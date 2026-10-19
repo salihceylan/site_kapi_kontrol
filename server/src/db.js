@@ -1884,8 +1884,9 @@ export async function ensureDbSchema() {
     // 050 (karar defteri): dev blokta DEGIL; katalog kontrolu + her adim kendi otomatik onayli ifadesi (decision_book_schema.js = migrations/050).
     await ensureDecisionBookSchema(client);
     // 051 (daire PIN'i duz metin kopyasi silinir): katalog kontrolu + kendi otomatik onayli ALTER'i; aktarim partili ve kilitli satiri atlar
-    // (apartment_pin_schema.js = migrations/051). Aktarim hatasi acilisi durdurmaz (sonraki acilista yeniden denenir).
-    await ensureApartmentPinSchema(client);
+    // (apartment_pin_schema.js = migrations/051). Aktarim hatasi acilisi durdurmaz (sonraki acilista yeniden denenir). Isaret bcrypt ile dogrulanir;
+    // acilis en cok ~3 sn bekler, kalan satirlar sunucu acildiktan sonra arka planda (havuzdan ayri baglantiyla) tamamlanir.
+    await ensureApartmentPinSchema(client, { connect: () => pool.connect() });
 
     // 031 people_v1: mevcut sakinlerin CRM'e tek seferlik aktarimi. Savunmaci: hata sunucunun acilmasini ENGELLEMEZ
     // (kendi transaction'i geri alinir, isaret yazilmaz => sonraki acilista yeniden denenir; okuma anindaki

@@ -1246,7 +1246,7 @@ adminRouter.post('/admin/apartments/:id/reset-pin', authRequired, requireSuperUs
   const sendEmail = req.body?.send_email !== false;
 
   try {
-    // Süper kullanıcı: PIN her durumda bir kez gösterilir (delivery 'shown').
+    // Süper kullanıcı: sakinin kendi belirlediği parolayı da sıfırlayabilir; PIN bir kez gösterilir.
     const reset = await resetApartmentPin(apartmentId, { actor: req.authUser, actorIsSuper: true });
     // PIN değişti ve commit edildi: yerel kontrol belirteci yenilemesi düşerse de PIN BİR KEZ gösterilsin (aksi halde kaybolurdu).
     await rotateLocalControlTokensForSite(Number(reset.apartment.site_code), 'apartment_pin_reset').catch((rotateError) => {

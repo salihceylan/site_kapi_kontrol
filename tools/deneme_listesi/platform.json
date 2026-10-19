@@ -3829,21 +3829,23 @@
           "id": "F11.02",
           "baslik": "E-genel kurul ve karar defteri",
           "adimlar": [],
-          "beklenen": "Yakında… Toplantı daveti, çevrimiçi oylama ve karar kayıtları.",
+          "beklenen": "Karar defteri hazırdır (F22). Toplantı daveti ve çevrimiçi oylama (e-genel kurul) hukuki görüş bekliyor; yakında.",
           "rol_notu": "",
           "on_kosul": "",
-          "yeni": false,
+          "yeni": true,
           "gelistirme": "yakinda"
         },
         {
           "id": "F11.04",
           "baslik": "Firma ve sözleşme takibi",
-          "adimlar": [],
-          "beklenen": "Yakında… Hizmet alınan firmalar, sözleşme bitiş tarihleri ve hatırlatmalar.",
+          "adimlar": [
+            "F21 maddelerini uygulayın."
+          ],
+          "beklenen": "Hizmet alınan firmalar, sözleşme bitiş tarihleri ve hatırlatmalar çalışır (ayrıntı F21).",
           "rol_notu": "",
           "on_kosul": "",
-          "yeni": false,
-          "gelistirme": "yakinda"
+          "yeni": true,
+          "gelistirme": "hazir"
         },
         {
           "id": "F11.05",
@@ -4265,8 +4267,8 @@
     {
       "id": "F20",
       "baslik": "Cihaz testi: “Genel IP (WAN)” alanı dolmuyor (açık hata)",
-      "durum": "planli",
-      "ozet": "Cihaz Etiketleyici → “Cihaz testi” sayfasındaki “Genel IP (WAN)” alanı hiç dolmuyor. Neden: araç kartın genel IP’sini tanımsız bir adresten istiyor, bu yüzden istek hiç gönderilmiyor. Sunucu kartın genel IP’sini aslında tutuyor (MQTT bağlantısından), ama bunu şirket anahtarıyla okunabilir şekilde veren bir uç yok; bu bilgi yalnızca yönetici oturumu isteyen uçlardan dönüyor. Hata henüz düzeltilmedi; sayfadaki diğer alanlar etkilenmez.",
+      "durum": "hazir",
+      "ozet": "Düzeltildi (2026-10-19). Kartın genel IP'si sunucuda zaten kayıtlıdır: kart güncelleme kontrolü yaparken (Wi-Fi'ye bağlandıktan yaklaşık 2 dakika sonra, sonra günde bir) sunucuya gelen adres kaydedilir. Cihaz Etiketleyici bu bilgiyi şirket anahtarıyla korunan yeni bir uçtan okur.",
       "maddeler": [
         {
           "id": "F20.01",
@@ -4276,7 +4278,7 @@
             "Cihaz Etiketleyici → “Cihaz testi” → portu seçip “Bağlan”a basın.",
             "Kart durum bloğunu yazana kadar bekleyin (gerekirse kartı yeniden başlatın)."
           ],
-          "beklenen": "Şu an: cihaz kimliği, Yerel IP, MQTT gibi alanlar dolar; “Genel IP (WAN)” alanı “-” olarak kalır. Uygulama donmaz, hata penceresi çıkmaz. (Bu madde hatanın varlığını doğrular; “Çalışmıyor” işaretlemeniz beklenen sonuçtur.)",
+          "beklenen": "Düzeltme öncesi davranıştı: alan '-' kalıyordu. Düzeltilmiş sürümde F20.03'teki gibi dolmalıdır. Yeni kurulan kart Wi-Fi'ye bağlandıktan sonra yaklaşık 2 dakika içinde IP'yi bildirir; daha önce '-' görünmesi normaldir.",
           "rol_notu": "Şirket (üretim) bilgisayarı",
           "on_kosul": "İnternete bağlı bir kapı kartı",
           "yeni": true,
@@ -4306,7 +4308,7 @@
           "rol_notu": "Şirket (üretim) bilgisayarı",
           "on_kosul": "Düzeltme sürümü",
           "yeni": true,
-          "gelistirme": "planli"
+          "gelistirme": "hazir"
         },
         {
           "id": "F20.04",
@@ -4320,7 +4322,248 @@
           "rol_notu": "Geliştirici",
           "on_kosul": "",
           "yeni": true,
-          "gelistirme": "planli"
+          "gelistirme": "hazir"
+        }
+      ]
+    },
+    {
+      "id": "F21",
+      "baslik": "Firma ve Sözleşme Takibi",
+      "durum": "hazir",
+      "ozet": "Hizmet alınan firmalar (asansör, güvenlik, temizlik vb.) ve sözleşmeleri; bitiş ve fesih bildirim tarihleri; yöneticilere günde en çok bir hatırlatma e-postası. Modül varsayılan KAPALIDIR: önce süper kullanıcı siteye açar. Ayrıntı: docs/PLATFORM_SOZLESMELER.md.",
+      "maddeler": [
+        {
+          "id": "F21.01",
+          "baslik": "Modülü açma ve menü",
+          "adimlar": [
+            "Süper kullanıcı 'Firma ve Sözleşme Takibi' modülünü siteye açar.",
+            "Yönetici, kurul, görevli ve sakin hesaplarıyla menüye bakın."
+          ],
+          "beklenen": "Yönetici, kurul ve görevlide 'Sözleşmeler' menüsü görünür; sakinde görünmez. Modül kapalıyken kimsede görünmez.",
+          "rol_notu": "",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F21.02",
+          "baslik": "Firma ekleme ve arama",
+          "adimlar": [
+            "'Sözleşmeler' → 'Firmalar' → yeni firma: ad, kategori, yetkili, telefon, e-posta, not.",
+            "Aynı adla ikinci firma eklemeyi deneyin.",
+            "Firma adını, yetkili adını ve telefonu (boşluklu ya da bitişik) aratın; telefona dokunun."
+          ],
+          "beklenen": "Firma listelenir; aynı ad reddedilir. Arama ad, yetkili ve telefonla bulur. Telefona dokununca arama ekranı açılır.",
+          "rol_notu": "",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F21.03",
+          "baslik": "Sözleşme ekleme ve durumlar",
+          "adimlar": [
+            "'Sözleşmeler' → yeni sözleşme: firma, başlık, başlangıç ve bitiş (GG.AA.YYYY), tutar, dönem, otomatik yenileme, fesih bildirim ve hatırlatma gün sayıları.",
+            "Bitişi 10 gün sonra, geçmişte ve süresiz olan üç sözleşme kaydedin; üstteki özet kartlarına dokunun."
+          ],
+          "beklenen": "Bitişi yaklaşan sözleşme 'Bitişi yaklaşan' (uyarı rengi), geçmiş olan 'Süresi dolmuş' (hata rengi), süresiz olan 'Yürürlükte' görünür; kartlar süzgeç gibi çalışır. Otomatik yenilenende 'Fesih bildirimi son günü' yazar. Bitiş başlangıçtan önceyse kayıt reddedilir.",
+          "rol_notu": "",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F21.04",
+          "baslik": "Fesih ve yeniden etkinleştirme",
+          "adimlar": [
+            "Bir sözleşmeyi açıp 'Feshet' deyin, onaylayın; sonra 'Yeniden etkinleştir'."
+          ],
+          "beklenen": "Sözleşme 'Feshedilen' olur ve özet sayısı değişir; yeniden etkinleştirilince eski durumuna döner. Kayıt silinmez.",
+          "rol_notu": "",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F21.05",
+          "baslik": "Hatırlatma e-postası",
+          "adimlar": [
+            "Bitişi hatırlatma süresi içinde olan bir sözleşme kaydedin (ör. bitiş 5 gün sonra, hatırlatma 30 gün).",
+            "Ertesi sabah 09:00'dan sonra yönetici e-postasına bakın."
+          ],
+          "beklenen": "Site yöneticilerine sitedeki yaklaşan sözleşmeleri listeleyen bir e-posta gelir (firma, başlık, bitiş/fesih tarihi; tutar yok). Aynı gün ikinci e-posta gelmez.",
+          "rol_notu": "",
+          "on_kosul": "E-posta (SMTP) canlıda açık; yönetici e-postası doğrulanmış",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F21.06",
+          "baslik": "Rol sınırları",
+          "adimlar": [
+            "Kurul ve görevli hesaplarıyla firmalar ve sözleşmeler ekranına bakın."
+          ],
+          "beklenen": "Kayıtları görürler (telefon dahil) ama ekleme, düzenleme ve fesih düğmeleri yoktur.",
+          "rol_notu": "",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        }
+      ]
+    },
+    {
+      "id": "F22",
+      "baslik": "Karar Defteri",
+      "durum": "hazir",
+      "ozet": "Yönetim kurulu ve genel kurul kararlarının kaydı: taslak → kesinleştirme (numara alır, sonra değiştirilemez), düzeltme kararı, yıl PDF'i, sakinlere açık kararlar. Bu kayıt noter onaylı karar defterinin yerine geçmez. Modül varsayılan KAPALIDIR. Ayrıntı: docs/PLATFORM_KARAR_DEFTERI.md.",
+      "maddeler": [
+        {
+          "id": "F22.01",
+          "baslik": "Modülü açma ve menüler",
+          "adimlar": [
+            "Süper kullanıcı 'Karar Defteri' modülünü açar.",
+            "Yönetici, kurul, görevli ve sakin hesaplarıyla menüye bakın."
+          ],
+          "beklenen": "Yönetici ve kurulda 'Karar Defteri', sakinde 'Kararlar' görünür; görevlide görünmez. Kurul salt okur.",
+          "rol_notu": "",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F22.02",
+          "baslik": "Taslak karar yazma",
+          "adimlar": [
+            "'Karar Defteri' → yeni karar: toplantı türü ve tarihi (GG.AA.YYYY), başlık, metin, katılanlar, oy sonucu ve sayıları; 'Sakinler de görsün' açık/kapalı.",
+            "Formu doldururken geri tuşuna basın."
+          ],
+          "beklenen": "Karar 'Taslak' olarak kaydedilir ve düzenlenebilir/silinebilir. Kaydetmeden çıkarken 'Değişiklikler silinsin mi?' sorulur.",
+          "rol_notu": "",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F22.03",
+          "baslik": "Kesinleştirme ve numara",
+          "adimlar": [
+            "Bir taslağı 'Kesinleştir' ile, uyarıyı okuyup 'Okudum, anladım' kutusunu işaretleyerek kesinleştirin.",
+            "Toplantı tarihi yarın olan bir taslağı kesinleştirmeyi deneyin.",
+            "Kesin kararı düzenlemeyi ya da silmeyi deneyin."
+          ],
+          "beklenen": "Kesinleşen karar 'yıl/sıra' numarası alır (ör. 2026/1) ve bir daha değiştirilemez ya da silinemez. Toplantı tarihi gelmemiş karar 'Toplantı tarihi gelmemiş karar kesinleştirilemez.' ile reddedilir.",
+          "rol_notu": "",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F22.04",
+          "baslik": "Düzeltme kararı",
+          "adimlar": [
+            "Kesin bir kararda 'Düzeltme kararı yaz'ı seçin, yeni kararı kesinleştirin; eski kararı açın."
+          ],
+          "beklenen": "Yeni karar eski kararı gösterir; eski kararda 'X sayılı kararla değiştirildi' yazar ve bağlantıya dokununca yeni karar açılır.",
+          "rol_notu": "",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F22.05",
+          "baslik": "Yıl PDF'i",
+          "adimlar": [
+            "Bir yılı seçip 'PDF olarak indir'e dokunun (uzun metinli bir karar da olsun)."
+          ],
+          "beklenen": "Yalnız kesin kararları içeren PDF iner/paylaşılır; Türkçe karakterler doğru, uzun metin sayfalara bölünür; altta 'noter onaylı karar defterinin yerine geçmez' notu bulunur.",
+          "rol_notu": "",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F22.06",
+          "baslik": "Sakin görünümü",
+          "adimlar": [
+            "Sakin hesabıyla 'Kararlar'ı açın."
+          ],
+          "beklenen": "Sakin yalnız kesinleşmiş ve 'Sakinler de görsün' işaretli kararları görür; taslaklar ve yönetime özel kararlar görünmez.",
+          "rol_notu": "",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        }
+      ]
+    },
+    {
+      "id": "F23",
+      "baslik": "Daire PIN'i artık saklanmıyor (KVKK)",
+      "durum": "hazir",
+      "ozet": "Yönetimin açtığı daire hesaplarının PIN'i sunucuda okunabilir saklanmıyor: oluşturma ya da sıfırlamada bir kez gösterilir ve e-posta varsa bir kez e-postalanır. 'Bilgileri Gönder' kalktı, yerine 'PIN'i Sıfırla' geldi.",
+      "maddeler": [
+        {
+          "id": "F23.01",
+          "baslik": "Daire kartında PIN görünmez",
+          "adimlar": [
+            "Yönetici hesabıyla 'Site Yapısı' → bir daire kartına bakın."
+          ],
+          "beklenen": "Kartta PIN yazmaz; 'Şifre (PIN): yönetim verdi' ya da 'sakin kendisi belirledi' ve 'PIN yalnız oluşturulurken bir kez gösterilir; unutulduysa yenileyin.' notu görünür.",
+          "rol_notu": "",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F23.02",
+          "baslik": "Daire hesabı açma ve tek seferlik PIN",
+          "adimlar": [
+            "Boş bir daireye daire hesabı açın (e-postalı ve e-postasız iki deneme).",
+            "Kartı kapatıp yeniden açın."
+          ],
+          "beklenen": "PIN bir kez büyük pencerede gösterilir (kopyalama düğmesiyle); e-posta girildiyse 'PIN … adresine bir kez gönderildi' yazar. Pencere kapanınca PIN bir daha görülemez.",
+          "rol_notu": "",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F23.03",
+          "baslik": "PIN sıfırlama",
+          "adimlar": [
+            "Kartta 'PIN'i Sıfırla'ya dokunun ve onaylayın.",
+            "Eski PIN'le giriş yapmayı deneyin; açık oturumdaki telefona bakın."
+          ],
+          "beklenen": "Yeni PIN bir kez gösterilir; eski PIN çalışmaz, eski oturumlar kapanır, o hesabın misafir geçişleri ve kapı karekodları iptal olur.",
+          "rol_notu": "",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F23.04",
+          "baslik": "Sakin kendi şifresini belirlediyse",
+          "adimlar": [
+            "Sakin daire hesabıyla girip kendi şifresini değiştirsin.",
+            "Yönetici aynı dairede 'PIN'i Sıfırla'ya dokunsun (dairede e-posta varken ve yokken)."
+          ],
+          "beklenen": "E-posta varsa yeni PIN yönetime GÖSTERİLMEZ, yalnız sakinin e-postasına gider. E-posta yoksa yönetici sıfırlayamaz ('yalnız süper kullanıcı sıfırlayabilir'); süper kullanıcı sıfırlayabilir.",
+          "rol_notu": "",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F23.05",
+          "baslik": "Taşınan sakinin adresine gönderim yok",
+          "adimlar": [
+            "Daire hesabı e-postalı bir daireyi boşaltın (Taşındı/çıkar).",
+            "Aynı daireye yeni hesap açın."
+          ],
+          "beklenen": "Eski sakinin e-postası formda hazır gelmez ve yeni PIN eski adrese gönderilmez.",
+          "rol_notu": "",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
         }
       ]
     }

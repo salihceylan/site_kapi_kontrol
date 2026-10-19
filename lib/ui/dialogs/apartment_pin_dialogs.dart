@@ -14,33 +14,34 @@ import 'package:site_kapi_kontrol/ui/helpers/dialog_guard.dart';
 const String kApartmentPinMailPending =
     "E-posta gönderimi sürüyor; ulaşmazsa PIN'i yeniden sıfırlayın.";
 
+/// Sakin şifresini kendisi belirlemişse yönetici PIN'i sıfırlayamaz (sunucu 409 APARTMENT_PIN_RESET_NEEDS_SUPER ile aynı ileti).
+const String kApartmentPinNeedsSuper =
+    "Sakin şifresini kendisi belirlemiş. Bu durumda PIN'i yalnız süper kullanıcı sıfırlayabilir; sakin kendi şifresini uygulamadan değiştirebilir.";
+
 /// "PIN'i Sıfırla" onayı. Onaylanırsa true.
 ///
-/// Sakin parolasını kendisi belirlemişse ([ApartmentRecord.residentPinIssued] false) yönetici yeni PIN'i
-/// GÖREMEZ: PIN yalnız sakinin e-posta adresine gider; adres yoksa yalnız süper kullanıcı sıfırlayabilir
-/// (sunucu yöneticiye açıklamalı 409 döner).
+/// Sıfırlamayı yapan PIN'i BİR KEZ görür. Sakin şifresini kendisi belirlemişse
+/// ([ApartmentRecord.residentPinIssued] false) yalnız süper kullanıcı ([isSuper]) sıfırlayabilir; yönetici için bu
+/// pencere açılmaz (false döner; daire satırındaki düğme zaten devre dışıdır ve [kApartmentPinNeedsSuper] yazar).
 Future<bool> confirmApartmentPinReset(
   BuildContext context, {
   required ApartmentRecord apartment,
-}) {
+  required bool isSuper,
+}) async {
+  if (!apartment.residentPinIssued && !isSuper) return false;
   final email = (apartment.residentEmail ?? '').trim();
-  final hasEmail = email.isNotEmpty;
-  final String delivery;
-  if (!apartment.residentPinIssued) {
-    delivery = hasEmail
-        ? 'Sakin şifresini kendisi belirlemiş: yeni PIN size gösterilmez, yalnız sakinin e-posta adresine ($email) gönderilir.'
-        : 'Sakin şifresini kendisi belirlemiş ve e-posta adresi yok: PIN\'i yalnız süper kullanıcı sıfırlayabilir.';
-  } else {
-    delivery = hasEmail
-        ? 'Yeni PIN ekranda bir kez gösterilir ve sakinin e-posta adresine ($email) de gönderilir.'
-        : 'Yeni PIN yalnız ekranda bir kez gösterilir.';
-  }
+  final mail = email.isNotEmpty
+      ? ' ve sakinin e-posta adresine ($email) de gönderilir'
+      : '';
+  final override = apartment.residentPinIssued
+      ? ''
+      : 'Sakin şifresini kendisi belirlemiş; süper kullanıcı olarak onun şifresinin yerine yeni PIN veriyorsunuz. ';
   return confirmCrmAction(
     context,
     title: 'PIN sıfırlansın mı?',
     message:
-        '${apartment.label} daire hesabına yeni bir PIN verilir. Eski PIN artık çalışmaz; bu hesapla açık oturumlar, '
-        'misafir geçişleri ve karekodlar kapanır. $delivery',
+        '${apartment.label} daire hesabına yeni bir PIN verilir. Eski şifre artık çalışmaz; bu hesapla açık oturumlar, '
+        'misafir geçişleri ve karekodlar kapanır. ${override}Yeni PIN size bir kez gösterilir$mail.',
     confirmLabel: 'Sıfırla',
     cancelLabel: 'Vazgeç',
     icon: Icons.lock_reset_rounded,
@@ -48,8 +49,7 @@ Future<bool> confirmApartmentPinReset(
   );
 }
 
-/// Az önce verilen PIN'i BİR KEZ gösterir (kapatılınca yeniden gösterilemez). Yalnız e-postayla teslimde
-/// ([ApartmentPinIssue.emailOnly]) PIN gösterilmez; yalnız gönderim durumu ve hedef adres yazılır.
+/// Az önce verilen PIN'i BİR KEZ gösterir (kapatılınca yeniden gösterilemez).
 class ApartmentPinIssuedDialog extends StatefulWidget {
   const ApartmentPinIssuedDialog({super.key, required this.issue});
 
@@ -66,19 +66,14 @@ class ApartmentPinIssuedDialog extends StatefulWidget {
   /// Gönderim durumu (ton, ileti). [ApartmentPinIssue.credentialsSent] null + adres dolu = gönderim sürüyor.
   static (AppTone, String) mailStatus(ApartmentPinIssue issue) {
     final email = issue.credentialsEmail;
-    final shown = issue.pinCode != null;
     return switch (issue.credentialsSent) {
       true => (
         AppTone.success,
-        shown
-            ? 'PIN ${email ?? 'sakinin e-posta'} adresine bir kez gönderildi.'
-            : 'Yeni PIN ${email ?? 'sakinin e-posta'} adresine gönderildi; güvenlik gereği burada gösterilmez.',
+        'PIN ${email ?? 'sakinin e-posta'} adresine bir kez gönderildi.',
       ),
       false => (
         AppTone.warning,
-        shown
-            ? "E-posta ${email != null ? '($email) ' : ''}gönderilemedi. PIN'i sakine kendiniz iletin."
-            : "E-posta ${email != null ? '($email) ' : ''}gönderilemedi ve PIN gösterilmez. Daha sonra PIN'i yeniden sıfırlayın.",
+        "E-posta ${email != null ? '($email) ' : ''}gönderilemedi. PIN'i sakine kendiniz iletin.",
       ),
       null when email != null => (
         AppTone.info,
@@ -99,8 +94,8 @@ class ApartmentPinIssuedDialog extends StatefulWidget {
 class _ApartmentPinIssuedDialogState extends State<ApartmentPinIssuedDialog> {
   bool _copied = false;
 
-  Future<void> _copy(String pin) async {
-    await Clipboard.setData(ClipboardData(text: pin));
+  Future<void> _copy() async {
+    await Clipboard.setData(ClipboardData(text: widget.issue.pinCode));
     if (!mounted) return;
     HapticFeedback.lightImpact();
     setState(() => _copied = true);
@@ -116,9 +111,9 @@ class _ApartmentPinIssuedDialogState extends State<ApartmentPinIssuedDialog> {
     final (mailTone, mailMessage) = ApartmentPinIssuedDialog.mailStatus(issue);
 
     return AppDialog(
-      title: pin != null ? "Daire PIN'i" : 'PIN sıfırlandı',
+      title: "Daire PIN'i",
       subtitle: issue.apartment.label,
-      icon: pin != null ? Icons.pin_rounded : Icons.mark_email_read_outlined,
+      icon: Icons.pin_rounded,
       tone: AppTone.violet,
       actions: [
         ElevatedButton(
@@ -139,46 +134,38 @@ class _ApartmentPinIssuedDialogState extends State<ApartmentPinIssuedDialog> {
             ),
             const SizedBox(height: AppSpace.md),
           ],
-          if (pin != null) ...[
-            Text('PIN', style: th.bodySmall),
-            Semantics(
-              label: 'PIN ${pin.split('').join(' ')}',
-              excludeSemantics: true,
-              child: SelectableText(
-                pin,
-                style: th.headlineMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 6,
-                  color: p.text,
-                  fontFeatures: const [FontFeature.tabularFigures()],
-                ),
+          Text('PIN', style: th.bodySmall),
+          Semantics(
+            label: 'PIN ${pin.split('').join(' ')}',
+            excludeSemantics: true,
+            child: SelectableText(
+              pin,
+              style: th.headlineMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+                letterSpacing: 6,
+                color: p.text,
+                fontFeatures: const [FontFeature.tabularFigures()],
               ),
             ),
-            Align(
-              alignment: AlignmentDirectional.centerStart,
-              child: TextButton.icon(
-                onPressed: () => _copy(pin),
-                icon: Icon(
-                  _copied ? Icons.check_rounded : Icons.copy_rounded,
-                  size: 18,
-                ),
-                label: Text(_copied ? 'Kopyalandı' : 'Kopyala'),
+          ),
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: TextButton.icon(
+              onPressed: _copy,
+              icon: Icon(
+                _copied ? Icons.check_rounded : Icons.copy_rounded,
+                size: 18,
               ),
+              label: Text(_copied ? 'Kopyalandı' : 'Kopyala'),
             ),
-            const SizedBox(height: AppSpace.sm),
-            const InlineNotice(
-              tone: AppTone.warning,
-              icon: Icons.visibility_off_outlined,
-              message:
-                  "PIN yalnız şimdi gösterilir; güvenlik gereği saklanmaz. Unutulursa PIN'i sıfırlayın.",
-            ),
-          ] else
-            const InlineNotice(
-              tone: AppTone.info,
-              icon: Icons.lock_person_outlined,
-              message:
-                  'Sakin şifresini kendisi belirlemişti: yeni PIN yalnız sakine gönderilir, yönetim göremez.',
-            ),
+          ),
+          const SizedBox(height: AppSpace.sm),
+          const InlineNotice(
+            tone: AppTone.warning,
+            icon: Icons.visibility_off_outlined,
+            message:
+                "PIN yalnız şimdi gösterilir; güvenlik gereği saklanmaz. Unutulursa PIN'i sıfırlayın.",
+          ),
           const SizedBox(height: AppSpace.sm),
           InlineNotice(tone: mailTone, message: mailMessage),
         ],

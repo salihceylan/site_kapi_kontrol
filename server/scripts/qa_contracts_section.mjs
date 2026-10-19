@@ -177,6 +177,43 @@ export async function sectionContracts(ctx) {
     try { await ensureContractsSchema(client); } finally { client.query = original; client.release(); }
     check('S6: ensureContractsSchema tablolar varken yalniz katalog sorgusu gonderir (DDL 0, kilit yok)', sent.length === 1 && /^SELECT ARRAY/.test(sent[0]), sent);
   }
+  {
+    // S7: 049'un ilk surumuyle kurulmus veritabani (contract_reminders VAR, claimed_at YOK): hem migration dosyasi hem ensure sutunu ekler; mevcut satir deger alir.
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const { fileURLToPath } = await import('node:url');
+    const migrationText = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'migrations', '049_contracts.sql'), 'utf8');
+    const columnInfo = async () => (await q(`SELECT data_type, is_nullable, column_default FROM information_schema.columns WHERE table_name = 'contract_reminders' AND column_name = 'claimed_at'`)).rows[0] ?? null;
+    const sVendor = Number((await q(`INSERT INTO contract_vendors (site_code, name, category) VALUES ($1, 'Eski Sema Firma', 'diger') RETURNING id`, [site2])).rows[0].id);
+    const sContract = Number((await q(`INSERT INTO site_contracts (site_code, vendor_id, title, category, start_date) VALUES ($1, $2, 'eski', 'diger', '2026-01-01') RETURNING id`, [site2, sVendor])).rows[0].id);
+    await q(`ALTER TABLE contract_reminders DROP COLUMN claimed_at`);
+    await q(`INSERT INTO contract_reminders (contract_id, site_code, kind, due_date, sent_at, recipients) VALUES ($1, $2, 'bitis', '2026-02-01', NOW(), 1)`, [sContract, site2]);
+    const dropped = await columnInfo();
+    await q(migrationText); // migrate.js yolu: 049 yeniden uygulanir (idempotent; ALTER ... ADD COLUMN IF NOT EXISTS)
+    const afterMigration = await columnInfo();
+    const rowAfterMigration = (await q(`SELECT claimed_at IS NOT NULL AS ok FROM contract_reminders WHERE contract_id = $1`, [sContract])).rows[0];
+    await q(`ALTER TABLE contract_reminders DROP COLUMN claimed_at`);
+    const client = await pool.connect();
+    const sent = [];
+    const original = client.query.bind(client);
+    client.query = (text, params) => { sent.push(String(text).replace(/\s+/g, ' ').trim()); return original(text, params); };
+    try { await ensureContractsSchema(client); } finally { client.query = original; client.release(); }
+    const afterEnsure = await columnInfo();
+    const rowAfterEnsure = (await q(`SELECT claimed_at IS NOT NULL AS ok FROM contract_reminders WHERE contract_id = $1`, [sContract])).rows[0];
+    const client2 = await pool.connect();
+    const sent2 = [];
+    const original2 = client2.query.bind(client2);
+    client2.query = (text, params) => { sent2.push(String(text).replace(/\s+/g, ' ').trim()); return original2(text, params); };
+    try { await ensureContractsSchema(client2); } finally { client2.query = original2; client2.release(); }
+    const expected = { data_type: 'timestamp with time zone', is_nullable: 'NO', column_default: 'now()' };
+    check('S7: eski 049 semasi (claimed_at YOK): migration dosyasi ve ensure sutunu ekler (timestamptz NOT NULL DEFAULT now(), mevcut satir dolu); ensure yalniz ALTER gonderir (lock_timeout ile), sonraki acilis yine tek katalog sorgusu',
+      dropped === null && same(afterMigration, expected) && rowAfterMigration?.ok === true && same(afterEnsure, expected) && rowAfterEnsure?.ok === true
+        && same(sent.filter((s) => /^(CREATE|DO|ALTER)/.test(s)), ['ALTER TABLE contract_reminders ADD COLUMN IF NOT EXISTS claimed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()'])
+        && sent[1] === "SET lock_timeout = '2s'" && sent[sent.length - 1] === 'RESET lock_timeout' && sent2.length === 1 && /^SELECT ARRAY/.test(sent2[0]),
+      { dropped, afterMigration, afterEnsure, rowAfterMigration, rowAfterEnsure, sent, sent2 });
+    await q(`DELETE FROM site_contracts WHERE site_code = $1`, [site2]);
+    await q(`DELETE FROM contract_vendors WHERE site_code = $1`, [site2]);
+  }
 
   // ============================================================================================================
   // M: modul kapisi (varsayilan KAPALI)

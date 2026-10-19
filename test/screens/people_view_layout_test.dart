@@ -602,6 +602,16 @@ void main() {
       );
     });
 
+    testWidgets('null + adres: gönderim sürüyor (sunucu ~8 sn beklemedi), hesap açıldı', (t) async {
+      final auth = PeopleFakeAuth.seeded()..nextCredentialsEmail = 'yeni@example.com';
+      await addPerson(t, auth);
+      expect(
+        find.text("Kişi eklendi ve hesap açıldı; giriş bilgisi e-postası gönderiliyor. Ulaşmazsa Daireler ekranından PIN'i sıfırlayın."),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Yalnız kayıt'), findsNothing);
+    });
+
     testWidgets('alan yoksa (null) ve hesap açılmadıysa: "yalnız kayıt olarak tutuldu" söylenir', (t) async {
       final auth = PeopleFakeAuth.seeded();
       await addPerson(t, auth);

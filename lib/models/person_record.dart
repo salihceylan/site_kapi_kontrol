@@ -171,13 +171,18 @@ class PersonDetail extends PersonSummary {
     this.vehicles = const <VehicleRecord>[],
     this.userCode,
     this.credentialsSent,
+    this.credentialsEmail,
   });
 
   final String? note;
 
   /// Kişi eklenirken boş daireye dahili hesap açıldıysa giriş bilgisi e-postasının gönderilip
-  /// gönderilmediği (`credentials_sent`): true gönderildi, false gönderilemedi, null bilgi yok.
+  /// gönderilmediği (`credentials_sent`): true gönderildi, false gönderilemedi, null: [credentialsEmail] doluysa
+  /// gönderim sürüyor (sunucu ~8 sn'den fazla beklemedi), boşsa hesap açılmadı.
   final bool? credentialsSent;
+
+  /// Giriş bilgisi e-postasının gönderildiği / gönderilmekte olduğu adres (`credentials_email`; hesap açılmadıysa null).
+  final String? credentialsEmail;
   final DateTime? createdAt;
 
   /// Geçmiş dahil tüm ilişki kayıtları.
@@ -215,6 +220,7 @@ class PersonDetail extends PersonSummary {
       vehicleCount: json['vehicle_count'] == null ? vehicles.length : base.vehicleCount,
       accountKind: base.accountKind,
       credentialsSent: json['credentials_sent'] is bool ? json['credentials_sent'] as bool : null,
+      credentialsEmail: crmText(json['credentials_email']),
       note: crmText(json['note']),
       createdAt: crmTimestamp(json['created_at']),
       residencies: residencies,

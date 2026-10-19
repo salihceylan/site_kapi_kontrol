@@ -2300,3 +2300,62 @@ Sakin "Borcum" ekranında, ekstresinde ve makbuzlarında dairenin defterini yaln
 - [ ] **85.4. (Geliştirici) Test ve QA:**
   - **Nasıl Test Edilir:** server klasöründe `node --test test/finance_resident_view.test.js test/platform_finance_*.test.js test/finance4b_*.test.js test/account_export_service.test.js`; tek kullanımlık yerel PostgreSQL ile `QA_ONLY=finance,finance4b,account` ve ayrıca `QA_ONLY=finance4b QA_PART=resident_scope` (üretimde ÇALIŞTIRMAYIN).
   - **Beklenen Sonuç:** Testler ve QA bölümleri yeşil; resident_scope S0-S13 geçer.
+
+## 86. 🗂️ Firma ve Sözleşme Takibi, Karar Defteri, Daire PIN'i Artık Saklanmıyor ve Cihaz Testi Genel IP — F21/F22/F23/F20 (2026-10-19)
+
+Yeni iki modül varsayılan KAPALIDIR (süper kullanıcı siteye açar). Karar defteri kaydı noter onaylı karar defterinin yerine geçmez. Daire hesabı PIN'i sunucuda okunabilir saklanmaz. Ayrıntı: `docs/PLATFORM_SOZLESMELER.md`, `docs/PLATFORM_KARAR_DEFTERI.md`, deneme listesi F20-F23.
+
+- [ ] **86.1. Modülü açma ve menü (F21.01):**
+  - **Nasıl Test Edilir:** Süper kullanıcı 'Firma ve Sözleşme Takibi' modülünü siteye açar. Yönetici, kurul, görevli ve sakin hesaplarıyla menüye bakın.
+  - **Beklenen Sonuç:** Yönetici, kurul ve görevlide 'Sözleşmeler' menüsü görünür; sakinde görünmez. Modül kapalıyken kimsede görünmez.
+- [ ] **86.2. Firma ekleme ve arama (F21.02):**
+  - **Nasıl Test Edilir:** 'Sözleşmeler' → 'Firmalar' → yeni firma: ad, kategori, yetkili, telefon, e-posta, not. Aynı adla ikinci firma eklemeyi deneyin. Firma adını, yetkili adını ve telefonu (boşluklu ya da bitişik) aratın; telefona dokunun.
+  - **Beklenen Sonuç:** Firma listelenir; aynı ad reddedilir. Arama ad, yetkili ve telefonla bulur. Telefona dokununca arama ekranı açılır.
+- [ ] **86.3. Sözleşme ekleme ve durumlar (F21.03):**
+  - **Nasıl Test Edilir:** 'Sözleşmeler' → yeni sözleşme: firma, başlık, başlangıç ve bitiş (GG.AA.YYYY), tutar, dönem, otomatik yenileme, fesih bildirim ve hatırlatma gün sayıları. Bitişi 10 gün sonra, geçmişte ve süresiz olan üç sözleşme kaydedin; üstteki özet kartlarına dokunun.
+  - **Beklenen Sonuç:** Bitişi yaklaşan sözleşme 'Bitişi yaklaşan' (uyarı rengi), geçmiş olan 'Süresi dolmuş' (hata rengi), süresiz olan 'Yürürlükte' görünür; kartlar süzgeç gibi çalışır. Otomatik yenilenende 'Fesih bildirimi son günü' yazar. Bitiş başlangıçtan önceyse kayıt reddedilir.
+- [ ] **86.4. Fesih ve yeniden etkinleştirme (F21.04):**
+  - **Nasıl Test Edilir:** Bir sözleşmeyi açıp 'Feshet' deyin, onaylayın; sonra 'Yeniden etkinleştir'.
+  - **Beklenen Sonuç:** Sözleşme 'Feshedilen' olur ve özet sayısı değişir; yeniden etkinleştirilince eski durumuna döner. Kayıt silinmez.
+- [ ] **86.5. Hatırlatma e-postası (F21.05):**
+  - **Nasıl Test Edilir:** Önkoşul: E-posta (SMTP) canlıda açık; yönetici e-postası doğrulanmış. Bitişi hatırlatma süresi içinde olan bir sözleşme kaydedin (ör. bitiş 5 gün sonra, hatırlatma 30 gün). Ertesi sabah 09:00'dan sonra yönetici e-postasına bakın.
+  - **Beklenen Sonuç:** Site yöneticilerine sitedeki yaklaşan sözleşmeleri listeleyen bir e-posta gelir (firma, başlık, bitiş/fesih tarihi; tutar yok). Aynı gün ikinci e-posta gelmez.
+- [ ] **86.6. Rol sınırları (F21.06):**
+  - **Nasıl Test Edilir:** Kurul ve görevli hesaplarıyla firmalar ve sözleşmeler ekranına bakın.
+  - **Beklenen Sonuç:** Kayıtları görürler (telefon dahil) ama ekleme, düzenleme ve fesih düğmeleri yoktur.
+- [ ] **86.7. Modülü açma ve menüler (F22.01):**
+  - **Nasıl Test Edilir:** Süper kullanıcı 'Karar Defteri' modülünü açar. Yönetici, kurul, görevli ve sakin hesaplarıyla menüye bakın.
+  - **Beklenen Sonuç:** Yönetici ve kurulda 'Karar Defteri', sakinde 'Kararlar' görünür; görevlide görünmez. Kurul salt okur.
+- [ ] **86.8. Taslak karar yazma (F22.02):**
+  - **Nasıl Test Edilir:** 'Karar Defteri' → yeni karar: toplantı türü ve tarihi (GG.AA.YYYY), başlık, metin, katılanlar, oy sonucu ve sayıları; 'Sakinler de görsün' açık/kapalı. Formu doldururken geri tuşuna basın.
+  - **Beklenen Sonuç:** Karar 'Taslak' olarak kaydedilir ve düzenlenebilir/silinebilir. Kaydetmeden çıkarken 'Değişiklikler silinsin mi?' sorulur.
+- [ ] **86.9. Kesinleştirme ve numara (F22.03):**
+  - **Nasıl Test Edilir:** Bir taslağı 'Kesinleştir' ile, uyarıyı okuyup 'Okudum, anladım' kutusunu işaretleyerek kesinleştirin. Toplantı tarihi yarın olan bir taslağı kesinleştirmeyi deneyin. Kesin kararı düzenlemeyi ya da silmeyi deneyin.
+  - **Beklenen Sonuç:** Kesinleşen karar 'yıl/sıra' numarası alır (ör. 2026/1) ve bir daha değiştirilemez ya da silinemez. Toplantı tarihi gelmemiş karar 'Toplantı tarihi gelmemiş karar kesinleştirilemez.' ile reddedilir.
+- [ ] **86.10. Düzeltme kararı (F22.04):**
+  - **Nasıl Test Edilir:** Kesin bir kararda 'Düzeltme kararı yaz'ı seçin, yeni kararı kesinleştirin; eski kararı açın.
+  - **Beklenen Sonuç:** Yeni karar eski kararı gösterir; eski kararda 'X sayılı kararla değiştirildi' yazar ve bağlantıya dokununca yeni karar açılır.
+- [ ] **86.11. Yıl PDF'i (F22.05):**
+  - **Nasıl Test Edilir:** Bir yılı seçip 'PDF olarak indir'e dokunun (uzun metinli bir karar da olsun).
+  - **Beklenen Sonuç:** Yalnız kesin kararları içeren PDF iner/paylaşılır; Türkçe karakterler doğru, uzun metin sayfalara bölünür; altta 'noter onaylı karar defterinin yerine geçmez' notu bulunur.
+- [ ] **86.12. Sakin görünümü (F22.06):**
+  - **Nasıl Test Edilir:** Sakin hesabıyla 'Kararlar'ı açın.
+  - **Beklenen Sonuç:** Sakin yalnız kesinleşmiş ve 'Sakinler de görsün' işaretli kararları görür; taslaklar ve yönetime özel kararlar görünmez.
+- [ ] **86.13. Daire kartında PIN görünmez (F23.01):**
+  - **Nasıl Test Edilir:** Yönetici hesabıyla 'Site Yapısı' → bir daire kartına bakın.
+  - **Beklenen Sonuç:** Kartta PIN yazmaz; 'Şifre (PIN): yönetim verdi' ya da 'sakin kendisi belirledi' ve 'PIN yalnız oluşturulurken bir kez gösterilir; unutulduysa yenileyin.' notu görünür.
+- [ ] **86.14. Daire hesabı açma ve tek seferlik PIN (F23.02):**
+  - **Nasıl Test Edilir:** Boş bir daireye daire hesabı açın (e-postalı ve e-postasız iki deneme). Kartı kapatıp yeniden açın.
+  - **Beklenen Sonuç:** PIN bir kez büyük pencerede gösterilir (kopyalama düğmesiyle); e-posta girildiyse 'PIN … adresine bir kez gönderildi' yazar. Pencere kapanınca PIN bir daha görülemez.
+- [ ] **86.15. PIN sıfırlama (F23.03):**
+  - **Nasıl Test Edilir:** Kartta 'PIN'i Sıfırla'ya dokunun ve onaylayın. Eski PIN'le giriş yapmayı deneyin; açık oturumdaki telefona bakın.
+  - **Beklenen Sonuç:** Yeni PIN bir kez gösterilir; eski PIN çalışmaz, eski oturumlar kapanır, o hesabın misafir geçişleri ve kapı karekodları iptal olur.
+- [ ] **86.16. Sakin kendi şifresini belirlediyse (F23.04):**
+  - **Nasıl Test Edilir:** Sakin daire hesabıyla girip kendi şifresini değiştirsin. Yönetici aynı dairede 'PIN'i Sıfırla'ya dokunsun (dairede e-posta varken ve yokken).
+  - **Beklenen Sonuç:** E-posta varsa yeni PIN yönetime GÖSTERİLMEZ, yalnız sakinin e-postasına gider. E-posta yoksa yönetici sıfırlayamaz ('yalnız süper kullanıcı sıfırlayabilir'); süper kullanıcı sıfırlayabilir.
+- [ ] **86.17. Taşınan sakinin adresine gönderim yok (F23.05):**
+  - **Nasıl Test Edilir:** Daire hesabı e-postalı bir daireyi boşaltın (Taşındı/çıkar). Aynı daireye yeni hesap açın.
+  - **Beklenen Sonuç:** Eski sakinin e-postası formda hazır gelmez ve yeni PIN eski adrese gönderilmez.
+- [ ] **86.18. Cihaz testinde Genel IP (WAN) (F20.03):**
+  - **Nasıl Test Edilir:** İnternete bağlı bir kapı kartını USB ile bağlayın; Cihaz Etiketleyici → "Cihaz testi" → portu seçip "Bağlan"; kart durum bloğunu yazana kadar bekleyin. Sonra COMPANY_API_KEY satırını geçici kaldırıp tekrar deneyin.
+  - **Beklenen Sonuç:** Birkaç saniye içinde "Genel IP (WAN)" alanı kartın genel IP'siyle dolar (mobil uygulamadaki değerle aynı). Yeni kurulan kart Wi-Fi'ye bağlandıktan sonra yaklaşık 2 dakika içinde bildirir. Anahtar yokken ya da sunucuya ulaşılamazken alan "-" kalır, uygulama donmaz.

@@ -878,9 +878,18 @@ async function sectionUpgrade() {
       const expectedApartments = beforeDumps.apartments.map((row) => ({ ...row, resident_pin_code: null }));
       check(`${scenario}: apartments ensureDbSchema ile YALNIZ 051 aktarimi kadar degisti (duz PIN -> NULL; diger sutunlar ayni)`,
         beforeDumps.apartments.some((row) => row.resident_pin_code !== null) && same(expectedApartments, afterDumps.apartments));
+      // Isaret YALNIZ duz kopya bcrypt ile gostergedeki hesabin GUNCEL parolasina esitse TRUE (eskimis / dogrulanamayan kopya FALSE; inceleme 2. tur P3).
+      const bcryptLib = (await import('bcryptjs')).default;
+      const hashOf = async (userCode) => (userCode === null ? null : (await q(`SELECT password_hash, deleted_at FROM users WHERE user_code = $1`, [userCode])).rows[0] ?? null);
+      const expectedIssued = [];
+      for (const row of beforeDumps.apartments) {
+        const pin = String(row.resident_pin_code ?? '').trim();
+        const user = pin === '' ? null : await hashOf(row.resident_user_code);
+        const verifiable = user !== null && user.deleted_at === null && /^\$2[abxy]\$\d{2}\$/.test(String(user.password_hash));
+        expectedIssued.push({ id: row.id, resident_pin_issued: verifiable ? await bcryptLib.compare(pin, user.password_hash) : false });
+      }
       const issuedRows = (await q(`SELECT id, resident_pin_issued FROM apartments ORDER BY id`)).rows;
-      const expectedIssued = beforeDumps.apartments.map((row) => ({ id: row.id, resident_pin_issued: String(row.resident_pin_code ?? '').trim() !== '' }));
-      check(`${scenario}: 051 isareti yalniz duz PIN'i olan satirlarda TRUE (${expectedIssued.filter((row) => row.resident_pin_issued).length} satir)`,
+      check(`${scenario}: 051 isareti yalniz bcrypt ile dogrulanan kopyada TRUE (${expectedIssued.filter((row) => row.resident_pin_issued).length} satir; dogrulanamayan / eskimis kopya FALSE)`,
         same(expectedIssued, issuedRows), issuedRows.filter((row) => row.resident_pin_issued));
       continue;
     }

@@ -41,7 +41,7 @@ import {
 } from '../src/modules/contracts_common.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const src = (name) => readFileSync(path.join(here, '..', 'src', 'modules', name), 'utf8');
+const src = (name) => readFileSync(path.join(here, '..', 'src', 'modules', name), 'utf8').replace(/\r\n/g, '\n');
 const invalid = (fn, field) =>
   assert.throws(fn, (error) => error.statusCode === 400 && error.code === 'INVALID_FIELD' && error.extra?.field === field && typeof error.message === 'string');
 

@@ -825,7 +825,7 @@ managerRouter.post('/manager/apartments/:id/reset-pin', authRequired, requireSit
       return res.status(403).json({ error: 'Bu daireyi yonetme yetkiniz yok.' });
     }
 
-    // Sakin parolasını kendisi belirlemişse (resident_pin_issued FALSE) yönetici PIN'i göremez: yalnız sakinin e-postasına gider.
+    // Sakin parolasını kendisi belirlemişse (resident_pin_issued FALSE) yönetici sıfırlayamaz: 409 APARTMENT_PIN_RESET_NEEDS_SUPER (yalnız süper).
     const reset = await resetApartmentPin(apartmentId, { actor: req.authUser, actorIsSuper: req.authUser?.role === 'super_user' });
     // PIN değişti ve commit edildi: yerel kontrol belirteci yenilemesi düşerse de PIN BİR KEZ gösterilsin (aksi halde kaybolurdu).
     await rotateLocalControlTokensForSite(Number(reset.apartment.site_code), 'apartment_pin_reset_by_manager').catch((rotateError) => {

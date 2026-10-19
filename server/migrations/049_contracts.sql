@@ -9,6 +9,7 @@
 -- (kayit kalir, ad "Silinmis Kullanici" gorunur); sozlesmesi olan firma silinemez (RESTRICT; API'de firma silme yok, pasife alinir).
 -- Hatirlatma (gunluk is, tek calisan): contract_reminders UNIQUE (contract_id, kind, due_date) ayni hatirlatmanin iki kez gonderilmesini engeller;
 -- claimed_at: talep ani (yarida kalan turun gonderilmemis talebi o gun site basina tek e-posta kuralina sayilir, ertesi gun yeniden denenir).
+-- claimed_at 049'un ilk surumunde yoktu: o surumu uygulamis veritabaninda ALTER TABLE ... ADD COLUMN IF NOT EXISTS ekler (yeni kurulumda no-op).
 
 CREATE TABLE IF NOT EXISTS contract_vendors (
   id BIGSERIAL PRIMARY KEY,
@@ -140,6 +141,8 @@ CREATE TABLE IF NOT EXISTS contract_reminders (
   CONSTRAINT chk_contract_reminders_recipients CHECK (recipients >= 0),
   CONSTRAINT uq_contract_reminders_once UNIQUE (contract_id, kind, due_date)
 );
+
+ALTER TABLE contract_reminders ADD COLUMN IF NOT EXISTS claimed_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 
 DO $$
 BEGIN

@@ -591,6 +591,7 @@ class SitesView extends StatelessWidget {
                   resettingPin: busyApartmentPins.contains(
                     structure.apartments[i].id,
                   ),
+                  isSuperUser: isSuperUser,
                   onDelete: onDeleteApartmentResident != null
                       ? () =>
                             onDeleteApartmentResident!(structure.apartments[i])

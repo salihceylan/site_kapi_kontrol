@@ -143,6 +143,13 @@ class PeoplePersonsTabState extends State<PeoplePersonsTab> {
           "Kişi eklendi ve hesap açıldı; ancak giriş bilgisi e-postası gönderilemedi. PIN saklanmadığı için Daireler ekranından PIN'i sıfırlayın.",
           kind: AppSnackKind.warning,
         );
+      case null when created.credentialsEmail != null:
+        // Hesap açıldı, e-posta gönderimi yanıt süresinde bitmedi (sunucu beklemeden yanıtladı).
+        AppSnack.show(
+          context,
+          "Kişi eklendi ve hesap açıldı; giriş bilgisi e-postası gönderiliyor. Ulaşmazsa Daireler ekranından PIN'i sıfırlayın.",
+          kind: AppSnackKind.info,
+        );
       case null:
         // Hesap açılmadı: e-posta bu sitedeki kayıtlı bir hesaba aitse kişi o hesaba bağlanır, değilse yalnız kayıt.
         AppSnack.show(

@@ -401,6 +401,7 @@ describe('createPerson: kayit, hesap baglama (yalniz bu sitede erisimi olan hesa
       assert.equal(has(/^INSERT INTO apartment_memberships/), false, 'eski model: erisim apartments.resident_user_code ile');
 
       assert.equal(result.credentials_sent, true);
+      assert.equal(result.credentials_email, 'ali@example.com');
       assert.equal(sent.length, 1);
       assert.equal(sent[0].to, 'ali@example.com');
       assert.match(sent[0].subject, /Daire giris bilgileriniz/);
@@ -420,6 +421,7 @@ describe('createPerson: kayit, hesap baglama (yalniz bu sitede erisimi olan hesa
       assert.equal(person.params[4], 'ali@example.com');
       assert.equal(sent.length, 0);
       assert.equal(result.credentials_sent, null);
+      assert.equal(result.credentials_email, null, 'hesap acilmadi');
     });
 
     it('e-posta yoksa hesap acilmaz (yalniz kayit)', async () => {
@@ -468,7 +470,9 @@ describe('createPerson: kayit, hesap baglama (yalniz bu sitede erisimi olan hesa
       const result = await createPerson({ siteCode: SITE, input: parsePersonCreateInput({ full_name: 'Ali Veli', email: 'ali@example.com', apartment_id: 9 }), actor });
       assert.equal(has(PERSON_INSERT), true);
       assert.equal(result.credentials_sent, false);
-      assert.ok(console.error.mock.calls.some((c) => String(c.arguments[0]).includes('[people] daire sakini e-postasi gonderilemedi')));
+      assert.equal(result.credentials_email, 'ali@example.com', 'gonderim denendi (hesap acildi)');
+      // Gunluge yalniz kod yazilir (PIN / adres yok): sendIssuedApartmentPin.
+      assert.ok(console.error.mock.calls.some((c) => String(c.arguments[0]).includes('[apartment] daire PIN e-postasi gonderilemedi')));
     });
   });
 

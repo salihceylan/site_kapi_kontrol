@@ -7,7 +7,7 @@
 //  - Yazma işlemleri site bazlı advisory kilit altında (eşitleme ile aynı anahtar) tek transaction'da yapılır.
 
 import { pool } from '../db.js';
-import { sendApartmentCredentials, provisionApartmentResident } from '../services/apartment_service.js';
+import { sendIssuedApartmentPin, provisionApartmentResident } from '../services/apartment_service.js';
 import { rotateTokensForSite } from '../services/local_token_service.js';
 import { cleanupDoorOverridesIfNoMembership, handOverApartmentResident } from '../services/membership_service.js';
 import { generateApartmentPin } from '../utils/helpers.js';
@@ -791,8 +791,9 @@ async function activatePersonRecord(client, { siteCode, person }) {
  * Hesap bağlama: e-posta BU SİTEDE zaten erişimi olan kayıtlı bir hesaba aitse (bkz. findSiteUserByEmail) kişi o hesaba bağlanır ve
  * daire verildiyse apartment_memberships oluşturulur/yeniden etkinleştirilir; aksi halde kişi HESAPSIZ kaydedilir (yanıt şekli
  * hesabın var olup olmadığına göre değişmez). Hesap yoksa ve daire + e-posta varsa ve dairenin sakin hesabı yoksa MEVCUT "daire sakini
- * hesabı oluştur ve kimlik bilgilerini e-postayla gönder" akışı (provisionApartmentResident + sendApartmentCredentials) yeniden
- * kullanılır; aksi halde yalnız kayıt tutulur. Yanıtta credentials_sent: true|false|null (null = hesap açılmadı).
+ * hesabı oluştur ve kimlik bilgilerini e-postayla gönder" akışı (provisionApartmentResident + sendIssuedApartmentPin) yeniden
+ * kullanılır; aksi halde yalnız kayıt tutulur. Yanıtta credentials_sent: true|false|null ve credentials_email: hesap açılmadıysa ikisi de null;
+ * credentials_sent null + credentials_email dolu = e-posta gönderimi sürüyor (yanıt ~8 sn'den fazla beklemez).
  */
 export async function createPerson({ siteCode, input, actor, includeUserCode = true }) {
   const actorInfo = actorFromAuthUser(actor);
@@ -930,21 +931,16 @@ export async function createPerson({ siteCode, input, actor, includeUserCode = t
     return id;
   });
 
-  let credentialsSent = null;
+  // Kimlik bilgilerini e-postayla gönder (mevcut akış); hata kişi kaydını bozmaz. PIN saklanmadığı için yalnız bu anda gönderilebilir;
+  // gönderilemezse yönetici Daireler ekranından PIN'i sıfırlar (yeni hesap yönetimin PIN'iyle açıldığı için sıfırlayabilir).
+  // SMTP yavaşsa yanıt ~8 sn'den fazla beklemez (sendIssuedApartmentPin): credentials_sent null + credentials_email dolu = gönderim sürüyor.
+  // credentials_sent / credentials_email ikisi de null = hesap açılmadı.
+  let mail = { sent: null, to: null };
   if (provisionedApartmentId !== null) {
-    // Kimlik bilgilerini e-postayla gönder (mevcut akış); hata kişi kaydını bozmaz, istemciye credentials_sent:false bildirilir.
-    // PIN saklanmadığı için yalnız bu anda gönderilebilir; gönderilemezse yönetici Daireler ekranından PIN'i sıfırlar.
-    try {
-      await sendApartmentCredentials(provisionedApartmentId, { pinCode: provisionedPinCode });
-      credentialsSent = true;
-    } catch (error) {
-      credentialsSent = false;
-      // eslint-disable-next-line no-console
-      console.error('[people] daire sakini e-postasi gonderilemedi:', error?.code || error?.message || 'hata');
-    }
+    mail = await sendIssuedApartmentPin(provisionedApartmentId, provisionedPinCode);
   }
   const detail = await loadPersonDetail(pool, siteCode, personId, { includeUserCode });
-  return detail === null ? null : { ...detail, credentials_sent: credentialsSent };
+  return detail === null ? null : { ...detail, credentials_sent: mail.sent, credentials_email: mail.to };
 }
 
 // ---------------------------------------------------------------------------

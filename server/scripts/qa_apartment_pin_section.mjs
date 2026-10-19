@@ -6,7 +6,8 @@
 // ilk kurulum x apartments yazici yuku (SKIP LOCKED partileri, uzun satir kilitleri, apartments -> users sirasi; 40P01 = 0), HTTP: liste PIN tasimaz,
 // olusturma PIN'i bir kez doner + bir kez e-postalanir, PIN sifirlama (yetki matrisi, eski PIN / oturum gecersiz, audit PIN'siz, no-store), eski
 // "Bilgileri Gonder" 409, sakin kendi parolasini degistirince isaret kalkar, gunluklerde PIN yok. Inceleme duzeltmeleri: sifirlama JWT disi erisimi
-// (misafir gecisi, karekod, bildirim kaydi) kapatir (P3); sakinin kendi parolasinda yonetici PIN'i goremez / e-postasizsa yalniz super (P3); gosterge
+// (misafir gecisi, karekod, bildirim kaydi) kapatir (P3); sakinin kendi parolasini yalniz super sifirlar, yoneticiye 409 (2. tur P2); isaret yalniz
+// bcrypt ile dogrulanan kopyada TRUE, migration temkinli, acilis bcrypt'i beklemez (2. tur P3); gosterge
 // temizlenince eski sakinin e-postasi silinir, yeni hesabin PIN'i eski adrese gitmez (P2); SMTP takilirsa yanit beklemez (P4).
 import http from 'node:http';
 
@@ -24,7 +25,7 @@ export async function sectionApartmentPin(ctx) {
 
   const { pool, ensureDbSchema } = await import('../src/db.js');
   const pinSchema = await import('../src/modules/apartment_pin_schema.js');
-  const { ensureApartmentPinSchema, APARTMENT_PIN_DDL, apartmentPinTuning } = pinSchema;
+  const { ensureApartmentPinSchema, APARTMENT_PIN_DDL, apartmentPinTuning, apartmentPinBackgroundDone } = pinSchema;
   const bcrypt = (await import('bcryptjs')).default;
   const fs = await import('node:fs');
   const path = await import('node:path');
@@ -108,6 +109,8 @@ export async function sectionApartmentPin(ctx) {
     legacy.push({ n, pin, loginName, userCode });
   }
   const registered = await mkUser({ name: 'Kayitli Sakin', email: 'kayitli.sakin@qa.example', loginName: 'kayitli.sakin', password: 'Guclu-Parola-2026!' });
+  // 051 oncesi PATCH /me ile parolasini degistirmis dahili hesap: duz kopya ('1212') ESKIMIS, guncel parola '8888' -> isaret FALSE olmali.
+  const staleUser = await mkUser({ name: 'A Blok Daire 13', email: `${SITE}_a_blok_daire13.${aptNo(13)}.${SITE}@ahbu.local`, loginName: `${SITE}_a_blok_daire13`, password: '8888' });
 
   /** 051 ONCESI durum: isaret sutunu yok; daire satirlarinda duz PIN'ler (canli benzeri). */
   const seedPlain = async () => {
@@ -121,8 +124,13 @@ export async function sectionApartmentPin(ctx) {
     await q(`UPDATE apartments SET resident_pin_code = '   ' WHERE id = $1`, [aptNo(6)]); // yalniz bosluk -> sayilmaz
     // keepPin benzeri: gosterge bos ama PIN duruyordu (gecici pasife alma) + toplu satirlar (partiler birden cok kez doner)
     await q(`UPDATE apartments SET resident_pin_code = lpad(((sort_order * 7919) % 9000 + 1000)::text, 4, '0') WHERE site_code = $1 AND sort_order BETWEEN 10 AND $2`, [SITE, APT_COUNT]);
+    await q(`UPDATE apartments SET resident_user_code = $2, resident_pin_code = '1212', resident_email = 'iletisim13@qa.example' WHERE id = $1`, [aptNo(13), staleUser]);
   };
-  const expectedIssued = 3 + 1 + (APT_COUNT - 10 + 1);
+  // Isaret YALNIZ duz kopya bcrypt ile guncel parolaya esitse TRUE: daire 1-3. Daire 4 (kayitli hesap, '9999' != parola), 13 (eskimis kopya),
+  // 5/6 (bos), toplu satirlar (gostergede hesap yok) FALSE. Dogrulanabilir (bcrypt ozetli hesapli) satirlar: 1, 2, 3, 4, 13.
+  const expectedIssued = 3;
+  const verifiableCount = 5;
+  const plainSeeded = APT_COUNT - 10 + 1 + 6;
   const plainCount = () => countOf(`SELECT COUNT(*)::int AS n FROM apartments WHERE resident_pin_code IS NOT NULL`);
   const issuedCount = () => countOf(`SELECT COUNT(*)::int AS n FROM apartments WHERE site_code = $1 AND resident_pin_issued`, [SITE]);
   const columnDef = async () => (await q(`SELECT data_type, is_nullable, column_default FROM information_schema.columns WHERE table_name = 'apartments' AND column_name = 'resident_pin_issued'`)).rows[0] ?? null;
@@ -130,7 +138,7 @@ export async function sectionApartmentPin(ctx) {
   // ============================================================================================================
   console.log('--- A. yukseltme yolu (051 oncesi sema + duz PIN) -> ensureDbSchema ---');
   await seedPlain();
-  check('A0: baslangic 051 oncesi: isaret sutunu YOK, duz PIN satirlari VAR', (await columnDef()) === null && (await plainCount()) === APT_COUNT - 10 + 1 + 6, await plainCount());
+  check('A0: baslangic 051 oncesi: isaret sutunu YOK, duz PIN satirlari VAR', (await columnDef()) === null && (await plainCount()) === plainSeeded, await plainCount());
   const hashesBefore = (await q(`SELECT user_code, password_hash FROM users WHERE user_code = ANY($1) ORDER BY user_code`, [legacy.map((l) => l.userCode)])).rows;
   const ensureStarted = Date.now();
   await ensureDbSchema();
@@ -138,8 +146,11 @@ export async function sectionApartmentPin(ctx) {
   const def = await columnDef();
   check('A1: resident_pin_issued BOOLEAN NOT NULL DEFAULT false eklendi', def?.data_type === 'boolean' && def.is_nullable === 'NO' && def.column_default === 'false', def);
   check(`A2: TUM tabloda duz PIN kalmadi (resident_pin_code IS NOT NULL = 0; ${APT_COUNT} daire, ${ensureMs} ms)`, (await plainCount()) === 0, await plainCount());
-  check(`A3: isaret yalniz bos olmayan PIN'li satirlarda TRUE (${expectedIssued}); '' ve '   ' FALSE; PIN'siz satirlar FALSE`,
+  const flagOf = async (n) => (await q(`SELECT resident_pin_issued AS v FROM apartments WHERE id = $1`, [aptNo(n)])).rows[0].v;
+  check(`A3: isaret YALNIZ duz kopya bcrypt ile GUNCEL parolaya esitse TRUE (${expectedIssued}: daire 1-3); eskimis kopya (13), kayitli hesap (4), bos PIN, gostergesiz satirlar FALSE`,
     (await issuedCount()) === expectedIssued
+      && (await flagOf(1)) === true && (await flagOf(2)) === true && (await flagOf(3)) === true
+      && (await flagOf(13)) === false && (await flagOf(4)) === false
       && (await q(`SELECT resident_pin_issued AS v FROM apartments WHERE id = $1`, [aptNo(5)])).rows[0].v === false
       && (await q(`SELECT resident_pin_issued AS v FROM apartments WHERE id = $1`, [aptNo(6)])).rows[0].v === false
       && (await q(`SELECT resident_pin_issued AS v FROM apartments WHERE id = $1`, [aptNo(7)])).rows[0].v === false,
@@ -192,11 +203,26 @@ export async function sectionApartmentPin(ctx) {
   await seedPlain();
   const firstCounts = await runMigrationFile();
   const defMigrate = await columnDef();
-  check('C1: migration dosyasi: ayni sutun tanimi (ensure ile birebir), duz PIN 0, isaret ayni sayida',
-    same(defMigrate, def) && (await plainCount()) === 0 && (await issuedCount()) === expectedIssued && firstCounts[1] === APT_COUNT - 10 + 1 + 6, { firstCounts, defMigrate });
+  check(`C1: migration dosyasi TEMKINLI: ayni sutun tanimi (ensure ile birebir); yalniz DOGRULANAMAYAN ${plainSeeded - verifiableCount} kopya FALSE + NULL; dogrulanabilir ${verifiableCount} satir duz kopyasiyla kalir, hicbir isaret TRUE degil`,
+    same(defMigrate, def) && firstCounts[1] === plainSeeded - verifiableCount && (await plainCount()) === verifiableCount && (await issuedCount()) === 0, { firstCounts, defMigrate, plain: await plainCount() });
   const secondCounts = await runMigrationFile();
-  check('C2: migration ikinci kez: UPDATE 0 satir (idempotent), veri degismedi', secondCounts[1] === 0 && (await plainCount()) === 0 && (await issuedCount()) === expectedIssued, secondCounts);
-  check('C3: migration sonrasi ESKI PIN ile giris yine CALISIR', (await login(legacy[1].loginName, legacy[1].pin)).status === 200);
+  check('C2: migration ikinci kez: UPDATE 0 satir (idempotent), veri degismedi', secondCounts[1] === 0 && (await plainCount()) === verifiableCount && (await issuedCount()) === 0, secondCounts);
+  await ensureDbSchema();
+  check(`C3: migration sonrasi sunucu acilisi (bcrypt) tamamlar: duz PIN 0, isaret ${expectedIssued}; ESKI PIN ile giris CALISIR`,
+    (await plainCount()) === 0 && (await issuedCount()) === expectedIssued && (await flagOf(13)) === false && (await login(legacy[1].loginName, legacy[1].pin)).status === 200);
+
+  // C4: acilis suresi dolarsa (burada 0) acilis BEKLEMEZ; kalanlar sunucu acildiktan sonra arka planda (havuz baglantisiyla) tamamlanir.
+  await seedPlain();
+  const savedBudget = apartmentPinTuning.syncBudgetMs;
+  apartmentPinTuning.syncBudgetMs = -1;
+  const bgStart = Date.now();
+  await ensureDbSchema();
+  const bgEnsureMs = Date.now() - bgStart;
+  const plainRightAfter = await plainCount();
+  apartmentPinTuning.syncBudgetMs = savedBudget;
+  await apartmentPinBackgroundDone();
+  check(`C4: acilis bcrypt'i beklemez (${bgEnsureMs} ms; hemen sonra ${plainRightAfter} duz kopya); arka plan tamamlar: duz PIN 0, isaret ${expectedIssued}`,
+    plainRightAfter === plainSeeded && (await plainCount()) === 0 && (await issuedCount()) === expectedIssued && (await flagOf(1)) === true && (await flagOf(13)) === false, { plainRightAfter });
 
   // ============================================================================================================
   console.log('--- D. ilk kurulum x apartments yazici yuku (40P01 = 0) ---');
@@ -223,6 +249,7 @@ export async function sectionApartmentPin(ctx) {
     await holder.end();
     Object.assign(apartmentPinTuning, savedPasses);
     await ensureDbSchema();
+    await apartmentPinBackgroundDone();
     check(`D0: kilitli satir ATLANIR (bekleme yok, ${tookMs} ms): kilitliyken yalniz o satir kaldi (${leftWhileLocked}); kilit kalkinca sonraki acilis tamamladi`,
       held === true && leftWhileLocked === 1 && tookMs < 1500 && (await plainCount()) === 0 && (await issuedCount()) === expectedIssued, { held, leftWhileLocked, tookMs });
   }
@@ -272,6 +299,7 @@ export async function sectionApartmentPin(ctx) {
     running = false;
     await Promise.all(loops.splice(0));
     await ensureDbSchema(); // atlanan (kilitli) satir kaldiysa sonraki acilis tamamlar
+    await apartmentPinBackgroundDone(); // acilis suresi dolduysa arka plan isi bir sonraki denemeden ONCE biter
   }
   Object.assign(apartmentPinTuning, savedTuning);
   await writerPool.end();
@@ -313,8 +341,8 @@ export async function sectionApartmentPin(ctx) {
   const reset = await call('POST', `/manager/apartments/${aptNo(1)}/reset-pin`, manager, {});
   const newPin = reset.body?.pin_code;
   const resetRow = (await q(`SELECT resident_pin_code, resident_pin_issued FROM apartments WHERE id = $1`, [aptNo(1)])).rows[0];
-  check('E4: PIN sifirlama 200 (yonetimin verdigi PIN): yeni 4 haneli PIN yanitta bir kez (pin_code = apartment.resident_pin_code, pin_delivery shown), e-posta 1 + hedef adres, no-store; DB duz kopya YOK',
-    reset.status === 200 && /^\d{4}$/.test(String(newPin)) && reset.body.apartment.resident_pin_code === newPin && reset.body.pin_delivery === 'shown' && reset.body.credentials_sent === true
+  check('E4: PIN sifirlama 200 (yonetimin verdigi PIN): yeni 4 haneli PIN yanitta bir kez (pin_code = apartment.resident_pin_code), e-posta 1 + hedef adres, no-store; DB duz kopya YOK',
+    reset.status === 200 && /^\d{4}$/.test(String(newPin)) && reset.body.apartment.resident_pin_code === newPin && reset.body.credentials_sent === true
       && reset.body.credentials_email === 'iletisim1@qa.example' && mails.length === 1 && mails[0].to === 'iletisim1@qa.example'
       && String(mails[0].html).includes(newPin) && reset.headers.get('cache-control') === 'no-store' && resetRow.resident_pin_code === null && resetRow.resident_pin_issued === true,
     { status: reset.status, body: reset.body });
@@ -330,9 +358,9 @@ export async function sectionApartmentPin(ctx) {
     meBefore.status === 200 && oldPinLogin.status === 401 && newPinLogin.status === 200 && meAfter.status === 401, { meBefore: meBefore.status, old: oldPinLogin.status, new: newPinLogin.status, meAfter: meAfter.status });
   const auditRows = (await q(`SELECT action, actor_user_code, site_code, target_type, target_id, details FROM audit_log WHERE action = 'apartment.pin_reset'`)).rows;
   const pinIn = (text, pin) => new RegExp(`(^|[^0-9])${pin}([^0-9]|$)`).test(text);
-  check('E6: audit apartment.pin_reset (kim, hangi daire, teslim bicimi, kapanan erisim sayilari); hicbir alan PIN TASIMAZ',
+  check('E6: audit apartment.pin_reset (kim, hangi daire, sakinin kendi parolasi mi ezildi, kapanan erisim sayilari); hicbir alan PIN TASIMAZ',
     auditRows.length === 1 && Number(auditRows[0].actor_user_code) === manager && Number(auditRows[0].site_code) === SITE && auditRows[0].target_id === String(aptNo(1))
-      && same(Object.entries(auditRows[0].details).sort(), Object.entries({ delivery: 'shown', guest_passes: 1, qr_tokens: 1, push_devices: 1, push_outbox: 0 }).sort()) && !pinIn(JSON.stringify(auditRows), newPin), auditRows);
+      && same(Object.entries(auditRows[0].details).sort(), Object.entries({ resident_chosen_password: false, guest_passes: 1, qr_tokens: 1, push_devices: 1, push_outbox: 0 }).sort()) && !pinIn(JSON.stringify(auditRows), newPin), auditRows);
 
   const hashRegistered = (await q(`SELECT password_hash FROM users WHERE user_code = $1`, [registered])).rows[0].password_hash;
   const notResettable = await call('POST', `/manager/apartments/${aptNo(4)}/reset-pin`, manager, {});
@@ -353,26 +381,42 @@ export async function sectionApartmentPin(ctx) {
   const selfRow = (await q(`SELECT resident_pin_issued, resident_pin_code FROM apartments WHERE id = $1`, [aptNo(3)])).rows[0];
   check('E9: daire hesabi kendi parolasini belirleyince (PATCH /me) "PIN verildi" isareti kalkar', patchMe.status === 200 && selfRow.resident_pin_issued === false && selfRow.resident_pin_code === null, { status: patchMe.status, body: patchMe.body, selfRow });
 
-  // --- inceleme P3: sakinin KENDI belirledigi parola yoneticice sessizce degistirilip hesap kullanilamaz
+  // --- inceleme 2. tur P2: sakinin KENDI belirledigi parolayi yonetici SIFIRLAYAMAZ (e-posta olsa da); yalniz super. 409'da hicbir sey degismez.
+  await q(`INSERT INTO guest_passes (site_code, door_id, created_by_user_code, title, token, expires_at) VALUES ($1, $2, $3, 'Misafir', 'gp-pin-qa-3', NOW() + interval '1 day')`, [SITE, doorId, legacy[2].userCode]);
+  const hashBeforeDenied = (await q(`SELECT password_hash FROM users WHERE user_code = $1`, [legacy[2].userCode])).rows[0].password_hash;
+  const auditBeforeDenied = await countOf(`SELECT COUNT(*)::int AS n FROM audit_log WHERE action = 'apartment.pin_reset'`);
   mails.length = 0;
-  const silent = await call('POST', `/manager/apartments/${aptNo(3)}/reset-pin`, manager, { send_email: false });
-  const mailedPin = /<strong>PIN:<\/strong> (\d{4})/.exec(String(mails[0]?.html ?? ''))?.[1];
-  check('E12: sakinin kendi parolasi: yonetici sifirlamasi PIN\'i YANITTA VERMEZ (pin_code null, satirda null, pin_delivery email_only); send_email:false yok sayilir, PIN yalniz sakinin adresine 1 e-posta',
-    silent.status === 200 && silent.body.pin_code === null && silent.body.apartment.resident_pin_code === null && silent.body.pin_delivery === 'email_only'
-      && silent.body.credentials_sent === true && silent.body.credentials_email === 'iletisim3@qa.example' && mails.length === 1 && mails[0].to === 'iletisim3@qa.example' && /^\d{4}$/.test(String(mailedPin)),
-    { status: silent.status, body: silent.body, mails: mails.length });
-  check('E12b: e-postadaki PIN ile giris CALISIR, sakinin eski (kendi) parolasi 401',
-    (await login(legacy[2].loginName, mailedPin)).status === 200 && (await login(legacy[2].loginName, 'Kendi-Parolam-2026!')).status === 401);
+  const denied = await call('POST', `/manager/apartments/${aptNo(3)}/reset-pin`, manager, {});
+  const afterDenied = (await q(`SELECT a.resident_pin_issued, u.password_hash, (SELECT is_active FROM guest_passes WHERE token = 'gp-pin-qa-3') AS gp FROM apartments a JOIN users u ON u.user_code = a.resident_user_code WHERE a.id = $1`, [aptNo(3)])).rows[0];
+  check('E12: sakinin kendi parolasi (isaret FALSE, e-posta VAR): yonetici 409 APARTMENT_PIN_RESET_NEEDS_SUPER + sabit ileti; ROLLBACK: parola, isaret, misafir gecisi, audit DEGISMEDI; e-posta YOK',
+    denied.status === 409 && denied.body.code === 'APARTMENT_PIN_RESET_NEEDS_SUPER'
+      && denied.body.error === "Sakin şifresini kendisi belirlemiş. Bu durumda PIN'i yalnız süper kullanıcı sıfırlayabilir; sakin kendi şifresini uygulamadan değiştirebilir."
+      && afterDenied.password_hash === hashBeforeDenied && afterDenied.resident_pin_issued === false && afterDenied.gp === true && mails.length === 0
+      && (await countOf(`SELECT COUNT(*)::int AS n FROM audit_log WHERE action = 'apartment.pin_reset'`)) === auditBeforeDenied
+      && (await login(legacy[2].loginName, 'Kendi-Parolam-2026!')).status === 200,
+    { denied: denied.body, afterDenied });
 
   const superUser = await mkUser({ name: 'PIN Super', role: 'super_user' });
+  mails.length = 0;
+  const bySuper = await call('POST', `/manager/apartments/${aptNo(3)}/reset-pin`, superUser, {});
+  const superRow = (await q(`SELECT a.resident_pin_issued, (SELECT is_active FROM guest_passes WHERE token = 'gp-pin-qa-3') AS gp FROM apartments a WHERE a.id = $1`, [aptNo(3)])).rows[0];
+  const superAudit = (await q(`SELECT details FROM audit_log WHERE action = 'apartment.pin_reset' ORDER BY id DESC LIMIT 1`)).rows[0];
+  check('E13: super kullanici sakinin kendi parolasini sifirlar: PIN yanitta BIR KEZ + e-posta (hedef adres), isaret TRUE, misafir gecisi kapandi, audit "sakinin parolasi ezildi"; yeni PIN 200, eski (kendi) parolasi 401',
+    bySuper.status === 200 && /^\d{4}$/.test(String(bySuper.body.pin_code)) && bySuper.body.apartment.resident_pin_code === bySuper.body.pin_code
+      && bySuper.body.credentials_sent === true && bySuper.body.credentials_email === 'iletisim3@qa.example' && mails.length === 1
+      && superRow.resident_pin_issued === true && superRow.gp === false && superAudit.details.resident_chosen_password === true
+      && (await login(legacy[2].loginName, bySuper.body.pin_code)).status === 200 && (await login(legacy[2].loginName, 'Kendi-Parolam-2026!')).status === 401,
+    { body: bySuper.body, superRow, superAudit });
+  const afterSuperManager = await call('POST', `/manager/apartments/${aptNo(3)}/reset-pin`, manager, {});
+  check('E13b: super sifirlamasindan sonra PIN yonetimin verdigi PIN\'dir (isaret TRUE): yonetici sifirlayabilir',
+    afterSuperManager.status === 200 && /^\d{4}$/.test(String(afterSuperManager.body.pin_code)), afterSuperManager.body);
+
   await q(`UPDATE apartments SET resident_pin_issued = FALSE, resident_email = NULL WHERE id = $1`, [aptNo(2)]);
-  const hashBeforeNoMail = (await q(`SELECT password_hash FROM users WHERE user_code = $1`, [legacy[1].userCode])).rows[0].password_hash;
   const noMailManager = await call('POST', `/manager/apartments/${aptNo(2)}/reset-pin`, manager, {});
-  const hashAfterNoMail = (await q(`SELECT password_hash FROM users WHERE user_code = $1`, [legacy[1].userCode])).rows[0].password_hash;
   const noMailSuper = await call('POST', `/manager/apartments/${aptNo(2)}/reset-pin`, superUser, {});
-  check('E13: sakinin kendi parolasi + e-posta YOK: yonetici 409 APARTMENT_PIN_RESET_NEEDS_SUPER (parola DEGISMEZ); super kullanici sifirlar ve PIN\'i bir kez gorur',
-    noMailManager.status === 409 && noMailManager.body.code === 'APARTMENT_PIN_RESET_NEEDS_SUPER' && /süper kullanıcı/.test(noMailManager.body.error) && hashBeforeNoMail === hashAfterNoMail
-      && noMailSuper.status === 200 && noMailSuper.body.pin_delivery === 'shown' && /^\d{4}$/.test(String(noMailSuper.body.pin_code)) && noMailSuper.body.credentials_email === null
+  check('E13c: isaret FALSE + e-posta YOK: yonetici 409 NEEDS_SUPER; super sifirlar (credentials_email null, PIN bir kez) ve yeni PIN ile giris CALISIR',
+    noMailManager.status === 409 && noMailManager.body.code === 'APARTMENT_PIN_RESET_NEEDS_SUPER'
+      && noMailSuper.status === 200 && noMailSuper.body.credentials_email === null && /^\d{4}$/.test(String(noMailSuper.body.pin_code))
       && (await login(legacy[1].loginName, noMailSuper.body.pin_code)).status === 200,
     { manager: noMailManager.body, super: noMailSuper.body });
 
@@ -420,11 +464,11 @@ export async function sectionApartmentPin(ctx) {
     slow.status === 200 && slowMs < 3000 && slow.body.credentials_sent === null && slow.body.credentials_email === 'iletisim1@qa.example' && /^\d{4}$/.test(String(slow.body.pin_code))
       && (await login(legacy[0].loginName, slow.body.pin_code)).status === 200, { slowMs, body: slow.body });
 
-  const issuedPins = ['6047', newPin, '4821', '1357', '2468', mailedPin, noMailSuper.body?.pin_code, '7310', slow.body?.pin_code].filter(Boolean);
+  const issuedPins = ['6047', newPin, '4821', '1357', '2468', '1212', '8888', bySuper.body?.pin_code, afterSuperManager.body?.pin_code, noMailSuper.body?.pin_code, '7310', slow.body?.pin_code].filter(Boolean);
   // Aktarim sayac satiri ([DB] 051 ... N duz kopya) yalniz sayi tasir; PIN ile yanlis eslesmesin diye disarida.
   const logText = `${logLines.filter((line) => !line.startsWith('[DB] 051')).join('\n')}\n${serverErrors.join('\n')}`;
   check('E10: sunucu gunlugu (console / hata satirlari) verilen / eski PIN\'leri TASIMAZ', !issuedPins.some((pin) => pinIn(logText, pin)), issuedPins.filter((pin) => pinIn(logText, pin)));
-  check('E11: migration dosyasi APARTMENT_PIN_DDL ile ayni ifadeleri tasir (zincir esitligi chain bolumunde)', migrationSql.includes(APARTMENT_PIN_DDL.issuedColumn) && migrationSql.includes(APARTMENT_PIN_DDL.backfill));
+  check('E11: migration dosyasi APARTMENT_PIN_DDL ile ayni ifadeleri tasir (zincir esitligi chain bolumunde)', migrationSql.includes(APARTMENT_PIN_DDL.issuedColumn) && migrationSql.includes(APARTMENT_PIN_DDL.clearUnverifiable));
 
   server.close();
   await finishChild(pool);

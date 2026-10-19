@@ -74,6 +74,7 @@ Future<void> _pumpCard(
   bool dark = false,
   VoidCallback? onResetPin,
   bool resetting = false,
+  bool isSuperUser = false,
 }) async {
   await pumpList(
     t,
@@ -82,6 +83,7 @@ Future<void> _pumpCard(
       onEdit: () {},
       onResetPin: onResetPin,
       resettingPin: resetting,
+      isSuperUser: isSuperUser,
       onDelete: () {},
     ),
     width: width,
@@ -94,16 +96,15 @@ Future<void> _pumpCard(
 
 const String _mail = 'sakin.cok.uzun.eposta.adresi@ornek-alan-adi.com';
 
-ApartmentPinIssue _issue({
-  bool? sent = true,
-  String? email = _mail,
-  bool emailOnly = false,
-}) => ApartmentPinIssue(
+ApartmentPinIssue _issue({bool? sent = true, String? email = _mail}) => ApartmentPinIssue(
   apartment: _apartment(),
-  pinCode: emailOnly ? null : '4821',
+  pinCode: '4821',
   credentialsSent: sent,
   credentialsEmail: email,
-  emailOnly: emailOnly,
+);
+
+OutlinedButton _resetButton(WidgetTester t) => t.widget<OutlinedButton>(
+  find.ancestor(of: find.text("PIN'i Sıfırla"), matching: find.byType(OutlinedButton)),
 );
 
 void main() {
@@ -113,23 +114,36 @@ void main() {
       expect(find.text('Şifre (PIN): yönetim verdi'), findsOneWidget);
       expect(find.text(kApartmentPinOnceNotice), findsOneWidget);
       expect(find.text("PIN'i Sıfırla"), findsOneWidget);
+      expect(_resetButton(t).onPressed, isNotNull);
       // Model yanlışlıkla PIN taşısa bile satır PIN'i YAZMAZ; eski "Bilgileri Gönder" yok.
       expect(find.textContaining('9876'), findsNothing);
       expect(find.text('Bilgileri Gönder'), findsNothing);
+    });
+
+    _matrix('sakin kendi şifresini belirlemiş, YÖNETİCİ görünümü: düğme devre dışı + yalnız süper açıklaması', (t, w, h, s, dark) async {
+      await _pumpCard(t, _apartment(issued: false), width: w, height: h, scale: s, dark: dark, onResetPin: () {});
+      expect(find.text('Şifre (PIN): sakin kendisi belirledi'), findsOneWidget);
+      expect(find.text(kApartmentPinNeedsSuper), findsOneWidget);
+      expect(find.text(kApartmentPinOnceNotice), findsNothing);
+      expect(_resetButton(t).onPressed, isNull, reason: 'yönetici sıfırlayamaz (sunucu 409 NEEDS_SUPER)');
+    });
+
+    testWidgets('sakin kendi şifresini belirlemiş, SÜPER kullanıcı: düğme etkin, "bir kez gösterilir" notu', (t) async {
+      var calls = 0;
+      await _pumpCard(t, _apartment(issued: false), onResetPin: () => calls += 1, isSuperUser: true);
+      expect(find.text(kApartmentPinNeedsSuper), findsNothing);
+      expect(find.text(kApartmentPinOnceNotice), findsOneWidget);
+      await tapText(t, "PIN'i Sıfırla");
+      expect(calls, 1);
     });
 
     testWidgets('kayıtlı (kendi hesabıyla giren) sakin: PIN satırı, not ve sıfırlama düğmesi YOK', (t) async {
       await _pumpCard(t, _apartment(issued: false, resettable: false), onResetPin: () {});
       expect(find.textContaining('Şifre (PIN)'), findsNothing);
       expect(find.text(kApartmentPinOnceNotice), findsNothing);
+      expect(find.text(kApartmentPinNeedsSuper), findsNothing);
       expect(find.text("PIN'i Sıfırla"), findsNothing);
       expect(t.takeException(), isNull);
-    });
-
-    testWidgets('daire hesabı ama sakin kendi parolasını belirledi: durum yazılır, sıfırlama yine mümkün', (t) async {
-      await _pumpCard(t, _apartment(issued: false), onResetPin: () {});
-      expect(find.text('Şifre (PIN): sakin kendisi belirledi'), findsOneWidget);
-      expect(find.text("PIN'i Sıfırla"), findsOneWidget);
     });
 
     testWidgets('yetkisiz görünüm (onResetPin yok): not görünür, düğme yok', (t) async {
@@ -145,10 +159,7 @@ void main() {
       expect(calls, 1);
 
       await _pumpCard(t, _apartment(), onResetPin: () => calls += 1, resetting: true);
-      final button = t.widget<OutlinedButton>(
-        find.ancestor(of: find.text("PIN'i Sıfırla"), matching: find.byType(OutlinedButton)),
-      );
-      expect(button.onPressed, isNull);
+      expect(_resetButton(t).onPressed, isNull);
       expect(t.takeException(), isNull);
     });
 
@@ -159,18 +170,13 @@ void main() {
   });
 
   group('ApartmentPinIssuedDialog: yeni PIN bir kez', () {
-    // (ad, kayıt, beklenen gönderim iletisi, PIN görünür mü)
-    final scenarios = <(String, ApartmentPinIssue, String, bool)>[
-      ('gönderildi + hedef adres', _issue(), 'PIN $_mail adresine bir kez gönderildi.', true),
-      ('gönderim sürüyor (yanıt beklemedi)', _issue(sent: null), 'PIN $_mail adresine gönderiliyor. $kApartmentPinMailPending', true),
-      (
-        'yalnız e-posta (sakinin kendi parolası), gönderilemedi',
-        _issue(sent: false, emailOnly: true),
-        "E-posta ($_mail) gönderilemedi ve PIN gösterilmez. Daha sonra PIN'i yeniden sıfırlayın.",
-        false,
-      ),
+    // (ad, kayıt, beklenen gönderim iletisi)
+    final scenarios = <(String, ApartmentPinIssue, String)>[
+      ('gönderildi + hedef adres', _issue(), 'PIN $_mail adresine bir kez gönderildi.'),
+      ('gönderim sürüyor (yanıt beklemedi)', _issue(sent: null), 'PIN $_mail adresine gönderiliyor. $kApartmentPinMailPending'),
+      ('gönderilemedi', _issue(sent: false), "E-posta ($_mail) gönderilemedi. PIN'i sakine kendiniz iletin."),
     ];
-    for (final (name, issue, mail, shown) in scenarios) {
+    for (final (name, issue, mail) in scenarios) {
       _matrix(name, (t, w, h, s, dark) async {
         await openDialogAt(
           t,
@@ -180,34 +186,24 @@ void main() {
           scale: s,
           dark: dark,
         );
-        expect(find.text(shown ? "Daire PIN'i" : 'PIN sıfırlandı'), findsOneWidget);
-        expect(find.text('4821'), shown ? findsOneWidget : findsNothing);
-        expect(find.text('Kopyala'), shown ? findsOneWidget : findsNothing);
+        expect(find.text("Daire PIN'i"), findsOneWidget);
+        expect(find.text('4821'), findsOneWidget);
+        expect(find.text('Kopyala'), findsOneWidget);
         expect(find.text('5899864115_a_blok_daire12'), findsOneWidget);
-        expect(find.textContaining('yalnız şimdi gösterilir'), shown ? findsOneWidget : findsNothing);
+        expect(find.textContaining('yalnız şimdi gösterilir'), findsOneWidget);
         expect(find.text(mail), findsOneWidget);
         await scrollTo(t, find.text('Tamam'));
         expect(t.takeException(), isNull);
       });
     }
 
-    test('gönderim iletileri: hedef adres yazılır; adres yoksa ve PIN gösteriliyorsa elden iletme', () {
-      expect(
-        ApartmentPinIssuedDialog.mailStatus(_issue(sent: false)).$2,
-        "E-posta ($_mail) gönderilemedi. PIN'i sakine kendiniz iletin.",
-      );
+    test('gönderim iletileri: adres yoksa elden iletme; "yeniden sıfırlayın" yalnız gönderim sürerken (PIN ekranda)', () {
       expect(
         ApartmentPinIssuedDialog.mailStatus(_issue(sent: null, email: null)).$2,
         "Sakinin e-posta adresi yok. PIN'i sakine kendiniz iletin.",
       );
-      expect(
-        ApartmentPinIssuedDialog.mailStatus(_issue(emailOnly: true)).$2,
-        'Yeni PIN $_mail adresine gönderildi; güvenlik gereği burada gösterilmez.',
-      );
-      expect(
-        ApartmentPinIssuedDialog.mailStatus(_issue(sent: null, emailOnly: true)).$2,
-        contains(kApartmentPinMailPending),
-      );
+      expect(ApartmentPinIssuedDialog.mailStatus(_issue(sent: false)).$2, isNot(contains('yeniden sıfırlayın')));
+      expect(ApartmentPinIssuedDialog.mailStatus(_issue(sent: true)).$2, isNot(contains('gösterilmez')));
     });
 
     testWidgets('Kopyala panoya PIN\'i yazar ("Kopyalandı"); dışarı dokunmak kapatmaz; Tamam kapatır', (t) async {
@@ -256,42 +252,56 @@ void main() {
     });
   });
 
-  group('confirmApartmentPinReset', () {
-    _matrix('onay penceresi', (t, w, h, s, dark) async {
+  group('confirmApartmentPinReset (role göre metin)', () {
+    _matrix('yönetici, yönetimin verdiği PIN: "Yeni PIN size bir kez gösterilir" + e-posta', (t, w, h, s, dark) async {
       await openDialogAt(
         t,
-        (context) => confirmApartmentPinReset(context, apartment: _apartment()),
+        (context) => confirmApartmentPinReset(context, apartment: _apartment(), isSuper: false),
         width: w,
         height: h,
         scale: s,
         dark: dark,
       );
       expect(find.text('PIN sıfırlansın mı?'), findsOneWidget);
-      expect(find.textContaining('Eski PIN artık çalışmaz'), findsOneWidget);
-      expect(find.textContaining('sakinin e-posta adresine ($_mail) de gönderilir'), findsOneWidget);
+      expect(find.textContaining('Eski şifre artık çalışmaz'), findsOneWidget);
+      expect(find.textContaining('Yeni PIN size bir kez gösterilir ve sakinin e-posta adresine ($_mail) de gönderilir.'), findsOneWidget);
       expect(find.textContaining('misafir geçişleri ve karekodlar kapanır'), findsOneWidget);
       await scrollTo(t, find.text('Sıfırla'));
       expect(find.text('Vazgeç'), findsOneWidget);
     });
 
-    testWidgets('onay true, vazgeç false; e-postasız dairede yalnız ekranda bir kez', (t) async {
+    _matrix('süper kullanıcı, sakinin kendi şifresi: uyarı + "Yeni PIN size bir kez gösterilir"', (t, w, h, s, dark) async {
+      await openDialogAt(
+        t,
+        (context) => confirmApartmentPinReset(context, apartment: _apartment(issued: false, email: null), isSuper: true),
+        width: w,
+        height: h,
+        scale: s,
+        dark: dark,
+      );
+      expect(find.textContaining('süper kullanıcı olarak onun şifresinin yerine yeni PIN veriyorsunuz'), findsOneWidget);
+      expect(find.textContaining('Yeni PIN size bir kez gösterilir.'), findsOneWidget);
+      await scrollTo(t, find.text('Sıfırla'));
+    });
+
+    testWidgets('onay true, vazgeç false; yönetici + sakinin kendi şifresi: pencere AÇILMAZ (false)', (t) async {
       bool? result;
       await openDialogAt(
         t,
-        (context) async => result = await confirmApartmentPinReset(context, apartment: _apartment(email: null)),
+        (context) async => result = await confirmApartmentPinReset(context, apartment: _apartment(email: null), isSuper: false),
         width: 360,
         height: 900,
         scale: 1.0,
         dark: false,
       );
-      expect(find.textContaining('Yeni PIN yalnız ekranda bir kez gösterilir.'), findsOneWidget);
+      expect(find.textContaining('Yeni PIN size bir kez gösterilir.'), findsOneWidget);
       await tapText(t, 'Sıfırla');
       await settleFor(t);
       expect(result, isTrue);
 
       await openDialogAt(
         t,
-        (context) async => result = await confirmApartmentPinReset(context, apartment: _apartment()),
+        (context) async => result = await confirmApartmentPinReset(context, apartment: _apartment(), isSuper: false),
         width: 360,
         height: 900,
         scale: 1.0,
@@ -300,35 +310,18 @@ void main() {
       await tapFinder(t, find.text('Vazgeç'));
       await settleFor(t);
       expect(result, isFalse);
-    });
 
-    _matrix('sakin kendi şifresini belirlemiş (PIN yöneticiye gösterilmez)', (t, w, h, s, dark) async {
+      result = null;
       await openDialogAt(
         t,
-        (context) => confirmApartmentPinReset(context, apartment: _apartment(issued: false)),
-        width: w,
-        height: h,
-        scale: s,
-        dark: dark,
-      );
-      expect(
-        find.textContaining('yeni PIN size gösterilmez, yalnız sakinin e-posta adresine ($_mail) gönderilir'),
-        findsOneWidget,
-      );
-      await scrollTo(t, find.text('Sıfırla'));
-    });
-
-    testWidgets('sakin kendi şifresi + e-posta yok: yalnız süper kullanıcı uyarısı', (t) async {
-      await openDialogAt(
-        t,
-        (context) => confirmApartmentPinReset(context, apartment: _apartment(issued: false, email: null)),
+        (context) async => result = await confirmApartmentPinReset(context, apartment: _apartment(issued: false), isSuper: false),
         width: 360,
         height: 900,
         scale: 1.0,
         dark: false,
       );
-      expect(find.textContaining("PIN'i yalnız süper kullanıcı sıfırlayabilir"), findsOneWidget);
-      expect(t.takeException(), isNull);
+      expect(find.text('PIN sıfırlansın mı?'), findsNothing);
+      expect(result, isFalse);
     });
   });
 
@@ -416,22 +409,13 @@ void main() {
       expect(ApartmentPinIssue.fromResponse(without, {'pin_code': '2468', 'credentials_sent': 'evet'})!.credentialsSent, isNull);
     });
 
-    test('ApartmentPinIssue.fromResponse: yalnız e-posta teslimi (pin_code null) ve hedef adres', () {
+    test('ApartmentPinIssue.fromResponse: hedef adres; gönderim sürüyor (null + adres); PIN yoksa null (yalnız-e-posta modu YOK)', () {
       final apt = ApartmentRecord.fromJson({'id': 1, 'site_code': 2, 'block_id': 3});
-      final onlyMail = ApartmentPinIssue.fromResponse(apt, {
-        'pin_code': null,
-        'pin_delivery': 'email_only',
-        'credentials_sent': true,
-        'credentials_email': ' ayse@example.com ',
-      });
-      expect(onlyMail, isNotNull);
-      expect(onlyMail!.pinCode, isNull);
-      expect(onlyMail.emailOnly, isTrue);
-      expect(onlyMail.credentialsEmail, 'ayse@example.com');
-      final pending = ApartmentPinIssue.fromResponse(apt, {'pin_code': '1357', 'pin_delivery': 'shown', 'credentials_sent': null, 'credentials_email': 'a@b.co'});
+      final pending = ApartmentPinIssue.fromResponse(apt, {'pin_code': '1357', 'credentials_sent': null, 'credentials_email': ' a@b.co '});
       expect(pending!.pinCode, '1357');
       expect(pending.credentialsSent, isNull);
       expect(pending.credentialsEmail, 'a@b.co');
+      expect(ApartmentPinIssue.fromResponse(apt, {'pin_code': null, 'pin_delivery': 'email_only', 'credentials_sent': true}), isNull);
       expect(ApartmentPinIssue.fromResponse(apt, {'credentials_email': ''}), isNull);
     });
 

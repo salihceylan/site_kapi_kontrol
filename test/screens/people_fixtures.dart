@@ -313,6 +313,9 @@ class PeopleFakeAuth extends AuthService with ModuleRequestFixtures {
   /// Kişi eklenince yanıttaki `credentials_sent` (null: alan yok).
   bool? nextCredentialsSent;
 
+  /// Kişi eklenince yanıttaki `credentials_email` (null: alan yok). null + adres = gönderim sürüyor.
+  String? nextCredentialsEmail;
+
   /// PERSON_EXISTS yanıtında `person_id` bulunsun mu? (false: alan yok.)
   bool personExistsHasId = true;
 
@@ -610,6 +613,7 @@ class PeopleFakeAuth extends AuthService with ModuleRequestFixtures {
     );
     final created = Map<String, dynamic>.of(peopleJson[id]!);
     if (nextCredentialsSent != null) created['credentials_sent'] = nextCredentialsSent;
+    if (nextCredentialsEmail != null) created['credentials_email'] = nextCredentialsEmail;
     return PersonDetail.fromJson(created);
   }
 

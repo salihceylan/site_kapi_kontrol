@@ -57,25 +57,28 @@ describe('migration 049: firma ve sözleşme takibi', () => {
     assert.deepEqual(findUnsafeStatements(MIGRATION), []);
   });
 
-  it('CONTRACTS_DDL migration 049 ile AYNI ifadeleri taşır (yorumlar ve boşluklar dışında birebir, AYNI sırayla): 3 tablo, 8 FK, 4 indeks', () => {
+  it('CONTRACTS_DDL migration 049 ile AYNI ifadeleri taşır (yorumlar ve boşluklar dışında birebir, AYNI sırayla): 3 tablo, 1 sonradan eklenen sütun (claimed_at), 8 FK, 4 indeks', () => {
     const fromMigration = splitStatements(MIGRATION);
-    assert.equal(fromMigration.length, 15);
+    assert.equal(fromMigration.length, 16);
     assert.deepEqual(fromMigration, CONTRACTS_DDL_ORDER.map((name) => normalizeSql(CONTRACTS_DDL[name])));
     assert.deepEqual(Object.keys(CONTRACTS_DDL), [...CONTRACTS_DDL_ORDER]);
   });
 
-  it('EKLEMELİ ve idempotent: yalnız CREATE TABLE / INDEX IF NOT EXISTS ve katalog korumalı FK; DROP / UPDATE / DELETE / INSERT YOK, ALTER yalnız yeni tablolar', () => {
+  it('EKLEMELİ ve idempotent: yalnız CREATE TABLE / INDEX IF NOT EXISTS, katalog korumalı FK ve claimed_at için ADD COLUMN IF NOT EXISTS; DROP / UPDATE / DELETE / INSERT YOK, ALTER yalnız yeni tablolar', () => {
     for (const statement of splitStatements(MIGRATION)) {
       assert.match(
         statement,
-        /^(CREATE (UNIQUE )?(TABLE|INDEX) IF NOT EXISTS |DO \$\$ BEGIN IF NOT EXISTS \( SELECT 1 FROM pg_constraint WHERE conname = '\w+_fkey' AND conrelid = '\w+'::regclass \) THEN ALTER TABLE \w+ ADD CONSTRAINT \w+_fkey FOREIGN KEY \(\w+\) REFERENCES \w+\(\w+\) ON DELETE (CASCADE|SET NULL|RESTRICT); END IF; END \$\$$)/,
+        /^(CREATE (UNIQUE )?(TABLE|INDEX) IF NOT EXISTS |DO \$\$ BEGIN IF NOT EXISTS \( SELECT 1 FROM pg_constraint WHERE conname = '\w+_fkey' AND conrelid = '\w+'::regclass \) THEN ALTER TABLE \w+ ADD CONSTRAINT \w+_fkey FOREIGN KEY \(\w+\) REFERENCES \w+\(\w+\) ON DELETE (CASCADE|SET NULL|RESTRICT); END IF; END \$\$$|ALTER TABLE contract_reminders ADD COLUMN IF NOT EXISTS claimed_at TIMESTAMPTZ NOT NULL DEFAULT NOW\(\)$)/,
       );
     }
     const all = normalizeSql(MIGRATION);
     assert.ok(!/\b(DROP|TRUNCATE|UPDATE|DELETE FROM|INSERT INTO)\b/i.test(all));
     const altered = new Set((all.match(/ALTER TABLE (\w+)/g) ?? []).map((entry) => entry.slice('ALTER TABLE '.length)));
     assert.deepEqual([...altered].sort(), ['contract_reminders', 'contract_vendors', 'site_contracts']);
-    assert.equal((all.match(/ALTER TABLE/g) ?? []).length, 8);
+    assert.equal((all.match(/ALTER TABLE/g) ?? []).length, 9);
+    assert.equal((all.match(/ADD COLUMN/g) ?? []).length, 1);
+    // sütun ifadesi tablonun HEMEN ardından (FK / indekslerden önce)
+    assert.equal(CONTRACTS_DDL_ORDER.indexOf('remindersClaimedAtColumn'), CONTRACTS_DDL_ORDER.indexOf('remindersTable') + 1);
   });
 
   it("AÇILIŞ 40P01 dersi: DDL dev blokta DEĞİL; db.js yalnız ensureContractsSchema(client) çağırır, iş takibi ekleri şemasından SONRA ve people_v1'den ÖNCE", () => {
@@ -238,14 +241,16 @@ describe('ensureContractsSchema (katalog kontrolü + yeniden deneme)', () => {
     return `${table}.${constraint}`;
   });
 
-  function fakeClient({ tables, indexes, fks = [], failures = {} }) {
+  const ALL_COLUMNS = ['contract_reminders.claimed_at'];
+
+  function fakeClient({ tables, indexes, fks = [], columns = ALL_COLUMNS, failures = {} }) {
     const log = [];
     return {
       log,
       async query(text) {
         const statement = normalizeSql(text);
         log.push(statement);
-        if (/^SELECT ARRAY/.test(statement)) return { rows: [{ tables, indexes, fks }] };
+        if (/^SELECT ARRAY/.test(statement)) return { rows: [{ tables, indexes, fks, columns: columns.filter((column) => tables.includes(column.split('.')[0])) }] };
         if (/^SET lock_timeout|^RESET lock_timeout/.test(statement)) return { rows: [] };
         const key = Object.keys(failures).find((needle) => statement.includes(needle));
         if (key && failures[key].length > 0) throw Object.assign(new Error('enjekte'), { code: failures[key].shift() });
@@ -253,7 +258,7 @@ describe('ensureContractsSchema (katalog kontrolü + yeniden deneme)', () => {
       },
     };
   }
-  const ddlOf = (client) => client.log.filter((statement) => /^(CREATE|DO)/.test(statement));
+  const ddlOf = (client) => client.log.filter((statement) => /^(CREATE|DO|ALTER)/.test(statement));
 
   it('4 indeks ve 8 FK adı beklenen kümedir', () => {
     assert.deepEqual(ALL_INDEXES, ['uq_contract_vendors_site_name', 'idx_site_contracts_site_end', 'idx_site_contracts_site_vendor', 'idx_contract_reminders_site_sent']);
@@ -267,12 +272,31 @@ describe('ensureContractsSchema (katalog kontrolü + yeniden deneme)', () => {
     assert.match(client.log[0], /^SELECT ARRAY/);
   });
 
-  it('hiçbiri yoksa: lock_timeout, her ifade TEK ayrı sorgu olarak SIRAYLA, sonda RESET', async () => {
+  it('katalog sorgusu sonradan eklenen sütunu da sorar (TEK sorgu; normal açılış maliyeti değişmez)', async () => {
+    const client = fakeClient({ tables: ALL_TABLES, indexes: ALL_INDEXES, fks: ALL_FKS });
+    await ensureContractsSchema(client);
+    assert.equal(client.log.length, 1);
+    assert.match(client.log[0], /FROM pg_attribute a INNER JOIN pg_class r ON r\.oid = a\.attrelid .* = ANY\(\$4::TEXT\[\]\) \) AS columns$/);
+  });
+
+  it("hiçbiri yoksa: lock_timeout, her ifade TEK ayrı sorgu olarak SIRAYLA, sonda RESET; yeni tablo claimed_at'i zaten içerdiği için ALTER GÖNDERİLMEZ", async () => {
     const client = fakeClient({ tables: [], indexes: [] });
     await ensureContractsSchema(client);
     assert.equal(client.log[1], "SET lock_timeout = '2s'");
     assert.equal(client.log[client.log.length - 1], 'RESET lock_timeout');
-    assert.deepEqual(client.log.slice(2, -1), CONTRACTS_DDL_ORDER.map((name) => sql(name)));
+    assert.deepEqual(client.log.slice(2, -1), CONTRACTS_DDL_ORDER.filter((name) => name !== 'remindersClaimedAtColumn').map((name) => sql(name)));
+  });
+
+  it('eski 049 ile kurulmuş tablo (contract_reminders VAR, claimed_at YOK): YALNIZ ADD COLUMN IF NOT EXISTS gider (lock_timeout ile); 40P01 / 55P03 yeniden denenir', async () => {
+    const old = fakeClient({ tables: ALL_TABLES, indexes: ALL_INDEXES, fks: ALL_FKS, columns: [] });
+    await ensureContractsSchema(old);
+    assert.deepEqual(ddlOf(old), [sql('remindersClaimedAtColumn')]);
+    assert.equal(old.log[1], "SET lock_timeout = '2s'");
+    assert.equal(old.log[old.log.length - 1], 'RESET lock_timeout');
+    const needle = 'ADD COLUMN IF NOT EXISTS claimed_at';
+    const retry = fakeClient({ tables: ALL_TABLES, indexes: ALL_INDEXES, fks: ALL_FKS, columns: [], failures: { [needle]: ['55P03', '40P01'] } });
+    await ensureContractsSchema(retry);
+    assert.equal(retry.log.filter((statement) => statement.includes(needle)).length, 3);
   });
 
   it('yalnız eksik indeks / yalnız eksik FK varsa yalnız o ifade gider', async () => {

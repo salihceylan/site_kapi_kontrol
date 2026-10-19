@@ -50,7 +50,7 @@ export const APARTMENT_PIN_NOT_STORED_MESSAGE =
 export const APARTMENT_PIN_ERROR_MESSAGES = Object.freeze({
   APARTMENT_PIN_NO_ACCOUNT: 'Bu dairede daire hesabı yok; önce sakini ekleyin.',
   APARTMENT_PIN_RESET_NEEDS_SUPER:
-    'Sakin şifresini kendisi belirlemiş ve dairede kayıtlı e-posta adresi yok. Bu durumda PIN\'i yalnız süper kullanıcı sıfırlayabilir.',
+    'Sakin şifresini kendisi belirlemiş. Bu durumda PIN\'i yalnız süper kullanıcı sıfırlayabilir; sakin kendi şifresini uygulamadan değiştirebilir.',
   APARTMENT_PIN_NOT_RESETTABLE:
     'Bu dairenin sakini kendi hesabıyla giriş yapıyor; şifresini yönetici değiştiremez. Sakin giriş ekranındaki "Şifremi Unuttum?" bağlantısıyla yenileyebilir.',
 });
@@ -501,18 +501,15 @@ export async function sendIssuedApartmentPin(apartmentId, pinCode, { timeoutMs =
 }
 
 /**
- * reset-pin yanıt gövdesi (admin ve yönetici uçlarında AYNI; `apartment` alanını rota mapApartmentRow ile ekler).
- *  - delivery 'shown': pin_code yanıtta BİR KEZ; e-posta [sendEmail] ise bir kez gönderilir.
- *  - delivery 'email_only' (sakinin kendi belirlediği parola, yönetici): pin_code YOK (null); e-posta ZORUNLU ([sendEmail]=false yok sayılır).
- * credentials_sent: true gönderildi / false gönderilemedi / null (credentials_email doluysa gönderim sürüyor, boşsa e-posta adresi yok ya da istenmedi).
+ * reset-pin yanıt gövdesi (admin ve yönetici uçlarında AYNI; `apartment` alanını rota mapApartmentRow ile ekler): pin_code yanıtta BİR KEZ; e-posta
+ * [sendEmail] ise bir kez gönderilir. credentials_sent: true gönderildi / false gönderilemedi / null (credentials_email doluysa gönderim sürüyor,
+ * boşsa e-posta adresi yok ya da istenmedi).
  */
 export async function apartmentPinResetBody(apartmentId, reset, { sendEmail = true } = {}) {
-  const emailOnly = reset.delivery === 'email_only';
-  const mail = sendEmail || emailOnly ? await sendIssuedApartmentPin(apartmentId, reset.pinCode) : { sent: null, to: null };
+  const mail = sendEmail ? await sendIssuedApartmentPin(apartmentId, reset.pinCode) : { sent: null, to: null };
   return {
     ok: true,
-    pin_code: emailOnly ? null : reset.pinCode,
-    pin_delivery: reset.delivery,
+    pin_code: reset.pinCode,
     credentials_sent: mail.sent,
     credentials_email: mail.to,
   };
@@ -526,12 +523,12 @@ export async function apartmentPinResetBody(apartmentId, reset, { sendEmail = tr
  * Eski PIN'le edinilmiş JWT DIŞI erişim de AYNI işlemde kapanır: hesabın oluşturduğu misafir geçişleri pasif, kapı karekod belirteçleri iptal,
  * telefon bildirimi cihaz kayıtları / kuyruğu silinir (deletePushDataForUser).
  *
- * Teslim kuralı (inceleme P3): PIN'i SAKİN KENDİSİ belirlemişse (resident_pin_issued FALSE) yönetici PIN'i GÖREMEZ: yeni PIN yalnız dairenin
- * kayıtlı iletişim e-postasına gönderilir (delivery 'email_only'; yanıtta PIN yok); e-posta adresi yoksa yalnız süper kullanıcı sıfırlayabilir
- * (yöneticiye 409 APARTMENT_PIN_RESET_NEEDS_SUPER). Yönetimin verdiği PIN (TRUE) ya da süper kullanıcı: PIN bir kez gösterilir ('shown').
+ * Yetki kuralı (inceleme 2. tur P2): sakin parolasını KENDİSİ belirlemişse (resident_pin_issued FALSE) YÖNETİCİ sıfırlayamaz: e-posta olsa da olmasa
+ * da 409 APARTMENT_PIN_RESET_NEEDS_SUPER ve ROLLBACK (parola, işaret, misafir geçişi, karekod, bildirim kaydı DEĞİŞMEZ). Yalnız süper kullanıcı
+ * sıfırlayabilir. Sıfırlama sonrası işaret TRUE olur (PIN artık yönetimin verdiği PIN'dir) ve PIN bir kez gösterilir.
  * Kilit sırası: apartments -> users -> misafir geçişi / karekod / bildirim (resetApartmentResident ve yönetici devriyle aynı başlangıç; 40P01 önleme).
  * bcrypt özeti kilit ALINMADAN hesaplanır.
- * @returns {Promise<{ apartment: object, pinCode: string, delivery: 'shown'|'email_only', revoked: object }>}
+ * @returns {Promise<{ apartment: object, pinCode: string, revoked: object }>}
  */
 export async function resetApartmentPin(apartmentId, { actor = null, actorIsSuper = false } = {}) {
   const pinCode = generateApartmentPin();
@@ -539,7 +536,6 @@ export async function resetApartmentPin(apartmentId, { actor = null, actorIsSupe
   const client = await pool.connect();
   let user;
   let row;
-  let delivery = 'shown';
   const revoked = { guest_passes: 0, qr_tokens: 0, push_devices: 0, push_outbox: 0 };
   try {
     await client.query('BEGIN');
@@ -568,13 +564,11 @@ export async function resetApartmentPin(apartmentId, { actor = null, actorIsSupe
       throw apartmentPinError('APARTMENT_PIN_NOT_RESETTABLE');
     }
     user = userRes.rows[0];
-    // Sakin parolasını kendisi belirlemiş: yönetici yeni PIN'i göremez (yalnız sakinin e-postasına); e-posta yoksa yalnız süper kullanıcı.
-    // (Hata fırlarsa ROLLBACK yukarıdaki parola değişikliğini de geri alır.)
-    if (apt.resident_pin_issued !== true && !actorIsSuper) {
-      if (!String(apt.resident_email ?? '').trim()) {
-        throw apartmentPinError('APARTMENT_PIN_RESET_NEEDS_SUPER');
-      }
-      delivery = 'email_only';
+    // Sakin parolasını kendisi belirlemiş: yalnız süper kullanıcı sıfırlayabilir. (Hata ROLLBACK'i yukarıdaki parola değişikliğini de geri alır;
+    // misafir geçişi / karekod / bildirim adımları bu kontrolden SONRADIR.)
+    const residentChosen = apt.resident_pin_issued !== true;
+    if (residentChosen && !actorIsSuper) {
+      throw apartmentPinError('APARTMENT_PIN_RESET_NEEDS_SUPER');
     }
     const userCode = Number(user.user_code);
     await client.query(
@@ -594,7 +588,7 @@ export async function resetApartmentPin(apartmentId, { actor = null, actorIsSupe
     const push = await deletePushDataForUser(client, userCode);
     revoked.push_devices = push.devices;
     revoked.push_outbox = push.outbox;
-    // Kim, hangi dairenin PIN'ini sıfırladı; teslim biçimi ve kapanan erişim SAYILARI (PIN / e-posta YAZILMAZ).
+    // Kim, hangi dairenin PIN'ini sıfırladı; sakinin kendi parolası mı ezildi (yalnız süper) ve kapanan erişim SAYILARI (PIN / e-posta YAZILMAZ).
     await recordAudit(
       client,
       {
@@ -603,7 +597,7 @@ export async function resetApartmentPin(apartmentId, { actor = null, actorIsSupe
         siteCode: apt.site_code,
         targetType: 'apartment',
         targetId: apt.id,
-        details: { delivery, ...revoked },
+        details: { resident_chosen_password: residentChosen, ...revoked },
       },
       { inTransaction: true },
     );
@@ -617,6 +611,5 @@ export async function resetApartmentPin(apartmentId, { actor = null, actorIsSupe
   }
   // Yetkili yeni PIN verdi: hesabın giriş / mevcut parola kilitleri açılır (şifre sıfırlama bağlantısıyla aynı).
   clearAccountLocks({ email: user.email, loginName: user.login_name, userCode: user.user_code });
-  // 'email_only': PIN yalnız e-postaya gider; API satırında (resident_pin_code) da YOKTUR.
-  return { apartment: { ...row, issued_pin_code: delivery === 'shown' ? pinCode : null }, pinCode, delivery, revoked };
+  return { apartment: { ...row, issued_pin_code: pinCode }, pinCode, revoked };
 }

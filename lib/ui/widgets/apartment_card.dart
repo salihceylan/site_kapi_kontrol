@@ -3,6 +3,8 @@ import 'package:site_kapi_kontrol/models/apartment_record.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/apartment_pin_dialogs.dart'
+    show kApartmentPinNeedsSuper;
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 
 /// Daire satırındaki PIN notu (KVKK m.12: sunucu PIN'i saklamaz, liste PIN taşımaz).
@@ -18,6 +20,7 @@ class ApartmentCard extends StatefulWidget {
     required this.onEdit,
     this.onResetPin,
     this.resettingPin = false,
+    this.isSuperUser = false,
     this.onDelete,
   });
 
@@ -27,6 +30,10 @@ class ApartmentCard extends StatefulWidget {
   /// "PIN'i Sıfırla" (yalnız dahili daire hesabında ve yetkili rolde verilir). Yeni PIN bir kez gösterilir.
   final VoidCallback? onResetPin;
   final bool resettingPin;
+
+  /// Sakin şifresini kendisi belirlemişse ([ApartmentRecord.residentPinIssued] false) PIN'i yalnız süper kullanıcı
+  /// sıfırlayabilir; yöneticide düğme devre dışıdır ve [kApartmentPinNeedsSuper] açıklaması gösterilir.
+  final bool isSuperUser;
   final VoidCallback? onDelete;
 
   @override
@@ -122,6 +129,9 @@ class _ApartmentCardState extends State<ApartmentCard> {
     );
     // PIN sunucuda SAKLANMAZ: yalnız "verildi" durumu gösterilir; PIN'in kendisi hiçbir zaman burada yazmaz.
     final pinResettable = hasResident && apartment.residentPinResettable;
+    // Sakin şifresini kendisi belirlemiş: yalnız süper kullanıcı sıfırlayabilir (sunucu yöneticiye 409 verir).
+    final needsSuper =
+        pinResettable && !apartment.residentPinIssued && !widget.isSuperUser;
     final showPinState =
         hasResident &&
         (apartment.residentPinIssued || apartment.residentPinResettable);
@@ -168,10 +178,14 @@ class _ApartmentCardState extends State<ApartmentCard> {
         ],
         if (pinResettable) ...[
           const SizedBox(height: AppSpace.md),
-          const InlineNotice(
+          InlineNotice(
             tone: AppTone.info,
-            icon: Icons.lock_outline_rounded,
-            message: kApartmentPinOnceNotice,
+            icon: needsSuper
+                ? Icons.lock_person_outlined
+                : Icons.lock_outline_rounded,
+            message: needsSuper
+                ? kApartmentPinNeedsSuper
+                : kApartmentPinOnceNotice,
           ),
         ],
         const SizedBox(height: AppSpace.md),
@@ -181,7 +195,9 @@ class _ApartmentCardState extends State<ApartmentCard> {
           children: [
             if (pinResettable && widget.onResetPin != null)
               OutlinedButton.icon(
-                onPressed: widget.resettingPin ? null : widget.onResetPin,
+                onPressed: widget.resettingPin || needsSuper
+                    ? null
+                    : widget.onResetPin,
                 style: tonalActionStyle(context, tone: AppTone.warning),
                 icon: widget.resettingPin
                     ? const SizedBox(

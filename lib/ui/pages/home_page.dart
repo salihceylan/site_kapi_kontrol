@@ -3870,6 +3870,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final confirmed = await confirmApartmentPinReset(
       context,
       apartment: apartment,
+      isSuper: widget.authService.session?.role == UserRole.superUser,
     );
     if (!confirmed || !mounted) return;
     setState(() => _busyApartmentPins.add(apartment.id));

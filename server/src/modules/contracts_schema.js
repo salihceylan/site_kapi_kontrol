@@ -108,12 +108,18 @@ export const CONTRACTS_DDL = Object.freeze({
       CONSTRAINT uq_contract_reminders_once UNIQUE (contract_id, kind, due_date)
     )
   `,
+  // 049'un ilk sürümünde claimed_at yoktu: o sürümü uygulamış veritabanında (QA / hazırlık) tablo VAR ama sütun YOK -> idempotent ekleme. NOW() STABLE'dır:
+  // PG 11+ tabloyu yeniden yazmaz (mevcut satırlar ekleme anını alır). ensure bu ifadeyi YALNIZ sütun eksikse gönderir (katalog sorgusu).
+  remindersClaimedAtColumn: `ALTER TABLE contract_reminders ADD COLUMN IF NOT EXISTS claimed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`,
   remindersContractFk: foreignKeySql('contract_reminders', 'contract_id', 'site_contracts', 'id', 'CASCADE'),
   remindersSiteFk: foreignKeySql('contract_reminders', 'site_code', 'sites', 'site_code', 'CASCADE'),
   remindersSiteSentIndex: `CREATE INDEX IF NOT EXISTS idx_contract_reminders_site_sent ON contract_reminders (site_code, sent_at)`,
 });
 
-/** İfade adı -> { tablo | indeks | fk }. Sıra CONTRACTS_DDL ile aynıdır. `parent`: FK adımı için başvurulan tablo (sites / users her zaman vardır). */
+/**
+ * İfade adı -> { tablo | sütun | indeks | fk }. Sıra CONTRACTS_DDL ile aynıdır. `parent`: FK adımı için başvurulan tablo (sites / users her zaman vardır).
+ * `column`: tablo önceden (eski 049 ile) kurulmuşsa eksik kalabilecek sütun; tablo bu turda oluşturulursa CREATE TABLE onu zaten içerir.
+ */
 const STEPS = Object.freeze([
   ['vendorsTable', { table: 'contract_vendors' }],
   ['vendorsSiteFk', { fk: 'contract_vendors_site_code_fkey', on: 'contract_vendors', parent: 'sites' }],
@@ -127,6 +133,7 @@ const STEPS = Object.freeze([
   ['contractsSiteEndIndex', { index: 'idx_site_contracts_site_end', on: 'site_contracts' }],
   ['contractsSiteVendorIndex', { index: 'idx_site_contracts_site_vendor', on: 'site_contracts' }],
   ['remindersTable', { table: 'contract_reminders' }],
+  ['remindersClaimedAtColumn', { column: 'claimed_at', on: 'contract_reminders' }],
   ['remindersContractFk', { fk: 'contract_reminders_contract_id_fkey', on: 'contract_reminders', parent: 'site_contracts' }],
   ['remindersSiteFk', { fk: 'contract_reminders_site_code_fkey', on: 'contract_reminders', parent: 'sites' }],
   ['remindersSiteSentIndex', { index: 'idx_contract_reminders_site_sent', on: 'contract_reminders' }],
@@ -159,6 +166,8 @@ export async function ensureContractsSchema(client) {
   const tables = STEPS.filter(([, spec]) => spec.table).map(([, spec]) => spec.table);
   const indexes = STEPS.filter(([, spec]) => spec.index).map(([, spec]) => spec.index);
   const foreignKeys = STEPS.filter(([, spec]) => spec.fk).map(([, spec]) => spec.fk);
+  const columns = STEPS.filter(([, spec]) => spec.column).map(([, spec]) => `${spec.on}.${spec.column}`);
+  // TEK katalog sorgusu (normal açılışın maliyeti değişmez): tablolar, indeksler, FK'ler ve sonradan eklenen sütunlar.
   const found = await client.query(
     `
       SELECT
@@ -168,18 +177,28 @@ export async function ensureContractsSchema(client) {
           SELECT (SELECT r.relname::TEXT FROM pg_class r WHERE r.oid = c.conrelid) || '.' || c.conname::TEXT
           FROM pg_constraint c
           WHERE c.contype = 'f' AND c.connamespace = 'public'::regnamespace AND c.conname = ANY($3::TEXT[])
-        ) AS fks
+        ) AS fks,
+        ARRAY(
+          SELECT r.relname::TEXT || '.' || a.attname::TEXT
+          FROM pg_attribute a
+          INNER JOIN pg_class r ON r.oid = a.attrelid
+          WHERE r.relnamespace = 'public'::regnamespace AND a.attnum > 0 AND NOT a.attisdropped
+            AND (r.relname::TEXT || '.' || a.attname::TEXT) = ANY($4::TEXT[])
+        ) AS columns
     `,
-    [tables, indexes, foreignKeys],
+    [tables, indexes, foreignKeys, columns],
   );
   const presentTables = new Set(found.rows[0]?.tables ?? []);
   const presentIndexes = new Set(found.rows[0]?.indexes ?? []);
   const presentFks = new Set(found.rows[0]?.fks ?? []);
+  const presentColumns = new Set(found.rows[0]?.columns ?? []);
   const hasParent = (parent) => parent === 'sites' || parent === 'users' || presentTables.has(parent);
   const fkPresent = (spec) => presentFks.has(`${spec.on}.${spec.fk}`);
+  const columnPresent = (spec) => presentColumns.has(`${spec.on}.${spec.column}`);
   const pending = STEPS.filter(([, spec]) => {
     if (spec.table) return !presentTables.has(spec.table);
     if (spec.fk) return !fkPresent(spec);
+    if (spec.column) return presentTables.has(spec.on) && !columnPresent(spec);
     return !presentIndexes.has(spec.index);
   });
   // Eksik nesne yoksa (her normal açılış) hiçbir ifade gönderilmez: kilit alınmaz.
@@ -194,6 +213,14 @@ export async function ensureContractsSchema(client) {
         if (presentTables.has(spec.table)) continue;
         await runDdl(client, CONTRACTS_DDL[name]);
         presentTables.add(spec.table);
+        // yeni oluşturulan tablo bu turun sütunlarını CREATE TABLE ile zaten içerir
+        for (const [, other] of STEPS) {
+          if (other.column && other.on === spec.table) presentColumns.add(`${other.on}.${other.column}`);
+        }
+      } else if (spec.column) {
+        if (!presentTables.has(spec.on) || columnPresent(spec)) continue;
+        await runDdl(client, CONTRACTS_DDL[name]);
+        presentColumns.add(`${spec.on}.${spec.column}`);
       } else if (spec.fk) {
         if (!presentTables.has(spec.on) || !hasParent(spec.parent) || fkPresent(spec)) continue;
         await runDdl(client, CONTRACTS_DDL[name]);

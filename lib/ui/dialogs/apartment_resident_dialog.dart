@@ -215,7 +215,10 @@ class _ApartmentResidentDialogState extends State<ApartmentResidentDialog> {
               InlineNotice(
                 tone: AppTone.info,
                 icon: Icons.lock_outline_rounded,
-                message: widget.apartment.residentPinResettable
+                // Daire hesabında yönetimin verdiği PIN (işaret TRUE) satırdan sıfırlanır; sakin şifresini kendisi belirlemişse
+                // yalnız süper kullanıcı sıfırlayabilir (sunucu yöneticiye 409 verir).
+                message: widget.apartment.residentPinResettable &&
+                        widget.apartment.residentPinIssued
                     ? 'Güvenlik gereği kayıtlı sakinlerin şifresi yöneticiler tarafından değiştirilemez. Daire hesabının PIN\'i unutulduysa daire satırındaki "PIN\'i Sıfırla" ile yenilenir.'
                     : 'Güvenlik gereği kayıtlı sakinlerin şifresi yöneticiler tarafından değiştirilemez. Sakin şifresini kendi hesabından değiştirmelidir.',
               ),

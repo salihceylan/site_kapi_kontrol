@@ -38,7 +38,7 @@ import {
 } from '../src/modules/decision_book_common.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const src = (name) => readFileSync(path.join(here, '..', 'src', 'modules', name), 'utf8');
+const src = (name) => readFileSync(path.join(here, '..', 'src', 'modules', name), 'utf8').replace(/\r\n/g, '\n');
 const fieldError = (fn, field) => assert.throws(fn, (error) => error.statusCode === 400 && error.code === 'INVALID_FIELD' && error.extra?.field === field);
 const queryError = (fn) => assert.throws(fn, (error) => error.statusCode === 400 && error.code === 'INVALID_QUERY');
 const NOW = new Date('2026-10-19T09:00:00Z');

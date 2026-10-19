@@ -12,9 +12,12 @@ import express from 'express';
 import nodemailer from 'nodemailer';
 import { pool } from '../src/db.js';
 import {
-  APARTMENT_PIN_BACKFILL_BATCH_SQL,
+  APARTMENT_PIN_CLEAR_BATCH_SQL,
   APARTMENT_PIN_DDL,
   APARTMENT_PIN_DDL_ORDER,
+  APARTMENT_PIN_VERIFY_APPLY_SQL,
+  APARTMENT_PIN_VERIFY_CANDIDATES_SQL,
+  apartmentPinBackgroundDone,
   apartmentPinTuning,
   ensureApartmentPinSchema,
   runApartmentPinBackfill,
@@ -67,47 +70,86 @@ describe('051 şema: migration = apartment_pin_schema (birebir, aynı sıra)', (
       .join('\n');
     const statements = sql.split(';').map(norm).filter(Boolean);
     assert.deepEqual(statements, APARTMENT_PIN_DDL_ORDER.map((name) => norm(APARTMENT_PIN_DDL[name])));
-    assert.doesNotMatch(sql, /pin_hash|password_hash|crypt\(/i, 'aynı 4 haneli sırrın ikinci bir özeti tutulmaz');
+    assert.doesNotMatch(sql, /pin_hash|crypt\(|ADD COLUMN[^;]*password/i, 'aynı 4 haneli sırrın ikinci bir özeti tutulmaz');
   });
 
-  it('sütun sabit varsayılanlı NOT NULL (PG 11+ yalnız katalog; tablo yeniden yazılmaz); aktarım düz kopyayı NULL yapar, işareti korur/kurar', () => {
+  it('migration TEMKİNLİ: yalnız DOĞRULANAMAYAN kopyalar FALSE + NULL; doğrulanabilenlere dokunmaz (bcrypt SQL\'de yok, açılış tamamlar)', () => {
     assert.equal(norm(APARTMENT_PIN_DDL.issuedColumn), 'ALTER TABLE apartments ADD COLUMN IF NOT EXISTS resident_pin_issued BOOLEAN NOT NULL DEFAULT FALSE');
-    assert.match(APARTMENT_PIN_DDL.backfill, /resident_pin_code = NULL WHERE resident_pin_code IS NOT NULL$/);
-    assert.match(APARTMENT_PIN_DDL.backfill, /resident_pin_issued = \(resident_pin_issued OR btrim\(resident_pin_code\) <> ''\)/);
+    const clear = norm(APARTMENT_PIN_DDL.clearUnverifiable);
+    assert.match(clear, /^UPDATE apartments a SET resident_pin_issued = FALSE, resident_pin_code = NULL WHERE a\.resident_pin_code IS NOT NULL AND NOT EXISTS/);
+    assert.ok(clear.includes("u.password_hash ~ '^\\$2[abxy]\\$[0-9]{2}\\$'"), clear);
+    assert.ok(clear.includes('u.deleted_at IS NULL') && clear.includes("btrim(a.resident_pin_code) <> ''"));
+    assert.doesNotMatch(clear, /resident_pin_issued = TRUE/, 'SQL hiçbir zaman TRUE yazmaz');
   });
 
-  it('partili aktarım: anahtar kümesi sırası, kilitli satırı ATLAR (FOR NO KEY UPDATE SKIP LOCKED), yalnız id döner (PIN okunmaz)', () => {
-    const batch = norm(APARTMENT_PIN_BACKFILL_BATCH_SQL);
-    assert.match(batch, /WHERE resident_pin_code IS NOT NULL AND id > \$2 ORDER BY id LIMIT \$1 FOR NO KEY UPDATE SKIP LOCKED/);
-    assert.match(batch, /RETURNING a\.id$/);
-    assert.match(batch, /SET resident_pin_issued = \(a\.resident_pin_issued OR btrim\(a\.resident_pin_code\) <> ''\), resident_pin_code = NULL/);
+  it('açılış SQL\'leri: Aşama A kilitli satırı ATLAR; Aşama B adayları KİLİTSİZ okunur, yazım iyimser (xmin + özet) ve PIN parametre DEĞİL', () => {
+    const clear = norm(APARTMENT_PIN_CLEAR_BATCH_SQL);
+    assert.match(clear, /WHERE a\.resident_pin_code IS NOT NULL AND a\.id > \$2 AND NOT EXISTS .* ORDER BY a\.id LIMIT \$1 FOR NO KEY UPDATE SKIP LOCKED/);
+    assert.match(clear, /SET resident_pin_issued = FALSE, resident_pin_code = NULL FROM batch WHERE a\.id = batch\.id RETURNING a\.id$/);
+    const candidates = norm(APARTMENT_PIN_VERIFY_CANDIDATES_SQL);
+    assert.doesNotMatch(candidates, /FOR (NO KEY )?UPDATE/);
+    assert.match(candidates, /a\.xmin::TEXT AS version, a\.resident_pin_code AS pin, u\.password_hash AS hash/);
+    const apply = norm(APARTMENT_PIN_VERIFY_APPLY_SQL);
+    assert.match(apply, /SET resident_pin_issued = \$2, resident_pin_code = NULL WHERE a\.id = \$1 AND a\.xmin::TEXT = \$3 AND EXISTS \(SELECT 1 FROM users u WHERE u\.user_code = a\.resident_user_code AND u\.password_hash = \$4\)$/);
   });
 
-  it('db.js 051 modülünü 050\'den SONRA çağırır', () => {
+  it('db.js 051 modülünü 050\'den SONRA, arka plan için havuz bağlantısıyla çağırır', () => {
     const db = read('src/db.js');
     assert.ok(db.includes("import { ensureApartmentPinSchema } from './modules/apartment_pin_schema.js';"));
-    assert.ok(db.indexOf('await ensureApartmentPinSchema(client);') > db.indexOf('await ensureDecisionBookSchema(client);'));
+    assert.ok(db.indexOf('await ensureApartmentPinSchema(client, { connect: () => pool.connect() });') > db.indexOf('await ensureDecisionBookSchema(client);'));
   });
 });
 
-describe('051 açılış: ensureApartmentPinSchema + runApartmentPinBackfill', () => {
+describe('051 açılış: ensureApartmentPinSchema + runApartmentPinBackfill (bcrypt doğrulamalı)', () => {
   const saved = { ...apartmentPinTuning };
   let errors;
+  let logs;
   const originalError = console.error;
   const originalLog = console.log;
   beforeEach(() => {
-    Object.assign(apartmentPinTuning, { retryDelayMs: 1, passDelayMs: 1, batchSize: 2, maxPasses: 3 });
+    Object.assign(apartmentPinTuning, { retryDelayMs: 1, passDelayMs: 1, batchSize: 2, verifyBatchSize: 2, maxPasses: 3, backgroundDelayMs: 1, backgroundRowPauseMs: 0 });
     errors = [];
+    logs = [];
     console.error = (...args) => errors.push(args.map(String).join(' '));
-    console.log = () => {};
+    console.log = (...args) => logs.push(args.map(String).join(' '));
   });
-  afterEach(() => {
+  afterEach(async () => {
+    await apartmentPinBackgroundDone();
     Object.assign(apartmentPinTuning, saved);
     console.error = originalError;
     console.log = originalLog;
   });
 
   const catalog = (state) => [/^SELECT to_regclass\('public\.apartments'\) IS NOT NULL AS has_table/, rowsOf([state])];
+  const HASH_4821 = bcrypt.hashSync('4821', 4);
+  const HASH_2222 = bcrypt.hashSync('2222', 4);
+
+  /**
+   * Durumlu sahte veritabanı: `rows` = { id, pin, hash|null (doğrulanamaz), version, issued }. Aşama A (WITH batch), aday okuma (SELECT a.id, a.xmin),
+   * yazım (UPDATE ... xmin) ve EXISTS sorgularını yanıtlar. `locked` kümesindeki satırlar Aşama A'da atlanır, yazımda 55P03 verir.
+   */
+  function fakeDb(rows, { locked = new Set(), extra = [] } = {}) {
+    const verifiable = (r) => r.pin !== null && r.hash !== null && r.pin.trim() !== '';
+    return scriptedClient([
+      ...extra,
+      [/^SELECT EXISTS \(SELECT 1 FROM apartments WHERE resident_pin_code IS NOT NULL\)/, () => rowsOf([{ pending: rows.some((r) => r.pin !== null) }])],
+      [/^WITH batch AS/, (_sql, [limit, lastId]) => {
+        const picked = rows.filter((r) => r.pin !== null && !verifiable(r) && r.id > lastId && !locked.has(r.id)).slice(0, limit);
+        for (const r of picked) Object.assign(r, { pin: null, issued: false, version: `${r.version}+` });
+        return rowsOf(picked.map((r) => ({ id: r.id })));
+      }],
+      [/^SELECT a\.id, a\.xmin::TEXT AS version/, (_sql, [limit, lastId]) => rowsOf(
+        rows.filter((r) => verifiable(r) && r.id > lastId).slice(0, limit).map((r) => ({ id: r.id, version: r.version, pin: r.pin, hash: r.hash })),
+      )],
+      [/^UPDATE apartments a SET resident_pin_issued = \$2/, (_sql, [id, issued, version, hash]) => {
+        if (locked.has(id)) throw Object.assign(new Error('kilit'), { code: '55P03' });
+        const r = rows.find((x) => x.id === id);
+        if (!r || r.version !== version || r.hash !== hash) return { rowCount: 0, rows: [] };
+        Object.assign(r, { pin: null, issued, version: `${r.version}+` });
+        return { rowCount: 1, rows: [] };
+      }],
+    ]);
+  }
 
   it('normal açılış (sütun var, düz PIN yok): yalnız iki okuma; ALTER / UPDATE / lock_timeout YOK', async () => {
     const client = scriptedClient([
@@ -119,49 +161,77 @@ describe('051 açılış: ensureApartmentPinSchema + runApartmentPinBackfill', (
     assert.equal(client.log.some((e) => /^(ALTER|UPDATE|SET)/.test(e.sql)), false);
   });
 
-  it('ilk dağıtım: ALTER lock_timeout altında; düz PIN partilerle silinir, son id ilerler; RESET lock_timeout', async () => {
-    const pending = [11, 12, 15, 20, 21];
-    const client = scriptedClient([
-      catalog({ has_table: true, has_column: false, has_plain_column: true }),
-      [/^SELECT EXISTS/, () => rowsOf([{ pending: pending.length > 0 }])],
-      [/^WITH batch AS/, (_sql, [limit, lastId]) => {
-        const picked = pending.filter((id) => id > lastId).slice(0, limit);
-        for (const id of picked) pending.splice(pending.indexOf(id), 1);
-        return rowsOf(picked.map((id) => ({ id })));
-      }],
-    ]);
+  it('ilk dağıtım: ALTER lock_timeout altında; doğrulanamayanlar FALSE (partili, id ilerler); işaret YALNIZ bcrypt eşleşirse TRUE; PIN sorguya gitmez', async () => {
+    const rows = [
+      { id: 11, pin: '4821', hash: HASH_4821, version: 'v11' }, // güncel kopya -> TRUE
+      { id: 12, pin: '1111', hash: HASH_2222, version: 'v12' }, // 051 öncesi PATCH /me ile değişmiş (eski kopya) -> FALSE
+      { id: 15, pin: '5555', hash: null, version: 'v15' }, // göstergede hesap yok (keepPin) -> FALSE
+      { id: 20, pin: ' ', hash: HASH_4821, version: 'v20' }, // boş PIN -> FALSE
+      { id: 21, pin: '7777', hash: null, version: 'v21' }, // silinmiş / bcrypt olmayan özet -> FALSE
+    ];
+    const client = fakeDb(rows, { extra: [catalog({ has_table: true, has_column: false, has_plain_column: true })] });
     await ensureApartmentPinSchema(client);
     const sqls = client.log.map((e) => e.sql);
     assert.equal(sqls[2], "SET lock_timeout = '2s'");
     assert.equal(sqls[3], norm(APARTMENT_PIN_DDL.issuedColumn));
-    const batches = client.log.filter((e) => e.sql.startsWith('WITH batch AS'));
-    assert.deepEqual(batches.map((e) => e.params), [[2, 0], [2, 12], [2, 20], [2, 21]]);
-    assert.equal(pending.length, 0);
+    assert.deepEqual(client.log.filter((e) => e.sql.startsWith('WITH batch AS')).map((e) => e.params), [[2, 0], [2, 20], [2, 21]]);
+    assert.deepEqual(rows.map((r) => [r.id, r.pin, r.issued]), [[11, null, true], [12, null, false], [15, null, false], [20, null, false], [21, null, false]]);
+    const applies = client.log.filter((e) => e.sql.startsWith('UPDATE apartments a SET resident_pin_issued = $2'));
+    assert.deepEqual(applies.map((e) => [e.params[0], e.params[1], e.params[2]]), [[11, true, 'v11'], [12, false, 'v12']]);
+    assert.equal(client.log.some((e) => e.params.some((p) => ['4821', '1111', '5555', '7777'].includes(String(p)))), false, 'PIN hiçbir sorguya parametre olarak gitmez');
     assert.equal(sqls.at(-1), 'RESET lock_timeout');
     assert.deepEqual(errors, []);
+    assert.ok(logs.some((l) => /051 daire PIN'i: 5 duz kopya silindi \(2 bcrypt ile dogrulandi, 1 yonetim PIN'i\)/.test(l)), logs.join('|'));
+    assert.equal(logs.some((l) => /4821|1111/.test(l)), false);
   });
 
-  it('ikinci çalıştırma no-op: düz PIN kalmadıysa hiçbir parti UPDATE\'i yok (idempotent)', async () => {
-    const client = scriptedClient([[/^SELECT EXISTS/, rowsOf([{ pending: false }])]]);
-    assert.deepEqual(await runApartmentPinBackfill(client), { converted: 0, remaining: false });
-    assert.equal(client.log.some((e) => e.sql.startsWith('WITH batch AS')), false);
-  });
-
-  it('55P03 / 40P01 yeniden denenir; kilitli kalan satır "remaining" olarak bildirilir (sonraki açılışta tamamlanır)', async () => {
-    let failures = 2;
-    const client = scriptedClient([
-      [/^SELECT EXISTS/, rowsOf([{ pending: true }])],
-      [/^WITH batch AS/, () => {
-        if (failures > 0) {
-          failures -= 1;
-          throw Object.assign(new Error('kilit'), { code: failures === 1 ? '55P03' : '40P01' });
-        }
-        return rowsOf([]);
-      }],
-    ]);
+  it('ikinci çalıştırma no-op: düz PIN kalmadıysa hiçbir parti / karşılaştırma yok (idempotent)', async () => {
+    const client = fakeDb([{ id: 1, pin: null, hash: HASH_4821, version: 'v1' }]);
     const result = await runApartmentPinBackfill(client);
-    assert.deepEqual(result, { converted: 0, remaining: true });
-    assert.equal(client.log.filter((e) => e.sql.startsWith('WITH batch AS')).length, 2 + apartmentPinTuning.maxPasses);
+    assert.equal(result.converted, 0);
+    assert.equal(result.remaining, false);
+    assert.equal(client.log.some((e) => /^(WITH batch AS|SELECT a\.id, a\.xmin|UPDATE)/.test(e.sql)), false);
+  });
+
+  it('satır okunduktan sonra değiştiyse (xmin) yazılmaz ve sonraki geçişte yeniden doğrulanır; kilitli satır (55P03) atlanır, "remaining" bildirilir', async () => {
+    const rows = [{ id: 1, pin: '4821', hash: HASH_4821, version: 'v1' }, { id: 2, pin: '4821', hash: HASH_4821, version: 'v2' }];
+    const client = fakeDb(rows, { locked: new Set([2]) });
+    let bumped = false;
+    const query = client.query.bind(client);
+    client.query = async (text, params) => {
+      // İlk yazımdan hemen önce 1. satır başka bir yazıcıyla değişir (sürüm artar).
+      if (!bumped && norm(text).startsWith('UPDATE apartments a SET resident_pin_issued = $2')) {
+        bumped = true;
+        rows[0].version = 'v1-degisti';
+      }
+      return query(text, params);
+    };
+    const result = await runApartmentPinBackfill(client);
+    assert.equal(rows[0].pin, null, 'sonraki geçişte güncel sürümle yazıldı');
+    assert.equal(rows[0].issued, true);
+    assert.equal(rows[1].pin, '4821', 'kilitli satır bu açılışta kaldı');
+    assert.equal(result.remaining, true);
+    assert.equal(result.deferred, false);
+  });
+
+  it('açılış süresi (syncBudgetMs) dolarsa açılış BEKLEMEZ: kalanlar arka planda tamamlanır (havuz bağlantısıyla), sonuç günlüğe yazılır', async () => {
+    apartmentPinTuning.syncBudgetMs = -1;
+    const rows = [{ id: 1, pin: '4821', hash: HASH_4821, version: 'v1' }, { id: 2, pin: '1111', hash: HASH_2222, version: 'v2' }];
+    const startup = fakeDb(rows, { extra: [catalog({ has_table: true, has_column: true, has_plain_column: true })] });
+    let connects = 0;
+    let released = 0;
+    const connect = async () => {
+      connects += 1;
+      const c = fakeDb(rows);
+      c.release = () => { released += 1; };
+      return c;
+    };
+    await ensureApartmentPinSchema(startup, { connect });
+    assert.equal(rows.filter((r) => r.pin !== null).length, 2, 'açılış süresi 0: hiçbir bcrypt beklenmedi');
+    await apartmentPinBackgroundDone();
+    assert.ok(connects >= 1 && released === connects);
+    assert.deepEqual(rows.map((r) => [r.pin, r.issued]), [[null, true], [null, false]]);
+    assert.ok(logs.some((l) => /arka plan/.test(l)), logs.join('|'));
   });
 
   it('aktarım hatası açılışı DURDURMAZ (günlüğe yalnız kod yazılır), lock_timeout yine sıfırlanır', async () => {
@@ -175,6 +245,24 @@ describe('051 açılış: ensureApartmentPinSchema + runApartmentPinBackfill', (
     assert.equal(errors.length, 1);
     assert.match(errors[0], /051 daire PIN aktarimi basarisiz.*XX000/);
     assert.doesNotMatch(errors[0], /4821/);
+  });
+
+  it('Aşama A 55P03 / 40P01 yeniden denenir', async () => {
+    let failures = 2;
+    const client = scriptedClient([
+      [/^SELECT EXISTS/, rowsOf([{ pending: true }])],
+      [/^WITH batch AS/, () => {
+        if (failures > 0) {
+          failures -= 1;
+          throw Object.assign(new Error('kilit'), { code: failures === 1 ? '55P03' : '40P01' });
+        }
+        return rowsOf([]);
+      }],
+    ]);
+    const result = await runApartmentPinBackfill(client);
+    assert.equal(result.converted, 0);
+    assert.equal(result.remaining, true);
+    assert.equal(client.log.filter((e) => e.sql.startsWith('WITH batch AS')).length, 2 + apartmentPinTuning.maxPasses);
   });
 
   it('ALTER hatası (55P03 dışı) açılışı durdurur (diğer şema modülleriyle aynı)', async () => {
@@ -292,9 +380,8 @@ describe('servisler: oluşturma / sıfırlama / e-posta', () => {
   it('resetApartmentPin (yönetimin verdiği PIN): yeni 4 haneli PIN yalnız özet; işaret; JWT dışı erişim AYNI işlemde kapanır; audit PIN\'siz; kilit sırası', async () => {
     client = resetClient();
     pool.connect = async () => client;
-    const { apartment, pinCode, delivery, revoked } = await resetApartmentPin(3, { actor: manager });
+    const { apartment, pinCode, revoked } = await resetApartmentPin(3, { actor: manager });
     assert.match(pinCode, /^[1-9]\d{3}$/);
-    assert.equal(delivery, 'shown');
     const sqls = client.log.map((e) => e.sql);
     assert.equal(sqls[0], 'BEGIN');
     const at = (re) => sqls.findIndex((s) => re.test(s));
@@ -316,48 +403,47 @@ describe('servisler: oluşturma / sıfırlama / e-posta', () => {
     assert.deepEqual(revoked, { guest_passes: 2, qr_tokens: 1, push_devices: 3, push_outbox: 4 });
     const auditInsert = client.log.find((e) => e.sql.startsWith('INSERT INTO audit_log'));
     assert.equal(auditInsert.params[3], 'apartment.pin_reset');
-    assert.deepEqual(JSON.parse(auditInsert.params[7]), { delivery: 'shown', guest_passes: 2, qr_tokens: 1, push_devices: 3, push_outbox: 4 });
+    assert.deepEqual(JSON.parse(auditInsert.params[7]), { resident_chosen_password: false, guest_passes: 2, qr_tokens: 1, push_devices: 3, push_outbox: 4 });
     assert.equal(sqls.at(-1), 'COMMIT');
     assert.equal(carriesPin(client.log, pinCode), false, 'PIN hiçbir sorguya / audit\'e düz metin gitmez');
     assert.equal(apartment.issued_pin_code, pinCode);
     assert.equal(mapApartmentRow(apartment).resident_pin_code, pinCode);
   });
 
-  it('resetApartmentPin (sakin KENDİ parolasını belirlemiş, yönetici): PIN yalnız e-postaya (email_only), API satırında PIN YOK', async () => {
-    client = resetClient({ issued: false });
-    pool.connect = async () => client;
-    const { apartment, pinCode, delivery } = await resetApartmentPin(3, { actor: manager });
-    assert.equal(delivery, 'email_only');
-    assert.match(pinCode, /^\d{4}$/, 'e-posta için servis içinde bilinir');
-    assert.equal(apartment.issued_pin_code, null);
-    assert.equal(mapApartmentRow(apartment).resident_pin_code, null);
-    assert.equal(client.log.at(-1).sql, 'COMMIT');
-    const auditInsert = client.log.find((e) => e.sql.startsWith('INSERT INTO audit_log'));
-    assert.equal(JSON.parse(auditInsert.params[7]).delivery, 'email_only');
+  it('resetApartmentPin (sakin KENDİ parolasını belirlemiş): YÖNETİCİ e-posta olsa da olmasa da 409 APARTMENT_PIN_RESET_NEEDS_SUPER; ROLLBACK, hiçbir erişim adımı yok', async () => {
+    for (const email of ['ayse@example.com', null, '   ']) {
+      client = resetClient({ issued: false, email });
+      pool.connect = async () => client;
+      await assert.rejects(
+        () => resetApartmentPin(3, { actor: manager }),
+        (error) => error.statusCode === 409 && error.code === 'APARTMENT_PIN_RESET_NEEDS_SUPER' && error.message === APARTMENT_PIN_ERROR_MESSAGES.APARTMENT_PIN_RESET_NEEDS_SUPER,
+        `e-posta: ${email}`,
+      );
+      assert.equal(client.log.at(-1).sql, 'ROLLBACK');
+      assert.equal(
+        client.log.some((e) => e.sql === 'COMMIT' || /^(UPDATE guest_passes|UPDATE qr_access_tokens|DELETE FROM push|UPDATE apartments|INSERT INTO audit_log)/.test(e.sql)),
+        false,
+        'parola değişikliği ROLLBACK ile geri alınır; işaret / misafir geçişi / karekod / bildirim / audit adımlarına gelinmez',
+      );
+    }
+    assert.equal(
+      APARTMENT_PIN_ERROR_MESSAGES.APARTMENT_PIN_RESET_NEEDS_SUPER,
+      "Sakin şifresini kendisi belirlemiş. Bu durumda PIN'i yalnız süper kullanıcı sıfırlayabilir; sakin kendi şifresini uygulamadan değiştirebilir.",
+    );
   });
 
-  it('resetApartmentPin (sakin kendi parolası + e-posta YOK): yönetici 409 APARTMENT_PIN_RESET_NEEDS_SUPER (parola değişikliği geri alınır); süper kullanıcı PIN\'i görür', async () => {
-    client = resetClient({ issued: false, email: null });
-    pool.connect = async () => client;
-    await assert.rejects(
-      () => resetApartmentPin(3, { actor: manager }),
-      (error) => error.statusCode === 409 && error.code === 'APARTMENT_PIN_RESET_NEEDS_SUPER' && error.message === APARTMENT_PIN_ERROR_MESSAGES.APARTMENT_PIN_RESET_NEEDS_SUPER,
-    );
-    assert.equal(client.log.at(-1).sql, 'ROLLBACK');
-    assert.equal(client.log.some((e) => e.sql === 'COMMIT' || e.sql.startsWith('UPDATE guest_passes') || e.sql.startsWith('UPDATE apartments')), false);
-
-    client = resetClient({ issued: false, email: '   ' });
-    pool.connect = async () => client;
-    await assert.rejects(() => resetApartmentPin(3, { actor: manager }), (error) => error.code === 'APARTMENT_PIN_RESET_NEEDS_SUPER', 'yalnız boşluk = adres yok');
-
+  it('resetApartmentPin (sakin kendi parolası): SÜPER kullanıcı sıfırlar (e-postasız da), PIN bir kez döner, işaret TRUE, audit "sakinin parolası ezildi"', async () => {
     client = resetClient({ issued: false, email: null });
     pool.connect = async () => client;
     const asSuper = await resetApartmentPin(3, { actor: { user_code: 1, role: 'super_user' }, actorIsSuper: true });
-    assert.equal(asSuper.delivery, 'shown');
     assert.equal(asSuper.apartment.issued_pin_code, asSuper.pinCode);
+    assert.ok(client.log.some((e) => e.sql === 'UPDATE apartments SET resident_pin_issued = TRUE, resident_pin_code = NULL WHERE id = $1'));
+    const auditInsert = client.log.find((e) => e.sql.startsWith('INSERT INTO audit_log'));
+    assert.equal(JSON.parse(auditInsert.params[7]).resident_chosen_password, true);
+    assert.equal(client.log.at(-1).sql, 'COMMIT');
   });
 
-  it('resetApartmentPin: kayıtlı (dahili olmayan) hesap 409 APARTMENT_PIN_NOT_RESETTABLE (e-posta kuralından ÖNCE); sakin yoksa 409 APARTMENT_PIN_NO_ACCOUNT; ROLLBACK', async () => {
+  it('resetApartmentPin: kayıtlı (dahili olmayan) hesap 409 APARTMENT_PIN_NOT_RESETTABLE (süper kuralından ÖNCE); sakin yoksa 409 APARTMENT_PIN_NO_ACCOUNT; ROLLBACK', async () => {
     client = resetClient({ internal: false, issued: false, email: null });
     pool.connect = async () => client;
     await assert.rejects(() => resetApartmentPin(3, { actor: manager }), (error) => error.statusCode === 409 && error.code === 'APARTMENT_PIN_NOT_RESETTABLE' && error.message === APARTMENT_PIN_ERROR_MESSAGES.APARTMENT_PIN_NOT_RESETTABLE);
@@ -374,14 +460,14 @@ describe('servisler: oluşturma / sıfırlama / e-posta', () => {
     await assert.rejects(() => resetApartmentPin(3), (error) => error.message === 'APARTMENT_NOT_FOUND');
   });
 
-  it('apartmentPinResetBody: email_only -> pin_code null ve e-posta ZORUNLU (send_email:false yok sayılır); shown + send_email:false -> e-posta yok', async () => {
+  it('apartmentPinResetBody: PIN yanıtta bir kez; send_email:true -> e-posta + hedef adres; send_email:false -> e-posta yok (yalnız-e-posta modu YOK)', async () => {
     pool.query = async (text) => (SNAPSHOT.test(norm(text)) ? rowsOf([snapshotRow]) : rowsOf([]));
-    const emailOnly = await apartmentPinResetBody(3, { delivery: 'email_only', pinCode: '7305', apartment: {} }, { sendEmail: false });
-    assert.deepEqual(emailOnly, { ok: true, pin_code: null, pin_delivery: 'email_only', credentials_sent: true, credentials_email: 'ayse@example.com' });
+    const withMail = await apartmentPinResetBody(3, { pinCode: '7305', apartment: {} }, { sendEmail: true });
+    assert.deepEqual(withMail, { ok: true, pin_code: '7305', credentials_sent: true, credentials_email: 'ayse@example.com' });
     assert.equal(sent.length, 1);
     assert.match(sent[0].html, /7305/);
-    const shownNoMail = await apartmentPinResetBody(3, { delivery: 'shown', pinCode: '7305', apartment: {} }, { sendEmail: false });
-    assert.deepEqual(shownNoMail, { ok: true, pin_code: '7305', pin_delivery: 'shown', credentials_sent: null, credentials_email: null });
+    const noMail = await apartmentPinResetBody(3, { pinCode: '7305', apartment: {} }, { sendEmail: false });
+    assert.deepEqual(noMail, { ok: true, pin_code: '7305', credentials_sent: null, credentials_email: null });
     assert.equal(sent.length, 1);
   });
 
@@ -521,7 +607,6 @@ describe('HTTP: POST /admin/apartments/:id/reset-pin ve eski send-credentials', 
     assert.equal(res.body.apartment.resident_pin_resettable, true);
     assert.equal(res.body.credentials_sent, true);
     assert.equal(res.body.credentials_email, 'ayse@example.com', 'hedef adres istemcide gösterilir');
-    assert.equal(res.body.pin_delivery, 'shown');
     assert.equal(res.headers.get('cache-control'), 'no-store');
     assert.equal(sent.length, 1);
     assert.ok(sent[0].html.includes(res.body.pin_code));
@@ -536,7 +621,6 @@ describe('HTTP: POST /admin/apartments/:id/reset-pin ve eski send-credentials', 
     pool.connect = async () => client;
     const res = await post('/admin/apartments/3/reset-pin');
     assert.equal(res.status, 200, JSON.stringify(res.body));
-    assert.equal(res.body.pin_delivery, 'shown');
     assert.match(res.body.pin_code, /^\d{4}$/);
   });
 
