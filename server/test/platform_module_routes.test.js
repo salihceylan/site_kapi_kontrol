@@ -547,6 +547,7 @@ describe('GET /manager/sites/:siteCode/modules: yetki matrisi', () => {
         ['metering', false, false],
         ['online_payment', false, false],
         ['survey', true, true],
+        ['visitor_log', true, true],
       ],
     );
     // bekleyen talep: yalnizca o sitenin o modulu 'pending' olur; baska site / sonuclanmis talep etkilemez
@@ -1572,6 +1573,7 @@ describe('GET /app/my-modules', () => {
         'metering',
         'online_payment',
         'survey',
+        'visitor_log',
       ]);
     }
     assert.equal(res.body.sites[0].modules.door_control, true);

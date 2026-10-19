@@ -25,7 +25,7 @@ import { mapSiteRow } from '../src/utils/helpers.js';
 const def = (code) => getModuleDefinition(code);
 
 describe('platform katalog: sozlesme tablosu', () => {
-  it('9 modul, sozlesmedeki sirayla ve alanlarla', () => {
+  it('10 modul, sozlesmedeki sirayla ve alanlarla', () => {
     assert.deepEqual(MODULE_CODES, [
       'door_control',
       'people',
@@ -37,6 +37,7 @@ describe('platform katalog: sozlesme tablosu', () => {
       'metering',
       'online_payment',
       'survey',
+      'visitor_log',
     ]);
     const table = Object.fromEntries(MODULE_CATALOG.map((m) => [m.code, [m.core, m.status]]));
     assert.deepEqual(table, {
@@ -50,6 +51,7 @@ describe('platform katalog: sozlesme tablosu', () => {
       metering: [false, 'coming_soon'],
       online_payment: [false, 'coming_soon'],
       survey: [false, 'available'], // Anket ve Oylama: kullanilabilir (varsayilan KAPALI; super acar, yonetici modul talep eder)
+      visitor_log: [false, 'available'], // Ziyaretci ve Kargo (F11.03): kullanilabilir (varsayilan KAPALI; super acar, yonetici modul talep eder)
     });
     assert.equal(def('door_control').name, 'Geçiş Kontrol (SmartKeyPass)');
     assert.equal(def('people').name, 'Kişi ve Daire Kayıtları');
@@ -84,6 +86,7 @@ describe('platform katalog: sozlesme tablosu', () => {
     assert.deepEqual(
       MODULE_CATALOG.filter(isToggleable).map((m) => m.code),
       ['door_control', 'finance', 'documents', 'reservation', 'work_tracking', 'survey'],
+      ['door_control', 'finance', 'documents', 'reservation', 'work_tracking', 'visitor_log'],
     );
     assert.equal(isToggleable(null), false);
   });

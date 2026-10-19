@@ -60,6 +60,8 @@ import { reservationKeepNote, reservationRemoveNote } from './reservation_common
 import { releaseUserReservations } from './reservation_service.js';
 import { surveyVotesKeepNote } from './survey_common.js';
 import { anonymizeUserSurveyData, countUserSurveyVotes } from './survey_service.js';
+import { visitorEntriesKeepNote } from './visitor_log_common.js';
+import { countVisitorEntriesByUser } from './visitor_log_service.js';
 
 const GLOBAL_LOCK_KEY = 'account_deletion';
 const MAX_SCOPE_ATTEMPTS = 3;
@@ -295,6 +297,8 @@ async function previewOptionalCounts(db, userCode) {
   }
   // Anket ve oylama (044): oylar KALIR ve anonimleşir; yalnız sayı (tablo yoksa 0).
   out.surveyVotes = await countUserSurveyVotes(db, userCode);
+  // Ziyaretci ve kargo (045): gorevli / yonetici olarak girdigi ya da sonlandirdigi kayitlar (tablo yoksa 0; katalog kontrolu fonksiyonun icinde).
+  out.visitorEntries = await countVisitorEntriesByUser(db, userCode);
   return out;
 }
 
@@ -395,6 +399,8 @@ export async function previewAccountDeletion(authUser, db = pool) {
   }
   if (optionalCounts.surveyVotes > 0) {
     willKeep.push(surveyVotesKeepNote(optionalCounts.surveyVotes));
+  if (optionalCounts.visitorEntries > 0) {
+    willKeep.push(visitorEntriesKeepNote(optionalCounts.visitorEntries));
   }
   if (num(counts.apartment_links) + num(counts.site_links) > 0) {
     willKeep.push('Makbuz ve tahsilat kayıtları (düzenleyen yönetici ve ödeyen adını içeren makbuz anlık görüntüsü dahil) yasal mali kayıt saklama yükümlülükleri gereği DEĞİŞTİRİLMEDEN saklanır; makbuz anlık görüntüsündeki ad anonimleştirilmez.');

@@ -38,6 +38,7 @@ import { documentRouter } from './modules/document_routes.js';
 import { workTrackingRouter } from './modules/work_tracking_routes.js';
 import { reservationRouter } from './modules/reservation_routes.js';
 import { surveyRouter } from './modules/survey_routes.js';
+import { visitorLogRouter } from './modules/visitor_log_routes.js';
 import { startDocumentsMaintenance, stopDocumentsMaintenance } from './modules/document_maintenance.js';
 import { pushRouter } from './modules/push_routes.js';
 import { startPushWorker, stopPushWorker } from './modules/push_worker.js';
@@ -121,6 +122,8 @@ app.use(workTrackingRouter);
 app.use(reservationRouter);
 // Anket ve oylama: /manager/sites/:siteCode/surveys[...] + /app/surveys[...] (modul survey, varsayilan KAPALI).
 app.use(surveyRouter);
+// Ziyaretci ve kargo (F11.03): /manager/sites/:siteCode/visitor-entries[/:id] + /app/visitor-entries[/summary|/:id/seen] (modul visitor_log, varsayilan KAPALI).
+app.use(visitorLogRouter);
 // Telefon bildirimi (Faz 3b-B): /app/push/devices[/:installId], /app/push/test, /admin/push/status (tercihler /app/notification-preferences'ta).
 app.use(pushRouter);
 // Hesap silme (kimliksizlestirme) ve kisisel veri disa aktarma: /me/account-deletion[/preview], /me/data-export (yalniz kendi hesabi).
