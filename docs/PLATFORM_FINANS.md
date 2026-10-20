@@ -128,3 +128,65 @@ Yeni bağımlılık YOK. Para girişi/gösterimi: ortak yardımcı (`lib/ui/help
 5. **Defter koruması (DB).** `trg_ledger_entries_append_only` (`created_by → NULL` yalnız ilgili kullanıcı ARTIK yoksa), `BEFORE TRUNCATE` (ledger_entries, fee_runs), ters kayıt aynası kontrolü (`BEFORE INSERT`: aynı site/daire, `amount_minor = -asıl`, asıl ters kayıt olamaz, hata P0001), `fee_runs` append-only (site silme ve `posted_by` SET NULL istisnası), `finance_period_closures` UPDATE yasağı (DELETE serbest: yeniden açma satırı siler). `ledger_entries.definition_name` borçlandırma anındaki ANLIK GÖRÜNTÜDÜR (tanım yeniden adlandırılınca geçmiş değişmez; ters kayıt asıldan kopyalar).
 6. **Kilit sırası:** `sites KEY SHARE → finance_post advisory → apartments(id) → users(işlemi yapan) FOR KEY SHARE → finans satırları`. Tanım listesi `GET …/definitions?limit=&offset=` → `{ items, total }` (≤ 500; aylık tanımlar önce).
 7. **Kabul edilen riskler (Faz 4b'de gözden geçirilecek):** bakiye listesi ve özet her istekte sitenin tüm defterini toplar (≈1M satırda ~350 ms); çok satırlı (≈200k+) kullanıcı/site silme 30 sn `statement_timeout`'a yaklaşır (rollback güvenli); bir sitenin toplam bakiyesi 2^53'ü aşarsa özet 500 verir (gerçekçi değil); `definition_name` anlık görüntüsü sonradan düzeltilemez; ~~sakin dairenin tüm geçmişini (önceki kiracı dönemi dahil) görür~~ (2026-10-19 giderildi: "Sakin kapsamı"). **Dağıtım notu:** 034 DDL'i sert yazma yükü altında `ensureDbSchema` içinde 40P01 alabilir (açılış DDL'inin doğası); `pm2 restart` ile idempotent yeniden denenir, trafiksiz uygulamak güvenlidir. Canlıya almadan önce `site_modules`'ta `finance` için `enabled = TRUE` satırı OLMADIĞI doğrulanır (aksi halde dağıtımda modül sessizce açılır). `finance` varsayılan KAPALIDIR.
+
+## Altın veri seti (F5, 2026-10-21)
+
+Karar F5: gerçekçi bir site için ELLE hesaplanmış tablo; dağıtım, yuvarlama, gecikme tazminatı ve mahsup kodu bu tabloyla kuruşu kuruşuna
+karşılaştırılır, tutmazsa test düşer. Beklenen değerlerin hiçbiri kod çalıştırılarak üretilmedi; her birinin hesap adımları fikstürde yazılıdır.
+Cenk'in gerçek tablosu gelince ikinci set olarak eklenecek.
+
+- Fikstür (site, senaryolar, adım adım hesap): `server/test/fixtures/finance_golden_site.js`
+- Test: `server/test/finance_golden_dataset.test.js` (gerçek `buildDistributionPlan`, `lateFeeForApartment` + gün gün kaba kuvvet tanımı, `m1Remainders`).
+- Sapma çıkarsa önce fikstürdeki elle hesap iki kez yeniden yapılır; hesap doğruysa hata raporlanır, hesap kodu fikstüre uydurulmaz.
+  İlk koşu (2026-10-21): 21 kontrolün hepsi ilk seferde tuttu (sapma yok).
+
+**Site ("Altın Veri Sitesi"):** A Blok 12 daire (2 dükkan + 10 adet 3+1), B Blok 12 daire (4 adet 1+1 + 8 adet 2+1); daire kimliği sıradır
+(A-1 = 1 ... B-12 = 24; eşit kalanda kimliği küçük olan önce kuruş alır).
+
+| Daire | Kategori | Brüt m² | Net m² | Arsa payı |
+| --- | --- | --- | --- | --- |
+| A-1 | Dükkan | 85,50 | 68,75 | 50/1200 |
+| A-2 | Dükkan | 64,25 | 54,50 | 40/1200 |
+| A-3..A-7 | 3+1 | 120,00 | 100,00 | 62/1200 |
+| A-8..A-12 | 3+1 | 118,25 | 98,75 | 61/1200 |
+| B-1..B-4 | 1+1 | 62,40 | 52,00 | 54/2400 |
+| B-5..B-8 | 2+1 | 101,20 | 84,50 | 97/2400 |
+| B-9, B-10 | 2+1 | 101,15 | 84,25 | 96/2400 |
+| B-11, B-12 | 2+1 | 101,15 | 84,25 | 97/2400 |
+| **Toplam** | | **2.400,00** | **2.000,00** | **2400/2400** |
+
+Dağıtım kuralı: `pay = taban(T x w / W)`; artan kuruşlar en büyük kalan (`T x w mod W`) sırasıyla birer birer; eşitlikte küçük kimlik.
+
+| Senaryo | Tutar (T) | Ağırlık toplamı (W) | Artan kuruş | Sonuç (kuruş) |
+| --- | --- | --- | --- | --- |
+| D1 eşit | 8.500.000 (85.000,00 TL) | 24 | 16 | A-1..B-4: 354.167; B-5..B-12: 354.166 |
+| D2 brüt m² | 1.000.000 (10.000,00 TL) | 240.000 | 11 | A-1 35.625; A-2 26.771; A-3..A-7 50.000; A-8..A-12 49.271; B-1..B-4 26.000; B-5 42.167; B-6..B-8 42.166; B-9..B-12 42.146 |
+| D3 net m² | 500.003 (5.000,03 TL) | 200.000 | 8 | A-1 17.187; A-2 13.625; A-3..A-7 25.000; A-8..A-12 24.688; B-1..B-4 13.000; B-5..B-8 21.125; B-9..B-11 21.063; B-12 21.062 |
+| D4 arsa payı | 3.600.019 (36.000,19 TL) | 2.400 (1200'lük paylar x2) | 19 | A-1 150.001; A-2 120.000; A-3..A-7 186.001; A-8..A-12 183.001; B-1..B-4 81.000; B-5..B-8 145.501; B-9, B-10 144.001; B-11, B-12 145.501 |
+| D5 kategori | daire başı | — | — | Dükkan 150.000; 3+1 125.000; 2+1 100.000; 1+1 75.000 (toplam 2.650.000; "DÜKKAN" yazımı "Dükkan" ile eşleşir) |
+| D6 sabit | daire başı 50.000 | — | — | her daire 50.000 (toplam 1.200.000) |
+
+Yuvarlama örnekleri: D2'de 11 kuruşun 10'u kalanı 200.000 olan 10 daireye, 1'i kalanı 160.000 olan dört daireden kimliği küçük B-5'e gider;
+D3'te kalanı eşit dört daireden (B-9..B-12) yalnız ilk üçü artan kuruşu alır; D4'te kalanı en küçük A-2 ve B-1..B-4 artan kuruş almaz.
+
+**Gecikme tazminatı** (aylık %5 = 500 bp; `fee = taban((2 x S x R + 10.000 x D) / (20.000 x D))`, S = kuruş x gün; vade günü ve ödeme günü
+gecikme sayılmaz; tazminat kalemleri tabana girmez ama vadesine göre ödemeyi önce tüketir):
+
+| Senaryo | Defter | Dönem | S (kuruş x gün) | Tazminat |
+| --- | --- | --- | --- | --- |
+| L1 (A-3) | Eylül aidatı 125.000 (vade 05.09) ödenmedi | Ekim 2026 (31 gün) | 31 x 125.000 = 3.875.000 | daily_30: 6.458 (%5 x 31/30); daily_actual: 6.250 (tam %5) |
+| L2 (A-4) | Ağu/Eyl/Eki aidatı 125.000'er; ödeme 20.09'da 150.000, 15.10'da 100.000 | Ekim 2026 | 5 x 100.000 + 9 x 225.000 + 17 x 125.000 = 4.650.000 | daily_30: 7.750 |
+| L3 (B-5) | Ekim aidatı 100.000 (vade 10.10) + önceki tazminat kalemi 2.000 (01.10); ödeme 25.10'da 50.000 | Ekim 2026 | ek gün 5: 9 x 100.000 + 7 x 52.000 = 1.264.000; ek gün 0: 14 x 100.000 + 7 x 52.000 = 1.764.000 | daily_30: 2.107 (ek gün 5), 2.940 (ek gün 0) |
+| L4 (A-7) | 100.000 (vade 05.01.2027) ödenmedi | Şubat 2027 (28 gün) | 28 x 100.000 = 2.800.000 | daily_30: 4.667 (%5 x 28/30); daily_actual: 5.000 (tam %5) |
+
+Aylık %5 sınırı: ayın tamamı gecikmedeyken `daily_actual` tam %5 verir (L1, L4); `daily_30` 31 günlük ayda %5'in 31/30'u, 28 günlük ayda 28/30'u
+kadardır ("geciktiği günler için aylık yüzde beş hesabıyla" yorumu) `[AVUKAT DOĞRULASIN]`. Oran 500 bp'yi aşamaz: ayar 501'i reddeder, kurallar
+tablosuna daha yüksek değer yazılsa bile üst sınır 500'e kırpılır (`docs/PLATFORM_KURALLAR.md`).
+
+**Mahsup (M1, vadesi en eski borçtan; vade eşitse kayıt sırası):**
+
+| Senaryo | Borçlar (vade sırasıyla) | Ödenen | Kalanlar | Alacak |
+| --- | --- | --- | --- | --- |
+| M1 (A-5) | Eylül 125.000 (05.09); çatı payı 186.001 (20.09, 02.10'da yazıldı); Ekim 125.000 (05.10) | 200.000 | 0; 111.001; 125.000 | 0 |
+| M2 (B-1) | Eylül 75.000; Ekim 75.000 | 200.000 | 0; 0 | 50.000 |
+| M3 (B-6) | aynı vade (05.10): aidat 100.000 (kimlik 601), ortak gider payı 42.166 (kimlik 602) | 120.000 | 0; 22.166 | 0 |
