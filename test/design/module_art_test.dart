@@ -1,5 +1,6 @@
 // ModuleArt testleri: sözleşme (tür sırası, kurucu, imza), her tür x boyut x tema çizimi, kontrast
-// (WCAG 1.4.11, ana ton >= 3:1), erişilebilirlik (dışlanır), durağanlık, yeniden boyama ve rozet sınırı.
+// (WCAG 1.4.11, ana ton ve vurgu üstü ayrıntı >= 3:1), durum anlamı yok (durum renkleri / "açık kilit" süs değildir),
+// erişilebilirlik (dışlanır), durağanlık, yeniden boyama ve rozet sınırı.
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -48,6 +49,45 @@ Future<Uint8List> _raster(ModuleArtKind kind, bool dark, int s) async {
   final data = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
   image.dispose();
   return data!.buffer.asUint8List();
+}
+
+/// Vitrinin durum noktası renkleri (işveren tasarım kuralı): zümrüt, kehribar, mercan. Yalnız gerçek durumu gösterir.
+const List<Color> _statusColors = <Color>[
+  Color(0xFF10B981),
+  Color(0xFFF59E0B),
+  Color(0xFFE11D48),
+];
+
+List<int> _rgb(Color c) => <int>[
+  (c.r * 255).round(),
+  (c.g * 255).round(),
+  (c.b * 255).round(),
+];
+
+/// Yeşil baskın (durum yeşili ailesi) piksel.
+bool _greenish(int r, int g, int b) => g > r + 40 && g > b + 20;
+
+/// Sıcak (mercan / kehribar ailesi) piksel.
+bool _warm(int r, int g, int b) => r > b + 60 && r > g + 30;
+
+/// 48 birimlik ızgaradaki (ux, uy) noktasının [s] px'lik boyamadaki rengi (opak olmalı).
+List<int> _pixelAt(Uint8List px, int s, double ux, double uy) {
+  final x = (ux * s / 48).floor();
+  final y = (uy * s / 48).floor();
+  final i = (y * s + x) * 4;
+  expect(px[i + 3], 255, reason: '($ux, $uy) opak olmalı');
+  return <int>[px[i], px[i + 1], px[i + 2]];
+}
+
+void _expectNear(List<int> actual, Color expected, String what) {
+  final want = _rgb(expected);
+  for (var i = 0; i < 3; i++) {
+    expect(
+      (actual[i] - want[i]).abs(),
+      lessThanOrEqualTo(6),
+      reason: '$what: $actual, beklenen $want',
+    );
+  }
 }
 
 void main() {
@@ -297,12 +337,13 @@ void main() {
         },
       );
 
-      test('vurgu rengi rozet zeminine ve kağıda >= 3:1 ($theme)', () {
+      test('vurgu rengi rozet zeminine, rozet halkasına ve kağıda >= 3:1 ($theme)', () {
         for (final k in ModuleArtKind.values) {
           final c = _colors(k, dark);
           for (final (name, bg) in <(String, Color)>[
             ('rozet sol-üst', c.badgeTop),
             ('rozet sağ-alt', c.badgeBottom),
+            ('rozet halkası', c.ring),
             ('kağıt', c.paper),
           ]) {
             expect(
@@ -314,19 +355,41 @@ void main() {
         }
       });
 
-      test('durum yeşili (kapı açık, onay) rozet zeminine >= 3:1 ($theme)', () {
+      test('vurgu üstündeki ayrıntı (kapı kilidi, onay, "+") vurguya >= 3:1 ($theme)', () {
         for (final k in ModuleArtKind.values) {
           final c = _colors(k, dark);
-          for (final bg in <Color>[c.badgeTop, c.badgeBottom, c.ring]) {
-            expect(
-              _contrast(c.success, bg),
-              greaterThanOrEqualTo(_graphicMin),
-              reason: '${k.name} success',
-            );
-          }
+          expect(
+            _contrast(c.onAccent, c.accent),
+            greaterThanOrEqualTo(_graphicMin),
+            reason: '${k.name} onAccent / accent',
+          );
         }
       });
     }
+
+    test('ayrıntı rengi: açıkta beyaz, koyuda rozetin koyu zemini (sabit beyaz değil)', () {
+      for (final k in ModuleArtKind.values) {
+        expect(_colors(k, false).onAccent, const Color(0xFFFFFFFF), reason: k.name);
+        final dark = _colors(k, true);
+        expect(dark.onAccent, dark.badgeBottom, reason: k.name);
+        expect(dark.onAccent, isNot(const Color(0xFFFFFFFF)), reason: k.name);
+      }
+    });
+
+    testWidgets('koyu temada saf beyaz ayrıntı yok (kilit, onay, "+" vurgu üstünde okunur)', (t) async {
+      await t.runAsync(() async {
+        for (final k in ModuleArtKind.values) {
+          final px = await _raster(k, true, 96);
+          var white = 0;
+          for (var i = 0; i < px.length; i += 4) {
+            if (px[i + 3] == 255 && px[i] >= 250 && px[i + 1] >= 250 && px[i + 2] >= 250) {
+              white++;
+            }
+          }
+          expect(white, 0, reason: '${k.name}: koyu temada sabit beyaz ayrıntı (vurguya ~1,9:1)');
+        }
+      });
+    });
 
     test('ana ton, açık temada marka lacivertidir', () {
       expect(ModuleArtColors.inkLight, const Color(0xFF0F2A4A));
@@ -335,6 +398,88 @@ void main() {
         expect(_colors(k, true).ink, ModuleArtColors.inkDark);
       }
     });
+  });
+
+  group('durum anlamı yok (durum renkleri ve "açık kilit" süs değildir)', () {
+    test('tür vurgusu ve hiçbir renk rolü vitrinin durum rengi değildir (her tür, her tema)', () {
+      for (final k in ModuleArtKind.values) {
+        expect(_statusColors, isNot(contains(moduleArtAccent(k))), reason: k.name);
+        for (final dark in <bool>[false, true]) {
+          final c = _colors(k, dark);
+          for (final (name, role) in <(String, Color)>[
+            ('badgeTop', c.badgeTop),
+            ('badgeBottom', c.badgeBottom),
+            ('ring', c.ring),
+            ('ink', c.ink),
+            ('paper', c.paper),
+            ('wash', c.wash),
+            ('accentSoft', c.accentSoft),
+            ('accent', c.accent),
+            ('onAccent', c.onAccent),
+          ]) {
+            expect(
+              _statusColors,
+              isNot(contains(role)),
+              reason: '${k.name} ${dark ? 'koyu' : 'açık'} $name',
+            );
+          }
+        }
+      }
+    });
+
+    for (final dark in <bool>[false, true]) {
+      final theme = dark ? 'koyu' : 'açık';
+
+      // Yeşil ya da sıcak ton yalnız türün KENDİ rengi o aileden ise çizilir (Finans yeşili, Duyuru turuncusu).
+      // Kapıdaki yeşil "açık kilit", rezervasyondaki yeşil onay, cihazdaki yeşil ışık ve İş Takibi / Ziyaretçi'deki
+      // mercan bu testi kırar.
+      testWidgets('durum yeşili / mercan / kehribar süs olarak çizilmez ($theme)', (t) async {
+        await t.runAsync(() async {
+          for (final k in ModuleArtKind.values) {
+            final own = _rgb(moduleArtAccent(k));
+            final ownGreen = _greenish(own[0], own[1], own[2]);
+            final ownWarm = _warm(own[0], own[1], own[2]);
+            final px = await _raster(k, dark, 96);
+            var green = 0;
+            var warm = 0;
+            for (var i = 0; i < px.length; i += 4) {
+              if (px[i + 3] != 255) continue;
+              if (_greenish(px[i], px[i + 1], px[i + 2])) green++;
+              if (_warm(px[i], px[i + 1], px[i + 2])) warm++;
+            }
+            if (!ownGreen) {
+              expect(green, 0, reason: '${k.name}: durum yeşili süs olarak çizilmiş');
+            }
+            if (!ownWarm) {
+              expect(warm, 0, reason: '${k.name}: mercan / kehribar süs olarak çizilmiş');
+            }
+          }
+        });
+      });
+
+      testWidgets('kapı: rozet tür vurgusu (mavi), kilit KAPALI (iki bacak da gövdeye iner) ($theme)', (t) async {
+        await t.runAsync(() async {
+          const s = 96; // 1 birim = 2 px
+          final c = _colors(ModuleArtKind.door, dark);
+          expect(moduleArtAccent(ModuleArtKind.door), const Color(0xFF2563EB));
+          final px = await _raster(ModuleArtKind.door, dark, s);
+          _expectNear(_pixelAt(px, s, 34.2, 33.3), c.onAccent, 'kilit gövdesi');
+          _expectNear(_pixelAt(px, s, 32.3, 30.3), c.onAccent, 'kilidin sol bacağı');
+          // Açık kilitte sağ bacak gövdeye inmiyordu: burada rozet rengi görünürdü.
+          _expectNear(_pixelAt(px, s, 35.7, 30.3), c.onAccent, 'kilidin sağ bacağı');
+          _expectNear(_pixelAt(px, s, 34.2, 37.2), c.accent, 'rozet (kilit dışı)');
+        });
+      });
+
+      testWidgets('küçük boyutta (40 dp, hızlı işlem) kapı rozeti yalnız vurgu noktasıdır ($theme)', (t) async {
+        await t.runAsync(() async {
+          const s = 40; // ayrıntı (< 44 dp) çizilmez
+          final c = _colors(ModuleArtKind.door, dark);
+          final px = await _raster(ModuleArtKind.door, dark, s);
+          _expectNear(_pixelAt(px, s, 34.2, 31.8), c.accent, 'rozet merkezi');
+        });
+      });
+    }
   });
 
   group('erişilebilirlik', () {

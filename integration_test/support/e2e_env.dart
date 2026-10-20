@@ -9,7 +9,8 @@
 //   E2E_COMBOS   calistirilacak gorunum/yazi-olcegi kombinasyonlari (virgullu; ornek:
 //                "phone@1.0,small@1.5"; "quick" = yalniz phone@1.0; "all" = 3 preset x {1.0,1.5})
 //   E2E_ONLY     virgullu kullanici anahtarlari filtresi (ornek: "manager_2,resident_a1")
-//   E2E_SCREENS  virgullu ekran adlari filtresi (ornek: "panel,siteler")
+//   E2E_SCREENS  virgullu ekran adlari filtresi (ornek: "panel,kapilar,site_yonetimi"; "panel" = modul vitrini,
+//                "kapilar" = vitrindeki kartla acilan kapi paneli)
 //   E2E_SHOT_MAX ekran goruntusunun uzun kenar piksel ust siniri (varsayilan 1100)
 
 import 'dart:convert';

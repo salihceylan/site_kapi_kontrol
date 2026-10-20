@@ -2,8 +2,12 @@
 //
 // FAZ 5 / P: kare süresi ölçüm düzeneği (profile mod, masaüstü).
 //
-// Gezinti: giriş -> ana panel (boşta: 3 sn'lik yoklama + saat) -> bir kapı kartı (site/kapı seç,
-// Detaylar, QR modalı) -> geçiş günlükleri listesi -> (isteğe bağlı) Site Yönetimi uzun liste kaydırma.
+// Gezinti: giriş -> Panel modül vitrini (boşta) -> vitrindeki "Kapılar" kartıyla kapı paneline geçiş ->
+// Kapılar (boşta: 3 sn'lik yoklama + saat) -> bir kapı kartı (site/kapı seç, Detaylar, QR modalı) -> geçiş
+// günlükleri listesi -> (isteğe bağlı) Site Yönetimi uzun liste kaydırma. Panel artık vitrindir: kapı yoklaması
+// yalnız "Kapılar"da çalışır; bu yüzden eski "ana_panel_bosta" aşaması "vitrin_bosta" + "kapilar_bosta" olarak
+// ikiye ayrıldı (eski taban JSON'larıyla karışmasın diye ad da değişti). Kapı paneli açılmazsa koşu DURUR
+// (aksi halde kapı aşamaları hiçbir şey yapmadan "hızlı" ölçülürdü).
 // `SchedulerBinding.addTimingsCallback` ile her aşama için build/raster/toplam p50/p90/p99 ve jank
 // (>16 ms) oranını JSON'a yazar.
 //
@@ -31,7 +35,10 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart' show InputDecorator;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:site_kapi_kontrol/ui/widgets/admin_door_status_card.dart';
+import 'package:site_kapi_kontrol/ui/widgets/yan_menu.dart';
 
 import 'support/e2e_driver.dart';
 import 'support/e2e_env.dart';
@@ -63,7 +70,30 @@ Future<void> _phase(
   }
 }
 
+/// Panel vitrinindeki "Kapılar" kartına dokunur (kullanıcının yolu); kapı paneli açılmazsa koşuyu durdurur.
+Future<void> _openDoorsFromShowcase(WidgetTester tester) async {
+  await closeOverlays(tester); // ilk girişteki tanıtım turu vb. vitrinin üstünde kalmasın
+  final card = showcaseCardFinder(SirketMenuItem.kapilar);
+  if (!await pumpUntilFound(tester, card, timeout: const Duration(seconds: 8)) ||
+      !await tapFinder(tester, card, description: 'vitrin kartı "Kapılar"')) {
+    fail('PERF: Panel vitrininde "Kapılar" kartı yok; kapı paneli açılamadı (PERF_USER kapı yetkili bir yönetici olmalı)');
+  }
+  await settle(tester, min: const Duration(seconds: 1));
+  if (!await pumpUntilFound(tester, find.byType(AdminDoorStatusCard), timeout: const Duration(seconds: 10))) {
+    fail('PERF: kapı paneli (AdminDoorStatusCard) açılmadı');
+  }
+}
+
 Future<void> _doorCardTour(WidgetTester tester) async {
+  final sitePicker = find.descendant(
+    of: find.byType(AdminDoorStatusCard),
+    matching: find.byWidgetPredicate(
+      (w) => w is InputDecorator && foldText(w.decoration.labelText ?? '') == foldText('Site Seçin'),
+    ),
+  );
+  if (sitePicker.evaluate().isEmpty) {
+    fail('PERF: kapı paneli açılmadı ("Site Seçin" yok)');
+  }
   final sites = E2eEnv.siteName(_perfSite);
   if (sites != null) {
     await selectDropdownItem(tester, label: 'Site Seçin', itemText: sites);
@@ -112,7 +142,7 @@ Future<void> _sitesScrollTour(WidgetTester tester) async {
 void main() {
   final binding = initE2eBinding();
 
-  testWidgets('PERF: giriş + ana panel + kapı kartı + günlük listesi (kare süreleri)', (tester) async {
+  testWidgets('PERF: giriş + Panel vitrini + Kapılar + kapı kartı + günlük listesi (kare süreleri)', (tester) async {
     // Motorun gerçek vsync karelerini kullan (elle pump değil): FrameTiming ancak böyle anlamlıdır.
     binding.framePolicy = LiveTestWidgetsFlutterBindingFramePolicy.fullyLive;
     if (!kProfileMode) {
@@ -130,8 +160,16 @@ void main() {
       await settle(tester, min: const Duration(seconds: 1));
     });
 
-    await _phase(recorder, tester, 'ana_panel_bosta', () async {
+    // Girişte Panel = modül vitrini (kapı yoklaması yok).
+    await _phase(recorder, tester, 'vitrin_bosta', () async {
       await settle(tester, min: const Duration(seconds: 1));
+      await pumpFor(tester, const Duration(seconds: _idleSeconds));
+    });
+
+    await _phase(recorder, tester, 'kapilar_gecis', () => _openDoorsFromShowcase(tester));
+
+    // Kapı paneli boşta: 3 sn'lik durum yoklaması + saat (eskiden "ana_panel_bosta").
+    await _phase(recorder, tester, 'kapilar_bosta', () async {
       await pumpFor(tester, const Duration(seconds: _idleSeconds));
     });
 

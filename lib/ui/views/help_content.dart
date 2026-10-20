@@ -64,9 +64,11 @@ abstract final class HelpContent {
     }
   }
 
-  /// Yan menüdeki başlıklar (yan_menu.dart ile birebir) ve çekmecedeki eylemler.
+  /// Yan menüdeki başlıklar (yan_menu.dart ile birebir) ve çekmecedeki eylemler. "Panel" modül vitrinidir; kapı
+  /// paneli (kapı durumu, kapıyı aç) "Kapılar" ekranındadır.
   static const Set<String> knownMenuTitles = <String>{
     'Panel',
+    'Kapılar',
     'Profilim',
     'Eller Serbest & Kestirmeler',
     'Kullanıcı Yönetimi',
@@ -138,7 +140,7 @@ abstract final class HelpContent {
       'Menüden “Daireye Katıl & Cihaz Ekle” ekranını açın.',
       '“QR / Kod ile Daireye Katıl” düğmesine dokunun.',
       'Yöneticinizin paylaştığı site katılım QR kodunu okutun ya da katılım kodunu girin; blok ve daireyi seçip başvurun.',
-      'Başvurunuzu yönetici onaylayınca kapılarınız “Panel” ekranında görünür. Durumu “Katılım Başvurularım” bölümünden izleyebilirsiniz.',
+      'Başvurunuzu yönetici onaylayınca kapılarınız “Kapılar” ekranında görünür. Durumu “Katılım Başvurularım” bölümünden izleyebilirsiniz.',
     ],
     note: 'Başvuru reddedilirse gerekçesi aynı bölümde yazar; bilgileri düzeltip yeniden başvurabilirsiniz.',
   );
@@ -170,21 +172,59 @@ abstract final class HelpContent {
         'yöneticinize başvurun.',
   );
 
+  // "Panel" artık MODÜL VİTRİNİDİR (girişte açılan ekran): kapı paneli "Kapılar" kartının / menü öğesinin arkasındadır.
+  // Her grup bunu kendi diliyle anlatan bir konu alır.
+
+  static const HelpTopic _panelResident = HelpTopic(
+    id: 'panel',
+    title: 'Panel ekranında neler var?',
+    icon: Icons.grid_view_rounded,
+    steps: <String>[
+      'Girişte açılan “Panel” ekranı modül vitrinidir: sitenizde size açık her modül bir kart olarak dizilir; karta dokununca o ekran açılır.',
+      'Kapıyı açmak için “Kapılar” kartına dokunun; kapı düğmesi “Kapılar” ekranındadır.',
+      'Kapalı ya da size açık olmayan bir modülün kartı ne “Panel” ekranında ne menüde görünür.',
+    ],
+  );
+
+  static const HelpTopic _panelIndividual = HelpTopic(
+    id: 'panel',
+    title: 'Panel ekranında neler var?',
+    icon: Icons.grid_view_rounded,
+    steps: <String>[
+      'Girişte açılan “Panel” ekranı modül vitrinidir: hesabınıza açık ekranlar kart olarak dizilir; karta dokununca o ekran açılır.',
+      'Yetkili kapılarınız ve katılım başvurularınız “Kapılar” ekranındadır; bir siteye katılmak ya da cihaz eklemek için “Daireye Katıl & Cihaz Ekle” kartını kullanın.',
+    ],
+    note:
+        'Kapı modülü kapalıysa “Kapılar” görünmez; dairelerinizin ve başvurularınızın bölümleri o zaman “Panel” '
+        'ekranının altında gösterilir.',
+  );
+
+  static const HelpTopic _panelAdmin = HelpTopic(
+    id: 'panel',
+    title: 'Panel ekranında neler var?',
+    icon: Icons.grid_view_rounded,
+    steps: <String>[
+      'Girişte açılan “Panel” ekranı modül vitrinidir: yetkinize açık modüller ve yönetim ekranları kart olarak dizilir; karta dokununca o ekran açılır.',
+      'Kapı durumu, kapıyı açma ve geçiş kayıtları “Kapılar” ekranındadır.',
+    ],
+  );
+
   static const List<HelpTopic> _resident = <HelpTopic>[
     HelpTopic(
       id: 'open_door',
       title: 'Kapıyı nasıl açarım?',
       icon: Icons.lock_open_rounded,
       steps: <String>[
-        'Menüden “Panel” ekranını açın.',
+        '“Panel” ekranındaki “Kapılar” kartına dokunun ya da menüden “Kapılar” ekranını açın.',
         'Kapı kartındaki “KAPIYI AÇ” düğmesine dokunun. Telefonunuz site ağındaysa düğme “YEREL AĞDAN AÇ” olur.',
         'Sitenizde yalnızca QR ile giriş açıksa düğmenin adı “QR KOD İLE AÇ” olur.',
         'Kapı modülü açıksa menüdeki “Sesli Kapı Açma” eylemiyle sesle de açabilirsiniz.',
       ],
       note:
-          'Panelde kapı kartı görünmüyorsa sitenizde kapı modülü kapalıdır ya da henüz bir daireye bağlı '
-          'değilsiniz; site yöneticinize başvurun.',
+          '“Panel” ekranında “Kapılar” kartı, menüde de “Kapılar” yoksa sitenizde kapı modülü kapalıdır ya da '
+          'hesabınızın kapı yetkisi yoktur (örneğin henüz bir daireye bağlı değilsiniz); site yöneticinize başvurun.',
     ),
+    _panelResident,
     HelpTopic(
       id: 'qr_and_guest',
       title: 'QR ile giriş ve misafir geçişi',
@@ -221,6 +261,7 @@ abstract final class HelpContent {
   ];
 
   static const List<HelpTopic> _individual = <HelpTopic>[
+    _panelIndividual,
     HelpTopic(
       id: 'add_device',
       title: 'Cihazımı hesabıma nasıl eklerim?',
@@ -248,6 +289,7 @@ abstract final class HelpContent {
   ];
 
   static const List<HelpTopic> _siteManager = <HelpTopic>[
+    _panelAdmin,
     HelpTopic(
       id: 'manage_site',
       title: 'Sitemi, bloklarımı ve kapılarımı nasıl yönetirim?',
@@ -311,6 +353,7 @@ abstract final class HelpContent {
   ];
 
   static const List<HelpTopic> _superUser = <HelpTopic>[
+    _panelAdmin,
     HelpTopic(
       id: 'users',
       title: 'Kullanıcıları nasıl yönetirim?',

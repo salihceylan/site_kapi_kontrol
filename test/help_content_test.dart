@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/ui/views/help_content.dart';
 import 'package:site_kapi_kontrol/ui/views/onboarding_tour.dart';
+import 'package:site_kapi_kontrol/ui/widgets/yan_menu.dart';
 
 String _libSource() {
   final buffer = StringBuffer();
@@ -87,6 +88,86 @@ void main() {
       expect(ids(HelpAudience.individual), isNot(contains('open_door')));
       expect(ids(HelpAudience.siteManager), containsAll(<String>['manage_site', 'people', 'announce', 'modules']));
       expect(ids(HelpAudience.superUser), containsAll(<String>['users', 'applications', 'device_inventory']));
+      for (final audience in HelpAudience.values) {
+        expect(ids(audience), contains('panel'), reason: '$audience: Panel (modül vitrini) anlatılmalı');
+      }
+    });
+
+    group('Panel = modül vitrini; kapı "Kapılar" ekranında', () {
+      HelpTopic topic(HelpAudience a, String id) => HelpContent.howToFor(a).firstWhere((t) => t.id == id);
+      String joined(HelpTopic t) => <String>[t.title, ...t.steps, if (t.note != null) t.note!].join('\n');
+
+      test('"Kapılar" gerçek menü başlığıdır ve bilinen adlardadır', () {
+        expect(YanMenu.titleFor(SirketMenuItem.kapilar), 'Kapılar');
+        expect(HelpContent.knownMenuTitles, contains(YanMenu.titleFor(SirketMenuItem.kapilar)));
+        expect(HelpContent.knownMenuTitles, contains(YanMenu.titleFor(SirketMenuItem.dashboard)));
+      });
+
+      test('"Kapıyı nasıl açarım?": ilk adım Panel\'deki "Kapılar" kartına götürür; not "Kapılar" yokluğunu anlatır', () {
+        final door = topic(HelpAudience.resident, 'open_door');
+        expect(door.steps.first, contains('“Kapılar”'));
+        expect(door.steps.first, contains('“Panel”'));
+        expect(door.steps.any((s) => s.contains('“KAPIYI AÇ”')), isTrue);
+        expect(door.note, contains('“Kapılar”'));
+        expect(door.note, isNot(contains('Panelde kapı kartı')));
+      });
+
+      test('her grubun "panel" konusu vitrini anlatır ve kapıyı "Kapılar"a bağlar', () {
+        for (final audience in HelpAudience.values) {
+          final panel = topic(audience, 'panel');
+          expect(panel.steps.first, contains('“Panel”'), reason: '$audience');
+          expect(panel.steps.first, contains('vitrin'), reason: '$audience');
+          expect(joined(panel), contains('“Kapılar”'), reason: '$audience');
+        }
+      });
+
+      test('daireye katılma: onaydan sonra kapılar "Kapılar" ekranında görünür', () {
+        for (final audience in <HelpAudience>[HelpAudience.resident, HelpAudience.individual]) {
+          final join = topic(audience, 'join_apartment');
+          expect(join.steps.any((s) => s.contains('kapılarınız “Kapılar” ekranında görünür')), isTrue, reason: '$audience');
+        }
+      });
+
+      test('sakin turu: ilk adım vitrini ve "Kapılar" kartındaki "KAPIYI AÇ" düğmesini anlatır', () {
+        final first = OnboardingSteps.forAudience(HelpAudience.resident).first;
+        expect(first.title, 'Kapınız cebinizde');
+        expect(first.body, contains('“Panel”'));
+        expect(first.body, contains('vitrin'));
+        expect(first.body, contains('“Kapılar”'));
+        expect(first.body, contains('“KAPIYI AÇ”'));
+      });
+
+      test('her rolün turu "Panel" ekranını anlatır', () {
+        for (final audience in HelpAudience.values) {
+          final tour = OnboardingSteps.forAudience(audience).map((s) => s.body).join('\n');
+          expect(tour, contains('“Panel”'), reason: '$audience');
+        }
+      });
+
+      test('kapı düğmesini anlatan her konu / tur adımı "Kapılar"ı da anar; eski "Panel = kapı" cümleleri yok', () {
+        final groups = <String, String>{
+          for (final audience in HelpAudience.values)
+            for (final t in HelpContent.howToFor(audience)) '$audience/${t.id}': joined(t),
+          for (final audience in HelpAudience.values)
+            for (final (i, s) in OnboardingSteps.forAudience(audience).indexed) '$audience/tur$i': '${s.title}\n${s.body}',
+          for (final (i, faq) in HelpContent.faqs.indexed) 'sss$i': '${faq.question}\n${faq.answer}',
+        };
+        groups.forEach((where, text) {
+          if (text.contains('KAPIYI AÇ')) {
+            expect(text, contains('“Kapılar”'), reason: '$where: kapı düğmesi "Kapılar" ekranında anlatılmalı');
+          }
+          for (final stale in const <String>[
+            'Panelde kapı',
+            'Panel ekranında kapı',
+            '“Panel” ekranında kapı',
+            'kapılarınız “Panel”',
+            'Menüden “Panel” ekranını açın',
+            'Menüdeki “Panel” ekranında',
+          ]) {
+            expect(text, isNot(contains(stale)), reason: '$where: "$stale" (Panel artık modül vitrinidir)');
+          }
+        });
+      });
     });
 
     test('metinlerdeki “tırnaklı” arayüz adlarının hepsi bilinen menü / etiket listesinde', () {
