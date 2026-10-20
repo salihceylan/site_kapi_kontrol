@@ -1,14 +1,19 @@
 // FAZ 5 / A1b (i): durum rozeti (çevrimiçi/çevrimdışı/uyarı) ve nabız noktası.
 import 'package:flutter/material.dart';
+import 'package:site_kapi_kontrol/ui/design/status_dot.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 
 /// Salt görüntü durum rozeti: nokta (ya da ikon) + kısa etiket.
+///
+/// **Sade stil (İP-1C, karar G7)**: görünüm [StatusDot]'tur: metnin solunda küçük nokta, zemin ve kenar BOYANMAZ.
+/// Nokta rengi [AppTone.dot] (tamam #10B981, bekliyor #F59E0B, kritik #E11D48; öteki tonlar nötr gri; açıkta gerekirse
+/// 1 dp koyu kenar), ikon rengi [AppTone.sign], metin gövde metni renginde. Nabızlı noktada parıltı yoktur.
 ///
 /// Eşleme: çevrimiçi -> success + [pulse]; yerel ağ -> warning; çevrimdışı -> danger; cihaz yok ->
 /// neutral; onay bekliyor -> warning. Etiket çağıranın mevcut metnidir ("Çevrimiçi", "Online"...).
 ///
 /// Durumlar: normal | [pulse] (nokta 3 tur "ping" atar, SONRA DURUR: kararlı durumda ticker yok,
-/// `pumpAndSettle` biter) | ton değişimi (200 ms zemin/kenar/metin/nokta renk geçişi). [icon] verilir
+/// `pumpAndSettle` biter) | ton değişimi (200 ms nokta / ikon renk geçişi). [icon] verilir
 /// ve [pulse] kapalıysa nokta yerine ikon gösterilir; nabızda nokta öncelik taşır.
 ///
 /// Taşma: etiket tek satır + elips (`Flexible`), sabit yükseklik/genişlik yoktur; sınırlı genişlikte
@@ -90,7 +95,7 @@ class _StatusChipState extends State<StatusChip>
   }
 
   /// Nabız halkası: yalnız animasyon sürerken çizilir (bittiğinde ağaçta iz kalmaz).
-  Widget _ring(AnimationController c, Color ink) {
+  Widget _ring(AnimationController c, Color color) {
     return RepaintBoundary(
       child: AnimatedBuilder(
         animation: c,
@@ -102,9 +107,12 @@ class _StatusChipState extends State<StatusChip>
             child: DecoratedBox(
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: ink.withValues(alpha: 0.35 * (1 - t)),
+                color: color.withValues(alpha: 0.35 * (1 - t)),
               ),
-              child: const SizedBox(width: 8, height: 8),
+              child: const SizedBox(
+                width: StatusDot.size,
+                height: StatusDot.size,
+              ),
             ),
           );
         },
@@ -116,46 +124,33 @@ class _StatusChipState extends State<StatusChip>
   Widget build(BuildContext context) {
     final p = context.palette;
     final tone = widget.tone;
-    final ink = tone.ink(p);
     final duration = AppMotion.of(context, AppMotion.base);
     final base = Theme.of(context).textTheme.bodySmall ?? const TextStyle();
 
     final Widget lead;
     if (widget.icon != null && !widget.pulse) {
       lead = TweenAnimationBuilder<Color?>(
-        tween: ColorTween(end: ink),
+        tween: ColorTween(end: tone.sign(p)),
         duration: duration,
         curve: AppMotion.standard,
         builder: (context, color, _) =>
-            Icon(widget.icon, size: 14, color: color),
+            Icon(widget.icon, size: StatusDot.leadExtent, color: color),
       );
     } else {
       lead = SizedBox(
-        width: 14,
-        height: 14,
+        width: StatusDot.leadExtent,
+        height: StatusDot.leadExtent,
         child: Stack(
           alignment: Alignment.center,
           clipBehavior: Clip.none,
           children: [
-            if (widget.pulse && _c != null) _ring(_c!, ink),
+            if (widget.pulse && _c != null) _ring(_c!, tone.dot),
             AnimatedContainer(
               duration: duration,
               curve: AppMotion.standard,
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: ink,
-                // LED parıltısı: yalnız nabızlı (canlı) noktada; tek, küçük, statik gölge.
-                boxShadow: widget.pulse
-                    ? [
-                        BoxShadow(
-                          color: tone.hue.withValues(alpha: 0.55),
-                          blurRadius: 6,
-                        ),
-                      ]
-                    : null,
-              ),
+              width: StatusDot.size,
+              height: StatusDot.size,
+              decoration: StatusDot.decorationOf(tone, p),
             ),
           ],
         ),
@@ -166,17 +161,11 @@ class _StatusChipState extends State<StatusChip>
       label: widget.label,
       container: true,
       child: ExcludeSemantics(
-        child: AnimatedContainer(
-          duration: duration,
-          curve: AppMotion.standard,
+        // Zemin ve kenar YOK (sade stil): yalnız nokta / ikon renklidir.
+        child: Padding(
           padding: const EdgeInsets.symmetric(
-            horizontal: AppSpace.md,
+            horizontal: AppSpace.xs,
             vertical: AppSpace.xs,
-          ),
-          decoration: BoxDecoration(
-            color: tone.tint(p),
-            borderRadius: BorderRadius.circular(AppRadius.pill),
-            border: Border.all(color: tone.hue.withValues(alpha: 0.4)),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -187,7 +176,10 @@ class _StatusChipState extends State<StatusChip>
                 child: AnimatedDefaultTextStyle(
                   duration: duration,
                   curve: AppMotion.standard,
-                  style: base.copyWith(fontWeight: FontWeight.w700, color: ink),
+                  style: base.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: p.textSecondary,
+                  ),
                   child: Text(
                     widget.label,
                     maxLines: 1,

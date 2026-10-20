@@ -167,7 +167,7 @@ void main() {
     });
   });
 
-  group('StatusChip: LED noktası', () {
+  group('StatusChip: düz nokta (sade stil, LED parıltısı yok)', () {
     Finder ledDot() => find.descendant(
       of: find.byType(StatusChip),
       matching: find.byWidgetPredicate(
@@ -179,7 +179,7 @@ void main() {
       ),
     );
 
-    testWidgets('nabızlı (canlı) nokta tek, küçük, statik bir parıltı taşır', (
+    testWidgets('nabızlı (canlı) nokta da düzdür: gölge / parıltı yok; nabız sonlu', (
       t,
     ) async {
       await t.pumpWidget(
@@ -193,12 +193,8 @@ void main() {
           ),
         ),
       );
-      final dot = t.widget<DecoratedBox>(ledDot().last).decoration
-          as BoxDecoration;
-      expect(dot.boxShadow, hasLength(1));
-      expect(dot.boxShadow!.single.blurRadius, lessThanOrEqualTo(8));
-      expect(dot.boxShadow!.single.spreadRadius, 0);
-      expect(dot.boxShadow!.single.color.a, greaterThan(0));
+      await t.pump();
+      expect(ledDot(), findsNothing);
       await t.pumpAndSettle();
       expect(t.binding.transientCallbackCount, 0, reason: 'nabız biter');
     });
