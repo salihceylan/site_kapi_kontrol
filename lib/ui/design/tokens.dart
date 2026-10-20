@@ -348,13 +348,14 @@ enum AppTone {
     Color(0xFF7DD3FC),
   ),
 
-  /// Çevrimdışı/hata/silme.
+  /// Çevrimdışı/hata/silme. Sade stilin "mercan" tonu (karar G7): hue = dolgu = #E11D48 (kritik durum noktası, vitrin ve
+  /// çekmece rozeti noktası); dolgu sonu ve açık ink #BE123C, koyu ink #FDA4AF.
   danger(
-    Color(0xFFEF4444),
-    Color(0xFFDC2626),
-    Color(0xFFB91C1C),
-    Color(0xFFB91C1C),
-    Color(0xFFFCA5A5),
+    Color(0xFFE11D48),
+    Color(0xFFE11D48),
+    Color(0xFFBE123C),
+    Color(0xFFBE123C),
+    Color(0xFFFDA4AF),
   ),
 
   /// Daire kullanıcısı/bireysel rolü.
@@ -410,6 +411,17 @@ enum AppTone {
 
   /// Soluk zemin: [hue] açıkta %12, koyuda %16 saydamlıkla (yüzey üstüne bindirilir).
   Color tint(AppPalette p) => hue.withValues(alpha: p.isDark ? 0.16 : 0.12);
+
+  /// Sade stil (karar G7): durum tonu mu (tamam / bekliyor / kritik)? Yalnız bu üç ton renkli işaret (nokta, simge,
+  /// dolu düğme, kart kenarı) taşır; öteki tonlar (birincil, bilgi, mor, nötr) nötr görünür: mavi yalnız bağlantı ve odak
+  /// halkasındadır.
+  bool get isStatus => this == success || this == warning || this == danger;
+
+  /// Durum noktasının rengi: durum tonlarında tonun canlı rengi (#10B981 / #F59E0B / #E11D48), ötekilerde nötr gri.
+  Color get dot => isStatus ? hue : neutral.hue;
+
+  /// Simge (ikon) rengi: durum tonlarında [ink], ötekilerde gövde metni rengi (sade stilde "normal metin ve ikon").
+  Color sign(AppPalette p) => isStatus ? ink(p) : p.textSecondary;
 }
 
 /// Rol -> ton köprüsü. `role.tone.hue == role.accentColor` (role_theme.dart) sözleşmesi testle doğrulanır.

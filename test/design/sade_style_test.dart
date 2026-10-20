@@ -125,6 +125,65 @@ void main() {
     });
   });
 
+  group('AppTone: tehlike tonu #E11D48 ve durum tonu kuralı (G7)', () {
+    test('tehlike tonu mercan ailesi: hue = dolgu = #E11D48, dolgu sonu ve açık ink #BE123C, koyu ink #FDA4AF', () {
+      expect(AppTone.danger.hue, const Color(0xFFE11D48));
+      expect(AppTone.danger.a, const Color(0xFFE11D48));
+      expect(AppTone.danger.b, const Color(0xFFBE123C));
+      expect(AppTone.danger.inkLight, const Color(0xFFBE123C));
+      expect(AppTone.danger.inkDark, const Color(0xFFFDA4AF));
+    });
+
+    test('kritik nokta = tehlike hue = tehlike dolgusu (vitrin ve çekmece rozetinin noktası AppTone.danger.a)', () {
+      for (final p in const [_light, _dark]) {
+        expect(AppTone.danger.hue, p.statusCrit);
+        expect(AppTone.danger.a, p.statusCrit);
+        expect(AppTone.success.hue, p.statusOk);
+        expect(AppTone.warning.hue, p.statusWarn);
+      }
+    });
+
+    test('yalnız tamam / bekliyor / kritik durum tonudur', () {
+      expect(
+        AppTone.values.where((t) => t.isStatus).toSet(),
+        <AppTone>{AppTone.success, AppTone.warning, AppTone.danger},
+      );
+    });
+
+    test('nokta rengi: durum tonlarında tonun canlı rengi, ötekilerde nötr gri (mavi / mor nokta yok)', () {
+      expect(AppTone.success.dot, const Color(0xFF10B981));
+      expect(AppTone.warning.dot, const Color(0xFFF59E0B));
+      expect(AppTone.danger.dot, const Color(0xFFE11D48));
+      for (final t in const [AppTone.primary, AppTone.info, AppTone.violet, AppTone.neutral]) {
+        expect(t.dot, AppTone.neutral.hue, reason: t.name);
+      }
+    });
+
+    test('simge rengi: durum tonlarında ink, ötekilerde gövde metni rengi (>= 4,5:1 yüzeylerde)', () {
+      for (final p in const [_light, _dark]) {
+        for (final t in AppTone.values) {
+          expect(t.sign(p), t.isStatus ? t.ink(p) : p.textSecondary, reason: '${t.name} dark=${p.isDark}');
+          for (final bg in [p.surface, p.surfaceMuted, p.background]) {
+            expect(contrast(t.sign(p), bg), greaterThanOrEqualTo(4.5), reason: '${t.name} dark=${p.isDark}');
+          }
+        }
+      }
+    });
+
+    test('nötr nokta yüzeylerde >= 3:1; açık temada tamam ve bekliyor noktası 3:1 altında (kenar gerekir)', () {
+      for (final p in const [_light, _dark]) {
+        for (final bg in [p.surface, p.background]) {
+          expect(contrast(AppTone.neutral.hue, bg), greaterThanOrEqualTo(3.0));
+          expect(contrast(AppTone.danger.dot, bg), greaterThanOrEqualTo(3.0));
+        }
+      }
+      expect(contrast(AppTone.success.dot, _light.surface), lessThan(3.0));
+      expect(contrast(AppTone.warning.dot, _light.surface), lessThan(3.0));
+      expect(contrast(AppTone.success.a, _light.surface), greaterThanOrEqualTo(3.0));
+      expect(contrast(AppTone.warning.a, _light.surface), greaterThanOrEqualTo(3.0));
+    });
+  });
+
   group('kontrast tablosu (docs/TASARIM_DILI.md)', () {
     for (final (name, p) in const [('açık', _light), ('koyu', _dark)]) {
       for (final (row, fg, bg, min) in contrastTable(p)) {
