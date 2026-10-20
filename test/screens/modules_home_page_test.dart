@@ -1010,6 +1010,30 @@ void main() {
       await _disposeHome(t);
     });
 
+    // Vitrin son doğrulamasından (c): olumlu yol. Kapısı ve kapıya atanmış cihazı olan sakinde (Geçiş Kontrol açık, kapı
+    // erişimi var) otomatik sesli dinleme BAŞLAR, aday kapılar verilir ve hiçbir uyarı konuşulmaz.
+    testWidgets('kapısı ve cihazı olan sakinde sesli dinleme başlar (aday kapılarla); uyarı konuşulmaz', (t) async {
+      final auth = _HomeModAuth(role: UserRole.apartmentOwner)..residentDoors = <DoorRecord>[_door(11)];
+      expect(auth.residentDoors.single.assignedDeviceUid, isNotEmpty, reason: 'ön koşul: kapıya cihaz atanmış');
+      final access = await _access(<MySiteModules>[_my(11, door: true, role: 'resident')]);
+      final voice = _HomeVoice();
+      await _pumpHome(t, auth, access: access, voice: voice);
+
+      expect(find.byKey(const ValueKey<String>('panel_kart_kapilar')), findsOneWidget, reason: 'Kapılar erişilebilir');
+      expect(voice.startCalls, 1, reason: 'otomatik dinleme bir kez başlatılır');
+      expect(voice.listening, isTrue);
+      expect(voice.spoken, isEmpty, reason: '"kapı bulunamadı" / "cihaz atanmamış" uyarısı yok');
+      expect(voice.stopCalls, 0);
+
+      // Yenileme dinlemeyi ikinci kez başlatmaz (zaten dinliyor).
+      await t.tap(_inAppBar(find.byTooltip('Yenile')));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 600));
+      expect(voice.startCalls, 1);
+      expect(voice.spoken, isEmpty);
+      await _disposeHome(t);
+    });
+
     testWidgets('modül AÇIK ve kapı yok: uyarı eskisi gibi konuşulur (kontrol)', (t) async {
       final auth = _HomeModAuth(role: UserRole.apartmentOwner);
       final access = await _access(<MySiteModules>[_my(11, door: true, role: 'resident')]);
