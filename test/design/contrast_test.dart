@@ -807,7 +807,7 @@ void main() {
   group('AppDecorations (imzalar aynı, içi tokenlara bağlı)', () {
     for (final dark in [false, true]) {
       testWidgets(
-        '${dark ? 'koyu' : 'açık'}: glassCard/infoCard opak, tek katman gölge, AppRadius.lg',
+        '${dark ? 'koyu' : 'açık'}: glassCard/infoCard opak, gölgesiz (sade stil), AppRadius.lg; rozet gölgesiz',
         (t) async {
           final p = dark ? AppPalette.dark : AppPalette.light;
           late BoxDecoration glass;
@@ -833,12 +833,10 @@ void main() {
             expect(d.color!.a, 1.0, reason: 'opak yüzey (kompozit maliyeti)');
             expect(d.borderRadius, BorderRadius.circular(AppRadius.lg));
             expect((d.border! as Border).top.color, p.border);
-            expect(d.boxShadow, hasLength(1));
-            expect(d.boxShadow!.single.blurRadius, lessThanOrEqualTo(16));
-            expect(d.boxShadow!.single.spreadRadius, 0);
-            expect(d.boxShadow, p.shadow(1));
+            expect(d.boxShadow, isNull, reason: 'kart gölgesiz');
           }
           expect(badge.borderRadius, BorderRadius.circular(AppRadius.pill));
+          expect(badge.boxShadow, isNull, reason: 'rozet ışıması yok');
         },
       );
     }
