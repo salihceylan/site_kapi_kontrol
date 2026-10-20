@@ -499,7 +499,17 @@ export function parseDefinitionCreate(body) {
     startPeriod,
     endPeriod,
     target: parseTarget(input.target),
+    // İki hesap (İP-1A): "kim öder"; verilmezse aylık aidat dairede oturanın (occupant), tek seferlik borç ev sahibinin hesabına.
+    chargeParty: parseChargeParty(input.charge_party) ?? defaultChargeParty(kind),
   };
+}
+
+/** Tanım türüne göre varsayılan "kim öder" (İP-1A): aylık -> occupant, tek seferlik -> owner. */
+export const defaultChargeParty = (kind) => (kind === 'recurring' ? 'occupant' : 'owner');
+
+/** Tanım satırının etkin "kim öder" değeri (052 öncesi satırda NULL: türe göre varsayılan). */
+export function definitionChargeParty(row) {
+  return row?.charge_party === 'occupant' || row?.charge_party === 'owner' ? row.charge_party : defaultChargeParty(row?.kind);
 }
 
 export const PATCH_KEYS = Object.freeze([
@@ -514,9 +524,10 @@ export const PATCH_KEYS = Object.freeze([
   'end_period',
   'target',
   'is_active',
+  'charge_party',
 ]);
-/** Borçlandırılmış tanımda değiştirilebilen alanlar (geçmiş kayıtlar zaten değişmez). */
-export const POSTED_PATCH_KEYS = Object.freeze(['name', 'end_period', 'is_active', 'due_day']);
+/** Borçlandırılmış tanımda değiştirilebilen alanlar (geçmiş kayıtlar zaten değişmez; "kim öder" yalnız SONRAKİ borçlandırmaları etkiler). */
+export const POSTED_PATCH_KEYS = Object.freeze(['name', 'end_period', 'is_active', 'due_day', 'charge_party']);
 
 /** PATCH gövdesi -> yalnız gönderilen alanların ham halleri + anahtar listesi (birleştirme ve çapraz doğrulama serviste). */
 export function parseDefinitionPatch(body) {
@@ -560,6 +571,13 @@ export function parseDefinitionPatch(body) {
     }
     patch.isActive = input.is_active;
   }
+  if (keys.includes('charge_party')) {
+    const chargeParty = parseChargeParty(input.charge_party);
+    if (chargeParty === null) {
+      throw invalidBody('Kim öder seçimi geçersiz (dairede oturan veya ev sahibi olmalıdır).');
+    }
+    patch.chargeParty = chargeParty;
+  }
   return patch;
 }
 
@@ -585,6 +603,7 @@ export function mergeDefinitionPatch(existing, patch) {
   if (changed('end_period')) next.endPeriod = patch.endPeriod;
   if (changed('target')) next.target = patch.target;
   if (changed('is_active')) next.isActive = patch.isActive;
+  if (changed('charge_party')) next.chargeParty = patch.chargeParty;
   return next;
 }
 
@@ -676,6 +695,8 @@ export function parseChargeInput(body, { requireExpected, now = new Date() }) {
     dueDate: parseOptionalDueDate(input.due_date, now),
     skipMissing: parseBooleanFlag(input.skip_missing, 'Eksik verili daireleri hariç tutma seçeneği'),
     allowDuplicate: parseBooleanFlag(input.allow_duplicate, 'Yinelenen ek borç seçeneği'),
+    // İki hesap (İP-1A): ek borcun varsayılanı ev sahibi hesabı (demirbaş / yatırım / büyük onarım); "dairede oturan" seçilebilir.
+    chargeParty: parseChargeParty(input.charge_party) ?? 'owner',
     idempotencyKey: parseIdempotencyKey(input.idempotency_key, { required: requireExpected === true }),
     expectedTotal: null,
     expectedCount: null,
@@ -879,6 +900,8 @@ export function mapDefinitionRow(row) {
     target: { type: row.target_type, block_ids: blockIds, apartment_ids: apartmentIds, blocks: [], apartments: [] },
     is_active: row.is_active === true,
     has_runs: row.has_runs === true,
+    // İki hesap (İP-1A): etkin "kim öder" (occupant = dairede oturanın hesabı, owner = ev sahibi hesabı)
+    charge_party: definitionChargeParty(row),
     last_posted_period: periodOrNull(row.last_posted_period),
     currency: 'TRY',
     created_by_name: row.created_by_name ?? null,
@@ -1009,7 +1032,10 @@ export function postRequestFingerprint({ definitionId, period, dueDate, skipMiss
   return sha256(canonicalJson({ v: 1, kind: 'post', definition_id: definitionId, period, due_date: dueDate, skip_missing: skipMissing === true }));
 }
 
-/** Ek borç isteğinin parmak izi: ad, tutar, dağıtım, alan esası, kategori tutarları, hedef, istenen vade ve hariç tutma. */
+/**
+ * Ek borç isteğinin parmak izi: ad, tutar, dağıtım, alan esası, kategori tutarları, hedef, istenen vade ve hariç tutma. İP-1A: "kim öder" yalnız varsayılan
+ * (owner) DEĞİLSE parmak izine girer; böylece 052 öncesi başlamış bir isteğin aynı anahtarla tekrarı 409 almaz.
+ */
 export function chargeRequestFingerprint(input) {
   return sha256(
     canonicalJson({
@@ -1023,6 +1049,7 @@ export function chargeRequestFingerprint(input) {
       target: targetOf(input.target),
       due_date: input.dueDate,
       skip_missing: input.skipMissing === true,
+      ...(input.chargeParty && input.chargeParty !== 'owner' ? { charge_party: input.chargeParty } : {}),
     }),
   );
 }

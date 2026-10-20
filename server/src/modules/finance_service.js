@@ -21,6 +21,7 @@ import {
   chargeNaturalKey,
   chargeRequestFingerprint,
   currentPeriod,
+  definitionChargeParty,
   definitionInactive,
   definitionLocked,
   definitionNotFound,
@@ -50,17 +51,21 @@ import {
 } from './finance_common.js';
 import { buildDistributionPlan, planHash, redistributesOnSkip } from './finance_distribution.js';
 import { MAX_RUN_TOTAL_MINOR, bigintsToSqlArray, minorToNumber } from './finance_money.js';
+import { accountForCharge, tenantOnDateSql } from './finance_parties.js';
 import { isPeriodClosed, lockActorRow, recordFinanceAudit, withFinanceTransaction } from './finance_tx.js';
 
 // ---------------------------------------------------------------------------
 // Tanım okuma
 // ---------------------------------------------------------------------------
 
+// İki hesap (İP-1A): hedef dairede borç tarihinde ($5) etkin kiracı var mı (loadTargetApartments).
+const TENANT_ON_CHARGE_DATE = tenantOnDateSql('a', '$5::DATE');
+
 const DEFINITION_SELECT = `
   SELECT
     d.id, d.name, d.kind, d.distribution, d.area_basis, d.amount_minor::text AS amount_minor, d.category_amounts, d.due_day,
     to_char(d.start_period, 'YYYY-MM-DD') AS start_period, to_char(d.end_period, 'YYYY-MM-DD') AS end_period,
-    d.target_type, d.target_block_ids, d.target_apartment_ids, d.is_active, d.created_at, d.updated_at,
+    d.target_type, d.target_block_ids, d.target_apartment_ids, d.is_active, d.created_at, d.updated_at, d.charge_party,
     u.full_name AS created_by_name,
     EXISTS (SELECT 1 FROM fee_runs r WHERE r.definition_id = d.id) AS has_runs,
     (SELECT to_char(MAX(r.period), 'YYYY-MM-DD') FROM fee_runs r WHERE r.definition_id = d.id) AS last_posted_period
@@ -89,6 +94,7 @@ export function shapeOfRow(row) {
     endPeriod: row.end_period ?? null,
     isActive: row.is_active === true,
     target: { type: row.target_type, blockIds: idsOf(row.target_block_ids), apartmentIds: idsOf(row.target_apartment_ids) },
+    chargeParty: definitionChargeParty(row),
   };
 }
 
@@ -176,14 +182,17 @@ async function assertTargetBelongsToSite(db, siteCode, target) {
 /**
  * Hedefteki AKTİF daireler. lock: yazma yolunda satırlar id sırasıyla FOR KEY SHARE kilitlenir (daire silme ile sıra; kilit sırası kuralı:
  * apartments id sırasıyla). Alan değerleri SQL'de tamsayıya çevrilir (NUMERIC(8,2) x 100): kayan nokta yok.
+ * İki hesap (İP-1A): `onDate` (borç tarihi) verilirse dairenin o gün etkin kiracısı olup olmadığı aynı sorguda okunur ve satırın hesabı
+ * (`accountParty`) "kim öder" (`chargeParty`) kuralıyla çözülür (finance_parties.accountForCharge; 3000 daire tek sorgu).
  */
-async function loadTargetApartments(db, siteCode, target, { lock = false } = {}) {
+async function loadTargetApartments(db, siteCode, target, { lock = false, onDate = null, chargeParty = 'occupant' } = {}) {
   const result = await db.query(
     `
       SELECT
         a.id, a.unit_label, b.block_name, b.sort_order AS block_sort, a.sort_order AS apt_sort, a.responsible_party, a.category,
         (a.gross_area_m2 * 100)::BIGINT AS gross_x100, (a.net_area_m2 * 100)::BIGINT AS net_x100,
-        a.land_share_numerator, a.land_share_denominator
+        a.land_share_numerator, a.land_share_denominator,
+        ($5::DATE IS NOT NULL AND ${TENANT_ON_CHARGE_DATE}) AS has_tenant
       FROM apartments a
       INNER JOIN site_blocks b ON b.id = a.block_id
       WHERE a.site_code = $1 AND a.is_active = TRUE
@@ -195,7 +204,7 @@ async function loadTargetApartments(db, siteCode, target, { lock = false } = {})
       ORDER BY a.id
       ${lock ? 'FOR KEY SHARE OF a' : ''}
     `,
-    [siteCode, target.type, target.blockIds, target.apartmentIds],
+    [siteCode, target.type, target.blockIds, target.apartmentIds, onDate],
   );
   return (result.rows ?? []).map((row) => ({
     id: Number(row.id),
@@ -209,11 +218,12 @@ async function loadTargetApartments(db, siteCode, target, { lock = false } = {})
     netX100: row.net_x100 ?? null,
     landNumerator: row.land_share_numerator ?? null,
     landDenominator: row.land_share_denominator ?? null,
+    ...(onDate === null ? {} : { accountParty: accountForCharge(chargeParty, row.responsible_party, row.has_tenant === true) }),
   }));
 }
 
 async function computePlan(db, siteCode, spec, options) {
-  const apartments = await loadTargetApartments(db, siteCode, spec.target, options);
+  const apartments = await loadTargetApartments(db, siteCode, spec.target, { ...options, chargeParty: spec.chargeParty ?? 'occupant' });
   return buildDistributionPlan(
     { distribution: spec.distribution, areaBasis: spec.areaBasis, amountMinor: spec.amountMinor, categoryAmounts: spec.categoryAmounts },
     apartments,
@@ -238,6 +248,8 @@ function previewBody({ plan, period, definitionId, alreadyPosted, closed, dueDat
       label: line.label,
       block_name: line.blockName,
       payer_party: line.payerParty,
+      // İki hesap (İP-1A): borcun yazılacağı hesap (owner = ev sahibi, tenant = kiracı)
+      account_party: line.accountParty ?? null,
       amount_minor: minorToNumber(line.amount),
     })),
     missing_data: plan.missing.map((entry) => ({
@@ -298,6 +310,7 @@ export async function createDefinition({ siteCode, body, actor }) {
     endPeriod: input.endPeriod,
     isActive: true,
     target: input.target,
+    chargeParty: input.chargeParty,
   };
   assertDefinitionShape(shape);
   const actorInfo = actorFromAuthUser(actor);
@@ -308,12 +321,12 @@ export async function createDefinition({ siteCode, body, actor }) {
       `
         INSERT INTO fee_definitions (
           site_code, name, kind, distribution, area_basis, amount_minor, category_amounts, due_day, start_period, end_period,
-          target_type, target_block_ids, target_apartment_ids, is_active, created_by
+          target_type, target_block_ids, target_apartment_ids, is_active, created_by, charge_party
         )
-        VALUES ($1, $2, $3, $4, $5, $6::BIGINT, $7::JSONB, $8, $9::DATE, $10::DATE, $11, $12::BIGINT[], $13::BIGINT[], TRUE, $14)
+        VALUES ($1, $2, $3, $4, $5, $6::BIGINT, $7::JSONB, $8, $9::DATE, $10::DATE, $11, $12::BIGINT[], $13::BIGINT[], TRUE, $14, $15)
         RETURNING id
       `,
-      [siteCode, ...sqlParamsOfShape(shape), actorInfo.userCode],
+      [siteCode, ...sqlParamsOfShape(shape), actorInfo.userCode, shape.chargeParty],
     );
     const id = Number(inserted.rows[0].id);
     await recordFinanceAudit(client, actor, 'finance.definition.created', siteCode, id, auditDefinitionDetails(shape));
@@ -359,10 +372,10 @@ export async function updateDefinition({ siteCode, rawId, body, actor }) {
         UPDATE fee_definitions
         SET name = $3, kind = $4, distribution = $5, area_basis = $6, amount_minor = $7::BIGINT, category_amounts = $8::JSONB, due_day = $9,
             start_period = $10::DATE, end_period = $11::DATE, target_type = $12, target_block_ids = $13::BIGINT[], target_apartment_ids = $14::BIGINT[],
-            is_active = $15, updated_at = NOW()
+            is_active = $15, charge_party = $16, updated_at = NOW()
         WHERE id = $1 AND site_code = $2
       `,
-      [id, siteCode, ...params, merged.isActive],
+      [id, siteCode, ...params, merged.isActive, merged.chargeParty],
     );
     const deactivated = existing.isActive && merged.isActive === false;
     await recordFinanceAudit(client, actor, deactivated ? 'finance.definition.deactivated' : 'finance.definition.updated', siteCode, id, {
@@ -415,7 +428,7 @@ export async function previewDefinition({ siteCode, rawId, body, now = new Date(
   const timing = resolveTiming(shape, input, now);
   const alreadyPosted = await runExists(db, id, shape.kind === 'recurring' ? timing.period : null);
   const closed = await isPeriodClosed(db, siteCode, timing.period);
-  const plan = await computePlan(db, siteCode, shape, { lock: false });
+  const plan = await computePlan(db, siteCode, shape, { lock: false, onDate: timing.entryDate });
   return previewBody({ plan, period: timing.period, definitionId: id, alreadyPosted, closed, dueDate: timing.dueDate, distribution: shape.distribution });
 }
 
@@ -426,7 +439,7 @@ export async function previewCharge({ siteCode, body, now = new Date() }, db = p
   const todayIsoDate = today(now);
   const period = periodOfDate(todayIsoDate);
   const dueDate = input.dueDate ?? todayIsoDate;
-  const plan = await computePlan(db, siteCode, input, { lock: false });
+  const plan = await computePlan(db, siteCode, input, { lock: false, onDate: todayIsoDate });
   const duplicate = await findRecentDuplicate(db, siteCode, chargeNaturalKey(input, dueDate));
   return previewBody({
     plan,
@@ -517,10 +530,10 @@ async function writeRun(client, { siteCode, definitionId, definitionName, plan, 
   const written = await client.query(
     `
       INSERT INTO ledger_entries (
-        site_code, apartment_id, kind, amount_minor, period, entry_date, due_date, definition_id, definition_name, run_id, payer_party, created_by
+        site_code, apartment_id, kind, amount_minor, period, entry_date, due_date, definition_id, definition_name, run_id, payer_party, created_by, account_party
       )
-      SELECT $1, t.apartment_id, 'charge', t.amount, $2::DATE, $3::DATE, $4::DATE, $5, $6::TEXT, $7, t.payer, $8
-      FROM unnest($9::BIGINT[], $10::BIGINT[], $11::TEXT[]) AS t(apartment_id, amount, payer)
+      SELECT $1, t.apartment_id, 'charge', t.amount, $2::DATE, $3::DATE, $4::DATE, $5, $6::TEXT, $7, t.payer, $8, t.account
+      FROM unnest($9::BIGINT[], $10::BIGINT[], $11::TEXT[], $12::TEXT[]) AS t(apartment_id, amount, payer, account)
       ORDER BY t.apartment_id
     `,
     [
@@ -535,6 +548,8 @@ async function writeRun(client, { siteCode, definitionId, definitionName, plan, 
       bigintsToSqlArray(lines.map((line) => BigInt(line.apartmentId))),
       bigintsToSqlArray(lines.map((line) => line.amount)),
       lines.map((line) => line.payerParty),
+      // İki hesap (İP-1A): satırın hesabı (önizlemeyle AYNI kuralla kilit altında çözüldü; planHash'e de girer)
+      lines.map((line) => line.accountParty ?? (line.payerParty === 'tenant' ? 'tenant' : 'owner')),
     ],
   );
   if (written.rowCount !== lines.length) {
@@ -614,7 +629,7 @@ export async function postDefinition({ siteCode, rawId, body, actor, now = new D
     if (await runExists(client, id, shape.kind === 'recurring' ? resolved.period : null)) {
       throw periodAlreadyPosted();
     }
-    const plan = await computePlan(client, siteCode, shape, { lock: true });
+    const plan = await computePlan(client, siteCode, shape, { lock: true, onDate: resolved.entryDate });
     verifyPlan(plan, input);
     await lockActorRow(client, actorInfo);
     const run = await writeRun(client, {
@@ -668,7 +683,7 @@ export async function postCharge({ siteCode, body, actor, now = new Date() }) {
         throw duplicateCharge(Number(duplicate.id), isoOrNull(duplicate.posted_at));
       }
     }
-    const plan = await computePlan(client, siteCode, input, { lock: true });
+    const plan = await computePlan(client, siteCode, input, { lock: true, onDate: timing.entryDate });
     verifyPlan(plan, input);
     const shape = {
       kind: 'one_time',
@@ -682,6 +697,7 @@ export async function postCharge({ siteCode, body, actor, now = new Date() }) {
       endPeriod: null,
       isActive: true,
       target: input.target,
+      chargeParty: input.chargeParty,
     };
     assertDefinitionShape(shape);
     await lockActorRow(client, actorInfo);
@@ -689,12 +705,12 @@ export async function postCharge({ siteCode, body, actor, now = new Date() }) {
       `
         INSERT INTO fee_definitions (
           site_code, name, kind, distribution, area_basis, amount_minor, category_amounts, due_day, start_period, end_period,
-          target_type, target_block_ids, target_apartment_ids, is_active, created_by
+          target_type, target_block_ids, target_apartment_ids, is_active, created_by, charge_party
         )
-        VALUES ($1, $2, $3, $4, $5, $6::BIGINT, $7::JSONB, $8, $9::DATE, $10::DATE, $11, $12::BIGINT[], $13::BIGINT[], TRUE, $14)
+        VALUES ($1, $2, $3, $4, $5, $6::BIGINT, $7::JSONB, $8, $9::DATE, $10::DATE, $11, $12::BIGINT[], $13::BIGINT[], TRUE, $14, $15)
         RETURNING id
       `,
-      [siteCode, ...sqlParamsOfShape(shape), actorInfo.userCode],
+      [siteCode, ...sqlParamsOfShape(shape), actorInfo.userCode, shape.chargeParty],
     );
     const definitionId = Number(created.rows[0].id);
     const run = await writeRun(client, {

@@ -3,6 +3,8 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   METHODS,
+  PATCH_KEYS,
+  POSTED_PATCH_KEYS,
   addDays,
   addMonths,
   apartmentHasFinance,
@@ -227,7 +229,18 @@ describe('finans: tanım gövdeleri', () => {
       startPeriod: '2026-01-01',
       endPeriod: null,
       target: { type: 'apartments', blockIds: [], apartmentIds: [3, 7, 9] },
+      // İP-1A: "kim öder" verilmedi -> aylık aidat dairede oturanın hesabına
+      chargeParty: 'occupant',
     });
+  });
+
+  it('İP-1A: charge_party (occupant | owner); verilmezse aylık -> occupant, tek seferlik -> owner; geçersiz 400', () => {
+    assert.equal(parseDefinitionCreate({ ...baseDef(), charge_party: 'owner' }).chargeParty, 'owner');
+    assert.equal(parseDefinitionCreate({ ...baseDef(), kind: 'one_time', due_day: undefined }).chargeParty, 'owner');
+    assert.equal(parseDefinitionCreate({ ...baseDef(), kind: 'one_time', due_day: undefined, charge_party: 'occupant' }).chargeParty, 'occupant');
+    for (const bad of ['tenant', 'both', 5, '']) {
+      throwsCode(() => parseDefinitionCreate({ ...baseDef(), charge_party: bad }), 'INVALID_BODY');
+    }
   });
 
   it('amount takma adı (kuruş) kabul edilir; ikisi farklıysa 400; kategori ve m² varyantları', () => {
@@ -297,6 +310,18 @@ describe('finans: tanım gövdeleri', () => {
     const badEnd = mergeDefinitionPatch(existing, parseDefinitionPatch({ end_period: '2025-01' }));
     assert.throws(() => assertDefinitionShape(badEnd), (error) => error.code === 'INVALID_BODY');
   });
+
+  it('İP-1A: PATCH charge_party borçlandırılmış tanımda da değişebilir (yalnız SONRAKİ borçlandırmaları etkiler); geçersiz 400', () => {
+    const patch = parseDefinitionPatch({ charge_party: 'owner' });
+    assert.deepEqual(patch.keys, ['charge_party']);
+    assert.equal(patch.chargeParty, 'owner');
+    assert.ok(POSTED_PATCH_KEYS.includes('charge_party'));
+    assert.ok(PATCH_KEYS.includes('charge_party'));
+    const merged = mergeDefinitionPatch({ ...parseDefinitionCreate(baseDef()), isActive: true }, patch);
+    assert.equal(merged.chargeParty, 'owner');
+    throwsCode(() => parseDefinitionPatch({ charge_party: 'tenant' }), 'INVALID_BODY');
+    throwsCode(() => parseDefinitionPatch({ charge_party: null }), 'INVALID_BODY');
+  });
 });
 
 describe('finans: borçlandırma / ek borç / tahsilat gövdeleri', () => {
@@ -357,6 +382,10 @@ describe('finans: borçlandırma / ek borç / tahsilat gövdeleri', () => {
     throwsCode(() => parseChargeInput({ ...body, name: undefined }, { requireExpected: false, now: NOW }), 'INVALID_BODY');
     throwsCode(() => parseChargeInput({ ...body, due_date: '2026-02-30' }, { requireExpected: false, now: NOW }), 'INVALID_BODY');
     throwsCode(() => parseChargeInput({ ...body, due_date: '2002-11-15' }, { requireExpected: false, now: NOW }), 'INVALID_BODY');
+    // İP-1A: ek borç varsayılanı ev sahibi hesabı; "dairede oturan" seçilebilir
+    assert.equal(preview.chargeParty, 'owner');
+    assert.equal(parseChargeInput({ ...body, charge_party: 'occupant' }, { requireExpected: false, now: NOW }).chargeParty, 'occupant');
+    throwsCode(() => parseChargeInput({ ...body, charge_party: 'tenant' }, { requireExpected: false, now: NOW }), 'INVALID_BODY');
   });
 
   it('parmak izleri: kararlı (anahtar sırasından bağımsız); gövde değişince değişir; doğal özet vade ve kategori harf farkından etkilenmez/etkilenir', () => {
@@ -365,9 +394,11 @@ describe('finans: borçlandırma / ek borç / tahsilat gövdeleri', () => {
     const a = chargeRequestFingerprint(base);
     assert.match(a, /^[0-9a-f]{64}$/);
     assert.equal(chargeRequestFingerprint({ ...base }), a);
-    for (const change of [{ name: 'Asansör 2' }, { amountMinor: 1001 }, { distribution: 'fixed' }, { target: { type: 'blocks', blockIds: [3], apartmentIds: [] } }, { dueDate: '2026-11-01' }, { skipMissing: true }]) {
+    for (const change of [{ name: 'Asansör 2' }, { amountMinor: 1001 }, { distribution: 'fixed' }, { target: { type: 'blocks', blockIds: [3], apartmentIds: [] } }, { dueDate: '2026-11-01' }, { skipMissing: true }, { chargeParty: 'occupant' }]) {
       assert.notEqual(chargeRequestFingerprint({ ...base, ...change }), a, JSON.stringify(change));
     }
+    // İP-1A: varsayılan (ev sahibi) "kim öder" parmak izini DEĞİŞTİRMEZ (dağıtımdan önce başlayan tekrarlar 409 almasın)
+    assert.equal(chargeRequestFingerprint({ ...base, chargeParty: 'owner' }), a);
     const natural = chargeNaturalKey(base, '2026-11-01');
     assert.match(natural, /^[0-9a-f]{64}$/);
     assert.equal(chargeNaturalKey({ ...base, skipMissing: true }, '2026-11-01'), natural, 'skip_missing doğal özete girmez');
@@ -477,6 +508,10 @@ describe('finans: yanıt eşleyicileri ve gizlilik', () => {
     assert.equal(fixed.category_amounts, null);
     assert.equal(fixed.has_runs, false);
     assert.equal(fixed.created_at, null);
+    // İP-1A: 052 öncesi tanım (charge_party yok) türüne göre: aylık -> occupant, tek seferlik -> owner; dolu değer aynen
+    assert.equal(mapped.charge_party, 'occupant');
+    assert.equal(fixed.charge_party, 'owner');
+    assert.equal(mapDefinitionRow({ id: 1, name: 'x', kind: 'recurring', distribution: 'fixed', amount_minor: '1', start_period: '2026-10-01', target_type: 'site', charge_party: 'owner' }).charge_party, 'owner');
   });
 
   it('mapEntryRow / mapRunRow: tamsayı kuruş, dönem YYYY-MM, kimlikler sayı, boşlar null', () => {
