@@ -420,7 +420,10 @@ Her iki durumda ilk gönderim: `bash ~/ops/offsite_push.sh --all`. Sonra cron (0
    powershell -NoProfile -ExecutionPolicy Bypass -File C:\kapi-ops\pull_backups_windows.ps1
    ```
    Varsayılan hedef klasör `%USERPROFILE%\kapi-yedek`; günlük `pull.log`, son durum `LAST_OK.txt` / `LAST_FAILED.txt`.
-4. Zamanlanmış görev (**siz kurun**; ben kurmadım). Yönetici olmayan PowerShell'de:
+4. Zamanlanmış görev. **2026-10-21 kuruldu** (geliştirici bilgisayarı; C: diski dolu olduğu için betik `G:\kapi-ops\`, yedekler
+   `G:\kapi-yedek\`): görev adı `KapiYedekCek`, her gün 11:00, `-StartWhenAvailable -RunOnlyIfNetworkAvailable`, argüman
+   `-Destination "G:\kapi-yedek"`; ilk elle çalışma 15 dosya indirdi ve doğruladı (çıkış 0). Kaldırmak için:
+   `Unregister-ScheduledTask -TaskName KapiYedekCek -Confirm:$false`. Başka bir bilgisayara kurmak için yönetici olmayan PowerShell'de:
    ```powershell
    $action   = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument '-NoProfile -ExecutionPolicy Bypass -File "C:\kapi-ops\pull_backups_windows.ps1"'
    $trigger  = New-ScheduledTaskTrigger -Daily -At 11:00

@@ -79,7 +79,10 @@ Büyüklük: **S** bir gün içinde · **M** birkaç gün · **L** bir haftadan 
 
 - [x] **P0 — Kaynak kodun gizliliği (karar 14, 2026-10-20).** `site_kapi_kontrol` GitHub deposu gizliye çekildi (Salih). Aynı kontrol
   `ev_otomasyon` deposu için de yapılmalı (`gudeteknoloji_com_tr` zaten gizli).
-- [ ] **P0 · S — Veritabanının dış kopyası (karar 13'ün kapsamadığı kısım).** Aşağıdaki Drive kararı sisteme YÜKLENEN DOSYALARI kapsar;
+- [x] **P0 · S — Veritabanının dış kopyası (karar 13'ün kapsamadığı kısım; kuruldu 2026-10-21).** Şifreli günlük yedekler her gün
+  geliştirici bilgisayarına çekiliyor (Windows zamanlanmış görevi `KapiYedekCek`, 11:00, hedef `G:\kapi-yedek`; ilk çalışma 15 dosyayı
+  indirip doğruladı; ayrıntı `docs/OPERASYON_YEDEK_IZLEME.md` bölüm 7). Güde'nin Drive hesabı bağlanınca ikinci kopya oraya (karar D3).
+  Aşağıdaki Drive kararı sisteme YÜKLENEN DOSYALARI kapsar;
   bütün sitelerin ortak veritabanını (kişiler, daireler, finans defteri, makbuzlar, kararlar, duyurular) kapsamaz. Veritabanı yedeği
   hâlâ yalnız sunucuda: sunucu kaybolursa kayıtların hepsi gider. Betikler hazır (`deploy/ops/offsite_push.sh`,
   `deploy/ops/pull_backups_windows.ps1`, şifreli); yalnız hedef seçilecek. Boyut küçük: bugün ~50 KB, 5.000 sitede 1. yıl sonunda
@@ -101,28 +104,20 @@ Büyüklük: **S** bir gün içinde · **M** birkaç gün · **L** bir haftadan 
   - **Hata durumları:** kota dolarsa ya da bağlantı koparsa yükleme sistemde kalır, yöneticiye uyarı gider, bağlantı gelince
     eksikler gönderilir.
 
-## Sizden gerekenler (özet)
+## Kararlar ve sıra
 
-1. Şirket bilgileri ve avukat onayı → yasal metinler (P0).
-2. Avukat onayı → gecikme tazminatı, borç hatırlatma, makbuz metni (P0).
-3. Firebase hizmet hesabı → telefon bildirimi (P1).
-4. Sitelerin IBAN bilgileri → sakine ödeme bilgisi (P1).
-5. SMS sağlayıcı ve ödeme kuruluşu seçimi (P2).
-6. Veritabanı yedeğinin dış kopyası için hedef (P0) ve Drive kararındaki netleşecek noktalar (P1).
-
-## Önerilen sıra
-
-1. Yasal metinler (sizden bilgi gelince) ve gecikme tazminatı / hatırlatmada dönem kapsamı.
-2. Sakine IBAN + referans kodu, ardından banka ekstresi eşleme.
-3. Yönetici ana sayfası "Bu ay", ardından "Tüm siteler".
-4. Sade dil ve Excel'e aktarma tamamlama.
-5. İşletme projesi, SMS girişi ve bildirimleri, icra dökümü, ısı paylaşımı.
+2026-10-21'den beri kararların, uygulama sırasının ve dışarıdan gerekenlerin güncel hâli aşağıdaki eksik listesinin sonunda:
+"Karar kaydı (2026-10-21)", "Uygulama sırası (2026-10-21)" ve "Dışarıdan gerekenler". Önceki "Sizden gerekenler" ve
+"Önerilen sıra" listeleri bu kayıtla kapandı.
 
 ## Eksik listesi — işveren belgeleri ve Apsiyon karşılaştırması (2026-10-20)
 
 İşveren bugün şunu bildirdi: sistem hâlâ yalnız bir kapı açma sistemi gibi duruyor; kullanıcılar Apsiyon'da çalışır gibi rahat etmeli;
 girişte, kendisine tanımlı modüller güzel resimlerle dizili görünmeli. Bu bölüm, bunun için işverenin üç belgesinde ve Apsiyon'da olup
 bizde olmayanları kanıtıyla listeler.
+
+2026-10-21: Tablolardaki "Karar ya da bilgi (kimden)" sütunundaki sorular bölüm sonundaki "Karar kaydı (2026-10-21)" ile
+kapatıldı; sütun tarihçe olarak bırakıldı.
 
 **Kaynaklar**
 
@@ -269,7 +264,7 @@ Mağaza kuralları için (H6): Apple https://developer.apple.com/support/enrollm
 | --- | --- | --- | --- | --- | --- |
 | **D1** Sitenin yüklediği her dosya sitenin Drive'ında; sunucuda gerekli bağlantı dursun ("Teklif Pro'daki Drive saklama sistemi gibi") | Kararlar 13 (Cenk) | **Plan var, kod yok.** Yol haritasında var: «Sitenin dosyaları sitenin Google Drive'ında». `docs/PLATFORM_DRIVE_DEPOLAMA.md` durum satırı: "plan, kod yazılmadı"; dosyalar bugün sunucu diskinde (`server/src/modules/document_storage.js`). Fark: Cenk "sunucuda yalnız bağlantı" diyor; önerilen model C sunucuda sabit önbellek ve küçük bekleme alanı tutuyor (aynı belge bölüm 3). | P1 | L | Cenk: model C kabul mü; "Teklif Pro" sisteminin tarifi (depoda yok, doğrulanamadı). Avukat: KVKK m.9 |
 | **D2** Dosyalar şifreli durmalı ("şifrelenmiş şekilde kendi sistemlerinde") | Kararlar 2 | **Yok.** Planda yalnız Drive yenileme anahtarı şifreli (`PLATFORM_DRIVE_DEPOLAMA.md` 121); dosya içeriği şifrelemesi yok. İçerik şifreli olursa Drive'da önizleme/arama çalışmaz; anahtarı biz tutarsak "firma sorumlu olmasın" ifadesi zayıflar. | P2 | M | Cenk ve Salih: şifreleme dosya içeriği için mi isteniyor? |
-| **D3** Veritabanının dış kopyası | Kararlar 13 (Salih) | **Hedef bekliyor.** Yol haritasında var: «Veritabanının dış kopyası» (P0, S). Betikler hazır (`deploy/ops/offsite_push.sh`). | P0 | S | Cenk: hedef seçimi |
+| **D3** Veritabanının dış kopyası | Kararlar 13 (Salih) | **Var (2026-10-21).** Şifreli günlük yedek her gün geliştirici bilgisayarına çekiliyor (`KapiYedekCek` görevi, `G:\kapi-yedek`); betikler `deploy/ops/pull_backups_windows.ps1`, `deploy/ops/offsite_push.sh`. | P0 | S | Karar kaydı D3 |
 
 ### 10. Apsiyon'da olup işveren belgelerinde olmayanlar (şimdilik önerilmez)
 
@@ -304,39 +299,81 @@ Mağaza kuralları için (H6): Apple https://developer.apple.com/support/enrollm
 | **K14** Hesap silme, veri dışa aktarma, yardım ve tanıtım turu | Yol Haritası PDF Ekran 4 | `platform.json` F12 ve F16 bölümleri. |
 | **K15** Kaynak kodun gizliliği | Kararlar 14 | Bu dosyanın 6. bölümünde işaretli (2026-10-20). |
 
-### Önerilen sıra (ilk 10)
+### Karar kaydı (2026-10-21)
 
-1. **G1** Panel modül vitrini — yapılıyor; bugünkü şikâyetin özü.
-2. **G6** Tasarım dili kararı (Cenk) — yeni ekranlar yazılmadan önce; iş küçük, karar önemli.
-3. **G2 + G3 + G4** Gruplu menü, sakin alt çubuğu ve "Güncel borç / Öde" kartı.
-4. **G5** Yönetici ana sayfası "Bu ay" ve dikkat barı.
-5. **F1 + F2** Sakine IBAN ve referans kodu; dekontla ödeme, geçici kabul, yönetici onayı.
-6. **F3** Banka ekstresi yükleme ve IBAN hafızası (dikkat barını da besler).
-7. **H1 + H2 + H3** Hukuk paketi (kullanıcı ve avukat bağımlı; 1–6 ile paralel yürür): şirket bilgileri, saklama süreleri, gecikme tazminatı ve hatırlatma taslağı.
-8. **D3** Veritabanının dış kopyası (P0, S; yalnız hedef seçimi bekliyor).
-9. **R1** Gelir-gider analizi, grafik ve tahmin; ardından **R2** faaliyet raporu taslağı.
-10. **D1** Drive depolama; ardından **T1–T5** sayaç okuma (fotoğraf, OCR, Drive klasörleri) ve **T2** ısı pay ölçer.
+Kaynak: Cenk'in 2026-10-19 belgesindeki kırmızı yanıtlar ve `komutlar.txt` talimatları. Yanıtı boş kalan ya da iki belgenin ayrıştığı
+yerlerde karar, gerekçesiyle ekip tarafından verildi (Salih, 2026-10-21: "başka karar isteme, ne gerekiyorsa yap"). Yukarıdaki
+tablolardaki "Karar ya da bilgi" sütunu tarihçe olarak kaldı; geçerli olan bu kayıttır. Hukuki maddeler avukata gidecek taslaklarda
+`[AVUKAT DOĞRULASIN]` işaretiyle yazılır; avukat onayına kadar ilgili özellik kapalı kalır. Dışarıdan hesap ya da sözleşme gerektiren
+özelliklerin temel yapısı hazırlanır ve uygulamada "Yakında…" etiketiyle durur.
 
-Sıra dışı iki uyarı: **F4** (eski yazılımdan borç göçü) ilk gerçek müşteri geçişinden önce bitmeli. **G12** (malik/kiracı iki hesap) bir
-mimari karardır; F2 ve F3 ödemeyi hangi hesaba yazacağını bilmek zorunda olduğundan bu karar onlardan önce konuşulmalı.
+| Kod | Karar | Dayanak |
+| --- | --- | --- |
+| G6, G7 | Tasarım dili `komutlar.txt`'deki sade stil: zemin #F8FAFC; kart beyaz, ince #E2E8F0 çerçeve, gölgesiz; metin #475569; ana onay düğmesi ve kritik uyarı #0F172A, düz (parlaksız). Durum, metnin solunda küçük nokta (● #10B981 / #F59E0B / #E11D48); zemin boyanmaz. Mavi yalnız bağlantı ve odak halkasında. Koyu tema erişilebilirlik için kalır. Kapı düğmesinin görünüşü ve kapı akışı değişmez. | Cenk: komutlar Kural 1, renk tablosu, talimat 3 |
+| G8 | İkon seti Phosphor, "regular" ağırlık (24 px'te 1,5 px çizgi). Önce menü, alt çubuk ve vitrin; kalan ekranlar kademeli. | Cenk: komutlar bölüm 2 ("Lucide ya da Phosphor"); Phosphor'un regular çizgisi talimattaki 1,5 px'e birebir uyar |
+| G9 | Beyaz etiket yapılır: yönetim firması başına 5 renk, logo ve uygulamada görünen ad; varsayılan Güde teması. | Cenk: komutlar bölüm 2 ("beyaz etiket yapısı … ayrı tema") |
+| G2 | Menü PDF'teki 7 başlıkla gruplanır: Ana sayfa · Daireler · Borçlar · Tahsilat · Giderler · İletişim · Raporlar. Bizdeki ek modüller (Kapılar, kartlı geçiş, ziyaretçi ve kargo, rezervasyon, sözleşmeler, karar defteri, belgeler, sayaç, ekipman) 8. başlık "Site hizmetleri" altında. Ayarlar sağ üstte dişli. Kullanıcıya tanımlı öğesi olmayan başlık görünmez. | Cenk: Yol Haritası PDF (Menü); 8. başlık bizdeki fazla modüller için |
+| G3 | Sakin alt çubuğu: Özet · Duyuru · Arıza · Kapı · Belgeler. Uygulama Özet'te açılır (en üstte borç kartı ve "Öde"). Kapı sekmesi yalnız kapı yetkisi olana görünür; olmayanda PDF'teki dört sekme kalır. Modülü kapalı sekme görünmez. | İki belgenin birleşimi: PDF Ekran 4 (Borcum, Duyuru, Arıza, Belgeler), komutlar Ekran 3 (Özet, Arıza, Kapı, Belge); alt çubukta en çok 5 sekme |
+| G11 | Kurallar tablosu: "%5 gecikme", "90 gün geçici bütçe", "itiraz süresi", "%70/%30 ısı payı" gibi değerler koddan değil tablodan okunur; her kuralın geçerlilik tarihi ve mevzuat notu olur. Yasal üst sınır (ör. aylık %5) site ayarıyla aşılamaz. | Cenk: komutlar talimat 4 |
+| G12 | Her dairenin iki ayrı hesabı olur: Kiracı hesabı ve Ev sahibi hesabı; bakiyeler karışmaz. Aidat ve işletme giderleri daire kiradaysa kiracı hesabına, değilse ev sahibi hesabına yazılır; demirbaş, yatırım, büyük onarım ve devir bakiyesi ev sahibi hesabına (borç tanımında değiştirilebilir). Tahsilat, ödeyenin hesabına yazılır. Sakin yalnız kendi hesabını görür; yönetici iki hesabı iki sekmede görür. Bugünkü kayıtlar dairenin "kim öder" bilgisine göre ilgili hesaba aktarılır. | Cenk: komutlar talimat 2 ve Adım 1; TBK m.341 (yan giderler kiracıda), KMK m.22 (kiracının sorumluluğu) `[AVUKAT DOĞRULASIN]` |
+| F1 | Sakine ödeme bilgisi: sitenin IBAN'ı, alıcı adı ve referans kodu, kopyala düğmeleriyle. Referans biçimi `GUL-A2-1026`: site kısa kodu (3 harf; yönetici değiştirebilir, sistemde tekil) - blok ve daire - ay ve yıl. Eşleme dönemli ve dönemsiz kodu tanır; boşluk, tire ve harf büyüklüğü fark etmez. IBAN kasa/banka hesabına girilir ve TR IBAN denetiminden geçer. | Cenk: Yol Haritası PDF Ekran 4 ve örnek kod |
+| F2 | Dekontla ödeme Cenk'in tarif ettiği gibi: sakin dekontu uygulamadan yükler ya da telefondan "Paylaş" ile gönderir; kayıt geçici kabule düşer, yöneticiye bildirim gider; yönetici karşılaştırma bilgisine bakıp onaylar ya da iptal eder (toplu da). Sakin yapamıyorsa yönetici elden makbuz/dekont girer; o da geçici kabulden geçer. Geçici kabuldeki tutar deftere yazılmaz, bakiye düşmez; sakin borç kartının altında "İnceleniyor: 1.250 TL" görür. Onayda deftere dekont tarihiyle tahsilat ve makbuz yazılır; iptalde neden sakine gösterilir. Yanlış daireye karşı: karşılaştırmada dekonttaki ad, IBAN ve açıklama ile dairenin kişileri, referans kodu ve açık borç yan yana durur; uyuşmazlıkta uyarı verilir. | Cenk: Kararlar 7. Bakiyenin düşmemesi: doğrulanmamış tahsilat kayda alınmaz |
+| F3 | Banka dosyası: Excel, CSV ve MT940. Bankaya göre sütun eşlemesi bir kez seçilir ve o hesap için hatırlanır. Eşleme sırası: referans kodu → açıklamadaki daire kodu → IBAN hafızası → gönderen adı → bekliyor. IBAN hafızası daireyle birlikte hesabı (kiracı / ev sahibi) da tutar. Gerçek ekstre örneği beklenmez; yaygın biçimlerle yapılır, örnek gelince test eklenir. | Cenk: komutlar Kural 2 ve Ekran 2; Yol Haritası PDF Ekran 3 |
+| F4 | Devir bakiyesi: kendi Excel şablonumuz (daire, hesap, tutar, vade, açıklama) ve başka dosyalar için sütun eşleme; önizleme ve tek onay; geri alma ters kayıtla. | komutlar Adım 3 ("Veri Göçü") |
+| F5 | Altın veri seti: ekip gerçekçi bir site için elle hesaplanmış tablo hazırlar (eşit, m², arsa payı dağıtımı; gecikme; mahsup); sonuç kuruşu kuruşuna tutmazsa test düşer. Cenk'in gerçek tablosu gelince ikinci set olarak eklenir. | komutlar Adım 2; Yol Haritası PDF yapım sırası 2 |
+| F6 | Kart ödemesi lisanslı bir ödeme kuruluşuyla; para doğrudan sitenin hesabına (alt üye işyeri modeli). Kart komisyonu ödeyene yansır ve ödemeden önce gösterilir; FAST/havale komisyonsuz kalır. Şimdilik sağlayıcıdan bağımsız arayüz hazırlanır ve "Yakında…" kalır; sözleşme yapılınca bağlanır. | Cenk: Kararlar 7 ("site yönetiminin banka hesabına"); 6493 sayılı Kanun |
+| F7 | İşletme projesi: Taslak → Tebliğ → Kesin. Onaylı proje yoksa geçici proje en çok 90 gün; kalan gün yöneticinin dikkat barında. Süreler kurallar tablosundan. Planlanan–gerçekleşen karşılaştırması. | komutlar Adım 2 ve Ekran 1; KMK m.37 (7579 sayılı Kanunla değişik) `[AVUKAT DOĞRULASIN]` |
+| F8 | İcra dökümü: daire ve hesap bazında PDF (kesinleşmiş proje ya da kurul kararı bilgisi, ödenmemiş kalemler, varsa gecikme tazminatı) ve avukat için Excel listesi. | komutlar Adım 4; İİK m.68 `[AVUKAT DOĞRULASIN]` |
+| R1 | Giderde "rutin / beklenmedik" işareti: sözleşmeli ve her ay tekrar eden gider kendiliğinden "rutin" önerilir, yönetici değiştirebilir. Gider ekipmana bağlanabilir (asansör, interkom, kamera, bariyer, yangın algılama…); ekipman başına yıllık maliyet çıkar. Aylık, 3, 6 ve 12 aylık grafik. Gelecek yıl tahmini: son 12 ayın kategori toplamları ile yöneticinin girdiği artış oranı (varsayılanı kurallar tablosunda), üstüne beklenmedik giderlerin ortalaması. | Cenk: "Sistemde görmediklerim" 2 |
+| R2 | Faaliyet raporu bölümleri: genel bilgiler; mali durum (gelir-gider, bütçe karşılaştırması); tahsilat ve borçlar; yapılan işler (iş takibi, fotoğraflarıyla); bakım ve ekipman; sözleşmeler; kararlar; duyurular; gelecek yıl tahmini. Sistem taslağı kayıtlardan doldurur, yönetici her bölümü değiştirir, PDF alınır. | Cenk: "Sistemde görmediklerim" 1; KMK m.39 ve 41 |
+| T1–T5 | Sayaç okuma Cenk'in tarifi gibi: uzaktan okuyan sayaç için dosyadan ya da bağlantıdan içe aktarma. Elle okumada görevli saati fotoğraflar; sistem değeri ve (saatte yazıyorsa) daire numarasını okur; kamera kapanmaz, ekranın üstünde sıradaki daire yazar; internet yoksa fotoğraflar telefonda bekler, gelince Drive'a gönderilir. Okuma telefonda yapılır (internetsiz çalışsın diye); okunan değeri görevli onaylar ya da düzeltir, yönetici sonradan düzeltirse kaydı tutulur. Dosya adı `AB_D13_201026` (A blok, daire 13, 20.10.2026). Drive klasörleri `SrvEkim_26`, `suEkim_26`, `elektrikEkim_26`, `TeklifEkim_26`; diğer türler aynı kalıpla (`isiEkim_26`, `GiderEkim_26`, `DekontEkim_26`, `BelgeEkim_26`). Sistemde yalnız kayıt (log) tutulur. Isı payı %70 ölçüm, %30 m². | Cenk: Kararlar 8; ısı payı yönetmeliği (RG 26847) doğrulanacak |
+| T6 | Teklifler "Giderler" altında: konu, firma, tutar, geçerlilik, belge (Drive `TeklifEkim_26`); yan yana karşılaştırma; kabul edilen teklif gidere ya da sözleşmeye dönüşür. | Cenk: Kararlar 8 (TeklifEkim) |
+| T7 | Ekipman ve bakım: varsayılan türler asansör, interkom, kamera, bariyer, yangın algılama, hidrofor, jeneratör, kazan, havuz; bakım aralığı (aylık, 3, 6, 12 ay) varsayılanla gelir, yönetici değiştirir; yasal periyodik kontrol hatırlatması (ör. asansör yılda bir). | Cenk: "Sistemde görmediklerim" 2 |
+| T8 | Kamera ve plaka tanıma: Hikvision için üreticinin ISAPI arayüzü, Tiandy ve yerli markalar için ONVIF. Kamera olayı sunucuya gönderir; sunucu plakayı sitenin araç listesiyle karşılaştırır. Şimdilik cihaz kaydı, üreticiye göre bağdaştırıcı ve olay ucu ("Yakında…"); saha denemesi donanım gelince. | Cenk: Kararlar 9 |
+| C1, S1, S3 | Kararlar 10'un yanıtı boş kaldığı için belgedeki öneri uygulanır: önce ücretsiz telefon bildirimi ve e-posta; SMS isteğe bağlı ücretli ek modül (maliyet siteye). Sağlayıcıdan bağımsız arayüz; ilk bağdaştırıcı yaygın bir yerli SMS firması; hesap açılana kadar "Yakında…". Telefon + SMS koduyla şifresiz giriş SMS açılınca çalışır. Kargo geldi bildirimi telefon bildirimi ve e-postayla. WhatsApp: KVKK m.9 netleşene kadar yalnız arayüz. | Kararlar 10'daki öneri (yanıt boş) |
+| H1 | Platform Ayarları'na Cenk'in verdiği bilgiler girilir: GÜDE TEKNOLOJİ LTD. ŞTİ., Yalı Mah. 6436 Sok. No:37/A Karşıyaka / İzmir, 0543 795 60 44. KEP ve MERSİS boş kalır; boş alan metinlerde görünmez. | Cenk: Kararlar 1 |
+| H2 | Saklama süreleri (avukata gidecek taslak; otomatik silme avukat onayına kadar kapalı): mali kayıtlar (borç, tahsilat, makbuz, gider belgesi, banka dosyası, dekont) 10 yıl; taşınan kişinin iletişim bilgileri, açık borcu yoksa 1 yıl sonra silinir; kapı geçiş ve ziyaretçi kayıtları 1 yıl; iş takibi fotoğrafları talep kapandıktan 2 yıl sonra; duyurular ve denetim kaydı 5 yıl; karar defteri süresiz. Sorumluluk: veri sorumlusu site yönetimi, Güde veri işleyen; veri işleme sözleşmesi sorumluluğu paylaştırır (KVKK m.12/2 nedeniyle tam muafiyet yazılamaz; ağır kusurdan önceden sorumsuzluk TBK m.115'e göre geçersizdir). Şifreleme: Drive'daki dosyalar Google'ın kendi şifrelemesiyle durur, aktarım TLS ile; veritabanı yedekleri ayrıca şifreli. Dosya içeriği ayrıca şifrelenmez (anahtar kaybolursa dosyalar açılamaz, önizleme çalışmaz). Yedekler ayrı: fotoğraflar, belgeler ve veritabanı/kayıtlar ayrı arşivlerde (bugün de böyle). | Cenk: Kararlar 2 (süre boş); TTK m.82 (10 yıl), VUK m.253 (5 yıl) `[AVUKAT DOĞRULASIN]` |
+| H3, H4 | Avukata gidecek taslakları ekip yazar: gecikme tazminatı, borç hatırlatma ve makbuz için "örnek hesap + sorular"; elektronik genel kurul için taslak metin ve soru listesi. | Cenk: Kararlar 4 ve 12 |
+| H5, H6 | Mağaza hesapları şirket adına (kuruluş hesabı; Apple için D-U-N-S numarası ücretsiz alınır). Cenk ve Salih için adım adım rehber ekip hazırlar. Apple sorusunun yanıtı: şart değil, ama kişisel hesapta mağazada kişinin adı görünür; şirket adına önerilir. | Cenk: Kararlar 5 ve 6 |
+| D1, D2 | Drive modeli C: sunucuda kalıcı dosya yok; yalnız üst sınırı sabit önbellek ve bağlantı kopukken kısa bekleme alanı; asıl kopya sitenin Drive'ında. "Teklif Pro" tarifi beklenmez: aynı ilke uygulanır (dosya Drive'da, sistemde bağlantı ve kayıt). Şifreleme H2'deki gibi. Drive bağlanana kadar dosyalar bugünkü gibi sunucuda kalır. | Cenk: Kararlar 13 |
+| D3 | Veritabanının dış kopyası: şifreli günlük yedekler her gün Türkiye'deki geliştirici bilgisayarına çekilir (hazır betik `deploy/ops/pull_backups_windows.ps1`, zamanlanmış görev); Güde'nin Drive hesabı bağlanınca ikinci kopya oraya. | Kararlar 13 (Salih); kopya Türkiye'de kaldığı için yurt dışına aktarım (KVKK m.9) doğmaz |
+| G13 | Satır düzeyi güvenlik (RLS) şimdilik yok; site yalıtımı uygulama katmanında kalır ve her yeni uç için "başka sitenin kimliğiyle erişim reddedilir" testi zorunlu. | Canlı sistemde bütün sorguların değişmesini gerektirir; yalıtım bugün testlerle korunuyor |
+| Y1 | Yönetim firması çok personelli kurum: firma kaydı, firma sahibi ve personel, firmaya bağlı siteler. Firma sahibi "Tüm siteler" tablosunu görür (en düşük tahsilat oranı en üstte). | Yol Haritası PDF Ekran 1; Kararlar 3 (yönetim firmaları asıl müşteri) |
+| Y2 | Deneme süresi ayarlanabilir (ilk kullananlara 1–2 ay; varsayılan 60 gün). Yönetim firmasının ortaklık payı oranı firma kaydında, aylık pay dökümüyle. Bireysel yöneticiye aynı fiyat listesi. Fiyatlar depoya yazılmaz, süper kullanıcı girer. Banka anlaşması iş geliştirme konusu (kod yok). | Cenk: Kararlar 3 |
+| S4, S5, S6 | Rehber (yönetim kadrosu ve faydalı telefonlar) yapılır. Komşu panosu yönetici onaylı ilan olarak yapılır (şikâyet ve kaldırma düğmesiyle). Çok dil için altyapı kurulur (Türkçe + İngilizce iskelet); tam çeviri sonra. | Apsiyon [A3]; işveren belgelerinde istek yok, düşük öncelik |
+| G4, G5 | Sakin ana ekranı: koyu "Güncel toplam borcunuz" kartı ve "Öde" (F1 ödeme bilgisi + dekont yükleme); altında Arıza Bildir, Ziyaretçi Kodu, Belgeler. Yönetici ana sayfası: dört sayı, beş adımlı aylık döngü, koyu dikkat barı (bekleyen dekont, eşleşmeyen banka satırı, geçici bütçede kalan gün), son beş para hareketi. | komutlar Kural 3, Ekran 1 ve 3; Yol Haritası PDF Ekran 1 ve 4 |
+| G10, G14, R3 | Ekranda "tahakkuk, mutabakat, cari" yerine yöneticinin dili ("borç yazma", "banka / kasa kontrolü"); her listede arama ve Excel'e aktar; rapor adları PDF'teki gibi (Aylık özet, Yıllık hesap, Daire ekstresi, İcra dökümü). | Yol Haritası PDF |
+| G15 | İki haftada bir yapılacak canlı demo için demo senaryosu belgesi hazırlanır. | komutlar talimat 5 |
+| Z1–Z8 | Bu turda yapılmaz: işveren belgelerinde istenmedi (Apsiyon'a özgü ek hizmetler). | Kapsam |
 
-### Sizden gereken kararlar ve bilgiler
+### Uygulama sırası (2026-10-21)
 
-**Cenk**
+Her dalga ayrı ajanlarla ve bağımsız incelemeyle yapılır (para, yetki ve veri işlerinde en az iki tur ve gerçek PostgreSQL denemesi).
+Dalga bitince canlıya alınır, deneme maddeleri Faz Kontrol Listesi sayfasına eklenir. Yeni modüller varsayılan kapalı gelir. Ayrıntılı
+iş planı: `docs/superpowers/plans/2026-10-21-eksik-listesi-programi.md`.
 
-1. Tasarım dili: komutlar.txt'nin sade stili mi, mevcut parlak stil mi (G6); ikon seti (G8); beyaz etiket satılacak mı (G9).
-2. Menü grupları ve sakin alt çubuğunun dördüncü sekmesi: Kapı mı Belgeler mi (G2, G3).
-3. Dekontta geçici kabul: sakinin bakiyesi düşer mi (F2). Malik/kiracı hesabı: hangi kalem kimin hesabına (G12).
-4. Kart ödemesi sağlayıcısı ve komisyonu kimin ödeyeceği (F6). SMS ve WhatsApp isteniyor mu, bütçe (C1, S1).
-5. Saklama süreleri; veritabanı da Drive'a mı; dosya içeriği şifreleme (H2, D2). Drive modeli C kabul mü; Teklif Pro tarifi; klasör adları (D1, T5, T6).
-6. Şirket adına mağaza hesabı ve D-U-N-S (H5, H6). KEP, MERSİS, kvkk e-posta adresi (H1). Veritabanı dış kopya hedefi (D3).
-7. Fiyat listesi, deneme süresi, komisyon (Y2). İstenen ek özellikler: komşu panosu, rehber, çok dil (S4–S6). Yönetim firması kullanıcı yapısı (Y1).
-8. Gerçek örnekler: banka ekstresi (3 banka, 3 ay) (F3); eski yazılım dışa aktarma dosyası (F4); elle hesaplı aidat tablosu (F5); sayaç dosyaları (T1); örnek faaliyet raporu (R2); ekipman ve bakım listesi (T7).
-9. İki haftada bir canlı demo takvimi (G15, Salih ile).
+| Dalga | İçerik | Durum |
+| --- | --- | --- |
+| 0 | G1 Panel modül vitrini | son düzeltme turunda; ardından canlı |
+| 1 | G12 iki hesap · G11 kurallar tablosu + F5 altın veri seti · G6 + G7 sade tasarım · G2 + G3 gruplu menü ve sakin alt çubuğu · H1–H6 ve G15 hukuk taslakları, hesap rehberleri, demo senaryosu · D3 dış kopya (kuruldu 2026-10-21) | sırada |
+| 2 | F1 + G4 IBAN, referans kodu, "Öde" · F2 dekont ve geçici kabul · F3 banka dosyası ve IBAN hafızası · F4 devir bakiyesi · R1 gelir-gider analizi, grafik ve tahmin · G5 yönetici ana sayfası ve dikkat barı | |
+| 3 | F7 işletme projesi · T7 ekipman ve bakım + T6 teklifler (R1'e ekipman kırılımı) · R2 faaliyet raporu · F8 icra dökümü · G10 + G14 + R3 sade dil, Excel'e aktar, rapor adları | |
+| 4 | D1 Drive bağlantısı · T1–T5 sayaç, fotoğrafla okuma, çevrimdışı kuyruk, adlandırma · T2 ısı payı | |
+| 5 | Y1 + Y2 yönetim firması, deneme süresi, ortaklık payı · C1 + S1 + S3 SMS arayüzü, SMS ile giriş, kargo bildirimi · S5 + S4 rehber ve komşu panosu | |
+| 6 | G8 + G9 Phosphor ikonları ve beyaz etiket · F6 + T8 kart ödemesi ve kamera arayüzleri · S6 çok dil altyapısı | |
 
-**Avukat** (taslakları biz hazırlarız, Cenk iletir): gecikme tazminatı ve borç hatırlatma (H3); saklama ve sorumluluk ifadesi (H2); elektronik genel kurul (H4); dekont ve üçüncü kişi verisi (F2); WhatsApp ve Drive için KVKK m.9 (C1, D1); KMK m.37 (F7); icra dökümü (F8); kiracı/malik sorumluluğu (G12).
+### Dışarıdan gerekenler (karar değil; hesap açma ve onay)
 
-**Salih**: Platform Ayarları'na şirket bilgilerinin girilmesi (H1); Firebase hizmet hesabı (S2); mağaza hesapları (H5); OCR yöntemi (T3); RLS gerekli mi (G13); kamera SDK araştırması (T8).
+Kod bunlar için hazırlanır ve kapalı ya da "Yakında…" olarak bekler; hiçbiri işi durdurmaz.
+
+1. Avukat: H2, H3, H4 taslakları (ekip yazar, Cenk iletir). Onaya kadar gecikme tazminatı, borç hatırlatma ve otomatik silme kapalı.
+2. Google Cloud projesi ve onay ekranı (Drive için; adım adım rehber dalga 4'te).
+3. Firebase hizmet hesabı (telefon bildirimi; kod hazır).
+4. Apple ve Google Play geliştirici hesapları, şirket adına (rehber dalga 1'de).
+5. SMS firması hesabı (SMS ek hizmeti açılacaksa) ve ödeme kuruluşu sözleşmesi (kart ödemesi açılacaksa).
+6. Sitelerin IBAN'ları: her site yöneticisi kendi ekranından girer.
+7. KEP adresi ve MERSİS numarası (varsa): Platform Ayarları'na girilir.
+8. Gerçek örnek dosyalar (banka ekstresi, eski yazılımın dışa aktarması, sayaç dosyası, elle hesaplanmış aidat tablosu): gelirse teste eklenir; beklenmez.
 
 ### Doğrulanamayanlar ve dikkat
 
