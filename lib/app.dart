@@ -381,28 +381,13 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       darkTheme: AppTheme.dark(),
       themeMode: _themeService.mode,
       builder: (context, child) {
-        // Metin ölçeği en çok 2,0 (taşma testleri bu sınırda biter). Zemin gradyanının üstüne tek,
-        // statik ışıma binilir: dinamik içeriği yok, kararlı durumda yeniden boyanmaz.
+        // Metin ölçeği en çok 2,0 (taşma testleri bu sınırda biter). Sayfa zemini DÜZ palet zeminidir (sade stil,
+        // karar G6: açıkta #F8FAFC, koyuda #0F172A); üstünde ışıma yoktur. Statik: kararlı durumda yeniden boyanmaz.
         return MediaQuery.withClampedTextScaling(
           maxScaleFactor: 2.0,
-          child: Container(
+          child: DecoratedBox(
             decoration: AppDecorations.pageBackground(context),
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: context.palette.isDark
-                    ? AppGradients.pageGlowDark
-                    : AppGradients.pageGlowLight,
-              ),
-              // İkinci, çok hafif mor ışıma (sol-alt): sayfa derinliği; statik, tek gradyan.
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: context.palette.isDark
-                      ? AppGradients.pageGlowAccentDark
-                      : AppGradients.pageGlowAccentLight,
-                ),
-                child: child,
-              ),
-            ),
+            child: child,
           ),
         );
       },

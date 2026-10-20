@@ -36,8 +36,8 @@ double _contrast(Color foreground, Color background) {
   return (hi + 0.05) / (lo + 0.05);
 }
 
-/// Koyu temanın sayfa zemini tonları (üst / orta / alt).
-List<Color> get _darkPage => (AppDecorations.pageBackgroundDark.gradient! as LinearGradient).colors;
+/// Koyu temanın sayfa zemini (İP-1C sade stil: düz renk; eskiden üst / orta / alt tonlu degrade).
+List<Color> get _darkPage => <Color>[AppDecorations.pageBackgroundDark.color!];
 
 /// [owner] altındaki ilk yüzeyin (odak kutusu ya da düz kart) dekorasyonu.
 BoxDecoration _surfaceOf(WidgetTester t, Finder owner) =>
@@ -1057,10 +1057,9 @@ void main() {
         expect(_contrast(AppTone.primary.hue, page), greaterThanOrEqualTo(3.0));
       }
       expect(_contrast(AppTone.primary.hue, AppShowcaseColors.focusDark), greaterThanOrEqualTo(3.0));
-      // Kart çerçevesi Panel'in düz zemininde ([ModuleShowcaseView.pageBackgroundOf]; sayfa kabı boyar) görünür: eski
-      // gradyanın alt tonu çerçeveyle AYNIYDI (1,0:1).
-      final oldBottom = (AppDecorations.pageBackgroundLight.gradient! as LinearGradient).colors.last;
-      expect(_contrast(AppShowcaseColors.cardBorder, oldBottom), lessThan(1.01));
+      // Kart çerçevesi Panel'in düz zemininde ([ModuleShowcaseView.pageBackgroundOf]; sayfa kabı boyar) görünür. İP-1C'den
+      // beri uygulamanın genel zemini de aynı düz #F8FAFC'dir (eski gradyanın alt tonu çerçeveyle AYNIYDI, 1,0:1).
+      expect(AppDecorations.pageBackgroundLight.color, AppShowcaseColors.background);
       expect(_contrast(AppShowcaseColors.cardBorder, AppShowcaseColors.background), greaterThanOrEqualTo(1.15));
     });
 

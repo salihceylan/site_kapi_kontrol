@@ -433,43 +433,15 @@ extension RoleTone on UserRole {
   };
 }
 
-/// Sayfa zemini `AppDecorations.pageBackground*` ile DEĞİŞMEZ; üstüne tek, statik ışıma binilir.
-abstract final class AppGradients {
-  static const RadialGradient pageGlowLight = RadialGradient(
-    center: Alignment(0.9, -1.1),
-    radius: 1.1,
-    colors: <Color>[Color(0x143B82F6), Color(0x003B82F6)],
-  );
-
-  static const RadialGradient pageGlowDark = RadialGradient(
-    center: Alignment(0.9, -1.1),
-    radius: 1.1,
-    colors: <Color>[Color(0x1F3B82F6), Color(0x003B82F6)],
-  );
-
-  /// İkinci, çok hafif ışıma (sol-alt köşe, mor): sayfaya derinlik verir. Birincil ışımayla aynı ilke:
-  /// statiktir (ticker yok), tek gradyan boyaması.
-  static const RadialGradient pageGlowAccentLight = RadialGradient(
-    center: Alignment(-1.0, 1.15),
-    radius: 1.0,
-    colors: <Color>[Color(0x0FA855F7), Color(0x00A855F7)],
-  );
-
-  static const RadialGradient pageGlowAccentDark = RadialGradient(
-    center: Alignment(-1.0, 1.15),
-    radius: 1.0,
-    colors: <Color>[Color(0x1AA855F7), Color(0x00A855F7)],
-  );
-}
-
-/// Panel modül vitrininin ("sade" stil: işverenin komutlar.txt renk tablosu) renk değişkenleri. Beyaz etiket teması bu
+/// Sade stilin ("sade": işverenin komutlar.txt renk tablosu, karar G6 + G7) renk değişkenleri. Beyaz etiket teması bu
 /// beş değişkeni değiştirir: [background] (ana zemin), [card] + [cardBorder] (kart ve ince çerçevesi; gölge yok),
 /// [text] (normal metin ve ikon), [focus] (kritik odak kutusu ve ana düğme) ve durum noktaları ([statusOk],
 /// [statusWarn], [statusCrit]: arka planı boyamaz, metnin soluna küçük nokta). Altındakiler bunlardan türeyen yardımcılardır.
 ///
-/// Değerler AÇIK tema içindir. Koyu temada vitrin kart / metin için [AppPalette.dark]'ı, odak kutusu için [focusDark] +
-/// [AppTone.primary] kenarını kullanır. Uygulamanın geri kalanı (G6 kararına kadar) "Cilalı Safir" paletindedir; bu
-/// renkler yalnız vitrinde kullanılır. Kontrastlar `test/screens/module_showcase_view_test.dart` ile doğrulanır.
+/// Değerler AÇIK tema içindir ve [AppPalette.light]'ın sade alanları bunlardan okunur (tek kaynak): uygulamanın tamamı
+/// (İP-1C'den beri) bu renklerdedir; Panel vitrini ayrıca doğrudan kullanır. Koyu temada vitrin kart / metin için
+/// [AppPalette.dark]'ı, odak kutusu için [focusDark] + [AppTone.primary] kenarını kullanır. Kontrastlar
+/// `test/screens/module_showcase_view_test.dart` ve `test/design/sade_style_test.dart` ile doğrulanır.
 abstract final class AppShowcaseColors {
   /// Ana zemin (kırık beyaz / buz grisi): açık temada vitrin sayfasının DÜZ zemini.
   static const Color background = Color(0xFFF8FAFC);

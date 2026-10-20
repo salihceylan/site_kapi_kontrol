@@ -3,31 +3,14 @@ import 'package:site_kapi_kontrol/styles/app_colors.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 
 class AppDecorations {
-  // Arka Plan Gradientleri
+  // Sayfa zemini (sade stil, karar G6): DÜZ renk = [AppPalette.background] (açıkta #F8FAFC "ana zemin", koyuda #0F172A).
+  // Degrade ve ışıma yoktur. Adlar eskisiyle aynı (kabuk ve tam ekran kapılar bu sabitleri kullanır).
   static const BoxDecoration pageBackgroundDark = BoxDecoration(
-    gradient: LinearGradient(
-      begin: Alignment.topCenter,
-      end: Alignment.bottomCenter,
-      colors: [
-        AppColors.backgroundTop,
-        Color(0xFF0B1120),
-        AppColors.backgroundBottom,
-      ],
-      stops: [0.0, 0.5, 1.0],
-    ),
+    color: AppColors.backgroundTop,
   );
 
   static const BoxDecoration pageBackgroundLight = BoxDecoration(
-    gradient: LinearGradient(
-      begin: Alignment.topCenter,
-      end: Alignment.bottomCenter,
-      colors: [
-        Color(0xFFF8FAFC),
-        Color(0xFFF1F5F9),
-        Color(0xFFE2E8F0),
-      ],
-      stops: [0.0, 0.5, 1.0],
-    ),
+    color: AppShowcaseColors.background,
   );
 
   static BoxDecoration pageBackground(BuildContext context) =>

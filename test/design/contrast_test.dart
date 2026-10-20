@@ -35,16 +35,13 @@ double contrast(Color foreground, Color background) {
 const double kTextMin = 4.5;
 const double kRingMin = 3.0;
 
-List<Color> _pageColors(bool dark) {
-  final decoration = dark
-      ? AppDecorations.pageBackgroundDark
-      : AppDecorations.pageBackgroundLight;
-  return (decoration.gradient! as LinearGradient).colors;
-}
+/// Sayfa zemini (İP-1C sade stil: DÜZ renk; eskiden üç duraklı dikey degrade + ışıma).
+Color _page(bool dark) =>
+    (dark ? AppDecorations.pageBackgroundDark : AppDecorations.pageBackgroundLight)
+        .color!;
 
 /// Metnin üstünde durabileceği yüzeyler (metin tokenları için sözleşme kapsamı).
 Map<String, Color> _surfaces(AppPalette p) {
-  final page = _pageColors(p.isDark);
   return <String, Color>{
     'surface': p.surface,
     'surfaceMuted': p.surfaceMuted,
@@ -52,11 +49,7 @@ Map<String, Color> _surfaces(AppPalette p) {
       'surfaceAt(2)': p.surfaceAt(2),
       'surfaceAt(3)': p.surfaceAt(3),
     },
-    'sayfa üstü': page[0],
-    'sayfa ortası': page[1],
-    // Koyuda sayfanın en altı da kapsamda; açıkta (E2E8F0) yalnız text/textSecondary için
-    // (aşağıdaki ayrı test): muted metin ve tint'li rozet orada kapsam dışıdır.
-    if (p.isDark) 'sayfa altı': page[2],
+    'sayfa': _page(p.isDark),
   };
 }
 
@@ -88,20 +81,12 @@ void main() {
       }
     }
 
-    test(
-      'açık: sayfa zemininin en alt ucunda (E2E8F0) text ve textSecondary >= 4,5',
-      () {
-        final bottom = _pageColors(false).last;
-        expect(
-          contrast(AppPalette.light.text, bottom),
-          greaterThanOrEqualTo(kTextMin),
-        );
-        expect(
-          contrast(AppPalette.light.textSecondary, bottom),
-          greaterThanOrEqualTo(kTextMin),
-        );
-      },
-    );
+    test('sayfa zemini düz palet zemini: açık #F8FAFC, koyu #0F172A', () {
+      expect(_page(false), AppPalette.light.background);
+      expect(_page(false), const Color(0xFFF8FAFC));
+      expect(_page(true), AppPalette.dark.background);
+      expect(_page(true), const Color(0xFF0F172A));
+    });
 
     test(
       'appTextTheme renkleri palet metinleridir (varsayılan metin = textSecondary)',
@@ -457,18 +442,6 @@ void main() {
         expect(t.titleSmall, isNull);
       },
     );
-
-    test('sayfa ışıması: statik const, düşük alfa, iki tema', () {
-      for (final g in [AppGradients.pageGlowLight, AppGradients.pageGlowDark]) {
-        expect(g.center, const Alignment(0.9, -1.1));
-        expect(g.colors.first.a, lessThanOrEqualTo(0.13));
-        expect(g.colors.last.a, 0);
-      }
-      expect(
-        AppGradients.pageGlowDark.colors.first.a,
-        greaterThan(AppGradients.pageGlowLight.colors.first.a),
-      );
-    });
   });
 
   group('AppTheme', () {
@@ -583,7 +556,7 @@ void main() {
           final fill = dark
               ? Color.alphaBlend(
                   const Color(0xFF1E293B).withValues(alpha: 0.9),
-                  _pageColors(true)[1],
+                  _page(true),
                 )
               : const Color(0xFFFFFFFF);
           final input = theme.inputDecorationTheme;
@@ -870,20 +843,13 @@ void main() {
       );
     }
 
-    test('glassCardDark/Light statikleri ve pageBackground* korunur', () {
+    test('glassCardDark/Light statikleri ve pageBackground* korunur (zemin düz renk, degrade yok)', () {
       expect(AppDecorations.glassCardLight.color, AppPalette.light.surface);
       expect(AppDecorations.glassCardDark.color, AppPalette.dark.surface);
-      expect(
-        AppDecorations.pageBackgroundLight.gradient,
-        isA<LinearGradient>(),
-      );
-      expect(AppDecorations.pageBackgroundDark.gradient, isA<LinearGradient>());
-      expect(_pageColors(false), const <Color>[
-        Color(0xFFF8FAFC),
-        Color(0xFFF1F5F9),
-        Color(0xFFE2E8F0),
-      ]);
-      expect(_pageColors(true).first, AppColors.backgroundTop);
+      expect(AppDecorations.pageBackgroundLight.gradient, isNull);
+      expect(AppDecorations.pageBackgroundDark.gradient, isNull);
+      expect(_page(false), const Color(0xFFF8FAFC));
+      expect(_page(true), AppColors.backgroundTop);
     });
   });
 
