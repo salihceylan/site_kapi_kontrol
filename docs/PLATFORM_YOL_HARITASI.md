@@ -85,10 +85,12 @@ Büyüklük: **S** bir gün içinde · **M** birkaç gün · **L** bir haftadan 
   `deploy/ops/pull_backups_windows.ps1`, şifreli); yalnız hedef seçilecek. Boyut küçük: bugün ~50 KB, 5.000 sitede 1. yıl sonunda
   günlük şifreli döküm ~5 GB. Kişisel veri içerdiği için Türkiye'de bir hedef tercih edilir (yurt dışı ise KVKK 9. madde).
 - [ ] **P1 · L — Sitenin dosyaları sitenin Google Drive'ında (karar 13, 2026-10-20).** Her site yönetimi kendi Drive hesabını
-  sisteme bağlar; sisteme yüklediği dosyalar (belgeler, iş takibi fotoğrafları, gider belgeleri) o sitenin Drive'ına kaydedilir.
+  sisteme bağlar; sisteme yüklediği HER dosya (belgeler, iş takibi fotoğrafları, gider belgeleri, ileride eklenecek her yükleme)
+  o sitenin Drive'ına kaydedilir ve oradan gösterilir. Plan, araştırma ve gereklilikler: `docs/PLATFORM_DRIVE_DEPOLAMA.md`.
   Uygulamadan önce netleşecekler:
-  - **Asıl kopya mı, yedek mi:** önerilen, dosya sistemde kalır ve Drive'a bir kopyası gider. Drive asıl kopya olursa bağlantı
-    kopunca, kota dolunca ya da dosya Drive'dan silinince sakinler belgeye ve fotoğrafa ulaşamaz.
+  - **Asıl kopya mı, yedek mi:** 2026-10-20 kullanıcı kararı: Drive asıl depo; dosya alanını sunucuda karşılayamayız. Önerilen
+    model: sunucuda kalıcı dosya yok, yalnız üst sınırı sabit önbellek ve bağlantı kopukken küçük geçici bekleme alanı; Drive
+    bağlantısı dosya yükleyen modüller için zorunlu.
   - **Hesabın sahibi:** bir kişinin değil sitenin adına açılmış hesap; yönetim değişince devrin nasıl olacağı.
   - **Erişim:** sakinlere Drive bağlantısı verilmez; dosyayı uygulama gösterir, bugünkü yetki kuralları (kim hangi belgeyi görür)
     korunur.
