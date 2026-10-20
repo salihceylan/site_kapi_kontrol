@@ -116,7 +116,8 @@ void main() {
     tester.state<ScaffoldState>(find.byType(Scaffold).first).openDrawer();
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
-    await tester.tap(find.text('Site Yönetimi').first);
+    // Çekmecedeki öğe (Panel vitrininde de aynı adlı bir kart vardır: bulucu çekmeceyle sınırlı).
+    await tester.tap(find.descendant(of: find.byType(Drawer), matching: find.text('Site Yönetimi')).first);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     await tester.pump(const Duration(milliseconds: 400));

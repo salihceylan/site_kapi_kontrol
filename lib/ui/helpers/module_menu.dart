@@ -4,8 +4,10 @@ import 'package:site_kapi_kontrol/services/module_access.dart';
 import 'package:site_kapi_kontrol/ui/widgets/yan_menu.dart';
 
 /// Geçiş Kontrol (`door_control`) modülüne bağlı menü öğeleri: modül kapalıyken gizlenir.
-/// "Panel" (dashboard) kalır; kapı kartları yerine "Geçiş Kontrol modülü kapalı" bilgi kartı gösterilir.
+/// "Panel" (dashboard, modül vitrini) kalır; "Kapılar" öğesi (ve vitrindeki kapı kartı / hızlı "Kapıyı aç" eylemi)
+/// gizlenir. Süper kullanıcının Kapılar ekranında seçili site kapalıysa "Geçiş Kontrol modülü kapalı" bilgi kartı çıkar.
 const Set<SirketMenuItem> doorControlMenuItems = <SirketMenuItem>{
+  SirketMenuItem.kapilar,
   SirketMenuItem.kayitliCihazlar,
   SirketMenuItem.bluetoothWifiKur,
   SirketMenuItem.ellerSerbest,

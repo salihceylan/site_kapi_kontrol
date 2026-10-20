@@ -3,6 +3,9 @@
 // Yoklama (3 sn): yalnız kapı paneli görünürken ve uygulama ön plandayken çalışır; ardışık hatada
 // üstel geri çekilir (tavan 30 sn); önceki tur bitmeden yenisi başlamaz; dispose'ta durur.
 // Yeniden kurma: yoklama tüm sayfayı (Scaffold/AppBar) değil yalnız kapı panelini yeniden kurar.
+//
+// "Panel" artık modül vitrinidir; kapı paneli "Kapılar" öğesinin arkasındadır. Bu testler kapı panelini sınar: [_pumpHome]
+// açılışta Kapılar kartına dokunur (yoklama yalnız orada çalışır; vitrinde çalışmaması ayrıca sınanır).
 // ignore_for_file: avoid_print
 
 import 'dart:async';
@@ -173,7 +176,9 @@ class _IndividualAuth extends _PollAuth {
   Future<(List<MyApartmentRecord>?, String?)> getMyApartments() async => (<MyApartmentRecord>[], null);
 }
 
-Future<void> _pumpHome(WidgetTester tester, _PollAuth auth) async {
+/// HomePage'i kurar ve (varsayılan) "Kapılar" kartına dokunup kapı panelini açar. Saat neredeyse ilerlemez (yalnız
+/// 100 ms + iki kare): yoklamanın 3 sn'lik ritmi açılıştan itibaren ölçülmeye devam eder.
+Future<void> _pumpHome(WidgetTester tester, _PollAuth auth, {bool openDoors = true}) async {
   tester.view.physicalSize = const Size(400, 1400);
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.reset);
@@ -181,6 +186,14 @@ Future<void> _pumpHome(WidgetTester tester, _PollAuth auth) async {
   await tester.pumpWidget(MaterialApp(home: HomePage(authService: auth)));
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 50));
+  if (openDoors) {
+    final card = find.byKey(const ValueKey<String>('panel_kart_kapilar'));
+    await tester.ensureVisible(card);
+    await tester.pump();
+    await tester.tap(card);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+  }
 }
 
 Future<void> _disposeHome(WidgetTester tester) async {
@@ -233,7 +246,7 @@ void main() {
       await _disposeHome(tester);
     });
 
-    testWidgets('başka menü açıkken (Profilim) yoklama YAPILMAZ; panele dönünce sürer', (tester) async {
+    testWidgets('başka menü açıkken (Profilim) yoklama YAPILMAZ; Kapılar sayfasına dönünce sürer', (tester) async {
       final auth = _PollAuth();
       await _pumpHome(tester, auth);
 
@@ -243,9 +256,9 @@ void main() {
       expect(idleTimes, isEmpty, reason: 'görünmeyen panel için ağ isteği yok');
       expect(auth.statusCalls, afterMenu);
 
-      await _openMenu(tester, 'Panel');
+      await _openMenu(tester, 'Kapılar');
       final back = auth.statusCalls;
-      expect(back, greaterThan(afterMenu), reason: 'panele dönünce kapı durumu yenilenir');
+      expect(back, greaterThan(afterMenu), reason: 'kapı paneline dönünce kapı durumu yenilenir');
       final times = await _elapse(tester, auth, totalMs: 7000, stepMs: 500);
       expect(times.length, greaterThanOrEqualTo(2), reason: 'yoklama yeniden başladı');
       await _disposeHome(tester);
@@ -321,7 +334,8 @@ void main() {
       final slow = Completer<(DoorRuntimeStatus?, String?)>();
       final auth = _PollAuth(
         handler: (index) {
-          if (index == 2) return slow.future; // ilk yoklama turu takılır
+          // 1: ilk yükleme, 2: Kapılar açılışındaki yenileme, 3: ilk yoklama turu (takılır).
+          if (index == 3) return slow.future;
           return Future.value((_status(), null));
         },
       );

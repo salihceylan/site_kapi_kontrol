@@ -598,10 +598,13 @@ void main() {
       return access;
     }
 
-    test('tüm sitelerde door_control kapalı: kapı öğeleri gizlenir, Panel kalır', () async {
+    // Panel artık modül vitrinidir: kapı paneli "Kapılar" öğesidir ve Geçiş Kontrol kapalıyken o da gizlenir
+    // (vitrinde kapı kartı ve hızlı "Kapıyı aç" eylemi de böylece çıkmaz).
+    test('tüm sitelerde door_control kapalı: kapı öğeleri (Kapılar dahil) gizlenir, Panel (vitrin) kalır', () async {
       final access = await loaded(<MySiteModules>[_site(1, door: false), _site(2, door: false)]);
       final hidden = hiddenMenuItemsFor(UserRole.siteManager, access);
       expect(hidden, <SirketMenuItem>{
+        SirketMenuItem.kapilar,
         SirketMenuItem.kayitliCihazlar,
         SirketMenuItem.bluetoothWifiKur,
         SirketMenuItem.ellerSerbest,

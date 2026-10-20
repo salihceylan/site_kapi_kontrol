@@ -2359,3 +2359,32 @@ Yeni iki modül varsayılan KAPALIDIR (süper kullanıcı siteye açar). Karar d
 - [ ] **86.18. Cihaz testinde Genel IP (WAN) (F20.03):**
   - **Nasıl Test Edilir:** İnternete bağlı bir kapı kartını USB ile bağlayın; Cihaz Etiketleyici → "Cihaz testi" → portu seçip "Bağlan"; kart durum bloğunu yazana kadar bekleyin. Sonra COMPANY_API_KEY satırını geçici kaldırıp tekrar deneyin.
   - **Beklenen Sonuç:** Birkaç saniye içinde "Genel IP (WAN)" alanı kartın genel IP'siyle dolar (mobil uygulamadaki değerle aynı). Yeni kurulan kart Wi-Fi'ye bağlandıktan sonra yaklaşık 2 dakika içinde bildirir. Anahtar yokken ya da sunucuya ulaşılamazken alan "-" kalır, uygulama donmaz.
+
+## 87. Panel: Modül Vitrini ve "Kapılar" Kartı (2026-10-20)
+
+Girişten sonra açılan Panel artık kapı açma ekranı değil, kullanıcıya tanımlı modüllerin kart vitrinidir. Kapı paneli "Kapılar" kartının arkasındadır (bir dokunuş). Kartlar çekmecedeki menüyle birebir aynı öğelerden gelir: menüde olmayan (kapalı / yetkisiz) modülün kartı yoktur.
+
+- [ ] **87.1. Girişte vitrin gelir (V1.01):**
+  - **Nasıl Test Edilir:** Süper kullanıcı, site yöneticisi, daire sakini ve bireysel kullanıcı hesaplarıyla sırayla giriş yapın.
+  - **Beklenen Sonuç:** Hepsinde Panel modül kartlarıyla açılır (kapı düğmesi yoktur). Başlık "Panel"dir. Kartlarda görsel, başlık ve tek satır açıklama vardır.
+- [ ] **87.2. Yalnız tanımlı modüller görünür (V1.02):**
+  - **Nasıl Test Edilir:** Süper kullanıcı bir siteye Finans'ı ve Belgeler'i açıp kapatsın. Aynı sitenin yönetici ve sakin hesaplarında Panel'e ve çekmeceye bakın; modül durumu değişince bekleyin (yaklaşık yarım dakika) ya da Yenile'ye dokunun.
+  - **Beklenen Sonuç:** Açık modülün kartı hem vitrinde hem çekmecede çıkar, kapatınca ikisinden de kalkar. Sakinde "Finans" değil "Borcum" kartı vardır.
+- [ ] **87.3. Kapılar kartı ve hızlı "Kapıyı aç" (V1.03):**
+  - **Nasıl Test Edilir:** Daire sakini hesabında Panel'de "Kapılar" kartına ve "Hızlı işlemler" altındaki "Kapıyı aç"a dokunun; çekmecede "Panel"in altındaki "Kapılar"a bakın. Geri tuşuna basın.
+  - **Beklenen Sonuç:** İkisi de kapı panelini (kapı seçici ve yuvarlak düğme) açar; vitrinde kapı AÇILMAZ. Kapıyı panelde açtıktan sonra geri tuşu Panel vitrinine döner, uygulamadan çıkmaz.
+- [ ] **87.4. Geçiş Kontrol kapalıyken kapı kartı yok (V1.04):**
+  - **Nasıl Test Edilir:** Siteyi Geçiş Kontrol (kapı) modülü kapalı olacak şekilde ayarlayın; yönetici ve sakin hesaplarıyla Panel'e ve çekmeceye bakın.
+  - **Beklenen Sonuç:** "Kapılar" kartı, "Kapıyı aç" hızlı eylemi ve çekmecedeki "Kapılar" / "Eller Serbest" yoktur; öteki modül kartları durur.
+- [ ] **87.5. Sakin görünümü: borç kartı ve hızlı işlemler (V1.05):**
+  - **Nasıl Test Edilir:** Borcu olan sakin hesabıyla Panel'e bakın; Finans modülü kapalı bir sitenin sakin hesabıyla da bakın. Borç bilgisi alınamazken (uçak modu) bakın.
+  - **Beklenen Sonuç:** Üstte koyu kartta "Güncel borcunuz", tutar, vadesi geçen ve sıradaki vade ile "Borcum'a git" görünür; düğme Borcum'u açar. Modül kapalıyken ya da bilgi alınamazken "Merhaba, Ad" selamlaması çıkar; "Borcunuz yok" yazmaz. Altında yalnız modülü açık olanlar için Kapıyı aç, Arıza bildir, Ziyaretçi ve kargo, Belgeler kısayolları vardır.
+- [ ] **87.6. Yönetici görünümü: dikkat edilmesi gereken iş barı (V1.06):**
+  - **Nasıl Test Edilir:** Süper kullanıcı hesabında bekleyen modül talebi ve site başvurusu bırakın; Panel'e bakın, satırdaki "İncele"ye dokunun. Bekleyenleri bitirince tekrar bakın.
+  - **Beklenen Sonuç:** Üstte koyu barda "Dikkat edilmesi gereken N iş var" ve her satırda tek düğme görünür; düğme ilgili sayfayı açar. Bekleyen kalmayınca bar kalkar.
+- [ ] **87.7. Büyük yazı, dar ekran, koyu tema (V1.07):**
+  - **Nasıl Test Edilir:** Telefonda yazı boyutunu en büyüğe alın, koyu temayı açın, Panel'e bakın; tablet ya da web'de pencereyi genişletin.
+  - **Beklenen Sonuç:** Taşma ve kesilme olmaz; telefonda 2 sütun (çok büyük yazıda 1), geniş ekranda 3-4 sütun görünür. Hareket azaltma açıkken kartlar animasyonsuz gelir.
+- [ ] **87.8. Hesap ve ayar düğmeleri (V1.08):**
+  - **Nasıl Test Edilir:** Panel'in altındaki "Hesap ve ayarlar" satırından Profilim, Eller Serbest ve Yardım ve Destek'e dokunun.
+  - **Beklenen Sonuç:** Bunlar kart değil küçük düğmedir; çekmeceden seçmekle aynı sayfaları açar.
