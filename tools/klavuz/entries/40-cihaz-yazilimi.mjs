@@ -469,13 +469,13 @@ export default {
         { file: OTA, find: 'if (usbRequired) {', note: 'Manifest usb_required ise OTA yapılmaz; "ota_usb_required" olayı' },
         { file: OTA, find: 'if (otaSurumKarsilastir(version, String(OTA_CURRENT_VERSION)) <= 0) {', note: 'Yalnız artan sürüm kabul edilir; eşit/eski sürüm "downgrade reddedildi" ve cihaz "güncel" sayılır' },
         { file: OTA, find: 'if (!otaSha256HexGecerli(sha256)) {', note: 'Manifestte 64 hane hex sha256 yoksa güncelleme yapılmaz' },
-        { file: OTA, find: 'inline constexpr char OTA_VERSION_C3[] = "4.3.1";', note: 'C3 sürüm sabiti (WROOM ayrı: OTA_VERSION_WROOM); manifest sürümü bundan büyük olmalı' },
+        { file: OTA, find: 'inline constexpr char OTA_VERSION_C3[] = ', note: 'C3 sürüm sabiti (WROOM ayrı: OTA_VERSION_WROOM); manifest sürümü bundan büyük olmalı (sürüm değeri satırda; araç her sürümde yeniden yazar)' },
       ],
       causes: [
         'Sunucuda yanlış klasöre firmware konmuş: wroom bin dosyası c3 manifestinde ya da tersi (iki donanımın dosyaları asla karışmamalı)',
         'Manifest url alanı http:// ya da başka alan adı gösteriyor',
         'Manifest sha256 alanı boş/kısa/hatalı',
-        'Manifest sürümü cihaz sürümünden büyük değil (örn. cihaz 4.3.1, manifest 4.3.1)',
+        'Manifest sürümü cihaz sürümünden büyük değil (örn. cihaz ve manifest aynı sürümde)',
         'Sunucu bilerek usb_required=true veriyor (partition tablosu değişti, OTA yetmez)',
       ],
       checks: [

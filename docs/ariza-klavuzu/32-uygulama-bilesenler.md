@@ -45,7 +45,7 @@ Bu bölüm lib/ui/design (jeton, hareket, kart, düğme, rozet, iskelet, geri sa
 - [bilesen-basma-olcegi](#bilesen-basma-olcegi) — Düğmeye basınca küçülme efekti takılı kalıyor ya da çift tıklama algılanıyor
 - [bilesen-bos-durum](#bilesen-bos-durum) — Boş liste mesajı (ikon + başlık + "Ekle" düğmesi) görünmüyor, taşıyor ya da eylem düğmesi çıkmıyor
 - [bilesen-diyalog-sablonu](#bilesen-diyalog-sablonu) — Ortak diyalog (başlık şeridi + eylemler) dar ekranda taşıyor, başlık kırpılıyor ya da eylemler görünmüyor
-- [bilesen-giris-logosu](#bilesen-giris-logosu) — Giriş ekranında logo görünmüyor, bulanık ya da başlık/alt başlık yanlış
+- [bilesen-giris-logosu](#bilesen-giris-logosu) — Giriş ekranında logo görünmüyor, ışık animasyonu çalışmıyor ya da başlık/alt başlık yanlış
 - [bilesen-sayfa-zemini](#bilesen-sayfa-zemini) — Sayfa arka planı ya da kart yüzeyi temaya göre yanlış (koyu temada beyaz kart / açıkta koyu zemin)
 - [bilesen-eski-renkler](#bilesen-eski-renkler) — Bir ekranda renkler tema ile uyumsuz (sabit AppColors değeri), metin koyu zeminde okunmuyor
 - [bilesen-saat-donuyor](#bilesen-saat-donuyor) — Dijital saat durmuş gibi, uygulamaya dönünce yanlış saat gösteriyor ya da saat kartı her saniye yeniden kuruluyor (takılma)
@@ -227,10 +227,10 @@ Bu bölüm lib/ui/design (jeton, hareket, kart, düğme, rozet, iskelet, geri sa
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/ui/design/app_snack.dart:53](../../lib/ui/design/app_snack.dart#L53) | <code>final messenger = ScaffoldMessenger.maybeOf(context);</code> | Messenger yoksa mesaj sessizce yutulur |
-| [lib/ui/design/app_snack.dart:64](../../lib/ui/design/app_snack.dart#L64) | <code>messenger.clearSnackBars();</code> | replace true ise sıradakiler atılır ve mesaj hemen gösterilir; false ise kuyruğa girer |
+| [lib/ui/design/app_snack.dart:60](../../lib/ui/design/app_snack.dart#L60) | <code>final messenger = ScaffoldMessenger.maybeOf(context);</code> | Messenger yoksa mesaj sessizce yutulur |
+| [lib/ui/design/app_snack.dart:73](../../lib/ui/design/app_snack.dart#L73) | <code>messenger.clearSnackBars();</code> | replace true ise sıradakiler atılır ve mesaj hemen gösterilir; false ise kuyruğa girer |
 | [lib/ui/design/app_snack.dart:27](../../lib/ui/design/app_snack.dart#L27) | <code>static const Duration defaultDuration = Duration(seconds: 4);</code> | Varsayılan süre 4 sn |
-| [lib/ui/design/app_snack.dart:78](../../lib/ui/design/app_snack.dart#L78) | <code>final (Color? background, IconData icon) = switch (kind) {</code> | Tür -> dolgu rengi ve simge eşlemesi |
+| [lib/ui/design/app_snack.dart:89](../../lib/ui/design/app_snack.dart#L89) | <code>final (Color? background, IconData icon) = switch (kind) {</code> | Tür -> dolgu rengi ve simge eşlemesi |
 
 **Olası nedenler**
 - context ağaçta ScaffoldMessenger yok ya da await sonrası context ölü (mounted kontrolü yok)
@@ -250,8 +250,8 @@ Bu bölüm lib/ui/design (jeton, hareket, kart, düğme, rozet, iskelet, geri sa
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/ui/design/app_snack.dart:51](../../lib/ui/design/app_snack.dart#L51) | <code>int maxLines = 4,</code> | Varsayılan 4 satır; uzun cümle için çağıran artırabilir |
-| [lib/ui/design/app_snack.dart:134](../../lib/ui/design/app_snack.dart#L134) | <code>static SnackBarAction _readableAction(SnackBarAction action) {</code> | Tonlu dolguda renksiz eylemin rengi beyaz yapılır |
+| [lib/ui/design/app_snack.dart:57](../../lib/ui/design/app_snack.dart#L57) | <code>int maxLines = 4,</code> | Varsayılan 4 satır; uzun cümle için çağıran artırabilir |
+| [lib/ui/design/app_snack.dart:147](../../lib/ui/design/app_snack.dart#L147) | <code>static SnackBarAction _readableAction(SnackBarAction action) {</code> | Tonlu dolguda renksiz eylemin rengi beyaz yapılır |
 
 **Olası nedenler**
 - Mesaj 4 satırdan uzun
@@ -431,8 +431,8 @@ Bu bölüm lib/ui/design (jeton, hareket, kart, düğme, rozet, iskelet, geri sa
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
 | [lib/ui/design/app_card.dart:481](../../lib/ui/design/app_card.dart#L481) | <code>class InlineNotice extends StatelessWidget {</code> | İkon + metin; ton ve isteğe bağlı onRetry alır |
-| [lib/ui/design/app_card.dart:519](../../lib/ui/design/app_card.dart#L519) | <code>liveRegion: true,</code> | Hata/başarı kutusu canlı bölge: ekran okuyucu değişince okur |
-| [lib/ui/design/app_card.dart:549](../../lib/ui/design/app_card.dart#L549) | <code>label: const Text('Tekrar Dene'),</code> | Düğme yalnız onRetry verilirse gösterilir |
+| [lib/ui/design/app_card.dart:523](../../lib/ui/design/app_card.dart#L523) | <code>liveRegion: true,</code> | Hata/başarı kutusu canlı bölge: ekran okuyucu değişince okur |
+| [lib/ui/design/app_card.dart:554](../../lib/ui/design/app_card.dart#L554) | <code>label: const Text('Tekrar Dene'),</code> | Düğme yalnız onRetry verilirse gösterilir |
 
 **Olası nedenler**
 - Çağıran onRetry vermemiş
@@ -530,22 +530,22 @@ Bu bölüm lib/ui/design (jeton, hareket, kart, düğme, rozet, iskelet, geri sa
 **Bkz.:** [bilesen-dialog-genisligi](#bilesen-dialog-genisligi)
 
 <a id="bilesen-giris-logosu"></a>
-### bilesen-giris-logosu · Giriş ekranında logo görünmüyor, bulanık ya da başlık/alt başlık yanlış
+### bilesen-giris-logosu · Giriş ekranında logo görünmüyor, ışık animasyonu çalışmıyor ya da başlık/alt başlık yanlış
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/ui/design/login_hero.dart:41](../../lib/ui/design/login_hero.dart#L41) | <code>static const String logoAsset = 'assets/images/app_logo.png';</code> | Logo dosyası pubspec varlıklarında olmalı |
-| [lib/ui/design/login_hero.dart:127](../../lib/ui/design/login_hero.dart#L127) | <code>cacheWidth: (logoDiameter * dpr).ceil(),</code> | Görsel ekran yoğunluğuna göre küçültülerek çözülür |
-| [lib/ui/design/login_hero.dart:60](../../lib/ui/design/login_hero.dart#L60) | <code>duration: AppMotion.of(context, AppMotion.slow),</code> | Giriş solma + yukarı kayma; hareket azaltmada anında |
+| [lib/ui/design/login_hero.dart:66](../../lib/ui/design/login_hero.dart#L66) | <code>return AnimatedGudeLogo(height: height, semanticLabel: null);</code> | Logo vektör olarak çizilir (lib/brand); görsel dosyası yoktur |
+| [lib/ui/design/login_hero.dart:46](../../lib/ui/design/login_hero.dart#L46) | <code>duration: AppMotion.of(context, AppMotion.slow),</code> | Giriş solma + yukarı kayma; hareket azaltmada anında |
 
 **Olası nedenler**
-- assets/images/app_logo.png pubspec te yok ya da silinmiş
+- Cihazda "animasyonları azalt" açık: logo durağan çizilir (beklenen)
 - Başlık/alt başlık çağıranda null
 
 **Adım adım kontrol**
-- pubspec.yaml assets bölümünde dosyayı doğrulayın
+- Cihaz erişilebilirlik ayarında animasyonların kapalı olup olmadığına bakın
+- lib/brand/gude_logo_animated.dart içindeki GudeLogoAnimation.enabledByDefault değeri (yalnız testte false)
 
-**İlgili testler:** [test/design/login_hero_test.dart](../../test/design/login_hero_test.dart)
+**İlgili testler:** [test/design/login_hero_test.dart](../../test/design/login_hero_test.dart), [test/brand/gude_logo_animated_test.dart](../../test/brand/gude_logo_animated_test.dart)
 
 **Bkz.:** [ui-giris-hata](31-uygulama-arayuz.md#ui-giris-hata)
 
@@ -845,11 +845,11 @@ Bu bölüm lib/ui/design (jeton, hareket, kart, düğme, rozet, iskelet, geri sa
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/ui/widgets/apartment_card.dart:40](../../lib/ui/widgets/apartment_card.dart#L40) | <code>apartment.residentIsActive ?? (hasResident &amp;&amp; apartment.isActive);</code> | Aktif/Pasif: sakin durumu varsa o, yoksa sakin var ve daire aktif |
-| [lib/ui/widgets/apartment_card.dart:73](../../lib/ui/widgets/apartment_card.dart#L73) | <code>label: active ? 'Aktif' : 'Pasif',</code> | Rozet etiketi ve rengi |
-| [lib/ui/widgets/apartment_card.dart:159](../../lib/ui/widgets/apartment_card.dart#L159) | <code>onPressed: widget.sendingMail ? null : widget.onSendMail,</code> | Bilgileri Gönder yalnız e-postası olan sakinde; gönderirken pasif ve dönen gösterge |
-| [lib/ui/widgets/apartment_card.dart:133](../../lib/ui/widgets/apartment_card.dart#L133) | <code>Text('Şifre (PIN): ${apartment.residentPinCode}', style: strong),</code> | Sakin PIN kodu açıkça ayrıntıda yazılır |
-| [lib/ui/widgets/apartment_card.dart:176](../../lib/ui/widgets/apartment_card.dart#L176) | <code>if (hasResident &amp;&amp; widget.onDelete != null)</code> | Sakini Sil düğmesi yalnız sakin varsa |
+| [lib/ui/widgets/apartment_card.dart:54](../../lib/ui/widgets/apartment_card.dart#L54) | <code>apartment.residentIsActive ?? (hasResident &amp;&amp; apartment.isActive);</code> | Aktif/Pasif: sakin durumu varsa o, yoksa sakin var ve daire aktif |
+| [lib/ui/widgets/apartment_card.dart:87](../../lib/ui/widgets/apartment_card.dart#L87) | <code>label: active ? 'Aktif' : 'Pasif',</code> | Rozet etiketi ve rengi |
+| [lib/ui/widgets/apartment_card.dart:198](../../lib/ui/widgets/apartment_card.dart#L198) | <code>onPressed: widget.resettingPin &#124;&#124; needsSuper</code> | PIN'i Sıfırla yalnız dahili daire hesabında (resident_pin_resettable); sakin şifresini kendisi belirlemişse (resident_pin_issued false) yöneticide devre dışı + 'yalnız süper kullanıcı' notu; sıfırlanırken pasif ve dönen gösterge |
+| [lib/ui/widgets/apartment_card.dart:157](../../lib/ui/widgets/apartment_card.dart#L157) | <code>? 'Şifre (PIN): yönetim verdi'</code> | PIN değeri ASLA yazılmaz (sunucu saklamaz, migration 051); yalnız "verildi" durumu ve "bir kez gösterilir" notu |
+| [lib/ui/widgets/apartment_card.dart:217](../../lib/ui/widgets/apartment_card.dart#L217) | <code>if (hasResident &amp;&amp; widget.onDelete != null)</code> | Sakini Sil düğmesi yalnız sakin varsa |
 
 **Olası nedenler**
 - Sakin adı boş: daire boş sayılır (turuncu ikon, Sakini Sil yok)
@@ -1071,8 +1071,8 @@ Bu bölüm lib/ui/design (jeton, hareket, kart, düğme, rozet, iskelet, geri sa
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
 | [lib/menu.dart:1](../../lib/menu.dart#L1) | <code>export 'package:site_kapi_kontrol/ui/widgets/yan_menu.dart';</code> | menu.dart tek satırlık yeniden dışa aktarımdır; gerçek kod yan_menu.dart ta |
-| [lib/ui/widgets/yan_menu.dart:373](../../lib/ui/widgets/yan_menu.dart#L373) | <code>List&lt;SirketMenuItem&gt; _itemsForRole(</code> | Rol ve mod başına menü öğeleri burada seçilir |
-| [lib/ui/widgets/yan_menu.dart:142](../../lib/ui/widgets/yan_menu.dart#L142) | <code>title: isResidentMode ? 'Yönetici Paneline Geç' : 'Sakin Moduna Geç',</code> | Çift rollü kullanıcıda mod değiştirme satırı |
+| [lib/ui/widgets/yan_menu.dart:667](../../lib/ui/widgets/yan_menu.dart#L667) | <code>List&lt;SirketMenuItem&gt; _itemsForRole(</code> | Rol ve mod başına menü öğeleri burada seçilir |
+| [lib/ui/widgets/yan_menu.dart:279](../../lib/ui/widgets/yan_menu.dart#L279) | <code>title: isResidentMode ? 'Yönetici Paneline Geç' : 'Sakin Moduna Geç',</code> | Çift rollü kullanıcıda mod değiştirme satırı |
 
 **Olası nedenler**
 - _itemsForRole listesinde öğe o rol/mod için yok
