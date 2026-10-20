@@ -157,30 +157,28 @@ void main() {
     );
 
     testWidgets(
-      'tek AppCard(seviye 2); uyarı tonlu cilalı IconOrb (hero); başlık anlamsal başlık',
+      'tek AppCard(seviye 2); uyarı tonlu düz IconOrb (hero); başlık anlamsal başlık',
       (t) async {
         for (final dark in const <bool>[false, true]) {
           await _pumpPage(t, dark: dark);
           expect(t.widget<AppCard>(find.byType(AppCard)).level, 2);
 
-          // Görsel sözleşme (bilerek değişti): düz tint karosu yerine cilalı, ışımalı daire IconOrb
-          // (ekranın tek hero öğesi, uyarı tonu).
+          // Görsel sözleşme (İP-1C sade stil): daire IconOrb (ekranın tek hero öğesi, uyarı tonu) düzdür: soluk
+          // yüzey zemin, ikon uyarı tonunun ink rengi (glow etkisiz).
           expect(find.byType(IconOrb), findsOneWidget);
           final orb = t.widget<IconOrb>(find.byType(IconOrb));
           expect(orb.tone, AppTone.warning, reason: 'dark=$dark');
-          expect(orb.glow, isTrue);
           expect(orb.size, 72);
           expect(orb.shape, IconOrbShape.circle);
+          final p = t.element(find.byType(IconOrb)).palette;
           final icon = t.widget<Icon>(find.byIcon(Icons.wifi_off_rounded));
-          expect(icon.color, Colors.white);
-          // Beyaz ikon ton gradyanının iki ucunda da >= 3:1 (WCAG 1.4.11 grafik nesne).
-          for (final end in <Color>[AppTone.warning.a, AppTone.warning.b]) {
-            expect(
-              _contrast(Colors.white, end),
-              greaterThanOrEqualTo(3.0),
-              reason: 'beyaz ikon / uyarı gradyanı',
-            );
-          }
+          expect(icon.color, AppTone.warning.sign(p));
+          // İkon rozet zemininde >= 3:1 (WCAG 1.4.11 grafik nesne; ölçüm 4,5:1 üstü).
+          expect(
+            _contrast(AppTone.warning.sign(p), p.surfaceMuted),
+            greaterThanOrEqualTo(3.0),
+            reason: 'uyarı ikonu / rozet zemini',
+          );
           // Ikon dekoratif: durum aşağıdaki başlıkta okunur.
           expect(
             find.ancestor(

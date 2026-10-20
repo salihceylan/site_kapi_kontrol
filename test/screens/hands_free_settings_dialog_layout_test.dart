@@ -56,7 +56,7 @@ void main() {
   });
 
   testWidgets(
-    'HandsFreeSettingsDialog: cilalı küreler, tam satır anahtar (>= 56 dp, tek anlamsal düğüm), güvenlik notu InlineNotice',
+    'HandsFreeSettingsDialog: ikon rozetleri, tam satır anahtar (>= 56 dp, tek anlamsal düğüm), güvenlik notu InlineNotice',
     (t) async {
       final handle = t.ensureSemantics();
       final voice = FakeVoiceDoorService();
@@ -69,9 +69,13 @@ void main() {
         scale: 1.0,
         dark: false,
       );
-      // Başlık küresi (AppDialogHeader, 44) + dinleme kartı küresi (info, 36).
+      // Başlık rozeti (AppDialogHeader, 44 squircle; sade stilde düz, glow istemez) + dinleme kartı rozeti (info, 36).
       final orbs = t.widgetList<IconOrb>(find.byType(IconOrb)).toList();
-      expect(orbs.any((o) => o.size == 44 && o.glow), isTrue, reason: 'başlık');
+      expect(
+        orbs.any((o) => o.size == 44 && o.shape == IconOrbShape.squircle),
+        isTrue,
+        reason: 'başlık',
+      );
       expect(
         orbs.any((o) => o.size == 36 && o.tone == AppTone.info),
         isTrue,

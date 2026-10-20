@@ -76,6 +76,16 @@ const String _forgotSuccess =
     'Bu e-posta adresiyle kayıtlı bir hesap varsa şifre sıfırlama bağlantısı gönderildi. '
     'Lütfen gelen kutunuzu (ve gereksiz klasörünü) kontrol ediniz.';
 
+/// Bildirim çubuğunun türü (sade stil, İP-1C): dolgu her türde tema rengidir (renkli dolgu yok); tür, simgesi ve
+/// simgenin rengiyle ayrılır.
+void _expectSnackKind(WidgetTester t, IconData icon, Color color) {
+  final snack = t.widget<SnackBar>(find.byType(SnackBar));
+  expect(snack.backgroundColor, isNull, reason: 'tek koyu yüzey (tema rengi)');
+  final glyph = find.descendant(of: find.byType(SnackBar), matching: find.byIcon(icon));
+  expect(glyph, findsOneWidget);
+  expect(t.widget<Icon>(glyph).color, color);
+}
+
 Finder get _identifierField => find.byType(TextFormField).at(0);
 Finder get _passwordField => find.byType(TextFormField).at(1);
 Finder get _dialogField => find.descendant(
@@ -220,8 +230,7 @@ void main() {
 
             expect(auth.logins, <String>['ali@example.com']);
             expect(find.text(_longError), findsOneWidget);
-            final snack = t.widget<SnackBar>(find.byType(SnackBar));
-            expect(snack.backgroundColor, AppTone.danger.b);
+            _expectSnackKind(t, Icons.error_rounded, AppTone.danger.inkDark);
             expect(t.takeException(), isNull);
           },
         );
@@ -243,7 +252,7 @@ void main() {
 
             expect(find.text(notice), findsOneWidget);
             final snack = t.widget<SnackBar>(find.byType(SnackBar));
-            expect(snack.backgroundColor, AppTone.warning.b);
+            _expectSnackKind(t, Icons.warning_amber_rounded, AppTone.warning.inkDark);
             expect(snack.duration, const Duration(seconds: 6));
             expect(t.takeException(), isNull);
           },
@@ -338,7 +347,7 @@ void main() {
             expect(find.byType(AlertDialog), findsNothing);
             expect(find.text(_forgotSuccess), findsOneWidget);
             final snack = t.widget<SnackBar>(find.byType(SnackBar));
-            expect(snack.backgroundColor, AppTone.success.b);
+            _expectSnackKind(t, Icons.check_circle_rounded, AppTone.success.inkDark);
             expect(snack.duration, const Duration(seconds: 5));
             expect(t.takeException(), isNull);
           },

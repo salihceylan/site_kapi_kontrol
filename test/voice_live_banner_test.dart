@@ -258,16 +258,14 @@ void main() {
             expect(find.text(c.feedback), findsNothing);
           }
           expect(_leadingIcon(t).icon, c.icon, reason: 'dark=$dark');
-          // Başlangıç küresi (IconOrb, cilalı ton): beyaz ikon, ton gradyanının iki ucunda >= 4,5:1
-          // (cila dahil piksel ölçümü gloss_test.dart'ta). Eski düz ton dairesinin ink ikonu yerine geçti.
-          expect(_leadingIcon(t).color, Colors.white);
-          for (final end in <Color>[c.tone.a, c.tone.b]) {
-            expect(
-              _contrast(Colors.white, end),
-              greaterThanOrEqualTo(4.5),
-              reason: '${c.name}: ${c.tone.name} gradyanı üstünde beyaz ikon',
-            );
-          }
+          // Başlangıç rozeti (IconOrb): sade stilde (İP-1C) düz: soluk yüzey zemin, ikon tonun işaret rengi
+          // (durum tonunda ink, ötekinde gövde metni), rozet zemininde >= 4,5:1.
+          expect(_leadingIcon(t).color, c.tone.sign(p));
+          expect(
+            _contrast(c.tone.sign(p), p.surfaceMuted),
+            greaterThanOrEqualTo(4.5),
+            reason: '${c.name}: ${c.tone.name} rozet zemininde ikon',
+          );
           final orb = t.widget<IconOrb>(find.byType(IconOrb));
           expect(orb.tone, c.tone);
           expect(
