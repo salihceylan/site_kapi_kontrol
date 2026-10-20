@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/models/finance.dart';
@@ -36,7 +35,8 @@ Color _bodyInk(AppPalette p) => p.isDark ? p.textSecondary : AppShowcaseColors.t
 /// - Hesap / ayar türü öğeler ([showcaseSecondaryItems]) ızgarada değil, altta küçük "Hesap ve ayarlar" satırındadır.
 /// - Izgara duyarlıdır (telefonda 2, geniş ekranda 3-4 sütun; büyük yazıda azalır); kartlar yüksekliğe göre sabit
 ///   değildir (taşma yok). Hareket azaltmada giriş animasyonu yoktur.
-/// - Açık temada sayfa zemini düz #F8FAFC'dir ([_ShowcaseBackdrop]); koyu odak kutusu koyu temada zeminden ayrışan
+/// - Vitrin zemin BOYAMAZ ve kendi sınırının dışına hiçbir şey boyamaz. Açık temadaki düz #F8FAFC sayfa zeminini
+///   sayfanın kaydırılan gövdesinin kabı verir ([pageBackgroundOf]). Koyu odak kutusu koyu temada zeminden ayrışan
 ///   lacivert yüzey + mavi kenarla çizilir. Hap düğmeler en az 48 dp ve klavye odağında halkalıdır ([_PillButton]).
 class ModuleShowcaseView extends StatefulWidget {
   const ModuleShowcaseView({
@@ -105,6 +105,16 @@ class ModuleShowcaseView extends StatefulWidget {
 
   /// Verilirse hızlı işlemlerde "Ziyaretçi kodu" çıkar: misafir / kurye için süreli geçiş linki oluşturur (kapı AÇMAZ).
   final VoidCallback? onCreateGuestPass;
+
+  /// Vitrin gösterilirken sayfa kabının (ana sayfada kaydırılan gövdenin kabı) zemini: açık temada DÜZ #F8FAFC
+  /// ([AppShowcaseColors.background], işverenin "ana zemin"i), koyu temada null (koyu zemin olduğu gibi kalır).
+  ///
+  /// Zemini vitrinin kendisi çizmez: kaydırma görünümü içerik sığınca kırpmaz, vitrin sınırını aşan bir boya üstteki
+  /// acil duyuru şeridini örterdi. Kap şeridin ALTINDAN ekranın altına kadar uzanır ve kaydırılmaz; vitrinin altında
+  /// gösterilen bölümler (Geçiş Kontrol kapalı bireyselde ana ekran) de aynı düz zemindedir. Uygulamanın genel zemini
+  /// (gradyan + ışıma) DEĞİŞMEZ; gradyanın alt tonu kart çerçevesiyle (#E2E8F0) aynı olduğundan vitrinde kullanılmaz.
+  static Color? pageBackgroundOf(BuildContext context) =>
+      context.palette.isDark ? null : AppShowcaseColors.background;
 
   @override
   State<ModuleShowcaseView> createState() => ModuleShowcaseViewState();
@@ -273,12 +283,10 @@ class ModuleShowcaseViewState extends State<ModuleShowcaseView> {
       ],
     ];
 
-    return _ShowcaseBackdrop(
-      child: Column(
-        key: const ValueKey<String>('panel_vitrin'),
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: children,
-      ),
+    return Column(
+      key: const ValueKey<String>('panel_vitrin'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: children,
     );
   }
 
@@ -365,67 +373,6 @@ class ModuleShowcaseViewState extends State<ModuleShowcaseView> {
       ),
     );
   }
-}
-
-/// Açık temada vitrin sayfasının zemini DÜZ #F8FAFC ([AppShowcaseColors.background], işverenin "ana zemin"i). Uygulamanın
-/// genel zemini (#F8FAFC -> #E2E8F0 gradyanı + ışıma) DEĞİŞMEZ; vitrin açıkken onun üstüne boyanır. Gradyanın alt tonu
-/// kart çerçevesiyle (#E2E8F0) aynı olduğundan gölgesiz kartların çerçevesi sayfanın altında zemine karışıyordu.
-///
-/// Boya vitrinin dışına taşar (sayfa kenar boşlukları, üst / alt boşluk, kısa içerikte ekranın kalanı): sayfanın kaydırma
-/// görünümü kendi sınırında kırptığı için yalnız kaydırılan alan düzleşir (üstteki bant ve uygulama çubuğu etkilenmez).
-/// Kendi [RepaintBoundary]'sindedir: tek dikdörtgen, içerik katmanını büyütmez, kaydırırken yeniden boyanmaz, dokunmayı
-/// yutmaz. Koyu temada boyanmaz (koyu zemin olduğu gibi kalır); ağaç yapısı iki temada aynıdır (tema değişince alt ağaç
-/// yeniden kurulmaz).
-class _ShowcaseBackdrop extends StatelessWidget {
-  const _ShowcaseBackdrop({required this.child});
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        Positioned.fill(
-          child: RepaintBoundary(
-            child: CustomPaint(
-              key: const ValueKey<String>('panel_vitrin_zemin'),
-              painter: _FlatBackdropPainter(
-                color: context.palette.isDark ? null : AppShowcaseColors.background,
-                reach: MediaQuery.sizeOf(context),
-              ),
-            ),
-          ),
-        ),
-        child,
-      ],
-    );
-  }
-}
-
-class _FlatBackdropPainter extends CustomPainter {
-  const _FlatBackdropPainter({required this.color, required this.reach});
-
-  /// Zemin rengi; null ise boyanmaz (koyu tema).
-  final Color? color;
-
-  /// Ekran boyutu. Dikdörtgen vitrinin iki yanından ekranın kalan genişliği kadar (kenar boşlukları), üstünden ve
-  /// altından bir ekran boyu taşar: görünür alanın tamamı, kısa içerikte ve aşağı çekip yenilemede de.
-  final Size reach;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final c = color;
-    if (c == null) return;
-    final dx = math.max(0.0, reach.width - size.width) + 1;
-    final dy = reach.height;
-    canvas.drawRect(Rect.fromLTRB(-dx, -dy, size.width + dx, size.height + dy), Paint()..color = c);
-  }
-
-  @override
-  bool? hitTest(Offset position) => false;
-
-  @override
-  bool shouldRepaint(_FlatBackdropPainter oldDelegate) => oldDelegate.color != color || oldDelegate.reach != reach;
 }
 
 /// Bölüm başlığı (küçük, kalın; başlık düğümü).
@@ -562,8 +509,10 @@ class _ModuleTile extends StatelessWidget {
   }
 }
 
-/// Rozet: metnin soluna durum noktası + sayı (arka planı boyamaz; 99'dan büyük "99+"). Dekoratiftir: sayı kartın
-/// erişilebilirlik etiketindedir.
+/// Rozet: metnin soluna nokta + sayı (arka planı boyamaz; 99'dan büyük "99+"). Dekoratiftir: sayı kartın erişilebilirlik
+/// etiketindedir. Noktanın rengi çekmecedeki sayı rozetinin ([YanMenu]) dolgusuyla AYNI belirteçtir ([AppTone.danger]
+/// `a`): aynı bekleyen / okunmamış sayısı çekmecede ve Panel'de aynı renkte görünür. Vitrinin öteki durum noktaları
+/// (borç kartı, dikkat barı) işverenin tablosundaki renklerde kalır ([AppShowcaseColors]).
 class _CountDot extends StatelessWidget {
   const _CountDot({required this.count});
 
@@ -585,7 +534,7 @@ class _CountDot extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const _Dot(color: AppShowcaseColors.statusCrit),
+              _Dot(color: AppTone.danger.a),
               const SizedBox(width: AppSpace.xs),
               Flexible(
                 child: Text(
@@ -659,7 +608,7 @@ class _QuickTile extends StatelessWidget {
       excludeSemantics: true,
       child: Material(
         key: tileKey,
-        color: p.surface,
+        color: _cardColor(p),
         shape: _cardShape(p),
         clipBehavior: Clip.antiAlias,
         child: InkWell(

@@ -899,7 +899,8 @@ IconData _iconForItem(SirketMenuItem item) {
 
 /// Menü öğesinin sağındaki sayı rozeti (örn. bekleyen modül talebi, okunmamış duyuru): tehlike tonunun
 /// koyu ucu üstünde beyaz sayı (>= 4,5:1). 99'dan büyük sayılar "99+" yazılır. Ekran okuyucuya tek ifade
-/// olarak okunur ("3 bekleyen" / "3 okunmamış").
+/// olarak okunur ("3 bekleyen" / "3 okunmamış"). Panel vitrinindeki kart rozetinin noktası da AYNI belirteçtir
+/// ([AppTone.danger] `a`): aynı sayı iki yerde aynı renkte görünür.
 class _CountBadge extends StatelessWidget {
   const _CountBadge({required this.count, this.noun = 'bekleyen'});
 

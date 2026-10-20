@@ -9,8 +9,12 @@
 //   erişimi / kapısı olmayan hesapta (yalnız görevli / kurul / site üyeliği) kart, hızlı "Kapıyı aç" ve Eller Serbest yoktur.
 // - Vitrinde hiçbir dokunuş kapı komutu GÖNDERMEZ (sahte serviste openDoor sayılır); Kapılar sayfasına girişte kısa süre
 //   dokunuş yutulur (hızlı çift dokunuş KAPIYI AÇ düğmesine düşmez).
-// - Dar ekran + büyük yazıda taşma yok.
+// - Dar ekran + büyük yazıda taşma yok (320 dp'de yazı 1,0 / 1,15 iki sütun; borç kartı çizili sakin dahil).
+// - Açık temada Panel zemini kaydırılan gövdenin KABINDA düz #F8FAFC'dir: kap acil duyuru şeridinin altından ekranın altına
+//   uzanır, vitrin kendi sınırının dışına boyamaz; içerik ekrana sığarken de şerit örtülmez. Koyu temada ve öteki
+//   sayfalarda kap boyanmaz. Kart rozeti çekmece rozetiyle aynı renktedir.
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -41,6 +45,7 @@ import 'package:site_kapi_kontrol/services/module_access.dart';
 import 'package:site_kapi_kontrol/services/visitor_log_api.dart';
 import 'package:site_kapi_kontrol/styles/app_theme.dart';
 import 'package:site_kapi_kontrol/ui/design/door_open_button.dart';
+import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/create_guest_pass_dialog.dart';
 import 'package:site_kapi_kontrol/ui/helpers/module_showcase.dart';
 import 'package:site_kapi_kontrol/ui/pages/home_page.dart';
@@ -51,6 +56,8 @@ import 'package:site_kapi_kontrol/ui/views/module_showcase_view.dart';
 import 'package:site_kapi_kontrol/ui/views/my_finance_view.dart';
 import 'package:site_kapi_kontrol/ui/widgets/unread_announcement_card.dart';
 import 'package:site_kapi_kontrol/ui/widgets/yan_menu.dart';
+
+import '../design/paint_extent.dart';
 
 final SiteRecord _site = SiteRecord(
   id: 1,
@@ -288,6 +295,26 @@ AnnouncementNotifier _quietNotifier() => AnnouncementNotifier(
   fetchAnnouncement: (id) async => throw StateError('yok'),
   isEligible: () => false,
 );
+
+/// Okunmamış ACİL duyurusu olan sakin ("Gaz kaçağı"): kırmızı şerit gövdenin üstünde çıkar.
+AnnouncementNotifier _urgentNotifier() {
+  const urgent = ResidentAnnouncement(
+    id: 20,
+    siteCode: 1,
+    siteName: 'Güneş Sitesi',
+    title: 'Gaz kaçağı',
+    importance: AnnouncementImportance.urgent,
+  );
+  final notifier = AnnouncementNotifier(
+    fetchSummary: () async =>
+        const NotificationSummary(unreadAnnouncements: 1, unreadUrgent: 1, latestAnnouncementId: 20),
+    fetchInbox: () async => const ResidentAnnouncementPage(items: <ResidentAnnouncement>[urgent]),
+    fetchAnnouncement: (id) async => urgent,
+    isEligible: () => true,
+  );
+  addTearDown(notifier.dispose);
+  return notifier;
+}
 
 /// Ziyaretçi ve Kargo sakin rozeti (`/app/visitor-entries/summary`): istekler sayılır, okunmamış sayısı testten.
 class _VisitorServer {
@@ -1684,13 +1711,235 @@ void main() {
     });
   });
 
+  // tasarim-10 gerileme düzeltmesi: eski düz zemin vitrinin içinden, vitrinin bir ekran boyu üstüne / altına boyanıyordu;
+  // kaydırma görünümü içerik sığınca kırpmadığından üstteki acil duyuru şeridi ÖRTÜLÜYORDU (yalnız görünmez dokunma alanı
+  // kalıyordu). Artık zemin kaydırılan gövdenin kabındadır: şeridin altından ekranın altına. Kanıt golden değil: geometri,
+  // gerçek boya kaydı (kabın ve vitrinin hiçbir boyası kendi sınırını aşmaz) ve isabet testi.
+  group('Panel zemini: kaydırılan gövdenin kabında düz #F8FAFC; acil duyuru şeridi örtülmez', () {
+    final zemin = find.byKey(const ValueKey<String>('panel_vitrin_zemin'));
+    final banner = find.byKey(const ValueKey<String>('urgent_announcement_banner'));
+    final vitrin = find.byKey(const ValueKey<String>('panel_vitrin'));
+
+    /// Kabın ilk boyası kendi dikdörtgeninin tamamı, düz #F8FAFC mi?
+    void expectFlatFill(WidgetTester t, {required String reason}) {
+      final box = t.renderObject<RenderBox>(zemin);
+      final first = paintedShapes(box).first;
+      expect(first.method, #drawRect, reason: reason);
+      expect(first.bounds, Offset.zero & box.size, reason: reason);
+      // Paint rengi kayan nokta (float32) saklar: 8 bitlik ARGB değeriyle karşılaştırılır.
+      expect(first.color.toARGB32(), AppShowcaseColors.background.toARGB32(), reason: reason);
+    }
+
+    /// Kap kendi dikdörtgenini kaplayan bir boya yapıyor mu?
+    bool fillsZemin(WidgetTester t) {
+      final box = t.renderObject<RenderBox>(zemin);
+      return paintedShapes(box).any((s) => rectCovers(s.bounds, Offset.zero & box.size));
+    }
+
+    testWidgets('içerik ekrana sığarken (az kart, büyük ekran) acil duyuru şeridi görünür ve üstü örtülmez', (t) async {
+      final auth = _ShowcaseAuth(UserRole.apartmentOwner);
+      final access = await _access(() => <MySiteModules>[_my('resident')]);
+      await _pumpHome(t, auth, access: access, width: 1280, height: 1600, notifier: _urgentNotifier());
+      await t.pump(const Duration(milliseconds: 600));
+      expect(find.byType(ModuleShowcaseView), findsOneWidget);
+      expect(banner, findsOneWidget);
+      expect(find.text('Okunmamış acil duyuru: Gaz kaçağı'), findsOneWidget);
+      // Hatanın koşulu: içerik kaydırma alanına sığıyor (kaydırma yok), kaydırma görünümü kırpmıyor.
+      expect(t.state<ScrollableState>(_bodyScrollable()).position.maxScrollExtent, 0);
+
+      // Geometri: kap şeridin ve uygulama çubuğunun ALTINDAN başlar; ekranın iki kenarına ve altına uzanır.
+      final bannerRect = t.getRect(banner);
+      final zeminRect = t.getRect(zemin);
+      expect(zeminRect.top, greaterThanOrEqualTo(bannerRect.bottom), reason: 'kap şeridin bölgesine girmez');
+      expect(zeminRect.top, greaterThanOrEqualTo(t.getRect(find.byType(AppBar)).bottom), reason: 'uygulama çubuğu etkilenmez');
+      expect(zeminRect.left, 0);
+      expect(zeminRect.right, 1280);
+      expect(zeminRect.bottom, 1600);
+
+      // Gerçek boya: kap kendi dikdörtgenini düz #F8FAFC boyar; gövdenin (vitrin dahil) hiçbir boyası kabın dışına, yani
+      // şeridin bölgesine düşmez. Vitrin de kendi sınırının dışına boyamaz.
+      expectFlatFill(t, reason: 'Panel açık tema');
+      expect(paintedOutside(t.renderObject<RenderBox>(zemin)), isEmpty, reason: 'gövdenin boyası şeride taşmaz');
+      expect(
+        paintedOutside(t.renderObject<RenderBox>(find.byType(ModuleShowcaseView))),
+        isEmpty,
+        reason: 'vitrin (kökünden) sınırı dışına boya yok',
+      );
+
+      // İsabet: şeridin ortası şeridi bulur; gövdenin kabı orada değildir.
+      final targets = <Object>[for (final entry in t.hitTestOnBinding(bannerRect.center).path) entry.target];
+      expect(targets, contains(t.renderObject(banner)));
+      expect(targets, isNot(contains(t.renderObject(zemin))));
+
+      // Kartlar beyaz + ince #E2E8F0 çerçeve (düz zeminde seçilir; kontrast oranı vitrin testinde).
+      final card = t.widget<Material>(_card(SirketMenuItem.duyurular));
+      expect(card.color, AppShowcaseColors.card);
+      expect((card.shape! as RoundedRectangleBorder).side.color, AppShowcaseColors.cardBorder);
+      await _disposeHome(t);
+    });
+
+    testWidgets(
+        'kap görünen gövdenin tamamını kaplar: kenar boşlukları ve alttaki sistem gezinme çubuğu payı dahil; kaydırılan '
+        'içerik payın üstünde kalır (yerleşim değişmedi)', (t) async {
+      t.view.padding = const FakeViewPadding(bottom: 34);
+      t.view.viewPadding = const FakeViewPadding(bottom: 34);
+      final auth = _ShowcaseAuth(UserRole.apartmentOwner);
+      final access = await _access(() => <MySiteModules>[_my('resident')]);
+      await _pumpHome(t, auth, access: access, width: 360, height: 740);
+      expect(banner, findsNothing);
+      final zeminRect = t.getRect(zemin);
+      expect(zeminRect.top, t.getRect(find.byType(AppBar)).bottom, reason: 'şerit yokken uygulama çubuğunun hemen altı');
+      expect(zeminRect.left, 0);
+      expect(zeminRect.right, 360);
+      expect(zeminRect.bottom, 740, reason: 'sistem çubuğu payının altına kadar');
+      // Kaydırma alanı sistem çubuğunun ÜSTÜNDE biter (eskisi gibi); vitrin 16 dp kenar boşluğuyla.
+      expect(t.getRect(_bodyScrollable()).bottom, 740 - 34);
+      expect(t.getRect(vitrin).left, 16);
+      expect(t.getRect(vitrin).right, 360 - 16);
+      expectFlatFill(t, reason: 'sistem çubuğu payı');
+      await _disposeHome(t);
+    });
+
+    testWidgets(
+        'Geçiş Kontrol kapalı bireysel: vitrinin altındaki ana ekran da düz zeminde; aşağı kaydırınca zemin gradyana '
+        'dönmez (kap kaydırılmaz)', (t) async {
+      final auth = _ShowcaseAuth(UserRole.individual);
+      final access = await _access(() => <MySiteModules>[_my('resident', doorOpen: false)]);
+      await _pumpHome(t, auth, access: access, width: 360, height: 640);
+      final home = find.byType(IndividualHomeView);
+      expect(home, findsOneWidget, reason: 'ana ekran vitrinin altında');
+      expect(find.descendant(of: zemin, matching: home), findsOneWidget, reason: 'ana ekran da kabın içinde');
+      final position = t.state<ScrollableState>(_bodyScrollable()).position;
+      final viewport = t.getRect(_bodyScrollable());
+      // Ön koşul (eski hatanın koşulu): ana ekranın sonu vitrinin bir ekran boyundan da aşağıda.
+      expect(t.getRect(home).bottom, greaterThan(t.getRect(vitrin).bottom + 640));
+      final before = t.getRect(zemin);
+      position.jumpTo(position.maxScrollExtent);
+      await t.pump();
+      expect(t.getRect(zemin), before, reason: 'kap kaydırılmaz');
+      final visibleHome = t.getRect(home).intersect(viewport);
+      expect(visibleHome.height, greaterThan(0), reason: 'ana ekranın sonu görünür');
+      expect(rectCovers(before, visibleHome), isTrue, reason: 'görünen ana ekranın tamamı düz zeminin üstünde');
+      expectFlatFill(t, reason: 'kaydırılmış bireysel ana ekran');
+      expect(paintedOutside(t.renderObject<RenderBox>(zemin)), isEmpty, reason: 'kaydırılmışken de taşma yok');
+      await _disposeHome(t);
+    });
+
+    testWidgets('koyu temada ve öteki sayfalarda kap boyanmaz; tema / sayfa değişince gövde alt ağacı yeniden kurulmaz',
+        (t) async {
+      final mode = ValueNotifier<ThemeMode>(ThemeMode.light);
+      addTearDown(mode.dispose);
+      final auth = _ShowcaseAuth(UserRole.apartmentOwner);
+      final access = await _access(() => <MySiteModules>[_my('resident')]);
+      final notifier = _quietNotifier();
+      addTearDown(notifier.dispose);
+      t.view.physicalSize = const Size(400, 1400);
+      t.view.devicePixelRatio = 1.0;
+      addTearDown(t.view.reset);
+      await t.pumpWidget(
+        ValueListenableBuilder<ThemeMode>(
+          valueListenable: mode,
+          builder: (context, value, _) => MaterialApp(
+            theme: AppTheme.light(),
+            darkTheme: AppTheme.dark(),
+            themeMode: value,
+            home: HomePage(authService: auth, moduleAccess: access, announcementNotifier: notifier),
+          ),
+        ),
+      );
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 600));
+      Color? color() => (t.widget<DecoratedBox>(zemin).decoration as BoxDecoration).color;
+
+      expect(find.byType(ModuleShowcaseView), findsOneWidget);
+      expect(color(), AppShowcaseColors.background);
+      expectFlatFill(t, reason: 'açık tema');
+      final zeminElement = t.element(zemin);
+      final scroll = t.state<ScrollableState>(_bodyScrollable());
+
+      mode.value = ThemeMode.dark;
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 600));
+      expect(color(), isNull, reason: 'koyu temada boyama yok');
+      expect(fillsZemin(t), isFalse, reason: 'koyu temada kap boyamaz (koyu zemin olduğu gibi)');
+      expect(identical(t.element(zemin), zeminElement), isTrue, reason: 'kap yeniden kurulmadı');
+      expect(identical(t.state<ScrollableState>(_bodyScrollable()), scroll), isTrue, reason: 'kaydırma görünümü korunur');
+
+      mode.value = ThemeMode.light;
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 600));
+      expect(color(), AppShowcaseColors.background);
+
+      // Öteki sayfa (Profilim): kap boyanmaz, uygulama zemini görünür; Panel'e dönünce yine düz.
+      final profil = find.byKey(const ValueKey<String>('panel_ikincil_profilim'));
+      await t.ensureVisible(profil);
+      await t.tap(profil);
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 600));
+      expect(find.byType(ModuleShowcaseView), findsNothing);
+      expect(color(), isNull, reason: 'Panel dışında kap boyanmaz');
+      expect(fillsZemin(t), isFalse);
+      expect(identical(t.state<ScrollableState>(_bodyScrollable()), scroll), isTrue, reason: 'sayfa değişince de korunur');
+      expect(await _back(t), isTrue);
+      expect(find.byType(ModuleShowcaseView), findsOneWidget);
+      expectFlatFill(t, reason: 'Panel’e dönüş');
+      await _disposeHome(t);
+    });
+  });
+
+  // tasarim-12: aynı bekleyen sayı çekmecede ve Panel kartında aynı renkte (aynı belirteç).
+  testWidgets('rozet rengi: vitrin kart rozetinin noktası çekmece rozetinin dolgusuyla aynı belirteç (AppTone.danger.a)',
+      (t) async {
+    final auth = _ShowcaseAuth(UserRole.superUser);
+    final access = await _access(() => const <MySiteModules>[], superUser: true, pendingModules: 3);
+    await _pumpHome(t, auth, access: access);
+    Color? colorOf(Finder f) => (t.widget<DecoratedBox>(f).decoration as BoxDecoration).color;
+    final cardBadge = find.descendant(
+      of: _card(SirketMenuItem.modulTalepleri),
+      matching: find.byKey(const ValueKey<String>('panel_kart_rozet')),
+    );
+    expect(find.descendant(of: cardBadge, matching: find.text('3')), findsOneWidget);
+    final cardColor = colorOf(find.descendant(of: cardBadge, matching: find.byKey(const ValueKey<String>('panel_durum_noktasi'))));
+
+    await _openDrawer(t);
+    final drawerBadge = find.descendant(
+      of: find.widgetWithText(ListTile, YanMenu.titleFor(SirketMenuItem.modulTalepleri, UserRole.superUser)),
+      matching: find.byKey(const ValueKey<String>('yan_menu_rozet')),
+    );
+    expect(find.descendant(of: drawerBadge, matching: find.text('3')), findsOneWidget);
+    expect(cardColor, colorOf(drawerBadge), reason: 'aynı sayı çekmecede ve Panel kartında aynı renk');
+    expect(cardColor, AppTone.danger.a);
+    await _closeDrawer(t);
+    await _disposeHome(t);
+  });
+
   group('taşma yok: dar ekran + yazı ölçeği 2,0 ve geniş ekran', () {
-    final roles = <(String, UserRole, List<MySiteModules> Function(), bool)>[
+    // Borç bilgisi BAŞARIYLA dönen sakin (test-13): hero borç kartı (vadesi geçen + sıradaki vade satırlarıyla) çizilir.
+    Future<MyFinance> debt() async => MyFinance(
+          items: [
+            MyFinanceApartment(
+              siteCode: 1,
+              siteName: 'Güneş Sitesi',
+              apartmentId: 5,
+              label: 'D:3',
+              blockName: 'A Blok',
+              balanceMinor: 32500000,
+              overdueMinor: 100000,
+              nextDueDate: DateTime(2026, 11, 10),
+            ),
+          ],
+        );
+    List<MySiteModules> residentSites() => <MySiteModules>[
+          _my('resident', modules: {'announcements': true, 'finance': true, 'documents': true, 'work_tracking': true}),
+        ];
+    // (etiket, rol, my-modules, süper mi, borç özeti: null = ağ hatası, hero selamlamadır)
+    final roles = <(String, UserRole, List<MySiteModules> Function(), bool, Future<MyFinance> Function()?)>[
       (
         'süper kullanıcı',
         UserRole.superUser,
         () => const <MySiteModules>[],
         true,
+        null,
       ),
       (
         'site yöneticisi',
@@ -1699,23 +1948,22 @@ void main() {
           _my('manager', modules: {'announcements': true, 'finance': true, 'work_tracking': true, 'documents': true}),
         ],
         false,
+        null,
       ),
-      (
-        'daire sakini',
-        UserRole.apartmentOwner,
-        () => <MySiteModules>[
-          _my('resident', modules: {'announcements': true, 'finance': true, 'documents': true, 'work_tracking': true}),
-        ],
-        false,
-      ),
+      ('daire sakini', UserRole.apartmentOwner, residentSites, false, null),
+      ('daire sakini (borç kartı)', UserRole.apartmentOwner, residentSites, false, debt),
       (
         'bireysel',
         UserRole.individual,
         () => const <MySiteModules>[],
         false,
+        null,
       ),
     ];
     const cells = <(double, double, double, bool)>[
+      // test-13: 320 dp telefonda normal ve biraz büyük yazı da GERÇEK sayfada (vitrin 288 dp, iki sütun) sınanır.
+      (320, 640, 1.0, false),
+      (320, 640, 1.15, true),
       (320, 640, 2.0, false),
       (320, 640, 2.0, true),
       (360, 740, 1.5, false),
@@ -1723,14 +1971,33 @@ void main() {
       (1366, 768, 1.0, true),
     ];
 
-    for (final (label, role, sites, isSuper) in roles) {
+    for (final (label, role, sites, isSuper, finance) in roles) {
       for (final (w, h, scale, dark) in cells) {
         testWidgets('$label: ${w.toInt()}x${h.toInt()} x$scale ${dark ? 'koyu' : 'açık'}', (t) async {
-          final auth = _ShowcaseAuth(role, finance: () async => throw StateError('ağ'));
+          final auth = _ShowcaseAuth(role, finance: finance ?? () async => throw StateError('ağ'));
           final access = await _access(sites, superUser: isSuper, pendingModules: 12, pendingApplications: 3);
           await _pumpHome(t, auth, access: access, width: w, height: h, scale: scale, dark: dark);
-          expect(find.byType(ModuleShowcaseView), findsOneWidget);
+          final showcase = find.byType(ModuleShowcaseView);
+          expect(showcase, findsOneWidget);
           expect(t.takeException(), isNull, reason: 'RenderFlex taşması yok');
+          if (finance != null) {
+            expect(find.byKey(const ValueKey<String>('panel_hero_borc')), findsOneWidget, reason: 'borç kartı çizildi');
+          }
+          // Gerçek sayfa genişliği (16 / 20 dp kenar boşluğu, en çok 1100 dp) ve bu genişlikteki sütun kuralı: 320 dp'de
+          // vitrin 288 dp, yazı 1,0 / 1,15 iki sütun, daha büyük yazı tek sütun.
+          final width = t.getSize(find.byKey(const ValueKey<String>('panel_vitrin'))).width;
+          expect(width, math.min(w - 2 * (w < 600 ? 16 : 20), 1100.0), reason: 'vitrin genişliği');
+          final grid = buildShowcaseModel(menuItems: t.widget<ModuleShowcaseView>(showcase).menuItems, role: role).grid;
+          if (grid.length >= 2) {
+            final a = t.getTopLeft(_card(grid[0].item)).dy;
+            final b = t.getTopLeft(_card(grid[1].item)).dy;
+            if (showcaseColumns(width, scale) >= 2) {
+              expect(b, a, reason: 'ilk iki kart aynı satırda');
+            } else {
+              expect(b, greaterThan(a), reason: 'tek sütun');
+            }
+          }
+          if (w == 320 && scale <= 1.15) expect(showcaseColumns(width, scale), 2, reason: '320 dp normal yazı: iki sütun');
           // Sayfanın tamamı kaydırılarak gezilir: alt uçta da taşma/hata yok.
           final scroll = find.byType(SingleChildScrollView).first;
           await t.drag(scroll, const Offset(0, -3000));
