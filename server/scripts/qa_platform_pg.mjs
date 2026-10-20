@@ -201,6 +201,7 @@ const CATALOG_TABLES = [
   'receipts',
   'receipt_counters',
   'late_fee_runs',
+  'late_fee_run_lines',
   'expenses',
   'account_movements',
   'finance_reminder_runs',
@@ -256,10 +257,10 @@ async function readCatalog(client) {
   const triggers = await client.query(
     `SELECT c.relname AS tbl, t.tgname, regexp_replace(pg_get_triggerdef(t.oid), '\\s+', ' ', 'g') AS def
      FROM pg_trigger t INNER JOIN pg_class c ON c.oid = t.tgrelid
-     WHERE NOT t.tgisinternal AND t.tgname IN ('trg_users_preserve_site_people', 'trg_ledger_entries_append_only', 'trg_ledger_entries_reversal_check', 'trg_ledger_entries_no_truncate', 'trg_fee_runs_append_only', 'trg_fee_runs_no_truncate', 'trg_finance_period_closures_no_update', 'trg_board_decisions_immutable', 'trg_board_decisions_no_truncate') ORDER BY 1, 2`,
+     WHERE NOT t.tgisinternal AND t.tgname IN ('trg_users_preserve_site_people', 'trg_ledger_entries_append_only', 'trg_ledger_entries_reversal_check', 'trg_ledger_entries_no_truncate', 'trg_fee_runs_append_only', 'trg_fee_runs_no_truncate', 'trg_finance_period_closures_no_update', 'trg_board_decisions_immutable', 'trg_board_decisions_no_truncate', 'trg_ledger_entries_account_party', 'trg_late_fee_run_lines_account') ORDER BY 1, 2`,
   );
   const functions = await client.query(
-    `SELECT proname, regexp_replace(prosrc, '\\s+', ' ', 'g') AS src FROM pg_proc WHERE proname IN ('trg_users_preserve_site_people', 'trg_ledger_entries_append_only', 'trg_ledger_entries_reversal_check', 'trg_fee_runs_append_only', 'trg_finance_period_closures_no_update', 'trg_finance_block_truncate', 'trg_board_decisions_immutable', 'trg_board_decisions_block_truncate') ORDER BY 1`,
+    `SELECT proname, regexp_replace(prosrc, '\\s+', ' ', 'g') AS src FROM pg_proc WHERE proname IN ('trg_users_preserve_site_people', 'trg_ledger_entries_append_only', 'trg_ledger_entries_reversal_check', 'trg_fee_runs_append_only', 'trg_finance_period_closures_no_update', 'trg_finance_block_truncate', 'trg_board_decisions_immutable', 'trg_board_decisions_block_truncate', 'trg_ledger_entries_account_party', 'trg_late_fee_run_lines_account') ORDER BY 1`,
   );
   // tohum satirlari (zamandan bagimsiz alanlar): migration zinciri ile ensureDbSchema ayni tohumu yazmali
   const seeds = {
