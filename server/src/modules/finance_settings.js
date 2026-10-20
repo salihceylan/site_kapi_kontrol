@@ -26,9 +26,22 @@ import {
   periodLabel,
 } from './finance_common.js';
 import { lockActorRow, recordFinanceAudit, withFinanceTransaction } from './finance_tx.js';
+import { todayIso } from './people_common.js';
 import { parseFlag } from './platform_config_service.js';
+import { getRule } from './platform_rules.js';
 
 export const LEGAL_OK_KEY = 'finance.legal_ok';
+
+/**
+ * Kurallar tablosu (G11; docs/PLATFORM_KURALLAR.md): aylık oran üst sınırı bu kuraldan okunur. Etkin üst sınır = min(kural, LATE_FEE_MAX_MONTHLY_BP):
+ * kural kendi sınırına (0..500) zaten kırpılır, yasal sınır (KMK m.20, 500 bp) burada da korunur.
+ */
+export const LATE_FEE_MAX_RULE_KEY = 'finance.late_fee.monthly_bp_max';
+
+/** Bugünün (İstanbul) etkin oran üst sınırı (baz puan). `db`: havuz ya da işlem istemcisi (kural satırları kısa önbellekte). */
+export async function lateFeeMaxRateBp(db = pool, now = new Date()) {
+  return Math.min(await getRule(db, LATE_FEE_MAX_RULE_KEY, { onDate: todayIso(now) }), LATE_FEE_MAX_MONTHLY_BP);
+}
 export const LATE_FEE_METHODS = Object.freeze(['daily_30', 'daily_actual']);
 
 /** Satır yokken dönen varsayılanlar (sütun varsayılanlarıyla aynı). */
@@ -71,11 +84,18 @@ function normalizeRow(row) {
   };
 }
 
-/** Etkin ayarlar (satır yoksa varsayılanlar). `lock`: yazma yolunda satır FOR SHARE ile okunur. */
+/**
+ * Etkin ayarlar (satır yoksa varsayılanlar). Gecikme tazminatı AÇIKKEN aylık oran kurallar tablosundaki üst sınıra kırpılır (önizleme, onay ve özet
+ * kırpılmış oranla yapılır); KAPALIYKEN oran hiçbir hesaba girmediğinden kural okunmaz (ödeme / hatırlatma yolunda ek sorgu yok).
+ */
 export async function loadEffectiveSettings(db, siteCode) {
   const result = await db.query(`SELECT ${SETTINGS_COLUMNS} FROM finance_settings WHERE site_code = $1`, [siteCode]);
   const row = result.rows?.[0];
-  return row ? normalizeRow(row) : { ...SETTINGS_DEFAULTS };
+  const settings = row ? normalizeRow(row) : { ...SETTINGS_DEFAULTS };
+  if (settings.late_fee_enabled) {
+    settings.late_fee_rate_bp = Math.min(settings.late_fee_rate_bp, await lateFeeMaxRateBp(db));
+  }
+  return settings;
 }
 
 /** Sistem düzeyi hukuk onayı bayrağı (platform_settings finance.legal_ok); satır yok/geçersiz = KAPALI. */
@@ -97,16 +117,16 @@ export async function loadLateFeeChainState(db, siteCode, settings) {
 
 const label = (periodIso) => (periodIso === null || periodIso === undefined ? null : periodLabel(periodIso));
 
-/** GET settings gövdesi. */
-export function settingsBody(settings, chain, { legalOk, smtpConfigured }) {
+/** GET settings gövdesi. `maxRateBp`: etkin oran üst sınırı (kurallar tablosu; verilmezse yasal sınır); gösterilen oran bu sınıra kırpılır. */
+export function settingsBody(settings, chain, { legalOk, smtpConfigured, maxRateBp = LATE_FEE_MAX_MONTHLY_BP }) {
   return {
     settings_version: settings.settings_version,
     legal_ok: legalOk,
     receipts: { auto_issue: settings.receipts_auto_issue },
     late_fee: {
       enabled: settings.late_fee_enabled,
-      rate_bp: settings.late_fee_rate_bp,
-      max_rate_bp: LATE_FEE_MAX_MONTHLY_BP,
+      rate_bp: Math.min(settings.late_fee_rate_bp, maxRateBp),
+      max_rate_bp: maxRateBp,
       method: settings.late_fee_method,
       grace_days: settings.late_fee_grace_days,
       start_period: label(settings.late_fee_start_period),
@@ -127,7 +147,8 @@ export function settingsBody(settings, chain, { legalOk, smtpConfigured }) {
 export async function getSettings(siteCode, db = pool) {
   const settings = await loadEffectiveSettings(db, siteCode);
   const chain = await loadLateFeeChainState(db, siteCode, settings);
-  return settingsBody(settings, chain, { legalOk: await readLegalOk(db), smtpConfigured: isSmtpConfigured() });
+  const maxRateBp = await lateFeeMaxRateBp(db);
+  return settingsBody(settings, chain, { legalOk: await readLegalOk(db), smtpConfigured: isSmtpConfigured(), maxRateBp });
 }
 
 // --- PUT ---------------------------------------------------------------------------------------------------------------------------------
@@ -242,6 +263,12 @@ export async function updateSettings({ siteCode, body, actor, now = new Date() }
     if (next.late_fee_enabled && next.late_fee_start_period === null) {
       throw invalidBody('Gecikme tazminatını açmak için başlangıç ayını girin.');
     }
+    // Oran üst sınırı kurallar tablosundan (yasal 500 ayrıştırmada ve DB CHECK'inde de korunur). Yalnız GÖNDERİLEN oran denetlenir: sınır sonradan
+    // düşürüldüyse saklı yüksek oran başka alanların kaydını engellemez; hesapta zaten sınıra kırpılır (loadEffectiveSettings).
+    const maxRateBp = await lateFeeMaxRateBp(client, now);
+    if (hasOwn(input.changes, 'late_fee_rate_bp') && input.changes.late_fee_rate_bp > maxRateBp) {
+      throw invalidBody(`Aylık oran (baz puan) 0 ile ${maxRateBp} arasında bir tamsayı olmalıdır.`);
+    }
     if (hasOwn(input.changes, 'late_fee_start_period') && input.changes.late_fee_start_period !== current.late_fee_start_period) {
       const chain = await loadLateFeeChainState(client, siteCode, current);
       if (chain.lastRunId !== null) {
@@ -266,7 +293,7 @@ export async function updateSettings({ siteCode, body, actor, now = new Date() }
     await recordFinanceAudit(client, actor, 'finance.settings.updated', siteCode, siteCode, { fields: input.keys });
     const settings = await loadEffectiveSettings(client, siteCode);
     const chain = await loadLateFeeChainState(client, siteCode, settings);
-    return settingsBody(settings, chain, { legalOk, smtpConfigured: isSmtpConfigured() });
+    return settingsBody(settings, chain, { legalOk, smtpConfigured: isSmtpConfigured(), maxRateBp });
   });
 }
 
