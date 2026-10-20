@@ -2164,6 +2164,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   void _applyMenuSelection(SirketMenuItem item) {
+    // İP-1D (a): kapı isteği modül verisini beklerken kullanıcı kendisi başka bir sayfa açtıysa istek düşer: geç gelen
+    // veriyle sayfa kendiliğinden Kapılar'a dönmez.
+    if (_doorRequestWaiting && item != SirketMenuItem.kapilar) widget.doorPanelRequests?.clear();
     if (_selectedMenu != item) {
       if (item == SirketMenuItem.kapilar) _armDoorEntryGuard();
       _jumpBodyToTop();

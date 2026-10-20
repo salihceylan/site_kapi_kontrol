@@ -619,6 +619,30 @@ void main() {
       await _disposeHome(t);
     });
 
+    testWidgets('beklerken kullanıcı kendisi başka sayfa açarsa istek düşer: veri gelince sayfa değişmez', (t) async {
+      final gate = Completer<MyModulesResult>();
+      final access = ModuleAccess(fetch: () => gate.future);
+      addTearDown(access.dispose);
+      final requests = DoorPanelRequests()..request();
+      addTearDown(requests.dispose);
+      final auth = _NavAuth(UserRole.apartmentOwner);
+      await _pumpHome(t, auth, access: access, requests: requests);
+      expect(requests.isPending, isTrue);
+      await _openSettings(t);
+      await t.tap(_settingsTile(SirketMenuItem.profilim));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 600));
+      expect(_inAppBar(find.text('Profilim')), findsOneWidget);
+      expect(requests.isPending, isFalse, reason: 'kullanıcının seçimi bekleyen kapı isteğini düşürür');
+
+      gate.complete(MyModulesResult(sites: <MySiteModules>[_my('resident')]));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 700));
+      expect(_inAppBar(find.text('Profilim')), findsOneWidget, reason: 'geç gelen veri sayfayı Kapılar\'a çevirmez');
+      expect(find.byType(DashboardView), findsNothing);
+      await _disposeHome(t);
+    });
+
     testWidgets('ilk yükleme hata verirse (fail-open) istek uygulanır: Kapılar açılır', (t) async {
       final access = ModuleAccess(fetch: () async => throw StateError('ağ yok'));
       addTearDown(access.dispose);
