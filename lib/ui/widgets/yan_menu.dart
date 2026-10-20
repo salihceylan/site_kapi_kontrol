@@ -150,6 +150,97 @@ enum SirketMenuItem {
   kapilar,
 }
 
+/// İP-1D / G2 (karar kaydı 2026-10-21, sözleşme 2.4): çekmece menüsünün başlıkları. Çekmecede yalnız [drawerGroups]
+/// (8 başlık) vardır ve kullanıcıya görünür öğesi olmayan başlık çizilmez. [ayarlar] çekmece başlığı DEĞİLDİR: o
+/// gruptaki öğeler (profil, kullanıcılar, modüller, cihazlar, denetim kaydı, platform ayarları ...) sağ üstteki
+/// dişliden açılan "Ayarlar" panelindedir ([YanMenuAyarlar]).
+enum SirketMenuGroup {
+  anaSayfa('Ana sayfa'),
+  daireler('Daireler'),
+  borclar('Borçlar'),
+  tahsilat('Tahsilat'),
+  giderler('Giderler'),
+  iletisim('İletişim'),
+  raporlar('Raporlar'),
+  siteHizmetleri('Site hizmetleri'),
+  ayarlar('Ayarlar');
+
+  const SirketMenuGroup(this.title);
+
+  /// Başlık metni: çekmecede bölüm başlığı, [ayarlar] için Ayarlar panelinin başlığı.
+  final String title;
+
+  /// Çekmecedeki 8 başlık, karar G2 sırasıyla (Yol Haritası PDF'teki 7 başlık + bizdeki ek modüller için "Site
+  /// hizmetleri"). [ayarlar] burada yoktur.
+  static const List<SirketMenuGroup> drawerGroups = <SirketMenuGroup>[
+    anaSayfa,
+    daireler,
+    borclar,
+    tahsilat,
+    giderler,
+    iletisim,
+    raporlar,
+    siteHizmetleri,
+  ];
+}
+
+/// Menü öğesinin grubu (sözleşme 2.4). Yeni ekran eklemek = [SirketMenuItem] değeri + buradaki eşleme + görünürlük
+/// kuralı (`HomePage._extraMenuItems` / `_canAccessMenu`); `switch` ifadesi eşlemesi yazılmamış öğeyi derletmez.
+/// Tahsilat, Giderler ve Raporlar bugün boştur (başlıkları görünmez): dekont / banka dosyası Tahsilat'a, gider analizi
+/// Giderler'e, faaliyet raporu / icra dökümü Raporlar'a eklenecektir. Talepler ve anketler yönetimle sakin arasındaki
+/// yazışma kanalı olduğundan İletişim'dedir (karar G2'nin "Site hizmetleri" listesinde yoklar).
+SirketMenuGroup menuGroupOf(SirketMenuItem item) => switch (item) {
+      SirketMenuItem.dashboard => SirketMenuGroup.anaSayfa,
+      SirketMenuItem.siteler ||
+      SirketMenuItem.daireKullanicilariYonetimi ||
+      SirketMenuItem.kisiler ||
+      SirketMenuItem.katilimVeKurulum =>
+        SirketMenuGroup.daireler,
+      SirketMenuItem.finans || SirketMenuItem.borcum => SirketMenuGroup.borclar,
+      SirketMenuItem.duyurular ||
+      SirketMenuItem.talepler ||
+      SirketMenuItem.taleplerim ||
+      SirketMenuItem.anketler ||
+      SirketMenuItem.anket =>
+        SirketMenuGroup.iletisim,
+      SirketMenuItem.kapilar ||
+      SirketMenuItem.belgeler ||
+      SirketMenuItem.rezervasyonlar ||
+      SirketMenuItem.rezervasyon ||
+      SirketMenuItem.ziyaretciKayitlari ||
+      SirketMenuItem.ziyaretcilerim ||
+      SirketMenuItem.sozlesmeler ||
+      SirketMenuItem.kararDefteri ||
+      SirketMenuItem.kararlar =>
+        SirketMenuGroup.siteHizmetleri,
+      SirketMenuItem.profilim ||
+      SirketMenuItem.ellerSerbest ||
+      SirketMenuItem.abonelikTalepleri ||
+      SirketMenuItem.siteOnayTalepleri ||
+      SirketMenuItem.kullaniciYonetimi ||
+      SirketMenuItem.superUserYonetimi ||
+      SirketMenuItem.siteYoneticileriYonetimi ||
+      SirketMenuItem.cihazEkle ||
+      SirketMenuItem.kayitliCihazlar ||
+      SirketMenuItem.bluetoothWifiKur ||
+      SirketMenuItem.moduller ||
+      SirketMenuItem.denetimKaydi ||
+      SirketMenuItem.modulTalepleri ||
+      SirketMenuItem.siteBasvurulari ||
+      SirketMenuItem.platformAyarlari ||
+      SirketMenuItem.istemciHatalari =>
+        SirketMenuGroup.ayarlar,
+    };
+
+/// Çekmecenin bir bölümü: başlık + o başlıktaki görünür öğeler (menü sırasıyla). Boş bölüm üretilmez.
+@immutable
+class YanMenuSection {
+  const YanMenuSection(this.group, this.items);
+
+  final SirketMenuGroup group;
+  final List<SirketMenuItem> items;
+}
+
 class YanMenu extends StatelessWidget {
   const YanMenu({
     super.key,
@@ -228,6 +319,28 @@ class YanMenu extends StatelessWidget {
         .where((item) => !hiddenItems.contains(item))
         .toList(growable: false);
   }
+
+  /// Görünür öğelerin ([visibleItems]) çekmece bölümleri: [SirketMenuGroup.drawerGroups] sırasıyla, yalnız öğesi olan
+  /// başlıklar; grup içinde menü sırası korunur. Ayarlar öğeleri burada YOKTUR ([settingsItems]).
+  static List<YanMenuSection> drawerSections(List<SirketMenuItem> items) => <YanMenuSection>[
+        for (final group in SirketMenuGroup.drawerGroups)
+          if (items.any((item) => menuGroupOf(item) == group))
+            YanMenuSection(group, <SirketMenuItem>[
+              for (final item in items)
+                if (menuGroupOf(item) == group) item,
+            ]),
+      ];
+
+  /// Çekmecede çizilen öğeler, ekrandaki sırayla (bölümler art arda).
+  static List<SirketMenuItem> drawerItems(List<SirketMenuItem> items) => <SirketMenuItem>[
+        for (final section in drawerSections(items)) ...section.items,
+      ];
+
+  /// Sağ üstteki dişliden açılan "Ayarlar" panelinin öğeleri (menü sırasıyla). Çekmece + Ayarlar = görünür öğeler.
+  static List<SirketMenuItem> settingsItems(List<SirketMenuItem> items) => <SirketMenuItem>[
+        for (final item in items)
+          if (menuGroupOf(item) == SirketMenuGroup.ayarlar) item,
+      ];
 
   /// Öğenin çekmecedeki başlığı (vitrin kartı aynı metni kullanır).
   static String titleFor(SirketMenuItem item, [UserRole? role]) => _titleForItem(item, role);
