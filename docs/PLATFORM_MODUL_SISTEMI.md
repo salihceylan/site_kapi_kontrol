@@ -123,7 +123,46 @@ Hata: HTTP 403 `{ "error": "Geçiş Kontrol modülü kapalı.", "code": "MODULE_
 - **AuthApi/AuthService:** `getModuleCatalog`, `getMyModules`, `getSiteModules(siteCode)`, `setSiteModule(siteCode, code, enabled, {confirm})`, `listAuditLog({siteCode, limit, beforeId})`, `listStaffRoles(siteCode)`, `assignStaffRole(siteCode, email, role)`, `removeStaffRole(siteCode, userCode)`; `setupSite`/`createSite` `managementType` iletir.
 - **Hata kodları → Türkçe mesaj** (`messageForErrorCode`, her biri <140 karakter, '_' içermez): `MODULE_DISABLED` "Bu özellik şu an kapalı. Site yöneticisi Modüller ekranından açabilir." · `MODULE_COMING_SOON` "Bu modül yakında." · `MODULE_NOT_TOGGLEABLE` "Bu modül kapatılamaz." · `MODULE_NOT_FOUND` "Modül bulunamadı." · `MODULE_CONFIRM_REQUIRED` (sunucu metni kullanılır; uygulama onay penceresini önceden gösterir) · `MANAGEMENT_TYPE_COMING_SOON` "Bu yönetim türü yakında." · `MANAGEMENT_TYPE_INVALID` "Geçersiz yönetim türü." · `USER_NOT_FOUND` "Bu e-posta ile kayıtlı hesap yok." · `USER_NOT_ACTIVE` "Bu hesap henüz etkin değil." · `ALREADY_SITE_MANAGER` "Bu kişi zaten site yöneticisi." · `ROLE_INVALID` "Geçersiz rol." · `ROLE_NOT_FOUND` "Bu kişide kurul veya görevli rolü yok." (mevcut kodlarla çakışanlar yeniden kullanılır).
 - **ModuleAccess** (ChangeNotifier, `lib/services/module_access.dart`): girişten sonra ve her genel yenilemede `getMyModules` çeker; `AdaptivePoller` ile kısa aralıklı tazelenir (arka planda durur). `isEnabled(siteCode, code)`, `anyEnabled(code)`, `sitesWith(code)`. Süper kullanıcıda her şey açık sayılır. Çağrı hatası durumunda mevcut değer korunur; ilk yükleme başarısızsa TÜM modüller açık sayılır (fail-open: ağ hatası yüzünden menüler kaybolmasın).
-- **Menü:** `SirketMenuItem.moduller` ("Modüller": süper kullanıcı + site yöneticisi yönetici modunda), `SirketMenuItem.denetimKaydi` ("Denetim Kaydı": yalnız süper kullanıcı). `YanMenu`'ye gizlenecek öğe kümesi verilir; `_canAccessMenu` aynı süzgeci uygular. Süper olmayan kullanıcıda, bağlı OLDUĞU TÜM sitelerde `door_control` kapalıysa kapıyla ilgili öğeler (`kayitliCihazlar`, `bluetoothWifiKur`, `ellerSerbest`) gizlenir; `dashboard` kalır ve kapı kartları yerine "Geçiş Kontrol modülü kapalı" bilgi kartı gösterilir. Panel'deki site seçici yalnız modülü açık siteleri listeler.
+- **Menü:** `SirketMenuItem.moduller` ("Modüller": süper kullanıcı + site yöneticisi yönetici modunda), `SirketMenuItem.denetimKaydi` ("Denetim Kaydı": yalnız süper kullanıcı). `YanMenu`'ye gizlenecek öğe kümesi verilir; `_canAccessMenu` aynı süzgeci uygular. Süper olmayan kullanıcıda, bağlı OLDUĞU TÜM sitelerde `door_control` kapalıysa kapıyla ilgili öğeler (`kayitliCihazlar`, `bluetoothWifiKur`, `ellerSerbest`) gizlenir; `dashboard` kalır ve kapı kartları yerine "Geçiş Kontrol modülü kapalı" bilgi kartı gösterilir. Panel'deki site seçici yalnız modülü açık siteleri listeler. Menünün başlıklara ve Ayarlar paneline dağılımı, çekmecedeki site seçici ve sakin alt çubuğu: aşağıda "Menü grupları ... (İP-1D)".
+
+### Menü grupları, Ayarlar paneli, site seçici ve sakin alt çubuğu (İP-1D, 2026-10-21; karar G2 + G3)
+
+Görünürlük kuralı DEĞİŞMEDİ ve tek yerdedir: `YanMenu.visibleItems` (rol listesi + `HomePage._extraMenuItems` - `_hiddenMenuItems`). Aynı liste
+çekmeceye, Ayarlar paneline, Panel vitrinine ve sakin alt çubuğuna dağıtılır; kapalı / yetkisiz modülün öğesi bu dört yüzeyin hiçbirinde yoktur
+(fail-closed) ve modül kapanınca öğe dördünden de kalkar (açık sayfa Panel'e düşer).
+
+- **Grup eşlemesi** (`menuGroupOf`, `lib/ui/widgets/yan_menu.dart`; `switch` ifadesi eksik eşlemeyi derletmez): her `SirketMenuItem` tam bir yere gider.
+
+| Grup (`SirketMenuGroup`) | Öğeler |
+|---|---|
+| Ana sayfa | Panel |
+| Daireler | Site Yönetimi, Daire Sakinleri, Kişiler, Daireye Katıl & Cihaz Ekle |
+| Borçlar | Finans, Borcum |
+| Tahsilat | (bugün boş: dekont bildirimi, banka dosyası buraya gelecek) |
+| Giderler | (bugün boş: gider analizi buraya gelecek) |
+| İletişim | Duyurular, Talepler, Taleplerim, Anket ve Oylama, Anketler |
+| Raporlar | (bugün boş: faaliyet raporu, icra dökümü buraya gelecek) |
+| Site hizmetleri | Kapılar, Belgeler, Rezervasyonlar, Rezervasyon, Ziyaretçi ve Kargo, Ziyaretçilerim, Sözleşmeler, Karar Defteri, Kararlar |
+| Ayarlar (dişli; çekmece başlığı değil) | Profilim, Eller Serbest, Kullanıcı / Süper Kullanıcı / Site Yöneticileri Yönetimi, Modüller, Modül Talepleri, Site Başvuruları, cihaz ekranları, Bluetooth ile Wi-Fi Kur, Denetim Kaydı, Platform Ayarları, İstemci Hataları (+ eski iki talep ekranı) |
+
+- **Çekmece**: yalnız görünür öğesi olan başlıklar, `SirketMenuGroup.drawerGroups` sırasıyla (`YanMenu.drawerSections`); grup içinde menü sırası
+  korunur. Rozetler (bekleyen / okunmamış) çekmecede ve Ayarlar panelinde öğenin yanındadır.
+- **Ayarlar paneli** (`YanMenuAyarlar`, `Scaffold.endDrawer`): AppBar'ın en sağındaki dişli açar; öğeler `YanMenu.settingsItems`. Paneldeki öğelerin
+  rozet toplamı dişlide görünür (süper kullanıcının bekleyen modül talebi / site başvurusu sayıları dişlinin arkasında kaybolmaz). Panelde ayrıca
+  "Masaüstüne Widget Ekle" eylemi (mobil, süper kullanıcı dışı).
+- **Yeni ekran eklemek** = `SirketMenuItem` değeri + `menuGroupOf` eşlemesi + görünürlük kuralı (`_extraMenuItems` ve `_canAccessMenu`; modül
+  kapalıyken ya da modül verisi yokken eklenmez). Yeni grup gerekmez; boş başlıklar öğesi gelince kendiliğinden görünür.
+- **Site seçici** (çekmecenin en üstü): veriler `ModuleAccess.allSites`; yönetici görünümünde (süper kullanıcı hariç) iki ve daha çok sitede seçicidir.
+  Seçim `ModuleAccess.setScopeSiteCode` ile kapsamı daraltır: `result` ve bütün sorgular (`isEnabled`, `anyEnabled`, `sitesWith`,
+  `boardMemberSites`, `isDisabledEverywhere`) yalnız o siteyle çalışır; kapsam dışı site kapalı sayılır (menüler yalnız daralır). Kapsamdaki site
+  sonraki `my-modules` yanıtında yoksa kapsam düşer; `clear` (çıkış) ve mod değişimi kapsamı sıfırlar; süper kullanıcıda kapsam yoktur. Sunucu
+  sorguları değişmez (kapsam yalnız istemci süzgecidir; yetkiyi sunucu yine doğrular). Kendi site listesini sunucudan çeken ekranlar (Kişiler /
+  Duyurular yönetimi, Modüller) kendi seçicisini korur; tüm ekranları kapsayan "etkin site" Y1 (yönetim firması) ile gelecektir.
+- **Sakin alt çubuğu** (`residentTabsFor`, `lib/ui/helpers/resident_tabs.dart`): Özet (Panel) · Duyuru (Duyurular) · Arıza (Taleplerim) · Kapı
+  (Kapılar) · Belgeler (Belgeler). Sekme yalnız öğesi görünürse çizilir; Kapı ayrıca kapı yetkisinin olumlu kanıtını ister (kapı listesi dolu ya da
+  modül verisinde `door_access` site; Geçiş Kontrol kapalıysa yok). İki sekmeden azsa ve kısa pencerede (< 480 dp) çubuk yok. Yalnız sakin kitlesinde (`showcaseAudience ==
+  resident`). Android widget'ı / kısayol isteği (`DoorPanelRequests`) soğuk açılışta modül verisinin ilk yüklemesini bekler; uygulanınca Kapı
+  sekmesi seçilir.
 - **Yönetim türü seçici:** `SetupSiteDialog` ve `SiteDialog`'da Site Adı ile İl arasında; beş tür de seçilebilir, her satırda türün açıklaması ve varsayılandan farklı terimlerin özeti (F9). Site kartında tür çipi.
 - **Modüller ekranı:** site seçici (süper kullanıcıda tüm siteler, yönetici modunda yönetilen siteler), modül kartları (ad, açıklama, durum çipi: Açık / Kapalı / Yakında… / Her sitede açık, anahtar), `door_control` kapatırken önce `AppDialog` onayı (uyarı metni sunucudakiyle aynı), sonra `confirm: true`. Yenileme: çekip yenileme + yenile düğmesi, işlem sonrası otomatik yeniden çekme. "Ek roller" bölümü: liste, ekle (e-posta + rol), kaldır.
 - **Denetim Kaydı ekranı:** liste (tarih, kim, ne, site), site süzgeci, "Daha fazla yükle", çekip yenileme.
