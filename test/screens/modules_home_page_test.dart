@@ -897,6 +897,10 @@ void main() {
           expect(_tileTitle('Eller Serbest & Kestirmeler'), findsNothing);
           expect(_tileTitle('Sesli Kapı Açma'), findsNothing, reason: 'kapı komutları da yok');
           expect(_tileTitle('Daireye Katıl & Cihaz Ekle'), findsOneWidget, reason: 'öteki öğeler durur');
+          // Sesli asistan da susar: otomatik dinlemeyi kapatacak "Eller Serbest" gizliyken "Tanımlı bir kapı
+          // bulunamadı." denmez, dinleme başlamaz.
+          expect(voice.spoken, isEmpty, reason: 'kapı öğeleri gizliyken sesli asistan konuşmaz');
+          expect(voice.startCalls, 0);
           await _disposeHome(t);
         });
       }
@@ -931,7 +935,7 @@ void main() {
     });
   });
 
-  group('Sesli asistan: kapalı modülde sessiz (kapı yok uyarısı yok)', () {
+  group('Sesli asistan: kapalı modülde ve kapı erişimi yokken (Kapılar gizli) sessiz (kapı yok uyarısı yok)', () {
     testWidgets('daire sakini, modül kapalı (Kapılar kartı yok): uyarı konuşulmaz, dinleme durdurulur, aday kapılar temizlenir; yenilemede de sessiz', (t) async {
       final auth = _HomeModAuth(role: UserRole.apartmentOwner);
       final access = await _access(<MySiteModules>[_my(11, door: false, role: 'resident')]);
@@ -952,6 +956,57 @@ void main() {
       await t.pump(const Duration(milliseconds: 600));
       expect(auth.listMyDoorsCalls, greaterThan(callsBefore));
       expect(voice.spoken, isEmpty);
+      await _disposeHome(t);
+    });
+
+    // Kapı erişimi olmayan daire sakini hesabında (yalnız kurul / site üyeliği bağı; sunucu kapı vermez) "Kapılar" ve
+    // otomatik dinlemeyi kapatacak tek yol olan "Eller Serbest" gizlidir: asistan da kapalı modüldeki gibi susar.
+    for (final (role, label) in <(String, String)>[('board_member', 'kurul üyesi'), ('resident', 'yalnız site üyeliği')]) {
+      testWidgets(
+          'daire sakini rolünde kapı erişimi yok ($label, Geçiş Kontrol AÇIK, Kapılar gizli): uyarı konuşulmaz, dinleme '
+          'durdurulur, aday kapılar temizlenir; yenilemede de sessiz', (t) async {
+        final auth = _HomeModAuth(role: UserRole.apartmentOwner);
+        expect(auth.residentDoors, isEmpty, reason: 'ön koşul: sunucu bu hesaba kapı vermez');
+        final access = await _access(<MySiteModules>[_my(11, door: true, role: role, access: false)]);
+        final voice = _HomeVoice()..listening = true;
+        await _pumpHome(t, auth, access: access, voice: voice);
+
+        expect(auth.listMyDoorsCalls, greaterThanOrEqualTo(1));
+        expect(find.byKey(const ValueKey<String>('panel_kart_kapilar')), findsNothing, reason: 'Kapılar gizli');
+        expect(find.byKey(const ValueKey<String>('panel_ikincil_ellerSerbest')), findsNothing, reason: 'Eller Serbest gizli');
+        expect(voice.spoken, isEmpty, reason: '"Tanımlı bir kapı bulunamadı." söylenmemeli');
+        expect(voice.stopCalls, greaterThanOrEqualTo(1), reason: 'sürmekte olan dinleme durdurulur');
+        expect(voice.startCalls, 0);
+        expect(voice.candidateUpdates.any((l) => l != null && l.isEmpty), isTrue,
+            reason: 'sesli komut servisindeki eski kapı listesi boş listeyle temizlenir');
+
+        final callsBefore = auth.listMyDoorsCalls;
+        await t.tap(_inAppBar(find.byTooltip('Yenile')));
+        await t.pump();
+        await t.pump(const Duration(milliseconds: 600));
+        expect(auth.listMyDoorsCalls, greaterThan(callsBefore));
+        expect(voice.spoken, isEmpty);
+        expect(voice.startCalls, 0);
+        await _disposeHome(t);
+      });
+    }
+
+    testWidgets('açılış yarışı: modül verisi sonradan gelir ve kapı erişimi yok çıkarsa (Kapılar gizli) hiç konuşulmaz',
+        (t) async {
+      final auth = _HomeModAuth(role: UserRole.apartmentOwner);
+      final gate = Completer<MyModulesResult>();
+      final access = ModuleAccess(fetch: () => gate.future);
+      addTearDown(access.dispose);
+      final voice = _HomeVoice();
+      await _pumpHome(t, auth, access: access, voice: voice);
+      expect(voice.spoken, isEmpty, reason: 'modül durumu beklenirken konuşulmaz');
+
+      gate.complete(MyModulesResult(sites: <MySiteModules>[_my(11, door: true, role: 'board_member', access: false)]));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 600));
+      expect(find.byKey(const ValueKey<String>('panel_kart_kapilar')), findsNothing);
+      expect(voice.spoken, isEmpty);
+      expect(voice.startCalls, 0);
       await _disposeHome(t);
     });
 

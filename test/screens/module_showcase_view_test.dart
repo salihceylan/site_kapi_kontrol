@@ -1,7 +1,8 @@
-// Panel modül vitrini (ModuleShowcaseView): kartlar, fail-closed, hero kart, hızlı işlemler, odak barı, duyarlı ızgara,
-// erişilebilirlik (ekran okuyucu etiketleri, klavye odağı, dokunma hedefi), tasarım belirteçleri (AppShowcaseColors,
-// koyu kutu yalnız eylem isteyen yerde, açık temada düz zemin) ve taşma matrisi (320/360/412/820 x yazı ölçeği
-// 1,0/1,5/2,0 x açık/koyu; 320 dp'de 1,15 ve 1,3 de).
+// Panel modül vitrini (ModuleShowcaseView): kartlar, listede olmayan öğe, hero kart, hızlı işlemler, odak barı, duyarlı
+// ızgara, erişilebilirlik (ekran okuyucu etiketleri, klavye odağı, dokunma hedefi), tasarım belirteçleri
+// (AppShowcaseColors, koyu kutu yalnız eylem isteyen yerde, kart rozeti çekmece rozetiyle aynı renk), vitrinin kendi
+// sınırının dışına hiç boyamaması (açık temadaki düz zemini sayfa kabı verir; bkz. module_showcase_home_page_test) ve
+// taşma matrisi (320/360/412/820 x yazı ölçeği 1,0/1,5/2,0 x açık/koyu; 320 dp'de 1,15 ve 1,3 de).
 //
 // Vitrin yan menünün hesapladığı öğe listesinden ([YanMenu.visibleItems]) türer: listede olmayan modülün kartı olamaz.
 // Vitrin her testte ana sayfanın GERÇEK gövde genişliğiyle kurulur ([_page]: 16 / 20 dp kenar boşluğu).
@@ -16,12 +17,14 @@ import 'package:site_kapi_kontrol/models/user_session.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/styles/app_decorations.dart';
 import 'package:site_kapi_kontrol/ui/design/module_art.dart';
+import 'package:site_kapi_kontrol/ui/design/motion_widgets.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/helpers/module_showcase.dart';
 import 'package:site_kapi_kontrol/ui/views/module_showcase_view.dart';
 import 'package:site_kapi_kontrol/ui/widgets/yan_menu.dart';
 
 import '../design/harness.dart';
+import '../design/paint_extent.dart';
 
 /// WCAG 2.x kontrast oranı (saydam ön plan opak [background] üstüne bindirilir).
 double _contrast(Color foreground, Color background) {
@@ -191,31 +194,36 @@ void main() {
       expect(_card(SirketMenuItem.dashboard), findsNothing, reason: 'vitrin kendi kartını çizmez');
     });
 
-    testWidgets('kapalı modülün kartı yok: menü listesinde olmayan öğeler hiçbir koşulda çizilmez', (t) async {
-      // Finans, Belgeler, Rezervasyon ve Kapılar (Geçiş Kontrol) kapalı.
-      final items = _items(
-        UserRole.siteManager,
-        extras: _managerExtras,
-        hidden: {SirketMenuItem.kapilar, SirketMenuItem.finans, SirketMenuItem.belgeler, SirketMenuItem.rezervasyonlar},
-      );
-      await _pump(
-        t,
-        _view(
-          role: UserRole.siteManager,
-          audience: ShowcaseAudience.admin,
-          items: items,
-          // Rozet haritasında kapalı modül için sayı olsa bile kart çıkmaz.
-          badges: {SirketMenuItem.finans: 5},
-          onOpen: (_) {},
-        ),
-      );
-      for (final closed in [
+    testWidgets(
+        'listede olmayan öğenin kartı çizilmez (rozet haritasında sayısı olsa bile): görünüm yalnız verilen listeyi '
+        'çizer', (t) async {
+      // Görünümün kendi görünürlük kuralı YOKTUR: liste çağıranda süzülür (HomePage: modül verisi -> ek / gizli öğeler ->
+      // YanMenu.visibleItems). Burada dört öğe testin kendisinde listeden ÇIKARILIR; modül kodu kapalıyken kartın
+      // yokluğu (gerçek fail-closed yolu) module_showcase_home_page_test'teki "fail-closed tablosu"nda sınanır.
+      const removed = <SirketMenuItem>{
         SirketMenuItem.kapilar,
         SirketMenuItem.finans,
         SirketMenuItem.belgeler,
         SirketMenuItem.rezervasyonlar,
-      ]) {
-        expect(_card(closed), findsNothing, reason: '$closed kapalı: kartı yok');
+      };
+      Widget view(Set<SirketMenuItem> hidden) => _view(
+            role: UserRole.siteManager,
+            audience: ShowcaseAudience.admin,
+            items: _items(UserRole.siteManager, extras: _managerExtras, hidden: hidden),
+            // Rozet haritasında listede olmayan öğe için sayı olsa bile kart çıkmaz.
+            badges: {SirketMenuItem.finans: 5},
+            onOpen: (_) {},
+          );
+
+      // Ön koşul: aynı öğeler listedeyken kartları VAR (aşağıdaki yokluk boş yere geçmiyor).
+      await _pump(t, view(const <SirketMenuItem>{}));
+      for (final item in removed) {
+        expect(_card(item), findsOneWidget, reason: '$item listede: kartı var');
+      }
+
+      await _pump(t, view(removed));
+      for (final item in removed) {
+        expect(_card(item), findsNothing, reason: '$item listede yok: kartı yok');
       }
       expect(_card(SirketMenuItem.duyurular), findsOneWidget);
       expect(_card(SirketMenuItem.talepler), findsOneWidget);
@@ -283,6 +291,33 @@ void main() {
       expect(find.descendant(of: _card(SirketMenuItem.duyurular), matching: find.text('3')), findsOneWidget);
       expect(find.descendant(of: _card(SirketMenuItem.ziyaretcilerim), matching: find.text('99+')), findsOneWidget);
       expect(find.descendant(of: _card(SirketMenuItem.belgeler), matching: find.byKey(rozet)), findsNothing);
+    });
+
+    testWidgets(
+        'renk: kart rozetinin noktası çekmece rozetiyle AYNI belirteç (AppTone.danger.a); borç kartının durum noktaları '
+        'işverenin tablosunda kalır (vadesi geçen mercan, sıradaki vade kehribar)', (t) async {
+      await _pump(
+        t,
+        _view(
+          role: UserRole.apartmentOwner,
+          audience: ShowcaseAudience.resident,
+          items: _items(UserRole.apartmentOwner, extras: _residentExtras),
+          badges: {SirketMenuItem.duyurular: 3},
+          fetch: () async => _debt(325000, overdue: 100000, due: DateTime(2026, 11, 10)),
+          onOpen: (_) {},
+        ),
+      );
+      const dot = ValueKey<String>('panel_durum_noktasi');
+      Color? colorOf(Finder f) => (t.widget<DecoratedBox>(f).decoration as BoxDecoration).color;
+      final badge = find.descendant(
+        of: _card(SirketMenuItem.duyurular),
+        matching: find.byKey(const ValueKey<String>('panel_kart_rozet')),
+      );
+      expect(colorOf(find.descendant(of: badge, matching: find.byKey(dot))), AppTone.danger.a);
+      final heroDots = find.descendant(of: find.byKey(_heroDebt), matching: find.byKey(dot));
+      expect(heroDots, findsNWidgets(2));
+      expect(colorOf(heroDots.at(0)), AppShowcaseColors.statusCrit, reason: 'vadesi geçen');
+      expect(colorOf(heroDots.at(1)), AppShowcaseColors.statusWarn, reason: 'sıradaki vade');
     });
 
     testWidgets('erişilebilirlik: her kart tek düğme; etiket = başlık + rozet, ipucu = açıklama', (t) async {
@@ -1010,9 +1045,9 @@ void main() {
       expect(_contrast(AppShowcaseColors.focus, AppShowcaseColors.card), greaterThanOrEqualTo(3.0));
       expect(_contrast(AppTone.primary.inkLight, AppShowcaseColors.card), greaterThanOrEqualTo(3.0));
       expect(_contrast(AppTone.primary.inkDark, AppPalette.dark.surface), greaterThanOrEqualTo(3.0));
-      // Rozetin mercan noktası soluk rozet zemininde.
-      expect(_contrast(AppShowcaseColors.statusCrit, AppPalette.light.surfaceMuted), greaterThanOrEqualTo(3.0));
-      expect(_contrast(AppShowcaseColors.statusCrit, AppPalette.dark.surfaceMuted), greaterThanOrEqualTo(3.0));
+      // Kart rozetinin noktası (çekmece rozetiyle aynı belirteç) soluk rozet zemininde.
+      expect(_contrast(AppTone.danger.a, AppPalette.light.surfaceMuted), greaterThanOrEqualTo(3.0));
+      expect(_contrast(AppTone.danger.a, AppPalette.dark.surfaceMuted), greaterThanOrEqualTo(3.0));
       // Beyaz kartta kehribar nokta tek başına 3:1'in altında: koyu kehribar kenarı >= 3:1; koyu temanın kartında gerekmez.
       expect(_contrast(AppShowcaseColors.statusWarn, AppShowcaseColors.card), lessThan(3.0));
       expect(_contrast(AppTone.warning.a, AppShowcaseColors.card), greaterThanOrEqualTo(3.0));
@@ -1022,45 +1057,59 @@ void main() {
         expect(_contrast(AppTone.primary.hue, page), greaterThanOrEqualTo(3.0));
       }
       expect(_contrast(AppTone.primary.hue, AppShowcaseColors.focusDark), greaterThanOrEqualTo(3.0));
-      // Kart çerçevesi düz zeminde görünür (eski gradyanın alt tonu çerçeveyle AYNIYDI: 1,0:1).
+      // Kart çerçevesi Panel'in düz zemininde ([ModuleShowcaseView.pageBackgroundOf]; sayfa kabı boyar) görünür: eski
+      // gradyanın alt tonu çerçeveyle AYNIYDI (1,0:1).
       final oldBottom = (AppDecorations.pageBackgroundLight.gradient! as LinearGradient).colors.last;
       expect(_contrast(AppShowcaseColors.cardBorder, oldBottom), lessThan(1.01));
       expect(_contrast(AppShowcaseColors.cardBorder, AppShowcaseColors.background), greaterThanOrEqualTo(1.15));
     });
 
+    // tasarim-10 gerileme düzeltmesi: eski düz zemin vitrinin bir ekran boyu üstüne / altına boyanıyordu; kaydırma
+    // görünümü içerik sığınca kırpmadığından üstteki acil duyuru şeridini örtüyordu. Artık vitrin zemin çizmez, kendi
+    // sınırının dışına hiçbir şey boyamaz; açık temadaki düz zemini sayfa kabı verir (module_showcase_home_page_test).
     testWidgets(
-        'açık temada vitrin zemini DÜZ #F8FAFC ve görünen alanın tamamını (kenar boşlukları, üst / alt) kaplar; kartlar '
-        'beyaz + #E2E8F0 çerçeve; koyu temada zemin boyanmaz', (t) async {
-      const zemin = ValueKey<String>('panel_vitrin_zemin');
+        'vitrin zemin BOYAMAZ ve kendi sınırının dışına hiç boyamaz (zemini sayfa kabı verir: açıkta düz #F8FAFC, koyuda '
+        'yok); kartlar açıkta beyaz + #E2E8F0 çerçeve', (t) async {
       final menu = _items(UserRole.apartmentOwner, extras: _residentExtras);
-      Widget view() => _view(role: UserRole.apartmentOwner, audience: ShowcaseAudience.resident, items: menu, onOpen: (_) {});
-      for (final (width, height) in const [(320.0, 640.0), (1366.0, 768.0)]) {
-        await _pump(t, view(), width: width, height: height);
-        Rect? painted;
-        Color? color;
-        expect(
-          t.renderObject(find.byKey(zemin)),
-          paints
-            ..something((method, args) {
-              if (method != #drawRect) return false;
-              painted = args[0] as Rect;
-              color = (args[1] as Paint).color;
-              return true;
-            }),
-        );
-        // Paint rengi kayan nokta (float32) saklar: 8 bitlik ARGB değeriyle karşılaştırılır.
-        expect(color?.toARGB32(), AppShowcaseColors.background.toARGB32(), reason: '$width');
-        final onScreen = painted!.shift(t.getTopLeft(find.byKey(zemin)));
-        expect(onScreen.left, lessThanOrEqualTo(0), reason: '$width: sol kenar boşluğu');
-        expect(onScreen.top, lessThanOrEqualTo(0), reason: '$width: üst');
-        expect(onScreen.right, greaterThanOrEqualTo(width), reason: '$width: sağ kenar boşluğu');
-        expect(onScreen.bottom, greaterThanOrEqualTo(height), reason: '$width: alt');
-        final card = t.widget<Material>(_card(SirketMenuItem.belgeler));
-        expect(card.color, AppShowcaseColors.card);
-        expect((card.shape! as RoundedRectangleBorder).side.color, AppShowcaseColors.cardBorder);
+      Widget view() => _view(
+            role: UserRole.apartmentOwner,
+            audience: ShowcaseAudience.resident,
+            items: menu,
+            badges: {SirketMenuItem.duyurular: 3},
+            fetch: () async => _debt(325000, overdue: 100000, due: DateTime(2026, 11, 10)),
+            onOpen: (_) {},
+            onHelp: () {},
+          );
+      for (final dark in const [false, true]) {
+        for (final (width, height) in const [(320.0, 640.0), (1366.0, 768.0)]) {
+          final cell = '${width.toInt()} ${dark ? 'koyu' : 'açık'}';
+          await _pump(t, view(), width: width, height: height, dark: dark);
+          // Giriş animasyonları bitsin (kayan kart ölçümü bozmasın).
+          await t.pump(const Duration(seconds: 1));
+          // Ölçüm vitrinin KÖKÜNDEN (ModuleShowcaseView'ın ilk render nesnesi) başlar: eski zemin, anahtarlı Column'un
+          // kardeşi olan bir boyayıcıydı.
+          final showcase = t.renderObject<RenderBox>(find.byType(ModuleShowcaseView));
+          expect(showcase.size, t.getSize(find.byKey(const ValueKey<String>('panel_vitrin'))), reason: cell);
+          final shapes = paintedShapes(showcase);
+          expect(shapes, isNotEmpty, reason: cell);
+          expect(paintedOutside(showcase), isEmpty, reason: '$cell: vitrinin sınırı dışına boya yok');
+          final own = (Offset.zero & showcase.size).deflate(1);
+          expect(shapes.where((s) => rectCovers(s.bounds, own)), isEmpty, reason: '$cell: vitrin zemin boyamaz');
+          expect(find.byKey(const ValueKey<String>('panel_vitrin_zemin')), findsNothing, reason: cell);
+          expect(
+            ModuleShowcaseView.pageBackgroundOf(t.element(find.byType(ModuleShowcaseView))),
+            dark ? isNull : AppShowcaseColors.background,
+            reason: '$cell: sayfa kabının zemini',
+          );
+          final card = t.widget<Material>(_card(SirketMenuItem.belgeler));
+          expect(card.color, dark ? AppPalette.dark.surface : AppShowcaseColors.card, reason: cell);
+          expect(
+            (card.shape! as RoundedRectangleBorder).side.color,
+            dark ? AppPalette.dark.border : AppShowcaseColors.cardBorder,
+            reason: cell,
+          );
+        }
       }
-      await _pump(t, view(), dark: true);
-      expect(t.renderObject(find.byKey(zemin)), paintsNothing);
     });
 
     testWidgets('koyu temada odak kutusu (dikkat barı, borç kartı) zeminden ayrışır: lacivert yüzey + >= 3:1 mavi kenar', (t) async {
@@ -1102,33 +1151,47 @@ void main() {
   });
 
   group('hareket azaltma', () {
-    testWidgets('disableAnimations açıkken vitrin ilk karede tam görünür (giriş animasyonu yok)', (t) async {
+    // test-14: iddia iki durumu AYIRT eder. Kartın girişini süren öğe (StaggeredEntry) kartın ATASIDIR; soldurma
+    // (Opacity) ve kaydırma (Transform) onun içindedir: kartın içinde aranırsa hiç bulunmaz ve iddia her koşulda geçer.
+    testWidgets(
+        'hareket azaltma KAPALIYKEN kart ilk karede soluk ve aşağıda başlar, sonra yerine oturur; AÇIKKEN ilk karede tam '
+        'görünür ve yerindedir (giriş animasyonu yok)', (t) async {
       final menu = _items(UserRole.apartmentOwner, extras: _residentExtras);
+      // Izgaranın ilk kartı: sırası StaggeredEntry.maxAnimated'ın altında, yani kademeli girişte canlandırılır.
+      final first = buildShowcaseModel(menuItems: menu, role: UserRole.apartmentOwner).grid.first.item;
+      final entry = find.ancestor(of: _card(first), matching: find.byType(StaggeredEntry)).first;
+      double opacity() => t.widget<Opacity>(find.descendant(of: entry, matching: find.byType(Opacity)).first).opacity;
+      double drop() =>
+          t.widget<Transform>(find.descendant(of: entry, matching: find.byType(Transform)).first).transform.getTranslation().y;
+
       t.view.physicalSize = const Size(400, 1400);
       t.view.devicePixelRatio = 1.0;
       addTearDown(t.view.reset);
-      await t.pumpWidget(
-        MaterialApp(
-          builder: (c, child) => MediaQuery(
-            data: MediaQuery.of(c).copyWith(disableAnimations: true),
-            child: child!,
-          ),
-          home: Scaffold(
-            body: SingleChildScrollView(
+      for (final reduce in const [false, true]) {
+        final mode = reduce ? 'hareket azaltma açık' : 'hareket azaltma kapalı';
+        await t.pumpWidget(const SizedBox.shrink());
+        await t.pumpWidget(
+          harnessApp(
+            SingleChildScrollView(
               child: _view(role: UserRole.apartmentOwner, audience: ShowcaseAudience.resident, items: menu, onOpen: (_) {}),
             ),
+            reduce: reduce,
           ),
-        ),
-      );
-      // Tek kare: StaggeredEntry hareket azaltmada hemen tamamdır (opaklık 1).
-      final opacities = t.widgetList<Opacity>(find.descendant(of: _card(SirketMenuItem.kapilar), matching: find.byType(Opacity)));
-      expect(opacities, isEmpty);
-      final entry = find.ancestor(of: _card(SirketMenuItem.kapilar), matching: find.byType(Opacity));
-      for (final o in t.widgetList<Opacity>(entry)) {
-        expect(o.opacity, 1.0);
+        );
+        // İlk kare.
+        expect(entry, findsOneWidget, reason: '$mode: kartın giriş öğesi var');
+        if (reduce) {
+          expect(opacity(), 1.0, reason: '$mode: ilk karede tam görünür');
+          expect(drop(), 0.0, reason: '$mode: kayma yok');
+        } else {
+          expect(opacity(), lessThan(1.0), reason: '$mode: ilk karede soluk (giriş animasyonu)');
+          expect(drop(), greaterThan(0.0), reason: '$mode: aşağıdan gelir');
+        }
+        // Kararlı durumda ticker yok (pumpAndSettle biter); kart tam görünür ve yerinde.
+        await t.pumpAndSettle();
+        expect(opacity(), 1.0, reason: mode);
+        expect(drop(), 0.0, reason: mode);
       }
-      // Kararlı durumda ticker yok: pumpAndSettle biter.
-      await t.pumpAndSettle();
     });
   });
 

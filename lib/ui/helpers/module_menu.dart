@@ -23,7 +23,8 @@ const Set<SirketMenuItem> doorControlMenuItems = <SirketMenuItem>{
 /// görevli / kurul üyeliği ya da yalnız site üyeliği bağı: sunucu `door_access=false` der) VE kapı listesi de boşsa
 /// ([hasDoors] false) kapı öğeleri yine gizlenir: kapı açamayan kullanıcıya "Kapılar" kartı, hızlı "Kapıyı aç" ve
 /// "Eller Serbest" gösterilmez. Bireysel kullanıcı ("Kapılar" onun bireysel ana ekranının tek yoludur), yönetici ve
-/// süper kullanıcı bu kuraldan etkilenmez; modül verisi yokken de değişen bir şey yoktur.
+/// süper kullanıcı bu kuraldan etkilenmez; modül verisi yokken de değişen bir şey yoktur. Kapı öğeleri gizliyken ana
+/// sayfa sesli asistanı da susturur (otomatik dinlemeyi kapatacak "Eller Serbest" yokken "kapı bulunamadı" konuşulmaz).
 Set<SirketMenuItem> hiddenMenuItemsFor(
   UserRole role,
   ModuleAccess access, {

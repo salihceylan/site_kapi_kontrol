@@ -2492,11 +2492,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       return;
     }
 
-    // Geçiş Kontrol modülü kapalıysa kapı listesi sunucuda boşaltılır: "Tanımlı bir kapı bulunamadı."
-    // diye her Panel açılışında konuşmak yanıltıcıdır. Sessizce dön, sürmekte olan dinlemeyi durdur
-    // ve eski kapı listesini sesli komut servisinden temizle.
-    if (_isDoorControlClosed(session)) {
-      await _silenceVoiceForClosedModule();
+    // Kapı açma yolu yoksa asistan konuşmaz: Geçiş Kontrol modülü kapalıyken kapı listesi sunucuda boşaltılır; daire
+    // sakini rolünde kapı erişimi / kapısı olmayan hesapta (yalnız görevli / kurul / site üyeliği) "Kapılar" ve otomatik
+    // dinlemeyi kapatacak "Eller Serbest" de gizlidir. "Tanımlı bir kapı bulunamadı." diye her Panel açılışında konuşmak
+    // yanıltıcıdır: sessizce dön, sürmekte olan dinlemeyi durdur ve eski kapı listesini sesli komut servisinden temizle.
+    if (_voiceHasNoDoorAccess(session)) {
+      await _silenceVoiceAssistance();
       return;
     }
 
@@ -2506,12 +2507,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
 
     if (doors.isEmpty) {
-      // Modül durumu henüz gelmediyse (açılış yarışı) önce onu bekle: kapalıysa konuşma.
+      // Modül durumu henüz gelmediyse (açılış yarışı) önce onu bekle: modül kapalı ya da kapı erişimi yoksa konuşma.
       if (!_moduleAccess.isLoaded) {
         await _moduleAccess.refresh();
         if (!mounted) return;
-        if (_isDoorControlClosed(session)) {
-          await _silenceVoiceForClosedModule();
+        if (_voiceHasNoDoorAccess(session)) {
+          await _silenceVoiceAssistance();
           return;
         }
       }
@@ -2537,7 +2538,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _silenceVoiceForClosedModule() async {
+  /// Sesli asistanın kapı açma yolu yok mu: Geçiş Kontrol kapalı ya da "Kapılar" bu kullanıcıda gizli (daire sakini
+  /// rolünde kapı erişimi / kapısı olmayan hesap, bkz. [hiddenMenuItemsFor]). Kapı öğeleri gizliyken asistan da susar.
+  bool _voiceHasNoDoorAccess(UserSession session) =>
+      _isDoorControlClosed(session) || !_canAccessMenu(SirketMenuItem.kapilar, session.role);
+
+  /// Sesli asistanı susturur (kapı yokken): sürmekte olan dinleme durur, sesli komut servisindeki aday kapı listesi
+  /// boşaltılır; hiçbir şey konuşulmaz.
+  Future<void> _silenceVoiceAssistance() async {
     final voice = widget.voiceDoorService;
     if (voice == null) return;
     voice.updateCandidateDoors(const <DoorRecord>[]);
@@ -5407,6 +5415,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     // ve geri tuşu kararı HEP bunu kullanır (ham [_selectedMenu] değil): vitrine düşülünce ilk geri basışı boşa gitmez.
     final effectiveMenu =
         _canAccessMenu(_selectedMenu, session.role) ? _selectedMenu : SirketMenuItem.dashboard;
+    // Panel vitrini gösterilirken kaydırılan gövdenin kabı açık temada DÜZ zemindir ([ModuleShowcaseView.pageBackgroundOf]);
+    // öteki sayfalarda ve koyu temada kap boyanmaz (uygulama zemini görünür).
+    final bodyBackground =
+        effectiveMenu == SirketMenuItem.dashboard ? ModuleShowcaseView.pageBackgroundOf(context) : null;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -5579,14 +5591,22 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           },
           child: child!,
         ),
-        child: SafeArea(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _urgentBannerSlot(session),
-              Expanded(child: _buildScrollBody(session)),
-            ],
-          ),
+        // Acil duyuru şeridi kaydırılan gövdenin DIŞINDA, üstünde bir kardeştir. Gövdenin kabı (Panel'de düz zemin)
+        // şeridin ALTINDAN başlar ve ekranın altına (sistem gezinme çubuğu payı dahil) uzanır: zemin şeridin bölgesine
+        // hiç boyamaz, kaydırılmaz. Sistem boşlukları eskisiyle aynıdır: şeritte üst / yanlar, kaydırılan gövdede yanlar /
+        // alt. Kap her sayfada ve iki temada da vardır (yalnız rengi değişir): gövdenin alt ağacı yeniden kurulmaz.
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SafeArea(bottom: false, child: _urgentBannerSlot(session)),
+            Expanded(
+              child: DecoratedBox(
+                key: const ValueKey<String>('panel_vitrin_zemin'),
+                decoration: BoxDecoration(color: bodyBackground),
+                child: SafeArea(top: false, child: _buildScrollBody(session)),
+              ),
+            ),
+          ],
         ),
       ),
     );
