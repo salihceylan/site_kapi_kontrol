@@ -1134,7 +1134,7 @@ void main() {
     }
 
     testWidgets(
-      'ikincil (tonal) ElevatedButton düz kalır, dolu Onayla cilalıdır (tema cilası yalnız dolu düğmede)',
+      'ikincil (tonal) ElevatedButton ve dolu Onayla düzdür (sade stil G6: tema cilası yok)',
       (t) async {
         await pumpList(
           t,
@@ -1160,12 +1160,13 @@ void main() {
             );
           }
         }
-        // Dolu "Onayla" (filledToneStyle): tema cilası var.
+        // Dolu "Onayla" (filledToneStyle): sade stilde o da düzdür (cila yok).
         await tapText(t, _longName);
         final approve = find.widgetWithText(ElevatedButton, 'Onayla');
+        expect(approve, findsOneWidget);
         expect(
           find.descendant(of: approve, matching: find.byType(Gloss)),
-          findsOneWidget,
+          findsNothing,
         );
       },
     );
