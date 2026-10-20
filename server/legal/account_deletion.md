@@ -71,7 +71,7 @@ Aşağıdaki durumlarda hesap silinemez; ekran nedenini ve ne yapmanız gerekti�
 
 ## 4. Uygulamaya erişemiyorsanız: e-posta ile talep
 
-Parolanızı hatırlamıyor veya hesabınıza giremiyorsanız silme talebinizi, hesabınıza kayıtlı e-posta adresinizden "Hesap silme talebi" konusuyla {{contact_email}} adresine gönderebilirsiniz. Talebinizi ayrıca {{kep_address}} KEP adresine veya {{company_address}} adresine yazılı olarak da iletebilirsiniz.
+Parolanızı hatırlamıyor veya hesabınıza giremiyorsanız silme talebinizi, hesabınıza kayıtlı e-posta adresinizden "Hesap silme talebi" konusuyla {{contact_email}} adresine gönderebilirsiniz. Talebinizi ayrıca {{#kep_address}}{{kep_address}} KEP adresine veya {{/kep_address}}{{company_address}} adresine yazılı olarak da iletebilirsiniz.
 
 Süreç şöyle işler: talebiniz alınır ve kimliğiniz doğrulanır (hesaba kayıtlı e-posta adresinden gelmesi ve gerekirse ek bilgi). Şifrenizi unuttuysanız uygulamadaki "Şifremi unuttum" bağlantısıyla yenileyip yukarıdaki adımlarla hesabı kendiniz silmeniz size önerilir; bu yol sonuçları yukarıda açıklanan silmedir. Uygulamaya hiç erişemiyorsanız yetkili personel hesabı yönetim işlemiyle kalıcı olarak siler. Bu yöntemin sonuçları uygulamadaki silmeden farklıdır: hesap kaydı kimliksizleştirilmez, tamamen silinir; yasal belge onay kayıtlarınız hesapla birlikte silinir; kapı geçiş kayıtlarındaki adınız ve IP adresiniz 30 günlük saklama süresi dolana kadar kalır; site kayıtlarında adınız ve hesabınızdaki telefon numaranız yedek olarak kalır; hesabınızın silindiğine dair bilgilendirme e-postası gönderilmez; telefon bildirimi cihaz kayıtlarınız hesapla birlikte silinir, bildirim kuyruğundaki kayıtlarınız bakım işiyle en geç yaklaşık bir saat içinde silinir, sırada bekleyen aidat hatırlatma e-postalarındaki adresiniz ise en geç yaklaşık 24 saat içinde temizlenir. [KARAR/BİLGİ GEREKLİ: yönetici kimliksizleştirme aracı geliştirilecek; geliştirilince bu paragraf uygulamadaki silmeyle aynı sonuçları anlatacak şekilde sadeleştirilecek]
 
@@ -94,4 +94,4 @@ Siteye ilişkin kayıtlarınızın (kişi, daire, araç, aidat, borç, makbuz, b
 
 ## 6. İletişim
 
-{{company_name}}, {{company_address}}; e-posta {{contact_email}}; telefon {{contact_phone}}; KEP {{kep_address}}. Kişisel verilerinize ilişkin diğer haklarınız için KVKK Aydınlatma Metni ve Gizlilik Politikası'na bakın.
+{{company_name}}, {{company_address}}; e-posta {{contact_email}}; telefon {{contact_phone}}{{#kep_address}}; KEP {{kep_address}}{{/kep_address}}. Kişisel verilerinize ilişkin diğer haklarınız için KVKK Aydınlatma Metni ve Gizlilik Politikası'na bakın.

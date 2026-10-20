@@ -9,7 +9,7 @@ complete: false   # köşeli [KARAR/BİLGİ GEREKLİ ...] ve [AVUKAT DOĞRULASIN
 
 # Kullanım Koşulları
 
-Bu Kullanım Koşulları ("Koşullar"), Site ve Toplu Yaşam Yönetim Sistemi'nin ("Platform"; mobil uygulama, web sürümü ve sunucu hizmetleri) kullanımını düzenler. Platformu {{company_name}} ("Güde"; MERSİS {{mersis_no}}; adres {{company_address}}) işletir. Hesap oluşturarak veya Platformu kullanarak bu Koşulları kabul etmiş olursunuz. Kabul etmiyorsanız Platformu kullanmayınız.
+Bu Kullanım Koşulları ("Koşullar"), Site ve Toplu Yaşam Yönetim Sistemi'nin ("Platform"; mobil uygulama, web sürümü ve sunucu hizmetleri) kullanımını düzenler. Platformu {{company_name}} ("Güde"{{#mersis_no}}; MERSİS {{mersis_no}}{{/mersis_no}}; adres {{company_address}}) işletir. Hesap oluşturarak veya Platformu kullanarak bu Koşulları kabul etmiş olursunuz. Kabul etmiyorsanız Platformu kullanmayınız.
 
 ## 1. Tanımlar
 
@@ -127,4 +127,4 @@ Bu Koşullara Türk hukuku uygulanır. Uyuşmazlıklarda yetkili mahkeme ve icra
 
 ## 15. İletişim
 
-{{company_name}}, {{company_address}}; e-posta {{contact_email}}; telefon {{contact_phone}}; KEP {{kep_address}}.
+{{company_name}}, {{company_address}}; e-posta {{contact_email}}; telefon {{contact_phone}}{{#kep_address}}; KEP {{kep_address}}{{/kep_address}}.
