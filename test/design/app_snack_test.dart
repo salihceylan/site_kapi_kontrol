@@ -49,73 +49,91 @@ IconData _iconOf(AppSnackKind kind) => switch (kind) {
   AppSnackKind.error => Icons.error_rounded,
 };
 
+/// Türün simge rengi (sade stil: koyu yüzeyde tonun açık ink'i; bilgi beyaz).
+Color _iconColorOf(AppSnackKind kind) => switch (kind) {
+  AppSnackKind.info => Colors.white,
+  AppSnackKind.success => AppTone.success.inkDark,
+  AppSnackKind.warning => AppTone.warning.inkDark,
+  AppSnackKind.error => AppTone.danger.inkDark,
+};
+
 void main() {
-  group('AppSnack: türler (simge + tonlu dolgu)', () {
+  group('AppSnack: türler (sade stil: tek koyu yüzey + tür simgesi renkli)', () {
     for (final kind in AppSnackKind.values) {
-      testWidgets('${kind.name}: mesaj, simge ve dolgu', (t) async {
-        await pumpAt(t, const SizedBox(), scale: 1.0);
-        AppSnack.show(_ctx(t), 'Kapı açılıyor... 🚪', kind: kind);
-        await _enter(t);
+      testWidgets('${kind.name}: mesaj, simge ve dolgu (açık + koyu)', (t) async {
+        for (final dark in const [false, true]) {
+          await pumpAt(t, const SizedBox(), scale: 1.0, dark: dark);
+          AppSnack.show(_ctx(t), 'Kapı açılıyor... 🚪', kind: kind);
+          await _enter(t);
 
-        expect(find.byType(SnackBar), findsOneWidget);
-        expect(find.text('Kapı açılıyor... 🚪'), findsOneWidget);
-        final icon = t.widget<Icon>(
-          find.descendant(
-            of: find.byType(SnackBar),
-            matching: find.byIcon(_iconOf(kind)),
-          ),
-        );
-        expect(icon.color, Colors.white);
-        expect(icon.size, 20);
+          expect(find.byType(SnackBar), findsOneWidget);
+          expect(find.text('Kapı açılıyor... 🚪'), findsOneWidget);
+          final icon = t.widget<Icon>(
+            find.descendant(
+              of: find.byType(SnackBar),
+              matching: find.byIcon(_iconOf(kind)),
+            ),
+          );
+          expect(icon.color, _iconColorOf(kind), reason: 'dark=$dark');
+          expect(icon.size, 20);
 
-        final expected = switch (kind) {
-          AppSnackKind.success => AppTone.success.b,
-          AppSnackKind.warning => AppTone.warning.b,
-          AppSnackKind.error => AppTone.danger.b,
-          AppSnackKind.info => null,
-        };
-        expect(_snack(t).backgroundColor, expected);
-        if (expected != null) {
-          expect(_surfaceColor(t), expected);
+          // Zemin boyanmaz (renkli dolgu yok): her tür tema rengini kullanır.
+          expect(_snack(t).backgroundColor, isNull, reason: 'dark=$dark');
+          expect(
+            _surfaceColor(t),
+            Theme.of(_ctx(t)).snackBarTheme.backgroundColor,
+            reason: 'dark=$dark',
+          );
+          expect(
+            _contrast(icon.color!, _surfaceColor(t)),
+            greaterThanOrEqualTo(4.5),
+            reason: 'simge koyu yüzeyde seçilir (dark=$dark)',
+          );
+          // Cam rozet yok: simge doğrudan çizilir.
+          expect(
+            find.descendant(
+              of: find.byType(SnackBar),
+              matching: find.byWidgetPredicate(
+                (w) =>
+                    w is DecoratedBox &&
+                    w.decoration is BoxDecoration &&
+                    (w.decoration as BoxDecoration).shape == BoxShape.circle,
+              ),
+            ),
+            findsNothing,
+          );
         }
       });
     }
 
-    testWidgets('info: dolgu TEMA SnackBar rengidir (açık ve koyu)', (t) async {
+    testWidgets('dolgu TEMA SnackBar rengidir: açıkta kritik uyarı rengi #0F172A, koyuda #1E293B + kenar', (t) async {
+      expect(AppTheme.light().snackBarTheme.backgroundColor, AppPalette.light.critical);
+      expect(AppTheme.dark().snackBarTheme.backgroundColor, const Color(0xFF1E293B));
       for (final dark in const [false, true]) {
         await pumpAt(t, const SizedBox(), scale: 1.0, dark: dark);
-        AppSnack.show(_ctx(t), 'Bilgi');
+        AppSnack.show(_ctx(t), 'Bilgi', kind: AppSnackKind.success);
         await _enter(t);
-        final theme = Theme.of(_ctx(t));
-        expect(
-          _surfaceColor(t),
-          theme.snackBarTheme.backgroundColor,
-          reason: dark ? 'koyu tema' : 'açık tema',
-        );
-        expect(
-          _snack(t).backgroundColor,
-          isNull,
-          reason: 'info tema rengini kullanır',
-        );
+        final shape = _snack(t).shape! as RoundedRectangleBorder;
+        expect(shape.side.style, dark ? BorderStyle.solid : BorderStyle.none, reason: 'koyuda ince kenar ayırır');
+        if (dark) expect(shape.side.color, AppPalette.dark.border);
       }
     });
 
     testWidgets(
-      'beyaz metin/simge tüm dolgularda >= 4,5:1 (tonlar ve tema rengi)',
+      'beyaz metin tema dolgusunda >= 4,5:1; eylem rengi (bağlantı mavisi) >= 4,5:1',
       (t) async {
-        for (final tone in [AppTone.success, AppTone.warning, AppTone.danger]) {
-          expect(
-            _contrast(Colors.white, tone.b),
-            greaterThanOrEqualTo(4.5),
-            reason: tone.name,
-          );
-        }
         for (final dark in const [false, true]) {
           final theme = dark ? AppTheme.dark() : AppTheme.light();
+          final bg = theme.snackBarTheme.backgroundColor!;
           expect(
-            _contrast(Colors.white, theme.snackBarTheme.backgroundColor!),
+            _contrast(Colors.white, bg),
             greaterThanOrEqualTo(4.5),
-            reason: dark ? 'koyu tema info' : 'açık tema info',
+            reason: dark ? 'koyu' : 'açık',
+          );
+          expect(
+            _contrast(theme.snackBarTheme.actionTextColor!, bg),
+            greaterThanOrEqualTo(4.5),
+            reason: dark ? 'koyu eylem' : 'açık eylem',
           );
         }
       },
@@ -344,7 +362,9 @@ void main() {
       await t.tap(find.text('göster'));
       await _enter(t);
       expect(find.text('Düz tema'), findsOneWidget);
-      expect(_surfaceColor(t), AppTone.success.b);
+      // Tema yokken Material 3 varsayılanı (ters yüzey): renkli dolgu yok.
+      expect(_snack(t).backgroundColor, isNull);
+      expect(_surfaceColor(t), Theme.of(t.element(find.text('Düz tema'))).colorScheme.inverseSurface);
       expect(t.takeException(), isNull);
     });
 
@@ -391,7 +411,7 @@ void main() {
     });
 
     testWidgets(
-      'tonlu dolguda etiketi belirtilmemiş eylem BEYAZ olur (okunur)',
+      'etiketi belirtilmemiş eylem her türde tema eylem rengini alır (koyu yüzeyde okunur bağlantı mavisi)',
       (t) async {
         for (final kind in [
           AppSnackKind.success,
@@ -408,8 +428,18 @@ void main() {
           await _enter(t);
           expect(
             t.widget<SnackBarAction>(find.byType(SnackBarAction)).textColor,
-            Colors.white,
-            reason: kind.name,
+            isNull,
+            reason: '${kind.name}: tema rengi',
+          );
+          final label = t.widget<Text>(
+            find.descendant(of: find.byType(SnackBarAction), matching: find.text('Tamam')),
+          );
+          final color = label.style?.color ?? DefaultTextStyle.of(t.element(find.text('Tamam'))).style.color;
+          expect(color, isNotNull);
+          expect(
+            _contrast(color!, _surfaceColor(t)),
+            greaterThanOrEqualTo(4.5),
+            reason: '${kind.name}: eylem okunur',
           );
         }
       },

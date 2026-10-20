@@ -165,8 +165,8 @@ void main() {
     });
   });
 
-  group('AppSnack: cam rozetli simge', () {
-    testWidgets('simge yarı saydam beyaz daire rozette, anlamsal ağaçta yok', (
+  group('AppSnack: düz simge (sade stil, cam rozet yok)', () {
+    testWidgets('simge doğrudan çizilir (yarı saydam daire rozet yok), tür renginde, anlamsal ağaçta yok', (
       t,
     ) async {
       await pumpAt(t, const SizedBox(), scale: 1.0);
@@ -186,19 +186,11 @@ void main() {
               (w.decoration as BoxDecoration).shape == BoxShape.circle,
         ),
       );
-      expect(badge, findsOneWidget);
-      final deco = t.widget<DecoratedBox>(badge).decoration as BoxDecoration;
-      expect(deco.color, Colors.white.withValues(alpha: 0.20));
-      expect(deco.border, isNotNull);
+      expect(badge, findsNothing);
+      final icon = find.byIcon(Icons.check_circle_rounded);
+      expect(t.widget<Icon>(icon).color, AppTone.success.inkDark);
       expect(
-        t.widget<Icon>(find.byIcon(Icons.check_circle_rounded)).color,
-        Colors.white,
-      );
-      expect(
-        find.ancestor(
-          of: badge,
-          matching: find.byType(ExcludeSemantics),
-        ),
+        find.ancestor(of: icon, matching: find.byType(ExcludeSemantics)),
         findsWidgets,
       );
     });
