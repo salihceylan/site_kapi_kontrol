@@ -250,7 +250,7 @@ void main() {
     });
   });
 
-  group('PrimaryActionButton: cila ve başarı ışıltısı', () {
+  group('PrimaryActionButton: düz (sade stil, cila ve ışıltı yok)', () {
     Finder gloss() => find.descendant(
       of: find.byType(PrimaryActionButton),
       matching: find.byType(Gloss),
@@ -269,52 +269,33 @@ void main() {
       success: success,
     );
 
-    testWidgets('yalnız canlı dolu düğme cilalıdır', (t) async {
-      await t.pumpWidget(_app(button(onPressed: () {})));
-      expect(gloss(), findsOneWidget);
-      await t.pumpWidget(_app(button(onPressed: () {}, loading: true)));
-      expect(gloss(), findsOneWidget, reason: 'yükleniyor: canlı');
-      await t.pumpWidget(_app(button(onPressed: () {}, success: true)));
-      expect(gloss(), findsOneWidget, reason: 'başarılı: canlı');
-      await t.pumpWidget(_app(button()));
-      expect(gloss(), findsNothing, reason: 'devre dışı: düz');
-      for (final v in [AppButtonVariant.tonal, AppButtonVariant.outline]) {
+    testWidgets('hiçbir görünüm ve durumda cila yok', (t) async {
+      for (final v in AppButtonVariant.values) {
         await t.pumpWidget(_app(button(variant: v, onPressed: () {})));
-        expect(gloss(), findsNothing, reason: '${v.name}: ikincil, düz');
+        expect(gloss(), findsNothing, reason: v.name);
+        await t.pumpWidget(_app(button(variant: v, onPressed: () {}, loading: true)));
+        expect(gloss(), findsNothing, reason: '${v.name} yükleniyor');
+        await t.pumpWidget(_app(button(variant: v, onPressed: () {}, success: true)));
+        expect(gloss(), findsNothing, reason: '${v.name} başarılı');
+        await t.pumpWidget(_app(button(variant: v)));
+        expect(gloss(), findsNothing, reason: '${v.name} devre dışı');
       }
     });
 
     testWidgets(
-      'success false -> true: ışıltı bir kez oynar ve biter (ticker kalmaz)',
+      'success false -> true: yalnız 200 ms renk geçişi (ışıltı yok), ticker kalmaz',
       (t) async {
-        Animation<double> sweep() => t.widget<Gloss>(gloss()).sweep!;
         await t.pumpWidget(_app(button(onPressed: () {})));
-        expect(sweep().value, 0);
         await t.pumpWidget(_app(button(onPressed: () {}, success: true)));
         await t.pump();
-        await t.pump(const Duration(milliseconds: 200));
-        expect(sweep().value, greaterThan(0));
-        await t.pump(PrimaryActionButton.sweepDuration);
-        await t.pump(const Duration(milliseconds: 50));
-        expect(sweep().status, AnimationStatus.completed);
-        await t.pumpAndSettle();
+        final settled = await t.pumpAndSettle();
+        expect(settled * 100, lessThanOrEqualTo(400), reason: 'yalnız renk / onay işareti geçişi');
+        expect(gloss(), findsNothing);
         expect(t.binding.transientCallbackCount, 0);
       },
     );
 
-    testWidgets('hareket azaltmada ışıltı oynamaz', (t) async {
-      Animation<double> sweep() => t.widget<Gloss>(gloss()).sweep!;
-      await t.pumpWidget(_app(button(onPressed: () {}), reduce: true));
-      await t.pumpWidget(
-        _app(button(onPressed: () {}, success: true), reduce: true),
-      );
-      await t.pump();
-      await t.pump(const Duration(milliseconds: 200));
-      expect(sweep().value, 0);
-      expect(t.binding.transientCallbackCount, 0);
-    });
-
-    testWidgets('cila dokunmayı yutmaz: onPressed çalışır', (t) async {
+    testWidgets('dokunma çalışır: onPressed', (t) async {
       var calls = 0;
       await t.pumpWidget(_app(button(onPressed: () => calls++)));
       await t.tap(find.text('Kaydet'));
