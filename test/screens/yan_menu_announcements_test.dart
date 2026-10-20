@@ -1,5 +1,9 @@
 // Platform Faz 3a: çekmecede "Duyurular" öğesi — `additionalItems`, "Kişiler"in altına yerleşim, sayı rozeti
 // ve ekran okuyucu ifadesi ("N okunmamış"); varsayılan menü (öğe sayıları) DEĞİŞMEZ.
+//
+// İP-1D (G2): menü LİSTESİNDEKİ sıra (`YanMenu.visibleItems`, vitrin kartlarının sırası) eskisi gibidir; ÇEKMECEDE öğe
+// kendi başlığının altındadır (Duyurular "İletişim"de). Ayar öğeleri (Profilim, Eller Serbest, Modül Talepleri ...)
+// çekmecede değil, sağ üstteki dişliden açılan Ayarlar panelindedir.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:site_kapi_kontrol/models/user_role.dart';
@@ -55,17 +59,46 @@ Future<List<String>> _pumpMenu(
   ];
 }
 
+/// Menü listesinin (vitrin sırası) başlıkları.
+List<String> _listTitles(
+  UserRole role, {
+  Set<SirketMenuItem> additional = const <SirketMenuItem>{},
+  bool resident = false,
+  bool toggle = false,
+}) =>
+    <String>[
+      for (final item in YanMenu.visibleItems(
+        role: role,
+        isResidentMode: resident,
+        canToggleMode: toggle,
+        additionalItems: additional,
+      ))
+        YanMenu.titleFor(item, role),
+    ];
+
+/// Çekmecede [title] öğesi [header] başlığının altında mı (başlık öğenin üstünde)?
+void _expectUnderHeader(WidgetTester t, String title, String header) {
+  final h = t.getRect(find.text(header));
+  final tile = t.getRect(find.widgetWithText(ListTile, title));
+  expect(h.bottom, lessThanOrEqualTo(tile.top + 0.01), reason: '"$title" "$header" başlığının altında');
+}
+
 void main() {
   group('Duyurular çekmece öğesi', () {
     testWidgets('rol listesinde YOK: varsayılan menü eskisi gibidir (hiçbir rolde Duyurular çıkmaz)', (t) async {
       for (final role in UserRole.values) {
         expect(await _pumpMenu(t, role), isNot(contains('Duyurular')), reason: role.name);
       }
-      expect(await _pumpMenu(t, UserRole.apartmentOwner), <String>[
+      // Menü listesi eskisi gibi; çekmecede ayar öğeleri yok (dişlide).
+      expect(_listTitles(UserRole.apartmentOwner), <String>[
         'Panel',
         'Daireye Katıl & Cihaz Ekle',
         'Eller Serbest & Kestirmeler',
         'Profilim',
+      ]);
+      expect(await _pumpMenu(t, UserRole.apartmentOwner), <String>[
+        'Panel',
+        'Daireye Katıl & Cihaz Ekle',
         'Çıkış Yap',
       ]);
     });
@@ -78,14 +111,18 @@ void main() {
         additional: const <SirketMenuItem>{SirketMenuItem.duyurular},
         onSelect: selected.add,
       );
+      expect(
+        _listTitles(UserRole.apartmentOwner, additional: const <SirketMenuItem>{SirketMenuItem.duyurular}).take(2),
+        <String>['Panel', 'Duyurular'],
+        reason: 'menü listesinde (vitrin sırası) Panel\'in hemen altında',
+      );
       expect(titles, <String>[
         'Panel',
-        'Duyurular',
         'Daireye Katıl & Cihaz Ekle',
-        'Eller Serbest & Kestirmeler',
-        'Profilim',
+        'Duyurular',
         'Çıkış Yap',
       ]);
+      _expectUnderHeader(t, 'Duyurular', 'İletişim');
       await t.tap(find.text('Duyurular'));
       expect(selected, <SirketMenuItem>[SirketMenuItem.duyurular]);
     });
@@ -98,8 +135,15 @@ void main() {
           toggle: role == UserRole.siteManager,
           additional: const <SirketMenuItem>{SirketMenuItem.duyurular},
         );
-        expect(titles.indexOf('Duyurular'), titles.indexOf('Kişiler') + 1, reason: role.name);
+        final list = _listTitles(
+          role,
+          toggle: role == UserRole.siteManager,
+          additional: const <SirketMenuItem>{SirketMenuItem.duyurular},
+        );
+        expect(list.indexOf('Duyurular'), list.indexOf('Kişiler') + 1, reason: '${role.name} (menü listesi)');
         expect(titles.where((e) => e == 'Duyurular'), hasLength(1));
+        _expectUnderHeader(t, 'Duyurular', 'İletişim');
+        _expectUnderHeader(t, 'Kişiler', 'Daireler');
       }
     });
 
@@ -109,7 +153,14 @@ void main() {
         UserRole.apartmentOwner,
         additional: const <SirketMenuItem>{SirketMenuItem.duyurular, SirketMenuItem.kisiler},
       );
-      expect(titles.take(3).toList(), <String>['Panel', 'Kişiler', 'Duyurular']);
+      expect(
+        _listTitles(
+          UserRole.apartmentOwner,
+          additional: const <SirketMenuItem>{SirketMenuItem.duyurular, SirketMenuItem.kisiler},
+        ).take(3).toList(),
+        <String>['Panel', 'Kişiler', 'Duyurular'],
+      );
+      expect(titles, <String>['Panel', 'Kişiler', 'Daireye Katıl & Cihaz Ekle', 'Duyurular', 'Çıkış Yap']);
     });
 
     testWidgets('sakin modundaki site yöneticisi: Duyurular eklenir (kişiler rol listesinde yok)', (t) async {
@@ -175,13 +226,26 @@ void main() {
       semantics.dispose();
     });
 
-    testWidgets('nouns verilmeyen öğe eski sözcüğü ("bekleyen") korur (Modül Talepleri)', (t) async {
+    testWidgets('nouns verilmeyen öğe eski sözcüğü ("bekleyen") korur (Modül Talepleri, Ayarlar panelinde)', (t) async {
       final semantics = t.ensureSemantics();
-      await _pumpMenu(
-        t,
-        UserRole.superUser,
-        badges: const <SirketMenuItem, int>{SirketMenuItem.modulTalepleri: 4},
+      t.view.physicalSize = const Size(360, 1400);
+      t.view.devicePixelRatio = 1.0;
+      addTearDown(t.view.reset);
+      await t.pumpWidget(
+        harnessApp(
+          SizedBox(
+            height: 1400,
+            child: YanMenuAyarlar(
+              role: UserRole.superUser,
+              selectedItem: SirketMenuItem.dashboard,
+              onSelect: (_) {},
+              badgeCounts: const <SirketMenuItem, int>{SirketMenuItem.modulTalepleri: 4},
+            ),
+          ),
+          scale: 1.0,
+        ),
       );
+      await t.pump(const Duration(milliseconds: 450));
       expect(
         t.getSemantics(find.widgetWithText(ListTile, 'Modül Talepleri')).getSemanticsData().label,
         contains('4 bekleyen'),

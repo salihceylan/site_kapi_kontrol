@@ -46,11 +46,26 @@ Future<List<String>> _pumpMenu(
     ),
   );
   await t.pump(const Duration(milliseconds: 450));
-  final tiles = find.descendant(of: find.byType(Drawer), matching: find.byType(ListTile));
+  // İP-1D (G2): çekmece başlıklar altında gruplu çizilir ve ayar öğeleri sağ üstteki dişlidedir. Bu dosyanın sıra
+  // kuralları menü LİSTESİNİN sırasıdır (`YanMenu.visibleItems`: vitrin kartlarının sırası); öğenin çekmecedeki
+  // başlığı [_expectUnderHeader] ile sınanır.
   return <String>[
-    for (var i = 0; i < tiles.evaluate().length; i++)
-      ((t.widget<ListTile>(tiles.at(i))).title! as Text).data!,
+    for (final item in YanMenu.visibleItems(
+      role: role,
+      isResidentMode: resident,
+      canToggleMode: toggle,
+      additionalItems: additional,
+      hiddenItems: hidden,
+    ))
+      YanMenu.titleFor(item, role),
   ];
+}
+
+/// Çekmecede [title] öğesi [header] başlığının altında mı (başlık öğenin üstünde ve öğe çizili)?
+void _expectUnderHeader(WidgetTester t, String title, String header) {
+  final h = t.getRect(find.text(header));
+  final tile = t.getRect(find.widgetWithText(ListTile, title));
+  expect(h.bottom, lessThanOrEqualTo(tile.top + 0.01), reason: '"$title" "$header" başlığının altında');
 }
 
 void main() {
@@ -74,6 +89,7 @@ void main() {
       );
       expect(titles.indexOf('Finans'), titles.indexOf('Duyurular') + 1);
       expect(titles.indexOf('Duyurular'), titles.indexOf('Kişiler') + 1);
+      _expectUnderHeader(t, 'Finans', 'Borçlar');
       await t.tap(find.text('Finans'));
       expect(selected, <SirketMenuItem>[SirketMenuItem.finans]);
     });
@@ -102,8 +118,9 @@ void main() {
         'Daireye Katıl & Cihaz Ekle',
         'Eller Serbest & Kestirmeler',
         'Profilim',
-        'Çıkış Yap',
       ]);
+      _expectUnderHeader(t, 'Borcum', 'Borçlar');
+      expect(find.text('Profilim'), findsNothing, reason: 'Profilim Ayarlar panelinde (dişli)');
       await t.tap(find.text('Borcum'));
       expect(selected, <SirketMenuItem>[SirketMenuItem.borcum]);
     });

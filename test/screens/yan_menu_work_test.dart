@@ -41,11 +41,25 @@ Future<List<String>> _pumpMenu(
     ),
   );
   await t.pump(const Duration(milliseconds: 450));
-  final tiles = find.descendant(of: find.byType(Drawer), matching: find.byType(ListTile));
+  // İP-1D (G2): çekmece başlıklar altında gruplu çizilir ve ayar öğeleri sağ üstteki dişlidedir. Bu dosyanın sıra
+  // kuralları menü LİSTESİNİN sırasıdır (`YanMenu.visibleItems`: vitrin kartlarının sırası); öğenin çekmecedeki
+  // başlığı [_expectUnderHeader] ile sınanır.
   return <String>[
-    for (var i = 0; i < tiles.evaluate().length; i++)
-      ((t.widget<ListTile>(tiles.at(i))).title! as Text).data!,
+    for (final item in YanMenu.visibleItems(
+      role: role,
+      canToggleMode: toggle,
+      additionalItems: additional,
+      hiddenItems: hidden,
+    ))
+      YanMenu.titleFor(item, role),
   ];
+}
+
+/// Çekmecede [title] öğesi [header] başlığının altında mı (başlık öğenin üstünde ve öğe çizili)?
+void _expectUnderHeader(WidgetTester t, String title, String header) {
+  final h = t.getRect(find.text(header));
+  final tile = t.getRect(find.widgetWithText(ListTile, title));
+  expect(h.bottom, lessThanOrEqualTo(tile.top + 0.01), reason: '"$title" "$header" başlığının altında');
 }
 
 void main() {
@@ -72,6 +86,8 @@ void main() {
     );
     expect(titles.indexOf('Talepler'), titles.indexOf('Belgeler') + 1);
     expect(titles.indexOf('Taleplerim'), titles.indexOf('Talepler') + 1);
+    _expectUnderHeader(t, 'Talepler', 'İletişim');
+    _expectUnderHeader(t, 'Taleplerim', 'İletişim');
     await t.tap(find.text('Taleplerim'));
     expect(selected, <SirketMenuItem>[SirketMenuItem.taleplerim]);
   });
