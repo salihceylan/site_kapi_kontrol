@@ -95,6 +95,9 @@
 //             (duz kopya NULL, isaret, eski PIN'le giris calisir), ikinci calistirma no-op, migration dosyasi yolu, ilk kurulum x apartments yazici yuku (40P01 = 0),
 //             HTTP (liste PIN tasimaz, olusturma / sifirlama PIN'i bir kez, yetki matrisi, eski oturum gecersiz, eski uc 409). QA_ONLY=apartment_pin
 //             (zincir esitligi icin chain,live,apartment_pin; live yukseltmesi 051 aktarimini ayrica dogrular).
+//   platform_rules  Kurallar tablosu (053, G11; govde scripts/qa_platform_rules_section.mjs): sema, yalniz ekleme tetikleyicisi (CASCADE / SET NULL istisnalari),
+//             cozum sirasi + tarih + kirpma (dogrudan SQL ile sinir disi deger), getRule onbellegi, HTTP yetki matrisi + IDOR, dogrulama, no-op, audit, eszamanli
+//             yazma (40P01 = 0), gecikme tazminati ust siniri (ayar 400, GET ve onizleme kirpilmis oran). QA_ONLY=platform_rules (zincir esitligi icin chain,live,platform_rules).
 //
 // GEREKSINIMLER
 //   - Yerelde calisan, SUPERUSER ile erisilebilen BIR PostgreSQL sunucusu (tek kullanimlik; ornegin gecici bir dizinde
@@ -129,6 +132,7 @@ import { sectionCardAccess } from './qa_card_access_section.mjs';
 import { sectionContracts } from './qa_contracts_section.mjs';
 import { sectionDecisionBook } from './qa_decision_book_section.mjs';
 import { sectionApartmentPin } from './qa_apartment_pin_section.mjs';
+import { sectionPlatformRules } from './qa_platform_rules_section.mjs';
 
 const SELF = fileURLToPath(import.meta.url);
 const SERVER_DIR = path.resolve(path.dirname(SELF), '..');
@@ -218,6 +222,7 @@ const CATALOG_TABLES = [
   'contract_vendors',
   'site_contracts',
   'contract_reminders',
+  'platform_rule_values',
 ];
 const APARTMENT_COLUMNS = ['floor', 'gross_area_m2', 'net_area_m2', 'land_share_numerator', 'land_share_denominator', 'category', 'responsible_party'];
 const NAMED_CONSTRAINTS = [
@@ -256,10 +261,10 @@ async function readCatalog(client) {
   const triggers = await client.query(
     `SELECT c.relname AS tbl, t.tgname, regexp_replace(pg_get_triggerdef(t.oid), '\\s+', ' ', 'g') AS def
      FROM pg_trigger t INNER JOIN pg_class c ON c.oid = t.tgrelid
-     WHERE NOT t.tgisinternal AND t.tgname IN ('trg_users_preserve_site_people', 'trg_ledger_entries_append_only', 'trg_ledger_entries_reversal_check', 'trg_ledger_entries_no_truncate', 'trg_fee_runs_append_only', 'trg_fee_runs_no_truncate', 'trg_finance_period_closures_no_update', 'trg_board_decisions_immutable', 'trg_board_decisions_no_truncate') ORDER BY 1, 2`,
+     WHERE NOT t.tgisinternal AND t.tgname IN ('trg_users_preserve_site_people', 'trg_ledger_entries_append_only', 'trg_ledger_entries_reversal_check', 'trg_ledger_entries_no_truncate', 'trg_fee_runs_append_only', 'trg_fee_runs_no_truncate', 'trg_finance_period_closures_no_update', 'trg_board_decisions_immutable', 'trg_board_decisions_no_truncate', 'trg_platform_rule_values_immutable', 'trg_platform_rule_values_no_truncate') ORDER BY 1, 2`,
   );
   const functions = await client.query(
-    `SELECT proname, regexp_replace(prosrc, '\\s+', ' ', 'g') AS src FROM pg_proc WHERE proname IN ('trg_users_preserve_site_people', 'trg_ledger_entries_append_only', 'trg_ledger_entries_reversal_check', 'trg_fee_runs_append_only', 'trg_finance_period_closures_no_update', 'trg_finance_block_truncate', 'trg_board_decisions_immutable', 'trg_board_decisions_block_truncate') ORDER BY 1`,
+    `SELECT proname, regexp_replace(prosrc, '\\s+', ' ', 'g') AS src FROM pg_proc WHERE proname IN ('trg_users_preserve_site_people', 'trg_ledger_entries_append_only', 'trg_ledger_entries_reversal_check', 'trg_fee_runs_append_only', 'trg_finance_period_closures_no_update', 'trg_finance_block_truncate', 'trg_board_decisions_immutable', 'trg_board_decisions_block_truncate', 'trg_platform_rule_values_immutable', 'trg_platform_rule_values_block_truncate') ORDER BY 1`,
   );
   // tohum satirlari (zamandan bagimsiz alanlar): migration zinciri ile ensureDbSchema ayni tohumu yazmali
   const seeds = {
@@ -375,6 +380,7 @@ async function runParent() {
     contracts: `${prefix}_contracts`,
     decision_book: `${prefix}_decision_book`,
     apartment_pin: `${prefix}_apartment_pin`,
+    platform_rules: `${prefix}_platform_rules`,
     finance_upgrade_base: `${prefix}_fu_base`,
     finance_upgrade_ensure: `${prefix}_fu_ensure`,
     finance_upgrade_migrate: `${prefix}_fu_migrate`,
@@ -433,7 +439,7 @@ async function runParent() {
 
     // legacy ve live: yukseltme senaryolari
     for (const [key, limit, scenario] of [['legacy', platformFirst, 'legacy'], ['live', peopleFirst, 'live']]) {
-      if (!wants(key) && !(key === 'live' && (wants('platform') || wants('people') || wants('locks') || wants('announcements') || wants('site_applications') || wants('finance') || wants('finance4b') || wants('platform_services') || wants('account') || wants('bulk_import') || wants('documents') || wants('push') || wants('work_tracking') || wants('reservation') || wants('survey') || wants('visitor_log') || wants('card_access') || wants('contracts') || wants('decision_book') || wants('apartment_pin')))) continue;
+      if (!wants(key) && !(key === 'live' && (wants('platform') || wants('people') || wants('locks') || wants('announcements') || wants('site_applications') || wants('finance') || wants('finance4b') || wants('platform_services') || wants('account') || wants('bulk_import') || wants('documents') || wants('push') || wants('work_tracking') || wants('reservation') || wants('survey') || wants('visitor_log') || wants('card_access') || wants('contracts') || wants('decision_book') || wants('apartment_pin') || wants('platform_rules')))) continue;
       await recreate(names[key]);
       const subset = subsetMigrations(limit);
       dirs.push(subset);
@@ -471,7 +477,7 @@ async function runParent() {
     }
 
     // platform / people / locks: yukseltilmis "live" veritabaninin kopyalari
-    for (const key of ['platform', 'people', 'locks', 'announcements', 'site_applications', 'finance', 'finance4b', 'platform_services', 'account', 'bulk_import', 'documents', 'push', 'work_tracking', 'reservation', 'survey', 'visitor_log', 'card_access', 'contracts', 'decision_book', 'apartment_pin']) {
+    for (const key of ['platform', 'people', 'locks', 'announcements', 'site_applications', 'finance', 'finance4b', 'platform_services', 'account', 'bulk_import', 'documents', 'push', 'work_tracking', 'reservation', 'survey', 'visitor_log', 'card_access', 'contracts', 'decision_book', 'apartment_pin', 'platform_rules']) {
       if (!wants(key)) continue;
       await recreate(names[key], names.live);
       record(key, runSection(key, names[key]));
@@ -9862,6 +9868,8 @@ async function sectionAccount() {
     // Karar defteri (050): karar siteye aittir; kesin karar DEGISMEZ (tetikleyici), *_by yalniz users satiri silinirse FK SET NULL ile NULL olur; ad JOIN ile Silinmis Kullanici
     'board_decisions.created_by': 'TOMBSTONE (karar siteye aittir; yazan JOIN ile Silinmis Kullanici)',
     'board_decisions.finalized_by': 'TOMBSTONE (degismez kesin karar; kesinlestiren JOIN ile Silinmis Kullanici)',
+    // Kurallar tablosu (053): kural degeri yalniz eklenir (tetikleyici); degistiren UPDATE edilmez, FK SET NULL yalniz users satiri silinirse; ad JOIN ile Silinmis Kullanici
+    'platform_rule_values.created_by': 'TOMBSTONE (kural degeri platforma aittir; degistiren JOIN ile Silinmis Kullanici)',
   };
   const fkRows = (
     await q(`
@@ -11478,6 +11486,8 @@ const SECTIONS = {
   decision_book: () => sectionDecisionBook({ check, same, sleep, childEnv, finishChild, installPoolHooks, serverErrors }),
   // Daire PIN'i duz metin kopyasi kaldirildi (051); govde scripts/qa_apartment_pin_section.mjs
   apartment_pin: () => sectionApartmentPin({ check, same, sleep, childEnv, finishChild, installPoolHooks, serverErrors, mails }),
+  // Kurallar tablosu (053, G11); govde scripts/qa_platform_rules_section.mjs
+  platform_rules: () => sectionPlatformRules({ check, same, sleep, childEnv, finishChild, installPoolHooks, serverErrors }),
 };
 
 if (SECTION === '') {
