@@ -104,14 +104,15 @@ kullanıcıdan gerekenler".
    uygulama yapılandırması, "APNs authentication key", Upload: dosyayı seçin ve Key ID'yi girin. (Firebase sayfası Team ID'den söz
    etmiyor; ekran isterse Team ID'yi girin.)
 5. **Hizmet hesabı (sunucunun bildirim gönderebilmesi için):**
-   - Firebase belgesindeki yol: Proje ayarları, Hizmet hesapları, "Generate New Private Key", "Generate Key". JSON dosyası iner. Bu
-     varsayılan hesap geniş yetkilidir.
+   - Firebase belgesindeki yol: Proje ayarları, Hizmet hesapları, "Generate New Private Key", "Generate Key". JSON dosyası iner.
+     Depodaki teknik belgeye göre (`docs/PLATFORM_BELGELER.md` B0 madde 6) bu varsayılan hesap gerekenden geniş yetkilidir.
    - Önerdiğimiz yol (en az yetki): Google Cloud Console'da IAM, Hizmet hesapları, yeni hesap; rol olarak yalnız **Firebase Cloud
      Messaging API Admin** (`roles/firebasecloudmessaging.admin`; mesaj gönderme izni `cloudmessaging.messages.create` içinde). Sonra
      Anahtarlar, Anahtar ekle, JSON. (Bu rolle gönderimin çalıştığı bu çalışmada denenmedi.)
-   - **Tuzak:** Google Workspace ya da Cloud Identity ile 3 Mayıs 2024 ve sonrasında kurulan kuruluşlarda "Disable service account key
-     creation" kısıtı (`constraints/iam.managed.disableServiceAccountKeyCreation`) varsayılan olarak açıktır. Anahtar oluşturma hata
-     verirse kuruluş politikası yöneticisi (`roles/orgpolicy.policyAdmin`) bu proje için istisna tanımlamalıdır.
+   - **Tuzak:** 3 Mayıs 2024 ve sonrasında oluşturulan Google Cloud kuruluşlarında "Disable service account key creation" kısıtı
+     (`constraints/iam.managed.disableServiceAccountKeyCreation`) varsayılan olarak uygulanır. Google'a göre kuruluş, alan adınızdan bir
+     kullanıcı ilk kez girdiğinde ya da kuruluşa bağlı olmayan bir faturalama hesabı açıldığında kendiliğinden oluşur. Anahtar oluşturma
+     hata verirse kuruluş politikası yöneticisi (`roles/orgpolicy.policyAdmin`) bu proje için istisna tanımlamalıdır.
    - JSON dosyasını e-postayla, mesajla, sohbete ya da depoya **koymayın**. Salih sunucuya güvenli kopyalar (`/etc/kapi/` altına, yalnız
      uygulama kullanıcısı okuyabilir) ve `.env`'de yolunu verir.
 6. Google Cloud'da Android ve iOS API anahtarlarını uygulama kimliğiyle kısıtlayın.
@@ -192,4 +193,5 @@ Ayrıntı: `docs/PLATFORM_DRIVE_DEPOLAMA.md`.
 19. Google Drive API kapsamları (`drive.file` hassas değil): <https://developers.google.com/workspace/drive/api/guides/api-specific-auth>
 20. Google Cloud IAM, Firebase Cloud Messaging rolleri: <https://docs.cloud.google.com/iam/docs/roles-permissions/firebasecloudmessaging>
 21. Google Cloud, güvenlik taban kısıtları (hizmet hesabı anahtarı): <https://docs.cloud.google.com/organization-policy/manage-baseline-constraints>
+    ve kuruluşun ne zaman kendiliğinden oluştuğu: <https://docs.cloud.google.com/resource-manager/docs/secure-by-default-organizations>
 22. Güde Teknoloji web sitesi (çalışıyor mu, iletişim bilgileri): <https://gudeteknoloji.com.tr/>

@@ -25,8 +25,9 @@ yerleri değişince bu belgedeki adımlar da güncellenir (bölüm 6).
 
 1. Süper kullanıcı bir demo sitesi kurar (ör. "Örnek Sitesi"; 2 blok, 24 daire). Daire künyesine m² ve arsa payı girilir.
 2. Kişiler **Toplu Yükle** ile uydurma adlarla doldurulur (malik, kiracı; birkaç araç).
-3. Modüller ekranından demo sitesinde şu modüller açılır: Finans, Duyurular, Belgeler, İş Takibi (Talepler), Rezervasyon, Anket ve
-   Oylama, Ziyaretçi ve Kargo, Sözleşmeler, Karar Defteri.
+3. Modüller ekranından demo sitesinde şu modüller açılır: Aidat ve Finans, Belgeler (Dosya Deposu), İş Takibi, Rezervasyon ve
+   Konsiyerj, Ziyaretçi ve Kargo, Firma ve Sözleşme Takibi, Karar Defteri. (Kişi ve Daire Kayıtları ile Duyuru ve Bildirim her sitede
+   zaten açıktır.) **Anket ve Oylama kapalı bırakılır:** süper kullanıcı bölümünde canlı açılacak; demodan sonra yeniden kapatılır.
 4. Üç demo hesabı: **yönetici**, **sakin (kiracı)** ve **süper kullanıcı**. Sakin hesabı bir daireye bağlı olmalı; taşınma tarihi
    geçmiş bir ay olsun (Borcum o tarihten itibaren gösterir).
 5. Örnek veriler: aylık aidat tanımı (arsa payına göre dağıtım) ve geçmiş bir ayın borçlandırması; iki tahsilat (makbuzlu); bir gider
@@ -38,6 +39,7 @@ yerleri değişince bu belgedeki adımlar da güncellenir (bölüm 6).
 - [ ] Sunucu ayakta: uygulama açılıyor, giriş yapılıyor.
 - [ ] Üç hesapla giriş denendi (yönetici web'de ya da bilgisayarda, sakin telefonda, süper kullanıcı ikinci tarayıcıda).
 - [ ] Telefon şarjlı, ekranı paylaşılabiliyor; bildirimler sessizde.
+- [ ] Demo sitesinde Anket ve Oylama kapalı (süper kullanıcı bölümünde açılacak).
 - [ ] "Bu iki haftada yeni" listesi hazır (en çok 3 madde; bölüm 4).
 - [ ] Yedek plan hazır (bölüm 5).
 
@@ -68,7 +70,7 @@ yerleri değişince bu belgedeki adımlar da güncellenir (bölüm 6).
 ### 10:00-13:00 Süper kullanıcı (3 dakika)
 
 1. **Site Başvuruları** ve **Modül Talepleri:** bekleyen istekler ve onay akışı.
-2. **Modüller:** demo sitesinde kapalı bir modül (ör. Anket ve Oylama) açılır; yöneticinin Panel'inde kart belirir.
+2. **Modüller:** demo sitesinde kapalı duran Anket ve Oylama açılır; yöneticinin Panel'inde kart ve menüde öğe belirir.
 3. **Platform Ayarları:** şirket ve yasal bilgiler (unvan, adres, telefon). Yasal metin sayfası açılır (ör. `/legal/kvkk_notice`):
    KEP ve MERSİS boşken metinde bu satırlar hiç görünmez; e-posta girilene kadar "[……]" ve "taslak" uyarısı görünür.
 4. **Denetim Kaydı:** demoda yapılan işlemler (borçlandırma, tahsilat, modül açma) kim ve ne zaman bilgisiyle kayıtlı.
