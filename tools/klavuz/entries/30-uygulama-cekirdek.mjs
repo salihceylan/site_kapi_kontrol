@@ -69,9 +69,9 @@ export default {
         },
         {
           file: 'lib/services/auth_service.dart',
-          find: '_session = await api.login(email: email, password: password, role: role);',
+          find: '_session = await api.login(',
           until: "return 'Sunucuya baglanilamadi.';",
-          note: 'Giriş: ApiException mesajı aynen döner; ApiException dışındaki HER istisna "Sunucuya baglanilamadi." olur',
+          note: 'Giriş: ApiException mesajı aynen döner; ApiException dışındaki HER istisna "Sunucuya baglanilamadi." olur (güvenilir cihaz belirtecinin okunup yazılması hata verse de girişi bozmaz)',
         },
         {
           file: 'lib/services/auth_service.dart',
@@ -279,12 +279,12 @@ export default {
         },
         {
           file: 'lib/app.dart',
-          find: 'return HomePage(',
-          note: 'Oturumlu kullanıcı için ana sayfa; bu widget\'ın kendi build hatası ekranı boş/gri bırakabilir (ekran alanı: lib/ui)',
+          find: 'child: HomePage(',
+          note: 'Oturumlu kullanıcı için ana sayfa ("Güncellenen koşullar" kapısı LegalConsentGate\'in çocuğu: bekleyen yasal onay varsa üstüne tam ekran onay sayfası biner, hata/zaman aşımında kilitlemez); bu widget\'ın kendi build hatası ekranı boş/gri bırakabilir (ekran alanı: lib/ui)',
         },
         {
           file: 'lib/services/auth_service.dart',
-          find: '_session = await api.login(email: email, password: password, role: role);',
+          find: '_session = await api.login(',
           note: 'Oturum atanır, kalıcılaştırılır, SONRA dinleyiciler bilgilendirilir',
         },
         {
@@ -294,7 +294,7 @@ export default {
         },
         {
           file: 'lib/services/auth_api.dart',
-          find: "return _parsePayload('Oturum bilgisi', () {",
+          find: "final session = _parsePayload('Oturum bilgisi', () {",
           note: 'Giriş yanıtı beklenen şekilde değilse (user/token eksik) ekran değil HATA MESAJI döner: "Oturum bilgisi verisi beklenen formatta degil."',
         },
         {

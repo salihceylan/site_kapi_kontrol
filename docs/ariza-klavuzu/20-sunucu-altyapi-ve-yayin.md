@@ -107,9 +107,9 @@ Bu bölüm API sürecinin ayağa kalkması (PM2, ortam doğrulaması, /health), 
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/server.js:168](../../server/src/server.js#L168) | <code>async function startServer() {</code> | Açılış sırası: checkEnvOrExit → ensureDbSchema → startMqttBridge → temizlik → dinleme; ilk başarısız adım süreci düşürür |
-| [server/src/server.js:190](../../server/src/server.js#L190) | <code>console.error('Server startup failed:', error);</code> | Açılışta fırlatılan her hata (DB'ye ulaşılamadı, şema SQL hatası) buraya düşer, ardından process.exit(1) |
-| [server/src/server.js:170](../../server/src/server.js#L170) | <code>checkEnvOrExit();</code> | Ortam doğrulaması DB'den ÖNCE çalışır; JWT_SECRET hatasında DB'ye hiç bağlanılmaz |
+| [server/src/server.js:237](../../server/src/server.js#L237) | <code>async function startServer() {</code> | Açılış sırası: checkEnvOrExit → ensureDbSchema → startMqttBridge → temizlik → dinleme; ilk başarısız adım süreci düşürür |
+| [server/src/server.js:277](../../server/src/server.js#L277) | <code>console.error('Server startup failed:', error);</code> | Açılışta fırlatılan her hata (DB'ye ulaşılamadı, şema SQL hatası) buraya düşer, ardından process.exit(1) |
+| [server/src/server.js:239](../../server/src/server.js#L239) | <code>checkEnvOrExit();</code> | Ortam doğrulaması DB'den ÖNCE çalışır; JWT_SECRET hatasında DB'ye hiç bağlanılmaz |
 | [server/src/config/process_handlers.js:28](../../server/src/config/process_handlers.js#L28) | <code>const onUncaughtException = (error) =&gt; {</code> | Yakalanmamış istisna: günlüğe yazar ve exit(1); PM2 yeniden başlatır |
 | [server/ecosystem.config.cjs:38](../../server/ecosystem.config.cjs#L38) | <code>min_uptime: '15s',</code> | 15 sn dayanmayan çıkışlar "kararsız" sayılır ve yeniden başlatma sayacını artırır |
 | [server/ecosystem.config.cjs:39](../../server/ecosystem.config.cjs#L39) | <code>max_restarts: 30,</code> | Üst üste kararsız yeniden başlatma sınırı; aşılınca PM2 süreci errored bırakır |
@@ -148,10 +148,10 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 100 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/config/env.js:64](../../server/src/config/env.js#L64) | <code>'JWT_SECRET tanimli degil veya yer tutucu bir deger. Guclu, rastgele bir secret tanimlayi…</code> | Hata iletisinin üretildiği yer: secret boş ya da yer tutucuysa evaluateJwtSecret ok:false döner |
-| [server/src/config/env.js:42](../../server/src/config/env.js#L42) | <code>export function isPlaceholderSecret(value) {</code> | Hangi değerlerin "yer tutucu" sayıldığı (PLACEHOLDER_EXACT / PLACEHOLDER_PATTERNS: change_this_secret, your-secret, <JWT_SECRET> ...) |
-| [server/src/config/env.js:100](../../server/src/config/env.js#L100) | <code>const jwtCheck = evaluateJwtSecret(env.JWT_SECRET);</code> | validateEnv içinde TEK "errors" kaynağı budur; diğer eksikler yalnız uyarıdır |
-| [server/src/server.js:102](../../server/src/server.js#L102) | <code>function checkEnvOrExit() {</code> | errors doluysa [ENV] HATA yazar ve process.exit(1); uyarılar [ENV] UYARI olarak yazılır |
+| [server/src/config/env.js:67](../../server/src/config/env.js#L67) | <code>'JWT_SECRET tanimli degil veya yer tutucu bir deger. Guclu, rastgele bir secret tanimlayi…</code> | Hata iletisinin üretildiği yer: secret boş ya da yer tutucuysa evaluateJwtSecret ok:false döner |
+| [server/src/config/env.js:45](../../server/src/config/env.js#L45) | <code>export function isPlaceholderSecret(value) {</code> | Hangi değerlerin "yer tutucu" sayıldığı (PLACEHOLDER_EXACT / PLACEHOLDER_PATTERNS: change_this_secret, your-secret, <JWT_SECRET> ...) |
+| [server/src/config/env.js:249](../../server/src/config/env.js#L249) | <code>const jwtCheck = evaluateJwtSecret(env.JWT_SECRET);</code> | validateEnv içinde TEK "errors" kaynağı budur; diğer eksikler yalnız uyarıdır |
+| [server/src/server.js:165](../../server/src/server.js#L165) | <code>function checkEnvOrExit() {</code> | errors doluysa [ENV] HATA yazar ve process.exit(1); uyarılar [ENV] UYARI olarak yazılır |
 
 **Olası nedenler**
 - server/.env içinde JWT_SECRET yok ya da boş
@@ -180,10 +180,10 @@ ssh -p 22667 salihceylan@178.210.161.55 'bash -s' < deploy/remote_audit.sh   # s
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/config/env.js:68](../../server/src/config/env.js#L68) | <code>if (length &lt; MIN_RECOMMENDED_JWT_SECRET_LENGTH) {</code> | 32 karakterden kısa secret yalnız UYARI üretir (ok:true); sunucu açılır |
-| [server/src/config/env.js:108](../../server/src/config/env.js#L108) | <code>warnings.push('JWT_EXPIRES_IN gecersiz bicimde (ornek: 30d, 12h); giris tokeni uretimi ba…</code> | JWT_EXPIRES_IN biçimi hatalıysa (30d, 12h gibi olmalı) yalnız uyarı; token üretimi başarısız olabilir |
-| [server/src/server.js:105](../../server/src/server.js#L105) | <code>console.warn(`[ENV] UYARI: ${warning}`);</code> | Tüm uyarıların yazıldığı yer; secret değeri asla yazılmaz (yalnız uzunluk) |
-| [deploy/README.md:38](../../deploy/README.md#L38) | <code>- Canlı `JWT_SECRET` (≥32 karakter), `JWT_EXPIRES_IN` ve `NODE_ENV=production` kararları …</code> | Canlıdaki secret/süre/NODE_ENV kararları kullanıcıya aittir; kendiliğinden değiştirilmez |
+| [server/src/config/env.js:71](../../server/src/config/env.js#L71) | <code>if (length &lt; MIN_RECOMMENDED_JWT_SECRET_LENGTH) {</code> | 32 karakterden kısa secret yalnız UYARI üretir (ok:true); sunucu açılır |
+| [server/src/config/env.js:257](../../server/src/config/env.js#L257) | <code>warnings.push('JWT_EXPIRES_IN gecersiz bicimde (ornek: 30d, 12h); varsayilan 30 gun kulla…</code> | JWT_EXPIRES_IN biçimi hatalıysa (30d, 12h gibi olmalı) yalnız uyarı; token üretimi başarısız olabilir |
+| [server/src/server.js:168](../../server/src/server.js#L168) | <code>console.warn(`[ENV] UYARI: ${warning}`);</code> | Tüm uyarıların yazıldığı yer; secret değeri asla yazılmaz (yalnız uzunluk) |
+| [deploy/README.md:39](../../deploy/README.md#L39) | <code>- Canlı `JWT_SECRET` (≥32 karakter), `JWT_EXPIRES_IN` ve `NODE_ENV=production` kararları …</code> | Canlıdaki secret/süre/NODE_ENV kararları kullanıcıya aittir; kendiliğinden değiştirilmez |
 
 **Olası nedenler**
 - Canlı .env'deki secret 20 karakter (kullanıcı kararıyla değiştirilmedi); bu bir arıza değil, bilinen uyarıdır
@@ -205,13 +205,13 @@ ssh -p 22667 salihceylan@178.210.161.55 'bash -s' < deploy/remote_audit.sh   # s
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/config/env.js:118](../../server/src/config/env.js#L118) | <code>const missingDb = ['DB_HOST', 'DB_NAME', 'DB_USER', 'DB_PASSWORD'].filter((name) =&gt; !isSe…</code> | DB_HOST/DB_NAME/DB_USER/DB_PASSWORD eksikse uyarı (sunucu yine de başlar; DB bağlantısı sonra hata verir) |
-| [server/src/config/env.js:123](../../server/src/config/env.js#L123) | <code>const missingMqtt = ['MQTT_HOST', 'MQTT_USER', 'MQTT_PASSWORD'].filter((name) =&gt; !isSet(e…</code> | MQTT_HOST/MQTT_USER/MQTT_PASSWORD eksikse uyarı: cihaz komutları çalışmaz |
-| [server/src/config/env.js:128](../../server/src/config/env.js#L128) | <code>const missingSmtp = ['SMTP_HOST', 'SMTP_USER', 'SMTP_PASSWORD'].filter((name) =&gt; !isSet(e…</code> | SMTP eksikse e-posta (doğrulama kodu, şifre sıfırlama, davet) gönderilemez |
-| [server/src/config/env.js:134](../../server/src/config/env.js#L134) | <code>warnings.push('COMPANY_API_KEY tanimli degil; /api/company/* yalnizca super_user JWT ile …</code> | Anahtar yoksa /api/company/* yalnız super_user JWT ile çalışır (şirket aracı X-Company-Key kullanamaz) |
-| [server/src/config/env.js:140](../../server/src/config/env.js#L140) | <code>warnings.push('CORS allowlist bos (CORS_ORIGINS/PUBLIC_APP_URL/PUBLIC_BASE_URL); tarayici…</code> | CORS_ORIGINS/PUBLIC_APP_URL/PUBLIC_BASE_URL üçü de boşsa tarayıcı tabanlı cross-origin istekler reddedilir |
-| [server/src/config/env.js:144](../../server/src/config/env.js#L144) | <code>warnings.push('NODE_ENV=production degil (Express gelistirme varsayilanlari aktif); oneri…</code> | NODE_ENV production değilse yalnız uyarı (hata yanıtları ortamdan bağımsız güvenlidir) |
-| [server/src/server.js:108](../../server/src/server.js#L108) | <code>console.warn(`[CORS] Gecersiz origin girdisi yok sayildi: ${entry}`);</code> | CORS_ORIGINS içindeki geçersiz girdi (şema yok, * vb.) sessizce atılmaz; burada loglanır |
+| [server/src/config/env.js:272](../../server/src/config/env.js#L272) | <code>const missingDb = ['DB_HOST', 'DB_NAME', 'DB_USER', 'DB_PASSWORD'].filter((name) =&gt; !isSe…</code> | DB_HOST/DB_NAME/DB_USER/DB_PASSWORD eksikse uyarı (sunucu yine de başlar; DB bağlantısı sonra hata verir) |
+| [server/src/config/env.js:277](../../server/src/config/env.js#L277) | <code>const missingMqtt = ['MQTT_HOST', 'MQTT_USER', 'MQTT_PASSWORD'].filter((name) =&gt; !isSet(e…</code> | MQTT_HOST/MQTT_USER/MQTT_PASSWORD eksikse uyarı: cihaz komutları çalışmaz |
+| [server/src/config/env.js:282](../../server/src/config/env.js#L282) | <code>const missingSmtp = ['SMTP_HOST', 'SMTP_USER', 'SMTP_PASSWORD'].filter((name) =&gt; !isSet(e…</code> | SMTP eksikse e-posta (doğrulama kodu, şifre sıfırlama, davet) gönderilemez |
+| [server/src/config/env.js:325](../../server/src/config/env.js#L325) | <code>warnings.push('COMPANY_API_KEY tanimli degil; /api/company/* yalnizca super_user JWT ile …</code> | Anahtar yoksa /api/company/* yalnız super_user JWT ile çalışır (şirket aracı X-Company-Key kullanamaz) |
+| [server/src/config/env.js:331](../../server/src/config/env.js#L331) | <code>warnings.push('CORS allowlist bos (CORS_ORIGINS/PUBLIC_APP_URL/PUBLIC_BASE_URL); tarayici…</code> | CORS_ORIGINS/PUBLIC_APP_URL/PUBLIC_BASE_URL üçü de boşsa tarayıcı tabanlı cross-origin istekler reddedilir |
+| [server/src/config/env.js:335](../../server/src/config/env.js#L335) | <code>warnings.push('NODE_ENV=production degil (Express gelistirme varsayilanlari aktif); oneri…</code> | NODE_ENV production değilse yalnız uyarı (hata yanıtları ortamdan bağımsız güvenlidir) |
+| [server/src/server.js:171](../../server/src/server.js#L171) | <code>console.warn(`[CORS] Gecersiz origin girdisi yok sayildi: ${entry}`);</code> | CORS_ORIGINS içindeki geçersiz girdi (şema yok, * vb.) sessizce atılmaz; burada loglanır |
 
 **Olası nedenler**
 - İlgili anahtar sunucudaki server/.env dosyasında yok/boş
@@ -241,8 +241,8 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 200 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/server.js:38](../../server/src/server.js#L38) | <code>dotenv.config();</code> | .env yalnız süreç AÇILIRKEN okunur; dotenv varsayılanı, süreç ortamında zaten tanımlı değişkenin üzerine YAZMAZ |
-| [deploy/README.md:26](../../deploy/README.md#L26) | <code>6. **Etkinleştirme:** `ssh ... "bash /home/salihceylan/kapi_remote_deploy_$TS.sh $TS acti…</code> | Dağıtım sonrası etkinleştirme PM2'yi --update-env ile yeniden başlatır |
+| [server/src/server.js:63](../../server/src/server.js#L63) | <code>dotenv.config();</code> | .env yalnız süreç AÇILIRKEN okunur; dotenv varsayılanı, süreç ortamında zaten tanımlı değişkenin üzerine YAZMAZ |
+| [deploy/README.md:27](../../deploy/README.md#L27) | <code>6. **Etkinleştirme:** `ssh ... "bash /home/salihceylan/kapi_remote_deploy_$TS.sh $TS acti…</code> | Dağıtım sonrası etkinleştirme PM2'yi --update-env ile yeniden başlatır |
 | [server/ecosystem.config.cjs:15](../../server/ecosystem.config.cjs#L15) | <code>// Gizli degerler BURAYA yazilmaz; server/.env dosyasindan dotenv ile okunur</code> | Gizli değerler ecosystem'e değil server/.env'e yazılır; cwd = server/ olduğu için dotenv bulur |
 
 **Olası nedenler**
@@ -268,9 +268,9 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 restart kapi-api --update-env && sl
 | --- | --- | --- |
 | [server/src/routes/firmware_routes.js:95](../../server/src/routes/firmware_routes.js#L95) | <code>firmwareRouter.get('/health', async (_req, res) =&gt; {</code> | /health uç noktası: DB'ye SELECT 1 atar; başarılıysa ok:true/connected, hata olursa 500 |
 | [server/src/routes/firmware_routes.js:104](../../server/src/routes/firmware_routes.js#L104) | <code>res.status(500).json({ ok: false, database: 'disconnected', mqtt });</code> | catch (_e) hatayı YUTAR: nedeni ne yanıtta ne günlükte görünür; nedeni docker/psql ile arayın |
-| [server/src/db.js:39](../../server/src/db.js#L39) | <code>export async function checkDbConnection() {</code> | Havuzdan bağlantı alıp SELECT 1 çalıştırır; havuz doluysa ya da DB kapalıysa fırlatır |
-| [server/src/db.js:27](../../server/src/db.js#L27) | <code>connectionTimeoutMillis: DB_CONNECT_TIMEOUT_MS,</code> | Bağlantı alma/kurma zaman aşımı (varsayılan 5 sn, DB_CONNECT_TIMEOUT_MS) |
-| [server/src/db.js:14](../../server/src/db.js#L14) | <code>const DB_POOL_MAX = Math.max(2, Number(process.env.DB_POOL_MAX) &#124;&#124; 12);</code> | Havuz üst sınırı 12; hepsi meşgulse yeni istek bağlantı bekler ve zaman aşımına düşer |
+| [server/src/db.js:52](../../server/src/db.js#L52) | <code>export async function checkDbConnection() {</code> | Havuzdan bağlantı alıp SELECT 1 çalıştırır; havuz doluysa ya da DB kapalıysa fırlatır |
+| [server/src/db.js:40](../../server/src/db.js#L40) | <code>connectionTimeoutMillis: DB_CONNECT_TIMEOUT_MS,</code> | Bağlantı alma/kurma zaman aşımı (varsayılan 5 sn, DB_CONNECT_TIMEOUT_MS) |
+| [server/src/db.js:27](../../server/src/db.js#L27) | <code>const DB_POOL_MAX = Math.max(2, Number(process.env.DB_POOL_MAX) &#124;&#124; 12);</code> | Havuz üst sınırı 12; hepsi meşgulse yeni istek bağlantı bekler ve zaman aşımına düşer |
 
 **Olası nedenler**
 - PostgreSQL konteyneri durmuş / unhealthy / yeniden başlıyor
@@ -344,7 +344,7 @@ ssh -p 22667 salihceylan@178.210.161.55 "sudo systemctl status mosquitto --no-pa
 | [server/src/mqtt_bridge.js:1003](../../server/src/mqtt_bridge.js#L1003) | <code>if (!config.host &#124;&#124; !config.username &#124;&#124; !config.password) {</code> | Üç değerden biri boşsa köprü HİÇ başlamaz (yeniden deneme yok); bağlantı kurulmaz |
 | [server/src/mqtt_bridge.js:1006](../../server/src/mqtt_bridge.js#L1006) | <code>lastBridgeErrorCode = 'mqtt_not_configured';</code> | /health'te görünen kod |
 | [server/src/mqtt_bridge.js:65](../../server/src/mqtt_bridge.js#L65) | <code>function mqttConfig() {</code> | MQTT_HOST, MQTT_PORT (varsayılan 8883), MQTT_USER, MQTT_PASSWORD ve MQTT_ALLOW_INSECURE_TLS okunur |
-| [server/src/config/env.js:125](../../server/src/config/env.js#L125) | <code>warnings.push(`MQTT ayarlari eksik: ${missingMqtt.join(', ')}; cihaz komutlari calismayab…</code> | Açılışta aynı eksiği "[ENV] UYARI: MQTT ayarlari eksik" olarak bildirir |
+| [server/src/config/env.js:279](../../server/src/config/env.js#L279) | <code>warnings.push(`MQTT ayarlari eksik: ${missingMqtt.join(', ')}; cihaz komutlari calismayab…</code> | Açılışta aynı eksiği "[ENV] UYARI: MQTT ayarlari eksik" olarak bildirir |
 
 **Olası nedenler**
 - server/.env içinde MQTT_HOST / MQTT_USER / MQTT_PASSWORD eksik ya da boş
@@ -439,7 +439,7 @@ ssh -p 22667 salihceylan@178.210.161.55 'bash -s' < deploy/remote_audit.sh
 | [sunucu_kurulum.txt:92](../../sunucu_kurulum.txt#L92) | <code>9) NGINX REVERSE PROXY</code> | nginx site dosyası /etc/nginx/sites-available/api.gudeteknoloji.com.tr; hedef 127.0.0.1:8080 (yapılandırma depoda YOK, sunucuda) |
 | [sunucu_kurulum.txt:99](../../sunucu_kurulum.txt#L99) | <code>sudo nginx -t</code> | Yapılandırma testi ve reload: sudo nginx -t; sudo systemctl reload nginx |
 | [sunucu_kurulum.txt:139](../../sunucu_kurulum.txt#L139) | <code>- Guvenlik duvari: 5432 (PostgreSQL) ve 8080 (Node) disariya ACIK olmamali; yalnizca 80/4…</code> | 8080 yalnız nginx'ten erişilmeli; dışarıdan 8080 testi başarısız olması normaldir |
-| [server/src/server.js:48](../../server/src/server.js#L48) | <code>app.set('trust proxy', 1);</code> | API tek proxy (nginx) arkasında varsayılır; istemci IP'si X-Forwarded-For'dan alınır |
+| [server/src/server.js:74](../../server/src/server.js#L74) | <code>app.set('trust proxy', resolveTrustProxy(process.env).value);</code> | trust proxy varsayılanı "loopback": istemci IP'si yalnız aynı makinedeki nginx'in X-Forwarded-For başlığından alınır; TRUST_PROXY ile değişir (Cloudflare turuncu bulut önündeyse "loopback,cloudflare") |
 
 **Olası nedenler**
 - kapi-api çalışmıyor/çöküp yeniden başlıyor (nginx 502 verir) → önce altyapi-api-acilmiyor-pm2-dongu
@@ -466,8 +466,8 @@ ssh -p 22667 salihceylan@178.210.161.55 "sudo tail -n 30 /var/log/nginx/error.lo
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/server.js:49](../../server/src/server.js#L49) | <code>const port = Number(process.env.PORT &#124;&#124; 8080);</code> | Dinlenen port: PORT ortam değişkeni, yoksa 8080 (nginx buraya yönlenir) |
-| [server/src/server.js:177](../../server/src/server.js#L177) | <code>httpServer = app.listen(port, () =&gt; {</code> | Dinleme hatası bu çağrıda try/catch ile YAKALANMAZ; Node'un yakalanmamış istisnasına döner |
+| [server/src/server.js:75](../../server/src/server.js#L75) | <code>const port = Number(process.env.PORT &#124;&#124; 8080);</code> | Dinlenen port: PORT ortam değişkeni, yoksa 8080 (nginx buraya yönlenir) |
+| [server/src/server.js:267](../../server/src/server.js#L267) | <code>httpServer = listenHost ? app.listen(port, listenHost, onListening) : app.listen(port, on…</code> | Dinleme hatası bu çağrıda try/catch ile YAKALANMAZ (sunucuda "error" dinleyicisi yok); Node'un yakalanmamış istisnasına döner. LISTEN_HOST verilmişse (ör. 127.0.0.1: yalnız aynı makinedeki nginx erişir) yalnız o adreste dinlenir |
 | [server/src/config/process_handlers.js:28](../../server/src/config/process_handlers.js#L28) | <code>const onUncaughtException = (error) =&gt; {</code> | Bu yüzden günlükte "Server startup failed" değil "[uncaughtException] <id>: Error: listen EADDRINUSE" görünür; exit(1) |
 
 **Olası nedenler**
@@ -496,10 +496,10 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 status"
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/server.js:126](../../server/src/server.js#L126) | <code>async function shutdown(signal) {</code> | Düzgün kapanma: yeni bağlantı almayı bırakır, süren istekleri bitirir, MQTT ve DB havuzunu kapatır |
-| [server/src/server.js:120](../../server/src/server.js#L120) | <code>const SHUTDOWN_GRACE_MS = 8000;</code> | 8 sn içinde bitmezse zorla exit(1) |
-| [server/src/server.js:136](../../server/src/server.js#L136) | <code>console.error('[SHUTDOWN] Sure asildi, zorla cikiliyor.');</code> | Zorla çıkış satırı; uzun süren istek/bağlantı kapanmayı geciktirmiştir |
-| [server/src/server.js:150](../../server/src/server.js#L150) | <code>await stopMqttBridge();</code> | MQTT bağlantısı kapatılır (stopMqttBridge asla fırlatmaz) |
+| [server/src/server.js:189](../../server/src/server.js#L189) | <code>async function shutdown(signal) {</code> | Düzgün kapanma: yeni bağlantı almayı bırakır, süren istekleri bitirir, MQTT ve DB havuzunu kapatır |
+| [server/src/server.js:183](../../server/src/server.js#L183) | <code>const SHUTDOWN_GRACE_MS = 8000;</code> | 8 sn içinde bitmezse zorla exit(1) |
+| [server/src/server.js:199](../../server/src/server.js#L199) | <code>console.error('[SHUTDOWN] Sure asildi, zorla cikiliyor.');</code> | Zorla çıkış satırı; uzun süren istek/bağlantı kapanmayı geciktirmiştir |
+| [server/src/server.js:219](../../server/src/server.js#L219) | <code>await stopMqttBridge();</code> | MQTT bağlantısı kapatılır (stopMqttBridge asla fırlatmaz) |
 | [server/ecosystem.config.cjs:41](../../server/ecosystem.config.cjs#L41) | <code>kill_timeout: 10000,</code> | PM2 SIGKILL'i 10 sn sonra gönderir; bu, 8 sn'lik kapanma süresinden büyük olmalıdır |
 
 **Olası nedenler**
@@ -614,8 +614,8 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 describe kapi-api | grep -E 'script
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/db.js:55](../../server/src/db.js#L55) | <code>'Veritabani semasi kurulu degil ("users" tablosu yok). Bos veritabaninda once `node scrip…</code> | ensureDbSchema ilk iş "users" tablosunu arar; yoksa anlaşılır bir hata fırlatır (ALTER TABLE users patlamasın diye) |
-| [server/src/db.js:48](../../server/src/db.js#L48) | <code>export async function ensureDbSchema() {</code> | Temel tablolar migration'larla gelir; ensureDbSchema yalnız EKLEYİCİ ve IF NOT EXISTS ifadeleri çalıştırır |
+| [server/src/db.js:165](../../server/src/db.js#L165) | <code>'Veritabani semasi kurulu degil ("users" tablosu yok). Bos veritabaninda once `node scrip…</code> | ensureDbSchema ilk iş "users" tablosunu arar; yoksa anlaşılır bir hata fırlatır (ALTER TABLE users patlamasın diye) |
+| [server/src/db.js:158](../../server/src/db.js#L158) | <code>export async function ensureDbSchema() {</code> | Temel tablolar migration'larla gelir; ensureDbSchema yalnız EKLEYİCİ ve IF NOT EXISTS ifadeleri çalıştırır |
 | [server/migrations/001_init.sql:19](../../server/migrations/001_init.sql#L19) | <code>CREATE TABLE IF NOT EXISTS users (</code> | users tablosunun tek tanımı migration 001'dedir (db.js bunu oluşturmaz) |
 | [docker-compose.yml:30](../../docker-compose.yml#L30) | <code>- ./server/migrations:/docker-entrypoint-initdb.d:ro</code> | Migration SQL'leri YALNIZ boş veri dizininde ilk kurulumda otomatik çalışır |
 | [server/scripts/migrate.js:497](../../server/scripts/migrate.js#L497) | <code>async function runApply(opts, env, log, logError, open, ask) {</code> | Boş veritabanına migration uygulayan elle komut (node scripts/migrate.js --apply) |
@@ -649,9 +649,9 @@ ssh -p 22667 salihceylan@178.210.161.55 "cd /var/www/site_kapi_kontrol/server &&
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/db.js:48](../../server/src/db.js#L48) | <code>export async function ensureDbSchema() {</code> | Tablo/kolon/indeks tanımlarının çoğu burada (CREATE TABLE IF NOT EXISTS / ADD COLUMN IF NOT EXISTS); AÇILIŞTA çalışır |
-| [server/src/db.js:842](../../server/src/db.js#L842) | <code>CREATE TABLE IF NOT EXISTS pending_registrations (</code> | Örnek (son eklenen): e-posta doğrulama bekleyen kayıt tablosu; migration 028 ile aynı DDL |
-| [server/src/db.js:515](../../server/src/db.js#L515) | <code>CREATE TABLE IF NOT EXISTS ota_update_jobs (</code> | ota_update_jobs / ota_update_job_devices / app_maintenance_runs YALNIZ db.js'te tanımlı (migration'da yok) |
+| [server/src/db.js:158](../../server/src/db.js#L158) | <code>export async function ensureDbSchema() {</code> | Tablo/kolon/indeks tanımlarının çoğu burada (CREATE TABLE IF NOT EXISTS / ADD COLUMN IF NOT EXISTS); AÇILIŞTA çalışır |
+| [server/src/db.js:952](../../server/src/db.js#L952) | <code>CREATE TABLE IF NOT EXISTS pending_registrations (</code> | Örnek (son eklenen): e-posta doğrulama bekleyen kayıt tablosu; migration 028 ile aynı DDL |
+| [server/src/db.js:625](../../server/src/db.js#L625) | <code>CREATE TABLE IF NOT EXISTS ota_update_jobs (</code> | ota_update_jobs / ota_update_job_devices / app_maintenance_runs YALNIZ db.js'te tanımlı (migration'da yok) |
 | [server/migrations/001_init.sql:19](../../server/migrations/001_init.sql#L19) | <code>CREATE TABLE IF NOT EXISTS users (</code> | users tablosu YALNIZ migration'da tanımlı; db.js yalnız bu tabloya kolon ekler |
 | [server/scripts/migrate.js:43](../../server/scripts/migrate.js#L43) | <code>export const MIGRATIONS_TABLE = 'schema_migrations';</code> | Migration koşucusunun kendi takip tablosu (uygulama tablosu değildir) |
 
@@ -681,14 +681,14 @@ ssh -p 22667 salihceylan@178.210.161.55 'docker exec -i site_kapi_kontrol_postgr
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/db.js:149](../../server/src/db.js#L149) | <code>CREATE UNIQUE INDEX IF NOT EXISTS idx_users_login_name_unique</code> | login_name (küçük harfe göre) benzersiz indeksi: mevcut veride yinelenen değer varsa oluşturulamaz |
-| [server/src/db.js:364](../../server/src/db.js#L364) | <code>CREATE UNIQUE INDEX IF NOT EXISTS idx_sites_mqtt_site_id_unique</code> | sites.mqtt_site_id benzersiz indeksi (önce NULL satırlar UPDATE ile doldurulur) |
-| [server/src/db.js:361](../../server/src/db.js#L361) | <code>ALTER COLUMN mqtt_site_id SET NOT NULL</code> | NULL kalan satır varsa başarısız olur; öncesindeki UPDATE bunu önlemek içindir |
-| [server/src/db.js:461](../../server/src/db.js#L461) | <code>CREATE UNIQUE INDEX IF NOT EXISTS idx_devices_mqtt_username_unique</code> | devices.mqtt_username benzersiz indeksi (NULL olmayanlar için) |
-| [server/src/db.js:742](../../server/src/db.js#L742) | <code>CREATE UNIQUE INDEX IF NOT EXISTS idx_door_access_logs_client_log</code> | Offline log idempotansı: (device_uid, client_log_id) benzersiz indeksi |
-| [server/src/db.js:732](../../server/src/db.js#L732) | <code>ALTER TABLE door_access_logs ALTER COLUMN site_code TYPE BIGINT;</code> | Her açılışta çalışan tip değişikliği ifadeleri (sütun zaten BIGINT ise yan etkisizdir) |
-| [server/src/db.js:126](../../server/src/db.js#L126) | <code>ELSIF current_def NOT LIKE '%super_user%'</code> | users_role_check yalnız eksikse/eski tanımsa yenilenir; her açılışta DROP/ADD yapılmaz |
-| [server/src/server.js:190](../../server/src/server.js#L190) | <code>console.error('Server startup failed:', error);</code> | Hata burada günlüğe yazılır ve süreç kapanır (PM2 döngüsü başlar) |
+| [server/src/db.js:259](../../server/src/db.js#L259) | <code>CREATE UNIQUE INDEX IF NOT EXISTS idx_users_login_name_unique</code> | login_name (küçük harfe göre) benzersiz indeksi: mevcut veride yinelenen değer varsa oluşturulamaz |
+| [server/src/db.js:474](../../server/src/db.js#L474) | <code>CREATE UNIQUE INDEX IF NOT EXISTS idx_sites_mqtt_site_id_unique</code> | sites.mqtt_site_id benzersiz indeksi (önce NULL satırlar UPDATE ile doldurulur) |
+| [server/src/db.js:471](../../server/src/db.js#L471) | <code>ALTER COLUMN mqtt_site_id SET NOT NULL</code> | NULL kalan satır varsa başarısız olur; öncesindeki UPDATE bunu önlemek içindir |
+| [server/src/db.js:571](../../server/src/db.js#L571) | <code>CREATE UNIQUE INDEX IF NOT EXISTS idx_devices_mqtt_username_unique</code> | devices.mqtt_username benzersiz indeksi (NULL olmayanlar için) |
+| [server/src/db.js:852](../../server/src/db.js#L852) | <code>CREATE UNIQUE INDEX IF NOT EXISTS idx_door_access_logs_client_log</code> | Offline log idempotansı: (device_uid, client_log_id) benzersiz indeksi |
+| [server/src/db.js:842](../../server/src/db.js#L842) | <code>ALTER TABLE door_access_logs ALTER COLUMN site_code TYPE BIGINT;</code> | Her açılışta çalışan tip değişikliği ifadeleri (sütun zaten BIGINT ise yan etkisizdir) |
+| [server/src/db.js:236](../../server/src/db.js#L236) | <code>ELSIF current_def NOT LIKE '%super_user%'</code> | users_role_check yalnız eksikse/eski tanımsa yenilenir; her açılışta DROP/ADD yapılmaz |
+| [server/src/server.js:277](../../server/src/server.js#L277) | <code>console.error('Server startup failed:', error);</code> | Hata burada günlüğe yazılır ve süreç kapanır (PM2 döngüsü başlar) |
 
 **Olası nedenler**
 - Mevcut veride yinelenen değer yüzünden bir UNIQUE indeks oluşturulamıyor (login_name, mqtt_username, e-posta, client_log_id)
@@ -720,12 +720,12 @@ ssh -p 22667 salihceylan@178.210.161.55 'docker exec -i site_kapi_kontrol_postgr
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/db.js:14](../../server/src/db.js#L14) | <code>const DB_POOL_MAX = Math.max(2, Number(process.env.DB_POOL_MAX) &#124;&#124; 12);</code> | Aynı anda en fazla 12 bağlantı (DB_POOL_MAX); hepsi doluysa yenisi bağlantı bekler |
-| [server/src/db.js:28](../../server/src/db.js#L28) | <code>statement_timeout: DB_STATEMENT_TIMEOUT_MS,</code> | Tek sorgunun en uzun süresi 30 sn (DB_STATEMENT_TIMEOUT_MS); kilit beklemeyi de kapsar |
-| [server/src/db.js:29](../../server/src/db.js#L29) | <code>query_timeout: DB_STATEMENT_TIMEOUT_MS + 5000,</code> | İstemci tarafı sorgu zaman aşımı: sunucu iptal etmezse 5 sn sonra istemci bırakır |
-| [server/src/db.js:24](../../server/src/db.js#L24) | <code>options: '-c timezone=Europe/Istanbul -c idle_in_transaction_session_timeout=60000',</code> | Açık unutulan transaction 60 sn sonra SUNUCU tarafında kapatılır (kilit sızıntısını önler) |
-| [server/src/db.js:36](../../server/src/db.js#L36) | <code>console.error('[DB] Bosta bekleyen istemci hatasi:', error?.code &#124;&#124; error?.message);</code> | Boştaki bağlantı koparsa süreç düşmez; yalnız bu satır yazılır |
-| [server/src/db.js:31](../../server/src/db.js#L31) | <code>application_name: 'kapi-api',</code> | pg_stat_activity'de API bağlantılarını ayırt etmek için ad |
+| [server/src/db.js:27](../../server/src/db.js#L27) | <code>const DB_POOL_MAX = Math.max(2, Number(process.env.DB_POOL_MAX) &#124;&#124; 12);</code> | Aynı anda en fazla 12 bağlantı (DB_POOL_MAX); hepsi doluysa yenisi bağlantı bekler |
+| [server/src/db.js:41](../../server/src/db.js#L41) | <code>statement_timeout: DB_STATEMENT_TIMEOUT_MS,</code> | Tek sorgunun en uzun süresi 30 sn (DB_STATEMENT_TIMEOUT_MS); kilit beklemeyi de kapsar |
+| [server/src/db.js:42](../../server/src/db.js#L42) | <code>query_timeout: DB_STATEMENT_TIMEOUT_MS + 5000,</code> | İstemci tarafı sorgu zaman aşımı: sunucu iptal etmezse 5 sn sonra istemci bırakır |
+| [server/src/db.js:37](../../server/src/db.js#L37) | <code>options: '-c timezone=Europe/Istanbul -c idle_in_transaction_session_timeout=60000',</code> | Açık unutulan transaction 60 sn sonra SUNUCU tarafında kapatılır (kilit sızıntısını önler) |
+| [server/src/db.js:49](../../server/src/db.js#L49) | <code>console.error('[DB] Bosta bekleyen istemci hatasi:', error?.code &#124;&#124; error?.message);</code> | Boştaki bağlantı koparsa süreç düşmez; yalnız bu satır yazılır |
+| [server/src/db.js:44](../../server/src/db.js#L44) | <code>application_name: 'kapi-api',</code> | pg_stat_activity'de API bağlantılarını ayırt etmek için ad |
 
 **Olası nedenler**
 - Uzun süren sorgu ya da kilit (başka bir transaction satırı tutuyor) bağlantıları dolduruyor
@@ -755,11 +755,11 @@ ssh -p 22667 salihceylan@178.210.161.55 'docker exec -i site_kapi_kontrol_postgr
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/db.js:19](../../server/src/db.js#L19) | <code>host: process.env.DB_HOST,</code> | Bağlantı bilgileri yalnız ortamdan okunur (DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD) |
+| [server/src/db.js:32](../../server/src/db.js#L32) | <code>host: process.env.DB_HOST,</code> | Bağlantı bilgileri yalnız ortamdan okunur (DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD) |
 | [docker-compose.yml:19](../../docker-compose.yml#L19) | <code>- "127.0.0.1:5432:5432"</code> | Postgres yalnız loopback'e bağlıdır: API aynı makinede olmalı; dışarıdan erişim SSH tüneliyle |
 | [docker-compose.yml:5](../../docker-compose.yml#L5) | <code># NOT: POSTGRES_PASSWORD yalnizca BOS veri dizininde (ilk kurulum) uygulanir.</code> | POSTGRES_PASSWORD sonradan değişse de mevcut veritabanının parolası DEĞİŞMEZ (ALTER USER gerekir) |
 | [server/.env.example:31](../../server/.env.example#L31) | <code>DB_HOST=127.0.0.1</code> | Beklenen canlı DB_HOST; DB_PASSWORD docker-compose POSTGRES_PASSWORD ile aynı olmalı |
-| [server/src/config/env.js:118](../../server/src/config/env.js#L118) | <code>const missingDb = ['DB_HOST', 'DB_NAME', 'DB_USER', 'DB_PASSWORD'].filter((name) =&gt; !isSe…</code> | Eksik DB_* değişkeni açılışta uyarı olarak görünür |
+| [server/src/config/env.js:272](../../server/src/config/env.js#L272) | <code>const missingDb = ['DB_HOST', 'DB_NAME', 'DB_USER', 'DB_PASSWORD'].filter((name) =&gt; !isSe…</code> | Eksik DB_* değişkeni açılışta uyarı olarak görünür |
 
 **Olası nedenler**
 - Postgres konteyneri kapalı/yeniden başlıyor (ECONNREFUSED)
@@ -958,7 +958,7 @@ ssh -p 22667 salihceylan@178.210.161.55 'docker exec -i site_kapi_kontrol_postgr
 | [server/scripts/_dev_guard.js:5](../../server/scripts/_dev_guard.js#L5) | <code>'Bu gelistirme betigi gercek veritabanina dokunabilir. Bilerek calistirmak icin ALLOW_DEV…</code> | Görülen mesaj |
 | [server/scripts/apply_016.js:1](../../server/scripts/apply_016.js#L1) | <code>import './_dev_guard.js';</code> | Her apply_*/check_*/test_* betiğinin İLK importu bekçidir |
 | [server/scripts/apply_024.js:12](../../server/scripts/apply_024.js#L12) | <code>const sqlPath = path.join(__dirname, '..', 'migrations', '024_device_inventory_and_defect…</code> | apply_* betikleri yalnız 013-024 içindir; 025-028 için betik YOKTUR (migrate.js ya da ensureDbSchema kullanılır) |
-| [server/.env.example:111](../../server/.env.example#L111) | <code># ALLOW_DEV_SCRIPTS=1</code> | Yalnız geliştirmede tanımlanır; üretimde tanımlamayın |
+| [server/.env.example:212](../../server/.env.example#L212) | <code># ALLOW_DEV_SCRIPTS=1</code> | Yalnız geliştirmede tanımlanır; üretimde tanımlamayın |
 
 **Olası nedenler**
 - Bekçi kasıtlı çalışıyor: ALLOW_DEV_SCRIPTS=1 verilmedi
@@ -977,9 +977,9 @@ ssh -p 22667 salihceylan@178.210.161.55 'docker exec -i site_kapi_kontrol_postgr
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/server.js:173](../../server/src/server.js#L173) | <code>void runCleanupSafely();</code> | Temizlik her AÇILIŞTA bir kez çalışır (PM2 sık yeniden başlıyorsa sık çalışır) |
-| [server/src/server.js:175](../../server/src/server.js#L175) | <code>setInterval(runCleanupSafely, 24 * 60 * 60 * 1000).unref();</code> | Ardından 24 saatte bir; unref sayesinde süreç kapanmasını engellemez |
-| [server/src/server.js:164](../../server/src/server.js#L164) | <code>console.error('[Bakim] Temizlik hatasi:', error?.code &#124;&#124; error?.message);</code> | Beklenmeyen fırlatma burada yakalanır (süreç düşmez) |
+| [server/src/server.js:255](../../server/src/server.js#L255) | <code>void runCleanupSafely();</code> | Temizlik her AÇILIŞTA bir kez çalışır (PM2 sık yeniden başlıyorsa sık çalışır) |
+| [server/src/server.js:257](../../server/src/server.js#L257) | <code>setInterval(runCleanupSafely, 24 * 60 * 60 * 1000).unref();</code> | Ardından 24 saatte bir; unref sayesinde süreç kapanmasını engellemez |
+| [server/src/server.js:233](../../server/src/server.js#L233) | <code>console.error('[Bakim] Temizlik hatasi:', error?.code &#124;&#124; error?.message);</code> | Beklenmeyen fırlatma burada yakalanır (süreç düşmez) |
 | [server/src/services/maintenance_service.js:91](../../server/src/services/maintenance_service.js#L91) | <code>console.error('[Maintenance Cleanup] Hata:', error);</code> | DB hatası: ayrıntı yalnız günlükte; dönen değerde "Veritabanı temizliği başarısız oldu." genel metni vardır |
 | [server/src/services/maintenance_service.js:73](../../server/src/services/maintenance_service.js#L73) | <code>VALUES ('routine_cleanup', NOW())</code> | Son başarılı temizlik zamanı app_maintenance_runs'a yazılır |
 | [server/src/services/maintenance_service.js:202](../../server/src/services/maintenance_service.js#L202) | <code>isClean: pendingTotal === 0,</code> | Panelin "temiz" durumu yalnız silinebilir kayıt sayısına bağlıdır |
@@ -1221,7 +1221,7 @@ ssh -p 22667 salihceylan@178.210.161.55 'docker exec -i site_kapi_kontrol_postgr
 | [server/src/mqtt_acl_sync.js:208](../../server/src/mqtt_acl_sync.js#L208) | <code>message: `MQTT ACL senkronu zaman asimina ugradi (${timeoutMs} ms).`,</code> | Zaman aşımı mesajı (mqtt_sync.message) |
 | [server/src/mqtt_acl_sync.js:247](../../server/src/mqtt_acl_sync.js#L247) | <code>message: code === 0 ? 'MQTT ACL senkronu tamamlandi.' : `MQTT ACL senkronu hata kodu: ${c…</code> | Komut sıfır olmayan kodla çıktı (mqtt_sync.message ve stderr nedeni verir) |
 | [server/src/mqtt_acl_sync.js:182](../../server/src/mqtt_acl_sync.js#L182) | <code>message: 'MQTT_SYNC_COMMAND/MQTT_SYNC_ARGS gecersiz karakter iceriyor.',</code> | Komut/argüman güvenli karakter kümesi dışındaysa hiç çalıştırılmaz (SAFE_COMMAND_PATTERN / SAFE_ARG_PATTERN) |
-| [server/src/routes/admin_routes.js:1512](../../server/src/routes/admin_routes.js#L1512) | <code>error: 'Cihaz kaydedildi ama MQTT broker senkronu basarisiz.',</code> | Cihaz kaydı DB'de oluştu ama broker senkronu başarısız: cihaz yeniden denemeye değil senkronu düzeltmeye ihtiyaç duyar |
+| [server/src/routes/admin_routes.js:1615](../../server/src/routes/admin_routes.js#L1615) | <code>error: 'Cihaz kaydedildi ama MQTT broker senkronu basarisiz.',</code> | Cihaz kaydı DB'de oluştu ama broker senkronu başarısız: cihaz yeniden denemeye değil senkronu düzeltmeye ihtiyaç duyar |
 
 **Olası nedenler**
 - sudo parola istiyor: sudoers NOPASSWD satırı yok/yanlış (MQTT_SYNC_ARGS "-n" parola sorusunu hataya çevirir)
@@ -1291,7 +1291,7 @@ ssh -p 22667 salihceylan@178.210.161.55 "ls -l /var/www/site_kapi_kontrol/server
 | --- | --- | --- |
 | [server/scripts/sync_mqtt_acl.js:86](../../server/scripts/sync_mqtt_acl.js#L86) | <code>if (username.startsWith('device_') &amp;&amp; !wantedUsers.has(username)) {</code> | DB'de olmayan device_* kullanıcıları passwd'den silinir |
 | [server/scripts/sync_mqtt_acl.js:89](../../server/scripts/sync_mqtt_acl.js#L89) | <code>if (legacyUsers.includes(username)) {</code> | Eski ortak kullanıcılar (varsayılan app_client, esp32_door_01; MQTT_LEGACY_USERS) silinir |
-| [server/src/routes/admin_routes.js:1449](../../server/src/routes/admin_routes.js#L1449) | <code>await syncMqttAclOrThrow({ reason: 'device_deleted' });</code> | Cihaz silinince senkron tetiklenir; başarısızsa 503 (cihaz DB'den silinmiştir ama broker eski kalır) |
+| [server/src/routes/admin_routes.js:1552](../../server/src/routes/admin_routes.js#L1552) | <code>await syncMqttAclOrThrow({ reason: 'device_deleted' });</code> | Cihaz silinince senkron tetiklenir; başarısızsa 503 (cihaz DB'den silinmiştir ama broker eski kalır) |
 | [server/src/mqtt_acl_sync.js:107](../../server/src/mqtt_acl_sync.js#L107) | <code>const CHILD_ENV_PREFIXES = ['LC_', 'DB_', 'PG', 'MQTT_', 'MOSQUITTO_', 'KAPI_'];</code> | Senkron alt sürecine geçen ortam: MQTT_PASSWD_FILE/MQTT_ACL_FILE gibi MQTT_* değişkenleri dahil |
 
 **Olası nedenler**
@@ -1522,7 +1522,7 @@ ssh -p 22667 salihceylan@178.210.161.55 "grep -c screen_qr /etc/mosquitto/acl"
 | [server/src/mqtt_bridge.js:676](../../server/src/mqtt_bridge.js#L676) | <code>transientReject = result?.reason === 'DEVICE_NOT_ASSIGNED';</code> | Cihaz henüz siteye/kapıya atanmamışsa ack GÖNDERİLMEZ (cihaz sakladığı kayıtları atanınca yeniden yollar) |
 | [server/src/mqtt_bridge.js:623](../../server/src/mqtt_bridge.js#L623) | <code>function publishLogsAck(normalizedUid, batchId) {</code> | logs_ack, köprü bağlıysa device/<uid>/cmd konusuna yayınlanır |
 | [server/src/services/door_log_service.js:419](../../server/src/services/door_log_service.js#L419) | <code>result.reason = 'DEVICE_NOT_ASSIGNED';</code> | Atanmamış cihaz nedeniyle yazılmayan kayıtlar rejected sayılır |
-| [server/src/db.js:742](../../server/src/db.js#L742) | <code>CREATE UNIQUE INDEX IF NOT EXISTS idx_door_access_logs_client_log</code> | Tekrar gelen aynı (device_uid, client_log_id) kayıtları eklenmez: tekrar yayın güvenlidir (idempotent) |
+| [server/src/db.js:852](../../server/src/db.js#L852) | <code>CREATE UNIQUE INDEX IF NOT EXISTS idx_door_access_logs_client_log</code> | Tekrar gelen aynı (device_uid, client_log_id) kayıtları eklenmez: tekrar yayın güvenlidir (idempotent) |
 | [server/src/mqtt_acl_sync.js:96](../../server/src/mqtt_acl_sync.js#L96) | <code>lines.push(`topic write device/${uid}/logs`);</code> | Cihazın logs konusuna yazabilmesi için ACL'de bu satır gerekir |
 
 **Olası nedenler**
@@ -1624,8 +1624,8 @@ ssh -p 22667 salihceylan@178.210.161.55 'bash -s' < deploy/remote_verify.sh
 | [deploy/remote_deploy.sh:18](../../deploy/remote_deploy.sh#L18) | <code>rollback() {</code> | Geri alma: yedek kodu (data hariç) açar, node_modules.old_<TS>'i geri koyar, PM2 yeniden başlatır, /health bakar |
 | [deploy/remote_deploy.sh:21](../../deploy/remote_deploy.sh#L21) | <code>tar -xzf "$BK/server_code.tgz" --exclude='server/data' -C "$BASE"</code> | Kodu geri yükler; yedek .env'i de içerdiğinden .env yedek anındaki haline döner, server/data ise dokunulmaz |
 | [deploy/remote_deploy.sh:38](../../deploy/remote_deploy.sh#L38) | <code>docker exec "$DBC" pg_dump -U postgres -d site_kapi_kontrol &#124; gzip &gt; "$BK/db.sql.gz"</code> | Veritabanı yedeği db.sql.gz; otomatik geri almada GERİ YÜKLENMEZ (şema değişiklikleri ekleyicidir), gerekirse elle |
-| [deploy/README.md:30](../../deploy/README.md#L30) | <code>## Geri alma</code> | Elle geri alma komutu: remote_deploy.sh <TS> rollback |
-| [deploy/README.md:32](../../deploy/README.md#L32) | <code>`ssh ... "bash /home/salihceylan/kapi_remote_deploy_$TS.sh $TS rollback"` — yedekteki kod…</code> | Veritabanının geri alınmaması bilinçli karardır; db.sql.gz ile elle ve onayla geri yüklenir |
+| [deploy/README.md:31](../../deploy/README.md#L31) | <code>## Geri alma</code> | Elle geri alma komutu: remote_deploy.sh <TS> rollback |
+| [deploy/README.md:33](../../deploy/README.md#L33) | <code>`ssh ... "bash /home/salihceylan/kapi_remote_deploy_$TS.sh $TS rollback"` — yedekteki kod…</code> | Veritabanının geri alınmaması bilinçli karardır; db.sql.gz ile elle ve onayla geri yüklenir |
 
 **Olası nedenler**
 - Yeni sürümde çalışma zamanı hatası (sağlık geçse bile bir uç bozuk)
@@ -1696,8 +1696,8 @@ ssh -p 22667 salihceylan@178.210.161.55 "docker ps --format '{{.Names}} | {{.Sta
 | [deploy/remote_deploy.sh:59](../../deploy/remote_deploy.sh#L59) | <code>[ -d "$STAGE/node_modules" ] &#124;&#124; { echo "HATA: hazirlik (prepare) yapilmamis"; exit 2; }</code> | Aşama dizininde node_modules yoksa (prepare çalışmamış ya da başka TS) exit 2; hiçbir şey değişmez |
 | [deploy/remote_deploy.sh:62](../../deploy/remote_deploy.sh#L62) | <code>if ! grep -q '^COMPANY_API_KEY=.\{24,\}' .env; then</code> | Anahtar yoksa ya da 24 karakterden kısaysa YENİSİ üretilip .env'e eklenir; şirket aracının .env'ine de aynı değer girilmeli |
 | [deploy/remote_deploy.sh:14](../../deploy/remote_deploy.sh#L14) | <code>health_ok() {</code> | Sağlık ölçütü: 127.0.0.1:8080/health yanıtında "ok":true geçmesi (nginx/DNS bu ölçüte girmez) |
-| [deploy/remote_deploy.sh:84](../../deploy/remote_deploy.sh#L84) | <code>echo "SAGLIK KONTROLU BASARISIZ"</code> | Hata durumunda son 40 günlük satırı basılır, rollback() çağrılır ve exit 4 ile çıkılır |
-| [deploy/remote_deploy.sh:81](../../deploy/remote_deploy.sh#L81) | <code>echo "ACTIVATE_OK"</code> | Başarı işareti; ardından /health çıktısının ilk 400 karakteri yazılır |
+| [deploy/remote_deploy.sh:93](../../deploy/remote_deploy.sh#L93) | <code>echo "SAGLIK KONTROLU BASARISIZ"</code> | Hata durumunda son 40 günlük satırı basılır, rollback() çağrılır ve exit 4 ile çıkılır |
+| [deploy/remote_deploy.sh:89](../../deploy/remote_deploy.sh#L89) | <code>echo "ACTIVATE_OK"</code> | Başarı işareti; ardından /health çıktısının ilk 400 karakteri yazılır |
 
 **Olası nedenler**
 - Yeni kod açılışta düşüyor (ENV/şema/MQTT hatası): basılan günlük satırlarındaki İLK hata (altyapi-api-acilmiyor-pm2-dongu)
@@ -1728,10 +1728,10 @@ ssh -p 22667 salihceylan@178.210.161.55 "curl -s -m 8 http://127.0.0.1:8080/heal
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [deploy/remote_verify.sh:7](../../deploy/remote_verify.sh#L7) | <code>echo "== yeni kolonlar/indeks"</code> | users.updated_at, door_access_logs.client_log_id ve client_log indeksinin varlığını information_schema ile sorar; boşsa şema tamamlanmamıştır |
-| [deploy/remote_verify.sh:13](../../deploy/remote_verify.sh#L13) | <code>echo "== sirket ucu anahtarsiz (401 beklenir)"; curl -s -m 8 -o /dev/null -w "%{http_code…</code> | Anahtarsız /api/company/labeled-devices 401 vermeli; 200 ise yetkilendirme açığı, 5xx ise sunucu hatası |
-| [deploy/remote_verify.sh:16](../../deploy/remote_verify.sh#L16) | <code>echo "== OTA manifest (200 + sha256/hedef alanlari)"; curl -s -m 8 "http://127.0.0.1:8080…</code> | Gerçek cihaz UID'siyle manifest isteği: enabled/sha256/target alanları görünmeli (altyapi-ota-manifest-guncelleme-sunmuyor) |
-| [deploy/remote_verify.sh:18](../../deploy/remote_verify.sh#L18) | <code>echo "== mosquitto + acl"; systemctl is-active mosquitto; grep -c "logs" /etc/mosquitto/a…</code> | mosquitto aktif mi ve ACL'de "logs" satırı sayısı (offline log yazma izni); 0 ise ACL eski (altyapi-mqtt-acl-yayin-reddi) |
+| [deploy/remote_verify.sh:21](../../deploy/remote_verify.sh#L21) | <code>echo "== yeni kolonlar/indeks"</code> | users.updated_at, door_access_logs.client_log_id ve client_log indeksinin varlığını information_schema ile sorar; boşsa şema tamamlanmamıştır |
+| [deploy/remote_verify.sh:27](../../deploy/remote_verify.sh#L27) | <code>echo "== sirket ucu anahtarsiz (401 beklenir)"; curl -s -m 8 -o /dev/null -w "%{http_code…</code> | Anahtarsız /api/company/labeled-devices 401 vermeli; 200 ise yetkilendirme açığı, 5xx ise sunucu hatası |
+| [deploy/remote_verify.sh:30](../../deploy/remote_verify.sh#L30) | <code>echo "== OTA manifest (200 + sha256/hedef alanlari)"; curl -s -m 8 "http://127.0.0.1:8080…</code> | Gerçek cihaz UID'siyle manifest isteği: enabled/sha256/target alanları görünmeli (altyapi-ota-manifest-guncelleme-sunmuyor) |
+| [deploy/remote_verify.sh:100](../../deploy/remote_verify.sh#L100) | <code>echo "== mosquitto + acl"; systemctl is-active mosquitto; grep -c "logs" /etc/mosquitto/a…</code> | mosquitto aktif mi ve ACL'de "logs" satırı sayısı (offline log yazma izni); 0 ise ACL eski (altyapi-mqtt-acl-yayin-reddi) |
 | [deploy/remote_audit.sh:17](../../deploy/remote_audit.sh#L17) | <code>echo "== uzak-yalniz artik dosyalar"; ls -1 src/services/membership_routes.js apply_014.j…</code> | Depoda olmayıp sunucuda kalan eski dosyalar listelenir; silinmez (deploy/README Notlar) |
 | [deploy/remote_audit.sh:18](../../deploy/remote_audit.sh#L18) | <code>echo "== firmware dizini"; ls -A firmware 2&gt;&amp;1 &#124; tr '\n' ' '; echo; for d in firmware/*; …</code> | firmware/<hedef> klasörleri ve içindeki dosyalar: manifest.json ve .bin var mı |
 
@@ -1763,7 +1763,7 @@ ssh -p 22667 salihceylan@178.210.161.55 'bash -s' < deploy/remote_audit.sh
 | [server/src/routes/firmware_routes.js:186](../../server/src/routes/firmware_routes.js#L186) | <code>const updateAvailable =</code> | Güncelleme sunma koşulu: enabled, hedef uyumu, allowed_uids, usb_required değil ve sürüm cihazınkinden BÜYÜK |
 | [server/src/routes/firmware_routes.js:176](../../server/src/routes/firmware_routes.js#L176) | <code>const blockedByUid = allowedUids.length &gt; 0 &amp;&amp; !allowedUids.includes(uid);</code> | allowed_uids doluysa listede olmayan cihaz yayını görmez; uid sorgu parametresi verilmezse de engellenir |
 | [server/src/routes/firmware_routes.js:201](../../server/src/routes/firmware_routes.js#L201) | <code>message = 'Bu surum icin USB ile tam yukleme gerekiyor.';</code> | usb_required:true ise uzaktan güncelleme sunulmaz |
-| [server/src/utils/helpers.js:34](../../server/src/utils/helpers.js#L34) | <code>export function compareVersionParts(left, right) {</code> | Sürüm karşılaştırması parça parça sayısaldır; manifest sürümü eşit ya da küçükse güncelleme sunulmaz |
+| [server/src/utils/helpers.js:36](../../server/src/utils/helpers.js#L36) | <code>export function compareVersionParts(left, right) {</code> | Sürüm karşılaştırması parça parça sayısaldır; manifest sürümü eşit ya da küçükse güncelleme sunulmaz |
 | [OTA_KURULUM.txt:61](../../OTA_KURULUM.txt#L61) | <code>- allowed_uids bos ise o hedefin tum cihazlari bu yayini gorebilir.</code> | Manifest alanlarının anlamı ve yayın adımları |
 
 **Olası nedenler**
@@ -1836,7 +1836,7 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 300 --nostrea
 | [server/src/routes/firmware_routes.js:212](../../server/src/routes/firmware_routes.js#L212) | <code>? `${publicBaseUrl(req)}/firmware/${folderTarget}/${fileName}`</code> | İndirme URL'si PUBLIC_BASE_URL'den üretilir; cihaz yalnız https://api.gudeteknoloji.com.tr/ ile başlayanı kabul eder (OTA_KURULUM.txt) |
 | [server/src/routes/firmware_routes.js:254](../../server/src/routes/firmware_routes.js#L254) | <code>headers['x-MD5'] = md5;</code> | Manifestte geçerli md5 varsa x-MD5 başlığı gönderilir (cihaz ikinci kontrol olarak kullanır) |
 | [server/src/routes/firmware_routes.js:25](../../server/src/routes/firmware_routes.js#L25) | <code>const firmwareRoot = path.resolve(process.env.FIRMWARE_DIR &#124;&#124; path.join(process.cwd(), 'f…</code> | Kök klasör FIRMWARE_DIR ya da <cwd>/firmware; PM2 cwd = server/ olmalı |
-| [server/src/utils/helpers.js:29](../../server/src/utils/helpers.js#L29) | <code>export function safeFirmwareFile(value) {</code> | Dosya adı yalnız harf/rakam/_/./- ve .bin uzantılı olabilir; aksi halde 400 |
+| [server/src/utils/helpers.js:31](../../server/src/utils/helpers.js#L31) | <code>export function safeFirmwareFile(value) {</code> | Dosya adı yalnız harf/rakam/_/./- ve .bin uzantılı olabilir; aksi halde 400 |
 
 **Olası nedenler**
 - .bin dosyası klasörde yok ya da manifest filename ile farklı adda
@@ -1865,8 +1865,8 @@ ssh -p 22667 salihceylan@178.210.161.55 "sha256sum /var/www/site_kapi_kontrol/se
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/routes/admin_routes.js:1323](../../server/src/routes/admin_routes.js#L1323) | <code>adminRouter.post('/admin/devices/ota-check', authRequired, requireSuperUser, async (req, …</code> | Toplu uç: tüm cihaz UID'lerini alır, iş kaydı açar, her cihaza ota_check yayınlar; yalnız super_user |
-| [server/src/routes/admin_routes.js:1358](../../server/src/routes/admin_routes.js#L1358) | <code>return res.status(503).json({ error: 'MQTT baglantisi hazir degil.' });</code> | Köprü bağlı değilse yayın yapılamaz: önce /health mqtt.connected (altyapi-health-mqtt-baglanti-yok) |
+| [server/src/routes/admin_routes.js:1426](../../server/src/routes/admin_routes.js#L1426) | <code>adminRouter.post('/admin/devices/ota-check', authRequired, requireSuperUser, async (req, …</code> | Toplu uç: tüm cihaz UID'lerini alır, iş kaydı açar, her cihaza ota_check yayınlar; yalnız super_user |
+| [server/src/routes/admin_routes.js:1461](../../server/src/routes/admin_routes.js#L1461) | <code>return res.status(503).json({ error: 'MQTT baglantisi hazir degil.' });</code> | Köprü bağlı değilse yayın yapılamaz: önce /health mqtt.connected (altyapi-health-mqtt-baglanti-yok) |
 | [server/src/mqtt_bridge.js:1193](../../server/src/mqtt_bridge.js#L1193) | <code>export async function publishOtaCheckToDevices({</code> | Her UID için device/<uid>/cmd konusuna {action:ota_check, retry:true, ota_job_id} QoS1 yayınlar; tekil hatalar failed listesine girer |
 | [server/src/services/device_service.js:427](../../server/src/services/device_service.js#L427) | <code>export async function createOtaUpdateJob({ authUser, deviceUids }) {</code> | ota_update_jobs ve cihaz bazlı satırlar oluşturulur; tablolar eksikse 500 |
 | [server/src/mqtt_bridge.js:453](../../server/src/mqtt_bridge.js#L453) | <code>function otaJobDeviceEventStatus(eventName) {</code> | Cihazın OTA olayları (ota_success, ota_failed...) iş satırının durumuna çevrilir |
@@ -1952,7 +1952,7 @@ ssh -p 22667 salihceylan@178.210.161.55 'docker exec -i site_kapi_kontrol_postgr
 | [server/scripts/test_doors_qr.js:5](../../server/scripts/test_doors_qr.js#L5) | <code>const cleanUid = '00861A0D5020';</code> | SABİT bir UID için kapı eşleşmesini sorgular (salt-okunur); başka cihaz için dosyada UID değiştirilmeli |
 | [server/scripts/test_query.js:5](../../server/scripts/test_query.js#L5) | <code>const dev = await pool.query("SELECT * FROM devices WHERE device_uid = 'D4C771A172E0'");</code> | SABİT UID/kullanıcı için cihaz, kullanıcı ve üyelik satırlarını basar (salt-okunur); kişisel veri içerir, çıktıyı paylaşmayın |
 | [server/scripts/_dev_guard.js:3](../../server/scripts/_dev_guard.js#L3) | <code>if (process.env.ALLOW_DEV_SCRIPTS !== '1') {</code> | Tümü bekçi arkasında; ALLOW_DEV_SCRIPTS=1 olmadan çıkar |
-| [server/src/db.js:18](../../server/src/db.js#L18) | <code>export const pool = new Pool({</code> | Betikler src/db.js havuzunu kullanır: server/.env'deki DB_* hangisiyse O veritabanına bağlanır (canlı sunucuda çalıştırılırsa CANLI DB) |
+| [server/src/db.js:31](../../server/src/db.js#L31) | <code>export const pool = new Pool({</code> | Betikler src/db.js havuzunu kullanır: server/.env'deki DB_* hangisiyse O veritabanına bağlanır (canlı sunucuda çalıştırılırsa CANLI DB) |
 
 **Olası nedenler**
 - Beklenen: bu betikler geliştirme yardımcılarıdır, sabit UID/kullanıcıya bağlıdır; boş sonuç çoğu zaman o kayıt bu veritabanında yoktur demektir
@@ -1972,9 +1972,9 @@ ssh -p 22667 salihceylan@178.210.161.55 'docker exec -i site_kapi_kontrol_postgr
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/scripts/test_endpoint.js:11](../../server/scripts/test_endpoint.js#L11) | <code>INSERT INTO users (user_code, full_name, email, password_hash, role, is_active, email_ver…</code> | DB'ye gerçek bir test kullanıcısı YAZAR (user_code 99991, parola özeti sahte); salt-okunur DEĞİLDİR |
-| [server/scripts/test_endpoint.js:18](../../server/scripts/test_endpoint.js#L18) | <code>const delResponse = await fetch('http://localhost:8080/admin/users/99991', {</code> | Yerel 8080'deki API'ye DELETE atar; API ayakta değilse fetch hata verir ve kullanıcı SİLİNMEDEN kalır |
-| [server/scripts/test_endpoint.js:7](../../server/scripts/test_endpoint.js#L7) | <code>const token = signAccessToken(admin);</code> | DB'deki ilk super_user adına JWT üretir (JWT_SECRET .env'den); sır basmaz ama yetkili istek yapar |
+| [server/scripts/test_endpoint.js:12](../../server/scripts/test_endpoint.js#L12) | <code>INSERT INTO users (user_code, full_name, email, password_hash, role, is_active, email_ver…</code> | DB'ye gerçek bir test kullanıcısı YAZAR (user_code 99991, parola özeti sahte); salt-okunur DEĞİLDİR |
+| [server/scripts/test_endpoint.js:19](../../server/scripts/test_endpoint.js#L19) | <code>const delResponse = await fetch('http://localhost:8080/admin/users/99991', {</code> | Yerel 8080'deki API'ye DELETE atar; API ayakta değilse fetch hata verir ve kullanıcı SİLİNMEDEN kalır |
+| [server/scripts/test_endpoint.js:8](../../server/scripts/test_endpoint.js#L8) | <code>const token = signAccessToken(admin, { passwordHash: admin.password_hash });</code> | DB'deki ilk (silinmemiş) super_user adına, parola sürümüne (pv) bağlı JWT üretir (JWT_SECRET .env'den); sır basmaz ama yetkili istek yapar |
 | [server/scripts/_dev_guard.js:5](../../server/scripts/_dev_guard.js#L5) | <code>'Bu gelistirme betigi gercek veritabanina dokunabilir. Bilerek calistirmak icin ALLOW_DEV…</code> | Bekçi mesajı; bu betik için gerçekten geçerlidir |
 
 **Olası nedenler**
@@ -2004,9 +2004,9 @@ ssh -p 22667 salihceylan@178.210.161.55 'docker exec -i site_kapi_kontrol_postgr
 | --- | --- | --- |
 | [deploy/remote_deploy.sh:63](../../deploy/remote_deploy.sh#L63) | <code>KEY=$(node -e "console.log(require('crypto').randomBytes(36).toString('base64url'))")</code> | activate, anahtar yoksa/24 karakterden kısaysa YENİ rastgele anahtar üretip .env'e yazar; eski anahtar silinir, şirket aracındaki değer geçersiz kalır |
 | [deploy/remote_deploy.sh:66](../../deploy/remote_deploy.sh#L66) | <code>echo "COMPANY_API_KEY tanimlandi (uzunluk ${#KEY})"</code> | Betik anahtarı DEĞİL yalnız uzunluğunu yazar; değeri sunucudaki .env'dedir |
-| [deploy/remote_verify.sh:13](../../deploy/remote_verify.sh#L13) | <code>echo "== sirket ucu anahtarsiz (401 beklenir)"; curl -s -m 8 -o /dev/null -w "%{http_code…</code> | Doğrulama: anahtarsız şirket ucu 401 vermeli |
-| [server/src/config/env.js:134](../../server/src/config/env.js#L134) | <code>warnings.push('COMPANY_API_KEY tanimli degil; /api/company/* yalnizca super_user JWT ile …</code> | Anahtar yoksa şirket uçları yalnız super_user JWT ile çalışır |
-| [deploy/README.md:36](../../deploy/README.md#L36) | <code>- `.env` değişiklikleri (ör. `COMPANY_API_KEY`) elle ve sırlar yazdırılmadan yapılır; ayn…</code> | Anahtar elle ve sır yazdırmadan alınıp şirket aracının .env'ine konmalıdır |
+| [deploy/remote_verify.sh:27](../../deploy/remote_verify.sh#L27) | <code>echo "== sirket ucu anahtarsiz (401 beklenir)"; curl -s -m 8 -o /dev/null -w "%{http_code…</code> | Doğrulama: anahtarsız şirket ucu 401 vermeli |
+| [server/src/config/env.js:325](../../server/src/config/env.js#L325) | <code>warnings.push('COMPANY_API_KEY tanimli degil; /api/company/* yalnizca super_user JWT ile …</code> | Anahtar yoksa şirket uçları yalnız super_user JWT ile çalışır |
+| [deploy/README.md:37](../../deploy/README.md#L37) | <code>- `.env` değişiklikleri (ör. `COMPANY_API_KEY`) elle ve sırlar yazdırılmadan yapılır; ayn…</code> | Anahtar elle ve sır yazdırmadan alınıp şirket aracının .env'ine konmalıdır |
 
 **Olası nedenler**
 - İlk dağıtımda anahtar otomatik üretildi ama company_qr_tool/.env güncellenmedi
@@ -2032,8 +2032,8 @@ curl -s -o /dev/null -w "%{http_code}\n" https://api.gudeteknoloji.com.tr/api/co
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
 | [deploy/remote_deploy.sh:32](../../deploy/remote_deploy.sh#L32) | <code>mkdir -p "$BK"</code> | Her dağıtım yeni bir ~/backups/kapi_<TS>/ açar; betik eski yedekleri SİLMEZ |
-| [deploy/remote_deploy.sh:35](../../deploy/remote_deploy.sh#L35) | <code>tar -czf "$BK/server_code.tgz" --exclude='server/node_modules' --exclude='server/firmware…</code> | Kod yedeği (node_modules, firmware, public hariç; .env ve data dahil) |
-| [deploy/remote_deploy.sh:75](../../deploy/remote_deploy.sh#L75) | <code>mv "$APP/node_modules" "$APP/node_modules.old_$TS"</code> | Her aktivasyonda eski node_modules server/ altında node_modules.old_<TS> olarak KALIR (otomatik temizlenmez) |
+| [deploy/remote_deploy.sh:35](../../deploy/remote_deploy.sh#L35) | <code>tar -czf "$BK/server_code.tgz" --exclude='server/node_modules' --exclude='server/node_mod…</code> | Kod yedeği (node_modules, firmware, public hariç; .env ve data dahil) |
+| [deploy/remote_deploy.sh:83](../../deploy/remote_deploy.sh#L83) | <code>mv "$APP/node_modules" "$APP/node_modules.old_$TS"</code> | Her aktivasyonda eski node_modules server/ altında node_modules.old_<TS> olarak KALIR (otomatik temizlenmez) |
 | [deploy/remote_deploy.sh:10](../../deploy/remote_deploy.sh#L10) | <code>STAGE="$HOME/kapi_stage_$TS"</code> | Aşama dizini ($HOME/kapi_stage_<TS>) ve paket (kapi_deploy_<TS>.tgz) de birikir |
 | [deploy/remote_audit.sh:21](../../deploy/remote_audit.sh#L21) | <code>echo "== disk"; df -h /var/www &#124; tail -1</code> | Salt-okunur disk kullanımı satırı |
 | [deploy/remote_audit.sh:20](../../deploy/remote_audit.sh#L20) | <code>echo "== yedek dizini"; ls -la ~/backups 2&gt;&amp;1 &#124; head -6</code> | Yedek dizini listesi (son girdiler) |

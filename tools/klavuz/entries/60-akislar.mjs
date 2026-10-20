@@ -54,8 +54,8 @@ export default {
         },
         {
           file: 'lib/services/auth_service.dart',
-          find: '_session = await api.login(email: email, password: password, role: role);',
-          note: 'Adım 2 — uygulama (servis): ApiException mesajı kullanıcıya döner; ağ hatasında "Sunucuya baglanilamadi."; başarıda oturum _session\'a yazılır ve kalıcılaştırılır.',
+          find: '_session = await api.login(',
+          note: 'Adım 2 — uygulama (servis): önceki girişte verilen güvenilir cihaz belirteci (varsa) gönderilir, yanıtta yenisi gelirse saklanır; ApiException mesajı kullanıcıya döner; ağ hatasında "Sunucuya baglanilamadi."; başarıda oturum _session\'a yazılır ve kalıcılaştırılır.',
         },
         {
           file: 'lib/services/auth_api.dart',
@@ -69,8 +69,8 @@ export default {
         },
         {
           file: 'server/src/routes/auth_routes.js',
-          find: 'const lockState = loginFailureTracker.check(identifier);',
-          note: 'Adım 5 — sunucu (ara kural): hesap bazlı ardışık hata sayacı (login_throttle.js: 5 hata -> 15 dk); kilitliyse 429 + code LOGIN_LOCKED + Retry-After. Sayaç süreç belleğindedir; PM2 yeniden başlatması sıfırlar.',
+          find: 'const reservation = loginGuard.reserve(attempt);',
+          note: 'Adım 5 — sunucu (giriş kilidi, security/login_guard.js): üç katman (hesap × kaynak 5 hata / 15 dk, hesap geneli 20 / 60 dk, IP geneli 30 / 15 dk; ilk kilit 15 dk, tekrarında uzar); hata hakkı bcrypt\'ten ÖNCE ayrılır; kilitliyse 429 + code LOGIN_LOCKED + Retry-After. Hesapla eşleşen güvenilir cihaz belirteci hesap ve IP geneli kilitten muaftır. Sayaç süreç belleğindedir; PM2 yeniden başlatması sıfırlar.',
         },
         {
           file: 'server/src/routes/auth_routes.js',
@@ -79,8 +79,8 @@ export default {
         },
         {
           file: 'server/src/routes/auth_routes.js',
-          find: 'const isPasswordMatch = await bcrypt.compare(',
-          note: 'Adım 7 — sunucu (parola): kullanıcı bulunmasa da tek bcrypt karşılaştırması yapılır (zaman ölçümüyle hesap taraması engellenir). Uyuşmazsa recordFailure + 401 "Giris bilgileri hatali."',
+          find: 'const compared = await bcrypt.compare(candidate, usableHash ? storedHash : DUMMY_PASSWORD_HASH);',
+          note: 'Adım 7 — sunucu (parola): kullanıcı bulunmasa ya da saklı özet kullanılamaz olsa da tek bcrypt karşılaştırması yapılır (zaman ölçümüyle hesap taraması engellenir). Uyuşmazsa commitFailure + 401 "Giris bilgileri hatali." (eşik dolduysa 429 LOGIN_LOCKED).',
         },
         {
           file: 'server/src/routes/auth_routes.js',
@@ -90,7 +90,7 @@ export default {
         {
           file: 'server/src/routes/auth_routes.js',
           find: 'const token = signAccessToken(user, { passwordHash: row.password_hash });',
-          note: 'Adım 9 — sunucu (JWT): jwt.js signAccessToken HS256 ile sub/email/role + pv (parola sürümü) imzalar; ömür JWT_EXPIRES_IN (varsayılan 30d). JWT_SECRET yoksa/kısaysa token üretimi hata verir (500).',
+          note: 'Adım 9 — sunucu (JWT): jwt.js signAccessToken HS256 ile sub/email/role + pv (parola sürümü) imzalar; ömür JWT_EXPIRES_IN (varsayılan 30d). JWT_SECRET yoksa/kısaysa token üretimi hata verir (500). Yanıta güvenilir cihaz belirteci (device_token) de eklenir.',
         },
         {
           file: 'lib/services/auth_service.dart',
@@ -109,7 +109,7 @@ export default {
         },
       ],
       causes: [
-        'Adım 4-5: hız sınırı (429) ya da 5 hatalı denemeden sonra hesap kilidi (LOGIN_LOCKED, 15 dk); PM2 yeniden başlatması kilidi sıfırlar',
+        'Adım 4-5: hız sınırı (429) ya da hatalı deneme kilidi (LOGIN_LOCKED: aynı hesap ve kaynaktan 5 hata; ilk kilit 15 dk, tekrarında daha uzun); PM2 yeniden başlatması kilidi sıfırlar',
         'Adım 6-7: parola yanlış, kullanıcı adı/e-posta farklı yazılmış ya da hesap hiç yok (aynı 401 döner: hesap varlığı ayırt edilmez)',
         'Adım 8: hesap pasif, e-posta doğrulanmamış, abonelik onay bekliyor/reddedildi; rol seçimi uyuşmuyor',
         'Adım 9: sunucuda JWT_SECRET eksik/geçersiz (500 "Giris islemi basarisiz." + errorId)',
@@ -121,7 +121,7 @@ export default {
         'Sunucu günlüğünde isteği bulun: "[API] POST /auth/login -> <durum>" (401: parola/kimlik, 403: durum kapıları, 429: hız/kilit, 500: errorId ile ayrıntı)',
         'Kullanıcı satırını salt-okunur sorguyla görün (parola özeti seçilmez): SELECT user_code, role, is_active, email_verified, approval_status FROM users WHERE LOWER(email) = LOWER(\'<e-posta>\');',
         '403 ise yanıttaki Türkçe metne göre Adım 8\'deki kapıyı bulun; "dogrulanmadi" ise akis-kayit-eposta-dogrulama akışına geçin',
-        '429 + LOGIN_LOCKED ise 15 dk bekleyin ya da şifre sıfırlama (akis-sifre-sifirlama) kilidi açar',
+        '429 + LOGIN_LOCKED ise yanıttaki retry_after_seconds kadar bekleyin (ilk kilit 15 dk) ya da şifre sıfırlama (akis-sifre-sifirlama) hesap kilidini açar',
         'Oturum açıkken sonradan çıkış oluyorsa 401 yanıtına bakın: code TOKEN_REVOKED = parola değişmiş; "Gecersiz veya suresi dolmus token." = süre bitmiş ya da imza geçersiz (JWT_SECRET değişmiş); "Kullanici bulunamadi." = kullanıcı silinmiş (uygulama her 401\'de oturumu kapatır)',
         'Sunucu açılışında "[ENV] HATA" ya da "[JWT]" uyarısı var mı: pm2 logs içinde arayın',
       ],
@@ -132,6 +132,7 @@ export default {
       ],
       tests: [
         'server/test/core_auth_routes.test.js',
+        'server/test/security_login_guard.test.js',
         'server/test/core_jwt.test.js',
         'server/test/core_auth_middleware.test.js',
         'test/auth_service_session_test.dart',
@@ -996,8 +997,8 @@ export default {
         },
         {
           file: 'server/src/routes/guest_passes_routes.js',
-          find: 'requestedBy: `guest_pass:',
-          note: 'Adım 11 — MQTT (yayın): publishDoorPulse device/<UID>/cmd konusuna pulse yayınlar; köprü/cihaz yoksa MQTT_BRIDGE_NOT_CONNECTED / DEVICE_OFFLINE -> 503 "Kapi cihazi su anda bagli degil." Cihaz tarafı için akis-bulut-kapi-acma Adım 10-11.',
+          find: 'requestedBy: `guest:${Number(pass.id)}`,',
+          note: 'Adım 11 — MQTT (yayın): publishDoorPulse device/<UID>/cmd konusuna pulse yayınlar (MQTT\'ye misafir başlığı gitmez, yalnız geçiş kimliği: guest:<id>); köprü/cihaz yoksa MQTT_BRIDGE_NOT_CONNECTED / DEVICE_OFFLINE -> 503 "Kapi cihazi su anda bagli degil." Cihaz tarafı için akis-bulut-kapi-acma Adım 10-11.',
         },
         {
           file: 'server/src/routes/guest_passes_routes.js',

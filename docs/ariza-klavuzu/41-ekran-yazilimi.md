@@ -502,7 +502,7 @@ diff -q ekran_yazilimi/include/display_protocol.h cihaz_kontrol/include/display_
 | [ekran_yazilimi/platformio.ini:38](../../ekran_yazilimi/platformio.ini#L38) | <code>bodmer/TFT_eSPI@^2.5.0</code> | Kütüphaneler: TFT_eSPI, QRCode, ArduinoJson |
 | [ekran_yazilimi/platformio.ini:13](../../ekran_yazilimi/platformio.ini#L13) | <code>-D USER_SETUP_LOADED=1</code> | TFT_eSPI kullanıcı ayarı yüklenmez; tüm pinler bayraklarla verilir (User_Setup.h değişimi etkisizdir) |
 | [ekran_yazilimi/platformio.ini:10](../../ekran_yazilimi/platformio.ini#L10) | <code>-D HARDWARE_TARGET="esp32c3-display"</code> | Donanım hedefi etiketi |
-| [company_qr_tool/app.py:2991](../../company_qr_tool/app.py#L2991) | <code>class ScreenFirmwareWindow:</code> | Şirket aracında ekran için derle/sürümle/yükle penceresi |
+| [company_qr_tool/app.py:3514](../../company_qr_tool/app.py#L3514) | <code>class ScreenFirmwarePage:</code> | Şirket aracının "Ekran yazılımı" sayfası (yan menü, Ctrl+5): ekranı bul, sürüm oluştur, yükle |
 
 **Olası nedenler**
 - COM8 yok/başka programda açık; ekranın bağlı olduğu port farklı
@@ -530,12 +530,12 @@ pio run -d ekran_yazilimi -e esp32c3_display
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [ekran_yazilimi/include/config.h:4](../../ekran_yazilimi/include/config.h#L4) | <code>#define DISPLAY_FIRMWARE_VERSION "1.1.1"</code> | Ekranın sürüm kaynağı (Cihaz Bilgisi ekranında "Ekran FW" ve USB kimlik yanıtında) |
+| [ekran_yazilimi/include/config.h:4](../../ekran_yazilimi/include/config.h#L4) | <code>#define DISPLAY_FIRMWARE_VERSION "1.1.3"  // 1.1.3: ana ekran markasi SmartKeyPass (eski …</code> | Ekranın sürüm kaynağı (Cihaz Bilgisi ekranında "Ekran FW" ve USB kimlik yanıtında) |
 | [ekran_yazilimi/src/ScreenManager.cpp:845](../../ekran_yazilimi/src/ScreenManager.cpp#L845) | <code>tft.print(DISPLAY_FIRMWARE_VERSION);</code> | Cihaz Bilgisi ekranında sürümün gösterildiği yer |
 | [ekran_yazilimi/src/main.cpp:88](../../ekran_yazilimi/src/main.cpp#L88) | <code>Serial.println(DISPLAY_FIRMWARE_VERSION);</code> | USB "?" / IDENT / DISP_PING yanıtındaki FW alanı |
 | [ekran_yazilimi/firmware_releases/index.json:2](../../ekran_yazilimi/firmware_releases/index.json#L2) | <code>"releases": [</code> | Yayın dizini: her kayıt id, sürüm, env ve dosya özetleri taşır |
 | [ekran_yazilimi/firmware_releases/20260917_115500_v1_0_2/manifest.json:2](../../ekran_yazilimi/firmware_releases/20260917_115500_v1_0_2/manifest.json#L2) | <code>"version": "1.0.2",</code> | Örnek sürüm manifesti |
-| [company_qr_tool/app.py:51](../../company_qr_tool/app.py#L51) | <code>DISPLAY_RELEASES_DIR = DISPLAY_PROJECT_DIR / "firmware_releases"</code> | Araç sürümleri bu klasöre yazar; sürüm numarasını config.h'tan okur/yazar |
+| [company_qr_tool/app.py:54](../../company_qr_tool/app.py#L54) | <code>DISPLAY_RELEASES_DIR = DISPLAY_PROJECT_DIR / "firmware_releases"</code> | Araç sürümleri bu klasöre yazar; sürüm numarasını config.h'tan okur/yazar |
 
 **Olası nedenler**
 - config.h sürümü değişti ama araçla yayın kaydı oluşturulmadı (firmware_releases geride kalabilir)

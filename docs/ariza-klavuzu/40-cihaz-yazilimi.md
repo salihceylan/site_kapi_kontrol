@@ -39,7 +39,7 @@ Bu bölüm cihaz_kontrol (ESP32-C3 saha cihazı + ESP32-WROOM röle kartı), ekr
 | [ekran_yazilimi/include/config.h](../../ekran_yazilimi/include/config.h) | Ekran: UART, dokunmatik, LED ve düğme pinleri; ekran firmware sürümü |
 | [ekran_yazilimi/include/cst816d_touch.h](../../ekran_yazilimi/include/cst816d_touch.h) | Ekran: CST816D dokunmatik I2C sürücüsü |
 | [ekran_yazilimi/platformio.ini](../../ekran_yazilimi/platformio.ini) | Ekran derleme ortamı ve TFT_eSPI pin/sürücü bayrakları |
-| [cihaz_dene/app.py](../../cihaz_dene/app.py) | Cihaz Dene (AHBU Cihaz Deneme) seri aracı: durum tablosu, röle butonları |
+| [cihaz_dene/app.py](../../cihaz_dene/app.py) | Cihaz Dene (SmartKeyPass Cihaz Deneme) seri aracı: durum tablosu, röle butonları |
 | [OTA_KURULUM.txt](../../OTA_KURULUM.txt) | OTA akışı, manifest alanları, sunucu dizin yapısı (c3 / wroom ayrı) |
 | [docs/YEREL_KONTROL_V2.md](../../docs/YEREL_KONTROL_V2.md) | Yerel kontrol protokol sözleşmesi (LOCALCTRL_V2) |
 
@@ -47,7 +47,7 @@ Bu bölüm cihaz_kontrol (ESP32-C3 saha cihazı + ESP32-WROOM röle kartı), ekr
 
 - [cihaz-wifi-baglanmiyor](#cihaz-wifi-baglanmiyor) — Cihaz Wi-Fi'ye bağlanmıyor: Wi-Fi LED'i yavaş (yaklaşık 0,7 sn) yanıp sönüyor, uygulamada cihaz çevrimdışı
 - [cihaz-led-hizli-yanip-sonuyor](#cihaz-led-hizli-yanip-sonuyor) — Cihazın Wi-Fi LED'i hızlı (yaklaşık 0,15 sn) yanıp sönüyor: Wi-Fi bilgisi girilmemiş, kurulum bekliyor
-- [cihaz-ble-gorunmuyor](#cihaz-ble-gorunmuyor) — Telefon BLE taramasında "AHBU..." adlı cihaz görünmüyor, Wi-Fi kurulumu başlatılamıyor
+- [cihaz-ble-gorunmuyor](#cihaz-ble-gorunmuyor) — Telefon BLE taramasında "SmartKeyPass..." (eski kartlarda "AHBU...") adlı cihaz görünmüyor, Wi-Fi kurulumu başlatılamıyor
 - [cihaz-ble-kurulum-basarisiz](#cihaz-ble-kurulum-basarisiz) — BLE ile Wi-Fi/MQTT kurulumu başarısız: "SSID bilgisi eksik veya gecersiz", "MQTT cihaz kimligi eksik" ya da "MQTT sunucu adresi izinli degil"
 - [cihaz-wifi-sifirlama-butonu](#cihaz-wifi-sifirlama-butonu) — Wi-Fi bilgisini silmek / cihazı yeniden kuruluma almak için reset butonu çalışmıyor ("sifirlama iptal")
 - [cihaz-saat-ntp-yok](#cihaz-saat-ntp-yok) — Wi-Fi bağlı görünüyor ama cihaz MQTT'ye hiç bağlanmıyor ve OTA başlamıyor (sistem saati NTP ile gelmemiş)
@@ -97,10 +97,10 @@ Bu bölüm cihaz_kontrol (ESP32-C3 saha cihazı + ESP32-WROOM röle kartı), ekr
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [cihaz_kontrol/include/wifi_baglanti.h:667](../../cihaz_kontrol/include/wifi_baglanti.h#L667) | <code>inline void wifiLoop() {</code> | Kayıtlı Wi-Fi varken bağlı değilse yedek yeniden deneme: bekleme 6 -> 12 -> 24 -> 48 -> 60 sn katlanır |
+| [cihaz_kontrol/include/wifi_baglanti.h:670](../../cihaz_kontrol/include/wifi_baglanti.h#L670) | <code>inline void wifiLoop() {</code> | Kayıtlı Wi-Fi varken bağlı değilse yedek yeniden deneme: bekleme 6 -> 12 -> 24 -> 48 -> 60 sn katlanır |
 | [cihaz_kontrol/include/wifi_baglanti.h:43](../../cihaz_kontrol/include/wifi_baglanti.h#L43) | <code>inline constexpr unsigned long WIFI_RETRY_MIN_MS = 6000;</code> | Yeniden deneme beklemesinin başlangıç değeri (üst sınır WIFI_RETRY_MAX_MS 60 sn) |
-| [cihaz_kontrol/include/wifi_baglanti.h:657](../../cihaz_kontrol/include/wifi_baglanti.h#L657) | <code>Serial.printf("WiFi baglanti koptu / basarisiz (Hata kodu: %d)\n", info.wifi_sta_disconne…</code> | Kopma/başarısızlık nedeni ESP-IDF "Hata kodu" olarak seriye yazılır |
-| [cihaz_kontrol/include/wifi_baglanti.h:620](../../cihaz_kontrol/include/wifi_baglanti.h#L620) | <code>inline void wifiBaglan() {</code> | Açılışta NVS'teki SSID/parola ile WiFi.begin; kayıt yoksa BLE kuruluma geçer |
+| [cihaz_kontrol/include/wifi_baglanti.h:660](../../cihaz_kontrol/include/wifi_baglanti.h#L660) | <code>Serial.printf("WiFi baglanti koptu / basarisiz (Hata kodu: %d)\n", info.wifi_sta_disconne…</code> | Kopma/başarısızlık nedeni ESP-IDF "Hata kodu" olarak seriye yazılır |
+| [cihaz_kontrol/include/wifi_baglanti.h:623](../../cihaz_kontrol/include/wifi_baglanti.h#L623) | <code>inline void wifiBaglan() {</code> | Açılışta NVS'teki SSID/parola ile WiFi.begin; kayıt yoksa BLE kuruluma geçer |
 | [cihaz_kontrol/include/wifi_baglanti.h:261](../../cihaz_kontrol/include/wifi_baglanti.h#L261) | <code>inline void wifiUpdateLed() {</code> | Bağlıyken LED sürekli yanar; bağlı değilken yapılandırılmışsa 700 ms, değilse 150 ms yanıp söner |
 | [cihaz_kontrol/include/wifi_baglanti.h:46](../../cihaz_kontrol/include/wifi_baglanti.h#L46) | <code>inline constexpr unsigned long WIFI_IP_BEKLEME_MAX_MS = 30000;</code> | AP'ye bağlanıp DHCP/IP beklenirken deneme en fazla 30 sn kesilmez |
 
@@ -135,8 +135,8 @@ cd cihaz_kontrol && pio device monitor -e lolin_c3_mini
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
 | [cihaz_kontrol/include/wifi_baglanti.h:48](../../cihaz_kontrol/include/wifi_baglanti.h#L48) | <code>inline constexpr unsigned long WIFI_UNCONFIGURED_BLINK_INTERVAL_MS = 150;</code> | Wi-Fi yapılandırılmamışsa LED 150 ms aralıkla yanıp söner (yapılandırılmışsa 700 ms) |
-| [cihaz_kontrol/include/wifi_baglanti.h:642](../../cihaz_kontrol/include/wifi_baglanti.h#L642) | <code>Serial.println("Kayitli WiFi yok, BLE provisioning baslatiliyor.");</code> | Kayıtlı SSID yoksa açılışta BLE kurulum modu başlar |
-| [cihaz_kontrol/include/wifi_baglanti.h:699](../../cihaz_kontrol/include/wifi_baglanti.h#L699) | <code>} else if (!gWifiConfigured) {</code> | Çalışırken de yapılandırma yoksa kurulum modu (yeniden) açılır |
+| [cihaz_kontrol/include/wifi_baglanti.h:645](../../cihaz_kontrol/include/wifi_baglanti.h#L645) | <code>Serial.println("Kayitli WiFi yok, BLE provisioning baslatiliyor.");</code> | Kayıtlı SSID yoksa açılışta BLE kurulum modu başlar |
+| [cihaz_kontrol/include/wifi_baglanti.h:702](../../cihaz_kontrol/include/wifi_baglanti.h#L702) | <code>} else if (!gWifiConfigured) {</code> | Çalışırken de yapılandırma yoksa kurulum modu (yeniden) açılır |
 | [cihaz_kontrol/include/device_konfig.h:26](../../cihaz_kontrol/include/device_konfig.h#L26) | <code>constexpr int WIFI_STATUS_LED_PIN = 2;</code> | ESP32-C3: Wi-Fi LED GPIO2 |
 | [cihaz_kontrol/include/device_konfig.h:11](../../cihaz_kontrol/include/device_konfig.h#L11) | <code>constexpr int WIFI_STATUS_LED_PIN = 23;</code> | WROOM: Wi-Fi/Power LED GPIO23 (açılışta 2 kez yanıp söner, sonra bağlıyken sürekli yanar) |
 
@@ -146,7 +146,7 @@ cd cihaz_kontrol && pio device monitor -e lolin_c3_mini
 - Kart atölye modunda (kayıtlı Wi-Fi yok) olduğu için h/l/p seri komutları açık
 
 **Adım adım kontrol**
-- Seri "?" çıktısı: "WiFi kayitli: Yok", "Bluetooth provisioning: aktif" ve "Bluetooth adi: AHBU<UID>"
+- Seri "?" çıktısı: "WiFi kayitli: Yok", "Bluetooth provisioning: aktif" ve "Bluetooth adi: SmartKeyPass<UID>" (eski firmware: AHBU<UID>)
 - Uygulamadan cihaz ekleme (BLE) akışını başlatın; başarısızsa cihaz-ble-kurulum-basarisiz
 
 **Günlükte aranacak ifadeler**
@@ -156,15 +156,15 @@ cd cihaz_kontrol && pio device monitor -e lolin_c3_mini
 **Bkz.:** [cihaz-ble-gorunmuyor](#cihaz-ble-gorunmuyor), [cihaz-ble-kurulum-basarisiz](#cihaz-ble-kurulum-basarisiz), [cihaz-wifi-baglanmiyor](#cihaz-wifi-baglanmiyor)
 
 <a id="cihaz-ble-gorunmuyor"></a>
-### cihaz-ble-gorunmuyor · Telefon BLE taramasında "AHBU..." adlı cihaz görünmüyor, Wi-Fi kurulumu başlatılamıyor
+### cihaz-ble-gorunmuyor · Telefon BLE taramasında "SmartKeyPass..." (eski kartlarda "AHBU...") adlı cihaz görünmüyor, Wi-Fi kurulumu başlatılamıyor
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [cihaz_kontrol/include/wifi_baglanti.h:372](../../cihaz_kontrol/include/wifi_baglanti.h#L372) | <code>return "AHBU" + cihazUniqueId();</code> | BLE cihaz adı: "AHBU" + 12 haneli UID (efuse MAC) |
-| [cihaz_kontrol/include/wifi_baglanti.h:504](../../cihaz_kontrol/include/wifi_baglanti.h#L504) | <code>inline void wifiStartProvisioningMode() {</code> | BLE sunucusu/servis/özellikler kurulur ve yayın (advertising) başlar |
-| [cihaz_kontrol/include/wifi_baglanti.h:696](../../cihaz_kontrol/include/wifi_baglanti.h#L696) | <code>if (gProvisioningMode &amp;&amp; wifiHasMqttCredentials()) {</code> | Wi-Fi bağlanıp MQTT kimliği de varsa BLE kurulum modu KAPATILIR |
-| [cihaz_kontrol/include/wifi_baglanti.h:642](../../cihaz_kontrol/include/wifi_baglanti.h#L642) | <code>Serial.println("Kayitli WiFi yok, BLE provisioning baslatiliyor.");</code> | BLE yalnız kayıtlı Wi-Fi YOKKEN açılışta başlar |
-| [cihaz_kontrol/include/wifi_baglanti.h:578](../../cihaz_kontrol/include/wifi_baglanti.h#L578) | <code>inline void wifiHandleResetButton() {</code> | Kayıtlı Wi-Fi varsa BLE'yi yeniden açmanın yolu: reset butonu 3 sn |
+| [cihaz_kontrol/include/wifi_baglanti.h:375](../../cihaz_kontrol/include/wifi_baglanti.h#L375) | <code>return "SmartKeyPass" + cihazUniqueId();</code> | BLE cihaz adı: "SmartKeyPass" + 12 haneli UID (efuse MAC); eski firmware "AHBU" + UID yayınlardı |
+| [cihaz_kontrol/include/wifi_baglanti.h:507](../../cihaz_kontrol/include/wifi_baglanti.h#L507) | <code>inline void wifiStartProvisioningMode() {</code> | BLE sunucusu/servis/özellikler kurulur ve yayın (advertising) başlar |
+| [cihaz_kontrol/include/wifi_baglanti.h:699](../../cihaz_kontrol/include/wifi_baglanti.h#L699) | <code>if (gProvisioningMode &amp;&amp; wifiHasMqttCredentials()) {</code> | Wi-Fi bağlanıp MQTT kimliği de varsa BLE kurulum modu KAPATILIR |
+| [cihaz_kontrol/include/wifi_baglanti.h:645](../../cihaz_kontrol/include/wifi_baglanti.h#L645) | <code>Serial.println("Kayitli WiFi yok, BLE provisioning baslatiliyor.");</code> | BLE yalnız kayıtlı Wi-Fi YOKKEN açılışta başlar |
+| [cihaz_kontrol/include/wifi_baglanti.h:581](../../cihaz_kontrol/include/wifi_baglanti.h#L581) | <code>inline void wifiHandleResetButton() {</code> | Kayıtlı Wi-Fi varsa BLE'yi yeniden açmanın yolu: reset butonu 3 sn |
 
 **Olası nedenler**
 - Cihazda kayıtlı Wi-Fi var: BLE kurulum penceresi kapalı (önce reset butonu 3 sn ile Wi-Fi bilgisini silin)
@@ -188,13 +188,13 @@ cd cihaz_kontrol && pio device monitor -e lolin_c3_mini
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [cihaz_kontrol/include/wifi_baglanti.h:430](../../cihaz_kontrol/include/wifi_baglanti.h#L430) | <code>class WifiProvisionCommandCallbacks : public BLECharacteristicCallbacks {</code> | BLE komut yazımı burada doğrulanır; hatalar BLE "result" özelliğine yazılır (seriye değil) |
-| [cihaz_kontrol/include/wifi_baglanti.h:473](../../cihaz_kontrol/include/wifi_baglanti.h#L473) | <code>wifiNotifyBleResult("error", "SSID bilgisi eksik veya gecersiz.");</code> | SSID boş, 32 karakterden uzun ya da parola 63 karakterden uzun |
-| [cihaz_kontrol/include/wifi_baglanti.h:485](../../cihaz_kontrol/include/wifi_baglanti.h#L485) | <code>wifiNotifyBleResult("error", "MQTT cihaz kimligi eksik. Once cihazi sirket hesabina kayde…</code> | mqtt_host / mqtt_port / mqtt_username / mqtt_password dördü birden dolu olmalı |
-| [cihaz_kontrol/include/wifi_baglanti.h:409](../../cihaz_kontrol/include/wifi_baglanti.h#L409) | <code>inline bool wifiMqttHostIzinliMi(const String&amp; host) {</code> | MQTT sunucu adı yalnız izinli alan adı ekiyle bitebilir (sahte broker yönlendirmesi engeli) |
+| [cihaz_kontrol/include/wifi_baglanti.h:433](../../cihaz_kontrol/include/wifi_baglanti.h#L433) | <code>class WifiProvisionCommandCallbacks : public BLECharacteristicCallbacks {</code> | BLE komut yazımı burada doğrulanır; hatalar BLE "result" özelliğine yazılır (seriye değil) |
+| [cihaz_kontrol/include/wifi_baglanti.h:476](../../cihaz_kontrol/include/wifi_baglanti.h#L476) | <code>wifiNotifyBleResult("error", "SSID bilgisi eksik veya gecersiz.");</code> | SSID boş, 32 karakterden uzun ya da parola 63 karakterden uzun |
+| [cihaz_kontrol/include/wifi_baglanti.h:488](../../cihaz_kontrol/include/wifi_baglanti.h#L488) | <code>wifiNotifyBleResult("error", "MQTT cihaz kimligi eksik. Once cihazi sirket hesabina kayde…</code> | mqtt_host / mqtt_port / mqtt_username / mqtt_password dördü birden dolu olmalı |
+| [cihaz_kontrol/include/wifi_baglanti.h:412](../../cihaz_kontrol/include/wifi_baglanti.h#L412) | <code>inline bool wifiMqttHostIzinliMi(const String&amp; host) {</code> | MQTT sunucu adı yalnız izinli alan adı ekiyle bitebilir (sahte broker yönlendirmesi engeli) |
 | [cihaz_kontrol/include/wifi_baglanti.h:37](../../cihaz_kontrol/include/wifi_baglanti.h#L37) | <code>#define AHBU_MQTT_HOST_SUFFIX ".gudeteknoloji.com.tr"</code> | Varsayılan izinli ek; özel/test ortamı için -D AHBU_MQTT_HOST_SUFFIX ile derlenir |
 | [cihaz_kontrol/include/wifi_baglanti.h:39](../../cihaz_kontrol/include/wifi_baglanti.h#L39) | <code>inline constexpr size_t BLE_COMMAND_MAX_BYTES = 640;</code> | 640 bayttan büyük komut SESSİZCE yok sayılır (hata dönmez) |
-| [cihaz_kontrol/include/wifi_baglanti.h:378](../../cihaz_kontrol/include/wifi_baglanti.h#L378) | <code>inline void wifiApplyProvisioningRequest() {</code> | Geçerli talep NVS'e yazılır, sonuç "restarting" olur ve cihaz yeniden başlar |
+| [cihaz_kontrol/include/wifi_baglanti.h:381](../../cihaz_kontrol/include/wifi_baglanti.h#L381) | <code>inline void wifiApplyProvisioningRequest() {</code> | Geçerli talep NVS'e yazılır, sonuç "restarting" olur ve cihaz yeniden başlar |
 
 **Olası nedenler**
 - MQTT cihaz kimliği (kullanıcı/parola) uygulama tarafından gönderilmedi: cihaz şirket hesabına kayıtlı değil (sunucu tarafı bu alanın dışında)
@@ -222,8 +222,8 @@ cd cihaz_kontrol && pio device monitor -e lolin_c3_mini
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [cihaz_kontrol/include/wifi_baglanti.h:578](../../cihaz_kontrol/include/wifi_baglanti.h#L578) | <code>inline void wifiHandleResetButton() {</code> | Düğme basılı süresi izlenir; 3 sn dolunca Wi-Fi bilgisi silinir ve cihaz yeniden başlar |
-| [cihaz_kontrol/include/wifi_baglanti.h:613](../../cihaz_kontrol/include/wifi_baglanti.h#L613) | <code>Serial.println("WiFi ayarlari sifirlaniyor...");</code> | Sıfırlama tetiklendi: wifiForgetCredentials + yeniden başlatma |
+| [cihaz_kontrol/include/wifi_baglanti.h:581](../../cihaz_kontrol/include/wifi_baglanti.h#L581) | <code>inline void wifiHandleResetButton() {</code> | Düğme basılı süresi izlenir; 3 sn dolunca Wi-Fi bilgisi silinir ve cihaz yeniden başlar |
+| [cihaz_kontrol/include/wifi_baglanti.h:616](../../cihaz_kontrol/include/wifi_baglanti.h#L616) | <code>Serial.println("WiFi ayarlari sifirlaniyor...");</code> | Sıfırlama tetiklendi: wifiForgetCredentials + yeniden başlatma |
 | [cihaz_kontrol/include/wifi_baglanti.h:154](../../cihaz_kontrol/include/wifi_baglanti.h#L154) | <code>inline void wifiForgetCredentials() {</code> | YALNIZ SSID ve parolayı siler; MQTT kimliği ve yerel kontrol anahtarı NVS'te kalır |
 | [cihaz_kontrol/include/device_konfig.h:15](../../cihaz_kontrol/include/device_konfig.h#L15) | <code>constexpr uint8_t WIFI_RESET_BUTTON_PIN = 0;</code> | Reset butonu GPIO0, aktif-düşük (iki donanım hedefinde de aynı) |
 | [cihaz_kontrol/include/device_konfig.h:17](../../cihaz_kontrol/include/device_konfig.h#L17) | <code>constexpr unsigned long WIFI_RESET_HOLD_MS = 3000;</code> | Basılı tutma süresi 3000 ms (iki hedefte aynı) |
@@ -252,9 +252,9 @@ cd cihaz_kontrol && pio device monitor -e lolin_c3_mini
 | --- | --- | --- |
 | [cihaz_kontrol/include/device_konfig.h:60](../../cihaz_kontrol/include/device_konfig.h#L60) | <code>inline bool zamanSenkronMu() {</code> | Saat "senkron" sayılır: epoch > 1600000000 |
 | [cihaz_kontrol/include/device_konfig.h:57](../../cihaz_kontrol/include/device_konfig.h#L57) | <code>return now &gt; 1600000000 ? static_cast&lt;uint32_t&gt;(now) : 0;</code> | Eşik: NTP gelmeden time() küçük değer döner |
-| [cihaz_kontrol/include/wifi_baglanti.h:694](../../cihaz_kontrol/include/wifi_baglanti.h#L694) | <code>sNtpConfigured = true;</code> | Wi-Fi bağlanınca configTime ile NTP başlatılır (pool.ntp.org, time.google.com, time.cloudflare.com; UTC+3) |
+| [cihaz_kontrol/include/wifi_baglanti.h:697](../../cihaz_kontrol/include/wifi_baglanti.h#L697) | <code>sNtpConfigured = true;</code> | Wi-Fi bağlanınca configTime ile NTP başlatılır (pool.ntp.org, time.google.com, time.cloudflare.com; UTC+3) |
 | [cihaz_kontrol/include/mqtt_baglanti.h:430](../../cihaz_kontrol/include/mqtt_baglanti.h#L430) | <code>if (!zamanSenkronMu()) {</code> | Saat gelmeden MQTT denemesi YAPILMAZ; 5 sn sonra tekrar bakılır (günlük yazmaz) |
-| [cihaz_kontrol/include/ota_guncelleme.h:272](../../cihaz_kontrol/include/ota_guncelleme.h#L272) | <code>if (!zamanSenkronMu()) {</code> | Saat gelmeden OTA kontrolü başlamaz (TLS doğrulaması saate bağlı) |
+| [cihaz_kontrol/include/ota_guncelleme.h:275](../../cihaz_kontrol/include/ota_guncelleme.h#L275) | <code>if (!zamanSenkronMu()) {</code> | Saat gelmeden OTA kontrolü başlamaz (TLS doğrulaması saate bağlı) |
 
 **Olası nedenler**
 - Ağ NTP sunucularına (UDP 123) ya da DNS'e izin vermiyor / internet yok
@@ -291,7 +291,7 @@ cd cihaz_kontrol && pio device monitor -e lolin_c3_mini
 **Adım adım kontrol**
 - Seri "?": "MQTT kimligi: cihaz ozel kimlikli" mi, "MQTT sunucu: host:port" doğru mu
 - rc=4/5 sonrası cihaz 5 dk bekler; hemen denemek için cihazı yeniden başlatın
-- Broker günlüğünde aynı clientId ("AHBU-<UID>") için red nedenini arayın
+- Broker günlüğünde aynı clientId ("SmartKeyPass-<UID>"; eski firmware "AHBU-<UID>") için red nedenini arayın
 
 **Günlükte aranacak ifadeler**
 - `MQTT baglaniyor (id=`
@@ -312,7 +312,7 @@ cd cihaz_kontrol && pio device monitor -e lolin_c3_mini
 | [cihaz_kontrol/include/mqtt_baglanti.h:584](../../cihaz_kontrol/include/mqtt_baglanti.h#L584) | <code>espClientSecure.setCACert(TLS_ROOT_CA);</code> | MQTT TLS doğrulaması bu kök CA ile yapılır (setInsecure YOK) |
 | [cihaz_kontrol/include/mqtt_baglanti.h:504](../../cihaz_kontrol/include/mqtt_baglanti.h#L504) | <code>if (espClientSecure.lastError(tlsHata, sizeof(tlsHata) - 1) != 0 &amp;&amp; tlsHata[0] != '\0') {</code> | mbedtls hata metni " tls=..." olarak seriye eklenir |
 | [cihaz_kontrol/include/mqtt_baglanti.h:32](../../cihaz_kontrol/include/mqtt_baglanti.h#L32) | <code>inline constexpr uint32_t MQTT_TLS_HANDSHAKE_TIMEOUT_S = 10;</code> | El sıkışma zaman aşımı 10 sn (loop bu sürede bloklanabilir) |
-| [cihaz_kontrol/include/ota_guncelleme.h:297](../../cihaz_kontrol/include/ota_guncelleme.h#L297) | <code>inline bool otaReadManifest(JsonDocument&amp; doc) {</code> | OTA da aynı kök CA ile api.gudeteknoloji.com.tr'ye bağlanır: sertifika sorunu OTA'yı da bozar |
+| [cihaz_kontrol/include/ota_guncelleme.h:300](../../cihaz_kontrol/include/ota_guncelleme.h#L300) | <code>inline bool otaReadManifest(JsonDocument&amp; doc) {</code> | OTA da aynı kök CA ile api.gudeteknoloji.com.tr'ye bağlanır: sertifika sorunu OTA'yı da bozar |
 
 **Olası nedenler**
 - Broker/API sertifika zinciri gömülü kök CA'ya (ISRG Root X1) bağlanmıyor ya da sunucu sertifikasının süresi dolmuş (yenilenmemiş)
@@ -448,10 +448,10 @@ openssl s_client -connect mqtt.gudeteknoloji.com.tr:8883 -servername mqtt.gudete
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [cihaz_kontrol/include/ota_guncelleme.h:263](../../cihaz_kontrol/include/ota_guncelleme.h#L263) | <code>inline bool otaShouldCheckNow() {</code> | Kontrol başlamasının tüm ön koşulları: Wi-Fi hazır, OTA sürmüyor, röle pasif, saat senkron, imaj doğrulanmış, 10 dk tekrar sınırı |
-| [cihaz_kontrol/include/ota_guncelleme.h:495](../../cihaz_kontrol/include/ota_guncelleme.h#L495) | <code>inline void otaCheckAndUpdate() {</code> | Ana döngüden her turda çağrılır; ilk plan Wi-Fi oturunca ~90 sn + MAC tabanlı gecikmeyle kurulur |
-| [cihaz_kontrol/include/ota_guncelleme.h:47](../../cihaz_kontrol/include/ota_guncelleme.h#L47) | <code>inline constexpr unsigned long OTA_BOOT_CHECK_DELAY_MS = 90UL * 1000UL;</code> | Açılıştan sonra ilk otomatik kontrol en az ~90 sn (+0-60 sn cihaz gecikmesi) sonra; sonra 24 saatte bir |
-| [cihaz_kontrol/include/ota_guncelleme.h:237](../../cihaz_kontrol/include/ota_guncelleme.h#L237) | <code>inline void otaTalepEt(const char* reason = "manual", bool dagit = false) {</code> | Elle/MQTT talebi: tekil talep hemen, toplu iş (ota_job_id) 0-120 sn dağıtılarak planlanır |
+| [cihaz_kontrol/include/ota_guncelleme.h:266](../../cihaz_kontrol/include/ota_guncelleme.h#L266) | <code>inline bool otaShouldCheckNow() {</code> | Kontrol başlamasının tüm ön koşulları: Wi-Fi hazır, OTA sürmüyor, röle pasif, saat senkron, imaj doğrulanmış, 10 dk tekrar sınırı |
+| [cihaz_kontrol/include/ota_guncelleme.h:498](../../cihaz_kontrol/include/ota_guncelleme.h#L498) | <code>inline void otaCheckAndUpdate() {</code> | Ana döngüden her turda çağrılır; ilk plan Wi-Fi oturunca ~90 sn + MAC tabanlı gecikmeyle kurulur |
+| [cihaz_kontrol/include/ota_guncelleme.h:50](../../cihaz_kontrol/include/ota_guncelleme.h#L50) | <code>inline constexpr unsigned long OTA_BOOT_CHECK_DELAY_MS = 90UL * 1000UL;</code> | Açılıştan sonra ilk otomatik kontrol en az ~90 sn (+0-60 sn cihaz gecikmesi) sonra; sonra 24 saatte bir |
+| [cihaz_kontrol/include/ota_guncelleme.h:240](../../cihaz_kontrol/include/ota_guncelleme.h#L240) | <code>inline void otaTalepEt(const char* reason = "manual", bool dagit = false) {</code> | Elle/MQTT talebi: tekil talep hemen, toplu iş (ota_job_id) 0-120 sn dağıtılarak planlanır |
 | [cihaz_kontrol/include/mqtt_baglanti.h:350](../../cihaz_kontrol/include/mqtt_baglanti.h#L350) | <code>} else if (action == "ota_check") {</code> | Sunucudan gelen ota_check komutu (retry ve ota_job_id burada okunur) |
 | [cihaz_kontrol/src/main.cpp:510](../../cihaz_kontrol/src/main.cpp#L510) | <code>otaCheckAndUpdate();</code> | Döngüde OTA çağrısı |
 
@@ -483,11 +483,11 @@ openssl s_client -connect mqtt.gudeteknoloji.com.tr:8883 -servername mqtt.gudete
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [cihaz_kontrol/include/ota_guncelleme.h:297](../../cihaz_kontrol/include/ota_guncelleme.h#L297) | <code>inline bool otaReadManifest(JsonDocument&amp; doc) {</code> | Manifest GET isteği: ?current_version=&uid= ile; hata durumu NVS'e "manifest ..." olarak yazılır |
-| [cihaz_kontrol/include/ota_guncelleme.h:30](../../cihaz_kontrol/include/ota_guncelleme.h#L30) | <code>inline constexpr char OTA_MANIFEST_URL[] =</code> | Hedefe göre manifest adresi (c3 ve wroom ayrı yol); iki tanım var, ilkini gösterir |
-| [cihaz_kontrol/include/ota_guncelleme.h:317](../../cihaz_kontrol/include/ota_guncelleme.h#L317) | <code>otaPersistStatus("manifest http hata: " + String(code));</code> | HTTP 200 dışı yanıt: negatif kod bağlantı/TLS/zaman aşımı, pozitif kod sunucu yanıtı |
-| [cihaz_kontrol/include/ota_guncelleme.h:522](../../cihaz_kontrol/include/ota_guncelleme.h#L522) | <code>Serial.print("OTA manifest hatasi: ");</code> | Hata seriye yazılır, ota_check_failed olayı yayınlanır, üstel geri çekilme başlar (10-20-40 dk) |
-| [cihaz_kontrol/include/ota_guncelleme.h:107](../../cihaz_kontrol/include/ota_guncelleme.h#L107) | <code>inline void otaPlanFailure() {</code> | Başarısız denemede geri çekilme: 10 dk, 20 dk, 40 dk ... en çok periyodik aralık |
+| [cihaz_kontrol/include/ota_guncelleme.h:300](../../cihaz_kontrol/include/ota_guncelleme.h#L300) | <code>inline bool otaReadManifest(JsonDocument&amp; doc) {</code> | Manifest GET isteği: ?current_version=&uid= ile; hata durumu NVS'e "manifest ..." olarak yazılır |
+| [cihaz_kontrol/include/ota_guncelleme.h:33](../../cihaz_kontrol/include/ota_guncelleme.h#L33) | <code>inline constexpr char OTA_MANIFEST_URL[] =</code> | Hedefe göre manifest adresi (c3 ve wroom ayrı yol); iki tanım var, ilkini gösterir |
+| [cihaz_kontrol/include/ota_guncelleme.h:320](../../cihaz_kontrol/include/ota_guncelleme.h#L320) | <code>otaPersistStatus("manifest http hata: " + String(code));</code> | HTTP 200 dışı yanıt: negatif kod bağlantı/TLS/zaman aşımı, pozitif kod sunucu yanıtı |
+| [cihaz_kontrol/include/ota_guncelleme.h:525](../../cihaz_kontrol/include/ota_guncelleme.h#L525) | <code>Serial.print("OTA manifest hatasi: ");</code> | Hata seriye yazılır, ota_check_failed olayı yayınlanır, üstel geri çekilme başlar (10-20-40 dk) |
+| [cihaz_kontrol/include/ota_guncelleme.h:110](../../cihaz_kontrol/include/ota_guncelleme.h#L110) | <code>inline void otaPlanFailure() {</code> | Başarısız denemede geri çekilme: 10 dk, 20 dk, 40 dk ... en çok periyodik aralık |
 | [cihaz_kontrol/include/tls_kok_sertifika.h:4](../../cihaz_kontrol/include/tls_kok_sertifika.h#L4) | <code>inline const char TLS_ROOT_CA[] PROGMEM = R"EOF(</code> | Manifest TLS doğrulaması bu gömülü kök CA ile yapılır |
 
 **Olası nedenler**
@@ -521,18 +521,18 @@ curl -s -o /dev/null -w "%{http_code}\n" https://api.gudeteknoloji.com.tr/firmwa
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [cihaz_kontrol/include/ota_guncelleme.h:532](../../cihaz_kontrol/include/ota_guncelleme.h#L532) | <code>if (!manifestTarget.isEmpty() &amp;&amp; manifestTarget != OTA_TARGET) {</code> | Manifestin target alanı cihaz hedefiyle (esp32-c3 \| esp32-wroom) eşleşmezse güncelleme YAPILMAZ |
-| [cihaz_kontrol/include/ota_guncelleme.h:39](../../cihaz_kontrol/include/ota_guncelleme.h#L39) | <code>inline constexpr char OTA_ALLOWED_URL_PREFIX[] = "https://api.gudeteknoloji.com.tr/";</code> | İndirme adresi yalnız bu önekle (https + api.gudeteknoloji.com.tr) başlayabilir |
-| [cihaz_kontrol/include/ota_guncelleme.h:553](../../cihaz_kontrol/include/ota_guncelleme.h#L553) | <code>if (usbRequired) {</code> | Manifest usb_required ise OTA yapılmaz; "ota_usb_required" olayı |
-| [cihaz_kontrol/include/ota_guncelleme.h:573](../../cihaz_kontrol/include/ota_guncelleme.h#L573) | <code>if (otaSurumKarsilastir(version, String(OTA_CURRENT_VERSION)) &lt;= 0) {</code> | Yalnız artan sürüm kabul edilir; eşit/eski sürüm "downgrade reddedildi" ve cihaz "güncel" sayılır |
-| [cihaz_kontrol/include/ota_guncelleme.h:592](../../cihaz_kontrol/include/ota_guncelleme.h#L592) | <code>if (!otaSha256HexGecerli(sha256)) {</code> | Manifestte 64 hane hex sha256 yoksa güncelleme yapılmaz |
-| [cihaz_kontrol/include/ota_guncelleme.h:24](../../cihaz_kontrol/include/ota_guncelleme.h#L24) | <code>inline constexpr char OTA_VERSION_C3[] = "4.3.1";</code> | C3 sürüm sabiti (WROOM ayrı: OTA_VERSION_WROOM); manifest sürümü bundan büyük olmalı |
+| [cihaz_kontrol/include/ota_guncelleme.h:535](../../cihaz_kontrol/include/ota_guncelleme.h#L535) | <code>if (!manifestTarget.isEmpty() &amp;&amp; manifestTarget != OTA_TARGET) {</code> | Manifestin target alanı cihaz hedefiyle (esp32-c3 \| esp32-wroom) eşleşmezse güncelleme YAPILMAZ |
+| [cihaz_kontrol/include/ota_guncelleme.h:42](../../cihaz_kontrol/include/ota_guncelleme.h#L42) | <code>inline constexpr char OTA_ALLOWED_URL_PREFIX[] = "https://api.gudeteknoloji.com.tr/";</code> | İndirme adresi yalnız bu önekle (https + api.gudeteknoloji.com.tr) başlayabilir |
+| [cihaz_kontrol/include/ota_guncelleme.h:556](../../cihaz_kontrol/include/ota_guncelleme.h#L556) | <code>if (usbRequired) {</code> | Manifest usb_required ise OTA yapılmaz; "ota_usb_required" olayı |
+| [cihaz_kontrol/include/ota_guncelleme.h:576](../../cihaz_kontrol/include/ota_guncelleme.h#L576) | <code>if (otaSurumKarsilastir(version, String(OTA_CURRENT_VERSION)) &lt;= 0) {</code> | Yalnız artan sürüm kabul edilir; eşit/eski sürüm "downgrade reddedildi" ve cihaz "güncel" sayılır |
+| [cihaz_kontrol/include/ota_guncelleme.h:595](../../cihaz_kontrol/include/ota_guncelleme.h#L595) | <code>if (!otaSha256HexGecerli(sha256)) {</code> | Manifestte 64 hane hex sha256 yoksa güncelleme yapılmaz |
+| [cihaz_kontrol/include/ota_guncelleme.h:27](../../cihaz_kontrol/include/ota_guncelleme.h#L27) | <code>inline constexpr char OTA_VERSION_C3[] = "4.3.3";</code> | C3 sürüm sabiti (WROOM ayrı: OTA_VERSION_WROOM); manifest sürümü bundan büyük olmalı (sürüm değeri satırda; araç her sürümde yeniden yazar) |
 
 **Olası nedenler**
 - Sunucuda yanlış klasöre firmware konmuş: wroom bin dosyası c3 manifestinde ya da tersi (iki donanımın dosyaları asla karışmamalı)
 - Manifest url alanı http:// ya da başka alan adı gösteriyor
 - Manifest sha256 alanı boş/kısa/hatalı
-- Manifest sürümü cihaz sürümünden büyük değil (örn. cihaz 4.3.1, manifest 4.3.1)
+- Manifest sürümü cihaz sürümünden büyük değil (örn. cihaz ve manifest aynı sürümde)
 - Sunucu bilerek usb_required=true veriyor (partition tablosu değişti, OTA yetmez)
 
 **Adım adım kontrol**
@@ -555,13 +555,13 @@ curl -s -o /dev/null -w "%{http_code}\n" https://api.gudeteknoloji.com.tr/firmwa
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [cihaz_kontrol/include/ota_guncelleme.h:433](../../cihaz_kontrol/include/ota_guncelleme.h#L433) | <code>inline String otaIndirVeYaz(const String&amp; url, const String&amp; beklenenSha256, const String…</code> | İndirme + SHA-256 + Update; dönüş "" ise başarılı, aksi halde hata metni; agHatasi geçici ağ hatasını ayırır |
-| [cihaz_kontrol/include/ota_guncelleme.h:486](../../cihaz_kontrol/include/ota_guncelleme.h#L486) | <code>return "sha256 uyusmuyor";</code> | Hesaplanan özet manifestteki sha256 ile eşleşmezse yazılan imaj iptal edilir (boot bölümü değişmez) |
-| [cihaz_kontrol/include/ota_guncelleme.h:457](../../cihaz_kontrol/include/ota_guncelleme.h#L457) | <code>return "firmware boyutu bilinmiyor";</code> | Sunucu Content-Length vermezse indirme başlamaz |
-| [cihaz_kontrol/include/ota_guncelleme.h:462](../../cihaz_kontrol/include/ota_guncelleme.h#L462) | <code>return "Update.begin basarisiz: " + String(Update.errorString());</code> | Hedef bölüme sığmıyorsa/başlatılamıyorsa (bölüm tablosu, boyut) |
-| [cihaz_kontrol/include/ota_guncelleme.h:490](../../cihaz_kontrol/include/ota_guncelleme.h#L490) | <code>return "Update.end basarisiz: " + String(Update.errorString());</code> | İmaj doğrulaması (MD5/başlık) başarısız |
-| [cihaz_kontrol/include/ota_guncelleme.h:374](../../cihaz_kontrol/include/ota_guncelleme.h#L374) | <code>class OtaHashStream : public Stream {</code> | Gelen veriyi Update'e yazar ve SHA-256 hesaplar; flash yazma hatası hata=true yapar |
-| [cihaz_kontrol/include/ota_guncelleme.h:631](../../cihaz_kontrol/include/ota_guncelleme.h#L631) | <code>if (gOtaMqttKapat != nullptr) {</code> | İndirmeden önce MQTT TLS oturumu kapatılır (bellek); sunucuda kısa offline görülür |
+| [cihaz_kontrol/include/ota_guncelleme.h:436](../../cihaz_kontrol/include/ota_guncelleme.h#L436) | <code>inline String otaIndirVeYaz(const String&amp; url, const String&amp; beklenenSha256, const String…</code> | İndirme + SHA-256 + Update; dönüş "" ise başarılı, aksi halde hata metni; agHatasi geçici ağ hatasını ayırır |
+| [cihaz_kontrol/include/ota_guncelleme.h:489](../../cihaz_kontrol/include/ota_guncelleme.h#L489) | <code>return "sha256 uyusmuyor";</code> | Hesaplanan özet manifestteki sha256 ile eşleşmezse yazılan imaj iptal edilir (boot bölümü değişmez) |
+| [cihaz_kontrol/include/ota_guncelleme.h:460](../../cihaz_kontrol/include/ota_guncelleme.h#L460) | <code>return "firmware boyutu bilinmiyor";</code> | Sunucu Content-Length vermezse indirme başlamaz |
+| [cihaz_kontrol/include/ota_guncelleme.h:465](../../cihaz_kontrol/include/ota_guncelleme.h#L465) | <code>return "Update.begin basarisiz: " + String(Update.errorString());</code> | Hedef bölüme sığmıyorsa/başlatılamıyorsa (bölüm tablosu, boyut) |
+| [cihaz_kontrol/include/ota_guncelleme.h:493](../../cihaz_kontrol/include/ota_guncelleme.h#L493) | <code>return "Update.end basarisiz: " + String(Update.errorString());</code> | İmaj doğrulaması (MD5/başlık) başarısız |
+| [cihaz_kontrol/include/ota_guncelleme.h:377](../../cihaz_kontrol/include/ota_guncelleme.h#L377) | <code>class OtaHashStream : public Stream {</code> | Gelen veriyi Update'e yazar ve SHA-256 hesaplar; flash yazma hatası hata=true yapar |
+| [cihaz_kontrol/include/ota_guncelleme.h:634](../../cihaz_kontrol/include/ota_guncelleme.h#L634) | <code>if (gOtaMqttKapat != nullptr) {</code> | İndirmeden önce MQTT TLS oturumu kapatılır (bellek); sunucuda kısa offline görülür |
 | [cihaz_kontrol/include/mqtt_baglanti.h:524](../../cihaz_kontrol/include/mqtt_baglanti.h#L524) | <code>inline void mqttOtaOncesiKapat() {</code> | availability=offline yayınlanır ve MQTT bağlantısı kesilir |
 
 **Olası nedenler**
@@ -592,12 +592,12 @@ curl -s -o /dev/null -w "%{http_code}\n" https://api.gudeteknoloji.com.tr/firmwa
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [cihaz_kontrol/include/ota_guncelleme.h:347](../../cihaz_kontrol/include/ota_guncelleme.h#L347) | <code>inline bool otaDenemeHakkiAyir(const String&amp; version) {</code> | Aynı sürüm için deneme sayacı NVS'te (try_ver / try_cnt) tutulur; 3 hak |
-| [cihaz_kontrol/include/ota_guncelleme.h:55](../../cihaz_kontrol/include/ota_guncelleme.h#L55) | <code>inline constexpr uint8_t OTA_MAX_DENEME = 3;                           // ayni surum icin…</code> | Aynı sürüm için en çok 3 deneme |
-| [cihaz_kontrol/include/ota_guncelleme.h:363](../../cihaz_kontrol/include/ota_guncelleme.h#L363) | <code>inline void otaDenemeHakkiIadeEt(const String&amp; version) {</code> | Yalnız geçici ağ hatasında hak iade edilir; güç kesintisi, geri alma, sha256 ve flash hatalarında hak yanar |
-| [cihaz_kontrol/include/ota_guncelleme.h:249](../../cihaz_kontrol/include/ota_guncelleme.h#L249) | <code>inline void otaDenemeSayacinaSifirla() {</code> | Yönetici ota_check ile retry:true gönderince sayaç ve geri çekilme sıfırlanır |
+| [cihaz_kontrol/include/ota_guncelleme.h:350](../../cihaz_kontrol/include/ota_guncelleme.h#L350) | <code>inline bool otaDenemeHakkiAyir(const String&amp; version) {</code> | Aynı sürüm için deneme sayacı NVS'te (try_ver / try_cnt) tutulur; 3 hak |
+| [cihaz_kontrol/include/ota_guncelleme.h:58](../../cihaz_kontrol/include/ota_guncelleme.h#L58) | <code>inline constexpr uint8_t OTA_MAX_DENEME = 3;                           // ayni surum icin…</code> | Aynı sürüm için en çok 3 deneme |
+| [cihaz_kontrol/include/ota_guncelleme.h:366](../../cihaz_kontrol/include/ota_guncelleme.h#L366) | <code>inline void otaDenemeHakkiIadeEt(const String&amp; version) {</code> | Yalnız geçici ağ hatasında hak iade edilir; güç kesintisi, geri alma, sha256 ve flash hatalarında hak yanar |
+| [cihaz_kontrol/include/ota_guncelleme.h:252](../../cihaz_kontrol/include/ota_guncelleme.h#L252) | <code>inline void otaDenemeSayacinaSifirla() {</code> | Yönetici ota_check ile retry:true gönderince sayaç ve geri çekilme sıfırlanır |
 | [cihaz_kontrol/include/mqtt_baglanti.h:351](../../cihaz_kontrol/include/mqtt_baglanti.h#L351) | <code>if (doc["retry"] &#124; false) {</code> | ota_check komutunda retry alanı |
-| [cihaz_kontrol/include/ota_guncelleme.h:612](../../cihaz_kontrol/include/ota_guncelleme.h#L612) | <code>otaPersistStatus("deneme siniri asildi (" + String(OTA_MAX_DENEME) + "): " + version, ver…</code> | Sınır aşılınca cihaz daha yeni bir sürüm bekler |
+| [cihaz_kontrol/include/ota_guncelleme.h:615](../../cihaz_kontrol/include/ota_guncelleme.h#L615) | <code>otaPersistStatus("deneme siniri asildi (" + String(OTA_MAX_DENEME) + "): " + version, ver…</code> | Sınır aşılınca cihaz daha yeni bir sürüm bekler |
 
 **Olası nedenler**
 - Aynı sürüm 3 kez denendi ve her seferinde sha256/imaj/flash hatası ya da güç kesintisi/geri alma oldu
@@ -620,12 +620,12 @@ curl -s -o /dev/null -w "%{http_code}\n" https://api.gudeteknoloji.com.tr/firmwa
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [cihaz_kontrol/include/ota_guncelleme.h:213](../../cihaz_kontrol/include/ota_guncelleme.h#L213) | <code>otaPersistStatus("geri alindi: " + gOtaLastVersion + " yuklenemedi");</code> | Açılışta "guncelleme tamam" kayıtlı ama çalışan sürüm hedef sürüm değilse geri alma kaydedilir |
-| [cihaz_kontrol/include/ota_guncelleme.h:676](../../cihaz_kontrol/include/ota_guncelleme.h#L676) | <code>inline void otaGecerliligiDogrula(bool saglikli) {</code> | Wi-Fi + MQTT 60 sn kesintisiz sağlıklıysa imaj geçerli işaretlenir (esp_ota_mark_app_valid_cancel_rollback) |
-| [cihaz_kontrol/include/ota_guncelleme.h:54](../../cihaz_kontrol/include/ota_guncelleme.h#L54) | <code>inline constexpr unsigned long OTA_SAGLIK_SURESI_MS = 60UL * 1000UL;  // Wi-Fi+MQTT bu su…</code> | Sağlık süresi 60 sn; bundan önce yeniden başlarsa bootloader eski imaja döner |
+| [cihaz_kontrol/include/ota_guncelleme.h:216](../../cihaz_kontrol/include/ota_guncelleme.h#L216) | <code>otaPersistStatus("geri alindi: " + gOtaLastVersion + " yuklenemedi");</code> | Açılışta "guncelleme tamam" kayıtlı ama çalışan sürüm hedef sürüm değilse geri alma kaydedilir |
+| [cihaz_kontrol/include/ota_guncelleme.h:679](../../cihaz_kontrol/include/ota_guncelleme.h#L679) | <code>inline void otaGecerliligiDogrula(bool saglikli) {</code> | Wi-Fi + MQTT 60 sn kesintisiz sağlıklıysa imaj geçerli işaretlenir (esp_ota_mark_app_valid_cancel_rollback) |
+| [cihaz_kontrol/include/ota_guncelleme.h:57](../../cihaz_kontrol/include/ota_guncelleme.h#L57) | <code>inline constexpr unsigned long OTA_SAGLIK_SURESI_MS = 60UL * 1000UL;  // Wi-Fi+MQTT bu su…</code> | Sağlık süresi 60 sn; bundan önce yeniden başlarsa bootloader eski imaja döner |
 | [cihaz_kontrol/src/main.cpp:42](../../cihaz_kontrol/src/main.cpp#L42) | <code>extern "C" bool verifyRollbackLater() {</code> | true döner: Arduino çekirdeği yeni imajı kendiliğinden geçerli yapmaz; doğrulama otaGecerliligiDogrula ile yapılır |
 | [cihaz_kontrol/src/main.cpp:511](../../cihaz_kontrol/src/main.cpp#L511) | <code>otaGecerliligiDogrula(wifiHazirMi() &amp;&amp; mqttBagliMi());</code> | Her döngüde sağlık bildirilir |
-| [cihaz_kontrol/include/ota_guncelleme.h:192](../../cihaz_kontrol/include/ota_guncelleme.h#L192) | <code>inline bool otaCalisanImajPendingMi() {</code> | Açılışta çalışan imaj PENDING_VERIFY mi okunur |
+| [cihaz_kontrol/include/ota_guncelleme.h:195](../../cihaz_kontrol/include/ota_guncelleme.h#L195) | <code>inline bool otaCalisanImajPendingMi() {</code> | Açılışta çalışan imaj PENDING_VERIFY mi okunur |
 
 **Olası nedenler**
 - Yeni imaj Wi-Fi ya da MQTT bağlantısını 60 sn kesintisiz tutamadı (ör. kimlik/ağ sorunu) ve araya yeniden başlatma girdi
@@ -657,7 +657,7 @@ curl -s -o /dev/null -w "%{http_code}\n" https://api.gudeteknoloji.com.tr/firmwa
 | [cihaz_kontrol/include/ota_is_kimligi.h:81](../../cihaz_kontrol/include/ota_is_kimligi.h#L81) | <code>inline void otaIsKimligiEkle(JsonDocument&amp; doc) {</code> | Kimlik varsa olay JSON'una ota_job_id eklenir (tamsayı gelmişse tamsayı olarak) |
 | [cihaz_kontrol/include/mqtt_baglanti.h:356](../../cihaz_kontrol/include/mqtt_baglanti.h#L356) | <code>otaIsKimligiAyarla(doc["ota_job_id"]);</code> | ota_check işleyicisi kimliği kaydeder |
 | [cihaz_kontrol/include/mqtt_baglanti.h:151](../../cihaz_kontrol/include/mqtt_baglanti.h#L151) | <code>otaIsKimligiEkle(doc);  // OTA olaylari (ota_*): sunucudaki is takibi icin ota_job_id yan…</code> | Yalnız adı "ota_" ile başlayan olaylara eklenir |
-| [cihaz_kontrol/include/ota_guncelleme.h:176](../../cihaz_kontrol/include/ota_guncelleme.h#L176) | <code>if (otaOlayBitirirMi(eventName)) {</code> | OTA olayı yayınlandıktan sonra kimlik temizleme |
+| [cihaz_kontrol/include/ota_guncelleme.h:179](../../cihaz_kontrol/include/ota_guncelleme.h#L179) | <code>if (otaOlayBitirirMi(eventName)) {</code> | OTA olayı yayınlandıktan sonra kimlik temizleme |
 
 **Olası nedenler**
 - ota_job_id geçersiz karakter içeriyor, 40 karakterden uzun, sıfır/negatif ya da sayı/metin değil: cihaz kimliği yok sayar
@@ -748,7 +748,7 @@ curl -s -o /dev/null -w "%{http_code}\n" https://api.gudeteknoloji.com.tr/firmwa
 | [cihaz_kontrol/src/main.cpp:449](../../cihaz_kontrol/src/main.cpp#L449) | <code>esp_task_wdt_init(LOOP_WDT_TIMEOUT_S, true);</code> | setup'ta loop görevi izlemeye alınır (panic=true) |
 | [cihaz_kontrol/src/main.cpp:493](../../cihaz_kontrol/src/main.cpp#L493) | <code>void loop() {</code> | Her turun başında esp_task_wdt_reset(); uzun işler kendi içinde besler |
 | [cihaz_kontrol/include/mqtt_baglanti.h:464](../../cihaz_kontrol/include/mqtt_baglanti.h#L464) | <code>const bool baglandi = client.connect(clientId.c_str(), mqttUser.c_str(), mqttPass.c_str()…</code> | Bloklayan MQTT connect (DNS+TCP+TLS, 5-15 sn) öncesi ve sonrası watchdog resetlenir |
-| [cihaz_kontrol/include/ota_guncelleme.h:390](../../cihaz_kontrol/include/ota_guncelleme.h#L390) | <code>size_t write(const uint8_t* buf, size_t size) override {</code> | OTA indirmesinde her blokta watchdog beslenir |
+| [cihaz_kontrol/include/ota_guncelleme.h:393](../../cihaz_kontrol/include/ota_guncelleme.h#L393) | <code>size_t write(const uint8_t* buf, size_t size) override {</code> | OTA indirmesinde her blokta watchdog beslenir |
 | [cihaz_kontrol/src/main.cpp:65](../../cihaz_kontrol/src/main.cpp#L65) | <code>void pinBulmaTesti() {</code> | Atölye pin testi döngüyü bloklar; her adımda watchdog beslenir |
 
 **Olası nedenler**
@@ -1093,7 +1093,7 @@ curl -s -o /dev/null -w "%{http_code}\n" https://api.gudeteknoloji.com.tr/firmwa
 | [cihaz_kontrol/include/yerel_kapi_kontrol.h:243](../../cihaz_kontrol/include/yerel_kapi_kontrol.h#L243) | <code>inline void yerelStatusHandler(WiFiClient&amp; client, const YerelHttpIstek&amp; request) {</code> | Durum cevabı: device_uid, firmware_version, wifi_connected, ip, door_locked, local_control_available (sır yok) |
 | [cihaz_kontrol/include/yerel_kapi_kontrol.h:145](../../cihaz_kontrol/include/yerel_kapi_kontrol.h#L145) | <code>inline YerelOkuSonuc yerelHttpIstekOku(WiFiClient&amp; client, YerelHttpIstek&amp; request) {</code> | 512 bayt ve 300 ms sınırı; aşılırsa 431 (istek_cok_buyuk), bozuk/zaman aşımı 400 (gecersiz_istek) |
 | [cihaz_kontrol/include/yerel_kapi_kontrol.h:233](../../cihaz_kontrol/include/yerel_kapi_kontrol.h#L233) | <code>inline bool yerelUidEslesiyor(const String&amp; gelenUid) {</code> | X-AHBU-Device-UID başlığı verilmişse cihaz UID'siyle eşleşmeli (büyük/küçük harf duyarsız), değilse 404 |
-| [cihaz_kontrol/include/yerel_kapi_kontrol.h:292](../../cihaz_kontrol/include/yerel_kapi_kontrol.h#L292) | <code>MDNS.addService("ahbu", "tcp", YEREL_KAPI_KONTROL_PORT);</code> | mDNS adı ahbu-<uid>.local; ağ mDNS'i filtreliyorsa IP ile deneyin |
+| [cihaz_kontrol/include/yerel_kapi_kontrol.h:292](../../cihaz_kontrol/include/yerel_kapi_kontrol.h#L292) | <code>MDNS.addService("ahbu", "tcp", YEREL_KAPI_KONTROL_PORT);  // servis turu protokol kimligi…</code> | mDNS adı smartkeypass-<uid>.local (eski firmware ahbu-<uid>.local; servis türü _ahbu._tcp protokol kimliği olarak kalır); ağ mDNS'i filtreliyorsa IP ile deneyin |
 
 **Olası nedenler**
 - Eski istemci POST /ahbu/open kullanıyor: v2 ile kaldırıldı, UDP imzalı açma kullanılmalı
@@ -1279,7 +1279,7 @@ curl -s http://<cihaz-ip>:8765/ahbu/status
 | [cihaz_kontrol/platformio.ini:15](../../cihaz_kontrol/platformio.ini#L15) | <code>platform = espressif32@6.5.0</code> | Platform sürümü sabitlenmiştir; değiştirmek davranışı etkileyebilir |
 | [platformio.ini:13](../../platformio.ini#L13) | <code>[env]</code> | Kök platformio.ini (VS Code girişi): cihaz_kontrol kaynaklarını derler fakat bayrakları farklıdır; hangi dizinden derlendiğine dikkat |
 | [cihaz_kontrol/include/device_konfig.h:7](../../cihaz_kontrol/include/device_konfig.h#L7) | <code>#if defined(BOARD_ESP32_WROOM_RELAY)</code> | Pin sabitleri bayrağa göre seçilir: bayrak yoksa C3 değerleri kullanılır |
-| [cihaz_kontrol/include/ota_guncelleme.h:27](../../cihaz_kontrol/include/ota_guncelleme.h#L27) | <code>#if defined(BOARD_ESP32_WROOM_RELAY) &#124;&#124; defined(BOARD_ESP32_WROOM)</code> | OTA hedefi ve manifest adresi de aynı bayraktan türer |
+| [cihaz_kontrol/include/ota_guncelleme.h:30](../../cihaz_kontrol/include/ota_guncelleme.h#L30) | <code>#if defined(BOARD_ESP32_WROOM_RELAY) &#124;&#124; defined(BOARD_ESP32_WROOM)</code> | OTA hedefi ve manifest adresi de aynı bayraktan türer |
 
 **Olası nedenler**
 - cihaz_kontrol dizininde değil de kökten ya da yanlış -e ortamıyla derlendi
@@ -1307,7 +1307,7 @@ cd cihaz_kontrol && pio run -e esp32_relay_wroom
 | --- | --- | --- |
 | [cihaz_kontrol/flash_wroom.bat:19](../../cihaz_kontrol/flash_wroom.bat#L19) | <code>call pio run -e esp32_relay_wroom -t upload --upload-port %PORT%</code> | app0 (0x10000) USB ile yazılır; varsayılan port COM7, ilk argümanla değişir |
 | [cihaz_kontrol/flash_wroom.bat:27](../../cihaz_kontrol/flash_wroom.bat#L27) | <code>"%USERPROFILE%\.platformio\penv\Scripts\python.exe" "%USERPROFILE%\.platformio\packages\t…</code> | otadata sıfırlanır: bootloader yeni app0'ı seçsin (OTA ile app1'e geçilmişse eski imaj açılmasını önler) |
-| [cihaz_kontrol/flash_wroom.bat:22](../../cihaz_kontrol/flash_wroom.bat#L22) | <code>echo Lutfen AHBU Cihaz Deneme veya Seri Monitor baglantisini Kes butonuna basarak kapatin!</code> | Seri port başka program tarafından tutuluyorsa yükleme başarısız olur |
+| [cihaz_kontrol/flash_wroom.bat:22](../../cihaz_kontrol/flash_wroom.bat#L22) | <code>echo Lutfen SmartKeyPass Cihaz Deneme veya Seri Monitor baglantisini Kes butonuna basarak…</code> | Seri port başka program tarafından tutuluyorsa yükleme başarısız olur |
 | [cihaz_kontrol/partitions_ota_4mb.csv:3](../../cihaz_kontrol/partitions_ota_4mb.csv#L3) | <code>otadata,  data, ota,     0xe000,  0x2000,</code> | otadata 0xe000 / 0x2000 bayt; bat betiği tam bu bölgeyi siler |
 | [cihaz_kontrol/partitions_ota_4mb.csv:4](../../cihaz_kontrol/partitions_ota_4mb.csv#L4) | <code>app0,     app,  ota_0,   0x10000, 0x1E0000,</code> | app0 0x10000, app1 0x1F0000; her biri 0x1E0000 bayt |
 | [cihaz_kontrol/flash_wroom.bat:8](../../cihaz_kontrol/flash_wroom.bat#L8) | <code>set PORT=COM7</code> | Varsayılan port; farklı portta ilk argüman verilmeli |
@@ -1331,8 +1331,8 @@ cd cihaz_kontrol && pio run -e esp32_relay_wroom
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [cihaz_kontrol/include/ota_guncelleme.h:601](../../cihaz_kontrol/include/ota_guncelleme.h#L601) | <code>const esp_partition_t* updatePartition = esp_ota_get_next_update_partition(nullptr);</code> | OTA için bir sonraki güncelleme bölümü yoksa (eski bölüm tablosu) güncelleme yapılmaz |
-| [cihaz_kontrol/include/ota_guncelleme.h:603](../../cihaz_kontrol/include/ota_guncelleme.h#L603) | <code>otaPersistStatus("OTA partition yok; cihaza USB ile OTA partition tablosu yuklenmeli", ve…</code> | Durum metni; ota_failed olayı yayınlanır |
+| [cihaz_kontrol/include/ota_guncelleme.h:604](../../cihaz_kontrol/include/ota_guncelleme.h#L604) | <code>const esp_partition_t* updatePartition = esp_ota_get_next_update_partition(nullptr);</code> | OTA için bir sonraki güncelleme bölümü yoksa (eski bölüm tablosu) güncelleme yapılmaz |
+| [cihaz_kontrol/include/ota_guncelleme.h:606](../../cihaz_kontrol/include/ota_guncelleme.h#L606) | <code>otaPersistStatus("OTA partition yok; cihaza USB ile OTA partition tablosu yuklenmeli", ve…</code> | Durum metni; ota_failed olayı yayınlanır |
 | [cihaz_kontrol/partitions_ota_4mb.csv:5](../../cihaz_kontrol/partitions_ota_4mb.csv#L5) | <code>app1,     app,  ota_1,   0x1F0000,0x1E0000,</code> | İki eşit uygulama bölümü (ota_0, ota_1) gerekir |
 | [cihaz_kontrol/platformio.ini:28](../../cihaz_kontrol/platformio.ini#L28) | <code>board_build.partitions = partitions_ota_4mb.csv</code> | İki ortam da OTA bölüm tablosunu kullanır |
 
@@ -1411,7 +1411,7 @@ cd cihaz_kontrol/host_test && python run_all.py
 | --- | --- | --- |
 | [cihaz_kontrol/include/tls_kok_sertifika.h:4](../../cihaz_kontrol/include/tls_kok_sertifika.h#L4) | <code>inline const char TLS_ROOT_CA[] PROGMEM = R"EOF(</code> | Gömülü tek kök CA; MQTT, OTA manifesti ve OTA indirmesi hepsi bunu kullanır |
 | [cihaz_kontrol/include/mqtt_baglanti.h:584](../../cihaz_kontrol/include/mqtt_baglanti.h#L584) | <code>espClientSecure.setCACert(TLS_ROOT_CA);</code> | MQTT TLS doğrulaması; kök değişirse hiçbir cihaz bağlanamaz |
-| [cihaz_kontrol/include/ota_guncelleme.h:299](../../cihaz_kontrol/include/ota_guncelleme.h#L299) | <code>otaClient.setCACert(TLS_ROOT_CA);</code> | OTA da aynı kökle doğrular: kök bozulursa OTA ile düzeltme yapılamaz |
+| [cihaz_kontrol/include/ota_guncelleme.h:302](../../cihaz_kontrol/include/ota_guncelleme.h#L302) | <code>otaClient.setCACert(TLS_ROOT_CA);</code> | OTA da aynı kökle doğrular: kök bozulursa OTA ile düzeltme yapılamaz |
 
 **Olası nedenler**
 - Sunucu zinciri farklı bir köke taşındı (ISRG Root X1 yerine başka kök): cihaz doğrulayamaz
