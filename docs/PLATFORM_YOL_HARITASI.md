@@ -75,6 +75,30 @@ Büyüklük: **S** bir gün içinde · **M** birkaç gün · **L** bir haftadan 
   standart sözleşme ve Kurum'a bildirim) avukatla netleşir. Borç bilgisi yalnız ilgilisine gider (KVKK Kurulu 2026/348).
 - [x] **İş takibinde fotoğraf eki** (2026-10-19, migration 047/048, canlıda).
 
+## 6. Altyapı, yedek ve güvenlik
+
+- [x] **P0 — Kaynak kodun gizliliği (karar 14, 2026-10-20).** `site_kapi_kontrol` GitHub deposu gizliye çekildi (Salih). Aynı kontrol
+  `ev_otomasyon` deposu için de yapılmalı (`gudeteknoloji_com_tr` zaten gizli).
+- [ ] **P0 · S — Veritabanının dış kopyası (karar 13'ün kapsamadığı kısım).** Aşağıdaki Drive kararı sisteme YÜKLENEN DOSYALARI kapsar;
+  bütün sitelerin ortak veritabanını (kişiler, daireler, finans defteri, makbuzlar, kararlar, duyurular) kapsamaz. Veritabanı yedeği
+  hâlâ yalnız sunucuda: sunucu kaybolursa kayıtların hepsi gider. Betikler hazır (`deploy/ops/offsite_push.sh`,
+  `deploy/ops/pull_backups_windows.ps1`, şifreli); yalnız hedef seçilecek. Boyut küçük: bugün ~50 KB, 5.000 sitede 1. yıl sonunda
+  günlük şifreli döküm ~5 GB. Kişisel veri içerdiği için Türkiye'de bir hedef tercih edilir (yurt dışı ise KVKK 9. madde).
+- [ ] **P1 · L — Sitenin dosyaları sitenin Google Drive'ında (karar 13, 2026-10-20).** Her site yönetimi kendi Drive hesabını
+  sisteme bağlar; sisteme yüklediği dosyalar (belgeler, iş takibi fotoğrafları, gider belgeleri) o sitenin Drive'ına kaydedilir.
+  Uygulamadan önce netleşecekler:
+  - **Asıl kopya mı, yedek mi:** önerilen, dosya sistemde kalır ve Drive'a bir kopyası gider. Drive asıl kopya olursa bağlantı
+    kopunca, kota dolunca ya da dosya Drive'dan silinince sakinler belgeye ve fotoğrafa ulaşamaz.
+  - **Hesabın sahibi:** bir kişinin değil sitenin adına açılmış hesap; yönetim değişince devrin nasıl olacağı.
+  - **Erişim:** sakinlere Drive bağlantısı verilmez; dosyayı uygulama gösterir, bugünkü yetki kuralları (kim hangi belgeyi görür)
+    korunur.
+  - **Google izni:** yalnız uygulamanın oluşturduğu dosyalara erişim (`drive.file`); Google Cloud projesi, onay ekranı ve gizlilik
+    politikası adresi gerekir (yasal metinlerin yayınına bağlı).
+  - **KVKK:** Drive sunucuları yurt dışında; veri sorumlusu site yönetimidir. Aydınlatma metni, veri işleme sözleşmesi ve
+    9. madde (yurt dışına aktarım) avukatla netleşir.
+  - **Hata durumları:** kota dolarsa ya da bağlantı koparsa yükleme sistemde kalır, yöneticiye uyarı gider, bağlantı gelince
+    eksikler gönderilir.
+
 ## Sizden gerekenler (özet)
 
 1. Şirket bilgileri ve avukat onayı → yasal metinler (P0).
@@ -82,6 +106,7 @@ Büyüklük: **S** bir gün içinde · **M** birkaç gün · **L** bir haftadan 
 3. Firebase hizmet hesabı → telefon bildirimi (P1).
 4. Sitelerin IBAN bilgileri → sakine ödeme bilgisi (P1).
 5. SMS sağlayıcı ve ödeme kuruluşu seçimi (P2).
+6. Veritabanı yedeğinin dış kopyası için hedef (P0) ve Drive kararındaki netleşecek noktalar (P1).
 
 ## Önerilen sıra
 
