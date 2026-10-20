@@ -17,6 +17,7 @@ import 'package:site_kapi_kontrol/ui/helpers/form_validation.dart';
 import 'package:site_kapi_kontrol/ui/helpers/retry_lock.dart';
 import 'package:site_kapi_kontrol/ui/widgets/crm_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
+import 'package:site_kapi_kontrol/ui/widgets/platform_rules_entry_card.dart';
 
 /// "Platform Ayarları" ekranı (yalnız süper kullanıcı): `GET/PUT /admin/platform-config`.
 ///
@@ -575,6 +576,9 @@ class PlatformSettingsViewState extends State<PlatformSettingsView> {
           '"ayarsız" sayılır.',
           style: th.bodyMedium,
         ),
+        const SizedBox(height: AppSpace.lg),
+        // Kurallar tablosu (G11; docs/PLATFORM_KURALLAR.md): platform geneli değerler ayrı sayfada değiştirilir (bu formun kaydından bağımsız).
+        PlatformRulesEntryCard(authService: widget.authService, canEdit: true),
         const SizedBox(height: AppSpace.lg),
         content,
       ],
