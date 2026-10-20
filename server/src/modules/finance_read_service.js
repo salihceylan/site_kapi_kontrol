@@ -17,7 +17,9 @@ import {
   apartmentNotFound,
   computeOpenPeriod,
   currentPeriod,
+  entryAccountParty,
   mapEntryRow,
+  parseAccountPartyQuery,
   parseAccountQuery,
   parseBalancesQuery,
   periodLabel,
@@ -26,11 +28,16 @@ import {
 } from './finance_common.js';
 import { ENTRY_SELECT } from './finance_ledger_service.js';
 import { minorToNumber, toBigInt } from './finance_money.js';
+import { accountPartySql, currentTenantSql, defaultPaymentParty, partyOfRelation } from './finance_parties.js';
 import { apartmentLabel, escapeLike, foldSql, foldText, parsePositiveId } from './people_common.js';
 import { syncUserPeopleSafe } from './people_sync.js';
 import { residentEntryOf, residentView } from './finance_resident_view.js';
 
 const INT32_MAX = 2147483647;
+
+// İki hesap (İP-1A): defter satırının (takma ad `l`) hesabı ve dairenin (takma ad `a`) güncel kiracısı (finance_parties.js).
+const LEDGER_ACCOUNT = accountPartySql('l');
+const CURRENT_TENANT = currentTenantSql('a');
 
 /** Vadesi geçmiş tutar: bakiye - vadesi gelmemiş borçlar, en az 0 (BigInt). */
 export function overdueOf(balance, notDue) {
@@ -54,27 +61,47 @@ const OWNER_NAME_LATERAL = (alias, relation) => `
   ) ${alias} ON TRUE
 `;
 
+// İki hesap (İP-1A): bakiye, vadesi geçen, borç ve alacak HESAP BAZINDA hesaplanır, sonra daireye toplanır: bir hesabın alacağı diğerinin borcunu
+// kapatmaz (bakiyeler karışmaz). balance = iki hesabın toplamı (eski istemci); debt / credit = hesapların pozitif / negatif bakiyeleri.
 const BALANCE_CTES = (searchSql) => `
-  agg AS MATERIALIZED (
+  acc AS MATERIALIZED (
     SELECT
       l.apartment_id,
+      ${LEDGER_ACCOUNT} AS account_party,
       SUM(l.amount_minor) AS balance,
       COALESCE(SUM(l.amount_minor) FILTER (WHERE l.due_date > $2::DATE), 0) AS not_due
     FROM ledger_entries l
     WHERE l.site_code = $1
-    GROUP BY l.apartment_id
+    GROUP BY 1, 2
+  ),
+  agg AS MATERIALIZED (
+    SELECT
+      apartment_id,
+      SUM(balance) AS balance,
+      SUM(GREATEST(balance - not_due, 0)) AS overdue,
+      SUM(GREATEST(balance, 0)) AS debt,
+      SUM(GREATEST(-balance, 0)) AS credit,
+      COALESCE(SUM(balance) FILTER (WHERE account_party = 'owner'), 0) AS owner_balance,
+      COALESCE(SUM(GREATEST(balance - not_due, 0)) FILTER (WHERE account_party = 'owner'), 0) AS owner_overdue,
+      COALESCE(SUM(balance) FILTER (WHERE account_party = 'tenant'), 0) AS tenant_balance,
+      COALESCE(SUM(GREATEST(balance - not_due, 0)) FILTER (WHERE account_party = 'tenant'), 0) AS tenant_overdue
+    FROM acc
+    GROUP BY apartment_id
   ),
   totals AS (
-    SELECT
-      COALESCE(SUM(balance) FILTER (WHERE balance > 0), 0) AS debt,
-      COALESCE(-SUM(balance) FILTER (WHERE balance < 0), 0) AS credit
-    FROM agg
+    SELECT COALESCE(SUM(debt), 0) AS debt, COALESCE(SUM(credit), 0) AS credit FROM agg
   ),
   base AS (
     SELECT
       a.id AS apartment_id, a.unit_label, b.block_name, b.sort_order AS block_sort, a.sort_order AS apt_sort,
       COALESCE(g.balance, 0) AS balance,
-      GREATEST(COALESCE(g.balance, 0) - COALESCE(g.not_due, 0), 0) AS overdue
+      COALESCE(g.overdue, 0) AS overdue,
+      COALESCE(g.debt, 0) AS debt,
+      COALESCE(g.credit, 0) AS credit,
+      COALESCE(g.owner_balance, 0) AS owner_balance,
+      COALESCE(g.owner_overdue, 0) AS owner_overdue,
+      COALESCE(g.tenant_balance, 0) AS tenant_balance,
+      COALESCE(g.tenant_overdue, 0) AS tenant_overdue
     FROM apartments a
     INNER JOIN site_blocks b ON b.id = a.block_id
     LEFT JOIN agg g ON g.apartment_id = a.id
@@ -103,10 +130,11 @@ function searchClause(term, paramIndex) {
   `;
 }
 
-const STATUS_WHERE = { debtor: 'WHERE balance > 0', credit: 'WHERE balance < 0', all: '' };
+// İP-1A: borçlu = en az bir hesabı borçlu; alacaklı = en az bir hesabı alacaklı (iki hesaplı daire iki listede de görünebilir).
+const STATUS_WHERE = { debtor: 'WHERE debt > 0', credit: 'WHERE credit > 0', all: '' };
 const STATUS_ORDER = {
-  debtor: 'balance DESC, block_sort, apt_sort, apartment_id',
-  credit: 'balance ASC, block_sort, apt_sort, apartment_id',
+  debtor: 'debt DESC, block_sort, apt_sort, apartment_id',
+  credit: 'credit DESC, block_sort, apt_sort, apartment_id',
   all: 'block_sort, apt_sort, apartment_id',
 };
 
@@ -132,12 +160,14 @@ export async function listBalances(siteCode, query = {}, now = new Date(), db = 
         SELECT * FROM filtered ORDER BY ${STATUS_ORDER[filters.status]} LIMIT $${limitIndex} OFFSET $${limitIndex + 1}
       )
       SELECT f.apartment_id, f.unit_label, f.block_name, f.balance::TEXT AS balance, f.overdue::TEXT AS overdue, f.total::TEXT AS total,
+             f.debt::TEXT AS apt_debt, f.credit::TEXT AS apt_credit, f.owner_balance::TEXT AS owner_balance, f.owner_overdue::TEXT AS owner_overdue,
+             f.tenant_balance::TEXT AS tenant_balance, f.tenant_overdue::TEXT AS tenant_overdue,
              t.debt::TEXT AS debt, t.credit::TEXT AS credit, o.name AS owner_name, te.name AS tenant_name
       FROM paged f
       CROSS JOIN totals t
       ${OWNER_NAME_LATERAL('o', 'owner')}
       ${OWNER_NAME_LATERAL('te', 'tenant')}
-      ORDER BY ${STATUS_ORDER[filters.status].replace(/\b(balance|block_sort|apt_sort|apartment_id)\b/g, 'f.$1')}
+      ORDER BY ${STATUS_ORDER[filters.status].replace(/\b(debt|credit|block_sort|apt_sort|apartment_id)\b/g, 'f.$1')}
     `,
     params,
   );
@@ -165,6 +195,13 @@ export async function listBalances(siteCode, query = {}, now = new Date(), db = 
       overdue_minor: minorToNumber(row.overdue),
       owner_name: row.owner_name ?? null,
       tenant_name: row.tenant_name ?? null,
+      // İki hesap (İP-1A): hesapların borç / alacak toplamları ve hesap başına bakiye
+      debt_minor: minorToNumber(row.apt_debt),
+      credit_minor: minorToNumber(row.apt_credit),
+      accounts: {
+        owner: { balance_minor: minorToNumber(row.owner_balance), overdue_minor: minorToNumber(row.owner_overdue) },
+        tenant: { balance_minor: minorToNumber(row.tenant_balance), overdue_minor: minorToNumber(row.tenant_overdue) },
+      },
     })),
     total: Number(meta.total),
     totals: { debt_minor: minorToNumber(meta.debt), credit_minor: minorToNumber(meta.credit) },
@@ -175,13 +212,46 @@ export async function listBalances(siteCode, query = {}, now = new Date(), db = 
 // Daire ekstresi
 // ---------------------------------------------------------------------------
 
-/** GET apartments/:apartmentId/account -> { apartment, balance_minor, overdue_minor, items, next_before_id }. Başka sitenin dairesi 404. */
+/**
+ * Dairenin hesap başına bakiyesi (İP-1A): { owner: { balance_minor, overdue_minor, entry_count }, tenant: { … } } (satırı olmayan hesap 0). Vadesi geçen
+ * = hesap bakiyesi - hesabın vadesi gelmemiş borçları, en az 0 (4a tanımı, hesap başına).
+ */
+async function loadAccountSums(db, siteCode, apartmentId, todayIsoDate) {
+  const result = await db.query(
+    `
+      SELECT ${LEDGER_ACCOUNT} AS account_party, COALESCE(SUM(l.amount_minor), 0)::TEXT AS balance,
+             COALESCE(SUM(l.amount_minor) FILTER (WHERE l.due_date > $3::DATE), 0)::TEXT AS not_due, COUNT(*)::TEXT AS n
+      FROM ledger_entries l
+      WHERE l.site_code = $1 AND l.apartment_id = $2
+      GROUP BY 1
+    `,
+    [siteCode, apartmentId, todayIsoDate],
+  );
+  const sums = { owner: { balance: 0n, overdue: 0n, count: 0 }, tenant: { balance: 0n, overdue: 0n, count: 0 } };
+  for (const row of result.rows ?? []) {
+    const party = row.account_party === 'tenant' ? 'tenant' : 'owner';
+    sums[party] = { balance: toBigInt(row.balance), overdue: overdueOf(row.balance, row.not_due), count: Number(row.n) };
+  }
+  return sums;
+}
+
+const accountSumsBody = (sums) => ({
+  owner: { balance_minor: minorToNumber(sums.owner.balance), overdue_minor: minorToNumber(sums.owner.overdue), entry_count: sums.owner.count },
+  tenant: { balance_minor: minorToNumber(sums.tenant.balance), overdue_minor: minorToNumber(sums.tenant.overdue), entry_count: sums.tenant.count },
+});
+
+/**
+ * GET apartments/:apartmentId/account -> { apartment, balance_minor, overdue_minor, items, next_before_id } (+ İP-1A: account_party, accounts,
+ * show_tenant_account, has_current_tenant, default_payment_account). Başka sitenin dairesi 404. `?account_party=owner|tenant` satırları ve bakiyeyi o
+ * hesapla sınırlar; verilmezse eski davranış (dairenin tüm satırları; bakiye iki hesabın toplamı, vadesi geçen hesapların vadesi geçenlerinin toplamı).
+ */
 export async function getApartmentAccount(siteCode, rawApartmentId, query = {}, now = new Date(), db = pool) {
   const apartmentId = parsePositiveId(rawApartmentId);
   if (apartmentId === null) {
     throw apartmentNotFound();
   }
   const filters = parseAccountQuery(query);
+  const accountParty = parseAccountPartyQuery(query.account_party);
   const apartmentResult = await db.query(
     `
       SELECT a.id, a.unit_label, b.block_name, a.responsible_party
@@ -195,18 +265,22 @@ export async function getApartmentAccount(siteCode, rawApartmentId, query = {}, 
   if (!apartment) {
     throw apartmentNotFound();
   }
-  const sums = await db.query(
+  const sums = await loadAccountSums(db, siteCode, apartmentId, today(now));
+  const tenancy = await db.query(
     `
-      SELECT
-        COALESCE(SUM(amount_minor), 0)::TEXT AS balance,
-        COALESCE(SUM(amount_minor) FILTER (WHERE due_date > $3::DATE), 0)::TEXT AS not_due
-      FROM ledger_entries
-      WHERE site_code = $1 AND apartment_id = $2
+      SELECT ${CURRENT_TENANT} AS has_current_tenant,
+             EXISTS (SELECT 1 FROM apartment_residencies hr WHERE hr.apartment_id = a.id AND hr.relation = 'tenant') AS had_tenant
+      FROM apartments a WHERE a.id = $1 AND a.site_code = $2
     `,
-    [siteCode, apartmentId, today(now)],
+    [apartmentId, siteCode],
   );
+  const tenancyRow = tenancy.rows?.[0] ?? {};
   const params = [siteCode, apartmentId];
   const clauses = ['l.site_code = $1', 'l.apartment_id = $2'];
+  if (accountParty !== null) {
+    params.push(accountParty);
+    clauses.push(`${LEDGER_ACCOUNT} = $${params.length}`);
+  }
   if (filters.from !== null) {
     params.push(filters.from);
     clauses.push(`l.entry_date >= $${params.length}::DATE`);
@@ -228,7 +302,9 @@ export async function getApartmentAccount(siteCode, rawApartmentId, query = {}, 
   const rows = entries.rows ?? [];
   const hasMore = rows.length > filters.limit;
   const items = rows.slice(0, filters.limit).map(mapEntryRow);
-  const balance = sums.rows[0].balance;
+  const selected = accountParty === null
+    ? { balance: sums.owner.balance + sums.tenant.balance, overdue: sums.owner.overdue + sums.tenant.overdue }
+    : sums[accountParty];
   return {
     apartment: {
       id: Number(apartment.id),
@@ -237,10 +313,17 @@ export async function getApartmentAccount(siteCode, rawApartmentId, query = {}, 
       responsible_party: apartment.responsible_party,
     },
     currency: 'TRY',
-    balance_minor: minorToNumber(balance),
-    overdue_minor: minorToNumber(overdueOf(balance, sums.rows[0].not_due)),
+    balance_minor: minorToNumber(selected.balance),
+    overdue_minor: minorToNumber(selected.overdue),
     items,
     next_before_id: hasMore && items.length > 0 ? items[items.length - 1].id : null,
+    // İki hesap (İP-1A)
+    account_party: accountParty,
+    accounts: accountSumsBody(sums),
+    // Kiracısı hiç olmamış ve kiracı hesabında satırı olmayan dairede yönetici ekranı yalnız ev sahibi hesabını (sekmesiz) gösterir.
+    show_tenant_account: tenancyRow.had_tenant === true || tenancyRow.has_current_tenant === true || sums.tenant.count > 0,
+    has_current_tenant: tenancyRow.has_current_tenant === true,
+    default_payment_account: await defaultPaymentParty(db, { siteCode, apartmentId, onDate: today(now) }),
   };
 }
 
@@ -254,8 +337,11 @@ export async function getSummary(siteCode, now = new Date(), db = pool) {
   const openPeriod = computeOpenPeriod(currentPeriod(now), new Set((closures.rows ?? []).map((row) => row.period)));
   const result = await db.query(
     `
-      WITH agg AS (
-        SELECT apartment_id, SUM(amount_minor) AS balance FROM ledger_entries WHERE site_code = $1 GROUP BY apartment_id
+      WITH acc AS (
+        SELECT l.apartment_id, ${LEDGER_ACCOUNT} AS account_party, SUM(l.amount_minor) AS balance FROM ledger_entries l WHERE l.site_code = $1 GROUP BY 1, 2
+      ),
+      agg AS (
+        SELECT apartment_id, SUM(balance) AS balance, SUM(GREATEST(balance, 0)) AS debt, SUM(GREATEST(-balance, 0)) AS credit FROM acc GROUP BY apartment_id
       ),
       period_sums AS (
         SELECT
@@ -266,9 +352,9 @@ export async function getSummary(siteCode, now = new Date(), db = pool) {
       )
       SELECT
         COALESCE(SUM(balance), 0)::TEXT AS balance_total,
-        COALESCE(SUM(balance) FILTER (WHERE balance > 0), 0)::TEXT AS debt_total,
-        COALESCE(-SUM(balance) FILTER (WHERE balance < 0), 0)::TEXT AS credit_total,
-        (COUNT(*) FILTER (WHERE balance > 0))::TEXT AS debtor_count,
+        COALESCE(SUM(debt), 0)::TEXT AS debt_total,
+        COALESCE(SUM(credit), 0)::TEXT AS credit_total,
+        (COUNT(*) FILTER (WHERE debt > 0))::TEXT AS debtor_count,
         (SELECT charged FROM period_sums)::TEXT AS charged,
         (SELECT collected FROM period_sums)::TEXT AS collected
       FROM agg
@@ -355,39 +441,35 @@ export async function loadResidentLedger(db, siteCodes, apartmentIds, { limit = 
 }
 
 /**
- * Çağıranın borcu görebileceği daireler. Kural (F2.05 responsible_party): owner -> güncel malik, tenant -> güncel kiracı, both -> malik + kiracı +
- * belirsiz ilişki (resident); family_member HİÇBİR durumda görmez. Eşleşen güncel (aktif) kişi hiç yoksa güvenli yedek: dairenin güncel
- * resident/owner/tenant ilişkili kişileri görür (borç sahipsiz kalmasın). Yalnız onaylı siteler. `visible_from`: çağıranın bu dairedeki güncel
- * ilişkisinin taşınma ayı (taşınma tarihi boşsa ilişkinin kayıt günü, İstanbul takvimi; birden çok kişi kaydı varsa en erkeni). Ziyaretçi
- * kayıtlarındaki "önceki sakinin kayıtları yeni sakine görünmez" kuralıyla aynı ilke (visitor_log_resident.js).
+ * İki hesap (İP-1A): çağıranın borç görünümleri. Kişinin bu dairedeki GÜNCEL ilişkisinden kendi hesabı (finance_parties.partyOfRelation: owner -> ev
+ * sahibi, tenant -> kiracı, resident -> dairede güncel kiracı varsa kiracı, yoksa ev sahibi; family_member HİÇBİR hesabı görmez) ve dairenin
+ * `responsible_party` değeri `both` ise MALİK kiracı hesabını SALT OKUNUR da görür. Yalnız onaylı siteler, etkin kişi kaydı.
+ * Kapsam (`visible_from`, ayın 1'i) HER görünüm için kişinin ilişki başlangıcıdır (taşınma günü; boşsa ilişki kaydının günü, İstanbul); aynı kişinin
+ * aynı dairedeki kesintisiz önceki ilişkisi zincirin başını YALNIZ aynı hesaba düşüyorsa öne çeker (kiracıyken satın alan kişi eski kiracı kayıtlarını
+ * salt okunur kiracı hesabında görür; önceki malikin ev sahibi hesabı kayıtları yeni malike görünmez). Zincir tek adımdır (güvenli taraf).
+ * `relation_since_at`: o görünüm için ilişki kaydının açıldığı an (öncesinde düzenlenmiş makbuzda ödeyen adı gösterilmez).
+ * Dönüş: daire satırları + `views: [{ account_party, role: 'own'|'read_only', visible_from, relation_since_at }]` (ilki kendi hesabı).
  */
-export async function loadVisibleApartments(db, userCode) {
+export async function loadVisibleAccounts(db, userCode) {
   const result = await db.query(
     `
       SELECT
         a.id AS apartment_id, a.site_code, s.name AS site_name, a.unit_label, b.block_name, b.sort_order AS block_sort,
-        a.sort_order AS apt_sort, a.responsible_party,
-        to_char(date_trunc('month', MIN(LEAST(
-          COALESCE(r.move_in_date, (r.created_at AT TIME ZONE 'Europe/Istanbul')::DATE),
-          -- Aynı kişinin aynı dairedeki kesintisiz önceki ilişkisi (ör. kiracıyken daireyi satın aldı): kendi eski kayıtlarını görmeye devam eder.
-          COALESCE((
-            SELECT MIN(COALESCE(p.move_in_date, (p.created_at AT TIME ZONE 'Europe/Istanbul')::DATE))
-            FROM apartment_residencies p
-            WHERE p.person_id = r.person_id AND p.apartment_id = r.apartment_id AND p.is_current = FALSE
-              -- Yalnız borcu görebileceği bir ilişki sayılır (ör. malik sorumluyken kiracılık dönemi sayılmaz: önceki malikin kayıtları sızmaz).
-              AND p.relation <> 'family_member' AND p.relation = ANY(${ALLOWED_RELATIONS_SQL}) AND p.move_out_date IS NOT NULL
-              AND p.move_out_date >= COALESCE(r.move_in_date, (r.created_at AT TIME ZONE 'Europe/Istanbul')::DATE) - 1
-          ), COALESCE(r.move_in_date, (r.created_at AT TIME ZONE 'Europe/Istanbul')::DATE))
-        ))), 'YYYY-MM-DD') AS visible_from,
-        -- Sakinin bu dairedeki ilişki kaydının (kesintisiz önceki ilişki dahil) açıldığı an: bundan önce düzenlenmiş makbuzlarda ödeyen
-        -- adı sakine gösterilmez (o an daireye bağlı değildi; ad başka birine ait olabilir).
-        MIN(LEAST(r.created_at, COALESCE((
-          SELECT MIN(p.created_at)
+        a.sort_order AS apt_sort, a.responsible_party, r.relation,
+        to_char(COALESCE(r.move_in_date, (r.created_at AT TIME ZONE 'Europe/Istanbul')::DATE), 'YYYY-MM-DD') AS start_date,
+        r.created_at AS relation_created_at,
+        ${CURRENT_TENANT} AS has_current_tenant,
+        COALESCE((
+          SELECT json_agg(json_build_object(
+            'relation', p.relation,
+            'start_date', to_char(COALESCE(p.move_in_date, (p.created_at AT TIME ZONE 'Europe/Istanbul')::DATE), 'YYYY-MM-DD'),
+            'created_at', p.created_at
+          ) ORDER BY p.id)
           FROM apartment_residencies p
           WHERE p.person_id = r.person_id AND p.apartment_id = r.apartment_id AND p.is_current = FALSE
-            AND p.relation <> 'family_member' AND p.relation = ANY(${ALLOWED_RELATIONS_SQL}) AND p.move_out_date IS NOT NULL
+            AND p.relation <> 'family_member' AND p.move_out_date IS NOT NULL
             AND p.move_out_date >= COALESCE(r.move_in_date, (r.created_at AT TIME ZONE 'Europe/Istanbul')::DATE) - 1
-        ), r.created_at))) AS relation_since_at
+        ), '[]'::json) AS previous
       FROM site_people sp
       INNER JOIN apartment_residencies r ON r.person_id = sp.id AND r.is_current = TRUE
       INNER JOIN apartments a ON a.id = r.apartment_id AND a.site_code = sp.site_code
@@ -395,22 +477,58 @@ export async function loadVisibleApartments(db, userCode) {
       INNER JOIN sites s ON s.site_code = a.site_code AND s.approval_status = 'approved'
       WHERE sp.user_code = $1 AND sp.is_active = TRUE
         AND r.relation <> 'family_member'
-        AND (
-          r.relation = ANY(${ALLOWED_RELATIONS_SQL})
-          OR NOT EXISTS (
-            SELECT 1
-            FROM apartment_residencies r2
-            INNER JOIN site_people sp2 ON sp2.id = r2.person_id AND sp2.is_active = TRUE
-            WHERE r2.apartment_id = a.id AND r2.is_current = TRUE AND r2.relation = ANY(${ALLOWED_RELATIONS_SQL})
-          )
-        )
-      GROUP BY a.id, a.site_code, s.name, a.unit_label, b.block_name, b.sort_order, a.sort_order, a.responsible_party
       ORDER BY s.name, b.sort_order, a.sort_order, a.id
     `,
     [userCode],
   );
-  return result.rows ?? [];
+  const out = [];
+  for (const row of result.rows ?? []) {
+    const views = residentViewsOf(row);
+    if (views.length > 0) {
+      out.push({ ...row, views });
+    }
+  }
+  return out;
 }
+
+const instantOf = (value) => (value instanceof Date ? value.getTime() : new Date(value).getTime());
+
+/** Daire satırının görünümleri (saf; loadVisibleAccounts). */
+export function residentViewsOf(row) {
+  const hasTenant = row.has_current_tenant === true;
+  const own = partyOfRelation(row.relation, hasTenant);
+  if (own === null) {
+    return [];
+  }
+  const parties = [{ party: own, role: 'own' }];
+  if (row.relation === 'owner' && row.responsible_party === 'both' && own === 'owner') {
+    parties.push({ party: 'tenant', role: 'read_only' });
+  }
+  const previous = Array.isArray(row.previous) ? row.previous : [];
+  return parties.map(({ party, role }) => {
+    let start = typeof row.start_date === 'string' ? row.start_date : null;
+    let sinceAt = row.relation_created_at ?? null;
+    for (const prev of previous) {
+      if (partyOfRelation(prev.relation, hasTenant) !== party) continue;
+      if (typeof prev.start_date === 'string' && (start === null || prev.start_date < start)) start = prev.start_date;
+      if (prev.created_at && (sinceAt === null || instantOf(prev.created_at) < instantOf(sinceAt))) sinceAt = prev.created_at;
+    }
+    return {
+      account_party: party,
+      role,
+      visible_from: start === null ? null : `${start.slice(0, 7)}-01`,
+      relation_since_at: sinceAt,
+    };
+  });
+}
+
+/** Sakin görünümünün kapsam başlangıcı ('YYYY-MM-01'): okunamazsa (beklenmez) sınır KALKMAZ, bu ay esas alınır. */
+export function viewSinceOf(view, todayIso) {
+  return visibleFromOf(view) ?? `${todayIso.slice(0, 7)}-01`;
+}
+
+/** Görünümün hesabına ait defter satırları (052 öncesi satır payer_party'den türetilir). */
+export const rowsOfView = (rows, view) => rows.filter((entry) => entryAccountParty(entry) === view.account_party);
 
 /** Modülü AÇIK siteler (katalog varsayılanı + site_modules satırı). */
 export async function enabledFinanceSites(db, siteCodes) {
@@ -446,18 +564,46 @@ export function nextDueOf(balance, groups) {
   return null;
 }
 
+/** Bir görünümün Borcum gövdesi (kendi hesabı ya da salt okunur kiracı hesabı). */
+function myFinanceViewBody(rows, view, todayIsoDate) {
+  const since = viewSinceOf(view, todayIsoDate);
+  const own = rowsOfView(rows, view);
+  const result = residentView(own.map(residentEntryOf), { since, today: todayIsoDate });
+  const shown = own.filter((entry) => result.visibleIds.has(Number(entry.id)));
+  // Görünen satırların toplamı bakiyeye eşit değilse bir tahsilat ya da alacak önceki dönem kayıtlarıyla mahsup edilmiştir: istemci açıklar.
+  const shownSum = shown.reduce((sum, entry) => sum + BigInt(entry.amount_minor), 0n);
+  const recent = shown
+    .sort((a, b) => (a.entry_date === b.entry_date ? Number(b.id) - Number(a.id) : a.entry_date < b.entry_date ? 1 : -1))
+    .slice(0, RECENT_ENTRIES_LIMIT)
+    .map((entry) => redactEntryForResident(mapEntryRow(entry)));
+  return {
+    account_party: view.account_party,
+    role: view.role,
+    balance_minor: minorToNumber(result.balance),
+    overdue_minor: minorToNumber(result.overdue),
+    next_due_date: result.nextDue ? result.nextDue.dueDate : null,
+    next_due_minor: result.nextDue ? minorToNumber(result.nextDue.amount) : null,
+    // Kapsam dışında kalan kayıt varsa başlangıç ayı ('YYYY-MM'); istemci bunu sakine açıkça yazar.
+    visible_from: result.hiddenCount > 0 ? periodLabel(since) : null,
+    offset_note: shownSum !== result.balance,
+    recent,
+  };
+}
+
 /**
- * GET /app/my-finance -> { items: [...] } (bkz. dosya başı). Bakiye, vadesi geçmiş tutar ve sıradaki vade sakin kapsamıyla ve mahsup kuralıyla
- * (finance_resident_view.residentView) hesaplanır; `recent` yalnız görünen satırlardır. `visible_from` ('YYYY-MM') yalnız kapsam
- * dışında kalan kayıt VARSA dolar (sakine "Kayıtlar … ayından itibaren" notu gösterilir).
+ * GET /app/my-finance -> { items: [...] } (bkz. dosya başı). İki hesap (İP-1A): ESKİ alanlar (balance_minor, overdue_minor, next_due_*, visible_from,
+ * offset_note, recent) kişinin KENDİ hesabıdır (eski istemci kendi hesabının bakiyesini görmeye devam eder); `account_party` kendi hesabı, `accounts`
+ * görünümlerin listesi (ilki kendi hesabı; `both` dairede malik için salt okunur kiracı hesabı ikinci). Bakiye, vadesi geçmiş tutar ve sıradaki vade
+ * her görünümde sakin kapsamı ve mahsup kuralıyla (finance_resident_view.residentView) YALNIZ o hesabın satırlarından hesaplanır.
+ * `ownOnly`: yalnız kendi hesabı (kişisel veri dışa aktarması: salt okunur kiracı hesabı başkasının verisidir).
  */
-export async function getMyFinance(authUser, now = new Date(), db = pool) {
+export async function getMyFinance(authUser, now = new Date(), db = pool, { ownOnly = false } = {}) {
   const userCode = parsePositiveId(authUser?.user_code ?? authUser?.userCode ?? authUser?.id, INT32_MAX);
   if (userCode === null) {
     return { items: [] };
   }
   await syncUserPeopleSafe(userCode);
-  const visible = await loadVisibleApartments(db, userCode);
+  const visible = await loadVisibleAccounts(db, userCode);
   const enabled = await enabledFinanceSites(db, [...new Set(visible.map((row) => Number(row.site_code)))]);
   const apartments = visible.filter((row) => enabled.has(Number(row.site_code)));
   if (apartments.length === 0) {
@@ -477,15 +623,8 @@ export async function getMyFinance(authUser, now = new Date(), db = pool) {
     items: apartments.map((row) => {
       const id = Number(row.apartment_id);
       const rows = rowsByApartment.get(id) ?? [];
-      const since = residentSinceOf(row, todayIsoDate);
-      const view = residentView(rows.map(residentEntryOf), { since, today: todayIsoDate });
-      const shown = rows.filter((entry) => view.visibleIds.has(Number(entry.id)));
-      // Görünen satırların toplamı bakiyeye eşit değilse bir tahsilat ya da alacak önceki dönem kayıtlarıyla mahsup edilmiştir: istemci açıklar.
-      const shownSum = shown.reduce((sum, entry) => sum + BigInt(entry.amount_minor), 0n);
-      const recent = shown
-        .sort((a, b) => (a.entry_date === b.entry_date ? Number(b.id) - Number(a.id) : a.entry_date < b.entry_date ? 1 : -1))
-        .slice(0, RECENT_ENTRIES_LIMIT)
-        .map((entry) => redactEntryForResident(mapEntryRow(entry)));
+      const views = (ownOnly ? row.views.slice(0, 1) : row.views).map((view) => myFinanceViewBody(rows, view, todayIsoDate));
+      const own = views[0];
       return {
         site_code: Number(row.site_code),
         site_name: row.site_name ?? null,
@@ -493,15 +632,16 @@ export async function getMyFinance(authUser, now = new Date(), db = pool) {
         label: apartmentLabel(row.block_name, row.unit_label),
         block_name: row.block_name ?? null,
         currency: 'TRY',
-        balance_minor: minorToNumber(view.balance),
-        overdue_minor: minorToNumber(view.overdue),
-        next_due_date: view.nextDue ? view.nextDue.dueDate : null,
-        next_due_minor: view.nextDue ? minorToNumber(view.nextDue.amount) : null,
+        balance_minor: own.balance_minor,
+        overdue_minor: own.overdue_minor,
+        next_due_date: own.next_due_date,
+        next_due_minor: own.next_due_minor,
         payer_party: row.responsible_party,
-        // Kapsam dışında kalan kayıt varsa başlangıç ayı ('YYYY-MM'); istemci bunu sakine açıkça yazar.
-        visible_from: view.hiddenCount > 0 ? periodLabel(since) : null,
-        offset_note: shownSum !== view.balance,
-        recent,
+        visible_from: own.visible_from,
+        offset_note: own.offset_note,
+        recent: own.recent,
+        account_party: own.account_party,
+        accounts: views,
       };
     }),
   };

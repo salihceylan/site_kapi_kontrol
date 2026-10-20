@@ -842,6 +842,18 @@ export function parseAccountQuery(query = {}) {
   };
 }
 
+/** İki hesap (İP-1A): sorgu parametresi `account_party` (owner | tenant); boşsa null (hesap süzgeci yok), geçersizse 400 INVALID_QUERY. */
+export function parseAccountPartyQuery(value) {
+  if (value === undefined || value === null || String(value).trim() === '') {
+    return null;
+  }
+  const text = String(value).trim();
+  if (text !== 'owner' && text !== 'tenant') {
+    throw invalidQuery();
+  }
+  return text;
+}
+
 export function parseDefinitionsQuery(query = {}) {
   let kind = null;
   if (query.kind !== undefined && query.kind !== null && String(query.kind).trim() !== '') {

@@ -50,12 +50,15 @@ import {
 import { lateFeeForApartment } from './finance_late_fee_calc.js';
 import { minorToNumber, toBigInt } from './finance_money.js';
 import { withReportSnapshot } from './finance_reports.js';
-import { enabledFinanceSites, loadVisibleApartments, residentScopeSql, residentSinceOf } from './finance_read_service.js';
+import { enabledFinanceSites, loadVisibleAccounts, residentScopeSql, viewSinceOf } from './finance_read_service.js';
+import { accountPartySql } from './finance_parties.js';
 import { loadEffectiveSettings, loadLateFeeChainState, readLegalOk } from './finance_settings.js';
 import { isPeriodClosed, lockActorRow, recordFinanceAudit, withFinanceTransaction } from './finance_tx.js';
 import { apartmentLabel, parsePositiveId, toIso } from './people_common.js';
 
 const INT32_MAX = 2147483647;
+// İki hesap (İP-1A): defter satırının (takma ad `l`) hesabı.
+const LEDGER_ACCOUNT = accountPartySql('l');
 const calculationTimeout = () => new PlatformError(503, 'CALCULATION_TIMEOUT', 'Hesaplama zaman aşımına uğradı. Biraz sonra tekrar deneyin.');
 
 // --- Gövde ayrıştırma --------------------------------------------------------------------------------------------------------------------------
@@ -691,30 +694,36 @@ export async function voidLateFeeRun({ siteCode, rawId, body, actor, now = new D
 
 // --- Sakin açıklaması ------------------------------------------------------------------------------------------------------------------------
 
-/** GET /app/my-finance/entries/:entryId/late-fee: kalem çağıranın görebildiği dairenin tazminat kalemi olmalı (aksi 404). */
+/**
+ * GET /app/my-finance/entries/:entryId/late-fee: kalem çağıranın görünümlerinden birinin (İP-1A: kendi hesabı ya da `both` dairede malike salt okunur
+ * kiracı hesabı) tazminat kalemi olmalı (aksi 404).
+ */
 export async function getMyLateFeeExplanation(authUser, rawEntryId, db = pool) {
   const entryId = parsePositiveId(rawEntryId);
   const userCode = parsePositiveId(authUser?.user_code ?? authUser?.userCode ?? authUser?.id, INT32_MAX);
   if (entryId === null || userCode === null) {
     throw entryNotFound();
   }
-  const visible = await loadVisibleApartments(db, userCode);
+  const visible = await loadVisibleAccounts(db, userCode);
   const enabled = await enabledFinanceSites(db, [...new Set(visible.map((row) => Number(row.site_code)))]);
-  const rows = visible.filter((row) => enabled.has(Number(row.site_code)));
-  if (rows.length === 0) {
+  const views = visible
+    .filter((row) => enabled.has(Number(row.site_code)))
+    .flatMap((row) => row.views.map((view) => ({ apartmentId: Number(row.apartment_id), accountParty: view.account_party, since: viewSinceOf(view, today()) })));
+  if (views.length === 0) {
     throw entryNotFound();
   }
-  // Sakin kapsamı: kalemin hesaplandığı ay sakinin taşınma ayından önceyse kalem yoktur (404; residentScopeSql).
+  // Sakin kapsamı: kalemin hesaplandığı ay sakinin taşınma ayından önceyse kalem yoktur (404; residentScopeSql); kalem görünümün HESABINDA olmalı.
   const result = await db.query(
     `
       SELECT to_char(r.period, 'YYYY-MM-DD') AS period, r.params, ln.amount_minor::TEXT AS amount, ln.base_day_minor::TEXT AS base_day, ln.breakdown
-      FROM unnest($2::BIGINT[], $3::DATE[]) AS vis(apartment_id, since)
-      INNER JOIN ledger_entries l ON l.apartment_id = vis.apartment_id
+      FROM unnest($2::BIGINT[], $3::TEXT[], $4::DATE[]) AS vis(apartment_id, account_party, since)
+      INNER JOIN ledger_entries l ON l.apartment_id = vis.apartment_id AND ${LEDGER_ACCOUNT} = vis.account_party
       INNER JOIN late_fee_run_lines ln ON ln.ledger_entry_id = l.id
       INNER JOIN late_fee_runs r ON r.id = ln.run_id
       WHERE l.id = $1 AND l.kind = 'charge' AND l.late_fee_run_id IS NOT NULL AND ${residentScopeSql('l', 'vis.since')}
+      LIMIT 1
     `,
-    [entryId, rows.map((row) => Number(row.apartment_id)), rows.map((row) => residentSinceOf(row, today()))],
+    [entryId, views.map((view) => view.apartmentId), views.map((view) => view.accountParty), views.map((view) => view.since)],
   );
   const row = result.rows?.[0];
   if (!row) {
