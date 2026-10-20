@@ -9,6 +9,10 @@ enum DeepLinkActionType {
   openFirstDoor,
   triggerVoice,
   showQrForDoor,
+
+  /// Yalnız "Kapılar" sayfasını açar (kapı AÇMAZ): Android kapı widget'ının gövdesine / başlığına dokunuş
+  /// (`sitekapi://door_control`). "Panel" artık modül vitrini olduğundan uygulama kapı panelinde açılsın diye.
+  showDoorPanel,
 }
 
 class DeepLinkAction {
@@ -105,6 +109,7 @@ class DeepLinkDoorResolver {
           candidates: List<DoorRecord>.of(scoped),
         );
       case DeepLinkActionType.triggerVoice:
+      case DeepLinkActionType.showDoorPanel:
         return const DeepLinkDoorResolution(DeepLinkDoorStatus.notFound);
     }
   }
@@ -144,7 +149,7 @@ class DeepLinkService {
   static const int _maxPending = 3;
   static const int _maxUriLength = 512;
   static const int _maxId = 2147483647;
-  static const Set<String> _knownTargets = {'voice', 'qr', 'open'};
+  static const Set<String> _knownTargets = {'voice', 'qr', 'open', 'door_control'};
 
   final AppLinks _appLinks = AppLinks();
   StreamSubscription<Uri>? _linkSubscription;
@@ -287,6 +292,11 @@ class DeepLinkService {
 
     if (target == 'voice') {
       return const DeepLinkAction(type: DeepLinkActionType.triggerVoice);
+    }
+
+    // Widget gövdesi: yalnız Kapılar sayfası (parametre okunmaz; kapı AÇMAZ).
+    if (target == 'door_control') {
+      return const DeepLinkAction(type: DeepLinkActionType.showDoorPanel);
     }
 
     final hasSiteParam = _hasAnyParam(uri, siteNames);

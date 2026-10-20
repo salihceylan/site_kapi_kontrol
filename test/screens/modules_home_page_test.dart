@@ -854,7 +854,8 @@ void main() {
   });
 
   group('door_access: yalnız kurul/görevli bağı olan kullanıcı', () {
-    testWidgets('Geçiş Kontrol kapalı olsa bile kapalı SAYILMAZ: Kapılar kartı, kapı paneli ve menüler değişmez', (t) async {
+    testWidgets('yönetici rolünde Geçiş Kontrol kapalı olsa bile kapalı SAYILMAZ: Kapılar kartı, kapı paneli ve menüler değişmez', (t) async {
+      // Yönetici rolü yeni kuraldan (daire sakini rolünde kapı erişimi yoksa kapı öğeleri gizlenir) ETKİLENMEZ.
       final auth = _HomeModAuth();
       final access = await _access(<MySiteModules>[
         _my(11, door: false, role: 'board_member', access: false),
@@ -869,6 +870,51 @@ void main() {
       expect(_tileTitle('Kayıtlı Cihazlar'), findsOneWidget);
       expect(_tileTitle('Bluetooth ile Wi-Fi Kur'), findsOneWidget);
       expect(t.widget<YanMenu>(find.byType(YanMenu)).hiddenItems, isEmpty);
+      await _disposeHome(t);
+    });
+
+    // yetki-1 / kapi-1 / tasarim-1: daire sakini rolünde kapı erişimi olan sitesi yok VE sunucu kapı vermedi (kapı listesi
+    // boş): kapı açamayan görevliye / dış kurul üyesine "Kapılar", "Kapıyı aç", Eller Serbest ve sesli kapı açma vaat
+    // edilmez (Geçiş Kontrol açık da kapalı da olsa). Sahte listMyDoors bu hesaplara sunucu gibi BOŞ liste verir.
+    for (final (role, label) in <(String, String)>[('board_member', 'kurul üyesi'), ('staff', 'görevli')]) {
+      for (final door in <bool>[true, false]) {
+        testWidgets('daire sakini rolünde yalnız $label bağı, Geçiş Kontrol ${door ? 'AÇIK' : 'KAPALI'}: kapı öğeleri YOK', (t) async {
+          final auth = _HomeModAuth(role: UserRole.apartmentOwner);
+          expect(auth.residentDoors, isEmpty, reason: 'ön koşul: sunucu bu hesaba kapı vermez');
+          final access = await _access(<MySiteModules>[_my(11, door: door, role: role, access: false)]);
+          final voice = _HomeVoice();
+          await _pumpHome(t, auth, access: access, voice: voice);
+
+          expect(auth.listMyDoorsCalls, greaterThanOrEqualTo(1), reason: 'kapı listesi okundu (boş)');
+          expect(find.byKey(const ValueKey<String>('panel_vitrin')), findsOneWidget);
+          expect(find.byKey(const ValueKey<String>('panel_kart_kapilar')), findsNothing);
+          expect(find.byKey(const ValueKey<String>('panel_hizli_kapilar')), findsNothing);
+          expect(find.text('Kapıyı aç'), findsNothing);
+          expect(find.byKey(const ValueKey<String>('panel_ikincil_ellerSerbest')), findsNothing);
+          expect(find.byType(DashboardView), findsNothing);
+          await _openDrawer(t);
+          expect(_tileTitle('Kapılar'), findsNothing);
+          expect(_tileTitle('Eller Serbest & Kestirmeler'), findsNothing);
+          expect(_tileTitle('Sesli Kapı Açma'), findsNothing, reason: 'kapı komutları da yok');
+          expect(_tileTitle('Daireye Katıl & Cihaz Ekle'), findsOneWidget, reason: 'öteki öğeler durur');
+          await _disposeHome(t);
+        });
+      }
+    }
+
+    testWidgets('daire sakini rolünde kurul bağı var ama sunucu kapı verdi (kapı listesi dolu): Kapılar kalır', (t) async {
+      final auth = _HomeModAuth(role: UserRole.apartmentOwner)..residentDoors = <DoorRecord>[_door(11)];
+      final access = await _access(<MySiteModules>[_my(11, door: true, role: 'board_member', access: false)]);
+      await _pumpHome(t, auth, access: access);
+      expect(find.byKey(const ValueKey<String>('panel_kart_kapilar')), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('panel_hizli_kapilar')), findsOneWidget);
+      await _disposeHome(t);
+    });
+
+    testWidgets('daire sakini rolünde modül verisi hiç gelmezse (fail-open) Kapılar eskisi gibi durur', (t) async {
+      final auth = _HomeModAuth(role: UserRole.apartmentOwner)..myModulesError = ApiException('Sunucuya ulaşılamadı.');
+      await _pumpHome(t, auth);
+      expect(find.byKey(const ValueKey<String>('panel_kart_kapilar')), findsOneWidget);
       await _disposeHome(t);
     });
 

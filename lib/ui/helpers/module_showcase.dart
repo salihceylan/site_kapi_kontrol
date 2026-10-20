@@ -137,7 +137,8 @@ const Map<SirketMenuItem, String> _descriptions = <SirketMenuItem, String>{
   SirketMenuItem.siteBasvurulari: 'Site kurma başvuruları',
   SirketMenuItem.siteOnayTalepleri: 'Onay bekleyen siteler',
   SirketMenuItem.katilimVeKurulum: 'Daireye katılın, cihaz ekleyin',
-  SirketMenuItem.moduller: 'Site modüllerini açın ve kapatın',
+  // Anahtar yalnız süper kullanıcıdadır (Faz 1.1): rol verilmezse açma / kapama vaat edilmez (bkz. [_roleDescription]).
+  SirketMenuItem.moduller: 'Tanımlı modüller ve modül talebi',
   SirketMenuItem.modulTalepleri: 'Yöneticilerin modül talepleri',
   SirketMenuItem.abonelikTalepleri: 'Yeni abonelik talepleri',
   SirketMenuItem.kayitliCihazlar: 'Cihaz envanteri ve durumu',
@@ -154,8 +155,25 @@ const Map<SirketMenuItem, String> _descriptions = <SirketMenuItem, String>{
   SirketMenuItem.profilim: 'Hesap bilgileriniz',
 };
 
-/// Kartın tek satırlık açıklaması (başlık menüdeki başlıktır: [YanMenu.titleFor]).
-String showcaseDescription(SirketMenuItem item) => _descriptions[item] ?? '';
+/// Rolüne göre farklı söylenen açıklamalar: kart, kullanıcının o sayfada YAPABİLECEĞİNİ söyler (yetki kuralıyla
+/// çelişmez). null: role özel metin yok, [_descriptions] geçerli.
+String? _roleDescription(SirketMenuItem item, UserRole? role) {
+  switch (item) {
+    case SirketMenuItem.moduller:
+      // Modülü yalnız süper kullanıcı açıp kapatır; site yöneticisi tanımlı modülleri görür ve talep gönderir.
+      return role == UserRole.superUser ? 'Site modüllerini açın ve kapatın' : null;
+    case SirketMenuItem.kapilar:
+      // Bireysel kullanıcıda Kapılar sayfası bireysel ana ekrandır: kapılar, kayıtlı daireler, cihazlar, başvurular.
+      return role == UserRole.individual ? 'Kapılar, daireleriniz ve cihazlarınız' : null;
+    default:
+      return null;
+  }
+}
+
+/// Kartın tek satırlık açıklaması (başlık menüdeki başlıktır: [YanMenu.titleFor]). [role] verilirse role özel metin
+/// (örn. "Modüller": süper kullanıcıda aç / kapat, site yöneticisinde görüntüle / talep et) önceliklidir.
+String showcaseDescription(SirketMenuItem item, [UserRole? role]) =>
+    _roleDescription(item, role) ?? _descriptions[item] ?? '';
 
 /// Vitrin kartı: yan menüdeki bir öğenin görünümü.
 @immutable
@@ -215,7 +233,7 @@ ShowcaseModel buildShowcaseModel({
   ShowcaseEntry entry(SirketMenuItem item) => ShowcaseEntry(
         item: item,
         title: YanMenu.titleFor(item, role),
-        description: showcaseDescription(item),
+        description: showcaseDescription(item, role),
         art: moduleArtKindFor(item),
         badge: badgeCounts[item] ?? 0,
         badgeNoun: badgeNouns[item] ?? 'bekleyen',

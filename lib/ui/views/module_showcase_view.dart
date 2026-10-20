@@ -54,6 +54,9 @@ class ModuleShowcaseView extends StatefulWidget {
     this.applicantRole = false,
     this.belowHero,
     this.onOpenHelp,
+    this.debtSiteCodes,
+    this.quickActionItems,
+    this.onCreateGuestPass,
   }) : assert(applications == null || onReapply != null, 'başvuru kartı için onReapply gerekir');
 
   final UserSession session;
@@ -90,6 +93,18 @@ class ModuleShowcaseView extends StatefulWidget {
   /// Verilirse "Hesap ve ayarlar" satırında "Yardım ve Destek" çıkar.
   final VoidCallback? onOpenHelp;
 
+  /// Borç özetinin kapsadığı siteler (alıcısı olunan ve Finans modülü AÇIK sitelerin kodları). Borcum menüde kalsa da
+  /// bu küme değişince (bir sitede Finans kapandı, siteden ayrılındı) eski tutar GÖSTERİLMEZ ve özet yeniden okunur;
+  /// özet yalnız bu sitelerin dairelerini içerir. null: süzgeç yok.
+  final Set<int>? debtSiteCodes;
+
+  /// Hızlı işlem olabilecek menü öğeleri (null: menüdeki her hızlı işlem öğesi). Daire bağı gerektiren eylemler
+  /// ("Arıza bildir", "Ziyaretçi ve kargo") çağıran tarafından yalnız daire bağı olabilen sitede verilir.
+  final Set<SirketMenuItem>? quickActionItems;
+
+  /// Verilirse hızlı işlemlerde "Ziyaretçi kodu" çıkar: misafir / kurye için süreli geçiş linki oluşturur (kapı AÇMAZ).
+  final VoidCallback? onCreateGuestPass;
+
   @override
   State<ModuleShowcaseView> createState() => ModuleShowcaseViewState();
 }
@@ -123,10 +138,28 @@ class ModuleShowcaseViewState extends State<ModuleShowcaseView> {
       ++_token;
       _finance = null;
       _loadFailed = false;
+    } else if (wants && !_sameSites(widget.debtSiteCodes, oldWidget.debtSiteCodes)) {
+      // Borcum menüde kaldı ama kapsadığı site kümesi değişti (bir sitede Finans kapandı / açıldı, siteden ayrılındı):
+      // eski tutar GÖSTERİLMEZ, uçuştaki yanıt yok sayılır ve özet yeniden okunur.
+      ++_token;
+      _finance = null;
+      _loadFailed = false;
+      unawaited(reload());
     }
     if (oldWidget.applications != widget.applications) {
       unawaited(widget.applications?.ensureLoaded());
     }
+  }
+
+  static bool _sameSites(Set<int>? a, Set<int>? b) =>
+      a == null ? b == null : (b != null && a.length == b.length && a.containsAll(b));
+
+  /// Özetten kapsam dışı (Finans'ı kapalı / bağı kalmamış) sitelerin daireleri atılır: sunucu da yalnız açık siteleri
+  /// verir; bu, istemcideki son site kümesiyle ek güvencedir.
+  MyFinance _scoped(MyFinance data) {
+    final codes = widget.debtSiteCodes;
+    if (codes == null || data.items.every((item) => codes.contains(item.siteCode))) return data;
+    return MyFinance(items: [for (final item in data.items) if (codes.contains(item.siteCode)) item]);
   }
 
   @override
@@ -144,7 +177,7 @@ class ModuleShowcaseViewState extends State<ModuleShowcaseView> {
       final data = await fetch();
       if (!mounted || token != _token) return;
       setState(() {
-        _finance = data;
+        _finance = _scoped(data);
         _loadFailed = false;
       });
     } catch (e) {
@@ -278,23 +311,43 @@ class ModuleShowcaseViewState extends State<ModuleShowcaseView> {
     );
   }
 
-  /// Hızlı işlemler (yalnız modülü AÇIK olanlar): menü listesinde olmayan eylem hiç çizilmez.
+  /// Hızlı işlemler (yalnız modülü AÇIK olanlar): menü listesinde olmayan eylem hiç çizilmez. Vitrinde hiçbir hızlı
+  /// işlem kapı AÇMAZ: "Kapıyı aç" Kapılar sayfasını açar (kapı oradaki düğmeyle açılır), "Ziyaretçi kodu" yalnız süreli
+  /// misafir geçiş linki üretir. Erişilebilir ipucu, dokununca olanı söyler.
   Widget _buildQuickActions(BuildContext context) {
-    const defs = <(SirketMenuItem, String, ModuleArtKind)>[
-      (SirketMenuItem.kapilar, 'Kapıyı aç', ModuleArtKind.door),
-      (SirketMenuItem.taleplerim, 'Arıza bildir', ModuleArtKind.workTracking),
-      (SirketMenuItem.ziyaretcilerim, 'Ziyaretçi ve kargo', ModuleArtKind.visitor),
-      (SirketMenuItem.belgeler, 'Belgeler', ModuleArtKind.documents),
+    const defs = <(SirketMenuItem, String, String, ModuleArtKind)>[
+      (SirketMenuItem.kapilar, 'Kapıyı aç', 'Kapılar sayfasını açar; kapı orada açılır', ModuleArtKind.door),
+      (
+        SirketMenuItem.taleplerim,
+        'Arıza bildir',
+        'Taleplerim sayfasını açar; yeni talep oradan bildirilir',
+        ModuleArtKind.workTracking,
+      ),
+      (SirketMenuItem.ziyaretcilerim, 'Ziyaretçi ve kargo', 'Ziyaretçilerim sayfasını açar', ModuleArtKind.visitor),
+      (SirketMenuItem.belgeler, 'Belgeler', 'Belgeler sayfasını açar', ModuleArtKind.documents),
     ];
+    final allowed = widget.quickActionItems;
+    final guestPass = widget.onCreateGuestPass;
     final tiles = <Widget>[
-      for (final (item, title, art) in defs)
-        if (widget.menuItems.contains(item))
+      for (final (item, title, hint, art) in defs) ...[
+        if (widget.menuItems.contains(item) && (allowed == null || allowed.contains(item)))
           _QuickTile(
             tileKey: ValueKey<String>('panel_hizli_${item.name}'),
             title: title,
+            hint: hint,
             art: art,
             onTap: () => _open(item),
           ),
+        // İşverenin "Ziyaretçi Kodu (Kapı)" kutusu: "Arıza bildir"in hemen ardından.
+        if (item == SirketMenuItem.taleplerim && guestPass != null)
+          _QuickTile(
+            tileKey: const ValueKey<String>('panel_hizli_ziyaretciKodu'),
+            title: 'Ziyaretçi kodu',
+            hint: 'Misafir ve kurye için süreli geçiş linki oluşturur; kapıyı açmaz',
+            art: ModuleArtKind.accessCards,
+            onTap: guestPass,
+          ),
+      ],
     ];
     if (tiles.isEmpty) return const SizedBox.shrink();
     return Padding(
@@ -493,17 +546,20 @@ class _Dot extends StatelessWidget {
   }
 }
 
-/// Hızlı işlem kutusu: küçük görsel + tek başlık (yan yana); kart gibi düz beyaz, tek düğme.
+/// Hızlı işlem kutusu: küçük görsel + tek başlık (yan yana); kart gibi düz beyaz, tek düğme. Ekran okuyucu ipucu
+/// ([hint]) dokununca olanı söyler (örn. "Kapılar sayfasını açar").
 class _QuickTile extends StatelessWidget {
   const _QuickTile({
     required this.tileKey,
     required this.title,
+    required this.hint,
     required this.art,
     required this.onTap,
   });
 
   final Key tileKey;
   final String title;
+  final String hint;
   final ModuleArtKind art;
   final VoidCallback onTap;
 
@@ -515,6 +571,7 @@ class _QuickTile extends StatelessWidget {
       container: true,
       button: true,
       label: title,
+      hint: hint,
       onTap: onTap,
       excludeSemantics: true,
       child: Material(

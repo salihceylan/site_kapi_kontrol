@@ -119,9 +119,10 @@ enum SirketMenuItem {
   /// eklenir ("Rezervasyon"un, yoksa üstteki öğelerin altına). Modül kapalıyken ya da modül verisi yokken eklenmez.
   ziyaretciKayitlari,
 
-  /// Ziyaretçi ve Kargo sakin ekranı (kendi dairesinin kayıtları; okunmamış sayısı rozetle). Rol listesinde YOKTUR;
-  /// alıcısı olabilecek ve `visitor_log` modülü AÇIK sitesi olan sakine [YanMenu.additionalItems] ile eklenir
-  /// (yönetim öğesinin altına).
+  /// Ziyaretçi ve Kargo sakin ekranı "Ziyaretçilerim" (kendi dairesinin kayıtları; okunmamış sayısı rozetle). Rol
+  /// listesinde YOKTUR; alıcısı olabilecek ve `visitor_log` modülü AÇIK sitesi olan sakine [YanMenu.additionalItems] ile
+  /// eklenir (yönetim öğesinin altına). Başlığı yönetim öğesinden ("Ziyaretçi ve Kargo") AYRIDIR: kurul üyesinde ikisi
+  /// birden görünür, aynı adlı iki öğe / kart olmasın.
   ziyaretcilerim,
 
   /// Firma ve Sözleşme Takibi ekranı "Sözleşmeler" (Sözleşmeler | Firmalar). Rol listesinde YOKTUR; `contracts` modülü
@@ -143,7 +144,8 @@ enum SirketMenuItem {
   /// Kapılar: bugüne dek "Panel"in kendisi olan kapı paneli (durum, kapıyı aç; bireysel kullanıcıda kapılar, daireler,
   /// cihazlar). "Panel" artık modül vitrinidir; kapı paneli bu öğeyle bir dokunuş uzaktadır. Rol listesinde YOKTUR;
   /// [YanMenu.additionalItems] ile eklenir ve her zaman "Panel"in hemen altına gelir. Geçiş Kontrol (`door_control`)
-  /// modülü kullanıcının bağlı olduğu TÜM sitelerde kapalıyken [YanMenu.hiddenItems] ile gizlenir (kapı kartı vitrinde de
+  /// modülü kullanıcının bağlı olduğu TÜM sitelerde kapalıyken ve daire sakini rolünde kapı erişimi / kapısı olmayan
+  /// hesapta (yalnız görevli / kurul / site üyeliği bağı) [YanMenu.hiddenItems] ile gizlenir (kapı kartı vitrinde de
   /// görünmez).
   kapilar,
 }
@@ -804,7 +806,7 @@ String _titleForItem(SirketMenuItem item, [UserRole? role]) {
     case SirketMenuItem.ziyaretciKayitlari:
       return 'Ziyaretçi ve Kargo';
     case SirketMenuItem.ziyaretcilerim:
-      return 'Ziyaretçi ve Kargo';
+      return 'Ziyaretçilerim';
     case SirketMenuItem.sozlesmeler:
       return 'Sözleşmeler';
     case SirketMenuItem.kararDefteri:
