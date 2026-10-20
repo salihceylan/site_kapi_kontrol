@@ -174,10 +174,28 @@ void main() {
       await _tapText(t, 'Kapıyı nasıl açarım?');
       expect(find.textContaining('“KAPIYI AÇ” düğmesine dokunun'), findsOneWidget);
       expect(find.text('1.'), findsOneWidget);
-      expect(find.textContaining('Panelde kapı kartı görünmüyorsa'), findsOneWidget);
+      // Kapı "Kapılar" ekranındadır (Panel modül vitrinidir): ilk adım oraya götürür, not "Kapılar" yokluğunu anlatır.
+      expect(find.textContaining('ekranındaki “Kapılar” kartına dokunun'), findsOneWidget);
+      expect(find.textContaining('“Kapılar” kartı, menüde de “Kapılar” yoksa'), findsOneWidget);
+      expect(find.textContaining('Panelde kapı kartı görünmüyorsa'), findsNothing);
 
       await _tapText(t, 'Şifremi unuttum, ne yapmalıyım?');
       expect(find.textContaining('“Şifremi Unuttum?” bağlantısına dokunun'), findsOneWidget);
+    });
+
+    testWidgets('her rol "Panel ekranında neler var?" konusunu görür; konu vitrini ve "Kapılar"ı anlatır', (t) async {
+      for (final env in <_Env>[
+        _Env(role: UserRole.apartmentOwner),
+        _Env(role: UserRole.individual),
+        _Env(role: UserRole.siteManager),
+        _Env(role: UserRole.superUser),
+      ]) {
+        await _pump(t, env);
+        expect(find.text('Panel ekranında neler var?'), findsOneWidget, reason: '${env.role}');
+        await _tapText(t, 'Panel ekranında neler var?');
+        expect(find.textContaining('ekranı modül vitrinidir'), findsOneWidget, reason: '${env.role}');
+        expect(find.textContaining('“Kapılar”'), findsWidgets, reason: '${env.role}');
+      }
     });
   });
 
@@ -451,13 +469,21 @@ void main() {
             final env = _Env(role: role, onOpenProfile: () {});
             await _pump(t, env, width: w, height: h, scale: s, dark: dark);
             expect(t.takeException(), isNull, reason: '$role');
-            // Her konuyu aç: en uzun metinler de taşmaz.
+            // Her konuyu aç (yalnız ilki değil): en uzun metinler de taşmaz. Dokunuştan sonra İKİ kare: ilki açılma
+            // animasyonunu başlatır, ikincisi bitirir (tek `pump(süre)` içeriği 0 yükseklikte bırakırdı ve sonraki
+            // konunun yeri kayardı).
             final topics = HelpContent.howToFor(HelpContent.audienceFor(role));
-            await t.ensureVisible(find.text(topics.first.title));
-            await t.pump(const Duration(milliseconds: 250));
-            await t.tap(find.text(topics.first.title));
-            await t.pump(const Duration(milliseconds: 400));
-            expect(t.takeException(), isNull, reason: '$role açık konu');
+            for (final topic in topics) {
+              final title = find.text(topic.title);
+              await t.ensureVisible(title);
+              await t.pump(const Duration(milliseconds: 250));
+              expect(title.hitTestable(), findsOneWidget, reason: '$role ${topic.id}: başlık dokunulabilir');
+              await t.tap(title);
+              await t.pump();
+              await t.pump(const Duration(milliseconds: 400));
+              expect(t.takeException(), isNull, reason: '$role açık konu: ${topic.id}');
+              expect(find.textContaining(topic.steps.first), findsWidgets, reason: '$role ${topic.id}: konu açıldı');
+            }
           }
         });
       }

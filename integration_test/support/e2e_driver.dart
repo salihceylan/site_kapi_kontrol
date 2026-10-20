@@ -26,9 +26,11 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:site_kapi_kontrol/main.dart' as app;
+import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/services/crash_reporter.dart';
 import 'package:site_kapi_kontrol/ui/pages/home_page.dart';
 import 'package:site_kapi_kontrol/ui/pages/login_page.dart';
+import 'package:site_kapi_kontrol/ui/widgets/yan_menu.dart';
 
 import 'e2e_env.dart';
 import 'e2e_report.dart';
@@ -450,6 +452,18 @@ const List<String> _errorishWords = <String>[
   'sunucu',
   'baglanti',
 ];
+
+/// Gorunen SnackBar metinleri (ornek: bir eylemin sonuc bildirimi bulguya eklenir).
+List<String> visibleSnackBarTexts() {
+  final out = <String>[];
+  for (final e in find.descendant(of: find.byType(SnackBar), matching: find.byType(Text)).evaluate()) {
+    final w = e.widget;
+    if (w is! Text) continue;
+    final text = _textOf(w).trim();
+    if (text.isNotEmpty) out.add(text);
+  }
+  return out;
+}
 
 /// Gorunen SnackBar metinlerini eylem gunlugune yazar; hata benzeri ise bulgu uretir.
 void captureSnackBars() {
@@ -936,6 +950,167 @@ Future<bool> openDrawerAndTap(
 }
 
 // ---------------------------------------------------------------------------
+// Panel = modul vitrini (kartlar) / AppBar basligi
+// ---------------------------------------------------------------------------
+//
+// "Panel" artik MODUL VITRINIDIR: kapi paneli "Kapılar" kartinin arkasindadir. Vitrin kartlari menu basliklarini
+// tekrarlar; bu yuzden ekran basligi YALNIZ AppBar'da aranir ve kartlar anahtarla bulunur (metin katlamasi
+// "KAPIYI AÇ" ile vitrindeki "Kapıyı aç" kutusunu ayni sayardi).
+
+/// Vitrinin kok anahtari (lib/ui/views/module_showcase_view.dart).
+const ValueKey<String> kShowcaseKey = ValueKey<String>('panel_vitrin');
+
+/// Vitrinde HIC olmamasi gereken kapi komutu dugmeleri (kapi yalniz "Kapılar" sayfasinda acilir).
+const List<String> kDoorCommandKeys = <String>[
+  'admin_door_open_button',
+  'resident_door_open_button',
+  'individual_door_open',
+];
+
+/// [item] menu ogesinin vitrin karti (ana izgara).
+Finder showcaseCardFinder(SirketMenuItem item) => find.byKey(ValueKey<String>('panel_kart_${item.name}'));
+
+/// Ekran basligi: YALNIZ AppBar icinde (HomePage basligi AppBar'in alt bandindadir).
+Finder appBarTitle(String title) => findText(title, exact: true, within: find.byType(AppBar));
+
+SirketMenuItem? _menuItemNamed(String name) {
+  for (final item in SirketMenuItem.values) {
+    if (item.name == name) return item;
+  }
+  return null;
+}
+
+/// [scope] altinda anahtari `<prefix><SirketMenuItem.name>` olan widget'larin ogeleri (agac sirasiyla; ogeye
+/// donusmeyen anahtarlar, orn. 'panel_kart_rozet' / 'panel_ikincil_yardim', atlanir).
+List<SirketMenuItem> _itemsByKeyPrefix(Finder scope, String prefix) {
+  final keyed = find.descendant(
+    of: scope,
+    matching: find.byWidgetPredicate((w) {
+      final key = w.key;
+      return key is ValueKey<String> && key.value.startsWith(prefix);
+    }),
+  );
+  final out = <SirketMenuItem>[];
+  for (final e in keyed.evaluate()) {
+    final item = _menuItemNamed((e.widget.key! as ValueKey<String>).value.substring(prefix.length));
+    if (item != null) out.add(item);
+  }
+  return out;
+}
+
+/// Vitrinin ana izgarasindaki kartlarin ogeleri (sirali; hizli islem kutulari 'panel_hizli_*' sayilmaz).
+List<SirketMenuItem> showcaseCardItems() => _itemsByKeyPrefix(find.byKey(kShowcaseKey), 'panel_kart_');
+
+/// Vitrinin "Hesap ve ayarlar" satirindaki ogeler (yardim cipi oge degildir, sayilmaz).
+List<SirketMenuItem> showcaseChipItems() => _itemsByKeyPrefix(find.byKey(kShowcaseKey), 'panel_ikincil_');
+
+/// ACIK cekmecedeki menu ogeleri (YanMenu ogeleri `ValueKey<SirketMenuItem>` tasir; ek eylemler / gecis / yardim /
+/// cikis `String` anahtarlidir ve sayilmaz).
+List<SirketMenuItem> drawerMenuItems() {
+  final keyed = find.descendant(
+    of: find.byType(Drawer),
+    matching: find.byWidgetPredicate((w) => w.key is ValueKey<SirketMenuItem>),
+  );
+  return <SirketMenuItem>[
+    for (final e in keyed.evaluate()) (e.widget.key! as ValueKey<SirketMenuItem>).value,
+  ];
+}
+
+/// Ekrandaki kapi komutu dugmelerinin anahtarlari ([kDoorCommandKeys] icinden).
+List<String> doorCommandButtonsOnScreen() => <String>[
+      for (final key in kDoorCommandKeys)
+        if (find.byKey(ValueKey<String>(key)).evaluate().isNotEmpty) key,
+    ];
+
+/// Vitrin ile cekmecenin AYNI ogeleri gostermesi kurali (gorunurluk tek kaynaktan: YanMenu.visibleItems): "Panel"
+/// disindaki her cekmece ogesi ya izgarada ya ikincil satirda TAM BIR KEZ bulunur; vitrinde cekmecede olmayan oge
+/// yoktur; "Panel" kendisi kart degildir. Bos liste = sorun yok.
+List<String> showcaseParityProblems({
+  required Iterable<SirketMenuItem> drawer,
+  required Iterable<SirketMenuItem> grid,
+  required Iterable<SirketMenuItem> secondary,
+}) {
+  final problems = <String>[];
+  final expected = drawer.where((i) => i != SirketMenuItem.dashboard).toSet();
+  final shown = <SirketMenuItem>[...grid, ...secondary];
+  if (shown.contains(SirketMenuItem.dashboard)) {
+    problems.add('Panel kendisi vitrinde kart olmamali');
+  }
+  final counts = <SirketMenuItem, int>{};
+  for (final item in shown) {
+    counts[item] = (counts[item] ?? 0) + 1;
+  }
+  for (final entry in counts.entries) {
+    if (entry.value > 1) problems.add('Vitrinde birden cok kez: ${entry.key.name}');
+  }
+  for (final item in expected) {
+    if (!counts.containsKey(item)) problems.add('Cekmecede var, vitrinde karti yok: ${item.name}');
+  }
+  for (final item in counts.keys) {
+    if (item != SirketMenuItem.dashboard && !expected.contains(item)) {
+      problems.add('Vitrinde karti var, cekmecede yok: ${item.name}');
+    }
+  }
+  return problems;
+}
+
+/// Oturumdaki rol (vitrin kart basligi rolle degisebilir: [YanMenu.titleFor]); ana sayfa yoksa null.
+UserRole? currentRole(WidgetTester tester) {
+  final home = find.byType(HomePage);
+  if (home.evaluate().isEmpty) return null;
+  return tester.widget<HomePage>(home).authService.session?.role;
+}
+
+/// Cekmecede [item] var mi (cekmeceyi acar, bakar, kapatir).
+Future<bool> drawerHasItem(WidgetTester tester, SirketMenuItem item) async {
+  if (!await openDrawer(tester)) return false;
+  final has = drawerMenuItems().contains(item);
+  await closeOverlays(tester);
+  return has;
+}
+
+/// [spec] ekranina Panel vitrinindeki KARTINA dokunarak gecer ([E2eScreenSpec.showcaseCard]; kullanicinin yolu).
+/// Kart yoksa: cekmecede varsa 'navigation' bulgusu (vitrin ile cekmece ayristi); hicbirinde yoksa ekran isteğe
+/// bagliysa ([E2eScreenSpec.optional]) bulgusuz atlanir (modul kapali / yetki yok), degilse 'navigation' bulgusu.
+Future<bool> openViaShowcaseCard(WidgetTester tester, E2eScreenSpec spec) async {
+  final item = spec.showcaseCard!;
+  if (!await openDrawerAndTap(tester, 'Panel')) return false;
+  await settle(tester, min: const Duration(milliseconds: 700), max: const Duration(seconds: 6));
+  if (!await pumpUntilFound(tester, find.byKey(kShowcaseKey), timeout: const Duration(seconds: 6))) {
+    E2eRuntime.collector.note(
+      kind: 'navigation',
+      message: 'Panel modul vitrini gorunmedi ("${spec.menuLabel}" karti aranirken)',
+    );
+    return false;
+  }
+  final card = showcaseCardFinder(item);
+  var found = await pumpUntilFound(tester, card, timeout: const Duration(seconds: 2));
+  if (!found) found = await scrollUntilFound(tester, card);
+  if (!found) {
+    if (await drawerHasItem(tester, item)) {
+      E2eRuntime.collector.note(
+        kind: 'navigation',
+        message: 'Panel vitrininde "${spec.menuLabel}" karti yok ama cekmecede var (vitrin ile cekmece ayristi)',
+      );
+    } else if (spec.optional) {
+      E2eRuntime.skip('"${spec.menuLabel}" ne vitrinde ne cekmecede (modul kapali / yetki yok)');
+    } else {
+      E2eRuntime.collector.note(
+        kind: 'navigation',
+        message: 'Panel vitrininde "${spec.menuLabel}" karti yok (cekmecede de yok)',
+      );
+    }
+    return false;
+  }
+  return tapFinder(
+    tester,
+    card,
+    description: 'vitrin karti "${spec.menuLabel}"',
+    settleAfter: const Duration(milliseconds: 600),
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Ekran goruntusu
 // ---------------------------------------------------------------------------
 
@@ -1051,6 +1226,8 @@ class E2eScreenSpec {
     this.interactions,
     this.expectTexts = const <String>[],
     this.opensDialogInstead = false,
+    this.showcaseCard,
+    this.optional = false,
   });
 
   /// Dosya adi dostu ekran adi (ornek: "site_yonetimi").
@@ -1059,8 +1236,16 @@ class E2eScreenSpec {
   /// Cekmecedeki menu etiketi (tam eslesme).
   final String menuLabel;
 
-  /// AppBar baslik metni (gectigimizi dogrulamak icin).
+  /// AppBar baslik metni (gectigimizi dogrulamak icin). YALNIZ AppBar'da aranir ([appBarTitle]): vitrin kartlari menu
+  /// basliklarini tekrarladigi icin tum ekranda aramak, sayfa degismedigi halde gecildi sayardi.
   final String? titleText;
+
+  /// Verilirse ekrana cekmeceden DEGIL, Panel vitrinindeki bu ogenin kartina dokunarak gecilir (ornek: "Kapılar";
+  /// bkz. [openViaShowcaseCard]). [menuLabel] raporda ve cekmece denetiminde kullanilir.
+  final SirketMenuItem? showcaseCard;
+
+  /// [showcaseCard] ekrani rolde hic yoksa (ne vitrinde ne cekmecede: modul kapali / yetki yok) bulgusuz atlanir.
+  final bool optional;
 
   /// Ekranda mutlaka gorunmesi beklenen metinler (bos/yanlis veri tespiti).
   final List<String> expectTexts;
@@ -1354,7 +1539,9 @@ class E2eSession {
     sc.global.addAll(E2eRuntime.collector.drain());
     E2eRuntime.collector.beginScreen(spec.name);
     try {
-      final navigated = await openDrawerAndTap(tester, spec.menuLabel);
+      final navigated = spec.showcaseCard != null
+          ? await openViaShowcaseCard(tester, spec)
+          : await openDrawerAndTap(tester, spec.menuLabel);
       if (!navigated) {
         result.status = 'missing';
         return result;
@@ -1366,7 +1553,7 @@ class E2eSession {
       if (spec.titleText != null) {
         final inTitle = await pumpUntilFound(
           tester,
-          findText(spec.titleText!, exact: true),
+          appBarTitle(spec.titleText!),
           timeout: const Duration(seconds: 5),
         );
         if (!inTitle) {

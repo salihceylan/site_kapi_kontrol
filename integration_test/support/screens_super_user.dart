@@ -13,12 +13,9 @@ List<E2eScreenSpec> superUserScreens() {
   final site1 = E2eEnv.siteName('site_1') ?? 'Yeşilvadi Sitesi';
   final site2 = E2eEnv.siteName('site_2') ?? 'Mavi Park Evleri';
   return <E2eScreenSpec>[
-    E2eScreenSpec(
-      name: 'panel',
-      menuLabel: 'Panel',
-      titleText: 'Panel',
-      interactions: (c) => adminPanelTour(c, siteKeys: const <String>['site_1', 'site_2']),
-    ),
+    // Panel = modul vitrini; kapi paneli (iki sitenin kapilari) "Kapılar" kartinin arkasinda.
+    panelShowcaseScreen,
+    kapilarScreen((c) => adminPanelTour(c, siteKeys: const <String>['site_1', 'site_2'])),
     const E2eScreenSpec(
       name: 'profilim',
       menuLabel: 'Profilim',

@@ -6,7 +6,7 @@
 // Boyut sabit dp'dir, yazı ölçeğinden etkilenmez.
 //
 // Görsel dil (Güde Teknoloji tanıtım görselleriyle aynı aile): yumuşak tonlu yuvarlak kare rozet +
-// iki tonlu (duotone) yuvarlak hatlı figür + küçük bir vurgu öğesi (durum noktası / dalga / parıltı).
+// iki tonlu (duotone) yuvarlak hatlı figür + küçük bir vurgu öğesi (nokta / dalga / parıltı).
 //
 // - Tek ızgara: figürler 48 birimlik bir ızgarada çizilir ve tuvale `boyut / 48` ile ölçeklenir; hiçbir
 //   çizgi/yarıçap sabit piksel değildir (32-96 dp arasında keskin kalır).
@@ -14,8 +14,11 @@
 //   sol-üstten sağ-alta koyulaşır, sol-üstte beyaz ışıma).
 // - Renk rolleri ([ModuleArtColors]): `ink` ana figür çizgisi (açıkta lacivert #0F2A4A, koyuda açık),
 //   `paper` figür yüzeyi, `wash` ikinci ton (türün vurgusunun soluk hâli), `accent` küçük dolu vurgu,
-//   `success` durum yeşili. Ana ton rozet zeminine karşı >= 3:1'dir (WCAG 1.4.11); `module_art_test.dart`
-//   bunu her tür ve her tema için hesaplar.
+//   `onAccent` vurgunun üstündeki ayrıntı (kilit, onay, "+"). Ana ton rozet zeminine, ayrıntı vurguya karşı
+//   >= 3:1'dir (WCAG 1.4.11); `module_art_test.dart` bunu her tür ve her tema için hesaplar.
+// - Durum bildirmez: görsel kalıcıdır, kapının açık olup olmadığını ya da bir uyarıyı ANLATMAZ. Bu yüzden
+//   vitrinin durum renkleri (zümrüt #10B981, kehribar #F59E0B, mercan #E11D48), durum yeşili ve "açık kilit"
+//   gibi durum simgeleri çizilmez; durum yalnız gerçek veriden gelen rozet noktasındadır (testle doğrulanır).
 // - Durağandır: animasyon ve ticker yok; boyama yalnız tür ya da renkler değişince yenilenir.
 import 'dart:math' as math;
 import 'dart:ui' as ui;
@@ -89,10 +92,12 @@ enum ModuleArtKind {
   generic,
 }
 
-/// Türün vurgu rengi (kart üst çizgisi, durum noktası). Açık ve koyu temada okunur tonlar.
+/// Türün vurgu rengi (kart üst çizgisi, vurgu noktası). Açık ve koyu temada okunur tonlar.
 ///
-/// Mavi/camgöbeği ağırlıklıdır (marka dili); amber, mercan, zümrüt ve mor yalnız ayırt edicilik için.
-/// Her renk, kendi tonundaki açık rozet zeminine karşı >= 3:1 verir (testle doğrulanır).
+/// Mavi/camgöbeği ağırlıklıdır (marka dili); turuncu, yeşil, mor ve fuşya yalnız ayırt edicilik içindir. Vitrinin
+/// durum renkleri (zümrüt #10B981, kehribar #F59E0B, mercan #E11D48) burada YOKTUR: onlar yalnız gerçek durumu
+/// gösterir (tasarım kuralı); İş Takibi ve Ziyaretçi bu yüzden mercan değil fuşyadır. Her renk, kendi tonundaki açık
+/// rozet zeminine karşı >= 3:1 verir (testle doğrulanır).
 Color moduleArtAccent(ModuleArtKind kind) {
   switch (kind) {
     case ModuleArtKind.door:
@@ -109,7 +114,7 @@ Color moduleArtAccent(ModuleArtKind kind) {
       return const Color(0xFFC2610A);
     case ModuleArtKind.workTracking:
     case ModuleArtKind.visitor:
-      return const Color(0xFFE11D48);
+      return const Color(0xFFC026D3);
     case ModuleArtKind.reservation:
     case ModuleArtKind.decisions:
     case ModuleArtKind.contracts:
@@ -140,7 +145,7 @@ class ModuleArtColors {
     required this.wash,
     required this.accentSoft,
     required this.accent,
-    required this.success,
+    required this.onAccent,
   });
 
   /// Açık tema lacivert çizgi rengi (marka: #0F2A4A).
@@ -176,11 +181,13 @@ class ModuleArtColors {
   /// İkinci tonun orta şiddeti (çubuk, kapak, bant).
   final Color accentSoft;
 
-  /// Küçük dolu vurgu öğeleri (nokta, dalga, çip, onay).
+  /// Küçük dolu vurgu öğeleri (nokta, dalga, çip, rozet).
   final Color accent;
 
-  /// Durum yeşili (kapı açık, onay).
-  final Color success;
+  /// Vurgu dolgusunun ÜSTÜNDEKİ ayrıntı (kapı kilidi, rezervasyon onayı, modül "+"): açıkta beyaz, koyuda rozetin
+  /// koyu zemini (oyuk gibi görünür; koyu temada sabit beyaz vurguya karşı ~1,9:1 kalıyordu). Vurguya karşı her
+  /// temada >= 3:1 (testle doğrulanır).
+  final Color onAccent;
 
   /// [kind] türünün [p] paletine göre renkleri.
   factory ModuleArtColors.resolve(ModuleArtKind kind, AppPalette p) {
@@ -199,7 +206,7 @@ class ModuleArtColors {
         wash: Color.alphaBlend(base.withValues(alpha: 0.30), p.surface),
         accentSoft: Color.alphaBlend(base.withValues(alpha: 0.55), p.surface),
         accent: base,
-        success: const Color(0xFF058660),
+        onAccent: const Color(0xFFFFFFFF),
       );
     }
     final lit = Color.lerp(base, const Color(0xFFFFFFFF), 0.5)!;
@@ -216,7 +223,7 @@ class ModuleArtColors {
       wash: Color.alphaBlend(lit.withValues(alpha: 0.34), bottom),
       accentSoft: Color.alphaBlend(lit.withValues(alpha: 0.42), bottom),
       accent: lit,
-      success: const Color(0xFF34D399),
+      onAccent: bottom,
     );
   }
 
@@ -233,7 +240,7 @@ class ModuleArtColors {
       other.wash == wash &&
       other.accentSoft == accentSoft &&
       other.accent == accent &&
-      other.success == success;
+      other.onAccent == onAccent;
 
   @override
   int get hashCode => Object.hash(
@@ -247,7 +254,7 @@ class ModuleArtColors {
     wash,
     accentSoft,
     accent,
-    success,
+    onAccent,
   );
 }
 
@@ -524,7 +531,7 @@ class _Brush {
   void dot(double x, double y, double r, Color color) =>
       canvas.drawCircle(Offset(x, y), r, _fill(color));
 
-  /// Zemin renginde halkalı küçük dolu rozet (durum noktası).
+  /// Zemin renginde halkalı küçük dolu rozet (vurgu noktası; durum bildirmez).
   void badge(double cx, double cy, double r, Color color) {
     dot(cx, cy, r + 1.7, c.ring);
     dot(cx, cy, r, color);
@@ -554,25 +561,28 @@ class _Brush {
 // Türler
 // ---------------------------------------------------------------------------------------------
 
-/// Kapı + yeşil "açık kilit" noktası.
+/// Kapı + tür vurgusu (mavi) rozet içinde KAPALI kilit: nötr "erişim" simgesi. Durum bildirmez; eskiden yeşil "açık
+/// kilit" vardı ve kapı çevrimdışıyken bile kapının açık / hazır olduğu sanılabiliyordu.
 void _drawDoor(_Brush p) {
   final c = p.c;
   p.paper(_rr(10, 8, 30, 39.5, 2.6));
   p.fill(_rr(13.6, 11.6, 24.4, 22.2, 1.2), c.wash);
   p.fill(_rr(13.6, 25.4, 24.4, 36, 1.2), c.wash);
   p.dot(27.1, 24, 1.25, c.ink);
-  p.badge(34, 31.6, 6.4, c.success);
+  p.badge(34, 31.6, 6.4, c.accent);
   if (p.detailed) {
-    p.fill(_rr(31.2, 31.1, 36.8, 35.5, 1.1), const Color(0xFFFFFFFF));
+    // Gövde + iki bacağı da gövdeye inen (kapalı) halka, gövdenin ortasında (x = 34).
+    p.fill(_rr(31.2, 31.1, 36.8, 35.5, 1.1), c.onAccent);
     p.stroke(
       Path()
-        ..moveTo(32.8, 31.1)
-        ..lineTo(32.8, 29.3)
+        ..moveTo(32.3, 31.1)
+        ..lineTo(32.3, 29.3)
         ..arcToPoint(
-          const Offset(36.2, 29.3),
+          const Offset(35.7, 29.3),
           radius: const Radius.circular(1.7),
-        ),
-      color: const Color(0xFFFFFFFF),
+        )
+        ..lineTo(35.7, 31.1),
+      color: c.onAccent,
       width: 1.5,
     );
   }
@@ -773,7 +783,7 @@ void _drawWorkTracking(_Brush p) {
   p.shape(_circle(33.4, 33.4, 2.3), c.paper);
 }
 
-/// Takvim + onay.
+/// Takvim + onay (tür vurgusu rozet; durum yeşili değil).
 void _drawReservation(_Brush p) {
   final c = p.c;
   final body = _rr(8.5, 11, 39.5, 39.5, 4.5);
@@ -794,13 +804,13 @@ void _drawReservation(_Brush p) {
       }
     }
   }
-  p.badge(31.6, 31.4, 7, c.success);
+  p.badge(31.6, 31.4, 7, c.accent);
   p.stroke(
     Path()
       ..moveTo(28, 31.6)
       ..lineTo(30.6, 34.2)
       ..lineTo(35.4, 28.4),
-    color: const Color(0xFFFFFFFF),
+    color: c.onAccent,
     width: 1.8,
   );
 }
@@ -953,16 +963,17 @@ void _drawModules(_Brush p) {
       ..lineTo(33, 36.4)
       ..moveTo(29.6, 33)
       ..lineTo(36.4, 33),
-    color: const Color(0xFFFFFFFF),
+    color: p.c.onAccent,
   );
 }
 
-/// Yönlendirici/cihaz + kablosuz dalga.
+/// Yönlendirici/cihaz + kablosuz dalga. Işıklar tür vurgusu ve ana tondur (yeşil "çevrimiçi" ışığı çizilmez: görsel
+/// cihaz durumunu bildirmez).
 void _drawDevices(_Brush p) {
   final c = p.c;
   p.paper(_rr(8.5, 29.5, 39.5, 40, 3.4));
   p.dot(14.8, 34.8, 1.5, c.accent);
-  p.dot(20, 34.8, 1.5, c.success);
+  p.dot(20, 34.8, 1.5, c.ink);
   p.stroke(
     Path()
       ..moveTo(28, 34.8)

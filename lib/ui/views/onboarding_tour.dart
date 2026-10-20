@@ -21,7 +21,8 @@ class OnboardingStep {
 }
 
 /// Role göre 4 adımlık kısa tanıtım içeriği. Arayüz adları “çift tırnak” içinde verilir ve gerçek menü /
-/// ekran etiketlerine dayanır ([HelpContent.knownMenuTitles], [HelpContent.knownScreenLabels]).
+/// ekran etiketlerine dayanır ([HelpContent.knownMenuTitles], [HelpContent.knownScreenLabels]). Girişte açılan
+/// "Panel" modül vitrinidir; kapı paneli "Kapılar" ekranındadır (tur da kapıyı orada anlatır).
 abstract final class OnboardingSteps {
   static const OnboardingStep _help = OnboardingStep(
     icon: Icons.help_outline_rounded,
@@ -39,7 +40,8 @@ abstract final class OnboardingSteps {
             icon: Icons.lock_open_rounded,
             title: 'Kapınız cebinizde',
             body:
-                'Menüdeki “Panel” ekranında kapı kartınızı görürsünüz. “KAPIYI AÇ” düğmesine dokunarak kapıyı açabilirsiniz.',
+                'Girişte açılan “Panel” ekranı modüllerinizin vitrinidir. Kapınız “Kapılar” kartının arkasında: karta '
+                'dokunun, “KAPIYI AÇ” düğmesiyle kapıyı açın.',
           ),
           OnboardingStep(
             icon: Icons.qr_code_2_rounded,
@@ -63,15 +65,15 @@ abstract final class OnboardingSteps {
             icon: Icons.waving_hand_rounded,
             title: 'Hoş geldiniz',
             body:
-                'Hesabınız hazır. Buradan bir siteye daire sakini olarak katılabilir, cihazınızı hesabınıza '
-                'ekleyebilir ya da site kurmak için başvurabilirsiniz.',
+                'Hesabınız hazır. Girişte açılan “Panel” ekranındaki kartlardan bir siteye daire sakini olarak '
+                'katılabilir, cihazınızı hesabınıza ekleyebilir ya da site kurmak için başvurabilirsiniz.',
           ),
           OnboardingStep(
             icon: Icons.qr_code_scanner_rounded,
             title: 'Daireye katılın',
             body:
                 'Menüden “Daireye Katıl & Cihaz Ekle” ekranını açın ve “QR / Kod ile Daireye Katıl” düğmesiyle '
-                'yöneticinizin paylaştığı kodu girin. Yönetici onaylayınca kapılarınız açılır.',
+                'yöneticinizin paylaştığı kodu girin. Yönetici onaylayınca kapılarınız “Kapılar” ekranında görünür.',
           ),
           OnboardingStep(
             icon: Icons.add_to_photos_rounded,
@@ -100,10 +102,11 @@ abstract final class OnboardingSteps {
           ),
           OnboardingStep(
             icon: Icons.extension_rounded,
-            title: 'Modüller',
+            title: 'Panel ve modüller',
             body:
-                '“Modüller” ekranında sitenizin özelliklerini görür, kapalı bir modül için talep gönderirsiniz. '
-                'Finans modülü açılınca menüde “Finans” ekranı belirir.',
+                'Açık modüller girişte açılan “Panel” ekranında kart olarak dizilir; kapı paneli “Kapılar” '
+                'kartındadır. “Modüller” ekranında sitenizin özelliklerini görür, kapalı bir modül için talep '
+                'gönderirsiniz. Finans modülü açılınca menüde “Finans” ekranı belirir.',
           ),
           _help,
         ];
@@ -113,8 +116,9 @@ abstract final class OnboardingSteps {
             icon: Icons.admin_panel_settings_rounded,
             title: 'Platform yönetimi',
             body:
-                '“Kullanıcı Yönetimi”, “Site Yöneticileri Yönetimi” ve “Daire Sakinleri” ekranlarından hesapları '
-                'yönetirsiniz.',
+                'Girişte açılan “Panel” ekranında yönetim ekranlarınız kart olarak dizilir; kapı paneli “Kapılar” '
+                'kartındadır. “Kullanıcı Yönetimi”, “Site Yöneticileri Yönetimi” ve “Daire Sakinleri” ekranlarından '
+                'hesapları yönetirsiniz.',
           ),
           OnboardingStep(
             icon: Icons.inbox_rounded,
