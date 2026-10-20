@@ -8,11 +8,12 @@
 import { pool } from '../db.js';
 import { recordAudit } from './audit_service.js';
 import { EXPORT_ROW_LIMIT, exportKindNotFound, exportTooLarge, queryEnum, queryId } from './finance_4b_common.js';
-import { invalidQuery } from './finance_common.js';
+import { invalidQuery, parseAccountPartyQuery } from './finance_common.js';
 import { exportExpenseRows } from './finance_expenses.js';
 import { AGING_BUCKETS } from './finance_m1.js';
 import { exportReceiptRows } from './finance_receipts.js';
 import {
+  agingForAccount,
   cashTotals,
   computeAging,
   computeCashPosition,
@@ -64,6 +65,8 @@ export function percentCell(bp) {
 const compactDate = (iso) => iso.replace(/-/g, '');
 
 const PAYER_LABEL = Object.freeze({ owner: 'Malik', tenant: 'Kiracı', both: 'Malik / Kiracı' });
+/** İki hesap (İP-1A): "Hesap" sütunu değerleri. */
+export const ACCOUNT_PARTY_LABEL = Object.freeze({ owner: 'Ev sahibi hesabı', tenant: 'Kiracı hesabı' });
 const ENTRY_KIND_LABEL = Object.freeze({ charge: 'Borç', payment: 'Tahsilat', reversal: 'Ters kayıt' });
 const METHOD_LABEL = Object.freeze({ cash: 'Nakit', transfer: 'Havale', cheque: 'Çek' });
 const ACCOUNT_KIND_LABEL = Object.freeze({ cash: 'Kasa', bank: 'Banka' });
@@ -87,7 +90,7 @@ function envelope(kind, siteName, generatedAt, base, columns, rows) {
 }
 
 /** Denetime yazılabilen BİLİNEN süzgeç anahtarları (rapor / dışa aktarma uçlarının ayrıştırdıkları); başka anahtar adı serbest metin taşıyabileceğinden YAZILMAZ. */
-export const KNOWN_FILTER_KEYS = Object.freeze(['as_of', 'status', 'from', 'to', 'apartment_id', 'category_id', 'supplier_id', 'account_id', 'year', 'kind', 'limit', 'offset', 'before_id']);
+export const KNOWN_FILTER_KEYS = Object.freeze(['as_of', 'status', 'from', 'to', 'apartment_id', 'category_id', 'supplier_id', 'account_id', 'year', 'kind', 'limit', 'offset', 'before_id', 'account_party']);
 
 /** Süzgeç adları (audit): yalnız BİLİNEN anahtar adları, değerler değil (arama metni ve bilinmeyen anahtarlar YOK). */
 export function filterNamesOf(query) {
@@ -109,8 +112,17 @@ export async function buildExportEnvelope(siteCode, kind, query = {}, now = new 
     const siteName = site.rows?.[0]?.name ?? '';
     if (kind === 'finance_aging') {
       const filters = parseAgingQuery({ ...query, status: query.status ?? 'debtor' }, now);
-      const rows = sortAging(await computeAging(client, siteCode, filters.asOf), filters.status);
-      const names = await loadResidentNames(client, rows.map((row) => row.apartmentId));
+      // İki hesap (İP-1A): satır HESAP başınadır ("Hesap" sütunu); hareketi olmayan hesap satırı yazılmaz (hareketsiz daire tek ev sahibi satırıyla görünür).
+      const aging = await computeAging(client, siteCode, filters.asOf);
+      const accountRows = [];
+      for (const row of aging) {
+        for (const party of ['owner', 'tenant']) {
+          if (filters.accountParty !== null && party !== filters.accountParty) continue;
+          if (row.accounts[party].hasRows || (party === 'owner' && !row.hasRows)) accountRows.push(agingForAccount(row, party));
+        }
+      }
+      const rows = sortAging(accountRows, filters.status);
+      const names = await loadResidentNames(client, [...new Set(rows.map((row) => row.apartmentId))]);
       const columns = [
         col('daire', 'Daire', 'text'),
         col('blok', 'Blok', 'text'),
@@ -127,6 +139,7 @@ export async function buildExportEnvelope(siteCode, kind, query = {}, now = new 
         col('toplam_gecikmis', 'Toplam Gecikmiş', 'money'),
         col('alacak', 'Alacak', 'money'),
         col('tazminat_bakiyesi', 'Gecikme Tazminatı (kalan)', 'money'),
+        col('hesap', 'Hesap', 'text'),
       ];
       const out = rows.map((row) => [
         row.label,
@@ -138,6 +151,7 @@ export async function buildExportEnvelope(siteCode, kind, query = {}, now = new 
         minorToNumber(row.overdue),
         minorToNumber(row.credit),
         minorToNumber(row.lateFeeOutstanding),
+        ACCOUNT_PARTY_LABEL[row.accountParty] ?? '',
       ]);
       return envelope(kind, siteName, now, `yaslandirma_${filters.asOf}`.replace(/-/g, ''), columns, out);
     }
@@ -201,7 +215,8 @@ export async function buildExportEnvelope(siteCode, kind, query = {}, now = new 
         throw invalidQuery();
       }
       const range = parseStatementQuery(query, now);
-      const statement = await computeStatement(client, siteCode, apartmentId, range, now);
+      const accountParty = parseAccountPartyQuery(query.account_party);
+      const statement = await computeStatement(client, siteCode, apartmentId, range, now, { accountParty });
       const columns = [
         col('tarih', 'Tarih', 'date'),
         col('tur', 'Tür', 'text'),
@@ -213,8 +228,9 @@ export async function buildExportEnvelope(siteCode, kind, query = {}, now = new 
         col('makbuz', 'Makbuz', 'text'),
         col('tutar', 'Tutar', 'money'),
         col('bakiye', 'Bakiye', 'money'),
+        col('hesap', 'Hesap', 'text'),
       ];
-      const rows = [['', 'Devreden', '', '', '', '', '', '', null, statement.opening_balance_minor]];
+      const rows = [['', 'Devreden', '', '', '', '', '', '', null, statement.opening_balance_minor, ACCOUNT_PARTY_LABEL[accountParty] ?? '']];
       for (const item of statement.items) {
         rows.push([
           item.entry_date,
@@ -227,6 +243,7 @@ export async function buildExportEnvelope(siteCode, kind, query = {}, now = new 
           item.receipt?.number ?? '',
           item.amount_minor,
           item.running_balance_minor,
+          ACCOUNT_PARTY_LABEL[item.account_party] ?? '',
         ]);
       }
       return envelope(kind, siteName, now, `ekstre_${slugify(statement.apartment.label)}`, columns, rows);
@@ -269,6 +286,7 @@ export async function buildExportEnvelope(siteCode, kind, query = {}, now = new 
       col('daire', 'Daire', 'text'),
       col('odeyen', 'Ödeyen', 'text'),
       col('tutar', 'Tutar', 'money'),
+      col('hesap', 'Hesap', 'text'),
     ];
     const rows = items.map((r) => [
       r.number,
@@ -279,6 +297,7 @@ export async function buildExportEnvelope(siteCode, kind, query = {}, now = new 
       r.apartment.label ?? '',
       r.payer_name ?? '',
       r.amount_minor,
+      ACCOUNT_PARTY_LABEL[r.account_party] ?? '',
     ]);
     return envelope(kind, siteName, now, 'makbuzlar', columns, rows);
   });
