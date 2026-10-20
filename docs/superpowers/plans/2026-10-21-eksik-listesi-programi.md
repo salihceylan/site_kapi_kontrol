@@ -227,23 +227,30 @@ web kaynakları erişim tarihiyle. Uydurma madde, tarih ya da ücret YAZMA: doğ
 | 2 | 2A | F1 + G4: IBAN, alıcı adı, site kısa kodu, referans kodu (oluşturma, ayrıştırma, normalleştirme), sakine ödeme bilgisi, borç kartında "Öde" sayfası (kopyala düğmeleri, "Dekont yükle", "Kartla öde — Yakında…") | 054 | 55451 |
 | 2 | 2B | F2: dekont bildirimi (yükleme, Android paylaş alıcısı), geçici kabul, yönetici karşılaştırma ekranı, tek ve toplu onay/iptal, onayda `postPayment` + makbuz, bildirimler, dikkat sayısı | 055 | 55452 |
 | 2 | 2C | F3: banka dosyası (xlsx, CSV, MT940), sütun eşleme profili, yinelenen satır özeti, eşleme sırası, IBAN hafızası, eşleşmeyenler ekranı, daire dışı satırlar gelir/gider, yüklemeyi geri alma, dikkat sayısı | 056 | 55453 |
-| 2 | 2D | F4: devir bakiyesi şablonu, sütun eşleme, önizleme, tek onay, geri alma | 057 | 55454 |
+| 2 | 2D | F4 + N6: devir bakiyesi şablonu, sütun eşleme, önizleme, tek onay, geri alma; "Hepsi bir arada" toplu yükleme (daire, sakin ve ilişkisi, telefon, e-posta, taşınma tarihi, plaka, not) | 057 | 55454 |
 | 2 | 2E | R1: gider "rutin / beklenmedik", aylık + 3/6/12 aylık seriler, kategori kırılımı, tahmin, grafik (fl_chart), PDF/Excel | 058 | 55455 |
-| 2 | 2F | G5: yönetici ana sayfası "Bu ay" (dört sayı, beş adım, koyu dikkat barı, son beş hareket) | — | — |
-| 3 | 3A | F7: işletme projesi (Taslak → Tebliğ → Kesin, geçici proje süresi, planlanan–gerçekleşen) | 059 | 55461 |
-| 3 | 3B | T7 + T6: ekipman, bakım planı ve kaydı, yasal kontrol hatırlatması; teklifler ve karşılaştırma; R1'e ekipman kırılımı | 060 | 55462 |
-| 3 | 3C | R2: faaliyet raporu taslağı, bölüm düzenleme, PDF | 061 | 55463 |
+| 2 | 2F | G5 + N4: yönetici ana sayfası "Bu ay" (dört sayı, beş adım, koyu dikkat barı, son beş hareket); ay kapatmada istenen ay seçilir, sırayla zorunluluğu ve baskı metni kalkar | — | 55456 |
+| 2 | 2G | N1: Panel'in en üstünde yanıp sönen okunmamış duyuru kartı; alıcı kendi listesinden siler; yönetici siler (kayıt arka planda saklanır) | 059 | 55457 |
+| 2 | 2H | N2 + N3 + S5: yönetim kadrosu (kişi kartından görev verme, kadro sayfası), uygulamaya davet (e-postası olan her kişi), rehber (yönetim kadrosu ve faydalı telefonlar) | 060 | 55458 |
+| 2 | 2I | N5: hesap silme engeli (kayıtlı site sahibi, borcu olan sakin) ve yol gösteren metin | — | 55459 |
+| 3 | 3A | F7: işletme projesi (Taslak → Tebliğ → Kesin, geçici proje süresi, planlanan–gerçekleşen) | 061 | 55461 |
+| 3 | 3B | T7 + T6: ekipman, bakım planı ve kaydı, yasal kontrol hatırlatması; teklifler ve karşılaştırma; R1'e ekipman kırılımı | 062 | 55462 |
+| 3 | 3C | R2: faaliyet raporu taslağı, bölüm düzenleme, PDF | 063 | 55463 |
 | 3 | 3D | F8: icra dökümü PDF ve avukat Excel'i | — | — |
 | 3 | 3E | G10 + G14 + R3: sade dil, kalan listelere arama ve Excel'e aktar, rapor adları | — | — |
-| 4 | 4A | D1: Drive bağlantısı (OAuth `drive.file`, şifreli belirteç, yükleme/indirme vekili, önbellek ve bekleme alanı, klasör ve dosya adı kuralları T5), "Yakında…" Google projesi açılana dek | 062 | 55471 |
-| 4 | 4B | T1 + T2: sayaç modülü (dosyadan içe aktarma, okuma kaydı, borç kalemi), ısı payı %70/%30 | 063 | 55472 |
-| 4 | 4C | T3 + T4 + T5: fotoğrafla okuma (telefonda metin tanıma), sıradaki daire akışı, çevrimdışı kuyruk, Drive eşitleme | 064 | 55473 |
-| 5 | 5A | Y1 + Y2: yönetim firması, personel, "Tüm siteler", deneme süresi, ortaklık payı dökümü | 065 | 55481 |
-| 5 | 5B | C1 + S1 + S3: SMS/WhatsApp sağlayıcı arayüzü ("Yakında…"), telefon + SMS koduyla giriş, kargo bildirimi | 066 | 55482 |
-| 5 | 5C | S5 + S4: rehber, yönetici onaylı komşu panosu | 067 | 55483 |
-| 6 | 6A | G8 + G9: Phosphor ikonları (menü, alt çubuk, vitrin), beyaz etiket tema | 068 | 55491 |
-| 6 | 6B | F6 + T8: kart ödemesi sağlayıcı arayüzü, kamera/plaka bağdaştırıcıları ("Yakında…") | 069 | 55492 |
+| 4 | 4A | D1: Drive bağlantısı (OAuth `drive.file`, şifreli belirteç, yükleme/indirme vekili, önbellek ve bekleme alanı, klasör ve dosya adı kuralları T5), "Yakında…" Google projesi açılana dek | 064 | 55471 |
+| 4 | 4B | T1 + T2: sayaç modülü (dosyadan içe aktarma, okuma kaydı, borç kalemi), ısı payı %70/%30 | 065 | 55472 |
+| 4 | 4C | T3 + T4 + T5: fotoğrafla okuma (telefonda metin tanıma), sıradaki daire akışı, çevrimdışı kuyruk, Drive eşitleme | 066 | 55473 |
+| 5 | 5A | Y1 + Y2: yönetim firması, personel, "Tüm siteler", deneme süresi, ortaklık payı dökümü | 067 | 55481 |
+| 5 | 5B | C1 + S1 + S3 + N8: SMS/WhatsApp sağlayıcı arayüzü ("Yakında…"), telefon + SMS koduyla giriş, kargo bildirimi, web için Firebase'siz tarayıcı bildirimi | 068 | 55482 |
+| 5 | 5C | S4: yönetici onaylı komşu panosu | 069 | 55483 |
+| 6 | 6A | G8 + G9: Phosphor ikonları (menü, alt çubuk, vitrin), beyaz etiket tema | 070 | 55491 |
+| 6 | 6B | F6 + T8: kart ödemesi sağlayıcı arayüzü, kamera/plaka bağdaştırıcıları ("Yakında…") | 071 | 55492 |
 | 6 | 6C | S6: çok dil altyapısı (Türkçe + İngilizce iskelet) | — | — |
+
+Migration numaraları zincirdir (001..son, boşluksuz; bkz. `037_reserved_noop.sql`): bir İP'ye ayrılan numara kullanılmazsa aynı
+numarayla boş (`_reserved_noop`) dosya eklenir. Notlardan gelen işler (N1–N10): yol haritası "Faz Kontrol Listesi notlarından gelen
+işler (2026-10-21)".
 
 ## 5. Dalga akışı (koordinatör)
 
@@ -272,9 +279,12 @@ web kaynakları erişim tarihiyle. Uydurma madde, tarih ya da ücret YAZMA: doğ
 | F1, G4 | 2A |
 | F2 | 2B |
 | F3 | 2C |
-| F4 | 2D |
+| F4, N6 | 2D |
 | R1 | 2E (+ 3B ekipman kırılımı) |
-| G5 | 2F |
+| G5, N4 | 2F |
+| N1 | 2G |
+| N2, N3, S5 | 2H |
+| N5 | 2I |
 | F7 | 3A |
 | T6, T7 | 3B |
 | R2 | 3C |
@@ -285,7 +295,11 @@ web kaynakları erişim tarihiyle. Uydurma madde, tarih ya da ücret YAZMA: doğ
 | T3, T4 | 4C |
 | Y1, Y2 | 5A |
 | C1, S1, S3 | 5B |
-| S4, S5 | 5C |
+| S4 | 5C |
+| N8 (web bildirimi) | 5B |
+| N7 | yapıldı (deneme listesi) |
+| N9 | dışarıdan |
+| N10 | 1D |
 | G8, G9 | 6A |
 | F6, T8 | 6B |
 | S6 | 6C |

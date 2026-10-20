@@ -346,6 +346,24 @@ tablolardaki "Karar ya da bilgi" sütunu tarihçe olarak kaldı; geçerli olan b
 | G15 | İki haftada bir yapılacak canlı demo için demo senaryosu belgesi hazırlanır. | komutlar talimat 5 |
 | Z1–Z8 | Bu turda yapılmaz: işveren belgelerinde istenmedi (Apsiyon'a özgü ek hizmetler). | Kapsam |
 
+### Faz Kontrol Listesi notlarından gelen işler (2026-10-21)
+
+Faz Kontrol Listesi sayfasında maddelere yazılmış, yanıtlanmamış notlar (2026-10-16/19). Her biri bir işe bağlandı; sayfadaki notlara
+Claude yanıtı yazıldı.
+
+| Kod | İş | Not (madde) | Dalga |
+| --- | --- | --- | --- |
+| N1 | Duyurular: sakin girer girmez Panel'in en üstünde okunmamış duyuru kartı, yanıp söner (hareket azaltma açıksa sabit vurgu); okununca Panel'den kalkar, Duyurular'da kalır. Alıcı duyuruyu kendi listesinden siler; yönetici duyuruyu siler (listelerden kalkar, kayıt yasal süre boyunca arka planda saklanır). | F3.03, F3.04 | 2 |
+| N2 | Yönetim kadrosu: kişi kartından "Görev ver" (yönetim kurulu üyesi; görevli: kapıcı, teknik, danışma) ve tek sayfada yönetici, kurul ve görevliler. Kimseye görev verilmezse işler yöneticide kalır. Bugün görev atama Modüller ekranındaki "Ek roller"de, e-postayla; bulunması zor. | F2.02, F2.15, F1.12 | 2 |
+| N3 | Kişiye uygulama daveti: e-postası olan her kişiye (dolu daire dahil) "Uygulamaya davet et"; kişi şifresini kendisi belirler. E-postası olmayan kişi telefon + SMS koduyla girer (S1, SMS ek hizmeti açılınca); o zamana kadar ekranda açık not. | F2.03 | 2 |
+| N4 | Ay kapatma: yönetici istediği ayı seçip kapatır (önceki açık aylar birlikte kapanır); "sırayla kapat" zorunluluğu ve baskı yapan uyarılar kalkar; kapatmak isteğe bağlıdır. | F4.15 | 2 |
+| N5 | Hesap silme engeli: kayıtlı sitesi olan yönetici siteyi devretmeden ya da kapatma talebi göndermeden, borcu olan sakin borcu kapanmadan hesabını silemez; ekranda nedeni ve yolu yazar. `[AVUKAT DOĞRULASIN]` (KVKK m.11 ve m.13: gerekçeli yanıt). | F12.08 | 2 |
+| N6 | Tek dosyada toplu yükleme: "Hepsi bir arada" Excel şablonu (daire, sakin ve ilişkisi, telefon, e-posta, taşınma tarihi, plaka, not); önizleme ve onay. | F13.02 | 2 |
+| N7 | F1.20 deneme maddesi sade dille yeniden yazıldı (API adımı yerine ekran adımları). | F1.20 | yapıldı |
+| N8 | Telefon bildirimi: Firebase'in bildirim hizmeti ücretsiz; hesap açılınca devreye alınır (hatırlatma). Web uygulaması için Firebase'siz tarayıcı bildirimi. | F1.30, F3.01 | hesap: dışarıdan; web bildirimi: 5 |
+| N9 | Destek e-postası, telefonu ve çalışma saatleri Platform Ayarları'na girilecek (hatırlatma). | F12.44 | dışarıdan |
+| N10 | Tanıtım turu yeni Panel'i (modül kartları, Kapılar, gruplu menü, sakin alt çubuğu) anlatır. | F12.36 | 1 (İP-1D) |
+
 ### Uygulama sırası (2026-10-21)
 
 Her dalga ayrı ajanlarla ve bağımsız incelemeyle yapılır (para, yetki ve veri işlerinde en az iki tur ve gerçek PostgreSQL denemesi).
@@ -356,10 +374,10 @@ iş planı: `docs/superpowers/plans/2026-10-21-eksik-listesi-programi.md`.
 | --- | --- | --- |
 | 0 | G1 Panel modül vitrini | son düzeltme turunda; ardından canlı |
 | 1 | G12 iki hesap · G11 kurallar tablosu + F5 altın veri seti · G6 + G7 sade tasarım · G2 + G3 gruplu menü ve sakin alt çubuğu · H1–H6 ve G15 hukuk taslakları, hesap rehberleri, demo senaryosu · D3 dış kopya (kuruldu 2026-10-21) | sırada |
-| 2 | F1 + G4 IBAN, referans kodu, "Öde" · F2 dekont ve geçici kabul · F3 banka dosyası ve IBAN hafızası · F4 devir bakiyesi · R1 gelir-gider analizi, grafik ve tahmin · G5 yönetici ana sayfası ve dikkat barı | |
+| 2 | F1 + G4 IBAN, referans kodu, "Öde" · F2 dekont ve geçici kabul · F3 banka dosyası ve IBAN hafızası · F4 + N6 devir bakiyesi ve tek dosyada toplu yükleme · R1 gelir-gider analizi, grafik ve tahmin · G5 + N4 yönetici ana sayfası, dikkat barı ve ay kapatma · N1 duyurular · N2 + N3 + S5 yönetim kadrosu, uygulama daveti ve rehber · N5 hesap silme engeli | |
 | 3 | F7 işletme projesi · T7 ekipman ve bakım + T6 teklifler (R1'e ekipman kırılımı) · R2 faaliyet raporu · F8 icra dökümü · G10 + G14 + R3 sade dil, Excel'e aktar, rapor adları | |
 | 4 | D1 Drive bağlantısı · T1–T5 sayaç, fotoğrafla okuma, çevrimdışı kuyruk, adlandırma · T2 ısı payı | |
-| 5 | Y1 + Y2 yönetim firması, deneme süresi, ortaklık payı · C1 + S1 + S3 SMS arayüzü, SMS ile giriş, kargo bildirimi · S5 + S4 rehber ve komşu panosu | |
+| 5 | Y1 + Y2 yönetim firması, deneme süresi, ortaklık payı · C1 + S1 + S3 SMS arayüzü, SMS ile giriş, kargo bildirimi; web için Firebase'siz tarayıcı bildirimi (N8) · S4 komşu panosu | |
 | 6 | G8 + G9 Phosphor ikonları ve beyaz etiket · F6 + T8 kart ödemesi ve kamera arayüzleri · S6 çok dil altyapısı | |
 
 ### Dışarıdan gerekenler (karar değil; hesap açma ve onay)
@@ -368,12 +386,14 @@ Kod bunlar için hazırlanır ve kapalı ya da "Yakında…" olarak bekler; hiç
 
 1. Avukat: H2, H3, H4 taslakları (ekip yazar, Cenk iletir). Onaya kadar gecikme tazminatı, borç hatırlatma ve otomatik silme kapalı.
 2. Google Cloud projesi ve onay ekranı (Drive için; adım adım rehber dalga 4'te).
-3. Firebase hizmet hesabı (telefon bildirimi; kod hazır).
+3. Firebase hizmet hesabı (telefon bildirimi; kod hazır). Firebase'in bildirim hizmeti ücretsizdir; yalnız bir Google hesabıyla proje
+   açılır (iPhone için ayrıca Apple geliştirici hesabı). Hesap açılınca bildirim kısa sürede devreye alınır (N8).
 4. Apple ve Google Play geliştirici hesapları, şirket adına (rehber dalga 1'de).
 5. SMS firması hesabı (SMS ek hizmeti açılacaksa) ve ödeme kuruluşu sözleşmesi (kart ödemesi açılacaksa).
 6. Sitelerin IBAN'ları: her site yöneticisi kendi ekranından girer.
 7. KEP adresi ve MERSİS numarası (varsa): Platform Ayarları'na girilir.
 8. Gerçek örnek dosyalar (banka ekstresi, eski yazılımın dışa aktarması, sayaç dosyası, elle hesaplanmış aidat tablosu): gelirse teste eklenir; beklenmez.
+9. Destek e-postası, destek telefonu ve çalışma saatleri: Platform Ayarları'na girilir (N9; yardım ekranında görünür).
 
 ### Doğrulanamayanlar ve dikkat
 

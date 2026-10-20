@@ -391,12 +391,15 @@
           "id": "F1.20",
           "baslik": "Site yöneticisi modülü kendisi açıp kapatamaz, talep eder",
           "adimlar": [
-            "Site yöneticisi hesabıyla PUT /manager/sites/:siteCode/modules/door_control isteği gönderin."
+            "Site yöneticisi hesabıyla çekmeceden \"Modüller\"i açın.",
+            "Modüllerin yanına bakın: açma/kapama anahtarı yoktur; açık modülde \"Tanımlı\", kapalı modülde \"Tanımlı değil\" yazısı ve \"Modül Talep Et\" düğmesi vardır.",
+            "Kapalı bir modülde \"Modül Talep Et\"e dokunup talebi gönderin.",
+            "Süper kullanıcı hesabıyla \"Modül Talepleri\"ni açıp talebi onaylayın."
           ],
-          "beklenen": "Site yöneticisi 'Modüller' ekranında bir modülü kendisi açıp kapatamaz; 'Modül Talep Et' ile talep gönderir. Talebi yalnızca süper kullanıcı onaylar ya da reddeder. Yönetici doğrudan açmaya çalışırsa \"Modülleri yalnızca sistem yöneticisi açıp kapatabilir. Modül talebi gönderebilirsiniz.\" iletisi çıkar. Süper kullanıcı modülü doğrudan açıp kapatabilir.",
+          "beklenen": "Site yöneticisi modülü kendisi açıp kapatamaz, yalnız talep eder. Talep süper kullanıcının \"Modül Talepleri\" listesine düşer; onaylanınca modül yöneticinin \"Modüller\" ekranında \"Tanımlı\" olur ve menüde görünür, reddedilirse kapalı kalır. Süper kullanıcı modülü doğrudan da açıp kapatabilir.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "API aracı",
-          "yeni": false,
+          "yeni": true,
           "gelistirme": "hazir"
         },
         {
