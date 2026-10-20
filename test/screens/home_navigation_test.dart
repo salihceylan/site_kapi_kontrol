@@ -700,6 +700,45 @@ void main() {
       await _disposeHome(t);
     });
 
+    testWidgets('site seçimi Kapılar panelini de o siteye çeker (seçili site + liste); Tüm siteler geri getirir', (t) async {
+      final auth = _NavAuth(UserRole.siteManager, sites: twoSites);
+      final access = await _access(managerSites);
+      await _pumpHome(t, auth, access: access);
+      await _openDrawer(t);
+      await pick(t, '2');
+      Navigator.of(t.element(find.byType(YanMenu))).pop();
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 450));
+      final card = find.byKey(const ValueKey<String>('panel_kart_kapilar'));
+      await t.ensureVisible(card);
+      await t.pump();
+      await t.tap(card);
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 700));
+      var dashboard = t.widget<DashboardView>(find.byType(DashboardView));
+      expect(dashboard.sites.map((s) => s.id), <int>[2], reason: 'kapsam: yalnız Ay Sitesi');
+      expect(dashboard.selectedSite?.id, 2, reason: 'seçili site de kapsamdaki site');
+
+      await _openDrawer(t);
+      await pick(t, 'tum');
+      dashboard = t.widget<DashboardView>(find.byType(DashboardView));
+      expect(dashboard.sites.map((s) => s.id), <int>[1, 2]);
+
+      // Kapılar sayfasındayken (Güneş Sitesi seçiliyken) Ay Sitesi seçilir: panel de hemen o siteye geçer.
+      final switcher = t.widget<DashboardView>(find.byType(DashboardView));
+      switcher.onSelectSite(1);
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 400));
+      expect(t.widget<DashboardView>(find.byType(DashboardView)).selectedSite?.id, 1);
+      await _openDrawer(t);
+      await pick(t, '2');
+      dashboard = t.widget<DashboardView>(find.byType(DashboardView));
+      expect(dashboard.sites.map((s) => s.id), <int>[2]);
+      expect(dashboard.selectedSite?.id, 2, reason: 'açık Kapılar paneli de kapsamdaki siteye geçer');
+      expect(auth.openDoorCalls, 0);
+      await _disposeHome(t);
+    });
+
     testWidgets('Sakin Moduna geçiş site kapsamını sıfırlar; sakin modunda seçici yok', (t) async {
       final handle = t.ensureSemantics();
       final auth = _NavAuth(UserRole.siteManager, sites: twoSites, doors: <DoorRecord>[_door(1)]);

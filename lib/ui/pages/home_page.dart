@@ -5480,6 +5480,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   /// yeniden kurar); Site Yönetimi de seçilen siteyle açılır.
   void _selectScopeSite(int? siteCode) {
     _moduleAccess.setScopeSiteCode(siteCode);
+    // Kapılar panelinin site listesi ve seçili sitesi kapsama göre yeniden kurulur (açık paneldeyken de; kapı açma
+    // mantığı değişmez, yalnız hangi sitenin panelinin gösterileceği).
+    unawaited(_loadDoorControlSites());
     if (siteCode == null) return;
     final site = _sitesPage?.sites.where((s) => s.id == siteCode).firstOrNull;
     if (site != null && _selectedSite?.id != siteCode) unawaited(_selectSite(site));
