@@ -32,6 +32,7 @@ import 'package:site_kapi_kontrol/ui/widgets/document_parts.dart';
 import 'dialog_layout_harness.dart' show settleFor;
 import 'list_fixtures.dart' show fxDoors, tapFinder;
 import 'people_fixtures.dart';
+import '../support/menu_nav.dart';
 
 /// HomePage için sahte servis: ana kabuğun ihtiyaç duyduğu uçlar boş döner.
 class _HomeAuth extends PeopleFakeAuth {
@@ -212,12 +213,9 @@ Future<void> _tapMenu(WidgetTester t, String label) async {
 Finder _tileTitle(String title) =>
     find.descendant(of: find.byType(Drawer), matching: find.text(title));
 
-List<String> _drawerTitles(WidgetTester t) => <String>[
-  for (final tile in t.widgetList<ListTile>(
-    find.descendant(of: find.byType(Drawer), matching: find.byType(ListTile)),
-  ))
-    (tile.title! as Text).data!,
-];
+/// İP-1D (G2): menü LİSTESİNİN sırası (vitrin sırası; `YanMenu.visibleItems`: çekmece + Ayarlar paneli). Çekmece öğeleri
+/// başlıklar altında gruplar ([expectUnderDrawerHeader]); ayar öğeleri sağ üstteki dişlidedir.
+List<String> _drawerTitles(WidgetTester t) => menuListTitles(t);
 
 Finder _inAppBar(Finder f) =>
     find.descendant(of: find.byType(AppBar), matching: f);
@@ -244,6 +242,7 @@ void main() {
         final titles = _drawerTitles(t);
         expect(titles, contains('Belgeler'));
         expect(titles.indexOf('Belgeler'), titles.indexOf('Duyurular') + 1);
+        expectUnderDrawerHeader(t, 'Belgeler', 'Site hizmetleri');
         await t.tap(_tileTitle('Belgeler'));
         await t.pump();
         await t.pump(const Duration(milliseconds: 600));

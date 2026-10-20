@@ -31,6 +31,7 @@ import 'package:site_kapi_kontrol/ui/views/work_resident_view.dart';
 import 'dialog_layout_harness.dart' show settleFor;
 import 'list_fixtures.dart' show fxDoors;
 import 'people_fixtures.dart';
+import '../support/menu_nav.dart';
 
 class _HomeAuth extends PeopleFakeAuth {
   _HomeAuth({super.role});
@@ -167,12 +168,9 @@ Future<void> _tapMenu(WidgetTester t, String label) async {
 Finder _tileTitle(String title) =>
     find.descendant(of: find.byType(Drawer), matching: find.text(title));
 
-List<String> _drawerTitles(WidgetTester t) => <String>[
-  for (final tile in t.widgetList<ListTile>(
-    find.descendant(of: find.byType(Drawer), matching: find.byType(ListTile)),
-  ))
-    (tile.title! as Text).data!,
-];
+/// İP-1D (G2): menü LİSTESİNİN sırası (vitrin sırası; `YanMenu.visibleItems`: çekmece + Ayarlar paneli). Çekmece öğeleri
+/// başlıklar altında gruplar ([expectUnderDrawerHeader]); ayar öğeleri sağ üstteki dişlidedir.
+List<String> _drawerTitles(WidgetTester t) => menuListTitles(t);
 
 void main() {
   setUp(() {
@@ -195,6 +193,7 @@ void main() {
       expect(titles, contains('Talepler'));
       expect(titles, isNot(contains('Taleplerim')), reason: 'yönetici modunda sakin ekranı yok');
       expect(titles.indexOf('Talepler'), titles.indexOf('Duyurular') + 1);
+      expectUnderDrawerHeader(t, 'Talepler', 'İletişim');
       await t.tap(_tileTitle('Talepler'));
       await t.pump();
       await t.pump(const Duration(milliseconds: 600));

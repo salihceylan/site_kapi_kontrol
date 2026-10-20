@@ -13,6 +13,9 @@
 // - Açık temada Panel zemini kaydırılan gövdenin KABINDA düz #F8FAFC'dir: kap acil duyuru şeridinin altından ekranın altına
 //   uzanır, vitrin kendi sınırının dışına boyamaz; içerik ekrana sığarken de şerit örtülmez. Koyu temada ve öteki
 //   sayfalarda kap boyanmaz. Kart rozeti çekmece rozetiyle aynı renktedir.
+// - İP-1D (G2 + G3): çekmece başlıklar altında, ayar öğeleri sağ üstteki dişliden açılan Ayarlar panelinde; vitrin kartları
+//   çekmece + Ayarlar panelinin BİRLEŞİMİYLE aynı kümedir. Sakin kitlesinde alt çubuk vardır: gövdenin kabı çubuğun
+//   üstünde biter.
 import 'dart:convert';
 import 'dart:math' as math;
 
@@ -58,6 +61,7 @@ import 'package:site_kapi_kontrol/ui/widgets/unread_announcement_card.dart';
 import 'package:site_kapi_kontrol/ui/widgets/yan_menu.dart';
 
 import '../design/paint_extent.dart';
+import '../support/menu_nav.dart';
 
 final SiteRecord _site = SiteRecord(
   id: 1,
@@ -433,6 +437,8 @@ const Set<String> _drawerOnlyTitles = <String>{
   'Kapıya QR Göster',
   'Kapı Ekranından QR Oku',
   'Kurye / Misafir Geçiş Linki Oluştur',
+  // İP-1D: Ayarlar panelindeki sayfa seçmeyen eylem.
+  'Masaüstüne Widget Ekle',
 };
 
 /// Çekmecedeki başlıklar (sıralı); "Yardım ve Destek" / "Çıkış Yap" dahil.
@@ -507,14 +513,17 @@ void main() {
       await _disposeHome(t);
     });
 
-    testWidgets('çekmecede "Kapılar", "Panel"in hemen altındadır', (t) async {
+    testWidgets('menü listesinde "Kapılar" "Panel"in hemen altında; çekmecede "Site hizmetleri" başlığında', (t) async {
       final auth = _ShowcaseAuth(UserRole.siteManager);
       final access = await _access(() => <MySiteModules>[_my('manager')]);
       await _pumpHome(t, auth, access: access);
       await _openDrawer(t);
       final titles = _drawerTitles(t).where((title) => title != 'Sakin Moduna Geç').toList();
       expect(titles.first, 'Panel');
-      expect(titles[1], 'Kapılar');
+      final list = menuListTitles(t);
+      expect(list.first, 'Panel');
+      expect(list[1], 'Kapılar', reason: 'vitrin sırası: Kapılar kartı ilk kart');
+      expectUnderDrawerHeader(t, 'Kapılar', 'Site hizmetleri');
       await _disposeHome(t);
     });
   });
@@ -528,11 +537,10 @@ void main() {
           if (find.byKey(ValueKey<String>('panel_ikincil_${item.name}')).evaluate().isNotEmpty)
             YanMenu.titleFor(item, _sessionRole(t)),
       ];
-      await _openDrawer(t);
-      final drawer = _drawerTitles(t)
+      // İP-1D: çekmece + Ayarlar paneli (dişli) birlikte görünür öğelerdir.
+      final drawer = (await menuAndSettingsTitles(t))
           .where((title) => !_drawerOnlyTitles.contains(title))
           .toList();
-      await _closeDrawer(t);
       expect(
         <String>{...showcase, ...secondary},
         drawer.toSet(),
@@ -1754,7 +1762,11 @@ void main() {
       expect(zeminRect.top, greaterThanOrEqualTo(t.getRect(find.byType(AppBar)).bottom), reason: 'uygulama çubuğu etkilenmez');
       expect(zeminRect.left, 0);
       expect(zeminRect.right, 1280);
-      expect(zeminRect.bottom, 1600);
+      // İP-1D: sakinde alt çubuk vardır; kap onun üstüne kadar uzanır (çubuk yoksa ekranın altına).
+      final bar = find.byType(NavigationBar);
+      expect(bar, findsOneWidget, reason: 'sakin alt çubuğu');
+      expect(zeminRect.bottom, t.getRect(bar).top);
+      expect(t.getRect(bar).bottom, 1600);
 
       // Gerçek boya: kap kendi dikdörtgenini düz #F8FAFC boyar; gövdenin (vitrin dahil) hiçbir boyası kabın dışına, yani
       // şeridin bölgesine düşmez. Vitrin de kendi sınırının dışına boyamaz.
@@ -1791,9 +1803,12 @@ void main() {
       expect(zeminRect.top, t.getRect(find.byType(AppBar)).bottom, reason: 'şerit yokken uygulama çubuğunun hemen altı');
       expect(zeminRect.left, 0);
       expect(zeminRect.right, 360);
-      expect(zeminRect.bottom, 740, reason: 'sistem çubuğu payının altına kadar');
-      // Kaydırma alanı sistem çubuğunun ÜSTÜNDE biter (eskisi gibi); vitrin 16 dp kenar boşluğuyla.
-      expect(t.getRect(_bodyScrollable()).bottom, 740 - 34);
+      // İP-1D: sakin alt çubuğu sistem gezinme çubuğu payını kendi içinde (SafeArea) karşılar; kap ve kaydırma alanı
+      // çubuğun ÜSTÜNDE biter, çubuk ekranın altına kadar uzanır (pay çubukta, içerik payın üstünde).
+      final bar = t.getRect(find.byType(NavigationBar));
+      expect(bar.bottom, 740, reason: 'çubuk sistem çubuğu payının altına kadar');
+      expect(zeminRect.bottom, bar.top, reason: 'kap çubuğun üstüne kadar');
+      expect(t.getRect(_bodyScrollable()).bottom, bar.top);
       expect(t.getRect(vitrin).left, 16);
       expect(t.getRect(vitrin).right, 360 - 16);
       expectFlatFill(t, reason: 'sistem çubuğu payı');
@@ -1901,15 +1916,16 @@ void main() {
     expect(find.descendant(of: cardBadge, matching: find.text('3')), findsOneWidget);
     final cardColor = colorOf(find.descendant(of: cardBadge, matching: find.byKey(const ValueKey<String>('panel_durum_noktasi'))));
 
-    await _openDrawer(t);
+    // İP-1D: Modül Talepleri sağ üstteki dişliden açılan Ayarlar panelindedir (aynı öğe bileşeni ve rozet).
+    await openSettingsPanel(t);
     final drawerBadge = find.descendant(
       of: find.widgetWithText(ListTile, YanMenu.titleFor(SirketMenuItem.modulTalepleri, UserRole.superUser)),
       matching: find.byKey(const ValueKey<String>('yan_menu_rozet')),
     );
     expect(find.descendant(of: drawerBadge, matching: find.text('3')), findsOneWidget);
-    expect(cardColor, colorOf(drawerBadge), reason: 'aynı sayı çekmecede ve Panel kartında aynı renk');
+    expect(cardColor, colorOf(drawerBadge), reason: 'aynı sayı Ayarlar panelinde ve Panel kartında aynı renk');
     expect(cardColor, AppTone.danger.a);
-    await _closeDrawer(t);
+    await closeMenuPanels(t);
     await _disposeHome(t);
   });
 

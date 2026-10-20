@@ -39,6 +39,7 @@ import 'package:site_kapi_kontrol/services/legal_api.dart';
 import 'dialog_layout_harness.dart';
 import 'site_application_fixtures.dart';
 import '../legal_fixtures.dart';
+import '../support/menu_nav.dart';
 
 SiteRecord _site(int id, String name) => SiteRecord.fromJson(<String, dynamic>{
   'id': id,
@@ -167,10 +168,14 @@ Future<void> _openDrawer(WidgetTester t) async {
 
 Finder _tileTitle(String title) => find.descendant(of: find.byType(Drawer), matching: find.text(title));
 
+/// İP-1D: ayar öğeleri (Site Başvuruları, Modül Talepleri, Platform Ayarları, İstemci Hataları, Denetim Kaydı ...) sağ
+/// üstteki dişliden açılan Ayarlar panelindedir; panel de bir `Drawer` olduğundan çekmece bulucuları orada da çalışır.
+Future<void> _openSettings(WidgetTester t) => openSettingsPanel(t);
+
 /// Çekmecedeki öğeye dokunur. Bulucu çekmeceyle SINIRLIDIR: Panel modül vitrininde de aynı adlı kartlar vardır.
 Future<void> _tapMenu(WidgetTester t, String label) async {
-  await _openDrawer(t);
-  final tile = find.descendant(of: find.byType(Drawer), matching: find.text(label)).first;
+  // İP-1D: öğe çekmecede yoksa (ayar öğesi) sağ üstteki dişliden açılan Ayarlar panelinde aranır.
+  final tile = await findMenuEntry(t, label);
   await t.ensureVisible(tile);
   await t.pump();
   await t.tap(tile);
@@ -218,7 +223,7 @@ void main() {
       await _pumpHome(t, auth);
       expect(auth.summaryCalls, greaterThan(0));
 
-      await _openDrawer(t);
+      await _openSettings(t);
       expect(_tileTitle('Site Başvuruları'), findsOneWidget);
       expect(_tileTitle('Modül Talepleri'), findsOneWidget);
       expect(find.bySemanticsLabel(RegExp(r'2 bekleyen')), findsWidgets);
@@ -260,7 +265,7 @@ void main() {
       expect(auth.approveCalls, <int>[41]);
       expect(auth.summaryCalls, greaterThan(before), reason: 'karardan sonra rozet tazelenir');
 
-      await _openDrawer(t);
+      await _openSettings(t);
       final badge = find.descendant(
         of: find.widgetWithText(ListTile, 'Site Başvuruları'),
         matching: find.byKey(const ValueKey<String>('yan_menu_rozet')),
@@ -272,7 +277,7 @@ void main() {
     testWidgets('bekleyen başvuru yoksa rozet yok; summary hatasında menü yine görünür ve çökme yok', (t) async {
       final empty = _HomeApp(role: UserRole.superUser, myUserCode: 999);
       await _pumpHome(t, empty);
-      await _openDrawer(t);
+      await _openSettings(t);
       expect(_tileTitle('Site Başvuruları'), findsOneWidget);
       expect(
         find.descendant(
@@ -285,7 +290,7 @@ void main() {
 
       final failing = superAuth()..summaryError = ApiException('Sunucu yanıt vermedi.');
       await _pumpHome(t, failing);
-      await _openDrawer(t);
+      await _openSettings(t);
       expect(_tileTitle('Site Başvuruları'), findsOneWidget);
       expect(t.takeException(), isNull);
       await _disposeHome(t);
@@ -309,7 +314,7 @@ void main() {
       for (final role in const [UserRole.siteManager, UserRole.apartmentOwner, UserRole.individual]) {
         final auth = _HomeApp(role: role)..sites = [_site(11, 'Gül Sitesi')];
         await _pumpHome(t, auth);
-        await _openDrawer(t);
+        await _openSettings(t);
         expect(_tileTitle('Site Başvuruları'), findsNothing, reason: '$role');
         expect(auth.summaryCalls, 0, reason: '$role: yönetici özeti istenmez');
         expect(auth.adminListCalls, isEmpty);
@@ -343,9 +348,10 @@ void main() {
       expect(find.byKey(const ValueKey<String>('panel_kart_moduller')), findsNothing);
       expect(find.text('Sunucu yanıt vermedi.'), findsOneWidget, reason: 'hata görünür');
       await _openDrawer(t);
+      expect(_tileTitle('Site Yönetimi'), findsNothing);
+      await _openSettings(t);
       expect(_tileTitle('Site Başvuruları'), findsNothing);
       expect(_tileTitle('Modül Talepleri'), findsNothing);
-      expect(_tileTitle('Site Yönetimi'), findsNothing);
       expect(auth.role, UserRole.individual);
       await _disposeHome(t);
     });
@@ -445,6 +451,7 @@ void main() {
 
       await _openDrawer(t);
       expect(_tileTitle('Site Yönetimi'), findsOneWidget, reason: 'yönetici menüsü');
+      await _openSettings(t);
       expect(_tileTitle('Site Başvuruları'), findsNothing, reason: 'süper kullanıcı menüsü açılmaz');
       final base = auth.mineCalls;
       await _elapse(t, const Duration(minutes: 2));

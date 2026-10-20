@@ -26,6 +26,7 @@ import 'package:site_kapi_kontrol/ui/widgets/finance_parts.dart';
 import 'dialog_layout_harness.dart' show settleFor;
 import 'finance_fixtures.dart';
 import 'list_fixtures.dart' show fxDoors, tapFinder;
+import '../support/menu_nav.dart';
 
 /// HomePage için sahte servis: finans uçlarına ek olarak ana kabuğun ihtiyaç duyduğu uçlar boş döner.
 class _HomeFinanceAuth extends FinanceFakeAuth {
@@ -167,10 +168,9 @@ Future<void> _tapMenu(WidgetTester t, String label) async {
 
 Finder _tileTitle(String title) => find.descendant(of: find.byType(Drawer), matching: find.text(title));
 
-List<String> _drawerTitles(WidgetTester t) => <String>[
-  for (final tile in t.widgetList<ListTile>(find.descendant(of: find.byType(Drawer), matching: find.byType(ListTile))))
-    (tile.title! as Text).data!,
-];
+/// İP-1D (G2): menü LİSTESİNİN sırası (vitrin sırası; `YanMenu.visibleItems`: çekmece + Ayarlar paneli). Çekmece öğeleri
+/// başlıklar altında gruplar ([expectUnderDrawerHeader]); ayar öğeleri sağ üstteki dişlidedir.
+List<String> _drawerTitles(WidgetTester t) => menuListTitles(t);
 
 Finder _inAppBar(Finder f) => find.descendant(of: find.byType(AppBar), matching: f);
 
@@ -184,6 +184,7 @@ void main() {
       final titles = _drawerTitles(t);
       expect(titles, contains('Finans'));
       expect(titles.indexOf('Finans'), titles.indexOf('Duyurular') + 1);
+      expectUnderDrawerHeader(t, 'Finans', 'Borçlar');
       expect(titles, isNot(contains('Borcum')), reason: 'yönetici modunda Borcum yok');
       await t.tap(_tileTitle('Finans'));
       await t.pump();

@@ -9,6 +9,7 @@ import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/ui/pages/home_page.dart';
 import 'package:site_kapi_kontrol/ui/views/profile_view.dart';
 import 'package:site_kapi_kontrol/ui/widgets/resident_door_remote_card.dart';
+import 'support/menu_nav.dart';
 
 DoorRecord _door({String? siteName = 'Güneş Sitesi'}) => DoorRecord(
       id: 7,
@@ -137,13 +138,9 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
 
-      tester.state<ScaffoldState>(find.byType(Scaffold).first).openDrawer();
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 400));
-      // Çekmecedeki öğe (Panel vitrininde de "Profilim" düğmesi vardır: bulucu çekmeceyle sınırlı).
-      await tester.tap(find.descendant(of: find.byType(Drawer), matching: find.text('Profilim')));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 400));
+      // İP-1D: Profilim sağ üstteki dişliden açılan Ayarlar panelindedir (Panel vitrininde de "Profilim" düğmesi vardır:
+      // bulucu panelle sınırlı).
+      await tapMenuEntry(tester, 'Profilim', settle: const Duration(milliseconds: 400));
 
       expect(find.byType(ResidentProfileView), findsOneWidget);
       expect(find.text('Hesap Bilgilerim'), findsOneWidget);

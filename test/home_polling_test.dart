@@ -30,6 +30,7 @@ import 'package:site_kapi_kontrol/ui/pages/home_page.dart';
 import 'package:site_kapi_kontrol/ui/widgets/admin_door_status_card.dart';
 
 import 'support/rebuild_probe.dart';
+import 'support/menu_nav.dart';
 
 final SiteRecord _site = SiteRecord(
   id: 1,
@@ -222,12 +223,8 @@ Future<List<int>> _elapse(
 }
 
 Future<void> _openMenu(WidgetTester tester, String label) async {
-  tester.state<ScaffoldState>(find.byType(Scaffold).first).openDrawer();
-  await tester.pump();
-  await tester.pump(const Duration(milliseconds: 400));
-  await tester.tap(find.text(label).first);
-  await tester.pump();
-  await tester.pump(const Duration(milliseconds: 400));
+  // İP-1D: öğe çekmecede yoksa (Profilim gibi ayar öğesi) sağ üstteki dişliden açılan Ayarlar panelinde aranır.
+  await tapMenuEntry(tester, label, settle: const Duration(milliseconds: 400));
 }
 
 void main() {

@@ -1,7 +1,10 @@
 // Platform modül sistemi Faz 1: ana kabuk (HomePage) entegrasyonu.
 //
 // - Menü: süper kullanıcı "Modüller" + "Denetim Kaydı", site yöneticisi "Modüller"; seçilince ilgili
-//   ekran açılır ve AppBar başlığı değişir; genel yenileme (Yenile) modül durumunu ve ekranı tazeler.
+//   ekran açılır ve AppBar başlığı değişir; genel yenileme (Yenile) modül durumunu ve ekranı tazeler. İP-1D: bu ayar
+//   öğeleri (Modüller, Modül Talepleri, Denetim Kaydı, cihaz ekranları, Bluetooth) çekmecede değil, sağ üstteki
+//   dişliden açılan Ayarlar panelindedir ([_openSettings]; panel de bir `Drawer` olduğundan [_tileTitle] ikisinde de
+//   çalışır).
 // - Panel artık MODÜL VİTRİNİDİR; kapı paneli "Kapılar" kartının (menü öğesi) arkasındadır.
 // - Geçiş Kontrol bağlı olunan TÜM sitelerde kapalıyken: kapıyla ilgili menü öğeleri ("Kapılar" dahil) gizlenir, vitrinde
 //   kapı kartı ve hızlı "Kapıyı aç" eylemi YOKTUR (eski "modül kapalı" bilgi kartı artık çıkmaz); bireysel ana ekranın kapı
@@ -43,6 +46,7 @@ import 'package:site_kapi_kontrol/ui/widgets/module_request_card.dart';
 import 'package:site_kapi_kontrol/ui/widgets/yan_menu.dart';
 
 import 'modules_fixtures.dart';
+import '../support/menu_nav.dart';
 
 UserSession _sessionFor(UserRole role) => UserSession(
   id: role == UserRole.superUser ? 1 : 5,
@@ -295,10 +299,16 @@ Future<void> _closeDrawer(WidgetTester t) async {
   await t.pump(const Duration(milliseconds: 450));
 }
 
+/// İP-1D: sağ üstteki dişliden Ayarlar panelini açar (ayar öğeleri burada).
+Future<void> _openSettings(WidgetTester t) => openSettingsPanel(t);
+
+/// Ayarlar panelini kapatır.
+Future<void> _closeSettings(WidgetTester t) => closeMenuPanels(t);
+
 /// Çekmecedeki öğeye dokunur. Bulucu çekmeceyle SINIRLIDIR: Panel modül vitrininde de aynı adlı kartlar vardır.
 Future<void> _tapMenu(WidgetTester t, String label) async {
-  await _openDrawer(t);
-  final tile = find.descendant(of: find.byType(Drawer), matching: find.text(label)).first;
+  // İP-1D: öğe çekmecede yoksa (ayar öğesi) sağ üstteki dişliden açılan Ayarlar panelinde aranır.
+  final tile = await findMenuEntry(t, label);
   await t.ensureVisible(tile);
   await t.pump();
   await t.tap(tile);
@@ -326,11 +336,13 @@ Finder _tileTitle(String title) => find.descendant(
 
 void main() {
   group('Menü: Modüller / Denetim Kaydı', () {
-    testWidgets('süper kullanıcı: "Modüller" ve "Denetim Kaydı" çekmecede; seçilince ekranlar açılır', (t) async {
+    testWidgets('süper kullanıcı: "Modüller" ve "Denetim Kaydı" Ayarlar panelinde (dişli); seçilince ekranlar açılır', (t) async {
       final auth = _HomeModAuth(role: UserRole.superUser);
       await _pumpHome(t, auth);
 
       await _openDrawer(t);
+      expect(_tileTitle('Modüller'), findsNothing, reason: 'ayar öğesi çekmecede değil');
+      await _openSettings(t);
       expect(_tileTitle('Modüller'), findsOneWidget);
       expect(_tileTitle('Denetim Kaydı'), findsOneWidget);
       expect(_tileTitle('Kayıtlı Cihazlar').evaluate().isEmpty, isTrue,
@@ -357,14 +369,14 @@ void main() {
       final auth = _HomeModAuth();
       await _pumpHome(t, auth);
 
-      await _openDrawer(t);
+      await _openSettings(t);
       expect(_tileTitle('Modüller'), findsOneWidget);
       expect(_tileTitle('Denetim Kaydı'), findsNothing);
-      final tiles = find.descendant(of: find.byType(Drawer), matching: find.byType(ListTile));
-      final titles = <String>[
-        for (var i = 0; i < tiles.evaluate().length; i++)
-          ((t.widget<ListTile>(tiles.at(i))).title! as Text).data!,
-      ];
+      await _closeSettings(t);
+      // Sıra kuralı menü LİSTESİNDE (vitrin sırası); çekmece öğeleri başlıklar altında gruplar.
+      await _openDrawer(t);
+      final titles = menuListTitles(t);
+      expectUnderDrawerHeader(t, 'Kişiler', 'Daireler');
       expect(
         titles.indexOf('Kişiler'),
         titles.indexOf('Site Yönetimi') + 1,
@@ -424,8 +436,9 @@ void main() {
       expect(find.byKey(const ValueKey<String>('panel_vitrin')), findsOneWidget);
       expect(find.byKey(const ValueKey<String>('panel_kart_kapilar')), findsNothing);
       await _openDrawer(t);
-      expect(_tileTitle('Kayıtlı Cihazlar'), findsNothing);
       expect(_tileTitle('Kapılar'), findsNothing);
+      await _openSettings(t);
+      expect(_tileTitle('Kayıtlı Cihazlar'), findsNothing);
       await _disposeHome(t);
     });
 
@@ -460,13 +473,15 @@ void main() {
       expect(find.byType(DashboardView), findsNothing);
       expect(find.byKey(const ValueKey<String>('panel_kart_moduller')), findsOneWidget);
 
+      await _openSettings(t);
+      expect(_tileTitle('Kayıtlı Cihazlar'), findsNothing);
+      expect(_tileTitle('Bluetooth ile Wi-Fi Kur'), findsNothing);
+      expect(_tileTitle('Modüller'), findsOneWidget);
+      await _closeSettings(t);
       await _openDrawer(t);
       expect(_tileTitle('Panel'), findsOneWidget, reason: 'Panel kalır');
       expect(_tileTitle('Kapılar'), findsNothing);
-      expect(_tileTitle('Kayıtlı Cihazlar'), findsNothing);
-      expect(_tileTitle('Bluetooth ile Wi-Fi Kur'), findsNothing);
       expect(_tileTitle('Site Yönetimi'), findsOneWidget);
-      expect(_tileTitle('Modüller'), findsOneWidget);
       expect(_tileTitle('Daireye Katıl & Cihaz Ekle'), findsOneWidget);
       expect(
         t.widget<YanMenu>(find.byType(YanMenu)).hiddenItems,
@@ -514,8 +529,10 @@ void main() {
       await _openDrawer(t);
       expect(_tileTitle('Panel'), findsOneWidget);
       expect(_tileTitle('Kapılar'), findsNothing);
-      expect(_tileTitle('Eller Serbest & Kestirmeler'), findsNothing);
       expect(_tileTitle('Daireye Katıl & Cihaz Ekle'), findsOneWidget);
+      await _openSettings(t);
+      expect(_tileTitle('Eller Serbest & Kestirmeler'), findsNothing);
+      expect(_tileTitle('Profilim'), findsOneWidget);
       await _disposeHome(t);
     });
 
@@ -535,7 +552,7 @@ void main() {
           reason: 'Panel kapıları yalnız modülü açık sitenin kapılarıdır');
       expect(dashboard.doors, isNotEmpty);
 
-      await _openDrawer(t);
+      await _openSettings(t);
       expect(_tileTitle('Kayıtlı Cihazlar'), findsOneWidget);
       expect(_tileTitle('Bluetooth ile Wi-Fi Kur'), findsOneWidget);
       await _disposeHome(t);
@@ -551,9 +568,11 @@ void main() {
           reason: 'süper kullanıcıda Kapılar kartı her zaman vardır');
       await _openDrawer(t);
       expect(_tileTitle('Kapılar'), findsOneWidget);
+      expect(t.widget<YanMenu>(find.byType(YanMenu)).hiddenItems, isEmpty);
+      await _openSettings(t);
       expect(_tileTitle('Şirket Cihaz Envanteri'), findsOneWidget);
       expect(_tileTitle('Bluetooth ile Wi-Fi Kur'), findsOneWidget);
-      expect(t.widget<YanMenu>(find.byType(YanMenu)).hiddenItems, isEmpty);
+      expect(t.widget<YanMenuAyarlar>(find.byType(YanMenuAyarlar)).hiddenItems, isEmpty);
       await _disposeHome(t);
     });
 
@@ -565,7 +584,7 @@ void main() {
       expect(find.byKey(const ValueKey<String>('panel_kart_kapilar')), findsOneWidget);
       await _openDoorPanel(t);
       expect(find.byType(DashboardView), findsOneWidget);
-      await _openDrawer(t);
+      await _openSettings(t);
       expect(_tileTitle('Kayıtlı Cihazlar'), findsOneWidget);
       expect(_tileTitle('Bluetooth ile Wi-Fi Kur'), findsOneWidget);
       await _disposeHome(t);
@@ -624,9 +643,9 @@ void main() {
       addTearDown(access.dispose);
       await access.refresh();
       await _pumpHome(t, auth, access: access);
-      await _openDrawer(t);
+      await _openSettings(t);
       expect(_tileTitle('Kayıtlı Cihazlar'), findsOneWidget);
-      await _closeDrawer(t);
+      await _closeSettings(t);
 
       await _tapMenu(t, 'Modüller');
       expect(doorModuleSwitch, findsNothing, reason: 'site yöneticisi modülü kendi kapatamaz');
@@ -637,11 +656,11 @@ void main() {
       await t.tap(_inAppBar(find.byTooltip('Yenile')));
       await t.pump();
       await t.pump(const Duration(milliseconds: 800));
-      await _openDrawer(t);
+      await _openSettings(t);
       expect(_tileTitle('Kayıtlı Cihazlar'), findsNothing,
           reason: 'kapıyla ilgili öğeler genel yenilemeyle gizlenir');
       expect(_tileTitle('Modüller'), findsOneWidget);
-      await _closeDrawer(t);
+      await _closeSettings(t);
       expect(find.text('Modül Talep Et'), findsOneWidget);
       await _disposeHome(t);
     });
@@ -659,11 +678,11 @@ void main() {
 
     final badge = find.byKey(const ValueKey<String>('yan_menu_rozet'));
 
-    testWidgets('çekmecede yalnız süper kullanıcıda; Modüller\'in altında, bekleyen sayısı rozetle (pending_count)', (t) async {
+    testWidgets('Ayarlar panelinde yalnız süper kullanıcıda; Modüller\'in altında, bekleyen sayısı rozetle (pending_count)', (t) async {
       final auth = superAuth(pending: 2);
       await _pumpHome(t, auth);
 
-      await _openDrawer(t);
+      await _openSettings(t);
       expect(_tileTitle('Modül Talepleri'), findsOneWidget);
       expect(badge, findsOneWidget);
       expect(
@@ -685,12 +704,12 @@ void main() {
     testWidgets('Modüller ekranında anahtar işleminden sonra rozet de tazelenir (sunucu bekleyen talebi otomatik onayladı)', (t) async {
       final auth = superAuth(pending: 2);
       await _pumpHome(t, auth);
-      await _openDrawer(t);
+      await _openSettings(t);
       expect(
         find.descendant(of: find.widgetWithText(ListTile, 'Modül Talepleri'), matching: find.text('2')),
         findsOneWidget,
       );
-      await _closeDrawer(t);
+      await _closeSettings(t);
 
       await _tapMenu(t, 'Modüller');
       final callsBefore = auth.adminCalls.length;
@@ -710,7 +729,7 @@ void main() {
       expect(auth.setCalls, hasLength(1));
       expect(auth.adminCalls.length, greaterThan(callsBefore),
           reason: 'anahtar işleminden sonra bekleyen talep sayısı yeniden çekilir');
-      await _openDrawer(t);
+      await _openSettings(t);
       expect(
         find.descendant(of: find.widgetWithText(ListTile, 'Modül Talepleri'), matching: find.text('1')),
         findsOneWidget,
@@ -721,14 +740,14 @@ void main() {
     testWidgets('bekleyen yoksa rozet yok; site yöneticisinde öğe hiç yok', (t) async {
       final none = superAuth(pending: 0);
       await _pumpHome(t, none);
-      await _openDrawer(t);
+      await _openSettings(t);
       expect(_tileTitle('Modül Talepleri'), findsOneWidget);
       expect(badge, findsNothing);
       await _disposeHome(t);
 
       final manager = _HomeModAuth();
       await _pumpHome(t, manager);
-      await _openDrawer(t);
+      await _openSettings(t);
       expect(_tileTitle('Modül Talepleri'), findsNothing);
       expect(manager.adminCalls, isEmpty, reason: 'yönetici için talep sayacı çekilmez');
       await _disposeHome(t);
@@ -753,7 +772,7 @@ void main() {
       expect(auth.decideCalls.single.approve, isTrue);
       expect(find.byType(ModuleRequestCard), findsNWidgets(1));
 
-      await _openDrawer(t);
+      await _openSettings(t);
       expect(
         find.descendant(of: find.widgetWithText(ListTile, 'Modül Talepleri'), matching: find.text('1')),
         findsOneWidget,
@@ -774,7 +793,7 @@ void main() {
       await t.pump(const Duration(milliseconds: 800));
       expect(auth.adminCalls.length, greaterThan(before));
       expect(find.byType(ModuleRequestCard), findsNWidgets(3));
-      await _openDrawer(t);
+      await _openSettings(t);
       expect(
         find.descendant(of: find.widgetWithText(ListTile, 'Modül Talepleri'), matching: find.text('3')),
         findsOneWidget,
@@ -785,17 +804,17 @@ void main() {
     testWidgets('rozet arka planda AdaptivePoller ile tazelenir (yeni talep gelir)', (t) async {
       final auth = superAuth(pending: 1);
       await _pumpHome(t, auth);
-      await _openDrawer(t);
+      await _openSettings(t);
       expect(
         find.descendant(of: find.widgetWithText(ListTile, 'Modül Talepleri'), matching: find.text('1')),
         findsOneWidget,
       );
-      await _closeDrawer(t);
+      await _closeSettings(t);
 
       auth.adminRequests = <ModuleRequest>[mdRequest(1), mdRequest(2), mdRequest(3), mdRequest(4)];
       await t.pump(const Duration(seconds: 31));
       await t.pump();
-      await _openDrawer(t);
+      await _openSettings(t);
       expect(
         find.descendant(of: find.widgetWithText(ListTile, 'Modül Talepleri'), matching: find.text('4')),
         findsOneWidget,
@@ -809,7 +828,7 @@ void main() {
       expect(find.byKey(const ValueKey<String>('panel_vitrin')), findsOneWidget);
       expect(find.byKey(const ValueKey<String>('panel_odak_bar')), findsNothing,
           reason: 'sayaç alınamadıysa odak barı (bekleyen sayı) çizilmez');
-      await _openDrawer(t);
+      await _openSettings(t);
       expect(_tileTitle('Modül Talepleri'), findsOneWidget);
       expect(badge, findsNothing);
       await _disposeHome(t);
@@ -867,9 +886,10 @@ void main() {
       await _openDoorPanel(t);
       expect(find.byType(DashboardView), findsOneWidget);
       await _openDrawer(t);
+      expect(t.widget<YanMenu>(find.byType(YanMenu)).hiddenItems, isEmpty);
+      await _openSettings(t);
       expect(_tileTitle('Kayıtlı Cihazlar'), findsOneWidget);
       expect(_tileTitle('Bluetooth ile Wi-Fi Kur'), findsOneWidget);
-      expect(t.widget<YanMenu>(find.byType(YanMenu)).hiddenItems, isEmpty);
       await _disposeHome(t);
     });
 
