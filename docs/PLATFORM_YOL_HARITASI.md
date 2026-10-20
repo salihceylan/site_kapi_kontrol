@@ -117,3 +117,232 @@ Büyüklük: **S** bir gün içinde · **M** birkaç gün · **L** bir haftadan 
 3. Yönetici ana sayfası "Bu ay", ardından "Tüm siteler".
 4. Sade dil ve Excel'e aktarma tamamlama.
 5. İşletme projesi, SMS girişi ve bildirimleri, icra dökümü, ısı paylaşımı.
+
+## Eksik listesi — işveren belgeleri ve Apsiyon karşılaştırması (2026-10-20)
+
+İşveren bugün şunu bildirdi: sistem hâlâ yalnız bir kapı açma sistemi gibi duruyor; kullanıcılar Apsiyon'da çalışır gibi rahat etmeli;
+girişte, kendisine tanımlı modüller güzel resimlerle dizili görünmeli. Bu bölüm, bunun için işverenin üç belgesinde ve Apsiyon'da olup
+bizde olmayanları kanıtıyla listeler.
+
+**Kaynaklar**
+
+1. `komutlar.txt` — 3 tasarım kuralı, renk ve ikon tablosu, 3 ekran çizimi, 5 aylık yol haritası, 5 net talimat. Tabloda: "komutlar".
+2. "Yazılımcı için Yol Haritası — Ekranlar ve Menü" (PDF, 15 Ekim 2026, @cenk). Tabloda: "Yol Haritası PDF". Bu belge 2026-10-19'da bu
+   dosyanın üst bölümleriyle zaten karşılaştırıldı; o işler burada yeniden yazılmadı, "Yol haritasında var: <madde adı>" diye bağlandı.
+3. "Site Yönetim Sistemi — Yapılacaklar ve Kararlar 2026-10-19" (PDF): Cenk ve Salih'in yanıtları ve Cenk'in "sistemde görmediklerim"
+   1 ve 2 notları. Tabloda: "Kararlar N" (N = karar numarası), "görmediklerim 1/2".
+4. Apsiyon (yönetici paneli, yönetici mobil, sakin mobil). Tabloda: "Apsiyon [A…]"; adresler aşağıda.
+
+**Yöntem**
+
+- Taranan yerler: `lib/` (Flutter), `server/src/` (Node), `server/migrations/`, `docs/PLATFORM_*.md`, `docs/yasal/`,
+  `tools/deneme_listesi/platform.json`.
+- "Bugün sistemde" sütunu: **var / kısmen / yok** ve kanıt. Kanıt; dosya yolu (gerektiğinde satır), tablo ya da migration adıdır.
+  "Araması sonuç yok" = o ifade `lib/`, `server/src/` ve `server/migrations/` içinde bulunamadı. Emin olunamayan yerde
+  **doğrulanamadı** yazıldı.
+- Satır numaraları 2026-10-20 durumuna aittir; dosyalar değişince kayabilir. Canlı sunucudaki veri (ör. Platform Ayarları değerleri)
+  bu taramanın dışındadır.
+- Apsiyon bilgileri aşağıdaki sayfalardan alındı. Hepsi **"Apsiyon'un sitesinde yazıyor"** türünde pazarlama iddiasıdır; bağımsız
+  doğrulanmadı. Sayfada geçmeyen bir özellik "yok" demek değildir, "sayfada belirtilmemiş" demektir.
+- Öncelik (P0–P3) ve büyüklük (S/M/L) ölçeği bu dosyanın başındakiyle aynıdır. Satır başındaki kodlar (G1, F2 …) "Önerilen sıra" ve
+  "Sizden gereken kararlar ve bilgiler" listelerine bağlantıdır.
+
+**Apsiyon kaynakları (hepsi "Apsiyon'un sitesinde yazıyor"; A19 ve A20 haber sitesidir)**
+
+| Kod | Adres | Sitede yazan (özet) |
+| --- | --- | --- |
+| A1 | https://www.apsiyon.com/urunler/apsiyon | Yönetici paneli: aidat dağıtımı (kat maliki, kiracı, daire, kategori), kartla online tahsilat, rezervasyon ve konsiyerj, banka entegrasyonu ("tüm bankalar"), finans ve raporlama, e-posta/mobil bildirim/WhatsApp/SMS, sayaç, kişi-daire kayıtları, iş takibi, ücretsiz web sitesi, geçiş kontrol. Paketler: bağımsız yönetimler için Blue ve Black, yönetim ve inşaat firmaları için Kurumsal. |
+| A2 | https://www.apsiyon.com/yonetici-mobil-uygulama | Yönetici mobil: gelir-gider ve kasa durumu, banka hareketlerini görme ve onaylama, kişi kartları ve davet, tesis ve rezervasyon onayı, tahsilat, iş takibi, cari izleme, onay bekleyen kişiler, borçlandırma, bakım emri. |
+| A3 | https://www.apsiyon.com/konut-sakini/mobil-uygulama | Sakin mobil: banka/kredi kartıyla aidat, borç ve kira sözleşmesi, makbuz ve ekstre, site finansalları, rezervasyon, anket, ilan panosu, haber kaynağı, ziyaretçi kaydı, kargo takibi (SMS/e-posta), iş talebi, yönetim kadrosu, telefon rehberi, sigorta ve kampanya, 8 dil. |
+| A4 | https://www.apsiyon.com/aidat-takip-programi | Aidat: işletme projesi (gider bütçesi, planlanan/gerçekleşen), otomatik dağıtım (m², arsa payı, bağımsız bölüm), gecikme tazminatı, toplu borçlandırma ve Excel ile borç yükleme, makbuz, toplu tahsilat, banka hareketlerini Excel ile yükleme ve onaylama, iade ve devir bakiye, 10 haneli kodla borç sorgulama, noterli işletme defteri basımı, icra takibi başlatma. |
+| A5 | https://www.apsiyon.com/online-banka-entegrasyonu | 21 banka listeli ("Türkiye'nin tüm bankaları"), hareketler tek ekranda, "akıllı algoritma" ile kişiyle eşleme, anında onay, sanal POS ödemelerinin hesaba aktarımı. Sayfada CSV/Excel yükleme ve IBAN geçmiyor. |
+| A6 | https://www.apsiyon.com/online-tahsilat-sistemi | Kredi kartıyla ödeme (iyzico altyapısı), kart saklama ve tek tık ödeme, otomatik ödeme talimatı, daireyle otomatik eşleme. Komisyon bu sayfada belirtilmemiş. |
+| A7 | https://www.apsiyon.com/sayac-faturalandirma | Uzaktan okuma, Excel'den toplu aktarma, fatura veya birim fiyat ile dağıtım, sıcak su dağıtımı, Excel raporu, faturayı e-posta ve SMS ile gönderme. Elle giriş ve fotoğrafla okuma sayfada belirtilmemiş. |
+| A8 | https://www.apsiyon.com/otomatik-isi-pay-olcer-kalorimetre-sistemi | Isı pay ölçer: uzaktan günlük okuma, bağımsız bölümlere paylaştırma, e-posta/SMS bildirimi; SSS: 26847 sayılı yönetmelik 8.1 uyarınca %70 ölçüm, %30 alan. |
+| A9 | https://www.apsiyon.com/rezervasyon-sistemi | Tesis kriterleri, onay/iptal, müsaitlik, mobilden rezervasyon, ücretli tesis için online ödeme, rezervasyon geçmişi, kart ve QR ile geçiş entegrasyonu. |
+| A10 | https://www.apsiyon.com/tur-kontrol-sistemi | NFC/QR ile personel turu, rota ve süre, fotoğraflı not, çevrimdışı çalışma, rapor. |
+| A11 | https://www.apsiyon.com/e-posta-sms-gonderimi | Sınırsız şablon, otomatik hatırlatmalar (borç, iş atama, rezervasyon, anket), ileri tarihe planlama, iletildi/okundu bilgisi; kanallar: e-posta, SMS, mobil bildirim, WhatsApp. |
+| A12 | https://www.apsiyon.com/gecis-kontrol-sistemleri | Kartlı geçiş, plaka tanıma, HGS, QR ile geçiş (kurye dahil), Santral Plus (sesli borç bildirimi). Telefonla kapı açma sayfada belirtilmemiş. |
+| A13 | https://www.apsiyon.com/tum-cozumler | 18 yönetici çözümü başlığı: muhasebe (tek düzen hesap planı), bakım ve onarım, tur kontrol, Santral Plus, saha mobil ve diğerleri. Yönetim firması "Tüm siteler" görünümü, genel kurul, ziyaretçi ve komşu panosu başlıkları bu sayfada yok. |
+| A14 | https://www.apsiyon.com/mobil-aidat-tahsilat-cihazi | Android tabanlı kartlı tahsilat cihazı ve termal yazıcı; tahsilat sisteme otomatik işlenir. |
+| A15 | https://www.apsiyon.com/web-sitesi-hizmeti | Ücretsiz özelleştirilebilir web sitesi: duyuru, anket, galeri, forum, rezervasyon, iş talebi, yönetim kadrosu ve telefonlar. |
+| A16 | https://www.apsiyon.com/urunler/apsis | Apsis (sade paket): toplu borçlandırma, banka, gelir-gider, e-posta/SMS, icra, sınırsız firma ve kişi. Örnek fiyat: 20 daire için yılda 3.240 TL + KDV. |
+| A17 | https://www.apsiyon.com/ada-dijital-asistan ve https://www.apsiyon.com/site-yonetici-asistani | ADA (sakin ve yönetici) ve ASYA (yönetici; Kat Mülkiyeti Kanunu soruları): WhatsApp tabanlı yapay zekâ asistanları. |
+| A18 | https://www.apsiyon.com/konut-sakini/avantajlar | Sakin avantajları: arıza/talep kaydı, kartla ödeme, rezervasyon, duyuru ve anket, kargo takibi, sigorta, ilan panosu. |
+| A19 | https://webrazzi.com/2020/04/03/apsiyon-komsum-var | (Haber.) "Komşum Var": yardım iste, yönetici onayı, "Ben Yaparım". |
+| A20 | https://webrazzi.com/2021/05/11/apsiyon-yeni-hizmetiyle-apartman-ve-site-yonetimlerini-profesyonel-yonetim-firmalariyla-bulusturuyor/ | (Haber.) "Profesyonel yönetim firması bul" hizmeti. Çoklu site ya da firma paneli bu haberde geçmiyor. |
+
+Mağaza kuralları için (H6): Apple https://developer.apple.com/support/enrollment/ ve Google Play https://support.google.com/googleplay/android-developer/answer/14151465.
+
+### 1. Görünüm ve gezinme
+
+| Konu | İstek (kaynak) | Bugün sistemde (var / kısmen / yok + kanıt) | Öncelik | Büyüklük | Karar ya da bilgi (kimden) |
+| --- | --- | --- | --- | --- | --- |
+| **G1** Panel modül vitrini: girişte kapı paneli yerine, kendisine tanımlı modüllerin resimli kartları | Bugünkü geri bildirim; Apsiyon [A1] | **Yapılıyor** (ayrı ajan). Bugün: yönetici girişte saat + kapı durum kartı (`lib/ui/views/dashboard_view.dart` 99-104), daire sakini girişte yalnız kapı kumandası (aynı dosya 72-96). Hazır olanlar: modül verisi `GET /app/my-modules` (`docs/PLATFORM_MODUL_SISTEMI.md`), görsel yer tutucu sözleşmesi `lib/ui/design/module_art.dart` (commit 14d98bb). | P1 | M | Yok |
+| **G2** Gruplu menü (Apsiyon düzeni): 7 başlık, 22 sayfa; Ayarlar sağ üstte dişli; site seçici en üstte | Yol Haritası PDF (Menü); komutlar Ekran 1 | **Kısmen.** Menü tek düz çekmece listesi: `SirketMenuItem` 36 değerli (`lib/ui/widgets/yan_menu.dart` 25-141), modül açıldıkça alta eklenir. Başlık altı gruplama ve dişli yok. Ayrı web paneli yok; aynı Flutter uygulaması web'de de çalışır (`web/index.html`); `platform.json` F11.05 "Yönetici paneli (web)" yakinda. | P1 | L | Cenk: grup adları ve sırası |
+| **G3** Sakin alt çubuğu (4 sekme); açılışta doğrudan borç | Yol Haritası PDF Ekran 4: Borcum · Duyuru · Arıza · Belgeler; komutlar Ekran 3: Özet · Arıza · Kapı · Belge | **Yok.** `lib/` içinde alt gezinme çubuğu yok (`NavigationBar`, `BottomNavigationBar` araması sonuç yok). Sakin için Borcum, Duyurular, Taleplerim, Belgeler çekmece öğesi (`yan_menu.dart` 56-90). | P1 | M | Cenk: iki belge farklı sekme öneriyor (Kapı mı Belgeler mi?) |
+| **G4** Sakin ana ekranı: koyu "Güncel toplam borcunuz" kartı + [Öde]; altında beyaz hızlı kutular (Arıza Bildir, Ziyaretçi Kodu, Belgeler) | komutlar Kural 3 ve Ekran 3; Yol Haritası PDF Ekran 4 | **Yok.** Daire sakini girişte kapı kumandasını görür (`dashboard_view.dart` 72-96). Borç kartı ayrı sayfada (`lib/ui/views/my_finance_view.dart`, "Toplam borç" satır 205); "Öde" düğmesi yok. | P1 | M | Bağımlı: F1 |
+| **G5** Yönetici ana sayfası: dört sayı kartı, beş adımlı aylık döngü, koyu "Dikkat edilmesi gereken N işlem" barı, son hareketler | Yol Haritası PDF Ekran 1; komutlar Ekran 1 | **Yok.** Yol haritasında var: «Yönetici ana sayfası "Bu ay"». Yeni ayrıntı: koyu dikkat barı (ekstrede tanınmayan ödeme; geçici işletme projesinde kalan gün) ve "son defter hareketleri" şeridi. Site geneli hareket uç noktası yok (defter okuma daire bazlı: `GET .../apartments/:id/account`, `docs/PLATFORM_FINANS.md` 49). Dikkat barının iki kaynağı (F3, F7) henüz yok. | P1 | M | Yok |
+| **G6** Renk ve buton kuralı: %90 beyaz; koyu #0F172A yalnız ana buton ve kritik uyarıda | komutlar Kural 1, renk tablosu, talimat 3 | **Kısmen / farklı.** Palet var: #F8FAFC, #E2E8F0, #475569, #0F172A (`lib/ui/design/tokens.dart` 89-97; `lib/styles/app_colors.dart` 29-44). Ama ana butonlar mavi #2563EB ve parlak katmanlı (`lib/styles/app_theme.dart` 129-146), kartlarda gölge (106-115), sayfa zemininde ışıma (`tokens.dart` 319-345), koyu tema da var. #0F172A bugün yalnız bildirim çubuğunda ve ipucunda (`app_theme.dart` 186-188, 216-219). | P2 | M | Cenk: sade stil (komutlar) mi, mevcut parlak stil mi? Yeni ekranlardan önce karar iyi olur |
+| **G7** Durum noktaları (● zümrüt #10B981, kehribar #F59E0B, mercan #E11D48), arka plan boyamadan | komutlar renk tablosu | **Kısmen.** `StatusChip` nokta çiziyor (8 px) ama tint dolgu ve çerçeveyle (`lib/ui/design/status_chip.dart` 141-160, 176-180). Tehlike tonu #EF4444 (`tokens.dart` 247), #E11D48 değil. | P3 | S | Bağlı: G6 |
+| **G8** İkon seti: Lucide ya da Phosphor, 1,5 px ince çizgi | komutlar bölüm 2 | **Yok.** `pubspec.yaml` bağımlılıklarında ikon paketi yok; Material ikonları kullanılıyor (ör. `Icons.table_chart_rounded`). | P3 | M | Cenk: Lucide mi Phosphor mu |
+| **G9** Beyaz etiket tema: aynı veritabanında site ya da firma başına ayrı tema (5 sabit renk değişkeni) | komutlar bölüm 2 | **Yok.** Tema sabit (`lib/styles/app_theme.dart`, `tokens.dart`); site ya da firma başına tema/marka alanı yok (tema, marka, logo araması sonuç yok). | P3 | M | Cenk: yönetim firmalarına "kendi markanız" satılacak mı? |
+| **G10** Sade dil: "tahakkuk, cari, mutabakat" ekranda yok | Yol Haritası PDF (dil kuralı) | **Kısmen.** Yol haritasında var: «Ekranlarda sade dil». Kanıt: "Tahakkuk" ekranda (`lib/ui/views/finance_reports_tab.dart` 868, 925, 1470) ve PDF'te (`lib/services/pdf_finance_service.dart` 710, 859); "Mutabakat" düğmesi (`lib/ui/widgets/finance_4b_parts.dart` 325). "Cari" ekranda geçmiyor. | P2 | S | Yok |
+| **G11** Kurallar koddan değil tablodan: "%5 gecikme", "90 gün geçici bütçe", "%70/%30 ısı payı" | komutlar talimat 4 | **Kısmen.** Site başına ayar tablosu var: `finance_settings` (`server/migrations/040_finance_4b.sql` 7-35: oran, yöntem, hoşgörü günü, hatırlatma eşikleri). Üst sınır koda gömülü: `LATE_FEE_MAX_MONTHLY_BP = 500` (`server/src/modules/finance_4b_common.js` 11). Genel `rules` tablosu ve geçerlilik tarihli kural sürümü yok (migration'larda böyle tablo araması sonuç yok). 90 gün ve %70/%30 için kod henüz yok. | P2 | M | Avukat: hangi oran sabit, hangisini site değiştirebilir? |
+| **G12** Daire kartında iki sekme [Kiracı Hesabı] [Ev Sahibi Hesabı]; bakiyeler karışmaz | komutlar talimat 2, Adım 1; Yol Haritası PDF (sözlük: "her dairenin iki hesabı") | **Yok.** Defter tek daire hesabıdır: `ledger_entries.apartment_id` (`server/migrations/034_finance.sql` 92-132); `payer_party` (owner, tenant, both) yalnız etikettir (satır 105 ve 120); "Borç tek daire hesabına yazılır" (`docs/PLATFORM_FINANS.md` 33). Daire kartı kiracıyı yalnız yazı olarak gösterir (`lib/ui/widgets/apartment_crm_card.dart` 68-70). Yol haritasında var: «Kişi bazlı tahsilat». | P1 | L | Cenk + avukat: hangi kalem kimin hesabına yazılır; kiracı ödemezse malik sorumlu mu (KMK m.22 notu: `docs/PLATFORM_FINANS_4B.md` 18) |
+| **G13** Satır düzeyi güvenlik (RLS) | komutlar Adım 1 | **Yok.** `ROW LEVEL SECURITY` ve `CREATE POLICY` migration ve sunucu kodunda yok (arama sonuç yok). Site yalıtımı uygulama katmanında (`docs/PLATFORM_FINANS.md` "Yetki"). | P3 | M | Salih: uygulama katmanı yeterli mi? |
+| **G14** Her listede arama ve Excel'e aktar | Yol Haritası PDF (sade kullanım kuralı) | **Kısmen.** Yol haritasında var: «Her listede Excel'e aktarma». Envanter: Excel/CSV var — Kişiler, Daireler, Araçlar (`lib/ui/widgets/bulk_entry_buttons.dart`; `server/src/modules/bulk_import_spec.js` 10) ve finansta yaşlandırma, gelir-gider, kasa durumu, daire ekstresi, gider, makbuz (`server/src/modules/finance_export_tables.js`). Yok: duyurular, iş talepleri, ziyaretçi/kargo, rezervasyon, anket sonucu, firma/sözleşme, karar listesi, belgeler (`lib/ui` içinde Excel/CSV geçen 11 dosyanın hepsi kişi ya da finans). Kapı günlüğü yalnız PDF (`lib/services/pdf_logs_service.dart`). | P2 | M | Yok |
+| **G15** İki haftada bir canlı ekran demosu | komutlar talimat 5 | Süreç maddesi, kodla ilgili değil. | — | — | Cenk ve Salih: demo takvimi |
+
+### 2. Finans ve tahsilat
+
+| Konu | İstek (kaynak) | Bugün sistemde (var / kısmen / yok + kanıt) | Öncelik | Büyüklük | Karar ya da bilgi (kimden) |
+| --- | --- | --- | --- | --- | --- |
+| **F1** Sakine ödeme bilgisi: sitenin IBAN'ı + daire ve aya özel referans kodu (GUL-A2-1026); "Komisyonsuz öde (FAST/POS)" | Yol Haritası PDF Ekran 4; komutlar Ekran 3 | **Yok.** Yol haritasında var: «Sakine ödeme bilgisi». Kanıt: IBAN için alan ya da sütun yok (`iban` sözcüğü `server/src`, `server/migrations` ve `lib` içinde yalnız kişisel veri uyarı metinlerinde geçiyor: `lib/ui/dialogs/document_upload_dialog.dart` 39, `lib/ui/dialogs/finance_expense_dialog.dart` 715); kasa/banka hesabı yalnız ad ve tür taşır (`server/migrations/040_finance_4b.sql` 183-202, tür: cash ya da bank). | P1 | M | Site yöneticileri: sitelerin IBAN'ları. Cenk: referans biçimi |
+| **F2** Dekontla ödeme: sakin dekontu paylaşır/yükler, kayıt "geçici kabul"e düşer, yönetici karşılaştırıp onaylar ya da iptal eder (toplu da); elden makbuz/dekont girişi | Kararlar 7 (Cenk) | **Yok.** Sakinin ödeme bildirme yolu yok. Tahsilat yöntemi yalnız yöneticinin girdiği nakit, havale, çek (`034_finance.sql` 121-124). "Dekont", "geçici kabul" araması ilgili sonuç vermedi. Telefondan uygulamaya dosya paylaşma alıcısı yok (`android/app/src/main/AndroidManifest.xml` içinde `ACTION_SEND` yok; `pubspec.yaml`'da paylaşım alıcı paketi yok). Gerekli parçalar: sakin yükleme ekranı; bekleyen ödeme tablosu (defter DIŞINDA, onaylanınca deftere yazılır); yönetici karşılaştırma ekranı (tutar, tarih, gönderen, daire; yanlış daire koruması); tek ve toplu onay/ret; onayda makbuz. Dekont dosyası Drive'a gider (D1). | P1 | L | Cenk: geçici kabulde sakinin bakiyesi düşer mi, "inceleniyor" mu görünür? Avukat: dekont üçüncü kişi verisi içerir (KVKK) |
+| **F3** Banka ekstresi (Excel, CSV, MT940) yükleme; IBAN hafızası; yalnız tanınmayan satırlar ekrana gelir, aynı satırda daire seçilir, "bu IBAN'ı kaydet"; çift işleme yok; yükleme geri alınır | komutlar Kural 2 ve Ekran 2; Yol Haritası PDF Ekran 3 | **Yok.** Yol haritasında var: «Banka ekstresi yükleme ve otomatik eşleme». Kanıt: `docs/PLATFORM_FINANS_4B.md` 13 "banka ekstresi içe aktarma/otomatik eşleştirme" kapsam dışı; IBAN alanı yok (F1); `platform.json` F8.02 yakinda. Apsiyon [A5]: hareketler tek ekranda, "akıllı algoritma" ile eşleme, onay (sitesinde yazıyor); [A4]: banka hareketini Excel ile yükleme (sitesinde yazıyor). | P1 | L | Cenk/site yöneticileri: gerçek ekstre örnekleri (en az 3 banka, 3 ay); MT940 gerekli mi? |
+| **F4** Eski yazılımdan borç ve devir bakiyesi göçü (Excel) | komutlar Adım 3 ("Veri Göçü"); Apsiyon [A4] | **Kısmen.** Excel yükleme yalnız daire, kişi, araç (`bulk_import_spec.js` 10). Daire borcu ya da devir bakiyesi yüklenemez; açılış bakiyesi yalnız kasa/banka hesabında (`finance_accounts.opening_balance_minor`, `040_finance_4b.sql` 190). Elle "Ek borç" ile girilir (`docs/PLATFORM_FINANS.md` 45). | P1 | M | Cenk: bir eski yazılımın örnek dışa aktarma dosyası |
+| **F5** "Altın veri seti": işverenin gerçek örnek hesabıyla kuruşu kuruşuna sıfır sapma testi | komutlar Adım 2; Yol Haritası PDF (yapım sırası 2) | **Kısmen.** Dağıtım için rastgele özellik testi var: toplam payların toplamı tutara eşit (`server/test/platform_finance_money.test.js` 2; `server/src/modules/finance_distribution.js` 59). İşverenin gerçek verisiyle karşılaştırma yok (`golden`, `altın` araması yalnız dosya-okuma testlerinde çıkıyor). | P1 | S | Cenk: gerçek bir sitenin 1–2 aylık, elle hesaplanmış aidat tablosu |
+| **F6** Online kart ödemesi | Yol Haritası PDF Ekran 4; Apsiyon [A6] | **Yok.** Yol haritasında var: «Online kart ödemesi». Katalogda `online_payment` "yakında" (`server/src/modules/catalog.js` 90-97). Apsiyon [A6] sitesinde yazıyor: kart saklama, otomatik ödeme talimatı; taksit [A13]'te anılıyor. | P2 | L | Cenk: sağlayıcı; kart komisyonunu kim öder ("Komisyonsuz öde" kartıyla çelişmesin) |
+| **F7** İşletme projesi (bütçe): Taslak → Tebliğ → Kesin durum makinesi; geçici proje 90 gün; planlanan–gerçekleşen | komutlar Adım 2 ve Ekran 1 (dikkat barı: "geçici işletme projesi için son 18 gün"); Apsiyon [A4] | **Yok.** Yol haritasında var: «İşletme projesi (bütçe)». Kanıt: bütçe/işletme projesi kodda yok (`budget`, `bütçe`, `işletme proje` araması yalnız ilgisiz dosyalarda çıktı); `docs/PLATFORM_FINANS_4B.md` 13 kapsam dışı sayıyor. Apsiyon [A4] sitesinde yazıyor: gider bütçesi, planlanan/gerçekleşen. | P2 | L | Avukat: KMK m.37 (7579 sayılı Kanun) adımları ve süreleri. Cenk: "Tebliğ" adımı belge ister mi? |
+| **F8** İcra: tek tıkla icra PDF'i ve avukat Excel'i | komutlar Adım 4; Yol Haritası PDF (İcra dökümü) | **Yok.** Yol haritasında var: «İcra dökümü PDF». Kanıt: icra özelliği yok (`icra` araması yalnız hatırlatma şablonundaki yasak-dil notunda: `server/src/modules/finance_reminder_mail.js` 4). Apsiyon [A4] sitesinde yazıyor: icra takibi başlatma ve izleme. | P3 | M | Avukat: dökümün içeriği (İİK 68/1) |
+
+### 3. Sakin uygulaması
+
+| Konu | İstek (kaynak) | Bugün sistemde (var / kısmen / yok + kanıt) | Öncelik | Büyüklük | Karar ya da bilgi (kimden) |
+| --- | --- | --- | --- | --- | --- |
+| **S1** Telefon + SMS koduyla şifresiz giriş | Yol Haritası PDF Ekran 4 | **Yok.** Yol haritasında var: «Telefon + SMS koduyla şifresiz giriş». Giriş "E-posta veya Kullanıcı Adı" + şifre (`lib/ui/pages/login_page.dart` 286). SMS sağlayıcı kodu yok (SMS, OTP araması sonuç yok). | P2 | M | Cenk: SMS sağlayıcı ve maliyet (Kararlar 10 yanıtı boş) |
+| **S2** Telefon bildirimi (uygulama kapalıyken) | Kararlar 6; Yol Haritası PDF | **Kod hazır, kapalı.** Yol haritasında var: «Telefon bildirimini canlıya alma». `PUSH_ENABLED` varsayılan 0 (`server/src/modules/push_config.js` 4). | P1 | S | Cenk ve Salih: Firebase hizmet hesabı; Apple hesabı kararı (H6) |
+| **S3** Kargo ve paket geldi bildirimi (SMS, e-posta, telefon) | Apsiyon [A3] | **Kısmen.** Kargo kaydı var (`visitor_entries.kind` visitor ya da cargo: `server/migrations/045_visitor_log.sql` 27); bildirim yalnız uygulama içi (`server/src/modules/catalog.js` 109); SMS/e-posta/telefon bildirimi yok. | P2 | S | Bağımlı: S2, C1 |
+| **S4** Komşu panosu / ilan panosu / "Komşum Var" yardımlaşma | Apsiyon [A3], [A19] | **Yok.** `ilan`, `komşum`, `neighbor`, `forum` araması ilgili sonuç vermedi. İşveren belgelerinde istek yok. Apsiyon sitesinde yazıyor: ilan panosu, alım-satım, yolculuk paylaşımı. | P3 | M | Cenk: isteniyor mu? İçerik denetimi sorumluluğu (hukuk) |
+| **S5** Yönetim kadrosu ve faydalı telefonlar (rehber) | Apsiyon [A3], [A15] | **Yok.** `rehber`, `phone_directory`, `faydalı telefon` araması ilgili sonuç vermedi. | P3 | S | Cenk |
+| **S6** Çok dilli uygulama | Apsiyon [A3] (8 dil, sitesinde yazıyor) | **Yok.** Yalnız Türkçe: `lib/` altında `.arb` dosyası yok, `pubspec.yaml`'da `flutter_localizations` yok. | P3 | L | Cenk: yabancı uyruklu sakin ihtiyacı var mı? |
+
+### 4. İletişim
+
+| Konu | İstek (kaynak) | Bugün sistemde (var / kısmen / yok + kanıt) | Öncelik | Büyüklük | Karar ya da bilgi (kimden) |
+| --- | --- | --- | --- | --- | --- |
+| **C1** SMS ve WhatsApp bildirimi | Kararlar 10 (yanıt boş); Yol Haritası PDF; Apsiyon [A11] | **Yok.** Yol haritasında var: «SMS ve WhatsApp bildirimleri». Sağlayıcı kodu yok; `platform.json` F3.12 ve F3.13 yakinda. Bizde duyuru zamanlama, okundu bilgisi ve e-posta var (`platform.json` F3.04, F3.06, F3.08 hazir). Apsiyon [A11] sitesinde yazıyor: sınırsız şablon, otomatik hatırlatmalar, iletildi/okundu, WhatsApp. | P2 | M | Cenk: isteniyor mu, bütçe? Avukat: WhatsApp için KVKK m.9 |
+
+### 5. Teknik işletme ve sayaç
+
+| Konu | İstek (kaynak) | Bugün sistemde (var / kısmen / yok + kanıt) | Öncelik | Büyüklük | Karar ya da bilgi (kimden) |
+| --- | --- | --- | --- | --- | --- |
+| **T1** Sayaç okuma ve faturalandırma modülü (su, elektrik, ısı); uzaktan okuyan sayaç için link ya da dosyadan içe aktarma | Kararlar 8; komutlar Adım 4; Apsiyon [A7] | **Yok.** Katalogda `metering` "yakında" (`server/src/modules/catalog.js` 82-89); tablo ve ekran yok (sayaç tablosu/ucu araması sonuç yok); `platform.json` F7.01–F7.03 yakinda. Apsiyon [A7] sitesinde yazıyor: uzaktan okuma, Excel aktarma, fatura/birim fiyat dağıtımı, faturayı e-posta ve SMS ile gönderme. | P2 | L | Cenk: sayaç firmaları ve dosya/link biçimleri |
+| **T2** Isı pay ölçer paylaşımı: fatura %70 ölçüme, %30 m²'ye; Excel okuyucu; sakin borcunda "Ekim ısı pay ölçer" kalemi | Yol Haritası PDF; komutlar Adım 4 ve Ekran 3 | **Yok.** Yol haritasında var: «Isı pay ölçer paylaşımı». m² verisi hazır (`apartments.gross_area_m2`, `net_area_m2`: `docs/PLATFORM_FINANS.md` 3). Apsiyon [A8] sitesinde yazıyor: 26847 sayılı yönetmelik 8.1, %70/%30. | P2 | M | Avukat/mevzuat: oranın yönetmelik dayanağı doğrulansın (mevzuat.gov.tr'den doğrulanmadı) |
+| **T3** Elle okuma: görevli saati fotoğraflar, sistem değeri okur (OCR); daire no fotoğraftan alınır; çekim ekranı sıradaki daireyi gösterir, kamera kapanmaz (Daire 1 → 2 → …) | Kararlar 8 | **Yok.** Kamera/OCR paketi yok (`pubspec.yaml`: `camera`, `image_picker`, ML Kit yok; `mobile_scanner` yalnız karekod için). Fotoğraf `file_picker` ile seçilir (`lib/services/work_attachment_picker.dart` 164-176). Küçültme ve EXIF silme hazır (`lib/services/work_photo_prepare.dart`). | P2 | L | Salih: OCR telefonda mı sunucuda mı? Cenk: yanlış okumada kim düzeltir/onaylar? |
+| **T4** İnternet yoksa fotoğraf telefonda bekler, bağlantı gelince Drive ile eşitlenir | Kararlar 8 | **Yok.** Drive planında yalnız sunucu–Drive arası bekleme alanı var (`docs/PLATFORM_DRIVE_DEPOLAMA.md` 16-19); telefon tarafında çevrimdışı kuyruk planda geçmiyor (çevrimdışı araması sonuç yok). | P2 | M | Bağımlı: D1 |
+| **T5** Dosya adı kuralı (AB_D13_201026) ve Drive klasörleri (SrvEkim_26, suEkim_26, elektrikEkim_26, TeklifEkim_26); sistemde yalnız günlük (log) | Kararlar 8 | **Yok.** Drive planında modül klasörleri var (`PLATFORM_DRIVE_DEPOLAMA.md` 72-75), ay bazlı klasör ve bu dosya adı kuralı yok (`SrvEkim`, `AB_D13` araması `docs/` içinde sonuç yok). | P2 | S | Cenk: adlandırma kesin mi? |
+| **T6** Teklif toplama: o ay alınan teklif PDF ve fotoğrafları kendi klasöründe | Kararlar 8 (TeklifEkim) | **Yok.** Teklif modülü yok (teklif araması ilgili sonuç vermedi). Sözleşme takibi var (`contracts`, `server/migrations/049_contracts.sql`) ama teklif yok. | P2 | M | Cenk: teklifler hangi modüle bağlanır (gider, sözleşme, iş takibi)? "Teklif Pro"daki Drive sistemini tarif etmeli (depoda yok) |
+| **T7** Ekipman envanteri ve periyodik bakım (asansör, interkom, kamera, bariyer, yangın algılama) | görmediklerim 2; Apsiyon [A13] ("Bakım ve Onarım") | **Yok.** İş takibinde "bakım" yalnız talep kategorisi (`server/migrations/042_work_tracking.sql` 33). Cihaz envanteri yalnız kapı cihazları için (`server/migrations/024_device_inventory_and_defect_management.sql`). | P2 | M | Cenk: hangi ekipman, hangi bakım periyodu |
+| **T8** Geçiş donanımı: kamera Hikvision, Tiandy ve yerli markalar | Kararlar 9 | **Kısmen.** Kartlı geçiş hazır (`catalog.js` 114-121; `server/migrations/046_access_cards.sql`). Plaka tanıma, HGS, kamera "yakında" (`catalog.js` 138-161). Marka adları kodda ya da belgelerde geçmiyor (`Hikvision`, `Tiandy` araması sonuç yok): entegrasyon araştırması yapılmamış. | P3 | L | Cenk: kullanılacak model ve protokol. Salih: SDK/arayüz araştırması |
+
+### 6. Raporlar
+
+| Konu | İstek (kaynak) | Bugün sistemde (var / kısmen / yok + kanıt) | Öncelik | Büyüklük | Karar ya da bilgi (kimden) |
+| --- | --- | --- | --- | --- | --- |
+| **R1** Gelir-gider analizi: rutin ve ekstra gider, kategori/ekipman bazında; 3-6-12 aylık grafik; gelecek yıl tahmini | görmediklerim 2 (Cenk) | **Kısmen.** Aylık gelir-gider raporu var (en çok 36 ay, kategori kırılımıyla: `server/src/modules/finance_4b_routes.js` 438; `docs/PLATFORM_FINANS_4B.md` 170); 12 hazır gider kategorisi (`server/src/modules/finance_expenses.js` 55-68). Yok: grafik (`pubspec.yaml`'da grafik paketi yok; `grafik`/`chart` araması yalnız ikon adları), "rutin / olağan dışı" işareti (gider tablosunda yok: `040_finance_4b.sql` 239-283), ekipman bazlı toplam (T7), 3-6 aylık karşılaştırma, tahmin (finans dosyalarında `tahmin`/`forecast` araması sonuç yok). | P1 | L | Cenk: "rutin" gider nasıl işaretlenir? Tahmin yöntemi (geçen yıl + oran mı?) |
+| **R2** Yıl sonu faaliyet raporu: kayıtlı dosya, fotoğraf ve görsellerden otomatik hazırlanır, yönetici değiştirir | görmediklerim 1 (Cenk) | **Kısmen.** Parçalar var: yönetim kurulu özeti (`reports/board-summary`, yıllık dönem verilebilir: `finance_4b_routes.js` 440; `docs/PLATFORM_FINANS_4B.md` 173), karar defteri yıl PDF'i (`lib/services/pdf_decision_service.dart`), belgeler, gider belgeleri, iş takibi fotoğrafları. Yok: bunları tek taslakta toplayan, düzenlenebilir rapor (`faaliyet`, `annual_report` araması sonuç yok). Dosyalar Drive'a taşınınca (D1) rapor görselleri Drive'dan alacak. | P2 | L | Cenk: rapor bölümleri ve örnek bir faaliyet raporu. Avukat: KMK m.39/41 içeriği |
+| **R3** Raporlar menüsü: Aylık özet, Yıllık hesap, Daire ekstresi, İcra dökümü | Yol Haritası PDF | **Kısmen.** Var: yaşlandırma, gelir-gider, kasa durumu, daire ekstresi, kurul özeti (`finance_4b_routes.js` 437-443; PDF/CSV/Excel: `docs/PLATFORM_FINANS_4B.md` 165-175). "Aylık özet" ve "Yıllık hesap" adlı ayrı sayfa yok (gelir-gider ve kurul özeti bu işi görür). İcra dökümü: F8. | P2 | S | Yok |
+
+### 7. Yönetim firması
+
+| Konu | İstek (kaynak) | Bugün sistemde (var / kısmen / yok + kanıt) | Öncelik | Büyüklük | Karar ya da bilgi (kimden) |
+| --- | --- | --- | --- | --- | --- |
+| **Y1** "Tüm siteler" tablosu (firma sahibi; en kötü tahsilat oranı üstte) | Yol Haritası PDF Ekran 1 | **Yok.** Yol haritasında var: «Yönetim firması için "Tüm siteler" tablosu». Kanıt: firma/kurum kaydı yok (`management_company` araması sonuç yok; roller: `lib/models/user_role.dart`). Bir yönetici birden çok siteyi yönetebilir (`site_manager_sites`, `server/migrations/006_site_structure_and_access.sql`; `platform.json` F1.10). Apsiyon [A1] sitesinde yazıyor: yönetim firmaları için "Kurumsal" paket; çoklu site görünümünün ayrıntısı doğrulanamadı. | P2 | M | Cenk: yönetim firması tek kullanıcı mı, çok personelli kurum mu? |
+| **Y2** Fiyat, 1–2 ay ücretsiz deneme, komisyon faturasıyla ortaklık payı, firmanın fiyatının bireysel yöneticiye de uygulanması, banka anlaşması | Kararlar 3 (Cenk; bilgi notu) | **Kısmen (şema var, iş yok).** `subscription_plans` (fiyat boş; "Standart" plan kapalı) ve `site_subscriptions` (durumlar: active, trial, past_due, cancelled, expired; bitiş tarihi) tabloları var (`server/migrations/033_site_applications.sql` 9-41). Yok: fiyat listesi, deneme bitişinde işlem, komisyon/ortaklık alanı, yönetim firması ilişkisi, ödeme ve fatura. Modül bugün süper kullanıcı onayıyla açılıyor (`docs/PLATFORM_MODUL_SISTEMI.md` 139-141). Bilgi notu: Apsiyon'un Apsis ürününde örnek fiyat 20 daire için yılda 3.240 TL + KDV (Apsiyon'un sitesinde yazıyor [A16]). | P3 | M | Cenk: fiyat listesi, deneme süresi, komisyon oranı ve faturası |
+
+### 8. Hukuk ve hesaplar
+
+| Konu | İstek (kaynak) | Bugün sistemde (var / kısmen / yok + kanıt) | Öncelik | Büyüklük | Karar ya da bilgi (kimden) |
+| --- | --- | --- | --- | --- | --- |
+| **H1** Yasal metinler: şirket bilgileri; ilk açılışta aydınlatma metni | Kararlar 1; Yol Haritası PDF Ekran 4 | **Kısmen.** Yol haritasında var: «Yasal metinlerin yayını». Cenk unvan, adres ve telefonu verdi; KEP boş, MERSİS verilmedi. Değerler Platform Ayarları'ndan girilir (`legal.company_name`, `legal.company_address`, `legal.contact_phone`, `legal.kep_address`, `legal.mersis_no`: `docs/yasal/KULLANICIDAN_GEREKENLER.md` 25-32). Girilip girilmediği doğrulanamadı (canlı veri). Aydınlatma metni kapısı kodda hazır, `legal.enforce_consents` kapalı (aynı belge 33). | P0 | S | Cenk: KEP, MERSİS, kvkk e-posta adresi. Salih: Platform Ayarları'na giriş |
+| **H2** Kayıtların saklama süreleri; saklama yönetim firmasının Drive'ında, şifreli; yedekler ayrı (fotoğraf ayrı, log/kayıt ayrı); veri çalınırsa firma sorumlu olmasın | Kararlar 2 (Cenk; süre alanı boş) | **Kısmen.** Önerilen süreler yazılı ama kesin değil: aidat/borç ve ilişki geçmişi 10 yıl, araç kaydı pasifleşince 1 yıl, duyuru 5 yıl, denetim kaydı 5 yıl (`docs/yasal/KULLANICIDAN_GEREKENLER.md` 58-59, 82); otomatik silme işi yok (aynı belge 59). Sunucu yedekleri zaten ayrı şifreli arşivler: veritabanı, belgeler, iş takibi fotoğrafları (`docs/OPERASYON_YEDEK_IZLEME.md` 23-24, 84). Veritabanı (finans defteri) Drive'a konmuyor; Cenk'in "saklama tamamen yönetim firmalarının Drive'ında" ifadesi bunu da kapsıyorsa fark var. | P0 | M | Cenk: süreler; veritabanı da Drive'a mı? Avukat: "veri çalınırsa firmamız sorumlu olmasın" ifadesi mümkün mü (veri sorumlusu/işleyen) |
+| **H3** Gecikme tazminatı ve borç hatırlatma: avukata sorulacak taslak (biz hazırlamalıyız) | Kararlar 4 (Cenk) | **Kısmen.** Hesap ve e-posta kodu hazır, KAPALI (`finance.legal_ok`: `server/src/modules/finance_late_fee.js` 4). Avukat kontrol listesinde madde 37 (gecikme tazminatı), 38 (borç hatırlatma), 39 (makbuz) yazılı (`docs/yasal/AVUKAT_KONTROL_LISTESI.md` 267-282). Cenk'in okuyup avukata götürebileceği kısa taslak (örnek hesap + sorular) bulunamadı (doğrulanamadı: başka belge gönderilmiş olabilir). Dönem kapsamı sorunu da açık (bu dosyanın 1. bölümü). | P0 | S | Cenk: taslağı avukata iletmek. Avukat: onay → `finance.legal_ok` |
+| **H4** Elektronik genel kurul: taslak metin (Cenk kontrol ettirip avukata soracak) | Kararlar 12 | **Yok.** Katalogda e-genel kurul modülü yok. Karar Defteri yalnız kararı kaydeder (toplantı türü `genel_kurul`: `server/migrations/050_decision_book.sql` 37); `platform.json` F11.02 "E-genel kurul ve karar defteri" yakinda. Taslak metin yok. | P2 | M | Cenk: taslak istiyor. Avukat: elektronik genel kurulun mevzuat koşulları (bu belgede doğrulanamadı) |
+| **H5** Mağaza ve geliştirici hesapları (Google Play, App Store); taslak/örnek çalışma | Kararlar 5 | **Kısmen.** Yayın hazırlık belgesi var: Google Play ve App Store kontrol listeleri (`docs/YAYIN_HAZIRLIGI.md` 130, 201, 258). Android paket adı `tr.com.gudeteknoloji.siteyonetim` (`android/app/build.gradle.kts` 44). Hesaplar kullanıcıda; iOS Team ID yok. Yayın, yasal metinlerin tamamlanmasına bağlı. | P1 | S | Cenk ve Salih: hesapları açmak |
+| **H6** "Apple hesabını açarız, şirket adına olması şart mı?" | Kararlar 6 | **Bilgi, kod değil.** Şart değil. Apple'ın sayfasına göre bireysel hesapta App Store'da kişinin yasal adı görünür ve D-U-N-S gerekmez; kuruluş hesabı için tüzel kişilik, D-U-N-S numarası, kuruluşun alan adlı e-postası ve çalışan web sitesi gerekir. Güde bir limited şirket; kuruluş hesabı mümkün görünür (D-U-N-S durumu doğrulanamadı). Google Play'de Kasım 2023 sonrası açılan KİŞİSEL hesaplar, üretime çıkmadan önce 12 test kullanıcısıyla 14 gün kapalı test yapmak zorundadır; kuruluş hesabı için bu sayfada bilgi yok (doğrulanamadı). | P1 | S | Cenk: karar (öneri: şirket adına, mağazada "Güde Teknoloji" görünür). Bilgi: D-U-N-S var mı? |
+
+### 9. Drive ve yedek
+
+| Konu | İstek (kaynak) | Bugün sistemde (var / kısmen / yok + kanıt) | Öncelik | Büyüklük | Karar ya da bilgi (kimden) |
+| --- | --- | --- | --- | --- | --- |
+| **D1** Sitenin yüklediği her dosya sitenin Drive'ında; sunucuda gerekli bağlantı dursun ("Teklif Pro'daki Drive saklama sistemi gibi") | Kararlar 13 (Cenk) | **Plan var, kod yok.** Yol haritasında var: «Sitenin dosyaları sitenin Google Drive'ında». `docs/PLATFORM_DRIVE_DEPOLAMA.md` durum satırı: "plan, kod yazılmadı"; dosyalar bugün sunucu diskinde (`server/src/modules/document_storage.js`). Fark: Cenk "sunucuda yalnız bağlantı" diyor; önerilen model C sunucuda sabit önbellek ve küçük bekleme alanı tutuyor (aynı belge bölüm 3). | P1 | L | Cenk: model C kabul mü; "Teklif Pro" sisteminin tarifi (depoda yok, doğrulanamadı). Avukat: KVKK m.9 |
+| **D2** Dosyalar şifreli durmalı ("şifrelenmiş şekilde kendi sistemlerinde") | Kararlar 2 | **Yok.** Planda yalnız Drive yenileme anahtarı şifreli (`PLATFORM_DRIVE_DEPOLAMA.md` 121); dosya içeriği şifrelemesi yok. İçerik şifreli olursa Drive'da önizleme/arama çalışmaz; anahtarı biz tutarsak "firma sorumlu olmasın" ifadesi zayıflar. | P2 | M | Cenk ve Salih: şifreleme dosya içeriği için mi isteniyor? |
+| **D3** Veritabanının dış kopyası | Kararlar 13 (Salih) | **Hedef bekliyor.** Yol haritasında var: «Veritabanının dış kopyası» (P0, S). Betikler hazır (`deploy/ops/offsite_push.sh`). | P0 | S | Cenk: hedef seçimi |
+
+### 10. Apsiyon'da olup işveren belgelerinde olmayanlar (şimdilik önerilmez)
+
+| Konu | İstek (kaynak) | Bugün sistemde (var / kısmen / yok + kanıt) | Öncelik | Büyüklük | Karar ya da bilgi (kimden) |
+| --- | --- | --- | --- | --- | --- |
+| **Z1** Ücretli tesis rezervasyonu (online ödeme); rezervasyon süresine bağlı kart/QR geçişi | Apsiyon [A9] | **Yok.** Rezervasyon şemasında ücret alanı yok (`server/src/modules/reservation_schema.js` içinde ücret/ödeme araması sonuç yok); `card_access` dosyalarında rezervasyon geçmiyor. | P3 | M | Cenk (bağlı: F6) |
+| **Z2** Muhasebe: tek düzen hesap planı, yevmiye; işletme defterinin noterli basımı | Apsiyon [A13], [A4] | **Yok.** `hesap planı`, `yevmiye` araması sonuç yok; raporlar yasal defterin yerine geçmez diyor (`docs/PLATFORM_FINANS_4B.md` 18). | P3 | L | Cenk + avukat |
+| **Z3** Tur kontrol (NFC/QR noktaları) | Apsiyon [A10] | **Yok.** `tur kontrol`, `patrol`, `checkpoint` araması ilgili sonuç vermedi. | P3 | L | Cenk |
+| **Z4** Sakinler için ücretsiz web sayfası (duyuru, galeri, forum) | Apsiyon [A15] | **Yok.** Ayrı sakin web sayfası yok; Flutter uygulaması web'de de çalışır (`web/index.html`). | P3 | L | Cenk |
+| **Z5** Santral Plus (gelen aramada sesli borç bildirimi); mobil tahsilat cihazı | Apsiyon [A12], [A13], [A14] | **Yok.** Donanım/telefon altyapısı işi. | P3 | L | Cenk |
+| **Z6** Yapay zekâ asistanı (WhatsApp; ADA, ASYA) | Apsiyon [A17] | **Yok.** | P3 | L | Cenk |
+| **Z7** Sigorta, kampanya, kira sözleşmesi, yönetim firması bulma pazaryeri | Apsiyon [A3], [A18], [A20] | **Yok.** Satış modeli işi; işveren belgelerinde istek yok. | P3 | — | Cenk |
+| **Z8** Firma (tedarikçi) bazlı cari dökümü | Apsiyon [A2] ("cari izleme") | **Kısmen.** Tedarikçi kaydı ve gider listesinde tedarikçi süzgeci var (`docs/PLATFORM_FINANS_4B.md` 147-149); firma bazlı özet ekranı doğrulanamadı. | P3 | S | Cenk |
+
+### 11. Zaten karşılanan istekler (yanlış eksik sayılmasın)
+
+| Konu | İstek (kaynak) | Kanıt |
+| --- | --- | --- |
+| **K1** Silinemez defter; düzeltme ters kayıtla | komutlar talimat 1; Yol Haritası PDF | `ledger_entries` değiştirilemez/silinemez (`server/migrations/034_finance.sql` 5 ve 92-132); ters kayıt: `POST .../entries/:id/reverse` (`docs/PLATFORM_FINANS.md` 53); uygulamada "Düzelt / İptal Et" (aynı belge 109). |
+| **K2** Aidat dağıtımı: sabit, eşit, kategori, arsa payı, m² (brüt/net) | komutlar Adım 2; Apsiyon [A4] | `fee_definitions.distribution` (`034_finance.sql` 31); "en büyük kalan" bölme (`server/src/modules/finance_distribution.js` 59). |
+| **K3** Gecikme aylık en çok %5, tazminat tabana girmez (faiz üstüne faiz yok) | komutlar Adım 2 | `server/migrations/040_finance_4b.sql` 11 ve 23; `server/src/modules/finance_late_fee_calc.js` 6. Kapalı: hukuk onayı bekliyor (H3). |
+| **K4** Makbuz, kasa/banka, aktarım, mutabakat, gider + belge, borç hatırlatma e-postası | Yol Haritası PDF Ekran 3 | `040_finance_4b.sql` (receipts, finance_accounts, account_reconciliations, expenses, finance_reminder_runs). |
+| **K5** Raporlar: yaşlandırma, gelir-gider, kasa durumu, daire ekstresi, kurul özeti; PDF/CSV/Excel | Yol Haritası PDF (Raporlar) | `server/src/modules/finance_4b_routes.js` 437-443; `finance_export_tables.js`; `lib/services/pdf_finance_service.dart`. |
+| **K6** Daire künyesi (brüt/net m², arsa payı, kategori); malik ve kiracı ilişkisi ayrı kayıtlı | Yol Haritası PDF (Daireler) | `docs/PLATFORM_FINANS.md` 3; `platform.json` F2.05. (Bakiyenin ikiye ayrılması: G12.) |
+| **K7** Sakin: Borcum, ekstre, makbuz | Yol Haritası PDF Ekran 4 | `lib/ui/views/my_finance_view.dart`; yol haritası 1. bölüm «Borcum sakin kapsamı». |
+| **K8** Arıza/talep: fotoğraflı, atama, durum izleme, performans raporu | Yol Haritası PDF Ekran 4 | Durumlar yeni, işlemde, beklemede, çözüldü, kapandı, iptal ve atama (`server/migrations/042_work_tracking.sql` 24, 37); fotoğraf eki `047_work_attachments.sql`; `server/src/modules/work_tracking_report.js`. |
+| **K9** Rezervasyon ve konsiyerj, anket, ziyaretçi ve kargo, firma ve sözleşme, karar defteri (yıl PDF'i) | Apsiyon [A1], [A3] | `server/src/modules/catalog.js`; migration 043-050; `lib/services/pdf_decision_service.dart`. |
+| **K10** Kapı: telefondan açma, karekod, misafir geçişi (Ziyaretçi Kodu), kartlı geçiş | komutlar Kural 3 | Migration 008, 011-015, 046; `catalog.js` 114-121. |
+| **K11** Onay bekleyen kişiler (katılım isteği) | Apsiyon [A2] | `lib/ui/dialogs/manage_join_requests_dialog.dart`; `server/migrations/019_join_requests_notes.sql`. |
+| **K12** Yönetim türleri: önce apartman/site, rezidans, kooperatif; AVM en son | Kararlar 11 | Beş tür seçilebilir (`docs/PLATFORM_MODUL_SISTEMI.md` 166-180); türe özel ileri özellikler `platform.json` F9.01–F9.04 yakinda. |
+| **K13** Yedekler ayrı ve şifreli (veritabanı, belgeler, iş takibi fotoğrafları) | Kararlar 2 | `docs/OPERASYON_YEDEK_IZLEME.md` 23-24 ve 84. |
+| **K14** Hesap silme, veri dışa aktarma, yardım ve tanıtım turu | Yol Haritası PDF Ekran 4 | `platform.json` F12 ve F16 bölümleri. |
+| **K15** Kaynak kodun gizliliği | Kararlar 14 | Bu dosyanın 6. bölümünde işaretli (2026-10-20). |
+
+### Önerilen sıra (ilk 10)
+
+1. **G1** Panel modül vitrini — yapılıyor; bugünkü şikâyetin özü.
+2. **G6** Tasarım dili kararı (Cenk) — yeni ekranlar yazılmadan önce; iş küçük, karar önemli.
+3. **G2 + G3 + G4** Gruplu menü, sakin alt çubuğu ve "Güncel borç / Öde" kartı.
+4. **G5** Yönetici ana sayfası "Bu ay" ve dikkat barı.
+5. **F1 + F2** Sakine IBAN ve referans kodu; dekontla ödeme, geçici kabul, yönetici onayı.
+6. **F3** Banka ekstresi yükleme ve IBAN hafızası (dikkat barını da besler).
+7. **H1 + H2 + H3** Hukuk paketi (kullanıcı ve avukat bağımlı; 1–6 ile paralel yürür): şirket bilgileri, saklama süreleri, gecikme tazminatı ve hatırlatma taslağı.
+8. **D3** Veritabanının dış kopyası (P0, S; yalnız hedef seçimi bekliyor).
+9. **R1** Gelir-gider analizi, grafik ve tahmin; ardından **R2** faaliyet raporu taslağı.
+10. **D1** Drive depolama; ardından **T1–T5** sayaç okuma (fotoğraf, OCR, Drive klasörleri) ve **T2** ısı pay ölçer.
+
+Sıra dışı iki uyarı: **F4** (eski yazılımdan borç göçü) ilk gerçek müşteri geçişinden önce bitmeli. **G12** (malik/kiracı iki hesap) bir
+mimari karardır; F2 ve F3 ödemeyi hangi hesaba yazacağını bilmek zorunda olduğundan bu karar onlardan önce konuşulmalı.
+
+### Sizden gereken kararlar ve bilgiler
+
+**Cenk**
+
+1. Tasarım dili: komutlar.txt'nin sade stili mi, mevcut parlak stil mi (G6); ikon seti (G8); beyaz etiket satılacak mı (G9).
+2. Menü grupları ve sakin alt çubuğunun dördüncü sekmesi: Kapı mı Belgeler mi (G2, G3).
+3. Dekontta geçici kabul: sakinin bakiyesi düşer mi (F2). Malik/kiracı hesabı: hangi kalem kimin hesabına (G12).
+4. Kart ödemesi sağlayıcısı ve komisyonu kimin ödeyeceği (F6). SMS ve WhatsApp isteniyor mu, bütçe (C1, S1).
+5. Saklama süreleri; veritabanı da Drive'a mı; dosya içeriği şifreleme (H2, D2). Drive modeli C kabul mü; Teklif Pro tarifi; klasör adları (D1, T5, T6).
+6. Şirket adına mağaza hesabı ve D-U-N-S (H5, H6). KEP, MERSİS, kvkk e-posta adresi (H1). Veritabanı dış kopya hedefi (D3).
+7. Fiyat listesi, deneme süresi, komisyon (Y2). İstenen ek özellikler: komşu panosu, rehber, çok dil (S4–S6). Yönetim firması kullanıcı yapısı (Y1).
+8. Gerçek örnekler: banka ekstresi (3 banka, 3 ay) (F3); eski yazılım dışa aktarma dosyası (F4); elle hesaplı aidat tablosu (F5); sayaç dosyaları (T1); örnek faaliyet raporu (R2); ekipman ve bakım listesi (T7).
+9. İki haftada bir canlı demo takvimi (G15, Salih ile).
+
+**Avukat** (taslakları biz hazırlarız, Cenk iletir): gecikme tazminatı ve borç hatırlatma (H3); saklama ve sorumluluk ifadesi (H2); elektronik genel kurul (H4); dekont ve üçüncü kişi verisi (F2); WhatsApp ve Drive için KVKK m.9 (C1, D1); KMK m.37 (F7); icra dökümü (F8); kiracı/malik sorumluluğu (G12).
+
+**Salih**: Platform Ayarları'na şirket bilgilerinin girilmesi (H1); Firebase hizmet hesabı (S2); mağaza hesapları (H5); OCR yöntemi (T3); RLS gerekli mi (G13); kamera SDK araştırması (T8).
+
+### Doğrulanamayanlar ve dikkat
+
+- Platform Ayarları'ndaki canlı yasal bilgi değerleri (H1) ve Cenk'e daha önce gönderilmiş bir avukat taslağı olup olmadığı (H3).
+- "Teklif Pro" Drive saklama sistemi (D1, T6): depoda yok, tarifi Cenk'ten gerekli.
+- Apsiyon'un yönetim firmaları için çoklu site görünümü (Y1): sitesinde yalnız "Kurumsal" paket adı var; ayrıntı doğrulanamadı.
+- Apple D-U-N-S durumu ve Google Play kuruluş hesabı kuralı (H6); elektronik genel kurulun mevzuat dayanağı (H4); ısı yönetmeliğinin numarası ve oranları (T2: Apsiyon'un sitesinden alındı, mevzuat.gov.tr'den doğrulanmadı).
+- Tüm Apsiyon bilgileri pazarlama iddiasıdır (bkz. Yöntem).
+- Liste tutarsızlığı: `tools/deneme_listesi/platform.json` içinde F2.08, F2.09 (Excel yükleme ve aktarma), F3.11 (Belgeler) ve F4.07, F4.09–F4.11 (makbuz, gider, kasa/banka, raporlar) hâlâ "planli"; oysa F13, F14 ve F15 bölümleriyle yapıldı. F4.08 ve F4.14 (gecikme tazminatı, borç hatırlatma) kodlandı ama hukuk onayına kadar bilerek kapalı. F11.02 "E-genel kurul ve karar defteri" yakinda; karar defteri F22'de hazır, eksik olan yalnız e-genel kurul (H4). Bu dosya yalnız yol haritasına yazıldığından `platform.json` değiştirilmedi.
