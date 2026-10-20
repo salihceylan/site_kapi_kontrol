@@ -1,16 +1,16 @@
-// FAZ 5 / A1b (i): boş durum (cilalı ikon rozeti + metin + isteğe bağlı eylem).
+// FAZ 5 / A1b (i): boş durum (düz ikon rozeti + metin + isteğe bağlı eylem).
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/ui/design/buttons.dart';
 import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 
-/// Boş / sonuç yok durumu: cilalı ikon rozeti ([IconOrb]) + [title] + [message] + isteğe bağlı eylem düğmesi.
+/// Boş / sonuç yok durumu: düz ikon rozeti ([IconOrb]) + [title] + [message] + isteğe bağlı eylem düğmesi.
 ///
 /// Aynı bileşen "boş liste", "boş + eylem" ve "filtre sonucu yok" için kullanılır; mevcut cümleler
 /// ("Kayıtlı site bulunamadı." vb.) birebir geçer. Eylem düğmesi yalnız [actionLabel] VE [onAction]
 /// ikisi de verilince gösterilir.
 ///
-/// Varsayılan (tam sayfa/bölüm): ortalanmış, en çok 360 dp genişlik, 72 dp glow'lu daire rozet. Yükseklik
+/// Varsayılan (tam sayfa/bölüm): ortalanmış, en çok 360 dp genişlik, 72 dp daire rozet. Yükseklik
 /// sınırlıysa ve içerik (büyük yazıda) sığmıyorsa içerik KAYDIRILIR (taşma yok); sınırsızsa (ListView,
 /// SingleChildScrollView) içeriği kadar yer kaplar. [EmptyState.compact]: kart/akordiyon içi satır
 /// düzeni (44 dp squircle rozet solda, metin sağda, sola hizalı).
@@ -149,7 +149,7 @@ class EmptyState extends StatelessWidget {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          IconOrb(icon: icon, tone: tone, size: 72, glow: true),
+                          IconOrb(icon: icon, tone: tone, size: 72),
                           const SizedBox(height: AppSpace.lg),
                           Text(
                             title,
