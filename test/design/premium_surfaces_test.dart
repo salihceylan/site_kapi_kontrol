@@ -39,60 +39,26 @@ Gradient _gradientOf(WidgetTester t, Finder box) =>
     (t.widget<DecoratedBox>(box).decoration as BoxDecoration).gradient!;
 
 void main() {
-  group('AppCard: premium yüzey katmanı', () {
-    testWidgets('açık tema, level 1: düz kart (ışık/yıkama yok)', (t) async {
-      await t.pumpWidget(_app(const AppCard(child: Text('x'))));
-      expect(_gradientBoxes(find.byType(AppCard)), findsNothing);
-    });
-
-    testWidgets('koyu tema, level 1: sol-üstten cam gibi hafif üst ışık', (
-      t,
-    ) async {
-      await t.pumpWidget(_app(const AppCard(child: Text('x')), dark: true));
-      await t.pumpAndSettle();
-      final box = _gradientBoxes(find.byType(AppCard));
-      expect(box, findsOneWidget);
-      final g = _gradientOf(t, box) as LinearGradient;
-      expect(g.colors.first.a, lessThan(0.1), reason: 'çok hafif');
-      expect(g.colors.last.a, 0);
-    });
-
-    testWidgets('level >= 2 (hero): tonun sol-üst yıkaması; ton verilirse o ton', (
-      t,
-    ) async {
+  group('AppCard: düz yüzey (sade stil: ışık, yıkama, sızıntı yok)', () {
+    testWidgets('açık ve koyu tema, her seviye ve ton: degrade katmanı yok', (t) async {
       for (final dark in [false, true]) {
-        final p = _palette(dark);
-        for (final level in [2, 3]) {
-          await t.pumpWidget(
-            _app(AppCard(level: level, child: const Text('x')), dark: dark),
-          );
-          await t.pumpAndSettle();
-          final g =
-              _gradientOf(t, _gradientBoxes(find.byType(AppCard)))
-                  as RadialGradient;
-          expect(
-            g.colors.first,
-            AppTone.primary.hue.withValues(alpha: p.isDark ? 0.16 : 0.09),
-            reason: 'L$level dark=$dark',
-          );
-          expect(g.colors.last.a, 0);
+        for (final level in [1, 2, 3]) {
+          for (final tone in <AppTone?>[null, AppTone.warning, AppTone.primary]) {
+            await t.pumpWidget(
+              _app(AppCard(level: level, tone: tone, child: const Text('x')), dark: dark),
+            );
+            await t.pumpAndSettle();
+            expect(
+              _gradientBoxes(find.byType(AppCard)),
+              findsNothing,
+              reason: 'L$level ${tone?.name} dark=$dark',
+            );
+          }
         }
-        await t.pumpWidget(
-          _app(
-            AppCard(level: 2, tone: AppTone.warning, child: const Text('x')),
-            dark: dark,
-          ),
-        );
-        await t.pumpAndSettle();
-        final g =
-            _gradientOf(t, _gradientBoxes(find.byType(AppCard)))
-                as RadialGradient;
-        expect(g.colors.first.toARGB32() & 0x00FFFFFF,
-            AppTone.warning.hue.toARGB32() & 0x00FFFFFF);
       }
     });
 
-    testWidgets('ışık katmanı dokunmayı yutmaz ve opak Material rengi değişmez', (
+    testWidgets('dokunma çalışır ve opak Material rengi seviye yüzeyidir', (
       t,
     ) async {
       var taps = 0;
@@ -114,19 +80,11 @@ void main() {
             .descendant(of: find.byType(AppCard), matching: find.byType(Material))
             .first,
       );
-      expect(material.color, AppPalette.dark.surfaceAt(2));
+      expect(material.color, _palette(true).surfaceAt(2));
       expect(material.color!.a, 1.0);
-      // Katman IgnorePointer içindedir.
-      expect(
-        find.ancestor(
-          of: _gradientBoxes(find.byType(AppCard)),
-          matching: find.byType(IgnorePointer),
-        ),
-        findsWidgets,
-      );
     });
 
-    testWidgets('accentBar: çubuk korunur + altında ince ışık sızıntısı', (
+    testWidgets('accentBar: 3 dp düz çubuk korunur, altında ışık sızıntısı yok', (
       t,
     ) async {
       const bar = Color(0xFF7E22CE);
@@ -143,11 +101,7 @@ void main() {
         findsOneWidget,
         reason: '3 dp çubuk',
       );
-      final spill = _gradientBoxes(find.byType(AppCard));
-      expect(spill, findsOneWidget);
-      final g = _gradientOf(t, spill) as LinearGradient;
-      expect(g.colors.first, bar.withValues(alpha: 0.16));
-      expect(g.colors.last, bar.withValues(alpha: 0));
+      expect(_gradientBoxes(find.byType(AppCard)), findsNothing);
     });
 
     testWidgets('durağan: ticker ve kare yok', (t) async {

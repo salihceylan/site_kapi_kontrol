@@ -1,10 +1,10 @@
 // FAZ 5 / A1b (i): kart yüzeyi, bölüm başlığı ve satır içi bildirim.
 //
-// - [AppCard]: tüm kart yüzeylerinin tek karşılığı. Opak yüzey + tek katman gölge (BackdropFilter,
-//   Opacity, spread, çift gölge YOK); rol/ton şeridi 3 dp.
+// - [AppCard]: tüm kart yüzeylerinin tek karşılığı. Sade stil (İP-1C, karar G6): opak yüzey + 1 px kenar, GÖLGESİZ
+//   (BackdropFilter, Opacity, ışık / yıkama katmanı YOK); rol/ton şeridi 3 dp.
 // - [SectionHeader]: başlık + sayaç rozeti + eylem. Başlık ve rozet KIRPILMAZ: sığmazsa alt satıra
 //   iner; metinli eylem de başlığın altına düşer.
-// - [InlineNotice]: form/hata/başarı kutusu (ikon + metin, >= 4,5:1, canlı bölge, "Tekrar Dene").
+// - [InlineNotice]: form/hata/başarı kutusu (ikon + metin, >= 4,5:1, canlı bölge, "Tekrar Dene"); zemin boyanmaz.
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -14,14 +14,12 @@ import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 
 /// Kart yüzeyi.
 ///
-/// **Premium yüzey**: koyu temada kartın üstünden sol-üstten cam gibi hafif bir ışık iner; yüksek
-/// seviyeli (2-3, "hero") kartlarda tonun (varsayılan birincil) sol-üst köşeden yumuşak bir yıkaması
-/// vardır; [accentBar] altına ince bir ışık sızıntısı bırakır. Üçü de statik gradyandır (opak
-/// Material yüzeyin ÜSTÜNDE, içeriğin ALTINDA; dokunmayı yutmaz, saveLayer yok).
+/// **Sade yüzey (İP-1C, karar G6)**: kart [AppPalette.surface] (açıkta #FFFFFF) + 1 px [AppPalette.border] (#E2E8F0),
+/// GÖLGESİZ; ışık, ton yıkaması ve şerit sızıntısı yoktur. Seviye ([level]) yalnız koyu temada yüzeyi bir kademe açar.
 ///
 /// Durumlar: varsayılan | hover/odak ([onTap] varsa `InkWell`: fare ve klavye) | [selected] (1,5 px
-/// kenar + en az seviye 2 yükselti) | [tone] (uyarı/hata tonlu zemin ve kenar) | devre dışı
-/// ([onTap] null: dokunulamaz; soluk içerik çağıranın işidir). Yükleme ve boş içerik kartın değil
+/// ana eylem rengi kenar + en az seviye 2 yüzey) | [tone] (zemin BOYANMAZ; durum tonlarında kenar tonun %50'si) |
+/// devre dışı ([onTap] null: dokunulamaz; soluk içerik çağıranın işidir). Yükleme ve boş içerik kartın değil
 /// `SkeletonBox`/`EmptyState`in işidir.
 ///
 /// Taşma: [child]'a sabit yükseklik verilmez, kart içeriği kadar uzar. Dar kartta çağıran
@@ -50,16 +48,16 @@ class AppCard extends StatelessWidget {
   /// İç boşluk (varsayılan 16; dar kartta 12).
   final EdgeInsetsGeometry padding;
 
-  /// Tonlu kart (örn. cihazsız site: warning, hata: danger): soluk ton zemini + ton kenarı.
+  /// Tonlu kart (örn. cihazsız site: warning, hata: danger): zemin BOYANMAZ; durum tonlarında kenar tonun %50'si.
   final AppTone? tone;
 
   /// Kartın üstünde 3 dp'lik şerit rengi (rol vurgusu: `role.tone.hue`). null ise şerit yok.
   final Color? accentBar;
 
-  /// Seçili kart: 1,5 px birincil kenar ve en az seviye 2 yükselti.
+  /// Seçili kart: 1,5 px ana eylem rengi kenar ve en az seviye 2 yüzey.
   final bool selected;
 
-  /// Yükselti 1..3 (1 kart, 2 seçili/birincil, 3 diyalog/sheet). Koyu temada daha açık yüzey.
+  /// Yüzey seviyesi 1..3 (1 kart, 2 seçili/birincil, 3 diyalog/sheet). Koyu temada daha açık yüzey; gölge yoktur.
   final int level;
 
   /// null ise kart dokunulamaz ve `InkWell` eklenmez.
@@ -71,51 +69,22 @@ class AppCard extends StatelessWidget {
   /// Seçili kart en az seviye 2 çizilir; daha yüksek seviye verilmişse düşürülmez.
   int get _effectiveLevel => selected && level < 2 ? 2 : level;
 
-  /// Yüzeyin üstüne binen statik ışık/yıkama (yoksa null). Opak Material rengi DEĞİŞMEZ.
-  static Widget? _sheen(AppPalette p, AppTone? tone, int level) {
-    Gradient? gradient;
-    if (level >= 2) {
-      // Hero kart: tonun sol-üst köşeden yumuşak yıkaması.
-      final hue = (tone ?? AppTone.primary).hue;
-      gradient = RadialGradient(
-        center: const Alignment(-1.0, -1.15),
-        radius: 1.35,
-        colors: [hue.withValues(alpha: p.isDark ? 0.16 : 0.09), hue.withValues(alpha: 0)],
-      );
-    } else if (p.isDark) {
-      // Koyu temada her karta cam gibi hafif üst ışık.
-      gradient = const LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [Color(0x0FFFFFFF), Color(0x00FFFFFF)],
-        stops: [0.0, 0.6],
-      );
-    }
-    return gradient == null
-        ? null
-        : DecoratedBox(decoration: BoxDecoration(gradient: gradient));
+  /// Kartın kenar rengi: seçili -> ana eylem rengi; durum tonu -> tonun %50'si; aksi hâlde palet kenarı.
+  static Color _edge(AppPalette p, AppTone? tone, bool selected) {
+    if (selected) return p.action;
+    if (tone != null && tone.isStatus) return tone.hue.withValues(alpha: 0.5);
+    return p.border;
   }
 
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
-    final tone = this.tone;
     final bar = accentBar;
     final tap = onTap;
     final radius = BorderRadius.circular(AppRadius.lg);
     final lvl = _effectiveLevel;
 
     Widget body = Padding(padding: padding, child: child);
-    final sheen = _sheen(p, tone, lvl);
-    if (sheen != null) {
-      body = Stack(
-        fit: StackFit.passthrough,
-        children: [
-          Positioned.fill(child: IgnorePointer(child: sheen)),
-          body,
-        ],
-      );
-    }
     if (bar != null) {
       // passthrough: sınırlar şeritsiz kartla birebir aynı iletilir (düzen şeride bağlı değişmez).
       body = Stack(
@@ -123,24 +92,6 @@ class AppCard extends StatelessWidget {
         clipBehavior: Clip.none,
         children: [
           body,
-          // Çubuğun altına inen ince ışık sızıntısı (dekoratif).
-          Positioned(
-            left: 0,
-            right: 0,
-            top: 3,
-            height: 22,
-            child: IgnorePointer(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [bar.withValues(alpha: 0.16), bar.withValues(alpha: 0)],
-                  ),
-                ),
-              ),
-            ),
-          ),
           Positioned(
             left: 0,
             right: 0,
@@ -168,28 +119,19 @@ class AppCard extends StatelessWidget {
       button: tap != null ? true : null,
       selected: selected ? true : null,
       label: semanticLabel,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
+      // Düz yüzey: gölge katmanı yok (Material yükseltisi de 0).
+      child: Material(
+        color: p.surfaceAt(lvl),
+        clipBehavior: Clip.antiAlias,
+        animationDuration: AppMotion.of(context, AppMotion.base),
+        shape: RoundedRectangleBorder(
           borderRadius: radius,
-          boxShadow: p.shadow(lvl),
-        ),
-        child: Material(
-          color: tone == null
-              ? p.surfaceAt(lvl)
-              : Color.alphaBlend(tone.tint(p), p.surface),
-          clipBehavior: Clip.antiAlias,
-          animationDuration: AppMotion.of(context, AppMotion.base),
-          shape: RoundedRectangleBorder(
-            borderRadius: radius,
-            side: BorderSide(
-              width: selected ? 1.5 : 1,
-              color: selected
-                  ? AppTone.primary.ink(p)
-                  : (tone?.hue.withValues(alpha: 0.5) ?? p.border),
-            ),
+          side: BorderSide(
+            width: selected ? 1.5 : 1,
+            color: _edge(p, tone, selected),
           ),
-          child: body,
         ),
+        child: body,
       ),
     );
   }
@@ -237,7 +179,6 @@ class SectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = context.palette;
     final th = Theme.of(context).textTheme;
-    const tone = AppTone.primary;
     final count = this.count;
     final trailing = this.trailing;
 
@@ -267,9 +208,10 @@ class SectionHeader extends StatelessWidget {
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               titleRow,
+              // Sayaç: nötr hap (sade stil: mavi yok; soluk yüzey + gövde metni, >= 4,5:1).
               DecoratedBox(
                 decoration: BoxDecoration(
-                  color: tone.tint(p),
+                  color: p.surfaceMuted,
                   borderRadius: BorderRadius.circular(AppRadius.pill),
                 ),
                 child: Padding(
@@ -282,7 +224,7 @@ class SectionHeader extends StatelessWidget {
                     suffix: countSuffix,
                     style: th.bodySmall?.copyWith(
                       fontWeight: FontWeight.w700,
-                      color: tone.ink(p),
+                      color: p.textSecondary,
                     ),
                   ),
                 ),
@@ -470,8 +412,9 @@ class _RenderHeaderFlow extends RenderBox
 
 /// Satır içi bildirim: hata/başarı/uyarı/bilgi kutusu (ikon + metin).
 ///
-/// Soluk ton zemini (opak: arkasındaki yüzeyden bağımsız aynı renk) + ton kenarı + `ink` metin
-/// (>= 4,5:1). Girişte [Pop] ile belirir; mesaj (ya da ton) değişince yeniden belirir. AYNI mesaj
+/// Sade stil (G7): zemin BOYANMAZ (opak yüzey: arkasındaki yüzeyden bağımsız aynı renk); durum tonlarında kenar tonun
+/// %40'ı ve ikon + metin `ink` (>= 4,5:1); bilgi gibi öteki tonlarda palet kenarı ve gövde metni rengi ([AppTone.sign]).
+/// Girişte [Pop] ile belirir; mesaj (ya da ton) değişince yeniden belirir. AYNI mesaj
 /// art arda tekrarlanıyorsa yeniden belirmesi için çağıran bir `key` verir (örn. deneme sayacı).
 /// [onRetry] verilirse "Tekrar Dene" düğmesi metnin ALTINDA hizalanır (dar ekranda yan yana değil;
 /// en az 48 dp).
@@ -514,7 +457,7 @@ class InlineNotice extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = context.palette;
     final th = Theme.of(context).textTheme;
-    final ink = tone.ink(p);
+    final ink = tone.sign(p);
     final retry = onRetry;
 
     return Pop(
@@ -524,9 +467,11 @@ class InlineNotice extends StatelessWidget {
         container: true,
         child: DecoratedBox(
           decoration: BoxDecoration(
-            color: Color.alphaBlend(tone.tint(p), p.surface),
+            color: p.surface,
             borderRadius: BorderRadius.circular(AppRadius.sm),
-            border: Border.all(color: tone.hue.withValues(alpha: 0.4)),
+            border: Border.all(
+              color: tone.isStatus ? tone.hue.withValues(alpha: 0.4) : p.border,
+            ),
           ),
           child: Padding(
             padding: const EdgeInsets.all(AppSpace.md),
