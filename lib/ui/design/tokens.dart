@@ -52,8 +52,14 @@ abstract final class AppMotion {
 
 /// Tema duyarlı renk paleti (ThemeExtension). `context.palette` ile okunur.
 ///
-/// Sözleşme: [text], [textSecondary] ve [textMuted] renklerinin her biri [surface] ve
-/// [surfaceMuted] üzerinde (koyuda ayrıca [surfaceAt] 2-3. seviyelerinde) en az 4,5:1 kontrast verir.
+/// Sözleşme: [text], [textSecondary] ve [textMuted] renklerinin her biri [surface], [surfaceMuted] ve [background]
+/// üzerinde (koyuda ayrıca [surfaceAt] 2-3. seviyelerinde) en az 4,5:1 kontrast verir.
+///
+/// **Sade stil (karar G6 + G7, sözleşme 2.3)**: sayfa zemini [background] (düz, ışıma yok); kart [surface] + 1 px
+/// [border], gölgesiz; gövde metni [textSecondary], başlık [text]; ana onay düğmesi ve kritik uyarı [action] / [critical]
+/// (düz: cila, degrade, gölge yok); mavi yalnız [link] ve [focusRing]; durum noktaları [statusOk], [statusWarn],
+/// [statusCrit] (zemin boyanmaz). Açık temanın değerleri beyaz etiketin değişkenleridir ([AppShowcaseColors]).
+/// Kontrast tablosu: `test/design/sade_style_test.dart` ve `docs/TASARIM_DILI.md`.
 @immutable
 class AppPalette extends ThemeExtension<AppPalette> {
   const AppPalette._(
@@ -63,37 +69,93 @@ class AppPalette extends ThemeExtension<AppPalette> {
     this.border,
     this.text,
     this.textSecondary,
-    this.textMuted,
-  );
+    this.textMuted, {
+    required this.background,
+    required this.action,
+    required this.onAction,
+    required this.link,
+    required this.focusRing,
+    required this.statusOk,
+    required this.statusWarn,
+    required this.statusCrit,
+    required this.critical,
+    required this.onCritical,
+    required this.criticalBorder,
+  });
 
   final bool isDark;
 
   /// Kart/diyalog/girdi yüzeyi.
   final Color surface;
 
-  /// Soluk iç yüzey (devre dışı zemin, iskelet tabanı, grup içi kutu).
+  /// Soluk iç yüzey (devre dışı zemin, iskelet tabanı, grup içi kutu, ikon rozeti).
   final Color surfaceMuted;
 
-  /// Kart/ayırıcı kenarı. Metin rengi DEĞİLDİR.
+  /// Kart/ayırıcı kenarı ve ikincil düğmenin çerçevesi. Metin rengi DEĞİLDİR.
   final Color border;
 
-  /// Ana metin.
+  /// Ana metin (başlık).
   final Color text;
 
-  /// İkincil metin (varsayılan gövde metni).
+  /// İkincil metin (varsayılan gövde metni; sade stilde ikonlar da bu renktedir).
   final Color textSecondary;
 
   /// Etiket/ipucu metni. Açıkta #5F6F85: surface, surfaceMuted ve #F8FAFC üzerinde >= 4,5:1.
   final Color textMuted;
 
+  /// Sayfa zemini: DÜZ renk (açıkta #F8FAFC "ana zemin", koyuda #0F172A); üstünde ışıma yoktur.
+  final Color background;
+
+  /// Ana onay düğmesinin zemini (açıkta #0F172A; koyuda #F8FAFC: koyu zeminde en yüksek karşıtlık). Düz çizilir.
+  final Color action;
+
+  /// [action] üstündeki metin ve ikon (açık / koyu temada >= 4,5:1; ölçüm 17,06:1).
+  final Color onAction;
+
+  /// Bağlantı metni (mavi yalnız burada ve [focusRing]'de). Yüzeylerde >= 4,5:1.
+  final Color link;
+
+  /// Klavye odak halkası (mavi). Yanındaki yüzeye >= 3:1.
+  final Color focusRing;
+
+  /// Durum noktası: tamam (zümrüt #10B981). Metnin solunda; zemin boyanmaz.
+  final Color statusOk;
+
+  /// Durum noktası: bekliyor (kehribar #F59E0B).
+  final Color statusWarn;
+
+  /// Durum noktası: kritik (mercan #E11D48 = [AppTone.danger] `hue` ve `a`).
+  final Color statusCrit;
+
+  /// Kritik uyarı kutusu (yalnız eylem isteyen yer: dikkat barı, ödenecek borç). Açıkta #0F172A; koyuda zeminden
+  /// ayrışan lacivert #172554 (+ [criticalBorder]).
+  final Color critical;
+
+  /// [critical] üstündeki metin.
+  final Color onCritical;
+
+  /// [critical] kutusunun kenarı: açıkta ince #1E293B, koyuda kutuya ve zemine >= 3:1 mavi (#3B82F6).
+  final Color criticalBorder;
+
   static const AppPalette light = AppPalette._(
     false,
-    Color(0xFFFFFFFF),
+    AppShowcaseColors.card,
     Color(0xFFF1F5F9),
-    Color(0xFFE2E8F0),
+    AppShowcaseColors.cardBorder,
     Color(0xFF0F172A),
-    Color(0xFF475569),
+    AppShowcaseColors.text,
     Color(0xFF5F6F85),
+    background: AppShowcaseColors.background,
+    action: AppShowcaseColors.focus,
+    onAction: AppShowcaseColors.onFocus,
+    link: Color(0xFF1D4ED8),
+    focusRing: Color(0xFF1D4ED8),
+    statusOk: AppShowcaseColors.statusOk,
+    statusWarn: AppShowcaseColors.statusWarn,
+    statusCrit: AppShowcaseColors.statusCrit,
+    critical: AppShowcaseColors.focus,
+    onCritical: AppShowcaseColors.onFocus,
+    criticalBorder: AppShowcaseColors.focusBorder,
   );
 
   static const AppPalette dark = AppPalette._(
@@ -104,6 +166,17 @@ class AppPalette extends ThemeExtension<AppPalette> {
     Color(0xFFF8FAFC),
     Color(0xFFCBD5E1),
     Color(0xFF94A3B8),
+    background: Color(0xFF0F172A),
+    action: Color(0xFFF8FAFC),
+    onAction: Color(0xFF0F172A),
+    link: Color(0xFF93C5FD),
+    focusRing: Color(0xFF93C5FD),
+    statusOk: AppShowcaseColors.statusOk,
+    statusWarn: AppShowcaseColors.statusWarn,
+    statusCrit: AppShowcaseColors.statusCrit,
+    critical: AppShowcaseColors.focusDark,
+    onCritical: AppShowcaseColors.onFocus,
+    criticalBorder: Color(0xFF3B82F6),
   );
 
   /// Yükselti 1..3 için yüzey rengi. Koyu temada yükselti = daha açık yüzey (beyaz %3 x (seviye-1));
@@ -158,6 +231,17 @@ class AppPalette extends ThemeExtension<AppPalette> {
     Color? text,
     Color? textSecondary,
     Color? textMuted,
+    Color? background,
+    Color? action,
+    Color? onAction,
+    Color? link,
+    Color? focusRing,
+    Color? statusOk,
+    Color? statusWarn,
+    Color? statusCrit,
+    Color? critical,
+    Color? onCritical,
+    Color? criticalBorder,
   }) {
     return AppPalette._(
       isDark ?? this.isDark,
@@ -167,6 +251,17 @@ class AppPalette extends ThemeExtension<AppPalette> {
       text ?? this.text,
       textSecondary ?? this.textSecondary,
       textMuted ?? this.textMuted,
+      background: background ?? this.background,
+      action: action ?? this.action,
+      onAction: onAction ?? this.onAction,
+      link: link ?? this.link,
+      focusRing: focusRing ?? this.focusRing,
+      statusOk: statusOk ?? this.statusOk,
+      statusWarn: statusWarn ?? this.statusWarn,
+      statusCrit: statusCrit ?? this.statusCrit,
+      critical: critical ?? this.critical,
+      onCritical: onCritical ?? this.onCritical,
+      criticalBorder: criticalBorder ?? this.criticalBorder,
     );
   }
 
@@ -182,6 +277,17 @@ class AppPalette extends ThemeExtension<AppPalette> {
       Color.lerp(text, other.text, t)!,
       Color.lerp(textSecondary, other.textSecondary, t)!,
       Color.lerp(textMuted, other.textMuted, t)!,
+      background: Color.lerp(background, other.background, t)!,
+      action: Color.lerp(action, other.action, t)!,
+      onAction: Color.lerp(onAction, other.onAction, t)!,
+      link: Color.lerp(link, other.link, t)!,
+      focusRing: Color.lerp(focusRing, other.focusRing, t)!,
+      statusOk: Color.lerp(statusOk, other.statusOk, t)!,
+      statusWarn: Color.lerp(statusWarn, other.statusWarn, t)!,
+      statusCrit: Color.lerp(statusCrit, other.statusCrit, t)!,
+      critical: Color.lerp(critical, other.critical, t)!,
+      onCritical: Color.lerp(onCritical, other.onCritical, t)!,
+      criticalBorder: Color.lerp(criticalBorder, other.criticalBorder, t)!,
     );
   }
 }
