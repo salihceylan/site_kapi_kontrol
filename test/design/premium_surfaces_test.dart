@@ -35,9 +35,6 @@ Finder _gradientBoxes(Finder root) => find.descendant(
   ),
 );
 
-Gradient _gradientOf(WidgetTester t, Finder box) =>
-    (t.widget<DecoratedBox>(box).decoration as BoxDecoration).gradient!;
-
 void main() {
   group('AppCard: düz yüzey (sade stil: ışık, yıkama, sızıntı yok)', () {
     testWidgets('açık ve koyu tema, her seviye ve ton: degrade katmanı yok', (t) async {

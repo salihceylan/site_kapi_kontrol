@@ -30,7 +30,7 @@ const AppPalette _dark = AppPalette.dark;
 /// Kontrast tablosunun bir satırı: (ad, ön plan, zemin, en az oran).
 typedef _Row = (String, Color, Color, double);
 
-List<_Row> contrastTable(AppPalette p) {
+List<_Row> _contrastTable(AppPalette p) {
   final surfaces = <String, Color>{
     'sayfa': p.background,
     'kart': p.surface,
@@ -302,7 +302,7 @@ void main() {
 
   group('kontrast tablosu (docs/TASARIM_DILI.md)', () {
     for (final (name, p) in const [('açık', _light), ('koyu', _dark)]) {
-      for (final (row, fg, bg, min) in contrastTable(p)) {
+      for (final (row, fg, bg, min) in _contrastTable(p)) {
         test('$name: $row >= $min', () {
           final r = contrast(fg, bg);
           expect(r, greaterThanOrEqualTo(min), reason: 'oran=${r.toStringAsFixed(2)}');
