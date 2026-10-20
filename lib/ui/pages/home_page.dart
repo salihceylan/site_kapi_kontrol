@@ -201,6 +201,11 @@ class HomePage extends StatefulWidget {
   /// açılmaz). Kapı açma işlevi değişmez.
   static const Duration doorEntryGuard = Duration(milliseconds: 500);
 
+  /// İP-1D: sakin alt çubuğu yalnız bu yükseklikten (dp) itibaren çizilir. Kısa pencerede (yatay telefon) sabit AppBar,
+  /// acil duyuru şeridi ve 80 dp'lik çubuk büyük yazıda içeriğe yer bırakmaz; orada gezinme çekmeceyle yapılır (çekmece de
+  /// aynı eşikte tek kaydırma düzenine geçer).
+  static const double residentBarMinHeight = 480;
+
 
 
   final AuthService authService;
@@ -5529,6 +5534,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   /// seçili sekme ekrandaki sayfadır (sekme olmayan sayfada Özet). Sekmeye dokunmak çekmeceden seçmekle AYNI yoldur.
   Widget? _residentBottomBar(UserSession session, SirketMenuItem page) {
     if (_audienceFor(session) != ShowcaseAudience.resident) return null;
+    if (MediaQuery.sizeOf(context).height < HomePage.residentBarMinHeight) return null;
     final tabs = residentTabsFor(
       menuItems: _visibleMenuItems(session),
       hasDoorAccess: _hasDoorPermission(session),

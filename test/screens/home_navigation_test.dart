@@ -435,6 +435,18 @@ void main() {
       });
     }
 
+    testWidgets('kısa pencere (yatay telefon, < 480 dp): alt çubuk yok, gezinme çekmeceyle; 480 dp\'de var', (t) async {
+      for (final (w, h, bar) in const <(double, double, bool)>[(640, 360, false), (800, 479, false), (800, 480, true)]) {
+        final auth = _NavAuth(UserRole.apartmentOwner);
+        final access = await _access(() => <MySiteModules>[_my('resident', modules: {'documents': true})]);
+        await _pumpHome(t, auth, access: access, width: w, height: h, scale: 2.0);
+        expect(_bar, bar ? findsOneWidget : findsNothing, reason: '${w.toInt()}x${h.toInt()}');
+        expect(t.takeException(), isNull);
+        await _disposeHome(t);
+      }
+      expect(HomePage.residentBarMinHeight, 480);
+    });
+
     testWidgets('yalnız görevli bağı: tek sekme kalır, çubuk yok', (t) async {
       final auth = _NavAuth(UserRole.apartmentOwner, doors: const <DoorRecord>[]);
       final access = await _access(() => <MySiteModules>[_my('staff', modules: {'work_tracking': true})]);
