@@ -338,6 +338,9 @@ void main() {
       final auth = _HomeApp(role: UserRole.individual)..mineError = ApiException('Sunucu yanıt vermedi.');
       await _pumpHome(t, auth);
       expect(find.byType(ModuleShowcaseView), findsOneWidget, reason: 'bireysel kullanıcı bireysel vitrinini görür');
+      // Vitrin her rolde çizilir: "yetki açılmadı" ayrımı yönetici kartlarının YOKLUĞUYLA sınanır.
+      expect(find.byKey(const ValueKey<String>('panel_kart_siteler')), findsNothing, reason: 'yetki yerelde yükseltilmez');
+      expect(find.byKey(const ValueKey<String>('panel_kart_moduller')), findsNothing);
       expect(find.text('Sunucu yanıt vermedi.'), findsOneWidget, reason: 'hata görünür');
       await _openDrawer(t);
       expect(_tileTitle('Site Başvuruları'), findsNothing);
@@ -460,6 +463,9 @@ void main() {
       await t.pump(const Duration(milliseconds: 600));
       expect(auth.role, UserRole.individual, reason: 'yenileme başarısız: yetki yükseltilmedi');
       expect(find.byType(ModuleShowcaseView), findsOneWidget);
+      // Arayüzde de yetki yükselmedi: yönetici vitrininin kartları (Site Yönetimi, Modüller) yok.
+      expect(find.byKey(const ValueKey<String>('panel_kart_siteler')), findsNothing, reason: 'yetki yerelde yükseltilmez');
+      expect(find.byKey(const ValueKey<String>('panel_kart_moduller')), findsNothing);
       expect(find.text('Site başvurunuz onaylandı'), findsOneWidget);
       expect(find.text('Hesabı yenile'), findsOneWidget);
 
@@ -819,7 +825,12 @@ void main() {
         ..seed([saRow(7, siteName: 'Ek Site')]);
       await _pumpHome(t, auth, height: 1600);
       expect(find.byType(ModuleShowcaseView), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('panel_kart_siteler')), findsOneWidget, reason: 'yönetici vitrini');
       expect(find.text('Site başvurunuz inceleniyor'), findsOneWidget);
+      // Sitesiz yöneticinin bireysel ana ekranı (başvuru düğmesini çizebilecek TEK ekran) Kapılar'ın arkasındadır:
+      // yokluk orada sınanır (vitrin bu düğmeyi hiç çizmez; vitrinde aramak her koşulda geçerdi).
+      await _openDoorPanel(t);
+      expect(find.byType(IndividualHomeView), findsOneWidget);
       expect(find.text('Site Kurmak İçin Başvur'), findsNothing, reason: 'yöneticide başvuru eylemi "Site Yönetimi" ekranındadır');
       await _tapMenu(t, 'Site Yönetimi');
       await t.pump(const Duration(milliseconds: 600));

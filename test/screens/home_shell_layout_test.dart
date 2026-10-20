@@ -245,7 +245,9 @@ Future<void> _pumpShell(
   if (doors) await _openDoorPanel(tester);
 }
 
-/// Panel vitrinindeki "Kapılar" kartına dokunur: kapı paneli bir dokunuş uzaktadır (başlık "Kapılar" olur).
+/// Panel vitrinindeki "Kapılar" kartına dokunur: kapı paneli bir dokunuş uzaktadır (başlık "Kapılar" olur). Kapılar
+/// sayfası girişte [HomePage.doorEntryGuard] boyunca dokunuş ALMAZ (vitrindeki karta hızlı ikinci dokunuş KAPIYI AÇ
+/// düğmesine düşmesin): kapı düğmesine dokunan testler bu süre geçtikten sonra dokunur.
 Future<void> _openDoorPanel(WidgetTester tester) async {
   final card = find.byKey(const ValueKey<String>('panel_kart_kapilar'));
   await tester.ensureVisible(card);
@@ -253,6 +255,7 @@ Future<void> _openDoorPanel(WidgetTester tester) async {
   await tester.tap(card);
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 50));
+  await tester.pump(HomePage.doorEntryGuard);
 }
 
 /// Yoklama zamanlayıcısı ve girişler kalmasın (flutter_test "Timer is still pending" demesin).

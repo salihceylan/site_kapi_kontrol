@@ -64,11 +64,43 @@ void main() {
       }
     });
 
-    test('her kartın açıklaması dolu (Panel hariç)', () {
+    test('her kartın açıklaması dolu (Panel hariç), her rolde', () {
       for (final item in SirketMenuItem.values) {
         if (item == SirketMenuItem.dashboard) continue;
         expect(showcaseDescription(item), isNotEmpty, reason: '$item açıklaması eksik');
+        for (final role in UserRole.values) {
+          expect(showcaseDescription(item, role), isNotEmpty, reason: '$item / $role açıklaması eksik');
+        }
       }
+    });
+
+    // tasarim-4: açıklama, kullanıcının o sayfada YAPABİLECEĞİNİ söyler (yetki kuralıyla çelişmez).
+    test('"Modüller": süper kullanıcıda aç / kapat; site yöneticisinde görüntüle / talep et (rol yoksa vaat yok)', () {
+      expect(showcaseDescription(SirketMenuItem.moduller, UserRole.superUser), 'Site modüllerini açın ve kapatın');
+      expect(showcaseDescription(SirketMenuItem.moduller, UserRole.siteManager), 'Tanımlı modüller ve modül talebi');
+      expect(showcaseDescription(SirketMenuItem.moduller), 'Tanımlı modüller ve modül talebi');
+      final manager = buildShowcaseModel(menuItems: _menu(UserRole.siteManager), role: UserRole.siteManager);
+      expect(
+        manager.grid.firstWhere((e) => e.item == SirketMenuItem.moduller).description,
+        'Tanımlı modüller ve modül talebi',
+      );
+      final superUser = buildShowcaseModel(menuItems: _menu(UserRole.superUser), role: UserRole.superUser);
+      expect(
+        superUser.grid.firstWhere((e) => e.item == SirketMenuItem.moduller).description,
+        'Site modüllerini açın ve kapatın',
+      );
+    });
+
+    test('"Kapılar": bireysel kullanıcıda bireysel ana ekran (kapılar, daireler, cihazlar); ötekilerde kapı paneli', () {
+      expect(showcaseDescription(SirketMenuItem.kapilar, UserRole.individual), 'Kapılar, daireleriniz ve cihazlarınız');
+      for (final role in <UserRole>[UserRole.apartmentOwner, UserRole.siteManager, UserRole.superUser]) {
+        expect(showcaseDescription(SirketMenuItem.kapilar, role), 'Kapı durumu ve kapıyı aç', reason: '$role');
+      }
+      final individual = buildShowcaseModel(
+        menuItems: _menu(UserRole.individual, extras: {SirketMenuItem.kapilar}),
+        role: UserRole.individual,
+      );
+      expect(individual.grid.first.description, 'Kapılar, daireleriniz ve cihazlarınız');
     });
   });
 
@@ -121,7 +153,24 @@ void main() {
       expect(duyuru.art, ModuleArtKind.announcements);
       final ziyaret = model.grid.firstWhere((e) => e.item == SirketMenuItem.ziyaretcilerim);
       expect(ziyaret.badge, 0);
-      expect(ziyaret.semanticLabel, 'Ziyaretçi ve Kargo', reason: 'rozet yoksa etiket yalnız başlık');
+      expect(ziyaret.semanticLabel, 'Ziyaretçilerim', reason: 'rozet yoksa etiket yalnız başlık');
+    });
+
+    // tasarim-13: aynı kullanıcıda aynı başlıklı iki kart olmaz (kurul üyesinde yönetim kaydı + sakin ekranı birlikte).
+    test('hiçbir rol / modda iki kart aynı başlığı taşımaz (tüm ek öğeler açıkken bile)', () {
+      final allExtras = <SirketMenuItem>{...SirketMenuItem.values}..remove(SirketMenuItem.dashboard);
+      for (final role in UserRole.values) {
+        for (final (resident, toggle) in <(bool, bool)>[(false, false), (true, true), (false, true)]) {
+          final model = buildShowcaseModel(
+            menuItems: _menu(role, extras: allExtras, resident: resident, toggle: toggle),
+            role: role,
+          );
+          final titles = <String>[for (final e in [...model.grid, ...model.secondary]) e.title];
+          expect(titles.toSet().length, titles.length, reason: '$role resident=$resident toggle=$toggle: $titles');
+        }
+      }
+      expect(YanMenu.titleFor(SirketMenuItem.ziyaretciKayitlari), 'Ziyaretçi ve Kargo');
+      expect(YanMenu.titleFor(SirketMenuItem.ziyaretcilerim), 'Ziyaretçilerim');
     });
 
     test('rozet sözcüğü verilmeyen öğede "bekleyen"', () {
@@ -134,10 +183,13 @@ void main() {
       expect(e.semanticLabel, 'Modül Talepleri, 2 bekleyen');
     });
 
-    test('FAIL-CLOSED: menü listesinde olmayan öğenin kartı yoktur (rozet haritasında olsa bile)', () {
-      // Finans modülü kapalı: yan menü "Finans"ı listelemedi.
+    test('listede olmayan öğe çizilmez: rozet haritasında sayı olsa bile kart üretilmez', () {
+      // Bu SAF test yalnız kart üretiminin listenin DIŞINA çıkmadığını sınar: liste Finans / Borcum ek öğesi VERİLMEDEN
+      // kuruldu (HomePage modül kapalıyken bunları eklemez). Modül verisinden listeye giden asıl fail-closed yolu
+      // (her modül kodu kapalıyken kart / hızlı işlem yok) HomePage düzeyinde sınanır:
+      // test/screens/module_showcase_home_page_test.dart, "fail-closed tablosu".
       final items = _menu(UserRole.siteManager, extras: {SirketMenuItem.kapilar, SirketMenuItem.duyurular});
-      expect(items, isNot(contains(SirketMenuItem.finans)));
+      expect(items, isNot(contains(SirketMenuItem.finans)), reason: 'ön koşul: liste Finans içermiyor');
       final model = buildShowcaseModel(
         menuItems: items,
         role: UserRole.siteManager,

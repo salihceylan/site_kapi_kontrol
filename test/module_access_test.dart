@@ -563,9 +563,45 @@ void main() {
       return access;
     }
 
-    test('yalnız kurul/görevli bağı olan kullanıcı: kapalı SAYILMAZ, menüler değişmez', () async {
+    test('yalnız kurul/görevli bağı olan kullanıcı: modül "kapalı" SAYILMAZ; yönetici ve bireyselde menüler değişmez', () async {
       final access = await loaded(<MySiteModules>[board(1, door: false)]);
       expect(access.isDisabledEverywhere(PlatformModuleCodes.doorControl), isFalse);
+      expect(hiddenMenuItemsFor(UserRole.siteManager, access), isEmpty, reason: 'yönetici etkilenmez');
+      expect(hiddenMenuItemsFor(UserRole.individual, access), isEmpty, reason: 'bireysel ana ekranın yolu Kapılar');
+      expect(hiddenMenuItemsFor(UserRole.superUser, access), isEmpty);
+      access.dispose();
+    });
+
+    // yetki-1: daire sakini rolünde kapı erişimi olan site yoksa ve kapı listesi boşsa kapı öğeleri gizlenir (kapı açamayan
+    // görevliye / dış kurul üyesine / yalnız site üyesine "Kapılar", "Kapıyı aç" ve Eller Serbest vaat edilmez).
+    test('daire sakini rolünde kapı erişimli site yok + kapı listesi boş: kapı öğeleri gizlenir (modül açık ya da kapalı)', () async {
+      for (final door in <bool>[true, false]) {
+        final access = await loaded(<MySiteModules>[board(1, door: door)]);
+        expect(hiddenMenuItemsFor(UserRole.apartmentOwner, access), doorControlMenuItems, reason: 'door_control=$door');
+        expect(
+          hiddenMenuItemsFor(UserRole.apartmentOwner, access, hasDoors: true),
+          isEmpty,
+          reason: 'sunucu kapı verdiyse (kapı listesi dolu) kapı öğeleri kalır',
+        );
+        access.dispose();
+      }
+    });
+
+    test('daire sakini rolünde hiç sitesi olmayan (yüklendi, boş) hesapta da kapı öğeleri gizlenir; veri yokken (fail-open) gizlenmez', () async {
+      final none = await loaded(const <MySiteModules>[]);
+      expect(hiddenMenuItemsFor(UserRole.apartmentOwner, none), doorControlMenuItems);
+      expect(hiddenMenuItemsFor(UserRole.individual, none), isEmpty);
+      none.dispose();
+
+      final notLoaded = ModuleAccess(fetch: (_Fetcher()..error = Exception('ağ yok')).call);
+      await notLoaded.refresh();
+      expect(notLoaded.isFiltering, isFalse);
+      expect(hiddenMenuItemsFor(UserRole.apartmentOwner, notLoaded), isEmpty, reason: 'fail-open: menü eskisi gibi');
+      notLoaded.dispose();
+    });
+
+    test('daire sakini rolünde kapı erişimli (açık) bir site varsa kapı öğeleri kalır', () async {
+      final access = await loaded(<MySiteModules>[_site(1, door: true), board(2, door: false)]);
       expect(hiddenMenuItemsFor(UserRole.apartmentOwner, access), isEmpty);
       access.dispose();
     });
