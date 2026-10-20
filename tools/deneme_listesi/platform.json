@@ -182,10 +182,10 @@
             "Menüleri gezin.",
             "Misafir geçişi bağlantısını açmayı deneyin."
           ],
-          "beklenen": "Kapı menüleri ve kapı kartları görünmez. Panel’de “Geçiş Kontrol modülü kapalı” bilgisi çıkar. Kapı listesi ve telefon widget’ı o siteyi göstermez. Misafir bağlantısı kibar bir “modül kapalı” bilgisi verir, hata ekranı çıkmaz.",
+          "beklenen": "Kapı menüleri, Panel'deki \"Kapılar\" kartı ve kapı kısayolları görünmez (ayrıca bir \"modül kapalı\" bilgi kartı da çıkmaz; öteki modül kartları durur). Kapı listesi ve telefon widget'ı o siteyi göstermez. Misafir bağlantısı kibar bir \"modül kapalı\" bilgisi verir, hata ekranı çıkmaz.",
           "rol_notu": "Daire sakini",
           "on_kosul": "Geçiş Kontrol’ü kapalı bir test sitesi",
-          "yeni": false,
+          "yeni": true,
           "gelistirme": "hazir"
         },
         {
@@ -540,7 +540,7 @@
           "beklenen": "Beş türün hepsi seçilebilir; \"Yakında…\" etiketi yoktur. Seçilen tür site kartında etiket olarak görünür. Şimdilik hepsinde \"daire\" ve \"blok\" terimleri kullanılır (ofis/mağaza/üye payı gibi türe özel terimler sonraki aşamadadır). Kurulmuş sitenin türü düzenlemede salt okunur gösterilir.",
           "rol_notu": "",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         }
       ]
@@ -651,11 +651,11 @@
             "Şablonu birkaç kişi ve daireyle doldurup yükleyin (bir satırı bilerek hatalı bırakın).",
             "Önizlemeyi inceleyip onaylayın."
           ],
-          "beklenen": "Yükleme önce önizleme gösterir. Hatalı satırlar sebebiyle ayrı listelenir. Onaylayınca yalnızca doğru satırlar kaydedilir ve mevcut kayıtlar bozulmaz.",
+          "beklenen": "Yükleme önce önizleme gösterir. Hatalı satırlar sebebiyle ayrı listelenir. Onaylayınca yalnızca doğru satırlar kaydedilir ve mevcut kayıtlar bozulmaz. Ayrıntılı deneme maddeleri F13 bölümünde.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
-          "yeni": false,
-          "gelistirme": "planli"
+          "yeni": true,
+          "gelistirme": "hazir"
         },
         {
           "id": "F2.09",
@@ -663,11 +663,11 @@
           "adimlar": [
             "Kişiler ekranında “Dışa Aktar”a dokunun."
           ],
-          "beklenen": "Süzülmüş liste Excel/CSV dosyası olarak indirilir. Sütunlar kişi kartındaki alanlarla aynıdır.",
+          "beklenen": "Süzülmüş liste Excel/CSV dosyası olarak indirilir. Sütunlar kişi kartındaki alanlarla aynıdır. Ayrıntılı deneme maddeleri F13 bölümünde.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
-          "yeni": false,
-          "gelistirme": "planli"
+          "yeni": true,
+          "gelistirme": "hazir"
         },
         {
           "id": "F2.10",
@@ -914,16 +914,16 @@
         },
         {
           "id": "F3.11",
-          "baslik": "Belgeler (sonraki adım)",
+          "baslik": "Belgeler",
           "adimlar": [
             "Yönetici “Belgeler”e bir PDF (ör. yönetim planı) yükler ve kimlerin göreceğini seçer.",
             "Sakin hesabıyla belgeyi açın."
           ],
-          "beklenen": "Belge, izin verilen kişilerde listelenir ve açılır. İzin verilmeyen kişi belgeyi göremez.",
+          "beklenen": "Belge, izin verilen kişilerde listelenir ve açılır. İzin verilmeyen kişi belgeyi göremez. Ayrıntılı deneme maddeleri F14 bölümünde.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
-          "yeni": false,
-          "gelistirme": "planli"
+          "yeni": true,
+          "gelistirme": "hazir"
         },
         {
           "id": "F3.12",
@@ -1114,68 +1114,65 @@
         },
         {
           "id": "F4.07",
-          "baslik": "Makbuz (sonraki adım)",
+          "baslik": "Makbuz",
           "adimlar": [
             "Bir tahsilat kaydından “Makbuz”a dokunun."
           ],
-          "beklenen": "Sıra numaralı makbuz PDF’i açılır. Sakin de kendi makbuzunu görüp paylaşabilir.",
+          "beklenen": "Sıra numaralı makbuz PDF’i açılır. Sakin de kendi makbuzunu görüp paylaşabilir. Ayrıntılı deneme maddeleri F15 bölümünde.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
-          "yeni": false,
-          "gelistirme": "planli"
+          "yeni": true,
+          "gelistirme": "hazir"
         },
         {
           "id": "F4.08",
-          "baslik": "Gecikme tazminatı (sonraki adım)",
-          "adimlar": [
-            "Finans ayarlarında gecikme oranını tanımlayın.",
-            "Vadesi geçmiş borcu olan bir dairenin hesabına bakın."
-          ],
-          "beklenen": "Vade sonrası gecikme tutarı otomatik hesaplanır ve hesabın nasıl yapıldığı ekranda yazar. Yönetici bir daire için gecikmeyi affedebilir; bu işlem kayıt defterinde görünür.",
+          "baslik": "Gecikme tazminatı",
+          "adimlar": [],
+          "beklenen": "Yakında… Hesap ve e-posta kodlandı, avukat onayına kadar bilerek kapalı (yasal taslak avukata gidiyor). Açıldığında ayrıntılı deneme F15 bölümündeki maddelerle yapılır.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
-          "yeni": false,
-          "gelistirme": "planli"
+          "yeni": true,
+          "gelistirme": "yakinda"
         },
         {
           "id": "F4.09",
-          "baslik": "Gider kaydı (sonraki adım)",
+          "baslik": "Gider kaydı",
           "adimlar": [
             "“Gider Ekle”ye dokunun.",
             "Kategori (elektrik, su, personel, bakım…), tutar, tarih ve ödeme yöntemi girin; faturanın fotoğrafını ekleyin."
           ],
-          "beklenen": "Gider listede görünür, belgesiyle birlikte açılır ve ilgili hesabın bakiyesine yansır.",
+          "beklenen": "Gider listede görünür, belgesiyle birlikte açılır ve ilgili hesabın bakiyesine yansır. Ayrıntılı deneme maddeleri F15 bölümünde.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
-          "yeni": false,
-          "gelistirme": "planli"
+          "yeni": true,
+          "gelistirme": "hazir"
         },
         {
           "id": "F4.10",
-          "baslik": "Kasa ve banka hesapları (sonraki adım)",
+          "baslik": "Kasa ve banka hesapları",
           "adimlar": [
             "Bir kasa ve bir banka hesabı tanımlayın.",
             "Hesaplar arasında aktarım yapın."
           ],
-          "beklenen": "Her hesabın bakiyesi ayrı görünür. Tahsilat ve giderler seçilen hesaba işlenir. Aktarım iki hesapta da hareket olarak görünür.",
+          "beklenen": "Her hesabın bakiyesi ayrı görünür. Tahsilat ve giderler seçilen hesaba işlenir. Aktarım iki hesapta da hareket olarak görünür. Ayrıntılı deneme maddeleri F15 bölümünde.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
-          "yeni": false,
-          "gelistirme": "planli"
+          "yeni": true,
+          "gelistirme": "hazir"
         },
         {
           "id": "F4.11",
-          "baslik": "Raporlar (sonraki adım)",
+          "baslik": "Raporlar",
           "adimlar": [
             "“Raporlar”ı açın.",
             "Aylık gelir-gider özeti, borçlular listesi, tahsilat oranı ve bir daire ekstresine bakın.",
             "Birini Excel ya da PDF olarak indirin."
           ],
-          "beklenen": "Rakamlar daire hesapları ve gider kayıtlarıyla tutarlıdır. Dönem seçilebilir. Çıktı ekrandakiyle aynıdır.",
+          "beklenen": "Rakamlar daire hesapları ve gider kayıtlarıyla tutarlıdır. Dönem seçilebilir. Çıktı ekrandakiyle aynıdır. Ayrıntılı deneme maddeleri F15 bölümünde.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
-          "yeni": false,
-          "gelistirme": "planli"
+          "yeni": true,
+          "gelistirme": "hazir"
         },
         {
           "id": "F4.12",
@@ -1206,15 +1203,13 @@
         },
         {
           "id": "F4.14",
-          "baslik": "Borç hatırlatması (sonraki adım)",
-          "adimlar": [
-            "Vadesi geçmiş borcu olan dairelerde “Hatırlat”ı seçin."
-          ],
-          "beklenen": "Sakine uygulama bildirimi ve e-posta gider. Yönetici kaç kişiye gittiğini görür. Aynı gün ikinci kez toplu hatırlatma uyarı verir.",
+          "baslik": "Borç hatırlatması",
+          "adimlar": [],
+          "beklenen": "Yakında… Hesap ve e-posta kodlandı, avukat onayına kadar bilerek kapalı (yasal taslak avukata gidiyor). Açıldığında ayrıntılı deneme F15 bölümündeki maddelerle yapılır.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
-          "yeni": false,
-          "gelistirme": "planli"
+          "yeni": true,
+          "gelistirme": "yakinda"
         },
         {
           "id": "F4.15",
@@ -1319,7 +1314,7 @@
           "beklenen": "Yeni kiracı yalnız taşınma ayından itibaren olan borçları, ödemeleri ve makbuzları görür; önceki kiracının borcu, ödemesi ve makbuzu görünmez. Kartta \"Kayıtlar … ayından itibaren gösterilir\" notu çıkar. Yönetici ekstresi değişmez: dairenin tüm kayıtları görünür.",
           "rol_notu": "Sakin (yeni kiracı) + site yöneticisi",
           "on_kosul": "Aidat ve Finans modülü açık, en az iki ay borçlandırılmış bir daire",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -1332,7 +1327,7 @@
           "beklenen": "Ödeme vadesi en eski borçtan mahsup edildiği için yeni kiracının kendi borcu açık kalabilir; Borcum bunu doğru gösterir ve \"Ödemeler vadesi en eski borçtan başlayarak mahsup edilir…\" notunu yazar. \"Borcunuz yok\" yanlışlıkla çıkmaz; sahte alacak görünmez.",
           "rol_notu": "Sakin (yeni kiracı) + site yöneticisi",
           "on_kosul": "F4.22",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         }
       ]
@@ -2267,12 +2262,12 @@
           "baslik": "(Yayın) R8'li Release Paketi Cihazda Açılıyor mu",
           "adimlar": [
             "Debug paketini kaldırıp `app-release.apk`'yı telefona kurun (`adb install -r` ya da dosyadan).",
-            "Giriş yapın; \"Panel\"de kapı kartından \"KAPIYI AÇ\" ile kapıyı bulut yolundan açın."
+            "Giriş yapın; Panel'de \"Kapılar\" kartına dokunup kapı panelindeki \"KAPIYI AÇ\" ile kapıyı bulut yolundan açın."
           ],
           "beklenen": "Uygulama çökmeden açılır; giriş ve kapı açma çalışır. R8 küçültme açıktır (`android/app/proguard-rules.pro`) ve R8'li paket cihazda DENENMEDİ: kural eksikliği ancak cihazda görülür.",
           "rol_notu": "Hepsi",
           "on_kosul": "Anahtarla imzalı `app-release.apk`",
-          "yeni": false,
+          "yeni": true,
           "gelistirme": "hazir"
         },
         {
@@ -3422,7 +3417,7 @@
           "beklenen": "Önizlemenin \"Saklanacaklar\" kartında talepler/yorumlar ve \"İş takibi taleplerine eklediğiniz fotoğraflar (N) taleple birlikte site yönetiminde kalır\" maddesi çıkar. Dosyada yalnız kendi talepleriniz, kendi yorumlarınız ve fotoğrafların meta verisi (dosya adı, tür, boyut, tarih) bulunur; fotoğraf içeriği, başkalarının yorumları, iç notlar ve durum geçmişi yoktur (\"excluded\" açıklar). Silme sonrası talep ve fotoğraflar sitede kalır; açan/yükleyen \"Silinmiş Kullanıcı\" görünür.",
           "rol_notu": "",
           "on_kosul": "İş Takibi açık sitede, fotoğraflı talep açmış TEST hesabı",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -3436,7 +3431,7 @@
           "beklenen": "\"Silinecekler\" kartında gelecekteki bekleyen/onaylı rezervasyonlar ve açık konsiyerj talepleri sayıyla yazar; \"Saklanacaklar\"da geçmiş rezervasyon/talep kayıtlarının sitede kalacağı yazar. Dosyada yalnız sizin rezervasyonlarınız (alan, zaman, durum, notunuz) ve talepleriniz vardır; yönetimin gerekçe ve notları yoktur. Silme sonrası gelecekteki rezervasyonlar ve açık talepler iptal olur, kapasite boşalır; kayıtlar \"Silinmiş Kullanıcı\" adıyla kalır.",
           "rol_notu": "",
           "on_kosul": "Rezervasyon modülü açık sitede TEST hesabı",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         }
       ]
@@ -3470,7 +3465,7 @@
           "beklenen": "Onay modu 'otomatik' ise anında onaylanır; 'yönetici onaylı' ise bekler. Yönetici karar verince sakinin listesinde o rezervasyonda okunmamış işareti ve 'Rezervasyonlarım' sekmesinde sayı görünür; ayrıntı açılınca kaybolur. Sakinin kendi yaptığı işlemler (oluşturma, kendi iptali) işaret çıkarmaz. E-posta ya da telefon bildirimi gönderilmez (bu sürümde yalnız uygulama içi).",
           "rol_notu": "",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -3483,7 +3478,7 @@
           "beklenen": "Sakin kargo teslimi, temizlik, taşıma gibi hizmet ister; görevli talebi takip eder. Yönetim durum ya da not değiştirince sakinde okunmamış işareti ve sekme sayısı çıkar; açınca kaybolur.",
           "rol_notu": "",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         }
       ]
@@ -3507,7 +3502,7 @@
           "beklenen": "Talep 'Yeni' durumuyla ve fotoğraflarıyla kaydedilir; listede fotoğraf sayısı rozeti görünür. Bir fotoğraf yüklenemezse talep yine açılır ve 'Talep oluşturuldu, N fotoğraf yüklenemedi.' yazar; eksik fotoğraf talep ayrıntısından yeniden eklenebilir. Beşinci fotoğraf 'En fazla 4 fotoğraf eklenebilir' ile reddedilir; büyük fotoğraf 'Fotoğraf hazırlanıyor...' sonrası küçültülüp yüklenir (konum bilgisi silinir); resim olmayan dosya tür hatasıyla reddedilir. Yöneticinin eklediği fotoğraf sakinde görünür ve yükleyen adı yazar; sakin yalnız kendi eklediğini silebilir, yönetici hepsini silebilir. Kurul fotoğrafları görür ama ekleyemez/silemez. Kapanmış ya da iptal edilmiş talebe fotoğraf eklenemez.",
           "rol_notu": "",
           "on_kosul": "İş Takibi modülü sitede açık",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -3533,7 +3528,7 @@
           "beklenen": "Özet kartları (açılan, çözülen, kapanan, iptal, şu an açık, gecikmiş, ortalama/medyan çözüm süresi), görevli bazında tablo (açık, gecikmiş, çözülen, ortalama süre, zamanında %) ve kategori satırları gelir. Kurul salt okur; görevlide 'Rapor' sekmesi yoktur. 366 günden uzun aralık reddedilir. Çözüm süresi, talebin açılışından ilk 'Çözüldü' durumuna kadar geçen süredir; atanmamış talepler 'Atanmamış' satırında ayrı gösterilir.",
           "rol_notu": "",
           "on_kosul": "İş Takibi modülü sitede açık; birkaç çözülmüş talep",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         }
       ]
@@ -3641,7 +3636,7 @@
           "beklenen": "Beş türün hepsi seçilebilir (artık \"Yakında…\" çipi yoktur); her satırda türün tek cümlelik açıklaması ve varsayılandan farklı kelimelerin kısa özeti yazar (örn. İş Merkezi: \"Daire → Ofis, Sakin → Firma, …\"). Site seçilen türle kaydedilir. \"Site Düzenle\"de tür yalnız çip olarak görünür ve \"Yönetim türü site kurulduktan sonra değiştirilemez.\" notu çıkar.",
           "rol_notu": "Süper kullanıcı / Site yöneticisi",
           "on_kosul": "Silinmesinde sakınca olmayan bir TEST sitesi kurun (tür sonradan değiştirilemez).",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -3654,7 +3649,7 @@
           "beklenen": "İş Merkezi’nde sekme \"Ofisler\", arama kutusu \"Ofis ara\"; Kooperatif’te \"Hisseler\"; Alışveriş Merkezi’nde \"Mağazalar\" yazar. Apartman ve Site ile Rezidans’ta \"Daireler\" kalır. Yalnız kelimeler değişir: kayıtlar, yetkiler ve diğer ekranlar aynı çalışır.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -3666,7 +3661,7 @@
           "beklenen": "Türe önerilen modüllerin kartında \"Bu tür için önerilir\" çipi görünür. Apartman ve Site: Geçiş Kontrol, Aidat ve Finans, Belgeler, Duyuru ve Bildirim. Rezidans: Rezervasyon ve Konsiyerj, Ziyaretçi ve Kargo, İş Takibi, Geçiş Kontrol, Aidat ve Finans. İş Merkezi: İş Takibi, Ziyaretçi ve Kargo, Aidat ve Finans, Belgeler. Kooperatif: Aidat ve Finans, Belgeler, Duyuru ve Bildirim, Anket ve Oylama. Alışveriş Merkezi: Aidat ve Finans, İş Takibi, Ziyaretçi ve Kargo, Belgeler. Çip yalnız öneridir: modüller yine kapalı gelir, açma ve talep akışı değişmez.",
           "rol_notu": "Site yöneticisi / Süper kullanıcı",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -3676,7 +3671,7 @@
           "beklenen": "Yakında… Rezidansa özel ayarlar. (Danışma/konsiyerj ve ortak alan rezervasyonu \"Rezervasyon ve Konsiyerj\" (F18), kargo ve ziyaretçi kaydı \"Ziyaretçi ve Kargo\" (F11.03) modülleriyle bugün kullanılabilir; Rezidans türünde \"Bu tür için önerilir\" işaretiyle gelir.)",
           "rol_notu": "",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "yakinda"
         },
         {
@@ -3686,7 +3681,7 @@
           "beklenen": "Yakında… KDV’li fatura, firma çalışanlarının girişi, mesai saatleri. (\"Ofis/Firma\" kelimeleri (F9.06) ve ziyaretçi kaydı (F11.03) hazırdır.)",
           "rol_notu": "",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "yakinda"
         },
         {
@@ -3696,7 +3691,7 @@
           "beklenen": "Yakında… Hisse devri ve üye/hisse kayıtları, genel kurul ve denetim, inşaat dönemi ödemeleri. (\"Hisse/Üye\" ve \"Üye aidatı\" kelimeleri (F9.06) hazırdır.)",
           "rol_notu": "",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "yakinda"
         },
         {
@@ -3706,7 +3701,7 @@
           "beklenen": "Yakında… Kira, ciro kirası, sayaç ve enerji dağıtımı. (\"Mağaza/Kiracı firma\" ve \"Ortak gider\" kelimeleri (F9.06) hazırdır.)",
           "rol_notu": "",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "yakinda"
         }
       ]
@@ -3724,7 +3719,7 @@
           "beklenen": "Planlı. Sunucu tarafı hazırdır: kart bir kişi kaydına tanımlanır, iptal edilir (kayıt silinmez, geçmiş kalır), aynı sitede bir kart aynı anda yalnız bir kişide etkin olur; sakin ileride yalnız kendi kartlarını numarasının son 4 hanesi açık olarak görecek. Uygulama ekranı (yönetici kart listesi, tanımlama, iptal; sakin kart listesi) ve kart okuyucu (cihaz yazılımı ve kapı bağlantısı) henüz YOKTUR; gelince denenecek adımlar buraya yazılır. \"Kartlı Geçiş\" \"Modüller\" ekranında görünür, ama açılsa da uygulamada yeni ekran çıkmaz.",
           "rol_notu": "",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "planli"
         },
         {
@@ -3777,7 +3772,7 @@
           "beklenen": "Taslak yalnız yöneticide görünür, sakinde hiç görünmez. Yayınlanınca \"Anket yayınlandı.\" yazar ve anket sakinin \"Açık anketler\" listesine gelir; yayınlanan anketin sorusu ve seçenekleri değiştirilemez. Oy verince \"Oyunuz alındı.\" yazar ve sonuçlar (seçenek başına oy ve yüzde) görünür; oy değiştirilemez, ikinci oy kabul edilmez. Yönetici sonucu her zaman \"Toplam N oy · M kişiden %X katılım\" biçiminde görür. Kapatınca \"Anket kapatıldı.\" yazar, artık oy verilemez ve kapanan anket yeniden açılamaz; sakin sonucu \"Kapanan anketler\"de görür. Kapanış tarihi geçen anket \"Süresi doldu\" görünür ve oy almaz.",
           "rol_notu": "Site yöneticisi / Daire sakini",
           "on_kosul": "Modül siteye açık olmalı: süper kullanıcı açar ya da site yöneticisi \"Modüller\" ekranından \"Modül Talep Et\" ile ister ve süper kullanıcı onaylar. Denemeleri bir TEST sitesinde yapın.",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -3792,7 +3787,7 @@
           "beklenen": "İlk hesabın oyu alınır; aynı dairedeki ikinci hesap oy veremez ve nedeni yazılır. Seçilmeyen bloktaki sakin anketi hiç görmez. Anonim olmayan ankette yönetici \"Oy verenler\" listesinde kişi, daire ve seçimi görür; anonim ankette kimin ne oy verdiği görünmez. Kurul üyesi anketleri ve sonuçları görür ama yeni anket, yayınla ve kapat düğmeleri yoktur ve \"Yönetim kurulu üyesi olarak anketleri ve sonuçları yalnızca görüntüleyebilirsiniz. Oy verenler görünmez.\" notu çıkar. Görevli hesabında \"Anket ve Oylama\" menüsü yoktur.",
           "rol_notu": "Site yöneticisi / Yönetim kurulu / Daire sakini",
           "on_kosul": "Modül siteye açık olmalı: süper kullanıcı açar ya da site yöneticisi \"Modüller\" ekranından \"Modül Talep Et\" ile ister ve süper kullanıcı onaylar. Denemeleri bir TEST sitesinde yapın. Seçilen blokta iki sakin hesabı bağlı bir daire ve başka blokta bir sakin hesabı gerekir.",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -3807,14 +3802,14 @@
           "beklenen": "Kargo \"Bekliyor\", ziyaretçi \"İçeride\" durumuyla açılır (\"Kargo kaydı açıldı (Bekliyor).\" / \"Ziyaretçi kaydı açıldı (İçeride).\"). Kapatınca durum \"Teslim edildi\" / \"Ayrıldı\" olur ve kapanış zamanı görünür; kapanan kayıt yeniden açılamaz, kayıt silinmez (yanlış kayıt \"İptal\" ile kapatılır). Süzgeç ve arama listeyi daraltır.",
           "rol_notu": "Görevli / Site yöneticisi",
           "on_kosul": "Modül siteye açık olmalı: süper kullanıcı açar ya da site yöneticisi \"Modüller\" ekranından \"Modül Talep Et\" ile ister ve süper kullanıcı onaylar. Denemeleri bir TEST sitesinde yapın. Kayıt girecek kapıcı/güvenlik hesabı siteye görevli olarak eklenmiş olmalı.",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
           "id": "F11.07",
           "baslik": "Ziyaretçi ve kargo: sakin rozeti ve rol sınırları",
           "adimlar": [
-            "F11.03’teki dairenin sakini: menüde \"Ziyaretçi ve Kargo\"nun yanındaki sayı rozetine bakın; ekranı açın.",
+            "F11.03’teki dairenin sakini: menüde \"Ziyaretçilerim\"in yanındaki sayı rozetine bakın; ekranı açın (sayfanın başlık kartında \"Ziyaretçi ve Kargo\" yazar).",
             "\"Yeni\" rozetli kaydı açın (ayrıntı penceresi), kapatıp listeye ve menü rozetine dönün.",
             "Başka bir dairenin sakini aynı ekrana baksın.",
             "Yönetim kurulu üyesi hesabıyla \"Ziyaretçi ve Kargo\"yu açın."
@@ -3832,7 +3827,7 @@
           "beklenen": "Karar defteri hazırdır (F22). Toplantı daveti ve çevrimiçi oylama (e-genel kurul) hukuki görüş bekliyor; yakında.",
           "rol_notu": "",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "yakinda"
         },
         {
@@ -3844,7 +3839,7 @@
           "beklenen": "Hizmet alınan firmalar, sözleşme bitiş tarihleri ve hatırlatmalar çalışır (ayrıntı F21).",
           "rol_notu": "",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -3979,7 +3974,7 @@
           "beklenen": "Fotoğraflar talep ayrıntısında şerit olarak görünür; Rapor sekmesi yalnız yönetici ve kurulda vardır.",
           "rol_notu": "",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         }
       ]
@@ -4101,7 +4096,7 @@
           "beklenen": "Yönetim karar verince ya da not yazınca sakinin listesinde okunmamış işareti ve sekme sayısı çıkar; ayrıntı açılınca kaybolur; sakinin kendi işlemleri işaret çıkarmaz.",
           "rol_notu": "",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         }
       ]
@@ -4123,7 +4118,7 @@
           "beklenen": "Pencere tam ekran açılır; solda lacivert menü, SmartKeyPass logosu ve altta “Sunucu anahtarı hazır” (yeşil nokta) ya da “Sunucu anahtarı yok” (sarı nokta; üzerine gelince nasıl tanımlanacağı yazar) görünür. Sayfa geçişi kısa bir kaymayla olur, menüdeki seçim çizgisi yeni öğeye kayar. Yazılar yüksek ölçekte bulanık değildir.",
           "rol_notu": "Şirket (üretim) bilgisayarı",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -4137,7 +4132,7 @@
           "beklenen": "Takınca kart 2 saniye içinde listeye gelir ve sağ altta “Kart bağlandı: COMx” bildirimi çıkar; tek kart bağlıysa kendiliğinden seçilir. Çıkarınca listeden düşer ve “Kart çıkarıldı” bildirimi gelir. Hiç kart yokken tabloda “Bağlı kart yok” açıklaması görünür.",
           "rol_notu": "Şirket (üretim) bilgisayarı",
           "on_kosul": "Bir ESP32 kapı kartı ve USB kablosu",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -4150,7 +4145,7 @@
           "beklenen": "Okurken sağdaki rozet “Kimlik okunuyor” der, alt çubukta dönen gösterge görünür. Bitince “Kimlik okundu” bildirimi gelir, karekod hafif bir animasyonla belirir, kimlik büyük yazıyla ve kopyalama düğmesiyle görünür. Satırın durumu “Karekod hazır” olur, üstteki adım göstergesinde ilk iki adım tamamlanır. Ayrıca “QR oluştur” düğmesine basmak gerekmez.",
           "rol_notu": "Şirket (üretim) bilgisayarı",
           "on_kosul": "Bir ESP32 kapı kartı",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -4163,7 +4158,7 @@
           "beklenen": "Kaydederken rozet “Kaydediliyor”, bitince “Kaydedildi” olur; satırda “✓ Kaydedildi” yazar ve adım göstergesinin üçü de tamamlanır. Sunucu anahtarı yoksa “Yerel kayıt tamam, sunucuya gönderilemedi” uyarı penceresi çıkar. Yazdır yazıcıya gönderir; PNG output klasörüne kaydedilir ve bildirim gelir. Kimliği okunmamış kart seçiliyken kaydet, yazdır ve PNG düğmeleri kapalıdır (başka kartın etiketi basılamaz).",
           "rol_notu": "Şirket (üretim) bilgisayarı",
           "on_kosul": "Kimliği okunmuş bir kart; yazıcı",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -4176,7 +4171,7 @@
           "beklenen": "Çözüm adımlarını anlatan “Kimlik okunamadı” penceresi çıkar; kapatınca düğmeler yeniden kullanılabilir. (Eskiden okuma hatasından sonra düğmeler kalıcı olarak kapalı kalıyordu.)",
           "rol_notu": "Şirket (üretim) bilgisayarı",
           "on_kosul": "Bir ESP32 kapı kartı",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -4191,7 +4186,7 @@
           "beklenen": "Arama kutusunun yanındaki rozet cihaz sayısını gösterir (“3 cihaz”; aramada “1 / 3 cihaz”); eşleşme yoksa “Eşleşen cihaz yok” yazar. Seçilen cihazın karekodu sağda belirir; kayıt tarihleri yerel saatle görünür. PDF açılır ve “PDF raporu hazır” bildirimi gelir. Sunucuya ulaşılamazsa tablonun altında sarı uyarı simgesiyle nedeni yazar.",
           "rol_notu": "Şirket (üretim) bilgisayarı",
           "on_kosul": "Silmeyi yalnızca TEST kaydıyla deneyin",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -4205,7 +4200,7 @@
           "beklenen": "Başlıktaki rozet “Bağlanıyor” → “Bağlı: COMx” olur. Bilgiler Kimlik ve yazılım, Bluetooth, Donanım, Wi-Fi ve ağ, MQTT gruplarında dolar; değişen değer kısa süre vurgulanır. Seri kayıtta gönderilen komutlar mavi, hatalar kırmızı görünür. Kart aynı ağdaysa “Yerel yayın (UDP)” alanı dolar (eskiden hiç dolmuyordu); Windows Güvenlik Duvarı ilk seferde Python için izin isteyebilir, özel ağa izin verin. “Genel IP (WAN)” alanı için F20’ye bakın.",
           "rol_notu": "Şirket (üretim) bilgisayarı",
           "on_kosul": "Bir ESP32 kapı kartı",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -4219,7 +4214,7 @@
           "beklenen": "Sıradaki adımın düğmesi koyu renkle vurgulanır. Derlerken ilerleme çubuğunda gidip gelen şerit ve “Derleniyor” rozeti görünür; yüklemede yüzde ilerler; bitince “TMM · Yükleme tamamlandı” bildirimi gelir ve adım göstergesi tamamlanır. Hedef kart listesi Etiketle sayfasındaki seçimle aynıdır. Derleme, sürüm, sunucu ya da ZIP hatasında hata penceresi çıkar (eskiden bu hatalarda pencere hiç açılmıyordu) ve rozet “Başarısız” olur.",
           "rol_notu": "Şirket (üretim) bilgisayarı",
           "on_kosul": "PlatformIO kurulu bilgisayar ve bir test kartı",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -4232,7 +4227,7 @@
           "beklenen": "ZIP oluşur ve “ZIP hazır” bildirimi gelir (eskiden bu düğme hata verip ZIP oluşturmuyordu). BAT ve README dosyalarında hedef donanım adı (esp32-c3 ya da esp32-wroom) doğru yazar.",
           "rol_notu": "Şirket (üretim) bilgisayarı",
           "on_kosul": "Oluşturulmuş bir sürüm",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -4246,7 +4241,7 @@
           "beklenen": "Ekran bulununca yeşil rozette “COMx · SmartKeyPass 2.4\" ekran yanıt verdi” yazar; bulunamazsa sarı ya da kırmızı rozet nedenini söyler. Komutlar seri kayıtta mavi görünür. Yükleme bitince “TMM” bildirimi gelir ve seri konsol kendiliğinden yeniden bağlanır.",
           "rol_notu": "Şirket (üretim) bilgisayarı",
           "on_kosul": "2.4\" ekran modülü",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -4259,7 +4254,7 @@
           "beklenen": "Sayfa geçişleri, bildirimler ve karekod animasyonsuz, anında görünür; işlevler aynı çalışır.",
           "rol_notu": "Şirket (üretim) bilgisayarı",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         }
       ]
@@ -4281,7 +4276,7 @@
           "beklenen": "Düzeltme öncesi davranıştı: alan '-' kalıyordu. Düzeltilmiş sürümde F20.03'teki gibi dolmalıdır. Yeni kurulan kart Wi-Fi'ye bağlandıktan sonra yaklaşık 2 dakika içinde IP'yi bildirir; daha önce '-' görünmesi normaldir.",
           "rol_notu": "Şirket (üretim) bilgisayarı",
           "on_kosul": "İnternete bağlı bir kapı kartı",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -4293,7 +4288,7 @@
           "beklenen": "Mobil uygulamada genel IP görünüyorsa veri sunucuda var demektir; sorun yalnızca masaüstü aracının bu bilgiye erişememesidir. Görünmüyorsa sorun daha geniştir (sunucu kartın genel IP’sini hiç almıyor) ve düzeltmeye bu da eklenmelidir.",
           "rol_notu": "Süper kullanıcı / site yöneticisi",
           "on_kosul": "F20.01’deki kart",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -4307,7 +4302,7 @@
           "beklenen": "Durum bloğu geldikten birkaç saniye içinde “Genel IP (WAN)” alanı kartın genel IP’siyle dolar (değer kısa süre vurgulanır) ve F20.02’de görülen değerle aynıdır; yalnızca bağlı kartın IP’si gösterilir. Anahtar yokken ya da sunucuya ulaşılamazken alan “-” kalır, uygulama donmaz ve hata penceresi çıkmaz.",
           "rol_notu": "Şirket (üretim) bilgisayarı",
           "on_kosul": "Düzeltme sürümü",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -4321,7 +4316,7 @@
           "beklenen": "Uç anahtarsız istekte 401, geçersiz kimlikte 400, bilinmeyen cihazda 404 döner; yanıt yalnızca istenen cihazın genel IP’sini içerir (cihaz listesi, kullanıcı ya da site bilgisi dönmez). Testler ve lint yeşil, derleme hatasız.",
           "rol_notu": "Geliştirici",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         }
       ]
@@ -4342,7 +4337,7 @@
           "beklenen": "Yönetici, kurul ve görevlide 'Sözleşmeler' menüsü görünür; sakinde görünmez. Modül kapalıyken kimsede görünmez.",
           "rol_notu": "",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -4356,7 +4351,7 @@
           "beklenen": "Firma listelenir; aynı ad reddedilir. Arama ad, yetkili ve telefonla bulur. Telefona dokununca arama ekranı açılır.",
           "rol_notu": "",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -4369,7 +4364,7 @@
           "beklenen": "Bitişi yaklaşan sözleşme 'Bitişi yaklaşan' (uyarı rengi), geçmiş olan 'Süresi dolmuş' (hata rengi), süresiz olan 'Yürürlükte' görünür; kartlar süzgeç gibi çalışır. Otomatik yenilenende 'Fesih bildirimi son günü' yazar. Bitiş başlangıçtan önceyse kayıt reddedilir.",
           "rol_notu": "",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -4381,7 +4376,7 @@
           "beklenen": "Sözleşme 'Feshedilen' olur ve özet sayısı değişir; yeniden etkinleştirilince eski durumuna döner. Kayıt silinmez.",
           "rol_notu": "",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -4394,7 +4389,7 @@
           "beklenen": "Site yöneticilerine sitedeki yaklaşan sözleşmeleri listeleyen bir e-posta gelir (firma, başlık, bitiş/fesih tarihi; tutar yok). Aynı gün ikinci e-posta gelmez.",
           "rol_notu": "",
           "on_kosul": "E-posta (SMTP) canlıda açık; yönetici e-postası doğrulanmış",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -4406,7 +4401,7 @@
           "beklenen": "Kayıtları görürler (telefon dahil) ama ekleme, düzenleme ve fesih düğmeleri yoktur.",
           "rol_notu": "",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         }
       ]
@@ -4427,7 +4422,7 @@
           "beklenen": "Yönetici ve kurulda 'Karar Defteri', sakinde 'Kararlar' görünür; görevlide görünmez. Kurul salt okur.",
           "rol_notu": "",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -4440,7 +4435,7 @@
           "beklenen": "Karar 'Taslak' olarak kaydedilir ve düzenlenebilir/silinebilir. Kaydetmeden çıkarken 'Değişiklikler silinsin mi?' sorulur.",
           "rol_notu": "",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -4454,7 +4449,7 @@
           "beklenen": "Kesinleşen karar 'yıl/sıra' numarası alır (ör. 2026/1) ve bir daha değiştirilemez ya da silinemez. Toplantı tarihi gelmemiş karar 'Toplantı tarihi gelmemiş karar kesinleştirilemez.' ile reddedilir.",
           "rol_notu": "",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -4466,7 +4461,7 @@
           "beklenen": "Yeni karar eski kararı gösterir; eski kararda 'X sayılı kararla değiştirildi' yazar ve bağlantıya dokununca yeni karar açılır.",
           "rol_notu": "",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -4478,7 +4473,7 @@
           "beklenen": "Yalnız kesin kararları içeren PDF iner/paylaşılır; Türkçe karakterler doğru, uzun metin sayfalara bölünür; altta 'noter onaylı karar defterinin yerine geçmez' notu bulunur.",
           "rol_notu": "",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -4490,7 +4485,7 @@
           "beklenen": "Sakin yalnız kesinleşmiş ve 'Sakinler de görsün' işaretli kararları görür; taslaklar ve yönetime özel kararlar görünmez.",
           "rol_notu": "",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         }
       ]
@@ -4510,7 +4505,7 @@
           "beklenen": "Kartta PIN yazmaz; 'Şifre (PIN): yönetim verdi' ya da 'sakin kendisi belirledi' ve 'PIN yalnız oluşturulurken bir kez gösterilir; unutulduysa yenileyin.' notu görünür.",
           "rol_notu": "",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -4523,7 +4518,7 @@
           "beklenen": "PIN bir kez büyük pencerede gösterilir (kopyalama düğmesiyle); e-posta girildiyse 'PIN … adresine bir kez gönderildi' yazar. Pencere kapanınca PIN bir daha görülemez.",
           "rol_notu": "",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -4536,7 +4531,7 @@
           "beklenen": "Yeni PIN bir kez gösterilir; eski PIN çalışmaz, eski oturumlar kapanır, o hesabın misafir geçişleri ve kapı karekodları iptal olur.",
           "rol_notu": "",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -4549,7 +4544,7 @@
           "beklenen": "E-posta varsa yeni PIN yönetime GÖSTERİLMEZ, yalnız sakinin e-postasına gider. E-posta yoksa yönetici sıfırlayamaz ('yalnız süper kullanıcı sıfırlayabilir'); süper kullanıcı sıfırlayabilir.",
           "rol_notu": "",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -4562,6 +4557,231 @@
           "beklenen": "Eski sakinin e-postası formda hazır gelmez ve yeni PIN eski adrese gönderilmez.",
           "rol_notu": "",
           "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "hazir"
+        }
+      ]
+    },
+    {
+      "id": "F24",
+      "baslik": "Panel: modül vitrini ve \"Kapılar\" kartı",
+      "durum": "hazir",
+      "ozet": "Girişten sonra açılan Panel artık kapı açma ekranı değil, kullanıcıya tanımlı modüllerin resimli kart vitrinidir. Kapı paneli \"Kapılar\" kartının arkasındadır (bir dokunuş). Kartlar çekmecedeki menüyle aynı öğelerden gelir: kapalı ya da yetkisiz modülün kartı yoktur. Vitrindeki hiçbir kart kapı açmaz. Saha listesinde bölüm 87.",
+      "maddeler": [
+        {
+          "id": "F24.01",
+          "baslik": "Girişte modül vitrini gelir",
+          "adimlar": [
+            "Süper kullanıcı, site yöneticisi, daire sakini ve bireysel kullanıcı hesaplarıyla sırayla giriş yapın."
+          ],
+          "beklenen": "Hepsinde Panel, modül kartlarıyla açılır; kapı düğmesi yoktur. Başlık \"Panel\"dir. Kartlarda görsel, başlık ve tek satır açıklama vardır. Bireysel kullanıcıda üstte borç kartı ve hızlı işlemler yoktur: varsa site başvurusu durumu kartının ardından doğrudan modül kartları gelir.",
+          "rol_notu": "Hepsi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F24.02",
+          "baslik": "Yalnız tanımlı modüller görünür",
+          "adimlar": [
+            "Süper kullanıcı bir siteye Finans'ı ve Belgeler'i açsın, sonra kapatsın.",
+            "Aynı sitenin yönetici ve sakin hesaplarında Panel'e ve çekmeceye bakın; modül durumu değişince yarım dakika bekleyin ya da Yenile'ye dokunun."
+          ],
+          "beklenen": "Açık modülün kartı hem vitrinde hem çekmecede çıkar; kapatınca ikisinden de kalkar. Sakinde \"Finans\" değil \"Borcum\" kartı vardır.",
+          "rol_notu": "Süper kullanıcı + site yöneticisi + daire sakini",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F24.03",
+          "baslik": "\"Kapılar\" kartı ve hızlı \"Kapıyı aç\"",
+          "adimlar": [
+            "Panel'de \"Kapılar\" kartına dokunun; geri dönüp \"Hızlı işlemler\" altındaki \"Kapıyı aç\"a dokunun.",
+            "Çekmecede \"Panel\"in altındaki \"Kapılar\"a bakın.",
+            "Ekran okuyucu (TalkBack / VoiceOver) açıkken \"Kapıyı aç\" kutusuna odaklanın.",
+            "Kapı panelinde kapıyı açın, sonra geri tuşuna basın."
+          ],
+          "beklenen": "İkisi de kapı panelini (kapı seçici ve yuvarlak düğme) açar; vitrinde kapı AÇILMAZ. Ekran okuyucu kutuyu \"Kapıyı aç\" adı ve \"Kapılar sayfasını açar; kapı orada açılır\" ipucuyla okur. Geri tuşu Panel vitrinine döner, uygulamadan çıkmaz.",
+          "rol_notu": "Daire sakini",
+          "on_kosul": "Geçiş Kontrol açık, hesabın en az bir kapısı var.",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F24.04",
+          "baslik": "Geçiş Kontrol kapalıyken kapı kartı yok",
+          "adimlar": [
+            "Kullanıcının bağlı olduğu tüm sitelerde Geçiş Kontrol (kapı) modülü kapalıyken Panel'e ve çekmeceye bakın.",
+            "Süper kullanıcı \"Kapılar\"da modülü kapalı siteyi seçsin."
+          ],
+          "beklenen": "\"Kapılar\" kartı, \"Kapıyı aç\" ve \"Ziyaretçi kodu\" kısayolları, çekmecedeki \"Kapılar\" / \"Eller Serbest\" ve kapı komutları (\"Sesli Kapı Açma\", \"Kapıya QR Göster\", \"Kapı Ekranından QR Oku\", \"Kurye / Misafir Geçiş Linki Oluştur\") yoktur; öteki modül kartları durur. Bireysel kullanıcıda daireler, katılım başvuruları ve cihazlar vitrinin altında \"Geçiş Kontrol modülü kapalı: telefondan kapı açma, QR ve misafir geçişi şu an kapalı.\" notuyla görünür. Süper kullanıcıda \"Kapılar\" kalır; modülü kapalı site seçilince \"Geçiş Kontrol modülü kapalı\" bilgi kartı çıkar.",
+          "rol_notu": "Site yöneticisi, daire sakini, bireysel kullanıcı, süper kullanıcı",
+          "on_kosul": "Geçiş Kontrol kullanıcının bağlı olduğu tüm sitelerde kapalı.",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F24.05",
+          "baslik": "Sakin görünümü: borç kartı ve hızlı işlemler",
+          "adimlar": [
+            "Borcu olan, borcu olmayan ve fazla ödemiş (alacaklı) sakin hesaplarıyla Panel'e bakın.",
+            "Finans modülü kapalı bir sitenin sakin hesabıyla ve borç bilgisi alınamazken (uçak modu) de bakın.",
+            "\"Hızlı işlemler\"i dairesi olan bir sakinle ve dairesi olmayan bir yönetim kurulu üyesiyle karşılaştırın."
+          ],
+          "beklenen": "Yalnız ödenecek borç varken üstte KOYU kartta \"Güncel borcunuz\", tutar, varsa \"Vadesi geçen\" ve \"Sıradaki vade\" satırları ile \"Borcum'a git\" görünür; düğme Borcum'u açar. Borç yoksa kart düzdür (açık temada beyaz, gölgesiz, ince çerçeveli): başlık \"Borç durumunuz\", tutar yerine \"Borcunuz yok\" (fazla ödemede \"Alacağınız\" ve tutar) ve yine \"Borcum'a git\". Modül kapalıyken aynı düz kartta \"Merhaba, Ad\" selamlaması çıkar; bilgi alınamazken altında \"Borç bilginiz şu an alınamadı.\" notu vardır; ikisinde de \"Borcunuz yok\" yazmaz. \"Hızlı işlemler\"de yalnız modülü açık olanlar şu sırayla çıkar: Kapıyı aç, Arıza bildir, Ziyaretçi kodu, Ziyaretçi ve kargo (\"Ziyaretçilerim\"i açar), Belgeler. \"Arıza bildir\" ve \"Ziyaretçi ve kargo\" yalnız dairesi olan sitede çıkar: dairesi olmayan kurul üyesinde bu iki kısayol yoktur, \"Taleplerim\" ve \"Ziyaretçilerim\" kartları ise durur.",
+          "rol_notu": "Daire sakini",
+          "on_kosul": "Aidat ve Finans açık bir site. Hesap yönetimin açtığı daire hesabı olmalı. Kendi kaydolup siteye bağlanmış (bireysel) hesapta hızlı işlemler bölümü hiç çıkmaz; bu bir hata değildir.",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F24.06",
+          "baslik": "Süper kullanıcıda dikkat barı",
+          "adimlar": [
+            "Süper kullanıcı hesabında bekleyen bir modül talebi ve bir site başvurusu bırakın; Panel'e bakın, satırdaki \"İncele\"ye dokunun.",
+            "Bekleyenleri bitirince tekrar bakın.",
+            "Site yöneticisi hesabıyla da Panel'e bakın."
+          ],
+          "beklenen": "Üstte koyu barda \"Dikkat edilmesi gereken N iş var\" ve her satırda tek düğme görünür; düğme ilgili sayfayı (Modül Talepleri / Site Başvuruları) açar. Ekran okuyucu düğmeyi satır metniyle okur (ör. \"2 bekleyen site başvurusu. İncele\"). Bekleyen kalmayınca bar kalkar. Bar bugün yalnız süper kullanıcıda çıkar; site yöneticisinin barı (bekleyen dekont, eşleşmeyen banka satırı) sonraki sürümde gelecek.",
+          "rol_notu": "Süper kullanıcı; karşılaştırma için site yöneticisi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F24.07",
+          "baslik": "Büyük yazı, dar ekran, koyu tema",
+          "adimlar": [
+            "Telefonda yazı boyutunu en büyüğe alın, koyu temayı açın, Panel'e bakın.",
+            "Tablet ya da web'de pencereyi genişletin.",
+            "Telefonda hareket azaltmayı (animasyonları kaldır) açıp Panel'i yeniden açın."
+          ],
+          "beklenen": "Taşma ve kesilme olmaz; telefonda 2 sütun (çok büyük yazıda 1), geniş ekranda 3-4 sütun görünür. Hareket azaltma açıkken kartlar animasyonsuz gelir.",
+          "rol_notu": "Daire sakini ve site yöneticisi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F24.08",
+          "baslik": "Hesap ve ayar düğmeleri",
+          "adimlar": [
+            "Panel'in altındaki \"Hesap ve ayarlar\" satırından Profilim, Eller Serbest ve Yardım ve Destek'e dokunun."
+          ],
+          "beklenen": "Bunlar kart değil küçük düğmedir; çekmeceden seçmekle aynı sayfaları açar.",
+          "rol_notu": "Daire sakini",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F24.09",
+          "baslik": "Ziyaretçi kodu: misafir / kurye geçiş linki",
+          "adimlar": [
+            "Panel'de \"Hızlı işlemler\" altındaki \"Ziyaretçi kodu\"na dokunun.",
+            "Açılan pencerede bir geçiş türü seçip \"Linki Oluştur\"a basın; linki kopyalayın.",
+            "Ekran okuyucuyla kutuya odaklanın.",
+            "İzni kapalı bir sitede, kapısı olmayan bir sakinle ve Geçiş Kontrol kapalı bir sitede tekrar bakın."
+          ],
+          "beklenen": "Dokununca çekmecedeki \"Kurye / Misafir Geçiş Linki Oluştur\" ile aynı \"<kapı adı> - Geçiş Linki\" penceresi açılır (Tek Kullanımlık 30 dk; Süreli Misafir 2 saat / 5 kullanım; Günlük Geçiş 12 saat / 10 kullanım); sayfa vitrinde kalır ve kapı AÇILMAZ. \"Linki Oluştur\" ile \"Geçiş Linki Hazır!\" penceresi çıkar. Ekran okuyucu kutuyu \"Misafir ve kurye için süreli geçiş linki oluşturur; kapıyı açmaz\" ipucuyla okur. İzin kapalıyken, kapı yokken ya da Geçiş Kontrol kapalıyken kutu hiç çıkmaz.",
+          "rol_notu": "Daire sakini",
+          "on_kosul": "Geçiş Kontrol açık, sakinin en az bir kapısı var ve sitenin güvenlik politikasında \"Misafir & Kurye Geçiş İzni\" açık.",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F24.10",
+          "baslik": "Kapılar'a girişte çift dokunuş kapıyı açmaz",
+          "adimlar": [
+            "Panel'de \"Kapılar\" kartına hızlıca iki kez dokunun (ikinci dokunuş kapı düğmesinin yerine denk gelsin).",
+            "Aynısını hızlı işlemlerdeki \"Kapıyı aç\" ve çekmecedeki \"Kapılar\" ile deneyin.",
+            "Yarım saniye bekleyip kapı düğmesine bir kez dokunun."
+          ],
+          "beklenen": "Kapılar sayfası açılır ama kapı AÇILMAZ: girişten sonraki ilk yarım saniye sayfadaki dokunuşlar yok sayılır. Bekledikten sonra tek dokunuş kapıyı eskisi gibi açar. Kapılar'dayken düğme beklemeden çalışır; öteki sayfalar etkilenmez.",
+          "rol_notu": "Daire sakini ve site yöneticisi",
+          "on_kosul": "Kapı çevrimiçi.",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F24.11",
+          "baslik": "Kapı erişimi olmayan hesapta kapı öğeleri yok",
+          "adimlar": [
+            "Görevli (kapıcı / güvenlik) ve dairesi olmayan yönetim kurulu üyesi hesaplarıyla Panel'e (kartlar, \"Hızlı işlemler\", \"Hesap ve ayarlar\") ve çekmeceye bakın; aynı sitenin dairesi olan bir sakinle karşılaştırın.",
+            "Kurul üyesine bir kapı izni verip Yenile'ye dokunun."
+          ],
+          "beklenen": "Görevli ve dairesiz kurul üyesinde \"Kapılar\" kartı, \"Kapıyı aç\" ve \"Ziyaretçi kodu\", \"Eller Serbest\" ve çekmecedeki \"Kapılar\" ile kapı komutları görünmez; \"Arıza bildir\" ve \"Ziyaretçi ve kargo\" kısayolları da çıkmaz. Yetkili oldukları modül kartları ve çekmece öğeleri durur; sesli asistan da konuşmaz. Dairesi olan sakinde hepsi görünür. Kapı izni verilince \"Kapılar\" geri gelir. Modül bilgisi hiç alınamadıysa (ağ yok) menü eskisi gibi kalır.",
+          "rol_notu": "Görevli ve dairesiz kurul üyesi; karşılaştırma için daire sakini",
+          "on_kosul": "Geçiş Kontrol açık; görevli ve kurul üyesi hesaplarının o sitede dairesi ve kapı izni yok. Hesap yönetimin açtığı daire hesabı olmalı. Kendi kaydolup siteye bağlanmış (bireysel) hesapta hızlı işlemler bölümü hiç çıkmaz; bu bir hata değildir. Bireysel hesapta \"Kapılar\" kalır, çünkü bireysel ana ekranın tek yoludur.",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F24.12",
+          "baslik": "Android kapı widget'ı Kapılar sayfasını açar",
+          "adimlar": [
+            "Uygulamayı kapatın ve widget'ın gövdesine ya da başlığına (düğmelerin dışına) dokunun; uygulama arka plandayken tekrarlayın.",
+            "Widget'taki \"KAPIYI AÇ\", önceki / sonraki kapı ve (kapı destekliyorsa) \"QR KOD\" düğmelerine dokunun.",
+            "Uygulamada çıkış yapıp widget gövdesine dokunun."
+          ],
+          "beklenen": "Gövdeye dokununca uygulama Panel vitrini yerine doğrudan Kapılar sayfasında açılır; kapı AÇILMAZ. \"KAPIYI AÇ\" ve önceki / sonraki düğmeleri eskisi gibi widget üzerinden çalışır; \"QR KOD\" uygulamayı Kapılar sayfasında açıp QR penceresini gösterir. Oturum yokken uygulama giriş ekranında açılır. Geçiş Kontrol kapalıysa ya da hesabın kapı erişimi yoksa uygulama Panel vitrininde açılır. Not: bu sürümde böyle bir hesapta soğuk açılışta Kapılar bir an görünüp vitrine dönebilir; düzeltmesi sıradaki sürümde.",
+          "rol_notu": "Daire sakini (Android)",
+          "on_kosul": "Üst çubuktaki \"Masaüstüne Widget Ekle\" ile kapı widget'ı ana ekrana eklenmiş, oturum açık.",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F24.13",
+          "baslik": "Geri tuşu: önce çekmece, sonra vitrin",
+          "adimlar": [
+            "Panel'de çekmeceyi açıp geri tuşuna basın.",
+            "Bir modül sayfasında (ör. Borcum ya da Kapılar) çekmeceyi açıp geri tuşuna basın; ardından geri tuşuna iki kez daha basın.",
+            "Sakin Borcum'dayken süper kullanıcı o sitede Finans'ı kapatsın (yarım dakika bekleyin ya da Yenile'ye dokunun)."
+          ],
+          "beklenen": "Çekmece açıkken geri tuşu yalnız çekmeceyi kapatır. Modül sayfasında sonraki geri Panel vitrinine döner, vitrinde bir sonraki geri uygulamadan çıkar. Açık sayfanın modülü kapanınca ekran kendiliğinden Panel'e döner: başlık \"Panel\" olur ve ilk geri basışı uygulamadan çıkar.",
+          "rol_notu": "Herhangi bir hesap (Android geri tuşu)",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F24.14",
+          "baslik": "Açılan sayfa en üstten başlar",
+          "adimlar": [
+            "Panel vitrinini aşağı kaydırıp alttaki bir karta ya da \"Hesap ve ayarlar\"daki \"Profilim\"e dokunun, sonra geri tuşuyla vitrine dönün.",
+            "Çift modlu hesapta \"Sakin Modu / Yönetici Paneli\" geçişini de deneyin."
+          ],
+          "beklenen": "Açılan sayfa en üstten başlar; geri dönülen vitrin de en üstten başlar; mod geçişinde de sayfa en üstten açılır.",
+          "rol_notu": "Daire sakini ya da site yöneticisi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F24.15",
+          "baslik": "Yenile, rozetleri de tazeler",
+          "adimlar": [
+            "Sakin Panel'deyken yönetici acil olmayan yeni bir duyuru yayınlasın ve görevli sakinin dairesine bir kargo kaydı açsın.",
+            "Sakin beklemeden üst çubuktaki Yenile'ye dokunsun (ya da Panel'i aşağı çeksin)."
+          ],
+          "beklenen": "Vitrindeki ve çekmecedeki \"Duyurular\" ile \"Ziyaretçilerim\" sayı rozetleri ve vitrindeki \"Yeni duyuru\" kartı hemen güncellenir (kendiliğinden yoklama duyurularda ~20 sn, ziyaretçide ~60 sn); borç kartı da yeniden okunur.",
+          "rol_notu": "Daire sakini + site yöneticisi / görevli",
+          "on_kosul": "Sitede Duyuru ve Bildirim ile Ziyaretçi ve Kargo modülleri açık.",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F24.16",
+          "baslik": "Acil duyuru şeridi vitrinin üstünde görünür",
+          "adimlar": [
+            "Açık temada, vitrini kısa (birkaç modül kartı) olan bir sakin hesabıyla Panel'i büyük bir telefonda, tablette ya da web'de açın.",
+            "Yönetici \"Acil\" önemde bir duyuru yayınlasın; ~20 sn bekleyin ya da Yenile'ye dokunun.",
+            "Koyu temada tekrarlayın, sonra şeride dokunun."
+          ],
+          "beklenen": "Kırmızı şerit (\"Okunmamış acil duyuru: <başlık>\") Panel vitrininin üstünde, kaydırmadan da tam görünür; vitrinin zemini şeridi örtmez (açık ve koyu temada aynı). Dokununca duyuru açılır; okununca şerit kalkar.",
+          "rol_notu": "Daire sakini + site yöneticisi",
+          "on_kosul": "Duyuru ve Bildirim açık.",
           "yeni": true,
           "gelistirme": "hazir"
         }

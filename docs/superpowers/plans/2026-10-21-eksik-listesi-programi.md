@@ -49,7 +49,7 @@ defter yalnız eklemeli (append-only), düzeltme ters kayıtla. Modüller katalo
 9. **Ortak dosyalar (çakışma alanı).** `lib/ui/widgets/yan_menu.dart`, `lib/ui/pages/home_page.dart`,
    `lib/ui/helpers/module_showcase.dart`, `server/src/server.js` (router kaydı), `server/src/modules/catalog.js`, yardım metinleri ve
    tanıtım turu. Bu dosyalarda yalnız kendi İP'nin satırlarını tek blok hâlinde ekle; yeniden düzenleme, taşıma ya da biçimlendirme
-   yapma. `docs/SAHA_KONTROL_LISTESI.md` ve `tools/deneme_listesi/platform.json` dosyalarına DOKUNMA: deneme maddelerini son raporda
+   yapma. `SAHA_KONTROL_LISTESI.md` (depo kökünde) ve `tools/deneme_listesi/platform.json` dosyalarına DOKUNMA: deneme maddelerini son raporda
    ver (koordinatör ekler).
 10. **Belge.** Alanın sözleşme belgesi (`docs/PLATFORM_<ALAN>.md`) güncellenir ya da yeni açılır: uçlar, tablolar, kurallar, inceleme
     kararları. Yardım metni ve tanıtım turu yeni ekranı anlatır.
@@ -256,7 +256,7 @@ web kaynakları erişim tarihiyle. Uydurma madde, tarih ya da ücret YAZMA: doğ
 4. Son doğrulayıcı (bir ajan): tümleşik dalda yayın engeli var mı.
 5. `main`'e birleştir ve gönder; sunucu dağıtımı (prepare → rehearse → activate → verify), web dizin takası; gerekiyorsa Platform
    Ayarları değerleri (H1).
-6. Faz Kontrol Listesi sayfası (`tools/deneme_listesi/platform.json` → `uret.py` → aynı adres), `docs/SAHA_KONTROL_LISTESI.md`, yol
+6. Faz Kontrol Listesi sayfası (`tools/deneme_listesi/platform.json` → `uret.py` → aynı adres), `SAHA_KONTROL_LISTESI.md` (depo kökünde), yol
    haritası işaretleri.
 
 ## 6. Kapsam denetimi (karar kaydı → İP)
