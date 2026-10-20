@@ -299,6 +299,28 @@ export function parseIdempotencyKey(value, { required = false } = {}) {
   return value;
 }
 
+/** İki hesap (İP-1A): gövde alanı `account_party` (owner | tenant). Yoksa null; geçersizse 400 INVALID_BODY. */
+export function parseAccountParty(value, label = 'Hesap') {
+  if (value === undefined || value === null) {
+    return null;
+  }
+  if (value !== 'owner' && value !== 'tenant') {
+    throw invalidBody(`${label} geçersiz (ev sahibi hesabı veya kiracı hesabı olmalıdır).`);
+  }
+  return value;
+}
+
+/** İki hesap (İP-1A): borç tanımı / ek borç gövde alanı `charge_party` (occupant | owner). Yoksa null; geçersizse 400 INVALID_BODY. */
+export function parseChargeParty(value) {
+  if (value === undefined || value === null) {
+    return null;
+  }
+  if (value !== 'occupant' && value !== 'owner') {
+    throw invalidBody('Kim öder seçimi geçersiz (dairede oturan veya ev sahibi olmalıdır).');
+  }
+  return value;
+}
+
 export function parseBooleanFlag(value, label) {
   if (value === undefined || value === null) {
     return false;
@@ -693,6 +715,8 @@ function parsePaymentFields(input, now) {
     description: normalizeFreeText(input.description, { label: 'Açıklama', max: DESCRIPTION_MAX }),
     idempotencyKey: parseIdempotencyKey(input.idempotency_key, { required: true }),
     accountId: parseOptionalAccountId(input.account_id),
+    // İki hesap (İP-1A): tahsilatın yazılacağı hesap; verilmezse (eski istemci) sunucu vadesi en eski açık borcu olan hesabı seçer.
+    accountParty: parseAccountParty(input.account_party),
   };
 }
 
@@ -895,7 +919,19 @@ export function mapEntryRow(row) {
     created_at: toIso(row.created_at),
     late_fee_run_id: row.late_fee_run_id === null || row.late_fee_run_id === undefined ? null : Number(row.late_fee_run_id),
     receipt: mapEntryReceipt(row),
+    // İki hesap (İP-1A): satırın hesabı (052 öncesi satırda payer_party'den türetilir: tenant -> kiracı, owner / both -> ev sahibi) ve kaynak izi.
+    account_party: entryAccountParty(row),
+    source_kind: row.source_kind ?? null,
+    source_id: row.source_id === null || row.source_id === undefined ? null : Number(row.source_id),
   };
+}
+
+/** Defter satırının hesabı: dolu `account_party`; boşsa payer_party türetmesi (both -> ev sahibi). */
+export function entryAccountParty(row) {
+  if (row?.account_party === 'owner' || row?.account_party === 'tenant') {
+    return row.account_party;
+  }
+  return row?.payer_party === 'tenant' ? 'tenant' : 'owner';
 }
 
 /** Ödeme satırının makbuzu (Faz 4b): { id, number, status, cancelled_by_number } ya da null. */
@@ -915,7 +951,7 @@ function mapEntryReceipt(row) {
 
 /** Sakin yanıtı: yönetici serbest metinleri (açıklama, ters kayıt nedeni) ve oluşturan adı ASLA verilmez. */
 export function redactEntryForResident(entry) {
-  return { ...entry, description: null, reversal_reason: null, created_by_name: null };
+  return { ...entry, description: null, reversal_reason: null, created_by_name: null, source_id: null };
 }
 
 const BOARD_HIDDEN_KEYS = new Set([

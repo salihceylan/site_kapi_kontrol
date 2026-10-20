@@ -382,8 +382,13 @@ describe('finans: borçlandırma / ek borç / tahsilat gövdeleri', () => {
 
   it('tahsilat: kuruş tamsayı, yöntem, GELECEK TARİH 400, anahtar zorunlu; açıklama temizlenir', () => {
     const body = { apartment_id: 9, amount_minor: 50000, entry_date: '2026-10-16', method: 'cash', description: '  Nakit  tahsilat ', idempotency_key: 'k-1' };
-    assert.deepEqual(parsePaymentInput(body, NOW), { apartmentId: 9, amountMinor: 50000, entryDate: '2026-10-16', method: 'cash', description: 'Nakit tahsilat', idempotencyKey: 'k-1', accountId: null });
+    assert.deepEqual(parsePaymentInput(body, NOW), { apartmentId: 9, amountMinor: 50000, entryDate: '2026-10-16', method: 'cash', description: 'Nakit tahsilat', idempotencyKey: 'k-1', accountId: null, accountParty: null });
     assert.equal(parsePaymentInput({ ...body, apartment_id: '9', description: undefined }, NOW).description, null);
+    // İki hesap (İP-1A): isteğe bağlı daire hesabı (owner | tenant); yoksa null (sunucu varsayılanı)
+    assert.equal(parsePaymentInput({ ...body, account_party: 'tenant' }, NOW).accountParty, 'tenant');
+    assert.equal(parsePaymentInput({ ...body, account_party: 'owner' }, NOW).accountParty, 'owner');
+    throwsCode(() => parsePaymentInput({ ...body, account_party: 'both' }, NOW), 'INVALID_BODY');
+    throwsCode(() => parsePaymentInput({ ...body, account_party: 1 }, NOW), 'INVALID_BODY');
     // Faz 4b: isteğe bağlı kasa / banka hesabı kimliği
     assert.equal(parsePaymentInput({ ...body, account_id: 4 }, NOW).accountId, 4);
     throwsCode(() => parsePaymentInput({ ...body, account_id: 'abc' }, NOW), 'INVALID_BODY');
@@ -483,7 +488,13 @@ describe('finans: yanıt eşleyicileri ve gizlilik', () => {
       id: 12, kind: 'payment', amount_minor: -50000, period: '2026-10', entry_date: '2026-10-16', due_date: null, description: 'Nakit', method: 'cash', payer_party: 'both', definition_name: null,
       reverses_entry_id: null, reversed_by_entry_id: 13, reversal_reason: null, created_by_name: 'Ali', created_at: '2026-10-16T09:00:00.000Z',
       late_fee_run_id: null, receipt: null,
+      // İki hesap (İP-1A): 052 öncesi satır (account_party yok) payer_party'den türetilir: both -> ev sahibi; kaynak izi yok
+      account_party: 'owner', source_kind: null, source_id: null,
     });
+    assert.equal(mapEntryRow({ id: 1, kind: 'charge', amount_minor: '5', period: '2026-10-01', payer_party: 'tenant' }).account_party, 'tenant');
+    assert.equal(mapEntryRow({ id: 1, kind: 'charge', amount_minor: '5', period: '2026-10-01', payer_party: 'owner', account_party: 'tenant' }).account_party, 'tenant');
+    const sourced = mapEntryRow({ id: 1, kind: 'payment', amount_minor: '-5', period: '2026-10-01', payer_party: 'both', account_party: 'owner', source_kind: 'bank_line', source_id: '44' });
+    assert.deepEqual([sourced.source_kind, sourced.source_id], ['bank_line', 44]);
     // Faz 4b: makbuz özeti (eklemeli alanlar)
     const withReceipt = mapEntryRow({ id: '12', kind: 'payment', amount_minor: '-50000', period: '2026-10-01', entry_date: '2026-10-16', payer_party: 'both', late_fee_run_id: '5', receipt_id: '8', receipt_year: 2026, receipt_no: 12, receipt_cancel_year: 2026, receipt_cancel_no: 13 });
     assert.equal(withReceipt.late_fee_run_id, 5);
@@ -495,7 +506,8 @@ describe('finans: yanıt eşleyicileri ve gizlilik', () => {
   it('redactEntryForResident: açıklama, ters kayıt nedeni ve oluşturan adı çıkarılır; kuruş ve tür kalır. Girdi değişmez', () => {
     const entry = { id: 1, kind: 'reversal', amount_minor: 100, description: 'GİZLİ', reversal_reason: 'GİZLİ NEDEN', created_by_name: 'Yönetici', method: null };
     const redacted = redactEntryForResident(entry);
-    assert.deepEqual(redacted, { id: 1, kind: 'reversal', amount_minor: 100, description: null, reversal_reason: null, created_by_name: null, method: null });
+    // İP-1A: kaynak kimliği (dekont / banka satırı iç kimliği) sakine verilmez
+    assert.deepEqual(redacted, { id: 1, kind: 'reversal', amount_minor: 100, description: null, reversal_reason: null, created_by_name: null, method: null, source_id: null });
     assert.equal(entry.description, 'GİZLİ');
   });
 

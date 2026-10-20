@@ -400,6 +400,10 @@ function paymentFlow({ balance = '-50000' } = {}) {
     // Faz 4b: hesap gereksinimi (hesap yok) ve ayarlar (makbuz otomatik düzenleme KAPALI: bu test makbuz yolunu sınamaz; makbuz / hesap akışı finance4b_* testleri ve QA)
     [/^SELECT bool_or\(is_active\) AS has_active FROM finance_accounts WHERE site_code = \$1 AND opening_date <= \$2::DATE HAVING COUNT\(\*\) > 0$/, () => ok()],
     [/^SELECT receipts_auto_issue, .* FROM finance_settings WHERE site_code = \$1$/, () => ok([{ receipts_auto_issue: false, late_fee_enabled: false, late_fee_rate_bp: 500, late_fee_method: 'daily_30', late_fee_grace_days: 0, late_fee_start_period: null, reminders_enabled: false, reminder_min_overdue_minor: '5000', reminder_min_days_overdue: 5, reminder_min_interval_days: 14, reminder_max_consecutive: 3, settings_version: 1 }])],
+    // İki hesap (İP-1A): hesap verilmedi -> varsayılan (açık borç yok -> oturanın hesabı; kiracı yok -> ev sahibi); tahsilat hesabının bakiyesi
+    [/FROM ledger_entries l WHERE l\.site_code = \$1 AND l\.apartment_id = \$2 ORDER BY l\.id$/, () => ok()],
+    [/^SELECT a\.responsible_party, EXISTS/, () => ok([{ responsible_party: 'both', has_tenant: false }])],
+    [/^SELECT COALESCE\(SUM\(l\.amount_minor\), 0\)::TEXT AS balance FROM ledger_entries l WHERE l\.site_code = \$1 AND l\.apartment_id = \$2 AND COALESCE/, () => ok([{ balance }])],
     [/^INSERT INTO ledger_entries \(/, () => ok([{ id: '77' }])],
     [/WHERE l\.id = \$1 AND l\.site_code = \$2 LIMIT 1$/, () => ok([entryRow])],
     [/^SELECT COALESCE\(SUM\(amount_minor\), 0\)::TEXT AS balance FROM ledger_entries WHERE site_code = \$1 AND apartment_id = \$2$/, () => ok([{ balance }])],
@@ -411,7 +415,8 @@ describe('finans: işlem sırası ve yeniden deneme', () => {
     handlers.push(...paymentFlow());
     const res = await call('POST', `${base()}/payments`, { body: PAYMENT_BODY });
     assert.equal(res.status, 201, JSON.stringify(res.body));
-    assert.deepEqual(Object.keys(res.body), ['entry', 'balance_minor', 'receipt', 'movement_id']);
+    assert.deepEqual(Object.keys(res.body), ['entry', 'balance_minor', 'account_balance_minor', 'receipt', 'movement_id']);
+    assert.equal(res.body.account_balance_minor, -50000);
     assert.equal(res.body.receipt, null, 'makbuz otomatik düzenleme kapalı');
     assert.equal(res.body.movement_id, null, 'hesap yok: 4a davranışı');
     assert.equal(res.body.entry.kind, 'payment');
@@ -436,6 +441,23 @@ describe('finans: işlem sırası ve yeniden deneme', () => {
     // kayıt: tutar defterde NEGATİF kuruş (metin), dönem ayın ilk günü, ödeyen taraf dairenin değeri, işlem anahtarı
     const insertParams = txLog[insert].params;
     assert.deepEqual(insertParams.slice(0, 9), [SITE_1, 5, '-50000', PAY_PERIOD, PAY_DATE, 'both', 'cash', 'Nakit', 'test-key-1']);
+    // İP-1A: hesap (gövdede yok -> varsayılan ev sahibi) ve kaynak izi (yönetici tahsilatı = manual)
+    assert.deepEqual(insertParams.slice(10), ['owner', 'manual', null]);
+  });
+
+  it('İP-1A: gövdedeki account_party tahsilatın hesabıdır (varsayılan sorgusu çalışmaz); geçersiz hesap 400 ve işlem açılmaz', async () => {
+    handlers.push(...paymentFlow());
+    const res = await call('POST', `${base()}/payments`, { body: { ...PAYMENT_BODY, account_party: 'tenant' } });
+    assert.equal(res.status, 201, JSON.stringify(res.body));
+    const txLog = state.log.filter((e) => e.client);
+    const insert = txLog.find((e) => /^INSERT INTO ledger_entries/.test(e.sql));
+    assert.deepEqual(insert.params.slice(10), ['tenant', 'manual', null]);
+    assert.equal(txLog.some((e) => /ORDER BY l\.id$/.test(e.sql)), false, 'varsayılan hesap sorgusu yok');
+    state.log.length = 0;
+    const bad = await call('POST', `${base()}/payments`, { body: { ...PAYMENT_BODY, account_party: 'both' } });
+    assert.equal(bad.status, 400);
+    assert.equal(bad.body.code, 'INVALID_BODY');
+    assert.equal(state.log.some((e) => e.sql === 'BEGIN'), false);
   });
 
   it('kilit çıkmazı (40P01): işlem TEK SEFER baştan denenir -> 201; ilk deneme ROLLBACK', async () => {
