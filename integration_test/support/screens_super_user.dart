@@ -1,4 +1,6 @@
-// Super kullanici ekran tanimlari + guvenli etkilesimler.
+// Super kullanici ekran tanimlari + guvenli etkilesimler. IP-1D: kullanici yonetimi, cihaz, Moduller, Denetim Kaydi,
+// Platform Ayarlari, Istemci Hatalari ve Profilim sag ustteki disliden (Ayarlar paneli) acilir; openDrawerAndTap
+// etiketi cekmecede bulamazsa orada arar.
 
 import 'package:flutter/material.dart' show Icons;
 

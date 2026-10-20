@@ -10,6 +10,8 @@
 //
 // Ozellikler:
 //  - bootApp / login / logout / pumpUntilFound / tapText / openDrawerAndTap / scrollAllTheWay
+//  - IP-1D gezinme: cekmece basliklar altinda; ayar ogeleri sag ustteki disliden acilan Ayarlar panelinde
+//    (openDrawerAndTap cekmecede bulamadigi etiketi orada arar); sakin alt cubugu (tapBottomTab)
 //  - pumpAndSettle KULLANMAZ (uygulamada 3 sn'lik yoklamalar var): sabit aralikli pump dongusu
 //  - guvenli-dokunma politikasi: yikici eylemler engellenir ([E2ePolicy])
 //  - hata toplayici: FlutterError.onError + zone hatalari ilk hatada testi COKERTMEZ, raporlanir
@@ -871,6 +873,12 @@ Future<bool> closeTop(WidgetTester tester) async {
     await pumpFor(tester, const Duration(milliseconds: 350));
     return true;
   }
+  // IP-1D: sag ustteki disliden acilan Ayarlar paneli (endDrawer).
+  if (scaffold != null && scaffold.isEndDrawerOpen) {
+    scaffold.closeEndDrawer();
+    await pumpFor(tester, const Duration(milliseconds: 350));
+    return true;
+  }
   if (!nav.canPop()) return false;
   if (hasOverlay()) {
     for (final label in <String>['Vazgeç', 'İptal', 'Kapat', 'Geri', 'Şimdi Değil', 'Anladım', 'Tamam']) {
@@ -901,7 +909,7 @@ Future<void> closeOverlays(WidgetTester tester) async {
   for (var i = 0; i < 8; i++) {
     final nav = _rootNavigator(tester);
     final scaffold = _homeScaffoldState(tester);
-    final drawerOpen = scaffold?.isDrawerOpen ?? false;
+    final drawerOpen = (scaffold?.isDrawerOpen ?? false) || (scaffold?.isEndDrawerOpen ?? false);
     if (nav == null || (!nav.canPop() && !drawerOpen)) return;
     await closeTop(tester);
   }
@@ -925,7 +933,24 @@ Future<bool> openDrawer(WidgetTester tester) async {
   return find.byType(Drawer).evaluate().isNotEmpty;
 }
 
-/// Cekmeceyi acip [label] menu ogesine dokunur (cekmece kapanir, ekran degisir).
+/// Sag ustteki disliye ("Ayarlar") dokunup Ayarlar panelini (endDrawer) acar. IP-1D: ayar ogeleri (Profilim, Moduller,
+/// cihazlar, kullanici yonetimi, denetim kaydi, platform ayarlari ...) cekmecede degil, buradadir.
+Future<bool> openSettingsPanel(WidgetTester tester) async {
+  final scaffold = _homeScaffoldState(tester);
+  if (scaffold == null) return false;
+  if (!scaffold.isEndDrawerOpen) {
+    if (scaffold.isDrawerOpen) {
+      scaffold.closeDrawer();
+      await pumpFor(tester, const Duration(milliseconds: 350));
+    }
+    scaffold.openEndDrawer();
+  }
+  await pumpFor(tester, const Duration(milliseconds: 450));
+  return find.byType(YanMenuAyarlar).evaluate().isNotEmpty;
+}
+
+/// Cekmeceyi acip [label] menu ogesine dokunur (cekmece kapanir, ekran degisir). Etiket cekmecede yoksa (ayar ogesi)
+/// sag ustteki disliden acilan Ayarlar panelinde aranir.
 Future<bool> openDrawerAndTap(
   WidgetTester tester,
   String label, {
@@ -935,6 +960,15 @@ Future<bool> openDrawerAndTap(
   if (!await openDrawer(tester)) {
     E2eRuntime.collector.note(kind: 'navigation', message: 'Cekmece acilamadi (menu: "$label")');
     return false;
+  }
+  if (findText(label, exact: true, within: find.byType(YanMenu)).evaluate().isEmpty &&
+      await openSettingsPanel(tester) &&
+      findText(label, exact: true, within: find.byType(YanMenuAyarlar)).evaluate().isNotEmpty) {
+    E2eRuntime.act('Ayarlar paneli (disli): "$label"');
+  } else if (find.byType(YanMenu).evaluate().isEmpty) {
+    // Ayarlar panelinde de yok: cekmeceye geri don (tapText bulgu yazar).
+    await closeOverlays(tester);
+    if (!await openDrawer(tester)) return false;
   }
   final drawer = find.byType(Drawer);
   final drawerScrollable = find.descendant(of: drawer, matching: find.byType(Scrollable));
@@ -1004,8 +1038,16 @@ List<SirketMenuItem> showcaseCardItems() => _itemsByKeyPrefix(find.byKey(kShowca
 /// Vitrinin "Hesap ve ayarlar" satirindaki ogeler (yardim cipi oge degildir, sayilmaz).
 List<SirketMenuItem> showcaseChipItems() => _itemsByKeyPrefix(find.byKey(kShowcaseKey), 'panel_ikincil_');
 
-/// ACIK cekmecedeki menu ogeleri (YanMenu ogeleri `ValueKey<SirketMenuItem>` tasir; ek eylemler / gecis / yardim /
-/// cikis `String` anahtarlidir ve sayilmaz).
+/// Ayarlar panelindeki (disli) menu ogeleri: paneli acar, okur, kapatir. Cekmece + Ayarlar paneli = gorunur ogeler.
+Future<List<SirketMenuItem>> settingsMenuItems(WidgetTester tester) async {
+  if (!await openSettingsPanel(tester)) return const <SirketMenuItem>[];
+  final items = drawerMenuItems();
+  await closeOverlays(tester);
+  return items;
+}
+
+/// ACIK cekmecedeki (ya da acik Ayarlar panelindeki) menu ogeleri (YanMenu ogeleri `ValueKey<SirketMenuItem>` tasir; ek
+/// eylemler / gecis / yardim / cikis / grup basliklari `String` anahtarlidir ve sayilmaz).
 List<SirketMenuItem> drawerMenuItems() {
   final keyed = find.descendant(
     of: find.byType(Drawer),
@@ -1061,12 +1103,42 @@ UserRole? currentRole(WidgetTester tester) {
   return tester.widget<HomePage>(home).authService.session?.role;
 }
 
-/// Cekmecede [item] var mi (cekmeceyi acar, bakar, kapatir).
+/// Cekmecede ya da Ayarlar panelinde [item] var mi (acar, bakar, kapatir).
 Future<bool> drawerHasItem(WidgetTester tester, SirketMenuItem item) async {
   if (!await openDrawer(tester)) return false;
   final has = drawerMenuItems().contains(item);
   await closeOverlays(tester);
-  return has;
+  if (has) return true;
+  return (await settingsMenuItems(tester)).contains(item);
+}
+
+// ---------------------------------------------------------------------------
+// IP-1D / G3: sakin alt cubugu (Material 3 NavigationBar)
+// ---------------------------------------------------------------------------
+
+/// Sakin alt cubugunun anahtari (lib/ui/widgets/resident_bottom_bar.dart).
+const ValueKey<String> kResidentBarKey = ValueKey<String>('sakin_alt_cubuk');
+
+/// Alt cubuktaki sekmeler (soldan saga) ve etiketleri: ('ozet', 'Özet') ...; cubuk yoksa bos.
+List<(String, String)> bottomTabsOnScreen() {
+  const all = <(String, String)>[
+    ('ozet', 'Özet'),
+    ('duyuru', 'Duyuru'),
+    ('ariza', 'Arıza'),
+    ('kapi', 'Kapı'),
+    ('belgeler', 'Belgeler'),
+  ];
+  return <(String, String)>[
+    for (final tab in all)
+      if (find.byKey(ValueKey<String>('sakin_sekme_${tab.$1}')).evaluate().isNotEmpty) tab,
+  ];
+}
+
+/// Alt cubukta [tab] sekmesine dokunur (anahtarla: `sakin_sekme_` + sekme adi). Sekme yoksa false.
+Future<bool> tapBottomTab(WidgetTester tester, String tab) async {
+  final finder = find.byKey(ValueKey<String>('sakin_sekme_$tab'));
+  if (finder.evaluate().isEmpty) return false;
+  return tapFinder(tester, finder, description: 'alt cubuk sekmesi "$tab"', settleAfter: const Duration(milliseconds: 700));
 }
 
 /// [spec] ekranina Panel vitrinindeki KARTINA dokunarak gecer ([E2eScreenSpec.showcaseCard]; kullanicinin yolu).

@@ -16,7 +16,8 @@ import 'package:site_kapi_kontrol/ui/widgets/yan_menu.dart';
 import '../integration_test/support/e2e_driver.dart';
 import '../integration_test/support/screens_common.dart' show showcaseTour;
 import '../integration_test/support/screens_individual.dart' show individualPanelTour, individualScreens;
-import '../integration_test/support/screens_resident.dart' show residentRemoteTour, residentScreens;
+import '../integration_test/support/screens_resident.dart'
+    show residentBottomBarTour, residentRemoteTour, residentScreens;
 import '../integration_test/support/screens_site_manager.dart'
     show siteManagerResidentModeScreens, siteManagerScreens;
 import '../integration_test/support/screens_super_user.dart' show superUserScreens;
@@ -63,6 +64,14 @@ Future<List<SirketMenuItem>> _pumpPanel(
           onLogout: () {},
           additionalItems: extras,
         ),
+        // İP-1D: ayar öğeleri sağdan açılan Ayarlar panelinde (e2e sürücüsü ikisini birlikte okur).
+        endDrawer: YanMenuAyarlar(
+          role: role,
+          isResidentMode: resident,
+          selectedItem: SirketMenuItem.dashboard,
+          onSelect: (_) {},
+          additionalItems: extras,
+        ),
         body: SingleChildScrollView(
           child: ModuleShowcaseView(
             session: _session(role),
@@ -82,6 +91,24 @@ Future<void> _openDrawer(WidgetTester t) async {
   t.state<ScaffoldState>(find.byType(Scaffold).first).openDrawer();
   await t.pump();
   await t.pump(const Duration(milliseconds: 600));
+}
+
+/// Açık çekmeceyi kapatıp Ayarlar panelini (endDrawer) açar ve oradaki öğeleri okur.
+Future<List<SirketMenuItem>> _settingsItems(WidgetTester t) async {
+  final scaffold = t.state<ScaffoldState>(find.byType(Scaffold).first);
+  if (scaffold.isDrawerOpen) {
+    scaffold.closeDrawer();
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 600));
+  }
+  scaffold.openEndDrawer();
+  await t.pump();
+  await t.pump(const Duration(milliseconds: 600));
+  final items = drawerMenuItems();
+  scaffold.closeEndDrawer();
+  await t.pump();
+  await t.pump(const Duration(milliseconds: 600));
+  return items;
 }
 
 void main() {
@@ -113,8 +140,15 @@ void main() {
 
       await _openDrawer(t);
       final drawer = drawerMenuItems();
-      expect(drawer, items, reason: 'çekmece = YanMenu.visibleItems (ek eylem / yardım / çıkış sayılmaz)');
-      expect(showcaseParityProblems(drawer: drawer, grid: grid, secondary: secondary), isEmpty);
+      expect(
+        drawer,
+        YanMenu.drawerItems(items),
+        reason: 'çekmece = görünür öğelerin çekmece bölümleri (ek eylem / yardım / çıkış / başlık sayılmaz)',
+      );
+      final settings = await _settingsItems(t);
+      expect(settings, YanMenu.settingsItems(items), reason: 'Ayarlar paneli = ayar öğeleri');
+      expect(<SirketMenuItem>{...drawer, ...settings}, items.toSet());
+      expect(showcaseParityProblems(drawer: <SirketMenuItem>[...drawer, ...settings], grid: grid, secondary: secondary), isEmpty);
     });
 
     testWidgets('sakin vitrini (hero + hızlı işlemler + ızgara): Kapılar kartı tek; eşlik kuralı tutar', (t) async {
@@ -134,8 +168,10 @@ void main() {
       expect(grid.where((i) => i == SirketMenuItem.kapilar), hasLength(1));
       expect(doorCommandButtonsOnScreen(), isEmpty);
       await _openDrawer(t);
+      final drawer = drawerMenuItems();
+      final settings = await _settingsItems(t);
       expect(
-        showcaseParityProblems(drawer: drawerMenuItems(), grid: grid, secondary: showcaseChipItems()),
+        showcaseParityProblems(drawer: <SirketMenuItem>[...drawer, ...settings], grid: grid, secondary: showcaseChipItems()),
         isEmpty,
         reason: 'öğeler: $items',
       );
@@ -234,12 +270,15 @@ void main() {
       expect(doors.optional, optional, reason: who);
       expect(doors.interactions, isNotNull, reason: who);
       if (doorTour != null) expect(doors.interactions, same(doorTour), reason: who);
-      expect(screens.where((s) => s.menuLabel == 'Panel'), hasLength(1), reason: who);
+      expect(screens.where((s) => s.name == 'panel'), hasLength(1), reason: who);
       expect(screens.where((s) => s.name == 'kapilar'), hasLength(1), reason: who);
     }
 
-    test('daire sakini', () {
+    test('daire sakini (İP-1D: alt çubuk turu da var)', () {
       expectShape(residentScreens(), who: 'sakin', optional: false, doorTour: residentRemoteTour);
+      final tabs = residentScreens().where((s) => s.name == 'alt_cubuk').toList();
+      expect(tabs, hasLength(1), reason: 'alt çubuk sekmeleri gezilir');
+      expect(tabs.single.interactions, same(residentBottomBarTour));
     });
 
     test('bireysel (Kapılar Geçiş Kontrol kapalıyken yok: isteğe bağlı)', () {
