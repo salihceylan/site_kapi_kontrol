@@ -6,8 +6,13 @@
 //   halkası, odak halkası ve durum noktası (ya da kenarı) yanındaki yüzeye >= 3:1.
 // - Tehlike tonu #E11D48 ailesi; durum tonu kuralı (yalnız tamam / bekliyor / kritik renkli işaret taşır).
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:site_kapi_kontrol/styles/app_theme.dart';
+import 'package:site_kapi_kontrol/ui/design/gloss.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+
+import 'harness.dart';
 
 /// WCAG 2.x kontrast oranı; saydam ön plan opak [background] üzerine bindirilir.
 double contrast(Color foreground, Color background) {
@@ -181,6 +186,117 @@ void main() {
       expect(contrast(AppTone.warning.dot, _light.surface), lessThan(3.0));
       expect(contrast(AppTone.success.a, _light.surface), greaterThanOrEqualTo(3.0));
       expect(contrast(AppTone.warning.a, _light.surface), greaterThanOrEqualTo(3.0));
+    });
+  });
+
+  group('AppTheme: sade varsayılanlar (G6)', () {
+    for (final (name, build, p) in [('açık', AppTheme.light, _light), ('koyu', AppTheme.dark, _dark)]) {
+      test('$name: ana onay düğmeleri (Elevated / Filled) ana eylem rengi, düz: yükselti 0, gölge yok, cila katmanı yok', () {
+        final theme = build();
+        for (final style in [theme.elevatedButtonTheme.style!, theme.filledButtonTheme.style!]) {
+          expect(style.backgroundColor!.resolve(<WidgetState>{}), p.action);
+          expect(style.foregroundColor!.resolve(<WidgetState>{}), p.onAction);
+          expect(style.elevation?.resolve(<WidgetState>{}) ?? 0, 0);
+          expect(style.shadowColor?.resolve(<WidgetState>{}) ?? Colors.transparent, Colors.transparent);
+          expect(style.backgroundBuilder, isNull, reason: 'cila / degrade katmanı yok');
+        }
+      });
+
+      test('$name: ikincil düğme (Outlined) yüzey zemin + 1 px çerçeve + başlık metni; metin düğmesi başlık metni', () {
+        final theme = build();
+        final outlined = theme.outlinedButtonTheme.style!;
+        expect(outlined.backgroundColor!.resolve(<WidgetState>{}), p.surface);
+        expect(outlined.foregroundColor!.resolve(<WidgetState>{}), p.text);
+        expect(outlined.side!.resolve(<WidgetState>{}), BorderSide(color: p.border));
+        expect(outlined.backgroundBuilder, isNull);
+        final text = theme.textButtonTheme.style!;
+        expect(text.foregroundColor!.resolve(<WidgetState>{}), p.text);
+        expect(text.backgroundBuilder, isNull);
+      });
+
+      test('$name: renk şeması ana eylem rengi; mavi yalnız odakta (girdi odak kenarı), hata kenarı mercan', () {
+        final theme = build();
+        expect(theme.colorScheme.primary, p.action);
+        expect(theme.colorScheme.onPrimary, p.onAction);
+        final input = theme.inputDecorationTheme;
+        expect(input.focusedBorder!.borderSide.color, p.focusRing);
+        expect(input.errorBorder!.borderSide.color, AppTone.danger.hue);
+        expect(input.focusedErrorBorder!.borderSide.color, AppTone.danger.hue);
+        expect(input.prefixIconColor, p.textSecondary, reason: 'ön ikon nötr (mavi değil)');
+      });
+
+      test('$name: kart yüzey + 1 px çerçeve, gölgesiz', () {
+        final card = build().cardTheme;
+        expect(card.color, p.surface);
+        expect(card.elevation, 0);
+        expect((card.shape! as RoundedRectangleBorder).side, BorderSide(color: p.border));
+      });
+    }
+
+    testWidgets('tema düğmeleri düz çizilir: Gloss yok, Material yükseltisi 0, zemin ana eylem rengi (açık + koyu)', (t) async {
+      for (final dark in const [false, true]) {
+        final p = dark ? _dark : _light;
+        await t.pumpWidget(
+          harnessApp(
+            Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ElevatedButton(onPressed: () {}, child: const Text('E')),
+                  FilledButton(onPressed: () {}, child: const Text('F')),
+                  OutlinedButton(onPressed: () {}, child: const Text('O')),
+                ],
+              ),
+            ),
+            dark: dark,
+          ),
+        );
+        await t.pumpAndSettle();
+        expect(find.byType(Gloss), findsNothing, reason: 'dark=$dark');
+        for (final type in [ElevatedButton, FilledButton]) {
+          final m = t.widget<Material>(find.descendant(of: find.byType(type), matching: find.byType(Material)).first);
+          expect(m.color, p.action, reason: '$type dark=$dark');
+          expect(m.elevation, 0, reason: '$type dark=$dark');
+        }
+        final o = t.widget<Material>(find.descendant(of: find.byType(OutlinedButton), matching: find.byType(Material)).first);
+        expect(o.color, p.surface);
+        expect(o.elevation, 0);
+      }
+    });
+
+    testWidgets('ana düğme pikseli düz: üst ve alt bölge aynı renk (degrade / cila yok)', (t) async {
+      const key = ValueKey<String>('ana_dugme');
+      await t.pumpWidget(
+        harnessApp(
+          Center(
+            child: RepaintBoundary(
+              key: key,
+              child: SizedBox(
+                width: 200,
+                height: 56,
+                child: ElevatedButton(onPressed: () {}, child: const SizedBox.shrink()),
+              ),
+            ),
+          ),
+        ),
+      );
+      await t.pumpAndSettle();
+      late List<int> top;
+      late List<int> bottom;
+      await t.runAsync(() async {
+        final boundary = t.renderObject<RenderRepaintBoundary>(find.byKey(key));
+        final image = await boundary.toImage();
+        final bytes = (await image.toByteData())!;
+        List<int> at(int x, int y) {
+          final i = (y * image.width + x) * 4;
+          return [bytes.getUint8(i), bytes.getUint8(i + 1), bytes.getUint8(i + 2)];
+        }
+
+        top = at(100, image.height ~/ 2 - 14);
+        bottom = at(100, image.height ~/ 2 + 14);
+      });
+      expect(top, bottom, reason: 'düz dolgu');
+      expect(top, <int>[0x0F, 0x17, 0x2A], reason: 'ana eylem rengi #0F172A');
     });
   });
 

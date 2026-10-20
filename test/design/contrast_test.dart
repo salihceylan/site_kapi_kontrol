@@ -526,20 +526,20 @@ void main() {
       );
 
       test(
-        '${entry.key}: düğme temaları ve snackBar/drawer anahtarları aynı kaldı',
+        '${entry.key}: düğme temaları (ana eylem rengi, sade stil G6) ve snackBar/drawer anahtarları',
         () {
           final theme = entry.value();
           expect(
             theme.elevatedButtonTheme.style!.backgroundColor!.resolve(
               <WidgetState>{},
             ),
-            AppColors.primary,
+            palette.action,
           );
           expect(
             theme.filledButtonTheme.style!.backgroundColor!.resolve(
               <WidgetState>{},
             ),
-            AppColors.primary,
+            palette.action,
           );
           expect(theme.outlinedButtonTheme.style, isNotNull);
           expect(theme.textButtonTheme.style, isNotNull);

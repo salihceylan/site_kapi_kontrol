@@ -1,16 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/styles/app_colors.dart';
-import 'package:site_kapi_kontrol/ui/design/gloss.dart';
 import 'package:site_kapi_kontrol/ui/design/page_transitions.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 
+/// Uygulama teması: sade stil (karar G6 + G7, `docs/TASARIM_DILI.md`).
+///
+/// - Ana onay düğmesi (`ElevatedButton`, `FilledButton`): [AppPalette.action] zemin + [AppPalette.onAction] metin, DÜZ
+///   (yükselti 0, gölge yok, cila / degrade katmanı yok). Açıkta #0F172A + #F8FAFC, koyuda #F8FAFC + #0F172A (17,06:1).
+/// - İkincil düğme (`OutlinedButton`): yüzey zemin + 1 px [AppPalette.border] çerçeve + başlık metni. Metin düğmesi
+///   (`TextButton`, çoğunlukla "Vazgeç" / "Kapat") başlık metni renginde.
+/// - Kart: yüzey + 1 px çerçeve, gölgesiz. Mavi yalnız odak halkasında (girdinin odak kenarı) ve bağlantıda.
+/// - Yüzen katmanlar (diyalog, alt sayfa, açılır menü, bildirim çubuğu, ipucu) yükseltisini korur: sayfa içeriği değildir.
+///
+/// Tema DEĞER olarak eşittir (`AppTheme.light() == AppTheme.light()`): kapanış ya da `resolveWith` YOK.
 class AppTheme {
   static ThemeData light() {
     const p = AppPalette.light;
     final colorScheme = ColorScheme.fromSeed(
-      seedColor: AppColors.primary,
-      primary: AppColors.primary,
-      secondary: AppColors.accent,
+      seedColor: p.action,
+      primary: p.action,
+      onPrimary: p.onAction,
       surface: Colors.white,
       brightness: Brightness.light,
     );
@@ -72,7 +81,8 @@ class AppTheme {
         hintStyle: TextStyle(color: p.textMuted),
         helperStyle: TextStyle(color: p.textMuted),
         errorStyle: TextStyle(color: AppTone.danger.ink(p)),
-        prefixIconColor: AppColors.primary,
+        // Sade stil: ikon gövde metni renginde (mavi yalnız odak halkasında).
+        prefixIconColor: p.textSecondary,
         suffixIconColor: AppColors.textMuted,
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 18,
@@ -84,33 +94,34 @@ class AppTheme {
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+          borderSide: BorderSide(color: p.border),
         ),
         disabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
           borderSide: BorderSide(color: p.border),
         ),
+        // Odak halkası mavi (>= 3:1 beyaz alanda: 6,70:1).
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: AppColors.primary, width: 1.8),
+          borderSide: BorderSide(color: p.focusRing, width: 1.8),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: AppColors.rose, width: 1.5),
+          borderSide: BorderSide(color: AppTone.danger.hue, width: 1.5),
         ),
         focusedErrorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: AppColors.rose, width: 1.8),
+          borderSide: BorderSide(color: AppTone.danger.hue, width: 1.8),
         ),
       ),
       cardTheme: CardThemeData(
-        color: Colors.white,
+        color: p.surface,
         surfaceTintColor: Colors.transparent,
-        elevation: 2,
-        shadowColor: const Color(0x100F172A),
+        elevation: 0,
+        shadowColor: Colors.transparent,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
-          side: const BorderSide(color: Color(0xFFE2E8F0)),
+          side: BorderSide(color: p.border),
         ),
       ),
       dialogTheme: DialogThemeData(
@@ -128,11 +139,10 @@ class AppTheme {
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.primary,
-          foregroundColor: Colors.white,
-          elevation: 2,
-          shadowColor: AppColors.shadowSoft,
-          backgroundBuilder: glossyButtonLayer,
+          backgroundColor: p.action,
+          foregroundColor: p.onAction,
+          elevation: 0,
+          shadowColor: Colors.transparent,
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
@@ -146,9 +156,10 @@ class AppTheme {
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          backgroundColor: AppColors.primary,
-          foregroundColor: Colors.white,
-          backgroundBuilder: glossyButtonLayer,
+          backgroundColor: p.action,
+          foregroundColor: p.onAction,
+          elevation: 0,
+          shadowColor: Colors.transparent,
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
@@ -162,8 +173,9 @@ class AppTheme {
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: AppColors.primary,
-          side: const BorderSide(color: Color(0xFFBFDBFE), width: 1.2),
+          foregroundColor: p.text,
+          backgroundColor: p.surface,
+          side: BorderSide(color: p.border),
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
@@ -176,16 +188,18 @@ class AppTheme {
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
-          foregroundColor: AppColors.primary,
+          foregroundColor: p.text,
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
           ),
         ),
       ),
+      // Bildirim çubuğu: kritik uyarı rengi (#0F172A); eylem bağlantı mavisi (koyu zeminde >= 4,5:1).
       snackBarTheme: SnackBarThemeData(
-        backgroundColor: const Color(0xFF0F172A),
+        backgroundColor: p.critical,
         contentTextStyle: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+        actionTextColor: AppPalette.dark.link,
         behavior: SnackBarBehavior.floating,
         elevation: 8,
         shape: RoundedRectangleBorder(
@@ -196,7 +210,7 @@ class AppTheme {
         surfaceTintColor: Colors.transparent,
         backgroundColor: Colors.white,
       ),
-      // Premium ince ayarlar (tüm ekranlara tek yerden): yuvarlak uçlu ilerleme göstergeleri,
+      // İnce ayarlar (tüm ekranlara tek yerden): yuvarlak uçlu ilerleme göstergeleri,
       // yuvarlatılmış açılır menü, koyu yumuşak ipucu ve üstü yuvarlak alt sayfa.
       progressIndicatorTheme: const ProgressIndicatorThemeData(
         strokeCap: StrokeCap.round,
@@ -210,7 +224,7 @@ class AppTheme {
         shadowColor: const Color(0x330F172A),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.md),
-          side: const BorderSide(color: Color(0xFFE2E8F0)),
+          side: BorderSide(color: p.border),
         ),
       ),
       tooltipTheme: TooltipThemeData(
@@ -243,9 +257,10 @@ class AppTheme {
   static ThemeData dark() {
     const p = AppPalette.dark;
     final colorScheme = ColorScheme.fromSeed(
-      seedColor: AppColors.primary,
-      primary: AppColors.primary,
-      secondary: AppColors.accentLight,
+      // Açık temayla aynı tohum (gece kömürü): türeyen kap renkleri aynı mavi-gri ailede kalır.
+      seedColor: AppPalette.light.action,
+      primary: p.action,
+      onPrimary: p.onAction,
       surface: AppColors.surface,
       onSurface: Colors.white,
       onSurfaceVariant: const Color(0xFFCBD5E1),
@@ -307,7 +322,7 @@ class AppTheme {
         hintStyle: const TextStyle(color: Color(0xFF94A3B8)),
         helperStyle: TextStyle(color: p.textMuted),
         errorStyle: TextStyle(color: AppTone.danger.ink(p)),
-        prefixIconColor: AppColors.primarySoft,
+        prefixIconColor: p.textSecondary,
         suffixIconColor: AppColors.textMutedLight,
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 18,
@@ -325,27 +340,28 @@ class AppTheme {
           borderRadius: BorderRadius.circular(16),
           borderSide: BorderSide(color: p.border),
         ),
+        // Odak halkası açık mavi (koyu alanda 8,11:1).
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: AppColors.primaryLight, width: 1.8),
+          borderSide: BorderSide(color: p.focusRing, width: 1.8),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: AppColors.rose, width: 1.5),
+          borderSide: BorderSide(color: AppTone.danger.hue, width: 1.5),
         ),
         focusedErrorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: AppColors.rose, width: 1.8),
+          borderSide: BorderSide(color: AppTone.danger.hue, width: 1.8),
         ),
       ),
       cardTheme: CardThemeData(
-        color: const Color(0xFF1E293B),
+        color: p.surface,
         surfaceTintColor: Colors.transparent,
-        elevation: 4,
-        shadowColor: const Color(0x50000000),
+        elevation: 0,
+        shadowColor: Colors.transparent,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
-          side: const BorderSide(color: Color(0x22FFFFFF)),
+          side: BorderSide(color: p.border),
         ),
       ),
       dialogTheme: DialogThemeData(
@@ -366,13 +382,13 @@ class AppTheme {
           color: Color(0xFFCBD5E1),
         ),
       ),
+      // Koyu temada ana düğme açık zemin + koyu metin: koyu sayfada en yüksek karşıtlık (17,06:1; karta 13,98:1).
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.primary,
-          foregroundColor: Colors.white,
-          elevation: 4,
-          shadowColor: AppColors.shadowSoft,
-          backgroundBuilder: glossyButtonLayer,
+          backgroundColor: p.action,
+          foregroundColor: p.onAction,
+          elevation: 0,
+          shadowColor: Colors.transparent,
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
@@ -386,9 +402,10 @@ class AppTheme {
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          backgroundColor: AppColors.primary,
-          foregroundColor: Colors.white,
-          backgroundBuilder: glossyButtonLayer,
+          backgroundColor: p.action,
+          foregroundColor: p.onAction,
+          elevation: 0,
+          shadowColor: Colors.transparent,
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
@@ -402,8 +419,9 @@ class AppTheme {
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: const Color(0xFF93C5FD),
-          side: const BorderSide(color: Color(0x403B82F6), width: 1.2),
+          foregroundColor: p.text,
+          backgroundColor: p.surface,
+          side: BorderSide(color: p.border),
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
@@ -416,7 +434,7 @@ class AppTheme {
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
-          foregroundColor: AppColors.accentLight,
+          foregroundColor: p.text,
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
@@ -426,18 +444,19 @@ class AppTheme {
       snackBarTheme: SnackBarThemeData(
         backgroundColor: const Color(0xFF1E293B),
         contentTextStyle: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+        actionTextColor: p.link,
         behavior: SnackBarBehavior.floating,
         elevation: 8,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
-          side: const BorderSide(color: Color(0x333B82F6), width: 1.2),
+          side: BorderSide(color: p.border, width: 1.2),
         ),
       ),
       drawerTheme: const DrawerThemeData(
         surfaceTintColor: Colors.transparent,
         backgroundColor: Color(0xFF0F172A),
       ),
-      // Premium ince ayarlar (açık temadaki karşılıkları).
+      // İnce ayarlar (açık temadaki karşılıkları).
       progressIndicatorTheme: const ProgressIndicatorThemeData(
         strokeCap: StrokeCap.round,
         linearMinHeight: 6,

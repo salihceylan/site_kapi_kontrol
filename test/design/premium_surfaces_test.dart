@@ -327,21 +327,15 @@ void main() {
     });
   });
 
-  group('AppTheme: premium ince ayarlar', () {
+  group('AppTheme: sade düğmeler + ince ayarlar', () {
     for (final entry in <String, ThemeData Function()>{
       'açık': AppTheme.light,
       'koyu': AppTheme.dark,
     }.entries) {
-      test('${entry.key}: dolu düğmeler cilalı katmana bağlı, diğerleri düz', () {
+      test('${entry.key}: hiçbir tema düğmesinde cila / degrade katmanı yok (sade stil G6)', () {
         final theme = entry.value();
-        expect(
-          theme.elevatedButtonTheme.style!.backgroundBuilder,
-          same(glossyButtonLayer),
-        );
-        expect(
-          theme.filledButtonTheme.style!.backgroundBuilder,
-          same(glossyButtonLayer),
-        );
+        expect(theme.elevatedButtonTheme.style!.backgroundBuilder, isNull);
+        expect(theme.filledButtonTheme.style!.backgroundBuilder, isNull);
         expect(theme.outlinedButtonTheme.style!.backgroundBuilder, isNull);
         expect(theme.textButtonTheme.style!.backgroundBuilder, isNull);
       });
@@ -365,12 +359,10 @@ void main() {
       });
     }
 
-    testWidgets('ElevatedButton/FilledButton cilalı çizilir; devre dışı ve ikincil düz', (
+    testWidgets('tema düğmeleri (dolu, devre dışı, ikincil, metin) düz çizilir: cila yok, durağan', (
       t,
     ) async {
       for (final dark in [false, true]) {
-        Finder gloss(Finder button) =>
-            find.descendant(of: button, matching: find.byType(Gloss));
         await t.pumpWidget(
           harnessApp(
             Center(
@@ -389,16 +381,12 @@ void main() {
           ),
         );
         await t.pumpAndSettle();
-        expect(gloss(find.byType(ElevatedButton).first), findsOneWidget);
-        expect(gloss(find.byType(FilledButton)), findsOneWidget);
-        expect(gloss(find.byType(ElevatedButton).last), findsNothing);
-        expect(gloss(find.byType(OutlinedButton)), findsNothing);
-        expect(gloss(find.byType(TextButton)), findsNothing);
+        expect(find.byType(Gloss), findsNothing, reason: 'dark=$dark');
         expect(t.binding.transientCallbackCount, 0, reason: 'durağan');
       }
     });
 
-    testWidgets('cilalı tema düğmesi dokunmayı yutmaz (onPressed çalışır)', (
+    testWidgets('tema düğmesi dokunmayı alır (onPressed çalışır)', (
       t,
     ) async {
       var calls = 0;
