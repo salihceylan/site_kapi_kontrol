@@ -669,4 +669,92 @@ void main() {
       noSites.dispose();
     });
   });
+
+  // İP-1D / G2: çekmecenin en üstündeki site seçici kapsamı daraltır (yönetici kitlesi; "Tüm siteler" = null).
+  group('Site kapsamı (scopeSiteCode)', () {
+    MySiteModules manager(int code, {required bool finance, bool door = true}) => MySiteModules(
+          siteCode: code,
+          siteName: 'Site $code',
+          role: 'manager',
+          modules: <String, bool>{'door_control': door, 'finance': finance},
+        );
+
+    Future<(ModuleAccess, _Fetcher)> loaded(List<MySiteModules> sites) async {
+      final fetcher = _Fetcher()..next = _result(sites);
+      final access = ModuleAccess(fetch: fetcher.call);
+      await access.refresh();
+      return (access, fetcher);
+    }
+
+    test('kapsam yokken her şey eskisi gibi; kapsam result\'ı tek siteye daraltır, allSites tümünü verir', () async {
+      final (access, _) = await loaded(<MySiteModules>[manager(1, finance: true), manager(2, finance: false)]);
+      expect(access.scopeSiteCode, isNull);
+      expect(access.result!.sites.map((s) => s.siteCode), <int>[1, 2]);
+
+      var notified = 0;
+      access.addListener(() => notified++);
+      access.setScopeSiteCode(2);
+      expect(notified, 1, reason: 'menüler yeniden kurulsun');
+      expect(access.scopeSiteCode, 2);
+      expect(access.result!.sites.map((s) => s.siteCode), <int>[2]);
+      expect(access.allSites.map((s) => s.siteCode), <int>[1, 2], reason: 'seçici tüm siteleri listeler');
+      expect(access.anyEnabled(PlatformModuleCodes.finance), isFalse, reason: 'yalnız kapsamdaki site');
+      expect(access.sitesWith(PlatformModuleCodes.finance), isEmpty);
+
+      access.setScopeSiteCode(2);
+      expect(notified, 1, reason: 'aynı kapsam: bildirim yok');
+      access.setScopeSiteCode(null);
+      expect(access.result!.sites.map((s) => s.siteCode), <int>[1, 2]);
+      expect(access.anyEnabled(PlatformModuleCodes.finance), isTrue);
+      access.dispose();
+    });
+
+    test('kapsam dışı site kapalı sayılır (Kapılar paneli de yalnız kapsamdaki siteyi listeler)', () async {
+      final (access, _) = await loaded(<MySiteModules>[manager(1, finance: true), manager(2, finance: true)]);
+      access.setScopeSiteCode(1);
+      expect(access.isEnabled(1, PlatformModuleCodes.doorControl), isTrue);
+      expect(access.isEnabled(2, PlatformModuleCodes.doorControl), isFalse);
+      expect(access.isEnabled(99, PlatformModuleCodes.doorControl), isFalse, reason: 'listede olmayan site de kapsam dışı');
+      access.dispose();
+    });
+
+    test('kapsamdaki sitede Geçiş Kontrol kapalıysa "her yerde kapalı" kapsam içinde doğrudur', () async {
+      final (access, _) = await loaded(<MySiteModules>[
+        manager(1, finance: false),
+        manager(2, finance: false, door: false),
+      ]);
+      expect(access.isDisabledEverywhere(PlatformModuleCodes.doorControl), isFalse);
+      access.setScopeSiteCode(2);
+      expect(access.isDisabledEverywhere(PlatformModuleCodes.doorControl), isTrue);
+      access.dispose();
+    });
+
+    test('bilinmeyen site kapsamı yok sayılır; site sonraki yanıtta kalkarsa kapsam düşer', () async {
+      final (access, fetcher) = await loaded(<MySiteModules>[manager(1, finance: true), manager(2, finance: true)]);
+      access.setScopeSiteCode(7);
+      expect(access.scopeSiteCode, isNull, reason: 'listede olmayan site seçilemez');
+      expect(access.result!.sites.length, 2);
+
+      access.setScopeSiteCode(2);
+      fetcher.next = _result(<MySiteModules>[manager(1, finance: true)]);
+      await access.refresh();
+      expect(access.scopeSiteCode, isNull, reason: 'siteden ayrılındı: tüm siteler');
+      expect(access.result!.sites.map((s) => s.siteCode), <int>[1]);
+      access.dispose();
+    });
+
+    test('clear (çıkış) kapsamı da sıfırlar; süper kullanıcıda kapsam uygulanmaz', () async {
+      final (access, _) = await loaded(<MySiteModules>[manager(1, finance: true), manager(2, finance: true)]);
+      access.setScopeSiteCode(1);
+      access.clear();
+      expect(access.scopeSiteCode, isNull);
+      access.dispose();
+
+      final superAccess = ModuleAccess(fetch: _Fetcher().call, isSuperUser: () => true);
+      superAccess.setScopeSiteCode(1);
+      expect(superAccess.scopeSiteCode, isNull);
+      expect(superAccess.isEnabled(2, PlatformModuleCodes.finance), isTrue);
+      superAccess.dispose();
+    });
+  });
 }
