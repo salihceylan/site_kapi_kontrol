@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/models/finance.dart';
@@ -15,14 +16,11 @@ import 'package:site_kapi_kontrol/ui/helpers/money.dart';
 import 'package:site_kapi_kontrol/ui/widgets/site_application_status_card.dart';
 import 'package:site_kapi_kontrol/ui/widgets/yan_menu.dart';
 
-/// Odak kutusunun (koyu kart) zemini: yalnız dikkat isteyen yerde (Panel tasarım kuralı: %90 açık, %10 koyu).
-const Color _kFocusColor = Color(0xFF0F172A);
-const Color _kFocusText = Color(0xFFF8FAFC);
-const Color _kFocusMuted = Color(0xFFCBD5E1);
-
-/// Durum noktaları (metnin soluna küçük nokta; arka planı boyamaz).
-const Color _kDotWarning = Color(0xFFF59E0B);
-const Color _kDotDanger = Color(0xFFE11D48);
+// Vitrin renkleri tek kaynaktan ([AppShowcaseColors], tokens.dart): açık temada işverenin renk tablosu (zemin #F8FAFC,
+// kart #FFFFFF + #E2E8F0 çerçeve, metin #475569, odak #0F172A, durum noktaları), koyu temada palet. Düz hex yazılmaz.
+Color _cardColor(AppPalette p) => p.isDark ? p.surface : AppShowcaseColors.card;
+Color _cardBorder(AppPalette p) => p.isDark ? p.border : AppShowcaseColors.cardBorder;
+Color _bodyInk(AppPalette p) => p.isDark ? p.textSecondary : AppShowcaseColors.text;
 
 /// Panel: MODÜL VİTRİNİ. Girişten sonra herkesi karşılayan ekran; kapı paneli artık "Kapılar" kartının arkasındadır.
 ///
@@ -32,11 +30,14 @@ const Color _kDotDanger = Color(0xFFE11D48);
 ///   Dokunmak çekmecede o öğeyi seçmekle AYNI gezinmedir ([onOpen]).
 /// - [ShowcaseAudience.admin]: üstte koyu "Dikkat edilmesi gereken iş" barı (YALNIZ [badgeCounts] içinde bekleyen sayı
 ///   varsa; yeni veri kaynağı yok), altında ızgara.
-/// - [ShowcaseAudience.resident]: üstte koyu tek kart (Borcum açıksa ve borç bilgisi alınabildiyse "Güncel borcunuz" +
+/// - [ShowcaseAudience.resident]: üstte tek kart (Borcum açıksa ve borç bilgisi alınabildiyse "Güncel borcunuz" +
 ///   "Borcum'a git"; değilse selamlama), altında hızlı işlemler (yalnız modülü açık olanlar), sonra ızgara.
+///   Kart YALNIZ ödenecek borç varken koyudur (eylem isteyen yer); selamlama, borç yok ve alacak düz beyaz karttır.
 /// - Hesap / ayar türü öğeler ([showcaseSecondaryItems]) ızgarada değil, altta küçük "Hesap ve ayarlar" satırındadır.
 /// - Izgara duyarlıdır (telefonda 2, geniş ekranda 3-4 sütun; büyük yazıda azalır); kartlar yüksekliğe göre sabit
 ///   değildir (taşma yok). Hareket azaltmada giriş animasyonu yoktur.
+/// - Açık temada sayfa zemini düz #F8FAFC'dir ([_ShowcaseBackdrop]); koyu odak kutusu koyu temada zeminden ayrışan
+///   lacivert yüzey + mavi kenarla çizilir. Hap düğmeler en az 48 dp ve klavye odağında halkalıdır ([_PillButton]).
 class ModuleShowcaseView extends StatefulWidget {
   const ModuleShowcaseView({
     super.key,
@@ -272,10 +273,12 @@ class ModuleShowcaseViewState extends State<ModuleShowcaseView> {
       ],
     ];
 
-    return Column(
-      key: const ValueKey<String>('panel_vitrin'),
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: children,
+    return _ShowcaseBackdrop(
+      child: Column(
+        key: const ValueKey<String>('panel_vitrin'),
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: children,
+      ),
     );
   }
 
@@ -364,6 +367,67 @@ class ModuleShowcaseViewState extends State<ModuleShowcaseView> {
   }
 }
 
+/// Açık temada vitrin sayfasının zemini DÜZ #F8FAFC ([AppShowcaseColors.background], işverenin "ana zemin"i). Uygulamanın
+/// genel zemini (#F8FAFC -> #E2E8F0 gradyanı + ışıma) DEĞİŞMEZ; vitrin açıkken onun üstüne boyanır. Gradyanın alt tonu
+/// kart çerçevesiyle (#E2E8F0) aynı olduğundan gölgesiz kartların çerçevesi sayfanın altında zemine karışıyordu.
+///
+/// Boya vitrinin dışına taşar (sayfa kenar boşlukları, üst / alt boşluk, kısa içerikte ekranın kalanı): sayfanın kaydırma
+/// görünümü kendi sınırında kırptığı için yalnız kaydırılan alan düzleşir (üstteki bant ve uygulama çubuğu etkilenmez).
+/// Kendi [RepaintBoundary]'sindedir: tek dikdörtgen, içerik katmanını büyütmez, kaydırırken yeniden boyanmaz, dokunmayı
+/// yutmaz. Koyu temada boyanmaz (koyu zemin olduğu gibi kalır); ağaç yapısı iki temada aynıdır (tema değişince alt ağaç
+/// yeniden kurulmaz).
+class _ShowcaseBackdrop extends StatelessWidget {
+  const _ShowcaseBackdrop({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: RepaintBoundary(
+            child: CustomPaint(
+              key: const ValueKey<String>('panel_vitrin_zemin'),
+              painter: _FlatBackdropPainter(
+                color: context.palette.isDark ? null : AppShowcaseColors.background,
+                reach: MediaQuery.sizeOf(context),
+              ),
+            ),
+          ),
+        ),
+        child,
+      ],
+    );
+  }
+}
+
+class _FlatBackdropPainter extends CustomPainter {
+  const _FlatBackdropPainter({required this.color, required this.reach});
+
+  /// Zemin rengi; null ise boyanmaz (koyu tema).
+  final Color? color;
+
+  /// Ekran boyutu. Dikdörtgen vitrinin iki yanından ekranın kalan genişliği kadar (kenar boşlukları), üstünden ve
+  /// altından bir ekran boyu taşar: görünür alanın tamamı, kısa içerikte ve aşağı çekip yenilemede de.
+  final Size reach;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final c = color;
+    if (c == null) return;
+    final dx = math.max(0.0, reach.width - size.width) + 1;
+    final dy = reach.height;
+    canvas.drawRect(Rect.fromLTRB(-dx, -dy, size.width + dx, size.height + dy), Paint()..color = c);
+  }
+
+  @override
+  bool? hitTest(Offset position) => false;
+
+  @override
+  bool shouldRepaint(_FlatBackdropPainter oldDelegate) => oldDelegate.color != color || oldDelegate.reach != reach;
+}
+
 /// Bölüm başlığı (küçük, kalın; başlık düğümü).
 class _SectionTitle extends StatelessWidget {
   const _SectionTitle({super.key, required this.text});
@@ -431,7 +495,7 @@ class _ShowcaseGrid extends StatelessWidget {
 /// Düz beyaz kart yüzeyi: ince çerçeve, gölge yok (koyu temada palet yüzeyi).
 ShapeBorder _cardShape(AppPalette p) => RoundedRectangleBorder(
       borderRadius: BorderRadius.circular(AppRadius.lg),
-      side: BorderSide(color: p.border),
+      side: BorderSide(color: _cardBorder(p)),
     );
 
 /// Modül kartı: görsel + başlık + açıklama + rozet. Tek erişilebilir düğme (etiket = başlık + rozet).
@@ -454,7 +518,7 @@ class _ModuleTile extends StatelessWidget {
       excludeSemantics: true,
       child: Material(
         key: ValueKey<String>('panel_kart_${entry.item.name}'),
-        color: p.surface,
+        color: _cardColor(p),
         shape: _cardShape(p),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
@@ -467,19 +531,26 @@ class _ModuleTile extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      ModuleArt(kind: entry.art, size: 56),
-                      const Spacer(),
-                      if (entry.badge > 0) _CountDot(count: entry.badge),
-                    ],
+                  // Görsel solda, rozet sağda. Dar kartta (320 dp telefonda iki sütun: kart içi ~114 dp) ya da büyük
+                  // yazıda rozet sığmazsa görselin ALTINA iner (taşma yok). Wrap, satırların eşit yüksekliği için
+                  // gereken iç boyut ölçümünü destekler (LayoutBuilder desteklemez).
+                  SizedBox(
+                    width: double.infinity,
+                    child: Wrap(
+                      alignment: WrapAlignment.spaceBetween,
+                      spacing: AppSpace.sm,
+                      runSpacing: AppSpace.sm,
+                      children: [
+                        ModuleArt(kind: entry.art, size: 56),
+                        if (entry.badge > 0) _CountDot(count: entry.badge),
+                      ],
+                    ),
                   ),
                   const SizedBox(height: AppSpace.md),
                   Text(entry.title, style: th.titleMedium),
                   if (entry.description.isNotEmpty) ...[
                     const SizedBox(height: AppSpace.xs),
-                    Text(entry.description, style: th.bodySmall?.copyWith(color: p.textSecondary)),
+                    Text(entry.description, style: th.bodySmall?.copyWith(color: _bodyInk(p))),
                   ],
                 ],
               ),
@@ -514,15 +585,19 @@ class _CountDot extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const _Dot(color: _kDotDanger),
+              const _Dot(color: AppShowcaseColors.statusCrit),
               const SizedBox(width: AppSpace.xs),
-              Text(
-                count > 99 ? '99+' : '$count',
-                maxLines: 1,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: p.text,
-                      fontWeight: FontWeight.w800,
-                    ),
+              Flexible(
+                child: Text(
+                  count > 99 ? '99+' : '$count',
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: p.text,
+                        fontWeight: FontWeight.w800,
+                      ),
+                ),
               ),
             ],
           ),
@@ -532,15 +607,23 @@ class _CountDot extends StatelessWidget {
   }
 }
 
+/// Durum noktası (8 dp). [edge]: açık yüzeyde dolgusu zemine 3:1'i tutmayan nokta (kehribar beyazda ~2,1:1) için 1 dp
+/// koyu kenar; nokta işverenin rengini korur, sınırı seçilir.
 class _Dot extends StatelessWidget {
-  const _Dot({required this.color});
+  const _Dot({required this.color, this.edge});
 
   final Color color;
+  final Color? edge;
 
   @override
   Widget build(BuildContext context) {
     return DecoratedBox(
-      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+      key: const ValueKey<String>('panel_durum_noktasi'),
+      decoration: BoxDecoration(
+        color: color,
+        shape: BoxShape.circle,
+        border: edge == null ? null : Border.all(color: edge!),
+      ),
       child: const SizedBox.square(dimension: 8),
     );
   }
@@ -600,7 +683,7 @@ class _QuickTile extends StatelessWidget {
   }
 }
 
-/// "Hesap ve ayarlar" satırındaki küçük düğme (profil, eller serbest, yardım vb.): en az 44 dp yüksek.
+/// "Hesap ve ayarlar" satırındaki küçük düğme (profil, eller serbest, yardım vb.): en az 48 dp yüksek (dokunma hedefi).
 class _SecondaryChip extends StatelessWidget {
   const _SecondaryChip({
     required this.label,
@@ -628,22 +711,22 @@ class _SecondaryChip extends StatelessWidget {
       excludeSemantics: true,
       child: Material(
         key: chipKey,
-        color: p.surface,
+        color: _cardColor(p),
         shape: _cardShape(p),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: onTap,
           child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 44),
+            constraints: const BoxConstraints(minHeight: 48),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: AppSpace.md, vertical: AppSpace.sm),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(icon, size: 18, color: p.textSecondary),
+                  Icon(icon, size: 18, color: _bodyInk(p)),
                   const SizedBox(width: AppSpace.sm),
                   Flexible(
-                    child: Text(label, style: th.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+                    child: Text(label, style: th.bodyMedium?.copyWith(color: _bodyInk(p), fontWeight: FontWeight.w600)),
                   ),
                 ],
               ),
@@ -655,7 +738,10 @@ class _SecondaryChip extends StatelessWidget {
   }
 }
 
-/// Koyu odak yüzeyi (#0F172A): ince çerçeve koyu temada da kartı sayfa zemininden ayırır.
+/// Koyu odak kutusu: YALNIZ eylem isteyen yerde (ödenecek borç kartı, yönetici dikkat barı; işveren talimatı 3: "koyu
+/// renk yalnız aksiyon isteyen yerde"). Açık temada gece kömürü (#0F172A) + ince kenar. Koyu temada sayfa zemini de koyu
+/// (#0F172A -> #020617) olduğundan kutu zeminden ayrışan lacivert yüzeyle (#172554) ve zemine de kutuya da en az 3:1
+/// kontrastlı 1,5 dp mavi kenarla çizilir (koyu temada da göz önce bu kutuyu görür).
 class _FocusSurface extends StatelessWidget {
   const _FocusSurface({super.key, required this.child});
 
@@ -666,62 +752,139 @@ class _FocusSurface extends StatelessWidget {
     final dark = context.palette.isDark;
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: _kFocusColor,
+        color: dark ? AppShowcaseColors.focusDark : AppShowcaseColors.focus,
         borderRadius: BorderRadius.circular(AppRadius.lg),
-        border: Border.all(color: dark ? const Color(0x24FFFFFF) : const Color(0xFF1E293B)),
+        border: dark
+            ? Border.all(color: AppTone.primary.hue, width: 1.5)
+            : Border.all(color: AppShowcaseColors.focusBorder),
       ),
       child: Padding(padding: const EdgeInsets.all(AppSpace.lg), child: child),
     );
   }
 }
 
-/// Koyu bar üstündeki açık düğme (ana eylem): metin #0F172A, en az 44 dp.
-class _OnDarkButton extends StatelessWidget {
-  const _OnDarkButton({required this.label, required this.onTap, this.buttonKey});
+/// Düz üst kart (eylem istemeyen durum: selamlama, borç yok, alacak): modül kartlarıyla aynı yüzey; açıkta beyaz + ince
+/// #E2E8F0 çerçeve, koyuda palet yüzeyi; gölge yok.
+class _PlainSurface extends StatelessWidget {
+  const _PlainSurface({required this.child});
 
-  final String label;
-  final VoidCallback onTap;
-  final Key? buttonKey;
+  final Widget child;
 
   @override
   Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      label: label,
-      onTap: onTap,
-      excludeSemantics: true,
-      child: Material(
-        key: buttonKey,
-        color: _kFocusText,
-        shape: const StadiumBorder(),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onTap,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 44, minWidth: 44),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpace.lg, vertical: AppSpace.sm),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Flexible(
-                    child: Text(
-                      label,
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: _kFocusColor,
-                            fontWeight: FontWeight.w800,
-                          ),
-                    ),
+    final p = context.palette;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: _cardColor(p),
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: _cardBorder(p)),
+      ),
+      child: Padding(padding: const EdgeInsets.all(AppSpace.lg), child: child),
+    );
+  }
+}
+
+/// Ana eylem düğmesi (hap): en az 48 x 48 dp. [onDark] true ise koyu yüzeyde açık hap (#F8FAFC zemin, #0F172A metin);
+/// değilse açık yüzeyde koyu hap (#0F172A zemin, #F8FAFC metin: işverenin "ana buton" rengi).
+///
+/// Klavye odağı iki temada da görünür: hapın 2 dp dışında 2 dp halka (yanındaki yüzeye >= 3:1: koyu yüzeyde #93C5FD,
+/// açıkta #1D4ED8) ve hapın metin tonunda odak / üzerine gelme / basma rengi. Temanın varsayılanı (koyu temada beyaz
+/// %12) açık hapın üstünde görünmüyordu. Ekran okuyucu adı [semanticLabel] (verilmezse [label]); görünen metni İÇERİR
+/// (WCAG 2.5.3), tek düğümdür.
+class _PillButton extends StatefulWidget {
+  const _PillButton({
+    required this.label,
+    required this.onTap,
+    required this.onDark,
+    this.semanticLabel,
+    this.buttonKey,
+  });
+
+  final String label;
+  final String? semanticLabel;
+  final VoidCallback onTap;
+  final bool onDark;
+  final Key? buttonKey;
+
+  @override
+  State<_PillButton> createState() => _PillButtonState();
+}
+
+class _PillButtonState extends State<_PillButton> {
+  bool _focused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final onDark = widget.onDark;
+    final fill = onDark ? AppShowcaseColors.onFocus : AppShowcaseColors.focus;
+    final ink = onDark ? AppShowcaseColors.focus : AppShowcaseColors.onFocus;
+    final ring = onDark ? AppTone.primary.inkDark : AppTone.primary.inkLight;
+    final pill = Material(
+      key: widget.buttonKey,
+      color: fill,
+      shape: const StadiumBorder(),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: widget.onTap,
+        onFocusChange: (focused) {
+          if (focused != _focused) setState(() => _focused = focused);
+        },
+        focusColor: ink.withValues(alpha: 0.16),
+        hoverColor: ink.withValues(alpha: 0.08),
+        highlightColor: ink.withValues(alpha: 0.10),
+        splashColor: ink.withValues(alpha: 0.16),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 48, minWidth: 48),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpace.lg, vertical: AppSpace.sm),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Flexible(
+                  child: Text(
+                    widget.label,
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: ink,
+                          fontWeight: FontWeight.w800,
+                        ),
                   ),
-                  const SizedBox(width: AppSpace.xs),
-                  const Icon(Icons.arrow_forward_rounded, size: 18, color: _kFocusColor),
-                ],
-              ),
+                ),
+                const SizedBox(width: AppSpace.xs),
+                Icon(Icons.arrow_forward_rounded, size: 18, color: ink),
+              ],
             ),
           ),
         ),
+      ),
+    );
+    return Semantics(
+      container: true,
+      button: true,
+      label: widget.semanticLabel ?? widget.label,
+      onTap: widget.onTap,
+      excludeSemantics: true,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          pill,
+          if (_focused)
+            Positioned(
+              left: -4,
+              top: -4,
+              right: -4,
+              bottom: -4,
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  key: const ValueKey<String>('panel_hap_odak'),
+                  decoration: ShapeDecoration(
+                    shape: StadiumBorder(side: BorderSide(color: ring, width: 2)),
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -750,13 +913,13 @@ class _FocusBar extends StatelessWidget {
               children: [
                 const Padding(
                   padding: EdgeInsets.only(top: 2),
-                  child: Icon(Icons.bolt_rounded, size: 20, color: _kDotWarning),
+                  child: Icon(Icons.bolt_rounded, size: 20, color: AppShowcaseColors.statusWarn),
                 ),
                 const SizedBox(width: AppSpace.sm),
                 Expanded(
                   child: Text(
                     'Dikkat edilmesi gereken $n iş var',
-                    style: th.titleMedium?.copyWith(color: _kFocusText, fontWeight: FontWeight.w800),
+                    style: th.titleMedium?.copyWith(color: AppShowcaseColors.onFocus, fontWeight: FontWeight.w800),
                   ),
                 ),
               ],
@@ -772,6 +935,9 @@ class _FocusBar extends StatelessWidget {
   }
 }
 
+/// Odak barı satırı: nokta + metin + tek düğme. Düğmenin ekran okuyucu adı satırın bağlamlı etiketidir
+/// ([ShowcaseFocusEntry.semanticLabel], örn. "2 bekleyen site başvurusu. İncele"): birden çok "İncele" düğmesi
+/// birbirinden ayrılır (WCAG 2.4.6). Satır metni bu adın içinde olduğundan ayrıca okunmaz (iki kez duyulmasın).
 class _FocusRow extends StatelessWidget {
   const _FocusRow({required this.entry, required this.onTap});
 
@@ -781,22 +947,26 @@ class _FocusRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final th = Theme.of(context).textTheme;
-    final text = Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Padding(
-          padding: EdgeInsets.only(top: 6),
-          child: _Dot(color: _kDotWarning),
-        ),
-        const SizedBox(width: AppSpace.sm),
-        Expanded(
-          child: Text(entry.text, style: th.bodyLarge?.copyWith(color: _kFocusText)),
-        ),
-      ],
+    final text = ExcludeSemantics(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.only(top: 6),
+            child: _Dot(color: AppShowcaseColors.statusWarn),
+          ),
+          const SizedBox(width: AppSpace.sm),
+          Expanded(
+            child: Text(entry.text, style: th.bodyLarge?.copyWith(color: AppShowcaseColors.onFocus)),
+          ),
+        ],
+      ),
     );
-    final button = _OnDarkButton(
+    final button = _PillButton(
       buttonKey: ValueKey<String>('panel_odak_${entry.item.name}'),
       label: entry.action,
+      semanticLabel: entry.semanticLabel,
+      onDark: true,
       onTap: onTap,
     );
     final scale = MediaQuery.textScalerOf(context).scale(1);
@@ -828,6 +998,11 @@ class _FocusRow extends StatelessWidget {
 }
 
 /// Sakin hero kartı, borç durumu: "Güncel borcunuz" + tutar + vade bilgisi + "Borcum'a git".
+///
+/// Koyu odak kutusu YALNIZ ödenecek borç varken ([DebtSummary.hasDebt]); "Borcunuz yok" ve "Alacağınız" eylem istemez,
+/// düz karttır. Ekran okuyucu görünen satırların TÜMÜNÜ tek düğümde okur (site / daire, tutar, vadesi geçen, sıradaki
+/// vade, alacak); tutarlar Borcum ekranındaki gibi "üç bin iki yüz elli lira" biçimindedir ([moneySemanticLabel]).
+/// "Borcum'a git" ayrı düğme düğümüdür (adı görünen metin).
 class _DebtHero extends StatelessWidget {
   const _DebtHero({
     super.key,
@@ -843,82 +1018,111 @@ class _DebtHero extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final th = Theme.of(context).textTheme;
+    final p = context.palette;
+    final s = summary;
+    final focus = s.hasDebt;
+    final strong = focus ? AppShowcaseColors.onFocus : p.text;
+    final muted = focus ? AppShowcaseColors.onFocusMuted : _bodyInk(p);
     final String caption;
     final String amount;
-    if (summary.hasDebt) {
+    final String spokenAmount;
+    if (s.hasDebt) {
       caption = 'Güncel borcunuz';
-      amount = formatMinor(summary.debtMinor);
-    } else if (summary.hasCredit) {
+      amount = formatMinor(s.debtMinor);
+      spokenAmount = moneySemanticLabel(s.debtMinor);
+    } else if (s.hasCredit) {
       caption = 'Alacağınız';
-      amount = formatMinor(summary.creditMinor);
+      amount = formatMinor(s.creditMinor);
+      spokenAmount = moneySemanticLabel(s.creditMinor);
     } else {
       caption = 'Borç durumunuz';
       amount = 'Borcunuz yok';
+      spokenAmount = amount;
     }
-    final lines = <Widget>[
-      if (summary.hasDebt && summary.overdueMinor > 0)
-        _HeroLine(
-          dot: _kDotDanger,
-          text: 'Vadesi geçen: ${formatMinor(summary.overdueMinor)}',
+    // (nokta, görünen metin, okunan metin)
+    final lines = <(Color?, String, String)>[
+      if (s.hasDebt && s.overdueMinor > 0)
+        (
+          AppShowcaseColors.statusCrit,
+          'Vadesi geçen: ${formatMinor(s.overdueMinor)}',
+          'Vadesi geçen: ${moneySemanticLabel(s.overdueMinor)}',
         ),
-      if (summary.hasDebt && summary.nextDue != null)
-        _HeroLine(dot: _kDotWarning, text: 'Sıradaki vade: ${formatCrmDate(summary.nextDue)}'),
-      if (summary.hasDebt && summary.hasCredit)
-        _HeroLine(dot: null, text: 'Alacağınız: ${formatMinor(summary.creditMinor)}'),
+      if (s.hasDebt && s.nextDue != null)
+        (
+          AppShowcaseColors.statusWarn,
+          'Sıradaki vade: ${formatCrmDate(s.nextDue)}',
+          'Sıradaki vade: ${formatCrmDate(s.nextDue)}',
+        ),
+      if (s.hasDebt && s.hasCredit)
+        (
+          null,
+          'Alacağınız: ${formatMinor(s.creditMinor)}',
+          'Alacağınız: ${moneySemanticLabel(s.creditMinor)}',
+        ),
     ];
-    return _FocusSurface(
-      child: Semantics(
-        container: true,
-        label: '$caption: $amount',
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            ExcludeSemantics(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (siteLine.isNotEmpty) ...[
-                    Text(siteLine, style: th.bodySmall?.copyWith(color: _kFocusMuted)),
-                    const SizedBox(height: AppSpace.sm),
-                  ],
-                  Text(
-                    caption,
-                    style: th.bodyMedium?.copyWith(color: _kFocusMuted, fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(height: AppSpace.xs),
-                  Text(
-                    amount,
-                    key: const ValueKey<String>('panel_hero_tutar'),
-                    style: th.headlineMedium?.copyWith(color: _kFocusText),
-                  ),
-                  for (final line in lines) ...[
-                    const SizedBox(height: AppSpace.xs),
-                    line,
-                  ],
+    final spoken = <String>[
+      // "Güneş Sitesi · A Blok / D:3": ayırıcı nokta okunmaz, virgül duraklatır.
+      if (siteLine.isNotEmpty) siteLine.replaceAll(' · ', ', '),
+      '$caption: $spokenAmount',
+      for (final (_, _, said) in lines) said,
+    ].join('. ');
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Semantics(
+          key: const ValueKey<String>('panel_hero_ozet'),
+          container: true,
+          label: '$spoken.',
+          child: ExcludeSemantics(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (siteLine.isNotEmpty) ...[
+                  Text(siteLine, style: th.bodySmall?.copyWith(color: muted)),
+                  const SizedBox(height: AppSpace.sm),
                 ],
-              ),
+                Text(
+                  caption,
+                  style: th.bodyMedium?.copyWith(color: muted, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: AppSpace.xs),
+                Text(
+                  amount,
+                  key: const ValueKey<String>('panel_hero_tutar'),
+                  style: th.headlineMedium?.copyWith(color: strong),
+                ),
+                for (final (dot, shown, _) in lines) ...[
+                  const SizedBox(height: AppSpace.xs),
+                  _HeroLine(dot: dot, text: shown, color: muted),
+                ],
+              ],
             ),
-            const SizedBox(height: AppSpace.lg),
-            Align(
-              alignment: AlignmentDirectional.centerStart,
-              child: _OnDarkButton(
-                buttonKey: const ValueKey<String>('panel_hero_borcuma_git'),
-                label: "Borcum'a git",
-                onTap: onOpenDebt,
-              ),
-            ),
-          ],
+          ),
         ),
-      ),
+        const SizedBox(height: AppSpace.lg),
+        Align(
+          alignment: AlignmentDirectional.centerStart,
+          child: _PillButton(
+            buttonKey: const ValueKey<String>('panel_hero_borcuma_git'),
+            label: "Borcum'a git",
+            // Koyu kutuda ve koyu temanın düz kartında açık hap; açık temanın düz kartında koyu (#0F172A) ana düğme.
+            onDark: focus || p.isDark,
+            onTap: onOpenDebt,
+          ),
+        ),
+      ],
     );
+    return focus ? _FocusSurface(child: content) : _PlainSurface(child: content);
   }
 }
 
 class _HeroLine extends StatelessWidget {
-  const _HeroLine({required this.dot, required this.text});
+  const _HeroLine({required this.dot, required this.text, required this.color, this.dotEdge});
 
   final Color? dot;
   final String text;
+  final Color color;
+  final Color? dotEdge;
 
   @override
   Widget build(BuildContext context) {
@@ -926,13 +1130,13 @@ class _HeroLine extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (dot != null) ...[
-          Padding(padding: const EdgeInsets.only(top: 5), child: _Dot(color: dot!)),
+          Padding(padding: const EdgeInsets.only(top: 5), child: _Dot(color: dot!, edge: dotEdge)),
           const SizedBox(width: AppSpace.sm),
         ],
         Expanded(
           child: Text(
             text,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: _kFocusMuted),
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: color),
           ),
         ),
       ],
@@ -940,7 +1144,8 @@ class _HeroLine extends StatelessWidget {
   }
 }
 
-/// Sakin hero kartı, selamlama (borç bilgisi yokken / alınamazken): "Merhaba, Ad" + site bilgisi.
+/// Sakin hero kartı, selamlama (borç bilgisi yokken / alınamazken): "Merhaba, Ad" + site bilgisi. Eylem istemediği için
+/// düz karttır (koyu değil); borç bilgisi alınamadıysa kısa not ve "Borcum'a git" ana düğmesi.
 class _GreetingHero extends StatelessWidget {
   const _GreetingHero({
     super.key,
@@ -958,29 +1163,38 @@ class _GreetingHero extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final th = Theme.of(context).textTheme;
-    return _FocusSurface(
+    final p = context.palette;
+    final muted = _bodyInk(p);
+    return _PlainSurface(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Semantics(
             header: true,
-            child: Text(greeting, style: th.headlineMedium?.copyWith(color: _kFocusText)),
+            child: Text(greeting, style: th.headlineMedium),
           ),
           if (siteLine.isNotEmpty) ...[
             const SizedBox(height: AppSpace.xs),
-            Text(siteLine, style: th.bodyMedium?.copyWith(color: _kFocusMuted)),
+            Text(siteLine, style: th.bodyMedium?.copyWith(color: muted)),
           ],
           if (note != null) ...[
             const SizedBox(height: AppSpace.sm),
-            _HeroLine(dot: _kDotWarning, text: note!),
+            _HeroLine(
+              dot: AppShowcaseColors.statusWarn,
+              // Beyaz kartta kehribar nokta ~2,1:1: sınırı koyu kehribar kenarla seçilir (>= 3:1).
+              dotEdge: p.isDark ? null : AppTone.warning.a,
+              text: note!,
+              color: muted,
+            ),
           ],
           if (onOpenDebt != null) ...[
             const SizedBox(height: AppSpace.lg),
             Align(
               alignment: AlignmentDirectional.centerStart,
-              child: _OnDarkButton(
+              child: _PillButton(
                 buttonKey: const ValueKey<String>('panel_hero_borcuma_git'),
                 label: "Borcum'a git",
+                onDark: p.isDark,
                 onTap: onOpenDebt!,
               ),
             ),

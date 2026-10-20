@@ -5,6 +5,12 @@ da bileşen yazarken önce buraya bakın; kod örnekleri `lib/ui/design/` altın
 
 > Kısa özet: **derinlik** (cila, aura, gölge) + **canlılık** (olay-güdümlü, sonlu animasyon) +
 > **okunaklılık** (ölçülmüş kontrast) + **hız** (kararlı durumda sıfır ticker).
+>
+> **İki stil (G6 kararına kadar):** **Panel (modül vitrini)** işverenin "sade" stilindedir (komutlar.txt): düz beyaz
+> kart + ince çerçeve, gölge ve cila YOK, koyu renk yalnız eylem isteyen yerde, renkler 5 değişkenden
+> (`AppShowcaseColors`). Uygulamanın geri kalanı "Cilalı Safir"dir (derinlik: cila, aura, gölge). Bu belgedeki
+> "derinlik / gölge" kuralları (`AppCard` gölgesi, cila) Panel vitrinine uygulanmaz; vitrin kuralları §3 "Panel"
+> bölümündedir. İkisi çelişmez: vitrin bilinçli istisnadır, G6 kararıyla tüm uygulama tek stile geçebilir.
 
 ## 1. Değişmez sözleşmeler
 
@@ -104,8 +110,12 @@ Girişten sonra açılan **Panel** kapı paneli değil, kullanıcıya tanımlı 
 - **Tek kaynak**: kartlar `YanMenu.visibleItems` (çekmecenin hesapladığı öğe listesi) çıktısından türer; görünürlük kuralı vitrinde kopyalanmaz. Kapalı / yetkisiz modülün kartı hiçbir koşulda çizilmez (fail-closed); modül sonradan kapanınca kart da kalkar.
 - **Kart**: `ModuleArt(kind: ...)` görseli (`moduleArtKindFor`: bilinmeyen öğe `generic`) + menüdeki başlık + tek satır açıklama + varsa rozet (çekmecedeki sayılar; durum noktası + sayı). Etiket = başlık + rozet, ipucu = açıklama; dokunma çekmecede öğeyi seçmekle aynı gezinmedir.
 - **İkincil satır kuralı**: hesap / ayar / sistem öğeleri (`showcaseSecondaryItems`: Profilim, Eller Serbest, Bluetooth ile Wi-Fi Kur, Denetim Kaydı, Platform Ayarları, İstemci Hataları) ızgarada kart olmaz, altta küçük "Hesap ve ayarlar" düğmeleri olarak durur (+ "Yardım ve Destek").
-- **Kitle** (`showcaseAudience`): yönetici / süper kullanıcı = üstte koyu (#0F172A) "Dikkat edilmesi gereken N iş var" barı (yalnız çekmecedeki bekleyen sayı > 0 iken; satır başına tek düğme); sakin / kurul / görevli = üstte koyu tek kart ("Güncel borcunuz" + "Borcum'a git", Borcum açık ve borç bilgisi alınabildiyse; yoksa selamlama), altında hızlı işlemler (Kapıyı aç, Arıza bildir, Ziyaretçi ve kargo, Belgeler; yalnız modülü açık olanlar); bireysel = yalnız ızgara.
-- **Görünüm**: kart düz beyaz yüzey + ince çerçeve, gölge yok; koyu renk yalnız odak barı / hero kart ve üzerindeki ana eylemde; durum noktaları #10B981 / #F59E0B / #E11D48. Izgara 2 sütun (telefon), 3-4 sütun (geniş), büyük yazıda sütun azalır (`showcaseColumns`); satırdaki kartlar eşit yükseklikte; hareket azaltmada giriş animasyonu yok.
+- **Kitle** (`showcaseAudience`):
+  - yönetici / süper kullanıcı: üstte koyu "Dikkat edilmesi gereken N iş var" barı, altında ızgara. Bar YALNIZ çekmecedeki bekleyen / okunmamış sayılar > 0 iken çıkar (yeni veri kaynağı yok; satır başına tek düğme). **Bugün yönetim tarafındaki bu sayılar yalnız süper kullanıcıda vardır** (bekleyen modül talepleri, site başvuruları). Yönetici modundaki site yöneticisinde çekmecede rozet olmadığından bar **hiç çıkmaz**; yönetici için (yeni arıza talepleri, karar bekleyen rezervasyonlar, onay bekleyen dekontlar) tek bir sunucu sayaç ucu gerekir, henüz yazılmadı.
+  - sakin / kurul / görevli: üstte tek kart ("Güncel borcunuz" + "Borcum'a git", Borcum açık ve borç bilgisi alınabildiyse; yoksa selamlama; bilgi yokken ASLA "borç yok" denmez), altında hızlı işlemler (Kapıyı aç, Arıza bildir, Ziyaretçi ve kargo, Belgeler; yalnız modülü açık olanlar).
+  - bireysel: yalnız ızgara.
+- **Görünüm** (renkler `AppShowcaseColors`, tokens.dart): açık temada sayfa zemini DÜZ #F8FAFC (yalnız vitrin; uygulamanın genel gradyan zemini değişmez, gradyanın alt tonu kart çerçevesiyle aynı olduğundan vitrinde kullanılmaz), kart saf beyaz + ince #E2E8F0 çerçeve, gölge yok, normal metin #475569. Koyu renk (#0F172A) YALNIZ eylem isteyen yerde: ödenecek borç varken sakin kartı, yöneticide dikkat barı ve ana düğmeler. Selamlama, "Borcunuz yok", "Alacağınız" ve "borç bilgisi alınamadı" hâli düz beyaz karttır (ana düğmesi koyu hap). Koyu temada odak kutusu zeminden ayrışan lacivert (#172554) + 1,5 dp mavi kenar (zemine ve kutuya ≥ 3:1). Durum noktaları #10B981 / #F59E0B / #E11D48 (arka planı boyamaz; anlam yanındaki metindedir). Izgara 2 sütun (telefon; 320 dp telefonda da yazı 1,0-1,15'te iki sütun, gerçek genişlik 288 dp), 3-4 sütun (geniş), büyük yazıda sütun azalır (`showcaseColumns`); satırdaki kartlar eşit yükseklikte, rozet sığmazsa görselin altına iner; hareket azaltmada giriş animasyonu yok.
+- **Erişilebilirlik**: hap düğmeler ve "Hesap ve ayarlar" düğmeleri en az 48 dp; hap düğmede klavye odağı iki temada görünür (2 dp dışında 2 dp halka, yanındaki yüzeye ≥ 3:1). Borç kartının ekran okuyucu etiketi görünen TÜM satırları okur (site / daire, tutar, vadesi geçen, sıradaki vade, alacak; tutarlar `moneySemanticLabel` ile "üç bin iki yüz elli lira"); "Borcum'a git" ayrı düğmedir. Dikkat barı düğmesinin adı satırın bağlamlı etiketidir ("2 bekleyen site başvurusu. İncele"): birden çok "İncele" birbirinden ayrılır, satır metni ikinci kez okunmaz.
 - **Kapı güvenliği**: vitrinde kapı AÇILMAZ (kazara dokunuşla kapı açılmasın); "Kapıyı aç" hızlı eylemi Kapılar sayfasına götürür, kapı açma mantığı değişmedi. Geçiş Kontrol kapalıyken `SirketMenuItem.kapilar` gizlenir: kart ve hızlı eylem de yoktur. Durum yoklaması yalnız Kapılar sayfasındayken çalışır.
 - Geri tuşu bir modül sayfasından Panel vitrinine döner (`PopScope`); vitrindeyken uygulamadan çıkar.
 
@@ -116,7 +126,8 @@ Girişten sonra açılan **Panel** kapı paneli değil, kullanıcıya tanımlı 
 - **Eylem**: birincil `PrimaryActionButton(filled)`, ikincil `tonal`; kapı açma her zaman `DoorOpenButton`.
 - **Diyalog**: `AppDialog(icon, tone)`; iptal `TextButton`, onay dolu düğme.
 - **Geri bildirim**: `AppSnack`, formlarda `InlineNotice`.
-- **Renk**: yalnız `AppTone` (metin için `tone.ink(palette)`), düz hex yazmayın.
+- **Renk**: yalnız `AppTone` / `AppPalette` (metin için `tone.ink(palette)`); Panel vitrini `AppShowcaseColors`
+  (beyaz etiket için 5 renk değişkeni: zemin, kart + kenar, metin, odak, durum noktaları). Düz hex yazmayın.
 
 ## 5. Ne yapılmaz
 
