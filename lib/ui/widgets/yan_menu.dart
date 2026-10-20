@@ -139,6 +139,13 @@ enum SirketMenuItem {
   /// Karar Defteri sakin ekranı "Kararlar" (sakinlere açık kesin kararlar). Rol listesinde YOKTUR; alıcısı olabilecek ve
   /// `decision_book` modülü AÇIK sitesi olan sakine [YanMenu.additionalItems] ile eklenir (yönetim öğesinin altına).
   kararlar,
+
+  /// Kapılar: bugüne dek "Panel"in kendisi olan kapı paneli (durum, kapıyı aç; bireysel kullanıcıda kapılar, daireler,
+  /// cihazlar). "Panel" artık modül vitrinidir; kapı paneli bu öğeyle bir dokunuş uzaktadır. Rol listesinde YOKTUR;
+  /// [YanMenu.additionalItems] ile eklenir ve her zaman "Panel"in hemen altına gelir. Geçiş Kontrol (`door_control`)
+  /// modülü kullanıcının bağlı olduğu TÜM sitelerde kapalıyken [YanMenu.hiddenItems] ile gizlenir (kapı kartı vitrinde de
+  /// görünmez).
+  kapilar,
 }
 
 class YanMenu extends StatelessWidget {
@@ -171,7 +178,7 @@ class YanMenu extends StatelessWidget {
   final VoidCallback? onToggleMode;
   final bool canToggleMode;
 
-  /// "Panel"den hemen sonra gösterilen ek eylemler (varsayılan boş: menü eskisi gibidir).
+  /// "Kapılar"dan (o yoksa "Panel"den) hemen sonra gösterilen ek eylemler (varsayılan boş: menü eskisi gibidir).
   final List<YanMenuAction> extraActions;
 
   /// Menüden gizlenecek öğeler (varsayılan boş: menü eskisi gibidir). Platform modül sistemi:
@@ -200,19 +207,49 @@ class YanMenu extends StatelessWidget {
   /// (en büyük yazıda 56 dp'ye düşerdi) ve Column ekran yüksekliğini aşıp taşabilirdi.
   static const double _compactHeight = 480;
 
-  @override
-  Widget build(BuildContext context) {
-    final p = context.palette;
-    final tone = role.tone;
-    final compact = MediaQuery.sizeOf(context).height < _compactHeight;
+  /// Çekmecede (ve Panel modül vitrininde) görünen öğelerin sıralı listesi: rol listesi + [additionalItems] - [hiddenItems].
+  /// Çekmece de vitrin de AYNI hesaplanmış listeyi kullanır: görünürlük mantığı tek yerdedir, kapalı bir modül ikisinde
+  /// de asla görünmez ("fail-closed"). "Panel" (dashboard) listededir; vitrin onu kart yapmaz.
+  static List<SirketMenuItem> visibleItems({
+    required UserRole role,
+    bool isResidentMode = false,
+    bool canToggleMode = false,
+    Set<SirketMenuItem> additionalItems = const <SirketMenuItem>{},
+    Set<SirketMenuItem> hiddenItems = const <SirketMenuItem>{},
+  }) {
     final roleItems = _itemsForRole(
       role,
       isResidentMode: isResidentMode,
       canToggleMode: canToggleMode,
     );
-    final items = _withExtras(roleItems, additionalItems)
+    return _withExtras(roleItems, additionalItems)
         .where((item) => !hiddenItems.contains(item))
         .toList(growable: false);
+  }
+
+  /// Öğenin çekmecedeki başlığı (vitrin kartı aynı metni kullanır).
+  static String titleFor(SirketMenuItem item, [UserRole? role]) => _titleForItem(item, role);
+
+  /// Öğenin çekmecedeki simgesi.
+  static IconData iconFor(SirketMenuItem item) => _iconForItem(item);
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    final tone = role.tone;
+    final compact = MediaQuery.sizeOf(context).height < _compactHeight;
+    final items = visibleItems(
+      role: role,
+      isResidentMode: isResidentMode,
+      canToggleMode: canToggleMode,
+      additionalItems: additionalItems,
+      hiddenItems: hiddenItems,
+    );
+    // Ek eylemler (kapı komutları) "Kapılar"ın, o yoksa "Panel"in hemen altına gelir.
+    final extrasAfter = () {
+      final doors = items.indexOf(SirketMenuItem.kapilar);
+      return doors >= 0 ? doors : 0;
+    }();
     final showToggle = canToggleMode && onToggleMode != null;
     // Çekmece açılışında ilk 8 öğe sırayla belirir (StaggeredEntry): sıra ekrandaki sıradır.
     final firstItemIndex = showToggle ? 1 : 0;
@@ -248,7 +285,7 @@ class YanMenu extends StatelessWidget {
         for (var i = 0; i < items.length; i++) ...[
           StaggeredEntry(
             key: ValueKey<SirketMenuItem>(items[i]),
-            index: firstItemIndex + i + (i > 0 ? extraActions.length : 0),
+            index: firstItemIndex + i + (i > extrasAfter ? extraActions.length : 0),
             child: _MenuTile(
               icon: _iconForItem(items[i]),
               title: _titleForItem(items[i], role),
@@ -259,12 +296,12 @@ class YanMenu extends StatelessWidget {
               onTap: () => onSelect(items[i]),
             ),
           ),
-          // Ek eylemler "Panel"in hemen altında.
-          if (i == 0)
+          // Ek eylemler "Kapılar"ın (o yoksa "Panel"in) hemen altında.
+          if (i == extrasAfter)
             for (var k = 0; k < extraActions.length; k++)
               StaggeredEntry(
                 key: ValueKey<String>('yan_menu_ek_$k'),
-                index: firstItemIndex + 1 + k,
+                index: firstItemIndex + extrasAfter + 1 + k,
                 child: _MenuTile(
                   icon: extraActions[k].icon,
                   title: extraActions[k].title,
@@ -615,6 +652,9 @@ List<SirketMenuItem> _withExtras(
         if (anchor >= 0) break;
       }
     }
+    // "Kapılar" her zaman "Panel"in hemen altındadır (kapı paneli bir dokunuş uzakta). Numaralandırmada en sonda
+    // olduğundan öteki ek öğelerden SONRA eklenir ve "Panel"in altına, onların önüne girer.
+    if (extra == SirketMenuItem.kapilar) anchor = result.indexOf(SirketMenuItem.dashboard);
     if (anchor < 0) anchor = result.indexOf(SirketMenuItem.siteler);
     if (anchor < 0) anchor = result.indexOf(SirketMenuItem.dashboard);
     result.insert(anchor < 0 ? result.length : anchor + 1, extra);
@@ -771,6 +811,8 @@ String _titleForItem(SirketMenuItem item, [UserRole? role]) {
       return 'Karar Defteri';
     case SirketMenuItem.kararlar:
       return 'Kararlar';
+    case SirketMenuItem.kapilar:
+      return 'Kapılar';
   }
 }
 
@@ -848,6 +890,8 @@ IconData _iconForItem(SirketMenuItem item) {
       return Icons.gavel_rounded;
     case SirketMenuItem.kararlar:
       return Icons.library_books_rounded;
+    case SirketMenuItem.kapilar:
+      return Icons.meeting_room_rounded;
   }
 }
 

@@ -2,9 +2,12 @@
 //
 // - Menü: süper kullanıcı "Modüller" + "Denetim Kaydı", site yöneticisi "Modüller"; seçilince ilgili
 //   ekran açılır ve AppBar başlığı değişir; genel yenileme (Yenile) modül durumunu ve ekranı tazeler.
-// - Geçiş Kontrol bağlı olunan TÜM sitelerde kapalıyken: kapıyla ilgili menü öğeleri gizlenir, Panel'de
-//   kapı kartları yerine "Geçiş Kontrol modülü kapalı" bilgi kartı çıkar; Panel site seçici yalnız
-//   modülü açık siteleri listeler. Süper kullanıcı ve veri yokken (fail-open) hiçbir şey değişmez.
+// - Panel artık MODÜL VİTRİNİDİR; kapı paneli "Kapılar" kartının (menü öğesi) arkasındadır.
+// - Geçiş Kontrol bağlı olunan TÜM sitelerde kapalıyken: kapıyla ilgili menü öğeleri ("Kapılar" dahil) gizlenir, vitrinde
+//   kapı kartı ve hızlı "Kapıyı aç" eylemi YOKTUR (eski "modül kapalı" bilgi kartı artık çıkmaz); bireysel ana ekranın kapı
+//   dışı bölümleri vitrinin altında kalır. Kapı paneli site seçici yalnız modülü açık siteleri listeler. Süper kullanıcıda
+//   Kapılar kartı hep vardır; seçili sitesi kapalıysa bilgi kartı Kapılar sayfasında çıkar. Veri yokken (fail-open) hiçbir
+//   şey değişmez.
 // - Taşma: 320x640 x2,0 ve 360x640 x1,5, açık + koyu tema.
 import 'dart:async';
 
@@ -292,11 +295,23 @@ Future<void> _closeDrawer(WidgetTester t) async {
   await t.pump(const Duration(milliseconds: 450));
 }
 
+/// Çekmecedeki öğeye dokunur. Bulucu çekmeceyle SINIRLIDIR: Panel modül vitrininde de aynı adlı kartlar vardır.
 Future<void> _tapMenu(WidgetTester t, String label) async {
   await _openDrawer(t);
-  await t.ensureVisible(find.text(label).first);
+  final tile = find.descendant(of: find.byType(Drawer), matching: find.text(label)).first;
+  await t.ensureVisible(tile);
   await t.pump();
-  await t.tap(find.text(label).first);
+  await t.tap(tile);
+  await t.pump();
+  await t.pump(const Duration(milliseconds: 600));
+}
+
+/// Panel vitrinindeki "Kapılar" kartına dokunur: kapı paneli (DashboardView / bireysel ana ekran) bir dokunuş uzaktadır.
+Future<void> _openDoorPanel(WidgetTester t) async {
+  final card = find.byKey(const ValueKey<String>('panel_kart_kapilar'));
+  await t.ensureVisible(card);
+  await t.pump();
+  await t.tap(card);
   await t.pump();
   await t.pump(const Duration(milliseconds: 600));
 }
@@ -399,15 +414,18 @@ void main() {
       await _disposeHome(t);
     });
 
-    testWidgets('varsayılan örnek (enjeksiyonsuz): sunucu "kapalı" derse sayfa bunu uygular', (t) async {
+    testWidgets('varsayılan örnek (enjeksiyonsuz): sunucu "kapalı" derse vitrinde Kapılar kartı çıkmaz', (t) async {
       final auth = _HomeModAuth(
         myModules: MyModulesResult(sites: <MySiteModules>[_my(11, door: false)]),
       );
       await _pumpHome(t, auth);
       expect(auth.myModulesCalls, greaterThanOrEqualTo(1));
-      expect(find.byType(DoorControlDisabledCard), findsOneWidget);
+      // Panel = modül vitrini: Geçiş Kontrol kapalıyken kapı kartı hiç çıkmaz (bilgi kartı artık yok).
+      expect(find.byKey(const ValueKey<String>('panel_vitrin')), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('panel_kart_kapilar')), findsNothing);
       await _openDrawer(t);
       expect(_tileTitle('Kayıtlı Cihazlar'), findsNothing);
+      expect(_tileTitle('Kapılar'), findsNothing);
       await _disposeHome(t);
     });
 
@@ -430,17 +448,21 @@ void main() {
   });
 
   group('Geçiş Kontrol kapalı (tüm bağlı sitelerde)', () {
-    testWidgets('site yöneticisi: bilgi kartı + gizli menüler + Modüller kısayolu', (t) async {
+    // Panel = modül vitrini: Geçiş Kontrol kapalıyken (bağlı TÜM sitelerde) "Kapılar" öğesi çekmecede de vitrinde de yoktur;
+    // eski "modül kapalı" bilgi kartı yerine kart hiç çizilmez (fail-closed). Modüller ekranına vitrindeki "Modüller" kartı götürür.
+    testWidgets('site yöneticisi: Kapılar kartı yok + gizli menüler; Modüller kartı Modüller ekranını açar', (t) async {
       final auth = _HomeModAuth();
       final access = await _access(<MySiteModules>[_my(11, door: false), _my(12, door: false)]);
       await _pumpHome(t, auth, access: access);
 
-      expect(find.byType(DoorControlDisabledCard), findsOneWidget);
-      expect(find.text('Geçiş Kontrol modülü kapalı'), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('panel_kart_kapilar')), findsNothing);
+      expect(find.byType(DoorControlDisabledCard), findsNothing);
       expect(find.byType(DashboardView), findsNothing);
+      expect(find.byKey(const ValueKey<String>('panel_kart_moduller')), findsOneWidget);
 
       await _openDrawer(t);
       expect(_tileTitle('Panel'), findsOneWidget, reason: 'Panel kalır');
+      expect(_tileTitle('Kapılar'), findsNothing);
       expect(_tileTitle('Kayıtlı Cihazlar'), findsNothing);
       expect(_tileTitle('Bluetooth ile Wi-Fi Kur'), findsNothing);
       expect(_tileTitle('Site Yönetimi'), findsOneWidget);
@@ -449,17 +471,20 @@ void main() {
       expect(
         t.widget<YanMenu>(find.byType(YanMenu)).hiddenItems,
         <SirketMenuItem>{
+          SirketMenuItem.kapilar,
           SirketMenuItem.kayitliCihazlar,
           SirketMenuItem.bluetoothWifiKur,
           SirketMenuItem.ellerSerbest,
         },
       );
-      await t.tap(find.text('Panel').last);
+      await t.tap(_tileTitle('Panel'));
       await t.pump();
       await t.pump(const Duration(milliseconds: 600));
 
-      // Kısayol: Modüller ekranı açılır.
-      await t.tap(find.text('Modüller Ekranını Aç'));
+      // Vitrindeki Modüller kartı: Modüller ekranı açılır.
+      final card = find.byKey(const ValueKey<String>('panel_kart_moduller'));
+      await t.ensureVisible(card);
+      await t.tap(card);
       await t.pump();
       await t.pump(const Duration(milliseconds: 600));
       expect(find.byType(ModulesView), findsOneWidget);
@@ -467,17 +492,28 @@ void main() {
       await _disposeHome(t);
     });
 
-    testWidgets('daire sakini: yalnız bilgi (düğme yok); Eller Serbest gizli', (t) async {
+    testWidgets('daire sakini: Kapılar kartı ve hızlı "Kapıyı aç" yok; Eller Serbest gizli; öteki hızlı işlemler durur', (t) async {
       final auth = _HomeModAuth(role: UserRole.apartmentOwner);
-      final access = await _access(<MySiteModules>[_my(11, door: false, role: 'resident')]);
+      final access = await _access(<MySiteModules>[
+        MySiteModules(
+          siteCode: 11,
+          siteName: 'Site 11',
+          role: 'resident',
+          modules: const <String, bool>{'door_control': false, 'work_tracking': true},
+        ),
+      ]);
       await _pumpHome(t, auth, access: access);
 
-      expect(find.text('Geçiş Kontrol modülü kapalı'), findsOneWidget);
-      expect(find.text('Modüller Ekranını Aç'), findsNothing);
-      expect(find.textContaining('Site yöneticisi Modüller ekranından açabilir'), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('panel_kart_kapilar')), findsNothing);
+      expect(find.byKey(const ValueKey<String>('panel_hizli_kapilar')), findsNothing);
+      expect(find.text('Kapıyı aç'), findsNothing);
+      expect(find.byKey(const ValueKey<String>('panel_hizli_taleplerim')), findsOneWidget);
+      expect(find.byType(DoorControlDisabledCard), findsNothing);
+      expect(find.byKey(const ValueKey<String>('panel_ikincil_ellerSerbest')), findsNothing);
 
       await _openDrawer(t);
       expect(_tileTitle('Panel'), findsOneWidget);
+      expect(_tileTitle('Kapılar'), findsNothing);
       expect(_tileTitle('Eller Serbest & Kestirmeler'), findsNothing);
       expect(_tileTitle('Daireye Katıl & Cihaz Ekle'), findsOneWidget);
       await _disposeHome(t);
@@ -491,6 +527,7 @@ void main() {
       await _pumpHome(t, auth, access: access);
 
       expect(find.byType(DoorControlDisabledCard), findsNothing);
+      await _openDoorPanel(t);
       final dashboard = t.widget<DashboardView>(find.byType(DashboardView));
       expect(dashboard.sites.map((s) => s.id), <int>[12]);
       expect(dashboard.selectedSite?.id, 12);
@@ -510,18 +547,23 @@ void main() {
       await _pumpHome(t, auth, access: access);
 
       expect(find.byType(DoorControlDisabledCard), findsNothing);
+      expect(find.byKey(const ValueKey<String>('panel_kart_kapilar')), findsOneWidget,
+          reason: 'süper kullanıcıda Kapılar kartı her zaman vardır');
       await _openDrawer(t);
+      expect(_tileTitle('Kapılar'), findsOneWidget);
       expect(_tileTitle('Şirket Cihaz Envanteri'), findsOneWidget);
       expect(_tileTitle('Bluetooth ile Wi-Fi Kur'), findsOneWidget);
       expect(t.widget<YanMenu>(find.byType(YanMenu)).hiddenItems, isEmpty);
       await _disposeHome(t);
     });
 
-    testWidgets('fail-open: modül verisi alınamazsa her şey açık (kart yok, menüler tam)', (t) async {
+    testWidgets('fail-open: modül verisi alınamazsa her şey açık (Kapılar kartı var, kapı paneli açılır, menüler tam)', (t) async {
       final auth = _HomeModAuth()..myModulesError = ApiException('Sunucuya ulaşılamadı.');
       await _pumpHome(t, auth);
 
       expect(find.byType(DoorControlDisabledCard), findsNothing);
+      expect(find.byKey(const ValueKey<String>('panel_kart_kapilar')), findsOneWidget);
+      await _openDoorPanel(t);
       expect(find.byType(DashboardView), findsOneWidget);
       await _openDrawer(t);
       expect(_tileTitle('Kayıtlı Cihazlar'), findsOneWidget);
@@ -529,7 +571,7 @@ void main() {
       await _disposeHome(t);
     });
 
-    testWidgets('canlı: yönetici kapatınca kart belirir, açınca Panel geri gelir (yoklama/yenileme ile)', (t) async {
+    testWidgets('canlı: yönetici kapatınca Kapılar kartı kalkar (kapı panelindeyken vitrine düşer), açınca geri gelir', (t) async {
       var door = true;
       final access = ModuleAccess(
         fetch: () async => MyModulesResult(sites: <MySiteModules>[_my(11, door: door)]),
@@ -538,25 +580,33 @@ void main() {
       await access.refresh();
       final auth = _HomeModAuth(sites: <SiteRecord>[mdSite(11, 'Gül Sitesi')]);
       await _pumpHome(t, auth, access: access);
+      expect(find.byKey(const ValueKey<String>('panel_kart_kapilar')), findsOneWidget);
+      await _openDoorPanel(t);
       expect(find.byType(DashboardView), findsOneWidget);
 
+      // Kapı panelindeyken modül kapanır: erişimi kalkan sayfa kare bile kalmadan vitrine düşer (bilgi kartı da yok).
       door = false;
       await access.refresh();
       await t.pump();
       await t.pump(const Duration(milliseconds: 600));
-      expect(find.byType(DoorControlDisabledCard), findsOneWidget);
       expect(find.byType(DashboardView), findsNothing);
+      expect(find.byType(DoorControlDisabledCard), findsNothing);
+      expect(find.byKey(const ValueKey<String>('panel_vitrin')), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('panel_kart_kapilar')), findsNothing);
+      expect(t.takeException(), isNull);
 
       door = true;
       await access.refresh();
       await t.pump();
       await t.pump(const Duration(milliseconds: 600));
+      expect(find.byKey(const ValueKey<String>('panel_kart_kapilar')), findsOneWidget);
+      await _openDoorPanel(t);
       expect(find.byType(DoorControlDisabledCard), findsNothing);
       expect(find.byType(DashboardView), findsOneWidget);
       expect(
         t.widget<DashboardView>(find.byType(DashboardView)).sites.map((s) => s.id),
         <int>[11],
-        reason: 'yeniden açılan site Panel listesine geri döner',
+        reason: 'yeniden açılan site kapı paneli listesine geri döner',
       );
       await _disposeHome(t);
     });
@@ -756,7 +806,9 @@ void main() {
     testWidgets('talep sayacı çekilemezse rozet gösterilmez ve menü/Panel bozulmaz', (t) async {
       final auth = superAuth(pending: 3)..adminError = ApiException('Sunucuya ulaşılamadı.');
       await _pumpHome(t, auth);
-      expect(find.byType(DashboardView), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('panel_vitrin')), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('panel_odak_bar')), findsNothing,
+          reason: 'sayaç alınamadıysa odak barı (bekleyen sayı) çizilmez');
       await _openDrawer(t);
       expect(_tileTitle('Modül Talepleri'), findsOneWidget);
       expect(badge, findsNothing);
@@ -802,7 +854,7 @@ void main() {
   });
 
   group('door_access: yalnız kurul/görevli bağı olan kullanıcı', () {
-    testWidgets('Geçiş Kontrol kapalı olsa bile kapalı SAYILMAZ: Panel ve menüler değişmez', (t) async {
+    testWidgets('Geçiş Kontrol kapalı olsa bile kapalı SAYILMAZ: Kapılar kartı, kapı paneli ve menüler değişmez', (t) async {
       final auth = _HomeModAuth();
       final access = await _access(<MySiteModules>[
         _my(11, door: false, role: 'board_member', access: false),
@@ -810,6 +862,8 @@ void main() {
       await _pumpHome(t, auth, access: access);
 
       expect(find.byType(DoorControlDisabledCard), findsNothing);
+      expect(find.byKey(const ValueKey<String>('panel_kart_kapilar')), findsOneWidget);
+      await _openDoorPanel(t);
       expect(find.byType(DashboardView), findsOneWidget);
       await _openDrawer(t);
       expect(_tileTitle('Kayıtlı Cihazlar'), findsOneWidget);
@@ -818,27 +872,28 @@ void main() {
       await _disposeHome(t);
     });
 
-    testWidgets('kapı erişimli site kapalı + kurul sitesi açık: kapalı kararı kapı erişimli siteden gelir', (t) async {
+    testWidgets('kapı erişimli site kapalı + kurul sitesi açık: kapalı kararı kapı erişimli siteden gelir (Kapılar kartı yok)', (t) async {
       final auth = _HomeModAuth(role: UserRole.apartmentOwner);
       final access = await _access(<MySiteModules>[
         _my(11, door: false, role: 'resident'),
         _my(12, door: true, role: 'board_member', access: false),
       ]);
       await _pumpHome(t, auth, access: access);
-      expect(find.byType(DoorControlDisabledCard), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('panel_kart_kapilar')), findsNothing);
+      expect(find.byKey(const ValueKey<String>('panel_hizli_kapilar')), findsNothing);
       await _disposeHome(t);
     });
   });
 
   group('Sesli asistan: kapalı modülde sessiz (kapı yok uyarısı yok)', () {
-    testWidgets('daire sakini, modül kapalı: uyarı konuşulmaz, dinleme durdurulur, aday kapılar temizlenir; yenilemede de sessiz', (t) async {
+    testWidgets('daire sakini, modül kapalı (Kapılar kartı yok): uyarı konuşulmaz, dinleme durdurulur, aday kapılar temizlenir; yenilemede de sessiz', (t) async {
       final auth = _HomeModAuth(role: UserRole.apartmentOwner);
       final access = await _access(<MySiteModules>[_my(11, door: false, role: 'resident')]);
       final voice = _HomeVoice()..listening = true;
       await _pumpHome(t, auth, access: access, voice: voice);
 
       expect(auth.listMyDoorsCalls, greaterThanOrEqualTo(1));
-      expect(find.byType(DoorControlDisabledCard), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('panel_kart_kapilar')), findsNothing, reason: 'modül kapalı: Kapılar kartı yok');
       expect(voice.spoken, isEmpty, reason: '"Tanımlı bir kapı bulunamadı." söylenmemeli');
       expect(voice.stopCalls, greaterThanOrEqualTo(1), reason: 'sürmekte olan dinleme durdurulur');
       expect(voice.startCalls, 0);
@@ -863,7 +918,7 @@ void main() {
       await _disposeHome(t);
     });
 
-    testWidgets('açılış yarışı: modül durumu henüz gelmediyse önce beklenir; kapalı çıkarsa hiç konuşulmaz', (t) async {
+    testWidgets('açılış yarışı: modül durumu henüz gelmediyse önce beklenir; kapalı çıkarsa hiç konuşulmaz (Kapılar kartı yok)', (t) async {
       final auth = _HomeModAuth(role: UserRole.apartmentOwner);
       final gate = Completer<MyModulesResult>();
       final access = ModuleAccess(fetch: () => gate.future);
@@ -876,7 +931,7 @@ void main() {
       await t.pump();
       await t.pump(const Duration(milliseconds: 600));
       expect(voice.spoken, isEmpty);
-      expect(find.byType(DoorControlDisabledCard), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('panel_kart_kapilar')), findsNothing);
       await _disposeHome(t);
     });
   });
@@ -891,12 +946,16 @@ void main() {
       apartmentRole: 'APARTMENT_ADMIN',
     );
 
-    testWidgets('bireysel kullanıcı (dairesiz): karşılama ve hızlı işlemler erişilebilir', (t) async {
+    // Panel = modül vitrini: Geçiş Kontrol kapalıyken "Kapılar" öğesi yoktur; bireysel ana ekranın kapı dışı bölümleri
+    // (dairelerim, başvurular, cihazlar, hızlı işlemler) kaybolmasın diye vitrinin ALTINDA gösterilir (kapı kartı olmadan).
+    testWidgets('bireysel kullanıcı (dairesiz): vitrin + karşılama ve hızlı işlemler erişilebilir; Kapılar kartı yok', (t) async {
       final auth = _HomeModAuth(role: UserRole.individual);
       final access = await _access(<MySiteModules>[_my(11, door: false, role: 'resident')]);
       await _pumpHome(t, auth, access: access);
       await t.pump(const Duration(milliseconds: 600));
 
+      expect(find.byKey(const ValueKey<String>('panel_vitrin')), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('panel_kart_kapilar')), findsNothing);
       expect(find.byType(IndividualHomeView), findsOneWidget);
       expect(find.text('Site Sakini Olarak Devam Et'), findsOneWidget);
       // Site başvurusu akışı: cihaz sahiplenmek yönetici yapmaz; "Site Kurmak İçin Başvur" birincil eylemdir.
@@ -922,12 +981,17 @@ void main() {
       await _disposeHome(t);
     });
 
-    testWidgets('modül AÇIK: bilgi kutusu yok (eski görünüm)', (t) async {
+    testWidgets('modül AÇIK: vitrinde Kapılar kartı var, bireysel ana ekran onun arkasında; bilgi kutusu yok', (t) async {
       final auth = _HomeModAuth(role: UserRole.individual)..apartments = [apartment()];
       final access = await _access(<MySiteModules>[_my(11, door: true, role: 'resident')]);
       await _pumpHome(t, auth, access: access);
       await t.pump(const Duration(milliseconds: 600));
+      expect(find.byType(IndividualHomeView), findsNothing, reason: 'vitrinde bireysel ana ekran yok');
+      expect(find.byKey(const ValueKey<String>('panel_kart_kapilar')), findsOneWidget);
+      await _openDoorPanel(t);
+      await t.pump(const Duration(milliseconds: 600));
       expect(find.byType(IndividualHomeView), findsOneWidget);
+      expect(find.text('Kayıtlı Dairem'), findsOneWidget);
       expect(find.byType(DoorControlDisabledCard), findsNothing);
       await _disposeHome(t);
     });
@@ -937,19 +1001,22 @@ void main() {
       final access = await _access(<MySiteModules>[_my(11, door: false)]);
       await _pumpHome(t, auth, access: access);
 
-      // Yönetici paneli: tam kart + Modüller kısayolu.
-      expect(find.text('Geçiş Kontrol modülü kapalı'), findsOneWidget);
-      expect(find.text('Modüller Ekranını Aç'), findsOneWidget);
+      // Yönetici paneli: Kapılar kartı yok (bilgi kartı da yok); Modüller kartı kapıdan bağımsız duruyor.
+      expect(find.byKey(const ValueKey<String>('panel_kart_kapilar')), findsNothing);
+      expect(find.byType(DoorControlDisabledCard), findsNothing);
+      expect(find.byKey(const ValueKey<String>('panel_kart_moduller')), findsOneWidget);
 
-      // Sakin modu: bireysel ana ekran (dairelerim vb.) + kısa bilgi; Modüller kısayolu YOK.
+      // Sakin modu: vitrin (sakin kitlesi) + altında bireysel ana ekran (dairelerim vb.) + kısa bilgi; Modüller kartı YOK.
       await t.tap(_inAppBar(find.text('Sakin Modu')));
       await t.pump();
       await t.pump(const Duration(milliseconds: 600));
       await t.pump(const Duration(milliseconds: 600));
+      expect(find.byKey(const ValueKey<String>('panel_hero_selam')), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('panel_kart_kapilar')), findsNothing);
       expect(find.byType(IndividualHomeView), findsOneWidget);
       expect(find.text('Kayıtlı Dairem'), findsOneWidget);
       expect(find.textContaining('Geçiş Kontrol modülü kapalı'), findsOneWidget);
-      expect(find.text('Modüller Ekranını Aç'), findsNothing);
+      expect(find.byKey(const ValueKey<String>('panel_kart_moduller')), findsNothing);
       await _openDrawer(t);
       expect(_tileTitle('Modüller'), findsNothing, reason: 'sakin modunda Modüller menüsü yok');
       await _closeDrawer(t);
@@ -958,13 +1025,14 @@ void main() {
       await t.tap(_inAppBar(find.text('Yönetici Paneli')));
       await t.pump();
       await t.pump(const Duration(milliseconds: 600));
-      expect(find.text('Modüller Ekranını Aç'), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('panel_kart_moduller')), findsOneWidget);
+      expect(find.byType(IndividualHomeView), findsNothing);
       await _disposeHome(t);
     });
   });
 
   group('Modül yeniden açılınca Panel verisi yeniden çekilir (home_page _loadDoorControlSites)', () {
-    testWidgets('site yöneticisi: kart kalkar, DashboardView seçili site ve kapılarla gelir, yapı yeniden çekilir', (t) async {
+    testWidgets('site yöneticisi: Kapılar kartı gelir, kapı paneli seçili site ve kapılarla açılır, yapı yeniden çekilir', (t) async {
       var door = false;
       final access = ModuleAccess(
         fetch: () async => MyModulesResult(sites: <MySiteModules>[_my(11, door: door)]),
@@ -973,7 +1041,7 @@ void main() {
       await access.refresh();
       final auth = _HomeModAuth(sites: <SiteRecord>[mdSite(11, 'Gül Sitesi')]);
       await _pumpHome(t, auth, access: access);
-      expect(find.byType(DoorControlDisabledCard), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('panel_kart_kapilar')), findsNothing);
       final structureBefore = auth.structureCalls.length;
       final sitesBefore = auth.listSitesCalls;
 
@@ -982,6 +1050,8 @@ void main() {
       await t.pump();
       await t.pump(const Duration(milliseconds: 600));
 
+      expect(find.byKey(const ValueKey<String>('panel_kart_kapilar')), findsOneWidget);
+      await _openDoorPanel(t);
       expect(find.byType(DoorControlDisabledCard), findsNothing);
       final dashboard = t.widget<DashboardView>(find.byType(DashboardView));
       expect(dashboard.selectedSite?.id, 11);
@@ -994,7 +1064,7 @@ void main() {
       await _disposeHome(t);
     });
 
-    testWidgets('daire sakini: kart kalkar, listMyDoors yeniden çekilir ve kapılar gelir', (t) async {
+    testWidgets('daire sakini: Kapılar kartı ve hızlı eylem gelir, listMyDoors yeniden çekilir ve kapılar gelir', (t) async {
       var door = false;
       final access = ModuleAccess(
         fetch: () async => MyModulesResult(
@@ -1005,7 +1075,8 @@ void main() {
       await access.refresh();
       final auth = _HomeModAuth(role: UserRole.apartmentOwner);
       await _pumpHome(t, auth, access: access);
-      expect(find.byType(DoorControlDisabledCard), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('panel_kart_kapilar')), findsNothing);
+      expect(find.byKey(const ValueKey<String>('panel_hizli_kapilar')), findsNothing);
       final callsBefore = auth.listMyDoorsCalls;
 
       door = true;
@@ -1015,6 +1086,8 @@ void main() {
       await t.pump(const Duration(milliseconds: 600));
 
       expect(auth.listMyDoorsCalls, greaterThan(callsBefore));
+      expect(find.byKey(const ValueKey<String>('panel_hizli_kapilar')), findsOneWidget);
+      await _openDoorPanel(t);
       expect(find.byType(DoorControlDisabledCard), findsNothing);
       final dashboard = t.widget<DashboardView>(find.byType(DashboardView));
       expect(dashboard.doors.map((d) => d.siteCode), <int>[11]);
@@ -1024,13 +1097,16 @@ void main() {
   });
 
   group('Süper kullanıcı: Panel\'de seçili sitenin Geçiş Kontrol durumu', () {
-    testWidgets('kapalı site: kapı kartları yerine bilgi kartı (Modüller kısayoluyla); açılınca yenilemeyle geri gelir', (t) async {
+    // Süper kullanıcıda Kapılar kartı her zaman vardır (menü süzgeci yok); seçili sitenin Geçiş Kontrol'ü kapalıysa kapı
+    // kartları yerine bilgi kartı KAPILAR sayfasında çıkar.
+    testWidgets('kapalı site: Kapılar sayfasında kapı kartları yerine bilgi kartı (Modüller kısayoluyla); açılınca yenilemeyle geri gelir', (t) async {
       final auth = _HomeModAuth(
         role: UserRole.superUser,
         sites: <SiteRecord>[mdSite(11, 'Gül Sitesi')],
         states: <int, SiteModulesState>{11: mdState(11, 'Gül Sitesi', door: false)},
       );
       await _pumpHome(t, auth);
+      await _openDoorPanel(t);
 
       expect(auth.getModulesCalls, contains(11));
       expect(find.byType(DoorControlDisabledCard), findsOneWidget);
@@ -1047,12 +1123,13 @@ void main() {
       await _disposeHome(t);
     });
 
-    testWidgets('açık site: normal Panel; Modüller ekranında kapatınca Panel kartına döner', (t) async {
+    testWidgets('açık site: normal kapı paneli; Modüller ekranında kapatınca Kapılar sayfası bilgi kartına döner', (t) async {
       final auth = _HomeModAuth(
         role: UserRole.superUser,
         sites: <SiteRecord>[mdSite(11, 'Gül Sitesi')],
       );
       await _pumpHome(t, auth);
+      await _openDoorPanel(t);
       expect(find.byType(DashboardView), findsOneWidget);
 
       await _tapMenu(t, 'Modüller');
@@ -1065,7 +1142,7 @@ void main() {
       await t.pump(const Duration(milliseconds: 800));
       expect(auth.setCalls.single.confirm, isTrue);
 
-      await _tapMenu(t, 'Panel');
+      await _tapMenu(t, 'Kapılar');
       expect(find.byType(DoorControlDisabledCard), findsOneWidget);
       await _disposeHome(t);
     });
@@ -1117,7 +1194,8 @@ void main() {
       );
       await t.pump();
       await t.pump(const Duration(milliseconds: 600));
-      expect(find.byType(DoorControlDisabledCard), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('panel_vitrin')), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('panel_kart_kapilar')), findsNothing, reason: 'kapalı sitenin kullanıcısı');
       expect(access.isLoaded, isTrue);
 
       auth.changeSession(loggedIn: false);
@@ -1136,6 +1214,9 @@ void main() {
       await t.pump();
       await t.pump(const Duration(milliseconds: 600));
       expect(find.byType(DoorControlDisabledCard), findsNothing);
+      expect(find.byKey(const ValueKey<String>('panel_kart_kapilar')), findsOneWidget,
+          reason: 'yeni kullanıcının sitesinde Geçiş Kontrol açık: Kapılar kartı var');
+      await _openDoorPanel(t);
       expect(find.byType(DashboardView), findsOneWidget);
       expect(access.isEnabled(11, PlatformModuleCodes.doorControl), isTrue,
           reason: 'eski kullanıcının kapalı sitesi sızmaz (bilinmeyen site: varsayılan açık)');
@@ -1169,11 +1250,12 @@ void main() {
       for (final dark in const <bool>[false, true]) {
         final label = '${w.toInt()}x${h.toInt()} x$s ${dark ? 'koyu' : 'açık'}';
 
-        testWidgets('site yöneticisi bilgi kartı + çekmece: $label', (t) async {
+        testWidgets('site yöneticisi kapalı modül vitrini + çekmece: $label', (t) async {
           final auth = _HomeModAuth();
           final access = await _access(<MySiteModules>[_my(11, door: false)]);
           await _pumpHome(t, auth, access: access, width: w, height: h, scale: s, dark: dark);
-          expect(find.byType(DoorControlDisabledCard), findsOneWidget);
+          expect(find.byKey(const ValueKey<String>('panel_vitrin')), findsOneWidget);
+          expect(find.byKey(const ValueKey<String>('panel_kart_kapilar')), findsNothing);
           expect(t.takeException(), isNull);
 
           await _openDrawer(t);
@@ -1182,10 +1264,24 @@ void main() {
           await _disposeHome(t);
         });
 
-        testWidgets('daire sakini bilgi kartı: $label', (t) async {
+        testWidgets('daire sakini kapalı modül vitrini: $label', (t) async {
           final auth = _HomeModAuth(role: UserRole.apartmentOwner);
           final access = await _access(<MySiteModules>[_my(11, door: false, role: 'resident')]);
           await _pumpHome(t, auth, access: access, width: w, height: h, scale: s, dark: dark);
+          expect(find.byKey(const ValueKey<String>('panel_vitrin')), findsOneWidget);
+          expect(find.byKey(const ValueKey<String>('panel_kart_kapilar')), findsNothing);
+          expect(t.takeException(), isNull);
+          await _disposeHome(t);
+        });
+
+        testWidgets('süper kullanıcı: kapalı sitenin Kapılar sayfası bilgi kartı: $label', (t) async {
+          final auth = _HomeModAuth(
+            role: UserRole.superUser,
+            sites: <SiteRecord>[mdSite(11, 'Gül Sitesi')],
+            states: <int, SiteModulesState>{11: mdState(11, 'Gül Sitesi', door: false)},
+          );
+          await _pumpHome(t, auth, width: w, height: h, scale: s, dark: dark);
+          await _openDoorPanel(t);
           expect(find.byType(DoorControlDisabledCard), findsOneWidget);
           expect(t.takeException(), isNull);
           await _disposeHome(t);

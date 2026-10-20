@@ -140,6 +140,17 @@ Future<void> _pumpHome(WidgetTester tester, _HomeAuth auth) async {
   await tester.pump(const Duration(milliseconds: 50));
 }
 
+/// Panel artık modül vitrinidir: kapı paneli "Kapılar" kartının arkasındadır. Kapı seçici / kapı açma sınayan testler
+/// önce o karta dokunur (yoklama ve yarış davranışı Kapılar sayfasında çalışır).
+Future<void> _openDoorPanel(WidgetTester tester) async {
+  final card = find.byKey(const ValueKey<String>('panel_kart_kapilar'));
+  await tester.ensureVisible(card);
+  await tester.pump();
+  await tester.tap(card);
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 600));
+}
+
 Future<void> _disposeHome(WidgetTester tester) async {
   // Periyodik zamanlayıcıları ve gecikmiş çağrıları temizle.
   await tester.pumpWidget(const SizedBox());
@@ -155,7 +166,7 @@ Future<void> _selectSite(WidgetTester tester, String label) async {
 }
 
 void main() {
-  testWidgets('geç gelen eski site yapısı yeni seçimi ezmez (istek jetonu)', (tester) async {
+  testWidgets('Kapılar sayfasında: geç gelen eski site yapısı yeni seçimi ezmez (istek jetonu)', (tester) async {
     final siteA = _site(1, 'A Sitesi');
     final siteB = _site(2, 'B Sitesi');
     final auth = _HomeAuth(sites: [siteA, siteB])
@@ -164,6 +175,7 @@ void main() {
       ..structureGates[1] = Completer<(SiteStructureRecord?, String?)>();
 
     await _pumpHome(tester, auth);
+    await _openDoorPanel(tester);
 
     // Başlangıçta A sitesi seçildi ve yapısı (yavaş) bekleniyor.
     expect(auth.structureRequests, contains(1));
@@ -217,7 +229,7 @@ void main() {
     await _disposeHome(tester);
   });
 
-  testWidgets('kullanıcı kapıyı açıkça seçince widget aktif kapısı da güncellenir', (tester) async {
+  testWidgets('Kapılar sayfasında: kullanıcı kapıyı açıkça seçince widget aktif kapısı da güncellenir', (tester) async {
     final siteA = _site(1, 'A Sitesi');
     final auth = _HomeAuth(sites: [siteA])
       ..structures[1] = _structure(
@@ -226,6 +238,7 @@ void main() {
       );
 
     await _pumpHome(tester, auth);
+    await _openDoorPanel(tester);
     expect(auth.widgetSelections, isEmpty);
 
     // İkinci dropdown: kapı seçimi
