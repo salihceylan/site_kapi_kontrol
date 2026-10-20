@@ -12,6 +12,10 @@ import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 ///
 /// Erişilebilirlik: kart canlı bölge değildir; kapsayıcının etiketi `Yeni duyuru: başlık`, "Oku" ve
 /// "+N duyuru daha" odaklanabilir düğmelerdir. Renk tek başına anlam taşımaz (simge + "Yeni duyuru" metni).
+///
+/// [flat] (Panel modül vitrini): gölgesiz düz yüzey + ince çerçeve, nabız / parıltı YOK (vitrinin "sakin ferahlık"
+/// kuralı: göz koyu odak kutusundan hareketli karta kaymasın). İçerik ve düğmeler aynıdır; varsayılan (false) eski
+/// görünümdür.
 class UnreadAnnouncementCard extends StatefulWidget {
   const UnreadAnnouncementCard({
     super.key,
@@ -20,6 +24,7 @@ class UnreadAnnouncementCard extends StatefulWidget {
     this.moreCount = 0,
     this.onOpenAll,
     this.pulse,
+    this.flat = false,
   });
 
   /// Nabız animasyonunun varsayılanı. Uygulamada açıktır; sonsuz animasyon `pumpAndSettle`ı bitirmediği için
@@ -43,6 +48,9 @@ class UnreadAnnouncementCard extends StatefulWidget {
   /// null ise [pulseEnabledByDefault].
   final bool? pulse;
 
+  /// Düz vitrin görünümü: gölge, ton zemini ve nabız yok (bkz. sınıf açıklaması).
+  final bool flat;
+
   @override
   State<UnreadAnnouncementCard> createState() => _UnreadAnnouncementCardState();
 }
@@ -56,6 +64,7 @@ class _UnreadAnnouncementCardState extends State<UnreadAnnouncementCard>
   );
 
   bool _wantsMotion(BuildContext context) =>
+      !widget.flat &&
       (widget.pulse ?? UnreadAnnouncementCard.pulseEnabledByDefault) &&
       !MediaQuery.disableAnimationsOf(context);
 
@@ -170,6 +179,24 @@ class _UnreadAnnouncementCardState extends State<UnreadAnnouncementCard>
         ],
       ),
     );
+
+    if (widget.flat) {
+      // Vitrin: düz yüzey + ince çerçeve; gölge, ton yıkaması ve nabız yok.
+      return Semantics(
+        container: true,
+        label: 'Yeni duyuru: $title',
+        child: Material(
+          key: const ValueKey<String>('unread_announcement_card_surface'),
+          color: p.surface,
+          clipBehavior: Clip.antiAlias,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.lg),
+            side: BorderSide(color: p.border),
+          ),
+          child: content,
+        ),
+      );
+    }
 
     return Semantics(
       container: true,

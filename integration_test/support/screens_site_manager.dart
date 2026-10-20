@@ -8,14 +8,11 @@ import 'screens_common.dart';
 import 'screens_individual.dart';
 import 'screens_sites.dart';
 
-/// Yonetici paneli (Panel, Profilim, Site Yonetimi, Kayitli Cihazlar, Katilim, Bluetooth).
+/// Yonetici modu: Panel (modul vitrini), Kapılar (kapi paneli: vitrindeki kartla), Profilim, Site Yonetimi, Kayitli
+/// Cihazlar, Katilim, Bluetooth.
 List<E2eScreenSpec> siteManagerScreens({required List<String> siteKeys}) => <E2eScreenSpec>[
-      E2eScreenSpec(
-        name: 'panel',
-        menuLabel: 'Panel',
-        titleText: 'Panel',
-        interactions: (c) => adminPanelTour(c, siteKeys: siteKeys),
-      ),
+      panelShowcaseScreen,
+      kapilarScreen((c) => adminPanelTour(c, siteKeys: siteKeys)),
       const E2eScreenSpec(
         name: 'profilim',
         menuLabel: 'Profilim',
@@ -60,15 +57,11 @@ List<E2eScreenSpec> siteManagerScreens({required List<String> siteKeys}) => <E2e
       ),
     ];
 
-/// "Sakin Modu" (yonetici ayni zamanda sakin): Panel (IndividualHomeView), Katilim, Profilim,
-/// Eller Serbest diyalogu.
+/// "Sakin Modu" (yonetici ayni zamanda sakin): Panel (sakin vitrini), Kapılar (IndividualHomeView), Katilim,
+/// Profilim, Eller Serbest diyalogu.
 List<E2eScreenSpec> siteManagerResidentModeScreens() => <E2eScreenSpec>[
-      const E2eScreenSpec(
-        name: 'panel',
-        menuLabel: 'Panel',
-        titleText: 'Panel',
-        interactions: individualPanelTour,
-      ),
+      panelShowcaseScreen,
+      kapilarScreen(individualPanelTour),
       const E2eScreenSpec(
         name: 'katilim_kurulum',
         menuLabel: 'Daireye Katıl & Cihaz Ekle',

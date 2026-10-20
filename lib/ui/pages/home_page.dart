@@ -50,6 +50,8 @@ import 'package:site_kapi_kontrol/services/voice_door_service.dart';
 
 import 'package:site_kapi_kontrol/services/door_widget_service.dart';
 
+import 'package:site_kapi_kontrol/services/door_panel_requests.dart';
+
 import 'package:site_kapi_kontrol/styles/app_colors.dart';
 
 import 'package:site_kapi_kontrol/styles/role_theme.dart';
@@ -166,6 +168,8 @@ import 'package:site_kapi_kontrol/ui/views/visitor_manager_view.dart';
 import 'package:site_kapi_kontrol/ui/views/visitor_resident_view.dart';
 import 'package:site_kapi_kontrol/models/contract_models.dart';
 import 'package:site_kapi_kontrol/ui/views/contracts_view.dart';
+import 'package:site_kapi_kontrol/ui/helpers/module_showcase.dart';
+import 'package:site_kapi_kontrol/ui/views/module_showcase_view.dart';
 
 
 
@@ -185,7 +189,14 @@ class HomePage extends StatefulWidget {
 
     this.announcementNotifier,
 
+    this.doorPanelRequests,
+
   });
+
+  /// Kapılar sayfasına girişten sonra sayfanın dokunuş ALMADIĞI süre: sayfa geçişi (200 ms) + kısa pay. Vitrindeki
+  /// karta / hızlı "Kapıyı aç"a hızlı ikinci dokunuş, henüz görünmeyen KAPIYI AÇ düğmesine düşmesin (kazara kapı
+  /// açılmaz). Kapı açma işlevi değişmez.
+  static const Duration doorEntryGuard = Duration(milliseconds: 500);
 
 
 
@@ -203,6 +214,11 @@ class HomePage extends StatefulWidget {
   /// Verilmezse sayfa kendi örneğini kurar (`getNotificationSummary` yoklaması) ve sayfayla birlikte
   /// kapatır. Testler için.
   final AnnouncementNotifier? announcementNotifier;
+
+  /// Uygulama dışından (Android kapı widget'ı, kısayol, kapıyla ilgili derin bağlantı) gelen "Kapılar sayfasını aç"
+  /// isteği: bekleyen istek kurulumda, yenisi gelince hemen uygulanır (kapı AÇMAZ). Geçiş Kontrol kapalıysa ya da
+  /// kullanıcının kapı erişimi yoksa vitrinde kalınır.
+  final DoorPanelRequests? doorPanelRequests;
 
 
 
@@ -451,6 +467,21 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   bool _isResidentMode = false;
   final GlobalKey<IndividualHomeViewState> _individualHomeKey = GlobalKey<IndividualHomeViewState>();
+  // Panel = modül vitrini: borç özeti (sakin) aşağı çekip yenilemeyle tazelenir.
+  final GlobalKey<ModuleShowcaseViewState> _showcaseKey = GlobalKey<ModuleShowcaseViewState>();
+
+  // Çekmece açık mı (Scaffold.onDrawerChanged)? Açıkken geri tuşu ÖNCE çekmeceyi kapatır: PopScope geri tuşuna izin verir
+  // ve çekmecenin yerel geçmişi pop'u karşılar (sayfa değişmez). Yalnız PopScope'u yeniden kurar.
+  final ValueNotifier<bool> _drawerOpen = ValueNotifier<bool>(false);
+
+  // Kapılar sayfasına girişten sonra kısa süre ([HomePage.doorEntryGuard]) sayfa dokunuş almaz: bkz. [_armDoorEntryGuard].
+  final ValueNotifier<bool> _doorEntryGuard = ValueNotifier<bool>(false);
+  Timer? _doorEntryGuardTimer;
+
+  // Gövde kaydırma alanının içeriği (kaydırma konumuna buradan ulaşılır) ve son çizilen sayfa: sayfa değişince kaydırma
+  // en üste alınır ([_jumpBodyToTop]).
+  final GlobalKey _bodyContentKey = GlobalKey();
+  String? _bodyScrollPage;
 
   bool get _canToggleDualMode {
     final session = widget.authService.session;
@@ -509,6 +540,22 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
     _startStatusAutoRefreshTimer();
 
+    // Widget / kısayol / derin bağlantıdan "Kapılar sayfasını aç": soğuk açılışta bekleyen istek ilk karede uygulanır.
+    widget.doorPanelRequests?.addListener(_onDoorPanelRequested);
+    if (widget.doorPanelRequests?.isPending ?? false) _onDoorPanelRequested();
+
+  }
+
+
+
+  @override
+  void didUpdateWidget(HomePage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.doorPanelRequests != widget.doorPanelRequests) {
+      oldWidget.doorPanelRequests?.removeListener(_onDoorPanelRequested);
+      widget.doorPanelRequests?.addListener(_onDoorPanelRequested);
+      if (widget.doorPanelRequests?.isPending ?? false) _onDoorPanelRequested();
+    }
   }
 
 
@@ -518,6 +565,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   void dispose() {
 
     WidgetsBinding.instance.removeObserver(this);
+
+    widget.doorPanelRequests?.removeListener(_onDoorPanelRequested);
+
+    _doorEntryGuardTimer?.cancel();
+
+    _doorEntryGuard.dispose();
+
+    _drawerOpen.dispose();
 
     _statusPoller.dispose();
 
@@ -611,14 +666,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 (_doorControlStructure?.doors.isEmpty ?? true)));
   }
 
-  /// Kapı paneli (DashboardView: durum, kapı aç) şu an ekranda mı?
+  /// Kapı paneli (DashboardView: durum, kapı aç) şu an ekranda mı? "Panel" artık modül vitrinidir; kapı paneli
+  /// "Kapılar" öğesinin arkasındadır, durum yoklaması yalnız orada çalışır.
   bool get _isDoorPanelVisible {
     final session = widget.authService.session;
     if (session == null) return false;
     final menu = _canAccessMenu(_selectedMenu, session.role)
         ? _selectedMenu
         : SirketMenuItem.dashboard;
-    if (menu != SirketMenuItem.dashboard && menu != SirketMenuItem.ellerSerbest) {
+    if (menu != SirketMenuItem.kapilar && menu != SirketMenuItem.ellerSerbest) {
       return false;
     }
     // Geçiş Kontrol kapalıyken Panel'de kapı kartı yoktur: durum yoklaması da gerekmez.
@@ -764,9 +820,40 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     return off.join(',');
   }
 
-  /// Menüden gizlenecek öğeler (Geçiş Kontrol bağlı olunan TÜM sitelerde kapalıyken kapı öğeleri).
+  /// Menüden gizlenecek öğeler: Geçiş Kontrol bağlı olunan TÜM sitelerde kapalıyken kapı öğeleri; daire sakini rolünde
+  /// kapı erişimi olan sitesi ve kapısı olmayan hesapta da (yalnız görevli / kurul / site üyeliği bağı). Kapı listesi
+  /// doluysa ([_hasResidentSignal]) kapı öğeleri kalır. Bkz. [hiddenMenuItemsFor].
   Set<SirketMenuItem> _hiddenMenuItems(UserRole role) =>
-      hiddenMenuItemsFor(role, _moduleAccess);
+      hiddenMenuItemsFor(role, _moduleAccess, hasDoors: _hasResidentSignal);
+
+  /// Çekmecede görünen öğeler (rol listesi + ek öğeler - gizlenenler). ÇEKMECE de Panel vitrini de bu listeyi kullanır:
+  /// görünürlük kuralı tek yerde ([YanMenu.visibleItems]) olduğundan kapalı bir modül vitrinde de asla görünmez.
+  List<SirketMenuItem> _visibleMenuItems(UserSession session) => YanMenu.visibleItems(
+        role: session.role,
+        isResidentMode: _isResidentMode,
+        canToggleMode: _canToggleDualMode,
+        additionalItems: _extraMenuItems(session.role),
+        hiddenItems: _hiddenMenuItems(session.role),
+      );
+
+  /// Çekmece ve vitrin rozet sayıları (aynı harita): bekleyen modül talebi / site başvurusu (süper kullanıcı),
+  /// okunmamış duyuru ve görülmemiş ziyaretçi kaydı (sakin).
+  Map<SirketMenuItem, int> _menuBadgeCounts(UserSession session) => <SirketMenuItem, int>{
+        if (session.role == UserRole.superUser)
+          SirketMenuItem.modulTalepleri: _moduleAccess.pendingRequestCount ?? 0,
+        if (session.role == UserRole.superUser)
+          SirketMenuItem.siteBasvurulari: _moduleAccess.pendingApplicationCount ?? 0,
+        if (_hasAnnouncementInbox(session.role))
+          SirketMenuItem.duyurular: _announcements.unreadCount,
+        if (_visitorResidentSites(session.role).isNotEmpty)
+          SirketMenuItem.ziyaretcilerim: _visitorUnread,
+      };
+
+  /// Rozetin ekran okuyucu sözcüğü ("3 okunmamış"); verilmeyen öğede "bekleyen".
+  static const Map<SirketMenuItem, String> _menuBadgeNouns = <SirketMenuItem, String>{
+    SirketMenuItem.duyurular: 'okunmamış',
+    SirketMenuItem.ziyaretcilerim: 'görülmemiş',
+  };
 
   // --- Kişi ve Daire Kayıtları (Faz 2a) ---
 
@@ -790,6 +877,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   /// Rolün kendi menü listesinde olmayan ek öğeler: kurul üyesine "Kişiler"; alıcısı olabilecek rollere
   /// (daire sakini, yönetici / süper kullanıcı, kurul üyesi) "Duyurular".
   Set<SirketMenuItem> _extraMenuItems(UserRole role) => <SirketMenuItem>{
+        // Kapı paneli ("Panel" artık vitrin): her rolde; Geçiş Kontrol kapalıyken ve daire sakini rolünde kapı erişimi /
+        // kapısı yokken [_hiddenMenuItems] gizler.
+        SirketMenuItem.kapilar,
         if (_moduleAccess.boardMemberSites.isNotEmpty) SirketMenuItem.kisiler,
         if (_canAccessAnnouncements(role)) SirketMenuItem.duyurular,
         if (_canAccessFinance(role)) SirketMenuItem.finans,
@@ -1407,6 +1497,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       // vazgeçilirse ekranda kalınır ve duyuru penceresi açılmaz (şerit duruyor, kaydedince yeniden dokunulur).
       _requestMenuChange(SirketMenuItem.duyurular, () {
         if (!mounted) return;
+        if (_selectedMenu != SirketMenuItem.duyurular) _jumpBodyToTop();
         setState(() {
           _forceAnnouncementInbox = true;
           _selectedMenu = SirketMenuItem.duyurular;
@@ -1462,6 +1553,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         moreCount: _announcements.cardMoreCount,
         onOpen: () => _showAnnouncementReadDialog(item),
         onOpenAll: () => _openAnnouncement(null),
+        // Vitrin (sakin ferahlık kuralı): gölgesiz düz yüzey, nabız yok.
+        flat: true,
       ),
     );
   }
@@ -1513,6 +1606,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       return false;
     }
     if (item == SirketMenuItem.katilimVeKurulum) {
+      return true;
+    }
+
+    // Kapılar (kapı paneli): her rolde erişilir; Geçiş Kontrol kapalıyken ve daire sakininde kapı erişimi / kapısı
+    // yokken yukarıdaki süzgeç zaten eler.
+    if (item == SirketMenuItem.kapilar) {
       return true;
     }
 
@@ -1756,10 +1855,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         return 'Ziyaretçi ve Kargo';
 
       case SirketMenuItem.ziyaretcilerim:
-        return 'Ziyaretçi ve Kargo';
+        // Yönetim öğesinden ayrı başlık: kurul üyesinde ikisi birden görünür (bkz. YanMenu).
+        return 'Ziyaretçilerim';
 
       case SirketMenuItem.sozlesmeler:
         return 'Sözleşmeler';
+
+      case SirketMenuItem.kapilar:
+        return 'Kapılar';
 
     }
 
@@ -1781,8 +1884,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (session.role != UserRole.apartmentOwner || _showsIndividualHome(session)) {
       return const <YanMenuAction>[];
     }
-    // Geçiş Kontrol modülü kapalıyken kapı komutları (QR, misafir geçişi, sesli açma) da yoktur.
-    if (_isDoorControlClosed(session)) {
+    // Geçiş Kontrol modülü kapalıyken ya da "Kapılar" gizliyken (kapı erişimi / kapısı olmayan hesap) kapı komutları
+    // (QR, misafir geçişi, sesli açma) da yoktur.
+    if (_isDoorControlClosed(session) || !_canAccessMenu(SirketMenuItem.kapilar, session.role)) {
       return const <YanMenuAction>[];
     }
     final door = _doorControlDoor;
@@ -1847,6 +1951,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   /// ekranına git" sayfayı kapatıp menüyü Profilim'e alır.
   void _openHelp() {
     Navigator.of(context).pop();
+    _openHelpPage();
+  }
+
+  /// Yardım ekranını açar (çekmece açık değilse de çalışır: Panel vitrinindeki "Yardım ve Destek" düğmesi).
+  void _openHelpPage() {
     final session = widget.authService.session;
     if (session == null) return;
     unawaited(
@@ -1895,14 +2004,59 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   /// [target] menüsüne korumalı geçiş (yalnız menü seçimi değişir).
   void _goToMenu(SirketMenuItem target) {
     _requestMenuChange(target, () {
-      if (mounted) setState(() => _selectedMenu = target);
+      if (!mounted) return;
+      if (_selectedMenu != target) {
+        if (target == SirketMenuItem.kapilar) _armDoorEntryGuard();
+        _jumpBodyToTop();
+      }
+      setState(() => _selectedMenu = target);
     });
+  }
+
+  /// Gövde kaydırmasını en üste alır. Sayfa değişmeden HEMEN ÖNCE çağrılır: yeni sayfa ilk karesinden en üstten çizilir
+  /// (eski sayfanın konumu yeni sayfaya taşınmaz). Kaydırma alanı henüz yoksa ya da zaten en üstteyse bir şey yapmaz.
+  void _jumpBodyToTop() {
+    final content = _bodyContentKey.currentContext;
+    final position = content == null ? null : Scrollable.maybeOf(content)?.position;
+    if (position == null || !position.hasPixels || position.pixels == 0) return;
+    position.jumpTo(0);
+  }
+
+  /// Kapılar sayfasına girerken sayfa [HomePage.doorEntryGuard] boyunca dokunuş ALMAZ: vitrindeki "Kapılar" kartına ya
+  /// da hızlı "Kapıyı aç"a hızlı ikinci dokunuş, sayfa geçişi sürerken aynı noktaya gelen KAPIYI AÇ düğmesine düşüp
+  /// kullanıcı paneli görmeden kapıyı açmasın. Kapı açma işlevine dokunulmaz; yalnız gövdedeki küçük dinleyici
+  /// ([_doorEntryGuard]) yeniden kurulur (sayfa, kapı paneli, Scaffold kurulmaz).
+  void _armDoorEntryGuard() {
+    _doorEntryGuardTimer?.cancel();
+    _doorEntryGuard.value = true;
+    _doorEntryGuardTimer = Timer(HomePage.doorEntryGuard, () {
+      _doorEntryGuardTimer = null;
+      _doorEntryGuard.value = false;
+    });
+  }
+
+  /// Widget / kısayol / derin bağlantı "Kapılar sayfasını aç" dedi ([HomePage.doorPanelRequests]): bir sonraki karede
+  /// uygulanır (olay bir kare kurulurken de gelebilir).
+  void _onDoorPanelRequested() {
+    WidgetsBinding.instance.addPostFrameCallback((_) => _applyDoorPanelRequest());
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
+
+  /// Bekleyen isteği tüketir: Kapılar'a erişim varsa oraya çekmeceden seçmekle AYNI korumalı yoldan geçilir; Geçiş
+  /// Kontrol kapalıysa ya da kapı erişimi yoksa vitrinde kalınır. Kapı AÇILMAZ.
+  void _applyDoorPanelRequest() {
+    final requests = widget.doorPanelRequests;
+    final session = widget.authService.session;
+    if (!mounted || requests == null || session == null || !requests.take()) return;
+    if (_selectedMenu == SirketMenuItem.kapilar || !_canAccessMenu(SirketMenuItem.kapilar, session.role)) return;
+    _openMenuItem(SirketMenuItem.kapilar);
   }
 
   /// "Sakin Modu / Yönetici Paneli" geçişi (AppBar hapı ve çekmece): yönetici paneline dönüşte menü Panel'e alınır.
   void _toggleResidentMode() {
     _requestMenuChange(SirketMenuItem.dashboard, () {
       if (!mounted) return;
+      _jumpBodyToTop();
       setState(() {
         _isResidentMode = !_isResidentMode;
         if (!_isResidentMode) {
@@ -1917,6 +2071,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   void _selectMenu(SirketMenuItem item) {
 
     Navigator.of(context).pop();
+
+    _openMenuItem(item);
+
+  }
+
+  /// Menü öğesini açar: çekmeceden seçmeyle de Panel vitrinindeki karta dokunmayla da AYNI gezinme (çekmeceyi kapatmak
+  /// çağıranın işidir: [_selectMenu]).
+  void _openMenuItem(SirketMenuItem item) {
 
     // Çekmeceden seçim: şeritten gelen "doğrudan gelen kutusu" isteği biter.
     _forceAnnouncementInbox = false;
@@ -1946,6 +2108,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   void _applyMenuSelection(SirketMenuItem item) {
+    if (_selectedMenu != item) {
+      if (item == SirketMenuItem.kapilar) _armDoorEntryGuard();
+      _jumpBodyToTop();
+    }
     setState(() => _selectedMenu = item);
 
 
@@ -1959,6 +2125,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     switch (item) {
 
       case SirketMenuItem.dashboard:
+      case SirketMenuItem.kapilar:
 
         _loadDoorControlSites();
 
@@ -2325,11 +2492,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       return;
     }
 
-    // Geçiş Kontrol modülü kapalıysa kapı listesi sunucuda boşaltılır: "Tanımlı bir kapı bulunamadı."
-    // diye her Panel açılışında konuşmak yanıltıcıdır. Sessizce dön, sürmekte olan dinlemeyi durdur
-    // ve eski kapı listesini sesli komut servisinden temizle.
-    if (_isDoorControlClosed(session)) {
-      await _silenceVoiceForClosedModule();
+    // Kapı açma yolu yoksa asistan konuşmaz: Geçiş Kontrol modülü kapalıyken kapı listesi sunucuda boşaltılır; daire
+    // sakini rolünde kapı erişimi / kapısı olmayan hesapta (yalnız görevli / kurul / site üyeliği) "Kapılar" ve otomatik
+    // dinlemeyi kapatacak "Eller Serbest" de gizlidir. "Tanımlı bir kapı bulunamadı." diye her Panel açılışında konuşmak
+    // yanıltıcıdır: sessizce dön, sürmekte olan dinlemeyi durdur ve eski kapı listesini sesli komut servisinden temizle.
+    if (_voiceHasNoDoorAccess(session)) {
+      await _silenceVoiceAssistance();
       return;
     }
 
@@ -2339,12 +2507,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
 
     if (doors.isEmpty) {
-      // Modül durumu henüz gelmediyse (açılış yarışı) önce onu bekle: kapalıysa konuşma.
+      // Modül durumu henüz gelmediyse (açılış yarışı) önce onu bekle: modül kapalı ya da kapı erişimi yoksa konuşma.
       if (!_moduleAccess.isLoaded) {
         await _moduleAccess.refresh();
         if (!mounted) return;
-        if (_isDoorControlClosed(session)) {
-          await _silenceVoiceForClosedModule();
+        if (_voiceHasNoDoorAccess(session)) {
+          await _silenceVoiceAssistance();
           return;
         }
       }
@@ -2370,7 +2538,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _silenceVoiceForClosedModule() async {
+  /// Sesli asistanın kapı açma yolu yok mu: Geçiş Kontrol kapalı ya da "Kapılar" bu kullanıcıda gizli (daire sakini
+  /// rolünde kapı erişimi / kapısı olmayan hesap, bkz. [hiddenMenuItemsFor]). Kapı öğeleri gizliyken asistan da susar.
+  bool _voiceHasNoDoorAccess(UserSession session) =>
+      _isDoorControlClosed(session) || !_canAccessMenu(SirketMenuItem.kapilar, session.role);
+
+  /// Sesli asistanı susturur (kapı yokken): sürmekte olan dinleme durur, sesli komut servisindeki aday kapı listesi
+  /// boşaltılır; hiçbir şey konuşulmaz.
+  Future<void> _silenceVoiceAssistance() async {
     final voice = widget.voiceDoorService;
     if (voice == null) return;
     voice.updateCandidateDoors(const <DoorRecord>[]);
@@ -5004,6 +5179,18 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
     switch (_selectedMenu) {
       case SirketMenuItem.dashboard:
+        // Vitrin: sakin borç özeti tazelenir; bekleyen sayılar zaten yukarıdaki modül yenilemesiyle gelir. Kart
+        // rozetleri (okunmamış duyuru, görülmemiş ziyaretçi / kargo kaydı) ve "Yeni duyuru" kartı da yoklama aralığı
+        // beklenmeden tazelenir (ikisi de kendi uygunluk denetimini yapar: uygun değilse ağ isteği yok). Kapı verisi
+        // (siteler / kapılar: sesli komut adayları, çekmecedeki kapı komutları, Kapılar sayfası) eskisi gibi yenilenir.
+        _announcements.resetBackoff();
+        unawaited(_announcements.refresh());
+        _refreshVisitorBadge();
+        await _loadDoorControlSites();
+        await _showcaseKey.currentState?.reload();
+        await _individualHomeKey.currentState?.loadAll();
+        break;
+      case SirketMenuItem.kapilar:
       case SirketMenuItem.ellerSerbest:
         await _loadDoorControlSites();
         if (_doorControlDoor != null) {
@@ -5223,9 +5410,19 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final showWidgetAction = session.role != UserRole.superUser && DoorWidgetService.supportsPinRequest;
     // Tema geçiş düğmesi yalnız ThemeScope varsa çizilir (uygulama kökü); yoksa (tek başına kurulum) yer ayrılmaz.
     final hasThemeToggle = ThemeScope.maybeOf(context) != null;
+    // Ekrandaki ("etkin") sayfa: erişimi kalkan öğe (örn. kurul üyeliği biten "Kişiler", Finans'ı kapanan "Borcum",
+    // sakin moduna geçince "Modüller") bir kare bile kalmaz, içerik gibi Panel'e düşer. AppBar başlığı, çekmecedeki seçim
+    // ve geri tuşu kararı HEP bunu kullanır (ham [_selectedMenu] değil): vitrine düşülünce ilk geri basışı boşa gitmez.
+    final effectiveMenu =
+        _canAccessMenu(_selectedMenu, session.role) ? _selectedMenu : SirketMenuItem.dashboard;
+    // Panel vitrini gösterilirken kaydırılan gövdenin kabı açık temada DÜZ zemindir ([ModuleShowcaseView.pageBackgroundOf]);
+    // öteki sayfalarda ve koyu temada kap boyanmaz (uygulama zemini görünür).
+    final bodyBackground =
+        effectiveMenu == SirketMenuItem.dashboard ? ModuleShowcaseView.pageBackgroundOf(context) : null;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
+      onDrawerChanged: (open) => _drawerOpen.value = open,
       appBar: AppBar(
         titleSpacing: 0,
         leadingWidth: 48,
@@ -5324,11 +5521,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                       Text(
                         // Erişimi kalkan öğe (örn. kurul üyeliği biten "Kişiler") başlıkta bir kare bile
                         // kalmaz: içerik gibi Panel'e düşer.
-                        _titleForMenu(
-                          _canAccessMenu(_selectedMenu, session.role)
-                              ? _selectedMenu
-                              : SirketMenuItem.dashboard,
-                        ),
+                        _titleForMenu(effectiveMenu),
                         style: TextStyle(
                           fontSize: 18,
                           height: 1.2,
@@ -5366,24 +5559,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
         additionalItems: _extraMenuItems(session.role),
 
-        badgeCounts: <SirketMenuItem, int>{
-          if (session.role == UserRole.superUser)
-            SirketMenuItem.modulTalepleri: _moduleAccess.pendingRequestCount ?? 0,
-          if (session.role == UserRole.superUser)
-            SirketMenuItem.siteBasvurulari: _moduleAccess.pendingApplicationCount ?? 0,
-          if (_hasAnnouncementInbox(session.role))
-            SirketMenuItem.duyurular: _announcements.unreadCount,
-          if (_visitorResidentSites(session.role).isNotEmpty)
-            SirketMenuItem.ziyaretcilerim: _visitorUnread,
-        },
-        badgeNouns: const <SirketMenuItem, String>{
-          SirketMenuItem.duyurular: 'okunmamış',
-          SirketMenuItem.ziyaretcilerim: 'görülmemiş',
-        },
+        badgeCounts: _menuBadgeCounts(session),
+        badgeNouns: _menuBadgeNouns,
         fullName: session.fullName,
         userEmail: session.email,
         role: session.role,
-        selectedItem: _selectedMenu,
+        selectedItem: effectiveMenu,
         isResidentMode: _isResidentMode,
         canToggleMode: _canToggleDualMode,
         onToggleMode: () {
@@ -5397,12 +5578,34 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           widget.authService.logout();
         },
       ),
-      body: SafeArea(
+      // Geri tuşu: bir modül sayfasındayken Panel vitrinine döner (uygulamadan çıkmaz); vitrindeyken eskisi gibi çıkar.
+      // Çekmece AÇIKKEN geri tuşu önce çekmeceyi kapatır, sayfa değişmez: PopScope rota yerel geçmişinden ÖNCE
+      // değerlendirildiği için ([ModalRoute.popDisposition]) çekmece açıkken pop'a izin verilir; pop'u çekmecenin
+      // yerel geçmişi karşılar (route kapanmaz, onPopInvokedWithResult çağrılmaz). Karar ekrandaki etkin sayfayla verilir.
+      body: ValueListenableBuilder<bool>(
+        valueListenable: _drawerOpen,
+        builder: (context, drawerOpen, child) => PopScope(
+          canPop: drawerOpen || effectiveMenu == SirketMenuItem.dashboard,
+          onPopInvokedWithResult: (didPop, _) {
+            if (!didPop) _goToMenu(SirketMenuItem.dashboard);
+          },
+          child: child!,
+        ),
+        // Acil duyuru şeridi kaydırılan gövdenin DIŞINDA, üstünde bir kardeştir. Gövdenin kabı (Panel'de düz zemin)
+        // şeridin ALTINDAN başlar ve ekranın altına (sistem gezinme çubuğu payı dahil) uzanır: zemin şeridin bölgesine
+        // hiç boyamaz, kaydırılmaz. Sistem boşlukları eskisiyle aynıdır: şeritte üst / yanlar, kaydırılan gövdede yanlar /
+        // alt. Kap her sayfada ve iki temada da vardır (yalnız rengi değişir): gövdenin alt ağacı yeniden kurulmaz.
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _urgentBannerSlot(session),
-            Expanded(child: _buildScrollBody(session)),
+            SafeArea(bottom: false, child: _urgentBannerSlot(session)),
+            Expanded(
+              child: DecoratedBox(
+                key: const ValueKey<String>('panel_vitrin_zemin'),
+                decoration: BoxDecoration(color: bodyBackground),
+                child: SafeArea(top: false, child: _buildScrollBody(session)),
+              ),
+            ),
           ],
         ),
       ),
@@ -5413,7 +5616,23 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
 
   /// Kaydırılan sayfa gövdesi (aşağı çek yenile + ortalanmış, en çok 1100 dp içerik).
+  ///
+  /// Sayfa (menü ya da Sakin / Yönetici modu) değişince kaydırma EN ÜSTTEN başlar ([_jumpBodyToTop]): vitrinde aşağı
+  /// kaydırıp bir karta dokununca modül sayfası ortadan açılmaz, geri dönülen vitrin de baştan başlar. Kaydırma görünümü
+  /// sayfa başına YENİDEN YARATILMAZ (anahtar yok): GlobalKey'li görünümler (vitrin, bireysel ana ekran) aynı karede
+  /// başka bir kaydırma alanına taşınırsa anlam ağacı (semantics) bozuluyordu; görünüm birincil kaydırma alanı olarak
+  /// kalır (iOS durum çubuğuna dokununca başa dönme). Yoklamayla yeniden kurulumda konum korunur.
   Widget _buildScrollBody(UserSession session) {
+    final page = _canAccessMenu(_selectedMenu, session.role) ? _selectedMenu : SirketMenuItem.dashboard;
+    final pageKey = '${page.name}-$_isResidentMode';
+    if (_bodyScrollPage != null && _bodyScrollPage != pageKey) {
+      // Olay işleyicileri sayfayı değiştirmeden ÖNCE başa alır; erişimi düşen sayfanın kurulumda Panel'e düşmesi gibi
+      // yollarda konum bir sonraki karede sıfırlanır (giriş solması sürerken, görünmeden).
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _jumpBodyToTop();
+      });
+    }
+    _bodyScrollPage = pageKey;
     return LayoutBuilder(
       builder: (context, constraints) {
         final horizontalPadding = constraints.maxWidth < 600 ? 16.0 : 20.0;
@@ -5423,6 +5642,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             physics: const AlwaysScrollableScrollPhysics(),
             padding: EdgeInsets.fromLTRB(horizontalPadding, 10.0, horizontalPadding, 56.0),
             child: Align(
+              key: _bodyContentKey,
               alignment: Alignment.topCenter,
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 1100),
@@ -5454,12 +5674,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   /// anahtar aynı kalır: animasyon yeniden başlamaz.
   Widget _buildContent(UserSession session) {
     final view = _buildContentView(session);
-    // Başvurusu gereken (sahip bağı olmayan) site yöneticisinin panosunda / Site Yönetimi'nde başvuru
-    // durumu kartı (bekleyen / reddedildi / iptal) görünür. Yuva her zaman bir Column çocuğudur: kart
-    // gelip giderken asıl görünümün durumu korunur.
+    // Başvurusu gereken (sahip bağı olmayan) site yöneticisinin Site Yönetimi'nde başvuru durumu kartı (bekleyen /
+    // reddedildi / iptal) görünür; Panel vitrininde kartı vitrin kendisi çizer. Yuva her zaman bir Column
+    // çocuğudur: kart gelip giderken asıl görünümün durumu korunur.
     final managerView = session.role == UserRole.siteManager &&
         !_isResidentMode &&
-        (_selectedMenu == SirketMenuItem.dashboard || _selectedMenu == SirketMenuItem.siteler) &&
+        _selectedMenu == SirketMenuItem.siteler &&
         !_showsIndividualHome(session);
     Widget child = view;
     if (managerView) {
@@ -5479,19 +5699,155 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         ],
       );
     }
-    // Sakin Panel'i: en üstte okunmamış duyuru kartı. Sarmalayıcı, kart olmasa da sakin rolünde sabit kalır.
-    final residentPanel = _selectedMenu == SirketMenuItem.dashboard &&
-        (session.role == UserRole.apartmentOwner ||
-            (session.role == UserRole.siteManager && _isResidentMode));
-    if (residentPanel) {
-      child = Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [_unreadAnnouncementCardSlot(session), child],
-      );
-    }
+    // Kapılar sayfasına girişte kısa süre dokunuş yutulur ([_armDoorEntryGuard]); yalnız bu küçük dinleyici kurulur.
+    final doorPage = _selectedMenu == SirketMenuItem.kapilar;
     return PageEntry(
       key: ValueKey<String>('${_selectedMenu.name}-$_isResidentMode'),
-      child: child,
+      child: ValueListenableBuilder<bool>(
+        valueListenable: _doorEntryGuard,
+        builder: (context, guarded, page) => IgnorePointer(
+          key: const ValueKey<String>('kapilar_giris_korumasi'),
+          ignoring: guarded && doorPage,
+          child: page,
+        ),
+        child: child,
+      ),
+    );
+  }
+
+  /// Sakin selamlamasının site satırı: alıcısı olduğu sitelerin adı (modül verisinden); veri yoksa kapı listesindeki
+  /// site adı. Bilinmiyorsa null.
+  String? _residentSiteName() {
+    final names = <String>[
+      if (_moduleAccess.isFiltering)
+        for (final site in _moduleAccess.result!.sites)
+          if (_isRecipientSite(site) && site.siteName.trim().isNotEmpty) site.siteName.trim(),
+    ];
+    if (names.isEmpty) {
+      final fallback = _doorControlStructure?.site.name.trim();
+      if (fallback != null && fallback.isNotEmpty && fallback != 'Site Kapısı') names.add(fallback);
+    }
+    if (names.isEmpty) return null;
+    return names.length == 1 ? names.first : '${names.first} +${names.length - 1} site';
+  }
+
+  /// Bireysel ana ekran (kapılar, kayıtlı daireler, katılım başvuruları, cihazlar, hızlı işlemler). Geçiş Kontrol
+  /// kapalıyken kapı dışı bölümleri ERİŞİLEBİLİR kalır; en üste kısa bir bilgi eklenir.
+  Widget _buildIndividualHome(UserSession session) {
+    final individualHome = IndividualHomeView(
+      key: _individualHomeKey,
+      session: session,
+      authService: widget.authService,
+      onRefreshAll: _loadInitialData,
+      // Site başvurusu kartı / formu bireysel ve daire kullanıcısına, ayrıca başvurusu gereken (sahip bağı
+      // olmayan) site yöneticisine açılır.
+      applications: _applicationsFor(session),
+      onRefreshAccount: () => _refreshAccountAfterApproval(),
+    );
+    if (_isDoorControlClosed(session)) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const DoorControlDisabledCard(compact: true),
+          const SizedBox(height: AppSpace.lg),
+          individualHome,
+        ],
+      );
+    }
+    return individualHome;
+  }
+
+  /// Sakin vitrininin borç özetinin kapsadığı siteler: alıcısı olunan ve `finance` modülü AÇIK sitelerin kodları (Borcum
+  /// menüsüyle aynı kural, [_hasFinanceInbox]). Küme değişince vitrin özeti yeniden okur ve kapanan sitenin tutarını
+  /// göstermez.
+  Set<int> _debtSiteCodes() => <int>{
+        if (_moduleAccess.isFiltering)
+          for (final site in _moduleAccess.result!.sites)
+            if (_isRecipientSite(site) && site.isEnabled(PlatformModuleCodes.finance)) site.siteCode,
+      };
+
+  /// Sakin vitrininde hızlı işlem olabilecek öğeler. Daire bağı gerektirenler ("Arıza bildir" = Taleplerim, "Ziyaretçi
+  /// ve kargo" = Ziyaretçilerim) yalnız daire bağı OLABİLEN bir sitede verilir: my-modules `door_access` aktif daire
+  /// üyeliği (ya da kapı izni) olan sitede true, yalnız kurul / görevli / site üyeliği bağında false. Sunucu dairesi
+  /// olmayanın talebini reddeder; dairesiz kurul üyesi ve yalnız site üyesi bu iki kısayolu görmez (kart ve çekmece öğesi
+  /// eski kuralıyla durur). Tam ayrım (kapı izni olan dairesiz kullanıcı) için sunucuda ayrı bir "dairesi var" alanı
+  /// gerekir.
+  Set<SirketMenuItem> _quickActionItems() {
+    bool apartmentSite(String code) =>
+        _moduleAccess.isFiltering &&
+        _moduleAccess.result!.sites.any((site) => site.doorAccess && site.isEnabled(code));
+    return <SirketMenuItem>{
+      SirketMenuItem.kapilar,
+      SirketMenuItem.belgeler,
+      if (apartmentSite(PlatformModuleCodes.workTracking)) SirketMenuItem.taleplerim,
+      if (apartmentSite(PlatformModuleCodes.visitorLog)) SirketMenuItem.ziyaretcilerim,
+    };
+  }
+
+  /// Vitrinin "Ziyaretçi kodu" hızlı işlemi: çekmecedeki "Kurye / Misafir Geçiş Linki Oluştur" ile AYNI akış ve AYNI
+  /// koşul ([_residentExtraActions]: daire sakini, Geçiş Kontrol açık, "Kapılar" erişilebilir, seçili kapıda misafir
+  /// geçişine izin var). Süreli geçiş linki üretir; kapı AÇMAZ ve kapı durumu yoklaması gerektirmez. Koşul yoksa null.
+  VoidCallback? _guestPassAction(UserSession session) {
+    final door = _doorControlDoor;
+    if (session.role != UserRole.apartmentOwner ||
+        _showsIndividualHome(session) ||
+        _isDoorControlClosed(session) ||
+        !_canAccessMenu(SirketMenuItem.kapilar, session.role) ||
+        door == null ||
+        !ResidentDoorActions.canCreateGuestPass(door)) {
+      return null;
+    }
+    return () => CreateGuestPassDialog.show(
+          context,
+          door: door,
+          authService: widget.authService,
+          showMessage: _showMessage,
+        );
+  }
+
+  /// Panel = MODÜL VİTRİNİ. Kartlar çekmecenin AYNI öğe listesinden türetilir ([_visibleMenuItems]); karta dokunmak
+  /// çekmeceden seçmekle aynı gezinmedir ([_openMenuItem]). Kapı paneli "Kapılar" kartının arkasındadır.
+  ///
+  /// Bireysel ana ekranın (dairelerim, katılım başvurularım, cihazlarım) tek yolu "Kapılar" öğesidir; Geçiş Kontrol
+  /// KAPALIyken o öğe vitrinde de çekmecede de yoktur. Bu bölümler kaybolmasın diye (kapı kartı olmadan) vitrinin
+  /// altında gösterilir ve başvuru durumu kartını o çizer (vitrin ikinci kez çizmez).
+  Widget _buildShowcase(UserSession session) {
+    final audience = showcaseAudience(
+      role: session.role,
+      isResidentMode: _isResidentMode,
+      canToggleMode: _canToggleDualMode,
+    );
+    final embedIndividualHome = _showsIndividualHome(session) && _isDoorControlClosed(session);
+    final applications = embedIndividualHome ? null : _applicationsFor(session);
+    final resident = audience == ShowcaseAudience.resident;
+    final showcase = ModuleShowcaseView(
+      key: _showcaseKey,
+      session: session,
+      audience: audience,
+      menuItems: _visibleMenuItems(session),
+      badgeCounts: _menuBadgeCounts(session),
+      badgeNouns: _menuBadgeNouns,
+      onOpen: _openMenuItem,
+      fetchMyFinance: resident ? widget.authService.getMyFinance : null,
+      residentSiteName: resident ? _residentSiteName() : null,
+      applications: applications,
+      onReapply: applications == null ? null : _reapplySiteApplication,
+      onRefreshAccount: () => _refreshAccountAfterApproval(),
+      applicantRole: canApplyForSite(session.role),
+      belowHero: resident ? _unreadAnnouncementCardSlot(session) : null,
+      onOpenHelp: _openHelpPage,
+      debtSiteCodes: resident ? _debtSiteCodes() : null,
+      quickActionItems: resident ? _quickActionItems() : null,
+      onCreateGuestPass: resident ? _guestPassAction(session) : null,
+    );
+    if (!embedIndividualHome) return showcase;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        showcase,
+        const SizedBox(height: AppSpace.xl),
+        _buildIndividualHome(session),
+      ],
     );
   }
 
@@ -5507,31 +5863,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
     switch (_selectedMenu) {
       case SirketMenuItem.dashboard:
+        return _buildShowcase(session);
+
+      case SirketMenuItem.kapilar:
       case SirketMenuItem.ellerSerbest:
         if (_showsIndividualHome(session)) {
-          final individualHome = IndividualHomeView(
-            key: _individualHomeKey,
-            session: session,
-            authService: widget.authService,
-            onRefreshAll: _loadInitialData,
-            // Site başvurusu kartı / formu bireysel ve daire kullanıcısına, ayrıca başvurusu gereken (sahip bağı
-            // olmayan) site yöneticisine açılır.
-            applications: _applicationsFor(session),
-            onRefreshAccount: () => _refreshAccountAfterApproval(),
-          );
-          // Geçiş Kontrol kapalıyken bireysel ana ekranın kapı dışı bölümleri (dairelerim, katılım
-          // talepleri, cihazlar, hızlı işlemler) ERİŞİLEBİLİR kalır; en üste kısa bir bilgi eklenir.
-          if (_isDoorControlClosed(session)) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const DoorControlDisabledCard(compact: true),
-                const SizedBox(height: AppSpace.lg),
-                individualHome,
-              ],
-            );
-          }
-          return individualHome;
+          return _buildIndividualHome(session);
         }
         // Geçiş Kontrol modülü kapalı (bağlı olunan tüm sitelerde; süper kullanıcıda seçili sitede):
         // kapı kartları yerine bilgi kartı.

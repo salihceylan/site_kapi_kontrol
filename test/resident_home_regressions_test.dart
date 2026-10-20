@@ -140,7 +140,8 @@ void main() {
       tester.state<ScaffoldState>(find.byType(Scaffold).first).openDrawer();
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
-      await tester.tap(find.text('Profilim'));
+      // Çekmecedeki öğe (Panel vitrininde de "Profilim" düğmesi vardır: bulucu çekmeceyle sınırlı).
+      await tester.tap(find.descendant(of: find.byType(Drawer), matching: find.text('Profilim')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
 

@@ -344,6 +344,49 @@ abstract final class AppGradients {
   );
 }
 
+/// Panel modül vitrininin ("sade" stil: işverenin komutlar.txt renk tablosu) renk değişkenleri. Beyaz etiket teması bu
+/// beş değişkeni değiştirir: [background] (ana zemin), [card] + [cardBorder] (kart ve ince çerçevesi; gölge yok),
+/// [text] (normal metin ve ikon), [focus] (kritik odak kutusu ve ana düğme) ve durum noktaları ([statusOk],
+/// [statusWarn], [statusCrit]: arka planı boyamaz, metnin soluna küçük nokta). Altındakiler bunlardan türeyen yardımcılardır.
+///
+/// Değerler AÇIK tema içindir. Koyu temada vitrin kart / metin için [AppPalette.dark]'ı, odak kutusu için [focusDark] +
+/// [AppTone.primary] kenarını kullanır. Uygulamanın geri kalanı (G6 kararına kadar) "Cilalı Safir" paletindedir; bu
+/// renkler yalnız vitrinde kullanılır. Kontrastlar `test/screens/module_showcase_view_test.dart` ile doğrulanır.
+abstract final class AppShowcaseColors {
+  /// Ana zemin (kırık beyaz / buz grisi): açık temada vitrin sayfasının DÜZ zemini.
+  static const Color background = Color(0xFFF8FAFC);
+
+  /// Kart yüzeyi (saf beyaz).
+  static const Color card = Color(0xFFFFFFFF);
+
+  /// Kartın ince çerçevesi (gölge yerine).
+  static const Color cardBorder = Color(0xFFE2E8F0);
+
+  /// Normal metin ve ikon (yumuşak antrasit).
+  static const Color text = Color(0xFF475569);
+
+  /// Kritik odak (gece kömürü): yalnız eylem isteyen kutu (ödenecek borç, dikkat barı) ve ana düğme.
+  static const Color focus = Color(0xFF0F172A);
+
+  /// Durum noktaları: zümrüt (tamam) / kehribar (bekliyor) / mercan (kritik).
+  static const Color statusOk = Color(0xFF10B981);
+  static const Color statusWarn = Color(0xFFF59E0B);
+  static const Color statusCrit = Color(0xFFE11D48);
+
+  /// Odak kutusu ve koyu düğme üstündeki metin (ana zemin rengi).
+  static const Color onFocus = background;
+
+  /// Odak kutusu üstündeki ikincil metin.
+  static const Color onFocusMuted = Color(0xFFCBD5E1);
+
+  /// Açık temada odak kutusunun ince kenarı.
+  static const Color focusBorder = Color(0xFF1E293B);
+
+  /// Koyu temada odak kutusu: koyu sayfa zemininden (#0F172A -> #020617) ayrışan lacivert; kenarı
+  /// [AppTone.primary] `hue` (zemine ve kutuya >= 3:1).
+  static const Color focusDark = Color(0xFF172554);
+}
+
 /// Tipografi ölçeği: yalnız mevcut temada tanımlı yuvalar (label* dokunulmaz: buton varsayılanları).
 ///
 /// Yeni kodda `fontSize` literal'i yazma; en küçük punto 11. `bodyMedium` (varsayılan metin) artık

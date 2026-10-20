@@ -9,6 +9,7 @@ import 'package:site_kapi_kontrol/services/auth_api.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/services/deep_link_service.dart';
 import 'package:site_kapi_kontrol/services/door_module_gate.dart';
+import 'package:site_kapi_kontrol/services/door_panel_requests.dart';
 import 'package:site_kapi_kontrol/services/door_widget_service.dart';
 import 'package:site_kapi_kontrol/services/local_door_service.dart';
 import 'package:site_kapi_kontrol/services/network_service.dart';
@@ -57,6 +58,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   /// Tek örnek: AuthService'in kullandığı örnekle aynıdır; yaşam döngüsü
   /// (pause/resume) bu asıl örneğe uygulanır.
   final LocalDoorService _localDoorService = LocalDoorService();
+
+  /// Widget / kısayol / derin bağlantıdan gelen "Kapılar sayfasını aç" isteği (HomePage tüketir; kapı AÇMAZ).
+  final DoorPanelRequests _doorPanelRequests = DoorPanelRequests();
 
   bool _wasLoggedIn = false;
   int? _lastUserId;
@@ -111,6 +115,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     if (loggedOut || userChanged) {
       _voiceDoorService.clearSession();
       _deepLinkService.clearPending();
+      _doorPanelRequests.clear();
       _localDoorService.clearCache();
     }
 
@@ -150,6 +155,12 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     if (AppGateBlock.active.value) {
       return;
     }
+    // Widget gövdesi: yalnız Kapılar sayfası açılır (kapı AÇILMAZ). Oturum yoksa sessizce yok sayılır: uygulama giriş
+    // ekranında açılır, "giriş yapın" diye konuşulmaz.
+    if (action.type == DeepLinkActionType.showDoorPanel) {
+      if (_authService.isLoggedIn) _doorPanelRequests.request();
+      return;
+    }
     if (!_authService.isLoggedIn) {
       await _voiceDoorService.speak('Lütfen önce uygulamaya giriş yapın.');
       return;
@@ -169,6 +180,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           _showFeedback(closedMessage);
           return;
         }
+        // Kapıyla ilgili giriş: altta Kapılar sayfası açılır ("Panel" artık modül vitrini; eskiden kapı paneliydi).
+        _doorPanelRequests.request();
         final context = _navigatorKey.currentContext;
         if (context != null && context.mounted) {
           VoiceControlModal.show(context, voiceService: _voiceDoorService);
@@ -179,11 +192,16 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       case DeepLinkActionType.openDoorById:
       case DeepLinkActionType.openDoorByIndex:
       case DeepLinkActionType.openFirstDoor:
+        // Altta Kapılar sayfası açılır; kapı açma yolu (doğrulama + onay penceresi) DEĞİŞMEZ.
+        _doorPanelRequests.request();
         await _openDoorFromLink(action);
         break;
       case DeepLinkActionType.showQrForDoor:
+        _doorPanelRequests.request();
         await _showQrModalForAction(action);
         break;
+      case DeepLinkActionType.showDoorPanel:
+        break; // yukarıda işlendi
     }
   }
 
@@ -334,6 +352,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     _networkService.dispose();
     _voiceDoorService.dispose();
     _deepLinkService.dispose();
+    _doorPanelRequests.dispose();
     if (_ownsThemeService) {
       _themeService.dispose();
     }
@@ -408,6 +427,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                 authService: _authService,
                 voiceDoorService: _voiceDoorService,
                 quickActionsService: _quickActionsService,
+                doorPanelRequests: _doorPanelRequests,
               ),
             );
           }

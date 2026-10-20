@@ -163,6 +163,9 @@ Future<void> _tapTile(WidgetTester t, Finder tile) async {
 
 const String _label = 'Ziyaretçi ve Kargo';
 
+/// Sakin öğesinin başlığı yönetim öğesinden AYRIDIR (kurul üyesinde ikisi birden görünür; aynı adlı iki öğe olmasın).
+const String _residentLabel = 'Ziyaretçilerim';
+
 void main() {
   setUp(() {
     _server = _Server();
@@ -181,7 +184,8 @@ void main() {
       await _pumpHome(t, auth, access: access);
       await _openDrawer(t);
       final titles = _drawerTitles(t);
-      expect(titles.where((x) => x == _label).length, 1, reason: 'yönetici modunda sakin öğesi yok');
+      expect(titles.where((x) => x == _label).length, 1);
+      expect(titles, isNot(contains(_residentLabel)), reason: 'yönetici modunda sakin öğesi yok');
       expect(titles.indexOf(_label), titles.indexOf('Duyurular') + 1);
       await _tapTile(t, _tileTitle(_label).first);
       expect(find.byType(VisitorManagerView), findsOneWidget);
@@ -211,6 +215,7 @@ void main() {
         await _pumpHome(t, auth, access: access);
         await _openDrawer(t);
         expect(_tileTitle(_label), findsNothing, reason: role);
+        expect(_tileTitle(_residentLabel), findsNothing, reason: role);
         await _disposeHome(t);
       }
       expect(_server.paths, isEmpty);
@@ -222,6 +227,7 @@ void main() {
         await _pumpHome(t, auth, access: ModuleAccess(fetch: () async => throw StateError('ağ yok')));
         await _openDrawer(t);
         expect(_tileTitle(_label), findsNothing, reason: '$role');
+        expect(_tileTitle(_residentLabel), findsNothing, reason: '$role');
         await _disposeHome(t);
       }
       expect(_server.paths, isEmpty);
@@ -233,6 +239,7 @@ void main() {
       await _pumpHome(t, auth, access: access);
       await _openDrawer(t);
       expect(_drawerTitles(t).where((x) => x == _label).length, 1);
+      expect(_drawerTitles(t), isNot(contains(_residentLabel)), reason: 'yalnız görevli bağı: sakin öğesi yok');
       await _tapTile(t, _tileTitle(_label).first);
       final view = t.widget<VisitorManagerView>(find.byType(VisitorManagerView));
       expect(view.sites.single.access, VisitorSiteAccess.staff);
@@ -248,15 +255,17 @@ void main() {
       await _openDrawer(t);
       final titles = _drawerTitles(t);
       final first = titles.indexOf(_label);
-      expect(titles.lastIndexOf(_label), first + 1, reason: 'yönetim ve sakin öğeleri art arda');
+      expect(titles.where((x) => x == _label).length, 1, reason: 'aynı adlı iki öğe yok');
+      expect(titles.indexOf(_residentLabel), first + 1, reason: 'yönetim ve sakin öğeleri art arda');
       await _tapTile(t, _tileTitle(_label).first);
       final view = t.widget<VisitorManagerView>(find.byType(VisitorManagerView));
       expect(view.sites.single.access, VisitorSiteAccess.board);
       expect(find.byKey(const ValueKey<String>('visitor_read_only_note')), findsOneWidget);
       expect(find.byKey(const ValueKey<String>('visitor_new_entry')), findsNothing);
       await _openDrawer(t);
-      await _tapTile(t, _tileTitle(_label).last);
+      await _tapTile(t, _tileTitle(_residentLabel).first);
       expect(find.byType(VisitorResidentView), findsOneWidget);
+      expect(find.descendant(of: find.byType(AppBar), matching: find.text(_residentLabel)), findsOneWidget);
       await _disposeHome(t);
     });
 
@@ -266,6 +275,7 @@ void main() {
       await _pumpHome(t, auth, access: access);
       await _openDrawer(t);
       expect(_drawerTitles(t).where((x) => x == _label).length, 1);
+      expect(_drawerTitles(t), isNot(contains(_residentLabel)));
       await _tapTile(t, _tileTitle(_label).first);
       final view = t.widget<VisitorManagerView>(find.byType(VisitorManagerView));
       expect(view.manageAllSites, isTrue);
@@ -282,20 +292,21 @@ void main() {
       await t.pump(const Duration(milliseconds: 300));
       expect(_server.paths, contains('/app/visitor-entries/summary'));
       await _openDrawer(t);
-      expect(_drawerTitles(t).where((x) => x == _label).length, 1, reason: 'yönetim öğesi yok');
+      expect(_drawerTitles(t).where((x) => x == _residentLabel).length, 1);
+      expect(_drawerTitles(t), isNot(contains(_label)), reason: 'yönetim öğesi yok');
       expect(
         find.descendant(of: find.byType(Drawer), matching: find.byKey(const ValueKey<String>('yan_menu_rozet'))),
         findsOneWidget,
       );
       expect(find.descendant(of: find.byType(Drawer), matching: find.text('2')), findsOneWidget);
-      await _tapTile(t, _tileTitle(_label).first);
+      await _tapTile(t, _tileTitle(_residentLabel).first);
       expect(find.byType(VisitorResidentView), findsOneWidget);
       final view = t.widget<VisitorResidentView>(find.byType(VisitorResidentView));
       expect(view.sites, <PeopleSite>[const PeopleSite(code: 11, name: 'Gül Sitesi')]);
       expect(view.onUnreadChanged, isNotNull);
       expect(_server.paths, contains('/app/visitor-entries'));
       expect(_server.paths, isNot(contains('/manager/sites/11/visitor-entries')));
-      expect(find.descendant(of: find.byType(AppBar), matching: find.text(_label)), findsOneWidget);
+      expect(find.descendant(of: find.byType(AppBar), matching: find.text(_residentLabel)), findsOneWidget);
       await _disposeHome(t);
     });
 
@@ -314,6 +325,7 @@ void main() {
       await _pumpHome(t, auth, access: await _access(() => const <MySiteModules>[]));
       await _openDrawer(t);
       expect(_tileTitle(_label), findsNothing);
+      expect(_tileTitle(_residentLabel), findsNothing);
       await _disposeHome(t);
     });
 
@@ -331,6 +343,7 @@ void main() {
       await _pumpHome(t, auth, access: access);
       await _openDrawer(t);
       expect(_tileTitle(_label), findsNothing);
+      expect(_tileTitle(_residentLabel), findsNothing);
       await _disposeHome(t);
     });
   });

@@ -341,6 +341,9 @@ void main() {
         ..myFinanceItems = <Map<String, dynamic>>[finMyItem()];
       final access = await _access(() => <MySiteModules>[_my('resident')]);
       await _pumpHome(t, auth, access: access);
+      // Panel = modül vitrini: Borcum açıkken hero kart borç özetini bir kez okur ("Güncel borcunuz").
+      expect(auth.myFinanceCalls, 1, reason: 'vitrin hero kartı borç özetini okur');
+      expect(find.text('Güncel borcunuz'), findsOneWidget);
       await _openDrawer(t);
       final titles = _drawerTitles(t);
       expect(titles, contains('Borcum'));
@@ -352,7 +355,7 @@ void main() {
 
       expect(find.byType(MyFinanceView), findsOneWidget);
       expect(_inAppBar(find.text('Borcum')), findsOneWidget);
-      expect(auth.myFinanceCalls, 1);
+      expect(auth.myFinanceCalls, 2, reason: 'vitrin özeti (1) + Borcum ekranı (1)');
       expect(find.byType(MyFinanceCard), findsOneWidget);
       expect(find.text('Tahsilat Ekle'), findsNothing);
       expect(auth.summaryCalls, 0, reason: 'sakin yönetici uçlarını çağırmaz');

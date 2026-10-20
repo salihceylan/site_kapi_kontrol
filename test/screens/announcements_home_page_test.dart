@@ -142,11 +142,13 @@ Future<void> _openDrawer(WidgetTester t) async {
   await t.pump(const Duration(milliseconds: 450));
 }
 
+/// Çekmecedeki öğeye dokunur. Bulucu çekmeceyle SINIRLIDIR: Panel modül vitrininde de aynı adlı kartlar vardır.
 Future<void> _tapMenu(WidgetTester t, String label) async {
   await _openDrawer(t);
-  await t.ensureVisible(find.text(label).first);
+  final tile = find.descendant(of: find.byType(Drawer), matching: find.text(label)).first;
+  await t.ensureVisible(tile);
   await t.pump();
-  await t.tap(find.text(label).first);
+  await t.tap(tile);
   await t.pump();
   await t.pump(const Duration(milliseconds: 600));
   await settleFor(t);

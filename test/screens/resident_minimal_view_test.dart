@@ -288,6 +288,31 @@ void main() {
       expect(calls, <String>['guest']);
     });
 
+    testWidgets('"Kapılar" varsa ek komutlar onun, Panel\'in değil, hemen altına gelir', (t) async {
+      await openDrawer(
+        t,
+        YanMenu(
+          fullName: 'Mehmet Demir',
+          userEmail: 'mehmet@example.com',
+          role: UserRole.apartmentOwner,
+          selectedItem: SirketMenuItem.dashboard,
+          onSelect: (_) {},
+          onLogout: () {},
+          additionalItems: const <SirketMenuItem>{SirketMenuItem.kapilar, SirketMenuItem.duyurular},
+          extraActions: <YanMenuAction>[
+            YanMenuAction(icon: Icons.qr_code_2_rounded, title: 'Kapıya QR Göster', onTap: () {}),
+          ],
+        ),
+      );
+      expect(titles(t).take(5).toList(), <String>[
+        'Panel',
+        'Kapılar',
+        'Kapıya QR Göster',
+        'Duyurular',
+        'Daireye Katıl & Cihaz Ekle',
+      ]);
+    });
+
     testWidgets('320 x 2,0 ve 360 x 1,5 (açık+koyu): taşma yok', (t) async {
       for (final (w, scale) in [(320.0, 2.0), (360.0, 1.5)]) {
         for (final dark in [false, true]) {
@@ -336,7 +361,7 @@ void main() {
     });
   });
 
-  group('HomePage: daire sakini çekmecesi', () {
+  group('HomePage: daire sakini çekmecesi (Panel = vitrin; sade kapı kumandası Kapılar kartının arkasında)', () {
     Future<void> pumpHome(WidgetTester t, _ResidentAuth auth) async {
       t.view.physicalSize = const Size(390, 844);
       t.view.devicePixelRatio = 1.0;
@@ -364,10 +389,19 @@ void main() {
       await t.pump();
     }
 
-    testWidgets('ana ekran SADE: saat/açıklama/QR/misafir düğmeleri yok, düğme var', (
+    // Panel artık modül vitrinidir: sade kapı kumandası "Kapılar" kartının arkasındadır (bir dokunuş).
+    testWidgets('Panel vitrindir (kapı düğmesi yok); Kapılar kartı SADE kumandayı açar: saat/açıklama/QR/misafir yok, düğme var', (
       t,
     ) async {
       await pumpHome(t, _ResidentAuth(g2Door(qrReader: true)));
+      expect(find.byType(DoorOpenButton), findsNothing, reason: 'vitrinde kapı düğmesi yok');
+      expect(find.byKey(const ValueKey<String>('panel_vitrin')), findsOneWidget);
+      final card = find.byKey(const ValueKey<String>('panel_kart_kapilar'));
+      await t.ensureVisible(card);
+      await t.tap(card);
+      for (var i = 0; i < 4; i++) {
+        await t.pump(const Duration(milliseconds: 200));
+      }
       expect(find.byType(DoorOpenButton), findsOneWidget);
       expect(find.text('KAPIYI AÇ'), findsOneWidget);
       for (final text in _removedTexts) {
@@ -377,7 +411,7 @@ void main() {
       await dispose(t);
     });
 
-    testWidgets('yetkiler tam: çekmecede QR, ekran QR ve misafir öğeleri Panel\'in altında', (
+    testWidgets('yetkiler tam: çekmecede QR, ekran QR ve misafir öğeleri Kapılar\'ın altında', (
       t,
     ) async {
       await pumpHome(t, _ResidentAuth(g2Door(qrReader: true)));
@@ -387,7 +421,8 @@ void main() {
           .map((w) => (w.title! as Text).data!)
           .toList();
       expect(titles.first, 'Panel');
-      expect(titles.sublist(1, 4), <String>[
+      expect(titles[1], 'Kapılar', reason: 'kapı paneli Panel\'in hemen altında');
+      expect(titles.sublist(2, 5), <String>[
         'Kapıya QR Göster',
         'Kapı Ekranından QR Oku',
         'Kurye / Misafir Geçiş Linki Oluştur',

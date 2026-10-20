@@ -11,7 +11,7 @@
 //     --dart-define=E2E_MAILS_DIR=<E2E>/mails
 //
 // Akis: Giris ekrani -> "Yeni Hesap Oluştur" -> form -> "Kayıt Ol" -> sahte SMTP kutusundan (E2E_MAILS_DIR)
-// kodu oku -> "Hesabımı Doğrula" -> otomatik giris (bireysel panel) -> cikis.
+// kodu oku -> "Hesabımı Doğrula" -> otomatik giris (Panel = modul vitrini) -> cikis.
 // Uretime baglanmaz (E2eEnv.assertLocalApi). Kod/parola konsola yazilmaz.
 
 import 'dart:convert';
@@ -144,6 +144,14 @@ void main() {
               return;
             }
             await c.settleUi(min: const Duration(seconds: 2));
+            // Ilk giris "Panel"i acar ve Panel MODUL VITRINIDIR (ustte ilk kullanim turu olabilir: sahne disi da aranir).
+            if (!await pumpUntilFound(
+              tester,
+              find.byKey(kShowcaseKey, skipOffstage: false),
+              timeout: const Duration(seconds: 8),
+            )) {
+              E2eRuntime.collector.note(kind: 'navigation', message: 'Ilk giris sonrasi Panel modul vitrini yok');
+            }
             await c.shot('ilk_giris_panel');
             await c.scrollEnd();
           });

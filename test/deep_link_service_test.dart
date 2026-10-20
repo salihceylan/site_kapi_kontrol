@@ -53,6 +53,11 @@ void main() {
         const DeepLinkAction(type: DeepLinkActionType.triggerVoice).opensDoor,
         isFalse,
       );
+      expect(
+        const DeepLinkAction(type: DeepLinkActionType.showDoorPanel).opensDoor,
+        isFalse,
+        reason: 'widget gövdesi yalnız Kapılar sayfasını açar',
+      );
     });
   });
 
@@ -118,14 +123,46 @@ void main() {
       }
     });
 
-    test('ignores foreign schemes, unknown hosts and widget container link', () {
+    test('ignores foreign schemes and unknown hosts', () {
       expect(
         DeepLinkService.parseUri(Uri.parse('https://evil.example/open?doorId=1')),
         isNull,
       );
-      expect(DeepLinkService.parseUri(Uri.parse('sitekapi://door_control')), isNull);
       expect(DeepLinkService.parseUri(Uri.parse('sitekapi://other_action')), isNull);
       expect(DeepLinkService.parseUri(Uri.parse('sitekapi:///unknown')), isNull);
+    });
+
+    // kapi-3: Android kapı widget'ının gövdesi / başlığı ("Panel" artık modül vitrini): uygulama Kapılar sayfasında açılır.
+    test('widget container link (door_control) opens the Kapılar page only (never a door)', () {
+      for (final raw in [
+        'sitekapi://door_control',
+        'sitekapi:///door_control',
+        'SITEKAPI://DOOR_CONTROL',
+        // Parametreler yok sayılır: bu bağlantı hiçbir koşulda kapı açmaz.
+        'sitekapi://door_control?doorId=11',
+      ]) {
+        final action = DeepLinkService.parseUri(Uri.parse(raw));
+        expect(action?.type, DeepLinkActionType.showDoorPanel, reason: raw);
+        expect(action?.opensDoor, isFalse, reason: raw);
+        expect(action?.doorId, isNull, reason: raw);
+      }
+      expect(
+        DeepLinkDoorResolver.resolve(const DeepLinkAction(type: DeepLinkActionType.showDoorPanel), [_door(1)]).status,
+        DeepLinkDoorStatus.notFound,
+        reason: 'kapı çözümlenmez (açılacak kapı yok)',
+      );
+    });
+
+    test('widget container link is queued until the session is ready, then delivered once', () {
+      final service = DeepLinkService();
+      final received = <DeepLinkAction>[];
+      service.onAction = received.add;
+      final t0 = DateTime(2026, 1, 1, 12, 0, 0);
+      service.handleUri(Uri.parse('sitekapi://door_control'), now: t0);
+      expect(received, isEmpty, reason: 'oturum hazır değil: kuyrukta');
+      service.markReady(now: t0.add(const Duration(seconds: 1)));
+      expect(received.map((a) => a.type), <DeepLinkActionType>[DeepLinkActionType.showDoorPanel]);
+      service.dispose();
     });
 
     test('rejects oversized URIs', () {

@@ -66,7 +66,7 @@ Ekranda görülen arıza (taşma, güncellenmeyen liste, yanlış menü, tepkisi
 - [ui-kapi-ac-sakin](#ui-kapi-ac-sakin) — Daire sakini kumandasında büyük düğme "ÇEVRİMDIŞI", "KAPALI" ya da "UZAKTAN KAPALI" yazıyor; kapı açılmıyor
 - [ui-kapi-durum-yoklama](#ui-kapi-durum-yoklama) — Kapının çevrimiçi/çevrimdışı durumu kendiliğinden güncellenmiyor ya da ekran gereksiz yere yeniden çiziliyor
 - [ui-kapi-ac-basari-tiki](#ui-kapi-ac-basari-tiki) — Kapı açma komutundan sonra düğme "Gönderiliyor..." durumunda kalıyor ya da başarı tiki hiç görünmüyor
-- [ui-bireysel-ana-ekran-kapilar](#ui-bireysel-ana-ekran-kapilar) — Bireysel/sakin ana ekranında kapı çevrimdışı görünüyor, liste kendiliğinden yenilenmiyor ya da "çevrimdışı" uyarısı çıkıyor
+- [ui-bireysel-ana-ekran-kapilar](#ui-bireysel-ana-ekran-kapilar) — Bireysel/sakin ana ekranında ("Kapılar" sayfası) kapı çevrimdışı görünüyor, liste kendiliğinden yenilenmiyor ya da "çevrimdışı" uyarısı çıkıyor
 - [ui-bireysel-kapi-karti-dugmeleri](#ui-bireysel-kapi-karti-dugmeleri) — Bireysel kapı kartında "Kapıyı Aç / Uzaktan Aç", "Kapıya QR Göster", "Kapı Ekranından QR Oku" ya da "Misafir Kodu" düğmesi eksik
 - [ui-qr-modal-sure](#ui-qr-modal-sure) — Karekod penceresi "Süresi Dolmuş QR Kod" diyor, yenilenmiyor ya da karekod yerine sürekli yükleniyor/hata görünüyor
 - [ui-qr-modal-ret](#ui-qr-modal-ret) — Karekod penceresinde "Kapı Yetkisi Yok", "Karekod Girişi Kapalı", "Kullanılmış Karekod" ya da "Kapı Uyuşmazlığı" uyarısı çıkıyor
@@ -76,7 +76,7 @@ Ekranda görülen arıza (taşma, güncellenmeyen liste, yanlış menü, tepkisi
 - [ui-misafir-gecis-dugmesi](#ui-misafir-gecis-dugmesi) — "Kurye / Misafir Geçişi" düğmesi görünmüyor ya da link oluşturunca paylaşım penceresi/kopyalama çalışmıyor
 - [ui-cihaz-sahiplen](#ui-cihaz-sahiplen) — Cihaz sahiplenme penceresinde hata çıkıyor ("Cihaz sahiplenme sırasında bir hata oluştu") ya da kutu QR okununca cihaz hesaba bağlanmıyor
 - [ui-cihaz-ekle-sonrasi](#ui-cihaz-ekle-sonrasi) — Cihaz eklendikten/sahiplenildikten sonra liste ve panel güncellenmiyor ya da site kurulum sihirbazı açılmıyor
-- [ui-kurulum-sihirbazi](#ui-kurulum-sihirbazi) — "Site Kurulum Sihirbazı" penceresinde blok/kapı eklerken ya da kaydederken hata alınıyor
+- [ui-kurulum-sihirbazi](#ui-kurulum-sihirbazi) — "Site Kurulum Sihirbazı" (ya da site başvurusu) penceresinde blok/kapı eklerken ya da kaydederken hata alınıyor
 - [ui-kapi-cihaz-ata](#ui-kapi-cihaz-ata) — Kapıya cihaz atama/çıkarma penceresi hata veriyor ya da işlemden sonra kapı kartı eski cihazı gösteriyor
 - [ui-cihaz-degistir](#ui-cihaz-degistir) — "Arızalı Cihazı Değiştir" penceresi hata veriyor ya da değiştirme sonrası kapı hâlâ eski cihazı gösteriyor
 - [ui-kapi-yonet-yenilenmiyor](#ui-kapi-yonet-yenilenmiyor) — Kapı eklendikten/düzenlendikten/silindikten sonra site ekranındaki kapı listesi ya da kapı paneli güncellenmiyor
@@ -121,10 +121,10 @@ Ekranda görülen arıza (taşma, güncellenmeyen liste, yanlış menü, tepkisi
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/ui/pages/home_page.dart:4021](../../lib/ui/pages/home_page.dart#L4021) | <code>final bottomHeight = 16 + 1.2 * (textScaler.scale(18) + textScaler.scale(12));</code> | Alt başlık bloğunun yüksekliği yazı ölçeğine göre hesaplanır; ölçek büyüyünce çubuk yüksekliği buradan artar |
-| [lib/ui/pages/home_page.dart:4072](../../lib/ui/pages/home_page.dart#L4072) | <code>otherActions: (showWidgetAction ? 3 : 2) + (hasThemeToggle ? 1 : 0),</code> | Mod hapının yanındaki 48 dp düğme sayısı (widget, tema, yenile, çıkış); yeni düğme eklenirse bu sayı güncellenmezse hap taşar |
-| [lib/ui/pages/home_page.dart:3919](../../lib/ui/pages/home_page.dart#L3919) | <code>Widget _appBarAction({</code> | Tüm AppBar eylem düğmeleri 44 dp minimum hedefle burada üretilir |
-| [lib/ui/pages/home_page.dart:3946](../../lib/ui/pages/home_page.dart#L3946) | <code>final maxWidth = (width - 48 - otherActions * 48 - 6 - 16).clamp(44.0, double.infinity).t…</code> | Mod hapına ayrılabilecek en büyük genişlik; aşılırsa etiket üç nokta ile kısalır |
+| [lib/ui/pages/home_page.dart:5409](../../lib/ui/pages/home_page.dart#L5409) | <code>final bottomHeight = 16 + 1.2 * (textScaler.scale(18) + textScaler.scale(12));</code> | Alt başlık bloğunun yüksekliği yazı ölçeğine göre hesaplanır; ölçek büyüyünce çubuk yüksekliği buradan artar |
+| [lib/ui/pages/home_page.dart:5470](../../lib/ui/pages/home_page.dart#L5470) | <code>otherActions: (showWidgetAction ? 3 : 2) + (hasThemeToggle ? 1 : 0),</code> | Mod hapının yanındaki 48 dp düğme sayısı (widget, tema, yenile, çıkış); yeni düğme eklenirse bu sayı güncellenmezse hap taşar |
+| [lib/ui/pages/home_page.dart:5314](../../lib/ui/pages/home_page.dart#L5314) | <code>Widget _appBarAction({</code> | Tüm AppBar eylem düğmeleri 44 dp minimum hedefle burada üretilir |
+| [lib/ui/pages/home_page.dart:5341](../../lib/ui/pages/home_page.dart#L5341) | <code>final maxWidth = (width - 48 - otherActions * 48 - 6 - 16).clamp(44.0, double.infinity).t…</code> | Mod hapına ayrılabilecek en büyük genişlik; aşılırsa etiket üç nokta ile kısalır |
 | [lib/ui/design/theme_toggle_button.dart:41](../../lib/ui/design/theme_toggle_button.dart#L41) | <code>constraints: const BoxConstraints(minWidth: 44, minHeight: 44),</code> | Tema düğmesi de AppBar'a 44 dp yer kaplar (ThemeScope varsa) |
 
 **Olası nedenler**
@@ -153,11 +153,11 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/screens/home_shell
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/ui/pages/home_page.dart:344](../../lib/ui/pages/home_page.dart#L344) | <code>bool get _canToggleDualMode {</code> | Hapın görünme kuralı: süper kullanıcı/site yöneticisi her zaman, diğer roller yalnız yönetebildiği site varsa |
-| [lib/ui/pages/home_page.dart:3942](../../lib/ui/pages/home_page.dart#L3942) | <code>final label = _isResidentMode ? 'Yönetici Paneli' : 'Sakin Modu';</code> | Hap etiketi; mod `_isResidentMode` bayrağıyla tutulur |
-| [lib/ui/pages/home_page.dart:3955](../../lib/ui/pages/home_page.dart#L3955) | <code>_isResidentMode = !_isResidentMode;</code> | Hap dokunuşu: modu çevirir; yönetici paneline dönüşte seçili menü dashboard'a alınır |
-| [lib/ui/pages/home_page.dart:4178](../../lib/ui/pages/home_page.dart#L4178) | <code>onToggleMode: () {</code> | Çekmecedeki "Sakin Moduna Geç / Yönetici Paneline Geç" satırı aynı bayrağı çevirir |
-| [lib/ui/widgets/yan_menu.dart:142](../../lib/ui/widgets/yan_menu.dart#L142) | <code>title: isResidentMode ? 'Yönetici Paneline Geç' : 'Sakin Moduna Geç',</code> | Çekmece geçiş satırının metni (yalnız `canToggleMode` true iken çizilir) |
+| [lib/ui/pages/home_page.dart:486](../../lib/ui/pages/home_page.dart#L486) | <code>bool get _canToggleDualMode {</code> | Hapın görünme kuralı: süper kullanıcı/site yöneticisi her zaman, diğer roller yalnız yönetebildiği site varsa |
+| [lib/ui/pages/home_page.dart:5337](../../lib/ui/pages/home_page.dart#L5337) | <code>final label = _isResidentMode ? 'Yönetici Paneli' : 'Sakin Modu';</code> | Hap etiketi; mod `_isResidentMode` bayrağıyla tutulur |
+| [lib/ui/pages/home_page.dart:2061](../../lib/ui/pages/home_page.dart#L2061) | <code>_isResidentMode = !_isResidentMode;</code> | Hap dokunuşu: modu çevirir; yönetici paneline dönüşte seçili menü dashboard'a alınır |
+| [lib/ui/pages/home_page.dart:5570](../../lib/ui/pages/home_page.dart#L5570) | <code>onToggleMode: () {</code> | Çekmecedeki "Sakin Moduna Geç / Yönetici Paneline Geç" satırı aynı bayrağı çevirir |
+| [lib/ui/widgets/yan_menu.dart:279](../../lib/ui/widgets/yan_menu.dart#L279) | <code>title: isResidentMode ? 'Yönetici Paneline Geç' : 'Sakin Moduna Geç',</code> | Çekmece geçiş satırının metni (yalnız `canToggleMode` true iken çizilir) |
 
 **Olası nedenler**
 - Bireysel/daire sakini hesabında `_doorControlSitesPage` boş ya da yüklenemedi: `_canToggleDualMode` false döner, hap çizilmez
@@ -179,12 +179,12 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/screens/home_shell
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/ui/widgets/yan_menu.dart:373](../../lib/ui/widgets/yan_menu.dart#L373) | <code>List&lt;SirketMenuItem&gt; _itemsForRole(</code> | Çekmecede GÖRÜNEN öğeler (rol + sakin modu + çift mod) burada listelenir |
-| [lib/ui/pages/home_page.dart:667](../../lib/ui/pages/home_page.dart#L667) | <code>bool _canAccessMenu(SirketMenuItem item, UserRole role) {</code> | Seçili menüye ERİŞİM kuralı; çekmece listesinden ayrı yazılmıştır |
-| [lib/ui/pages/home_page.dart:4245](../../lib/ui/pages/home_page.dart#L4245) | <code>if (!_canAccessMenu(_selectedMenu, session.role)) {</code> | Erişimsiz menü seçiliyse sessizce dashboard'a çevrilir (öğeye dokunup panele düşme nedeni) |
-| [lib/ui/pages/home_page.dart:672](../../lib/ui/pages/home_page.dart#L672) | <code>if (item == SirketMenuItem.katilimVeKurulum) {</code> | "Daireye Katıl & Cihaz Ekle" tüm rollere açıktır (rol anahtarından önce) |
-| [lib/ui/pages/home_page.dart:880](../../lib/ui/pages/home_page.dart#L880) | <code>void _selectMenu(SirketMenuItem item) {</code> | Menü seçimi: öğe tipine göre ilgili listeyi force ile yeniden yükler |
-| [lib/ui/pages/home_page.dart:724](../../lib/ui/pages/home_page.dart#L724) | <code>String _titleForMenu(SirketMenuItem item) {</code> | AppBar başlığı çekmecedeki başlıktan ayrı tutulur (AppBar başlığı menü öğesinin etiketiyle birebir aynı olmak zorunda değildir) |
+| [lib/ui/widgets/yan_menu.dart:667](../../lib/ui/widgets/yan_menu.dart#L667) | <code>List&lt;SirketMenuItem&gt; _itemsForRole(</code> | Çekmecede GÖRÜNEN öğeler (rol + sakin modu + çift mod) burada listelenir |
+| [lib/ui/pages/home_page.dart:1603](../../lib/ui/pages/home_page.dart#L1603) | <code>bool _canAccessMenu(SirketMenuItem item, UserRole role) {</code> | Seçili menüye ERİŞİM kuralı; çekmece listesinden ayrı yazılmıştır |
+| [lib/ui/pages/home_page.dart:5856](../../lib/ui/pages/home_page.dart#L5856) | <code>if (!_canAccessMenu(_selectedMenu, session.role)) {</code> | Erişimsiz menü seçiliyse sessizce dashboard'a çevrilir (öğeye dokunup panele düşme nedeni) |
+| [lib/ui/pages/home_page.dart:1608](../../lib/ui/pages/home_page.dart#L1608) | <code>if (item == SirketMenuItem.katilimVeKurulum) {</code> | "Daireye Katıl & Cihaz Ekle" tüm rollere açıktır (rol anahtarından önce) |
+| [lib/ui/pages/home_page.dart:2071](../../lib/ui/pages/home_page.dart#L2071) | <code>void _selectMenu(SirketMenuItem item) {</code> | Menü seçimi: öğe tipine göre ilgili listeyi force ile yeniden yükler |
+| [lib/ui/pages/home_page.dart:1735](../../lib/ui/pages/home_page.dart#L1735) | <code>String _titleForMenu(SirketMenuItem item) {</code> | AppBar başlığı çekmecedeki başlıktan ayrı tutulur (AppBar başlığı menü öğesinin etiketiyle birebir aynı olmak zorunda değildir) |
 | [lib/menu.dart:1](../../lib/menu.dart#L1) | <code>export 'package:site_kapi_kontrol/ui/widgets/yan_menu.dart';</code> | Eski içe aktarma yolu; menü tanımı yalnız yan_menu.dart'ta |
 
 **Olası nedenler**
@@ -207,10 +207,10 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/screens/home_shell
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/ui/pages/home_page.dart:685](../../lib/ui/pages/home_page.dart#L685) | <code>return item != SirketMenuItem.abonelikTalepleri &amp;&amp;</code> | Süper kullanıcı için abonelikTalepleri, siteOnayTalepleri ve ellerSerbest erişimi bilerek kapalı |
-| [lib/ui/widgets/yan_menu.dart:389](../../lib/ui/widgets/yan_menu.dart#L389) | <code>case UserRole.superUser:</code> | Süper kullanıcı çekmece listesinde abonelik/site onay öğeleri YOK (enum'da var, listede yok) |
-| [lib/ui/pages/home_page.dart:4754](../../lib/ui/pages/home_page.dart#L4754) | <code>return SubscriptionRequestsView(</code> | Görünüm kodda duruyor ama erişim kapalı olduğundan menüden açılamaz |
-| [lib/ui/pages/home_page.dart:4786](../../lib/ui/pages/home_page.dart#L4786) | <code>return PendingSiteApprovalsView(</code> | Site onay talepleri görünümü de aynı durumda |
+| [lib/ui/pages/home_page.dart:1696](../../lib/ui/pages/home_page.dart#L1696) | <code>return item != SirketMenuItem.abonelikTalepleri &amp;&amp;</code> | Süper kullanıcı için abonelikTalepleri, siteOnayTalepleri ve ellerSerbest erişimi bilerek kapalı |
+| [lib/ui/widgets/yan_menu.dart:683](../../lib/ui/widgets/yan_menu.dart#L683) | <code>case UserRole.superUser:</code> | Süper kullanıcı çekmece listesinde abonelik/site onay öğeleri YOK (enum'da var, listede yok) |
+| [lib/ui/pages/home_page.dart:6525](../../lib/ui/pages/home_page.dart#L6525) | <code>return SubscriptionRequestsView(</code> | Görünüm kodda duruyor ama erişim kapalı olduğundan menüden açılamaz |
+| [lib/ui/pages/home_page.dart:6557](../../lib/ui/pages/home_page.dart#L6557) | <code>return PendingSiteApprovalsView(</code> | Site onay talepleri görünümü de aynı durumda |
 | [lib/ui/views/subscription_requests_view.dart:11](../../lib/ui/views/subscription_requests_view.dart#L11) | <code>class SubscriptionRequestsView extends StatelessWidget {</code> | Talep listesi, onay/ret düğmeleri ve sayfalama |
 | [lib/ui/views/pending_site_approvals_view.dart:11](../../lib/ui/views/pending_site_approvals_view.dart#L11) | <code>class PendingSiteApprovalsView extends StatelessWidget {</code> | Bekleyen site onayları listesi |
 
@@ -235,8 +235,8 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/screens/home_shell
 | [lib/ui/widgets/admin_door_status_card.dart:244](../../lib/ui/widgets/admin_door_status_card.dart#L244) | <code>final commandEnabled = isDeviceAssigned &amp;&amp;</code> | Düğmenin etkin olma koşulu: cihaz atanmış + bulut/yerel çevrimiçi + komut sürmüyor + durum yüklenmiyor |
 | [lib/ui/widgets/admin_door_status_card.dart:221](../../lib/ui/widgets/admin_door_status_card.dart#L221) | <code>final isLocalOnline = !isCloudOnline &amp;&amp; widget.canTryLocalDoorOpen;</code> | Yerel ağ yolu: bulut çevrimdışıyken yalnız canTryLocalDoorOpen true ise etkin |
 | [lib/ui/widgets/admin_door_status_card.dart:386](../../lib/ui/widgets/admin_door_status_card.dart#L386) | <code>key: const ValueKey&lt;String&gt;('admin_door_open_button'),</code> | Tek DoorOpenButton; etkin değilse DoorOpenState.disabled (dokunma hiçbir şey yapmaz) |
-| [lib/ui/pages/home_page.dart:806](../../lib/ui/pages/home_page.dart#L806) | <code>bool get _canTryLocalDoorOpenNow =&gt;</code> | Yerel açma bayrağı: cihaz yerelde görünüyor + kapı politikası + geçerli token (üçü birden) |
-| [lib/ui/pages/home_page.dart:1475](../../lib/ui/pages/home_page.dart#L1475) | <code>Future&lt;void&gt; _openDoor() async {</code> | Düğme tıklanınca çağrılan akış: authService.openDoor, sonra mesaj ve durum güncelleme |
+| [lib/ui/pages/home_page.dart:1875](../../lib/ui/pages/home_page.dart#L1875) | <code>bool get _canTryLocalDoorOpenNow =&gt;</code> | Yerel açma bayrağı: cihaz yerelde görünüyor + kapı politikası + geçerli token (üçü birden) |
+| [lib/ui/pages/home_page.dart:2698](../../lib/ui/pages/home_page.dart#L2698) | <code>Future&lt;void&gt; _openDoor() async {</code> | Düğme tıklanınca çağrılan akış: authService.openDoor, sonra mesaj ve durum güncelleme |
 | [lib/ui/design/door_open_button.dart:29](../../lib/ui/design/door_open_button.dart#L29) | <code>enum DoorOpenState {</code> | ready / opening / offline / disabled anlamları; yalnız ready ve offline dokunmaya yanıt verir |
 
 **Olası nedenler**
@@ -289,13 +289,13 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/screens/home_shell
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/ui/pages/home_page.dart:198](../../lib/ui/pages/home_page.dart#L198) | <code>late final AdaptivePoller _statusPoller = AdaptivePoller(</code> | 3 sn'lik kapı durumu yoklaması; ardışık hatada üstel geri çekilir (tavan 30 sn) |
-| [lib/ui/pages/home_page.dart:453](../../lib/ui/pages/home_page.dart#L453) | <code>bool _isStatusPollingActive() {</code> | Yoklamanın çalışma koşulları: kapı seçili, komut sürmüyor, ön planda, sayfa opak sayfanın altında değil, panel görünür |
-| [lib/ui/pages/home_page.dart:1368](../../lib/ui/pages/home_page.dart#L1368) | <code>Future&lt;bool?&gt; _loadDoorRuntimeStatus(</code> | Durum + yerel Wi-Fi erişimi + hata gizleme mantığı tek yerde |
-| [lib/ui/pages/home_page.dart:1462](../../lib/ui/pages/home_page.dart#L1462) | <code>void _updateDoorPanel(VoidCallback mutate, {required bool scoped}) {</code> | Arka plan yoklaması sonucu yalnız kapı panelini yeniden kurar; sonuç aynıysa hiçbir şey kurmaz |
-| [lib/ui/pages/home_page.dart:4818](../../lib/ui/pages/home_page.dart#L4818) | <code>class _DoorPanelSnapshot {</code> | Ekrandaki değerlerin anlık görüntüsü; panelde görünen yeni bir alan buraya EKLENMEZSE değişikliği yeniden çizim tetiklemez |
-| [lib/ui/pages/home_page.dart:4211](../../lib/ui/pages/home_page.dart#L4211) | <code>child: ValueListenableBuilder&lt;int&gt;(</code> | Yoklamanın tetiklediği tek dinleyici (Scaffold/AppBar yeniden kurulmaz) |
-| [lib/ui/pages/home_page.dart:422](../../lib/ui/pages/home_page.dart#L422) | <code>void didChangeAppLifecycleState(AppLifecycleState state) {</code> | Arka plana alınınca yoklama durur; ön plana dönünce hemen yenilenir ve oturum /me ile eşitlenir |
+| [lib/ui/pages/home_page.dart:325](../../lib/ui/pages/home_page.dart#L325) | <code>late final AdaptivePoller _statusPoller = AdaptivePoller(</code> | 3 sn'lik kapı durumu yoklaması; ardışık hatada üstel geri çekilir (tavan 30 sn) |
+| [lib/ui/pages/home_page.dart:649](../../lib/ui/pages/home_page.dart#L649) | <code>bool _isStatusPollingActive() {</code> | Yoklamanın çalışma koşulları: kapı seçili, komut sürmüyor, ön planda, sayfa opak sayfanın altında değil, panel görünür |
+| [lib/ui/pages/home_page.dart:2591](../../lib/ui/pages/home_page.dart#L2591) | <code>Future&lt;bool?&gt; _loadDoorRuntimeStatus(</code> | Durum + yerel Wi-Fi erişimi + hata gizleme mantığı tek yerde |
+| [lib/ui/pages/home_page.dart:2685](../../lib/ui/pages/home_page.dart#L2685) | <code>void _updateDoorPanel(VoidCallback mutate, {required bool scoped}) {</code> | Arka plan yoklaması sonucu yalnız kapı panelini yeniden kurar; sonuç aynıysa hiçbir şey kurmaz |
+| [lib/ui/pages/home_page.dart:6589](../../lib/ui/pages/home_page.dart#L6589) | <code>class _DoorPanelSnapshot {</code> | Ekrandaki değerlerin anlık görüntüsü; panelde görünen yeni bir alan buraya EKLENMEZSE değişikliği yeniden çizim tetiklemez |
+| [lib/ui/pages/home_page.dart:5654](../../lib/ui/pages/home_page.dart#L5654) | <code>child: ValueListenableBuilder&lt;int&gt;(</code> | Yoklamanın tetiklediği tek dinleyici (Scaffold/AppBar yeniden kurulmaz) |
+| [lib/ui/pages/home_page.dart:608](../../lib/ui/pages/home_page.dart#L608) | <code>void didChangeAppLifecycleState(AppLifecycleState state) {</code> | Arka plana alınınca yoklama durur; ön plana dönünce hemen yenilenir ve oturum /me ile eşitlenir |
 
 **Olası nedenler**
 - Başka menüde (Profilim, Siteler...) ya da bireysel ana ekranda yoklama bilerek yapılmaz; panele dönünce sürer
@@ -324,11 +324,11 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/home_polling_test.
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/ui/pages/home_page.dart:1500](../../lib/ui/pages/home_page.dart#L1500) | <code>if (error == null) _doorOpenOkTick++;</code> | Komut hatasız bitince sayaç artar; DoorOpenButton bu artışı başarı sinyali sayar |
-| [lib/ui/pages/home_page.dart:1483](../../lib/ui/pages/home_page.dart#L1483) | <code>setState(() =&gt; _isOpeningDoor = true);</code> | `_isOpeningDoor` true iken düğme "opening" (spinner) ve yoklama durur |
+| [lib/ui/pages/home_page.dart:2723](../../lib/ui/pages/home_page.dart#L2723) | <code>if (error == null) _doorOpenOkTick++;</code> | Komut hatasız bitince sayaç artar; DoorOpenButton bu artışı başarı sinyali sayar |
+| [lib/ui/pages/home_page.dart:2706](../../lib/ui/pages/home_page.dart#L2706) | <code>setState(() =&gt; _isOpeningDoor = true);</code> | `_isOpeningDoor` true iken düğme "opening" (spinner) ve yoklama durur |
 | [lib/ui/design/door_open_button.dart:261](../../lib/ui/design/door_open_button.dart#L261) | <code>void didUpdateWidget(DoorOpenButton oldWidget) {</code> | successTick değişimi ya da opening bitişi ile başarı gösterimi başlar; ilk kurulumdaki değer sinyal sayılmaz |
 | [lib/ui/design/door_open_button.dart:154](../../lib/ui/design/door_open_button.dart#L154) | <code>static const Duration doneHold = Duration(milliseconds: 1400);</code> | Başarı tiki 1,4 sn kalır ve eski görünüme döner |
-| [lib/ui/views/individual_home_view.dart:244](../../lib/ui/views/individual_home_view.dart#L244) | <code>_doorOpenTicks[door.id] = (_doorOpenTicks[door.id] ?? 0) + 1;</code> | Bireysel görünümde kapı başına ayrı sayaç |
+| [lib/ui/views/individual_home_view.dart:275](../../lib/ui/views/individual_home_view.dart#L275) | <code>_doorOpenTicks[door.id] = (_doorOpenTicks[door.id] ?? 0) + 1;</code> | Bireysel görünümde kapı başına ayrı sayaç |
 
 **Olası nedenler**
 - Komut hata döndü (`error != null`): sayaç artmaz, tik gösterilmez; hata snackbar'ı çıkar
@@ -346,16 +346,16 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/home_polling_test.
 **Bkz.:** [ui-kapi-ac-yonetici](#ui-kapi-ac-yonetici), [ui-kapi-ac-sakin](#ui-kapi-ac-sakin)
 
 <a id="ui-bireysel-ana-ekran-kapilar"></a>
-### ui-bireysel-ana-ekran-kapilar · Bireysel/sakin ana ekranında kapı çevrimdışı görünüyor, liste kendiliğinden yenilenmiyor ya da "çevrimdışı" uyarısı çıkıyor
+### ui-bireysel-ana-ekran-kapilar · Bireysel/sakin ana ekranında ("Kapılar" sayfası) kapı çevrimdışı görünüyor, liste kendiliğinden yenilenmiyor ya da "çevrimdışı" uyarısı çıkıyor
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/ui/views/individual_home_view.dart:62](../../lib/ui/views/individual_home_view.dart#L62) | <code>late final AdaptivePoller _doorsPoller = AdaptivePoller(</code> | Kapı listesi her 15 sn yoklanır (kural 7: uygulamayı kapatıp açmadan güncel kalır) |
-| [lib/ui/views/individual_home_view.dart:133](../../lib/ui/views/individual_home_view.dart#L133) | <code>Future&lt;DoorRecord?&gt; _requireOnlineDoor(DoorRecord door) async {</code> | Önbellekte çevrimdışı görünen kapı için liste bir kez tazelenir; hâlâ çevrimdışıysa uyarı çıkar ve işlem yapılmaz |
-| [lib/ui/views/individual_home_view.dart:197](../../lib/ui/views/individual_home_view.dart#L197) | <code>Future&lt;bool&gt; _loadDoors() async {</code> | Liste değişmediyse yeniden kurulmaz (`_sameDoors`), değiştiyse setState |
-| [lib/ui/views/individual_home_view.dart:147](../../lib/ui/views/individual_home_view.dart#L147) | <code>Future&lt;void&gt; loadAll() async {</code> | Kapılar, cihazlar, başvurular ve daireler birlikte yeniden çekilir (HomePage global yenileme bunu çağırır) |
-| [lib/ui/pages/home_page.dart:464](../../lib/ui/pages/home_page.dart#L464) | <code>bool _showsIndividualHome(UserSession session) {</code> | Bu görünümün ne zaman gösterildiğini belirler (bireysel, sakin modu, kapısız yönetici) |
-| [lib/ui/pages/home_page.dart:3861](../../lib/ui/pages/home_page.dart#L3861) | <code>await _individualHomeKey.currentState?.loadAll();</code> | AppBar yenile / aşağı çekme bireysel görünümü de tazeler |
+| [lib/ui/views/individual_home_view.dart:77](../../lib/ui/views/individual_home_view.dart#L77) | <code>late final AdaptivePoller _doorsPoller = AdaptivePoller(</code> | Kapı listesi her 15 sn yoklanır (kural 7: uygulamayı kapatıp açmadan güncel kalır) |
+| [lib/ui/views/individual_home_view.dart:164](../../lib/ui/views/individual_home_view.dart#L164) | <code>Future&lt;DoorRecord?&gt; _requireOnlineDoor(DoorRecord door) async {</code> | Önbellekte çevrimdışı görünen kapı için liste bir kez tazelenir; hâlâ çevrimdışıysa uyarı çıkar ve işlem yapılmaz |
+| [lib/ui/views/individual_home_view.dart:228](../../lib/ui/views/individual_home_view.dart#L228) | <code>Future&lt;bool&gt; _loadDoors() async {</code> | Liste değişmediyse yeniden kurulmaz (`_sameDoors`), değiştiyse setState |
+| [lib/ui/views/individual_home_view.dart:178](../../lib/ui/views/individual_home_view.dart#L178) | <code>Future&lt;void&gt; loadAll() async {</code> | Kapılar, cihazlar, başvurular ve daireler birlikte yeniden çekilir (HomePage global yenileme bunu çağırır) |
+| [lib/ui/pages/home_page.dart:660](../../lib/ui/pages/home_page.dart#L660) | <code>bool _showsIndividualHome(UserSession session) {</code> | Bu görünümün ne zaman gösterildiğini belirler (bireysel, sakin modu, kapısız yönetici); görünüm "Kapılar" sayfasındadır (Panel artık modül vitrini; Geçiş Kontrol kapalıysa bölümler vitrinin altında) |
+| [lib/ui/pages/home_page.dart:5199](../../lib/ui/pages/home_page.dart#L5199) | <code>await _individualHomeKey.currentState?.loadAll();</code> | Kapılar sayfasında AppBar Yenile / aşağı çekme bireysel görünümü de tazeler (Panel dalında da aynı çağrı vardır) |
 
 **Olası nedenler**
 - Kapı kaydındaki `assignedDeviceIsOnline` bayat: 15 sn aralıkla yenilenir; arka planda yoklama durur ve ön plana dönünce hemen yenilenir
@@ -467,7 +467,7 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/qr_modal_polling_t
 | --- | --- | --- |
 | [lib/ui/widgets/resident_door_actions.dart:41](../../lib/ui/widgets/resident_door_actions.dart#L41) | <code>static Future&lt;void&gt; showQrPass(</code> | QR açmadan önce çevrimiçi kontrolü ve (gerekliyse) geofence doğrulaması; sakin kartı ve çekmece ("Kapıya QR Göster") bunu çağırır |
 | [lib/ui/widgets/resident_door_actions.dart:53](../../lib/ui/widgets/resident_door_actions.dart#L53) | <code>if (door.requireGeofence) {</code> | requireGeofence true ise verifyWithinGeofence çağrılır; izin verilmezse "Konum Hatası" diyaloğu |
-| [lib/ui/views/individual_home_view.dart:259](../../lib/ui/views/individual_home_view.dart#L259) | <code>Future&lt;void&gt; _openQrModal(DoorRecord requestedDoor) async {</code> | Bireysel görünümde aynı doğrulama; QR penceresi alt sayfa (bottom sheet) olarak açılır |
+| [lib/ui/views/individual_home_view.dart:290](../../lib/ui/views/individual_home_view.dart#L290) | <code>Future&lt;void&gt; _openQrModal(DoorRecord requestedDoor) async {</code> | Bireysel görünümde aynı doğrulama; QR penceresi alt sayfa (bottom sheet) olarak açılır |
 | [lib/ui/widgets/dynamic_qr_pass_modal.dart:439](../../lib/ui/widgets/dynamic_qr_pass_modal.dart#L439) | <code>if (widget.door.requireGeofence) {</code> | Token istemeden önce doğrulanmış konum alınır; alınamazsa pencere hata metnini gösterir |
 | [lib/ui/widgets/dynamic_qr_pass_modal.dart:707](../../lib/ui/widgets/dynamic_qr_pass_modal.dart#L707) | <code>label: 'Konum Korumalı (~${door.geofenceRadiusMeters}m)',</code> | Konum korumalı kapıda pencerede bilgi rozeti |
 
@@ -495,7 +495,7 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/qr_modal_polling_t
 | [lib/ui/widgets/resident_door_actions.dart:98](../../lib/ui/widgets/resident_door_actions.dart#L98) | <code>static Future&lt;void&gt; scanScreenQr(</code> | Çevrimiçi kontrolü, QR tarama sayfası, sonra sunucuya karekod gönderimi |
 | [lib/ui/widgets/resident_door_actions.dart:148](../../lib/ui/widgets/resident_door_actions.dart#L148) | <code>final (result, error) = await aService.openDoorWithScannedQr(</code> | Konum zorunluysa (requiresLocationForQrScan) AuthService konumu alır; reddedilirse nedeni diyalogda çıkar |
 | [lib/ui/widgets/resident_door_actions.dart:159](../../lib/ui/widgets/resident_door_actions.dart#L159) | <code>title: 'Geçiş Reddedildi',</code> | Sunucu retleri bu diyalogda tam metinle gösterilir |
-| [lib/ui/views/individual_home_view.dart:312](../../lib/ui/views/individual_home_view.dart#L312) | <code>Future&lt;void&gt; _handleScanScreenQr(DoorRecord requestedDoor) async {</code> | Bireysel görünümdeki aynı akış (başarıda loadAll + onRefreshAll ile liste tazelenir) |
+| [lib/ui/views/individual_home_view.dart:343](../../lib/ui/views/individual_home_view.dart#L343) | <code>Future&lt;void&gt; _handleScanScreenQr(DoorRecord requestedDoor) async {</code> | Bireysel görünümdeki aynı akış (başarıda loadAll + onRefreshAll ile liste tazelenir) |
 
 **Olası nedenler**
 - Kapıdaki cihaz ekranlı değil (C3): `hasDisplay` false olduğundan düğme çizilmez
@@ -546,7 +546,7 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/qr_modal_polling_t
 | --- | --- | --- |
 | [lib/ui/widgets/admin_door_status_card.dart:405](../../lib/ui/widgets/admin_door_status_card.dart#L405) | <code>if (door.canCreateGuestPass)</code> | Yönetici kartında yalnız site misafir geçişini kapatmadıysa gösterilir |
 | [lib/ui/widgets/resident_door_remote_card.dart:408](../../lib/ui/widgets/resident_door_remote_card.dart#L408) | <code>if (door?.canCreateGuestPass == true) ...[</code> | Sakin kartında aynı kural |
-| [lib/ui/pages/home_page.dart:4331](../../lib/ui/pages/home_page.dart#L4331) | <code>onCreateGuestPass: () {</code> | Panel düğmesi: seçili kapı yoksa hiçbir şey yapmaz |
+| [lib/ui/pages/home_page.dart:5927](../../lib/ui/pages/home_page.dart#L5927) | <code>onCreateGuestPass: () {</code> | Panel düğmesi: seçili kapı yoksa hiçbir şey yapmaz |
 | [lib/ui/dialogs/create_guest_pass_dialog.dart:120](../../lib/ui/dialogs/create_guest_pass_dialog.dart#L120) | <code>final (passType, durationMinutes, maxUses) = switch (_selectedPreset) {</code> | Ön ayarlar: tek kullanımlık 30 dk (1), 2 saat (5 kullanım), 12 saat (10 kullanım) |
 | [lib/ui/dialogs/create_guest_pass_dialog.dart:67](../../lib/ui/dialogs/create_guest_pass_dialog.dart#L67) | <code>await SharePlus.instance.share(</code> | Paylaşım başarısızsa mesaj panoya kopyalanır (yedek akış) |
 | [lib/ui/dialogs/create_guest_pass_dialog.dart:54](../../lib/ui/dialogs/create_guest_pass_dialog.dart#L54) | <code>Clipboard.setData(ClipboardData(text: pass.webUrl));</code> | "Linki Kopyala" düğmesi |
@@ -597,12 +597,12 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/qr_modal_polling_t
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/ui/pages/home_page.dart:2928](../../lib/ui/pages/home_page.dart#L2928) | <code>Future&lt;void&gt; _openClaimDeviceFlow() async {</code> | Sahiplenme sonrası cihaz listesi + kapı paneli yenilenir; hiç site yoksa SetupSiteDialog açılır |
-| [lib/ui/pages/home_page.dart:2934](../../lib/ui/pages/home_page.dart#L2934) | <code>final hasSites = _doorControlSitesPage?.sites.isNotEmpty ?? false;</code> | Sihirbaz yalnız yönettiği site olmayan kullanıcıya açılır |
-| [lib/ui/pages/home_page.dart:3052](../../lib/ui/pages/home_page.dart#L3052) | <code>_showMessage('Cihaz başarıyla kaydedildi.');</code> | Süper kullanıcı/yönetici elle kayıt: cihaz, site ve panel listeleri yeniden yüklenir |
-| [lib/ui/views/individual_home_view.dart:435](../../lib/ui/views/individual_home_view.dart#L435) | <code>Future&lt;void&gt; _openClaimDialog() async {</code> | Bireysel görünümde sahiplenme sonrası loadAll + onRefreshAll, ardından kurulum sihirbazı |
-| [lib/ui/views/individual_home_view.dart:459](../../lib/ui/views/individual_home_view.dart#L459) | <code>Future&lt;void&gt; _openSetupSite([String? uid]) async {</code> | Kurulum başarılıysa onRefreshAll (HomePage `_loadInitialData`) çağrılır |
-| [lib/ui/views/join_and_setup_view.dart:155](../../lib/ui/views/join_and_setup_view.dart#L155) | <code>widget.onOpenClaimDevice();</code> | Katıl & Cihaz Ekle ekranında akış HomePage'e devredilir, ardından başvurular yeniden yüklenir |
+| [lib/ui/pages/home_page.dart:4173](../../lib/ui/pages/home_page.dart#L4173) | <code>Future&lt;void&gt; _openClaimDeviceFlow() async {</code> | Sahiplenme sonrası cihaz listesi + kapı paneli yenilenir; hiç site yoksa SetupSiteDialog açılır |
+| [lib/ui/pages/home_page.dart:4190](../../lib/ui/pages/home_page.dart#L4190) | <code>final hasSites = _doorControlSitesPage?.sites.isNotEmpty ?? false;</code> | Sihirbaz yalnız yönettiği site olmayan kullanıcıya açılır |
+| [lib/ui/pages/home_page.dart:4376](../../lib/ui/pages/home_page.dart#L4376) | <code>_showMessage('Cihaz başarıyla kaydedildi.');</code> | Süper kullanıcı/yönetici elle kayıt: cihaz, site ve panel listeleri yeniden yüklenir |
+| [lib/ui/views/individual_home_view.dart:466](../../lib/ui/views/individual_home_view.dart#L466) | <code>Future&lt;void&gt; _openClaimDialog() async {</code> | Bireysel görünümde sahiplenme sonrası loadAll + onRefreshAll, ardından kurulum sihirbazı |
+| [lib/ui/views/individual_home_view.dart:509](../../lib/ui/views/individual_home_view.dart#L509) | <code>Future&lt;void&gt; _openSetupSite([String? uid]) async {</code> | Kurulum başarılıysa onRefreshAll (HomePage `_loadInitialData`) çağrılır |
+| [lib/ui/views/join_and_setup_view.dart:54](../../lib/ui/views/join_and_setup_view.dart#L54) | <code>widget.onOpenClaimDevice();</code> | Katıl & Cihaz Ekle ekranında akış HomePage'e devredilir, ardından başvurular yeniden yüklenir |
 
 **Olası nedenler**
 - Yeni bir diyalog akışı eklendi ama sonunda ilgili yükleyici (`_loadCompanyDevices`, `_loadSites`, `_loadDoorControlSites`) çağrılmadı (AGENTS.md kural 7)
@@ -620,19 +620,22 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/qr_modal_polling_t
 **Bkz.:** [ui-cihaz-sahiplen](#ui-cihaz-sahiplen), [ui-kurulum-sihirbazi](#ui-kurulum-sihirbazi), [ui-cihaz-envanteri](#ui-cihaz-envanteri)
 
 <a id="ui-kurulum-sihirbazi"></a>
-### ui-kurulum-sihirbazi · "Site Kurulum Sihirbazı" penceresinde blok/kapı eklerken ya da kaydederken hata alınıyor
+### ui-kurulum-sihirbazi · "Site Kurulum Sihirbazı" (ya da site başvurusu) penceresinde blok/kapı eklerken ya da kaydederken hata alınıyor
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/ui/dialogs/setup_site_dialog.dart:162](../../lib/ui/dialogs/setup_site_dialog.dart#L162) | <code>Future&lt;void&gt; _submit() async {</code> | Doğrulama, blok/kapı yüklerini hazırlar ve authService.setupSite çağırır |
-| [lib/ui/dialogs/setup_site_dialog.dart:120](../../lib/ui/dialogs/setup_site_dialog.dart#L120) | <code>void _addBlock() {</code> | Yeni blok adı mevcutlarla çakışmayacak ilk "<harf> Blok" olarak seçilir (sunucu yinelenen adı 400 ile reddeder) |
-| [lib/ui/dialogs/setup_site_dialog.dart:191](../../lib/ui/dialogs/setup_site_dialog.dart#L191) | <code>await widget.authService.setupSite(</code> | Sunucu çağrısı; ApiException mesajı `_errorMessage` ile diyalogda gösterilir |
-| [lib/ui/dialogs/setup_site_dialog.dart:214](../../lib/ui/dialogs/setup_site_dialog.dart#L214) | <code>_errorMessage = 'Site kurulumu sırasında bir hata oluştu.';</code> | ApiException dışı hata genel metne düşer |
-| [lib/ui/dialogs/setup_site_dialog.dart:95](../../lib/ui/dialogs/setup_site_dialog.dart#L95) | <code>_blocks.add(_BlockDraft(name: 'A Blok', apartmentCount: 10));</code> | Başlangıç değeri 1 blok x 10 daire, 1 kapı |
+| [lib/ui/dialogs/setup_site_dialog.dart:439](../../lib/ui/dialogs/setup_site_dialog.dart#L439) | <code>Future&lt;void&gt; _submit() async {</code> | Doğrulama, blok/kapı yüklerini hazırlar; anlık kipte authService.setupSite, başvuru kipinde createSiteApplication çağırır |
+| [lib/ui/dialogs/setup_site_dialog.dart:373](../../lib/ui/dialogs/setup_site_dialog.dart#L373) | <code>void _addBlock() {</code> | Yeni blok adı mevcutlarla çakışmayacak ilk "<harf> Blok" olarak seçilir (sunucu yinelenen adı 400 ile reddeder) |
+| [lib/ui/dialogs/setup_site_dialog.dart:431](../../lib/ui/dialogs/setup_site_dialog.dart#L431) | <code>String? _validateApartmentCount(String? value) {</code> | Daire sayısı 1 ile 5000 arasında olmalı; geçersizse alan altında uyarı çıkar ve gönderim yapılmaz |
+| [lib/ui/dialogs/setup_site_dialog.dart:512](../../lib/ui/dialogs/setup_site_dialog.dart#L512) | <code>await widget.authService.setupSite(</code> | Sunucu çağrısı; ApiException mesajı `_error` ile diyalogda gösterilir |
+| [lib/ui/dialogs/setup_site_dialog.dart:544](../../lib/ui/dialogs/setup_site_dialog.dart#L544) | <code>final switchToApplication = !_isApplication &amp;&amp; e.code == 'APPLICATION_REQUIRED';</code> | Anlık kurulum kapalıysa (409 APPLICATION_REQUIRED) pencere başvuru kipine geçer, girilen bilgiler korunur |
+| [lib/ui/dialogs/setup_site_dialog.dart:590](../../lib/ui/dialogs/setup_site_dialog.dart#L590) | <code>: 'Site kurulumu sırasında bir hata oluştu.';</code> | ApiException dışı hata genel metne düşer (başvuru kipinde "Başvuru gönderilemedi. ...") |
+| [lib/ui/dialogs/setup_site_dialog.dart:276](../../lib/ui/dialogs/setup_site_dialog.dart#L276) | <code>if (_blocks.isEmpty) _blocks.add(_BlockDraft(name: 'A Blok', apartmentCount: 10));</code> | Başlangıç değeri 1 blok x 10 daire, 1 kapı |
 
 **Olası nedenler**
 - Aynı blok adı iki kez girildi: sunucu reddeder
-- Daire sayısı boş/geçersiz: gönderimde 10'a düşer, 1'den küçükse 1 yapılır (sessiz varsayılan)
+- Daire sayısı boş ya da 1-5000 dışında ("Daire sayısı 1 ile 5000 arasında olmalı.") ya da toplam daire 5000'i aşıyor ("Toplam daire sayısı en fazla 5000 olabilir."): gönderim yapılmaz
+- Hesap anında site kuramıyor (sunucu 409 APPLICATION_REQUIRED): pencere "Site eklemek için başvuru yapmanız gerekiyor..." deyip başvuru kipine geçer; "Başvuruyu Gönder" ile devam edilir
 - Pencere bir cihaz UID değeriyle açıldıysa (`deviceUid`) bu değer kuruluma iletilir; cihazla ilgili ret sunucudan hata metniyle gelir (sunucu bölümüne bakın)
 
 **Adım adım kontrol**
@@ -648,8 +651,8 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/qr_modal_polling_t
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/ui/pages/home_page.dart:2825](../../lib/ui/pages/home_page.dart#L2825) | <code>Future&lt;void&gt; _assignDoorDevice(DoorRecord door) async {</code> | Atama/çıkarma sonucu burada işlenir ve site yapısı, kapı paneli, cihaz envanteri yeniden yüklenir |
-| [lib/ui/pages/home_page.dart:2836](../../lib/ui/pages/home_page.dart#L2836) | <code>await widget.authService.unassignDoorDevice(doorId: door.id);</code> | Çıkarma ucu; hata metni "Cihaz kapıdan çıkarılamadı: ..." snackbar'ı |
+| [lib/ui/pages/home_page.dart:4070](../../lib/ui/pages/home_page.dart#L4070) | <code>Future&lt;void&gt; _assignDoorDevice(DoorRecord door) async {</code> | Atama/çıkarma sonucu burada işlenir ve site yapısı, kapı paneli, cihaz envanteri yeniden yüklenir |
+| [lib/ui/pages/home_page.dart:4081](../../lib/ui/pages/home_page.dart#L4081) | <code>await widget.authService.unassignDoorDevice(doorId: door.id);</code> | Çıkarma ucu; hata metni "Cihaz kapıdan çıkarılamadı: ..." snackbar'ı |
 | [lib/ui/dialogs/door_device_dialog.dart:272](../../lib/ui/dialogs/door_device_dialog.dart#L272) | <code>validator: (value) =&gt; (value ?? '').trim().length &lt; 6</code> | UID en az 6 karakter; sonuç büyük harfe çevrilerek döner |
 | [lib/ui/dialogs/door_device_dialog.dart:284](../../lib/ui/dialogs/door_device_dialog.dart#L284) | <code>final success = await ReplaceDeviceDialog.show(</code> | Pencereden "Arızalı Cihazı Değiştir" akışı; başarıda atama penceresi de kapanır |
 | [lib/ui/dialogs/door_device_dialog.dart:322](../../lib/ui/dialogs/door_device_dialog.dart#L322) | <code>class DeviceDoorAssignDialog extends StatefulWidget {</code> | Cihaz envanterinden "Kapıya Ata": site seç > kapı seç; site yoksa Ata düğmesi kapalı |
@@ -678,7 +681,7 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/qr_modal_polling_t
 | [lib/ui/dialogs/replace_device_dialog.dart:116](../../lib/ui/dialogs/replace_device_dialog.dart#L116) | <code>final res = await widget.authService.replaceDoorDevice(</code> | Yeni cihazın QR/seri no'su ile kapıdaki cihaz değiştirilir (yetkiler ve ayarlar sunucuda korunur) |
 | [lib/ui/dialogs/replace_device_dialog.dart:72](../../lib/ui/dialogs/replace_device_dialog.dart#L72) | <code>return uid != currentUid;</code> | Kapıdaki mevcut cihaz atanabilir listeden çıkarılır |
 | [lib/ui/dialogs/replace_device_dialog.dart:32](../../lib/ui/dialogs/replace_device_dialog.dart#L32) | <code>barrierDismissible: false,</code> | Dışarı dokunarak kapatılamaz; "Vazgeç" düğmesi gerekir |
-| [lib/ui/pages/home_page.dart:2958](../../lib/ui/pages/home_page.dart#L2958) | <code>Future&lt;void&gt; _openReplaceDeviceDialog(DoorRecord door) async {</code> | Başarıda site yapısı, kapı paneli ve cihaz envanteri yenilenir |
+| [lib/ui/pages/home_page.dart:4282](../../lib/ui/pages/home_page.dart#L4282) | <code>Future&lt;void&gt; _openReplaceDeviceDialog(DoorRecord door) async {</code> | Başarıda site yapısı, kapı paneli ve cihaz envanteri yenilenir |
 | [lib/ui/widgets/door_card.dart:224](../../lib/ui/widgets/door_card.dart#L224) | <code>const Flexible(child: Text('Arızalı Cihazı Değiştir')),</code> | Menü öğesi yalnız kapıda cihaz varsa ve `onReplaceDevice` verilmişse görünür |
 
 **Olası nedenler**
@@ -699,9 +702,9 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/qr_modal_polling_t
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/ui/pages/home_page.dart:2868](../../lib/ui/pages/home_page.dart#L2868) | <code>Future&lt;void&gt; _openDoorDialog({DoorRecord? door}) async {</code> | Atanabilir cihazlar çekilir, DoorEditDialog açılır, başarıda site yapısı ve panel yenilenir |
-| [lib/ui/pages/home_page.dart:2887](../../lib/ui/pages/home_page.dart#L2887) | <code>_showMessage(door == null ? 'Yeni kapı oluşturuldu.' : 'Kapı güncellendi.');</code> | Başarıdan hemen sonra `_selectSite(site)` ve `_loadDoorControlSites()` çağrılır |
-| [lib/ui/pages/home_page.dart:2893](../../lib/ui/pages/home_page.dart#L2893) | <code>Future&lt;void&gt; _deleteDoor(DoorRecord door) async {</code> | Silme onayı sonrası `deleteDoor`; başarıda site yapısı ve kapı paneli yeniden yüklenir, atanmış cihaz serbest kalır |
+| [lib/ui/pages/home_page.dart:4113](../../lib/ui/pages/home_page.dart#L4113) | <code>Future&lt;void&gt; _openDoorDialog({DoorRecord? door}) async {</code> | Atanabilir cihazlar çekilir, DoorEditDialog açılır, başarıda site yapısı ve panel yenilenir |
+| [lib/ui/pages/home_page.dart:4132](../../lib/ui/pages/home_page.dart#L4132) | <code>_showMessage(door == null ? 'Yeni kapı oluşturuldu.' : 'Kapı güncellendi.');</code> | Başarıdan hemen sonra `_selectSite(site)` ve `_loadDoorControlSites()` çağrılır |
+| [lib/ui/pages/home_page.dart:4138](../../lib/ui/pages/home_page.dart#L4138) | <code>Future&lt;void&gt; _deleteDoor(DoorRecord door) async {</code> | Silme onayı sonrası `deleteDoor`; başarıda site yapısı ve kapı paneli yeniden yüklenir, atanmış cihaz serbest kalır |
 | [lib/ui/dialogs/door_edit_dialog.dart:102](../../lib/ui/dialogs/door_edit_dialog.dart#L102) | <code>await widget.authService.createDoor(</code> | Yeni kapı oluşturma çağrısı; hata diyalogda kalır, başarıda true ile kapanır |
 | [lib/ui/dialogs/door_edit_dialog.dart:123](../../lib/ui/dialogs/door_edit_dialog.dart#L123) | <code>_errorMessage = 'İşlem sırasında bir hata oluştu: $e';</code> | ApiException dışı hata ham istisna metniyle gösterilir |
 | [lib/ui/widgets/door_card.dart:39](../../lib/ui/widgets/door_card.dart#L39) | <code>final hasMenu = (hasDevice &amp;&amp; onReplaceDevice != null) &#124;&#124;</code> | Kapı kartındaki ... menüsü yalnız en az bir eylem verilmişse çizilir |
@@ -726,7 +729,7 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/qr_modal_polling_t
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/ui/pages/home_page.dart:3359](../../lib/ui/pages/home_page.dart#L3359) | <code>Future&lt;void&gt; _openWifiProvision() async {</code> | Sayfayı açar ve rol rengini (accentColor/surfaceColor) geçirir |
+| [lib/ui/pages/home_page.dart:4683](../../lib/ui/pages/home_page.dart#L4683) | <code>Future&lt;void&gt; _openWifiProvision() async {</code> | Sayfayı açar ve rol rengini (accentColor/surfaceColor) geçirir |
 | [lib/ui/views/bluetooth_wifi_view.dart:54](../../lib/ui/views/bluetooth_wifi_view.dart#L54) | <code>onPressed: onOpenWifiProvision,</code> | Menüdeki kart yalnız bu düğmeyle kurulum sayfasını açar |
 | [lib/ui/pages/wifi_provision_page.dart:159](../../lib/ui/pages/wifi_provision_page.dart#L159) | <code>Future&lt;void&gt; _scanDevices() async {</code> | Açılışta otomatik BLE taraması; cihaz yoksa "Kurulum modunda cihaz bulunamadı" mesajı |
 | [lib/ui/pages/wifi_provision_page.dart:190](../../lib/ui/pages/wifi_provision_page.dart#L190) | <code>Future&lt;void&gt; _connectDevice(BleProvisionDevice device) async {</code> | Cihaza bağlanır, durum ve son sonucu okur; cihaz kurulum modunda değilse uyarır |
@@ -788,11 +791,11 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/wifi_provision_pag
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/ui/pages/login_page.dart:95](../../lib/ui/pages/login_page.dart#L95) | <code>Future&lt;void&gt; _submit() async {</code> | Form doğrulaması, yükleme bayrağı ve sonuç işleme |
-| [lib/ui/pages/login_page.dart:106](../../lib/ui/pages/login_page.dart#L106) | <code>final errorMessage = await widget.authService.login(</code> | Hata metni AuthService'ten gelir (null = başarı; başarıda oturum kurulur ve kök rota HomePage olur) |
-| [lib/ui/pages/login_page.dart:115](../../lib/ui/pages/login_page.dart#L115) | <code>AppSnack.show(context, errorMessage, kind: AppSnackKind.error, maxLines: 8);</code> | Uzun mesajlar (örn. hesap kilidi) 8 satıra kadar gösterilir; sonrası üç nokta |
-| [lib/ui/pages/login_page.dart:364](../../lib/ui/pages/login_page.dart#L364) | <code>label: 'Giriş Yap',</code> | Yüklenirken düğme etiketi spinner olur ve dokunma kapanır (`loading`) |
-| [lib/ui/pages/login_page.dart:287](../../lib/ui/pages/login_page.dart#L287) | <code>return 'Lütfen e-posta veya kullanıcı adınızı girin.';</code> | Boş alan doğrulaması (e-posta veya kullanıcı adı; ikisi de kabul edilir) |
+| [lib/ui/pages/login_page.dart:101](../../lib/ui/pages/login_page.dart#L101) | <code>Future&lt;void&gt; _submit() async {</code> | Form doğrulaması, yükleme bayrağı ve sonuç işleme |
+| [lib/ui/pages/login_page.dart:112](../../lib/ui/pages/login_page.dart#L112) | <code>final errorMessage = await widget.authService.login(</code> | Hata metni AuthService'ten gelir (null = başarı; başarıda oturum kurulur ve kök rota HomePage olur) |
+| [lib/ui/pages/login_page.dart:121](../../lib/ui/pages/login_page.dart#L121) | <code>AppSnack.show(context, errorMessage, kind: AppSnackKind.error, maxLines: 8);</code> | Uzun mesajlar (örn. hesap kilidi) 8 satıra kadar gösterilir; sonrası üç nokta |
+| [lib/ui/pages/login_page.dart:370](../../lib/ui/pages/login_page.dart#L370) | <code>label: 'Giriş Yap',</code> | Yüklenirken düğme etiketi spinner olur ve dokunma kapanır (`loading`) |
+| [lib/ui/pages/login_page.dart:293](../../lib/ui/pages/login_page.dart#L293) | <code>return 'Lütfen e-posta veya kullanıcı adınızı girin.';</code> | Boş alan doğrulaması (e-posta veya kullanıcı adı; ikisi de kabul edilir) |
 
 **Olası nedenler**
 - Form doğrulaması başarısız: alan altında kırmızı metin çıkar, istek gönderilmez
@@ -814,10 +817,10 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/wifi_provision_pag
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/ui/pages/login_page.dart:25](../../lib/ui/pages/login_page.dart#L25) | <code>static const String _savedIdentifierKey = 'saved_login_identifier';</code> | Yalnız kullanıcı adı/e-posta saklanır, ŞİFRE saklanmaz |
-| [lib/ui/pages/login_page.dart:55](../../lib/ui/pages/login_page.dart#L55) | <code>Future&lt;void&gt; _loadSavedCredentials() async {</code> | Açılışta okunur; işaret kapalıysa alan doldurulmaz; okuma hatası sessizce yutulur |
-| [lib/ui/pages/login_page.dart:74](../../lib/ui/pages/login_page.dart#L74) | <code>Future&lt;void&gt; _saveCredentials(String identifier) async {</code> | Yalnız BAŞARILI girişten sonra çağrılır; işaret kapalıysa kayıtlı değer silinir |
-| [lib/ui/pages/login_page.dart:341](../../lib/ui/pages/login_page.dart#L341) | <code>'Beni Hatırla (Kullanıcı adını kaydet)',</code> | Onay kutusu etiketi (tüm satır dokunma alanı) |
+| [lib/ui/pages/login_page.dart:31](../../lib/ui/pages/login_page.dart#L31) | <code>static const String _savedIdentifierKey = 'saved_login_identifier';</code> | Yalnız kullanıcı adı/e-posta saklanır, ŞİFRE saklanmaz |
+| [lib/ui/pages/login_page.dart:61](../../lib/ui/pages/login_page.dart#L61) | <code>Future&lt;void&gt; _loadSavedCredentials() async {</code> | Açılışta okunur; işaret kapalıysa alan doldurulmaz; okuma hatası sessizce yutulur |
+| [lib/ui/pages/login_page.dart:80](../../lib/ui/pages/login_page.dart#L80) | <code>Future&lt;void&gt; _saveCredentials(String identifier) async {</code> | Yalnız BAŞARILI girişten sonra çağrılır; işaret kapalıysa kayıtlı değer silinir |
+| [lib/ui/pages/login_page.dart:347](../../lib/ui/pages/login_page.dart#L347) | <code>'Beni Hatırla (Kullanıcı adını kaydet)',</code> | Onay kutusu etiketi (tüm satır dokunma alanı) |
 
 **Olası nedenler**
 - Başarısız girişte kayıt yapılmaz: yanlış parolayla denenen kullanıcı adı saklanmaz
@@ -838,10 +841,10 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/wifi_provision_pag
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/ui/pages/login_page.dart:124](../../lib/ui/pages/login_page.dart#L124) | <code>Future&lt;void&gt; _showForgotPasswordDialog() async {</code> | Alandaki değer e-posta ise (@ içeriyorsa) pencereye hazır doldurulur |
-| [lib/ui/pages/login_page.dart:158](../../lib/ui/pages/login_page.dart#L158) | <code>final error = await widget.authService.forgotPassword(</code> | Sunucu çağrısı; hata pencere içinde InlineNotice ile gösterilir |
-| [lib/ui/pages/login_page.dart:175](../../lib/ui/pages/login_page.dart#L175) | <code>'Bu e-posta adresiyle kayıtlı bir hesap varsa şifre sıfırlama bağlantısı gönderildi. Lütf…</code> | Başarı mesajı hesap varlığını ele vermez (hesap yoksa da aynı metin) |
-| [lib/ui/pages/login_page.dart:222](../../lib/ui/pages/login_page.dart#L222) | <code>return 'Geçerli bir e-posta adresi girin.';</code> | Yalnız basit doğrulama (@ ve nokta içermeli) |
+| [lib/ui/pages/login_page.dart:130](../../lib/ui/pages/login_page.dart#L130) | <code>Future&lt;void&gt; _showForgotPasswordDialog() async {</code> | Alandaki değer e-posta ise (@ içeriyorsa) pencereye hazır doldurulur |
+| [lib/ui/pages/login_page.dart:164](../../lib/ui/pages/login_page.dart#L164) | <code>final error = await widget.authService.forgotPassword(</code> | Sunucu çağrısı; hata pencere içinde InlineNotice ile gösterilir |
+| [lib/ui/pages/login_page.dart:181](../../lib/ui/pages/login_page.dart#L181) | <code>'Bu e-posta adresiyle kayıtlı bir hesap varsa şifre sıfırlama bağlantısı gönderildi. Lütf…</code> | Başarı mesajı hesap varlığını ele vermez (hesap yoksa da aynı metin) |
+| [lib/ui/pages/login_page.dart:228](../../lib/ui/pages/login_page.dart#L228) | <code>return 'Geçerli bir e-posta adresi girin.';</code> | Yalnız basit doğrulama (@ ve nokta içermeli) |
 
 **Olası nedenler**
 - Başarı mesajı kullanıcı varlığını doğrulamaz: hesap yoksa e-posta hiç gönderilmez (güvenlik gereği aynı metin)
@@ -862,10 +865,10 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/wifi_provision_pag
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/ui/pages/login_page.dart:43](../../lib/ui/pages/login_page.dart#L43) | <code>final notice = widget.authService.takeSessionNotice();</code> | Giriş ekranı ilk karede sunucu kaynaklı oturum sonu nedenini BİR KEZ okur ve gösterir |
-| [lib/ui/pages/login_page.dart:48](../../lib/ui/pages/login_page.dart#L48) | <code>kind: AppSnackKind.warning,</code> | Uyarı tonlu, 6 sn, en çok 8 satır |
-| [lib/ui/pages/home_page.dart:425](../../lib/ui/pages/home_page.dart#L425) | <code>unawaited(widget.authService.refreshSession());</code> | Ön plana dönüşte oturum /me ile eşitlenir (hesap pasif/rol değişimi burada yakalanır) |
-| [lib/ui/pages/home_page.dart:4098](../../lib/ui/pages/home_page.dart#L4098) | <code>onPressed: () =&gt; widget.authService.logout(),</code> | AppBar çıkış düğmesi (kullanıcı kaynaklı çıkışta bildirim olmaz) |
+| [lib/ui/pages/login_page.dart:49](../../lib/ui/pages/login_page.dart#L49) | <code>final notice = widget.authService.takeSessionNotice();</code> | Giriş ekranı ilk karede sunucu kaynaklı oturum sonu nedenini BİR KEZ okur ve gösterir |
+| [lib/ui/pages/login_page.dart:54](../../lib/ui/pages/login_page.dart#L54) | <code>kind: AppSnackKind.warning,</code> | Uyarı tonlu, 6 sn, en çok 8 satır |
+| [lib/ui/pages/home_page.dart:611](../../lib/ui/pages/home_page.dart#L611) | <code>unawaited(widget.authService.refreshSession());</code> | Ön plana dönüşte oturum /me ile eşitlenir (hesap pasif/rol değişimi burada yakalanır) |
+| [lib/ui/pages/home_page.dart:5496](../../lib/ui/pages/home_page.dart#L5496) | <code>onPressed: () =&gt; widget.authService.logout(),</code> | AppBar çıkış düğmesi (kullanıcı kaynaklı çıkışta bildirim olmaz) |
 
 **Olası nedenler**
 - Kullanıcı kendi çıkış yaptıysa bildirim üretilmez (beklenen)
@@ -885,15 +888,15 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/wifi_provision_pag
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/ui/pages/register_individual_page.dart:46](../../lib/ui/pages/register_individual_page.dart#L46) | <code>Future&lt;void&gt; _submit() async {</code> | Form doğrulaması, kayıt çağrısı, başarıda doğrulama ekranına geçiş |
-| [lib/ui/pages/register_individual_page.dart:61](../../lib/ui/pages/register_individual_page.dart#L61) | <code>final error = await widget.authService.registerIndividual(</code> | Hata metni sayfada InlineNotice ile gösterilir (SnackBar değil) |
-| [lib/ui/pages/register_individual_page.dart:81](../../lib/ui/pages/register_individual_page.dart#L81) | <code>builder: (_) =&gt; VerifyEmailCodePage(</code> | Başarıda e-posta ve ad-soyad ile 6 haneli doğrulama sayfası push edilir |
-| [lib/ui/pages/register_individual_page.dart:158](../../lib/ui/pages/register_individual_page.dart#L158) | <code>final sideBySide = box.maxWidth &gt;= 380 &amp;&amp; textScale &lt;= 1.15;</code> | Ad/Soyad yan yana yalnız geniş kartta ve küçük yazıda; aksi halde alt alta (taşmayı önler) |
-| [lib/ui/pages/register_individual_page.dart:250](../../lib/ui/pages/register_individual_page.dart#L250) | <code>return 'Şifre en az 6 karakter olmalıdır';</code> | İstemci şifre kuralı: en az 6 karakter; tekrar alanı eşleşmeli |
+| [lib/ui/pages/register_individual_page.dart:72](../../lib/ui/pages/register_individual_page.dart#L72) | <code>Future&lt;void&gt; _submit() async {</code> | Form doğrulaması, kayıt çağrısı, başarıda doğrulama ekranına geçiş |
+| [lib/ui/pages/register_individual_page.dart:87](../../lib/ui/pages/register_individual_page.dart#L87) | <code>final error = await widget.authService.registerIndividual(</code> | Hata metni sayfada InlineNotice ile gösterilir (SnackBar değil) |
+| [lib/ui/pages/register_individual_page.dart:112](../../lib/ui/pages/register_individual_page.dart#L112) | <code>builder: (_) =&gt; VerifyEmailCodePage(</code> | Başarıda e-posta ve ad-soyad ile 6 haneli doğrulama sayfası push edilir |
+| [lib/ui/pages/register_individual_page.dart:189](../../lib/ui/pages/register_individual_page.dart#L189) | <code>final sideBySide = box.maxWidth &gt;= 380 &amp;&amp; textScale &lt;= 1.15;</code> | Ad/Soyad yan yana yalnız geniş kartta ve küçük yazıda; aksi halde alt alta (taşmayı önler) |
+| [lib/ui/pages/register_individual_page.dart:276](../../lib/ui/pages/register_individual_page.dart#L276) | <code>validator: (val) =&gt; PasswordPolicy.validate(</code> | İstemci şifre kuralı (PasswordPolicy, sunucuyla aynı): en az 8 karakter, e-posta ya da adla aynı olamaz, yaygın şifre reddedilir; tekrar alanı eşleşmeli |
 
 **Olası nedenler**
 - E-posta zaten kayıtlıysa ya da sunucu kuralı ihlal edildiyse hata sayfada kırmızı bildirimle gelir (sunucu kayıt bölümü)
-- Form doğrulaması: ad, soyad, e-posta (@ ve nokta), şifre >= 6, şifre tekrar eşleşmesi
+- Form doğrulaması: ad, soyad, e-posta (@ ve nokta), şifre ilkesi (en az 8 karakter, e-posta / adla aynı değil, yaygın değil), şifre tekrar eşleşmesi
 - Dar ekran/büyük yazıda alanlar alt alta dizilir; sabit genişlik eklenirse taşar (320 dp x 2,0)
 - Doğrulama sayfasına geçiş yalnız hatasız başarıda yapılır; hata varsa aynı sayfada kalınır
 
@@ -901,7 +904,7 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/wifi_provision_pag
 - Hata bildirimini okuyun; e-posta küçük harfe çevrilerek gönderilir (`toLowerCase`)
 - Test: flutter test test/screens/register_individual_layout_test.dart
 
-**İlgili testler:** [test/screens/register_individual_layout_test.dart](../../test/screens/register_individual_layout_test.dart), [test/fix_fx1_ui_test.dart](../../test/fix_fx1_ui_test.dart)
+**İlgili testler:** [test/screens/register_individual_layout_test.dart](../../test/screens/register_individual_layout_test.dart), [test/fix_fx1_ui_test.dart](../../test/fix_fx1_ui_test.dart), [test/password_policy_test.dart](../../test/password_policy_test.dart)
 
 **Bkz.:** [ui-dogrulama-kodu](#ui-dogrulama-kodu), [ui-dogrulama-sonrasi-yonlendirme](#ui-dogrulama-sonrasi-yonlendirme)
 
@@ -940,7 +943,7 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/wifi_provision_pag
 | --- | --- | --- |
 | [lib/ui/pages/verify_email_code_page.dart:114](../../lib/ui/pages/verify_email_code_page.dart#L114) | <code>Navigator.of(context).popUntil((route) =&gt; route.isFirst);</code> | Yalnız Kayıt + Doğrulama sayfaları kapanır; kök rota (oturuma tepki veren home) kalır |
 | [lib/ui/pages/verify_email_code_page.dart:95](../../lib/ui/pages/verify_email_code_page.dart#L95) | <code>final error = await widget.authService.verifyIndividualCode(</code> | Başarıda AuthService oturumu kurar; ekran değişimi oturum dinleyicisiyle olur |
-| [lib/ui/pages/login_page.dart:379](../../lib/ui/pages/login_page.dart#L379) | <code>builder: (_) =&gt; RegisterIndividualPage(</code> | Kayıt sayfası giriş sayfasının ÜSTÜNE push edilir (kök rota değişmez) |
+| [lib/ui/pages/login_page.dart:385](../../lib/ui/pages/login_page.dart#L385) | <code>builder: (_) =&gt; RegisterIndividualPage(</code> | Kayıt sayfası giriş sayfasının ÜSTÜNE push edilir (kök rota değişmez) |
 
 **Olası nedenler**
 - Kök rota pushAndRemoveUntil(... false) ile silinirse çıkışta giriş ekranı dönmez ve ikinci bir HomePage açılır (kodda uyarı notu var): bu satır değiştirilmemeli
@@ -986,9 +989,9 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/wifi_provision_pag
 | [lib/ui/design/theme_toggle_button.dart:33](../../lib/ui/design/theme_toggle_button.dart#L33) | <code>if (service == null) {</code> | ThemeScope yoksa (kök dışı kurulum/test) düğme hiç çizilmez |
 | [lib/ui/design/theme_toggle_button.dart:38](../../lib/ui/design/theme_toggle_button.dart#L38) | <code>final label = isDark ? 'Aydınlık temaya geç' : 'Koyu temaya geç';</code> | İkon GÖRÜNEN temayı değil geçilecek temayı anlatır; aynı metin tooltip ve anlamsal etiket |
 | [lib/ui/design/theme_toggle_button.dart:50](../../lib/ui/design/theme_toggle_button.dart#L50) | <code>onPressed: () =&gt; service.toggle(brightness),</code> | Görünen parlaklığın tersi seçilir (sistem modunda da); tercih cihazda saklanır |
-| [lib/ui/pages/home_page.dart:4089](../../lib/ui/pages/home_page.dart#L4089) | <code>const ThemeToggleButton(iconSize: 20),</code> | Ana sayfada AppBar'da (yalnız ThemeScope varsa yer ayrılır) |
-| [lib/ui/pages/login_page.dart:263](../../lib/ui/pages/login_page.dart#L263) | <code>child: ThemeToggleButton(),</code> | Giriş kartının sağ üst köşesi |
-| [lib/ui/pages/register_individual_page.dart:103](../../lib/ui/pages/register_individual_page.dart#L103) | <code>actions: const [ThemeToggleButton(), SizedBox(width: AppSpace.sm)],</code> | Kayıt ve doğrulama sayfalarının AppBar'ında |
+| [lib/ui/pages/home_page.dart:5487](../../lib/ui/pages/home_page.dart#L5487) | <code>const ThemeToggleButton(iconSize: 20),</code> | Ana sayfada AppBar'da (yalnız ThemeScope varsa yer ayrılır) |
+| [lib/ui/pages/login_page.dart:269](../../lib/ui/pages/login_page.dart#L269) | <code>child: ThemeToggleButton(),</code> | Giriş kartının sağ üst köşesi |
+| [lib/ui/pages/register_individual_page.dart:134](../../lib/ui/pages/register_individual_page.dart#L134) | <code>actions: const [ThemeToggleButton(), SizedBox(width: AppSpace.sm)],</code> | Kayıt ve doğrulama sayfalarının AppBar'ında |
 
 **Olası nedenler**
 - Tema düğmesi yalnız ana sayfa, giriş, kayıt ve doğrulama ekranlarında vardır; internet yok, Wi-Fi kurulum, QR tarama ve yönetici seçme sayfalarında YOKTUR (tasarım)
@@ -1020,7 +1023,7 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/design/theme_toggl
 | [lib/styles/role_theme.dart:53](../../lib/styles/role_theme.dart#L53) | <code>Color inkColor(AppPalette palette) =&gt; tone.ink(palette);</code> | Rol rengini METİN olarak kullanırken bu kullanılmalı (accentColor açık zeminde yetersiz kontrast) |
 | [lib/styles/app_theme.dart:243](../../lib/styles/app_theme.dart#L243) | <code>static ThemeData dark() {</code> | Koyu ThemeData: input, düğme, snackbar, drawer temaları |
 | [lib/ui/widgets/device_connectivity_logs_accordion.dart:129](../../lib/ui/widgets/device_connectivity_logs_accordion.dart#L129) | <code>color: p.surfaceMuted,</code> | Akordiyon paneli artık palet yüzeyiyle çizilir (eski elle yazılmış isDark rengi kaldırıldı) |
-| [lib/ui/pages/home_page.dart:2330](../../lib/ui/pages/home_page.dart#L2330) | <code>color: Colors.black87,</code> | E-posta kodu ile site silme penceresinde sabit koyu metin rengi (koyu temada soluk zeminle birlikte okunurluk riski) |
+| [lib/ui/pages/home_page.dart:3570](../../lib/ui/pages/home_page.dart#L3570) | <code>color: Colors.black87,</code> | E-posta kodu ile site silme penceresinde sabit koyu metin rengi (koyu temada soluk zeminle birlikte okunurluk riski) |
 
 **Olası nedenler**
 - Ham `Colors.red/grey/white` ya da sabit `Color(0xFF...)` kullanılan bileşen tema paletine uymaz: koyu temada okunmaz (örnekler: site silme pencereleri, site yöneticisi seçme sayfası)
@@ -1047,10 +1050,10 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/design/contrast_te
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/ui/pages/home_page.dart:2063](../../lib/ui/pages/home_page.dart#L2063) | <code>title: Text('${site.name} Sitesini Sil'),</code> | Süper kullanıcıya yöntem seçtiren pencere: kutu renkleri sabit (FEF2F2, FFFBEB) ve metin renkleri sabittir |
-| [lib/ui/pages/home_page.dart:2249](../../lib/ui/pages/home_page.dart#L2249) | <code>Future&lt;void&gt; _deleteSiteWithEmailVerification(SiteRecord site) async {</code> | 6 haneli silme kodu penceresi: kod alanı ve kutu renkleri sabit (Colors.black87, grey.shade50) |
-| [lib/ui/pages/home_page.dart:2340](../../lib/ui/pages/home_page.dart#L2340) | <code>fillColor: Colors.grey.shade50,</code> | Koyu temada açık gri dolgu üzerinde palet metni değil sabit koyu metin kullanılır |
-| [lib/ui/pages/home_page.dart:2465](../../lib/ui/pages/home_page.dart#L2465) | <code>Future&lt;void&gt; _approveDeleteSite(SiteRecord site) async {</code> | Silme onayı penceresi: düz AlertDialog + Colors.red düğme (AppDialog/palet kullanılmıyor) |
+| [lib/ui/pages/home_page.dart:3303](../../lib/ui/pages/home_page.dart#L3303) | <code>title: Text('${site.name} Sitesini Sil'),</code> | Süper kullanıcıya yöntem seçtiren pencere: kutu renkleri sabit (FEF2F2, FFFBEB) ve metin renkleri sabittir |
+| [lib/ui/pages/home_page.dart:3489](../../lib/ui/pages/home_page.dart#L3489) | <code>Future&lt;void&gt; _deleteSiteWithEmailVerification(SiteRecord site) async {</code> | 6 haneli silme kodu penceresi: kod alanı ve kutu renkleri sabit (Colors.black87, grey.shade50) |
+| [lib/ui/pages/home_page.dart:3580](../../lib/ui/pages/home_page.dart#L3580) | <code>fillColor: Colors.grey.shade50,</code> | Koyu temada açık gri dolgu üzerinde palet metni değil sabit koyu metin kullanılır |
+| [lib/ui/pages/home_page.dart:3705](../../lib/ui/pages/home_page.dart#L3705) | <code>Future&lt;void&gt; _approveDeleteSite(SiteRecord site) async {</code> | Silme onayı penceresi: düz AlertDialog + Colors.red düğme (AppDialog/palet kullanılmıyor) |
 
 **Olası nedenler**
 - Bu pencereler AppDialog/palet yerine elle yazılmış sabit renklerle çizilir; açık zeminli kutular koyu temada parlak kalır
@@ -1069,11 +1072,11 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/design/contrast_te
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/ui/pages/home_page.dart:2054](../../lib/ui/pages/home_page.dart#L2054) | <code>Future&lt;void&gt; _deleteSite(SiteRecord site) async {</code> | Rol/yönetici durumuna göre akış: süper kullanıcı yöntem seçer; diğerleri talep oluşturur; yöneticisiz sitede doğrudan kalıcı silme |
-| [lib/ui/pages/home_page.dart:2525](../../lib/ui/pages/home_page.dart#L2525) | <code>Future&lt;void&gt; _rejectDeleteSite(SiteRecord site) async {</code> | Talebi iptal (isteyen taraf) ya da reddet (karşı taraf); başlık ve düğme metni buna göre değişir |
-| [lib/ui/widgets/site_card.dart:277](../../lib/ui/widgets/site_card.dart#L277) | <code>final isUserApprovalRequired =</code> | Bekleyen silme talebinde onay sırası kimde (kullanıcıda mı karşı tarafta mı) buradan belirlenir |
-| [lib/ui/widgets/site_card.dart:232](../../lib/ui/widgets/site_card.dart#L232) | <code>label: const Text('E-Posta Koduyla Sil'),</code> | Yalnız süper kullanıcıda ve bekleyen silme yokken görünür |
-| [lib/ui/views/sites_view.dart:200](../../lib/ui/views/sites_view.dart#L200) | <code>deleteBusy: busyDeleteSites.contains(site.id),</code> | İşlem sürerken kart düğmeleri pasif (`_busyDeleteSites`) |
+| [lib/ui/pages/home_page.dart:3294](../../lib/ui/pages/home_page.dart#L3294) | <code>Future&lt;void&gt; _deleteSite(SiteRecord site) async {</code> | Rol/yönetici durumuna göre akış: süper kullanıcı yöntem seçer; diğerleri talep oluşturur; yöneticisiz sitede doğrudan kalıcı silme |
+| [lib/ui/pages/home_page.dart:3765](../../lib/ui/pages/home_page.dart#L3765) | <code>Future&lt;void&gt; _rejectDeleteSite(SiteRecord site) async {</code> | Talebi iptal (isteyen taraf) ya da reddet (karşı taraf); başlık ve düğme metni buna göre değişir |
+| [lib/ui/widgets/site_card.dart:281](../../lib/ui/widgets/site_card.dart#L281) | <code>final isUserApprovalRequired =</code> | Bekleyen silme talebinde onay sırası kimde (kullanıcıda mı karşı tarafta mı) buradan belirlenir |
+| [lib/ui/widgets/site_card.dart:236](../../lib/ui/widgets/site_card.dart#L236) | <code>label: const Text('E-Posta Koduyla Sil'),</code> | Yalnız süper kullanıcıda ve bekleyen silme yokken görünür |
+| [lib/ui/views/sites_view.dart:206](../../lib/ui/views/sites_view.dart#L206) | <code>deleteBusy: busyDeleteSites.contains(site.id),</code> | İşlem sürerken kart düğmeleri pasif (`_busyDeleteSites`) |
 
 **Olası nedenler**
 - Silme başarılı olunca hem `_loadSites` hem `_loadDoorControlSites` ve ilgili kullanıcı listeleri yeniden yüklenir; biri atlanırsa panel eski siteyi gösterir
@@ -1118,8 +1121,8 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/design/contrast_te
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/ui/pages/home_page.dart:1811](../../lib/ui/pages/home_page.dart#L1811) | <code>Future&lt;void&gt; _openSiteDialog({SiteRecord? site}) async {</code> | Site yöneticisi "Yeni Site" derse SetupSiteDialog (sihirbaz), süper kullanıcı SiteDialog açar; sonuçlar burada sunucuya gönderilir |
-| [lib/ui/pages/home_page.dart:1907](../../lib/ui/pages/home_page.dart#L1907) | <code>_showMessage('Site güncellendi.');</code> | Başarıda `_loadSites` ve `_loadDoorControlSites` (preferredSiteId) ile listeler yenilenir |
+| [lib/ui/pages/home_page.dart:3034](../../lib/ui/pages/home_page.dart#L3034) | <code>Future&lt;void&gt; _openSiteDialog({SiteRecord? site}) async {</code> | Site yöneticisi "Yeni Site" derse SetupSiteDialog (sihirbaz), süper kullanıcı SiteDialog açar; sonuçlar burada sunucuya gönderilir |
+| [lib/ui/pages/home_page.dart:3147](../../lib/ui/pages/home_page.dart#L3147) | <code>_showMessage('Site güncellendi.');</code> | Başarıda `_loadSites` ve `_loadDoorControlSites` (preferredSiteId) ile listeler yenilenir |
 | [lib/ui/dialogs/site_dialog.dart:167](../../lib/ui/dialogs/site_dialog.dart#L167) | <code>Future&lt;void&gt; _loadStructureCounts() async {</code> | Mevcut blok/daire sayıları yapı ucundan okunur; okunamazsa sessiz varsayılan KULLANILMAZ |
 | [lib/ui/dialogs/site_dialog.dart:180](../../lib/ui/dialogs/site_dialog.dart#L180) | <code>_structureCountsError = error ?? 'Mevcut daire sayıları okunamadı.';</code> | Okunamayınca hata gösterilir ve tekrar deneme sunulur (güncelleme kapalı kalır) |
 | [lib/ui/dialogs/site_dialog.dart:246](../../lib/ui/dialogs/site_dialog.dart#L246) | <code>final safeCount = blockCount.clamp(1, 50);</code> | Blok sayısı 1-50 aralığına sıkıştırılır |
@@ -1142,12 +1145,12 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/design/contrast_te
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/ui/pages/home_page.dart:2028](../../lib/ui/pages/home_page.dart#L2028) | <code>Future&lt;void&gt; _openSiteSecurityPolicyDialog(SiteRecord site) async {</code> | Pencereyi açar; başarıda siteler ve kapı paneli (_loadSites/_loadDoorControlSites) yeniden yüklenir |
+| [lib/ui/pages/home_page.dart:3268](../../lib/ui/pages/home_page.dart#L3268) | <code>Future&lt;void&gt; _openSiteSecurityPolicyDialog(SiteRecord site) async {</code> | Pencereyi açar; başarıda siteler ve kapı paneli (_loadSites/_loadDoorControlSites) yeniden yüklenir |
 | [lib/ui/widgets/site_security_policy_dialog.dart:244](../../lib/ui/widgets/site_security_policy_dialog.dart#L244) | <code>Future&lt;void&gt; _handleSave() async {</code> | Kaydet: konum zorunluysa form doğrulanır; erişim kipinden remote/QR bayrakları türetilir; hata snackbar'a düşer |
 | [lib/ui/widgets/site_security_policy_dialog.dart:274](../../lib/ui/widgets/site_security_policy_dialog.dart#L274) | <code>final isQrActive = _accessMode != 'app_only';</code> | Kip -> bayrak: app_only QR'ı, qr_only uzaktan açmayı kapatır; hibritte ikisi de açık |
 | [lib/ui/widgets/site_security_policy_dialog.dart:152](../../lib/ui/widgets/site_security_policy_dialog.dart#L152) | <code>radiusError = 'Mesafe 10 ile 2000 metre arasında olmalı.';</code> | Konum doğrulaması: enlem -90..90, boylam -180..180, (0,0) tanımsız, mesafe 10-2000 m |
 | [lib/ui/widgets/site_security_policy_dialog.dart:499](../../lib/ui/widgets/site_security_policy_dialog.dart#L499) | <code>onChanged: widget.isSuperUser</code> | QR yenilenme süresi seçicisi yalnız süper kullanıcıda etkin (misafir geçişi anahtarı da aynı kurala bağlıdır) |
-| [lib/services/auth_service.dart:859](../../lib/services/auth_service.dart#L859) | <code>Future&lt;String?&gt; updateSiteSecurityPolicy({</code> | Kayıt sunucuya buradan gider; hata metni döner (pencere "Kaydedilemedi:" ile gösterir) |
+| [lib/services/auth_service.dart:917](../../lib/services/auth_service.dart#L917) | <code>Future&lt;String?&gt; updateSiteSecurityPolicy({</code> | Kayıt sunucuya buradan gider; hata metni döner (pencere "Kaydedilemedi:" ile gösterir) |
 
 **Olası nedenler**
 - Konum doğrulaması açık ama enlem/boylam boş ya da (0,0): kaydetme bilerek engellenir, alan altında kırmızı hata çıkar
@@ -1170,7 +1173,7 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/design/contrast_te
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/ui/pages/home_page.dart:2973](../../lib/ui/pages/home_page.dart#L2973) | <code>Future&lt;void&gt; _openDoorPermissionsDialog(DoorRecord door) async {</code> | Pencere yalnız kapıyı alır; yetki verisi pencerenin kendi içinde yüklenir |
+| [lib/ui/pages/home_page.dart:4297](../../lib/ui/pages/home_page.dart#L4297) | <code>Future&lt;void&gt; _openDoorPermissionsDialog(DoorRecord door) async {</code> | Pencere yalnız kapıyı alır; yetki verisi pencerenin kendi içinde yüklenir |
 | [lib/ui/dialogs/door_permissions_dialog.dart:66](../../lib/ui/dialogs/door_permissions_dialog.dart#L66) | <code>Future&lt;void&gt; _loadPermissions() async {</code> | Pencere açılınca ve her başarılı işlemden sonra getDoorPermissions ile liste yeniden çekilir |
 | [lib/ui/dialogs/door_permissions_dialog.dart:102](../../lib/ui/dialogs/door_permissions_dialog.dart#L102) | <code>Future&lt;void&gt; _toggleResidentAccess(DoorResidentPermission resident) async {</code> | Anahtar: görünen durumun TERSİ yazılır (varsayılan erişim + ek izin/engel kaydı birlikte değerlendirilir) |
 | [lib/ui/dialogs/door_permissions_dialog.dart:87](../../lib/ui/dialogs/door_permissions_dialog.dart#L87) | <code>bool _hasDefaultAccess(DoorResidentPermission resident) {</code> | Ortak kapı herkese, blok kapısı yalnız kendi bloğuna varsayılan açıktır |
@@ -1200,11 +1203,11 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/design/contrast_te
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/ui/pages/home_page.dart:975](../../lib/ui/pages/home_page.dart#L975) | <code>Future&lt;void&gt; _loadSites({</code> | `force` verilmezse yükleme sürerken çağrı sessizce atlanır; eski yanıtlar `_sitesRequestToken` ile yok sayılır |
-| [lib/ui/pages/home_page.dart:990](../../lib/ui/pages/home_page.dart#L990) | <code>if (!mounted &#124;&#124; requestToken != _sitesRequestToken) return;</code> | Daha yeni bir yükleme başladıysa eski yanıt çöpe gider |
-| [lib/ui/pages/home_page.dart:1020](../../lib/ui/pages/home_page.dart#L1020) | <code>_selectedSite = currentInList;</code> | Yenilemede seçili site nesnesi yeni kayıtla DEĞİŞTİRİLİR; yoksa politika/ad eski kalırdı |
-| [lib/ui/pages/home_page.dart:1063](../../lib/ui/pages/home_page.dart#L1063) | <code>Future&lt;void&gt; _selectSite(SiteRecord site) async {</code> | Seçimde yapı ve yöneticiler yeniden çekilir; başka site seçilirse eski yanıt yok sayılır |
-| [lib/ui/pages/home_page.dart:3847](../../lib/ui/pages/home_page.dart#L3847) | <code>Future&lt;void&gt; _handleGlobalRefresh() async {</code> | AppBar yenile ve aşağı çekme: menüye göre ilgili listeyi force ile çeker |
+| [lib/ui/pages/home_page.dart:2187](../../lib/ui/pages/home_page.dart#L2187) | <code>Future&lt;void&gt; _loadSites({</code> | `force` verilmezse yükleme sürerken çağrı sessizce atlanır; eski yanıtlar `_sitesRequestToken` ile yok sayılır |
+| [lib/ui/pages/home_page.dart:2202](../../lib/ui/pages/home_page.dart#L2202) | <code>if (!mounted &#124;&#124; requestToken != _sitesRequestToken) return;</code> | Daha yeni bir yükleme başladıysa eski yanıt çöpe gider |
+| [lib/ui/pages/home_page.dart:2232](../../lib/ui/pages/home_page.dart#L2232) | <code>_selectedSite = currentInList;</code> | Yenilemede seçili site nesnesi yeni kayıtla DEĞİŞTİRİLİR; yoksa politika/ad eski kalırdı |
+| [lib/ui/pages/home_page.dart:2275](../../lib/ui/pages/home_page.dart#L2275) | <code>Future&lt;void&gt; _selectSite(SiteRecord site) async {</code> | Seçimde yapı ve yöneticiler yeniden çekilir; başka site seçilirse eski yanıt yok sayılır |
+| [lib/ui/pages/home_page.dart:5171](../../lib/ui/pages/home_page.dart#L5171) | <code>Future&lt;void&gt; _handleGlobalRefresh() async {</code> | AppBar yenile ve aşağı çekme: menüye göre ilgili listeyi force ile çeker |
 | [lib/ui/views/sites_view.dart:20](../../lib/ui/views/sites_view.dart#L20) | <code>class SitesView extends StatelessWidget {</code> | Liste yalnız home_page'in verdiği `sitesPage`i çizer; kendi başına yenilemez |
 
 **Olası nedenler**
@@ -1227,7 +1230,7 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/design/contrast_te
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/app.dart:357](../../lib/app.dart#L357) | <code>maxScaleFactor: 2.0,</code> | Uygulama genelinde yazı ölçeği 2,0 ile sınırlı; taşma testleri bu sınırda biter |
+| [lib/app.dart:387](../../lib/app.dart#L387) | <code>maxScaleFactor: 2.0,</code> | Uygulama genelinde yazı ölçeği 2,0 ile sınırlı; taşma testleri bu sınırda biter |
 | [lib/ui/widgets/list_parts.dart:18](../../lib/ui/widgets/list_parts.dart#L18) | <code>bool isLargeText(BuildContext context) =&gt;</code> | >= 1,75x ölçekte dekoratif öğeler gizlenir, metne yer açılır |
 | [lib/ui/widgets/list_parts.dart:22](../../lib/ui/widgets/list_parts.dart#L22) | <code>EdgeInsets listCardPadding(BuildContext context) =&gt; EdgeInsets.all(</code> | Dar ekranda (< 360 dp) kart iç boşluğu küçülür |
 | [lib/ui/views/company_devices_view.dart:202](../../lib/ui/views/company_devices_view.dart#L202) | <code>class _GroupLabel extends StatelessWidget {</code> | Örnek çözüm: büyük yazıda çip yerine sarmalanan düz metin |
@@ -1263,10 +1266,10 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/design/pump_at_tes
 | [lib/ui/views/company_devices_view.dart:71](../../lib/ui/views/company_devices_view.dart#L71) | <code>final unassignedDevices = devices</code> | Gruplama: assignedDoorId boş/0 ise "Atama Bekleyen", doluysa "Kapıya Atanmış" |
 | [lib/ui/views/company_devices_view.dart:137](../../lib/ui/views/company_devices_view.dart#L137) | <code>title: 'Şirket hesabına kayıtlı cihaz bulunamadı.',</code> | Liste boşsa gösterilen durum; süper kullanıcıya ekleme yönergesi verilir |
 | [lib/ui/views/company_devices_view.dart:185](../../lib/ui/views/company_devices_view.dart#L185) | <code>PaginationBar(</code> | Sayfalama: sayfa başına 10 kayıt (home_page yükleyicisinde pageSize: 10) |
-| [lib/ui/pages/home_page.dart:1685](../../lib/ui/pages/home_page.dart#L1685) | <code>Future&lt;void&gt; _loadCompanyDevices({int page = 1, bool force = false}) async {</code> | Liste yükleyici; hata yalnız snackbar ile bildirilir, eski liste kalır |
-| [lib/ui/pages/home_page.dart:3203](../../lib/ui/pages/home_page.dart#L3203) | <code>Future&lt;void&gt; _toggleDeviceDefect(DeviceRecord device) async {</code> | Arızalı işaretle/kaldır; başarıda liste force ile yenilenir |
-| [lib/ui/pages/home_page.dart:3261](../../lib/ui/pages/home_page.dart#L3261) | <code>Future&lt;void&gt; _releaseDeviceOwnership(DeviceRecord device) async {</code> | Depoya al: kapı ve sahip atamaları kalkar; cihaz, site ve kapı listeleri birlikte yenilenir |
-| [lib/ui/pages/home_page.dart:3137](../../lib/ui/pages/home_page.dart#L3137) | <code>Future&lt;void&gt; _deleteCompanyDevice(DeviceRecord device) async {</code> | Cihaz silme; başarıda cihaz, site ve kapı paneli yenilenir |
+| [lib/ui/pages/home_page.dart:2908](../../lib/ui/pages/home_page.dart#L2908) | <code>Future&lt;void&gt; _loadCompanyDevices({int page = 1, bool force = false}) async {</code> | Liste yükleyici; hata yalnız snackbar ile bildirilir, eski liste kalır |
+| [lib/ui/pages/home_page.dart:4527](../../lib/ui/pages/home_page.dart#L4527) | <code>Future&lt;void&gt; _toggleDeviceDefect(DeviceRecord device) async {</code> | Arızalı işaretle/kaldır; başarıda liste force ile yenilenir |
+| [lib/ui/pages/home_page.dart:4585](../../lib/ui/pages/home_page.dart#L4585) | <code>Future&lt;void&gt; _releaseDeviceOwnership(DeviceRecord device) async {</code> | Depoya al: kapı ve sahip atamaları kalkar; cihaz, site ve kapı listeleri birlikte yenilenir |
+| [lib/ui/pages/home_page.dart:4461](../../lib/ui/pages/home_page.dart#L4461) | <code>Future&lt;void&gt; _deleteCompanyDevice(DeviceRecord device) async {</code> | Cihaz silme; başarıda cihaz, site ve kapı paneli yenilenir |
 | [lib/ui/widgets/company_device_card.dart:53](../../lib/ui/widgets/company_device_card.dart#L53) | <code>class CompanyDeviceCard extends StatefulWidget {</code> | Kart rozetleri ve eylem düğmeleri (rol bazlı) |
 
 **Olası nedenler**
@@ -1290,8 +1293,8 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/design/pump_at_tes
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/ui/views/sites_view.dart:306](../../lib/ui/views/sites_view.dart#L306) | <code>label: const Text('Site Katılım QR'),</code> | Düğme yalnız `onShowSiteJoinQr` verilmişse çizilir |
-| [lib/ui/pages/home_page.dart:2981](../../lib/ui/pages/home_page.dart#L2981) | <code>Future&lt;void&gt; _openSiteJoinQrDialog(SiteRecord site) async {</code> | Pencereyi açar; sonuç beklenmez |
+| [lib/ui/views/sites_view.dart:312](../../lib/ui/views/sites_view.dart#L312) | <code>label: const Text('Site Katılım QR'),</code> | Düğme yalnız `onShowSiteJoinQr` verilmişse çizilir |
+| [lib/ui/pages/home_page.dart:4305](../../lib/ui/pages/home_page.dart#L4305) | <code>Future&lt;void&gt; _openSiteJoinQrDialog(SiteRecord site) async {</code> | Pencereyi açar; sonuç beklenmez |
 | [lib/ui/dialogs/site_join_qr_dialog.dart:61](../../lib/ui/dialogs/site_join_qr_dialog.dart#L61) | <code>Future&lt;void&gt; _loadToken() async {</code> | Mevcut katılım belirteci getSiteJoinToken ile okunur; hata ekranda metin olarak kalır |
 | [lib/ui/dialogs/site_join_qr_dialog.dart:85](../../lib/ui/dialogs/site_join_qr_dialog.dart#L85) | <code>Future&lt;void&gt; _rotateToken() async {</code> | Onay sonrası belirteç yenilenir; eski asılmış/paylaşılmış kodlar geçersiz olur |
 | [lib/ui/dialogs/site_join_qr_dialog.dart:158](../../lib/ui/dialogs/site_join_qr_dialog.dart#L158) | <code>Future&lt;void&gt; _shareQrCode() async {</code> | Önce karekod PNG'si ile paylaşım denenir, olmazsa yalnız metinle; ikisi de olmazsa "Paylaşım başlatılamadı" |
@@ -1317,7 +1320,7 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/design/pump_at_tes
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/ui/pages/home_page.dart:2989](../../lib/ui/pages/home_page.dart#L2989) | <code>Future&lt;void&gt; _openManageJoinRequestsDialog(SiteRecord site) async {</code> | Pencere kapanınca sonuç kullanılmaz: Siteler/sakin listeleri burada YENİLENMEZ |
+| [lib/ui/pages/home_page.dart:4313](../../lib/ui/pages/home_page.dart#L4313) | <code>Future&lt;void&gt; _openManageJoinRequestsDialog(SiteRecord site) async {</code> | Pencere kapanınca sonuç kullanılmaz: Siteler/sakin listeleri burada YENİLENMEZ |
 | [lib/ui/dialogs/manage_join_requests_dialog.dart:57](../../lib/ui/dialogs/manage_join_requests_dialog.dart#L57) | <code>Future&lt;void&gt; _loadRequests() async {</code> | Pencere açılınca ve her işlemden sonra talepler getSiteJoinRequests ile yeniden çekilir |
 | [lib/ui/dialogs/manage_join_requests_dialog.dart:78](../../lib/ui/dialogs/manage_join_requests_dialog.dart#L78) | <code>Future&lt;void&gt; _approve(JoinRequestRecord request) async {</code> | Onay: satır meşgul işaretlenir; hata kırmızı snackbar, başarıda liste yenilenir |
 | [lib/ui/dialogs/manage_join_requests_dialog.dart:102](../../lib/ui/dialogs/manage_join_requests_dialog.dart#L102) | <code>Future&lt;void&gt; _reject(JoinRequestRecord request) async {</code> | Ret: isteğe bağlı gerekçe ile; başarıda uyarı tonlu snackbar |
@@ -1343,7 +1346,7 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/design/pump_at_tes
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/ui/pages/home_page.dart:2948](../../lib/ui/pages/home_page.dart#L2948) | <code>Future&lt;void&gt; _openJoinRequestFlow() async {</code> | Başvuru başarılıysa `_loadInitialData` ile ekran verileri yeniden yüklenir |
+| [lib/ui/pages/home_page.dart:4272](../../lib/ui/pages/home_page.dart#L4272) | <code>Future&lt;void&gt; _openJoinRequestFlow() async {</code> | Başvuru başarılıysa `_loadInitialData` ile ekran verileri yeniden yüklenir |
 | [lib/ui/dialogs/submit_join_request_dialog.dart:72](../../lib/ui/dialogs/submit_join_request_dialog.dart#L72) | <code>Future&lt;void&gt; _scanQr() async {</code> | QR sayfası açılır; okunan değerden `SITE_JOIN:` ön eki atılır |
 | [lib/ui/dialogs/submit_join_request_dialog.dart:84](../../lib/ui/dialogs/submit_join_request_dialog.dart#L84) | <code>Future&lt;void&gt; _fetchInfo(String token) async {</code> | Kodla fetchSiteJoinInfo çağrılır; blok/daire listesi gelir, ilk blok ve ilk daire otomatik seçilir |
 | [lib/ui/dialogs/submit_join_request_dialog.dart:119](../../lib/ui/dialogs/submit_join_request_dialog.dart#L119) | <code>setState(() =&gt; _errorMessage = 'Lütfen blok ve daire seçiniz.');</code> | Site bilgisi ya da daire yokken gönderme engellenir |
@@ -1369,7 +1372,7 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/design/pump_at_tes
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/ui/pages/home_page.dart:2997](../../lib/ui/pages/home_page.dart#L2997) | <code>Future&lt;void&gt; _openSiteResidentsAccordionDialog(SiteRecord site) async {</code> | Pencere yalnız site verilerini alır; ağaç verisi pencerede yüklenir |
+| [lib/ui/pages/home_page.dart:4321](../../lib/ui/pages/home_page.dart#L4321) | <code>Future&lt;void&gt; _openSiteResidentsAccordionDialog(SiteRecord site) async {</code> | Pencere yalnız site verilerini alır; ağaç verisi pencerede yüklenir |
 | [lib/ui/dialogs/site_residents_accordion_dialog.dart:88](../../lib/ui/dialogs/site_residents_accordion_dialog.dart#L88) | <code>Future&lt;void&gt; _loadData() async {</code> | getSiteResidentsTree: pencere açılışında ve her başarılı işlemden sonra |
 | [lib/ui/dialogs/site_residents_accordion_dialog.dart:54](../../lib/ui/dialogs/site_residents_accordion_dialog.dart#L54) | <code>static const Duration _searchDebounce = Duration(milliseconds: 220);</code> | Arama 220 ms gecikmeli süzülür; anlık değişmemesi beklenen davranıştır |
 | [lib/ui/dialogs/site_residents_accordion_dialog.dart:107](../../lib/ui/dialogs/site_residents_accordion_dialog.dart#L107) | <code>Future&lt;void&gt; _toggleMemberStatus(SiteResidentApartment apt, SiteResidentMember resident) …</code> | Üyeliği pasife al/aktif et: yalnız daire üyeliği ve kapı erişimi etkilenir, kullanıcı hesabı değil |
@@ -1397,11 +1400,11 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/design/pump_at_tes
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/ui/pages/home_page.dart:1919](../../lib/ui/pages/home_page.dart#L1919) | <code>Future&lt;void&gt; _openInviteSiteManagerDialog() async {</code> | Seçili site yoksa hiçbir şey olmaz; başarıda yönetici listesi `_loadSiteManagers` ile yenilenir |
+| [lib/ui/pages/home_page.dart:3159](../../lib/ui/pages/home_page.dart#L3159) | <code>Future&lt;void&gt; _openInviteSiteManagerDialog() async {</code> | Seçili site yoksa hiçbir şey olmaz; başarıda yönetici listesi `_loadSiteManagers` ile yenilenir |
 | [lib/ui/dialogs/invite_site_manager_dialog.dart:57](../../lib/ui/dialogs/invite_site_manager_dialog.dart#L57) | <code>Future&lt;void&gt; _submit() async {</code> | Form doğrulanır, inviteSiteManager çağrılır; hata pencerede kalır, başarıda true ile kapanır |
 | [lib/ui/dialogs/invite_site_manager_dialog.dart:150](../../lib/ui/dialogs/invite_site_manager_dialog.dart#L150) | <code>return 'Geçerli bir e-posta adresi girin.';</code> | E-posta biçimi doğrulaması (zorunlu alan) |
 | [lib/ui/dialogs/invite_site_manager_dialog.dart:130](../../lib/ui/dialogs/invite_site_manager_dialog.dart#L130) | <code>'Davet edilen kişi kayıtlıysa anında bu siteye yönetici olarak atanır. '</code> | Kayıtlı kullanıcı anında atanır; kayıtsızsa e-postaya davet gider ve kayıtta otomatik yönetici olur |
-| [lib/ui/pages/home_page.dart:2019](../../lib/ui/pages/home_page.dart#L2019) | <code>_showMessage(message ?? 'Davet iptal edildi.');</code> | Bekleyen davet iptali |
+| [lib/ui/pages/home_page.dart:3259](../../lib/ui/pages/home_page.dart#L3259) | <code>_showMessage(message ?? 'Davet iptal edildi.');</code> | Bekleyen davet iptali |
 
 **Olası nedenler**
 - E-posta biçimi geçersiz: gönderim yapılmaz, alan altında hata çıkar
@@ -1423,12 +1426,12 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/design/pump_at_tes
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/ui/pages/home_page.dart:2667](../../lib/ui/pages/home_page.dart#L2667) | <code>Future&lt;void&gt; _openApartmentResidentDialog(ApartmentRecord apartment) async {</code> | Form sonucu burada sunucuya (upsertApartmentResident) gönderilir; başarıda seçili site yeniden seçilerek yapı tazelenir |
-| [lib/ui/dialogs/apartment_resident_dialog.dart:91](../../lib/ui/dialogs/apartment_resident_dialog.dart#L91) | <code>void _submit() {</code> | Doğrulama geçerse sonuçla kapanır; kayıtlı sakin varsa şifre alanı boş gönderilir |
-| [lib/ui/dialogs/apartment_resident_dialog.dart:188](../../lib/ui/dialogs/apartment_resident_dialog.dart#L188) | <code>: 'PIN 4 haneli sayısal olmalı.',</code> | Yeni sakin için ilk PIN yalnız 4 hane rakamdır |
-| [lib/ui/dialogs/apartment_resident_dialog.dart:152](../../lib/ui/dialogs/apartment_resident_dialog.dart#L152) | <code>return 'Kullanıcı adı en az 3 karakter olmalı.';</code> | Kullanıcı adı alt sınırı |
-| [lib/ui/dialogs/apartment_resident_dialog.dart:209](../../lib/ui/dialogs/apartment_resident_dialog.dart#L209) | <code>'Güvenlik gereği kayıtlı sakinlerin şifresi yöneticiler tarafından değiştirilemez. Sakin …</code> | Kayıtlı sakinde şifre alanı hiç gösterilmez |
-| [lib/ui/pages/home_page.dart:2721](../../lib/ui/pages/home_page.dart#L2721) | <code>Future&lt;void&gt; _deleteApartmentResident(ApartmentRecord apartment) async {</code> | Sakini silip daireyi boşa çıkarma (onaylı) |
+| [lib/ui/pages/home_page.dart:3907](../../lib/ui/pages/home_page.dart#L3907) | <code>Future&lt;void&gt; _openApartmentResidentDialog(ApartmentRecord apartment) async {</code> | Form sonucu burada sunucuya (upsertApartmentResident) gönderilir; başarıda seçili site yeniden seçilerek yapı tazelenir |
+| [lib/ui/dialogs/apartment_resident_dialog.dart:94](../../lib/ui/dialogs/apartment_resident_dialog.dart#L94) | <code>void _submit() {</code> | Doğrulama geçerse sonuçla kapanır; kayıtlı sakin varsa şifre alanı boş gönderilir |
+| [lib/ui/dialogs/apartment_resident_dialog.dart:197](../../lib/ui/dialogs/apartment_resident_dialog.dart#L197) | <code>: 'PIN 4 haneli sayısal olmalı.',</code> | Yeni sakin için ilk PIN yalnız 4 hane rakamdır |
+| [lib/ui/dialogs/apartment_resident_dialog.dart:155](../../lib/ui/dialogs/apartment_resident_dialog.dart#L155) | <code>return 'Kullanıcı adı en az 3 karakter olmalı.';</code> | Kullanıcı adı alt sınırı |
+| [lib/ui/dialogs/apartment_resident_dialog.dart:223](../../lib/ui/dialogs/apartment_resident_dialog.dart#L223) | <code>: 'Güvenlik gereği kayıtlı sakinlerin şifresi yöneticiler tarafından değiştirilemez. Saki…</code> | Kayıtlı sakinde şifre alanı hiç gösterilmez (daire hesabında not "PIN sıfırlama" düğmesine yönlendirir) |
+| [lib/ui/pages/home_page.dart:3968](../../lib/ui/pages/home_page.dart#L3968) | <code>Future&lt;void&gt; _deleteApartmentResident(ApartmentRecord apartment) async {</code> | Sakini silip daireyi boşa çıkarma (onaylı) |
 
 **Olası nedenler**
 - PIN 4 haneli rakam değil ya da kullanıcı adı 3 karakterden kısa: gönderim yapılmaz
@@ -1450,12 +1453,12 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/design/pump_at_tes
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/ui/pages/home_page.dart:3453](../../lib/ui/pages/home_page.dart#L3453) | <code>Future&lt;void&gt; _openManagedUserDialog({</code> | Yeni/düzenle akışı: sonuç createManagedUser ya da updateManagedUser ile gönderilir, ardından `_loadManagedUsers(role, force: true)` |
-| [lib/ui/dialogs/managed_user_dialog.dart:107](../../lib/ui/dialogs/managed_user_dialog.dart#L107) | <code>void _submit() {</code> | E-posta küçük harfe çevrilir; rol seçimi yalnız allowRoleSelection ile (Kullanıcı Yönetimi ekranı) |
-| [lib/ui/dialogs/managed_user_dialog.dart:244](../../lib/ui/dialogs/managed_user_dialog.dart#L244) | <code>return 'Şifre en az 6 karakter olmalı.';</code> | Yeni kullanıcıda şifre en az 6 karakter |
-| [lib/ui/dialogs/managed_user_dialog.dart:232](../../lib/ui/dialogs/managed_user_dialog.dart#L232) | <code>if (!_isEditing) ...[</code> | Şifre alanı yalnız YENİ kullanıcıda var; düzenlemede bilgi kutusu çıkar |
+| [lib/ui/pages/home_page.dart:4777](../../lib/ui/pages/home_page.dart#L4777) | <code>Future&lt;void&gt; _openManagedUserDialog({</code> | Yeni/düzenle akışı: sonuç createManagedUser ya da updateManagedUser ile gönderilir, ardından `_loadManagedUsers(role, force: true)` |
+| [lib/ui/dialogs/managed_user_dialog.dart:108](../../lib/ui/dialogs/managed_user_dialog.dart#L108) | <code>void _submit() {</code> | E-posta küçük harfe çevrilir; rol seçimi yalnız allowRoleSelection ile (Kullanıcı Yönetimi ekranı) |
+| [lib/ui/dialogs/managed_user_dialog.dart:243](../../lib/ui/dialogs/managed_user_dialog.dart#L243) | <code>validator: (value) =&gt; PasswordPolicy.validate(</code> | Yeni kullanıcıda şifre ilkesi (PasswordPolicy): en az 8 karakter, e-posta ya da adla aynı olamaz, yaygın şifre reddedilir |
+| [lib/ui/dialogs/managed_user_dialog.dart:233](../../lib/ui/dialogs/managed_user_dialog.dart#L233) | <code>if (!_isEditing) ...[</code> | Şifre alanı yalnız YENİ kullanıcıda var; düzenlemede bilgi kutusu çıkar |
 | [lib/ui/views/managed_users_view.dart:80](../../lib/ui/views/managed_users_view.dart#L80) | <code>label: Text('Yeni ${_roleTitle(role)}'),</code> | Liste ekranındaki ekle düğmesi |
-| [lib/ui/pages/home_page.dart:3559](../../lib/ui/pages/home_page.dart#L3559) | <code>Future&lt;void&gt; _toggleUserActivation({</code> | Aktif/pasif anahtarı: işlem sürerken kullanıcı meşgul işaretlenir, başarıda liste yenilenir |
+| [lib/ui/pages/home_page.dart:4883](../../lib/ui/pages/home_page.dart#L4883) | <code>Future&lt;void&gt; _toggleUserActivation({</code> | Aktif/pasif anahtarı: işlem sürerken kullanıcı meşgul işaretlenir, başarıda liste yenilenir |
 
 **Olası nedenler**
 - Düzenlemede e-posta ve şifre değiştirilemez: güvenlik gereği şifre yalnız "Profilim"den değişir (kullanıcı kendi hesabında)
@@ -1480,9 +1483,9 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/design/pump_at_tes
 | [lib/ui/views/all_users_view.dart:83](../../lib/ui/views/all_users_view.dart#L83) | <code>void _onSearchChanged(String query) {</code> | Arama 400 ms gecikmeli çalışır ve 1. sayfaya döner |
 | [lib/ui/views/all_users_view.dart:120](../../lib/ui/views/all_users_view.dart#L120) | <code>void _fetchData() {</code> | Rol, sayfa, sayfa boyutu ve aramayı `onLoadPage` ile üst bileşene iletir |
 | [lib/ui/views/all_users_view.dart:612](../../lib/ui/views/all_users_view.dart#L612) | <code>final displayUsers = widget.users.where((u) =&gt; u.role != UserRole.superUser).toList();</code> | Süper kullanıcılar bu listede bilerek gösterilmez |
-| [lib/ui/pages/home_page.dart:1572](../../lib/ui/pages/home_page.dart#L1572) | <code>Future&lt;void&gt; _loadAllUsers({</code> | `force` yoksa ve yükleme sürüyorsa çağrı HİÇ işlenmez: yeni arama/süzgeç/sayfa kaybolabilir |
-| [lib/ui/pages/home_page.dart:1579](../../lib/ui/pages/home_page.dart#L1579) | <code>final sanitizedRole = role == UserRole.superUser ? null : role;</code> | Süper kullanıcı rol süzgeci yok sayılır; sorgu ayrıca excludeRole: superUser gönderir |
-| [lib/ui/pages/home_page.dart:1607](../../lib/ui/pages/home_page.dart#L1607) | <code>Future&lt;void&gt; _updateDirectoryUser(</code> | Düzenleme sonrası aynı süzgeç/sayfa ile liste force yenilenir |
+| [lib/ui/pages/home_page.dart:2795](../../lib/ui/pages/home_page.dart#L2795) | <code>Future&lt;void&gt; _loadAllUsers({</code> | `force` yoksa ve yükleme sürüyorsa çağrı HİÇ işlenmez: yeni arama/süzgeç/sayfa kaybolabilir |
+| [lib/ui/pages/home_page.dart:2802](../../lib/ui/pages/home_page.dart#L2802) | <code>final sanitizedRole = role == UserRole.superUser ? null : role;</code> | Süper kullanıcı rol süzgeci yok sayılır; sorgu ayrıca excludeRole: superUser gönderir |
+| [lib/ui/pages/home_page.dart:2830](../../lib/ui/pages/home_page.dart#L2830) | <code>Future&lt;void&gt; _updateDirectoryUser(</code> | Düzenleme sonrası aynı süzgeç/sayfa ile liste force yenilenir |
 | [lib/ui/views/all_users_view.dart:735](../../lib/ui/views/all_users_view.dart#L735) | <code>label: const Text('Filtreleri Temizle'),</code> | Süzgeçle sonuç boşsa çıkan temizleme düğmesi |
 
 **Olası nedenler**
@@ -1506,7 +1509,7 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/design/pump_at_tes
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
 | [lib/ui/views/all_users_view.dart:410](../../lib/ui/views/all_users_view.dart#L410) | <code>Future&lt;void&gt; _showDbMaintenanceDialog() async {</code> | İki geri çağrı (sağlık, temizlik) yoksa pencere hiç açılmaz |
-| [lib/ui/pages/home_page.dart:4539](../../lib/ui/pages/home_page.dart#L4539) | <code>onGetDatabaseHealth: widget.authService.getDatabaseHealth,</code> | Sağlık sorgusu sunucuya buradan bağlanır |
+| [lib/ui/pages/home_page.dart:6142](../../lib/ui/pages/home_page.dart#L6142) | <code>onGetDatabaseHealth: widget.authService.getDatabaseHealth,</code> | Sağlık sorgusu sunucuya buradan bağlanır |
 | [lib/ui/views/all_users_view.dart:465](../../lib/ui/views/all_users_view.dart#L465) | <code>message: 'Hata: $errorMessage',</code> | Sağlık verisi alınamayınca pencere hata metnini gösterir |
 | [lib/ui/views/all_users_view.dart:560](../../lib/ui/views/all_users_view.dart#L560) | <code>label: Text(isCleaning ? 'Temizleniyor...' : 'Çöp Temizliği Yap'),</code> | Temizlik düğmesi; işlem sürerken pasif, bitince `onRefresh` ile liste yenilenir |
 
@@ -1529,11 +1532,11 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/design/pump_at_tes
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
 | [lib/ui/views/device_add_view.dart:46](../../lib/ui/views/device_add_view.dart#L46) | <code>final isCompact = constraints.maxWidth &lt; 680;</code> | Dar genişlikte iki eylem karosu alt alta dizilir |
-| [lib/ui/pages/home_page.dart:3005](../../lib/ui/pages/home_page.dart#L3005) | <code>Future&lt;void&gt; _openDeviceRegistrationFlow() async {</code> | QR okutulur, okunan UID forma aktarılır |
-| [lib/ui/pages/home_page.dart:3021](../../lib/ui/pages/home_page.dart#L3021) | <code>Future&lt;void&gt; _openManualDeviceRegistrationFlow({String? initialUid}) async {</code> | Form sonucu createDevice ile gönderilir; başarıda cihaz, site ve kapı panelleri yenilenir |
+| [lib/ui/pages/home_page.dart:4329](../../lib/ui/pages/home_page.dart#L4329) | <code>Future&lt;void&gt; _openDeviceRegistrationFlow() async {</code> | QR okutulur, okunan UID forma aktarılır |
+| [lib/ui/pages/home_page.dart:4345](../../lib/ui/pages/home_page.dart#L4345) | <code>Future&lt;void&gt; _openManualDeviceRegistrationFlow({String? initialUid}) async {</code> | Form sonucu createDevice ile gönderilir; başarıda cihaz, site ve kapı panelleri yenilenir |
 | [lib/ui/dialogs/device_dialog.dart:126](../../lib/ui/dialogs/device_dialog.dart#L126) | <code>validator: (value) =&gt; (value ?? '').trim().length &lt; 6</code> | UID en az 6 karakter; kullanıcı ID ve Site ID isteğe bağlı sayıdır |
 | [lib/ui/dialogs/device_dialog.dart:183](../../lib/ui/dialogs/device_dialog.dart#L183) | <code>class DeviceEditDialog extends StatefulWidget {</code> | Düzenleme formu (kullanıcı ID, site ID, kapı etiketi); sonuç `_editCompanyDevice` ile gönderilir |
-| [lib/ui/pages/home_page.dart:3059](../../lib/ui/pages/home_page.dart#L3059) | <code>Future&lt;void&gt; _editCompanyDevice(DeviceRecord device) async {</code> | Güncelleme sonrası cihaz/site/kapı listeleri yenilenir |
+| [lib/ui/pages/home_page.dart:4383](../../lib/ui/pages/home_page.dart#L4383) | <code>Future&lt;void&gt; _editCompanyDevice(DeviceRecord device) async {</code> | Güncelleme sonrası cihaz/site/kapı listeleri yenilenir |
 
 **Olası nedenler**
 - UID kısa/yanlış okundu ya da QR başka bir içerik taşıyor
@@ -1555,17 +1558,18 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/design/pump_at_tes
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/ui/pages/home_page.dart:3383](../../lib/ui/pages/home_page.dart#L3383) | <code>Future&lt;void&gt; _saveProfile() async {</code> | Sakin rolü güncelleyemez; form doğrulanır; updateMyProfile çağrılır; başarıda şifre alanları temizlenir |
-| [lib/ui/pages/home_page.dart:4384](../../lib/ui/pages/home_page.dart#L4384) | <code>return ResidentProfileView(</code> | Daire sakini için düzenlenebilir form yerine salt okunur hesap bilgileri |
-| [lib/ui/views/profile_view.dart:111](../../lib/ui/views/profile_view.dart#L111) | <code>return 'Şifre değiştirmek için mevcut şifrenizi girin.';</code> | Yeni şifre yazıldıysa mevcut şifre zorunlu |
-| [lib/ui/views/profile_view.dart:128](../../lib/ui/views/profile_view.dart#L128) | <code>? 'Şifre en az 6 karakter olmalı.'</code> | Yeni şifre alt sınırı |
-| [lib/ui/views/profile_view.dart:77](../../lib/ui/views/profile_view.dart#L77) | <code>labelText: 'E-posta (Değiştirilemez)',</code> | E-posta alanı pasiftir; değiştirilemez |
+| [lib/ui/pages/home_page.dart:4707](../../lib/ui/pages/home_page.dart#L4707) | <code>Future&lt;void&gt; _saveProfile() async {</code> | Sakin rolü güncelleyemez; form doğrulanır; updateMyProfile çağrılır; başarıda şifre alanları temizlenir |
+| [lib/ui/pages/home_page.dart:5980](../../lib/ui/pages/home_page.dart#L5980) | <code>return ResidentProfileView(</code> | Daire sakini için düzenlenebilir form yerine salt okunur hesap bilgileri |
+| [lib/ui/views/profile_view.dart:119](../../lib/ui/views/profile_view.dart#L119) | <code>return 'Şifre değiştirmek için mevcut şifrenizi girin.';</code> | Yeni şifre yazıldıysa mevcut şifre zorunlu |
+| [lib/ui/views/profile_view.dart:134](../../lib/ui/views/profile_view.dart#L134) | <code>validator: (value) =&gt; PasswordPolicy.validate(</code> | Yeni şifre (boş bırakılabilir) ilkeye uymalı: en az 8 karakter, e-posta ya da adla aynı olamaz, yaygın şifre reddedilir |
+| [lib/ui/views/profile_view.dart:85](../../lib/ui/views/profile_view.dart#L85) | <code>labelText: 'E-posta (Değiştirilemez)',</code> | E-posta alanı pasiftir; değiştirilemez |
 
 **Olası nedenler**
 - Yeni şifre girilip mevcut şifre boş bırakıldı
 - Mevcut şifre yanlış ya da sunucu reddetti: snackbar sunucu metnini gösterir
 - Hesap daire sakini: bu ekran bilerek salt okunurdur ("Daire sakinleri profil bilgilerini güncelleyemez.")
 - Ad 3 karakterden kısa
+- Yeni şifre ilkeye uymuyor (8 karakterden kısa, e-posta ya da adla aynı, yaygın): alan altında ileti çıkar; sunucu da 400 WEAK_PASSWORD ile reddeder
 
 **Adım adım kontrol**
 - Alan altındaki doğrulama metnini okuyun
@@ -1581,12 +1585,12 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/design/pump_at_tes
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/ui/pages/home_page.dart:4423](../../lib/ui/pages/home_page.dart#L4423) | <code>canManageSites:</code> | Yönetim bayrağı rolden türetilir (süper kullanıcı ve site yöneticisi) |
-| [lib/ui/views/sites_view.dart:132](../../lib/ui/views/sites_view.dart#L132) | <code>label: const Text('Yeni Site'),</code> | "Yeni Site" yalnız canManageSites iken |
-| [lib/ui/views/sites_view.dart:203](../../lib/ui/views/sites_view.dart#L203) | <code>onEdit: canManageSites ? () =&gt; onEditSite(site) : null,</code> | Düzenle/sil/onayla/reddet bayrağa bağlıdır; `canManageApartmentUsers` ve `canAssignDoorDevices` bu görünümde okunmaz |
-| [lib/ui/views/sites_view.dart:646](../../lib/ui/views/sites_view.dart#L646) | <code>onManagePermissions: onManageDoorPermissions != null</code> | Kapı yetki düğmesi geri çağrı verilirse çizilir |
-| [lib/ui/widgets/site_card.dart:225](../../lib/ui/widgets/site_card.dart#L225) | <code>if (widget.isSuperUser &amp;&amp;</code> | Karttaki bazı eylemler yalnız süper kullanıcıya |
-| [lib/ui/pages/home_page.dart:667](../../lib/ui/pages/home_page.dart#L667) | <code>bool _canAccessMenu(SirketMenuItem item, UserRole role) {</code> | Ekrana erişim kuralı; asıl yetki kontrolü sunucudadır |
+| [lib/ui/pages/home_page.dart:6022](../../lib/ui/pages/home_page.dart#L6022) | <code>canManageSites:</code> | Yönetim bayrağı rolden türetilir (süper kullanıcı ve site yöneticisi) |
+| [lib/ui/views/sites_view.dart:138](../../lib/ui/views/sites_view.dart#L138) | <code>label: Text(addSiteLabel),</code> | "Yeni Site" (başvurusu gereken yöneticide "Site Başvurusu") yalnız canManageSites iken |
+| [lib/ui/views/sites_view.dart:209](../../lib/ui/views/sites_view.dart#L209) | <code>onEdit: canManageSites ? () =&gt; onEditSite(site) : null,</code> | Düzenle/sil/onayla/reddet bayrağa bağlıdır; `canManageApartmentUsers` ve `canAssignDoorDevices` bu görünümde okunmaz |
+| [lib/ui/views/sites_view.dart:653](../../lib/ui/views/sites_view.dart#L653) | <code>onManagePermissions: onManageDoorPermissions != null</code> | Kapı yetki düğmesi geri çağrı verilirse çizilir |
+| [lib/ui/widgets/site_card.dart:229](../../lib/ui/widgets/site_card.dart#L229) | <code>if (widget.isSuperUser &amp;&amp;</code> | Karttaki bazı eylemler yalnız süper kullanıcıya |
+| [lib/ui/pages/home_page.dart:1603](../../lib/ui/pages/home_page.dart#L1603) | <code>bool _canAccessMenu(SirketMenuItem item, UserRole role) {</code> | Ekrana erişim kuralı; asıl yetki kontrolü sunucudadır |
 
 **Olası nedenler**
 - Düğme geri çağrısı rolden bağımsız verildi (ör. `onConfigurePolicy` her zaman verilir): görünürlük menü erişimine dayanır

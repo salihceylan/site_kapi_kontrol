@@ -553,8 +553,8 @@ export default {
           note: 'TFT_eSPI kullanıcı ayarı yüklenmez; tüm pinler bayraklarla verilir (User_Setup.h değişimi etkisizdir)' },
         { file: EPIO, find: '-D HARDWARE_TARGET="esp32c3-display"',
           note: 'Donanım hedefi etiketi' },
-        { file: 'company_qr_tool/app.py', find: 'class ScreenFirmwareWindow',
-          note: 'Şirket aracında ekran için derle/sürümle/yükle penceresi' },
+        { file: 'company_qr_tool/app.py', find: 'class ScreenFirmwarePage:',
+          note: 'Şirket aracının "Ekran yazılımı" sayfası (yan menü, Ctrl+5): ekranı bul, sürüm oluştur, yükle' },
       ],
       causes: [
         'COM8 yok/başka programda açık; ekranın bağlı olduğu port farklı',

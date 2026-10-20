@@ -30,7 +30,7 @@ Bu bölüm sunucu/uygulama/firmware kodunun DIŞINDAKİ arıza yerlerini toplar:
 | [tools/klavuz/build.test.mjs](../../tools/klavuz/build.test.mjs) | Klavuz aracının testleri + gerçek girişlerin --check denetimi |
 | [.github/workflows/ci.yml](../../.github/workflows/ci.yml) | CI: server lint+test, Flutter analyze+test, gitleaks (deploy YOK) |
 | [AGENTS.md](../../AGENTS.md) | 12 çalışma/kodlama kuralı |
-| [SAHA_KONTROL_LISTESI.md](../../SAHA_KONTROL_LISTESI.md) | Sahada/uygulamada elle doğrulama adımları (bölüm 1-55) |
+| [SAHA_KONTROL_LISTESI.md](../../SAHA_KONTROL_LISTESI.md) | Sahada/uygulamada elle doğrulama adımları (bölüm 1-87; Panel modül vitrini 87) |
 | [BEKLEYEN_ISLER.md](../../BEKLEYEN_ISLER.md) | Yol haritası, kod inceleme planı fazları, ertelenen işler, iptal edilen Faz 4 |
 | [PROJE_TEKNIK_NOTLAR.md](../../PROJE_TEKNIK_NOTLAR.md) | Genel teknik özet: canlı dizin, güncelleme sırası, build/test notları |
 | [docs/codebase/TESTING.md](../../docs/codebase/TESTING.md) | Test yığını, düzen, kapsam matrisi, komutlar |
@@ -53,16 +53,16 @@ Bu bölüm sunucu/uygulama/firmware kodunun DIŞINDAKİ arıza yerlerini toplar:
 - [arac-sftp-kimlik](#arac-sftp-kimlik) — Sunucuya gönderirken "SSH_KEY_FILE bulunamadi", "SSH anahtari parola ile korunuyor" veya şifre soruyor / "Sunucu yukleme hatasi"
 - [arac-uid-okunamadi](#arac-uid-okunamadi) — Şirket aracında "Secili cihaz UID oku" → "Cihaz Unique ID okunamadi!" hatası ya da çip "ESP32" (belirsiz) görünüyor
 - [arac-kayit-http-400-donanim](#arac-kayit-http-400-donanim) — "Cihazı Sunucuya Kaydet" hata veriyor (HTTP 400 "device_uid 12 haneli hex", HTTP 500, 429) ya da kayıttan sonra WROOM kart OTA'da 403 alıyor
-- [arac-usb-yukleme-hata](#arac-usb-yukleme-hata) — Şirket aracında "Surumu USB ile cihaza yukle" hata veriyor: "portu meşgul (Erişim engellendi)" veya "Bağlantı / Yazma Zaman Aşımı"
-- [arac-usb-yukleme-sessiz-basarisizlik](#arac-usb-yukleme-sessiz-basarisizlik) — USB yükleme "TMM: Firmware yukleme tamamlandi" dedi ama cihaz hâlâ eski sürümde / açılmıyor
-- [arac-surum-derleme](#arac-surum-derleme) — Şirket aracında "Firmware derle" / "Surum olustur" başarısız ya da düğmeler pasif ("Once derleme ve surum olusturma adimlarini basariyla tamamlayin")
+- [arac-usb-yukleme-hata](#arac-usb-yukleme-hata) — Şirket aracında "USB ile karta yükle" hata veriyor: "portu meşgul (Erişim engellendi)" veya "Bağlantı / Yazma Zaman Aşımı"
+- [arac-usb-yukleme-sessiz-basarisizlik](#arac-usb-yukleme-sessiz-basarisizlik) — USB yükleme "TMM: Yazılım yükleme tamamlandı" ("TMM · Yükleme tamamlandı") dedi ama cihaz hâlâ eski sürümde / açılmıyor
+- [arac-surum-derleme](#arac-surum-derleme) — Şirket aracında "Derle" / "Sürüm oluştur" başarısız ya da düğmeler pasif ("Once derleme ve surum olusturma adimlarini basariyla tamamlayin")
 - [arac-ota-basligi-degisti](#arac-ota-basligi-degisti) — git durumunda cihaz_kontrol/include/ota_guncelleme.h kendiliğinden değişmiş görünüyor (sürüm numarası farklı)
-- [arac-zip-hatasi](#arac-zip-hatasi) — Şirket aracında "Calisma arkadasina guncelleme zip dosyasi olustur" hata veriyor ("ZIP icin gerekli arac klasoru yok" / "str object has no attribute parent")
+- [arac-zip-hatasi](#arac-zip-hatasi) — Şirket aracında "Çalışma arkadaşı için ZIP" hata veriyor ("ZIP icin gerekli arac klasoru yok" / "Guncelleme dosyasi yok" / "Surum gerekli")
 - [arac-qr-etiket](#arac-qr-etiket) — Üretilen QR etiketi okunmuyor / etiket altındaki "Unique ID" cihazın gerçek UID'sinden farklı / "Logo bulunamadi"
 - [arac-kayitli-cihazlar-pdf](#arac-kayitli-cihazlar-pdf) — Kayıtlı Cihazlar listesi eksik/farklı, silme "Kısmi Silme" diyor ya da PDF raporu yazıları bozuk / "PDF Hatası"
-- [arac-cihaz-dene-durum-bos](#arac-cihaz-dene-durum-bos) — Cihaz Dene (cihaz_dene/app.py ya da şirket aracındaki pencere): bilgi alanları "-" kalıyor veya Role Pin HIGH/LOW/Pin Bulma tepki vermiyor
-- [arac-cihaz-dene-beacon-wan](#arac-cihaz-dene-beacon-wan) — Cihaz Dene penceresinde "Yerel Beacon (UDP)" ve "Genel IP (WAN)" alanları hiç dolmuyor
-- [arac-ekran-firmware](#arac-ekran-firmware) — Şirket aracı "Ekran Yazılımı" penceresi: ekran bulunamıyor / derleme-sürüm-yükleme hata veriyor
+- [arac-cihaz-dene-durum-bos](#arac-cihaz-dene-durum-bos) — Cihaz Dene (cihaz_dene/app.py ya da şirket aracındaki "Cihaz testi" sayfası): bilgi alanları "-" kalıyor veya Role Pin HIGH/LOW/Pin Bulma tepki vermiyor
+- [arac-cihaz-dene-beacon-wan](#arac-cihaz-dene-beacon-wan) — Cihaz testi sayfasında "Yerel Beacon (UDP)" ya da "Genel IP (WAN)" alanı dolmuyor ("-" kalıyor)
+- [arac-ekran-firmware](#arac-ekran-firmware) — Şirket aracı "Ekran yazılımı" sayfası: ekran bulunamıyor / derleme-sürüm-yükleme hata veriyor
 - [arac-baslatma-bat](#arac-baslatma-bat) — launch_company_qr_tool.bat ile araç açılmıyor ("Python sanal ortam olusturulamadi" / "Kutuphane kurulumu basarisiz") ya da pencere hiç açılmadan kapanıyor
 - [test-nerede-sunucu](#test-nerede-sunucu) — Sunucuda bu özellik/uç hangi testle korunuyor? Testi nerede bulurum, nasıl çalıştırırım?
 - [test-nerede-flutter](#test-nerede-flutter) — Flutter tarafında bu ekran/özellik hangi testle korunuyor? Testler nerede, hangisi neyi ölçüyor?
@@ -103,11 +103,11 @@ Bu bölüm sunucu/uygulama/firmware kodunun DIŞINDAKİ arıza yerlerini toplar:
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [company_qr_tool/app.py:149](../../company_qr_tool/app.py#L149) | <code>def _company_http_error_text(code: int, body: bytes &#124; None = None) -&gt; str:</code> | 401/403 gelince "Sunucu yetkilendirmeyi reddetti (HTTP ...)" metnini üretir |
-| [company_qr_tool/app.py:137](../../company_qr_tool/app.py#L137) | <code>headers["X-Company-Key"] = key</code> | Anahtar yalnız doluysa ve adres güvenliyse başlığa eklenir; aksi halde başlık hiç gitmez |
+| [company_qr_tool/app.py:152](../../company_qr_tool/app.py#L152) | <code>def _company_http_error_text(code: int, body: bytes &#124; None = None) -&gt; str:</code> | 401/403 gelince "Sunucu yetkilendirmeyi reddetti (HTTP ...)" metnini üretir |
+| [company_qr_tool/app.py:140](../../company_qr_tool/app.py#L140) | <code>headers["X-Company-Key"] = key</code> | Anahtar yalnız doluysa ve adres güvenliyse başlığa eklenir; aksi halde başlık hiç gitmez |
 | [server/src/middlewares/company_auth.js:16](../../server/src/middlewares/company_auth.js#L16) | <code>export function hasValidCompanyKey(req, env = process.env) {</code> | Sunucu tarafı: x-company-key başlığını COMPANY_API_KEY ile sabit zamanlı karşılaştırır; sunucuda anahtar tanımsızsa her zaman false |
 | [server/src/middlewares/company_auth.js:43](../../server/src/middlewares/company_auth.js#L43) | <code>return res.status(401).json({ error: 'Yetkisiz erisim.' });</code> | Anahtar da super_user JWT de yoksa 401; ayrıca company_access_denied denetim kaydı yazılır |
-| [server/src/config/env.js:134](../../server/src/config/env.js#L134) | <code>warnings.push('COMPANY_API_KEY tanimli degil; /api/company/* yalnizca super_user JWT ile …</code> | Sunucuda anahtar tanımsızsa açılışta bu uyarı yazılır (başlık işlemez) |
+| [server/src/config/env.js:325](../../server/src/config/env.js#L325) | <code>warnings.push('COMPANY_API_KEY tanimli degil; /api/company/* yalnizca super_user JWT ile …</code> | Sunucuda anahtar tanımsızsa açılışta bu uyarı yazılır (başlık işlemez) |
 | [company_qr_tool/env.example:12](../../company_qr_tool/env.example#L12) | <code>COMPANY_API_KEY=</code> | İstemcide anahtarın yazılacağı satır (değer sunucudaki server/.env ile AYNI olmalı) |
 
 **Olası nedenler**
@@ -139,13 +139,13 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 200 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [company_qr_tool/app.py:57](../../company_qr_tool/app.py#L57) | <code>def _load_local_env_file() -&gt; None:</code> | .env yalnız aracın kendi klasöründeki BASE_DIR/.env dosyasından okunur (açılışta bir kez) |
-| [company_qr_tool/app.py:77](../../company_qr_tool/app.py#L77) | <code>if key and key.replace("_", "").isalnum() and key not in os.environ:</code> | Ortamda ZATEN tanımlı değişken (boş değer bile) .env değerini ezmez; anahtar adı yalnız harf/rakam/_ olabilir |
-| [company_qr_tool/app.py:116](../../company_qr_tool/app.py#L116) | <code>def get_company_api_key() -&gt; str:</code> | Anahtarı ortamdan okur; boşsa "tanımlı değil" sayılır |
-| [company_qr_tool/app.py:105](../../company_qr_tool/app.py#L105) | <code>COMPANY_KEY_MISSING_MESSAGE = (</code> | Kullanıcıya gösterilen uyarı metni ve çözüm adımları |
-| [company_qr_tool/app.py:1637](../../company_qr_tool/app.py#L1637) | <code>error_msg = COMPANY_KEY_MISSING_MESSAGE</code> | Kayıt işçisi anahtar yokken ağ isteği yapmaz; yalnız yerel kayıt tamamlanır |
-| [company_qr_tool/app.py:539](../../company_qr_tool/app.py#L539) | <code>return [], f"{COMPANY_KEY_ENV} tanimli degil: sunucu listesi alinamadi, yalnizca yerel ka…</code> | Liste/PDF/Kayıtlı Cihazlar penceresi anahtar yokken yalnız yerel kayıtları gösterir |
-| [company_qr_tool/README.md:110](../../company_qr_tool/README.md#L110) | <code>### Sunucu yetkisi (COMPANY_API_KEY)</code> | Anahtarın nereye yazılacağı (.env veya setx) ve davranışı |
+| [company_qr_tool/app.py:60](../../company_qr_tool/app.py#L60) | <code>def _load_local_env_file() -&gt; None:</code> | .env yalnız aracın kendi klasöründeki BASE_DIR/.env dosyasından okunur (açılışta bir kez) |
+| [company_qr_tool/app.py:80](../../company_qr_tool/app.py#L80) | <code>if key and key.replace("_", "").isalnum() and key not in os.environ:</code> | Ortamda ZATEN tanımlı değişken (boş değer bile) .env değerini ezmez; anahtar adı yalnız harf/rakam/_ olabilir |
+| [company_qr_tool/app.py:119](../../company_qr_tool/app.py#L119) | <code>def get_company_api_key() -&gt; str:</code> | Anahtarı ortamdan okur; boşsa "tanımlı değil" sayılır |
+| [company_qr_tool/app.py:108](../../company_qr_tool/app.py#L108) | <code>COMPANY_KEY_MISSING_MESSAGE = (</code> | Kullanıcıya gösterilen uyarı metni ve çözüm adımları |
+| [company_qr_tool/app.py:2023](../../company_qr_tool/app.py#L2023) | <code>error_msg = COMPANY_KEY_MISSING_MESSAGE</code> | Kayıt işçisi anahtar yokken ağ isteği yapmaz; yalnız yerel kayıt tamamlanır |
+| [company_qr_tool/app.py:544](../../company_qr_tool/app.py#L544) | <code>return [], f"{COMPANY_KEY_ENV} tanimli degil: sunucu listesi alinamadi, yalnizca yerel ka…</code> | Liste/PDF/Kayıtlı Cihazlar penceresi anahtar yokken yalnız yerel kayıtları gösterir |
+| [company_qr_tool/README.md:125](../../company_qr_tool/README.md#L125) | <code>### Sunucu yetkisi (COMPANY_API_KEY)</code> | Anahtarın nereye yazılacağı (.env veya setx) ve davranışı |
 
 **Olası nedenler**
 - company_qr_tool/.env yok ya da app.py ile aynı klasörde değil
@@ -168,10 +168,10 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 200 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [company_qr_tool/app.py:120](../../company_qr_tool/app.py#L120) | <code>def _is_key_safe_url(url: str) -&gt; bool:</code> | Anahtar yalnız https veya localhost/127.0.0.1/::1 üzerindeki http ile gönderilir |
-| [company_qr_tool/app.py:131](../../company_qr_tool/app.py#L131) | <code>def company_request_headers(url: str, extra: dict &#124; None = None) -&gt; dict:</code> | Adres güvenli değilse X-Company-Key eklenmez → sunucu 401 döner |
-| [company_qr_tool/app.py:98](../../company_qr_tool/app.py#L98) | <code>PUBLIC_API_URL = _env_str("AHBU_API_URL", "https://api.gudeteknoloji.com.tr").rstrip("/")</code> | Varsayılan https://api.gudeteknoloji.com.tr; AHBU_API_URL ile değiştirilir |
-| [company_qr_tool/app.py:101](../../company_qr_tool/app.py#L101) | <code>API_FALLBACK_URL = _env_str("AHBU_API_FALLBACK_URL", "").rstrip("/")</code> | Düz http yedek uç varsayılan KAPALI (boş) |
+| [company_qr_tool/app.py:123](../../company_qr_tool/app.py#L123) | <code>def _is_key_safe_url(url: str) -&gt; bool:</code> | Anahtar yalnız https veya localhost/127.0.0.1/::1 üzerindeki http ile gönderilir |
+| [company_qr_tool/app.py:134](../../company_qr_tool/app.py#L134) | <code>def company_request_headers(url: str, extra: dict &#124; None = None) -&gt; dict:</code> | Adres güvenli değilse X-Company-Key eklenmez → sunucu 401 döner |
+| [company_qr_tool/app.py:101](../../company_qr_tool/app.py#L101) | <code>PUBLIC_API_URL = _env_str("AHBU_API_URL", "https://api.gudeteknoloji.com.tr").rstrip("/")</code> | Varsayılan https://api.gudeteknoloji.com.tr; AHBU_API_URL ile değiştirilir |
+| [company_qr_tool/app.py:104](../../company_qr_tool/app.py#L104) | <code>API_FALLBACK_URL = _env_str("AHBU_API_FALLBACK_URL", "").rstrip("/")</code> | Düz http yedek uç varsayılan KAPALI (boş) |
 | [company_qr_tool/env.example:17](../../company_qr_tool/env.example#L17) | <code># AHBU_API_FALLBACK_URL=http://127.0.0.1:3000</code> | Yerel geliştirme için örnek; yalnız localhost http güvenli sayılır |
 
 **Olası nedenler**
@@ -189,11 +189,11 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 200 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [company_qr_tool/app.py:188](../../company_qr_tool/app.py#L188) | <code>def known_hosts_setup_help() -&gt; str:</code> | İlk kurulum adımlarını ve known_hosts yolunu yazan yardım metni |
-| [company_qr_tool/app.py:212](../../company_qr_tool/app.py#L212) | <code>client.set_missing_host_key_policy(paramiko.RejectPolicy())</code> | Bilinmeyen sunucuya otomatik güvenilmez (AutoAddPolicy YOK) |
-| [company_qr_tool/app.py:235](../../company_qr_tool/app.py#L235) | <code>except paramiko.BadHostKeyException as exc:</code> | Kayıtlı anahtar ile sunucunun anahtarı uyuşmazsa "UYUSMUYOR" hatası |
-| [company_qr_tool/app.py:2160](../../company_qr_tool/app.py#L2160) | <code>if not known_hosts_path().is_file():</code> | Sunucuya gönder düğmesi known_hosts dosyası yoksa hiç bağlanmadan bu uyarıyı gösterir |
-| [company_qr_tool/README.md:121](../../company_qr_tool/README.md#L121) | <code>### SFTP ile firmware gonderme: sunucu kimligi dogrulamasi</code> | İlk kurulum ve sunucu yeniden kurulursa yapılacaklar |
+| [company_qr_tool/app.py:191](../../company_qr_tool/app.py#L191) | <code>def known_hosts_setup_help() -&gt; str:</code> | İlk kurulum adımlarını ve known_hosts yolunu yazan yardım metni |
+| [company_qr_tool/app.py:215](../../company_qr_tool/app.py#L215) | <code>client.set_missing_host_key_policy(paramiko.RejectPolicy())</code> | Bilinmeyen sunucuya otomatik güvenilmez (AutoAddPolicy YOK) |
+| [company_qr_tool/app.py:238](../../company_qr_tool/app.py#L238) | <code>except paramiko.BadHostKeyException as exc:</code> | Kayıtlı anahtar ile sunucunun anahtarı uyuşmazsa "UYUSMUYOR" hatası |
+| [company_qr_tool/app.py:2529](../../company_qr_tool/app.py#L2529) | <code>if not known_hosts_path().is_file():</code> | Sunucuya gönder düğmesi known_hosts dosyası yoksa hiç bağlanmadan bu uyarıyı gösterir |
+| [company_qr_tool/README.md:136](../../company_qr_tool/README.md#L136) | <code>### SFTP ile firmware gonderme: sunucu kimligi dogrulamasi</code> | İlk kurulum ve sunucu yeniden kurulursa yapılacaklar |
 
 **Olası nedenler**
 - known_hosts dosyasında 178.210.161.55:22667 kaydı yok (ilk kurulum yapılmamış)
@@ -223,12 +223,12 @@ ssh-keygen -R "[178.210.161.55]:22667"
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [company_qr_tool/app.py:219](../../company_qr_tool/app.py#L219) | <code>key_file = os.environ.get("SSH_KEY_FILE", "").strip()</code> | Anahtar tanımlıysa anahtarla, değilse parolayla bağlanır |
-| [company_qr_tool/app.py:223](../../company_qr_tool/app.py#L223) | <code>raise RuntimeError(f"SSH_KEY_FILE bulunamadi: {key_path}")</code> | Anahtar dosyası yolu yanlış |
-| [company_qr_tool/app.py:242](../../company_qr_tool/app.py#L242) | <code>except paramiko.PasswordRequiredException as exc:</code> | Anahtar parolalıysa SSH_KEY_PASSPHRASE gerekir |
-| [company_qr_tool/app.py:2167](../../company_qr_tool/app.py#L2167) | <code>password = os.environ.get("AHBU_VPS_PASSWORD", "").strip()</code> | Anahtar yoksa parola: önce AHBU_VPS_PASSWORD, yoksa diyalog; boş bırakılırsa işlem sessizce iptal olur |
-| [company_qr_tool/app.py:2203](../../company_qr_tool/app.py#L2203) | <code>import paramiko</code> | paramiko burada tembel içe alınır: kurulu değilse "Sunucu yukleme hatasi" ile düşer |
-| [company_qr_tool/app.py:2207](../../company_qr_tool/app.py#L2207) | <code>vps_target_dir = f"{VPS_FIRMWARE_BASE_DIR}/{target}"</code> | Dosyalar donanım hedef klasörüne (esp32-c3 / esp32-wroom) gider: AGENTS.md kural 4 izolasyonu |
+| [company_qr_tool/app.py:222](../../company_qr_tool/app.py#L222) | <code>key_file = os.environ.get("SSH_KEY_FILE", "").strip()</code> | Anahtar tanımlıysa anahtarla, değilse parolayla bağlanır |
+| [company_qr_tool/app.py:226](../../company_qr_tool/app.py#L226) | <code>raise RuntimeError(f"SSH_KEY_FILE bulunamadi: {key_path}")</code> | Anahtar dosyası yolu yanlış |
+| [company_qr_tool/app.py:245](../../company_qr_tool/app.py#L245) | <code>except paramiko.PasswordRequiredException as exc:</code> | Anahtar parolalıysa SSH_KEY_PASSPHRASE gerekir |
+| [company_qr_tool/app.py:2536](../../company_qr_tool/app.py#L2536) | <code>password = os.environ.get("AHBU_VPS_PASSWORD", "").strip()</code> | Anahtar yoksa parola: önce AHBU_VPS_PASSWORD, yoksa diyalog; boş bırakılırsa işlem sessizce iptal olur |
+| [company_qr_tool/app.py:2573](../../company_qr_tool/app.py#L2573) | <code>import paramiko</code> | paramiko burada tembel içe alınır: kurulu değilse "Sunucu yukleme hatasi" ile düşer |
+| [company_qr_tool/app.py:2577](../../company_qr_tool/app.py#L2577) | <code>vps_target_dir = f"{VPS_FIRMWARE_BASE_DIR}/{target}"</code> | Dosyalar donanım hedef klasörüne (esp32-c3 / esp32-wroom) gider: AGENTS.md kural 4 izolasyonu |
 | [company_qr_tool/requirements.txt:5](../../company_qr_tool/requirements.txt#L5) | <code>paramiko&gt;=3.4.0</code> | SFTP için gerekli paket |
 
 **Olası nedenler**
@@ -249,13 +249,13 @@ ssh-keygen -R "[178.210.161.55]:22667"
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [company_qr_tool/app.py:791](../../company_qr_tool/app.py#L791) | <code>def read_mac(port: str) -&gt; tuple[str, str]:</code> | Önce çalışan firmware'den seri komutla UID okur; olmazsa esptool ile MAC okur |
-| [company_qr_tool/app.py:819](../../company_qr_tool/app.py#L819) | <code>m_uid = re.search(r"Cihaz Unique ID:\s*([0-9A-Fa-f]{6,20})", buf)</code> | Firmware çıktısındaki "Cihaz Unique ID:" satırı beklenir |
-| [company_qr_tool/app.py:833](../../company_qr_tool/app.py#L833) | <code>return "ESP32", uid_found</code> | Eski firmware "Hardware Target" yazmazsa çip belirsiz kalır (sunucu donanım türünü tahmin ETMEZ) |
-| [company_qr_tool/app.py:418](../../company_qr_tool/app.py#L418) | <code>def mac_to_firmware_uid(mac: str) -&gt; str:</code> | esptool yolunda MAC baytları TERS çevrilip 12 haneli UID yapılır |
-| [company_qr_tool/app.py:858](../../company_qr_tool/app.py#L858) | <code>"Cihaz Unique ID okunamadi!\n\n"</code> | Hata iletisi: port meşgul / CH340 BOOT-EN adımları / kablo |
-| [company_qr_tool/app.py:778](../../company_qr_tool/app.py#L778) | <code>def find_esptool_python() -&gt; str:</code> | esptool'u çalıştıracak Python: önce kendi, sonra PlatformIO penv |
-| [company_qr_tool/app.py:1493](../../company_qr_tool/app.py#L1493) | <code>def _read_uid_worker(self, idx: int, dev: EspDevice) -&gt; None:</code> | UID okumadan önce Cihaz Dene penceresinin seri bağlantısını keser |
+| [company_qr_tool/app.py:833](../../company_qr_tool/app.py#L833) | <code>def read_mac(port: str) -&gt; tuple[str, str]:</code> | Önce çalışan firmware'den seri komutla UID okur; olmazsa esptool ile MAC okur |
+| [company_qr_tool/app.py:861](../../company_qr_tool/app.py#L861) | <code>m_uid = re.search(r"Cihaz Unique ID:\s*([0-9A-Fa-f]{6,20})", buf)</code> | Firmware çıktısındaki "Cihaz Unique ID:" satırı beklenir |
+| [company_qr_tool/app.py:875](../../company_qr_tool/app.py#L875) | <code>return "ESP32", uid_found</code> | Eski firmware "Hardware Target" yazmazsa çip belirsiz kalır (sunucu donanım türünü tahmin ETMEZ) |
+| [company_qr_tool/app.py:423](../../company_qr_tool/app.py#L423) | <code>def mac_to_firmware_uid(mac: str) -&gt; str:</code> | esptool yolunda MAC baytları TERS çevrilip 12 haneli UID yapılır |
+| [company_qr_tool/app.py:900](../../company_qr_tool/app.py#L900) | <code>"Cihaz Unique ID okunamadi!\n\n"</code> | Hata iletisi: port meşgul / CH340 BOOT-EN adımları / kablo |
+| [company_qr_tool/app.py:820](../../company_qr_tool/app.py#L820) | <code>def find_esptool_python() -&gt; str:</code> | esptool'u çalıştıracak Python: önce kendi, sonra PlatformIO penv |
+| [company_qr_tool/app.py:1856](../../company_qr_tool/app.py#L1856) | <code>def _read_uid_worker(self, port: str, dev: EspDevice) -&gt; None:</code> | UID okumadan önce Cihaz Dene penceresinin seri bağlantısını keser |
 
 **Olası nedenler**
 - Port meşgul: Cihaz Dene, VS Code seri monitörü veya başka program portu tutuyor
@@ -278,13 +278,13 @@ ssh-keygen -R "[178.210.161.55]:22667"
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [company_qr_tool/app.py:1620](../../company_qr_tool/app.py#L1620) | <code>hardware_type = chip_to_hardware_type(d.chip)</code> | Çipten donanım türü çıkarılır; belirsizse alan hiç gönderilmez |
-| [company_qr_tool/app.py:172](../../company_qr_tool/app.py#L172) | <code>def chip_to_hardware_type(chip: str) -&gt; str:</code> | C3 → esp32_c3; WROOM/WROVER/D0WD → esp32_wroom; diğeri boş |
-| [company_qr_tool/app.py:1627](../../company_qr_tool/app.py#L1627) | <code>def _server_device_save_worker(self, dev: EspDevice, payload: dict) -&gt; None:</code> | POST /api/company/labeled-devices çağrısı; hata metni _company_http_error_text ile gösterilir |
-| [server/src/routes/company_routes.js:292](../../server/src/routes/company_routes.js#L292) | <code>return res.status(400).json({ error: 'device_uid 12 haneli hex (0-9, A-F) olmalidir.' });</code> | Sunucu UID'yi 12 haneli büyük harf hex ister (":" ve "-" ayırıcıları tolere edilir) |
-| [server/src/routes/company_routes.js:107](../../server/src/routes/company_routes.js#L107) | <code>export function resolveCompanyHardwareType(body) {</code> | hardware_type/hardware_target/chip alanlarından türü çıkarır; çıkaramazsa null |
-| [server/src/routes/company_routes.js:124](../../server/src/routes/company_routes.js#L124) | <code>const DEFAULT_COMPANY_HARDWARE_TYPE = 'esp32_c3';</code> | Tür belirlenemezse varsayılan esp32_c3 yazılır; cihaz MQTT bildirimi sonradan düzeltir |
-| [server/src/server.js:64](../../server/src/server.js#L64) | <code>app.post('/api/company/labeled-devices', companyAccessLimiter, requireCompanyAccess, expr…</code> | Bu uca özel 5 MB JSON limiti (QR PNG base64); hız sınırı yetkiden ÖNCE çalışır |
+| [company_qr_tool/app.py:1983](../../company_qr_tool/app.py#L1983) | <code>hardware_type = chip_to_hardware_type(d.chip)</code> | Çipten donanım türü çıkarılır; belirsizse alan hiç gönderilmez |
+| [company_qr_tool/app.py:175](../../company_qr_tool/app.py#L175) | <code>def chip_to_hardware_type(chip: str) -&gt; str:</code> | C3 → esp32_c3; WROOM/WROVER/D0WD → esp32_wroom; diğeri boş |
+| [company_qr_tool/app.py:2013](../../company_qr_tool/app.py#L2013) | <code>def _server_device_save_worker(self, dev: EspDevice, payload: dict) -&gt; None:</code> | POST /api/company/labeled-devices çağrısı; hata metni _company_http_error_text ile gösterilir |
+| [server/src/routes/company_routes.js:326](../../server/src/routes/company_routes.js#L326) | <code>return res.status(400).json({ error: 'device_uid 12 haneli hex (0-9, A-F) olmalidir.' });</code> | Sunucu UID'yi 12 haneli büyük harf hex ister (":" ve "-" ayırıcıları tolere edilir) |
+| [server/src/routes/company_routes.js:110](../../server/src/routes/company_routes.js#L110) | <code>export function resolveCompanyHardwareType(body) {</code> | hardware_type/hardware_target/chip alanlarından türü çıkarır; çıkaramazsa null |
+| [server/src/routes/company_routes.js:127](../../server/src/routes/company_routes.js#L127) | <code>const DEFAULT_COMPANY_HARDWARE_TYPE = 'esp32_c3';</code> | Tür belirlenemezse varsayılan esp32_c3 yazılır; cihaz MQTT bildirimi sonradan düzeltir |
+| [server/src/server.js:92](../../server/src/server.js#L92) | <code>app.post('/api/company/labeled-devices', companyAccessLimiter, requireCompanyAccess, expr…</code> | Bu uca özel 5 MB JSON limiti (QR PNG base64); hız sınırı yetkiden ÖNCE çalışır |
 
 **Olası nedenler**
 - UID 12 haneli değil (ör. eski firmware farklı uzunlukta UID bildiriyor) → 400
@@ -302,29 +302,29 @@ ssh-keygen -R "[178.210.161.55]:22667"
 **Bkz.:** [arac-uid-okunamadi](#arac-uid-okunamadi), [arac-sunucu-401](#arac-sunucu-401)
 
 <a id="arac-usb-yukleme-hata"></a>
-### arac-usb-yukleme-hata · Şirket aracında "Surumu USB ile cihaza yukle" hata veriyor: "portu meşgul (Erişim engellendi)" veya "Bağlantı / Yazma Zaman Aşımı"
+### arac-usb-yukleme-hata · Şirket aracında "USB ile karta yükle" hata veriyor: "portu meşgul (Erişim engellendi)" veya "Bağlantı / Yazma Zaman Aşımı"
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [company_qr_tool/app.py:2034](../../company_qr_tool/app.py#L2034) | <code>def _upload_worker(self, dev: EspDevice, rel: dict) -&gt; None:</code> | USB yükleme işçisi: esptool write_flash ile bootloader + partitions + firmware yazar |
-| [company_qr_tool/app.py:2100](../../company_qr_tool/app.py#L2100) | <code>f"{dev.port} portu meşgul (Erişim engellendi).\n\n"</code> | PermissionError / "port is busy" için çözüm adımları |
-| [company_qr_tool/app.py:2106](../../company_qr_tool/app.py#L2106) | <code>if "write timeout" in err_lower or "failed to connect" in err_lower or "timed out waiting…</code> | Zaman aşımı/bağlanamama için BOOT+EN adımlarını anlatan hata |
-| [company_qr_tool/app.py:260](../../company_qr_tool/app.py#L260) | <code>def bootloader_offset_for_env(env: str) -&gt; str:</code> | Bootloader ofseti hedefe göre: WROOM 0x1000, C3 0x0 (yanlış env = bozuk yazım) |
-| [company_qr_tool/app.py:253](../../company_qr_tool/app.py#L253) | <code>def target_for_env(env: str) -&gt; str:</code> | Env adından hedef çıkarır: "wroom" veya "esp32dev" içeriyorsa esp32-wroom, aksi halde esp32-c3 |
-| [company_qr_tool/app.py:1053](../../company_qr_tool/app.py#L1053) | <code>def suggest_env_for_chip(chip: str, envs: list[str]) -&gt; str &#124; None:</code> | Çipe göre env önerisi: C3 → *c3*, WROOM/ESP32 → *wroom*/esp32dev; çip bilinmiyorsa lolin_c3_mini |
-| [company_qr_tool/app.py:2055](../../company_qr_tool/app.py#L2055) | <code>if "v5." in (ver_res.stdout + ver_res.stderr):</code> | esptool v5 ise komut write-flash, değilse write_flash kullanılır |
-| [company_qr_tool/app.py:2131](../../company_qr_tool/app.py#L2131) | <code>"erase_region",</code> | Yazımdan sonra OTA seçim bölgesi (0xe000, 0x2000) silinir ki yeni sürüm açılsın |
+| [company_qr_tool/app.py:2395](../../company_qr_tool/app.py#L2395) | <code>def _upload_worker(self, dev: EspDevice, rel: dict) -&gt; None:</code> | USB yükleme işçisi: esptool write_flash ile bootloader + partitions + firmware yazar |
+| [company_qr_tool/app.py:2461](../../company_qr_tool/app.py#L2461) | <code>f"{dev.port} portu meşgul (Erişim engellendi).\n\n"</code> | PermissionError / "port is busy" için çözüm adımları |
+| [company_qr_tool/app.py:2467](../../company_qr_tool/app.py#L2467) | <code>if "write timeout" in err_lower or "failed to connect" in err_lower or "timed out waiting…</code> | Zaman aşımı/bağlanamama için BOOT+EN adımlarını anlatan hata |
+| [company_qr_tool/app.py:263](../../company_qr_tool/app.py#L263) | <code>def bootloader_offset_for_env(env: str) -&gt; str:</code> | Bootloader ofseti hedefe göre: WROOM 0x1000, C3 0x0 (yanlış env = bozuk yazım) |
+| [company_qr_tool/app.py:256](../../company_qr_tool/app.py#L256) | <code>def target_for_env(env: str) -&gt; str:</code> | Env adından hedef çıkarır: "wroom" veya "esp32dev" içeriyorsa esp32-wroom, aksi halde esp32-c3 |
+| [company_qr_tool/app.py:1095](../../company_qr_tool/app.py#L1095) | <code>def suggest_env_for_chip(chip: str, envs: list[str]) -&gt; str &#124; None:</code> | Çipe göre env önerisi: C3 → *c3*, WROOM/ESP32 → *wroom*/esp32dev; çip bilinmiyorsa lolin_c3_mini |
+| [company_qr_tool/app.py:2416](../../company_qr_tool/app.py#L2416) | <code>if "v5." in (ver_res.stdout + ver_res.stderr):</code> | esptool v5 ise komut write-flash, değilse write_flash kullanılır |
+| [company_qr_tool/app.py:2492](../../company_qr_tool/app.py#L2492) | <code>"erase_region",</code> | Yazımdan sonra OTA seçim bölgesi (0xe000, 0x2000) silinir ki yeni sürüm açılsın |
 
 **Olası nedenler**
-- Port meşgul: Cihaz Dene penceresi, VS Code seri monitörü veya başka program portu tutuyor
+- Port meşgul: "Cihaz testi" sayfasındaki bağlantı, VS Code seri monitörü veya başka program portu tutuyor
 - Harici CH340/USB-TTL: kart kendiliğinden indirme moduna geçemez (BOOT basılı + EN bas-bırak + BOOT bırak)
 - Yanlış env seçili (C3 kartına WROOM env'i): bootloader ofseti ve ikili dosya uyumsuz olur
 - Kablo yalnız şarj kablosu / sürücü yok
 
 **Adım adım kontrol**
-- Cihaz Dene'de "Bağlantıyı Kes", serial monitor terminalini kapatın
+- "Cihaz testi" sayfasında "Bağlantıyı kes"e basın, serial monitor terminalini kapatın
 - Env, UID okununca çipe göre seçilir (suggest_env_for_chip); UID OKUNMADAN cihaz seçilirse lolin_c3_mini önerilir: WROOM kartı için önce UID okuyun ya da env'i elle düzeltin
-- Önce "Firmware derle" → "Surum olustur" tamamlanmış olmalı (yoksa "Surum gerekli" uyarısı)
+- Önce "Derle" → "Sürüm oluştur" tamamlanmış olmalı (yoksa "Surum gerekli" uyarısı)
 
 **Günlükte aranacak ifadeler**
 - `portu meşgul (Erişim engellendi)`
@@ -333,14 +333,14 @@ ssh-keygen -R "[178.210.161.55]:22667"
 **Bkz.:** [arac-usb-yukleme-sessiz-basarisizlik](#arac-usb-yukleme-sessiz-basarisizlik), [arac-surum-derleme](#arac-surum-derleme)
 
 <a id="arac-usb-yukleme-sessiz-basarisizlik"></a>
-### arac-usb-yukleme-sessiz-basarisizlik · USB yükleme "TMM: Firmware yukleme tamamlandi" dedi ama cihaz hâlâ eski sürümde / açılmıyor
+### arac-usb-yukleme-sessiz-basarisizlik · USB yükleme "TMM: Yazılım yükleme tamamlandı" ("TMM · Yükleme tamamlandı") dedi ama cihaz hâlâ eski sürümde / açılmıyor
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [company_qr_tool/app.py:2094](../../company_qr_tool/app.py#L2094) | <code>rc, tail = self._run_stream(cmd, DEVICE_PROJECT_DIR, on_line=on_line)</code> | esptool çıkış kodu burada alınır |
-| [company_qr_tool/app.py:2096](../../company_qr_tool/app.py#L2096) | <code>raw_err = "\n".join(tail[-8:]) if tail else "Yukleme hatasi."</code> | rc != 0 bloğunda YALNIZ iki hata kalıbı (port meşgul, zaman aşımı) exception fırlatır; başka bir esptool hatası fırlatılmaz |
-| [company_qr_tool/app.py:2135](../../company_qr_tool/app.py#L2135) | <code>self._run_stream(cmd_erase_ota, DEVICE_PROJECT_DIR)</code> | OTA bölgesi silme sonucu denetlenmez; hata sessizce yutulur |
-| [company_qr_tool/app.py:2141](../../company_qr_tool/app.py#L2141) | <code>self.root.after(0, lambda: self.set_status("TMM: Firmware yukleme tamamlandi."))</code> | Önceki adımlar hata fırlatmadıysa (rc != 0 olsa bile) başarı mesajı gösterilir |
+| [company_qr_tool/app.py:2455](../../company_qr_tool/app.py#L2455) | <code>rc, tail = self._run_stream(cmd, DEVICE_PROJECT_DIR, on_line=on_line)</code> | esptool çıkış kodu burada alınır |
+| [company_qr_tool/app.py:2457](../../company_qr_tool/app.py#L2457) | <code>raw_err = "\n".join(tail[-8:]) if tail else "Yukleme hatasi."</code> | rc != 0 bloğunda YALNIZ iki hata kalıbı (port meşgul, zaman aşımı) exception fırlatır; başka bir esptool hatası fırlatılmaz |
+| [company_qr_tool/app.py:2496](../../company_qr_tool/app.py#L2496) | <code>self._run_stream(cmd_erase_ota, DEVICE_PROJECT_DIR)</code> | OTA bölgesi silme sonucu denetlenmez; hata sessizce yutulur |
+| [company_qr_tool/app.py:2502](../../company_qr_tool/app.py#L2502) | <code>self.root.after(0, lambda: self.set_status(f"TMM: Yazılım yükleme tamamlandı ({dev.port},…</code> | Önceki adımlar hata fırlatmadıysa (rc != 0 olsa bile) başarı mesajı ve "TMM · Yükleme tamamlandı" bildirimi gösterilir |
 
 **Olası nedenler**
 - Kodda: rc != 0 olup hata metni "permissionerror/port is busy/erişim engellendi" ya da "write timeout/failed to connect/timed out waiting/no serial data" kalıplarına uymazsa hata fırlatılmaz ve "TMM" gösterilir (araç kusuru; gerçek durum esptool çıktısındadır)
@@ -348,23 +348,23 @@ ssh-keygen -R "[178.210.161.55]:22667"
 
 **Adım adım kontrol**
 - Durum çubuğu/ilerleme çıktısında son esptool satırlarına bakın ("Hash of data verified." görülmeli)
-- Cihaz Dene ile bağlanıp "Firmware surumu" ve "OTA durum" alanlarını okuyun (cihaz resetlenir)
-- Şüphede aynı sürümü bir kez daha yükleyin ya da "Calisma arkadasina guncelleme zip dosyasi" ile flash_ahbu_usb.bat çalıştırın
+- "Cihaz testi" sayfasında bağlanıp "Yazılım sürümü" ve "OTA durumu" alanlarını okuyun (cihaz resetlenir)
+- Şüphede aynı sürümü bir kez daha yükleyin ya da "Çalışma arkadaşı için ZIP" paketindeki flash_smartkeypass_usb.bat'ı çalıştırın
 
 **Bkz.:** [arac-usb-yukleme-hata](#arac-usb-yukleme-hata), [arac-cihaz-dene-durum-bos](#arac-cihaz-dene-durum-bos)
 
 <a id="arac-surum-derleme"></a>
-### arac-surum-derleme · Şirket aracında "Firmware derle" / "Surum olustur" başarısız ya da düğmeler pasif ("Once derleme ve surum olusturma adimlarini basariyla tamamlayin")
+### arac-surum-derleme · Şirket aracında "Derle" / "Sürüm oluştur" başarısız ya da düğmeler pasif ("Once derleme ve surum olusturma adimlarini basariyla tamamlayin")
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [company_qr_tool/app.py:775](../../company_qr_tool/app.py#L775) | <code>raise FileNotFoundError("PlatformIO bulunamadi.")</code> | platformio PATH'te ve ~/.platformio/penv altında yoksa derleme başlamaz |
-| [company_qr_tool/app.py:274](../../company_qr_tool/app.py#L274) | <code>SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+$")</code> | Sürüm yalnız X.Y.Z biçiminde olabilir |
-| [company_qr_tool/app.py:1801](../../company_qr_tool/app.py#L1801) | <code>def _apply_fw_button_state(self) -&gt; None:</code> | "Surum olustur" yalnız derleme hazırsa, yükle/sunucuya gönder/ZIP yalnız sürüm hazırsa açılır; env ya da sürüm değişince hazırlık sıfırlanır |
-| [company_qr_tool/app.py:1793](../../company_qr_tool/app.py#L1793) | <code>def _on_fw_input_changed(self) -&gt; None:</code> | Env veya sürüm kutusu değişince derleme/sürüm "hazır" bayrakları düşer |
-| [company_qr_tool/app.py:1951](../../company_qr_tool/app.py#L1951) | <code>raise FileNotFoundError(f"Build ciktilari eksik: {', '.join(missing)}")</code> | Derleme çıktıları (.pio/build/<env>/firmware.bin, bootloader.bin, partitions.bin) yoksa sürüm oluşmaz |
-| [company_qr_tool/app.py:914](../../company_qr_tool/app.py#L914) | <code>def save_releases(releases: list[dict]) -&gt; None:</code> | Sürüm kaydı cihaz_kontrol/firmware_releases/index.json dosyasına yazılır |
-| [company_qr_tool/app.py:870](../../company_qr_tool/app.py#L870) | <code>def parse_envs(path: Path) -&gt; tuple[list[str], dict[str, int]]:</code> | Env listesi cihaz_kontrol/platformio.ini içindeki [env:...] bölümlerinden okunur |
+| [company_qr_tool/app.py:817](../../company_qr_tool/app.py#L817) | <code>raise FileNotFoundError("PlatformIO bulunamadi.")</code> | platformio PATH'te ve ~/.platformio/penv altında yoksa derleme başlamaz |
+| [company_qr_tool/app.py:277](../../company_qr_tool/app.py#L277) | <code>SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+$")</code> | Sürüm yalnız X.Y.Z biçiminde olabilir |
+| [company_qr_tool/app.py:2159](../../company_qr_tool/app.py#L2159) | <code>def _apply_fw_button_state(self) -&gt; None:</code> | "Sürüm oluştur" yalnız derleme hazırsa, yükle/sunucuya gönder/ZIP yalnız sürüm hazırsa açılır; env ya da sürüm değişince hazırlık sıfırlanır |
+| [company_qr_tool/app.py:2151](../../company_qr_tool/app.py#L2151) | <code>def _on_fw_input_changed(self) -&gt; None:</code> | Env veya sürüm kutusu değişince derleme/sürüm "hazır" bayrakları düşer |
+| [company_qr_tool/app.py:2311](../../company_qr_tool/app.py#L2311) | <code>raise FileNotFoundError(f"Build ciktilari eksik: {', '.join(missing)}")</code> | Derleme çıktıları (.pio/build/<env>/firmware.bin, bootloader.bin, partitions.bin) yoksa sürüm oluşmaz |
+| [company_qr_tool/app.py:956](../../company_qr_tool/app.py#L956) | <code>def save_releases(releases: list[dict]) -&gt; None:</code> | Sürüm kaydı cihaz_kontrol/firmware_releases/index.json dosyasına yazılır |
+| [company_qr_tool/app.py:912](../../company_qr_tool/app.py#L912) | <code>def parse_envs(path: Path) -&gt; tuple[list[str], dict[str, int]]:</code> | Env listesi cihaz_kontrol/platformio.ini içindeki [env:...] bölümlerinden okunur |
 
 **Olası nedenler**
 - PlatformIO kurulu değil / PATH dışında
@@ -374,7 +374,7 @@ ssh-keygen -R "[178.210.161.55]:22667"
 - platformio.ini bulunamadı → env listesi boş
 
 **Adım adım kontrol**
-- Adım sırası: Firmware derle → Surum olustur → (USB yükle | Sunucuya gönder | ZIP)
+- Adım sırası: Derle → Sürüm oluştur → (USB ile karta yükle | Sunucuya gönder (OTA) | Çalışma arkadaşı için ZIP)
 - cihaz_kontrol klasöründe elle derleme: pio run -e lolin_c3_mini (ya da esp32_relay_wroom)
 
 **Komutlar**
@@ -390,15 +390,15 @@ pio run -d cihaz_kontrol -e esp32_relay_wroom
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [company_qr_tool/app.py:941](../../company_qr_tool/app.py#L941) | <code>def write_firmware_source_version(version: str, env: str &#124; None = None) -&gt; bool:</code> | Seçili env'e göre ota_guncelleme.h içindeki OTA_VERSION_C3 / OTA_VERSION_WROOM / OTA_CURRENT_VERSION değerini yeniden yazar |
-| [company_qr_tool/app.py:1870](../../company_qr_tool/app.py#L1870) | <code># Otomatik versiyon senkronizasyonu: ota_guncelleme.h dosyasini guncelle</code> | "Firmware derle" düğmesi derlemeden ÖNCE başlığı günceller |
-| [company_qr_tool/app.py:919](../../company_qr_tool/app.py#L919) | <code>def read_firmware_source_version(env: str &#124; None = None) -&gt; str &#124; None:</code> | Sürüm kutusunun başlangıç değeri başlıktan okunur (yoksa son sürüm + 1) |
-| [company_qr_tool/app.py:275](../../company_qr_tool/app.py#L275) | <code>OTA_VERSION_C3_RE = re.compile(r'OTA_VERSION_C3\[\]\s*=\s*"(\d+\.\d+\.\d+)"')</code> | Başlıkta aranan desen: OTA_VERSION_C3[] = "x.y.z" |
-| [cihaz_kontrol/include/ota_guncelleme.h:24](../../cihaz_kontrol/include/ota_guncelleme.h#L24) | <code>inline constexpr char OTA_VERSION_C3[] = "4.3.1";</code> | Araç bu satırı değiştirir; C3 hedef sürümü |
-| [cihaz_kontrol/include/ota_guncelleme.h:25](../../cihaz_kontrol/include/ota_guncelleme.h#L25) | <code>inline constexpr char OTA_VERSION_WROOM[] = "5.2.0";</code> | WROOM hedef sürümü (hedefler birbirinden bağımsız: AGENTS.md kural 4) |
+| [company_qr_tool/app.py:983](../../company_qr_tool/app.py#L983) | <code>def write_firmware_source_version(version: str, env: str &#124; None = None) -&gt; bool:</code> | Seçili env'e göre ota_guncelleme.h içindeki OTA_VERSION_C3 / OTA_VERSION_WROOM / OTA_CURRENT_VERSION değerini yeniden yazar |
+| [company_qr_tool/app.py:2228](../../company_qr_tool/app.py#L2228) | <code># Otomatik versiyon senkronizasyonu: ota_guncelleme.h dosyasini guncelle</code> | "Derle" düğmesi derlemeden ÖNCE başlığı günceller |
+| [company_qr_tool/app.py:961](../../company_qr_tool/app.py#L961) | <code>def read_firmware_source_version(env: str &#124; None = None) -&gt; str &#124; None:</code> | Sürüm kutusunun başlangıç değeri başlıktan okunur (yoksa son sürüm + 1) |
+| [company_qr_tool/app.py:278](../../company_qr_tool/app.py#L278) | <code>OTA_VERSION_C3_RE = re.compile(r'OTA_VERSION_C3\[\]\s*=\s*"(\d+\.\d+\.\d+)"')</code> | Başlıkta aranan desen: OTA_VERSION_C3[] = "x.y.z" |
+| [cihaz_kontrol/include/ota_guncelleme.h:27](../../cihaz_kontrol/include/ota_guncelleme.h#L27) | <code>inline constexpr char OTA_VERSION_C3[] = "4.3.3";</code> | Araç bu satırı değiştirir; C3 hedef sürümü |
+| [cihaz_kontrol/include/ota_guncelleme.h:28](../../cihaz_kontrol/include/ota_guncelleme.h#L28) | <code>inline constexpr char OTA_VERSION_WROOM[] = "5.2.2";</code> | WROOM hedef sürümü (hedefler birbirinden bağımsız: AGENTS.md kural 4) |
 
 **Olası nedenler**
-- Şirket aracında "Firmware derle" veya "Surum olustur" kullanıldı: başlık seçilen sürüme eşitlenir (tasarım gereği)
+- Şirket aracında "Derle" veya "Sürüm oluştur" kullanıldı: başlık seçilen sürüme eşitlenir (tasarım gereği)
 - WROOM env'i seçiliyken C3 sürümü değişmez, tersi de (hedef başına ayrı sabit)
 
 **Adım adım kontrol**
@@ -413,23 +413,26 @@ git diff -- cihaz_kontrol/include/ota_guncelleme.h
 **Bkz.:** [arac-surum-derleme](#arac-surum-derleme)
 
 <a id="arac-zip-hatasi"></a>
-### arac-zip-hatasi · Şirket aracında "Calisma arkadasina guncelleme zip dosyasi olustur" hata veriyor ("ZIP icin gerekli arac klasoru yok" / "str object has no attribute parent")
+### arac-zip-hatasi · Şirket aracında "Çalışma arkadaşı için ZIP" hata veriyor ("ZIP icin gerekli arac klasoru yok" / "Guncelleme dosyasi yok" / "Surum gerekli")
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [company_qr_tool/app.py:2275](../../company_qr_tool/app.py#L2275) | <code>def _coworker_zip_worker(self, rel: dict, target: Path) -&gt; None:</code> | ZIP işçisi: firmware, manifest, flash_ahbu_usb.bat ve PlatformIO araçlarını paketler |
-| [company_qr_tool/app.py:2281](../../company_qr_tool/app.py#L2281) | <code>required_tool_dirs = [</code> | ~/.platformio altında python3, tool-esptoolpy ve penv/site-packages/serial klasörleri bulunmalı |
-| [company_qr_tool/app.py:2293](../../company_qr_tool/app.py#L2293) | <code>target = target_for_env(env)</code> | KODDA: kayıt yolu parametresi `target` (Path) burada donanım adıyla (str) ezilir |
-| [company_qr_tool/app.py:2384](../../company_qr_tool/app.py#L2384) | <code>target.parent.mkdir(parents=True, exist_ok=True)</code> | Ezilen `target` str olduğundan burada AttributeError beklenir (ZIP hatası); düzeltme: donanım adı için ayrı değişken adı |
-| [company_qr_tool/app.py:2391](../../company_qr_tool/app.py#L2391) | <code>zf.writestr("flash_ahbu_usb.bat", bat)</code> | Pakete konan bat dosyası: otomatik COM port bulur, esptool ile yazar |
+| [company_qr_tool/app.py:2617](../../company_qr_tool/app.py#L2617) | <code>def start_coworker_zip(self) -&gt; None:</code> | Düğme yalnız derleme + sürüm hazırken (aynı env ve sürüm) çalışır, yoksa "Surum gerekli"; kayıt yeri sorulur |
+| [company_qr_tool/app.py:2644](../../company_qr_tool/app.py#L2644) | <code>def _coworker_zip_worker(self, rel: dict, target: Path) -&gt; None:</code> | ZIP işçisi: firmware, manifest, flash_smartkeypass_usb.bat, README ve PlatformIO araçlarını paketler |
+| [company_qr_tool/app.py:2649](../../company_qr_tool/app.py#L2649) | <code>raise FileNotFoundError(f"Guncelleme dosyasi yok: {p}")</code> | Sürümün bootloader / partitions / firmware / manifest dosyalarından biri yoksa ZIP yapılmaz |
+| [company_qr_tool/app.py:2650](../../company_qr_tool/app.py#L2650) | <code>required_tool_dirs = [</code> | ~/.platformio altında python3, packages/tool-esptoolpy ve penv/Lib/site-packages/serial klasörleri bulunmalı |
+| [company_qr_tool/app.py:2663](../../company_qr_tool/app.py#L2663) | <code>hw_target = target_for_env(env)</code> | Donanım hedefi ve bootloader ofseti sürümün env'inden çıkarılır; bat dosyasına ve README'ye yazılır |
+| [company_qr_tool/app.py:2761](../../company_qr_tool/app.py#L2761) | <code>zf.writestr("flash_smartkeypass_usb.bat", bat)</code> | Pakete konan bat dosyası: otomatik COM port bulur, esptool ile yazar |
 
 **Olası nedenler**
 - ~/.platformio/python3, packages/tool-esptoolpy veya penv/Lib/site-packages/serial yok (PlatformIO bu bilgisayarda kurulmamış/farklı konumda)
-- Kodda görülen kusur: `target` değişkeni yol yerine str olduğundan ZIP yazma adımı hata verir (çözülene dek ZIP üretilemez)
+- Sürüm dosyaları eksik (firmware_releases altındaki dosyalar silinmiş/taşınmış): "Guncelleme dosyasi yok"
+- Derleme / sürüm adımları tamamlanmadı ya da env veya sürüm sonradan değişti: "Surum gerekli"
+- Seçilen kayıt yerine yazılamıyor (izin, dolu disk): "ZIP hatası" penceresi nedeni yazar
 
 **Adım adım kontrol**
-- Hata penceresindeki eksik klasör yolunu kontrol edin
-- AttributeError metni görülüyorsa kusur budur; ZIP yerine "Surumu USB ile cihaza yukle" kullanın
+- Hata penceresindeki eksik klasör / dosya yolunu kontrol edin
+- ZIP olmadan da yüklenebilir: "USB ile karta yükle"
 
 **Bkz.:** [arac-surum-derleme](#arac-surum-derleme), [arac-usb-yukleme-hata](#arac-usb-yukleme-hata)
 
@@ -438,16 +441,16 @@ git diff -- cihaz_kontrol/include/ota_guncelleme.h
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [company_qr_tool/app.py:444](../../company_qr_tool/app.py#L444) | <code>def generate_qr(unique_id: str, logo_path: Path) -&gt; Image.Image:</code> | QR içeriği yalnızca büyük harfe çevrilmiş UID; hata düzeltme H, ortada AHBU logo rozeti; altına "Unique ID: <UID>" yazılır |
-| [company_qr_tool/app.py:403](../../company_qr_tool/app.py#L403) | <code>def ensure_logo() -&gt; Path:</code> | Logo önce assets/ahbu_logo.png, yoksa ..\..\ahbu\assets\images\app_logo.png dosyasından alınır; ikisi de yoksa "Logo bulunamadi" |
-| [company_qr_tool/app.py:38](../../company_qr_tool/app.py#L38) | <code>EXTERNAL_LOGO_PATH = (BASE_DIR / ".." / ".." / "ahbu" / "assets" / "images" / "app_logo.p…</code> | Harici logo yolu (depo dışındaki ahbu projesi) |
-| [company_qr_tool/app.py:418](../../company_qr_tool/app.py#L418) | <code>def mac_to_firmware_uid(mac: str) -&gt; str:</code> | esptool yolunda UID = MAC baytlarının tersi (firmware UID biçimiyle aynı) |
-| [company_qr_tool/app.py:1553](../../company_qr_tool/app.py#L1553) | <code>def save_qr(self) -&gt; None:</code> | PNG output/ klasörüne zaman damgalı adla kaydedilir (git dışı) |
-| [company_qr_tool/app.py:1564](../../company_qr_tool/app.py#L1564) | <code>def print_qr(self) -&gt; None:</code> | Yazdırma yalnız Windows'ta os.startfile(..., "print") ile yapılır |
+| [company_qr_tool/app.py:449](../../company_qr_tool/app.py#L449) | <code>def generate_qr(unique_id: str, logo_path: Path) -&gt; Image.Image:</code> | QR içeriği yalnızca büyük harfe çevrilmiş UID; hata düzeltme H, ortada logo rozeti (assets/smartkeypass_logo.png); altına "Unique ID: <UID>" yazılır |
+| [company_qr_tool/app.py:412](../../company_qr_tool/app.py#L412) | <code>def ensure_logo() -&gt; Path:</code> | Logo assets/smartkeypass_logo.png dosyasından alınır; dosya yoksa FileNotFoundError ("Logo bulunamadi: <yol>") fırlatılır |
+| [company_qr_tool/app.py:41](../../company_qr_tool/app.py#L41) | <code>LOGO_PATH = ASSETS_DIR / "smartkeypass_logo.png"</code> | Karekod ve rapor logosu: company_qr_tool/assets/smartkeypass_logo.png |
+| [company_qr_tool/app.py:423](../../company_qr_tool/app.py#L423) | <code>def mac_to_firmware_uid(mac: str) -&gt; str:</code> | esptool yolunda UID = MAC baytlarının tersi (firmware UID biçimiyle aynı) |
+| [company_qr_tool/app.py:1913](../../company_qr_tool/app.py#L1913) | <code>def save_qr(self) -&gt; None:</code> | PNG output/ klasörüne zaman damgalı adla kaydedilir (git dışı) |
+| [company_qr_tool/app.py:1924](../../company_qr_tool/app.py#L1924) | <code>def print_qr(self) -&gt; None:</code> | Yazdırma yalnız Windows'ta os.startfile(..., "print") ile yapılır |
 
 **Olası nedenler**
 - Etiket yanlış cihazdan okunan UID ile üretilmiş (listeden başka port seçili)
-- Logo dosyası yok (assets/ahbu_logo.png kopyalanamadı)
+- Logo dosyası yok (assets/smartkeypass_logo.png bulunamadı)
 - QR çok küçük basıldı (QR 1200 px; etiket yazıcısı ölçeklemesi)
 
 **Adım adım kontrol**
@@ -461,14 +464,14 @@ git diff -- cihaz_kontrol/include/ota_guncelleme.h
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [company_qr_tool/app.py:2523](../../company_qr_tool/app.py#L2523) | <code>def _fetch_worker(self) -&gt; None:</code> | Liste = sunucu kayıtları + yerelde olup sunucuda olmayanlar (UID ile birleştirilir; sunucu önceliklidir) |
-| [company_qr_tool/app.py:536](../../company_qr_tool/app.py#L536) | <code>def fetch_server_labeled_devices_with_status() -&gt; tuple[list[dict], str]:</code> | Sunucu listesi alınamazsa neden döner (anahtar yok / 401 / ağ) ve yalnız yerel kayıtlar kalır |
-| [company_qr_tool/app.py:36](../../company_qr_tool/app.py#L36) | <code>LABELED_DEVICES_FILE = OUTPUT_DIR / "labeled_devices.json"</code> | Yerel indeks: company_qr_tool/output/labeled_devices.json (git dışı) |
-| [company_qr_tool/app.py:2608](../../company_qr_tool/app.py#L2608) | <code>def _delete_selected_device(self) -&gt; None:</code> | Önce yerel kayıt + PNG silinir, sonra sunucudan silinir; sunucu hatası "Kısmi Silme" uyarısı verir |
-| [company_qr_tool/app.py:580](../../company_qr_tool/app.py#L580) | <code>def delete_server_labeled_device(device_uid: str) -&gt; tuple[bool, str]:</code> | DELETE /api/company/labeled-devices/<UID>; anahtar yoksa sunucudan silinmez |
-| [company_qr_tool/app.py:606](../../company_qr_tool/app.py#L606) | <code>def generate_devices_catalog_pdf(</code> | A4 2480x3508 (300 DPI), sayfa başına 6 kart; QR'lar her kart için yeniden üretilir |
-| [company_qr_tool/app.py:478](../../company_qr_tool/app.py#L478) | <code>def load_regular_font(size: int) -&gt; ImageFont.FreeTypeFont &#124; ImageFont.ImageFont:</code> | Yazı tipi C:/Windows/Fonts altından aranır (segoeui/arial/calibri); yoksa Pillow varsayılanı (küçük/Türkçe karakter sorunu) |
-| [server/src/routes/company_routes.js:373](../../server/src/routes/company_routes.js#L373) | <code>companyRouter.delete('/api/company/labeled-devices/:deviceUid', async (req, res) =&gt; {</code> | Sunucu silme ucu (cihaz, kapı bağı ve MQTT ACL senkronu) |
+| [company_qr_tool/app.py:2937](../../company_qr_tool/app.py#L2937) | <code>def _fetch_worker(self) -&gt; None:</code> | Liste = sunucu kayıtları + yerelde olup sunucuda olmayanlar (UID ile birleştirilir; sunucu önceliklidir) |
+| [company_qr_tool/app.py:541](../../company_qr_tool/app.py#L541) | <code>def fetch_server_labeled_devices_with_status() -&gt; tuple[list[dict], str]:</code> | Sunucu listesi alınamazsa neden döner (anahtar yok / 401 / ağ) ve yalnız yerel kayıtlar kalır |
+| [company_qr_tool/app.py:40](../../company_qr_tool/app.py#L40) | <code>LABELED_DEVICES_FILE = OUTPUT_DIR / "labeled_devices.json"</code> | Yerel indeks: company_qr_tool/output/labeled_devices.json (git dışı) |
+| [company_qr_tool/app.py:3026](../../company_qr_tool/app.py#L3026) | <code>def _delete_selected_device(self) -&gt; None:</code> | Önce yerel kayıt + PNG silinir, sonra sunucudan silinir; sunucu hatası "Kısmi Silme" uyarısı verir |
+| [company_qr_tool/app.py:585](../../company_qr_tool/app.py#L585) | <code>def delete_server_labeled_device(device_uid: str) -&gt; tuple[bool, str]:</code> | DELETE /api/company/labeled-devices/<UID>; anahtar yoksa sunucudan silinmez |
+| [company_qr_tool/app.py:648](../../company_qr_tool/app.py#L648) | <code>def generate_devices_catalog_pdf(</code> | A4 2480x3508 (300 DPI), sayfa başına 6 kart; QR'lar her kart için yeniden üretilir |
+| [company_qr_tool/app.py:483](../../company_qr_tool/app.py#L483) | <code>def load_regular_font(size: int) -&gt; ImageFont.FreeTypeFont &#124; ImageFont.ImageFont:</code> | Yazı tipi C:/Windows/Fonts altından aranır (segoeui/arial/calibri); yoksa Pillow varsayılanı (küçük/Türkçe karakter sorunu) |
+| [server/src/routes/company_routes.js:407](../../server/src/routes/company_routes.js#L407) | <code>companyRouter.delete('/api/company/labeled-devices/:deviceUid', async (req, res) =&gt; {</code> | Sunucu silme ucu (cihaz, kapı bağı ve MQTT ACL senkronu) |
 
 **Olası nedenler**
 - COMPANY_API_KEY yok/yanlış: yalnız yerel kayıtlar listelenir
@@ -485,17 +488,17 @@ git diff -- cihaz_kontrol/include/ota_guncelleme.h
 **Bkz.:** [arac-sunucu-401](#arac-sunucu-401), [arac-anahtar-tanimli-degil](#arac-anahtar-tanimli-degil)
 
 <a id="arac-cihaz-dene-durum-bos"></a>
-### arac-cihaz-dene-durum-bos · Cihaz Dene (cihaz_dene/app.py ya da şirket aracındaki pencere): bilgi alanları "-" kalıyor veya Role Pin HIGH/LOW/Pin Bulma tepki vermiyor
+### arac-cihaz-dene-durum-bos · Cihaz Dene (cihaz_dene/app.py ya da şirket aracındaki "Cihaz testi" sayfası): bilgi alanları "-" kalıyor veya Role Pin HIGH/LOW/Pin Bulma tepki vermiyor
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
 | [cihaz_dene/app.py:17](../../cihaz_dene/app.py#L17) | <code>STATUS_START = "----- CIHAZ DURUMU -----"</code> | Bağımsız araç ESKİ başlığı bekler; güncel firmware "--- ESP32 SISTEM BILGISI ---" yazar (bu araçta alanlar dolmaz) |
-| [company_qr_tool/app.py:2694](../../company_qr_tool/app.py#L2694) | <code>STATUS_START = "--- ESP32 SISTEM BILGISI ---"</code> | Şirket aracındaki pencere güncel başlığı tanır (eski başlığı da: STATUS_START_ALT) |
-| [company_qr_tool/app.py:2916](../../company_qr_tool/app.py#L2916) | <code>if line.strip().startswith("---") and self._collecting_status and len(self._status_lines)…</code> | Blok, ilk "---" ile başlayan satırda (en az 3 satır sonra) kapanır ve alanlara işlenir |
-| [company_qr_tool/app.py:2941](../../company_qr_tool/app.py#L2941) | <code>key_map = {</code> | Firmware anahtarlarını arayüz alanlarına çevirir (Cihaz Unique ID → Cihaz UID vb.) |
+| [company_qr_tool/app.py:3113](../../company_qr_tool/app.py#L3113) | <code>STATUS_START = "--- ESP32 SISTEM BILGISI ---"</code> | Şirket aracındaki "Cihaz testi" sayfası güncel başlığı tanır (eski başlığı da: STATUS_START_ALT) |
+| [company_qr_tool/app.py:3404](../../company_qr_tool/app.py#L3404) | <code>if line.strip().startswith("---") and self._collecting_status and len(self._status_lines)…</code> | Blok, ilk "---" ile başlayan satırda (en az 3 satır sonra) kapanır ve alanlara işlenir |
+| [company_qr_tool/app.py:3429](../../company_qr_tool/app.py#L3429) | <code>key_map = {</code> | Firmware anahtarlarını arayüz alanlarına çevirir (Cihaz Unique ID → Cihaz UID vb.) |
 | [cihaz_kontrol/src/main.cpp:355](../../cihaz_kontrol/src/main.cpp#L355) | <code>Serial.println("--- ESP32 SISTEM BILGISI ---");</code> | Firmware durum bloğu; "?" (ve s/u/i) komutuyla yazılır |
 | [cihaz_kontrol/src/main.cpp:191](../../cihaz_kontrol/src/main.cpp#L191) | <code>Serial.println("Atolye modu kapali (Wi-Fi sifirlayin veya reset butonu 3 sn)");</code> | h/l/p seri komutları yalnız ATÖLYE MODUNDA çalışır; r ve k her derlemede açık |
-| [company_qr_tool/app.py:358](../../company_qr_tool/app.py#L358) | <code># DTR/RTS MUTLAKA open() oncesinde False yapilmali!</code> | Seri bağlantıda DTR/RTS kontrolü (CH340 kartı indirme moduna sokmasın) |
+| [company_qr_tool/app.py:367](../../company_qr_tool/app.py#L367) | <code># DTR/RTS MUTLAKA open() oncesinde False yapilmali!</code> | Seri bağlantıda DTR/RTS kontrolü (CH340 kartı indirme moduna sokmasın) |
 | [cihaz_dene/app.py:71](../../cihaz_dene/app.py#L71) | <code>self._serial = serial.Serial(self.port, BAUD_RATE, timeout=0.2)</code> | Bağımsız araç portu DTR/RTS ayarlamadan açar (yukarıdaki yorumdaki risk geçerli olabilir) |
 
 **Olası nedenler**
@@ -505,7 +508,7 @@ git diff -- cihaz_kontrol/include/ota_guncelleme.h
 - Port başka programda açık (bağlanamaz, "[hata]" görünür)
 
 **Adım adım kontrol**
-- Şirket aracındaki "Cihaz dene" penceresini kullanın (güncel başlık + anahtar eşlemesi)
+- Şirket aracındaki "Cihaz testi" sayfasını kullanın (güncel başlık + anahtar eşlemesi)
 - Seri günlüğünde "--- ESP32 SISTEM BILGISI ---" bloğu görünüyor mu
 - Atölye modu: Wi-Fi sıfırlama veya reset butonu 3 sn (firmware mesajı)
 
@@ -516,39 +519,44 @@ git diff -- cihaz_kontrol/include/ota_guncelleme.h
 **Bkz.:** [arac-cihaz-dene-beacon-wan](#arac-cihaz-dene-beacon-wan), [arac-uid-okunamadi](#arac-uid-okunamadi)
 
 <a id="arac-cihaz-dene-beacon-wan"></a>
-### arac-cihaz-dene-beacon-wan · Cihaz Dene penceresinde "Yerel Beacon (UDP)" ve "Genel IP (WAN)" alanları hiç dolmuyor
+### arac-cihaz-dene-beacon-wan · Cihaz testi sayfasında "Yerel Beacon (UDP)" ya da "Genel IP (WAN)" alanı dolmuyor ("-" kalıyor)
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [company_qr_tool/app.py:2817](../../company_qr_tool/app.py#L2817) | <code>def _start_beacon_listener(self) -&gt; None:</code> | UDP 8765 dinleyicisi `socket` kullanır; dosyada `import socket` YOK → NameError, dıştaki try/except sessizce yutar (dinleyici hiç başlamaz) |
-| [company_qr_tool/app.py:8](../../company_qr_tool/app.py#L8) | <code>import queue</code> | İçe aktarma listesi (socket bu listede yok) |
-| [company_qr_tool/app.py:2965](../../company_qr_tool/app.py#L2965) | <code>url = f"{API_BASE_URL}/api/devices"</code> | API_BASE_URL dosyada tanımlı değil (tanımlı olan PUBLIC_API_URL); sunucuda /api/devices rotası da yok; hata sessizce yutulur |
-| [company_qr_tool/app.py:2850](../../company_qr_tool/app.py#L2850) | <code>if "Yerel Beacon (UDP)" in self.status_vars:</code> | Beacon geldiğinde yazılacak alan |
+| [company_qr_tool/app.py:3305](../../company_qr_tool/app.py#L3305) | <code>def _start_beacon_listener(self) -&gt; None:</code> | UDP 8765 dinleyicisi (yayın kabul eder); soket açılamazsa (port başka uygulamada, izin yok) hata sessizce yutulur ve alan "-" kalır |
+| [company_qr_tool/app.py:3338](../../company_qr_tool/app.py#L3338) | <code>if "Yerel Beacon (UDP)" in self.status_vars:</code> | Beacon yalnız bağlı kartın kimliğiyle eşleşirse (ya da kimlik henüz okunmadıysa) "ip:port (rssi dBm) · canlı" yazılır |
 | [docs/YEREL_KONTROL_V2.md:9](../../docs/YEREL_KONTROL_V2.md#L9) | <code>- **Beacon** (cihaz → alt ağ broadcast, ~5 sn): `{"device_uid","ip","port":8765,"rssi","h…</code> | Cihazın yayınladığı beacon biçimi (UDP 8765) |
+| [company_qr_tool/app.py:617](../../company_qr_tool/app.py#L617) | <code>def fetch_device_public_ip(device_uid: str) -&gt; str:</code> | Genel IP sunucudan okunur: GET /api/company/devices/<UID>/runtime (X-Company-Key, yalnız HTTPS ya da yerel makine, 4 sn zaman aşımı); anahtar yoksa ya da hata olursa boş döner, hata penceresi açmaz |
+| [company_qr_tool/app.py:3456](../../company_qr_tool/app.py#L3456) | <code>def _request_public_ip(self, uid: str) -&gt; None:</code> | Kartın durum bloğu her geldiğinde istenir (başarıdan sonra 120 sn, hatada 30 sn arayla); COMPANY_API_KEY yoksa hiç sorulmaz |
+| [server/src/routes/company_routes.js:478](../../server/src/routes/company_routes.js#L478) | <code>companyRouter.get('/api/company/devices/:deviceUid/runtime', async (req, res) =&gt; {</code> | Salt okunur uç: yalnız { device_uid, public_ip, last_seen_at }; geçersiz kimlik 400, kayıtlı olmayan kart 404 |
+| [server/src/routes/company_routes.js:219](../../server/src/routes/company_routes.js#L219) | <code>export function companyDeviceRuntimeBody(deviceUid, row) {</code> | public_ip kartın OTA manifest isteğinin kaynak adresidir (açılışta Wi-Fi oturduktan ~1,5-2,5 dk sonra, sonra 24 saatte bir); henüz istek yoksa ya da adres Cloudflare kenarıysa null |
 
 **Olası nedenler**
-- Araç kusuru (kodda görülen): socket içe aktarılmamış ve API_BASE_URL tanımsız; iki işlev de except Exception: pass ile sessiz kalır
-- Cihaz ve bilgisayar aynı alt ağda değil / Windows güvenlik duvarı UDP 8765'i engelliyor (kusur giderilse de)
+- Beacon: kart ve bilgisayar aynı alt ağda değil, Windows güvenlik duvarı UDP 8765'i engelliyor ya da port başka bir uygulamada
+- Genel IP: COMPANY_API_KEY bu bilgisayarda tanımlı değil (anahtar ancak araç yeniden açılınca okunur) ya da sunucuya ulaşılamıyor
+- Genel IP: kart sunucuda kayıtlı değil (404) ya da henüz OTA manifest isteği yapmadı (yeni kurulan kartta Wi-Fi bağlantısından sonra yaklaşık 2 dk)
+- Genel IP: API Cloudflare turuncu bulut arkasında ve TRUST_PROXY Cloudflare'i kapsamıyor: kaydedilen adres kartın değil, sunucu bu yüzden boş döner
 
 **Adım adım kontrol**
 - Beacon'ı doğrudan görmek için uygulamanın yerel kontrol akışını (docs/YEREL_KONTROL_V2.md) kullanın
-- Kusur için: `import socket` eklenmeli ve WAN IP için geçerli bir sunucu ucu seçilmeli (şu an /api/devices yok)
+- COMPANY_API_KEY'in company_qr_tool/.env dosyasında ya da kullanıcı ortam değişkeninde tanımlı olduğunu doğrulayıp aracı yeniden açın
+- Kartı ilk kez bağladıysanız birkaç dakika bekleyin; alan 30 sn arayla yeniden sorulur (saha denemesi: SAHA_KONTROL_LISTESI.md 86.18)
 
 **İlgili testler:** [cihaz_kontrol/host_test/t_udp.cpp](../../cihaz_kontrol/host_test/t_udp.cpp)
 
 **Bkz.:** [arac-cihaz-dene-durum-bos](#arac-cihaz-dene-durum-bos)
 
 <a id="arac-ekran-firmware"></a>
-### arac-ekran-firmware · Şirket aracı "Ekran Yazılımı" penceresi: ekran bulunamıyor / derleme-sürüm-yükleme hata veriyor
+### arac-ekran-firmware · Şirket aracı "Ekran yazılımı" sayfası: ekran bulunamıyor / derleme-sürüm-yükleme hata veriyor
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [company_qr_tool/app.py:2991](../../company_qr_tool/app.py#L2991) | <code>class ScreenFirmwareWindow:</code> | Ekran (ESP32-C3 + TFT) için ayrı derle/sürümle/yükle penceresi |
-| [company_qr_tool/app.py:3287](../../company_qr_tool/app.py#L3287) | <code>s.write(b"\r\nDISP_PING\r\n")</code> | "Ekranı Bul": her porta DISP_PING gönderir |
-| [company_qr_tool/app.py:3290](../../company_qr_tool/app.py#L3290) | <code>if "AHBU_DEVICE:DISPLAY" in buf or "Display Controller" in buf:</code> | Ekranın yanıtı; gelmezse esptool chip_id ile ESP32-C3 aranır (yalnız "tespit edildi" der) |
+| [company_qr_tool/app.py:3514](../../company_qr_tool/app.py#L3514) | <code>class ScreenFirmwarePage:</code> | Ekran (ESP32-C3 + TFT) için ayrı sayfa (yan menüde "Ekran yazılımı", Ctrl+5): ekranı bul, sürüm oluştur, yükle |
+| [company_qr_tool/app.py:3728](../../company_qr_tool/app.py#L3728) | <code>s.write(b"\r\nDISP_PING\r\n")</code> | "Ekranı bul": her porta DISP_PING gönderir |
+| [company_qr_tool/app.py:3731](../../company_qr_tool/app.py#L3731) | <code>if "AHBU_DEVICE:DISPLAY" in buf or "Display Controller" in buf:</code> | Ekranın yanıtı; gelmezse esptool chip_id ile ESP32-C3 aranır ("ESP32-C3 ekran modülü bulundu (yazılım yanıt vermedi)" der) |
 | [ekran_yazilimi/src/main.cpp:86](../../ekran_yazilimi/src/main.cpp#L86) | <code>if (pcSerialBuffer == "?" &#124;&#124; pcSerialBuffer == "IDENT" &#124;&#124; pcSerialBuffer == "DISP_PING") {</code> | Ekran yazılımının kimlik yanıtı (PC USB seri) |
-| [company_qr_tool/app.py:53](../../company_qr_tool/app.py#L53) | <code>DISPLAY_CONFIG_H_PATH = DISPLAY_PROJECT_DIR / "include" / "config.h"</code> | Sürüm ekran projesindeki config.h içindeki DISPLAY_FIRMWARE_VERSION satırına yazılır |
-| [company_qr_tool/app.py:3640](../../company_qr_tool/app.py#L3640) | <code>"esp32c3",</code> | Ekran yüklemesi her zaman --chip esp32c3, 0x0 bootloader ofseti ve 460800 baud ile yapılır |
+| [company_qr_tool/app.py:56](../../company_qr_tool/app.py#L56) | <code>DISPLAY_CONFIG_H_PATH = DISPLAY_PROJECT_DIR / "include" / "config.h"</code> | Sürüm ekran projesindeki config.h içindeki DISPLAY_FIRMWARE_VERSION satırına yazılır |
+| [company_qr_tool/app.py:4093](../../company_qr_tool/app.py#L4093) | <code>"esp32c3",</code> | Ekran yüklemesi her zaman --chip esp32c3, 0x0 bootloader ofseti ve 460800 baud ile yapılır |
 
 **Olası nedenler**
 - Ekran farklı bir seri portta / başka program portu tutuyor
@@ -576,7 +584,7 @@ pio run -d ekran_yazilimi -e esp32c3_display
 | [company_qr_tool/launch_company_qr_tool.bat:17](../../company_qr_tool/launch_company_qr_tool.bat#L17) | <code>".venv\Scripts\python.exe" -m pip install -r requirements.txt</code> | Bağımlılıkları kurar; ağ/proxy yoksa "Kutuphane kurulumu basarisiz" |
 | [company_qr_tool/launch_company_qr_tool.bat:24](../../company_qr_tool/launch_company_qr_tool.bat#L24) | <code>start "" ".venv\Scripts\pythonw.exe" app.py</code> | pythonw konsolsuz çalışır: açılış hataları (ör. içe aktarma/Tk) görünmez |
 | [company_qr_tool/requirements.txt:1](../../company_qr_tool/requirements.txt#L1) | <code>qrcode[pil]&gt;=7.4.2</code> | QR üretimi (Pillow ile) |
-| [company_qr_tool/app.py:3722](../../company_qr_tool/app.py#L3722) | <code>def main() -&gt; None:</code> | Giriş noktası: App().run() |
+| [company_qr_tool/app.py:4180](../../company_qr_tool/app.py#L4180) | <code>def main() -&gt; None:</code> | Giriş noktası: App().run() |
 
 **Olası nedenler**
 - Python 3 / py başlatıcısı kurulu değil
@@ -849,9 +857,9 @@ flutter test test/screens/login_layout_test.dart
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [test/design/app_snack_test.dart:455](../../test/design/app_snack_test.dart#L455) | <code>// Not: flutter test'in Ahem yazı tipinde her harf 1 em genişliğindedir (gerçek yazı tipl…</code> | Ahem: her harf 1 em genişlikte (gerçek yazı tiplerinin ~2 katı); matris bilerek kötü durumu sınar |
+| [test/design/app_snack_test.dart:486](../../test/design/app_snack_test.dart#L486) | <code>// Not: flutter test'in Ahem yazı tipinde her harf 1 em genişliğindedir (gerçek yazı tipl…</code> | Ahem: her harf 1 em genişlikte (gerçek yazı tiplerinin ~2 katı); matris bilerek kötü durumu sınar |
 | [test/screens/login_layout_test.dart:10](../../test/screens/login_layout_test.dart#L10) | <code>// Not: widget testleri Ahem yazı tipiyle çalışır (her harf 1 em genişliğinde): satır sar…</code> | Geçen taşma testi gerçek yazı tipinde de geçer; satır sarma testte gerçek cihazdan serttir |
-| [test/screens/home_shell_layout_test.dart:743](../../test/screens/home_shell_layout_test.dart#L743) | <code>// 400 dp x1,3: test yazı tipinde (Ahem: harf = punto) uzun etiket sığmaz; gerçek yazı ti…</code> | 400 dp x1.3'te uzun etiket testte sığmaz, gerçek yazı tipinde sığar (iddia buna göre yazılmış) |
+| [test/screens/home_shell_layout_test.dart:778](../../test/screens/home_shell_layout_test.dart#L778) | <code>// 400 dp x1,3: test yazı tipinde (Ahem: harf = punto) uzun etiket sığmaz; gerçek yazı ti…</code> | 400 dp x1.3'te uzun etiket testte sığmaz, gerçek yazı tipinde sığar (iddia buna göre yazılmış) |
 | [test/design/app_dialog_test.dart:453](../../test/design/app_dialog_test.dart#L453) | <code>// Test yazı tipi (Ahem) gerçek yazı tipinden ~2 kat geniştir: 320 x 2,0'da yalnız üst sı…</code> | 320 x 2.0'da yalnız üst sınır sınanır |
 | [test/voice_live_banner_test.dart:596](../../test/voice_live_banner_test.dart#L596) | <code>// Ahem'de her harf 1 em: gerçek yazı tiplerinden ~2 kat geniş; yalnız taşma/hata olmamas…</code> | Yalnız taşma/hata olmaması sınanır |
 
@@ -910,7 +918,7 @@ flutter test test/theme_service_test.dart
 | [test/clock_rebuild_scope_test.dart:1](../../test/clock_rebuild_scope_test.dart#L1) | <code>// FAZ 5 / P-d: DigitalClockWidget'ın saniyelik güncellemesi yalnız saat metnini yeniden …</code> | Saniyelik güncelleme yalnız saat metnini yeniden kurar |
 | [test/qr_modal_polling_test.dart:1](../../test/qr_modal_polling_test.dart#L1) | <code>// FAZ 5 / P-c, P-d: DynamicQrPassModal durum yoklaması (800 ms) yaşam döngüsü ve geri sa…</code> | QR modalı yoklama yaşam döngüsü ve geri sayım halkası kapsamı |
 | [test/home_scroll_paint_test.dart:2](../../test/home_scroll_paint_test.dart#L2) | <code>// (RepaintBoundary) yoksa her kaydırma karesinde yüzlerce kartın tümü baştan boyanır.</code> | Uzun sayfada kaydırma: sınır yoksa her karede yüzlerce kart baştan boyanır |
-| [SAHA_KONTROL_LISTESI.md:1102](../../SAHA_KONTROL_LISTESI.md#L1102) | <code>- [ ] **52.16.** Sunucu erişim günlüğünden yoklama trafiği: Panel (kapı kartı) açıkken ~3…</code> | Sunucu erişim günlüğünde yoklama trafiğinin saha doğrulaması |
+| [SAHA_KONTROL_LISTESI.md:1102](../../SAHA_KONTROL_LISTESI.md#L1102) | <code>- [ ] **52.16.** Sunucu erişim günlüğünden yoklama trafiği: Kapılar sayfası (kapı kartı) …</code> | Sunucu erişim günlüğünde yoklama trafiğinin saha doğrulaması |
 
 **Olası nedenler**
 - Geniş kapsamlı setState / üst widget güncellemesi yeni eklendi (yalnız ilgili alt ağaç yeniden kurulmalı)
@@ -938,7 +946,7 @@ flutter test test/home_polling_test.dart test/adaptive_poller_test.dart test/clo
 | --- | --- | --- |
 | [test/widget_test.dart:8](../../test/widget_test.dart#L8) | <code>SharedPreferences.setMockInitialValues(&lt;String, Object&gt;{});</code> | Her uygulama kökü testi SharedPreferences'ı sahte değerle başlatır |
 | [test/widget_test.dart:9](../../test/widget_test.dart#L9) | <code>FlutterSecureStorage.setMockInitialValues(&lt;String, String&gt;{});</code> | Güvenli depo da sahtelenir (oturum anahtarı) |
-| [lib/app.dart:32](../../lib/app.dart#L32) | <code>const MyApp({super.key, this.networkCheckEnabled = true, this.themeService});</code> | MyApp(networkCheckEnabled: false) ağ sağlık yoklamasını kapatır; testlerde verilmezse gerçek ağa çıkılır |
+| [lib/app.dart:36](../../lib/app.dart#L36) | <code>const MyApp({super.key, this.networkCheckEnabled = true, this.themeService});</code> | MyApp(networkCheckEnabled: false) ağ sağlık yoklamasını kapatır; testlerde verilmezse gerçek ağa çıkılır |
 | [test/screens/dialog_layout_harness.dart:50](../../test/screens/dialog_layout_harness.dart#L50) | <code>/// girişi (~450 ms) bitene kadar ilerletilir. `pumpAndSettle` KULLANILMAZ: yüklenirken d…</code> | Yüklenirken dönen göstergeler bitmeyen animasyondur: sabit süreli pump kullanılır |
 | [test/screens/login_layout_test.dart:33](../../test/screens/login_layout_test.dart#L33) | <code>class _FakeAuth extends AuthService {</code> | Ağa çıkmayan sahte kimlik servisi örneği |
 | [integration_test/support/e2e_driver.dart:13](../../integration_test/support/e2e_driver.dart#L13) | <code>//  - pumpAndSettle KULLANMAZ (uygulamada 3 sn'lik yoklamalar var): sabit aralikli pump d…</code> | Uygulamada 3 sn'lik yoklamalar olduğundan yürüyüş düzeneği de sabit aralıklı pump döngüsü kullanır |
@@ -962,8 +970,8 @@ flutter test test/home_polling_test.dart test/adaptive_poller_test.dart test/clo
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [integration_test/support/e2e_env.dart:66](../../integration_test/support/e2e_env.dart#L66) | <code>static void assertLocalApi() {</code> | Üretime bağlanmayı engeller: yalnız 127.0.0.1, localhost, 10.0.2.2, ::1 |
-| [integration_test/support/e2e_env.dart:81](../../integration_test/support/e2e_env.dart#L81) | <code>'E2E_USERS bos: --dart-define-from-file=&lt;E2E&gt;/dart_defines.json verin '</code> | Kullanıcılar --dart-define-from-file ile gelir; dosya yoksa bu hata |
+| [integration_test/support/e2e_env.dart:67](../../integration_test/support/e2e_env.dart#L67) | <code>static void assertLocalApi() {</code> | Üretime bağlanmayı engeller: yalnız 127.0.0.1, localhost, 10.0.2.2, ::1 |
+| [integration_test/support/e2e_env.dart:82](../../integration_test/support/e2e_env.dart#L82) | <code>'E2E_USERS bos: --dart-define-from-file=&lt;E2E&gt;/dart_defines.json verin '</code> | Kullanıcılar --dart-define-from-file ile gelir; dosya yoksa bu hata |
 | [integration_test/tool/make_defines.mjs:30](../../integration_test/tool/make_defines.mjs#L30) | <code>console.error('Hata: --e2e &lt;E2E harness dizini&gt; (veya E2E_DIR) gerekli.');</code> | dart_defines.json üreticisi; seed.json gerekir (repoya yazılmaz, sır içerir) |
 | [integration_test/support/e2e_driver.dart:5](../../integration_test/support/e2e_driver.dart#L5) | <code>// Calistirma (proje kokunden; ayni anda YALNIZ BIR `flutter test -d windows`):</code> | Çalıştırma komutu ve kuralı: aynı anda tek `flutter test -d windows` |
 | [test/e2e_harness_collector_test.dart:1](../../test/e2e_harness_collector_test.dart#L1) | <code>// E2E altyapisinin (integration_test/support) hata toplayicisini dogrular: "0 tasma" son…</code> | "0 taşma" sonucunun yanlış negatif olmadığını gerçek taşma yakalayarak kanıtlar |
@@ -995,7 +1003,9 @@ flutter test integration_test/walk_super_user_test.dart -d windows --dart-define
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [integration_test/perf_frames_test.dart:10](../../integration_test/perf_frames_test.dart#L10) | <code>// ÇALIŞTIRMA (koordinatör; yerel yığın ayakta, E2E kullanıcıları tohumlanmış, pencere GÖ…</code> | Önkoşullar ve komut: yerel yığın, tohumlanmış E2E kullanıcıları, pencere görünür |
+| [integration_test/perf_frames_test.dart:14](../../integration_test/perf_frames_test.dart#L14) | <code>// ÇALIŞTIRMA (koordinatör; yerel yığın ayakta, E2E kullanıcıları tohumlanmış, pencere GÖ…</code> | Önkoşullar ve komut: yerel yığın, tohumlanmış E2E kullanıcıları, pencere görünür |
+| [integration_test/perf_frames_test.dart:164](../../integration_test/perf_frames_test.dart#L164) | <code>await _phase(recorder, tester, 'vitrin_bosta', () async {</code> | Aşama sırası: acilis_giris → vitrin_bosta (Panel vitrini boşta, kapı yoklaması yok) → kapilar_gecis → kapilar_bosta (Kapılar boşta: 3 sn durum yoklaması + saat) → kapi_karti → gecis_loglari → site_yonetimi_liste |
+| [integration_test/perf_frames_test.dart:74](../../integration_test/perf_frames_test.dart#L74) | <code>Future&lt;void&gt; _openDoorsFromShowcase(WidgetTester tester) async {</code> | kapilar_gecis: vitrindeki "Kapılar" kartına dokunur; kart yoksa ya da kapı paneli (AdminDoorStatusCard) açılmazsa koşu durur (kapı aşamaları boşuna "hızlı" ölçülmesin) |
 | [test_driver/perf_driver.dart:28](../../test_driver/perf_driver.dart#L28) | <code>final out = Platform.environment['PERF_OUT'] ?? 'build${Platform.pathSeparator}perf';</code> | Çıktı dizini: PERF_OUT ortam değişkeni (yoksa build/perf); dosya perf_frames.json |
 | [test_driver/perf_driver.dart:25](../../test_driver/perf_driver.dart#L25) | <code>print('PERF~ sürücü: perf_frames verisi gelmedi (test hata verdi mi?).');</code> | Test hata verdiyse sürücüye özet gelmez |
 | [test/perf_frame_stats_test.dart:1](../../test/perf_frame_stats_test.dart#L1) | <code>// FAZ 5 / P: kare süresi ölçüm düzeneğinin (integration_test/support/perf_frames.dart) ö…</code> | Ölçüm düzeneğinin yüzdelik/jank hesabının birim testi |
@@ -1005,13 +1015,17 @@ flutter test integration_test/walk_super_user_test.dart -d windows --dart-define
 - Yerel API/E2E kullanıcıları hazır değil ya da pencere simge durumunda
 - Başka bir flutter koşusu aynı anda çalışıyor
 - Üretime bağlanma denemesi: bootApp yalnız yerel API'ye izin verir
+- PERF_USER kapı panelini açamayan bir hesap (vitrinde "Kapılar" kartı yok ya da kapı paneli açılmıyor): koşu bilerek durur; kapı yetkili bir yönetici seçin (varsayılan manager_1)
 
 **Adım adım kontrol**
 - Aynı komutu taban ve çalışma kopyasında (PERF_LABEL=taban / faz5) çalıştırıp perf_frames.json dosyalarını kıyaslayın
-- İzlenecek aşamalar: ana_panel_bosta, kapi_karti, site_yonetimi_liste
+- İzlenecek aşamalar: vitrin_bosta, kapilar_bosta, kapi_karti, site_yonetimi_liste (site_yonetimi_liste PERF_SKIP_SITES=true ile atlanır)
+- Panel modül vitrinine geçmeden önceki bir sürümün taban JSON'unda vitrin_bosta / kapilar_bosta yerine ana_panel_bosta vardır: onun karşılığı kapilar_bosta'dır; vitrin_bosta yeni aşamadır ve ana_panel_bosta ile kıyaslanmaz (vitrinde kapı yoklaması olmadığından sahte iyileşme gösterir)
 
 **Günlükte aranacak ifadeler**
 - `PERF~ sürücü: perf_frames verisi gelmedi (test hata verdi mi?).`
+- `PERF: Panel vitrininde "Kapılar" kartı yok; kapı paneli açılamadı`
+- `PERF: kapı paneli (AdminDoorStatusCard) açılmadı`
 
 **Komutlar**
 ```bash
@@ -1258,7 +1272,7 @@ Test-Path .git\index.lock
 | [docs/EPOSTA_DOGRULAMA.md:47](../../docs/EPOSTA_DOGRULAMA.md#L47) | <code>## Bilinen kalıntı riskler ve sınırlamalar</code> | Pre-hijacking (belirteçli çözüm onay bekliyor), kaba kuvvet tavanı, sent_at eksikliği, bellek içi hız sınırı |
 | [docs/EPOSTA_DOGRULAMA.md:75](../../docs/EPOSTA_DOGRULAMA.md#L75) | <code>## İşletim: "kod gelmiyor / geç geliyor" teşhisi</code> | Günlükte "Mail Gönderim", SMTP verify, DNS (SPF/DKIM/DMARC), alıcı/gönderen kuyruğu |
 | [docs/EPOSTA_DOGRULAMA.md:88](../../docs/EPOSTA_DOGRULAMA.md#L88) | <code>## Geri alma</code> | Şema ekleyicidir; kod geri alınırsa pending_registrations kullanılmadan kalır |
-| [server/src/services/membership_rules.js:28](../../server/src/services/membership_rules.js#L28) | <code>export const VERIFICATION_CODE_TTL_MINUTES = 30;</code> | Kod süresinin kodda geçtiği tek yer; belgedeki 30 dk bununla uyumlu olmalı |
+| [server/src/services/membership_rules.js:29](../../server/src/services/membership_rules.js#L29) | <code>export const VERIFICATION_CODE_TTL_MINUTES = 30;</code> | Kod süresinin kodda geçtiği tek yer; belgedeki 30 dk bununla uyumlu olmalı |
 
 **Olası nedenler**
 - Belge ile kod ayrıştı (parametre değişti, belge güncellenmedi): önce membership_rules.js sabitlerine bakın, belgeyi kodla düzeltin
@@ -1315,9 +1329,9 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 300 --nostrea
 | [AGENTS.md:39](../../AGENTS.md#L39) | <code>8. **Sunucuyu (Backend VPS) Her Zaman Güncelle ve Canlı Doğrula (Zorunlu):**</code> | Backend değişikliği canlıya alınmadan iş bitmiş sayılmaz; PM2 günlüğü ve /health doğrulanır |
 | [deploy/README.md:7](../../deploy/README.md#L7) | <code>## Adımlar</code> | Sıra: yerel test -> paket + sha256 -> yükleme -> prepare -> (ACL kuru çalıştırma) -> activate -> (kapi-mqtt-sync) -> doğrulama |
 | [deploy/remote_deploy.sh:58](../../deploy/remote_deploy.sh#L58) | <code>activate() {</code> | Canlıya alır: kodu yerleştirir, node_modules değiştirir, pm2 restart kapi-api --update-env, /health bekler |
-| [deploy/remote_deploy.sh:84](../../deploy/remote_deploy.sh#L84) | <code>echo "SAGLIK KONTROLU BASARISIZ"</code> | Sağlık gelmezse günlükten son 40 satırı basar ve otomatik rollback çalıştırır (çıkış 4) |
+| [deploy/remote_deploy.sh:93](../../deploy/remote_deploy.sh#L93) | <code>echo "SAGLIK KONTROLU BASARISIZ"</code> | Sağlık gelmezse günlükten son 40 satırı basar ve otomatik rollback çalıştırır (çıkış 4) |
 | [deploy/remote_deploy.sh:59](../../deploy/remote_deploy.sh#L59) | <code>[ -d "$STAGE/node_modules" ] &#124;&#124; { echo "HATA: hazirlik (prepare) yapilmamis"; exit 2; }</code> | activate, prepare yapılmadan çalışmaz (çıkış 2) |
-| [PROJE_TEKNIK_NOTLAR.md:504](../../PROJE_TEKNIK_NOTLAR.md#L504) | <code>## 15. Sunucuda Guncelleme Sirasi</code> | Eski/kısa anlatım (git pull + pm2 restart); yedekli ve sağlık denetimli güncel yol deploy/README.md'dedir |
+| [PROJE_TEKNIK_NOTLAR.md:514](../../PROJE_TEKNIK_NOTLAR.md#L514) | <code>## 15. Sunucuda Guncelleme Sirasi</code> | Eski/kısa anlatım (git pull + pm2 restart); yedekli ve sağlık denetimli güncel yol deploy/README.md'dedir |
 
 **Olası nedenler**
 - Değişiklik yalnız yerelde kaldı (kural 8 uygulanmadı); canlıda eski kod çalışıyor
@@ -1424,7 +1438,7 @@ python cihaz_dene/app.py
 | [lib/config/app_config.dart:8](../../lib/config/app_config.dart#L8) | <code>static const int buildNumber = 1;</code> | Ekrandaki "Build" numarası da elle yazılıdır |
 | [lib/config/app_config.dart:16](../../lib/config/app_config.dart#L16) | <code>static String get versionDisplay =&gt; 'v$appVersion (Build $buildNumber)';</code> | Giriş sayfası ve yan menü bu metni gösterir |
 | [lib/config/app_config.dart:13](../../lib/config/app_config.dart#L13) | <code>defaultValue: _defaultApiBaseUrl,</code> | API adresi derlemede --dart-define=API_BASE_URL ile değişir; varsayılan canlı API |
-| [android/app/build.gradle.kts:30](../../android/app/build.gradle.kts#L30) | <code>versionName = flutter.versionName</code> | Android sürümü pubspec'ten türetilir |
+| [android/app/build.gradle.kts:49](../../android/app/build.gradle.kts#L49) | <code>versionName = flutter.versionName</code> | Android sürümü pubspec'ten türetilir |
 
 **Olası nedenler**
 - pubspec.yaml sürümü artırıldı ama app_config.dart sabitleri güncellenmedi (ya da tersi): ekran ile APK farklı sürüm söyler
@@ -1445,16 +1459,16 @@ python cihaz_dene/app.py
 | --- | --- | --- |
 | [android/gradle.properties:8](../../android/gradle.properties#L8) | <code>org.gradle.java.home=C:\\Program Files\\Android\\Android Studio\\jbr</code> | Gradle JDK, Android Studio jbr klasörüne SABİTLENMİŞ (Windows yolu); başka makinede/yolda bu klasör yoksa Gradle başlamaz |
 | [android/gradle.properties:1](../../android/gradle.properties#L1) | <code>org.gradle.jvmargs=-Xmx8G -XX:MaxMetaspaceSize=4G -XX:ReservedCodeCacheSize=512m -XX:+Hea…</code> | Gradle JVM belleği 8 GB istenir: az RAM'li makinede bellek hatası verebilir |
-| [android/app/build.gradle.kts:14](../../android/app/build.gradle.kts#L14) | <code>sourceCompatibility = JavaVersion.VERSION_17</code> | Uygulama kodu Java 17 hedefler (derleyici JDK'si 17 veya üstü olmalı) |
-| [android/app/build.gradle.kts:37](../../android/app/build.gradle.kts#L37) | <code>signingConfig = signingConfigs.getByName("debug")</code> | Release derleme şimdilik DEBUG anahtarıyla imzalanır (yayın/mağaza kararı bekliyor) |
-| [android/app/build.gradle.kts:24](../../android/app/build.gradle.kts#L24) | <code>applicationId = "com.example.site_kapi_kontrol"</code> | Geçici com.example uygulama kimliği (BEKLEYEN_ISLER: yayın kararı) |
+| [android/app/build.gradle.kts:35](../../android/app/build.gradle.kts#L35) | <code>sourceCompatibility = JavaVersion.VERSION_17</code> | Uygulama kodu Java 17 hedefler (derleyici JDK'si 17 veya üstü olmalı) |
+| [android/app/build.gradle.kts:84](../../android/app/build.gradle.kts#L84) | <code>signingConfig = signingConfigs.getByName("debug")</code> | android/key.properties yoksa release derleme DEBUG anahtarıyla imzalanır (uyarı basılır; mağazaya yüklenemez) |
+| [android/app/build.gradle.kts:44](../../android/app/build.gradle.kts#L44) | <code>applicationId = "tr.com.gudeteknoloji.siteyonetim"</code> | Kalıcı uygulama kimliği (mağaza kaydından sonra değiştirilemez; iOS paket kimliğiyle aynıdır) |
 | [SAHA_KONTROL_LISTESI.md:1115](../../SAHA_KONTROL_LISTESI.md#L1115) | <code>- [ ] **53.2. Android Gradle JDK 21 Uyumluluğu:**</code> | Doğrulama adımı: gradle.properties'teki Android Studio JDK ile hatasız derleme |
 
 **Olası nedenler**
 - Android Studio farklı yola kurulu ya da jbr klasörü yok: org.gradle.java.home yolunu bu makineye göre düzeltin (yalnız yerel; depodaki değer geliştirici makinesindir)
 - Gradle varsayılan (eski) Java ile çalışıyor: problems-report.html hatası (bu ayar bunu önlemek için eklendi)
 - RAM yetersiz: org.gradle.jvmargs değerini düşürmek gerekebilir
-- Release APK debug imzalıdır: mağazaya yüklenemez/ güncelleme imzası farklıdır (tasarım gereği şimdilik)
+- android/key.properties yoksa Release APK debug imzalıdır: mağazaya yüklenemez / güncelleme imzası farklıdır (derleme çıktısında UYARI görünür)
 
 **Adım adım kontrol**
 - Hata metnindeki Java yolunu gradle.properties ile karşılaştırın; klasörün varlığını kontrol edin
@@ -1476,7 +1490,7 @@ flutter doctor -v
 | --- | --- | --- |
 | [analysis_options.yaml:19](../../analysis_options.yaml#L19) | <code>include: package:flutter_lints/flutter.yaml</code> | Varsayılan Flutter lint seti; özel kural geçersiz kılmaları yorum satırında (kapalı) |
 | [analysis_options.yaml:13](../../analysis_options.yaml#L13) | <code>- android/**</code> | build, android, ios, web, windows, macos, linux klasörleri analiz dışıdır: oradaki kodu analyze görmez |
-| [pubspec.yaml:38](../../pubspec.yaml#L38) | <code>flutter_lints: ^6.0.0</code> | Lint paketi sürümü (sürüm yükselince yeni kurallar yeni uyarı çıkarabilir) |
+| [pubspec.yaml:46](../../pubspec.yaml#L46) | <code>flutter_lints: ^6.0.0</code> | Lint paketi sürümü (sürüm yükselince yeni kurallar yeni uyarı çıkarabilir) |
 | [.github/workflows/ci.yml:69](../../.github/workflows/ci.yml#L69) | <code>run: flutter analyze --no-fatal-infos</code> | CI hata ve uyarıda kırılır, yalnız info düzeyi kırmaz |
 | [docs/codebase/CONVENTIONS.md:14](../../docs/codebase/CONVENTIONS.md#L14) | <code>### 2) Formatting and Linting</code> | Linter/biçimlendirici kuralları ve çalıştırma komutları |
 
@@ -1502,12 +1516,12 @@ flutter pub get
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [PROJE_TEKNIK_NOTLAR.md:473](../../PROJE_TEKNIK_NOTLAR.md#L473) | <code>## 14. Build ve Test Notlari</code> | Build/test komutları ve test sayısı (örn. "2357 test"): sayı zamanla eskir |
-| [PROJE_TEKNIK_NOTLAR.md:504](../../PROJE_TEKNIK_NOTLAR.md#L504) | <code>## 15. Sunucuda Guncelleme Sirasi</code> | Kısa anlatım: git pull + npm install + pm2 restart; yedekli/denetimli güncel yol deploy/README.md |
+| [PROJE_TEKNIK_NOTLAR.md:483](../../PROJE_TEKNIK_NOTLAR.md#L483) | <code>## 14. Build ve Test Notlari</code> | Build/test komutları ve test sayısı (örn. "2357 test"): sayı zamanla eskir |
+| [PROJE_TEKNIK_NOTLAR.md:514](../../PROJE_TEKNIK_NOTLAR.md#L514) | <code>## 15. Sunucuda Guncelleme Sirasi</code> | Kısa anlatım: git pull + npm install + pm2 restart; yedekli/denetimli güncel yol deploy/README.md |
 | [PROJE_TEKNIK_NOTLAR.md:393](../../PROJE_TEKNIK_NOTLAR.md#L393) | <code>### 11.2 company_qr_tool</code> | Şirket aracının amacı ve firmware çıktı klasörleri (derleme .pio/build, sürüm firmware_releases) |
 | [PROJE_TEKNIK_NOTLAR.md:320](../../PROJE_TEKNIK_NOTLAR.md#L320) | <code>## 9. E-Posta Dogrulama</code> | E-posta doğrulama özeti; ayrıntı ve güncel parametreler docs/EPOSTA_DOGRULAMA.md'dedir |
-| [PROJE_TEKNIK_NOTLAR.md:539](../../PROJE_TEKNIK_NOTLAR.md#L539) | <code>## 17. Acik Tasarim Kararlari / Sonraki Adimlar</code> | Açık kararlar; güncel yapılacaklar için BEKLEYEN_ISLER.md |
-| [deploy/README.md:30](../../deploy/README.md#L30) | <code>## Geri alma</code> | Canlı dağıtım için doğru kaynak: yedek + sağlık denetimi + otomatik geri alma |
+| [PROJE_TEKNIK_NOTLAR.md:549](../../PROJE_TEKNIK_NOTLAR.md#L549) | <code>## 17. Acik Tasarim Kararlari / Sonraki Adimlar</code> | Açık kararlar; güncel yapılacaklar için BEKLEYEN_ISLER.md |
+| [deploy/README.md:31](../../deploy/README.md#L31) | <code>## Geri alma</code> | Canlı dağıtım için doğru kaynak: yedek + sağlık denetimi + otomatik geri alma |
 
 **Olası nedenler**
 - Belge bir önceki tur sonrası güncellenmedi: kod ve testler (npm test / flutter test) belgeden önceliklidir

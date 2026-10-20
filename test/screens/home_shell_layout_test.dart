@@ -9,6 +9,10 @@
 // - PageEntry: menü (ya da mod) değişince TEK içerik, anahtar `menü-mod`; yoklama yeniden kurması giriş
 //   animasyonunu yeniden başlatmaz; hareket azaltmada içerik anında tam.
 // - Kapı açma başarı sinyali (_doorOpenOkTick -> DashboardView.successTick -> DoorOpenButton).
+//
+// Panel artık MODÜL VİTRİNİDİR (ModuleShowcaseView); kapı paneli (DashboardView / bireysel ana ekran) "Kapılar" kartının
+// arkasındadır. AppBar / mod hapı testleri vitrin üzerinde, kapı sinyali ve kapı yoklaması testleri `doors: true` ile
+// Kapılar sayfasında çalışır.
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
@@ -36,6 +40,7 @@ import 'package:site_kapi_kontrol/ui/design/theme_toggle_button.dart';
 import 'package:site_kapi_kontrol/ui/pages/home_page.dart';
 import 'package:site_kapi_kontrol/ui/views/dashboard_view.dart';
 import 'package:site_kapi_kontrol/ui/views/individual_home_view.dart';
+import 'package:site_kapi_kontrol/ui/views/module_showcase_view.dart';
 import 'package:site_kapi_kontrol/ui/views/profile_view.dart';
 import 'package:site_kapi_kontrol/ui/widgets/admin_door_status_card.dart';
 
@@ -211,6 +216,7 @@ Future<void> _pumpShell(
   bool reduce = false,
   bool plainTheme = false,
   bool themeToggle = false,
+  bool doors = false,
 }) async {
   tester.view.physicalSize = Size(width, height);
   tester.view.devicePixelRatio = 1.0;
@@ -236,6 +242,20 @@ Future<void> _pumpShell(
   );
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 50));
+  if (doors) await _openDoorPanel(tester);
+}
+
+/// Panel vitrinindeki "Kapılar" kartına dokunur: kapı paneli bir dokunuş uzaktadır (başlık "Kapılar" olur). Kapılar
+/// sayfası girişte [HomePage.doorEntryGuard] boyunca dokunuş ALMAZ (vitrindeki karta hızlı ikinci dokunuş KAPIYI AÇ
+/// düğmesine düşmesin): kapı düğmesine dokunan testler bu süre geçtikten sonra dokunur.
+Future<void> _openDoorPanel(WidgetTester tester) async {
+  final card = find.byKey(const ValueKey<String>('panel_kart_kapilar'));
+  await tester.ensureVisible(card);
+  await tester.pump();
+  await tester.tap(card);
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 50));
+  await tester.pump(HomePage.doorEntryGuard);
 }
 
 /// Yoklama zamanlayıcısı ve girişler kalmasın (flutter_test "Timer is still pending" demesin).
@@ -248,7 +268,10 @@ Future<void> _openMenu(WidgetTester tester, String label) async {
   tester.state<ScaffoldState>(find.byType(Scaffold).first).openDrawer();
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 400));
-  await tester.tap(find.text(label).first);
+  // Çekmecedeki öğe (Panel vitrininde de aynı adlı kart / düğme vardır: bulucu çekmeceyle sınırlı).
+  await tester.tap(
+    find.descendant(of: find.byType(Drawer), matching: find.text(label)).first,
+  );
   await tester.pump();
 }
 
@@ -382,7 +405,7 @@ void main() {
   tearDown(RebuildProbe.stop);
 
   group(
-    'AppBar taşmaz: boyut x yazı ölçeği x tema (çift modlu site yöneticisi, Android: hap + 3 ikon)',
+    'AppBar taşmaz (Panel = modül vitrini): boyut x yazı ölçeği x tema (çift modlu site yöneticisi, Android: hap + 3 ikon)',
     () {
       const cells = <({double width, double height, double scale})>[
         (width: 360, height: 640, scale: 1.5), // spesifikasyon hücresi
@@ -407,7 +430,7 @@ void main() {
                 scale: c.scale,
                 dark: dark,
               );
-              expect(find.byType(AdminDoorStatusCard), findsOneWidget);
+              expect(find.byType(ModuleShowcaseView), findsOneWidget, reason: 'Panel = modül vitrini');
               _expectAppBarFits(
                 tester,
                 width: c.width,
@@ -424,7 +447,7 @@ void main() {
   );
 
   group(
-    'AppBar + tema düğmesi (ThemeScope var): hap + widget + tema + yenile + çıkış taşmaz, hedefler >= 44 dp',
+    'AppBar + tema düğmesi (ThemeScope var, Panel = modül vitrini): hap + widget + tema + yenile + çıkış taşmaz, hedefler >= 44 dp',
     () {
       const cells = <({double width, double height, double scale})>[
         (width: 320, height: 640, scale: 2.0), // en kötü: en dar + en büyük yazı
@@ -447,7 +470,7 @@ void main() {
                 dark: dark,
                 themeToggle: true,
               );
-              expect(find.byType(AdminDoorStatusCard), findsOneWidget);
+              expect(find.byType(ModuleShowcaseView), findsOneWidget, reason: 'Panel = modül vitrini');
               _expectAppBarFits(
                 tester,
                 width: c.width,
@@ -481,7 +504,7 @@ void main() {
 
   group('AppBar: öteki roller ve platformlar', () {
     testWidgets(
-      'Sakin Modu (yönetici etiketi, "Yönetici Paneli") 320x640 x2,0 ve 412x915 x1,0 taşmaz',
+      'Sakin Modu (yönetici etiketi, "Yönetici Paneli") 320x640 x2,0 ve 412x915 x1,0 taşmaz; Panel sakin vitrinine döner (bireysel ana ekran Kapılar\'ın arkasında)',
       (tester) async {
         for (final c in const <({double w, double h, double s})>[
           (w: 320, h: 640, s: 2.0),
@@ -490,13 +513,15 @@ void main() {
         ]) {
           final auth = _ShellAuth();
           await _pumpShell(tester, auth, width: c.w, height: c.h, scale: c.s);
-          // Hapa dokun: Sakin Moduna geç (IndividualHomeView).
+          // Hapa dokun: Sakin Moduna geç (vitrin sakin kitlesine döner; bireysel ana ekran Kapılar'ın arkasında).
           await tester.tap(
             _pillOf('Sakin Modu', iconOnly: _expectedIconOnly(c.w, c.s)),
           );
           await tester.pump();
           await tester.pump(const Duration(milliseconds: 300));
-          expect(find.byType(IndividualHomeView), findsOneWidget);
+          expect(find.byType(ModuleShowcaseView), findsOneWidget);
+          expect(find.byKey(const ValueKey<String>('panel_hero_selam')), findsOneWidget);
+          expect(find.byType(IndividualHomeView), findsNothing);
           _expectAppBarFits(
             tester,
             width: c.w,
@@ -599,11 +624,12 @@ void main() {
     );
 
     testWidgets(
-      'çift modlu olmayan rol (sitesiz bireysel): hap yok, 3 ikon 44 dp',
+      'çift modlu olmayan rol (sitesiz bireysel): Panel bireysel vitrin, hap yok, 3 ikon 44 dp',
       (tester) async {
         final auth = _ShellAuth(role: UserRole.individual);
         await _pumpShell(tester, auth, width: 360, scale: 1.5);
-        expect(find.byType(IndividualHomeView), findsOneWidget);
+        expect(find.byType(ModuleShowcaseView), findsOneWidget);
+        expect(find.byType(IndividualHomeView), findsNothing, reason: 'bireysel ana ekran Kapılar kartının arkasında');
         _expectAppBarFits(
           tester,
           width: 360,
@@ -642,7 +668,7 @@ void main() {
 
   group('mod hapı (Sakin Modu / Yönetici Paneli)', () {
     testWidgets(
-      'dar ekranda yalnız ikon: Tooltip + Semantics etiketi; dokununca mod değişir',
+      'dar ekranda yalnız ikon: Tooltip + Semantics etiketi; dokununca mod değişir (Sakin Modu = sakin vitrini; bireysel ana ekran Kapılar\'ın arkasında)',
       (tester) async {
         final handle = tester.ensureSemantics();
         final auth = _ShellAuth();
@@ -671,6 +697,12 @@ void main() {
         await tester.pump(const Duration(milliseconds: 300));
         expect(_inAppBar(find.byTooltip('Yönetici Paneli')), findsOneWidget);
         expect(_inAppBar(find.byTooltip('Sakin Modu')), findsNothing);
+        // Sakin modunda Panel sakin vitrinidir; kapı paneli yerine bireysel ana ekran Kapılar kartının arkasındadır.
+        expect(find.byKey(const ValueKey<String>('panel_hero_selam')), findsOneWidget);
+        expect(find.byType(IndividualHomeView), findsNothing);
+        expect(find.byType(DashboardView), findsNothing);
+        await _openDoorPanel(tester);
+        await tester.pump(const Duration(milliseconds: 300));
         expect(find.byType(IndividualHomeView), findsOneWidget);
         expect(find.byType(DashboardView), findsNothing);
         // Alt satır artık "Sakin Modu" der (mevcut davranış).
@@ -679,7 +711,10 @@ void main() {
         await tester.tap(_pillOf('Yönetici Paneli', iconOnly: true));
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 300));
-        expect(find.byType(DashboardView), findsOneWidget);
+        // Yönetici paneline dönüş her zaman Panel vitrinine düşer.
+        expect(find.byType(ModuleShowcaseView), findsOneWidget);
+        expect(find.byKey(const ValueKey<String>('panel_hero_selam')), findsNothing);
+        expect(find.byType(DashboardView), findsNothing);
         expect(find.byType(IndividualHomeView), findsNothing);
         expect(_inAppBar(find.byTooltip('Sakin Modu')), findsOneWidget);
         await _disposeShell(tester);
@@ -770,7 +805,7 @@ void main() {
           .first,
     );
 
-    testWidgets('içerik tek PageEntry içinde; anahtar menü-mod', (
+    testWidgets('Panel (modül vitrini) tek PageEntry içinde; anahtar menü-mod', (
       tester,
     ) async {
       final auth = _ShellAuth();
@@ -780,14 +815,14 @@ void main() {
         tester.widget<PageEntry>(find.byType(PageEntry)).key,
         const ValueKey<String>('dashboard-false'),
       );
-      expect(find.byType(DashboardView), findsOneWidget);
+      expect(find.byType(ModuleShowcaseView), findsOneWidget);
       expect(
         find.descendant(
           of: find.byType(PageEntry),
-          matching: find.byType(DashboardView),
+          matching: find.byType(ModuleShowcaseView),
         ),
         findsOneWidget,
-        reason: 'panel PageEntry içinde',
+        reason: 'panel (vitrin) PageEntry içinde',
       );
       await _disposeShell(tester);
     });
@@ -830,7 +865,7 @@ void main() {
           tester.widget<PageEntry>(find.byType(PageEntry)).key,
           const ValueKey<String>('dashboard-false'),
         );
-        expect(find.byType(DashboardView), findsOneWidget);
+        expect(find.byType(ModuleShowcaseView), findsOneWidget);
         expect(find.byType(ProfileView), findsNothing);
         expect(tester.takeException(), isNull);
         await _disposeShell(tester);
@@ -838,7 +873,7 @@ void main() {
     );
 
     testWidgets(
-      'mod değişince de anahtar değişir; GlobalKey çakışması yok (bireysel görünüm tek)',
+      'mod değişince de anahtar değişir; GlobalKey çakışması yok (vitrin <-> Kapılar\'daki bireysel görünüm tek)',
       (tester) async {
         final auth = _ShellAuth();
         await _pumpShell(tester, auth, width: 820, height: 1180);
@@ -851,8 +886,17 @@ void main() {
           tester.widget<PageEntry>(find.byType(PageEntry)).key,
           const ValueKey<String>('dashboard-true'),
         );
-        expect(find.byType(IndividualHomeView), findsOneWidget);
+        expect(find.byType(ModuleShowcaseView), findsOneWidget);
         expect(find.byType(DashboardView), findsNothing);
+
+        // Sakin modunda bireysel ana ekran Kapılar kartının arkasındadır (GlobalKey'li görünüm tek).
+        await tester.pump(const Duration(milliseconds: 300));
+        await _openDoorPanel(tester);
+        expect(find.byType(IndividualHomeView), findsOneWidget);
+        expect(
+          tester.widget<PageEntry>(find.byType(PageEntry)).key,
+          const ValueKey<String>('kapilar-true'),
+        );
 
         await tester.pump(const Duration(milliseconds: 300));
         await tester.tap(_pillOf('Yönetici Paneli', iconOnly: false));
@@ -862,7 +906,8 @@ void main() {
           tester.widget<PageEntry>(find.byType(PageEntry)).key,
           const ValueKey<String>('dashboard-false'),
         );
-        expect(find.byType(DashboardView), findsOneWidget);
+        expect(find.byType(ModuleShowcaseView), findsOneWidget);
+        expect(find.byType(DashboardView), findsNothing);
         expect(find.byType(IndividualHomeView), findsNothing);
         expect(
           tester.takeException(),
@@ -888,13 +933,13 @@ void main() {
     });
 
     testWidgets(
-      'yoklama sonucu değişince PageEntry yeniden başlamaz (giriş animasyonu tekrarlanmaz, durum korunur)',
+      'Kapılar sayfasında: yoklama sonucu değişince PageEntry yeniden başlamaz (giriş animasyonu tekrarlanmaz, durum korunur)',
       (tester) async {
         final auth = _ShellAuth(
           statusHandler: (i) async =>
               (_status(online: i.isOdd, rssi: -40 - i), null),
         );
-        await _pumpShell(tester, auth, width: 400, height: 1400);
+        await _pumpShell(tester, auth, width: 400, height: 1400, doors: true);
         await tester.pump(const Duration(milliseconds: 400)); // giriş bitti
         expect(entryFade(tester).opacity.value, 1.0);
         final stateBefore = tester.state(find.byType(PageEntry));
@@ -924,7 +969,7 @@ void main() {
     );
   });
 
-  group('kapı açma başarı sinyali (_doorOpenOkTick -> successTick)', () {
+  group('Kapılar sayfasında: kapı açma başarı sinyali (_doorOpenOkTick -> successTick)', () {
     Finder openButton() =>
         find.byKey(const ValueKey<String>('admin_door_open_button'));
 
@@ -937,7 +982,7 @@ void main() {
         final haptics = recordHaptics(tester);
         final completer = Completer<(DoorRuntimeStatus?, String?)>();
         final auth = _ShellAuth(openHandler: (_) => completer.future);
-        await _pumpShell(tester, auth, width: 400, height: 1400);
+        await _pumpShell(tester, auth, width: 400, height: 1400, doors: true);
 
         expect(tick(tester), 0);
         expect(find.text('KAPI AÇ'), findsOneWidget);
@@ -991,7 +1036,7 @@ void main() {
           openHandler: (_) async =>
               (null, 'Bu kapı için uygulamadan açma kapalı.'),
         );
-        await _pumpShell(tester, auth, width: 400, height: 1400);
+        await _pumpShell(tester, auth, width: 400, height: 1400, doors: true);
 
         await tester.tap(openButton());
         await tester.pump();
@@ -1012,7 +1057,7 @@ void main() {
     testWidgets('her başarılı açmada sayaç bir artar (1 -> 2)', (tester) async {
       recordHaptics(tester);
       final auth = _ShellAuth();
-      await _pumpShell(tester, auth, width: 400, height: 1400);
+      await _pumpShell(tester, auth, width: 400, height: 1400, doors: true);
 
       await tester.tap(openButton());
       await tester.pump();
@@ -1039,7 +1084,7 @@ void main() {
           role: UserRole.apartmentOwner,
           openHandler: (_) => completer.future,
         );
-        await _pumpShell(tester, auth, width: 400, height: 1400);
+        await _pumpShell(tester, auth, width: 400, height: 1400, doors: true);
         final button = find.byKey(
           const ValueKey<String>('resident_door_open_button'),
         );
@@ -1067,7 +1112,7 @@ void main() {
       (tester) async {
         recordHaptics(tester);
         final auth = _ShellAuth();
-        await _pumpShell(tester, auth, width: 320, scale: 2.0, reduce: true);
+        await _pumpShell(tester, auth, width: 320, scale: 2.0, reduce: true, doors: true);
         await tester.ensureVisible(openButton());
         await tester.pump();
         await tester.tap(openButton());
