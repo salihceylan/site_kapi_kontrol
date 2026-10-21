@@ -479,10 +479,10 @@ describe('platform rotalari: kimlik zinciri', () => {
 });
 
 describe('GET /app/modules/catalog', () => {
-  it('kimligi dogrulanmis herkese 24 modullu katalog doner', async () => {
+  it('kimligi dogrulanmis herkese 25 modullu katalog doner', async () => {
     const res = await call('GET', '/app/modules/catalog', { user: users.resident });
     assert.equal(res.status, 200);
-    assert.equal(res.body.modules.length, 24);
+    assert.equal(res.body.modules.length, 25);
     assert.deepEqual(Object.keys(res.body.modules[0]), ['code', 'name', 'description', 'core', 'status']);
     assert.equal(res.body.modules[0].code, 'door_control');
     assert.equal(res.body.modules[1].core, true);
@@ -501,7 +501,7 @@ describe('GET /manager/sites/:siteCode/modules: yetki matrisi', () => {
     assert.equal(res.body.site_name, 'Gül Sitesi');
     assert.equal(res.body.management_type, 'apartment_site');
     assert.equal(res.body.management_type_label, 'Apartman ve Site');
-    assert.equal(res.body.modules.length, 24);
+    assert.equal(res.body.modules.length, 25);
     assert.deepEqual(doorOf(res.body), {
       code: 'door_control',
       name: 'Geçiş Kontrol (SmartKeyPass)',
@@ -1762,7 +1762,7 @@ describe('F9: yonetim turu terimleri', () => {
     // mevcut alanlar degismez
     assert.equal(res.body.management_type, 'apartment_site');
     assert.equal(res.body.management_type_label, 'Apartman ve Site');
-    assert.equal(res.body.modules.length, 24);
+    assert.equal(res.body.modules.length, 25);
     assert.equal(typeof doorOf(res.body).can_toggle, 'boolean');
   });
 
@@ -1775,7 +1775,7 @@ describe('F9: yonetim turu terimleri', () => {
     assert.equal(res.body.management_terms.unit, 'Ofis');
     assert.equal(res.body.management_terms.resident_plural, 'Firmalar');
     assert.equal(res.body.management_terms.fee, 'Ortak gider');
-    assert.equal(res.body.modules.length, 24);
+    assert.equal(res.body.modules.length, 25);
     assert.deepEqual(
       res.body.modules.filter((m) => m.recommended).map((m) => m.code).sort(),
       ['documents', 'finance', 'visitor_log', 'work_tracking'],
