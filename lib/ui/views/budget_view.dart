@@ -170,7 +170,7 @@ class BudgetViewState extends State<BudgetView> {
       return const EmptyCard(icon: Icons.apartment_rounded, title: 'Kayıtlı site bulunamadı.');
     }
     final result = _result;
-    return ListView(
+    return ListView(shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), 
       padding: const EdgeInsets.all(AppSpace.lg),
       children: <Widget>[
         if (_sites.length > 1)

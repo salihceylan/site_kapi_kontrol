@@ -189,7 +189,7 @@ class NeighborBoardViewState extends State<NeighborBoardView> {
     }
     return RefreshIndicator(
       onRefresh: reload,
-      child: ListView(
+      child: ListView(shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), 
         padding: const EdgeInsets.all(16),
         children: <Widget>[
           if (widget.sites.length > 1)

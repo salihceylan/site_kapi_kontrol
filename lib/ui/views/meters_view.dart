@@ -71,6 +71,12 @@ class MetersViewState extends State<MetersView> with SingleTickerProviderStateMi
     if (mounted) setState(() => _reloadTick++);
   }
 
+  /// Ana sayfa gövdesi kaydırılan bir kap: sekme görünümüne sınırlı yükseklik verilir (yoksa boş ekran).
+  double _bodyHeight(BuildContext context) {
+    final h = MediaQuery.sizeOf(context).height * 0.78;
+    return h < 480 ? 480 : h;
+  }
+
   @override
   Widget build(BuildContext context) {
     final site = _site;
@@ -78,7 +84,7 @@ class MetersViewState extends State<MetersView> with SingleTickerProviderStateMi
       return const Center(child: Padding(padding: EdgeInsets.all(AppSpace.xl), child: Text('Sayaç modülü açık bir site bulunamadı. Modüller ekranından açılmasını isteyin.')));
     }
     if (site.fieldOnly) {
-      return MeterFieldView(key: ValueKey<int>(site.code), authService: widget.authService, siteCode: site.code, siteName: site.label, service: _service);
+      return SizedBox(height: _bodyHeight(context), child: MeterFieldView(key: ValueKey<int>(site.code), authService: widget.authService, siteCode: site.code, siteName: site.label, service: _service));
     }
     return Column(
       children: <Widget>[
@@ -93,7 +99,8 @@ class MetersViewState extends State<MetersView> with SingleTickerProviderStateMi
             ),
           ),
         TabBar(controller: _tabs, tabs: const <Tab>[Tab(text: 'Sayaçlar'), Tab(text: 'Okuma aktar'), Tab(text: 'Faturalandır')]),
-        Expanded(
+        SizedBox(
+          height: _bodyHeight(context),
           child: TabBarView(
             controller: _tabs,
             children: <Widget>[

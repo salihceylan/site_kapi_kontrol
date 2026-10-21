@@ -153,7 +153,7 @@ class AnnualReportViewState extends State<AnnualReportView> {
   Widget build(BuildContext context) {
     if (_site == null) return const Center(child: Text('Faaliyet raporu için uygun site yok.'));
     final years = <int>[for (var y = DateTime.now().year; y >= DateTime.now().year - 6; y--) y];
-    return ListView(
+    return ListView(shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), 
       padding: const EdgeInsets.all(16),
       children: <Widget>[
         Text('Faaliyet Raporu', style: Theme.of(context).textTheme.titleLarge),

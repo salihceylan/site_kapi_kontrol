@@ -380,7 +380,7 @@ class EquipmentViewState extends State<EquipmentView> {
   @override
   Widget build(BuildContext context) {
     final site = _site;
-    return ListView(
+    return ListView(shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), 
       padding: const EdgeInsets.all(AppSpace.lg),
       children: <Widget>[
         Text('Ekipman ve Bakım', style: Theme.of(context).textTheme.headlineSmall),
@@ -540,7 +540,7 @@ class _EquipmentDetailSheetState extends State<EquipmentDetailSheet> {
     final kind = equipmentKinds.where((k) => k.code == item.kind).firstOrNull;
     final hasLegal = d.plans.any((p) => p.legal && p.isActive);
     final canWrite = widget.site.canWrite;
-    return ListView(
+    return ListView(shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), 
       padding: const EdgeInsets.fromLTRB(AppSpace.lg, 0, AppSpace.lg, AppSpace.xl),
       children: <Widget>[
         Text(item.name, style: Theme.of(context).textTheme.headlineSmall),

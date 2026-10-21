@@ -291,7 +291,7 @@ class DeviceIntegrationsViewState extends State<DeviceIntegrationsView> {
   @override
   Widget build(BuildContext context) {
     final site = _site;
-    return ListView(
+    return ListView(shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), 
       padding: const EdgeInsets.all(AppSpace.lg),
       children: <Widget>[
         Text('Ödeme ve Kamera', style: Theme.of(context).textTheme.headlineSmall),
