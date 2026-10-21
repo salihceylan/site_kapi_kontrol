@@ -19,6 +19,7 @@ import 'package:site_kapi_kontrol/ui/helpers/money.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/finance_bank_details_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/finance_payment_settings_dialog.dart';
 import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
+import 'package:site_kapi_kontrol/ui/views/bank_import_view.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_4b_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
@@ -389,6 +390,14 @@ class FinanceCashTabState extends State<FinanceCashTab> {
     _afterPaymentWrite(message);
   }
 
+  Future<void> _bankImport(CashAccount account) async {
+    if (_opening) return;
+    await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => BankImportView(scope: widget.scope, initialAccountId: account.id)));
+    if (!mounted) return;
+    widget.onDataChanged();
+    _refreshOnly();
+  }
+
   void _afterPaymentWrite(String? message) {
     if (message == null || !mounted) return;
     ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(message)));
@@ -419,6 +428,17 @@ class FinanceCashTabState extends State<FinanceCashTab> {
             label: const Text('IBAN ve alıcı adı'),
           ),
         ),
+        if (account.isActive)
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: TextButton.icon(
+              key: ValueKey<String>('finance_cash_bank_import_${account.id}'),
+              style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+              onPressed: () => _bankImport(account),
+              icon: const Icon(Icons.upload_file_rounded, size: 18),
+              label: const Text('Banka dosyası yükle'),
+            ),
+          ),
       ],
     );
   }
