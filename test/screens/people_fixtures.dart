@@ -16,6 +16,7 @@ import 'package:site_kapi_kontrol/models/site_page.dart';
 import 'package:site_kapi_kontrol/models/site_manager_record.dart';
 import 'package:site_kapi_kontrol/models/site_record.dart';
 import 'package:site_kapi_kontrol/models/staff_role_record.dart';
+import 'package:site_kapi_kontrol/models/team.dart';
 import 'package:site_kapi_kontrol/models/site_structure_record.dart';
 import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/models/user_session.dart';
@@ -507,6 +508,75 @@ class PeopleFakeAuth extends AuthService with ModuleRequestFixtures {
 
   @override
   Future<List<StaffRoleRecord>> listStaffRoles(int siteCode) async => List<StaffRoleRecord>.of(staffRoles);
+
+  // Yönetim kadrosu ve davet (058): kişi kimliğine göre görev, davet durumu ve çağrı kayıtları.
+  final Map<int, TeamDuty> teamDuties = <int, TeamDuty>{};
+  final Map<int, PersonInvitationState> invitations = <int, PersonInvitationState>{};
+  final List<({int personId, String duty, String? title, String? phone, bool show})> dutyCalls =
+      <({int personId, String duty, String? title, String? phone, bool show})>[];
+  final List<int> dutyEndCalls = <int>[];
+  final List<int> inviteSendCalls = <int>[];
+  final List<int> inviteRevokeCalls = <int>[];
+  final List<DirectoryContact> teamContacts = <DirectoryContact>[];
+  bool teamDirectoryEnabled = false;
+
+  @override
+  Future<TeamData> getTeam(int siteCode) async => TeamData(
+    managers: const <String>['Yönetici Kişi'],
+    duties: teamDuties.values.toList(),
+    legacyRoles: <LegacyStaffRole>[
+      for (final r in staffRoles) LegacyStaffRole(userCode: r.userCode, fullName: r.fullName, role: r.role),
+    ],
+    contacts: List<DirectoryContact>.of(teamContacts),
+    directoryEnabled: teamDirectoryEnabled,
+  );
+
+  @override
+  Future<String?> setTeamDuty(
+    int siteCode,
+    int personId, {
+    required String duty,
+    String? title,
+    String? publicPhone,
+    bool showInDirectory = true,
+  }) async {
+    dutyCalls.add((personId: personId, duty: duty, title: title, phone: publicPhone, show: showInDirectory));
+    final person = peopleJson[personId];
+    teamDuties[personId] = TeamDuty(
+      personId: personId,
+      fullName: person?['full_name'] as String? ?? 'Kişi',
+      duty: duty,
+      title: title,
+      publicPhone: publicPhone,
+      showInDirectory: showInDirectory,
+      access: person?['has_account'] == true ? 'granted' : 'no_account',
+    );
+    return teamDuties[personId]!.access;
+  }
+
+  @override
+  Future<void> endTeamDuty(int siteCode, int personId) async {
+    dutyEndCalls.add(personId);
+    teamDuties.remove(personId);
+  }
+
+  @override
+  Future<PersonInvitationState> getPersonInvitation(int siteCode, int personId) async =>
+      invitations[personId] ?? const PersonInvitationState();
+
+  @override
+  Future<PersonInvitationState> sendPersonInvitation(int siteCode, int personId) async {
+    inviteSendCalls.add(personId);
+    final state = PersonInvitationState(status: 'pending', sendCount: (invitations[personId]?.sendCount ?? 0) + 1, sent: true);
+    invitations[personId] = state;
+    return state;
+  }
+
+  @override
+  Future<void> revokePersonInvitation(int siteCode, int personId) async {
+    inviteRevokeCalls.add(personId);
+    invitations.remove(personId);
+  }
 
   @override
   Future<SiteManagersData?> getSiteManagers(int siteCode) async =>

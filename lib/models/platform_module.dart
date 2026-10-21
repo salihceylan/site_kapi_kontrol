@@ -24,6 +24,8 @@ abstract final class PlatformModuleCodes {
   static const String contracts = 'contracts';
   /// Karar Defteri (yönetim / genel / denetim kurulu kararları). Varsayılan KAPALI.
   static const String decisionBook = 'decision_book';
+  /// Rehber (yönetim kadrosu ve faydalı telefonlar; sakin ekranı). Varsayılan KAPALI.
+  static const String directory = 'directory';
 }
 
 DateTime? _parseDate(Object? raw) {

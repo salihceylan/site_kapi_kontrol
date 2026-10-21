@@ -28,6 +28,7 @@ import 'package:site_kapi_kontrol/models/residency_relation.dart';
 import 'package:site_kapi_kontrol/models/vehicle_record.dart';
 import 'package:site_kapi_kontrol/models/platform_module.dart';
 import 'package:site_kapi_kontrol/models/staff_role_record.dart';
+import 'package:site_kapi_kontrol/models/team.dart';
 import 'package:site_kapi_kontrol/models/site_page.dart';
 import 'package:site_kapi_kontrol/models/site_record.dart';
 import 'package:site_kapi_kontrol/models/site_join_token_record.dart';
@@ -783,6 +784,175 @@ class AuthApi {
       token: token,
     );
     _ensureStatus(response, 200);
+  }
+
+  // --- Yönetim kadrosu, davet, rehber (058) ------------------------------------------------
+
+  Future<Map<String, dynamic>> _teamJson(
+    String method,
+    String path,
+    String token,
+    int expected, {
+    Map<String, dynamic>? body,
+  }) async {
+    final response = await _authorizedRequest(
+      method: method,
+      path: path,
+      token: token,
+      body: body,
+    );
+    _ensureStatus(response, expected);
+    return _decodePayload(response);
+  }
+
+  Future<TeamData> getTeam({required String token, required int siteCode}) async {
+    final payload = await _teamJson('GET', '/manager/sites/$siteCode/team', token, 200);
+    return _parsePayload('Yönetim kadrosu', () => TeamData.fromJson(payload));
+  }
+
+  /// Görev verir/günceller. Dönüş: sunucunun hesapladığı yetki durumu (`access`).
+  Future<String?> setTeamDuty({
+    required String token,
+    required int siteCode,
+    required int personId,
+    required String duty,
+    String? title,
+    String? publicPhone,
+    bool showInDirectory = true,
+  }) async {
+    final payload = await _teamJson(
+      'PUT',
+      '/manager/sites/$siteCode/people/$personId/duty',
+      token,
+      200,
+      body: <String, dynamic>{
+        'duty': duty,
+        'title': ?title,
+        'public_phone': ?publicPhone,
+        'show_in_directory': showInDirectory,
+      },
+    );
+    return payload['access'] as String?;
+  }
+
+  Future<void> endTeamDuty({
+    required String token,
+    required int siteCode,
+    required int personId,
+  }) async {
+    await _teamJson('DELETE', '/manager/sites/$siteCode/people/$personId/duty', token, 200);
+  }
+
+  Future<PersonInvitationState> getPersonInvitation({
+    required String token,
+    required int siteCode,
+    required int personId,
+  }) async {
+    final payload = await _teamJson(
+      'GET',
+      '/manager/sites/$siteCode/people/$personId/invitation',
+      token,
+      200,
+    );
+    return _parsePayload('Davet durumu', () => PersonInvitationState.fromJson(payload));
+  }
+
+  Future<PersonInvitationState> sendPersonInvitation({
+    required String token,
+    required int siteCode,
+    required int personId,
+  }) async {
+    final payload = await _teamJson(
+      'POST',
+      '/manager/sites/$siteCode/people/$personId/invitation',
+      token,
+      201,
+    );
+    return _parsePayload('Davet', () => PersonInvitationState.fromJson(payload));
+  }
+
+  Future<void> revokePersonInvitation({
+    required String token,
+    required int siteCode,
+    required int personId,
+  }) async {
+    await _teamJson('DELETE', '/manager/sites/$siteCode/people/$personId/invitation', token, 200);
+  }
+
+  Future<void> saveDirectoryContact({
+    required String token,
+    required int siteCode,
+    int? contactId,
+    required String label,
+    required String phone,
+    String? note,
+    required String category,
+  }) async {
+    final body = <String, dynamic>{
+      'label': label,
+      'phone': phone,
+      'note': note,
+      'category': category,
+    };
+    if (contactId == null) {
+      await _teamJson('POST', '/manager/sites/$siteCode/directory/contacts', token, 201, body: body);
+    } else {
+      await _teamJson(
+        'PATCH',
+        '/manager/sites/$siteCode/directory/contacts/$contactId',
+        token,
+        200,
+        body: body,
+      );
+    }
+  }
+
+  Future<void> deleteDirectoryContact({
+    required String token,
+    required int siteCode,
+    required int contactId,
+  }) async {
+    await _teamJson(
+      'DELETE',
+      '/manager/sites/$siteCode/directory/contacts/$contactId',
+      token,
+      200,
+    );
+  }
+
+  Future<List<DirectorySite>> getDirectory({required String token}) async {
+    final payload = await _teamJson('GET', '/app/directory', token, 200);
+    return _parsePayload(
+      'Rehber',
+      () => (payload['sites'] as List<dynamic>? ?? <dynamic>[])
+          .whereType<Map<String, dynamic>>()
+          .map(DirectorySite.fromJson)
+          .toList(),
+    );
+  }
+
+  Future<List<PendingInvitation>> listMyInvitations({required String token}) async {
+    final payload = await _teamJson('GET', '/app/invitations', token, 200);
+    return _parsePayload(
+      'Davetler',
+      () => (payload['invitations'] as List<dynamic>? ?? <dynamic>[])
+          .whereType<Map<String, dynamic>>()
+          .map(PendingInvitation.fromJson)
+          .toList(),
+    );
+  }
+
+  Future<void> answerInvitation({
+    required String token,
+    required int invitationId,
+    required bool accept,
+  }) async {
+    await _teamJson(
+      'POST',
+      '/app/invitations/$invitationId/${accept ? 'accept' : 'decline'}',
+      token,
+      200,
+    );
   }
 
   // --- Modül talebi (Faz 1.1) ---------------------------------------------------------------

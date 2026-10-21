@@ -231,3 +231,7 @@ Yeni tablo ve migration YOK. Türe göre veri modeli ve modüller AYNI kalır (b
 
 ### Testler
 `server/test/management_type_terms.test.js` (tablo, kopya/donmuş nesneler, bilinmeyen tür, katalog dışı kodlar, görünüm şekli); `platform_catalog.test.js` (mapSiteRow `management_terms`), `platform_module_routes.test.js` (her iki modül ucu + `/app/management-types`), `platform_site_create.test.js` (admin site yanıtında `management_terms`).
+
+## Rehber modülü ve ek rollerin yeri (058)
+
+Katalog: `directory` (Rehber), kullanılabilir, çekirdek değil, **varsayılan KAPALI**. Kadro yönetimi çekirdek `people` modülünde kalır (modülden bağımsız); `directory` yalnız sakine/kuruldaki kişiye açılan rehberi ve faydalı telefon yönetimini denetler. `GET /app/directory`: çağıranın bağı olduğu (aktif daire üyeliği ya da BOARD_MEMBER/STAFF üyeliği) ve `directory` açık siteler için yönetici adları, kurul, görevliler (yalnız `show_in_directory`; telefon yalnız elle girilen `public_phone`) ve faydalı telefonlar; kapalı modülde site listede yoktur. Yönetici ucu: `POST|PATCH|DELETE /manager/sites/:siteCode/directory/contacts[/:id]` (modül kapalıysa 403 `MODULE_DISABLED`). Modüller ekranındaki "Ek Roller" bölümü bir yönlendirme kartına döndü; kadro Kişiler > Kadro sekmesinde, görev kişi kartındaki "Görev ver"dedir.
