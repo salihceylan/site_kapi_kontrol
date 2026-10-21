@@ -8,7 +8,7 @@ Bu dilim YALNIZ sunucu altyapısıdır: kartlı geçiş kayıt/iptal/listeleme u
 | `card_access` | Kartlı Geçiş | `available` | KAPALI (süper açar, yönetici modül talep eder) |
 | `plate_recognition` | Plaka Tanıma | `coming_soon` | KAPALI (açılamaz, `409 MODULE_COMING_SOON`) |
 | `hgs_access` | HGS Geçişi | `coming_soon` | KAPALI |
-| `cctv_link` | Kamera (CCTV) Bağlantısı | `coming_soon` | KAPALI |
+| `cctv_link` | Kamera (CCTV) Bağlantısı | `available` (072; bkz. `PLATFORM_KAMERA_CCTV.md`) | KAPALI (süper açar, yönetici modül talep eder) |
 
 `card_access` kapalıyken tüm yönetim uçları `403 MODULE_DISABLED` (`module: "card_access"`); sakin listesi modülü kapalı siteyi sessizce atlar. Mevcut `door_control` (SmartKeyPass) modülüne ve `door_access_policy`ye DOKUNULMAZ; kart doğrulaması `door_control`dan bağımsız, kendi modül anahtarıyla çalışır.
 
@@ -70,7 +70,7 @@ Ortak ilke: bu üç özellik dış sistemlerden (plaka kamerası / OCR servisi, 
 - **Webhook ucu (öneri)**: `POST /integrations/:provider/events` başlıkları `X-AHBU-Integration-Key` (site anahtarı) + `X-AHBU-Signature` (gövdenin HMAC-SHA256'sı, anahtarla) + `X-AHBU-Event-Id` (idempotans, sağlayıcı olay kimliği; tekrar 200 `replayed:true`). Gövde sağlayıcıdan bağımsız normalize edilir: `{ occurred_at, gate_id?, plate? | tag_id?, camera_id?, clip_ref?, raw_ref? }`. Hız sınırı site başına (ör. 600/dakika), gövde ≤16 KB, saat sapması ±5 dk.
 - **Plaka tanıma**: `plate_registrations (site_code, person_id, plate (normalizePlate ile kanonik), apartment_id?, is_active)`; webhook plakayı eşler, `verifyPlateForGate` kart doğrulamasıyla aynı karar şekline (`ok, reason, person_id`) döner; eşleşirse kapı komutu mevcut `door_control` yolundan verilir. Kişi listesi ve sakin görünümü kart modülüyle aynı maskeleme ilkesine (`masked_plate`) uyar.
 - **HGS geçişi**: sağlayıcı sözleşmesi site başına; `hgs_tags (site_code, person_id, tag_id_hash, is_active)` — HGS etiketi kimliği HAM saklanmaz (hash + son 4). Geçiş olayı yalnız kayıt ve raporlama içindir (bariyer komutu sağlayıcıda kalır).
-- **Kamera (CCTV) bağlantısı**: `cctv_links (site_code, door_id, camera_id, clip_url_template, provider)`; kapı olayına (`door_logs`) zaman penceresiyle (`occurred_at ± 10 sn`) klip bağlantısı eklenir (`clip_ref`); video sunucuda SAKLANMAZ, yalnız imzalı/kısa ömürlü bağlantı. KVKK: klip erişimi yalnız yönetici/süper, audit'li.
+- **Kamera (CCTV) bağlantısı**: UYGULANDI (072), tasarım değişti: tablolar `cctv_cameras` + `cctv_camera_doors`, kapı olayına `occurred_at ± 30 sn` penceresiyle kayıt bağlantısı şablonla doldurulur; video sunucuda SAKLANMAZ. Ayrıntı: `docs/PLATFORM_KAMERA_CCTV.md`.
 - Hepsi için ortak: hata gövdesi `{ error, code }`, modül kapalıyken `403 MODULE_DISABLED`, olaylar `audit_log`'a yalnız kimlik/son 4 ile yazılır, hesap silmede kişiye bağlı kayıtlar (plaka/etiket) kişi kaydıyla yaşar.
 
 ## Açık işler (bu dilimin dışı)

@@ -73,6 +73,8 @@ IconData moduleIconOf(String code) {
       return Icons.handshake_rounded;
     case PlatformModuleCodes.equipment:
       return Icons.build_circle_rounded;
+    case PlatformModuleCodes.cctvLink:
+      return Icons.videocam_rounded;
     default:
       return Icons.extension_rounded;
   }

@@ -169,6 +169,8 @@ import 'package:site_kapi_kontrol/ui/views/neighbor_board_view.dart';
 import 'package:site_kapi_kontrol/ui/views/annual_report_view.dart';
 import 'package:site_kapi_kontrol/services/device_integrations_api.dart' show DeviceSite;
 import 'package:site_kapi_kontrol/ui/views/device_integrations_view.dart';
+import 'package:site_kapi_kontrol/services/cctv_api.dart' show CctvSite;
+import 'package:site_kapi_kontrol/ui/views/cctv_view.dart';
 import 'package:site_kapi_kontrol/services/equipment_api.dart' show EquipmentSite;
 import 'package:site_kapi_kontrol/ui/views/equipment_view.dart';
 import 'package:site_kapi_kontrol/ui/widgets/announcement_parts.dart';
@@ -324,6 +326,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final GlobalKey<NeighborBoardViewState> _neighborBoardKey = GlobalKey<NeighborBoardViewState>();
   final GlobalKey<AnnualReportViewState> _annualReportKey = GlobalKey<AnnualReportViewState>();
   final GlobalKey<DeviceIntegrationsViewState> _deviceIntegrationsKey = GlobalKey<DeviceIntegrationsViewState>();
+  final GlobalKey<CctvViewState> _cctvKey = GlobalKey<CctvViewState>();
   final GlobalKey<EquipmentViewState> _equipmentKey = GlobalKey<EquipmentViewState>();
   final GlobalKey<VisitorManagerViewState> _visitorManagerKey = GlobalKey<VisitorManagerViewState>();
   final GlobalKey<VisitorResidentViewState> _visitorResidentKey = GlobalKey<VisitorResidentViewState>();
@@ -988,6 +991,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         if (_neighborBoardSites(role).isNotEmpty) SirketMenuItem.komsuPanosu,
         if (_annualReportSites(role).isNotEmpty) SirketMenuItem.faaliyetRaporu,
         if (_deviceIntegrationSites(role).isNotEmpty) SirketMenuItem.odemeKamera,
+        if (_cctvSites(role).isNotEmpty) SirketMenuItem.kameraCctv,
         if (_equipmentSites(role).isNotEmpty) SirketMenuItem.ekipmanBakim,
         if (_canAccessVisitorManage(role)) SirketMenuItem.ziyaretciKayitlari,
         if (_visitorResidentSites(role).isNotEmpty) SirketMenuItem.ziyaretcilerim,
@@ -1268,6 +1272,19 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             paymentsOn: site.isEnabled(PlatformModuleCodes.cardPayments),
             camerasOn: site.isEnabled(PlatformModuleCodes.plateCameras),
           ),
+    ];
+  }
+
+  /// "Kamera (CCTV)" ekranındaki siteler: `cctv_link` modülü AÇIK siteler; yönetici yazar, kurul üyesi ve görevli salt okur (sakin görmez).
+  /// FAIL-OPEN YOK: modül verisi yoksa ya da süper kullanıcıda (modül süzgeci yok) liste boştur.
+  List<CctvSite> _cctvSites(UserRole role) {
+    if (role == UserRole.superUser || !_moduleAccess.isFiltering) return const <CctvSite>[];
+    final canManage = _canManagePeople(role);
+    return <CctvSite>[
+      for (final site in _moduleAccess.result!.sites)
+        if (site.isEnabled(PlatformModuleCodes.cctvLink) &&
+            ((site.role == 'manager' && canManage) || site.isBoardMember || site.role == 'staff'))
+          CctvSite(code: site.siteCode, name: site.siteName, canWrite: site.role == 'manager' && canManage),
     ];
   }
 
@@ -1929,6 +1946,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (item == SirketMenuItem.odemeKamera) {
       return _deviceIntegrationSites(role).isNotEmpty;
     }
+    if (item == SirketMenuItem.kameraCctv) {
+      return _cctvSites(role).isNotEmpty;
+    }
     if (item == SirketMenuItem.ekipmanBakim) {
       return _equipmentSites(role).isNotEmpty;
     }
@@ -2122,6 +2142,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         return 'Faaliyet Raporu';
       case SirketMenuItem.odemeKamera:
         return 'Ödeme ve Kamera';
+      case SirketMenuItem.kameraCctv:
+        return 'Kamera (CCTV)';
       case SirketMenuItem.ekipmanBakim:
         return 'Ekipman ve Bakım';
 
@@ -5580,6 +5602,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       case SirketMenuItem.odemeKamera:
         await _deviceIntegrationsKey.currentState?.reload();
         break;
+      case SirketMenuItem.kameraCctv:
+        await _cctvKey.currentState?.reload();
+        break;
       case SirketMenuItem.ekipmanBakim:
         await _equipmentKey.currentState?.reload();
         break;
@@ -6830,6 +6855,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           key: _deviceIntegrationsKey,
           authService: widget.authService,
           sites: _deviceIntegrationSites(session.role),
+        );
+
+      case SirketMenuItem.kameraCctv:
+        return CctvView(
+          key: _cctvKey,
+          authService: widget.authService,
+          sites: _cctvSites(session.role),
         );
 
       case SirketMenuItem.ekipmanBakim:
