@@ -1507,16 +1507,13 @@ IconData _iconForItem(SirketMenuItem item) {
     case SirketMenuItem.isletmeProjesi:
       return PhosphorIconsRegular.wallet;
     case SirketMenuItem.komsuPanosu:
-      return Icons.forum_rounded;
-    case SirketMenuItem.faaliyetRaporu:
-      return Icons.assignment_rounded;
-    case SirketMenuItem.odemeKamera:
-      return Icons.videocam_rounded;
-    case SirketMenuItem.ekipmanBakim:
-      return Icons.build_circle_rounded;
       return PhosphorIconsRegular.chatsCircle;
+    case SirketMenuItem.faaliyetRaporu:
+      return PhosphorIconsRegular.clipboardText;
     case SirketMenuItem.odemeKamera:
       return PhosphorIconsRegular.videoCamera;
+    case SirketMenuItem.ekipmanBakim:
+      return PhosphorIconsRegular.wrench;
     case SirketMenuItem.kapilar:
       return PhosphorIconsRegular.doorOpen;
   }
