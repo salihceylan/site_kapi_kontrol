@@ -5,6 +5,8 @@
 // - Kontrast tablosu (docs/TASARIM_DILI.md ile aynı satırlar): metin >= 4,5:1; ana düğme metni >= 4,5:1; ana düğme, bağlantı
 //   halkası, odak halkası ve durum noktası (ya da kenarı) yanındaki yüzeye >= 3:1.
 // - Tehlike tonu #E11D48 ailesi; durum tonu kuralı (yalnız tamam / bekliyor / kritik renkli işaret taşır).
+import 'dart:io' show Directory, File;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -310,4 +312,48 @@ void main() {
       }
     }
   });
+
+  // İP-1C bağımsız inceleme: tema ön planı artık beyaz DEĞİL (açıkta #F8FAFC, koyuda #0F172A). Çağrı yerinde yalnız zemin
+  // veren dolu düğme (ör. `FilledButton.styleFrom(backgroundColor: AppTone.danger.a)`) koyu temada mercan üstüne koyu
+  // metin (3,80:1) çiziyordu. Kural: Elevated / Filled `styleFrom` zemini ve ön planı BİRLİKTE verir (ya da hiçbirini).
+  group('çağrı yerinde dolu düğme rengi (sade stil G6)', () {
+    test('Elevated / Filled styleFrom: backgroundColor ve foregroundColor birlikte verilir', () {
+      final offenders = <String>[];
+      final files = Directory('lib')
+          .listSync(recursive: true)
+          .whereType<File>()
+          .where((f) => f.path.endsWith('.dart'));
+      for (final file in files) {
+        final path = file.path.replaceAll(r'\', '/');
+        // İP-1D'nin ortak dosyası (plan bölüm 1 madde 9: başka İP satırlarına dokunulmaz). Oradaki beş eski
+        // `backgroundColor: Colors.red` onayı bu paketten önce de beyaz metinle 3,68:1 idi; açık risk olarak raporda.
+        if (path.endsWith('lib/ui/pages/home_page.dart')) continue;
+        final src = file.readAsStringSync();
+        for (final m in RegExp(r'\b(?:ElevatedButton|FilledButton)\.styleFrom\(').allMatches(src)) {
+          final args = _callArgs(src, m.end - 1);
+          final bg = RegExp(r'\bbackgroundColor\s*:').hasMatch(args);
+          final fg = RegExp(r'\bforegroundColor\s*:').hasMatch(args);
+          if (bg != fg) {
+            final line = '\n'.allMatches(src.substring(0, m.start)).length + 1;
+            offenders.add('$path:$line');
+          }
+        }
+      }
+      expect(offenders, isEmpty, reason: 'zemin ya da ön plan eksik: tema ön planı koyu temada koyu, açıkta kırık beyaz');
+    });
+  });
+}
+
+/// [open] konumundaki `(` ile eşleşen `)` arasındaki metin (iç içe parantezler sayılır).
+String _callArgs(String src, int open) {
+  var depth = 0;
+  for (var i = open; i < src.length; i++) {
+    final c = src[i];
+    if (c == '(') depth++;
+    if (c == ')') {
+      depth--;
+      if (depth == 0) return src.substring(open + 1, i);
+    }
+  }
+  return src.substring(open + 1);
 }
