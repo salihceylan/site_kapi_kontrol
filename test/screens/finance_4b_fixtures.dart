@@ -1507,7 +1507,13 @@ class FakeFinance4bApi extends Finance4bApi {
     final waived = [
       for (final l in lines)
         if (excluded.contains(l['apartment_id']))
-          <String, dynamic>{'apartment_id': l['apartment_id'], 'label': l['label'], 'computed_minor': l['amount_minor']},
+          <String, dynamic>{
+            'apartment_id': l['apartment_id'],
+            'label': l['label'],
+            // İP-1A: sunucu muaf dairenin her hesabını ayrı öğe olarak verir (hesap adıyla)
+            if (l['account_party'] != null) 'account_party': l['account_party'],
+            'computed_minor': l['amount_minor'],
+          },
     ];
     json['lines'] = kept;
     json['waived'] = waived;

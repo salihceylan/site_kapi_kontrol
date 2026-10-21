@@ -17,6 +17,7 @@ import 'package:site_kapi_kontrol/ui/views/finance_late_fee_section.dart';
 import 'package:site_kapi_kontrol/ui/views/finance_reports_tab.dart';
 import 'package:site_kapi_kontrol/ui/views/my_finance_view.dart';
 import 'package:site_kapi_kontrol/ui/widgets/bulk_export_sheet.dart' show ExportSource;
+import 'package:site_kapi_kontrol/ui/widgets/finance_4b_parts.dart' show FinanceSpokenText;
 import 'package:site_kapi_kontrol/ui/widgets/finance_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_settings_controller.dart';
 
@@ -204,6 +205,31 @@ void main() {
       expect(auth.accountCalls.single.party, isNull, reason: 'yalnız sekme bilgisi sorulur');
       expect(_selected(t, 'finance_payment_party_tenant'), isTrue);
       await _pay(t, '100');
+      expect(auth.paymentCalls.single['account_party'], 'tenant');
+    });
+
+    testWidgets('hesap bilgisi yüklenirken kayıt gönderilmez (seçim sonradan çıkıp işlem anahtarını değiştirmesin); yüklenince seçilen hesaba', (t) async {
+      final auth = _twoAccounts();
+      final gate = Completer<void>();
+      auth.accountGates.add(gate);
+      await openDialogAt(
+        t,
+        (context) => FinancePaymentDialog.show(context, scope: _scope(auth), apartmentId: 301, apartmentLabel: 'A Blok - 5', now: () => _now),
+        width: 420,
+        height: 1800,
+        scale: 1.0,
+        dark: false,
+      );
+      await settleFor(t);
+      expect(find.text('Daire hesapları yükleniyor...'), findsOneWidget);
+      await _pay(t, '100');
+      expect(auth.paymentCalls, isEmpty, reason: 'hesap bilgisi gelmeden istek gitmez');
+      expect(find.text('Daire hesapları yükleniyor; birkaç saniye sonra yeniden deneyin.'), findsOneWidget);
+      gate.complete();
+      await settleFor(t);
+      expect(find.text('Daire hesapları yükleniyor; birkaç saniye sonra yeniden deneyin.'), findsNothing, reason: 'yükleme bitince uyarı kalkar');
+      expect(_selected(t, 'finance_payment_party_tenant'), isTrue);
+      await _tap(t, 'finance_payment_submit');
       expect(auth.paymentCalls.single['account_party'], 'tenant');
     });
 
@@ -504,6 +530,46 @@ void main() {
       await _tap(t, 'finance_latefee_explain_301_tenant');
       expect(find.byKey(const ValueKey<String>('finance_latefee_breakdown_301_tenant')), findsOneWidget);
       expect(find.byKey(const ValueKey<String>('finance_latefee_breakdown_301_owner')), findsNothing, reason: 'döküm satır başına açılır');
+    });
+
+    testWidgets('muafiyet daire başınadır: iki hesabı gecikmiş daire muaf tutulunca "1 daire muaf tutuldu", her hesap adıyla ayrı öğe', (t) async {
+      final auth = FinanceFakeAuth.seeded();
+      auth.f4.settingsJson = f4SettingsJson(version: 2, lateFee: true, startPeriod: '2026-08-01', nextPeriod: '2026-09');
+      final base = f4LatePreviewJson();
+      final line = (base['lines'] as List).first as Map<String, dynamic>;
+      auth.f4.latePreviewJson = <String, dynamic>{
+        ...base,
+        'apartment_count': 2,
+        'lines': <Map<String, dynamic>>[
+          <String, dynamic>{...line, 'account_party': 'owner', 'amount_minor': 10000},
+          <String, dynamic>{...line, 'account_party': 'tenant', 'amount_minor': 2345},
+        ],
+      };
+      final controller = FinanceSettingsController(_scope(auth));
+      addTearDown(controller.dispose);
+      unawaited(controller.load());
+      await pumpList(
+        t,
+        FinanceLateFeeSection(scope: _scope(auth), settings: controller, onOpenSettings: () {}, onDataChanged: () {}, now: () => _now),
+        width: 420,
+        height: 3000,
+        scale: 1.0,
+        dark: false,
+      );
+      await settleFor(t, 100);
+      await settleFor(t, 100);
+      await _tap(t, 'finance_latefee_calculate');
+      await _tap(t, 'finance_latefee_preview');
+      final apartmentId = line['apartment_id'] as int;
+      await _tap(t, 'finance_latefee_waive_${apartmentId}_owner');
+      await _tap(t, 'finance_latefee_refresh');
+      expect(t.takeException(), isNull);
+      expect(auth.f4.latePreviewCalls.last['excluded'], <int>[apartmentId]);
+      expect(find.text('1 daire muaf tutuldu'), findsOneWidget, reason: 'iki hesap öğesi tek daire sayılır');
+      final owner = t.widget<FinanceSpokenText>(find.byKey(ValueKey<String>('finance_latefee_waived_${apartmentId}_owner')));
+      final tenant = t.widget<FinanceSpokenText>(find.byKey(ValueKey<String>('finance_latefee_waived_${apartmentId}_tenant')));
+      expect(owner.text, contains('(Ev sahibi hesabı): 100,00 ₺ (yazılmayacak)'));
+      expect(tenant.text, contains('(Kiracı hesabı): 23,45 ₺ (yazılmayacak)'));
     });
   });
 }

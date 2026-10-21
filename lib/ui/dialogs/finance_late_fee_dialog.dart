@@ -611,14 +611,16 @@ class _FinanceLateFeeDialogState extends State<FinanceLateFeeDialog> with Financ
               children: [
                 DialogSectionTitle(
                   icon: Icons.do_not_disturb_on_rounded,
-                  title: '${preview.waived.length} daire muaf tutuldu',
+                  // İP-1A: muafiyet daire başınadır; iki hesabı da gecikmiş daire listede iki öğedir (her hesap için), sayı dairedir.
+                  title: '${preview.waived.map((w) => w.apartmentId).toSet().length} daire muaf tutuldu',
                   subtitle: 'Bu ayın tazminatı bu dairelere KALICI olarak yazılmaz.',
                   tone: AppTone.warning,
                 ),
                 const SizedBox(height: AppSpace.sm),
                 for (final w in preview.waived)
                   FinanceSpokenText(
-                    w.computedMinor == null ? w.label : '${w.label}: ${formatMinor(w.computedMinor!)} (yazılmayacak)',
+                    _waivedText(w),
+                    key: ValueKey<String>('finance_latefee_waived_${w.apartmentId}_${w.accountParty?.apiValue ?? 'daire'}'),
                     style: th.bodySmall,
                   ),
               ],
@@ -657,6 +659,12 @@ class _FinanceLateFeeDialogState extends State<FinanceLateFeeDialog> with Financ
     final perAccount = preview.lines.any((line) => line.accountParty != null);
     if (perAccount && apartments != preview.apartmentCount) return '$apartments daire, ${preview.apartmentCount} hesap';
     return '${preview.apartmentCount} daire';
+  }
+
+  /// Muaf öğe satırı: "A Blok - 5 (Kiracı hesabı): 23,45 ₺ (yazılmayacak)" (hesap adı yalnız sunucu verdiyse; İP-1A).
+  static String _waivedText(LateFeeWaivedItem w) {
+    final label = w.accountParty == null ? w.label : '${w.label} (${w.accountParty!.label})';
+    return w.computedMinor == null ? label : '$label: ${formatMinor(w.computedMinor!)} (yazılmayacak)';
   }
 
   Widget _lineTile(BuildContext context, LateFeePreview preview, LateFeeLine line) {

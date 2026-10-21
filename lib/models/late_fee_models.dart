@@ -114,16 +114,20 @@ class LateFeeLine {
 /// Muaf tutulan daire (hesaplanan tutar yazılmaz).
 @immutable
 class LateFeeWaivedItem {
-  const LateFeeWaivedItem({required this.apartmentId, this.label = '', this.computedMinor});
+  const LateFeeWaivedItem({required this.apartmentId, this.label = '', this.computedMinor, this.accountParty});
 
   final int apartmentId;
   final String label;
   final int? computedMinor;
 
+  /// Hesap (İP-1A): muafiyet daire başınadır; iki hesabı da gecikmiş dairenin iki öğesi olur (biri her hesap). Eski sunucuda null.
+  final AccountParty? accountParty;
+
   factory LateFeeWaivedItem.fromJson(Map<String, dynamic> json) => LateFeeWaivedItem(
     apartmentId: f4Int(json['apartment_id']),
     label: f4Str(json['label']),
     computedMinor: f4MinorOrNull(json, 'computed_minor'),
+    accountParty: AccountParty.tryParse(json['account_party']),
   );
 }
 

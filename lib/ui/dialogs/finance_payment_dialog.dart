@@ -60,7 +60,8 @@ class FinancePaymentOutcome {
 /// - İki hesap (İP-1A): iki hesaplı dairede "Daire hesabı" seçilir ([Kiracı hesabı] [Ev sahibi hesabı]); tahsilat yalnız
 ///   seçilen hesabın borcundan düşer. Başlangıç değeri [accountParty] (ekstrenin seçili sekmesi) ya da sunucunun varsayılan
 ///   tahsilat hesabıdır. [accountChoice] null ise (pencere ekstre dışından açıldı) daire seçilince sunucuya sorulur; hesap
-///   bilgisi alınamazsa ya da tek hesaplı dairede seçim gösterilmez ve sunucu hesabı kendisi seçer (eski davranış).
+///   bilgisi alınamazsa ya da tek hesaplı dairede seçim gösterilmez ve sunucu hesabı kendisi seçer (eski davranış). Soru
+///   sürerken kayıt gönderilmez (seçim sonradan çıkıp işlem anahtarını değiştirmesin; çift tahsilat koruması).
 ///   Düzeltmede seçim eski tahsilatın hesabıyla başlar; değiştirilirse yeni tahsilat diğer hesaba yazılır (ters kayıt eski
 ///   hesapta kalır).
 class FinancePaymentDialog extends StatefulWidget {
@@ -219,6 +220,7 @@ class _FinancePaymentDialogState extends State<FinancePaymentDialog> with Financ
         _partyLoading = false;
         _partyChoice = view.hasTwoAccounts;
         _party = view.hasTwoAccounts ? (_party ?? view.defaultPaymentAccount) : null;
+        if (_error == _partyPendingMessage) _error = null;
       });
     } catch (_) {
       if (!mounted || token != _partyToken) return;
@@ -226,9 +228,12 @@ class _FinancePaymentDialogState extends State<FinancePaymentDialog> with Financ
         _partyLoading = false;
         _partyChoice = false;
         _party = null;
+        if (_error == _partyPendingMessage) _error = null;
       });
     }
   }
+
+  static const String _partyPendingMessage = 'Daire hesapları yükleniyor; birkaç saniye sonra yeniden deneyin.';
 
   @override
   void dispose() {
@@ -434,6 +439,12 @@ class _FinancePaymentDialogState extends State<FinancePaymentDialog> with Financ
 
   Future<void> _submit() async {
     if (_submitting || _retry.locked) return;
+    // İP-1A: daire hesapları yüklenirken gönderilmez. Yükleme bitince "Daire hesabı" seçimi çıkabilir ve isteğin imzası (işlem
+    // anahtarı) değişir: sonucu belirsiz kalan ilk denemeden sonra yeniden gönderim yeni anahtarla İKİNCİ tahsilatı yazabilirdi.
+    if (_partyLoading) {
+      setState(() => _error = _partyPendingMessage);
+      return;
+    }
     final fieldsOk = validateForm(
       _formKey,
       validateExtra: _validateChoices,
