@@ -141,6 +141,7 @@ class _BankLinesViewState extends State<BankLinesView> {
             ),
             if (l.counterpartyName != null) Text(l.counterpartyName!, style: th.bodyMedium),
             if (l.description.isNotEmpty) Text(l.description, style: th.bodySmall, maxLines: 3, overflow: TextOverflow.ellipsis),
+            if (bankPeriodLabel(l.periodHint) != null) Text('Açıklamada dönem: ${bankPeriodLabel(l.periodHint)}', style: th.bodySmall),
             if (_done) Text('${_classNames[l.classification] ?? 'Ayrıldı'}${l.note != null ? ' · ${l.note}' : ''}', style: th.bodySmall),
             if (suggested) ...[
               const SizedBox(height: AppSpace.sm),

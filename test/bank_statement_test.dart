@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:site_kapi_kontrol/models/bank_import.dart';
 import 'package:site_kapi_kontrol/services/bank_amount.dart';
 import 'package:site_kapi_kontrol/services/bank_statement_reader.dart';
 import 'package:site_kapi_kontrol/services/mt940_parser.dart';
@@ -105,6 +106,45 @@ void main() {
       final a = readBankFile(csv('Tarih;Açıklama;Tutar\n03.10.2026;a;1,00\n'), 'a.csv');
       final b = readBankFile(csv('Tarih;Açıklama;Tutar\n09.10.2026;z;2,00\n'), 'b.csv');
       expect(a.table!.signature, b.table!.signature);
+    });
+  });
+
+  group('PDF ekstre (sunucuda okunur)', () {
+    test('%PDF imzası türü pdf yapar; cihazda ayrıştırılmaz, özet çıkar', () {
+      final bytes = Uint8List.fromList(utf8.encode('%PDF-1.4\n1 0 obj\n<<>>\nendobj\n'));
+      final file = readBankFile(bytes, 'ekstre.pdf');
+      expect(file.kind, BankFileKind.pdf);
+      expect(file.table, isNull);
+      expect(file.mt940, isNull);
+      expect(file.sha256.length, 64);
+      expect(isPdfBytes(Uint8List.fromList(utf8.encode('Tarih;Tutar\n'))), isFalse);
+    });
+    test('sunucu yanıtı satırlara, güvene ve sayaçlara çevrilir', () {
+      final r = BankPdfExtract.fromJson(<String, dynamic>{
+        'lines': <Map<String, dynamic>>[
+          <String, dynamic>{'n': 1, 'value_date': '2026-10-05', 'amount_minor': 150000, 'description': 'A blok 5 Ahmet Yılmaz', 'balance_after_minor': 1150000, 'confidence': 'high'},
+          <String, dynamic>{'n': 2, 'value_date': '2026-10-07', 'amount_minor': -25050, 'description': 'Fatura', 'counterparty_iban': 'TR330006100519786457841326', 'confidence': 'low'},
+        ],
+        'unreadable': 2,
+        'low_confidence': 1,
+        'page_count': 3,
+        'statement': <String, dynamic>{'from': '2026-10-05', 'to': '2026-10-07', 'account_iban': 'TR330006100519786457841326'},
+      });
+      expect(r.lines.length, 2);
+      expect(r.lines[0].uncertain, isFalse);
+      expect(r.lines[1].uncertain, isTrue);
+      expect(r.lines[1].toJson()['confidence'], 'low');
+      expect(r.lines[0].toJson()['counterparty_iban'], isNull);
+      expect(r.unreadable, 2);
+      expect(r.lowConfidence, 1);
+      expect(r.pageCount, 3);
+      expect(r.accountIban, 'TR330006100519786457841326');
+    });
+    test('dönem ipucu etiketi', () {
+      expect(bankPeriodLabel('2026-10'), 'Ekim 2026');
+      expect(bankPeriodLabel('2025-12'), 'Aralık 2025');
+      expect(bankPeriodLabel('2026-13'), isNull);
+      expect(bankPeriodLabel(null), isNull);
     });
   });
 }

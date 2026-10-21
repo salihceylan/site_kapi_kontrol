@@ -1,5 +1,7 @@
 // Banka dosyası yükleme ekranı (Dalga 2 / 2C): Hesap seç -> Dosya seç -> Sütunları eşle (gerekirse) -> Özet -> İşle.
 // Dosya (XLSX / CSV / MT940) CİHAZDA ayrıştırılır; sunucuya yalnız satırlar ve dosya özeti gider. Tutarlar ve sayılar sunucu önizlemesindendir.
+// PDF hesap ekstresi (OCR yok, yalnız metin katmanı): PDF sunucuya gönderilir, satırlar sunucuda okunur (dosya saklanmaz); sütun eşleme adımı atlanır,
+// satırlar aynı önizleme/eşleşme akışına girer. Güveni düşük PDF satırları otomatik işlenmez, "Kontrol edin"e düşer.
 // Geçmiş yüklemeler "Geri al" ile ters kayıtla geri alınır. Hata durumunda eski sayılar gösterilmez.
 import 'dart:async';
 import 'dart:math';
@@ -46,6 +48,7 @@ class _BankImportViewState extends State<BankImportView> {
   String? _loadError;
   BankFile? _file;
   List<BankLine> _lines = const <BankLine>[];
+  BankPdfExtract? _pdf;
   int _skipped = 0;
   BankPreview? _preview;
   bool _working = false;
@@ -94,6 +97,7 @@ class _BankImportViewState extends State<BankImportView> {
   void _reset() {
     _file = null;
     _lines = const <BankLine>[];
+    _pdf = null;
     _preview = null;
     _key = null;
     _error = null;
@@ -106,7 +110,7 @@ class _BankImportViewState extends State<BankImportView> {
     final file = await FilePicker.pickFile(
       dialogTitle: 'Banka ekstresini seçin',
       type: FileType.custom,
-      allowedExtensions: const <String>['xlsx', 'csv', 'sta', 'mt940', '940', 'txt'],
+      allowedExtensions: const <String>['xlsx', 'csv', 'pdf', 'sta', 'mt940', '940', 'txt'],
     );
     return file == null ? null : pickedFileOf(file);
   }
@@ -125,7 +129,12 @@ class _BankImportViewState extends State<BankImportView> {
       final bytes = await picked.readBytes();
       final file = await compute(_readIsolate, (bytes: bytes, name: picked.name));
       BankParseResult parsed;
-      if (file.kind == BankFileKind.mt940) {
+      BankPdfExtract? pdf;
+      if (file.kind == BankFileKind.pdf) {
+        final extract = await _svc.run((api, t) => api.extractPdf(token: t, siteCode: _siteCode, bytes: bytes));
+        pdf = extract;
+        parsed = BankParseResult(lines: extract.lines, skipped: extract.unreadable, errors: const <int>[]);
+      } else if (file.kind == BankFileKind.mt940) {
         parsed = bankLinesOfMt940(file.mt940!);
       } else {
         final table = file.table!;
@@ -144,7 +153,11 @@ class _BankImportViewState extends State<BankImportView> {
         parsed = applyBankMapping(table, mapping);
         if (parsed.truncated) throw const SpreadsheetException('Dosya çok uzun. Satırları dönemlere bölüp ayrı ayrı yükleyin.');
       }
-      if (parsed.lines.isEmpty) throw const SpreadsheetException('Dosyada okunabilen hareket satırı bulunamadı. Sütun eşlemesini kontrol edin.');
+      if (parsed.lines.isEmpty) {
+        throw SpreadsheetException(
+          pdf == null ? 'Dosyada okunabilen hareket satırı bulunamadı. Sütun eşlemesini kontrol edin.' : "PDF'de okunabilen hareket satırı bulunamadı. Bankanın Excel (xlsx) ya da CSV dökümünü yükleyin.",
+        );
+      }
       if (parsed.lines.length > bankMaxLines) {
         throw SpreadsheetException('Dosyada ${parsed.lines.length} hareket var; bir seferde en çok $bankMaxLines yüklenebilir. Dosyayı dönemlere bölün.');
       }
@@ -152,11 +165,12 @@ class _BankImportViewState extends State<BankImportView> {
         throw SpreadsheetException('${parsed.errors.length} satırın tutarı okunamadı (ilk satır: ${parsed.errors.first}). Sütun eşlemesini kontrol edin.');
       }
       final preview = await _svc.run(
-        (api, t) => api.preview(token: t, siteCode: _siteCode, accountId: accountId, file: file, lines: parsed.lines, accountIban: file.mt940?.accountIban),
+        (api, t) => api.preview(token: t, siteCode: _siteCode, accountId: accountId, file: file, lines: parsed.lines, accountIban: file.mt940?.accountIban ?? pdf?.accountIban),
       );
       if (!mounted) return;
       setState(() {
         _file = file;
+        _pdf = pdf;
         _lines = parsed.lines;
         _skipped = parsed.skipped;
         _preview = preview;
@@ -192,7 +206,7 @@ class _BankImportViewState extends State<BankImportView> {
           lines: _lines,
           previewHash: preview.hash,
           idempotencyKey: key,
-          accountIban: file.mt940?.accountIban,
+          accountIban: file.mt940?.accountIban ?? _pdf?.accountIban,
         ),
       );
       if (!mounted) return;
@@ -247,6 +261,63 @@ class _BankImportViewState extends State<BankImportView> {
     'OVERLAP': 'Dosyanın bir kısmı daha önce yüklenmiş; o satırlar atlanacak.',
   };
 
+  /// PDF'e özgü uyarılar: okunamayan satırlar ve güveni düşük satırlar (bunlar işlenmeden önce onayınıza düşer).
+  List<Widget> _pdfNotes(BankPdfExtract pdf) {
+    final th = Theme.of(context).textTheme;
+    final err = TextStyle(color: Theme.of(context).colorScheme.error);
+    Widget note(String text, {bool warn = false}) =>
+        Padding(padding: const EdgeInsets.symmetric(vertical: 2), child: Text(text, key: warn ? const ValueKey<String>('bank_pdf_warn') : null, style: warn ? err : th.bodySmall));
+    return [
+      note("PDF'den ${pdf.lines.length} hareket okundu (${pdf.pageCount} sayfa). Metin ekstreden okunur; tutar ve tarihleri bankanızın ekstresiyle karşılaştırın."),
+      if (pdf.unreadable > 0) note('${pdf.unreadable} satır güvenle okunamadığı için atlandı (tutarı ya da yönü belirsiz). Bu satırlar için bankanın Excel/CSV dökümünü yükleyin.', warn: true),
+      if (pdf.lowConfidence > 0) note('${pdf.lowConfidence} satırın okunması belirsiz (bakiyeyle uyuşmuyor); bunlar otomatik işlenmez, “Kontrol edin”e düşer.', warn: true),
+    ];
+  }
+
+  static const Map<String, String> _outcomeNames = <String, String>{
+    'recognized': 'Tanındı',
+    'check': 'Kontrol edin',
+    'unmatched': 'Tanınmadı',
+    'linked': 'Mevcut tahsilat',
+    'duplicate': 'Daha önce yüklenmiş',
+    'outgoing': 'Çıkan para',
+  };
+
+  /// Okunan satırlar: tarih, tutar, açıklama, sunucunun eşleşme sonucu ve (varsa) açıklamadaki dönem ipucu. Belirsiz PDF satırları işaretlidir.
+  Widget _lineList(BankPreview p) {
+    const maxShown = 300;
+    final th = Theme.of(context).textTheme;
+    final byN = <int, BankPreviewLine>{for (final l in p.lines) l.n: l};
+    final shown = _lines.length > maxShown ? _lines.sublist(0, maxShown) : _lines;
+    Widget tile(int i) {
+      final line = shown[i];
+      final pl = byN[i + 1];
+      final period = bankPeriodLabel(pl?.periodHint);
+      final bits = <String>[
+        if (pl != null && _outcomeNames.containsKey(pl.outcome)) _outcomeNames[pl.outcome]!,
+        if (pl?.apartmentLabel != null) pl!.apartmentLabel!,
+        if (period != null) '$period dönemi',
+      ];
+      return ListTile(
+        dense: true,
+        contentPadding: EdgeInsets.zero,
+        leading: line.uncertain ? Icon(Icons.warning_amber_rounded, color: Theme.of(context).colorScheme.error, semanticLabel: 'Okunması belirsiz satır') : null,
+        title: Text('${line.valueDate}  ${formatSignedMinor(line.amountMinor)}', style: th.bodyMedium),
+        subtitle: Text(<String>[if (line.description.isNotEmpty) line.description, if (bits.isNotEmpty) bits.join(' · ')].join('\n'), maxLines: 3, overflow: TextOverflow.ellipsis),
+      );
+    }
+
+    return ExpansionTile(
+      key: const ValueKey<String>('bank_lines_expand'),
+      tilePadding: EdgeInsets.zero,
+      title: Text('Satırları göster (${_lines.length})', style: th.titleSmall),
+      children: [
+        for (var i = 0; i < shown.length; i++) tile(i),
+        if (_lines.length > maxShown) Padding(padding: const EdgeInsets.all(AppSpace.sm), child: Text('… ve ${_lines.length - maxShown} satır daha', style: th.bodySmall)),
+      ],
+    );
+  }
+
   Widget _summary(BankPreview p) {
     final s = p.summary;
     final th = Theme.of(context).textTheme;
@@ -264,10 +335,12 @@ class _BankImportViewState extends State<BankImportView> {
           if (s.outgoing > 0) row('Çıkan para ${s.outgoing} (gider/masraf olarak ayrılabilir)'),
           if (s.linkedExisting > 0) row('Zaten işlenmiş ${s.linkedExisting} (mevcut tahsilata bağlanacak, ikinci kez yazılmaz)'),
           if (s.duplicates > 0) row('Daha önce yüklenmiş ${s.duplicates} (atlanacak)'),
-          if (_skipped > 0) row('Okunamayan/boş $_skipped satır yok sayıldı'),
+          if (_skipped > 0 && _pdf == null) row('Okunamayan/boş $_skipped satır yok sayıldı'),
+          if (_pdf != null) ..._pdfNotes(_pdf!),
           for (final w in p.warnings)
             if (_warnings.containsKey(w))
               Padding(padding: const EdgeInsets.only(top: AppSpace.sm), child: Text(_warnings[w]!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
+          if (_lines.isNotEmpty) _lineList(p),
           const SizedBox(height: AppSpace.md),
           FilledButton(
             key: const ValueKey<String>('bank_commit'),
@@ -329,7 +402,10 @@ class _BankImportViewState extends State<BankImportView> {
                 const SizedBox(height: AppSpace.md),
                 Text('2. Dosya', style: th.titleSmall),
                 const SizedBox(height: AppSpace.xs),
-                const Text('Bankanızın ekstre dosyası (XLSX, CSV veya MT940). Dosya telefonunuzda/bilgisayarınızda okunur, yalnız hareket satırları gönderilir.'),
+                const Text(
+                  'Bankanızın ekstre dosyası (XLSX, CSV veya MT940). Dosya telefonunuzda/bilgisayarınızda okunur, yalnız hareket satırları gönderilir. '
+                  'PDF hesap ekstresi de yüklenebilir: metni sunucuda okunur (taranmış resim PDF’ler okunamaz), dosya saklanmaz.',
+                ),
                 const SizedBox(height: AppSpace.sm),
                 OutlinedButton.icon(
                   key: const ValueKey<String>('bank_pick_file'),

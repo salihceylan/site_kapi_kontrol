@@ -620,13 +620,15 @@ abstract final class HelpContent {
       steps: <String>[
         '“Finans” > “Kasa” sekmesinde banka hesabının altındaki “Banka dosyası yükle”ye dokunun ve bankanızdan indirdiğiniz ekstreyi (XLSX, CSV ya da MT940) seçin.',
         'İlk seferde “Sütunları eşleyin” penceresi açılır; tarih, açıklama ve tutar sütunlarını seçin. Seçim bu hesap için hatırlanır.',
+        'PDF ekstre: bankanın indirdiğiniz PDF hesap ekstresini de seçebilirsiniz. Metni sunucuda okunur (sütun eşleme sorulmaz), dosya saklanmaz. “Satırları göster”den tarih ve tutarları ekstreyle karşılaştırın; okunması belirsiz satırlar işaretlidir ve otomatik işlenmez. Taranmış (resim) PDF okunamaz; bankanın Excel ya da CSV dökümünü yükleyin.',
+        'Açıklamada daire numarası ve kişi adı birlikte yazılıysa (ör. “A blok 5 Ahmet Yılmaz ekim aidatı”) satır tanınır; yalnız numara ya da yalnız ad varsa “Kontrol edin”e düşer ve onayınızı bekler. Açıklamadaki ay (ör. “ekim”) satırda dönem olarak gösterilir; mahsup yine en eski vadeden yapılır.',
         'Özet ekranında kaç satırın tanındığı, kaçının kontrol edeceğiniz, kaçının daha önce yüklendiği görünür. “İşle”ye dokununca tanınan tahsilatlar makbuzuyla yazılır.',
         'Tanınmayan ya da kontrol isteyen satırlar “Eşleşmeyen banka satırları” ekranında bekler: daireye işleyin, “Bu IBAN\'ı kaydet”le sonraki dosyada otomatik tanınmasını sağlayın ya da gider, banka masrafı, faiz gibi gelir/gider olarak ayırın.',
         'Yanlış dosya yüklediyseniz “Geçmiş yüklemeler” listesinden “Geri al”a dokunun; tahsilatlar ters kayıtla iptal edilir.',
       ],
       note:
           'Aynı dosya aynı hesaba ikinci kez yüklenemez; daha önce el ile girdiğiniz tahsilatlar ikinci kez yazılmaz, bankadaki satıra bağlanır. '
-          'Fotoğraf ya da PDF ekstre henüz desteklenmiyor (Yakında).',
+          'Ekstre fotoğrafı (resim) desteklenmiyor; PDF yalnızca metin katmanı olan (bankanın indirdiği) dosyalarda okunur.',
     ),
     HelpTopic(
       id: 'opening_balances',
