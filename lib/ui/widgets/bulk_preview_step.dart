@@ -270,6 +270,19 @@ class _BulkPreviewStepState extends State<BulkPreviewStep> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            if (kind.isOpening)
+              ListTile(
+                key: const ValueKey<String>('bulk_cutover_tile'),
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.event_rounded),
+                title: const Text('Devir tarihi'),
+                subtitle: Text(_dateText(c.cutoverDate)),
+                trailing: TextButton(
+                  key: const ValueKey<String>('bulk_cutover_change'),
+                  onPressed: c.committing || c.previewing ? null : () => _pickCutover(context, c),
+                  child: const Text('Değiştir'),
+                ),
+              ),
             if (kind.supportsOverwrite) ...[
               Material(
                 type: MaterialType.transparency,
@@ -532,6 +545,27 @@ class _BulkPreviewStepState extends State<BulkPreviewStep> {
     'unchanged' => 'Değişmez',
     _ => 'Satır',
   };
+}
+
+String _dateText(String iso) {
+  final m = RegExp(r'^(\d{4})-(\d{2})-(\d{2})$').firstMatch(iso);
+  return m == null ? iso : '${m[3]}.${m[2]}.${m[1]}';
+}
+
+Future<void> _pickCutover(BuildContext context, BulkImportController c) async {
+  final now = DateTime.now();
+  final parsed = DateTime.tryParse(c.cutoverDate) ?? now;
+  final picked = await showDatePicker(
+    context: context,
+    initialDate: parsed.isAfter(now) ? now : parsed,
+    firstDate: DateTime(now.year - 5, now.month, now.day),
+    lastDate: now,
+    helpText: 'Devir tarihi',
+  );
+  if (picked == null) return;
+  c.setCutoverDate(
+    '${picked.year.toString().padLeft(4, '0')}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}',
+  );
 }
 
 class _BackButton extends StatelessWidget {

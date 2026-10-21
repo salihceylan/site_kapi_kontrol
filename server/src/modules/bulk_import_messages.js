@@ -31,6 +31,14 @@ export const ERROR_CODES = Object.freeze([
   'PERSON_NOT_FOUND',
   'TOO_MANY_PLATES',
   'PLATE_REQUIRED',
+  'MONEY_INVALID',
+  'MONEY_RANGE',
+  'ACCOUNT_INVALID',
+  'OPENING_CREDIT_UNSUPPORTED',
+  'OPENING_EXISTS',
+  'PERIOD_CLOSED',
+  'APARTMENT_INACTIVE',
+  'APARTMENT_VALUES_CONFLICT',
 ]);
 
 export const WARNING_CODES = Object.freeze([
@@ -47,6 +55,9 @@ export const WARNING_CODES = Object.freeze([
   'NET_GT_GROSS',
   'FUTURE_DATE',
   'NO_VALUES',
+  'OPENING_ZERO',
+  'NO_TENANT',
+  'OPENING_LEDGER_EXISTS',
 ]);
 
 /** Hücre değerini iletiye koymak için: tek satır, en çok 40 karakter. */
@@ -193,6 +204,39 @@ export function issueMessage(code, ctx = {}) {
       break;
     case 'NO_VALUES':
       text = 'Satırda yüklenecek bir değer yok.';
+      break;
+    case 'MONEY_INVALID':
+      text = `${label} geçersiz: «${value}». Örnek: 1.250,50`;
+      break;
+    case 'MONEY_RANGE':
+      text = `${label} çok büyük.`;
+      break;
+    case 'ACCOUNT_INVALID':
+      text = `Hesap anlaşılamadı: «${value}». Ev sahibi ya da Kiracı yazın.`;
+      break;
+    case 'OPENING_CREDIT_UNSUPPORTED':
+      text = 'Eksi (alacaklı) devir desteklenmiyor. Bu daireyi dosyadan çıkarın.';
+      break;
+    case 'OPENING_EXISTS':
+      text = 'Bu daire ve hesapta farklı bir devir kaydı var. Önce o yüklemeyi geri alın.';
+      break;
+    case 'PERIOD_CLOSED':
+      text = 'Devir tarihinin ayı kapatılmış. Açık bir aya ait tarih seçin.';
+      break;
+    case 'APARTMENT_INACTIVE':
+      text = 'Bu daire pasif; devir yazılamaz.';
+      break;
+    case 'APARTMENT_VALUES_CONFLICT':
+      text = `Aynı dairenin satır ${ctx.line} ile farklı daire bilgisi var. Tek değer bırakın.`;
+      break;
+    case 'OPENING_ZERO':
+      text = 'Tutar 0; satır atlandı.';
+      break;
+    case 'NO_TENANT':
+      text = 'Dairede güncel kiracı yok; borç kiracı hesabına yazılacak.';
+      break;
+    case 'OPENING_LEDGER_EXISTS':
+      text = 'Bu dairenin devirden başka mali kaydı var; toplamı kontrol edin.';
       break;
     default:
       text = 'Satır işlenemedi.';

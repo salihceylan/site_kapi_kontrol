@@ -3,6 +3,7 @@ import 'package:site_kapi_kontrol/models/bulk_import.dart';
 import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/helpers/dialog_guard.dart';
+import 'package:site_kapi_kontrol/ui/helpers/money.dart' show formatMinor;
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart' show filledToneStyle;
 
 /// Yükleme onay penceresi: ne yazılacağının sayıları, atlanacak/uyarılı satırlar, (daireler için) üzerine
@@ -17,9 +18,13 @@ class BulkConfirmDialog extends StatefulWidget {
     required this.preview,
     required this.strict,
     required this.allowOverwrite,
+    this.cutoverDate,
   });
 
   final ImportKind kind;
+
+  /// Devir bakiyesi: devir tarihi (YYYY-MM-DD).
+  final String? cutoverDate;
   final ImportPreview preview;
   final bool strict;
   final bool allowOverwrite;
@@ -33,6 +38,7 @@ class BulkConfirmDialog extends StatefulWidget {
     required ImportPreview preview,
     required bool strict,
     required bool allowOverwrite,
+    String? cutoverDate,
   }) async {
     final result = await showDialog<bool>(
       context: context,
@@ -42,6 +48,7 @@ class BulkConfirmDialog extends StatefulWidget {
         preview: preview,
         strict: strict,
         allowOverwrite: allowOverwrite,
+        cutoverDate: cutoverDate,
       ),
     );
     return result ?? false;
@@ -54,6 +61,11 @@ class BulkConfirmDialog extends StatefulWidget {
 class _BulkConfirmDialogState extends State<BulkConfirmDialog> {
   bool _ack = false;
 
+  static String _dateText(String? iso) {
+    final m = RegExp(r'^(\d{4})-(\d{2})-(\d{2})$').firstMatch(iso ?? '');
+    return m == null ? (iso ?? '') : '${m[3]}.${m[2]}.${m[1]}';
+  }
+
   @override
   Widget build(BuildContext context) {
     final th = Theme.of(context).textTheme;
@@ -63,7 +75,8 @@ class _BulkConfirmDialogState extends State<BulkConfirmDialog> {
     final stats = preview.planStats();
     final skipped = widget.strict ? 0 : preview.totals.error;
     final needsAck = kind.needsAcknowledgement;
-    final canConfirm = !needsAck || _ack;
+    final isOpening = kind.isOpening;
+    final canConfirm = isOpening ? _ack : (!needsAck || _ack);
     return AppDialog(
       title: 'Yüklemeyi onaylayın',
       subtitle: kind.label,
@@ -86,8 +99,13 @@ class _BulkConfirmDialogState extends State<BulkConfirmDialog> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            '${preview.totals.ok} satır aktarılacak. Bu işlem toplu geri alınamaz; yanlış yüklenen kayıtlar tek '
-            'tek düzeltilir.',
+            isOpening
+                ? 'Toplam ${formatMinor(preview.plan['total_minor'] ?? 0)} devir borcu ${preview.plan['opening_add'] ?? preview.totals.ok} '
+                      'hesaba ${_dateText(widget.cutoverDate)} tarihiyle yazılacak. Yanlışsa Finans > Daireler > Devir '
+                      'bakiyesi ekranından yüklemeyi geri alabilirsiniz.'
+                : '${preview.totals.ok} satır aktarılacak. Bu işlem toplu geri alınamaz; yanlış yüklenen kayıtlar tek '
+                      'tek düzeltilir.',
+            key: const ValueKey<String>('bulk_confirm_summary'),
             style: th.bodyMedium,
           ),
           const SizedBox(height: AppSpace.md),
@@ -143,7 +161,20 @@ class _BulkConfirmDialogState extends State<BulkConfirmDialog> {
                 style: th.bodySmall?.copyWith(color: p.textSecondary),
               ),
             ),
-          if (needsAck) ...[
+          if (isOpening) ...[
+            const SizedBox(height: AppSpace.md),
+            Material(
+              type: MaterialType.transparency,
+              child: CheckboxListTile(
+                key: const ValueKey<String>('bulk_confirm_amount_ack'),
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                value: _ack,
+                onChanged: (value) => setState(() => _ack = value ?? false),
+                title: const Text('Tutarları eski kayıtlarla karşılaştırdım.'),
+              ),
+            ),
+          ] else if (needsAck) ...[
             const SizedBox(height: AppSpace.md),
             Material(
               type: MaterialType.transparency,

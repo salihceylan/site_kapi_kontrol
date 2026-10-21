@@ -281,7 +281,7 @@ describe('spec ucu', () => {
     assert.equal(response.body.spec_version, 1);
     assert.equal(response.body.max_rows, 5000);
     assert.equal(response.body.max_body_bytes, 5242880);
-    assert.deepEqual(Object.keys(response.body.kinds).sort(), ['apartments', 'people', 'vehicles']);
+    assert.deepEqual(Object.keys(response.body.kinds).sort(), ['all_in_one', 'apartments', 'opening_balances', 'people', 'vehicles']);
     assert.equal(state.log.filter((entry) => /^(INSERT|UPDATE|DELETE)/.test(entry.sql)).length, 0);
   });
 });

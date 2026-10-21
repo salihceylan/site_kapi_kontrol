@@ -17,6 +17,8 @@ class BulkKindStep extends StatelessWidget {
     ImportKind.apartments: Icons.apartment_rounded,
     ImportKind.people: Icons.groups_2_rounded,
     ImportKind.vehicles: Icons.directions_car_rounded,
+    ImportKind.allInOne: Icons.table_chart_rounded,
+    ImportKind.openingBalances: Icons.account_balance_wallet_rounded,
   };
 
   static const Map<ImportKind, String> descriptions = <ImportKind, String>{
@@ -25,6 +27,17 @@ class BulkKindStep extends StatelessWidget {
     ImportKind.people:
         'Kişileri, daire ilişkilerini ve araç plakalarını ekler. Hesap açmaz, e-posta göndermez.',
     ImportKind.vehicles: 'Yalnızca araç plakalarını sitedeki mevcut kişilere bağlar.',
+    ImportKind.allInOne:
+        'Tek dosyada daire bilgisi, sakin ve ilişkisi, telefon, e-posta, taşınma tarihi, plaka ve not. Bir dairenin '
+        'birden çok sakini alt alta yazılır.',
+    ImportKind.openingBalances:
+        'Eski yazılımdan devreden daire borçlarını tek seferde deftere yazar. Yüklemeyi sonradan geri alabilirsiniz.',
+  };
+
+  static const Map<ImportKind, int> _order = <ImportKind, int>{
+    ImportKind.apartments: 1,
+    ImportKind.people: 2,
+    ImportKind.vehicles: 3,
   };
 
   @override
@@ -45,7 +58,7 @@ class BulkKindStep extends StatelessWidget {
       body = Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          for (final kind in ImportKind.values)
+          for (final kind in c.allowedKinds)
             if (c.spec!.of(kind) != null) ...[
               _KindTile(controller: c, kind: kind),
               const SizedBox(height: AppSpace.md),
@@ -62,8 +75,10 @@ class BulkKindStep extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
-          'Excel (.xlsx) veya CSV dosyasıyla toplu yükleme yapın. Önerilen sıra: Daireler, Kişiler, Araçlar; '
-          'hepsi isteğe bağlıdır.',
+          c.allowedKinds.contains(ImportKind.openingBalances) && c.allowedKinds.length == 1
+              ? 'Excel (.xlsx) veya CSV dosyasıyla eski yazılımdan devreden bakiyeleri yükleyin.'
+              : 'Excel (.xlsx) veya CSV dosyasıyla toplu yükleme yapın. «Hepsi bir arada» tek dosyada her şeyi yükler; '
+                    'ayrı ayrı yüklemek için Daireler, Kişiler, Araçlar sırasını izleyin.',
           style: th.bodyMedium?.copyWith(color: p.textSecondary),
         ),
         const SizedBox(height: AppSpace.md),
@@ -94,7 +109,7 @@ class _KindTile extends StatelessWidget {
     final p = context.palette;
     final selected = controller.kind == kind;
     final done = controller.completedKinds.contains(kind);
-    final order = kind.index + 1;
+    final order = BulkKindStep._order[kind];
     final description = BulkKindStep.descriptions[kind]!;
     return AppCard(
       key: ValueKey<String>('bulk_kind_${kind.apiValue}'),
@@ -123,7 +138,8 @@ class _KindTile extends StatelessWidget {
                   spacing: AppSpace.sm,
                   runSpacing: AppSpace.xs,
                   children: [
-                    InfoChip('Önerilen sıra: $order'),
+                    if (kind == ImportKind.allInOne) const InfoChip('Önerilen', tone: AppTone.primary),
+                    if (order != null) InfoChip('Önerilen sıra: $order'),
                     if (done) const InfoChip('Yüklendi', tone: AppTone.success),
                     if (selected) const InfoChip('Seçili', tone: AppTone.primary),
                   ],
@@ -157,7 +173,7 @@ class _TemplateCard extends StatelessWidget {
           const SectionHeader(title: 'Şablon', icon: Icons.description_outlined),
           const SizedBox(height: AppSpace.sm),
           Text(
-            kind == ImportKind.apartments
+            kind == ImportKind.apartments || kind == ImportKind.allInOne || kind == ImportKind.openingBalances
                 ? 'Şablondaki daire sayfası sitenizin mevcut blok ve daire numaralarıyla hazır gelir; boş '
                       'alanları doldurmanız yeterli.'
                 : 'Şablonu indirip doldurun ya da kendi dosyanızı kullanın. Başlıklar tanınırsa sütunlar '

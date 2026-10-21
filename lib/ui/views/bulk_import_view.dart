@@ -25,7 +25,13 @@ import 'package:site_kapi_kontrol/ui/widgets/bulk_step_header.dart';
 /// Sayfa kapanırken [BulkImportOutcome] döner (kayıtlar değiştiyse çağıran listeleri tazeler, «Kişilere git»
 /// için sekme dizini taşır). Geri tuşu adım adım geri gider; onay sürerken çıkış engellenir.
 class BulkImportView extends StatefulWidget {
-  const BulkImportView({super.key, required this.scope, this.initialKind, this.controller});
+  const BulkImportView({
+    super.key,
+    required this.scope,
+    this.initialKind,
+    this.controller,
+    this.allowedKinds = kClassicImportKinds,
+  });
 
   final PeopleScope scope;
 
@@ -35,14 +41,18 @@ class BulkImportView extends StatefulWidget {
   /// Test / özel kurulum için hazır denetleyici (verilirse sayfa onu yönetmez ama dinler; kapanırken atılır).
   final BulkImportController? controller;
 
+  /// Bu girişte seçilebilen türler (Kişiler: klasik + hepsi bir arada; Finans > Daireler: devir bakiyesi).
+  final List<ImportKind> allowedKinds;
+
   static Future<BulkImportOutcome?> open(
     BuildContext context, {
     required PeopleScope scope,
     ImportKind? initialKind,
+    List<ImportKind> allowedKinds = kClassicImportKinds,
   }) {
     return Navigator.of(context).push<BulkImportOutcome>(
       MaterialPageRoute<BulkImportOutcome>(
-        builder: (_) => BulkImportView(scope: scope, initialKind: initialKind),
+        builder: (_) => BulkImportView(scope: scope, initialKind: initialKind, allowedKinds: allowedKinds),
       ),
     );
   }
@@ -75,6 +85,7 @@ class BulkImportViewState extends State<BulkImportView> {
       service: BulkService(authService: scope.authService),
       siteCode: scope.siteCode,
       siteName: scope.siteName,
+      allowedKinds: widget.allowedKinds,
       siteSummaryLoader: () async {
         final (structure, _) = await scope.authService.getSiteStructure(siteCode: scope.siteCode);
         if (structure == null) return null;
@@ -91,8 +102,13 @@ class BulkImportViewState extends State<BulkImportView> {
       unawaited(
         _c.loadSpec().then((_) {
           if (!mounted) return;
-          final initial = widget.initialKind;
-          if (initial != null && _c.spec?.of(initial) != null && _c.kind == null) _c.selectKind(initial);
+          final wanted = widget.initialKind;
+          final ImportKind? initial = wanted == ImportKind.allInOne && _c.spec?.of(ImportKind.allInOne) == null
+              ? ImportKind.people
+              : wanted;
+          // Sunucu «Hepsi bir arada» türünü bilmiyorsa (eski sürüm) klasik Kişiler türüne düşülür.
+          final chosen = initial;
+          if (chosen != null && _c.spec?.of(chosen) != null && _c.kind == null) _c.selectKind(chosen);
         }),
       );
     }
@@ -172,6 +188,7 @@ class BulkImportViewState extends State<BulkImportView> {
         preview: preview,
         strict: _c.strict,
         allowOverwrite: _c.allowOverwrite,
+        cutoverDate: _c.cutoverDate,
       );
       if (!ok || !mounted) return;
       unawaited(_c.commit(acknowledged: true));
@@ -184,6 +201,8 @@ class BulkImportViewState extends State<BulkImportView> {
     ImportKind.people => 0,
     ImportKind.apartments => 1,
     ImportKind.vehicles => 2,
+    ImportKind.allInOne => 0,
+    ImportKind.openingBalances => 0,
   };
 
   @override

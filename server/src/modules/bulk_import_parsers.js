@@ -489,3 +489,97 @@ export function apartmentKey(text) {
   const match = /^(?:daire|kapi|apt|bagimsiz bolum|numara|nr|no|d)?\s*(?:no|numara|nr)?\s*(\d{1,6})$/.exec(norm);
   return match ? `n:${Number(match[1])}` : `l:${norm}`;
 }
+
+// --- Devir bakiyesi (F4): tutar, hesap, vade ----------------------------------------------------------------
+
+export const MONEY_MAX_MINOR = 1_000_000_000_000;
+export const ACCOUNT_WORDS = Object.freeze({
+  owner: Object.freeze(['Ev sahibi', 'Malik', 'Mal sahibi']),
+  tenant: Object.freeze(['Kiracı']),
+});
+const ACCOUNT_MAP = wordMap(ACCOUNT_WORDS);
+
+/** Hesap sütunu: Ev sahibi / Malik / Mal sahibi -> owner, Kiracı -> tenant; boş -> null (çağıran owner varsayar). */
+export function readAccount(raw) {
+  const text = readText(raw, { forbidSigned: true, max: 80 });
+  if (text.error || text.value === null) {
+    return text;
+  }
+  const party = ACCOUNT_MAP.get(foldHeader(text.value));
+  return party ? { value: party } : { value: null, error: 'ACCOUNT_INVALID' };
+}
+
+/**
+ * TL tutarı -> kuruş (tamsayı; metin aritmetiği, kayan nokta yok). '1.250,50', '1250.5', '₺ 1.250', '1250 TL' kabul edilir.
+ * 2'den fazla ondalık yarım yukarı yuvarlanır (ROUNDED uyarısı). Eksi değer işaretiyle döner (çağıran karar verir). Aşırı büyük MONEY_RANGE.
+ */
+export function readMoney(raw) {
+  const text = readText(raw, { max: 40 });
+  if (text.error || text.value === null) {
+    return text;
+  }
+  const invalid = { value: null, error: 'MONEY_INVALID' };
+  let body = text.value.replace(/₺|TRY|TL/gi, '').replace(/[\s ]/g, '');
+  let negative = false;
+  if (/^\(.*\)$/.test(body)) {
+    negative = true;
+    body = body.slice(1, -1);
+  }
+  if (body.startsWith('-') || body.startsWith('−')) {
+    negative = !negative;
+    body = body.slice(1);
+  } else if (body.startsWith('+')) {
+    body = body.slice(1);
+  }
+  if (!/^[0-9.,]+$/.test(body) || !/[0-9]/.test(body)) {
+    return invalid;
+  }
+  const lastDot = body.lastIndexOf('.');
+  const lastComma = body.lastIndexOf(',');
+  let intPart = body;
+  let fraction = '';
+  if (lastDot >= 0 && lastComma >= 0) {
+    // karışık: son ayırıcı ondalık, diğeri binlik
+    const at = Math.max(lastDot, lastComma);
+    const thousands = lastDot > lastComma ? ',' : '.';
+    intPart = body.slice(0, at);
+    fraction = body.slice(at + 1);
+    const pattern = thousands === '.' ? /^\d{1,3}(\.\d{3})*$/ : /^\d{1,3}(,\d{3})*$/;
+    if (!pattern.test(intPart)) return invalid;
+  } else if (lastDot >= 0 || lastComma >= 0) {
+    const sep = lastComma >= 0 ? ',' : '.';
+    const at = Math.max(lastDot, lastComma);
+    const count = body.split(sep).length - 1;
+    const after = body.slice(at + 1);
+    if (count > 1 || after.length === 3) {
+      // binlik ayırıcı (TR): 1.250 / 1.250.000
+      if (!(sep === '.' ? /^\d{1,3}(\.\d{3})+$/ : /^\d{1,3}(,\d{3})+$/).test(body)) return invalid;
+    } else {
+      intPart = body.slice(0, at);
+      fraction = after;
+    }
+  }
+  intPart = intPart.replace(/[.,]/g, '');
+  if (intPart === '') intPart = '0';
+  if (!/^\d+$/.test(intPart) || (fraction !== '' && !/^\d+$/.test(fraction))) {
+    return invalid;
+  }
+  const warnings = [];
+  const carry = fraction.length > 2 && fraction.charCodeAt(2) >= 53 ? 1n : 0n;
+  if (fraction.length > 2) warnings.push('ROUNDED');
+  const minor = BigInt(intPart) * 100n + BigInt(fraction.slice(0, 2).padEnd(2, '0')) + carry;
+  if (minor >= BigInt(MONEY_MAX_MINOR)) {
+    return { value: null, error: 'MONEY_RANGE' };
+  }
+  return { value: negative ? -Number(minor) : Number(minor), warnings };
+}
+
+/** 'A-5' / 'A/5' gibi tek hücrelik daire kodu -> { block, number }; ayrıştırılamazsa value null. */
+export function readApartmentCode(raw) {
+  const text = readText(raw, { forbidSigned: true, max: 90 });
+  if (text.error || text.value === null) {
+    return { value: null };
+  }
+  const match = /^(.+?)\s*[-/]\s*([^-/\s]+)$/.exec(text.value);
+  return match ? { value: { block: match[1].trim(), number: match[2].trim() } } : { value: null };
+}

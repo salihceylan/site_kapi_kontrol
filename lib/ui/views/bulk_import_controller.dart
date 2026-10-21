@@ -34,6 +34,22 @@ import 'package:site_kapi_kontrol/ui/helpers/retry_lock.dart';
 
 enum BulkStep { kind, file, mapping, preview, result }
 
+/// Kişiler girişindeki türler: «Hepsi bir arada» önerilen (ilk), ardından klasik üçlü.
+const List<ImportKind> kClassicImportKinds = <ImportKind>[
+  ImportKind.allInOne,
+  ImportKind.apartments,
+  ImportKind.people,
+  ImportKind.vehicles,
+];
+
+/// Finans girişindeki türler.
+const List<ImportKind> kOpeningImportKinds = <ImportKind>[ImportKind.openingBalances];
+
+String _isoToday() {
+  final now = DateTime.now();
+  return '${now.year.toString().padLeft(4, '0')}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+}
+
 class _DigestSink implements Sink<Digest> {
   late Digest value;
 
@@ -66,6 +82,7 @@ class BulkImportController extends ChangeNotifier {
     Future<String?> Function()? siteSummaryLoader,
     Future<void> Function()? purgePickerCache,
     this.previewPageSize = 20,
+    this.allowedKinds = kClassicImportKinds,
   }) : delivery = delivery ?? BulkFileSharer(),
        _purgePickerCache = purgePickerCache ?? (() => purgeLocalSharedCaches(shareCache: false)),
        _parseRunner = parseRunner ?? parseInBackground,
@@ -78,6 +95,9 @@ class BulkImportController extends ChangeNotifier {
   final String siteName;
   final BulkFileDelivery delivery;
   final int previewPageSize;
+
+  /// Bu giriş noktasında seçilebilen türler (Kişiler: hepsi bir arada + klasik üçlü; Finans: yalnız devir bakiyesi).
+  final List<ImportKind> allowedKinds;
 
   final BulkParseRunner _parseRunner;
   final BulkFilePicker _picker;
@@ -135,6 +155,9 @@ class BulkImportController extends ChangeNotifier {
   ImportPreview? _staleFrom;
   bool allowOverwrite = false;
   bool strict = false;
+
+  /// Devir bakiyesi: devir tarihi (YYYY-MM-DD; bugün ya da önce, en çok 5 yıl geri).
+  String cutoverDate = _isoToday();
   int _previewToken = 0;
 
   // Onay.
@@ -258,6 +281,8 @@ class BulkImportController extends ChangeNotifier {
       commitRetryable = false;
     }
     kind = value;
+    // Devirde «hatalı satır varsa aktarma» varsayılan AÇIK (para yazılır).
+    if (value.isOpening) strict = true;
     templateMessage = null;
     templateError = null;
     notifyListeners();
@@ -276,7 +301,7 @@ class BulkImportController extends ChangeNotifier {
       ExportEnvelope? apartments;
       String? note;
       // Daireler sayfası sitenin MEVCUT blok / daire numaralarıyla ön doldurulur.
-      if (format == ExportFormat.xlsx || k == ImportKind.apartments) {
+      if (format == ExportFormat.xlsx || k == ImportKind.apartments || k == ImportKind.allInOne || k == ImportKind.openingBalances) {
         try {
           apartments = await service.exportData(siteCode, kind: 'apartments');
         } catch (_) {
@@ -561,6 +586,7 @@ class BulkImportController extends ChangeNotifier {
         specVersion: s.specVersion,
         rows: rows,
         allowOverwrite: k.supportsOverwrite && allowOverwrite,
+        options: _options(k),
       );
       if (token != _previewToken || _disposed) return;
       final before = _staleFrom;
@@ -611,6 +637,27 @@ class BulkImportController extends ChangeNotifier {
     unawaited(requestPreview());
   }
 
+  /// Devir tarihini değiştirir; önizleme eskir ve yenilenir.
+  void setCutoverDate(String value) {
+    if (value == cutoverDate || committing || previewing || kind?.isOpening != true) return;
+    cutoverDate = value;
+    previewStale = true;
+    notifyListeners();
+    unawaited(requestPreview());
+  }
+
+  /// Sunucuya giden `options` (yalnız devir bakiyesi). [withTotal]: onayda toplam tutar (kuruş) da gider.
+  Map<String, Object?>? _options(ImportKind k, {bool withTotal = false}) {
+    if (!k.isOpening) return null;
+    return <String, Object?>{
+      'cutover_date': cutoverDate,
+      if (withTotal) 'expected_total_minor': openingTotalMinor,
+    };
+  }
+
+  /// Önizlemedeki devir toplamı (kuruş).
+  int get openingTotalMinor => preview?.plan['total_minor'] ?? 0;
+
   void setStrict(bool value) {
     if (value == strict || committing) return;
     strict = value;
@@ -620,7 +667,7 @@ class BulkImportController extends ChangeNotifier {
   // --- 5. Onay ---------------------------------------------------------------------------------
 
   String _signature() =>
-      '${kind!.apiValue}|$siteCode|$_rowsDigest|strict=$strict|ow=${kind!.supportsOverwrite && allowOverwrite}|sv=${spec!.specVersion}';
+      '${kind!.apiValue}|$siteCode|$_rowsDigest|strict=$strict|ow=${kind!.supportsOverwrite && allowOverwrite}|sv=${spec!.specVersion}|cut=${kind!.isOpening ? cutoverDate : ''}|tot=${kind!.isOpening ? openingTotalMinor : 0}';
 
   /// Yüklemeyi onaylar. [acknowledged]: KVKK onayı (people / vehicles için zorunlu).
   Future<void> commit({required bool acknowledged}) async {
@@ -649,6 +696,7 @@ class BulkImportController extends ChangeNotifier {
         allowOverwrite: k.supportsOverwrite && allowOverwrite,
         strict: strict,
         acknowledged: acknowledged,
+        options: _options(k, withTotal: true),
       );
       _keys.clear(signature);
       if (_disposed) return;
@@ -684,7 +732,7 @@ class BulkImportController extends ChangeNotifier {
     if (financeOutcomeUncertain(e)) _maybeChanged = true;
     final code = e is ApiException ? e.code : null;
 
-    if (code == 'PREVIEW_STALE' && !limited) {
+    if ((code == 'PREVIEW_STALE' || code == 'TOTAL_MISMATCH') && !limited) {
       // Veri önizlemeden sonra değişti: onay kapanır, önizleme yeniden alınır.
       previewStale = true;
       _staleFrom = preview;
@@ -796,8 +844,8 @@ class BulkImportController extends ChangeNotifier {
 
   /// Önerilen sıradaki, henüz yüklenmemiş tür.
   ImportKind? get suggestedNextKind {
-    for (final k in ImportKind.values) {
-      if (!completedKinds.contains(k) && k != kind) return k;
+    for (final k in allowedKinds) {
+      if (k != ImportKind.allInOne && !completedKinds.contains(k) && k != kind) return k;
     }
     return null;
   }

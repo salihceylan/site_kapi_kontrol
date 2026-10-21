@@ -5,6 +5,7 @@ import 'package:site_kapi_kontrol/models/finance.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/finance_account_dialog.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/finance_opening_dialog.dart';
 import 'package:site_kapi_kontrol/ui/helpers/finance_errors.dart';
 import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart';
 import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
@@ -188,6 +189,18 @@ class FinanceBalancesTabState extends State<FinanceBalancesTab> {
           ),
         ),
         const SizedBox(height: AppSpace.md),
+        if (widget.scope.canWrite) ...[
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+              key: const ValueKey<String>('finance_opening_button'),
+              onPressed: () => unawaited(FinanceOpeningDialog.show(context, scope: widget.scope, onChanged: _afterChange)),
+              icon: const Icon(Icons.account_balance_wallet_outlined),
+              label: const Text('Devir bakiyesi'),
+            ),
+          ),
+          const SizedBox(height: AppSpace.md),
+        ],
         SectionHeader(
           title: 'Daireler',
           count: _loader.loadedOnce ? _loader.total : null,

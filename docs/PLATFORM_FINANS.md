@@ -381,3 +381,21 @@ sınanır).
 | İL1 (B-2) | ev sahibi hesabı: çatı payı 81.000 (vade 20.09) ödenmedi; kiracı hesabı: Ekim aidatı 75.000 (vade 05.10) 03.10'da ödendi; Ekim 2026, ek gün 0 | ev sahibi hesabı S = 31 x 81.000 = 2.511.000: daily_30 4.185, daily_actual 4.050; kiracı hesabında tazminat satırı yok. Tek hesapta karışsaydı S = 2 x 81.000 + 3 x 6.000 + 26 x 81.000 = 2.286.000 ve daily_30 3.810 olurdu (zamanında ödenen aidat gecikmiş sayılırdı) |
 | İM1 (B-3) | ev sahibi hesabı: çatı payı 81.000 (vade 20.09); kiracı hesabı: Eylül ve Ekim aidatı 75.000'er; kiracı 100.000 ödedi | kiracı hesabı kalanları 0; 50.000; ev sahibi hesabı 81.000. Tek hesapta karışsaydı 0; 56.000 (çatı); 75.000: kiracının 25.000'i ev sahibinin borcuna giderdi |
 | İL2 (B-2; ikinci inceleme) | İL1'in satırları; kurallar tablosunda aylık üst sınır 300 bp, sitenin saklı oranı 500 bp (etkin oran = min = 300) | ev sahibi hesabı S = 2.511.000: daily_30 (1.506.600.000 + 300.000) / 600.000 = 2.511, daily_actual (1.506.600.000 + 310.000) / 620.000 = 2.430 (= 81.000 x %3); kiracı hesabında satır yok |
+
+## Devir bakiyesi (F4, 2026-10-21)
+
+Eski yazılımdan devreden daire borçları toplu yükleme altyapısıyla yüklenir (`docs/PLATFORM_TOPLU_ISLEMLER.md` «Hepsi bir arada ve devir bakiyesi»).
+Arayüz: Finans > Daireler > «Devir bakiyesi» (yalnız yazma yetkisi) -> «Excel'den yükle», yüklemeler listesi, «Geri al». Modül varsayılan KAPALI (finans modülüne bağlı).
+
+Tablolar (migration 055): `finance_opening_reverts(run_id PK -> bulk_import_runs, site_code, reversed_count, reversed_total_minor, idempotency_key, reverted_by, reverted_at)`,
+tekil `(site_code, idempotency_key)`. Defter kayıtları `ledger_entries.source_kind='opening'`, `source_id` = yükleme.
+
+Uçlar (`/manager/sites/:siteCode/finance/opening-balances`, yetki: finans yönetici/süper + kurul okur):
+- `GET` yüklemeler ve durumları. `GET /:runId` geri alma önizlemesi (ters kaydı yazılacak satır sayısı ve tutarı, tek tek iptal edilmiş satırlar, devirden sonra
+  tahsilatı olan daire sayısı, sonradan hesaplanmış gecikme tazminatı kaydı sayısı).
+- `POST /:runId/revert {reason, idempotency_key, expected_count, expected_total_minor}` (`withFinanceTransaction`): ters kaydı olmayan devir satırlarına açık ayda,
+  bugünün tarihiyle `reversal` yazılır (hesap asıl kayıttan); ters kayıtlar da `source_kind='opening'` taşır. Aynı anahtarla tekrar 200; başka anahtarla 409
+  `OPENING_ALREADY_REVERTED`; sayı/tutar değiştiyse 409 `OPENING_CHANGED`; başka sitenin yüklemesi 404. Audit `finance.opening.reverted`.
+
+Kurallar: defter yalnız eklemelidir (geri alma ters kayıtladır); alacaklı (eksi) devir yok; gecikme tazminatı açılırsa devir kalemi ana borç gibi işler, eski yazılımdaki
+tazminat tutara katılmışsa faiz üstüne faiz riski vardır [AVUKAT DOĞRULASIN]. Önceki kiracının borcu kiracı hesabına yazılırsa yeni kiracı görür (NO_TENANT uyarısı azaltır).

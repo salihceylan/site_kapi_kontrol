@@ -74,7 +74,7 @@ export const schemaHooks = {
  * Tek DDL ifadesini kısa lock_timeout ile çalıştırır; kilit zaman aşımında (55P03) ya da deadlock'ta (40P01) bekleyip yeniden dener (en çok 6 deneme).
  * lock_timeout oturum düzeyindedir ve her denemeden sonra SIFIRLANIR (havuz bağlantısı başka işe değiştirilmiş kalmasın).
  */
-async function runDdl(client, statement) {
+export async function runDdl(client, statement) {
   for (let attempt = 1; ; attempt += 1) {
     try {
       await client.query(`SET lock_timeout = '${LOCK_TIMEOUT}'`);

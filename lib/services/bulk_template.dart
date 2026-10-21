@@ -28,7 +28,21 @@ const Map<String, String> _examples = <String, String>{
   'giris_tarihi': '15.03.2021',
   'plaka': '34 ABC 123, 06 XY 789',
   'not': 'Kısa bir not',
+  'hesap': 'Ev sahibi',
+  'tutar': '1.250,50',
+  'vade': '01.10.2026',
+  'aciklama': 'Eski yazılımdan devir',
 };
+
+/// Şablon kitabına birlikte giren türler: klasik üçlü tek kitapta; «Hepsi bir arada» ve «Devir bakiyesi» ayrı dosyadır.
+List<ImportKind> _groupOf(ImportKind kind) => switch (kind) {
+  ImportKind.allInOne => const <ImportKind>[ImportKind.allInOne],
+  ImportKind.openingBalances => const <ImportKind>[ImportKind.openingBalances],
+  _ => const <ImportKind>[ImportKind.apartments, ImportKind.people, ImportKind.vehicles],
+};
+
+bool _prefillsApartments(ImportKind kind) =>
+    kind == ImportKind.apartments || kind == ImportKind.allInOne || kind == ImportKind.openingBalances;
 
 const Map<String, String> _relationLabels = <String, String>{
   'owner': 'Malik',
@@ -123,7 +137,7 @@ Object? _cellFor(ImportColumn column, ExportColumn source, Object? value) {
   return text.isEmpty ? null : text;
 }
 
-List<List<String>> _explanationRows(ImportSpec spec, {required String siteName}) {
+List<List<String>> _explanationRows(ImportSpec spec, {required String siteName, required List<ImportKind> group}) {
   final rows = <List<String>>[
     <String>['Toplu Yükleme Şablonu', '', '', ''],
     if (siteName.trim().isNotEmpty) <String>['Site', siteName.trim(), '', ''],
@@ -154,7 +168,7 @@ List<List<String>> _explanationRows(ImportSpec spec, {required String siteName})
     ],
     <String>['', '', '', ''],
   ];
-  for (final kind in ImportKind.values) {
+  for (final kind in group) {
     final kindSpec = spec.of(kind);
     if (kindSpec == null) continue;
     rows.add(<String>['${kind.label} sayfası', '', '', '']);
@@ -173,9 +187,13 @@ List<List<String>> _explanationRows(ImportSpec spec, {required String siteName})
     }
     rows.add(<String>['', '', '', '']);
   }
+  if (group.contains(ImportKind.openingBalances)) {
+    rows.add(<String>['Devir bakiyesi', 'Tutar TL olarak yazılır (1.250,50). Eksi (alacaklı) tutar desteklenmez. Hesap boşsa ev sahibi hesabına yazılır. Devir tarihini uygulamada seçersiniz.', '', '']);
+    return rows;
+  }
   rows.add(<String>['İlişki sözlüğü', '', '', '']);
   rows.add(<String>['İlişki', 'Kabul edilen sözcükler', '', '']);
-  final words = spec.of(ImportKind.people)?.relationWords ?? const <String, List<String>>{};
+  final words = spec.of(ImportKind.people)?.relationWords ?? spec.of(ImportKind.allInOne)?.relationWords ?? const <String, List<String>>{};
   final source = words.isEmpty ? _fallbackRelationWords : words;
   for (final entry in source.entries) {
     rows.add(<String>[_relationLabels[entry.key] ?? entry.key, entry.value.join(', '), '', '']);
@@ -183,7 +201,7 @@ List<List<String>> _explanationRows(ImportSpec spec, {required String siteName})
   rows.add(<String>['', '', '', '']);
   rows.add(<String>['Borç sorumlusu sözlüğü', '', '', '']);
   rows.add(<String>['Borç sorumlusu', 'Kabul edilen sözcükler', '', '']);
-  final responsible = spec.of(ImportKind.apartments)?.responsibleWords ?? const <String, List<String>>{};
+  final responsible = spec.of(ImportKind.apartments)?.responsibleWords ?? spec.of(ImportKind.allInOne)?.responsibleWords ?? const <String, List<String>>{};
   for (final entry in (responsible.isEmpty ? _fallbackResponsibleWords : responsible).entries) {
     rows.add(<String>[_responsibleLabels[entry.key] ?? entry.key, entry.value.join(', '), '', '']);
   }
@@ -218,7 +236,7 @@ RenderedFile buildImportTemplate({
   if (format == ExportFormat.csv) {
     final rows = <List<String>>[
       <String>[for (final c in kindSpec.columns) c.label],
-      if (kind == ImportKind.apartments)
+      if (_prefillsApartments(kind))
         for (final row in _prefilledRows(apartments, kindSpec))
           <String>[
             for (var i = 0; i < kindSpec.columns.length; i++)
@@ -234,7 +252,7 @@ RenderedFile buildImportTemplate({
       format: ExportFormat.csv,
     );
   }
-  final order = <ImportKind>[kind, ...ImportKind.values.where((k) => k != kind)];
+  final order = <ImportKind>[kind, ..._groupOf(kind).where((k) => k != kind)];
   final sheets = <XlsxSheet>[];
   for (final k in order) {
     final s = spec.of(k);
@@ -243,7 +261,7 @@ RenderedFile buildImportTemplate({
       XlsxSheet(
         name: k.sheetName,
         columns: <XlsxColumn>[for (final c in s.columns) _templateColumn(c)],
-        rows: k == ImportKind.apartments ? _prefilledRows(apartments, s) : const <List<Object?>>[],
+        rows: _prefillsApartments(k) ? _prefilledRows(apartments, s) : const <List<Object?>>[],
       ),
     );
   }
@@ -257,7 +275,7 @@ RenderedFile buildImportTemplate({
         XlsxColumn('Kural', format: XlsxFormat.wrap, width: 52),
         XlsxColumn('Örnek', format: XlsxFormat.wrap, width: 26),
       ],
-      rows: _explanationRows(spec, siteName: siteName),
+      rows: _explanationRows(spec, siteName: siteName, group: _groupOf(kind)),
     ),
   );
   return RenderedFile(
@@ -272,4 +290,6 @@ String _asciiName(ImportKind kind) => switch (kind) {
   ImportKind.apartments => 'daireler',
   ImportKind.people => 'kisiler',
   ImportKind.vehicles => 'araclar',
+  ImportKind.allInOne => 'hepsi_bir_arada',
+  ImportKind.openingBalances => 'devir_bakiyesi',
 };

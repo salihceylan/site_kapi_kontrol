@@ -21,7 +21,8 @@ import { isPlatformError } from './errors.js';
 import { resolvePeopleAccess } from './people_access.js';
 import { buildExport } from './bulk_import_export.js';
 import { commitImport, previewImport } from './bulk_import_service.js';
-import { MAX_BODY_BYTES, buildSpec, isBulkKind, isImportDisabled } from './bulk_import_spec.js';
+import { isModuleEnabled } from './module_service.js';
+import { KIND_MODULE, MAX_BODY_BYTES, buildSpec, isBulkKind, isImportDisabled } from './bulk_import_spec.js';
 import { HOUR_MS, ipKey, userKey } from './route_helpers.js';
 
 export const bulkImportRouter = express.Router();
@@ -83,6 +84,10 @@ function accessStep({ needsKind }) {
       }
       if (needsKind && !isBulkKind(req.params.kind)) {
         return res.status(404).json({ error: 'Yükleme türü bulunamadı.', code: 'IMPORT_KIND_NOT_FOUND' });
+      }
+      const moduleCode = KIND_MODULE[req.params.kind];
+      if (needsKind && moduleCode && !(await isModuleEnabled(access.siteCode, moduleCode))) {
+        return res.status(403).json({ error: 'Bu modül site için kapalı.', code: 'MODULE_DISABLED', module: moduleCode });
       }
       req.bulkAccess = access;
       return next();

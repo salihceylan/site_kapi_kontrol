@@ -10,11 +10,13 @@ import { pool } from '../db.js';
 import { actorFromAuthUser } from './audit_service.js';
 import { PlatformError } from './errors.js';
 import { financeLockKey } from './finance_common.js';
+import { assertFinanceEnabled } from './finance_access.js';
+import { assertWritableDate } from './finance_4b_guard.js';
 import { requestFingerprint, validateImportBody } from './bulk_import_body.js';
 import { computePlan, collectApartmentIds } from './bulk_import_plan.js';
 import { loadBlocksAndApartments, loadSnapshot } from './bulk_import_snapshot.js';
-import { SPEC_VERSION, isImportDisabled } from './bulk_import_spec.js';
-import { ENTITY_CHUNK, applyApartmentOps, applyPeopleOps, insertAudits } from './bulk_import_writer.js';
+import { KIND_MODULE, SPEC_VERSION, isImportDisabled } from './bulk_import_spec.js';
+import { ENTITY_CHUNK, applyApartmentOps, applyOpeningOps, applyPeopleOps, insertAudits } from './bulk_import_writer.js';
 import { todayIso } from './people_common.js';
 import { peopleLockKey } from './people_sync.js';
 import { runSyncSteps } from './people_sync_sql.js';
@@ -22,6 +24,17 @@ import { runSyncSteps } from './people_sync_sql.js';
 export const bulkImportLockKey = (siteCode) => `bulk_import:${Number(siteCode)}`;
 
 const LOCK_TIMEOUT = '8s';
+/** Kişi eşitlemesi (CRM) gereken türler; finans kilidi gereken türler; daire satırı yazan türler. */
+const SYNC_KINDS = new Set(['people', 'vehicles', 'all_in_one']);
+const FINANCE_LOCK_KINDS = new Set(['apartments', 'all_in_one', 'opening_balances']);
+const APARTMENT_WRITE_KINDS = new Set(['apartments', 'all_in_one']);
+const totalError = (plan, expected) =>
+  new PlatformError(409, 'TOTAL_MISMATCH', 'Toplam tutar onaylanan tutarla uyuşmuyor. Önizleme yenilendi, tekrar inceleyin.', {
+    totals: plan.totals,
+    plan: plan.counts,
+    preview_hash: plan.previewHash,
+    expected_total_minor: expected,
+  });
 const MAX_CONCURRENT_COMMITS = 2;
 const MAX_CONCURRENT_PREVIEWS = 4;
 const gauge = { commits: 0, previews: 0 };
@@ -103,7 +116,10 @@ export async function previewImport({ siteCode, kind, body, env = process.env })
   if (gauge.previews >= MAX_CONCURRENT_PREVIEWS) throw serverBusy();
   gauge.previews += 1;
   try {
-    if (kind !== 'apartments') {
+    if (KIND_MODULE[kind]) {
+      await assertFinanceEnabled(siteCode, pool);
+    }
+    if (SYNC_KINDS.has(kind)) {
       await syncBeforePreview(siteCode);
     }
     const client = await pool.connect();
@@ -113,10 +129,10 @@ export async function previewImport({ siteCode, kind, body, env = process.env })
       began = true;
       const exists = await client.query(`SELECT 1 FROM sites WHERE site_code = $1`, [siteCode]);
       if (!exists.rows[0]) throw siteNotFound();
-      const snapshot = await loadSnapshot(client, siteCode, kind);
+      const snapshot = await loadSnapshot(client, siteCode, kind, parsed.options);
       await client.query('COMMIT');
       began = false;
-      const plan = computePlan({ kind, rows: parsed.rows, snapshot, allowOverwrite: parsed.allowOverwrite, today: todayIso() });
+      const plan = computePlan({ kind, rows: parsed.rows, snapshot, allowOverwrite: parsed.allowOverwrite, today: todayIso(), options: parsed.options });
       return { kind, spec_version: SPEC_VERSION, ...plan.view };
     } catch (error) {
       if (began) await rollbackQuietly(client);
@@ -156,8 +172,12 @@ async function commitOnce({ siteCode, kind, parsed, fingerprint, actor }) {
     const locked = await client.query('SELECT pg_try_advisory_xact_lock(hashtext($1)) AS locked', [bulkImportLockKey(siteCode)]);
     if (locked.rows[0]?.locked !== true) throw importInProgress();
     await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [peopleLockKey(siteCode)]);
-    if (kind === 'apartments') {
+    if (FINANCE_LOCK_KINDS.has(kind)) {
       await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [financeLockKey(siteCode)]);
+    }
+    if (KIND_MODULE[kind]) {
+      // modül kilit altında yeniden denetlenir (yükleme sırasında kapatılmış olabilir)
+      await assertFinanceEnabled(siteCode, client);
     }
 
     // idempotans: aynı anahtar + aynı parmak izi = tekrar (yazım yok); farklı parmak izi = çakışma
@@ -188,7 +208,7 @@ async function commitOnce({ siteCode, kind, parsed, fingerprint, actor }) {
     const apartmentIds = collectApartmentIds(parsed.rows, light);
     if (apartmentIds.length > 0) {
       await client.query(
-        `SELECT id FROM apartments WHERE id = ANY($1::BIGINT[]) AND site_code = $2 ORDER BY id ${kind === 'apartments' ? 'FOR NO KEY UPDATE' : 'FOR KEY SHARE'}`,
+        `SELECT id FROM apartments WHERE id = ANY($1::BIGINT[]) AND site_code = $2 ORDER BY id ${APARTMENT_WRITE_KINDS.has(kind) ? 'FOR NO KEY UPDATE' : 'FOR KEY SHARE'}`,
         [apartmentIds, siteCode],
       );
     }
@@ -200,18 +220,24 @@ async function commitOnce({ siteCode, kind, parsed, fingerprint, actor }) {
     }
 
     // eşleşmeden ÖNCE üyelikleri CRM'e yansıt (aksi halde sonradan LINK edilecek hesaplı kişi için ikinci, hayalet kayıt doğardı)
-    if (kind !== 'apartments') {
+    if (SYNC_KINDS.has(kind)) {
       await runSyncSteps(client, { siteCode, userCode: null });
     }
-    const snapshot = await loadSnapshot(client, siteCode, kind);
+    if (kind === 'opening_balances') {
+      await assertWritableDate(client, siteCode, parsed.options.cutover_date, 'Devir tarihi');
+    }
+    const snapshot = await loadSnapshot(client, siteCode, kind, parsed.options);
     const today = todayIso();
-    const plan = computePlan({ kind, rows: parsed.rows, snapshot, allowOverwrite: parsed.allowOverwrite, today });
+    const plan = computePlan({ kind, rows: parsed.rows, snapshot, allowOverwrite: parsed.allowOverwrite, today, options: parsed.options });
     if (plan.previewHash !== parsed.expectedHash) {
       throw new PlatformError(409, 'PREVIEW_STALE', 'Veriler değişti. Önizleme yenilendi, tekrar inceleyin.', {
         totals: plan.totals,
         plan: plan.counts,
         preview_hash: plan.previewHash,
       });
+    }
+    if (kind === 'opening_balances' && plan.counts.total_minor !== parsed.options.expected_total_minor) {
+      throw totalError(plan, parsed.options.expected_total_minor);
     }
     if (parsed.strict && plan.totals.error > 0) {
       throw new PlatformError(409, 'IMPORT_HAS_ERRORS', 'Hatalı satırlar var. Düzeltip yeniden yükleyin.', {
@@ -221,7 +247,12 @@ async function commitOnce({ siteCode, kind, parsed, fingerprint, actor }) {
     }
 
     const rows = { applied: plan.totals.ok, unchanged: plan.totals.unchanged, skipped: plan.totals.error };
-    const counts = { rows, with_warnings: plan.totals.with_warnings, plan: plan.counts };
+    const counts = {
+      rows,
+      with_warnings: plan.totals.with_warnings,
+      plan: plan.counts,
+      ...(parsed.options ? { cutover_date: parsed.options.cutover_date } : {}),
+    };
     const inserted = await client.query(
       `
         INSERT INTO bulk_import_runs
@@ -245,10 +276,30 @@ async function commitOnce({ siteCode, kind, parsed, fingerprint, actor }) {
     const run = inserted.rows[0];
     const runId = Number(run.id);
 
-    const audits =
-      kind === 'apartments'
-        ? await applyApartmentOps(client, { siteCode, ops: plan.ops, runId })
-        : await applyPeopleOps(client, { siteCode, ops: plan.ops, runId, today, actorUserCode: actorInfo.userCode });
+    let audits = [];
+    if (kind === 'opening_balances') {
+      const written = await applyOpeningOps(client, {
+        siteCode,
+        ops: plan.ops,
+        runId,
+        cutoverDate: parsed.options.cutover_date,
+        actorUserCode: actorInfo.userCode,
+      });
+      audits.push({
+        action: 'finance.opening.imported',
+        target_type: 'finance',
+        target_id: String(runId),
+        details: { run_id: runId, rows: plan.counts.opening_add, total_minor: written.total, cutover_date: parsed.options.cutover_date },
+      });
+    } else {
+      if (APARTMENT_WRITE_KINDS.has(kind)) {
+        audits = audits.concat(await applyApartmentOps(client, { siteCode, ops: plan.ops, runId }));
+      }
+      if (kind !== 'apartments') {
+        const peopleOps = plan.ops.filter((op) => op.t !== 'au');
+        audits = audits.concat(await applyPeopleOps(client, { siteCode, ops: peopleOps, runId, today, actorUserCode: actorInfo.userCode }));
+      }
+    }
     audits.push({
       action: 'import.committed',
       target_type: 'import',
@@ -291,7 +342,7 @@ async function commitOnce({ siteCode, kind, parsed, fingerprint, actor }) {
 export async function commitImport({ siteCode, kind, body, actor, env = process.env }) {
   if (isImportDisabled(env)) throw importDisabled();
   const parsed = validateImportBody(body, kind, { commit: true, env });
-  const fingerprint = requestFingerprint({ kind, strict: parsed.strict, allowOverwrite: parsed.allowOverwrite, rows: parsed.rows });
+  const fingerprint = requestFingerprint({ kind, strict: parsed.strict, allowOverwrite: parsed.allowOverwrite, rows: parsed.rows, options: parsed.options });
   if (gauge.commits >= MAX_CONCURRENT_COMMITS) throw serverBusy();
   gauge.commits += 1;
   try {

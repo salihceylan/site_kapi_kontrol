@@ -114,6 +114,8 @@ export function opSignature(op) {
       return ['va', op.ref, op.plate, op.note];
     case 'au':
       return ['au', op.aptId, op.set];
+    case 'ob':
+      return ['ob', op.aptId, op.account, op.minor, op.due, op.desc];
     default:
       return [op.t];
   }
@@ -155,7 +157,9 @@ export function finalizePlan(plan) {
     kept = [...errors, ...warnings].sort((a, b) => a.n - b.n);
     kept = kept.slice(0, MAX_ISSUES_IN_RESPONSE);
   }
-  const previewHash = sha256(`v1\n${kind}\n${results.map((result) => result.sig).join('\n')}`);
+  const NL = String.fromCharCode(10);
+  const salt = plan.hashSalt ? plan.hashSalt + NL : '';
+  const previewHash = sha256(['v1', kind, salt + results.map((result) => result.sig).join(NL)].join(NL));
   return {
     // yanıt gövdesi (kişisel veri içerebilir: yalnız önizleme yanıtında döner, saklanmaz)
     view: {

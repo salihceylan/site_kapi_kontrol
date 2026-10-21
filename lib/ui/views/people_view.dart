@@ -428,7 +428,7 @@ class PeopleViewState extends State<PeopleView> {
           scope: scope,
           onDataChanged: changed,
           onImportRequested: scope.canWrite
-              ? () => unawaited(_openBulkImport(scope, kind: ImportKind.people))
+              ? () => unawaited(_openBulkImport(scope, kind: ImportKind.allInOne))
               : null,
         );
       case 1:

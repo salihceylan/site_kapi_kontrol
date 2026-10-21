@@ -15,6 +15,7 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show compute, visibleForTesting;
 import 'package:http/http.dart' as http;
 import 'package:site_kapi_kontrol/models/bulk_import.dart';
+import 'package:site_kapi_kontrol/models/finance_opening.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/services/auth_api.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
@@ -49,6 +50,14 @@ String? bulkErrorMessage(String? code) {
       return 'Bu yükleme farklı bilgilerle daha önce gönderilmiş. Dosyayı yeniden seçip yükleyin.';
     case 'FORBIDDEN_SITE':
       return 'Bu site için yetkiniz yok.';
+    case 'TOTAL_MISMATCH':
+      return 'Toplam tutar değişti. Önizleme yenilendi, tekrar inceleyin.';
+    case 'OPENING_ALREADY_REVERTED':
+      return 'Bu devir yüklemesi zaten geri alınmış.';
+    case 'OPENING_CHANGED':
+      return 'Devir kayıtları değişti. Ayrıntıyı yenileyip tekrar inceleyin.';
+    case 'OPENING_RUN_NOT_FOUND':
+      return 'Devir yüklemesi bulunamadı.';
   }
   return null;
 }
@@ -98,8 +107,11 @@ class BulkApi {
     required int specVersion,
     required List<ImportRow> rows,
     required bool allowOverwrite,
+    Map<String, Object?>? options,
   }) => <String, dynamic>{
     'spec_version': specVersion,
+    // Yalnız devir bakiyesinde (`cutover_date`, onayda `expected_total_minor`).
+    'options': ?options,
     // Yalnız `apartments`'ta geçerlidir (diğerlerinde gönderilirse sunucu 400 der).
     if (kind.supportsOverwrite) 'allow_overwrite': allowOverwrite,
     'rows': <Map<String, Object?>>[for (final row in rows) row.toJson()],
@@ -113,12 +125,13 @@ class BulkApi {
     required int specVersion,
     required List<ImportRow> rows,
     bool allowOverwrite = false,
+    Map<String, Object?>? options,
   }) async {
     final response = await _send(
       'POST',
       _imports(siteCode, '${kind.apiValue}/preview'),
       token: token,
-      body: _rowsBody(kind: kind, specVersion: specVersion, rows: rows, allowOverwrite: allowOverwrite),
+      body: _rowsBody(kind: kind, specVersion: specVersion, rows: rows, allowOverwrite: allowOverwrite, options: options),
       timeout: previewTimeout,
       timeoutMessage: 'Sunucu yanıt vermedi. Önizleme alınamadı, tekrar deneyin.',
     );
@@ -138,8 +151,9 @@ class BulkApi {
     bool allowOverwrite = false,
     bool strict = false,
     bool acknowledged = false,
+    Map<String, Object?>? options,
   }) async {
-    final body = _rowsBody(kind: kind, specVersion: specVersion, rows: rows, allowOverwrite: allowOverwrite)
+    final body = _rowsBody(kind: kind, specVersion: specVersion, rows: rows, allowOverwrite: allowOverwrite, options: options)
       ..['expected_hash'] = expectedHash
       ..['idempotency_key'] = idempotencyKey
       ..['strict'] = strict;
@@ -185,6 +199,66 @@ class BulkApi {
       maxBytes: maxResponseBytes,
     );
     return _parse(response, ExportEnvelope.fromJson);
+  }
+
+  String _opening(int siteCode, String tail) => '/manager/sites/$siteCode/finance/opening-balances$tail';
+
+  /// `GET finance/opening-balances`.
+  Future<List<OpeningRun>> listOpeningRuns({required String token, required int siteCode}) async {
+    final response = await _send(
+      'GET',
+      _opening(siteCode, ''),
+      token: token,
+      timeout: readTimeout,
+      timeoutMessage: 'Sunucu yanıt vermedi, tekrar deneyin.',
+    );
+    return _parse(response, (json) {
+      final runs = json['runs'];
+      if (runs is! List) throw const FormatException('Devir listesi yok.');
+      return <OpeningRun>[for (final r in runs) if (r is Map) OpeningRun.fromJson(Map<String, dynamic>.from(r))];
+    });
+  }
+
+  /// `GET finance/opening-balances/:runId` (geri alma önizlemesi).
+  Future<OpeningRevertPreview> getOpeningRun({required String token, required int siteCode, required int runId}) async {
+    final response = await _send(
+      'GET',
+      _opening(siteCode, '/$runId'),
+      token: token,
+      timeout: readTimeout,
+      timeoutMessage: 'Sunucu yanıt vermedi, tekrar deneyin.',
+    );
+    return _parse(response, OpeningRevertPreview.fromJson);
+  }
+
+  /// `POST finance/opening-balances/:runId/revert` (201 ya da replay 200). Aynı anahtarla tekrar güvenlidir.
+  Future<int> revertOpening({
+    required String token,
+    required int siteCode,
+    required int runId,
+    required String reason,
+    required String idempotencyKey,
+    required int expectedCount,
+    required int expectedTotalMinor,
+  }) async {
+    const ambiguous =
+        'Sunucudan yanıt alınamadı. Geri alma tamamlanmış olabilir; aynı işlemi tekrar denerseniz çift kayıt oluşmaz.';
+    final response = await _send(
+      'POST',
+      _opening(siteCode, '/$runId/revert'),
+      token: token,
+      body: <String, dynamic>{
+        'reason': reason,
+        'idempotency_key': idempotencyKey,
+        'expected_count': expectedCount,
+        'expected_total_minor': expectedTotalMinor,
+      },
+      timeout: commitTimeout,
+      timeoutMessage: ambiguous,
+      transportMessage: ambiguous,
+      acceptStatuses: const <int>{200, 201},
+    );
+    return _parse(response, (json) => json['reversed_count'] is num ? (json['reversed_count'] as num).toInt() : 0);
   }
 
   // --- Taşıma katmanı --------------------------------------------------------------------------
@@ -470,6 +544,7 @@ class BulkService {
     required int specVersion,
     required List<ImportRow> rows,
     bool allowOverwrite = false,
+    Map<String, Object?>? options,
   }) => _guard(
     (token) => api.previewImport(
       token: token,
@@ -478,6 +553,7 @@ class BulkService {
       specVersion: specVersion,
       rows: rows,
       allowOverwrite: allowOverwrite,
+      options: options,
     ),
   );
 
@@ -491,6 +567,7 @@ class BulkService {
     bool allowOverwrite = false,
     bool strict = false,
     bool acknowledged = false,
+    Map<String, Object?>? options,
   }) => _guard(
     (token) => api.commitImport(
       token: token,
@@ -503,6 +580,32 @@ class BulkService {
       allowOverwrite: allowOverwrite,
       strict: strict,
       acknowledged: acknowledged,
+      options: options,
+    ),
+  );
+
+  Future<List<OpeningRun>> listOpeningRuns(int siteCode) =>
+      _guard((token) => api.listOpeningRuns(token: token, siteCode: siteCode));
+
+  Future<OpeningRevertPreview> getOpeningRun(int siteCode, int runId) =>
+      _guard((token) => api.getOpeningRun(token: token, siteCode: siteCode, runId: runId));
+
+  Future<int> revertOpening(
+    int siteCode,
+    int runId, {
+    required String reason,
+    required String idempotencyKey,
+    required int expectedCount,
+    required int expectedTotalMinor,
+  }) => _guard(
+    (token) => api.revertOpening(
+      token: token,
+      siteCode: siteCode,
+      runId: runId,
+      reason: reason,
+      idempotencyKey: idempotencyKey,
+      expectedCount: expectedCount,
+      expectedTotalMinor: expectedTotalMinor,
     ),
   );
 
