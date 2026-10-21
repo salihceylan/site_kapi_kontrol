@@ -59,6 +59,24 @@
                 <data android:scheme="sitekapi"/>
             </intent-filter>
         </activity>
+        <!-- Dekont paylaşma (Dalga 2 / 2B): banka uygulamasından "Paylaş" ile PDF / JPEG / PNG. AYRI, arayüzsüz etkinlik: MainActivity'nin başlatma modu değişmez.
+             Yalnız content:// kabul edilir (kodda); dosya cache/share_inbox'a kopyalanır, MainActivity öne gelir. -->
+        <activity
+            android:name=".ShareReceiverActivity"
+            android:exported="true"
+            android:label="@string/share_receipt_label"
+            android:noHistory="true"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:mimeType="application/pdf"/>
+                <data android:mimeType="image/jpeg"/>
+                <data android:mimeType="image/png"/>
+            </intent-filter>
+        </activity>
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />

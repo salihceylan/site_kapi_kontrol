@@ -37,6 +37,7 @@ function fakeDb({ settings = new Map(), versions = [], expenseTable = true, expe
       log.push({ sql, params });
       if (failWith) throw failWith;
       if (/to_regclass\('public\.expense_documents'\)/.test(sql)) return ok([{ present: expenseTable }]);
+      if (/to_regclass\('public\.payment_notices'\)/.test(sql)) return ok([{ present: false }]); // dekont bildirimi (066): bu testlerde yok
       // iş takibi fotoğrafları (047): kimlik örneklemesi work_attachments/ alt ağacını da tanır
       if (/to_regclass\('public\.work_item_attachments'\)/.test(sql)) return ok([{ present: attachmentTable }]);
       if (/^SELECT storage_key FROM work_item_attachments WHERE status = 'ready' ORDER BY id DESC LIMIT 20$/.test(sql)) {

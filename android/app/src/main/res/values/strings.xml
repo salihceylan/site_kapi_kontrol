@@ -3,6 +3,9 @@
     <string name="app_name">Site ve Toplu Yaşam Yönetim Sistemi</string>
     <string name="widget_name">Hızlı Kapı Aç</string>
     <string name="widget_description">Uygulamayı açmadan tek tıkla kapıyı açın.</string>
+    <!-- Paylaş ile dekont gönderme (ShareReceiverActivity). -->
+    <string name="share_receipt_label">Dekont bildir</string>
+    <string name="share_receipt_rejected">Bu dosya dekont olarak kabul edilemedi. PDF, JPEG ya da PNG olmalı ve 10 MB\'ı aşmamalı.</string>
     <!-- Telefon bildirimi kanalları (Ayarlar > Bildirimler'de kullanıcı bu adları görür). -->
     <string name="push_channel_announcements">Duyurular</string>
     <string name="push_channel_announcements_description">Site yönetiminin yayınladığı duyurular.</string>

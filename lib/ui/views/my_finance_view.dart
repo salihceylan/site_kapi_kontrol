@@ -15,6 +15,7 @@ import 'package:site_kapi_kontrol/ui/widgets/finance_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/my_finance_4b_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/pay_sheet.dart';
+import 'package:site_kapi_kontrol/ui/widgets/payment_notice_status.dart';
 
 /// Sakin "Borcum" ekranı (Platform Faz 4a, `finance` modülü): kendi dairelerinin toplam borcu / alacağı,
 /// vadesi geçen tutar, sıradaki vade ve son hareketler. YALNIZ GÖRÜNTÜLEME: hiçbir yazma eylemi yoktur,
@@ -434,6 +435,7 @@ class _MyFinanceCardState extends State<MyFinanceCard> {
           if (widget.authService != null) ...[
             const SizedBox(height: AppSpace.md),
             MyFinanceActions(authService: widget.authService!, item: item, now: widget.now),
+            PaymentNoticeStatusLine(authService: widget.authService!, apartmentId: item.apartmentId),
           ],
           // İP-1A: salt okunur kiracı hesabı (borç sorumlusu "malik ve kiracı" olan dairede malike); kendi hesabından AYRI.
           for (final account in item.readOnlyAccounts) ...[

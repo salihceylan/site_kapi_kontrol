@@ -16,6 +16,7 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
     private val CHANNEL = "tr.com.gudeteknoloji.siteyonetim/wifi_helper"
     private val PUSH_CHANNEL = "tr.com.gudeteknoloji.siteyonetim/push"
+    private val SHARE_CHANNEL = "tr.com.gudeteknoloji.siteyonetim/share_inbox"
     private var multicastLock: WifiManager.MulticastLock? = null
     private var wifiLock: WifiManager.WifiLock? = null
 
@@ -56,6 +57,18 @@ class MainActivity : FlutterActivity() {
         // Telefon bildirimi: Android API düzeyi (13 öncesinde bildirim izni sorulamaz, yalnız ayarlardan açılır).
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, PUSH_CHANNEL).setMethodCallHandler { call, result ->
             if (call.method == "sdkInt") result.success(Build.VERSION.SDK_INT) else result.notImplemented()
+        }
+
+        // Paylaş ile gelen dekont (Dalga 2 / 2B): bekleyen tek kaydı bir kez okur / siler (ShareReceiverActivity yazar).
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, SHARE_CHANNEL).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "take" -> result.success(ShareInbox.take(applicationContext))
+                "clear" -> {
+                    ShareInbox.clear(applicationContext)
+                    result.success(null)
+                }
+                else -> result.notImplemented()
+            }
         }
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->

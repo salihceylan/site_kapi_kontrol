@@ -117,6 +117,17 @@ abstract final class HelpContent {
 
   /// Menü dışı ekran içi etiketler (düğme, bölüm, sekme adları; kodda aynen geçer).
   static const Set<String> knownScreenLabels = <String>{
+    // Dekont bildirimi (2B)
+    'Dekont yükle',
+    'Dekont bildir',
+    'Paylaş',
+    'Gönder',
+    'İnceleniyor',
+    'Dekontlar',
+    'Onayla',
+    'İptal et',
+    'Elden giriş',
+    'Açık döneme yaz',
     'Devir bakiyesi',
     "Excel'den yükle",
     'Hesap',
@@ -325,6 +336,18 @@ abstract final class HelpContent {
 
   static const List<HelpTopic> _resident = <HelpTopic>[
     HelpTopic(
+      id: 'payment_notice_resident',
+      title: 'Ödememi nasıl bildiririm (dekont)?',
+      icon: Icons.receipt_long_rounded,
+      steps: <String>[
+        'Borcum kartında “Öde”ye dokunun, IBAN ve açıklama kodunu kopyalayıp bankanızdan ödemeyi yapın.',
+        '“Dekont yükle”ye dokunun; dekontun PDF’ini ya da fotoğrafını seçin, tutarı ve ödeme tarihini kontrol edip “Gönder”e dokunun. Android’de banka uygulamasından “Paylaş” menüsünde “Dekont bildir”i de seçebilirsiniz.',
+        'Yönetim dekontu kontrol edinceye kadar kartta tutarla birlikte “İnceleniyor” görünür. Onaylanınca borcunuzdan düşer ve makbuzunuz oluşur.',
+        'Kabul edilmezse nedenini kartın altında görürsünüz; düzeltip yeniden gönderebilirsiniz.',
+      ],
+      note: 'Dekont ad ve IBAN gibi kişisel veri içerebilir; yalnız site yönetimi görür. Fotoğraflardaki konum bilgisi silinir. Bu özellik sitede açık değilse “Dekont yükle” görünmez.',
+    ),
+    HelpTopic(
       id: 'neighbor_board',
       title: 'Komşu panosuna nasıl ilan veririm?',
       icon: Icons.forum_rounded,
@@ -424,6 +447,19 @@ abstract final class HelpContent {
   ];
 
   static const List<HelpTopic> _siteManager = <HelpTopic>[
+    HelpTopic(
+      id: 'payment_notice_manager',
+      title: 'Sakinlerin dekontlarını nasıl onaylarım?',
+      icon: Icons.receipt_long_rounded,
+      steps: <String>[
+        'Finans Ayarları > Ödeme bilgisi bölümünden dekont yüklemeyi açın (varsayılan kapalıdır).',
+        'Finans ekranındaki “Dekontlar” sekmesinde bekleyen dekontlar listelenir. Birine dokununca solda dekont, sağda sakinin bildirdikleri, daire bilgisi ve uyarılar görünür.',
+        '“Onayla”ya dokunun: tahsilat dekont tarihiyle deftere yazılır ve makbuz oluşur. Önemli uyarı varsa her birini gözden geçirdiğinizi işaretlemeden onay açılmaz.',
+        '“İptal et”te nedeni seçin; sakin nedeni görür. Yanlış daireye yapılmışsa iptal edip tahsilatı doğru daireye elle girin. Birden çok dekontu kutucuklarla seçip toplu onaylayabilirsiniz.',
+        'Elden aldığınız parayı “Elden giriş” ile kaydedin; o da aynı yoldan onaylanır.',
+      ],
+      note: 'Dekontun ayı kapatılmışsa “Açık döneme yaz” ile bugünün tarihine işleyebilirsiniz. Onaydan sonra geri almak için tahsilat kaydını iptal edin (ters kayıt).',
+    ),
     _panelAdmin,
     _navigationManager,
     HelpTopic(
