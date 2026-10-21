@@ -43,6 +43,7 @@ describe('platform katalog: sozlesme tablosu', () => {
       'contracts',
       'decision_book',
       'directory',
+      'budget',
       'plate_recognition',
       'hgs_access',
       'cctv_link',
@@ -64,6 +65,7 @@ describe('platform katalog: sozlesme tablosu', () => {
       contracts: [false, 'available'], // Firma ve Sozlesme Takibi: kullanilabilir (varsayilan KAPALI; super acar, yonetici modul talep eder)
       decision_book: [false, 'available'], // Karar Defteri: kullanilabilir (varsayilan KAPALI; super acar, yonetici modul talep eder)
       directory: [false, 'available'], // Rehber: kullanilabilir (varsayilan KAPALI; yonetim kadrosu ve faydali telefonlar)
+      budget: [false, 'available'], // Isletme Projesi (F7): kullanilabilir (varsayilan KAPALI)
       plate_recognition: [false, 'coming_soon'],
       hgs_access: [false, 'coming_soon'],
       cctv_link: [false, 'coming_soon'],
@@ -101,6 +103,7 @@ describe('platform katalog: sozlesme tablosu', () => {
     assert.deepEqual(
       MODULE_CATALOG.filter(isToggleable).map((m) => m.code),
       ['door_control', 'finance', 'documents', 'reservation', 'work_tracking', 'survey', 'visitor_log', 'card_access', 'contracts', 'decision_book', 'directory'],
+      ['door_control', 'finance', 'documents', 'reservation', 'work_tracking', 'survey', 'visitor_log', 'card_access', 'contracts', 'decision_book', 'budget'],
     );
     assert.equal(isToggleable(null), false);
   });

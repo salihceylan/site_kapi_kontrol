@@ -144,6 +144,9 @@ enum SirketMenuItem {
   /// Rehber (sakin ve kurul/görevli): yönetim kadrosu ve faydalı telefonlar. Rol listesinde YOKTUR; `directory` modülü
   /// AÇIK sitesi olan ve bağı bulunan kullanıcıya [YanMenu.additionalItems] ile eklenir (İletişim grubu).
   rehber,
+  /// İşletme Projesi (bütçe) yönetim ekranı. Rol listesinde YOKTUR; `budget` modülü AÇIK olan sitenin yöneticisine / süper
+  /// kullanıcıya (yazar) ve kurul üyesine (salt okunur) [YanMenu.additionalItems] ile eklenir ("Finans"ın altına).
+  isletmeProjesi,
 
   /// Kapılar: bugüne dek "Panel"in kendisi olan kapı paneli (durum, kapıyı aç; bireysel kullanıcıda kapılar, daireler,
   /// cihazlar). "Panel" artık modül vitrinidir; kapı paneli bu öğeyle bir dokunuş uzaktadır. Rol listesinde YOKTUR;
@@ -216,6 +219,7 @@ SirketMenuGroup menuGroupOf(SirketMenuItem item) => switch (item) {
       SirketMenuItem.ziyaretcilerim ||
       SirketMenuItem.sozlesmeler ||
       SirketMenuItem.kararDefteri ||
+      SirketMenuItem.isletmeProjesi ||
       SirketMenuItem.kararlar =>
         SirketMenuGroup.siteHizmetleri,
       SirketMenuItem.profilim ||
@@ -1168,6 +1172,9 @@ List<SirketMenuItem> _withExtras(
     // "Rehber": Anket / Duyurular öğesinin altına (İletişim grubu).
     if (extra == SirketMenuItem.rehber) {
       for (final above in <SirketMenuItem>[SirketMenuItem.anket, SirketMenuItem.anketler, SirketMenuItem.duyurular]) {
+    // "İşletme Projesi": "Finans" / "Duyurular" / "Kişiler" sırasıyla ilk bulunanın altına.
+    if (extra == SirketMenuItem.isletmeProjesi) {
+      for (final above in const <SirketMenuItem>[SirketMenuItem.finans, SirketMenuItem.duyurular, SirketMenuItem.kisiler]) {
         anchor = result.indexOf(above);
         if (anchor >= 0) break;
       }
@@ -1333,6 +1340,8 @@ String _titleForItem(SirketMenuItem item, [UserRole? role]) {
       return 'Kararlar';
     case SirketMenuItem.rehber:
       return 'Rehber';
+    case SirketMenuItem.isletmeProjesi:
+      return 'İşletme Projesi';
     case SirketMenuItem.kapilar:
       return 'Kapılar';
   }
@@ -1414,6 +1423,8 @@ IconData _iconForItem(SirketMenuItem item) {
       return Icons.library_books_rounded;
     case SirketMenuItem.rehber:
       return Icons.contact_phone_rounded;
+    case SirketMenuItem.isletmeProjesi:
+      return Icons.account_balance_wallet_rounded;
     case SirketMenuItem.kapilar:
       return Icons.meeting_room_rounded;
   }

@@ -58,6 +58,7 @@ class AuditLogEntry {
     'cctv_link': 'Kamera (CCTV) Bağlantısı',
     'decision_book': 'Karar Defteri',
     'contracts': 'Firma ve Sözleşme Takibi',
+    'budget': 'İşletme Projesi',
   };
 
   static const Map<String, String> _staffRoleNames = <String, String>{

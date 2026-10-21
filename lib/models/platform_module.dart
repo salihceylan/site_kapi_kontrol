@@ -26,6 +26,9 @@ abstract final class PlatformModuleCodes {
   static const String decisionBook = 'decision_book';
   /// Rehber (yönetim kadrosu ve faydalı telefonlar; sakin ekranı). Varsayılan KAPALI.
   static const String directory = 'directory';
+
+  /// İşletme Projesi (bütçe). Varsayılan KAPALI.
+  static const String budget = 'budget';
 }
 
 DateTime? _parseDate(Object? raw) {
