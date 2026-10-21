@@ -71,6 +71,7 @@ const Set<SirketMenuItem> _featureModuleItems = <SirketMenuItem>{
   SirketMenuItem.ziyaretciKayitlari,
   SirketMenuItem.ziyaretcilerim,
   SirketMenuItem.sozlesmeler,
+  SirketMenuItem.odemeKamera,
 };
 
 const Map<SirketMenuItem, ModuleArtKind> _artKinds = <SirketMenuItem, ModuleArtKind>{
@@ -91,6 +92,7 @@ const Map<SirketMenuItem, ModuleArtKind> _artKinds = <SirketMenuItem, ModuleArtK
   SirketMenuItem.sozlesmeler: ModuleArtKind.contracts,
   SirketMenuItem.kararDefteri: ModuleArtKind.decisions,
   SirketMenuItem.kararlar: ModuleArtKind.decisions,
+  SirketMenuItem.odemeKamera: ModuleArtKind.devices,
   SirketMenuItem.siteler: ModuleArtKind.sites,
   SirketMenuItem.siteBasvurulari: ModuleArtKind.sites,
   SirketMenuItem.siteOnayTalepleri: ModuleArtKind.sites,
@@ -133,6 +135,7 @@ const Map<SirketMenuItem, String> _descriptions = <SirketMenuItem, String>{
   SirketMenuItem.sozlesmeler: 'Firma ve sözleşme takibi',
   SirketMenuItem.kararDefteri: 'Kurul ve genel kurul kararları',
   SirketMenuItem.kararlar: 'Sitenizin kesinleşen kararları',
+  SirketMenuItem.odemeKamera: 'Kart ödemesi ve plaka kameraları',
   SirketMenuItem.siteler: 'Site, blok, daire ve kapılar',
   SirketMenuItem.siteBasvurulari: 'Site kurma başvuruları',
   SirketMenuItem.siteOnayTalepleri: 'Onay bekleyen siteler',

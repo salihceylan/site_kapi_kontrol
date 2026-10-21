@@ -40,6 +40,7 @@ import { reservationRouter } from './modules/reservation_routes.js';
 import { surveyRouter } from './modules/survey_routes.js';
 import { visitorLogRouter } from './modules/visitor_log_routes.js';
 import { cardAccessRouter } from './modules/card_access_routes.js';
+import { deviceIntegrationsRouter } from './modules/device_integrations_routes.js';
 import { contractsRouter } from './modules/contracts_routes.js';
 import { startContractReminders, stopContractReminders } from './modules/contracts_reminders.js';
 import { decisionBookRouter } from './modules/decision_book_routes.js';
@@ -130,6 +131,8 @@ app.use(surveyRouter);
 app.use(visitorLogRouter);
 // Kartli gecis (F10): /manager/sites/:siteCode/access-cards[...] + /app/access-cards (modul card_access, varsayilan KAPALI).
 app.use(cardAccessRouter);
+// Kart odemesi saglayici arayuzu (F6) + kamera/plaka baglastiricilari (T8): modul card_payments / plate_cameras, varsayilan KAPALI.
+app.use(deviceIntegrationsRouter);
 // Firma ve sozlesme takibi: /manager/sites/:siteCode/contract-vendors[/:id] + /manager/sites/:siteCode/contracts[/summary|/:id] (modul contracts, varsayilan KAPALI; sakin ucu yok).
 app.use(contractsRouter);
 // Karar defteri: /manager/sites/:siteCode/decisions[/:id[/finalize]] + /app/decisions[/:id] (modul decision_book, varsayilan KAPALI).

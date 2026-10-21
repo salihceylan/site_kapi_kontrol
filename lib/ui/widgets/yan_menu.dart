@@ -141,6 +141,10 @@ enum SirketMenuItem {
   /// `decision_book` modülü AÇIK sitesi olan sakine [YanMenu.additionalItems] ile eklenir (yönetim öğesinin altına).
   kararlar,
 
+  /// Ödeme ve Kamera yönetim ekranı. Rol listesinde YOKTUR; `card_payments` ya da `plate_cameras` modülü AÇIK olan sitenin
+  /// yöneticisine / kurul üyesine [YanMenu.additionalItems] ile eklenir. Sakin ve görevli için yoktur.
+  odemeKamera,
+
   /// Kapılar: bugüne dek "Panel"in kendisi olan kapı paneli (durum, kapıyı aç; bireysel kullanıcıda kapılar, daireler,
   /// cihazlar). "Panel" artık modül vitrinidir; kapı paneli bu öğeyle bir dokunuş uzaktadır. Rol listesinde YOKTUR;
   /// [YanMenu.additionalItems] ile eklenir ve her zaman "Panel"in hemen altına gelir. Geçiş Kontrol (`door_control`)
@@ -211,7 +215,8 @@ SirketMenuGroup menuGroupOf(SirketMenuItem item) => switch (item) {
       SirketMenuItem.ziyaretcilerim ||
       SirketMenuItem.sozlesmeler ||
       SirketMenuItem.kararDefteri ||
-      SirketMenuItem.kararlar =>
+      SirketMenuItem.kararlar ||
+      SirketMenuItem.odemeKamera =>
         SirketMenuGroup.siteHizmetleri,
       SirketMenuItem.profilim ||
       SirketMenuItem.ellerSerbest ||
@@ -1160,6 +1165,24 @@ List<SirketMenuItem> _withExtras(
         if (anchor >= 0) break;
       }
     }
+    // "Ödeme ve Kamera": "Karar Defteri" / "Sözleşmeler" / ... / "Kişiler" sırasıyla ilk bulunanın altına.
+    if (extra == SirketMenuItem.odemeKamera) {
+      for (final above in const <SirketMenuItem>[
+        SirketMenuItem.kararDefteri,
+        SirketMenuItem.sozlesmeler,
+        SirketMenuItem.ziyaretciKayitlari,
+        SirketMenuItem.anketler,
+        SirketMenuItem.rezervasyonlar,
+        SirketMenuItem.talepler,
+        SirketMenuItem.belgeler,
+        SirketMenuItem.finans,
+        SirketMenuItem.duyurular,
+        SirketMenuItem.kisiler,
+      ]) {
+        anchor = result.indexOf(above);
+        if (anchor >= 0) break;
+      }
+    }
     // "Kapılar" her zaman "Panel"in hemen altındadır (kapı paneli bir dokunuş uzakta). Numaralandırmada en sonda
     // olduğundan öteki ek öğelerden SONRA eklenir ve "Panel"in altına, onların önüne girer.
     if (extra == SirketMenuItem.kapilar) anchor = result.indexOf(SirketMenuItem.dashboard);
@@ -1319,6 +1342,8 @@ String _titleForItem(SirketMenuItem item, [UserRole? role]) {
       return 'Karar Defteri';
     case SirketMenuItem.kararlar:
       return 'Kararlar';
+    case SirketMenuItem.odemeKamera:
+      return 'Ödeme ve Kamera';
     case SirketMenuItem.kapilar:
       return 'Kapılar';
   }
@@ -1398,6 +1423,8 @@ IconData _iconForItem(SirketMenuItem item) {
       return Icons.gavel_rounded;
     case SirketMenuItem.kararlar:
       return Icons.library_books_rounded;
+    case SirketMenuItem.odemeKamera:
+      return Icons.videocam_rounded;
     case SirketMenuItem.kapilar:
       return Icons.meeting_room_rounded;
   }

@@ -120,6 +120,22 @@ export const MODULE_CATALOG = Object.freeze([
     defaultEnabled: false,
   }),
   defineModule({
+    code: 'card_payments',
+    name: 'Kart Ödemesi',
+    description: 'Kartla aidat ödemesi için sağlayıcı arayüzü (iyzico, PayTR). Yakında.',
+    core: false,
+    status: MODULE_STATUS_AVAILABLE,
+    defaultEnabled: false,
+  }),
+  defineModule({
+    code: 'plate_cameras',
+    name: 'Kamera ve Plaka',
+    description: 'Plaka tanıyan kameralardan gelen olayların araç listesiyle karşılaştırılıp kaydı. Kapı açmaz.',
+    core: false,
+    status: MODULE_STATUS_AVAILABLE,
+    defaultEnabled: false,
+  }),
+  defineModule({
     code: 'contracts',
     name: 'Firma ve Sözleşme Takibi',
     description: 'Firmalar, sözleşme bitiş tarihleri ve hatırlatmalar.',

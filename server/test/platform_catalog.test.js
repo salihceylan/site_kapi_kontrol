@@ -26,7 +26,7 @@ import { managementTerms } from '../src/modules/management_type_terms.js';
 const def = (code) => getModuleDefinition(code);
 
 describe('platform katalog: sozlesme tablosu', () => {
-  it('17 modul, sozlesmedeki sirayla ve alanlarla', () => {
+  it('19 modul, sozlesmedeki sirayla ve alanlarla', () => {
     assert.deepEqual(MODULE_CODES, [
       'door_control',
       'people',
@@ -40,6 +40,8 @@ describe('platform katalog: sozlesme tablosu', () => {
       'survey',
       'visitor_log',
       'card_access',
+      'card_payments',
+      'plate_cameras',
       'contracts',
       'decision_book',
       'plate_recognition',
@@ -61,6 +63,8 @@ describe('platform katalog: sozlesme tablosu', () => {
       visitor_log: [false, 'available'], // Ziyaretci ve Kargo (F11.03): kullanilabilir (varsayilan KAPALI; super acar, yonetici modul talep eder)
       card_access: [false, 'available'], // F10: Kartli Gecis kullanilabilir (varsayilan KAPALI; super acar, yonetici modul talep eder)
       contracts: [false, 'available'], // Firma ve Sozlesme Takibi: kullanilabilir (varsayilan KAPALI; super acar, yonetici modul talep eder)
+      card_payments: [false, 'available'], // F6: Kart Odemesi arayuzu (varsayilan KAPALI; saglayicilar "Yakinda")
+      plate_cameras: [false, 'available'], // T8: Kamera ve Plaka (varsayilan KAPALI; kapi acmaz)
       decision_book: [false, 'available'], // Karar Defteri: kullanilabilir (varsayilan KAPALI; super acar, yonetici modul talep eder)
       plate_recognition: [false, 'coming_soon'],
       hgs_access: [false, 'coming_soon'],
@@ -81,7 +85,7 @@ describe('platform katalog: sozlesme tablosu', () => {
 
   it('publicCatalog yalnizca { code, name, description, core, status } alanlarini dondurur', () => {
     const catalog = publicCatalog();
-    assert.equal(catalog.length, 17);
+    assert.equal(catalog.length, 19);
     for (const entry of catalog) {
       assert.deepEqual(Object.keys(entry), ['code', 'name', 'description', 'core', 'status']);
     }
@@ -98,7 +102,7 @@ describe('platform katalog: sozlesme tablosu', () => {
   it('toggleable = !core && status === available (door_control, finance, documents, rezervasyon, is takibi, anket, ziyaretci, kartli gecis, sozlesmeler, karar defteri)', () => {
     assert.deepEqual(
       MODULE_CATALOG.filter(isToggleable).map((m) => m.code),
-      ['door_control', 'finance', 'documents', 'reservation', 'work_tracking', 'survey', 'visitor_log', 'card_access', 'contracts', 'decision_book'],
+      ['door_control', 'finance', 'documents', 'reservation', 'work_tracking', 'survey', 'visitor_log', 'card_access', 'card_payments', 'plate_cameras', 'contracts', 'decision_book'],
     );
     assert.equal(isToggleable(null), false);
   });
@@ -198,7 +202,7 @@ describe('platform katalog: enabled hesabi', () => {
     const list = computeSiteModuleList([
       { module_code: 'door_control', enabled: false, updated_at: when, updated_by_name: 'Ali Veli' },
     ]);
-    assert.equal(list.length, 17);
+    assert.equal(list.length, 19);
     const door = list.find((m) => m.code === 'door_control');
     assert.deepEqual(door, {
       code: 'door_control',

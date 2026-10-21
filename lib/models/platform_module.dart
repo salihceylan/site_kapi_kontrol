@@ -24,6 +24,10 @@ abstract final class PlatformModuleCodes {
   static const String contracts = 'contracts';
   /// Karar Defteri (yönetim / genel / denetim kurulu kararları). Varsayılan KAPALI.
   static const String decisionBook = 'decision_book';
+  /// Kart Ödemesi arayüzü (sağlayıcılar "Yakında…"). Varsayılan KAPALI.
+  static const String cardPayments = 'card_payments';
+  /// Kamera ve Plaka (plaka olayı kaydı; kapı açmaz). Varsayılan KAPALI.
+  static const String plateCameras = 'plate_cameras';
 }
 
 DateTime? _parseDate(Object? raw) {
