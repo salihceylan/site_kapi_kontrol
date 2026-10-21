@@ -283,7 +283,8 @@ function pairErrors(changes, rowsByKey, validFrom) {
       const a = resolveRuleFromRows(change.rule, own, { onDate: date }).value;
       const b = resolveRuleFromRows(partner, other, { onDate: date }).value;
       if (a + b !== pair.sum) {
-        fields[change.key] = `${change.rule.label} ile ${partner.label.toLowerCase()} toplamı ${pair.sum} olmalıdır (${trDate(date)} itibarıyla ${a} + ${b}). İkisini birlikte değiştirin.`;
+        // Türkçe küçük harf (I -> ı); toLowerCase() "isınma" yazardı.
+        fields[change.key] = `${change.rule.label} ile ${partner.label.toLocaleLowerCase('tr-TR')} toplamı ${pair.sum} olmalıdır (${trDate(date)} itibarıyla ${a} + ${b}). İkisini birlikte değiştirin.`;
         codes[change.key] = 'RULE_PAIR_MISMATCH';
         break;
       }
