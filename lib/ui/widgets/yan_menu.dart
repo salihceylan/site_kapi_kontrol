@@ -151,6 +151,9 @@ enum SirketMenuItem {
   /// İşletme Projesi (bütçe) yönetim ekranı. Rol listesinde YOKTUR; `budget` modülü AÇIK olan sitenin yöneticisine / süper
   /// kullanıcıya (yazar) ve kurul üyesine (salt okunur) [YanMenu.additionalItems] ile eklenir ("Finans"ın altına).
   isletmeProjesi,
+  /// Komşu Panosu (`neighbor_board`): sakin ilan yazar / şikayet eder, yönetici onaylar / kaldırır. Rol listesinde YOKTUR;
+  /// modül AÇIK sitesi olan yönetici ya da sakine [YanMenu.additionalItems] ile eklenir.
+  komsuPanosu,
 
   /// Kapılar: bugüne dek "Panel"in kendisi olan kapı paneli (durum, kapıyı aç; bireysel kullanıcıda kapılar, daireler,
   /// cihazlar). "Panel" artık modül vitrinidir; kapı paneli bu öğeyle bir dokunuş uzaktadır. Rol listesinde YOKTUR;
@@ -216,6 +219,8 @@ SirketMenuGroup menuGroupOf(SirketMenuItem item) => switch (item) {
       SirketMenuItem.anketler ||
       SirketMenuItem.rehber ||
       SirketMenuItem.anket =>
+      SirketMenuItem.anket ||
+      SirketMenuItem.komsuPanosu =>
         SirketMenuGroup.iletisim,
       SirketMenuItem.kapilar ||
       SirketMenuItem.belgeler ||
@@ -1350,6 +1355,8 @@ String _titleForItem(SirketMenuItem item, [UserRole? role]) {
       return 'Rehber';
     case SirketMenuItem.isletmeProjesi:
       return 'İşletme Projesi';
+    case SirketMenuItem.komsuPanosu:
+      return 'Komşu Panosu';
     case SirketMenuItem.kapilar:
       return 'Kapılar';
   }
@@ -1435,6 +1442,8 @@ IconData _iconForItem(SirketMenuItem item) {
       return Icons.contact_phone_rounded;
     case SirketMenuItem.isletmeProjesi:
       return Icons.account_balance_wallet_rounded;
+    case SirketMenuItem.komsuPanosu:
+      return Icons.forum_rounded;
     case SirketMenuItem.kapilar:
       return Icons.meeting_room_rounded;
   }

@@ -31,6 +31,8 @@ abstract final class PlatformModuleCodes {
   static const String budget = 'budget';
   /// Dosya Deposu (Google Drive, D1). Varsayılan KAPALI.
   static const String driveStorage = 'drive_storage';
+  /// Komşu Panosu (sakin ilanları, yönetici onayı). Varsayılan KAPALI.
+  static const String neighborBoard = 'neighbor_board';
 }
 
 DateTime? _parseDate(Object? raw) {

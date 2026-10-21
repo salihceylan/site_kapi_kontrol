@@ -51,6 +51,7 @@ import { teamRouter } from './modules/team_routes.js';
 import { personInviteRouter } from './modules/person_invite_routes.js';
 import { budgetRouter } from './modules/budget_routes.js';
 import { driveRouter } from './modules/drive_routes.js';
+import { neighborBoardRouter } from './modules/neighbor_board_routes.js';
 import { startDocumentsMaintenance, stopDocumentsMaintenance } from './modules/document_maintenance.js';
 import { pushRouter } from './modules/push_routes.js';
 import { notifyChannelsRouter } from './modules/notify_channels_routes.js';
@@ -155,6 +156,8 @@ app.use(personInviteRouter);
 app.use(budgetRouter);
 // Site Drive deposu (D1): /manager/sites/:siteCode/drive[...] + /drive/oauth/callback (modul drive_storage, varsayilan KAPALI; yapilandirma yoksa Yakinda).
 app.use(driveRouter);
+// Komsu panosu: /app/neighbor-board[/:id/report|withdraw] + /manager/sites/:siteCode/neighbor-board[/:id/approve|reject|remove] (modul neighbor_board, varsayilan KAPALI).
+app.use(neighborBoardRouter);
 // Telefon bildirimi (Faz 3b-B): /app/push/devices[/:installId], /app/push/test, /admin/push/status (tercihler /app/notification-preferences'ta).
 app.use(pushRouter);
 // SMS ile giris + tarayici bildirimi (063): /auth/sms/*, /app/web-push/* (SMS / VAPID anahtari yoksa kapali).

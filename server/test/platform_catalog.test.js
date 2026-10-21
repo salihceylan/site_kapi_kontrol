@@ -45,6 +45,7 @@ describe('platform katalog: sozlesme tablosu', () => {
       'directory',
       'budget',
       'drive_storage',
+      'neighbor_board',
       'plate_recognition',
       'hgs_access',
       'cctv_link',
@@ -68,6 +69,7 @@ describe('platform katalog: sozlesme tablosu', () => {
       directory: [false, 'available'], // Rehber: kullanilabilir (varsayilan KAPALI; yonetim kadrosu ve faydali telefonlar)
       budget: [false, 'available'], // Isletme Projesi (F7): kullanilabilir (varsayilan KAPALI)
       drive_storage: [false, 'available'], // Dosya Deposu (Google Drive, D1): varsayilan KAPALI
+      neighbor_board: [false, 'available'], // Komsu Panosu: kullanilabilir (varsayilan KAPALI)
       plate_recognition: [false, 'coming_soon'],
       hgs_access: [false, 'coming_soon'],
       cctv_link: [false, 'coming_soon'],
@@ -108,6 +110,7 @@ describe('platform katalog: sozlesme tablosu', () => {
       ['door_control', 'finance', 'documents', 'reservation', 'work_tracking', 'survey', 'visitor_log', 'card_access', 'contracts', 'decision_book', 'budget'],
       ['door_control', 'finance', 'documents', 'reservation', 'work_tracking', 'survey', 'visitor_log', 'card_access', 'contracts', 'decision_book', 'drive_storage'],
       ['door_control', 'finance', 'documents', 'reservation', 'work_tracking', 'metering', 'survey', 'visitor_log', 'card_access', 'contracts', 'decision_book'],
+      ['door_control', 'finance', 'documents', 'reservation', 'work_tracking', 'survey', 'visitor_log', 'card_access', 'contracts', 'decision_book', 'neighbor_board'],
     );
     assert.equal(isToggleable(null), false);
   });
