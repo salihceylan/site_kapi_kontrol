@@ -99,3 +99,6 @@ firebase-sunucu*.json
 # Sozlesme B6 desenleri (varsayilan yol /etc/kapi/fcm-service-account.json)
 *service-account*.json
 fcm-*.json
+
+# Demo veri tohumu: kimlik bilgileri ve cikti (SIFRELER commit edilmez)
+tools/demo_seed/out/
