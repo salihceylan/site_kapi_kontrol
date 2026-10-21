@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:site_kapi_kontrol/ui/helpers/list_export.dart';
 import 'package:site_kapi_kontrol/models/work_tracking_models.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
@@ -419,11 +420,11 @@ class WorkManagerViewState extends State<WorkManagerView> {
             const SizedBox(height: AppSpace.md),
             SectionHeader(
               title: 'Talepler',
-              trailing: IconButton(
+              trailing: Row(mainAxisSize: MainAxisSize.min, children: <Widget>[ListExportButton(enabled: _loader.items.isNotEmpty, source: localExportSource(label: 'İş talepleri', filenameBase: 'is_talepleri', headers: <String>['No', 'Başlık', 'Kategori', 'Durum', 'Öncelik', 'Konum', 'Talep eden', 'Atanan', 'Açılış', 'Kapanış'], rows: () => <List<Object?>>[for (final w in _loader.items) [w.id, w.title, w.category.label, w.status.label, w.priority.label, w.apartment?.label ?? w.block?.label, w.requester.name, w.assignedTo?.name, exportDate(w.createdAt), exportDate(w.closedAt)]])), IconButton(
                 onPressed: _loader.loading ? null : reload,
                 tooltip: 'Yenile',
                 icon: const Icon(Icons.refresh_rounded),
-              ),
+              )]),
             ),
             const SizedBox(height: AppSpace.md),
             CursorListBody<WorkManagedItem>(

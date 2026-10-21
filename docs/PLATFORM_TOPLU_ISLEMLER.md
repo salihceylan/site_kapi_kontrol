@@ -288,3 +288,10 @@ KVKK: dosya sunucuya girmez; gövde loglanmaz, çalıştırma kaydı/audit kişi
 - Geri alma ve liste uçları: `docs/PLATFORM_FINANS.md` «Devir bakiyesi». Şablonlar tür grubuna göre ayrı dosyadır (klasik üçlü / hepsi bir arada / devir),
   mevcut dairelerle ön doludur.
 - Yakında: `opening_minor` rapor alanı, «Bu ay yazılan» devir ayrımı, alacaklı (eksi) devir, `HOLDER_AFTER_DUE` uyarısı.
+
+## Liste arama ve Excel'e aktarma, sade finans dili (paket 3E)
+
+- Yeni yardımcı `lib/ui/helpers/list_export.dart`: `localExportSource` + `ListExportButton`. Dosyayı istemci üretir (mevcut `ExportSheet`, CSV/XLSX üreticisi ve formül kaçışı); sunucu ucu, tablo ya da migration YOK.
+- Düğme liste başlığında: duyurular, iş talepleri, ziyaretçi/kargo, konsiyerj, rezervasyonlar, anket sonuçları, firmalar, sözleşmeler, kararlar, belgeler. Yalnız ekranda yüklü (süzgeç/aramaya uyan) kayıtlar yazılır.
+- Anket listesine yerel başlık araması eklendi. Konsiyerj ve rezervasyon listeleri sunucu imleçli olduğundan aramaları "Yakında".
+- Finans dili: tahakkuk -> "Yazılan borç", mutabakat -> "Banka / kasa kontrolü". Rapor adları: Aylık özet, Yıllık hesap (kurul özeti), Daire ekstresi, İcra dökümü, Gecikmiş borçlar.

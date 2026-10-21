@@ -278,7 +278,7 @@ void main() {
       await _pump(t, auth);
       await f4Tap(t, 'finance_report_export');
       final source = _launched.single.single;
-      expect(source.label, 'Yaşlandırma');
+      expect(source.label, 'Gecikmiş borçlar');
       expect(source.filterSummary, contains('16.10.2026'));
       final envelope = await source.fetch(ExportFormat.csv);
       expect(envelope.kind, 'finance_aging');
@@ -374,7 +374,7 @@ void main() {
       final auth = FinanceFakeAuth.seeded();
       await _pump(t, auth, report: 'cash_position');
       expect(auth.f4.reportCalls.last['as_of'], '2026-10-16');
-      expect(find.textContaining('Son mutabakat 01.10.2026: fark -5,00 ₺'), findsOneWidget);
+      expect(find.textContaining('Son banka / kasa kontrolü 01.10.2026: fark -5,00 ₺'), findsOneWidget);
       await f4Tap(t, 'finance_report_export');
       await _launched.single.single.fetch(ExportFormat.csv);
       expect(auth.f4.exportCalls.single['kind'], 'finance_cash_position');
@@ -521,7 +521,7 @@ void main() {
       final handle = t.ensureSemantics();
       final auth = FinanceFakeAuth.seeded();
       await _pump(t, auth, report: 'board_summary');
-      final labels = find.bySemanticsLabel(RegExp('^Son mutabakat farkı'));
+      final labels = find.bySemanticsLabel(RegExp('^Son banka / kasa kontrolü farkı'));
       expect(labels, findsOneWidget);
       final label = t.getSemantics(labels).label;
       expect(label, contains('lira'));

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:site_kapi_kontrol/ui/helpers/list_export.dart';
 import 'package:site_kapi_kontrol/models/reservation_models.dart';
 import 'package:site_kapi_kontrol/models/vehicle_record.dart' show crmDateParam;
 import 'package:site_kapi_kontrol/services/api_exception.dart';
@@ -624,11 +625,11 @@ class ReservationCalendarTabState extends State<ReservationCalendarTab>
         const SizedBox(height: AppSpace.md),
         SectionHeader(
           title: 'Rezervasyonlar',
-          trailing: IconButton(
+          trailing: Row(mainAxisSize: MainAxisSize.min, children: <Widget>[ListExportButton(enabled: _loader.items.isNotEmpty, source: localExportSource(label: 'Rezervasyonlar', filenameBase: 'rezervasyonlar', headers: <String>['Alan', 'Tarih', 'Başlangıç', 'Bitiş', 'Durum', 'Daire', 'Talep eden', 'Not'], rows: () => <List<Object?>>[for (final r in _loader.items) [r.areaName, r.date, r.start, r.end, r.status.label, r.apartment?.label, r.requester?.name, r.note]])), IconButton(
             onPressed: _loader.loading ? null : reload,
             tooltip: 'Yenile',
             icon: const Icon(Icons.refresh_rounded),
-          ),
+          )]),
         ),
         const SizedBox(height: AppSpace.md),
         CursorListBody<ReservationRecord>(

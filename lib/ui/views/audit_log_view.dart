@@ -75,7 +75,7 @@ class AuditLogView extends StatefulWidget {
     ('finance.account.adjusted', 'Hesap düzeltmesi yapıldı'),
     ('finance.transfer.created', 'Hesaplar arası aktarım yapıldı'),
     ('finance.transfer.voided', 'Hesaplar arası aktarım iptal edildi'),
-    ('finance.reconciliation.recorded', 'Hesap mutabakatı kaydedildi'),
+    ('finance.reconciliation.recorded', 'Banka / kasa kontrolü kaydedildi'),
     ('finance.payments.assigned', 'Tahsilatlar hesaba eşlendi'),
     ('finance.expense.created', 'Gider eklendi'),
     ('finance.expense.corrected', 'Gider düzeltildi'),

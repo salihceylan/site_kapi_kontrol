@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:site_kapi_kontrol/ui/helpers/list_export.dart';
 import 'package:site_kapi_kontrol/models/reservation_models.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/services/reservation_api.dart';
@@ -213,11 +214,11 @@ class ConciergeManagerTabState extends State<ConciergeManagerTab>
         const SizedBox(height: AppSpace.md),
         SectionHeader(
           title: 'Konsiyerj talepleri',
-          trailing: IconButton(
+          trailing: Row(mainAxisSize: MainAxisSize.min, children: <Widget>[ListExportButton(enabled: _loader.items.isNotEmpty, source: localExportSource(label: 'Konsiyerj talepleri', filenameBase: 'konsiyerj_talepleri', headers: <String>['Kategori', 'Durum', 'Daire', 'Talep eden', 'İstenen zaman', 'Oluşturma', 'Not'], rows: () => <List<Object?>>[for (final c in _loader.items) [c.category.label, c.status.label, c.apartment?.label, c.requester?.name, exportDateTime(c.requestedFor), exportDateTime(c.createdAt), c.note]])), IconButton(
             onPressed: _loader.loading ? null : reload,
             tooltip: 'Yenile',
             icon: const Icon(Icons.refresh_rounded),
-          ),
+          )]),
         ),
         const SizedBox(height: AppSpace.md),
         CursorListBody<ConciergeRecord>(

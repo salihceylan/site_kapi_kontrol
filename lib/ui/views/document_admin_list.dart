@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:site_kapi_kontrol/ui/helpers/list_export.dart';
 import 'package:site_kapi_kontrol/models/document_models.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/services/document_api.dart';
@@ -304,11 +305,11 @@ class DocumentAdminListState extends State<DocumentAdminList> {
         SectionHeader(
           title: deletedView ? 'Silinen belgeler' : 'Belgeler',
           count: _loader.loadedOnce ? _loader.total : null,
-          trailing: IconButton(
+          trailing: Row(mainAxisSize: MainAxisSize.min, children: <Widget>[ListExportButton(enabled: _loader.items.isNotEmpty, source: localExportSource(label: 'Belgeler', filenameBase: 'belgeler', headers: <String>['Belge', 'Kategori', 'Durum', 'Sürüm', 'İndirme', 'Yükleyen', 'Güncelleme'], rows: () => <List<Object?>>[for (final x in _loader.items) [x.title, x.category.label, x.status.label, x.versionCount, x.downloadCount, x.uploadedByName, exportDate(x.updatedAt ?? x.createdAt)]])), IconButton(
             onPressed: _loader.loading ? null : reload,
             tooltip: 'Yenile',
             icon: const Icon(Icons.refresh_rounded),
-          ),
+          )]),
         ),
         if (deletedView) ...[
           const SizedBox(height: AppSpace.sm),
