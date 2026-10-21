@@ -1856,12 +1856,13 @@ class AuthService extends ChangeNotifier {
     );
   }
 
-  /// Daire ekstresi; sonraki sayfa için `nextBeforeId` [beforeId] olarak verilir.
+  /// Daire ekstresi; sonraki sayfa için `nextBeforeId` [beforeId] olarak verilir. [accountParty] (İP-1A) yalnız o hesabı ister.
   Future<AccountView> getFinanceAccount(
     int siteCode,
     int apartmentId, {
     int limit = 50,
     int? beforeId,
+    AccountParty? accountParty,
   }) {
     return _runAuthorized(
       (token) => api.getFinanceAccount(
@@ -1870,11 +1871,13 @@ class AuthService extends ChangeNotifier {
         apartmentId: apartmentId,
         limit: limit,
         beforeId: beforeId,
+        accountParty: accountParty,
       ),
     );
   }
 
-  /// Tahsilat kaydı: [amountMinor] POZİTİF kuruş; aynı [idempotencyKey] = aynı kayıt.
+  /// Tahsilat kaydı: [amountMinor] POZİTİF kuruş; aynı [idempotencyKey] = aynı kayıt. [accountParty] (İP-1A): daire hesabı;
+  /// null ise sunucu seçer (vadesi en eski açık borcu olan hesap).
   Future<LedgerWriteResult> recordFeePayment(
     int siteCode, {
     required int apartmentId,
@@ -1883,6 +1886,7 @@ class AuthService extends ChangeNotifier {
     required PaymentMethod method,
     String? description,
     required String idempotencyKey,
+    AccountParty? accountParty,
   }) {
     return _runAuthorized(
       (token) => api.recordFeePayment(
@@ -1894,6 +1898,7 @@ class AuthService extends ChangeNotifier {
         method: method,
         description: description,
         idempotencyKey: idempotencyKey,
+        accountParty: accountParty,
       ),
     );
   }
@@ -1923,6 +1928,7 @@ class AuthService extends ChangeNotifier {
     required PaymentMethod method,
     String? description,
     required String idempotencyKey,
+    AccountParty? accountParty,
   }) {
     return _runAuthorized(
       (token) => api.correctFinancePayment(
@@ -1934,6 +1940,7 @@ class AuthService extends ChangeNotifier {
         method: method,
         description: description,
         idempotencyKey: idempotencyKey,
+        accountParty: accountParty,
       ),
     );
   }
