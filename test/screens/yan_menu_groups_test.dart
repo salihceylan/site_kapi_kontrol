@@ -287,6 +287,48 @@ void main() {
       expect(find.descendant(of: _siteRow, matching: find.text('Güneş Sitesi +1 site')), findsOneWidget);
     });
 
+    testWidgets('site listesi (alt sayfa) 320x640 x2,0 ve 640x320 x2,0, açık ve koyu: taşma yok, seçenekler >= 48 dp', (t) async {
+      for (final (w, h) in const <(double, double)>[(320, 640), (640, 320)]) {
+        for (final dark in const <bool>[false, true]) {
+          await _pump(
+            t,
+            width: w,
+            height: h,
+            scale: 2.0,
+            dark: dark,
+            drawer: _menu(
+              site: YanMenuSiteContext(
+                sites: <YanMenuSite>[
+                  const YanMenuSite(code: 1, name: 'Çok Uzun Adlı Güneşli Vadi Konutları ve Çarşı Sitesi'),
+                  for (var i = 2; i <= 6; i++) YanMenuSite(code: i, name: 'Site $i'),
+                ],
+                selectedCode: 1,
+                onChanged: (_) {},
+              ),
+            ),
+          );
+          await t.ensureVisible(_siteRow);
+          await t.pump();
+          await t.tap(_siteRow);
+          await t.pump();
+          await t.pump(const Duration(milliseconds: 400));
+          expect(t.takeException(), isNull, reason: '${w.toInt()}x${h.toInt()} ${dark ? 'koyu' : 'açık'}');
+          final options = find.byWidgetPredicate(
+            (wdg) => wdg is ListTile && wdg.key is ValueKey<String> && (wdg.key! as ValueKey<String>).value.startsWith('yan_menu_site_secenek_'),
+          );
+          expect(options, findsNWidgets(7), reason: '"Tüm siteler" + 6 site');
+          for (final e in options.evaluate()) {
+            expect((e.renderObject! as RenderBox).size.height, greaterThanOrEqualTo(48));
+          }
+          final last = find.byKey(const ValueKey<String>('yan_menu_site_secenek_6'));
+          await t.ensureVisible(last);
+          await t.pump();
+          expect(t.takeException(), isNull, reason: 'liste kaydırılır');
+          expect(t.widget<ListTile>(find.byKey(const ValueKey<String>('yan_menu_site_secenek_1'))).selected, isTrue);
+        }
+      }
+    });
+
     testWidgets('site bağlamı verilmezse satır yok', (t) async {
       await _pump(t, drawer: _menu());
       expect(_siteRow, findsNothing);
