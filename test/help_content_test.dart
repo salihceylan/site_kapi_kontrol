@@ -203,6 +203,22 @@ void main() {
         expect(joined(topic(HelpAudience.siteManager, 'modules')), contains('“Ayarlar” düğmesinden “Modüller”'));
       });
 
+      test('bugün öğesi olmayan başlıklar ("Tahsilat", "Giderler", "Raporlar") ekranları varmış gibi anlatılmaz', () {
+        // Hiçbir menü öğesinin eşlenmediği çekmece başlığı bugün hiç çizilmez: yardım onu "ekranların toplandığı başlık"
+        // diye sayarsa yönetici menüde arar, bulamaz. Anılıyorsa boş olduğu da yazmalıdır.
+        final empty = <SirketMenuGroup>[
+          for (final group in SirketMenuGroup.drawerGroups)
+            if (!SirketMenuItem.values.any((item) => menuGroupOf(item) == group)) group,
+        ];
+        for (final audience in HelpAudience.values) {
+          final text = joined(topic(audience, 'navigation'));
+          for (final group in empty) {
+            if (!text.contains('“${group.title}”')) continue;
+            expect(text, contains('henüz ekran yok'), reason: '$audience: “${group.title}” başlığı bugün görünmez');
+          }
+        }
+      });
+
       test('ayar ekranları (Profilim, Modüller) için eski "Menüden ... açın" adımı kalmadı', () {
         for (final audience in HelpAudience.values) {
           for (final t in HelpContent.howToFor(audience)) {

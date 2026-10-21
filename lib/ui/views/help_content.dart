@@ -256,7 +256,7 @@ abstract final class HelpContent {
     title: 'Menü, site seçici ve ayarlar nerede?',
     icon: Icons.menu_rounded,
     steps: <String>[
-      'Sol üstteki menü düğmesi menüyü açar: ekranlar “Ana sayfa”, “Daireler”, “Borçlar”, “Tahsilat”, “Giderler”, “İletişim”, “Raporlar” ve “Site hizmetleri” başlıkları altında toplanır; yetkinize açık ekranı olmayan başlık görünmez.',
+      'Sol üstteki menü düğmesi menüyü açar: ekranlar “Ana sayfa”, “Daireler”, “Borçlar”, “İletişim” ve “Site hizmetleri” gibi başlıklar altında toplanır; yetkinize açık ekranı olmayan başlık görünmez (“Tahsilat”, “Giderler” ve “Raporlar” başlıklarında henüz ekran yoktur).',
       'Birden çok siteniz varsa menünün en üstündeki site satırına dokunup bir site seçin: menü ve Panel o sitenin açık modülleriyle sınırlanır. “Tüm siteler” seçimi hepsini geri getirir.',
       'Sağ üstteki “Ayarlar” düğmesi (dişli) “Profilim”, “Modüller”, “Kayıtlı Cihazlar” ve “Bluetooth ile Wi-Fi Kur” gibi ayar ekranlarını açar.',
     ],
