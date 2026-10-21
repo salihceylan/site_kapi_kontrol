@@ -186,7 +186,7 @@ const DEFINITIONS = [
   rule('retention.enforce', {
     label: 'Otomatik silme',
     description:
-      'Açıkken bu sayfadaki süresi dolan kayıtlar kendiliğinden silinir. Bu silme işi henüz yoktur; kural avukat onayına kadar kapalı ve kilitlidir. Kapı geçiş kayıtlarının bugünkü 30 günlük bakım silmesi bundan ayrıdır.',
+      'Açıkken saklama süresi (bu sayfadaki değer) dolan kayıtlar kendiliğinden silinir. Bu silme işi henüz yoktur; kural avukat onayına kadar kapalı ve kilitlidir. Kapı geçiş kayıtlarının bugünkü 30 günlük bakım silmesi bundan ayrıdır.',
     type: 'bool',
     defaultValue: false,
     editable: false,
