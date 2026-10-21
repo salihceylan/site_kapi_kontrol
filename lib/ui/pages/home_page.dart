@@ -1611,8 +1611,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         moreCount: _announcements.cardMoreCount,
         onOpen: () => _showAnnouncementReadDialog(item),
         onOpenAll: () => _openAnnouncement(null),
-        // Vitrin (sakin ferahlık kuralı): gölgesiz düz yüzey, nabız yok.
-        flat: true,
       ),
     );
   }
@@ -6055,7 +6053,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       onReapply: applications == null ? null : _reapplySiteApplication,
       onRefreshAccount: () => _refreshAccountAfterApproval(),
       applicantRole: canApplyForSite(session.role),
-      belowHero: resident ? _unreadAnnouncementCardSlot(session) : null,
+      aboveHero: resident ? _unreadAnnouncementCardSlot(session) : null,
       onOpenHelp: _openHelpPage,
       debtSiteCodes: resident ? _debtSiteCodes() : null,
       quickActionItems: resident ? _quickActionItems() : null,

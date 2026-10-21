@@ -245,7 +245,7 @@ describe('sunucu bağlantısı ve kaynak korumaları', () => {
       .filter((sql) => /\b(FROM|UPDATE|DELETE FROM|INTO)\s+announcements\b/.test(sql) && /\$\d|\$\{/.test(sql));
     assert.ok(sqls.length >= 8, `beklenenden az sorgu: ${sqls.length}`);
     // liste sorgularinin kosulu listWhere() ile kurulur; site_code kosulu orada ilk maddedir
-    assert.match(source, /const clauses = \['a\.site_code = \$1'\];/);
+    assert.match(source, /const clauses = \['a\.site_code = \$1', 'a\.deleted_at IS NULL'\];/);
     for (const sql of sqls) {
       const flat = sql.replace(/\s+/g, ' ');
       const ownRowUpdate = /UPDATE announcements SET recipient_count = \$2, published_at = clock_timestamp\(\) WHERE id = \$1/.test(flat);

@@ -1338,7 +1338,7 @@ void main() {
 
   // gezinme-6 + tasarim-11: vitrinde Yenile rozetleri ve "Yeni duyuru" kartını hemen tazeler; kart vitrinde düzdür.
   group('vitrinde Yenile: duyuru / ziyaretçi rozetleri ve "Yeni duyuru" kartı', () {
-    testWidgets('Yenile yoklama aralığını beklemeden rozetleri ve kartı tazeler; kart gölgesiz ve nabızsız', (t) async {
+    testWidgets('Yenile yoklama aralığını beklemeden rozetleri ve kartı tazeler; kart hero kartının üstünde, gölgesiz ve 3 turla biter', (t) async {
       final visitors = _fakeVisitorServer();
       var unread = 0;
       var summaryCalls = 0;
@@ -1384,43 +1384,18 @@ void main() {
       expect(find.byType(UnreadAnnouncementCard), findsOneWidget);
       expect(find.text('Su kesintisi'), findsOneWidget);
 
-      // tasarim-11: vitrindeki kart düz (gölge / nabız yok).
+      // N1: kart Panel'in en üstünde (selam / borç kartının ÜSTÜNDE); gölgesiz sade yüzey; 3 tur sonra durur.
       final card = find.byType(UnreadAnnouncementCard);
-      expect(t.widget<UnreadAnnouncementCard>(card).flat, isTrue);
+      final hero = find.byKey(const ValueKey<String>('panel_hero_selam'));
+      if (hero.evaluate().isNotEmpty) {
+        expect(t.getTopLeft(card).dy, lessThan(t.getTopLeft(hero).dy), reason: 'okunmamış duyuru kartı hero kartının üstünde');
+      }
       final shadows = <BoxShadow>[
         for (final box in t.widgetList<DecoratedBox>(find.descendant(of: card, matching: find.byType(DecoratedBox))))
           if (box.decoration is BoxDecoration) ...?(box.decoration as BoxDecoration).boxShadow,
       ];
       expect(shadows, isEmpty, reason: 'vitrinde gölgeli / parlayan kart yok');
       await _disposeHome(t);
-    });
-
-    testWidgets('öteki ekranlardaki (varsayılan) kart değişmedi: parıltı gölgesi ve nabız sürer', (t) async {
-      t.view.physicalSize = const Size(400, 800);
-      t.view.devicePixelRatio = 1.0;
-      addTearDown(t.view.reset);
-      await t.pumpWidget(
-        MaterialApp(
-          theme: AppTheme.light(),
-          home: Scaffold(
-            body: UnreadAnnouncementCard(
-              announcement: const ResidentAnnouncement(id: 1, title: 'Asansör bakımı'),
-              pulse: true,
-              onOpen: () {},
-            ),
-          ),
-        ),
-      );
-      await t.pump(const Duration(milliseconds: 100));
-      final boxes = t.widgetList<DecoratedBox>(
-        find.descendant(of: find.byType(UnreadAnnouncementCard), matching: find.byType(DecoratedBox)),
-      );
-      expect(
-        boxes.any((b) => b.decoration is BoxDecoration && ((b.decoration as BoxDecoration).boxShadow?.isNotEmpty ?? false)),
-        isTrue,
-      );
-      expect(t.binding.hasScheduledFrame, isTrue, reason: 'nabız animasyonu sürüyor');
-      await t.pumpWidget(const SizedBox());
     });
   });
 

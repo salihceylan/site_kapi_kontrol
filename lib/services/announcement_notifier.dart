@@ -320,6 +320,13 @@ class AnnouncementNotifier extends ChangeNotifier {
     if (changed) notifyListeners();
   }
 
+  /// Sakin [id] numaralı duyuruyu KENDİ listesinden kaldırdı. Okunmamışsa ([unread]) sayılar hemen düşer
+  /// (okunmuş gibi: kart ve şerit kalkar); okunmuşsa sayılar değişmez. Geri al için [refresh] yeterlidir.
+  void noteHidden(int id, {required bool unread, required bool urgent}) {
+    if (_disposed || !unread) return;
+    noteRead(id, urgent: urgent);
+  }
+
   /// "Tümünü okundu yap" sunucuya yazıldı. Tüm sitelerde ise ([allSites]) sayılar sıfırlanır; tek site
   /// ise yalnız [refresh] gerekir (kalan sayı sunucudan okunur).
   void noteAllRead({required bool allSites}) {

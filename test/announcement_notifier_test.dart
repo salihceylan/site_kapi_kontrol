@@ -277,6 +277,21 @@ void main() {
       notifier.dispose();
     });
 
+    testWidgets('noteHidden: okunmamışsa sayı düşer ve acil şerit kalkar; okunmuşsa sayılar değişmez', (t) async {
+      final server = _Server()
+        ..summary = _summary(unread: 2, urgent: 1, latestId: 5, latestAt: t0)
+        ..inbox = <ResidentAnnouncement>[_item(5, urgent: true), _item(4)];
+      final notifier = _make(server);
+      await notifier.refresh();
+      await _tick(t);
+      notifier.noteHidden(9, unread: false, urgent: false);
+      expect(notifier.unreadCount, 2);
+      notifier.noteHidden(5, unread: true, urgent: true);
+      expect((notifier.unreadCount, notifier.unreadUrgent), (1, 0));
+      expect(notifier.urgentAnnouncement, isNull);
+      notifier.dispose();
+    });
+
     testWidgets('birden çok acil duyuruda biri okununca diğeri bir sonraki turda bulunur', (t) async {
       final server = _Server()
         ..summary = _summary(unread: 2, urgent: 2, latestId: 7, latestAt: t0)

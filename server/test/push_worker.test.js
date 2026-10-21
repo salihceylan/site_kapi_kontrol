@@ -540,7 +540,7 @@ describe('inceleme düzeltmeleri', () => {
     assert.deepEqual(db.finals, [{ id: 1, status: 'skipped', reason: 'withdrawn' }]);
     assert.equal(fcm.calls.length, 1);
     const claim = db.log.find((q) => /^SELECT o\.id/.test(q.sql));
-    assert.match(claim.sql, /EXISTS \( SELECT 1 FROM site_people sp INNER JOIN announcement_recipients r ON r\.person_id = sp\.id AND r\.announcement_id = o\.announcement_id WHERE sp\.user_code = o\.user_code \) AS still_recipient/);
+    assert.match(claim.sql, /EXISTS \( SELECT 1 FROM site_people sp INNER JOIN announcement_recipients r ON r\.person_id = sp\.id AND r\.announcement_id = o\.announcement_id WHERE sp\.user_code = o\.user_code AND r\.hidden_at IS NULL \) AS still_recipient/);
   });
 
   it('10) TTL: ttl / apns-expiration = min(varsayılan, expires_at - şimdi); kalan < 1 sn -> expired (gönderilmez)', async () => {

@@ -9,9 +9,11 @@ import {
   getMyAnnouncement,
   getNotificationPreferences,
   getNotificationSummary,
+  hideMyAnnouncement,
   listMyAnnouncements,
   markAllAnnouncementsRead,
   markAnnouncementRead,
+  restoreMyAnnouncement,
   setNotificationPreferences,
 } from '../src/modules/announcement_inbox.js';
 
@@ -63,7 +65,7 @@ describe('gelen kutusu: liste', () => {
     const result = await listMyAnnouncements(user, { limit: '2' });
     const query = log[0];
     assert.deepEqual(query.params, [20004, 3]);
-    assert.match(query.sql, /FROM site_people sp INNER JOIN announcement_recipients r ON r\.person_id = sp\.id INNER JOIN announcements a ON a\.id = r\.announcement_id AND a\.status = 'published' INNER JOIN sites s ON s\.site_code = a\.site_code AND s\.approval_status = 'approved'/);
+    assert.match(query.sql, /FROM site_people sp INNER JOIN announcement_recipients r ON r\.person_id = sp\.id INNER JOIN announcements a ON a\.id = r\.announcement_id AND a\.status = 'published' AND a\.deleted_at IS NULL INNER JOIN sites s ON s\.site_code = a\.site_code AND s\.approval_status = 'approved'/);
     assert.match(query.sql, /WHERE sp\.user_code = \$1/);
     assert.match(query.sql, /ORDER BY a\.published_at DESC, a\.id DESC LIMIT \$2$/);
     assert.deepEqual(result.items.map((i) => i.id), [3, 2]);
@@ -196,7 +198,7 @@ describe('gelen kutusu: ayrıntı ve okundu', () => {
     handlers.push([/^SELECT a\.id, a\.site_code, s\.name AS site_name, a\.title, a\.body, a\.importance, a\.published_at, a\.edited_at, r\.read_at/, () => ok([{ ...row(2), body: 'Tam metin', body_head: undefined, edited_at: new Date('2026-10-16T09:00:00.000Z'), read_at: null }])]);
     const detail = await getMyAnnouncement(user, '2');
     assert.deepEqual(log[0].params, [20004, 2]);
-    assert.match(log[0].sql, /WHERE sp\.user_code = \$1 AND a\.id = \$2 LIMIT 1$/);
+    assert.match(log[0].sql, /WHERE sp\.user_code = \$1 AND a\.id = \$2 AND r\.hidden_at IS NULL LIMIT 1$/);
     assert.equal(log.some((q) => /^(UPDATE|INSERT|DELETE)/.test(q.sql)), false);
     assert.equal(detail.body, 'Tam metin');
     assert.equal(detail.edited_at, '2026-10-16T09:00:00.000Z');
@@ -214,7 +216,7 @@ describe('gelen kutusu: ayrıntı ve okundu', () => {
   it('okundu: UPDATE yalnız okunmamış + çağıranın satırı + yayında; ilk okuma zamanı döner', async () => {
     const readAt = new Date('2026-10-16T10:00:00.000Z');
     // D11: okundu da liste / ayrıntı / özet ile AYNI süzgeci uygular (yayında + onaylı site)
-    handlers.push([/^UPDATE announcement_recipients r SET read_at = NOW\(\) FROM site_people sp, announcements a, sites s WHERE r\.announcement_id = \$1 AND sp\.id = r\.person_id AND sp\.user_code = \$2 AND a\.id = r\.announcement_id AND a\.status = 'published' AND s\.site_code = a\.site_code AND s\.approval_status = 'approved' AND r\.read_at IS NULL RETURNING r\.read_at$/, () => ok([{ read_at: readAt }])]);
+    handlers.push([/^UPDATE announcement_recipients r SET read_at = NOW\(\) FROM site_people sp, announcements a, sites s WHERE r\.announcement_id = \$1 AND sp\.id = r\.person_id AND sp\.user_code = \$2 AND a\.id = r\.announcement_id AND a\.status = 'published' AND a\.deleted_at IS NULL AND s\.site_code = a\.site_code AND s\.approval_status = 'approved' AND r\.read_at IS NULL AND r\.hidden_at IS NULL RETURNING r\.read_at$/, () => ok([{ read_at: readAt }])]);
     assert.deepEqual(await markAnnouncementRead(user, '7'), { ok: true, read_at: '2026-10-16T10:00:00.000Z' });
     assert.deepEqual(log[0].params, [7, 20004]);
   });
@@ -233,7 +235,7 @@ describe('gelen kutusu: ayrıntı ve okundu', () => {
   });
 
   it('tümünü okundu yap: yalnız çağıranın okunmamış + yayındaki satırları; site_code isteğe bağlı; marked = etkilenen satır', async () => {
-    handlers.push([/^UPDATE announcement_recipients r SET read_at = NOW\(\) FROM site_people sp, announcements a, sites s WHERE sp\.id = r\.person_id AND sp\.user_code = \$1 AND a\.id = r\.announcement_id AND a\.status = 'published' AND s\.site_code = a\.site_code AND s\.approval_status = 'approved' AND r\.read_at IS NULL AND \(\$2::BIGINT IS NULL OR a\.site_code = \$2::BIGINT\)$/, () => ok([], 4)]);
+    handlers.push([/^UPDATE announcement_recipients r SET read_at = NOW\(\) FROM site_people sp, announcements a, sites s WHERE sp\.id = r\.person_id AND sp\.user_code = \$1 AND a\.id = r\.announcement_id AND a\.status = 'published' AND a\.deleted_at IS NULL AND s\.site_code = a\.site_code AND s\.approval_status = 'approved' AND r\.read_at IS NULL AND r\.hidden_at IS NULL AND \(\$2::BIGINT IS NULL OR a\.site_code = \$2::BIGINT\)$/, () => ok([], 4)]);
     assert.deepEqual(await markAllAnnouncementsRead(user, {}), { ok: true, marked: 4 });
     assert.deepEqual(log[0].params, [20004, null]);
     await markAllAnnouncementsRead(user, { site_code: '1000000001' });
@@ -409,5 +411,44 @@ describe('bildirim tercihleri', () => {
   it('kullanıcı kodu yoksa GET varsayılan döner ve DB sorgusu yok', async () => {
     assert.deepEqual(await getNotificationPreferences({}), { email_announcements: true, email_finance_reminders: true, push_announcements: true, push_available: false, email_suppressed: false, ...PUSH_DEFAULTS });
     assert.equal(log.length, 0);
+  });
+});
+
+describe('gelen kutusu: listemden kaldır (gizle) ve geri al', () => {
+  it('gizle: yalnız çağıranın alıcı satırı + yayında; hidden_at ilk değer korunur; read_at DEĞİŞMEZ', async () => {
+    const at = new Date('2026-10-21T09:00:00.000Z');
+    handlers.push([/^UPDATE announcement_recipients r SET hidden_at = COALESCE\(r\.hidden_at, NOW\(\)\) FROM /, () => ok([{ hidden_at: at }])]);
+    assert.deepEqual(await hideMyAnnouncement(user, '7'), { ok: true, hidden_at: '2026-10-21T09:00:00.000Z' });
+    assert.deepEqual(log[0].params, [7, 20004]);
+    assert.match(log[0].sql, /sp\.user_code = \$2/);
+    assert.match(log[0].sql, /a\.status = 'published' AND a\.deleted_at IS NULL/);
+    assert.doesNotMatch(log[0].sql, /read_at/);
+  });
+
+  it('gizle: alıcı değil / yayında değil / geçersiz kimlik / kullanıcı kodu yok -> 404', async () => {
+    handlers.push([/^UPDATE announcement_recipients r SET hidden_at/, () => ok()]);
+    await assert.rejects(() => hideMyAnnouncement(user, '7'), (e) => e.code === 'ANNOUNCEMENT_NOT_FOUND' && e.statusCode === 404);
+    await assert.rejects(() => hideMyAnnouncement(user, 'abc'), (e) => e.code === 'ANNOUNCEMENT_NOT_FOUND');
+    await assert.rejects(() => hideMyAnnouncement({}, '7'), (e) => e.code === 'ANNOUNCEMENT_NOT_FOUND');
+    assert.equal(log.length, 1);
+  });
+
+  it('geri al: hidden_at NULL; yayında olmayan -> 404', async () => {
+    handlers.push([/^UPDATE announcement_recipients r SET hidden_at = NULL FROM /, () => ok([{ announcement_id: '7' }])]);
+    assert.deepEqual(await restoreMyAnnouncement(user, '7'), { ok: true });
+    assert.deepEqual(log[0].params, [7, 20004]);
+    handlers.unshift([/^UPDATE announcement_recipients r SET hidden_at = NULL/, () => ok()]);
+    await assert.rejects(() => restoreMyAnnouncement(user, '7'), (e) => e.code === 'ANNOUNCEMENT_NOT_FOUND');
+  });
+
+  it('liste, özet, okundu ve detay gizlenenleri dışlar (r.hidden_at IS NULL); imleç alt sorgusu süzmez', async () => {
+    handlers.push([/^SELECT /, () => ok()], [/^WITH mine/, () => ok([{}])], [/^UPDATE /, () => ok()]);
+    await listMyAnnouncements(user, { before_id: '9' });
+    await getNotificationSummary(user);
+    await getMyAnnouncement(user, '2').catch(() => {});
+    await markAllAnnouncementsRead(user, {});
+    for (const q of log) assert.match(q.sql, /r\.hidden_at IS NULL/);
+    const cursor = log[0].sql.match(/\(a\.published_at, a\.id\) < \(.*\) AND r\.hidden_at/)?.[0] ?? '';
+    assert.doesNotMatch(cursor, /hidden_at IS NULL.*hidden_at/);
   });
 });

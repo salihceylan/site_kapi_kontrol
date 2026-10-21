@@ -51,12 +51,12 @@ const PEOPLE_LOCK = /^SELECT pg_advisory_xact_lock\(hashtext\(\$1\)\)$/;
 const GLOBAL_LOCK = /^SELECT pg_advisory_xact_lock\(\$1::int, \$2::int\)$/;
 const INSERT_ANN = /^INSERT INTO announcements \(/;
 const CLAIM = /^UPDATE announcements SET status = 'published', published_at = NOW\(\)/;
-const STATE = /^SELECT status FROM announcements WHERE id = \$1 AND site_code = \$2$/;
+const STATE = /^SELECT status FROM announcements WHERE id = \$1 AND site_code = \$2( AND deleted_at IS NULL)?( FOR UPDATE)?$/;
 const FINAL = /^UPDATE announcements SET recipient_count = \$2, published_at = clock_timestamp\(\) WHERE id = \$1$/;
 const USAGE = /^SELECT COUNT\(\*\)::INTEGER AS used FROM announcement_recipients r INNER JOIN announcements a ON a\.id = r\.announcement_id WHERE a\.site_code = \$1 AND a\.published_at >=/;
 const SNAPSHOT = /^WITH audience AS .* INSERT INTO announcement_recipients/;
 const STATUS_COUNTS = /^SELECT email_status, COUNT\(\*\)::INTEGER AS n FROM announcement_recipients WHERE announcement_id = \$1 GROUP BY email_status$/;
-const DETAIL = /^SELECT a\.id, a\.title, a\.body, a\.importance, a\.status, a\.target_type, a\.target_block_ids, a\.target_apartment_ids, a\.send_email, .* WHERE a\.id = \$1 AND a\.site_code = \$2 LIMIT 1$/;
+const DETAIL = /^SELECT a\.id, a\.title, a\.body, a\.importance, a\.status, a\.target_type, a\.target_block_ids, a\.target_apartment_ids, a\.send_email, .* WHERE a\.id = \$1 AND a\.site_code = \$2 AND a\.deleted_at IS NULL LIMIT 1$/;
 const DETAIL_STATS = /^SELECT email_status, COUNT\(\*\)::INTEGER AS n, COUNT\(\*\) FILTER \(WHERE read_at IS NOT NULL\)::INTEGER AS read_n FROM announcement_recipients WHERE announcement_id = \$1 GROUP BY email_status$/;
 const LOCK_ROW = /^SELECT id, title, body, importance, status, target_type, target_block_ids, target_apartment_ids, send_email, publish_at FROM announcements WHERE id = \$1 AND site_code = \$2 FOR UPDATE$/;
 // kötüye kullanım sınırları ve koruma sorguları
@@ -920,7 +920,7 @@ describe('withdraw / delete', () => {
   it('geri çek: talep UPDATE (yalnız published, site kapsamlı) -> HİÇ talep edilmemiş bekleyen e-postalar iptal (none, adres + özet NULL) -> yoldakiler sayılır -> audit sayılar', async () => {
     handlers.push(
       [SITE_LOCK, () => ok([{ site_code: SITE }])],
-      [/^UPDATE announcements SET status = 'withdrawn', withdrawn_at = NOW\(\), updated_at = NOW\(\) WHERE id = \$1 AND site_code = \$2 AND status = 'published' RETURNING recipient_count$/, () => ok([{ recipient_count: 9 }])],
+      [/^UPDATE announcements SET status = 'withdrawn', withdrawn_at = NOW\(\), updated_at = NOW\(\) WHERE id = \$1 AND site_code = \$2 AND status = 'published' AND deleted_at IS NULL RETURNING recipient_count$/, () => ok([{ recipient_count: 9 }])],
       [/^UPDATE announcement_recipients SET email_status = 'none', email = NULL, email_hash = NULL, email_next_at = NULL WHERE announcement_id = \$1 AND email_status = 'pending' AND email_claimed_at IS NULL$/, () => ok([], 4)],
       [/^SELECT COUNT\(\*\)::INTEGER AS n FROM announcement_recipients WHERE announcement_id = \$1 AND email_status = 'pending'$/, () => ok([{ n: 2 }])],
       ...detailHandlers(annRow({ status: 'withdrawn' })),
@@ -954,18 +954,43 @@ describe('withdraw / delete', () => {
     assert.equal(has(/UPDATE announcement_recipients/), false);
   });
 
-  it('sil: yalnız draft/scheduled (DELETE ... WHERE status IN ...), { ok: true }, audit yalnız eski durum', async () => {
-    handlers.push([SITE_LOCK, () => ok([{ site_code: SITE }])], [/^DELETE FROM announcements WHERE id = \$1 AND site_code = \$2 AND status IN \('draft', 'scheduled'\) RETURNING status$/, () => ok([{ status: 'scheduled' }])]);
-    assert.deepEqual(await deleteAnnouncement({ siteCode: SITE, id: '41', actor }), { ok: true });
+  const DELETE_DRAFT = /^DELETE FROM announcements WHERE id = \$1 AND site_code = \$2 AND status IN \('draft', 'scheduled'\) AND deleted_at IS NULL RETURNING status$/;
+  const SOFT_DELETE = /^UPDATE announcements SET deleted_at = NOW\(\), updated_at = NOW\(\) WHERE id = \$1 AND site_code = \$2 AND status = 'withdrawn'$/;
+
+  it('sil: draft/scheduled KALICI silinir (mode removed); audit from_status, archived false', async () => {
+    handlers.push([SITE_LOCK, () => ok([{ site_code: SITE }])], [DELETE_DRAFT, () => ok([{ status: 'scheduled' }])]);
+    assert.deepEqual(await deleteAnnouncement({ siteCode: SITE, id: '41', actor }), { ok: true, mode: 'removed' });
     assert.deepEqual(find(/^DELETE FROM announcements/).params, [41, SITE]);
-    assert.deepEqual(auditDetails('announcement.deleted'), { status: 'scheduled' });
+    assert.deepEqual(auditDetails('announcement.deleted'), { from_status: 'scheduled', archived: false });
+    assert.equal(has(SOFT_DELETE), false);
   });
 
-  it('sil: yayınlanmış -> 409 INVALID_STATE; yok -> 404; silme yazılmaz', async () => {
-    handlers.push([SITE_LOCK, () => ok([{ site_code: SITE }])], [/^DELETE FROM announcements/, () => ok()], [STATE, () => ok([{ status: 'published' }])]);
-    await assert.rejects(() => deleteAnnouncement({ siteCode: SITE, id: '41', actor }), (e) => e.code === 'INVALID_STATE');
+  it('sil: yayınlanmış -> AYNI işlemde geri çekme adımları + deleted_at (mode archived); tek audit; satır silinmez', async () => {
+    handlers.push(
+      [SITE_LOCK, () => ok([{ site_code: SITE }])],
+      [DELETE_DRAFT, () => ok()],
+      [STATE, () => ok([{ status: 'published' }])],
+      [/^UPDATE announcements SET status = 'withdrawn'/, () => ok([{ recipient_count: 5 }])],
+      [/^UPDATE announcement_recipients SET email_status = 'none'/, () => ok([], 2)],
+      [/^SELECT COUNT\(\*\)::INTEGER AS n FROM announcement_recipients/, () => ok([{ n: 1 }])],
+      [SOFT_DELETE, () => ok([], 1)],
+    );
+    assert.deepEqual(await deleteAnnouncement({ siteCode: SITE, id: '41', actor }), { ok: true, mode: 'archived' });
+    assert.ok(indexOfQuery(/^UPDATE announcements SET status = 'withdrawn'/) < indexOfQuery(SOFT_DELETE));
+    assert.deepEqual(auditActions(), ['announcement.deleted']);
+    assert.deepEqual(auditDetails('announcement.deleted'), { from_status: 'published', archived: true, email_cancelled: 2, email_in_flight: 1 });
+    assert.equal(findAll(/^COMMIT$/).length, 1);
+  });
+
+  it('sil: geri çekilmiş -> yalnız deleted_at (geri çekme tekrarlanmaz); yok / zaten silinmiş -> 404, yazma yok', async () => {
+    handlers.push([SITE_LOCK, () => ok([{ site_code: SITE }])], [DELETE_DRAFT, () => ok()], [STATE, () => ok([{ status: 'withdrawn' }])], [SOFT_DELETE, () => ok([], 1)]);
+    assert.deepEqual(await deleteAnnouncement({ siteCode: SITE, id: '41', actor }), { ok: true, mode: 'archived' });
+    assert.equal(has(/^UPDATE announcements SET status = 'withdrawn'/), false);
+    assert.deepEqual(auditDetails('announcement.deleted'), { from_status: 'withdrawn', archived: true, email_cancelled: 0, email_in_flight: 0 });
     handlers.unshift([STATE, () => ok()]);
-    await assert.rejects(() => deleteAnnouncement({ siteCode: SITE, id: '41', actor }), (e) => e.code === 'ANNOUNCEMENT_NOT_FOUND');
+    log.length = 0;
+    await assert.rejects(() => deleteAnnouncement({ siteCode: SITE, id: '41', actor }), (e) => e.code === 'ANNOUNCEMENT_NOT_FOUND' && e.statusCode === 404);
+    assert.equal(has(SOFT_DELETE), false);
     assert.equal(auditActions().length, 0);
   });
 });
@@ -973,7 +998,7 @@ describe('withdraw / delete', () => {
 describe('okuma: liste, ayrıntı, alıcılar, önizleme', () => {
   it('liste: site kapsamlı sorgu; status/arama parametreleri; limit/offset kırpılır; read_count ve created_by_name eşlenir; total ayrı sayılır', async () => {
     handlers.push(
-      [/^SELECT COUNT\(\*\)::INTEGER AS total FROM announcements a WHERE a\.site_code = \$1 AND a\.status = \$2 AND \(/, () => ok([{ total: 7 }])],
+      [/^SELECT COUNT\(\*\)::INTEGER AS total FROM announcements a WHERE a\.site_code = \$1 AND a\.deleted_at IS NULL AND a\.status = \$2 AND \(/, () => ok([{ total: 7 }])],
       [/^SELECT a\.id, a\.title, left\(a\.body, 1200\) AS body_head/, () => ok([{ ...annRow({ status: 'published' }), body_head: 'Merhaba   dünya', body_length: '15', read_count: 3 }])],
     );
     const result = await listAnnouncements(SITE, { status: 'published', q: 'SU', limit: '999', offset: '4' });
@@ -989,7 +1014,7 @@ describe('okuma: liste, ayrıntı, alıcılar, önizleme', () => {
   });
 
   it('liste: status=all süzgeç eklemez; geçersiz status -> 400 INVALID_QUERY', async () => {
-    handlers.push([/^SELECT COUNT\(\*\)::INTEGER AS total FROM announcements a WHERE a\.site_code = \$1$/, () => ok([{ total: 0 }])], [/^SELECT a\.id, a\.title, left/, () => ok()]);
+    handlers.push([/^SELECT COUNT\(\*\)::INTEGER AS total FROM announcements a WHERE a\.site_code = \$1 AND a\.deleted_at IS NULL$/, () => ok([{ total: 0 }])], [/^SELECT a\.id, a\.title, left/, () => ok()]);
     assert.deepEqual(await listAnnouncements(SITE, {}), { items: [], total: 0 });
     assert.deepEqual(find(/^SELECT a\.id, a\.title, left/).params, [SITE, 30, 0]);
     await assert.rejects(() => listAnnouncements(SITE, { status: 'zz' }), (e) => e.code === 'INVALID_QUERY');
@@ -1041,7 +1066,7 @@ describe('okuma: liste, ayrıntı, alıcılar, önizleme', () => {
 
   it('alıcılar: duyuru site kapsamlı doğrulanır (yoksa 404); alıcı sorgusu announcement + site_code ile bağlı; daire etiketleri toplu', async () => {
     handlers.push(
-      [/^SELECT 1 FROM announcements WHERE id = \$1 AND site_code = \$2 LIMIT 1$/, () => ok([{ '?column?': 1 }])],
+      [/^SELECT 1 FROM announcements WHERE id = \$1 AND site_code = \$2 AND deleted_at IS NULL LIMIT 1$/, () => ok([{ '?column?': 1 }])],
       [/^SELECT COUNT\(\*\)::INTEGER AS total FROM announcement_recipients r INNER JOIN site_people sp/, () => ok([{ total: 2 }])],
       [/^SELECT r\.person_id, COALESCE\(NULLIF\(u\.full_name, ''\), sp\.full_name\) AS full_name/, () => ok([{ person_id: '5', full_name: 'Ali Veli', has_account: true, read_at: new Date('2026-10-16T09:00:00.000Z'), email_status: 'sent' }, { person_id: '6', full_name: null, has_account: false, read_at: null, email_status: 'none' }])],
       [/^SELECT rr\.person_id, ap\.unit_label, sb\.block_name FROM apartment_residencies rr/, () => ok([{ person_id: '5', unit_label: 'Daire 1', block_name: 'A Blok' }])],
@@ -1062,7 +1087,7 @@ describe('okuma: liste, ayrıntı, alıcılar, önizleme', () => {
   });
 
   it('alıcılar: başka sitenin duyurusu -> 404 ve alıcı sorgusu ÇALIŞMAZ', async () => {
-    handlers.push([/^SELECT 1 FROM announcements WHERE id = \$1 AND site_code = \$2 LIMIT 1$/, () => ok()]);
+    handlers.push([/^SELECT 1 FROM announcements WHERE id = \$1 AND site_code = \$2 AND deleted_at IS NULL LIMIT 1$/, () => ok()]);
     await assert.rejects(() => listAnnouncementRecipients(SITE, '41', {}), (e) => e.code === 'ANNOUNCEMENT_NOT_FOUND');
     assert.equal(has(/announcement_recipients/), false);
   });

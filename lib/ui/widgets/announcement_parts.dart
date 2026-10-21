@@ -190,10 +190,14 @@ class AnnouncementInboxCard extends StatelessWidget {
     required this.announcement,
     required this.onTap,
     this.showSite = false,
+    this.onRemove,
   });
 
   final ResidentAnnouncement announcement;
   final VoidCallback onTap;
+
+  /// "Listemden kaldır" (48 dp simge düğmesi); null ise düğme çıkmaz.
+  final VoidCallback? onRemove;
 
   /// Birden çok sitesi olan sakinde site adı da gösterilir.
   final bool showSite;
@@ -221,7 +225,11 @@ class AnnouncementInboxCard extends StatelessWidget {
       padding: listCardPadding(context),
       onTap: onTap,
       semanticLabel: semantic.toString(),
-      child: ExcludeSemantics(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: ExcludeSemantics(
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -287,6 +295,17 @@ class AnnouncementInboxCard extends StatelessWidget {
             ),
           ],
         ),
+            ),
+          ),
+          if (onRemove != null)
+            IconButton(
+              key: ValueKey<String>('announcement_remove_${a.id}'),
+              onPressed: onRemove,
+              tooltip: 'Listemden kaldır',
+              constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+              icon: Icon(Icons.close_rounded, color: p.textSecondary),
+            ),
+        ],
       ),
     );
   }

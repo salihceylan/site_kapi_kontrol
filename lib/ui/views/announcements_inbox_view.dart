@@ -191,7 +191,59 @@ class AnnouncementsInboxViewState extends State<AnnouncementsInboxView> {
         if (mounted) unawaited(_loader.reload());
         unawaited(widget.notifier?.refresh() ?? Future<bool?>.value(null));
       },
+      onHide: _hide,
     );
+  }
+
+  /// "Listemden kaldır": onaysız; başarıda öğe kalkar, rozet düşer ve 8 sn "Geri al" sunulur. Hata görünür kalır.
+  Future<void> _hide(ResidentAnnouncement announcement) async {
+    try {
+      await widget.authService.hideAnnouncement(announcement.id);
+      if (!mounted) return;
+      _loader.removeItem(announcement.id);
+      widget.notifier?.noteHidden(
+        announcement.id,
+        unread: !announcement.isRead,
+        urgent: announcement.isUrgent,
+      );
+      unawaited(widget.notifier?.refresh() ?? Future<bool?>.value(null));
+      setState(() => _actionError = null);
+      AppSnack.show(
+        context,
+        'Duyuru listenizden kaldırıldı.',
+        kind: AppSnackKind.success,
+        duration: const Duration(seconds: 8),
+        persist: false,
+        replace: true,
+        action: SnackBarAction(label: 'Geri al', onPressed: () => unawaited(_restore(announcement))),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _actionError = crmMessageOf(
+          e,
+          'Duyuru listenizden kaldırılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin.',
+        );
+      });
+    }
+  }
+
+  Future<void> _restore(ResidentAnnouncement announcement) async {
+    try {
+      await widget.authService.restoreAnnouncement(announcement.id);
+      if (!mounted) return;
+      setState(() => _actionError = null);
+      unawaited(_loader.reload());
+      unawaited(widget.notifier?.refresh() ?? Future<bool?>.value(null));
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _actionError = crmMessageOf(
+          e,
+          'Duyuru geri alınamadı. İnternet bağlantınızı kontrol edip tekrar deneyin.',
+        );
+      });
+    }
   }
 
   Future<void> _markAllRead() async {
@@ -322,6 +374,7 @@ class AnnouncementsInboxViewState extends State<AnnouncementsInboxView> {
             announcement: announcement,
             showSite: multiSite,
             onTap: () => _open(announcement),
+            onRemove: () => unawaited(_hide(announcement)),
           ),
         ),
       ],

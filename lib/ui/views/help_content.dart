@@ -332,6 +332,7 @@ abstract final class HelpContent {
       steps: <String>[
         'Alttaki “Duyuru” sekmesine dokunun ya da menüden “Duyurular” ekranını açın; yönetimin gönderdiği duyurular gelen kutunuzda listelenir.',
         'Okunmamış duyuru sayısı menüde ve “Duyuru” sekmesinde rozetle görünür.',
+        'Okunmamış duyuru Panel’in en üstünde kart olarak çıkar; okuyunca karttan kalkar, “Duyurular”da durur. Duyuruyu listenizden kaldırmak için satırdaki “×” düğmesine dokunun; 8 saniye içinde “Geri al” diyebilirsiniz.',
         'E-posta ile duyuru alıp almayacağınızı “Profilim” ekranındaki “Bildirim Tercihleri” bölümünden seçersiniz.',
       ],
     ),
@@ -413,6 +414,7 @@ abstract final class HelpContent {
       steps: <String>[
         'Menüden “Duyurular” ekranını açın.',
         'Yönetim görünümünde yeni duyuru oluşturun, alıcıları seçin ve yayınlayın.',
+        'Geri çek: duyuru sakinlerden kalkar, sizde “Geri çekildi” olarak durur. Sil: iki listeden de kalkar, kayıt yasal saklama süresince saklanır; yayındaki duyuruyu silmek onu aynı anda geri çeker ve geri alınamaz.',
       ],
       note:
           'Hem yönetim hem gelen kutusu görünüyorsa ekrandaki “Yönetim görünümü” seçimiyle yönetim ekranına geçin.',

@@ -12,6 +12,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/services/announcement_notifier.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
+import 'package:site_kapi_kontrol/ui/design/app_card.dart' show InlineNotice;
 import 'package:site_kapi_kontrol/ui/dialogs/announcement_read_dialog.dart';
 import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
 import 'package:site_kapi_kontrol/ui/views/announcements_inbox_view.dart';
@@ -633,4 +634,43 @@ void main() {
     });
   });
 
+  group('listemden kaldır', () {
+    testWidgets('X: öğe kalkar, rozet düşer, Geri al geri getirir', (t) async {
+      final auth = _auth();
+      final notifier = _notifier(auth);
+      await notifier.refresh();
+      await _pump(t, auth, notifier: notifier);
+      expect(notifier.unreadCount, 2);
+
+      await tapFinder(t, find.byKey(const ValueKey<String>('announcement_remove_11')));
+      await settleFor(t);
+      expect(auth.hideCalls, <int>[11]);
+      expect(find.text('Asansör bakımı'), findsNothing);
+      expect(find.text('Duyuru listenizden kaldırıldı.'), findsOneWidget);
+      expect(notifier.unreadCount, 1, reason: 'okunmamış duyuru kaldırılınca rozet düşer');
+
+      await tapText(t, 'Geri al');
+      await settleFor(t);
+      expect(auth.restoreCalls, <int>[11]);
+      expect(find.text('Asansör bakımı'), findsOneWidget);
+      expect(notifier.unreadCount, 2);
+      notifier.dispose();
+    });
+
+    testWidgets('hata görünür kalır ve öğe yerinde durur; okuma penceresinden de kaldırılır', (t) async {
+      final auth = _auth()..hideError = ApiException('Sunucu hatası', statusCode: 500);
+      await _pump(t, auth);
+      await tapFinder(t, find.byKey(const ValueKey<String>('announcement_remove_10')));
+      await settleFor(t);
+      expect(find.text('Aidat hatırlatması'), findsOneWidget);
+      expect(find.byType(InlineNotice), findsOneWidget);
+
+      auth.hideError = null;
+      await _open(t, 'Aidat hatırlatması');
+      await tapFinder(t, find.byKey(const ValueKey<String>('announcement_read_hide')));
+      await settleFor(t);
+      expect(auth.hideCalls, <int>[10, 10]);
+      expect(find.text('Aidat hatırlatması'), findsNothing);
+    });
+  });
 }

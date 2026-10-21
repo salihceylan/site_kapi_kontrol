@@ -1753,6 +1753,27 @@ class AuthApi {
     return announcementInstant(payload['read_at']);
   }
 
+  /// Duyuruyu KENDİ listemden kaldırır (DELETE /app/announcements/:id; idempotent, okundu bilgisine dokunmaz).
+  Future<void> hideAnnouncement({required String token, required int announcementId}) async {
+    final response = await _authorizedRequest(
+      method: 'DELETE',
+      path: '/app/announcements/$announcementId',
+      token: token,
+    );
+    _ensureStatus(response, 200);
+  }
+
+  /// "Geri al": [hideAnnouncement] ile kaldırılan duyuruyu listeye döndürür.
+  Future<void> restoreAnnouncement({required String token, required int announcementId}) async {
+    final response = await _authorizedRequest(
+      method: 'POST',
+      path: '/app/announcements/$announcementId/restore',
+      token: token,
+      body: const <String, dynamic>{},
+    );
+    _ensureStatus(response, 200);
+  }
+
   /// Tümünü okundu yapar ([siteCode] verilirse yalnız o site). Dönüş: işaretlenen adet.
   Future<int> markAllAnnouncementsRead({required String token, int? siteCode}) async {
     final response = await _authorizedRequest(

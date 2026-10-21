@@ -208,7 +208,7 @@ const base = (site = SITE_1) => `/manager/sites/${site}/announcements`;
 
 // --- yanıt işleyicileri -------------------------------------------------------------------------------------
 const SITE_SHARE = /^SELECT site_code FROM sites WHERE site_code = \$1 FOR KEY SHARE$/;
-const DETAIL = /^SELECT a\.id, a\.title, a\.body, a\.importance, a\.status, a\.target_type, a\.target_block_ids, a\.target_apartment_ids, a\.send_email, .* WHERE a\.id = \$1 AND a\.site_code = \$2 LIMIT 1$/;
+const DETAIL = /^SELECT a\.id, a\.title, a\.body, a\.importance, a\.status, a\.target_type, a\.target_block_ids, a\.target_apartment_ids, a\.send_email, .* WHERE a\.id = \$1 AND a\.site_code = \$2 AND a\.deleted_at IS NULL LIMIT 1$/;
 const DETAIL_STATS = /^SELECT email_status, COUNT\(\*\)::INTEGER AS n, COUNT\(\*\) FILTER/;
 const LIST_COUNT = /^SELECT COUNT\(\*\)::INTEGER AS total FROM announcements a/;
 const LIST_PAGE = /^SELECT a\.id, a\.title, left\(a\.body, 1200\)/;
@@ -244,9 +244,10 @@ function publishFlow({ sendEmail = false, total = 3, pending = 0 } = {}) {
 // ---------------------------------------------------------------------------
 
 describe('duyuru rotaları: zincir', () => {
-  it('16 rota; hepsi authRequired ile başlar; yazma uçları 120/saat, okuma 1200/saat, özet 600/saat sınırlayıcı ile', () => {
+  it('18 rota; hepsi authRequired ile başlar; yazma uçları 120/saat, okuma 1200/saat, özet 600/saat sınırlayıcı ile', () => {
     const summary = ORIGINAL_ROUTES.map((r) => `${r.method.toUpperCase()} ${r.path}`).sort();
     assert.deepEqual(summary, [
+      'DELETE /app/announcements/:id',
       'DELETE /manager/sites/:siteCode/announcements/:id',
       'GET /app/announcements',
       'GET /app/announcements/:id',
@@ -257,6 +258,7 @@ describe('duyuru rotaları: zincir', () => {
       'GET /manager/sites/:siteCode/announcements/:id/recipients',
       'PATCH /manager/sites/:siteCode/announcements/:id',
       'POST /app/announcements/:id/read',
+      'POST /app/announcements/:id/restore',
       'POST /app/announcements/read-all',
       'POST /manager/sites/:siteCode/announcements',
       'POST /manager/sites/:siteCode/announcements/:id/publish',
@@ -584,7 +586,7 @@ describe('hata biçimleri', () => {
     handlers.length = 0;
     handlers.push([SITE_SHARE, () => ok([{ site_code: SITE_1 }])], [/^DELETE FROM announcements/, () => ok([{ status: 'draft' }])]);
     const removed = await call('DELETE', `${base()}/41`);
-    assert.deepEqual([removed.status, removed.body], [200, { ok: true }]);
+    assert.deepEqual([removed.status, removed.body], [200, { ok: true, mode: 'removed' }]);
   });
 });
 

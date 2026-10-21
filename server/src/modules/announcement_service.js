@@ -133,7 +133,7 @@ async function audit(client, actor, action, siteCode, announcementId, details) {
 
 function listWhere(siteCode, filters) {
   const params = [siteCode];
-  const clauses = ['a.site_code = $1'];
+  const clauses = ['a.site_code = $1', 'a.deleted_at IS NULL'];
   if (filters.status !== 'all') {
     params.push(filters.status);
     clauses.push(`a.status = $${params.length}`);
@@ -228,7 +228,7 @@ export async function loadAnnouncementDetail(db, siteCode, id) {
         u.full_name AS created_by_name
       FROM announcements a
       LEFT JOIN users u ON u.user_code = a.created_by
-      WHERE a.id = $1 AND a.site_code = $2
+      WHERE a.id = $1 AND a.site_code = $2 AND a.deleted_at IS NULL
       LIMIT 1
     `,
     [id, siteCode],
@@ -300,7 +300,7 @@ export async function listAnnouncementRecipients(siteCode, rawId, query = {}, db
     throw announcementNotFound();
   }
   const filters = parseRecipientsQuery(query);
-  const exists = await db.query(`SELECT 1 FROM announcements WHERE id = $1 AND site_code = $2 LIMIT 1`, [id, siteCode]);
+  const exists = await db.query(`SELECT 1 FROM announcements WHERE id = $1 AND site_code = $2 AND deleted_at IS NULL LIMIT 1`, [id, siteCode]);
   if (!exists.rows?.[0]) {
     throw announcementNotFound();
   }
@@ -1010,69 +1010,94 @@ export async function withdrawAnnouncement({ siteCode, id: rawId, actor }) {
     throw announcementNotFound();
   }
   await withAnnouncementTransaction(siteCode, async (client) => {
-    const claim = await client.query(
-      `
-        UPDATE announcements
-        SET status = 'withdrawn', withdrawn_at = NOW(), updated_at = NOW()
-        WHERE id = $1 AND site_code = $2 AND status = 'published'
-        RETURNING recipient_count
-      `,
-      [id, siteCode],
-    );
-    const row = claim.rows?.[0];
-    if (!row) {
-      const state = await client.query(`SELECT status FROM announcements WHERE id = $1 AND site_code = $2`, [id, siteCode]);
-      if (!state.rows?.[0]) {
-        throw announcementNotFound();
-      }
-      throw invalidState(
-        state.rows[0].status === 'withdrawn' ? 'Duyuru zaten geri çekilmiş.' : 'Yalnız yayındaki duyuru geri çekilebilir.',
-      );
-    }
-    // Yalnız HİÇ talep edilmemiş (gönderimi başlamamış) e-postalar iptal edilir. Kuyruk işçisinin talep ettiği (yoldaki) satırlar
-    // 'pending' kalır: işçi sonucu sent / failed olarak yazar, istatistik ve günlük kota gerçeği yansıtır (talep anı satır kilidiyle
-    // sıralıdır: bu UPDATE talebi bekler, talep commit olunca koşulu yeniden değerlendirir).
-    const cancelled = await client.query(
-      `
-        UPDATE announcement_recipients
-        SET email_status = 'none', email = NULL, email_hash = NULL, email_next_at = NULL
-        WHERE announcement_id = $1 AND email_status = 'pending' AND email_claimed_at IS NULL
-      `,
-      [id],
-    );
-    const inFlight = await client.query(
-      `SELECT COUNT(*)::INTEGER AS n FROM announcement_recipients WHERE announcement_id = $1 AND email_status = 'pending'`,
-      [id],
-    );
-    await audit(client, actor, 'announcement.withdrawn', siteCode, id, {
-      recipient_count: Number(row.recipient_count ?? 0),
-      email_cancelled: Number(cancelled.rowCount ?? 0),
-      email_in_flight: Number(inFlight.rows?.[0]?.n ?? 0),
-    });
+    const result = await withdrawWithinTransaction(client, { id, siteCode });
+    await audit(client, actor, 'announcement.withdrawn', siteCode, id, result);
   });
   return loadAnnouncementDetail(pool, siteCode, id);
 }
 
-/** DELETE announcements/:id (yalnız draft | scheduled). Yayınlanmış kayıt silinmez. */
+/**
+ * Geri çekme adımları (withdraw ve yayındaki duyuruyu silme paylaşır): published -> withdrawn + gönderimi başlamamış e-postaların iptali.
+ * Yoldaki (işçinin talep ettiği) e-postalar iptal edilmez. Dönüş: audit ayrıntıları (başlık / gövde YOK).
+ */
+async function withdrawWithinTransaction(client, { id, siteCode }) {
+  const claim = await client.query(
+    `
+      UPDATE announcements
+      SET status = 'withdrawn', withdrawn_at = NOW(), updated_at = NOW()
+      WHERE id = $1 AND site_code = $2 AND status = 'published' AND deleted_at IS NULL
+      RETURNING recipient_count
+    `,
+    [id, siteCode],
+  );
+  const row = claim.rows?.[0];
+  if (!row) {
+    const state = await client.query(`SELECT status FROM announcements WHERE id = $1 AND site_code = $2 AND deleted_at IS NULL`, [id, siteCode]);
+    if (!state.rows?.[0]) {
+      throw announcementNotFound();
+    }
+    throw invalidState(
+      state.rows[0].status === 'withdrawn' ? 'Duyuru zaten geri çekilmiş.' : 'Yalnız yayındaki duyuru geri çekilebilir.',
+    );
+  }
+  // Yalnız HİÇ talep edilmemiş (gönderimi başlamamış) e-postalar iptal edilir. Kuyruk işçisinin talep ettiği (yoldaki) satırlar
+  // 'pending' kalır: işçi sonucu sent / failed olarak yazar, istatistik ve günlük kota gerçeği yansıtır (talep anı satır kilidiyle
+  // sıralıdır: bu UPDATE talebi bekler, talep commit olunca koşulu yeniden değerlendirir).
+  const cancelled = await client.query(
+    `
+      UPDATE announcement_recipients
+      SET email_status = 'none', email = NULL, email_hash = NULL, email_next_at = NULL
+      WHERE announcement_id = $1 AND email_status = 'pending' AND email_claimed_at IS NULL
+    `,
+    [id],
+  );
+  const inFlight = await client.query(
+    `SELECT COUNT(*)::INTEGER AS n FROM announcement_recipients WHERE announcement_id = $1 AND email_status = 'pending'`,
+    [id],
+  );
+  return {
+    recipient_count: Number(row.recipient_count ?? 0),
+    email_cancelled: Number(cancelled.rowCount ?? 0),
+    email_in_flight: Number(inFlight.rows?.[0]?.n ?? 0),
+  };
+}
+
+/**
+ * DELETE announcements/:id. draft | scheduled -> KALICI silme ({ ok, mode: 'removed' }). published -> aynı işlemde geri çekme adımları +
+ * deleted_at ({ mode: 'archived' }); withdrawn -> deleted_at. Kayıt silinmez (yumuşak silme); yönetici / kurul listesi, ayrıntı ve alıcılar
+ * silinmişi göstermez; günlük / saatlik yayın sınırları silinenleri saymaya DEVAM eder. Zaten silinmiş -> 404. Audit tek satır (başlık / gövde yok).
+ */
 export async function deleteAnnouncement({ siteCode, id: rawId, actor }) {
   const id = parsePositiveId(rawId);
   if (id === null) {
     throw announcementNotFound();
   }
+  let mode = 'removed';
   await withAnnouncementTransaction(siteCode, async (client) => {
     const removed = await client.query(
-      `DELETE FROM announcements WHERE id = $1 AND site_code = $2 AND status IN ('draft', 'scheduled') RETURNING status`,
+      `DELETE FROM announcements WHERE id = $1 AND site_code = $2 AND status IN ('draft', 'scheduled') AND deleted_at IS NULL RETURNING status`,
       [id, siteCode],
     );
-    const row = removed.rows?.[0];
-    if (!row) {
-      const state = await client.query(`SELECT status FROM announcements WHERE id = $1 AND site_code = $2`, [id, siteCode]);
-      if (!state.rows?.[0]) {
-        throw announcementNotFound();
-      }
-      throw invalidState('Yayınlanmış duyuru silinemez; geri çekebilirsiniz.');
+    if (removed.rows?.[0]) {
+      await audit(client, actor, 'announcement.deleted', siteCode, id, { from_status: removed.rows[0].status, archived: false });
+      return;
     }
-    await audit(client, actor, 'announcement.deleted', siteCode, id, { status: row.status });
+    const state = await client.query(
+      `SELECT status FROM announcements WHERE id = $1 AND site_code = $2 AND deleted_at IS NULL FOR UPDATE`,
+      [id, siteCode],
+    );
+    const status = state.rows?.[0]?.status;
+    if (!status) {
+      throw announcementNotFound();
+    }
+    let details = { email_cancelled: 0, email_in_flight: 0 };
+    if (status === 'published') {
+      const { email_cancelled: cancelled, email_in_flight: inFlight } = await withdrawWithinTransaction(client, { id, siteCode });
+      details = { email_cancelled: cancelled, email_in_flight: inFlight };
+    }
+    await client.query(`UPDATE announcements SET deleted_at = NOW(), updated_at = NOW() WHERE id = $1 AND site_code = $2 AND status = 'withdrawn'`, [id, siteCode]);
+    await audit(client, actor, 'announcement.deleted', siteCode, id, { from_status: status, archived: true, ...details });
+    mode = 'archived';
   });
-  return { ok: true };
+  return { ok: true, mode };
 }

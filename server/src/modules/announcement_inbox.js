@@ -34,9 +34,12 @@ function userCodeOf(authUser) {
 const MINE_FROM = `
   FROM site_people sp
   INNER JOIN announcement_recipients r ON r.person_id = sp.id
-  INNER JOIN announcements a ON a.id = r.announcement_id AND a.status = 'published'
+  INNER JOIN announcements a ON a.id = r.announcement_id AND a.status = 'published' AND a.deleted_at IS NULL
   INNER JOIN sites s ON s.site_code = a.site_code AND s.approval_status = 'approved'
 `;
+
+/** Alıcının kendi listesinden kaldırdığı (gizlediği) duyuruyu dışlar: liste, özet, read-all ve detay AYNI süzgeci kullanır. */
+const NOT_HIDDEN_SQL = 'r.hidden_at IS NULL';
 
 /**
  * GET /app/announcements -> { items: [...], next_before_id }. Sıra: published_at DESC, id DESC. Sayfa imleci `before_id`
@@ -74,6 +77,7 @@ export async function listMyAnnouncements(authUser, query = {}, db = pool) {
       LIMIT 1
     )`);
   }
+  clauses.push(NOT_HIDDEN_SQL);
   params.push(filters.limit + 1);
   const result = await db.query(
     `
@@ -109,7 +113,7 @@ export async function getMyAnnouncement(authUser, rawId, db = pool) {
     `
       SELECT a.id, a.site_code, s.name AS site_name, a.title, a.body, a.importance, a.published_at, a.edited_at, r.read_at
       ${MINE_FROM}
-      WHERE sp.user_code = $1 AND a.id = $2
+      WHERE sp.user_code = $1 AND a.id = $2 AND ${NOT_HIDDEN_SQL}
       LIMIT 1
     `,
     [userCode, id],
@@ -135,6 +139,62 @@ export async function getMyAnnouncement(authUser, rawId, db = pool) {
   };
 }
 
+/**
+ * DELETE /app/announcements/:id -> { ok: true, hidden_at }. Alıcının duyuruyu KENDİ listesinden kaldırması (yalnız çağıranın alıcı satırı ve
+ * yayındaki duyuru). İdempotent: ilk gizleme zamanı korunur. read_at'e dokunulmaz (yönetici istatistiği gerçek kalır); audit yazılmaz.
+ */
+export async function hideMyAnnouncement(authUser, rawId, db = pool) {
+  const id = parsePositiveId(rawId);
+  const userCode = userCodeOf(authUser);
+  if (id === null || userCode === null) {
+    throw announcementNotFound();
+  }
+  const result = await db.query(
+    `
+      UPDATE announcement_recipients r
+      SET hidden_at = COALESCE(r.hidden_at, NOW())
+      FROM site_people sp, announcements a, sites s
+      WHERE r.announcement_id = $1
+        AND sp.id = r.person_id AND sp.user_code = $2
+        AND a.id = r.announcement_id AND a.status = 'published' AND a.deleted_at IS NULL
+        AND s.site_code = a.site_code AND s.approval_status = 'approved'
+      RETURNING r.hidden_at
+    `,
+    [id, userCode],
+  );
+  const row = result.rows?.[0];
+  if (!row) {
+    throw announcementNotFound();
+  }
+  return { ok: true, hidden_at: toIso(row.hidden_at) };
+}
+
+/** POST /app/announcements/:id/restore -> { ok: true }. "Geri al": gizlemeyi kaldırır (idempotent; yayında olmayan / başkasının kaydı 404). */
+export async function restoreMyAnnouncement(authUser, rawId, db = pool) {
+  const id = parsePositiveId(rawId);
+  const userCode = userCodeOf(authUser);
+  if (id === null || userCode === null) {
+    throw announcementNotFound();
+  }
+  const result = await db.query(
+    `
+      UPDATE announcement_recipients r
+      SET hidden_at = NULL
+      FROM site_people sp, announcements a, sites s
+      WHERE r.announcement_id = $1
+        AND sp.id = r.person_id AND sp.user_code = $2
+        AND a.id = r.announcement_id AND a.status = 'published' AND a.deleted_at IS NULL
+        AND s.site_code = a.site_code AND s.approval_status = 'approved'
+      RETURNING r.announcement_id
+    `,
+    [id, userCode],
+  );
+  if (!result.rows?.[0]) {
+    throw announcementNotFound();
+  }
+  return { ok: true };
+}
+
 /** POST /app/announcements/:id/read -> { ok: true, read_at }. İdempotent: ilk okuma zamanı korunur. */
 export async function markAnnouncementRead(authUser, rawId, db = pool) {
   const id = parsePositiveId(rawId);
@@ -149,9 +209,9 @@ export async function markAnnouncementRead(authUser, rawId, db = pool) {
       FROM site_people sp, announcements a, sites s
       WHERE r.announcement_id = $1
         AND sp.id = r.person_id AND sp.user_code = $2
-        AND a.id = r.announcement_id AND a.status = 'published'
+        AND a.id = r.announcement_id AND a.status = 'published' AND a.deleted_at IS NULL
         AND s.site_code = a.site_code AND s.approval_status = 'approved'
-        AND r.read_at IS NULL
+        AND r.read_at IS NULL AND r.hidden_at IS NULL
       RETURNING r.read_at
     `,
     [id, userCode],
@@ -162,7 +222,7 @@ export async function markAnnouncementRead(authUser, rawId, db = pool) {
       `
         SELECT r.read_at
         ${MINE_FROM}
-        WHERE sp.user_code = $1 AND a.id = $2
+        WHERE sp.user_code = $1 AND a.id = $2 AND ${NOT_HIDDEN_SQL}
         LIMIT 1
       `,
       [userCode, id],
@@ -194,9 +254,9 @@ export async function markAllAnnouncementsRead(authUser, body = {}, db = pool) {
       SET read_at = NOW()
       FROM site_people sp, announcements a, sites s
       WHERE sp.id = r.person_id AND sp.user_code = $1
-        AND a.id = r.announcement_id AND a.status = 'published'
+        AND a.id = r.announcement_id AND a.status = 'published' AND a.deleted_at IS NULL
         AND s.site_code = a.site_code AND s.approval_status = 'approved'
-        AND r.read_at IS NULL
+        AND r.read_at IS NULL AND r.hidden_at IS NULL
         AND ($2::BIGINT IS NULL OR a.site_code = $2::BIGINT)
     `,
     [userCode, siteCode],
@@ -221,7 +281,7 @@ export async function getNotificationSummary(authUser, db = pool) {
       WITH mine AS (
         SELECT a.id, a.importance, a.published_at, r.read_at
         ${MINE_FROM}
-        WHERE sp.user_code = $1${windowClause === null ? '' : ` AND ${windowClause}`}
+        WHERE sp.user_code = $1${windowClause === null ? '' : ` AND ${windowClause}`} AND ${NOT_HIDDEN_SQL}
       )
       SELECT
         (SELECT COUNT(*) FROM mine WHERE read_at IS NULL)::INTEGER AS unread,

@@ -689,12 +689,12 @@ async function runAttempt(userCode) {
     const recipients = await client.query(
       `
         UPDATE announcement_recipients r
-        SET read_at = NULL, email = NULL, email_hash = NULL, email_next_at = NULL,
+        SET read_at = NULL, hidden_at = NULL, email = NULL, email_hash = NULL, email_next_at = NULL,
             email_status = CASE WHEN r.email_status = 'pending' THEN 'none' ELSE r.email_status END,
             email_claimed_at = CASE WHEN r.email_status = 'pending' THEN NULL ELSE r.email_claimed_at END
         FROM site_people sp
         WHERE sp.id = r.person_id AND sp.user_code = $1
-          AND (r.read_at IS NOT NULL OR r.email IS NOT NULL OR r.email_hash IS NOT NULL OR r.email_status = 'pending')
+          AND (r.read_at IS NOT NULL OR r.hidden_at IS NOT NULL OR r.email IS NOT NULL OR r.email_hash IS NOT NULL OR r.email_status = 'pending')
       `,
       [userCode],
     );

@@ -34,6 +34,7 @@ class AnnouncementReadDialog extends StatefulWidget {
     required this.announcement,
     this.onRead,
     this.onGone,
+    this.onHide,
     this.documentService,
   });
 
@@ -49,12 +50,16 @@ class AnnouncementReadDialog extends StatefulWidget {
   /// Duyuru artık yok / yayında değil (404).
   final VoidCallback? onGone;
 
+  /// "Listemden kaldır": verilirse pencerede eylem çıkar; pencere kapanır, çağıran kaldırmayı yapar ve "Geri al" sunar.
+  final Future<void> Function(ResidentAnnouncement announcement)? onHide;
+
   static Future<void> show(
     BuildContext context, {
     required AuthService authService,
     required ResidentAnnouncement announcement,
     ValueChanged<ResidentAnnouncement>? onRead,
     VoidCallback? onGone,
+    Future<void> Function(ResidentAnnouncement announcement)? onHide,
   }) {
     return showDialog<void>(
       context: context,
@@ -63,6 +68,7 @@ class AnnouncementReadDialog extends StatefulWidget {
         announcement: announcement,
         onRead: onRead,
         onGone: onGone,
+        onHide: onHide,
       ),
     );
   }
@@ -178,6 +184,17 @@ class _AnnouncementReadDialogState extends State<AnnouncementReadDialog> {
       icon: a.isUrgent ? Icons.priority_high_rounded : Icons.campaign_rounded,
       tone: a.isUrgent ? AppTone.danger : AppTone.primary,
       actions: [
+        if (widget.onHide != null && _loaded)
+          TextButton(
+            key: const ValueKey<String>('announcement_read_hide'),
+            onPressed: () {
+              final hide = widget.onHide!;
+              final current = _announcement;
+              popIfCurrent(context);
+              unawaited(hide(current));
+            },
+            child: const Text('Listemden kaldır'),
+          ),
         TextButton(onPressed: () => popIfCurrent(context), child: const Text('Kapat')),
       ],
       child: body,

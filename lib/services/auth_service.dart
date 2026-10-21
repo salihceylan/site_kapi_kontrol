@@ -1688,6 +1688,20 @@ class AuthService extends ChangeNotifier {
     );
   }
 
+  /// Duyuruyu kendi listemden kaldırır (Geri al için [restoreAnnouncement]).
+  Future<void> hideAnnouncement(int announcementId) {
+    return _runAuthorized(
+      (token) => api.hideAnnouncement(token: token, announcementId: announcementId),
+    );
+  }
+
+  /// Kaldırılan duyuruyu listeye geri getirir.
+  Future<void> restoreAnnouncement(int announcementId) {
+    return _runAuthorized(
+      (token) => api.restoreAnnouncement(token: token, announcementId: announcementId),
+    );
+  }
+
   /// Tümünü okundu yapar; işaretlenen adedi döndürür.
   Future<int> markAllAnnouncementsRead({int? siteCode}) {
     return _runAuthorized(
