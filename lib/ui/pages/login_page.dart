@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:site_kapi_kontrol/services/locale_service.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:site_kapi_kontrol/config/app_config.dart';
@@ -283,10 +284,10 @@ class _LoginPageState extends State<LoginPage> {
                         keyboardType: TextInputType.text,
                         autocorrect: false,
                         enableSuggestions: false,
-                        decoration: const InputDecoration(
-                          labelText: 'E-posta veya Kullanıcı Adı',
+                        decoration: InputDecoration(
+                          labelText: context.l10n.loginIdentifierLabel,
                           hintText: 'ornek@email.com veya daire1',
-                          prefixIcon: Icon(Icons.person_outline_rounded),
+                          prefixIcon: const Icon(Icons.person_outline_rounded),
                         ),
                         validator: (value) {
                           final text = (value ?? '').trim();
@@ -303,7 +304,7 @@ class _LoginPageState extends State<LoginPage> {
                         controller: _passwordController,
                         obscureText: _obscurePassword,
                         decoration: InputDecoration(
-                          labelText: 'Şifre',
+                          labelText: context.l10n.loginPasswordLabel,
                           prefixIcon: const Icon(Icons.lock_outline_rounded),
                           suffixIcon: IconButton(
                             icon: Icon(
@@ -358,9 +359,9 @@ class _LoginPageState extends State<LoginPage> {
                         alignment: Alignment.centerRight,
                         child: TextButton(
                           onPressed: _isLoading ? null : _showForgotPasswordDialog,
-                          child: const Text(
-                            'Şifremi Unuttum?',
-                            style: TextStyle(fontWeight: FontWeight.w600),
+                          child: Text(
+                            context.l10n.loginForgotPassword,
+                            style: const TextStyle(fontWeight: FontWeight.w600),
                           ),
                         ),
                       ),
@@ -368,7 +369,7 @@ class _LoginPageState extends State<LoginPage> {
 
                       // Giriş Yap: yüklenirken etiket yerine çark gösterilir (tıklama kapalı).
                       PrimaryActionButton(
-                        label: 'Giriş Yap',
+                        label: context.l10n.loginSubmit,
                         onPressed: _isLoading ? null : _submit,
                         loading: _isLoading,
                       ),

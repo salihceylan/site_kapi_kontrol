@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:site_kapi_kontrol/services/locale_service.dart';
 import 'package:site_kapi_kontrol/brand/gude_logo_animated.dart';
 import 'package:site_kapi_kontrol/config/app_config.dart';
 import 'package:site_kapi_kontrol/models/user_role.dart';
@@ -461,7 +462,7 @@ class YanMenu extends StatelessWidget {
           const ValueKey<String>('yan_menu_gecis'),
           _MenuTile(
             icon: isResidentMode ? Icons.admin_panel_settings_rounded : Icons.home_rounded,
-            title: isResidentMode ? 'Yönetici Paneline Geç' : 'Sakin Moduna Geç',
+            title: isResidentMode ? context.l10n.menuSwitchToAdmin : context.l10n.menuSwitchToResident,
             selected: false,
             tone: isResidentMode ? AppTone.primary : AppTone.success,
             onTap: onToggleMode!,
@@ -516,7 +517,7 @@ class YanMenu extends StatelessWidget {
           const ValueKey<String>('yan_menu_yardim'),
           _MenuTile(
             icon: Icons.help_outline_rounded,
-            title: 'Yardım ve Destek',
+            title: context.l10n.menuHelp,
             selected: false,
             tone: tone,
             onTap: onOpenHelp!,
@@ -531,7 +532,7 @@ class YanMenu extends StatelessWidget {
           const ValueKey<String>('yan_menu_cikis'),
           _MenuTile(
             icon: Icons.logout_rounded,
-            title: 'Çıkış Yap',
+            title: context.l10n.menuLogout,
             selected: false,
             tone: AppTone.danger,
             onTap: onLogout,

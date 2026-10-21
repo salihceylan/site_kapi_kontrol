@@ -6,6 +6,7 @@ import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/helpers/password_policy.dart';
 import 'package:site_kapi_kontrol/ui/widgets/account_privacy_section.dart';
+import 'package:site_kapi_kontrol/ui/widgets/language_picker.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/managed_user_card.dart';
 import 'package:site_kapi_kontrol/ui/widgets/my_records_section.dart';
@@ -163,6 +164,8 @@ class ProfileView extends StatelessWidget {
               ),
             ),
           ),
+          const SizedBox(height: AppSpace.lg),
+          const LanguagePicker(),
           if (authService != null) ...[
             const SizedBox(height: AppSpace.lg),
             MyRecordsSection(authService: authService!),

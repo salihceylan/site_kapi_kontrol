@@ -1,0 +1,15 @@
+{
+  "@@locale": "en",
+  "loginIdentifierLabel": "Email or username",
+  "loginPasswordLabel": "Password",
+  "loginForgotPassword": "Forgot password?",
+  "loginSubmit": "Sign in",
+  "menuSwitchToAdmin": "Switch to admin panel",
+  "menuSwitchToResident": "Switch to resident mode",
+  "menuHelp": "Help and support",
+  "menuLogout": "Sign out",
+  "languageTitle": "Language",
+  "languageSystem": "Device language",
+  "languageTurkish": "Türkçe",
+  "languageEnglish": "English"
+}

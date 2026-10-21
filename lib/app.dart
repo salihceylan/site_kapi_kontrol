@@ -1,6 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:site_kapi_kontrol/l10n/gen/app_localizations.dart';
+import 'package:site_kapi_kontrol/services/locale_service.dart';
 import 'package:site_kapi_kontrol/config/app_config.dart';
 import 'package:site_kapi_kontrol/models/door_record.dart';
 import 'package:site_kapi_kontrol/models/user_role.dart';
@@ -54,6 +57,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   late final DeepLinkService _deepLinkService;
   late final ThemeService _themeService;
   late final bool _ownsThemeService;
+  final LocaleService _localeService = LocaleService();
 
   /// Tek örnek: AuthService'in kullandığı örnekle aynıdır; yaşam döngüsü
   /// (pause/resume) bu asıl örneğe uygulanır.
@@ -75,6 +79,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     if (_ownsThemeService) {
       unawaited(_themeService.load());
     }
+    unawaited(_localeService.load());
     _authService = AuthService(api: AuthApi(baseUrl: apiBaseUrl));
     _networkService = NetworkService(enabled: widget.networkCheckEnabled);
     _voiceDoorService = VoiceDoorService(authService: _authService);
@@ -348,6 +353,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     _authService.removeListener(_onAuthChanged);
     _localDoorService.pauseListening();
+    _localeService.dispose();
     _authService.dispose();
     _networkService.dispose();
     _voiceDoorService.dispose();
@@ -363,11 +369,14 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     // ThemeScope MaterialApp'ın ÜSTÜNDE: itilen sayfalar ve diyaloglar da tema düğmesine erişir. Tema modu
     // değişince yalnız MaterialApp yeniden kurulur (varsayılan: sistem teması, eski davranış).
-    return ThemeScope(
-      service: _themeService,
-      child: AnimatedBuilder(
-        animation: _themeService,
-        builder: (context, _) => _buildMaterialApp(),
+    return LocaleScope(
+      service: _localeService,
+      child: ThemeScope(
+        service: _themeService,
+        child: AnimatedBuilder(
+          animation: Listenable.merge([_themeService, _localeService]),
+          builder: (context, _) => _buildMaterialApp(),
+        ),
       ),
     );
   }
@@ -380,6 +389,14 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
       themeMode: _themeService.mode,
+      locale: _localeService.locale,
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       builder: (context, child) {
         // Metin ölçeği en çok 2,0 (taşma testleri bu sınırda biter). Sayfa zemini DÜZ palet zeminidir (sade stil,
         // karar G6: açıkta #F8FAFC, koyuda #0F172A); üstünde ışıma yoktur. Statik: kararlı durumda yeniden boyanmaz.

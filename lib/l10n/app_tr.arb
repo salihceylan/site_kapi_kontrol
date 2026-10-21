@@ -1,0 +1,15 @@
+{
+  "@@locale": "tr",
+  "loginIdentifierLabel": "E-posta veya Kullanıcı Adı",
+  "loginPasswordLabel": "Şifre",
+  "loginForgotPassword": "Şifremi Unuttum?",
+  "loginSubmit": "Giriş Yap",
+  "menuSwitchToAdmin": "Yönetici Paneline Geç",
+  "menuSwitchToResident": "Sakin Moduna Geç",
+  "menuHelp": "Yardım ve Destek",
+  "menuLogout": "Çıkış Yap",
+  "languageTitle": "Dil",
+  "languageSystem": "Cihaz dili",
+  "languageTurkish": "Türkçe",
+  "languageEnglish": "English"
+}
