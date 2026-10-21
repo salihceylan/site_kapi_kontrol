@@ -156,9 +156,20 @@ class FinanceChartsTabState extends State<FinanceChartsTab> {
     ];
     final unit = terms.unit.toLowerCase();
 
+    // Giriş animasyonunun yeniden oynama anahtarı: kartın verisi değişmediyse (örn. aynı veriyle yenileme, sekme dönüşü) tekrar oynamaz.
+    final incomeKey = Object.hashAll(<Object?>[for (final m in months) ...<Object?>[m.period, m.collectedMinor, m.expenseMinor]]);
+    final collectionKey = Object.hashAll(<Object?>[
+      for (final m in months) ...<Object?>[m.period, m.writtenMinor, m.collectedMinor, m.collectionRateBp],
+    ]);
+    final cashKey = Object.hashAll(<Object?>[for (final m in months) ...<Object?>[m.period, m.cashBalanceMinor]]);
+    final categoriesKey = Object.hashAll(<Object?>[for (final c in cats) ...<Object?>[c.name, c.totalMinor]]);
+    final agingKey = Object.hashAll(<Object?>[for (final r in agingRows) r.minor]);
+
     return <Widget>[
       FinanceChartCard(
         id: 'income_expense',
+        index: 0,
+        replayKey: incomeKey,
         title: 'Aylık gelir ve gider',
         description: 'Her ay kasaya giren tahsilat ile yapılan gider. Son $count ayda ${formatMinor(data.totalCollectedMinor)} tahsil edildi, '
             '${formatMinor(data.totalExpenseMinor)} harcandı.',
@@ -186,6 +197,8 @@ class FinanceChartsTabState extends State<FinanceChartsTab> {
       const SizedBox(height: AppSpace.md),
       FinanceChartCard(
         id: 'collection',
+        index: 1,
+        replayKey: collectionKey,
         title: '${terms.fee} tahsilatı',
         description: 'Her ay yazılan borç ile toplanan tutar ve toplanma yüzdesi. Gecikme bedelleri yazılan borca dahildir.'
             '${rate == null ? '' : ' Son $count ayda toplanma oranı: ${chartPercent(rate)}.'}',
@@ -231,6 +244,8 @@ class FinanceChartsTabState extends State<FinanceChartsTab> {
       const SizedBox(height: AppSpace.md),
       FinanceChartCard(
         id: 'cash',
+        index: 2,
+        replayKey: cashKey,
         title: 'Kasa ve banka bakiyesi',
         description: 'Tüm kasa ve banka hesaplarındaki toplam para; her ayın sonu, bu ay için bugün.'
             '${lastCash == null ? '' : ' Şu an toplam ${formatMinor(lastCash)}.'}',
@@ -255,6 +270,8 @@ class FinanceChartsTabState extends State<FinanceChartsTab> {
       const SizedBox(height: AppSpace.md),
       FinanceChartCard(
         id: 'categories',
+        index: 3,
+        replayKey: categoriesKey,
         title: 'Gider kategorileri',
         description: 'Son $count ayda paranın nereye harcandığı. Toplam gider ${formatMinor(totalCats)}.',
         hasData: data.hasCategories,
@@ -269,6 +286,8 @@ class FinanceChartsTabState extends State<FinanceChartsTab> {
       const SizedBox(height: AppSpace.md),
       FinanceChartCard(
         id: 'aging',
+        index: 4,
+        replayKey: agingKey,
         title: 'Geciken borçlar',
         description: 'Vadesi geçmiş borçların kaç gündür ödenmediğine göre dağılımı (bugün itibarıyla). '
             'Toplam ${formatMinor(aging.totalOverdueMinor)}, ${aging.debtorCount} $unit borçlu.',

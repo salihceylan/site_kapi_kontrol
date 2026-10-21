@@ -4,9 +4,11 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/models/finance_charts.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
+import 'package:site_kapi_kontrol/ui/design/motion_widgets.dart' show StaggeredEntry;
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/helpers/money.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_4b_parts.dart' show FinanceInfoRow;
+import 'package:site_kapi_kontrol/ui/widgets/finance_chart_reveal.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart' show listCardPadding;
 
 /// Finans > Grafikler'in çizim parçaları.
@@ -19,7 +21,10 @@ import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart' show listCardPaddi
 ///   (açık temada koyu ton, koyu temada canlı ton; zemine karşı en az 3:1).
 /// - Eksen yazıları en çok 1,3x büyür (büyük yazıda grafik taşmaz); asıl değerler tabloda ve açıklamada tam ölçekte.
 /// - Grafik koordinatları kayan nokta (yalnız çizim); para hesabı tamsayı kuruştur.
-/// - `MediaQuery.disableAnimations` açıkken animasyon yoktur.
+/// - Giriş animasyonu: çubuklar alttan büyür, çizgiler soldan sağa çizilir, tutar ve yüzde 0'dan sayar (800 ms, easeOutCubic,
+///   kart başına tek denetleyici, kartlar kademeli; bkz. `finance_chart_reveal.dart`). Sekme açılınca bir kez, veri değişince
+///   yeniden oynar; "Tablo olarak göster" ile dönüşte yeniden oynamaz. Sonsuz animasyon yoktur.
+/// - `MediaQuery.disableAnimations` açıkken animasyon yoktur (ilk karede son hal).
 
 const String kChartEmptyText = 'Bu dönemde kayıt yok';
 
@@ -86,7 +91,15 @@ class FinanceChartCard extends StatefulWidget {
     required this.table,
     this.emptyHint,
     this.footnote,
+    this.index = 0,
+    this.replayKey,
   });
+
+  /// Kartın sırası (0'dan): giriş animasyonu [kChartRevealStagger] x sıra kadar geç başlar.
+  final int index;
+
+  /// Değişince giriş animasyonu yeniden oynar (örn. verinin özeti). Aynı kalırsa yenilemede tekrar oynamaz.
+  final Object? replayKey;
 
   /// Anahtar soneki: `finance_chart_card_<id>`, `finance_chart_<id>`, `finance_chart_table_<id>`, `finance_chart_empty_<id>`.
   final String id;
@@ -106,14 +119,62 @@ class FinanceChartCard extends StatefulWidget {
   State<FinanceChartCard> createState() => _FinanceChartCardState();
 }
 
-class _FinanceChartCardState extends State<FinanceChartCard> {
+class _FinanceChartCardState extends State<FinanceChartCard> with SingleTickerProviderStateMixin {
   bool _asTable = false;
+
+  // Kart başına tek denetleyici: "Tablo olarak göster" ile grafik yeniden kurulsa da giriş yeniden oynamaz.
+  late final AnimationController _controller;
+  late final Animation<double> _progress;
+  bool _decided = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final delay = kChartRevealStagger * (widget.index < 0 ? 0 : widget.index);
+    final total = kChartRevealDuration + delay;
+    _controller = AnimationController(vsync: this, duration: total);
+    _progress = _controller.drive(
+      CurveTween(curve: Interval(delay.inMilliseconds / total.inMilliseconds, 1, curve: AppMotion.enter)),
+    );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_decided) {
+      _decided = true;
+      _play();
+    } else if (AppMotion.reduced(context)) {
+      // Hareket azaltma giriş sürerken açılırsa grafik hemen son haline gelir.
+      _controller.value = 1;
+    }
+  }
+
+  @override
+  void didUpdateWidget(FinanceChartCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.replayKey != widget.replayKey || oldWidget.hasData != widget.hasData) _play();
+  }
+
+  void _play() {
+    if (!widget.hasData || AppMotion.reduced(context)) {
+      _controller.value = 1;
+      return;
+    }
+    _controller.forward(from: 0);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final th = Theme.of(context).textTheme;
     final p = context.palette;
-    return AppCard(
+    final card = AppCard(
       key: ValueKey<String>('finance_chart_card_${widget.id}'),
       padding: listCardPadding(context),
       child: Column(
@@ -138,7 +199,10 @@ class _FinanceChartCardState extends State<FinanceChartCard> {
             if (_asTable)
               KeyedSubtree(key: ValueKey<String>('finance_chart_table_${widget.id}'), child: widget.table)
             else
-              KeyedSubtree(key: ValueKey<String>('finance_chart_${widget.id}'), child: widget.chart),
+              KeyedSubtree(
+                key: ValueKey<String>('finance_chart_${widget.id}'),
+                child: ChartRevealScope(progress: _progress, child: widget.chart),
+              ),
             if (!_asTable && widget.footnote != null) ...[
               const SizedBox(height: AppSpace.xs),
               Text(widget.footnote!, style: th.bodySmall?.copyWith(color: p.textSecondary)),
@@ -155,6 +219,8 @@ class _FinanceChartCardState extends State<FinanceChartCard> {
         ],
       ),
     );
+    // Kart girişi: hafif kademeli (sıraya göre) solarak ve 12 dp yukarıdan kayarak gelir; yalnız ilk kurulumda bir kez oynar.
+    return StaggeredEntry(index: widget.index, child: card);
   }
 }
 
@@ -291,6 +357,7 @@ class ChartPairBars extends StatelessWidget {
     final interval = niceInterval(maxV);
     final maxY = math.max(interval, (maxV / interval).ceil() * interval);
     final labels = <String>[for (final m in months) chartMonthLabel(m.period)];
+    final reveal = ChartRevealScope.maybeOf(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -298,34 +365,43 @@ class ChartPairBars extends StatelessWidget {
           builder: (context, c) {
             final slot = months.isEmpty ? 40.0 : (c.maxWidth - _leftAxisWidth) / months.length;
             final rodWidth = (slot / 3.2).clamp(3.0, 12.0).toDouble();
+            final grid = _grid(context, interval);
+            final titles = _titles(context, labels: labels, step: _labelStep(slot), interval: interval, leftLabel: compactLira);
             return Semantics(
               label: summary(),
               container: true,
               excludeSemantics: true,
               child: SizedBox(
                 height: 220,
-                child: BarChart(
-                  duration: AppMotion.of(context, AppMotion.base),
-                  BarChartData(
-                    minY: 0,
-                    maxY: maxY,
-                    alignment: BarChartAlignment.spaceAround,
-                    gridData: _grid(context, interval),
-                    borderData: FlBorderData(show: false),
-                    barTouchData: BarTouchData(enabled: false),
-                    titlesData: _titles(context, labels: labels, step: _labelStep(slot), interval: interval, leftLabel: compactLira),
-                    barGroups: [
-                      for (var i = 0; i < months.length; i++)
-                        BarChartGroupData(
-                          x: i,
-                          barsSpace: 1,
-                          barRods: [
-                            BarChartRodData(toY: _y(first(months[i])), width: rodWidth, color: firstColor, borderRadius: const BorderRadius.vertical(top: Radius.circular(2))),
-                            BarChartRodData(toY: _y(second(months[i])), width: rodWidth, color: secondColor, borderRadius: const BorderRadius.vertical(top: Radius.circular(2))),
-                          ],
-                        ),
-                    ],
-                  ),
+                // Giriş: çubuklar tabandan büyür (eksen en büyük değere sabit). Kapsam varsa fl_chart'ın kendi geçişi kapalıdır.
+                child: AnimatedBuilder(
+                  animation: reveal ?? kAlwaysCompleteAnimation,
+                  builder: (context, _) {
+                    final p = reveal?.value ?? 1.0;
+                    return BarChart(
+                      duration: reveal == null ? AppMotion.of(context, AppMotion.base) : Duration.zero,
+                      BarChartData(
+                        minY: 0,
+                        maxY: maxY,
+                        alignment: BarChartAlignment.spaceAround,
+                        gridData: grid,
+                        borderData: FlBorderData(show: false),
+                        barTouchData: BarTouchData(enabled: false),
+                        titlesData: titles,
+                        barGroups: [
+                          for (var i = 0; i < months.length; i++)
+                            BarChartGroupData(
+                              x: i,
+                              barsSpace: 1,
+                              barRods: [
+                                BarChartRodData(toY: _y(first(months[i])) * p, width: rodWidth, color: firstColor, borderRadius: const BorderRadius.vertical(top: Radius.circular(2))),
+                                BarChartRodData(toY: _y(second(months[i])) * p, width: rodWidth, color: secondColor, borderRadius: const BorderRadius.vertical(top: Radius.circular(2))),
+                              ],
+                            ),
+                        ],
+                      ),
+                    );
+                  },
                 ),
               ),
             );
@@ -399,48 +475,60 @@ class ChartLine extends StatelessWidget {
       for (var i = 0; i < months.length; i++)
         values[i] == null ? FlSpot.nullSpot : FlSpot(i.toDouble(), percent ? values[i]! / 100.0 : _lira(values[i]!)),
     ];
+    final reveal = ChartRevealScope.maybeOf(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         LayoutBuilder(
           builder: (context, c) {
             final slot = months.isEmpty ? 40.0 : (c.maxWidth - _leftAxisWidth) / months.length;
+            final grid = _grid(context, interval);
+            final titles = _titles(
+              context,
+              labels: labels,
+              step: _labelStep(slot),
+              interval: interval,
+              leftLabel: percent ? (v) => '%${v.round()}' : compactLira,
+            );
             return Semantics(
               label: summary(),
               container: true,
               excludeSemantics: true,
               child: SizedBox(
                 height: height,
-                child: LineChart(
-                  duration: AppMotion.of(context, AppMotion.base),
-                  LineChartData(
-                    minX: -0.5,
-                    maxX: math.max(months.length - 1, 0) + 0.5,
-                    minY: minY,
-                    maxY: maxY,
-                    gridData: _grid(context, interval),
-                    borderData: FlBorderData(show: false),
-                    lineTouchData: const LineTouchData(enabled: false),
-                    titlesData: _titles(
-                      context,
-                      labels: labels,
-                      step: _labelStep(slot),
-                      interval: interval,
-                      leftLabel: percent ? (v) => '%${v.round()}' : compactLira,
-                    ),
-                    lineBarsData: [
-                      LineChartBarData(
-                        spots: spots,
-                        color: color,
-                        barWidth: 2.5,
-                        isCurved: false,
-                        dotData: FlDotData(
-                          show: true,
-                          getDotPainter: (spot, _, bar, index) => FlDotCirclePainter(radius: 3, color: color, strokeWidth: 0),
-                        ),
+                // Giriş: çizgi soldan sağa çizilir (eksenler sabit); aradaki ara değerli uç nokta için nokta çizilmez.
+                child: AnimatedBuilder(
+                  animation: reveal ?? kAlwaysCompleteAnimation,
+                  builder: (context, _) {
+                    final shown = revealSpots(spots, reveal?.value ?? 1.0);
+                    return LineChart(
+                      duration: reveal == null ? AppMotion.of(context, AppMotion.base) : Duration.zero,
+                      LineChartData(
+                        minX: -0.5,
+                        maxX: math.max(months.length - 1, 0) + 0.5,
+                        minY: minY,
+                        maxY: maxY,
+                        gridData: grid,
+                        borderData: FlBorderData(show: false),
+                        lineTouchData: const LineTouchData(enabled: false),
+                        titlesData: titles,
+                        lineBarsData: [
+                          if (shown.any((s) => s.isNotNull()))
+                            LineChartBarData(
+                              spots: shown,
+                              color: color,
+                              barWidth: 2.5,
+                              isCurved: false,
+                              dotData: FlDotData(
+                                show: true,
+                                checkToShowDot: (spot, _) => spot.x == spot.x.roundToDouble(),
+                                getDotPainter: (spot, _, bar, index) => FlDotCirclePainter(radius: 3, color: color, strokeWidth: 0),
+                              ),
+                            ),
+                        ],
                       ),
-                    ],
-                  ),
+                    );
+                  },
                 ),
               ),
             );
@@ -480,48 +568,66 @@ class ChartBarRows extends StatelessWidget {
   Widget build(BuildContext context) {
     final th = Theme.of(context).textTheme;
     final p = context.palette;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        for (final (i, row) in rows.indexed)
-          Padding(
-            key: ValueKey<String>('${rowKeyPrefix}_$i'),
-            padding: EdgeInsets.only(bottom: i == rows.length - 1 ? 0 : AppSpace.md),
-            child: Semantics(
-              container: true,
-              excludeSemantics: true,
-              label: '${row.label}: ${moneySemanticLabel(row.minor)}${percentOf(row.minor, total) == null ? '' : ', yüzde ${percentOf(row.minor, total)}'}',
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Wrap(
-                    alignment: WrapAlignment.spaceBetween,
-                    spacing: AppSpace.sm,
-                    runSpacing: 2,
+    final reveal = ChartRevealScope.maybeOf(context);
+    // Giriş: çubuk soldan dolar, tutar ve yüzde 0'dan sayar. Ekran okuyucu etiketi hep son değerdir (ara değer okunmaz).
+    return AnimatedBuilder(
+      animation: reveal ?? kAlwaysCompleteAnimation,
+      builder: (context, _) {
+        final t = reveal?.value ?? 1.0;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (final (i, row) in rows.indexed)
+              Padding(
+                key: ValueKey<String>('${rowKeyPrefix}_$i'),
+                padding: EdgeInsets.only(bottom: i == rows.length - 1 ? 0 : AppSpace.md),
+                child: Semantics(
+                  container: true,
+                  excludeSemantics: true,
+                  label: '${row.label}: ${moneySemanticLabel(row.minor)}${percentOf(row.minor, total) == null ? '' : ', yüzde ${percentOf(row.minor, total)}'}',
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Text(row.label, style: th.bodyMedium?.copyWith(fontWeight: FontWeight.w700)),
-                      Text(
-                        percentOf(row.minor, total) == null ? formatMinor(row.minor) : '${formatMinor(row.minor)} · %${percentOf(row.minor, total)}',
-                        style: th.bodyMedium?.copyWith(color: p.textSecondary),
+                      Wrap(
+                        alignment: WrapAlignment.spaceBetween,
+                        spacing: AppSpace.sm,
+                        runSpacing: 2,
+                        children: [
+                          Text(row.label, style: th.bodyMedium?.copyWith(fontWeight: FontWeight.w700)),
+                          Text(
+                            _rowAmountText(row.minor, total, t),
+                            style: th.bodyMedium?.copyWith(
+                              color: p.textSecondary,
+                              fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: AppSpace.xs),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          value: (total <= 0 ? 0.0 : (row.minor / total).clamp(0.0, 1.0)) * t,
+                          minHeight: 10,
+                          color: row.color,
+                          backgroundColor: p.surfaceMuted,
+                        ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: AppSpace.xs),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
-                    child: LinearProgressIndicator(
-                      value: total <= 0 ? 0.0 : (row.minor / total).clamp(0.0, 1.0),
-                      minHeight: 10,
-                      color: row.color,
-                      backgroundColor: p.surfaceMuted,
-                    ),
-                  ),
-                ],
+                ),
               ),
-            ),
-          ),
-      ],
+          ],
+        );
+      },
     );
+  }
+
+  /// "1.250,00 ₺ · %25"; [t] (0..1) giriş ilerlemesidir: tutar ve yüzde 0'dan saydırılır, 1'de tam değerdir.
+  static String _rowAmountText(int minor, int total, double t) {
+    final shown = t >= 1 ? minor : (minor * t).round();
+    final pct = percentOf(shown, total);
+    return pct == null ? formatMinor(shown) : '${formatMinor(shown)} · %$pct';
   }
 }
 
