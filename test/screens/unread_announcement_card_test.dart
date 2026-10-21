@@ -1,6 +1,6 @@
-// Saha denemesi F3.03: sakin Panel'inin en üstünde okunmamış duyuru KARTI (yumuşak nabız, "Oku", "+N duyuru daha").
-// Bileşen testleri: içerik, düğmeler, anlamsal etiket (canlı bölge DEĞİL), nabız hızı (sert flaş yok),
-// hareketi azalt / test anahtarı ile durağan, açık + koyu tema ve taşma matrisi.
+// Saha denemesi F3.03: sakin Panel'inin en üstünde okunmamış duyuru KARTI (3 tur yanıp söner sonra durağan, "Oku", "+N duyuru daha").
+// Bileşen testleri: içerik, düğmeler, anlamsal etiket (canlı bölge DEĞİL), yanıp sönme (3 tur, 4,8 sn, sonra durağan; sert flaş yok),
+// hareketi azalt ile durağan, açık + koyu tema ve taşma matrisi.
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart' show SemanticsAction;
 import 'package:flutter/services.dart' show LogicalKeyboardKey;
@@ -30,18 +30,10 @@ Widget _card({
   ),
 );
 
-/// Kartın dış parıltısının (BoxShadow) o anki saydamlığı.
-double _glowAlpha(WidgetTester t) {
-  final box = t.widget<DecoratedBox>(
-    find
-        .descendant(
-          of: find.byType(UnreadAnnouncementCard),
-          matching: find.byType(DecoratedBox),
-        )
-        .first,
-  );
-  final decoration = box.decoration as BoxDecoration;
-  return decoration.boxShadow!.first.color.a;
+/// Kartın kenar çerçevesinin o anki rengi.
+Color _edgeColor(WidgetTester t) {
+  final material = t.widget<Material>(find.byKey(const ValueKey<String>('unread_announcement_card_surface')));
+  return ((material.shape! as RoundedRectangleBorder).side).color;
 }
 
 void main() {
@@ -76,7 +68,7 @@ void main() {
     await pumpAt(t, _card(more: 1, onAll: () {}), width: 400, height: 800, scale: 1.0);
 
     final node = t.getSemantics(find.bySemanticsLabel(RegExp(r'^Yeni duyuru: Asansör bakımı')).first);
-    expect(node.label, 'Yeni duyuru: Asansör bakımı');
+    expect(node.label, startsWith('Yeni duyuru: Asansör bakımı'));
     expect(node.flagsCollection.isLiveRegion, isFalse);
 
     final open = t.getSemantics(find.byKey(const ValueKey<String>('unread_announcement_open')));
@@ -103,61 +95,54 @@ void main() {
     expect(find.text('Başlıksız duyuru'), findsOneWidget);
   });
 
-  group('nabız animasyonu', () {
-    testWidgets('açıkken parıltı yavaşça değişir: örnekler arası küçük adım, saniyede 3\'ten az tam tur', (t) async {
-      await pumpAt(t, _card(pulse: true), width: 400, height: 800, scale: 1.0);
-      final samples = <double>[_glowAlpha(t)];
-      for (var i = 0; i < 40; i++) {
+  group('yanıp sönme (sınırlı)', () {
+    testWidgets('3 kez yanıp söner, 4,8 sn sonra DURAĞAN vurgulu kalır (pumpAndSettle biter); gölge yok', (t) async {
+      await pumpAt(t, _card(), width: 400, height: 800, scale: 1.0);
+      final samples = <Color>[_edgeColor(t)];
+      for (var i = 0; i < 48; i++) {
         await t.pump(const Duration(milliseconds: 100));
-        samples.add(_glowAlpha(t));
+        samples.add(_edgeColor(t));
       }
-      var maxStep = 0.0;
-      var turns = 0; // yön değişimi sayısı
-      var lastSign = 0;
-      for (var i = 1; i < samples.length; i++) {
-        final d = samples[i] - samples[i - 1];
-        if (d.abs() > maxStep) maxStep = d.abs();
-        final sign = d == 0 ? 0 : (d > 0 ? 1 : -1);
-        if (sign != 0 && lastSign != 0 && sign != lastSign) turns++;
-        if (sign != 0) lastSign = sign;
-      }
-      final range = samples.reduce((a, b) => a > b ? a : b) - samples.reduce((a, b) => a < b ? a : b);
-      expect(range, greaterThan(0.2), reason: 'nabız görünür olmalı');
-      expect(maxStep, lessThan(0.12), reason: 'sert flaş yok: 100 ms\'de küçük adım');
-      // 4 sn'de en çok ~3 yön değişimi (tam tur ~3 sn): saniyede 3 flaştan çok uzak.
-      expect(turns, lessThanOrEqualTo(3));
-      await t.pumpWidget(const SizedBox());
-    });
-
-    testWidgets('hareketi azalt açıkken durağan ve vurgulu (pumpAndSettle biter)', (t) async {
-      await pumpAt(t, _card(pulse: true), width: 400, height: 800, scale: 1.0, reduce: true);
-      final a = _glowAlpha(t);
-      await t.pump(const Duration(milliseconds: 700));
-      expect(_glowAlpha(t), a);
-      expect(a, greaterThan(0.45), reason: 'durağan hâl vurgulu');
+      // Renk değişir (yanıp söner) ve en sonda durağan vurgulu renge oturur.
+      expect(samples.map((c) => c.toARGB32()).toSet().length, greaterThan(5));
       await t.pumpAndSettle();
+      final steady = _edgeColor(t);
+      await t.pump(const Duration(seconds: 2));
+      expect(_edgeColor(t), steady);
+      expect(t.binding.hasScheduledFrame, isFalse, reason: 'sonsuz animasyon yok');
+      final shadows = <BoxShadow>[
+        for (final box in t.widgetList<DecoratedBox>(find.descendant(of: find.byType(UnreadAnnouncementCard), matching: find.byType(DecoratedBox))))
+          if (box.decoration is BoxDecoration) ...?(box.decoration as BoxDecoration).boxShadow,
+      ];
+      expect(shadows, isEmpty);
     });
 
-    testWidgets('pulse false ya da test anahtarı kapalıyken durağan (pumpAndSettle biter)', (t) async {
-      expect(UnreadAnnouncementCard.pulseEnabledByDefault, isFalse, reason: 'flutter_test_config kapatır');
+    testWidgets('hareketi azalt açıkken doğrudan durağan vurgulu', (t) async {
+      await pumpAt(t, _card(), width: 400, height: 800, scale: 1.0, reduce: true);
+      final a = _edgeColor(t);
+      await t.pump(const Duration(milliseconds: 700));
+      expect(_edgeColor(t), a);
+      expect(t.binding.hasScheduledFrame, isFalse);
+      // Hareketli kartın durağan hâliyle aynı renk.
       await pumpAt(t, _card(), width: 400, height: 800, scale: 1.0);
       await t.pumpAndSettle();
-      final a = _glowAlpha(t);
-      await t.pump(const Duration(milliseconds: 700));
-      expect(_glowAlpha(t), a);
+      expect(_edgeColor(t), a);
+    });
 
+    testWidgets('duyuru kimliği değişince yeniden başlar', (t) async {
+      await pumpAt(t, _card(), width: 400, height: 800, scale: 1.0);
+      await t.pumpAndSettle();
+      final steady = _edgeColor(t);
+      await pumpAt(t, _card(announcement: ResidentAnnouncement(id: 8, title: 'Başka', bodyPreview: '')), width: 400, height: 800, scale: 1.0);
+      await t.pump(const Duration(milliseconds: 100));
+      expect(_edgeColor(t), isNot(steady), reason: 'yeni duyuruda soluk renkten yeniden başlar');
+      await t.pumpAndSettle();
+      expect(_edgeColor(t), steady);
+    });
+
+    testWidgets('pulse false: durağan vurgulu', (t) async {
       await pumpAt(t, _card(pulse: false), width: 400, height: 800, scale: 1.0);
-      await t.pumpAndSettle();
-    });
-
-    testWidgets('anahtar açılınca varsayılan olarak nabız atar; geri alınır', (t) async {
-      UnreadAnnouncementCard.pulseEnabledByDefault = true;
-      addTearDown(() => UnreadAnnouncementCard.pulseEnabledByDefault = false);
-      await pumpAt(t, _card(), width: 400, height: 800, scale: 1.0);
-      final a = _glowAlpha(t);
-      await t.pump(const Duration(milliseconds: 700));
-      expect(_glowAlpha(t), isNot(a));
-      await t.pumpWidget(const SizedBox());
+      expect(t.binding.hasScheduledFrame, isFalse);
     });
   });
 

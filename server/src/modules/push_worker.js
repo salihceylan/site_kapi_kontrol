@@ -135,7 +135,7 @@ const CLAIM_SQL = `
       SELECT 1
       FROM site_people sp
       INNER JOIN announcement_recipients r ON r.person_id = sp.id AND r.announcement_id = o.announcement_id
-      WHERE sp.user_code = o.user_code
+      WHERE sp.user_code = o.user_code AND r.hidden_at IS NULL
     ) AS still_recipient,
     np.push_announcements, np.push_show_preview, np.push_quiet_enabled, np.push_quiet_start, np.push_quiet_end
   FROM push_outbox o

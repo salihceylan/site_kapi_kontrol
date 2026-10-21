@@ -299,7 +299,7 @@ const SQL = Object.freeze({
     ORDER BY v.id DESC
   `,
   announcements: `
-    SELECT a.id, a.site_code, s.name AS site_name, a.title, a.body, a.importance, a.published_at, r.read_at
+    SELECT a.id, a.site_code, s.name AS site_name, a.title, a.body, a.importance, a.published_at, r.read_at, r.hidden_at
     FROM site_people sp
     INNER JOIN announcement_recipients r ON r.person_id = sp.id
     INNER JOIN announcements a ON a.id = r.announcement_id AND a.status = 'published'

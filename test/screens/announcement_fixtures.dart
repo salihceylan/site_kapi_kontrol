@@ -723,7 +723,7 @@ class AnnouncementFakeAuth extends PeopleFakeAuth {
   // --- Sakin uçları ----------------------------------------------------------------------------
 
   List<Map<String, dynamic>> get _visibleInbox {
-    final visible = inboxRows.where((r) => r['status'] == 'published').toList();
+    final visible = inboxRows.where((r) => r['status'] == 'published' && r['hidden'] != true).toList();
     visible.sort((a, b) {
       final byTime = (b['published_at'] as DateTime).compareTo(a['published_at'] as DateTime);
       return byTime != 0 ? byTime : (b['id'] as int).compareTo(a['id'] as int);
@@ -805,6 +805,28 @@ class AnnouncementFakeAuth extends PeopleFakeAuth {
     if (row == null) throw _notFound();
     row['read_at'] ??= DateTime.utc(2026, 10, 16, 9);
     return row['read_at'] as DateTime;
+  }
+
+  final List<int> hideCalls = <int>[];
+  final List<int> restoreCalls = <int>[];
+  Object? hideError;
+
+  @override
+  Future<void> hideAnnouncement(int announcementId) async {
+    hideCalls.add(announcementId);
+    final error = hideError;
+    if (error != null) throw error;
+    final row = _inboxById(announcementId);
+    if (row == null) throw _notFound();
+    row['hidden'] = true;
+  }
+
+  @override
+  Future<void> restoreAnnouncement(int announcementId) async {
+    restoreCalls.add(announcementId);
+    final row = _inboxById(announcementId);
+    if (row == null) throw _notFound();
+    row['hidden'] = false;
   }
 
   @override

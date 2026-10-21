@@ -129,6 +129,15 @@ class CursorLoader<T> {
     notify();
   }
 
+  /// Anahtarı [key] olan kaydı listeden çıkarır (örn. "Listemden kaldır"); yoksa bir şey yapmaz.
+  void removeItem(Object key) {
+    if (_disposed || !isAlive()) return;
+    final index = items.indexWhere((e) => keyOf(e) == key);
+    if (index < 0) return;
+    items = List<T>.of(items)..removeAt(index);
+    notify();
+  }
+
   /// Tüm kayıtları [update] ile değiştirir (örn. "tümünü okundu yap"); tek bildirim yapılır.
   void updateAll(T Function(T old) update) {
     if (_disposed || !isAlive()) return;

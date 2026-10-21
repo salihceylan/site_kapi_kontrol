@@ -230,7 +230,7 @@ void main() {
       expect(find.byKey(const ValueKey<String>('announcement_action_edit')), findsOneWidget);
       expect(find.byKey(const ValueKey<String>('announcement_action_withdraw')), findsOneWidget);
       expect(find.byKey(const ValueKey<String>('announcement_action_publish')), findsNothing);
-      expect(find.byKey(const ValueKey<String>('announcement_action_delete')), findsNothing);
+      expect(find.byKey(const ValueKey<String>('announcement_action_delete')), findsOneWidget, reason: 'yayındaki duyuru da silinebilir (yumuşak)');
       expect(find.text('Alıcılar'), findsOneWidget);
     });
   });
@@ -501,15 +501,18 @@ void main() {
       expect(find.text('Taslak, henüz yayınlanmadı.'), findsOneWidget);
     });
 
-    testWidgets('geri çekilmiş duyuruda hiçbir yazma eylemi yok', (t) async {
+    testWidgets('geri çekilmiş duyuruda yalnız Sil var (yumuşak silme metni)', (t) async {
       final auth = AnnouncementFakeAuth.seeded();
       await _pump(t, auth);
       await _open(t, 'Yanlış duyuru');
       expect(find.byKey(const ValueKey<String>('announcement_action_edit')), findsNothing);
       expect(find.byKey(const ValueKey<String>('announcement_action_publish')), findsNothing);
       expect(find.byKey(const ValueKey<String>('announcement_action_withdraw')), findsNothing);
-      expect(find.byKey(const ValueKey<String>('announcement_action_delete')), findsNothing);
+      expect(find.byKey(const ValueKey<String>('announcement_action_delete')), findsOneWidget);
       expect(find.textContaining('Geri çekildi (yayın zamanı:'), findsOneWidget);
+      await tapFinder(t, find.byKey(const ValueKey<String>('announcement_action_delete')));
+      await settleFor(t);
+      expect(find.textContaining('yasal saklama süresince saklanır'), findsOneWidget);
     });
 
     testWidgets('zamanlanmış duyuruda yayın zamanı İstanbul saatiyle yazılır', (t) async {

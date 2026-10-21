@@ -254,6 +254,9 @@ Girişten sonra açılan **Panel** kapı paneli değil, kullanıcıya tanımlı 
 - Geri tuşu bir modül sayfasından Panel vitrinine döner (`PopScope`); vitrindeyken uygulamadan çıkar. Çekmece ya da sağdaki Ayarlar paneli açıkken geri tuşu önce onu kapatır (sayfa değişmez). Karar ekrandaki etkin sayfayla verilir: erişimi düşen sayfadan vitrine düşülünce ilk geri basışı boşa gitmez.
 - Sayfa (menü ya da Sakin / Yönetici modu) değişince gövde kaydırması en üstten başlar. Vitrinde "Yenile" (AppBar düğmesi ya da aşağı çek) borç özetinin yanında kart rozetlerini (okunmamış duyuru, ziyaretçi / kargo) ve "Yeni duyuru" kartını da tazeler.
 
+### Panel: okunmamış duyuru kartı (N1)
+Sakin vitrininde okunmamış duyuru varken `UnreadAnnouncementCard` hero (borç / selam) kartının ÜSTÜNDEdir (`ModuleShowcaseView.aboveHero`). "Bounded dikkat" istisnasıdır: gölgesiz 2 dp kenar + nokta soluktan ana eylem rengine 3 kez (4,8 sn, ~0,5 Hz) geçer, sonra durağan vurgulu kalır; sonsuz efekt yok (WCAG 2.2.2 ve 2.3.1). Hareket azaltmada doğrudan durağan. Duyuru kimliği değişince yeniden başlar.
+
 ### Gezinme: gruplu çekmece, Ayarlar paneli, site seçici, sakin alt çubuğu (İP-1D, karar G2 + G3)
 Vitrinin kart listesi ve kuralları değişmedi; değişen, aynı öğe listesinin (`YanMenu.visibleItems`) çekmecede ve yeni yüzeylerde nasıl dizildiğidir. Görünürlük kuralı yine tek yerdedir: kapalı / yetkisiz öğe çekmecede, Ayarlar panelinde, vitrinde ve alt çubukta hiçbir koşulda yoktur (fail-closed).
 

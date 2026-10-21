@@ -27,7 +27,7 @@ import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 /// istatistiği, e-posta özeti ve (yazma yetkisi + yayınlanmış duyuruda) "Alıcılar" sekmesi.
 ///
 /// Eylemler YALNIZ [PeopleScope.canWrite] iken vardır: Düzenle, Şimdi Yayınla (kitle önizlemesi + onay),
-/// Geri Çek (onaylı), Sil (yalnız taslak / zamanlanmış, onaylı). Kurul üyesi salt okur: ne yazma düğmesi
+/// Geri Çek (onaylı), Sil (taslak / zamanlanmış kalıcı; yayınlanmış ve geri çekilmiş yumuşak silinir, onaylı). Kurul üyesi salt okur: ne yazma düğmesi
 /// ne alıcı adları ne de oluşturan kişi görünür (sunucu verse bile).
 ///
 /// Ayrıntı açılışta çekilir: yüklenirken iskelet, hata olursa "Tekrar Dene" (boş pencere ASLA çizilmez).
@@ -306,7 +306,13 @@ class _AnnouncementManageDialogState extends State<AnnouncementManageDialog> {
     final confirmed = await confirmCrmAction(
       context,
       title: 'Duyuruyu sil',
-      message: 'Bu duyuru kalıcı olarak silinir. Silme geri alınamaz.',
+      message: switch (detail.status) {
+        AnnouncementStatus.published =>
+          'Duyuru sakinlerin listesinden ve bu listeden kaldırılır; henüz gönderilmemiş e-postalar iptal edilir. Kayıt yasal saklama süresince arka planda tutulur. Bu işlem geri alınamaz.',
+        AnnouncementStatus.withdrawn =>
+          'Geri çekilmiş duyuru bu listeden kaldırılır; kayıt yasal saklama süresince saklanır.',
+        _ => 'Bu duyuru kalıcı olarak silinir. Silme geri alınamaz.',
+      },
       confirmLabel: 'Sil',
       icon: Icons.delete_outline_rounded,
       tone: AppTone.danger,
@@ -667,7 +673,7 @@ class _AnnouncementManageDialogState extends State<AnnouncementManageDialog> {
           onPressed: _actionsLocked ? null : _withdraw,
         ),
       ],
-      if (status.isEditable) ...[
+      if (status.isEditable || status == AnnouncementStatus.published || status == AnnouncementStatus.withdrawn) ...[
         const SizedBox(height: AppSpace.sm),
         PrimaryActionButton(
           key: const ValueKey<String>('announcement_action_delete'),

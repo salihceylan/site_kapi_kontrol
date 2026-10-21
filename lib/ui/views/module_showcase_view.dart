@@ -54,6 +54,7 @@ class ModuleShowcaseView extends StatefulWidget {
     this.onRefreshAccount,
     this.applicantRole = false,
     this.belowHero,
+    this.aboveHero,
     this.onOpenHelp,
     this.debtSiteCodes,
     this.quickActionItems,
@@ -90,6 +91,9 @@ class ModuleShowcaseView extends StatefulWidget {
 
   /// Sakin hero kartının hemen altı (örn. "Yeni duyuru" kartı).
   final Widget? belowHero;
+
+  /// Sakin hero kartının hemen ÜSTÜ (örn. okunmamış "Yeni duyuru" kartı; yoksa null / boş ve borç kartı en üsttedir).
+  final Widget? aboveHero;
 
   /// Verilirse "Hesap ve ayarlar" satırında "Yardım ve Destek" çıkar.
   final VoidCallback? onOpenHelp;
@@ -231,6 +235,7 @@ class ModuleShowcaseViewState extends State<ModuleShowcaseView> {
         const SizedBox(height: AppSpace.lg),
       ],
       if (audience == ShowcaseAudience.resident) ...[
+        if (widget.aboveHero != null) widget.aboveHero!,
         _buildHero(context),
         const SizedBox(height: AppSpace.lg),
         if (widget.belowHero != null) widget.belowHero!,

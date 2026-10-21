@@ -21,6 +21,8 @@ import {
   getNotificationSummary,
   listMyAnnouncements,
   markAllAnnouncementsRead,
+  hideMyAnnouncement,
+  restoreMyAnnouncement,
   markAnnouncementRead,
   setNotificationPreferences,
 } from './announcement_inbox.js';
@@ -256,6 +258,24 @@ announcementRouter.get(
   authRequired,
   announcementReadLimiter,
   appHandler({ context: 'my_announcement', fallback: 'Duyuru yüklenemedi.' }, (req) => getMyAnnouncement(req.authUser, req.params.id)),
+);
+
+announcementRouter.delete(
+  '/app/announcements/:id',
+  authRequired,
+  announcementWriteLimiter,
+  appHandler({ context: 'my_announcement_hide', fallback: 'Duyuru listenizden kaldırılamadı.' }, (req) =>
+    hideMyAnnouncement(req.authUser, req.params.id),
+  ),
+);
+
+announcementRouter.post(
+  '/app/announcements/:id/restore',
+  authRequired,
+  announcementWriteLimiter,
+  appHandler({ context: 'my_announcement_restore', fallback: 'Duyuru geri alınamadı.' }, (req) =>
+    restoreMyAnnouncement(req.authUser, req.params.id),
+  ),
 );
 
 announcementRouter.post(
