@@ -249,15 +249,18 @@ export function computeOpenPeriod(currentIso, closedPeriods) {
 
 /**
  * Şimdi kapatılabilecek aylar (yeni -> eski, en çok 12): kapalı ay yoksa bu ay ve önceki 11 ay (ilk kapatmada herhangi bir ay serbesttir);
- * varsa yalnız closed_through + 1 ay (bu ay ya da öncesiyse), aksi halde boş.
+ * varsa closed_through + 1 aydan bu aya kadar bütün aylar (en çok 12, yeni -> eski); hepsi kapalıysa boş. Seçilen ay ve öncesindeki açık aylar birlikte kapanır.
  */
 export function closableMonths(currentIso, closedPeriods) {
   const latest = latestClosedPeriod(closedPeriods);
   if (latest === null) {
     return Array.from({ length: CLOSABLE_LIST_MAX }, (_, i) => addMonths(currentIso, -i));
   }
-  const next = addMonths(latest, 1);
-  return next <= currentIso ? [next] : [];
+  const out = [];
+  for (let m = currentIso; m > latest && out.length < CLOSABLE_LIST_MAX; m = addMonths(m, -1)) {
+    out.push(m);
+  }
+  return out;
 }
 
 /** Bugünün İstanbul tarihinden ENTRY_LOOKBACK_YEARS yıl öncesi 'YYYY-MM-DD' (29 Şubat -> 28 Şubat). */

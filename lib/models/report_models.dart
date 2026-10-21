@@ -494,7 +494,7 @@ class BoardWarning {
   String get message {
     switch (code) {
       case 'UNCLOSED_PAST_PERIODS':
-        return 'Geçmiş aylardan kapatılmamış dönemler var; rakamlar kesinleşmemiştir.';
+        return 'Geçmiş aylardan kapatılmamış dönemler var.';
       case 'RECONCILIATION_DIFFERENCE':
         return 'Bir ya da daha fazla hesapta mutabakat farkı var.';
       case 'UNASSIGNED_PAYMENTS':

@@ -411,6 +411,7 @@ abstract final class HelpContent {
         'Sağ üstteki “Ayarlar” düğmesinden “Modüller” ekranını açın ve siteyi seçin.',
         'Kapalı bir modül için talep gönderin; talebinizi “Modül Taleplerim” bölümünden izleyebilirsiniz.',
         'Finans modülü açılınca menüde “Finans” ekranı (“Daireler”, “Tanımlar” ve “Dönemler” sekmeleri) görünür.',
+        'Finans açıkken ana sayfada “Bu ay” bölümü görünür: yazılan, toplanan, geciken daire ve kasa sayıları, beş adımlı aylık döngü ve son hareketler. Ay kapatmak isteğe bağlıdır; “Dönemler” sekmesinden istediğiniz ayı seçince o aya kadar açık aylar birlikte kapanır.',
         'Sitenizde geçerli kuralları (gecikme tazminatı üst sınırı, işletme projesi ve saklama süreleri) aynı ekrandaki “Kurallar” bölümünde “Kuralları Görüntüle” ile görürsünüz; değerleri sistem yöneticisi belirler.',
       ],
     ),

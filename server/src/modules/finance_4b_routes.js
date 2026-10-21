@@ -64,6 +64,8 @@ import { addExclusion, cancelReminderRun, getReminderRun, listExclusions, listRe
 import { getMyLateFeeExplanation, listLateFeeRunLines, listLateFeeRuns, postLateFee, previewLateFee, voidLateFeeRun } from './finance_late_fee.js';
 import { getSettings, readLegalOk, setLegalGate, updateSettings } from './finance_settings.js';
 import { HOUR_MS, ipKey, respondError, userKey } from './route_helpers.js';
+import { recordAudit } from './audit_service.js';
+import { pool } from '../db.js';
 
 export const finance4bRouter = express.Router();
 
@@ -415,7 +417,7 @@ export const exportLimiter = createRuleLimiter({
 });
 
 /** Rapor ucu: okuma yetkisi (kurul dahil) ya da yalnız yönetici (dışa aktarma); no-store; REPORT_BUSY için Retry-After. */
-function reportRoute(path, context, fallback, { limiters = [reportLimiter], managerOnly = false }, run) {
+function reportRoute(path, context, fallback, { limiters = [reportLimiter], managerOnly = false, audit = false }, run) {
   finance4bRouter.get(path, authRequired, financeReadLimiter, ...limiters, async (req, res) => {
     try {
       const access = await resolveFinanceAccess(req, res, { write: managerOnly });
@@ -424,6 +426,18 @@ function reportRoute(path, context, fallback, { limiters = [reportLimiter], mana
       }
       res.set('Cache-Control', 'no-store');
       const body = await run({ req, access });
+      if (audit && canSeeManagerFields(access)) {
+        // Yönetici ana sayfasındaki "Rapor al" adımı için: hangi aylar kapsandı (kişi verisi yok).
+        const monthOf = (value) => (typeof value === 'string' && /^\d{4}-\d{2}/.test(value) ? value.slice(0, 7) : null);
+        await recordAudit(pool, {
+          actor: req.authUser,
+          action: 'finance.report.viewed',
+          siteCode: access.siteCode,
+          targetType: 'report',
+          targetId: audit,
+          details: { report: audit, from: monthOf(req.query?.from), to: monthOf(req.query?.to) },
+        });
+      }
       return res.status(200).json(canSeeManagerFields(access) ? body : redactFinanceForBoard(body));
     } catch (error) {
       if (error?.retryAfterSeconds) {
@@ -435,9 +449,9 @@ function reportRoute(path, context, fallback, { limiters = [reportLimiter], mana
 }
 
 reportRoute(`${BASE}/reports/aging`, 'finance_report_aging', 'Rapor hazırlanamadı.', {}, async ({ req, access }) => agingReport(access.siteCode, req.query));
-reportRoute(`${BASE}/reports/income-expense`, 'finance_report_income_expense', 'Rapor hazırlanamadı.', {}, async ({ req, access }) => incomeExpenseReport(access.siteCode, req.query));
+reportRoute(`${BASE}/reports/income-expense`, 'finance_report_income_expense', 'Rapor hazırlanamadı.', { audit: 'income-expense' }, async ({ req, access }) => incomeExpenseReport(access.siteCode, req.query));
 reportRoute(`${BASE}/reports/cash-position`, 'finance_report_cash', 'Rapor hazırlanamadı.', {}, async ({ req, access }) => cashPositionReport(access.siteCode, req.query));
-reportRoute(`${BASE}/reports/board-summary`, 'finance_report_board', 'Rapor hazırlanamadı.', {}, async ({ req, access }) =>
+reportRoute(`${BASE}/reports/board-summary`, 'finance_report_board', 'Rapor hazırlanamadı.', { audit: 'board-summary' }, async ({ req, access }) =>
   boardSummaryReport(access.siteCode, req.query, { canListDebtors: canSeeManagerFields(access), actor: req.authUser }),
 );
 reportRoute(`${BASE}/apartments/:id/statement`, 'finance_report_statement', 'Ekstre hazırlanamadı.', {}, async ({ req, access }) =>

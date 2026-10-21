@@ -89,8 +89,8 @@ void main() {
       await _pump(t, auth, report: 'income_expense', width: w, height: h, scale: s, dark: dark);
       expect(find.byKey(const ValueKey<String>('finance_ie_month_2026-09')), findsOneWidget);
       expect(find.byKey(const ValueKey<String>('finance_ie_month_2026-10')), findsOneWidget);
-      expect(find.text('Kesinleşmiş'), findsOneWidget);
-      expect(find.text('Kesinleşmemiş'), findsOneWidget);
+      expect(find.text('Kapalı'), findsOneWidget);
+      expect(find.text('Açık'), findsOneWidget);
       expect(find.text('Gider kategorileri'), findsOneWidget);
     });
 
@@ -304,7 +304,7 @@ void main() {
       auth.f4.agingJson = f4AgingJson(closedThrough: null);
       FinancePdfActions.debugOverride = (_) async => throw StateError('pdf');
       await _pump(t, auth);
-      expect(find.textContaining('Kapatılmış dönem yok: rakamlar kesinleşmemiştir.'), findsOneWidget);
+      expect(find.textContaining('Henüz kapatılmış ay yok.'), findsOneWidget);
       await f4Tap(t, 'finance_report_pdf_share');
       await settleFor(t);
       expect(find.byKey(const ValueKey<String>('finance_report_output_error')), findsOneWidget);

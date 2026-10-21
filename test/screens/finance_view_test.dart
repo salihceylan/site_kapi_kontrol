@@ -499,13 +499,13 @@ void main() {
       expect(find.byKey(const ValueKey<String>('finance_close_choice_2026-09_12')), findsOneWidget,
           reason: 'varsayılan seçim: bir önceki ay (Eylül)');
       expect(
-        find.text('Eylül 2026 kapatılınca Eylül 2026 ve öncesindeki tüm aylar değiştirilemez olur.'),
+        find.text('Eylül 2026 seçilirse bu aya kadar açık olan aylar birlikte kapanır; bu aylara kayıt eklenemez.'),
         findsOneWidget,
       );
       await tapFinder(t, find.byKey(const ValueKey<String>('finance_close_period')));
       await settleFor(t);
       expect(find.text('Eylül 2026 ayını kapat'), findsOneWidget);
-      expect(find.textContaining('Eylül 2026 kapatılınca Eylül 2026 ve öncesindeki tüm aylar'), findsWidgets);
+      expect(find.textContaining('Eylül 2026 seçilirse bu aya kadar açık olan aylar birlikte kapanır'), findsWidgets);
       await tapText(t, 'Vazgeç');
       await settleFor(t);
       expect(auth.periodCalls, isEmpty);
@@ -529,7 +529,7 @@ void main() {
       await tapFinder(t, find.byType(DropdownButtonFormField<FinancePeriod>));
       await tapFinder(t, find.text('Ağustos 2026').last);
       await settleFor(t);
-      expect(find.text('Ağustos 2026 kapatılınca Ağustos 2026 ve öncesindeki tüm aylar değiştirilemez olur.'),
+      expect(find.text('Ağustos 2026 seçilirse bu aya kadar açık olan aylar birlikte kapanır; bu aylara kayıt eklenemez.'),
           findsOneWidget);
       await tapFinder(t, find.byKey(const ValueKey<String>('finance_close_period')));
       await settleFor(t);
@@ -546,7 +546,7 @@ void main() {
       await _pump(t, auth);
       await _tab(t, 2);
       expect(find.byKey(const ValueKey<String>('finance_nothing_closable')), findsOneWidget);
-      expect(find.textContaining('Şu an kapatılabilecek dönem yok'), findsOneWidget);
+      expect(find.textContaining('Kapatılabilecek ay yok'), findsOneWidget);
       expect(find.byKey(const ValueKey<String>('finance_close_period')), findsNothing);
       expect(find.byType(DropdownButtonFormField<FinancePeriod>), findsNothing);
     });

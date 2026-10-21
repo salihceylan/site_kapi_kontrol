@@ -15,6 +15,7 @@ import 'package:site_kapi_kontrol/models/door_access_log_record.dart';
 import 'package:site_kapi_kontrol/models/door_record.dart';
 import 'package:site_kapi_kontrol/models/door_runtime_status.dart';
 import 'package:site_kapi_kontrol/models/finance.dart';
+import 'package:site_kapi_kontrol/models/finance_home.dart';
 import 'package:site_kapi_kontrol/models/guest_pass.dart';
 import 'package:site_kapi_kontrol/models/history_item.dart';
 import 'package:site_kapi_kontrol/models/legal_document.dart';
@@ -1963,6 +1964,11 @@ class AuthService extends ChangeNotifier {
 
   Future<FinanceSummary> getFinanceSummary(int siteCode) {
     return _runAuthorized((token) => api.getFinanceSummary(token: token, siteCode: siteCode));
+  }
+
+  /// Yönetici ana sayfası "Bu ay" özeti.
+  Future<FinanceHome> getFinanceHome(int siteCode) {
+    return _runAuthorized((token) => api.getFinanceHome(token: token, siteCode: siteCode));
   }
 
   /// Sakinin kendi dairelerinin borç durumu (`GET /app/my-finance`).

@@ -28,6 +28,7 @@ import { announcementRouter } from './modules/announcement_routes.js';
 import { announcementPublicRouter } from './modules/announcement_public_routes.js';
 import { financeRouter } from './modules/finance_routes.js';
 import { finance4bRouter } from './modules/finance_4b_routes.js';
+import { financeHomeRouter } from './modules/finance_home_routes.js';
 import { accountRouter } from './modules/account_routes.js';
 import { startAnnouncementScheduler, stopAnnouncementScheduler } from './modules/announcement_scheduler.js';
 import { startFinanceReminderScheduler, stopFinanceReminderScheduler } from './modules/finance_reminder_scheduler.js';
@@ -118,6 +119,7 @@ app.use(announcementRouter);
 app.use(announcementPublicRouter);
 app.use(financeRouter);
 app.use(finance4bRouter);
+app.use(financeHomeRouter);
 // Belgeler (dosya deposu): yonetici uclari + sakin uclari + ham govde akisi (PUT .../content, application/octet-stream; JSON govde sinirina dokunmaz).
 app.use(documentRouter);
 // Is takibi (ariza, bakim, talep): /manager/sites/:siteCode/work-items[...] + /app/work-items[...] (modul work_tracking, varsayilan KAPALI).

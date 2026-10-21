@@ -843,13 +843,8 @@ export async function boardSummaryReport(siteCode, query = {}, { canListDebtors 
       `,
       [siteCode, filters.from, endDay],
     );
-    const closedThrough = header.closed_through;
-    const currentMonth = periodLabel(currentPeriod(now));
+    // Ay kapatmak isteğe bağlıdır: kapatılmamış geçmiş ay uyarısı üretilmez.
     const warnings = [];
-    const lastRangeMonth = periodLabel(filters.to);
-    if (lastRangeMonth < currentMonth && (closedThrough === null || closedThrough < lastRangeMonth)) {
-      warnings.push({ code: 'UNCLOSED_PAST_PERIODS' });
-    }
     for (const account of position.accounts) {
       if (account.last_reconciliation && account.last_reconciliation.difference_minor !== 0n && !account.last_reconciliation.adjusted) {
         warnings.push({ code: 'RECONCILIATION_DIFFERENCE', account_id: account.id, difference_minor: minorToNumber(account.last_reconciliation.difference_minor) });

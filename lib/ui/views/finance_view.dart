@@ -53,7 +53,13 @@ class FinanceView extends StatefulWidget {
     this.onOpenModules,
     this.expenseAttachmentSource,
     this.now,
+    this.initialSiteCode,
+    this.initialTab,
   });
+
+  /// Yönetici ana sayfasından gelinen site ve sekme (0 Daireler ... 5 Raporlar); yoksa ilk site ve ilk sekme.
+  final int? initialSiteCode;
+  final int? initialTab;
 
   final AuthService authService;
   final bool manageAllSites;
@@ -115,9 +121,15 @@ class FinanceViewState extends State<FinanceView> {
   // Tahsilat / ek borç pencereleri çift dokunuşta iki kez açılmasın.
   bool _opening = false;
 
+  int? _pendingTab;
+  int? _wantedSite;
+
   @override
   void initState() {
     super.initState();
+    _wantedSite = widget.initialSiteCode;
+    final tab = widget.initialTab;
+    _pendingTab = tab != null && tab >= 0 && tab < _tabs.length ? tab : null;
     unawaited(_loadSites());
   }
 
@@ -205,7 +217,9 @@ class FinanceViewState extends State<FinanceView> {
     }
     if (!mounted || token != _sitesToken) return;
     final keep = _siteCode != null && merged.any((s) => s.code == _siteCode);
-    final next = keep ? _siteCode : (merged.isEmpty ? null : merged.first.code);
+    final wanted = _wantedSite;
+    final preferred = !keep && wanted != null && merged.any((s) => s.code == wanted);
+    final next = keep ? _siteCode : (preferred ? wanted : (merged.isEmpty ? null : merged.first.code));
     final siteChanged = next != _siteCode;
     final previous = _site;
     setState(() {
@@ -224,10 +238,11 @@ class FinanceViewState extends State<FinanceView> {
   /// Site değişti: sekme durumu ve özet atılır; uçuştaki eski yanıtlar yok sayılır.
   void _resetSite(int? siteCode) {
     _siteCode = siteCode;
-    _tab = 0;
+    _tab = _pendingTab ?? 0;
+    _pendingTab = null;
     _visited
       ..clear()
-      ..add(0);
+      ..add(_tab);
     _dirty.clear();
     _balancesKey = GlobalKey<FinanceBalancesTabState>();
     _definitionsKey = GlobalKey<FinanceDefinitionsTabState>();
