@@ -507,6 +507,31 @@ void main() {
       await _disposeHome(t);
     });
 
+    // Kapı sekmesi menüdeki "Kapılar"dan ayrıca kapı yetkisinin OLUMLU kanıtını ister: modül verisi alınamadığında
+    // (fail-open) "Kapılar" menüde kalır, ama kapı listesi de boşsa Kapı sekmesi çizilmez.
+    testWidgets('modül verisi alınamadı (fail-open), kapı listesi boş: Kapılar menüde olsa da Kapı sekmesi yok', (t) async {
+      final access = ModuleAccess(fetch: () async => throw StateError('ağ yok'));
+      addTearDown(access.dispose);
+      await access.refresh();
+      final auth = _NavAuth(UserRole.apartmentOwner, doors: const <DoorRecord>[]);
+      await _pumpHome(t, auth, access: access);
+      expect(_bar, findsNothing, reason: 'kapı yetkisinin olumlu kanıtı yok: yalnız Özet kalır, çubuk çizilmez');
+      await _openDrawer(t);
+      expect(_drawerTile(SirketMenuItem.kapilar), findsOneWidget, reason: 'fail-open: Kapılar öğesi menüde kalır');
+      await _disposeHome(t);
+    });
+
+    testWidgets('modül verisi alınamadı ama kapı listesi geldi: Kapı sekmesi kapı listesinden (olumlu kanıt)', (t) async {
+      final access = ModuleAccess(fetch: () async => throw StateError('ağ yok'));
+      addTearDown(access.dispose);
+      await access.refresh();
+      final auth = _NavAuth(UserRole.apartmentOwner);
+      await _pumpHome(t, auth, access: access);
+      expect(_bar, findsOneWidget);
+      expect(_tabsOnScreen(), <ResidentTab>[ResidentTab.ozet, ResidentTab.duyuru, ResidentTab.kapi]);
+      await _disposeHome(t);
+    });
+
     for (final (label, role, superUser) in <(String, UserRole, bool)>[
       ('site yöneticisi (yönetici modu)', UserRole.siteManager, false),
       ('süper kullanıcı', UserRole.superUser, true),
