@@ -1244,6 +1244,21 @@ List<SirketMenuItem> _withExtras(
     if (extra == SirketMenuItem.kameraCctv) {
       for (final above in const <SirketMenuItem>[
         SirketMenuItem.odemeKamera,
+        SirketMenuItem.kararDefteri,
+        SirketMenuItem.sozlesmeler,
+        SirketMenuItem.ziyaretciKayitlari,
+        SirketMenuItem.anketler,
+        SirketMenuItem.rezervasyonlar,
+        SirketMenuItem.talepler,
+        SirketMenuItem.belgeler,
+        SirketMenuItem.finans,
+        SirketMenuItem.duyurular,
+        SirketMenuItem.kisiler,
+      ]) {
+        anchor = result.indexOf(above);
+        if (anchor >= 0) break;
+      }
+    }
     // "Plaka Tanıma": "Karar Defteri" / "Sözleşmeler" / ... / "Kişiler" sırasıyla ilk bulunanın altına (numaralandırmada önde olduğundan
     // "Ödeme ve Kamera" ve "Ekipman ve Bakım" sonradan ekleniyor ve kendi çıpalarının altına giriyor).
     if (extra == SirketMenuItem.plakaTanima) {

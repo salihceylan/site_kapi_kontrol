@@ -802,8 +802,7 @@ describe('PUT modul: onay zorunlulugu ve denetim kaydi', () => {
   });
 
   it('yakinda modul ACILAMAZ 409 MODULE_COMING_SOON; kapatmak 200 (degisiklik yok, audit yok)', async () => {
-    for (const code of ['online_payment', 'plate_recognition', 'hgs_access']) {
-    for (const code of ['online_payment', 'hgs_access', 'cctv_link']) {
+    for (const code of ['online_payment', 'hgs_access']) {
       const open = await call('PUT', moduleUrl(SITE_1, code), { user: users.superUser, body: { enabled: true } });
       assert.equal(open.status, 409, code);
       assert.equal(open.body.code, 'MODULE_COMING_SOON');
