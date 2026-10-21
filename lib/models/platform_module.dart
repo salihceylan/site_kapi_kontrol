@@ -33,6 +33,10 @@ abstract final class PlatformModuleCodes {
   static const String driveStorage = 'drive_storage';
   /// Komşu Panosu (sakin ilanları, yönetici onayı). Varsayılan KAPALI.
   static const String neighborBoard = 'neighbor_board';
+  /// Kart Ödemesi arayüzü (sağlayıcılar "Yakında…"). Varsayılan KAPALI.
+  static const String cardPayments = 'card_payments';
+  /// Kamera ve Plaka (plaka olayı kaydı; kapı açmaz). Varsayılan KAPALI.
+  static const String plateCameras = 'plate_cameras';
 }
 
 DateTime? _parseDate(Object? raw) {

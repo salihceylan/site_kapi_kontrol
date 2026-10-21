@@ -163,6 +163,8 @@ import 'package:site_kapi_kontrol/ui/views/decision_resident_view.dart';
 import 'package:site_kapi_kontrol/ui/views/directory_view.dart';
 import 'package:site_kapi_kontrol/ui/widgets/pending_invitations_card.dart';
 import 'package:site_kapi_kontrol/ui/views/neighbor_board_view.dart';
+import 'package:site_kapi_kontrol/services/device_integrations_api.dart' show DeviceSite;
+import 'package:site_kapi_kontrol/ui/views/device_integrations_view.dart';
 import 'package:site_kapi_kontrol/ui/widgets/announcement_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/unread_announcement_card.dart';
 
@@ -314,6 +316,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final GlobalKey<DirectoryViewState> _directoryKey = GlobalKey<DirectoryViewState>();
   final GlobalKey<BudgetViewState> _budgetKey = GlobalKey<BudgetViewState>();
   final GlobalKey<NeighborBoardViewState> _neighborBoardKey = GlobalKey<NeighborBoardViewState>();
+  final GlobalKey<DeviceIntegrationsViewState> _deviceIntegrationsKey = GlobalKey<DeviceIntegrationsViewState>();
   final GlobalKey<VisitorManagerViewState> _visitorManagerKey = GlobalKey<VisitorManagerViewState>();
   final GlobalKey<VisitorResidentViewState> _visitorResidentKey = GlobalKey<VisitorResidentViewState>();
   final GlobalKey<ContractsViewState> _contractsKey = GlobalKey<ContractsViewState>();
@@ -951,6 +954,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         if (_directoryResidentSites(role).isNotEmpty) SirketMenuItem.rehber,
         if (_canAccessBudget(role)) SirketMenuItem.isletmeProjesi,
         if (_neighborBoardSites(role).isNotEmpty) SirketMenuItem.komsuPanosu,
+        if (_deviceIntegrationSites(role).isNotEmpty) SirketMenuItem.odemeKamera,
         if (_canAccessVisitorManage(role)) SirketMenuItem.ziyaretciKayitlari,
         if (_visitorResidentSites(role).isNotEmpty) SirketMenuItem.ziyaretcilerim,
         if (_canAccessContracts(role)) SirketMenuItem.sozlesmeler,
@@ -1211,6 +1215,22 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       for (final site in _moduleAccess.result!.sites)
         if (_isRecipientSite(site) && site.isEnabled(PlatformModuleCodes.directory))
           PeopleSite(code: site.siteCode, name: site.siteName),
+  /// "Ödeme ve Kamera" ekranındaki siteler: `card_payments` ya da `plate_cameras` modülü AÇIK siteler; yönetici yazar, kurul
+  /// üyesi salt okur. FAIL-OPEN YOK: modül verisi yoksa ya da süper kullanıcıda (modül süzgeci yok) liste boştur.
+  List<DeviceSite> _deviceIntegrationSites(UserRole role) {
+    if (role == UserRole.superUser || !_moduleAccess.isFiltering) return const <DeviceSite>[];
+    final canManage = _canManagePeople(role);
+    return <DeviceSite>[
+      for (final site in _moduleAccess.result!.sites)
+        if ((site.isEnabled(PlatformModuleCodes.cardPayments) || site.isEnabled(PlatformModuleCodes.plateCameras)) &&
+            ((site.role == 'manager' && canManage) || site.isBoardMember))
+          DeviceSite(
+            code: site.siteCode,
+            name: site.siteName,
+            canWrite: site.role == 'manager' && canManage,
+            paymentsOn: site.isEnabled(PlatformModuleCodes.cardPayments),
+            camerasOn: site.isEnabled(PlatformModuleCodes.plateCameras),
+          ),
     ];
   }
 
@@ -1830,6 +1850,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       return _canAccessBudget(role);
     if (item == SirketMenuItem.komsuPanosu) {
       return _neighborBoardSites(role).isNotEmpty;
+    if (item == SirketMenuItem.odemeKamera) {
+      return _deviceIntegrationSites(role).isNotEmpty;
     }
 
     // Ziyaretçi ve Kargo: `visitor_log` modülü açık siteye bağlı yönetici / görevli / kurul (yönetim ekranı) ya da
@@ -2018,6 +2040,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         return 'İşletme Projesi';
       case SirketMenuItem.komsuPanosu:
         return 'Komşu Panosu';
+      case SirketMenuItem.odemeKamera:
+        return 'Ödeme ve Kamera';
 
       case SirketMenuItem.ziyaretciKayitlari:
         return 'Ziyaretçi ve Kargo';
@@ -5461,6 +5485,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         await _budgetKey.currentState?.reload();
       case SirketMenuItem.komsuPanosu:
         await _neighborBoardKey.currentState?.reload();
+      case SirketMenuItem.odemeKamera:
+        await _deviceIntegrationsKey.currentState?.reload();
         break;
       case SirketMenuItem.modulTalepleri:
         await _moduleRequestsViewKey.currentState?.reload();
@@ -6699,6 +6725,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           key: _neighborBoardKey,
           authService: widget.authService,
           sites: _neighborBoardSites(session.role),
+      case SirketMenuItem.odemeKamera:
+        return DeviceIntegrationsView(
+          key: _deviceIntegrationsKey,
+          authService: widget.authService,
+          sites: _deviceIntegrationSites(session.role),
         );
 
       case SirketMenuItem.modulTalepleri:

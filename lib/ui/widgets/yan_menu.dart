@@ -154,6 +154,9 @@ enum SirketMenuItem {
   /// Komşu Panosu (`neighbor_board`): sakin ilan yazar / şikayet eder, yönetici onaylar / kaldırır. Rol listesinde YOKTUR;
   /// modül AÇIK sitesi olan yönetici ya da sakine [YanMenu.additionalItems] ile eklenir.
   komsuPanosu,
+  /// Ödeme ve Kamera yönetim ekranı. Rol listesinde YOKTUR; `card_payments` ya da `plate_cameras` modülü AÇIK olan sitenin
+  /// yöneticisine / kurul üyesine [YanMenu.additionalItems] ile eklenir. Sakin ve görevli için yoktur.
+  odemeKamera,
 
   /// Kapılar: bugüne dek "Panel"in kendisi olan kapı paneli (durum, kapıyı aç; bireysel kullanıcıda kapılar, daireler,
   /// cihazlar). "Panel" artık modül vitrinidir; kapı paneli bu öğeyle bir dokunuş uzaktadır. Rol listesinde YOKTUR;
@@ -232,6 +235,8 @@ SirketMenuGroup menuGroupOf(SirketMenuItem item) => switch (item) {
       SirketMenuItem.kararDefteri ||
       SirketMenuItem.isletmeProjesi ||
       SirketMenuItem.kararlar =>
+      SirketMenuItem.kararlar ||
+      SirketMenuItem.odemeKamera =>
         SirketMenuGroup.siteHizmetleri,
       SirketMenuItem.profilim ||
       SirketMenuItem.ellerSerbest ||
@@ -1186,6 +1191,20 @@ List<SirketMenuItem> _withExtras(
     // "İşletme Projesi": "Finans" / "Duyurular" / "Kişiler" sırasıyla ilk bulunanın altına.
     if (extra == SirketMenuItem.isletmeProjesi) {
       for (final above in const <SirketMenuItem>[SirketMenuItem.finans, SirketMenuItem.duyurular, SirketMenuItem.kisiler]) {
+    // "Ödeme ve Kamera": "Karar Defteri" / "Sözleşmeler" / ... / "Kişiler" sırasıyla ilk bulunanın altına.
+    if (extra == SirketMenuItem.odemeKamera) {
+      for (final above in const <SirketMenuItem>[
+        SirketMenuItem.kararDefteri,
+        SirketMenuItem.sozlesmeler,
+        SirketMenuItem.ziyaretciKayitlari,
+        SirketMenuItem.anketler,
+        SirketMenuItem.rezervasyonlar,
+        SirketMenuItem.talepler,
+        SirketMenuItem.belgeler,
+        SirketMenuItem.finans,
+        SirketMenuItem.duyurular,
+        SirketMenuItem.kisiler,
+      ]) {
         anchor = result.indexOf(above);
         if (anchor >= 0) break;
       }
@@ -1357,6 +1376,8 @@ String _titleForItem(SirketMenuItem item, [UserRole? role]) {
       return 'İşletme Projesi';
     case SirketMenuItem.komsuPanosu:
       return 'Komşu Panosu';
+    case SirketMenuItem.odemeKamera:
+      return 'Ödeme ve Kamera';
     case SirketMenuItem.kapilar:
       return 'Kapılar';
   }
@@ -1444,6 +1465,8 @@ IconData _iconForItem(SirketMenuItem item) {
       return Icons.account_balance_wallet_rounded;
     case SirketMenuItem.komsuPanosu:
       return Icons.forum_rounded;
+    case SirketMenuItem.odemeKamera:
+      return Icons.videocam_rounded;
     case SirketMenuItem.kapilar:
       return Icons.meeting_room_rounded;
   }
