@@ -10,6 +10,7 @@ import { recordAudit } from './audit_service.js';
 import { EXPORT_ROW_LIMIT, exportKindNotFound, exportTooLarge, queryEnum, queryId } from './finance_4b_common.js';
 import { invalidQuery, parseAccountPartyQuery } from './finance_common.js';
 import { exportExpenseRows } from './finance_expenses.js';
+import { analysisExportRows, computeExpenseAnalysis, parseAnalysisQuery } from './finance_expense_analysis.js';
 import { AGING_BUCKETS } from './finance_m1.js';
 import { exportReceiptRows } from './finance_receipts.js';
 import {
@@ -37,6 +38,8 @@ export const EXPORT_KINDS = Object.freeze([
   'finance_statement',
   'finance_expenses',
   'finance_receipts',
+  'finance_expense_analysis',
+  'finance_expense_forecast',
 ]);
 
 const col = (key, label, type, scale) => (scale === undefined ? { key, label, type } : { key, label, type, scale });
@@ -70,6 +73,7 @@ export const ACCOUNT_PARTY_LABEL = Object.freeze({ owner: 'Ev sahibi hesabı', t
 const ENTRY_KIND_LABEL = Object.freeze({ charge: 'Borç', payment: 'Tahsilat', reversal: 'Ters kayıt' });
 const METHOD_LABEL = Object.freeze({ cash: 'Nakit', transfer: 'Havale', cheque: 'Çek' });
 const ACCOUNT_KIND_LABEL = Object.freeze({ cash: 'Kasa', bank: 'Banka' });
+const NATURE_LABEL = Object.freeze({ routine: 'Rutin', unexpected: 'Beklenmedik' });
 const DOC_KIND_LABEL = Object.freeze({ invoice: 'Fatura', receipt: 'Fiş', contract: 'Sözleşme', other: 'Diğer', none: '' });
 const RECEIPT_KIND_LABEL = Object.freeze({ collection: 'Tahsilat makbuzu', cancellation: 'İptal makbuzu' });
 const RECEIPT_STATUS_LABEL = Object.freeze({ active: 'Geçerli', cancelled: 'İptal edildi' });
@@ -248,6 +252,33 @@ export async function buildExportEnvelope(siteCode, kind, query = {}, now = new 
       }
       return envelope(kind, siteName, now, `ekstre_${slugify(statement.apartment.label)}`, columns, rows);
     }
+    if (kind === 'finance_expense_analysis' || kind === 'finance_expense_forecast') {
+      const report = await computeExpenseAnalysis(client, siteCode, parseAnalysisQuery(query, now), now);
+      if (kind === 'finance_expense_analysis') {
+        const columns = [
+          col('ay', 'Ay', 'date'),
+          col('kategori', 'Kategori', 'text'),
+          col('rutin', 'Rutin', 'money'),
+          col('beklenmedik', 'Beklenmedik', 'money'),
+          col('toplam', 'Toplam', 'money'),
+          col('gelir', 'Gelir', 'money'),
+        ];
+        return envelope(kind, siteName, now, 'gider_analizi', columns, analysisExportRows(report));
+      }
+      const columns = [
+        col('kategori', 'Kategori', 'text'),
+        col('son12_rutin', 'Son 12 ay rutin', 'money'),
+        col('artis', 'Artış %', 'number', 2),
+        col('tahmini_rutin', 'Tahmini rutin', 'money'),
+        col('beklenmedik_ort', 'Beklenmedik ortalaması', 'money'),
+        col('tahmin', 'Tahmin', 'money'),
+      ];
+      const forecast = report.forecast;
+      const rows = forecast
+        ? forecast.items.map((i) => [i.category_name, i.base_routine_minor, percentCell(forecast.increase_bp), i.forecast_routine_minor, i.annual_unexpected_minor, i.forecast_minor])
+        : [];
+      return envelope(kind, siteName, now, 'gider_tahmini', columns, rows);
+    }
     if (kind === 'finance_expenses') {
       const items = await exportExpenseRows(siteCode, query, client);
       const columns = [
@@ -260,6 +291,7 @@ export async function buildExportEnvelope(siteCode, kind, query = {}, now = new 
         col('hesap', 'Hesap', 'text'),
         col('belge_turu', 'Belge Türü', 'text'),
         col('belge_no', 'Belge No', 'text'),
+        col('tur', 'Tür', 'text'),
         col('durum', 'Durum', 'text'),
       ];
       const rows = items.map((e) => [
@@ -272,6 +304,7 @@ export async function buildExportEnvelope(siteCode, kind, query = {}, now = new 
         e.account.name,
         DOC_KIND_LABEL[e.document_kind] ?? '',
         e.document_no ?? '',
+        NATURE_LABEL[e.nature] ?? '',
         e.voided ? 'İptal' : 'Aktif',
       ]);
       return envelope(kind, siteName, now, 'giderler', columns, rows);

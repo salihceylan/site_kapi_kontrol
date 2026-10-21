@@ -148,6 +148,11 @@ abstract final class HelpContent {
     'Ev sahibi hesabı',
     'Kiracı hesabı',
     'Hesap Ekstresi',
+    'Gider Analizi',
+    'Raporu Getir',
+    'Tablo olarak göster',
+    'Gider türü',
+    'Gelecek yıl tahmini',
     'Daire hesabı',
     'Kim öder',
     'Dairede oturan',
@@ -430,6 +435,18 @@ abstract final class HelpContent {
       note:
           'Daire sorumlusu kiracı ya da malik ve kiracıysa ve dairede kiracı varsa aidat kiracı hesabına yazılır. Malik ve '
           'kiracının birlikte sorumlu olduğu dairede malik, kiracı hesabını salt okunur görür.',
+    ),
+    HelpTopic(
+      id: 'expense_analysis',
+      title: 'Gider analizi ve gelecek yıl tahmini',
+      icon: Icons.insights_rounded,
+      steps: <String>[
+        '“Finans” ekranının “Raporlar” sekmesinde “Gider Analizi”ni seçin; 1, 3, 6 ya da 12 aylık dönemi ve bitiş ayını belirleyip “Raporu Getir”e dokunun.',
+        'Grafikte her ay için rutin ve beklenmedik giderler ile gelir görünür; “Tablo olarak göster” aynı rakamları liste olarak verir. Önceki aynı uzunluktaki dönemle karşılaştırma ve kategori kırılımı altındadır.',
+        'Gider eklerken “Gider türü” (Rutin / Beklenmedik) önerisiyle gelir; aktif sözleşmesi olan firma ve son aylarda tekrar eden giderler rutin sayılır. Önerinin nedeni altında yazar, isterseniz değiştirebilirsiniz.',
+        '“Gelecek yıl tahmini”, son 12 tam aydaki rutin giderlere yazdığınız artış oranını uygular; beklenmedik giderler yıllık ortalamayla alınır. Oranı boş bırakırsanız kurallar tablosundaki varsayılan kullanılır.',
+      ],
+      note: 'Tahmin bir öngörüdür, taahhüt değildir. Veri 12 aydan azsa yıllığa çevrilir ve bu ekranda belirtilir.',
     ),
     HelpTopic(
       id: 'devices',

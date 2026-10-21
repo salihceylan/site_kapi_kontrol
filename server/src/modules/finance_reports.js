@@ -102,7 +102,7 @@ export async function withReportSnapshot(siteCode, work, db = pool, { slot = 're
 /** Test yardımcısı: devam eden rapor sayaçları. */
 export const reportConcurrency = () => Object.fromEntries(inFlight.entries());
 
-async function reportHeader(db, siteCode, now = new Date()) {
+export async function reportHeader(db, siteCode, now = new Date()) {
   const site = await db.query(`SELECT name FROM sites WHERE site_code = $1`, [siteCode]);
   const closed = await db.query(`SELECT to_char(period, 'YYYY-MM-DD') AS period FROM finance_period_closures WHERE site_code = $1`, [siteCode]);
   const latest = latestClosedPeriod((closed.rows ?? []).map((row) => row.period));

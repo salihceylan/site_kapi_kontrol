@@ -18,6 +18,7 @@ import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:http/http.dart' as http;
 import 'package:site_kapi_kontrol/models/bulk_import.dart' show ExportEnvelope;
 import 'package:site_kapi_kontrol/models/cash_models.dart';
+import 'package:site_kapi_kontrol/models/expense_analysis.dart';
 import 'package:site_kapi_kontrol/models/expense_models.dart';
 import 'package:site_kapi_kontrol/models/finance.dart';
 import 'package:site_kapi_kontrol/models/finance_4b.dart';
@@ -935,6 +936,61 @@ class Finance4bApi {
       timeout: const Duration(seconds: 40),
     );
     return _parse('Gelir-gider raporu', () => IncomeExpenseReport.fromJson(r.body));
+  }
+
+  /// Gider analizi ve tahmin (R1). [increaseBp] null ise sunucu kurallar tablosundaki varsayılanı kullanır.
+  Future<ExpenseAnalysisReport> getExpenseAnalysisReport({
+    required String token,
+    required int siteCode,
+    required String to,
+    required int window,
+    int? increaseBp,
+  }) async {
+    final r = await _send(
+      'GET',
+      _site(siteCode, 'reports/expense-analysis'),
+      token: token,
+      query: <String, String>{'to': to, 'window': '$window', 'increase_bp': ?increaseBp?.toString()},
+      timeout: const Duration(seconds: 40),
+    );
+    return _parse('Gider analizi', () => ExpenseAnalysisReport.fromJson(r.body));
+  }
+
+  /// Gider türü önerisi (kategori + tedarikçi + tarih).
+  Future<NatureSuggestion> getNatureSuggestion({
+    required String token,
+    required int siteCode,
+    required int categoryId,
+    int? supplierId,
+    required DateTime expenseDate,
+  }) async {
+    final r = await _send(
+      'GET',
+      _site(siteCode, 'expenses/nature-suggestion'),
+      token: token,
+      query: <String, String>{
+        'category_id': '$categoryId',
+        'supplier_id': ?supplierId?.toString(),
+        'expense_date': crmDateParam(expenseDate),
+      },
+    );
+    return _parse('Gider türü önerisi', () => NatureSuggestion.fromJson(r.body));
+  }
+
+  /// Giderin türünü değiştirir (yönetici / süper).
+  Future<void> setExpenseNature({
+    required String token,
+    required int siteCode,
+    required int expenseId,
+    required ExpenseNature nature,
+  }) async {
+    await _send(
+      'PUT',
+      _site(siteCode, 'expenses/$expenseId/nature'),
+      token: token,
+      body: <String, dynamic>{'nature': nature.apiValue},
+      write: true,
+    );
   }
 
   Future<CashPositionReport> getCashPositionReport({

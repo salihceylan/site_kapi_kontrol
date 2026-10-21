@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show MaxLengthEnforcement;
 import 'package:site_kapi_kontrol/models/cash_models.dart';
+import 'package:site_kapi_kontrol/models/expense_analysis.dart';
 import 'package:site_kapi_kontrol/models/expense_models.dart';
 import 'package:site_kapi_kontrol/services/expense_attachments.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
@@ -112,6 +113,12 @@ class _FinanceExpenseDialogState extends State<FinanceExpenseDialog> with Financ
 
   int? _categoryId;
   Supplier? _supplier;
+
+  // Gider türü (R1): öneri önseçili gelir; kullanıcı dokunursa o gönderilir, dokunmazsa sunucu öneriyi yazar.
+  ExpenseNature? _nature;
+  bool _natureTouched = false;
+  String? _natureReason;
+  int _suggestToken = 0;
   String? _supplierHint;
   int? _accountId;
   ExpenseDocumentKind _docKind = ExpenseDocumentKind.none;
@@ -149,6 +156,8 @@ class _FinanceExpenseDialogState extends State<FinanceExpenseDialog> with Financ
       _docKind = e.documentKind;
       _documentNo.text = e.documentNo ?? '';
       _accountId = e.accountId;
+      _nature = e.nature;
+      _natureReason = e.nature == null ? null : 'Asıl giderin türü korunur.';
     }
     unawaited(_load());
   }
@@ -221,6 +230,61 @@ class _FinanceExpenseDialogState extends State<FinanceExpenseDialog> with Financ
     }
   }
 
+  /// Kategori / tedarikçi değişince öneriyi getirir (kullanıcı türe dokunduysa dokunmaz). Hata sessizdir: tür seçimi yine yapılabilir.
+  Future<void> _refreshSuggestion() async {
+    final categoryId = _categoryId;
+    if (categoryId == null || _natureTouched) return;
+    final token = ++_suggestToken;
+    final date = parseDateField(_date.text) ?? _today();
+    try {
+      final s = await widget.scope.f4Call(
+        (api, t, site) => api.getNatureSuggestion(token: t, siteCode: site, categoryId: categoryId, supplierId: _supplier?.id, expenseDate: date),
+      );
+      if (!mounted || token != _suggestToken || _natureTouched) return;
+      setState(() {
+        _nature = s.nature;
+        _natureReason = 'Öneri: ${s.nature.label.toLowerCase()} — ${s.reasonText}';
+      });
+    } catch (_) {
+      // öneri alınamadı: kullanıcı türü elle seçebilir
+    }
+  }
+
+  Widget _natureField(TextTheme th) {
+    return Column(
+      key: const ValueKey<String>('finance_expense_nature'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Gider türü', style: th.labelLarge),
+        const SizedBox(height: AppSpace.xs),
+        SegmentedButton<ExpenseNature>(
+          showSelectedIcon: false,
+          emptySelectionAllowed: true,
+          segments: [
+            for (final n in ExpenseNature.values) ButtonSegment<ExpenseNature>(value: n, label: Text(n.label), tooltip: n.label),
+          ],
+          selected: _nature == null ? <ExpenseNature>{} : <ExpenseNature>{_nature!},
+          onSelectionChanged: submitting
+              ? null
+              : (set) {
+                  if (set.isEmpty) return;
+                  markDirty();
+                  setState(() {
+                    _nature = set.first;
+                    _natureTouched = true;
+                    _natureReason = 'Seçiminiz kullanılacak.';
+                  });
+                },
+        ),
+        if (_natureReason != null)
+          Padding(
+            padding: const EdgeInsets.only(top: AppSpace.xs),
+            child: Text(_natureReason!, key: const ValueKey<String>('finance_expense_nature_reason'), style: th.bodySmall),
+          ),
+      ],
+    );
+  }
+
   Future<void> _pickSupplier() async {
     if (submitting) return;
     final choice = await FinanceSupplierPickerDialog.show(context, scope: widget.scope);
@@ -230,6 +294,7 @@ class _FinanceExpenseDialogState extends State<FinanceExpenseDialog> with Financ
       _supplier = choice.supplier;
       _supplierHint = null;
     });
+    unawaited(_refreshSuggestion());
   }
 
   Future<void> _pickFiles() async {
@@ -286,10 +351,11 @@ class _FinanceExpenseDialogState extends State<FinanceExpenseDialog> with Financ
       accountId: _accountId!,
       documentKind: _docKind,
       documentNo: documentNo,
+      nature: _natureTouched ? _nature : null,
     );
     final base =
         '${widget.correcting?.id ?? 0}|${input.categoryId}|${input.supplierId ?? 0}|${input.description}|$minor|${vat ?? -1}|'
-        '${formatDateField(date)}|${input.accountId}|${_docKind.apiValue}|${documentNo ?? ''}';
+        '${formatDateField(date)}|${input.accountId}|${_docKind.apiValue}|${documentNo ?? ''}|${input.nature?.apiValue ?? ''}';
     await _write(input, base);
   }
 
@@ -307,6 +373,7 @@ class _FinanceExpenseDialogState extends State<FinanceExpenseDialog> with Financ
             documentKind: input.documentKind,
             documentNo: input.documentNo,
             allowDuplicate: true,
+            nature: input.nature,
           )
         : input;
     final scope = widget.scope;
@@ -511,13 +578,18 @@ class _FinanceExpenseDialogState extends State<FinanceExpenseDialog> with Financ
                         ],
                         onChanged: busy
                             ? null
-                            : (v) => setState(() {
+                            : (v) {
+                            setState(() {
                                 markDirty();
                                 _categoryId = v;
                                 _categoryError = null;
-                              }),
+                              });
+                              unawaited(_refreshSuggestion());
+                            },
                       ),
                     ),
+                    const SizedBox(height: AppSpace.md),
+                    _natureField(th),
                     const SizedBox(height: AppSpace.md),
                     CrmPickerField(
                       key: const ValueKey<String>('finance_expense_supplier'),

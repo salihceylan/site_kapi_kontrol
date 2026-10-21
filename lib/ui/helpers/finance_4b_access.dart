@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:site_kapi_kontrol/models/expense_analysis.dart';
 import 'package:site_kapi_kontrol/models/receipt_models.dart';
 import 'package:site_kapi_kontrol/models/report_models.dart';
 import 'package:site_kapi_kontrol/services/finance_4b_api.dart';
@@ -49,6 +50,13 @@ class FinancePdfActions {
     'Gelir_Gider',
     share,
     () => PdfFinanceService.generateIncomeExpensePdf(report: report),
+  );
+
+  static Future<void> expenseAnalysis(ExpenseAnalysisReport report, {required bool share}) => _report(
+    'expense_analysis',
+    'Gider_Analizi',
+    share,
+    () => PdfFinanceService.generateExpenseAnalysisPdf(report: report),
   );
 
   static Future<void> cashPosition(CashPositionReport report, {required bool share}) =>
