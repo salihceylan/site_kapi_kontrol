@@ -1071,8 +1071,8 @@ Bu bölüm lib/ui/design (jeton, hareket, kart, düğme, rozet, iskelet, geri sa
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
 | [lib/menu.dart:1](../../lib/menu.dart#L1) | <code>export 'package:site_kapi_kontrol/ui/widgets/yan_menu.dart';</code> | menu.dart tek satırlık yeniden dışa aktarımdır; gerçek kod yan_menu.dart ta |
-| [lib/ui/widgets/yan_menu.dart:667](../../lib/ui/widgets/yan_menu.dart#L667) | <code>List&lt;SirketMenuItem&gt; _itemsForRole(</code> | Rol ve mod başına menü öğeleri burada seçilir |
-| [lib/ui/widgets/yan_menu.dart:279](../../lib/ui/widgets/yan_menu.dart#L279) | <code>title: isResidentMode ? 'Yönetici Paneline Geç' : 'Sakin Moduna Geç',</code> | Çift rollü kullanıcıda mod değiştirme satırı |
+| [lib/ui/widgets/yan_menu.dart:1173](../../lib/ui/widgets/yan_menu.dart#L1173) | <code>List&lt;SirketMenuItem&gt; _itemsForRole(</code> | Rol ve mod başına menü öğeleri burada seçilir |
+| [lib/ui/widgets/yan_menu.dart:439](../../lib/ui/widgets/yan_menu.dart#L439) | <code>title: isResidentMode ? 'Yönetici Paneline Geç' : 'Sakin Moduna Geç',</code> | Çift rollü kullanıcıda mod değiştirme satırı |
 
 **Olası nedenler**
 - _itemsForRole listesinde öğe o rol/mod için yok

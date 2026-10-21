@@ -150,6 +150,138 @@ enum SirketMenuItem {
   kapilar,
 }
 
+/// İP-1D / G2 (karar kaydı 2026-10-21, sözleşme 2.4): çekmece menüsünün başlıkları. Çekmecede yalnız [drawerGroups]
+/// (8 başlık) vardır ve kullanıcıya görünür öğesi olmayan başlık çizilmez. [ayarlar] çekmece başlığı DEĞİLDİR: o
+/// gruptaki öğeler (profil, kullanıcılar, modüller, cihazlar, denetim kaydı, platform ayarları ...) sağ üstteki
+/// dişliden açılan "Ayarlar" panelindedir ([YanMenuAyarlar]).
+enum SirketMenuGroup {
+  anaSayfa('Ana sayfa'),
+  daireler('Daireler'),
+  borclar('Borçlar'),
+  tahsilat('Tahsilat'),
+  giderler('Giderler'),
+  iletisim('İletişim'),
+  raporlar('Raporlar'),
+  siteHizmetleri('Site hizmetleri'),
+  ayarlar('Ayarlar');
+
+  const SirketMenuGroup(this.title);
+
+  /// Başlık metni: çekmecede bölüm başlığı, [ayarlar] için Ayarlar panelinin başlığı.
+  final String title;
+
+  /// Çekmecedeki 8 başlık, karar G2 sırasıyla (Yol Haritası PDF'teki 7 başlık + bizdeki ek modüller için "Site
+  /// hizmetleri"). [ayarlar] burada yoktur.
+  static const List<SirketMenuGroup> drawerGroups = <SirketMenuGroup>[
+    anaSayfa,
+    daireler,
+    borclar,
+    tahsilat,
+    giderler,
+    iletisim,
+    raporlar,
+    siteHizmetleri,
+  ];
+}
+
+/// Menü öğesinin grubu (sözleşme 2.4). Yeni ekran eklemek = [SirketMenuItem] değeri + buradaki eşleme + görünürlük
+/// kuralı (`HomePage._extraMenuItems` / `_canAccessMenu`); `switch` ifadesi eşlemesi yazılmamış öğeyi derletmez.
+/// Tahsilat, Giderler ve Raporlar bugün boştur (başlıkları görünmez): dekont / banka dosyası Tahsilat'a, gider analizi
+/// Giderler'e, faaliyet raporu / icra dökümü Raporlar'a eklenecektir. Talepler ve anketler yönetimle sakin arasındaki
+/// yazışma kanalı olduğundan İletişim'dedir (karar G2'nin "Site hizmetleri" listesinde yoklar).
+SirketMenuGroup menuGroupOf(SirketMenuItem item) => switch (item) {
+      SirketMenuItem.dashboard => SirketMenuGroup.anaSayfa,
+      SirketMenuItem.siteler ||
+      SirketMenuItem.daireKullanicilariYonetimi ||
+      SirketMenuItem.kisiler ||
+      SirketMenuItem.katilimVeKurulum =>
+        SirketMenuGroup.daireler,
+      SirketMenuItem.finans || SirketMenuItem.borcum => SirketMenuGroup.borclar,
+      SirketMenuItem.duyurular ||
+      SirketMenuItem.talepler ||
+      SirketMenuItem.taleplerim ||
+      SirketMenuItem.anketler ||
+      SirketMenuItem.anket =>
+        SirketMenuGroup.iletisim,
+      SirketMenuItem.kapilar ||
+      SirketMenuItem.belgeler ||
+      SirketMenuItem.rezervasyonlar ||
+      SirketMenuItem.rezervasyon ||
+      SirketMenuItem.ziyaretciKayitlari ||
+      SirketMenuItem.ziyaretcilerim ||
+      SirketMenuItem.sozlesmeler ||
+      SirketMenuItem.kararDefteri ||
+      SirketMenuItem.kararlar =>
+        SirketMenuGroup.siteHizmetleri,
+      SirketMenuItem.profilim ||
+      SirketMenuItem.ellerSerbest ||
+      SirketMenuItem.abonelikTalepleri ||
+      SirketMenuItem.siteOnayTalepleri ||
+      SirketMenuItem.kullaniciYonetimi ||
+      SirketMenuItem.superUserYonetimi ||
+      SirketMenuItem.siteYoneticileriYonetimi ||
+      SirketMenuItem.cihazEkle ||
+      SirketMenuItem.kayitliCihazlar ||
+      SirketMenuItem.bluetoothWifiKur ||
+      SirketMenuItem.moduller ||
+      SirketMenuItem.denetimKaydi ||
+      SirketMenuItem.modulTalepleri ||
+      SirketMenuItem.siteBasvurulari ||
+      SirketMenuItem.platformAyarlari ||
+      SirketMenuItem.istemciHatalari =>
+        SirketMenuGroup.ayarlar,
+    };
+
+/// Çekmecenin bir bölümü: başlık + o başlıktaki görünür öğeler (menü sırasıyla). Boş bölüm üretilmez.
+@immutable
+class YanMenuSection {
+  const YanMenuSection(this.group, this.items);
+
+  final SirketMenuGroup group;
+  final List<SirketMenuItem> items;
+}
+
+/// Site satırında listelenen site.
+@immutable
+class YanMenuSite {
+  const YanMenuSite({required this.code, required this.name});
+
+  final int code;
+  final String name;
+
+  /// Görünen ad; ad boşsa teknik site kodu gösterilmez.
+  String get label => name.trim().isEmpty ? 'İsimsiz site' : name.trim();
+}
+
+/// İP-1D / G2: çekmecenin en üstündeki site satırının verisi. Tek sitede (ya da [onChanged] yokken) yalnız bilgi
+/// satırıdır; [onChanged] verilmiş ve en az iki site varsa site seçicidir: "Tüm siteler" (null) ya da bir site.
+@immutable
+class YanMenuSiteContext {
+  const YanMenuSiteContext({required this.sites, this.selectedCode, this.onChanged});
+
+  final List<YanMenuSite> sites;
+
+  /// Seçili site kodu; null = tüm siteler.
+  final int? selectedCode;
+
+  /// Seçim değişti (null = tüm siteler). null ise satır seçici değildir.
+  final ValueChanged<int?>? onChanged;
+
+  /// Satır dokunulabilir bir seçici mi?
+  bool get canSelect => onChanged != null && sites.length >= 2;
+
+  /// Satırda görünen metin: seçili site, tek site, "Tüm siteler (N)" ya da (seçim yokken) "ilk site +N site".
+  String get label {
+    for (final site in sites) {
+      if (site.code == selectedCode) return site.label;
+    }
+    if (sites.isEmpty) return '';
+    if (sites.length == 1) return sites.first.label;
+    if (canSelect) return 'Tüm siteler (${sites.length})';
+    return '${sites.first.label} +${sites.length - 1} site';
+  }
+}
+
 class YanMenu extends StatelessWidget {
   const YanMenu({
     super.key,
@@ -168,6 +300,7 @@ class YanMenu extends StatelessWidget {
     this.badgeNouns = const <SirketMenuItem, String>{},
     this.additionalItems = const <SirketMenuItem>{},
     this.onOpenHelp,
+    this.siteContext,
   });
 
   final String fullName;
@@ -179,6 +312,10 @@ class YanMenu extends StatelessWidget {
   final bool isResidentMode;
   final VoidCallback? onToggleMode;
   final bool canToggleMode;
+
+  /// İP-1D: çekmecenin en üstündeki site satırı (başlığın hemen altında, mod geçişinin ÜSTÜNDE). null: satır yok.
+  /// Seçim verilmişse ([YanMenuSiteContext.onChanged], en az iki site) satır site seçicidir.
+  final YanMenuSiteContext? siteContext;
 
   /// "Kapılar"dan (o yoksa "Panel"den) hemen sonra gösterilen ek eylemler (varsayılan boş: menü eskisi gibidir).
   final List<YanMenuAction> extraActions;
@@ -229,6 +366,28 @@ class YanMenu extends StatelessWidget {
         .toList(growable: false);
   }
 
+  /// Görünür öğelerin ([visibleItems]) çekmece bölümleri: [SirketMenuGroup.drawerGroups] sırasıyla, yalnız öğesi olan
+  /// başlıklar; grup içinde menü sırası korunur. Ayarlar öğeleri burada YOKTUR ([settingsItems]).
+  static List<YanMenuSection> drawerSections(List<SirketMenuItem> items) => <YanMenuSection>[
+        for (final group in SirketMenuGroup.drawerGroups)
+          if (items.any((item) => menuGroupOf(item) == group))
+            YanMenuSection(group, <SirketMenuItem>[
+              for (final item in items)
+                if (menuGroupOf(item) == group) item,
+            ]),
+      ];
+
+  /// Çekmecede çizilen öğeler, ekrandaki sırayla (bölümler art arda).
+  static List<SirketMenuItem> drawerItems(List<SirketMenuItem> items) => <SirketMenuItem>[
+        for (final section in drawerSections(items)) ...section.items,
+      ];
+
+  /// Sağ üstteki dişliden açılan "Ayarlar" panelinin öğeleri (menü sırasıyla). Çekmece + Ayarlar = görünür öğeler.
+  static List<SirketMenuItem> settingsItems(List<SirketMenuItem> items) => <SirketMenuItem>[
+        for (final item in items)
+          if (menuGroupOf(item) == SirketMenuGroup.ayarlar) item,
+      ];
+
   /// Öğenin çekmecedeki başlığı (vitrin kartı aynı metni kullanır).
   static String titleFor(SirketMenuItem item, [UserRole? role]) => _titleForItem(item, role);
 
@@ -247,14 +406,19 @@ class YanMenu extends StatelessWidget {
       additionalItems: additionalItems,
       hiddenItems: hiddenItems,
     );
-    // Ek eylemler (kapı komutları) "Kapılar"ın, o yoksa "Panel"in hemen altına gelir.
-    final extrasAfter = () {
-      final doors = items.indexOf(SirketMenuItem.kapilar);
-      return doors >= 0 ? doors : 0;
-    }();
+    // İP-1D / G2: öğeler başlıklar altında (boş başlık yok); Ayarlar öğeleri çekmecede değil dişli panelindedir.
+    final sections = drawerSections(items);
+    final drawerOrder = <SirketMenuItem>[for (final section in sections) ...section.items];
+    // Ek eylemler (kapı komutları) "Kapılar"ın, o çekmecede yoksa "Panel"in hemen altına gelir.
+    final extrasAnchor =
+        drawerOrder.contains(SirketMenuItem.kapilar) ? SirketMenuItem.kapilar : SirketMenuItem.dashboard;
     final showToggle = canToggleMode && onToggleMode != null;
-    // Çekmece açılışında ilk 8 öğe sırayla belirir (StaggeredEntry): sıra ekrandaki sıradır.
-    final firstItemIndex = showToggle ? 1 : 0;
+    final site = siteContext;
+
+    // Çekmece açılışında ilk 8 satır sırayla belirir (StaggeredEntry): sıra ekrandaki sıradır (site satırı ve başlıklar
+    // dahil).
+    var entryIndex = 0;
+    Widget entry(Key key, Widget child) => StaggeredEntry(key: key, index: entryIndex++, child: child);
 
     // Header Alanı (Rol Temalı Gradient)
     final header = _DrawerHeader(
@@ -264,72 +428,83 @@ class YanMenu extends StatelessWidget {
       compact: compact,
     );
 
-    // Menü Öğeleri Listesi
-    final menuList = Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (showToggle) ...[
-          StaggeredEntry(
-            key: const ValueKey<String>('yan_menu_gecis'),
-            index: 0,
-            child: _MenuTile(
-              icon: isResidentMode
-                  ? Icons.admin_panel_settings_rounded
-                  : Icons.home_rounded,
-              title: isResidentMode ? 'Yönetici Paneline Geç' : 'Sakin Moduna Geç',
-              selected: false,
-              tone: isResidentMode ? AppTone.primary : AppTone.success,
-              onTap: onToggleMode!,
-            ),
+    final rows = <Widget>[
+      // Site seçici en üstte (mod geçişinin de üstünde).
+      if (site != null) entry(const ValueKey<String>('yan_menu_site_giris'), _SiteRow(site: site, tone: tone)),
+      if (showToggle)
+        entry(
+          const ValueKey<String>('yan_menu_gecis'),
+          _MenuTile(
+            icon: isResidentMode ? Icons.admin_panel_settings_rounded : Icons.home_rounded,
+            title: isResidentMode ? 'Yönetici Paneline Geç' : 'Sakin Moduna Geç',
+            selected: false,
+            tone: isResidentMode ? AppTone.primary : AppTone.success,
+            onTap: onToggleMode!,
           ),
-          const _MenuDivider(),
-        ],
-        for (var i = 0; i < items.length; i++) ...[
-          StaggeredEntry(
-            key: ValueKey<SirketMenuItem>(items[i]),
-            index: firstItemIndex + i + (i > extrasAfter ? extraActions.length : 0),
-            child: _MenuTile(
-              icon: _iconForItem(items[i]),
-              title: _titleForItem(items[i], role),
-              selected: selectedItem == items[i],
+        ),
+      if (site != null || showToggle) const _MenuDivider(),
+    ];
+    for (var s = 0; s < sections.length; s++) {
+      final section = sections[s];
+      rows.add(
+        entry(
+          ValueKey<String>('yan_menu_grup_${section.group.name}'),
+          _GroupHeader(title: section.group.title, first: s == 0),
+        ),
+      );
+      for (final item in section.items) {
+        rows.add(
+          entry(
+            ValueKey<SirketMenuItem>(item),
+            _MenuTile(
+              icon: _iconForItem(item),
+              title: _titleForItem(item, role),
+              selected: selectedItem == item,
               tone: tone,
-              badge: badgeCounts[items[i]] ?? 0,
-              badgeNoun: badgeNouns[items[i]] ?? 'bekleyen',
-              onTap: () => onSelect(items[i]),
+              badge: badgeCounts[item] ?? 0,
+              badgeNoun: badgeNouns[item] ?? 'bekleyen',
+              onTap: () => onSelect(item),
             ),
           ),
-          // Ek eylemler "Kapılar"ın (o yoksa "Panel"in) hemen altında.
-          if (i == extrasAfter)
-            for (var k = 0; k < extraActions.length; k++)
-              StaggeredEntry(
-                key: ValueKey<String>('yan_menu_ek_$k'),
-                index: firstItemIndex + extrasAfter + 1 + k,
-                child: _MenuTile(
-                  icon: extraActions[k].icon,
-                  title: extraActions[k].title,
-                  selected: false,
-                  tone: tone,
-                  onTap: extraActions[k].onTap,
-                ),
+        );
+        if (item != extrasAnchor) continue;
+        // Ek eylemler "Kapılar"ın (o yoksa "Panel"in) hemen altında.
+        for (var k = 0; k < extraActions.length; k++) {
+          rows.add(
+            entry(
+              ValueKey<String>('yan_menu_ek_$k'),
+              _MenuTile(
+                icon: extraActions[k].icon,
+                title: extraActions[k].title,
+                selected: false,
+                tone: tone,
+                onTap: extraActions[k].onTap,
               ),
-        ],
-        if (onOpenHelp != null)
-          StaggeredEntry(
-            key: const ValueKey<String>('yan_menu_yardim'),
-            index: firstItemIndex + items.length + extraActions.length,
-            child: _MenuTile(
-              icon: Icons.help_outline_rounded,
-              title: 'Yardım ve Destek',
-              selected: false,
-              tone: tone,
-              onTap: onOpenHelp!,
             ),
+          );
+        }
+      }
+    }
+    if (onOpenHelp != null) {
+      rows.add(
+        entry(
+          const ValueKey<String>('yan_menu_yardim'),
+          _MenuTile(
+            icon: Icons.help_outline_rounded,
+            title: 'Yardım ve Destek',
+            selected: false,
+            tone: tone,
+            onTap: onOpenHelp!,
           ),
-        const _MenuDivider(),
-        StaggeredEntry(
-          key: const ValueKey<String>('yan_menu_cikis'),
-          index: firstItemIndex + items.length + extraActions.length + (onOpenHelp != null ? 1 : 0),
-          child: _MenuTile(
+        ),
+      );
+    }
+    rows
+      ..add(const _MenuDivider())
+      ..add(
+        entry(
+          const ValueKey<String>('yan_menu_cikis'),
+          _MenuTile(
             icon: Icons.logout_rounded,
             title: 'Çıkış Yap',
             selected: false,
@@ -337,8 +512,10 @@ class YanMenu extends StatelessWidget {
             onTap: onLogout,
           ),
         ),
-      ],
-    );
+      );
+
+    // Menü Öğeleri Listesi
+    final menuList = Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: rows);
 
     // Alt Sürüm Bilgisi
     final version = Padding(
@@ -390,6 +567,335 @@ class YanMenu extends StatelessWidget {
                 version,
               ],
             ),
+    );
+  }
+}
+
+/// İP-1D / G2: sağ üstteki dişliden açılan "Ayarlar" paneli (`Scaffold.endDrawer`). Öğeler çekmeceyle AYNI görünürlük
+/// kuralından gelir ([YanMenu.visibleItems] içinden [SirketMenuGroup.ayarlar] grubundakiler, menü sırasıyla): kapalı /
+/// yetkisiz öğe burada da yoktur. Öğe bileşeni, rozet ve seçili hap çekmeceyle aynıdır. [extraActions] sayfa seçmeyen
+/// ayar eylemleridir (örn. "Masaüstüne Widget Ekle"); listenin sonunda durur. Dokunulan öğe için çekmeceyi kapatmak
+/// çağıranın işidir (çekmecedeki gibi).
+class YanMenuAyarlar extends StatelessWidget {
+  const YanMenuAyarlar({
+    super.key,
+    required this.role,
+    required this.selectedItem,
+    required this.onSelect,
+    this.isResidentMode = false,
+    this.canToggleMode = false,
+    this.additionalItems = const <SirketMenuItem>{},
+    this.hiddenItems = const <SirketMenuItem>{},
+    this.badgeCounts = const <SirketMenuItem, int>{},
+    this.badgeNouns = const <SirketMenuItem, String>{},
+    this.extraActions = const <YanMenuAction>[],
+  });
+
+  final UserRole role;
+  final SirketMenuItem selectedItem;
+  final ValueChanged<SirketMenuItem> onSelect;
+  final bool isResidentMode;
+  final bool canToggleMode;
+  final Set<SirketMenuItem> additionalItems;
+  final Set<SirketMenuItem> hiddenItems;
+  final Map<SirketMenuItem, int> badgeCounts;
+  final Map<SirketMenuItem, String> badgeNouns;
+  final List<YanMenuAction> extraActions;
+
+  /// Paneldeki öğeler (menü sırasıyla).
+  static List<SirketMenuItem> itemsFor({
+    required UserRole role,
+    bool isResidentMode = false,
+    bool canToggleMode = false,
+    Set<SirketMenuItem> additionalItems = const <SirketMenuItem>{},
+    Set<SirketMenuItem> hiddenItems = const <SirketMenuItem>{},
+  }) =>
+      YanMenu.settingsItems(
+        YanMenu.visibleItems(
+          role: role,
+          isResidentMode: isResidentMode,
+          canToggleMode: canToggleMode,
+          additionalItems: additionalItems,
+          hiddenItems: hiddenItems,
+        ),
+      );
+
+  /// Dişli düğmesinin rozeti: [items] içindeki AYAR öğelerinin rozet toplamı (bekleyen sayılar dişlinin arkasında
+  /// kaybolmasın). Çekmecedeki öğelerin rozetleri sayılmaz (onlar çekmecede görünür).
+  static int badgeTotal(List<SirketMenuItem> items, Map<SirketMenuItem, int> badgeCounts) {
+    var total = 0;
+    for (final item in YanMenu.settingsItems(items)) {
+      final count = badgeCounts[item] ?? 0;
+      if (count > 0) total += count;
+    }
+    return total;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tone = role.tone;
+    final compact = MediaQuery.sizeOf(context).height < YanMenu._compactHeight;
+    final items = itemsFor(
+      role: role,
+      isResidentMode: isResidentMode,
+      canToggleMode: canToggleMode,
+      additionalItems: additionalItems,
+      hiddenItems: hiddenItems,
+    );
+    final list = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final (i, item) in items.indexed)
+          StaggeredEntry(
+            key: ValueKey<SirketMenuItem>(item),
+            index: i,
+            child: _MenuTile(
+              icon: _iconForItem(item),
+              title: _titleForItem(item, role),
+              selected: selectedItem == item,
+              tone: tone,
+              badge: badgeCounts[item] ?? 0,
+              badgeNoun: badgeNouns[item] ?? 'bekleyen',
+              onTap: () => onSelect(item),
+            ),
+          ),
+        if (extraActions.isNotEmpty && items.isNotEmpty) const _MenuDivider(),
+        for (var k = 0; k < extraActions.length; k++)
+          StaggeredEntry(
+            key: ValueKey<String>('yan_menu_ayar_ek_$k'),
+            index: items.length + k,
+            child: _MenuTile(
+              icon: extraActions[k].icon,
+              title: extraActions[k].title,
+              selected: false,
+              tone: tone,
+              onTap: extraActions[k].onTap,
+            ),
+          ),
+      ],
+    );
+    final header = _SettingsHeader(tone: tone, compact: compact);
+    const listPadding = EdgeInsets.symmetric(vertical: 12, horizontal: 10);
+    return Drawer(
+      semanticLabel: SirketMenuGroup.ayarlar.title,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(AppRadius.xl),
+          bottomLeft: Radius.circular(AppRadius.xl),
+        ),
+      ),
+      child: compact
+          ? SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [header, Padding(padding: listPadding, child: list)],
+              ),
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                header,
+                Expanded(child: SingleChildScrollView(padding: listPadding, child: list)),
+              ],
+            ),
+    );
+  }
+}
+
+/// Ayarlar panelinin başlığı: dişli simgesi + "Ayarlar" (başlık düğümü). Durum çubuğunun altında başlar.
+class _SettingsHeader extends StatelessWidget {
+  const _SettingsHeader({required this.tone, required this.compact});
+
+  final AppTone tone;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    return SafeArea(
+      bottom: false,
+      left: false,
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(AppSpace.xl, compact ? AppSpace.md : AppSpace.xl, AppSpace.lg, AppSpace.sm),
+        child: Row(
+          children: [
+            ExcludeSemantics(child: Icon(Icons.settings_rounded, size: 24, color: tone.ink(p))),
+            const SizedBox(width: AppSpace.md),
+            Expanded(
+              child: Semantics(
+                header: true,
+                child: Text(
+                  SirketMenuGroup.ayarlar.title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(color: p.text),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Çekmece bölüm başlığı (İP-1D / G2): küçük, kalın, sessiz renk (metin >= 4,5:1: palet sözleşmesi); başlık düğümü.
+class _GroupHeader extends StatelessWidget {
+  const _GroupHeader({required this.title, required this.first});
+
+  final String title;
+
+  /// İlk başlığın üst boşluğu küçüktür.
+  final bool first;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    final style = Theme.of(context).textTheme.labelLarge ?? Theme.of(context).textTheme.bodySmall;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(AppSpace.lg, first ? AppSpace.xs : AppSpace.md, AppSpace.lg, AppSpace.xs),
+      child: Semantics(
+        header: true,
+        child: Text(
+          title,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: style?.copyWith(color: p.textMuted, fontWeight: FontWeight.w700, letterSpacing: 0.3),
+        ),
+      ),
+    );
+  }
+}
+
+/// Site seçimi: seçenek kutusundan dönen değer (null = "Tüm siteler"; kutu kapandıysa seçim yok).
+class _SiteChoice {
+  const _SiteChoice(this.code);
+
+  final int? code;
+}
+
+/// Çekmecenin en üstündeki site satırı (İP-1D / G2 "site seçici en üstte"). Seçici değilse yalnız bilgi verir (dokunma
+/// eylemi yok); seçiciyse dokununca alt sayfada "Tüm siteler" ve siteler listelenir. Dokunma hedefi >= 48 dp; ekran
+/// okuyucu tek düğüm okur ("Site: Güneş Sitesi").
+class _SiteRow extends StatelessWidget {
+  const _SiteRow({required this.site, required this.tone});
+
+  final YanMenuSiteContext site;
+  final AppTone tone;
+
+  Future<void> _pick(BuildContext context) async {
+    final choice = await showModalBottomSheet<_SiteChoice>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => _SitePickerSheet(site: site, tone: tone),
+    );
+    if (choice == null || choice.code == site.selectedCode) return;
+    site.onChanged?.call(choice.code);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    final th = Theme.of(context).textTheme;
+    final interactive = site.canSelect;
+    final content = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpace.lg, vertical: AppSpace.sm),
+      child: Row(
+        children: [
+          Icon(Icons.location_city_rounded, size: 22, color: tone.ink(p)),
+          const SizedBox(width: AppSpace.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Site', maxLines: 1, style: th.bodySmall?.copyWith(color: p.textMuted)),
+                Text(
+                  site.label,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: th.titleSmall?.copyWith(color: p.text, fontWeight: FontWeight.w700),
+                ),
+              ],
+            ),
+          ),
+          if (interactive) ...[
+            const SizedBox(width: AppSpace.sm),
+            Icon(Icons.unfold_more_rounded, size: 22, color: p.textSecondary),
+          ],
+        ],
+      ),
+    );
+    return Semantics(
+      key: const ValueKey<String>('yan_menu_site'),
+      container: true,
+      button: interactive,
+      label: 'Site: ${site.label}',
+      hint: interactive ? 'Siteyi değiştirmek için dokunun' : null,
+      onTap: interactive ? () => _pick(context) : null,
+      excludeSemantics: true,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 48),
+        child: interactive
+            ? Material(
+                type: MaterialType.transparency,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(AppRadius.md),
+                  onTap: () => _pick(context),
+                  child: content,
+                ),
+              )
+            : content,
+      ),
+    );
+  }
+}
+
+/// Site seçenekleri (alt sayfa): "Tüm siteler" + siteler; seçili olan işaretli. Büyük yazıda kaydırılır.
+class _SitePickerSheet extends StatelessWidget {
+  const _SitePickerSheet({required this.site, required this.tone});
+
+  final YanMenuSiteContext site;
+  final AppTone tone;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    final options = <(int?, String)>[
+      (null, 'Tüm siteler'),
+      for (final s in site.sites) (s.code, s.label),
+    ];
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.only(bottom: AppSpace.lg),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(AppSpace.xl, 0, AppSpace.xl, AppSpace.sm),
+              child: Semantics(
+                header: true,
+                child: Text('Site seçin', style: Theme.of(context).textTheme.titleMedium?.copyWith(color: p.text)),
+              ),
+            ),
+            for (final (code, label) in options)
+              ListTile(
+                key: ValueKey<String>('yan_menu_site_secenek_${code ?? 'tum'}'),
+                leading: Icon(
+                  code == null ? Icons.domain_rounded : Icons.location_city_rounded,
+                  color: tone.ink(p),
+                ),
+                title: Text(label, maxLines: 3, overflow: TextOverflow.ellipsis),
+                selected: code == site.selectedCode,
+                selectedColor: tone.ink(p),
+                trailing: code == site.selectedCode ? Icon(Icons.check_rounded, color: tone.ink(p)) : null,
+                onTap: () => Navigator.of(context).pop(_SiteChoice(code)),
+              ),
+          ],
+        ),
+      ),
     );
   }
 }

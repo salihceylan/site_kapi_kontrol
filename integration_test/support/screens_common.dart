@@ -54,8 +54,10 @@ Future<void> showcaseTour(E2eScreenContext c) async {
   }
   E2eRuntime.act('vitrin: ${grid.length} kart (${grid.map((i) => i.name).join(', ')}), ${secondary.length} ikincil');
   if (await openDrawer(tester)) {
-    final drawer = drawerMenuItems();
+    // IP-1D: ayar ogeleri cekmecede degil, sag ustteki disliden acilan Ayarlar panelinde; eslik ikisinin birlesimiyle.
+    final drawer = <SirketMenuItem>[...drawerMenuItems()];
     await closeOverlays(tester);
+    drawer.addAll(await settingsMenuItems(tester));
     for (final problem in showcaseParityProblems(drawer: drawer, grid: grid, secondary: secondary)) {
       E2eRuntime.collector.note(kind: 'expectation', message: 'Vitrin / cekmece: $problem');
     }

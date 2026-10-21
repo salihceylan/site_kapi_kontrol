@@ -98,6 +98,18 @@ abstract final class HelpContent {
     'Kapıya QR Göster',
     'Kapı Ekranından QR Oku',
     'Kurye / Misafir Geçiş Linki Oluştur',
+    // İP-1D / G2: çekmece başlıkları, sağ üstteki dişli ("Ayarlar") ve oradaki eylem; ekran adları.
+    'Ana sayfa',
+    'Borçlar',
+    'Tahsilat',
+    'Giderler',
+    'İletişim',
+    'Raporlar',
+    'Site hizmetleri',
+    'Ayarlar',
+    'Masaüstüne Widget Ekle',
+    'Belgeler',
+    'Taleplerim',
   };
 
   /// Menü dışı ekran içi etiketler (düğme, bölüm, sekme adları; kodda aynen geçer).
@@ -140,6 +152,12 @@ abstract final class HelpContent {
     'Kim öder',
     'Dairede oturan',
     'Ev sahibi',
+    // İP-1D / G3: sakin alt çubuğunun sekmeleri ve site seçici.
+    'Özet',
+    'Duyuru',
+    'Arıza',
+    'Kapı',
+    'Tüm siteler',
   };
 
   // --- Konular ----------------------------------------------------------------------------------
@@ -162,7 +180,7 @@ abstract final class HelpContent {
     title: 'Profilimi ve şifremi nasıl değiştiririm?',
     icon: Icons.account_circle_outlined,
     steps: <String>[
-      'Menüden “Profilim” ekranını açın.',
+      'Sağ üstteki “Ayarlar” düğmesine (dişli) dokunun ve “Profilim” ekranını açın.',
       '“Kendi Bilgilerini Düzenle” bölümünde ad soyadınızı ve telefonunuzu güncelleyin.',
       'Şifrenizi değiştirmek için “Mevcut Şifre” ve “Yeni Şifre” alanlarını doldurun (en az 8 karakter).',
       '“Profili Kaydet” düğmesine dokunun.',
@@ -176,7 +194,7 @@ abstract final class HelpContent {
     title: 'Hesap bilgilerimi nerede görürüm?',
     icon: Icons.account_circle_outlined,
     steps: <String>[
-      'Menüden “Profilim” ekranını açın.',
+      'Sağ üstteki “Ayarlar” düğmesine (dişli) dokunun ve “Profilim” ekranını açın.',
       '“Hesap Bilgilerim”, “Kayıtlarım” ve “Bildirim Tercihleri” bölümlerinde hesabınızı, daire kayıtlarınızı ve e-posta tercihlerinizi görürsünüz.',
     ],
     note:
@@ -221,13 +239,59 @@ abstract final class HelpContent {
     ],
   );
 
+  // İP-1D (G2 + G3): menü başlıklar altında, ayarlar sağ üstteki dişlide, sakinde alt çubuk. Her grup kendi diliyle.
+
+  static const HelpTopic _navigationResident = HelpTopic(
+    id: 'navigation',
+    title: 'Menü, alt çubuk ve ayarlar nerede?',
+    icon: Icons.menu_rounded,
+    steps: <String>[
+      'Ekranın altındaki çubukta “Özet”, “Duyuru”, “Arıza”, “Kapı” ve “Belgeler” sekmeleri vardır. “Özet” girişte açılan “Panel” ekranıdır; sitenizde kapalı olan ya da size açık olmayan sekme görünmez, kapı yetkiniz yoksa “Kapı” sekmesi çıkmaz. İkiden az sekme kalırsa ya da telefon yatay tutulurken çubuk görünmez; ekranlara menüden ulaşırsınız.',
+      'Sol üstteki menü düğmesi menüyü açar: ekranlar “Ana sayfa”, “Daireler”, “Borçlar”, “İletişim” ve “Site hizmetleri” gibi başlıklar altında toplanır. Size açık ekranı olmayan başlık görünmez; menünün en üstünde bağlı olduğunuz site yazar.',
+      'Sağ üstteki “Ayarlar” düğmesi (dişli) “Profilim” ve “Eller Serbest & Kestirmeler” gibi hesap ve ayar ekranlarını açar.',
+      'Geri tuşu bir sekmeden ya da ekrandan “Özet” sekmesine döner; “Özet” sekmesindeyken uygulamadan çıkar.',
+    ],
+  );
+
+  static const HelpTopic _navigationIndividual = HelpTopic(
+    id: 'navigation',
+    title: 'Menü ve ayarlar nerede?',
+    icon: Icons.menu_rounded,
+    steps: <String>[
+      'Sol üstteki menü düğmesi menüyü açar: ekranlar “Ana sayfa”, “Daireler” ve “Site hizmetleri” gibi başlıklar altında toplanır; size açık ekranı olmayan başlık görünmez.',
+      'Sağ üstteki “Ayarlar” düğmesi (dişli) “Profilim” gibi hesap ve ayar ekranlarını açar.',
+    ],
+  );
+
+  static const HelpTopic _navigationManager = HelpTopic(
+    id: 'navigation',
+    title: 'Menü, site seçici ve ayarlar nerede?',
+    icon: Icons.menu_rounded,
+    steps: <String>[
+      'Sol üstteki menü düğmesi menüyü açar: ekranlar “Ana sayfa”, “Daireler”, “Borçlar”, “İletişim” ve “Site hizmetleri” gibi başlıklar altında toplanır; yetkinize açık ekranı olmayan başlık görünmez (“Tahsilat”, “Giderler” ve “Raporlar” başlıklarında henüz ekran yoktur).',
+      'Birden çok siteniz varsa menünün en üstündeki site satırına dokunup bir site seçin: menü ve Panel o sitenin açık modülleriyle sınırlanır. “Tüm siteler” seçimi hepsini geri getirir.',
+      'Sağ üstteki “Ayarlar” düğmesi (dişli) “Profilim”, “Modüller”, “Kayıtlı Cihazlar” ve “Bluetooth ile Wi-Fi Kur” gibi ayar ekranlarını açar.',
+    ],
+  );
+
+  static const HelpTopic _navigationSuperUser = HelpTopic(
+    id: 'navigation',
+    title: 'Menü ve ayarlar nerede?',
+    icon: Icons.menu_rounded,
+    steps: <String>[
+      'Sol üstteki menü düğmesi menüyü açar: ekranlar “Ana sayfa”, “Daireler”, “Borçlar”, “İletişim” ve “Site hizmetleri” gibi başlıklar altında toplanır.',
+      'Sağ üstteki “Ayarlar” düğmesi (dişli) kullanıcı yönetimi, “Modüller”, “Modül Talepleri”, “Site Başvuruları”, cihaz ekranları, “Denetim Kaydı”, “Platform Ayarları” ve “İstemci Hataları” ekranlarını açar.',
+      'Bekleyen modül talebi ve site başvurusu sayıları “Ayarlar” düğmesinde ve ilgili ekranın yanında rozetle görünür.',
+    ],
+  );
+
   static const List<HelpTopic> _resident = <HelpTopic>[
     HelpTopic(
       id: 'open_door',
       title: 'Kapıyı nasıl açarım?',
       icon: Icons.lock_open_rounded,
       steps: <String>[
-        '“Panel” ekranındaki “Kapılar” kartına dokunun ya da menüden “Kapılar” ekranını açın.',
+        '“Panel” ekranındaki “Kapılar” kartına ya da alttaki “Kapı” sekmesine dokunun; menüden “Kapılar” ekranını da açabilirsiniz.',
         'Kapı kartındaki “KAPIYI AÇ” düğmesine dokunun. Telefonunuz site ağındaysa düğme “YEREL AĞDAN AÇ” olur.',
         'Sitenizde yalnızca QR ile giriş açıksa düğmenin adı “QR KOD İLE AÇ” olur.',
         'Kapı modülü açıksa menüdeki “Sesli Kapı Açma” eylemiyle sesle de açabilirsiniz.',
@@ -237,6 +301,7 @@ abstract final class HelpContent {
           'hesabınızın kapı yetkisi yoktur (örneğin henüz bir daireye bağlı değilsiniz); site yöneticinize başvurun.',
     ),
     _panelResident,
+    _navigationResident,
     HelpTopic(
       id: 'qr_and_guest',
       title: 'QR ile giriş ve misafir geçişi',
@@ -254,8 +319,8 @@ abstract final class HelpContent {
       title: 'Duyuruları nasıl görürüm?',
       icon: Icons.campaign_rounded,
       steps: <String>[
-        'Menüden “Duyurular” ekranını açın; yönetimin gönderdiği duyurular gelen kutunuzda listelenir.',
-        'Okunmamış duyuru sayısı menüde rozetle görünür.',
+        'Alttaki “Duyuru” sekmesine dokunun ya da menüden “Duyurular” ekranını açın; yönetimin gönderdiği duyurular gelen kutunuzda listelenir.',
+        'Okunmamış duyuru sayısı menüde ve “Duyuru” sekmesinde rozetle görünür.',
         'E-posta ile duyuru alıp almayacağınızı “Profilim” ekranındaki “Bildirim Tercihleri” bölümünden seçersiniz.',
       ],
     ),
@@ -264,7 +329,7 @@ abstract final class HelpContent {
       title: 'Borcumu nasıl görürüm?',
       icon: Icons.receipt_long_rounded,
       steps: <String>[
-        'Sitenizde Finans modülü açıksa menüde “Borcum” ekranı görünür.',
+        'Sitenizde Finans modülü açıksa menünün “Borçlar” başlığında “Borcum” ekranı görünür.',
         'Bu ekranda daireniz için tahakkuk eden aidat ve diğer borçları ile yapılan ödemeleri görürsünüz.',
         'Her dairenin iki ayrı hesabı vardır: “Ev sahibi hesabı” ve “Kiracı hesabı”. Ekranda yalnız kendi hesabınızın borcu ve '
             'hareketleri görünür; malik ve kiracı borçları birbirine karışmaz.',
@@ -278,6 +343,7 @@ abstract final class HelpContent {
 
   static const List<HelpTopic> _individual = <HelpTopic>[
     _panelIndividual,
+    _navigationIndividual,
     HelpTopic(
       id: 'add_device',
       title: 'Cihazımı hesabıma nasıl eklerim?',
@@ -306,6 +372,7 @@ abstract final class HelpContent {
 
   static const List<HelpTopic> _siteManager = <HelpTopic>[
     _panelAdmin,
+    _navigationManager,
     HelpTopic(
       id: 'manage_site',
       title: 'Sitemi, bloklarımı ve kapılarımı nasıl yönetirim?',
@@ -341,7 +408,7 @@ abstract final class HelpContent {
       title: 'Modülleri nasıl açarım?',
       icon: Icons.extension_rounded,
       steps: <String>[
-        'Menüden “Modüller” ekranını açın ve siteyi seçin.',
+        'Sağ üstteki “Ayarlar” düğmesinden “Modüller” ekranını açın ve siteyi seçin.',
         'Kapalı bir modül için talep gönderin; talebinizi “Modül Taleplerim” bölümünden izleyebilirsiniz.',
         'Finans modülü açılınca menüde “Finans” ekranı (“Daireler”, “Tanımlar” ve “Dönemler” sekmeleri) görünür.',
         'Sitenizde geçerli kuralları (gecikme tazminatı üst sınırı, işletme projesi ve saklama süreleri) aynı ekrandaki “Kurallar” bölümünde “Kuralları Görüntüle” ile görürsünüz; değerleri sistem yöneticisi belirler.',
@@ -369,8 +436,8 @@ abstract final class HelpContent {
       title: 'Cihaz ve Wi-Fi kurulumu',
       icon: Icons.bluetooth_searching_rounded,
       steps: <String>[
-        'Cihazlarınızı “Kayıtlı Cihazlar” ekranında görürsünüz.',
-        'Yeni cihazı Wi-Fi ağına bağlamak için “Bluetooth ile Wi-Fi Kur” ekranını kullanın.',
+        'Cihazlarınızı sağ üstteki “Ayarlar” düğmesindeki “Kayıtlı Cihazlar” ekranında görürsünüz.',
+        'Yeni cihazı Wi-Fi ağına bağlamak için aynı yerdeki “Bluetooth ile Wi-Fi Kur” ekranını kullanın.',
       ],
     ),
     HelpTopic(
@@ -378,7 +445,7 @@ abstract final class HelpContent {
       title: 'Kendi daireme sakin olarak nasıl girerim?',
       icon: Icons.home_rounded,
       steps: <String>[
-        'Menünün en üstünde görünüyorsa “Sakin Moduna Geç” seçeneğine dokunun.',
+        'Menünün üst kısmında (site satırının hemen altında) görünüyorsa “Sakin Moduna Geç” seçeneğine dokunun.',
         'Yönetici paneline dönmek için aynı yerdeki “Yönetici Paneline Geç” seçeneğini kullanın.',
       ],
       note: 'Bu seçenek yalnız hem yönetici hem sakin olarak kayıtlı hesaplarda görünür.',
@@ -388,12 +455,13 @@ abstract final class HelpContent {
 
   static const List<HelpTopic> _superUser = <HelpTopic>[
     _panelAdmin,
+    _navigationSuperUser,
     HelpTopic(
       id: 'users',
       title: 'Kullanıcıları nasıl yönetirim?',
       icon: Icons.manage_accounts_rounded,
       steps: <String>[
-        '“Kullanıcı Yönetimi” ekranı tüm kullanıcıları listeler.',
+        'Sağ üstteki “Ayarlar” düğmesindeki “Kullanıcı Yönetimi” ekranı tüm kullanıcıları listeler.',
         '“Süper Kullanıcı Yönetimi”, “Site Yöneticileri Yönetimi” ve “Daire Sakinleri” ekranlarından rol bazında ekleme, düzenleme ve pasife alma yaparsınız.',
       ],
     ),
@@ -403,7 +471,7 @@ abstract final class HelpContent {
       icon: Icons.inbox_rounded,
       steps: <String>[
         '“Site Başvuruları” ekranı bireysel kullanıcıların site kurma başvurularını listeler; inceleyip onaylayın ya da reddedin.',
-        '“Modül Talepleri” ekranı site yöneticilerinin modül taleplerini gösterir. Bekleyen sayıları menüde rozetle görünür.',
+        '“Modül Talepleri” ekranı site yöneticilerinin modül taleplerini gösterir. Bekleyen sayılar “Ayarlar” düğmesinde rozetle görünür.',
       ],
     ),
     HelpTopic(

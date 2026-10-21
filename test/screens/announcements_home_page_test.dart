@@ -32,6 +32,7 @@ import 'package:site_kapi_kontrol/ui/widgets/unread_announcement_card.dart';
 import 'announcement_fixtures.dart';
 import 'list_fixtures.dart' show fxDoors, tapFinder;
 import 'dialog_layout_harness.dart' show settleFor;
+import '../support/menu_nav.dart';
 
 /// HomePage için sahte servis: duyuru uçlarına ek olarak ana kabuğun ihtiyaç duyduğu uçlar boş döner.
 class _HomeAnnouncementAuth extends AnnouncementFakeAuth {
@@ -144,8 +145,8 @@ Future<void> _openDrawer(WidgetTester t) async {
 
 /// Çekmecedeki öğeye dokunur. Bulucu çekmeceyle SINIRLIDIR: Panel modül vitrininde de aynı adlı kartlar vardır.
 Future<void> _tapMenu(WidgetTester t, String label) async {
-  await _openDrawer(t);
-  final tile = find.descendant(of: find.byType(Drawer), matching: find.text(label)).first;
+  // İP-1D: öğe çekmecede yoksa (ayar öğesi) sağ üstteki dişliden açılan Ayarlar panelinde aranır.
+  final tile = await findMenuEntry(t, label);
   await t.ensureVisible(tile);
   await t.pump();
   await t.tap(tile);
@@ -159,10 +160,9 @@ Finder _tileTitle(String title) =>
 
 Finder _inAppBar(Finder f) => find.descendant(of: find.byType(AppBar), matching: f);
 
-List<String> _drawerTitles(WidgetTester t) => [
-  for (final tile in t.widgetList<ListTile>(find.descendant(of: find.byType(Drawer), matching: find.byType(ListTile))))
-    (tile.title! as Text).data!,
-];
+/// İP-1D (G2): menü LİSTESİNİN sırası (vitrin sırası; `YanMenu.visibleItems`: çekmece + Ayarlar paneli). Çekmece öğeleri
+/// başlıklar altında gruplar ([expectUnderDrawerHeader]); ayar öğeleri sağ üstteki dişlidedir.
+List<String> _drawerTitles(WidgetTester t) => menuListTitles(t);
 
 /// Yoklamayı bir tur ilerletir (ön plan aralığı 20 sn).
 Future<void> _poll(WidgetTester t, {int seconds = 20}) async {
@@ -182,6 +182,7 @@ void main() {
       final titles = _drawerTitles(t);
       expect(titles, contains('Duyurular'));
       expect(titles.indexOf('Duyurular'), titles.indexOf('Kişiler') + 1);
+      expectUnderDrawerHeader(t, 'Duyurular', 'İletişim');
       await t.tap(_tileTitle('Duyurular'));
       await t.pump();
       await t.pump(const Duration(milliseconds: 600));
@@ -287,7 +288,7 @@ void main() {
       await _poll(t);
       await _openDrawer(t);
       expect(_tileTitle('Duyurular'), findsNothing);
-      expect(_tileTitle('Profilim'), findsOneWidget);
+      expect(_tileTitle('Panel'), findsOneWidget);
       expect(auth.summaryCalls, 0);
       await _disposeHome(t);
     });
@@ -300,9 +301,8 @@ void main() {
       await _openDrawer(t);
       expect(_tileTitle('Duyurular'), findsNothing);
       expect(auth.summaryCalls, 0);
-      await t.tap(_tileTitle('Profilim'));
-      await t.pump();
-      await t.pump(const Duration(milliseconds: 600));
+      // İP-1D: Profilim sağ üstteki dişliden açılan Ayarlar panelindedir.
+      await tapMenuEntry(t, 'Profilim');
       await settleFor(t);
       expect(find.byType(NotificationPrefsSection), findsNothing);
       await _disposeHome(t);
@@ -750,6 +750,9 @@ void main() {
       expect(find.byKey(const ValueKey<String>('urgent_announcement_banner')), findsOneWidget);
       await _openDrawer(t);
       expect(t.takeException(), isNull);
+      // Gruplu çekmecede Duyurular "İletişim" başlığındadır: büyük yazıda kaydırılarak erişilir.
+      await t.ensureVisible(_tileTitle('Duyurular'));
+      await t.pump();
       await t.tap(_tileTitle('Duyurular'));
       await t.pump();
       await t.pump(const Duration(milliseconds: 600));

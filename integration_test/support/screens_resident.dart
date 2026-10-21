@@ -1,5 +1,5 @@
-// Daire sakini (apartment_owner) ekran tanimlari: Panel (modul vitrini), "Kapılar" (akilli kumanda karti) +
-// Eller Serbest diyalogu.
+// Daire sakini (apartment_owner) ekran tanimlari: Panel (modul vitrini), alt cubuk sekmeleri (IP-1D / G3), "Kapılar"
+// (akilli kumanda karti) + Eller Serbest diyalogu. Profilim ve Eller Serbest sag ustteki disliden (Ayarlar) acilir.
 
 import 'package:flutter/material.dart' show Drawer, ValueKey;
 import 'package:flutter_test/flutter_test.dart' show find;
@@ -15,6 +15,12 @@ Duration _s(int seconds) => Duration(seconds: seconds);
 List<E2eScreenSpec> residentScreens() => <E2eScreenSpec>[
       panelShowcaseScreen,
       kapilarScreen(residentRemoteTour),
+      const E2eScreenSpec(
+        name: 'alt_cubuk',
+        menuLabel: 'Panel',
+        titleText: 'Panel',
+        interactions: residentBottomBarTour,
+      ),
       const E2eScreenSpec(
         name: 'katilim_kurulum',
         menuLabel: 'Daireye Katıl & Cihaz Ekle',
@@ -124,6 +130,45 @@ Future<void> _drawerAction(E2eScreenContext c, String label, String shotName) as
     await c.settleUi(min: _s(2));
     await c.shot(shotName);
     await c.closeAll();
+  }
+}
+
+/// Alt cubuk (IP-1D / G3): Ozet · Duyuru · Arıza · Kapı · Belgeler sekmeleri gorunur ogelerden turer. Her sekme kendi
+/// sayfasini acar (AppBar basligi), geri tusu Ozet'e (Panel) dondurur. Kapi sekmesi kapiyi ACMAZ, Kapılar sayfasini
+/// acar. Cubuk yoksa (iki sekmeden az) bulgu yazilmaz, yalniz not dusulur.
+Future<void> residentBottomBarTour(E2eScreenContext c) async {
+  final tester = c.tester;
+  if (find.byKey(kResidentBarKey).evaluate().isEmpty) {
+    E2eRuntime.act('alt cubuk yok (iki sekmeden az)');
+    return;
+  }
+  final tabs = bottomTabsOnScreen();
+  E2eRuntime.act('alt cubuk: ${tabs.map((t) => t.$2).join(', ')}');
+  if (tabs.isEmpty || tabs.first.$1 != 'ozet') {
+    E2eRuntime.collector.note(kind: 'expectation', message: 'Alt cubugun ilk sekmesi "Özet" degil');
+  }
+  const titles = <String, String>{
+    'duyuru': 'Duyurular',
+    'ariza': 'Taleplerim',
+    'kapi': 'Kapılar',
+    'belgeler': 'Belgeler',
+  };
+  for (final (key, label) in tabs) {
+    final title = titles[key];
+    if (title == null) continue;
+    if (!await tapBottomTab(tester, key)) continue;
+    await c.settleUi(min: _s(1));
+    if (!await pumpUntilFound(tester, appBarTitle(title), timeout: _s(5))) {
+      E2eRuntime.collector.note(kind: 'navigation', message: 'Alt cubuk "$label" sekmesi "$title" sayfasini acmadi');
+    }
+    await c.shot('sekme_$key');
+    // Geri tusu sekmeden Ozet'e (Panel) doner.
+    await tester.binding.handlePopRoute();
+    await c.settleUi(min: _s(1));
+    if (!await pumpUntilFound(tester, find.byKey(kShowcaseKey), timeout: _s(5))) {
+      E2eRuntime.collector.note(kind: 'navigation', message: 'Alt cubuk "$label" sekmesinden geri tusu Özet\'e donmedi');
+      await tapBottomTab(tester, 'ozet');
+    }
   }
 }
 

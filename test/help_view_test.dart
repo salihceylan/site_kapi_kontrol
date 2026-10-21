@@ -174,8 +174,9 @@ void main() {
       await _tapText(t, 'Kapıyı nasıl açarım?');
       expect(find.textContaining('“KAPIYI AÇ” düğmesine dokunun'), findsOneWidget);
       expect(find.text('1.'), findsOneWidget);
-      // Kapı "Kapılar" ekranındadır (Panel modül vitrinidir): ilk adım oraya götürür, not "Kapılar" yokluğunu anlatır.
-      expect(find.textContaining('ekranındaki “Kapılar” kartına dokunun'), findsOneWidget);
+      // Kapı "Kapılar" ekranındadır (Panel modül vitrinidir): ilk adım oraya (kart ya da İP-1D alt çubuktaki "Kapı"
+      // sekmesi) götürür, not "Kapılar" yokluğunu anlatır.
+      expect(find.textContaining('ekranındaki “Kapılar” kartına ya da alttaki “Kapı” sekmesine dokunun'), findsOneWidget);
       expect(find.textContaining('“Kapılar” kartı, menüde de “Kapılar” yoksa'), findsOneWidget);
       expect(find.textContaining('Panelde kapı kartı görünmüyorsa'), findsNothing);
 

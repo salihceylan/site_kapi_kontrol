@@ -276,7 +276,7 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/design/app_shell_t
 | [lib/services/api_exception.dart:42](../../lib/services/api_exception.dart#L42) | <code>bool get invalidatesSession =&gt;</code> | Varsayılan: yalnız 401 ve ara katmandan gelmeyen yanıt oturumu geçersiz sayar |
 | [lib/services/auth_service.dart:222](../../lib/services/auth_service.dart#L222) | <code>Future&lt;void&gt; _runSessionRefresh(UserSession active) async {</code> | GET /me doğrulaması: 401/403 oturumu kapatır; ağ/5xx/ara katman hatasında çevrimdışı oturum KORUNUR |
 | [lib/services/auth_service.dart:67](../../lib/services/auth_service.dart#L67) | <code>static const Duration _sessionCheckMinInterval = Duration(seconds: 20);</code> | /me doğrulaması art arda en çok 20 sn'de bir (force olmadıkça) |
-| [lib/ui/pages/home_page.dart:611](../../lib/ui/pages/home_page.dart#L611) | <code>unawaited(widget.authService.refreshSession());</code> | Uygulama ön plana dönünce /me doğrulaması tetiklenir (oturum bu anda düşebilir) |
+| [lib/ui/pages/home_page.dart:640](../../lib/ui/pages/home_page.dart#L640) | <code>unawaited(widget.authService.refreshSession());</code> | Uygulama ön plana dönünce /me doğrulaması tetiklenir (oturum bu anda düşebilir) |
 | [lib/services/auth_service.dart:111](../../lib/services/auth_service.dart#L111) | <code>String? takeSessionNotice() {</code> | Düşme nedeni mesajı giriş ekranında BİR KEZ gösterilir ve temizlenir |
 
 **Olası nedenler**
@@ -851,8 +851,8 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/local_door_service
 | [lib/services/auth_service.dart:2541](../../lib/services/auth_service.dart#L2541) | <code>static bool _isCloudUnreachableError(ApiException e) =&gt;</code> | "Bulut erişilemiyor" = durum kodu yok (ağ/zaman aşımı), 5xx ya da ara katman yanıtı; 403/404 gibi iş hataları sayılmaz |
 | [lib/models/door_runtime_status.dart:84](../../lib/models/door_runtime_status.dart#L84) | <code>bool get commandEnabled =&gt;</code> | Komut gönderilebilir mi: (MQTT köprüsü VE cihaz bağlı) ya da (yerel kontrol token + IP var) |
 | [lib/models/door_runtime_status.dart:124](../../lib/models/door_runtime_status.dart#L124) | <code>DoorRuntimeStatus copyWithOffline() {</code> | Durum alınamadı ve yerelde de erişilemiyorsa son durum "çevrimdışı"ya çevrilir |
-| [lib/ui/pages/home_page.dart:2644](../../lib/ui/pages/home_page.dart#L2644) | <code>_doorRuntimeStatus = _doorRuntimeStatus!.copyWithOffline();</code> | Çağrı noktası (ekran): arka plan yoklaması hata verip yerel ulaşılamazsa çevrimdışı gösterilir |
-| [lib/ui/pages/home_page.dart:325](../../lib/ui/pages/home_page.dart#L325) | <code>late final AdaptivePoller _statusPoller = AdaptivePoller(</code> | Durum yoklaması 3 sn aralıklı kurulur (görünür ve ön plandayken) |
+| [lib/ui/pages/home_page.dart:2712](../../lib/ui/pages/home_page.dart#L2712) | <code>_doorRuntimeStatus = _doorRuntimeStatus!.copyWithOffline();</code> | Çağrı noktası (ekran): arka plan yoklaması hata verip yerel ulaşılamazsa çevrimdışı gösterilir |
+| [lib/ui/pages/home_page.dart:333](../../lib/ui/pages/home_page.dart#L333) | <code>late final AdaptivePoller _statusPoller = AdaptivePoller(</code> | Durum yoklaması 3 sn aralıklı kurulur (görünür ve ön plandayken) |
 | [lib/services/adaptive_poller.dart:52](../../lib/services/adaptive_poller.dart#L52) | <code>Duration get currentDelay {</code> | Ardışık hatada aralık üstel artar (en çok 30 sn): hata sürerken durum geç güncellenir; başarıda 3 sn'ye döner |
 | [lib/services/adaptive_poller.dart:114](../../lib/services/adaptive_poller.dart#L114) | <code>if (active != null &amp;&amp; !active()) {</code> | Ekran görünür/ön planda değilse tur atlanır: ağ isteği yapılmaz |
 
@@ -880,7 +880,7 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/local_door_service
 | [lib/app.dart:335](../../lib/app.dart#L335) | <code>void didChangeAppLifecycleState(AppLifecycleState state) {</code> | Ön plan: yerel dinleyici yeniden başlar; arka plan/inactive/hidden/detached: durdurulur |
 | [lib/services/local_door_service.dart:548](../../lib/services/local_door_service.dart#L548) | <code>void pauseListening() {</code> | Soketleri ve 10 sn'lik yenileme zamanlayıcısını kapatır, çok-yayın kilidini bırakır |
 | [lib/services/local_door_service.dart:555](../../lib/services/local_door_service.dart#L555) | <code>void resumeListening() {</code> | Dinleyiciyi yeniden başlatır; ilk beacon gelene kadar cihaz yerelde "görünmez" |
-| [lib/ui/pages/home_page.dart:611](../../lib/ui/pages/home_page.dart#L611) | <code>unawaited(widget.authService.refreshSession());</code> | Ön plana dönüşte oturum doğrulaması (durum yoklaması da yeniden başlar) |
+| [lib/ui/pages/home_page.dart:640](../../lib/ui/pages/home_page.dart#L640) | <code>unawaited(widget.authService.refreshSession());</code> | Ön plana dönüşte oturum doğrulaması (durum yoklaması da yeniden başlar) |
 
 **Olası nedenler**
 - Dinleyici bilerek arka planda durdurulur (pil tasarrufu); ön plana dönünce yeniden kurulur
@@ -1218,7 +1218,7 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/deep_link_service_
 | [lib/services/quick_actions_service.dart:50](../../lib/services/quick_actions_service.dart#L50) | <code>for (final door in sortedDoors.take(3)) {</code> | En fazla 3 kapı kısayolu: 4. ve sonraki kapılar için kısayol YOKTUR |
 | [lib/services/quick_actions_service.dart:12](../../lib/services/quick_actions_service.dart#L12) | <code>void initialize(void Function(String actionType) onAction) {</code> | Web'de çalışmaz; eklenti yoksa (masaüstü) hata yutulur ve "[QuickActions] initialize yok sayıldı" yazılır |
 | [lib/app.dart:91](../../lib/app.dart#L91) | <code>_quickActionsService.initialize(_handleQuickAction);</code> | Seçilen kısayol _handleQuickAction ile deep link yoluna aktarılır |
-| [lib/ui/pages/home_page.dart:205](../../lib/ui/pages/home_page.dart#L205) | <code>final QuickActionsService? quickActionsService;</code> | Ana sayfa servisi alır; kodda updateDoorShortcuts çağrısı SADECE test dosyasında geçer (depoda başka çağrı bulunamadı) |
+| [lib/ui/pages/home_page.dart:213](../../lib/ui/pages/home_page.dart#L213) | <code>final QuickActionsService? quickActionsService;</code> | Ana sayfa servisi alır; kodda updateDoorShortcuts çağrısı SADECE test dosyasında geçer (depoda başka çağrı bulunamadı) |
 
 **Olası nedenler**
 - Kısayol listesi uygulama kodunda hiçbir yerde güncellenmiyor görünüyor (updateDoorShortcuts çağıranı yok): kısayollar oluşmaz
@@ -1445,9 +1445,9 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/pdf_background_tes
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/ui/pages/home_page.dart:5061](../../lib/ui/pages/home_page.dart#L5061) | <code>_fetchLogsForPdf({</code> | Çağrı noktası: kayıtlar sayfa sayfa alınır; hata olursa o ana kadarki kayıtlarla devam edilir (error alanı doldurulur) |
-| [lib/ui/pages/home_page.dart:5119](../../lib/ui/pages/home_page.dart#L5119) | <code>_showMessage('Çok sayıda kayıt var; rapor en yeni kayıtlarla sınırlandırıldı.');</code> | Sayfa üst sınırına ulaşılınca rapor kısıtlanır (eski kayıtlar PDF'e girmez) |
-| [lib/ui/pages/home_page.dart:5112](../../lib/ui/pages/home_page.dart#L5112) | <code>'${door.doorName} için son 7 güne ait kapı geçiş kaydı bulunamadı.',</code> | Rapor yalnız son 7 gün içindir; kayıt yoksa PDF üretilmez, bu mesaj gösterilir |
+| [lib/ui/pages/home_page.dart:5129](../../lib/ui/pages/home_page.dart#L5129) | <code>_fetchLogsForPdf({</code> | Çağrı noktası: kayıtlar sayfa sayfa alınır; hata olursa o ana kadarki kayıtlarla devam edilir (error alanı doldurulur) |
+| [lib/ui/pages/home_page.dart:5187](../../lib/ui/pages/home_page.dart#L5187) | <code>_showMessage('Çok sayıda kayıt var; rapor en yeni kayıtlarla sınırlandırıldı.');</code> | Sayfa üst sınırına ulaşılınca rapor kısıtlanır (eski kayıtlar PDF'e girmez) |
+| [lib/ui/pages/home_page.dart:5180](../../lib/ui/pages/home_page.dart#L5180) | <code>'${door.doorName} için son 7 güne ait kapı geçiş kaydı bulunamadı.',</code> | Rapor yalnız son 7 gün içindir; kayıt yoksa PDF üretilmez, bu mesaj gösterilir |
 | [lib/services/pdf_logs_service.dart:44](../../lib/services/pdf_logs_service.dart#L44) | <code>static Future&lt;Uint8List&gt; generateLogsPdf({</code> | PDF arka plan izolesinde derlenir; hata fırlarsa çağıran "Geçiş raporu PDF oluşturulurken hata:" gösterir |
 | [lib/services/pdf_logs_service.dart:85](../../lib/services/pdf_logs_service.dart#L85) | <code>int countGroup(String group) =&gt; logs.where((l) =&gt; l.triggerGroup == group).length;</code> | İstatistik kutuları tetik gruplarından (cloud/local/guest/voice/offline/other) hesaplanır |
 | [lib/services/pdf_logs_service.dart:33](../../lib/services/pdf_logs_service.dart#L33) | <code>await Printing.layoutPdf(</code> | Yazdır/kaydet/paylaş önizlemesi platform eklentisiyle açılır; eklenti yoksa (bazı masaüstü/web ortamları) istisna olur |
@@ -1487,7 +1487,7 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/pdf_background_tes
 | [lib/services/pdf_credentials_service.dart:152](../../lib/services/pdf_credentials_service.dart#L152) | <code>static Future&lt;void&gt; printOrShareSitePdf({</code> | Yazdır/kaydet önizlemesi (Printing.layoutPdf); dosya adı site adından türetilir |
 | [lib/services/pdf_credentials_service.dart:168](../../lib/services/pdf_credentials_service.dart#L168) | <code>static Future&lt;void&gt; shareSitePdf({</code> | Doğrudan paylaşım (Printing.sharePdf) |
 | [lib/services/pdf_credentials_service.dart:399](../../lib/services/pdf_credentials_service.dart#L399) | <code>'Kullanıcı Adı (Giriş)',</code> | Tablo sütunları: PIN sütunu YOK (migration 051: sunucu PIN saklamaz; PIN yalnız oluşturma / sıfırlamada bir kez gösterilir) |
-| [lib/ui/pages/home_page.dart:5037](../../lib/ui/pages/home_page.dart#L5037) | <code>await PdfCredentialsService.printOrShareSitePdf(</code> | Çağrı noktası (ana sayfa): site yapısı alındıktan sonra çağrılır |
+| [lib/ui/pages/home_page.dart:5105](../../lib/ui/pages/home_page.dart#L5105) | <code>await PdfCredentialsService.printOrShareSitePdf(</code> | Çağrı noktası (ana sayfa): site yapısı alındıktan sonra çağrılır |
 | [lib/services/auth_service.dart:2175](../../lib/services/auth_service.dart#L2175) | <code>Future&lt;(SiteStructureRecord?, String?)&gt; getSiteStructure({</code> | PDF'in veri kaynağı: site yapısı alınamazsa rapor üretilmez |
 
 **Olası nedenler**
@@ -1520,7 +1520,7 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/pdf_background_tes
 | [lib/services/pdf_device_firmware_service.dart:161](../../lib/services/pdf_device_firmware_service.dart#L161) | <code>final ver = (dev.firmwareVersion ?? 'Bilinmiyor').trim();</code> | Sürüm alanı boşsa "Bilinmiyor" kovasına düşer (cihaz sürümü hiç bildirmemiş) |
 | [lib/services/pdf_device_firmware_service.dart:35](../../lib/services/pdf_device_firmware_service.dart#L35) | <code>static String _targetKey(DeviceRecord d) =&gt; d.hardwareTarget ?? 'bilinmiyor';</code> | Donanım hedefi boşsa tüm cihazlar tek "bilinmiyor" hattında karşılaştırılır |
 | [lib/services/pdf_device_firmware_service.dart:141](../../lib/services/pdf_device_firmware_service.dart#L141) | <code>final onlineDevices = devices.where((d) =&gt; d.mqttConnected == true).length;</code> | Çevrimiçi sayısı mqttConnected alanından gelir |
-| [lib/ui/pages/home_page.dart:4665](../../lib/ui/pages/home_page.dart#L4665) | <code>await PdfDeviceFirmwareService.printOrShareFirmwareReportPdf(</code> | Çağrı noktası: latestTargetVersion VERİLMİYOR, bu yüzden en yüksek listedeki sürüm esas alınır |
+| [lib/ui/pages/home_page.dart:4733](../../lib/ui/pages/home_page.dart#L4733) | <code>await PdfDeviceFirmwareService.printOrShareFirmwareReportPdf(</code> | Çağrı noktası: latestTargetVersion VERİLMİYOR, bu yüzden en yüksek listedeki sürüm esas alınır |
 
 **Olası nedenler**
 - Listede hiçbir cihaz en güncel sürümde değilse hepsi "güncel" sayılabilir (en yüksek sürüm yine listeden)

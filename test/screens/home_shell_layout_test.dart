@@ -1,9 +1,10 @@
 // FAZ 5 / A3: ana panel kabuğu (home_page.dart) — AppBar, PageEntry ve kapı açma başarı sinyali.
 //
 // Kapsam:
-// - AppBar taşmaz: 320x640 x2,0 ve 360x640 x1,5 dahil 7 boyut/ölçek x açık+koyu; çift modlu rolde
-//   "hap + 3 ikon" (Android'de widget düğmesi dahil); eylem düğmeleri >= 44 dp; araç çubuğu 56 dp kalır
-//   ve alt başlık bloğu yazı ölçeğiyle büyür (50 + ölçek farkı).
+// - AppBar taşmaz: 320x640 x2,0 ve 360x640 x1,5 dahil 7 boyut/ölçek x açık+koyu, Panel'de (vitrin) ve Kapılar
+//   sayfasında; çift modlu rolde "hap + yenile + çıkış + dişli" (+ tema); eylem düğmeleri >= 44 dp; araç çubuğu 56 dp
+//   kalır ve alt başlık bloğu yazı ölçeğiyle büyür (50 + ölçek farkı). İP-1D: "Masaüstüne Widget Ekle" AppBar'da değil,
+//   sağ üstteki dişliden açılan Ayarlar panelindedir.
 // - "Sakin Modu / Yönetici Paneli" hapı: dar ekranda (< 400 dp) ya da büyük yazıda (> 1,3x) yalnız ikon
 //   (Tooltip + Semantics etiketi), aksi hâlde etiketli; dokununca mod değişir (davranış korunur).
 // - PageEntry: menü (ya da mod) değişince TEK içerik, anahtar `menü-mod`; yoklama yeniden kurması giriş
@@ -43,6 +44,7 @@ import 'package:site_kapi_kontrol/ui/views/individual_home_view.dart';
 import 'package:site_kapi_kontrol/ui/views/module_showcase_view.dart';
 import 'package:site_kapi_kontrol/ui/views/profile_view.dart';
 import 'package:site_kapi_kontrol/ui/widgets/admin_door_status_card.dart';
+import 'package:site_kapi_kontrol/ui/widgets/yan_menu.dart';
 
 import '../design/harness.dart' show recordHaptics;
 import '../support/rebuild_probe.dart';
@@ -265,18 +267,33 @@ Future<void> _disposeShell(WidgetTester tester) async {
 }
 
 Future<void> _openMenu(WidgetTester tester, String label) async {
-  tester.state<ScaffoldState>(find.byType(Scaffold).first).openDrawer();
+  final scaffold = tester.state<ScaffoldState>(find.byType(Scaffold).first);
+  scaffold.openDrawer();
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 400));
   // Çekmecedeki öğe (Panel vitrininde de aynı adlı kart / düğme vardır: bulucu çekmeceyle sınırlı).
-  await tester.tap(
-    find.descendant(of: find.byType(Drawer), matching: find.text(label)).first,
-  );
+  var target = find.descendant(of: find.byType(YanMenu), matching: find.text(label));
+  if (target.evaluate().isEmpty) {
+    // İP-1D: ayar öğeleri (Profilim ...) çekmecede değil, sağ üstteki dişliden açılan Ayarlar panelindedir.
+    scaffold.closeDrawer();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    await _openSettings(tester);
+    target = find.descendant(of: find.byType(YanMenuAyarlar), matching: find.text(label));
+  }
+  await tester.tap(target.first);
   await tester.pump();
 }
 
 Finder _inAppBar(Finder f) =>
     find.descendant(of: find.byType(AppBar), matching: f);
+
+/// Sağ üstteki dişliye dokunur: Ayarlar paneli (endDrawer) açılır.
+Future<void> _openSettings(WidgetTester tester) async {
+  await tester.tap(_inAppBar(find.byTooltip('Ayarlar')));
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 400));
+}
 
 /// Hapın kendisi: etiketli hâlde etiket metninin InkWell'i, yalnız ikonda Tooltip.
 Finder _pillOf(String label, {required bool iconOnly}) {
@@ -294,7 +311,6 @@ void _expectAppBarFits(
   WidgetTester tester, {
   required double width,
   required double scale,
-  required bool widgetAction,
   required bool dual,
   bool resident = false,
   String title = 'Panel',
@@ -332,14 +348,25 @@ void _expectAppBarFits(
     expect(r.right, lessThanOrEqualTo(width + 0.01));
   }
 
-  // Eylem düğmeleri: >= 44 dp ve ekranın içinde; menü düğmesiyle (48 dp) çakışmaz.
+  // Eylem düğmeleri: >= 44 dp ve ekranın içinde; menü düğmesiyle (48 dp) çakışmaz. İP-1D: dişli (Ayarlar) en sağda;
+  // "Masaüstüne Widget Ekle" artık Ayarlar panelindedir (ayrı test), AppBar'da hiç yoktur.
   final icons = <IconData>[
     Icons.refresh_rounded,
     Icons.logout_rounded,
-    if (widgetAction) Icons.widgets_outlined,
+    Icons.settings_rounded,
     // Tema düğmesi, geçilecek temayı gösterir: aydınlıkta ay, karanlıkta güneş.
     if (themeToggle) dark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
   ];
+  expect(_inAppBar(find.byIcon(Icons.widgets_outlined)), findsNothing, reason: 'widget düğmesi Ayarlar panelinde');
+  final gear = tester.getRect(_inAppBar(find.widgetWithIcon(IconButton, Icons.settings_rounded)));
+  for (final icon in icons) {
+    if (icon == Icons.settings_rounded) continue;
+    expect(
+      tester.getRect(_inAppBar(find.widgetWithIcon(IconButton, icon))).right,
+      lessThanOrEqualTo(gear.left + 0.01),
+      reason: 'dişli sağ üstte: $icon solunda',
+    );
+  }
   for (final icon in icons) {
     final button = _inAppBar(find.widgetWithIcon(IconButton, icon));
     expect(button, findsOneWidget, reason: '$icon düğmesi');
@@ -404,19 +431,21 @@ void _expectAppBarFits(
 void main() {
   tearDown(RebuildProbe.stop);
 
+  // AppBar matrisi: 7 boyut / yazı ölçeği. Vitrin son doğrulamasından (b): aynı matris Kapılar sayfasında da koşar.
+  const appBarCells = <({double width, double height, double scale})>[
+    (width: 360, height: 640, scale: 1.5), // spesifikasyon hücresi
+    (width: 320, height: 640, scale: 2.0), // en küçük + en büyük yazı
+    (width: 360, height: 640, scale: 1.0), // < 400 dp: yalnız ikon
+    (width: 412, height: 915, scale: 1.0), // etiketli hap (sınırın üstünde)
+    (width: 412, height: 915, scale: 1.3), // sınır: 1,3 hâlâ etiketli
+    (width: 412, height: 915, scale: 1.5), // 1,3'ün üstü: yalnız ikon
+    (width: 820, height: 1180, scale: 1.0), // tablet
+  ];
+
   group(
-    'AppBar taşmaz (Panel = modül vitrini): boyut x yazı ölçeği x tema (çift modlu site yöneticisi, Android: hap + 3 ikon)',
+    'AppBar taşmaz (Panel = modül vitrini): boyut x yazı ölçeği x tema (çift modlu site yöneticisi: hap + yenile + çıkış + dişli)',
     () {
-      const cells = <({double width, double height, double scale})>[
-        (width: 360, height: 640, scale: 1.5), // spesifikasyon hücresi
-        (width: 320, height: 640, scale: 2.0), // en küçük + en büyük yazı
-        (width: 360, height: 640, scale: 1.0), // < 400 dp: yalnız ikon
-        (width: 412, height: 915, scale: 1.0), // etiketli hap (sınırın üstünde)
-        (width: 412, height: 915, scale: 1.3), // sınır: 1,3 hâlâ etiketli
-        (width: 412, height: 915, scale: 1.5), // 1,3'ün üstü: yalnız ikon
-        (width: 820, height: 1180, scale: 1.0), // tablet
-      ];
-      for (final c in cells) {
+      for (final c in appBarCells) {
         for (final dark in const <bool>[false, true]) {
           testWidgets(
             '${c.width.toInt()}x${c.height.toInt()} x${c.scale} ${dark ? 'koyu' : 'açık'}',
@@ -435,7 +464,6 @@ void main() {
                 tester,
                 width: c.width,
                 scale: c.scale,
-                widgetAction: true,
                 dual: true,
               );
               await _disposeShell(tester);
@@ -447,7 +475,42 @@ void main() {
   );
 
   group(
-    'AppBar + tema düğmesi (ThemeScope var, Panel = modül vitrini): hap + widget + tema + yenile + çıkış taşmaz, hedefler >= 44 dp',
+    'AppBar taşmaz (Kapılar sayfası): aynı boyut x yazı ölçeği x tema matrisi, başlık "Kapılar"',
+    () {
+      for (final c in appBarCells) {
+        for (final dark in const <bool>[false, true]) {
+          testWidgets(
+            '${c.width.toInt()}x${c.height.toInt()} x${c.scale} ${dark ? 'koyu' : 'açık'}',
+            (tester) async {
+              final auth = _ShellAuth();
+              await _pumpShell(
+                tester,
+                auth,
+                width: c.width,
+                height: c.height,
+                scale: c.scale,
+                dark: dark,
+                doors: true,
+              );
+              expect(find.byType(DashboardView), findsOneWidget, reason: 'kapı paneli açık');
+              expect(find.byType(ModuleShowcaseView), findsNothing);
+              _expectAppBarFits(
+                tester,
+                width: c.width,
+                scale: c.scale,
+                dual: true,
+                title: 'Kapılar',
+              );
+              await _disposeShell(tester);
+            },
+          );
+        }
+      }
+    },
+  );
+
+  group(
+    'AppBar + tema düğmesi (ThemeScope var, Panel = modül vitrini): hap + tema + yenile + çıkış + dişli taşmaz, hedefler >= 44 dp',
     () {
       const cells = <({double width, double height, double scale})>[
         (width: 320, height: 640, scale: 2.0), // en kötü: en dar + en büyük yazı
@@ -475,7 +538,6 @@ void main() {
                 tester,
                 width: c.width,
                 scale: c.scale,
-                widgetAction: true,
                 dual: true,
                 themeToggle: true,
                 dark: dark,
@@ -486,14 +548,13 @@ void main() {
         }
       }
 
-      testWidgets('süper kullanıcı (widget düğmesi yok) 320x640 x2,0 tema düğmesiyle taşmaz', (tester) async {
+      testWidgets('süper kullanıcı 320x640 x2,0 tema düğmesiyle taşmaz', (tester) async {
         final auth = _ShellAuth(role: UserRole.superUser);
         await _pumpShell(tester, auth, width: 320, scale: 2.0, themeToggle: true);
         _expectAppBarFits(
           tester,
           width: 320,
           scale: 2.0,
-          widgetAction: false,
           dual: true,
           themeToggle: true,
         );
@@ -526,7 +587,6 @@ void main() {
             tester,
             width: c.w,
             scale: c.s,
-            widgetAction: true,
             dual: true,
             resident: true,
           );
@@ -536,7 +596,7 @@ void main() {
     );
 
     testWidgets(
-      'süper kullanıcı (widget düğmesi yok: hap + 2 ikon) 360x640 x1,5 ve 320x640 x2,0 taşmaz',
+      'süper kullanıcı (hap + yenile + çıkış + dişli) 360x640 x1,5 ve 320x640 x2,0 taşmaz',
       (tester) async {
         for (final dark in const <bool>[false, true]) {
           for (final c in const <({double w, double s})>[
@@ -549,7 +609,6 @@ void main() {
               tester,
               width: c.w,
               scale: c.s,
-              widgetAction: false,
               dual: true,
             );
             await _disposeShell(tester);
@@ -559,7 +618,7 @@ void main() {
     );
 
     testWidgets(
-      'masaüstü platformu: widget iğneleme düğmesi yok; AppBar yine taşmaz',
+      'masaüstü platformu: widget iğneleme eylemi Ayarlar panelinde de yok; AppBar yine taşmaz',
       (tester) async {
         debugDefaultTargetPlatformOverride = TargetPlatform.windows;
         try {
@@ -569,11 +628,15 @@ void main() {
             _inAppBar(find.byTooltip('Masaüstüne Widget Ekle')),
             findsNothing,
           );
+          await _openSettings(tester);
+          expect(find.text('Masaüstüne Widget Ekle'), findsNothing, reason: 'masaüstünde iğneleme yok');
+          Navigator.of(tester.element(find.byType(YanMenuAyarlar))).pop();
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 400));
           _expectAppBarFits(
             tester,
             width: 360,
             scale: 1.5,
-            widgetAction: false,
             dual: true,
           );
           await _disposeShell(tester);
@@ -604,6 +667,7 @@ void main() {
           for (final icon in <IconData>[
             Icons.refresh_rounded,
             Icons.logout_rounded,
+            Icons.settings_rounded,
           ]) {
             final r = tester.getRect(
               _inAppBar(find.widgetWithIcon(IconButton, icon)),
@@ -624,7 +688,7 @@ void main() {
     );
 
     testWidgets(
-      'çift modlu olmayan rol (sitesiz bireysel): Panel bireysel vitrin, hap yok, 3 ikon 44 dp',
+      'çift modlu olmayan rol (sitesiz bireysel): Panel bireysel vitrin, hap yok, yenile + çıkış + dişli 44 dp',
       (tester) async {
         final auth = _ShellAuth(role: UserRole.individual);
         await _pumpShell(tester, auth, width: 360, scale: 1.5);
@@ -634,7 +698,6 @@ void main() {
           tester,
           width: 360,
           scale: 1.5,
-          widgetAction: true,
           dual: false,
         );
         await _disposeShell(tester);
@@ -642,16 +705,23 @@ void main() {
     );
 
     testWidgets(
-      'eylem düğmeleri çalışır: Yenile ve Çıkış Yap araç ipuçlarını korur',
+      'eylem düğmeleri çalışır: Yenile ve Çıkış Yap araç ipuçlarını korur; widget eylemi dişlideki Ayarlar panelinde',
       (tester) async {
         final auth = _ShellAuth();
         await _pumpShell(tester, auth, width: 360, scale: 1.5);
         expect(_inAppBar(find.byTooltip('Yenile')), findsOneWidget);
         expect(_inAppBar(find.byTooltip('Çıkış Yap')), findsOneWidget);
+        expect(_inAppBar(find.byTooltip('Ayarlar')), findsOneWidget);
+        expect(_inAppBar(find.byTooltip('Masaüstüne Widget Ekle')), findsNothing);
+        await _openSettings(tester);
         expect(
-          _inAppBar(find.byTooltip('Masaüstüne Widget Ekle')),
+          find.descendant(of: find.byType(YanMenuAyarlar), matching: find.text('Masaüstüne Widget Ekle')),
           findsOneWidget,
+          reason: 'Android: iğneleme eylemi Ayarlar panelinde',
         );
+        Navigator.of(tester.element(find.byType(YanMenuAyarlar))).pop();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
         final before = auth.statusCalls;
         await tester.tap(_inAppBar(find.byTooltip('Yenile')));
         await tester.pump();
