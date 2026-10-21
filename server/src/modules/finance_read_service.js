@@ -377,6 +377,11 @@ export async function getSummary(siteCode, now = new Date(), db = pool) {
 // Sakin: Borcum
 // ---------------------------------------------------------------------------
 
+/**
+ * ESKİ (İP-1A öncesi) "borç sorumlusu taraf görür" kuralının ilişki listesi. İP-1A'dan beri sakin görünümü hesap sahipliğiyle
+ * belirlenir (loadVisibleAccounts / finance_parties.partyOfRelation); bu sabit hiçbir sorguda KULLANILMAZ, dışa açık adı geriye uyum
+ * için korunur.
+ */
 export const ALLOWED_RELATIONS_SQL = `(
   CASE a.responsible_party
     WHEN 'owner' THEN ARRAY['owner']::TEXT[]
@@ -405,7 +410,7 @@ export function residentScopeSql(alias, since) {
   return `(${since}::DATE IS NULL OR ${residentAnchorSql(alias)} >= ${since}::DATE)`;
 }
 
-/** loadVisibleApartments satırının kapsam başlangıcı ('YYYY-MM-01') ya da null. */
+/** Görünümün (loadVisibleAccounts `views[]`) ya da satırın kapsam başlangıcı ('YYYY-MM-01') ya da null. */
 export function visibleFromOf(row) {
   const value = row?.visible_from;
   return typeof value === 'string' && /^\d{4}-\d{2}-01$/.test(value) ? value : null;
