@@ -19,6 +19,7 @@ import { recordAudit } from './audit_service.js';
 import { documentLimits } from './document_common.js';
 import { SYSTEM_ACTOR, purgeLockedDocument, withDocumentTransaction } from './document_service.js';
 import { SITE_DIR_PATTERN, UUID_PATTERN, checkStorage, isInside, purgeQuarantine, quarantineStoredFile, removeStoredFile } from './document_storage.js';
+import { sweepStaleNoticeUploads } from './payment_notice_upload.js';
 import { ensureStorageIdentity, loadKnownKeys, orphanGuardTripped, siteDirGuardTripped, siteHasRecords } from './document_integrity.js';
 import { ATTACHMENT_SUBTREE, ATTACHMENT_UPLOAD_TTL_MINUTES, attachmentLimits } from './work_attachments_common.js';
 
@@ -47,6 +48,7 @@ const emptySummary = () => ({
   attachment_stale_uploads: 0,
   attachment_orphans: 0,
   attachment_site_dirs: 0,
+  notice_stale_uploads: 0, // dekont bildirimi (066): bayat `uploading` satır + dosyası
   errors: 0,
 });
 
@@ -506,6 +508,9 @@ export async function runDocumentsMaintenanceOnce({ now = Date.now(), env = proc
       if (storage.ok) {
         await safe(summary, 'stale_uploads', () => cleanStaleUploads(storage.root, limits, summary, client));
         await safe(summary, 'attachment_stale_uploads', () => cleanStaleAttachmentUploads(storage.root, summary, client));
+        await safe(summary, 'notice_stale_uploads', async () => {
+          summary.notice_stale_uploads += await sweepStaleNoticeUploads(client);
+        });
         await safe(summary, 'temp_files', () => cleanTempFiles(storage.root, summary, now));
         await safe(summary, 'purge_expired', () => purgeExpired(limits, summary, client));
         // karantinada süresi dolanlar (zaman tabanlıdır, DB'ye bağlı değildir): kimlik denetiminden bağımsız çalışır

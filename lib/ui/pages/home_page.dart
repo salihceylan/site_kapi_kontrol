@@ -37,6 +37,8 @@ import 'package:site_kapi_kontrol/models/user_session.dart';
 import 'package:site_kapi_kontrol/services/adaptive_poller.dart';
 
 import 'package:site_kapi_kontrol/services/auth_service.dart';
+import 'package:site_kapi_kontrol/services/share_inbox.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/payment_notice_dialog.dart';
 
 import 'package:site_kapi_kontrol/services/pdf_credentials_service.dart';
 
@@ -495,6 +497,28 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   bool _isLoadingPendingSiteApprovals = false;
 
   bool _isResidentMode = false;
+
+  bool _shareOpen = false;
+
+  /// Android "Paylaş" ile gelen dekont (2B): bekleyen paylaşım varsa sakin hesabında "Dekont bildir" penceresi açılır. Sakin değilse paylaşım atılır.
+  /// Oturum yokken gelen paylaşım 30 dakika bekler (giriş sonrası açılışta yakalanır).
+  Future<void> _openSharedReceipt() async {
+    if (_shareOpen || !mounted) return;
+    final session = widget.authService.session;
+    if (session == null) return;
+    _shareOpen = true;
+    try {
+      final shared = await const ChannelShareInbox().take();
+      if (shared == null || !mounted) return;
+      if (_audienceFor(session) != ShowcaseAudience.resident) {
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(const SnackBar(content: Text('Dekont bildirimi yalnız sakin hesabıyla yapılır.')));
+        return;
+      }
+      await PaymentNoticeDialog.open(context, widget.authService, shared: shared);
+    } finally {
+      _shareOpen = false;
+    }
+  }
   final GlobalKey<IndividualHomeViewState> _individualHomeKey = GlobalKey<IndividualHomeViewState>();
   // Panel = modül vitrini: borç özeti (sakin) aşağı çekip yenilemeyle tazelenir.
   final GlobalKey<ModuleShowcaseViewState> _showcaseKey = GlobalKey<ModuleShowcaseViewState>();
@@ -549,6 +573,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     super.initState();
 
     WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) => unawaited(_openSharedReceipt()));
 
     final session = widget.authService.session;
 
@@ -669,6 +694,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       unawaited(_announcements.refresh());
       // Arka plandayken yeni kargo / ziyaretçi kaydı gelmiş olabilir: sakin rozeti hemen tazelenir.
       _refreshVisitorBadge();
+      unawaited(_openSharedReceipt());
       // Arka plandayken başvuru karara bağlanmış olabilir: bekleyen başvuru biliniyorsa hemen oku.
       if (_siteApplications.pending != null) {
         _siteApplications.resetBackoff();

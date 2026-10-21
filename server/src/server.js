@@ -53,6 +53,7 @@ import { personInviteRouter } from './modules/person_invite_routes.js';
 import { budgetRouter } from './modules/budget_routes.js';
 import { driveRouter } from './modules/drive_routes.js';
 import { neighborBoardRouter } from './modules/neighbor_board_routes.js';
+import { paymentNoticeRouter } from './modules/payment_notice_routes.js';
 import { startDocumentsMaintenance, stopDocumentsMaintenance } from './modules/document_maintenance.js';
 import { pushRouter } from './modules/push_routes.js';
 import { notifyChannelsRouter } from './modules/notify_channels_routes.js';
@@ -131,6 +132,8 @@ app.use(financeRouter);
 app.use(financeOpeningRouter);
 app.use(finance4bRouter);
 app.use(financePaymentRouter);
+// Dekont bildirimi / gecici kabul (066): /app/my-finance/payment-notices[...] + /manager/sites/:siteCode/finance/payment-notices[...] (finance modulu + 2A notices_enabled).
+app.use(paymentNoticeRouter);
 app.use(financeHomeRouter);
 // Belgeler (dosya deposu): yonetici uclari + sakin uclari + ham govde akisi (PUT .../content, application/octet-stream; JSON govde sinirina dokunmaz).
 app.use(documentRouter);

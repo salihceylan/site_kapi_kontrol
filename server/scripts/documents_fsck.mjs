@@ -62,7 +62,21 @@ const SOURCES = [
     ref: (row) => ({ expense_document_id: Number(row.id), storage_key: row.storage_key }),
     optional: true,
   },
+  {
+    name: 'payment_notices',
+    sql: `SELECT n.id, n.status, n.storage_key, n.size_bytes, n.sha256, n.submitted_at AS created_at
+          FROM payment_notices n WHERE n.id > $1 AND n.storage_key IS NOT NULL AND (n.file_completed_at IS NOT NULL OR n.status = 'uploading') ORDER BY n.id LIMIT $2`,
+    ref: (row) => ({ payment_notice_id: Number(row.id), storage_key: row.storage_key }),
+    optional: 'payment_notices',
+  },
 ];
+
+/** İsteğe bağlı kaynak tablosu var mı (optional: true = gider belgeleri; metin = tablo adı). */
+async function sourceTableExists(db, source) {
+  if (source.optional === true) return expenseTableExists(db);
+  const found = await db.query(`SELECT to_regclass('public.${source.optional}') IS NOT NULL AS present`);
+  return found.rows?.[0]?.present === true;
+}
 
 /**
  * Denetimi çalıştırır ve sonuç nesnesini döndürür (çıktı yazmaz; test / QA doğrudan çağırır).
@@ -83,6 +97,7 @@ export async function runFsck({
     root_exists: true,
     versions_checked: 0,
     expense_documents_checked: 0,
+    payment_notices_checked: 0,
     missing: [],
     size_mismatch: [],
     hash_mismatch: [],
@@ -133,7 +148,7 @@ export async function runFsck({
   // 1) DB -> disk
   const knownKeys = new Set();
   for (const source of SOURCES) {
-    if (source.optional && !(await expenseTableExists(db))) continue;
+    if (source.optional && !(await sourceTableExists(db, source))) continue;
     let afterId = 0;
     for (;;) {
       const page = await db.query(source.sql, [afterId, PAGE]);
@@ -143,6 +158,7 @@ export async function runFsck({
         afterId = Number(row.id);
         knownKeys.add(row.storage_key);
         if (source.name === 'versions') result.versions_checked += 1;
+        else if (source.name === 'payment_notices') result.payment_notices_checked += 1;
         else result.expense_documents_checked += 1;
         const ref = source.ref(row);
         let full;
@@ -258,6 +274,8 @@ function printHuman(result) {
   const out = (line) => console.log(line);
   out(`Belge bütünlük denetimi (kök dizin ${result.root_exists ? 'var' : 'YOK'})`);
   out(`  denetlenen sürüm / gider belgesi : ${result.versions_checked} / ${result.expense_documents_checked}`);
+  out(`  denetlenen dekont bildirimi      : ${result.payment_notices_checked}`);
+  out(`  denetlenen dekont bildirimi      : ${result.payment_notices_checked}`);
   out(`  EKSİK dosya (kritik)    : ${result.missing.length}`);
   out(`  boyut uyuşmazlığı       : ${result.size_mismatch.length}`);
   out(`  hash doğrulanan/yanlış  : ${result.hash_verified}/${result.hash_mismatch.length}`);

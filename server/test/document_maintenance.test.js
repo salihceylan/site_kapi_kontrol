@@ -60,6 +60,7 @@ function install() {
     if (/^SELECT site_code FROM sites WHERE site_code = ANY\(\$1::BIGINT\[\]\)$/.test(sql)) return ok(params[0].filter((code) => aliveSites.has(Number(code))).map((code) => ({ site_code: String(code) })));
     if (/^SELECT COUNT\(\*\)::INTEGER AS n FROM sites$/.test(sql)) return ok([{ n: aliveSites.size }]);
     if (/^SELECT to_regclass\('public\.expense_documents'\) IS NOT NULL AS present$/.test(sql)) return ok([{ present: expenseTable }]);
+    if (/^SELECT to_regclass\('public\.payment_notices'\) IS NOT NULL AS present$/.test(sql)) return ok([{ present: false }]); // dekont bildirimi (066)
     if (/^SELECT storage_key FROM expense_documents WHERE storage_key = ANY\(\$1::TEXT\[\]\)$/.test(sql)) return ok(params[0].filter((key) => expenseKeys.has(key)).map((storage_key) => ({ storage_key })));
     if (/^SELECT 1 FROM (document_versions|expense_documents) WHERE site_code = \$1 LIMIT 1$/.test(sql)) return ok(siteRecords.has(Number(params[0])) ? [{ x: 1 }] : []);
     if (/^SELECT storage_key FROM (document_versions|expense_documents) WHERE status = 'ready' ORDER BY id DESC LIMIT 20$/.test(sql)) return ok(readyKeys.map((storage_key) => ({ storage_key })));

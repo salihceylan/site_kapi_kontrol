@@ -11,6 +11,7 @@ import 'package:site_kapi_kontrol/services/finance_payment_api.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/status_dot.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/payment_notice_dialog.dart';
 import 'package:site_kapi_kontrol/ui/helpers/finance_errors.dart';
 import 'package:site_kapi_kontrol/ui/helpers/money.dart';
 
@@ -40,14 +41,20 @@ class PaySheet extends StatefulWidget {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      builder: (_) => PaySheet(
+      builder: (sheetContext) => PaySheet(
         loader: () async {
           final info = await FinancePaymentService.of(authService).run((api, token) => api.getMyPaymentInfo(token: token));
           return info.forApartment(apartmentId);
         },
         amountMinor: amountMinor,
         accountLabel: accountLabel,
-        onUploadReceipt: onUploadReceipt,
+        // 2B: geri çağrı verilmediyse "Dekont yükle" dekont bildirme penceresini açar (sayfa kapanır; pencere alttaki ekranda açılır).
+        onUploadReceipt:
+            onUploadReceipt ??
+            () {
+              Navigator.of(sheetContext).pop();
+              unawaited(PaymentNoticeDialog.open(context, authService, apartmentId: apartmentId, amountMinor: amountMinor));
+            },
       ),
     );
   }
@@ -114,7 +121,8 @@ class _PaySheetState extends State<PaySheet> {
         info: _info,
         amountMinor: widget.amountMinor,
         accountLabel: widget.accountLabel,
-        onUploadReceipt: widget.onUploadReceipt,
+        // Dekont yalnız sitede açıksa (2A "notices_enabled") sunulur.
+        onUploadReceipt: _info?.noticesEnabled == true ? widget.onUploadReceipt : null,
         now: widget.now,
       );
     }

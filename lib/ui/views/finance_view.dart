@@ -6,6 +6,7 @@ import 'package:flutter/semantics.dart' show SemanticsRole;
 import 'package:site_kapi_kontrol/models/finance.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/services/expense_attachments.dart';
+import 'package:site_kapi_kontrol/services/payment_notice_api.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/buttons.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
@@ -23,6 +24,7 @@ import 'package:site_kapi_kontrol/ui/views/finance_late_fee_section.dart';
 import 'package:site_kapi_kontrol/ui/views/finance_periods_tab.dart';
 import 'package:site_kapi_kontrol/ui/views/finance_reminder_card.dart';
 import 'package:site_kapi_kontrol/ui/views/finance_reports_tab.dart';
+import 'package:site_kapi_kontrol/ui/views/payment_notices_view.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_settings_controller.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
@@ -89,6 +91,7 @@ class FinanceViewState extends State<FinanceView> {
     ('Kasa', Icons.account_balance_rounded),
     ('Giderler', Icons.shopping_cart_checkout_rounded),
     ('Raporlar', Icons.insights_rounded),
+    ('Dekontlar', Icons.receipt_long_rounded),
   ];
 
   List<PeopleSite> _sites = const <PeopleSite>[];
@@ -109,6 +112,10 @@ class FinanceViewState extends State<FinanceView> {
   GlobalKey<FinanceCashTabState> _cashKey = GlobalKey<FinanceCashTabState>();
   GlobalKey<FinanceExpensesTabState> _expensesKey = GlobalKey<FinanceExpensesTabState>();
   GlobalKey<FinanceReportsTabState> _reportsKey = GlobalKey<FinanceReportsTabState>();
+  GlobalKey<PaymentNoticesViewState> _noticesKey = GlobalKey<PaymentNoticesViewState>();
+
+  // Dekont bildirimi (2B): bekleyen dekont sayısı ("Dekontlar" sekmesi rozeti).
+  int _noticeCount = 0;
 
   // Faz 4b ayarları (makbuz / tazminat / hatırlatma): site başına tek yükleyici; site değişince atılır.
   FinanceSettingsController? _settings;
@@ -251,6 +258,8 @@ class FinanceViewState extends State<FinanceView> {
     _cashKey = GlobalKey<FinanceCashTabState>();
     _expensesKey = GlobalKey<FinanceExpensesTabState>();
     _reportsKey = GlobalKey<FinanceReportsTabState>();
+    _noticesKey = GlobalKey<PaymentNoticesViewState>();
+    _noticeCount = 0;
     ++_summaryToken;
     _summary = null;
     _summaryError = null;
@@ -274,6 +283,7 @@ class FinanceViewState extends State<FinanceView> {
     final code = _siteCode;
     if (code == null || !mounted) return;
     final token = ++_summaryToken;
+    unawaited(_loadNoticeCount(code));
     setState(() => _summaryError = null);
     try {
       final summary = await widget.authService.getFinanceSummary(code);
@@ -299,6 +309,17 @@ class FinanceViewState extends State<FinanceView> {
     }
   }
 
+  /// Bekleyen dekont sayısı (rozet). Yalnız yazma yetkisi olan yönetici sorar; hata sessizdir (rozet görünmez).
+  Future<void> _loadNoticeCount(int code) async {
+    if (_site?.canWrite != true) return;
+    try {
+      final attention = await PaymentNoticeService.of(widget.authService).run((api, token) => api.summary(token: token, siteCode: code));
+      if (mounted && code == _siteCode && attention.count != _noticeCount) setState(() => _noticeCount = attention.count);
+    } catch (_) {
+      // rozet isteğe bağlıdır
+    }
+  }
+
   void _reloadVisibleTab() {
     switch (_tab) {
       case 0:
@@ -314,6 +335,8 @@ class FinanceViewState extends State<FinanceView> {
         unawaited(_expensesKey.currentState?.reload() ?? Future<void>.value());
       case 5:
         unawaited(_reportsKey.currentState?.reload() ?? Future<void>.value());
+      case 6:
+        unawaited(_noticesKey.currentState?.reload() ?? Future<void>.value());
     }
   }
 
@@ -584,7 +607,7 @@ class FinanceViewState extends State<FinanceView> {
                       child: ChoiceChip(
                         key: ValueKey<String>('finance_tab_$i'),
                         avatar: Icon(_tabs[i].$2, size: 18),
-                        label: Text(_tabs[i].$1),
+                        label: Text(i == 6 && _noticeCount > 0 ? '${_tabs[i].$1} ($_noticeCount)' : _tabs[i].$1),
                         selected: _tab == i,
                         onSelected: (_) => _selectTab(i),
                       ),
@@ -722,6 +745,16 @@ class FinanceViewState extends State<FinanceView> {
           onDataChanged: () => _afterWrite(4),
         );
       default:
+        if (index == 6) {
+          return PaymentNoticesView(
+            key: _noticesKey,
+            scope: scope,
+            onDataChanged: () => _afterWrite(6),
+            onAttention: (count) {
+              if (mounted && count != _noticeCount) setState(() => _noticeCount = count);
+            },
+          );
+        }
         return FinanceReportsTab(key: _reportsKey, scope: scope, now: widget.now);
     }
   }

@@ -31,8 +31,14 @@ export async function expenseTableExists(db) {
   return result.rows?.[0]?.present === true;
 }
 
+/** `payment_notices` (066, dekont bildirimi) tablosu var mı? Dekont dosyaları da `sites/` ağacındadır: bilinen anahtar kümesine girer. */
+export async function noticeTableExists(db) {
+  const result = await db.query(`SELECT to_regclass('public.payment_notices') IS NOT NULL AS present`);
+  return result.rows?.[0]?.present === true;
+}
+
 /**
- * Verilen anahtarlardan DB'de KAYITLI olanlar (document_versions ∪ expense_documents). Sorgu hatası fırlar: çağıran HİÇBİR dosya silmemelidir.
+ * Verilen anahtarlardan DB'de KAYITLI olanlar (document_versions ∪ expense_documents ∪ payment_notices). Sorgu hatası fırlar: çağıran HİÇBİR dosya silmemelidir.
  * @returns {Promise<Set<string>>}
  */
 export async function loadKnownKeys(db, keys) {
@@ -44,6 +50,10 @@ export async function loadKnownKeys(db, keys) {
     const expenses = await db.query(`SELECT storage_key FROM expense_documents WHERE storage_key = ANY($1::TEXT[])`, [keys]);
     for (const row of expenses.rows ?? []) known.add(row.storage_key);
   }
+  if (await noticeTableExists(db)) {
+    const notices = await db.query(`SELECT storage_key FROM payment_notices WHERE storage_key = ANY($1::TEXT[])`, [keys]);
+    for (const row of notices.rows ?? []) known.add(row.storage_key);
+  }
   return known;
 }
 
@@ -54,6 +64,10 @@ export async function siteHasRecords(db, siteCode) {
   if (await expenseTableExists(db)) {
     const expenses = await db.query(`SELECT 1 FROM expense_documents WHERE site_code = $1 LIMIT 1`, [siteCode]);
     if (expenses.rows?.[0]) return true;
+  }
+  if (await noticeTableExists(db)) {
+    const notices = await db.query(`SELECT 1 FROM payment_notices WHERE site_code = $1 LIMIT 1`, [siteCode]);
+    if (notices.rows?.[0]) return true;
   }
   return false;
 }
