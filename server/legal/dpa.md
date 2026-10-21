@@ -9,7 +9,7 @@ complete: false   # köşeli [KARAR/BİLGİ GEREKLİ ...] ve [AVUKAT DOĞRULASIN
 
 # Veri İşleme Sözleşmesi
 
-Bu Sözleşme, kişisel verileri kendi amaçları doğrultusunda işleyen site, apartman veya toplu yapı yönetimi ("Site Yönetimi" veya "Veri Sorumlusu") ile Site ve Toplu Yaşam Yönetim Sistemi'ni ("Platform") işleten {{company_name}} ("Güde" veya "Veri İşleyen"; MERSİS {{mersis_no}}; adres {{company_address}}) arasında, 6698 sayılı Kişisel Verilerin Korunması Kanunu ("Kanun") ve ilgili mevzuat uyarınca, Platform üzerinde Site Yönetimi adına işlenen veriler için kurulur. Site Yönetimi tarafı, site başvurusunda ya da Platformda site oluşturulurken bildirilen site ve yönetici bilgileriyle belirlenir. Sözleşme, site başvurusu sırasında ya da Platformda site oluşturulurken elektronik olarak onaylandığında kurulur.
+Bu Sözleşme, kişisel verileri kendi amaçları doğrultusunda işleyen site, apartman veya toplu yapı yönetimi ("Site Yönetimi" veya "Veri Sorumlusu") ile Site ve Toplu Yaşam Yönetim Sistemi'ni ("Platform") işleten {{company_name}} ("Güde" veya "Veri İşleyen"{{#mersis_no}}; MERSİS {{mersis_no}}{{/mersis_no}}; adres {{company_address}}) arasında, 6698 sayılı Kişisel Verilerin Korunması Kanunu ("Kanun") ve ilgili mevzuat uyarınca, Platform üzerinde Site Yönetimi adına işlenen veriler için kurulur. Site Yönetimi tarafı, site başvurusunda ya da Platformda site oluşturulurken bildirilen site ve yönetici bilgileriyle belirlenir. Sözleşme, site başvurusu sırasında ya da Platformda site oluşturulurken elektronik olarak onaylandığında kurulur.
 
 [KARAR/BİLGİ GEREKLİ: setup-site (sahiplik bağı olan yöneticinin anında site kurması) ve süper kullanıcı site oluşturma akışlarında DPA onayı geliştirmesi; bugün yalnız site başvurusu akışında onay alınır]
 

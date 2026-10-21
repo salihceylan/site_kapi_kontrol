@@ -738,8 +738,9 @@ class PlatformSettingsViewState extends State<PlatformSettingsView> {
                 const SectionHeader(title: 'Şirket ve Yasal Bilgiler', icon: Icons.gavel_rounded),
                 const SizedBox(height: AppSpace.xs),
                 Text(
-                  'Gizlilik politikası ve sözleşme metinlerindeki şirket bilgilerini doldurur. Boş kalan alan '
-                  'belgede [……] olarak görünür ve belge "tamamlanmamış" sayılır.',
+                  'Gizlilik politikası ve sözleşme metinlerindeki şirket bilgilerini doldurur. MERSİS numarası ve KEP '
+                  'adresi isteğe bağlıdır: boşken yasal metinlerde hiç yazılmaz. Diğer alanlardan boş kalan belgede [……] '
+                  'olarak görünür ve belge "tamamlanmamış" sayılır.',
                   style: th.bodySmall,
                 ),
                 const SizedBox(height: AppSpace.md),
@@ -767,7 +768,7 @@ class PlatformSettingsViewState extends State<PlatformSettingsView> {
                   icon: Icons.tag_rounded,
                   keyboardType: TextInputType.number,
                   formatters: <TextInputFormatter>[FilteringTextInputFormatter.allow(RegExp(r'[0-9 ]'))],
-                  helper: '16 rakam.',
+                  helper: '16 rakam; isteğe bağlı.',
                   validator: validatePlatformMersis,
                 ),
                 const SizedBox(height: AppSpace.md),
@@ -776,6 +777,7 @@ class PlatformSettingsViewState extends State<PlatformSettingsView> {
                   'KEP adresi',
                   icon: Icons.alternate_email_rounded,
                   keyboardType: TextInputType.emailAddress,
+                  helper: 'İsteğe bağlı.',
                   validator: (v) => validatePlatformEmail(v, 'KEP adresi'),
                 ),
                 const SizedBox(height: AppSpace.md),
