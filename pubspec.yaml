@@ -35,6 +35,9 @@ dependencies:
   url_launcher: ^6.3.3
   package_info_plus: ^10.2.2
   file_picker: ^13.1.0
+  camera: ^0.12.1
+  path_provider: ^2.1.6
+  google_mlkit_text_recognition: ^0.17.1
   image: ^4.10.1
   archive: ^4.5.2
   xml: ^7.1.0

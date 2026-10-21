@@ -1333,7 +1333,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   // --- Sayaç Okuma ve Faturalandırma ---
 
   /// "Sayaçlar" ekranındaki siteler: `metering` modülü AÇIK siteler. Yönetici (yönetici modunda) yazar, kurul üyesi salt okur;
-  /// sakin ve görevli GÖREMEZ. Süper kullanıcıda liste boştur (menü açılmaz). FAIL-OPEN YOK: modül verisi yoksa site yoktur.
+  /// görevli (STAFF) yalnız fotoğrafla okuma ekranını görür; sakin GÖREMEZ. Süper kullanıcıda liste boştur (menü açılmaz). FAIL-OPEN YOK: modül verisi yoksa site yoktur.
   List<MeterSite> _meterSites(UserRole role) {
     if (role == UserRole.superUser || !_moduleAccess.isFiltering) return const <MeterSite>[];
     final canManage = _canManagePeople(role);
@@ -1342,12 +1342,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         if (site.isEnabled(PlatformModuleCodes.metering))
           if (site.role == 'manager' && canManage)
             MeterSite(code: site.siteCode, name: site.siteName)
+          else if (site.role == 'staff')
+            MeterSite(code: site.siteCode, name: site.siteName, canWrite: false, fieldOnly: true)
           else if (site.isBoardMember)
             MeterSite(code: site.siteCode, name: site.siteName, canWrite: false),
     ];
   }
 
-  /// "Sayaçlar" menüsü: `metering` modülü açık bir sitede yönetici / kurul üyesi.
+  /// "Sayaçlar" menüsü: `metering` modülü açık bir sitede yönetici / kurul üyesi / görevli.
   bool _canAccessMeters(UserRole role) => _meterSites(role).isNotEmpty;
 
   /// Sakin rozeti bir turu: modül açık sitesi olmayan kullanıcıda ağ isteği yok (rozet sıfırlanır); hata geri

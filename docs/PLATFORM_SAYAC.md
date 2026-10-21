@@ -28,6 +28,18 @@ Tüketim = kapanış okuması (tarih <= dönem sonu) - açılış okuması (tari
 
 `POST meter-billings`: önizleme özeti (`expected_total_minor`, `expected_count`, `expected_hash`) ve `idempotency_key` zorunlu; okumalar değiştiyse 409 `PREVIEW_STALE`. Aynı anahtar + aynı istek tekrar gönderimde çift borç yazmaz; farklı istek 409. Aynı türde çakışan tarih aralığı 409 `BILLING_OVERLAP`. Borç satırı `ledger_entries`'e `charge` olarak, dairenin OTURANIN hesabına (`occupantAccount`) ve açık finans dönemine yazılır (kapalı dönemde 409). Düzeltme Finans ekranından ters kayıtla yapılır; tahsilat yalnız `finance_parties.postPayment` ile.
 
+## Fotoğrafla okuma (4C, migration 070)
+
+Uçlar (`/sites/:siteCode/meter-field/...`; yönetici, süper ve o sitenin etkin görevlisi STAFF; kurul/sakin 403 `FORBIDDEN_ROLE`; `metering` kapalıysa 403 `MODULE_DISABLED`):
+
+- `GET meters?kind=` etkin sayaçlar, daire sırasıyla (son okuma dahil).
+- `POST readings` `{ meter_id, date, value, photo_b64?, photo_mime? }` mevcut okuma kurallarıyla (tarih ileri olamaz, sıra, aynı gün farklı değer 409) okuma ekler; aynı sayaç+tarih+değer tekrarı `replayed: true` (çevrimdışı kuyruk güvenle yeniden dener, fotoğraf tekrar eklenmez). Yanıt `photo.storage`: `drive` | `server` | `none`.
+- `GET photos/:id/content` sunucuda tutulan fotoğraf.
+
+Fotoğraf: istemci uzun kenarı 1280 px, JPEG kalite 70'e küçültür (EXIF/GPS atılır); sunucu en çok 600 KB kabul eder, içeriği türle eşleştirir. `drive_storage` açık ve bağlıysa Drive'a, değilse (ya da Drive hata verirse) `meter_reading_photos` tablosuna (site başına en çok 5000). Dosya adı `AB_D13_201026` (A blok, daire 13, 20.10.2026), klasör `suEkim_26` / `elektrikEkim_26` / `isiEkim_26` (sıcak su `su`). Tablo `meter_reading_photos` (okuma silinince CASCADE).
+
+İstemci: kamera açık kalır, üstte sıradaki daire, metin tanıma telefonda (ML Kit; yalnız Android/iOS, web'de elle giriş), görevli onaylar/düzeltir. Okuma önce cihaz kuyruğuna yazılır (SharedPreferences + belgeler klasöründe fotoğraf), sonra gönderilir; ağ/sunucu hatasında kuyruk durur ve 30 sn'de bir / uygulama öne gelince / okuma sonrası yeniden dener. Sunucunun kalıcı reddi (4xx) kayda yazılır, görevli düzeltene ya da silene dek denenmez.
+
 ## Yakında
 
-Fotoğrafla okuma (4C), sayaç değişimi (eski sayacı kapatıp yenisini açmak: şimdilik pasife alıp yeni sayaç eklenir), ortak alan sayaçları, süper kullanıcı için site seçmeli sayaç ekranı.
+Okunan değerin yönetici tarafından sonradan düzeltilmesinin ayrı kaydı, fotoğraf görüntüleme ekranı, sayaç değişimi (eski sayacı kapatıp yenisini açmak: şimdilik pasife alıp yeni sayaç eklenir), ortak alan sayaçları, süper kullanıcı için site seçmeli sayaç ekranı.

@@ -8,6 +8,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:http/http.dart' as http;
+import 'package:site_kapi_kontrol/models/meter_field_models.dart';
 import 'package:site_kapi_kontrol/models/meter_models.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/services/auth_api.dart';
@@ -69,6 +70,36 @@ class MeterApi {
     timeout: _writeTimeout,
     body: <String, dynamic>{'date': date, 'value': value},
     ok: const <int>{200, 201},
+  );
+
+  // --- Saha okuması (görevli; fotoğraflı) ---
+
+  Future<List<FieldMeter>> listFieldMeters({required String token, required int siteCode, MeterKind? kind}) async => FieldMeter.listFrom(
+    await _call('GET', '/sites/$siteCode/meter-field/meters', token: token, timeout: _readTimeout, query: kind == null ? null : <String, String>{'kind': kind.api}),
+  );
+
+  /// Tekrar gönderim güvenlidir (aynı sayaç+tarih+değer sunucuda `replayed`); bu yüzden çevrimdışı kuyruk aynı okumayı yeniden deneyebilir.
+  Future<FieldReadingResult> postFieldReading({
+    required String token,
+    required int siteCode,
+    required int meterId,
+    required String date,
+    required String value,
+    String? photoBase64,
+  }) async => FieldReadingResult.fromJson(
+    await _call(
+      'POST',
+      '/sites/$siteCode/meter-field/readings',
+      token: token,
+      timeout: const Duration(seconds: 40),
+      body: <String, dynamic>{
+        'meter_id': meterId,
+        'date': date,
+        'value': value,
+        if (photoBase64 != null) ...<String, dynamic>{'photo_b64': photoBase64, 'photo_mime': 'image/jpeg'},
+      },
+      ok: const <int>{200, 201},
+    ),
   );
 
   Future<void> deleteReading({required String token, required int siteCode, required int meterId, required int readingId}) =>
@@ -223,6 +254,9 @@ class MeterService {
   Future<List<MeterReading>> listReadings(int siteCode, int meterId) => _guard((t) => api.listReadings(token: t, siteCode: siteCode, meterId: meterId));
   Future<void> addReading(int siteCode, int meterId, {required String date, required String value}) =>
       _guard((t) => api.addReading(token: t, siteCode: siteCode, meterId: meterId, date: date, value: value));
+  Future<List<FieldMeter>> listFieldMeters(int siteCode, {MeterKind? kind}) => _guard((t) => api.listFieldMeters(token: t, siteCode: siteCode, kind: kind));
+  Future<FieldReadingResult> postFieldReading(int siteCode, {required int meterId, required String date, required String value, String? photoBase64}) =>
+      _guard((t) => api.postFieldReading(token: t, siteCode: siteCode, meterId: meterId, date: date, value: value, photoBase64: photoBase64));
   Future<void> deleteReading(int siteCode, int meterId, int readingId) =>
       _guard((t) => api.deleteReading(token: t, siteCode: siteCode, meterId: meterId, readingId: readingId));
   Future<MeterImportResult> importReadings(
