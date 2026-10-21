@@ -293,7 +293,7 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | `PORT` | [server/src/server.js:75](../server/src/server.js#L75) |
 | `PUBLIC_APP_URL` | [server/src/routes/auth_routes.js:323](../server/src/routes/auth_routes.js#L323)<br>[server/src/routes/guest_passes_routes.js:40](../server/src/routes/guest_passes_routes.js#L40) |
 | `PUBLIC_BASE_URL` | [server/src/routes/auth_routes.js:324](../server/src/routes/auth_routes.js#L324)<br>[server/src/routes/guest_passes_routes.js:41](../server/src/routes/guest_passes_routes.js#L41)<br>[server/src/utils/helpers.js:19](../server/src/utils/helpers.js#L19) |
-| `QA_ADMIN_DB` | [server/scripts/qa_finance4b.mjs:161](../server/scripts/qa_finance4b.mjs#L161)<br>[server/scripts/qa_finance4b_upgrade.mjs:75](../server/scripts/qa_finance4b_upgrade.mjs#L75)<br>[server/scripts/qa_finance_parties_section.mjs:95](../server/scripts/qa_finance_parties_section.mjs#L95) |
+| `QA_ADMIN_DB` | [server/scripts/qa_finance4b.mjs:161](../server/scripts/qa_finance4b.mjs#L161)<br>[server/scripts/qa_finance4b_upgrade.mjs:75](../server/scripts/qa_finance4b_upgrade.mjs#L75)<br>[server/scripts/qa_finance_parties_section.mjs:97](../server/scripts/qa_finance_parties_section.mjs#L97) |
 | `QA_ANNOUNCEMENT_LOCK_ROUNDS` | [server/scripts/qa_platform_pg.mjs:3612](../server/scripts/qa_platform_pg.mjs#L3612) |
 | `QA_ANNOUNCEMENT_ROUNDS` | [server/scripts/qa_platform_pg.mjs:3038](../server/scripts/qa_platform_pg.mjs#L3038) |
 | `QA_CONFIRM_DISPOSABLE_DB` | [server/scripts/qa_finance4b_upgrade.mjs:35](../server/scripts/qa_finance4b_upgrade.mjs#L35)<br>[server/scripts/qa_pending_registration_pg.mjs:21](../server/scripts/qa_pending_registration_pg.mjs#L21)<br>[server/scripts/qa_platform_pg.mjs:150](../server/scripts/qa_platform_pg.mjs#L150) |
@@ -502,7 +502,7 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [lib/models/platform_rule.dart](../lib/models/platform_rule.dart) | 435 | — | — |
 | [lib/models/push_models.dart](../lib/models/push_models.dart) | 295 | — | — |
 | [lib/models/receipt_models.dart](../lib/models/receipt_models.dart) | 341 | — | — |
-| [lib/models/reminder_models.dart](../lib/models/reminder_models.dart) | 294 | — | — |
+| [lib/models/reminder_models.dart](../lib/models/reminder_models.dart) | 326 | — | — |
 | [lib/models/report_models.dart](../lib/models/report_models.dart) | 711 | — | — |
 | [lib/models/reservation_models.dart](../lib/models/reservation_models.dart) | 1023 | — | — |
 | [lib/models/residency_relation.dart](../lib/models/residency_relation.dart) | 61 | — | — |
@@ -671,7 +671,7 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [lib/ui/dialogs/finance_receipt_flow.dart](../lib/ui/dialogs/finance_receipt_flow.dart) | 26 | — | — |
 | [lib/ui/dialogs/finance_receipt_list_dialog.dart](../lib/ui/dialogs/finance_receipt_list_dialog.dart) | 533 | — | — |
 | [lib/ui/dialogs/finance_reconcile_dialog.dart](../lib/ui/dialogs/finance_reconcile_dialog.dart) | 536 | — | — |
-| [lib/ui/dialogs/finance_reminder_dialog.dart](../lib/ui/dialogs/finance_reminder_dialog.dart) | 597 | — | — |
+| [lib/ui/dialogs/finance_reminder_dialog.dart](../lib/ui/dialogs/finance_reminder_dialog.dart) | 600 | — | — |
 | [lib/ui/dialogs/finance_reminder_exempt_dialog.dart](../lib/ui/dialogs/finance_reminder_exempt_dialog.dart) | 259 | — | — |
 | [lib/ui/dialogs/finance_reminder_runs_dialog.dart](../lib/ui/dialogs/finance_reminder_runs_dialog.dart) | 529 | — | — |
 | [lib/ui/dialogs/finance_reverse_dialog.dart](../lib/ui/dialogs/finance_reverse_dialog.dart) | 297 | — | — |
@@ -927,7 +927,7 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [server/scripts/qa_contracts_section.mjs](../server/scripts/qa_contracts_section.mjs) | 707 | — | — |
 | [server/scripts/qa_decision_book_section.mjs](../server/scripts/qa_decision_book_section.mjs) | 590 | — | — |
 | [server/scripts/qa_documents_section.mjs](../server/scripts/qa_documents_section.mjs) | 1574 | — | — |
-| [server/scripts/qa_finance_parties_section.mjs](../server/scripts/qa_finance_parties_section.mjs) | 1028 | — | — |
+| [server/scripts/qa_finance_parties_section.mjs](../server/scripts/qa_finance_parties_section.mjs) | 1119 | — | — |
 | [server/scripts/qa_finance4b_accounts.mjs](../server/scripts/qa_finance4b_accounts.mjs) | 231 | — | — |
 | [server/scripts/qa_finance4b_expenses.mjs](../server/scripts/qa_finance4b_expenses.mjs) | 348 | — | — |
 | [server/scripts/qa_finance4b_late_fee.mjs](../server/scripts/qa_finance4b_late_fee.mjs) | 358 | — | — |
@@ -1061,7 +1061,7 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [server/src/modules/finance_reminder_mail.js](../server/src/modules/finance_reminder_mail.js) | 133 | — | — |
 | [server/src/modules/finance_reminder_queue.js](../server/src/modules/finance_reminder_queue.js) | 549 | — | — |
 | [server/src/modules/finance_reminder_scheduler.js](../server/src/modules/finance_reminder_scheduler.js) | 88 | — | — |
-| [server/src/modules/finance_reminders.js](../server/src/modules/finance_reminders.js) | 693 | — | — |
+| [server/src/modules/finance_reminders.js](../server/src/modules/finance_reminders.js) | 698 | — | — |
 | [server/src/modules/finance_reports.js](../server/src/modules/finance_reports.js) | 911 | — | — |
 | [server/src/modules/finance_resident_view.js](../server/src/modules/finance_resident_view.js) | 137 | — | — |
 | [server/src/modules/finance_routes.js](../server/src/modules/finance_routes.js) | 298 | — | — |
