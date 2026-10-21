@@ -231,7 +231,7 @@ class PlatformRuleDialogState extends State<PlatformRuleDialog> {
     final partnerValue = _partnerValue;
     final siteName = widget.siteName;
     final current = '${formatRuleValue(rule, _current)} (${ruleSourceLabel(widget.siteScope ? rule.effective.source : rule.platform.source)})';
-    return AppDialog(
+    final dialog = AppDialog(
       title: rule.label,
       subtitle: widget.siteScope ? 'Site: ${siteName == null || siteName.isEmpty ? 'seçili site' : siteName}' : 'Platform geneli',
       icon: Icons.rule_rounded,
@@ -355,5 +355,7 @@ class PlatformRuleDialogState extends State<PlatformRuleDialog> {
         ),
       ),
     );
+    // Kayıt sürerken geri tuşu pencereyi kapatmaz (projedeki pencere kuralı): kapansa yanıt kaybolur, sayfa eski değeri gösterirdi.
+    return PopScope(canPop: !_saving, child: dialog);
   }
 }

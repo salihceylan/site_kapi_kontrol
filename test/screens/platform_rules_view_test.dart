@@ -1,5 +1,7 @@
 // "Kurallar" sayfası (PlatformRulesScreen) ve "Kuralı değiştir" penceresi (PlatformRuleDialog): süper kullanıcı (platform geneli ve site kapsamı),
 // site yöneticisi (salt okunur), düzenleme akışı (doğrulama, çift kural, tarih, sunucu reddi, üst düzeye dön), yükleme hatası, taşma matrisi.
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:site_kapi_kontrol/models/platform_rule.dart';
@@ -37,6 +39,9 @@ class _FakeRules extends PlatformRulesService {
   Object? failUpdate;
   int lateFeeMax = 400;
 
+  /// Verilirse yazma yanıtı bu tamamlanana dek bekler (kayıt sürerken davranış).
+  Completer<void>? holdUpdate;
+
   Map<String, dynamic> _json({int? siteCode, required bool canEdit}) =>
       prRulesJson(siteCode: siteCode, siteName: siteCode == null ? null : 'Gül Sitesi', canEdit: canEdit, lateFeeMax: lateFeeMax);
 
@@ -57,6 +62,7 @@ class _FakeRules extends PlatformRulesService {
   @override
   Future<PlatformRulesView> update({required List<PlatformRuleChange> changes, int? siteCode, String? validFrom, String? note}) async {
     updates.add((changes: changes, siteCode: siteCode, validFrom: validFrom, note: note));
+    if (holdUpdate != null) await holdUpdate!.future;
     if (failUpdate != null) throw failUpdate!;
     final late = changes.where((c) => c.key == 'finance.late_fee.monthly_bp_max');
     if (late.isNotEmpty && late.first.value is int) lateFeeMax = late.first.value! as int;
@@ -235,6 +241,27 @@ void main() {
       expect(find.byType(PlatformRuleDialog), findsNothing);
     });
 
+    testWidgets('kayıt sürerken geri tuşu pencereyi KAPATMAZ (sonuç kaybolmaz); yanıt gelince pencere kapanır ve kart güncellenir', (t) async {
+      final rules = await _pump(t);
+      final pending = Completer<void>();
+      rules.holdUpdate = pending;
+      await _openEdit(t, 'finance.late_fee.monthly_bp_max');
+      await t.enterText(find.byKey(_dialogValue), '3');
+      await t.ensureVisible(find.byKey(_dialogSave));
+      await t.pump();
+      await t.tap(find.byKey(_dialogSave));
+      await t.pump();
+      expect(rules.updates, hasLength(1), reason: 'istek gönderildi, yanıt bekleniyor');
+      await t.binding.handlePopRoute();
+      await _settle(t);
+      expect(find.byType(PlatformRuleDialog), findsOneWidget, reason: 'kayıt sürerken geri tuşu pencereyi kapatmamalı');
+      pending.complete();
+      await _settle(t);
+      expect(find.byType(PlatformRuleDialog), findsNothing);
+      expect(_valueText(t, 'finance.late_fee.monthly_bp_max'), '%3,00');
+      expect(find.text('Kural kaydedildi.'), findsOneWidget);
+    });
+
     testWidgets('süresiz kural: "Süresiz" anahtarı açıkken değer alanı kapalı ve null değer gider', (t) async {
       final rules = await _pump(t);
       await _openEdit(t, 'retention.decision_book_days');
@@ -278,6 +305,15 @@ void main() {
       expect(find.textContaining('Son değiştiren'), findsNothing);
       expect(find.byKey(const ValueKey<String>('rule_platform_only_finance.late_fee.monthly_bp_max')), findsNothing);
       expect(_valueText(t, 'finance.late_fee.monthly_bp_max'), '%4,00');
+    });
+
+    testWidgets('site görünümünde planlı PLATFORM değeri kapsamıyla yazılır ("platform geneli"); platform görünümünde ek yok', (t) async {
+      await _pump(t, canEdit: false, siteCode: 11);
+      await t.scrollUntilVisible(_card('budget.objection_days'), 300, scrollable: find.byType(Scrollable).first);
+      expect(
+        find.descendant(of: _card('budget.objection_days'), matching: find.text('Planlı: 20.11.2026 tarihinden itibaren 10 gün (platform geneli)')),
+        findsOneWidget,
+      );
     });
   });
 

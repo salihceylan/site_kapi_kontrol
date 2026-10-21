@@ -261,7 +261,9 @@ class _RuleCard extends StatelessWidget {
 
   String _scheduledText(PlatformRuleScheduled entry) {
     final what = entry.inherit ? (entry.isSite ? 'platform değeri' : 'varsayılan değer') : formatRuleValue(rule, entry.value);
-    return 'Planlı: ${formatRuleDate(entry.validFrom)} tarihinden itibaren $what${entry.isSite ? ' (bu site)' : ''}';
+    // Site görünümünde planlı platform değeri kapsamıyla yazılır: siteye özel değer varken bu siteyi değiştirmez.
+    final scope = entry.isSite ? ' (bu site)' : (siteScope ? ' (platform geneli)' : '');
+    return 'Planlı: ${formatRuleDate(entry.validFrom)} tarihinden itibaren $what$scope';
   }
 
   @override
