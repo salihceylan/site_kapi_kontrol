@@ -20,6 +20,10 @@ class AppTheme {
       seedColor: p.action,
       primary: p.action,
       onPrimary: p.onAction,
+      // Seçili çip, bölümlü düğme ve gezinme göstergesi: nötr gri (tohumdan türeyen açık mavi-mor değil; mavi yalnız
+      // bağlantı ve odakta). Üstündeki metin başlık rengi (14,5:1).
+      secondaryContainer: p.border,
+      onSecondaryContainer: p.text,
       surface: Colors.white,
       brightness: Brightness.light,
     );
@@ -261,6 +265,9 @@ class AppTheme {
       seedColor: AppPalette.light.action,
       primary: p.action,
       onPrimary: p.onAction,
+      // Seçili çip / gezinme göstergesi: nötr arduvaz (#334155), üstünde başlık metni (açık temadaki notla aynı).
+      secondaryContainer: const Color(0xFF334155),
+      onSecondaryContainer: p.text,
       surface: AppColors.surface,
       onSurface: Colors.white,
       onSurfaceVariant: const Color(0xFFCBD5E1),

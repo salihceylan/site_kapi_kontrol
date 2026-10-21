@@ -227,6 +227,15 @@ void main() {
         expect(input.prefixIconColor, p.textSecondary, reason: 'ön ikon nötr (mavi değil)');
       });
 
+      // İP-1C bağımsız inceleme: seçili çip (ChoiceChip / FilterChip varsayılanı), bölümlü düğme ve gezinme
+      // göstergesi renk şemasının `secondaryContainer`'ını kullanır; tohumdan türeyince açık mavi-mor çıkıyordu.
+      test('$name: seçili çip / gezinme göstergesi dolgusu nötr gri (mavi-mor değil), üstündeki metin >= 4,5:1', () {
+        final cs = build().colorScheme;
+        expect(cs.secondaryContainer, p.isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0));
+        expect(cs.onSecondaryContainer, p.text);
+        expect(contrast(cs.onSecondaryContainer, cs.secondaryContainer), greaterThanOrEqualTo(4.5));
+      });
+
       test('$name: kart yüzey + 1 px çerçeve, gölgesiz', () {
         final card = build().cardTheme;
         expect(card.color, p.surface);
