@@ -70,6 +70,7 @@ abstract final class HelpContent {
     'Panel',
     'İşletme Projesi',
     'Komşu Panosu',
+    'Faaliyet Raporu',
     'Kapılar',
     'Profilim',
     'Eller Serbest & Kestirmeler',
@@ -118,6 +119,9 @@ abstract final class HelpContent {
   /// Menü dışı ekran içi etiketler (düğme, bölüm, sekme adları; kodda aynen geçer).
   static const Set<String> knownScreenLabels = <String>{
     'Devir bakiyesi',
+    'Sistem taslağına dön',
+    'Hesapla',
+    'Taslağı kaydet',
     "Excel'den yükle",
     'Hesap',
     'Geri al',
@@ -493,6 +497,18 @@ abstract final class HelpContent {
         'Aynı ekranda planlanan ve gerçekleşen giderleri kategori bazında görür, “PDF” ile indirirsiniz.',
       ],
       note: 'Geçici projenin kalan günü listede görünür. Süreleri sistem yöneticisi “Kurallar”dan belirler; yasal adımları kendi karar defterinizle birlikte takip edin.',
+    ),
+    HelpTopic(
+      id: 'annual_report',
+      title: 'Yıllık faaliyet raporunu nasıl hazırlarım?',
+      icon: Icons.assignment_rounded,
+      steps: <String>[
+        'Faaliyet Raporu modülü açıkken menüden “Faaliyet Raporu” ekranını açıp rapor yılını seçin; dokuz bölüm kayıtlarınızdan otomatik dolar.',
+        'Bir bölümü açıp metni dilediğiniz gibi düzenleyin; “Sistem taslağına dön” bölümü yeniden kayıtlardan doldurur.',
+        '“Gelecek yıl tahmini” bölümüne gider artış yüzdesini yazıp “Hesapla”ya basın.',
+        '“Taslağı kaydet” düzenlemelerinizi saklar, “PDF” raporu verir.',
+      ],
+      note: 'Kapalı modüllerin bölümleri boş kalır. Düzenlemediğiniz bölüm her açılışta güncel kayıtlardan gelir. Ekipman envanteri “Yakında…”.',
     ),
     HelpTopic(
       id: 'metering',
