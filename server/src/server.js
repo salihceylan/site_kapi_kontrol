@@ -188,11 +188,21 @@ app.use(platformServicesRouter);
 // Serve Flutter Web SPA if build/web exists
 if (fs.existsSync(webBuildPath)) {
   console.log(`[WEB] Serving Flutter Web from: ${webBuildPath}`);
-  app.use(express.static(webBuildPath, { maxAge: '1h' }));
+  // Giriş dosyaları her açılışta yeniden doğrulanır (ETag ile 304): yeni sürüm tarayıcı önbelleğinde 1 saat beklemesin.
+  const WEB_ENTRY_FILES = new Set(['index.html', 'main.dart.js', 'flutter_bootstrap.js', 'flutter_service_worker.js', 'flutter.js', 'version.json', 'manifest.json']);
+  app.use(express.static(webBuildPath, {
+    maxAge: '1h',
+    setHeaders: (res, filePath) => {
+      if (WEB_ENTRY_FILES.has(path.basename(filePath))) {
+        res.setHeader('Cache-Control', 'no-cache');
+      }
+    },
+  }));
 
   // Fallback for HTML5 history mode (SPA routing)
   app.get('*', (req, res, next) => {
     if (req.method === 'GET' && req.accepts('html')) {
+      res.setHeader('Cache-Control', 'no-cache');
       return res.sendFile(path.join(webBuildPath, 'index.html'));
     }
     next();
