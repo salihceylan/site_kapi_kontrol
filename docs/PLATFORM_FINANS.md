@@ -31,6 +31,7 @@ Bu belge sunucu (`server/`) ve uygulama (`lib/`) için BAĞLAYICIDIR. Öncül be
 - Dahil edilen daireler: hedefteki (`target_*`) **aktif** daireler. Tutar payları **en büyük kalan** yöntemiyle kuruşa bölünür (toplam payların toplamına BİREBİR eşit olmalı; eşitlikte `apartment_id` küçük olan önce): `equal` (ağırlık 1), `land_share` (ağırlık = `numerator/denominator`, tam sayı aritmetiği: ortak payda ile), `area` (ağırlık = seçili m² × 100 tamsayı). `fixed`: her daireye `amount_minor`. `category`: dairenin `category`'sine karşılık gelen daire başı tutar.
 - Eksik veri (arsa payı/m²/kategori tanımsız ya da kategori haritada yok): önizlemede `missing_data` listesi; `commit` bu durumda 409 `PREVIEW_INCOMPLETE` döner (varsayılan), yönetici `skip_missing: true` ile o daireleri hariç tutarak devam edebilir (hariç tutulanlar audit `details`'ında sayı olarak yazılır).
 - **Kim öder:** her daire için `payer_party = apartments.responsible_party` (kayıt anındaki değer kopyalanır, sonradan değişse de eski kayıt değişmez). Borç tek daire hesabına yazılır; kimin GÖRECEĞİ `responsible_party`'ye uyar (aşağıda).
+  > **İP-1A (2026-10-21) ile değişti:** her dairenin iki hesabı vardır (ev sahibi / kiracı); borç tanımın "kim öder" (`charge_party`) değeri ve borç tarihindeki kiracı durumuna göre bu hesaplardan BİRİNE yazılır. `payer_party` anlık görüntü olarak yazılmaya devam eder. Bkz. **İki hesap (2026-10-21)**.
 - Vade: aylık tanımda `due_date = period + (due_day-1) gün`; ek borçta istekteki `due_date` (yoksa kayıt günü).
 
 ## Yönetici uçları (`/manager/sites/:siteCode/finance/…`)
@@ -64,6 +65,7 @@ Hata gövdesi `{ error, code }` (Türkçe). Tutarlar kuruş tamsayı. Yazmalar 1
 
 - `GET /app/my-finance` (`authRequired`) → `{ items: [{ site_code, site_name, apartment_id, label, block_name, currency, balance_minor, overdue_minor, next_due_date, next_due_minor, payer_party, visible_from, offset_note, recent: [Entry (son 30; yönetici kimliği/notu YOK)] }] }`: yalnız çağıranın **güncel** (aktif) kişisinin ilişkili olduğu daireler, **modülü açık ve onaylı** siteler.
 - **Kim görür (F2.05 `responsible_party` kuralı):** `owner` ise dairenin güncel `owner` ilişkisi olanlar; `tenant` ise `tenant`; `both` ise `owner` + `tenant` + `resident` (belirsiz ilişki). `family_member` HİÇBİR durumda borç görmez. Eşleşen güncel kişi yoksa güvenli yedek: dairenin güncel `resident`/`owner`/`tenant` ilişkili kişileri görür (borç sahipsiz kalmasın); bu yedek davranış sözleşme notu olarak raporlanır. Başkasının dairesi asla.
+  > **İP-1A (2026-10-21) ile değişti:** sakin dairenin KENDİ HESABINI görür (malik -> ev sahibi hesabı, kiracı -> kiracı hesabı, ilişkisi belirtilmemiş -> dairede güncel kiracı varsa kiracı, yoksa ev sahibi hesabı; `family_member` hiçbirini); borç sorumlusu `both` ise malik kiracı hesabını SALT OKUNUR da görür. Yedek kural kalktı (borç zaten sorumlu tarafın hesabındadır). Bkz. **İki hesap (2026-10-21)**.
 - Sakin ucu yönetici notlarını/oluşturan adını/diğer dairelerin verisini içermez; `recent` yalnız kendi dairesi.
 - **Sakin kapsamı (2026-10-19, KVKK ölçülülük + doğru bakiye; `finance_resident_view.residentView`):**
   - **Başlangıç:** sakinin bu dairedeki güncel ilişkisinin taşınma ayı (`move_in_date`; boşsa ilişki kaydının günü, İstanbul).
@@ -96,7 +98,9 @@ Hata gövdesi `{ error, code }` (Türkçe). Tutarlar kuruş tamsayı. Yazmalar 1
     Aynı kişinin önceki ilişki zinciri tek adımdır (güvenli taraf). (2) Taşınma tarihi girilmezse kayıt günü esas alınır; uzun süredir oturan
     biri sonradan kaydedildiyse eski borcu Borcum'da görünmez. Kişi eklerken uyarı ve yönetici ekranında gösterge yol
     haritasında. (3) Gecikme tazminatı ve borç hatırlatma hâlâ daire bazında hesaplanır; açılmadan önce aynı kapsam uygulanacak
-    (`docs/PLATFORM_YOL_HARITASI.md`, P0).
+    (`docs/PLATFORM_YOL_HARITASI.md`, P0). **İP-1A (2026-10-21):** mahsup, tazminat ve hatırlatma artık HESAP bazındadır ve
+    "kim ödedi" sorusu hesapla yanıtlanır (kiracının ödemesi kiracı hesabına); (1) daire bazlı mahsup notu iki hesap için geçerli
+    değildir. Bkz. **İki hesap (2026-10-21)**.
 - Hız sınırı: 600/saat/kullanıcı.
 
 ## Audit
@@ -128,3 +132,128 @@ Yeni bağımlılık YOK. Para girişi/gösterimi: ortak yardımcı (`lib/ui/help
 5. **Defter koruması (DB).** `trg_ledger_entries_append_only` (`created_by → NULL` yalnız ilgili kullanıcı ARTIK yoksa), `BEFORE TRUNCATE` (ledger_entries, fee_runs), ters kayıt aynası kontrolü (`BEFORE INSERT`: aynı site/daire, `amount_minor = -asıl`, asıl ters kayıt olamaz, hata P0001), `fee_runs` append-only (site silme ve `posted_by` SET NULL istisnası), `finance_period_closures` UPDATE yasağı (DELETE serbest: yeniden açma satırı siler). `ledger_entries.definition_name` borçlandırma anındaki ANLIK GÖRÜNTÜDÜR (tanım yeniden adlandırılınca geçmiş değişmez; ters kayıt asıldan kopyalar).
 6. **Kilit sırası:** `sites KEY SHARE → finance_post advisory → apartments(id) → users(işlemi yapan) FOR KEY SHARE → finans satırları`. Tanım listesi `GET …/definitions?limit=&offset=` → `{ items, total }` (≤ 500; aylık tanımlar önce).
 7. **Kabul edilen riskler (Faz 4b'de gözden geçirilecek):** bakiye listesi ve özet her istekte sitenin tüm defterini toplar (≈1M satırda ~350 ms); çok satırlı (≈200k+) kullanıcı/site silme 30 sn `statement_timeout`'a yaklaşır (rollback güvenli); bir sitenin toplam bakiyesi 2^53'ü aşarsa özet 500 verir (gerçekçi değil); `definition_name` anlık görüntüsü sonradan düzeltilemez; ~~sakin dairenin tüm geçmişini (önceki kiracı dönemi dahil) görür~~ (2026-10-19 giderildi: "Sakin kapsamı"). **Dağıtım notu:** 034 DDL'i sert yazma yükü altında `ensureDbSchema` içinde 40P01 alabilir (açılış DDL'inin doğası); `pm2 restart` ile idempotent yeniden denenir, trafiksiz uygulamak güvenlidir. Canlıya almadan önce `site_modules`'ta `finance` için `enabled = TRUE` satırı OLMADIĞI doğrulanır (aksi halde dağıtımda modül sessizce açılır). `finance` varsayılan KAPALIDIR.
+
+## İki hesap (2026-10-21; İP-1A, karar G12 — yukarıdaki metne göre ÖNCELİKLİDİR)
+
+Kaynak: `docs/PLATFORM_YOL_HARITASI.md` "Karar kaydı (2026-10-21)" G12; alt plan `docs/superpowers/plans/2026-10-21-ip-1a.md`. Migration **052**
+(`052_finance_parties.sql`; `finance_parties_schema.js` aynı adımları `ensureDbSchema` sonunda katalog korumalı, her adım kendi işleminde uygular).
+
+### Kurallar
+
+1. **Her dairenin iki hesabı vardır:** "Ev sahibi hesabı" (`owner`) ve "Kiracı hesabı" (`tenant`). Bakiyeler KARIŞMAZ: bir hesabın tahsilatı ya da
+   alacağı diğer hesabın borcuna mahsup edilmez. Mahsup (vadesi en eski borçtan, TBK 102) her hesabın kendi içindedir.
+2. **Kim öder** (`fee_definitions.charge_party`): `owner` ⇒ ev sahibi hesabı; `occupant` ("dairede oturan") ⇒ dairenin `responsible_party` değeri
+   `owner` ise ev sahibi; `tenant` / `both` ise BORÇ TARİHİNDE dairenin etkin kiracısı varsa kiracı, yoksa ev sahibi hesabı. Borç tarihi: aylık aidatta
+   dönemin ilk günü, ek borçta kayıt günü. Etkin kiracı: `relation = tenant` ilişkisi tarihi kapsar (başlangıç `move_in_date`, boşsa ilişki kaydının
+   günü, İstanbul; güncel ilişkide kişi etkin; bitmiş ilişkide `move_out_date >= tarih`, çıkış günü dahil). NULL = türe göre varsayılan: aylık aidat
+   `occupant`, tek seferlik ek borç `owner`. Değişiklik yalnız SONRAKİ borçlandırmaları etkiler (borçlandırılmış tanımda da değişebilir).
+3. **Kişinin kendi hesabı:** `owner` ⇒ ev sahibi; `tenant` ⇒ kiracı; `resident` (ilişki belirtilmemiş) ⇒ dairede güncel kiracı varsa kiracı, yoksa ev
+   sahibi; `family_member` ⇒ hesap yok (borç görmez).
+4. **Kim görür:** sakin YALNIZ kendi hesabını görür. Borç sorumlusu `both` ise malik kiracı hesabını SALT OKUNUR da görür (müteselsil sorumluluk; bu
+   tutar malikin kendi bakiyesine eklenmez). Eski "eşleşen kişi yoksa yedek" kuralı kalktı.
+5. **Tahsilat:** seçilen hesaba yazılır. Hesap verilmezse (eski istemci) vadesi en eski AÇIK borcu olan hesap (eşitlikte ev sahibi); iki hesapta da açık
+   borç yoksa tahsilat tarihindeki oturanın hesabı (kural 2, `occupant`). Yönetici ekranında aynı değer `default_payment_account` ile gelir.
+6. **Ters kayıt ve düzeltme:** ters kayıt HER ZAMAN asılın hesabındadır (DB tetikleyicisi de zorlar). Düzeltmede `account_party` verilirse yeni tahsilat o
+   hesaba yazılır (yanlış hesaba girilen tahsilatın düzeltilmesi); verilmezse asılın hesabı korunur.
+7. **Hesap bazında hesaplananlar:** bakiye, vadesi geçen, mahsup (M1), yaşlandırma, ekstre, gecikme tazminatı, borç hatırlatma (alıcı = hesabın sahibi),
+   makbuz ödeyeni (kiracı hesabı -> güncel kiracı, ev sahibi hesabı -> güncel malik) ve dışa aktarma ("Hesap" sütunu).
+
+### Veri (052)
+
+- `ledger_entries.account_party` (NULL | `owner` | `tenant`), `source_kind` (NULL | `manual` | `payment_notice` | `bank_line` | `opening` | `card`),
+  `source_id` (BIGINT; kaynak türü olmadan dolu olamaz). CHECK'ler `NOT VALID` eklenip ayrı adımda `VALIDATE` edilir. Kısmi indeks
+  `idx_ledger_entries_source (site_code, source_kind, source_id) WHERE source_id IS NOT NULL`. Yönetici tahsilatı `manual`; borç / tazminat / ters kayıt
+  satırlarında kaynak NULL (izleri `run_id` / `late_fee_run_id` / `reverses_entry_id`).
+- `trg_ledger_entries_account_party` (BEFORE INSERT, yalnız hedefli ters kayıt): hesap boşsa asılın (türetilmiş) hesabıyla DOLDURULUR, farklıysa P0001
+  `finance reversal must keep the account of its original entry`. 052'yi bilmeyen eski sürümün dağıtım sırasında yazdığı ters kayıt da doğru hesaba düşer.
+- `fee_definitions.charge_party` (NULL | `occupant` | `owner`).
+- `late_fee_run_lines.account_party` + `trg_late_fee_run_lines_account` (boşsa defter satırının hesabıyla doldurur, farklıysa reddeder); birincil anahtar
+  `(run_id, apartment_id)` -> `(run_id, ledger_entry_id)` ve kısmi tekil `(run_id, apartment_id, account_party) WHERE account_party IS NOT NULL`. Bu,
+  "yalnız ekleyici" kuralının GEREKÇELİ tek istisnasıdır: aynı dairenin iki hesabı aynı çalıştırmada iki satır olmalıdır; kısıt yalnız gevşer, veri
+  değişmez, eski kod aynen çalışır; tablo eklemeli ve küçüktür (özellik hukuk onayına kadar kapalı).
+- Yeni kod HER yeni satıra hesabı açıkça yazar (borçlandırma, ek borç, tahsilat, düzeltme, ters kayıt, tazminat ve iptali).
+
+### Var olan satırlar nasıl atanır (geri doldurma YOK)
+
+Defter eklemelidir: 052 öncesi satırlarda `account_party` NULL KALIR ve hesap OKUMADA türetilir:
+`COALESCE(account_party, CASE WHEN payer_party = 'tenant' THEN 'tenant' ELSE 'owner' END)` (`finance_parties.accountPartySql`). Yani:
+
+| Eski satırın `payer_party` değeri | Hesabı |
+|---|---|
+| `tenant` (kayıt anında daire sorumlusu kiracı) | Kiracı hesabı |
+| `owner` | Ev sahibi hesabı |
+| `both` | Ev sahibi hesabı (makbuzdaki "both => malik" kuralıyla aynı) |
+
+Sonuç: sorumlusu kiracı olan dairelerin eski borç ve tahsilatları kiracı hesabında, `both` ve malik dairelerinin eski kayıtları ev sahibi hesabındadır;
+aynı hesaptaki eski borç ve tahsilat kendi içinde mahsup edilir (bakiye değişmez). 052'den sonra `both` dairede kiracı varken yazılan aidat kiracı
+hesabına gider. Yanlış hesapta görünen eski bir tahsilat yönetici tarafından **Düzelt** ile diğer hesaba taşınabilir (ters kayıt eski hesapta kalır).
+
+### Uçlar (yalnız EKLENEN alanlar; eski alanlar KALDIRILMADI)
+
+- Tanım: `POST/PATCH …/definitions` gövdede `charge_party` (borçlandırılmış tanımda da `PATCH` edilebilir); `Definition.charge_party` (etkin değer).
+- Ek borç `POST …/charges` ve `…/charges/preview`: `charge_party` (varsayılan `owner`; istek parmak izine yalnız `owner` değilse girer).
+- Önizleme satırı: `account_party`; `preview_hash` satırın hesabını içerir (önizleme ile onay arasında hesabı değiştiren CRM değişikliği, örneğin kiracının
+  taşınması, 409 `PREVIEW_STALE` verir).
+- `POST …/payments`: isteğe bağlı `account_party` -> yanıt `entry.account_party`, `balance_minor` (eski: dairenin iki hesabının toplamı) ve
+  `account_balance_minor` (yeni: tahsilatın yazıldığı hesabın bakiyesi). Aynı `idempotency_key` + farklı hesap 409 `IDEMPOTENCY_CONFLICT`; hesapsız
+  tekrar (eski istemci) aynı kaydı döndürür.
+- `POST …/entries/:id/correct`: isteğe bağlı `account_party` (kural 6) -> `account_balance_minor`.
+- `GET …/balances`: satırda `debt_minor`, `credit_minor` ve `accounts: { owner: { balance_minor, overdue_minor }, tenant: {…} }`. `balance_minor` iki
+  hesabın toplamı (eski alan), `overdue_minor` hesapların vadesi geçenlerinin toplamıdır (bir hesabın alacağı diğerinin vadesi geçenini düşürmez).
+  `status=debtor` en az bir hesabı borçlu, `status=credit` en az bir hesabı alacaklı daireleri verir (aynı daire iki listede olabilir); `totals` hesap başına.
+- `GET …/apartments/:id/account?account_party=owner|tenant`: satırlar ve bakiye yalnız o hesabın; verilmezse eski davranış (iki hesap birlikte). Yeni
+  alanlar: `account_party`, `accounts: { owner|tenant: { balance_minor, overdue_minor, entry_count } }`, `show_tenant_account` (kiracısı olmuş, güncel
+  kiracısı olan ya da kiracı hesabında satırı olan daire), `has_current_tenant`, `default_payment_account`.
+- `GET …/summary`: borç / alacak toplamları hesap başına (pozitif / negatif hesap bakiyeleri); `debtor_count` en az bir hesabı borçlu daire sayısıdır.
+- `Entry`: `account_party` (türetilmiş), `source_kind`, `source_id` (sakin uçlarında `source_id` null).
+- `GET /app/my-finance`: eski alanlar (`balance_minor`, `overdue_minor`, `next_due_*`, `visible_from`, `offset_note`, `recent`) kişinin KENDİ hesabıdır;
+  yeni `account_party` (kendi hesabı) ve `accounts: [{ account_party, role: own | read_only, balance_minor, overdue_minor, next_due_date, next_due_minor,
+  visible_from, offset_note, recent }]` (ilki kendi hesabı). Kişisel veri dışa aktarması yalnız kendi hesabını içerir (salt okunur hesap başkasının verisidir).
+- Sakin kapsamı HESAP başınadır: başlangıç kişinin bu dairedeki güncel ilişkisinin başlangıcıdır; kesintisiz önceki ilişki zinciri yalnız AYNI hesaba düşen
+  ilişkiyse başı öne çeker (kiracıyken satın alan kişi eski kiracı kayıtlarını salt okunur kiracı hesabında görür; önceki malikin ev sahibi hesabı kayıtları
+  yeni malike görünmez).
+- Faz 4b uçları (makbuz, sakin ekstresi, yaşlandırma, dışa aktarma, gecikme tazminatı, hatırlatma): `docs/PLATFORM_FINANS_4B.md` "İki hesap" bölümü.
+
+### Sözleşme modülü (program planı 2.1; adlar SABİT, dalga 2 çağırır)
+
+`server/src/modules/finance_parties.js`: `ACCOUNT_PARTIES`, `resolveChargeParty(client, { siteCode, apartmentId, chargeParty, onDate })`,
+`resolvePersonParty(client, { siteCode, apartmentId, userCode })`, `accountBalances(db, { siteCode, apartmentId })` ve
+`postPayment(client, { siteCode, apartmentId, accountParty, amountMinor, paidOn, method, description, sourceKind, sourceId, idempotencyKey, actor })`
+-> `{ entryId, receiptId, … }`. `postPayment` TEK tahsilat giriş noktasıdır (yönetici tahsilatı ve düzeltmenin yeni tahsilatı da bunu kullanır); çağıran
+`withFinanceTransaction` içinde olmalıdır (sites KEY SHARE -> `finance_post` advisory), daire ve işlemi yapan `postPayment` içinde kilitlenir (apartments ->
+users -> finans satırları); çağıranın kendi satırları (dekont, banka satırı) `postPayment`'tan SONRA yazılır. Kaynak izi `source_kind` / `source_id`; aynı
+anahtar = aynı kayıt, farklı daire / tutar / tarih / yöntem / hesap / kasa hesabı / kaynak 409.
+
+### Eski istemci uyumu
+
+Eski istemci `account_party` göndermez ve yeni alanları okumaz: tahsilatı sunucunun varsayılan hesabına yazılır; "Borcum" ve panel vitrini eski alanlardan
+kişinin KENDİ hesabını görür; yönetici ekstresi süzgeçsiz (iki hesap birlikte) eski görünümdedir. Toplu yükleme (Excel) daire sütunları DEĞİŞMEDİ.
+
+### Uygulama (Flutter)
+
+Ekstre penceresinde iki sekme [Kiracı hesabı] [Ev sahibi hesabı] (`show_tenant_account` ise; ilk sekme `default_payment_account`, bakiye ve hareketler
+yalnız seçili hesabın); tahsilat / düzeltme penceresinde "Daire hesabı" seçimi (ekstrenin sekmesiyle başlar; pencere ekstre dışından açılırsa daire
+seçilince sunucuya sorulur; tek hesaplı dairede çizilmez); tanım ve ek borç formunda "Kim öder" (Dairede oturan / Ev sahibi; varsayılansa gövdede
+gönderilmez); önizleme satırında hesap; bakiye listesinde kiracı hesabında tutar varsa iki hesap ayrı rozet; yaşlandırma ve daire ekstresi raporunda hesap
+süzgeci (dışa aktarma dahil); "Borcum"da "Kendi hesabınız: …" ve salt okunur kiracı hesabı bölümü (kendi ekstresi ayrı); panel vitrini borç kartı yalnız
+kendi hesabı (tek dairede hesabın adı); gecikme tazminatında aynı dairenin iki satırı ayrı anahtarla; hatırlatma önizlemesinde hesap sayısı; yardım metni.
+
+### Doğrulama
+
+- Sunucu birim: `finance_parties*.test.js` (şema, sözleşme modülü, borçlandırma, görünümler, raporlar, tazminat / hatırlatma) + güncellenen 4a / 4b testleri.
+- Gerçek PG: `QA_ONLY=chain,live,parties` (`scripts/qa_finance_parties_section.mjs`; 052 veri varken yükseltme, şema, "kim öder", hesap başına mahsup,
+  görünüm matrisi + IDOR, düzeltme / ters kayıt, tazminat iki satır, hatırlatma alıcısı, `postPayment` kaynak izi, eşzamanlı tahsilat x borçlandırma x CRM
+  ile 40P01 = 0) + `finance` + `finance4b` + `finance_upgrade` + `qa_finance4b_upgrade.mjs` ("ensure" yolları artık 001..son zinciriyle karşılaştırılır).
+- G12'nin BİLEREK değiştirdiği eski beklentiler (gerekçeleri betiklerde): sakin matrisi (I1, I1b: her kişi kendi boş hesabını görür), denetim
+  `finance.payment.recorded` ayrıntısına `account_party` + `source_kind` kodları (G8, N4), bakiye sorgusu planında `acc` CTE'si (L5), hatırlatma alıcısı =
+  hesabın sahibi (G2-G5, R6/R6b), sakin kapsamı fikstürlerinde kiracı senaryolarının satırları kiracı hesabında (S2, S3b, S11), makbuz dışa aktarmasında
+  son sütun "Hesap" (E8c).
+
+### Bilinen sınırlar
+
+1. Hatırlatma sıklık kaydı (`finance_reminder_apartments`) daire başına kalır (temkinli: iki hesaptan birine giden hatırlatma dairenin aralığını başlatır);
+   ardışık sayaç hesabın son tahsilatına göredir. Şema değişikliği yapılmadı.
+2. Gecikme tazminatında `apartment_count` artık satır (HESAP) sayısıdır; muafiyet daire başınadır (iki hesabı birlikte muaf tutar).
+3. Etkin kiracı tarihi `move_in_date` boşsa ilişki kaydının günüdür; geç kaydedilen kiracının taşınma tarihi girilmezse ilk ay aidatı ev sahibi hesabına
+   yazılabilir (yönetici düzeltme / ters kayıtla düzeltir).
+4. 052 öncesi `both` dairelerinde kiracının yaptığı eski ödemeler ev sahibi hesabındadır (anlık görüntü yalnız sorumluyu tutuyordu); bakiye değişmez.
