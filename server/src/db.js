@@ -21,6 +21,7 @@ import { ensureBulkOpeningSchema } from './modules/bulk_import_opening_schema.js
 import { ensureFinancePartiesSchema } from './modules/finance_parties_schema.js';
 import { ensurePlatformRulesSchema } from './modules/platform_rules_schema.js';
 import { ensureFinancePaymentSchema } from './modules/finance_payment_schema.js';
+import { ensureExpenseNaturesSchema } from './modules/finance_expense_nature_schema.js';
 
 dotenv.config();
 
@@ -1901,6 +1902,8 @@ export async function ensureDbSchema() {
     // 055 (devir bakiyesi + hepsi bir arada, F4/N6): 038 ve 052'den SONRA; katalog kontrolu + her adim kendi otomatik onayli ifadesi
     // (bulk_import_opening_schema.js = migrations/055).
     await ensureBulkOpeningSchema(client);
+    // 056 (gider turu, R1): katalog kontrolu + kendi otomatik onayli ifadeleri (finance_expense_nature_schema.js = migrations/056).
+    await ensureExpenseNaturesSchema(client);
 
     // 031 people_v1: mevcut sakinlerin CRM'e tek seferlik aktarimi. Savunmaci: hata sunucunun acilmasini ENGELLEMEZ
     // (kendi transaction'i geri alinir, isaret yazilmaz => sonraki acilista yeniden denenir; okuma anindaki

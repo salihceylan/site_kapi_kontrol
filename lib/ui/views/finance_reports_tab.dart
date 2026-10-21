@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:site_kapi_kontrol/models/expense_analysis.dart';
 import 'package:site_kapi_kontrol/models/finance.dart';
 import 'package:site_kapi_kontrol/models/report_models.dart';
 import 'package:site_kapi_kontrol/models/vehicle_record.dart' show crmDateParam;
@@ -19,6 +20,7 @@ import 'package:site_kapi_kontrol/ui/helpers/money.dart';
 import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
 import 'package:site_kapi_kontrol/ui/helpers/retry_lock.dart';
 import 'package:site_kapi_kontrol/ui/widgets/bulk_export_sheet.dart' show ExportSource;
+import 'package:site_kapi_kontrol/ui/widgets/expense_analysis_chart.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_4b_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_account_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_parts.dart';
@@ -57,7 +59,8 @@ enum FinanceReportKind {
   incomeExpense('income_expense', 'Gelir-Gider', Icons.stacked_bar_chart_rounded),
   cashPosition('cash_position', 'Kasa Durumu', Icons.account_balance_rounded),
   statement('statement', 'Daire Ekstresi', Icons.receipt_long_rounded),
-  boardSummary('board_summary', 'Kurul Özeti', Icons.groups_rounded);
+  boardSummary('board_summary', 'Kurul Özeti', Icons.groups_rounded),
+  expenseAnalysis('expense_analysis', 'Gider Analizi', Icons.insights_rounded);
 
   const FinanceReportKind(this.key, this.label, this.icon);
 
@@ -128,6 +131,8 @@ class FinanceReportsTabState extends State<FinanceReportsTab> {
         return _StatementReportView(scope: widget.scope, now: widget.now, launcher: widget.exportLauncher);
       case FinanceReportKind.boardSummary:
         return _BoardSummaryReportView(scope: widget.scope, now: widget.now, launcher: widget.exportLauncher);
+      case FinanceReportKind.expenseAnalysis:
+        return _ExpenseAnalysisReportView(scope: widget.scope, now: widget.now, launcher: widget.exportLauncher);
     }
   }
 }
@@ -969,6 +974,315 @@ class _MonthCard extends StatelessWidget {
           FinanceInfoRow(label: 'Tahsilat oranı', value: percentOrDash(m.collectionRateBp)),
           FinanceInfoRow(label: 'Gider', money: m.expenseMinor),
           FinanceInfoRow(label: 'Net nakit', money: m.netCashMinor, emphasize: true),
+        ],
+      ),
+    );
+  }
+}
+
+// --- Gider analizi (R1) --------------------------------------------------------------------------
+
+class _ExpenseAnalysisReportView extends StatefulWidget {
+  const _ExpenseAnalysisReportView({required this.scope, required this.now, required this.launcher});
+
+  final PeopleScope scope;
+  final DateTime Function()? now;
+  final FinanceExportLauncher launcher;
+
+  @override
+  State<_ExpenseAnalysisReportView> createState() => _ExpenseAnalysisReportViewState();
+}
+
+class _ExpenseAnalysisReportViewState extends _ReportState<_ExpenseAnalysisReportView, ExpenseAnalysisReport> {
+  @override
+  PeopleScope get scope => widget.scope;
+  @override
+  DateTime Function()? get nowFn => widget.now;
+  @override
+  FinanceExportLauncher get launcher => widget.launcher;
+
+  static const List<int> _windows = <int>[1, 3, 6, 12];
+
+  late FinancePeriod _to = FinancePeriod.of(today);
+  int _window = 3;
+  final TextEditingController _increase = TextEditingController();
+  bool _asTable = false;
+  FinancePeriod? _appliedTo;
+  int? _appliedWindow;
+  int? _appliedBp;
+
+  FinancePeriod get _maxMonth => FinancePeriod.of(today);
+  FinancePeriod get _minMonth => FinancePeriod.of(today).addMonths(-60);
+
+  /// Artış alanı (% olarak) -> baz puan; boş = null (sunucu kurallar tablosunu kullanır); geçersiz = -1.
+  int? get _bp {
+    final text = _increase.text.trim().replaceAll(',', '.');
+    if (text.isEmpty) return null;
+    final value = double.tryParse(text);
+    if (value == null || value < 0 || value > 100) return -1;
+    return (value * 100).round();
+  }
+
+  @override
+  String get currentSignature => '${_to.toApi()}|$_window|${_bp ?? ''}';
+
+  @override
+  String? validateFilters() => _bp == -1 ? 'Artış oranı 0 ile 100 arasında bir yüzde olmalıdır.' : null;
+
+  @override
+  void dispose() {
+    _increase.dispose();
+    super.dispose();
+  }
+
+  @override
+  Future<ExpenseAnalysisReport> fetch() {
+    _appliedTo = _to;
+    _appliedWindow = _window;
+    _appliedBp = _bp;
+    return scope.f4Call(
+      (api, t, s) => api.getExpenseAnalysisReport(token: t, siteCode: s, to: _to.toApi(), window: _window, increaseBp: _bp),
+    );
+  }
+
+  List<ExportSource> _sources() {
+    final query = <String, String>{'to': _appliedTo!.toApi(), 'window': '$_appliedWindow', 'increase_bp': ?_appliedBp?.toString()};
+    return <ExportSource>[
+      financeExportSource(
+        scope: scope,
+        label: 'Gider Analizi',
+        kind: 'finance_expense_analysis',
+        icon: Icons.insights_rounded,
+        query: query,
+        filterSummary: '${_appliedTo!.label}, son $_appliedWindow ay',
+      ),
+      financeExportSource(
+        scope: scope,
+        label: 'Gider Tahmini',
+        kind: 'finance_expense_forecast',
+        icon: Icons.trending_up_rounded,
+        query: query,
+        filterSummary: '${_appliedTo!.label} tabanı',
+      ),
+    ];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final th = Theme.of(context).textTheme;
+    final report = data;
+    final status = statusWidget();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Wrap(
+          spacing: AppSpace.sm,
+          runSpacing: AppSpace.sm,
+          children: [
+            for (final w in _windows)
+              ChoiceChip(
+                key: ValueKey<String>('finance_ea_window_$w'),
+                label: Text('$w ay'),
+                selected: _window == w,
+                onSelected: (_) {
+                  if (_window != w) setState(() => _window = w);
+                },
+              ),
+          ],
+        ),
+        const SizedBox(height: AppSpace.sm),
+        _MonthStepper(
+          keyPrefix: 'finance_ea_to',
+          label: 'Bitiş ayı',
+          value: _to,
+          min: _minMonth,
+          max: _maxMonth,
+          onChanged: (v) => setState(() => _to = v),
+        ),
+        const SizedBox(height: AppSpace.sm),
+        TextField(
+          key: const ValueKey<String>('finance_ea_increase'),
+          controller: _increase,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          onChanged: (_) => setState(() {}),
+          decoration: InputDecoration(
+            labelText: 'Gelecek yıl rutin gider artışı (%)',
+            prefixIcon: const Icon(Icons.trending_up_rounded),
+            helperText: report?.forecast == null
+                ? 'Boş bırakırsanız kurallar tablosundaki oran kullanılır.'
+                : 'Boş bırakırsanız kurallar tablosundaki oran kullanılır (şu an ${percentOrDash(report!.forecast!.increaseBp)}).',
+            helperMaxLines: 2,
+          ),
+        ),
+        const SizedBox(height: AppSpace.md),
+        fetchButton(),
+        const SizedBox(height: AppSpace.md),
+        ?errorBanner(),
+        ?staleNote(),
+        if (status != null) status else ...[
+          metaCard(report!.meta),
+          const SizedBox(height: AppSpace.md),
+          actions(
+            pdfAllowed: canWrite,
+            onPdf: (share) => runOutput(() => FinancePdfActions.expenseAnalysis(report, share: share)),
+            exportSources: _sources,
+          ),
+          const SizedBox(height: AppSpace.md),
+          AppCard(
+            key: const ValueKey<String>('finance_ea_totals'),
+            padding: listCardPadding(context),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Semantics(header: true, container: true, child: Text('Dönem toplamı', style: th.titleMedium)),
+                const SizedBox(height: AppSpace.sm),
+                if (report.comparisonSentence != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: AppSpace.sm),
+                    child: Text(report.comparisonSentence!, key: const ValueKey<String>('finance_ea_comparison'), style: th.bodyLarge),
+                  ),
+                FinanceInfoRow(label: 'Rutin gider', money: report.routineMinor),
+                FinanceInfoRow(label: 'Beklenmedik gider', money: report.unexpectedMinor),
+                FinanceInfoRow(label: 'Toplam gider', money: report.expenseMinor, emphasize: true),
+                FinanceInfoRow(label: 'Gelir (net tahsilat)', money: report.incomeMinor),
+                if (report.derivedCount > 0)
+                  Padding(
+                    padding: const EdgeInsets.only(top: AppSpace.xs),
+                    child: Text(
+                      '${report.derivedCount} giderin türü kayıtlı değil; kategoriye göre sınıflandı. Gider ayrıntısından değiştirilebilir.',
+                      key: const ValueKey<String>('finance_ea_derived'),
+                      style: th.bodySmall,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: AppSpace.md),
+          AppCard(
+            padding: listCardPadding(context),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Expanded(child: Semantics(header: true, container: true, child: Text('Aylık gider ve gelir', style: th.titleMedium))),
+                    Text('Tablo olarak göster', style: th.bodySmall),
+                    Switch(
+                      key: const ValueKey<String>('finance_ea_table_switch'),
+                      value: _asTable,
+                      onChanged: (v) => setState(() => _asTable = v),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppSpace.sm),
+                if (report.months.isEmpty)
+                  const EmptyCard(icon: Icons.insights_rounded, title: 'Bu dönem için ay satırı dönmedi.')
+                else if (_asTable)
+                  Column(
+                    key: const ValueKey<String>('finance_ea_table'),
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (final m in report.months) ...[
+                        Text(m.period, style: th.titleSmall),
+                        FinanceInfoRow(label: 'Rutin', money: m.routineMinor),
+                        FinanceInfoRow(label: 'Beklenmedik', money: m.unexpectedMinor),
+                        FinanceInfoRow(label: 'Gider', money: m.expenseMinor),
+                        FinanceInfoRow(label: 'Gelir', money: m.incomeMinor),
+                        const SizedBox(height: AppSpace.sm),
+                      ],
+                    ],
+                  )
+                else
+                  ExpenseAnalysisChart(months: report.months),
+              ],
+            ),
+          ),
+          const SizedBox(height: AppSpace.md),
+          if (report.categories.isNotEmpty) ...[
+            Semantics(header: true, container: true, child: Text('Kategori kırılımı', style: th.titleMedium)),
+            const SizedBox(height: AppSpace.sm),
+            AppCard(
+              key: const ValueKey<String>('finance_ea_categories'),
+              padding: listCardPadding(context),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (final c in report.categories) _CategoryBar(category: c, total: report.expenseMinor),
+                ],
+              ),
+            ),
+            const SizedBox(height: AppSpace.md),
+          ],
+          _ForecastCard(forecast: report.forecast),
+        ],
+      ],
+    );
+  }
+}
+
+class _CategoryBar extends StatelessWidget {
+  const _CategoryBar({required this.category, required this.total});
+
+  final AnalysisCategory category;
+  final int total;
+
+  @override
+  Widget build(BuildContext context) {
+    final th = Theme.of(context).textTheme;
+    final p = context.palette;
+    final fraction = total <= 0 || category.totalMinor <= 0 ? 0.0 : (category.totalMinor / total).clamp(0.0, 1.0);
+    final change = category.changeBp;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpace.sm),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          FinanceInfoRow(label: category.name, money: category.totalMinor),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(value: fraction, minHeight: 8, color: AppTone.info.hue, backgroundColor: p.surfaceMuted),
+          ),
+          Text(
+            'Rutin ${formatMinor(category.routineMinor)} • Beklenmedik ${formatMinor(category.unexpectedMinor)}'
+            '${change == null ? '' : ' • Önceki döneme göre ${change > 0 ? '+' : ''}${percentOrDash(change)}'}',
+            style: th.bodySmall,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ForecastCard extends StatelessWidget {
+  const _ForecastCard({required this.forecast});
+
+  final ExpenseForecast? forecast;
+
+  @override
+  Widget build(BuildContext context) {
+    final th = Theme.of(context).textTheme;
+    final f = forecast;
+    return AppCard(
+      key: const ValueKey<String>('finance_ea_forecast'),
+      padding: listCardPadding(context),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Semantics(header: true, container: true, child: Text('Gelecek yıl tahmini', style: th.titleMedium)),
+          const SizedBox(height: AppSpace.sm),
+          if (f == null)
+            Text('Tahmin için henüz gider kaydı yok.', style: th.bodyMedium)
+          else ...[
+            Text(
+              'Taban: ${f.baseFrom} - ${f.baseTo} (${f.baseMonths} ay). Rutin giderlere ${percentOrDash(f.increaseBp)} artış uygulandı; '
+              'beklenmedik giderler yıllık ortalamayla alındı.${f.note == null ? '' : ' ${f.note}'}',
+              style: th.bodySmall,
+            ),
+            const SizedBox(height: AppSpace.sm),
+            for (final i in f.items) FinanceInfoRow(label: i.name, money: i.forecastMinor),
+            const Divider(),
+            FinanceInfoRow(label: 'Tahmini yıllık gider', money: f.totalMinor, emphasize: true),
+          ],
         ],
       ),
     );

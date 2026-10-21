@@ -59,6 +59,8 @@ import {
 } from './finance_receipts.js';
 import { buildExportEnvelope, exportFormatOf, recordExportAudit } from './finance_export_tables.js';
 import { agingReport, boardSummaryReport, cashPositionReport, incomeExpenseReport, myStatement, statementReport } from './finance_reports.js';
+import { expenseAnalysisReport } from './finance_expense_analysis.js';
+import { getNatureSuggestion, setExpenseNature } from './finance_expense_nature.js';
 import { kickFinanceReminderQueue } from './finance_reminder_queue.js';
 import { addExclusion, cancelReminderRun, getReminderRun, listExclusions, listReminderRuns, previewReminders, removeExclusion, sendReminders } from './finance_reminders.js';
 import { getMyLateFeeExplanation, listLateFeeRunLines, listLateFeeRuns, postLateFee, previewLateFee, voidLateFeeRun } from './finance_late_fee.js';
@@ -256,6 +258,8 @@ finance4bRouter.post(
   }),
 );
 finance4bRouter.get(`${BASE}/expenses`, ...read('finance_expenses_list', 'Giderler yüklenemedi.', async ({ req, access }) => ({ body: await listExpenses(access.siteCode, req.query) })));
+// nature-suggestion, expenses/:id'den ÖNCE (sabit yol)
+finance4bRouter.get(`${BASE}/expenses/nature-suggestion`, ...read('finance_expense_nature_suggest', 'Öneri hazırlanamadı.', async ({ req, access }) => ({ body: await getNatureSuggestion(access.siteCode, req.query) })));
 finance4bRouter.get(`${BASE}/expenses/:id`, ...read('finance_expense_get', 'Gider yüklenemedi.', async ({ req, access }) => ({ body: await getExpense(access.siteCode, req.params.id) })));
 finance4bRouter.post(
   `${BASE}/expenses/:id/void`,
@@ -400,6 +404,15 @@ finance4bRouter.post(
   })),
 );
 
+// --- Gider türü (R1): rutin / beklenmedik --------------------------------------------------------------------------------------------------
+
+finance4bRouter.put(
+  `${BASE}/expenses/:id/nature`,
+  ...write('finance_expense_nature_set', 'Gider türü kaydedilemedi.', async ({ req, access }) => ({
+    body: await setExpenseNature({ siteCode: access.siteCode, rawId: req.params.id, body: bodyOf(req), actor: req.authUser }),
+  })),
+);
+
 // --- Raporlar ve dışa aktarma ---------------------------------------------------------------------------------------------------------------
 
 // Ağır rapor uçları ayrıca 120/saat; dışa aktarma 30/saat (kullanıcı başına).
@@ -436,6 +449,7 @@ function reportRoute(path, context, fallback, { limiters = [reportLimiter], mana
 
 reportRoute(`${BASE}/reports/aging`, 'finance_report_aging', 'Rapor hazırlanamadı.', {}, async ({ req, access }) => agingReport(access.siteCode, req.query));
 reportRoute(`${BASE}/reports/income-expense`, 'finance_report_income_expense', 'Rapor hazırlanamadı.', {}, async ({ req, access }) => incomeExpenseReport(access.siteCode, req.query));
+reportRoute(`${BASE}/reports/expense-analysis`, 'finance_report_expense_analysis', 'Rapor hazırlanamadı.', {}, async ({ req, access }) => expenseAnalysisReport(access.siteCode, req.query));
 reportRoute(`${BASE}/reports/cash-position`, 'finance_report_cash', 'Rapor hazırlanamadı.', {}, async ({ req, access }) => cashPositionReport(access.siteCode, req.query));
 reportRoute(`${BASE}/reports/board-summary`, 'finance_report_board', 'Rapor hazırlanamadı.', {}, async ({ req, access }) =>
   boardSummaryReport(access.siteCode, req.query, { canListDebtors: canSeeManagerFields(access), actor: req.authUser }),

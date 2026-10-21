@@ -401,3 +401,15 @@ Kurallar, veri (052), var olan satırların hesabı ve 4a uçları: `docs/PLATFO
   ("(salt okunur)" işaretiyle), tazminat önizlemesi ve çalıştırma satırlarında hesap adı ve "N daire, M hesap" sayısı, hatırlatma önizlemesinde hesap sayısı.
 - **Gerçek PG:** `QA_ONLY=chain,live,finance4b` bölümlerinin G12 nedeniyle bilerek güncellenen beklentileri `PLATFORM_FINANS.md` "İki hesap / Doğrulama"
   maddesindedir; `qa_finance4b_upgrade.mjs` "ensure" yolları 001..son zinciriyle karşılaştırılır (sunucu açılışı semayı son sürüme getirir).
+
+## Gider analizi ve tahmin (R1)
+
+Migration 056 (`expense_natures`, db.js `ensureExpenseNaturesSchema` ile aynı DDL): `expense_id` PK (gider silinirse CASCADE), `site_code`, `nature` routine|unexpected, `source` suggested|manual, `set_by`, `set_at`. Gider satırı değişmez; tür yan tabloda değişir (denetim `finance.expense.nature_set`). Kaydı olmayan eski gider okumada kategori varsayılanıyla türetilir (`nature_source: derived`), yazılmaz.
+
+Öneri sırası: aktif sözleşmeli firma (aylık/yıllık) -> rutin `contract`; son 3 ayın en az 2'sinde aynı kategori+tedarikçi -> rutin `recurring`; sistem kategorisi (Personel, Elektrik, Su, Doğalgaz/Yakıt, Asansör bakım, Temizlik malzemesi, Sigorta, Yönetici aylığı, Vergi/harç, Banka/noter masrafı) -> rutin `category`; diğer -> beklenmedik `default`.
+
+Uçlar (`.../finance/...`, modül açık olmalı): `GET expenses/nature-suggestion?category_id&supplier_id&expense_date` (okuma); `PUT expenses/:id/nature {nature}` (yazma; iptalli 409 EXPENSE_ALREADY_VOIDED, başka site 404); `POST expenses` ve `.../correct` isteğe bağlı `nature` alır (parmak izine yalnız gönderilirse girer; gelmezse öneri `suggested` yazılır, düzeltmede asıl giderin türü kopyalanır); gider listesi/detayı `nature`, `nature_source` döner, liste `nature=` süzgeci alır; `GET reports/expense-analysis?to=YYYY-MM&window=1|3|6|12&increase_bp=0..10000` (kurul okur).
+
+Değişmez: her ay için rutin + beklenmedik = gelir-gider raporundaki gider. Önceki dönem = aynı uzunlukta bir önceki pencere; `change_bp` önceki 0 ise null. Tahmin: taban son 12 TAM ay; n = tabanda ilk gider ayından beri geçen ay (1..12; 0 ise `forecast: null`); yıllık = X*12/n; kategori tahmini = rutin yıllık*(10000+bp)/10000 + beklenmedik yıllık (yarım yukarı, BigInt); artış yalnız rutine. `bp` önceliği: istek, kurallar tablosu `forecast.default_increase_bp`, 0 (`increase_source`). Dışa aktarma (yönetici/süper): `finance_expense_analysis`, `finance_expense_forecast`; `finance_expenses`e "Tür" sütunu.
+
+İstemci: Finans > Raporlar > "Gider Analizi" (1/3/6/12 ay, bitiş ayı, artış %; fl_chart çubuk grafiği, "Tablo olarak göster", kategori kırılımı, tahmin kartı, PDF `pw.Chart` ile); gider diyaloğunda "Gider türü" önerisi ve gerekçesi. Henüz yok: Giderler menü grubunda ayrı öğe, gider ayrıntısından tür değiştirme düğmesi, ekipman kırılımı (3B).

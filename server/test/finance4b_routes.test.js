@@ -166,6 +166,7 @@ const MANAGER_ROUTES = [
   ['GET', '/reminders/runs', 'read'], ['GET', '/reminders/runs/1', 'read'], ['POST', '/reminders/runs/1/cancel', 'write'],
   ['GET', '/reports/aging', 'read'], ['GET', '/reports/income-expense', 'read'], ['GET', '/reports/cash-position', 'read'], ['GET', '/reports/board-summary', 'read'], ['GET', '/apartments/1/statement', 'read'],
   ['GET', '/exports/finance_aging', 'write'],
+  ['GET', '/expenses/nature-suggestion', 'read'], ['PUT', '/expenses/1/nature', 'write'], ['GET', '/reports/expense-analysis', 'read'],
 ];
 const OTHER_ROUTES = [
   'GET /app/my-finance/entries/:entryId/late-fee', 'GET /app/my-finance/apartments/:id/statement', 'GET /app/my-finance/receipts', 'GET /app/my-finance/receipts/:id',
@@ -188,15 +189,15 @@ const toTemplate = (path) =>
     .replace(/\/exports\/finance_aging/, '/exports/:kind');
 
 describe('4b rota listesi ve zincir', () => {
-  it('60 rota, sözleşmedeki listeyle birebir (ne eksik ne fazla)', () => {
+  it('63 rota, sözleşmedeki listeyle birebir (ne eksik ne fazla)', () => {
     const expected = [
       ...MANAGER_ROUTES.map(([method, path]) => `${method} /manager/sites/:siteCode/finance${toTemplate(path).slice('/manager/sites/:siteCode/finance'.length)}`),
       ...OTHER_ROUTES,
     ].sort();
     const actual = ORIGINAL.map((route) => `${route.method} ${route.path}`).sort();
     assert.deepEqual(actual, expected);
-    assert.equal(actual.length, 60);
-    assert.equal(new Set(actual).size, 60, 'yinelenen rota yok');
+    assert.equal(actual.length, 63);
+    assert.equal(new Set(actual).size, 63, 'yinelenen rota yok');
   });
 
   it('hepsi authRequired ile başlar; yönetim uçlarında hız sınırlayıcı var: yazma -> yazma sınırlayıcı, okuma/önizleme -> okuma sınırlayıcı; sakin uçları sakin sınırlayıcı', () => {
@@ -219,7 +220,7 @@ describe('4b rota listesi ve zincir', () => {
     assert.ok(chain('POST', '/reminders/send').includes(reminderSendLimiter), 'hatırlatma gönderimi 5/saat');
     assert.ok(chain('POST', '/receipts/verify').includes(receiptVerifyLimiter), 'makbuz doğrulama 60/saat');
     assert.ok(chain('GET', '/exports/:kind').includes(exportLimiter), 'dışa aktarma 30/saat');
-    for (const path of ['/reports/aging', '/reports/income-expense', '/reports/cash-position', '/reports/board-summary', '/apartments/:id/statement']) {
+    for (const path of ['/reports/aging', '/reports/income-expense', '/reports/cash-position', '/reports/board-summary', '/reports/expense-analysis', '/apartments/:id/statement']) {
       assert.ok(chain('GET', path).includes(reportLimiter), `${path}: ağır rapor 120/saat`);
     }
   });

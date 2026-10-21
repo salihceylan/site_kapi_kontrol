@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:site_kapi_kontrol/models/announcement.dart' show announcementInstant;
+import 'package:site_kapi_kontrol/models/expense_analysis.dart' show ExpenseNature;
 import 'package:site_kapi_kontrol/models/finance.dart';
 import 'package:site_kapi_kontrol/models/finance_4b.dart';
 import 'package:site_kapi_kontrol/models/vehicle_record.dart' show crmDateParam;
@@ -202,6 +203,8 @@ class Expense {
     this.documentsCount = 0,
     this.createdByName,
     this.createdAt,
+    this.nature,
+    this.natureSource,
     this.attachments = const <ExpenseAttachment>[],
   });
 
@@ -225,6 +228,12 @@ class Expense {
   final int documentsCount;
   final String? createdByName;
   final DateTime? createdAt;
+
+  /// Gider türü (rutin / beklenmedik); eski sunucu göndermezse null.
+  final ExpenseNature? nature;
+
+  /// suggested | manual | derived.
+  final String? natureSource;
 
   /// Yalnız ayrıntı (`GET expenses/:id`) yanıtında dolu.
   final List<ExpenseAttachment> attachments;
@@ -253,6 +262,8 @@ class Expense {
       documentsCount: f4Int(json['documents_count'], documents.length),
       createdByName: f4Text(json['created_by_name']),
       createdAt: announcementInstant(json['created_at']),
+      nature: ExpenseNature.tryParse(json['nature']),
+      natureSource: f4Text(json['nature_source']),
       attachments: documents,
     );
   }
@@ -343,6 +354,7 @@ class ExpenseInput {
     this.documentKind = ExpenseDocumentKind.none,
     this.documentNo,
     this.allowDuplicate = false,
+    this.nature,
   });
 
   final int categoryId;
@@ -355,6 +367,9 @@ class ExpenseInput {
   final ExpenseDocumentKind documentKind;
   final String? documentNo;
   final bool allowDuplicate;
+
+  /// Seçilen gider türü; null ise sunucu öneriyi yazar.
+  final ExpenseNature? nature;
 
   /// İstek parmak izine girmeyen `allow_duplicate` hariç sunucu gövdesi.
   Map<String, dynamic> toJson() {
@@ -370,6 +385,7 @@ class ExpenseInput {
       'document_kind': documentKind.apiValue,
       if (no != null && no.isNotEmpty) 'document_no': no,
       if (allowDuplicate) 'allow_duplicate': true,
+      if (nature != null) 'nature': nature!.apiValue,
     };
   }
 }

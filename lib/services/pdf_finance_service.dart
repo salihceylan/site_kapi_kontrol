@@ -6,6 +6,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:site_kapi_kontrol/models/expense_analysis.dart';
 import 'package:site_kapi_kontrol/models/finance.dart';
 import 'package:site_kapi_kontrol/models/finance_4b.dart';
 import 'package:site_kapi_kontrol/models/person_record.dart' show crmApartmentTitle;
@@ -129,6 +130,19 @@ class PdfFinanceService {
       report.months.length,
       _buildIncomeExpense,
       _IncomeExpenseJob(compress: PdfFinanceService.debugCompress, fonts: set, report: report, printedAt: printedAt ?? DateTime.now()),
+    );
+  }
+
+  static Future<Uint8List> generateExpenseAnalysisPdf({
+    required ExpenseAnalysisReport report,
+    DateTime? printedAt,
+    PdfFontSet? fonts,
+  }) async {
+    final set = fonts ?? await PdfFontSet.loadBundled();
+    return _run(
+      report.categories.length + (report.forecast?.items.length ?? 0),
+      _buildExpenseAnalysis,
+      _ExpenseAnalysisJob(compress: PdfFinanceService.debugCompress, fonts: set, report: report, printedAt: printedAt ?? DateTime.now()),
     );
   }
 
@@ -658,6 +672,146 @@ Future<Uint8List> _buildAging(_AgingJob job) async {
             style: const pw.TextStyle(fontSize: 9),
           ),
         ],
+      ],
+    ),
+  );
+  return doc.save();
+}
+
+
+// --- Gider analizi (R1) -------------------------------------------------------------------------
+
+class _ExpenseAnalysisJob {
+  const _ExpenseAnalysisJob({this.compress = true, required this.fonts, required this.report, required this.printedAt});
+
+  final bool compress;
+  final PdfFontSet fonts;
+  final ExpenseAnalysisReport report;
+  final DateTime printedAt;
+}
+
+/// pw.Chart çubuk grafiği (rutin / beklenmedik / gelir). Değerler TL (kuruş / 100); negatif net 0'a sabitlenir.
+pw.Widget _analysisChart(ExpenseAnalysisReport r) {
+  double y(int minor) => minor <= 0 ? 0 : minor / 100.0;
+  var maxY = 1.0;
+  for (final m in r.months) {
+    for (final v in <int>[m.expenseMinor, m.incomeMinor]) {
+      if (y(v) > maxY) maxY = y(v);
+    }
+  }
+  final ticks = <double>[for (var i = 0; i <= 4; i++) (maxY * 1.1 * i / 4).roundToDouble()];
+  final labels = <String>[for (final m in r.months) m.period.length >= 7 ? '${m.period.substring(5, 7)}.${m.period.substring(2, 4)}' : m.period];
+  List<pw.PointChartValue> points(int Function(AnalysisMonth) pick) => <pw.PointChartValue>[
+    for (var i = 0; i < r.months.length; i++) pw.PointChartValue(i.toDouble(), y(pick(r.months[i]))),
+  ];
+  return pw.SizedBox(
+    height: 170,
+    child: pw.Chart(
+      grid: pw.CartesianGrid(
+        xAxis: pw.FixedAxis.fromStrings(labels, marginStart: 24, marginEnd: 24, ticks: true),
+        yAxis: pw.FixedAxis(ticks, format: (num v) => v.toStringAsFixed(0), divisions: true),
+      ),
+      datasets: <pw.Dataset>[
+        pw.BarDataSet(color: PdfColors.blue600, legend: 'Rutin gider', width: 9, offset: -11, data: points((m) => m.routineMinor)),
+        pw.BarDataSet(color: PdfColors.orange600, legend: 'Beklenmedik gider', width: 9, offset: 0, data: points((m) => m.unexpectedMinor)),
+        pw.BarDataSet(color: PdfColors.green600, legend: 'Gelir (net tahsilat)', width: 9, offset: 11, data: points((m) => m.incomeMinor)),
+      ],
+    ),
+  );
+}
+
+Future<Uint8List> _buildExpenseAnalysis(_ExpenseAnalysisJob job) async {
+  final r = job.report;
+  final doc = pw.Document(title: 'Gider analizi', creator: 'Aidat ve Finans', compress: job.compress);
+  final forecast = r.forecast;
+  doc.addPage(
+    pw.MultiPage(
+      pageTheme: pw.PageTheme(pageFormat: PdfPageFormat.a4, margin: const pw.EdgeInsets.all(30), theme: _theme(job.fonts)),
+      header: (pw.Context context) => _reportHeader(
+        'Gider Analizi',
+        r.meta.siteName,
+        'Son ${r.window} ay, bitiş ${r.to}  •  Tutarlar ₺  •  Grafik değerleri ₺',
+      ),
+      footer: (pw.Context context) => _reportFooter(context, job.printedAt, extra: _closedNote(r.meta), footer: r.meta.footer),
+      build: (pw.Context context) => <pw.Widget>[
+        if (r.comparisonSentence != null) pw.Text(r.comparisonSentence!, style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+        pw.SizedBox(height: 8),
+        _analysisChart(r),
+        pw.SizedBox(height: 10),
+        _table(
+          headers: <String>['Ay', 'Rutin', 'Beklenmedik', 'Gider', 'Gelir'],
+          rows: <List<String>>[
+            for (final m in r.months)
+              <String>[
+                m.period,
+                formatMinor(m.routineMinor, symbol: false),
+                formatMinor(m.unexpectedMinor, symbol: false),
+                formatMinor(m.expenseMinor, symbol: false),
+                formatMinor(m.incomeMinor, symbol: false),
+              ],
+            <String>[
+              'TOPLAM',
+              formatMinor(r.routineMinor, symbol: false),
+              formatMinor(r.unexpectedMinor, symbol: false),
+              formatMinor(r.expenseMinor, symbol: false),
+              formatMinor(r.incomeMinor, symbol: false),
+            ],
+          ],
+          alignments: <int, pw.Alignment>{0: pw.Alignment.centerLeft, for (var i = 1; i < 5; i++) i: pw.Alignment.centerRight},
+        ),
+        if (r.categories.isNotEmpty) ...<pw.Widget>[
+          pw.SizedBox(height: 14),
+          pw.Text('Kategori kırılımı', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
+          pw.SizedBox(height: 4),
+          _table(
+            headers: <String>['Kategori', 'Rutin', 'Beklenmedik', 'Toplam', 'Pay', 'Önceki', 'Değişim'],
+            rows: <List<String>>[
+              for (final c in r.categories)
+                <String>[
+                  c.name,
+                  formatMinor(c.routineMinor, symbol: false),
+                  formatMinor(c.unexpectedMinor, symbol: false),
+                  formatMinor(c.totalMinor, symbol: false),
+                  c.shareBp == null ? '-' : formatPercentBp(c.shareBp!),
+                  formatMinor(c.previousTotalMinor, symbol: false),
+                  c.changeBp == null ? '-' : formatPercentBp(c.changeBp!),
+                ],
+            ],
+            alignments: <int, pw.Alignment>{0: pw.Alignment.centerLeft, for (var i = 1; i < 7; i++) i: pw.Alignment.centerRight},
+            widths: <int, pw.TableColumnWidth>{0: const pw.FlexColumnWidth(1.8)},
+          ),
+        ],
+        if (forecast != null) ...<pw.Widget>[
+          pw.SizedBox(height: 14),
+          pw.Text('Gelecek yıl tahmini', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
+          pw.Text(
+            'Taban: ${forecast.baseFrom} - ${forecast.baseTo} (${forecast.baseMonths} ay)  •  Rutin artış: ${formatPercentBp(forecast.increaseBp)}'
+            '${forecast.note == null ? '' : '  •  ${forecast.note}'}',
+            style: const pw.TextStyle(fontSize: 8.5),
+          ),
+          pw.SizedBox(height: 4),
+          _table(
+            headers: <String>['Kategori', 'Taban rutin', 'Tahmini rutin', 'Beklenmedik (yıllık)', 'Tahmin'],
+            rows: <List<String>>[
+              for (final i in forecast.items)
+                <String>[
+                  i.name,
+                  formatMinor(i.baseRoutineMinor, symbol: false),
+                  formatMinor(i.forecastRoutineMinor, symbol: false),
+                  formatMinor(i.annualUnexpectedMinor, symbol: false),
+                  formatMinor(i.forecastMinor, symbol: false),
+                ],
+              <String>['TOPLAM', '', '', '', formatMinor(forecast.totalMinor, symbol: false)],
+            ],
+            alignments: <int, pw.Alignment>{0: pw.Alignment.centerLeft, for (var i = 1; i < 5; i++) i: pw.Alignment.centerRight},
+            widths: <int, pw.TableColumnWidth>{0: const pw.FlexColumnWidth(1.8)},
+          ),
+        ],
+        pw.SizedBox(height: 8),
+        pw.Text(
+          'Tür kaydı olmayan ${r.derivedCount} gider kategoriye göre sınıflandırıldı. Tahmin bir öngörüdür, taahhüt değildir.',
+          style: const pw.TextStyle(fontSize: 8),
+        ),
       ],
     ),
   );

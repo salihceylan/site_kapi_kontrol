@@ -49,6 +49,7 @@ import {
   today,
 } from './finance_common.js';
 import { minorToNumber } from './finance_money.js';
+import { categoryDefaultNature, derivedNatureSql, loadSuggestionFacts, parseNature, writeExpenseNature } from './finance_expense_nature.js';
 import { lockActorRow, recordFinanceAudit, withFinanceTransaction } from './finance_tx.js';
 import { escapeLike, foldSql, foldText, parsePositiveId, toIso } from './people_common.js';
 
@@ -357,6 +358,7 @@ export function parseExpenseInput(body, now = new Date()) {
     documentNo,
     allowDuplicate: parseBooleanFlag(input.allow_duplicate, 'Yinelenen gider seçeneği'),
     idempotencyKey: parseIdempotencyKey(input.idempotency_key, { required: true }),
+    nature: parseNature(input.nature),
   };
 }
 
@@ -373,19 +375,22 @@ export const expenseFingerprint = (input) =>
     account_id: input.accountId,
     document_kind: input.documentKind,
     document_no: input.documentNo,
+    // yalnız gönderildiğinde parmak izine girer (eski istemcinin yeniden denemesi bozulmasın)
+    ...(input.nature ? { nature: input.nature } : {}),
   });
 
 const EXPENSE_SELECT = `
   SELECT
     e.id, e.category_id, e.category_name, e.supplier_id, e.supplier_name, e.description, e.amount_minor::TEXT AS amount_minor, e.vat_minor::TEXT AS vat_minor,
     to_char(e.expense_date, 'YYYY-MM-DD') AS expense_date, e.account_id, a.name AS account_name, e.document_kind, e.document_no, e.corrects_expense_id,
-    e.request_fingerprint, e.created_at, u.full_name AS created_by_name,
+    e.request_fingerprint, e.created_at, u.full_name AS created_by_name, n.nature AS nature_value, n.source AS nature_source_value,
     v.voided_at, v.reason AS void_reason, to_char(v.period, 'YYYY-MM-DD') AS void_period,
     (SELECT COUNT(*) FROM expense_documents d WHERE d.expense_id = e.id AND d.status = 'ready' AND d.removed_at IS NULL)::INTEGER AS documents_count
   FROM expenses e
   INNER JOIN finance_accounts a ON a.id = e.account_id
   LEFT JOIN users u ON u.user_code = e.created_by
   LEFT JOIN expense_voids v ON v.expense_id = e.id
+  LEFT JOIN expense_natures n ON n.expense_id = e.id
 `;
 
 export function mapExpenseRow(row) {
@@ -405,6 +410,8 @@ export function mapExpenseRow(row) {
     voided: row.voided_at ? { at: toIso(row.voided_at), reason: row.void_reason, period: row.void_period } : null,
     corrects_expense_id: row.corrects_expense_id === null || row.corrects_expense_id === undefined ? null : Number(row.corrects_expense_id),
     documents_count: Number(row.documents_count ?? 0),
+    nature: row.nature_value ?? categoryDefaultNature(row.category_name),
+    nature_source: row.nature_value ? row.nature_source_value ?? 'manual' : 'derived',
     created_by_name: row.created_by_name ?? null,
     created_at: toIso(row.created_at),
   };
@@ -528,6 +535,7 @@ async function writeExpense(client, { siteCode, input, actorInfo, actor, correct
     ],
   );
   const id = Number(inserted.rows[0].id);
+  await writeNatureFor(client, { siteCode, id, input, correctsExpenseId, actorInfo });
   const movement = await client.query(
     `
       INSERT INTO account_movements (site_code, account_id, kind, amount_minor, movement_date, period, expense_id, created_by)
@@ -544,6 +552,19 @@ async function writeExpense(client, { siteCode, input, actorInfo, actor, correct
     corrects_expense_id: correctsExpenseId,
   });
   return { replayed: false, row: await loadExpenseRow(client, siteCode, id), movementId: Number(movement.rows[0].id) };
+}
+
+/** Gider türü kaydı: açıkça gönderildiyse o; düzeltmede asıl giderin türü kopyalanır; yoksa öneri 'suggested' yazılır. */
+async function writeNatureFor(client, { siteCode, id, input, correctsExpenseId, actorInfo }) {
+  if (input.nature === null && correctsExpenseId !== null) {
+    const prev = await client.query(`SELECT nature, source FROM expense_natures WHERE expense_id = $1`, [correctsExpenseId]);
+    if (prev.rows?.[0]) {
+      await client.query(`INSERT INTO expense_natures (expense_id, site_code, nature, source, set_by) VALUES ($1, $2, $3, $4, $5)`, [id, siteCode, prev.rows[0].nature, prev.rows[0].source, actorInfo.userCode ?? null]);
+      return;
+    }
+  }
+  const facts = input.nature === null ? await loadSuggestionFacts(client, siteCode, { categoryId: input.categoryId, supplierId: input.supplierId, expenseDate: input.expenseDate }) : null;
+  await writeExpenseNature(client, { siteCode, expenseId: id, nature: input.nature, actorUserCode: actorInfo.userCode, facts });
 }
 
 /** POST expenses -> { replayed, expense, movement, account_balance_minor }. */
@@ -683,6 +704,7 @@ export function parseExpensesQuery(query = {}) {
     supplierId: queryId(query.supplier_id),
     accountId: queryId(query.account_id),
     status: queryEnum(query.status, ['active', 'voided', 'all'], 'all'),
+    nature: query.nature === undefined || query.nature === '' ? null : parseNature(query.nature),
     q: typeof query.q === 'string' && query.q.trim() !== '' ? Array.from(query.q.trim()).slice(0, 60).join('') : null,
     limit: queryInt(query.limit, { min: 1, max: 200, fallback: 50 }),
     beforeId: queryId(query.before_id),
@@ -702,6 +724,7 @@ export function expenseFilterSql(filters, startParams = []) {
   if (filters.categoryId !== null) add('e.category_id = ?', filters.categoryId);
   if (filters.supplierId !== null) add('e.supplier_id = ?', filters.supplierId);
   if (filters.accountId !== null) add('e.account_id = ?', filters.accountId);
+  if (filters.nature) add(`COALESCE((SELECT x.nature FROM expense_natures x WHERE x.expense_id = e.id), ${derivedNatureSql('e')}) = ?`, filters.nature);
   if (filters.status === 'active') clauses.push('v.expense_id IS NULL');
   if (filters.status === 'voided') clauses.push('v.expense_id IS NOT NULL');
   if (filters.q !== null) {
