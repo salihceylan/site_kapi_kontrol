@@ -48,7 +48,7 @@ AccountDeletionPreview acPreview({
 const AccountDeletionBlocker acLastManager = AccountDeletionBlocker(
   code: 'LAST_SITE_MANAGER',
   message:
-      '"Çok Uzun Adlı Konut Yapı Kooperatifi Sitesi" sitesinde aktif üyeler varken tek yöneticisiniz.',
+      '"Çok Uzun Adlı Konut Yapı Kooperatifi Sitesi" sitesinin tek yöneticisisiniz.',
   siteId: 12,
 );
 

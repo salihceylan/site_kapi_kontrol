@@ -612,12 +612,14 @@ function myFinanceViewBody(rows, view, todayIsoDate) {
  * her görünümde sakin kapsamı ve mahsup kuralıyla (finance_resident_view.residentView) YALNIZ o hesabın satırlarından hesaplanır.
  * `ownOnly`: yalnız kendi hesabı (kişisel veri dışa aktarması: salt okunur kiracı hesabı başkasının verisidir).
  */
-export async function getMyFinance(authUser, now = new Date(), db = pool, { ownOnly = false } = {}) {
+export async function getMyFinance(authUser, now = new Date(), db = pool, { ownOnly = false, sync = true } = {}) {
   const userCode = parsePositiveId(authUser?.user_code ?? authUser?.userCode ?? authUser?.id, INT32_MAX);
   if (userCode === null) {
     return { items: [] };
   }
-  await syncUserPeopleSafe(userCode);
+  if (sync) {
+    await syncUserPeopleSafe(userCode);
+  }
   const visible = await loadVisibleAccounts(db, userCode);
   const enabled = await enabledFinanceSites(db, [...new Set(visible.map((row) => Number(row.site_code)))]);
   const apartments = visible.filter((row) => enabled.has(Number(row.site_code)));
@@ -660,4 +662,27 @@ export async function getMyFinance(authUser, now = new Date(), db = pool, { ownO
       };
     }),
   };
+}
+
+/**
+ * Hesap silme engeli: çağıranın KENDİ hesabında ödenmemiş borç (Borcum'daki sakin kapsamlı bakiye > 0), Finans modülü AÇIK sitelerde.
+ * getMyFinance ile aynı iç yol; eşitleme ÇAĞIRMAZ (silme işlemi bağlantısında da çalışır). Aile üyesi, salt okunur karşı hesap ve alacak sayılmaz.
+ * Finans tabloları yoksa boş döner. @returns {Promise<Array<{site_code:number,site_name:string|null,apartment_id:number,label:string,balance_minor:number,account_party:string}>>}
+ */
+export async function ownOpenDebts(db, userCode, now = new Date()) {
+  const has = await db.query("SELECT (to_regclass('public.ledger_entries') IS NOT NULL) AS ok");
+  if (has.rows?.[0]?.ok !== true) {
+    return [];
+  }
+  const finance = await getMyFinance({ user_code: userCode }, now, db, { ownOnly: true, sync: false });
+  return finance.items
+    .filter((item) => Number(item.balance_minor) > 0)
+    .map((item) => ({
+      site_code: item.site_code,
+      site_name: item.site_name,
+      apartment_id: item.apartment_id,
+      label: item.label,
+      balance_minor: Number(item.balance_minor),
+      account_party: item.account_party,
+    }));
 }

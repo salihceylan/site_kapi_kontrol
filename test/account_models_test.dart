@@ -54,12 +54,21 @@ void main() {
       });
       expect(preview.blockers, hasLength(4), reason: 'harita olmayan öğeler atlanır');
       expect(preview.blockers[0].siteId, 12);
-      expect(preview.blockers[0].message, 'Sitenizde aktif üyeler varken tek yöneticisiniz.');
-      expect(preview.blockers[0].hint, contains('başka bir yönetici atayın'));
+      expect(preview.blockers[0].message, 'Bir sitenin tek yöneticisisiniz.');
+      expect(preview.blockers[0].hint, contains('Yönetici davet et'));
       expect(preview.blockers[1].siteId, 7);
       expect(preview.blockers[2].message, 'Süper kullanıcı hesapları buradan silinemez.');
       expect(preview.blockers[3].message, 'Hesabınız şu anda silinemez.');
       expect(preview.blockers[3].hint, isNull);
+    });
+
+    test('OPEN_DEBT: amount_minor sayı ya da metin; yedek metin ve yönerge', () {
+      final a = AccountDeletionBlocker.fromJson(<String, dynamic>{'code': 'OPEN_DEBT', 'amount_minor': 5000, 'site_id': 3});
+      final b = AccountDeletionBlocker.fromJson(<String, dynamic>{'code': 'OPEN_DEBT', 'amount_minor': '250'});
+      expect(a.amountMinor, 5000);
+      expect(b.amountMinor, 250);
+      expect(a.message, 'Ödenmemiş borcunuz var.');
+      expect(a.hint, contains('Borcum'));
     });
 
     test('sunucu metni varsa yedek metne tercih edilir', () {

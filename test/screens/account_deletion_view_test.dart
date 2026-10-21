@@ -7,6 +7,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:site_kapi_kontrol/models/account_deletion.dart';
 import 'package:site_kapi_kontrol/services/account_api.dart';
 import 'package:site_kapi_kontrol/services/account_local_wipe.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
@@ -57,7 +58,8 @@ Future<void> _pumpPage(
   double height = 900,
   double scale = 1.0,
   bool dark = false,
-}) => _pumpApp(t, AccountDeletionView(service: h.service), width: width, height: height, scale: scale, dark: dark);
+  VoidCallback? onOpenDebt,
+}) => _pumpApp(t, AccountDeletionView(service: h.service, onOpenDebt: onOpenDebt), width: width, height: height, scale: scale, dark: dark);
 
 /// Ana sayfa (oturum açıkken "Hesap Sayfası" düğmesi silme sayfasını iter) / giriş ekranı (oturum kapanınca).
 class _Host extends StatelessWidget {
@@ -130,9 +132,9 @@ void main() {
       await _pumpPage(t, harness, width: w, height: h, scale: s, dark: dark);
       expect(find.byKey(const ValueKey<String>('account_blockers')), findsOneWidget);
       expect(find.text('Hesabınız şu anda silinemez'), findsOneWidget);
-      expect(find.textContaining('tek yöneticisiniz'), findsOneWidget);
+      expect(find.textContaining('tek yöneticisisiniz'), findsOneWidget);
       expect(find.text('Site kodu: 12'), findsOneWidget);
-      expect(find.textContaining('başka bir yönetici atayın'), findsOneWidget);
+      expect(find.textContaining('Yönetici davet et'), findsOneWidget);
       expect(find.text('Süper kullanıcı hesabı bu ekrandan silinemez.'), findsOneWidget);
       expect(t.widget<ElevatedButton>(find.byKey(_continue)).onPressed, isNull);
     });
@@ -271,6 +273,26 @@ void main() {
       expect(find.byKey(_continue), findsNothing);
     });
 
+    testWidgets('borç engeli: tutar ve yönerge görünür; "Borcum\'a git" yalnız geri çağrı verilince', (t) async {
+      const debt = AccountDeletionBlocker(
+        code: 'OPEN_DEBT',
+        message: '"Gül Sitesi" sitesindeki A Blok 3 için ödenmemiş 1.234,50 TL borcunuz var.',
+        siteId: 7,
+        amountMinor: 123450,
+      );
+      final h = AccountHarness()..api.preview = acPreview(canDelete: false, blockers: const [debt]);
+      await _pumpPage(t, h);
+      expect(find.textContaining('1.234,50 TL'), findsOneWidget);
+      expect(find.textContaining('Borcum sayfasındadır'), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('account_blocker_open_debt')), findsNothing);
+      var opened = 0;
+      await _pumpPage(t, h, onOpenDebt: () => opened++);
+      await t.ensureVisible(find.byKey(const ValueKey<String>('account_blocker_open_debt')));
+      await t.tap(find.byKey(const ValueKey<String>('account_blocker_open_debt')));
+      await settleFor(t);
+      expect(opened, 1);
+    });
+
     testWidgets('engelli: devam düğmesine dokunmak pencere AÇMAZ; açıklama görünür', (t) async {
       final h = AccountHarness()..api.preview = acPreview(canDelete: false, blockers: const [acSuperUser]);
       await _pumpPage(t, h);
@@ -354,7 +376,7 @@ void main() {
 
       expect(find.byType(AlertDialog), findsNothing);
       expect(find.byKey(const ValueKey<String>('account_blockers')), findsOneWidget);
-      expect(find.textContaining('tek yöneticisiniz'), findsOneWidget);
+      expect(find.textContaining('tek yöneticisisiniz'), findsOneWidget);
       expect(t.widget<ElevatedButton>(find.byKey(_continue)).onPressed, isNull);
       expect(h.auth.logoutCalls, 0);
       expect(h.wiper.wipes, 0);

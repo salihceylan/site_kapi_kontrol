@@ -13,6 +13,7 @@ class AccountDeletionBlocker {
     required this.code,
     required this.message,
     this.siteId,
+    this.amountMinor,
   });
 
   /// Makine kodu (`SUPER_USER`, `LAST_SITE_MANAGER`, …); sunucu yeni kod eklerse olduğu gibi gelir.
@@ -24,6 +25,9 @@ class AccountDeletionBlocker {
   /// Engelin ait olduğu site (varsa).
   final int? siteId;
 
+  /// `OPEN_DEBT` için ödenmemiş borç (kuruş); yoksa null.
+  final int? amountMinor;
+
   /// Bilinen koda göre "ne yapabilirsiniz" yönergesi; bilinmeyen kodda null.
   String? get hint => blockerHint(code);
 
@@ -34,10 +38,15 @@ class AccountDeletionBlocker {
     final siteId = rawSite is num && rawSite.isFinite
         ? rawSite.toInt()
         : (rawSite is String ? int.tryParse(rawSite.trim()) : null);
+    final rawAmount = json['amount_minor'];
+    final amountMinor = rawAmount is num && rawAmount.isFinite
+        ? rawAmount.toInt()
+        : (rawAmount is String ? int.tryParse(rawAmount.trim()) : null);
     return AccountDeletionBlocker(
       code: code,
       message: serverMessage ?? blockerFallbackMessage(code),
       siteId: siteId,
+      amountMinor: amountMinor,
     );
   }
 
@@ -47,7 +56,9 @@ class AccountDeletionBlocker {
       case 'SUPER_USER':
         return 'Süper kullanıcı hesapları buradan silinemez.';
       case 'LAST_SITE_MANAGER':
-        return 'Sitenizde aktif üyeler varken tek yöneticisiniz.';
+        return 'Bir sitenin tek yöneticisisiniz.';
+      case 'OPEN_DEBT':
+        return 'Ödenmemiş borcunuz var.';
       default:
         return 'Hesabınız şu anda silinemez.';
     }
@@ -59,7 +70,11 @@ class AccountDeletionBlocker {
       case 'SUPER_USER':
         return 'Süper kullanıcı hesabının kaldırılması için başka bir süper kullanıcıyla iletişime geçin.';
       case 'LAST_SITE_MANAGER':
-        return 'Önce siteye başka bir yönetici atayın; ardından hesabınızı silebilirsiniz.';
+        return 'Devretmek için: Siteler, site, Yöneticiler, Yönetici davet et; davet kabul edilince silebilirsiniz. '
+            'Kapatmak için: site kartında Sil; talep süper kullanıcı onayına gider, talep gönderilince hesabınızı silebilirsiniz.';
+      case 'OPEN_DEBT':
+        return 'Borcunuz kapanınca hesabınızı silebilirsiniz. Ödeme bilgisi Borcum sayfasındadır; '
+            'gönderdiğiniz dekont onaylanınca borç kapanır. Kişisel verilerinizle ilgili başvurunuzu site yönetimine yapabilirsiniz.';
       default:
         return null;
     }

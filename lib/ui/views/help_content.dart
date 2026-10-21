@@ -547,5 +547,6 @@ abstract final class HelpContent {
   /// "Hesabım ve verilerim" bilgilendirmesi (silme/dışa aktarma adımları Profilim ekranındadır).
   static const String accountAndDataText =
       'Kişisel verilerinizin bir kopyasını almak ve hesabınızı silmek için “Profilim” ekranındaki hesap ve '
-      'veri bölümünü kullanın. Hesap silme geri alınamaz; silmeden önce ekrandaki uyarıları okuyun.';
+      'veri bölümünü kullanın. Hesap silme geri alınamaz; silmeden önce ekrandaki uyarıları okuyun. '
+      'Ödenmemiş borcunuz varsa ya da bir sitenin tek yöneticisiyseniz hesap silinemez; ekran nedenini ve yolunu (Borcum, site devri ya da kapatma talebi) gösterir.';
 }

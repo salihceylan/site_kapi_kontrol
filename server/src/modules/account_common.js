@@ -66,8 +66,27 @@ export const superUserBlocker = () => ({
 /** @param {{ site_code: number|string, name?: string|null }} site */
 export const lastSiteManagerBlocker = (site) => ({
   code: BLOCKER_LAST_SITE_MANAGER,
-  message: `${site?.name ? `"${String(site.name).slice(0, 120)}" sitesinde` : 'Bir sitede'} aktif üyeler varken tek yöneticisiniz. Önce siteye başka bir yönetici atayın veya siteyi kaldırın.`,
+  message: `${site?.name ? `"${String(site.name).slice(0, 120)}" sitesinin` : 'Bir sitenin'} tek yöneticisisiniz. Hesabınızı silmeden önce siteyi başka bir yöneticiye devredin ya da site silme (kapatma) talebi gönderin.`,
   site_id: Number(site.site_code),
+});
+
+export const BLOCKER_OPEN_DEBT = 'OPEN_DEBT';
+
+const MONEY_FORMAT = new Intl.NumberFormat('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+/** Kuruş (tamsayı) -> "1.234,50 TL". */
+export const formatMinorTry = (minor) => `${MONEY_FORMAT.format(Number(minor) / 100)} TL`;
+
+/**
+ * Ödenmemiş borç engeli (kendi hesabın bakiyesi > 0). EKLEMELİ alanlar: site_id, apartment_id, amount_minor, account_party.
+ * @param {{ site_code: number|string, site_name?: string|null, apartment_id: number|string, label?: string|null, balance_minor: number, account_party?: string|null }} debt
+ */
+export const openDebtBlocker = (debt) => ({
+  code: BLOCKER_OPEN_DEBT,
+  message: `${debt?.site_name ? `"${String(debt.site_name).slice(0, 120)}" sitesindeki` : 'Bir sitedeki'} ${debt?.label ? String(debt.label).slice(0, 60) : 'daire'} için ödenmemiş ${formatMinorTry(debt.balance_minor)} borcunuz var.`,
+  site_id: Number(debt.site_code),
+  apartment_id: Number(debt.apartment_id),
+  amount_minor: Number(debt.balance_minor),
+  account_party: debt.account_party ?? null,
 });
 
 // --- Hatalar ----------------------------------------------------------------------------------------------

@@ -46,6 +46,7 @@ import {
   isDeliverableEmail,
   isSubsetOf,
   lastSiteManagerBlocker,
+  openDebtBlocker,
   plainObject,
   superUserBlocker,
   userCodeOf,
@@ -54,6 +55,7 @@ import { verifyCurrentPassword } from './account_password_guard.js';
 import { recordAudit } from './audit_service.js';
 import { peopleLockKey } from './people_sync.js';
 import { deletePushDataForUser } from './push_devices.js';
+import { ownOpenDebts } from './finance_read_service.js';
 import { workItemsKeepNote } from './work_tracking_common.js';
 import { attachmentsKeepNote } from './work_attachments_common.js';
 import { releaseAssignedWorkItems } from './work_tracking_service.js';
@@ -201,9 +203,9 @@ const MANAGED_SITES_CTE = `
 `;
 
 /**
- * Kullanıcının yönettiği siteler içinde "son yönetici" olduğu ve sitede başka aktif hesaplı üye bulunan siteler. Tek küme sorgusu.
+ * Kullanıcının yönettiği siteler içinde "son yönetici" olduğu siteler (üye olup olmadığına bakılmaz). Reddedilmiş site ve yöneticinin kapatma
+ * talebi gönderdiği site (deletion_status = 'pending_super_user_approval') engel değildir. Tek küme sorgusu.
  * "Başka aktif yönetici": site_manager_sites bağı VEYA aktif SITE_OWNER / SITE_ADMIN üyeliği olan, aktif ve silinmemiş başka hesap.
- * "Aktif üye": başka aktif hesabın aktif dairede aktif daire üyeliği / sakin göstergesi ya da yönetici olmayan aktif site üyeliği (RESIDENT, kurul, görevli).
  * @returns {Promise<Array<{ site_code: number, name: string }>>}
  */
 export async function findLastManagerSites(db, userCode) {
@@ -226,26 +228,22 @@ export async function findLastManagerSites(db, userCode) {
               AND mu.is_active = TRUE AND mu.deleted_at IS NULL
           )
         )
-        AND (
-          EXISTS (
-            SELECT 1 FROM apartment_memberships am
-            INNER JOIN apartments a ON a.id = am.apartment_id
-            INNER JOIN users mu ON mu.user_code = am.user_code
-            WHERE a.site_code = s.site_code AND a.is_active = TRUE AND am.is_active = TRUE AND am.user_code <> $1
-              AND mu.is_active = TRUE AND mu.deleted_at IS NULL
-          )
-          OR EXISTS (
-            SELECT 1 FROM apartments a
-            INNER JOIN users mu ON mu.user_code = a.resident_user_code
-            WHERE a.site_code = s.site_code AND a.is_active = TRUE AND a.resident_user_code <> $1 AND mu.is_active = TRUE AND mu.deleted_at IS NULL
-          )
-          OR EXISTS (
-            SELECT 1 FROM site_memberships sm
-            INNER JOIN users mu ON mu.user_code = sm.user_code
-            WHERE sm.site_code = s.site_code AND sm.user_code <> $1 AND sm.is_active = TRUE AND sm.role NOT IN ('SITE_OWNER', 'SITE_ADMIN')
-              AND mu.is_active = TRUE AND mu.deleted_at IS NULL
-          )
-        )
+        AND s.approval_status <> 'rejected'
+        AND s.deletion_status IS DISTINCT FROM 'pending_super_user_approval'
+      ORDER BY s.site_code
+    `,
+    [userCode],
+  );
+  return (result.rows ?? []).map((row) => ({ site_code: num(row.site_code), name: row.name ?? null }));
+}
+
+/** Kullanıcının yönettiği, kapatma (silme) talebi süper kullanıcı onayında bekleyen siteler. */
+async function findPendingClosureSites(db, userCode) {
+  const result = await db.query(
+    `
+      WITH ${MANAGED_SITES_CTE}
+      SELECT s.site_code, s.name FROM sites s
+      WHERE s.site_code IN (SELECT site_code FROM managed) AND s.deletion_status = 'pending_super_user_approval'
       ORDER BY s.site_code
     `,
     [userCode],
@@ -323,11 +321,18 @@ export async function previewAccountDeletion(authUser, db = pool) {
     throw accountDeleted();
   }
   const blockers = [];
+  let closureSites = [];
   if (user.role === 'super_user') {
     blockers.push(superUserBlocker());
   } else {
     for (const site of await findLastManagerSites(db, userCode)) {
       blockers.push(lastSiteManagerBlocker(site));
+    }
+    // Kapatma talebi bekleyen siteler (hesap silinince site yöneticisiz kalır): will_keep notu için.
+    closureSites = await findPendingClosureSites(db, userCode);
+    // Ödenmemiş borç (kendi hesap bakiyesi > 0): eşitleme çağrılmaz, salt okuma.
+    for (const debt of await ownOpenDebts(db, userCode)) {
+      blockers.push(openDebtBlocker(debt));
     }
   }
 
@@ -394,6 +399,9 @@ export async function previewAccountDeletion(authUser, db = pool) {
     'Duyuru e-postalarından çıktıysanız, çıkış tercihinizin korunması için e-posta adresinizin geri döndürülemez özeti listede kalır.',
     'Sunucu günlükleri ve yedeklerdeki kopyalar kendi saklama döngüleri dolana kadar kalır, sonra yok edilir.',
   ];
+  for (const site of closureSites) {
+    willKeep.push(`"${String(site.name ?? '').slice(0, 120)}" için kapatma talebiniz onay bekliyor; hesabınız silinince site yöneticisiz kalır, kayıtlar saklanır.`);
+  }
   if (optionalCounts.uploadedDocuments > 0) {
     willKeep.push(`Yüklediğiniz belgeler (${optionalCounts.uploadedDocuments} dosya sürümü) site yönetiminde kalır (belgeler siteye aittir); yükleyen adı "Silinmiş Kullanıcı" olarak görünür.`);
   }
@@ -626,6 +634,11 @@ async function runAttempt(userCode) {
     const lastManagerSites = await findLastManagerSites(client, userCode);
     if (lastManagerSites.length > 0) {
       throw deleteBlocked(lastManagerSites.map(lastSiteManagerBlocker));
+    }
+    // Ödenmemiş borç: aynı işlem bağlantısı, eşitleme yok (kapsam kilitler altında yeniden okundu).
+    const openDebts = await ownOpenDebts(client, userCode);
+    if (openDebts.length > 0) {
+      throw deleteBlocked(openDebts.map(openDebtBlocker));
     }
 
     const summary = {};

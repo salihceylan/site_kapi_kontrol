@@ -6171,6 +6171,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             session: session,
             authService: widget.authService,
             showNotificationPrefs: _receivesAnnouncements(session.role),
+            onOpenDebt: _hasFinanceInbox(session.role) ? () => _goToMenu(SirketMenuItem.borcum) : null,
           );
 
         }

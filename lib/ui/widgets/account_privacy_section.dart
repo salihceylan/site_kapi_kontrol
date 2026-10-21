@@ -27,9 +27,13 @@ class AccountPrivacySection extends StatefulWidget {
     this.service,
     this.sharer,
     this.sweepLeftovers = _defaultSweep,
+    this.onOpenDebt,
   });
 
   final AuthService authService;
+
+  /// Hesap silme engelinde "Borcum'a git" için (verilmezse düğme çıkmaz).
+  final VoidCallback? onOpenDebt;
 
   /// Testler için: verilmezse [authService] üzerinden kurulur.
   final AccountService? service;
@@ -175,7 +179,7 @@ class AccountPrivacySectionState extends State<AccountPrivacySection> {
     try {
       await Navigator.of(context).push<void>(
         MaterialPageRoute<void>(
-          builder: (_) => AccountDeletionView(service: _service),
+          builder: (_) => AccountDeletionView(service: _service, onOpenDebt: widget.onOpenDebt),
         ),
       );
     } finally {

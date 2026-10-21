@@ -23,6 +23,7 @@ import {
   isDeliverableEmail,
   isSubsetOf,
   lastSiteManagerBlocker,
+  openDebtBlocker,
   numOrNull,
   plainObject,
   superUserBlocker,
@@ -86,6 +87,13 @@ describe('hesap silme: hata üreticileri (PlatformError, makine kodu + durum)', 
     assert.ok(last.message.includes('Gül Sitesi'));
     assert.ok(lastSiteManagerBlocker({ site_code: 1, name: null }).message.length > 10);
     assert.ok(lastSiteManagerBlocker({ site_code: 1, name: 'x'.repeat(500) }).message.length < 400, 'uzun site adı mesajı şişirmez');
+    const debt = openDebtBlocker({ site_code: '1000000042', site_name: 'Gül Sitesi', apartment_id: '7', label: 'A Blok 3', balance_minor: 123450, account_party: 'tenant' });
+    assert.equal(debt.code, 'OPEN_DEBT');
+    assert.equal(debt.site_id, 1000000042);
+    assert.equal(debt.apartment_id, 7);
+    assert.equal(debt.amount_minor, 123450);
+    assert.equal(debt.account_party, 'tenant');
+    assert.match(debt.message, /A Blok 3 için ödenmemiş 1\.234,50 TL borcunuz var/);
   });
 });
 
