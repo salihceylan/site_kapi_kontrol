@@ -536,6 +536,21 @@ abstract final class HelpContent {
           'kiracının birlikte sorumlu olduğu dairede malik, kiracı hesabını salt okunur görür.',
     ),
     HelpTopic(
+      id: 'bank_import',
+      title: 'Banka dosyasından tahsilatları nasıl işlerim?',
+      icon: Icons.account_balance_rounded,
+      steps: <String>[
+        '“Finans” > “Kasa” sekmesinde banka hesabının altındaki “Banka dosyası yükle”ye dokunun ve bankanızdan indirdiğiniz ekstreyi (XLSX, CSV ya da MT940) seçin.',
+        'İlk seferde “Sütunları eşleyin” penceresi açılır; tarih, açıklama ve tutar sütunlarını seçin. Seçim bu hesap için hatırlanır.',
+        'Özet ekranında kaç satırın tanındığı, kaçının kontrol edeceğiniz, kaçının daha önce yüklendiği görünür. “İşle”ye dokununca tanınan tahsilatlar makbuzuyla yazılır.',
+        'Tanınmayan ya da kontrol isteyen satırlar “Eşleşmeyen banka satırları” ekranında bekler: daireye işleyin, “Bu IBAN\'ı kaydet”le sonraki dosyada otomatik tanınmasını sağlayın ya da gider, banka masrafı, faiz gibi gelir/gider olarak ayırın.',
+        'Yanlış dosya yüklediyseniz “Geçmiş yüklemeler” listesinden “Geri al”a dokunun; tahsilatlar ters kayıtla iptal edilir.',
+      ],
+      note:
+          'Aynı dosya aynı hesaba ikinci kez yüklenemez; daha önce el ile girdiğiniz tahsilatlar ikinci kez yazılmaz, bankadaki satıra bağlanır. '
+          'Fotoğraf ya da PDF ekstre henüz desteklenmiyor (Yakında).',
+    ),
+    HelpTopic(
       id: 'opening_balances',
       title: 'Devir bakiyesini nasıl yüklerim?',
       icon: Icons.upload_file_rounded,

@@ -30,6 +30,7 @@ import { financeRouter } from './modules/finance_routes.js';
 import { financeOpeningRouter } from './modules/finance_opening_routes.js';
 import { finance4bRouter } from './modules/finance_4b_routes.js';
 import { financePaymentRouter } from './modules/finance_payment_routes.js';
+import { bankImportRouter } from './modules/bank_import_routes.js';
 import { financeHomeRouter } from './modules/finance_home_routes.js';
 import { accountRouter } from './modules/account_routes.js';
 import { startAnnouncementScheduler, stopAnnouncementScheduler } from './modules/announcement_scheduler.js';
@@ -131,6 +132,7 @@ app.use(financeRouter);
 app.use(financeOpeningRouter);
 app.use(finance4bRouter);
 app.use(financePaymentRouter);
+app.use(bankImportRouter);
 app.use(financeHomeRouter);
 // Belgeler (dosya deposu): yonetici uclari + sakin uclari + ham govde akisi (PUT .../content, application/octet-stream; JSON govde sinirina dokunmaz).
 app.use(documentRouter);

@@ -31,6 +31,7 @@ import { ensureDriveSchema } from './modules/drive_schema.js';
 import { ensureMeteringSchema } from './modules/metering_schema.js';
 import { ensureManagementCompanySchema } from './modules/management_company_schema.js';
 import { ensureNotifyChannelsSchema } from './modules/notify_channels_schema.js';
+import { ensureBankImportSchema } from './modules/bank_import_schema.js';
 
 dotenv.config();
 
@@ -1931,6 +1932,8 @@ export async function ensureDbSchema() {
     await ensureNeighborBoardSchema(client);
     // 065 (kart odemesi ayarlari + kamera/plaka): dev blokta DEGIL; katalog kontrolu (device_integrations_schema.js = migrations/065).
     await ensureDeviceIntegrationsSchema(client);
+    // 067 (banka dosyasi, 2C): finance_accounts/apartments'tan SONRA; her ifade kendi otomatik onayinda (bank_import_schema.js = migrations/067).
+    await ensureBankImportSchema(client);
 
     // 031 people_v1: mevcut sakinlerin CRM'e tek seferlik aktarimi. Savunmaci: hata sunucunun acilmasini ENGELLEMEZ
     // (kendi transaction'i geri alinir, isaret yazilmaz => sonraki acilista yeniden denenir; okuma anindaki
