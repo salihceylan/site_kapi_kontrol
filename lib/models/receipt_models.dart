@@ -110,6 +110,7 @@ class ReceiptSummary {
     this.apartmentId,
     this.apartmentLabel = '',
     this.payerName,
+    this.accountParty,
   });
 
   final int id;
@@ -124,6 +125,9 @@ class ReceiptSummary {
   final int? apartmentId;
   final String apartmentLabel;
   final String? payerName;
+
+  /// Tahsilatın yazıldığı daire hesabı (İP-1A); eski sunucuda null.
+  final AccountParty? accountParty;
 
   bool get isCancellation => kind == ReceiptKind.cancellation;
   bool get isCancelled => status == 'cancelled';
@@ -141,6 +145,7 @@ class ReceiptSummary {
       apartmentId: f4IntOrNull(apartment['id']),
       apartmentLabel: f4Str(apartment['label']),
       payerName: f4Text(json['payer_name']),
+      accountParty: AccountParty.tryParse(json['account_party']),
     );
   }
 }

@@ -71,11 +71,15 @@ class LateFeeLine {
     this.peakOverdueMinor,
     this.breakdown = const <OverdueSegment>[],
     this.reversed = false,
+    this.accountParty,
   });
 
   final int apartmentId;
   final String label;
   final String? blockName;
+
+  /// Satırın hesabı (İP-1A: aynı dairenin iki hesabı gecikmişse iki satır olur); eski sunucuda null.
+  final AccountParty? accountParty;
   /// Kim öder (önizlemede var; çalıştırma satırlarında sunucu göndermez -> null, uydurma değer yazılmaz).
   final ResponsibleParty? payerParty;
   final int amountMinor;
@@ -100,6 +104,7 @@ class LateFeeLine {
     peakOverdueMinor: f4MinorOrNull(json, 'peak_overdue_minor'),
     breakdown: f4List(json['breakdown'], OverdueSegment.fromJson),
     reversed: f4Bool(json['reversed']),
+    accountParty: AccountParty.tryParse(json['account_party']),
   );
 }
 

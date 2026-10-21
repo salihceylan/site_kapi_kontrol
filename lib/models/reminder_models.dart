@@ -117,10 +117,14 @@ class ReminderPreview {
     this.smtpConfigured = true,
     this.previewHash,
     this.blockers = const <String>[],
+    this.accountCount,
   });
 
   final int apartmentCount;
   final int personCount;
+
+  /// Kapsanan hesap sayısı (İP-1A: aynı dairenin iki hesabı borçluysa iki sayılır; alıcı hesabın sahibidir); eski sunucuda null.
+  final int? accountCount;
   final int withAmountCount;
   final int withoutAmountCount;
   final int noAddressCount;
@@ -169,6 +173,7 @@ class ReminderPreview {
       for (final b in (json['blockers'] is List ? json['blockers'] as List : const <Object?>[]))
         if (b != null) b.toString(),
     ],
+    accountCount: f4IntOrNull(json['account_count']),
   );
 }
 
