@@ -20,6 +20,7 @@ dependencies:
   flutter_reactive_ble: ^5.4.0
   speech_to_text: ^7.3.0
   flutter_tts: ^4.2.3
+  phosphor_glyphs: 2.1.2
   quick_actions: ^1.1.0
   app_links: ^6.4.1
   pdf: ^3.11.1

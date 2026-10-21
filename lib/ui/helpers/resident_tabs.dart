@@ -1,4 +1,5 @@
-import 'package:flutter/material.dart' show IconData, Icons;
+import 'package:flutter/material.dart' show IconData;
+import 'package:phosphor_glyphs/phosphor_glyphs.dart';
 import 'package:site_kapi_kontrol/ui/widgets/yan_menu.dart';
 
 // İP-1D / G3 (karar kaydı 2026-10-21): daire sakini alt çubuğunun SAF kuralları (widget yok). Sekmeler çekmecenin
@@ -8,11 +9,11 @@ import 'package:site_kapi_kontrol/ui/widgets/yan_menu.dart';
 /// Alt çubuğun sekmeleri, karar G3 sırasıyla: Özet · Duyuru · Arıza · Kapı · Belgeler. Her sekme bir menü öğesidir;
 /// sekmeye dokunmak çekmecede o öğeyi seçmekle AYNI gezinmedir. Özet = Panel (modül vitrini, borç kartı üstte).
 enum ResidentTab {
-  ozet(SirketMenuItem.dashboard, 'Özet', Icons.grid_view_outlined, Icons.grid_view_rounded),
-  duyuru(SirketMenuItem.duyurular, 'Duyuru', Icons.campaign_outlined, Icons.campaign_rounded),
-  ariza(SirketMenuItem.taleplerim, 'Arıza', Icons.build_circle_outlined, Icons.build_circle_rounded),
-  kapi(SirketMenuItem.kapilar, 'Kapı', Icons.meeting_room_outlined, Icons.meeting_room_rounded),
-  belgeler(SirketMenuItem.belgeler, 'Belgeler', Icons.folder_outlined, Icons.folder_rounded);
+  ozet(SirketMenuItem.dashboard, 'Özet', PhosphorIconsRegular.squaresFour, PhosphorIconsRegular.squaresFour),
+  duyuru(SirketMenuItem.duyurular, 'Duyuru', PhosphorIconsRegular.megaphone, PhosphorIconsRegular.megaphone),
+  ariza(SirketMenuItem.taleplerim, 'Arıza', PhosphorIconsRegular.wrench, PhosphorIconsRegular.wrench),
+  kapi(SirketMenuItem.kapilar, 'Kapı', PhosphorIconsRegular.doorOpen, PhosphorIconsRegular.doorOpen),
+  belgeler(SirketMenuItem.belgeler, 'Belgeler', PhosphorIconsRegular.folder, PhosphorIconsRegular.folder);
 
   const ResidentTab(this.item, this.label, this.icon, this.selectedIcon);
 

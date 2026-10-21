@@ -8,7 +8,10 @@ import 'package:site_kapi_kontrol/config/app_config.dart';
 import 'package:site_kapi_kontrol/models/door_record.dart';
 import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/services/app_gate_state.dart';
+import 'package:site_kapi_kontrol/brand/brand_scope.dart';
+import 'package:site_kapi_kontrol/brand/brand_theme.dart';
 import 'package:site_kapi_kontrol/services/auth_api.dart';
+import 'package:site_kapi_kontrol/services/brand_theme_api.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/services/deep_link_service.dart';
 import 'package:site_kapi_kontrol/services/door_module_gate.dart';
@@ -56,6 +59,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   late final QuickActionsService _quickActionsService;
   late final DeepLinkService _deepLinkService;
   late final ThemeService _themeService;
+  // Beyaz etiket tema (G9): oturum açılınca kullanıcının sitesi/firması için yüklenir; null = varsayılan Gude.
+  final BrandThemeController _brandTheme = BrandThemeController();
   late final bool _ownsThemeService;
   final LocaleService _localeService = LocaleService();
 
@@ -124,8 +129,24 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       _localDoorService.clearCache();
     }
 
+    if (loggedOut) {
+      _brandTheme.set(null);
+    } else if (loggedIn && (!_wasLoggedIn || userChanged)) {
+      unawaited(_loadBrandTheme());
+    }
+
     _wasLoggedIn = loggedIn;
     _lastUserId = userId;
+  }
+
+  /// Kullanıcının etkin marka temasını yükler. Hata/yoksa varsayılan tema kalır (uygulama açılışı etkilenmez).
+  Future<void> _loadBrandTheme() async {
+    try {
+      final theme = await BrandThemeService(authService: _authService).mine();
+      if (mounted && _authService.isLoggedIn) _brandTheme.set(theme);
+    } catch (_) {
+      // Tema alınamadı: varsayılan Gude teması.
+    }
   }
 
   Future<void> _handleQuickAction(String actionType) async {
@@ -354,6 +375,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     _authService.removeListener(_onAuthChanged);
     _localDoorService.pauseListening();
     _localeService.dispose();
+    _brandTheme.dispose();
     _authService.dispose();
     _networkService.dispose();
     _voiceDoorService.dispose();
@@ -373,9 +395,12 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       service: _localeService,
       child: ThemeScope(
         service: _themeService,
-        child: AnimatedBuilder(
-          animation: Listenable.merge([_themeService, _localeService]),
-          builder: (context, _) => _buildMaterialApp(),
+        child: BrandThemeScope(
+          controller: _brandTheme,
+          child: AnimatedBuilder(
+            animation: Listenable.merge([_themeService, _localeService, _brandTheme]),
+            builder: (context, _) => _buildMaterialApp(),
+          ),
         ),
       ),
     );
@@ -384,9 +409,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   Widget _buildMaterialApp() {
     return MaterialApp(
       navigatorKey: _navigatorKey,
-      title: AppConfig.appName,
+      title: _brandTheme.theme?.displayName ?? AppConfig.appName,
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.light(),
+      theme: AppTheme.light(_brandTheme.theme?.lightPalette() ?? AppPalette.light),
       darkTheme: AppTheme.dark(),
       themeMode: _themeService.mode,
       locale: _localeService.locale,

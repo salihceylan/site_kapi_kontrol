@@ -7,6 +7,7 @@ import 'package:site_kapi_kontrol/services/management_company_api.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_snack.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+import 'package:site_kapi_kontrol/ui/views/brand_theme_view.dart';
 
 /// Biçim yardımcıları (testler için açık).
 String companyMoney(num minor) {
@@ -295,6 +296,10 @@ class _ManagementCompanyScreenState extends State<ManagementCompanyScreen> {
       if (canSeeAll) ...[
         const SizedBox(height: AppSpace.lg),
         _shareSection(th, id),
+      ],
+      if (canSeeAll) ...[
+        const SizedBox(height: AppSpace.lg),
+        BrandThemeSection(authService: widget.authService, companyId: id, sites: [for (final s in sites) {'site_code': s['site_code'], 'name': s['name']}]),
       ],
       const SizedBox(height: AppSpace.lg),
       _membersSection(th, id, role, members),
