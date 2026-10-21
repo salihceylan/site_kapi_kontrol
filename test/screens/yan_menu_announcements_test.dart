@@ -10,6 +10,7 @@ import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/ui/widgets/yan_menu.dart';
 
 import '../design/harness.dart';
+import '../support/menu_nav.dart' show expectUnderDrawerHeader;
 
 Future<List<String>> _pumpMenu(
   WidgetTester t,
@@ -77,11 +78,7 @@ List<String> _listTitles(
     ];
 
 /// Çekmecede [title] öğesi [header] başlığının altında mı (başlık öğenin üstünde)?
-void _expectUnderHeader(WidgetTester t, String title, String header) {
-  final h = t.getRect(find.text(header));
-  final tile = t.getRect(find.widgetWithText(ListTile, title));
-  expect(h.bottom, lessThanOrEqualTo(tile.top + 0.01), reason: '"$title" "$header" başlığının altında');
-}
+void _expectUnderHeader(WidgetTester t, String title, String header) => expectUnderDrawerHeader(t, title, header);
 
 void main() {
   group('Duyurular çekmece öğesi', () {
