@@ -241,7 +241,8 @@ void main() {
     });
 
     testWidgets(
-      'rol rengi METİN olarak ink ile okunur: rozet ve avatar >= 4,5:1 (açık + koyu, her rol)',
+      'sade stil (G7): rol rozeti metni gövde metni rengi (zemin boyanmaz), avatar ve saat rozeti düz; ikonlar '
+      'işaret renginde >= 4,5:1 (açık + koyu, her rol)',
       (t) async {
         for (final dark in const <bool>[false, true]) {
           final p = dark ? AppPalette.dark : AppPalette.light;
@@ -254,16 +255,16 @@ void main() {
               dark: dark,
             );
             final ink = g2TextColor(t, find.text(role.label));
-            expect(ink, role.tone.ink(p), reason: '${role.name} dark=$dark');
-            // Rozet zemini: kart yüzeyi + ton tint'i.
+            expect(ink, p.textSecondary, reason: '${role.name} dark=$dark');
+            // Rozet zemini: kart yüzeyi (StatusChip sade stilde boyamaz).
             expect(
-              g2Contrast(ink, g2Over(role.tone.tint(p), p.surface)),
+              g2Contrast(ink, p.surface),
               greaterThanOrEqualTo(4.5),
               reason: '${role.name} dark=$dark',
             );
-            // Avatar: rol tonlu cilalı küre (IconOrb), beyaz ikon gradyanın iki ucunda >= 4,5:1.
+            // Avatar: rol tonlu düz rozet (IconOrb): soluk yüzey + ikon tonun işaret rengi.
             final avatarIcon = t.widget<Icon>(find.byIcon(Icons.person_rounded));
-            expect(avatarIcon.color, Colors.white);
+            expect(avatarIcon.color, role.tone.sign(p), reason: '${role.name} dark=$dark');
             final avatar = t.widget<IconOrb>(
               find
                   .ancestor(
@@ -273,29 +274,23 @@ void main() {
                   .first,
             );
             expect(avatar.tone, role.tone, reason: role.name);
-            for (final end in <Color>[role.tone.a, role.tone.b]) {
-              expect(
-                g2Contrast(Colors.white, end),
-                greaterThanOrEqualTo(4.5),
-                reason: '${role.name} avatar dark=$dark',
-              );
-            }
+            expect(
+              g2Contrast(role.tone.sign(p), p.surfaceMuted),
+              greaterThanOrEqualTo(4.5),
+              reason: '${role.name} avatar dark=$dark',
+            );
           }
-          // Saat ikonu: cilalı info küresi (IconOrb) içinde beyaz ikon; ton gradyanının iki ucunda
-          // >= 4,5:1 (cila dahil piksel ölçümü gloss_test.dart'ta). Eski düz tint dairesinin ink ikonu
-          // yerine geçti; kontrast eşiği AYNI.
+          // Saat ikonu: düz info rozeti (IconOrb); bilgi durum tonu değildir: ikon gövde metni renginde.
           await pumpAt(t, _clock(), width: 360, scale: 1.0, dark: dark);
           final icon = t.widget<Icon>(
             find.byIcon(Icons.access_time_filled_rounded),
           );
-          expect(icon.color, Colors.white);
-          for (final end in <Color>[AppTone.info.a, AppTone.info.b]) {
-            expect(
-              g2Contrast(Colors.white, end),
-              greaterThanOrEqualTo(4.5),
-              reason: 'saat küresi dark=$dark',
-            );
-          }
+          expect(icon.color, AppTone.info.sign(p));
+          expect(
+            g2Contrast(AppTone.info.sign(p), p.surfaceMuted),
+            greaterThanOrEqualTo(4.5),
+            reason: 'saat rozeti dark=$dark',
+          );
           final clockOrb = t.widget<IconOrb>(
             find
                 .ancestor(

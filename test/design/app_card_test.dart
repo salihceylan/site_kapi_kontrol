@@ -45,18 +45,21 @@ Material _material(WidgetTester t) => t.widget<Material>(
   find.descendant(of: _cardFinder, matching: find.byType(Material)).first,
 );
 
-BoxDecoration _shadowBox(WidgetTester t) =>
-    t
-            .widget<DecoratedBox>(
-              find
-                  .descendant(
-                    of: _cardFinder,
-                    matching: find.byType(DecoratedBox),
-                  )
-                  .first,
-            )
-            .decoration
-        as BoxDecoration;
+/// Kartın içinde çizilen gölgeler (sade stil: hiç olmamalı) ve degradeler (ışık / yıkama / sızıntı: hiç olmamalı).
+List<BoxShadow> _shadows(WidgetTester t) => [
+  for (final d in t
+      .widgetList<DecoratedBox>(find.descendant(of: _cardFinder, matching: find.byType(DecoratedBox)))
+      .map((b) => b.decoration)
+      .whereType<BoxDecoration>())
+    ...?d.boxShadow,
+];
+
+int _gradients(WidgetTester t) => t
+    .widgetList<DecoratedBox>(find.descendant(of: _cardFinder, matching: find.byType(DecoratedBox)))
+    .map((b) => b.decoration)
+    .whereType<BoxDecoration>()
+    .where((d) => d.gradient != null)
+    .length;
 
 RoundedRectangleBorder _shape(WidgetTester t) =>
     _material(t).shape! as RoundedRectangleBorder;
@@ -143,10 +146,11 @@ Finder get _noticeText => find.descendant(
 void main() {
   group('AppCard: yüzey', () {
     testWidgets(
-      'varsayılan: opak surface, 1 px kenar, yarıçap 20, tek katman seviye-1 gölge, 16 dp iç boşluk (açık + koyu)',
+      'varsayılan (sade stil G6): opak surface, 1 px kenar, yarıçap 20, GÖLGESİZ ve ışıksız, 16 dp iç boşluk (açık + koyu)',
       (t) async {
         for (final dark in [false, true]) {
           final p = _palette(dark);
+          await t.pumpWidget(const SizedBox.shrink());
           await t.pumpWidget(
             _app(_full(const AppCard(child: Text('içerik'))), dark: dark),
           );
@@ -155,16 +159,13 @@ void main() {
           expect(material.color, p.surfaceAt(1));
           expect(material.color!.a, 1.0, reason: 'opak yüzey');
           expect(material.clipBehavior, Clip.antiAlias);
+          expect(material.elevation, 0);
           final shape = _shape(t);
           expect(shape.borderRadius, BorderRadius.circular(AppRadius.lg));
           expect(shape.side.width, 1);
           expect(shape.side.color, p.border);
-          final shadow = _shadowBox(t);
-          expect(shadow.boxShadow, p.shadow(1));
-          expect(shadow.boxShadow, hasLength(1), reason: 'tek katman');
-          expect(shadow.boxShadow!.single.blurRadius, lessThanOrEqualTo(16));
-          expect(shadow.boxShadow!.single.spreadRadius, 0);
-          expect(shadow.borderRadius, BorderRadius.circular(AppRadius.lg));
+          expect(_shadows(t), isEmpty, reason: 'gölgesiz');
+          expect(_gradients(t), 0, reason: 'ışık / yıkama yok');
           expect(
             t.getTopLeft(find.text('içerik')) - t.getTopLeft(_cardFinder),
             const Offset(AppSpace.lg, AppSpace.lg),
@@ -175,11 +176,12 @@ void main() {
     );
 
     testWidgets(
-      'level 1/2/3: yüzey ve gölge seviyesi (koyuda daha açık yüzey)',
+      'level 1/2/3: yüzey seviyesi (koyuda daha açık yüzey); hiçbir seviyede gölge, ışık ya da ton yıkaması yok',
       (t) async {
         for (final dark in [false, true]) {
           final p = _palette(dark);
           for (final level in [1, 2, 3]) {
+            await t.pumpWidget(const SizedBox.shrink());
             await t.pumpWidget(
               _app(
                 _full(AppCard(level: level, child: const Text('x'))),
@@ -188,7 +190,8 @@ void main() {
             );
             await t.pumpAndSettle();
             expect(_material(t).color, p.surfaceAt(level), reason: 'L$level');
-            expect(_shadowBox(t).boxShadow, p.shadow(level), reason: 'L$level');
+            expect(_shadows(t), isEmpty, reason: 'L$level');
+            expect(_gradients(t), 0, reason: 'L$level');
           }
           if (dark) {
             expect(
@@ -202,11 +205,12 @@ void main() {
     );
 
     testWidgets(
-      'tonlu kart: opak soluk ton zemini + ton kenarı (7 ton x açık/koyu)',
+      'tonlu kart (G7): zemin BOYANMAZ (yüzey); kenar durum tonlarında ton %50, ötekilerde palet kenarı (7 ton x açık/koyu)',
       (t) async {
         for (final dark in [false, true]) {
           final p = _palette(dark);
           for (final tone in AppTone.values) {
+            await t.pumpWidget(const SizedBox.shrink());
             await t.pumpWidget(
               _app(
                 _full(AppCard(tone: tone, child: const Text('x'))),
@@ -215,10 +219,15 @@ void main() {
             );
             await t.pumpAndSettle();
             final color = _material(t).color!;
-            expect(color, Color.alphaBlend(tone.tint(p), p.surface));
+            expect(color, p.surface, reason: '${tone.name} dark=$dark');
             expect(color.a, 1.0, reason: 'opak (kompozit maliyeti yok)');
-            expect(_shape(t).side.color, tone.hue.withValues(alpha: 0.5));
+            expect(
+              _shape(t).side.color,
+              tone.isStatus ? tone.hue.withValues(alpha: 0.5) : p.border,
+              reason: '${tone.name} dark=$dark',
+            );
             expect(_shape(t).side.width, 1);
+            expect(_gradients(t), 0);
           }
         }
       },
@@ -253,11 +262,12 @@ void main() {
     );
 
     testWidgets(
-      'seçili: 1,5 px birincil ink kenar + seviye 2 yükselti; Semantics seçili',
+      'seçili: 1,5 px ana eylem rengi kenar (mavi değil) + seviye 2 yüzey; gölgesiz; Semantics seçili',
       (t) async {
         final handle = t.ensureSemantics();
         for (final dark in [false, true]) {
           final p = _palette(dark);
+          await t.pumpWidget(const SizedBox.shrink());
           await t.pumpWidget(
             _app(
               _full(const AppCard(selected: true, child: Text('x'))),
@@ -266,9 +276,14 @@ void main() {
           );
           await t.pumpAndSettle();
           expect(_shape(t).side.width, 1.5);
-          expect(_shape(t).side.color, AppTone.primary.ink(p));
-          expect(_shadowBox(t).boxShadow, p.shadow(2));
+          expect(_shape(t).side.color, p.action);
+          expect(_shadows(t), isEmpty);
           expect(_material(t).color, p.surfaceAt(2));
+          expect(
+            _contrast(p.action, p.surface),
+            greaterThanOrEqualTo(3.0),
+            reason: 'seçili kenar yüzeyde seçilir',
+          );
           expect(
             t.getSemantics(_cardFinder),
             isSemantics(isSelected: true, hasSelectedState: true),
@@ -279,14 +294,16 @@ void main() {
     );
 
     testWidgets(
-      'seçili kart daha yüksek seviyeyi DÜŞÜRMEZ (level 3 seçili: seviye 3)',
+      'seçili kart daha yüksek seviyeyi DÜŞÜRMEZ (koyuda level 3 seçili: seviye 3 yüzey)',
       (t) async {
         await t.pumpWidget(
           _app(
             _full(const AppCard(selected: true, level: 3, child: Text('x'))),
+            dark: true,
           ),
         );
-        expect(_shadowBox(t).boxShadow, AppPalette.light.shadow(3));
+        await t.pumpAndSettle();
+        expect(_material(t).color, AppPalette.dark.surfaceAt(3));
       },
     );
 
@@ -386,7 +403,7 @@ void main() {
           );
         }
         expect(_material(t).elevation, 0, reason: 'Material gölgesi yok');
-        expect(_shadowBox(t).boxShadow, hasLength(1));
+        expect(_shadows(t), isEmpty, reason: 'sade stil: gölge katmanı yok');
       },
     );
 
@@ -731,7 +748,7 @@ void main() {
     );
 
     testWidgets(
-      'sayaç rozeti: hap, birincil tint zemin + ink metin (>= 4,5:1), bodySmall w700',
+      'sayaç rozeti (sade stil): nötr hap, soluk yüzey zemin + gövde metni (>= 4,5:1, mavi değil), bodySmall w700',
       (t) async {
         for (final dark in [false, true]) {
           final p = _palette(dark);
@@ -744,19 +761,16 @@ void main() {
           );
           final box =
               t.widget<DecoratedBox>(_badge).decoration as BoxDecoration;
-          expect(box.color, AppTone.primary.tint(p));
+          expect(box.color, p.surfaceMuted);
           final text = t.widget<Text>(
             find.descendant(of: _badge, matching: find.byType(Text)),
           );
           expect(text.data, '3 Kapı');
-          expect(text.style!.color, AppTone.primary.ink(p));
+          expect(text.style!.color, p.textSecondary);
           expect(text.style!.fontWeight, FontWeight.w700);
           expect(text.style!.fontSize, 12);
           expect(
-            _contrast(
-              AppTone.primary.ink(p),
-              Color.alphaBlend(AppTone.primary.tint(p), p.surface),
-            ),
+            _contrast(p.textSecondary, p.surfaceMuted),
             greaterThanOrEqualTo(4.5),
           );
         }
@@ -1540,7 +1554,8 @@ void main() {
     );
 
     testWidgets(
-      '4 ton x açık/koyu: ton ikonu, opak tint zemin, hue kenarı, ink metin >= 4,5:1',
+      '4 ton x açık/koyu (G7): ton ikonu, zemin BOYANMAZ (opak yüzey), kenar durum tonunda ton %40 (bilgi: palet '
+      'kenarı), metin durum tonunda ink / bilgide gövde metni, >= 4,5:1',
       (t) async {
         const icons = <AppTone, IconData>{
           AppTone.danger: Icons.error_outline_rounded,
@@ -1552,6 +1567,7 @@ void main() {
           final p = _palette(dark);
           for (final entry in icons.entries) {
             final tone = entry.key;
+            await t.pumpWidget(const SizedBox.shrink());
             await t.pumpWidget(
               _app(
                 _full(notice(tone: tone, message: 'Mesaj ${tone.name}')),
@@ -1560,19 +1576,19 @@ void main() {
             );
             await t.pumpAndSettle();
             final box = _noticeBox(t);
-            final bg = Color.alphaBlend(tone.tint(p), p.surface);
+            final bg = p.surface;
             expect(box.color, bg, reason: '${tone.name} dark=$dark');
             expect(box.color!.a, 1.0, reason: 'opak');
             expect(
               (box.border! as Border).top.color,
-              tone.hue.withValues(alpha: 0.4),
+              tone.isStatus ? tone.hue.withValues(alpha: 0.4) : p.border,
             );
             expect(box.borderRadius, BorderRadius.circular(AppRadius.sm));
             final icon = t.widget<Icon>(find.byIcon(entry.value));
-            expect(icon.color, tone.ink(p));
+            expect(icon.color, tone.sign(p));
             expect(icon.size, 20);
             final text = t.widget<Text>(find.text('Mesaj ${tone.name}'));
-            expect(text.style!.color, tone.ink(p));
+            expect(text.style!.color, tone.sign(p));
             expect(
               _contrast(text.style!.color!, bg),
               greaterThanOrEqualTo(4.5),

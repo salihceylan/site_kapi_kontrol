@@ -75,7 +75,7 @@ Widget _app(Widget w, {bool dark = false, bool reduce = false}) =>
 void main() {
   group('EmptyState: görünüm ve durumlar', () {
     testWidgets(
-      'ikon rozeti (72 dp daire, glow, beyaz ikon 36) + başlık + mesaj, ortalı (7 ton x açık/koyu)',
+      'ikon rozeti (72 dp daire, düz, işaret renkli ikon 36) + başlık + mesaj, ortalı (7 ton x açık/koyu)',
       (t) async {
         for (final dark in [false, true]) {
           final p = _palette(dark);
@@ -85,11 +85,11 @@ void main() {
             final orb = t.widget<IconOrb>(_tile);
             expect(orb.tone, tone, reason: '${tone.name} dark=$dark');
             expect(orb.shape, IconOrbShape.circle);
-            expect(orb.glow, isTrue);
+            expect(orb.glow, isFalse, reason: 'sade stil: parıltı istenmez');
             expect(t.getSize(_tile), const Size(72, 72));
             final icon = t.widget<Icon>(find.byIcon(Icons.apartment_rounded));
             expect(icon.size, 36);
-            expect(icon.color, Colors.white);
+            expect(icon.color, tone.sign(p));
             final title = t.widget<Text>(find.text(_title));
             expect(title.textAlign, TextAlign.center);
             expect(title.style!.fontSize, 15.5, reason: 'titleMedium');

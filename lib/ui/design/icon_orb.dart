@@ -1,14 +1,13 @@
-// Premium ikon rozeti: cilalı küre / squircle.
+// İkon rozeti (sade stil, İP-1C: karar G6 + G7).
 //
-// Listelerdeki, kart başlıklarındaki, diyalog ve boş durum başlıklarındaki DÜZ renkli ikon
-// kutularının yerine geçer: ton gradyanı + [Gloss] cilası + beyaz ikon (+ isteğe bağlı glow).
-// Durağandır (ticker yok), yalnız boyamadır; boyutu yazı ölçeğinden etkilenmez (sabit dp).
+// Listelerdeki, kart başlıklarındaki, diyalog ve boş durum başlıklarındaki ikon kutusudur: soluk yüzey zemin
+// ([AppPalette.surfaceMuted]) + 1 px palet kenarı + tonun işaret renginde ikon ([AppTone.sign]: durum tonlarında `ink`,
+// öteki tonlarda gövde metni rengi; mavi yalnız bağlantı ve odakta). Degrade, cila ve renkli parıltı YOKTUR. Durağandır
+// (ticker yok), yalnız boyamadır; boyutu yazı ölçeğinden etkilenmez (sabit dp).
 //
 // **Erişilebilirlik**: rozet dekoratiftir (anlamsal ağaçta yok): anlamı yanındaki metin taşır.
-// Rozet tek başına anlam taşıyorsa [semanticLabel] verilir. Beyaz ikon ton gradyanında >= 3:1
-// (cila dahil, `gloss_test.dart` ölçer).
+// Rozet tek başına anlam taşıyorsa [semanticLabel] verilir. İkon zemine >= 4,5:1 (`icon_orb_test.dart`).
 import 'package:flutter/material.dart';
-import 'package:site_kapi_kontrol/ui/design/gloss.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 
 /// [IconOrb] biçimi.
@@ -20,7 +19,7 @@ enum IconOrbShape {
   squircle,
 }
 
-/// Cilalı ikon rozeti. [size] en az 24 dp; ikon boyutun yarısıdır.
+/// Düz ikon rozeti. [size] en az 24 dp; ikon boyutun yarısıdır.
 class IconOrb extends StatelessWidget {
   const IconOrb({
     super.key,
@@ -34,7 +33,7 @@ class IconOrb extends StatelessWidget {
 
   final IconData icon;
 
-  /// Gradyan tonu (anlamsal): primary, success, warning, info, danger, violet, neutral.
+  /// Anlamsal ton: yalnız durum tonları (success, warning, danger) ikonu renklendirir; öteki tonlar nötrdür.
   final AppTone tone;
 
   /// Kenar uzunluğu / çap (dp).
@@ -42,7 +41,7 @@ class IconOrb extends StatelessWidget {
 
   final IconOrbShape shape;
 
-  /// true: tonun renkli glow gölgesi (tek katman, blur <= 16). Vurgulu başlıklarda kullanın.
+  /// Geriye uyum için durur; sade stilde parıltı çizilmez (etkisiz).
   final bool glow;
 
   /// Rozet tek başına anlam taşıyorsa erişilebilirlik etiketi; null ise rozet dışlanır.
@@ -50,51 +49,24 @@ class IconOrb extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = context.palette;
     final circle = shape == IconOrbShape.circle;
     final radius = circle ? size / 2 : size * 0.30;
+    final side = BorderSide(color: p.border);
     final orb = DecoratedBox(
       decoration: ShapeDecoration(
         shape: circle
-            ? const CircleBorder()
-            : RoundedRectangleBorder(borderRadius: BorderRadius.circular(radius)),
-        gradient: tone.gradient,
-        shadows: glow
-            ? [
-                BoxShadow(
-                  color: tone.a.withValues(alpha: 0.32),
-                  blurRadius: (size * 0.30).clamp(6.0, 16.0),
-                  offset: Offset(0, size * 0.09),
-                ),
-              ]
-            : null,
+            ? CircleBorder(side: side)
+            : RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(radius),
+                side: side,
+              ),
+        color: p.surfaceMuted,
       ),
       child: SizedBox.square(
         dimension: size,
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            Positioned.fill(
-              child: Gloss(
-                shape: circle ? GlossShape.circle : GlossShape.rounded,
-                radius: radius,
-                strength: 0.9,
-                // Listelerde onlarca rozet olabilir: ayrı katman gereksiz.
-                isolate: false,
-              ),
-            ),
-            Icon(
-              icon,
-              size: size * 0.5,
-              color: Colors.white,
-              shadows: const <Shadow>[
-                Shadow(
-                  color: Color(0x40000000),
-                  blurRadius: 3,
-                  offset: Offset(0, 1),
-                ),
-              ],
-            ),
-          ],
+        child: Center(
+          child: Icon(icon, size: size * 0.5, color: tone.sign(p)),
         ),
       ),
     );

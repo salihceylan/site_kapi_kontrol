@@ -37,6 +37,15 @@ Widget _action() => ElevatedButton.icon(
   label: const Text('Yeni Kayıt'),
 );
 
+/// WCAG kontrast oranı (opak renkler).
+double _ratio(Color a, Color b) {
+  final la = a.computeLuminance();
+  final lb = b.computeLuminance();
+  final hi = la > lb ? la : lb;
+  final lo = la > lb ? lb : la;
+  return (hi + 0.05) / (lo + 0.05);
+}
+
 void main() {
   group('IconTile (cilalı ikon rozeti)', () {
     testWidgets(
@@ -239,7 +248,107 @@ void main() {
 
   group('Düğme stilleri ve haptik', () {
     testWidgets(
-      'tonalActionStyle: ElevatedButton düz (cilasız); tema ve filledToneStyle dolu düğmesi cilalı',
+      'sade stil (G6): ikincil (tonalActionStyle) yüzey + palet kenarı + başlık metni (durum tonunda ink); dolu '
+      '(filledToneStyle) birincilde ana eylem rengi, durum tonunda tonun a rengi; zemin ton boyanmaz (açık + koyu)',
+      (t) async {
+        for (final dark in const [false, true]) {
+          final p = dark ? AppPalette.dark : AppPalette.light;
+          late BuildContext ctx;
+          await pumpAt(
+            t,
+            Builder(
+              builder: (c) {
+                ctx = c;
+                return const SizedBox();
+              },
+            ),
+            width: 360,
+            scale: 1.0,
+            height: 200,
+            dark: dark,
+          );
+          final none = <WidgetState>{};
+          final tonal = tonalActionStyle(ctx);
+          expect(tonal.backgroundColor!.resolve(none), p.surface, reason: 'dark=$dark');
+          expect(tonal.foregroundColor!.resolve(none), p.text);
+          expect(tonal.side!.resolve(none), BorderSide(color: p.border));
+          expect(tonal.backgroundBuilder, isNull);
+          final warn = tonalActionStyle(ctx, tone: AppTone.warning);
+          expect(warn.foregroundColor!.resolve(none), AppTone.warning.ink(p));
+          expect(warn.backgroundColor!.resolve(none), p.surface);
+          final filled = filledToneStyle(ctx);
+          expect(filled.backgroundColor!.resolve(none), p.action);
+          expect(filled.foregroundColor!.resolve(none), p.onAction);
+          final ok = filledToneStyle(ctx, tone: AppTone.success);
+          expect(ok.backgroundColor!.resolve(none), AppTone.success.a);
+          expect(ok.foregroundColor!.resolve(none), Colors.white);
+          final info = filledToneStyle(ctx, tone: AppTone.info);
+          expect(info.backgroundColor!.resolve(none), p.action, reason: 'mavi dolu düğme yok');
+        }
+      },
+    );
+
+    testWidgets(
+      'InfoChip (G7): zemin her tonda nötr (soluk yüzey + palet kenarı), metin durum tonunda ink, ötekinde gövde metni',
+      (t) async {
+        for (final dark in const [false, true]) {
+          final p = dark ? AppPalette.dark : AppPalette.light;
+          for (final tone in <AppTone?>[null, ...AppTone.values]) {
+            await t.pumpWidget(const SizedBox.shrink());
+            await pumpAt(t, InfoChip('Etiket', tone: tone), width: 360, scale: 1.0, height: 200, dark: dark);
+            final box = t.widget<DecoratedBox>(
+              find.descendant(of: find.byType(InfoChip), matching: find.byType(DecoratedBox)).first,
+            );
+            final deco = box.decoration as BoxDecoration;
+            expect(deco.color, p.surfaceMuted, reason: '${tone?.name} dark=$dark');
+            expect((deco.border! as Border).top.color, p.border, reason: '${tone?.name} dark=$dark');
+            final text = t.widget<Text>(find.text('Etiket'));
+            expect(
+              text.style!.color,
+              tone == null ? p.textSecondary : tone.sign(p),
+              reason: '${tone?.name} dark=$dark',
+            );
+          }
+        }
+      },
+    );
+
+    // İP-1C bağımsız inceleme: baş harf avatarı da ikon rozetiyle (IconOrb) aynı sade kurala bağlıdır: rol tonu
+    // zemini boyamaz (birincilde mavi, morda mor daire yok); harf tonun işaret rengindedir.
+    testWidgets(
+      'InitialAvatar (G6 + G7): zemin her tonda soluk yüzey + palet kenarı; harf tonun işaret rengi, >= 4,5:1',
+      (t) async {
+        for (final dark in const [false, true]) {
+          final p = dark ? AppPalette.dark : AppPalette.light;
+          for (final tone in AppTone.values) {
+            await t.pumpWidget(const SizedBox.shrink());
+            await pumpAt(
+              t,
+              InitialAvatar(name: 'ayşe', tone: tone),
+              width: 360,
+              scale: 1.0,
+              height: 200,
+              dark: dark,
+            );
+            final name = '${tone.name} dark=$dark';
+            final avatar = t.widget<CircleAvatar>(find.byType(CircleAvatar));
+            expect(avatar.backgroundColor, p.surfaceMuted, reason: name);
+            final ring = t.widget<DecoratedBox>(
+              find.ancestor(of: find.byType(CircleAvatar), matching: find.byType(DecoratedBox)).first,
+            );
+            final ringDeco = ring.decoration as BoxDecoration;
+            expect(ringDeco.shape, BoxShape.circle, reason: name);
+            expect((ringDeco.border! as Border).top.color, p.border, reason: name);
+            final letter = t.widget<Text>(find.text('A'));
+            expect(letter.style!.color, tone.sign(p), reason: name);
+            expect(_ratio(tone.sign(p), p.surfaceMuted), greaterThanOrEqualTo(4.5), reason: name);
+          }
+        }
+      },
+    );
+
+    testWidgets(
+      'hiçbir düğme stilinde cila yok: tonal, ince, tema dolu ve tonlu dolu (sade stil)',
       (t) async {
         await pumpAt(
           t,
@@ -276,8 +385,8 @@ void main() {
         );
         expect(gloss(ElevatedButton, 'tonal'), findsNothing);
         expect(gloss(OutlinedButton, 'ince'), findsNothing);
-        expect(gloss(ElevatedButton, 'dolu'), findsOneWidget);
-        expect(gloss(ElevatedButton, 'tonlu dolu'), findsOneWidget);
+        expect(gloss(ElevatedButton, 'dolu'), findsNothing);
+        expect(gloss(ElevatedButton, 'tonlu dolu'), findsNothing);
         // Düğme tipi ve tıklanabilirlik değişmez.
         expect(
           t.widget<ElevatedButton>(

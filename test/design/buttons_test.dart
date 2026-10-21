@@ -389,26 +389,21 @@ void main() {
             ),
           ),
         );
+        final p = AppPalette.light;
         await t.pumpWidget(build(false));
         await t.pumpAndSettle();
-        expect(_decoration(t).gradient, AppTone.primary.gradient);
+        expect(_decoration(t).color, p.action);
+        expect(_decoration(t).gradient, isNull, reason: 'düz (sade stil)');
         expect(find.byIcon(Icons.check_rounded), findsNothing);
 
         await t.pumpWidget(build(true));
         await t.pump(const Duration(milliseconds: 100));
-        final mid = _decoration(t).gradient! as LinearGradient;
-        expect(
-          mid.colors,
-          isNot(AppTone.primary.gradient.colors),
-          reason: 'morph sürüyor',
-        );
-        expect(
-          mid.colors,
-          isNot(AppTone.success.gradient.colors),
-          reason: 'morph henüz bitmedi',
-        );
+        final mid = _decoration(t).color;
+        expect(mid, isNot(p.action), reason: 'morph sürüyor');
+        expect(mid, isNot(AppTone.success.a), reason: 'morph henüz bitmedi');
         await t.pumpAndSettle();
-        expect(_decoration(t).gradient, AppTone.success.gradient);
+        expect(_decoration(t).color, AppTone.success.a);
+        expect(_decoration(t).gradient, isNull);
         expect(find.byIcon(Icons.check_rounded), findsOneWidget);
         expect(find.byIcon(Icons.save_rounded), findsNothing);
         expect(find.text('Kaydet'), findsOneWidget, reason: 'etiket kalır');
@@ -418,7 +413,7 @@ void main() {
 
         await t.pumpWidget(build(false)); // ebeveyn ~1,2 sn sonra false yapar
         await t.pumpAndSettle();
-        expect(_decoration(t).gradient, AppTone.primary.gradient);
+        expect(_decoration(t).color, p.action);
         await t.tap(find.text('Kaydet'));
         await t.pump();
         expect(calls, 1);
@@ -435,7 +430,7 @@ void main() {
       await t.pumpWidget(build(false));
       await t.pumpWidget(build(true));
       await t.pump();
-      expect(_decoration(t).gradient, AppTone.success.gradient);
+      expect(_decoration(t).color, AppTone.success.a);
       expect(find.byIcon(Icons.check_rounded), findsOneWidget);
       expect(
         t.binding.transientCallbackCount,
@@ -475,7 +470,8 @@ void main() {
     );
 
     testWidgets(
-      'görünümler: filled beyaz etiket + gradyan + tek gölge; tonal/outline ink etiket',
+      'görünümler (sade stil G6): filled düz dolgu (ana eylem ya da durum tonu), gölgesiz; tonal / outline ikincil: '
+      'çerçeve + metin',
       (t) async {
         for (final dark in [false, true]) {
           final p = dark ? AppPalette.dark : AppPalette.light;
@@ -484,7 +480,10 @@ void main() {
             AppTone.info,
             AppTone.danger,
             AppTone.violet,
+            AppTone.success,
           ]) {
+            // Temiz ağaç: tema geçişinin ilk karesi eski paleti göstermesin.
+            await t.pumpWidget(const SizedBox.shrink());
             await t.pumpWidget(
               harnessApp(
                 Center(
@@ -495,13 +494,12 @@ void main() {
             );
             await t.pumpAndSettle();
             var deco = _decoration(t);
-            expect(deco.gradient, tone.gradient);
-            expect(deco.boxShadow, hasLength(1));
-            expect(deco.boxShadow!.single.blurRadius, lessThanOrEqualTo(16));
-            expect(deco.boxShadow!.single.spreadRadius, 0);
+            expect(deco.gradient, isNull, reason: '${tone.name}: degrade yok');
+            expect(deco.boxShadow, isNull, reason: '${tone.name}: gölge yok');
+            expect(deco.color, tone.isStatus ? tone.a : p.action, reason: tone.name);
             expect(
               t.widget<Text>(find.text('Kaydet')).style!.color,
-              Colors.white,
+              tone.isStatus ? Colors.white : p.onAction,
             );
 
             await t.pumpWidget(
@@ -519,11 +517,12 @@ void main() {
             await t.pumpAndSettle();
             deco = _decoration(t);
             expect(deco.gradient, isNull);
-            expect(deco.color, tone.tint(p));
+            expect(deco.color, p.surface);
+            expect((deco.border! as Border).top.color, p.border);
             expect(deco.boxShadow, isNull);
             expect(
               t.widget<Text>(find.text('Kaydet')).style!.color,
-              tone.ink(p),
+              tone.isStatus ? tone.ink(p) : p.text,
             );
 
             await t.pumpWidget(
@@ -542,20 +541,32 @@ void main() {
             deco = _decoration(t);
             expect(deco.gradient, isNull);
             expect(deco.color, isNull);
-            expect(
-              (deco.border! as Border).top.color,
-              tone.hue.withValues(alpha: 0.6),
-            );
+            expect((deco.border! as Border).top.color, p.border);
             expect(
               t.widget<Text>(find.text('Kaydet')).style!.color,
-              tone.ink(p),
+              tone.isStatus ? tone.ink(p) : p.text,
             );
           }
         }
       },
     );
 
-    testWidgets('tonal başarı success tonuna döner (ink + tint)', (t) async {
+    testWidgets('ana eylem metni dolguya >= 4,5:1 (açık + koyu; durum tonlarında beyaz)', (t) async {
+      double contrast(Color a, Color b) {
+        final l1 = a.computeLuminance();
+        final l2 = b.computeLuminance();
+        return ((l1 > l2 ? l1 : l2) + 0.05) / ((l1 > l2 ? l2 : l1) + 0.05);
+      }
+
+      for (final p in const [AppPalette.light, AppPalette.dark]) {
+        expect(contrast(p.onAction, p.action), greaterThanOrEqualTo(4.5));
+        for (final tone in AppTone.values.where((t) => t.isStatus)) {
+          expect(contrast(Colors.white, tone.a), greaterThanOrEqualTo(4.5), reason: tone.name);
+        }
+      }
+    });
+
+    testWidgets('tonal başarı success tonuna döner (ink metin, zemin boyanmaz)', (t) async {
       final p = AppPalette.light;
       await t.pumpWidget(
         harnessApp(
@@ -569,7 +580,7 @@ void main() {
         ),
       );
       await t.pumpAndSettle();
-      expect(_decoration(t).color, AppTone.success.tint(p));
+      expect(_decoration(t).color, p.surface);
       expect(
         t.widget<Text>(find.text('Kaydet')).style!.color,
         AppTone.success.ink(p),

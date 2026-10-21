@@ -25,9 +25,9 @@ EdgeInsets listCardPadding(BuildContext context) => EdgeInsets.all(
 
 /// Sayfa başlık kartı: [title] + isteğe bağlı birincil eylem ([action], genellikle `ElevatedButton.icon`).
 ///
-/// Hero yüzey: `AppCard(level: 2)` (tonun sol-üst yıkaması + seviye 2 gölge). [icon] verilirse başlığın
-/// solunda 48 dp cilalı squircle [IconOrb] durur (dekoratif; büyük yazıda >= 1,75x gizlenir, başlığa yer
-/// kalır). [icon] null ise düzen eskisiyle birebir aynıdır (yalnız başlık).
+/// Hero yüzey: `AppCard(level: 2)` (sade stil: düz yüzey + 1 px kenar, gölgesiz; koyu temada bir kademe açık
+/// yüzey). [icon] verilirse başlığın solunda 48 dp düz squircle [IconOrb] durur (dekoratif; büyük yazıda >= 1,75x
+/// gizlenir, başlığa yer kalır). [icon] null ise düzen eskisiyle birebir aynıdır (yalnız başlık).
 ///
 /// Dar ekranda (< 680) eylem başlığın altında tam genişlikte, geniş ekranda sağda durur. Başlık
 /// kırpılmaz (en çok 3 satır). Kartın tek dolu düğmesi eylemdir.
@@ -153,11 +153,13 @@ class ExpandChevron extends StatelessWidget {
   }
 }
 
-/// Bilgi çipi ("Kullanıcı ID: 5", "Yerel IP: ..."): [tone] null ise nötr soluk kutu, doluysa tonlu.
+/// Bilgi çipi ("Kullanıcı ID: 5", "Yerel IP: ..."): nötr soluk kutu (soluk yüzey + palet kenarı).
+///
+/// Sade stil (İP-1C, karar G7): zemin ton BOYANMAZ; [tone] yalnız metni renklendirir: durum tonlarında (tamam, bekliyor,
+/// kritik) tonun `ink` rengi, öteki tonlarda ve [tone] null iken gövde metni rengi ([AppTone.sign]).
 ///
 /// Metin KIRPILMAZ, sığmayınca satırlara sarar (çok uzun tek sözcük de karakterden bölünür); sabit
-/// genişlik yoktur: `Wrap` içinde kullanın. Kontrast: nötr çip `textSecondary` (>= 4,5:1), tonlu çip
-/// `ink` (>= 4,5:1).
+/// genişlik yoktur: `Wrap` içinde kullanın. Kontrast: metin soluk yüzeyde >= 4,5:1.
 class InfoChip extends StatelessWidget {
   const InfoChip(this.label, {super.key, this.tone});
 
@@ -170,13 +172,9 @@ class InfoChip extends StatelessWidget {
     final tone = this.tone;
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: tone == null
-            ? p.surfaceMuted
-            : Color.alphaBlend(tone.tint(p), p.surface),
+        color: p.surfaceMuted,
         borderRadius: BorderRadius.circular(AppRadius.sm),
-        border: Border.all(
-          color: tone == null ? p.border : tone.hue.withValues(alpha: 0.4),
-        ),
+        border: Border.all(color: p.border),
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(
@@ -187,7 +185,7 @@ class InfoChip extends StatelessWidget {
           label,
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
             fontWeight: FontWeight.w600,
-            color: tone == null ? p.textSecondary : tone.ink(p),
+            color: tone == null ? p.textSecondary : tone.sign(p),
           ),
         ),
       ),
@@ -247,8 +245,12 @@ class PaginationBar extends StatelessWidget {
   }
 }
 
-/// Baş harfli yuvarlak avatar; rengi [tone] (rol/durum). Büyük yazıda büyümez (CircleAvatar
+/// Baş harfli yuvarlak avatar; harfin rengi [tone] (rol/durum). Büyük yazıda büyümez (CircleAvatar
 /// yazı ölçeğini kapatır): daire sabit [radius] kalır; çok büyük yazıda (>= 1,75x) gizlenir.
+///
+/// Sade stil (İP-1C, karar G6 + G7; [IconOrb] ile aynı kural): zemin her tonda soluk yüzey + 1 px palet kenarı
+/// (ton BOYANMAZ); harf tonun işaret rengindedir ([AppTone.sign]: durum tonlarında `ink`, öteki tonlarda gövde metni;
+/// mavi yalnız bağlantı ve odakta). Anlam yanındaki metindedir (avatar dekoratiftir).
 class InitialAvatar extends StatelessWidget {
   const InitialAvatar({
     super.key,
@@ -273,14 +275,22 @@ class InitialAvatar extends StatelessWidget {
     return ExcludeSemantics(
       child: Padding(
         padding: EdgeInsets.only(right: gap),
-        child: CircleAvatar(
-          radius: radius,
-          backgroundColor: Color.alphaBlend(tone.tint(p), p.surface),
-          child: Text(
-            trimmed.isEmpty ? '?' : trimmed[0].toUpperCase(),
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              color: tone.ink(p),
-              fontWeight: FontWeight.w800,
+        // Kenar halkası avatarın ÜSTÜNE çizilir (ön plan): aynı boyutta arkada kalsa görünmezdi.
+        child: DecoratedBox(
+          position: DecorationPosition.foreground,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: p.border),
+          ),
+          child: CircleAvatar(
+            radius: radius,
+            backgroundColor: p.surfaceMuted,
+            child: Text(
+              trimmed.isEmpty ? '?' : trimmed[0].toUpperCase(),
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                color: tone.sign(p),
+                fontWeight: FontWeight.w800,
+              ),
             ),
           ),
         ),
@@ -289,10 +299,11 @@ class InitialAvatar extends StatelessWidget {
   }
 }
 
-/// Kart/satır başındaki cilalı ikon rozeti: ton gradyanı + cila + beyaz ikon ([IconOrb], squircle,
-/// [size] x [size]). Dekoratiftir (anlamsal ağaçta yok); büyük yazıda (>= 1,75x) gizlenir.
+/// Kart/satır başındaki düz ikon rozeti ([IconOrb], squircle, [size] x [size]; sade stil: soluk yüzey + kenar,
+/// ikon tonun işaret renginde). Dekoratiftir (anlamsal ağaçta yok); büyük yazıda (>= 1,75x) gizlenir.
 ///
-/// Ton ANLAM taşır: çağıran durumu yansıtan tonu verir (site onayı, cihaz çevrimiçi/çevrimdışı, rol...).
+/// Ton ANLAM taşır: çağıran durumu yansıtan tonu verir (site onayı, cihaz çevrimiçi/çevrimdışı, rol...); sade
+/// stilde yalnız durum tonları (tamam / bekliyor / kritik) ikonu renklendirir.
 /// Boyut rehberi: liste satırı 40, kart başlığı 44-48. [iconSize] geriye dönük uyumluluk için durur ama
 /// artık kullanılmaz: [IconOrb] ikonu her zaman boyutun yarısı çizer.
 class IconTile extends StatelessWidget {
@@ -430,39 +441,25 @@ class EmptyCard extends StatelessWidget {
   }
 }
 
-/// İkincil (yönetim) eylemi: ton zeminli düğme. `ElevatedButton/OutlinedButton/FilledButton`'ın
-/// `style:`'ına verilir; düğme tipi (test bulucuları) değişmez. En az 48 dp yükseklik (dokunma hedefi).
-///
-/// Hiyerarşi: ikincil eylem DÜZ kalır. `ElevatedButton`a verilirse tema cila katmanı (üst ışık + alt
-/// gölge) soluk ton zemininin üstünde kirli bir gradyan bırakıyordu; [_flatLayer] o katmanı kapatır
-/// (`OutlinedButton`ta zaten katman yoktur, etkisizdir).
+/// İkincil (yönetim) eylemi: sade stilin ikincil düğmesi (İP-1C, karar G6): yüzey zemin + 1 px palet kenarı +
+/// başlık metni (durum tonlarında tonun `ink` rengi; zemin ton BOYANMAZ). `ElevatedButton/OutlinedButton/FilledButton`'ın
+/// `style:`'ına verilir; düğme tipi (test bulucuları) değişmez. En az 48 dp yükseklik (dokunma hedefi). Düzdür:
+/// yükselti 0 (tema da gölgesiz ve cilasızdır).
 ButtonStyle tonalActionStyle(
   BuildContext context, {
   AppTone tone = AppTone.primary,
 }) {
   final p = context.palette;
   return OutlinedButton.styleFrom(
-    foregroundColor: tone.ink(p),
-    backgroundColor: Color.alphaBlend(tone.tint(p), p.surface),
+    foregroundColor: tone.isStatus ? tone.ink(p) : p.text,
+    backgroundColor: p.surface,
     disabledForegroundColor: p.textSecondary,
     disabledBackgroundColor: p.surfaceMuted,
     elevation: 0,
+    side: BorderSide(color: p.border),
     minimumSize: const Size(0, 48),
-  ).copyWith(
-    backgroundBuilder: _flatLayer,
-    side: WidgetStateProperty.resolveWith(
-      (states) => BorderSide(
-        color: states.contains(WidgetState.disabled)
-            ? p.border
-            : tone.hue.withValues(alpha: 0.35),
-      ),
-    ),
   );
 }
-
-/// Tema cila katmanını ([glossyButtonLayer]) geçersiz kılan geçirgen katman: düğmenin içeriğini aynen döner.
-Widget _flatLayer(BuildContext context, Set<WidgetState> states, Widget? child) =>
-    child ?? const SizedBox.shrink();
 
 /// Onay anında hafif haptik veren sarmalayıcı: [onPressed] null ise null döner (düğme devre dışı kalır).
 ///
@@ -496,16 +493,18 @@ ButtonStyle dangerOutlineStyle(BuildContext context) {
   );
 }
 
-/// Dolu eylem (onayla, kaydet, sil onayı): ton gradyanının koyu ucu zemin, beyaz metin (>= 4,5:1);
-/// devre dışıyken palet nötrü (önceki sürümde devre dışı dolu düğme etkin gibi görünüyordu).
+/// Dolu eylem (onayla, kaydet, sil onayı), sade stil (İP-1C, karar G6): durum tonlarında (tamam, bekliyor, kritik)
+/// tonun `a` rengi + beyaz metin, öteki tonlarda (birincil, bilgi, mor, nötr) ana eylem rengi + üstündeki metin
+/// (>= 4,5:1; mavi dolu düğme yok); devre dışıyken palet nötrü (önceki sürümde devre dışı dolu düğme etkin gibi
+/// görünüyordu). Düz: degrade, gölge, cila yok.
 ButtonStyle filledToneStyle(
   BuildContext context, {
   AppTone tone = AppTone.primary,
 }) {
   final p = context.palette;
   return ElevatedButton.styleFrom(
-    backgroundColor: tone.a,
-    foregroundColor: Colors.white,
+    backgroundColor: tone.isStatus ? tone.a : p.action,
+    foregroundColor: tone.isStatus ? Colors.white : p.onAction,
     disabledBackgroundColor: p.border,
     disabledForegroundColor: p.textSecondary,
     // Düz dolgu: tema gölgesi (mavi, yükselti 2-4) tonlu düğmede yanlış renkli halka çiziyordu.

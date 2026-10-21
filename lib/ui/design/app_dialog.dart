@@ -4,7 +4,7 @@ import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/helpers/ui_helpers.dart';
 
-/// Diyalog başlık şeridi: cilalı ikon rozeti ([IconOrb], 44 dp squircle, glow'lu) + başlık + alt başlık.
+/// Diyalog başlık şeridi: düz ikon rozeti ([IconOrb], 44 dp squircle; sade stil) + başlık + alt başlık.
 ///
 /// [AppDialog] bunu `AlertDialog.title` olarak kullanır; `Dialog` tabanlı özel diyaloglar (cihaz
 /// sahiplenme, QR modalı) doğrudan içeriklerinin başına koyar. Kendi kenar boşluğunu taşır
@@ -49,7 +49,6 @@ class AppDialogHeader extends StatelessWidget {
               tone: tone,
               size: 44,
               shape: IconOrbShape.squircle,
-              glow: true,
             ),
             const SizedBox(width: AppSpace.md),
           ],
