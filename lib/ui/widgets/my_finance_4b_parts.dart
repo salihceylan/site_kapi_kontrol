@@ -25,12 +25,25 @@ PeopleScope residentScopeOf(AuthService authService, MyFinanceApartment item) =>
 /// "Borcum" kartındaki Faz 4b eylemleri (sakin): **Makbuzlarım** (kendi dairesinin makbuzları) ve **Ekstre** PDF'i
 /// (yazdır / paylaş; yılbaşından bugüne). Salt okuma: hiçbir şey yazmaz. PDF istemcide üretilir. Hata görünür kalır;
 /// işlem sürerken düğmeler pasiftir (çift dokunuş yok).
+/// İP-1A: [accountParty] verilirse ekstre o hesabın görünümüdür (salt okunur kiracı hesabı); verilmezse sunucu KENDİ hesabını
+/// verir. [showReceipts] false iken "Makbuzlarım" çizilmez (salt okunur bölümde; makbuz listesi zaten iki görünümü kapsar).
 class MyFinanceActions extends StatefulWidget {
-  const MyFinanceActions({super.key, required this.authService, required this.item, this.now});
+  const MyFinanceActions({
+    super.key,
+    required this.authService,
+    required this.item,
+    this.now,
+    this.accountParty,
+    this.showReceipts = true,
+    this.keyPrefix = 'my_finance',
+  });
 
   final AuthService authService;
   final MyFinanceApartment item;
   final DateTime Function()? now;
+  final AccountParty? accountParty;
+  final bool showReceipts;
+  final String keyPrefix;
 
   @override
   State<MyFinanceActions> createState() => _MyFinanceActionsState();
@@ -76,6 +89,7 @@ class _MyFinanceActionsState extends State<MyFinanceActions> {
           apartmentId: widget.item.apartmentId,
           from: DateTime(today.year, 1, 1),
           to: DateTime(today.year, today.month, today.day),
+          accountParty: widget.accountParty,
         ),
       );
       await FinancePdfActions.statement(statement, share: share);
@@ -96,7 +110,7 @@ class _MyFinanceActionsState extends State<MyFinanceActions> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (_error != null) ...[
-          FinanceSubmitError(key: const ValueKey<String>('my_finance_action_error'), message: _error!),
+          FinanceSubmitError(key: ValueKey<String>('${widget.keyPrefix}_action_error'), message: _error!),
           const SizedBox(height: AppSpace.sm),
         ],
         Wrap(
@@ -104,16 +118,17 @@ class _MyFinanceActionsState extends State<MyFinanceActions> {
           spacing: AppSpace.sm,
           runSpacing: AppSpace.sm,
           children: [
+            if (widget.showReceipts)
+              PrimaryActionButton(
+                key: ValueKey<String>('${widget.keyPrefix}_receipts'),
+                label: 'Makbuzlarım',
+                icon: Icons.receipt_long_rounded,
+                variant: AppButtonVariant.tonal,
+                expand: false,
+                onPressed: _busy ? null : _openReceipts,
+              ),
             PrimaryActionButton(
-              key: const ValueKey<String>('my_finance_receipts'),
-              label: 'Makbuzlarım',
-              icon: Icons.receipt_long_rounded,
-              variant: AppButtonVariant.tonal,
-              expand: false,
-              onPressed: _busy ? null : _openReceipts,
-            ),
-            PrimaryActionButton(
-              key: const ValueKey<String>('my_finance_statement_print'),
+              key: ValueKey<String>('${widget.keyPrefix}_statement_print'),
               label: 'Ekstreyi Yazdır',
               icon: Icons.print_rounded,
               variant: AppButtonVariant.tonal,
@@ -122,7 +137,7 @@ class _MyFinanceActionsState extends State<MyFinanceActions> {
               onPressed: _busy ? null : () => _statement(share: false),
             ),
             PrimaryActionButton(
-              key: const ValueKey<String>('my_finance_statement_share'),
+              key: ValueKey<String>('${widget.keyPrefix}_statement_share'),
               label: 'Ekstreyi Paylaş',
               icon: Icons.ios_share_rounded,
               variant: AppButtonVariant.tonal,

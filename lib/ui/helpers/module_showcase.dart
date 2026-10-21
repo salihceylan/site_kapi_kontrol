@@ -338,7 +338,9 @@ int showcaseColumns(double width, double textScale) {
   return fit.clamp(1, cap);
 }
 
-/// Sakin vitrinindeki borç özeti ([MyFinance] içinden).
+/// Sakin vitrinindeki borç özeti ([MyFinance] içinden). İki hesap (İP-1A): YALNIZ kişinin KENDİ hesabı sayılır (malik ->
+/// ev sahibi hesabı, kiracı -> kiracı hesabı); borç sorumlusu "malik ve kiracı" olan dairede malike gösterilen salt okunur
+/// kiracı hesabı tutarı vitrine EKLENMEZ.
 @immutable
 class DebtSummary {
   const DebtSummary({
@@ -348,7 +350,11 @@ class DebtSummary {
     this.nextDue,
     this.siteName = '',
     this.apartmentTitle = '',
+    this.accountLabel = '',
   });
+
+  /// Tek daire varsa kişinin kendi hesabının adı ("Kiracı hesabı"); eski sunucuda ya da birden çok dairede boş.
+  final String accountLabel;
 
   /// Toplam borç (pozitif büyüklük; yalnız borçlu daireler).
   final int debtMinor;
@@ -378,13 +384,15 @@ DebtSummary summarizeMyFinance(MyFinance finance) {
   var overdue = 0;
   DateTime? next;
   for (final item in finance.items) {
-    if (item.balanceMinor > 0) {
-      debt += item.balanceMinor;
-      overdue += (item.overdueMinor ?? 0) > 0 ? item.overdueMinor! : 0;
-      final due = item.nextDueDate;
+    // Kendi hesabı (eski alanlar): salt okunur görünümler ([MyFinanceApartment.readOnlyAccounts]) sayılmaz.
+    final own = item.ownAccount;
+    if (own.balanceMinor > 0) {
+      debt += own.balanceMinor;
+      overdue += (own.overdueMinor ?? 0) > 0 ? own.overdueMinor! : 0;
+      final due = own.nextDueDate;
       if (due != null && (next == null || due.isBefore(next))) next = due;
-    } else if (item.balanceMinor < 0) {
-      credit += -item.balanceMinor;
+    } else if (own.balanceMinor < 0) {
+      credit += -own.balanceMinor;
     }
   }
   final single = finance.items.length == 1 ? finance.items.first : null;
@@ -395,5 +403,6 @@ DebtSummary summarizeMyFinance(MyFinance finance) {
     nextDue: next,
     siteName: single?.siteName.trim() ?? '',
     apartmentTitle: single == null ? '' : crmApartmentTitle(single.blockName, single.label),
+    accountLabel: single?.accountParty?.label ?? '',
   );
 }

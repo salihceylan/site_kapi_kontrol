@@ -1450,6 +1450,67 @@ void main() {
       await _disposeHome(t);
     });
 
+    // İP-1A (G12): vitrin yalnız kişinin KENDİ hesabını sayar; malike salt okunur gösterilen kiracı hesabı borcu vitrine girmez.
+    testWidgets('iki hesap: kendi (ev sahibi) hesabı borçsuz, salt okunur kiracı hesabı borçlu -> "Borcunuz yok", kiracı tutarı yok',
+        (t) async {
+      final auth = _ShowcaseAuth(
+        UserRole.apartmentOwner,
+        finance: () async => const MyFinance(
+          items: [
+            MyFinanceApartment(
+              siteCode: 1,
+              siteName: 'Güneş Sitesi',
+              apartmentId: 5,
+              label: 'D:3',
+              blockName: 'A Blok',
+              balanceMinor: 0,
+              accountParty: AccountParty.owner,
+              accounts: [
+                MyFinanceAccount(accountParty: AccountParty.owner, balanceMinor: 0),
+                MyFinanceAccount(accountParty: AccountParty.tenant, role: MyFinanceAccountRole.readOnly, balanceMinor: 168000, overdueMinor: 156000),
+              ],
+            ),
+          ],
+        ),
+      );
+      final access = await _access(() => <MySiteModules>[_my('resident', modules: {'finance': true})]);
+      await _pumpHome(t, auth, access: access);
+      expect(find.byKey(const ValueKey<String>('panel_hero_borc')), findsOneWidget);
+      expect(find.text('Borcunuz yok'), findsOneWidget);
+      expect(find.text('Güncel borcunuz'), findsNothing);
+      expect(find.text('1.680,00 ₺'), findsNothing, reason: 'salt okunur kiracı hesabı vitrine eklenmez');
+      expect(find.textContaining('Ev sahibi hesabı'), findsOneWidget, reason: 'tek dairede kendi hesabının adı yazılır');
+      await _disposeHome(t);
+    });
+
+    testWidgets('iki hesap: kiracının kendi hesabı borçlu -> "Güncel borcunuz" kendi tutarı ve "Kiracı hesabı"', (t) async {
+      final auth = _ShowcaseAuth(
+        UserRole.apartmentOwner,
+        finance: () async => const MyFinance(
+          items: [
+            MyFinanceApartment(
+              siteCode: 1,
+              siteName: 'Güneş Sitesi',
+              apartmentId: 5,
+              label: 'D:3',
+              blockName: 'A Blok',
+              balanceMinor: 168000,
+              overdueMinor: 156000,
+              accountParty: AccountParty.tenant,
+              accounts: [MyFinanceAccount(accountParty: AccountParty.tenant, balanceMinor: 168000, overdueMinor: 156000)],
+            ),
+          ],
+        ),
+      );
+      final access = await _access(() => <MySiteModules>[_my('resident', modules: {'finance': true})]);
+      await _pumpHome(t, auth, access: access);
+      expect(find.text('Güncel borcunuz'), findsOneWidget);
+      expect(find.text('1.680,00 ₺'), findsOneWidget);
+      expect(find.text('Vadesi geçen: 1.560,00 ₺'), findsOneWidget);
+      expect(find.textContaining('Kiracı hesabı'), findsOneWidget);
+      await _disposeHome(t);
+    });
+
     testWidgets('borç bilgisi alınamadı: selamlama + site adı, "Borcunuz yok" denmez', (t) async {
       final auth = _ShowcaseAuth(UserRole.apartmentOwner, finance: () async => throw StateError('ağ yok'));
       final access = await _access(() => <MySiteModules>[_my('resident', modules: {'finance': true})]);
