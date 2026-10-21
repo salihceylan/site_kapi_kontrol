@@ -25,9 +25,9 @@ EdgeInsets listCardPadding(BuildContext context) => EdgeInsets.all(
 
 /// Sayfa başlık kartı: [title] + isteğe bağlı birincil eylem ([action], genellikle `ElevatedButton.icon`).
 ///
-/// Hero yüzey: `AppCard(level: 2)` (tonun sol-üst yıkaması + seviye 2 gölge). [icon] verilirse başlığın
-/// solunda 48 dp cilalı squircle [IconOrb] durur (dekoratif; büyük yazıda >= 1,75x gizlenir, başlığa yer
-/// kalır). [icon] null ise düzen eskisiyle birebir aynıdır (yalnız başlık).
+/// Hero yüzey: `AppCard(level: 2)` (sade stil: düz yüzey + 1 px kenar, gölgesiz; koyu temada bir kademe açık
+/// yüzey). [icon] verilirse başlığın solunda 48 dp düz squircle [IconOrb] durur (dekoratif; büyük yazıda >= 1,75x
+/// gizlenir, başlığa yer kalır). [icon] null ise düzen eskisiyle birebir aynıdır (yalnız başlık).
 ///
 /// Dar ekranda (< 680) eylem başlığın altında tam genişlikte, geniş ekranda sağda durur. Başlık
 /// kırpılmaz (en çok 3 satır). Kartın tek dolu düğmesi eylemdir.
@@ -245,8 +245,12 @@ class PaginationBar extends StatelessWidget {
   }
 }
 
-/// Baş harfli yuvarlak avatar; rengi [tone] (rol/durum). Büyük yazıda büyümez (CircleAvatar
+/// Baş harfli yuvarlak avatar; harfin rengi [tone] (rol/durum). Büyük yazıda büyümez (CircleAvatar
 /// yazı ölçeğini kapatır): daire sabit [radius] kalır; çok büyük yazıda (>= 1,75x) gizlenir.
+///
+/// Sade stil (İP-1C, karar G6 + G7; [IconOrb] ile aynı kural): zemin her tonda soluk yüzey + 1 px palet kenarı
+/// (ton BOYANMAZ); harf tonun işaret rengindedir ([AppTone.sign]: durum tonlarında `ink`, öteki tonlarda gövde metni;
+/// mavi yalnız bağlantı ve odakta). Anlam yanındaki metindedir (avatar dekoratiftir).
 class InitialAvatar extends StatelessWidget {
   const InitialAvatar({
     super.key,
@@ -271,14 +275,22 @@ class InitialAvatar extends StatelessWidget {
     return ExcludeSemantics(
       child: Padding(
         padding: EdgeInsets.only(right: gap),
-        child: CircleAvatar(
-          radius: radius,
-          backgroundColor: Color.alphaBlend(tone.tint(p), p.surface),
-          child: Text(
-            trimmed.isEmpty ? '?' : trimmed[0].toUpperCase(),
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              color: tone.ink(p),
-              fontWeight: FontWeight.w800,
+        // Kenar halkası avatarın ÜSTÜNE çizilir (ön plan): aynı boyutta arkada kalsa görünmezdi.
+        child: DecoratedBox(
+          position: DecorationPosition.foreground,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: p.border),
+          ),
+          child: CircleAvatar(
+            radius: radius,
+            backgroundColor: p.surfaceMuted,
+            child: Text(
+              trimmed.isEmpty ? '?' : trimmed[0].toUpperCase(),
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                color: tone.sign(p),
+                fontWeight: FontWeight.w800,
+              ),
             ),
           ),
         ),
@@ -287,10 +299,11 @@ class InitialAvatar extends StatelessWidget {
   }
 }
 
-/// Kart/satır başındaki cilalı ikon rozeti: ton gradyanı + cila + beyaz ikon ([IconOrb], squircle,
-/// [size] x [size]). Dekoratiftir (anlamsal ağaçta yok); büyük yazıda (>= 1,75x) gizlenir.
+/// Kart/satır başındaki düz ikon rozeti ([IconOrb], squircle, [size] x [size]; sade stil: soluk yüzey + kenar,
+/// ikon tonun işaret renginde). Dekoratiftir (anlamsal ağaçta yok); büyük yazıda (>= 1,75x) gizlenir.
 ///
-/// Ton ANLAM taşır: çağıran durumu yansıtan tonu verir (site onayı, cihaz çevrimiçi/çevrimdışı, rol...).
+/// Ton ANLAM taşır: çağıran durumu yansıtan tonu verir (site onayı, cihaz çevrimiçi/çevrimdışı, rol...); sade
+/// stilde yalnız durum tonları (tamam / bekliyor / kritik) ikonu renklendirir.
 /// Boyut rehberi: liste satırı 40, kart başlığı 44-48. [iconSize] geriye dönük uyumluluk için durur ama
 /// artık kullanılmaz: [IconOrb] ikonu her zaman boyutun yarısı çizer.
 class IconTile extends StatelessWidget {

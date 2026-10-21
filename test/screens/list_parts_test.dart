@@ -37,6 +37,15 @@ Widget _action() => ElevatedButton.icon(
   label: const Text('Yeni Kayıt'),
 );
 
+/// WCAG kontrast oranı (opak renkler).
+double _ratio(Color a, Color b) {
+  final la = a.computeLuminance();
+  final lb = b.computeLuminance();
+  final hi = la > lb ? la : lb;
+  final lo = la > lb ? lb : la;
+  return (hi + 0.05) / (lo + 0.05);
+}
+
 void main() {
   group('IconTile (cilalı ikon rozeti)', () {
     testWidgets(
@@ -299,6 +308,40 @@ void main() {
               tone == null ? p.textSecondary : tone.sign(p),
               reason: '${tone?.name} dark=$dark',
             );
+          }
+        }
+      },
+    );
+
+    // İP-1C bağımsız inceleme: baş harf avatarı da ikon rozetiyle (IconOrb) aynı sade kurala bağlıdır: rol tonu
+    // zemini boyamaz (birincilde mavi, morda mor daire yok); harf tonun işaret rengindedir.
+    testWidgets(
+      'InitialAvatar (G6 + G7): zemin her tonda soluk yüzey + palet kenarı; harf tonun işaret rengi, >= 4,5:1',
+      (t) async {
+        for (final dark in const [false, true]) {
+          final p = dark ? AppPalette.dark : AppPalette.light;
+          for (final tone in AppTone.values) {
+            await t.pumpWidget(const SizedBox.shrink());
+            await pumpAt(
+              t,
+              InitialAvatar(name: 'ayşe', tone: tone),
+              width: 360,
+              scale: 1.0,
+              height: 200,
+              dark: dark,
+            );
+            final name = '${tone.name} dark=$dark';
+            final avatar = t.widget<CircleAvatar>(find.byType(CircleAvatar));
+            expect(avatar.backgroundColor, p.surfaceMuted, reason: name);
+            final ring = t.widget<DecoratedBox>(
+              find.ancestor(of: find.byType(CircleAvatar), matching: find.byType(DecoratedBox)).first,
+            );
+            final ringDeco = ring.decoration as BoxDecoration;
+            expect(ringDeco.shape, BoxShape.circle, reason: name);
+            expect((ringDeco.border! as Border).top.color, p.border, reason: name);
+            final letter = t.widget<Text>(find.text('A'));
+            expect(letter.style!.color, tone.sign(p), reason: name);
+            expect(_ratio(tone.sign(p), p.surfaceMuted), greaterThanOrEqualTo(4.5), reason: name);
           }
         }
       },
