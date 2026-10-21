@@ -95,6 +95,10 @@
 //             (duz kopya NULL, isaret, eski PIN'le giris calisir), ikinci calistirma no-op, migration dosyasi yolu, ilk kurulum x apartments yazici yuku (40P01 = 0),
 //             HTTP (liste PIN tasimaz, olusturma / sifirlama PIN'i bir kez, yetki matrisi, eski oturum gecersiz, eski uc 409). QA_ONLY=apartment_pin
 //             (zincir esitligi icin chain,live,apartment_pin; live yukseltmesi 051 aktarimini ayrica dogrular).
+//   parties   Iki hesap (IP-1A / G12, 052; govde scripts/qa_finance_parties_section.mjs, finance4b ortamini kullanir): 052 VERI VARKEN yukseltme (eski satirlar
+//             dogru hesaba, geri doldurma yok), sema + ters kayit tetikleyicisi, "kim oder" (ay ortasi tasinan / cikan kiraci, PREVIEW_STALE), tahsilat hesabi
+//             ve hesap basina mahsup (iki hesap ASLA karismaz), sakin gorunum matrisi + IDOR, duzeltme / ters kayit, gecikme tazminati (iki hesap iki satir),
+//             hatirlatma alicisi = hesabin sahibi, postPayment kaynak izi, eszamanli tahsilat x borclandirma x CRM (40P01 = 0). QA_ONLY=chain,live,parties.
 //
 // GEREKSINIMLER
 //   - Yerelde calisan, SUPERUSER ile erisilebilen BIR PostgreSQL sunucusu (tek kullanimlik; ornegin gecici bir dizinde
@@ -376,6 +380,7 @@ async function runParent() {
     contracts: `${prefix}_contracts`,
     decision_book: `${prefix}_decision_book`,
     apartment_pin: `${prefix}_apartment_pin`,
+    parties: `${prefix}_parties`,
     finance_upgrade_base: `${prefix}_fu_base`,
     finance_upgrade_ensure: `${prefix}_fu_ensure`,
     finance_upgrade_migrate: `${prefix}_fu_migrate`,
@@ -434,7 +439,7 @@ async function runParent() {
 
     // legacy ve live: yukseltme senaryolari
     for (const [key, limit, scenario] of [['legacy', platformFirst, 'legacy'], ['live', peopleFirst, 'live']]) {
-      if (!wants(key) && !(key === 'live' && (wants('platform') || wants('people') || wants('locks') || wants('announcements') || wants('site_applications') || wants('finance') || wants('finance4b') || wants('platform_services') || wants('account') || wants('bulk_import') || wants('documents') || wants('push') || wants('work_tracking') || wants('reservation') || wants('survey') || wants('visitor_log') || wants('card_access') || wants('contracts') || wants('decision_book') || wants('apartment_pin')))) continue;
+      if (!wants(key) && !(key === 'live' && (wants('platform') || wants('people') || wants('locks') || wants('announcements') || wants('site_applications') || wants('finance') || wants('finance4b') || wants('platform_services') || wants('account') || wants('bulk_import') || wants('documents') || wants('push') || wants('work_tracking') || wants('reservation') || wants('survey') || wants('visitor_log') || wants('card_access') || wants('contracts') || wants('decision_book') || wants('apartment_pin') || wants('parties')))) continue;
       await recreate(names[key]);
       const subset = subsetMigrations(limit);
       dirs.push(subset);
@@ -472,7 +477,7 @@ async function runParent() {
     }
 
     // platform / people / locks: yukseltilmis "live" veritabaninin kopyalari
-    for (const key of ['platform', 'people', 'locks', 'announcements', 'site_applications', 'finance', 'finance4b', 'platform_services', 'account', 'bulk_import', 'documents', 'push', 'work_tracking', 'reservation', 'survey', 'visitor_log', 'card_access', 'contracts', 'decision_book', 'apartment_pin']) {
+    for (const key of ['platform', 'people', 'locks', 'announcements', 'site_applications', 'finance', 'finance4b', 'parties', 'platform_services', 'account', 'bulk_import', 'documents', 'push', 'work_tracking', 'reservation', 'survey', 'visitor_log', 'card_access', 'contracts', 'decision_book', 'apartment_pin']) {
       if (!wants(key)) continue;
       await recreate(names[key], names.live);
       record(key, runSection(key, names[key]));
@@ -7438,7 +7443,8 @@ async function sectionFinance() {
   check('G7: ESZAMANLI cift tahsilat (ayni anahtar): biri 201 digeri 200, TEK defter satiri (cift tahsilat olmaz)', same([ccA.status, ccB.status].sort(), [200, 201]) && ccA.body.entry.id === ccB.body.entry.id && (await q(`SELECT COUNT(*)::int AS n FROM ledger_entries WHERE site_code = $1 AND idempotency_key = $2`, [fs3.code, concurrentKey])).rows[0].n === 1);
   const [dA, dB] = await Promise.all([call('POST', `${b3}/payments`, MGR, payBody(P3(5).id, { amount_minor: 1000, idempotency_key: key('d1') })), call('POST', `${b3}/payments`, MGR, payBody(P3(5).id, { amount_minor: 1000, idempotency_key: key('d2') }))]);
   check('G7b: ESZAMANLI iki FARKLI anahtarli tahsilat ikisi de yazilir (gercek iki tahsilat); bakiye 400000 - 2000', dA.status === 201 && dB.status === 201 && (await balanceOf(fs3.code, P3(5).id)) === 398000n);
-  check('G8: audit finance.payment.recorded: details { account_id (Faz 4b), apartment_id, amount_minor, period, method } - aciklama YOK', (await auditRows(fs3.code, 'finance.payment.recorded')).every((r) => same(Object.keys(r.details).sort(), ['account_id', 'amount_minor', 'apartment_id', 'method', 'period']) && !JSON.stringify(r.details).includes('Nakit')));
+  // İP-1A (G12): denetime tahsilatın hesabı (account_party) ve kaynak izi (source_kind) KODLARI eklendi (serbest metin değil)
+  check('G8: audit finance.payment.recorded: details { account_id (Faz 4b), account_party + source_kind (İP-1A), apartment_id, amount_minor, period, method } - aciklama YOK', (await auditRows(fs3.code, 'finance.payment.recorded')).every((r) => same(Object.keys(r.details).sort(), ['account_id', 'account_party', 'amount_minor', 'apartment_id', 'method', 'period', 'source_kind']) && !JSON.stringify(r.details).includes('Nakit')));
 
   // --- ters kayit
   const reverseUrl = (id) => `${b3}/entries/${id}/reverse`;
@@ -7742,13 +7748,15 @@ async function sectionFinance() {
   await call('POST', `${b5}/payments`, MGR, { apartment_id: S5(3).id, amount_minor: 150000, entry_date: TODAY, method: 'transfer', description: 'GIZLI-ACIKLAMA-3', idempotency_key: key('s3') });
   const mine = async (user) => (await call('GET', '/app/my-finance', user)).body;
   const idsOf = (body) => body.items.map((i) => i.apartment_id).sort((a, b) => a - b);
+  // İP-1A (G12, BİLEREK DEĞİŞTİ): sakin KENDİ hesabını görür (borcu yoksa "Borcunuz yok"); eski "yalnız sorumlu taraf görür + yedek kural" yerine
+  // hesap sahipliği. T1 / R1 / O2 / T6 artık kendi (boş) hesaplarını görür; borç sorumlu tarafın hesabındadır ve onlara görünmez (aşağıda I1b).
   const expectVisible = [
-    ['O1 (S1 malik + S3 sakin): S1 ve S3', O1.user, [S5(1).id, S5(3).id]], ['T1 (S1 kiraci, sorumlu=malik)', T1.user, []], ['R1 (S1 belirsiz iliski, sorumlu=malik)', R1.user, []], ['F1 (aile uyesi)', F1.user, []],
-    ['O2 (S2 malik, sorumlu=kiraci)', O2.user, []], ['T2 (S2 kiraci, sorumlu=kiraci)', T2.user, [S5(2).id]],
+    ['O1 (S1 malik + S3 sakin): S1 ve S3', O1.user, [S5(1).id, S5(3).id]], ['T1 (S1 kiraci, sorumlu=malik): kendi bos kiraci hesabi', T1.user, [S5(1).id]], ['R1 (S1 belirsiz iliski, dairede kiraci var: kiraci hesabi, bos)', R1.user, [S5(1).id]], ['F1 (aile uyesi)', F1.user, []],
+    ['O2 (S2 malik, sorumlu=kiraci): kendi bos ev sahibi hesabi', O2.user, [S5(2).id]], ['T2 (S2 kiraci, sorumlu=kiraci)', T2.user, [S5(2).id]],
     ['O3 (S3 malik, sorumlu=ikisi)', O3.user, [S5(3).id]], ['T3 (S3 kiraci)', T3.user, [S5(3).id]], ['R3 (S3 belirsiz iliski, sorumlu=ikisi)', R3.user, [S5(3).id]], ['F3 (S3 aile uyesi, sorumlu=ikisi: GORMEZ)', F3.user, []],
     ['T4 (S4 sorumlu=malik ama malik yok: yedek kural)', T4.user, [S5(4).id]], ['R4 (S4 yedek kural)', R4.user, [S5(4).id]], ['F4 (S4 aile: yedekte de GORMEZ)', F4.user, []],
     ['O5 (S5 sorumlu=kiraci ama kiraci yok: yedek)', O5.user, [S5(5).id]], ['F5 (S5 aile)', F5.user, []],
-    ['T6 (S6 sorumlu=malik; HESAPSIZ ama kayitli malik var: yedek UYGULANMAZ)', T6.user, []],
+    ['T6 (S6 sorumlu=malik; kiraci kendi bos kiraci hesabini gorur, malikin borcunu GORMEZ)', T6.user, [S5(6).id]],
     ['F7 (S7 yalniz aile)', F7.user, []], ['O7 (S7 PASIF kisi)', O7.user, []],
     ['O8 (S8 taşınmış eski malik, is_current=false)', O8.user, []], ['R8 (S8 sorumlu=malik, guncel malik yok: yedek)', R8.user, [S5(8).id]],
     ['ilgisiz kullanici', NOBODY, []],
@@ -7758,7 +7766,18 @@ async function sectionFinance() {
     const body = await mine(user);
     visibleResults.push([label, same(idsOf(body), [...expected].sort((a, b) => a - b)), idsOf(body)]);
   }
-  check(`I1: sorumlu taraf matrisi (${expectVisible.length} durum): owner -> malik, tenant -> kiraci, both -> malik+kiraci+belirsiz; family_member HICBIR durumda; eslesen guncel kisi yoksa yedek (resident/owner/tenant); pasif kisi / taşınmış iliski gormez; ilgisiz kullanici bos`, visibleResults.every(([, ok]) => ok), visibleResults.filter(([, ok]) => !ok));
+  check(`I1: hesap matrisi (${expectVisible.length} durum; İP-1A): her guncel kisi KENDI hesabini gorur (malik -> ev sahibi, kiraci -> kiraci, belirsiz -> kiraci varsa kiraci yoksa ev sahibi); family_member HICBIR durumda; pasif kisi / taşınmış iliski gormez; ilgisiz kullanici bos`, visibleResults.every(([, ok]) => ok), visibleResults.filter(([, ok]) => !ok));
+  // I1b (İP-1A): borç SORUMLU tarafın hesabındadır; diğer tarafın kendi hesabı boştur ve başkasının borcunu GÖRMEZ. Both dairede malik kiracı hesabını SALT OKUNUR görür.
+  const viewOf = async (user, aptNo) => (await mine(user)).items.find((i) => i.apartment_id === S5(aptNo).id);
+  const t1 = await viewOf(T1.user, 1);
+  const o2 = await viewOf(O2.user, 2);
+  const t6 = await viewOf(T6.user, 6);
+  const o3 = await viewOf(O3.user, 3);
+  check('I1b: kiraci (S1, S6) ve malik (S2) kendi bos hesabini gorur (bakiye 0, hareket yok); both dairede malik (S3) ev sahibi hesabi bos + kiraci hesabi salt okunur (200000 borc - 150000 tahsilat = 50000)',
+    t1?.account_party === 'tenant' && t1.balance_minor === 0 && t1.recent.length === 0 && o2?.account_party === 'owner' && o2.balance_minor === 0 && o2.recent.length === 0
+      && t6?.account_party === 'tenant' && t6.balance_minor === 0 && o3?.account_party === 'owner' && o3.balance_minor === 0
+      && o3.accounts.length === 2 && o3.accounts[1].account_party === 'tenant' && o3.accounts[1].role === 'read_only' && o3.accounts[1].balance_minor === 50000,
+    { t1, o2: o2 && { ...o2, recent: o2.recent.length }, o3: o3?.accounts?.map((a) => [a.account_party, a.role, a.balance_minor]) });
   const o1 = await mine(O1.user);
   const o1s1 = o1.items.find((i) => i.apartment_id === S5(1).id);
   const o1s3 = o1.items.find((i) => i.apartment_id === S5(3).id);
@@ -7780,7 +7799,8 @@ async function sectionFinance() {
   check('I8b: modul tekrar acilinca veri yerinde', (await mine(O1.user)).items.length === 2);
   // recent siniri: 30
   for (let i = 0; i < 40; i += 1) {
-    await q(`INSERT INTO ledger_entries (site_code, apartment_id, kind, amount_minor, period, entry_date, payer_party, method) VALUES ($1, $2, 'payment', -1, $3, $4, 'both', 'cash')`, [fs5.code, S5(2).id, monthStart(-1), `${ym(-1)}-${String((i % 28) + 1).padStart(2, '0')}`]);
+    // İP-1A (G12): S2'nin sorumlusu kiracı; gerçek kod ödeyen anlık görüntüsünü dairenin değeriyle (tenant) yazar ve satır kiracı hesabına düşer
+    await q(`INSERT INTO ledger_entries (site_code, apartment_id, kind, amount_minor, period, entry_date, payer_party, method) VALUES ($1, $2, 'payment', -1, $3, $4, 'tenant', 'cash')`, [fs5.code, S5(2).id, monthStart(-1), `${ym(-1)}-${String((i % 28) + 1).padStart(2, '0')}`]);
   }
   const t2Many = await mine(T2.user);
   check('I9: recent en fazla 30 satir (40 hareketli dairede 30), yeni -> eski sirali; bakiye tum satirlari kapsar', t2Many.items[0].recent.length === 30 && t2Many.items[0].recent.every((e, i, a) => i === 0 || a[i - 1].entry_date >= e.entry_date) && t2Many.items[0].balance_minor === 200000 - 40, t2Many.items[0].balance_minor);
@@ -7955,8 +7975,9 @@ async function sectionFinance() {
     }
     check(`L5 EXPLAIN ${label}: ${captured.length} sorgu, ledger_entries uzerinde Seq Scan YOK (indeks erisimi; site satirlari yine okunur)`, captured.length > 0 && findings.every((f) => f.seqScans === 0), findings);
   };
-  await explainCalls('bakiye listesi', () => call('GET', `${bigBase}/balances?limit=50`, MGR), [/GROUP BY l\.apartment_id/]);
-  await explainCalls('bakiye listesi (borclu + arama)', () => call('GET', `${bigBase}/balances?status=debtor&q=daire%2012&limit=50`, MGR), [/GROUP BY l\.apartment_id/]);
+  // İP-1A: bakiye listesi defteri (daire, hesap) başına toplar (acc CTE'si)
+  await explainCalls('bakiye listesi', () => call('GET', `${bigBase}/balances?limit=50`, MGR), [/GROUP BY l\.apartment_id/, /acc AS MATERIALIZED/]);
+  await explainCalls('bakiye listesi (borclu + arama)', () => call('GET', `${bigBase}/balances?status=debtor&q=daire%2012&limit=50`, MGR), [/GROUP BY l\.apartment_id/, /acc AS MATERIALIZED/]);
   const bigApt = Number((await q(`SELECT id FROM apartments WHERE site_code = $1 ORDER BY id LIMIT 1 OFFSET 1234`, [bigCode])).rows[0].id);
   await explainCalls('daire ekstresi', () => call('GET', `${bigBase}/apartments/${bigApt}/account?limit=50`, MGR), [/ORDER BY l\.entry_date DESC/, /SUM\(amount_minor\)/]);
   await explainCalls('ozet', () => call('GET', `${bigBase}/summary`, MGR), [/GROUP BY apartment_id/, /period = \$2::DATE/]);
@@ -8592,7 +8613,7 @@ async function sectionFinance() {
   const leakyAudits = financeAudits.filter((r) => forbidden.test(JSON.stringify(r.details)));
   check('N3: audit details\'te tanim adi, aciklama, neden metni, kisi adi HICBIR satirda yok (yalniz toplam / sayi / donem / alan adi)', leakyAudits.length === 0, leakyAudits.slice(0, 2));
   const allDetailKeys = new Set(financeAudits.flatMap((r) => Object.keys(r.details)));
-  check('N4: audit details anahtarlari beyaz listede', [...allDetailKeys].every((k) => ['kind', 'distribution', 'target_type', 'start_period', 'fields', 'definition_id', 'period', 'total_minor', 'apartment_count', 'skipped_missing_count', 'apartment_id', 'amount_minor', 'method', 'reversed_entry_id', 'reversed_kind', 'reversal_entry_id', 'old_amount_minor', 'new_amount_minor', 'account_id', 'ledger_entry_id', 'reason_code', 'cancelled_receipt_id', 'receipt_cancelled', 'movement_mirrored'].includes(k)), [...allDetailKeys]); // Faz 4b ekleri: hepsi kimlik / kod / bayrak (metin YOK)
+  check('N4: audit details anahtarlari beyaz listede', [...allDetailKeys].every((k) => ['kind', 'distribution', 'target_type', 'start_period', 'fields', 'definition_id', 'period', 'total_minor', 'apartment_count', 'skipped_missing_count', 'apartment_id', 'amount_minor', 'method', 'reversed_entry_id', 'reversed_kind', 'reversal_entry_id', 'old_amount_minor', 'new_amount_minor', 'account_id', 'ledger_entry_id', 'reason_code', 'cancelled_receipt_id', 'receipt_cancelled', 'movement_mirrored', 'account_party', 'source_kind'].includes(k)), [...allDetailKeys]); // Faz 4b ekleri: hepsi kimlik / kod / bayrak (metin YOK); İP-1A: account_party, source_kind (kod)
 
   // son tutarlilik (tum veritabani)
   const apartmentSites = (await q(`SELECT COUNT(*)::int AS n FROM ledger_entries l JOIN apartments a ON a.id = l.apartment_id WHERE a.site_code <> l.site_code`)).rows[0].n;
@@ -11438,6 +11459,32 @@ async function sectionFinance4b() {
 }
 // <finance4b-section-end>
 
+// <parties-section-start>
+// CHILD bolum: parties (Iki hesap, IP-1A / G12; docs/PLATFORM_FINANS.md "Iki hesap (2026-10-21)"). Govde scripts/qa_finance_parties_section.mjs;
+// finance4b ortamini (gercek authRequired + JWT, fabrikalar) kullanir, 040 sema denetimlerini (A) tekrarlamaz.
+async function sectionParties() {
+  const { runFinance4bSection } = await import('./qa_finance4b.mjs');
+  await runFinance4bSection({
+    check,
+    same,
+    sleep,
+    waitFor,
+    childEnv,
+    installPoolHooks,
+    finishChild,
+    mails,
+    serverErrors,
+    migrationFiles,
+    MIGRATIONS_DIR,
+    SERVER_DIR,
+    connectConfig,
+    runMigrate,
+    parts: ['parties'],
+    skipSchema: true,
+  });
+}
+// <parties-section-end>
+
 // <bulk-import-section-start>
 // CHILD bolum: bulk_import (Toplu yukleme / disa aktarma Faz 2b; docs/PLATFORM_TOPLU_ISLEMLER.md). Govde scripts/qa_bulk_import.mjs icindedir (bu dosyaya yalniz delege eden ince kanca eklenir).
 async function sectionBulkImport() {
@@ -11457,6 +11504,8 @@ const SECTIONS = {
   finance: sectionFinance,
   finance_upgrade: sectionFinanceUpgrade,
   finance4b: sectionFinance4b,
+  // Iki hesap (IP-1A, 052); govde scripts/qa_finance_parties_section.mjs
+  parties: sectionParties,
   platform_services: sectionPlatformServices,
   account: sectionAccount,
   bulk_import: sectionBulkImport,
