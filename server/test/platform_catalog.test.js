@@ -26,8 +26,7 @@ import { managementTerms } from '../src/modules/management_type_terms.js';
 const def = (code) => getModuleDefinition(code);
 
 describe('platform katalog: sozlesme tablosu', () => {
-  it('18 modul, sozlesmedeki sirayla ve alanlarla', () => {
-  it('19 modul, sozlesmedeki sirayla ve alanlarla', () => {
+  it('23 modul, sozlesmedeki sirayla ve alanlarla', () => {
     assert.deepEqual(MODULE_CODES, [
       'door_control',
       'people',
@@ -94,8 +93,7 @@ describe('platform katalog: sozlesme tablosu', () => {
 
   it('publicCatalog yalnizca { code, name, description, core, status } alanlarini dondurur', () => {
     const catalog = publicCatalog();
-    assert.equal(catalog.length, 18);
-    assert.equal(catalog.length, 19);
+    assert.equal(catalog.length, 23);
     for (const entry of catalog) {
       assert.deepEqual(Object.keys(entry), ['code', 'name', 'description', 'core', 'status']);
     }
@@ -112,12 +110,7 @@ describe('platform katalog: sozlesme tablosu', () => {
   it('toggleable = !core && status === available (door_control, finance, documents, rezervasyon, is takibi, anket, ziyaretci, kartli gecis, sozlesmeler, karar defteri)', () => {
     assert.deepEqual(
       MODULE_CATALOG.filter(isToggleable).map((m) => m.code),
-      ['door_control', 'finance', 'documents', 'reservation', 'work_tracking', 'survey', 'visitor_log', 'card_access', 'contracts', 'decision_book', 'directory'],
-      ['door_control', 'finance', 'documents', 'reservation', 'work_tracking', 'survey', 'visitor_log', 'card_access', 'contracts', 'decision_book', 'budget'],
-      ['door_control', 'finance', 'documents', 'reservation', 'work_tracking', 'survey', 'visitor_log', 'card_access', 'contracts', 'decision_book', 'drive_storage'],
-      ['door_control', 'finance', 'documents', 'reservation', 'work_tracking', 'metering', 'survey', 'visitor_log', 'card_access', 'contracts', 'decision_book'],
-      ['door_control', 'finance', 'documents', 'reservation', 'work_tracking', 'survey', 'visitor_log', 'card_access', 'contracts', 'decision_book', 'neighbor_board'],
-      ['door_control', 'finance', 'documents', 'reservation', 'work_tracking', 'survey', 'visitor_log', 'card_access', 'card_payments', 'plate_cameras', 'contracts', 'decision_book'],
+      ['door_control', 'finance', 'documents', 'reservation', 'work_tracking', 'metering', 'survey', 'visitor_log', 'card_access', 'card_payments', 'plate_cameras', 'contracts', 'decision_book', 'directory', 'budget', 'drive_storage', 'neighbor_board'],
     );
     assert.equal(isToggleable(null), false);
   });
@@ -217,8 +210,7 @@ describe('platform katalog: enabled hesabi', () => {
     const list = computeSiteModuleList([
       { module_code: 'door_control', enabled: false, updated_at: when, updated_by_name: 'Ali Veli' },
     ]);
-    assert.equal(list.length, 18);
-    assert.equal(list.length, 19);
+    assert.equal(list.length, 23);
     const door = list.find((m) => m.code === 'door_control');
     assert.deepEqual(door, {
       code: 'door_control',

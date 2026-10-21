@@ -290,7 +290,7 @@ export async function acceptInviteNewAccount({ token, password, fullName, accept
       const upd = await client.query(
         `UPDATE users SET password_hash = $2, full_name = $3, phone_number = COALESCE($4, phone_number), is_active = TRUE, email_verified = TRUE, approval_status = 'approved',
                 email_verification_code_hash = NULL, email_verification_expires_at = NULL, password_reset_token_hash = NULL, password_reset_expires_at = NULL
-         WHERE user_code = $1 RETURNING user_code`,
+         WHERE user_code = $1 AND deleted_at IS NULL RETURNING user_code`,
         [existing.user_code, passwordHash, displayName, person.phone],
       );
       userCode = Number(upd.rows[0].user_code);
@@ -374,7 +374,7 @@ export async function acceptMyInvitation({ authUser, invitationId }) {
     }
     const u = (await client.query(`SELECT phone_number FROM users WHERE user_code = $1`, [userCode])).rows[0];
     if (person.phone && !u?.phone_number) {
-      await client.query(`UPDATE users SET phone_number = $2 WHERE user_code = $1`, [userCode, person.phone]);
+      await client.query(`UPDATE users SET phone_number = $2 WHERE user_code = $1 AND deleted_at IS NULL`, [userCode, person.phone]);
     }
     await bindPersonToUser(client, { siteCode, person, userCode });
     await closeAccepted(client, inv.id, userCode);

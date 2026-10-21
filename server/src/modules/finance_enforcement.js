@@ -36,7 +36,7 @@ export function parseEnforcementAccounts(value) {
   return out;
 }
 
-const dayDiff = (asOf, due) => Math.round((Date.parse(`${asOf}T00:00:00Z`) - Date.parse(`${due}T00:00:00Z`)) / 86400000);
+const dayDiff = (asOf, due) => Number((BigInt(Date.parse(`${asOf}T00:00:00Z`)) - BigInt(Date.parse(`${due}T00:00:00Z`))) / 86400000n);
 
 /** Vadesi geçmiş ödenmemiş kalemler, hesap başına gruplu. `selection` null ise tüm borçlu hesaplar (en çok 200). */
 export async function computeEnforcement(db, siteCode, asOf, selection = null) {

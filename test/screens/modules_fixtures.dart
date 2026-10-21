@@ -4,6 +4,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart' show Switch;
 import 'package:flutter_test/flutter_test.dart' show Finder, find;
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart' show MockClient;
 
 import 'package:site_kapi_kontrol/models/audit_log.dart';
 import 'package:site_kapi_kontrol/models/module_request.dart';
@@ -16,6 +18,7 @@ import 'package:site_kapi_kontrol/models/user_session.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/services/auth_api.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
+import 'package:site_kapi_kontrol/ui/widgets/drive_storage_card.dart';
 import 'package:site_kapi_kontrol/ui/widgets/module_card.dart';
 
 SiteRecord mdSite(int id, String name, {String approval = 'approved'}) =>
@@ -202,7 +205,15 @@ class ModulesFakeAuth extends AuthService with ModuleRequestFixtures {
              12: mdState(12, 'Mavi Park'),
            },
        roles = roles ?? <int, List<StaffRoleRecord>>{},
-       super(api: AuthApi(baseUrl: 'http://localhost'));
+       super(api: AuthApi(baseUrl: 'http://localhost')) {
+    // Modüller ekranındaki Drive kartı gerçek ağa çıkmasın: "Google Drive bağlantısı Yakında…" durumu (hata bildirimi yok).
+    DriveStorageCard.debugApi = DriveStorageApi(
+      baseUrl: 'http://localhost',
+      client: MockClient(
+        (request) async => http.Response('{"configured":false,"connected":false,"status":"disconnected"}', 200, headers: const <String, String>{'content-type': 'application/json'}),
+      ),
+    );
+  }
 
   List<SiteRecord> sites;
   final Map<int, SiteModulesState> states;

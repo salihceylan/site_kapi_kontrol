@@ -429,6 +429,7 @@ List<String> _capturePlatform(WidgetTester t) {
 /// kapı komutları (ek eylemler).
 const Set<String> _drawerOnlyTitles = <String>{
   'Panel',
+  'Yönetim Firması',
   'Yardım ve Destek',
   'Çıkış Yap',
   'Sakin Moduna Geç',

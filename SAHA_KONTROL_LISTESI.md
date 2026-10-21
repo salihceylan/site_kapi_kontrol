@@ -2594,3 +2594,284 @@ Dalga 1'in beş paketi. Her dairenin iki ayrı hesabı vardır ("Kiracı hesabı
 - [ ] **88.59. Demo senaryosu provası (15 dakika) (F29.09):**
   - **Nasıl Test Edilir:** Rol: Cenk ve Salih. docs/DEMO_SENARYOSU.md bölüm 2.1'e göre demo sitesini uydurma verilerle kurun; Anket ve Oylama kapalı kalsın. Bölüm 2.2'deki kontrol listesini yapın: süper kullanıcı ekranlarında gerçek bekleyen başvuru ya da talep var mı bakın; Denetim Kaydı süzgecini ve Modüller'deki site seçimini demo sitesine alın. Bölüm 3'teki akışı saat tutarak bir kez baştan sona deneyin.
   - **Beklenen Sonuç:** Akış 15 dakikayı geçmez ve her adım demo sitesinde çalışır. Süper kullanıcı Anket ve Oylama'yı açınca yöneticinin Panel'inde kart en geç yaklaşık 30 saniyede belirir. Paylaşılan ekranda gerçek bir sitenin kişi adı, telefonu, e-postası ya da adresi görünmez. Çalışmayan adım bölüm 7'deki tabloya yazılır.
+
+## 89. Dalga 2-6 temel yapı, A aşaması (2026-10-21)
+
+Dalga 2-6'nın ilk aşaması: çalışan şema, uçlar ve ekranlar. Dışarıdan hesap ya da sözleşme gerektiren kısımlar (Google Drive bilgileri, SMS ve VAPID anahtarları, kart ödemesi sağlayıcıları) ekranda "Yakında…" görünür; yeni modüller (Rehber, İşletme Projesi, Dosya Deposu, Sayaç, Komşu Panosu, Kart Ödemesi, Kamera ve Plaka) varsayılan KAPALIdır, süper kullanıcı açar. Kapı düğmesi ve kapı açma değişmedi. Denemeleri bir TEST sitesinde yapın. Faz listesi: F30–F34. Ayrıntılar: `docs/PLATFORM_FINANS.md`, `docs/PLATFORM_FINANS_4B.md`, `docs/PLATFORM_TOPLU_ISLEMLER.md` ve ilgili `docs/PLATFORM_*.md` belgeleri.
+
+- [ ] **89.1. Yönetici: banka hesabına IBAN girme (F30.01):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Finans > Kasa sekmesinde bir Banka hesabı açın (yoksa Hesap Ekle ile banka türünde ekleyin). Altındaki 'IBAN ve alıcı adı' düğmesine dokunun. Önce hatalı bir IBAN yazın, sonra geçerli bir TR IBAN ve alıcı adı yazıp onay kutusunu işaretleyip Kaydedin.
+  - **Beklenen Sonuç:** Hatalı IBAN'da kırmızı uyarı çıkar ve Kaydet pasif kalır. Geçerli IBAN'da 'Banka bilgisi kaydedildi' bildirimi görünür.
+- [ ] **89.2. Yönetici: ödeme ayarları ve site kısa kodu (F30.02):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Kasa sekmesinde 'Ödeme bilgisi' düğmesine dokunun. Önerilen 3 harfli kodu kabul edin (ya da değiştirin), sakinlere gösterilen banka hesabını seçin ve Kaydedin. Sonra yeniden açıp kodu değiştirin.
+  - **Beklenen Sonuç:** Kayıt başarılı olur; örnek kod GUL-A2-1026 gibi görünür. Kod değişince eski kod 'Eski kodlar' altında listelenir. Başka sitenin kullandığı kod girilirse hata ve öneriler çıkar.
+- [ ] **89.3. Sakin: Panel borç kartında Öde (F30.03):**
+  - **Nasıl Test Edilir:** Rol: Daire sakini (borcu olan). Uygulamayı açın, Özet sayfasındaki koyu borç kartına bakın ve 'Öde' düğmesine dokunun.
+  - **Beklenen Sonuç:** Ödenecek tutar, alıcı adı, gruplu IBAN ve GUL-A2-1026 biçiminde açıklama kodu görünür. Borç yoksa 'Öde' düğmesi çıkmaz.
+- [ ] **89.4. Sakin: kopyala düğmeleri (F30.04):**
+  - **Nasıl Test Edilir:** Rol: Daire sakini. Öde sayfasında IBAN, alıcı ve açıklama kodu satırlarındaki 'Kopyala' düğmelerine sırayla dokunun; bankacılık uygulamasında yapıştırın.
+  - **Beklenen Sonuç:** Her dokunuşta 'Kopyalandı' bildirimi çıkar. IBAN boşluksuz yapışır, açıklama kodu olduğu gibi yapışır.
+- [ ] **89.5. Sakin: Borcum ekranında Öde (F30.05):**
+  - **Nasıl Test Edilir:** Rol: Daire sakini. Menüden Borcum'u açın; borçlu daire kartındaki 'Öde' düğmesine dokunun.
+  - **Beklenen Sonuç:** Aynı Öde sayfası açılır, tutar kartla aynıdır. Ekranın üstündeki 'Online ödeme yakında' notu artık yoktur.
+- [ ] **89.6. Ödeme bilgisi girilmemiş site ve yakında alanları (F30.06):**
+  - **Nasıl Test Edilir:** Rol: Daire sakini. Yönetici henüz ödeme bilgisi girmemiş bir sitede Öde'ye dokunun. Bilgisi girilmiş sitede de sayfanın altına bakın. Yönetici IBAN'ı değiştirdikten sonra sakin olarak yeniden açın.
+  - **Beklenen Sonuç:** Girilmemişse 'Site yönetimi ödeme bilgisini henüz girmedi' yazar. Girilmişse 'Kartla öde — Yakında…' pasif görünür, Dekont yükle görünmez. IBAN son 14 günde değiştiyse sarı değişiklik uyarısı çıkar.
+- [ ] **89.7. Devir bakiyesi yükleme (F30.07):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi (Finans modülü açık). Finans > Daireler > Devir bakiyesi > Excel'den yükle > Şablonu indir. Birkaç daire için Blok, Daire No ve Tutar (1.250,50 gibi) yazıp kaydedin, dosyayı seçin. Önizlemede devir tarihini seçin, toplamı kontrol edin, Aktar'a dokunup tutar kutusunu işaretleyin.
+  - **Beklenen Sonuç:** Onay metni 'Toplam X TL devir borcu N hesaba ... tarihiyle yazılacak' der. Yükleme sonrası ilgili dairelerin ekstresinde 'Devir bakiyesi' borcu görünür ve bakiye artar.
+- [ ] **89.8. Aynı dosyayı ikinci kez yükleme (F30.08):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Aynı devir dosyasını bir daha yükleyin. Sonra bir dairenin tutarını değiştirip yeniden yükleyin.
+  - **Beklenen Sonuç:** Aynı dosyada satırlar 'değişiklik yok' sayılır ve yeni kayıt yazılmaz. Tutarı değişen satır 'farklı bir devir kaydı var, önce geri alın' hatası verir.
+- [ ] **89.9. Kiracı hesabına devir, eksi ve sıfır tutar (F30.09):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Dosyada bir satırın Hesap sütununa Kiracı yazın; bir satıra -50, bir satıra 0 yazın; önizlemeye bakın.
+  - **Beklenen Sonuç:** Kiracı satırında dairede kiracı yoksa uyarı çıkar. Eksi tutar hatalıdır (alacaklı devir desteklenmez). Sıfır tutar uyarıyla atlanır. 'Hatalı satır varsa aktarma' varsayılan açıktır.
+- [ ] **89.10. Devir yüklemesini geri alma (F30.10):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Finans > Daireler > Devir bakiyesi penceresinde bir yüklemenin yanındaki Geri al'a dokunun. Neden yazıp onaylayın.
+  - **Beklenen Sonuç:** Kaç kayıt ve ne kadar tutarda ters kayıt yazılacağı gösterilir (devirden sonra tahsilat varsa uyarı çıkar). Onaydan sonra bakiyeler eski hâline döner, yükleme 'Geri alındı' görünür. İkinci kez geri alınamaz.
+- [ ] **89.11. Hepsi bir arada yükleme (F30.11):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Kişiler > Toplu Yükle > Hepsi bir arada (Önerilen). Şablonu indirin. Bir dairenin 3 sakinini alt alta yazın (ilk satırda kat, tip bilgisi), bir başka dairenin ikinci satırında farklı kat yazın. Yükleyin.
+  - **Beklenen Sonuç:** İlk dairede tek daire güncellemesiyle 3 kişi eklenir. Farklı kat yazılan satır 'farklı daire bilgisi var' hatası verir ve o satır atlanır. Boş Kişiler ekranındaki Excel'den yükle kısayolu bu türü seçili açar.
+- [ ] **89.12. Gelir-gider raporunda devir (F30.12):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Devir yükledikten sonra Finans özetinde/gelir-gider raporunda ilgili ayın 'yazılan' tutarına bakın.
+  - **Beklenen Sonuç:** Devir bakiyesi bu ayın 'yazılan' toplamını şişirmez (ayrı rakam gösterimi sonraya kaldı).
+- [ ] **89.13. Gider türü önerisi (F30.13):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Finans > Giderler > yeni gider; kategori olarak Elektrik seçin, sonra Bakım-onarım seçin.
+  - **Beklenen Sonuç:** Elektrik için Rutin, Bakım-onarım için Beklenmedik önseçili gelir ve altında gerekçe yazar. Tür seçip kaydedince seçiminiz kullanılır.
+- [ ] **89.14. Sözleşmeli firma rutin sayılır (F30.14):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Sözleşmeler'de aktif aylık sözleşmesi olan firmayla aynı adda tedarikçi oluşturun; bu tedarikçiyle Diğer kategorisinde gider ekleyin.
+  - **Beklenen Sonuç:** Tür Rutin, gerekçe 'Bu firmayla aktif sözleşme var.' olur.
+- [ ] **89.15. Gider Analizi ekranı (F30.15):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Finans > Raporlar > Gider Analizi; 3 ay seçip Raporu Getir'e basın; sonra 'Tablo olarak göster'i açın.
+  - **Beklenen Sonuç:** Aylık rutin/beklenmedik/gelir grafiği, önceki döneme göre karşılaştırma cümlesi, kategori kırılımı ve tahmin kartı görünür; tablo aynı rakamları listeler.
+- [ ] **89.16. Tahmin artış oranı (F30.16):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Gider Analizi'nde artış alanına 10 yazıp Raporu Getir'e basın; sonra alanı boşaltıp tekrar getirin.
+  - **Beklenen Sonuç:** Rutin tahmin %10 artar; boş bırakınca kurallar tablosundaki oran kullanılır.
+- [ ] **89.17. PDF ve Excel (F30.17):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Gider Analizi raporunda PDF Yazdır'a ve dışa aktarmaya (Gider Analizi, Gider Tahmini) basın.
+  - **Beklenen Sonuç:** PDF'te grafik, kategori ve tahmin tabloları var; Excel/CSV'de ay-kategori ve tahmin satırları gelir.
+- [ ] **89.18. Kurul yetkisi (F30.18):**
+  - **Nasıl Test Edilir:** Rol: Yönetim kurulu üyesi. Kurul üyesiyle Gider Analizi'ni açın.
+  - **Beklenen Sonuç:** Rapor okunur; dışa aktarma ve tür değiştirme yoktur.
+- [ ] **89.19. Bu ay paneli görünür (F30.19):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Finans modülü açık sitede yönetici olarak ana sayfayı açın.
+  - **Beklenen Sonuç:** Üstte 'Bu ay · <ay yıl>' başlığı, dört kart (Yazılan, Toplanan, Geciken daire, Kasa + banka), Aylık döngü ve Son hareketler görünür.
+- [ ] **89.20. Hesap yokken kasa kartı (F30.20):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Kasa/banka hesabı tanımsız bir sitede ana sayfaya bakın.
+  - **Beklenen Sonuç:** Kasa kartında 0 değil 'Hesap yok' yazar.
+- [ ] **89.21. Eşlenmemiş tahsilat uyarısı (F30.21):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Hesaba eşlenmemiş tahsilatı olan sitede ana sayfaya bakın; koyu bardaki 'Eşle'ye dokunun.
+  - **Beklenen Sonuç:** Koyu barda '<n> tahsilat kasa / bankaya eşlenmedi' görünür; Eşle Finans ekranının Kasa sekmesini açar.
+- [ ] **89.22. Aylık döngü tek düğme (F30.22):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Aylık döngüde yapılmamış ilk adıma bakın ve düğmeye dokunun.
+  - **Beklenen Sonuç:** Yalnız ilk yapılmamış adımda düğme vardır; dokununca ilgili finans sekmesi açılır.
+- [ ] **89.23. İstediğim ayı kapatma (F30.23):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Finans > Dönemler'de iki ay önceki bir ayı seçip Ayı Kapat'a dokunun, onaylayın.
+  - **Beklenen Sonuç:** Seçilen aya kadar açık aylar birlikte kapanır; 'sırayla kapatılır' uyarısı çıkmaz; kapanan aya kayıt eklenemez.
+- [ ] **89.24. Raporlarda baskı metni yok (F30.24):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Finans > Raporlar'da gelir-gider raporuna ve PDF'ine bakın.
+  - **Beklenen Sonuç:** 'Kesinleşmemiştir' uyarısı yoktur; 'Kapalı aylar: ...' / 'Henüz kapatılmış ay yok.' ve ay kartında Kapalı/Açık yazar.
+- [ ] **89.25. Okunmamış duyuru kartı Panelin en üstünde (F30.25):**
+  - **Nasıl Test Edilir:** Rol: Sakin. Yönetici hesabıyla sakine yeni bir (acil olmayan) duyuru yayınlayın. Sakin hesabıyla Panel'i açın veya Yenile'ye dokunun.
+  - **Beklenen Sonuç:** Kart borç/selam kartının ÜSTÜNDE çıkar, kenarı ve noktası 3 kez yanıp söner, sonra sabit vurgulu kalır. Duyuruyu okuyunca kart Panel'den kalkar ve borç kartı en üste döner. Telefonda hareket azaltma açıksa kart hiç yanıp sönmez.
+- [ ] **89.26. Duyuruyu listemden kaldır ve Geri al (F30.26):**
+  - **Nasıl Test Edilir:** Rol: Sakin. Duyurular ekranında bir satırın sağındaki × düğmesine dokunun. Alt çıkan mesajda 'Geri al'a dokunun. Bir duyuruyu açıp pencerede 'Listemden kaldır'ı da deneyin.
+  - **Beklenen Sonuç:** Onay sorulmadan satır kalkar, 'Duyuru listenizden kaldırıldı.' görünür; okunmamışsa rozet düşer. Geri al deyince satır ve rozet geri gelir. Yönetici ekranında okunma sayısı değişmez.
+- [ ] **89.27. Yayınlanmış duyuruyu yönetici silsin (F30.27):**
+  - **Nasıl Test Edilir:** Rol: Yönetici. Yayında bir duyurunun ayrıntısını açıp 'Sil'e dokunun, metni okuyup onaylayın. Sonra sakin hesabında Duyurular'a bakın.
+  - **Beklenen Sonuç:** Sil düğmesi yayınlanmış duyuruda da görünür; onay metni 'geri alınamaz' ve 'yasal saklama süresince' der. Duyuru yönetici listesinden ve sakinlerin listesinden kalkar.
+- [ ] **89.28. Geri çekilmiş duyuruyu silme (F30.28):**
+  - **Nasıl Test Edilir:** Rol: Yönetici. Bir duyuruyu 'Geri Çek'in, sonra aynı duyuruda 'Sil'e dokunun ve onaylayın.
+  - **Beklenen Sonuç:** Geri çekilmiş duyuruda Sil görünür, onay metni 'bu listeden kaldırılır' der; duyuru yönetici listesinden kalkar.
+- [ ] **89.29. Taslak silme eskisi gibi (F30.29):**
+  - **Nasıl Test Edilir:** Rol: Yönetici. Bir taslak duyuruyu Sil ile silin.
+  - **Beklenen Sonuç:** Taslak kalıcı silinir, 'Duyuru silindi.' mesajı çıkar.
+- [ ] **89.30. Gizlenen duyuru bildirim ve sayılarda çıkmaz (F30.30):**
+  - **Nasıl Test Edilir:** Rol: Sakin. Okunmamış bir duyuruyu × ile kaldırın; sonra uygulamayı kapatıp açın ve alt çubuktaki Duyuru rozetine bakın.
+  - **Beklenen Sonuç:** Rozet sayısı kaldırılan duyuruyu saymaz; Panel'de o duyuru için kart çıkmaz; Geri al yapılmadıkça geri gelmez.
+- [ ] **89.31. Hesabı olmayan kişiye görev ver (F30.31):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Kişiler ekranında e-postası olan ama uygulamada hesabı olmayan bir kişinin kartını açın, Roller bölümünde Görev Ver deyin, Kapıcı seçip Kaydet'e basın.
+  - **Beklenen Sonuç:** Görev kaydedilir; kartta 'Kişinin uygulama hesabı yok: görev kadroda görünür; yetki için uygulamaya davet edin' yazar.
+- [ ] **89.32. Kişiyi uygulamaya davet et (F30.32):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi ve davetli kişi. Aynı kartta Uygulamaya Davet Et'e basın. Kişi e-postadaki bağlantıyı açıp ad ve şifre belirleyerek hesabı oluştursun. Sonra kartı yenileyin.
+  - **Beklenen Sonuç:** Davet e-postası gelir. Hesap açılınca kişi uygulamaya girer, görevinin yetkisi açılır, kartta 'Uygulama yetkisi açık' yazar. Aynı bağlantı ikinci kez açılınca 'davet kullanılamıyor' denir.
+- [ ] **89.33. Davet gönderim sınırları ve iptal (F30.33):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Davet gönderdikten hemen sonra Yeniden Gönder'e basın, sonra bir dakika bekleyip tekrar deneyin ve Daveti İptal Et'i deneyin.
+  - **Beklenen Sonuç:** Bir dakika dolmadan 'az önce gönderildi' uyarısı çıkar; sonra yeniden gönderilir (en çok 5 kez); iptal edilen davetin bağlantısı çalışmaz.
+- [ ] **89.34. Kadro sekmesi ve Modüller kartı (F30.34):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Kişiler ekranında Yönetim Kurulu ve Görevliler düğmesine ya da Kadro sekmesine dokunun. Sonra Modüller ekranının altına bakın.
+  - **Beklenen Sonuç:** Kadro sekmesinde yönetici, kurul, görevliler, varsa eski ek roller ve faydalı telefonlar görünür; boşsa 'Görev vermezseniz işler sizde kalır' yazar. Modüller'de eski Ek Roller yerine Yönetim Kadrosu yönlendirme kartı vardır.
+- [ ] **89.35. Rehber modülü ve faydalı telefon (F30.35):**
+  - **Nasıl Test Edilir:** Rol: Sakin ve yönetici. Süper kullanıcıdan Rehber modülünü açtırın. Kadro sekmesinde Telefon Ekle ile 'Su arıza 186' ekleyin. Görev verdiğiniz kişide telefon yazıp Rehberde göster açık bırakın. Sakin hesabıyla menüden Rehber'i açıp telefona dokunun.
+  - **Beklenen Sonuç:** Rehber ekranında yönetici, kurul, görevliler ve faydalı telefonlar görünür; telefona dokununca arama açılır. Modül kapalıyken sakinde Rehber menüsü yoktur.
+- [ ] **89.36. Mevcut hesabı olan kişiye davet (F30.36):**
+  - **Nasıl Test Edilir:** Rol: Davetli kişi. Uygulamada hesabı olan bir kişinin kayıtlı e-postasıyla kişi kaydı açıp davet gönderin (ya da daveti hesaplı e-posta ile alın). O hesapla giriş yapıp Panel'e bakın.
+  - **Beklenen Sonuç:** Panel'de 'Site sizi davet etti' kartı çıkar; Kabul et dediğinizde kişi kaydı hesaba bağlanır, Reddet dediğinizde davet kapanır.
+- [ ] **89.37. Borcu olan sakin hesabını silemez (F30.37):**
+  - **Nasıl Test Edilir:** Rol: Sakin. Finans modülü açık bir sitede borcu olan sakin hesabıyla girin. Profilim, Gizlilik ve Veri, Hesabımı Sil sayfasını açın.
+  - **Beklenen Sonuç:** Hesabınız şu anda silinemez kartında site, daire ve borç tutarı yazar, Borcum'a git düğmesi görünür, Silmeye Devam Et kapalıdır.
+- [ ] **89.38. Borcum'a git düğmesi (F30.38):**
+  - **Nasıl Test Edilir:** Rol: Sakin. Borç kartındaki Borcum'a git düğmesine dokunun.
+  - **Beklenen Sonuç:** Silme sayfası kapanır ve Borcum sayfası açılır.
+- [ ] **89.39. Borç kapanınca silinebilir (F30.39):**
+  - **Nasıl Test Edilir:** Rol: Sakin. Yönetici borcu tahsilatla kapatsın. Sakin Hesabımı Sil sayfasını yeniden açsın.
+  - **Beklenen Sonuç:** Borç engeli kalkar, silme akışı ilerler. Alacaklı (bakiye 0 veya eksi) sakin için engel çıkmaz.
+- [ ] **89.40. Üyesiz sitenin tek yöneticisi silemez (F30.40):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Tek yöneticisi olduğu (hiç sakini olmayan) siteyle Hesabımı Sil sayfasını açın.
+  - **Beklenen Sonuç:** Sitenin tek yöneticisisiniz mesajı ve devretme ya da kapatma talebi yolu görünür, silme kapalıdır.
+- [ ] **89.41. Kapatma talebi gönderince silinebilir (F30.41):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Site kartından Sil ile kapatma talebi gönderin, sonra Hesabımı Sil sayfasını açın.
+  - **Beklenen Sonuç:** Engel yoktur. Saklanacaklar listesinde kapatma talebiniz onay bekliyor notu görünür.
+- [ ] **89.42. Başka yönetici davet edince silinebilir (F30.42):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Siteye ikinci yönetici davet edin, davet kabul edilsin, sonra Hesabımı Sil sayfasını açın.
+  - **Beklenen Sonuç:** Engel çıkmaz.
+- [ ] **89.43. Modülü aç ve menüyü gör (F31.01):**
+  - **Nasıl Test Edilir:** Rol: Süper kullanıcı. Modüller ekranından bir sitede İşletme Projesi (ve Aidat ve Finans) modülünü açın. Yönetici hesabıyla girip menüde Site hizmetleri altında İşletme Projesi öğesine bakın.
+  - **Beklenen Sonuç:** Menüde İşletme Projesi görünür; modül kapalıyken görünmez.
+- [ ] **89.44. Yeni proje ve kalem girişi (F31.02):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. İşletme Projesi > Yeni proje > yıl yazın, Oluştur. Açılan ekranda birkaç kategoriye yıllık tutar yazıp Kalemleri kaydet'e basın.
+  - **Beklenen Sonuç:** Kalemler kaydedilir, toplam bütçe güncellenir; boş bırakılan kategori kalem olmaz.
+- [ ] **89.45. Geçici proje kalan gün (F31.03):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Yeni proje açarken Geçici proje'yi işaretleyin. Listeye dönün.
+  - **Beklenen Sonuç:** Üstte ve proje satırında 'Geçici proje: son 90 gün' benzeri kalan gün yazar.
+- [ ] **89.46. Tebliğ, itiraz ve kesinleştirme (F31.04):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Kalemli taslakta Tebliğ et > bugünü seçin. Hemen Kesinleştir'e basın. Sonra İtiraz: taslağa al deneyin.
+  - **Beklenen Sonuç:** Tebliğden sonra kalemler kilitlenir ve itiraz süresi sonu yazar; süre bitmeden Kesinleştir 'itiraz süresi bitiyor' uyarısı verir; taslağa alınca kalemler yine düzenlenir.
+- [ ] **89.47. Planlanan ve gerçekleşen (F31.05):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Finans'ta aynı yıla bir gider girin (bütçede kalemi olan kategori). Proje ekranının alt bölümüne bakın, PDF'e basın.
+  - **Beklenen Sonuç:** Kategori satırında planlanan, gerçekleşen, fark ve yüzde görünür; aşım kırmızı artı değerdir; PDF indirilir/paylaşılır.
+- [ ] **89.48. Kurul üyesi salt okur (F31.06):**
+  - **Nasıl Test Edilir:** Rol: Yönetim kurulu üyesi. Kurul hesabıyla İşletme Projesi ekranını açın.
+  - **Beklenen Sonuç:** Projeler okunur, Yeni proje ve düzenleme/eylem düğmeleri görünmez.
+- [ ] **89.49. Borçlu hesapları listele (F31.07):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Finans, Raporlar, İcra Dökümü sekmesine girin ve borçlu hesapları getiren düğmeye basın.
+  - **Beklenen Sonuç:** Vadesi geçmiş borcu olan ev sahibi ve kiracı hesapları ayrı satırlarda toplam tutarla listelenir. Borç yoksa 'hesap yok' mesajı çıkar.
+- [ ] **89.50. Kurul üyesi göremez (F31.08):**
+  - **Nasıl Test Edilir:** Rol: Kurul üyesi. Aynı Raporlar ekranına kurul üyesi olarak girin.
+  - **Beklenen Sonuç:** İcra Dökümü sekmesi görünmez.
+- [ ] **89.51. Tek hesap için icra PDF'i (F31.09):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Bir hesabı işaretleyin, bilgi alanına 'Test projesi' yazın, PDF Yazdır'a basın.
+  - **Beklenen Sonuç:** Bir sayfa çıkar: daire, hesap türü, kişi adı, vade sırasıyla kalemler, varsa gecikme tazminatı, toplam, 'Test projesi' ve avukat kontrolü notu.
+- [ ] **89.52. Bilgi alanı boş PDF (F31.10):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Bilgi alanını boş bırakıp PDF üretin.
+  - **Beklenen Sonuç:** PDF'te elle doldurulacak noktalı bir proje/kurul kararı alanı vardır.
+- [ ] **89.53. Avukat Excel listesi (F31.11):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. İki hesap seçip Avukat Excel listesi düğmesine basın.
+  - **Beklenen Sonuç:** Seçilen hesaplar için satır başına daire, hesap, borçlu, kalem sayısı, en eski vade, asıl alacak, gecikme tazminatı ve toplam içeren dosya iner.
+- [ ] **89.54. Ödeme sonrası tutar (F31.12):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Bir borçlu hesaba tahsilat girin, listeyi yenileyin.
+  - **Beklenen Sonuç:** Ödenen kalemler listeden çıkar veya kalan tutar azalır; toplam yaşlandırma raporuyla tutar.
+- [ ] **89.55. Modülü aç ve kartı gör (F32.01):**
+  - **Nasıl Test Edilir:** Rol: Süper kullanıcı. Süper kullanıcıyla Modüller ekranında siteyi seçin, 'Dosya Deposu (Google Drive)' modülünü açın, sayfanın altındaki karta bakın.
+  - **Beklenen Sonuç:** Modül kapalıyken kartta 'bu modül kapalı' yazar; açınca (Google bilgileri .env'de yoksa) 'Google Drive bağlantısı Yakında…' görünür.
+- [ ] **89.56. Google Drive bağla (F32.02):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Sunucu .env'ye DRIVE_CLIENT_ID, DRIVE_CLIENT_SECRET, DRIVE_REDIRECT_URI, DRIVE_TOKEN_KEY (32+ karakter) yazıp yeniden başlatın. Yönetici olarak karttaki 'Google Drive bağla' düğmesine dokunun, Google'da izni onaylayın, uygulamaya dönüp ekranı yenileyin.
+  - **Beklenen Sonuç:** Kartta bağlı hesap e-postası görünür; Drive'da 'SmartKeyPass — Site adı' klasörü oluşur.
+- [ ] **89.57. Dosya yükleme ve adlandırma (F32.03):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Bağlıyken POST /manager/sites/{site}/drive/files?kind=gider&mime=application/pdf&block=A&apartment=13&date=2026-10-20 ile bir PDF gönderin (octet-stream); aynısını bir kez daha gönderin.
+  - **Beklenen Sonuç:** Drive'da GiderEkim_26 klasöründe AB_D13_201026.pdf, ikincisi AB_D13_201026_2.pdf olur; GET .../files/{id}/content dosyayı geri verir.
+- [ ] **89.58. Bağlantı kopukken bekleme (F32.04):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Drive erişimini Google hesabından kaldırın, bir dosya yüklemeyi deneyin, sonra yeniden bağlayın.
+  - **Beklenen Sonuç:** Dosya 'pending' olarak kabul edilir; yeniden bağlanınca ya da POST .../drive/flush ile Drive'a gider ve 'stored' olur.
+- [ ] **89.59. Bağlantıyı kes (F32.05):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Kartta 'Bağlantıyı kes' düğmesine dokunup onaylayın.
+  - **Beklenen Sonuç:** Kart yeniden 'bağla' durumuna döner; sonraki yükleme 'Önce sitenin Google Drive hesabını bağlayın' (409) der.
+- [ ] **89.60. Modülü açıp sayaç ekleme (F32.06):**
+  - **Nasıl Test Edilir:** Rol: Süper kullanıcı, sonra site yöneticisi. Süper kullanıcı olarak Modüller'de siteniz için Sayaç Okuma ve Aidat ve Finans modüllerini açın. Yönetici olarak menüde Borçlar altındaki Sayaçlar'ı açın, Sayaç ekle ile bir daire, tür Su ve seri numarası girin.
+  - **Beklenen Sonuç:** Sayaçlar menüsü görünür; sayaç listede daire adı ve seri numarasıyla çıkar. Aynı seri numarası aynı türde tekrar girilirse 'zaten kayıtlı' uyarısı gelir.
+- [ ] **89.61. Elle okuma girme ve sıra denetimi (F32.07):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Sayaca dokunun; 31 Ağustos tarihine 100, 30 Eylül tarihine 130 okuması ekleyin. Sonra 15 Eylül tarihine 90 girmeyi deneyin. Bugünden ilerideki bir tarih de deneyin.
+  - **Beklenen Sonuç:** İlk iki okuma kaydedilir. 90 değeri önceki okumadan küçük olduğu için reddedilir; gelecek tarih kabul edilmez.
+- [ ] **89.62. Dosyadan okuma aktarma (F32.08):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Okuma aktar sekmesinde türü Su seçip okuma tarihini girin. İlk sütunu seri no ya da 'A Blok - 5' gibi daire kodu, ikinci sütunu değer olan bir CSV ya da Excel dosyası seçin (içinde bir yanlış kod olsun). Kontrol et'e, sonra Aktar'a basın.
+  - **Beklenen Sonuç:** Kontrol et, aktarılacak ve sorunlu satır sayısını ve yanlış kodun nedenini gösterir. Aktar yalnız hatasız satırları yazar; aynı dosya tekrar yüklenince satırlar 'zaten kayıtlı' sayılır, çift kayıt olmaz.
+- [ ] **89.63. Birim fiyatla faturalandırma (F32.09):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Faturalandır sekmesinde Su, Birim fiyat, başlangıç 31 Ağustos, bitiş 30 Eylül seçip birim fiyatı 45,50 girin; Önizle'ye basın, sonra Borçlandır'a basıp onaylayın. Finans ekranından o dairenin borcuna bakın.
+  - **Beklenen Sonuç:** Önizlemede her dairenin tüketimi ve tutarı (tüketim x 45,50) ve toplam görünür. Onayla borç oturanın hesabına (kiracı varsa kiracı) yazılır. Aynı aralık tekrar faturalandırılmak istenirse 'çakışıyor' uyarısı gelir; eksik okumalı daire varsa uyarıyla listelenir.
+- [ ] **89.64. Isı payı dağıtımı (F32.10):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Isı sayaçları olan daireler için Faturalandır'da tür Isı, yöntem 'Isı payı' seçin, toplam gideri girip Önizle'ye basın. Bir dairenin m² bilgisini boş bırakıp 'eksik daireleri atla' kapalıyken Borçlandır'ı deneyin.
+  - **Beklenen Sonuç:** Gider %70 tüketime, %30 daire m²'sine göre paylaşılır ve toplam girilen tutara eşittir. m²'si boş daire eksik listesinde 'alanı girilmemiş' diye görünür ve atla seçilmeden borçlandırma yapılamaz.
+- [ ] **89.65. Kurul üyesi salt okuma (F32.11):**
+  - **Nasıl Test Edilir:** Rol: Kurul üyesi. Kurul üyesi olarak Sayaçlar'ı açın; sakin ya da görevli hesabında menüye bakın.
+  - **Beklenen Sonuç:** Kurul üyesi sayaç ve geçmiş faturalandırmaları görür ama ekle/sil/aktar/borçlandır düğmesi yoktur. Sakin ve görevli menüde Sayaçlar'ı görmez.
+- [ ] **89.66. Firma oluşturma (F33.01):**
+  - **Nasıl Test Edilir:** Rol: Süper kullanıcı. Sağ üst dişli > Yönetim Firması > Yeni Yönetim Firması. Ad, kayıtlı bir kullanıcının e-postası ve pay yüzdesi girin.
+  - **Beklenen Sonuç:** Firma listede görünür; girdiğiniz kişi firmanın sahibi olur.
+- [ ] **89.67. Siteyi firmaya bağlama (F33.02):**
+  - **Nasıl Test Edilir:** Rol: Süper kullanıcı. Firmayı açın > Site Bağla; site kodu ve aylık bedel (TL) girin.
+  - **Beklenen Sonuç:** Site 'Bağlı siteler' listesinde görünür. Aynı siteyi başka firmaya bağlamaya çalışınca hata verir.
+- [ ] **89.68. Tüm siteler tablosu (F33.03):**
+  - **Nasıl Test Edilir:** Rol: Firma sahibi. Firma sahibi hesabıyla giriş yapın, dişli > Yönetim Firması.
+  - **Beklenen Sonuç:** Her site için daire sayısı, bu ay tahsilat oranı, açık borç ve borçlu daire sayısı görünür; oranı en düşük site en üstte.
+- [ ] **89.69. Personel ekleme ve yetki (F33.04):**
+  - **Nasıl Test Edilir:** Rol: Firma sahibi. Personel Ekle ile kayıtlı birinin e-postasını girin. O kişiyle giriş yapıp Yönetim Firması'nı açın.
+  - **Beklenen Sonuç:** Personel firmayı ve üyeleri görür, 'Tüm siteler' tablosunu ve pay dökümünü görmez.
+- [ ] **89.70. Deneme süresi (F33.05):**
+  - **Nasıl Test Edilir:** Rol: Süper kullanıcı. Yönetim Firması ekranında 'Süreyi Değiştir' ile 30 yazın. Yeni bir site açın; sonra o siteyi firmaya bağlayıp Tüm siteler kartına bakın.
+  - **Beklenen Sonuç:** Yeni sitede 'Deneme bitişi' yaklaşık 30 gün sonrasını gösterir. 0 yazarsanız yeni site denemesiz açılır.
+- [ ] **89.71. Aylık ortaklık payı (F33.06):**
+  - **Nasıl Test Edilir:** Rol: Firma sahibi. Firma ekranında 'Aylık ortaklık payı' bölümünde okla ayı değiştirin.
+  - **Beklenen Sonuç:** Her sitede bedel ve pay görünür; deneme süresindeki sitede 'pay yok' yazar; toplam pay doğru toplanır. Bilgi amaçlıdır, fatura oluşmaz.
+- [ ] **89.72. SMS kapalıyken ekran (F33.07):**
+  - **Nasıl Test Edilir:** Rol: Herkes. Sunucuda SMS anahtarı yokken giriş ekranında Telefonla giriş (SMS) düğmesine dokunun.
+  - **Beklenen Sonuç:** Sayfada Yakında… ve SMS ile giriş şu an kullanılamıyor yazar; WhatsApp satırı da Yakında… gösterir.
+- [ ] **89.73. SMS ile giriş (F33.08):**
+  - **Nasıl Test Edilir:** Rol: Sakin. Sunucu .env'ye Netgsm anahtarlarını koyup yeniden başlatın; telefonu hesapta kayıtlı kullanıcı numarasını yazıp Kod Gönder deyin, gelen 6 haneli kodu girin.
+  - **Beklenen Sonuç:** SMS gelir, kod doğruysa oturum açılır; yanlış kodda hata çıkar, 5 yanlıştan sonra kod geçersiz olur.
+- [ ] **89.74. Kayıtsız numara (F33.09):**
+  - **Nasıl Test Edilir:** Rol: Herkes. Hesapta olmayan bir numarayla kod isteyin.
+  - **Beklenen Sonuç:** Aynı 'kod gönderildi' mesajı çıkar ama SMS gelmez; giriş olmaz.
+- [ ] **89.75. Kargo e-postası (F33.10):**
+  - **Nasıl Test Edilir:** Rol: Görevli ve sakin. Ziyaretçi ve Kargo modülü açıksa, görevli olarak bir daireye kargo kaydı girin.
+  - **Beklenen Sonuç:** O dairenin sakinine 'Kargo geldi' e-postası gider (SMTP açıksa); telefon uygulaması kayıtlıysa bildirim de düşer.
+- [ ] **89.76. Tarayıcı bildirimi (F33.11):**
+  - **Nasıl Test Edilir:** Rol: Sakin. Sunucuya VAPID anahtarlarını koyun; web uygulamasında Bildirim Tercihleri'nden Tarayıcı bildirimi'ni açıp izin verin, sonra kargo kaydı girin.
+  - **Beklenen Sonuç:** Tarayıcıda 'Kargo geldi' bildirimi görünür; anahtarı kapatınca gelmez. Anahtar yoksa satır Yakında… der.
+- [ ] **89.77. Modülü aç (F33.12):**
+  - **Nasıl Test Edilir:** Rol: Süper kullanıcı. Modüller ekranından bir sitede Komşu Panosu modülünü aç.
+  - **Beklenen Sonuç:** Sitenin yöneticisi ve sakinlerinin menüsünde İletişim grubunda Komşu Panosu görünür; kapalıyken görünmez.
+- [ ] **89.78. İlan yaz (F33.13):**
+  - **Nasıl Test Edilir:** Rol: Sakin. Komşu Panosu > Yeni ilan; başlık ve metin yazıp Onaya gönder.
+  - **Beklenen Sonuç:** İlan listede Onay bekliyor etiketiyle sadece sende görünür; komşular henüz görmez.
+- [ ] **89.79. İlanı onayla (F33.14):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Komşu Panosu > Onay bekleyen sekmesi > Onayla.
+  - **Beklenen Sonuç:** İlan Yayındaki sekmesine geçer; sakinler listede görür.
+- [ ] **89.80. İlanı reddet (F33.15):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Bekleyen ilanda Reddet, gerekçe yaz.
+  - **Beklenen Sonuç:** Yazar ilanını gerekçesiyle (Yönetici notu) Reddedildi olarak görür; komşular görmez.
+- [ ] **89.81. Şikayet et ve kaldır (F33.16):**
+  - **Nasıl Test Edilir:** Rol: Sakin ve yönetici. Sakin başkasının yayındaki ilanında Şikayet et ve neden yazar. Yönetici Şikayetli sekmesinden ilanı Kaldır ile gerekçeyle kaldırır.
+  - **Beklenen Sonuç:** Yönetici şikayet sayısını ve nedeni görür; kaldırılan ilan komşulardan kaybolur. Kendi ilanında Şikayet et düğmesi çıkmaz.
+- [ ] **89.82. İlanı geri çek (F33.17):**
+  - **Nasıl Test Edilir:** Rol: Sakin. Kendi bekleyen ya da yayındaki ilanında Geri çek.
+  - **Beklenen Sonuç:** İlan listeden kalkar (Geri çekildi), komşular artık görmez.
+- [ ] **89.83. Modülleri aç (F34.01):**
+  - **Nasıl Test Edilir:** Rol: Süper kullanıcı. Modüller ekranından bir sitede 'Kart Ödemesi' ve 'Kamera ve Plaka' modüllerini aç.
+  - **Beklenen Sonuç:** İki modül listede görünür ve açılır; varsayılan kapalıydı.
+- [ ] **89.84. Ödeme ve Kamera menüsü (F34.02):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Modülleri açık sitede giriş yap, Site hizmetleri altında 'Ödeme ve Kamera' ekranını aç.
+  - **Beklenen Sonuç:** Kart Ödemesi kartında iyzico ve PayTR 'Yakında…' etiketiyle görünür; komisyonun ödeyene yansıtıldığı yazar.
+- [ ] **89.85. Komisyon notu (F34.03):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. iyzico satırındaki kalem simgesine bas, bir not yaz, Kaydet.
+  - **Beklenen Sonuç:** 'Bilgi kaydedildi.' çıkar, not satırda görünür.
+- [ ] **89.86. Kamera ekle ve belirteç (F34.04):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Kamera ekle: marka, ad, IP, kullanıcı ve parola gir, Kaydet.
+  - **Beklenen Sonuç:** Kamera listede çıkar; olay belirteci bir kez gösterilir ve kopyalanabilir; parola hiçbir yerde görünmez.
+- [ ] **89.87. Plaka olayı gönder (F34.05):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Araç listesinde olan bir plakayı, belirteçle POST /camera-events/plate ucuna gönder; sonra ekranı yenile.
+  - **Beklenen Sonuç:** Plaka 'Kayıtlı araç' olarak listelenir; listede olmayan plaka 'Listede yok' görünür; kapı açılmaz.
+- [ ] **89.88. Belirteç yenile / pasifleştir (F34.06):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Kamera menüsünden 'Belirteci yenile' yap, eski belirteçle olay gönder; sonra kamerayı pasifleştir.
+  - **Beklenen Sonuç:** Eski belirteç 401 verir; pasif kameradan olay kabul edilmez.
+- [ ] **89.89. Varsayılan dil Türkçe (F34.07):**
+  - **Nasıl Test Edilir:** Rol: Herkes. Uygulamayı ilk kez aç, giriş ekranına bak.
+  - **Beklenen Sonuç:** Etiketler Türkçe: E-posta veya Kullanıcı Adı, Şifre, Giriş Yap.
+- [ ] **89.90. İngilizceye geçiş (F34.08):**
+  - **Nasıl Test Edilir:** Rol: Sakin / yönetici. Giriş yap, Profilim sayfasında Dil bölümünden English seç.
+  - **Beklenen Sonuç:** Yan menüde Help and support ve Sign out görünür.
+- [ ] **89.91. Seçim kalıcı (F34.09):**
+  - **Nasıl Test Edilir:** Rol: Herkes. English seçiliyken uygulamayı kapatıp aç, çıkış yap.
+  - **Beklenen Sonuç:** Giriş ekranı İngilizce (Email or username, Password, Sign in).
+- [ ] **89.92. Türkçeye dönüş (F34.10):**
+  - **Nasıl Test Edilir:** Rol: Herkes. Profilim'de Dil bölümünden Türkçe seç.
+  - **Beklenen Sonuç:** Menü ve giriş metinleri Türkçeye döner.

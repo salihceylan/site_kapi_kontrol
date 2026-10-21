@@ -105,7 +105,7 @@ export default {
           note: 'Hap dokunuşu: modu çevirir; yönetici paneline dönüşte seçili menü dashboard\'a alınır' },
         { file: 'lib/ui/pages/home_page.dart', find: 'onToggleMode: () {',
           note: 'Çekmecedeki "Sakin Moduna Geç / Yönetici Paneline Geç" satırı aynı bayrağı çevirir' },
-        { file: 'lib/ui/widgets/yan_menu.dart', find: "title: isResidentMode ? 'Yönetici Paneline Geç' : 'Sakin Moduna Geç',",
+        { file: 'lib/ui/widgets/yan_menu.dart', find: "title: isResidentMode ? context.l10n.menuSwitchToAdmin : context.l10n.menuSwitchToResident,",
           note: 'Çekmece geçiş satırının metni (yalnız `canToggleMode` true iken çizilir)' },
       ],
       causes: [
@@ -896,7 +896,7 @@ export default {
           note: 'Hata metni AuthService\'ten gelir (null = başarı; başarıda oturum kurulur ve kök rota HomePage olur)' },
         { file: 'lib/ui/pages/login_page.dart', find: 'AppSnack.show(context, errorMessage, kind: AppSnackKind.error, maxLines: 8);',
           note: 'Uzun mesajlar (örn. hesap kilidi) 8 satıra kadar gösterilir; sonrası üç nokta' },
-        { file: 'lib/ui/pages/login_page.dart', find: "label: 'Giriş Yap',",
+        { file: 'lib/ui/pages/login_page.dart', find: "label: context.l10n.loginSubmit,",
           note: 'Yüklenirken düğme etiketi spinner olur ve dokunma kapanır (`loading`)' },
         { file: 'lib/ui/pages/login_page.dart', find: "return 'Lütfen e-posta veya kullanıcı adınızı girin.';",
           note: 'Boş alan doğrulaması (e-posta veya kullanıcı adı; ikisi de kabul edilir)' },

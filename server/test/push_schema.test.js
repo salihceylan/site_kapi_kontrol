@@ -267,13 +267,13 @@ describe('kaynak bağlantıları', () => {
     };
     const yes = run(true);
     assert.deepEqual(await deletePushDataForUser(yes.client, 12345), { devices: 3, outbox: 3 });
-    assert.deepEqual(yes.log.slice(1).map((q) => [q.sql, q.params]), [
+    assert.deepEqual(yes.log.slice(1, 3).map((q) => [q.sql, q.params]), [
       ['DELETE FROM push_devices WHERE id IN (SELECT id FROM push_devices WHERE user_code = $1 ORDER BY id FOR UPDATE)', [12345]],
       ['DELETE FROM push_outbox WHERE id IN (SELECT id FROM push_outbox WHERE user_code = $1 ORDER BY id FOR UPDATE)', [12345]],
     ]);
     const no = run(false);
     assert.deepEqual(await deletePushDataForUser(no.client, 12345), { devices: 0, outbox: 0 });
-    assert.equal(no.log.length, 1);
+    assert.equal(no.log.length, 2, 'push tabloları yok: ilk sorgu + 063 tarayıcı abonelik varlık sorgusu; silme yok');
   });
 
   it('veri dışa aktarma: push_devices (platform, app_version, tarihler) — jeton / kurulum kimliği HARİÇ; excluded notu; tablo yoksa boş', async () => {

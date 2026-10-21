@@ -125,6 +125,13 @@ abstract final class HelpContent {
     'Hepsi bir arada',
     'Dosya Deposu (Google Drive)',
     'Google Drive bağla',
+    'Telefonla giriş (SMS)',
+    'Yakında…',
+    'Öde',
+    'Kopyala',
+    'Geri çekildi',
+    'Bu ay',
+    '×',
     'KAPIYI AÇ',
     'Yeni proje',
     'Geçici proje',
@@ -664,7 +671,7 @@ abstract final class HelpContent {
       answer:
           'Giriş ekranında “Telefonla giriş (SMS)” seçeneğine dokunun, hesabınızdaki telefon numarasını yazın ve gelen '
           '6 haneli kodu girin. Kod 5 dakika geçerlidir. SMS hizmeti açık değilse ekran “Yakında…” der; '
-          'e-posta ve parolanızla girebilirsiniz. WhatsApp ile giriş henüz yoktur.',
+          'e-posta ve parolanızla girebilirsiniz. Başka bir giriş yöntemi henüz yoktur.',
     ),
     HelpFaq(
       question: 'Kargom geldiğinde nasıl haberdar olurum?',

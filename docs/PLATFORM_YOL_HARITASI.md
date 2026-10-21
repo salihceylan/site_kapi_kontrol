@@ -374,11 +374,11 @@ iş planı: `docs/superpowers/plans/2026-10-21-eksik-listesi-programi.md`.
 | --- | --- | --- |
 | 0 | G1 Panel modül vitrini | son düzeltme turunda; ardından canlı |
 | 1 | G12 iki hesap · G11 kurallar tablosu + F5 altın veri seti · G6 + G7 sade tasarım · G2 + G3 gruplu menü ve sakin alt çubuğu · H1–H6 ve G15 hukuk taslakları, hesap rehberleri, demo senaryosu · D3 dış kopya (kuruldu 2026-10-21) | tamamlandı, canlıya alınıyor |
-| 2 | F1 + G4 IBAN, referans kodu, "Öde" · F2 dekont ve geçici kabul · F3 banka dosyası ve IBAN hafızası · F4 + N6 devir bakiyesi ve tek dosyada toplu yükleme · R1 gelir-gider analizi, grafik ve tahmin · G5 + N4 yönetici ana sayfası, dikkat barı ve ay kapatma · N1 duyurular · N2 + N3 + S5 yönetim kadrosu, uygulama daveti ve rehber · N5 hesap silme engeli | |
-| 3 | F7 işletme projesi · T7 ekipman ve bakım + T6 teklifler (R1'e ekipman kırılımı) · R2 faaliyet raporu · F8 icra dökümü · G10 + G14 + R3 sade dil, Excel'e aktar, rapor adları | |
-| 4 | D1 Drive bağlantısı · T1–T5 sayaç, fotoğrafla okuma, çevrimdışı kuyruk, adlandırma · T2 ısı payı | |
-| 5 | Y1 + Y2 yönetim firması, deneme süresi, ortaklık payı · C1 + S1 + S3 SMS arayüzü, SMS ile giriş, kargo bildirimi; web için Firebase'siz tarayıcı bildirimi (N8) · S4 komşu panosu | |
-| 6 | G8 + G9 Phosphor ikonları ve beyaz etiket · F6 + T8 kart ödemesi ve kamera arayüzleri · S6 çok dil altyapısı | |
+| 2 | F1 + G4 IBAN, referans kodu, "Öde" · F2 dekont ve geçici kabul · F3 banka dosyası ve IBAN hafızası · F4 + N6 devir bakiyesi ve tek dosyada toplu yükleme · R1 gelir-gider analizi, grafik ve tahmin · G5 + N4 yönetici ana sayfası, dikkat barı ve ay kapatma · N1 duyurular · N2 + N3 + S5 yönetim kadrosu, uygulama daveti ve rehber · N5 hesap silme engeli | temel yapı tamamlandı (2026-10-21): IBAN ve "Öde", devir bakiyesi ve tek dosya, gider analizi, yönetici ana sayfası ve ay kapatma, duyurular, kadro/davet/rehber, hesap silme engeli (dekont, geçici kabul ve banka dosyası sonraki aşamada) |
+| 3 | F7 işletme projesi · T7 ekipman ve bakım + T6 teklifler (R1'e ekipman kırılımı) · R2 faaliyet raporu · F8 icra dökümü · G10 + G14 + R3 sade dil, Excel'e aktar, rapor adları | temel yapı tamamlandı (2026-10-21): işletme projesi ve icra dökümü (ekipman, teklifler, faaliyet raporu ve sade dil sonraki aşamada) |
+| 4 | D1 Drive bağlantısı · T1–T5 sayaç, fotoğrafla okuma, çevrimdışı kuyruk, adlandırma · T2 ısı payı | temel yapı tamamlandı (2026-10-21): Drive bağlantısı ve sayaç/faturalandırma (fotoğrafla okuma ve çevrimdışı kuyruk sonraki aşamada) |
+| 5 | Y1 + Y2 yönetim firması, deneme süresi, ortaklık payı · C1 + S1 + S3 SMS arayüzü, SMS ile giriş, kargo bildirimi; web için Firebase'siz tarayıcı bildirimi (N8) · S4 komşu panosu | temel yapı tamamlandı (2026-10-21): yönetim firması, SMS ve tarayıcı bildirimi, komşu panosu |
+| 6 | G8 + G9 Phosphor ikonları ve beyaz etiket · F6 + T8 kart ödemesi ve kamera arayüzleri · S6 çok dil altyapısı | temel yapı tamamlandı (2026-10-21): kart ödemesi ve kamera arayüzleri, çok dil altyapısı (Phosphor ikonları ve beyaz etiket sonraki aşamada) |
 
 ### Dışarıdan gerekenler (karar değil; hesap açma ve onay)
 

@@ -246,6 +246,6 @@ void main() {
     await _pump(t, auth);
     expect(find.byType(MyFinanceCard), findsOneWidget);
     expect(find.byType(LedgerEntryTile), findsOneWidget);
-    expect(find.text('Online ödeme yakında. Ödemelerinizi şimdilik site yönetimine yapabilirsiniz.'), findsOneWidget);
+    expect(find.text('Online ödeme yakında. Ödemelerinizi şimdilik site yönetimine yapabilirsiniz.'), findsNothing); // 2A: not kalktı, yerine "Öde" sayfası var
   });
 }

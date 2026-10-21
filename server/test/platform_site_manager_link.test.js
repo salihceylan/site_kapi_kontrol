@@ -190,7 +190,9 @@ describe('bağ kaynağı yazımı', () => {
     await createSiteWithStructure(client, { user: { id: 7, user_code: 48213, role: 'individual' }, input, managementType: 'apartment_site', subscription: { source: 'manual_approval', applicationId: 41 } });
     assert.deepEqual(log.find((e) => /^INSERT INTO site_subscriptions/.test(e.sql)).params, [900, 'manual_approval', 'manual_approval', 41]);
     // abonelik satırı çekirdeğin SON ifadesidir (kurulum yarıda kalırsa satır da kalmaz: tek transaction)
-    assert.ok(/^INSERT INTO site_subscriptions/.test(log[log.length - 1].sql));
+    // (Y2: ardından deneme süresi SAVEPOINT / UPDATE ifadeleri gelebilir; başka INSERT gelmez)
+    const subscriptionAt = log.findLastIndex((e) => /^INSERT INTO site_subscriptions/.test(e.sql));
+    assert.ok(subscriptionAt >= 0 && log.slice(subscriptionAt + 1).every((e) => !/^INSERT /.test(e.sql)));
   });
 
   it("davet kabulü (e-posta doğrulama) ve ortak yönetici ataması yeni bağları 'invited' yazar; başka yolda 'invited' YAZILMAZ", () => {

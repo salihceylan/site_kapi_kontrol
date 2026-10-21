@@ -166,7 +166,7 @@ const MANAGER_ROUTES = [
   ['GET', '/reminders/runs', 'read'], ['GET', '/reminders/runs/1', 'read'], ['POST', '/reminders/runs/1/cancel', 'write'],
   ['GET', '/reports/aging', 'read'], ['GET', '/reports/income-expense', 'read'], ['GET', '/reports/cash-position', 'read'], ['GET', '/reports/board-summary', 'read'], ['GET', '/apartments/1/statement', 'read'],
   ['GET', '/exports/finance_aging', 'write'],
-  ['GET', '/expenses/nature-suggestion', 'read'], ['PUT', '/expenses/1/nature', 'write'], ['GET', '/reports/expense-analysis', 'read'],
+  ['GET', '/expenses/nature-suggestion', 'read'], ['PUT', '/expenses/1/nature', 'write'], ['GET', '/reports/expense-analysis', 'read'], ['GET', '/reports/enforcement', 'write'],
 ];
 const OTHER_ROUTES = [
   'GET /app/my-finance/entries/:entryId/late-fee', 'GET /app/my-finance/apartments/:id/statement', 'GET /app/my-finance/receipts', 'GET /app/my-finance/receipts/:id',
@@ -189,15 +189,15 @@ const toTemplate = (path) =>
     .replace(/\/exports\/finance_aging/, '/exports/:kind');
 
 describe('4b rota listesi ve zincir', () => {
-  it('63 rota, sözleşmedeki listeyle birebir (ne eksik ne fazla)', () => {
+  it('64 rota, sözleşmedeki listeyle birebir (ne eksik ne fazla)', () => {
     const expected = [
       ...MANAGER_ROUTES.map(([method, path]) => `${method} /manager/sites/:siteCode/finance${toTemplate(path).slice('/manager/sites/:siteCode/finance'.length)}`),
       ...OTHER_ROUTES,
     ].sort();
     const actual = ORIGINAL.map((route) => `${route.method} ${route.path}`).sort();
     assert.deepEqual(actual, expected);
-    assert.equal(actual.length, 63);
-    assert.equal(new Set(actual).size, 63, 'yinelenen rota yok');
+    assert.equal(actual.length, 64);
+    assert.equal(new Set(actual).size, 64, 'yinelenen rota yok');
   });
 
   it('hepsi authRequired ile başlar; yönetim uçlarında hız sınırlayıcı var: yazma -> yazma sınırlayıcı, okuma/önizleme -> okuma sınırlayıcı; sakin uçları sakin sınırlayıcı', () => {

@@ -97,12 +97,17 @@ class DriveStorageCard extends StatefulWidget {
   final DriveStorageApi? api;
   final Future<bool> Function(Uri uri)? launcher;
 
+  /// Yalnız testler: Modüller ekranı gibi kartı içeren ekranların testlerinde gerçek ağ çağrısı yapılmasın diye varsayılan API.
+  @visibleForTesting
+  static DriveStorageApi? debugApi;
+
   @override
   State<DriveStorageCard> createState() => _DriveStorageCardState();
 }
 
 class _DriveStorageCardState extends State<DriveStorageCard> {
-  late final DriveStorageApi _api = widget.api ?? DriveStorageApi(baseUrl: widget.authService.api.baseUrl);
+  late final DriveStorageApi _api =
+      widget.api ?? DriveStorageCard.debugApi ?? DriveStorageApi(baseUrl: widget.authService.api.baseUrl);
   DriveStorageStatus? _status;
   String? _error;
   bool _moduleOff = false;

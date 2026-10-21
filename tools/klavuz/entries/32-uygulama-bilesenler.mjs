@@ -1023,7 +1023,7 @@ export default {
           note: 'menu.dart tek satırlık yeniden dışa aktarımdır; gerçek kod yan_menu.dart ta' },
         { file: 'lib/ui/widgets/yan_menu.dart', find: 'List<SirketMenuItem> _itemsForRole(',
           note: 'Rol ve mod başına menü öğeleri burada seçilir' },
-        { file: 'lib/ui/widgets/yan_menu.dart', find: "title: isResidentMode ? 'Yönetici Paneline Geç' : 'Sakin Moduna Geç',",
+        { file: 'lib/ui/widgets/yan_menu.dart', find: "title: isResidentMode ? context.l10n.menuSwitchToAdmin : context.l10n.menuSwitchToResident,",
           note: 'Çift rollü kullanıcıda mod değiştirme satırı' },
       ],
       causes: ['_itemsForRole listesinde öğe o rol/mod için yok', 'Mod değiştirme yalnız canToggleMode true iken çıkar'],

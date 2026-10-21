@@ -1215,6 +1215,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       for (final site in _moduleAccess.result!.sites)
         if (_isRecipientSite(site) && site.isEnabled(PlatformModuleCodes.directory))
           PeopleSite(code: site.siteCode, name: site.siteName),
+    ];
+  }
+
   /// "Ödeme ve Kamera" ekranındaki siteler: `card_payments` ya da `plate_cameras` modülü AÇIK siteler; yönetici yazar, kurul
   /// üyesi salt okur. FAIL-OPEN YOK: modül verisi yoksa ya da süper kullanıcıda (modül süzgeci yok) liste boştur.
   List<DeviceSite> _deviceIntegrationSites(UserRole role) {
@@ -1845,11 +1848,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
     if (item == SirketMenuItem.rehber) {
       return _directoryResidentSites(role).isNotEmpty;
+    }
     // İşletme Projesi: `budget` modülü açık siteye bağlı yönetici / kurul; sakin ve görevli için yok.
     if (item == SirketMenuItem.isletmeProjesi) {
       return _canAccessBudget(role);
+    }
     if (item == SirketMenuItem.komsuPanosu) {
       return _neighborBoardSites(role).isNotEmpty;
+    }
     if (item == SirketMenuItem.odemeKamera) {
       return _deviceIntegrationSites(role).isNotEmpty;
     }
@@ -5670,8 +5676,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (site != null && _selectedSite?.id != siteCode) unawaited(_selectSite(site));
   }
 
-  /// Ayarlar panelindeki sayfa seçmeyen eylemler: "Masaüstüne Widget Ekle" (yalnız mobilde ve süper kullanıcı dışında;
-  /// masaüstünde "gönderildi" mesajı yanıltıcı olurdu). Panel kapanır, sonra istek gönderilir.
   Future<void> _loadCompanyMembership() async {
     final role = widget.authService.session?.role;
     if (role == null || role == UserRole.apartmentOwner) return;
@@ -5683,6 +5687,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
+  /// Ayarlar panelindeki sayfa seçmeyen eylemler: "Masaüstüne Widget Ekle" (yalnız mobilde ve süper kullanıcı dışında;
+  /// masaüstünde "gönderildi" mesajı yanıltıcı olurdu). Panel kapanır, sonra istek gönderilir.
   List<YanMenuAction> _settingsExtraActions(UserSession session) => <YanMenuAction>[
         if (session.role == UserRole.superUser || _isCompanyMember)
           YanMenuAction(
@@ -6225,15 +6231,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       onRefreshAccount: () => _refreshAccountAfterApproval(),
       applicantRole: canApplyForSite(session.role),
       aboveHero: resident ? _unreadAnnouncementCardSlot(session) : null,
-      belowHero: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Bekleyen site davetleri (058): e-postası eşleşen davet varsa Kabul et / Reddet kartı; yoksa görünmez.
-          PendingInvitationsCard(authService: widget.authService, onAccepted: () => unawaited(_moduleAccess.refresh())),
-          if (resident) _unreadAnnouncementCardSlot(session),
-        ],
-      ),
+      // Bekleyen site davetleri (058): e-postası eşleşen davet varsa Kabul et / Reddet kartı; yoksa görünmez.
+      belowHero: PendingInvitationsCard(authService: widget.authService, onAccepted: () => unawaited(_moduleAccess.refresh())),
       onOpenHelp: _openHelpPage,
       debtSiteCodes: resident ? _debtSiteCodes() : null,
       quickActionItems: resident ? _quickActionItems() : null,
@@ -6720,11 +6719,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
       case SirketMenuItem.rehber:
         return DirectoryView(key: _directoryKey, authService: widget.authService);
+
       case SirketMenuItem.komsuPanosu:
         return NeighborBoardView(
           key: _neighborBoardKey,
           authService: widget.authService,
           sites: _neighborBoardSites(session.role),
+        );
+
       case SirketMenuItem.odemeKamera:
         return DeviceIntegrationsView(
           key: _deviceIntegrationsKey,

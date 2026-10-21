@@ -190,24 +190,15 @@ void main() {
   });
 
   group('onay pencereleri', () {
-    listMatrix('Geçiş Kontrol kapatma onayı (uzun uyarı metni) ve rol kaldırma onayı', (
+    listMatrix('Geçiş Kontrol kapatma onayı (uzun uyarı metni)', (
       t,
       w,
       h,
       s,
       dark,
     ) async {
-      final auth = ModulesFakeAuth(
-        roles: <int, List<StaffRoleRecord>>{
-          11: <StaffRoleRecord>[
-            mdRole(
-              41,
-              'Çok Uzun Adlı Soyadlı Bir Yönetim Kurulu Üyesi Hesabı',
-              'cok.uzun.bir.eposta.adresi@ornek-alan-adi.com.tr',
-            ),
-          ],
-        },
-      );
+      // Ek roller 058'den beri Kişiler > Kadro sekmesindedir; "Rolü Kaldır" onayı orada denenir.
+      final auth = ModulesFakeAuth();
       await pumpList(
         t,
         ModulesView(authService: auth),
@@ -226,15 +217,6 @@ void main() {
       await t.tap(find.text('Vazgeç'));
       await settleFor(t);
       expect(find.byType(AppDialog), findsNothing);
-
-      // Rol kaldırma onayı.
-      await tapFinder(t, find.byTooltip('Rolü Kaldır'));
-      expect(find.text('Rol Kaldırılsın mı?'), findsOneWidget);
-      expect(t.takeException(), isNull);
-      await scrollTo(t, find.text('Kaldır'));
-      await t.tap(find.text('Kaldır'));
-      await settleFor(t, 800);
-      expect(auth.removeCalls.single, (site: 11, user: 41));
     });
 
     listMatrix('sunucunun onay istemi (409 MODULE_CONFIRM_REQUIRED) penceresi', (

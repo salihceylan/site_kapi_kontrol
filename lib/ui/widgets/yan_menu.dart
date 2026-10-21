@@ -222,7 +222,6 @@ SirketMenuGroup menuGroupOf(SirketMenuItem item) => switch (item) {
       SirketMenuItem.taleplerim ||
       SirketMenuItem.anketler ||
       SirketMenuItem.rehber ||
-      SirketMenuItem.anket =>
       SirketMenuItem.anket ||
       SirketMenuItem.komsuPanosu =>
         SirketMenuGroup.iletisim,
@@ -235,7 +234,6 @@ SirketMenuGroup menuGroupOf(SirketMenuItem item) => switch (item) {
       SirketMenuItem.sozlesmeler ||
       SirketMenuItem.kararDefteri ||
       SirketMenuItem.isletmeProjesi ||
-      SirketMenuItem.kararlar =>
       SirketMenuItem.kararlar ||
       SirketMenuItem.odemeKamera =>
         SirketMenuGroup.siteHizmetleri,
@@ -1189,9 +1187,17 @@ List<SirketMenuItem> _withExtras(
     // "Rehber": Anket / Duyurular öğesinin altına (İletişim grubu).
     if (extra == SirketMenuItem.rehber) {
       for (final above in <SirketMenuItem>[SirketMenuItem.anket, SirketMenuItem.anketler, SirketMenuItem.duyurular]) {
+        anchor = result.indexOf(above);
+        if (anchor >= 0) break;
+      }
+    }
     // "İşletme Projesi": "Finans" / "Duyurular" / "Kişiler" sırasıyla ilk bulunanın altına.
     if (extra == SirketMenuItem.isletmeProjesi) {
       for (final above in const <SirketMenuItem>[SirketMenuItem.finans, SirketMenuItem.duyurular, SirketMenuItem.kisiler]) {
+        anchor = result.indexOf(above);
+        if (anchor >= 0) break;
+      }
+    }
     // "Ödeme ve Kamera": "Karar Defteri" / "Sözleşmeler" / ... / "Kişiler" sırasıyla ilk bulunanın altına.
     if (extra == SirketMenuItem.odemeKamera) {
       for (final above in const <SirketMenuItem>[
