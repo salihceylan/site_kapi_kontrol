@@ -82,7 +82,8 @@ yerleri değişince bu belgedeki adımlar da güncellenir (bölüm 6).
 2. **Modüller:** demo sitesinde kapalı duran Anket ve Oylama açılır; yöneticinin Panel'inde kart ve menüde öğe en geç yaklaşık
    30 saniye içinde (ya da yöneticinin uygulamasına geri dönülünce hemen) belirir.
 3. **Platform Ayarları:** şirket ve yasal bilgiler (unvan, adres, telefon). Yasal metin sayfası açılır (ör. `/legal/kvkk_notice`):
-   KEP ve MERSİS boşken metinde bu satırlar hiç görünmez; e-posta girilene kadar "[……]" ve "taslak" uyarısı görünür.
+   KEP ve MERSİS boşken metinde bu satırlar hiç görünmez (ekranda iki alan "isteğe bağlı" yazar); iletişim e-postası girilene kadar
+   e-posta yerinde "[……]" görünür; sayfanın üstündeki "taslak" uyarısı avukat onayına kadar her durumda kalır.
 4. **Denetim Kaydı:** site süzgeci demo sitesindeyken, demoda yapılan işlemler (borçlandırma, tahsilat, modül açma) kim ve ne zaman
    bilgisiyle kayıtlı.
 
