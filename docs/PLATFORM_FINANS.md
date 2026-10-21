@@ -282,6 +282,27 @@ kez sayılır, öğeleri hesap adıyla); hatırlatma önizlemesinde hesap sayıs
    sahibi hesabındaki eski borç kiracının yeni ödemesini alabilir) ve eski uygulama düzeltmede hesap değiştiremez: G12 canlıya alınmadan önce yeni sürüm
    yayılmalıdır. Hatırlatma sıklık kaydı daire başınadır (kabul, kural 1 "Bilinen sınırlar").
 
+### İkinci bağımsız inceleme (2026-10-21; Dalga 1 tümleşik dalında, İP-1B / 1C / 1D ile birlikte)
+
+1. **Mutasyonla bulunan test boşlukları (kod doğruydu, kanıt yoktu):** 40 mutasyonun 24'ü birim testlerinden sağ çıktı; 24'ü de gerçek PG'ye karşı
+   denendi, 17'si orada yakalandı, 7'si orada da sağ çıktı. Kapatılanlar (her yeni test ilgili mutasyonla düştü): kişisel veri dışa aktarması YALNIZ kendi hesabı (Borcum +
+   makbuzlar; `parties` P5g, birim `finance_parties_views`), `postPayment` aynı anahtar + yalnız kaynak TÜRÜ farklı 409 (P10, birim), hesap süzgeçli
+   ekstrenin açılış bakiyesi (P6f, birim), ekstre penceresinin kiracı sekmesi kuralı `show_tenant_account` (P4m, birim), ardışık hatırlatma sayacı
+   hesabın son tahsilatına göre (P8d, birim SQL yapısı). Altın veri setine İL2 eklendi: kurallar tablosu üst sınırı iki hesaplı planda hesabın
+   tazminatına uygulanır.
+2. **Hatırlatma önizlemesi (düşük, düzeltildi):** hariç tutma ve elden takip sayıları hesap başına iken ekranda "daire" yazıyor, aynı dairenin iki hesabı
+   elden takip listesinde aynı etiketle iki kez görünüyordu. Sunucu `hand_follow_up_accounts` ekler; istemci "daire hesabı" ve "A Blok - 5 (Kiracı hesabı)"
+   yazar (`docs/PLATFORM_FINANS_4B.md` "İki hesap" Ö6).
+3. **Geri alma provası (gerçek PG, kendi örnek):** eski sürüm (5660a7e) 051 şemasıyla kuruldu, eski satırlar ve eski tahsilat yazıldı; yeni sürüm 052 + 053'ü
+   uyguladı ve iki hesaplı satırlar yazdı; sonra ESKİ kod `ensureDbSchema`'yı iki kez hatasız çalıştırdı (052 / 053 sütun, kısıt, indeks, tetikleyici ve
+   işlevleri değişmedi), eski kodla tahsilat, ters kayıt ve düzeltme yapıldı ve okundu; yeni kodun yeniden açılışı no-op oldu, hesap bakiyeleri defterin hesap
+   toplamlarına birebir, her ters kayıt asılın hesabında. **Geri alma süresince bilinen sonuç:** eski kodun yazdığı satırlar hesapsızdır (NULL) ve
+   `payer_party`'den türetilir: `both` dairede eski kodun tahsilatı, düzeltmenin yeni tahsilatı ve aidatı ev sahibi hesabına düşer (ters kayıtlar tetikleyiciyle
+   asılın hesabındadır). Yeniden yayından sonra yönetici bu satırları "Düzelt" ile doğru hesaba taşır.
+4. **Açık / kabul edilen:** sıklık kaydı daire başına olduğu için ardışık sayaç, dairenin DİĞER hesabı için gönderilmiş hatırlatmaları da sayar (o hesabın son
+   tahsilatından sonrakileri): bir hesap ilk kez gecikmeye düştüğünde, diğer hesap için sınır kadar hatırlatma gönderilmişse doğrudan elden takibe düşer (e-posta
+   gitmez; temkinli taraf). Hesap başına hatırlatma geçmişi şema değişikliği ister.
+
 ## Altın veri seti (F5, 2026-10-21)
 
 Karar F5: gerçekçi bir site için ELLE hesaplanmış tablo; dağıtım, yuvarlama, gecikme tazminatı ve mahsup kodu bu tabloyla kuruşu kuruşuna
@@ -359,3 +380,4 @@ sınanır).
 | İD2 | D4 çatı yalıtımı, "kim öder" = ev sahibi | 24 dairenin hepsi ev sahibi hesabı (kiracılı dairede de); toplam 3.600.019 |
 | İL1 (B-2) | ev sahibi hesabı: çatı payı 81.000 (vade 20.09) ödenmedi; kiracı hesabı: Ekim aidatı 75.000 (vade 05.10) 03.10'da ödendi; Ekim 2026, ek gün 0 | ev sahibi hesabı S = 31 x 81.000 = 2.511.000: daily_30 4.185, daily_actual 4.050; kiracı hesabında tazminat satırı yok. Tek hesapta karışsaydı S = 2 x 81.000 + 3 x 6.000 + 26 x 81.000 = 2.286.000 ve daily_30 3.810 olurdu (zamanında ödenen aidat gecikmiş sayılırdı) |
 | İM1 (B-3) | ev sahibi hesabı: çatı payı 81.000 (vade 20.09); kiracı hesabı: Eylül ve Ekim aidatı 75.000'er; kiracı 100.000 ödedi | kiracı hesabı kalanları 0; 50.000; ev sahibi hesabı 81.000. Tek hesapta karışsaydı 0; 56.000 (çatı); 75.000: kiracının 25.000'i ev sahibinin borcuna giderdi |
+| İL2 (B-2; ikinci inceleme) | İL1'in satırları; kurallar tablosunda aylık üst sınır 300 bp, sitenin saklı oranı 500 bp (etkin oran = min = 300) | ev sahibi hesabı S = 2.511.000: daily_30 (1.506.600.000 + 300.000) / 600.000 = 2.511, daily_actual (1.506.600.000 + 310.000) / 620.000 = 2.430 (= 81.000 x %3); kiracı hesabında satır yok |

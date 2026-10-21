@@ -394,6 +394,9 @@ Kurallar, veri (052), var olan satırların hesabı ve 4a uçları: `docs/PLATFO
   sorumlu tarafın güncel kişisi yokken: Borcum görünümüyle aynı `visiblePartyOfRelation`, bağımsız inceleme; aile üyesi alıcı değil). Borç
   sorumlusu `both` dairede malik kiracı hesabının borcu için ALICI DEĞİLDİR (salt okunur görür). İletideki tutar alıcının hesabının tutarıdır; önizleme
   `account_count` (kapsanan hesap sayısı) ekler, `apartment_count` daire başınadır. Hariç tutma sayıları hesap başınadır. Sıklık kaydı daire başına kalır.
+  İkinci inceleme: elden takip de hesap başınadır; önizleme `hand_follow_up_accounts: [{ label, account_party }]` (≤ 20) ekler (aynı dairenin iki hesabı
+  iki öğe; eski `hand_follow_up_apartments` yalnız etiket olarak kalır). İstemci yeni sunucuda (`account_count` varken) hariç tutma ve elden takip
+  satırlarını "daire hesabı" diye, elden takip öğelerini "A Blok - 5 (Kiracı hesabı)" biçiminde yazar.
 - **İstemci:** yaşlandırma ve daire ekstresi raporlarında hesap süzgeci ("Tüm hesaplar" / "Kiracı hesabı" / "Ev sahibi hesabı"), ekstre PDF'inde hesabın adı
   ("(salt okunur)" işaretiyle), tazminat önizlemesi ve çalıştırma satırlarında hesap adı ve "N daire, M hesap" sayısı, hatırlatma önizlemesinde hesap sayısı.
 - **Gerçek PG:** `QA_ONLY=chain,live,finance4b` bölümlerinin G12 nedeniyle bilerek güncellenen beklentileri `PLATFORM_FINANS.md` "İki hesap / Doğrulama"
