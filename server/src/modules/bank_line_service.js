@@ -11,6 +11,7 @@ import { apartmentLabel } from './people_common.js';
 import { findExistingPayments } from './bank_import_service.js';
 import { CLASSIFY_KINDS, LINE_STATUSES, invalid, lineNotFound, lineNotOpen } from './bank_import_common.js';
 import { normalizeIban } from './bank_line_match.js';
+import { periodHintOf } from './bank_match_hints.js';
 
 const num = (v) => Number(v);
 const idOf = (raw, make = lineNotFound) => {
@@ -46,6 +47,7 @@ const lineDto = (r) => ({
   ledger_entry_id: r.ledger_entry_id === null ? null : num(r.ledger_entry_id),
   classification: r.classification,
   note: r.note,
+  period_hint: periodHintOf(r.description, r.value_date),
 });
 
 async function loadLine(db, siteCode, id, { lock = false } = {}) {

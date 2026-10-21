@@ -4,6 +4,7 @@
 // (yükleme `idempotency_key` ile elle güvenle tekrarlanır). Satır verisi ve yanıt gövdeleri günlüğe yazılmaz.
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:http/http.dart' as http;
@@ -35,6 +36,8 @@ String? bankErrorMessage(String? code) {
       return 'Aidat ve Finans özelliği bu sitede kapalı.';
     case 'IDEMPOTENCY_CONFLICT':
       return 'Bu yükleme farklı bilgilerle daha önce gönderilmiş. Dosyayı yeniden seçin.';
+    case 'BANK_PDF_SCANNED':
+      return 'Bu PDF taranmış bir resim; metni okunamıyor. Bankanın Excel (xlsx) ya da CSV dökümünü yükleyin.';
   }
   return null;
 }
@@ -58,7 +61,8 @@ class BankImportApi {
     String? to,
   }) => <String, dynamic>{
     'account_id': accountId,
-    'format': file.kind.name,
+    // PDF'den okunan satırlar tablo satırıdır: sunucuda 'csv' biçimiyle kaydedilir (dosya adı .pdf kalır).
+    'format': file.kind == BankFileKind.pdf ? 'csv' : file.kind.name,
     'file': bankFileJson(file),
     'statement': <String, dynamic>{'from': ?from, 'to': ?to, 'account_iban': ?accountIban},
     'lines': lines.map((e) => e.toJson()).toList(),
@@ -89,6 +93,12 @@ class BankImportApi {
       token: token,
       body: <String, dynamic>{'format': kind == BankFileKind.xlsx ? 'xlsx' : 'csv', 'header_signature': signature, 'mapping': mapping.toJson(), 'options': <String, dynamic>{}},
     );
+  }
+
+  /// PDF hesap ekstresini (en çok 5 MB) sunucuya ham ikili gövde olarak gönderir; sunucu metin katmanını okur (OCR yok, dosya saklanmaz).
+  Future<BankPdfExtract> extractPdf({required String token, required int siteCode, required Uint8List bytes}) async {
+    final body = await _send('POST', '${_base(siteCode)}/bank-imports/pdf-extract', token: token, rawBody: bytes, rawContentType: 'application/pdf');
+    return BankPdfExtract.fromJson(body);
   }
 
   Future<BankPreview> preview({
@@ -200,14 +210,16 @@ class BankImportApi {
   static List<Map<String, dynamic>> _list(Object? v) =>
       (v is List ? v : const <Object?>[]).whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
 
-  Future<Map<String, dynamic>> _send(String method, String path, {required String token, Map<String, dynamic>? body}) async {
+  Future<Map<String, dynamic>> _send(String method, String path, {required String token, Map<String, dynamic>? body, Uint8List? rawBody, String? rawContentType}) async {
     final request = http.Request(method, Uri.parse('$_baseUrl$path'))
       ..headers.addAll(<String, String>{
         'Authorization': 'Bearer $token',
         'Accept': 'application/json',
         if (body != null) 'Content-Type': 'application/json; charset=utf-8',
+        if (rawBody != null) 'Content-Type': rawContentType ?? 'application/octet-stream',
       });
     if (body != null) request.body = jsonEncode(body);
+    if (rawBody != null) request.bodyBytes = rawBody;
     final http.Response response;
     try {
       response = await _client.send(request).then(http.Response.fromStream).timeout(const Duration(seconds: 60));

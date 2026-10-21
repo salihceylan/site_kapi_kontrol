@@ -16,7 +16,7 @@ const int bankMaxLines = 1500;
 /// Başlık satırı bu kadar ilk satırda aranır.
 const int bankHeaderSearchRows = 40;
 
-enum BankFileKind { xlsx, csv, mt940 }
+enum BankFileKind { xlsx, csv, mt940, pdf }
 
 class BankLine {
   const BankLine({
@@ -28,6 +28,7 @@ class BankLine {
     this.counterpartyIban,
     this.bankReference,
     this.balanceAfterMinor,
+    this.confidence,
   });
 
   final int n;
@@ -39,6 +40,27 @@ class BankLine {
   final String? bankReference;
   final int? balanceAfterMinor;
 
+  /// Yalnız PDF'ten okunan satırlarda: `high` | `medium` | `low` (düşük güvenli satır sunucuda otomatik işlenmez, "kontrol edin"e düşer).
+  final String? confidence;
+
+  bool get uncertain => confidence != null && confidence != 'high';
+
+  factory BankLine.fromJson(Map<String, dynamic> j) {
+    int? i(Object? v) => v is int ? v : (v is num ? v.toInt() : null);
+    String? t(Object? v) => v is String && v.isNotEmpty ? v : null;
+    return BankLine(
+      n: i(j['n']) ?? 0,
+      valueDate: t(j['value_date']) ?? '',
+      amountMinor: i(j['amount_minor']) ?? 0,
+      description: t(j['description']) ?? '',
+      counterpartyName: t(j['counterparty_name']),
+      counterpartyIban: t(j['counterparty_iban']),
+      bankReference: t(j['bank_reference']),
+      balanceAfterMinor: i(j['balance_after_minor']),
+      confidence: t(j['confidence']),
+    );
+  }
+
   Map<String, dynamic> toJson() => <String, dynamic>{
     'n': n,
     'value_date': valueDate,
@@ -48,7 +70,49 @@ class BankLine {
     'counterparty_iban': ?counterpartyIban,
     'bank_reference': ?bankReference,
     'balance_after_minor': ?balanceAfterMinor,
+    'confidence': ?confidence,
   };
+}
+
+/// Sunucunun PDF hesap ekstresinden okuduğu satırlar (`POST .../bank-imports/pdf-extract`; OCR yok, yalnız metin katmanı).
+class BankPdfExtract {
+  const BankPdfExtract({
+    required this.lines,
+    this.unreadable = 0,
+    this.skipped = 0,
+    this.lowConfidence = 0,
+    this.pageCount = 0,
+    this.accountIban,
+    this.from,
+    this.to,
+  });
+
+  final List<BankLine> lines;
+
+  /// Tarihli ama tutarı/işareti güvenle okunamadığı için atlanan satır sayısı.
+  final int unreadable;
+  final int skipped;
+  final int lowConfidence;
+  final int pageCount;
+  final String? accountIban;
+  final String? from;
+  final String? to;
+
+  factory BankPdfExtract.fromJson(Map<String, dynamic> j) {
+    int i(Object? v) => v is int ? v : (v is num ? v.toInt() : 0);
+    final st = j['statement'] is Map ? Map<String, dynamic>.from(j['statement'] as Map) : <String, dynamic>{};
+    String? t(Object? v) => v is String && v.isNotEmpty ? v : null;
+    return BankPdfExtract(
+      lines: (j['lines'] is List ? j['lines'] as List : const <Object?>[]).whereType<Map>().map((e) => BankLine.fromJson(Map<String, dynamic>.from(e))).toList(),
+      unreadable: i(j['unreadable']),
+      skipped: i(j['skipped']),
+      lowConfidence: i(j['low_confidence']),
+      pageCount: i(j['page_count']),
+      accountIban: t(st['account_iban']),
+      from: t(st['from']),
+      to: t(st['to']),
+    );
+  }
 }
 
 /// Sütun eşlemesi (0 tabanlı sütun numaraları). Tutar ya tek sütun ([amount]) ya da ayrı [debit]/[credit] sütunlarıdır.
@@ -221,10 +285,23 @@ String _cellText(Object? cell) {
   return cell.toString();
 }
 
+/// `%PDF` imzası (ilk 1 KB içinde).
+bool isPdfBytes(Uint8List bytes) {
+  final limit = bytes.length < 1024 ? bytes.length : 1024;
+  for (var i = 0; i + 4 <= limit; i++) {
+    if (bytes[i] == 0x25 && bytes[i + 1] == 0x50 && bytes[i + 2] == 0x44 && bytes[i + 3] == 0x46) return true;
+  }
+  return false;
+}
+
 /// Dosyayı okur. Hata durumunda [SpreadsheetException] ya da [Mt940Exception] (Türkçe ileti) fırlatır.
 BankFile readBankFile(Uint8List bytes, String name) {
   if (bytes.isEmpty) throw const SpreadsheetException('Dosya boş.', code: 'FILE_EMPTY');
   final sha = crypto.sha256.convert(bytes).toString();
+  if (isPdfBytes(bytes)) {
+    // PDF cihazda ayrıştırılmaz: metin sunucuda okunur (BankImportApi.extractPdf); burada yalnız özet çıkarılır.
+    return BankFile(kind: BankFileKind.pdf, name: name, size: bytes.length, sha256: sha);
+  }
   if (bytes.length >= 2 && bytes[0] == 0x50 && bytes[1] == 0x4B) {
     final reader = XlsxReader.open(bytes);
     if (reader.sheets.isEmpty) throw const SpreadsheetException('Çalışma kitabında sayfa yok.', code: 'FILE_EMPTY');

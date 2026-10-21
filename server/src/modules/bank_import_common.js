@@ -64,6 +64,7 @@ export function parseStatementBody(body, { commit = false, todayIso }) {
       counterparty_name: optText(l.counterparty_name, 120),
       counterparty_iban: normalizeIban(l.counterparty_iban),
       bank_reference: optText(l.bank_reference, 60),
+      confidence: ['low', 'medium', 'high'].includes(l.confidence) ? l.confidence : null,
       balance_after_minor: l.balance_after_minor === undefined || l.balance_after_minor === null ? null : minorOf(l.balance_after_minor, `${n}. satır bakiyesi`),
     };
   });
