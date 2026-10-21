@@ -18,6 +18,7 @@ import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:http/http.dart' as http;
 import 'package:site_kapi_kontrol/models/bulk_import.dart' show ExportEnvelope;
 import 'package:site_kapi_kontrol/models/cash_models.dart';
+import 'package:site_kapi_kontrol/models/enforcement_models.dart';
 import 'package:site_kapi_kontrol/models/expense_models.dart';
 import 'package:site_kapi_kontrol/models/finance.dart';
 import 'package:site_kapi_kontrol/models/finance_4b.dart';
@@ -919,6 +920,26 @@ class Finance4bApi {
       timeout: const Duration(seconds: 40),
     );
     return _parse('Yaşlandırma raporu', () => AgingReport.fromJson(r.body));
+  }
+
+  /// İcra dökümü (F8; yalnız yönetici): vadesi geçmiş ödenmemiş kalemler, hesap bazında. [accountKeys] boşsa tüm borçlu hesaplar.
+  Future<EnforcementReport> getEnforcementReport({
+    required String token,
+    required int siteCode,
+    DateTime? asOf,
+    Iterable<String> accountKeys = const <String>[],
+  }) async {
+    final r = await _send(
+      'GET',
+      _site(siteCode, 'reports/enforcement'),
+      token: token,
+      query: <String, String>{
+        if (asOf != null) 'as_of': crmDateParam(asOf),
+        if (accountKeys.isNotEmpty) 'accounts': accountKeys.join(','),
+      },
+      timeout: const Duration(seconds: 40),
+    );
+    return _parse('İcra dökümü', () => EnforcementReport.fromJson(r.body));
   }
 
   Future<IncomeExpenseReport> getIncomeExpenseReport({

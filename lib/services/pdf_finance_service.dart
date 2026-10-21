@@ -6,6 +6,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:site_kapi_kontrol/models/enforcement_models.dart';
 import 'package:site_kapi_kontrol/models/finance.dart';
 import 'package:site_kapi_kontrol/models/finance_4b.dart';
 import 'package:site_kapi_kontrol/models/person_record.dart' show crmApartmentTitle;
@@ -117,6 +118,21 @@ class PdfFinanceService {
   }) async {
     final set = fonts ?? await PdfFontSet.loadBundled();
     return _run(report.items.length, _buildAging, _AgingJob(compress: PdfFinanceService.debugCompress, fonts: set, report: report, printedAt: printedAt ?? DateTime.now()));
+  }
+
+  /// İcra dökümü (F8): her hesap ayrı sayfada; [basisNote] kesinleşmiş işletme projesi / kurul kararı bilgisi (boşsa doldurulacak alan).
+  static Future<Uint8List> generateEnforcementPdf({
+    required EnforcementReport report,
+    String basisNote = '',
+    DateTime? printedAt,
+    PdfFontSet? fonts,
+  }) async {
+    final set = fonts ?? await PdfFontSet.loadBundled();
+    return _run(
+      report.accounts.fold<int>(0, (n, a) => n + a.items.length),
+      _buildEnforcement,
+      _EnforcementJob(compress: PdfFinanceService.debugCompress, fonts: set, report: report, basisNote: basisNote, printedAt: printedAt ?? DateTime.now()),
+    );
   }
 
   static Future<Uint8List> generateIncomeExpensePdf({
@@ -661,6 +677,83 @@ Future<Uint8List> _buildAging(_AgingJob job) async {
       ],
     ),
   );
+  return doc.save();
+}
+
+// --- İcra dökümü --------------------------------------------------------------------------------
+
+class _EnforcementJob {
+  const _EnforcementJob({this.compress = true, required this.fonts, required this.report, required this.basisNote, required this.printedAt});
+
+  final bool compress;
+  final PdfFontSet fonts;
+  final EnforcementReport report;
+  final String basisNote;
+  final DateTime printedAt;
+}
+
+Future<Uint8List> _buildEnforcement(_EnforcementJob job) async {
+  final r = job.report;
+  final doc = pw.Document(title: 'İcra dökümü', creator: 'Aidat ve Finans', compress: job.compress);
+  final basis = job.basisNote.trim();
+  for (final a in r.accounts) {
+    doc.addPage(
+      pw.MultiPage(
+        pageTheme: pw.PageTheme(pageFormat: PdfPageFormat.a4, margin: const pw.EdgeInsets.all(28), theme: _theme(job.fonts)),
+        header: (pw.Context context) => _reportHeader('İcra Dökümü', r.siteName, 'Tarih: ${_date(r.asOf)}  •  Tutarlar ₺'),
+        footer: (pw.Context context) => _reportFooter(context, job.printedAt, extra: r.note, footer: PdfFinanceService.reportDisclaimer),
+        build: (pw.Context context) => <pw.Widget>[
+          pw.Text('Daire: ${crmApartmentTitle(a.blockName, a.label)}', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
+          pw.Text('Hesap: ${a.accountParty.label}', style: const pw.TextStyle(fontSize: 10)),
+          pw.Text('Kişi: ${(a.personName ?? '').isEmpty ? '-' : a.personName}', style: const pw.TextStyle(fontSize: 10)),
+          pw.SizedBox(height: 4),
+          pw.Container(
+            padding: const pw.EdgeInsets.all(6),
+            decoration: pw.BoxDecoration(border: pw.Border.all(color: _line)),
+            child: pw.Text(
+              basis.isEmpty
+                  ? 'Kesinleşmiş işletme projesi / yönetim kurulu kararı bilgisi (tarih, sayı): ........................................'
+                  : 'Kesinleşmiş işletme projesi / yönetim kurulu kararı bilgisi: $basis',
+              style: const pw.TextStyle(fontSize: 9.5),
+            ),
+          ),
+          pw.SizedBox(height: 8),
+          _table(
+            headers: const <String>['Vade', 'Kalem', 'Dönem', 'Gün', 'Kalan tutar'],
+            rows: <List<String>>[
+              for (final i in a.items)
+                <String>[
+                  _date(i.dueDate),
+                  i.isLateFee ? 'Gecikme tazminatı' : i.name,
+                  i.period == null ? '-' : '${i.period!.month.toString().padLeft(2, '0')}.${i.period!.year}',
+                  '${i.daysOverdue}',
+                  formatMinor(i.remainingMinor, symbol: false),
+                ],
+            ],
+            alignments: const <int, pw.Alignment>{3: pw.Alignment.centerRight, 4: pw.Alignment.centerRight},
+            widths: const <int, pw.TableColumnWidth>{1: pw.FlexColumnWidth(2.4)},
+          ),
+          pw.SizedBox(height: 8),
+          pw.Align(
+            alignment: pw.Alignment.centerRight,
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.end,
+              children: <pw.Widget>[
+                pw.Text('Asıl alacak: ${formatMinor(a.principalMinor)}', style: const pw.TextStyle(fontSize: 10)),
+                if (a.lateFeeMinor > 0) pw.Text('Gecikme tazminatı: ${formatMinor(a.lateFeeMinor)}', style: const pw.TextStyle(fontSize: 10)),
+                pw.Text('TOPLAM: ${formatMinor(a.totalMinor)}', style: pw.TextStyle(fontSize: 11.5, fontWeight: pw.FontWeight.bold)),
+              ],
+            ),
+          ),
+          pw.SizedBox(height: 10),
+          pw.Text('Avukat kontrolü: bu döküm icra takibine esas olmadan önce avukat tarafından kontrol edilmelidir.', style: pw.TextStyle(fontSize: 9, color: _danger, fontWeight: pw.FontWeight.bold)),
+        ],
+      ),
+    );
+  }
+  if (r.accounts.isEmpty) {
+    doc.addPage(pw.Page(pageTheme: pw.PageTheme(pageFormat: PdfPageFormat.a4, theme: _theme(job.fonts)), build: (pw.Context c) => pw.Text('Seçilen hesapta vadesi geçmiş borç yok.')));
+  }
   return doc.save();
 }
 

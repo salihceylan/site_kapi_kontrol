@@ -18,6 +18,7 @@ import 'package:site_kapi_kontrol/ui/helpers/istanbul_time.dart';
 import 'package:site_kapi_kontrol/ui/helpers/money.dart';
 import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
 import 'package:site_kapi_kontrol/ui/helpers/retry_lock.dart';
+import 'package:site_kapi_kontrol/ui/views/finance_enforcement_view.dart';
 import 'package:site_kapi_kontrol/ui/widgets/bulk_export_sheet.dart' show ExportSource;
 import 'package:site_kapi_kontrol/ui/widgets/finance_4b_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_account_parts.dart';
@@ -57,7 +58,8 @@ enum FinanceReportKind {
   incomeExpense('income_expense', 'Gelir-Gider', Icons.stacked_bar_chart_rounded),
   cashPosition('cash_position', 'Kasa Durumu', Icons.account_balance_rounded),
   statement('statement', 'Daire Ekstresi', Icons.receipt_long_rounded),
-  boardSummary('board_summary', 'Kurul Özeti', Icons.groups_rounded);
+  boardSummary('board_summary', 'Kurul Özeti', Icons.groups_rounded),
+  enforcement('enforcement', 'İcra Dökümü', Icons.gavel_rounded);
 
   const FinanceReportKind(this.key, this.label, this.icon);
 
@@ -99,7 +101,8 @@ class FinanceReportsTabState extends State<FinanceReportsTab> {
           runSpacing: AppSpace.sm,
           children: [
             for (final kind in FinanceReportKind.values)
-              ChoiceChip(
+              if (kind != FinanceReportKind.enforcement || widget.scope.canWrite)
+                ChoiceChip(
                 key: ValueKey<String>('finance_report_chip_${kind.key}'),
                 avatar: Icon(kind.icon, size: 18),
                 label: Text(kind.label),
@@ -128,6 +131,8 @@ class FinanceReportsTabState extends State<FinanceReportsTab> {
         return _StatementReportView(scope: widget.scope, now: widget.now, launcher: widget.exportLauncher);
       case FinanceReportKind.boardSummary:
         return _BoardSummaryReportView(scope: widget.scope, now: widget.now, launcher: widget.exportLauncher);
+      case FinanceReportKind.enforcement:
+        return FinanceEnforcementView(scope: widget.scope, now: widget.now, exportLauncher: widget.exportLauncher);
     }
   }
 }

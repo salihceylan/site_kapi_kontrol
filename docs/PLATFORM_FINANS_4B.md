@@ -401,3 +401,10 @@ Kurallar, veri (052), var olan satırların hesabı ve 4a uçları: `docs/PLATFO
   ("(salt okunur)" işaretiyle), tazminat önizlemesi ve çalıştırma satırlarında hesap adı ve "N daire, M hesap" sayısı, hatırlatma önizlemesinde hesap sayısı.
 - **Gerçek PG:** `QA_ONLY=chain,live,finance4b` bölümlerinin G12 nedeniyle bilerek güncellenen beklentileri `PLATFORM_FINANS.md` "İki hesap / Doğrulama"
   maddesindedir; `qa_finance4b_upgrade.mjs` "ensure" yolları 001..son zinciriyle karşılaştırılır (sunucu açılışı semayı son sürüme getirir).
+
+## İcra dökümü (F8, 2026-10-21)
+
+- **Uç:** `GET /manager/sites/:siteCode/finance/reports/enforcement?as_of=&accounts=12:owner,15:tenant` (yalnız yönetici; kurul 403). `accounts` boşsa tüm borçlu hesaplar (en çok 200). Excel: `exports/finance_enforcement` aynı sorgu (satır HESAP başına: daire, hesap, borçlu, kalem sayısı, en eski vade, asıl alacak, gecikme tazminatı, toplam, not).
+- **Hesaplama:** M1 mahsup CTE'leri (`finance_m1.js`) ile aynı; yalnız vadesi geçmiş ve kalanı > 0 kalemler, hesap (ev sahibi / kiracı) bazında, vade sırasıyla. Gecikme tazminatı kalemleri ayrı işaretli ve ayrı toplanır. Salt okunur; tablo / migration yok. Kod: `server/src/modules/finance_enforcement.js`.
+- **İstemci:** Finans > Raporlar > "İcra Dökümü" (`finance_enforcement_view.dart`); PDF cihazda (`PdfFinanceService.generateEnforcementPdf`, hesap başına sayfa; kesinleşmiş işletme projesi / kurul kararı bilgisi serbest metin, kaydedilmez, boşsa elle doldurma alanı; "avukat kontrolü" notu). Kurul görmez.
+- **Kalan / Yakında:** icra takibini başlatma ve izleme (UYAP vb.) yok; döküm içeriği İİK m.68 açısından `[AVUKAT DOĞRULASIN]`; işletme projesi / karar bilgisi henüz modülden otomatik gelmez (F7 sonrası bağlanabilir).

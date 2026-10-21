@@ -11,6 +11,7 @@ import { EXPORT_ROW_LIMIT, exportKindNotFound, exportTooLarge, queryEnum, queryI
 import { invalidQuery, parseAccountPartyQuery } from './finance_common.js';
 import { exportExpenseRows } from './finance_expenses.js';
 import { AGING_BUCKETS } from './finance_m1.js';
+import { computeEnforcement, parseEnforcementAccounts } from './finance_enforcement.js';
 import { exportReceiptRows } from './finance_receipts.js';
 import {
   agingForAccount,
@@ -37,6 +38,7 @@ export const EXPORT_KINDS = Object.freeze([
   'finance_statement',
   'finance_expenses',
   'finance_receipts',
+  'finance_enforcement',
 ]);
 
 const col = (key, label, type, scale) => (scale === undefined ? { key, label, type } : { key, label, type, scale });
@@ -90,7 +92,7 @@ function envelope(kind, siteName, generatedAt, base, columns, rows) {
 }
 
 /** Denetime yazılabilen BİLİNEN süzgeç anahtarları (rapor / dışa aktarma uçlarının ayrıştırdıkları); başka anahtar adı serbest metin taşıyabileceğinden YAZILMAZ. */
-export const KNOWN_FILTER_KEYS = Object.freeze(['as_of', 'status', 'from', 'to', 'apartment_id', 'category_id', 'supplier_id', 'account_id', 'year', 'kind', 'limit', 'offset', 'before_id', 'account_party']);
+export const KNOWN_FILTER_KEYS = Object.freeze(['as_of', 'status', 'from', 'to', 'apartment_id', 'category_id', 'supplier_id', 'account_id', 'year', 'kind', 'limit', 'offset', 'before_id', 'account_party', 'accounts']);
 
 /** Süzgeç adları (audit): yalnız BİLİNEN anahtar adları, değerler değil (arama metni ve bilinmeyen anahtarlar YOK). */
 export function filterNamesOf(query) {
@@ -247,6 +249,35 @@ export async function buildExportEnvelope(siteCode, kind, query = {}, now = new 
         ]);
       }
       return envelope(kind, siteName, now, `ekstre_${slugify(statement.apartment.label)}`, columns, rows);
+    }
+    if (kind === 'finance_enforcement') {
+      // F8: avukat listesi; satır HESAP başınadır. Asıl alacak + ödenmemiş gecikme tazminatı (ayrı sütun).
+      const asOf = parseAgingQuery({ as_of: query.as_of }, now).asOf;
+      const accounts = await computeEnforcement(client, siteCode, asOf, parseEnforcementAccounts(query.accounts));
+      const names = await loadResidentNames(client, [...new Set(accounts.map((a) => a.apartmentId))]);
+      const columns = [
+        col('daire', 'Daire', 'text'),
+        col('hesap', 'Hesap', 'text'),
+        col('borclu', 'Borçlu', 'text'),
+        col('kalem_sayisi', 'Kalem Sayısı', 'number', 0),
+        col('en_eski_vade', 'En Eski Vade', 'date'),
+        col('asil_alacak', 'Asıl Alacak', 'money'),
+        col('tazminat', 'Gecikme Tazminatı', 'money'),
+        col('toplam', 'Toplam', 'money'),
+        col('not', 'Not', 'text'),
+      ];
+      const rows = accounts.map((a) => [
+        a.label,
+        ACCOUNT_PARTY_LABEL[a.accountParty] ?? '',
+        names.get(a.apartmentId)?.[a.accountParty] ?? '',
+        a.items.length,
+        a.items[0]?.due_date ?? null,
+        minorToNumber(a.principal),
+        minorToNumber(a.lateFee),
+        minorToNumber(a.principal + a.lateFee),
+        'Avukat kontrolü gerekir',
+      ]);
+      return envelope(kind, siteName, now, `icra_listesi_${asOf}`.replace(/-/g, ''), columns, rows);
     }
     if (kind === 'finance_expenses') {
       const items = await exportExpenseRows(siteCode, query, client);
