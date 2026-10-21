@@ -1,7 +1,9 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/models/announcement.dart';
+import 'package:site_kapi_kontrol/ui/widgets/web_push_tile.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/services/push_service.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
@@ -221,6 +223,10 @@ class NotificationPrefsSectionState extends State<NotificationPrefsSection> {
             ),
           ],
           const SizedBox(height: AppSpace.sm),
+          if (kIsWeb) ...[
+            const Divider(height: AppSpace.lg),
+            WebPushTile(authService: widget.authService),
+          ],
           if (prefs.pushAvailable) ...[
             const Divider(height: AppSpace.lg),
             PushPrefsPanel(

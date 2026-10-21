@@ -184,6 +184,42 @@ class AuthApi {
     return _decodePayload(response);
   }
 
+  /// SMS ile giriş (063): `GET /auth/sms/status` -> sağlayıcı yapılandırıldı mı. Hata olursa kapalı sayılır.
+  Future<bool> smsLoginEnabled() async {
+    try {
+      final response = await _sendRequest(
+        method: 'GET',
+        uri: Uri.parse('$baseUrl/auth/sms/status'),
+        headers: const {'Content-Type': 'application/json'},
+      );
+      _ensureStatus(response, 200, unauthorizedIsSession: false);
+      return _decodePayload(response)['enabled'] == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// `POST /auth/sms/request`: telefona 6 haneli kod gönderir (kayıtlı olsun olmasın aynı yanıt).
+  Future<void> requestSmsCode({required String phone}) async {
+    final response = await _sendRequest(
+      method: 'POST',
+      uri: Uri.parse('$baseUrl/auth/sms/request'),
+      headers: const {'Content-Type': 'application/json'},
+      body: {'phone': phone},
+      retryOnTransportError: false,
+    );
+    _ensureStatus(response, 200, unauthorizedIsSession: false);
+  }
+
+  /// `POST /auth/sms/verify`: kod doğruysa oturum açar.
+  Future<UserSession> verifySmsCode({required String phone, required String code}) {
+    return _authRequest(
+      path: '/auth/sms/verify',
+      body: {'phone': phone, 'code': code},
+      expectedCode: 200,
+    );
+  }
+
   Future<UserSession> register({
     required String fullName,
     required String email,

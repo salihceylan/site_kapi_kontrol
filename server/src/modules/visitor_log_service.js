@@ -7,6 +7,7 @@
 //  - Audit `details` yalnız kimlik / tür / durum taşır: ziyaretçi adı, firma, not ASLA yazılmaz.
 
 import { pool } from '../db.js';
+import { notifyCargoArrived } from './cargo_notify.js';
 import { actorFromAuthUser, recordAudit } from './audit_service.js';
 import { apartmentLabel, escapeLike, foldSql, foldText, parsePositiveId } from './people_common.js';
 import {
@@ -227,6 +228,10 @@ export async function createVisitorEntry({ siteCode, actor, access, body }) {
   const row = await loadEntry(pool, siteCode, id);
   if (!row) {
     throw visitorEntryNotFound();
+  }
+  if (input.kind === 'cargo' && input.apartmentId !== null) {
+    // Kargo geldi bildirimi (063): arka planda, en iyi caba; yanit/kayit bundan etkilenmez.
+    void notifyCargoArrived({ siteCode, entryId: id, apartmentId: input.apartmentId });
   }
   return mapEntry(row);
 }

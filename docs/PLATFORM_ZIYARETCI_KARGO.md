@@ -56,4 +56,11 @@ Audit eylemleri: `visitor_entry.created` (details: kind, apartment_id, status) v
 - Kişisel veri dışa aktarmasına (`/me/data-export`) bu modülden bir bölüm EKLENMEZ: sakin bu modülde kayıt üretmez (kaydı görevli girer); kayıttaki ziyaretçi adı / kargo firması sakinin kişisel verisi değil, sitenin ziyaret kaydıdır; `resident_seen_at` yalnız bir okundu işaretidir. Görevlinin kaydettiği satırlar da görevlinin değil sitenin verisidir.
 
 ## Sakin bildirimi
-Yalnız uygulama içi: liste + `summary.unread` + `seen`. E-posta ve telefon bildirimi "Yakında" (ileride `announcements` / push altyapısıyla; bu sürümde kod yok).
+Uygulama içi: liste + `summary.unread` + `seen`. 063 ile ek olarak (`cargo_notify.js`, en iyi çaba, kayıt akışını bozmaz): dairesi dolu KARGO kaydı açılınca dairenin güncel sakinlerine (üyelik + CRM ilişkisi; kiracılıyken malik hariç) e-posta, kayıtlı telefon cihazlarına FCM (push açıksa) ve tarayıcı bildirimi gider. Metin yalnız "kargo geldi" + daire etiketi (firma/ad yok). `cargo_notify_log` (entry_id PK) kayıt başına tek bildirim sağlar.
+
+## Bildirim kanalları (063): SMS girişi, tarayıcı bildirimi
+Tablolar (FK'siz, ekleyici): `sms_login_codes`, `web_push_subscriptions`, `cargo_notify_log`; DDL `migrations/063_notify_channels.sql` = `notify_channels_schema.js`. Hesap silmede web abonelikleri `deletePushDataForUser` içinde silinir.
+- SMS sağlayıcı arayüzü `sms_provider.js` (adaptör: Netgsm). `.env`: `SMS_PROVIDER=netgsm`, `NETGSM_USERCODE`, `NETGSM_PASSWORD`, `NETGSM_HEADER`. Anahtar yoksa kapalı: `GET /auth/sms/status` -> `enabled:false`, istemci "Yakında…".
+- `POST /auth/sms/request {phone}` (503 SMS_UNAVAILABLE / 429 SMS_RATE_LIMITED; kayıtlı olsun olmasın aynı 200) ve `POST /auth/sms/verify {phone, code}` -> `{token,user}`. 6 hane, 5 dk, kod başına 5 deneme, telefon başına 15 dk'da 3 kod, IP başına 20/60 istek/saat. Kod yalnız HMAC özeti (`SMS_CODE_PEPPER` ya da `JWT_SECRET`). Telefon birden çok hesapta varsa gönderilmez.
+- Tarayıcı bildirimi (Firebase'siz VAPID): `.env` `WEB_PUSH_VAPID_PUBLIC`, `WEB_PUSH_VAPID_PRIVATE`, `WEB_PUSH_SUBJECT` (mailto:/https:); `npx web-push generate-vapid-keys`. Uçlar: `GET /app/web-push/config`, `PUT|DELETE /app/web-push/subscriptions`. Kullanıcı başına en çok 10 abonelik; 404/410 abonelik otomatik silinir. İstemci: `web/push_sw.js`, `web/web_push_helper.js`.
+- WhatsApp yalnız arayüz ("Yakında…").
