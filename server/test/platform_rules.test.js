@@ -2,6 +2,9 @@
 // Gerçek PostgreSQL: scripts/qa_platform_pg.mjs "platform_rules".
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { LATE_FEE_MAX_MONTHLY_BP } from '../src/modules/finance_4b_common.js';
 import {
   RULES,
@@ -18,6 +21,7 @@ import {
   validateRuleChange,
 } from '../src/modules/platform_rules.js';
 
+const here = path.dirname(fileURLToPath(import.meta.url));
 const LATE = RULES['finance.late_fee.monthly_bp_max'];
 const FORECAST = RULES['forecast.default_increase_bp'];
 const BOOK = RULES['retention.decision_book_days'];
@@ -125,6 +129,18 @@ describe('kayıt defteri (sözleşme 2.2)', () => {
     assert.deepEqual(RULE_KEYS.filter((key) => !RULES[key].editable), ['retention.enforce']);
     assert.deepEqual(RULE_KEYS.filter((key) => !RULES[key].schedulable), ['finance.late_fee.monthly_bp_max']);
     for (const key of RULE_KEYS.filter((k) => k.startsWith('retention.') && RULES[k].type === 'int')) assert.equal(RULES[key].unit, 'days', key);
+  });
+
+  it('saklama süreleri gerçeği söyler: kapı geçiş kayıtlarının BUGÜNKÜ bakım silmesi (maintenance_service) kapı kaydı ve otomatik silme açıklamasında yazılı', () => {
+    // Bakım servisi kapı geçiş kayıtlarını bu kuraldan bağımsız olarak siler; ekran "1 yıl saklanır, otomatik silme kapalı" izlenimi vermemeli.
+    const source = readFileSync(path.join(here, '..', 'src', 'services', 'maintenance_service.js'), 'utf8');
+    const match = /DELETE FROM door_access_logs\s+WHERE opened_at < NOW\(\) - INTERVAL '(\d+) days'/.exec(source);
+    assert.ok(match, 'bakım servisindeki kapı geçiş kaydı silmesi bulunamadı (açıklamayı ve bu testi birlikte güncelleyin)');
+    const days = match[1];
+    const doorLogs = RULES['retention.door_logs_days'];
+    assert.match(doorLogs.description, new RegExp(`${days} gün sonra silinir`), doorLogs.description);
+    assert.match(ENFORCE.description, new RegExp(`${days} günlük`), ENFORCE.description);
+    for (const key of RULE_KEYS) assert.ok(RULES[key].description.length <= 300, `${key}: açıklama 300 karakteri aşmaz`);
   });
 });
 

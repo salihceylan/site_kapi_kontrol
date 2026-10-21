@@ -128,7 +128,9 @@ const DEFINITIONS = [
   }),
   rule('retention.door_logs_days', {
     label: 'Kapı geçiş kayıtları',
-    description: 'Kapı açma ve geçiş kayıtlarının saklanacağı gün sayısı.',
+    // Bakım servisi (services/maintenance_service.js) bu kayıtları kuraldan bağımsız olarak bugün de siler; açıklama bunu saklamaz (test: platform_rules).
+    description:
+      'Kapı açma ve geçiş kayıtlarının saklanacağı gün sayısı (otomatik silme açılınca uygulanır). Bugün bu kayıtlar sistem bakımıyla 30 gün sonra silinir.',
     unit: 'days',
     defaultValue: 365,
     min: 30,
@@ -183,7 +185,8 @@ const DEFINITIONS = [
   }),
   rule('retention.enforce', {
     label: 'Otomatik silme',
-    description: 'Açıkken saklama süresi dolan kayıtlar kendiliğinden silinir. Silme işi henüz yoktur; kural avukat onayına kadar kapalı ve kilitlidir.',
+    description:
+      'Açıkken bu sayfadaki süresi dolan kayıtlar kendiliğinden silinir. Bu silme işi henüz yoktur; kural avukat onayına kadar kapalı ve kilitlidir. Kapı geçiş kayıtlarının bugünkü 30 günlük bakım silmesi bundan ayrıdır.',
     type: 'bool',
     defaultValue: false,
     editable: false,

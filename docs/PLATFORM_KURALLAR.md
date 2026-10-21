@@ -23,7 +23,7 @@ Kayıt defteri: `server/src/modules/platform_rules.js` (`RULES`, sıra = ekranda
 | `forecast.default_increase_bp` | Gelecek yıl tahmini: varsayılan artış oranı | bp | 0 | 0..10000 | EVET | evet | ürün varsayılanı (karar R1) |
 | `retention.finance_days` | Mali kayıtlar | gün | 3650 | 1825..7300 | hayır | evet | TTK m.82, VUK m.253; H2: 10 yıl |
 | `retention.contact_after_moveout_days` | Taşınan kişinin iletişim bilgileri | gün | 365 | 30..3650 | hayır | evet | KVKK m.4/2-d, m.7; H2: açık borç yoksa 1 yıl |
-| `retention.door_logs_days` | Kapı geçiş kayıtları | gün | 365 | 30..3650 | hayır | evet | H2: 1 yıl |
+| `retention.door_logs_days` | Kapı geçiş kayıtları | gün | 365 | 30..3650 | hayır | evet | H2: 1 yıl; bugün bakım işi 30 gün sonra siler (aşağıda) |
 | `retention.visitor_logs_days` | Ziyaretçi ve kargo kayıtları | gün | 365 | 30..3650 | hayır | evet | H2: 1 yıl |
 | `retention.work_photos_after_close_days` | İş takibi fotoğrafları (talep kapandıktan sonra) | gün | 730 | 30..3650 | hayır | evet | H2: 2 yıl |
 | `retention.announcements_days` | Duyurular | gün | 1825 | 365..3650 | hayır | evet | H2: 5 yıl |
@@ -144,9 +144,15 @@ korunur. Bu, `docs/PLATFORM_FINANS_4B.md` "Hukuki dayanak"taki sabit üst sını
 
 ## Saklama süreleri (H2)
 
-`retention.*` kuralları bugün YALNIZ VERİDİR: hiçbir kayıt silinmez. `retention.enforce` kapalıdır ve KİLİTLİDİR (`editable: false`, yazma 400
-`RULE_LOCKED`): silme işi yazılmadı; avukat onayı ve silme işi geldiğinde kilit kaldırılır, iş `getRule` ile günün değerini okur.
+`retention.*` kuralları bugün YALNIZ VERİDİR: bu kurallara bağlı silme işi yoktur. `retention.enforce` kapalıdır ve KİLİTLİDİR (`editable: false`,
+yazma 400 `RULE_LOCKED`): silme işi yazılmadı; avukat onayı ve silme işi geldiğinde kilit kaldırılır, iş `getRule` ile günün değerini okur.
 Taslak ve dayanaklar: `docs/yasal/SAKLAMA_SURELERI_TASLAGI.md` (İP-1E).
+
+**Kurallardan bağımsız, bugün de çalışan silme (2026-10-21 inceleme notu):** bakım servisi (`server/src/services/maintenance_service.js`,
+açılışta ve günde bir) kapı geçiş kayıtlarını (`door_access_logs`) ve cihaz bağlantı kayıtlarını 30 gün sonra siler. Bu yüzden
+`retention.door_logs_days` (365, karar H2) bugün UYGULANMAZ; kural açıklaması ve otomatik silme açıklaması bunu ekranda söyler (test:
+`platform_rules.test.js` bakım servisindeki gün sayısını okur). H2'deki 1 yıl ile bugünkü 30 gün arasındaki fark avukat sorusudur
+(`docs/yasal/AVUKAT_KONTROL_LISTESI.md` geçiş kaydı maddesi 30 günü önerir); bakım silmesi bu İP'de değiştirilmedi (kapı tarafı).
 
 ## Bilinen sınırlar ve kararlar
 
