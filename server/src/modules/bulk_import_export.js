@@ -415,6 +415,9 @@ async function exportVehicles(siteCode, f) {
  * GET exports/:kind -> ExportEnvelope. Yalnız yönetici/süper çağırır (rota denetler). `export` audit satırı yazar (arama metni YOK, yalnız has_q).
  */
 export async function buildExport({ siteCode, kind, query, actor }) {
+  if (kind !== 'people' && kind !== 'apartments' && kind !== 'vehicles') {
+    throw new PlatformError(404, 'IMPORT_KIND_NOT_FOUND', 'Bu tür için dışa aktarma yok.');
+  }
   const filters = parseExportQuery(query);
   await syncSitePeopleSafe(siteCode);
   const site = await pool.query(`SELECT name FROM sites WHERE site_code = $1`, [siteCode]);

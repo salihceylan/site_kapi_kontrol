@@ -9,7 +9,10 @@ import 'package:flutter/foundation.dart';
 enum ImportKind {
   apartments('apartments', 'Daireler', 'Daireler'),
   people('people', 'Kişiler', 'Kişiler'),
-  vehicles('vehicles', 'Araçlar', 'Araçlar');
+  vehicles('vehicles', 'Araçlar', 'Araçlar'),
+  // Dalga 2 (N6 / F4): sona eklenir (sıra numaraları ve tab indeksleri değişmesin).
+  allInOne('all_in_one', 'Hepsi bir arada', 'Hepsi bir arada'),
+  openingBalances('opening_balances', 'Devir bakiyesi', 'Devir bakiyesi');
 
   const ImportKind(this.apiValue, this.label, this.sheetName);
 
@@ -23,10 +26,13 @@ enum ImportKind {
   final String sheetName;
 
   /// Kişi verisi işlenir: KVKK onayı (`acknowledged`) zorunlu (sözleşme Karar 19).
-  bool get needsAcknowledgement => this != ImportKind.apartments;
+  bool get needsAcknowledgement => this != ImportKind.apartments && this != ImportKind.openingBalances;
+
+  /// Devir bakiyesi: devir tarihi (`options.cutover_date`) ve onayda toplam tutar (`options.expected_total_minor`) gerekir.
+  bool get isOpening => this == ImportKind.openingBalances;
 
   /// `allow_overwrite` yalnız dairelerde geçerlidir.
-  bool get supportsOverwrite => this == ImportKind.apartments;
+  bool get supportsOverwrite => this == ImportKind.apartments || this == ImportKind.allInOne;
 
   static ImportKind? tryParse(Object? value) {
     if (value is! String) return null;
@@ -421,6 +427,9 @@ const Map<String, String> kImportPlanLabels = <String, String>{
   'cells_set': 'Doldurulacak alan',
   'overwritten_cells': 'Üzerine yazılacak alan',
   'cells_kept': 'Farklı olduğu için korunan alan',
+  'opening_add': 'Yazılacak devir kaydı',
+  'opening_unchanged': 'Zaten yüklü devir kaydı',
+  'opening_zero': 'Tutarı 0 olduğu için atlanan',
 };
 
 extension ImportPreviewStats on ImportPreview {
@@ -444,6 +453,21 @@ extension ImportPreviewStats on ImportPreview {
         return <ImportStat>[
           ImportStat('Eklenecek', plan['people_create'] ?? 0),
           ImportStat('Bağlanacak', (plan['people_link'] ?? 0) + (plan['people_reactivate'] ?? 0)),
+          ImportStat('Değişmeyecek', totals.unchanged),
+          ImportStat('Hatalı', totals.error),
+          ImportStat('Uyarılı', totals.withWarnings),
+        ];
+      case ImportKind.allInOne:
+        return <ImportStat>[
+          ImportStat('Eklenecek kişi', plan['people_create'] ?? 0),
+          ImportStat('Güncellenecek daire', plan['apartment_update'] ?? 0),
+          ImportStat('Değişmeyecek', totals.unchanged),
+          ImportStat('Hatalı', totals.error),
+          ImportStat('Uyarılı', totals.withWarnings),
+        ];
+      case ImportKind.openingBalances:
+        return <ImportStat>[
+          ImportStat('Yazılacak', plan['opening_add'] ?? totals.ok),
           ImportStat('Değişmeyecek', totals.unchanged),
           ImportStat('Hatalı', totals.error),
           ImportStat('Uyarılı', totals.withWarnings),

@@ -1,19 +1,30 @@
 // Toplu yükleme (Faz 2b) planlayıcı girişi. Saf: DB/ağ bağımsız.
 
 import { readText } from './bulk_import_parsers.js';
+import { planAllInOne } from './bulk_import_plan_all_in_one.js';
+import { planOpening } from './bulk_import_plan_opening.js';
 import { planApartments } from './bulk_import_plan_apartments.js';
 import { buildLocator } from './bulk_import_plan_common.js';
 import { planPeople, planVehicles } from './bulk_import_plan_people.js';
 
 /** Türe göre planı hesaplar (önizleme ve commit AYNI fonksiyonu kullanır). */
-export function computePlan({ kind, rows, snapshot, allowOverwrite = false, today }) {
+export function computePlan({ kind, rows, snapshot, allowOverwrite = false, today, options = null }) {
+  if (kind === 'opening_balances') {
+    return planOpening({ rows, snapshot, options, today });
+  }
+  if (kind === 'all_in_one') {
+    return planAllInOne({ rows, snapshot, allowOverwrite, today });
+  }
   if (kind === 'apartments') {
     return planApartments({ rows, snapshot, allowOverwrite });
   }
   if (kind === 'people') {
     return planPeople({ rows, snapshot, today });
   }
-  return planVehicles({ rows, snapshot, today });
+  if (kind === 'vehicles') {
+    return planVehicles({ rows, snapshot, today });
+  }
+  throw new Error('Bilinmeyen toplu yükleme türü.');
 }
 
 /** Dosyadaki satırların başvurduğu dairelerin kimlikleri (artan, tekil): commit kilit sırası için. */

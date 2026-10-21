@@ -46,10 +46,13 @@ export async function loadBlocksAndApartments(db, siteCode, { withFinance = fals
  * Tür için anlık görüntü. `apartments`: yalnız blok + daire (+ mali kayıt bayrağı). `people` / `vehicles`: + kişiler (pasifler dahil), güncel ilişkiler,
  * aktif araçlar.
  */
-export async function loadSnapshot(db, siteCode, kind) {
-  const base = await loadBlocksAndApartments(db, siteCode, { withFinance: kind === 'apartments' });
+export async function loadSnapshot(db, siteCode, kind, options = null) {
+  const base = await loadBlocksAndApartments(db, siteCode, { withFinance: kind === 'apartments' || kind === 'all_in_one' });
   if (kind === 'apartments') {
     return { ...base, people: [], residencies: [], vehicles: [] };
+  }
+  if (kind === 'opening_balances') {
+    return { ...base, people: [], residencies: [], vehicles: [], opening: await loadOpeningInfo(db, siteCode, base, options) };
   }
   // Kişiler: önce yalnız site_people (idx_site_people_site), hesaplı olanların kullanıcı satırları ayrıca BİRİNCİL ANAHTARLA (users'ta Seq Scan yok).
   const people = await db.query(
@@ -102,5 +105,51 @@ export async function loadSnapshot(db, siteCode, kind) {
       personId: row.person_id === null ? null : Number(row.person_id),
       plate: row.plate,
     })),
+  };
+}
+
+/**
+ * Devir bakiyesi bağlamı: etkin (ters kaydı olmayan) devir kayıtları, güncel kiracılı daireler, pasif daireler, devirden başka mali kaydı olan daireler,
+ * devir tarihinin ayının kapalı olup olmadığı. Tüm sorgular site_code ile sınırlı.
+ */
+async function loadOpeningInfo(db, siteCode, base, options) {
+  const existing = new Map();
+  const entries = await db.query(
+    `
+      SELECT l.apartment_id, COALESCE(l.account_party, CASE WHEN l.payer_party = 'tenant' THEN 'tenant' ELSE 'owner' END) AS account,
+             l.amount_minor, to_char(l.due_date, 'YYYY-MM-DD') AS due, l.description
+      FROM ledger_entries l
+      WHERE l.site_code = $1 AND l.source_kind = 'opening' AND l.kind = 'charge'
+        AND NOT EXISTS (SELECT 1 FROM ledger_entries r WHERE r.reverses_entry_id = l.id)
+    `,
+    [siteCode],
+  );
+  for (const row of entries.rows) {
+    existing.set(`${Number(row.apartment_id)}:${row.account}`, { minor: Number(row.amount_minor), due: row.due, desc: row.description ?? null });
+  }
+  const other = await db.query(
+    `SELECT DISTINCT apartment_id FROM ledger_entries WHERE site_code = $1 AND source_kind IS DISTINCT FROM 'opening' AND kind <> 'reversal'`,
+    [siteCode],
+  );
+  const apartmentIds = base.apartments.map((apartment) => apartment.id);
+  const tenants = await db.query(
+    `SELECT DISTINCT apartment_id FROM apartment_residencies WHERE apartment_id = ANY($1::BIGINT[]) AND is_current = TRUE AND relation = 'tenant'`,
+    [apartmentIds],
+  );
+  const inactive = await db.query(`SELECT id FROM apartments WHERE site_code = $1 AND is_active = FALSE`, [siteCode]);
+  let cutoverClosed = false;
+  if (options?.cutover_date) {
+    const closed = await db.query(
+      `SELECT 1 FROM finance_period_closures WHERE site_code = $1 AND period >= date_trunc('month', $2::DATE)::DATE LIMIT 1`,
+      [siteCode, options.cutover_date],
+    );
+    cutoverClosed = closed.rows.length > 0;
+  }
+  return {
+    existing,
+    otherLedger: new Set(other.rows.map((row) => Number(row.apartment_id))),
+    tenantApts: new Set(tenants.rows.map((row) => Number(row.apartment_id))),
+    inactive: new Set(inactive.rows.map((row) => Number(row.id))),
+    cutoverClosed,
   };
 }

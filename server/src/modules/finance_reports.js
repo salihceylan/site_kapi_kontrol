@@ -376,7 +376,7 @@ export async function computeIncomeExpense(db, siteCode, months) {
   const ledger = await db.query(
     `
       SELECT to_char(period, 'YYYY-MM-DD') AS period,
-        COALESCE(SUM(amount_minor) FILTER (WHERE late_fee_run_id IS NULL AND (kind = 'charge' OR (kind = 'reversal' AND amount_minor < 0))), 0)::TEXT AS charged,
+        COALESCE(SUM(amount_minor) FILTER (WHERE late_fee_run_id IS NULL AND source_kind IS DISTINCT FROM 'opening' AND (kind = 'charge' OR (kind = 'reversal' AND amount_minor < 0))), 0)::TEXT AS charged,
         COALESCE(SUM(amount_minor) FILTER (WHERE late_fee_run_id IS NOT NULL AND (kind = 'charge' OR (kind = 'reversal' AND amount_minor < 0))), 0)::TEXT AS late_fee,
         COALESCE(-SUM(amount_minor) FILTER (WHERE kind = 'payment' OR (kind = 'reversal' AND amount_minor > 0)), 0)::TEXT AS collected
       FROM ledger_entries WHERE site_code = $1 AND period BETWEEN $2::DATE AND $3::DATE GROUP BY period

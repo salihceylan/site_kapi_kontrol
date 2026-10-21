@@ -27,6 +27,7 @@ import { bulkImportRouter, bulkPreviewGate, bulkCommitGate, BULK_PREVIEW_PATH, B
 import { announcementRouter } from './modules/announcement_routes.js';
 import { announcementPublicRouter } from './modules/announcement_public_routes.js';
 import { financeRouter } from './modules/finance_routes.js';
+import { financeOpeningRouter } from './modules/finance_opening_routes.js';
 import { finance4bRouter } from './modules/finance_4b_routes.js';
 import { financePaymentRouter } from './modules/finance_payment_routes.js';
 import { accountRouter } from './modules/account_routes.js';
@@ -118,6 +119,7 @@ app.use(bulkImportRouter);
 app.use(announcementRouter);
 app.use(announcementPublicRouter);
 app.use(financeRouter);
+app.use(financeOpeningRouter);
 app.use(finance4bRouter);
 app.use(financePaymentRouter);
 // Belgeler (dosya deposu): yonetici uclari + sakin uclari + ham govde akisi (PUT .../content, application/octet-stream; JSON govde sinirina dokunmaz).

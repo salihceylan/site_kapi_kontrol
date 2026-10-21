@@ -264,3 +264,27 @@ KVKK: dosya sunucuya girmez; gövde loglanmaz, çalıştırma kaydı/audit kişi
 21. **Dosya türü:** yalnız .xlsx ve CSV; .xls/.xlsm/.xlsb/.ods reddedilir (makro ve eski ikili biçim yüzeyi yok).
 22. **Linux masaüstünde `saveFile`, mobilde `share_plus`:** share_plus Linux'ta dosya paylaşmaz; web'de indirme yedeği vardır.
 23. **Kurulum için ayrı sunucu ucu yok:** site yapısı sayı tabanlı kurulur (`createSiteWithStructure`: «Daire 1…N»); kurulum bittikten sonra (anlık kurulumda ve başvuru onayı sonrası yöneticinin ilk girişinde) AYNI toplu uçlarla ön dolu şablon kullanılır. Kurulum transaction'ına dosya verisi sokulmaz (başvuru onayı süper kullanıcı akışıdır, yönetici verisi orada yoktur). **Uygulama durumu:** kurulum ekranına/başvuru onayı sonrasına kısayol henüz YOKTUR; yalnız boş Kişiler sekmesindeki kısayol ve «Toplu Yükle» düğmesi vardır.
+
+## Hepsi bir arada ve devir bakiyesi (Dalga 2, N6 / F4; yukarıdaki metne göre ÖNCELİKLİDİR)
+
+İki yeni tür; uçlar aynıdır: `imports/:kind/preview|commit`. Tür beyaz listesi kodda (`BULK_KINDS`), `bulk_import_runs.kind` CHECK'i biçim denetimidir
+(`^[a-z][a-z_]{2,39}$`, migration 055). Modül kapısı gereken türler `KIND_MODULE` tablosundadır (devir -> `finance`; kapalıysa 403 `MODULE_DISABLED`).
+`exports/opening_balances` ve `exports/all_in_one` yoktur (404).
+
+- **`all_in_one`** (N6): sütunlar daire türü + kişi türünün birleşimi; `blok` ve `daire_no` her satırda zorunlu; «Taşınma Tarihi» = Giriş Tarihi. Mevcut
+  planlayıcılar değişmeden kullanılır (`bulk_import_plan_all_in_one.js`): dairenin ilk satırı «taşıyıcı» olur, daire bilgisi dairenin satırlarındaki ilk dolu
+  değerlerden birleşir, farklı değer `APARTMENT_VALUES_CONFLICT` (satır hatası). Daire bölümü hatalı satır kişi planına girmez; satır atomiktir (kişi bölümü
+  hatalı taşıyıcının daire alanı güncellemesi de düşer, düzeltilip yeniden yüklenir). KVKK onayı (`acknowledged`) ve `allow_overwrite` (daire alanları)
+  geçerlidir. Kilit sırası: bulk_import -> people_sync -> finance_post -> apartments (FOR NO KEY UPDATE) -> users.
+- **`opening_balances`** (F4): sütunlar `blok*`, `daire_no*`, `hesap` (Ev sahibi/Malik/Mal sahibi/Kiracı; boş = ev sahibi), `tutar*` (TL; `1.250,50`, `1250.5`,
+  `₺`, `TL`; kuruşa metin aritmetiğiyle), `vade` (boş = devir tarihi), `aciklama` (<= 200). Gövdede `options.cutover_date` (bugün ya da önce, en çok 5 yıl geri,
+  ayı açık) ve commit'te `options.expected_total_minor` zorunludur; ikisi de parmak izine, devir tarihi `preview_hash`'e girer. Toplam uyuşmazsa 409
+  `TOTAL_MISMATCH`. KVKK onayı yerine istemcide tutar onayı kutusu vardır.
+- Satır kuralları: eksi tutar `OPENING_CREDIT_UNSUPPORTED` (v1'de alacaklı devir yok), 0 -> `OPENING_ZERO` uyarısı (atlanır), aynı daire+hesap dosyada ikinci kez
+  `DUPLICATE_IN_FILE`; etkin devir varsa aynı tutar/vade/açıklama «değişiklik yok», farklıysa `OPENING_EXISTS`; kiracı hesabı ama güncel kiracı yok `NO_TENANT`
+  uyarısı; devirden başka mali kayıt `OPENING_LEDGER_EXISTS` uyarısı; pasif daire `APARTMENT_INACTIVE`; kapalı ay `PERIOD_CLOSED`.
+- Yazım: satır başına bir `charge` (`source_kind='opening'`, `source_id` = çalıştırma, `definition_name='Devir bakiyesi'`, `payer_party = account_party` = hesap,
+  `period` = devir ayı). Audit `finance.opening.imported`. Gelir-gider `charged` toplamı devri saymaz (`source_kind IS DISTINCT FROM 'opening'`).
+- Geri alma ve liste uçları: `docs/PLATFORM_FINANS.md` «Devir bakiyesi». Şablonlar tür grubuna göre ayrı dosyadır (klasik üçlü / hepsi bir arada / devir),
+  mevcut dairelerle ön doludur.
+- Yakında: `opening_minor` rapor alanı, «Bu ay yazılan» devir ayrımı, alacaklı (eksi) devir, `HOLDER_AFTER_DUE` uyarısı.

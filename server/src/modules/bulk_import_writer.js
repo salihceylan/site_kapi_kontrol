@@ -325,3 +325,33 @@ export async function applyPeopleOps(client, { siteCode, ops, runId, today, acto
   }
   return audits;
 }
+
+// ---------------------------------------------------------------------------------------------------------------
+// Devir bakiyesi (F4): her satır tek defter kaydı (charge, source_kind='opening', source_id=çalıştırma). Defter yalnız eklemelidir.
+// ---------------------------------------------------------------------------------------------------------------
+
+export async function applyOpeningOps(client, { siteCode, ops, runId, cutoverDate, actorUserCode }) {
+  const adds = ops.filter((op) => op.t === 'ob');
+  let total = 0;
+  for (const part of chunksOf(adds, ENTITY_CHUNK)) {
+    const rows = part.map((op) => ({ apt: op.aptId, account: op.account, minor: String(op.minor), due: op.due, note: op.desc }));
+    const result = await run(
+      client,
+      `
+        INSERT INTO ledger_entries (
+          site_code, apartment_id, kind, amount_minor, period, entry_date, due_date, definition_name, payer_party, account_party,
+          source_kind, source_id, description, created_by
+        )
+        SELECT $2::BIGINT, v.apt, 'charge', v.minor::BIGINT, date_trunc('month', $3::DATE)::DATE, $3::DATE, v.due::DATE, 'Devir bakiyesi',
+               v.account, v.account, 'opening', $4::BIGINT, v.note, $5::INTEGER
+        FROM jsonb_to_recordset($1::jsonb) AS v(apt bigint, account text, minor text, due text, note text)
+      `,
+      [JSON.stringify(rows), siteCode, cutoverDate, runId, actorUserCode ?? null],
+    );
+    if (result.rowCount !== part.length) {
+      throw staleError();
+    }
+    total += part.reduce((sum, op) => sum + op.minor, 0);
+  }
+  return { audits: [], total };
+}

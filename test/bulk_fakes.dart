@@ -97,6 +97,10 @@ class FakeBulkApi extends BulkApi {
     return spec;
   }
 
+  /// Son önizleme / onay isteğindeki `options` (devir bakiyesi).
+  Map<String, Object?>? lastPreviewOptions;
+  Map<String, Object?>? lastCommitOptions;
+
   @override
   Future<ImportPreview> previewImport({
     required String token,
@@ -105,7 +109,9 @@ class FakeBulkApi extends BulkApi {
     required int specVersion,
     required List<ImportRow> rows,
     bool allowOverwrite = false,
+    Map<String, Object?>? options,
   }) async {
+    lastPreviewOptions = options;
     previewCalls.add((kind: kind, rows: rows, allowOverwrite: allowOverwrite, specVersion: specVersion));
     await previewGate?.future;
     if (previewScript.isNotEmpty) {
@@ -131,7 +137,9 @@ class FakeBulkApi extends BulkApi {
     bool allowOverwrite = false,
     bool strict = false,
     bool acknowledged = false,
+    Map<String, Object?>? options,
   }) async {
+    lastCommitOptions = options;
     commitCalls.add((
       kind: kind,
       rows: rows,

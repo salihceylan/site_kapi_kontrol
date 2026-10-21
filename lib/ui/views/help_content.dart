@@ -114,6 +114,12 @@ abstract final class HelpContent {
 
   /// Menü dışı ekran içi etiketler (düğme, bölüm, sekme adları; kodda aynen geçer).
   static const Set<String> knownScreenLabels = <String>{
+    'Devir bakiyesi',
+    "Excel'den yükle",
+    'Hesap',
+    'Geri al',
+    'Toplu Yükle',
+    'Hepsi bir arada',
     'KAPIYI AÇ',
     'YEREL AĞDAN AÇ',
     'QR KOD İLE AÇ',
@@ -433,6 +439,28 @@ abstract final class HelpContent {
       note:
           'Daire sorumlusu kiracı ya da malik ve kiracıysa ve dairede kiracı varsa aidat kiracı hesabına yazılır. Malik ve '
           'kiracının birlikte sorumlu olduğu dairede malik, kiracı hesabını salt okunur görür.',
+    ),
+    HelpTopic(
+      id: 'opening_balances',
+      title: 'Devir bakiyesini nasıl yüklerim?',
+      icon: Icons.upload_file_rounded,
+      steps: <String>[
+        "“Finans” ekranında “Daireler” sekmesindeki “Devir bakiyesi” düğmesine dokunun, ardından “Excel'den yükle”yi seçin.",
+        'Şablonu indirip her daire için blok, daire no ve tutarı (TL) yazın; kiracının borcu için “Hesap” sütununa Kiracı yazın, boşsa ev sahibi hesabına yazılır.',
+        'Önizlemede devir tarihini seçin ve toplamı kontrol edin; onayda tutarları eski kayıtlarla karşılaştırdığınızı işaretleyin.',
+        'Yanlış yüklediyseniz aynı pencerede ilgili yüklemenin yanındaki “Geri al”a dokunun; neden yazılır ve ters kayıt eklenir, eski kayıtlar silinmez.',
+      ],
+      note: 'Eksi (alacaklı) devir desteklenmez. Aynı dosyayı ikinci kez yüklemek bir şey değiştirmez.',
+    ),
+    HelpTopic(
+      id: 'bulk_all_in_one',
+      title: 'Daire ve sakinleri tek dosyada nasıl yüklerim?',
+      icon: Icons.table_chart_rounded,
+      steps: <String>[
+        '“Kişiler” ekranında “Toplu Yükle”ye dokunun ve “Hepsi bir arada”yı seçin.',
+        'Şablonda daire bilgisi, sakin adı, ilişki, telefon, e-posta, taşınma tarihi, plaka ve not tek satırdadır; bir dairenin birden çok sakini alt alta yazılır.',
+        'Aynı dairenin satırlarında daire bilgisi (kat, tip, m²) farklıysa o satır hata olur; tek değer bırakın.',
+      ],
     ),
     HelpTopic(
       id: 'devices',

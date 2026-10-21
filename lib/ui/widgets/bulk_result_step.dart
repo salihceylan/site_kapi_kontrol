@@ -26,6 +26,8 @@ class BulkResultStep extends StatelessWidget {
     ImportKind.people => 'Kişilere git',
     ImportKind.apartments => 'Dairelere git',
     ImportKind.vehicles => 'Araçlara git',
+    ImportKind.allInOne => 'Kişilere git',
+    ImportKind.openingBalances => 'Dairelere git',
   };
 
   @override

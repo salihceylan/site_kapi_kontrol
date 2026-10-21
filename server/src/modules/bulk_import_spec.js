@@ -7,7 +7,9 @@
 import { foldText } from './people_common.js';
 
 export const SPEC_VERSION = 1;
-export const BULK_KINDS = Object.freeze(['apartments', 'people', 'vehicles']);
+export const BULK_KINDS = Object.freeze(['apartments', 'people', 'vehicles', 'opening_balances', 'all_in_one']);
+/** Modül kapısı gereken türler (tür -> modül anahtarı). Yeni toplu tür için tek satır. */
+export const KIND_MODULE = Object.freeze({ opening_balances: 'finance' });
 export const MAX_ROWS_LIMIT = 5000;
 export const MAX_BODY_BYTES = 5 * 1024 * 1024;
 /** Tek hücre için sert üst sınır (kötüye kullanım koruması). 600'ü aşan hücre satır hatası TOO_LONG, bunu aşan gövde 400 INVALID_BODY. */
@@ -74,7 +76,7 @@ const NAME_COLUMN = (required, hint) =>
 const EMAIL_COLUMN = (hint) =>
   col('e_posta', 'E-posta', false, 'text', 254, ['Eposta', 'E Posta', 'E-posta Adresi', 'Email', 'E-mail', 'Mail'], hint);
 
-const COLUMNS = Object.freeze({
+const BASE_COLUMNS = Object.freeze({
   apartments: Object.freeze([
     BLOCK_COLUMN(true, 'Sitedeki blok adı: «A», «A Blok» ya da «Blok A» aynı sayılır.'),
     APARTMENT_NO_COLUMN(true, 'Daire numarası: «5», «05» ya da «Daire 5». Daire sayısı Site Yapısı’ndan belirlenir.'),
@@ -105,6 +107,33 @@ const COLUMNS = Object.freeze({
     NAME_COLUMN(false, 'Dairede birden çok sakin varsa sahibini ayırmak için kullanılır.'),
     NOTE_COLUMN('Araç notu (en çok 500 karakter).'),
   ]),
+});
+
+const OPENING_COLUMNS = Object.freeze([
+  BLOCK_COLUMN(true, 'Sitedeki blok adı: «A», «A Blok» ya da «Blok A» aynı sayılır.'),
+  APARTMENT_NO_COLUMN(true, 'Daire numarası: «5», «05» ya da «Daire 5».'),
+  col('hesap', 'Hesap', false, 'enum', 40, ['Ev Sahibi', 'Malik', 'Mal Sahibi', 'Kiracı', 'Borçlu', 'Hesap Türü'], 'Ev sahibi ya da Kiracı. Boşsa ev sahibi hesabına yazılır.'),
+  col('tutar', 'Tutar', true, 'text', 40, ['Devir Tutarı', 'Devir Bakiyesi', 'Borç', 'Bakiye', 'Tutar TL'], 'Devreden borç, TL: 1.250,50 ya da 1250,5. Eksi (alacak) desteklenmez.'),
+  col('vade', 'Vade', false, 'date', 20, ['Vade Tarihi', 'Son Ödeme Tarihi'], 'GG.AA.YYYY. Boşsa devir tarihi.'),
+  col('aciklama', 'Açıklama', false, 'text', 200, ['Not', 'Notlar'], 'En çok 200 karakter (yalnız yönetici ekstresinde görünür).'),
+]);
+
+// Hepsi bir arada: daire + sakin sütunları (blok/daire_no tek sefer). Taşınma tarihi etiketi Giriş Tarihi'nin yerini alır.
+const ALL_IN_ONE_COLUMNS = Object.freeze([
+  ...BASE_COLUMNS.apartments,
+  ...BASE_COLUMNS.people
+    .filter((column) => column.key !== 'blok' && column.key !== 'daire_no')
+    .map((column) =>
+      column.key === 'giris_tarihi'
+        ? col('giris_tarihi', 'Taşınma Tarihi', false, 'date', 20, ['Giriş Tarihi', 'Giriş', 'Oturum Başlangıcı'], 'GG.AA.YYYY. Sakin, Borcum’da borçlarını bu tarihin ayından itibaren görür.')
+        : column,
+    ),
+]);
+
+const COLUMNS = Object.freeze({
+  ...BASE_COLUMNS,
+  opening_balances: OPENING_COLUMNS,
+  all_in_one: ALL_IN_ONE_COLUMNS,
 });
 
 export function columnsOf(kind) {
@@ -149,8 +178,9 @@ export function buildSpec(env = process.env) {
         aliases: [...column.aliases],
         hint: column.hint,
       })),
-      relation_words: kind === 'people' ? clone(RELATION_WORDS) : {},
-      ...(kind === 'apartments' ? { responsible_words: clone(RESPONSIBLE_WORDS) } : {}),
+      relation_words: kind === 'people' || kind === 'all_in_one' ? clone(RELATION_WORDS) : {},
+      ...(kind === 'apartments' || kind === 'all_in_one' ? { responsible_words: clone(RESPONSIBLE_WORDS) } : {}),
+      ...(kind === 'opening_balances' ? { account_words: clone({ owner: ['Ev sahibi', 'Malik', 'Mal sahibi'], tenant: ['Kiracı'] }), module: 'finance' } : {}),
     };
   }
   return { spec_version: SPEC_VERSION, max_rows: maxRows(env), max_body_bytes: MAX_BODY_BYTES, kinds };

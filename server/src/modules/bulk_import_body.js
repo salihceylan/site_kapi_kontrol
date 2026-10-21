@@ -5,6 +5,7 @@
 
 import { createHash } from 'node:crypto';
 import { PlatformError } from './errors.js';
+import { todayIso } from './people_common.js';
 import { CELL_HARD_LIMIT, SPEC_VERSION, columnKeysOf, maxRows } from './bulk_import_spec.js';
 
 const MAX_ABS_NUMBER = 1e15;
@@ -31,6 +32,40 @@ export function canonicalJson(value) {
 }
 
 export const sha256 = (text) => createHash('sha256').update(text).digest('hex');
+
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Yalnız devir bakiyesi: options.cutover_date (YYYY-MM-DD, bugün ya da önce, en çok 5 yıl geri) ve commit'te options.expected_total_minor. */
+function parseOptions(body, kind, commit) {
+  const raw = body.options;
+  if (kind !== 'opening_balances') {
+    if (raw !== undefined && raw !== null) {
+      throw invalid('options yalnız devir bakiyesi yüklemesinde geçerlidir.');
+    }
+    return null;
+  }
+  if (!isPlainObject(raw)) {
+    throw invalid('options.cutover_date zorunludur.');
+  }
+  const date = raw.cutover_date;
+  if (typeof date !== 'string' || !DATE_PATTERN.test(date) || Number.isNaN(Date.parse(`${date}T00:00:00Z`))) {
+    throw invalid('options.cutover_date geçersiz (YYYY-MM-DD).');
+  }
+  const now = todayIso();
+  const limit = `${Number(now.slice(0, 4)) - 5}${now.slice(4)}`;
+  if (date > now || date < limit) {
+    throw invalid('Devir tarihi bugün ya da önce olmalı ve en çok 5 yıl geriye gidebilir.');
+  }
+  const options = { cutover_date: date };
+  if (commit) {
+    const total = raw.expected_total_minor;
+    if (!Number.isSafeInteger(total) || total < 0) {
+      throw invalid('options.expected_total_minor zorunludur (kuruş, tam sayı).');
+    }
+    options.expected_total_minor = total;
+  }
+  return options;
+}
 
 /**
  * Gövdeyi doğrular (preview ve commit ortak). Hata: PlatformError (400 INVALID_BODY / IMPORT_EMPTY / IMPORT_TOO_MANY_ROWS / ACK_REQUIRED, 409 IMPORT_SPEC_MISMATCH).
@@ -108,12 +143,13 @@ export function validateImportBody(body, kind, { commit = false, env = process.e
       throw invalid('allow_overwrite true veya false olmalıdır.');
     }
     allowOverwrite = body.allow_overwrite;
-    if (allowOverwrite && kind !== 'apartments') {
-      throw invalid('allow_overwrite yalnız daire yüklemesinde geçerlidir.');
+    if (allowOverwrite && kind !== 'apartments' && kind !== 'all_in_one') {
+      throw invalid('allow_overwrite yalnız daire ve hepsi bir arada yüklemesinde geçerlidir.');
     }
   }
 
-  const result = { rows, allowOverwrite, strict: false, expectedHash: null, idempotencyKey: null, acknowledged: false };
+  const options = parseOptions(body, kind, commit);
+  const result = { rows, allowOverwrite, strict: false, expectedHash: null, idempotencyKey: null, acknowledged: false, options };
   if (!commit) {
     return result;
   }
@@ -133,7 +169,7 @@ export function validateImportBody(body, kind, { commit = false, env = process.e
   result.idempotencyKey = body.idempotency_key;
   result.strict = body.strict === true;
   result.acknowledged = body.acknowledged === true;
-  if ((kind === 'people' || kind === 'vehicles') && !result.acknowledged) {
+  if ((kind === 'people' || kind === 'vehicles' || kind === 'all_in_one') && !result.acknowledged) {
     throw new PlatformError(
       400,
       'ACK_REQUIRED',
@@ -147,9 +183,9 @@ export function validateImportBody(body, kind, { commit = false, env = process.e
  * İstek parmak izi = sha256(kind, spec_version, strict, allow_overwrite, kanonik rows). `expected_hash` parmak izine GİRMEZ.
  * Hücre değerleri yalnız karma içinde kullanılır, hiçbir yere yazılmaz.
  */
-export function requestFingerprint({ kind, strict, allowOverwrite, rows }) {
+export function requestFingerprint({ kind, strict, allowOverwrite, rows, options = null }) {
   const canonicalRows = rows.map((row) => [row.n, Object.keys(row.cells).sort().map((key) => [key, row.cells[key]])]);
   return sha256(
-    canonicalJson({ v: 1, kind, spec_version: SPEC_VERSION, strict: strict === true, allow_overwrite: allowOverwrite === true, rows: canonicalRows }),
+    canonicalJson({ v: 1, kind, spec_version: SPEC_VERSION, strict: strict === true, allow_overwrite: allowOverwrite === true, rows: canonicalRows, ...(options ? { opt: options } : {}) }),
   );
 }
