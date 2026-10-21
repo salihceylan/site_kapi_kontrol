@@ -28,16 +28,17 @@ import {
 } from './finance_common.js';
 import { ENTRY_SELECT } from './finance_ledger_service.js';
 import { minorToNumber, toBigInt } from './finance_money.js';
-import { accountPartySql, currentTenantSql, defaultPaymentParty, partyOfRelation } from './finance_parties.js';
+import { accountPartySql, currentTenantSql, defaultPaymentParty, partyOfRelation, responsiblePersonSql, visiblePartyOfRelation } from './finance_parties.js';
 import { apartmentLabel, escapeLike, foldSql, foldText, parsePositiveId } from './people_common.js';
 import { syncUserPeopleSafe } from './people_sync.js';
 import { residentEntryOf, residentView } from './finance_resident_view.js';
 
 const INT32_MAX = 2147483647;
 
-// İki hesap (İP-1A): defter satırının (takma ad `l`) hesabı ve dairenin (takma ad `a`) güncel kiracısı (finance_parties.js).
+// İki hesap (İP-1A): defter satırının (takma ad `l`) hesabı, dairenin (takma ad `a`) güncel kiracısı ve borç sorumlusu tarafın güncel kişisi (finance_parties.js).
 const LEDGER_ACCOUNT = accountPartySql('l');
 const CURRENT_TENANT = currentTenantSql('a');
+const RESPONSIBLE_PERSON = responsiblePersonSql('a');
 
 /** Vadesi geçmiş tutar: bakiye - vadesi gelmemiş borçlar, en az 0 (BigInt). */
 export function overdueOf(balance, notDue) {
@@ -446,9 +447,10 @@ export async function loadResidentLedger(db, siteCodes, apartmentIds, { limit = 
 }
 
 /**
- * İki hesap (İP-1A): çağıranın borç görünümleri. Kişinin bu dairedeki GÜNCEL ilişkisinden kendi hesabı (finance_parties.partyOfRelation: owner -> ev
- * sahibi, tenant -> kiracı, resident -> dairede güncel kiracı varsa kiracı, yoksa ev sahibi; family_member HİÇBİR hesabı görmez) ve dairenin
- * `responsible_party` değeri `both` ise MALİK kiracı hesabını SALT OKUNUR da görür. Yalnız onaylı siteler, etkin kişi kaydı.
+ * İki hesap (İP-1A): çağıranın borç görünümleri. Kişinin bu dairedeki GÜNCEL ilişkisinden kendi hesabı (finance_parties.visiblePartyOfRelation: owner ->
+ * ev sahibi, tenant -> kiracı, resident -> dairede güncel kiracı varsa kiracı, yoksa ev sahibi, ANCAK yalnız sorumlu both iken ya da sorumlu tarafın güncel
+ * kişisi yokken; family_member HİÇBİR hesabı görmez) ve dairenin `responsible_party` değeri `both` ise MALİK kiracı hesabını SALT OKUNUR da görür. Yalnız
+ * onaylı siteler, etkin kişi kaydı.
  * Kapsam (`visible_from`, ayın 1'i) HER görünüm için kişinin ilişki başlangıcıdır (taşınma günü; boşsa ilişki kaydının günü, İstanbul); aynı kişinin
  * aynı dairedeki kesintisiz önceki ilişkisi zincirin başını YALNIZ aynı hesaba düşüyorsa öne çeker (kiracıyken satın alan kişi eski kiracı kayıtlarını
  * salt okunur kiracı hesabında görür; önceki malikin ev sahibi hesabı kayıtları yeni malike görünmez). Zincir tek adımdır (güvenli taraf).
@@ -464,6 +466,7 @@ export async function loadVisibleAccounts(db, userCode) {
         to_char(COALESCE(r.move_in_date, (r.created_at AT TIME ZONE 'Europe/Istanbul')::DATE), 'YYYY-MM-DD') AS start_date,
         r.created_at AS relation_created_at,
         ${CURRENT_TENANT} AS has_current_tenant,
+        ${RESPONSIBLE_PERSON} AS has_responsible_person,
         COALESCE((
           SELECT json_agg(json_build_object(
             'relation', p.relation,
@@ -498,10 +501,17 @@ export async function loadVisibleAccounts(db, userCode) {
 
 const instantOf = (value) => (value instanceof Date ? value.getTime() : new Date(value).getTime());
 
-/** Daire satırının görünümleri (saf; loadVisibleAccounts). */
+/**
+ * Daire satırının görünümleri (saf; loadVisibleAccounts). Kendi hesabı visiblePartyOfRelation ile: ilişkisi belirtilmemiş sakin yalnız sorumlu both
+ * iken ya da sorumlu tarafın güncel kişisi yokken görür (bağımsız inceleme: eski F2.05 kuralı korunur).
+ */
 export function residentViewsOf(row) {
   const hasTenant = row.has_current_tenant === true;
-  const own = partyOfRelation(row.relation, hasTenant);
+  const own = visiblePartyOfRelation(row.relation, {
+    hasCurrentTenant: hasTenant,
+    responsibleParty: row.responsible_party,
+    hasResponsiblePerson: row.has_responsible_person === true,
+  });
   if (own === null) {
     return [];
   }

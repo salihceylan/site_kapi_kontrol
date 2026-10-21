@@ -454,6 +454,10 @@ export default async function sectionParties(t) {
   // P5. Sakin gorunum matrisi + IDOR (durum: A1 ev sahibi -10000, kiraci 168000)
   // ============================================================================================================
   // A2: kiraci 212000, ev sahibi 10000 | A3: ev sahibi 222000, kiraci 0 | A4: ev sahibi 210000 | A5: ev sahibi 110000, kiraci 112000 | A6: ev sahibi 110000, kiraci 100000
+  // Bagimsiz inceleme (F2.05 korunur): iliskisi belirtilmemis sakin, sorumlu malik / kiraci ve o kisi KAYITLIYKEN hicbir hesabi gormez (RA2); sorumlu tarafin
+  // guncel kisisi yoksa (yedek) oturanin hesabini gorur (RA6: sorumlu kiraci, kiraci cikti -> ev sahibi hesabi).
+  const RA2 = await resident(M, A2, 'resident', 'P Sakin Iki');
+  const RA6 = await resident(M, A6, 'resident', 'P Sakin Alti');
   const matrix = [
     ['OU malik (both)', OU, A1, [['owner', 'own', -10000], ['tenant', 'read_only', 168000]]],
     ['TU kiraci (both)', TU, A1, [['tenant', 'own', 168000]]],
@@ -468,6 +472,8 @@ export default async function sectionParties(t) {
     ['TM ay ortasi tasinan kiraci', TM, A5, [['tenant', 'own', 112000]]],
     ['OX malik (sorumlu kiraci, kiraci cikti)', OX, A6, [['owner', 'own', 110000]]],
     ['TX cikmis kiraci', TX, A6, null],
+    ['RA2 belirtilmemis (sorumlu kiraci, kiraci kayitli): GORMEZ', RA2, A2, null],
+    ['RA6 belirtilmemis (sorumlu kiraci, kiraci cikti: yedek) -> ev sahibi', RA6, A6, [['owner', 'own', 110000]]],
   ];
   const matrixResults = [];
   for (const [label, who, aptId, expected] of matrix) {
@@ -479,7 +485,7 @@ export default async function sectionParties(t) {
   }
   const outsiderItems = await mine(OUTSIDER);
   check(
-    `P5: sakin gorunum matrisi (${matrix.length} durum): her kisi YALNIZ kendi hesabini gorur (malik -> ev sahibi, kiraci -> kiraci, belirtilmemis -> kiraci varsa kiraci yoksa ev sahibi); both dairede malik kiraci hesabini SALT OKUNUR gorur; aile uyesi / cikmis kiraci / ilgisiz gormez; eski alanlar (balance_minor, overdue_minor, next_due_date, recent) = kendi hesabi`,
+    `P5: sakin gorunum matrisi (${matrix.length} durum): her kisi YALNIZ kendi hesabini gorur (malik -> ev sahibi, kiraci -> kiraci, belirtilmemis -> kiraci varsa kiraci yoksa ev sahibi; belirtilmemis yalniz sorumlu both iken ya da sorumlu tarafin kisisi yokken); both dairede malik kiraci hesabini SALT OKUNUR gorur; aile uyesi / cikmis kiraci / ilgisiz gormez; eski alanlar (balance_minor, overdue_minor, next_due_date, recent) = kendi hesabi`,
     matrixResults.every(([, ok]) => ok) && outsiderItems.length === 0,
     matrixResults.filter(([, ok]) => !ok),
   );
@@ -506,12 +512,14 @@ export default async function sectionParties(t) {
     ['cikmis kiraci', (await myStatement(TX.user, A6)).status, 404],
     ['ilgisiz', (await myStatement(OUTSIDER, A1)).status, 404],
     ['gecersiz hesap', (await myStatement(TU.user, A1, '&account_party=both')).status, 400],
+    ['belirtilmemis sakin (sorumlu kiraci, kiraci kayitli)', (await myStatement(RA2.user, A2)).status, 404],
+    ['belirtilmemis sakin -> kiraci hesabi', (await myStatement(RA2.user, A2, '&account_party=tenant')).status, 404],
   ];
   const ouTenantSt = await myStatement(OU.user, A1, '&account_party=tenant');
   const ouOwnSt = await myStatement(OU.user, A1);
   const tuSt = await myStatement(TU.user, A1);
   check(
-    'P5d: sakin ekstresi IDOR: kiraci ev sahibi hesabini / baska daireyi, sorumlu kiraci dairede malik kiraci hesabini, aile uyesi / cikmis kiraci / ilgisiz HICBIRINI gormez (404); malik both dairede kiraci ekstresini salt okunur (role read_only, kapanis 168000), kendi ekstresi ev sahibi (-10000); kiraci kendi ekstresi 168000',
+    'P5d: sakin ekstresi IDOR: kiraci ev sahibi hesabini / baska daireyi, sorumlu kiraci dairede malik kiraci hesabini, aile uyesi / cikmis kiraci / ilgisiz / sorumlu kisi kayitliyken belirtilmemis sakin HICBIRINI gormez (404); malik both dairede kiraci ekstresini salt okunur (role read_only, kapanis 168000), kendi ekstresi ev sahibi (-10000); kiraci kendi ekstresi 168000',
     idor.every(([, got, want]) => got === want) && ouTenantSt.status === 200 && ouTenantSt.body.role === 'read_only' && ouTenantSt.body.closing_balance_minor === 168000
       && ouOwnSt.body.role === 'own' && ouOwnSt.body.account_party === 'owner' && ouOwnSt.body.closing_balance_minor === -10000 && tuSt.body.closing_balance_minor === 168000 && tuSt.body.items.every((i) => i.account_party === 'tenant'),
     { idor: idor.filter(([, got, want]) => got !== want), ouTenant: [ouTenantSt.status, ouTenantSt.body?.role, ouTenantSt.body?.closing_balance_minor] },
@@ -773,10 +781,10 @@ export default async function sectionParties(t) {
   // P8. Borc hatirlatma: alici = hesabin sahibi (gercek kuyruk, sahte SMTP)
   // ============================================================================================================
   queue.reminderQueueHooks.sleep = async () => {};
-  const R = await mkManaged('P Hatirlatma Sitesi', { 'H Blok': 4 });
-  const [R1, R2, R3, R4] = R.ids;
+  const R = await mkManaged('P Hatirlatma Sitesi', { 'H Blok': 5 });
+  const [R1, R2, R3, R4, R5] = R.ids;
   const rBase = P(R.code);
-  for (const [id, party] of [[R1, 'both'], [R2, 'tenant'], [R3, 'both'], [R4, 'both']]) await setResponsible(id, party);
+  for (const [id, party] of [[R1, 'both'], [R2, 'tenant'], [R3, 'both'], [R4, 'both'], [R5, 'owner']]) await setResponsible(id, party);
   await resident(R, R1, 'owner', 'P H Malik Bir', { email: 'p.ro1@qa.example' });
   await resident(R, R1, 'tenant', 'P H Kiraci Bir', { email: 'p.rt1@qa.example' });
   await resident(R, R2, 'owner', 'P H Malik Iki', { email: 'p.ro2@qa.example' });
@@ -792,13 +800,17 @@ export default async function sectionParties(t) {
   await accountCharge(R3, 60000, 'owner'); // iki hesap borclu -> iki sahibe ayri ileti
   await accountCharge(R3, 70000, 'tenant');
   await accountCharge(R4, 50000, 'tenant'); // kiraci yok, yalniz aile uyesi -> alici yok
+  // Bagimsiz inceleme (F2.05 korunur): sorumlu malik + malik kayitli: iliskisi belirtilmemis sakin (hane uyesi olabilir) hatirlatma ALMAZ, yalniz malik
+  await resident(R, R5, 'owner', 'P H Malik Bes', { email: 'p.ro5@qa.example' });
+  await resident(R, R5, 'resident', 'P H Sakin Bes', { email: 'p.rs5@qa.example' });
+  await accountCharge(R5, 40000, 'owner');
   const rSettings = await call('GET', `${rBase}/settings`, MGR);
   const rEnable = await call('PUT', `${rBase}/settings`, MGR, { expected_settings_version: rSettings.body.settings_version, reminders: { enabled: true, min_overdue_minor: 5000, min_days_overdue: 5, min_interval_days: 14, max_consecutive: 3 } });
   if (rEnable.status !== 200) throw new Error(`hatirlatma acilamadi: ${JSON.stringify(rEnable.body)}`);
   const rPv = await call('POST', `${rBase}/reminders/preview`, MGR, { tone: 'friendly' });
   check(
-    'P8: hatirlatma onizlemesi hesap basina: 4 kisi (R1 kiraci, R2 malik, R3 malik + kiraci), 3 daire, 4 hesap; kiracisiz dairenin kiraci hesabi "alici yok" (1); both dairede malik kiraci hesabi borcu icin ALICI DEGIL',
-    rPv.status === 200 && rPv.body.person_count === 4 && rPv.body.apartment_count === 3 && rPv.body.account_count === 4 && rPv.body.excluded.no_recipient === 1 && rPv.body.can_send === true,
+    'P8: hatirlatma onizlemesi hesap basina: 5 kisi (R1 kiraci, R2 malik, R3 malik + kiraci, R5 malik), 4 daire, 5 hesap; kiracisiz dairenin kiraci hesabi "alici yok" (1); both dairede malik kiraci hesabi borcu icin ALICI DEGIL; sorumlu malik dairede belirtilmemis sakin ALICI DEGIL',
+    rPv.status === 200 && rPv.body.person_count === 5 && rPv.body.apartment_count === 4 && rPv.body.account_count === 5 && rPv.body.excluded.no_recipient === 1 && rPv.body.can_send === true,
     rPv.body,
   );
   void queue.stopFinanceReminderQueue();
@@ -809,13 +821,14 @@ export default async function sectionParties(t) {
   const recipients = mails.map((m) => m.to).sort();
   const mailTo = (address) => mails.find((m) => m.to === address)?.text ?? '';
   check(
-    'P8b: kuyruk iletileri YALNIZ hesap sahiplerine gonderir (R1 kiraci, R2 malik, R3 malik + kiraci); R1 maliki ve R2 kiracisi ALMAZ; her iletideki tutar alicinin HESABININ tutari (800 / 900 / 600 / 700 TL)',
-    rSend.status === 201 && rSummary.sent === 4 && same(recipients, ['p.ro2@qa.example', 'p.ro3@qa.example', 'p.rt1@qa.example', 'p.rt3@qa.example'])
-      && /800,00 ₺/.test(mailTo('p.rt1@qa.example')) && /900,00 ₺/.test(mailTo('p.ro2@qa.example')) && /600,00 ₺/.test(mailTo('p.ro3@qa.example')) && !/700,00/.test(mailTo('p.ro3@qa.example')) && /700,00 ₺/.test(mailTo('p.rt3@qa.example')),
+    'P8b: kuyruk iletileri YALNIZ hesap sahiplerine gonderir (R1 kiraci, R2 malik, R3 malik + kiraci, R5 malik); R1 maliki, R2 kiracisi ve R5 belirtilmemis sakini ALMAZ; her iletideki tutar alicinin HESABININ tutari (800 / 900 / 600 / 700 / 400 TL)',
+    rSend.status === 201 && rSummary.sent === 5 && same(recipients, ['p.ro2@qa.example', 'p.ro3@qa.example', 'p.ro5@qa.example', 'p.rt1@qa.example', 'p.rt3@qa.example'])
+      && /800,00 ₺/.test(mailTo('p.rt1@qa.example')) && /900,00 ₺/.test(mailTo('p.ro2@qa.example')) && /600,00 ₺/.test(mailTo('p.ro3@qa.example')) && !/700,00/.test(mailTo('p.ro3@qa.example')) && /700,00 ₺/.test(mailTo('p.rt3@qa.example'))
+      && /400,00 ₺/.test(mailTo('p.ro5@qa.example')),
     { send: rSend.body, summary: rSummary, recipients },
   );
   const rPvAfter = await call('POST', `${rBase}/reminders/preview`, MGR, { tone: 'friendly' });
-  check('P8c: gonderim sonrasi onizleme: hatirlatilan 4 hesap aralik nedeniyle hariç (interval 4), kalan alici yok', rPvAfter.body.excluded.interval === 4 && rPvAfter.body.person_count === 0, rPvAfter.body.excluded);
+  check('P8c: gonderim sonrasi onizleme: hatirlatilan 5 hesap aralik nedeniyle hariç (interval 5), kalan alici yok', rPvAfter.body.excluded.interval === 5 && rPvAfter.body.person_count === 0, rPvAfter.body.excluded);
 
   // ============================================================================================================
   // P9. ESZAMANLI tahsilat x borclandirma x ters kayit x duzeltme x CRM degisikligi

@@ -7749,9 +7749,11 @@ async function sectionFinance() {
   const mine = async (user) => (await call('GET', '/app/my-finance', user)).body;
   const idsOf = (body) => body.items.map((i) => i.apartment_id).sort((a, b) => a - b);
   // İP-1A (G12, BİLEREK DEĞİŞTİ): sakin KENDİ hesabını görür (borcu yoksa "Borcunuz yok"); eski "yalnız sorumlu taraf görür + yedek kural" yerine
-  // hesap sahipliği. T1 / R1 / O2 / T6 artık kendi (boş) hesaplarını görür; borç sorumlu tarafın hesabındadır ve onlara görünmez (aşağıda I1b).
+  // hesap sahipliği. T1 / O2 / T6 artık kendi (boş) hesaplarını görür; borç sorumlu tarafın hesabındadır ve onlara görünmez (aşağıda I1b).
+  // Bağımsız inceleme (F2.05 korunur): ilişkisi belirtilmemiş sakin (R1) sorumlu malik / kiracı ve o kişi kayıtlıyken HİÇBİR hesabı görmez (052 öncesiyle aynı);
+  // R4 / R8 (sorumlu tarafın kişisi yok: yedek) oturanın hesabını görür.
   const expectVisible = [
-    ['O1 (S1 malik + S3 sakin): S1 ve S3', O1.user, [S5(1).id, S5(3).id]], ['T1 (S1 kiraci, sorumlu=malik): kendi bos kiraci hesabi', T1.user, [S5(1).id]], ['R1 (S1 belirsiz iliski, dairede kiraci var: kiraci hesabi, bos)', R1.user, [S5(1).id]], ['F1 (aile uyesi)', F1.user, []],
+    ['O1 (S1 malik + S3 sakin): S1 ve S3', O1.user, [S5(1).id, S5(3).id]], ['T1 (S1 kiraci, sorumlu=malik): kendi bos kiraci hesabi', T1.user, [S5(1).id]], ['R1 (S1 belirsiz iliski, sorumlu=malik ve malik kayitli: GORMEZ)', R1.user, []], ['F1 (aile uyesi)', F1.user, []],
     ['O2 (S2 malik, sorumlu=kiraci): kendi bos ev sahibi hesabi', O2.user, [S5(2).id]], ['T2 (S2 kiraci, sorumlu=kiraci)', T2.user, [S5(2).id]],
     ['O3 (S3 malik, sorumlu=ikisi)', O3.user, [S5(3).id]], ['T3 (S3 kiraci)', T3.user, [S5(3).id]], ['R3 (S3 belirsiz iliski, sorumlu=ikisi)', R3.user, [S5(3).id]], ['F3 (S3 aile uyesi, sorumlu=ikisi: GORMEZ)', F3.user, []],
     ['T4 (S4 sorumlu=malik ama malik yok: yedek kural)', T4.user, [S5(4).id]], ['R4 (S4 yedek kural)', R4.user, [S5(4).id]], ['F4 (S4 aile: yedekte de GORMEZ)', F4.user, []],
@@ -7766,7 +7768,7 @@ async function sectionFinance() {
     const body = await mine(user);
     visibleResults.push([label, same(idsOf(body), [...expected].sort((a, b) => a - b)), idsOf(body)]);
   }
-  check(`I1: hesap matrisi (${expectVisible.length} durum; İP-1A): her guncel kisi KENDI hesabini gorur (malik -> ev sahibi, kiraci -> kiraci, belirsiz -> kiraci varsa kiraci yoksa ev sahibi); family_member HICBIR durumda; pasif kisi / taşınmış iliski gormez; ilgisiz kullanici bos`, visibleResults.every(([, ok]) => ok), visibleResults.filter(([, ok]) => !ok));
+  check(`I1: hesap matrisi (${expectVisible.length} durum; İP-1A): her guncel kisi KENDI hesabini gorur (malik -> ev sahibi, kiraci -> kiraci, belirsiz -> kiraci varsa kiraci yoksa ev sahibi; belirsiz iliski yalniz sorumlu ikisi iken ya da sorumlu tarafin kisisi yokken); family_member HICBIR durumda; pasif kisi / taşınmış iliski gormez; ilgisiz kullanici bos`, visibleResults.every(([, ok]) => ok), visibleResults.filter(([, ok]) => !ok));
   // I1b (İP-1A): borç SORUMLU tarafın hesabındadır; diğer tarafın kendi hesabı boştur ve başkasının borcunu GÖRMEZ. Both dairede malik kiracı hesabını SALT OKUNUR görür.
   const viewOf = async (user, aptNo) => (await mine(user)).items.find((i) => i.apartment_id === S5(aptNo).id);
   const t1 = await viewOf(T1.user, 1);

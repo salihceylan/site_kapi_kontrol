@@ -8,7 +8,7 @@
 //  - Borç tanımının "kim öder" değeri `charge_party`: owner -> ev sahibi hesabı; occupant -> dairenin responsible_party değeri owner ise ev sahibi,
 //    tenant / both ise borç tarihinde etkin kiracı varsa kiracı, yoksa ev sahibi hesabı. Varsayılan: aylık aidat occupant, tek seferlik ek borç owner.
 //  - Kişinin kendi hesabı: owner -> ev sahibi; tenant -> kiracı; resident (ilişki belirtilmemiş) -> dairede güncel kiracı varsa kiracı, yoksa ev sahibi;
-//    family_member -> hesap yok.
+//    family_member -> hesap yok. Görünüm / hatırlatmada resident yalnız sorumlu both iken ya da sorumlu tarafın kişisi yokken (visiblePartyOfRelation).
 //  - Tahsilat seçilen hesaba yazılır; hesap verilmezse (eski istemci) vadesi en eski açık borcu olan hesap, hiç açık borç yoksa borç tarihindeki oturanın hesabı.
 //  - postPayment TEK tahsilat giriş noktasıdır (yönetici tahsilatı finance_ledger_service.recordPayment de bunu çağırır). ÇAĞIRAN withFinanceTransaction
 //    içinde olmalıdır (sites KEY SHARE -> finance_post advisory); postPayment daireyi ve işlemi yapanı kendisi kilitler (apartments -> users -> finans satırları).
@@ -86,6 +86,22 @@ export function partyOfRelation(relation, hasCurrentTenant) {
   return null;
 }
 
+/**
+ * Kişinin borç GÖRÜNÜMÜ ve hatırlatma hesabı (Borcum, sakin ekstresi / makbuzu / tazminat açıklaması, borç hatırlatma alıcısı): kendi hesabı
+ * (partyOfRelation). Bağımsız inceleme (F2.05 korunur): ilişkisi belirtilmemiş sakin (`resident`) yalnız borç sorumlusu "malik ve kiracı" (both)
+ * iken ya da sorumlu tarafın (malik / kiracı) güncel ve etkin kişisi YOKKEN (eski "yedek" kuralı) oturanın hesabını görür. Yönetici "borç ve
+ * bildirimler kime gitsin: malik / kiracı" demişken ve o kişi kayıtlıyken belirtilmemiş ilişkili kişiye (ör. hane üyesi) borç gösterilmez ve hatırlatma
+ * gitmez (052 öncesiyle aynı kişiler). `resolvePersonParty` (hesap yönlendirmesi) bu kuraldan etkilenmez.
+ * @param {string} relation
+ * @param {{ hasCurrentTenant: boolean, responsibleParty: string, hasResponsiblePerson: boolean }} context
+ */
+export function visiblePartyOfRelation(relation, { hasCurrentTenant, responsibleParty, hasResponsiblePerson }) {
+  if (relation === 'resident' && responsibleParty !== 'both' && hasResponsiblePerson === true) {
+    return null;
+  }
+  return partyOfRelation(relation, hasCurrentTenant === true);
+}
+
 // Gövde alanları `account_party` / `charge_party` (finance_common.js'te tanımlıdır: gövde ayrıştırıcıları da kullanır; burada yeniden dışa verilir).
 export { parseAccountParty, parseChargeParty };
 
@@ -109,6 +125,19 @@ export function currentTenantSql(apartmentAlias) {
     SELECT 1 FROM apartment_residencies ct
     INNER JOIN site_people csp ON csp.id = ct.person_id AND csp.is_active = TRUE
     WHERE ct.apartment_id = ${apartmentAlias}.id AND ct.relation = 'tenant' AND ct.is_current = TRUE
+  )`;
+}
+
+/**
+ * SQL parçası: dairenin (`apartmentAlias`) borç sorumlusu tarafın (responsible_party owner -> malik, tenant -> kiracı) güncel ve etkin bir kişisi var mı
+ * (both için false; kullanılmaz). visiblePartyOfRelation'ın "yedek" koşulu (eski F2.05 sorgusuyla aynı).
+ */
+export function responsiblePersonSql(apartmentAlias) {
+  return `EXISTS (
+    SELECT 1 FROM apartment_residencies rp
+    INNER JOIN site_people rpp ON rpp.id = rp.person_id AND rpp.is_active = TRUE
+    WHERE rp.apartment_id = ${apartmentAlias}.id AND rp.is_current = TRUE
+      AND rp.relation = CASE ${apartmentAlias}.responsible_party WHEN 'owner' THEN 'owner' WHEN 'tenant' THEN 'tenant' END
   )`;
 }
 

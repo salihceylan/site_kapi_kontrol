@@ -19,7 +19,9 @@ import {
   postPayment,
   resolveChargeParty,
   resolvePersonParty,
+  responsiblePersonSql,
   tenantOnDateSql,
+  visiblePartyOfRelation,
 } from '../src/modules/finance_parties.js';
 
 const norm = (text) => String(text).replace(/\s+/g, ' ').trim();
@@ -89,6 +91,23 @@ describe('sözleşme 2.1: sabitler ve saf kurallar', () => {
     assert.equal(partyOfRelation('family_member', true), null);
     assert.equal(partyOfRelation('family_member', false), null);
     assert.equal(partyOfRelation('x', false), null);
+  });
+
+  it('inceleme: görünüm / hatırlatma hesabı = kendi hesabı; belirtilmemiş sakin yalnız sorumlu "both" iken ya da sorumlu tarafın kişisi yokken (F2.05 yedeği)', () => {
+    const ctx = (responsibleParty, hasResponsiblePerson, hasCurrentTenant = false) => ({ responsibleParty, hasResponsiblePerson, hasCurrentTenant });
+    assert.equal(visiblePartyOfRelation('resident', ctx('owner', true)), null);
+    assert.equal(visiblePartyOfRelation('resident', ctx('tenant', true, true)), null);
+    assert.equal(visiblePartyOfRelation('resident', ctx('owner', false)), 'owner');
+    assert.equal(visiblePartyOfRelation('resident', ctx('owner', false, true)), 'tenant');
+    assert.equal(visiblePartyOfRelation('resident', ctx('both', true, true)), 'tenant');
+    assert.equal(visiblePartyOfRelation('resident', ctx('both', true, false)), 'owner');
+    assert.equal(visiblePartyOfRelation('owner', ctx('tenant', true, true)), 'owner');
+    assert.equal(visiblePartyOfRelation('tenant', ctx('owner', true, true)), 'tenant');
+    assert.equal(visiblePartyOfRelation('family_member', ctx('both', false)), null);
+    const sql = norm(responsiblePersonSql('a'));
+    assert.match(sql, /rp\.apartment_id = a\.id AND rp\.is_current = TRUE/);
+    assert.match(sql, /rpp\.is_active = TRUE/);
+    assert.match(sql, /rp\.relation = CASE a\.responsible_party WHEN 'owner' THEN 'owner' WHEN 'tenant' THEN 'tenant' END/);
   });
 
   it('gövde alanları: account_party yoksa null, geçersizse 400; charge_party yoksa null, geçersizse 400', () => {

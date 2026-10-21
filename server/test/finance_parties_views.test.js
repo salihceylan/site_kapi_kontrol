@@ -34,6 +34,21 @@ describe('residentViewsOf: kim hangi hesabı görür', () => {
     assert.deepEqual(shape(residentViewsOf(row({ relation: 'resident', has_current_tenant: false, responsible_party: 'both' }))), [['owner', 'own', '2026-10-01']]);
   });
 
+  it('inceleme (F2.05 korunur): sorumlu malik / kiracı ve o tarafın güncel kişisi VARKEN belirtilmemiş sakin hiçbir hesabı görmez; kişi yoksa (yedek) oturanın hesabını görür', () => {
+    for (const responsible of ['owner', 'tenant']) {
+      for (const hasTenant of [true, false]) {
+        assert.deepEqual(residentViewsOf(row({ relation: 'resident', responsible_party: responsible, has_current_tenant: hasTenant, has_responsible_person: true })), [], `${responsible}/${hasTenant}`);
+      }
+    }
+    assert.deepEqual(shape(residentViewsOf(row({ relation: 'resident', responsible_party: 'owner', has_current_tenant: false, has_responsible_person: false }))), [['owner', 'own', '2026-10-01']]);
+    assert.deepEqual(shape(residentViewsOf(row({ relation: 'resident', responsible_party: 'tenant', has_current_tenant: false, has_responsible_person: false }))), [['owner', 'own', '2026-10-01']]);
+    // both dairede sorumlu kişi bilgisi önemsizdir (eski kural: malik + kiracı + belirtilmemiş sakin görür)
+    assert.deepEqual(shape(residentViewsOf(row({ relation: 'resident', responsible_party: 'both', has_current_tenant: true, has_responsible_person: true }))), [['tenant', 'own', '2026-10-01']]);
+    // malik / kiracı kendi hesabını sorumlu kişiden bağımsız görür
+    assert.deepEqual(shape(residentViewsOf(row({ relation: 'tenant', responsible_party: 'owner', has_responsible_person: true }))), [['tenant', 'own', '2026-10-01']]);
+    assert.deepEqual(shape(residentViewsOf(row({ relation: 'owner', responsible_party: 'tenant', has_responsible_person: true }))), [['owner', 'own', '2026-10-01']]);
+  });
+
   it('kapsam zinciri hesap başına: kiracıyken satın alan malik eski kayıtlarını salt okunur kiracı hesabında görür; ev sahibi hesabında kapsam kendi malikliğiyle başlar', () => {
     const buyer = row({
       responsible_party: 'both',

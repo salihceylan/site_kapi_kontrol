@@ -68,8 +68,10 @@ describe('İP-1A borç hatırlatma: alıcı = hesabın sahibi', () => {
     id: '7', account_party: account, unit_label: 'Daire 7', block_name: 'A Blok', block_sort: 1, apt_sort: 7, overdue: String(overdue), oldest_due: '2026-09-01',
     last_day: null, consecutive: 0, excluded: false,
   });
+  // Varsayılan daire: borç sorumlusu "malik ve kiracı" (both), güncel kiracı var.
   const person = (id, relation, email, extra = {}) => ({
-    apartment_id: '7', person_id: String(id), relation, has_tenant: true, account_kind: 'registered', verified: true, pref: true, email, ...extra,
+    apartment_id: '7', person_id: String(id), relation, has_tenant: true, responsible_party: 'both', has_responsible_person: false, account_kind: 'registered', verified: true,
+    pref: true, email, ...extra,
   });
   const db = (candidates, recipients) =>
     strictDb([
@@ -107,5 +109,28 @@ describe('İP-1A borç hatırlatma: alıcı = hesabın sahibi', () => {
     const orphan = await computeReminderPlan(db([candidate('owner', 120000)], [person(2, 'tenant', 'kiraci@ornek.test')]), 1, { settings, tone: 'friendly', now: NOW });
     assert.equal(orphan.pendingPersons.length, 0);
     assert.equal(orphan.excluded.no_recipient, 1);
+  });
+
+  it('inceleme (F2.05 korunur): sorumlu malik / kiracı ve o tarafın güncel kişisi varken belirtilmemiş sakine hatırlatma GİTMEZ; kişi yoksa (yedek) gider', async () => {
+    // sorumlu kiracı, güncel kiracı var: borç kiracı hesabında -> yalnız kiracı (sakin hane üyesi olabilir)
+    const tenantSide = { responsible_party: 'tenant', has_responsible_person: true };
+    const plan = await computeReminderPlan(
+      db([candidate('tenant', 80000)], [person(2, 'tenant', 'kiraci@ornek.test', tenantSide), person(4, 'resident', 'sakin@ornek.test', tenantSide)]),
+      1,
+      { settings, tone: 'friendly', now: NOW },
+    );
+    assert.deepEqual(plan.pendingPersons.map((p) => p.personId), [2]);
+    // sorumlu malik, güncel malik var, kiracı yok: borç ev sahibi hesabında -> yalnız malik
+    const ownerSide = { responsible_party: 'owner', has_responsible_person: true, has_tenant: false };
+    const ownerPlan = await computeReminderPlan(
+      db([candidate('owner', 90000)], [person(1, 'owner', 'malik@ornek.test', ownerSide), person(4, 'resident', 'sakin@ornek.test', ownerSide)]),
+      1,
+      { settings, tone: 'friendly', now: NOW },
+    );
+    assert.deepEqual(ownerPlan.pendingPersons.map((p) => p.personId), [1]);
+    // sorumlu malik ama güncel malik YOK (yedek): belirtilmemiş sakin ev sahibi hesabının hatırlatmasını alır
+    const fallback = { responsible_party: 'owner', has_responsible_person: false, has_tenant: false };
+    const fallbackPlan = await computeReminderPlan(db([candidate('owner', 90000)], [person(4, 'resident', 'sakin@ornek.test', fallback)]), 1, { settings, tone: 'friendly', now: NOW });
+    assert.deepEqual(fallbackPlan.pendingPersons.map((p) => p.personId), [4]);
   });
 });

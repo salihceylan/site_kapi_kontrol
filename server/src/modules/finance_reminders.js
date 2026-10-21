@@ -2,8 +2,9 @@
 //
 // Sözleşme: docs/PLATFORM_FINANS_4B.md "Ö6". Varsayılan KAPALI + sistem düzeyinde hukuk onayı bayrağına bağlı. Bayat borç koruması ve gönderim kuyruk işçisindedir
 // (finance_reminder_queue.js). İKİ HESAP (İP-1A): uygunluk (eşik, gecikme günü) HESAP başına (her hesabın kendi mahsubu); hatırlatma hesabın SAHİBİNE gider
-// (finance_parties.partyOfRelation: kiracı hesabı -> kiracı, ev sahibi hesabı -> malik; ilişkisi belirtilmemiş sakin dairede güncel kiracı varsa kiracı hesabının,
-// yoksa ev sahibi hesabının sahibidir); both dairede malik kiracı hesabı için hatırlatma ALMAZ. Sıklık kayıtları (finance_reminder_apartments) daire başınadır
+// (finance_parties.visiblePartyOfRelation: kiracı hesabı -> kiracı, ev sahibi hesabı -> malik; ilişkisi belirtilmemiş sakin dairede güncel kiracı varsa kiracı
+// hesabının, yoksa ev sahibi hesabının sahibidir, ANCAK yalnız sorumlu both iken ya da sorumlu tarafın güncel kişisi yokken: Borcum ile aynı); both dairede
+// malik kiracı hesabı için hatırlatma ALMAZ. Sıklık kayıtları (finance_reminder_apartments) daire başınadır
 // (temkinli); ardışık sayaç hesabın son tahsilatına göre. AŞAĞIDAKİ 4b metni (responsible_party kuralı) İP-1A ile DEĞİŞTİ:
 // (eski) KİME: 4a "Borcum" görünürlük kuralının AYNISI: owner -> güncel malik; tenant -> kiracı; both ->
 // malik + kiracı + resident; eşleşen kişi yoksa güvenli yedek; family_member ASLA. Kişi başına TEK ileti (≤ 20 daire). Adres = Faz 2 "etkin iletişim e-postası"
@@ -36,7 +37,7 @@ import { cleanReminderNote, noteHasLink, REMINDER_TONES } from './finance_remind
 import { apartmentNotFound, idempotencyConflict, invalidBody, normalizeFreeText, parseIdempotencyKey, previewStale, today } from './finance_common.js';
 import { m1Ctes } from './finance_m1.js';
 import { minorToNumber, toBigInt } from './finance_money.js';
-import { accountPartySql, currentTenantSql, partyOfRelation } from './finance_parties.js';
+import { accountPartySql, currentTenantSql, responsiblePersonSql, visiblePartyOfRelation } from './finance_parties.js';
 import { withReportSnapshot } from './finance_reports.js';
 import { loadEffectiveSettings, readLegalOk } from './finance_settings.js';
 import { lockActorRow, recordFinanceAudit, withFinanceTransaction } from './finance_tx.js';
@@ -47,9 +48,10 @@ import { CONTACT_EMAIL_SQL, PERSON_FROM } from './people_service.js';
 
 export const REMINDER_MAX_APARTMENTS_PER_PERSON = 20;
 
-// İki hesap (İP-1A): defter satırının (takma ad `l`) hesabı ve dairenin (takma ad `a`) güncel kiracısı.
+// İki hesap (İP-1A): defter satırının (takma ad `l`) hesabı, dairenin (takma ad `a`) güncel kiracısı ve borç sorumlusu tarafın güncel kişisi.
 const LEDGER_ACCOUNT = accountPartySql('l');
 const CURRENT_TENANT = currentTenantSql('a');
+const RESPONSIBLE_PERSON = responsiblePersonSql('a');
 export const REMINDER_PER_ADDRESS_DAYS = 7;
 export const REMINDER_ITEM_STATUSES = Object.freeze(['pending', 'sent', 'failed', 'no_address', 'skipped_pref', 'duplicate', 'capped', 'resolved', 'cancelled']);
 
@@ -177,14 +179,16 @@ export const thresholdsOf = (settings) => ({
 });
 
 /**
- * Hesap sahibi alıcılar (İP-1A): kişinin daireDEKİ güncel ilişkisinden kendi hesabı (`account_party`; finance_parties.partyOfRelation); aile üyesi yok.
+ * Hesap sahibi alıcılar (İP-1A): kişinin daireDEKİ güncel ilişkisinden kendi hesabı (`account_party`; finance_parties.visiblePartyOfRelation: Borcum
+ * görünümüyle AYNI kural; ilişkisi belirtilmemiş sakin yalnız sorumlu both iken ya da sorumlu tarafın güncel kişisi yokken); aile üyesi yok.
  * Gönderim anında da kullanılır (finance_reminder_queue.js): kişi o dairede HÂLÂ güncel ve hatırlatılan hesabın sahibi mi.
  */
 export async function loadRecipientRows(db, siteCode, apartmentIds) {
   const result = await db.query(
     `
-      SELECT rr.apartment_id, sp.id AS person_id, rr.relation, ${CURRENT_TENANT} AS has_tenant, ${ACCOUNT_KIND_SQL} AS account_kind,
-             COALESCE(u.email_verified, FALSE) AS verified, COALESCE(np.email_finance_reminders, TRUE) AS pref, ${deliverableEmailSql(CONTACT_EMAIL_SQL)} AS email
+      SELECT rr.apartment_id, sp.id AS person_id, rr.relation, ${CURRENT_TENANT} AS has_tenant, a.responsible_party, ${RESPONSIBLE_PERSON} AS has_responsible_person,
+             ${ACCOUNT_KIND_SQL} AS account_kind, COALESCE(u.email_verified, FALSE) AS verified, COALESCE(np.email_finance_reminders, TRUE) AS pref,
+             ${deliverableEmailSql(CONTACT_EMAIL_SQL)} AS email
       ${PERSON_FROM}
       INNER JOIN apartment_residencies rr ON rr.person_id = sp.id AND rr.is_current = TRUE
       INNER JOIN apartments a ON a.id = rr.apartment_id AND a.site_code = sp.site_code
@@ -198,7 +202,11 @@ export async function loadRecipientRows(db, siteCode, apartmentIds) {
   );
   const out = [];
   for (const row of result.rows ?? []) {
-    const accountParty = partyOfRelation(row.relation, row.has_tenant === true);
+    const accountParty = visiblePartyOfRelation(row.relation, {
+      hasCurrentTenant: row.has_tenant === true,
+      responsibleParty: row.responsible_party,
+      hasResponsiblePerson: row.has_responsible_person === true,
+    });
     if (accountParty !== null) {
       out.push({ ...row, account_party: accountParty });
     }
