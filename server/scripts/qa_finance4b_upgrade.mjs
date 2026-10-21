@@ -41,7 +41,7 @@ const ALL_SCENARIOS = ['chain035', 'refresh', 'steps', 'ensure', 'migrate'];
 const scenarios = ALL_SCENARIOS.includes(process.argv[2]) ? [process.argv[2]] : ALL_SCENARIOS;
 const TRIALS = Number(process.env.QA_UPGRADE_TRIALS || 8);
 const prefix = (process.env.QA_DB_PREFIX || 'f4bup').replace(/[^a-z0-9_]/gi, '');
-const names = { base: `${prefix}_base`, ref: `${prefix}_ref`, trial: `${prefix}_trial`, control: `${prefix}_ctl` };
+const names = { base: `${prefix}_base`, ref: `${prefix}_ref`, refAll: `${prefix}_refall`, trial: `${prefix}_trial`, control: `${prefix}_ctl` };
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const connect = (database) => ({ host: process.env.DB_HOST, port: Number(process.env.DB_PORT || 5432), user: process.env.DB_USER || 'postgres', password: process.env.DB_PASSWORD || undefined, database });
 
@@ -127,6 +127,14 @@ const refClient = new pg.Client(connect(names.ref));
 await refClient.connect();
 const refDump = await catalogDump(refClient);
 await refClient.end();
+// IP-1A (052 ledger_entries'e hesap / kaynak izi sutunlari, kisitlari ve tetikleyicisi ekler): "ensure" yollari sunucu acilisidir (ensureDbSchema semayi
+// SON migration'a getirir); bu yollar TUM zincirle (001..son) karsilastirilir. "steps" ve "migrate" yalniz 040'i uygular: 001..040 ile karsilastirilir.
+await recreate(names.refAll);
+check('referans: migration 001..son (tum zincir; ensure yollari icin) uygulandi', runMigrate(names.refAll, migrationsWhere(() => true)));
+const refAllClient = new pg.Client(connect(names.refAll));
+await refAllClient.connect();
+const refAllDump = await catalogDump(refAllClient);
+await refAllClient.end();
 const only040 = migrationsWhere((n) => n === 40);
 
 // --- tohum: 8 site x 20 daire, 2 yonetici, ~4 000 defter satiri ----------------------------------------------------------------
@@ -409,7 +417,8 @@ for (const [scenario, mode] of plan) {
     const client = new pg.Client(connect(trialDb));
     await client.connect();
     const dump = await catalogDump(client);
-    const equal = ['cols', 'cons', 'idx', 'trg', 'fn'].every((part) => same(dump[part], refDump[part]));
+    const reference = scenario === 'ensure' ? refAllDump : refDump;
+    const equal = ['cols', 'cons', 'idx', 'trg', 'fn'].every((part) => same(dump[part], reference[part]));
     if (failure || !equal) summary.notEqual += 1;
     const invalid = (await client.query(`SELECT (SELECT COUNT(*) FROM pg_index i JOIN pg_class c ON c.oid = i.indrelid WHERE NOT i.indisvalid AND c.relname = ANY($1))::int AS i, (SELECT COUNT(*) FROM pg_constraint WHERE NOT convalidated AND conrelid::regclass::text = ANY($1))::int AS c`, [[...FINANCE_4B_TABLES, 'ledger_entries']])).rows[0];
     if (invalid.i > 0 || invalid.c > 0) summary.invalid += 1;
@@ -421,7 +430,7 @@ for (const [scenario, mode] of plan) {
     if (defaults.l !== 0 || defaults.p !== 0 || defaults.total !== seededPrefs) summary.defaults += 1;
     await client.end();
   }
-  check(`${label}: ${trials} deneme x ${WRITERS} ESZAMANLI yazici: 040 HER denemede eksiksiz ve katalog migrate zinciri 001..040 ile BIREBIR (tablo, sutun, kisit, indeks, tetikleyici, islev); gerekirse yeniden uygulanarak (<= 3)`, summary.notEqual === 0 && summary.unrecovered === 0, summary);
+  check(`${label}: ${trials} deneme x ${WRITERS} ESZAMANLI yazici: 040 HER denemede eksiksiz ve katalog migrate zinciri ${scenario === 'ensure' ? '001..son (ensureDbSchema semayi son surume getirir)' : '001..040'} ile BIREBIR (tablo, sutun, kisit, indeks, tetikleyici, islev); gerekirse yeniden uygulanarak (<= 3)`, summary.notEqual === 0 && summary.unrecovered === 0, summary);
   check(`${label}: dogrulanmamis (NOT VALID) kisit ve gecersiz indeks KALMADI; veri kaybi YOK (defter satiri = tohum + yazicilarin commit ettigi); eski satirlar yeni sutunlarda varsayilan degerde (late_fee_run_id NULL, email_finance_reminders TRUE)`, summary.invalid === 0 && summary.lost === 0 && summary.defaults === 0, summary);
   check(`${label}: yazicilarda ve uygulayicida 40P01 / 55P03 DISINDA beklenmeyen hata YOK`, Object.keys(summary.writerOther).length === 0 && summary.applyOther.length === 0, { other: summary.writerOther, samples: summary.writerSamples, applyOther: summary.applyOther.slice(0, 2) });
   check(`${label}: OLCUM (bilgi): ${summary.writerOps} yazici islemi; uygulayici deadlock ${summary.applyDeadlocks}/${trials} deneme, kilit zaman asimi ${summary.applyLockTimeouts}, yeniden uygulama ${summary.retries}; yazici deadlock (kurban) ${summary.writerDeadlocks}; uygulama suresi ort ${Math.round(summary.applyMsSum / trials)} ms / en uzun ${summary.applyMsMax} ms; yazicinin en uzun beklemesi ${summary.writerStallMaxMs} ms`, true);
