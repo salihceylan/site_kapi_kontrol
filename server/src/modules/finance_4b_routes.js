@@ -68,6 +68,7 @@ import { getMyLateFeeExplanation, listLateFeeRunLines, listLateFeeRuns, postLate
 import { getSettings, readLegalOk, setLegalGate, updateSettings } from './finance_settings.js';
 import { HOUR_MS, ipKey, respondError, userKey } from './route_helpers.js';
 import { recordAudit } from './audit_service.js';
+import { withEquipmentBreakdown } from './equipment_service.js';
 import { pool } from '../db.js';
 
 export const finance4bRouter = express.Router();
@@ -463,7 +464,7 @@ function reportRoute(path, context, fallback, { limiters = [reportLimiter], mana
 }
 
 reportRoute(`${BASE}/reports/aging`, 'finance_report_aging', 'Rapor hazırlanamadı.', {}, async ({ req, access }) => agingReport(access.siteCode, req.query));
-reportRoute(`${BASE}/reports/expense-analysis`, 'finance_report_expense_analysis', 'Rapor hazırlanamadı.', {}, async ({ req, access }) => expenseAnalysisReport(access.siteCode, req.query));
+reportRoute(`${BASE}/reports/expense-analysis`, 'finance_report_expense_analysis', 'Rapor hazırlanamadı.', {}, async ({ req, access }) => withEquipmentBreakdown(access.siteCode, await expenseAnalysisReport(access.siteCode, req.query)));
 reportRoute(`${BASE}/reports/income-expense`, 'finance_report_income_expense', 'Rapor hazırlanamadı.', { audit: 'income-expense' }, async ({ req, access }) => incomeExpenseReport(access.siteCode, req.query));
 reportRoute(`${BASE}/reports/enforcement`, 'finance_report_enforcement', 'İcra dökümü hazırlanamadı.', { managerOnly: true }, async ({ req, access }) => enforcementReport(access.siteCode, req.query));
 reportRoute(`${BASE}/reports/cash-position`, 'finance_report_cash', 'Rapor hazırlanamadı.', {}, async ({ req, access }) => cashPositionReport(access.siteCode, req.query));

@@ -46,6 +46,7 @@ import { visitorLogRouter } from './modules/visitor_log_routes.js';
 import { cardAccessRouter } from './modules/card_access_routes.js';
 import { deviceIntegrationsRouter } from './modules/device_integrations_routes.js';
 import { contractsRouter } from './modules/contracts_routes.js';
+import { equipmentRouter } from './modules/equipment_routes.js';
 import { meteringRouter } from './modules/metering_routes.js';
 import { startContractReminders, stopContractReminders } from './modules/contracts_reminders.js';
 import { decisionBookRouter } from './modules/decision_book_routes.js';
@@ -153,6 +154,8 @@ app.use(cardAccessRouter);
 app.use(deviceIntegrationsRouter);
 // Firma ve sozlesme takibi: /manager/sites/:siteCode/contract-vendors[/:id] + /manager/sites/:siteCode/contracts[/summary|/:id] (modul contracts, varsayilan KAPALI; sakin ucu yok).
 app.use(contractsRouter);
+// Ekipman, bakim ve teklif: /manager/sites/:siteCode/equipment[...] + /quotes[...] (modul equipment, varsayilan KAPALI; sakin ucu yok).
+app.use(equipmentRouter);
 // Sayac okuma ve faturalandirma: /manager/sites/:siteCode/{meter-apartments,meters,meter-readings/import,meter-billings}[...] (modul metering, varsayilan KAPALI; sakin ucu yok).
 app.use(meteringRouter);
 // Karar defteri: /manager/sites/:siteCode/decisions[/:id[/finalize]] + /app/decisions[/:id] (modul decision_book, varsayilan KAPALI).

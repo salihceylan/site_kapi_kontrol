@@ -207,6 +207,14 @@ export const MODULE_CATALOG = Object.freeze([
     status: MODULE_STATUS_COMING_SOON,
     defaultEnabled: false,
   }),
+  defineModule({
+    code: 'equipment',
+    name: 'Ekipman ve Bakım',
+    description: 'Ekipman envanteri, bakım planı ve kaydı, yasal kontrol hatırlatması ve teklif karşılaştırma.',
+    core: false,
+    status: MODULE_STATUS_AVAILABLE,
+    defaultEnabled: false,
+  }),
 ]);
 
 export const MODULE_CODES = Object.freeze(MODULE_CATALOG.map((definition) => definition.code));

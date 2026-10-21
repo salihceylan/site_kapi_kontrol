@@ -22,6 +22,8 @@ abstract final class PlatformModuleCodes {
   static const String visitorLog = 'visitor_log';
   /// Firma ve Sözleşme Takibi. Varsayılan KAPALI.
   static const String contracts = 'contracts';
+  /// Ekipman ve Bakım (envanter, bakım planı / kaydı, teklifler). Varsayılan KAPALI.
+  static const String equipment = 'equipment';
   /// Karar Defteri (yönetim / genel / denetim kurulu kararları). Varsayılan KAPALI.
   static const String decisionBook = 'decision_book';
   /// Rehber (yönetim kadrosu ve faydalı telefonlar; sakin ekranı). Varsayılan KAPALI.
