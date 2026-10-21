@@ -136,6 +136,14 @@ export const MODULE_CATALOG = Object.freeze([
     defaultEnabled: false,
   }),
   defineModule({
+    code: 'drive_storage',
+    name: 'Dosya Deposu (Google Drive)',
+    description: 'Sitenin dosyalarının sitenin kendi Google Drive hesabında saklanması.',
+    core: false,
+    status: MODULE_STATUS_AVAILABLE,
+    defaultEnabled: false,
+  }),
+  defineModule({
     code: 'plate_recognition',
     name: 'Plaka Tanıma',
     description: 'Araç plakasını tanıyarak otopark kapısını açma; plaka kayıtları.',
