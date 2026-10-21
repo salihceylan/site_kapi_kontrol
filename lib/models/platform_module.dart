@@ -35,6 +35,8 @@ abstract final class PlatformModuleCodes {
   static const String driveStorage = 'drive_storage';
   /// Komşu Panosu (sakin ilanları, yönetici onayı). Varsayılan KAPALI.
   static const String neighborBoard = 'neighbor_board';
+  /// Faaliyet Raporu (yıllık rapor taslağı, PDF). Varsayılan KAPALI.
+  static const String annualReport = 'annual_report';
   /// Kart Ödemesi arayüzü (sağlayıcılar "Yakında…"). Varsayılan KAPALI.
   static const String cardPayments = 'card_payments';
   /// Kamera ve Plaka (plaka olayı kaydı; kapı açmaz). Varsayılan KAPALI.

@@ -155,6 +155,9 @@ enum SirketMenuItem {
   /// Komşu Panosu (`neighbor_board`): sakin ilan yazar / şikayet eder, yönetici onaylar / kaldırır. Rol listesinde YOKTUR;
   /// modül AÇIK sitesi olan yönetici ya da sakine [YanMenu.additionalItems] ile eklenir.
   komsuPanosu,
+  /// Faaliyet Raporu (`annual_report`): yönetici yıllık raporu kayıtlardan hazırlar, düzenler, PDF alır. Rol listesinde YOKTUR;
+  /// modül AÇIK sitesi olan yöneticiye [YanMenu.additionalItems] ile eklenir (Site hizmetleri).
+  faaliyetRaporu,
   /// Ödeme ve Kamera yönetim ekranı. Rol listesinde YOKTUR; `card_payments` ya da `plate_cameras` modülü AÇIK olan sitenin
   /// yöneticisine / kurul üyesine [YanMenu.additionalItems] ile eklenir. Sakin ve görevli için yoktur.
   odemeKamera,
@@ -238,6 +241,7 @@ SirketMenuGroup menuGroupOf(SirketMenuItem item) => switch (item) {
       SirketMenuItem.sozlesmeler ||
       SirketMenuItem.kararDefteri ||
       SirketMenuItem.isletmeProjesi ||
+      SirketMenuItem.faaliyetRaporu ||
       SirketMenuItem.kararlar ||
       SirketMenuItem.odemeKamera ||
       SirketMenuItem.ekipmanBakim =>
@@ -1407,6 +1411,8 @@ String _titleForItem(SirketMenuItem item, [UserRole? role]) {
       return 'İşletme Projesi';
     case SirketMenuItem.komsuPanosu:
       return 'Komşu Panosu';
+    case SirketMenuItem.faaliyetRaporu:
+      return 'Faaliyet Raporu';
     case SirketMenuItem.odemeKamera:
       return 'Ödeme ve Kamera';
     case SirketMenuItem.ekipmanBakim:
@@ -1498,6 +1504,8 @@ IconData _iconForItem(SirketMenuItem item) {
       return Icons.account_balance_wallet_rounded;
     case SirketMenuItem.komsuPanosu:
       return Icons.forum_rounded;
+    case SirketMenuItem.faaliyetRaporu:
+      return Icons.assignment_rounded;
     case SirketMenuItem.odemeKamera:
       return Icons.videocam_rounded;
     case SirketMenuItem.ekipmanBakim:

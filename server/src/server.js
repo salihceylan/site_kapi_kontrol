@@ -56,6 +56,7 @@ import { budgetRouter } from './modules/budget_routes.js';
 import { driveRouter } from './modules/drive_routes.js';
 import { neighborBoardRouter } from './modules/neighbor_board_routes.js';
 import { paymentNoticeRouter } from './modules/payment_notice_routes.js';
+import { annualReportRouter } from './modules/annual_report_routes.js';
 import { startDocumentsMaintenance, stopDocumentsMaintenance } from './modules/document_maintenance.js';
 import { pushRouter } from './modules/push_routes.js';
 import { notifyChannelsRouter } from './modules/notify_channels_routes.js';
@@ -169,6 +170,8 @@ app.use(budgetRouter);
 app.use(driveRouter);
 // Komsu panosu: /app/neighbor-board[/:id/report|withdraw] + /manager/sites/:siteCode/neighbor-board[/:id/approve|reject|remove] (modul neighbor_board, varsayilan KAPALI).
 app.use(neighborBoardRouter);
+// Faaliyet raporu: /manager/sites/:siteCode/annual-report (modul annual_report, varsayilan KAPALI).
+app.use(annualReportRouter);
 // Telefon bildirimi (Faz 3b-B): /app/push/devices[/:installId], /app/push/test, /admin/push/status (tercihler /app/notification-preferences'ta).
 app.use(pushRouter);
 // SMS ile giris + tarayici bildirimi (063): /auth/sms/*, /app/web-push/* (SMS / VAPID anahtari yoksa kapali).

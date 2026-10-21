@@ -20,6 +20,7 @@ import { ensureEquipmentSchema } from './modules/equipment_schema.js';
 import { ensureDecisionBookSchema } from './modules/decision_book_schema.js';
 import { ensureBudgetSchema } from './modules/budget_schema.js';
 import { ensureNeighborBoardSchema } from './modules/neighbor_board_schema.js';
+import { ensureAnnualReportSchema } from './modules/annual_report_schema.js';
 import { ensurePushSchema } from './modules/push_schema.js';
 import { ensureApartmentPinSchema } from './modules/apartment_pin_schema.js';
 import { ensureBulkOpeningSchema } from './modules/bulk_import_opening_schema.js';
@@ -1940,6 +1941,8 @@ export async function ensureDbSchema() {
     await ensurePaymentNoticesSchema(client);
     // 067 (banka dosyasi, 2C): finance_accounts/apartments'tan SONRA; her ifade kendi otomatik onayinda (bank_import_schema.js = migrations/067).
     await ensureBankImportSchema(client);
+    // 069 (faaliyet raporu taslagi): tablo varsa hicbir ifade gonderilmez (annual_report_schema.js = migrations/069).
+    await ensureAnnualReportSchema(client);
 
     // 031 people_v1: mevcut sakinlerin CRM'e tek seferlik aktarimi. Savunmaci: hata sunucunun acilmasini ENGELLEMEZ
     // (kendi transaction'i geri alinir, isaret yazilmaz => sonraki acilista yeniden denenir; okuma anindaki
