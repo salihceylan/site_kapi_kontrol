@@ -286,6 +286,31 @@ export const SQL_CLAIM_DEVICE_ATOMIC = `
 `;
 
 /**
+ * Cihaz ekleme (sahiplenme) kuralı: cihazı YALNIZ süper kullanıcı ya da en az bir sitenin yöneticisi (site_manager_sites ya da aktif
+ * SITE_OWNER / SITE_ADMIN üyeliği) ekleyebilir; o sitenin Geçiş Kontrol (door_control) modülü AÇIK olmalıdır (satır yoksa katalog
+ * varsayılanı AÇIK). Sakin, bireysel kullanıcı, kurul ve görevli ekleyemez. $1 = users.user_code. Satır dönerse izin vardır.
+ */
+export const SQL_MANAGED_SITE_WITH_DOOR_CONTROL = `
+  SELECT s.site_code
+  FROM sites s
+  WHERE s.approval_status = 'approved'
+    AND (
+      EXISTS (SELECT 1 FROM site_manager_sites sms WHERE sms.site_code = s.site_code AND sms.manager_user_code = $1)
+      OR EXISTS (
+        SELECT 1 FROM site_memberships sm
+        WHERE sm.site_code = s.site_code AND sm.user_code = $1 AND sm.role IN ('SITE_OWNER', 'SITE_ADMIN') AND sm.is_active = TRUE
+      )
+    )
+    AND COALESCE(
+      (SELECT smod.enabled FROM site_modules smod WHERE smod.site_code = s.site_code AND smod.module_code = 'door_control'),
+      TRUE
+    ) = TRUE
+  LIMIT 1
+`;
+
+export const DEVICE_ADD_FORBIDDEN_MESSAGE = 'Cihazı yalnız site yöneticisi, Geçiş Kontrol modülü açıkken ekleyebilir.';
+
+/**
  * Bireysel / daire sahibi rolü mü? (site yöneticisi OLMAMIŞ, başvuru yapabilecek roller.)
  * Ürün kararı (docs/PLATFORM_SITE_BASVURUSU.md): HİÇBİR yol bu rolleri kendiliğinden site_manager'a yükseltmez — cihaz sahiplenme de
  * yükseltmez; yönetici olmanın yolu site başvurusu + süper kullanıcı onayıdır. İşlev adı eski davranıştan kalmadır (testler ona bağlı).

@@ -67,22 +67,22 @@ abstract final class OnboardingSteps {
             title: 'Hoş geldiniz',
             body:
                 'Hesabınız hazır. Girişte açılan “Panel” ekranındaki kartlardan bir siteye daire sakini olarak '
-                'katılabilir, cihazınızı hesabınıza ekleyebilir ya da site kurmak için başvurabilirsiniz. Hesap '
+                'katılabilir ya da site kurmak için başvurabilirsiniz. Hesap '
                 'ayarlarınız sağ üstteki “Ayarlar” düğmesindedir.',
           ),
           OnboardingStep(
             icon: Icons.qr_code_scanner_rounded,
             title: 'Daireye katılın',
             body:
-                'Menüden “Daireye Katıl & Cihaz Ekle” ekranını açın ve “QR / Kod ile Daireye Katıl” düğmesiyle '
+                'Menüden “Daireye Katıl” ekranını açın ve “QR / Kod ile Daireye Katıl” düğmesiyle '
                 'yöneticinizin paylaştığı kodu girin. Yönetici onaylayınca kapılarınız “Kapılar” ekranında görünür.',
           ),
           OnboardingStep(
             icon: Icons.add_to_photos_rounded,
-            title: 'Cihaz ekleyin ya da site kurun',
+            title: 'Site kurun',
             body:
-                'Aynı ekranda “Cihaz Ekle” ile kutudaki QR kodu okutabilir, “Site Kurmak İçin Başvur” ile site '
-                'yöneticisi olmak için başvurabilirsiniz.',
+                'Aynı ekranda “Site Kurmak İçin Başvur” ile site yöneticisi olmak için başvurabilirsiniz. '
+                'Cihazı site kurulduktan sonra siz (site yöneticisi) eklersiniz.',
           ),
           _help,
         ];

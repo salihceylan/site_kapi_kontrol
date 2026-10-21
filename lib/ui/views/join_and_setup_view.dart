@@ -21,7 +21,6 @@ class JoinAndSetupView extends StatefulWidget {
     super.key,
     required this.authService,
     required this.session,
-    required this.onOpenClaimDevice,
     required this.onOpenJoinSite,
     this.onRefreshAll,
     this.applications,
@@ -30,7 +29,6 @@ class JoinAndSetupView extends StatefulWidget {
 
   final AuthService authService;
   final UserSession session;
-  final VoidCallback onOpenClaimDevice;
   final VoidCallback onOpenJoinSite;
   final VoidCallback? onRefreshAll;
 
@@ -46,34 +44,14 @@ class JoinAndSetupView extends StatefulWidget {
 }
 
 class _JoinAndSetupViewState extends State<JoinAndSetupView> {
-  /// Cihaz ekleme düğmesi. Cihaz sahiplenmek kullanıcıyı site yöneticisi YAPMAZ: etiket yanıltmaz.
-  Widget _claimButton({bool tonal = false}) {
-    return ElevatedButton.icon(
-      style: tonal ? tonalActionStyle(context) : null,
-      onPressed: () async {
-        widget.onOpenClaimDevice();
-        await _loadRequests();
-      },
-      icon: const Icon(
-        Icons.add_circle_outline_rounded,
-        size: 20,
-      ),
-      label: const Text('Cihaz Ekle', textAlign: TextAlign.center),
-    );
-  }
-
-  /// "Site Kurulumu & Cihaz" kartının eylemi: başvuru akışı kapalıysa (rol uygun değil) yalnız "Cihaz Ekle";
-  /// açıksa birincil "Site Kurmak İçin Başvur" ([SiteApplyCta]: bekleyen / durum bilinmezken pasif), ikincil
-  /// cihaz düğmesi ve "Yakında…" pasif satırı.
-  Widget _buildAdminAction() {
-    final tracker = widget.applications;
-    if (tracker == null) return _claimButton();
+  /// "Site Kurulumu" kartının eylemi: birincil "Site Kurmak İçin Başvur" ([SiteApplyCta]: bekleyen / durum bilinmezken pasif)
+  /// ve "Yakında…" pasif satırı. Bu ekranda CİHAZ EKLEME yoktur: cihazı yalnız Geçiş Kontrol modülü açık sitenin yöneticisi
+  /// ekler ("Kayıtlı Cihazlar" ekranından); bu ekran yalnız daireye katılma ve site başvurusu içindir.
+  Widget _buildAdminAction(SiteApplicationTracker tracker) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         SiteApplyCta(tracker: tracker, onApply: _openApplicationForm),
-        const SizedBox(height: AppSpace.sm),
-        _claimButton(tonal: true),
         const SizedBox(height: AppSpace.sm),
         const SiteSubscriptionComingSoonRow(),
       ],
@@ -171,11 +149,11 @@ class _JoinAndSetupViewState extends State<JoinAndSetupView> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               const SectionHeader(
-                                title: 'Daireye Katıl & Cihaz Ekle',
+                                title: 'Daireye Katıl',
                               ),
                               const SizedBox(height: AppSpace.xs),
                               Text(
-                                'Yeni bir siteye/daireye katılabilir ya da yeni bir cihazı hesabınıza ekleyebilirsiniz.',
+                                'Yöneticinizin paylaştığı site katılım QR kodu ya da katılım koduyla bir siteye/daireye katılabilirsiniz.',
                                 style: th.bodyMedium,
                               ),
                             ],
@@ -206,7 +184,7 @@ class _JoinAndSetupViewState extends State<JoinAndSetupView> {
                     tone: AppTone.success,
                     icon: Icons.key_rounded,
                     title: 'Site Sakini Girişi',
-                    badge: 'Daireye Katıl',
+                    badge: 'Hızlı Katılım',
                     description:
                         'Yöneticinizin paylaştığı site katılım QR kodunu okutarak veya katılım kodunu girerek dairenize katılım başvurusu gönderin.',
                     action: ElevatedButton.icon(
@@ -230,23 +208,21 @@ class _JoinAndSetupViewState extends State<JoinAndSetupView> {
                 const SizedBox(height: AppSpace.lg),
 
                 // ==========================================
-                // 2. KART: YÖNETİCİ & CİHAZ KURULUMU
+                // 2. KART: SİTE KURULUMU (yalnız başvuru akışı açık rollerde)
                 // ==========================================
-                StaggeredEntry(
-                  index: 2,
-                  child: SetupOptionCard(
-                    tone: AppTone.primary,
-                    icon: widget.applications == null
-                        ? Icons.add_to_photos_rounded
-                        : Icons.domain_add_rounded,
-                    title: 'Site Kurulumu & Cihaz',
-                    badge: widget.applications == null ? 'Cihaz' : 'Başvuru',
-                    description: widget.applications == null
-                        ? 'Satın aldığınız kutudaki QR kodu veya Seri Numarasını okutup cihazınızı hesabınıza ekleyin.'
-                        : 'Sitenizi tanımlayıp başvurun; süper kullanıcı onayladığında siteniz kurulur ve site yöneticisi olursunuz. Cihaz şart değildir, kutudaki QR kodu veya Seri Numarasıyla sonra da eklenebilir.',
-                    action: _buildAdminAction(),
+                if (widget.applications != null)
+                  StaggeredEntry(
+                    index: 2,
+                    child: SetupOptionCard(
+                      tone: AppTone.primary,
+                      icon: Icons.domain_add_rounded,
+                      title: 'Site Kurulumu',
+                      badge: 'Başvuru',
+                      description:
+                          'Sitenizi tanımlayıp başvurun; süper kullanıcı onayladığında siteniz kurulur ve site yöneticisi olursunuz. Cihazı site kurulduktan sonra siz (site yöneticisi) eklersiniz.',
+                      action: _buildAdminAction(widget.applications!),
+                    ),
                   ),
-                ),
 
                 // ==========================================
                 // 3. BÖLÜM: KATILIM BAŞVURULARIM (VARSA)

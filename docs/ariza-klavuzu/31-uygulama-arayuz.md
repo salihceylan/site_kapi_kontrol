@@ -24,7 +24,7 @@ Ekranda görülen arıza (taşma, güncellenmeyen liste, yanlış menü, tepkisi
 | [lib/ui/views/all_users_view.dart](../../lib/ui/views/all_users_view.dart) | Süper kullanıcı "Kullanıcı Yönetimi" (arama, rol çipleri, sayfalama, veritabanı bakımı) |
 | [lib/ui/views/managed_users_view.dart](../../lib/ui/views/managed_users_view.dart) | Süper kullanıcı / site yöneticisi yönetimi listesi |
 | [lib/ui/views/company_devices_view.dart](../../lib/ui/views/company_devices_view.dart) | Şirket cihaz envanteri (atama bekleyen / kapıya atanmış, OTA, PDF) |
-| [lib/ui/views/join_and_setup_view.dart](../../lib/ui/views/join_and_setup_view.dart) | Daireye Katıl & Cihaz Ekle ekranı + başvurularım |
+| [lib/ui/views/join_and_setup_view.dart](../../lib/ui/views/join_and_setup_view.dart) | Daireye Katıl ekranı + başvurularım |
 | [lib/ui/views/profile_view.dart](../../lib/ui/views/profile_view.dart) | Profil formu ve sakin için salt okunur hesap bilgileri |
 | [lib/ui/views/subscription_requests_view.dart](../../lib/ui/views/subscription_requests_view.dart) | Abonelik talepleri listesi (menüden erişim kapalı, bkz. giriş) |
 | [lib/ui/views/pending_site_approvals_view.dart](../../lib/ui/views/pending_site_approvals_view.dart) | Site onay talepleri listesi (menüden erişim kapalı) |
@@ -186,7 +186,7 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/screens/home_shell
 | [lib/ui/widgets/yan_menu.dart:219](../../lib/ui/widgets/yan_menu.dart#L219) | <code>SirketMenuGroup menuGroupOf(SirketMenuItem item) =&gt; switch (item) {</code> | Görünen öğenin hangi çekmece başlığına düştüğü ya da sağ üstteki dişlinin açtığı Ayarlar paneline gittiği; boş başlık çizilmez |
 | [lib/ui/pages/home_page.dart:1842](../../lib/ui/pages/home_page.dart#L1842) | <code>bool _canAccessMenu(SirketMenuItem item, UserRole role) {</code> | Seçili menüye ERİŞİM kuralı; çekmece listesinden ayrı yazılmıştır |
 | [lib/ui/pages/home_page.dart:6336](../../lib/ui/pages/home_page.dart#L6336) | <code>if (!_canAccessMenu(_selectedMenu, session.role)) {</code> | Erişimsiz menü seçiliyse sessizce dashboard'a çevrilir (öğeye dokunup panele düşme nedeni) |
-| [lib/ui/pages/home_page.dart:1847](../../lib/ui/pages/home_page.dart#L1847) | <code>if (item == SirketMenuItem.katilimVeKurulum) {</code> | "Daireye Katıl & Cihaz Ekle" tüm rollere açıktır (rol anahtarından önce) |
+| [lib/ui/pages/home_page.dart:1847](../../lib/ui/pages/home_page.dart#L1847) | <code>if (item == SirketMenuItem.katilimVeKurulum) {</code> | "Daireye Katıl" tüm rollere açıktır (rol anahtarından önce) |
 | [lib/ui/pages/home_page.dart:2380](../../lib/ui/pages/home_page.dart#L2380) | <code>void _selectMenu(SirketMenuItem item) {</code> | Menü seçimi: öğe tipine göre ilgili listeyi force ile yeniden yükler |
 | [lib/ui/pages/home_page.dart:1996](../../lib/ui/pages/home_page.dart#L1996) | <code>String _titleForMenu(SirketMenuItem item) {</code> | AppBar başlığı çekmecedeki başlıktan ayrı tutulur (AppBar başlığı menü öğesinin etiketiyle birebir aynı olmak zorunda değildir) |
 | [lib/menu.dart:1](../../lib/menu.dart#L1) | <code>export 'package:site_kapi_kontrol/ui/widgets/yan_menu.dart';</code> | Eski içe aktarma yolu; menü tanımı yalnız yan_menu.dart'ta |

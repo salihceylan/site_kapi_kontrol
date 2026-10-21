@@ -101,7 +101,7 @@ void main() {
       expect(YanMenu.visibleItems(role: UserRole.superUser), hasLength(18));
       await _pumpMenu(t, UserRole.superUser, height: 1200);
       final drawer = _titles(t);
-      expect(drawer, <String>['Panel', 'Daire Sakinleri', 'Site Yönetimi', 'Kişiler', 'Daireye Katıl & Cihaz Ekle', 'Çıkış Yap']);
+      expect(drawer, <String>['Panel', 'Daire Sakinleri', 'Site Yönetimi', 'Kişiler', 'Daireye Katıl', 'Çıkış Yap']);
       expect(drawer.indexOf('Kişiler'), drawer.indexOf('Site Yönetimi') + 1);
 
       await _pumpSettings(t, UserRole.superUser, height: 1200);
@@ -256,7 +256,7 @@ void main() {
         'Profilim',
         'Site Yönetimi',
         'Modüller',
-        'Daireye Katıl & Cihaz Ekle',
+        'Daireye Katıl',
         'Çıkış Yap',
       ]));
     });
@@ -268,7 +268,7 @@ void main() {
         hidden: doorControlMenuItems,
       );
       final titles = _titles(t);
-      expect(titles, <String>['Panel', 'Daireye Katıl & Cihaz Ekle', 'Çıkış Yap']);
+      expect(titles, <String>['Panel', 'Daireye Katıl', 'Çıkış Yap']);
       await _pumpSettings(t, UserRole.apartmentOwner, hidden: doorControlMenuItems);
       expect(_titles(t), isNot(contains('Eller Serbest & Kestirmeler')));
       expect(_titles(t), <String>['Profilim']);

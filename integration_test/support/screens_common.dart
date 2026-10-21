@@ -89,7 +89,7 @@ Future<void> showcaseTour(E2eScreenContext c) async {
   await settle(tester, min: const Duration(milliseconds: 600));
 }
 
-/// "Daireye Katıl & Cihaz Ekle" ekrani: iki diyalogu ac/kapat; sahipsiz cihaz UID'sini ve site
+/// "Daireye Katıl" ekrani: iki diyalogu ac/kapat; sahipsiz cihaz UID'sini ve site
 /// katilim kodunu yaz (gonderme/sahiplenme YOK), yalniz okuma amacli "Site Bilgilerini Getir".
 Future<void> joinAndSetupTour(E2eScreenContext c, {bool lookupJoinToken = false}) async {
   await c.openAndClose(

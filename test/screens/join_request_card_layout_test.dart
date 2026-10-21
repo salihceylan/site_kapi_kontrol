@@ -1,6 +1,6 @@
 // "Katılım Başvurularım" kartı (JoinRequestCard): cilalı site rozeti durumun tonunu taşır, durum
 // rozeti (StatusChip) metinle birlikte durur; taşma yok (320x640 x2,0 ve 360x640 x1,5; açık + koyu).
-// Kartı bireysel ana görünüm ile "Daireye Katıl & Cihaz Ekle" ekranı paylaşır: ekran testleri
+// Kartı bireysel ana görünüm ile "Daireye Katıl" ekranı paylaşır: ekran testleri
 // (individual_home_view_layout_test, join_and_setup_view_layout_test) kartın metinlerini ayrıca sınar.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';

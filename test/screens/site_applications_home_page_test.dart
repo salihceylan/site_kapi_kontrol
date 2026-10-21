@@ -28,7 +28,6 @@ import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/styles/app_theme.dart';
 import 'package:site_kapi_kontrol/ui/pages/home_page.dart';
-import 'package:site_kapi_kontrol/ui/views/dashboard_view.dart';
 import 'package:site_kapi_kontrol/ui/views/individual_home_view.dart';
 import 'package:site_kapi_kontrol/ui/views/join_and_setup_view.dart';
 import 'package:site_kapi_kontrol/ui/views/module_showcase_view.dart';
@@ -526,15 +525,16 @@ void main() {
     });
   });
 
-  group('daire kullanıcısı: Daireye Katıl & Cihaz Ekle ekranı', () {
+  group('daire kullanıcısı: Daireye Katıl ekranı', () {
     testWidgets('başvuru kartı ve "Site Kurmak İçin Başvur" burada da vardır (cihazsız başvuru)', (t) async {
       final auth = _HomeApp(role: UserRole.apartmentOwner)..seed([saRow(7, status: 'rejected', decisionNote: 'Eksik')]);
       await _pumpHome(t, auth, height: 1400);
-      await _tapMenu(t, 'Daireye Katıl & Cihaz Ekle');
+      await _tapMenu(t, 'Daireye Katıl');
       expect(find.byType(JoinAndSetupView), findsOneWidget);
       expect(find.text('Site başvurunuz reddedildi'), findsOneWidget);
       expect(find.text('Site Kurmak İçin Başvur'), findsOneWidget);
-      expect(find.text('Cihaz Ekle'), findsOneWidget);
+      // Cihaz ekleme bu ekranda yoktur: cihazı yalnız site yöneticisi ekler.
+      expect(find.text('Cihaz Ekle'), findsNothing);
       expect(find.text('Cihaz Ekleyerek Site Yöneticisi Ol'), findsNothing);
 
       final apply = find.byKey(const ValueKey<String>('site_application_apply'));
@@ -603,23 +603,6 @@ void main() {
       expect(auth.createCalls.single['deviceUid'], 'ESP32_NEW');
       expect(auth.setupCalls, isEmpty);
       expect(auth.role, UserRole.individual);
-      await _disposeHome(t);
-    });
-
-    testWidgets('Daireye Katıl & Cihaz Ekle ekranından (daire kullanıcısı) aynı bilgi + Site Kur', (t) async {
-      final auth = _HomeApp(role: UserRole.apartmentOwner);
-      await _pumpHome(t, auth, height: 1600);
-      await _tapMenu(t, 'Daireye Katıl & Cihaz Ekle');
-      await t.ensureVisible(find.text('Cihaz Ekle'));
-      await t.tap(find.text('Cihaz Ekle'));
-      await settleFor(t, 500);
-      await claim(t, 'ESP32_N2');
-      expect(find.text('Cihaz Eklendi'), findsOneWidget);
-      expect(auth.role, UserRole.apartmentOwner);
-      expect(find.byType(DashboardView), findsNothing);
-      await t.tap(find.byKey(const ValueKey<String>('device_added_site_setup')));
-      await settleFor(t, 700);
-      expect(find.text('Site Başvurusu'), findsOneWidget);
       await _disposeHome(t);
     });
 
@@ -921,7 +904,7 @@ void main() {
       // site_application_screens_sync_test.dart.)
       final auth = _HomeApp(role: UserRole.apartmentOwner)..seed([saRow(7, status: 'rejected', decisionNote: 'Eksik')]);
       await _pumpHome(t, auth, height: 1600);
-      await _tapMenu(t, 'Daireye Katıl & Cihaz Ekle');
+      await _tapMenu(t, 'Daireye Katıl');
       expect(find.text('Site başvurunuz reddedildi'), findsOneWidget);
       final loaded = auth.mineCalls;
 
@@ -994,11 +977,11 @@ void main() {
           await _disposeHome(t);
         });
 
-        testWidgets('daire kullanıcısı, Daireye Katıl & Cihaz Ekle + reddedilmiş başvuru: ${w.toInt()}x${h.toInt()} x$s ${dark ? 'koyu' : 'açık'} tema, taşma yok', (t) async {
+        testWidgets('daire kullanıcısı, Daireye Katıl + reddedilmiş başvuru: ${w.toInt()}x${h.toInt()} x$s ${dark ? 'koyu' : 'açık'} tema, taşma yok', (t) async {
           final auth = _HomeApp(role: UserRole.apartmentOwner)
             ..seed([saRow(7, status: 'rejected', decisionNote: 'Adres bilgisi eksik olduğu için kayıt oluşturulamadı.')]);
           await _pumpHome(t, auth, width: w, height: h, scale: s, dark: dark);
-          await _tapMenu(t, 'Daireye Katıl & Cihaz Ekle');
+          await _tapMenu(t, 'Daireye Katıl');
           await scrollTo(t, find.byKey(const ValueKey<String>('site_application_reapply')));
           await scrollTo(t, find.byKey(const ValueKey<String>('site_application_apply')));
           await scrollTo(t, find.text('Abonelikle hemen site aç — Yakında…'));

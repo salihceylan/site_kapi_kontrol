@@ -112,7 +112,7 @@ void main() {
         'Panel',
         'Duyurular',
         'Borcum',
-        'Daireye Katıl & Cihaz Ekle',
+        'Daireye Katıl',
         'Eller Serbest & Kestirmeler',
         'Profilim',
       ]);

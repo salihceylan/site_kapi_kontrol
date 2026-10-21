@@ -124,7 +124,6 @@ void main() {
       Widget join(UserRole role) => JoinAndSetupView(
         authService: auth,
         session: saSession(role),
-        onOpenClaimDevice: () {},
         onOpenJoinSite: () {},
         applications: tracker,
       );

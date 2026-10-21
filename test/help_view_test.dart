@@ -149,7 +149,7 @@ void main() {
       ]) {
         expect(find.text(heading), findsOneWidget, reason: heading);
       }
-      expect(find.text('Cihazımı hesabıma nasıl eklerim?'), findsOneWidget);
+      expect(find.text('Sisteme cihazı kim ekler?'), findsOneWidget);
       expect(find.text('Site yöneticisi olmak için nasıl başvururum?'), findsOneWidget);
       expect(find.text('Kapıyı nasıl açarım?'), findsNothing, reason: 'bireysel kullanıcıda kapı yok');
       expect(find.text('Uygulama sürümü: 1.2.3 (45)'), findsOneWidget);

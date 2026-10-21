@@ -45,6 +45,7 @@ class IndividualHomeView extends StatefulWidget {
     required this.onRefreshAll,
     this.applications,
     this.onRefreshAccount,
+    this.canAddDevice = false,
   });
 
   final UserSession session;
@@ -57,6 +58,10 @@ class IndividualHomeView extends StatefulWidget {
 
   /// Onaylanmış başvuruda rolü elle yenileme ("Hesabı yenile").
   final Future<void> Function()? onRefreshAccount;
+
+  /// "Cihaz Ekle" düğmeleri görünsün mü? Yalnız site yöneticisi (Geçiş Kontrol modülü açık sitede) ya da süper kullanıcı cihaz
+  /// ekleyebilir (bkz. [canAddDevice]); varsayılan false: bireysel / daire kullanıcısı cihaz ekleyemez, mevcut cihazları listelenir.
+  final bool canAddDevice;
 
   @override
   State<IndividualHomeView> createState() => IndividualHomeViewState();
@@ -611,8 +616,8 @@ class IndividualHomeViewState extends State<IndividualHomeView>
 
   Widget _buildQuickActions() {
     // Bir kişi bireysel kullanıcıdan daire kullanıcılığına veya yöneticiliğe geçtiği zaman
-    // panelindeki "Daireye Katıl" ve "Site Kurulumu & Cihaz" kartları
-    // panelde görünmez; sandwich menüdeki "Daireye Katıl & Cihaz Ekle" menüsünden erişilir.
+    // panelindeki "Daireye Katıl" ve "Site Kurulumu" kartları
+    // panelde görünmez; sandwich menüdeki "Daireye Katıl" menüsünden erişilir.
     // Başvuru akışında (applications != null: bireysel / daire kullanıcısı) cihaz sahiplenmek kullanıcıyı
     // yönetici yapmaz; cihazı olan kişi de "Site Kur" ile başvurabilmelidir: cihaz kartları gizlemez.
     final hasTransitioned = widget.session.role == UserRole.siteManager ||
@@ -657,37 +662,37 @@ class IndividualHomeViewState extends State<IndividualHomeView>
           ),
         ),
 
-        const SizedBox(height: AppSpace.lg),
-
-        // 2. KART: YÖNETİCİ / CİHAZ KURULUM KARTI (altta; kurumsal mavi)
-        StaggeredEntry(
-          index: firstIndex + 1,
-          child: SetupOptionCard(
-            tone: AppTone.primary,
-            icon: widget.applications == null
-                ? Icons.add_to_photos_rounded
-                : Icons.domain_add_rounded,
-            title: 'Site Kurulumu & Cihaz',
-            badge: widget.applications == null ? 'CİHAZ' : 'BAŞVURU',
-            // Cihaz sahiplenmek kullanıcıyı site yöneticisi YAPMAZ; yönetici olmak için başvurulur.
-            description: widget.applications == null
-                ? 'Yeni cihazınızı kutu QR koduyla hesabınıza ekleyin.'
-                : 'Sitenizi tanımlayıp başvurun; süper kullanıcı onayladığında siteniz kurulur ve '
-                      'site yöneticisi olursunuz. Cihaz şart değildir, sonra da eklenebilir.',
-            action: widget.applications == null
-                ? PrimaryActionButton(
-                    label: 'Cihaz Ekle',
-                    icon: Icons.add_to_photos_rounded,
-                    tone: AppTone.primary,
-                    onPressed: _openClaimDialog,
-                  )
-                : _SiteApplyActions(
-                    tracker: widget.applications!,
-                    onApply: _openApplicationForm,
-                    onClaimDevice: _openClaimDialog,
-                  ),
+        // 2. KART: SİTE KURULUMU (yalnız başvuru akışı açık rollerde; cihaz ekleme yalnız site yöneticisinde)
+        if (widget.applications != null || widget.canAddDevice) ...[
+          const SizedBox(height: AppSpace.lg),
+          StaggeredEntry(
+            index: firstIndex + 1,
+            child: SetupOptionCard(
+              tone: AppTone.primary,
+              icon: widget.applications == null
+                  ? Icons.add_to_photos_rounded
+                  : Icons.domain_add_rounded,
+              title: widget.applications == null ? 'Cihaz' : 'Site Kurulumu',
+              badge: widget.applications == null ? 'CİHAZ' : 'BAŞVURU',
+              description: widget.applications == null
+                  ? 'Yeni cihazınızı kutu QR koduyla hesabınıza ekleyin.'
+                  : 'Sitenizi tanımlayıp başvurun; süper kullanıcı onayladığında siteniz kurulur ve '
+                        'site yöneticisi olursunuz. Cihazı site kurulduktan sonra siz (site yöneticisi) eklersiniz.',
+              action: widget.applications == null
+                  ? PrimaryActionButton(
+                      label: 'Cihaz Ekle',
+                      icon: Icons.add_to_photos_rounded,
+                      tone: AppTone.primary,
+                      onPressed: _openClaimDialog,
+                    )
+                  : _SiteApplyActions(
+                      tracker: widget.applications!,
+                      onApply: _openApplicationForm,
+                      onClaimDevice: widget.canAddDevice ? _openClaimDialog : null,
+                    ),
+            ),
           ),
-        ),
+        ],
       ],
     );
   }
@@ -913,11 +918,12 @@ class IndividualHomeViewState extends State<IndividualHomeView>
                 alignment: WrapAlignment.end,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  TextButton.icon(
-                    onPressed: _openClaimDialog,
-                    icon: const Icon(Icons.add_rounded, size: 18),
-                    label: const Text('Cihaz Ekle'),
-                  ),
+                  if (widget.canAddDevice)
+                    TextButton.icon(
+                      onPressed: _openClaimDialog,
+                      icon: const Icon(Icons.add_rounded, size: 18),
+                      label: const Text('Cihaz Ekle'),
+                    ),
                   IconButton(
                     onPressed: _loadDevices,
                     icon: const Icon(Icons.refresh_rounded, size: 20),
@@ -956,20 +962,20 @@ class IndividualHomeViewState extends State<IndividualHomeView>
   }
 }
 
-/// "Site Kurulumu & Cihaz" kartının eylemleri (başvuru akışı): birincil "Site Kurmak İçin Başvur"
+/// "Site Kurulumu" kartının eylemleri (başvuru akışı): birincil "Site Kurmak İçin Başvur"
 /// (bekleyen başvuru varken "Başvurunuz İnceleniyor", durum bilinmezken de pasif; [SiteApplyCta]), ikincil
-/// "Cihaz Ekle" (cihaz sahiplenmek yönetici yapmaz) ve
+/// "Cihaz Ekle" (YALNIZ [onClaimDevice] verilirse: site yöneticisi / süper) ve
 /// "Abonelikle hemen site aç — Yakında…" pasif satırı. Düğme etiketleri sarar; kırpılmaz.
 class _SiteApplyActions extends StatelessWidget {
   const _SiteApplyActions({
     required this.tracker,
     required this.onApply,
-    required this.onClaimDevice,
+    this.onClaimDevice,
   });
 
   final SiteApplicationTracker tracker;
   final Future<void> Function() onApply;
-  final VoidCallback onClaimDevice;
+  final VoidCallback? onClaimDevice;
 
   @override
   Widget build(BuildContext context) {
@@ -977,14 +983,16 @@ class _SiteApplyActions extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         SiteApplyCta(tracker: tracker, onApply: onApply),
-        const SizedBox(height: AppSpace.sm),
-        OutlinedButton.icon(
-          key: const ValueKey<String>('site_application_claim_device'),
-          onPressed: onClaimDevice,
-          style: tonalActionStyle(context),
-          icon: const Icon(Icons.add_to_photos_rounded, size: 20),
-          label: const Text('Cihaz Ekle', textAlign: TextAlign.center),
-        ),
+        if (onClaimDevice != null) ...[
+          const SizedBox(height: AppSpace.sm),
+          OutlinedButton.icon(
+            key: const ValueKey<String>('site_application_claim_device'),
+            onPressed: onClaimDevice,
+            style: tonalActionStyle(context),
+            icon: const Icon(Icons.add_to_photos_rounded, size: 20),
+            label: const Text('Cihaz Ekle', textAlign: TextAlign.center),
+          ),
+        ],
         const SizedBox(height: AppSpace.sm),
         const SiteSubscriptionComingSoonRow(),
       ],

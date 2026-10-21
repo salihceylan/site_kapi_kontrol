@@ -1,6 +1,6 @@
 // FAZ 5 / A2-G4: "Site Sakini Girişi" ve "Yönetici & Cihaz Kurulumu" seçenek kartı.
 //
-// Bireysel ana görünümün ilk açılış kartları ile "Daireye Katıl & Cihaz Ekle" ekranındaki iki
+// Bireysel ana görünümün ilk açılış kartları ile "Daireye Katıl" ekranındaki iki
 // kart aynı kompozisyonu paylaşır; eskiden her biri ~150 satır iç içe Container/gradyan kopyasıydı.
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
