@@ -6363,6 +6363,44 @@
           "on_kosul": "Sitede en az bir daire kayıtlı olmalı; plaka denemesi için başka bir kişide kayıtlı bir plaka olmalı.",
           "yeni": true,
           "gelistirme": "hazir"
+        },
+        {
+          "id": "F30.58",
+          "baslik": "Cihazı yalnız site yöneticisi ekler",
+          "adimlar": [
+            "Sakin ya da bireysel hesapla menüye bakın.",
+            "Geçiş Kontrol açık sitenin yöneticisiyle Kayıtlı Cihazlar'a girin; sonra modülü kapatıp tekrar bakın."
+          ],
+          "beklenen": "Menüde 'Daireye Katıl' yazar, sakinde ve bireyselde 'Cihaz Ekle' yoktur. Yöneticide 'Yeni Cihaz Kaydet' yalnız modül açıkken görünür. Mevcut cihazlar ve kapı açma eskisi gibi çalışır.",
+          "rol_notu": "Daire sakini, bireysel, site yöneticisi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F30.59",
+          "baslik": "Banka PDF ekstresi",
+          "adimlar": [
+            "Finans > Kasa > 'Banka dosyası yükle' ile bankanın PDF hesap ekstresini seçin; 'Satırları göster'e bakın.",
+            "Taranmış (resim) bir PDF de deneyin."
+          ],
+          "beklenen": "Tarih, tutar ve yön ekstreyle aynıdır; emin olunamayan satırlar işaretlidir; 'İşle'den sonra aynı satır ikinci kez işlenmez. Taranmış PDF'de 'Bu PDF taranmış bir resim; metni okunamıyor...' uyarısı çıkar.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F30.60",
+          "baslik": "Açıklamadan daire ve ad eşleme",
+          "adimlar": [
+            "Açıklaması 'A blok 5 Ahmet Yılmaz ekim aidatı' olan ve yalnız '5 nolu daire' yazan iki satırlı banka dosyası yükleyin."
+          ],
+          "beklenen": "Daire ve ad birlikte geçen satır 'Tanındı' olur ve dönem (Ekim) bilgisi görünür; yalnız daire numarası geçen satır 'Kontrol edin' olarak öneriyle gelir.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
         }
       ]
     },
