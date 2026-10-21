@@ -80,7 +80,7 @@ abstract final class HelpContent {
     'Site Yöneticileri Yönetimi',
     'Daire Sakinleri',
     'Site Yönetimi',
-    'Daireye Katıl & Cihaz Ekle',
+    'Daireye Katıl',
     'Şirket Cihazı Kaydet',
     'Şirket Cihaz Envanteri',
     'Kayıtlı Cihazlar',
@@ -173,8 +173,8 @@ abstract final class HelpContent {
     'Görev ver',
     'Uygulamaya davet et',
     'Kadro',
-    'Site Kurulumu & Cihaz',
-    'Cihaz Ekle',
+    'Site Kurulumu',
+    'Yeni Cihaz Kaydet',
     'Site Kurmak İçin Başvur',
     'Kendi Bilgilerini Düzenle',
     'Mevcut Şifre',
@@ -232,7 +232,7 @@ abstract final class HelpContent {
     title: 'Daireme nasıl katılırım?',
     icon: Icons.qr_code_scanner_rounded,
     steps: <String>[
-      'Menüden “Daireye Katıl & Cihaz Ekle” ekranını açın.',
+      'Menüden “Daireye Katıl” ekranını açın.',
       '“QR / Kod ile Daireye Katıl” düğmesine dokunun.',
       'Yöneticinizin paylaştığı site katılım QR kodunu okutun ya da katılım kodunu girin; blok ve daireyi seçip başvurun.',
       'Başvurunuzu yönetici onaylayınca kapılarınız “Kapılar” ekranında görünür. Durumu “Katılım Başvurularım” bölümünden izleyebilirsiniz.',
@@ -287,7 +287,7 @@ abstract final class HelpContent {
     icon: Icons.grid_view_rounded,
     steps: <String>[
       'Girişte açılan “Panel” ekranı modül vitrinidir: hesabınıza açık ekranlar kart olarak dizilir; karta dokununca o ekran açılır.',
-      'Yetkili kapılarınız ve katılım başvurularınız “Kapılar” ekranındadır; bir siteye katılmak ya da cihaz eklemek için “Daireye Katıl & Cihaz Ekle” kartını kullanın.',
+      'Yetkili kapılarınız ve katılım başvurularınız “Kapılar” ekranındadır; bir siteye katılmak için “Daireye Katıl” kartını kullanın.',
     ],
     note:
         'Kapı modülü kapalıysa “Kapılar” görünmez; dairelerinizin ve başvurularınızın bölümleri o zaman “Panel” '
@@ -438,22 +438,22 @@ abstract final class HelpContent {
     _navigationIndividual,
     HelpTopic(
       id: 'add_device',
-      title: 'Cihazımı hesabıma nasıl eklerim?',
+      title: 'Sisteme cihazı kim ekler?',
       icon: Icons.add_to_photos_rounded,
       steps: <String>[
-        'Menüden “Daireye Katıl & Cihaz Ekle” ekranını açın.',
-        '“Site Kurulumu & Cihaz” kartındaki “Cihaz Ekle” düğmesine dokunun.',
-        'Kutunun üzerindeki QR kodu okutun ya da Seri No / UID kodunu elle girin.',
+        'Sisteme cihazı yalnız site yöneticisi ekleyebilir, o da yalnızca sitesinde Geçiş Kontrol modülü açıkken.',
+        'Daire sakini ve bireysel kullanıcılar cihaz eklemez; sitenizin kapısını açmak için yöneticinizin tanımladığı yetkiyi kullanırsınız.',
+        'Kendi sitenizi kurmak istiyorsanız “Site Kurulumu” kartındaki “Site Kurmak İçin Başvur” ile başvurun; site kurulunca cihazı siz eklersiniz.',
       ],
-      note: 'Cihaz eklemek sizi site yöneticisi yapmaz; site yöneticisi olmak için site başvurusu gerekir.',
+      note: 'Zaten hesabınıza tanımlı cihazlarınız ve kapı açma yetkileriniz aynen çalışmaya devam eder.',
     ),
     HelpTopic(
       id: 'site_application',
       title: 'Site yöneticisi olmak için nasıl başvururum?',
       icon: Icons.domain_add_rounded,
       steps: <String>[
-        'Menüden “Daireye Katıl & Cihaz Ekle” ekranını açın; “Site Kurulumu & Cihaz” kartındaki “Site Kurmak İçin Başvur” düğmesine dokunun.',
-        'Site adını, bloklarla daire sayılarını ve kapıları girin. Cihazınız yoksa cihaz seçimini boş bırakabilirsiniz.',
+        'Menüden “Daireye Katıl” ekranını açın; “Site Kurulumu” kartındaki “Site Kurmak İçin Başvur” düğmesine dokunun.',
+        'Site adını, bloklarla daire sayılarını ve kapıları girin. Cihaz seçimi isteğe bağlıdır; cihazı site kurulduktan sonra siz (site yöneticisi) eklersiniz.',
         'Veri İşleme Sözleşmesi kutusunu işaretleyip başvuruyu gönderin.',
         'Süper kullanıcı onaylayınca siteniz kurulur ve site yöneticisi olursunuz. Onaylanmadan önce başvurunuzu iptal edebilirsiniz.',
       ],
@@ -669,6 +669,7 @@ abstract final class HelpContent {
       steps: <String>[
         'Cihazlarınızı sağ üstteki “Ayarlar” düğmesindeki “Kayıtlı Cihazlar” ekranında görürsünüz.',
         'Yeni cihazı Wi-Fi ağına bağlamak için aynı yerdeki “Bluetooth ile Wi-Fi Kur” ekranını kullanın.',
+        'Kutudaki QR kodu / Seri No ile yeni cihaz eklemek için “Kayıtlı Cihazlar” ekranındaki “Yeni Cihaz Kaydet” düğmesini kullanın; cihazı yalnız site yöneticisi, sitede Geçiş Kontrol modülü açıkken ekleyebilir.',
       ],
     ),
     HelpTopic(

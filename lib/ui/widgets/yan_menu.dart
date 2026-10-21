@@ -1353,7 +1353,7 @@ String _titleForItem(SirketMenuItem item, [UserRole? role]) {
     case SirketMenuItem.siteler:
       return 'Site Yönetimi';
     case SirketMenuItem.katilimVeKurulum:
-      return 'Daireye Katıl & Cihaz Ekle';
+      return 'Daireye Katıl';
     case SirketMenuItem.cihazEkle:
       if (role == UserRole.superUser) return 'Şirket Cihazı Kaydet';
       if (role == UserRole.individual) return 'Cihaz Ekle';

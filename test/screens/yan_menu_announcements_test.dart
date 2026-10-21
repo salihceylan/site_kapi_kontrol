@@ -89,13 +89,13 @@ void main() {
       // Menü listesi eskisi gibi; çekmecede ayar öğeleri yok (dişlide).
       expect(_listTitles(UserRole.apartmentOwner), <String>[
         'Panel',
-        'Daireye Katıl & Cihaz Ekle',
+        'Daireye Katıl',
         'Eller Serbest & Kestirmeler',
         'Profilim',
       ]);
       expect(await _pumpMenu(t, UserRole.apartmentOwner), <String>[
         'Panel',
-        'Daireye Katıl & Cihaz Ekle',
+        'Daireye Katıl',
         'Çıkış Yap',
       ]);
     });
@@ -115,7 +115,7 @@ void main() {
       );
       expect(titles, <String>[
         'Panel',
-        'Daireye Katıl & Cihaz Ekle',
+        'Daireye Katıl',
         'Duyurular',
         'Çıkış Yap',
       ]);
@@ -157,7 +157,7 @@ void main() {
         ).take(3).toList(),
         <String>['Panel', 'Kişiler', 'Duyurular'],
       );
-      expect(titles, <String>['Panel', 'Kişiler', 'Daireye Katıl & Cihaz Ekle', 'Duyurular', 'Çıkış Yap']);
+      expect(titles, <String>['Panel', 'Kişiler', 'Daireye Katıl', 'Duyurular', 'Çıkış Yap']);
     });
 
     testWidgets('sakin modundaki site yöneticisi: Duyurular eklenir (kişiler rol listesinde yok)', (t) async {

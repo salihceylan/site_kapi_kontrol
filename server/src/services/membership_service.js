@@ -20,6 +20,8 @@ import {
   SQL_BULK_BLOCK_USERS,
   SQL_CLAIM_DEVICE_ATOMIC,
   SQL_CLAIM_VERIFICATION_ATTEMPT,
+  SQL_MANAGED_SITE_WITH_DOOR_CONTROL,
+  DEVICE_ADD_FORBIDDEN_MESSAGE,
   SQL_CONSUME_VERIFICATION_CODE,
   SQL_FIND_PENDING_REGISTRATION,
   SQL_SUPERSEDE_OLDER_VERIFICATION_CODES,
@@ -537,6 +539,9 @@ export async function resendIndividualVerificationCode({ email }) {
  * Sahiplenme ATOMİKTİR: `UPDATE devices ... WHERE id = $ AND owner_user_id IS NULL RETURNING`
  * (0 satır -> başka biri sahiplenmiş -> 409).
  *
+ * YETKİ (docs/PLATFORM_MODUL_SISTEMI.md "Cihaz ekleme kuralı"): yalnız süper kullanıcı ya da Geçiş Kontrol (door_control) modülü açık bir
+ * sitenin yöneticisi cihaz ekleyebilir; diğer herkese 403 DEVICE_ADD_FORBIDDEN. Kapı açma / MQTT / mevcut cihaz kayıtları etkilenmez.
+ *
  * ROL DEĞİŞMEZ (ürün kararı, docs/PLATFORM_SITE_BASVURUSU.md): cihaz sahiplenmek kişiyi site yöneticisi YAPMAZ. Eskiden bireysel /
  * daire sahibi kullanıcı sahiplenmede anında site_manager olurdu; artık yönetici olmanın tek yolu site BAŞVURUSU + süper kullanıcı
  * onayıdır (site_applications). Sahiplenen cihaz başvuruda seçilebilir ve onayda 1. kapıya bağlanır. getMyClaimedDevices salt-okunurdur.
@@ -566,6 +571,17 @@ export async function claimDevice({ userCode, deviceInput }) {
     const user = userRes.rows[0];
     if (!user.email_verified) {
       throw httpError(403, 'Cihaz sahiplenmek için önce e-posta adresinizi doğrulamanız gerekmektedir.');
+    }
+
+    // Cihaz ekleme yetkisi (cihaz sorgusundan ÖNCE: yetkisiz kullanıcıya cihazın varlığı/sahipliği sızmaz): yalnız süper kullanıcı ya da
+    // Geçiş Kontrol (door_control) modülü AÇIK bir sitenin yöneticisi. Sakin, bireysel, kurul ve görevli ekleyemez (403).
+    if (user.role !== 'super_user') {
+      const allowedRes = await client.query(SQL_MANAGED_SITE_WITH_DOOR_CONTROL, [user.user_code]);
+      if (allowedRes.rowCount === 0) {
+        const forbidden = httpError(403, DEVICE_ADD_FORBIDDEN_MESSAGE);
+        forbidden.code = 'DEVICE_ADD_FORBIDDEN';
+        throw forbidden;
+      }
     }
 
     // Cihazı veritabanında ara

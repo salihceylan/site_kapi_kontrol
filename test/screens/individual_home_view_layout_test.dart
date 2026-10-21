@@ -41,6 +41,8 @@ Future<void> _pumpView(
       session: _session(role),
       authService: auth,
       onRefreshAll: () {},
+      // Cihaz ekleme düğmesi yalnız site yöneticisinde görünür (canAddDevice); bu test o kartın yerleşimini ölçer.
+      canAddDevice: true,
     ),
     width: width,
     height: height,
@@ -167,7 +169,7 @@ void main() {
 
       expect(find.text('Hoş Geldiniz!'), findsOneWidget);
       expect(find.text('Site Sakini Girişi'), findsOneWidget);
-      expect(find.text('Site Kurulumu & Cihaz'), findsOneWidget);
+      expect(find.text('Cihaz'), findsWidgets);
       expect(find.text('Site Sakini Olarak Devam Et'), findsOneWidget);
       expect(find.text('Cihaz Ekle'), findsOneWidget);
       expect(find.text('HIZLI KATILIM'), findsOneWidget);

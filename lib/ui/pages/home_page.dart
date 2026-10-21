@@ -126,6 +126,7 @@ import 'package:site_kapi_kontrol/models/reservation_models.dart';
 
 import 'package:site_kapi_kontrol/services/module_access.dart';
 
+import 'package:site_kapi_kontrol/ui/helpers/device_add_gate.dart';
 import 'package:site_kapi_kontrol/ui/helpers/module_menu.dart';
 
 import 'package:site_kapi_kontrol/ui/views/audit_log_view.dart';
@@ -1984,7 +1985,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               item == SirketMenuItem.bluetoothWifiKur;
         }
         return item == SirketMenuItem.dashboard ||
-            item == SirketMenuItem.cihazEkle ||
             item == SirketMenuItem.profilim ||
             item == SirketMenuItem.ellerSerbest;
     }
@@ -2038,7 +2038,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         return 'Site Yönetimi';
 
       case SirketMenuItem.katilimVeKurulum:
-        return 'Daireye Katıl & Cihaz Ekle';
+        return 'Daireye Katıl';
 
       case SirketMenuItem.cihazEkle:
         final currentRole = widget.authService.session?.role;
@@ -4478,7 +4478,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
+  /// Cihaz ekleme yetkisi: süper kullanıcı ya da Geçiş Kontrol modülü açık sitenin yöneticisi ([canAddDevice]).
+  bool _canAddDevice(UserSession session) => canAddDevice(role: session.role, access: _moduleAccess);
+
   Future<void> _openClaimDeviceFlow() async {
+    final current = widget.authService.session;
+    if (current == null || !_canAddDevice(current)) {
+      _showMessage('Cihazı yalnız site yöneticisi, Geçiş Kontrol modülü açıkken ekleyebilir.');
+      return;
+    }
     final claimedUid = await ClaimDeviceDialog.show(context, widget.authService);
     if (claimedUid != null && claimedUid.isNotEmpty) {
       await _loadCompanyDevices(force: true);
@@ -6211,6 +6219,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       // olmayan) site yöneticisine açılır.
       applications: _applicationsFor(session),
       onRefreshAccount: () => _refreshAccountAfterApproval(),
+      // Cihaz ekleme: yalnız Geçiş Kontrol modülü açık sitenin yöneticisi (ya da süper kullanıcı).
+      canAddDevice: _canAddDevice(session),
     );
     if (_isDoorControlClosed(session)) {
       return Column(
@@ -6987,7 +6997,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         return JoinAndSetupView(
           authService: widget.authService,
           session: session,
-          onOpenClaimDevice: _openClaimDeviceFlow,
           onOpenJoinSite: _openJoinRequestFlow,
           onRefreshAll: _loadInitialData,
           applications: _applicationsFor(session),
@@ -6995,21 +7004,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         );
 
       case SirketMenuItem.cihazEkle:
-        if (session.role == UserRole.individual) {
-          return DeviceAddView(
-            title: 'Cihaz Ekle',
-            qrTitle: 'Kutu QR Kodunu Okut',
-            qrDescription:
-                'Cihaz ambalaj kutusundaki QR kodu kameraya göstererek cihazı hesabınıza bağlayın. Site yöneticisi olmak için Site Kur ile başvuru yapabilirsiniz.',
-            qrButtonLabel: 'QR Kodunu Okut',
-            manualTitle: 'Seri No / UID ile Cihaz Ekle',
-            manualDescription:
-                'Kamera kullanamıyorsanız kutu üzerindeki Seri No veya UID kodunu elle girerek cihazı bağlayın.',
-            manualButtonLabel: 'Seri No Gir',
-            onOpenQrRegistration: _openClaimDeviceFlow,
-            onOpenManualRegistration: _openClaimDeviceFlow,
-          );
-        }
+        // Şirket cihazı kaydı yalnız süper kullanıcıdadır; bireysel kullanıcı cihaz ekleyemez (bkz. [_canAccessMenu]).
         return DeviceAddView(
           onOpenQrRegistration: _openDeviceRegistrationFlow,
           onOpenManualRegistration: _openManualDeviceRegistrationFlow,
@@ -7045,7 +7040,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
           onDeleteDevice: _deleteCompanyDevice,
           onDownloadFirmwareReportPdf: _exportFirmwareReportPdf,
-          onRegisterNewDevice: _openClaimDeviceFlow,
+          // "Yeni Cihaz Kaydet" yalnız site yöneticisinde (Geçiş Kontrol modülü açık sitede) görünür.
+          onRegisterNewDevice: _canAddDevice(session) ? _openClaimDeviceFlow : null,
           onToggleDefect: _toggleDeviceDefect,
           onReleaseOwnership: _releaseDeviceOwnership,
         );

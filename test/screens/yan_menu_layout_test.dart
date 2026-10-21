@@ -752,7 +752,7 @@ void main() {
       'başlığa ayrılan genişlik seçili/seçilmeyen öğede AYNI ve trailing yer ayırmaz',
       (t) async {
         // Uzun başlık: trailing (>= 32 dp ayrılır) olsaydı her öğede daralır ve gereksiz sarardı.
-        const target = 'Daireye Katıl & Cihaz Ekle';
+        const target = 'Daireye Katıl';
         const unselected = _Cfg(
           'seçili değil',
           UserRole.individual,
@@ -796,7 +796,7 @@ void main() {
           'Panel',
           'Site Yönetimi',
           'Kişiler',
-          'Daireye Katıl & Cihaz Ekle',
+          'Daireye Katıl',
           'Çıkış Yap',
         ]);
         expect(find.text('Ana sayfa'), findsOneWidget);
@@ -820,7 +820,7 @@ void main() {
           'Daire Sakinleri',
           'Site Yönetimi',
           'Kişiler',
-          'Daireye Katıl & Cihaz Ekle',
+          'Daireye Katıl',
           'Borçlar',
           'Finans',
           'İletişim',
@@ -1039,9 +1039,9 @@ void main() {
       );
 
       await t.tap(find.text('Site Yönetimi'));
-      await t.ensureVisible(find.text('Daireye Katıl & Cihaz Ekle'));
+      await t.ensureVisible(find.text('Daireye Katıl'));
       await t.pump();
-      await t.tap(find.text('Daireye Katıl & Cihaz Ekle'));
+      await t.tap(find.text('Daireye Katıl'));
       expect(selected, <SirketMenuItem>[
         SirketMenuItem.siteler,
         SirketMenuItem.katilimVeKurulum,
@@ -1079,8 +1079,8 @@ void main() {
       final handle = t.ensureSemantics();
       await _pumpMenu(t, _cfgs[4], width: 360, height: 640, scale: 1.0);
       expect(
-        t.getSemantics(find.widgetWithText(ListTile, 'Daireye Katıl & Cihaz Ekle')),
-        isSemantics(isSelected: true, isButton: true, label: 'Daireye Katıl & Cihaz Ekle'),
+        t.getSemantics(find.widgetWithText(ListTile, 'Daireye Katıl')),
+        isSemantics(isSelected: true, isButton: true, label: 'Daireye Katıl'),
       );
       expect(
         t.getSemantics(find.widgetWithText(ListTile, 'Panel')),
@@ -1092,7 +1092,7 @@ void main() {
           .map((n) => n.getSemanticsData().label)
           .where((l) => l.isNotEmpty)
           .toList();
-      expect(labels.where((l) => l == 'Daireye Katıl & Cihaz Ekle'), hasLength(1));
+      expect(labels.where((l) => l == 'Daireye Katıl'), hasLength(1));
       // Grup başlıkları ekran okuyucuda başlık olarak tek kez okunur.
       expect(labels.where((l) => l == 'Ana sayfa'), hasLength(1));
       handle.dispose();
@@ -1309,7 +1309,7 @@ void main() {
         t.state<ScaffoldState>(find.byType(Scaffold)).openDrawer();
         await t.pump();
         await t.pump(const Duration(milliseconds: 400));
-        await t.tap(find.text('Daireye Katıl & Cihaz Ekle'));
+        await t.tap(find.text('Daireye Katıl'));
         expect(selected, <SirketMenuItem>[SirketMenuItem.katilimVeKurulum]);
         expect(t.takeException(), isNull);
       },

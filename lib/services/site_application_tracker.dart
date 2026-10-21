@@ -5,7 +5,7 @@ import 'package:site_kapi_kontrol/models/site_application.dart';
 import 'package:site_kapi_kontrol/services/adaptive_poller.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
 
-/// "Başvur" eyleminin durumu (bireysel ana ekran, cihaz kartı, "Daireye Katıl & Cihaz Ekle").
+/// "Başvur" eyleminin durumu (bireysel ana ekran, cihaz kartı, "Daireye Katıl").
 enum SiteApplyAvailability {
   /// Durum biliniyor ve bekleyen başvuru yok: başvurulabilir.
   ready,

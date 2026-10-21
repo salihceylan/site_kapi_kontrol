@@ -1,6 +1,6 @@
 // FAZ 5 / A2-G4: "Katılım Başvurularım" liste kartı.
 //
-// Bireysel ana görünüm ile "Daireye Katıl & Cihaz Ekle" ekranı aynı kart kabuğunu paylaşır; iki ekranın
+// Bireysel ana görünüm ile "Daireye Katıl" ekranı aynı kart kabuğunu paylaşır; iki ekranın
 // ayrıntı satırları (blok/daire/not/gerekçe) birbirinden farklıdır ve birebir korunur: ayrıntılar
 // çağıranın [details] listesidir.
 import 'package:flutter/material.dart';

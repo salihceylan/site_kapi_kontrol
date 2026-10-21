@@ -44,7 +44,6 @@ void main() {
 
   testWidgets('JoinAndSetupView renders both setup cards and handles interactions', (tester) async {
     final mockAuth = MockAuthServiceForJoinAndSetup();
-    bool claimClicked = false;
     bool joinClicked = false;
 
     await tester.pumpWidget(
@@ -53,7 +52,6 @@ void main() {
           body: JoinAndSetupView(
             authService: mockAuth,
             session: session,
-            onOpenClaimDevice: () => claimClicked = true,
             onOpenJoinSite: () => joinClicked = true,
           ),
         ),
@@ -63,13 +61,14 @@ void main() {
     await tester.pumpAndSettle();
 
     // Verify Title and Cards
-    expect(find.text('Daireye Katıl & Cihaz Ekle'), findsOneWidget);
+    expect(find.text('Daireye Katıl'), findsOneWidget);
     expect(find.text('Site Sakini Girişi'), findsOneWidget);
-    expect(find.text('Site Kurulumu & Cihaz'), findsOneWidget);
+    // Başvuru akışı kapalıyken (applications null) kurulum kartı yok; cihaz ekleme bu ekranda hiç yok.
+    expect(find.text('Site Kurulumu'), findsNothing);
 
     // Verify Action Buttons
     expect(find.text('QR / Kod ile Daireye Katıl'), findsOneWidget);
-    expect(find.text('Cihaz Ekle'), findsOneWidget);
+    expect(find.text('Cihaz Ekle'), findsNothing);
 
     // Verify Join Request List item rendered
     expect(find.text('Katılım Başvurularım'), findsOneWidget);
@@ -80,10 +79,5 @@ void main() {
     await tester.tap(find.text('QR / Kod ile Daireye Katıl'));
     await tester.pump();
     expect(joinClicked, isTrue);
-
-    // Tap Claim button
-    await tester.tap(find.text('Cihaz Ekle'));
-    await tester.pump();
-    expect(claimClicked, isTrue);
   });
 }

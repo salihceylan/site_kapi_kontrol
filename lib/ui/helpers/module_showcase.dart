@@ -157,7 +157,7 @@ const Map<SirketMenuItem, String> _descriptions = <SirketMenuItem, String>{
   SirketMenuItem.siteler: 'Site, blok, daire ve kapılar',
   SirketMenuItem.siteBasvurulari: 'Site kurma başvuruları',
   SirketMenuItem.siteOnayTalepleri: 'Onay bekleyen siteler',
-  SirketMenuItem.katilimVeKurulum: 'Daireye katılın, cihaz ekleyin',
+  SirketMenuItem.katilimVeKurulum: 'Daireye katılın',
   // Anahtar yalnız süper kullanıcıdadır (Faz 1.1): rol verilmezse açma / kapama vaat edilmez (bkz. [_roleDescription]).
   SirketMenuItem.moduller: 'Tanımlı modüller ve modül talebi',
   SirketMenuItem.modulTalepleri: 'Yöneticilerin modül talepleri',

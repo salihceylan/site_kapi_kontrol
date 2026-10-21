@@ -85,7 +85,7 @@ void main() {
       expect(titles, <String>[
         'Panel',
         'Kişiler',
-        'Daireye Katıl & Cihaz Ekle',
+        'Daireye Katıl',
         'Eller Serbest & Kestirmeler',
         'Profilim',
       ]);
@@ -136,7 +136,7 @@ void main() {
       final plain = await _pumpMenu(t, UserRole.apartmentOwner);
       expect(plain, <String>[
         'Panel',
-        'Daireye Katıl & Cihaz Ekle',
+        'Daireye Katıl',
         'Eller Serbest & Kestirmeler',
         'Profilim',
       ]);

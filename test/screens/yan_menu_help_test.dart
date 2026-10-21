@@ -115,7 +115,7 @@ void main() {
       // İP-1D: Eller Serbest ve Profilim sağ üstteki dişliden açılan Ayarlar panelindedir.
       expect(await _pumpMenu(t, UserRole.apartmentOwner), <String>[
         'Panel',
-        'Daireye Katıl & Cihaz Ekle',
+        'Daireye Katıl',
         'Çıkış Yap',
       ]);
     });
@@ -197,7 +197,7 @@ void main() {
       expect(help.residentMode, isFalse);
       expect(help.userId, 5);
       expect(help.onOpenProfile, isNotNull);
-      expect(find.text('Cihazımı hesabıma nasıl eklerim?'), findsOneWidget, reason: 'bireysel yardımı');
+      expect(find.text('Sisteme cihazı kim ekler?'), findsOneWidget, reason: 'bireysel yardımı');
 
       // "Profilim ekranına git": yardım kapanır, menü Profilim'e geçer.
       await t.ensureVisible(find.text('Profilim ekranına git'));

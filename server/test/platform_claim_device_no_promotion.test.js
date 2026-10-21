@@ -11,7 +11,7 @@ import { claimDevice } from '../src/services/membership_service.js';
 const norm = (text) => String(text).replace(/\s+/g, ' ').trim();
 const ok = (rows = []) => ({ rows, rowCount: rows.length });
 
-function install({ role = 'individual', device = {}, claimRows = 'claimed' } = {}) {
+function install({ role = 'site_manager', device = {}, claimRows = 'claimed', managedSite = true } = {}) {
   const log = [];
   const deviceRow = {
     id: 77,
@@ -37,6 +37,8 @@ function install({ role = 'individual', device = {}, claimRows = 'claimed' } = {
       if (/^SELECT id, user_code, full_name, email, email_verified, role FROM users/.test(sql)) {
         return ok([{ id: 7, user_code: 48213, full_name: 'Ayse', email: 'a@example.com', email_verified: true, role }]);
       }
+      // Cihaz ekleme yetkisi: Geçiş Kontrol modülü açık bir sitenin yöneticisi (satır dönerse izin var).
+      if (/^SELECT s\.site_code FROM sites s WHERE s\.approval_status = 'approved'/.test(sql)) return ok(managedSite ? [{ site_code: 5 }] : []);
       if (/FROM devices WHERE UPPER\(device_uid\)/.test(sql)) return ok([deviceRow]);
       if (/^UPDATE devices SET owner_user_id/.test(sql)) {
         if (claimRows === 'claimed') return ok([{ ...deviceRow, owner_user_id: 7, claimed_at: new Date() }]);
@@ -57,39 +59,65 @@ afterEach(() => {
 const writesUsers = (log) => log.some((entry) => /^(UPDATE|INSERT INTO|DELETE FROM)\s+users\b/i.test(entry.sql));
 
 describe('claimDevice: rol DEĞİŞMEZ', () => {
-  it('bireysel / daire sahibi sahiplenir: cihaz kullanıcıya atanır, users tablosuna HİÇ yazılmaz, yanıtta rol aynı kalır', async () => {
-    for (const role of ['individual', 'apartment_owner']) {
-      const { log, client } = install({ role });
-      const result = await claimDevice({ userCode: 48213, deviceInput: 'GD-C3-00861A0D5020' });
-      assert.equal(result.ok, true);
-      assert.equal(result.role, role, 'rol terfi etmedi');
-      assert.equal(result.already_owned, undefined);
-      assert.equal(result.device.owner_user_id, 7, 'cihaz kullanıcıya atandı');
-      assert.ok(log.some((entry) => /^UPDATE devices SET owner_user_id/.test(entry.sql)), 'atomik sahiplenme çalıştı');
-      assert.equal(writesUsers(log), false, `${role}: users tablosuna yazılmadı`);
-      assert.ok(log.some((entry) => entry.sql === 'COMMIT'));
+  it('site yöneticisi (door_control açık site) sahiplenir: cihaz kullanıcıya atanır, users tablosuna HİÇ yazılmaz, rol aynı kalır', async () => {
+    const { log, client } = install({ role: 'site_manager' });
+    const result = await claimDevice({ userCode: 48213, deviceInput: 'GD-C3-00861A0D5020' });
+    assert.equal(result.ok, true);
+    assert.equal(result.role, 'site_manager', 'rol değişmedi');
+    assert.equal(result.already_owned, undefined);
+    assert.equal(result.device.owner_user_id, 7, 'cihaz kullanıcıya atandı');
+    assert.ok(log.some((entry) => /^UPDATE devices SET owner_user_id/.test(entry.sql)), 'atomik sahiplenme çalıştı');
+    assert.equal(writesUsers(log), false, 'users tablosuna yazılmadı');
+    assert.ok(log.some((entry) => entry.sql === 'COMMIT'));
+    assert.equal(client.released, true);
+  });
+
+  it('bireysel / daire sahibi / yönetici olmayan kullanıcı cihaz EKLEYEMEZ: 403, cihaz sorgusu ve yazım yok', async () => {
+    for (const role of ['individual', 'apartment_owner', 'site_manager']) {
+      const { log, client } = install({ role, managedSite: false });
+      await assert.rejects(
+        () => claimDevice({ userCode: 48213, deviceInput: '00861A0D5020' }),
+        (e) => e.statusCode === 403 && e.code === 'DEVICE_ADD_FORBIDDEN' && /yalnız site yöneticisi, Geçiş Kontrol modülü açıkken/.test(e.message),
+        `${role}: 403`,
+      );
+      assert.equal(log.some((entry) => /FROM devices/.test(entry.sql)), false, `${role}: cihaz sorgulanmadı (varlık sızmaz)`);
+      assert.equal(log.some((entry) => /^UPDATE devices/.test(entry.sql)), false, `${role}: cihaz atanmadı`);
+      assert.equal(writesUsers(log), false);
+      assert.ok(log.some((entry) => entry.sql === 'ROLLBACK'));
       assert.equal(client.released, true);
-      // başvuruyu işaret eden mesaj: "yönetici oldunuz" / "site kurabilirsiniz" denmez
-      assert.match(result.message, /başvuru yapabilir/);
-      assert.match(result.message, /başvuruda seçebilirsiniz/);
-      assert.equal(/Artık bu cihaz ile site ve kapı kurulumu yapabilirsiniz/.test(result.message), false);
     }
   });
 
+  it('yetki sorgusu: yalnız onaylı site + yönetici bağı + door_control açık (satır yoksa varsayılan AÇIK); süper kullanıcıda sorgu yapılmaz', async () => {
+    const { log } = install({ role: 'site_manager' });
+    await claimDevice({ userCode: 48213, deviceInput: '00861A0D5020' });
+    const check = log.find((entry) => /^SELECT s\.site_code FROM sites s/.test(entry.sql));
+    assert.ok(check, 'yetki sorgusu çalıştı');
+    assert.deepEqual(check.params, [48213], 'users.user_code ile');
+    assert.match(check.sql, /site_manager_sites/);
+    assert.match(check.sql, /SITE_OWNER', 'SITE_ADMIN/);
+    assert.match(check.sql, /module_code = 'door_control'/);
+    assert.match(check.sql, /TRUE \) = TRUE|TRUE\) = TRUE/);
+    const superDb = install({ role: 'super_user', managedSite: false });
+    const result = await claimDevice({ userCode: 48213, deviceInput: '00861A0D5020' });
+    assert.equal(result.ok, true);
+    assert.equal(superDb.log.some((entry) => /^SELECT s\.site_code FROM sites s/.test(entry.sql)), false, 'süper kullanıcı mevcut davranışı korur');
+  });
+
   it('zaten sahip olunan cihazı yeniden okutmak (idempotent) da rolü yükseltmez', async () => {
-    const { log } = install({ role: 'individual', device: { owner_user_id: 7 } });
+    const { log } = install({ role: 'site_manager', device: { owner_user_id: 7 } });
     const result = await claimDevice({ userCode: 48213, deviceInput: '00861A0D5020' });
     assert.equal(result.already_owned, true);
-    assert.equal(result.role, 'individual');
+    assert.equal(result.role, 'site_manager');
     assert.equal(writesUsers(log), false);
     assert.equal(log.some((entry) => /^UPDATE devices/.test(entry.sql)), false, 'yeniden atama yapılmaz');
   });
 
   it('eşzamanlı yarışta (atomik güncelleme 0 satır, kontrolde artık kendi cihazı) rol yükseltilmez', async () => {
-    const { log } = install({ role: 'apartment_owner', claimRows: 'raced' });
+    const { log } = install({ role: 'site_manager', claimRows: 'raced' });
     const result = await claimDevice({ userCode: 48213, deviceInput: '00861A0D5020' });
     assert.equal(result.already_owned, true);
-    assert.equal(result.role, 'apartment_owner');
+    assert.equal(result.role, 'site_manager');
     assert.equal(writesUsers(log), false);
   });
 

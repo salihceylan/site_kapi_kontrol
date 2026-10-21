@@ -12,7 +12,7 @@ import 'package:site_kapi_kontrol/ui/helpers/istanbul_time.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/site_application_parts.dart';
 
-/// Bireysel ana ekranın (ve "Daireye Katıl & Cihaz Ekle" ile yönetici panosunun) üstündeki SİTE BAŞVURUSU
+/// Bireysel ana ekranın (ve "Daireye Katıl" ile yönetici panosunun) üstündeki SİTE BAŞVURUSU
 /// durum kartı (Platform: site başvurusu). Durum [SiteApplicationTracker]dan gelir; kart yalnız onun görünümüdür.
 ///
 /// - Bekleyen: "Site başvurunuz inceleniyor" (site adı, tarih, "Başvuruyu iptal et" onaylı).

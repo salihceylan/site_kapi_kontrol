@@ -249,7 +249,7 @@ void main() {
       await openDrawer(t, menu());
       expect(titles(t), <String>[
         'Panel',
-        'Daireye Katıl & Cihaz Ekle',
+        'Daireye Katıl',
         'Çıkış Yap',
       ]);
     });
@@ -279,7 +279,7 @@ void main() {
         'Panel',
         'Kapıya QR Göster',
         'Kurye / Misafir Geçiş Linki Oluştur',
-        'Daireye Katıl & Cihaz Ekle',
+        'Daireye Katıl',
       ]);
       await t.tap(find.text('Kurye / Misafir Geçiş Linki Oluştur'));
       await t.pump();
@@ -305,7 +305,7 @@ void main() {
       // İP-1D (G2): Kapılar "Site hizmetleri" başlığındadır; ek komutlar onun hemen altında.
       expect(titles(t), <String>[
         'Panel',
-        'Daireye Katıl & Cihaz Ekle',
+        'Daireye Katıl',
         'Duyurular',
         'Kapılar',
         'Kapıya QR Göster',

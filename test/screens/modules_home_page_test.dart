@@ -482,7 +482,7 @@ void main() {
       expect(_tileTitle('Panel'), findsOneWidget, reason: 'Panel kalır');
       expect(_tileTitle('Kapılar'), findsNothing);
       expect(_tileTitle('Site Yönetimi'), findsOneWidget);
-      expect(_tileTitle('Daireye Katıl & Cihaz Ekle'), findsOneWidget);
+      expect(_tileTitle('Daireye Katıl'), findsOneWidget);
       expect(
         t.widget<YanMenu>(find.byType(YanMenu)).hiddenItems,
         <SirketMenuItem>{
@@ -529,7 +529,7 @@ void main() {
       await _openDrawer(t);
       expect(_tileTitle('Panel'), findsOneWidget);
       expect(_tileTitle('Kapılar'), findsNothing);
-      expect(_tileTitle('Daireye Katıl & Cihaz Ekle'), findsOneWidget);
+      expect(_tileTitle('Daireye Katıl'), findsOneWidget);
       await _openSettings(t);
       expect(_tileTitle('Eller Serbest & Kestirmeler'), findsNothing);
       expect(_tileTitle('Profilim'), findsOneWidget);
@@ -916,7 +916,7 @@ void main() {
           expect(_tileTitle('Kapılar'), findsNothing);
           expect(_tileTitle('Eller Serbest & Kestirmeler'), findsNothing);
           expect(_tileTitle('Sesli Kapı Açma'), findsNothing, reason: 'kapı komutları da yok');
-          expect(_tileTitle('Daireye Katıl & Cihaz Ekle'), findsOneWidget, reason: 'öteki öğeler durur');
+          expect(_tileTitle('Daireye Katıl'), findsOneWidget, reason: 'öteki öğeler durur');
           // Sesli asistan da susar: otomatik dinlemeyi kapatacak "Eller Serbest" gizliyken "Tanımlı bir kapı
           // bulunamadı." denmez, dinleme başlamaz.
           expect(voice.spoken, isEmpty, reason: 'kapı öğeleri gizliyken sesli asistan konuşmaz');
@@ -1105,7 +1105,7 @@ void main() {
       expect(find.text('Site Sakini Olarak Devam Et'), findsOneWidget);
       // Site başvurusu akışı: cihaz sahiplenmek yönetici yapmaz; "Site Kurmak İçin Başvur" birincil eylemdir.
       expect(find.text('Site Kurmak İçin Başvur'), findsOneWidget);
-      expect(find.text('Cihaz Ekle'), findsOneWidget);
+      expect(find.text('Cihaz Ekle'), findsNothing, reason: 'cihazı yalnız site yöneticisi ekler');
       expect(find.byType(DoorControlDisabledCard), findsOneWidget);
       expect(find.text('Modüller Ekranını Aç'), findsNothing);
       await _disposeHome(t);

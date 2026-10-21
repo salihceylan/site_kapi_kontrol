@@ -708,7 +708,7 @@ void main() {
       await _disposeHome(t);
     });
 
-    testWidgets('bireysel kullanıcı: Kapılar + Daireye Katıl & Cihaz Ekle; hero ve hızlı işlem yok', (t) async {
+    testWidgets('bireysel kullanıcı: Kapılar + Daireye Katıl; hero ve hızlı işlem yok', (t) async {
       final auth = _ShowcaseAuth(UserRole.individual);
       final access = await _access(() => const <MySiteModules>[]);
       await _pumpHome(t, auth, access: access);

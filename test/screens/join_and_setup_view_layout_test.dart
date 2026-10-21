@@ -1,4 +1,4 @@
-// FAZ 5 / A2-G4: JoinAndSetupView ("Daireye Katıl & Cihaz Ekle") taşma ve davranış testleri.
+// FAZ 5 / A2-G4: JoinAndSetupView ("Daireye Katıl") taşma ve davranış testleri.
 //
 // AGENTS.md kural 6: 320x640 x2,0 ve 360x640 x1,5, açık + koyu tema (pumpAt). Çözülen bulgu: başlık
 // ("Sit…", "Yön…") ve düğme etiketi ("QR / Kod ile Daireye…") kırpılıyordu; başlık+rozet aynı satırdaydı.
@@ -39,7 +39,6 @@ Widget _view(G4Auth auth, _Taps taps) {
   return JoinAndSetupView(
     authService: auth,
     session: _session,
-    onOpenClaimDevice: () => taps.claim++,
     onOpenJoinSite: () => taps.join++,
     onRefreshAll: () => taps.refreshAll++,
   );
@@ -70,13 +69,13 @@ void main() {
         dark: dark,
       );
 
-      expect(find.text('Daireye Katıl & Cihaz Ekle'), findsOneWidget);
-      expect(find.text('Site Sakini Girişi'), findsOneWidget);
       expect(find.text('Daireye Katıl'), findsOneWidget);
-      expect(find.text('Site Kurulumu & Cihaz'), findsOneWidget);
-      expect(find.text('Cihaz'), findsOneWidget);
+      expect(find.text('Site Sakini Girişi'), findsOneWidget);
+      expect(find.text('Hızlı Katılım'), findsOneWidget);
       expect(find.text('QR / Kod ile Daireye Katıl'), findsOneWidget);
-      expect(find.text('Cihaz Ekle'), findsOneWidget);
+      // Cihaz ekleme bu ekranda YOKTUR (yalnız site yöneticisi, "Kayıtlı Cihazlar" ekranından ekler).
+      expect(find.text('Cihaz Ekle'), findsNothing);
+      expect(find.text('Site Kurulumu'), findsNothing, reason: 'başvuru akışı kapalıyken kurulum kartı yok');
       expect(find.text('Katılım Başvurularım'), findsOneWidget);
       expect(find.text('Güneş Sitesi'), findsOneWidget);
       expect(find.text('A Blok • Daire 12'), findsOneWidget);
@@ -111,7 +110,7 @@ void main() {
 
       expect(find.text('Katılım Başvurularım'), findsNothing);
       expect(find.text('Site Sakini Girişi'), findsOneWidget);
-      expect(find.text('Site Kurulumu & Cihaz'), findsOneWidget);
+      expect(find.text('Cihaz Ekle'), findsNothing);
     });
   });
 
@@ -128,8 +127,7 @@ void main() {
         );
 
         for (final (title, badge) in const <(String, String)>[
-          ('Site Sakini Girişi', 'Daireye Katıl'),
-          ('Site Kurulumu & Cihaz', 'Cihaz'),
+          ('Site Sakini Girişi', 'Hızlı Katılım'),
         ]) {
           final titleBottom = t.getBottomLeft(find.text(title)).dy;
           final badgeTop = t
@@ -167,7 +165,7 @@ void main() {
         final titleTop = t.getTopLeft(find.text('Site Sakini Girişi')).dy;
         final titleBottom = t.getBottomLeft(find.text('Site Sakini Girişi')).dy;
         final badgeTop = t
-            .getTopLeft(find.widgetWithText(StatusChip, 'Daireye Katıl'))
+            .getTopLeft(find.widgetWithText(StatusChip, 'Hızlı Katılım'))
             .dy;
         expect(
           badgeTop,
@@ -193,16 +191,8 @@ void main() {
           find.widgetWithText(ElevatedButton, 'QR / Kod ile Daireye Katıl'),
           findsOneWidget,
         );
-        expect(
-          find.widgetWithText(
-            ElevatedButton,
-            'Cihaz Ekle',
-          ),
-          findsOneWidget,
-        );
         for (final label in const <String>[
           'QR / Kod ile Daireye Katıl',
-          'Cihaz Ekle',
         ]) {
           expect(
             t.widget<Text>(find.text(label)).overflow,
@@ -243,10 +233,6 @@ void main() {
           reason: 'diyalogdan dönünce başvurular otomatik yenilenir',
         );
 
-        await _tapVisible(t, find.text('Cihaz Ekle'));
-        await t.pump();
-        expect(taps.claim, 1);
-        expect(auth.requestCalls, initialCalls + 2);
       },
     );
 
@@ -361,13 +347,6 @@ void main() {
             Icons.key_rounded,
             'QR / Kod ile Daireye Katıl',
           ),
-          (
-            'Site Kurulumu & Cihaz',
-            AppTone.primary,
-            // Cihaz eklemek yönetici yapmaz (B3): "yönetici paneli" simgesi yerine nötr cihaz-ekle simgesi.
-            Icons.add_to_photos_rounded,
-            'Cihaz Ekle',
-          ),
         ]) {
           final card = find.ancestor(
             of: find.text(title),
@@ -407,7 +386,7 @@ void main() {
           height: 1400,
         );
         final orbs = t.widgetList<IconOrb>(find.byType(IconOrb)).toList();
-        expect(orbs.where((o) => o.glow), hasLength(2));
+        expect(orbs.where((o) => o.glow), hasLength(1), reason: 'başvuru akışı kapalıyken tek kurulum kartı (Site Sakini Girişi)');
         final header = orbs.singleWhere((o) => !o.glow);
         expect(header.icon, Icons.add_home_work_rounded);
         expect(header.size, 48);
@@ -427,12 +406,11 @@ void main() {
         );
         expect(
           find.byType(IconOrb),
-          findsNWidgets(2),
-          reason: 'yalnız iki hero rozet kalır (başlık rozeti gizli)',
+          findsNWidgets(1),
+          reason: 'yalnız hero rozet kalır (başlık rozeti gizli)',
         );
         for (final title in const <String>[
           'Site Sakini Girişi',
-          'Site Kurulumu & Cihaz',
         ]) {
           final card = find.ancestor(
             of: find.text(title),
@@ -465,7 +443,7 @@ void main() {
         height: 1400,
       );
       expect(
-        t.getSemantics(find.text('Daireye Katıl & Cihaz Ekle')),
+        t.getSemantics(find.text('Daireye Katıl')),
         isSemantics(isHeader: true),
       );
       handle.dispose();

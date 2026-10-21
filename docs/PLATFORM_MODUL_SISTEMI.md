@@ -117,6 +117,12 @@ Hata: HTTP 403 `{ "error": "Geçiş Kontrol modülü kapalı.", "code": "MODULE_
 - Bilinen sınır: yerel (LAN) açma cihaz üzerinde yapıldığından, modül kapatılırken anahtar döndürülür (yukarıya bakın); cihaz o sırada çevrimdışıysa yeni anahtar cihaz bağlanınca gider ve ondan önce eski anahtar geçerli kalabilir. Yeni sürüm uygulama kapalı sitelerin kapılarını hiç göstermez.
 - Süper kullanıcı kapı korumasından MUAF DEĞİLDİR (tutarlı deneme ve güvenlik için); uygulamada Panel'de seçili site için `getSiteModules` ile durumu öğrenir ve kapalıysa kapı kartları yerine bilgi kartı gösterir.
 
+### Cihaz ekleme kuralı (2026-10-21)
+Sisteme cihazı (kutu QR / Seri No / UID ile sahiplenme) YALNIZ **süper kullanıcı** ya da **Geçiş Kontrol (`door_control`) modülü AÇIK bir sitenin yöneticisi** ekleyebilir. Sakin, bireysel kullanıcı, kurul üyesi ve görevli ekleyemez.
+- Sunucu: `POST /membership/claim-device` (`claimDevice`). Yetki, cihaz sorgusundan ÖNCE denetlenir (yetkisiz kullanıcıya cihazın varlığı/sahipliği sızmaz). Kural: kullanıcı onaylı bir sitenin yöneticisi (`site_manager_sites` ya da aktif `SITE_OWNER`/`SITE_ADMIN` üyeliği) VE o sitede `door_control` açık (`site_modules` satırı yoksa katalog varsayılanı AÇIK). Aksi 403 `{ "error": "Cihazı yalnız site yöneticisi, Geçiş Kontrol modülü açıkken ekleyebilir.", "code": "DEVICE_ADD_FORBIDDEN" }`. Süper kullanıcı mevcut davranışı korur. Sorgu: `SQL_MANAGED_SITE_WITH_DOOR_CONTROL` (membership_rules.js).
+- Etkilenmeyenler: kapı açma, MQTT, BLE, firmware, kapı komutları, mevcut cihaz kayıtları ve sahiplikleri, süper kullanıcının `/admin/devices` kaydı, site başvurusu onayındaki cihaz bağlama (süper onayı), `company_qr_tool` yolları.
+- Flutter: menü öğesi "Daireye Katıl" (eski "Daireye Katıl & Cihaz Ekle"); bu ekranda cihaz ekleme yok (yalnız daireye katılma ve site başvurusu). "Cihaz Ekle" girişleri (`Kayıtlı Cihazlar` ekranındaki "Yeni Cihaz Kaydet", bireysel ana ekrandaki düğmeler) tek kuralla (`canAddDevice`, lib/ui/helpers/device_add_gate.dart) yalnız yönetici + modül açıkken görünür; modül verisi yokken (fail-open) yalnız site yöneticisi rolü yeter, sunucu zaten zorlar. Site başvurusunda cihaz isteğe bağlıdır: cihazı site kurulduktan sonra yönetici ekler.
+
 ## Flutter
 
 - **Modeller** (`lib/models/`): `PlatformModule`, `SiteModulesState`, `MySiteModules`/`MyModulesResult`, `AuditLogEntry`/`AuditLogPage`, `StaffRoleRecord`, `ManagementType` (5 değer, etiket, `selectable`). `SiteRecord`'a `managementType` + `managementTypeLabel` (alan yoksa `apartment_site`).
@@ -136,7 +142,7 @@ Görünürlük kuralı DEĞİŞMEDİ ve tek yerdedir: `YanMenu.visibleItems` (ro
 | Grup (`SirketMenuGroup`) | Öğeler |
 |---|---|
 | Ana sayfa | Panel |
-| Daireler | Site Yönetimi, Daire Sakinleri, Kişiler, Daireye Katıl & Cihaz Ekle |
+| Daireler | Site Yönetimi, Daire Sakinleri, Kişiler, Daireye Katıl |
 | Borçlar | Finans, Borcum |
 | Tahsilat | (bugün boş: dekont bildirimi, banka dosyası buraya gelecek) |
 | Giderler | (bugün boş: gider analizi buraya gelecek) |

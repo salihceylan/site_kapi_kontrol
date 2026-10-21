@@ -20,8 +20,8 @@ List<E2eScreenSpec> individualScreens({bool lookupJoinToken = false}) => <E2eScr
       kapilarScreen(individualPanelTour, optional: true),
       E2eScreenSpec(
         name: 'katilim_kurulum',
-        menuLabel: 'Daireye Katıl & Cihaz Ekle',
-        titleText: 'Daireye Katıl & Cihaz Ekle',
+        menuLabel: 'Daireye Katıl',
+        titleText: 'Daireye Katıl',
         interactions: (c) => joinAndSetupTour(c, lookupJoinToken: lookupJoinToken),
       ),
       const E2eScreenSpec(

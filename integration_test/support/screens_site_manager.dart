@@ -54,8 +54,8 @@ List<E2eScreenSpec> siteManagerScreens({required List<String> siteKeys}) => <E2e
       ),
       const E2eScreenSpec(
         name: 'katilim_kurulum',
-        menuLabel: 'Daireye Katıl & Cihaz Ekle',
-        titleText: 'Daireye Katıl & Cihaz Ekle',
+        menuLabel: 'Daireye Katıl',
+        titleText: 'Daireye Katıl',
         interactions: joinAndSetupTour,
       ),
       const E2eScreenSpec(
@@ -73,8 +73,8 @@ List<E2eScreenSpec> siteManagerResidentModeScreens() => <E2eScreenSpec>[
       kapilarScreen(individualPanelTour),
       const E2eScreenSpec(
         name: 'katilim_kurulum',
-        menuLabel: 'Daireye Katıl & Cihaz Ekle',
-        titleText: 'Daireye Katıl & Cihaz Ekle',
+        menuLabel: 'Daireye Katıl',
+        titleText: 'Daireye Katıl',
         interactions: joinAndSetupTour,
       ),
       const E2eScreenSpec(
