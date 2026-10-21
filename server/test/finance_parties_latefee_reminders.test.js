@@ -3,7 +3,9 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { computeLateFeePlan } from '../src/modules/finance_late_fee.js';
-import { computeReminderPlan } from '../src/modules/finance_reminders.js';
+import * as reminders from '../src/modules/finance_reminders.js';
+
+const { computeReminderPlan } = reminders;
 
 // adres özeti (hashEmail) için sır: test ortamı
 process.env.JWT_SECRET ||= 'finance-parties-test-secret-0123456789abcdef';
@@ -132,5 +134,24 @@ describe('İP-1A borç hatırlatma: alıcı = hesabın sahibi', () => {
     const fallback = { responsible_party: 'owner', has_responsible_person: false, has_tenant: false };
     const fallbackPlan = await computeReminderPlan(db([candidate('owner', 90000)], [person(4, 'resident', 'sakin@ornek.test', fallback)]), 1, { settings, tone: 'friendly', now: NOW });
     assert.deepEqual(fallbackPlan.pendingPersons.map((p) => p.personId), [4]);
+  });
+
+  it('ikinci inceleme: elden takip HESAP başınadır; önizleme öğeleri hesabı taşır (aynı daire iki öğe, ayırt edilebilir); eski etiket alanı aynen kalır', async () => {
+    const atLimit = (account) => ({ ...candidate(account, 90000), consecutive: 3 });
+    const plan = await computeReminderPlan(db([atLimit('owner'), atLimit('tenant')], [person(1, 'owner', 'malik@ornek.test'), person(2, 'tenant', 'kiraci@ornek.test')]), 1, {
+      settings,
+      tone: 'friendly',
+      now: NOW,
+    });
+    assert.equal(typeof reminders.reminderPreviewBody, 'function', 'önizleme gövdesi dışa verilir (sınanabilir)');
+    const body = reminders.reminderPreviewBody(plan, { smtp: true, blockers: [] });
+    assert.equal(body.hand_follow_up_count, 2, 'hesap başına (daire 1)');
+    assert.equal(body.excluded.consecutive, 2);
+    assert.deepEqual(body.hand_follow_up_apartments, ['A Blok - Daire 7', 'A Blok - Daire 7'], 'eski istemci alanı değişmedi');
+    assert.deepEqual(body.hand_follow_up_accounts, [
+      { label: 'A Blok - Daire 7', account_party: 'owner' },
+      { label: 'A Blok - Daire 7', account_party: 'tenant' },
+    ]);
+    assert.equal(body.person_count, 0);
   });
 });

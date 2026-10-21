@@ -535,17 +535,20 @@ class _FinanceReminderDialogState extends State<FinanceReminderDialog> with Fina
   Widget _breakdown(BuildContext context, ReminderPreview preview) {
     final th = Theme.of(context).textTheme;
     final p = context.palette;
+    // İP-1A (ikinci inceleme): yeni sunucuda hariç tutma ve elden takip sayıları HESAP başınadır (aynı dairenin iki hesabı iki sayılır).
+    final unit = preview.countsAccounts ? 'daire hesabı' : 'daire';
+    final followUp = preview.handFollowUpLabels;
     final rows = <(String, int)>[
       ('Adresi olmayan kişi', preview.noAddressCount),
       ('E-posta tercihi kapalı / abonelikten çıkmış kişi', preview.skippedPrefCount),
       ('Aynı adrese zaten gidecek (tekrar)', preview.duplicateCount),
       ('Yedi günlük adres sınırına takılan', preview.cappedCount),
-      ('Tutarı eşiğin altında kalan daire', preview.excluded.amount),
-      ('Gecikme günü eşiğin altında kalan daire', preview.excluded.days),
-      ('Son hatırlatmadan beri yeterli süre geçmemiş daire', preview.excluded.interval),
-      ('Ardışık hatırlatma sınırına ulaşan daire', preview.excluded.consecutive),
-      ('Muaf listesindeki daire', preview.excluded.exclusion),
-      ('Alıcısı bulunamayan daire', preview.excluded.noRecipient),
+      ('Tutarı eşiğin altında kalan $unit', preview.excluded.amount),
+      ('Gecikme günü eşiğin altında kalan $unit', preview.excluded.days),
+      ('Son hatırlatmadan beri yeterli süre geçmemiş $unit', preview.excluded.interval),
+      ('Ardışık hatırlatma sınırına ulaşan $unit', preview.excluded.consecutive),
+      ('Muaf listesindeki $unit', preview.excluded.exclusion),
+      ('Alıcısı bulunamayan $unit', preview.excluded.noRecipient),
     ].where((r) => r.$2 > 0).toList();
     return DialogPanel(
       key: const ValueKey<String>('finance_reminder_breakdown'),
@@ -565,9 +568,9 @@ class _FinanceReminderDialogState extends State<FinanceReminderDialog> with Fina
           if (preview.handFollowUpCount > 0) ...[
             const SizedBox(height: AppSpace.xs),
             Text(
-              'Elden takip: ${preview.handFollowUpCount} daire ardışık hatırlatma sınırına ulaştı; e-posta gitmez, '
+              'Elden takip: ${preview.handFollowUpCount} $unit ardışık hatırlatma sınırına ulaştı; e-posta gitmez, '
               'yönetimce elden takip edilmelidir.'
-              '${preview.handFollowUpApartments.isEmpty ? '' : ' (${preview.handFollowUpApartments.join(', ')}${preview.handFollowUpCount > preview.handFollowUpApartments.length ? ' ...' : ''})'}',
+              '${followUp.isEmpty ? '' : ' (${followUp.join(', ')}${preview.handFollowUpCount > followUp.length ? ' ...' : ''})'}',
               key: const ValueKey<String>('finance_reminder_hand_follow_up'),
               style: th.bodySmall?.copyWith(fontWeight: FontWeight.w700),
             ),

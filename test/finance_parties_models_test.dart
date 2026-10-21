@@ -307,5 +307,34 @@ void main() {
       expect(preview.accountCount, 4);
       expect(ReminderPreview.fromJson(<String, dynamic>{'apartment_count': 3, 'person_count': 4}).accountCount, isNull);
     });
+
+    test('ikinci inceleme: hatırlatma önizlemesinde elden takip öğeleri hesabıyla; eski sunucuda yalnız daire etiketleri', () {
+      final preview = ReminderPreview.fromJson(<String, dynamic>{
+        'apartment_count': 1,
+        'person_count': 0,
+        'account_count': 0,
+        'hand_follow_up_count': 2,
+        'hand_follow_up_apartments': <String>['A Blok - 5', 'A Blok - 5'],
+        'hand_follow_up_accounts': <Object?>[
+          <String, dynamic>{'label': 'A Blok - 5', 'account_party': 'owner'},
+          <String, dynamic>{'label': 'A Blok - 5', 'account_party': 'tenant'},
+          <String, dynamic>{'label': ' ', 'account_party': 'tenant'},
+          'bozuk',
+        ],
+      });
+      expect(preview.countsAccounts, isTrue);
+      expect(preview.handFollowUpAccounts.map((i) => i.accountParty), <AccountParty?>[AccountParty.owner, AccountParty.tenant]);
+      expect(preview.handFollowUpLabels, <String>['A Blok - 5 (Ev sahibi hesabı)', 'A Blok - 5 (Kiracı hesabı)']);
+      final old = ReminderPreview.fromJson(<String, dynamic>{
+        'apartment_count': 1,
+        'person_count': 0,
+        'hand_follow_up_count': 1,
+        'hand_follow_up_apartments': <String>['A Blok - 5'],
+      });
+      expect(old.countsAccounts, isFalse);
+      expect(old.handFollowUpAccounts, isEmpty);
+      expect(old.handFollowUpLabels, <String>['A Blok - 5']);
+      expect(const ReminderFollowUpItem(label: 'B Blok - 2').displayText, 'B Blok - 2', reason: 'hesabı bilinmeyen öğe yalnız etiket');
+    });
   });
 }

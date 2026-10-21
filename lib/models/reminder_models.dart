@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:site_kapi_kontrol/models/announcement.dart' show announcementInstant;
+import 'package:site_kapi_kontrol/models/finance.dart' show AccountParty;
 import 'package:site_kapi_kontrol/models/finance_4b.dart';
 
 /// Borç hatırlatma modelleri (Platform Faz 4b, Ö6; sözleşme: docs/PLATFORM_FINANS_4B.md "Ö6").
@@ -97,6 +98,20 @@ class ReminderExcludedCounts {
   );
 }
 
+/// Elden takip öğesi (İP-1A, ikinci inceleme): daire etiketi + hesabı (aynı dairenin iki hesabı iki öğe). Ad / adres YOK.
+@immutable
+class ReminderFollowUpItem {
+  const ReminderFollowUpItem({required this.label, this.accountParty});
+
+  final String label;
+
+  /// Öğenin hesabı; bilinmiyorsa null (yalnız etiket yazılır).
+  final AccountParty? accountParty;
+
+  /// Ekrandaki metin: "A Blok - 7 (Kiracı hesabı)".
+  String get displayText => accountParty == null ? label : '$label (${accountParty!.label})';
+}
+
 /// `POST reminders/preview` (YAZMAZ). Adres / ad DÖNMEZ.
 @immutable
 class ReminderPreview {
@@ -118,6 +133,7 @@ class ReminderPreview {
     this.previewHash,
     this.blockers = const <String>[],
     this.accountCount,
+    this.handFollowUpAccounts = const <ReminderFollowUpItem>[],
   });
 
   final int apartmentCount;
@@ -125,6 +141,17 @@ class ReminderPreview {
 
   /// Kapsanan hesap sayısı (İP-1A: aynı dairenin iki hesabı borçluysa iki sayılır; alıcı hesabın sahibidir); eski sunucuda null.
   final int? accountCount;
+
+  /// İP-1A: hariç tutma ve elden takip sayıları HESAP başınadır (sunucu `account_count` gönderiyorsa; eski sunucuda daire başı).
+  bool get countsAccounts => accountCount != null;
+
+  /// Elden takip öğeleri hesabıyla (İP-1A, ikinci inceleme); eski sunucuda boş ([handFollowUpApartments] kullanılır).
+  final List<ReminderFollowUpItem> handFollowUpAccounts;
+
+  /// Ekranda yazılacak elden takip etiketleri: hesaplı öğeler varsa "Etiket (Hesap adı)", yoksa eski daire etiketleri.
+  List<String> get handFollowUpLabels => handFollowUpAccounts.isNotEmpty
+      ? <String>[for (final item in handFollowUpAccounts) item.displayText]
+      : handFollowUpApartments;
   final int withAmountCount;
   final int withoutAmountCount;
   final int noAddressCount;
@@ -174,6 +201,11 @@ class ReminderPreview {
         if (b != null) b.toString(),
     ],
     accountCount: f4IntOrNull(json['account_count']),
+    handFollowUpAccounts: <ReminderFollowUpItem>[
+      for (final raw in (json['hand_follow_up_accounts'] is List ? json['hand_follow_up_accounts'] as List : const <Object?>[]))
+        if (raw is Map && raw['label'] != null && raw['label'].toString().trim().isNotEmpty)
+          ReminderFollowUpItem(label: raw['label'].toString(), accountParty: AccountParty.tryParse(raw['account_party'])),
+    ],
   );
 }
 

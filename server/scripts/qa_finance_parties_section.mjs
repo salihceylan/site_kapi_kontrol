@@ -912,8 +912,9 @@ export default async function sectionParties(t) {
     if (cEnable.status !== 200) throw new Error(`ardisik fiksturu: ${JSON.stringify(cEnable.body)}`);
     const cPv = await call('POST', `${cBase}/reminders/preview`, MGR, { tone: 'friendly' });
     check(
-      'P8d (ikinci inceleme): ardisik hatirlatma sayaci HESABIN son tahsilatina gore: iki hatirlatmadan sonra odeme yapan kiraci hesabina ileti gider (1 kisi, 1 hesap); hic odemeyen ev sahibi hesabi ardisik sinirda (2) elden takipte (consecutive 1)',
-      cPv.status === 200 && cPv.body.person_count === 1 && cPv.body.account_count === 1 && cPv.body.excluded.consecutive === 1 && cPv.body.hand_follow_up_count === 1,
+      'P8d (ikinci inceleme): ardisik hatirlatma sayaci HESABIN son tahsilatina gore: iki hatirlatmadan sonra odeme yapan kiraci hesabina ileti gider (1 kisi, 1 hesap); hic odemeyen ev sahibi hesabi ardisik sinirda (2) elden takipte (consecutive 1); onizleme elden takip ogesini HESABIYLA verir',
+      cPv.status === 200 && cPv.body.person_count === 1 && cPv.body.account_count === 1 && cPv.body.excluded.consecutive === 1 && cPv.body.hand_follow_up_count === 1
+        && same(cPv.body.hand_follow_up_accounts, [{ label: 'C Blok - Daire 1', account_party: 'owner' }]) && same(cPv.body.hand_follow_up_apartments, ['C Blok - Daire 1']),
       cPv.body,
     );
   }

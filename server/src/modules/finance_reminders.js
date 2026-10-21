@@ -382,7 +382,11 @@ export async function computeReminderPlan(db, siteCode, { settings, tone, now = 
   };
 }
 
-function previewBody(plan, { smtp, blockers }) {
+/**
+ * Önizleme gövdesi (YAZMAZ; adres / ad DÖNMEZ). İki hesap (İP-1A): hariç tutma ve elden takip sayıları HESAP başınadır; ikinci inceleme:
+ * `hand_follow_up_accounts` elden takip öğelerini hesabıyla verir (aynı dairenin iki hesabı iki öğe; eski `hand_follow_up_apartments` yalnız etiket).
+ */
+export function reminderPreviewBody(plan, { smtp, blockers }) {
   return {
     apartment_count: plan.coveredApartments.length,
     person_count: plan.pendingPersons.length,
@@ -398,6 +402,7 @@ function previewBody(plan, { smtp, blockers }) {
     excluded: plan.excluded,
     hand_follow_up_count: plan.handFollowUp.length,
     hand_follow_up_apartments: plan.handFollowUp.slice(0, 20).map((apartment) => apartment.label),
+    hand_follow_up_accounts: plan.handFollowUp.slice(0, 20).map((candidate) => ({ label: candidate.label, account_party: candidate.accountParty })),
     sample_apartments: plan.coveredApartments.slice(0, 20).map((apartment) => apartment.label),
     smtp_configured: smtp,
     preview_hash: plan.hash,
@@ -427,7 +432,7 @@ export async function previewReminders({ siteCode, body, now = new Date() }, db 
       const settings = await loadEffectiveSettings(client, siteCode);
       const plan = await computeReminderPlan(client, siteCode, { settings, tone: input.tone, now });
       const blockers = await gateBlockers(client, siteCode, settings, plan, plan.todayIso);
-      return previewBody(plan, { smtp: isSmtpConfigured(), blockers });
+      return reminderPreviewBody(plan, { smtp: isSmtpConfigured(), blockers });
     },
     db,
     { slot: 'preview' },
