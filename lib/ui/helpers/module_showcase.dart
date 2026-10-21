@@ -73,6 +73,7 @@ const Set<SirketMenuItem> _featureModuleItems = <SirketMenuItem>{
   SirketMenuItem.ziyaretciKayitlari,
   SirketMenuItem.ziyaretcilerim,
   SirketMenuItem.sozlesmeler,
+  SirketMenuItem.sayaclar,
 };
 
 const Map<SirketMenuItem, ModuleArtKind> _artKinds = <SirketMenuItem, ModuleArtKind>{
@@ -91,6 +92,7 @@ const Map<SirketMenuItem, ModuleArtKind> _artKinds = <SirketMenuItem, ModuleArtK
   SirketMenuItem.ziyaretciKayitlari: ModuleArtKind.visitor,
   SirketMenuItem.ziyaretcilerim: ModuleArtKind.visitor,
   SirketMenuItem.sozlesmeler: ModuleArtKind.contracts,
+  SirketMenuItem.sayaclar: ModuleArtKind.finance,
   SirketMenuItem.kararDefteri: ModuleArtKind.decisions,
   SirketMenuItem.kararlar: ModuleArtKind.decisions,
   SirketMenuItem.rehber: ModuleArtKind.people,
@@ -135,6 +137,7 @@ const Map<SirketMenuItem, String> _descriptions = <SirketMenuItem, String>{
   SirketMenuItem.ziyaretciKayitlari: 'Ziyaretçi ve kargo kayıtları',
   SirketMenuItem.ziyaretcilerim: 'Dairenizin ziyaretçi ve kargoları',
   SirketMenuItem.sozlesmeler: 'Firma ve sözleşme takibi',
+  SirketMenuItem.sayaclar: 'Sayaç okuma ve faturalandırma',
   SirketMenuItem.kararDefteri: 'Kurul ve genel kurul kararları',
   SirketMenuItem.kararlar: 'Sitenizin kesinleşen kararları',
   SirketMenuItem.rehber: 'Yönetim kadrosu ve faydalı telefonlar',

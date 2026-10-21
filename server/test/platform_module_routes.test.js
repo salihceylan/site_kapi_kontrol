@@ -529,9 +529,9 @@ describe('GET /manager/sites/:siteCode/modules: yetki matrisi', () => {
     assert.equal(reservation.toggleable, true);
     assert.equal(reservation.can_toggle, false, 'yonetici modul acip kapatamaz (modul talep eder)');
     const metering = res.body.modules.find((m) => m.code === 'metering');
-    assert.equal(metering.status, 'coming_soon');
+    assert.equal(metering.status, 'available');
     assert.equal(metering.enabled, false);
-    assert.equal(metering.toggleable, false);
+    assert.equal(metering.toggleable, true);
     assert.equal(metering.can_toggle, false);
   });
 
@@ -548,7 +548,7 @@ describe('GET /manager/sites/:siteCode/modules: yetki matrisi', () => {
         ['documents', true, true],
         ['reservation', true, true],
         ['work_tracking', true, true],
-        ['metering', false, false],
+        ['metering', true, true],
         ['online_payment', false, false],
         ['survey', true, true],
         ['visitor_log', true, true],
@@ -797,7 +797,7 @@ describe('PUT modul: onay zorunlulugu ve denetim kaydi', () => {
   });
 
   it('yakinda modul ACILAMAZ 409 MODULE_COMING_SOON; kapatmak 200 (degisiklik yok, audit yok)', async () => {
-    for (const code of ['metering', 'online_payment', 'plate_recognition', 'hgs_access', 'cctv_link']) {
+    for (const code of ['online_payment', 'plate_recognition', 'hgs_access', 'cctv_link']) {
       const open = await call('PUT', moduleUrl(SITE_1, code), { user: users.superUser, body: { enabled: true } });
       assert.equal(open.status, 409, code);
       assert.equal(open.body.code, 'MODULE_COMING_SOON');
@@ -987,7 +987,7 @@ describe('PUT modul: door_control kapaninca yerel kontrol anahtarlari dondurulur
     // onaysiz kapatma (409), zaten acik modulu acma, yakinda modulu kapatma, yetkisiz, olmayan site
     await call('PUT', moduleUrl(), { user: users.superUser, body: { enabled: false } });
     await call('PUT', moduleUrl(), { user: users.superUser, body: { enabled: true } });
-    await call('PUT', moduleUrl(SITE_1, 'metering'), { user: users.superUser, body: { enabled: false } });
+    await call('PUT', moduleUrl(SITE_1, 'online_payment'), { user: users.superUser, body: { enabled: false } });
     await call('PUT', moduleUrl(SITE_1, 'finance'), { user: users.superUser, body: { enabled: true } });
     await call('PUT', moduleUrl(SITE_1, 'finance'), { user: users.superUser, body: { enabled: false } });
     await call('PUT', moduleUrl(SITE_1), { user: users.mgrB, body: { enabled: false, confirm: true } });
@@ -1556,7 +1556,7 @@ describe('GET /app/my-modules', () => {
     ];
     state.siteModules.set(`${SITE_2}:door_control`, { site_code: SITE_2, module_code: 'door_control', enabled: false });
     // katalogda olmayan ve "yakinda" modul satirlari sonucu degistirmez; finance (Faz 4a, available) satiri enabled: true ise ACIK
-    state.siteModules.set(`${SITE_1}:metering`, { site_code: SITE_1, module_code: 'metering', enabled: true });
+    state.siteModules.set(`${SITE_1}:online_payment`, { site_code: SITE_1, module_code: 'online_payment', enabled: true });
     state.siteModules.set(`${SITE_1}:finance`, { site_code: SITE_1, module_code: 'finance', enabled: true });
     state.siteModules.set(`${SITE_1}:baska`, { site_code: SITE_1, module_code: 'baska', enabled: true });
 
@@ -1599,7 +1599,7 @@ describe('GET /app/my-modules', () => {
       ]);
     }
     assert.equal(res.body.sites[0].modules.door_control, true);
-    assert.equal(res.body.sites[0].modules.metering, false, 'yakinda modul satiri olsa bile false');
+    assert.equal(res.body.sites[0].modules.online_payment, false, 'yakinda modul satiri olsa bile false');
     assert.equal(res.body.sites[0].modules.reservation, false, 'rezervasyon satiri yoksa varsayilan KAPALI');
     assert.equal(res.body.sites[0].modules.finance, true, 'Faz 4a: finance satiri enabled ise acik');
     assert.equal(res.body.sites[1].modules.finance, false, 'satir yoksa varsayilan KAPALI');

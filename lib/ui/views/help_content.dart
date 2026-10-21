@@ -471,6 +471,18 @@ abstract final class HelpContent {
       note: 'Geçici projenin kalan günü listede görünür. Süreleri sistem yöneticisi “Kurallar”dan belirler; yasal adımları kendi karar defterinizle birlikte takip edin.',
     ),
     HelpTopic(
+      id: 'metering',
+      title: 'Sayaç okumalarını nasıl girer ve faturalandırırım?',
+      icon: Icons.speed_rounded,
+      steps: <String>[
+        'Sayaç modülü sitenizde açıksa menünün Borçlar başlığında Sayaçlar ekranı görünür. Önce Sayaçlar sekmesinden daire, tür (su, elektrik, ısı, sıcak su) ve seri numarasıyla sayacı ekleyin.',
+        'Okumayı sayaca dokunarak elle girin ya da uzaktan okuyan sayaçların CSV / Excel dosyasını Okuma aktar sekmesinden yükleyin: ilk sütun daire kodu ya da seri no, ikinci sütun değer. Aktarmadan önce Kontrol et ile sorunlu satırları görürsünüz.',
+        'Faturalandır sekmesinde tür, yöntem (birim fiyat, fatura tutarı ya da ısı için ölçüm + m² payı) ve iki tarihi seçip Önizle deyin; tutarlar uygunsa Borçlandır ile her dairenin oturanının hesabına borç yazılır.',
+      ],
+      note:
+          'Fotoğrafla okuma henüz yok (Yakında). Borçlandırma için Aidat ve Finans modülü de açık olmalıdır; yanlış borç Finans ekranından ters kayıtla düzeltilir.',
+    ),
+    HelpTopic(
       id: 'finance_accounts',
       title: 'Malik ve kiracı hesapları nasıl çalışır?',
       icon: Icons.account_balance_wallet_rounded,

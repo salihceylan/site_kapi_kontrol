@@ -82,9 +82,9 @@ export const MODULE_CATALOG = Object.freeze([
   defineModule({
     code: 'metering',
     name: 'Sayaç Okuma ve Faturalandırma',
-    description: 'Su, elektrik ve doğalgaz sayaç okuma ile faturalandırma.',
+    description: 'Su, elektrik ve ısı sayaç okuma, dosyadan aktarma ve faturalandırma.',
     core: false,
-    status: MODULE_STATUS_COMING_SOON,
+    status: MODULE_STATUS_AVAILABLE,
     defaultEnabled: false,
   }),
   defineModule({

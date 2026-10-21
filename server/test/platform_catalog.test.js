@@ -58,7 +58,7 @@ describe('platform katalog: sozlesme tablosu', () => {
       documents: [false, 'available'], // Faz 3b-A: Belgeler (Dosya Deposu) kullanilabilir (varsayilan KAPALI; super acar, yonetici modul talep eder)
       reservation: [false, 'available'], // Rezervasyon ve Konsiyerj: kullanilabilir (varsayilan KAPALI; super acar, yonetici modul talep eder)
       work_tracking: [false, 'available'], // Is Takibi: kullanilabilir (varsayilan KAPALI; super acar, yonetici modul talep eder)
-      metering: [false, 'coming_soon'],
+      metering: [false, 'available'],
       online_payment: [false, 'coming_soon'],
       survey: [false, 'available'], // Anket ve Oylama: kullanilabilir (varsayilan KAPALI; super acar, yonetici modul talep eder)
       visitor_log: [false, 'available'], // Ziyaretci ve Kargo (F11.03): kullanilabilir (varsayilan KAPALI; super acar, yonetici modul talep eder)
@@ -107,6 +107,7 @@ describe('platform katalog: sozlesme tablosu', () => {
       ['door_control', 'finance', 'documents', 'reservation', 'work_tracking', 'survey', 'visitor_log', 'card_access', 'contracts', 'decision_book', 'directory'],
       ['door_control', 'finance', 'documents', 'reservation', 'work_tracking', 'survey', 'visitor_log', 'card_access', 'contracts', 'decision_book', 'budget'],
       ['door_control', 'finance', 'documents', 'reservation', 'work_tracking', 'survey', 'visitor_log', 'card_access', 'contracts', 'decision_book', 'drive_storage'],
+      ['door_control', 'finance', 'documents', 'reservation', 'work_tracking', 'metering', 'survey', 'visitor_log', 'card_access', 'contracts', 'decision_book'],
     );
     assert.equal(isToggleable(null), false);
   });
@@ -134,7 +135,7 @@ describe('platform katalog: enabled hesabi', () => {
   });
 
   it('status !== available ise HER ZAMAN false (satir ne derse desin)', () => {
-    for (const code of ['metering', 'online_payment', 'plate_recognition', 'hgs_access', 'cctv_link']) {
+    for (const code of ['online_payment', 'plate_recognition', 'hgs_access', 'cctv_link']) {
       assert.equal(computeModuleEnabled(def(code), undefined), false, code);
       assert.equal(computeModuleEnabled(def(code), { enabled: true }), false, code);
     }
@@ -234,8 +235,8 @@ describe('platform katalog: enabled hesabi', () => {
     assert.equal(reservation.status, 'available');
     assert.equal(reservation.enabled, false, 'varsayilan KAPALI');
     const metering = list.find((m) => m.code === 'metering');
-    assert.equal(metering.toggleable, false);
-    assert.equal(metering.status, 'coming_soon');
+    assert.equal(metering.toggleable, true);
+    assert.equal(metering.status, 'available');
   });
 });
 

@@ -131,6 +131,10 @@ enum SirketMenuItem {
   /// yoktur; modül kapalıyken ya da modül verisi yokken eklenmez.
   sozlesmeler,
 
+  /// Sayaç Okuma ve Faturalandırma ekranı "Sayaçlar" (Sayaçlar | Okuma aktar | Faturalandır). Rol listesinde YOKTUR; `metering`
+  /// modülü AÇIK olan sitenin yöneticisine (yazar) ve kurul üyesine (salt okunur) [YanMenu.additionalItems] ile eklenir.
+  sayaclar,
+
   /// Karar Defteri yönetim ekranı. Rol listesinde YOKTUR; `decision_book` modülü AÇIK olan sitenin yöneticisine /
   /// süper kullanıcıya (yazar, kesinleştirir) ve kurul üyesine (salt okunur) [YanMenu.additionalItems] ile eklenir
   /// (Sözleşmeler / Ziyaretçi ve Kargo / Anket / ... öğelerinin altına). Görevli için yoktur; modül kapalıyken ya da
@@ -203,7 +207,9 @@ SirketMenuGroup menuGroupOf(SirketMenuItem item) => switch (item) {
       SirketMenuItem.kisiler ||
       SirketMenuItem.katilimVeKurulum =>
         SirketMenuGroup.daireler,
-      SirketMenuItem.finans || SirketMenuItem.borcum => SirketMenuGroup.borclar,
+      SirketMenuItem.finans ||
+      SirketMenuItem.borcum ||
+      SirketMenuItem.sayaclar => SirketMenuGroup.borclar,
       SirketMenuItem.duyurular ||
       SirketMenuItem.talepler ||
       SirketMenuItem.taleplerim ||
@@ -1334,6 +1340,8 @@ String _titleForItem(SirketMenuItem item, [UserRole? role]) {
       return 'Ziyaretçilerim';
     case SirketMenuItem.sozlesmeler:
       return 'Sözleşmeler';
+    case SirketMenuItem.sayaclar:
+      return 'Sayaçlar';
     case SirketMenuItem.kararDefteri:
       return 'Karar Defteri';
     case SirketMenuItem.kararlar:
@@ -1417,6 +1425,8 @@ IconData _iconForItem(SirketMenuItem item) {
       return Icons.local_shipping_rounded;
     case SirketMenuItem.sozlesmeler:
       return Icons.handshake_rounded;
+    case SirketMenuItem.sayaclar:
+      return Icons.speed_rounded;
     case SirketMenuItem.kararDefteri:
       return Icons.gavel_rounded;
     case SirketMenuItem.kararlar:
