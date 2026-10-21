@@ -476,7 +476,7 @@ async function assertRelationAvailable(db, apartmentId, relation, { excludeResid
  * APARTMENT_ADMIN yoksa bu kişi APARTMENT_ADMIN olur, varsa FAMILY_MEMBER (yeniden etkinleştirmede ikinci admin oluşmaz);
  * eski sakin göstergesi (apartments.resident_user_code) boşsa kişiye işaretlenir.
  */
-async function grantApartmentAccess(client, { siteCode, apartmentId, userCode }) {
+export async function grantApartmentAccess(client, { siteCode, apartmentId, userCode }) {
   await client.query(`SELECT id FROM apartments WHERE id = $1 FOR UPDATE`, [apartmentId]);
   const otherAdmin = await client.query(
     `
