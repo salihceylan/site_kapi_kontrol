@@ -119,6 +119,16 @@ abstract final class HelpContent {
 
   /// Menü dışı ekran içi etiketler (düğme, bölüm, sekme adları; kodda aynen geçer).
   static const Set<String> knownScreenLabels = <String>{
+    // Banka dosyası (2C) ve liste dışa aktarımı (3E)
+    'Kasa',
+    'Banka dosyası yükle',
+    'Sütunları eşleyin',
+    'İşle',
+    'Eşleşmeyen banka satırları',
+    "Bu IBAN'ı kaydet",
+    'Geçmiş yüklemeler',
+    'Excel’e aktar',
+    'Daha fazla',
     // Dekont bildirimi (2B)
     'Dekont yükle',
     'Dekont bildir',

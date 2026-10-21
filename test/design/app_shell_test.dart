@@ -32,6 +32,10 @@ Future<void> _pumpApp(
   await t.pumpAndSettle();
 }
 
+/// Zemin süslemesi eşleşmesi: sabitle özdeş ya da aynı düz renk (açık tema zemini beyaz etiket paletinden (G9) gelir).
+bool _same(Object? d, BoxDecoration expected) =>
+    identical(d, expected) || (d is BoxDecoration && d.gradient == null && d.color == expected.color);
+
 double _scaled(WidgetTester t) =>
     MediaQuery.textScalerOf(t.element(find.text('Site ve Toplu Yaşam Yönetim Sistemi'))).scale(10);
 
@@ -93,7 +97,7 @@ void main() {
         savedTheme: 'dark',
       );
       expect(Theme.of(t.element(find.text('Site ve Toplu Yaşam Yönetim Sistemi'))).brightness, Brightness.dark);
-      expect(_shellLayers(t).any((d) => identical(d, AppDecorations.pageBackgroundDark)), isTrue);
+      expect(_shellLayers(t).any((d) => _same(d, AppDecorations.pageBackgroundDark)), isTrue);
     });
 
     testWidgets('kayıtlı tercih yoksa sistem teması izlenir (varsayılan davranış)', (t) async {
@@ -105,14 +109,14 @@ void main() {
 
     testWidgets('giriş ekranındaki düğme temayı değiştirir, zemin güncellenir ve tercih saklanır', (t) async {
       await _pumpApp(t, textScale: 1.0, brightness: Brightness.light);
-      expect(_shellLayers(t).any((d) => identical(d, AppDecorations.pageBackgroundLight)), isTrue);
+      expect(_shellLayers(t).any((d) => _same(d, AppDecorations.pageBackgroundLight)), isTrue);
 
       await t.tap(find.byTooltip('Koyu temaya geç'));
       await t.pumpAndSettle();
 
       expect(Theme.of(t.element(find.text('Site ve Toplu Yaşam Yönetim Sistemi'))).brightness, Brightness.dark);
-      expect(_shellLayers(t).any((d) => identical(d, AppDecorations.pageBackgroundDark)), isTrue);
-      expect(_shellLayers(t).any((d) => identical(d, AppDecorations.pageBackgroundLight)), isFalse);
+      expect(_shellLayers(t).any((d) => _same(d, AppDecorations.pageBackgroundDark)), isTrue);
+      expect(_shellLayers(t).any((d) => _same(d, AppDecorations.pageBackgroundLight)), isFalse);
       expect(find.byTooltip('Aydınlık temaya geç'), findsOneWidget);
       expect(
         (await SharedPreferences.getInstance()).getString('app_theme_mode'),
@@ -130,13 +134,13 @@ void main() {
         await _pumpApp(t, textScale: 1.0, brightness: dark ? Brightness.dark : Brightness.light);
         final expected = dark ? AppDecorations.pageBackgroundDark : AppDecorations.pageBackgroundLight;
         final layers = _shellLayers(t);
-        expect(layers.where((d) => identical(d, expected)), hasLength(1), reason: 'kök zemin tek ve mevcut sabit');
+        expect(layers.where((d) => _same(d, expected)), hasLength(1), reason: 'kök zemin tek ve mevcut sabit');
         expect(expected.color, dark ? AppPalette.dark.background : AppPalette.light.background);
         expect(expected.gradient, isNull);
         expect(layers.where((d) => d.gradient != null), isEmpty, reason: 'ışıma / degrade katmanı yok');
         expect(
           find.descendant(
-            of: find.byWidgetPredicate((w) => w is DecoratedBox && identical(w.decoration, expected)),
+            of: find.byWidgetPredicate((w) => w is DecoratedBox && _same(w.decoration, expected)),
             matching: find.text('Site ve Toplu Yaşam Yönetim Sistemi'),
           ),
           findsOneWidget,

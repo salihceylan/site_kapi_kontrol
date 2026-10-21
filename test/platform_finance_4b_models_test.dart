@@ -1028,7 +1028,7 @@ void main() {
       'finance.account.adjusted': ('Hesap düzeltmesi yapıldı', AppTone.info, 'Hesap #12'),
       'finance.transfer.created': ('Hesaplar arası aktarım yapıldı', AppTone.success, 'Aktarım #12'),
       'finance.transfer.voided': ('Hesaplar arası aktarım iptal edildi', AppTone.warning, 'Aktarım #12'),
-      'finance.reconciliation.recorded': ('Hesap mutabakatı kaydedildi', AppTone.info, 'Mutabakat #12'),
+      'finance.reconciliation.recorded': ('Banka / kasa kontrolü kaydedildi', AppTone.info, 'Mutabakat #12'),
       'finance.payments.assigned': ('Tahsilatlar hesaba eşlendi', AppTone.info, 'Tahsilat eşleme'),
       'finance.expense.created': ('Gider eklendi', AppTone.success, 'Gider #12'),
       'finance.expense.corrected': ('Gider düzeltildi', AppTone.info, 'Gider #12'),

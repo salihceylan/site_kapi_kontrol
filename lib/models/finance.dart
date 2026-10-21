@@ -1573,7 +1573,7 @@ String? financeActionLabel(String action) {
     case 'finance.transfer.voided':
       return 'Hesaplar arası aktarım iptal edildi';
     case 'finance.reconciliation.recorded':
-      return 'Hesap mutabakatı kaydedildi';
+      return 'Banka / kasa kontrolü kaydedildi';
     case 'finance.payments.assigned':
       return 'Tahsilatlar hesaba eşlendi';
     case 'finance.expense.created':
