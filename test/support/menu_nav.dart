@@ -115,11 +115,25 @@ List<String> menuListTitles(WidgetTester t) {
   ];
 }
 
-/// AÇIK çekmecede [title] öğesi [header] başlığının altında mı (başlık öğenin üstünde)?
+/// AÇIK çekmecede [title] öğesi [header] başlığının altında mı? Öğenin üstündeki EN YAKIN grup başlığı [header] olmalıdır
+/// (arada başka başlık yok): yalnız "başlık öğenin üstünde" denetimi, sonraki bir gruba kaymış öğeyi de geçirirdi.
 void expectUnderDrawerHeader(WidgetTester t, String title, String header) {
   final h = find.descendant(of: find.byType(YanMenu), matching: find.text(header));
   final tile = find.descendant(of: find.byType(YanMenu), matching: find.widgetWithText(ListTile, title));
   expect(h, findsOneWidget, reason: '"$header" başlığı çekmecede');
   expect(tile, findsOneWidget, reason: '"$title" çekmecede');
-  expect(t.getRect(h).bottom, lessThanOrEqualTo(t.getRect(tile).top + 0.01), reason: '"$title" "$header" başlığının altında');
+  final tileTop = t.getRect(tile).top;
+  expect(t.getRect(h).bottom, lessThanOrEqualTo(tileTop + 0.01), reason: '"$title" "$header" başlığının altında');
+  SirketMenuGroup? nearest;
+  var nearestTop = double.negativeInfinity;
+  for (final group in SirketMenuGroup.drawerGroups) {
+    final f = find.descendant(of: find.byType(YanMenu), matching: find.byKey(ValueKey<String>('yan_menu_grup_${group.name}')));
+    if (f.evaluate().isEmpty) continue;
+    final r = t.getRect(f);
+    if (r.bottom <= tileTop + 0.01 && r.top > nearestTop) {
+      nearestTop = r.top;
+      nearest = group;
+    }
+  }
+  expect(nearest?.title, header, reason: '"$title" öğesinin hemen üstündeki başlık "$header" olmalı');
 }
