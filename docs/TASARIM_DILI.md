@@ -37,15 +37,16 @@ yalnız palet alanları ve `AppTone`.
 (sayfaya 17,06:1, karta 13,98:1). Mavi (#2563EB, beyaz metinle 5,17:1) seçenek olarak elendi: mavi yalnız bağlantı ve
 odakta kalır.
 
-**Tehlike tonu** (`AppTone.danger`) mercan ailesidir: hue = dolgu = #E11D48, dolgu sonu ve açık ink #BE123C, koyu ink
-#FDA4AF. **Durum tonu kuralı** (`AppTone.isStatus`): yalnız `success`, `warning`, `danger` renkli işaret taşır
-(`AppTone.dot` nokta rengi, `AppTone.sign(p)` simge rengi); `primary`, `info`, `violet`, `neutral` nötrdür (nokta
-#64748B, simge gövde metni rengi).
+**Tehlike tonu** (`AppTone.danger`) mercan ailesidir: hue = dolgu = #E11D48, dolgu sonu ve açık ink #BE123C,
+koyu ink #FDA4AF. **Durum tonu kuralı** (`AppTone.isStatus`): yalnız `success`, `warning`, `danger` renkli işaret
+taşır (`AppTone.dot` nokta rengi, `AppTone.sign(p)` simge rengi); `primary`, `info`, `violet`, `neutral` nötrdür
+(nokta #64748B, simge gövde metni rengi).
 
 ## 2. Kontrast tablosu (ölçüm)
 
-WCAG 2.x oranı, Flutter `computeLuminance` ile aynı formül (`test/design/sade_style_test.dart` bu satırları denetler).
-Eşik: metin >= 4,5:1; düğme sınırı, odak halkası, ikon ve durum noktası >= 3:1.
+WCAG 2.x oranı, Flutter `computeLuminance` ile aynı formül. Satırları `test/design/sade_style_test.dart` (metin,
+bağlantı, odak, ana düğme, kritik kutu, kritik nokta, simge rengi) ve bileşen testleri (`status_dot_test`, `icon_orb_test`,
+`app_snack_test`, `contrast_test`) denetler. Eşik: metin >= 4,5:1; düğme sınırı, odak halkası, ikon ve durum noktası >= 3:1.
 
 **Açık tema**
 
@@ -97,7 +98,7 @@ Eşik: metin >= 4,5:1; düğme sınırı, odak halkası, ikon ve durum noktası 
 | --- | --- | --- |
 | Ana onay | `ElevatedButton`, `FilledButton` (tema), `PrimaryActionButton(filled)`, `filledToneStyle(context)` | `action` zemin + `onAction` metin; düz: yükselti 0, gölge yok, cila / degrade yok. Kart ya da sayfa başına bir tane |
 | Durum tonlu dolu | `PrimaryActionButton(filled, tone: danger/success/warning)`, `filledToneStyle(tone: …)` | Tonun `a` rengi + beyaz metin (ör. "Sil" #E11D48). Öteki tonlar (birincil, bilgi, mor) ana eylem rengidir: mavi dolu düğme yok |
-| İkincil | `OutlinedButton` (tema), `PrimaryActionButton(tonal)`, `tonalActionStyle(context)` | Yüzey zemin + 1 px `border` + `text` (durum tonunda tonun `ink` rengi) |
+| İkincil | `OutlinedButton` (tema), `PrimaryActionButton(tonal)`, `tonalActionStyle(context)`, `dialogTonalButtonStyle(context)` | Yüzey zemin + 1 px `border` + `text` (durum tonunda tonun `ink` rengi) |
 | İkincil, zeminsiz | `PrimaryActionButton(outline)` | Yalnız 1 px `border` + metin |
 | Yıkıcı ikincil | `dangerOutlineStyle(context)` | Tehlike `ink` metin + tehlike kenarı (%50) |
 | Metin düğmesi | `TextButton` (tema; "Vazgeç", "Kapat", "İptal") | `text` renginde, zeminsiz |
@@ -134,6 +135,10 @@ düğmenin metin rengindedir (koyu temada açık zeminde de görünür).
   okunmamış sayısı çekmecede, Panel'de ve kritik durum noktasında aynı mercan renktir. Vitrinin öteki noktaları (borç
   kartı, dikkat barı) `AppShowcaseColors` renkleridir (aynı değerler).
 - **`InfoChip`**: nötr kutu (`surfaceMuted` + kenar); ton yalnız metni renklendirir (`AppTone.sign`).
+- **Büyük diyalog parçaları** (`lib/ui/dialogs/large_dialog_parts.dart`; finans ekranları da kullanır): `DialogMetaPill`
+  `InfoChip` ile aynıdır (nötr kutu, ton yalnız metin ve simgede); `DialogPanel` zemini her tonda `surfaceMuted`, durum
+  tonlarında yalnız kenar tonun %40'ı (bilgi / birincil / mor panel boyanmaz). `InitialAvatar` (`list_parts.dart`)
+  `IconOrb` gibidir: `surfaceMuted` + kenar, harf `AppTone.sign`.
 - **`InlineNotice`**: opak yüzey (zemin boyanmaz); durum tonlarında kenar tonun %40'ı ve ikon + metin `ink`, bilgi gibi
   öteki tonlarda palet kenarı + gövde metni.
 - **`AppSnack`**: her tür tek koyu yüzeyde (tema: açıkta #0F172A, koyuda #1E293B + ince kenar); tür, simgesi ve simgenin
@@ -208,7 +213,10 @@ Bkz. §4 ve §5.
 - `AppDialog` başlığı: düz `IconOrb` (44 squircle). `EmptyState`: 72 dp düz daire rozet (kompakt: 44).
 - `StatusChip` / `StatusDot`: bkz. §5. `AppSnack`: bkz. §5.
 - Tema (`AppTheme`): ana düğmeler düz; ilerleme göstergeleri yuvarlak uçlu; açılır menü, ipucu ve alt sayfa
-  yuvarlatılmış; girdi odak kenarı mavi (`focusRing`), hata kenarı mercan, ön ikon gövde metni renginde.
+  yuvarlatılmış; girdi odak kenarı mavi (`focusRing`), hata kenarı mercan, ön ikon gövde metni renginde. Seçili çip
+  (`ChoiceChip` / `FilterChip` varsayılanı), bölümlü düğme ve gezinme göstergesi dolgusu nötr gridir (renk şeması
+  `secondaryContainer`: açıkta #E2E8F0, koyuda #334155; üstünde başlık metni 14,48:1 / 9,90:1); tohumdan türeyen açık
+  mavi-mor kullanılmaz.
 
 ### Kapı açma kartları (yuvarlak cilalı düğme hero'dur)
 | Kart | Düzen |
@@ -267,17 +275,35 @@ Girişten sonra açılan **Panel** kapı paneli değil, kullanıcıya tanımlı 
 - Sayfa içeriğinde degrade, cila (`Gloss`), renkli gölge ya da ışıma (kapı düğmesi hariç).
 - Bağlantı ve odak dışında mavi; durum için boyanmış zemin ya da renkli hap (nokta + metin kullanın).
 - Çağrı yerinde düğme / kart rengi ezmek (`styleFrom(backgroundColor: AppColors.primary)` gibi): tema ve bileşen
-  varsayılanını kullanın.
+  varsayılanını kullanın. Durum tonlu dolu düğme gerekiyorsa `filledToneStyle(context, tone: …)`. Zorunlu kalırsa
+  `ElevatedButton` / `FilledButton` `styleFrom` zemini ve ön planı BİRLİKTE verir: tema ön planı beyaz değildir
+  (açıkta #F8FAFC, koyuda #0F172A), yalnız zemin veren çağrı koyu temada renkli zemin üstüne koyu metin çizer
+  (`sade_style_test.dart` kaynakta denetler).
 
 ## 11. Tema ile çözülmeyen, ekran düzeyinde kalanlar (İP-1C, 2026-10-21)
 
-Kural gereği ekran ekran renk yamalanmadı; aşağıdakiler kendi ekranlarının işidir (sonraki dalgalarda ya da ilgili İP'de):
+Kural gereği ekran ekran renk yamalanmadı (tek istisna, bağımsız incelemede: `individual_home_view.dart` "Üyeyi Çıkar"
+onayındaki dolu düğmeye eksik ön plan verildi, kontrast düzeltmesi); aşağıdakiler kendi ekranlarının işidir (sonraki
+dalgalarda ya da ilgili İP'de):
 
-- **İP-1D dosyaları** (bu pakette dokunulmadı): çekmece başlığının rol degradesi (`yan_menu.dart`, `role.tone.gradient`)
-  ve ana sayfa başlığının rol tonlu yıkaması (`home_page.dart`, `flexibleSpace`). `AppTone` degradeleri kapı
-  düğmesinde de kullanıldığından belirteç düzeyinde değiştirilemedi.
-- Çağrı yerinde verilmiş renkler: `backgroundColor: AppColors.primary` (4 yer), seçili `ChoiceChip` dolguları (çağrı
-  yerinde mavi), `site_join_qr_dialog.dart` degrade + gölge, `voice_control_modal.dart`, `voice_live_banner.dart`,
-  `digital_clock_widget.dart` degradeleri, `unread_announcement_card.dart` gölgesi, `dynamic_qr_pass_modal.dart`
-  `shadow(1)` / `shadow(2)`, ekranlarda `IconOrb(glow: true)` (artık etkisiz).
-- Finans ekranlarının yerel renkleri (İP-1A'nın alanı).
+- **İP-1D dosyaları** (bu pakette dokunulmadı):
+  - çekmece başlığının rol degradesi (`yan_menu.dart`, `role.tone.gradient`), ana sayfa başlığının rol tonlu yıkaması
+    (`home_page.dart`, `flexibleSpace`); `AppTone` degradeleri kapı düğmesinde de kullanıldığından belirteç düzeyinde
+    değiştirilemedi;
+  - `home_page.dart` içindeki beş eski onay düğmesi (`ElevatedButton.styleFrom(backgroundColor: Colors.red)`, ön plan
+    yok): açıkta #F8FAFC metin kırmızı üstünde 3,52:1 (paketten önce beyazla 3,68:1, yine eşik altı), koyuda 4,85:1.
+- Çağrı yerinde mavi kalanlar: `all_users_view.dart` dolu düğmesi (`AppTone.primary.a`); anahtarların (`Switch`) etkin
+  rengi (`all_users_view.dart`, `managed_user_card.dart`, `hands_free_settings_dialog.dart`); seçili `ChoiceChip`
+  dolguları (`resident_door_remote_card.dart`, `replace_device_dialog.dart`, `site_residents_accordion_dialog.dart`);
+  `AppTone.primary.ink` ile çizilen ikon ve metinler (ör. finans özet ikonları `finance_parts.dart`, kapı menüsü
+  `door_card.dart`, `all_users_view.dart`, `site_approval_request_card.dart`, `create_guest_pass_dialog.dart`); duyuru
+  listesinin okunmamış noktası (`announcement_parts.dart`, `AppTone.primary.a`); rol renkli etiketler (kullanıcı ve
+  profil ekranları). `AppCard.accentBar` şeridi de çağıranın verdiği rol / durum rengindedir.
+- Ton zeminli yerel parçalar: `ReservationUnreadBadge` (`reservation_parts.dart`), belge kitlesi seçeneği
+  (`document_form_fields.dart`, seçili satır mavi tint), bireysel daire kartının başlık yıkaması
+  (`individual_apartment_card.dart`).
+- Degrade, gölge ve ışıma: `site_join_qr_dialog.dart` degrade + gölge, `voice_control_modal.dart`,
+  `voice_live_banner.dart`, `digital_clock_widget.dart` degradeleri, `unread_announcement_card.dart` gölgesi,
+  `dynamic_qr_pass_modal.dart` `shadow(1)` / `shadow(2)`; ekranlarda `IconOrb(glow: true)` (artık etkisiz).
+- Finans ekranlarının yerel renkleri (İP-1A'nın alanı). Ortak `DialogMetaPill` / `DialogPanel` bileşenleri sade kurala
+  bağlandığından finanstaki borç ve durum hapları artık zemin boyamaz (renk metin ve simgede).

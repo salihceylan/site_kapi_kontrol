@@ -180,7 +180,7 @@ class AppPalette extends ThemeExtension<AppPalette> {
   );
 
   /// Yükselti 1..3 için yüzey rengi. Koyu temada yükselti = daha açık yüzey (beyaz %3 x (seviye-1));
-  /// açıkta yüzey sabittir (yükseltiyi gölge verir).
+  /// açıkta yüzey sabittir (sade stilde kartlar gölgesizdir; [shadow] yalnız yüzen katmanlar ve kapı düğmesi içindir).
   Color surfaceAt(int level) {
     assert(level >= 1 && level <= 3, 'Yükselti seviyesi 1..3 olmalı');
     return isDark
@@ -472,7 +472,7 @@ abstract final class AppShowcaseColors {
   /// Açık temada odak kutusunun ince kenarı.
   static const Color focusBorder = Color(0xFF1E293B);
 
-  /// Koyu temada odak kutusu: koyu sayfa zemininden (#0F172A -> #020617) ayrışan lacivert; kenarı
+  /// Koyu temada odak kutusu: koyu sayfa zemininden (düz #0F172A) ayrışan lacivert; kenarı
   /// [AppTone.primary] `hue` (zemine ve kutuya >= 3:1).
   static const Color focusDark = Color(0xFF172554);
 }
