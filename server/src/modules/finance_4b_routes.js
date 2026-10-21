@@ -58,6 +58,7 @@ import {
   verifyReceipt,
 } from './finance_receipts.js';
 import { buildExportEnvelope, exportFormatOf, recordExportAudit } from './finance_export_tables.js';
+import { enforcementReport } from './finance_enforcement.js';
 import { agingReport, boardSummaryReport, cashPositionReport, incomeExpenseReport, myStatement, statementReport } from './finance_reports.js';
 import { expenseAnalysisReport } from './finance_expense_analysis.js';
 import { getNatureSuggestion, setExpenseNature } from './finance_expense_nature.js';
@@ -464,6 +465,7 @@ function reportRoute(path, context, fallback, { limiters = [reportLimiter], mana
 reportRoute(`${BASE}/reports/aging`, 'finance_report_aging', 'Rapor hazırlanamadı.', {}, async ({ req, access }) => agingReport(access.siteCode, req.query));
 reportRoute(`${BASE}/reports/expense-analysis`, 'finance_report_expense_analysis', 'Rapor hazırlanamadı.', {}, async ({ req, access }) => expenseAnalysisReport(access.siteCode, req.query));
 reportRoute(`${BASE}/reports/income-expense`, 'finance_report_income_expense', 'Rapor hazırlanamadı.', { audit: 'income-expense' }, async ({ req, access }) => incomeExpenseReport(access.siteCode, req.query));
+reportRoute(`${BASE}/reports/enforcement`, 'finance_report_enforcement', 'İcra dökümü hazırlanamadı.', { managerOnly: true }, async ({ req, access }) => enforcementReport(access.siteCode, req.query));
 reportRoute(`${BASE}/reports/cash-position`, 'finance_report_cash', 'Rapor hazırlanamadı.', {}, async ({ req, access }) => cashPositionReport(access.siteCode, req.query));
 reportRoute(`${BASE}/reports/board-summary`, 'finance_report_board', 'Rapor hazırlanamadı.', { audit: 'board-summary' }, async ({ req, access }) =>
   boardSummaryReport(access.siteCode, req.query, { canListDebtors: canSeeManagerFields(access), actor: req.authUser }),

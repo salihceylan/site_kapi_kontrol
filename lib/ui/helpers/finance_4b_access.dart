@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:site_kapi_kontrol/models/expense_analysis.dart';
+import 'package:site_kapi_kontrol/models/enforcement_models.dart';
 import 'package:site_kapi_kontrol/models/receipt_models.dart';
 import 'package:site_kapi_kontrol/models/report_models.dart';
 import 'package:site_kapi_kontrol/services/finance_4b_api.dart';
@@ -44,6 +45,13 @@ class FinancePdfActions {
 
   static Future<void> aging(AgingReport report, {required bool share}) =>
       _report('aging', 'Yaslandirma', share, () => PdfFinanceService.generateAgingPdf(report: report));
+
+  static Future<void> enforcement(EnforcementReport report, {String basisNote = '', required bool share}) => _report(
+    'enforcement',
+    'Icra_Dokumu',
+    share,
+    () => PdfFinanceService.generateEnforcementPdf(report: report, basisNote: basisNote),
+  );
 
   static Future<void> incomeExpense(IncomeExpenseReport report, {required bool share}) => _report(
     'income_expense',

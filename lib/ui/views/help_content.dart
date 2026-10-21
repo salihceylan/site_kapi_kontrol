@@ -583,6 +583,17 @@ abstract final class HelpContent {
       ],
     ),
     HelpTopic(
+      id: 'finance_enforcement',
+      title: 'İcra dökümünü ve avukat listesini nasıl hazırlarım?',
+      icon: Icons.gavel_rounded,
+      steps: <String>[
+        'Finans ekranında “Raporlar” sekmesinden İcra Dökümü seçilir ve borçlu hesapları getiren düğmeye basılır; bugün vadesi geçmiş borcu olan ev sahibi ve kiracı hesapları ayrı ayrı listelenir.',
+        'Hesaplar işaretlenir; isterseniz kesinleşmiş işletme projesi ya da kurul kararı bilgisi yazılır (boş bırakılırsa PDF’te elle doldurulacak bir alan çıkar).',
+        'PDF yazdırma ya da paylaşma düğmesi her hesap için ayrı sayfa üretir: ödenmemiş kalemler vade sırasıyla, varsa gecikme tazminatı ve toplam. Avukat Excel listesi düğmesi seçilen hesapları tek tabloda verir.',
+        'Döküm bilgi amaçlıdır; icra takibini başlatmaz. Takipten önce avukata kontrol ettirin.',
+      ],
+    ),
+    HelpTopic(
       id: 'device_inventory',
       title: 'Şirket cihazlarını nasıl yönetirim?',
       icon: Icons.devices_other_rounded,
