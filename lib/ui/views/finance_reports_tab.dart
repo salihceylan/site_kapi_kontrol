@@ -307,11 +307,11 @@ abstract class _ReportState<W extends StatefulWidget, T> extends State<W> {
     final p = context.palette;
     final through = meta.closedThrough;
     final closedText = through == null
-        ? 'Kapatılmış dönem yok: rakamlar kesinleşmemiştir.'
-        : 'Kapalı dönem: ${through.label} ve öncesi. Sonraki aylar kesinleşmemiştir.';
+        ? 'Henüz kapatılmış ay yok.'
+        : 'Kapalı aylar: ${through.label} ve öncesi.';
     return DialogPanel(
       key: const ValueKey<String>('finance_report_meta'),
-      tone: through == null ? AppTone.warning : null,
+      tone: null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -961,7 +961,7 @@ class _MonthCard extends StatelessWidget {
             children: [
               Text(m.period.label, style: th.titleMedium),
               DialogMetaPill(
-                final_ ? 'Kesinleşmiş' : 'Kesinleşmemiş',
+                final_ ? 'Kapalı' : 'Açık',
                 tone: final_ ? AppTone.success : AppTone.warning,
                 icon: final_ ? Icons.lock_rounded : Icons.lock_open_rounded,
               ),

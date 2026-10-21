@@ -126,8 +126,7 @@ const toIsoOrNull = (value) => (value === null || value === undefined ? null : n
 
 /**
  * GET periods gövdesi: { closed_through (en son kapalı ay), items (kapatma satırları, yeni -> eski), open_period, closable }.
- * `closable` (yeni -> eski, en çok 12): kapalı ay yoksa bu ay ve önceki 11 ay (ilk kapatmada herhangi bir ay serbest); varsa yalnız closed_through + 1 ay
- * (bu ay ya da öncesiyse), aksi halde boş. Aradaki aylar ZATEN kapalı sayılır.
+ * `closable` (yeni -> eski, en çok 12): kapalı ay yoksa bu ay ve önceki 11 ay; varsa closed_through + 1 aydan bu aya kadar bütün aylar, aksi halde boş.
  */
 export function periodsBody(closures, now = new Date()) {
   const periods = closures.map((row) => row.period);
@@ -448,8 +447,8 @@ export async function correctPayment({ siteCode, rawId, body, actor, now = new D
 // ---------------------------------------------------------------------------
 
 /**
- * POST periods/:period/close. İlk kapatmada herhangi bir ay serbest (<= bu ay, en çok 5 yıl öncesi); sonra YALNIZ closed_through + 1 ay kapatılabilir
- * (aradaki aylar zaten kapalı sayılır). Gelecek ay kapatılamaz. Hata: 409 PERIOD_NOT_CLOSABLE. Dönüş: GET periods gövdesi.
+ * POST periods/:period/close. İlk kapatmada herhangi bir ay serbest (<= bu ay, en çok 5 yıl öncesi); sonra closed_through'tan sonraki herhangi bir ay seçilebilir;
+ * seçilen aya kadar bütün açık aylar birlikte kapanır (her ay için ayrı satır). Gelecek ay kapatılamaz. Hata: 409 PERIOD_NOT_CLOSABLE. Dönüş: GET periods gövdesi.
  */
 export async function closePeriod({ siteCode, rawPeriod, actor, now = new Date() }) {
   const period = parsePeriod(rawPeriod);
@@ -466,18 +465,18 @@ export async function closePeriod({ siteCode, rawPeriod, actor, now = new Date()
       }
     } else if (period <= latest) {
       throw periodNotClosable('Bu dönem zaten kapalı.');
-    } else if (period !== addMonths(latest, 1)) {
-      throw periodNotClosable('Önce önceki dönemi kapatmalısınız; dönemler sırayla kapanır.');
     }
     await lockActorRow(client, actorInfo);
     // Faz 4b: kapanan aya sonradan hareket yazılamayacağından, hesaba eşlenmemiş tahsilat varken ay kapatılamaz (hesap tanımlıysa).
     await assertNoUnassignedPayments(client, siteCode, period);
-    await client.query(`INSERT INTO finance_period_closures (site_code, period, closed_by) VALUES ($1, $2::DATE, $3)`, [
-      siteCode,
-      period,
-      actorInfo.userCode,
-    ]);
-    await recordFinanceAudit(client, actor, 'finance.period.closed', siteCode, periodLabel(period), { period: periodLabel(period) });
+    const from = latest === null ? period : addMonths(latest, 1);
+    await client.query(
+      `INSERT INTO finance_period_closures (site_code, period, closed_by)
+       SELECT $1, d::DATE, $4 FROM generate_series($2::DATE, $3::DATE, INTERVAL '1 month') AS d`,
+      [siteCode, from, period, actorInfo.userCode],
+    );
+    const months = (Number(period.slice(0, 4)) - Number(from.slice(0, 4))) * 12 + Number(period.slice(5, 7)) - Number(from.slice(5, 7)) + 1;
+    await recordFinanceAudit(client, actor, 'finance.period.closed', siteCode, periodLabel(period), { period: periodLabel(period), from: periodLabel(from), months });
     return periodsBody(await loadClosures(client, siteCode), now);
   });
 }

@@ -14,6 +14,7 @@ import 'package:site_kapi_kontrol/models/door_access_log_record.dart';
 import 'package:site_kapi_kontrol/models/door_record.dart';
 import 'package:site_kapi_kontrol/models/door_runtime_status.dart';
 import 'package:site_kapi_kontrol/models/finance.dart';
+import 'package:site_kapi_kontrol/models/finance_home.dart';
 import 'package:site_kapi_kontrol/models/guest_pass.dart';
 import 'package:site_kapi_kontrol/models/managed_user_account.dart';
 import 'package:site_kapi_kontrol/models/managed_user_page.dart';
@@ -2219,6 +2220,18 @@ class AuthApi {
     return _parsePayload('Finans özeti', () => FinanceSummary.fromJson(payload));
   }
 
+  /// Yönetici ana sayfası "Bu ay" özeti (`GET .../finance/home`).
+  Future<FinanceHome> getFinanceHome({required String token, required int siteCode}) async {
+    final response = await _authorizedRequest(
+      method: 'GET',
+      path: _financePath(siteCode, 'home'),
+      token: token,
+    );
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return _parsePayload('Bu ayın özeti', () => FinanceHome.fromJson(payload));
+  }
+
   /// Sakinin kendi dairelerinin borç durumu (`GET /app/my-finance`).
   Future<MyFinance> getMyFinance({required String token}) async {
     final response = await _authorizedRequest(
@@ -3652,7 +3665,7 @@ class AuthApi {
       case 'PERIOD_CLOSED':
         return 'Bu dönem kapatılmış; kapalı döneme kayıt eklenemez. Kapalı ayı yalnızca süper kullanıcı yeniden açabilir.';
       case 'PERIOD_NOT_CLOSABLE':
-        return 'Bu ay kapatılamaz. Aylar sırayla kapatılır: önceki ay kapalı olmalı ve gelecek ay kapatılamaz.';
+        return 'Bu ay kapatılamaz: zaten kapalı, gelecekte ya da 5 yıldan eski. Listeden bir ay seçin.';
       case 'PERIOD_NOT_REOPENABLE':
         return 'Bu ay yeniden açılamaz. Yalnızca en son kapatılan ay açılabilir.';
       case 'DEFINITION_LOCKED':

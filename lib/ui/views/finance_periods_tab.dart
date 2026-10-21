@@ -129,9 +129,9 @@ class FinancePeriodsTabState extends State<FinancePeriodsTab> {
       context,
       title: '$label ayını kapat',
       message:
-          '$label kapatılınca $label ve öncesindeki tüm aylar değiştirilemez olur. Bu aylara yeni borç, '
-          'tahsilat ya da ters kayıt eklenemez; düzeltmeler açık ayda ters kayıtla yapılır. Kapalı ayı '
-          'yalnızca süper kullanıcı yeniden açabilir.',
+          '$label ve öncesindeki açık aylar birlikte kapanır. Kapanan aylara borç, tahsilat ya da düzeltme '
+          'eklenemez; düzeltmeler açık ayda yapılır. Kapatmak isteğe bağlıdır; kapalı ayı yalnızca süper '
+          'kullanıcı yeniden açar.',
       confirmLabel: 'Ayı Kapat',
       icon: Icons.lock_rounded,
     );
@@ -268,7 +268,7 @@ class FinancePeriodsTabState extends State<FinancePeriodsTab> {
               ),
               const SizedBox(height: AppSpace.xs),
               Text(
-                'Açık dönemde borç, tahsilat ve düzeltme kaydedilir. Ay kapatılınca o aya kayıt eklenemez.',
+                'Açık dönemde borç, tahsilat ve düzeltme kaydedilir. Ay kapatılınca o aya kayıt eklenemez. Ay kapatmak isteğe bağlıdır.',
                 style: th.bodyMedium?.copyWith(color: p.textSecondary),
               ),
               if (_canWrite) ..._buildCloseControls(context, periods, choice),
@@ -306,7 +306,7 @@ class FinancePeriodsTabState extends State<FinancePeriodsTab> {
           key: ValueKey<String>('finance_nothing_closable'),
           tone: AppTone.info,
           message:
-              'Şu an kapatılabilecek dönem yok. Aylar sırayla kapatılır; gelecek ay kapatılamaz.',
+              'Kapatılabilecek ay yok: bu aya kadar bütün aylar kapalı.',
         ),
       ],
       if (list != null && list.isNotEmpty && choice != null) ...[
@@ -333,7 +333,7 @@ class FinancePeriodsTabState extends State<FinancePeriodsTab> {
         ),
         const SizedBox(height: AppSpace.xs),
         Text(
-          '${choice.label} kapatılınca ${choice.label} ve öncesindeki tüm aylar değiştirilemez olur.',
+          '${choice.label} seçilirse bu aya kadar açık olan aylar birlikte kapanır; bu aylara kayıt eklenemez.',
           key: const ValueKey<String>('finance_close_hint'),
           style: th.bodySmall?.copyWith(color: p.textSecondary),
         ),

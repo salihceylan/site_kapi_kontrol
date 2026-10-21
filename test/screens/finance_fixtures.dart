@@ -354,7 +354,11 @@ class FinanceFakeAuth extends PeopleFakeAuth {
       return [for (var i = 0; i < 12; i++) current.addMonths(-i).toApi()];
     }
     final next = FinancePeriod.tryParse(through)!.next.toApi();
-    return next.compareTo(currentPeriod) <= 0 ? <String>[next] : <String>[];
+    final out = <String>[];
+    for (var m = current; m.toApi().compareTo(next) >= 0 && out.length < 12; m = m.addMonths(-1)) {
+      out.add(m.toApi());
+    }
+    return out;
   }
 
   /// Yazma sonrası fırlatılacak hata varsa fırlatır (istek işlendi ama yanıt kayboldu).
@@ -1454,7 +1458,13 @@ class FinanceFakeAuth extends PeopleFakeAuth {
     if (!closableMonths.contains(p)) {
       throw _coded('PERIOD_NOT_CLOSABLE', 409, 'Bu ay şu an kapatılamaz.');
     }
-    closedPeriods.add(p);
+    // Seçilen aya kadar bütün açık aylar birlikte kapanır (her ay için ayrı satır).
+    final latest = closedThrough;
+    var m = latest == null ? period : FinancePeriod.tryParse(latest)!.next;
+    while (m.toApi().compareTo(p) <= 0) {
+      closedPeriods.add(m.toApi());
+      m = m.next;
+    }
     _throwAfterWrite();
   }
 

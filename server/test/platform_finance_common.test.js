@@ -171,7 +171,8 @@ describe('finans: tarih ve dönem aritmetiği', () => {
     assert.equal(none.length, 12);
     assert.equal(none[0], '2026-10-01');
     assert.equal(none[11], '2025-11-01');
-    assert.deepEqual(closableMonths('2026-10-01', ['2026-03-01']), ['2026-04-01']);
+    assert.deepEqual(closableMonths('2026-10-01', ['2026-08-01']), ['2026-10-01', '2026-09-01']);
+    assert.equal(closableMonths('2026-10-01', ['2025-01-01']).length, 12);
     assert.deepEqual(closableMonths('2026-10-01', ['2026-08-01', '2026-09-01']), ['2026-10-01']);
     assert.deepEqual(closableMonths('2026-10-01', ['2026-10-01']), [], 'bu ay kapalıysa sonraki ay gelecek: kapatılamaz');
     assert.deepEqual(closableMonths('2026-01-01', ['2025-12-01']), ['2026-01-01']);

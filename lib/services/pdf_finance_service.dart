@@ -483,8 +483,8 @@ pw.Widget _reportFooter(pw.Context context, DateTime printedAt, {String? extra, 
 
 String? _closedNote(ReportMeta meta) {
   final through = meta.closedThrough;
-  if (through == null) return 'Kapatılmış dönem yok: rakamlar kesinleşmemiştir.';
-  return 'Kapalı dönem: ${through.label} ve öncesi. Sonraki aylar kesinleşmemiştir.';
+  if (through == null) return 'Henüz kapatılmış ay yok.';
+  return 'Kapalı aylar: ${through.label} ve öncesi.';
 }
 
 pw.Widget _table({
@@ -859,7 +859,7 @@ Future<Uint8List> _buildIncomeExpense(_IncomeExpenseJob job) async {
       header: (pw.Context context) => _reportHeader(
         'Aylık Gelir-Gider Raporu',
         r.meta.siteName,
-        '${r.from?.label ?? '-'} - ${r.to?.label ?? '-'}  •  Tutarlar ₺  •  * kesinleşmemiş ay',
+        '${r.from?.label ?? '-'} - ${r.to?.label ?? '-'}  •  Tutarlar ₺  •  * açık ay',
       ),
       footer: (pw.Context context) => _reportFooter(context, job.printedAt, extra: _closedNote(r.meta), footer: r.meta.footer),
       build: (pw.Context context) => <pw.Widget>[

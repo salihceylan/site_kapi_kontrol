@@ -412,7 +412,7 @@ void main() {
       expect(text, contains('MK-2026-000045'), reason: 'ödeme satırında makbuz numarası');
       expect(text, contains('Aylık aidat'));
       expect(text, contains(PdfFinanceService.reportDisclaimer));
-      expect(text, contains('Kapalı dönem: Eylül 2026 ve öncesi. Sonraki aylar kesinleşmemiştir.'));
+      expect(text, contains('Kapalı aylar: Eylül 2026 ve öncesi.'));
       expect(text, contains('1.300,00 ₺'), reason: 'vadesi geçmiş tutar');
     });
 
@@ -425,7 +425,7 @@ void main() {
         'totals': <String, dynamic>{'charged_minor': 0, 'paid_minor': 0, 'reversed_minor': 0},
       };
       final text = extractPdfText(await PdfFinanceService.generateStatementPdf(statement: ApartmentStatement.fromJson(json), printedAt: _printed));
-      expect(text, contains('Kapatılmış dönem yok: rakamlar kesinleşmemiştir.'));
+      expect(text, contains('Henüz kapatılmış ay yok.'));
     });
 
     test('200 satırdan uzun ekstre arka plan işine gider; kısa olan gitmez', () async {

@@ -59,6 +59,7 @@ class ModuleShowcaseView extends StatefulWidget {
     this.quickActionItems,
     this.onCreateGuestPass,
     this.onPay,
+    this.monthPanel,
   }) : assert(applications == null || onReapply != null, 'başvuru kartı için onReapply gerekir');
 
   final UserSession session;
@@ -109,6 +110,9 @@ class ModuleShowcaseView extends StatefulWidget {
 
   /// Verilirse hızlı işlemlerde "Ziyaretçi kodu" çıkar: misafir / kurye için süreli geçiş linki oluşturur (kapı AÇMAZ).
   final VoidCallback? onCreateGuestPass;
+
+  /// Yönetici "Bu ay" paneli (G5); yalnız yönetici kitlesinde ve finans açıkken verilir, yoksa görünmez.
+  final Widget? monthPanel;
 
   /// Vitrin gösterilirken sayfa kabının (ana sayfada kaydırılan gövdenin kabı) zemini: açık temada DÜZ #F8FAFC
   /// ([AppShowcaseColors.background], işverenin "ana zemin"i), koyu temada null (koyu zemin olduğu gibi kalır).
@@ -234,6 +238,7 @@ class ModuleShowcaseViewState extends State<ModuleShowcaseView> {
         _FocusBar(entries: focus, onOpen: _open),
         const SizedBox(height: AppSpace.lg),
       ],
+      if (audience == ShowcaseAudience.admin && widget.monthPanel != null) widget.monthPanel!,
       if (audience == ShowcaseAudience.resident) ...[
         _buildHero(context),
         const SizedBox(height: AppSpace.lg),
