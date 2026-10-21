@@ -2875,3 +2875,131 @@ Dalga 2-6'nın ilk aşaması: çalışan şema, uçlar ve ekranlar. Dışarıdan
 - [ ] **89.92. Türkçeye dönüş (F34.10):**
   - **Nasıl Test Edilir:** Rol: Herkes. Profilim'de Dil bölümünden Türkçe seç.
   - **Beklenen Sonuç:** Menü ve giriş metinleri Türkçeye döner.
+
+## 90. Dalga 2-6 temel yapı, B aşaması (2026-10-21)
+
+Dalga 2-6'nın ikinci aşaması: dekont bildirimi, banka dosyasından tahsilat, ekipman ve bakım, faaliyet raporu, sade dil ve Excel'e aktar, görevli için fotoğrafla sayaç okuma, Phosphor ikonları ve beyaz etiket tema. Yeni modüller (Ekipman ve Bakım, Faaliyet Raporu) varsayılan KAPALIdır, süper kullanıcı açar. Kapı düğmesi ve kapı açma değişmedi. Denemeleri bir TEST sitesinde yapın. Faz listesi: F30, F31, F32, F34 (yeni maddeler).
+
+- [ ] **90.1. Dekont gönderme (sakin) (F30.43):**
+  - **Nasıl Test Edilir:** Rol: Sakin. Yönetici Finans Ayarları > Ödeme bilgisi'nde dekont yüklemeyi açsın. Sakin olarak Borcum > Öde > Dekont yükle'ye dokunun, bir PDF ya da fotoğraf seçin, tutarı ve tarihi kontrol edip Gönder'e dokunun.
+  - **Beklenen Sonuç:** "Dekont gönderildi" mesajı çıkar. Borcum kartında "İnceleniyor: tutar" görünür. Borç henüz düşmez.
+- [ ] **90.2. Android Paylaş ile dekont (F30.44):**
+  - **Nasıl Test Edilir:** Rol: Sakin. Banka uygulamasında dekontun PDF'ini ya da ekran görüntüsünü Paylaş'a dokunup listeden "Dekont bildir"i seçin. Bunu uygulama açıkken, kapalıyken ve oturum yokken ayrı ayrı deneyin.
+  - **Beklenen Sonuç:** Uygulama öne gelir ve dosya hazır olarak Dekont bildir penceresi açılır. Oturum yoksa girişten sonra açılır. Kapı ekranı ve düğmesi etkilenmez.
+- [ ] **90.3. Tek dekontu onaylama (F30.45):**
+  - **Nasıl Test Edilir:** Rol: Yönetici. Finans > Dekontlar sekmesinde bir dekonta dokunun. Solda dekontu, sağda sakinin bildirdiklerini ve uyarıları kontrol edip Onayla'ya dokunun.
+  - **Beklenen Sonuç:** Tahsilat dekontun tarihiyle Kasa ve Daireler'e yazılır, makbuz oluşur. Sakinin kartında "İnceleniyor" satırı kalkar ve "onaylandı" notu çıkar. Önemli uyarı varken, her biri işaretlenmeden Onayla pasif kalır.
+- [ ] **90.4. Toplu onay (F30.46):**
+  - **Nasıl Test Edilir:** Rol: Yönetici. Birkaç bekleyen dekontun kutucuğunu işaretleyin. "Seçilenleri onayla (N) - toplam"a dokunun, hesabı seçip onaylayın.
+  - **Beklenen Sonuç:** Her dekont ayrı ayrı onaylanır. Önemli uyarılı olanlar atlanır ve sonuç penceresinde nedeniyle listelenir.
+- [ ] **90.5. Dekontu nedenle iptal etme (F30.47):**
+  - **Nasıl Test Edilir:** Rol: Yönetici ve Sakin. Bir dekontta İptal et'e dokunup "Yanlış daire" gibi bir neden seçin ve onaylayın. Sonra sakin hesabında Borcum kartına bakın.
+  - **Beklenen Sonuç:** Defterde hiçbir kayıt oluşmaz. Sakin kartında nedeni görür, Tamam'a dokununca not kaybolur.
+- [ ] **90.6. Elden makbuz girişi ve kapalı ay (F30.48):**
+  - **Nasıl Test Edilir:** Rol: Yönetici. Dekontlar > Elden giriş ile daire, tutar ve yöntem seçip kaydedin, sonra onaylayın. Dekont tarihi kapalı bir aya düşen bir dekontu onaylamayı da deneyin.
+  - **Beklenen Sonuç:** Elden kayıt "İnceleniyor" listesine düşer, onayda tahsilat ve makbuz oluşur. Kapalı ayda uyarı çıkar. "Açık döneme yaz" işaretlenirse bugünün tarihiyle yazılır, dekont tarihi açıklamada kalır.
+- [ ] **90.7. Dosyayı yükle ve özeti gör (F30.49):**
+  - **Nasıl Test Edilir:** Rol: yönetici. Finans > Kasa sekmesinde banka hesabının altındaki 'Banka dosyası yükle'ye dokunun. Bankadan aldığınız CSV, XLSX ya da MT940 ekstresini seçin. İlk seferde açılan pencerede tarih, açıklama ve tutar sütunlarını seçin.
+  - **Beklenen Sonuç:** 'Tanınan N satır işlenecek', 'Kontrol edin', 'Tanınmayan', 'Daha önce yüklenmiş' sayıları görünür. Sütun seçimi sonraki dosyada tekrar sorulmaz.
+- [ ] **90.8. Tanınanları işle (F30.50):**
+  - **Nasıl Test Edilir:** Rol: yönetici. Özet ekranında 'İşle'ye dokunun. Sonra Finans'ta ilgili dairenin ekstresine bakın.
+  - **Beklenen Sonuç:** Açıklamasında ödeme referans kodu (örn. GUL-A2-1026) olan satırlar o dairenin hesabına makbuzlu tahsilat olarak yazılır. Banka hesabının bakiyesi o tutar kadar artar.
+- [ ] **90.9. Aynı dosyayı tekrar yükle (F30.51):**
+  - **Nasıl Test Edilir:** Rol: yönetici. Aynı dosyayı aynı hesaba yeniden seçin.
+  - **Beklenen Sonuç:** Özette 'bu dosya daha önce yüklenmiş' uyarısı çıkar ve İşle düğmesi kapalıdır. Örtüşen başka bir dosyada eski satırlar 'daha önce yüklenmiş' sayılıp atlanır.
+- [ ] **90.10. Eşleşmeyen satırı daireye işle (F30.52):**
+  - **Nasıl Test Edilir:** Rol: yönetici. Ekranın üstündeki 'banka satırı sizi bekliyor' kartına dokunun. Bir satırda 'Daireye işle' > daire seçin > 'Bu IBAN'ı kaydet'i işaretleyin > İşle. Öneri olan satırda 'Onayla' ya da 'Önerilen dairelerin hepsini onayla'yı deneyin.
+  - **Beklenen Sonuç:** Satır bekleyenlerden düşer, tahsilat dairede görünür. Aynı IBAN'dan gelen sonraki dosyada satır otomatik tanınır. Aynı tutarda elle girilmiş tahsilat varsa yenisi yazılmaz, satır ona bağlanır.
+- [ ] **90.11. Daire dışı satırı gelir/gider olarak ayır (F30.53):**
+  - **Nasıl Test Edilir:** Rol: yönetici. Eşleşmeyenler ekranında çıkan para satırında 'Gelir/gider' > Gider (kategori seçin) ya da Banka masrafı > Kaydet. Sonra 'Gelir/gider olarak ayrılanlar' sekmesinde 'Geri al'a dokunun.
+  - **Beklenen Sonuç:** Gider ve hesap hareketi oluşur; Geri al ile iptal edilir ve satır yeniden bekleyenlere döner.
+- [ ] **90.12. Yüklemeyi geri al (F30.54):**
+  - **Nasıl Test Edilir:** Rol: yönetici. Banka dosyası ekranında 'Geçmiş yüklemeler' altındaki yüklemede 'Geri al' > onay.
+  - **Beklenen Sonuç:** O dosyadan işlenen tahsilatlar ters kayıtla iptal olur, makbuzlar iptal edilir, yüklemede 'geri alındı' yazar. Gelir/gider ayrılmış satır varsa önce onları geri almanız istenir.
+- [ ] **90.13. Ekipman ekleme ve yasal kontrol planı (F31.13):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi (modül süper kullanıcıca açık). Menüden Ekipman ve Bakım > Ekipman ekle: tür Asansör, ad ve konum yaz, Kaydet. Ekipmana dokun > Yasal kontrol planı > ilk tarihi seç > Kaydet.
+  - **Beklenen Sonuç:** Ekipman listede görünür. Ayrıntıda yıllık, (yasal) işaretli plan ve sonraki tarih görünür. Tarih yakınsa Bakım takvimi sekmesinde listelenir.
+- [ ] **90.14. Bakım yapıldı kaydı planı ilerletir (F31.14):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ekipman ayrıntısında plan satırında Yapıldı > bugünün tarihi, firma ve maliyet (örn. 1.250,50) gir > Kaydet.
+  - **Beklenen Sonuç:** Bakım kayıtlarında yeni satır çıkar. Planın son bakım tarihi bugün olur, sonraki tarih sıklık kadar ilerler. Kayıt silinemez.
+- [ ] **90.15. Gecikmiş bakım uyarısı (F31.15):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Geçmiş tarihli ilk bakım tarihiyle bir plan ekle. Ekipman listesine ve Bakım takvimi sekmesine bak.
+  - **Beklenen Sonuç:** Ekipman kartında kırmızı Bakımı gecikmiş yazısı, takvimde 'N gün gecikti' satırı görünür.
+- [ ] **90.16. Teklif karşılaştırma ve gidere dönüştürme (F31.16):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi (Finans modülü açık, en az bir kategori ve hesap var). Teklifler sekmesinde aynı konuyla iki farklı firmadan teklif ekle. En düşük olanda Kabul et > Gider olarak kaydet > kategori ve hesap seç > Kaydet.
+  - **Beklenen Sonuç:** Düşük tutarlı teklifte En düşük etiketi çıkar. Kabul sonrası teklif 'Kabul: gider' olur, diğeri Reddedildi olur, Finans giderlerinde yeni gider görünür.
+- [ ] **90.17. Teklifi sözleşmeye dönüştürme (F31.17):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi (Sözleşmeler modülü açık, en az bir firma var). Açık bir teklifte Kabul et > Sözleşme olarak kaydet > firma ve başlangıç tarihi seç > Kaydet.
+  - **Beklenen Sonuç:** Teklif 'Kabul: sözleşme' olur; Sözleşmeler ekranında tekliften gelen tutarla yeni sözleşme görünür.
+- [ ] **90.18. Gider kırılımı (F31.18):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi (Finans açık). Ekipman ayrıntısında Gider bağla ile mevcut bir gider numarasını gir. Gider kırılımı sekmesine bak.
+  - **Beklenen Sonuç:** Ekipman adının karşısında gider tutarı, altta ekipmana bağlı/bağlanmamış/toplam tutarlar görünür.
+- [ ] **90.19. Modülü aç (F31.19):**
+  - **Nasıl Test Edilir:** Rol: süper kullanıcı / yönetici. Süper kullanıcı olarak Modüller ekranından bir sitede Faaliyet Raporu modülünü aç.
+  - **Beklenen Sonuç:** Site yöneticisinin menüsünde Site hizmetleri altında Faaliyet Raporu görünür.
+- [ ] **90.20. Taslak otomatik dolar (F31.20):**
+  - **Nasıl Test Edilir:** Rol: yönetici. Faaliyet Raporu ekranında geçen yılı seç ve dokuz bölümü tek tek aç.
+  - **Beklenen Sonuç:** Genel bilgiler, gelir/gider, tahsilat/borç, işler, sözleşmeler, kararlar, duyurular kayıtlarla uyumlu dolu gelir; kapalı modülün bölümünde 'modül kapalı' yazar.
+- [ ] **90.21. Bölüm düzenle ve kaydet (F31.21):**
+  - **Nasıl Test Edilir:** Rol: yönetici. Bir bölümün metnini değiştir, Taslağı kaydet de, ekrandan çıkıp tekrar gir.
+  - **Beklenen Sonuç:** Değiştirdiğin metin duruyor; düzenlemediğin bölümler güncel kayıtlardan geliyor. Sistem taslağına dön metni yeniler.
+- [ ] **90.22. Gelecek yıl tahmini (F31.22):**
+  - **Nasıl Test Edilir:** Rol: yönetici. Gelecek yıl tahmini bölümünde artış yüzdesini yaz (ör. 25) ve Hesapla'ya bas.
+  - **Beklenen Sonuç:** Beklenen gider, bu yılın giderinin %25 fazlası olarak görünür.
+- [ ] **90.23. PDF (F31.23):**
+  - **Nasıl Test Edilir:** Rol: yönetici. PDF düğmesine bas.
+  - **Beklenen Sonuç:** Dokuz başlıklı rapor PDF olarak iner/paylaşılır; düzenlenen bölümlerde senin metnin görünür, Türkçe karakterler bozulmaz.
+- [ ] **90.24. Yetki (F31.24):**
+  - **Nasıl Test Edilir:** Rol: sakin. Aynı sitenin sakini veya başka sitenin yöneticisi ile raporu açmayı dene.
+  - **Beklenen Sonuç:** Menüde görünmez; adres elle çağrılırsa erişim reddedilir.
+- [ ] **90.25. Excel'e aktar düğmesi (F31.25):**
+  - **Nasıl Test Edilir:** Rol: yönetici. Yönetici olarak Duyurular (ya da İş talepleri, Sözleşmeler, Belgeler vb.) listesini açın, liste başlığının sağındaki tablo simgesine basın, Excel seçip dosyayı alın.
+  - **Beklenen Sonuç:** Dosya listedeki kayıtlarla iner; sütun başlıkları Türkçe, tarihler gg.aa.yyyy. Liste boşken simge pasiftir.
+- [ ] **90.26. Aramaya uyan kayıtları aktarma (F31.26):**
+  - **Nasıl Test Edilir:** Rol: yönetici. Bir listede arama kutusuna kelime yazın, sonra Excel'e aktar'a basın.
+  - **Beklenen Sonuç:** Dosyada yalnız ekranda görünen (aramaya uyan) kayıtlar bulunur.
+- [ ] **90.27. Anket araması (F31.27):**
+  - **Nasıl Test Edilir:** Rol: yönetici. Anketler ekranında 'Anket ara' kutusuna anket başlığından bir parça yazın.
+  - **Beklenen Sonuç:** Yalnız başlığı uyan anketler kalır; kutu boşalınca hepsi geri gelir.
+- [ ] **90.28. Finans dili (F31.28):**
+  - **Nasıl Test Edilir:** Rol: yönetici. Finans > Kasa'da bir hesabın 'Banka / kasa kontrolü' düğmesine basın; ardından Raporlar sekmesindeki adlara bakın.
+  - **Beklenen Sonuç:** Ekranda 'tahakkuk' ve 'mutabakat' geçmez; raporlar Aylık özet, Yıllık hesap, Daire ekstresi, İcra dökümü olarak görünür.
+- [ ] **90.29. Yardım konusu (F31.29):**
+  - **Nasıl Test Edilir:** Rol: yönetici. Yardım ekranında 'Listeleri nasıl arar ve Excel'e aktarırım?' konusunu açın.
+  - **Beklenen Sonuç:** Konu görünür ve adımlar okunur.
+- [ ] **90.30. Görevli fotoğrafla okuma (F32.12):**
+  - **Nasıl Test Edilir:** Rol: Görevli. Sayaç modülü açık sitede görevli hesabıyla girin, Sayaçlar menüsünü açın, kamera iznini verin, sayacın fotoğrafını çekin.
+  - **Beklenen Sonuç:** Üstte 'Sıradaki: A Blok - 1' yazar, çekimden sonra okunan değer kutuda görünür. Onayla'ya basınca sıradaki daireye geçilir ve kamera açık kalır.
+- [ ] **90.31. Yanlış okunan değeri düzeltme (F32.13):**
+  - **Nasıl Test Edilir:** Rol: Görevli. Çekimden sonra kutudaki değeri sayaçla karşılaştırın, yanlışsa silip doğrusunu yazın ve Onayla'ya basın.
+  - **Beklenen Sonuç:** Yazdığınız değer kaydedilir; Sayaçlar sekmesinde ilgili sayacın son okuması bu değerdir (yönetici hesabıyla bakın).
+- [ ] **90.32. İnternetsiz okuma (F32.14):**
+  - **Nasıl Test Edilir:** Rol: Görevli. Uçak modunu açın, iki daire okuyup onaylayın, sonra uçak modunu kapatın ve 30 saniye bekleyin.
+  - **Beklenen Sonuç:** Üstte 'Bekleyen: 2' görünür; internet gelince sayı sıfırlanır ve okumalar yönetici ekranında görünür.
+- [ ] **90.33. Reddedilen okumayı düzeltme (F32.15):**
+  - **Nasıl Test Edilir:** Rol: Görevli. Bir dairenin önceki okumasından küçük bir değer onaylayın, internet varken 'Bekleyen' düğmesini açın, kalem simgesiyle değeri düzeltin.
+  - **Beklenen Sonuç:** Kayıtta sunucunun açıklaması görünür; düzeltilince kendiliğinden gönderilir ve bekleyen sayısı düşer.
+- [ ] **90.34. Fotoğraf Drive'a gider, dosya adı kuralı (F32.16):**
+  - **Nasıl Test Edilir:** Rol: Yönetici. Site Drive hesabı bağlıyken görevlinin okuduğu bir dairenin fotoğrafının Drive'daki klasörüne bakın.
+  - **Beklenen Sonuç:** Dosya suEkim_26 (elektrik için elektrikEkim_26) klasöründe ve adı AB_D13_201026 biçimindedir.
+- [ ] **90.35. Yönetici fotoğrafla oku düğmesi (F32.17):**
+  - **Nasıl Test Edilir:** Rol: Yönetici. Sayaçlar ekranında Sayaçlar sekmesindeki 'Fotoğrafla oku' düğmesine basın, üstteki türden elektrik seçin.
+  - **Beklenen Sonuç:** Kamera ekranı açılır; yalnız elektrik sayaçları sırayla gelir. Geri dönünce liste son okumaları gösterir.
+- [ ] **90.36. Yeni ikonlar (F34.11):**
+  - **Nasıl Test Edilir:** Rol: Sakin ve yönetici. Uygulamayı açın, sol menüyü açın; sakin hesabıyla alt çubuğa ve Panel kartlarına bakın.
+  - **Beklenen Sonuç:** Menü, alt çubuk (Özet, Duyuru, Arıza, Kapı, Belgeler) ve Panel kartlarında ince çizgili ikonlar görünür, hepsi doğru yerde.
+- [ ] **90.37. Firma temasını kaydetme (F34.12):**
+  - **Nasıl Test Edilir:** Rol: Firma sahibi veya süper. Ayarlar > Yönetim Firması > firmayı açın > Marka teması > Firma temasını düzenle. Ana rengi #7C2D12, zemini #FFF7ED yapın, ad yazın, Kaydet.
+  - **Beklenen Sonuç:** Önizleme yeni renkleri gösterir; 'Tema kaydedildi' iletisi çıkar.
+- [ ] **90.38. Temanın uygulamada görünmesi (F34.13):**
+  - **Nasıl Test Edilir:** Rol: Site kullanıcısı. Firmaya bağlı sitedeki bir kullanıcıyla çıkış yapıp yeniden girin.
+  - **Beklenen Sonuç:** Zemin, ana düğme ve bağlantı renkleri yeni temaya döner; çekmecenin üstünde ad (ve varsa logo) görünür.
+- [ ] **90.39. Site temasının önceliği (F34.14):**
+  - **Nasıl Test Edilir:** Rol: Firma sahibi, site kullanıcısı. Aynı ekrandan bağlı sitenin temasını farklı renklerle kaydedin; o siteden bir kullanıcıyla yeniden girin.
+  - **Beklenen Sonuç:** Site temasındaki renkler görünür (firma teması değil).
+- [ ] **90.40. Okunaksız renk reddi (F34.15):**
+  - **Nasıl Test Edilir:** Rol: Firma sahibi veya süper. Yazı rengini #E5E7EB (çok açık) yapın.
+  - **Beklenen Sonuç:** Kırmızı uyarı çıkar, Kaydet pasif olur.
+- [ ] **90.41. Varsayılana dön (F34.16):**
+  - **Nasıl Test Edilir:** Rol: Firma sahibi veya süper. Tema ekranında 'Varsayılana dön' deyin, kullanıcıyla yeniden girin.
+  - **Beklenen Sonuç:** Uygulama eski Güde temasına döner.

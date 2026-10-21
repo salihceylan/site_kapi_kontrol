@@ -5630,7 +5630,7 @@
       "id": "F30",
       "baslik": "Dalga 2: para akışı, yönetici ana sayfası, duyuru ve kadro",
       "durum": "hazir",
-      "ozet": "Dalga 2'nin temel yapısı (A aşaması) hazır: banka IBAN'ı ve sakinin \"Öde\" sayfası, devir bakiyesi ve tek dosyada toplu yükleme, gider analizi ve tahmin, yöneticinin \"Bu ay\" ana sayfası ve istediği ayı kapatma, okunmamış duyuru kartı ve duyuruyu listeden kaldırma, yönetim kadrosu / uygulamaya davet / Rehber, hesap silme engelleri. Dekont ve banka dosyası sonraki aşamada.",
+      "ozet": "Dalga 2'nin temel yapısı (A aşaması) hazır: banka IBAN'ı ve sakinin \"Öde\" sayfası, devir bakiyesi ve tek dosyada toplu yükleme, gider analizi ve tahmin, yöneticinin \"Bu ay\" ana sayfası ve istediği ayı kapatma, okunmamış duyuru kartı ve duyuruyu listeden kaldırma, yönetim kadrosu / uygulamaya davet / Rehber, hesap silme engelleri. Dekont bildirimi (geçici kabul) ve banka dosyasından tahsilat da hazır.",
       "maddeler": [
         {
           "id": "F30.01",
@@ -6161,6 +6161,162 @@
           "on_kosul": "",
           "yeni": true,
           "gelistirme": "hazir"
+        },
+        {
+          "id": "F30.43",
+          "baslik": "Dekont gönderme (sakin)",
+          "adimlar": [
+            "Yönetici Finans Ayarları > Ödeme bilgisi'nde dekont yüklemeyi açsın.",
+            "Sakin olarak Borcum > Öde > Dekont yükle'ye dokunun, bir PDF ya da fotoğraf seçin, tutarı ve tarihi kontrol edip Gönder'e dokunun."
+          ],
+          "beklenen": "\"Dekont gönderildi\" mesajı çıkar. Borcum kartında \"İnceleniyor: tutar\" görünür. Borç henüz düşmez.",
+          "rol_notu": "Sakin",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F30.44",
+          "baslik": "Android Paylaş ile dekont",
+          "adimlar": [
+            "Banka uygulamasında dekontun PDF'ini ya da ekran görüntüsünü Paylaş'a dokunup listeden \"Dekont bildir\"i seçin.",
+            "Bunu uygulama açıkken, kapalıyken ve oturum yokken ayrı ayrı deneyin."
+          ],
+          "beklenen": "Uygulama öne gelir ve dosya hazır olarak Dekont bildir penceresi açılır. Oturum yoksa girişten sonra açılır. Kapı ekranı ve düğmesi etkilenmez.",
+          "rol_notu": "Sakin",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F30.45",
+          "baslik": "Tek dekontu onaylama",
+          "adimlar": [
+            "Finans > Dekontlar sekmesinde bir dekonta dokunun.",
+            "Solda dekontu, sağda sakinin bildirdiklerini ve uyarıları kontrol edip Onayla'ya dokunun."
+          ],
+          "beklenen": "Tahsilat dekontun tarihiyle Kasa ve Daireler'e yazılır, makbuz oluşur. Sakinin kartında \"İnceleniyor\" satırı kalkar ve \"onaylandı\" notu çıkar. Önemli uyarı varken, her biri işaretlenmeden Onayla pasif kalır.",
+          "rol_notu": "Yönetici",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F30.46",
+          "baslik": "Toplu onay",
+          "adimlar": [
+            "Birkaç bekleyen dekontun kutucuğunu işaretleyin.",
+            "\"Seçilenleri onayla (N) - toplam\"a dokunun, hesabı seçip onaylayın."
+          ],
+          "beklenen": "Her dekont ayrı ayrı onaylanır. Önemli uyarılı olanlar atlanır ve sonuç penceresinde nedeniyle listelenir.",
+          "rol_notu": "Yönetici",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F30.47",
+          "baslik": "Dekontu nedenle iptal etme",
+          "adimlar": [
+            "Bir dekontta İptal et'e dokunup \"Yanlış daire\" gibi bir neden seçin ve onaylayın.",
+            "Sonra sakin hesabında Borcum kartına bakın."
+          ],
+          "beklenen": "Defterde hiçbir kayıt oluşmaz. Sakin kartında nedeni görür, Tamam'a dokununca not kaybolur.",
+          "rol_notu": "Yönetici ve Sakin",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F30.48",
+          "baslik": "Elden makbuz girişi ve kapalı ay",
+          "adimlar": [
+            "Dekontlar > Elden giriş ile daire, tutar ve yöntem seçip kaydedin, sonra onaylayın.",
+            "Dekont tarihi kapalı bir aya düşen bir dekontu onaylamayı da deneyin."
+          ],
+          "beklenen": "Elden kayıt \"İnceleniyor\" listesine düşer, onayda tahsilat ve makbuz oluşur. Kapalı ayda uyarı çıkar. \"Açık döneme yaz\" işaretlenirse bugünün tarihiyle yazılır, dekont tarihi açıklamada kalır.",
+          "rol_notu": "Yönetici",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F30.49",
+          "baslik": "Dosyayı yükle ve özeti gör",
+          "adimlar": [
+            "Finans > Kasa sekmesinde banka hesabının altındaki 'Banka dosyası yükle'ye dokunun.",
+            "Bankadan aldığınız CSV, XLSX ya da MT940 ekstresini seçin.",
+            "İlk seferde açılan pencerede tarih, açıklama ve tutar sütunlarını seçin."
+          ],
+          "beklenen": "'Tanınan N satır işlenecek', 'Kontrol edin', 'Tanınmayan', 'Daha önce yüklenmiş' sayıları görünür. Sütun seçimi sonraki dosyada tekrar sorulmaz.",
+          "rol_notu": "yönetici",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F30.50",
+          "baslik": "Tanınanları işle",
+          "adimlar": [
+            "Özet ekranında 'İşle'ye dokunun.",
+            "Sonra Finans'ta ilgili dairenin ekstresine bakın."
+          ],
+          "beklenen": "Açıklamasında ödeme referans kodu (örn. GUL-A2-1026) olan satırlar o dairenin hesabına makbuzlu tahsilat olarak yazılır. Banka hesabının bakiyesi o tutar kadar artar.",
+          "rol_notu": "yönetici",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F30.51",
+          "baslik": "Aynı dosyayı tekrar yükle",
+          "adimlar": [
+            "Aynı dosyayı aynı hesaba yeniden seçin."
+          ],
+          "beklenen": "Özette 'bu dosya daha önce yüklenmiş' uyarısı çıkar ve İşle düğmesi kapalıdır. Örtüşen başka bir dosyada eski satırlar 'daha önce yüklenmiş' sayılıp atlanır.",
+          "rol_notu": "yönetici",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F30.52",
+          "baslik": "Eşleşmeyen satırı daireye işle",
+          "adimlar": [
+            "Ekranın üstündeki 'banka satırı sizi bekliyor' kartına dokunun.",
+            "Bir satırda 'Daireye işle' > daire seçin > 'Bu IBAN'ı kaydet'i işaretleyin > İşle.",
+            "Öneri olan satırda 'Onayla' ya da 'Önerilen dairelerin hepsini onayla'yı deneyin."
+          ],
+          "beklenen": "Satır bekleyenlerden düşer, tahsilat dairede görünür. Aynı IBAN'dan gelen sonraki dosyada satır otomatik tanınır. Aynı tutarda elle girilmiş tahsilat varsa yenisi yazılmaz, satır ona bağlanır.",
+          "rol_notu": "yönetici",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F30.53",
+          "baslik": "Daire dışı satırı gelir/gider olarak ayır",
+          "adimlar": [
+            "Eşleşmeyenler ekranında çıkan para satırında 'Gelir/gider' > Gider (kategori seçin) ya da Banka masrafı > Kaydet.",
+            "Sonra 'Gelir/gider olarak ayrılanlar' sekmesinde 'Geri al'a dokunun."
+          ],
+          "beklenen": "Gider ve hesap hareketi oluşur; Geri al ile iptal edilir ve satır yeniden bekleyenlere döner.",
+          "rol_notu": "yönetici",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F30.54",
+          "baslik": "Yüklemeyi geri al",
+          "adimlar": [
+            "Banka dosyası ekranında 'Geçmiş yüklemeler' altındaki yüklemede 'Geri al' > onay."
+          ],
+          "beklenen": "O dosyadan işlenen tahsilatlar ters kayıtla iptal olur, makbuzlar iptal edilir, yüklemede 'geri alındı' yazar. Gelir/gider ayrılmış satır varsa önce onları geri almanız istenir.",
+          "rol_notu": "yönetici",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
         }
       ]
     },
@@ -6168,7 +6324,7 @@
       "id": "F31",
       "baslik": "Dalga 3: işletme projesi ve icra dökümü",
       "durum": "hazir",
-      "ozet": "İşletme projesi (bütçe kalemleri, tebliğ ve itiraz süresi, planlanan-gerçekleşen) ve icra dökümü (hesap bazında PDF ve avukat Excel listesi) temel yapısı hazır. İcra dökümü içeriği avukat kontrolüne tabidir.",
+      "ozet": "İşletme projesi (bütçe kalemleri, tebliğ ve itiraz süresi, planlanan-gerçekleşen) ve icra dökümü (hesap bazında PDF ve avukat Excel listesi) temel yapısı hazır. İcra dökümü içeriği avukat kontrolüne tabidir. Ekipman ve bakım (teklif karşılaştırma, gider kırılımı), faaliyet raporu ve sade dil / Excel'e aktar da hazır.",
       "maddeler": [
         {
           "id": "F31.01",
@@ -6319,6 +6475,214 @@
           "on_kosul": "",
           "yeni": true,
           "gelistirme": "hazir"
+        },
+        {
+          "id": "F31.13",
+          "baslik": "Ekipman ekleme ve yasal kontrol planı",
+          "adimlar": [
+            "Menüden Ekipman ve Bakım > Ekipman ekle: tür Asansör, ad ve konum yaz, Kaydet.",
+            "Ekipmana dokun > Yasal kontrol planı > ilk tarihi seç > Kaydet."
+          ],
+          "beklenen": "Ekipman listede görünür. Ayrıntıda yıllık, (yasal) işaretli plan ve sonraki tarih görünür. Tarih yakınsa Bakım takvimi sekmesinde listelenir.",
+          "rol_notu": "Site yöneticisi (modül süper kullanıcıca açık)",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F31.14",
+          "baslik": "Bakım yapıldı kaydı planı ilerletir",
+          "adimlar": [
+            "Ekipman ayrıntısında plan satırında Yapıldı > bugünün tarihi, firma ve maliyet (örn. 1.250,50) gir > Kaydet."
+          ],
+          "beklenen": "Bakım kayıtlarında yeni satır çıkar. Planın son bakım tarihi bugün olur, sonraki tarih sıklık kadar ilerler. Kayıt silinemez.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F31.15",
+          "baslik": "Gecikmiş bakım uyarısı",
+          "adimlar": [
+            "Geçmiş tarihli ilk bakım tarihiyle bir plan ekle.",
+            "Ekipman listesine ve Bakım takvimi sekmesine bak."
+          ],
+          "beklenen": "Ekipman kartında kırmızı Bakımı gecikmiş yazısı, takvimde 'N gün gecikti' satırı görünür.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F31.16",
+          "baslik": "Teklif karşılaştırma ve gidere dönüştürme",
+          "adimlar": [
+            "Teklifler sekmesinde aynı konuyla iki farklı firmadan teklif ekle.",
+            "En düşük olanda Kabul et > Gider olarak kaydet > kategori ve hesap seç > Kaydet."
+          ],
+          "beklenen": "Düşük tutarlı teklifte En düşük etiketi çıkar. Kabul sonrası teklif 'Kabul: gider' olur, diğeri Reddedildi olur, Finans giderlerinde yeni gider görünür.",
+          "rol_notu": "Site yöneticisi (Finans modülü açık, en az bir kategori ve hesap var)",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F31.17",
+          "baslik": "Teklifi sözleşmeye dönüştürme",
+          "adimlar": [
+            "Açık bir teklifte Kabul et > Sözleşme olarak kaydet > firma ve başlangıç tarihi seç > Kaydet."
+          ],
+          "beklenen": "Teklif 'Kabul: sözleşme' olur; Sözleşmeler ekranında tekliften gelen tutarla yeni sözleşme görünür.",
+          "rol_notu": "Site yöneticisi (Sözleşmeler modülü açık, en az bir firma var)",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F31.18",
+          "baslik": "Gider kırılımı",
+          "adimlar": [
+            "Ekipman ayrıntısında Gider bağla ile mevcut bir gider numarasını gir.",
+            "Gider kırılımı sekmesine bak."
+          ],
+          "beklenen": "Ekipman adının karşısında gider tutarı, altta ekipmana bağlı/bağlanmamış/toplam tutarlar görünür.",
+          "rol_notu": "Site yöneticisi (Finans açık)",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F31.19",
+          "baslik": "Modülü aç",
+          "adimlar": [
+            "Süper kullanıcı olarak Modüller ekranından bir sitede Faaliyet Raporu modülünü aç."
+          ],
+          "beklenen": "Site yöneticisinin menüsünde Site hizmetleri altında Faaliyet Raporu görünür.",
+          "rol_notu": "süper kullanıcı / yönetici",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F31.20",
+          "baslik": "Taslak otomatik dolar",
+          "adimlar": [
+            "Faaliyet Raporu ekranında geçen yılı seç ve dokuz bölümü tek tek aç."
+          ],
+          "beklenen": "Genel bilgiler, gelir/gider, tahsilat/borç, işler, sözleşmeler, kararlar, duyurular kayıtlarla uyumlu dolu gelir; kapalı modülün bölümünde 'modül kapalı' yazar.",
+          "rol_notu": "yönetici",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F31.21",
+          "baslik": "Bölüm düzenle ve kaydet",
+          "adimlar": [
+            "Bir bölümün metnini değiştir, Taslağı kaydet de, ekrandan çıkıp tekrar gir."
+          ],
+          "beklenen": "Değiştirdiğin metin duruyor; düzenlemediğin bölümler güncel kayıtlardan geliyor. Sistem taslağına dön metni yeniler.",
+          "rol_notu": "yönetici",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F31.22",
+          "baslik": "Gelecek yıl tahmini",
+          "adimlar": [
+            "Gelecek yıl tahmini bölümünde artış yüzdesini yaz (ör. 25) ve Hesapla'ya bas."
+          ],
+          "beklenen": "Beklenen gider, bu yılın giderinin %25 fazlası olarak görünür.",
+          "rol_notu": "yönetici",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F31.23",
+          "baslik": "PDF",
+          "adimlar": [
+            "PDF düğmesine bas."
+          ],
+          "beklenen": "Dokuz başlıklı rapor PDF olarak iner/paylaşılır; düzenlenen bölümlerde senin metnin görünür, Türkçe karakterler bozulmaz.",
+          "rol_notu": "yönetici",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F31.24",
+          "baslik": "Yetki",
+          "adimlar": [
+            "Aynı sitenin sakini veya başka sitenin yöneticisi ile raporu açmayı dene."
+          ],
+          "beklenen": "Menüde görünmez; adres elle çağrılırsa erişim reddedilir.",
+          "rol_notu": "sakin",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F31.25",
+          "baslik": "Excel'e aktar düğmesi",
+          "adimlar": [
+            "Yönetici olarak Duyurular (ya da İş talepleri, Sözleşmeler, Belgeler vb.) listesini açın, liste başlığının sağındaki tablo simgesine basın, Excel seçip dosyayı alın."
+          ],
+          "beklenen": "Dosya listedeki kayıtlarla iner; sütun başlıkları Türkçe, tarihler gg.aa.yyyy. Liste boşken simge pasiftir.",
+          "rol_notu": "yönetici",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F31.26",
+          "baslik": "Aramaya uyan kayıtları aktarma",
+          "adimlar": [
+            "Bir listede arama kutusuna kelime yazın, sonra Excel'e aktar'a basın."
+          ],
+          "beklenen": "Dosyada yalnız ekranda görünen (aramaya uyan) kayıtlar bulunur.",
+          "rol_notu": "yönetici",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F31.27",
+          "baslik": "Anket araması",
+          "adimlar": [
+            "Anketler ekranında 'Anket ara' kutusuna anket başlığından bir parça yazın."
+          ],
+          "beklenen": "Yalnız başlığı uyan anketler kalır; kutu boşalınca hepsi geri gelir.",
+          "rol_notu": "yönetici",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F31.28",
+          "baslik": "Finans dili",
+          "adimlar": [
+            "Finans > Kasa'da bir hesabın 'Banka / kasa kontrolü' düğmesine basın; ardından Raporlar sekmesindeki adlara bakın."
+          ],
+          "beklenen": "Ekranda 'tahakkuk' ve 'mutabakat' geçmez; raporlar Aylık özet, Yıllık hesap, Daire ekstresi, İcra dökümü olarak görünür.",
+          "rol_notu": "yönetici",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F31.29",
+          "baslik": "Yardım konusu",
+          "adimlar": [
+            "Yardım ekranında 'Listeleri nasıl arar ve Excel'e aktarırım?' konusunu açın."
+          ],
+          "beklenen": "Konu görünür ve adımlar okunur.",
+          "rol_notu": "yönetici",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
         }
       ]
     },
@@ -6326,7 +6690,7 @@
       "id": "F32",
       "baslik": "Dalga 4: Drive ve sayaç",
       "durum": "hazir",
-      "ozet": "Sitenin kendi Google Drive hesabına dosya saklama (Google bilgileri girilene kadar \"Yakında…\") ve sayaç modülü (elle ve dosyadan okuma, birim fiyat / fatura / ısı payı ile borçlandırma) temel yapısı hazır. Fotoğrafla okuma ve çevrimdışı kuyruk sonraki aşamada.",
+      "ozet": "Sitenin kendi Google Drive hesabına dosya saklama (Google bilgileri girilene kadar \"Yakında…\") ve sayaç modülü (elle ve dosyadan okuma, birim fiyat / fatura / ısı payı ile borçlandırma) temel yapısı hazır. Görevli için fotoğrafla okuma ve çevrimdışı kuyruk da hazır.",
       "maddeler": [
         {
           "id": "F32.01",
@@ -6464,6 +6828,78 @@
           ],
           "beklenen": "Kurul üyesi sayaç ve geçmiş faturalandırmaları görür ama ekle/sil/aktar/borçlandır düğmesi yoktur. Sakin ve görevli menüde Sayaçlar'ı görmez.",
           "rol_notu": "Kurul üyesi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F32.12",
+          "baslik": "Görevli fotoğrafla okuma",
+          "adimlar": [
+            "Sayaç modülü açık sitede görevli hesabıyla girin, Sayaçlar menüsünü açın, kamera iznini verin, sayacın fotoğrafını çekin."
+          ],
+          "beklenen": "Üstte 'Sıradaki: A Blok - 1' yazar, çekimden sonra okunan değer kutuda görünür. Onayla'ya basınca sıradaki daireye geçilir ve kamera açık kalır.",
+          "rol_notu": "Görevli",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F32.13",
+          "baslik": "Yanlış okunan değeri düzeltme",
+          "adimlar": [
+            "Çekimden sonra kutudaki değeri sayaçla karşılaştırın, yanlışsa silip doğrusunu yazın ve Onayla'ya basın."
+          ],
+          "beklenen": "Yazdığınız değer kaydedilir; Sayaçlar sekmesinde ilgili sayacın son okuması bu değerdir (yönetici hesabıyla bakın).",
+          "rol_notu": "Görevli",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F32.14",
+          "baslik": "İnternetsiz okuma",
+          "adimlar": [
+            "Uçak modunu açın, iki daire okuyup onaylayın, sonra uçak modunu kapatın ve 30 saniye bekleyin."
+          ],
+          "beklenen": "Üstte 'Bekleyen: 2' görünür; internet gelince sayı sıfırlanır ve okumalar yönetici ekranında görünür.",
+          "rol_notu": "Görevli",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F32.15",
+          "baslik": "Reddedilen okumayı düzeltme",
+          "adimlar": [
+            "Bir dairenin önceki okumasından küçük bir değer onaylayın, internet varken 'Bekleyen' düğmesini açın, kalem simgesiyle değeri düzeltin."
+          ],
+          "beklenen": "Kayıtta sunucunun açıklaması görünür; düzeltilince kendiliğinden gönderilir ve bekleyen sayısı düşer.",
+          "rol_notu": "Görevli",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F32.16",
+          "baslik": "Fotoğraf Drive'a gider, dosya adı kuralı",
+          "adimlar": [
+            "Site Drive hesabı bağlıyken görevlinin okuduğu bir dairenin fotoğrafının Drive'daki klasörüne bakın."
+          ],
+          "beklenen": "Dosya suEkim_26 (elektrik için elektrikEkim_26) klasöründe ve adı AB_D13_201026 biçimindedir.",
+          "rol_notu": "Yönetici",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F32.17",
+          "baslik": "Yönetici fotoğrafla oku düğmesi",
+          "adimlar": [
+            "Sayaçlar ekranında Sayaçlar sekmesindeki 'Fotoğrafla oku' düğmesine basın, üstteki türden elektrik seçin."
+          ],
+          "beklenen": "Kamera ekranı açılır; yalnız elektrik sayaçları sırayla gelir. Geri dönünce liste son okumaları gösterir.",
+          "rol_notu": "Yönetici",
           "on_kosul": "",
           "yeni": true,
           "gelistirme": "hazir"
@@ -6690,7 +7126,7 @@
       "id": "F34",
       "baslik": "Dalga 6: kart ödemesi ve kamera arayüzleri, çok dil",
       "durum": "hazir",
-      "ozet": "Kart ödemesi sağlayıcı arayüzü (iyzico ve PayTR \"Yakında…\"), plaka tanıyan kameralardan olay alma (kapı açmaz) ve Türkçe / İngilizce dil altyapısı hazır.",
+      "ozet": "Kart ödemesi sağlayıcı arayüzü (iyzico ve PayTR \"Yakında…\"), plaka tanıyan kameralardan olay alma (kapı açmaz) ve Türkçe / İngilizce dil altyapısı hazır. Phosphor ikon seti ve firma / site beyaz etiket teması da hazır.",
       "maddeler": [
         {
           "id": "F34.01",
@@ -6808,6 +7244,79 @@
           ],
           "beklenen": "Menü ve giriş metinleri Türkçeye döner.",
           "rol_notu": "Herkes",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F34.11",
+          "baslik": "Yeni ikonlar",
+          "adimlar": [
+            "Uygulamayı açın, sol menüyü açın; sakin hesabıyla alt çubuğa ve Panel kartlarına bakın."
+          ],
+          "beklenen": "Menü, alt çubuk (Özet, Duyuru, Arıza, Kapı, Belgeler) ve Panel kartlarında ince çizgili ikonlar görünür, hepsi doğru yerde.",
+          "rol_notu": "Sakin ve yönetici",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F34.12",
+          "baslik": "Firma temasını kaydetme",
+          "adimlar": [
+            "Ayarlar > Yönetim Firması > firmayı açın > Marka teması > Firma temasını düzenle.",
+            "Ana rengi #7C2D12, zemini #FFF7ED yapın, ad yazın, Kaydet."
+          ],
+          "beklenen": "Önizleme yeni renkleri gösterir; 'Tema kaydedildi' iletisi çıkar.",
+          "rol_notu": "Firma sahibi veya süper",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F34.13",
+          "baslik": "Temanın uygulamada görünmesi",
+          "adimlar": [
+            "Firmaya bağlı sitedeki bir kullanıcıyla çıkış yapıp yeniden girin."
+          ],
+          "beklenen": "Zemin, ana düğme ve bağlantı renkleri yeni temaya döner; çekmecenin üstünde ad (ve varsa logo) görünür.",
+          "rol_notu": "Site kullanıcısı",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F34.14",
+          "baslik": "Site temasının önceliği",
+          "adimlar": [
+            "Aynı ekrandan bağlı sitenin temasını farklı renklerle kaydedin; o siteden bir kullanıcıyla yeniden girin."
+          ],
+          "beklenen": "Site temasındaki renkler görünür (firma teması değil).",
+          "rol_notu": "Firma sahibi, site kullanıcısı",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F34.15",
+          "baslik": "Okunaksız renk reddi",
+          "adimlar": [
+            "Yazı rengini #E5E7EB (çok açık) yapın."
+          ],
+          "beklenen": "Kırmızı uyarı çıkar, Kaydet pasif olur.",
+          "rol_notu": "Firma sahibi veya süper",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F34.16",
+          "baslik": "Varsayılana dön",
+          "adimlar": [
+            "Tema ekranında 'Varsayılana dön' deyin, kullanıcıyla yeniden girin."
+          ],
+          "beklenen": "Uygulama eski Güde temasına döner.",
+          "rol_notu": "Firma sahibi veya süper",
           "on_kosul": "",
           "yeni": true,
           "gelistirme": "hazir"

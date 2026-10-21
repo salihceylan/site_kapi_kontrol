@@ -558,8 +558,8 @@ Bu bölüm lib/ui/design (jeton, hareket, kart, düğme, rozet, iskelet, geri sa
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
 | [lib/styles/app_decorations.dart:16](../../lib/styles/app_decorations.dart#L16) | <code>static BoxDecoration pageBackground(BuildContext context) =&gt;</code> | Tema parlaklığına göre DÜZ zemin (açıkta #F8FAFC, koyuda #0F172A; sade stil G6: degrade ve ışıma yok) |
-| [lib/styles/app_decorations.dart:37](../../lib/styles/app_decorations.dart#L37) | <code>static BoxDecoration glassCard(BuildContext context) =&gt;</code> | Palet yüzeyi + 1 px palet kenarı, GÖLGESİZ kart (sade stil; eski cam kartın yerine, ad aynı) |
-| [lib/styles/app_decorations.dart:45](../../lib/styles/app_decorations.dart#L45) | <code>static BoxDecoration glowingBadge(Color accentColor, {bool isDark = true}) =&gt; BoxDecorati…</code> | Kapsül rozet (adı eski; sade stilde ışıma yok): isDark varsayılanı TRUE; açık temada false verilmezse koyu tema saydamlığıyla çizilir |
+| [lib/styles/app_decorations.dart:38](../../lib/styles/app_decorations.dart#L38) | <code>static BoxDecoration glassCard(BuildContext context) =&gt;</code> | Palet yüzeyi + 1 px palet kenarı, GÖLGESİZ kart (sade stil; eski cam kartın yerine, ad aynı) |
+| [lib/styles/app_decorations.dart:46](../../lib/styles/app_decorations.dart#L46) | <code>static BoxDecoration glowingBadge(Color accentColor, {bool isDark = true}) =&gt; BoxDecorati…</code> | Kapsül rozet (adı eski; sade stilde ışıma yok): isDark varsayılanı TRUE; açık temada false verilmezse koyu tema saydamlığıyla çizilir |
 
 **Olası nedenler**
 - glowingBadge çağrısında isDark verilmemiş: açık temada koyu rozet tonu
@@ -1074,8 +1074,8 @@ Bu bölüm lib/ui/design (jeton, hareket, kart, düğme, rozet, iskelet, geri sa
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
 | [lib/menu.dart:1](../../lib/menu.dart#L1) | <code>export 'package:site_kapi_kontrol/ui/widgets/yan_menu.dart';</code> | menu.dart tek satırlık yeniden dışa aktarımdır; gerçek kod yan_menu.dart ta |
-| [lib/ui/widgets/yan_menu.dart:1229](../../lib/ui/widgets/yan_menu.dart#L1229) | <code>List&lt;SirketMenuItem&gt; _itemsForRole(</code> | Rol ve mod başına menü öğeleri burada seçilir |
-| [lib/ui/widgets/yan_menu.dart:463](../../lib/ui/widgets/yan_menu.dart#L463) | <code>title: isResidentMode ? context.l10n.menuSwitchToAdmin : context.l10n.menuSwitchToResiden…</code> | Çift rollü kullanıcıda mod değiştirme satırı |
+| [lib/ui/widgets/yan_menu.dart:1261](../../lib/ui/widgets/yan_menu.dart#L1261) | <code>List&lt;SirketMenuItem&gt; _itemsForRole(</code> | Rol ve mod başına menü öğeleri burada seçilir |
+| [lib/ui/widgets/yan_menu.dart:474](../../lib/ui/widgets/yan_menu.dart#L474) | <code>title: isResidentMode ? context.l10n.menuSwitchToAdmin : context.l10n.menuSwitchToResiden…</code> | Çift rollü kullanıcıda mod değiştirme satırı |
 
 **Olası nedenler**
 - _itemsForRole listesinde öğe o rol/mod için yok
