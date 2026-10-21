@@ -2009,6 +2009,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   /// başka menüye çıkılacaksa önce onay istenir: onaylanırsa [apply] çalışır, vazgeçilirse ekranda kalınır.
   /// [apply] menüyü [setState] içinde değiştirir ve gerekirse [mounted] denetimini kendisi yapar.
   void _requestMenuChange(SirketMenuItem target, VoidCallback apply) {
+    // İP-1D (a): kapı isteği modül verisini beklerken kullanıcı başka bir sayfaya geçerse (çekmece, sekme, vitrin, mod
+    // geçişi, acil duyuru şeridi, Yardım, geri tuşu ...) istek düşer: geç gelen veri sayfayı kendiliğinden Kapılar'a
+    // çevirmez.
+    void applyChange() {
+      if (_doorRequestWaiting && target != SirketMenuItem.kapilar) widget.doorPanelRequests?.clear();
+      apply();
+    }
+
     final leaving = _platformSettingsKey.currentState;
     if (_selectedMenu == SirketMenuItem.platformAyarlari &&
         target != SirketMenuItem.platformAyarlari &&
@@ -2024,13 +2032,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         leaving
             .confirmDiscard()
             .then((discard) {
-              if (discard && mounted) apply();
+              if (discard && mounted) applyChange();
             })
             .whenComplete(() => _menuGuardOpen = false),
       );
       return;
     }
-    apply();
+    applyChange();
   }
 
   /// Menü kapısının onay penceresi açık mı ([_requestMenuChange]).
@@ -2167,9 +2175,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   void _applyMenuSelection(SirketMenuItem item) {
-    // İP-1D (a): kapı isteği modül verisini beklerken kullanıcı kendisi başka bir sayfa açtıysa istek düşer: geç gelen
-    // veriyle sayfa kendiliğinden Kapılar'a dönmez.
-    if (_doorRequestWaiting && item != SirketMenuItem.kapilar) widget.doorPanelRequests?.clear();
+    // İP-1D (a): bekleyen kapı isteği, kullanıcı başka sayfa açınca [_requestMenuChange] içinde düşer.
     if (_selectedMenu != item) {
       if (item == SirketMenuItem.kapilar) _armDoorEntryGuard();
       _jumpBodyToTop();

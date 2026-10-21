@@ -695,6 +695,29 @@ void main() {
       await _disposeHome(t);
     });
 
+    testWidgets('beklerken mod geçişi (AppBar\'daki "Sakin Modu") de kullanıcının seçimidir: istek düşer, Kapılar açılmaz',
+        (t) async {
+      final gate = Completer<MyModulesResult>();
+      final access = ModuleAccess(fetch: () => gate.future);
+      addTearDown(access.dispose);
+      final requests = DoorPanelRequests()..request();
+      addTearDown(requests.dispose);
+      final auth = _NavAuth(UserRole.siteManager, doors: <DoorRecord>[_door(1)]);
+      await _pumpHome(t, auth, access: access, requests: requests, width: 820, height: 1180);
+      expect(requests.isPending, isTrue);
+      await t.tap(_inAppBar(find.text('Sakin Modu')));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 600));
+      expect(requests.isPending, isFalse, reason: 'mod geçişi bekleyen kapı isteğini düşürür');
+
+      gate.complete(MyModulesResult(sites: <MySiteModules>[_my('manager')]));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 700));
+      expect(_inAppBar(find.text('Kapılar')), findsNothing, reason: 'geç gelen veri sayfayı Kapılar\'a çevirmez');
+      expect(find.byType(ModuleShowcaseView), findsOneWidget);
+      await _disposeHome(t);
+    });
+
     testWidgets('ilk yükleme hata verirse (fail-open) istek uygulanır: Kapılar açılır', (t) async {
       final access = ModuleAccess(fetch: () async => throw StateError('ağ yok'));
       addTearDown(access.dispose);

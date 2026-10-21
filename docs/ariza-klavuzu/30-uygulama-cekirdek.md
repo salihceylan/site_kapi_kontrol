@@ -851,7 +851,7 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/local_door_service
 | [lib/services/auth_service.dart:2541](../../lib/services/auth_service.dart#L2541) | <code>static bool _isCloudUnreachableError(ApiException e) =&gt;</code> | "Bulut erişilemiyor" = durum kodu yok (ağ/zaman aşımı), 5xx ya da ara katman yanıtı; 403/404 gibi iş hataları sayılmaz |
 | [lib/models/door_runtime_status.dart:84](../../lib/models/door_runtime_status.dart#L84) | <code>bool get commandEnabled =&gt;</code> | Komut gönderilebilir mi: (MQTT köprüsü VE cihaz bağlı) ya da (yerel kontrol token + IP var) |
 | [lib/models/door_runtime_status.dart:124](../../lib/models/door_runtime_status.dart#L124) | <code>DoorRuntimeStatus copyWithOffline() {</code> | Durum alınamadı ve yerelde de erişilemiyorsa son durum "çevrimdışı"ya çevrilir |
-| [lib/ui/pages/home_page.dart:2703](../../lib/ui/pages/home_page.dart#L2703) | <code>_doorRuntimeStatus = _doorRuntimeStatus!.copyWithOffline();</code> | Çağrı noktası (ekran): arka plan yoklaması hata verip yerel ulaşılamazsa çevrimdışı gösterilir |
+| [lib/ui/pages/home_page.dart:2712](../../lib/ui/pages/home_page.dart#L2712) | <code>_doorRuntimeStatus = _doorRuntimeStatus!.copyWithOffline();</code> | Çağrı noktası (ekran): arka plan yoklaması hata verip yerel ulaşılamazsa çevrimdışı gösterilir |
 | [lib/ui/pages/home_page.dart:333](../../lib/ui/pages/home_page.dart#L333) | <code>late final AdaptivePoller _statusPoller = AdaptivePoller(</code> | Durum yoklaması 3 sn aralıklı kurulur (görünür ve ön plandayken) |
 | [lib/services/adaptive_poller.dart:52](../../lib/services/adaptive_poller.dart#L52) | <code>Duration get currentDelay {</code> | Ardışık hatada aralık üstel artar (en çok 30 sn): hata sürerken durum geç güncellenir; başarıda 3 sn'ye döner |
 | [lib/services/adaptive_poller.dart:114](../../lib/services/adaptive_poller.dart#L114) | <code>if (active != null &amp;&amp; !active()) {</code> | Ekran görünür/ön planda değilse tur atlanır: ağ isteği yapılmaz |
@@ -1445,9 +1445,9 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/pdf_background_tes
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/ui/pages/home_page.dart:5120](../../lib/ui/pages/home_page.dart#L5120) | <code>_fetchLogsForPdf({</code> | Çağrı noktası: kayıtlar sayfa sayfa alınır; hata olursa o ana kadarki kayıtlarla devam edilir (error alanı doldurulur) |
-| [lib/ui/pages/home_page.dart:5178](../../lib/ui/pages/home_page.dart#L5178) | <code>_showMessage('Çok sayıda kayıt var; rapor en yeni kayıtlarla sınırlandırıldı.');</code> | Sayfa üst sınırına ulaşılınca rapor kısıtlanır (eski kayıtlar PDF'e girmez) |
-| [lib/ui/pages/home_page.dart:5171](../../lib/ui/pages/home_page.dart#L5171) | <code>'${door.doorName} için son 7 güne ait kapı geçiş kaydı bulunamadı.',</code> | Rapor yalnız son 7 gün içindir; kayıt yoksa PDF üretilmez, bu mesaj gösterilir |
+| [lib/ui/pages/home_page.dart:5129](../../lib/ui/pages/home_page.dart#L5129) | <code>_fetchLogsForPdf({</code> | Çağrı noktası: kayıtlar sayfa sayfa alınır; hata olursa o ana kadarki kayıtlarla devam edilir (error alanı doldurulur) |
+| [lib/ui/pages/home_page.dart:5187](../../lib/ui/pages/home_page.dart#L5187) | <code>_showMessage('Çok sayıda kayıt var; rapor en yeni kayıtlarla sınırlandırıldı.');</code> | Sayfa üst sınırına ulaşılınca rapor kısıtlanır (eski kayıtlar PDF'e girmez) |
+| [lib/ui/pages/home_page.dart:5180](../../lib/ui/pages/home_page.dart#L5180) | <code>'${door.doorName} için son 7 güne ait kapı geçiş kaydı bulunamadı.',</code> | Rapor yalnız son 7 gün içindir; kayıt yoksa PDF üretilmez, bu mesaj gösterilir |
 | [lib/services/pdf_logs_service.dart:44](../../lib/services/pdf_logs_service.dart#L44) | <code>static Future&lt;Uint8List&gt; generateLogsPdf({</code> | PDF arka plan izolesinde derlenir; hata fırlarsa çağıran "Geçiş raporu PDF oluşturulurken hata:" gösterir |
 | [lib/services/pdf_logs_service.dart:85](../../lib/services/pdf_logs_service.dart#L85) | <code>int countGroup(String group) =&gt; logs.where((l) =&gt; l.triggerGroup == group).length;</code> | İstatistik kutuları tetik gruplarından (cloud/local/guest/voice/offline/other) hesaplanır |
 | [lib/services/pdf_logs_service.dart:33](../../lib/services/pdf_logs_service.dart#L33) | <code>await Printing.layoutPdf(</code> | Yazdır/kaydet/paylaş önizlemesi platform eklentisiyle açılır; eklenti yoksa (bazı masaüstü/web ortamları) istisna olur |
@@ -1487,7 +1487,7 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/pdf_background_tes
 | [lib/services/pdf_credentials_service.dart:152](../../lib/services/pdf_credentials_service.dart#L152) | <code>static Future&lt;void&gt; printOrShareSitePdf({</code> | Yazdır/kaydet önizlemesi (Printing.layoutPdf); dosya adı site adından türetilir |
 | [lib/services/pdf_credentials_service.dart:168](../../lib/services/pdf_credentials_service.dart#L168) | <code>static Future&lt;void&gt; shareSitePdf({</code> | Doğrudan paylaşım (Printing.sharePdf) |
 | [lib/services/pdf_credentials_service.dart:399](../../lib/services/pdf_credentials_service.dart#L399) | <code>'Kullanıcı Adı (Giriş)',</code> | Tablo sütunları: PIN sütunu YOK (migration 051: sunucu PIN saklamaz; PIN yalnız oluşturma / sıfırlamada bir kez gösterilir) |
-| [lib/ui/pages/home_page.dart:5096](../../lib/ui/pages/home_page.dart#L5096) | <code>await PdfCredentialsService.printOrShareSitePdf(</code> | Çağrı noktası (ana sayfa): site yapısı alındıktan sonra çağrılır |
+| [lib/ui/pages/home_page.dart:5105](../../lib/ui/pages/home_page.dart#L5105) | <code>await PdfCredentialsService.printOrShareSitePdf(</code> | Çağrı noktası (ana sayfa): site yapısı alındıktan sonra çağrılır |
 | [lib/services/auth_service.dart:2175](../../lib/services/auth_service.dart#L2175) | <code>Future&lt;(SiteStructureRecord?, String?)&gt; getSiteStructure({</code> | PDF'in veri kaynağı: site yapısı alınamazsa rapor üretilmez |
 
 **Olası nedenler**
@@ -1520,7 +1520,7 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/pdf_background_tes
 | [lib/services/pdf_device_firmware_service.dart:161](../../lib/services/pdf_device_firmware_service.dart#L161) | <code>final ver = (dev.firmwareVersion ?? 'Bilinmiyor').trim();</code> | Sürüm alanı boşsa "Bilinmiyor" kovasına düşer (cihaz sürümü hiç bildirmemiş) |
 | [lib/services/pdf_device_firmware_service.dart:35](../../lib/services/pdf_device_firmware_service.dart#L35) | <code>static String _targetKey(DeviceRecord d) =&gt; d.hardwareTarget ?? 'bilinmiyor';</code> | Donanım hedefi boşsa tüm cihazlar tek "bilinmiyor" hattında karşılaştırılır |
 | [lib/services/pdf_device_firmware_service.dart:141](../../lib/services/pdf_device_firmware_service.dart#L141) | <code>final onlineDevices = devices.where((d) =&gt; d.mqttConnected == true).length;</code> | Çevrimiçi sayısı mqttConnected alanından gelir |
-| [lib/ui/pages/home_page.dart:4724](../../lib/ui/pages/home_page.dart#L4724) | <code>await PdfDeviceFirmwareService.printOrShareFirmwareReportPdf(</code> | Çağrı noktası: latestTargetVersion VERİLMİYOR, bu yüzden en yüksek listedeki sürüm esas alınır |
+| [lib/ui/pages/home_page.dart:4733](../../lib/ui/pages/home_page.dart#L4733) | <code>await PdfDeviceFirmwareService.printOrShareFirmwareReportPdf(</code> | Çağrı noktası: latestTargetVersion VERİLMİYOR, bu yüzden en yüksek listedeki sürüm esas alınır |
 
 **Olası nedenler**
 - Listede hiçbir cihaz en güncel sürümde değilse hepsi "güncel" sayılabilir (en yüksek sürüm yine listeden)
