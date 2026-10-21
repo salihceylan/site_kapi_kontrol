@@ -735,8 +735,8 @@ describe('POST module-requests: hiz siniri', () => {
     return { res, passed };
   };
 
-  it('kullanici basina 10/saat: 11. istek 429 + Retry-After + retry_after_seconds; baska kullanici etkilenmez', () => {
-    for (let i = 0; i < 10; i += 1) {
+  it('kullanici basina 200/saat: 201. istek 429 + Retry-After + retry_after_seconds; baska kullanici etkilenmez', () => {
+    for (let i = 0; i < 200; i += 1) {
       assert.equal(run(111).passed, true, String(i));
     }
     const blocked = run(111);
@@ -748,8 +748,8 @@ describe('POST module-requests: hiz siniri', () => {
     assert.equal(run(222).passed, true);
   });
 
-  it('IP basina 100/saat (NAT arkasi toplu kilitlenmesin)', () => {
-    for (let i = 0; i < 100; i += 1) {
+  it('IP basina 500/saat (NAT arkasi toplu kilitlenmesin)', () => {
+    for (let i = 0; i < 500; i += 1) {
       assert.equal(run(1000 + i, '9.9.9.9').passed, true, String(i));
     }
     assert.equal(run(5000, '9.9.9.9').res.statusCode, 429);

@@ -24,13 +24,14 @@ import { HOUR_MS, ipKey, resolveManagedSite, respondError, userKey } from './rou
 
 export const moduleRequestRouter = express.Router();
 
-// POST module-requests: kullanıcı başına 10/saat (sözleşme). Her talep audit_log satırı ve süper kullanıcılara e-posta
-// üretir; döngüyle talep/geri çekme ile denetim kaydı şişirilmesin ve süper kullanıcı gelen kutusu doldurulmasın.
+// POST module-requests: kullanıcı başına 200/saat (2026-10-22: site yöneticisi sınırlanmasın; önceki 10/saat gerçek kullanımda
+// "çok fazla talep" veriyordu). Her talep audit_log satırı ve süper kullanıcılara e-posta üretir; yalnız betikle döngüye giren
+// hesap denetim kaydını ve süper kullanıcı gelen kutusunu şişirmesin diye yüksek bir üst sınır kalır.
 // IP kuralı NAT arkasındaki birçok site yöneticisini toplu kilitlemesin diye geniştir.
 export const moduleRequestLimiter = createRuleLimiter({
   rules: [
-    { windowMs: HOUR_MS, max: 10, key: userKey },
-    { windowMs: HOUR_MS, max: 100, key: ipKey },
+    { windowMs: HOUR_MS, max: 200, key: userKey },
+    { windowMs: HOUR_MS, max: 500, key: ipKey },
   ],
   message: 'Çok fazla modül talebi. Biraz sonra tekrar deneyin.',
   includeRetryBody: true,
