@@ -1186,7 +1186,7 @@ export default {
         { file: 'lib/ui/pages/home_page.dart', find: 'fillColor: Colors.grey.shade50,',
           note: 'Koyu temada açık gri dolgu üzerinde palet metni değil sabit koyu metin kullanılır' },
         { file: 'lib/ui/pages/home_page.dart', find: 'Future<void> _approveDeleteSite(SiteRecord site) async {',
-          note: 'Silme onayı penceresi: düz AlertDialog + Colors.red düğme (AppDialog/palet kullanılmıyor)' },
+          note: 'Silme onayı penceresi: düz AlertDialog (AppDialog değil); onay düğmesi tehlike stili filledToneStyle(ctx, tone: AppTone.danger), beyaz metin 4,70:1' },
       ],
       causes: [
         'Bu pencereler AppDialog/palet yerine elle yazılmış sabit renklerle çizilir; açık zeminli kutular koyu temada parlak kalır',

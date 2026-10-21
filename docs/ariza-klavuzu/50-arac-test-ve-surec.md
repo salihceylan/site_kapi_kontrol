@@ -857,11 +857,11 @@ flutter test test/screens/login_layout_test.dart
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [test/design/app_snack_test.dart:486](../../test/design/app_snack_test.dart#L486) | <code>// Not: flutter test'in Ahem yazı tipinde her harf 1 em genişliğindedir (gerçek yazı tipl…</code> | Ahem: her harf 1 em genişlikte (gerçek yazı tiplerinin ~2 katı); matris bilerek kötü durumu sınar |
+| [test/design/app_snack_test.dart:516](../../test/design/app_snack_test.dart#L516) | <code>// Not: flutter test'in Ahem yazı tipinde her harf 1 em genişliğindedir (gerçek yazı tipl…</code> | Ahem: her harf 1 em genişlikte (gerçek yazı tiplerinin ~2 katı); matris bilerek kötü durumu sınar |
 | [test/screens/login_layout_test.dart:10](../../test/screens/login_layout_test.dart#L10) | <code>// Not: widget testleri Ahem yazı tipiyle çalışır (her harf 1 em genişliğinde): satır sar…</code> | Geçen taşma testi gerçek yazı tipinde de geçer; satır sarma testte gerçek cihazdan serttir |
 | [test/screens/home_shell_layout_test.dart:848](../../test/screens/home_shell_layout_test.dart#L848) | <code>// 400 dp x1,3: test yazı tipinde (Ahem: harf = punto) uzun etiket sığmaz; gerçek yazı ti…</code> | 400 dp x1.3'te uzun etiket testte sığmaz, gerçek yazı tipinde sığar (iddia buna göre yazılmış) |
-| [test/design/app_dialog_test.dart:453](../../test/design/app_dialog_test.dart#L453) | <code>// Test yazı tipi (Ahem) gerçek yazı tipinden ~2 kat geniştir: 320 x 2,0'da yalnız üst sı…</code> | 320 x 2.0'da yalnız üst sınır sınanır |
-| [test/voice_live_banner_test.dart:596](../../test/voice_live_banner_test.dart#L596) | <code>// Ahem'de her harf 1 em: gerçek yazı tiplerinden ~2 kat geniş; yalnız taşma/hata olmamas…</code> | Yalnız taşma/hata olmaması sınanır |
+| [test/design/app_dialog_test.dart:454](../../test/design/app_dialog_test.dart#L454) | <code>// Test yazı tipi (Ahem) gerçek yazı tipinden ~2 kat geniştir: 320 x 2,0'da yalnız üst sı…</code> | 320 x 2.0'da yalnız üst sınır sınanır |
+| [test/voice_live_banner_test.dart:594](../../test/voice_live_banner_test.dart#L594) | <code>// Ahem'de her harf 1 em: gerçek yazı tiplerinden ~2 kat geniş; yalnız taşma/hata olmamas…</code> | Yalnız taşma/hata olmaması sınanır |
 
 **Olası nedenler**
 - Flutter test ortamı Ahem yazı tipini kullanır: satır sarma/genişlik gerçekten daha kötüdür

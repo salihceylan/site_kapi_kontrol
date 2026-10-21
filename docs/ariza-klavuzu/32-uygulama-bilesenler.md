@@ -184,13 +184,15 @@ Bu bölüm lib/ui/design (jeton, hareket, kart, düğme, rozet, iskelet, geri sa
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/ui/design/status_chip.dart:18](../../lib/ui/design/status_chip.dart#L18) | <code>class StatusChip extends StatefulWidget {</code> | Rozet: tone (renk), label, isteğe bağlı icon ve pulse |
-| [lib/ui/design/status_chip.dart:177](../../lib/ui/design/status_chip.dart#L177) | <code>color: tone.tint(p),</code> | Zemin tonu paletten gelir; metin ve nokta tone.ink(p) kullanır |
-| [lib/ui/design/status_chip.dart:194](../../lib/ui/design/status_chip.dart#L194) | <code>overflow: TextOverflow.ellipsis,</code> | Etiket tek satır + elips: dar alanda kısalır |
-| [lib/ui/design/tokens.dart:303](../../lib/ui/design/tokens.dart#L303) | <code>Color ink(AppPalette p) =&gt; p.isDark ? inkDark : inkLight;</code> | Metin/ikon rengi: açıkta koyu, koyuda açık ton |
+| [lib/ui/design/status_chip.dart:23](../../lib/ui/design/status_chip.dart#L23) | <code>class StatusChip extends StatefulWidget {</code> | Rozet: tone (renk), label, isteğe bağlı icon ve pulse |
+| [lib/ui/design/status_chip.dart:153](../../lib/ui/design/status_chip.dart#L153) | <code>decoration: StatusDot.decorationOf(tone, p),</code> | Sade stil (İP-1C, G7): rozetin zemini ve kenarı boyanmaz; renk yalnız noktadadır (StatusDot), etiket gövde metni renginde |
+| [lib/ui/design/status_chip.dart:186](../../lib/ui/design/status_chip.dart#L186) | <code>overflow: TextOverflow.ellipsis,</code> | Etiket tek satır + elips: dar alanda kısalır |
+| [lib/ui/design/tokens.dart:421](../../lib/ui/design/tokens.dart#L421) | <code>Color get dot =&gt; isStatus ? hue : neutral.hue;</code> | Nokta rengi: yalnız tamam / bekliyor / kritik tonları renkli; öteki tonlar (bilgi, birincil, rol) nötr gri |
+| [lib/ui/design/tokens.dart:424](../../lib/ui/design/tokens.dart#L424) | <code>Color sign(AppPalette p) =&gt; isStatus ? ink(p) : p.textSecondary;</code> | İkon rengi: durum tonlarında tonun ink rengi, ötekilerde gövde metni rengi |
 
 **Olası nedenler**
 - Çağıran yanlış AppTone verdi (çevrimiçi = success, yerel ağ = warning, çevrimdışı = danger)
+- Durum olmayan ton (bilgi, birincil, rol tonu) verildi: nokta bilerek nötr gridir (sade stil)
 - Hareket azaltma açık: nabız bilerek kapalı
 - pulse true iken icon verilirse nokta öncelik alır, ikon görünmez
 
@@ -207,9 +209,9 @@ Bu bölüm lib/ui/design (jeton, hareket, kart, düğme, rozet, iskelet, geri sa
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/ui/design/status_chip.dart:77](../../lib/ui/design/status_chip.dart#L77) | <code>..repeat(count: _pings);</code> | Nabız 3 tur atar ve durur (kararlı durumda ticker yok) |
-| [lib/ui/design/status_chip.dart:66](../../lib/ui/design/status_chip.dart#L66) | <code>if (widget.pulse != oldWidget.pulse) _sync();</code> | false -> true geçişinde nabız yeniden başlar |
-| [lib/ui/design/status_chip.dart:98](../../lib/ui/design/status_chip.dart#L98) | <code>if (!c.isAnimating) return const SizedBox.shrink();</code> | Animasyon bitince halka ağaçta iz bırakmaz |
+| [lib/ui/design/status_chip.dart:82](../../lib/ui/design/status_chip.dart#L82) | <code>..repeat(count: _pings);</code> | Nabız 3 tur atar ve durur (kararlı durumda ticker yok) |
+| [lib/ui/design/status_chip.dart:71](../../lib/ui/design/status_chip.dart#L71) | <code>if (widget.pulse != oldWidget.pulse) _sync();</code> | false -> true geçişinde nabız yeniden başlar |
+| [lib/ui/design/status_chip.dart:103](../../lib/ui/design/status_chip.dart#L103) | <code>if (!c.isAnimating) return const SizedBox.shrink();</code> | Animasyon bitince halka ağaçta iz bırakmaz |
 
 **Olası nedenler**
 - Nabız tasarım gereği 3 tur sonra durur; sürekli atması beklenmemeli
@@ -227,15 +229,16 @@ Bu bölüm lib/ui/design (jeton, hareket, kart, düğme, rozet, iskelet, geri sa
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/ui/design/app_snack.dart:60](../../lib/ui/design/app_snack.dart#L60) | <code>final messenger = ScaffoldMessenger.maybeOf(context);</code> | Messenger yoksa mesaj sessizce yutulur |
-| [lib/ui/design/app_snack.dart:73](../../lib/ui/design/app_snack.dart#L73) | <code>messenger.clearSnackBars();</code> | replace true ise sıradakiler atılır ve mesaj hemen gösterilir; false ise kuyruğa girer |
-| [lib/ui/design/app_snack.dart:27](../../lib/ui/design/app_snack.dart#L27) | <code>static const Duration defaultDuration = Duration(seconds: 4);</code> | Varsayılan süre 4 sn |
-| [lib/ui/design/app_snack.dart:89](../../lib/ui/design/app_snack.dart#L89) | <code>final (Color? background, IconData icon) = switch (kind) {</code> | Tür -> dolgu rengi ve simge eşlemesi |
+| [lib/ui/design/app_snack.dart:62](../../lib/ui/design/app_snack.dart#L62) | <code>final messenger = ScaffoldMessenger.maybeOf(context);</code> | Messenger yoksa mesaj sessizce yutulur |
+| [lib/ui/design/app_snack.dart:75](../../lib/ui/design/app_snack.dart#L75) | <code>messenger.clearSnackBars();</code> | replace true ise sıradakiler atılır ve mesaj hemen gösterilir; false ise kuyruğa girer |
+| [lib/ui/design/app_snack.dart:29](../../lib/ui/design/app_snack.dart#L29) | <code>static const Duration defaultDuration = Duration(seconds: 4);</code> | Varsayılan süre 4 sn |
+| [lib/ui/design/app_snack.dart:92](../../lib/ui/design/app_snack.dart#L92) | <code>final (Color iconColor, IconData icon) = switch (kind) {</code> | Tür -> simge ve simge rengi; dolgu her türde aynı koyu tema yüzeyidir (sade stil, İP-1C) |
 
 **Olası nedenler**
 - context ağaçta ScaffoldMessenger yok ya da await sonrası context ölü (mounted kontrolü yok)
 - Önceki mesajlar kuyrukta: yenisi sıra bekler (replace: true ile hemen gösterilir)
 - Kapı açma gibi akışta mesaj başka bir kod yolundan (elle SnackBar) veriliyor
+- "Yanlış renk" sanılan durum: sade stilde başarı / hata dolgusu boyanmaz; tür simgeden ve simge renginden anlaşılır
 
 **Adım adım kontrol**
 - Çağıranda await sonrası mounted kontrolü var mı bakın
@@ -250,8 +253,8 @@ Bu bölüm lib/ui/design (jeton, hareket, kart, düğme, rozet, iskelet, geri sa
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/ui/design/app_snack.dart:57](../../lib/ui/design/app_snack.dart#L57) | <code>int maxLines = 4,</code> | Varsayılan 4 satır; uzun cümle için çağıran artırabilir |
-| [lib/ui/design/app_snack.dart:147](../../lib/ui/design/app_snack.dart#L147) | <code>static SnackBarAction _readableAction(SnackBarAction action) {</code> | Tonlu dolguda renksiz eylemin rengi beyaz yapılır |
+| [lib/ui/design/app_snack.dart:59](../../lib/ui/design/app_snack.dart#L59) | <code>int maxLines = 4,</code> | Varsayılan 4 satır; uzun cümle için çağıran artırabilir |
+| [lib/styles/app_theme.dart:206](../../lib/styles/app_theme.dart#L206) | <code>actionTextColor: AppPalette.dark.link,</code> | Renk verilmemiş eylem etiketi temadan bağlantı mavisini alır (koyu bildirim yüzeyinde okunur) |
 
 **Olası nedenler**
 - Mesaj 4 satırdan uzun
@@ -368,7 +371,7 @@ Bu bölüm lib/ui/design (jeton, hareket, kart, düğme, rozet, iskelet, geri sa
 | --- | --- | --- |
 | [lib/styles/role_theme.dart:6](../../lib/styles/role_theme.dart#L6) | <code>Color get accentColor {</code> | Rol -> canlı vurgu rengi (tint/kenar/şerit için) |
 | [lib/styles/role_theme.dart:53](../../lib/styles/role_theme.dart#L53) | <code>Color inkColor(AppPalette palette) =&gt; tone.ink(palette);</code> | Rol rengini METİN olarak kullanmak için kontrastlı ton |
-| [lib/ui/design/tokens.dart:312](../../lib/ui/design/tokens.dart#L312) | <code>UserRole.superUser =&gt; AppTone.primary,</code> | Rol -> AppTone köprüsü; accentColor ile aynı hue olmalı |
+| [lib/ui/design/tokens.dart:430](../../lib/ui/design/tokens.dart#L430) | <code>UserRole.superUser =&gt; AppTone.primary,</code> | Rol -> AppTone köprüsü; accentColor ile aynı hue olmalı |
 
 **Olası nedenler**
 - accentColor metin rengi olarak kullanılmış: açık zeminde kontrast yetersiz (inkColor kullanılmalı)
@@ -386,10 +389,10 @@ Bu bölüm lib/ui/design (jeton, hareket, kart, düğme, rozet, iskelet, geri sa
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/ui/design/app_card.dart:35](../../lib/ui/design/app_card.dart#L35) | <code>class AppCard extends StatelessWidget {</code> | Tüm kart yüzeylerinin tek karşılığı; child e sabit yükseklik verilmez |
-| [lib/ui/design/app_card.dart:160](../../lib/ui/design/app_card.dart#L160) | <code>constraints: const BoxConstraints(minHeight: 48),</code> | onTap varsa en az 48 dp dokunma hedefi |
-| [lib/ui/design/app_card.dart:72](../../lib/ui/design/app_card.dart#L72) | <code>int get _effectiveLevel =&gt; selected &amp;&amp; level &lt; 2 ? 2 : level;</code> | Seçili kart en az seviye 2 gölgeyle çizilir |
-| [lib/ui/design/app_card.dart:149](../../lib/ui/design/app_card.dart#L149) | <code>child: ColoredBox(color: bar),</code> | accentBar: üstte 3 dp rol/ton şeridi (düzeni değiştirmez) |
+| [lib/ui/design/app_card.dart:33](../../lib/ui/design/app_card.dart#L33) | <code>class AppCard extends StatelessWidget {</code> | Tüm kart yüzeylerinin tek karşılığı; child e sabit yükseklik verilmez |
+| [lib/ui/design/app_card.dart:111](../../lib/ui/design/app_card.dart#L111) | <code>constraints: const BoxConstraints(minHeight: 48),</code> | onTap varsa en az 48 dp dokunma hedefi |
+| [lib/ui/design/app_card.dart:70](../../lib/ui/design/app_card.dart#L70) | <code>int get _effectiveLevel =&gt; selected &amp;&amp; level &lt; 2 ? 2 : level;</code> | Seçili kart en az seviye 2 gölgeyle çizilir |
+| [lib/ui/design/app_card.dart:100](../../lib/ui/design/app_card.dart#L100) | <code>child: ColoredBox(color: bar),</code> | accentBar: üstte 3 dp rol/ton şeridi (düzeni değiştirmez) |
 
 **Olası nedenler**
 - Kart sınırsız genişlikli üst öğede (örn. Scaffold gövdesi) kullanılmış: içeriği kadar dar kalır
@@ -409,9 +412,9 @@ Bu bölüm lib/ui/design (jeton, hareket, kart, düğme, rozet, iskelet, geri sa
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/ui/design/app_card.dart:213](../../lib/ui/design/app_card.dart#L213) | <code>class SectionHeader extends StatelessWidget {</code> | Başlık + sayaç + eylem; başlık en çok 3 satır |
-| [lib/ui/design/app_card.dart:333](../../lib/ui/design/app_card.dart#L333) | <code>static const double _inlineFraction = 0.4;</code> | trailing genişliğin %40 ından büyükse başlığın altına düşer |
-| [lib/ui/design/app_card.dart:328](../../lib/ui/design/app_card.dart#L328) | <code>class _RenderHeaderFlow extends RenderBox</code> | Özel yerleşim: başlık ile rozet birlikte alt satıra iner |
+| [lib/ui/design/app_card.dart:155](../../lib/ui/design/app_card.dart#L155) | <code>class SectionHeader extends StatelessWidget {</code> | Başlık + sayaç + eylem; başlık en çok 3 satır |
+| [lib/ui/design/app_card.dart:275](../../lib/ui/design/app_card.dart#L275) | <code>static const double _inlineFraction = 0.4;</code> | trailing genişliğin %40 ından büyükse başlığın altına düşer |
+| [lib/ui/design/app_card.dart:270](../../lib/ui/design/app_card.dart#L270) | <code>class _RenderHeaderFlow extends RenderBox</code> | Özel yerleşim: başlık ile rozet birlikte alt satıra iner |
 
 **Olası nedenler**
 - trailing en çok 2 IconButton ya da 1 TextButton olmalı; daha genişi altına düşer
@@ -430,9 +433,9 @@ Bu bölüm lib/ui/design (jeton, hareket, kart, düğme, rozet, iskelet, geri sa
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/ui/design/app_card.dart:481](../../lib/ui/design/app_card.dart#L481) | <code>class InlineNotice extends StatelessWidget {</code> | İkon + metin; ton ve isteğe bağlı onRetry alır |
-| [lib/ui/design/app_card.dart:523](../../lib/ui/design/app_card.dart#L523) | <code>liveRegion: true,</code> | Hata/başarı kutusu canlı bölge: ekran okuyucu değişince okur |
-| [lib/ui/design/app_card.dart:554](../../lib/ui/design/app_card.dart#L554) | <code>label: const Text('Tekrar Dene'),</code> | Düğme yalnız onRetry verilirse gösterilir |
+| [lib/ui/design/app_card.dart:424](../../lib/ui/design/app_card.dart#L424) | <code>class InlineNotice extends StatelessWidget {</code> | İkon + metin; ton ve isteğe bağlı onRetry alır |
+| [lib/ui/design/app_card.dart:466](../../lib/ui/design/app_card.dart#L466) | <code>liveRegion: true,</code> | Hata/başarı kutusu canlı bölge: ekran okuyucu değişince okur |
+| [lib/ui/design/app_card.dart:499](../../lib/ui/design/app_card.dart#L499) | <code>label: const Text('Tekrar Dene'),</code> | Düğme yalnız onRetry verilirse gösterilir |
 
 **Olası nedenler**
 - Çağıran onRetry vermemiş
@@ -450,10 +453,10 @@ Bu bölüm lib/ui/design (jeton, hareket, kart, düğme, rozet, iskelet, geri sa
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/ui/design/buttons.dart:185](../../lib/ui/design/buttons.dart#L185) | <code>final canTap = onPressed != null &amp;&amp; !loading &amp;&amp; !success;</code> | Düğme yalnız onPressed doluyken, yükleme ve başarı yokken dokunulur |
-| [lib/ui/design/buttons.dart:285](../../lib/ui/design/buttons.dart#L285) | <code>HapticFeedback.selectionClick();</code> | Her basışta hafif titreşim, sonra onPressed çağrılır |
-| [lib/ui/design/buttons.dart:183](../../lib/ui/design/buttons.dart#L183) | <code>final t = success ? AppTone.success : widget.tone;</code> | success true olunca ton yeşile döner ve onay simgesi çıkar |
-| [lib/ui/design/buttons.dart:195](../../lib/ui/design/buttons.dart#L195) | <code>child: CircularProgressIndicator(strokeWidth: 2.5, color: fg),</code> | loading true iken dönen gösterge; çağıran false a döndürmezse sonsuz kalır |
+| [lib/ui/design/buttons.dart:158](../../lib/ui/design/buttons.dart#L158) | <code>final canTap = onPressed != null &amp;&amp; !loading &amp;&amp; !success;</code> | Düğme yalnız onPressed doluyken, yükleme ve başarı yokken dokunulur |
+| [lib/ui/design/buttons.dart:230](../../lib/ui/design/buttons.dart#L230) | <code>HapticFeedback.selectionClick();</code> | Her basışta hafif titreşim, sonra onPressed çağrılır |
+| [lib/ui/design/buttons.dart:154](../../lib/ui/design/buttons.dart#L154) | <code>final t = success ? AppTone.success : tone;</code> | success true olunca ton yeşile döner ve onay simgesi çıkar |
+| [lib/ui/design/buttons.dart:168](../../lib/ui/design/buttons.dart#L168) | <code>child: CircularProgressIndicator(strokeWidth: 2.5, color: fg),</code> | loading true iken dönen gösterge; çağıran false a döndürmezse sonsuz kalır |
 
 **Olası nedenler**
 - Çağıran loading değerini işlem bitince false yapmıyor (hata dalında unutulmuş olabilir)
@@ -472,9 +475,9 @@ Bu bölüm lib/ui/design (jeton, hareket, kart, düğme, rozet, iskelet, geri sa
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/ui/design/buttons.dart:20](../../lib/ui/design/buttons.dart#L20) | <code>class PressableScale extends StatefulWidget {</code> | Basılıyken 0,97 ölçek (varsayılan) uygular |
-| [lib/ui/design/buttons.dart:63](../../lib/ui/design/buttons.dart#L63) | <code>onTapCancel: () =&gt; _set(false),</code> | İptal edilen dokunuşta ölçek geri döner |
-| [lib/ui/design/buttons.dart:52](../../lib/ui/design/buttons.dart#L52) | <code>if (!widget.enabled &amp;&amp; _down) _down = false;</code> | Devre dışı kalınca basılı durumu sıfırlanır |
+| [lib/ui/design/buttons.dart:19](../../lib/ui/design/buttons.dart#L19) | <code>class PressableScale extends StatefulWidget {</code> | Basılıyken 0,97 ölçek (varsayılan) uygular |
+| [lib/ui/design/buttons.dart:62](../../lib/ui/design/buttons.dart#L62) | <code>onTapCancel: () =&gt; _set(false),</code> | İptal edilen dokunuşta ölçek geri döner |
+| [lib/ui/design/buttons.dart:51](../../lib/ui/design/buttons.dart#L51) | <code>if (!widget.enabled &amp;&amp; _down) _down = false;</code> | Devre dışı kalınca basılı durumu sıfırlanır |
 
 **Olası nedenler**
 - enabled false iken efekt bilerek yok
@@ -513,9 +516,9 @@ Bu bölüm lib/ui/design (jeton, hareket, kart, düğme, rozet, iskelet, geri sa
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/ui/design/app_dialog.dart:107](../../lib/ui/design/app_dialog.dart#L107) | <code>class AppDialog extends StatelessWidget {</code> | Başlık şeridi + içerik + eylem satırı şablonu |
-| [lib/ui/design/app_dialog.dart:133](../../lib/ui/design/app_dialog.dart#L133) | <code>scrollable: true,</code> | İçerik kaydırılabilir: uzun içerik taşma yerine kayar |
-| [lib/ui/design/app_dialog.dart:147](../../lib/ui/design/app_dialog.dart#L147) | <code>content: SizedBox(width: dialogWidthForScreen(context), child: child),</code> | Genişlik ui_helpers.dialogWidthForScreen ten gelir |
+| [lib/ui/design/app_dialog.dart:106](../../lib/ui/design/app_dialog.dart#L106) | <code>class AppDialog extends StatelessWidget {</code> | Başlık şeridi + içerik + eylem satırı şablonu |
+| [lib/ui/design/app_dialog.dart:132](../../lib/ui/design/app_dialog.dart#L132) | <code>scrollable: true,</code> | İçerik kaydırılabilir: uzun içerik taşma yerine kayar |
+| [lib/ui/design/app_dialog.dart:146](../../lib/ui/design/app_dialog.dart#L146) | <code>content: SizedBox(width: dialogWidthForScreen(context), child: child),</code> | Genişlik ui_helpers.dialogWidthForScreen ten gelir |
 | [lib/ui/design/app_dialog.dart:15](../../lib/ui/design/app_dialog.dart#L15) | <code>class AppDialogHeader extends StatelessWidget {</code> | İkon karosu + en çok 3 satır başlık + alt başlık |
 
 **Olası nedenler**
@@ -554,9 +557,9 @@ Bu bölüm lib/ui/design (jeton, hareket, kart, düğme, rozet, iskelet, geri sa
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/styles/app_decorations.dart:33](../../lib/styles/app_decorations.dart#L33) | <code>static BoxDecoration pageBackground(BuildContext context) =&gt;</code> | Tema parlaklığına göre koyu/açık zemin gradyanı |
-| [lib/styles/app_decorations.dart:55](../../lib/styles/app_decorations.dart#L55) | <code>static BoxDecoration glassCard(BuildContext context) =&gt;</code> | Palet yüzeyi, kenarlık ve seviye-1 gölgeli kart (eski cam kartın yerine) |
-| [lib/styles/app_decorations.dart:63](../../lib/styles/app_decorations.dart#L63) | <code>static BoxDecoration glowingBadge(Color accentColor, {bool isDark = true}) =&gt; BoxDecorati…</code> | Işıltılı rozet: isDark varsayılanı TRUE; açık temada false verilmezse koyu görünür |
+| [lib/styles/app_decorations.dart:16](../../lib/styles/app_decorations.dart#L16) | <code>static BoxDecoration pageBackground(BuildContext context) =&gt;</code> | Tema parlaklığına göre DÜZ zemin (açıkta #F8FAFC, koyuda #0F172A; sade stil G6: degrade ve ışıma yok) |
+| [lib/styles/app_decorations.dart:37](../../lib/styles/app_decorations.dart#L37) | <code>static BoxDecoration glassCard(BuildContext context) =&gt;</code> | Palet yüzeyi + 1 px palet kenarı, GÖLGESİZ kart (sade stil; eski cam kartın yerine, ad aynı) |
+| [lib/styles/app_decorations.dart:45](../../lib/styles/app_decorations.dart#L45) | <code>static BoxDecoration glowingBadge(Color accentColor, {bool isDark = true}) =&gt; BoxDecorati…</code> | Kapsül rozet (adı eski; sade stilde ışıma yok): isDark varsayılanı TRUE; açık temada false verilmezse koyu tema saydamlığıyla çizilir |
 
 **Olası nedenler**
 - glowingBadge çağrısında isDark verilmemiş: açık temada koyu rozet tonu
@@ -575,7 +578,7 @@ Bu bölüm lib/ui/design (jeton, hareket, kart, düğme, rozet, iskelet, geri sa
 | [lib/styles/app_colors.dart:58](../../lib/styles/app_colors.dart#L58) | <code>static bool isDark(BuildContext context) =&gt;</code> | Tema duyarlı yardımcıların kökü |
 | [lib/styles/app_colors.dart:67](../../lib/styles/app_colors.dart#L67) | <code>static Color textMutedColor(BuildContext context) =&gt;</code> | Soluk metin: koyuda açık gri, açıkta slate |
 | [lib/styles/app_colors.dart:47](../../lib/styles/app_colors.dart#L47) | <code>static const Color textMuted = Color(0xFF64748B);</code> | Sabit renk: koyu zeminde düşük kontrast; context yardımcısı tercih edilmeli |
-| [lib/ui/design/tokens.dart:58](../../lib/ui/design/tokens.dart#L58) | <code>class AppPalette extends ThemeExtension&lt;AppPalette&gt; {</code> | Yeni kod bu palete (context.palette) bağlanmalı; AppColors eski yüzeydir |
+| [lib/ui/design/tokens.dart:64](../../lib/ui/design/tokens.dart#L64) | <code>class AppPalette extends ThemeExtension&lt;AppPalette&gt; {</code> | Yeni kod bu palete (context.palette) bağlanmalı; AppColors eski yüzeydir |
 
 **Olası nedenler**
 - Bileşen sabit AppColors.* kullanıyor, context.palette ya da AppColors.xxx(context) kullanmıyor
@@ -722,9 +725,9 @@ Bu bölüm lib/ui/design (jeton, hareket, kart, düğme, rozet, iskelet, geri sa
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
 | [lib/ui/widgets/list_parts.dart:18](../../lib/ui/widgets/list_parts.dart#L18) | <code>bool isLargeText(BuildContext context) =&gt;</code> | Yazı ölçeği 1,75 ve üstüyse true: avatar ve ikon karosu gizlenir |
-| [lib/ui/widgets/list_parts.dart:252](../../lib/ui/widgets/list_parts.dart#L252) | <code>class InitialAvatar extends StatelessWidget {</code> | Adın ilk harfi (boşsa "?"); büyük yazıda hiç çizilmez |
-| [lib/ui/widgets/list_parts.dart:298](../../lib/ui/widgets/list_parts.dart#L298) | <code>class IconTile extends StatelessWidget {</code> | Yuvarlak tonlu ikon karosu; büyük yazıda gizlenir |
-| [lib/ui/widgets/list_parts.dart:201](../../lib/ui/widgets/list_parts.dart#L201) | <code>class PaginationBar extends StatelessWidget {</code> | Önceki/sonraki okları 44 dp; onPrevious/onNext null ise ok devre dışı |
+| [lib/ui/widgets/list_parts.dart:254](../../lib/ui/widgets/list_parts.dart#L254) | <code>class InitialAvatar extends StatelessWidget {</code> | Adın ilk harfi (boşsa "?"); büyük yazıda hiç çizilmez |
+| [lib/ui/widgets/list_parts.dart:309](../../lib/ui/widgets/list_parts.dart#L309) | <code>class IconTile extends StatelessWidget {</code> | Yuvarlak tonlu ikon karosu; büyük yazıda gizlenir |
+| [lib/ui/widgets/list_parts.dart:199](../../lib/ui/widgets/list_parts.dart#L199) | <code>class PaginationBar extends StatelessWidget {</code> | Önceki/sonraki okları 44 dp; onPrevious/onNext null ise ok devre dışı |
 | [lib/ui/widgets/list_parts.dart:22](../../lib/ui/widgets/list_parts.dart#L22) | <code>EdgeInsets listCardPadding(BuildContext context) =&gt; EdgeInsets.all(</code> | 360 dp altı ekranda kart dolgusu 12, değilse 16 |
 
 **Olası nedenler**
@@ -764,8 +767,8 @@ Bu bölüm lib/ui/design (jeton, hareket, kart, düğme, rozet, iskelet, geri sa
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/ui/widgets/list_parts.dart:334](../../lib/ui/widgets/list_parts.dart#L334) | <code>class ListSkeleton extends StatelessWidget {</code> | rows adet satır; kendi ShimmerScope unu kurar, çağıran yüklenince ağaçtan çıkarmalı |
-| [lib/ui/widgets/list_parts.dart:388](../../lib/ui/widgets/list_parts.dart#L388) | <code>class EmptyCard extends StatelessWidget {</code> | Boş liste kartı: EmptyState + isteğe bağlı alt çocuk |
+| [lib/ui/widgets/list_parts.dart:345](../../lib/ui/widgets/list_parts.dart#L345) | <code>class ListSkeleton extends StatelessWidget {</code> | rows adet satır; kendi ShimmerScope unu kurar, çağıran yüklenince ağaçtan çıkarmalı |
+| [lib/ui/widgets/list_parts.dart:399](../../lib/ui/widgets/list_parts.dart#L399) | <code>class EmptyCard extends StatelessWidget {</code> | Boş liste kartı: EmptyState + isteğe bağlı alt çocuk |
 | [lib/ui/widgets/list_parts.dart:34](../../lib/ui/widgets/list_parts.dart#L34) | <code>class PageHeaderCard extends StatelessWidget {</code> | Başlık kartı; 680 dp altında eylem başlığın altına iner |
 
 **Olası nedenler**
@@ -782,9 +785,9 @@ Bu bölüm lib/ui/design (jeton, hareket, kart, düğme, rozet, iskelet, geri sa
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/ui/widgets/list_parts.dart:439](../../lib/ui/widgets/list_parts.dart#L439) | <code>ButtonStyle tonalActionStyle(</code> | Tonlu zeminli outlined düğme; minimum yükseklik 44 |
-| [lib/ui/widgets/list_parts.dart:480](../../lib/ui/widgets/list_parts.dart#L480) | <code>ButtonStyle dangerOutlineStyle(BuildContext context) {</code> | Silme/ret düğmesi: danger tonlu kenar |
-| [lib/ui/widgets/list_parts.dart:501](../../lib/ui/widgets/list_parts.dart#L501) | <code>ButtonStyle filledToneStyle(</code> | Düz dolgu, gölgesiz tonlu düğme (Onayla) |
+| [lib/ui/widgets/list_parts.dart:448](../../lib/ui/widgets/list_parts.dart#L448) | <code>ButtonStyle tonalActionStyle(</code> | Tonlu zeminli outlined düğme; minimum yükseklik 44 |
+| [lib/ui/widgets/list_parts.dart:477](../../lib/ui/widgets/list_parts.dart#L477) | <code>ButtonStyle dangerOutlineStyle(BuildContext context) {</code> | Silme/ret düğmesi: danger tonlu kenar |
+| [lib/ui/widgets/list_parts.dart:500](../../lib/ui/widgets/list_parts.dart#L500) | <code>ButtonStyle filledToneStyle(</code> | Düz dolgu, gölgesiz tonlu düğme (Onayla) |
 
 **Olası nedenler**
 - Çağıran bu stilleri kullanmayıp tema varsayılanını kullanmış
