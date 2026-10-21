@@ -1,6 +1,7 @@
 // Finans > Grafikler sekmesi: beş grafik kartı (aylık gelir-gider, aidat tahsilatı, kasa + banka seyri, gider kategorileri, geciken
 // borç yaşlandırması), "Tablo olarak göster" eşdeğeri, kayıt yok durumu, hata (asla "kayıt yok / 0" demez), erişilebilirlik ve
 // taşma matrisi (320 dp x 2,0 dahil, açık + koyu tema).
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:site_kapi_kontrol/models/finance_charts.dart';
@@ -51,7 +52,91 @@ Finder _table(String id) => find.byKey(ValueKey<String>('finance_chart_table_$id
 Finder _switch(String id) => find.byKey(ValueKey<String>('finance_chart_table_switch_$id'));
 Finder _empty(String id) => find.byKey(ValueKey<String>('finance_chart_empty_$id'));
 
+/// Yanıt gelip kartlar kurulana dek 1 ms'lik adımlarla ilerler (giriş animasyonu henüz ilk karesindedir).
+Future<void> _pumpUntilCards(WidgetTester t) async {
+  for (var i = 0; i < 100 && _card('aging').evaluate().isEmpty; i++) {
+    await t.pump(const Duration(milliseconds: 1));
+  }
+  expect(_card('aging'), findsOneWidget);
+}
+
+BarChartData _barData(WidgetTester t, String id) =>
+    t.widget<BarChart>(find.descendant(of: _chart(id), matching: find.byType(BarChart)).first).data;
+
+LineChartData _lineData(WidgetTester t, String id) =>
+    t.widget<LineChart>(find.descendant(of: _chart(id), matching: find.byType(LineChart)).first).data;
+
+/// 'Eylül 2026' çubuğu (gelir): fixture'da 1.000.000 kuruş = 10.000 lira.
+double _incomeBar(WidgetTester t) => _barData(t, 'income_expense').barGroups[10].barRods.first.toY;
+
+String _agingFirstAmount(WidgetTester t) => t
+    .widget<Text>(find.descendant(of: find.byKey(const ValueKey<String>('finance_chart_aging_0')), matching: find.textContaining('₺')))
+    .data!;
+
 void main() {
+  group('Grafikler: giriş animasyonu', () {
+    testWidgets('çubuklar alttan büyür, çizgi soldan çizilir, tutar sıfırdan sayar; bitince son değer; tablo dönüşünde yeniden oynamaz', (t) async {
+      final auth = FinanceFakeAuth.seeded();
+      await pumpList(t, FinanceChartsTab(scope: _scope(auth)), width: 400, height: 3000, scale: 1.0, dark: false);
+      await _pumpUntilCards(t);
+      // İlk kare: her şey sıfırdan başlar.
+      expect(_incomeBar(t), 0);
+      expect(_barData(t, 'income_expense').maxY, greaterThan(0), reason: 'eksen son değere sabit, çubuk büyür');
+      expect(_lineData(t, 'cash').lineBarsData, isEmpty, reason: 'ilk iki ay boş: çizgi henüz yok');
+      expect(_lineData(t, 'collection').lineBarsData.single.spots.length, lessThan(12));
+      expect(_agingFirstAmount(t), '0,00 ₺ · %0');
+      // Ortada: çubuk büyümüş ama tam değil.
+      await t.pump(const Duration(milliseconds: 300));
+      expect(_incomeBar(t), allOf(greaterThan(0), lessThan(10000)));
+      // Sonda: son değerler; sonsuz animasyon yok (pumpAndSettle biter).
+      await t.pump(const Duration(milliseconds: 1500));
+      await t.pumpAndSettle();
+      expect(_incomeBar(t), closeTo(10000, 1e-6));
+      expect(_lineData(t, 'collection').lineBarsData.single.spots, hasLength(12));
+      expect(_lineData(t, 'cash').lineBarsData.single.spots, hasLength(12));
+      expect(_agingFirstAmount(t), '4.000,00 ₺ · %50');
+      // "Tablo olarak göster" ve geri: animasyon yeniden oynamaz (450 ms sonra hâlâ tam değer).
+      await tapFinder(t, _switch('income_expense'));
+      await tapFinder(t, _switch('income_expense'));
+      expect(_chart('income_expense'), findsOneWidget);
+      expect(_incomeBar(t), closeTo(10000, 1e-6));
+    });
+
+    testWidgets('aynı veriyle yenileme animasyonu tekrar oynatmaz; veri değişince yeniden oynar', (t) async {
+      final auth = FinanceFakeAuth.seeded();
+      final key = GlobalKey<FinanceChartsTabState>();
+      await pumpList(t, FinanceChartsTab(key: key, scope: _scope(auth)), width: 400, height: 3000, scale: 1.0, dark: false);
+      await _pumpUntilCards(t);
+      await t.pump(const Duration(milliseconds: 1500));
+      await t.pumpAndSettle();
+      await key.currentState!.reload();
+      await settleFor(t, 100);
+      expect(_incomeBar(t), closeTo(10000, 1e-6), reason: 'veri aynı: tekrar oynamadı');
+      // Veri değişti: gelir çubuğu yeniden 0'dan büyür.
+      final json = f4ChartsJson();
+      ((json['months'] as List)[10] as Map<String, dynamic>)['collected_minor'] = 500000;
+      auth.f4.chartsJson = json;
+      await key.currentState!.reload();
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 1));
+      await t.pump(const Duration(milliseconds: 1));
+      expect(_incomeBar(t), lessThan(5000), reason: 'yeni veri (5.000 lira) için yeniden büyüyor');
+      await t.pump(const Duration(milliseconds: 1500));
+      await t.pumpAndSettle();
+      expect(_incomeBar(t), closeTo(5000, 1e-6));
+    });
+
+    testWidgets('hareketi azalt açıkken ilk karede son değer (animasyon yok)', (t) async {
+      final auth = FinanceFakeAuth.seeded();
+      await pumpList(t, FinanceChartsTab(scope: _scope(auth)), width: 400, height: 3000, scale: 1.0, dark: false, reduce: true);
+      await _pumpUntilCards(t);
+      expect(_incomeBar(t), closeTo(10000, 1e-6));
+      expect(_lineData(t, 'collection').lineBarsData.single.spots, hasLength(12));
+      expect(_lineData(t, 'cash').lineBarsData.single.spots, hasLength(12));
+      expect(_agingFirstAmount(t), '4.000,00 ₺ · %50');
+    });
+  });
+
   group('Grafikler: dolu', () {
     f4Matrix('beş kart, grafikler ve tablo anahtarları görünür', (t, w, h, s, dark) async {
       final auth = FinanceFakeAuth.seeded();
