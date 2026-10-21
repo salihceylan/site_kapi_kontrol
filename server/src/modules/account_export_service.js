@@ -371,7 +371,8 @@ const CONSENT_KEYS = ['id', 'document_id', 'version', 'accepted_at', 'source'];
 
 /** Test / QA için değiştirilebilir bağımlılık: makbuz listesi (sakin ucunun işlevi; yetki mantığı kopyalanmaz). */
 export const collectHooks = {
-  listReceipts: (userCode, client) => listMyReceipts({ user_code: userCode }, { limit: EXPORT_ROW_LIMITS.receipts }, client),
+  // İP-1A: yalnız kendi hesabı (both dairede malike salt okunur görünen kiracı hesabı başkasının verisidir).
+  listReceipts: (userCode, client) => listMyReceipts({ user_code: userCode }, { limit: EXPORT_ROW_LIMITS.receipts }, client, { ownOnly: true }),
 };
 
 /** Makbuz özeti -> dosya şekli: numara, tür, durum, tarihler, tutar (kuruş), daire. Ödeyen adı / yönetici adı / doğrulama kodu / anlık görüntü YOK. */
@@ -492,7 +493,8 @@ export async function collectPersonalData(userCode, { now = new Date(), db = poo
     }
 
     // Finans: Borcum'un kendi görünürlük kuralları (aynı bağlantı = aynı anlık görüntü).
-    const finance = await getMyFinance({ user_code: userCode }, now, client);
+    // İP-1A: yalnız kendi hesabı (ownOnly); salt okunur kiracı hesabı görünümü dosyaya girmez.
+    const finance = await getMyFinance({ user_code: userCode }, now, client, { ownOnly: true });
 
     await client.query('COMMIT');
     began = false;

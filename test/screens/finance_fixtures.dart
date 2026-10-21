@@ -88,9 +88,12 @@ Map<String, dynamic> finEntry(
   String? reason,
   String by = 'Site Yöneticisi',
   String createdAt = '2026-10-01T09:00:00.000Z',
+  String? account,
 }) => <String, dynamic>{
   'id': id,
   'apartment_id': apartmentId,
+  // İP-1A: satırın hesabı (owner | tenant); verilmezse sunucu gibi payer_party'den türetilir ([FinanceFakeAuth.accountOfRow])
+  'account_party': ?account,
   'kind': kind,
   'amount_minor': amount,
   'period': period,
@@ -212,6 +215,19 @@ class FinanceFakeAuth extends PeopleFakeAuth {
   /// Sakin ucunun yanıtı (`/app/my-finance` JSON'u).
   List<Map<String, dynamic>> myFinanceItems = <Map<String, dynamic>>[];
 
+  /// İP-1A: iki hesaplı daireler: ekstre yanıtı hesap alanlarını (`accounts`, `show_tenant_account`, `default_payment_account`)
+  /// taşır ve `?account_party=` süzgecini uygular. Listede OLMAYAN daireler ESKİ sunucu biçimindedir (tek hesap).
+  final Set<int> twoAccountApartments = <int>{};
+
+  /// İP-1A: güncel kiracısı olan daireler (`has_current_tenant`).
+  final Set<int> currentTenantApartments = <int>{};
+
+  /// İP-1A: dairenin sabit varsayılan tahsilat hesabı (yoksa [defaultPaymentAccountOf] hesaplar).
+  final Map<int, String> defaultPaymentAccounts = <int, String>{};
+
+  /// İP-1A: önizleme satırında iki hesaplı dairenin borç hesabı (yoksa ev sahibi).
+  final Map<int, String> previewAccounts = <int, String>{};
+
   // --- Kancalar ------------------------------------------------------------------------------
   Object? finError;
   Object? summaryError;
@@ -251,7 +267,7 @@ class FinanceFakeAuth extends PeopleFakeAuth {
   // --- Çağrı kayıtları -------------------------------------------------------------------------
   final List<({int site, String status, String? query, int limit, int offset})> balanceCalls =
       <({int site, String status, String? query, int limit, int offset})>[];
-  final List<({int apartment, int? before})> accountCalls = <({int apartment, int? before})>[];
+  final List<({int apartment, int? before, String? party})> accountCalls = <({int apartment, int? before, String? party})>[];
   final List<Map<String, Object?>> paymentCalls = <Map<String, Object?>>[];
   final List<Map<String, Object?>> correctCalls = <Map<String, Object?>>[];
   final List<Map<String, Object?>> reverseCalls = <Map<String, Object?>>[];
@@ -361,6 +377,34 @@ class FinanceFakeAuth extends PeopleFakeAuth {
     return value > 0 ? value : 0;
   }
 
+  /// İP-1A: satırın hesabı (sunucu kuralı: `account_party` yoksa payer_party tenant -> kiracı, diğerleri ev sahibi).
+  static String accountOfRow(Map<String, dynamic> e) =>
+      (e['account_party'] as String?) ?? (e['payer_party'] == 'tenant' ? 'tenant' : 'owner');
+
+  Iterable<Map<String, dynamic>> _accountEntries(int apartmentId, String party) =>
+      _entriesOf(apartmentId).where((e) => accountOfRow(e) == party);
+
+  int accountBalanceOf(int apartmentId, String party) =>
+      _accountEntries(apartmentId, party).fold<int>(0, (sum, e) => sum + (e['amount_minor'] as int));
+
+  int accountOverdueOf(int apartmentId, String party) {
+    final notDue = _accountEntries(apartmentId, party)
+        .where((e) => e['due_date'] != null && (e['due_date'] as String).compareTo(todayIso) > 0)
+        .fold<int>(0, (sum, e) => sum + (e['amount_minor'] as int));
+    final value = accountBalanceOf(apartmentId, party) - notDue;
+    return value > 0 ? value : 0;
+  }
+
+  /// Varsayılan tahsilat hesabı (sabit değer yoksa: vadesi geçeni büyük olan hesap; ikisi de sıfırsa kiracı varsa kiracı).
+  String defaultPaymentAccountOf(int apartmentId) {
+    final fixed = defaultPaymentAccounts[apartmentId];
+    if (fixed != null) return fixed;
+    final owner = accountOverdueOf(apartmentId, 'owner');
+    final tenant = accountOverdueOf(apartmentId, 'tenant');
+    if (owner > 0 || tenant > 0) return tenant > owner ? 'tenant' : 'owner';
+    return currentTenantApartments.contains(apartmentId) ? 'tenant' : 'owner';
+  }
+
   Map<String, dynamic> _entryJson(Map<String, dynamic> row, {bool resident = false}) {
     final reversedBy = ledger.where((e) => e['reverses_entry_id'] == row['id']).toList();
     return <String, dynamic>{
@@ -382,6 +426,8 @@ class FinanceFakeAuth extends PeopleFakeAuth {
       // Faz 4b: makbuz bağlantısı ve tazminat çalıştırması (satırda yoksa null).
       'receipt': row['receipt'],
       'late_fee_run_id': row['late_fee_run_id'],
+      // İP-1A: iki hesaplı dairede (ya da satırda hesap varsa) satırın hesabı; eski sunucu biçiminde alan yok
+      if (twoAccountApartments.contains(row['apartment_id']) || row['account_party'] != null) 'account_party': accountOfRow(row),
     };
   }
 
@@ -471,7 +517,8 @@ class FinanceFakeAuth extends PeopleFakeAuth {
     await _writeGate();
     final row = definitions[definitionId];
     if (row == null) throw _coded('DEFINITION_NOT_FOUND', 404);
-    const postedKeys = <String>{'name', 'end_period', 'is_active', 'due_day'};
+    // İP-1A: "kim öder" (charge_party) borçlandırılmış tanımda da değişir (sunucu POSTED_PATCH_KEYS).
+    const postedKeys = <String>{'name', 'end_period', 'is_active', 'due_day', 'charge_party'};
     if (row['has_runs'] == true && fields.keys.any((k) => !postedKeys.contains(k))) {
       throw _coded('DEFINITION_LOCKED', 409);
     }
@@ -655,6 +702,8 @@ class FinanceFakeAuth extends PeopleFakeAuth {
             'block_name': _blockOf(id),
             'payer_party': apartmentsJson[id]!['responsible_party'],
             'amount_minor': lines[id],
+            // İP-1A: iki hesaplı dairede borcun yazılacağı hesap ([previewAccounts], yoksa ev sahibi)
+            if (twoAccountApartments.contains(id)) 'account_party': previewAccounts[id] ?? 'owner',
           },
       ],
       'missing_data': plan['missing'],
@@ -1051,12 +1100,16 @@ class FinanceFakeAuth extends PeopleFakeAuth {
     int apartmentId, {
     int limit = 50,
     int? beforeId,
+    AccountParty? accountParty,
   }) async {
-    accountCalls.add((apartment: apartmentId, before: beforeId));
+    accountCalls.add((apartment: apartmentId, before: beforeId, party: accountParty?.apiValue));
     _guard();
     final json = apartmentsJson[apartmentId];
     if (json == null) throw _coded('APARTMENT_NOT_FOUND', 404);
-    var rows = _entriesOf(apartmentId).toList()..sort(_compareEntries);
+    final two = twoAccountApartments.contains(apartmentId);
+    // İP-1A: süzgeç yalnız iki hesaplı dairede uygulanır (eski sunucu süzgeci bilmez, tüm satırları verir).
+    final party = two ? accountParty?.apiValue : null;
+    var rows = (party == null ? _entriesOf(apartmentId) : _accountEntries(apartmentId, party)).toList()..sort(_compareEntries);
     if (beforeId != null) {
       final at = rows.indexWhere((e) => e['id'] == beforeId);
       rows = at < 0 ? <Map<String, dynamic>>[] : rows.sublist(at + 1);
@@ -1071,10 +1124,26 @@ class FinanceFakeAuth extends PeopleFakeAuth {
         'responsible_party': json['responsible_party'],
       },
       'currency': 'TRY',
-      'balance_minor': balanceOf(apartmentId),
-      'overdue_minor': overdueOf(apartmentId),
+      'balance_minor': party == null ? balanceOf(apartmentId) : accountBalanceOf(apartmentId, party),
+      'overdue_minor': party != null
+          ? accountOverdueOf(apartmentId, party)
+          : (two ? accountOverdueOf(apartmentId, 'owner') + accountOverdueOf(apartmentId, 'tenant') : overdueOf(apartmentId)),
       'items': [for (final row in page) _entryJson(row)],
       'next_before_id': rows.length > cap && page.isNotEmpty ? page.last['id'] : null,
+      if (two) ...<String, dynamic>{
+        'account_party': party,
+        'accounts': <String, dynamic>{
+          for (final p in const <String>['owner', 'tenant'])
+            p: <String, dynamic>{
+              'balance_minor': accountBalanceOf(apartmentId, p),
+              'overdue_minor': accountOverdueOf(apartmentId, p),
+              'entry_count': _accountEntries(apartmentId, p).length,
+            },
+        },
+        'show_tenant_account': true,
+        'has_current_tenant': currentTenantApartments.contains(apartmentId),
+        'default_payment_account': defaultPaymentAccountOf(apartmentId),
+      },
     });
     await _gateOf(accountGates);
     final error = accountError;
@@ -1128,6 +1197,7 @@ class FinanceFakeAuth extends PeopleFakeAuth {
         if (reversal != null) 'reversal': _entryJson(reversal),
         'entry': _entryJson(row),
         'balance_minor': balanceOf(apartmentId),
+        if (row['account_party'] != null) 'account_balance_minor': accountBalanceOf(apartmentId, row['account_party'] as String),
       });
 
   Map<String, dynamic> _addPayment({
@@ -1137,6 +1207,7 @@ class FinanceFakeAuth extends PeopleFakeAuth {
     required PaymentMethod method,
     String? description,
     required String key,
+    String? account,
   }) {
     final date = _dateString(entryDate);
     if (date.compareTo(todayIso) > 0) throw _invalid('Gelecek tarihli tahsilat girilemez.');
@@ -1158,6 +1229,8 @@ class FinanceFakeAuth extends PeopleFakeAuth {
       method: method.apiValue,
       description: (description ?? '').trim().isEmpty ? null : description!.trim(),
       payer: apartmentsJson[apartmentId]!['responsible_party'] as String,
+      // İP-1A: iki hesaplı dairede hesap verilmezse sunucu varsayılan hesabı seçer
+      account: account ?? (twoAccountApartments.contains(apartmentId) ? defaultPaymentAccountOf(apartmentId) : null),
     );
     ledger.add(row);
     _keys[key] = row['id'] as int;
@@ -1179,6 +1252,7 @@ class FinanceFakeAuth extends PeopleFakeAuth {
     required PaymentMethod method,
     String? description,
     required String idempotencyKey,
+    AccountParty? accountParty,
   }) async {
     paymentCalls.add(<String, Object?>{
       'apartment_id': apartmentId,
@@ -1187,6 +1261,7 @@ class FinanceFakeAuth extends PeopleFakeAuth {
       'method': method.apiValue,
       'description': description,
       'idempotency_key': idempotencyKey,
+      'account_party': ?accountParty?.apiValue,
     });
     _guard();
     final gate = paymentGate;
@@ -1198,6 +1273,8 @@ class FinanceFakeAuth extends PeopleFakeAuth {
     final existing = _byKey(idempotencyKey);
     if (existing != null) {
       if (_keyFingerprints[idempotencyKey] != fingerprint) throw _coded('IDEMPOTENCY_CONFLICT', 409);
+      // Sunucu: gövdede hesap verildiyse kayıt O hesapta olmalı (aksi 409)
+      if (accountParty != null && accountOfRow(existing) != accountParty.apiValue) throw _coded('IDEMPOTENCY_CONFLICT', 409);
       return _result(existing, apartmentId);
     }
     if (!apartmentsJson.containsKey(apartmentId)) throw _coded('APARTMENT_NOT_FOUND', 404);
@@ -1208,6 +1285,7 @@ class FinanceFakeAuth extends PeopleFakeAuth {
       method: method,
       description: description,
       key: idempotencyKey,
+      account: accountParty?.apiValue,
     );
     _keyFingerprints[idempotencyKey] = fingerprint;
     _throwAfterWrite();
@@ -1232,6 +1310,8 @@ class FinanceFakeAuth extends PeopleFakeAuth {
       reason: (reason ?? '').trim().isEmpty ? null : reason!.trim(),
       payer: original['payer_party'] as String,
       definitionName: original['definition_name'] as String?,
+      // İP-1A: ters kayıt asılın hesabındadır
+      account: original['account_party'] as String?,
     );
     ledger.add(reversal);
     _keys[key] = reversal['id'] as int;
@@ -1280,6 +1360,7 @@ class FinanceFakeAuth extends PeopleFakeAuth {
     required PaymentMethod method,
     String? description,
     required String idempotencyKey,
+    AccountParty? accountParty,
   }) async {
     correctCalls.add(<String, Object?>{
       'entry_id': entryId,
@@ -1288,6 +1369,7 @@ class FinanceFakeAuth extends PeopleFakeAuth {
       'method': method.apiValue,
       'description': description,
       'idempotency_key': idempotencyKey,
+      'account_party': ?accountParty?.apiValue,
     });
     _guard();
     final gate = paymentGate;
@@ -1316,6 +1398,8 @@ class FinanceFakeAuth extends PeopleFakeAuth {
         method: method,
         description: description,
         key: idempotencyKey,
+        // İP-1A: hesap verilmezse asılın hesabı korunur
+        account: accountParty?.apiValue ?? (original.first['account_party'] as String?),
       );
       _keyFingerprints[idempotencyKey] = fingerprint;
       result = _result(row, apartmentId, reversal: reversal);
@@ -1416,10 +1500,15 @@ Map<String, dynamic> finMyItem({
   int? nextDueMinor = 50000,
   String payer = 'owner',
   List<Map<String, dynamic>>? recent,
+  String? account,
+  List<Map<String, dynamic>>? accounts,
 }) => <String, dynamic>{
   'site_code': siteCode,
   'site_name': siteName,
   'apartment_id': apartmentId,
+  // İP-1A: kişinin kendi hesabı ve görünümleri (eski sunucu biçiminde yok)
+  'account_party': ?account,
+  'accounts': ?accounts,
   'label': label,
   'block_name': label.split(' - ').first,
   'currency': 'TRY',
@@ -1444,4 +1533,25 @@ Map<String, dynamic> finMyItem({
           'reversed_by_entry_id': null,
         },
       ],
+};
+
+/// İP-1A: sakin "Borcum" görünümü (`items[].accounts[]`): kendi hesabı (`own`) ya da salt okunur kiracı hesabı (`read_only`).
+Map<String, dynamic> finMyAccount({
+  required String party,
+  String role = 'own',
+  int balance = 0,
+  int overdue = 0,
+  String? nextDueDate,
+  int? nextDueMinor,
+  List<Map<String, dynamic>> recent = const <Map<String, dynamic>>[],
+}) => <String, dynamic>{
+  'account_party': party,
+  'role': role,
+  'balance_minor': balance,
+  'overdue_minor': overdue,
+  'next_due_date': nextDueDate,
+  'next_due_minor': nextDueMinor,
+  'visible_from': null,
+  'offset_note': false,
+  'recent': recent,
 };

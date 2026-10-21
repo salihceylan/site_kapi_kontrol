@@ -16,9 +16,11 @@ import {
   apartmentNotFound,
   assertNotTooOld,
   currentPeriod,
+  entryAccountParty,
   invalidBody,
   latestClosedPeriod,
   mapEntryRow,
+  parseAccountPartyQuery,
   parseAccountQuery,
   periodLabel,
   redactEntryForResident,
@@ -26,12 +28,18 @@ import {
 } from './finance_common.js';
 import { ENTRY_SELECT } from './finance_ledger_service.js';
 import { minorToNumber, toBigInt } from './finance_money.js';
-import { enabledFinanceSites, loadResidentLedger, loadVisibleApartments, overdueOf, residentSinceOf } from './finance_read_service.js';
+import { enabledFinanceSites, loadResidentLedger, loadVisibleAccounts, overdueOf, viewSinceOf } from './finance_read_service.js';
+import { accountPartySql } from './finance_parties.js';
 import { prepareResidentLedger, residentEntryOf, residentView } from './finance_resident_view.js';
 import { apartmentLabel, parsePositiveId } from './people_common.js';
 
 export const REPORT_FOOTER = 'Bu rapor noter onaylı karar defteri/yasal defterlerin yerine geçmez.';
 const INT32_MAX = 2147483647;
+
+// İki hesap (İP-1A): defter satırının (takma ad `l`) hesabı ve yer tutuculu hesap süzgeci (NULL = tüm hesaplar).
+const LEDGER_ACCOUNT = accountPartySql('l');
+const ACCOUNT_FILTER_4 = `($4::TEXT IS NULL OR ${LEDGER_ACCOUNT} = $4::TEXT)`;
+const ACCOUNT_FILTER_5 = `($5::TEXT IS NULL OR ${LEDGER_ACCOUNT} = $5::TEXT)`;
 
 // --- Tek snapshot + eşzamanlılık ---------------------------------------------------------------------------------------------------------------
 
@@ -126,6 +134,8 @@ export function parseAgingQuery(query = {}, now = new Date()) {
     status: queryEnum(query.status, ['debtor', 'all'], 'debtor'),
     limit: queryInt(query.limit, { min: 1, max: 500, fallback: 200 }),
     offset: queryInt(query.offset, { min: 0, max: 100000, fallback: 0 }),
+    // İki hesap (İP-1A): `?account_party=owner|tenant` yalnız o hesabın tutarları; yoksa iki hesabın toplamı
+    accountParty: parseAccountPartyQuery(query.account_party),
   };
 }
 
@@ -153,57 +163,92 @@ export function parseRangeQuery(query = {}, now = new Date()) {
 
 const BUCKET_COLUMNS = ['d0_30', 'd31_60', 'd61_90', 'd91_180', 'd181_365', 'd366_plus'];
 
-/** T itibarıyla tüm daireler için M1 kova toplamları (BigInt). Dışa aktarma ve ekran AYNI işlevi kullanır. */
+const emptyAgingPart = () => ({
+  buckets: Object.fromEntries(AGING_BUCKETS.map((bucket) => [bucket, 0n])),
+  overdue: 0n,
+  credit: 0n,
+  lateFeeOutstanding: 0n,
+  hasRows: false,
+});
+
+/**
+ * T itibarıyla tüm daireler için M1 kova toplamları (BigInt). Dışa aktarma ve ekran AYNI işlevi kullanır. İki hesap (İP-1A): M1 HESAP BAZINDA çalışır;
+ * her daire satırı iki hesabın toplamını (`buckets`, `overdue`, `credit`, `lateFeeOutstanding`) ve hesap kırılımını (`accounts.owner` / `accounts.tenant`)
+ * taşır. Alacak (kullanılmamış ödeme) hesap içinde kalır: bir hesabın alacağı diğerinin vadesi geçmiş borcunu düşürmez.
+ */
 export async function computeAging(db, siteCode, asOf) {
   const result = await db.query(
     `
       WITH ${m1Ctes('$1', '$2')},
       agg AS (
-        SELECT rem.apartment_id, ${bucketSumSql('$2')}, SUM(rem.a) AS total_items
-        FROM rem GROUP BY rem.apartment_id
+        SELECT rem.apartment_id, rem.account_party, ${bucketSumSql('$2')}, SUM(rem.a) AS total_items
+        FROM rem GROUP BY rem.apartment_id, rem.account_party
+      ),
+      acct AS (
+        SELECT
+          COALESCE(g.apartment_id, p.apartment_id) AS apartment_id, COALESCE(g.account_party, p.account_party) AS account_party,
+          g.not_due, g.d0_30, g.d31_60, g.d61_90, g.d91_180, g.d181_365, g.d366_plus, g.late_fee_outstanding,
+          GREATEST(0, COALESCE(p.p, 0) - COALESCE(g.total_items, 0)) AS credit
+        FROM agg g
+        FULL OUTER JOIN pay p ON p.apartment_id = g.apartment_id AND p.account_party = g.account_party
       )
       SELECT
-        a.id AS apartment_id, a.unit_label, b.block_name, b.sort_order AS block_sort, a.sort_order AS apt_sort, a.responsible_party,
-        COALESCE(g.not_due, 0)::TEXT AS not_due, COALESCE(g.d0_30, 0)::TEXT AS d0_30, COALESCE(g.d31_60, 0)::TEXT AS d31_60, COALESCE(g.d61_90, 0)::TEXT AS d61_90,
-        COALESCE(g.d91_180, 0)::TEXT AS d91_180, COALESCE(g.d181_365, 0)::TEXT AS d181_365, COALESCE(g.d366_plus, 0)::TEXT AS d366_plus,
-        COALESCE(g.late_fee_outstanding, 0)::TEXT AS late_fee_outstanding,
-        GREATEST(0, COALESCE(p.p, 0) - COALESCE(g.total_items, 0))::TEXT AS credit
+        a.id AS apartment_id, a.unit_label, b.block_name, b.sort_order AS block_sort, a.sort_order AS apt_sort, a.responsible_party, x.account_party,
+        COALESCE(x.not_due, 0)::TEXT AS not_due, COALESCE(x.d0_30, 0)::TEXT AS d0_30, COALESCE(x.d31_60, 0)::TEXT AS d31_60, COALESCE(x.d61_90, 0)::TEXT AS d61_90,
+        COALESCE(x.d91_180, 0)::TEXT AS d91_180, COALESCE(x.d181_365, 0)::TEXT AS d181_365, COALESCE(x.d366_plus, 0)::TEXT AS d366_plus,
+        COALESCE(x.late_fee_outstanding, 0)::TEXT AS late_fee_outstanding,
+        COALESCE(x.credit, 0)::TEXT AS credit
       FROM apartments a
       INNER JOIN site_blocks b ON b.id = a.block_id
-      LEFT JOIN agg g ON g.apartment_id = a.id
-      LEFT JOIN pay p ON p.apartment_id = a.id
-      WHERE a.site_code = $1 AND (a.is_active = TRUE OR g.apartment_id IS NOT NULL OR p.apartment_id IS NOT NULL)
-      ORDER BY b.sort_order, a.sort_order, a.id
+      LEFT JOIN acct x ON x.apartment_id = a.id
+      WHERE a.site_code = $1 AND (a.is_active = TRUE OR x.apartment_id IS NOT NULL)
+      ORDER BY b.sort_order, a.sort_order, a.id, x.account_party
     `,
     [siteCode, asOf],
   );
-  return (result.rows ?? []).map((row) => {
-    const buckets = {
-      not_due: asBig(row.not_due),
-      d0_30: asBig(row.d0_30),
-      d31_60: asBig(row.d31_60),
-      d61_90: asBig(row.d61_90),
-      d91_180: asBig(row.d91_180),
-      d181_365: asBig(row.d181_365),
-      d366_plus: asBig(row.d366_plus),
-    };
-    let overdue = 0n;
-    for (const name of BUCKET_COLUMNS) {
-      overdue += buckets[name];
+  const byApartment = new Map();
+  for (const row of result.rows ?? []) {
+    const id = Number(row.apartment_id);
+    let entry = byApartment.get(id);
+    if (!entry) {
+      entry = {
+        apartmentId: id,
+        label: apartmentLabel(row.block_name, row.unit_label),
+        blockName: row.block_name ?? null,
+        blockSort: Number(row.block_sort),
+        aptSort: Number(row.apt_sort),
+        payerParty: row.responsible_party,
+        ...emptyAgingPart(),
+        accounts: { owner: emptyAgingPart(), tenant: emptyAgingPart() },
+      };
+      byApartment.set(id, entry);
     }
-    return {
-      apartmentId: Number(row.apartment_id),
-      label: apartmentLabel(row.block_name, row.unit_label),
-      blockName: row.block_name ?? null,
-      blockSort: Number(row.block_sort),
-      aptSort: Number(row.apt_sort),
-      payerParty: row.responsible_party,
-      buckets,
-      overdue,
-      credit: asBig(row.credit),
-      lateFeeOutstanding: asBig(row.late_fee_outstanding),
-    };
-  });
+    if (row.account_party !== 'owner' && row.account_party !== 'tenant') {
+      continue; // defter satırı olmayan etkin daire: sıfır satır
+    }
+    const part = entry.accounts[row.account_party];
+    part.hasRows = true;
+    for (const bucket of AGING_BUCKETS) {
+      part.buckets[bucket] = asBig(row[bucket]);
+      entry.buckets[bucket] += part.buckets[bucket];
+    }
+    for (const name of BUCKET_COLUMNS) {
+      part.overdue += part.buckets[name];
+    }
+    part.credit = asBig(row.credit);
+    part.lateFeeOutstanding = asBig(row.late_fee_outstanding);
+    entry.overdue += part.overdue;
+    entry.credit += part.credit;
+    entry.lateFeeOutstanding += part.lateFeeOutstanding;
+    entry.hasRows = true;
+  }
+  return [...byApartment.values()];
+}
+
+/** Yaşlandırma satırının tek hesaplık görünümü (İP-1A `?account_party=` süzgeci ve dışa aktarmadaki hesap satırları). */
+export function agingForAccount(row, accountParty) {
+  const part = row.accounts[accountParty];
+  return { ...row, ...part, accountParty };
 }
 
 /** Daire kimlikleri için güncel malik / kiracı adları. */
@@ -233,22 +278,30 @@ export async function loadResidentNames(db, apartmentIds) {
   return names;
 }
 
+function agingAmounts(part) {
+  const entry = {};
+  for (const bucket of AGING_BUCKETS) {
+    entry[`${bucket}_minor`] = minorToNumber(part.buckets[bucket]);
+  }
+  entry.credit_minor = minorToNumber(part.credit);
+  entry.late_fee_outstanding_minor = minorToNumber(part.lateFeeOutstanding);
+  entry.total_overdue_minor = minorToNumber(part.overdue);
+  return entry;
+}
+
 function agingItem(row, names) {
-  const entry = {
+  return {
     apartment_id: row.apartmentId,
     label: row.label,
     block_name: row.blockName,
     payer_party: row.payerParty,
     owner_name: names.get(row.apartmentId)?.owner ?? null,
     tenant_name: names.get(row.apartmentId)?.tenant ?? null,
+    ...agingAmounts(row),
+    // İki hesap (İP-1A): süzgeç hesabı (yoksa null = iki hesabın toplamı) ve hesap kırılımı
+    account_party: row.accountParty ?? null,
+    accounts: { owner: agingAmounts(row.accounts.owner), tenant: agingAmounts(row.accounts.tenant) },
   };
-  for (const bucket of AGING_BUCKETS) {
-    entry[`${bucket}_minor`] = minorToNumber(row.buckets[bucket]);
-  }
-  entry.credit_minor = minorToNumber(row.credit);
-  entry.late_fee_outstanding_minor = minorToNumber(row.lateFeeOutstanding);
-  entry.total_overdue_minor = minorToNumber(row.overdue);
-  return entry;
 }
 
 export function sortAging(rows, status) {
@@ -289,13 +342,15 @@ export async function agingReport(siteCode, query = {}, now = new Date()) {
   const filters = parseAgingQuery(query, now);
   return withReportSnapshot(siteCode, async (client) => {
     const header = await reportHeader(client, siteCode, now);
-    const rows = await computeAging(client, siteCode, filters.asOf);
+    const all = await computeAging(client, siteCode, filters.asOf);
+    const rows = filters.accountParty === null ? all : all.map((row) => agingForAccount(row, filters.accountParty));
     const sorted = sortAging(rows, filters.status);
     const page = sorted.slice(filters.offset, filters.offset + filters.limit);
     const names = await loadResidentNames(client, page.map((row) => row.apartmentId));
     return {
       ...header,
       as_of: filters.asOf,
+      account_party: filters.accountParty,
       buckets: [...AGING_BUCKETS],
       totals: agingTotals(rows),
       items: page.map((row) => agingItem(row, names)),
@@ -539,7 +594,7 @@ const RESIDENT_STATEMENT_ROW_LIMIT = 2000;
  * Bir tahsilat bu ekstrede gösterilmeyen daha eski bir borca mahsup edildiyse satır toplamı kapanışa eşit olmaz; o zaman
  * `offset_note` true döner ve istemci bunu açıklar. `visible_from` ('YYYY-MM') yalnız kapsam dışında kayıt varsa dolar.
  */
-export async function computeResidentStatement(db, siteCode, apartmentId, range, since, now = new Date()) {
+export async function computeResidentStatement(db, siteCode, apartmentId, range, since, now = new Date(), { accountParty = null } = {}) {
   const apartment = await db.query(
     `SELECT a.id, a.unit_label, b.block_name, a.responsible_party FROM apartments a INNER JOIN site_blocks b ON b.id = a.block_id WHERE a.id = $1 AND a.site_code = $2`,
     [apartmentId, siteCode],
@@ -549,10 +604,12 @@ export async function computeResidentStatement(db, siteCode, apartmentId, range,
   }
   // Sakin ekstresi dairenin TÜM defterinden hesaplanır (kayan bakiye her satırda yeniden dökülür): sınır yönetici ekstresinden düşüktür ve
   // sorgu sınırın bir fazlasıyla kesilir (büyük defter olay döngüsünü uzun süre meşgul etmesin).
-  const rows = await loadResidentLedger(db, [siteCode], [apartmentId], { limit: RESIDENT_STATEMENT_ROW_LIMIT + 1 });
-  if (rows.length > RESIDENT_STATEMENT_ROW_LIMIT) {
+  const loaded = await loadResidentLedger(db, [siteCode], [apartmentId], { limit: RESIDENT_STATEMENT_ROW_LIMIT + 1 });
+  if (loaded.length > RESIDENT_STATEMENT_ROW_LIMIT) {
     throw statementTooLarge();
   }
+  // İki hesap (İP-1A): sakin ekstresi YALNIZ görünümün hesabındaki satırlardan (mahsup ve kapsam hesap içinde).
+  const rows = accountParty === null ? loaded : loaded.filter((row) => entryAccountParty(row) === accountParty);
   const todayIso = today(now);
   const entries = prepareResidentLedger(rows.map(residentEntryOf));
   const current = residentView(entries, { since, today: todayIso });
@@ -587,11 +644,15 @@ export async function computeResidentStatement(db, siteCode, apartmentId, range,
     overdue_minor: minorToNumber(current.overdue),
     visible_from: current.hiddenCount > 0 ? since.slice(0, 7) : null,
     offset_note: openingBalance + rowSum !== closingBalance,
+    account_party: accountParty,
   };
 }
 
-/** Ekstre çekirdeği (yönetici ve sakin aynı gövdeyi kullanır). */
-export async function computeStatement(db, siteCode, apartmentId, range, now = new Date()) {
+/**
+ * Ekstre çekirdeği (yönetici ve sakin aynı gövdeyi kullanır). İki hesap (İP-1A): `accountParty` verilirse açılış, satırlar, kapanış ve vadesi geçen YALNIZ o
+ * hesaptan; verilmezse dairenin tüm satırları (eski davranış; vadesi geçen hesap başına hesaplanıp toplanır: bir hesabın alacağı diğerinin borcunu kapatmaz).
+ */
+export async function computeStatement(db, siteCode, apartmentId, range, now = new Date(), { accountParty = null } = {}) {
   const apartment = await db.query(
     `SELECT a.id, a.unit_label, b.block_name, a.responsible_party FROM apartments a INNER JOIN site_blocks b ON b.id = a.block_id WHERE a.id = $1 AND a.site_code = $2`,
     [apartmentId, siteCode],
@@ -599,29 +660,35 @@ export async function computeStatement(db, siteCode, apartmentId, range, now = n
   if (!apartment.rows?.[0]) {
     throw apartmentNotFound();
   }
+  // $5: hesap süzgeci (NULL = tüm hesaplar)
   const count = await db.query(
-    `SELECT COUNT(*)::INTEGER AS n FROM ledger_entries WHERE site_code = $1 AND apartment_id = $2 AND entry_date BETWEEN $3::DATE AND $4::DATE`,
-    [siteCode, apartmentId, range.from, range.to],
+    `SELECT COUNT(*)::INTEGER AS n FROM ledger_entries l WHERE l.site_code = $1 AND l.apartment_id = $2 AND l.entry_date BETWEEN $3::DATE AND $4::DATE AND ${ACCOUNT_FILTER_5}`,
+    [siteCode, apartmentId, range.from, range.to, accountParty],
   );
   if (Number(count.rows[0].n) > STATEMENT_ROW_LIMIT) {
     throw statementTooLarge();
   }
-  const opening = await db.query(`SELECT COALESCE(SUM(amount_minor), 0)::TEXT AS s FROM ledger_entries WHERE site_code = $1 AND apartment_id = $2 AND entry_date < $3::DATE`, [
-    siteCode,
-    apartmentId,
-    range.from,
-  ]);
+  const opening = await db.query(
+    `SELECT COALESCE(SUM(l.amount_minor), 0)::TEXT AS s FROM ledger_entries l WHERE l.site_code = $1 AND l.apartment_id = $2 AND l.entry_date < $3::DATE AND ${ACCOUNT_FILTER_4}`,
+    [siteCode, apartmentId, range.from, accountParty],
+  );
   const entries = await db.query(
-    `${ENTRY_SELECT} WHERE l.site_code = $1 AND l.apartment_id = $2 AND l.entry_date BETWEEN $3::DATE AND $4::DATE ORDER BY l.entry_date, l.id`,
-    [siteCode, apartmentId, range.from, range.to],
+    `${ENTRY_SELECT} WHERE l.site_code = $1 AND l.apartment_id = $2 AND l.entry_date BETWEEN $3::DATE AND $4::DATE AND ${ACCOUNT_FILTER_5} ORDER BY l.entry_date, l.id`,
+    [siteCode, apartmentId, range.from, range.to, accountParty],
   );
   const sums = await db.query(
     `
-      SELECT COALESCE(SUM(amount_minor), 0)::TEXT AS balance, COALESCE(SUM(amount_minor) FILTER (WHERE due_date > $3::DATE), 0)::TEXT AS not_due
-      FROM ledger_entries WHERE site_code = $1 AND apartment_id = $2
+      SELECT ${LEDGER_ACCOUNT} AS account_party, COALESCE(SUM(l.amount_minor), 0)::TEXT AS balance,
+             COALESCE(SUM(l.amount_minor) FILTER (WHERE l.due_date > $3::DATE), 0)::TEXT AS not_due
+      FROM ledger_entries l WHERE l.site_code = $1 AND l.apartment_id = $2 AND ${ACCOUNT_FILTER_4}
+      GROUP BY 1
     `,
-    [siteCode, apartmentId, today(now)],
+    [siteCode, apartmentId, today(now), accountParty],
   );
+  let overdue = 0n;
+  for (const sum of sums.rows ?? []) {
+    overdue += overdueOf(sum.balance, sum.not_due);
+  }
   const openingBalance = asBig(opening.rows[0].s);
   let running = openingBalance;
   const totals = { charged: 0n, lateFee: 0n, paid: 0n, reversed: 0n };
@@ -647,7 +714,8 @@ export async function computeStatement(db, siteCode, apartmentId, range, now = n
     closing_balance_minor: minorToNumber(running),
     items,
     totals: { charged_minor: minorToNumber(totals.charged), late_fee_minor: minorToNumber(totals.lateFee), paid_minor: minorToNumber(totals.paid), reversed_minor: minorToNumber(totals.reversed) },
-    overdue_minor: minorToNumber(overdueOf(sums.rows[0].balance, sums.rows[0].not_due)),
+    overdue_minor: minorToNumber(overdue),
+    account_party: accountParty,
   };
 }
 
@@ -658,23 +726,29 @@ export async function statementReport(siteCode, rawApartmentId, query = {}, now 
     throw apartmentNotFound();
   }
   const range = parseStatementQuery(query, now);
+  const accountParty = parseAccountPartyQuery(query.account_party);
   return withReportSnapshot(siteCode, async (client) => {
     const header = await reportHeader(client, siteCode, now);
-    return { ...header, ...(await computeStatement(client, siteCode, apartmentId, range, now)) };
+    return { ...header, ...(await computeStatement(client, siteCode, apartmentId, range, now, { accountParty })) };
   });
 }
 
-/** Sakin: GET /app/my-finance/apartments/:id/statement (yalnız F2.05 kuralıyla borcu görebildiği daire; yönetici serbest metinleri çıkarılır). */
+/**
+ * Sakin: GET /app/my-finance/apartments/:id/statement (yalnız görebildiği daire; yönetici serbest metinleri çıkarılır). İki hesap (İP-1A): varsayılan
+ * kişinin KENDİ hesabı; `?account_party=` yalnız görünümlerinden biriyse (`both` dairede malike salt okunur kiracı hesabı), aksi 404.
+ */
 export async function myStatement(authUser, rawApartmentId, query = {}, now = new Date()) {
   const apartmentId = parsePositiveId(rawApartmentId);
   const userCode = parsePositiveId(authUser?.user_code ?? authUser?.userCode ?? authUser?.id, INT32_MAX);
   if (apartmentId === null || userCode === null) {
     throw apartmentNotFound();
   }
-  const visible = await loadVisibleApartments(pool, userCode);
+  const requested = parseAccountPartyQuery(query.account_party);
+  const visible = await loadVisibleAccounts(pool, userCode);
   const enabled = await enabledFinanceSites(pool, [...new Set(visible.map((row) => Number(row.site_code)))]);
   const target = visible.find((row) => Number(row.apartment_id) === apartmentId && enabled.has(Number(row.site_code)));
-  if (!target) {
+  const view = target ? (requested === null ? target.views[0] : target.views.find((candidate) => candidate.account_party === requested)) : null;
+  if (!target || !view) {
     throw apartmentNotFound();
   }
   const range = parseStatementQuery(query, now);
@@ -683,9 +757,14 @@ export async function myStatement(authUser, rawApartmentId, query = {}, now = ne
     siteCode,
     async (client) => {
       const header = await reportHeader(client, siteCode, now);
-      // Sakin kapsamı + mahsup kuralı (computeResidentStatement); yönetici ekstresi (computeStatement) değişmez.
-      const body = await computeResidentStatement(client, siteCode, apartmentId, range, residentSinceOf(target, today(now)), now);
-      return { ...header, ...body, items: body.items.map((entry) => ({ ...redactEntryForResident(entry), running_balance_minor: entry.running_balance_minor })) };
+      // Sakin kapsamı + mahsup kuralı (computeResidentStatement), görünümün hesabında; yönetici ekstresi (computeStatement) değişmez.
+      const body = await computeResidentStatement(client, siteCode, apartmentId, range, viewSinceOf(view, today(now)), now, { accountParty: view.account_party });
+      return {
+        ...header,
+        ...body,
+        role: view.role,
+        items: body.items.map((entry) => ({ ...redactEntryForResident(entry), running_balance_minor: entry.running_balance_minor })),
+      };
     },
     pool,
     { slot: 'resident' },

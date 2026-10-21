@@ -103,13 +103,19 @@ export default async function sectionReview(t) {
   const exclResult = await drain(excl);
   check('R5: P1-2 daire gonderimden SONRA muaf tutulursa ileti GITMEZ (resolved, ileti 0)', addEx.status === 200 && same(exclResult.states, ['resolved']) && exclResult.cleared && exclResult.sent === 0, exclResult);
 
-  // P1-2: sorumluluk degisimi (owner -> tenant, kiraci var): malik artik alici degil
+  // P1-2 (İP-1A / G12 ile BİLEREK DEĞİŞTİ): hatırlatma HESABIN SAHİBİNE gider. Sorumluluk değişimi (owner -> tenant) geçmiş borcun hesabını DEĞİŞTİRMEZ
+  // (borç ev sahibi hesabında kalır, yeni aidat kiracı hesabına yazılır): ev sahibi hesabındaki borç için ileti malike GİDER. Kişi hesabın sahibi olmaktan
+  // çıkarsa (ilişkisi aile üyesine çevrildi) ileti GİTMEZ (R6b). Daireden çıkarılma R4'tedir.
   const resp = await mkReminderRun('sorumlu');
   const tenantUser = await mkUser('Inceleme Kiraci', 'apartment_owner', { email: `rvk${counter}${Date.now() % 100000}@qa.example`, verified: true });
   await addResidency(resp.site.code, resp.a1, await addPerson(resp.site.code, { user: tenantUser }), 'tenant');
   await q(`UPDATE apartments SET responsible_party = 'tenant' WHERE id = $1`, [resp.a1]);
   const respResult = await drain(resp);
-  check('R6: P1-2 daire SORUMLUSU degisirse (owner -> tenant) eski sorumluya ileti GITMEZ (resolved, ileti 0)', same(respResult.states, ['resolved']) && respResult.sent === 0, respResult);
+  check('R6: P1-2 (İP-1A) daire sorumlusu degisse de (owner -> tenant) EV SAHIBI HESABINDAKI borc icin ileti malike GIDER (sent 1); kiraci bu borc icin alici degil', same(respResult.states, ['sent']) && respResult.sent === 1, respResult);
+  const fam = await mkReminderRun('aile');
+  await q(`UPDATE apartment_residencies SET relation = 'family_member' WHERE site_code = $1 AND apartment_id = $2 AND person_id = $3`, [fam.site.code, fam.a1, fam.person]);
+  const famResult = await drain(fam);
+  check('R6b: P1-2 (İP-1A) kisi hesabin sahibi olmaktan cikarsa (iliski aile uyesi) ileti GITMEZ (resolved, adres silinir, ileti 0)', same(famResult.states, ['resolved']) && famResult.cleared && famResult.sent === 0, famResult);
 
   // ============================================================================================================
   // R7 (P1-3): mutabakatta ayni gecmis ekstre tarihi icin CIFT duzeltme olmaz

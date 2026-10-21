@@ -92,6 +92,8 @@ Ortak: her tabloda `site_code BIGINT NOT NULL REFERENCES sites ON DELETE CASCADE
 
 ## Ö1 — Tahsilat makbuzu (F4.07)
 
+> **İP-1A (2026-10-21):** bu bölüm HESAP başınadır (ev sahibi / kiracı hesabı); ayrıntı en sondaki **İki hesap (2026-10-21)** bölümünde.
+
 **Karar: PDF İSTEMCİDE üretilir (`pdf` + `printing`, GÖMÜLÜ yazı tipi); sunucu değişmez snapshot + doğrulama kodu verir.** Karşılaştırma:
 
 | Ölçüt | Sunucu (`pdfkit` benzeri) | İstemci (mevcut `pdf`/`printing`) |
@@ -121,6 +123,8 @@ Yazı tipi: `assets/fonts/Roboto-Regular.ttf` + `Roboto-Bold.ttf` (Apache-2.0; l
 - Sakin: `GET /app/my-finance/receipts?apartment_id=&limit=&before_id=` ve `GET /app/my-finance/receipts/:id` — YALNIZ çağıranın F2.05 `responsible_party` kuralıyla borcu görebildiği dairelerin makbuzları; yanıttan `ledger_entry_id`, `copy_count`, `cancel_note`, `issued_by` çıkarılır; iptal makbuzunda neden KODU görünür, notu görünmez. Hız sınırı sakin ucu: 600/saat.
 
 ## Ö2 — Gecikme tazminatı (F4.08)
+
+> **İP-1A (2026-10-21):** bu bölüm HESAP başınadır (ev sahibi / kiracı hesabı); ayrıntı en sondaki **İki hesap (2026-10-21)** bölümünde.
 
 **Karar: OTOMATİK DEĞİL — yönetici onaylı, önizlemeli toplu işlem; aylık; yalnız KAPALI ve BİTMİŞ ay için; varsayılan KAPALI** (kullanıcıya para yükleyen ve hukuki yoruma açık işlem; sessiz otomasyon yok).
 
@@ -164,6 +168,8 @@ Yazı tipi: `assets/fonts/Roboto-Regular.ttf` + `Roboto-Bold.ttf` (Apache-2.0; l
 
 ## Ö5 — Raporlar ve dışa aktarma (F4.11)
 
+> **İP-1A (2026-10-21):** bu bölüm HESAP başınadır (ev sahibi / kiracı hesabı); ayrıntı en sondaki **İki hesap (2026-10-21)** bölümünde.
+
 Rapor uçları `GET …/finance/reports/…` (okuma yetkisi: yönetici/süper + kurul) JSON döner (ekran ve istemci PDF'i içindir); tek `REPEATABLE READ READ ONLY` işlemi, `statement_timeout` 20 sn, site başına en çok 2 eşzamanlı ağır rapor (aşılırsa 503 `REPORT_BUSY` + `Retry-After`), `Cache-Control: no-store`. Ortak yanıt alanları: `site: {name}`, `generated_at`, `closed_through`, `currency:'TRY'`. **CSV/XLSX** dosyaları `GET …/finance/exports/:kind` (ExportEnvelope; "Dış bağımlılık arayüzleri") ile alınır; kind'lar: `finance_aging`, `finance_income_expense`, `finance_cash_position`, `finance_statement` (+ `apartment_id`, `from`, `to`), `finance_expenses` (+ gider süzgeçleri), `finance_receipts` (+ `year`). Kurul özet raporu (`board-summary`) bölümlü olduğundan dosya dışa aktarması YOKTUR (yalnız ekran + PDF). Süzgeç parametreleri rapor uçlarıyla AYNIDIR ve aynı sorgu mantığı paylaşılır (ekranla dosya arasında sapma olmaz; QA eşdeğerliği). Zarf kolonları: kuruş tutarlar `money`, adet/oran `number` (`collection_rate` yüzde olarak `scale: 2`, tamsayı bp'den hesaplanır), tarihler `date`; satır sınırı 20 000 (aşarsa 422 `EXPORT_TOO_LARGE`).
 
 1. **Borç/alacak yaşlandırma** `reports/aging?as_of=YYYY-MM-DD&status=debtor|all&limit=200&offset=0` (`as_of` ≤ bugün, ≥ 5 yıl): M1 ile `T = as_of`; kovalar vade gecikmesine göre `not_due` (vade > T), `d0_30`, `d31_60`, `d61_90`, `d91_180`, `d181_365`, `d366_plus`; ayrıca `credit_minor` (kullanılmamış alacak) ve `late_fee_outstanding_minor` (bilgi). Yanıt: `{ as_of, buckets: [...], totals: {…}, items: [{ apartment_id, label, block_name, payer_party, owner_name, tenant_name, <kova>_minor…, credit_minor, late_fee_outstanding_minor, total_overdue_minor }], total }` (sıra: `total_overdue_minor DESC`). **Değişmez:** `as_of = bugün` için `Σ(d0_30…d366_plus) = 4a overdue_minor` (daire bazında ve toplamda; QA).
@@ -175,6 +181,8 @@ Rapor uçları `GET …/finance/reports/…` (okuma yetkisi: yönetici/süper + 
 **PDF (istemci).** `lib/services/pdf_finance_service.dart`: makbuz, ekstre ve tüm raporlar; `PdfFontSet.loadBundled()`; 200 satırdan uzun çıktı `BackgroundWork` izolesinde; dosya adı ASCII (`Makbuz_MK-2026-000123.pdf`); paylaşım `share_plus`, yazdırma `printing` (mevcut bağımlılıklar). CSV/XLSX dosyalarını da istemci üretir (`ExportSheet`; `PLATFORM_TOPLU_ISLEMLER.md`).
 
 ## Ö6 — Borç hatırlatma (F4.14)
+
+> **İP-1A (2026-10-21):** bu bölüm HESAP başınadır (ev sahibi / kiracı hesabı); ayrıntı en sondaki **İki hesap (2026-10-21)** bölümünde.
 
 **Karar: duyuru e-posta kuyruğunun BAĞLANTILARI yeniden kullanılır, alıcı tablosu ayrıdır** (`announcement_recipients` duyuru kimliğine bağlıdır ve kişiye özgü tutar taşıyamaz). Yeniden kullanılan: `announcement_email_security.js` (kanonik adres, tuzlu özet, abonelik belirteci/`List-Unsubscribe`), `announcement_email_suppressions` (ORTAK bastırma listesi), `announcement_lock.js` (yeni iş numarası `financeReminderQueue: 4`), `mailer.js` taşıyıcı/`isSmtpConfigured`, kuyruk kalıbı (talep → gönderim transaction DIŞI → sonuç; `FOR UPDATE SKIP LOCKED`, 20'lik grup, ≥150 ms, 3 deneme, 1/5 dk geri çekilme, kalıcı SMTP hatasında hemen `failed`, 10 dk bayat talep devri, son durumda `email` NULL). Uygulama `announcement_email_queue.js`'i parametrelendirir (tercih edilen; Faz 3a testleri yeşil kalmalı) ya da davranış eşdeğeri `finance_reminder_queue.js` yazar. Zamanlayıcı tiki bekleyen hatırlatma satırı varsa kuyruğu da sürer.
 
@@ -361,3 +369,32 @@ Gerçek PG sınamaları `scripts/qa_finance4b_r15.mjs` (bölüm S); düzeltmeden
 - **P2-5:** belge dikişi AÇILIŞ KOŞULU kota maddesini de içerir (BELGELER kotası `expense_documents.size_bytes`'i saymaz; kota ve süpürme bu tabloyu bilmeden dikiş açılmaz). `document_*.js` değiştirilmedi.
 - **P2-6:** (13b) satırı düzeltildi (yukarıda).
 - **P2-7:** `purgeStaleReminderHashes` satırları `ORDER BY run_id, person_id FOR UPDATE` ile kilitler.
+
+## İki hesap (2026-10-21; İP-1A, karar G12 — yukarıdaki metne göre ÖNCELİKLİDİR)
+
+Kurallar, veri (052), var olan satırların hesabı ve 4a uçları: `docs/PLATFORM_FINANS.md` **İki hesap (2026-10-21)**. Faz 4b'deki etkiler:
+
+- **Ö1 makbuz:** ödeyen tahsilatın HESABINA göre seçilir (kiracı hesabı -> dairenin güncel kiracısı, ev sahibi hesabı -> güncel malik; 052 öncesi tahsilat
+  türetilmiş hesapla, eski davranış aynı). Snapshot `payer.account_party` taşır (052 öncesi makbuzda yok; şablon sürümü değişmedi). Makbuz özeti
+  (`GET receipts`, sakin listesi) `account_party` alanını taşır. Sakin makbuzları görünümlerle sınırlıdır: kendi hesabı + (borç sorumlusu `both` dairede
+  malike) salt okunur kiracı hesabı; `GET /app/my-finance/receipts?account_party=` tek görünüm; başka hesabın makbuzu 404.
+- **Ö2 gecikme tazminatı:** plan (daire, HESAP) başınadır: aynı dairenin iki hesabı gecikmişse İKİ satır ve iki tazminat kaydı (`account_party` satır
+  hesabı); her satır kendi hesabının mahsubuyla gün-gün hesaplanır (kaba kuvvet kâhiniyle birebir, gerçek PG `parties` P7). `late_fee_run_lines` anahtarı
+  `(run_id, ledger_entry_id)` (+ hesap başına kısmi tekil); `apartment_count` satır sayısıdır; `preview_hash` hesabı içerir; muaf daire iki hesabı da atlar
+  (`waived[].account_party`). İptal (void) her ters kaydı asılın hesabına yazar. Sakin tazminat açıklaması (`/app/my-finance/entries/:id/late-fee`) yalnız
+  kişinin görünümlerindeki hesabın kalemine açılır (diğer hesabın kalemi 404).
+- **Ö5 raporlar:** M1 (yaşlandırma, tahsilat oranı tabanı) (daire, hesap) bölümlüdür: bir hesabın tahsilatı diğer hesabın kalemine mahsup edilmez.
+  `GET reports/aging?account_party=` tek hesabın tutarları; süzgeçsiz satır iki hesabın toplamı + `accounts.owner|tenant` kırılımı (`credit_minor` hesap başına).
+  Daire ekstresi `GET apartments/:id/statement?account_party=` tek hesap (yoksa iki hesap birlikte). Sakin ekstresi (`/app/my-finance/apartments/:id/statement`)
+  varsayılan KENDİ hesabıdır; `?account_party=` görünümlerinden biri olmalı (aksi 404), yanıt `account_party` + `role` (own | read_only). Dışa aktarma:
+  yaşlandırma satırı HESAP başına (hareketsiz daire tek ev sahibi satırı), ekstre (`account_party` süzgeci; Devreden satırı dahil) ve makbuz listesi son
+  sütun **Hesap** ("Ev sahibi hesabı" / "Kiracı hesabı"); `account_party` bilinen süzgeç anahtarıdır (audit).
+- **Ö6 borç hatırlatma:** aday (daire, HESAP) başınadır (eşik ve gün hesap başına); alıcı = hesabın SAHİBİ (kiracı hesabı -> kiracı, ev sahibi hesabı ->
+  malik, ilişkisi belirtilmemiş -> dairede güncel kiracı varsa kiracı hesabının, yoksa ev sahibi hesabının sahibi, ANCAK yalnız borç sorumlusu `both` iken ya da
+  sorumlu tarafın güncel kişisi yokken: Borcum görünümüyle aynı `visiblePartyOfRelation`, bağımsız inceleme; aile üyesi alıcı değil). Borç
+  sorumlusu `both` dairede malik kiracı hesabının borcu için ALICI DEĞİLDİR (salt okunur görür). İletideki tutar alıcının hesabının tutarıdır; önizleme
+  `account_count` (kapsanan hesap sayısı) ekler, `apartment_count` daire başınadır. Hariç tutma sayıları hesap başınadır. Sıklık kaydı daire başına kalır.
+- **İstemci:** yaşlandırma ve daire ekstresi raporlarında hesap süzgeci ("Tüm hesaplar" / "Kiracı hesabı" / "Ev sahibi hesabı"), ekstre PDF'inde hesabın adı
+  ("(salt okunur)" işaretiyle), tazminat önizlemesi ve çalıştırma satırlarında hesap adı ve "N daire, M hesap" sayısı, hatırlatma önizlemesinde hesap sayısı.
+- **Gerçek PG:** `QA_ONLY=chain,live,finance4b` bölümlerinin G12 nedeniyle bilerek güncellenen beklentileri `PLATFORM_FINANS.md` "İki hesap / Doğrulama"
+  maddesindedir; `qa_finance4b_upgrade.mjs` "ensure" yolları 001..son zinciriyle karşılaştırılır (sunucu açılışı semayı son sürüme getirir).

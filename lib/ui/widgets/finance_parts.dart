@@ -365,7 +365,22 @@ class BalanceRowCard extends StatelessWidget {
       if (row.ownerName != null) 'Malik: ${row.ownerName}',
       if (row.tenantName != null) 'Kiracı: ${row.tenantName}',
     ];
-    final semantic = StringBuffer('Daire: $title. ${balance.semanticLabel}.');
+    // İP-1A: kiracı hesabında hareket varsa iki hesap AYRI gösterilir (toplam bakiye yanıltır: bir hesabın alacağı diğerinin
+    // borcunu kapatmaz). Kiracı hesabı boşsa eski tek rozet (ev sahibi hesabı = toplam) kalır.
+    final accounts = <(AccountParty, AccountTotals)>[
+      if (row.hasTenantBalance && row.ownerAccount != null && row.tenantAccount != null) ...[
+        (AccountParty.tenant, row.tenantAccount!),
+        (AccountParty.owner, row.ownerAccount!),
+      ],
+    ];
+    final semantic = StringBuffer('Daire: $title.');
+    if (accounts.isEmpty) {
+      semantic.write(' ${balance.semanticLabel}.');
+    } else {
+      for (final (party, totals) in accounts) {
+        semantic.write(' ${party.label}: ${describeBalance(totals.balanceMinor).semanticLabel}.');
+      }
+    }
     if (hasOverdue) semantic.write(' Vadesi geçen: ${moneySemanticLabel(overdue)}.');
     for (final name in names) {
       semantic.write(' $name.');
@@ -391,7 +406,16 @@ class BalanceRowCard extends StatelessWidget {
                     spacing: AppSpace.sm,
                     runSpacing: AppSpace.xs,
                     children: [
-                      DialogMetaPill(balance.badgeText, tone: balance.tone, icon: balance.icon),
+                      if (accounts.isEmpty)
+                        DialogMetaPill(balance.badgeText, tone: balance.tone, icon: balance.icon)
+                      else
+                        for (final (party, totals) in accounts)
+                          DialogMetaPill(
+                            '${party.label}: ${describeBalance(totals.balanceMinor).badgeText}',
+                            key: ValueKey<String>('balance_row_${row.apartmentId}_${party.apiValue}'),
+                            tone: describeBalance(totals.balanceMinor).tone,
+                            icon: describeBalance(totals.balanceMinor).icon,
+                          ),
                       if (hasOverdue)
                         DialogMetaPill(
                           'Vadesi geçen ${formatMinor(overdue)}',
@@ -820,9 +844,11 @@ class FeePreviewLineTile extends StatelessWidget {
     final p = context.palette;
     final th = Theme.of(context).textTheme;
     final title = financeApartmentTitle(line.blockName, line.label);
+    // İP-1A: sunucu borcun yazılacağı hesabı verdiyse o yazılır ("Kiracı hesabı"); eski sunucuda "kim öder" etiketi.
+    final who = line.accountParty?.label ?? payerPartyLabel(line.payerParty);
     return Semantics(
       container: true,
-      label: '$title. ${payerPartyLabel(line.payerParty)}. ${moneySemanticLabel(line.amountMinor)}.',
+      label: '$title. $who. ${moneySemanticLabel(line.amountMinor)}.',
       child: ExcludeSemantics(
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: AppSpace.xs),
@@ -838,7 +864,7 @@ class FeePreviewLineTile extends StatelessWidget {
                 children: [
                   Text(title, style: th.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
                   Text(
-                    payerPartyLabel(line.payerParty),
+                    who,
                     style: th.bodySmall?.copyWith(color: p.textSecondary),
                   ),
                 ],

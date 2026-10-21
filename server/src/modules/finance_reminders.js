@@ -1,7 +1,12 @@
 // Borç hatırlatma (Faz 4b Ö6): uygunluk, önizleme (YAZMAZ), onaylı gönderim (kuyruğa alma), çalıştırma istatistiği / iptali, muafiyet listesi.
 //
 // Sözleşme: docs/PLATFORM_FINANS_4B.md "Ö6". Varsayılan KAPALI + sistem düzeyinde hukuk onayı bayrağına bağlı. Bayat borç koruması ve gönderim kuyruk işçisindedir
-// (finance_reminder_queue.js). KİME: 4a "Borcum" görünürlük kuralının AYNISI (ALLOWED_RELATIONS_SQL paylaşılır): owner -> güncel malik; tenant -> kiracı; both ->
+// (finance_reminder_queue.js). İKİ HESAP (İP-1A): uygunluk (eşik, gecikme günü) HESAP başına (her hesabın kendi mahsubu); hatırlatma hesabın SAHİBİNE gider
+// (finance_parties.visiblePartyOfRelation: kiracı hesabı -> kiracı, ev sahibi hesabı -> malik; ilişkisi belirtilmemiş sakin dairede güncel kiracı varsa kiracı
+// hesabının, yoksa ev sahibi hesabının sahibidir, ANCAK yalnız sorumlu both iken ya da sorumlu tarafın güncel kişisi yokken: Borcum ile aynı); both dairede
+// malik kiracı hesabı için hatırlatma ALMAZ. Sıklık kayıtları (finance_reminder_apartments) daire başınadır
+// (temkinli); ardışık sayaç hesabın son tahsilatına göre. AŞAĞIDAKİ 4b metni (responsible_party kuralı) İP-1A ile DEĞİŞTİ:
+// (eski) KİME: 4a "Borcum" görünürlük kuralının AYNISI: owner -> güncel malik; tenant -> kiracı; both ->
 // malik + kiracı + resident; eşleşen kişi yoksa güvenli yedek; family_member ASLA. Kişi başına TEK ileti (≤ 20 daire). Adres = Faz 2 "etkin iletişim e-postası"
 // (dahili daire hesabı adresi sayılmaz); aynı kanonik adres bir çalıştırmada TEK kez (duplicate); bastırılmış / tercihi kapalı -> skipped_pref; adres başına 7 günde en çok 1
 // hatırlatma (capped); site günlük sınırı FINANCE_REMINDER_MAX_PER_DAY_PER_SITE (300). Uygunluk (daire): etkin, muaf değil, M1 gecikmiş borç >= eşik, en eski ödenmemiş
@@ -32,7 +37,7 @@ import { cleanReminderNote, noteHasLink, REMINDER_TONES } from './finance_remind
 import { apartmentNotFound, idempotencyConflict, invalidBody, normalizeFreeText, parseIdempotencyKey, previewStale, today } from './finance_common.js';
 import { m1Ctes } from './finance_m1.js';
 import { minorToNumber, toBigInt } from './finance_money.js';
-import { ALLOWED_RELATIONS_SQL } from './finance_read_service.js';
+import { accountPartySql, currentTenantSql, responsiblePersonSql, visiblePartyOfRelation } from './finance_parties.js';
 import { withReportSnapshot } from './finance_reports.js';
 import { loadEffectiveSettings, readLegalOk } from './finance_settings.js';
 import { lockActorRow, recordFinanceAudit, withFinanceTransaction } from './finance_tx.js';
@@ -42,6 +47,11 @@ import { ACCOUNT_KIND_SQL, apartmentLabel, parsePositiveId, toIso } from './peop
 import { CONTACT_EMAIL_SQL, PERSON_FROM } from './people_service.js';
 
 export const REMINDER_MAX_APARTMENTS_PER_PERSON = 20;
+
+// İki hesap (İP-1A): defter satırının (takma ad `l`) hesabı, dairenin (takma ad `a`) güncel kiracısı ve borç sorumlusu tarafın güncel kişisi.
+const LEDGER_ACCOUNT = accountPartySql('l');
+const CURRENT_TENANT = currentTenantSql('a');
+const RESPONSIBLE_PERSON = responsiblePersonSql('a');
 export const REMINDER_PER_ADDRESS_DAYS = 7;
 export const REMINDER_ITEM_STATUSES = Object.freeze(['pending', 'sent', 'failed', 'no_address', 'skipped_pref', 'duplicate', 'capped', 'resolved', 'cancelled']);
 
@@ -94,45 +104,54 @@ export const reminderFingerprint = (input) => fingerprintOf({ v: 1, kind: 'remin
 
 // --- Plan -------------------------------------------------------------------------------------------------------------------------------
 
-/** Etkin daireler için M1 gecikmiş borç + uygunluk verileri (T = bugün). */
+/** Aday anahtarı: (daire, hesap). */
+export const candidateKey = (apartmentId, accountParty) => `${apartmentId}:${accountParty}`;
+
+/**
+ * Etkin daireler için M1 gecikmiş borç + uygunluk verileri (T = bugün). İki hesap (İP-1A): aday (daire, HESAP) başınadır (`accountParty`); mahsup hesap içinde.
+ * Aralık (`lastDay`) daire başına hatırlatma kayıtlarından; ardışık sayaç hesabın son tahsilatından sonraki daire hatırlatmalarıdır (temkinli).
+ */
 export async function loadCandidateApartments(db, siteCode, todayIso, apartmentIds = null) {
   const filter = apartmentIds === null ? '' : ' AND l.apartment_id = ANY($3::BIGINT[])';
   const result = await db.query(
     `
       WITH ${m1Ctes('$1', '$2', filter)},
       sums AS (
-        SELECT rem.apartment_id,
+        SELECT rem.apartment_id, rem.account_party,
                COALESCE(SUM(rem.r) FILTER (WHERE rem.due <= $2::DATE), 0) AS overdue,
                MIN(rem.due) FILTER (WHERE rem.r > 0 AND rem.due <= $2::DATE) AS oldest_due
-        FROM rem GROUP BY rem.apartment_id
+        FROM rem GROUP BY rem.apartment_id, rem.account_party
       ),
       lastpay AS (
-        SELECT l.apartment_id, MAX(l.entry_date) AS last_pay
+        SELECT l.apartment_id, ${LEDGER_ACCOUNT} AS account_party, MAX(l.entry_date) AS last_pay
         FROM ledger_entries l
         WHERE l.site_code = $1 AND l.kind = 'payment' AND NOT EXISTS (SELECT 1 FROM ledger_entries rv WHERE rv.reverses_entry_id = l.id)${filter}
-        GROUP BY l.apartment_id
+        GROUP BY 1, 2
       ),
       hist AS (
-        SELECT fa.apartment_id,
+        SELECT s.apartment_id, s.account_party,
                (MAX((fa.reminded_at AT TIME ZONE 'Europe/Istanbul')::DATE) - DATE '1970-01-01') AS last_day,
                COUNT(*) FILTER (WHERE lp.last_pay IS NULL OR (fa.reminded_at AT TIME ZONE 'Europe/Istanbul')::DATE > lp.last_pay)::INTEGER AS consecutive
-        FROM finance_reminder_apartments fa LEFT JOIN lastpay lp ON lp.apartment_id = fa.apartment_id
-        WHERE fa.site_code = $1 GROUP BY fa.apartment_id
+        FROM sums s
+        INNER JOIN finance_reminder_apartments fa ON fa.site_code = $1 AND fa.apartment_id = s.apartment_id
+        LEFT JOIN lastpay lp ON lp.apartment_id = s.apartment_id AND lp.account_party = s.account_party
+        GROUP BY s.apartment_id, s.account_party
       )
-      SELECT a.id, a.unit_label, b.block_name, b.sort_order AS block_sort, a.sort_order AS apt_sort, s.overdue::TEXT AS overdue,
+      SELECT a.id, s.account_party, a.unit_label, b.block_name, b.sort_order AS block_sort, a.sort_order AS apt_sort, s.overdue::TEXT AS overdue,
              to_char(s.oldest_due, 'YYYY-MM-DD') AS oldest_due, h.last_day, COALESCE(h.consecutive, 0) AS consecutive, (x.apartment_id IS NOT NULL) AS excluded
       FROM sums s
       INNER JOIN apartments a ON a.id = s.apartment_id
       INNER JOIN site_blocks b ON b.id = a.block_id
-      LEFT JOIN hist h ON h.apartment_id = a.id
+      LEFT JOIN hist h ON h.apartment_id = a.id AND h.account_party = s.account_party
       LEFT JOIN finance_reminder_exclusions x ON x.site_code = $1 AND x.apartment_id = a.id
       WHERE a.site_code = $1 AND a.is_active = TRUE AND s.overdue > 0
-      ORDER BY b.sort_order, a.sort_order, a.id
+      ORDER BY b.sort_order, a.sort_order, a.id, s.account_party
     `,
     apartmentIds === null ? [siteCode, todayIso] : [siteCode, todayIso, apartmentIds],
   );
   return (result.rows ?? []).map((row) => ({
     id: Number(row.id),
+    accountParty: row.account_party === 'tenant' ? 'tenant' : 'owner',
     label: apartmentLabel(row.block_name, row.unit_label),
     overdue: toBigInt(row.overdue),
     oldestDue: row.oldest_due,
@@ -159,13 +178,17 @@ export const thresholdsOf = (settings) => ({
   max_consecutive: settings.reminder_max_consecutive,
 });
 
-/** Eşleşen alıcı kişiler (kural: 4a "Borcum" görünürlüğü). */
-/** Gönderim anında da kullanılır (finance_reminder_queue.js): kişinin o dairede HÂLÂ güncel ve izinli ilişkisi var mı. */
+/**
+ * Hesap sahibi alıcılar (İP-1A): kişinin daireDEKİ güncel ilişkisinden kendi hesabı (`account_party`; finance_parties.visiblePartyOfRelation: Borcum
+ * görünümüyle AYNI kural; ilişkisi belirtilmemiş sakin yalnız sorumlu both iken ya da sorumlu tarafın güncel kişisi yokken); aile üyesi yok.
+ * Gönderim anında da kullanılır (finance_reminder_queue.js): kişi o dairede HÂLÂ güncel ve hatırlatılan hesabın sahibi mi.
+ */
 export async function loadRecipientRows(db, siteCode, apartmentIds) {
   const result = await db.query(
     `
-      SELECT rr.apartment_id, sp.id AS person_id, ${ACCOUNT_KIND_SQL} AS account_kind, COALESCE(u.email_verified, FALSE) AS verified,
-             COALESCE(np.email_finance_reminders, TRUE) AS pref, ${deliverableEmailSql(CONTACT_EMAIL_SQL)} AS email
+      SELECT rr.apartment_id, sp.id AS person_id, rr.relation, ${CURRENT_TENANT} AS has_tenant, a.responsible_party, ${RESPONSIBLE_PERSON} AS has_responsible_person,
+             ${ACCOUNT_KIND_SQL} AS account_kind, COALESCE(u.email_verified, FALSE) AS verified, COALESCE(np.email_finance_reminders, TRUE) AS pref,
+             ${deliverableEmailSql(CONTACT_EMAIL_SQL)} AS email
       ${PERSON_FROM}
       INNER JOIN apartment_residencies rr ON rr.person_id = sp.id AND rr.is_current = TRUE
       INNER JOIN apartments a ON a.id = rr.apartment_id AND a.site_code = sp.site_code
@@ -173,18 +196,22 @@ export async function loadRecipientRows(db, siteCode, apartmentIds) {
       WHERE sp.site_code = $1 AND sp.is_active = TRUE AND rr.apartment_id = ANY($2::BIGINT[])
         AND (u.user_code IS NULL OR u.deleted_at IS NULL)
         AND rr.relation <> 'family_member'
-        AND (
-          rr.relation = ANY(${ALLOWED_RELATIONS_SQL})
-          OR NOT EXISTS (
-            SELECT 1 FROM apartment_residencies r2 INNER JOIN site_people sp2 ON sp2.id = r2.person_id AND sp2.is_active = TRUE
-            WHERE r2.apartment_id = a.id AND r2.is_current = TRUE AND r2.relation = ANY(${ALLOWED_RELATIONS_SQL})
-          )
-        )
       ORDER BY sp.id, rr.apartment_id
     `,
     [siteCode, apartmentIds],
   );
-  return result.rows ?? [];
+  const out = [];
+  for (const row of result.rows ?? []) {
+    const accountParty = visiblePartyOfRelation(row.relation, {
+      hasCurrentTenant: row.has_tenant === true,
+      responsibleParty: row.responsible_party,
+      hasResponsiblePerson: row.has_responsible_person === true,
+    });
+    if (accountParty !== null) {
+      out.push({ ...row, account_party: accountParty });
+    }
+  }
+  return out;
 }
 
 async function suppressedHashes(db, hashes) {
@@ -229,7 +256,7 @@ export async function computeReminderPlan(db, siteCode, { settings, tone, now = 
   if (lock && candidates.length > 0) {
     const locked = await db.query(`SELECT id FROM apartments WHERE site_code = $1 AND id = ANY($2::BIGINT[]) AND is_active = TRUE ORDER BY id FOR KEY SHARE`, [
       siteCode,
-      candidates.map((c) => c.id),
+      [...new Set(candidates.map((c) => c.id))],
     ]);
     const stillActive = new Set((locked.rows ?? []).map((row) => Number(row.id)));
     candidates = candidates.filter((c) => stillActive.has(c.id));
@@ -248,18 +275,32 @@ export async function computeReminderPlan(db, siteCode, { settings, tone, now = 
       }
     }
   }
-  const byApartment = new Map(eligible.map((apartment) => [apartment.id, apartment]));
-  const recipients = eligible.length === 0 ? [] : await loadRecipientRows(db, siteCode, eligible.map((a) => a.id));
+  // İki hesap (İP-1A): aday (daire, hesap); alıcı yalnız o hesabın sahibi. Kişinin bir dairede tek hesabı vardır (kendi hesabı).
+  const byApartment = new Map(eligible.map((candidate) => [candidateKey(candidate.id, candidate.accountParty), candidate]));
+  const recipients = eligible.length === 0 ? [] : await loadRecipientRows(db, siteCode, [...new Set(eligible.map((a) => a.id))]);
   const personMap = new Map();
   const covered = new Set();
   for (const row of recipients) {
+    const key = candidateKey(Number(row.apartment_id), row.account_party);
+    if (!byApartment.has(key)) {
+      continue; // kişinin hesabı bu dairede uygun aday değil (ör. both dairede malik, borç kiracı hesabında)
+    }
     const personId = Number(row.person_id);
     let person = personMap.get(personId);
     if (!person) {
-      person = { personId, apartmentIds: [], accountKind: row.account_kind, verified: row.verified === true, pref: row.pref !== false, email: row.email ?? null };
+      person = {
+        personId,
+        apartmentIds: [],
+        accounts: new Map(),
+        accountKind: row.account_kind,
+        verified: row.verified === true,
+        pref: row.pref !== false,
+        email: row.email ?? null,
+      };
       personMap.set(personId, person);
     }
     person.apartmentIds.push(Number(row.apartment_id));
+    person.accounts.set(Number(row.apartment_id), row.account_party);
   }
   const persons = [...personMap.values()].sort((a, b) => a.personId - b.personId);
   for (const person of persons) {
@@ -291,7 +332,7 @@ export async function computeReminderPlan(db, siteCode, { settings, tone, now = 
       seen.add(person.hash);
       used += 1;
       for (const id of person.apartmentIds) {
-        covered.add(id);
+        covered.add(candidateKey(id, person.accounts.get(id)));
       }
     }
     counts[person.status] += 1;
@@ -299,20 +340,31 @@ export async function computeReminderPlan(db, siteCode, { settings, tone, now = 
       counts.with_amount += 1;
     }
   }
-  for (const apartment of eligible) {
-    const hasAnyPerson = persons.some((person) => person.apartmentIds.includes(apartment.id));
+  for (const candidate of eligible) {
+    const hasAnyPerson = persons.some((person) => person.apartmentIds.includes(candidate.id) && person.accounts.get(candidate.id) === candidate.accountParty);
     if (!hasAnyPerson) {
       excluded.no_recipient += 1;
     }
   }
   const pendingPersons = persons.filter((person) => person.status === 'pending');
-  const coveredApartments = eligible.filter((apartment) => covered.has(apartment.id));
+  // Kapsanan hesaplar (daire, hesap); daire sayısı / aralık kaydı daire başınadır.
+  const coveredAccounts = eligible.filter((candidate) => covered.has(candidateKey(candidate.id, candidate.accountParty)));
+  const coveredApartments = [];
+  const seenApartments = new Set();
+  for (const candidate of coveredAccounts) {
+    if (!seenApartments.has(candidate.id)) {
+      seenApartments.add(candidate.id);
+      coveredApartments.push(candidate);
+    }
+  }
   let totalOverdue = 0n;
-  for (const apartment of coveredApartments) {
-    totalOverdue += apartment.overdue;
+  for (const candidate of coveredAccounts) {
+    totalOverdue += candidate.overdue;
   }
   const hash = sha256Hex(
-    `v1|${tone}|${JSON.stringify(thresholds)}|${pendingPersons.map((p) => `${p.personId}:${p.apartmentIds.join('.')}:${p.withAmount ? 1 : 0}`).join(',')}`,
+    `v1|${tone}|${JSON.stringify(thresholds)}|${pendingPersons
+      .map((p) => `${p.personId}:${p.apartmentIds.map((id) => `${id}${p.accounts.get(id) === 'tenant' ? 't' : 'o'}`).join('.')}:${p.withAmount ? 1 : 0}`)
+      .join(',')}`,
   );
   return {
     todayIso,
@@ -322,6 +374,7 @@ export async function computeReminderPlan(db, siteCode, { settings, tone, now = 
     persons,
     pendingPersons,
     coveredApartments,
+    coveredAccounts,
     counts,
     hash,
     totalOverdue,
@@ -340,6 +393,8 @@ function previewBody(plan, { smtp, blockers }) {
     duplicate_count: plan.counts.duplicate,
     capped_count: plan.counts.capped,
     total_overdue_minor: minorToNumber(plan.totalOverdue),
+    // İki hesap (İP-1A): kapsanan hesap sayısı (aynı dairenin iki hesabı iki sayılır; apartment_count daire başınadır)
+    account_count: plan.coveredAccounts.length,
     excluded: plan.excluded,
     hand_follow_up_count: plan.handFollowUp.length,
     hand_follow_up_apartments: plan.handFollowUp.slice(0, 20).map((apartment) => apartment.label),

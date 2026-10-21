@@ -132,6 +132,14 @@ abstract final class HelpContent {
     'Kurallar',
     'Kuralları Aç',
     'Kuralları Görüntüle',
+    // İki hesap (İP-1A): hesap adları, ekstre penceresi, tahsilat "Daire hesabı" bölümü ve "Kim öder" seçimi
+    'Ev sahibi hesabı',
+    'Kiracı hesabı',
+    'Hesap Ekstresi',
+    'Daire hesabı',
+    'Kim öder',
+    'Dairede oturan',
+    'Ev sahibi',
   };
 
   // --- Konular ----------------------------------------------------------------------------------
@@ -258,6 +266,10 @@ abstract final class HelpContent {
       steps: <String>[
         'Sitenizde Finans modülü açıksa menüde “Borcum” ekranı görünür.',
         'Bu ekranda daireniz için tahakkuk eden aidat ve diğer borçları ile yapılan ödemeleri görürsünüz.',
+        'Her dairenin iki ayrı hesabı vardır: “Ev sahibi hesabı” ve “Kiracı hesabı”. Ekranda yalnız kendi hesabınızın borcu ve '
+            'hareketleri görünür; malik ve kiracı borçları birbirine karışmaz.',
+        'Borçtan malik ve kiracının birlikte sorumlu olduğu dairede malik, kiracı hesabını da salt okunur olarak görür; bu tutar '
+            'malikin kendi borcuna eklenmez.',
       ],
       note: 'Menüde “Borcum” yoksa sitenizde Finans modülü açık değildir.',
     ),
@@ -334,6 +346,23 @@ abstract final class HelpContent {
         'Finans modülü açılınca menüde “Finans” ekranı (“Daireler”, “Tanımlar” ve “Dönemler” sekmeleri) görünür.',
         'Sitenizde geçerli kuralları (gecikme tazminatı üst sınırı, işletme projesi ve saklama süreleri) aynı ekrandaki “Kurallar” bölümünde “Kuralları Görüntüle” ile görürsünüz; değerleri sistem yöneticisi belirler.',
       ],
+    ),
+    HelpTopic(
+      id: 'finance_accounts',
+      title: 'Malik ve kiracı hesapları nasıl çalışır?',
+      icon: Icons.account_balance_wallet_rounded,
+      steps: <String>[
+        'Her dairenin iki ayrı hesabı vardır: “Ev sahibi hesabı” ve “Kiracı hesabı”. Bakiyeler birbirine karışmaz; bir hesabın '
+            'alacağı diğerinin borcunu kapatmaz.',
+        '“Finans” ekranında daireye dokununca açılan “Hesap Ekstresi” penceresinde, dairede kiracı varsa ya da olduysa iki sekme '
+            'görünür: “Kiracı hesabı” ve “Ev sahibi hesabı”.',
+        'Tahsilat eklerken “Daire hesabı” bölümünden tahsilatın hangi hesaba yazılacağını seçin; ödeme yalnız o hesabın borcundan düşer.',
+        'Aidat tanımında ve ek borçta “Kim öder” seçilir: “Dairede oturan” ya da “Ev sahibi”. Aylık aidatta varsayılan dairede '
+            'oturan, ek borçta ev sahibidir.',
+      ],
+      note:
+          'Daire sorumlusu kiracı ya da malik ve kiracıysa ve dairede kiracı varsa aidat kiracı hesabına yazılır. Malik ve '
+          'kiracının birlikte sorumlu olduğu dairede malik, kiracı hesabını salt okunur görür.',
     ),
     HelpTopic(
       id: 'devices',

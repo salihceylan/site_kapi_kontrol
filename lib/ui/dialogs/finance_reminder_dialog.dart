@@ -443,6 +443,13 @@ class _FinanceReminderDialogState extends State<FinanceReminderDialog> with Fina
                   const DialogSectionTitle(icon: Icons.fact_check_rounded, title: 'Önizleme'),
                   const SizedBox(height: AppSpace.sm),
                   Text('${preview.apartmentCount} daire', key: const ValueKey<String>('finance_reminder_apartments'), style: th.titleMedium),
+                  // İP-1A: aynı dairenin iki hesabı borçluysa iki hesap sayılır; ileti her hesabın sahibine gider.
+                  if (preview.accountCount != null && preview.accountCount != preview.apartmentCount)
+                    Text(
+                      '${preview.accountCount} hesap (her hesabın sahibine ayrı ileti)',
+                      key: const ValueKey<String>('finance_reminder_accounts'),
+                      style: th.bodyMedium,
+                    ),
                   Text('${preview.personCount} kişi', key: const ValueKey<String>('finance_reminder_people'), style: th.titleMedium),
                   Text(
                     '${preview.withAmountCount} kişiye tutarlı, ${preview.withoutAmountCount} kişiye tutarsız ileti gider.',

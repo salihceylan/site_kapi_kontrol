@@ -2049,19 +2049,22 @@ class AuthApi {
     return _parsePayload('Bakiyeler', () => BalancePage.fromJson(payload));
   }
 
-  /// Daire ekstresi; sonraki sayfa için önceki yanıttaki `next_before_id` [beforeId] olarak verilir.
+  /// Daire ekstresi; sonraki sayfa için önceki yanıttaki `next_before_id` [beforeId] olarak verilir. [accountParty] (İP-1A)
+  /// verilirse satırlar ve bakiye yalnız o hesabındır (`?account_party=`); verilmezse eski davranış (iki hesap birlikte).
   Future<AccountView> getFinanceAccount({
     required String token,
     required int siteCode,
     required int apartmentId,
     int limit = 50,
     int? beforeId,
+    AccountParty? accountParty,
   }) async {
     final response = await _authorizedRequest(
       method: 'GET',
       path: _financePath(siteCode, 'apartments/$apartmentId/account', {
         'limit': '$limit',
         if (beforeId != null) 'before_id': '$beforeId',
+        'account_party': ?accountParty?.apiValue,
       }),
       token: token,
     );
@@ -2070,7 +2073,8 @@ class AuthApi {
     return _parsePayload('Ekstre', () => AccountView.fromJson(payload));
   }
 
-  /// Tahsilat kaydı. [amountMinor] POZİTİF kuruş (defter −); [entryDate] takvim günü (gelecek olamaz).
+  /// Tahsilat kaydı. [amountMinor] POZİTİF kuruş (defter −); [entryDate] takvim günü (gelecek olamaz). [accountParty] (İP-1A):
+  /// tahsilatın yazılacağı daire hesabı; verilmezse sunucu vadesi en eski açık borcu olan hesabı seçer.
   Future<LedgerWriteResult> recordFeePayment({
     required String token,
     required int siteCode,
@@ -2080,6 +2084,7 @@ class AuthApi {
     required PaymentMethod method,
     String? description,
     required String idempotencyKey,
+    AccountParty? accountParty,
   }) async {
     final note = description?.trim();
     final response = await _authorizedRequest(
@@ -2093,6 +2098,7 @@ class AuthApi {
         'method': method.apiValue,
         if (note != null && note.isNotEmpty) 'description': note,
         'idempotency_key': idempotencyKey,
+        'account_party': ?accountParty?.apiValue,
       },
     );
     _ensureCreatedOrOk(response);
@@ -2123,7 +2129,8 @@ class AuthApi {
     return _parsePayload('İptal', () => LedgerWriteResult.fromJson(payload));
   }
 
-  /// Tahsilatı düzeltir: TEK işlemde ters kayıt + yeni tahsilat.
+  /// Tahsilatı düzeltir: TEK işlemde ters kayıt + yeni tahsilat. [accountParty] (İP-1A) verilirse yeni tahsilat o hesaba yazılır
+  /// (yanlış hesaba girilen tahsilatın düzeltilmesi); verilmezse eski tahsilatın hesabı korunur. Ters kayıt hep eski hesaptadır.
   Future<LedgerWriteResult> correctFinancePayment({
     required String token,
     required int siteCode,
@@ -2133,6 +2140,7 @@ class AuthApi {
     required PaymentMethod method,
     String? description,
     required String idempotencyKey,
+    AccountParty? accountParty,
   }) async {
     final note = description?.trim();
     final response = await _authorizedRequest(
@@ -2145,6 +2153,7 @@ class AuthApi {
         'method': method.apiValue,
         if (note != null && note.isNotEmpty) 'description': note,
         'idempotency_key': idempotencyKey,
+        'account_party': ?accountParty?.apiValue,
       },
     );
     _ensureCreatedOrOk(response);

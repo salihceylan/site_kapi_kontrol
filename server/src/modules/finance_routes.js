@@ -216,7 +216,13 @@ financeRouter.post(
     const result = await recordPayment({ siteCode: access.siteCode, body: bodyOf(req), actor: req.authUser });
     return {
       status: result.replayed ? 200 : 201,
-      body: { entry: result.entry, balance_minor: result.balance_minor, receipt: result.receipt ?? null, movement_id: result.movement_id ?? null },
+      body: {
+        entry: result.entry,
+        balance_minor: result.balance_minor,
+        account_balance_minor: result.account_balance_minor ?? null,
+        receipt: result.receipt ?? null,
+        movement_id: result.movement_id ?? null,
+      },
     };
   }),
 );
@@ -239,7 +245,14 @@ financeRouter.post(
     const result = await correctPayment({ siteCode: access.siteCode, rawId: req.params.id, body: bodyOf(req), actor: req.authUser });
     return {
       status: result.replayed ? 200 : 201,
-      body: { reversal: result.reversal, entry: result.entry, balance_minor: result.balance_minor, receipt: result.receipt ?? null, movement_id: result.movement_id ?? null },
+      body: {
+        reversal: result.reversal,
+        entry: result.entry,
+        balance_minor: result.balance_minor,
+        account_balance_minor: result.account_balance_minor ?? null,
+        receipt: result.receipt ?? null,
+        movement_id: result.movement_id ?? null,
+      },
     };
   }),
 );

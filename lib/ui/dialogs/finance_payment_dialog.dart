@@ -26,6 +26,7 @@ import 'package:site_kapi_kontrol/ui/helpers/retry_lock.dart';
 import 'package:site_kapi_kontrol/ui/helpers/text_length.dart';
 import 'package:site_kapi_kontrol/ui/widgets/crm_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_4b_parts.dart';
+import 'package:site_kapi_kontrol/ui/widgets/finance_account_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/money_field.dart';
 
@@ -56,6 +57,13 @@ class FinancePaymentOutcome {
 ///   `receipt` ile sonuca eklenir. Düzeltmede hesap sorulmaz (sunucu eski ödemenin hesabını kullanır).
 /// - Sunucu reddi (kapalı dönem vb.) Türkçe mesajla pencerede gösterilir ve pencere AÇIK kalır. Dönem bilgisi
 ///   yüklüyse ve seçilen ay kapalıysa tarih alanının altında bilgi amaçlı uyarı görünür (kesin karar sunucuda).
+/// - İki hesap (İP-1A): iki hesaplı dairede "Daire hesabı" seçilir ([Kiracı hesabı] [Ev sahibi hesabı]); tahsilat yalnız
+///   seçilen hesabın borcundan düşer. Başlangıç değeri [accountParty] (ekstrenin seçili sekmesi) ya da sunucunun varsayılan
+///   tahsilat hesabıdır. [accountChoice] null ise (pencere ekstre dışından açıldı) daire seçilince sunucuya sorulur; hesap
+///   bilgisi alınamazsa ya da tek hesaplı dairede seçim gösterilmez ve sunucu hesabı kendisi seçer (eski davranış). Soru
+///   sürerken kayıt gönderilmez (seçim sonradan çıkıp işlem anahtarını değiştirmesin; çift tahsilat koruması).
+///   Düzeltmede seçim eski tahsilatın hesabıyla başlar; değiştirilirse yeni tahsilat diğer hesaba yazılır (ters kayıt eski
+///   hesapta kalır).
 class FinancePaymentDialog extends StatefulWidget {
   const FinancePaymentDialog({
     super.key,
@@ -65,6 +73,8 @@ class FinancePaymentDialog extends StatefulWidget {
     this.correcting,
     this.now,
     this.onRefreshNeeded,
+    this.accountParty,
+    this.accountChoice,
   });
 
   final PeopleScope scope;
@@ -82,6 +92,12 @@ class FinancePaymentDialog extends StatefulWidget {
   /// Sonuç BELİRSİZ kaldığında (ağ / 5xx) pencere kapanırken çağrılır: çağıran listeyi tazeler.
   final VoidCallback? onRefreshNeeded;
 
+  /// İP-1A: başlangıçta seçili daire hesabı (ekstrenin sekmesi / düzeltilen tahsilatın hesabı).
+  final AccountParty? accountParty;
+
+  /// İP-1A: dairenin iki hesabı var mı (seçim gösterilsin mi)? null: bilinmiyor (daire seçilince sunucuya sorulur).
+  final bool? accountChoice;
+
   static const int maxNoteLength = 200;
 
   static Future<FinancePaymentOutcome?> show(
@@ -92,6 +108,8 @@ class FinancePaymentDialog extends StatefulWidget {
     LedgerEntry? correcting,
     DateTime Function()? now,
     VoidCallback? onRefreshNeeded,
+    AccountParty? accountParty,
+    bool? accountChoice,
   }) {
     return showDialog<FinancePaymentOutcome>(
       context: context,
@@ -103,6 +121,8 @@ class FinancePaymentDialog extends StatefulWidget {
         correcting: correcting,
         now: now,
         onRefreshNeeded: onRefreshNeeded,
+        accountParty: accountParty,
+        accountChoice: accountChoice,
       ),
     );
   }
@@ -151,6 +171,15 @@ class _FinancePaymentDialogState extends State<FinancePaymentDialog> with Financ
   // (ACCOUNT_REQUIRED): o zaman seçim zorunlu olur.
   bool _accountRequiredByServer = false;
 
+  // İP-1A: daire hesabı (ev sahibi / kiracı). Seçim yalnız iki hesaplı dairede gösterilir; aksi halde gövdede gönderilmez.
+  final GlobalKey _partyKey = GlobalKey();
+  final FocusNode _partyFocus = FocusNode(skipTraversal: true, canRequestFocus: false);
+  late AccountParty? _party = widget.accountParty ?? widget.correcting?.accountParty;
+  late bool _partyChoice = widget.accountChoice ?? false;
+  bool _partyLoading = false;
+  String? _partyError;
+  int _partyToken = 0;
+
   bool _submitting = false;
   bool _picking = false;
   bool _needsRefreshOnClose = false;
@@ -175,11 +204,42 @@ class _FinancePaymentDialogState extends State<FinancePaymentDialog> with Financ
     super.initState();
     unawaited(_loadPeriods());
     unawaited(_loadAccounts());
+    // Hesap bilgisi verilmedi (ekstre dışından açıldı) ve daire hazır: iki hesaplı mı sunucuya sorulur.
+    if (widget.accountChoice == null && widget.apartmentId != null) unawaited(_probeParties(widget.apartmentId!));
   }
+
+  /// İP-1A: dairenin iki hesabı var mı ve varsayılan tahsilat hesabı ne (ekstrenin ilk satırı yeterli). Hata sessizdir:
+  /// seçim gösterilmez ve sunucu hesabı kendisi seçer (eski istemcinin davranışı).
+  Future<void> _probeParties(int apartmentId) async {
+    final token = ++_partyToken;
+    setState(() => _partyLoading = true);
+    try {
+      final view = await widget.scope.authService.getFinanceAccount(widget.scope.siteCode, apartmentId, limit: 1);
+      if (!mounted || token != _partyToken) return;
+      setState(() {
+        _partyLoading = false;
+        _partyChoice = view.hasTwoAccounts;
+        _party = view.hasTwoAccounts ? (_party ?? view.defaultPaymentAccount) : null;
+        if (_error == _partyPendingMessage) _error = null;
+      });
+    } catch (_) {
+      if (!mounted || token != _partyToken) return;
+      setState(() {
+        _partyLoading = false;
+        _partyChoice = false;
+        _party = null;
+        if (_error == _partyPendingMessage) _error = null;
+      });
+    }
+  }
+
+  static const String _partyPendingMessage = 'Daire hesapları yükleniyor; birkaç saniye sonra yeniden deneyin.';
 
   @override
   void dispose() {
     ++_cashToken;
+    ++_partyToken;
+    _partyFocus.dispose();
     _accountFocus.dispose();
     _retry.dispose();
     _apartmentFocus.dispose();
@@ -299,10 +359,18 @@ class _FinancePaymentDialogState extends State<FinancePaymentDialog> with Financ
       final picked = await showApartmentPicker(context, widget.scope);
       if (picked == null || !mounted) return;
       markDirty();
+      final changed = _apartment?.id != picked.id;
       setState(() {
         _apartment = (id: picked.id, label: picked.fullLabel);
         _apartmentError = null;
+        if (changed) {
+          // Daire değişti: önceki dairenin hesap seçimi geçmez; yeni dairenin hesapları sorulur.
+          _party = null;
+          _partyChoice = false;
+          _partyError = null;
+        }
       });
+      if (changed) unawaited(_probeParties(picked.id));
     } finally {
       _picking = false;
     }
@@ -342,12 +410,14 @@ class _FinancePaymentDialogState extends State<FinancePaymentDialog> with Financ
   /// Daire / yöntem seçimi eksikse hatayı alanın altında gösterir; ikisi de tamamsa true.
   bool _validateChoices() {
     final accountMissing = _accountRequired && _accountId == null;
+    final partyMissing = _partyChoice && _party == null;
     setState(() {
       _apartmentError = _apartment == null ? 'Daire seçin.' : null;
       _methodError = _method == null ? 'Tahsilat yöntemini seçin.' : null;
       _accountError = accountMissing ? 'Tahsilatın gireceği hesabı seçin.' : null;
+      _partyError = partyMissing ? 'Tahsilatın yazılacağı daire hesabını seçin.' : null;
     });
-    return _apartment != null && _method != null && !accountMissing;
+    return _apartment != null && _method != null && !accountMissing && !partyMissing;
   }
 
   bool _showAndFocus(GlobalKey key, FocusNode focus) {
@@ -361,6 +431,7 @@ class _FinancePaymentDialogState extends State<FinancePaymentDialog> with Financ
   /// Ekrandaki sıraya göre İLK sorunu görünür kılar: daire, sonra alan hataları (tutar, tarih), sonra yöntem.
   void _revealFirstProblem(BuildContext formContext) {
     if (_apartmentError != null && _showAndFocus(_apartmentKey, _apartmentFocus)) return;
+    if (_partyError != null && _showAndFocus(_partyKey, _partyFocus)) return;
     if (revealFirstInvalidField(formContext)) return;
     if (_methodError != null && _showAndFocus(_methodKey, _methodFocus)) return;
     if (_accountError != null) _showAndFocus(_accountKey, _accountFocus);
@@ -368,6 +439,12 @@ class _FinancePaymentDialogState extends State<FinancePaymentDialog> with Financ
 
   Future<void> _submit() async {
     if (_submitting || _retry.locked) return;
+    // İP-1A: daire hesapları yüklenirken gönderilmez. Yükleme bitince "Daire hesabı" seçimi çıkabilir ve isteğin imzası (işlem
+    // anahtarı) değişir: sonucu belirsiz kalan ilk denemeden sonra yeniden gönderim yeni anahtarla İKİNCİ tahsilatı yazabilirdi.
+    if (_partyLoading) {
+      setState(() => _error = _partyPendingMessage);
+      return;
+    }
     final fieldsOk = validateForm(
       _formKey,
       validateExtra: _validateChoices,
@@ -391,8 +468,11 @@ class _FinancePaymentDialogState extends State<FinancePaymentDialog> with Financ
     // imzada YOKTUR (yalnız metni düzeltmek yeni kayıt anahtarı üretmez).
     final useAccounts = _accountId != null && _selectableAccounts.any((a) => a.id == _accountId);
     final accountId = useAccounts ? _accountId : null;
+    // İP-1A: daire hesabı yalnız seçim gösterildiyse gider (aksi halde sunucu seçer); imzada yer alır (farklı hesap = yeni anahtar).
+    final party = _partyChoice ? _party : null;
     final signature =
-        '${widget.scope.siteCode}|${correcting?.id ?? 0}|${apartment.id}|$minor|${crmDateParam(date)}|${method.apiValue}|${accountId ?? 0}';
+        '${widget.scope.siteCode}|${correcting?.id ?? 0}|${apartment.id}|$minor|${crmDateParam(date)}|${method.apiValue}|${accountId ?? 0}'
+        '${party == null ? '' : '|${party.apiValue}'}';
     final key = _keys.keyFor(signature);
 
     FocusScope.of(context).unfocus();
@@ -417,6 +497,7 @@ class _FinancePaymentDialogState extends State<FinancePaymentDialog> with Financ
             description: note,
             accountId: accountId,
             idempotencyKey: key,
+            accountParty: party,
           ),
         );
       } else if (correcting != null && useAccounts) {
@@ -432,6 +513,7 @@ class _FinancePaymentDialogState extends State<FinancePaymentDialog> with Financ
             description: note,
             accountId: accountId,
             idempotencyKey: key,
+            accountParty: party,
           ),
         );
       } else if (correcting == null) {
@@ -443,6 +525,7 @@ class _FinancePaymentDialogState extends State<FinancePaymentDialog> with Financ
           method: method,
           description: note,
           idempotencyKey: key,
+          accountParty: party,
         );
       } else {
         result = await auth.correctFinancePayment(
@@ -453,6 +536,7 @@ class _FinancePaymentDialogState extends State<FinancePaymentDialog> with Financ
           method: method,
           description: note,
           idempotencyKey: key,
+          accountParty: party,
         );
       }
       // Yazma tamamlandı: bu imzanın anahtarı atılır (aynı tutardaki sonraki gerçek tahsilat yeni anahtar alır).
@@ -463,13 +547,16 @@ class _FinancePaymentDialogState extends State<FinancePaymentDialog> with Financ
       final head = _correcting
           ? 'Tahsilat düzeltildi: ${formatMinor(minor)}.'
           : 'Tahsilat kaydedildi: ${formatMinor(minor)}.';
-      popIfCurrent(
-        context,
-        FinancePaymentOutcome(
-          result: result,
-          message: balance == null ? head : '$head Güncel bakiye: ${describeBalance(balance).badgeText}.',
-        ),
-      );
+      // İP-1A: iki hesaplı dairede tahsilatın yazıldığı HESABIN bakiyesi yazılır (iki hesabın toplamı yanıltıcıdır).
+      final paidParty = result.entry.accountParty;
+      final accountBalance = result.accountBalanceMinor;
+      final String message;
+      if (_partyChoice && paidParty != null && accountBalance != null) {
+        message = '$head ${paidParty.label}: ${describeBalance(accountBalance).badgeText}.';
+      } else {
+        message = balance == null ? head : '$head Güncel bakiye: ${describeBalance(balance).badgeText}.';
+      }
+      popIfCurrent(context, FinancePaymentOutcome(result: result, message: message));
     } catch (e) {
       if (financeOutcomeUncertain(e)) _needsRefreshOnClose = true;
       // Sunucu aynı anahtarı farklı bilgiyle zaten kaydetmiş: bu imzanın anahtarı atılır; kayıt oluşmuş olabilir,
@@ -598,6 +685,38 @@ class _FinancePaymentDialogState extends State<FinancePaymentDialog> with Financ
                   ),
                 ),
               ),
+              if (_partyLoading && !_partyChoice) ...[
+                const SizedBox(height: AppSpace.sm),
+                const DialogLoadingNote(text: 'Daire hesapları yükleniyor...'),
+              ],
+              if (_partyChoice) ...[
+                const SizedBox(height: AppSpace.md),
+                KeyedSubtree(
+                  key: _partyKey,
+                  child: Focus(
+                    focusNode: _partyFocus,
+                    child: AccountPartyChoice(
+                      key: const ValueKey<String>('finance_payment_party'),
+                      selected: _party,
+                      enabled: !_submitting,
+                      keyPrefix: 'finance_payment_party',
+                      note: _correcting
+                          ? 'Düzeltilen tahsilat seçilen hesaba yazılır; eski kaydın ters kaydı kendi hesabında kalır.'
+                          : 'Tahsilat yalnız seçilen hesabın borcundan düşer; iki hesap birbirine karışmaz.',
+                      onSelected: (value) => setState(() {
+                        if (value == null) return;
+                        markDirty();
+                        _party = value;
+                        _partyError = null;
+                      }),
+                    ),
+                  ),
+                ),
+                if (_partyError != null) ...[
+                  const SizedBox(height: AppSpace.sm),
+                  CrmFormError(message: _partyError!, reveal: false),
+                ],
+              ],
               const SizedBox(height: AppSpace.md),
               MoneyFormField(
                 key: const ValueKey<String>('finance_payment_amount_group'),

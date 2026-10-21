@@ -71,11 +71,18 @@ class LateFeeLine {
     this.peakOverdueMinor,
     this.breakdown = const <OverdueSegment>[],
     this.reversed = false,
+    this.accountParty,
   });
 
   final int apartmentId;
   final String label;
   final String? blockName;
+
+  /// Satırın hesabı (İP-1A: aynı dairenin iki hesabı gecikmişse iki satır olur); eski sunucuda null.
+  final AccountParty? accountParty;
+
+  /// Satırın tekil anahtarı (liste / ekran anahtarı): eski sunucuda daire kimliği, iki hesapta "daire_hesap".
+  String get lineKey => accountParty == null ? '$apartmentId' : '${apartmentId}_${accountParty!.apiValue}';
   /// Kim öder (önizlemede var; çalıştırma satırlarında sunucu göndermez -> null, uydurma değer yazılmaz).
   final ResponsibleParty? payerParty;
   final int amountMinor;
@@ -100,22 +107,27 @@ class LateFeeLine {
     peakOverdueMinor: f4MinorOrNull(json, 'peak_overdue_minor'),
     breakdown: f4List(json['breakdown'], OverdueSegment.fromJson),
     reversed: f4Bool(json['reversed']),
+    accountParty: AccountParty.tryParse(json['account_party']),
   );
 }
 
 /// Muaf tutulan daire (hesaplanan tutar yazılmaz).
 @immutable
 class LateFeeWaivedItem {
-  const LateFeeWaivedItem({required this.apartmentId, this.label = '', this.computedMinor});
+  const LateFeeWaivedItem({required this.apartmentId, this.label = '', this.computedMinor, this.accountParty});
 
   final int apartmentId;
   final String label;
   final int? computedMinor;
 
+  /// Hesap (İP-1A): muafiyet daire başınadır; iki hesabı da gecikmiş dairenin iki öğesi olur (biri her hesap). Eski sunucuda null.
+  final AccountParty? accountParty;
+
   factory LateFeeWaivedItem.fromJson(Map<String, dynamic> json) => LateFeeWaivedItem(
     apartmentId: f4Int(json['apartment_id']),
     label: f4Str(json['label']),
     computedMinor: f4MinorOrNull(json, 'computed_minor'),
+    accountParty: AccountParty.tryParse(json['account_party']),
   );
 }
 

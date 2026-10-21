@@ -204,11 +204,13 @@ class Finance4bApi {
 
   // --- Sakin uçları (yalnız kendi dairesi) -------------------------------------------------------
 
+  /// Sakinin makbuzları (kendi hesabı + salt okunur kiracı hesabı); [accountParty] (İP-1A) yalnız o hesabın görünümü.
   Future<ReceiptPage> listMyReceipts({
     required String token,
     int? apartmentId,
     int limit = 50,
     int? beforeId,
+    AccountParty? accountParty,
   }) async {
     final r = await _send(
       'GET',
@@ -218,6 +220,7 @@ class Finance4bApi {
         if (apartmentId != null) 'apartment_id': '$apartmentId',
         'limit': '$limit',
         if (beforeId != null) 'before_id': '$beforeId',
+        'account_party': ?accountParty?.apiValue,
       },
     );
     return _parse('Makbuzlarım', () => ReceiptPage.fromJson(r.body));
@@ -228,11 +231,13 @@ class Finance4bApi {
     return _parse('Makbuz', () => Receipt.fromJson(_unwrap(r.body, 'receipt')));
   }
 
+  /// Sakin ekstresi: verilmezse KENDİ hesabı; [accountParty] (İP-1A) görünümlerinden biri olmalıdır (aksi 404).
   Future<ApartmentStatement> getMyStatement({
     required String token,
     required int apartmentId,
     DateTime? from,
     DateTime? to,
+    AccountParty? accountParty,
   }) async {
     final r = await _send(
       'GET',
@@ -241,6 +246,7 @@ class Finance4bApi {
       query: <String, String>{
         if (from != null) 'from': crmDateParam(from),
         if (to != null) 'to': crmDateParam(to),
+        'account_party': ?accountParty?.apiValue,
       },
       timeout: const Duration(seconds: 30),
     );
@@ -889,6 +895,7 @@ class Finance4bApi {
 
   // --- Raporlar ----------------------------------------------------------------------------------
 
+  /// Yaşlandırma; [accountParty] (İP-1A) verilirse yalnız o hesabın tutarları (yoksa iki hesabın toplamı + kırılım).
   Future<AgingReport> getAgingReport({
     required String token,
     required int siteCode,
@@ -896,6 +903,7 @@ class Finance4bApi {
     String status = 'all',
     int limit = 200,
     int offset = 0,
+    AccountParty? accountParty,
   }) async {
     final r = await _send(
       'GET',
@@ -906,6 +914,7 @@ class Finance4bApi {
         'status': status,
         'limit': '$limit',
         'offset': '$offset',
+        'account_party': ?accountParty?.apiValue,
       },
       timeout: const Duration(seconds: 40),
     );
@@ -943,12 +952,14 @@ class Finance4bApi {
     return _parse('Kasa durumu', () => CashPositionReport.fromJson(r.body));
   }
 
+  /// Yönetici daire ekstresi; [accountParty] (İP-1A) verilirse yalnız o hesap (yoksa iki hesap birlikte, eski davranış).
   Future<ApartmentStatement> getApartmentStatement({
     required String token,
     required int siteCode,
     required int apartmentId,
     DateTime? from,
     DateTime? to,
+    AccountParty? accountParty,
   }) async {
     final r = await _send(
       'GET',
@@ -957,6 +968,7 @@ class Finance4bApi {
       query: <String, String>{
         if (from != null) 'from': crmDateParam(from),
         if (to != null) 'to': crmDateParam(to),
+        'account_party': ?accountParty?.apiValue,
       },
       timeout: const Duration(seconds: 40),
     );
@@ -1130,6 +1142,7 @@ class Finance4bApi {
     String? description,
     int? accountId,
     required String idempotencyKey,
+    AccountParty? accountParty,
   }) async {
     final note = description?.trim();
     final r = await _send(
@@ -1144,6 +1157,8 @@ class Finance4bApi {
         if (note != null && note.isNotEmpty) 'description': note,
         'account_id': ?accountId,
         'idempotency_key': idempotencyKey,
+        // İP-1A: daire hesabı (ev sahibi / kiracı); verilmezse sunucu seçer
+        'account_party': ?accountParty?.apiValue,
       },
       write: true,
     );
@@ -1162,6 +1177,7 @@ class Finance4bApi {
     String? description,
     int? accountId,
     required String idempotencyKey,
+    AccountParty? accountParty,
   }) async {
     final note = description?.trim();
     final r = await _send(
@@ -1175,6 +1191,8 @@ class Finance4bApi {
         if (note != null && note.isNotEmpty) 'description': note,
         'account_id': ?accountId,
         'idempotency_key': idempotencyKey,
+        // İP-1A: verilirse yeni tahsilat bu daire hesabına yazılır (ters kayıt hep eski hesapta)
+        'account_party': ?accountParty?.apiValue,
       },
       write: true,
     );

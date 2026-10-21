@@ -296,6 +296,94 @@ String payerPartyLabel(ResponsibleParty party) => switch (party) {
   ResponsibleParty.both => 'Malik ve kiracı',
 };
 
+// --- İki hesap (İP-1A, karar G12; sözleşme: docs/PLATFORM_FINANS.md "İki hesap (2026-10-21)") ---------------------
+
+/// Dairenin hesabı: her dairenin ayrı bir "Ev sahibi hesabı" ve "Kiracı hesabı" vardır; bakiyeler birbirine KARIŞMAZ
+/// (sunucu `account_party`). Eski sunucu alanı göndermez: o zaman değer null'dır ve ekran tek hesap gibi davranır.
+enum AccountParty {
+  owner('owner', 'Ev sahibi hesabı'),
+  tenant('tenant', 'Kiracı hesabı');
+
+  const AccountParty(this.apiValue, this.label);
+
+  final String apiValue;
+  final String label;
+
+  /// Bilinmeyen / eksik değer null.
+  static AccountParty? tryParse(Object? value) {
+    if (value is! String) return null;
+    final normalized = value.trim().toLowerCase();
+    for (final party in values) {
+      if (party.apiValue == normalized) return party;
+    }
+    return null;
+  }
+}
+
+/// Borcun "Kim öder" seçimi (`charge_party`): dairede oturan (dairenin borç sorumlusu ve borç tarihindeki kiracı durumuna
+/// göre kiracı ya da ev sahibi hesabı) ya da her zaman ev sahibi. Seçim yalnız SONRAKİ borçlandırmaları etkiler.
+enum ChargeParty {
+  occupant('occupant', 'Dairede oturan'),
+  owner('owner', 'Ev sahibi');
+
+  const ChargeParty(this.apiValue, this.label);
+
+  final String apiValue;
+  final String label;
+
+  /// Seçeneğin kısa açıklaması (formda seçeneğin altında).
+  String get description => switch (this) {
+    ChargeParty.occupant =>
+      'Borç sorumlusu malikse ev sahibi hesabına; kiracı ya da malik ve kiracıysa, borç tarihinde dairede kiracı varsa '
+          'kiracı hesabına, yoksa ev sahibi hesabına yazılır.',
+    ChargeParty.owner => 'Her zaman ev sahibi hesabına yazılır (örneğin çatı, cephe, demirbaş).',
+  };
+
+  static ChargeParty? tryParse(Object? value) {
+    if (value is! String) return null;
+    final normalized = value.trim().toLowerCase();
+    for (final party in values) {
+      if (party.apiValue == normalized) return party;
+    }
+    return null;
+  }
+
+  /// Sunucu varsayılanı (alan gönderilmezse): aylık aidat dairede oturan, tek seferlik ek borç ev sahibi.
+  static ChargeParty defaultFor(FeeKind kind) => kind == FeeKind.recurring ? occupant : owner;
+}
+
+/// Bir hesabın toplamı (`accounts.owner` / `accounts.tenant`): bakiye (> 0 borç, < 0 alacak), vadesi geçen ve satır sayısı.
+@immutable
+class AccountTotals {
+  const AccountTotals({required this.balanceMinor, this.overdueMinor, this.entryCount});
+
+  final int balanceMinor;
+
+  /// Sunucu göndermediyse null (bilinmiyor, sıfır DEĞİL).
+  final int? overdueMinor;
+  final int? entryCount;
+
+  /// Hesapta hiç hareket yok mu? (Satır sayısı bilinmiyorsa bakiye sıfırsa öyle sayılır.)
+  bool get isEmpty => entryCount != null ? entryCount == 0 : balanceMinor == 0;
+
+  /// `accounts` içindeki bir hesap nesnesi; nesne yoksa ya da bakiye okunamazsa null (eski sunucu).
+  static AccountTotals? tryParse(Object? raw) {
+    if (raw is! Map) return null;
+    final json = Map<String, dynamic>.from(raw);
+    final balance = financeMinor(json['balance_minor']);
+    if (balance == null) return null;
+    return AccountTotals(
+      balanceMinor: balance,
+      overdueMinor: _optionalMinor(json, 'overdue_minor'),
+      entryCount: crmIntOrNull(json['entry_count']),
+    );
+  }
+}
+
+/// `accounts: { owner: {...}, tenant: {...} }` haritasından tek hesap.
+AccountTotals? _accountOf(Object? accounts, AccountParty party) =>
+    accounts is Map ? AccountTotals.tryParse(accounts[party.apiValue]) : null;
+
 // --- Hedef -----------------------------------------------------------------------------------
 
 /// Hedefteki bir blok / daire (kimlik + okunur etiket). Sunucunun `target.blocks` / `target.apartments` alanından gelir.
@@ -416,11 +504,18 @@ class FeeDefinition {
     this.isActive = true,
     this.lastPostedPeriod,
     this.hasRuns,
+    this.chargeParty,
   });
 
   final int id;
   final String name;
   final FeeKind kind;
+
+  /// "Kim öder" (`charge_party`; İP-1A). Eski sunucu göndermez: null ([effectiveChargeParty] türe göre varsayılanı verir).
+  final ChargeParty? chargeParty;
+
+  /// Etkin "Kim öder": sunucu değeri, yoksa türe göre varsayılan (aylık dairede oturan, tek seferlik ev sahibi).
+  ChargeParty get effectiveChargeParty => chargeParty ?? ChargeParty.defaultFor(kind);
   final FeeDistribution distribution;
   final AreaBasis? areaBasis;
 
@@ -476,6 +571,7 @@ class FeeDefinition {
       isActive: json['is_active'] is bool ? json['is_active'] as bool : true,
       lastPostedPeriod: FinancePeriod.tryParse(json['last_posted_period']),
       hasRuns: json['has_runs'] is bool ? json['has_runs'] as bool : null,
+      chargeParty: ChargeParty.tryParse(json['charge_party']),
     );
   }
 }
@@ -494,6 +590,7 @@ class FeeDefinitionInput {
     this.dueDay,
     this.endPeriod,
     this.target = const FeeTarget(),
+    this.chargeParty,
   });
 
   final String name;
@@ -506,6 +603,9 @@ class FeeDefinitionInput {
   final FinancePeriod startPeriod;
   final FinancePeriod? endPeriod;
   final FeeTarget target;
+
+  /// "Kim öder" (İP-1A); null ise alan gönderilmez (sunucu türe göre varsayılanı kullanır).
+  final ChargeParty? chargeParty;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
     'name': name.trim(),
@@ -520,6 +620,7 @@ class FeeDefinitionInput {
     'start_period': startPeriod.toApi(),
     if (endPeriod != null) 'end_period': endPeriod!.toApi(),
     'target': target.toJson(),
+    if (chargeParty != null) 'charge_party': chargeParty!.apiValue,
   };
 }
 
@@ -534,6 +635,7 @@ class ExtraChargeInput {
     this.categoryAmounts = const <String, int>{},
     this.target = const FeeTarget(),
     this.dueDate,
+    this.chargeParty,
   });
 
   final String name;
@@ -544,6 +646,9 @@ class ExtraChargeInput {
   final FeeTarget target;
   final DateTime? dueDate;
 
+  /// "Kim öder" (İP-1A); null ise alan gönderilmez (sunucu varsayılanı: ev sahibi).
+  final ChargeParty? chargeParty;
+
   Map<String, dynamic> toJson() => <String, dynamic>{
     'name': name.trim(),
     'distribution': distribution.apiValue,
@@ -553,6 +658,7 @@ class ExtraChargeInput {
     if (distribution == FeeDistribution.category) 'category_amounts': categoryAmounts,
     'target': target.toJson(),
     if (dueDate != null) 'due_date': crmDateParam(dueDate!),
+    if (chargeParty != null) 'charge_party': chargeParty!.apiValue,
   };
 }
 
@@ -567,6 +673,7 @@ class FeePreviewLine {
     this.blockName,
     this.payerParty = ResponsibleParty.both,
     required this.amountMinor,
+    this.accountParty,
   });
 
   final int apartmentId;
@@ -575,12 +682,16 @@ class FeePreviewLine {
   final ResponsibleParty payerParty;
   final int amountMinor;
 
+  /// Borcun yazılacağı hesap (İP-1A); eski sunucuda null.
+  final AccountParty? accountParty;
+
   factory FeePreviewLine.fromJson(Map<String, dynamic> json) => FeePreviewLine(
     apartmentId: crmInt(json['apartment_id']),
     label: json['label']?.toString() ?? '',
     blockName: crmText(json['block_name']),
     payerParty: ResponsibleParty.fromApi(json['payer_party']),
     amountMinor: _requiredMinor(json, 'amount_minor'),
+    accountParty: AccountParty.tryParse(json['account_party']),
   );
 }
 
@@ -832,11 +943,19 @@ class LedgerEntry {
     this.receipt,
     this.isLateFee = false,
     this.lateFeeRunId,
+    this.accountParty,
+    this.sourceKind,
   });
 
   final int id;
   final LedgerKind kind;
   final int amountMinor;
+
+  /// Satırın hesabı (İP-1A: ev sahibi / kiracı hesabı); eski sunucuda null.
+  final AccountParty? accountParty;
+
+  /// Tahsilatın kaynağı (`manual`, `payment_notice`, `bank_line`, `opening`, `card`); borç satırında ve eski sunucuda null.
+  final String? sourceKind;
   final FinancePeriod? period;
   final DateTime? entryDate;
   final DateTime? dueDate;
@@ -890,6 +1009,8 @@ class LedgerEntry {
     receipt: ReceiptRef.tryParse(json['receipt']),
     isLateFee: _isLateFeeJson(json),
     lateFeeRunId: crmIntOrNull(json['late_fee_run_id']),
+    accountParty: AccountParty.tryParse(json['account_party']),
+    sourceKind: crmText(json['source_kind']),
   );
 
   /// Tazminat kalemi: `kind = charge` VE (açık bayrak / harita ya da `late_fee_run_id`). Sunucu tazminatın TERS kaydına da
@@ -914,13 +1035,19 @@ class LedgerWriteResult {
     this.balanceMinor,
     this.receipt,
     this.movementId,
+    this.accountBalanceMinor,
   });
 
   final LedgerEntry entry;
 
   /// Yalnız düzeltmede (`correct`): oluşan ters kayıt.
   final LedgerEntry? reversal;
+
+  /// Dairenin TOPLAM bakiyesi (iki hesabın toplamı; eski alan).
   final int? balanceMinor;
+
+  /// Tahsilatın yazıldığı HESABIN bakiyesi (İP-1A; eski sunucuda null).
+  final int? accountBalanceMinor;
 
   /// Tahsilatla birlikte düzenlenen makbuz (otomatik düzenleme kapalıysa ya da eski sunucuda null).
   final ReceiptRef? receipt;
@@ -939,6 +1066,7 @@ class LedgerWriteResult {
       balanceMinor: _optionalMinor(json, 'balance_minor'),
       receipt: ReceiptRef.tryParse(json['receipt']) ?? parsedEntry.receipt,
       movementId: crmIntOrNull(json['movement_id']),
+      accountBalanceMinor: _optionalMinor(json, 'account_balance_minor'),
     );
   }
 }
@@ -956,17 +1084,33 @@ class BalanceRow {
     this.overdueMinor,
     this.ownerName,
     this.tenantName,
+    this.debtMinor,
+    this.creditMinor,
+    this.ownerAccount,
+    this.tenantAccount,
   });
 
   final int apartmentId;
   final String label;
   final String? blockName;
+
+  /// İki hesabın TOPLAMI (eski alan). Bir hesabın alacağı diğerinin borcunu kapatmaz: borç / alacak için [debtMinor] /
+  /// [creditMinor] kullanılır.
   final int balanceMinor;
 
   /// Vadesi geçmiş tutar; sunucu göndermediyse null (bilinmiyor, sıfır DEĞİL).
   final int? overdueMinor;
   final String? ownerName;
   final String? tenantName;
+
+  /// İP-1A: hesapların borç / alacak toplamları ve hesap kırılımı; eski sunucuda null.
+  final int? debtMinor;
+  final int? creditMinor;
+  final AccountTotals? ownerAccount;
+  final AccountTotals? tenantAccount;
+
+  /// Kiracı hesabında hareket var mı (bakiye sıfırdan farklı)? Varsa liste iki hesabı ayrı gösterir.
+  bool get hasTenantBalance => (tenantAccount?.balanceMinor ?? 0) != 0;
 
   factory BalanceRow.fromJson(Map<String, dynamic> json) => BalanceRow(
     apartmentId: crmInt(json['apartment_id']),
@@ -976,6 +1120,10 @@ class BalanceRow {
     overdueMinor: _optionalMinor(json, 'overdue_minor'),
     ownerName: crmText(json['owner_name']),
     tenantName: crmText(json['tenant_name']),
+    debtMinor: _optionalMinor(json, 'debt_minor'),
+    creditMinor: _optionalMinor(json, 'credit_minor'),
+    ownerAccount: _accountOf(json['accounts'], AccountParty.owner),
+    tenantAccount: _accountOf(json['accounts'], AccountParty.tenant),
   );
 }
 
@@ -1034,6 +1182,11 @@ class AccountApartment {
 }
 
 /// Daire ekstresi (`GET .../apartments/:id/account`).
+///
+/// İP-1A: `?account_party=` verilirse satırlar ve bakiye o hesabındır ([accountParty]); verilmezse eski davranış (tüm
+/// satırlar, bakiye iki hesabın toplamı). [showTenantAccount] kiracı sekmesinin gösterilip gösterilmeyeceğini (kiracısı hiç
+/// olmamış ve kiracı hesabında satırı olmayan dairede false), [defaultPaymentAccount] hesap seçilmeyen tahsilatın sunucuda
+/// yazılacağı hesabı (vadesi en eski açık borcu olan hesap) verir. Eski sunucu bu alanları göndermez: tek hesap gibi davranılır.
 @immutable
 class AccountView {
   const AccountView({
@@ -1042,6 +1195,12 @@ class AccountView {
     this.overdueMinor,
     this.items = const <LedgerEntry>[],
     this.nextBeforeId,
+    this.accountParty,
+    this.ownerAccount,
+    this.tenantAccount,
+    this.showTenantAccount = false,
+    this.hasCurrentTenant = false,
+    this.defaultPaymentAccount,
   });
 
   final AccountApartment apartment;
@@ -1049,6 +1208,19 @@ class AccountView {
   final int? overdueMinor;
   final List<LedgerEntry> items;
   final int? nextBeforeId;
+
+  /// İsteğin hesap süzgeci (yanıt yankısı); süzgeçsiz istekte null.
+  final AccountParty? accountParty;
+  final AccountTotals? ownerAccount;
+  final AccountTotals? tenantAccount;
+  final bool showTenantAccount;
+  final bool hasCurrentTenant;
+  final AccountParty? defaultPaymentAccount;
+
+  /// Ekran iki hesabı ayrı sekmelerde gösterebilir mi? (Sunucu iki hesabı da verdi ve kiracı sekmesi gerekli.)
+  bool get hasTwoAccounts => showTenantAccount && ownerAccount != null && tenantAccount != null;
+
+  AccountTotals? accountOf(AccountParty party) => party == AccountParty.owner ? ownerAccount : tenantAccount;
 
   factory AccountView.fromJson(Map<String, dynamic> json) {
     final apartment = json['apartment'];
@@ -1060,6 +1232,12 @@ class AccountView {
       overdueMinor: _optionalMinor(json, 'overdue_minor'),
       items: _listOf(json['items'], LedgerEntry.fromJson),
       nextBeforeId: crmIntOrNull(json['next_before_id']),
+      accountParty: AccountParty.tryParse(json['account_party']),
+      ownerAccount: _accountOf(json['accounts'], AccountParty.owner),
+      tenantAccount: _accountOf(json['accounts'], AccountParty.tenant),
+      showTenantAccount: json['show_tenant_account'] == true,
+      hasCurrentTenant: json['has_current_tenant'] == true,
+      defaultPaymentAccount: AccountParty.tryParse(json['default_payment_account']),
     );
   }
 }
@@ -1185,7 +1363,57 @@ class FinanceSummary {
 
 // --- Sakin: Borcum -----------------------------------------------------------------------------
 
+/// Sakinin bir hesap görünümündeki rolü: kendi hesabı ya da (borç sorumlusu "malik ve kiracı" olan dairede malike) salt
+/// okunur kiracı hesabı.
+enum MyFinanceAccountRole { own, readOnly }
+
+/// Sakinin bir daire hesabı görünümü (`items[].accounts[]`; İP-1A). Tutarlar ve hareketler YALNIZ bu hesabındır; sakin
+/// kapsamı ve mahsup kuralı hesap başına uygulanır.
+@immutable
+class MyFinanceAccount {
+  const MyFinanceAccount({
+    this.accountParty,
+    this.role = MyFinanceAccountRole.own,
+    required this.balanceMinor,
+    this.overdueMinor,
+    this.nextDueDate,
+    this.nextDueMinor,
+    this.visibleFrom,
+    this.offsetNote = false,
+    this.recent = const <LedgerEntry>[],
+  });
+
+  /// Görünümün hesabı; eski sunucuda null (tek hesap).
+  final AccountParty? accountParty;
+  final MyFinanceAccountRole role;
+  final int balanceMinor;
+  final int? overdueMinor;
+  final DateTime? nextDueDate;
+  final int? nextDueMinor;
+  final FinancePeriod? visibleFrom;
+  final bool offsetNote;
+  final List<LedgerEntry> recent;
+
+  bool get isReadOnly => role == MyFinanceAccountRole.readOnly;
+
+  factory MyFinanceAccount.fromJson(Map<String, dynamic> json) => MyFinanceAccount(
+    accountParty: AccountParty.tryParse(json['account_party']),
+    role: json['role'] == 'read_only' ? MyFinanceAccountRole.readOnly : MyFinanceAccountRole.own,
+    balanceMinor: _requiredMinor(json, 'balance_minor'),
+    overdueMinor: _optionalMinor(json, 'overdue_minor'),
+    nextDueDate: crmDate(json['next_due_date']),
+    nextDueMinor: _optionalMinor(json, 'next_due_minor'),
+    visibleFrom: FinancePeriod.tryParse(json['visible_from']),
+    offsetNote: json['offset_note'] == true,
+    recent: _listOf(json['recent'], LedgerEntry.fromJson),
+  );
+}
+
 /// Sakinin bir dairedeki mali durumu (`GET /app/my-finance` -> `items[]`).
+///
+/// İP-1A: eski alanlar ([balanceMinor], [overdueMinor], [nextDueDate], [visibleFrom], [offsetNote], [recent]) kişinin KENDİ
+/// hesabıdır ([accountParty]); [accounts] görünümlerin listesidir (ilki kendi hesabı; borç sorumlusu "malik ve kiracı" olan
+/// dairede malik için salt okunur kiracı hesabı ikinci). Borç kartı ve vitrin yalnız kendi hesabını sayar ([ownAccount]).
 @immutable
 class MyFinanceApartment {
   const MyFinanceApartment({
@@ -1202,7 +1430,33 @@ class MyFinanceApartment {
     this.visibleFrom,
     this.offsetNote = false,
     this.recent = const <LedgerEntry>[],
+    this.accountParty,
+    this.accounts = const <MyFinanceAccount>[],
   });
+
+  /// Kişinin kendi hesabı (İP-1A); eski sunucuda null.
+  final AccountParty? accountParty;
+
+  /// Görünümler (kendi hesabı + salt okunur kiracı hesabı); eski sunucuda boş.
+  final List<MyFinanceAccount> accounts;
+
+  /// Kişinin KENDİ hesabı: eski alanlardan (sunucu bunları kendi hesabıyla doldurur; eski sunucuda dairenin tek hesabıdır).
+  MyFinanceAccount get ownAccount => MyFinanceAccount(
+    accountParty: accountParty,
+    balanceMinor: balanceMinor,
+    overdueMinor: overdueMinor,
+    nextDueDate: nextDueDate,
+    nextDueMinor: nextDueMinor,
+    visibleFrom: visibleFrom,
+    offsetNote: offsetNote,
+    recent: recent,
+  );
+
+  /// Salt okunur görünümler (borç sorumlusu "malik ve kiracı" olan dairede malike kiracı hesabı).
+  List<MyFinanceAccount> get readOnlyAccounts => <MyFinanceAccount>[
+    for (final account in accounts)
+      if (account.isReadOnly) account,
+  ];
 
   final int siteCode;
   final String siteName;
@@ -1241,8 +1495,15 @@ class MyFinanceApartment {
     visibleFrom: FinancePeriod.tryParse(json['visible_from']),
     offsetNote: json['offset_note'] == true,
     recent: _listOf(json['recent'], LedgerEntry.fromJson),
+    accountParty: AccountParty.tryParse(json['account_party']),
+    accounts: _listOf(json['accounts'], MyFinanceAccount.fromJson),
   );
 }
+
+/// Salt okunur kiracı hesabının açıklaması (Borcum kartı).
+const String myFinanceReadOnlyNote =
+    'Bu dairede borçtan malik ve kiracı birlikte sorumlu olduğu için kiracı hesabını bilgi amacıyla görürsünüz. '
+    'Bu hesaptaki tutarlar sizin kendi hesabınıza eklenmez.';
 
 /// Sakin kapsamı notu (Borcum kartı ve sakin ekstresi PDF'i aynı metni kullanır).
 String myFinanceScopeNote(FinancePeriod from) =>

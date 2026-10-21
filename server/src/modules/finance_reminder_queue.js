@@ -16,7 +16,7 @@ import { ANNOUNCEMENT_LOCK_CLASS, ANNOUNCEMENT_LOCK_JOBS } from './announcement_
 import { deliverableEmailSql, suppressedSql } from './announcement_recipients.js';
 import { buildFinanceReminderEmail } from './finance_reminder_mail.js';
 import { dayNumber } from './finance_4b_common.js';
-import { loadCandidateApartments, loadRecipientRows } from './finance_reminders.js';
+import { candidateKey, loadCandidateApartments, loadRecipientRows } from './finance_reminders.js';
 import { readLegalOk } from './finance_settings.js';
 import { recordFinanceAudit } from './finance_tx.js';
 import { isPermanentSendError } from './announcement_email_queue.js';
@@ -248,18 +248,18 @@ async function claimBatch(batchSize, attempted) {
       list.push(...row.apartment_ids.map(Number));
       bySite.set(Number(row.site_code), list);
     }
-    const fresh = new Map();
-    const recipientsOf = new Map(); // `${site}:${person}` -> Set(daire): kişinin o dairede HÂLÂ güncel ve izinli (responsible_party) ilişkisi var
+    const fresh = new Map(); // `${daire}:${hesap}` -> aday (İP-1A: hesap bazında)
+    const recipientsOf = new Map(); // `${site}:${person}` -> Map(daire -> hesap): kişinin o dairede HÂLÂ güncel ilişkisi ve kendi hesabı
     for (const [siteCode, ids] of bySite) {
       const unique = [...new Set(ids)];
-      for (const apartment of await loadCandidateApartments(client, siteCode, today, unique)) {
-        fresh.set(apartment.id, apartment);
+      for (const candidate of await loadCandidateApartments(client, siteCode, today, unique)) {
+        fresh.set(candidateKey(candidate.id, candidate.accountParty), candidate);
       }
       for (const recipient of await loadRecipientRows(client, siteCode, unique)) {
         const mapKey = `${siteCode}:${Number(recipient.person_id)}`;
-        const set = recipientsOf.get(mapKey) ?? new Set();
-        set.add(Number(recipient.apartment_id));
-        recipientsOf.set(mapKey, set);
+        const map = recipientsOf.get(mapKey) ?? new Map();
+        map.set(Number(recipient.apartment_id), recipient.account_party);
+        recipientsOf.set(mapKey, map);
       }
     }
     const send = [];
@@ -289,12 +289,12 @@ async function claimBatch(batchSize, attempted) {
         mark(row, 'resolved');
         continue;
       }
-      const allowed = recipientsOf.get(`${Number(row.site_code)}:${Number(row.person_id)}`) ?? new Set();
-      // daire hâlâ bu kişinin sorumluluğunda mı (ilişki güncel + responsible_party), muaf değil, borç eşiği ve gecikme günü hâlâ sağlanıyor mu
+      const allowed = recipientsOf.get(`${Number(row.site_code)}:${Number(row.person_id)}`) ?? new Map();
+      // kişi hâlâ dairede ve hesabının sahibi mi (İP-1A), o hesap muaf değil, borç eşiği ve gecikme günü hâlâ sağlanıyor mu
       const remaining = row.apartment_ids
         .map(Number)
         .filter((id) => allowed.has(id))
-        .map((id) => fresh.get(id))
+        .map((id) => fresh.get(candidateKey(id, allowed.get(id))))
         .filter((apartment) => apartment && apartment.excluded !== true && apartment.overdue >= minOverdue && apartment.oldestDue !== null && todayDay - dayNumber(apartment.oldestDue) >= minDays);
       if (remaining.length === 0) {
         mark(row, 'resolved');
