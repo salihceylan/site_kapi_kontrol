@@ -5,6 +5,7 @@ import 'package:site_kapi_kontrol/models/decision_models.dart' show decisionBook
 import 'package:site_kapi_kontrol/models/document_models.dart' show documentActionLabel;
 import 'package:site_kapi_kontrol/models/finance.dart';
 import 'package:site_kapi_kontrol/models/history_item.dart';
+import 'package:site_kapi_kontrol/models/plate_audit_label.dart' show plateActionLabel;
 import 'package:site_kapi_kontrol/models/platform_rule.dart' show platformRuleActionLabel, platformRuleTargetLabel;
 import 'package:site_kapi_kontrol/models/site_application.dart';
 
@@ -105,6 +106,7 @@ class AuditLogEntry {
             decisionBookActionLabel(action) ??
             contractActionLabel(action, details) ??
             platformRuleActionLabel(action) ??
+            plateActionLabel(action) ??
             'Diğer işlem';
     }
   }

@@ -20,6 +20,7 @@ import { actorFromAuthUser } from './audit_service.js';
 import { FORBIDDEN_ROLE_BODY, FORBIDDEN_SITE_BODY, SITE_NOT_FOUND_BODY, getPeopleAccessKind } from './people_access.js';
 import { isModuleEnabled } from './module_service.js';
 import { HOUR_MS, ipKey, respondError, userKey } from './route_helpers.js';
+import { handlePlateEvent } from './plate_recognition_service.js';
 import {
   CARD_PAYMENTS_MODULE,
   MAX_BODY_BYTES,
@@ -171,7 +172,7 @@ deviceIntegrationsRouter.post('/camera-events/plate', eventLimiter, async (req, 
     assertBodySize(req);
     const bearer = /^Bearer\s+(\S+)$/i.exec(String(req.headers.authorization ?? ''));
     const rawToken = bearer ? bearer[1] : req.headers['x-camera-token'];
-    return res.json(await recordPlateEvent({ rawToken, body: bodyOf(req), isModuleOn: isModuleEnabled }));
+    return res.json(await recordPlateEvent({ rawToken, body: bodyOf(req), isModuleOn: isModuleEnabled, onRecorded: handlePlateEvent }));
   } catch (error) {
     return respondError(res, 'camera_plate_event', error, 'Olay kaydedilemedi.');
   }

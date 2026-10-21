@@ -167,6 +167,8 @@ import 'package:site_kapi_kontrol/ui/views/directory_view.dart';
 import 'package:site_kapi_kontrol/ui/widgets/pending_invitations_card.dart';
 import 'package:site_kapi_kontrol/ui/views/neighbor_board_view.dart';
 import 'package:site_kapi_kontrol/ui/views/annual_report_view.dart';
+import 'package:site_kapi_kontrol/services/plate_recognition_api.dart' show PlateAccess, PlateSite;
+import 'package:site_kapi_kontrol/ui/views/plate_recognition_view.dart';
 import 'package:site_kapi_kontrol/services/device_integrations_api.dart' show DeviceSite;
 import 'package:site_kapi_kontrol/ui/views/device_integrations_view.dart';
 import 'package:site_kapi_kontrol/services/equipment_api.dart' show EquipmentSite;
@@ -323,6 +325,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final GlobalKey<BudgetViewState> _budgetKey = GlobalKey<BudgetViewState>();
   final GlobalKey<NeighborBoardViewState> _neighborBoardKey = GlobalKey<NeighborBoardViewState>();
   final GlobalKey<AnnualReportViewState> _annualReportKey = GlobalKey<AnnualReportViewState>();
+  final GlobalKey<PlateRecognitionViewState> _plateRecognitionKey = GlobalKey<PlateRecognitionViewState>();
   final GlobalKey<DeviceIntegrationsViewState> _deviceIntegrationsKey = GlobalKey<DeviceIntegrationsViewState>();
   final GlobalKey<EquipmentViewState> _equipmentKey = GlobalKey<EquipmentViewState>();
   final GlobalKey<VisitorManagerViewState> _visitorManagerKey = GlobalKey<VisitorManagerViewState>();
@@ -987,6 +990,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         if (_canAccessBudget(role)) SirketMenuItem.isletmeProjesi,
         if (_neighborBoardSites(role).isNotEmpty) SirketMenuItem.komsuPanosu,
         if (_annualReportSites(role).isNotEmpty) SirketMenuItem.faaliyetRaporu,
+        if (_plateRecognitionSites(role).isNotEmpty) SirketMenuItem.plakaTanima,
         if (_deviceIntegrationSites(role).isNotEmpty) SirketMenuItem.odemeKamera,
         if (_equipmentSites(role).isNotEmpty) SirketMenuItem.ekipmanBakim,
         if (_canAccessVisitorManage(role)) SirketMenuItem.ziyaretciKayitlari,
@@ -1320,6 +1324,28 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       for (final site in _moduleAccess.result!.sites)
         if (site.isEnabled(PlatformModuleCodes.annualReport) && site.role == 'manager')
           PeopleSite(code: site.siteCode, name: site.siteName, canWrite: true),
+    ];
+  }
+
+  // --- Plaka Tanıma ---
+
+  /// "Plaka Tanıma" siteleri: `plate_recognition` modülü AÇIK siteler. Yönetici (yönetici modunda) yönetir; kurul üyesi ve görevli
+  /// SALT OKUR; sakin (ya da sakin modundaki yönetici) yalnız kendi dairesi için "Misafir plakası" verir. Süper kullanıcıda boştur.
+  /// FAIL-OPEN YOK: modül verisi yoksa liste boştur. Sunucu yetkiyi ve modül durumunu her çağrıda yine denetler.
+  List<PlateSite> _plateRecognitionSites(UserRole role) {
+    if (role == UserRole.superUser || !_moduleAccess.isFiltering) return const <PlateSite>[];
+    final canManage = _canManagePeople(role);
+    return <PlateSite>[
+      for (final site in _moduleAccess.result!.sites)
+        if (site.isEnabled(PlatformModuleCodes.plateRecognition))
+          if (site.role == 'manager' && canManage)
+            PlateSite(code: site.siteCode, name: site.siteName, access: PlateAccess.manager)
+          else if (site.role == 'staff' || site.isBoardMember)
+            PlateSite(code: site.siteCode, name: site.siteName, access: PlateAccess.viewer)
+          else if (role != UserRole.individual &&
+              site.doorAccess &&
+              (site.role == 'resident' || (site.role == 'manager' && _isResidentMode)))
+            PlateSite(code: site.siteCode, name: site.siteName, access: PlateAccess.resident),
     ];
   }
 
@@ -1926,6 +1952,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (item == SirketMenuItem.faaliyetRaporu) {
       return _annualReportSites(role).isNotEmpty;
     }
+    if (item == SirketMenuItem.plakaTanima) {
+      return _plateRecognitionSites(role).isNotEmpty;
+    }
     if (item == SirketMenuItem.odemeKamera) {
       return _deviceIntegrationSites(role).isNotEmpty;
     }
@@ -2120,6 +2149,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         return 'Komşu Panosu';
       case SirketMenuItem.faaliyetRaporu:
         return 'Faaliyet Raporu';
+      case SirketMenuItem.plakaTanima:
+        // Sakinde ekranın içindeki başlık "Misafir plakası"dır; menü adı herkeste aynıdır.
+        return 'Plaka Tanıma';
       case SirketMenuItem.odemeKamera:
         return 'Ödeme ve Kamera';
       case SirketMenuItem.ekipmanBakim:
@@ -5577,6 +5609,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         await _neighborBoardKey.currentState?.reload();
       case SirketMenuItem.faaliyetRaporu:
         await _annualReportKey.currentState?.reload();
+      case SirketMenuItem.plakaTanima:
+        await _plateRecognitionKey.currentState?.reload();
       case SirketMenuItem.odemeKamera:
         await _deviceIntegrationsKey.currentState?.reload();
         break;
@@ -6823,6 +6857,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           key: _annualReportKey,
           authService: widget.authService,
           sites: _annualReportSites(session.role),
+        );
+
+      case SirketMenuItem.plakaTanima:
+        return PlateRecognitionView(
+          key: _plateRecognitionKey,
+          authService: widget.authService,
+          sites: _plateRecognitionSites(session.role),
         );
 
       case SirketMenuItem.odemeKamera:

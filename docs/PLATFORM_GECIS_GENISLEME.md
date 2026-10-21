@@ -6,7 +6,7 @@ Bu dilim YALNIZ sunucu altyapısıdır: kartlı geçiş kayıt/iptal/listeleme u
 | Kod | Ad | Durum | Varsayılan |
 |---|---|---|---|
 | `card_access` | Kartlı Geçiş | `available` | KAPALI (süper açar, yönetici modül talep eder) |
-| `plate_recognition` | Plaka Tanıma | `coming_soon` | KAPALI (açılamaz, `409 MODULE_COMING_SOON`) |
+| `plate_recognition` | Plaka Tanıma | `available` (073; bkz. PLATFORM_PLAKA_TANIMA.md) | KAPALI (süper açar, yönetici modül talep eder; kapı açma "Yakında…") |
 | `hgs_access` | HGS Geçişi | `coming_soon` | KAPALI |
 | `cctv_link` | Kamera (CCTV) Bağlantısı | `coming_soon` | KAPALI |
 
