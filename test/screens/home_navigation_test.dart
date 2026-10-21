@@ -391,6 +391,52 @@ void main() {
     });
   });
 
+  group('çekmece başlıkları: rol × modül × kapı yetkisi matrisi (öğesi olmayan başlık görünmez)', () {
+    List<SirketMenuGroup> headersOnScreen() => <SirketMenuGroup>[
+          for (final group in SirketMenuGroup.values)
+            if (find.byKey(ValueKey<String>('yan_menu_grup_${group.name}')).evaluate().isNotEmpty) group,
+        ];
+
+    const a = SirketMenuGroup.anaSayfa;
+    const d = SirketMenuGroup.daireler;
+    const b = SirketMenuGroup.borclar;
+    const i = SirketMenuGroup.iletisim;
+    const h = SirketMenuGroup.siteHizmetleri;
+
+    final cases = <(String, UserRole, List<MySiteModules> Function(), bool, List<DoorRecord>?, List<SirketMenuGroup>)>[
+      ('süper kullanıcı', UserRole.superUser, () => const <MySiteModules>[], true, null, <SirketMenuGroup>[a, d, b, i, h]),
+      ('site yöneticisi, yalnız çekirdek modüller', UserRole.siteManager, () => <MySiteModules>[_my('manager')], false, null,
+          <SirketMenuGroup>[a, d, i, h]),
+      ('site yöneticisi, Finans açık', UserRole.siteManager, () => <MySiteModules>[_my('manager', modules: {'finance': true})],
+          false, null, <SirketMenuGroup>[a, d, b, i, h]),
+      ('site yöneticisi, Geçiş Kontrol kapalı ve modül yok', UserRole.siteManager,
+          () => <MySiteModules>[_my('manager', door: false)], false, null, <SirketMenuGroup>[a, d, i]),
+      ('daire sakini, kapı + Finans + Belgeler + İş Takibi', UserRole.apartmentOwner,
+          () => <MySiteModules>[_my('resident', modules: {'finance': true, 'documents': true, 'work_tracking': true})], false,
+          null, <SirketMenuGroup>[a, d, b, i, h]),
+      ('daire sakini, Geçiş Kontrol kapalı, modül yok', UserRole.apartmentOwner,
+          () => <MySiteModules>[_my('resident', door: false)], false, null, <SirketMenuGroup>[a, d, i]),
+      ('yalnız görevli bağı (kapısız), İş Takibi açık', UserRole.apartmentOwner,
+          () => <MySiteModules>[_my('staff', modules: {'work_tracking': true})], false, const <DoorRecord>[],
+          <SirketMenuGroup>[a, d, i]),
+      ('bireysel kullanıcı', UserRole.individual, () => const <MySiteModules>[], false, null, <SirketMenuGroup>[a, d, h]),
+    ];
+    for (final (label, role, sites, superUser, doors, expected) in cases) {
+      testWidgets(label, (t) async {
+        final auth = _NavAuth(role, doors: doors);
+        final access = await _access(sites, superUser: superUser);
+        await _pumpHome(t, auth, access: access, height: 1600);
+        await _openDrawer(t);
+        expect(headersOnScreen(), expected, reason: label);
+        expect(headersOnScreen(), isNot(contains(SirketMenuGroup.ayarlar)), reason: 'Ayarlar çekmece başlığı değil');
+        for (final empty in const <SirketMenuGroup>[SirketMenuGroup.tahsilat, SirketMenuGroup.giderler, SirketMenuGroup.raporlar]) {
+          expect(headersOnScreen(), isNot(contains(empty)), reason: '${empty.title}: bugün öğesi yok');
+        }
+        await _disposeHome(t);
+      });
+    }
+  });
+
   group('sakin alt çubuğu: rol × modül × kapı yetkisi matrisi', () {
     final cases = <(String, UserRole, List<MySiteModules> Function(), List<DoorRecord>?, List<ResidentTab>)>[
       (
