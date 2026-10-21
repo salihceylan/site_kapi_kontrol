@@ -225,6 +225,9 @@ class FinanceFakeAuth extends PeopleFakeAuth {
   /// İP-1A: dairenin sabit varsayılan tahsilat hesabı (yoksa [defaultPaymentAccountOf] hesaplar).
   final Map<int, String> defaultPaymentAccounts = <int, String>{};
 
+  /// İP-1A: önizleme satırında iki hesaplı dairenin borç hesabı (yoksa ev sahibi).
+  final Map<int, String> previewAccounts = <int, String>{};
+
   // --- Kancalar ------------------------------------------------------------------------------
   Object? finError;
   Object? summaryError;
@@ -514,7 +517,8 @@ class FinanceFakeAuth extends PeopleFakeAuth {
     await _writeGate();
     final row = definitions[definitionId];
     if (row == null) throw _coded('DEFINITION_NOT_FOUND', 404);
-    const postedKeys = <String>{'name', 'end_period', 'is_active', 'due_day'};
+    // İP-1A: "kim öder" (charge_party) borçlandırılmış tanımda da değişir (sunucu POSTED_PATCH_KEYS).
+    const postedKeys = <String>{'name', 'end_period', 'is_active', 'due_day', 'charge_party'};
     if (row['has_runs'] == true && fields.keys.any((k) => !postedKeys.contains(k))) {
       throw _coded('DEFINITION_LOCKED', 409);
     }
@@ -698,6 +702,8 @@ class FinanceFakeAuth extends PeopleFakeAuth {
             'block_name': _blockOf(id),
             'payer_party': apartmentsJson[id]!['responsible_party'],
             'amount_minor': lines[id],
+            // İP-1A: iki hesaplı dairede borcun yazılacağı hesap ([previewAccounts], yoksa ev sahibi)
+            if (twoAccountApartments.contains(id)) 'account_party': previewAccounts[id] ?? 'owner',
           },
       ],
       'missing_data': plan['missing'],

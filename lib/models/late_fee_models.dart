@@ -80,6 +80,9 @@ class LateFeeLine {
 
   /// Satırın hesabı (İP-1A: aynı dairenin iki hesabı gecikmişse iki satır olur); eski sunucuda null.
   final AccountParty? accountParty;
+
+  /// Satırın tekil anahtarı (liste / ekran anahtarı): eski sunucuda daire kimliği, iki hesapta "daire_hesap".
+  String get lineKey => accountParty == null ? '$apartmentId' : '${apartmentId}_${accountParty!.apiValue}';
   /// Kim öder (önizlemede var; çalıştırma satırlarında sunucu göndermez -> null, uydurma değer yazılmaz).
   final ResponsibleParty? payerParty;
   final int amountMinor;

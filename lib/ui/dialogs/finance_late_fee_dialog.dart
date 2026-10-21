@@ -103,7 +103,8 @@ class _FinanceLateFeeDialogState extends State<FinanceLateFeeDialog> with Financ
   int _previewToken = 0;
   int _visible = FinanceLateFeeDialog.pageSize;
   bool _asking = false;
-  final Set<int> _explained = <int>{};
+  // İP-1A: aynı dairenin iki hesabı iki satırdır: döküm satır anahtarıyla açılır ([LateFeeLine.lineKey]); muafiyet daire başınadır.
+  final Set<String> _explained = <String>{};
   final RetryLock _previewRetry = RetryLock();
 
   FinancePeriod get _currentPeriod => FinancePeriod.of(istanbulNow(widget.now?.call()));
@@ -508,7 +509,7 @@ class _FinanceLateFeeDialogState extends State<FinanceLateFeeDialog> with Financ
                     style: th.bodySmall?.copyWith(color: p.textSecondary),
                   ),
                   const SizedBox(height: AppSpace.xs),
-                  Text('${preview.apartmentCount} daire', key: const ValueKey<String>('finance_latefee_count'), style: th.bodyMedium),
+                  Text(_countText(preview), key: const ValueKey<String>('finance_latefee_count'), style: th.bodyMedium),
                   Text(
                     formatMinor(preview.totalMinor),
                     key: const ValueKey<String>('finance_latefee_total'),
@@ -649,18 +650,28 @@ class _FinanceLateFeeDialogState extends State<FinanceLateFeeDialog> with Financ
     );
   }
 
+  /// "12 daire" ya da (İP-1A, aynı dairenin iki hesabı satırdaysa) "11 daire, 12 hesap": sunucunun `apartment_count`
+  /// değeri satır (hesap) sayısıdır.
+  static String _countText(LateFeePreview preview) {
+    final apartments = preview.lines.map((line) => line.apartmentId).toSet().length;
+    final perAccount = preview.lines.any((line) => line.accountParty != null);
+    if (perAccount && apartments != preview.apartmentCount) return '$apartments daire, ${preview.apartmentCount} hesap';
+    return '${preview.apartmentCount} daire';
+  }
+
   Widget _lineTile(BuildContext context, LateFeePreview preview, LateFeeLine line) {
     final th = Theme.of(context).textTheme;
     final p = context.palette;
     final title = financeApartmentTitle(line.blockName, line.label);
-    final expanded = _explained.contains(line.apartmentId);
+    final expanded = _explained.contains(line.lineKey);
     final excluded = _excluded.contains(line.apartmentId);
     final payer = line.payerParty;
-    final semantic = '$title. ${payer == null ? '' : '${payerPartyLabel(payer)}. '}Tazminat: ${moneySemanticLabel(line.amountMinor)}.';
+    final account = line.accountParty;
+    final semantic = '$title. ${account == null ? '' : '${account.label}. '}${payer == null ? '' : '${payerPartyLabel(payer)}. '}Tazminat: ${moneySemanticLabel(line.amountMinor)}.';
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpace.sm),
       child: DialogPanel(
-        key: ValueKey<String>('finance_latefee_line_${line.apartmentId}'),
+        key: ValueKey<String>('finance_latefee_line_${line.lineKey}'),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -678,6 +689,7 @@ class _FinanceLateFeeDialogState extends State<FinanceLateFeeDialog> with Financ
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(title, style: th.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+                        if (account != null) Text(account.label, style: th.bodySmall?.copyWith(color: p.textSecondary)),
                         if (payer != null) Text(payerPartyLabel(payer), style: th.bodySmall?.copyWith(color: p.textSecondary)),
                       ],
                     ),
@@ -696,12 +708,12 @@ class _FinanceLateFeeDialogState extends State<FinanceLateFeeDialog> with Financ
               spacing: AppSpace.sm,
               children: [
                 TextButton.icon(
-                  key: ValueKey<String>('finance_latefee_explain_${line.apartmentId}'),
+                  key: ValueKey<String>('finance_latefee_explain_${line.lineKey}'),
                   onPressed: () => setState(() {
                     if (expanded) {
-                      _explained.remove(line.apartmentId);
+                      _explained.remove(line.lineKey);
                     } else {
-                      _explained.add(line.apartmentId);
+                      _explained.add(line.lineKey);
                     }
                   }),
                   icon: Icon(expanded ? Icons.expand_less_rounded : Icons.help_outline_rounded, size: 18),
@@ -709,7 +721,7 @@ class _FinanceLateFeeDialogState extends State<FinanceLateFeeDialog> with Financ
                   style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
                 ),
                 TextButton.icon(
-                  key: ValueKey<String>('finance_latefee_waive_${line.apartmentId}'),
+                  key: ValueKey<String>('finance_latefee_waive_${line.lineKey}'),
                   onPressed: (submitting || _previewing) ? null : () => _toggleExcluded(line.apartmentId, !excluded),
                   icon: Icon(excluded ? Icons.undo_rounded : Icons.do_not_disturb_on_rounded, size: 18),
                   label: Text(excluded ? 'Muafiyeti kaldır' : 'Bu ay muaf tut'),
@@ -750,7 +762,7 @@ class LateFeeBreakdownText extends StatelessWidget {
     ];
     final label = spokenMoneyText(lines.join(' '));
     return Container(
-      key: ValueKey<String>('finance_latefee_breakdown_${line.apartmentId}'),
+      key: ValueKey<String>('finance_latefee_breakdown_${line.lineKey}'),
       margin: const EdgeInsets.only(top: AppSpace.xs),
       padding: const EdgeInsets.all(AppSpace.sm),
       decoration: BoxDecoration(

@@ -17,6 +17,7 @@ import 'package:site_kapi_kontrol/ui/helpers/text_length.dart';
 import 'package:site_kapi_kontrol/ui/widgets/crm_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/fee_spec_form.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_4b_parts.dart';
+import 'package:site_kapi_kontrol/ui/widgets/finance_account_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_parts.dart';
 
 /// Tanım penceresi kapanırken döner.
@@ -34,6 +35,9 @@ class FinanceDefinitionOutcome {
 /// - Düzenleme: tür ve başlangıç dönemi değişmez. HİÇ borçlandırılmamış tanımda dağıtım / tutar / hedef de
 ///   düzenlenir; borçlandırılmış tanımda yalnız ad, vade günü ve bitiş dönemi (geçmiş kayıtlar zaten değişmez)
 ///   ve kilitli alanlar açıklanır. Yalnız DEĞİŞEN alanlar gönderilir; değişiklik yoksa sunucuya gidilmez.
+/// - İki hesap (İP-1A): "Kim öder" (Dairede oturan / Ev sahibi) seçilir; varsayılan aylık aidatta dairede oturan, tek
+///   seferlikte ev sahibidir (seçim varsayılana eşitse gövdede gönderilmez). Borçlandırılmış tanımda da değişebilir; yalnız
+///   SONRAKİ borçlandırmaları etkiler.
 /// - Çift gönderim koruması (`_submitting`), gönderim sürerken geri tuşu kapatmaz; sunucu reddi pencerede
 ///   gösterilir ve pencere AÇIK kalır. Sonuç belirsizse (ağ / 5xx) kapanırken çağıran listeyi tazeler.
 class FinanceDefinitionFormDialog extends StatefulWidget {
@@ -90,6 +94,10 @@ class _FinanceDefinitionFormDialogState extends State<FinanceDefinitionFormDialo
   late FinancePeriod _start = widget.definition?.startPeriod ?? _current;
   late bool _hasEnd = widget.definition?.endPeriod != null;
   late FinancePeriod _end = widget.definition?.endPeriod ?? _start.addMonths(11);
+
+  // İP-1A: "Kim öder". Yeni tanımda kullanıcı seçmediyse tür değişince türün varsayılanına geçer.
+  late ChargeParty _chargeParty = widget.definition?.effectiveChargeParty ?? ChargeParty.defaultFor(_kind);
+  bool _chargePartyTouched = false;
 
   bool _submitting = false;
   bool _needsRefreshOnClose = false;
@@ -151,6 +159,8 @@ class _FinanceDefinitionFormDialogState extends State<FinanceDefinitionFormDialo
         startPeriod: _kind == FeeKind.recurring ? _start : _current,
         endPeriod: _kind == FeeKind.recurring && _hasEnd ? _end : null,
         target: s.target,
+        // Türün varsayılanıyla aynıysa gönderilmez (sunucu aynı varsayılanı uygular; eski istek birebir korunur).
+        chargeParty: _chargeParty == ChargeParty.defaultFor(_kind) ? null : _chargeParty,
       );
     } else {
       fields = _changedFields(initial, name, spec);
@@ -206,6 +216,8 @@ class _FinanceDefinitionFormDialogState extends State<FinanceDefinitionFormDialo
   Map<String, Object?> _changedFields(FeeDefinition initial, String name, FeeSpec? spec) {
     final fields = <String, Object?>{};
     if (name != initial.name.trim()) fields['name'] = name;
+    // İP-1A: "Kim öder" borçlandırılmış tanımda da değişir (yalnız sonraki borçlandırmalar).
+    if (_chargeParty != initial.effectiveChargeParty) fields['charge_party'] = _chargeParty.apiValue;
     if (initial.isRecurring) {
       if (_dueDay != null && _dueDay != initial.dueDay) fields['due_day'] = _dueDay;
       final end = _hasEnd ? _end : null;
@@ -338,6 +350,7 @@ class _FinanceDefinitionFormDialogState extends State<FinanceDefinitionFormDialo
                             : (_) => setState(() {
                                 markDirty();
                                 _kind = kind;
+                                if (!_chargePartyTouched) _chargeParty = ChargeParty.defaultFor(kind);
                               }),
                       ),
                   ],
@@ -425,6 +438,26 @@ class _FinanceDefinitionFormDialogState extends State<FinanceDefinitionFormDialo
                   ),
               ],
               const SizedBox(height: AppSpace.lg),
+              ChargePartyChoice(
+                key: const ValueKey<String>('finance_definition_charge_party'),
+                selected: _chargeParty,
+                enabled: !_submitting,
+                keyPrefix: 'finance_def_charge_party',
+                onSelected: (value) => setState(() {
+                  markDirty();
+                  _chargeParty = value;
+                  _chargePartyTouched = true;
+                }),
+              ),
+              if (_editing && !_specEditable) ...[
+                const SizedBox(height: AppSpace.xs),
+                Text(
+                  'Kim öder değişikliği yalnız bundan sonraki borçlandırmalara uygulanır; yazılmış borçlar değişmez.',
+                  key: const ValueKey<String>('finance_definition_charge_party_note'),
+                  style: th.bodySmall?.copyWith(color: p.textSecondary),
+                ),
+              ],
+              const SizedBox(height: AppSpace.lg),
               if (_specEditable)
                 FeeSpecForm(
                   key: _specKey,
@@ -464,7 +497,7 @@ class _FinanceDefinitionFormDialogState extends State<FinanceDefinitionFormDialo
           const SizedBox(height: AppSpace.sm),
           Text(
             'Bu tanım borçlandırıldığı için dağıtım yöntemi, tutar ve hedef değiştirilemez; geçmiş kayıtlar '
-            'zaten değişmez. Yalnızca ad, vade günü ve bitiş dönemi düzenlenir. Farklı bir tutar için '
+            'zaten değişmez. Yalnızca ad, vade günü, bitiş dönemi ve kim öder düzenlenir. Farklı bir tutar için '
             'yeni bir tanım ekleyip bunu pasifleştirin.',
             style: th.bodyMedium,
           ),

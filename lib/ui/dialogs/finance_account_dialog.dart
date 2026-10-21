@@ -20,6 +20,7 @@ import 'package:site_kapi_kontrol/ui/helpers/money.dart';
 import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
 import 'package:site_kapi_kontrol/ui/widgets/cursor_list_body.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_4b_parts.dart';
+import 'package:site_kapi_kontrol/ui/widgets/finance_account_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_parts.dart';
 
 /// Daire hesap ekstresi penceresi (Platform Faz 4a): güncel bakiye (borç / alacak simge + metinle), vadesi
@@ -35,6 +36,10 @@ import 'package:site_kapi_kontrol/ui/widgets/finance_parts.dart';
 ///   (otomatik düzenleme kapalıyken ya da eski) tahsilatta yönetici için "Makbuz Düzenle" vardır; "Makbuzlar" bu
 ///   dairenin makbuz listesini açar (kurul da okur); yönetici "Hatırlatmadan Muaf Tut" ile daireyi borç hatırlatmalarından
 ///   muaf tutar / muafiyeti kaldırır (spec §7).
+/// - İki hesap (İP-1A): dairenin "Ev sahibi hesabı" ve "Kiracı hesabı" ayrıdır. Sunucu kiracı sekmesini istiyorsa
+///   (`show_tenant_account`) iki sekme görünür ([Kiracı hesabı] [Ev sahibi hesabı]); bakiye ve hareketler yalnız seçili
+///   hesabındır. İlk sekme sunucunun varsayılan tahsilat hesabıdır. Tahsilat / düzeltme penceresi seçili hesapla açılır.
+///   Eski sunucuda ya da kiracısı hiç olmamış dairede sekme yoktur (tek hesap, eski görünüm).
 class FinanceAccountDialog extends StatefulWidget {
   const FinanceAccountDialog({
     super.key,
@@ -84,16 +89,28 @@ class _FinanceAccountDialogState extends State<FinanceAccountDialog> {
   bool _issuing = false;
   String? _actionError;
 
+  /// Seçili hesap sekmesi (İP-1A); null: tek hesap (eski sunucu / kiracı sekmesi yok) ya da ilk yanıt henüz gelmedi.
+  AccountParty? _party;
+
+  Future<AccountView> _get(int? before) => widget.scope.authService.getFinanceAccount(
+    widget.scope.siteCode,
+    widget.apartmentId,
+    beforeId: before,
+    accountParty: _party,
+  );
+
   late final CursorLoader<LedgerEntry> _loader = CursorLoader<LedgerEntry>(
     fetch: (before) async {
       // Başlık yalnız İLK sayfadan ve yalnız EN SON isteğin yanıtından alınır (eski yanıt yenisini ezmez).
       final seq = before == null ? ++_headerSeq : _headerSeq;
       try {
-        final view = await widget.scope.authService.getFinanceAccount(
-          widget.scope.siteCode,
-          widget.apartmentId,
-          beforeId: before,
-        );
+        var view = await _get(before);
+        if (before == null && _party == null && view.hasTwoAccounts) {
+          // İki hesaplı daire: süzgeçsiz ilk yanıt yalnız sekme bilgisini verir; liste ve bakiye SEÇİLİ hesabındır
+          // (hesaplar karışık gösterilmez). İlk sekme sunucunun varsayılan tahsilat hesabıdır.
+          _party = view.defaultPaymentAccount ?? (view.hasCurrentTenant ? AccountParty.tenant : AccountParty.owner);
+          view = await _get(null);
+        }
         if (before == null && seq == _headerSeq && mounted) _header = view;
         return (items: view.items, next: view.nextBeforeId);
       } catch (_) {
@@ -140,6 +157,19 @@ class _FinanceAccountDialogState extends State<FinanceAccountDialog> {
     if (mounted) unawaited(_loader.reload());
   }
 
+  /// Hesap sekmesi değişti: liste ve bakiye o hesabın ilk sayfasıyla yeniden okunur (eski hesabın uçuştaki yanıtı yok sayılır).
+  void _selectParty(AccountParty party) {
+    if (party == _party || _opening || _issuing) return;
+    setState(() {
+      _party = party;
+      _actionError = null;
+    });
+    unawaited(_loader.reload());
+  }
+
+  /// Tahsilat penceresine verilen hesap bilgisi: iki hesaplı dairede seçim gösterilir (seçili sekmeyle başlar), tek hesapta yok.
+  bool get _twoAccounts => _header?.hasTwoAccounts ?? false;
+
   Future<void> _addPayment() async {
     if (_opening) return;
     _opening = true;
@@ -152,6 +182,8 @@ class _FinanceAccountDialogState extends State<FinanceAccountDialog> {
         apartmentLabel: _title,
         now: widget.now,
         onRefreshNeeded: _refreshOnly,
+        accountParty: _twoAccounts ? _party : null,
+        accountChoice: _twoAccounts,
       );
     } finally {
       _opening = false;
@@ -280,6 +312,9 @@ class _FinanceAccountDialogState extends State<FinanceAccountDialog> {
         correcting: entry,
         now: widget.now,
         onRefreshNeeded: _refreshOnly,
+        // İP-1A: düzeltme eski tahsilatın hesabıyla başlar; iki hesaplı dairede diğer hesaba taşınabilir
+        accountParty: _twoAccounts ? (entry.accountParty ?? _party) : null,
+        accountChoice: _twoAccounts,
       );
     } finally {
       _opening = false;
@@ -340,6 +375,19 @@ class _FinanceAccountDialogState extends State<FinanceAccountDialog> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (header != null && header.hasTwoAccounts && _party != null) ...[
+            AccountPartyTabs(
+              key: const ValueKey<String>('finance_account_tabs'),
+              selected: _party!,
+              onSelected: _selectParty,
+              enabled: !_opening && !_issuing,
+              totals: <AccountParty, AccountTotals?>{
+                AccountParty.owner: header.ownerAccount,
+                AccountParty.tenant: header.tenantAccount,
+              },
+            ),
+            const SizedBox(height: AppSpace.md),
+          ],
           if (header != null) _buildHeader(context, header),
           if (header != null && _canWrite) ...[
             const SizedBox(height: AppSpace.md),
@@ -425,12 +473,15 @@ class _FinanceAccountDialogState extends State<FinanceAccountDialog> {
     final p = context.palette;
     final balance = describeBalance(header.balanceMinor);
     final overdue = header.overdueMinor;
+    // İki hesaplı dairede bakiye seçili hesabındır: hangi hesap olduğu açıkça yazılır ve okunur.
+    final party = header.hasTwoAccounts ? (header.accountParty ?? _party) : null;
     return DialogPanel(
       key: const ValueKey<String>('finance_account_header'),
       tone: balance.direction == BalanceDirection.debt ? AppTone.danger : null,
       child: Semantics(
         container: true,
         label:
+            '${party == null ? '' : '${party.label}. '}'
             '${balance.semanticLabel}.'
             '${overdue != null && overdue > 0 ? ' Vadesi geçen: ${moneySemanticLabel(overdue)}.' : ''}'
             ' ${payerPartyLabel(header.apartment.responsibleParty)}.',
@@ -438,6 +489,12 @@ class _FinanceAccountDialogState extends State<FinanceAccountDialog> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              if (party != null)
+                Text(
+                  party.label,
+                  key: const ValueKey<String>('finance_account_party_label'),
+                  style: th.bodySmall?.copyWith(color: p.textSecondary, fontWeight: FontWeight.w700),
+                ),
               Row(
                 children: [
                   Icon(balance.icon, color: balance.tone.ink(p)),

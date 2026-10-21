@@ -20,6 +20,7 @@ import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
 import 'package:site_kapi_kontrol/ui/helpers/retry_lock.dart';
 import 'package:site_kapi_kontrol/ui/widgets/bulk_export_sheet.dart' show ExportSource;
 import 'package:site_kapi_kontrol/ui/widgets/finance_4b_parts.dart';
+import 'package:site_kapi_kontrol/ui/widgets/finance_account_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 
@@ -468,6 +469,9 @@ class _AgingReportViewState extends _ReportState<_AgingReportView, AgingReport> 
   String _status = 'debtor';
   DateTime? _appliedAsOf;
   String _appliedStatus = 'debtor';
+  // İP-1A: hesap süzgeci (null: tüm hesaplar; daire satırı iki hesabın toplamı + hesap kırılımı).
+  AccountParty? _party;
+  AccountParty? _appliedParty;
   List<AgingItem> _items = const <AgingItem>[];
   bool _loadingMore = false;
   String? _moreError;
@@ -481,7 +485,7 @@ class _AgingReportViewState extends _ReportState<_AgingReportView, AgingReport> 
   }
 
   @override
-  String get currentSignature => '${_asOf.text.trim()}|$_status';
+  String get currentSignature => '${_asOf.text.trim()}|$_status|${_party?.apiValue ?? ''}';
 
   @override
   String? validateFilters() {
@@ -502,13 +506,15 @@ class _AgingReportViewState extends _ReportState<_AgingReportView, AgingReport> 
   Future<AgingReport> fetch() async {
     final asOf = parseDateField(_asOf.text);
     final status = _status;
+    final party = _party;
     ++_generation;
     final report = await scope.f4Call(
-      (api, t, s) => api.getAgingReport(token: t, siteCode: s, asOf: asOf, status: status, limit: _pageSize),
+      (api, t, s) => api.getAgingReport(token: t, siteCode: s, asOf: asOf, status: status, limit: _pageSize, accountParty: party),
     );
     // Yanıt GELDİKTEN sonra uygulanır (hata olursa eski süzgeç / satırlar bozulmaz).
     _appliedAsOf = asOf;
     _appliedStatus = status;
+    _appliedParty = party;
     _moreError = null;
     _items = report.items;
     return report;
@@ -520,6 +526,7 @@ class _AgingReportViewState extends _ReportState<_AgingReportView, AgingReport> 
     final generation = _generation;
     final asOf = _appliedAsOf;
     final status = _appliedStatus;
+    final party = _appliedParty;
     final offset = _items.length;
     setState(() {
       _loadingMore = true;
@@ -527,7 +534,7 @@ class _AgingReportViewState extends _ReportState<_AgingReportView, AgingReport> 
     });
     try {
       final page = await scope.f4Call(
-        (api, t, s) => api.getAgingReport(token: t, siteCode: s, asOf: asOf, status: status, limit: _pageSize, offset: offset),
+        (api, t, s) => api.getAgingReport(token: t, siteCode: s, asOf: asOf, status: status, limit: _pageSize, offset: offset, accountParty: party),
       );
       if (!mounted) return;
       if (generation != _generation) {
@@ -554,11 +561,12 @@ class _AgingReportViewState extends _ReportState<_AgingReportView, AgingReport> 
     final generation = _generation;
     final asOf = _appliedAsOf;
     final status = _appliedStatus;
+    final party = _appliedParty;
     var items = List<AgingItem>.of(_items);
     while (items.length < first.total) {
       final offset = items.length;
       final page = await scope.f4Call(
-        (api, t, s) => api.getAgingReport(token: t, siteCode: s, asOf: asOf, status: status, limit: _pageSize, offset: offset),
+        (api, t, s) => api.getAgingReport(token: t, siteCode: s, asOf: asOf, status: status, limit: _pageSize, offset: offset, accountParty: party),
       );
       if (generation != _generation) throw StateError('Rapor yenilendi');
       if (page.items.isEmpty) break;
@@ -575,6 +583,7 @@ class _AgingReportViewState extends _ReportState<_AgingReportView, AgingReport> 
       totalOverdueMinor: first.totalOverdueMinor,
       items: items,
       total: first.total,
+      accountParty: first.accountParty,
     );
   }
 
@@ -587,8 +596,10 @@ class _AgingReportViewState extends _ReportState<_AgingReportView, AgingReport> 
       query: <String, String>{
         if (_appliedAsOf != null) 'as_of': crmDateParam(_appliedAsOf!),
         'status': _appliedStatus,
+        'account_party': ?_appliedParty?.apiValue,
       },
-      filterSummary: '${formatCrmDate(_appliedAsOf)} • ${_appliedStatus == 'debtor' ? 'Yalnız borçlu daireler' : 'Tüm daireler'}',
+      filterSummary: '${formatCrmDate(_appliedAsOf)} • ${_appliedStatus == 'debtor' ? 'Yalnız borçlu daireler' : 'Tüm daireler'}'
+          '${_appliedParty == null ? '' : ' • ${_appliedParty!.label}'}',
     ),
   ];
 
@@ -634,6 +645,16 @@ class _AgingReportViewState extends _ReportState<_AgingReportView, AgingReport> 
               onSelected: (_) => setState(() => _status = 'all'),
             ),
           ],
+        ),
+        const SizedBox(height: AppSpace.md),
+        AccountPartyChoice(
+          key: const ValueKey<String>('finance_aging_party'),
+          title: 'Hesap',
+          allowAll: true,
+          selected: _party,
+          keyPrefix: 'finance_aging_party',
+          note: 'Yaşlandırma her hesapta ayrı yapılır; bir hesabın alacağı diğerinin borcundan düşülmez.',
+          onSelected: (value) => setState(() => _party = value),
         ),
         const SizedBox(height: AppSpace.md),
         fetchButton(),
@@ -723,6 +744,19 @@ class _AgingItemCard extends StatelessWidget {
       semantic.write(' ${b.label}: ${moneySemanticLabel(item.buckets[b]!)}.');
     }
     if (item.creditMinor != 0) semantic.write(' Alacak: ${moneySemanticLabel(item.creditMinor)}.');
+    // İP-1A: süzgeçsiz raporda kiracı hesabında tutar varsa hesaplar ayrı yazılır (mahsup hesap başınadır).
+    final tenantPart = item.accounts[AccountParty.tenant];
+    final parts = <(AccountParty, AgingAccountPart)>[
+      if (item.accountParty == null && tenantPart != null && !tenantPart.isZero)
+        for (final party in kAccountPartyOrder)
+          if (item.accounts[party] case final part? when !part.isZero) (party, part),
+    ];
+    for (final (party, part) in parts) {
+      semantic.write(' ${party.label}: vadesi geçmiş ${moneySemanticLabel(part.totalOverdueMinor)}');
+      if (part.creditMinor != 0) semantic.write(', alacak ${moneySemanticLabel(part.creditMinor)}');
+      semantic.write('.');
+    }
+    if (item.accountParty != null) semantic.write(' ${item.accountParty!.label}.');
     return AppCard(
       key: ValueKey<String>('aging_item_${item.apartmentId}'),
       padding: listCardPadding(context),
@@ -750,6 +784,13 @@ class _AgingItemCard extends StatelessWidget {
                     DialogMetaPill('${b.label}: ${formatMinor(item.buckets[b]!)}', tone: b.isOverdue ? AppTone.warning : AppTone.neutral),
                   if (item.creditMinor != 0)
                     DialogMetaPill('Alacak: ${formatMinor(item.creditMinor)}', tone: AppTone.success, icon: Icons.arrow_circle_down_rounded),
+                  for (final (party, part) in parts)
+                    DialogMetaPill(
+                      '${party.label}: ${formatMinor(part.totalOverdueMinor)}'
+                      '${part.creditMinor != 0 ? ' • alacak ${formatMinor(part.creditMinor)}' : ''}',
+                      key: ValueKey<String>('aging_item_${item.apartmentId}_${party.apiValue}'),
+                      icon: accountPartyIcon(party),
+                    ),
                 ],
               ),
             ],
@@ -1117,7 +1158,9 @@ class _StatementReportViewState extends _ReportState<_StatementReportView, Apart
   late final TextEditingController _from = TextEditingController(text: formatDateField(DateTime(today.year, 1, 1)));
   late final TextEditingController _to = TextEditingController(text: formatDateField(today));
   ({int id, String label})? _apartment;
-  ({int id, DateTime from, DateTime to})? _applied;
+  ({int id, DateTime from, DateTime to, AccountParty? party})? _applied;
+  // İP-1A: hesap süzgeci (null: iki hesap birlikte, eski davranış).
+  AccountParty? _party;
   String? _pickError;
   int _visible = 50;
   bool _picking = false;
@@ -1134,7 +1177,7 @@ class _StatementReportViewState extends _ReportState<_StatementReportView, Apart
   }
 
   @override
-  String get currentSignature => '${_apartment?.id}|${_from.text.trim()}|${_to.text.trim()}';
+  String get currentSignature => '${_apartment?.id}|${_from.text.trim()}|${_to.text.trim()}|${_party?.apiValue ?? ''}';
 
   @override
   String? validateFilters() {
@@ -1155,10 +1198,11 @@ class _StatementReportViewState extends _ReportState<_StatementReportView, Apart
     final apartment = _apartment!;
     final from = parseDateField(_from.text)!;
     final to = parseDateField(_to.text)!;
-    _applied = (id: apartment.id, from: from, to: to);
+    final party = _party;
+    _applied = (id: apartment.id, from: from, to: to, party: party);
     _visible = 50;
     return scope.f4Call(
-      (api, t, s) => api.getApartmentStatement(token: t, siteCode: s, apartmentId: apartment.id, from: from, to: to),
+      (api, t, s) => api.getApartmentStatement(token: t, siteCode: s, apartmentId: apartment.id, from: from, to: to, accountParty: party),
     );
   }
 
@@ -1190,8 +1234,10 @@ class _StatementReportViewState extends _ReportState<_StatementReportView, Apart
           'apartment_id': '${applied.id}',
           'from': crmDateParam(applied.from),
           'to': crmDateParam(applied.to),
+          'account_party': ?applied.party?.apiValue,
         },
-        filterSummary: '${data?.apartment.label ?? ''} • ${formatCrmDate(applied.from)} - ${formatCrmDate(applied.to)}',
+        filterSummary: '${data?.apartment.label ?? ''} • ${formatCrmDate(applied.from)} - ${formatCrmDate(applied.to)}'
+            '${applied.party == null ? '' : ' • ${applied.party!.label}'}',
       ),
     ];
   }
@@ -1233,6 +1279,16 @@ class _StatementReportViewState extends _ReportState<_StatementReportView, Apart
           decoration: const InputDecoration(labelText: 'Bitiş tarihi', hintText: 'GG.AA.YYYY', prefixIcon: Icon(Icons.event_rounded)),
         ),
         const SizedBox(height: AppSpace.md),
+        AccountPartyChoice(
+          key: const ValueKey<String>('finance_statement_party'),
+          title: 'Hesap',
+          allowAll: true,
+          selected: _party,
+          keyPrefix: 'finance_statement_party',
+          note: 'Tek hesap seçilirse ekstre yalnız o hesabın hareketlerini ve bakiyesini gösterir.',
+          onSelected: (value) => setState(() => _party = value),
+        ),
+        const SizedBox(height: AppSpace.md),
         fetchButton(label: 'Ekstreyi Getir'),
         const SizedBox(height: AppSpace.md),
         ?errorBanner(),
@@ -1260,6 +1316,12 @@ class _StatementReportViewState extends _ReportState<_StatementReportView, Apart
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(financeApartmentTitle(report.apartment.blockName, report.apartment.label), style: th.titleMedium),
+                if (report.accountParty != null)
+                  Text(
+                    report.accountParty!.label,
+                    key: const ValueKey<String>('finance_statement_account'),
+                    style: th.bodySmall?.copyWith(color: p.textSecondary, fontWeight: FontWeight.w700),
+                  ),
                 Text('${formatCrmDate(report.from)} - ${formatCrmDate(report.to)}', style: th.bodySmall?.copyWith(color: p.textSecondary)),
                 const SizedBox(height: AppSpace.xs),
                 FinanceInfoRow(label: 'Önceki bakiye', money: report.openingBalanceMinor),
