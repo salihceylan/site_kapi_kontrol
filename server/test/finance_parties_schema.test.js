@@ -142,6 +142,9 @@ describe('052 adımları: içerik', () => {
     assert.ok(at('function:trg_late_fee_run_lines_account') < at('trigger:trg_late_fee_run_lines_account'));
     assert.ok(at('ledger:columns') < at('ledger:checks') && at('ledger:checks') < at('ledger:validate'));
     assert.ok(at('late_fee_lines:column') < at('late_fee_lines:index') && at('late_fee_lines:column') < at('trigger:trg_late_fee_run_lines_account'));
+    // İnceleme: tazminat satırı tetikleyicisinin işlevi ledger_entries.account_party sütununu okur; tetikleyici o sütun VAR olduktan sonra kurulur
+    // (aksi halde açılış iki adım arasında kalırsa ya da ledger adımı düşerse eski sürümün tazminat satırı yazımı "sütun yok" hatası alırdı).
+    assert.ok(at('ledger:columns') < at('trigger:trg_late_fee_run_lines_account'), 'tazminat satırı tetikleyicisi ledger sütunlarından sonra');
     const firstLedger = Math.min(...ids.filter((id) => id.startsWith('ledger:') || id === 'trigger:trg_ledger_entries_account_party').map(at));
     for (const id of ids.filter((x) => x.startsWith('fee_definitions:') || x.startsWith('late_fee_lines:'))) {
       assert.ok(at(id) < firstLedger, id);

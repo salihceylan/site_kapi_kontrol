@@ -97,15 +97,6 @@ END $$;
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_late_fee_run_lines_account ON late_fee_run_lines (run_id, apartment_id, account_party) WHERE account_party IS NOT NULL;
 
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_trigger WHERE tgname = 'trg_late_fee_run_lines_account' AND tgrelid = 'late_fee_run_lines'::regclass AND NOT tgisinternal
-  ) THEN
-    CREATE TRIGGER trg_late_fee_run_lines_account BEFORE INSERT ON late_fee_run_lines FOR EACH ROW EXECUTE PROCEDURE trg_late_fee_run_lines_account();
-  END IF;
-END $$;
-
 ALTER TABLE ledger_entries ADD COLUMN IF NOT EXISTS account_party TEXT, ADD COLUMN IF NOT EXISTS source_kind TEXT, ADD COLUMN IF NOT EXISTS source_id BIGINT;
 
 DO $$
@@ -144,5 +135,15 @@ BEGIN
     SELECT 1 FROM pg_trigger WHERE tgname = 'trg_ledger_entries_account_party' AND tgrelid = 'ledger_entries'::regclass AND NOT tgisinternal
   ) THEN
     CREATE TRIGGER trg_ledger_entries_account_party BEFORE INSERT ON ledger_entries FOR EACH ROW WHEN (NEW.kind = 'reversal' AND NEW.reverses_entry_id IS NOT NULL) EXECUTE PROCEDURE trg_ledger_entries_account_party();
+  END IF;
+END $$;
+
+-- Tazminat satiri hesap tetikleyicisi EN SONDA: islevi ledger_entries.account_party sutununu okur (sutun olusmadan kurulmaz).
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger WHERE tgname = 'trg_late_fee_run_lines_account' AND tgrelid = 'late_fee_run_lines'::regclass AND NOT tgisinternal
+  ) THEN
+    CREATE TRIGGER trg_late_fee_run_lines_account BEFORE INSERT ON late_fee_run_lines FOR EACH ROW EXECUTE PROCEDURE trg_late_fee_run_lines_account();
   END IF;
 END $$;

@@ -16,7 +16,8 @@
 //    hesabına aynı çalıştırmada satır yazılabilsin. Bu, "yalnız ekleyici" kuralının GEREKÇELİ tek istisnasıdır: kısıt yalnız gevşer (veri değişmez, eski kod
 //    aynen çalışır); tablo eklemeli ve küçüktür (gecikme tazminatı hukuk onayına kadar kapalı). (run_id, apartment_id, account_party) kısmi tekil indeksi yeni
 //    satırların hesap başına tekliğini korur.
-// SIRA (kilit penceresi): yalnız yeni işlevler -> küçük tablolar (fee_definitions, late_fee_run_lines) -> EN SONDA sıcak ledger_entries adımları.
+// SIRA (kilit penceresi): yalnız yeni işlevler -> küçük tablolar (fee_definitions, late_fee_run_lines) -> sıcak ledger_entries adımları -> EN SONDA
+// tazminat satırı tetikleyicisi (işlevi ledger_entries.account_party'yi okur; sütun oluşmadan kurulmaz).
 // Bu dosya db.js'i İÇE AKTARMAZ (döngü olmasın).
 
 /** İşlev gövdesine yazılan sürüm işareti (katalog `prosrc` aranır): değişirse işlevler yenilenir. */
@@ -186,15 +187,6 @@ END $$;`,
     exists: hasIndex('uq_late_fee_run_lines_account'),
     sql: `CREATE UNIQUE INDEX IF NOT EXISTS uq_late_fee_run_lines_account ON late_fee_run_lines (run_id, apartment_id, account_party) WHERE account_party IS NOT NULL;`,
   },
-  {
-    id: 'trigger:trg_late_fee_run_lines_account',
-    exists: hasTrigger('trg_late_fee_run_lines_account', 'late_fee_run_lines'),
-    sql: triggerSql(
-      'trg_late_fee_run_lines_account',
-      'late_fee_run_lines',
-      'BEFORE INSERT ON late_fee_run_lines FOR EACH ROW EXECUTE PROCEDURE trg_late_fee_run_lines_account()',
-    ),
-  },
   // --- 3. Sıcak tablo: ledger_entries (EN SONDA; her adım kendi kısa kilidi) ---------------------------------------------------------------------
   {
     id: 'ledger:columns',
@@ -223,6 +215,18 @@ END $$;`,
       'trg_ledger_entries_account_party',
       'ledger_entries',
       "BEFORE INSERT ON ledger_entries FOR EACH ROW WHEN (NEW.kind = 'reversal' AND NEW.reverses_entry_id IS NOT NULL) EXECUTE PROCEDURE trg_ledger_entries_account_party()",
+    ),
+  },
+  // --- 4. Tazminat satırı hesap tetikleyicisi (inceleme): işlevi ledger_entries.account_party sütununu okur; sütun VAR olduktan sonra kurulur.
+  //        Önce kurulsaydı açılış iki adım arasında kalırsa ya da ledger adımı düşüp eski sürüme dönülürse tazminat satırı yazımı "sütun yok" hatası alırdı.
+  //        Tetikleyici yalnız late_fee_run_lines'ı kilitler (ledger_entries'e dokunmaz).
+  {
+    id: 'trigger:trg_late_fee_run_lines_account',
+    exists: hasTrigger('trg_late_fee_run_lines_account', 'late_fee_run_lines'),
+    sql: triggerSql(
+      'trg_late_fee_run_lines_account',
+      'late_fee_run_lines',
+      'BEFORE INSERT ON late_fee_run_lines FOR EACH ROW EXECUTE PROCEDURE trg_late_fee_run_lines_account()',
     ),
   },
 ];
