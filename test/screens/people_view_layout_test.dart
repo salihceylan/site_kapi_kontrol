@@ -579,6 +579,7 @@ void main() {
       await _pump(t, auth);
       await tapText(t, 'Kişi Ekle');
       await _type(t, 'person_name', 'Yeni Kişi');
+      await _type(t, 'person_email', 'yeni@example.com');
       await tapText(t, 'Kaydet');
       await settleFor(t);
     }

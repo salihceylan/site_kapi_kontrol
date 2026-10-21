@@ -47,6 +47,172 @@ double? parseAreaInput(String? text) {
   return double.tryParse('${groups.join()}.$fraction');
 }
 
+/// Daire alanlarının (kat, brüt / net m², arsa payı, kategori, borç sorumlusu) giriş durumu, doğrulaması ve
+/// "yalnız değişenler" farkı. [ApartmentEditDialog] ile "Kişi Ekle / Düzenle" penceresindeki "Daire bilgileri"
+/// bölümü AYNI kuralları kullansın diye tek yerdedir (sunucuyla aynı sınırlar: kat -20..500, alan > 0 ve en çok
+/// 999999,99, arsa payı payda > 0 ve pay <= payda).
+///
+/// [load] ile bir dairenin mevcut değerleri alanlara yazılır ve karşılaştırma tabanı olur; [changedFields] yalnız
+/// tabandan farklı alanları `PATCH .../apartments/:id` gövdesi olarak döner (hiçbiri değişmediyse boş).
+class ApartmentFieldsDraft {
+  final TextEditingController floor = TextEditingController();
+  final TextEditingController gross = TextEditingController();
+  final TextEditingController net = TextEditingController();
+  final TextEditingController numerator = TextEditingController();
+  final TextEditingController denominator = TextEditingController();
+  final TextEditingController category = TextEditingController();
+  ResponsibleParty party = ResponsibleParty.both;
+  ApartmentDetail? _initial;
+
+  /// Karşılaştırma tabanı (yüklenmediyse null).
+  ApartmentDetail? get initial => _initial;
+
+  /// [apartment]'ın mevcut değerlerini alanlara yazar ve taban yapar.
+  void load(ApartmentDetail apartment) {
+    _initial = apartment;
+    floor.text = apartment.floor?.toString() ?? '';
+    gross.text = apartment.grossAreaM2 == null
+        ? ''
+        : formatNumber(apartment.grossAreaM2!);
+    net.text = apartment.netAreaM2 == null
+        ? ''
+        : formatNumber(apartment.netAreaM2!);
+    numerator.text = apartment.landShare?.numerator.toString() ?? '';
+    denominator.text = apartment.landShare?.denominator.toString() ?? '';
+    category.text = apartment.category ?? '';
+    party = apartment.responsibleParty;
+  }
+
+  /// Tabanı ve alanları boşaltır (başka daire seçildi / seçim kalktı).
+  void clear() {
+    _initial = null;
+    floor.clear();
+    gross.clear();
+    net.clear();
+    numerator.clear();
+    denominator.clear();
+    category.clear();
+    party = ResponsibleParty.both;
+  }
+
+  void dispose() {
+    floor.dispose();
+    gross.dispose();
+    net.dispose();
+    numerator.dispose();
+    denominator.dispose();
+    category.dispose();
+  }
+
+  static int? _parseInt(String text) => int.tryParse(text.trim());
+
+  static String? validateFloor(String? value) {
+    final text = (value ?? '').trim();
+    if (text.isEmpty) return null;
+    final parsed = _parseInt(text);
+    if (parsed == null || parsed < -20 || parsed > 500) {
+      return 'Kat -20 ile 500 arasında bir tam sayı olmalı.';
+    }
+    return null;
+  }
+
+  static String? validateArea(String? value) {
+    final text = (value ?? '').trim();
+    if (text.isEmpty) return null;
+    final parsed = parseAreaInput(text);
+    if (parsed == null ||
+        !parsed.isFinite ||
+        parsed <= 0 ||
+        parsed > 999999.99) {
+      return 'Alan 0\'dan büyük bir sayı olmalı (örn. 120,5).';
+    }
+    return null;
+  }
+
+  static String? validateNumerator(String? value) {
+    final text = (value ?? '').trim();
+    if (text.isNotEmpty && _parseInt(text) == null) {
+      return 'Pay tam sayı olmalı.';
+    }
+    return null;
+  }
+
+  static String? validateDenominator(String? value) {
+    final text = (value ?? '').trim();
+    if (text.isNotEmpty && _parseInt(text) == null) {
+      return 'Payda tam sayı olmalı.';
+    }
+    return null;
+  }
+
+  /// Arsa payı: ikisi de boş ya da ikisi de dolu ve geçerli kesir.
+  String? validateLandShare() {
+    final n = numerator.text.trim();
+    final d = denominator.text.trim();
+    if (n.isEmpty && d.isEmpty) return null;
+    if (n.isEmpty || d.isEmpty) {
+      return 'Arsa payı için pay ve payda birlikte girilmeli.';
+    }
+    final parsedNumerator = _parseInt(n);
+    final parsedDenominator = _parseInt(d);
+    if (!LandShare.isValid(parsedNumerator, parsedDenominator) ||
+        parsedDenominator! > 1000000000) {
+      return 'Arsa payı geçersiz: payda 0\'dan büyük, pay payı aşmamalı.';
+    }
+    return null;
+  }
+
+  /// Alanların TÜMÜ (form alanı çizilmemiş olsa da): ilk hata iletisi, yoksa null.
+  String? validateAll() =>
+      validateFloor(floor.text) ??
+      validateArea(gross.text) ??
+      validateArea(net.text) ??
+      validateNumerator(numerator.text) ??
+      validateDenominator(denominator.text) ??
+      validateLandShare();
+
+  /// Tabana göre değişen alanlar (sunucu anahtarlarıyla); taban yoksa ya da değişiklik yoksa boş.
+  Map<String, Object?> changedFields() {
+    final initial = _initial;
+    final fields = <String, Object?>{};
+    if (initial == null) return fields;
+    final floorValue = floor.text.trim().isEmpty ? null : _parseInt(floor.text);
+    if (floorValue != initial.floor) fields['floor'] = floorValue;
+
+    double? roundArea(double? v) => v == null ? null : (v * 100).round() / 100;
+    final grossValue = gross.text.trim().isEmpty
+        ? null
+        : roundArea(parseAreaInput(gross.text));
+    if (grossValue != roundArea(initial.grossAreaM2)) {
+      fields['gross_area_m2'] = grossValue;
+    }
+    final netValue = net.text.trim().isEmpty
+        ? null
+        : roundArea(parseAreaInput(net.text));
+    if (netValue != roundArea(initial.netAreaM2)) {
+      fields['net_area_m2'] = netValue;
+    }
+
+    final hasShare = numerator.text.trim().isNotEmpty;
+    final numeratorValue = hasShare ? _parseInt(numerator.text) : null;
+    final denominatorValue = hasShare ? _parseInt(denominator.text) : null;
+    if (numeratorValue != initial.landShare?.numerator ||
+        denominatorValue != initial.landShare?.denominator) {
+      fields['land_share_numerator'] = numeratorValue;
+      fields['land_share_denominator'] = denominatorValue;
+    }
+
+    final categoryValue = category.text.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (categoryValue != (initial.category ?? '')) {
+      fields['category'] = categoryValue.isEmpty ? null : categoryValue;
+    }
+    if (party != initial.responsibleParty) {
+      fields['responsible_party'] = party.apiValue;
+    }
+    return fields;
+  }
+}
+
 /// Daire bilgilerini düzenleme penceresi (Platform Faz 2a): kat, brüt / net m², arsa payı (pay /
 /// payda), kategori ve "Borç ve bildirimler kime gitsin" (Malik / Kiracı / İkisi).
 ///
@@ -85,119 +251,15 @@ class ApartmentEditDialog extends StatefulWidget {
 class _ApartmentEditDialogState extends State<ApartmentEditDialog> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   late final ApartmentDetail _initial = widget.apartment;
-  late final TextEditingController _floor = TextEditingController(
-    text: _initial.floor?.toString() ?? '',
-  );
-  late final TextEditingController _gross = TextEditingController(
-    text: _initial.grossAreaM2 == null
-        ? ''
-        : formatNumber(_initial.grossAreaM2!),
-  );
-  late final TextEditingController _net = TextEditingController(
-    text: _initial.netAreaM2 == null ? '' : formatNumber(_initial.netAreaM2!),
-  );
-  late final TextEditingController _numerator = TextEditingController(
-    text: _initial.landShare?.numerator.toString() ?? '',
-  );
-  late final TextEditingController _denominator = TextEditingController(
-    text: _initial.landShare?.denominator.toString() ?? '',
-  );
-  late final TextEditingController _category = TextEditingController(
-    text: _initial.category ?? '',
-  );
-  late ResponsibleParty _party = _initial.responsibleParty;
+  late final ApartmentFieldsDraft _draft = ApartmentFieldsDraft()
+    ..load(_initial);
   bool _submitting = false;
   String? _error;
 
   @override
   void dispose() {
-    _floor.dispose();
-    _gross.dispose();
-    _net.dispose();
-    _numerator.dispose();
-    _denominator.dispose();
-    _category.dispose();
+    _draft.dispose();
     super.dispose();
-  }
-
-  static int? _parseInt(String text) => int.tryParse(text.trim());
-
-  static double? _parseArea(String text) => parseAreaInput(text);
-
-  String? _validateFloor(String? value) {
-    final text = (value ?? '').trim();
-    if (text.isEmpty) return null;
-    final parsed = _parseInt(text);
-    if (parsed == null || parsed < -20 || parsed > 500) {
-      return 'Kat -20 ile 500 arasında bir tam sayı olmalı.';
-    }
-    return null;
-  }
-
-  String? _validateArea(String? value) {
-    final text = (value ?? '').trim();
-    if (text.isEmpty) return null;
-    final parsed = _parseArea(text);
-    if (parsed == null ||
-        !parsed.isFinite ||
-        parsed <= 0 ||
-        parsed > 999999.99) {
-      return 'Alan 0\'dan büyük bir sayı olmalı (örn. 120,5).';
-    }
-    return null;
-  }
-
-  /// Arsa payı: ikisi de boş ya da ikisi de dolu ve geçerli kesir.
-  String? _validateLandShare() {
-    final n = _numerator.text.trim();
-    final d = _denominator.text.trim();
-    if (n.isEmpty && d.isEmpty) return null;
-    if (n.isEmpty || d.isEmpty) {
-      return 'Arsa payı için pay ve payda birlikte girilmeli.';
-    }
-    final numerator = _parseInt(n);
-    final denominator = _parseInt(d);
-    if (!LandShare.isValid(numerator, denominator) ||
-        denominator! > 1000000000) {
-      return 'Arsa payı geçersiz: payda 0\'dan büyük, pay payı aşmamalı.';
-    }
-    return null;
-  }
-
-  Map<String, Object?> _changedFields() {
-    final fields = <String, Object?>{};
-    final floor = _floor.text.trim().isEmpty ? null : _parseInt(_floor.text);
-    if (floor != _initial.floor) fields['floor'] = floor;
-
-    double? roundArea(double? v) => v == null ? null : (v * 100).round() / 100;
-    final gross = _gross.text.trim().isEmpty
-        ? null
-        : roundArea(_parseArea(_gross.text));
-    if (gross != roundArea(_initial.grossAreaM2)) {
-      fields['gross_area_m2'] = gross;
-    }
-    final net = _net.text.trim().isEmpty
-        ? null
-        : roundArea(_parseArea(_net.text));
-    if (net != roundArea(_initial.netAreaM2)) fields['net_area_m2'] = net;
-
-    final hasShare = _numerator.text.trim().isNotEmpty;
-    final numerator = hasShare ? _parseInt(_numerator.text) : null;
-    final denominator = hasShare ? _parseInt(_denominator.text) : null;
-    if (numerator != _initial.landShare?.numerator ||
-        denominator != _initial.landShare?.denominator) {
-      fields['land_share_numerator'] = numerator;
-      fields['land_share_denominator'] = denominator;
-    }
-
-    final category = _category.text.replaceAll(RegExp(r'\s+'), ' ').trim();
-    if (category != (_initial.category ?? '')) {
-      fields['category'] = category.isEmpty ? null : category;
-    }
-    if (_party != _initial.responsibleParty) {
-      fields['responsible_party'] = _party.apiValue;
-    }
-    return fields;
   }
 
   Future<void> _submit() async {
@@ -206,13 +268,13 @@ class _ApartmentEditDialogState extends State<ApartmentEditDialog> {
       setState(() => _error = kFixFieldsMessage);
       return;
     }
-    final shareError = _validateLandShare();
+    final shareError = _draft.validateLandShare();
     if (shareError != null) {
       setState(() => _error = shareError);
       return;
     }
     FocusScope.of(context).unfocus();
-    final fields = _changedFields();
+    final fields = _draft.changedFields();
     if (fields.isEmpty) {
       popIfCurrent(context, _initial);
       return;
@@ -270,7 +332,7 @@ class _ApartmentEditDialogState extends State<ApartmentEditDialog> {
               if (_error != null) CrmFormError(message: _error!),
               TextFormField(
                 key: const ValueKey<String>('apartment_floor'),
-                controller: _floor,
+                controller: _draft.floor,
                 enabled: !_submitting,
                 keyboardType: const TextInputType.numberWithOptions(
                   signed: true,
@@ -279,12 +341,12 @@ class _ApartmentEditDialogState extends State<ApartmentEditDialog> {
                   labelText: 'Kat',
                   prefixIcon: Icon(Icons.layers_rounded),
                 ),
-                validator: _validateFloor,
+                validator: ApartmentFieldsDraft.validateFloor,
               ),
               const SizedBox(height: AppSpace.md),
               TextFormField(
                 key: const ValueKey<String>('apartment_gross'),
-                controller: _gross,
+                controller: _draft.gross,
                 enabled: !_submitting,
                 keyboardType: const TextInputType.numberWithOptions(
                   decimal: true,
@@ -293,12 +355,12 @@ class _ApartmentEditDialogState extends State<ApartmentEditDialog> {
                   labelText: 'Brüt alan (m²)',
                   prefixIcon: Icon(Icons.square_foot_rounded),
                 ),
-                validator: _validateArea,
+                validator: ApartmentFieldsDraft.validateArea,
               ),
               const SizedBox(height: AppSpace.md),
               TextFormField(
                 key: const ValueKey<String>('apartment_net'),
-                controller: _net,
+                controller: _draft.net,
                 enabled: !_submitting,
                 keyboardType: const TextInputType.numberWithOptions(
                   decimal: true,
@@ -307,12 +369,12 @@ class _ApartmentEditDialogState extends State<ApartmentEditDialog> {
                   labelText: 'Net alan (m²)',
                   prefixIcon: Icon(Icons.square_foot_rounded),
                 ),
-                validator: _validateArea,
+                validator: ApartmentFieldsDraft.validateArea,
               ),
               const SizedBox(height: AppSpace.md),
               TextFormField(
                 key: const ValueKey<String>('apartment_numerator'),
-                controller: _numerator,
+                controller: _draft.numerator,
                 enabled: !_submitting,
                 keyboardType: TextInputType.number,
                 decoration: const InputDecoration(
@@ -320,18 +382,12 @@ class _ApartmentEditDialogState extends State<ApartmentEditDialog> {
                   helperText: 'Örn. 35/1000 için 35',
                   prefixIcon: Icon(Icons.pie_chart_rounded),
                 ),
-                validator: (value) {
-                  final text = (value ?? '').trim();
-                  if (text.isNotEmpty && _parseInt(text) == null) {
-                    return 'Pay tam sayı olmalı.';
-                  }
-                  return null;
-                },
+                validator: ApartmentFieldsDraft.validateNumerator,
               ),
               const SizedBox(height: AppSpace.md),
               TextFormField(
                 key: const ValueKey<String>('apartment_denominator'),
-                controller: _denominator,
+                controller: _draft.denominator,
                 enabled: !_submitting,
                 keyboardType: TextInputType.number,
                 decoration: const InputDecoration(
@@ -339,18 +395,12 @@ class _ApartmentEditDialogState extends State<ApartmentEditDialog> {
                   helperText: 'Örn. 35/1000 için 1000',
                   prefixIcon: Icon(Icons.pie_chart_outline_rounded),
                 ),
-                validator: (value) {
-                  final text = (value ?? '').trim();
-                  if (text.isNotEmpty && _parseInt(text) == null) {
-                    return 'Payda tam sayı olmalı.';
-                  }
-                  return null;
-                },
+                validator: ApartmentFieldsDraft.validateDenominator,
               ),
               const SizedBox(height: AppSpace.md),
               TextFormField(
                 key: const ValueKey<String>('apartment_category'),
-                controller: _category,
+                controller: _draft.category,
                 enabled: !_submitting,
                 maxLength: ApartmentEditDialog.maxCategoryLength,
                 decoration: const InputDecoration(
@@ -364,7 +414,7 @@ class _ApartmentEditDialogState extends State<ApartmentEditDialog> {
               DropdownButtonFormField<ResponsibleParty>(
                 key: const ValueKey<String>('apartment_party'),
                 isExpanded: true,
-                initialValue: _party,
+                initialValue: _draft.party,
                 dropdownColor: p.surface,
                 style: th.bodyLarge?.copyWith(color: p.text),
                 decoration: const InputDecoration(
@@ -385,7 +435,7 @@ class _ApartmentEditDialogState extends State<ApartmentEditDialog> {
                 onChanged: _submitting
                     ? null
                     : (value) {
-                        if (value != null) setState(() => _party = value);
+                        if (value != null) setState(() => _draft.party = value);
                       },
               ),
             ],

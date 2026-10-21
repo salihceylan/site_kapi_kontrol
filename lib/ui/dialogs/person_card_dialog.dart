@@ -9,6 +9,7 @@ import 'package:site_kapi_kontrol/ui/design/app_snack.dart';
 import 'package:site_kapi_kontrol/ui/design/buttons.dart';
 import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/apartment_card_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/crm_confirm_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/history_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/large_dialog_parts.dart';
@@ -165,6 +166,17 @@ class _PersonCardDialogState extends State<PersonCardDialog> {
     );
     if (result == null || !mounted) return;
     _apply(result, 'İlişki eklendi.');
+  }
+
+  /// Dairenin kartını (kat, tip, m², arsa payı, borç sorumlusu, sakinler) açar; yazma yetkisi yoksa salt okunur.
+  Future<void> _openApartment(Residency residency) {
+    return ApartmentCardDialog.show(
+      context,
+      scope: widget.scope,
+      apartmentId: residency.apartmentId,
+      initialLabel: residency.fullLabel,
+      onChanged: widget.onChanged,
+    );
   }
 
   Future<void> _editResidency(Residency residency) async {
@@ -494,27 +506,37 @@ class _PersonCardDialogState extends State<PersonCardDialog> {
             if (!isCurrent) InfoChip('Çıkış: ${formatCrmDate(residency.moveOutDate)}'),
           ],
         ),
-        if (isCurrent && _canWrite) ...[
+        if (isCurrent) ...[
           const SizedBox(height: AppSpace.sm),
           Wrap(
             spacing: AppSpace.sm,
             runSpacing: AppSpace.sm,
             children: [
+              // Dairenin kat, tip, m², arsa payı ve borç sorumlusu bilgileri (kurul üyesi de salt okunur görür).
               PrimaryActionButton(
-                label: 'İlişkiyi Düzenle',
-                icon: Icons.edit_rounded,
+                label: 'Daire Bilgileri',
+                icon: Icons.home_work_rounded,
                 variant: AppButtonVariant.outline,
                 expand: false,
-                onPressed: () => _editResidency(residency),
+                onPressed: () => _openApartment(residency),
               ),
-              PrimaryActionButton(
-                label: 'Taşındı',
-                icon: Icons.logout_rounded,
-                variant: AppButtonVariant.tonal,
-                tone: AppTone.warning,
-                expand: false,
-                onPressed: () => _endResidency(residency),
-              ),
+              if (_canWrite) ...[
+                PrimaryActionButton(
+                  label: 'İlişkiyi Düzenle',
+                  icon: Icons.edit_rounded,
+                  variant: AppButtonVariant.outline,
+                  expand: false,
+                  onPressed: () => _editResidency(residency),
+                ),
+                PrimaryActionButton(
+                  label: 'Taşındı',
+                  icon: Icons.logout_rounded,
+                  variant: AppButtonVariant.tonal,
+                  tone: AppTone.warning,
+                  expand: false,
+                  onPressed: () => _endResidency(residency),
+                ),
+              ],
             ],
           ),
         ],

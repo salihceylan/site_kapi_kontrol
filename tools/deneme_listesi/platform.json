@@ -6345,6 +6345,24 @@
           "on_kosul": "Finans modülü açık olmalı.",
           "yeni": true,
           "gelistirme": "hazir"
+        },
+        {
+          "id": "F30.57",
+          "baslik": "Kişi Ekle / Düzenle: zorunlu alanlar, daire bilgileri ve plaka",
+          "adimlar": [
+            "Kişiler sekmesinde 'Kişi Ekle'ye dokunun. Ad Soyad, Telefon ve E-posta etiketlerinde '*' işaretini görün; hiçbir şey yazmadan 'Kaydet'e basın.",
+            "Yalnız ad yazıp 'Kaydet'e basın (telefon ve e-posta boş), sonra bir telefon ya da e-posta ekleyin.",
+            "Daire alanından bir daire seçin: İlişki alanı boş ('Seçin') gelir, Taşınma (giriş) tarihi bugünün tarihiyle dolu gelir. İlişki seçmeden 'Kaydet'e basın, sonra tarihi silip yeniden deneyin. İlişkiyi 'Aile Üyesi' yapınca telefon ve e-posta '*' işaretinin kalktığını ve boş bırakılabildiğini görün.",
+            "Plaka alanına iki plaka yazın (örn. '34 abc 123, 06 XY 789'), altıncı bir plaka eklemeyi ve '12' gibi kısa bir plaka yazmayı deneyin.",
+            "'Daire bilgileri' bölümünü açın: Kat, Tip (kategori), Brüt ve Net m², Arsa payı (pay / payda) ve Borç sorumlusu (Malik / Kiracı / İkisi) dairenin kayıtlı değerleriyle dolu gelir. Birkaçını değiştirip kişiyi kaydedin; Daireler sekmesinde o dairenin kartını açıp değerleri doğrulayın.",
+            "Kaydedilen kişinin kartını açın: araçlar listesinde iki plakayı, daire satırında 'Daire Bilgileri' düğmesini görün (düğme salt okunur kartı açar). Kişiyi 'Düzenle'ye alıp plaka alanından birini silin, yenisini ekleyin ve kaydedin; kartta eski plaka kalkar, yenisi görünür.",
+            "Bir plakayı sitede başka bir kişide kayıtlı olan plakayla ekleyin; yönetim kurulu hesabıyla Kişi Ekle / Düzenle düğmelerinin ve 'Daire bilgileri' bölümünün görünmediğine bakın."
+          ],
+          "beklenen": "Zorunlu alanlar '*' ile işaretlidir; eksik alanın altında Türkçe hata çıkar ve kayıt gönderilmez (ad, telefon ya da e-postadan en az biri, daire seçildiyse ilişki ve taşınma tarihi). İlişki 'Aile Üyesi' ise telefon ve e-posta boş geçilebilir. Plaka, not ve 'Daire bilgileri' bölümünün tümü isteğe bağlıdır; en çok 5 plaka virgülle girilir, geçersiz plaka alanın altında bildirilir. Kayıt adım adım yapılır: kişi, sonra değişen daire bilgileri, sonra plakalar. Bir adım düşerse pencere açık kalır ve hangi adımın başarısız olduğu yazılır (örn. 'Kişi kaydedildi, plaka eklenemedi: 34 ABC 123 (...)'); Kaydet'e yeniden basınca yalnız kalan adımlar denenir, kişi ikinci kez oluşmaz. Düzenlemede mevcut plakalar alanda görünür; eklenen yeni araç olur, çıkarılan pasife alınır. Değişmeyen daire bilgisi sunucuya gönderilmez. Yönetim kurulu bu pencereleri göremez; kişi kartındaki 'Daire Bilgileri' düğmesi onlarda da salt okunur kartı açar.",
+          "rol_notu": "Site yöneticisi (yazma); yönetim kurulu yalnız okur",
+          "on_kosul": "Sitede en az bir daire kayıtlı olmalı; plaka denemesi için başka bir kişide kayıtlı bir plaka olmalı.",
+          "yeni": true,
+          "gelistirme": "hazir"
         }
       ]
     },

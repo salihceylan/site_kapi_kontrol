@@ -236,6 +236,7 @@ void main() {
         ..writeError = ApiException('Sunucu yanıt vermedi, tekrar deneyin.');
       await _open(t, (c) => PersonFormDialog.show(c, scope: _scope(auth)), width: 320, height: 640, scale: 2.0);
       await _enter(t, 'person_name', 'Ali Veli');
+      await _enter(t, 'person_email', 'ali@example.com');
       await scrollTo(t, find.byKey(const ValueKey<String>('person_note')));
       await _tapLast(t, 'Kaydet');
       await settleFor(t);
@@ -346,6 +347,7 @@ void main() {
       final auth = PeopleFakeAuth.seeded()..writeGate = Completer<void>();
       await _open(t, (c) => PersonFormDialog.show(c, scope: _scope(auth)));
       await _enter(t, 'person_name', 'Ali Veli');
+      await _enter(t, 'person_email', 'ali@example.com');
       await _tapLast(t, 'Kaydet');
       expect(find.text('Kaydediliyor...'), findsOneWidget);
 
@@ -712,9 +714,30 @@ void main() {
       await _enter(t, 'person_move_in', '5.3.2024');
       expect(_fieldText(t, 'person_move_in'), '05.03.2024');
       await _enter(t, 'person_name', 'Tarihli Kişi');
+      await _enter(t, 'person_email', 'tarihli@example.com');
+      await t.tap(find.byKey(const ValueKey<String>('person_relation')));
+      await t.pumpAndSettle();
+      await t.tap(find.text('Malik').last);
+      await t.pumpAndSettle();
       await _tapLast(t, 'Kaydet');
       await settleFor(t);
       expect(auth.createPersonCalls.single['move_in_date'], DateTime(2024, 3, 5));
+    });
+  });
+
+  group('Kişi formu: plaka listesi (toplu yükleme ile aynı kurallar)', () {
+    test('virgül / noktalı virgül / eğik çizgi ile ayrılır, normalize edilir, yinelenen atılır', () {
+      final r = parsePlateList('34 abc 123, 06 XY 789; 34ABC123 / 35-DD-4567');
+      expect(r.isValid, isTrue);
+      expect(r.plates.map((e) => e.plate), ['34ABC123', '06XY789', '35DD4567']);
+      expect(r.plates.first.display, '34 ABC 123');
+    });
+    test('en çok 5 plaka; geçersiz parça ve formül benzeri başlangıç reddedilir; boş serbest', () {
+      expect(parsePlateList('11AAA11, 22BBB22, 33CCC33, 44DDD44, 55EEE55, 66FFF66').tooMany, isTrue);
+      expect(parsePlateList('34 ABC 123, XY').invalid, ['XY']);
+      expect(parsePlateList('=34ABC123').formulaLike, isTrue);
+      expect(parsePlateList('  ').plates, isEmpty);
+      expect(parsePlateList(null).isValid, isTrue);
     });
   });
 

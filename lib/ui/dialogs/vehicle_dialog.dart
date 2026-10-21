@@ -24,6 +24,70 @@ String? normalizePlateInput(String? text) {
   return RegExp(r'^[A-Z0-9]{5,10}$').hasMatch(plate) ? plate : null;
 }
 
+/// Bir hücre / alandaki en çok plaka sayısı (toplu yükleme ile aynı).
+const int maxPlatesPerField = 5;
+
+/// Girilen tek bir plaka: [plate] normalize (`34ABC123`), [display] sunucuya gönderilen / gösterilen biçim
+/// (`34 ABC 123`).
+class PlateEntry {
+  const PlateEntry(this.plate, this.display);
+
+  final String plate;
+  final String display;
+}
+
+/// [parsePlateList] sonucu: geçerli plakalar (yinelenenler atılmış), geçersiz parçalar ve sayı sınırı aşımı.
+class PlateListParse {
+  const PlateListParse({
+    this.plates = const <PlateEntry>[],
+    this.invalid = const <String>[],
+    this.tooMany = false,
+    this.formulaLike = false,
+  });
+
+  final List<PlateEntry> plates;
+  final List<String> invalid;
+
+  /// [maxPlatesPerField]'ten fazla parça var.
+  final bool tooMany;
+
+  /// Alan `=`, `@`, `+`, `-` ile başlıyor (toplu yüklemede de reddedilir: tablo formülü gibi görünür).
+  final bool formulaLike;
+
+  bool get isValid => invalid.isEmpty && !tooMany && !formulaLike;
+}
+
+/// Plaka alanını (birden çok plaka `,` `;` `/` `|` ya da satır sonuyla ayrılır) toplu yüklemedeki
+/// kurallarla ayrıştırır: en çok [maxPlatesPerField] parça; her parça [normalizePlateInput] kurallarına
+/// (5-10 harf / rakam) uymalı; aynı plaka bir kez sayılır. Boş metin: hiç plaka.
+PlateListParse parsePlateList(String? text) {
+  final cleaned = (text ?? '').replaceAll(RegExp(r'[ \t\f\v]+'), ' ').trim();
+  if (cleaned.isEmpty) return const PlateListParse();
+  if (RegExp(r'^[=@+\-]').hasMatch(cleaned)) {
+    return const PlateListParse(formulaLike: true);
+  }
+  final parts = cleaned
+      .split(RegExp(r'[,;/|\r\n]'))
+      .map((part) => part.replaceAll(RegExp(r'\s+'), ' ').trim())
+      .where((part) => part.isNotEmpty)
+      .toList(growable: false);
+  if (parts.length > maxPlatesPerField) {
+    return const PlateListParse(tooMany: true);
+  }
+  final plates = <PlateEntry>[];
+  final invalid = <String>[];
+  final seen = <String>{};
+  for (final part in parts) {
+    final plate = normalizePlateInput(part);
+    if (plate == null) {
+      invalid.add(part.length > 40 ? part.substring(0, 40) : part);
+      continue;
+    }
+    if (seen.add(plate)) plates.add(PlateEntry(plate, part.toUpperCase()));
+  }
+  return PlateListParse(plates: plates, invalid: invalid);
+}
+
 /// Plaka alanını yazarken BÜYÜK harfe çevirir (web / masaüstünde klavye `TextCapitalization` desteği
 /// yoktur). Türkçe `i` -> `I` (ASCII) olur: plaka yalnız A-Z ve 0-9 kabul eder.
 class UpperCaseFormatter extends TextInputFormatter {

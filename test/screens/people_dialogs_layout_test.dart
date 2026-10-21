@@ -578,17 +578,17 @@ void main() {
       );
       expect(find.text('Kişi Ekle'), findsOneWidget);
       expect(_fieldText(t, 'person_phone'), '+90 ', reason: '+90 hazır');
-      expect(find.text('Telefon (isteğe bağlı)'), findsOneWidget);
-      expect(find.text('Daire (isteğe bağlı)'), findsOneWidget);
+      expect(find.text('Telefon *'), findsOneWidget);
+      expect(find.text('Daire (blok + daire no, isteğe bağlı)'), findsOneWidget);
 
       await _pickApartment(t, 'person_apartment', 'B Blok - 2');
       expect(find.text('B Blok - 2'), findsOneWidget);
-      expect(find.text('İlişki'), findsOneWidget);
-      expect(find.text('Giriş tarihi (isteğe bağlı)'), findsOneWidget);
+      expect(find.text('İlişki *'), findsOneWidget);
+      expect(find.text('Taşınma (giriş) tarihi *'), findsOneWidget);
       await _enter(t, 'person_email', 'yeni@example.com');
       await t.pump();
       expect(find.textContaining('Dairenin sakin hesabı yoksa bu kişiye giriş bilgileri (kullanıcı adı ve PIN) e-postayla gönderilir.'), findsOneWidget);
-      expect(find.text('Telefon yalnız iletişim içindir; giriş telefonla yapılmaz.'), findsOneWidget);
+      expect(find.textContaining('Telefon yalnız iletişim içindir; giriş telefonla yapılmaz.'), findsOneWidget);
       expect(find.textContaining('hesap açılır'), findsNothing, reason: 'bu e-postanın hesabı var / yok ima edilmez');
     });
 
@@ -609,7 +609,7 @@ void main() {
       expect(find.text('Bu kişinin hesabı var. Ad, telefon ve e-posta kişinin kendi profilinden değişir.'),
           findsOneWidget, reason: 'tek bilgilendirme bandı');
       expect(find.textContaining('Bu kişinin hesabı var.'), findsOneWidget);
-      expect(find.text('Daire (isteğe bağlı)'), findsNothing, reason: 'düzenlemede daire yok');
+      expect(find.text('Daire (blok + daire no, isteğe bağlı)'), findsNothing, reason: 'düzenlemede daire yok');
     });
   });
 
@@ -628,7 +628,7 @@ void main() {
       final auth = PeopleFakeAuth.seeded();
       await _open(t, (c) => PersonFormDialog.show(c, scope: _scope(auth)));
       expect(find.text(noEmail), findsOneWidget);
-      expect(find.text(phoneHelp), findsOneWidget);
+      expect(find.textContaining(phoneHelp), findsOneWidget);
 
       await _enter(t, 'person_email', 'yeni@example.com');
       expect(find.text(noApartment), findsOneWidget);
@@ -708,6 +708,7 @@ void main() {
       final auth = PeopleFakeAuth.seeded();
       await _open(t, (c) => PersonFormDialog.show(c, scope: _scope(auth)));
       await _enter(t, 'person_name', 'Ali Veli');
+      await _enter(t, 'person_email', 'ali@example.com');
       await _tapButton(t, 'Kaydet');
       await settleFor(t);
       final call = auth.createPersonCalls.single;
@@ -733,7 +734,8 @@ void main() {
       expect(find.text('Lütfen işaretli alanları düzeltin.'), findsOneWidget);
       expect(auth.createPersonCalls, isEmpty);
 
-      await _enter(t, 'person_move_in', '');
+      await _enter(t, 'person_move_in', '05032024');
+      await _choose(t, find.byKey(const ValueKey<String>('person_relation')), 'Malik');
       await _enter(t, 'person_email', 'ayse@example.com');
       await _tapButton(t, 'Kaydet');
       await settleFor(t);
@@ -747,6 +749,7 @@ void main() {
         ..writeError = ApiException('Bu işlem için yetkiniz yok.', statusCode: 403, code: 'FORBIDDEN_ROLE');
       await _open(t, (c) => PersonFormDialog.show(c, scope: _scope(auth)));
       await _enter(t, 'person_name', 'Ali Veli');
+      await _enter(t, 'person_email', 'ali@example.com');
       await _tapButton(t, 'Kaydet');
       await settleFor(t);
       expect(find.text('Bu işlem için yetkiniz yok.'), findsOneWidget);

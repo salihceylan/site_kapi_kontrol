@@ -1,15 +1,21 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/models/apartment_crm.dart';
 import 'package:site_kapi_kontrol/models/person_record.dart';
 import 'package:site_kapi_kontrol/models/residency_relation.dart';
-import 'package:site_kapi_kontrol/models/vehicle_record.dart' show crmInt;
+import 'package:site_kapi_kontrol/models/vehicle_record.dart'
+    show VehicleRecord, crmInt;
 import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
 import 'package:site_kapi_kontrol/ui/design/buttons.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/apartment_edit_dialog.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/apartment_info_section.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/crm_pickers.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/person_card_dialog.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/vehicle_dialog.dart';
 import 'package:site_kapi_kontrol/ui/helpers/date_input.dart';
 import 'package:site_kapi_kontrol/ui/helpers/dialog_guard.dart';
 import 'package:site_kapi_kontrol/ui/helpers/form_validation.dart';
@@ -21,10 +27,21 @@ import 'package:site_kapi_kontrol/ui/widgets/crm_parts.dart';
 /// "Kişi Ekle" ve "Düzenle" penceresi (Platform Faz 2a).
 ///
 /// - Ekleme ([person] null): ad soyad, telefon (+90 hazır, 3-3-2-2), e-posta, isteğe bağlı daire +
-///   ilişki + giriş tarihi, not.
+///   ilişki + taşınma (giriş) tarihi, plaka(lar), not ve (daire seçilince) genişletilebilir "Daire bilgileri".
 /// - Düzenleme: yalnız DEĞİŞEN alanlar gönderilir. HESABI OLAN kişide ad / telefon / e-posta salt okunur
-///   görünür (TEK bir bilgilendirme bandı: "kişinin kendi profilinden değişir") ve gönderilmez; yalnız
-///   not düzenlenir. Dahili hesapta (`account_kind: internal`) iletişim e-postası da düzenlenebilir.
+///   görünür (TEK bir bilgilendirme bandı: "kişinin kendi profilinden değişir") ve gönderilmez; plaka, not ve
+///   daire bilgileri düzenlenir. Dahili hesapta (`account_kind: internal`) iletişim e-postası da düzenlenebilir.
+///
+/// ZORUNLU alanlar etikette "*" ile işaretlidir: ad soyad; telefon ya da e-postadan en az biri (kişinin tüm
+/// ilişkisi "Aile Üyesi" ise ikisi de boş olabilir); daire seçildiyse ilişki (varsayılan seçili gelmez: borcun
+/// hangi hesaba yazılacağını belirler) ve taşınma (giriş) tarihi (bugünle dolu gelir; Borcum görünürlüğü buna
+/// bağlıdır). Plaka, not ve "Daire bilgileri"nin tümü isteğe bağlıdır.
+///
+/// Kayıt ADIM ADIM yapılır: kişi (oluştur / güncelle) -> daire bilgileri (yalnız değişenler,
+/// [ApartmentFieldsDraft] ile "Daireyi Düzenle" ile AYNI doğrulama ve uç) -> plakalar (araç ekle / kaldır).
+/// Bir sonraki adım düşerse pencere AÇIK kalır, hangi adımın başarısız olduğu yazılır ("Kişi kaydedildi, plaka
+/// eklenemedi: ...") ve yeniden "Kaydet" yalnız kalan adımları dener (kişi iki kez oluşturulmaz). Vazgeç / geri,
+/// kişi kaydedilmişse onu döndürür (çağıran liste tazelensin).
 ///
 /// Sunucu reddi (aynı e-posta, dolu ilişki, ...) Türkçe mesajla pencerenin içinde gösterilir (görünür
 /// konuma kaydırılır) ve pencere AÇIK kalır. Gönderim sürerken geri tuşu pencereyi kapatmaz. Başarıda
@@ -48,6 +65,10 @@ class PersonFormDialog extends StatefulWidget {
 
   static const int maxNoteLength = 500;
   static const int maxNameLength = 100;
+
+  /// Telefon ve e-posta alanlarında ikisi de boşken gösterilen hata.
+  static const String contactRequiredMessage =
+      'Telefon ya da e-postadan en az biri girilmeli.';
 
   static Future<PersonDetail?> show(
     BuildContext context, {
@@ -87,10 +108,40 @@ class _PersonFormDialogState extends State<PersonFormDialog> {
   );
   final TextEditingController _moveIn = TextEditingController();
 
+  /// Kişinin mevcut (aktif) plakaları: düzenlemede "34 ABC 123, 06 XY 789" olarak dolu gelir.
+  late final TextEditingController _plates = TextEditingController(
+    text: _activeVehicles.map((v) => v.displayPlate).join(', '),
+  );
+
+  /// Daire bilgileri taslağı ("Daireyi Düzenle" ile ortak doğrulama / fark).
+  final ApartmentFieldsDraft _aptDraft = ApartmentFieldsDraft();
+
   ApartmentSummary? _apartment;
-  ResidencyRelation _relation = ResidencyRelation.resident;
+
+  /// Varsayılan YOK: kullanıcı seçmek zorundadır (borcun hangi hesaba yazılacağını belirler).
+  ResidencyRelation? _relation;
   bool _submitting = false;
   String? _error;
+
+  bool _aptExpanded = false;
+  bool _aptLoading = false;
+  String? _aptLoadError;
+  int _aptToken = 0;
+
+  // Kayıt ilerlemesi (adım adım kayıt; hata sonrası yeniden denemede yapılanlar tekrarlanmaz).
+  bool _personDone = false;
+  bool _created = false;
+  bool _personChanged = false;
+  bool _aptUpdated = false;
+  bool _extrasChanged = false;
+  bool _dirty = false;
+  PersonDetail? _savedPerson;
+
+  /// Kişide kayıtlı aktif plakalar: normalize plaka -> araç numarası (düzenlemede açılışta; sonra adımlarla güncellenir).
+  late final Map<String, int> _plateIds = <String, int>{
+    for (final v in _activeVehicles)
+      if (v.plate.isNotEmpty) v.plate: v.id,
+  };
 
   // PERSON_EXISTS yanıtındaki mevcut kişinin numarası (0 / eksik: "Kişiyi Aç" gösterilmez).
   int _existingPersonId = 0;
@@ -98,6 +149,11 @@ class _PersonFormDialogState extends State<PersonFormDialog> {
   static final RegExp _emailPattern = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
 
   bool get _editing => widget.person != null;
+
+  Iterable<VehicleRecord> get _activeVehicles =>
+      (widget.person?.vehicles ?? const <VehicleRecord>[]).where(
+        (v) => v.isActive,
+      );
 
   /// Hesabı olan kişide ad ve telefon CRM'den değişmez (kişinin kendi profilinden değişir).
   bool get _identityLocked => widget.person?.hasAccount == true;
@@ -108,12 +164,67 @@ class _PersonFormDialogState extends State<PersonFormDialog> {
       widget.person?.hasAccount == true &&
       widget.person?.isInternalAccount != true;
 
+  /// Kişi kaydı bitti: kişi alanları artık değişmez (yeniden denemede yalnız daire bilgileri ve plaka işlenir).
+  bool get _fieldsLocked => _submitting || _personDone;
+
+  /// Telefon ya da e-postadan en az biri zorunlu mu? Kişinin tek ilişkisi "Aile Üyesi" ise (ya da hesaplı kişide,
+  /// iletişim bilgisi hesaptan geldiği için) değil.
+  bool get _contactRequired {
+    if (_identityLocked) return false;
+    if (_editing) {
+      final relations = widget.person!.relations;
+      final onlyFamily =
+          relations.isNotEmpty &&
+          relations.every((r) => r == ResidencyRelation.familyMember);
+      return !onlyFamily;
+    }
+    return !(_apartment != null && _relation == ResidencyRelation.familyMember);
+  }
+
+  /// Düzenlemede "Daire bilgileri" bölümü için kişinin güncel daireleri (tekrarsız).
+  late final List<Residency> _editResidencies = () {
+    final seen = <int>{};
+    return <Residency>[
+      for (final r in widget.person?.currentResidencies ?? const <Residency>[])
+        if (seen.add(r.apartmentId)) r,
+    ];
+  }();
+
+  /// "Daire bilgileri"nin ait olduğu daire: ekleme -> seçilen daire; düzenleme -> kişinin TEK güncel dairesi.
+  int? get _aptId {
+    if (_editing) {
+      return _editResidencies.length == 1
+          ? _editResidencies.single.apartmentId
+          : null;
+    }
+    return _apartment?.id;
+  }
+
+  String get _aptLabel => _editing
+      ? _editResidencies.single.fullLabel
+      : (_apartment?.fullLabel ?? '');
+
+  /// Daire alanlarını düzenleme yetkisi yalnız yönetimde (kurul üyesi salt okur: bölüm gösterilmez).
+  bool get _showAptSection => widget.scope.canWrite && _aptId != null;
+
+  bool get _showMultiAptNote =>
+      widget.scope.canWrite && _editing && _editResidencies.length > 1;
+
+  /// Bölüm gösteriliyor ve dairenin mevcut değerleri yüklendi: kayıtta daire güncellemesi değerlendirilir.
+  bool get _aptActive =>
+      _showAptSection &&
+      _aptDraft.initial != null &&
+      _aptDraft.initial!.id == _aptId;
+
   /// E-posta alanının altındaki durum bazlı yardım metni (yalnız ekleme). Sunucu davranışı (people_service.createPerson):
   /// e-posta + daire varsa ve dairenin sakin hesabı yoksa dahili sakin hesabı açılıp giriş bilgisi (kullanıcı adı + PIN)
   /// e-postayla gönderilir; e-posta bu sitede erişimi olan kayıtlı bir hesaba aitse kişi o hesaba bağlanır; aksi
   /// halde (e-posta yok, daire yok ya da dairenin sakin hesabı var) yalnız kayıt tutulur. Hesabın var olup
   /// olmadığı ima edilmez: yalnız kurallar anlatılır.
-  static String emailHelp({required bool hasEmail, required bool hasApartment}) {
+  static String emailHelp({
+    required bool hasEmail,
+    required bool hasApartment,
+  }) {
     if (!hasEmail) {
       return 'E-posta girmezseniz kişi yalnız kayıt olarak tutulur; giriş hesabı açılmaz.';
     }
@@ -127,32 +238,120 @@ class _PersonFormDialogState extends State<PersonFormDialog> {
   }
 
   /// Telefon alanının altındaki yardım metni.
-  static const String phoneHelp = 'Telefon yalnız iletişim içindir; giriş telefonla yapılmaz.';
+  static const String phoneHelp =
+      'Telefon yalnız iletişim içindir; giriş telefonla yapılmaz.';
+
+  /// Telefon / e-posta zorunluluğunu anlatan kısa not (telefon alanının altında).
+  static const String contactRule =
+      'Telefon ya da e-postadan en az biri zorunlu (yalnız Aile Üyesi ise ikisi de boş olabilir).';
 
   @override
   void dispose() {
+    ++_aptToken;
     _name.dispose();
     _phone.dispose();
     _email.dispose();
     _note.dispose();
     _moveIn.dispose();
+    _plates.dispose();
+    _aptDraft.dispose();
     super.dispose();
   }
 
   Future<void> _pickApartment() async {
     final picked = await showApartmentPicker(context, widget.scope);
     if (picked == null || !mounted) return;
-    setState(() => _apartment = picked);
+    setState(() {
+      final changed = _apartment?.id != picked.id;
+      _apartment = picked;
+      // Bugünle dolu gelir (Borcum görünürlüğü taşınma tarihine bağlıdır); kullanıcı değiştirebilir.
+      if (_moveIn.text.trim().isEmpty) {
+        _moveIn.text = formatDateField(DateTime.now());
+      }
+      if (changed) _resetApartmentInfo();
+    });
+    if (_aptExpanded && _aptDraft.initial == null) unawaited(_loadApartment());
+  }
+
+  void _clearApartment() {
+    setState(() {
+      _apartment = null;
+      _resetApartmentInfo();
+    });
+  }
+
+  /// Başka daire seçildi / seçim kalktı: önceki dairenin taslağı atılır.
+  void _resetApartmentInfo() {
+    ++_aptToken;
+    _aptDraft.clear();
+    _aptLoading = false;
+    _aptLoadError = null;
+    if (_apartment == null) _aptExpanded = false;
+  }
+
+  void _toggleApartmentInfo() {
+    setState(() => _aptExpanded = !_aptExpanded);
+    if (_aptExpanded && _aptDraft.initial == null && !_aptLoading) {
+      unawaited(_loadApartment());
+    }
+  }
+
+  /// Dairenin mevcut değerlerini sunucudan alıp alanlara yazar (bölüm ilk açıldığında).
+  Future<void> _loadApartment() async {
+    final id = _aptId;
+    if (id == null || !mounted) return;
+    final token = ++_aptToken;
+    setState(() {
+      _aptLoading = true;
+      _aptLoadError = null;
+    });
+    try {
+      final detail = await widget.scope.authService.getApartment(
+        widget.scope.siteCode,
+        id,
+      );
+      if (!mounted || token != _aptToken) return;
+      setState(() {
+        _aptDraft.load(detail);
+        _aptLoading = false;
+      });
+    } catch (e) {
+      if (!mounted || token != _aptToken) return;
+      setState(() {
+        _aptLoading = false;
+        _aptLoadError = crmMessageOf(
+          e,
+          'Daire bilgileri yüklenemedi. İnternet bağlantınızı kontrol edip tekrar deneyin.',
+        );
+      });
+    }
+  }
+
+  /// Hata iletisini parantez içinde kullanmak için sondaki noktayı atar.
+  static String _inline(String message) {
+    final text = message.trim();
+    return text.endsWith('.') ? text.substring(0, text.length - 1) : text;
   }
 
   Future<void> _submit() async {
     if (_submitting) return;
-    if (!validateForm(_formKey)) {
+    // Daire bilgileri alanları kapalı bölümde çizilmez: doğrulama alan widget'larına değil taslağa dayanır.
+    final fieldsOk = validateForm(_formKey);
+    final aptMessage = _aptActive ? _aptDraft.validateAll() : null;
+    if (!fieldsOk || aptMessage != null) {
+      final reveal = aptMessage != null && !_aptExpanded;
       // Özet bildirimi + ilk geçersiz alana kaydırma / odak (kaydırılmış formda hata gizli kalmasın).
       setState(() {
-        _error = kFixFieldsMessage;
+        _error = fieldsOk ? aptMessage : kFixFieldsMessage;
         _existingPersonId = 0;
+        if (aptMessage != null) _aptExpanded = true;
       });
+      if (reveal) {
+        // Bölüm yeni açıldı: alan hataları çizildikten sonra görünür kılınır.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) validateForm(_formKey);
+        });
+      }
       return;
     }
     FocusScope.of(context).unfocus();
@@ -163,44 +362,178 @@ class _PersonFormDialogState extends State<PersonFormDialog> {
     });
     final auth = widget.scope.authService;
     final siteCode = widget.scope.siteCode;
-    try {
-      final PersonDetail result;
-      if (_editing) {
-        final fields = _changedFields();
-        if (fields.isEmpty) {
-          // Değişiklik yok: sunucuya gitmeden kapanır.
-          popIfCurrent(context, widget.person);
-          return;
+
+    // 1) Kişi
+    if (!_personDone) {
+      try {
+        if (_editing) {
+          final fields = _changedFields();
+          if (fields.isEmpty) {
+            _savedPerson = widget.person;
+          } else {
+            _savedPerson = await auth.updatePerson(
+              siteCode,
+              widget.person!.id,
+              fields,
+            );
+            _personChanged = true;
+            _dirty = true;
+          }
+        } else {
+          final apartment = _apartment;
+          _savedPerson = await auth.createPerson(
+            siteCode,
+            fullName: _name.text,
+            phone: phoneToApi(_phone.text),
+            email: _email.text,
+            note: _note.text,
+            apartmentId: apartment?.id,
+            relation: apartment == null ? null : _relation,
+            moveInDate: apartment == null ? null : parseDateField(_moveIn.text),
+          );
+          _created = true;
+          _dirty = true;
         }
-        result = await auth.updatePerson(siteCode, widget.person!.id, fields);
-      } else {
-        final apartment = _apartment;
-        result = await auth.createPerson(
-          siteCode,
-          fullName: _name.text,
-          phone: phoneToApi(_phone.text),
-          email: _email.text,
-          note: _note.text,
-          apartmentId: apartment?.id,
-          relation: apartment == null ? null : _relation,
-          moveInDate: apartment == null ? null : parseDateField(_moveIn.text),
-        );
+        _personDone = true;
+      } catch (e) {
+        if (!mounted) return;
+        setState(() {
+          _error = crmMessageOf(
+            e,
+            'Kişi kaydedilemedi. İnternet bağlantınızı kontrol edip tekrar deneyin.',
+          );
+          _existingPersonId = e is ApiException && e.code == 'PERSON_EXISTS'
+              ? crmInt(e.payload?['person_id'])
+              : 0;
+          _submitting = false;
+        });
+        return;
       }
       if (!mounted) return;
-      popIfCurrent(context, result);
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = crmMessageOf(
-          e,
-          'Kişi kaydedilemedi. İnternet bağlantınızı kontrol edip tekrar deneyin.',
-        );
-        _existingPersonId = e is ApiException && e.code == 'PERSON_EXISTS'
-            ? crmInt(e.payload?['person_id'])
-            : 0;
-        _submitting = false;
-      });
     }
+
+    final person = _savedPerson!;
+    final failures = <String>[];
+
+    // 2) Daire bilgileri (yalnız değişen alanlar; "Daireyi Düzenle" ile aynı uç)
+    if (_aptActive) {
+      final fields = _aptDraft.changedFields();
+      if (fields.isNotEmpty) {
+        try {
+          final result = await auth.updateApartment(
+            siteCode,
+            _aptDraft.initial!.id,
+            fields,
+          );
+          if (!mounted) return;
+          _aptDraft.load(result);
+          _aptUpdated = true;
+          _extrasChanged = true;
+          _dirty = true;
+        } catch (e) {
+          if (!mounted) return;
+          failures.add(
+            'daire bilgileri güncellenemedi: ${_inline(crmMessageOf(e, 'İnternet bağlantınızı kontrol edip tekrar deneyin.'))}',
+          );
+        }
+      }
+    }
+
+    // 3) Plakalar (eklenen yeni araç olur, çıkarılan pasife alınır)
+    if (!await _syncPlates(person.id, failures)) return;
+
+    // Düzenlemede plaka / daire değiştiyse kişi kartı güncel veriyle yenilensin.
+    if (_editing && _extrasChanged) {
+      try {
+        _savedPerson = await auth.getPerson(siteCode, person.id);
+        _extrasChanged = false;
+      } catch (_) {
+        // Yenileme düşerse eldeki kişi döner; kart bir sonraki açılışta güncellenir.
+      }
+    }
+
+    if (!mounted) return;
+    if (failures.isEmpty) {
+      popIfCurrent(context, _savedPerson);
+      return;
+    }
+    setState(() {
+      _error = _partialMessage(failures);
+      _submitting = false;
+    });
+  }
+
+  /// Plaka alanını kişinin kayıtlı plakalarıyla eşitler. Dönüş false: pencere kapandı (işlem bırakıldı).
+  Future<bool> _syncPlates(int personId, List<String> failures) async {
+    final auth = widget.scope.authService;
+    final siteCode = widget.scope.siteCode;
+    final desired = <String, PlateEntry>{
+      for (final entry in parsePlateList(_plates.text).plates)
+        entry.plate: entry,
+    };
+    final addFailed = <String>[];
+    final removeFailed = <String>[];
+    for (final entry in desired.values) {
+      if (_plateIds.containsKey(entry.plate)) continue;
+      try {
+        final vehicle = await auth.createVehicle(
+          siteCode,
+          personId,
+          entry.display,
+        );
+        if (!mounted) return false;
+        _plateIds[entry.plate] = vehicle.id;
+        _extrasChanged = true;
+        _dirty = true;
+      } catch (e) {
+        if (!mounted) return false;
+        addFailed.add(
+          '${entry.display} (${_inline(crmMessageOf(e, 'İnternet bağlantınızı kontrol edip tekrar deneyin.'))})',
+        );
+      }
+    }
+    for (final existing in _plateIds.entries.toList()) {
+      if (desired.containsKey(existing.key)) continue;
+      try {
+        await auth.removeVehicle(siteCode, existing.value);
+        if (!mounted) return false;
+        _plateIds.remove(existing.key);
+        _extrasChanged = true;
+        _dirty = true;
+      } catch (e) {
+        if (!mounted) return false;
+        removeFailed.add(
+          '${existing.key} (${_inline(crmMessageOf(e, 'İnternet bağlantınızı kontrol edip tekrar deneyin.'))})',
+        );
+      }
+    }
+    if (addFailed.isNotEmpty) {
+      failures.add('plaka eklenemedi: ${addFailed.join(', ')}');
+    }
+    if (removeFailed.isNotEmpty) {
+      failures.add('plaka kaldırılamadı: ${removeFailed.join(', ')}');
+    }
+    return true;
+  }
+
+  /// "Kişi kaydedildi, plaka eklenemedi: 34 ABC 123 (...)." biçiminde adım adım durum iletisi.
+  String _partialMessage(List<String> failures) {
+    final done = <String>[
+      if (_created)
+        'kişi kaydedildi'
+      else if (_personChanged)
+        'kişi bilgileri kaydedildi',
+      if (_aptUpdated) 'daire bilgileri güncellendi',
+    ];
+    final text = [...done, failures.join('; ')].join(', ');
+    final sentence = '${text[0].toUpperCase()}${text.substring(1)}.';
+    return '$sentence Düzeltip yeniden Kaydet\'e basabilir ya da Vazgeç ile kapatabilirsiniz.';
+  }
+
+  /// Vazgeç: kişi (ya da başka bir adım) kaydedildiyse onu döndürür; çağıran listeyi / kartı tazeler.
+  void _cancel() {
+    if (_submitting) return;
+    popIfCurrent(context, _dirty ? _savedPerson : null);
   }
 
   Future<void> _openExisting() async {
@@ -240,21 +573,48 @@ class _PersonFormDialogState extends State<PersonFormDialog> {
     return fields;
   }
 
+  /// Plaka alanı doğrulaması: en çok 5 plaka, her biri 5-10 harf / rakam (toplu yüklemeyle aynı kural).
+  String? _validatePlates(String? value) {
+    final parsed = parsePlateList(value);
+    if (parsed.formulaLike) {
+      return 'Plaka biçimi geçersiz: =, @, + ya da - ile başlayamaz.';
+    }
+    if (parsed.tooMany) {
+      // Kayıtlı plaka sayısı zaten sınırı aşıyorsa (eski veri) DEĞİŞMEMİŞ alan engellenmez.
+      final unchanged =
+          _editing &&
+          _plates.text.trim() ==
+              _activeVehicles.map((v) => v.displayPlate).join(', ');
+      return unchanged
+          ? null
+          : 'En çok $maxPlatesPerField plaka girilebilir; virgülle ayırın.';
+    }
+    if (parsed.invalid.isNotEmpty) {
+      return 'Plaka biçimi geçersiz: ${parsed.invalid.join(', ')} (5-10 harf / rakam, örn. 34 ABC 123).';
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final th = Theme.of(context).textTheme;
     final p = context.palette;
     final internal = widget.person?.isInternalAccount == true;
+    final contactRequired = _contactRequired;
     return PopScope(
-      // Gönderim sürerken geri tuşu pencereyi kapatmaz (işlem yarıda kalmış gibi görünmesin).
-      canPop: !_submitting,
+      // Gönderim sürerken geri tuşu pencereyi kapatmaz (işlem yarıda kalmış gibi görünmesin). Kişi kaydedildiyse
+      // geri tuşu da Vazgeç gibi kaydedilen kişiyle kapanır (çağıran liste tazelensin).
+      canPop: !_submitting && !_dirty,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _cancel();
+      },
       child: AppDialog(
         title: _editing ? 'Kişiyi Düzenle' : 'Kişi Ekle',
         subtitle: widget.scope.siteName.isEmpty ? null : widget.scope.siteName,
         icon: _editing ? Icons.edit_rounded : Icons.person_add_alt_1_rounded,
         actions: [
           TextButton(
-            onPressed: _submitting ? null : () => popIfCurrent(context),
+            onPressed: _submitting ? null : _cancel,
             child: const Text('Vazgeç'),
           ),
           ElevatedButton(
@@ -294,12 +654,12 @@ class _PersonFormDialogState extends State<PersonFormDialog> {
               TextFormField(
                 key: const ValueKey<String>('person_name'),
                 controller: _name,
-                enabled: !_submitting,
+                enabled: !_fieldsLocked,
                 readOnly: _identityLocked,
                 textCapitalization: TextCapitalization.words,
                 maxLength: PersonFormDialog.maxNameLength,
                 decoration: const InputDecoration(
-                  labelText: 'Ad Soyad',
+                  labelText: 'Ad Soyad *',
                   prefixIcon: Icon(Icons.person_rounded),
                   counterText: '',
                 ),
@@ -317,33 +677,50 @@ class _PersonFormDialogState extends State<PersonFormDialog> {
               TextFormField(
                 key: const ValueKey<String>('person_phone'),
                 controller: _phone,
-                enabled: !_submitting,
+                enabled: !_fieldsLocked,
                 readOnly: _identityLocked,
                 keyboardType: TextInputType.phone,
                 inputFormatters: _identityLocked
                     ? null
                     : const [PhoneInputFormatter()],
                 decoration: InputDecoration(
-                  labelText: 'Telefon (isteğe bağlı)',
+                  labelText: contactRequired
+                      ? 'Telefon *'
+                      : 'Telefon (isteğe bağlı)',
                   prefixIcon: const Icon(Icons.phone_rounded),
-                  helperText: _identityLocked ? null : phoneHelp,
-                  helperMaxLines: 3,
+                  helperText: _identityLocked
+                      ? null
+                      : (contactRequired
+                            ? '$contactRule $phoneHelp'
+                            : phoneHelp),
+                  helperMaxLines: 4,
                 ),
-                validator: (value) =>
-                    _identityLocked ? null : validatePhoneField(value),
+                validator: (value) {
+                  if (_identityLocked) return null;
+                  final format = validatePhoneField(value);
+                  if (format != null) return format;
+                  if (_contactRequired &&
+                      phoneToApi(value) == null &&
+                      _email.text.trim().isEmpty) {
+                    return PersonFormDialog.contactRequiredMessage;
+                  }
+                  return null;
+                },
               ),
               const SizedBox(height: AppSpace.md),
               TextFormField(
                 key: const ValueKey<String>('person_email'),
                 controller: _email,
-                enabled: !_submitting,
+                enabled: !_fieldsLocked,
                 readOnly: _emailLocked,
                 keyboardType: TextInputType.emailAddress,
                 autocorrect: false,
                 enableSuggestions: false,
                 onChanged: _editing ? null : (_) => setState(() {}),
                 decoration: InputDecoration(
-                  labelText: 'E-posta (isteğe bağlı)',
+                  labelText: contactRequired
+                      ? 'E-posta *'
+                      : 'E-posta (isteğe bağlı)',
                   prefixIcon: const Icon(Icons.email_rounded),
                   // Hesap var / yok ima etmez: yalnız kurallar anlatılır (bkz. [emailHelp]).
                   helperText: _editing
@@ -357,7 +734,11 @@ class _PersonFormDialogState extends State<PersonFormDialog> {
                 validator: (value) {
                   if (_emailLocked) return null;
                   final text = (value ?? '').trim();
-                  if (text.isEmpty) return null;
+                  if (text.isEmpty) {
+                    return _contactRequired && phoneToApi(_phone.text) == null
+                        ? PersonFormDialog.contactRequiredMessage
+                        : null;
+                  }
                   return _emailPattern.hasMatch(text)
                       ? null
                       : 'Geçerli bir e-posta girin.';
@@ -367,13 +748,13 @@ class _PersonFormDialogState extends State<PersonFormDialog> {
                 const SizedBox(height: AppSpace.md),
                 CrmPickerField(
                   key: const ValueKey<String>('person_apartment'),
-                  label: 'Daire (isteğe bağlı)',
+                  label: 'Daire (blok + daire no, isteğe bağlı)',
                   icon: Icons.apartment_rounded,
                   value: _apartment?.fullLabel,
                   placeholder: 'Daire seçmek için dokunun',
-                  enabled: !_submitting,
+                  enabled: !_fieldsLocked,
                   onTap: _pickApartment,
-                  onClear: () => setState(() => _apartment = null),
+                  onClear: _clearApartment,
                 ),
                 if (_apartment != null) ...[
                   const SizedBox(height: AppSpace.md),
@@ -383,8 +764,11 @@ class _PersonFormDialogState extends State<PersonFormDialog> {
                     initialValue: _relation,
                     dropdownColor: p.surface,
                     style: th.bodyLarge?.copyWith(color: p.text),
+                    hint: const Text('Seçin'),
                     decoration: const InputDecoration(
-                      labelText: 'İlişki',
+                      labelText: 'İlişki *',
+                      helperText: 'Borcun hangi hesaba yazılacağını belirler.',
+                      helperMaxLines: 2,
                       prefixIcon: Icon(Icons.badge_rounded),
                     ),
                     items: [
@@ -398,7 +782,10 @@ class _PersonFormDialogState extends State<PersonFormDialog> {
                           ),
                         ),
                     ],
-                    onChanged: _submitting
+                    validator: (value) => value == null
+                        ? 'İlişkiyi seçin (Malik, Kiracı, Aile Üyesi ya da Sakin).'
+                        : null,
+                    onChanged: _fieldsLocked
                         ? null
                         : (value) {
                             if (value != null) {
@@ -410,23 +797,49 @@ class _PersonFormDialogState extends State<PersonFormDialog> {
                   TextFormField(
                     key: const ValueKey<String>('person_move_in'),
                     controller: _moveIn,
-                    enabled: !_submitting,
+                    enabled: !_fieldsLocked,
                     keyboardType: TextInputType.number,
                     inputFormatters: const [DateInputFormatter()],
                     decoration: const InputDecoration(
-                      labelText: 'Giriş tarihi (isteğe bağlı)',
+                      labelText: 'Taşınma (giriş) tarihi *',
                       hintText: 'GG.AA.YYYY',
+                      helperText: 'Borcum görünürlüğü bu tarihe bağlıdır.',
+                      helperMaxLines: 2,
                       prefixIcon: Icon(Icons.event_rounded),
                     ),
-                    validator: validateDateField,
+                    validator: (value) {
+                      if ((value ?? '').trim().isEmpty) {
+                        return 'Taşınma (giriş) tarihi zorunlu.';
+                      }
+                      return validateDateField(value);
+                    },
                   ),
                 ],
               ],
               const SizedBox(height: AppSpace.md),
               TextFormField(
+                key: const ValueKey<String>('person_plates'),
+                controller: _plates,
+                enabled: !_submitting,
+                inputFormatters: const [UpperCaseFormatter()],
+                autocorrect: false,
+                enableSuggestions: false,
+                maxLength: 120,
+                decoration: const InputDecoration(
+                  labelText: 'Plaka (isteğe bağlı)',
+                  hintText: '34 ABC 123, 06 XY 789',
+                  helperText: 'Birden çok plaka virgülle ayrılır (en çok 5).',
+                  helperMaxLines: 2,
+                  prefixIcon: Icon(Icons.directions_car_rounded),
+                  counterText: '',
+                ),
+                validator: _validatePlates,
+              ),
+              const SizedBox(height: AppSpace.md),
+              TextFormField(
                 key: const ValueKey<String>('person_note'),
                 controller: _note,
-                enabled: !_submitting,
+                enabled: !_fieldsLocked,
                 minLines: 2,
                 maxLines: 4,
                 maxLength: PersonFormDialog.maxNoteLength,
@@ -436,6 +849,30 @@ class _PersonFormDialogState extends State<PersonFormDialog> {
                   alignLabelWithHint: true,
                 ),
               ),
+              if (_showAptSection) ...[
+                const SizedBox(height: AppSpace.md),
+                ApartmentInfoSection(
+                  key: const ValueKey<String>('person_apt_section'),
+                  draft: _aptDraft,
+                  apartmentLabel: _aptLabel,
+                  expanded: _aptExpanded,
+                  enabled: !_submitting,
+                  loading: _aptLoading,
+                  loadError: _aptLoadError,
+                  onRetry: _loadApartment,
+                  onToggle: _toggleApartmentInfo,
+                  onPartyChanged: (party) =>
+                      setState(() => _aptDraft.party = party),
+                ),
+              ] else if (_showMultiAptNote) ...[
+                const SizedBox(height: AppSpace.md),
+                const InlineNotice(
+                  tone: AppTone.info,
+                  icon: Icons.info_outline_rounded,
+                  message:
+                      'Bu kişinin birden çok dairesi var; daire bilgileri Daireler ekranından düzenlenir.',
+                ),
+              ],
             ],
           ),
         ),
