@@ -16,6 +16,8 @@ import 'package:site_kapi_kontrol/ui/helpers/finance_4b_access.dart';
 import 'package:site_kapi_kontrol/ui/helpers/finance_errors.dart';
 import 'package:site_kapi_kontrol/ui/helpers/finance_write_mixin.dart';
 import 'package:site_kapi_kontrol/ui/helpers/money.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/finance_bank_details_dialog.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/finance_payment_settings_dialog.dart';
 import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_4b_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_parts.dart';
@@ -302,6 +304,14 @@ class FinanceCashTabState extends State<FinanceCashTab> {
           ),
         ],
         const SizedBox(height: AppSpace.md),
+        PrimaryActionButton(
+          key: const ValueKey<String>('finance_cash_payment_settings'),
+          label: 'Ödeme bilgisi',
+          icon: Icons.account_balance_rounded,
+          variant: AppButtonVariant.tonal,
+          onPressed: () => _paymentSettings(),
+        ),
+        const SizedBox(height: AppSpace.sm),
         if (_canWrite) ...[
           PrimaryActionButton(
             key: const ValueKey<String>('finance_cash_add'),
@@ -365,14 +375,51 @@ class FinanceCashTabState extends State<FinanceCashTab> {
     );
   }
 
+  Future<void> _paymentSettings() async {
+    if (_opening) return;
+    final message = await _guarded(() => FinancePaymentSettingsDialog.show(context, scope: widget.scope));
+    _afterPaymentWrite(message);
+  }
+
+  Future<void> _bankDetails(CashAccount account) async {
+    if (_opening) return;
+    final message = await _guarded(
+      () => FinanceBankDetailsDialog.show(context, scope: widget.scope, accountId: account.id, accountName: account.name),
+    );
+    _afterPaymentWrite(message);
+  }
+
+  void _afterPaymentWrite(String? message) {
+    if (message == null || !mounted) return;
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(message)));
+    _refreshOnly();
+  }
+
   Widget _card(CashAccount account) {
-    return CashAccountCard(
+    final card = CashAccountCard(
       account: account,
       busy: _opening,
       onOpen: () => _movements(account),
       onAdjust: _canWrite ? () => _adjust(account) : null,
       onReconcile: _canWrite && account.isActive ? () => _reconcile(account) : null,
       onEdit: _canWrite ? () => _editAccount(account) : null,
+    );
+    if (!_canWrite || account.kind != CashAccountKind.bank) return card;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        card,
+        Align(
+          alignment: AlignmentDirectional.centerStart,
+          child: TextButton.icon(
+            key: ValueKey<String>('finance_cash_bank_${account.id}'),
+            style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+            onPressed: () => _bankDetails(account),
+            icon: const Icon(Icons.credit_card_rounded, size: 18),
+            label: const Text('IBAN ve alıcı adı'),
+          ),
+        ),
+      ],
     );
   }
 }

@@ -58,6 +58,7 @@ class ModuleShowcaseView extends StatefulWidget {
     this.debtSiteCodes,
     this.quickActionItems,
     this.onCreateGuestPass,
+    this.onPay,
   }) : assert(applications == null || onReapply != null, 'başvuru kartı için onReapply gerekir');
 
   final UserSession session;
@@ -76,6 +77,9 @@ class ModuleShowcaseView extends StatefulWidget {
   /// Sakin borç özeti kaynağı (`GET /app/my-finance`). Yalnız sakin vitrininde ve "Borcum" menüde GÖRÜNÜYORKEN
   /// çağrılır; null ise ya da hata verirse hero kart selamlamadır (asla "borç yok" denmez).
   final Future<MyFinance> Function()? fetchMyFinance;
+
+  /// "Öde" (2A): tek borçlu daire varken o dairenin Öde sayfasını açar; verilmezse "Öde" düğmesi çıkmaz.
+  final void Function(MyFinanceApartment item)? onPay;
 
   /// Sakin selamlamasının site satırı (modül verisinden); bilinmiyorsa null.
   final String? residentSiteName;
@@ -290,6 +294,19 @@ class ModuleShowcaseViewState extends State<ModuleShowcaseView> {
     );
   }
 
+  /// Hero "Öde": tek borçlu daire varsa Öde sayfası, birden çoksa daire seçimi için Borcum.
+  void _payFromHero() {
+    final finance = _finance;
+    final debtors = finance == null
+        ? const <MyFinanceApartment>[]
+        : [for (final i in finance.items) if (i.ownAccount.balanceMinor > 0) i];
+    if (debtors.length == 1 && widget.onPay != null) {
+      widget.onPay!(debtors.first);
+    } else {
+      _open(SirketMenuItem.borcum);
+    }
+  }
+
   /// Sakin hero kartı: borç özeti (Borcum açık + veri alındı) ya da selamlama.
   Widget _buildHero(BuildContext context) {
     final finance = _finance;
@@ -312,6 +329,7 @@ class ModuleShowcaseViewState extends State<ModuleShowcaseView> {
         summary: summary,
         siteLine: siteLine,
         onOpenDebt: () => _open(SirketMenuItem.borcum),
+        onPay: summary.hasDebt && widget.onPay != null ? _payFromHero : null,
       );
     }
     final first = widget.session.fullName.trim().split(RegExp(r'\s+')).first;
@@ -960,11 +978,15 @@ class _DebtHero extends StatelessWidget {
     required this.summary,
     required this.siteLine,
     required this.onOpenDebt,
+    this.onPay,
   });
 
   final DebtSummary summary;
   final String siteLine;
   final VoidCallback onOpenDebt;
+
+  /// Verilirse (borç varken) birincil "Öde" düğmesi çıkar; "Borcum'a git" ikincil kalır.
+  final VoidCallback? onPay;
 
   @override
   Widget build(BuildContext context) {
@@ -1053,12 +1075,25 @@ class _DebtHero extends StatelessWidget {
         const SizedBox(height: AppSpace.lg),
         Align(
           alignment: AlignmentDirectional.centerStart,
-          child: _PillButton(
-            buttonKey: const ValueKey<String>('panel_hero_borcuma_git'),
-            label: "Borcum'a git",
-            // Koyu kutuda ve koyu temanın düz kartında açık hap; açık temanın düz kartında koyu (#0F172A) ana düğme.
-            onDark: focus || p.isDark,
-            onTap: onOpenDebt,
+          child: Wrap(
+            spacing: AppSpace.sm,
+            runSpacing: AppSpace.sm,
+            children: [
+              if (onPay != null)
+                _PillButton(
+                  buttonKey: const ValueKey<String>('panel_hero_ode'),
+                  label: 'Öde',
+                  onDark: focus || p.isDark,
+                  onTap: onPay!,
+                ),
+              _PillButton(
+                buttonKey: const ValueKey<String>('panel_hero_borcuma_git'),
+                label: "Borcum'a git",
+                // Koyu kutuda ve koyu temanın düz kartında açık hap; açık temanın düz kartında koyu (#0F172A) ana düğme.
+                onDark: focus || p.isDark,
+                onTap: onOpenDebt,
+              ),
+            ],
           ),
         ),
       ],

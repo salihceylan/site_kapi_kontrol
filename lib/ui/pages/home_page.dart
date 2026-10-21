@@ -144,6 +144,7 @@ import 'package:site_kapi_kontrol/ui/views/announcements_view.dart';
 import 'package:site_kapi_kontrol/ui/views/document_view.dart';
 import 'package:site_kapi_kontrol/ui/views/finance_view.dart';
 import 'package:site_kapi_kontrol/ui/views/my_finance_view.dart';
+import 'package:site_kapi_kontrol/ui/widgets/pay_sheet.dart';
 import 'package:site_kapi_kontrol/ui/views/work_manager_view.dart';
 import 'package:site_kapi_kontrol/ui/views/work_resident_view.dart';
 import 'package:site_kapi_kontrol/ui/views/reservation_manager_view.dart';
@@ -6019,6 +6020,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       badgeNouns: _menuBadgeNouns,
       onOpen: _openMenuItem,
       fetchMyFinance: resident ? widget.authService.getMyFinance : null,
+      onPay: resident
+          ? (item) => PaySheet.show(
+              context,
+              authService: widget.authService,
+              apartmentId: item.apartmentId,
+              amountMinor: item.ownAccount.balanceMinor,
+              accountLabel: item.accountParty?.label,
+            )
+          : null,
       residentSiteName: resident ? _residentSiteName() : null,
       applications: applications,
       onReapply: applications == null ? null : _reapplySiteApplication,

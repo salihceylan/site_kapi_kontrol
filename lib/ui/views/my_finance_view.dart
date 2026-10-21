@@ -14,6 +14,7 @@ import 'package:site_kapi_kontrol/ui/helpers/money.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/my_finance_4b_parts.dart';
+import 'package:site_kapi_kontrol/ui/widgets/pay_sheet.dart';
 
 /// Sakin "Borcum" ekranı (Platform Faz 4a, `finance` modülü): kendi dairelerinin toplam borcu / alacağı,
 /// vadesi geçen tutar, sıradaki vade ve son hareketler. YALNIZ GÖRÜNTÜLEME: hiçbir yazma eylemi yoktur,
@@ -133,13 +134,6 @@ class MyFinanceViewState extends State<MyFinanceView> {
           style: th.bodyMedium,
         ),
         const SizedBox(height: AppSpace.md),
-        const InlineNotice(
-          key: ValueKey<String>('my_finance_online_soon'),
-          tone: AppTone.info,
-          icon: Icons.schedule_rounded,
-          message: 'Online ödeme yakında. Ödemelerinizi şimdilik site yönetimine yapabilirsiniz.',
-        ),
-        const SizedBox(height: AppSpace.lg),
         content,
       ],
     );
@@ -419,6 +413,23 @@ class _MyFinanceCardState extends State<MyFinanceCard> {
                   onPressed: () => setState(() => _expanded = !_expanded),
                 ),
               ),
+          ],
+          if (widget.authService != null && item.balanceMinor > 0) ...[
+            const SizedBox(height: AppSpace.md),
+            PrimaryActionButton(
+              key: const ValueKey<String>('my_finance_pay'),
+              label: 'Öde',
+              icon: Icons.payments_rounded,
+              onPressed: () => unawaited(
+                PaySheet.show(
+                  context,
+                  authService: widget.authService!,
+                  apartmentId: item.apartmentId,
+                  amountMinor: item.balanceMinor,
+                  accountLabel: item.accountParty?.label,
+                ),
+              ),
+            ),
           ],
           if (widget.authService != null) ...[
             const SizedBox(height: AppSpace.md),

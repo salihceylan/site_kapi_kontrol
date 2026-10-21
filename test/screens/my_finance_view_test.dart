@@ -172,7 +172,7 @@ void main() {
   });
 
   group('hareketler ve gizlilik', () {
-    testWidgets('yalnız görüntüleme: yazma düğmesi ve yönetici metni yok; "Online ödeme yakında" notu var', (t) async {
+    testWidgets('yalnız görüntüleme: yazma düğmesi ve yönetici metni yok; "Online ödeme yakında" notu kalktı', (t) async {
       final auth = FinanceFakeAuth.seeded()..myFinanceItems = <Map<String, dynamic>>[finMyItem()];
       await _pump(t, auth);
       for (final text in const ['Tahsilat Ekle', 'Düzelt', 'İptal Et', 'Borçlandır', 'Ayı Kapat', 'Yeni Tanım']) {
@@ -180,8 +180,8 @@ void main() {
       }
       expect(find.textContaining('Kaydeden:'), findsNothing);
       expect(find.textContaining('Neden:'), findsNothing);
-      expect(find.byKey(const ValueKey<String>('my_finance_online_soon')), findsOneWidget);
-      expect(find.text('Online ödeme yakında. Ödemelerinizi şimdilik site yönetimine yapabilirsiniz.'), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('my_finance_online_soon')), findsNothing);
+      expect(find.text('Online ödeme yakında. Ödemelerinizi şimdilik site yönetimine yapabilirsiniz.'), findsNothing);
     });
 
     testWidgets('son hareketler ilk 5; "Tümünü göster" geri kalanını açar, "Daha az göster" kapatır', (t) async {
