@@ -12,9 +12,12 @@ import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 bool hideRowOrbs(BuildContext context) =>
     MediaQuery.textScalerOf(context).scale(1) >= 1.75;
 
-/// Diyalog içinde bir grubu çerçeveleyen panel: soluk iç yüzey (ya da [tone] verilirse tonlu zemin) +
-/// ince kenar. Üst öğenin genişliğini kaplar (`Column` çocuğu olarak kullanın); içeriğe sabit yükseklik
-/// verilmez.
+/// Diyalog içinde bir grubu çerçeveleyen panel: soluk iç yüzey + ince kenar. Üst öğenin genişliğini kaplar
+/// (`Column` çocuğu olarak kullanın); içeriğe sabit yükseklik verilmez.
+///
+/// Sade stil (İP-1C, karar G6 + G7): zemin her tonda soluk iç yüzeydir (BOYANMAZ); [tone] durum tonuysa (tamam,
+/// bekliyor, kritik) yalnız kenar tonun %40'ıdır, öteki tonlarda (birincil, bilgi, mor, nötr) palet kenarı: mavi
+/// yalnız bağlantı ve odakta. Anlam panelin içindeki metinde ve simgededir.
 class DialogPanel extends StatelessWidget {
   const DialogPanel({
     super.key,
@@ -25,7 +28,7 @@ class DialogPanel extends StatelessWidget {
 
   final Widget child;
 
-  /// null: nötr soluk yüzey; dolu: tonun soluk zemini ve ton kenarı (uyarı/bilgi grupları).
+  /// null: nötr soluk yüzey; dolu: aynı zemin, durum tonlarında ton kenarı (uyarı / hata / tamam grupları).
   final AppTone? tone;
 
   final EdgeInsetsGeometry padding;
@@ -38,12 +41,10 @@ class DialogPanel extends StatelessWidget {
       width: double.infinity,
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: tone == null
-              ? p.surfaceMuted
-              : Color.alphaBlend(tone.tint(p), p.surface),
+          color: p.surfaceMuted,
           borderRadius: BorderRadius.circular(AppRadius.md),
           border: Border.all(
-            color: tone == null ? p.border : tone.hue.withValues(alpha: 0.4),
+            color: tone != null && tone.isStatus ? tone.hue.withValues(alpha: 0.4) : p.border,
           ),
         ),
         child: Padding(padding: padding, child: child),
@@ -52,7 +53,7 @@ class DialogPanel extends StatelessWidget {
   }
 }
 
-/// Panel/bölüm başlığı: 32 dp cilalı ikon rozeti ([IconOrb]) + küçük başlık (+ alt metin).
+/// Panel/bölüm başlığı: 32 dp düz ikon rozeti ([IconOrb]) + küçük başlık (+ alt metin).
 ///
 /// Başlık ve alt metin kalan genişliğe sarar (kırpılmaz). Üst öğe sınırlı genişlikte olmalıdır.
 class DialogSectionTitle extends StatelessWidget {
@@ -102,6 +103,10 @@ class DialogSectionTitle extends StatelessWidget {
 /// Küçük bilgi hapı (blok adı, daire etiketi, toplam sayı, uzun durum cümlesi): metin KIRPILMAZ,
 /// sığmayınca satırlara sarar. Kısa durum etiketleri için `StatusChip` kullanılır (tek satır + elips);
 /// bu hap üstverinin ve uzun cümlelerin yeridir. `Wrap` içinde ya da sütun çocuğu olarak kullanın.
+///
+/// Sade stil (İP-1C, karar G7; `InfoChip` ile aynı kural): zemin her tonda nötr soluk kutudur (soluk yüzey + palet
+/// kenarı, BOYANMAZ); [tone] yalnız metni ve simgeyi renklendirir ([AppTone.sign]: durum tonlarında `ink`, öteki
+/// tonlarda gövde metni rengi). Metin soluk yüzeyde >= 4,5:1.
 class DialogMetaPill extends StatelessWidget {
   const DialogMetaPill(
     this.label, {
@@ -113,7 +118,7 @@ class DialogMetaPill extends StatelessWidget {
 
   final String label;
 
-  /// null: nötr soluk hap; dolu: tonlu hap (metin `ink`, >= 4,5:1).
+  /// null: nötr soluk hap (başlık metni); dolu: aynı zemin, metin ve simge tonun işaret renginde (>= 4,5:1).
   final AppTone? tone;
 
   /// Metnin başındaki küçük simge (renk tek başına anlam taşımasın diye).
@@ -127,18 +132,14 @@ class DialogMetaPill extends StatelessWidget {
     final p = context.palette;
     final tone = this.tone;
     final icon = this.icon;
-    final ink = tone == null ? p.text : tone.ink(p);
+    final ink = tone == null ? p.text : tone.sign(p);
     return ConstrainedBox(
       constraints: BoxConstraints(minWidth: minWidth),
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: tone == null
-              ? p.surfaceMuted
-              : Color.alphaBlend(tone.tint(p), p.surface),
+          color: p.surfaceMuted,
           borderRadius: BorderRadius.circular(AppRadius.sm),
-          border: Border.all(
-            color: tone == null ? p.border : tone.hue.withValues(alpha: 0.4),
-          ),
+          border: Border.all(color: p.border),
         ),
         child: Padding(
           padding: const EdgeInsets.symmetric(
@@ -170,21 +171,23 @@ class DialogMetaPill extends StatelessWidget {
   }
 }
 
-/// İkincil eylem için tonlu "çerçeveli" düğme stili: `OutlinedButton.styleFrom` yerine VERİLİR (düğme
-/// tipi ve etiketin satır sarma davranışı değişmez; `PrimaryActionButton` etiketi 2 satırda keser).
-/// Tonun soluk zemini + `ink` metin (>= 4,5:1) + ton kenarı; en az 48 dp yükseklik.
+/// İkincil eylem için "çerçeveli" düğme stili: `OutlinedButton.styleFrom` yerine VERİLİR (düğme tipi ve etiketin
+/// satır sarma davranışı değişmez; `PrimaryActionButton` etiketi 2 satırda keser). En az 48 dp yükseklik.
+///
+/// Sade stil (İP-1C, karar G6; `tonalActionStyle` ile aynı kural): yüzey zemin + 1 px palet kenarı + başlık metni
+/// (durum tonlarında tonun `ink` rengi, >= 4,5:1); zemin ton BOYANMAZ, mavi zemin / metin yok.
 ButtonStyle dialogTonalButtonStyle(
   BuildContext context, {
   AppTone tone = AppTone.primary,
 }) {
   final p = context.palette;
   return OutlinedButton.styleFrom(
-    foregroundColor: tone.ink(p),
-    backgroundColor: Color.alphaBlend(tone.tint(p), p.surface),
+    foregroundColor: tone.isStatus ? tone.ink(p) : p.text,
+    backgroundColor: p.surface,
     disabledForegroundColor: p.textSecondary,
     disabledBackgroundColor: p.surfaceMuted,
     minimumSize: const Size(0, 48),
-    side: BorderSide(color: tone.hue.withValues(alpha: 0.35)),
+    side: BorderSide(color: p.border),
   );
 }
 
