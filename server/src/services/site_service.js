@@ -10,6 +10,7 @@ import {
   rotateLocalControlTokensForSite,
 } from './device_service.js';
 import { createUser } from './user_service.js';
+import { applyTrialToNewSubscription } from '../modules/management_company_service.js';
 import { sendSuperUserSiteDeletionEmail, sendSiteManagerInvitationEmail } from '../mailer.js';
 import { describeErrorForLog } from '../security/log_redact.js';
 import {
@@ -975,6 +976,8 @@ export async function createSiteWithStructure({
       `,
       [siteCode],
     );
+    // Y2: yeni siteye deneme süresi (varsayılan 60 gün; süper ayarlar). Hata siteyi açmayı engellemez.
+    await applyTrialToNewSubscription(client, siteCode);
 
     if (approvalStatus !== 'approved') {
       await client.query('COMMIT');

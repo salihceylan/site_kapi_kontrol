@@ -16,6 +16,7 @@ import { clientErrorRouter } from './client_error_routes.js';
 import { legalRouter } from './legal_routes.js';
 import { readPlatformConfig, updatePlatformConfig } from './platform_config_service.js';
 import { platformRulesRouter } from './platform_rules_routes.js';
+import { managementCompanyRouter } from './management_company_routes.js';
 import { HOUR_MS, ipKey, respondError, userKey } from './route_helpers.js';
 
 export const platformConfigRouter = express.Router();
@@ -65,3 +66,5 @@ platformServicesRouter.use(clientErrorRouter);
 platformServicesRouter.use(platformConfigRouter);
 // Kurallar tablosu (G11): /admin/rules, /manager/sites/:siteCode/rules (docs/PLATFORM_KURALLAR.md).
 platformServicesRouter.use(platformRulesRouter);
+// Yonetim firmasi, deneme suresi, ortaklik payi (Y1/Y2): docs/PLATFORM_YONETIM_FIRMASI.md.
+platformServicesRouter.use(managementCompanyRouter);

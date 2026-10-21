@@ -164,6 +164,11 @@ abstract final class HelpContent {
     'Kurallar',
     'Kuralları Aç',
     'Kuralları Görüntüle',
+    // Yönetim firması (Y1/Y2)
+    'Yönetim Firması',
+    'Aylık ortaklık payı',
+    'Personel Ekle',
+    'Deneme süresi',
     // İki hesap (İP-1A): hesap adları, ekstre penceresi, tahsilat "Daire hesabı" bölümü ve "Kim öder" seçimi
     'Ev sahibi hesabı',
     'Kiracı hesabı',
@@ -481,6 +486,18 @@ abstract final class HelpContent {
       ],
       note:
           'Fotoğrafla okuma henüz yok (Yakında). Borçlandırma için Aidat ve Finans modülü de açık olmalıdır; yanlış borç Finans ekranından ters kayıtla düzeltilir.',
+    ),
+    HelpTopic(
+      id: 'management_company',
+      title: 'Yönetim firması ve “Tüm siteler” tablosu',
+      icon: Icons.apartment_rounded,
+      steps: <String>[
+        'Bir yönetim firmasının sahibi ya da personeliyseniz sağ üstteki “Ayarlar” düğmesinde “Yönetim Firması” görünür.',
+        'Firma sahibi “Tüm siteler” bölümünde firmaya bağlı her sitenin daire sayısını, bu ayki tahsilat oranını, açık borcunu ve borçlu daire sayısını görür; tahsilat oranı en düşük site en üstte durur.',
+        '“Aylık ortaklık payı” bölümü yalnızca bilgi içindir; fatura ya da ödeme oluşturmaz. Deneme süresindeki sitelerde pay hesaplanmaz.',
+        'Firma sahibi “Personel Ekle” ile uygulamaya kayıtlı birini e-posta adresiyle ekler; personel “Tüm siteler” tablosunu görmez.',
+        'Yeni açılan sitelere varsayılan olarak 60 gün “Deneme süresi” tanınır; süreyi ve firmaya site bağlamayı sistem yöneticisi yapar.',
+      ],
     ),
     HelpTopic(
       id: 'finance_accounts',
