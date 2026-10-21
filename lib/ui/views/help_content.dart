@@ -335,6 +335,9 @@ abstract final class HelpContent {
             'hareketleri görünür; malik ve kiracı borçları birbirine karışmaz.',
         'Borçtan malik ve kiracının birlikte sorumlu olduğu dairede malik, kiracı hesabını da salt okunur olarak görür; bu tutar '
             'malikin kendi borcuna eklenmez.',
+        'Borcunuz varsa “Öde” düğmesine dokunun: alıcı adı, IBAN ve açıklama kodu görünür, her birinin yanındaki “Kopyala” ile '
+            'kopyalayıp bankanızdan FAST ya da havale yapın. Açıklamaya kodu (örn. GUL-A2-1026) yazarsanız ödemeniz dairenize işlenir. '
+            'Kartla ödeme yakında gelecek.',
       ],
       note: 'Menüde “Borcum” yoksa sitenizde Finans modülü açık değildir.',
     ),

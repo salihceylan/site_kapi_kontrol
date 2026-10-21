@@ -19,6 +19,7 @@ import { ensurePushSchema } from './modules/push_schema.js';
 import { ensureApartmentPinSchema } from './modules/apartment_pin_schema.js';
 import { ensureFinancePartiesSchema } from './modules/finance_parties_schema.js';
 import { ensurePlatformRulesSchema } from './modules/platform_rules_schema.js';
+import { ensureFinancePaymentSchema } from './modules/finance_payment_schema.js';
 
 dotenv.config();
 
@@ -1894,6 +1895,8 @@ export async function ensureDbSchema() {
     await ensureFinancePartiesSchema(client);
     // 053 (kurallar tablosu, G11): dev blokta DEGIL; katalog kontrolu + her adim kendi otomatik onayli ifadesi (platform_rules_schema.js = migrations/053).
     await ensurePlatformRulesSchema(client);
+    // 054 (odeme bilgisi, 2A): 040'tan (finance_accounts) SONRA; katalog kontrolu + her adim kendi otomatik onayli ifadesi (finance_payment_schema.js = migrations/054).
+    await ensureFinancePaymentSchema(client);
 
     // 031 people_v1: mevcut sakinlerin CRM'e tek seferlik aktarimi. Savunmaci: hata sunucunun acilmasini ENGELLEMEZ
     // (kendi transaction'i geri alinir, isaret yazilmaz => sonraki acilista yeniden denenir; okuma anindaki
