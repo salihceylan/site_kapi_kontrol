@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:site_kapi_kontrol/brand/brand_scope.dart';
+import 'package:phosphor_glyphs/phosphor_glyphs.dart';
 import 'package:site_kapi_kontrol/services/locale_service.dart';
 import 'package:site_kapi_kontrol/brand/gude_logo_animated.dart';
 import 'package:site_kapi_kontrol/config/app_config.dart';
@@ -468,7 +470,7 @@ class YanMenu extends StatelessWidget {
         entry(
           const ValueKey<String>('yan_menu_gecis'),
           _MenuTile(
-            icon: isResidentMode ? Icons.admin_panel_settings_rounded : Icons.home_rounded,
+            icon: isResidentMode ? PhosphorIconsRegular.shieldCheck : PhosphorIconsRegular.house,
             title: isResidentMode ? context.l10n.menuSwitchToAdmin : context.l10n.menuSwitchToResident,
             selected: false,
             tone: isResidentMode ? AppTone.primary : AppTone.success,
@@ -523,7 +525,7 @@ class YanMenu extends StatelessWidget {
         entry(
           const ValueKey<String>('yan_menu_yardim'),
           _MenuTile(
-            icon: Icons.help_outline_rounded,
+            icon: PhosphorIconsRegular.question,
             title: context.l10n.menuHelp,
             selected: false,
             tone: tone,
@@ -538,7 +540,7 @@ class YanMenu extends StatelessWidget {
         entry(
           const ValueKey<String>('yan_menu_cikis'),
           _MenuTile(
-            icon: Icons.logout_rounded,
+            icon: PhosphorIconsRegular.signOut,
             title: context.l10n.menuLogout,
             selected: false,
             tone: AppTone.danger,
@@ -581,6 +583,7 @@ class YanMenu extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   header,
+                  const BrandBar(),
                   Padding(padding: listPadding, child: menuList),
                   version,
                 ],
@@ -589,6 +592,7 @@ class YanMenu extends StatelessWidget {
           : Column(
               children: [
                 header,
+                const BrandBar(),
                 // Liste kısa (en çok 15 satır) ve öğeler State taşır (giriş animasyonu): tembel
                 // ListView yerine SingleChildScrollView; kaydırılıp dönülünce animasyon yinelenmez.
                 Expanded(
@@ -752,7 +756,7 @@ class _SettingsHeader extends StatelessWidget {
         padding: EdgeInsets.fromLTRB(AppSpace.xl, compact ? AppSpace.md : AppSpace.xl, AppSpace.lg, AppSpace.sm),
         child: Row(
           children: [
-            ExcludeSemantics(child: Icon(Icons.settings_rounded, size: 24, color: tone.ink(p))),
+            ExcludeSemantics(child: Icon(PhosphorIconsRegular.gear, size: 24, color: tone.ink(p))),
             const SizedBox(width: AppSpace.md),
             Expanded(
               child: Semantics(
@@ -836,7 +840,7 @@ class _SiteRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: AppSpace.lg, vertical: AppSpace.sm),
       child: Row(
         children: [
-          Icon(Icons.location_city_rounded, size: 22, color: tone.ink(p)),
+          Icon(PhosphorIconsRegular.buildings, size: 22, color: tone.ink(p)),
           const SizedBox(width: AppSpace.md),
           Expanded(
             child: Column(
@@ -855,7 +859,7 @@ class _SiteRow extends StatelessWidget {
           ),
           if (interactive) ...[
             const SizedBox(width: AppSpace.sm),
-            Icon(Icons.unfold_more_rounded, size: 22, color: p.textSecondary),
+            Icon(PhosphorIconsRegular.caretUpDown, size: 22, color: p.textSecondary),
           ],
         ],
       ),
@@ -917,13 +921,13 @@ class _SitePickerSheet extends StatelessWidget {
               ListTile(
                 key: ValueKey<String>('yan_menu_site_secenek_${code ?? 'tum'}'),
                 leading: Icon(
-                  code == null ? Icons.domain_rounded : Icons.location_city_rounded,
+                  code == null ? PhosphorIconsRegular.buildings : PhosphorIconsRegular.buildings,
                   color: tone.ink(p),
                 ),
                 title: Text(label, maxLines: 3, overflow: TextOverflow.ellipsis),
                 selected: code == site.selectedCode,
                 selectedColor: tone.ink(p),
-                trailing: code == site.selectedCode ? Icon(Icons.check_rounded, color: tone.ink(p)) : null,
+                trailing: code == site.selectedCode ? Icon(PhosphorIconsRegular.check, color: tone.ink(p)) : null,
                 onTap: () => Navigator.of(context).pop(_SiteChoice(code)),
               ),
           ],
@@ -1425,83 +1429,83 @@ String _titleForItem(SirketMenuItem item, [UserRole? role]) {
 IconData _iconForItem(SirketMenuItem item) {
   switch (item) {
     case SirketMenuItem.dashboard:
-      return Icons.grid_view_rounded;
+      return PhosphorIconsRegular.squaresFour;
     case SirketMenuItem.profilim:
-      return Icons.account_circle_outlined;
+      return PhosphorIconsRegular.userCircle;
     case SirketMenuItem.ellerSerbest:
-      return Icons.directions_car_filled_rounded;
+      return PhosphorIconsRegular.car;
     case SirketMenuItem.abonelikTalepleri:
-      return Icons.mark_email_unread_rounded;
+      return PhosphorIconsRegular.envelopeSimple;
     case SirketMenuItem.siteOnayTalepleri:
-      return Icons.verified_user_rounded;
+      return PhosphorIconsRegular.shieldCheck;
     case SirketMenuItem.kullaniciYonetimi:
-      return Icons.manage_accounts_rounded;
+      return PhosphorIconsRegular.userGear;
     case SirketMenuItem.superUserYonetimi:
-      return Icons.admin_panel_settings_rounded;
+      return PhosphorIconsRegular.shieldCheck;
     case SirketMenuItem.siteYoneticileriYonetimi:
-      return Icons.apartment_rounded;
+      return PhosphorIconsRegular.buildings;
     case SirketMenuItem.daireKullanicilariYonetimi:
-      return Icons.groups_2_rounded;
+      return PhosphorIconsRegular.usersThree;
     case SirketMenuItem.siteler:
-      return Icons.apartment_rounded;
+      return PhosphorIconsRegular.buildings;
     case SirketMenuItem.katilimVeKurulum:
-      return Icons.add_home_work_rounded;
+      return PhosphorIconsRegular.buildingApartment;
     case SirketMenuItem.cihazEkle:
-      return Icons.add_to_photos_rounded;
+      return PhosphorIconsRegular.folderPlus;
     case SirketMenuItem.kayitliCihazlar:
-      return Icons.devices_other_rounded;
+      return PhosphorIconsRegular.devices;
     case SirketMenuItem.bluetoothWifiKur:
-      return Icons.bluetooth_searching_rounded;
+      return PhosphorIconsRegular.bluetooth;
     case SirketMenuItem.moduller:
-      return Icons.extension_rounded;
+      return PhosphorIconsRegular.puzzlePiece;
     case SirketMenuItem.denetimKaydi:
-      return Icons.fact_check_rounded;
+      return PhosphorIconsRegular.clipboardText;
     case SirketMenuItem.modulTalepleri:
-      return Icons.inbox_rounded;
+      return PhosphorIconsRegular.tray;
     case SirketMenuItem.kisiler:
-      return Icons.contacts_rounded;
+      return PhosphorIconsRegular.addressBook;
     case SirketMenuItem.duyurular:
-      return Icons.campaign_rounded;
+      return PhosphorIconsRegular.megaphone;
     case SirketMenuItem.siteBasvurulari:
-      return Icons.domain_add_rounded;
+      return PhosphorIconsRegular.plus;
     case SirketMenuItem.finans:
-      return Icons.account_balance_wallet_rounded;
+      return PhosphorIconsRegular.wallet;
     case SirketMenuItem.borcum:
-      return Icons.receipt_long_rounded;
+      return PhosphorIconsRegular.receipt;
     case SirketMenuItem.belgeler:
-      return Icons.folder_rounded;
+      return PhosphorIconsRegular.folder;
     case SirketMenuItem.talepler:
-      return Icons.assignment_rounded;
+      return PhosphorIconsRegular.clipboard;
     case SirketMenuItem.taleplerim:
-      return Icons.build_circle_rounded;
+      return PhosphorIconsRegular.wrench;
     case SirketMenuItem.rezervasyonlar:
-      return Icons.event_note_rounded;
+      return PhosphorIconsRegular.calendar;
     case SirketMenuItem.rezervasyon:
-      return Icons.event_available_rounded;
+      return PhosphorIconsRegular.calendarCheck;
     case SirketMenuItem.platformAyarlari:
-      return Icons.tune_rounded;
+      return PhosphorIconsRegular.sliders;
     case SirketMenuItem.istemciHatalari:
-      return Icons.bug_report_rounded;
+      return PhosphorIconsRegular.bug;
     case SirketMenuItem.anketler:
-      return Icons.poll_rounded;
+      return PhosphorIconsRegular.chartBar;
     case SirketMenuItem.anket:
-      return Icons.how_to_vote_rounded;
+      return PhosphorIconsRegular.checkSquare;
     case SirketMenuItem.ziyaretciKayitlari:
-      return Icons.door_front_door_rounded;
+      return PhosphorIconsRegular.door;
     case SirketMenuItem.ziyaretcilerim:
-      return Icons.local_shipping_rounded;
+      return PhosphorIconsRegular.truck;
     case SirketMenuItem.sozlesmeler:
-      return Icons.handshake_rounded;
+      return PhosphorIconsRegular.handshake;
     case SirketMenuItem.sayaclar:
-      return Icons.speed_rounded;
+      return PhosphorIconsRegular.gauge;
     case SirketMenuItem.kararDefteri:
-      return Icons.gavel_rounded;
+      return PhosphorIconsRegular.gavel;
     case SirketMenuItem.kararlar:
-      return Icons.library_books_rounded;
+      return PhosphorIconsRegular.books;
     case SirketMenuItem.rehber:
-      return Icons.contact_phone_rounded;
+      return PhosphorIconsRegular.phoneCall;
     case SirketMenuItem.isletmeProjesi:
-      return Icons.account_balance_wallet_rounded;
+      return PhosphorIconsRegular.wallet;
     case SirketMenuItem.komsuPanosu:
       return Icons.forum_rounded;
     case SirketMenuItem.faaliyetRaporu:
@@ -1510,8 +1514,11 @@ IconData _iconForItem(SirketMenuItem item) {
       return Icons.videocam_rounded;
     case SirketMenuItem.ekipmanBakim:
       return Icons.build_circle_rounded;
+      return PhosphorIconsRegular.chatsCircle;
+    case SirketMenuItem.odemeKamera:
+      return PhosphorIconsRegular.videoCamera;
     case SirketMenuItem.kapilar:
-      return Icons.meeting_room_rounded;
+      return PhosphorIconsRegular.doorOpen;
   }
 }
 

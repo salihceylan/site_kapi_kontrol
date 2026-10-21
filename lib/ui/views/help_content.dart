@@ -193,6 +193,7 @@ abstract final class HelpContent {
     'Aylık ortaklık payı',
     'Personel Ekle',
     'Deneme süresi',
+    'Marka teması',
     // İki hesap (İP-1A): hesap adları, ekstre penceresi, tahsilat "Daire hesabı" bölümü ve "Kim öder" seçimi
     'Ev sahibi hesabı',
     'Kiracı hesabı',
@@ -582,6 +583,7 @@ abstract final class HelpContent {
         '“Aylık ortaklık payı” bölümü yalnızca bilgi içindir; fatura ya da ödeme oluşturmaz. Deneme süresindeki sitelerde pay hesaplanmaz.',
         'Firma sahibi “Personel Ekle” ile uygulamaya kayıtlı birini e-posta adresiyle ekler; personel “Tüm siteler” tablosunu görmez.',
         'Yeni açılan sitelere varsayılan olarak 60 gün “Deneme süresi” tanınır; süreyi ve firmaya site bağlamayı sistem yöneticisi yapar.',
+        'Firma sahibi “Marka teması” bölümünden firmanın (ya da tek bir sitenin) uygulama rengini, logosunu ve adını belirler; renkler okunaklı değilse kaydedilmez. Kayıt yoksa Güde teması kullanılır, kullanıcılar yeniden giriş yaptığında yeni temayı görür.',
       ],
     ),
     HelpTopic(

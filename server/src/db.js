@@ -15,6 +15,7 @@ import { ensureVisitorLogSchema } from './modules/visitor_log_schema.js';
 import { ensureCardAccessSchema } from './modules/card_access_schema.js';
 import { ensureDeviceIntegrationsSchema } from './modules/device_integrations_schema.js';
 import { ensurePaymentNoticesSchema } from './modules/payment_notice_schema.js';
+import { ensureBrandThemeSchema } from './modules/brand_theme_schema.js';
 import { ensureContractsSchema } from './modules/contracts_schema.js';
 import { ensureEquipmentSchema } from './modules/equipment_schema.js';
 import { ensureDecisionBookSchema } from './modules/decision_book_schema.js';
@@ -1946,6 +1947,8 @@ export async function ensureDbSchema() {
     await ensureAnnualReportSchema(client);
     // 070 (sayac okuma fotograflari): tablo varsa hicbir ifade yok (metering_field_schema.js = migrations/070).
     await ensureMeteringFieldSchema(client);
+    // 071 (beyaz etiket tema): katalog kontrolu (brand_theme_schema.js = migrations/071).
+    await ensureBrandThemeSchema(client);
 
     // 031 people_v1: mevcut sakinlerin CRM'e tek seferlik aktarimi. Savunmaci: hata sunucunun acilmasini ENGELLEMEZ
     // (kendi transaction'i geri alinir, isaret yazilmaz => sonraki acilista yeniden denenir; okuma anindaki

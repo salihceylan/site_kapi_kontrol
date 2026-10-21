@@ -884,6 +884,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "7.1.0"
+  phosphor_glyphs:
+    dependency: "direct main"
+    description:
+      name: phosphor_glyphs
+      sha256: "383f779272b3a748e7a987b7b6c15d0b39c604ee4f79a8c14893604affbc2484"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.1.2"
   platform:
     dependency: transitive
     description:

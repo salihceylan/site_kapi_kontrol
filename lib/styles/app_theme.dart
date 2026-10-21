@@ -14,8 +14,8 @@ import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 ///
 /// Tema DEĞER olarak eşittir (`AppTheme.light() == AppTheme.light()`): kapanış ya da `resolveWith` YOK.
 class AppTheme {
-  static ThemeData light() {
-    const p = AppPalette.light;
+  static ThemeData light([AppPalette palette = AppPalette.light]) {
+    final p = palette;
     final colorScheme = ColorScheme.fromSeed(
       seedColor: p.action,
       primary: p.action,
@@ -24,7 +24,7 @@ class AppTheme {
       // bağlantı ve odakta). Üstündeki metin başlık rengi (14,5:1).
       secondaryContainer: p.border,
       onSecondaryContainer: p.text,
-      surface: Colors.white,
+      surface: p.surface,
       brightness: Brightness.light,
     );
 
@@ -33,7 +33,7 @@ class AppTheme {
       brightness: Brightness.light,
       colorScheme: colorScheme,
       scaffoldBackgroundColor: Colors.transparent,
-      extensions: const <ThemeExtension<dynamic>>[AppPalette.light],
+      extensions: <ThemeExtension<dynamic>>[p],
       // Masaüstünde de 48 dp isabet alanı ve standart yoğunluk (compact isabeti küçültür).
       visualDensity: VisualDensity.standard,
       materialTapTargetSize: MaterialTapTargetSize.padded,

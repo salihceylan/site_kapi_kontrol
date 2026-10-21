@@ -16,7 +16,8 @@ class AppDecorations {
   static BoxDecoration pageBackground(BuildContext context) =>
       Theme.of(context).brightness == Brightness.dark
           ? pageBackgroundDark
-          : pageBackgroundLight;
+          // Açık tema: beyaz etiket (G9) zemini palet üzerinden gelir; varsayılan palette pageBackgroundLight ile aynı renk.
+          : BoxDecoration(color: context.palette.background);
 
   // Kart yüzeyi (tasarım sistemi, sade stil G6): opak palet yüzeyi, AppRadius.lg, 1 px palet kenarı, GÖLGESİZ.
   // Eski "cam" kartların alfalı yüzeyi/çift gölgesi kalktı (kompozit maliyeti düşer; BackdropFilter yok).
