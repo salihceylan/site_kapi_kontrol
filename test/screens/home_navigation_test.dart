@@ -88,10 +88,16 @@ class _NavAuth extends AuthService {
         sites = sites ?? <SiteRecord>[_siteRecord(1, 'Güneş Sitesi')],
         super(api: AuthApi(baseUrl: 'http://localhost'));
 
-  final UserRole role;
+  UserRole role;
   List<DoorRecord> doors;
   List<SiteRecord> sites;
   int openDoorCalls = 0;
+
+  /// Oturumdaki rol sunucuda değişti (örn. yöneticilik kaldırıldı): HomePage'in oturum dinleyicisi uyarılır.
+  void changeRole(UserRole next) {
+    role = next;
+    notifyListeners();
+  }
 
   @override
   UserSession? get session => _session(role);
@@ -824,6 +830,35 @@ void main() {
       await _openDrawer(t);
       expect(t.getSemantics(siteRow), isSemantics(isButton: false, hasTapAction: false));
       handle.dispose();
+      await _disposeHome(t);
+    });
+
+    testWidgets('rol değişince (yöneticilik kalktı) site kapsamı sıfırlanır: sakin görünümünde değiştirilemeyen kapsam kalmaz',
+        (t) async {
+      // Yönettiği site listesi boş yönetici (ör. başvurusu süren): yöneticilik kalkınca çift mod da yoktur, kitle sakindir.
+      var demoted = false;
+      final auth = _NavAuth(UserRole.siteManager, sites: const <SiteRecord>[], doors: <DoorRecord>[_door(1)]);
+      final access = await _access(
+        () => demoted
+            ? <MySiteModules>[_my('resident', site: 1, modules: {'finance': true}), _my('resident', site: 2)]
+            : managerSites(),
+      );
+      await _pumpHome(t, auth, access: access);
+      await _openDrawer(t);
+      await pick(t, '2');
+      expect(access.scopeSiteCode, 2);
+      Navigator.of(t.element(find.byType(YanMenu))).pop();
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 450));
+
+      demoted = true;
+      auth.changeRole(UserRole.apartmentOwner);
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 600));
+      expect(access.scopeSiteCode, isNull, reason: 'kapsam yönetici görünümünde seçilmişti; sakin onu değiştiremez');
+      await _openDrawer(t);
+      expect(find.descendant(of: siteRow, matching: find.text('Güneş Sitesi +1 site')), findsOneWidget);
+      expect(_drawerTile(SirketMenuItem.borcum), findsOneWidget, reason: 'Güneş Sitesi\'nin Borcum\'u kapsam dışında kalmaz');
       await _disposeHome(t);
     });
 

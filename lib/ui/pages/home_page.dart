@@ -798,6 +798,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (_lastSeenRole != session.role) {
       final previousRole = _lastSeenRole;
       _lastSeenRole = session.role;
+      // İP-1D: site seçicinin kapsamı seçildiği yönetici görünümüne aittir; rol değişince (örn. yöneticilik kalktı)
+      // tüm sitelere dönülür: sakin görünümünde değiştirilemeyen bir kapsam kalmasın.
+      _moduleAccess.setScopeSiteCode(null);
       unawaited(_moduleAccess.refresh());
       // Rol değişti (örn. site başvurusu onaylandı): yeni rolün Panel verisi (siteler / kapılar) yeniden
       // okunur. Başvuru durumu: izlenmeyen role (süper kullanıcı) geçildiyse atılır; yönetici <-> başvuran
