@@ -227,11 +227,12 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/screens/home_shell
 - Görünür sekme sayısı ikiden az (ör. modüller kapalı ve kapı yetkisi yok): tek sekmelik çubuk çizilmez
 - Pencere yüksekliği 480 dp altında (telefon yatay): içerik sığsın diye çubuk gizlenir
 - Kapı sekmesi yok: kullanıcının kapı yetkisi yok ya da kapı modülü o sitede kapalı
-- Duyuru / Arıza / Belgeler sekmesi yok: ilgili modül kapalı ya da modül verisi yüklenemedi (fail-closed: veri yokken sekme gösterilmez)
+- Arıza / Belgeler sekmesi yok: İş Takibi ya da Belgeler modülü kapalı ya da modül verisi yüklenemedi (fail-closed: veri yokken bu sekmeler gösterilmez)
+- Duyuru sekmesi yok: hesap hiçbir sitede duyuru alıcısı değil (yalnız görevli bağı) ya da modül verisi de kapı listesi de henüz gelmedi (veri yokken alıcılık yalnız kapı listesinden anlaşılır)
 - Widget ile açılışta Kapı sekmesi seçili gelmedi: modül verisi gelmeden kullanıcı başka sayfa açtı (istek bilerek düşer) ya da kapı yetkisi yok
 
 **Adım adım kontrol**
-- Hesabın Sakin Modunda olduğunu ve pencere yüksekliğini doğrulayın
+- Hesabın sakin görünümünde (daire sakini ya da Sakin Modundaki yönetici) olduğunu ve pencere yüksekliğini doğrulayın
 - Çekmecede ilgili öğe (Duyurular, Taleplerim, Kapılar, Belgeler) görünüyor mu bakın: sekme yalnız görünür öğeden türer
 - Testi çalıştırın: flutter test test/screens/home_navigation_test.dart
 

@@ -155,14 +155,15 @@ Görünürlük kuralı DEĞİŞMEDİ ve tek yerdedir: `YanMenu.visibleItems` (ro
 - **Site seçici** (çekmecenin en üstü): veriler `ModuleAccess.allSites`; yönetici görünümünde (süper kullanıcı hariç) iki ve daha çok sitede seçicidir.
   Seçim `ModuleAccess.setScopeSiteCode` ile kapsamı daraltır: `result` ve bütün sorgular (`isEnabled`, `anyEnabled`, `sitesWith`,
   `boardMemberSites`, `isDisabledEverywhere`) yalnız o siteyle çalışır; kapsam dışı site kapalı sayılır (menüler yalnız daralır). Kapsamdaki site
-  sonraki `my-modules` yanıtında yoksa kapsam düşer; `clear` (çıkış) ve mod değişimi kapsamı sıfırlar; süper kullanıcıda kapsam yoktur. Sunucu
+  sonraki `my-modules` yanıtında yoksa kapsam düşer; `clear` (çıkış), mod değişimi ve rol değişimi (`HomePage._onAuthChanged`) kapsamı sıfırlar;
+  süper kullanıcıda kapsam yoktur. Sunucu
   sorguları değişmez (kapsam yalnız istemci süzgecidir; yetkiyi sunucu yine doğrular). Kendi site listesini sunucudan çeken ekranlar (Kişiler /
   Duyurular yönetimi, Modüller) kendi seçicisini korur; tüm ekranları kapsayan "etkin site" Y1 (yönetim firması) ile gelecektir.
 - **Sakin alt çubuğu** (`residentTabsFor`, `lib/ui/helpers/resident_tabs.dart`): Özet (Panel) · Duyuru (Duyurular) · Arıza (Taleplerim) · Kapı
   (Kapılar) · Belgeler (Belgeler). Sekme yalnız öğesi görünürse çizilir; Kapı ayrıca kapı yetkisinin olumlu kanıtını ister (kapı listesi dolu ya da
   modül verisinde `door_access` site; Geçiş Kontrol kapalıysa yok). İki sekmeden azsa ve kısa pencerede (< 480 dp) çubuk yok. Yalnız sakin kitlesinde (`showcaseAudience ==
-  resident`). Android widget'ı / kısayol isteği (`DoorPanelRequests`) soğuk açılışta modül verisinin ilk yüklemesini bekler; uygulanınca Kapı
-  sekmesi seçilir.
+  resident`). Android widget'ı / kısayol isteği (`DoorPanelRequests`) soğuk açılışta modül verisinin ilk yüklemesini bekler; beklerken kullanıcı
+  başka sayfaya geçerse (menü değişiminin tek kapısı `_requestMenuChange`) istek düşer; uygulanınca Kapı sekmesi seçilir.
 - **Yönetim türü seçici:** `SetupSiteDialog` ve `SiteDialog`'da Site Adı ile İl arasında; beş tür de seçilebilir, her satırda türün açıklaması ve varsayılandan farklı terimlerin özeti (F9). Site kartında tür çipi.
 - **Modüller ekranı:** site seçici (süper kullanıcıda tüm siteler, yönetici modunda yönetilen siteler), modül kartları (ad, açıklama, durum çipi: Açık / Kapalı / Yakında… / Her sitede açık, anahtar), `door_control` kapatırken önce `AppDialog` onayı (uyarı metni sunucudakiyle aynı), sonra `confirm: true`. Yenileme: çekip yenileme + yenile düğmesi, işlem sonrası otomatik yeniden çekme. "Ek roller" bölümü: liste, ekle (e-posta + rol), kaldır.
 - **Denetim Kaydı ekranı:** liste (tarih, kim, ne, site), site süzgeci, "Daha fazla yükle", çekip yenileme.
