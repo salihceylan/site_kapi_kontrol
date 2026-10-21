@@ -53,6 +53,7 @@ class AuditLogView extends StatefulWidget {
     ('site_application.rejected', 'Site başvurusu reddedildi'),
     ('site_application.cancelled', 'Site başvurusu iptal edildi'),
     ('platform_settings.updated', 'Platform ayarı güncellendi'),
+    ('platform_rule.updated', 'Kural değeri güncellendi'),
     ('finance.definition.created', 'Aidat tanımı eklendi'),
     ('finance.definition.updated', 'Aidat tanımı güncellendi'),
     ('finance.definition.deactivated', 'Aidat tanımı pasifleştirildi'),

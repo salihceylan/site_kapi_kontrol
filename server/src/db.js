@@ -17,6 +17,7 @@ import { ensureContractsSchema } from './modules/contracts_schema.js';
 import { ensureDecisionBookSchema } from './modules/decision_book_schema.js';
 import { ensurePushSchema } from './modules/push_schema.js';
 import { ensureApartmentPinSchema } from './modules/apartment_pin_schema.js';
+import { ensurePlatformRulesSchema } from './modules/platform_rules_schema.js';
 
 dotenv.config();
 
@@ -1887,6 +1888,8 @@ export async function ensureDbSchema() {
     // (apartment_pin_schema.js = migrations/051). Aktarim hatasi acilisi durdurmaz (sonraki acilista yeniden denenir). Isaret bcrypt ile dogrulanir;
     // acilis en cok ~3 sn bekler, kalan satirlar sunucu acildiktan sonra arka planda (havuzdan ayri baglantiyla) tamamlanir.
     await ensureApartmentPinSchema(client, { connect: () => pool.connect() });
+    // 053 (kurallar tablosu, G11): dev blokta DEGIL; katalog kontrolu + her adim kendi otomatik onayli ifadesi (platform_rules_schema.js = migrations/053).
+    await ensurePlatformRulesSchema(client);
 
     // 031 people_v1: mevcut sakinlerin CRM'e tek seferlik aktarimi. Savunmaci: hata sunucunun acilmasini ENGELLEMEZ
     // (kendi transaction'i geri alinir, isaret yazilmaz => sonraki acilista yeniden denenir; okuma anindaki

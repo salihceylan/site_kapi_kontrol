@@ -128,6 +128,10 @@ abstract final class HelpContent {
     'Yönetim görünümü',
     'Destek',
     'Destek bilgisi yakında',
+    // Kurallar tablosu (G11): Platform Ayarları ve Modüller ekranlarındaki giriş kartı.
+    'Kurallar',
+    'Kuralları Aç',
+    'Kuralları Görüntüle',
   };
 
   // --- Konular ----------------------------------------------------------------------------------
@@ -328,6 +332,7 @@ abstract final class HelpContent {
         'Menüden “Modüller” ekranını açın ve siteyi seçin.',
         'Kapalı bir modül için talep gönderin; talebinizi “Modül Taleplerim” bölümünden izleyebilirsiniz.',
         'Finans modülü açılınca menüde “Finans” ekranı (“Daireler”, “Tanımlar” ve “Dönemler” sekmeleri) görünür.',
+        'Sitenizde geçerli kuralları (gecikme tazminatı üst sınırı, işletme projesi ve saklama süreleri) aynı ekrandaki “Kurallar” bölümünde “Kuralları Görüntüle” ile görürsünüz; değerleri sistem yöneticisi belirler.',
       ],
     ),
     HelpTopic(
@@ -388,6 +393,7 @@ abstract final class HelpContent {
       icon: Icons.tune_rounded,
       steps: <String>[
         '“Platform Ayarları” ekranında uygulama sürümü ve bakım ayarlarını, destek iletişim bilgilerini ve şirket / yasal bilgileri girersiniz.',
+        '“Platform Ayarları” ekranındaki “Kurallar” bölümünden (“Kuralları Aç”) gecikme tazminatı üst sınırı, işletme projesi süreleri, ısınma payı ve saklama süreleri gibi kuralları sınırları içinde değiştirirsiniz; her değişiklik denetim kaydına yazılır.',
         'Destek bilgileri, kullanıcıların “Yardım ve Destek” ekranındaki “Destek” bölümünde görünür; boş bırakılırsa orada “Destek bilgisi yakında” yazar.',
         '“İstemci Hataları” ekranında uygulamalardan gelen hata raporlarını izlersiniz.',
       ],
