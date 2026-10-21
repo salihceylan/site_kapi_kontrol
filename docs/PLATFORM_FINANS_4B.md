@@ -390,7 +390,8 @@ Kurallar, veri (052), var olan satırların hesabı ve 4a uçları: `docs/PLATFO
   yaşlandırma satırı HESAP başına (hareketsiz daire tek ev sahibi satırı), ekstre (`account_party` süzgeci; Devreden satırı dahil) ve makbuz listesi son
   sütun **Hesap** ("Ev sahibi hesabı" / "Kiracı hesabı"); `account_party` bilinen süzgeç anahtarıdır (audit).
 - **Ö6 borç hatırlatma:** aday (daire, HESAP) başınadır (eşik ve gün hesap başına); alıcı = hesabın SAHİBİ (kiracı hesabı -> kiracı, ev sahibi hesabı ->
-  malik, ilişkisi belirtilmemiş -> dairede güncel kiracı varsa kiracı hesabının, yoksa ev sahibi hesabının sahibi; aile üyesi alıcı değil). Borç
+  malik, ilişkisi belirtilmemiş -> dairede güncel kiracı varsa kiracı hesabının, yoksa ev sahibi hesabının sahibi, ANCAK yalnız borç sorumlusu `both` iken ya da
+  sorumlu tarafın güncel kişisi yokken: Borcum görünümüyle aynı `visiblePartyOfRelation`, bağımsız inceleme; aile üyesi alıcı değil). Borç
   sorumlusu `both` dairede malik kiracı hesabının borcu için ALICI DEĞİLDİR (salt okunur görür). İletideki tutar alıcının hesabının tutarıdır; önizleme
   `account_count` (kapsanan hesap sayısı) ekler, `apartment_count` daire başınadır. Hariç tutma sayıları hesap başınadır. Sıklık kaydı daire başına kalır.
 - **İstemci:** yaşlandırma ve daire ekstresi raporlarında hesap süzgeci ("Tüm hesaplar" / "Kiracı hesabı" / "Ev sahibi hesabı"), ekstre PDF'inde hesabın adı

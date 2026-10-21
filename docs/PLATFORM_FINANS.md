@@ -65,7 +65,7 @@ Hata gövdesi `{ error, code }` (Türkçe). Tutarlar kuruş tamsayı. Yazmalar 1
 
 - `GET /app/my-finance` (`authRequired`) → `{ items: [{ site_code, site_name, apartment_id, label, block_name, currency, balance_minor, overdue_minor, next_due_date, next_due_minor, payer_party, visible_from, offset_note, recent: [Entry (son 30; yönetici kimliği/notu YOK)] }] }`: yalnız çağıranın **güncel** (aktif) kişisinin ilişkili olduğu daireler, **modülü açık ve onaylı** siteler.
 - **Kim görür (F2.05 `responsible_party` kuralı):** `owner` ise dairenin güncel `owner` ilişkisi olanlar; `tenant` ise `tenant`; `both` ise `owner` + `tenant` + `resident` (belirsiz ilişki). `family_member` HİÇBİR durumda borç görmez. Eşleşen güncel kişi yoksa güvenli yedek: dairenin güncel `resident`/`owner`/`tenant` ilişkili kişileri görür (borç sahipsiz kalmasın); bu yedek davranış sözleşme notu olarak raporlanır. Başkasının dairesi asla.
-  > **İP-1A (2026-10-21) ile değişti:** sakin dairenin KENDİ HESABINI görür (malik -> ev sahibi hesabı, kiracı -> kiracı hesabı, ilişkisi belirtilmemiş -> dairede güncel kiracı varsa kiracı, yoksa ev sahibi hesabı; `family_member` hiçbirini); borç sorumlusu `both` ise malik kiracı hesabını SALT OKUNUR da görür. Yedek kural kalktı (borç zaten sorumlu tarafın hesabındadır). Bkz. **İki hesap (2026-10-21)**.
+  > **İP-1A (2026-10-21) ile değişti:** sakin dairenin KENDİ HESABINI görür (malik -> ev sahibi hesabı, kiracı -> kiracı hesabı, ilişkisi belirtilmemiş -> dairede güncel kiracı varsa kiracı, yoksa ev sahibi hesabı; `family_member` hiçbirini); borç sorumlusu `both` ise malik kiracı hesabını SALT OKUNUR da görür. Malik ve kiracı için yedek kural kalktı (her biri kendi hesabını görür). İlişkisi belirtilmemiş kişi için yukarıdaki koşul AYNEN kalır (bağımsız inceleme): yalnız sorumlu `both` iken ya da sorumlu tarafın güncel kişisi yokken görür. Bkz. **İki hesap (2026-10-21)**.
 - Sakin ucu yönetici notlarını/oluşturan adını/diğer dairelerin verisini içermez; `recent` yalnız kendi dairesi.
 - **Sakin kapsamı (2026-10-19, KVKK ölçülülük + doğru bakiye; `finance_resident_view.residentView`):**
   - **Başlangıç:** sakinin bu dairedeki güncel ilişkisinin taşınma ayı (`move_in_date`; boşsa ilişki kaydının günü, İstanbul).
@@ -150,7 +150,12 @@ Kaynak: `docs/PLATFORM_YOL_HARITASI.md` "Karar kaydı (2026-10-21)" G12; alt pla
 3. **Kişinin kendi hesabı:** `owner` ⇒ ev sahibi; `tenant` ⇒ kiracı; `resident` (ilişki belirtilmemiş) ⇒ dairede güncel kiracı varsa kiracı, yoksa ev
    sahibi; `family_member` ⇒ hesap yok (borç görmez).
 4. **Kim görür:** sakin YALNIZ kendi hesabını görür. Borç sorumlusu `both` ise malik kiracı hesabını SALT OKUNUR da görür (müteselsil sorumluluk; bu
-   tutar malikin kendi bakiyesine eklenmez). Eski "eşleşen kişi yoksa yedek" kuralı kalktı.
+   tutar malikin kendi bakiyesine eklenmez). Malik ve kiracı için eski "eşleşen kişi yoksa yedek" kuralı kalktı. **İlişkisi belirtilmemiş kişi
+   (`resident`) için eski F2.05 koşulu korunur (bağımsız inceleme):** kendi hesabını (kural 3) yalnız borç sorumlusu `both` iken ya da sorumlu tarafın
+   (`owner` ⇒ malik, `tenant` ⇒ kiracı) güncel ve etkin kişisi YOKKEN görür (`finance_parties.visiblePartyOfRelation`, `responsiblePersonSql`). Böylece
+   yönetici "borç ve bildirimler kime gitsin: malik / kiracı" demişken ve o kişi kayıtlıyken belirtilmemiş ilişkili kişiye (ör. hane üyesi) borç
+   gösterilmez; borç hatırlatma alıcısı da aynı kuraldır. 052 öncesinde borcu kimler görüyorsa yine onlar görür (görünürlük genişlemez).
+   `resolvePersonParty` (hesap yönlendirmesi, sözleşme 2.1) bu koşuldan etkilenmez.
 5. **Tahsilat:** seçilen hesaba yazılır. Hesap verilmezse (eski istemci) vadesi en eski AÇIK borcu olan hesap (eşitlikte ev sahibi); iki hesapta da açık
    borç yoksa tahsilat tarihindeki oturanın hesabı (kural 2, `occupant`). Yönetici ekranında aynı değer `default_payment_account` ile gelir.
 6. **Ters kayıt ve düzeltme:** ters kayıt HER ZAMAN asılın hesabındadır (DB tetikleyicisi de zorlar). Düzeltmede `account_party` verilirse yeni tahsilat o
@@ -233,10 +238,11 @@ kişinin KENDİ hesabını görür; yönetici ekstresi süzgeçsiz (iki hesap bi
 
 Ekstre penceresinde iki sekme [Kiracı hesabı] [Ev sahibi hesabı] (`show_tenant_account` ise; ilk sekme `default_payment_account`, bakiye ve hareketler
 yalnız seçili hesabın); tahsilat / düzeltme penceresinde "Daire hesabı" seçimi (ekstrenin sekmesiyle başlar; pencere ekstre dışından açılırsa daire
-seçilince sunucuya sorulur; tek hesaplı dairede çizilmez); tanım ve ek borç formunda "Kim öder" (Dairede oturan / Ev sahibi; varsayılansa gövdede
+seçilince sunucuya sorulur ve yanıt gelene kadar kayıt gönderilmez: seçim sonradan çıkıp işlem anahtarını değiştirmesin; tek hesaplı dairede çizilmez); tanım ve ek borç formunda "Kim öder" (Dairede oturan / Ev sahibi; varsayılansa gövdede
 gönderilmez); önizleme satırında hesap; bakiye listesinde kiracı hesabında tutar varsa iki hesap ayrı rozet; yaşlandırma ve daire ekstresi raporunda hesap
 süzgeci (dışa aktarma dahil); "Borcum"da "Kendi hesabınız: …" ve salt okunur kiracı hesabı bölümü (kendi ekstresi ayrı); panel vitrini borç kartı yalnız
-kendi hesabı (tek dairede hesabın adı); gecikme tazminatında aynı dairenin iki satırı ayrı anahtarla; hatırlatma önizlemesinde hesap sayısı; yardım metni.
+kendi hesabı (tek dairede hesabın adı); gecikme tazminatında aynı dairenin iki satırı ayrı anahtarla (muaf tutulan daire "N daire muaf tutuldu" sayısında bir
+kez sayılır, öğeleri hesap adıyla); hatırlatma önizlemesinde hesap sayısı; yardım metni.
 
 ### Doğrulama
 
@@ -257,3 +263,21 @@ kendi hesabı (tek dairede hesabın adı); gecikme tazminatında aynı dairenin 
 3. Etkin kiracı tarihi `move_in_date` boşsa ilişki kaydının günüdür; geç kaydedilen kiracının taşınma tarihi girilmezse ilk ay aidatı ev sahibi hesabına
    yazılabilir (yönetici düzeltme / ters kayıtla düzeltir).
 4. 052 öncesi `both` dairelerinde kiracının yaptığı eski ödemeler ev sahibi hesabındadır (anlık görüntü yalnız sorumluyu tutuyordu); bakiye değişmez.
+
+### Bağımsız inceleme (2026-10-21; yukarıdaki metne göre ÖNCELİKLİDİR)
+
+1. **Belirtilmemiş ilişkili kişinin görünürlüğü (orta, düzeltildi):** ilk sürümde `resident` her durumda oturanın hesabını görüyor ve hatırlatma alıyordu;
+   sorumlu malik / kiracı ve o kişi kayıtlıyken bu, 052 öncesinde borcu GÖRMEYEN kişilere (ör. hane üyesi, ev arkadaşı) yeni bir ifşaydı ve yöneticinin
+   "borç ve bildirimler kime gitsin" ayarıyla çelişiyordu. Kural 4'teki koşul eklendi (Borcum, sakin ekstresi / makbuzu / tazminat açıklaması ve
+   hatırlatma alıcısı aynı işlevi kullanır). Gerçek PG: `finance` I1 (R1 yeniden 052 öncesi gibi görmez), `parties` P5 (RA2 görmez, RA6 yedekle görür, P5d 404),
+   P8 (sorumlu malik dairede belirtilmemiş kişiye ileti gitmez).
+2. **Düzeltme tekrarı (düşük, düzeltildi):** `POST …/entries/:id/correct` aynı anahtarla tekrarlanınca yanıt `account_balance_minor` taşımıyordu; artık
+   ilk yanıtla aynı alanlar. Gerçek PG `parties` P4k (varsayılan tahsilat hesabı diğer hesapken hesapsız düzeltme asılın hesabını korur), P4l (toplamı eksi
+   ama bir hesabı borçlu daire borçlu listesinde).
+3. **052 adım sırası (düşük, düzeltildi):** `trg_late_fee_run_lines_account` işlevi `ledger_entries.account_party`'yi okur; tetikleyici artık ledger
+   sütunlarından SONRA (en son adım) kurulur. Açılış iki adım arasında kalsa ya da ledger adımı düşüp eski sürüme dönülse tazminat satırı yazımı bozulmaz.
+4. **İstemci (düşük, düzeltildi):** gecikme tazminatı önizlemesinde muaf daire sayısı hesap öğesi sayısı değil daire sayısıdır; tahsilat penceresi daire
+   hesapları yüklenirken kayıt göndermez (çift tahsilat koruması).
+5. **Açık / kabul edilen:** eski yönetici uygulaması hesap göndermez; tahsilat vadesi en eski açık borcun hesabına düşer (ör. `both` dairede 052 öncesi ev
+   sahibi hesabındaki eski borç kiracının yeni ödemesini alabilir) ve eski uygulama düzeltmede hesap değiştiremez: G12 canlıya alınmadan önce yeni sürüm
+   yayılmalıdır. Hatırlatma sıklık kaydı daire başınadır (kabul, kural 1 "Bilinen sınırlar").
