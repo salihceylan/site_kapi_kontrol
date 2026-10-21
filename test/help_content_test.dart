@@ -190,6 +190,10 @@ void main() {
           expect(text, contains(tab));
         }
         expect(text, contains('kapı yetkiniz yoksa'));
+        // Çubuğun HİÇ görünmediği iki durum (residentTabsFor < 2 sekme, HomePage.residentBarMinHeight) de anlatılır:
+        // yalnız görevli bağı olan hesap ve yatay telefon "çubuk nerede?" diye aramasın.
+        expect(text, contains('İkiden az sekme'));
+        expect(text, contains('yatay'));
         expect(text, contains('Geri tuşu'));
         final tour = OnboardingSteps.forAudience(HelpAudience.resident).map((s) => s.body).join('\n');
         expect(tour, contains('“Özet”'));

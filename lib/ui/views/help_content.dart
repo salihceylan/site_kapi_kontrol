@@ -234,7 +234,7 @@ abstract final class HelpContent {
     title: 'Menü, alt çubuk ve ayarlar nerede?',
     icon: Icons.menu_rounded,
     steps: <String>[
-      'Ekranın altındaki çubukta “Özet”, “Duyuru”, “Arıza”, “Kapı” ve “Belgeler” sekmeleri vardır. “Özet” girişte açılan “Panel” ekranıdır; sitenizde kapalı olan ya da size açık olmayan sekme görünmez, kapı yetkiniz yoksa “Kapı” sekmesi çıkmaz.',
+      'Ekranın altındaki çubukta “Özet”, “Duyuru”, “Arıza”, “Kapı” ve “Belgeler” sekmeleri vardır. “Özet” girişte açılan “Panel” ekranıdır; sitenizde kapalı olan ya da size açık olmayan sekme görünmez, kapı yetkiniz yoksa “Kapı” sekmesi çıkmaz. İkiden az sekme kalırsa ya da telefon yatay tutulurken çubuk görünmez; ekranlara menüden ulaşırsınız.',
       'Sol üstteki menü düğmesi menüyü açar: ekranlar “Ana sayfa”, “Daireler”, “Borçlar”, “İletişim” ve “Site hizmetleri” gibi başlıklar altında toplanır. Size açık ekranı olmayan başlık görünmez; menünün en üstünde bağlı olduğunuz site yazar.',
       'Sağ üstteki “Ayarlar” düğmesi (dişli) “Profilim” ve “Eller Serbest & Kestirmeler” gibi hesap ve ayar ekranlarını açar.',
       'Geri tuşu bir sekmeden ya da ekrandan “Özet” sekmesine döner; “Özet” sekmesindeyken uygulamadan çıkar.',
