@@ -71,6 +71,8 @@ IconData moduleIconOf(String code) {
       return Icons.payments_rounded;
     case PlatformModuleCodes.contracts:
       return Icons.handshake_rounded;
+    case PlatformModuleCodes.equipment:
+      return Icons.build_circle_rounded;
     default:
       return Icons.extension_rounded;
   }

@@ -58,6 +58,7 @@ class AuditLogEntry {
     'cctv_link': 'Kamera (CCTV) Bağlantısı',
     'decision_book': 'Karar Defteri',
     'contracts': 'Firma ve Sözleşme Takibi',
+    'equipment': 'Ekipman ve Bakım',
     'budget': 'İşletme Projesi',
   };
 

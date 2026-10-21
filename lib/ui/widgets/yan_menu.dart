@@ -159,6 +159,10 @@ enum SirketMenuItem {
   /// yöneticisine / kurul üyesine [YanMenu.additionalItems] ile eklenir. Sakin ve görevli için yoktur.
   odemeKamera,
 
+  /// Ekipman ve Bakım (`equipment`): envanter, bakım planı / kaydı, yasal kontrol, teklifler. Rol listesinde YOKTUR; modül AÇIK sitenin
+  /// yöneticisine (yazar), kurul üyesine ve görevlisine (salt okunur) [YanMenu.additionalItems] ile eklenir. Sakin için yoktur.
+  ekipmanBakim,
+
   /// Kapılar: bugüne dek "Panel"in kendisi olan kapı paneli (durum, kapıyı aç; bireysel kullanıcıda kapılar, daireler,
   /// cihazlar). "Panel" artık modül vitrinidir; kapı paneli bu öğeyle bir dokunuş uzaktadır. Rol listesinde YOKTUR;
   /// [YanMenu.additionalItems] ile eklenir ve her zaman "Panel"in hemen altına gelir. Geçiş Kontrol (`door_control`)
@@ -235,7 +239,8 @@ SirketMenuGroup menuGroupOf(SirketMenuItem item) => switch (item) {
       SirketMenuItem.kararDefteri ||
       SirketMenuItem.isletmeProjesi ||
       SirketMenuItem.kararlar ||
-      SirketMenuItem.odemeKamera =>
+      SirketMenuItem.odemeKamera ||
+      SirketMenuItem.ekipmanBakim =>
         SirketMenuGroup.siteHizmetleri,
       SirketMenuItem.profilim ||
       SirketMenuItem.ellerSerbest ||
@@ -1216,6 +1221,25 @@ List<SirketMenuItem> _withExtras(
         if (anchor >= 0) break;
       }
     }
+    // "Ekipman ve Bakım": "Ödeme ve Kamera" / "Karar Defteri" / "Sözleşmeler" / ... / "Kişiler" sırasıyla ilk bulunanın altına.
+    if (extra == SirketMenuItem.ekipmanBakim) {
+      for (final above in const <SirketMenuItem>[
+        SirketMenuItem.odemeKamera,
+        SirketMenuItem.kararDefteri,
+        SirketMenuItem.sozlesmeler,
+        SirketMenuItem.ziyaretciKayitlari,
+        SirketMenuItem.anketler,
+        SirketMenuItem.rezervasyonlar,
+        SirketMenuItem.talepler,
+        SirketMenuItem.belgeler,
+        SirketMenuItem.finans,
+        SirketMenuItem.duyurular,
+        SirketMenuItem.kisiler,
+      ]) {
+        anchor = result.indexOf(above);
+        if (anchor >= 0) break;
+      }
+    }
     // "Kapılar" her zaman "Panel"in hemen altındadır (kapı paneli bir dokunuş uzakta). Numaralandırmada en sonda
     // olduğundan öteki ek öğelerden SONRA eklenir ve "Panel"in altına, onların önüne girer.
     if (extra == SirketMenuItem.kapilar) anchor = result.indexOf(SirketMenuItem.dashboard);
@@ -1385,6 +1409,8 @@ String _titleForItem(SirketMenuItem item, [UserRole? role]) {
       return 'Komşu Panosu';
     case SirketMenuItem.odemeKamera:
       return 'Ödeme ve Kamera';
+    case SirketMenuItem.ekipmanBakim:
+      return 'Ekipman ve Bakım';
     case SirketMenuItem.kapilar:
       return 'Kapılar';
   }
@@ -1474,6 +1500,8 @@ IconData _iconForItem(SirketMenuItem item) {
       return Icons.forum_rounded;
     case SirketMenuItem.odemeKamera:
       return Icons.videocam_rounded;
+    case SirketMenuItem.ekipmanBakim:
+      return Icons.build_circle_rounded;
     case SirketMenuItem.kapilar:
       return Icons.meeting_room_rounded;
   }

@@ -15,6 +15,7 @@ import { ensureVisitorLogSchema } from './modules/visitor_log_schema.js';
 import { ensureCardAccessSchema } from './modules/card_access_schema.js';
 import { ensureDeviceIntegrationsSchema } from './modules/device_integrations_schema.js';
 import { ensureContractsSchema } from './modules/contracts_schema.js';
+import { ensureEquipmentSchema } from './modules/equipment_schema.js';
 import { ensureDecisionBookSchema } from './modules/decision_book_schema.js';
 import { ensureBudgetSchema } from './modules/budget_schema.js';
 import { ensureNeighborBoardSchema } from './modules/neighbor_board_schema.js';
@@ -1895,6 +1896,8 @@ export async function ensureDbSchema() {
     await ensureWorkAttachmentsSchema(client);
     // 049 (firma ve sozlesme takibi): dev blokta DEGIL; katalog kontrolu + her adim kendi otomatik onayli ifadesi (contracts_schema.js = migrations/049).
     await ensureContractsSchema(client);
+    // 068 (ekipman, bakim ve teklif): dev blokta DEGIL; katalog kontrolu + her adim kendi otomatik onayli ifadesi (equipment_schema.js = migrations/068).
+    await ensureEquipmentSchema(client);
     // 050 (karar defteri): dev blokta DEGIL; katalog kontrolu + her adim kendi otomatik onayli ifadesi (decision_book_schema.js = migrations/050).
     await ensureDecisionBookSchema(client);
     // 051 (daire PIN'i duz metin kopyasi silinir): katalog kontrolu + kendi otomatik onayli ALTER'i; aktarim partili ve kilitli satiri atlar
