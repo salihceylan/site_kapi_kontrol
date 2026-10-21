@@ -136,6 +136,9 @@ describe('vadesi en eski açık borç (varsayılan tahsilat hesabı)', () => {
     assert.equal(await defaultPaymentParty(both, { siteCode: 1, apartmentId: 5, onDate: '2026-10-21' }), 'tenant');
     const ownerOlder = strictClient([rows([row(1, 'owner', 'charge', 100, '2026-01-05'), row(2, 'tenant', 'charge', 100, '2026-02-05')]), apt('both', true)]);
     assert.equal(await defaultPaymentParty(ownerOlder, { siteCode: 1, apartmentId: 5, onDate: '2026-10-21' }), 'owner');
+    // inceleme: iki hesabın en eski açık borcu AYNI gün vadeli -> eşitlikte ev sahibi (belgedeki kural; kayıt sırası fark etmez)
+    const tie = strictClient([rows([row(1, 'tenant', 'charge', 100, '2026-02-05'), row(2, 'owner', 'charge', 100, '2026-02-05')]), apt('both', true)]);
+    assert.equal(await defaultPaymentParty(tie, { siteCode: 1, apartmentId: 5, onDate: '2026-10-21' }), 'owner');
     // kiracı hesabının borcu ödenmiş: kalan açık borç ev sahibinde
     const paid = strictClient([rows([row(1, 'owner', 'charge', 100, '2026-05-05'), row(2, 'tenant', 'charge', 100, '2026-02-05'), row(3, 'tenant', 'payment', -100, '2026-02-06')]), apt('both', true)]);
     assert.equal(await defaultPaymentParty(paid, { siteCode: 1, apartmentId: 5, onDate: '2026-10-21' }), 'owner');

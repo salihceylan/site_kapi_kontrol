@@ -367,6 +367,8 @@ export async function correctPayment({ siteCode, rawId, body, actor, now = new D
         reversal: mapEntryRow(reversal.rows[0]),
         entry: mapEntryRow(existing),
         balance_minor: await loadApartmentBalance(client, siteCode, apartmentId),
+        // İP-1A (inceleme): tekrar yanıtı da yeni tahsilatın yazıldığı hesabın bakiyesini taşır (ilk yanıtla aynı alanlar)
+        account_balance_minor: await loadAccountBalance(client, { siteCode, apartmentId, accountParty: entryAccountParty(existing) }),
         receipt: await activeReceiptRef(client, siteCode, Number(existing.id)),
         movement_id: replayMovement ? Number(replayMovement.id) : null,
       };

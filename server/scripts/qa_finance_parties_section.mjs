@@ -192,7 +192,9 @@ export default async function sectionParties(t) {
     { lineKey, fn: cat.fn.map((f) => f.proname) },
   );
   const file052 = fs.readdirSync(ctx.MIGRATIONS_DIR).find((name) => /^052_.+\.sql$/.test(name));
-  const sql052 = fs.readFileSync(path.join(ctx.MIGRATIONS_DIR, file052), 'utf8');
+  // Satir sonlari migrate.js normalizeSql gibi LF'ye cevrilir: Windows (CRLF) checkout'ta islev govdeleri (prosrc) aksi halde CR tasir ve katalog
+  // karsilastirmasi yalanci "degisti" der (migrate.js ve ensure yollari LF uygular).
+  const sql052 = fs.readFileSync(path.join(ctx.MIGRATIONS_DIR, file052), 'utf8').replace(/\r\n?/g, '\n');
   let reapply = null;
   try {
     await pool.query(sql052);
@@ -623,6 +625,53 @@ export default async function sectionParties(t) {
       && s3.body.accounts.tenant.balance_minor === 153000 && s3.body.accounts.owner.balance_minor === 15000,
     s3.body.accounts,
   );
+
+  // ============================================================================================================
+  // P4k (bagimsiz inceleme). Varsayilan tahsilat hesabi DIGER hesapken hesapsiz duzeltme (eski istemci) asilin hesabini korur;
+  // duzeltme tekrari hesap bakiyesini de dondurur; borclu / alacakli listesi HESAP bazinda (toplami eksi ama bir hesabi borclu daire borcludur)
+  // ============================================================================================================
+  {
+    const K = await mkManaged('P Inceleme Sitesi', { 'K Blok': 2 });
+    const [K1, K2] = K.ids;
+    const kBase = P(K.code);
+    await setResponsible(K1, 'both');
+    await setResponsible(K2, 'both');
+    await resident(K, K1, 'owner', 'P Inceleme Malik');
+    await resident(K, K1, 'tenant', 'P Inceleme Kiraci');
+    await resident(K, K2, 'owner', 'P Inceleme Malik Iki');
+    await resident(K, K2, 'tenant', 'P Inceleme Kiraci Iki');
+    // K1: ev sahibi hesabinda vadesi ESKI borc (40 gun once) 30000; iki dairenin kiraci hesabinda vadesi yeni (5 gun once) borc 10000'er
+    const kOwner = await postCharge(K, { name: 'P K Cati', distribution: 'equal', amount_minor: 30000, target: { type: 'apartments', apartment_ids: [K1] }, due_date: ago(40) });
+    const kTenant = await postCharge(K, { name: 'P K Fark', distribution: 'equal', amount_minor: 20000, target: { type: 'apartments', apartment_ids: [K1, K2] }, due_date: ago(5), charge_party: 'occupant' });
+    if (kOwner.post.status !== 201 || kTenant.post.status !== 201) throw new Error(`inceleme fiksturu: ${JSON.stringify([kOwner.post.body, kTenant.post.body])}`);
+    const kBefore = await account(K, K1);
+    const kPay = await payment(K, K1, 4000, { account_party: 'tenant' });
+    const kFixBody = { amount_minor: 4500, entry_date: TODAY, method: 'cash', idempotency_key: key('kfix') };
+    const kFix = await call('POST', `${kBase}/entries/${kPay.body.entry.id}/correct`, MGR, kFixBody);
+    const kFixReplay = await call('POST', `${kBase}/entries/${kPay.body.entry.id}/correct`, MGR, kFixBody);
+    const kAfter = await account(K, K1);
+    check(
+      'P4k: hesap verilmeyen duzeltme (eski istemci), varsayilan tahsilat hesabi EV SAHIBI iken bile asilin hesabinda kalir (kiraci: ters kayit + yeni tahsilat); hesaplar 30000 / 5500; ayni anahtarla tekrar AYNI kaydi ve hesap bakiyesini (account_balance_minor) dondurur',
+      kBefore.body.default_payment_account === 'owner' && kPay.status === 201 && kPay.body.entry.account_party === 'tenant'
+        && kFix.status === 201 && kFix.body.reversal.account_party === 'tenant' && kFix.body.entry.account_party === 'tenant' && kFix.body.account_balance_minor === 5500
+        && kFixReplay.status === 200 && kFixReplay.body.entry.id === kFix.body.entry.id && kFixReplay.body.account_balance_minor === 5500
+        && kAfter.body.accounts.owner.balance_minor === 30000 && kAfter.body.accounts.tenant.balance_minor === 5500,
+      { before: kBefore.body?.default_payment_account, fix: kFix.body, replay: kFixReplay.body, accounts: kAfter.body?.accounts },
+    );
+    // K2: ev sahibi hesabina 50000 fazla odeme (alacak) + kiraci hesabinda 10000 borc: daire TOPLAMI -40000 ama kiraci hesabi BORCLU
+    const kOver = await payment(K, K2, 50000, { account_party: 'owner' });
+    const kDebtors = await call('GET', `${kBase}/balances?status=debtor&limit=50`, MGR);
+    const kCredit = await call('GET', `${kBase}/balances?status=credit&limit=50`, MGR);
+    const kSummary = await call('GET', `${kBase}/summary`, MGR);
+    const k2Row = kDebtors.body.items?.find((i) => i.apartment_id === K2);
+    check(
+      'P4l: borclu listesi HESAP bazinda: toplami -40000 olan dairenin kiraci hesabi borclu (10000) -> borclu listesinde (alacakli listesinde de); ozet borclu daire sayisi 2, borc 30000 + 5500 + 10000 = 45500, alacak 50000 (hesaplar karismaz)',
+      kOver.status === 201 && kOver.body.entry.account_party === 'owner' && k2Row?.balance_minor === -40000 && k2Row.debt_minor === 10000 && k2Row.credit_minor === 50000
+        && kDebtors.body.items.length === 2 && kCredit.body.items.length === 1 && kCredit.body.items[0].apartment_id === K2
+        && kSummary.body.debtor_count === 2 && kSummary.body.debt_total_minor === 45500 && kSummary.body.credit_total_minor === 50000 && kSummary.body.balance_total_minor === -4500,
+      { k2Row, debtors: kDebtors.body.items?.map((i) => i.apartment_id), credit: kCredit.body.items?.map((i) => i.apartment_id), summary: kSummary.body },
+    );
+  }
 
   // ============================================================================================================
   // P7. Gecikme tazminati: ayni dairenin iki hesabi iki satir
