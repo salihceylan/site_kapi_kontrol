@@ -1,6 +1,6 @@
 # Sitenin dosyaları sitenin Google Drive'ında — plan ve uygulanabilirlik
 
-2026-10-20 · Yol haritası karar 13'ün (`docs/PLATFORM_YOL_HARITASI.md`) ayrıntısı. Durum: **plan, kod yazılmadı.**
+2026-10-20 · Yol haritası karar 13'ün (`docs/PLATFORM_YOL_HARITASI.md`) ayrıntısı. Durum: **D1 (sunucu temeli + "Dosya deposu" kartı) yazıldı, bayrak KAPALI; D2-D5 sürüyor.**
 
 İstek: her site yöneticisi sitesi için bir Google Drive hesabı açıp sisteme bağlar. Sitenin sisteme kaydettiği **her dosya**
 (fotoğraf, PDF, Word, Excel, her tür belge) o sitenin Drive'ına kaydedilir, gösterilirken ve indirilirken de oradan çekilir.
@@ -183,3 +183,28 @@ ama alanın bedeli bizde kalır; bu durumda dosya alanı site başına ücretli 
 - [KVKK standart sözleşme bildirim modülü duyurusu](https://www.alomaliye.com/2024/10/30/kvkk-standart-sozlesme-bildirim-modulu/)
 - [KVKK yurt dışı aktarım rehberi özeti (Erdem & Erdem)](https://www.erdem-erdem.av.tr/bilgi-bankasi/yurt-disina-kisisel-veri-aktarimi-rehberi-neleri-duzenliyor)
 - [Google One Türkiye zammı (Teknoblog)](https://www.teknoblog.com/google-one-fiyatlari-yuzde-76ya-kadar-artti/)
+
+## 7. D1 uygulaması (2026-10-21)
+
+Modül `drive_storage` ("Dosya Deposu (Google Drive)"), varsayılan KAPALI. Mevcut belge ve iş takibi yüklemeleri DEĞİŞMEDİ (sunucu diskinde sürer);
+yeni uçlar kendi yolundadır. Google bilgileri `.env`'de yoksa arayüz ve `POST .../connect` "Google Drive bağlantısı Yakında…" (503 `DRIVE_NOT_CONFIGURED`) der.
+
+**.env:** `DRIVE_CLIENT_ID`, `DRIVE_CLIENT_SECRET`, `DRIVE_REDIRECT_URI` (= `https://<api>/drive/oauth/callback`), `DRIVE_TOKEN_KEY` (en az 32 karakter), isteğe bağlı `DRIVE_PENDING_DIR`.
+Kapsam yalnız `drive.file`. Yenileme belirteci AES-256-GCM ile şifreli saklanır (anahtar `DRIVE_TOKEN_KEY`); anahtar kaybolursa siteler Drive'ı yeniden bağlar.
+
+**Tablolar (migration 060, db.js ile aynı):** `site_drive_connections` (site başına bağlantı: durum, hesap, şifreli belirteç, klasör kimlikleri), `drive_oauth_states`
+(tek kullanımlık, 10 dk), `drive_files` (Drive'a giden ya da bekleyen dosya; `UNIQUE (site_code, folder_name, name)`), `drive_pending_uploads` (bekleme kuyruğu).
+
+**Uçlar** (site yöneticisi / süper; modül kapalıysa 403 `MODULE_DISABLED`; başka site 403): `GET|DELETE /manager/sites/:siteCode/drive` (durum / bağlantıyı kes),
+`POST .../drive/connect` (`{url}`), `GET|POST .../drive/files` (liste / yükleme: gövde `application/octet-stream`, sorgu `kind, mime, date, block, apartment`; en çok 10 MB),
+`GET .../drive/files/:id/content` (Drive'dan sunucu üzerinden indirme; bekleyen dosya diskten), `POST .../drive/flush`, `GET /drive/oauth/callback` (kimliksiz, state ile).
+
+**Adlandırma (karar T1-T5):** klasör `<Tür><Ay>_<yy>`: `SrvEkim_26` (sözleşme), `suEkim_26`, `elektrikEkim_26`, `TeklifEkim_26`, `DekontEkim_26`, `GiderEkim_26`, `BelgeEkim_26`;
+hepsi sitenin `SmartKeyPass — <Site adı>` klasörü altında. Dosya adı daireliyse `AB_D13_201026` (A blok, daire 13, 20.10.2026), dairesizse `Gider_201026`; aynı ad varsa `_2`, `_3`.
+İçerik türü baytlardan doğrulanır (PDF, JPEG, PNG, WebP, Word, Excel, düz metin).
+
+**Bekleme alanı:** bağlantı koptuysa yükleme kabul edilir, dosya sunucuda `DRIVE_PENDING_DIR` altında bekler (site başına 100 MB, 7 gün); dolunca 503 `DRIVE_QUEUE_FULL`.
+Gönderim `flush` ile ya da yeniden bağlanınca denenir (artan bekleme). Bağlı değilse yükleme 409 `DRIVE_NOT_CONNECTED`.
+
+**Henüz yok (D2-D5):** otomatik zamanlayıcı ve günlük sağlık denetimi, önbellek ve önizleme, mevcut dosyaların taşınması, silme/dışa aktarma güncellemeleri, belge ve fotoğraf
+ekranlarının bu depoya bağlanması, bağlantısız yükleme kilidi. Google Cloud projesi ve marka doğrulaması (D0) yapılana dek canlıda "Yakında…" görünür.

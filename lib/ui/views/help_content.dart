@@ -122,6 +122,8 @@ abstract final class HelpContent {
     'Geri al',
     'Toplu Yükle',
     'Hepsi bir arada',
+    'Dosya Deposu (Google Drive)',
+    'Google Drive bağla',
     'KAPIYI AÇ',
     'Yeni proje',
     'Geçici proje',
@@ -453,6 +455,7 @@ abstract final class HelpContent {
         'Finans modülü açılınca menüde “Finans” ekranı (“Daireler”, “Tanımlar” ve “Dönemler” sekmeleri) görünür.',
         'Finans açıkken ana sayfada “Bu ay” bölümü görünür: yazılan, toplanan, geciken daire ve kasa sayıları, beş adımlı aylık döngü ve son hareketler. Ay kapatmak isteğe bağlıdır; “Dönemler” sekmesinden istediğiniz ayı seçince o aya kadar açık aylar birlikte kapanır.',
         'Sitenizde geçerli kuralları (gecikme tazminatı üst sınırı, işletme projesi ve saklama süreleri) aynı ekrandaki “Kurallar” bölümünde “Kuralları Görüntüle” ile görürsünüz; değerleri sistem yöneticisi belirler.',
+        'Sitenin dosyalarını kendi Google Drive hesabında saklamak için “Dosya Deposu (Google Drive)” modülünü açın; aynı ekrandaki “Google Drive bağla” düğmesi Google onayına götürür. Bağlantı henüz hazır değilse Yakında… yazar.',
       ],
     ),
     HelpTopic(

@@ -29,6 +29,8 @@ abstract final class PlatformModuleCodes {
 
   /// İşletme Projesi (bütçe). Varsayılan KAPALI.
   static const String budget = 'budget';
+  /// Dosya Deposu (Google Drive, D1). Varsayılan KAPALI.
+  static const String driveStorage = 'drive_storage';
 }
 
 DateTime? _parseDate(Object? raw) {

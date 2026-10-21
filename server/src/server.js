@@ -49,6 +49,7 @@ import { decisionBookRouter } from './modules/decision_book_routes.js';
 import { teamRouter } from './modules/team_routes.js';
 import { personInviteRouter } from './modules/person_invite_routes.js';
 import { budgetRouter } from './modules/budget_routes.js';
+import { driveRouter } from './modules/drive_routes.js';
 import { startDocumentsMaintenance, stopDocumentsMaintenance } from './modules/document_maintenance.js';
 import { pushRouter } from './modules/push_routes.js';
 import { startPushWorker, stopPushWorker } from './modules/push_worker.js';
@@ -148,6 +149,8 @@ app.use(teamRouter);
 app.use(personInviteRouter);
 // Isletme projesi (butce): /manager/sites/:siteCode/budget-projects[/:id[/items|/notify|/revert|/finalize|/comparison]] (modul budget, varsayilan KAPALI).
 app.use(budgetRouter);
+// Site Drive deposu (D1): /manager/sites/:siteCode/drive[...] + /drive/oauth/callback (modul drive_storage, varsayilan KAPALI; yapilandirma yoksa Yakinda).
+app.use(driveRouter);
 // Telefon bildirimi (Faz 3b-B): /app/push/devices[/:installId], /app/push/test, /admin/push/status (tercihler /app/notification-preferences'ta).
 app.use(pushRouter);
 // Hesap silme (kimliksizlestirme) ve kisisel veri disa aktarma: /me/account-deletion[/preview], /me/data-export (yalniz kendi hesabi).
