@@ -19,6 +19,7 @@ import 'package:site_kapi_kontrol/ui/widgets/module_card.dart';
 import 'package:site_kapi_kontrol/ui/widgets/module_request_card.dart';
 import 'package:site_kapi_kontrol/ui/widgets/platform_rules_entry_card.dart';
 import 'package:site_kapi_kontrol/ui/widgets/staff_roles_section.dart';
+import 'package:site_kapi_kontrol/ui/widgets/team_redirect_card.dart';
 
 /// Geçiş Kontrol kapatılırken gösterilen uyarı (sunucunun `MODULE_CONFIRM_REQUIRED` metniyle aynı).
 const String doorControlOffWarning =
@@ -448,12 +449,8 @@ class ModulesViewState extends State<ModulesView> {
             ..._buildRequestsSection(context, code),
           ],
           const SizedBox(height: AppSpace.xl),
-          StaffRolesSection(
-            key: _rolesKey,
-            authService: widget.authService,
-            siteCode: code,
-            siteName: _sites.where((s) => s.id == code).firstOrNull?.name,
-          ),
+          // Ek roller 058'den beri Kişiler > Kadro sekmesinde ([StaffRolesSection] yalnız eski pencerede kalır).
+          const TeamRedirectCard(),
           // Kurallar tablosu (G11): seçili sitede geçerli kurallar; yönetici salt okunur, süper kullanıcı siteye özel değer verir.
           const SizedBox(height: AppSpace.xl),
           PlatformRulesEntryCard(

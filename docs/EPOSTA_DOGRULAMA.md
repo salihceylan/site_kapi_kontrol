@@ -89,3 +89,7 @@ EN SON istenen kod geçerlidir.
 
 Şema ekleyicidir (yeni tablo). Kod geri alınırsa (`deploy/README.md` → rollback) `pending_registrations` tablosu kullanılmadan
 kalır ve zararsızdır; geri almadan önce bekleyen kayıtlar (hesap değil) kullanıcıların yeniden kayıt olmasıyla yenilenir.
+
+## Uygulamaya davet akışı (058)
+
+Davet e-postasındaki belirteç e-posta sahipliğini kanıtlar (şifre sıfırlama kalıbı): `/auth/accept-invite` sayfasında hesap açılır, bekleyen kayıt (`pending_registrations`) silinir, doğrulanmamış eski `users` satırı sahiplenilir (pre-hijacking kapanır) ve `email_verified = TRUE` yazılır. Doğrulanmış hesap varsa belirteçle parola belirlenmez (409 `ACCOUNT_EXISTS`); kişi uygulamada giriş yapıp daveti Panel'deki karttan kabul eder. Aynı e-posta için kilit `email_verify:<e-posta>`; `users.email` büyük/küçük harf duyarlı benzersiz olduğundan arama `LOWER(email)` ile yapılır. Ayrıntı: `docs/PLATFORM_KISILER.md` ("Yönetim kadrosu ve uygulamaya davet").

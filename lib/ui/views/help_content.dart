@@ -110,6 +110,7 @@ abstract final class HelpContent {
     'Masaüstüne Widget Ekle',
     'Belgeler',
     'Taleplerim',
+    'Rehber',
   };
 
   /// Menü dışı ekran içi etiketler (düğme, bölüm, sekme adları; kodda aynen geçer).
@@ -125,6 +126,9 @@ abstract final class HelpContent {
     'QR KOD İLE AÇ',
     'QR / Kod ile Daireye Katıl',
     'Katılım Başvurularım',
+    'Görev ver',
+    'Uygulamaya davet et',
+    'Kadro',
     'Site Kurulumu & Cihaz',
     'Cihaz Ekle',
     'Site Kurmak İçin Başvur',
@@ -406,6 +410,18 @@ abstract final class HelpContent {
         'Menüden “Kişiler” ekranını açın ve siteyi seçin.',
         '“Kişiler”, “Daireler” ve “Araçlar” sekmelerinden ilgili kayıtları ekleyin ya da düzenleyin.',
       ],
+    ),
+    HelpTopic(
+      id: 'team',
+      title: 'Kurul, kapıcı gibi görevlileri ve uygulamaya daveti nasıl yönetirim?',
+      icon: Icons.badge_rounded,
+      steps: <String>[
+        'Menüden “Kişiler” ekranını açın, kişinin kartında “Görev ver”e dokunun ve görevi seçin (kurul üyesi, denetçi, kapıcı, teknik görevli, danışma, diğer).',
+        'Kişinin e-postası var ama uygulamada hesabı yoksa kartındaki “Uygulamaya davet et” ile 7 gün geçerli bir bağlantı gönderin; kişi bağlantıdan hesabını açınca görev yetkisi kendiliğinden açılır.',
+        'Tüm kadroyu “Kişiler” ekranındaki “Kadro” sekmesinde görür, faydalı telefonları (su arıza, asansör servisi gibi) oradan eklersiniz.',
+        'Sakinlerin kadroyu ve telefonları görmesi için “Rehber” modülü açık olmalıdır (Modüller ekranından talep edin).',
+      ],
+      note: 'Görev vermezseniz ilgili işler sizde kalır. Rehberde görünecek telefonu sakinlere göstermeden önce kişinin onayını alın.',
     ),
     HelpTopic(
       id: 'announce',

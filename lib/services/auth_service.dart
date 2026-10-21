@@ -41,6 +41,7 @@ import 'package:site_kapi_kontrol/models/site_residents_tree_record.dart';
 import 'package:site_kapi_kontrol/models/site_structure_record.dart';
 import 'package:site_kapi_kontrol/models/site_manager_record.dart';
 import 'package:site_kapi_kontrol/models/subscription_request_page.dart';
+import 'package:site_kapi_kontrol/models/team.dart';
 import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/models/user_session.dart';
 import 'package:site_kapi_kontrol/services/account_local_wipe.dart';
@@ -1099,6 +1100,81 @@ class AuthService extends ChangeNotifier {
       ),
     );
   }
+
+  // --- Yönetim kadrosu, davet, rehber (058) ------------------------------------------------
+
+  Future<TeamData> getTeam(int siteCode) =>
+      _runAuthorized((token) => api.getTeam(token: token, siteCode: siteCode));
+
+  Future<String?> setTeamDuty(
+    int siteCode,
+    int personId, {
+    required String duty,
+    String? title,
+    String? publicPhone,
+    bool showInDirectory = true,
+  }) => _runAuthorized(
+    (token) => api.setTeamDuty(
+      token: token,
+      siteCode: siteCode,
+      personId: personId,
+      duty: duty,
+      title: title,
+      publicPhone: publicPhone,
+      showInDirectory: showInDirectory,
+    ),
+  );
+
+  Future<void> endTeamDuty(int siteCode, int personId) => _runAuthorized(
+    (token) => api.endTeamDuty(token: token, siteCode: siteCode, personId: personId),
+  );
+
+  Future<PersonInvitationState> getPersonInvitation(int siteCode, int personId) =>
+      _runAuthorized(
+        (token) => api.getPersonInvitation(token: token, siteCode: siteCode, personId: personId),
+      );
+
+  Future<PersonInvitationState> sendPersonInvitation(int siteCode, int personId) =>
+      _runAuthorized(
+        (token) => api.sendPersonInvitation(token: token, siteCode: siteCode, personId: personId),
+      );
+
+  Future<void> revokePersonInvitation(int siteCode, int personId) => _runAuthorized(
+    (token) => api.revokePersonInvitation(token: token, siteCode: siteCode, personId: personId),
+  );
+
+  Future<void> saveDirectoryContact(
+    int siteCode, {
+    int? contactId,
+    required String label,
+    required String phone,
+    String? note,
+    required String category,
+  }) => _runAuthorized(
+    (token) => api.saveDirectoryContact(
+      token: token,
+      siteCode: siteCode,
+      contactId: contactId,
+      label: label,
+      phone: phone,
+      note: note,
+      category: category,
+    ),
+  );
+
+  Future<void> deleteDirectoryContact(int siteCode, int contactId) => _runAuthorized(
+    (token) => api.deleteDirectoryContact(token: token, siteCode: siteCode, contactId: contactId),
+  );
+
+  Future<List<DirectorySite>> getDirectory() =>
+      _runAuthorized((token) => api.getDirectory(token: token));
+
+  Future<List<PendingInvitation>> listMyInvitations() =>
+      _runAuthorized((token) => api.listMyInvitations(token: token));
+
+  Future<void> answerInvitation(int invitationId, {required bool accept}) => _runAuthorized(
+    (token) => api.answerInvitation(token: token, invitationId: invitationId, accept: accept),
+  );
 
   // --- Modül talebi (Faz 1.1) ---------------------------------------------------------------
 

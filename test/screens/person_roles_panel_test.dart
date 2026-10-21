@@ -2,9 +2,11 @@
 // rozetle görünür; ek rol ver / kaldır, yönetici daveti, daireye bağlama ve geçiş bağlantısı kartın içinden;
 // hesapsız / daire hesabı / zaten yönetici kişide ek rol düğmesi yok, nedeni yazılır; salt okur bölümü görmez;
 // dar ekranda büyük yazıda taşmaz.
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:site_kapi_kontrol/models/site_manager_record.dart';
 import 'package:site_kapi_kontrol/models/staff_role_record.dart';
+import 'package:site_kapi_kontrol/models/team.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/person_card_dialog.dart';
 import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
 
@@ -41,61 +43,98 @@ Future<void> _tapText(WidgetTester t, String text) async {
 }
 
 void main() {
-  testWidgets('beş rolün hepsi kartta; rolsüz kişide açıklama; hesaplı kişiye "Rol Ver" -> onay -> atanır', (t) async {
+  testWidgets('rol bölümü: yönetici, görev, daire sakini, misafir; hesaplı kişiye "Görev Ver" -> pencere -> kaydedilir', (t) async {
     final auth = PeopleFakeAuth.seeded();
     await _open(t, auth, 2); // Mehmet Demir: hesaplı kiracı (user_code 702)
 
-    for (final title in const <String>[
-      'Roller',
-      'Site yöneticisi',
-      'Yönetim kurulu ve denetçi',
-      'Görevli',
-      'Daire sakini',
-      'Misafir ve kurye',
-    ]) {
+    for (final title in const <String>['Roller', 'Site yöneticisi', 'Görev', 'Daire sakini', 'Misafir ve kurye']) {
       await scrollTo(t, find.text(title).first);
       expect(find.text(title), findsWidgets, reason: title);
     }
     expect(find.text('Yönetici Olarak Davet Et'), findsOneWidget);
-    expect(find.text('Rol Ver'), findsNWidgets(2));
+    expect(find.text('Uygulamaya davet'), findsNothing); // hesabı olana davet gösterilmez
     expect(find.text('Geçiş Bağlantısı Oluştur'), findsOneWidget);
 
-    await scrollTo(t, find.text('Rol Ver').first);
-    await t.tap(find.text('Rol Ver').first);
-    await settleFor(t);
-    await t.tap(find.text('Rol Ver').last); // onay penceresindeki düğme (en üstte)
+    await _tapText(t, 'Görev Ver');
+    expect(find.text('Rehberde göster'), findsOneWidget);
+    expect(find.textContaining('kişinin onayını alın'), findsOneWidget);
+    await t.tap(find.text('Kaydet'));
     await settleFor(t);
 
-    expect(auth.staffAssignCalls.single, (email: 'mehmet@example.com', role: 'BOARD_MEMBER'));
-    await scrollTo(t, find.text('Rolü Kaldır'));
-    expect(find.text('Rolü Kaldır'), findsOneWidget);
-    expect(find.text('Önce kişinin mevcut rolünü kaldırın.'), findsOneWidget); // Görevli satırı
+    expect(auth.dutyCalls.single.personId, 2);
+    expect(auth.dutyCalls.single.duty, 'doorman');
+    await scrollTo(t, find.text('Görevi Düzenle'));
+    expect(find.text('Görevi Düzenle'), findsOneWidget);
+    expect(find.textContaining('Uygulama yetkisi açık'), findsOneWidget);
     expect(t.takeException(), isNull);
   });
 
-  testWidgets('rolü olan kişide rozet + "Rolü Kaldır" -> onay -> kaldırılır', (t) async {
+  testWidgets('"Diğer" görev unvansız kaydedilmez; unvanla kaydedilir', (t) async {
+    final auth = PeopleFakeAuth.seeded();
+    await _open(t, auth, 2);
+    await _tapText(t, 'Görev Ver');
+    await t.tap(find.byType(DropdownButtonFormField<String>));
+    await settleFor(t);
+    await t.tap(find.text('Diğer').last);
+    await settleFor(t);
+    await t.tap(find.text('Kaydet'));
+    await settleFor(t);
+    expect(find.textContaining('unvan yazın'), findsOneWidget);
+    expect(auth.dutyCalls, isEmpty);
+    await t.enterText(find.byType(TextField).first, 'Bahçıvan');
+    await t.tap(find.text('Kaydet'));
+    await settleFor(t);
+    expect(auth.dutyCalls.single.title, 'Bahçıvan');
+  });
+
+  testWidgets('görevi olan kişide "Görevi Kaldır" -> onay -> kaldırılır', (t) async {
+    final auth = PeopleFakeAuth.seeded();
+    auth.teamDuties[2] = const TeamDuty(
+      personId: 2,
+      fullName: 'Mehmet Demir',
+      duty: 'board_member',
+      showInDirectory: true,
+      access: 'granted',
+    );
+    await _open(t, auth, 2);
+    expect(find.text('Yönetim kurulu üyesi'), findsWidgets); // rozet + not
+    await _tapText(t, 'Görevi Kaldır');
+    await t.tap(find.text('Görevi Kaldır').last);
+    await settleFor(t);
+    expect(auth.dutyEndCalls, <int>[2]);
+  });
+
+  testWidgets('eski ek rol kadroda değilse "Eski ek rol" satırı ve "Rolü Kaldır" çalışır', (t) async {
     final auth = PeopleFakeAuth.seeded();
     auth.staffRoles.add(
       const StaffRoleRecord(userCode: 702, fullName: 'Mehmet Demir', email: 'mehmet@example.com', role: 'STAFF'),
     );
     await _open(t, auth, 2);
-    expect(find.text('Görevli'), findsWidgets); // rozet + satır başlığı
+    expect(find.text('Eski ek rol'), findsOneWidget);
     await _tapText(t, 'Rolü Kaldır');
     await t.tap(find.text('Rolü Kaldır').last);
     await settleFor(t);
     expect(auth.staffRemoveCalls, <int>[702]);
   });
 
-  testWidgets('hesapsız kişide ek rol düğmesi yok, nedeni yazılır; yönetici daveti ve daireye bağlama var', (t) async {
+  testWidgets('hesapsız kişide görev verilir (yetki yok notu) ve uygulamaya davet gönderilir / iptal edilir', (t) async {
     final auth = PeopleFakeAuth.seeded();
-    await _open(t, auth, 1); // Ayşe Yılmaz: hesapsız malik
-    expect(find.text('Rol Ver'), findsNothing);
-    expect(
-      find.textContaining('Bu rol için kişinin uygulamada kendi hesabı olmalı'),
-      findsNWidgets(2),
-    );
-    expect(find.text('Daire sakini'), findsWidgets); // rozet (bağlı daire var) + satır
+    await _open(t, auth, 1); // Ayşe Yılmaz: hesapsız malik, e-postalı
+    expect(find.text('Daire sakini'), findsWidgets);
     expect(find.text('Başka Bir Daireye Bağla'), findsOneWidget);
+
+    await _tapText(t, 'Görev Ver');
+    await t.tap(find.text('Kaydet'));
+    await settleFor(t);
+    expect(find.textContaining('Kişinin uygulama hesabı yok'), findsOneWidget);
+
+    await _tapText(t, 'Uygulamaya Davet Et');
+    expect(auth.inviteSendCalls, <int>[1]);
+    expect(find.textContaining('Davet gönderildi (1/5)'), findsOneWidget);
+    expect(find.text('Yeniden Gönder'), findsOneWidget);
+
+    await _tapText(t, 'Daveti İptal Et');
+    expect(auth.inviteRevokeCalls, <int>[1]);
 
     await _tapText(t, 'Yönetici Olarak Davet Et');
     await t.tap(find.text('Davet Gönder'));
@@ -103,7 +142,7 @@ void main() {
     expect(auth.managerInviteCalls, <String>['ayse@example.com']);
   });
 
-  testWidgets('zaten yönetici olan kişi: rozet, davet ve ek rol düğmesi yok', (t) async {
+  testWidgets('zaten yönetici olan kişi: rozet, davet ve görev düğmesi yok', (t) async {
     final auth = PeopleFakeAuth.seeded();
     auth.siteManagers.add(
       const SiteManagerRecord(
@@ -118,15 +157,15 @@ void main() {
     await _open(t, auth, 2);
     expect(find.text('Site yöneticisi'), findsWidgets);
     expect(find.text('Yönetici Olarak Davet Et'), findsNothing);
-    expect(find.text('Rol Ver'), findsNothing);
-    expect(find.text('Kişi zaten site yöneticisi; bu rol gerekmez.'), findsNWidgets(2));
+    expect(find.text('Görev Ver'), findsNothing);
+    expect(find.text('Kişi zaten site yöneticisi; görev gerekmez.'), findsOneWidget);
   });
 
   testWidgets('salt okur (kurul üyesi) "Roller" bölümünü görmez', (t) async {
     final auth = PeopleFakeAuth.seeded();
     await _open(t, auth, 2, canWrite: false);
     expect(find.text('Roller'), findsNothing);
-    expect(find.text('Rol Ver'), findsNothing);
+    expect(find.text('Görev Ver'), findsNothing);
   });
 
   testWidgets('kapı yoksa geçiş bağlantısı dürüst uyarı verir', (t) async {

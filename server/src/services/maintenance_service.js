@@ -48,6 +48,10 @@ export async function runDatabaseCleanup(db = pool) {
     `);
     stats.expiredPendingRegistrationsCleaned = delPending.rowCount || 0;
 
+    // 3c. Suresi dolan kisi davetleri (058): 'expired' olur, e-posta ve belirtec ozeti silinir; kisi baglanmissa bekleyen davet kapanir.
+    await db.query(`UPDATE person_invitations SET status = 'expired', email = NULL, token_hash = NULL, closed_at = NOW(), updated_at = NOW() WHERE status = 'pending' AND expires_at <= NOW()`);
+    await db.query(`UPDATE person_invitations i SET status = 'revoked', email = NULL, token_hash = NULL, closed_at = NOW(), updated_at = NOW() FROM site_people sp WHERE sp.id = i.person_id AND i.status = 'pending' AND (sp.user_code IS NOT NULL OR sp.is_active = FALSE)`);
+
     // 4. 30 günden eski cihaz bağlantı (connectivity) loglarını temizle
     const delConn = await db.query(`
       DELETE FROM device_connectivity_logs

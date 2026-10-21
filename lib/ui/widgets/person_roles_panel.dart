@@ -5,6 +5,7 @@ import 'package:site_kapi_kontrol/models/door_record.dart';
 import 'package:site_kapi_kontrol/models/person_record.dart';
 import 'package:site_kapi_kontrol/models/site_manager_record.dart';
 import 'package:site_kapi_kontrol/models/staff_role_record.dart';
+import 'package:site_kapi_kontrol/models/team.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_snack.dart';
@@ -13,6 +14,7 @@ import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/create_guest_pass_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/crm_confirm_dialog.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/duty_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/large_dialog_parts.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/staff_role_dialog.dart';
 import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart';
@@ -49,6 +51,8 @@ class PersonRolesPanel extends StatefulWidget {
 class _PersonRolesPanelState extends State<PersonRolesPanel> {
   List<StaffRoleRecord> _staff = const <StaffRoleRecord>[];
   SiteManagersData? _managers;
+  TeamData? _team;
+  PersonInvitationState? _invite;
   bool _loading = true;
   bool _busy = false;
   String? _error;
@@ -80,7 +84,25 @@ class _PersonRolesPanelState extends State<PersonRolesPanel> {
       ]);
       if (!mounted || token != _token) return;
       final managers = results[1] as SiteManagersData?;
+      // Kadro ve davet durumu ek bilgidir: yüklenemezse bölüm yine açılır, ilgili satır dürüst not gösterir.
+      TeamData? team;
+      PersonInvitationState? invite;
+      try {
+        team = await auth.getTeam(widget.scope.siteCode);
+      } catch (_) {
+        team = null;
+      }
+      if (!_person.hasAccount) {
+        try {
+          invite = await auth.getPersonInvitation(widget.scope.siteCode, _person.id);
+        } catch (_) {
+          invite = null;
+        }
+      }
+      if (!mounted || token != _token) return;
       setState(() {
+        _team = team;
+        _invite = invite;
         _staff = results[0]! as List<StaffRoleRecord>;
         _managers = managers;
         _loading = false;
@@ -120,20 +142,7 @@ class _PersonRolesPanelState extends State<PersonRolesPanel> {
     return null;
   }
 
-  /// Ek rol verilemiyorsa nedeni (null = verilebilir).
-  String? _staffBlockReason(StaffRoleType type) {
-    if (!_person.hasAccount || _person.userCode == null || _email.isEmpty) {
-      return 'Bu rol için kişinin uygulamada kendi hesabı olmalı. Kişi kayıt olduktan sonra rolü buradan '
-          'verebilirsiniz.';
-    }
-    if (_person.isInternalAccount) {
-      return 'Kişi daire hesabıyla giriyor. Bu rol için kendi e-postasıyla kayıt olması gerekir.';
-    }
-    if (_isManager) return 'Kişi zaten site yöneticisi; bu rol gerekmez.';
-    final current = _staffRole;
-    if (current != null && current.roleType != type) return 'Önce kişinin mevcut rolünü kaldırın.';
-    return null;
-  }
+  TeamDuty? get _duty => _team?.dutyOf(_person.id);
 
   Future<void> _run(Future<void> Function() action, String success) async {
     setState(() => _busy = true);
@@ -178,19 +187,49 @@ class _PersonRolesPanelState extends State<PersonRolesPanel> {
     }, 'Yönetici daveti gönderildi.');
   }
 
-  Future<void> _assignStaff(StaffRoleType type) async {
+  Future<void> _setDuty() async {
+    final choice = await DutyDialog.show(context, personName: _name, current: _duty);
+    if (choice == null || !mounted) return;
+    await _run(
+      () => widget.scope.authService.setTeamDuty(
+        widget.scope.siteCode,
+        _person.id,
+        duty: choice.duty,
+        title: choice.title,
+        publicPhone: choice.publicPhone,
+        showInDirectory: choice.showInDirectory,
+      ),
+      'Görev kaydedildi.',
+    );
+  }
+
+  Future<void> _endDuty() async {
     final confirmed = await confirmCrmAction(
       context,
-      title: '${type.label} rolü',
-      message: '$_name kişisine bu sitede "${type.label}" rolü verilsin mi? Genel rolü değişmez; yalnız bu '
-          'sitede ek yetki kazanır.',
-      confirmLabel: 'Rol Ver',
-      icon: Icons.badge_rounded,
+      title: 'Görev kaldırılsın mı?',
+      message: '$_name kişisinin görevi kaldırılsın mı? Kişi kaydı ve daire bilgileri değişmez; görevden gelen '
+          'uygulama yetkisi kapanır.',
+      confirmLabel: 'Görevi Kaldır',
+      icon: Icons.person_remove_rounded,
+      tone: AppTone.danger,
     );
     if (!confirmed || !mounted) return;
+    await _run(() => widget.scope.authService.endTeamDuty(widget.scope.siteCode, _person.id), 'Görev kaldırıldı.');
+  }
+
+  Future<void> _sendInvite() async {
+    await _run(() async {
+      final state = await widget.scope.authService.sendPersonInvitation(widget.scope.siteCode, _person.id);
+      if (state.sent == false) {
+        throw StateError('Davet kaydedildi ama e-posta gönderilemedi. Biraz sonra "Yeniden Gönder" deyin.');
+      }
+    }, 'Davet e-postası gönderildi.');
+  }
+
+  Future<void> _revokeInvite() async {
     await _run(
-      () => widget.scope.authService.assignStaffRole(widget.scope.siteCode, _email, type.apiValue),
-      'Rol verildi.',
+      () => widget.scope.authService.revokePersonInvitation(widget.scope.siteCode, _person.id),
+      'Davet iptal edildi.',
     );
   }
 
@@ -266,7 +305,8 @@ class _PersonRolesPanelState extends State<PersonRolesPanel> {
         const StatusChip(label: 'Site yöneticisi', tone: AppTone.primary, icon: Icons.manage_accounts_rounded),
       if (_invitePending)
         const StatusChip(label: 'Yönetici daveti bekliyor', tone: AppTone.warning, icon: Icons.schedule_rounded),
-      if (staffRole != null) StatusChip(label: staffRole.roleLabel, tone: AppTone.info, icon: Icons.badge_rounded),
+      if (_duty != null) StatusChip(label: _duty!.label, tone: AppTone.info, icon: Icons.badge_rounded),
+      if (staffRole != null && _duty == null) StatusChip(label: staffRole.roleLabel, tone: AppTone.info, icon: Icons.badge_rounded),
       if (isResident) const StatusChip(label: 'Daire sakini', tone: AppTone.success, icon: Icons.home_rounded),
     ];
 
@@ -300,8 +340,18 @@ class _PersonRolesPanelState extends State<PersonRolesPanel> {
               actionIcon: Icons.manage_accounts_rounded,
               onAction: _busy ? null : _inviteManager,
             ),
-            for (final type in StaffRoleType.values)
-              _staffRow(type, staffRole),
+            _dutyRow(),
+            if (staffRole != null && _duty == null)
+              _RoleRow(
+                title: 'Eski ek rol',
+                description: 'Kişi kaydına bağlı olmayan eski rol; Görev ver ile kadroya alabilirsiniz.',
+                note: 'Kişide "${staffRole.roleLabel}" rolü var.',
+                actionLabel: 'Rolü Kaldır',
+                actionIcon: Icons.person_remove_rounded,
+                danger: true,
+                onAction: _busy ? null : () => _removeStaff(staffRole),
+              ),
+            if (!(_person.hasAccount && !_person.isInternalAccount)) _inviteRow(),
             _RoleRow(
               title: 'Daire sakini',
               description: 'Kapıyı açar; duyurularını, borcunu ve kendi kayıtlarını görür.',
@@ -323,20 +373,86 @@ class _PersonRolesPanelState extends State<PersonRolesPanel> {
     );
   }
 
-  Widget _staffRow(StaffRoleType type, StaffRoleRecord? current) {
-    final has = current != null && current.roleType == type;
-    final blocked = has ? null : _staffBlockReason(type);
-    final description = type == StaffRoleType.boardMember
-        ? 'Kayıtları, duyuruları ve finansı yalnızca görüntüler.'
-        : 'Kendi işini görür; kişi listesini göremez.';
+  Widget _dutyRow() {
+    const description = 'Yönetim kurulu, denetçi, kapıcı, teknik görevli, danışma ya da başka görev. Görev kişi '
+        'kaydına bağlıdır; hesabı olmasa da kadroda görünür.';
+    final duty = _duty;
+    if (_isManager) {
+      return const _RoleRow(
+        title: 'Görev',
+        description: description,
+        note: 'Kişi zaten site yöneticisi; görev gerekmez.',
+        actionIcon: Icons.badge_rounded,
+      );
+    }
+    if (_team == null) {
+      return const _RoleRow(
+        title: 'Görev',
+        description: description,
+        note: 'Kadro bilgisi yüklenemedi. Kartı kapatıp tekrar açın.',
+        actionIcon: Icons.badge_rounded,
+      );
+    }
+    if (duty == null) {
+      return _RoleRow(
+        title: 'Görev',
+        description: description,
+        actionLabel: 'Görev Ver',
+        actionIcon: Icons.badge_rounded,
+        onAction: _busy ? null : _setDuty,
+      );
+    }
     return _RoleRow(
-      title: type == StaffRoleType.boardMember ? 'Yönetim kurulu ve denetçi' : 'Görevli',
+      title: 'Görev',
       description: description,
-      note: has ? 'Kişide bu rol var.' : blocked,
-      actionLabel: has ? 'Rolü Kaldır' : (blocked == null ? 'Rol Ver' : null),
-      actionIcon: has ? Icons.person_remove_rounded : Icons.badge_rounded,
-      danger: has,
-      onAction: _busy ? null : (has ? () => _removeStaff(current) : () => _assignStaff(type)),
+      note: '${duty.label}. ${teamAccessText(duty.access)}',
+      actionLabel: 'Görevi Düzenle',
+      actionIcon: Icons.edit_rounded,
+      onAction: _busy ? null : _setDuty,
+      secondaryLabel: 'Görevi Kaldır',
+      secondaryIcon: Icons.person_remove_rounded,
+      onSecondary: _busy ? null : _endDuty,
+    );
+  }
+
+  Widget _inviteRow() {
+    const description = 'E-postası olan ama uygulamada hesabı olmayan kişiye 7 gün geçerli, tek kullanımlık '
+        'davet gönderilir.';
+    final invite = _invite;
+    final blockText = invitationBlockText(
+      _person.isInternalAccount ? 'PERSON_INTERNAL_ACCOUNT' : (_email.isEmpty ? 'PERSON_NO_EMAIL' : invite?.blockReason),
+    );
+    if (blockText.isNotEmpty) {
+      return _RoleRow(title: 'Uygulamaya davet', description: description, note: blockText, actionIcon: Icons.mail_rounded);
+    }
+    if (invite == null) {
+      return const _RoleRow(
+        title: 'Uygulamaya davet',
+        description: description,
+        note: 'Davet durumu yüklenemedi. Kartı kapatıp tekrar açın.',
+        actionIcon: Icons.mail_rounded,
+      );
+    }
+    if (invite.isPending) {
+      return _RoleRow(
+        title: 'Uygulamaya davet',
+        description: description,
+        note: 'Davet gönderildi (${invite.sendCount}/5); kişinin kabul etmesi bekleniyor.',
+        actionLabel: 'Yeniden Gönder',
+        actionIcon: Icons.send_rounded,
+        onAction: _busy ? null : _sendInvite,
+        secondaryLabel: 'Daveti İptal Et',
+        secondaryIcon: Icons.close_rounded,
+        onSecondary: _busy ? null : _revokeInvite,
+      );
+    }
+    return _RoleRow(
+      title: 'Uygulamaya davet',
+      description: description,
+      note: invite.status == 'expired' ? 'Önceki davetin süresi doldu.' : null,
+      actionLabel: 'Uygulamaya Davet Et',
+      actionIcon: Icons.mail_rounded,
+      onAction: _busy ? null : _sendInvite,
     );
   }
 }
@@ -350,9 +466,16 @@ class _RoleRow extends StatelessWidget {
     this.actionLabel,
     this.note,
     this.onAction,
+    this.secondaryLabel,
+    this.secondaryIcon,
+    this.onSecondary,
     this.danger = false,
     this.last = false,
   });
+
+  final String? secondaryLabel;
+  final IconData? secondaryIcon;
+  final Future<void> Function()? onSecondary;
 
   final String title;
   final String description;
@@ -387,6 +510,16 @@ class _RoleRow extends StatelessWidget {
               tone: danger ? AppTone.danger : AppTone.primary,
               variant: AppButtonVariant.tonal,
               onPressed: action == null ? null : () => unawaited(action()),
+            ),
+          ],
+          if (secondaryLabel != null) ...[
+            const SizedBox(height: AppSpace.sm),
+            PrimaryActionButton(
+              label: secondaryLabel!,
+              icon: secondaryIcon ?? Icons.close_rounded,
+              tone: AppTone.danger,
+              variant: AppButtonVariant.tonal,
+              onPressed: onSecondary == null ? null : () => unawaited(onSecondary!()),
             ),
           ],
         ],

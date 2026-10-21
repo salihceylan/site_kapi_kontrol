@@ -366,11 +366,10 @@ void main() {
       expect(find.widgetWithText(StatusChip, 'Açık'), findsOneWidget);
       expect(find.widgetWithText(StatusChip, 'Yakında…'), findsNWidgets(5));
       expect(find.widgetWithText(StatusChip, 'Her sitede açık'), findsNWidgets(2));
-      expect(find.text('Ek Roller'), findsOneWidget);
-      expect(find.byType(StaffRoleCard), findsNWidgets(2));
-      expect(find.byTooltip('Rolü Kaldır'), findsNWidgets(2));
+      // Ek roller 058'den beri Kişiler > Kadro sekmesinde: Modüller'de yalnız yönlendirme kartı var.
+      expect(find.text('Yönetim Kadrosu'), findsOneWidget);
+      expect(find.byType(StaffRoleCard), findsNothing);
       expect(find.byTooltip('Yenile'), findsOneWidget);
-      expect(find.textContaining('Yönetim Kurulu / Denetçi'), findsWidgets);
     });
 
     listMatrix('Geçiş Kontrol kapalı: çip "Kapalı"', (t, w, h, s, dark) async {
@@ -393,10 +392,10 @@ void main() {
       expect(auth.getModulesCalls, isEmpty);
     });
 
-    listMatrix('boş durumlar: ek rol yok', (t, w, h, s, dark) async {
+    listMatrix('yönetim kadrosu yönlendirme kartı', (t, w, h, s, dark) async {
       await _pump(t, ModulesFakeAuth(), width: w, height: h, scale: s, dark: dark);
-      expect(find.text('Ek rol atanmamış.'), findsOneWidget);
-      expect(find.text('Rol Ekle'), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('team_redirect_card')), findsOneWidget);
+      expect(find.textContaining('Görev ver'), findsOneWidget);
     });
 
     listMatrix('yükleniyor: siteler', (t, w, h, s, dark) async {
@@ -406,7 +405,7 @@ void main() {
       expect(doorModuleSwitch, findsNothing);
     });
 
-    listMatrix('yükleniyor: modüller ve ek roller (site seçici görünür)', (
+    listMatrix('yükleniyor: modüller (site seçici görünür)', (
       t,
       w,
       h,
@@ -418,7 +417,7 @@ void main() {
         ..rolesGate = Completer<void>();
       await _pump(t, auth, width: w, height: h, scale: s, dark: dark);
       expect(find.text('Site Seçin'), findsOneWidget);
-      expect(find.byType(ListSkeleton), findsNWidgets(2));
+      expect(find.byType(ListSkeleton), findsOneWidget);
       expect(doorModuleSwitch, findsNothing);
     });
 
@@ -437,14 +436,12 @@ void main() {
       expect(find.text('Tekrar Dene'), findsOneWidget);
     });
 
-    listMatrix('hata: modüller ve ek roller yüklenemedi', (t, w, h, s, dark) async {
+    listMatrix('hata: modüller yüklenemedi', (t, w, h, s, dark) async {
       final auth = ModulesFakeAuth()
-        ..modulesError = ApiException('Bu site üzerinde yönetim yetkiniz bulunmuyor.')
-        ..rolesError = ApiException('Ek roller yüklenemedi (500).');
+        ..modulesError = ApiException('Bu site üzerinde yönetim yetkiniz bulunmuyor.');
       await _pump(t, auth, width: w, height: h, scale: s, dark: dark);
-      expect(find.byType(InlineNotice), findsNWidgets(2));
+      expect(find.byType(InlineNotice), findsOneWidget);
       expect(find.text('Bu site üzerinde yönetim yetkiniz bulunmuyor.'), findsOneWidget);
-      expect(find.text('Ek roller yüklenemedi (500).'), findsOneWidget);
       expect(doorModuleSwitch, findsNothing);
     });
   });
@@ -541,124 +538,6 @@ void main() {
     });
   });
 
-  group('Ek roller', () {
-    testWidgets('rol ekle: doğrulama -> atama -> liste yeniden çekilir', (t) async {
-      final auth = ModulesFakeAuth();
-      await _pump(t, auth);
-      final readsBefore = auth.listRolesCalls.length;
-
-      await tapText(t, 'Rol Ekle');
-      expect(find.byType(AppDialog), findsOneWidget);
-      expect(find.text('Ek Rol Ata'), findsOneWidget);
-
-      // Boş gönderim: doğrulama iletileri.
-      await tapText(t, 'Ata');
-      expect(find.text('E-posta zorunludur.'), findsOneWidget);
-      expect(find.text('Bir rol seçin.'), findsOneWidget);
-      expect(auth.assignCalls, isEmpty);
-
-      await t.enterText(find.widgetWithText(TextFormField, 'E-posta'), 'gecersiz');
-      await tapText(t, 'Ata');
-      expect(find.text('Geçerli bir e-posta girin.'), findsOneWidget);
-
-      await t.enterText(
-        find.widgetWithText(TextFormField, 'E-posta'),
-        '  selin@ornek.com ',
-      );
-      await tapFinder(t, find.byType(DropdownButtonFormField<StaffRoleType>));
-      await tapFinder(t, find.text('Görevli').last);
-      await tapText(t, 'Ata');
-      await settleFor(t);
-
-      expect(auth.assignCalls, hasLength(1));
-      expect(auth.assignCalls.single.site, 11);
-      expect(auth.assignCalls.single.email, 'selin@ornek.com');
-      expect(auth.assignCalls.single.role, 'STAFF');
-      expect(find.byType(AppDialog), findsNothing);
-      expect(find.text('Ek rol atandı.'), findsOneWidget);
-      expect(auth.listRolesCalls.length, readsBefore + 1);
-      expect(find.byType(StaffRoleCard), findsOneWidget);
-      expect(find.text('Görevli'), findsWidgets);
-    });
-
-    testWidgets('sunucu reddi (USER_NOT_FOUND): pencerede Türkçe hata, pencere açık kalır', (t) async {
-      final auth = ModulesFakeAuth()
-        ..assignError = ApiException(
-          'Bu e-posta ile kayıtlı hesap yok.',
-          statusCode: 404,
-          code: 'USER_NOT_FOUND',
-        );
-      await _pump(t, auth);
-
-      await tapText(t, 'Rol Ekle');
-      await t.enterText(find.widgetWithText(TextFormField, 'E-posta'), 'yok@ornek.com');
-      await tapFinder(t, find.byType(DropdownButtonFormField<StaffRoleType>));
-      await tapFinder(t, find.text('Yönetim Kurulu / Denetçi').last);
-      await tapText(t, 'Ata');
-      await settleFor(t);
-
-      expect(find.byType(AppDialog), findsOneWidget);
-      expect(find.byType(InlineNotice), findsOneWidget);
-      expect(
-        find.text(
-          'Bu e-posta ile kayıtlı hesap yok. Kişinin önce uygulamaya kayıt olması gerekir; '
-          'kayıt olduktan sonra rolü verebilirsiniz.',
-        ),
-        findsOneWidget,
-      );
-      expect(auth.assignCalls.single.role, 'BOARD_MEMBER');
-
-      // Düzeltilip yeniden denenebilir.
-      auth.assignError = null;
-      await tapText(t, 'Ata');
-      await settleFor(t);
-      expect(find.byType(AppDialog), findsNothing);
-      expect(auth.assignCalls, hasLength(2));
-    });
-
-    testWidgets('İptal pencereyi kapatır, atama yapılmaz', (t) async {
-      final auth = ModulesFakeAuth();
-      await _pump(t, auth);
-      await tapText(t, 'Rol Ekle');
-      await tapText(t, 'İptal');
-      expect(find.byType(AppDialog), findsNothing);
-      expect(auth.assignCalls, isEmpty);
-    });
-
-    testWidgets('rol kaldır: onay -> istek -> liste yeniden çekilir; Vazgeç istek yapmaz', (t) async {
-      final auth = _fullAuth();
-      await _pump(t, auth);
-      expect(find.byType(StaffRoleCard), findsNWidgets(2));
-      final readsBefore = auth.listRolesCalls.length;
-
-      await tapFinder(t, find.byTooltip('Rolü Kaldır'));
-      expect(find.text('Rol Kaldırılsın mı?'), findsOneWidget);
-      expect(find.textContaining('dairesindeki yetkileriyle kalır'), findsOneWidget);
-      await tapText(t, 'Vazgeç');
-      expect(auth.removeCalls, isEmpty);
-
-      await tapFinder(t, find.byTooltip('Rolü Kaldır'));
-      await tapText(t, 'Kaldır');
-      await settleFor(t);
-
-      expect(auth.removeCalls.single, (site: 11, user: 41));
-      expect(find.text('Ek rol kaldırıldı.'), findsOneWidget);
-      expect(auth.listRolesCalls.length, readsBefore + 1);
-      expect(find.byType(StaffRoleCard), findsOneWidget);
-    });
-
-    testWidgets('kaldırma hatası: mesaj gösterilir, satır kalır', (t) async {
-      final auth = _fullAuth()
-        ..removeError = ApiException('Bu kişide kurul veya görevli rolü yok.');
-      await _pump(t, auth);
-      await tapFinder(t, find.byTooltip('Rolü Kaldır'));
-      await tapText(t, 'Kaldır');
-      await settleFor(t);
-      expect(find.text('Bu kişide kurul veya görevli rolü yok.'), findsOneWidget);
-      expect(find.byType(StaffRoleCard), findsNWidgets(2));
-    });
-  });
-
   group('Site seçici ve yenileme', () {
     testWidgets('yalnız onaylı siteler listelenir; ilk site seçilir ve verisi çekilir', (t) async {
       final auth = ModulesFakeAuth(
@@ -670,7 +549,7 @@ void main() {
       );
       await _pump(t, auth);
       expect(auth.getModulesCalls, <int>[11]);
-      expect(auth.listRolesCalls, <int>[11]);
+      expect(auth.listRolesCalls, isEmpty, reason: 'ek roller artık Kadro sekmesinde');
 
       await tapFinder(t, find.byType(DropdownButtonFormField<int>));
       expect(find.text('Gül Sitesi (11)'), findsWidgets);
@@ -678,20 +557,15 @@ void main() {
       expect(find.text('Bekleyen (13)'), findsNothing);
     });
 
-    testWidgets('başka site seçilince o sitenin modülleri ve rolleri çekilir', (t) async {
+    testWidgets('başka site seçilince o sitenin modülleri çekilir', (t) async {
       final auth = _fullAuth();
       await _pump(t, auth);
-      expect(find.byType(StaffRoleCard), findsNWidgets(2));
 
       await tapFinder(t, find.byType(DropdownButtonFormField<int>));
       await tapFinder(t, find.text('Mavi Park (12)'));
       await settleFor(t);
 
       expect(auth.getModulesCalls.last, 12);
-      expect(auth.listRolesCalls.last, 12);
-      expect(find.byType(StaffRoleCard), findsNothing,
-          reason: 'önceki sitenin rolleri yeni sitede gösterilmez');
-      expect(find.text('Ek rol atanmamış.'), findsOneWidget);
     });
 
     testWidgets('yenile düğmesi ve reload() siteleri, modülleri ve rolleri yeniden çeker', (t) async {
@@ -703,7 +577,7 @@ void main() {
       await tapFinder(t, find.byTooltip('Yenile'));
       expect(auth.listSitesCalls, 2);
       expect(auth.getModulesCalls, hasLength(2));
-      expect(auth.listRolesCalls, hasLength(2));
+      expect(auth.listRolesCalls, isEmpty);
 
       await key.currentState!.reload(); // RefreshIndicator'ın çağırdığı yol
       await settleFor(t);
@@ -740,24 +614,6 @@ void main() {
       auth.sitesGate!.complete();
       await settleFor(t);
       expect(doorModuleSwitch, findsOneWidget);
-    });
-
-    testWidgets('ek rol listesi boşken yenileme hatası "Ek rol atanmamış." diye gizlenmez; Tekrar Dene çalışır', (t) async {
-      final auth = ModulesFakeAuth();
-      await _pump(t, auth);
-      expect(find.text('Ek rol atanmamış.'), findsOneWidget);
-
-      auth.rolesError = ApiException('Ek roller yüklenemedi (500).');
-      await tapFinder(t, find.byTooltip('Yenile'));
-      expect(find.text('Ek roller yüklenemedi (500).'), findsOneWidget);
-      expect(find.text('Ek rol atanmamış.'), findsNothing);
-      expect(find.text('Tekrar Dene'), findsOneWidget);
-
-      auth.rolesError = null;
-      await tapText(t, 'Tekrar Dene');
-      await settleFor(t);
-      expect(find.text('Ek roller yüklenemedi (500).'), findsNothing);
-      expect(find.text('Ek rol atanmamış.'), findsOneWidget);
     });
 
     testWidgets('site değişirken önceki sitenin işlem sonrası tazelemesi yeni sitenin yüklemesini ezmez (iskelette kalmaz)', (t) async {

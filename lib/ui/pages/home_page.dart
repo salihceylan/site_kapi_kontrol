@@ -156,6 +156,8 @@ import 'package:site_kapi_kontrol/ui/views/survey_resident_view.dart';
 import 'package:site_kapi_kontrol/models/decision_models.dart';
 import 'package:site_kapi_kontrol/ui/views/decision_manager_view.dart';
 import 'package:site_kapi_kontrol/ui/views/decision_resident_view.dart';
+import 'package:site_kapi_kontrol/ui/views/directory_view.dart';
+import 'package:site_kapi_kontrol/ui/widgets/pending_invitations_card.dart';
 import 'package:site_kapi_kontrol/ui/widgets/announcement_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/unread_announcement_card.dart';
 
@@ -300,6 +302,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final GlobalKey<SurveyResidentViewState> _surveyResidentKey = GlobalKey<SurveyResidentViewState>();
   final GlobalKey<DecisionManagerViewState> _decisionManagerKey = GlobalKey<DecisionManagerViewState>();
   final GlobalKey<DecisionResidentViewState> _decisionResidentKey = GlobalKey<DecisionResidentViewState>();
+  final GlobalKey<DirectoryViewState> _directoryKey = GlobalKey<DirectoryViewState>();
   final GlobalKey<VisitorManagerViewState> _visitorManagerKey = GlobalKey<VisitorManagerViewState>();
   final GlobalKey<VisitorResidentViewState> _visitorResidentKey = GlobalKey<VisitorResidentViewState>();
   final GlobalKey<ContractsViewState> _contractsKey = GlobalKey<ContractsViewState>();
@@ -931,6 +934,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         if (_surveyResidentSites(role).isNotEmpty) SirketMenuItem.anket,
         if (_canAccessDecisionManage(role)) SirketMenuItem.kararDefteri,
         if (_decisionResidentSites(role).isNotEmpty) SirketMenuItem.kararlar,
+        if (_directoryResidentSites(role).isNotEmpty) SirketMenuItem.rehber,
         if (_canAccessVisitorManage(role)) SirketMenuItem.ziyaretciKayitlari,
         if (_visitorResidentSites(role).isNotEmpty) SirketMenuItem.ziyaretcilerim,
         if (_canAccessContracts(role)) SirketMenuItem.sozlesmeler,
@@ -1153,6 +1157,25 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     return <PeopleSite>[
       for (final site in _moduleAccess.result!.sites)
         if (_isRecipientSite(site) && site.isEnabled(PlatformModuleCodes.decisionBook))
+          PeopleSite(code: site.siteCode, name: site.siteName),
+    ];
+  }
+
+  /// "Rehber" ekranındaki siteler: alıcısı olabilecek ve `directory` modülü AÇIK siteler (Kararlar kuralı; modül verisi yoksa site yoktur).
+  List<PeopleSite> _directoryResidentSites(UserRole role) {
+    if (!_moduleAccess.isFiltering) return const <PeopleSite>[];
+    switch (role) {
+      case UserRole.superUser:
+      case UserRole.individual:
+        return const <PeopleSite>[];
+      case UserRole.siteManager:
+        if (!_isResidentMode) return const <PeopleSite>[];
+      case UserRole.apartmentOwner:
+        break;
+    }
+    return <PeopleSite>[
+      for (final site in _moduleAccess.result!.sites)
+        if (_isRecipientSite(site) && site.isEnabled(PlatformModuleCodes.directory))
           PeopleSite(code: site.siteCode, name: site.siteName),
     ];
   }
@@ -1729,6 +1752,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (item == SirketMenuItem.kararlar) {
       return _decisionResidentSites(role).isNotEmpty;
     }
+    if (item == SirketMenuItem.rehber) {
+      return _directoryResidentSites(role).isNotEmpty;
+    }
 
     // Ziyaretçi ve Kargo: `visitor_log` modülü açık siteye bağlı yönetici / görevli / kurul (yönetim ekranı) ya da
     // sakin; modül kapalıyken ya da modül verisi yokken erişim YOKTUR.
@@ -1906,6 +1932,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
       case SirketMenuItem.kararlar:
         return 'Kararlar';
+
+      case SirketMenuItem.rehber:
+        return 'Rehber';
 
       case SirketMenuItem.ziyaretciKayitlari:
         return 'Ziyaretçi ve Kargo';
@@ -5340,6 +5369,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       case SirketMenuItem.kararlar:
         await _decisionResidentKey.currentState?.reload();
         break;
+      case SirketMenuItem.rehber:
+        await _directoryKey.currentState?.reload();
+        break;
       case SirketMenuItem.modulTalepleri:
         await _moduleRequestsViewKey.currentState?.reload();
         break;
@@ -6054,6 +6086,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       onRefreshAccount: () => _refreshAccountAfterApproval(),
       applicantRole: canApplyForSite(session.role),
       aboveHero: resident ? _unreadAnnouncementCardSlot(session) : null,
+      belowHero: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Bekleyen site davetleri (058): e-postası eşleşen davet varsa Kabul et / Reddet kartı; yoksa görünmez.
+          PendingInvitationsCard(authService: widget.authService, onAccepted: () => unawaited(_moduleAccess.refresh())),
+          if (resident) _unreadAnnouncementCardSlot(session),
+        ],
+      ),
       onOpenHelp: _openHelpPage,
       debtSiteCodes: resident ? _debtSiteCodes() : null,
       quickActionItems: resident ? _quickActionItems() : null,
@@ -6527,6 +6568,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           authService: widget.authService,
           sites: _decisionResidentSites(session.role),
         );
+
+      case SirketMenuItem.rehber:
+        return DirectoryView(key: _directoryKey, authService: widget.authService);
 
       case SirketMenuItem.modulTalepleri:
         return ModuleRequestsView(

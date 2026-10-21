@@ -13,12 +13,12 @@ import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
 import 'package:site_kapi_kontrol/ui/views/bulk_import_view.dart';
 import 'package:site_kapi_kontrol/ui/views/people_apartments_tab.dart';
 import 'package:site_kapi_kontrol/ui/views/people_persons_tab.dart';
+import 'package:site_kapi_kontrol/ui/views/people_team_tab.dart';
 import 'package:site_kapi_kontrol/ui/views/people_vehicles_tab.dart';
 import 'package:site_kapi_kontrol/ui/widgets/bulk_entry_buttons.dart';
 import 'package:site_kapi_kontrol/ui/widgets/bulk_export_sheet.dart';
 import 'package:site_kapi_kontrol/ui/widgets/bulk_export_sources.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
-import 'package:site_kapi_kontrol/ui/widgets/staff_roles_section.dart';
 
 /// "Kişiler" ekranı (Platform Faz 2a, çekirdek `people` modülü): site seçici + üç sekme
 /// (Kişiler | Daireler | Araçlar).
@@ -53,6 +53,7 @@ class PeopleViewState extends State<PeopleView> {
     ('Kişiler', Icons.groups_2_rounded),
     ('Daireler', Icons.apartment_rounded),
     ('Araçlar', Icons.directions_car_rounded),
+    ('Kadro', Icons.badge_rounded),
   ];
 
   List<PeopleSite> _sites = const <PeopleSite>[];
@@ -71,6 +72,7 @@ class PeopleViewState extends State<PeopleView> {
   GlobalKey<PeopleApartmentsTabState> _apartmentsKey =
       GlobalKey<PeopleApartmentsTabState>();
   GlobalKey<PeopleVehiclesTabState> _vehiclesKey = GlobalKey<PeopleVehiclesTabState>();
+  GlobalKey<PeopleTeamTabState> _teamKey = GlobalKey<PeopleTeamTabState>();
 
   @override
   void initState() {
@@ -200,6 +202,7 @@ class PeopleViewState extends State<PeopleView> {
     _personsKey = GlobalKey<PeoplePersonsTabState>();
     _apartmentsKey = GlobalKey<PeopleApartmentsTabState>();
     _vehiclesKey = GlobalKey<PeopleVehiclesTabState>();
+    _teamKey = GlobalKey<PeopleTeamTabState>();
   }
 
   void _reloadVisibleTab() {
@@ -210,6 +213,8 @@ class PeopleViewState extends State<PeopleView> {
         unawaited(_apartmentsKey.currentState?.reload() ?? Future<void>.value());
       case 2:
         unawaited(_vehiclesKey.currentState?.reload() ?? Future<void>.value());
+      case 3:
+        unawaited(_teamKey.currentState?.reload() ?? Future<void>.value());
     }
   }
 
@@ -369,20 +374,12 @@ class PeopleViewState extends State<PeopleView> {
             onExport: () => unawaited(_openBulkExport(scope)),
           ),
           const SizedBox(height: AppSpace.md),
-          // Yönetim Kurulu / Denetçi ve Görevli rolleri (yalnız yönetim yetkisi olanda): Modüller ekranındaki
-          // bölümle AYNI bileşen ([StaffRolesSection]) bir pencerede açılır.
+          // Yönetim kadrosu (058): eski "Yönetim Kurulu ve Görevliler" penceresi yerine Kadro sekmesi açılır.
           Align(
             alignment: Alignment.centerLeft,
             child: OutlinedButton.icon(
               key: const ValueKey<String>('people_staff_roles'),
-              onPressed: () => unawaited(
-                StaffRolesDialog.show(
-                  context,
-                  authService: widget.authService,
-                  siteCode: site.code,
-                  siteName: site.name,
-                ),
-              ),
+              onPressed: () => _selectTab(3),
               icon: const Icon(Icons.badge_rounded, size: 18),
               label: const Text('Yönetim Kurulu ve Görevliler'),
             ),
@@ -437,9 +434,15 @@ class PeopleViewState extends State<PeopleView> {
           scope: scope,
           onDataChanged: changed,
         );
-      default:
+      case 2:
         return PeopleVehiclesTab(
           key: _vehiclesKey,
+          scope: scope,
+          onDataChanged: changed,
+        );
+      default:
+        return PeopleTeamTab(
+          key: _teamKey,
           scope: scope,
           onDataChanged: changed,
         );

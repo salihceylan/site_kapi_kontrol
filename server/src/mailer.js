@@ -637,6 +637,32 @@ export function isSmtpConfigured(env = process.env) {
   return filled('SMTP_HOST') && filled('SMTP_USER') && filled('SMTP_PASSWORD') && (filled('SMTP_FROM') || filled('SMTP_USER'));
 }
 
+/**
+ * Kişiyi uygulamaya davet e-postası (058). `acceptUrl` tek kullanımlık belirteç içerir; günlüğe yazılmaz, yöneticiye dönmez.
+ * Bağlantı 7 gün geçerlidir.
+ */
+export async function sendPersonInvitationEmail({ to, fullName, siteName, inviterName, acceptUrl }) {
+  const from = String(process.env.SMTP_FROM || process.env.SMTP_USER || '').trim();
+  if (!from) {
+    throw new Error('SMTP_FROM veya SMTP_USER env degiskeni eksik.');
+  }
+  const transporter = createTransporter();
+  const safeUrl = escapeHtml(safeHttpUrl(acceptUrl));
+  const safeSite = escapeHtml(siteName);
+  const subject = singleLine(`Site ve Toplu Yaşam Yönetim Sistemi - ${withSitesi(siteName)} Uygulama Daveti`);
+  const text = `Merhaba ${fullName || ''}, ${inviterName || 'Site yönetimi'} sizi '${siteName}' sitesinin uygulamasına davet etti. Hesabınızı oluşturmak için bağlantı: ${acceptUrl} (7 gün geçerli, bir kez kullanılabilir.) Daveti beklemiyorsanız bu e-postayı dikkate almayın.`;
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 520px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 14px; background-color: #ffffff;">
+      <h2 style="color: #0f172a; margin: 0 0 12px 0;">Uygulamaya davet</h2>
+      <p style="color: #334155; font-size: 16px;">Merhaba <strong>${escapeHtml(fullName || '')}</strong>,</p>
+      <p style="color: #475569; font-size: 15px; line-height: 1.6;"><strong>${escapeHtml(inviterName || 'Site yönetimi')}</strong>, sizi '<strong>${safeSite}</strong>' sitesinin uygulamasına davet etti.</p>
+      <p style="text-align: center; margin: 28px 0;"><a href="${safeUrl}" style="display: inline-block; padding: 14px 28px; font-weight: bold; color: #ffffff; background: #2563eb; text-decoration: none; border-radius: 10px;">Hesabımı oluştur</a></p>
+      <p style="color: #94a3b8; font-size: 13px;">Bağlantı 7 gün geçerlidir ve yalnızca bir kez kullanılabilir. Daveti beklemiyorsanız bu e-postayı dikkate almayın.</p>
+    </div>
+  `;
+  await transporter.sendMail({ from, to, subject, text, html });
+}
+
 // Tek, düz adres: virgül/noktalı virgül/boşluk/açılı ayraç yok (alıcı listesi enjeksiyonu: "a@x.com, b@y.com" gönderilmez).
 const ANNOUNCEMENT_RECIPIENT_PATTERN = /^[^\s@,;<>"()]+@[^\s@,;<>"()]+\.[^\s@,;<>"()]+$/;
 

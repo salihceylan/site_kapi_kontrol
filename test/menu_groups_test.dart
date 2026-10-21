@@ -29,6 +29,7 @@ const Map<SirketMenuItem, SirketMenuGroup> _expected = <SirketMenuItem, SirketMe
   SirketMenuItem.sozlesmeler: SirketMenuGroup.siteHizmetleri,
   SirketMenuItem.kararDefteri: SirketMenuGroup.siteHizmetleri,
   SirketMenuItem.kararlar: SirketMenuGroup.siteHizmetleri,
+  SirketMenuItem.rehber: SirketMenuGroup.iletisim,
   SirketMenuItem.profilim: SirketMenuGroup.ayarlar,
   SirketMenuItem.ellerSerbest: SirketMenuGroup.ayarlar,
   SirketMenuItem.abonelikTalepleri: SirketMenuGroup.ayarlar,
