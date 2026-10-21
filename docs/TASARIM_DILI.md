@@ -299,8 +299,13 @@ dalgalarda ya da ilgili İP'de):
   - çekmece başlığının rol degradesi (`yan_menu.dart`, `role.tone.gradient`), ana sayfa başlığının rol tonlu yıkaması
     (`home_page.dart`, `flexibleSpace`); `AppTone` degradeleri kapı düğmesinde de kullanıldığından belirteç düzeyinde
     değiştirilemedi;
-  - `home_page.dart` içindeki beş eski onay düğmesi (`ElevatedButton.styleFrom(backgroundColor: Colors.red)`, ön plan
-    yok): açıkta #F8FAFC metin kırmızı üstünde 3,52:1 (paketten önce beyazla 3,68:1, yine eşik altı), koyuda 4,85:1.
+  - çekmecede seçili öğenin hapı (`yan_menu.dart` `_MenuTile`, `tone.tint`) ve sakin alt çubuğunun seçili göstergesi
+    (`resident_bottom_bar.dart`, `indicatorColor: tone.tint(p)`; İP-1D) rol tonunun açık zeminidir (sakinde mor,
+    sakin modundaki yöneticide yeşil); temanın nötr gezinme göstergesi kuralından sapma, ikisi birlikte ele alınmalı.
+  - Dalga 1 tümleştirmesinde düzeltildi: `home_page.dart` içindeki silme onayları (`Colors.red` zemin, açıkta 3,52:1)
+    `filledToneStyle(context, tone: AppTone.danger)` (#E11D48 + beyaz, 4,70:1), cihaz arıza onayı `AppTone.warning`,
+    "Depoya Al" ana eylem rengi; `sade_style_test.dart` kaynak kuralı artık bu dosyayı da kapsar ve ham `Colors.red`
+    zemini yasaklar.
 - Çağrı yerinde mavi kalanlar: `all_users_view.dart` dolu düğmesi (`AppTone.primary.a`); anahtarların (`Switch`) etkin
   rengi (`all_users_view.dart`, `managed_user_card.dart`, `hands_free_settings_dialog.dart`); seçili `ChoiceChip`
   dolguları (`resident_door_remote_card.dart`, `replace_device_dialog.dart`, `site_residents_accordion_dialog.dart`);

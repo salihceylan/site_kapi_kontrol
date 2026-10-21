@@ -334,9 +334,7 @@ void main() {
           .where((f) => f.path.endsWith('.dart'));
       for (final file in files) {
         final path = file.path.replaceAll(r'\', '/');
-        // İP-1D'nin ortak dosyası (plan bölüm 1 madde 9: başka İP satırlarına dokunulmaz). Oradaki beş eski
-        // `backgroundColor: Colors.red` onayı bu paketten önce de beyaz metinle 3,68:1 idi; açık risk olarak raporda.
-        if (path.endsWith('lib/ui/pages/home_page.dart')) continue;
+        // Dalga 1 tümleştirmesi: home_page.dart artık kapsamda (eskiden İP-1D'nin ortak dosyası olduğu için dışarıdaydı).
         final src = file.readAsStringSync();
         for (final m in RegExp(r'\b(?:ElevatedButton|FilledButton)\.styleFrom\(').allMatches(src)) {
           final args = _callArgs(src, m.end - 1);
@@ -349,6 +347,30 @@ void main() {
         }
       }
       expect(offenders, isEmpty, reason: 'zemin ya da ön plan eksik: tema ön planı koyu temada koyu, açıkta kırık beyaz');
+    });
+
+    // Dalga 1 tümleştirmesi: silme onaylarındaki ham `Colors.red` zemin beyaz metinle bile 3,68:1 (eşik 4,5:1); tehlike onayı
+    // `filledToneStyle(context, tone: AppTone.danger)` ile çizilir (#E11D48 + beyaz metin, 4,70:1).
+    test('dolu düğme zemini çağrı yerinde ham Colors.red değil: tehlike onayı AppTone.danger (beyaz metin >= 4,5:1)', () {
+      expect(contrast(Colors.white, Colors.red), lessThan(4.5), reason: 'ham kırmızı üstünde beyaz metin eşik altı');
+      expect(contrast(Colors.white, AppTone.danger.a), greaterThanOrEqualTo(4.5), reason: 'tehlike tonu üstünde beyaz metin');
+      final offenders = <String>[];
+      final files = Directory('lib')
+          .listSync(recursive: true)
+          .whereType<File>()
+          .where((f) => f.path.endsWith('.dart'));
+      for (final file in files) {
+        final path = file.path.replaceAll(r'\', '/');
+        final src = file.readAsStringSync();
+        for (final m in RegExp(r'\b(?:ElevatedButton|FilledButton)\.styleFrom\(').allMatches(src)) {
+          final args = _callArgs(src, m.end - 1);
+          if (RegExp(r'\bbackgroundColor\s*:\s*Colors\.red\b').hasMatch(args)) {
+            final line = '\n'.allMatches(src.substring(0, m.start)).length + 1;
+            offenders.add('$path:$line');
+          }
+        }
+      }
+      expect(offenders, isEmpty, reason: 'ham Colors.red zeminli dolu düğme: filledToneStyle(context, tone: AppTone.danger) kullanın');
     });
   });
 }

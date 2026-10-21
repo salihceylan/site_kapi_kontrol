@@ -63,6 +63,7 @@ import 'package:site_kapi_kontrol/ui/widgets/voice_control_modal.dart';
 import 'package:site_kapi_kontrol/ui/design/theme_toggle_button.dart';
 
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart' show filledToneStyle;
 
 import 'package:site_kapi_kontrol/ui/dialogs/apartment_pin_dialogs.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/apartment_resident_dialog.dart';
@@ -3502,7 +3503,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             child: const Text('İptal'),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            style: filledToneStyle(ctx, tone: AppTone.danger),
             onPressed: () => Navigator.pop(ctx, true),
             child: Text(isSuperUser && !hasManager ? 'Sil' : 'Talebi İlet'),
           ),
@@ -3703,10 +3704,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 child: const Text('Vazgeç'),
               ),
               ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.red,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                style: filledToneStyle(ctx, tone: AppTone.danger).copyWith(
+                  padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: 16, vertical: 10)),
                 ),
                 onPressed: () {
                   final code = codeController.text.trim();
@@ -3784,7 +3783,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             child: const Text('Vazgeç'),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            style: filledToneStyle(ctx, tone: AppTone.danger),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Onayla ve Sil'),
           ),
@@ -4061,7 +4060,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
           ElevatedButton(
 
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            style: filledToneStyle(ctx, tone: AppTone.danger),
 
             onPressed: () => Navigator.pop(ctx, true),
 
@@ -4554,7 +4553,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
           ElevatedButton(
 
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            style: filledToneStyle(ctx, tone: AppTone.danger),
 
             onPressed: () => Navigator.pop(ctx, true),
 
@@ -4629,9 +4628,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('İptal')),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.amber),
+            style: filledToneStyle(ctx, tone: AppTone.warning),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Arızalı İşaretle', style: TextStyle(color: Colors.white)),
+            child: const Text('Arızalı İşaretle'),
           ),
         ],
       ),
@@ -4661,9 +4660,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('İptal')),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF6366F1)),
+            style: filledToneStyle(ctx),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Depoya Al', style: TextStyle(color: Colors.white)),
+            child: const Text('Depoya Al'),
           ),
         ],
       ),
@@ -5036,7 +5035,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
           ElevatedButton(
 
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            style: filledToneStyle(ctx, tone: AppTone.danger),
 
             onPressed: () => Navigator.pop(ctx, true),
 
