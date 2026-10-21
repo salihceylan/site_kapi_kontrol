@@ -162,8 +162,8 @@ class _FinanceReconcileDialogState extends State<FinanceReconcileDialog> with Fi
   Future<void> _recordOnly() async {
     if (writeBlocked) return;
     final difference = _difference ?? 0;
-    final text = 'Mutabakat yalnızca kayıt olarak girilecek: ${formatSignedMinor(difference)} tutarındaki fark DÜZELTİLMEYECEK '
-        've hesap bakiyesi değişmeyecek. Fark raporlarda uyarı olarak görünür. Önce daha yeni tarihli mutabakatın düzeltmesini '
+    final text = 'Banka / kasa kontrolü yalnızca kayıt olarak girilecek: ${formatSignedMinor(difference)} tutarındaki fark DÜZELTİLMEYECEK '
+        've hesap bakiyesi değişmeyecek. Fark raporlarda uyarı olarak görünür. Önce daha yeni tarihli kontrolün düzeltmesini '
         'gözden geçirmek isterseniz vazgeçin.';
     final ok = await confirmCrmAction(
       context,
@@ -224,13 +224,13 @@ class _FinanceReconcileDialogState extends State<FinanceReconcileDialog> with Fi
       onSuccess: (result) {
         final diff = result.reconciliation.differenceMinor;
         final message = diff == 0
-            ? 'Mutabakat kaydedildi: ${widget.account.name} bakiyesi ekstreyle tutuyor.'
+            ? 'Banka / kasa kontrolü kaydedildi: ${widget.account.name} bakiyesi ekstreyle tutuyor.'
             : (result.reconciliation.adjusted
-                  ? 'Mutabakat kaydedildi: fark ${formatSignedMinor(diff)} düzeltme hareketiyle giderildi.'
-                  : 'Mutabakat kaydedildi: fark ${formatSignedMinor(diff)} düzeltilmedi; raporlarda uyarı olarak görünür.');
+                  ? 'Banka / kasa kontrolü kaydedildi: fark ${formatSignedMinor(diff)} düzeltme hareketiyle giderildi.'
+                  : 'Banka / kasa kontrolü kaydedildi: fark ${formatSignedMinor(diff)} düzeltilmedi; raporlarda uyarı olarak görünür.');
         popIfCurrent(context, FinanceWriteOutcome(message));
       },
-      failure: 'Mutabakat kaydedilemedi. İnternet bağlantınızı kontrol edip tekrar deneyin.',
+      failure: 'Banka / kasa kontrolü kaydedilemedi. İnternet bağlantınızı kontrol edip tekrar deneyin.',
       onError: (e) {
         if (hasErrorCode(e, 'RECONCILIATION_ORDER')) {
           // Sunucu iletisi (ya da eşlenen Türkçe metin) gösterilir; "Yalnız kayıt olarak gir" eylemi sunulur.
@@ -266,8 +266,8 @@ class _FinanceReconcileDialogState extends State<FinanceReconcileDialog> with Fi
     final th = Theme.of(context).textTheme;
     final p = context.palette;
     final info = difference == null || difference == 0
-        ? 'Mutabakat yalnızca kayıt olarak girilir.'
-        : 'Mutabakat yalnızca kayıt olarak girilir: ${formatSignedMinor(difference)} tutarındaki fark düzeltilmez ve raporlarda uyarı olarak görünür.';
+        ? 'Banka / kasa kontrolü yalnızca kayıt olarak girilir.'
+        : 'Banka / kasa kontrolü yalnızca kayıt olarak girilir: ${formatSignedMinor(difference)} tutarındaki fark düzeltilmez ve raporlarda uyarı olarak görünür.';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -325,7 +325,7 @@ class _FinanceReconcileDialogState extends State<FinanceReconcileDialog> with Fi
         if (didPop) _notify();
       },
       child: AppDialog(
-        title: 'Mutabakat',
+        title: 'Banka / kasa kontrolü',
         subtitle: widget.account.name,
         icon: Icons.fact_check_rounded,
         actions: [
@@ -336,7 +336,7 @@ class _FinanceReconcileDialogState extends State<FinanceReconcileDialog> with Fi
           ElevatedButton(
             key: const ValueKey<String>('finance_reconcile_submit'),
             onPressed: (writeBlocked || computed == null) ? null : _submit,
-            child: Text(submitting ? 'Kaydediliyor...' : 'Mutabakatı Kaydet'),
+            child: Text(submitting ? 'Kaydediliyor...' : 'Kontrolü Kaydet'),
           ),
         ],
         child: Form(
@@ -482,7 +482,7 @@ class _FinanceReconcileDialogState extends State<FinanceReconcileDialog> with Fi
                 autovalidateMode: AutovalidateMode.onUserInteraction,
                 onChanged: (_) => setState(() {}),
                 decoration: const InputDecoration(
-                  labelText: 'Mutabakat notu (isteğe bağlı)',
+                  labelText: 'Banka / kasa kontrolü notu (isteğe bağlı)',
                   prefixIcon: Icon(Icons.notes_rounded),
                 ),
                 validator: (value) => trimmedCodePoints(value ?? '') > FinanceReconcileDialog.maxNoteLength

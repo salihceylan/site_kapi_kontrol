@@ -111,14 +111,14 @@ class _FinanceSubmitErrorState extends State<FinanceSubmitError> {
   }
 }
 
-/// Son mutabakat özeti: "Son mutabakat 01.10.2026: tutuyor" / "...: fark -5,00 ₺" / "...: fark -5,00 ₺ (düzeltme hareketiyle giderildi)".
+/// Son banka / kasa kontrolü özeti: "Son mutabakat 01.10.2026: tutuyor" / "...: fark -5,00 ₺" / "...: fark -5,00 ₺ (düzeltme hareketiyle giderildi)".
 String reconciliationSummary(LastReconciliation r) {
   final date = formatCrmDate(r.asOfDate);
-  if (r.differenceMinor == 0) return 'Son mutabakat $date: tutuyor';
+  if (r.differenceMinor == 0) return 'Son banka / kasa kontrolü $date: tutuyor';
   final diff = formatMinor(r.differenceMinor);
   return r.adjusted == true
-      ? 'Son mutabakat $date: fark $diff (düzeltme hareketiyle giderildi)'
-      : 'Son mutabakat $date: fark $diff';
+      ? 'Son banka / kasa kontrolü $date: fark $diff (düzeltme hareketiyle giderildi)'
+      : 'Son banka / kasa kontrolü $date: fark $diff';
 }
 
 /// İçinde tutar geçen düz metin: görsel "2.500,00 ₺", ekran okuyucuya "iki bin beş yüz lira" (sayı yığını değil).
@@ -235,7 +235,7 @@ class CashAccountCard extends StatelessWidget {
     final p = context.palette;
     final a = account;
     final reconciliation = a.lastReconciliation;
-    final reconText = reconciliation == null ? 'Henüz mutabakat yapılmadı' : reconciliationSummary(reconciliation);
+    final reconText = reconciliation == null ? 'Henüz banka / kasa kontrolü yapılmadı' : reconciliationSummary(reconciliation);
     final semantic = StringBuffer('${a.kind.label}: ${a.name}. ${a.isActive ? 'Aktif' : 'Pasif'}.');
     semantic.write(' Bakiye: ${moneySemanticLabel(a.balanceMinor)}.');
     if (a.isNegative) semantic.write(' Uyarı: bakiye eksiye düşmüş.');
@@ -322,7 +322,7 @@ class CashAccountCard extends StatelessWidget {
                     key: ValueKey<String>('cash_reconcile_${a.id}'),
                     onPressed: busy ? null : onReconcile,
                     icon: const Icon(Icons.fact_check_rounded, size: 18),
-                    label: const Text('Mutabakat'),
+                    label: const Text('Banka / kasa kontrolü'),
                     style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
                   ),
                 if (onEdit != null)

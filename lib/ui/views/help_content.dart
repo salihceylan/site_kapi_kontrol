@@ -408,7 +408,7 @@ abstract final class HelpContent {
       icon: Icons.receipt_long_rounded,
       steps: <String>[
         'Sitenizde Finans modülü açıksa menünün “Borçlar” başlığında “Borcum” ekranı görünür.',
-        'Bu ekranda daireniz için tahakkuk eden aidat ve diğer borçları ile yapılan ödemeleri görürsünüz.',
+        'Bu ekranda daireniz için yazılan aidat ve diğer borçları ile yapılan ödemeleri görürsünüz.',
         'Her dairenin iki ayrı hesabı vardır: “Ev sahibi hesabı” ve “Kiracı hesabı”. Ekranda yalnız kendi hesabınızın borcu ve '
             'hareketleri görünür; malik ve kiracı borçları birbirine karışmaz.',
         'Borçtan malik ve kiracının birlikte sorumlu olduğu dairede malik, kiracı hesabını da salt okunur olarak görür; bu tutar '
@@ -718,10 +718,20 @@ abstract final class HelpContent {
       title: 'İcra dökümünü ve avukat listesini nasıl hazırlarım?',
       icon: Icons.gavel_rounded,
       steps: <String>[
-        'Finans ekranında “Raporlar” sekmesinden İcra Dökümü seçilir ve borçlu hesapları getiren düğmeye basılır; bugün vadesi geçmiş borcu olan ev sahibi ve kiracı hesapları ayrı ayrı listelenir.',
+        'Finans ekranında “Raporlar” sekmesinden İcra dökümü seçilir ve borçlu hesapları getiren düğmeye basılır; bugün vadesi geçmiş borcu olan ev sahibi ve kiracı hesapları ayrı ayrı listelenir.',
         'Hesaplar işaretlenir; isterseniz kesinleşmiş işletme projesi ya da kurul kararı bilgisi yazılır (boş bırakılırsa PDF’te elle doldurulacak bir alan çıkar).',
         'PDF yazdırma ya da paylaşma düğmesi her hesap için ayrı sayfa üretir: ödenmemiş kalemler vade sırasıyla, varsa gecikme tazminatı ve toplam. Avukat Excel listesi düğmesi seçilen hesapları tek tabloda verir.',
         'Döküm bilgi amaçlıdır; icra takibini başlatmaz. Takipten önce avukata kontrol ettirin.',
+      ],
+    ),
+    HelpTopic(
+      id: 'list_excel',
+      title: 'Listeleri nasıl arar ve Excel’e aktarırım?',
+      icon: Icons.table_chart_rounded,
+      steps: <String>[
+        'Duyurular, iş talepleri, ziyaretçi / kargo, rezervasyonlar, anketler, firmalar, sözleşmeler, kararlar ve belgeler listelerinde arama kutusu ve süzgeçler bulunur.',
+        'Liste başlığındaki tablo simgesi “Excel’e aktar” işlemini açar; dosya, ekranda yüklü ve süzülmüş kayıtlarla hazırlanır. Daha fazla kayıt için önce “Daha fazla” ile listeyi yükleyin.',
+        'Mali raporlar: Aylık özet, Yıllık hesap, Daire ekstresi ve İcra dökümü; borç yazma ve banka / kasa kontrolü de Finans ekranındadır.',
       ],
     ),
     HelpTopic(

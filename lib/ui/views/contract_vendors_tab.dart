@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:site_kapi_kontrol/ui/helpers/list_export.dart';
 import 'package:flutter/services.dart';
 import 'package:site_kapi_kontrol/models/contract_models.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
@@ -352,11 +353,11 @@ class ContractVendorsTabState extends State<ContractVendorsTab>
         const SizedBox(height: AppSpace.md),
         SectionHeader(
           title: 'Firmalar',
-          trailing: IconButton(
+          trailing: Row(mainAxisSize: MainAxisSize.min, children: <Widget>[ListExportButton(enabled: _loader.items.isNotEmpty, source: localExportSource(label: 'Firmalar', filenameBase: 'firmalar', headers: <String>['Firma', 'Kategori', 'Yetkili', 'Telefon', 'E-posta', 'Sözleşme sayısı', 'Durum'], rows: () => <List<Object?>>[for (final f in _loader.items) [f.name, f.category.label, f.contactName, f.phone, f.email, f.contractCount, f.isActive ? 'Aktif' : 'Pasif']])), IconButton(
             onPressed: _loader.loading ? null : reload,
             tooltip: 'Yenile',
             icon: const Icon(Icons.refresh_rounded),
-          ),
+          )]),
         ),
         const SizedBox(height: AppSpace.md),
         CrmListBody<ContractVendor>(

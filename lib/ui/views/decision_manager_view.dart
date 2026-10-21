@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:site_kapi_kontrol/ui/helpers/list_export.dart';
 import 'package:site_kapi_kontrol/models/decision_models.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
@@ -431,11 +432,11 @@ class DecisionManagerViewState extends State<DecisionManagerView> {
           const SizedBox(height: AppSpace.md),
           SectionHeader(
             title: 'Kararlar',
-            trailing: IconButton(
+            trailing: Row(mainAxisSize: MainAxisSize.min, children: <Widget>[ListExportButton(enabled: _loader.items.isNotEmpty, source: localExportSource(label: 'Kararlar', filenameBase: 'kararlar', headers: <String>['Karar no', 'Başlık', 'Toplantı türü', 'Toplantı tarihi', 'Oylama', 'Durum'], rows: () => <List<Object?>>[for (final d in _loader.items) [d.numberLabel ?? d.decisionNo, d.title, d.meetingType.label, exportDate(d.meetingDate), d.voteResult.label, d.status.label]])), IconButton(
               onPressed: _loader.loading ? null : reload,
               tooltip: 'Yenile',
               icon: const Icon(Icons.refresh_rounded),
-            ),
+            )]),
           ),
           const SizedBox(height: AppSpace.md),
           DecisionListBody(

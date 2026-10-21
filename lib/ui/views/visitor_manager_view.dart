@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:site_kapi_kontrol/ui/helpers/list_export.dart';
 import 'package:site_kapi_kontrol/models/visitor_log_models.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
@@ -479,11 +480,11 @@ class VisitorManagerViewState extends State<VisitorManagerView> {
           const SizedBox(height: AppSpace.md),
           SectionHeader(
             title: 'Kayıtlar',
-            trailing: IconButton(
+            trailing: Row(mainAxisSize: MainAxisSize.min, children: <Widget>[ListExportButton(enabled: _loader.items.isNotEmpty, source: localExportSource(label: 'Ziyaretçi ve kargo', filenameBase: 'ziyaretci_kargo', headers: <String>['Tür', 'Ad / firma', 'Blok', 'Daire', 'Durum', 'Geliş', 'Tamamlanma', 'Kaydeden'], rows: () => <List<Object?>>[for (final v in _loader.items) [v.kind.label, v.visitorName, v.blockName, v.apartmentLabel, v.status.label, exportDateTime(v.arrivedAt), exportDateTime(v.completedAt), v.recordedByName]])), IconButton(
               onPressed: _loader.loading ? null : reload,
               tooltip: 'Yenile',
               icon: const Icon(Icons.refresh_rounded),
-            ),
+            )]),
           ),
           const SizedBox(height: AppSpace.md),
           CrmListBody<VisitorEntry>(

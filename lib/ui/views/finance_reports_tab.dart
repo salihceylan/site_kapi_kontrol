@@ -56,13 +56,13 @@ class FinanceReportsTab extends StatefulWidget {
 }
 
 enum FinanceReportKind {
-  aging('aging', 'Yaşlandırma', Icons.hourglass_bottom_rounded),
-  incomeExpense('income_expense', 'Gelir-Gider', Icons.stacked_bar_chart_rounded),
+  aging('aging', 'Gecikmiş borçlar', Icons.hourglass_bottom_rounded),
+  incomeExpense('income_expense', 'Aylık özet', Icons.stacked_bar_chart_rounded),
   cashPosition('cash_position', 'Kasa Durumu', Icons.account_balance_rounded),
-  statement('statement', 'Daire Ekstresi', Icons.receipt_long_rounded),
-  boardSummary('board_summary', 'Kurul Özeti', Icons.groups_rounded),
+  statement('statement', 'Daire ekstresi', Icons.receipt_long_rounded),
+  boardSummary('board_summary', 'Yıllık hesap', Icons.groups_rounded),
   expenseAnalysis('expense_analysis', 'Gider Analizi', Icons.insights_rounded),
-  enforcement('enforcement', 'İcra Dökümü', Icons.gavel_rounded);
+  enforcement('enforcement', 'İcra dökümü', Icons.gavel_rounded);
 
   const FinanceReportKind(this.key, this.label, this.icon);
 
@@ -600,7 +600,7 @@ class _AgingReportViewState extends _ReportState<_AgingReportView, AgingReport> 
   List<ExportSource> _sources() => <ExportSource>[
     financeExportSource(
       scope: scope,
-      label: 'Yaşlandırma',
+      label: 'Gecikmiş borçlar',
       kind: 'finance_aging',
       icon: Icons.hourglass_bottom_rounded,
       query: <String, String>{
@@ -861,7 +861,7 @@ class _IncomeExpenseReportViewState extends _ReportState<_IncomeExpenseReportVie
   List<ExportSource> _sources() => <ExportSource>[
     financeExportSource(
       scope: scope,
-      label: 'Gelir-Gider',
+      label: 'Aylık özet',
       kind: 'finance_income_expense',
       icon: Icons.stacked_bar_chart_rounded,
       query: <String, String>{'from': _appliedFrom!.toApi(), 'to': _appliedTo!.toApi()},
@@ -916,7 +916,7 @@ class _IncomeExpenseReportViewState extends _ReportState<_IncomeExpenseReportVie
               children: [
                 Semantics(header: true, container: true, child: Text('Dönem toplamı', style: th.titleMedium)),
                 const SizedBox(height: AppSpace.sm),
-                FinanceInfoRow(label: 'Tahakkuk', money: report.chargedMinor),
+                FinanceInfoRow(label: 'Yazılan borç', money: report.chargedMinor),
                 FinanceInfoRow(label: 'Tahsilat', money: report.collectedMinor),
                 FinanceInfoRow(label: 'Gider', money: report.expenseMinor),
                 FinanceInfoRow(label: 'Net nakit', money: report.netCashMinor, emphasize: true),
@@ -973,7 +973,7 @@ class _MonthCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: AppSpace.xs),
-          FinanceInfoRow(label: 'Tahakkuk', money: m.chargedMinor),
+          FinanceInfoRow(label: 'Yazılan borç', money: m.chargedMinor),
           if (m.lateFeeMinor != 0) FinanceInfoRow(label: 'Gecikme tazminatı', money: m.lateFeeMinor),
           FinanceInfoRow(label: 'Tahsilat', money: m.collectedMinor),
           FinanceInfoRow(label: 'Tahsilat oranı', value: percentOrDash(m.collectionRateBp)),
@@ -1546,7 +1546,7 @@ class _StatementReportViewState extends _ReportState<_StatementReportView, Apart
     return <ExportSource>[
       financeExportSource(
         scope: scope,
-        label: 'Daire Ekstresi',
+        label: 'Daire ekstresi',
         kind: 'finance_statement',
         icon: Icons.receipt_long_rounded,
         query: <String, String>{
@@ -1848,8 +1848,8 @@ class _BoardSummaryReportViewState extends _ReportState<_BoardSummaryReportView,
     final th = Theme.of(context).textTheme;
     return <Widget>[
       if (r.chargedMinor != null || r.collectedMinor != null)
-        _section(context, 'collection', 'Tahakkuk ve tahsilat', Icons.payments_rounded, [
-          if (r.chargedMinor != null) FinanceInfoRow(label: 'Tahakkuk', money: r.chargedMinor),
+        _section(context, 'collection', 'Yazılan borç ve tahsilat', Icons.payments_rounded, [
+          if (r.chargedMinor != null) FinanceInfoRow(label: 'Yazılan borç', money: r.chargedMinor),
           if (r.lateFeeMinor != null) FinanceInfoRow(label: 'Gecikme tazminatı', money: r.lateFeeMinor),
           if (r.collectedMinor != null) FinanceInfoRow(label: 'Tahsilat', money: r.collectedMinor),
           if (r.collectionRateBp != null) FinanceInfoRow(label: 'Tahsilat oranı', value: percentOrDash(r.collectionRateBp)),
@@ -1890,7 +1890,7 @@ class _BoardSummaryReportViewState extends _ReportState<_BoardSummaryReportView,
               Padding(
                 padding: const EdgeInsets.only(bottom: 2),
                 child: FinanceSpokenText(
-                  'Son mutabakat farkı ${formatMinor(a.lastReconciliation!.differenceMinor)}',
+                  'Son banka / kasa kontrolü farkı ${formatMinor(a.lastReconciliation!.differenceMinor)}',
                   style: th.bodySmall?.copyWith(color: AppTone.warning.ink(context.palette), fontWeight: FontWeight.w700),
                 ),
               ),

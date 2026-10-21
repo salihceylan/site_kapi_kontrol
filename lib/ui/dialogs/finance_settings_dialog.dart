@@ -534,7 +534,7 @@ class _FinanceSettingsDialogState extends State<FinanceSettingsDialog> with Fina
           Text(
             locked
                 ? 'Aktif bir tazminat çalıştırması var; başlangıç ayı değiştirilemez.'
-                : 'Geçmişe yönelik sürpriz tahakkuk olmaması için zorunludur; bu aydan önceki aylar hesaplanmaz.',
+                : 'Geçmişe yönelik sürpriz borç yazılmaması için zorunludur; bu aydan önceki aylar hesaplanmaz.',
             style: th.bodySmall?.copyWith(color: p.textSecondary),
           ),
           if (_startError != null)

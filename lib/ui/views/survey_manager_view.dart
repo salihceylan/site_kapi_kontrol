@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:site_kapi_kontrol/ui/helpers/list_export.dart';
 import 'package:site_kapi_kontrol/models/survey_models.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
@@ -97,6 +98,11 @@ class SurveyManagerViewState extends State<SurveyManagerView> {
     ++_listToken;
     super.dispose();
   }
+
+  String _localQuery = '';
+
+  bool _matchesQuery(SurveySummary i) =>
+      _localQuery.isEmpty || i.title.toLowerCase().contains(_localQuery);
 
   SurveySite? get _site {
     final code = _siteCode;
@@ -320,6 +326,12 @@ class SurveyManagerViewState extends State<SurveyManagerView> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                TextField(
+                  key: const ValueKey<String>('svm_search'),
+                  onChanged: (v) => setState(() => _localQuery = v.trim().toLowerCase()),
+                  decoration: const InputDecoration(labelText: 'Anket ara', prefixIcon: Icon(Icons.search_rounded)),
+                ),
+                const SizedBox(height: AppSpace.md),
                 Text('Durum', style: th.titleSmall),
                 const SizedBox(height: AppSpace.sm),
                 Wrap(
@@ -350,11 +362,11 @@ class SurveyManagerViewState extends State<SurveyManagerView> {
           ],
           SectionHeader(
             title: _loadedOnce ? 'Anketler ($_total)' : 'Anketler',
-            trailing: IconButton(
+            trailing: Row(mainAxisSize: MainAxisSize.min, children: <Widget>[ListExportButton(enabled: _items.isNotEmpty, source: localExportSource(label: 'Anket sonuçları', filenameBase: 'anket_sonuclari', headers: <String>['Anket', 'Durum', 'Verilen oy', 'Oy hakkı olan', 'Açılış', 'Kapanış', 'Oluşturan'], rows: () => <List<Object?>>[for (final s in _items) [s.title, s.effectiveStatus.label, s.totalVotes, s.eligibleCount, exportDate(s.openedAt), exportDate(s.closedAt ?? s.closesAt), s.createdByName]])), IconButton(
               onPressed: _loading ? null : () => unawaited(_load()),
               tooltip: 'Yenile',
               icon: const Icon(Icons.refresh_rounded),
-            ),
+            )]),
           ),
           const SizedBox(height: AppSpace.md),
           if (_loading && !_loadedOnce)
@@ -380,7 +392,7 @@ class SurveyManagerViewState extends State<SurveyManagerView> {
             )
           else ...[
             if (error != null) ...[InlineNotice(message: error, tone: AppTone.danger), const SizedBox(height: AppSpace.md)],
-            for (final item in _items) ...[
+            for (final item in _items.where(_matchesQuery)) ...[
               SurveyManagedCard(
                 key: ValueKey<String>('svm_card_${item.id}'),
                 item: item,

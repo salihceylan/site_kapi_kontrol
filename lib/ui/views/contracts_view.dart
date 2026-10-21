@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:site_kapi_kontrol/ui/helpers/list_export.dart';
 import 'package:site_kapi_kontrol/models/contract_models.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
@@ -597,11 +598,11 @@ class ContractListTabState extends State<ContractListTab> implements ContractRel
         const SizedBox(height: AppSpace.md),
         SectionHeader(
           title: state == null ? 'Tüm sözleşmeler' : contractSummaryLabel(state),
-          trailing: IconButton(
+          trailing: Row(mainAxisSize: MainAxisSize.min, children: <Widget>[ListExportButton(enabled: _loader.items.isNotEmpty, source: localExportSource(label: 'Sözleşmeler', filenameBase: 'sozlesmeler', headers: <String>['Sözleşme', 'Firma', 'Kategori', 'Durum', 'Başlangıç', 'Bitiş', 'Tutar (kuruş)', 'Kalan gün'], rows: () => <List<Object?>>[for (final k in _loader.items) [k.title, k.vendorName, k.category.label, k.state.label, exportDate(k.startDate), exportDate(k.endDate), k.amountMinor, k.daysLeft]])), IconButton(
             onPressed: _loader.loading ? null : reload,
             tooltip: 'Yenile',
             icon: const Icon(Icons.refresh_rounded),
-          ),
+          )]),
         ),
         const SizedBox(height: AppSpace.md),
         CursorListBody<Contract>(

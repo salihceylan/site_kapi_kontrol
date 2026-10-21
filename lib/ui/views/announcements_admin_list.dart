@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:site_kapi_kontrol/ui/helpers/list_export.dart';
 import 'package:site_kapi_kontrol/models/announcement.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_snack.dart';
@@ -212,11 +213,11 @@ class AnnouncementsAdminListState extends State<AnnouncementsAdminList> {
         SectionHeader(
           title: 'Duyurular',
           count: _loader.loadedOnce ? _loader.total : null,
-          trailing: IconButton(
+          trailing: Row(mainAxisSize: MainAxisSize.min, children: <Widget>[ListExportButton(enabled: _loader.items.isNotEmpty, source: localExportSource(label: 'Duyurular', filenameBase: 'duyurular', headers: <String>['Başlık', 'Durum', 'Yayın tarihi', 'Alıcı sayısı', 'Okuyan sayısı', 'Oluşturan'], rows: () => <List<Object?>>[for (final a in _loader.items) [a.title, a.status.label, exportDate(a.publishedAt ?? a.publishAt), a.recipientCount, a.readCount, a.createdByName]])), IconButton(
             onPressed: _loader.loading ? null : reload,
             tooltip: 'Yenile',
             icon: const Icon(Icons.refresh_rounded),
-          ),
+          )]),
         ),
         const SizedBox(height: AppSpace.md),
         CrmListBody<AnnouncementSummary>(
