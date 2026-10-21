@@ -61,6 +61,7 @@ import { buildExportEnvelope, exportFormatOf, recordExportAudit } from './financ
 import { enforcementReport } from './finance_enforcement.js';
 import { agingReport, boardSummaryReport, cashPositionReport, incomeExpenseReport, myStatement, statementReport } from './finance_reports.js';
 import { expenseAnalysisReport } from './finance_expense_analysis.js';
+import { financeChartsReport } from './finance_charts.js';
 import { getNatureSuggestion, setExpenseNature } from './finance_expense_nature.js';
 import { kickFinanceReminderQueue } from './finance_reminder_queue.js';
 import { addExclusion, cancelReminderRun, getReminderRun, listExclusions, listReminderRuns, previewReminders, removeExclusion, sendReminders } from './finance_reminders.js';
@@ -468,6 +469,7 @@ reportRoute(`${BASE}/reports/expense-analysis`, 'finance_report_expense_analysis
 reportRoute(`${BASE}/reports/income-expense`, 'finance_report_income_expense', 'Rapor hazırlanamadı.', { audit: 'income-expense' }, async ({ req, access }) => incomeExpenseReport(access.siteCode, req.query));
 reportRoute(`${BASE}/reports/enforcement`, 'finance_report_enforcement', 'İcra dökümü hazırlanamadı.', { managerOnly: true }, async ({ req, access }) => enforcementReport(access.siteCode, req.query));
 reportRoute(`${BASE}/reports/cash-position`, 'finance_report_cash', 'Rapor hazırlanamadı.', {}, async ({ req, access }) => cashPositionReport(access.siteCode, req.query));
+reportRoute(`${BASE}/reports/charts`, 'finance_report_charts', 'Grafikler hazırlanamadı.', {}, async ({ req, access }) => financeChartsReport(access.siteCode, req.query));
 reportRoute(`${BASE}/reports/board-summary`, 'finance_report_board', 'Rapor hazırlanamadı.', { audit: 'board-summary' }, async ({ req, access }) =>
   boardSummaryReport(access.siteCode, req.query, { canListDebtors: canSeeManagerFields(access), actor: req.authUser }),
 );

@@ -5630,7 +5630,7 @@
       "id": "F30",
       "baslik": "Dalga 2: para akışı, yönetici ana sayfası, duyuru ve kadro",
       "durum": "hazir",
-      "ozet": "Dalga 2'nin temel yapısı (A aşaması) hazır: banka IBAN'ı ve sakinin \"Öde\" sayfası, devir bakiyesi ve tek dosyada toplu yükleme, gider analizi ve tahmin, yöneticinin \"Bu ay\" ana sayfası ve istediği ayı kapatma, okunmamış duyuru kartı ve duyuruyu listeden kaldırma, yönetim kadrosu / uygulamaya davet / Rehber, hesap silme engelleri. Dekont bildirimi (geçici kabul) ve banka dosyasından tahsilat da hazır.",
+      "ozet": "Dalga 2'nin temel yapısı (A aşaması) hazır: banka IBAN'ı ve sakinin \"Öde\" sayfası, devir bakiyesi ve tek dosyada toplu yükleme, gider analizi ve tahmin, istediği ayı kapatma, okunmamış duyuru kartı ve duyuruyu listeden kaldırma, yönetim kadrosu / uygulamaya davet / Rehber, hesap silme engelleri. Dekont bildirimi (geçici kabul) ve banka dosyasından tahsilat da hazır. Yöneticinin \"Bu ay\" ana sayfası kullanıcı isteğiyle kaldırıldı (2026-10-21); yerine Finans > Grafikler geldi.",
       "maddeler": [
         {
           "id": "F30.01",
@@ -5867,7 +5867,7 @@
           "adimlar": [
             "Finans modülü açık sitede yönetici olarak ana sayfayı açın."
           ],
-          "beklenen": "Üstte 'Bu ay · <ay yıl>' başlığı, dört kart (Yazılan, Toplanan, Geciken daire, Kasa + banka), Aylık döngü ve Son hareketler görünür.",
+          "beklenen": "Kaldırıldı (2026-10-21, kullanıcı isteği). Yöneticinin Panel'inde 'Bu ay' bölümü artık yoktur; yerine F30.55 ve F30.56 maddelerine bakın.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
           "yeni": true,
@@ -5879,7 +5879,7 @@
           "adimlar": [
             "Kasa/banka hesabı tanımsız bir sitede ana sayfaya bakın."
           ],
-          "beklenen": "Kasa kartında 0 değil 'Hesap yok' yazar.",
+          "beklenen": "Kaldırıldı (2026-10-21, kullanıcı isteği). Yöneticinin Panel'inde 'Bu ay' bölümü artık yoktur; yerine F30.55 ve F30.56 maddelerine bakın.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
           "yeni": true,
@@ -5903,7 +5903,7 @@
           "adimlar": [
             "Aylık döngüde yapılmamış ilk adıma bakın ve düğmeye dokunun."
           ],
-          "beklenen": "Yalnız ilk yapılmamış adımda düğme vardır; dokununca ilgili finans sekmesi açılır.",
+          "beklenen": "Kaldırıldı (2026-10-21, kullanıcı isteği). Yöneticinin Panel'inde 'Bu ay' bölümü artık yoktur; yerine F30.55 ve F30.56 maddelerine bakın.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
           "yeni": true,
@@ -6315,6 +6315,34 @@
           "beklenen": "O dosyadan işlenen tahsilatlar ters kayıtla iptal olur, makbuzlar iptal edilir, yüklemede 'geri alındı' yazar. Gelir/gider ayrılmış satır varsa önce onları geri almanız istenir.",
           "rol_notu": "yönetici",
           "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F30.55",
+          "baslik": "Panel'de 'Bu ay' bölümü yok",
+          "adimlar": [
+            "Finans modülü açık bir sitede yönetici olarak ana sayfayı (Panel) açın.",
+            "Önce hesaba eşlenmemiş tahsilatı olmayan, sonra olan bir sitede Panel'e bakın."
+          ],
+          "beklenen": "'Bu ay' başlığı, dört sayı kartı (Yazılan, Toplanan, Geciken daire, Kasa + banka), 'Aylık döngü' tablosu ve 'Son hareketler' hiçbir durumda görünmez. Bekleyen iş yoksa bu alanda hiçbir şey çizilmez (boşluk bile kalmaz). Hesaba eşlenmemiş tahsilat gibi bekleyen iş varsa yalnız koyu 'Dikkat edilmesi gereken N iş var' barı görünür; 'Eşle' Finans > Kasa sekmesini açar.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Finans modülü açık olmalı.",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F30.56",
+          "baslik": "Finans > Grafikler",
+          "adimlar": [
+            "Finans menüsünü açın ve 'Grafikler' sekmesine dokunun (sekme çubuğunda Raporlar'ın hemen yanındadır).",
+            "Beş grafiği yukarıdan aşağı gezin: Aylık gelir ve gider, Aidat tahsilatı, Kasa ve banka bakiyesi, Gider kategorileri, Geciken borçlar.",
+            "Bir grafiğin altındaki 'Tablo olarak göster' anahtarını açın, sonra kapatın.",
+            "Hiç kaydı olmayan (yeni) bir sitede ve bir yönetim kurulu hesabıyla da sekmeye bakın."
+          ],
+          "beklenen": "Son 12 ayın grafikleri açılır. Aylık gelir ve gider: her ay tahsilat ve gider çubukları. Aidat tahsilatı: her ay yazılan borç ile toplanan tutar çubukları ve altında toplanma yüzdesi çizgisi. Kasa ve banka bakiyesi: ay sonu toplam para çizgisi (hesap eklenmeden önceki aylar boş kalır). Gider kategorileri: son 12 ayın harcama dağılımı. Geciken borçlar: 0-30, 31-60, 61-90 ve 90 günden fazla gecikmeye göre dağılım. Her kartta yöneticinin diliyle kısa bir açıklama bulunur; tablo anahtarı grafiğin yerine aynı rakamları aylık tablo olarak gösterir. Kaydı olmayan grafikte 'Bu dönemde kayıt yok' yazar; veri alınamazsa bunun yerine hata kutusu ve 'Tekrar Dene' çıkar. Küçük ekranda ve büyük yazıda taşma olmaz. Yönetim kurulu da aynı grafikleri görür. Rakamlar Raporlar'daki Aylık özet ve Kasa Durumu ile tutar.",
+          "rol_notu": "Site yöneticisi ve yönetim kurulu",
+          "on_kosul": "Finans modülü açık olmalı.",
           "yeni": true,
           "gelistirme": "hazir"
         }

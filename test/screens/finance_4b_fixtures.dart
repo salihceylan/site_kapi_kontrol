@@ -14,6 +14,7 @@ import 'package:site_kapi_kontrol/models/cash_models.dart';
 import 'package:site_kapi_kontrol/models/expense_models.dart';
 import 'package:site_kapi_kontrol/models/finance.dart';
 import 'package:site_kapi_kontrol/models/finance_4b.dart';
+import 'package:site_kapi_kontrol/models/finance_charts.dart';
 import 'package:site_kapi_kontrol/models/late_fee_models.dart';
 import 'package:site_kapi_kontrol/models/receipt_models.dart';
 import 'package:site_kapi_kontrol/models/reminder_models.dart';
@@ -1374,6 +1375,7 @@ class FakeFinance4bApi extends Finance4bApi {
   Map<String, dynamic> agingJson = f4AgingJson();
   Map<String, dynamic> incomeExpenseJson = f4IncomeExpenseJson();
   Map<String, dynamic> cashPositionJson = f4CashPositionJson();
+  Map<String, dynamic> chartsJson = f4ChartsJson();
   Map<String, dynamic> statementJson = f4StatementJson();
   Map<String, dynamic> boardJson = f4BoardJson();
   Object? reportError;
@@ -1425,6 +1427,11 @@ class FakeFinance4bApi extends Finance4bApi {
     return _report('getIncomeExpenseReport', <String, Object?>{'from': from.toApi(), 'to': to.toApi()}, () {
       return IncomeExpenseReport.fromJson(<String, dynamic>{...incomeExpenseJson, 'from': from.toApi(), 'to': to.toApi()});
     });
+  }
+
+  @override
+  Future<FinanceCharts> getFinanceCharts({required String token, required int siteCode, int months = 12}) {
+    return _report('getFinanceCharts', <String, Object?>{'months': months}, () => FinanceCharts.fromJson(chartsJson));
   }
 
   @override
@@ -2014,6 +2021,62 @@ Map<String, dynamic> f4IncomeExpenseJson({String? closedThrough = '2026-09'}) =>
     },
   ],
 };
+
+/// Finans > Grafikler yanıtı: 12 ay (2025-11 .. 2026-10). [empty] true: hiç kayıt yok (hesap yok, borç yok).
+Map<String, dynamic> f4ChartsJson({bool empty = false}) {
+  const periods = <String>[
+    '2025-11', '2025-12', '2026-01', '2026-02', '2026-03', '2026-04', '2026-05', '2026-06', '2026-07', '2026-08', '2026-09', '2026-10', //
+  ];
+  return <String, dynamic>{
+    'site': <String, dynamic>{'name': 'Gül Sitesi'},
+    'generated_at': '2026-10-21T09:00:00Z',
+    'closed_through': '2026-09',
+    'currency': 'TRY',
+    'from': periods.first,
+    'to': periods.last,
+    'months': <Map<String, dynamic>>[
+      for (final (i, period) in periods.indexed)
+        <String, dynamic>{
+          'period': period,
+          'charged_minor': empty ? 0 : (i < 11 ? 1000000 + i * 10000 : 0),
+          'late_fee_minor': empty ? 0 : (i == 9 ? 20000 : 0),
+          'collected_minor': empty ? 0 : (i < 11 ? 800000 + i * 20000 : 50000),
+          'expense_minor': empty ? 0 : (i % 3 == 0 ? 300000 : 150000),
+          'collection_rate_bp': empty || i == 11 ? null : 8000 + i * 100,
+          'cash_balance_minor': empty || i < 2 ? null : 1000000 + i * 100000,
+          'cash_account_count': empty || i < 2 ? 0 : 2,
+        },
+    ],
+    'totals': <String, dynamic>{
+      'charged_minor': empty ? 0 : 11550000,
+      'late_fee_minor': empty ? 0 : 20000,
+      'collected_minor': empty ? 0 : 9950000,
+      'expense_minor': empty ? 0 : 2400000,
+      'collection_rate_bp': empty ? null : 8600,
+    },
+    'expense_by_category': empty
+        ? <Map<String, dynamic>>[]
+        : <Map<String, dynamic>>[
+            <String, dynamic>{'category_name': 'Elektrik', 'total_minor': 900000},
+            <String, dynamic>{'category_name': 'Asansör bakım', 'total_minor': 700000},
+            <String, dynamic>{'category_name': 'Temizlik', 'total_minor': 500000},
+            <String, dynamic>{'category_name': 'Su', 'total_minor': 200000},
+            <String, dynamic>{'category_name': 'Bahçe', 'total_minor': 100000},
+            <String, dynamic>{'category_name': 'Sigorta', 'total_minor': 60000},
+            <String, dynamic>{'category_name': 'Küçük onarım', 'total_minor': 30000},
+            <String, dynamic>{'category_name': 'Kırtasiye', 'total_minor': 10000},
+          ],
+    'aging': <String, dynamic>{
+      'as_of': '2026-10-21',
+      'd0_30_minor': empty ? 0 : 400000,
+      'd31_60_minor': empty ? 0 : 250000,
+      'd61_90_minor': empty ? 0 : 100000,
+      'd91_plus_minor': empty ? 0 : 50000,
+      'total_overdue_minor': empty ? 0 : 800000,
+      'debtor_count': empty ? 0 : 6,
+    },
+  };
+}
 
 Map<String, dynamic> f4CashPositionJson({int unassignedCount = 0}) => <String, dynamic>{
   'site': <String, dynamic>{'name': 'Gül Sitesi'},

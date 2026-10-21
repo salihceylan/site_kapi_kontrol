@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
 import 'package:site_kapi_kontrol/ui/views/finance_cash_tab.dart';
+import 'package:site_kapi_kontrol/ui/views/finance_charts_tab.dart';
 import 'package:site_kapi_kontrol/ui/views/finance_expenses_tab.dart';
 import 'package:site_kapi_kontrol/ui/views/finance_reports_tab.dart';
 import 'package:site_kapi_kontrol/ui/views/finance_view.dart';
@@ -91,6 +92,25 @@ void main() {
       expect(auth.f4.callCount('listExpenses'), greaterThan(0));
       await _tab(t, 5);
       expect(find.byType(FinanceReportsTab), findsOneWidget);
+    });
+
+    testWidgets('Grafikler sekmesi Raporlar sekmesinin yanında; tembel kurulur, tek uçtan 12 ay çeker, kurul da görür', (t) async {
+      for (final sites in <List<PeopleSite>>[_manage, _board]) {
+        final auth = _auth();
+        await _pump(t, auth, sites: sites);
+        final chips = find.byType(ChoiceChip).evaluate().map((e) => ((e.widget as ChoiceChip).label as Text).data).toList();
+        expect(chips.indexOf('Grafikler'), chips.indexOf('Raporlar') + 1, reason: 'çubukta Raporlar sekmesinin hemen yanında');
+        expect(find.byType(FinanceChartsTab), findsNothing);
+        expect(auth.f4.callCount('getFinanceCharts'), 0, reason: 'sekmeye girmeden istek atılmaz');
+        await _tab(t, 7);
+        expect(find.byType(FinanceChartsTab), findsOneWidget);
+        expect(auth.f4.callCount('getFinanceCharts'), 1);
+        expect(find.text('Aylık gelir ve gider'), findsOneWidget);
+        expect(find.byKey(const ValueKey<String>('finance_chart_card_aging')), findsOneWidget);
+        await _tab(t, 6);
+        await _tab(t, 7);
+        expect(auth.f4.callCount('getFinanceCharts'), 1, reason: 'bayat değilse yeniden çekilmez');
+      }
     });
 
     testWidgets('kurul: Finans Ayarları ve yazma düğmeleri yok; Kasa ve Raporlar okunur', (t) async {

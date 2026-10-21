@@ -60,7 +60,7 @@ import 'package:site_kapi_kontrol/styles/role_theme.dart';
 
 import 'package:site_kapi_kontrol/ui/design/page_transitions.dart';
 import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
-import 'package:site_kapi_kontrol/ui/widgets/manager_month_panel.dart';
+import 'package:site_kapi_kontrol/ui/widgets/manager_attention_bar.dart';
 import 'package:site_kapi_kontrol/ui/widgets/resident_door_actions.dart';
 import 'package:site_kapi_kontrol/ui/widgets/voice_control_modal.dart';
 import 'package:site_kapi_kontrol/ui/design/theme_toggle_button.dart';
@@ -1476,15 +1476,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     ];
   }
 
-  // G5: "Bu ay" paneli yalnız site yöneticisi kitlesinde ve yazma yetkili, finans modülü açık siteler varken (fail-closed).
+  // Yönetici dikkat barı (eski "Bu ay" paneli kaldırıldı, 2026-10-21): yalnız site yöneticisi kitlesinde ve yazma yetkili,
+  // finans modülü açık siteler varken; bekleyen iş yoksa hiçbir şey çizilmez (fail-closed).
   int? _financeInitialSite;
   int? _financeInitialTab;
 
-  Widget? _monthPanelFor(UserSession session, ShowcaseAudience audience) {
+  Widget? _attentionBarFor(UserSession session, ShowcaseAudience audience) {
     if (audience != ShowcaseAudience.admin || session.role == UserRole.superUser) return null;
     final sites = _financeSites(session.role).where((s) => s.canWrite).toList(growable: false);
     if (sites.isEmpty) return null;
-    return ManagerMonthPanel(
+    return ManagerAttentionBar(
       sites: sites,
       fetch: widget.authService.getFinanceHome,
       onOpenFinance: (siteCode, tab) {
@@ -1492,7 +1493,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         _financeInitialTab = tab;
         _goToMenu(SirketMenuItem.finans);
       },
-      onOpenAnnouncements: _canAccessAnnouncements(session.role) ? () => _goToMenu(SirketMenuItem.duyurular) : null,
     );
   }
 
@@ -6318,7 +6318,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       debtSiteCodes: resident ? _debtSiteCodes() : null,
       quickActionItems: resident ? _quickActionItems() : null,
       onCreateGuestPass: resident ? _guestPassAction(session) : null,
-      monthPanel: _monthPanelFor(session, audience),
+      attentionBar: _attentionBarFor(session, audience),
     );
     if (!embedIndividualHome) return showcase;
     return Column(

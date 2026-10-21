@@ -23,6 +23,7 @@ import 'package:site_kapi_kontrol/models/enforcement_models.dart';
 import 'package:site_kapi_kontrol/models/expense_models.dart';
 import 'package:site_kapi_kontrol/models/finance.dart';
 import 'package:site_kapi_kontrol/models/finance_4b.dart';
+import 'package:site_kapi_kontrol/models/finance_charts.dart';
 import 'package:site_kapi_kontrol/models/late_fee_models.dart';
 import 'package:site_kapi_kontrol/models/receipt_models.dart';
 import 'package:site_kapi_kontrol/models/reminder_models.dart';
@@ -957,6 +958,19 @@ class Finance4bApi {
       timeout: const Duration(seconds: 40),
     );
     return _parse('Gelir-gider raporu', () => IncomeExpenseReport.fromJson(r.body));
+  }
+
+  /// Finans > Grafikler: son [months] ay (varsayılan 12) için aylık gelir-gider, aidat tahsilatı, kasa + banka seyri,
+  /// gider kategorileri ve geciken borç yaşlandırması. Salt okunur; kurul da okur.
+  Future<FinanceCharts> getFinanceCharts({required String token, required int siteCode, int months = 12}) async {
+    final r = await _send(
+      'GET',
+      _site(siteCode, 'reports/charts'),
+      token: token,
+      query: <String, String>{'months': '$months'},
+      timeout: const Duration(seconds: 40),
+    );
+    return _parse('Grafik', () => FinanceCharts.fromJson(r.body));
   }
 
   /// Gider analizi ve tahmin (R1). [increaseBp] null ise sunucu kurallar tablosundaki varsayılanı kullanır.

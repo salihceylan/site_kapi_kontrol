@@ -18,6 +18,7 @@ import 'package:site_kapi_kontrol/ui/helpers/finance_errors.dart';
 import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
 import 'package:site_kapi_kontrol/ui/views/finance_balances_tab.dart';
 import 'package:site_kapi_kontrol/ui/views/finance_cash_tab.dart';
+import 'package:site_kapi_kontrol/ui/views/finance_charts_tab.dart';
 import 'package:site_kapi_kontrol/ui/views/finance_definitions_tab.dart';
 import 'package:site_kapi_kontrol/ui/views/finance_expenses_tab.dart';
 import 'package:site_kapi_kontrol/ui/views/finance_late_fee_section.dart';
@@ -30,8 +31,8 @@ import 'package:site_kapi_kontrol/ui/widgets/finance_settings_controller.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 
 /// Yönetici "Finans" ekranı (Platform Faz 4a, `finance` modülü): site seçici, mali özet kartı, eylemler
-/// (Tahsilat Ekle, Ek Borç Ekle, Finans Ayarları) ve altı sekme (Daireler | Tanımlar | Dönemler | Kasa | Giderler |
-/// Raporlar). Faz 4b: Daireler sekmesinin üstünde borç hatırlatma kartı, Dönemler sekmesinde gecikme tazminatı bölümü;
+/// (Tahsilat Ekle, Ek Borç Ekle, Finans Ayarları) ve sekmeler (Daireler | Tanımlar | Dönemler | Kasa | Giderler |
+/// Raporlar | Grafikler | Dekontlar). Faz 4b: Daireler sekmesinin üstünde borç hatırlatma kartı, Dönemler sekmesinde gecikme tazminatı bölümü;
 /// tazminat ve hatırlatma yalnız sistem bayrağı (`legal_ok`) VE site ayarı açıkken kullanılır, aksi halde nedenini
 /// açıklayan pasif kart gösterilir.
 ///
@@ -92,7 +93,12 @@ class FinanceViewState extends State<FinanceView> {
     ('Giderler', Icons.shopping_cart_checkout_rounded),
     ('Raporlar', Icons.insights_rounded),
     ('Dekontlar', Icons.receipt_long_rounded),
+    ('Grafikler', Icons.show_chart_rounded),
   ];
+
+  /// Sekme kimlikleri (anahtar `finance_tab_<kimlik>`, `initialTab`, bayatlama) sabit kalır; "Grafikler" (7) çubukta
+  /// "Raporlar"ın hemen yanında görünür.
+  static const List<int> _tabOrder = <int>[0, 1, 2, 3, 4, 5, 7, 6];
 
   List<PeopleSite> _sites = const <PeopleSite>[];
   int? _siteCode;
@@ -112,6 +118,7 @@ class FinanceViewState extends State<FinanceView> {
   GlobalKey<FinanceCashTabState> _cashKey = GlobalKey<FinanceCashTabState>();
   GlobalKey<FinanceExpensesTabState> _expensesKey = GlobalKey<FinanceExpensesTabState>();
   GlobalKey<FinanceReportsTabState> _reportsKey = GlobalKey<FinanceReportsTabState>();
+  GlobalKey<FinanceChartsTabState> _chartsKey = GlobalKey<FinanceChartsTabState>();
   GlobalKey<PaymentNoticesViewState> _noticesKey = GlobalKey<PaymentNoticesViewState>();
 
   // Dekont bildirimi (2B): bekleyen dekont sayısı ("Dekontlar" sekmesi rozeti).
@@ -258,6 +265,7 @@ class FinanceViewState extends State<FinanceView> {
     _cashKey = GlobalKey<FinanceCashTabState>();
     _expensesKey = GlobalKey<FinanceExpensesTabState>();
     _reportsKey = GlobalKey<FinanceReportsTabState>();
+    _chartsKey = GlobalKey<FinanceChartsTabState>();
     _noticesKey = GlobalKey<PaymentNoticesViewState>();
     _noticeCount = 0;
     ++_summaryToken;
@@ -337,6 +345,8 @@ class FinanceViewState extends State<FinanceView> {
         unawaited(_reportsKey.currentState?.reload() ?? Future<void>.value());
       case 6:
         unawaited(_noticesKey.currentState?.reload() ?? Future<void>.value());
+      case 7:
+        unawaited(_chartsKey.currentState?.reload() ?? Future<void>.value());
     }
   }
 
@@ -600,7 +610,7 @@ class FinanceViewState extends State<FinanceView> {
               spacing: AppSpace.sm,
               runSpacing: AppSpace.sm,
               children: [
-                for (var i = 0; i < _tabs.length; i++)
+                for (final i in _tabOrder)
                   MergeSemantics(
                     child: Semantics(
                       role: SemanticsRole.tab,
@@ -754,6 +764,9 @@ class FinanceViewState extends State<FinanceView> {
               if (mounted && count != _noticeCount) setState(() => _noticeCount = count);
             },
           );
+        }
+        if (index == 7) {
+          return FinanceChartsTab(key: _chartsKey, scope: scope);
         }
         return FinanceReportsTab(key: _reportsKey, scope: scope, now: widget.now);
     }
