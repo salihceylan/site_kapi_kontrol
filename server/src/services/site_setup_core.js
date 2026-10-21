@@ -19,6 +19,7 @@
 //  3. `input`, normalizeSetupSiteInput çıktısıdır; `managementType` resolveManagementTypeInput(...).value'dur.
 
 import { managementTypeLabel } from '../modules/management_types.js';
+import { applyTrialToNewSubscription } from '../modules/management_company_service.js';
 
 export const PLAN_MANUAL_APPROVAL = 'manual_approval';
 
@@ -240,6 +241,8 @@ export async function createSiteWithStructure(
       `,
     [siteCode, PLAN_MANUAL_APPROVAL, subscription.source, subscription.applicationId ?? null],
   );
+  // Y2: yeni siteye deneme süresi (varsayılan 60 gün; süper ayarlar). Hata siteyi açmayı engellemez.
+  await applyTrialToNewSubscription(client, siteCode);
 
   return {
     site: { ...site, management_type_label: managementTypeLabel(site.management_type) },

@@ -129,6 +129,8 @@ import 'package:site_kapi_kontrol/ui/views/audit_log_view.dart';
 import 'package:site_kapi_kontrol/ui/views/client_errors_view.dart';
 import 'package:site_kapi_kontrol/ui/views/help_view.dart';
 import 'package:site_kapi_kontrol/ui/views/platform_settings_view.dart';
+import 'package:site_kapi_kontrol/ui/views/management_company_view.dart';
+import 'package:site_kapi_kontrol/services/management_company_api.dart';
 
 import 'package:site_kapi_kontrol/ui/views/module_requests_view.dart';
 
@@ -284,6 +286,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final GlobalKey<PlatformSettingsViewState> _platformSettingsKey =
       GlobalKey<PlatformSettingsViewState>();
   final GlobalKey<ClientErrorsViewState> _clientErrorsKey = GlobalKey<ClientErrorsViewState>();
+  // Y1: kullanıcı bir yönetim firmasının üyesiyse Ayarlar panelinde "Yönetim Firması" görünür (süper kullanıcıda her zaman).
+  bool _isCompanyMember = false;
   final GlobalKey<PeopleViewState> _peopleViewKey = GlobalKey<PeopleViewState>();
   final GlobalKey<AnnouncementsViewState> _announcementsKey =
       GlobalKey<AnnouncementsViewState>();
@@ -551,6 +555,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _profileCurrentPasswordController = TextEditingController();
 
     _initModuleAccess();
+
+    unawaited(_loadCompanyMembership());
 
     _initAnnouncements();
 
@@ -5501,7 +5507,27 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   /// Ayarlar panelindeki sayfa seçmeyen eylemler: "Masaüstüne Widget Ekle" (yalnız mobilde ve süper kullanıcı dışında;
   /// masaüstünde "gönderildi" mesajı yanıltıcı olurdu). Panel kapanır, sonra istek gönderilir.
+  Future<void> _loadCompanyMembership() async {
+    final role = widget.authService.session?.role;
+    if (role == null || role == UserRole.apartmentOwner) return;
+    try {
+      final list = await ManagementCompanyService(authService: widget.authService).companies();
+      if (mounted && list.isNotEmpty) setState(() => _isCompanyMember = true);
+    } catch (_) {
+      // Üyelik bilgisi alınamazsa giriş gizli kalır; sayfa açılışı etkilenmez.
+    }
+  }
+
   List<YanMenuAction> _settingsExtraActions(UserSession session) => <YanMenuAction>[
+        if (session.role == UserRole.superUser || _isCompanyMember)
+          YanMenuAction(
+            icon: Icons.apartment_rounded,
+            title: 'Yönetim Firması',
+            onTap: () {
+              Navigator.of(context).pop();
+              unawaited(ManagementCompanyScreen.open(context, authService: widget.authService));
+            },
+          ),
         if (session.role != UserRole.superUser && DoorWidgetService.supportsPinRequest)
           YanMenuAction(
             icon: Icons.widgets_outlined,
