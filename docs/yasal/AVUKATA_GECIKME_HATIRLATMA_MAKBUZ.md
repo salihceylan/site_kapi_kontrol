@@ -52,8 +52,9 @@ Aşağıdaki alıntılar mevzuat.gov.tr'deki güncel metinlerden alındı (adres
 
 ## 3. Sistem tazminatı nasıl hesaplıyor? (sade anlatım)
 
-1. Yalnız **kapanmış ve bitmiş** bir ay hesaplanır. Yönetici önizler, onaylar. Aynı ay için ikinci kez tazminat yazılamaz; yanlışsa
-   önce o ayın işlemi iptal edilir.
+1. Yalnız **kapanmış ve bitmiş** bir ay hesaplanır. Yönetici önizler, onaylar. Aylar sırayla hesaplanır; aynı ay için ikinci kez
+   tazminat yazılamaz. Yanlışsa en son yazılan ayın işlemi bütünüyle iptal edilip yeniden hesaplanır; tek bir dairenin tazminat kalemi
+   ayrıca ters kayıtla iptal edilebilir.
 2. Gecikme **vade gününü izleyen gün** başlar. **Ödeme günü gecikme sayılmaz.** Sonradan kaydedilen bir borç, kayıt gününden önce
    gecikmeye girmez.
 3. İstenirse vadeye **ek gün** eklenir (0-90 gün; varsayılan 0).
@@ -97,7 +98,9 @@ Tazminat = 22.800,00 × %5 ÷ 31 = 36,774… → **36,77 TL**.
 
 Ekim 2026. Ek gün 5, gün esası 30. Dairede üç kalem var: Eylül aidatı 1.000,00 TL (vade 05.09; ek günle gecikme 11.09'da başlar),
 Eylül için daha önce yazılmış 41,67 TL tazminat (02.10'da yazıldı), Ekim aidatı 1.000,00 TL (vade 05.10; gecikme 11.10'da başlar).
-Sakin 15.10'da 500,00 TL öder. Ödeme en eski vadeden, yani Eylül aidatından düşülür.
+Sakin 15.10'da 500,00 TL öder. Ödeme en eski vadeden, yani Eylül aidatından düşülür. (Eylül tazminatı, Örnek 1'deki gibi ek gün 0
+iken hesaplanmıştır: oran, gün esası ve ek gün değişince yalnız sonraki ayların hesabı etkilenir. Tazminat kalemi tabana girmediği
+için tutarı bu örneğin sonucunu değiştirmez.)
 
 | Aralık | Gün | Gecikmedeki tutar | Tutar × gün |
 | --- | --- | --- | --- |

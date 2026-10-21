@@ -19,8 +19,8 @@ okutacak anahtardır (bölüm 3).
 | Ziyaretçi ve kargo kayıtları | 1 yıl | `retention.visitor_logs_days` (365) | Silinmez (yalnız site silinince). |
 | İş takibi fotoğrafları | talep kapandıktan 2 yıl sonra | `retention.work_photos_after_close_days` (730) | Kendiliğinden silinmez; yalnız elle silinir. |
 | Duyurular | 5 yıl | `retention.announcements_days` (1825) | Yayımlanmış duyuru silinmez (taslak ve zamanlanmış silinebilir). |
-| Denetim kaydı (kim, ne zaman, ne yaptı) | 5 yıl | `retention.audit_days` (1825) | Silinmez; değiştirilemez. |
-| Karar defteri | süresiz | `retention.decision_book_days` (boş = süresiz) | Silinmez. |
+| Denetim kaydı (kim, ne zaman, ne yaptı) | 5 yıl | `retention.audit_days` (1825) | Silinmez (temizlik işi yok); uygulamada düzenleme yolu yok (veritabanında ayrıca değişmezlik kilidi yok). |
+| Karar defteri | süresiz | `retention.decision_book_days` (boş = süresiz) | Kesinleşmiş karar silinmez ve değiştirilemez (veritabanı tetikleyicisi); taslak karar silinebilir. Site silinince birlikte silinir. |
 | Otomatik silme anahtarı | avukat onayına kadar kapalı | `retention.enforce` (kapalı) | Yukarıdaki yeni süreler için silme işi yok. |
 
 Bugün zaten kendiliğinden silinen kısa ömürlü kayıtlar (değişmiyor; kaynak: Gizlilik Politikası bölüm 7 ve kod): kapı cihazlarının
@@ -38,8 +38,10 @@ yönetimin sildiği belge 30 gün sonra; uygulama hata raporları 90 gün.
   uzun saklamanın dayanağı olarak (ç) ve (e) düşünüldü. `[AVUKAT DOĞRULASIN]`
 - **Silme, Yok Etme veya Anonim Hale Getirme Yönetmeliği (RG 28.10.2017/30224):** saklama ve imha politikası VERBİS'e kayıt
   yükümlülerine zorunludur (m.5/1); silme işlemleri kayıt altına alınır ve kayıtlar "en az üç yıl süreyle saklanır" (m.7/3); periyodik
-  imha aralığı "her halde altı ayı geçemez" (m.11/2); ilgili kişinin talebi en geç otuz günde sonuçlandırılır (m.12). (Lexpera'daki
-  yönetmelik metninden; ikincil yayın.) `[AVUKAT DOĞRULASIN]`
+  imha aralığı "her halde altı ayı geçemez" (m.11/2); politika hazırlama yükümlülüğü olmayan veri sorumlusu silme yükümlülüğünün
+  doğduğu tarihi izleyen üç ay içinde siler (m.11/3); ilgili kişinin talebi en geç otuz günde sonuçlandırılır (m.12). (Resmî Gazete'deki
+  asıl metinden okundu. Tek değişiklik RG 28.04.2019/30758 ile yapıldı ve yalnız m.4/1-e, m.7/4 ve m.12/1'deki madde atfını değiştirdi;
+  buradaki hükümlere dokunmadı.) `[AVUKAT DOĞRULASIN]`
 - **TTK (6102) m.82:** "Her tacir" ticari defterlerini ve kayıtların dayandığı belgeleri saklamakla yükümlüdür; bu belgeler "on yıl
   saklanır" (m.82/5); süre, kaydın yapıldığı takvim yılının bitişiyle başlar (m.82/6). Bu kural Güde (tacir) için kesindir; site
   yönetimine uygulanıp uygulanmadığı soru 1. `[AVUKAT DOĞRULASIN]`
@@ -60,9 +62,9 @@ yönetimin sildiği belge 30 gün sonra; uygulama hata raporları 90 gün.
    alındı.)
 2. **Kapalı başlar.** `retention.enforce` kapalıyken hiçbir yeni silme işi çalışmaz. Avukat onayından sonra süper kullanıcı açar.
 3. **Silme işi (yapılacak).** Günde bir kez çalışan bakım işi süresi dolan kayıtları küçük parçalar hâlinde siler ya da anonimleştirir.
-   Günde bir çalışması, yönetmelikteki "en çok altı ayda bir" periyodik imha sınırını rahatça karşılar.
+   Günde bir çalışması, yönetmelikteki "en çok altı ayda bir" periyodik imha sınırını (m.11/2) rahatça karşılar. `[AVUKAT DOĞRULASIN]`
 4. **Kayıt.** Her silme turu denetim kaydına yalnız sayıyla yazılır (hangi tür, kaç kayıt; ad ya da içerik yazılmaz). Bu kayıtlar en az
-   3 yıl kalır (yönetmelik m.7/3).
+   3 yıl kalır (yönetmelik m.7/3). `[AVUKAT DOĞRULASIN]`
 5. **Önce önizleme.** Anahtar açılmadan önce yöneticiye "şu tarihte şu kadar kayıt silinecek" bilgisi gösterilir (yapılacak).
 6. **Mali kayıtların özel durumu.** Defter bugün değiştirilemez ve silinemez (veritabanı tetikleyicisi). 10 yıl dolunca silme için
    denetimli, ayrı bir yol yazılması gerekir. Silme mi anonimleştirme mi: soru 7.
@@ -95,8 +97,10 @@ Bugün (kaynak: `docs/OPERASYON_YEDEK_IZLEME.md`, 2026-10-16; dış kopya için 
   şifre anahtarı yedeklerle aynı yerde ve eşitlenen (OneDrive gibi) bir klasörde tutulmamalıdır; bunun uygulandığı bu çalışmada
   görülmedi.
 - Drive bağlanınca (dalga 4, D1): dosyalar sitenin Google Drive'ında durur. Google'ın Workspace şifreleme incelemesine göre (Haziran
-  2021) Workspace verisi bekleyen hâlde ve tesisler arası aktarımda varsayılan olarak şifrelenir, anahtarları Google yönetir. Ücretsiz
-  kişisel Google hesabı için bu belgede bilgi yok: **doğrulanamadı**. Uygulama ile sunucu arası aktarım TLS ile şifrelidir.
+  2021) Workspace verisi bekleyen hâlde ve tesisler arası aktarımda varsayılan olarak şifrelenir, anahtarları Google yönetir. İnceleme
+  kendi ifadesiyle hem kişisel (ücretsiz) hem kurumsal hesap verisi için geçerlidir ("applies to both consumer and enterprise data");
+  bilgilerin Haziran 2021 itibarıyla doğru olduğunu yazar, bugünkü durum ayrıca doğrulanmadı. Uygulama ile sunucu arası aktarım TLS ile
+  şifrelidir.
 - Dosya içeriği ayrıca (bizim anahtarımızla) şifrelenmez (karar H2): anahtar kaybolursa dosyalar açılamaz, Drive'da önizleme ve arama
   çalışmaz; anahtarı Güde tutarsa "Güde'nin erişimi yok" savunması da zayıflar.
 
@@ -122,16 +126,19 @@ Bugün (kaynak: `docs/OPERASYON_YEDEK_IZLEME.md`, 2026-10-16; dış kopya için 
     Gmail hesabı kullanabilir mi, yoksa Google Workspace mı şart? (Ayrıntı: `docs/PLATFORM_DRIVE_DEPOLAMA.md` bölüm 2.)
 11. **Yedekler.** Şifreli dış kopyanın geliştirici bilgisayarında (Türkiye) tutulması yeterli mi? Silinen verinin yedeklerden en geç
     yaklaşık 7 ayda düşmesi kabul edilebilir mi? En son günlük dökümün sunucuda şifresiz (yalnız sahibi okuyabilir) durması sorun mu?
-12. **Politika.** Güde ve siteler VERBİS'e kayıtlı değilse saklama ve imha politikası zorunlu değil (yönetmelik m.5/1). Yine de
-    yazılsın mı; site yönetimleri için örnek politika hazırlayalım mı?
+12. **Politika.** Saklama ve imha politikası yalnız VERBİS'e kayıt YÜKÜMLÜSÜ olan veri sorumlusuna zorunludur (yönetmelik m.5/1;
+    belirleyici olan fiilen kayıtlı olmak değil, kayıt yükümlülüğüdür). Yükümlü olmayan veri sorumlusu süresi dolan veriyi en geç üç
+    ayda siler (m.11/3). Güde ve siteler kayıt yükümlüsü mü? Değilse de politika yazılsın mı; site yönetimleri için örnek politika
+    hazırlayalım mı?
 13. **Silme kaydı.** Silme turlarının denetim kaydında yalnız sayıyla tutulması (yönetmelik m.7/3) yeterli mi?
 
 ## 7. Kaynaklar (hepsine 2026-10-21'de erişildi)
 
 - KVKK (6698): <https://mevzuat.gov.tr/mevzuatmetin/1.5.6698.pdf> (m.3, m.4, m.5, m.7, m.12).
-- Silme, Yok Etme veya Anonim Hale Getirme Yönetmeliği (RG 28.10.2017/30224; son değişiklik RG 28.04.2019/30758), Lexpera metni:
-  <https://www.lexpera.com.tr/mevzuat/yonetmelikler/kisisel-verilerin-silinmesi-yok-edilmesi-veya-anonim-hale-getirilmesi-hakkinda-yonetmelik>
-  (ikincil yayın; resmî metinle karşılaştırılmadı).
+- Silme, Yok Etme veya Anonim Hale Getirme Yönetmeliği, Resmî Gazete asıl metni (28.10.2017/30224):
+  <https://www.resmigazete.gov.tr/eskiler/2017/10/20171028-10.htm>; değişiklik yönetmeliği (28.04.2019/30758):
+  <https://www.resmigazete.gov.tr/eskiler/2019/04/20190428-1.htm>. Lexpera'daki birleştirilmiş metin (ikincil):
+  <https://www.lexpera.com.tr/mevzuat/yonetmelikler/kisisel-verilerin-silinmesi-yok-edilmesi-veya-anonim-hale-getirilmesi-hakkinda-yonetmelik>.
 - TTK (6102): <https://mevzuat.gov.tr/mevzuatmetin/1.5.6102.pdf> (m.82).
 - VUK (213): <https://mevzuat.gov.tr/mevzuatmetin/1.4.213.pdf> (m.253).
 - KMK (634): <https://mevzuat.gov.tr/mevzuatmetin/1.5.634.pdf> (m.36).

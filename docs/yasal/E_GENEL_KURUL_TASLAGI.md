@@ -17,28 +17,30 @@ Kaynak: Kat Mülkiyeti Kanunu'nun (634) mevzuat.gov.tr'deki güncel metni (7579 
 - **KMK'da elektronik toplantı ya da elektronik oy hükmü yok.** Metinde "elektronik" sözcüğü yalnız tapu işlemlerinde (projenin ve yapı
   kullanma izninin tapu ya da kadastro müdürlüğüne elektronik ortamda gönderilmesi) geçiyor. `[AVUKAT DOĞRULASIN]`
 - **7579 sayılı Kanun (RG 22.05.2026) toplantı maddelerine dokunmadı.** KMK'da yalnız m.35, m.37 ve m.70 değişti (metnin sonundaki
-  değişiklik tablosu). m.29-33 aynı kaldı.
+  değişiklik tablosu). m.29-33 aynı kaldı. `[AVUKAT DOĞRULASIN]`
 - **Toplantı zamanı ve çağrı (m.29):** kurul yılda en az bir kez, yönetim planında yazılı zamanda, yazmıyorsa takvim yılının ilk ayında
   toplanır (toplu yapılarda en geç iki yılda bir). Önemli bir sebeple toplantı, "toplantı için istenilen tarihten en az onbeş gün önce
   bütün kat maliklerine imzalattırılacak bir çağrı veya bir taahhütlü mektupla, toplantı sebebi de bildirilmek şartiyle" yapılır. İlk
-  çağrıda ikinci toplantının yeri ve tarihi de yazılır; iki toplantı arasında en az yedi gün olur.
+  çağrıda ikinci toplantının yeri ve tarihi de yazılır; iki toplantı arasında en az yedi gün olur. `[AVUKAT DOĞRULASIN]`
 - **Yeter sayı (m.30):** kurul "kat maliklerinin sayı ve arsa payı bakımından yarısından fazlasiyle toplanır ve oy çokluğuyla karar
   verir." İlk toplantı yeter sayı yüzünden yapılamazsa ikinci toplantı en geç on beş gün sonra yapılır ve karar yeter sayısı
-  "katılanların salt çoğunluğudur." Kanundaki özel yeter sayılar saklıdır.
+  "katılanların salt çoğunluğudur." Kanundaki özel yeter sayılar saklıdır. `[AVUKAT DOĞRULASIN]`
 - **Oy ve vekâlet (m.31):** her kat malikinin bir oyu vardır; birden çok bağımsız bölümü olan her bölüm için oy kullanır ama oyları
   toplamın üçte birini geçemez. Bir bölümün birden çok maliki varsa içlerinden birini vekil yapar. Karar doğrudan kendisini
   ilgilendiren malik görüşmede bulunur ama oy kullanamaz. "Bir kişi, oy sayısının yüzde beşinden fazlasını kullanmak üzere vekil tayin
   edilemez. Ancak, kırk ve daha az sayıdaki kat mülkiyetine tâbi taşınmazlarda bir kişi, en fazla iki kişiye vekâlet edebilir."
+  `[AVUKAT DOĞRULASIN]`
 - **Karar defteri ve imza (m.32):** kararlar "(1) den başlayıp sırayla giden sayfa numaraları taşıyan her sayfası noter mühüriyle
   tasdikli bir deftere yazılarak, toplantıda bulunan bütün kat maliklerince imzalanır; karara aykırı oy verenler bu aykırılığın sebebini
-  belirterek imza koyarlar."
+  belirterek imza koyarlar." `[AVUKAT DOĞRULASIN]`
 - **İptal davası (m.33):** toplantıya katılıp aykırı oy veren karar tarihinden, katılmayan kararı öğrenmesinden başlayarak bir ay içinde
   ve her hâlde karar tarihinden başlayarak altı ay içinde sulh mahkemesinde iptal davası açabilir; yok ya da mutlak butlanla hükümsüz
-  kararlarda süre aranmaz.
+  kararlarda süre aranmaz. `[AVUKAT DOĞRULASIN]`
 - **Defterin kapatılması (m.36):** karar defteri her takvim yılının bitiminden başlayarak bir ay içinde notere kapattırılır.
+  `[AVUKAT DOĞRULASIN]`
 - **İşletme projesi (m.37, 7579 ile değişik):** "İşletme projesi kat malikleri genel kurulunda onaylanır." Geçici proje kat maliklerine
   "imzaları karşılığında veya taahhütlü mektupla bildirilir ve en geç üç ay içinde aynen veya değiştirilerek kabulüne yönelik genel
-  kurulda karar alınır."
+  kurulda karar alınır." `[AVUKAT DOĞRULASIN]`
 - **Kıyas, şirketler (TTK m.1527):** Türk Ticaret Kanunu şirketlerde elektronik genel kurulu açıkça düzenler: şirket sözleşmesinde
   öngörülmesi şartıyla "elektronik ortamda ortaklar kuruluna ve genel kurula katılma, öneride bulunma ve oy verme, fizikî katılımın,
   öneride bulunmanın ve oy vermenin bütün hukuki sonuçlarını doğurur"; bunun için ayrıca amaca özgü internet sitesi, teknik rapor ve oy
@@ -67,19 +69,22 @@ Kaynak: Kat Mülkiyeti Kanunu'nun (634) mevzuat.gov.tr'deki güncel metni (7579 
 1. **Hazırlık (yönetici).** Toplantı türü (olağan, önemli sebeple olağanüstü), tarih, saat, yer, gündem maddeleri, ekler (faaliyet
    raporu, işletme projesi taslağı, denetim raporu). İkinci toplantının tarihi ve yeri. Sistem uyarır: çağrı tarihi ile toplantı arasında
    en az 15 gün (m.29; olağan toplantı için yönetim planına bakılır); iki toplantı arasında en az 7 ve en çok 15 gün (m.29 ve m.30).
+   `[AVUKAT DOĞRULASIN]`
 2. **Çağrı.** Sistem çağrı metnini ve iki çıktıyı hazırlar: taahhütlü mektup listesi (malik adı ve adresi) ve imzaya açık çağrı listesi
    (PDF). Yönetici taahhütlü gönderi numaralarını ya da imzalı listenin fotoğrafını sisteme ekler. Uygulama bildirimi ve e-posta yalnız
    **ek bilgilendirmedir**, yasal çağrının yerine geçmez (soru 4).
 3. **Vekâlet.** Malik vekilini uygulamadan bildirir ve vekâletnameyi yükler; yönetici onaylar. Sistem m.31 sınırlarını denetler (bir
    kişi oyların %5'inden fazlası için vekil olamaz; 40 ve daha az bağımsız bölümde en çok 2 vekâlet; çok malikli bölümde tek temsilci).
+   Kanun "kırk ve daha az sayıdaki kat mülkiyetine tâbi taşınmazlarda" diyor; bunun bağımsız bölüm sayısı olarak okunması bizim
+   yorumumuzdur. `[AVUKAT DOĞRULASIN]`
 4. **Toplantı günü.** Hazirun cetveli çıktısı (bölüm, malik, arsa payı, bizzat ya da vekil). Sistem katılanları işaretledikçe yeter sayıyı
    gösterir: sayı ve arsa payı bakımından yarıdan fazla mı (m.30). Gündem maddesi başına kabul, ret ve çekimser sayısı girilir; aykırı oy
-   verenin gerekçesi yazılır; kararın doğrudan ilgilendirdiği malik oy dışı işaretlenir. Hesaplar **yardımcıdır**, karar toplantı
-   başkanlığına aittir.
+   verenin gerekçesi yazılır; kararın doğrudan ilgilendirdiği malik oy dışı işaretlenir (m.31). Hesaplar **yardımcıdır**, karar toplantı
+   başkanlığına aittir. `[AVUKAT DOĞRULASIN]`
 5. **Tutanak ve karar defteri.** Sistem kararları Karar Defteri'ne taslak olarak aktarır. Yönetici noter tasdikli deftere yazar ve
    imzaları alır; imzalı sayfaların fotoğrafı ya da PDF'i eklenince karar kesinleştirilir.
 6. **Duyuru.** Kesin kararlar sakinlere duyurulur. Toplantıya katılmayan maliklere bildirim gider ve bildirim tarihi kaydedilir (iptal
-   davası süresi kararı öğrenmekten başlar: m.33).
+   davası süresi kararı öğrenmekten başlar: m.33). `[AVUKAT DOĞRULASIN]`
 7. **Arşiv.** Karar defteri kaydı süresiz saklanır (karar H2; `docs/yasal/SAKLAMA_SURELERI_TASLAGI.md`).
 8. **Sonraki adım (yalnız avukat "geçerli" derse).** Uzaktan katılım ve uygulamadan oy: hesapla giriş artı tek kullanımlık kodla kimlik
    doğrulama, değiştirilemez oy kaydı, oy kullananların kimliklerinin saklanması (TTK m.1527'deki koşullara benzer).
