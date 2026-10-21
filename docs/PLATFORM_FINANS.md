@@ -289,9 +289,12 @@ karşılaştırılır, tutmazsa test düşer. Beklenen değerlerin hiçbiri kod 
 Cenk'in gerçek tablosu gelince ikinci set olarak eklenecek.
 
 - Fikstür (site, senaryolar, adım adım hesap): `server/test/fixtures/finance_golden_site.js`
-- Test: `server/test/finance_golden_dataset.test.js` (gerçek `buildDistributionPlan`, `lateFeeForApartment` + gün gün kaba kuvvet tanımı, `m1Remainders`).
+- Test: `server/test/finance_golden_dataset.test.js` (gerçek `buildDistributionPlan`, `lateFeeForApartment` + gün gün kaba kuvvet tanımı, `m1Remainders`;
+  iki hesap için gerçek `accountForCharge`, `computeLateFeePlan` (katı sahte DB) ve hesap başına `m1Remainders`).
 - Sapma çıkarsa önce fikstürdeki elle hesap iki kez yeniden yapılır; hesap doğruysa hata raporlanır, hesap kodu fikstüre uydurulmaz.
-  İlk koşu (2026-10-21): 21 kontrolün hepsi ilk seferde tuttu (sapma yok).
+  İlk koşu (2026-10-21): 21 kontrolün hepsi ilk seferde tuttu (sapma yok). Dalga 1 tümleştirmesi (İP-1A ile): iki hesaplı 7 kontrol eklendi, ilk
+  seferde tuttu; dört bozma denemesi (tazminatta hesapları karıştırma, kiracı durumunu yok sayma, dağıtım satırından hesabı düşürme, satırın hesabını
+  yok sayma) testlerce yakalandı.
 
 **Site ("Altın Veri Sitesi"):** A Blok 12 daire (2 dükkan + 10 adet 3+1), B Blok 12 daire (4 adet 1+1 + 8 adet 2+1); daire kimliği sıradır
 (A-1 = 1 ... B-12 = 24; eşit kalanda kimliği küçük olan önce kuruş alır).
@@ -343,3 +346,16 @@ tablosuna daha yüksek değer yazılsa bile üst sınır 500'e kırpılır (`doc
 | M1 (A-5) | Eylül 125.000 (05.09); çatı payı 186.001 (20.09, 02.10'da yazıldı); Ekim 125.000 (05.10) | 200.000 | 0; 111.001; 125.000 | 0 |
 | M2 (B-1) | Eylül 75.000; Ekim 75.000 | 200.000 | 0; 0 | 50.000 |
 | M3 (B-6) | aynı vade (05.10): aidat 100.000 (kimlik 601), ortak gider payı 42.166 (kimlik 602) | 120.000 | 0; 22.166 | 0 |
+
+**İki hesap (İP-1A, karar G12):** dairelerin "kim öder" durumu fikstürde elle seçildi (`ACCOUNT_PROFILE`: A-1, A-2 ve B-1..B-4 sorumlu kiracı +
+kiracı var; A-3..A-7 sorumlu malik, kiracı yok; A-8..A-10 sorumlu malik + kiracı var; A-11, A-12 "malik ve kiracı" + kiracı var; B-5..B-8 sorumlu
+kiracı, kiracı yok; B-9..B-12 "malik ve kiracı", kiracı yok). Borcun hesabı `accountForCharge` kuralıyla; mahsup ve tazminat hesap bazında. Tek
+hesaplı senaryolar (D1-D6, L1-L4, M1-M3) iki hesaplı kodla da aynı sonucu verir (L1-L4 hesap bazlı planda ev sahibi ve kiracı hesabında ayrı ayrı
+sınanır).
+
+| Senaryo | Durum | Sonuç (kuruş) |
+| --- | --- | --- |
+| İD1 | D1 aidatı, "kim öder" = dairede oturan | tutarlar D1 ile aynı; kiracı hesabı A-1, A-2, A-11, A-12, B-1..B-4: 8 x 354.167 = 2.833.336; ev sahibi hesabı A-3..A-10 8 x 354.167 + B-5..B-12 8 x 354.166 = 5.666.664 |
+| İD2 | D4 çatı yalıtımı, "kim öder" = ev sahibi | 24 dairenin hepsi ev sahibi hesabı (kiracılı dairede de); toplam 3.600.019 |
+| İL1 (B-2) | ev sahibi hesabı: çatı payı 81.000 (vade 20.09) ödenmedi; kiracı hesabı: Ekim aidatı 75.000 (vade 05.10) 03.10'da ödendi; Ekim 2026, ek gün 0 | ev sahibi hesabı S = 31 x 81.000 = 2.511.000: daily_30 4.185, daily_actual 4.050; kiracı hesabında tazminat satırı yok. Tek hesapta karışsaydı S = 2 x 81.000 + 3 x 6.000 + 26 x 81.000 = 2.286.000 ve daily_30 3.810 olurdu (zamanında ödenen aidat gecikmiş sayılırdı) |
+| İM1 (B-3) | ev sahibi hesabı: çatı payı 81.000 (vade 20.09); kiracı hesabı: Eylül ve Ekim aidatı 75.000'er; kiracı 100.000 ödedi | kiracı hesabı kalanları 0; 50.000; ev sahibi hesabı 81.000. Tek hesapta karışsaydı 0; 56.000 (çatı); 75.000: kiracının 25.000'i ev sahibinin borcuna giderdi |

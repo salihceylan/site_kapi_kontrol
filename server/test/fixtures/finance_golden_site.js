@@ -334,3 +334,128 @@ export const MAHSUP_CASES = Object.freeze([
     expected: { remaining: { 601: 0, 602: 22166 }, order: [601, 602], credit: 0 },
   },
 ]);
+
+// ------------------------------------------------------------------------------------------------------------------------------------------
+// İKİ HESAP (İP-1A, karar G12; docs/PLATFORM_FINANS.md "İki hesap" ve "Altın veri seti"): her dairenin Ev sahibi (owner) ve Kiracı (tenant)
+// hesabı vardır; mahsup ve gecikme tazminatı HESAP BAZINDADIR (bir hesabın tahsilatı öteki hesabın borcunu kapatmaz).
+// Borcun yazıldığı hesap (finance_parties.accountForCharge): "kim öder" = ev sahibi -> ev sahibi hesabı; "kim öder" = dairede oturan -> dairenin
+// borç sorumlusu malik ise ev sahibi hesabı; kiracı ya da "malik ve kiracı" ise borç tarihinde dairede kiracı varsa kiracı hesabı, yoksa ev sahibi.
+// Yukarıdaki tek hesaplı senaryolar (D1-D6, L1-L4, M1-M3) dairenin TEK hesabındadır; iki hesaplı kodla da AYNI sonucu verir (test bunu da sınar).
+// ------------------------------------------------------------------------------------------------------------------------------------------
+
+/**
+ * Dairelerin "kim öder" durumu (elle seçildi; kuralın her dalı en az bir kez):
+ *   Daireler      Sorumlu (responsible_party)  Kiracı  Oturanın borcu (aidat)                        Ev sahibine yazılan borç (çatı, demirbaş)
+ *   A-1, A-2      tenant                       var     kiracı hesabı                                 ev sahibi hesabı
+ *   A-3..A-7      owner                        yok     ev sahibi hesabı (sorumlu malik)              ev sahibi hesabı
+ *   A-8..A-10     owner                        var     ev sahibi hesabı (malik aidatı kendisi öder)  ev sahibi hesabı
+ *   A-11, A-12    both                         var     kiracı hesabı                                 ev sahibi hesabı
+ *   B-1..B-4      tenant                       var     kiracı hesabı                                 ev sahibi hesabı
+ *   B-5..B-8      tenant                       yok     ev sahibi hesabı (kiracı yok)                 ev sahibi hesabı
+ *   B-9..B-12     both                         yok     ev sahibi hesabı (kiracı yok)                 ev sahibi hesabı
+ */
+export const ACCOUNT_PROFILE = Object.freeze({
+  ...each(A(1, 2), Object.freeze({ responsibleParty: 'tenant', hasTenant: true })),
+  ...each(A(3, 7), Object.freeze({ responsibleParty: 'owner', hasTenant: false })),
+  ...each(A(8, 10), Object.freeze({ responsibleParty: 'owner', hasTenant: true })),
+  ...each(A(11, 12), Object.freeze({ responsibleParty: 'both', hasTenant: true })),
+  ...each(B(1, 4), Object.freeze({ responsibleParty: 'tenant', hasTenant: true })),
+  ...each(B(5, 8), Object.freeze({ responsibleParty: 'tenant', hasTenant: false })),
+  ...each(B(9, 12), Object.freeze({ responsibleParty: 'both', hasTenant: false })),
+});
+
+/** Oturanın borcunun hesabı (elle, yukarıdaki tablodan): 8 daire kiracı hesabı, 16 daire ev sahibi hesabı. */
+export const OCCUPANT_ACCOUNTS = Object.freeze({
+  ...each([...A(1, 2), ...A(11, 12), ...B(1, 4)], 'tenant'),
+  ...each([...A(3, 10), ...B(5, 12)], 'owner'),
+});
+
+export const TWO_ACCOUNT_DISTRIBUTION_CASES = Object.freeze([
+  // İD1: D1 aylık aidatı, "kim öder" = dairede oturan. Dağıtım hesaptan bağımsızdır: tutarlar D1 ile AYNI; her satır oturanın hesabını taşır.
+  //   Kiracı hesabına yazılanlar A-1, A-2, A-11, A-12, B-1..B-4: kimlikleri 1, 2, 11, 12, 13..16; D1'de kimlik 1..16 354.167 aldı -> 8 x 354.167 = 2.833.336.
+  //   Ev sahibi hesabına: A-3..A-10 (kimlik 3..10) 8 x 354.167 = 2.833.336 + B-5..B-12 (kimlik 17..24) 8 x 354.166 = 2.833.328 -> 5.666.664.
+  //   Kontrol: 2.833.336 + 5.666.664 = 8.500.000 (D1 toplamı).
+  {
+    name: 'İD1 D1 aidatı "dairede oturan": tutarlar D1 ile aynı; kiracı hesabı 8 daire 2.833.336, ev sahibi hesabı 16 daire 5.666.664',
+    base: 'D1',
+    chargeParty: 'occupant',
+    expectedAccounts: OCCUPANT_ACCOUNTS,
+    totals: { owner: 5666664, tenant: 2833336 },
+  },
+  // İD2: D4 çatı yalıtımı (büyük onarım), "kim öder" = ev sahibi: 24 dairenin hepsi ev sahibi hesabı (kiracılı dairelerde de). Toplam D4 ile aynı 3.600.019.
+  {
+    name: 'İD2 D4 çatı yalıtımı "ev sahibi": 24 daire ev sahibi hesabı, toplam 3.600.019 (kiracılı dairede de kiracıya yazılmaz)',
+    base: 'D4',
+    chargeParty: 'owner',
+    expectedAccounts: each([...A(1, 12), ...B(1, 12)], 'owner'),
+    totals: { owner: 3600019, tenant: 0 },
+  },
+]);
+
+export const TWO_ACCOUNT_LATE_FEE_CASES = Object.freeze([
+  // İL1 (B-2, kimlik 14; sorumlu kiracı, kiracı var): ev sahibi hesabında çatı yalıtımı payı 81.000 (D4'teki B-2 payı; "kim öder" ev sahibi;
+  //   15.09'da yazıldı, vade 20.09) ödenmedi. Kiracı hesabında Ekim aidatı 75.000 (D5'teki 1+1 tutarı; vade 05.10) kiracı tarafından 03.10'da tam ödendi.
+  //   P = Ekim 2026 (31 gün), ek gün 0, oran 500 bp.
+  //   İKİ HESAP: ev sahibi hesabı: Ekim'in 31 gününün hepsinde L = 81.000 (vade 20.09 geçti, ödeme yok) -> S = 31 x 81.000 = 2.511.000
+  //     daily_30:     (2 x 2.511.000 x 500 + 10.000 x 30) / (20.000 x 30) = 2.511.300.000 / 600.000 = 4.185,5 -> 4.185 (41,85 TL)
+  //     daily_actual: (2.511.000.000 + 10.000 x 31) / (20.000 x 31) = 2.511.310.000 / 620.000 = 4.050,5 -> 4.050 (= 81.000 x %5)
+  //   kiracı hesabı: aidat vadesinden (05.10) önce ödendi -> hiçbir gün gecikme yok, S = 0 -> tazminat satırı YOK.
+  //   KARŞILAŞTIRMA (tek hesap, 052 öncesi gibi): 03.10 ödemesi vadesi en eski çatı payına düşer (kalan 81.000 - 75.000 = 6.000), zamanında ödenen
+  //   aidat 06.10'dan itibaren gecikmiş sayılır: 01-02 Ekim 2 x 81.000 = 162.000; 03-05 Ekim 3 x 6.000 = 18.000; 06-31 Ekim 26 x (6.000 + 75.000)
+  //   = 2.106.000; S = 2.286.000; daily_30: (2.286.000.000 + 300.000) / 600.000 = 3.810,5 -> 3.810 (kiracının zamanında ödemesine rağmen tazminat).
+  {
+    name: 'İL1 kiracı aidatı zamanında ödedi, ev sahibinin çatı payı ödenmedi: tazminat YALNIZ ev sahibi hesabına (kiracı hesabında satır yok)',
+    apartment: 'B-2',
+    apartmentId: 14,
+    responsibleParty: 'tenant',
+    period: '2026-10',
+    graceDays: 0,
+    rows: [
+      { id: 701, kind: 'charge', amount: 81000, entry: '2026-09-15', due: '2026-09-20', account: 'owner' },
+      { id: 702, kind: 'charge', amount: 75000, entry: '2026-10-01', due: '2026-10-05', account: 'tenant' },
+      { id: 703, kind: 'payment', amount: -75000, entry: '2026-10-03', account: 'tenant' },
+    ],
+    expected: {
+      owner: {
+        daily_30: { base: 2511000, fee: 4185 },
+        daily_actual: { base: 2511000, fee: 4050 },
+        peak: 81000,
+        breakdown: [{ from: '2026-10-01', to: '2026-10-31', overdue: 81000 }],
+      },
+      tenant: null,
+    },
+    mixed: {
+      daily_30: { base: 2286000, fee: 3810 },
+      peak: 81000,
+      breakdown: [
+        { from: '2026-10-01', to: '2026-10-02', overdue: 81000 },
+        { from: '2026-10-03', to: '2026-10-05', overdue: 6000 },
+        { from: '2026-10-06', to: '2026-10-31', overdue: 81000 },
+      ],
+    },
+  },
+]);
+
+export const TWO_ACCOUNT_MAHSUP_CASES = Object.freeze([
+  // İM1 (B-3; sorumlu kiracı, kiracı var): ev sahibi hesabı: çatı payı 81.000 (vade 20.09; kimlik 711), ödeme yok.
+  //   Kiracı hesabı: Eylül aidatı 75.000 (vade 05.09; 712), Ekim aidatı 75.000 (vade 05.10; 713); kiracı toplam 100.000 ödedi.
+  //   İKİ HESAP: kiracı: 712 -> 75.000 - 100.000 < 0 -> 0; 713 -> 150.000 - 100.000 = 50.000 -> min(75.000, 50.000) = 50.000; alacak 0.
+  //              ev sahibi: 711 -> 81.000 - 0 = 81.000; alacak 0. Kontrol: açık 50.000 + 81.000 = 231.000 - 100.000.
+  //   KARŞILAŞTIRMA (tek hesap): vade sırası 712 (05.09), 711 (20.09), 713 (05.10): 712 -> 0; 711 -> 156.000 - 100.000 = 56.000;
+  //   713 -> 231.000 - 100.000 = 131.000 -> min(75.000, 131.000) = 75.000: kiracının 25.000'i ev sahibinin borcunu kapatırdı.
+  {
+    name: 'İM1 kiracının ödemesi yalnız kiracı hesabının borcunu kapatır (ev sahibinin çatı payı açık kalır)',
+    apartment: 'B-3',
+    charges: [
+      { id: 711, amount: 81000, entry: '2026-09-15', due: '2026-09-20', account: 'owner' },
+      { id: 712, amount: 75000, entry: '2026-09-01', due: '2026-09-05', account: 'tenant' },
+      { id: 713, amount: 75000, entry: '2026-10-01', due: '2026-10-05', account: 'tenant' },
+    ],
+    paid: { owner: 0, tenant: 100000 },
+    expected: {
+      owner: { order: [711], remaining: { 711: 81000 }, credit: 0 },
+      tenant: { order: [712, 713], remaining: { 712: 0, 713: 50000 }, credit: 0 },
+    },
+    mixed: { order: [712, 711, 713], remaining: { 712: 0, 711: 56000, 713: 75000 }, credit: 0 },
+  },
+]);
