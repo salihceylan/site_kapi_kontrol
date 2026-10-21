@@ -15,6 +15,7 @@ const Map<SirketMenuItem, SirketMenuGroup> _expected = <SirketMenuItem, SirketMe
   SirketMenuItem.katilimVeKurulum: SirketMenuGroup.daireler,
   SirketMenuItem.finans: SirketMenuGroup.borclar,
   SirketMenuItem.borcum: SirketMenuGroup.borclar,
+  SirketMenuItem.sayaclar: SirketMenuGroup.borclar,
   SirketMenuItem.duyurular: SirketMenuGroup.iletisim,
   SirketMenuItem.talepler: SirketMenuGroup.iletisim,
   SirketMenuItem.taleplerim: SirketMenuGroup.iletisim,

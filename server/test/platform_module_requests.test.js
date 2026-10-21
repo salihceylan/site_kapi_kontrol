@@ -525,7 +525,7 @@ describe('POST module-requests', () => {
       assert.equal(core.status, 400, code);
       assert.equal(core.body.code, 'MODULE_NOT_TOGGLEABLE');
     }
-    for (const code of ['metering', 'online_payment', 'plate_recognition', 'hgs_access', 'cctv_link']) {
+    for (const code of ['online_payment', 'plate_recognition', 'hgs_access', 'cctv_link']) {
       const soon = await post({ module_code: code });
       assert.equal(soon.status, 409, code);
       assert.equal(soon.body.code, 'MODULE_COMING_SOON');
@@ -1095,13 +1095,13 @@ describe('PUT /admin/module-requests/:id', () => {
     );
   });
 
-  it('onay aninda modul "yakinda" (metering): 409 MODULE_COMING_SOON, talep bekleyen kalir; ret yine mumkun', async () => {
-    const created = seedRequest({ module_code: 'metering', site_code: SITE_2 });
+  it('onay aninda modul "yakinda" (online_payment): 409 MODULE_COMING_SOON, talep bekleyen kalir; ret yine mumkun', async () => {
+    const created = seedRequest({ module_code: 'online_payment', site_code: SITE_2 });
     const res = await decide(created.id, { decision: 'approve' });
     assert.equal(res.status, 409);
     assert.equal(res.body.code, 'MODULE_COMING_SOON');
     assert.equal(state.requests[0].status, 'pending');
-    assert.equal(state.siteModules.has(`${SITE_2}:metering`), false);
+    assert.equal(state.siteModules.has(`${SITE_2}:online_payment`), false);
     assert.equal(state.audit.length, 0);
     assert.equal((await decide(created.id, { decision: 'reject' })).status, 200);
   });

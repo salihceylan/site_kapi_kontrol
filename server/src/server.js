@@ -41,6 +41,7 @@ import { surveyRouter } from './modules/survey_routes.js';
 import { visitorLogRouter } from './modules/visitor_log_routes.js';
 import { cardAccessRouter } from './modules/card_access_routes.js';
 import { contractsRouter } from './modules/contracts_routes.js';
+import { meteringRouter } from './modules/metering_routes.js';
 import { startContractReminders, stopContractReminders } from './modules/contracts_reminders.js';
 import { decisionBookRouter } from './modules/decision_book_routes.js';
 import { startDocumentsMaintenance, stopDocumentsMaintenance } from './modules/document_maintenance.js';
@@ -132,6 +133,8 @@ app.use(visitorLogRouter);
 app.use(cardAccessRouter);
 // Firma ve sozlesme takibi: /manager/sites/:siteCode/contract-vendors[/:id] + /manager/sites/:siteCode/contracts[/summary|/:id] (modul contracts, varsayilan KAPALI; sakin ucu yok).
 app.use(contractsRouter);
+// Sayac okuma ve faturalandirma: /manager/sites/:siteCode/{meter-apartments,meters,meter-readings/import,meter-billings}[...] (modul metering, varsayilan KAPALI; sakin ucu yok).
+app.use(meteringRouter);
 // Karar defteri: /manager/sites/:siteCode/decisions[/:id[/finalize]] + /app/decisions[/:id] (modul decision_book, varsayilan KAPALI).
 app.use(decisionBookRouter);
 // Telefon bildirimi (Faz 3b-B): /app/push/devices[/:installId], /app/push/test, /admin/push/status (tercihler /app/notification-preferences'ta).

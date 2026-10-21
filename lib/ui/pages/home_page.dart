@@ -169,6 +169,8 @@ import 'package:site_kapi_kontrol/ui/views/visitor_manager_view.dart';
 import 'package:site_kapi_kontrol/ui/views/visitor_resident_view.dart';
 import 'package:site_kapi_kontrol/models/contract_models.dart';
 import 'package:site_kapi_kontrol/ui/views/contracts_view.dart';
+import 'package:site_kapi_kontrol/models/meter_models.dart';
+import 'package:site_kapi_kontrol/ui/views/meters_view.dart';
 import 'package:site_kapi_kontrol/ui/helpers/module_showcase.dart';
 import 'package:site_kapi_kontrol/ui/views/module_showcase_view.dart';
 // İP-1D: gruplu menü, Ayarlar paneli ve sakin alt çubuğu.
@@ -301,6 +303,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final GlobalKey<VisitorManagerViewState> _visitorManagerKey = GlobalKey<VisitorManagerViewState>();
   final GlobalKey<VisitorResidentViewState> _visitorResidentKey = GlobalKey<VisitorResidentViewState>();
   final GlobalKey<ContractsViewState> _contractsKey = GlobalKey<ContractsViewState>();
+  final GlobalKey<MetersViewState> _metersKey = GlobalKey<MetersViewState>();
 
   // Ziyaretçi ve Kargo: sakin çekmece rozeti (`GET /app/visitor-entries/summary`), duyuru kalıbındaki gibi
   // AdaptivePoller ile (ön planda ~60 sn; `visitor_log` modülü açık sitesi olmayan kullanıcıda ağ isteği yok).
@@ -932,6 +935,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         if (_canAccessVisitorManage(role)) SirketMenuItem.ziyaretciKayitlari,
         if (_visitorResidentSites(role).isNotEmpty) SirketMenuItem.ziyaretcilerim,
         if (_canAccessContracts(role)) SirketMenuItem.sozlesmeler,
+        if (_canAccessMeters(role)) SirketMenuItem.sayaclar,
       };
 
   // --- Belgeler (Faz 3b-A) ---
@@ -1230,6 +1234,26 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   /// "Sözleşmeler" menüsü: süper kullanıcı ya da `contracts` modülü açık bir sitede yönetici / kurul üyesi / görevli.
   bool _canAccessContracts(UserRole role) =>
       role == UserRole.superUser || _contractSites(role).isNotEmpty;
+
+  // --- Sayaç Okuma ve Faturalandırma ---
+
+  /// "Sayaçlar" ekranındaki siteler: `metering` modülü AÇIK siteler. Yönetici (yönetici modunda) yazar, kurul üyesi salt okur;
+  /// sakin ve görevli GÖREMEZ. Süper kullanıcıda liste boştur (menü açılmaz). FAIL-OPEN YOK: modül verisi yoksa site yoktur.
+  List<MeterSite> _meterSites(UserRole role) {
+    if (role == UserRole.superUser || !_moduleAccess.isFiltering) return const <MeterSite>[];
+    final canManage = _canManagePeople(role);
+    return <MeterSite>[
+      for (final site in _moduleAccess.result!.sites)
+        if (site.isEnabled(PlatformModuleCodes.metering))
+          if (site.role == 'manager' && canManage)
+            MeterSite(code: site.siteCode, name: site.siteName)
+          else if (site.isBoardMember)
+            MeterSite(code: site.siteCode, name: site.siteName, canWrite: false),
+    ];
+  }
+
+  /// "Sayaçlar" menüsü: `metering` modülü açık bir sitede yönetici / kurul üyesi.
+  bool _canAccessMeters(UserRole role) => _meterSites(role).isNotEmpty;
 
   /// Sakin rozeti bir turu: modül açık sitesi olmayan kullanıcıda ağ isteği yok (rozet sıfırlanır); hata geri
   /// çekilir. Sayı değişmedikçe sayfa yeniden kurulmaz.
@@ -1724,6 +1748,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (item == SirketMenuItem.sozlesmeler) {
       return _canAccessContracts(role);
     }
+    if (item == SirketMenuItem.sayaclar) {
+      return _canAccessMeters(role);
+    }
 
     switch (role) {
 
@@ -1896,6 +1923,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
       case SirketMenuItem.sozlesmeler:
         return 'Sözleşmeler';
+
+      case SirketMenuItem.sayaclar:
+        return 'Sayaçlar';
 
       case SirketMenuItem.kapilar:
         return 'Kapılar';
@@ -5365,6 +5395,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       case SirketMenuItem.sozlesmeler:
         await _contractsKey.currentState?.reload();
         break;
+      case SirketMenuItem.sayaclar:
+        await _metersKey.currentState?.reload();
+        break;
       case SirketMenuItem.katilimVeKurulum:
       case SirketMenuItem.cihazEkle:
       case SirketMenuItem.bluetoothWifiKur:
@@ -6621,6 +6654,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           sites: _visitorResidentSites(session.role),
           // Kayıt görüldü işaretlenince çekmece rozeti sunucudan hemen tazelenir.
           onUnreadChanged: _refreshVisitorBadge,
+        );
+
+      case SirketMenuItem.sayaclar:
+        return MetersView(
+          key: _metersKey,
+          authService: widget.authService,
+          sites: _meterSites(session.role),
+          onOpenModules: _canManagePeople(session.role)
+              ? () => _goToMenu(SirketMenuItem.moduller)
+              : null,
         );
 
       case SirketMenuItem.sozlesmeler:
