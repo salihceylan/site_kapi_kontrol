@@ -109,6 +109,9 @@ function handle(sql, params) {
   if (/^UPDATE users SET full_name = \$2/.test(sql)) {
     return ok([{ user_code: params[0] }]);
   }
+  if (/^WITH managed AS .*deletion_status = 'pending_super_user_approval' ORDER/.test(sql)) {
+    return ok((state.closureSites ?? []).map((s) => ({ site_code: String(s.site_code), name: s.name })));
+  }
   if (/^WITH managed AS/.test(sql)) {
     return ok(state.lastManagerSites.map((s) => ({ site_code: String(s.site_code), name: s.name })));
   }
@@ -1014,6 +1017,23 @@ describe('hesap silme: önizleme', () => {
     assert.deepEqual(queries[0].params, [12345]);
     assert.ok(queries[0].sql.includes('mu.is_active = TRUE AND mu.deleted_at IS NULL'));
     assert.ok(queries[0].sql.includes('ms.manager_user_code <> $1'));
-    assert.ok(queries[0].sql.includes("sm.role NOT IN ('SITE_OWNER', 'SITE_ADMIN')"));
+    assert.ok(!queries[0].sql.includes('apartment_memberships'), 'üye olup olmadığına bakılmaz (üyesiz sitenin tek yöneticisi de engelli)');
+    assert.ok(queries[0].sql.includes("s.approval_status <> 'rejected'"));
+    assert.ok(queries[0].sql.includes("s.deletion_status IS DISTINCT FROM 'pending_super_user_approval'"), 'kapatma talebi gönderen engelsiz');
+  });
+
+  it('kapatma talebi bekleyen site: önizleme will_keep notu', async () => {
+    previewHandlers();
+    state.user.role = 'site_manager';
+    state.closureSites = [{ site_code: 1000000001, name: 'Gül Sitesi' }];
+    const preview = await previewAccountDeletion(USER);
+    assert.equal(preview.can_delete, true);
+    assert.ok(preview.will_keep.some((line) => line.includes('"Gül Sitesi" için kapatma talebiniz onay bekliyor')));
+  });
+
+  it('ödenmemiş borç yok (finans tablosu yok): borç engeli üretilmez', async () => {
+    previewHandlers();
+    const preview = await previewAccountDeletion(USER);
+    assert.ok(!preview.blockers.some((b) => b.code === 'OPEN_DEBT'));
   });
 });

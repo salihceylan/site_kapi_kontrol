@@ -1,8 +1,8 @@
 ---
 id: account_deletion
 title: Hesap ve Veri Silme
-version: 2026-10-19
-effective_date: 2026-10-19
+version: 2026-10-21
+effective_date: 2026-10-21
 required_for: []
 complete: false   # köşeli [KARAR/BİLGİ GEREKLİ ...] ve [AVUKAT DOĞRULASIN ...] işaretleri çözülünce bu satır silinir
 ---
@@ -27,7 +27,8 @@ Silmeden önce verilerinizin bir kopyasını almak isterseniz Profilim, Gizlilik
 Aşağıdaki durumlarda hesap silinemez; ekran nedenini ve ne yapmanız gerektiğini gösterir:
 
 - Platform yöneticisi (süper kullanıcı) hesapları bu ekrandan silinemez.
-- Bir sitede aktif üyeler varken o sitenin tek yöneticisiyseniz: önce siteye başka bir yönetici atamanız veya siteyi kaldırmanız gerekir.
+- Bir sitenin tek yöneticisiyseniz: önce siteyi başka bir yöneticiye devretmeniz ya da site silme (kapatma) talebi göndermeniz gerekir; talep gönderildikten sonra hesabınızı silebilirsiniz (site yöneticisiz kalır, kayıtlar saklanır).
+- Bir dairedeki kendi hesabınızda ödenmemiş borcunuz varsa: borç kapanınca hesabınızı silebilirsiniz; tutar ve ödeme yolu "Borcum" sayfasındadır. Kişisel verilerinizle ilgili başvurunuzu site yönetimine yapabilirsiniz. [AVUKAT DOĞRULASIN: KVKK m.11 ve m.13 gerekçeli yanıt; kayıtlar zaten saklanırken borç nedeniyle hesap silmenin ertelenmesi]
 
 ## 2. Silinen veya kimliksizleştirilen veriler
 

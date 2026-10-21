@@ -24,9 +24,12 @@ import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 /// Başarıda: sunucu silmeyi onaylayınca [AccountService.deleteAccount] yerel durumu temizler ve çıkış yapar;
 /// bu sayfa ve üstündeki tüm yollar kapatılır (kök sayfa artık giriş ekranıdır) ve bilgi mesajı gösterilir.
 class AccountDeletionView extends StatefulWidget {
-  const AccountDeletionView({super.key, required this.service});
+  const AccountDeletionView({super.key, required this.service, this.onOpenDebt});
 
   final AccountService service;
+
+  /// Verilirse borç engelinde "Borcum'a git" düğmesi çıkar: bu sayfa kapanır, ardından çağrılır (Borcum açılır).
+  final VoidCallback? onOpenDebt;
 
   static const String deletedMessage =
       'Hesabınız silindi ve bu cihazdaki verileriniz temizlendi. '
@@ -215,7 +218,15 @@ class AccountDeletionViewState extends State<AccountDeletionView> {
           const SizedBox(height: AppSpace.lg),
         ],
         if (blocked) ...[
-          _BlockersCard(blockers: preview.blockers),
+          _BlockersCard(
+            blockers: preview.blockers,
+            onOpenDebt: widget.onOpenDebt == null
+                ? null
+                : () {
+                    Navigator.of(context).maybePop();
+                    widget.onOpenDebt!();
+                  },
+          ),
           const SizedBox(height: AppSpace.lg),
         ],
         if (preview.willRemove.isNotEmpty) ...[
@@ -270,9 +281,10 @@ class AccountDeletionViewState extends State<AccountDeletionView> {
 
 /// "Hesabınız şu anda silinemez" kartı: her engel nedeniyle (+ varsa site kodu ve çözüm yönergesi).
 class _BlockersCard extends StatelessWidget {
-  const _BlockersCard({required this.blockers});
+  const _BlockersCard({required this.blockers, this.onOpenDebt});
 
   final List<AccountDeletionBlocker> blockers;
+  final VoidCallback? onOpenDebt;
 
   @override
   Widget build(BuildContext context) {
@@ -310,6 +322,14 @@ class _BlockersCard extends StatelessWidget {
                     Text(
                       blockers[i].hint!,
                       style: th.bodySmall?.copyWith(color: p.textSecondary),
+                    ),
+                  ],
+                  if (blockers[i].code == 'OPEN_DEBT' && onOpenDebt != null) ...[
+                    const SizedBox(height: AppSpace.sm),
+                    OutlinedButton(
+                      key: const ValueKey<String>('account_blocker_open_debt'),
+                      onPressed: onOpenDebt,
+                      child: const Text("Borcum'a git", textAlign: TextAlign.center),
                     ),
                   ],
                 ],

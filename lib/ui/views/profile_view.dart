@@ -237,6 +237,7 @@ class ResidentProfileView extends StatelessWidget {
     required this.session,
     this.authService,
     this.showNotificationPrefs = false,
+    this.onOpenDebt,
   });
 
   final UserSession session;
@@ -246,6 +247,9 @@ class ResidentProfileView extends StatelessWidget {
 
   /// true (ve [authService] verilmişse): "Bildirim Tercihleri" bölümü (Platform Faz 3a).
   final bool showNotificationPrefs;
+
+  /// Hesap silme engelinde "Borcum'a git" (ana sayfa Borcum menüsüne geçer).
+  final VoidCallback? onOpenDebt;
 
   @override
   Widget build(BuildContext context) {
@@ -337,7 +341,7 @@ class ResidentProfileView extends StatelessWidget {
           NotificationPrefsSection(authService: service),
         ],
         const SizedBox(height: AppSpace.lg),
-        AccountPrivacySection(authService: service),
+        AccountPrivacySection(authService: service, onOpenDebt: onOpenDebt),
       ],
     );
   }

@@ -9932,10 +9932,10 @@ async function sectionAccount() {
   const passiveAccountResident = await mkUser('Pasif Hesapli Sakin', 'apartment_owner', { active: false });
   await member(m2.site.apts[1], passiveAccountResident);
   p = await blk(m2.ms[0]);
-  check('B2c: pasif uyelik ve pasif HESAPLI uye "aktif uye" sayilmaz -> tek yonetici silebilir', p.can_delete === true && p.blockers.length === 0, p);
+  check('B2c: pasif uyeler olsa da (2I) sitenin tek yoneticisi engelli: LAST_SITE_MANAGER', p.can_delete === false && p.blockers.some((b) => b.code === 'LAST_SITE_MANAGER'), p);
 
   const m3 = await mkManaged('Engel Bos Site', { managers: 1, members: 0 });
-  check('B2d: uyesi olmayan sitenin tek yoneticisi silebilir (sozlesme: yalniz AKTIF UYE varken engel)', (await blk(m3.ms[0])).can_delete === true);
+  check('B2d: uyesi olmayan sitenin tek yoneticisi de engelli (2I); kapatma talebi gonderilince engel kalkar', (await blk(m3.ms[0])).can_delete === false);
 
   const m4 = await mkManaged('Engel Iki Yonetici', { managers: 2, members: 1 });
   check('B2e: iki aktif yonetici: her biri silebilir', (await blk(m4.ms[0])).can_delete === true && (await blk(m4.ms[1])).can_delete === true);
