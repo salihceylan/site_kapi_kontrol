@@ -136,6 +136,19 @@ describe('parseRulesPatch (gövde)', () => {
     expectSyncError(() => parse(one(undefined, { note: 12 })), 400, 'INVALID_BODY');
   });
 
+  it('not: görünmez ve yön denetim karakterleri atılır (projedeki serbest metin kuralı); uzunluk kod noktasıyla (DB char_length ile aynı)', () => {
+    const cp = (...codes) => String.fromCodePoint(...codes);
+    // U+202E (sağdan sola zorla), U+200B (sıfır genişlik), U+FEFF (BOM), U+2066 (yön yalıtımı) ekranda metni gizler ya da ters çevirir.
+    const sneaky = `Kurul${cp(0x202e)} kararı${cp(0x200b)} 12${cp(0xfeff)}${cp(0x2066)}`;
+    assert.equal(parse(one(undefined, { note: sneaky })).note, 'Kurul kararı 12');
+    assert.equal(parse(one(undefined, { note: cp(0x200b, 0x202e) })).note, null, 'yalnız görünmez karakter = not yok');
+    // NFC: ayrışık biçim (harf + birleşik nokta, NFD) yerine tek kod noktalı biçim saklanır (aynı görünen iki not aynı metin olur).
+    assert.equal(parse(one(undefined, { note: `Kanun${cp(0x0307)}`.normalize('NFD') })).note, `Kanun${cp(0x0307)}`.normalize('NFC'));
+    const emoji = cp(0x1f4c4);
+    assert.equal(parse(one(undefined, { note: emoji.repeat(200) })).note, emoji.repeat(200), '200 kod noktası sığar (UTF-16 uzunluğu 400)');
+    expectSyncError(() => parse(one(undefined, { note: emoji.repeat(201) })), 400, 'INVALID_BODY');
+  });
+
   it('yapı: nesne olmalı, bilinmeyen kök alan yok, değişiklik 1..20, site kodu pozitif tam sayı', () => {
     for (const bad of [null, [], 'x', {}, { changes: [] }, { changes: 'x' }, { changes: [{ key: 'budget.objection_days', value: 1 }], extra: 1 }, { ...one(), site_code: 'abc' }, { ...one(), site_code: -5 }, { ...one(), site_code: 0 }]) {
       expectSyncError(() => parse(bad), 400, 'INVALID_BODY');

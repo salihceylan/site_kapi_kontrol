@@ -14,6 +14,7 @@ import { pool } from '../db.js';
 import { accountDeleted } from './account_common.js';
 import { actorFromAuthUser, recordAudit } from './audit_service.js';
 import { PlatformError } from './errors.js';
+import { normalizeFreeText } from './finance_common.js';
 import { parsePositiveId, todayIso } from './people_common.js';
 import { RULES, RULE_GROUPS, RULE_KEYS, invalidateRuleCache, resolveRuleFromRows, ruleOf, validateRuleChange } from './platform_rules.js';
 
@@ -188,8 +189,6 @@ function isRealDate(text) {
   return probe.getUTCFullYear() === year && probe.getUTCMonth() === month - 1 && probe.getUTCDate() === day;
 }
 
-const CONTROL_RE = new RegExp(`[\\x00-\\x1f\\x7f-\\x9f${String.fromCharCode(0x2028, 0x2029)}]`, 'g');
-
 /**
  * PUT gövdesi -> { siteCode, validFrom, note, changes: [{ key, rule, value, inherit }] }.
  * Yapı hatası 400 INVALID_BODY; kural hataları TEK yanıtta 400 VALIDATION_FAILED (`fields`: anahtar -> Türkçe metin, `rule_codes`: anahtar -> kod).
@@ -216,13 +215,9 @@ export function parseRulesPatch(body, { today }) {
   const latest = `${Number(today.slice(0, 4)) + SCHEDULE_YEARS}${today.slice(4)}`;
   if (validFrom < today) throw invalidBody('Geçerlilik tarihi bugünden önce olamaz; geçmiş günlerin kuralı değiştirilmez.');
   if (validFrom > latest) throw invalidBody(`Geçerlilik tarihi en fazla ${SCHEDULE_YEARS} yıl ileride olabilir.`);
-  let note = null;
-  if (body.note !== undefined && body.note !== null) {
-    if (typeof body.note !== 'string') throw invalidBody('Not metin olmalıdır.');
-    const cleaned = body.note.replace(CONTROL_RE, ' ').replace(/\s+/g, ' ').trim();
-    if (cleaned.length > NOTE_MAX) throw invalidBody(`Not en fazla ${NOTE_MAX} karakter olabilir.`);
-    note = cleaned === '' ? null : cleaned;
-  }
+  // Projedeki serbest metin kuralı (finance_common.normalizeFreeText): NFC, kontrol / satır ayırıcı boşluğa, görünmez ve yön denetim karakterleri
+  // (U+202A-202E, U+2066-2069, U+200B, U+FEFF ...) atılır, boşluk tekleşir; uzunluk kod noktasıyla (DB char_length ile aynı); boş -> null.
+  const note = normalizeFreeText(body.note, { label: 'Not', max: NOTE_MAX });
   if (!Array.isArray(body.changes) || body.changes.length === 0) {
     throw invalidBody('En az bir kural değişikliği gönderin.');
   }
