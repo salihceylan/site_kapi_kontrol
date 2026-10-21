@@ -8,6 +8,7 @@ import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/services/bulk_file_picker.dart';
 import 'package:site_kapi_kontrol/services/meter_api.dart';
 import 'package:site_kapi_kontrol/services/meter_file_reader.dart';
+import 'package:site_kapi_kontrol/ui/views/meter_field_view.dart';
 import 'package:site_kapi_kontrol/ui/design/app_snack.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 
@@ -75,6 +76,9 @@ class MetersViewState extends State<MetersView> with SingleTickerProviderStateMi
     final site = _site;
     if (site == null) {
       return const Center(child: Padding(padding: EdgeInsets.all(AppSpace.xl), child: Text('Sayaç modülü açık bir site bulunamadı. Modüller ekranından açılmasını isteyin.')));
+    }
+    if (site.fieldOnly) {
+      return MeterFieldView(key: ValueKey<int>(site.code), authService: widget.authService, siteCode: site.code, siteName: site.label, service: _service);
     }
     return Column(
       children: <Widget>[
@@ -149,6 +153,13 @@ class _MetersTabState extends State<_MetersTab> {
     if (created == true) await _load();
   }
 
+  Future<void> _openField() async {
+    await Navigator.of(context).push<void>(MaterialPageRoute<void>(
+      builder: (_) => MeterFieldView(authService: widget.service.authService, siteCode: widget.site.code, siteName: widget.site.label, service: widget.service),
+    ));
+    if (mounted) await _load();
+  }
+
   Future<List<MeterApartment>?> _loadApartments() async {
     try {
       return await widget.service.listApartments(widget.site.code);
@@ -181,7 +192,11 @@ class _MetersTabState extends State<_MetersTab> {
           for (final k in MeterKind.values) ChoiceChip(label: Text(k.label), selected: _kind == k, onSelected: (_) => setState(() => _kind = k)),
         ]),
         const SizedBox(height: AppSpace.md),
-        if (widget.site.canWrite) Align(alignment: Alignment.centerLeft, child: FilledButton.icon(onPressed: _add, icon: const Icon(Icons.add_rounded), label: const Text('Sayaç ekle'))),
+        if (widget.site.canWrite)
+          Wrap(spacing: AppSpace.sm, runSpacing: AppSpace.sm, children: <Widget>[
+            FilledButton.icon(onPressed: _add, icon: const Icon(Icons.add_rounded), label: const Text('Sayaç ekle')),
+            OutlinedButton.icon(onPressed: _openField, icon: const Icon(Icons.photo_camera_rounded), label: const Text('Fotoğrafla oku')),
+          ]),
         const SizedBox(height: AppSpace.md),
         if (shown.isEmpty) const Text('Henüz sayaç kaydı yok.'),
         for (final m in shown)

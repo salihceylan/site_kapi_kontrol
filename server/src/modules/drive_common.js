@@ -74,6 +74,7 @@ export function newOauthState() {
 export const DRIVE_KINDS = Object.freeze({
   sozlesme: 'Srv',
   su: 'su',
+  isi: 'isi',
   elektrik: 'elektrik',
   teklif: 'Teklif',
   dekont: 'Dekont',

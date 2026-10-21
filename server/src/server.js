@@ -48,6 +48,7 @@ import { deviceIntegrationsRouter } from './modules/device_integrations_routes.j
 import { contractsRouter } from './modules/contracts_routes.js';
 import { equipmentRouter } from './modules/equipment_routes.js';
 import { meteringRouter } from './modules/metering_routes.js';
+import { meteringFieldRouter } from './modules/metering_field_routes.js';
 import { startContractReminders, stopContractReminders } from './modules/contracts_reminders.js';
 import { decisionBookRouter } from './modules/decision_book_routes.js';
 import { teamRouter } from './modules/team_routes.js';
@@ -159,6 +160,8 @@ app.use(contractsRouter);
 app.use(equipmentRouter);
 // Sayac okuma ve faturalandirma: /manager/sites/:siteCode/{meter-apartments,meters,meter-readings/import,meter-billings}[...] (modul metering, varsayilan KAPALI; sakin ucu yok).
 app.use(meteringRouter);
+// Sayac saha okuma (gorevli, fotografli): /sites/:siteCode/meter-field/{meters,readings,photos/:id/content} (modul metering).
+app.use(meteringFieldRouter);
 // Karar defteri: /manager/sites/:siteCode/decisions[/:id[/finalize]] + /app/decisions[/:id] (modul decision_book, varsayilan KAPALI).
 app.use(decisionBookRouter);
 // Yonetim kadrosu, uygulamaya davet ve rehber (058): /manager/sites/:siteCode/team|people/:id/duty|invitation|directory/contacts, /auth/accept-invite, /app/invitations, /app/directory.

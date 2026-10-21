@@ -37,7 +37,7 @@ enum MeterMethod {
 /// Sakin/yönetici sayaç ekranının siteleri (`metering` açık siteler).
 @immutable
 class MeterSite {
-  const MeterSite({required this.code, required this.name, this.canWrite = true});
+  const MeterSite({required this.code, required this.name, this.canWrite = true, this.fieldOnly = false});
 
   final int code;
   final String name;
@@ -45,14 +45,17 @@ class MeterSite {
   /// Yalnız yönetici yazar; kurul üyesi salt okur.
   final bool canWrite;
 
+  /// Görevli (STAFF): yalnız fotoğrafla okuma ekranını görür; sayaç yönetimi / faturalandırma yok.
+  final bool fieldOnly;
+
   String get label => name.trim().isEmpty ? 'İsimsiz site' : name.trim();
 
   @override
   bool operator ==(Object other) =>
-      other is MeterSite && other.code == code && other.name == name && other.canWrite == canWrite;
+      other is MeterSite && other.code == code && other.name == name && other.canWrite == canWrite && other.fieldOnly == fieldOnly;
 
   @override
-  int get hashCode => Object.hash(code, name, canWrite);
+  int get hashCode => Object.hash(code, name, canWrite, fieldOnly);
 }
 
 Map<String, dynamic> _map(Object? raw) => raw is Map ? Map<String, dynamic>.from(raw) : const <String, dynamic>{};
