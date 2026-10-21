@@ -20,6 +20,7 @@ const Map<SirketMenuItem, SirketMenuGroup> _expected = <SirketMenuItem, SirketMe
   SirketMenuItem.taleplerim: SirketMenuGroup.iletisim,
   SirketMenuItem.anketler: SirketMenuGroup.iletisim,
   SirketMenuItem.anket: SirketMenuGroup.iletisim,
+  SirketMenuItem.komsuPanosu: SirketMenuGroup.iletisim,
   SirketMenuItem.kapilar: SirketMenuGroup.siteHizmetleri,
   SirketMenuItem.belgeler: SirketMenuGroup.siteHizmetleri,
   SirketMenuItem.rezervasyonlar: SirketMenuGroup.siteHizmetleri,

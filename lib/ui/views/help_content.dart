@@ -68,6 +68,7 @@ abstract final class HelpContent {
   /// paneli (kapı durumu, kapıyı aç) "Kapılar" ekranındadır.
   static const Set<String> knownMenuTitles = <String>{
     'Panel',
+    'Komşu Panosu',
     'Kapılar',
     'Profilim',
     'Eller Serbest & Kestirmeler',
@@ -286,6 +287,17 @@ abstract final class HelpContent {
   );
 
   static const List<HelpTopic> _resident = <HelpTopic>[
+    HelpTopic(
+      id: 'neighbor_board',
+      title: 'Komşu panosuna nasıl ilan veririm?',
+      icon: Icons.forum_rounded,
+      steps: <String>[
+        'Menüden “Komşu Panosu” ekranını açın (site yöneticisi modülü açtıysa görünür).',
+        'Yeni ilan düğmesine dokunup başlık ve metni yazın; ilan yönetici onayına gider.',
+        'Onaylanınca komşularınız ilanı görür. Uygunsuz bir ilanı Şikayet et düğmesiyle yöneticiye bildirebilirsiniz.',
+      ],
+      note: 'Yönetici reddederse gerekçeyi ilanınızın altında görürsünüz. İlanınızı istediğiniz an geri çekebilirsiniz.',
+    ),
     HelpTopic(
       id: 'open_door',
       title: 'Kapıyı nasıl açarım?',

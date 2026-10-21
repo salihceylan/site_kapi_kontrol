@@ -154,6 +154,7 @@ import 'package:site_kapi_kontrol/ui/views/survey_resident_view.dart';
 import 'package:site_kapi_kontrol/models/decision_models.dart';
 import 'package:site_kapi_kontrol/ui/views/decision_manager_view.dart';
 import 'package:site_kapi_kontrol/ui/views/decision_resident_view.dart';
+import 'package:site_kapi_kontrol/ui/views/neighbor_board_view.dart';
 import 'package:site_kapi_kontrol/ui/widgets/announcement_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/unread_announcement_card.dart';
 
@@ -298,6 +299,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final GlobalKey<SurveyResidentViewState> _surveyResidentKey = GlobalKey<SurveyResidentViewState>();
   final GlobalKey<DecisionManagerViewState> _decisionManagerKey = GlobalKey<DecisionManagerViewState>();
   final GlobalKey<DecisionResidentViewState> _decisionResidentKey = GlobalKey<DecisionResidentViewState>();
+  final GlobalKey<NeighborBoardViewState> _neighborBoardKey = GlobalKey<NeighborBoardViewState>();
   final GlobalKey<VisitorManagerViewState> _visitorManagerKey = GlobalKey<VisitorManagerViewState>();
   final GlobalKey<VisitorResidentViewState> _visitorResidentKey = GlobalKey<VisitorResidentViewState>();
   final GlobalKey<ContractsViewState> _contractsKey = GlobalKey<ContractsViewState>();
@@ -929,6 +931,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         if (_surveyResidentSites(role).isNotEmpty) SirketMenuItem.anket,
         if (_canAccessDecisionManage(role)) SirketMenuItem.kararDefteri,
         if (_decisionResidentSites(role).isNotEmpty) SirketMenuItem.kararlar,
+        if (_neighborBoardSites(role).isNotEmpty) SirketMenuItem.komsuPanosu,
         if (_canAccessVisitorManage(role)) SirketMenuItem.ziyaretciKayitlari,
         if (_visitorResidentSites(role).isNotEmpty) SirketMenuItem.ziyaretcilerim,
         if (_canAccessContracts(role)) SirketMenuItem.sozlesmeler,
@@ -1158,6 +1161,23 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   /// "Karar Defteri" menüsü: süper kullanıcı ya da `decision_book` modülü açık bir sitede yönetici / kurul üyesi.
   bool _canAccessDecisionManage(UserRole role) =>
       role == UserRole.superUser || _decisionManageSites(role).isNotEmpty;
+
+  // --- Komşu Panosu ---
+
+  /// "Komşu Panosu" siteleri: `neighbor_board` modülü AÇIK siteler. Yöneticisi olunan sitede [PeopleSite.canWrite] true
+  /// (onay / kaldırma); sakini olunan sitede false (ilan yaz / şikayet). Süper kullanıcıda boştur. Sunucu yetkiyi yine denetler.
+  List<PeopleSite> _neighborBoardSites(UserRole role) {
+    if (role == UserRole.superUser || !_moduleAccess.isFiltering) return const <PeopleSite>[];
+    final canManage = _canManagePeople(role);
+    return <PeopleSite>[
+      for (final site in _moduleAccess.result!.sites)
+        if (site.isEnabled(PlatformModuleCodes.neighborBoard))
+          if (site.role == 'manager' && canManage)
+            PeopleSite(code: site.siteCode, name: site.siteName, canWrite: true)
+          else if (_isRecipientSite(site))
+            PeopleSite(code: site.siteCode, name: site.siteName),
+    ];
+  }
 
   // --- Ziyaretçi ve Kargo (F11.03) ---
 
@@ -1709,6 +1729,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (item == SirketMenuItem.kararlar) {
       return _decisionResidentSites(role).isNotEmpty;
     }
+    if (item == SirketMenuItem.komsuPanosu) {
+      return _neighborBoardSites(role).isNotEmpty;
+    }
 
     // Ziyaretçi ve Kargo: `visitor_log` modülü açık siteye bağlı yönetici / görevli / kurul (yönetim ekranı) ya da
     // sakin; modül kapalıyken ya da modül verisi yokken erişim YOKTUR.
@@ -1886,6 +1909,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
       case SirketMenuItem.kararlar:
         return 'Kararlar';
+
+      case SirketMenuItem.komsuPanosu:
+        return 'Komşu Panosu';
 
       case SirketMenuItem.ziyaretciKayitlari:
         return 'Ziyaretçi ve Kargo';
@@ -5320,6 +5346,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       case SirketMenuItem.kararlar:
         await _decisionResidentKey.currentState?.reload();
         break;
+      case SirketMenuItem.komsuPanosu:
+        await _neighborBoardKey.currentState?.reload();
+        break;
       case SirketMenuItem.modulTalepleri:
         await _moduleRequestsViewKey.currentState?.reload();
         break;
@@ -6496,6 +6525,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           key: _decisionResidentKey,
           authService: widget.authService,
           sites: _decisionResidentSites(session.role),
+        );
+
+      case SirketMenuItem.komsuPanosu:
+        return NeighborBoardView(
+          key: _neighborBoardKey,
+          authService: widget.authService,
+          sites: _neighborBoardSites(session.role),
         );
 
       case SirketMenuItem.modulTalepleri:

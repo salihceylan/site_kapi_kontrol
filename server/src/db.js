@@ -15,6 +15,7 @@ import { ensureVisitorLogSchema } from './modules/visitor_log_schema.js';
 import { ensureCardAccessSchema } from './modules/card_access_schema.js';
 import { ensureContractsSchema } from './modules/contracts_schema.js';
 import { ensureDecisionBookSchema } from './modules/decision_book_schema.js';
+import { ensureNeighborBoardSchema } from './modules/neighbor_board_schema.js';
 import { ensurePushSchema } from './modules/push_schema.js';
 import { ensureApartmentPinSchema } from './modules/apartment_pin_schema.js';
 import { ensureFinancePartiesSchema } from './modules/finance_parties_schema.js';
@@ -1894,6 +1895,8 @@ export async function ensureDbSchema() {
     await ensureFinancePartiesSchema(client);
     // 053 (kurallar tablosu, G11): dev blokta DEGIL; katalog kontrolu + her adim kendi otomatik onayli ifadesi (platform_rules_schema.js = migrations/053).
     await ensurePlatformRulesSchema(client);
+    // 064 (komsu panosu): dev blokta DEGIL; tablolar varsa hicbir ifade gonderilmez (neighbor_board_schema.js = migrations/064).
+    await ensureNeighborBoardSchema(client);
 
     // 031 people_v1: mevcut sakinlerin CRM'e tek seferlik aktarimi. Savunmaci: hata sunucunun acilmasini ENGELLEMEZ
     // (kendi transaction'i geri alinir, isaret yazilmaz => sonraki acilista yeniden denenir; okuma anindaki

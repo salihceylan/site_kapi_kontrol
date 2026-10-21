@@ -141,6 +141,10 @@ enum SirketMenuItem {
   /// `decision_book` modülü AÇIK sitesi olan sakine [YanMenu.additionalItems] ile eklenir (yönetim öğesinin altına).
   kararlar,
 
+  /// Komşu Panosu (`neighbor_board`): sakin ilan yazar / şikayet eder, yönetici onaylar / kaldırır. Rol listesinde YOKTUR;
+  /// modül AÇIK sitesi olan yönetici ya da sakine [YanMenu.additionalItems] ile eklenir.
+  komsuPanosu,
+
   /// Kapılar: bugüne dek "Panel"in kendisi olan kapı paneli (durum, kapıyı aç; bireysel kullanıcıda kapılar, daireler,
   /// cihazlar). "Panel" artık modül vitrinidir; kapı paneli bu öğeyle bir dokunuş uzaktadır. Rol listesinde YOKTUR;
   /// [YanMenu.additionalItems] ile eklenir ve her zaman "Panel"in hemen altına gelir. Geçiş Kontrol (`door_control`)
@@ -201,7 +205,8 @@ SirketMenuGroup menuGroupOf(SirketMenuItem item) => switch (item) {
       SirketMenuItem.talepler ||
       SirketMenuItem.taleplerim ||
       SirketMenuItem.anketler ||
-      SirketMenuItem.anket =>
+      SirketMenuItem.anket ||
+      SirketMenuItem.komsuPanosu =>
         SirketMenuGroup.iletisim,
       SirketMenuItem.kapilar ||
       SirketMenuItem.belgeler ||
@@ -1319,6 +1324,8 @@ String _titleForItem(SirketMenuItem item, [UserRole? role]) {
       return 'Karar Defteri';
     case SirketMenuItem.kararlar:
       return 'Kararlar';
+    case SirketMenuItem.komsuPanosu:
+      return 'Komşu Panosu';
     case SirketMenuItem.kapilar:
       return 'Kapılar';
   }
@@ -1398,6 +1405,8 @@ IconData _iconForItem(SirketMenuItem item) {
       return Icons.gavel_rounded;
     case SirketMenuItem.kararlar:
       return Icons.library_books_rounded;
+    case SirketMenuItem.komsuPanosu:
+      return Icons.forum_rounded;
     case SirketMenuItem.kapilar:
       return Icons.meeting_room_rounded;
   }
