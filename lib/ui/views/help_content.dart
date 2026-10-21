@@ -648,6 +648,19 @@ abstract final class HelpContent {
           'Hesap varsa şifre sıfırlama bağlantısı gönderilir; gelen kutunuza ve gereksiz klasörüne bakın.',
     ),
     HelpFaq(
+      question: 'Telefonla (SMS ile) nasıl giriş yaparım?',
+      answer:
+          'Giriş ekranında “Telefonla giriş (SMS)” seçeneğine dokunun, hesabınızdaki telefon numarasını yazın ve gelen '
+          '6 haneli kodu girin. Kod 5 dakika geçerlidir. SMS hizmeti açık değilse ekran “Yakında…” der; '
+          'e-posta ve parolanızla girebilirsiniz. WhatsApp ile giriş henüz yoktur.',
+    ),
+    HelpFaq(
+      question: 'Kargom geldiğinde nasıl haberdar olurum?',
+      answer:
+          'Görevli dairenize kargo kaydı girince size e-posta gider; telefon uygulaması ya da tarayıcı bildirimi açıksa '
+          'oraya da bildirim düşer. Tarayıcı bildirimini Bildirim Tercihleri bölümünden açabilirsiniz.',
+    ),
+    HelpFaq(
       question: 'Doğrulama kodu e-postama gelmedi.',
       answer:
           'Önce gereksiz (spam) klasörüne bakın. Kod 30 dakika geçerlidir; gelmediyse doğrulama ekranındaki '

@@ -53,6 +53,7 @@ import { budgetRouter } from './modules/budget_routes.js';
 import { driveRouter } from './modules/drive_routes.js';
 import { startDocumentsMaintenance, stopDocumentsMaintenance } from './modules/document_maintenance.js';
 import { pushRouter } from './modules/push_routes.js';
+import { notifyChannelsRouter } from './modules/notify_channels_routes.js';
 import { startPushWorker, stopPushWorker } from './modules/push_worker.js';
 
 import { buildCorsAllowlist, createCorsOptionsDelegate } from './config/cors.js';
@@ -156,6 +157,8 @@ app.use(budgetRouter);
 app.use(driveRouter);
 // Telefon bildirimi (Faz 3b-B): /app/push/devices[/:installId], /app/push/test, /admin/push/status (tercihler /app/notification-preferences'ta).
 app.use(pushRouter);
+// SMS ile giris + tarayici bildirimi (063): /auth/sms/*, /app/web-push/* (SMS / VAPID anahtari yoksa kapali).
+app.use(notifyChannelsRouter);
 // Hesap silme (kimliksizlestirme) ve kisisel veri disa aktarma: /me/account-deletion[/preview], /me/data-export (yalniz kendi hesabi).
 app.use(accountRouter);
 // Platform hizmetleri: yasal belgeler (/public/legal-documents, /legal/:id, /me/consents), /public/app-config, /public/client-errors, /admin/platform-config.

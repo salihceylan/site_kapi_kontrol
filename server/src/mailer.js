@@ -790,3 +790,20 @@ export async function sendAccountDeletedEmail({ to, fullName, deletedAt = new Da
   `;
   await transporter.sendMail({ from, to, subject: ACCOUNT_DELETED_SUBJECT, text, html });
 }
+
+// Kargo geldi bildirimi (063): kisa, kargo firmasi/ad icermez.
+export async function sendCargoArrivedEmail({ to, name, siteName, apartmentLabel }) {
+  const from = String(process.env.SMTP_FROM || process.env.SMTP_USER || '').trim();
+  if (!from) {
+    throw new Error('SMTP_FROM veya SMTP_USER env degiskeni eksik.');
+  }
+  const transporter = createTransporter();
+  const subject = singleLine(`Kargo geldi - ${siteName} (${apartmentLabel})`);
+  const text = `Merhaba ${name || ''}, ${siteName} sitesinde ${apartmentLabel} için bir kargo geldi. Teslim almak için görevliye uğrayabilirsiniz.`;
+  const html = `<div style="font-family: Arial, sans-serif; max-width: 520px; margin: 0 auto; padding: 24px;">
+    <h2 style="color: #111827;">Kargo geldi</h2>
+    <p style="color: #374151;">Merhaba <strong>${escapeHtml(name || '')}</strong>,</p>
+    <p style="color: #4b5563;"><strong>${escapeHtml(siteName)}</strong> sitesinde <strong>${escapeHtml(apartmentLabel)}</strong> için bir kargo geldi. Teslim almak için görevliye uğrayabilirsiniz.</p>
+  </div>`;
+  await transporter.sendMail({ from, to, subject, text, html });
+}

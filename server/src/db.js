@@ -28,6 +28,7 @@ import { ensureTeamSchema } from './modules/team_schema.js';
 import { ensureDriveSchema } from './modules/drive_schema.js';
 import { ensureMeteringSchema } from './modules/metering_schema.js';
 import { ensureManagementCompanySchema } from './modules/management_company_schema.js';
+import { ensureNotifyChannelsSchema } from './modules/notify_channels_schema.js';
 
 dotenv.config();
 
@@ -1922,6 +1923,8 @@ export async function ensureDbSchema() {
     await ensureMeteringSchema(client);
     // 062 (yonetim firmasi Y1/Y2, deneme suresi): katalog kontrolu; management_company_schema.js = migrations/062.
     await ensureManagementCompanySchema(client);
+    // 063 (SMS giris kodlari, web push, kargo bildirim kaydi): notify_channels_schema.js = migrations/063.
+    await ensureNotifyChannelsSchema(client);
 
     // 031 people_v1: mevcut sakinlerin CRM'e tek seferlik aktarimi. Savunmaci: hata sunucunun acilmasini ENGELLEMEZ
     // (kendi transaction'i geri alinir, isaret yazilmaz => sonraki acilista yeniden denenir; okuma anindaki

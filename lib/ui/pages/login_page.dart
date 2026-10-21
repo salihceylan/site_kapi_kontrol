@@ -12,6 +12,7 @@ import 'package:site_kapi_kontrol/ui/design/login_hero.dart';
 import 'package:site_kapi_kontrol/ui/design/theme_toggle_button.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/pages/register_individual_page.dart';
+import 'package:site_kapi_kontrol/ui/pages/sms_login_page.dart';
 import 'package:site_kapi_kontrol/ui/views/legal_footer_links.dart';
 
 class LoginPage extends StatefulWidget {
@@ -370,6 +371,16 @@ class _LoginPageState extends State<LoginPage> {
                         label: 'Giriş Yap',
                         onPressed: _isLoading ? null : _submit,
                         loading: _isLoading,
+                      ),
+                      TextButton.icon(
+                        onPressed: _isLoading
+                            ? null
+                            : () => Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (_) => SmsLoginPage(authService: widget.authService)),
+                              ),
+                        icon: const Icon(Icons.sms_outlined, size: 18),
+                        label: const Text('Telefonla giriş (SMS)'),
                       ),
                       const SizedBox(height: AppSpace.lg),
                       Wrap(

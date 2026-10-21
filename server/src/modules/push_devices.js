@@ -34,6 +34,7 @@ import { isPushAvailable, pushRuntime } from './push_credentials.js';
 import { fcmClientFor } from './push_fcm.js';
 import { buildTestMessage } from './push_message.js';
 import { parsePositiveId, toIso } from './people_common.js';
+import { deleteWebPushDataForUser } from './web_push.js';
 
 const INT32_MAX = 2147483647;
 
@@ -385,6 +386,8 @@ export async function deletePushDataForUser(client, userCode) {
       (await client.query('DELETE FROM push_outbox WHERE id IN (SELECT id FROM push_outbox WHERE user_code = $1 ORDER BY id FOR UPDATE)', [userCode])).rowCount ?? 0,
     );
   }
+  // 063: tarayici (web push) abonelikleri de silinir (FK yok; ayri sayac, ozet bicimi degismez).
+  await deleteWebPushDataForUser(client, userCode);
   return summary;
 }
 

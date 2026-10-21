@@ -300,6 +300,36 @@ class AuthService extends ChangeNotifier {
     }
   }
 
+  /// SMS ile giriş açık mı (sunucuda sağlayıcı anahtarı var mı).
+  Future<bool> smsLoginEnabled() => api.smsLoginEnabled();
+
+  /// Telefona giriş kodu ister; hata mesajı ya da null.
+  Future<String?> requestSmsCode({required String phone}) async {
+    try {
+      await api.requestSmsCode(phone: phone);
+      return null;
+    } on ApiException catch (e) {
+      return e.message;
+    } catch (_) {
+      return 'Sunucuya baglanilamadi.';
+    }
+  }
+
+  /// Telefon + SMS koduyla giriş; hata mesajı ya da null (başarı).
+  Future<String?> loginWithSms({required String phone, required String code}) async {
+    try {
+      _session = await api.verifySmsCode(phone: phone, code: code);
+      _lastSessionCheckAt = DateTime.now();
+      await _persist();
+      _notifySafely();
+      return null;
+    } on ApiException catch (e) {
+      return e.message;
+    } catch (_) {
+      return 'Sunucuya baglanilamadi.';
+    }
+  }
+
   Future<String?> registerIndividual({
     required String firstName,
     required String lastName,
