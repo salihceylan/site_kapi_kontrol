@@ -212,7 +212,7 @@ export const MODULE_CATALOG = Object.freeze([
     name: 'Kamera (CCTV) Bağlantısı',
     description: 'Kapı olaylarını kamera kayıtlarıyla eşleştirme; kayıt sistemi bağlantısı.',
     core: false,
-    status: MODULE_STATUS_COMING_SOON,
+    status: MODULE_STATUS_AVAILABLE,
     defaultEnabled: false,
   }),
   defineModule({

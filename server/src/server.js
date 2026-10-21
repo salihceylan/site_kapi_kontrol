@@ -47,6 +47,7 @@ import { cardAccessRouter } from './modules/card_access_routes.js';
 import { deviceIntegrationsRouter } from './modules/device_integrations_routes.js';
 import { contractsRouter } from './modules/contracts_routes.js';
 import { equipmentRouter } from './modules/equipment_routes.js';
+import { cctvRouter } from './modules/cctv_routes.js';
 import { meteringRouter } from './modules/metering_routes.js';
 import { meteringFieldRouter } from './modules/metering_field_routes.js';
 import { startContractReminders, stopContractReminders } from './modules/contracts_reminders.js';
@@ -175,6 +176,8 @@ app.use(driveRouter);
 app.use(neighborBoardRouter);
 // Faaliyet raporu: /manager/sites/:siteCode/annual-report (modul annual_report, varsayilan KAPALI).
 app.use(annualReportRouter);
+// Kamera (CCTV) baglantisi: /manager/sites/:siteCode/cctv/{cameras,events,clip-link}[...] (modul cctv_link, varsayilan KAPALI; sakin ucu yok).
+app.use(cctvRouter);
 // Telefon bildirimi (Faz 3b-B): /app/push/devices[/:installId], /app/push/test, /admin/push/status (tercihler /app/notification-preferences'ta).
 app.use(pushRouter);
 // SMS ile giris + tarayici bildirimi (063): /auth/sms/*, /app/web-push/* (SMS / VAPID anahtari yoksa kapali).

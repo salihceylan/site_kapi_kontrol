@@ -79,7 +79,7 @@ describe('platform katalog: sozlesme tablosu', () => {
       annual_report: [false, 'available'], // Faaliyet Raporu (R2): varsayilan KAPALI
       plate_recognition: [false, 'coming_soon'],
       hgs_access: [false, 'coming_soon'],
-      cctv_link: [false, 'coming_soon'],
+      cctv_link: [false, 'available'], // Kamera (CCTV) Baglantisi (072): kullanilabilir, varsayilan KAPALI
       equipment: [false, 'available'], // Ekipman ve Bakim (068): kullanilabilir, varsayilan KAPALI
     });
     assert.equal(def('door_control').name, 'Geçiş Kontrol (SmartKeyPass)');
@@ -114,7 +114,7 @@ describe('platform katalog: sozlesme tablosu', () => {
   it('toggleable = !core && status === available (door_control, finance, documents, rezervasyon, is takibi, anket, ziyaretci, kartli gecis, sozlesmeler, karar defteri)', () => {
     assert.deepEqual(
       MODULE_CATALOG.filter(isToggleable).map((m) => m.code),
-      ['door_control', 'finance', 'documents', 'reservation', 'work_tracking', 'metering', 'survey', 'visitor_log', 'card_access', 'card_payments', 'plate_cameras', 'contracts', 'decision_book', 'directory', 'budget', 'drive_storage', 'neighbor_board', 'annual_report', 'equipment'],
+      ['door_control', 'finance', 'documents', 'reservation', 'work_tracking', 'metering', 'survey', 'visitor_log', 'card_access', 'card_payments', 'plate_cameras', 'contracts', 'decision_book', 'directory', 'budget', 'drive_storage', 'neighbor_board', 'annual_report', 'cctv_link', 'equipment'],
     );
     assert.equal(isToggleable(null), false);
   });
@@ -142,7 +142,7 @@ describe('platform katalog: enabled hesabi', () => {
   });
 
   it('status !== available ise HER ZAMAN false (satir ne derse desin)', () => {
-    for (const code of ['online_payment', 'plate_recognition', 'hgs_access', 'cctv_link']) {
+    for (const code of ['online_payment', 'plate_recognition', 'hgs_access']) {
       assert.equal(computeModuleEnabled(def(code), undefined), false, code);
       assert.equal(computeModuleEnabled(def(code), { enabled: true }), false, code);
     }

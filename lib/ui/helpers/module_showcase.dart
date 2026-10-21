@@ -77,6 +77,7 @@ const Set<SirketMenuItem> _featureModuleItems = <SirketMenuItem>{
   SirketMenuItem.sozlesmeler,
   SirketMenuItem.sayaclar,
   SirketMenuItem.odemeKamera,
+  SirketMenuItem.kameraCctv,
   SirketMenuItem.ekipmanBakim,
 };
 
@@ -104,6 +105,7 @@ const Map<SirketMenuItem, ModuleArtKind> _artKinds = <SirketMenuItem, ModuleArtK
   SirketMenuItem.komsuPanosu: ModuleArtKind.announcements,
   SirketMenuItem.faaliyetRaporu: ModuleArtKind.finance,
   SirketMenuItem.odemeKamera: ModuleArtKind.devices,
+  SirketMenuItem.kameraCctv: ModuleArtKind.devices,
   SirketMenuItem.ekipmanBakim: ModuleArtKind.contracts,
   SirketMenuItem.siteler: ModuleArtKind.sites,
   SirketMenuItem.siteBasvurulari: ModuleArtKind.sites,
@@ -153,6 +155,7 @@ const Map<SirketMenuItem, String> _descriptions = <SirketMenuItem, String>{
   SirketMenuItem.komsuPanosu: 'Komşu ilanları ve onay',
   SirketMenuItem.faaliyetRaporu: 'Yıllık rapor taslağı ve PDF',
   SirketMenuItem.odemeKamera: 'Kart ödemesi ve plaka kameraları',
+  SirketMenuItem.kameraCctv: 'Kapı olaylarını kamera kayıtlarıyla eşleştirin',
   SirketMenuItem.ekipmanBakim: 'Ekipman, bakım planı ve teklifler',
   SirketMenuItem.siteler: 'Site, blok, daire ve kapılar',
   SirketMenuItem.siteBasvurulari: 'Site kurma başvuruları',
