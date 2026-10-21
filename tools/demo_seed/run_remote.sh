@@ -61,6 +61,8 @@ mk_url() {
 PROD_URL="$(mk_url "")"
 DB_NAME="$(cd "$APP_DIR" && node -e "require('dotenv').config({ path: process.argv[1] }); process.stdout.write(process.env.DB_NAME || '')" "$ENVF")"
 [ -n "$DB_NAME" ] || { echo "HATA: DB_NAME okunamadi"; exit 2; }
+DB_USER="$(cd "$APP_DIR" && node -e "require('dotenv').config({ path: process.argv[1] }); process.stdout.write(process.env.DB_USER || '')" "$ENVF")"
+[ -n "$DB_USER" ] || { echo "HATA: DB_USER okunamadi"; exit 2; }
 echo "Canli veritabani adi: $DB_NAME   (kapsayici: $DBC)"
 
 # --- 1) yedek -------------------------------------------------------------------------------------------------------------------------------
@@ -80,9 +82,9 @@ counts() {
 # --- 2-3) prova -------------------------------------------------------------------------------------------------------------------------------
 if [ "$SKIP_REH" = 0 ]; then
   echo "[2/4] gecici veritabani: $RDB (yedekten)"
-  $PSQL -qc "CREATE DATABASE \"$RDB\"" || exit 4
+  $PSQL -qc "CREATE DATABASE \"$RDB\" OWNER \"$DB_USER\"" || exit 4
   trap '$PSQL -qc "DROP DATABASE IF EXISTS \"$RDB\" WITH (FORCE)" >/dev/null 2>&1' EXIT
-  docker exec -i "$DBC" pg_restore -U postgres -d "$RDB" --no-owner < "$BK/db_before_demo.dump" 2> "$BK/restore.err"
+  docker exec -i "$DBC" pg_restore -U postgres -d "$RDB" --no-owner --role="$DB_USER" < "$BK/db_before_demo.dump" 2> "$BK/restore.err"
   echo "   yukleme uyarilari (ilk 3): $(head -n 3 "$BK/restore.err" | cut -c1-120 | tr '\n' '|')"
   REH_URL="$(mk_url "$RDB")"
   counts "$RDB" > "$BK/counts_before.txt"
