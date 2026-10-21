@@ -16,6 +16,8 @@
 //   P10 postPayment (sozlesme 2.1) kaynak izi, tekrar, cakisma, dogrulama
 //   P11 eski istemci uyumu (eski alanlar korunur)
 //   P12 tum veritabani degismezleri (ters kayit = asilin hesabi, tazminat satiri = defter satirinin hesabi, yeni satir hesapsiz yazilmaz, 40P01 = 0)
+//   Ikinci inceleme (mutasyonla bulunan test bosluklari): P4m kiraci sekmesi kurali, P5g kisisel veri disa aktarmasi yalniz kendi hesabi,
+//   P6f hesap suzgecli ekstrenin acilis bakiyesi, P8d ardisik hatirlatma sayaci hesabin son tahsilatina gore
 // NOT: dosya ASCII Turkce kullanir; para hesabi tamsayi kurus (BigInt kahin), kayan nokta yok.
 
 import fs from 'node:fs';
@@ -545,6 +547,21 @@ export default async function sectionParties(t) {
     ['baska sitenin dairesi bu site yolundan', (await account(M, s0, '?account_party=tenant')).status, 404],
   ];
   check('P5f: yonetici hesap ucu yetki matrisi: yonetici / super / kurul okur; baska site yoneticisi, ilgisiz, sakin 403; baska sitenin dairesi 404 (IDOR)', mgrMatrix.every(([, got, want]) => got === want), mgrMatrix);
+  // P5g (ikinci inceleme). Kisisel veri disa aktarmasi YALNIZ kendi hesabi: both dairede malike salt okunur gorunen kiraci hesabi kiracinin verisidir;
+  // malikin dosyasinda Borcum tek gorunum (ev sahibi) ve makbuzlarda yalniz ev sahibi hesabinin tahsilatlari bulunur (P5e: uygulamadaki makbuz listesi ikisini de gosterir).
+  const { collectPersonalData } = await import('../src/modules/account_export_service.js');
+  const exportOf = async (user) => (await collectPersonalData(user, { db: pool }))?.data ?? {};
+  const ouExport = await exportOf(OU.user);
+  const tuExport = await exportOf(TU.user);
+  const ouStatement = (ouExport.finance_statements ?? []).find((s) => s.apartment_id === A1) ?? null;
+  const exportReceiptIds = (data) => (data.receipts ?? []).map((r) => r.id).sort((a, b) => a - b);
+  check(
+    'P5g (ikinci inceleme): kisisel veri disa aktarmasi YALNIZ kendi hesabi: both dairede malikin dosyasinda Borcum tek gorunum (ev sahibi -10000, salt okunur kiraci hesabi YOK, hareketler ev sahibi hesabi) ve makbuzlarda yalniz ev sahibi hesabi tahsilatlari; kiracinin dosyasinda yalniz kendi makbuzu',
+    ouStatement?.account_party === 'owner' && ouStatement.accounts?.length === 1 && ouStatement.accounts[0].account_party === 'owner' && ouStatement.balance_minor === -10000
+      && ouStatement.recent.every((r) => r.account_party === 'owner')
+      && same(exportReceiptIds(ouExport), [Number(rc2.id), Number(rc3.id)].sort((a, b) => a - b)) && same(exportReceiptIds(tuExport), [Number(rc1.id)]),
+    { ou: ouStatement && { accounts: ouStatement.accounts?.map((a) => [a.account_party, a.role]), balance: ouStatement.balance_minor }, ouReceipts: exportReceiptIds(ouExport), tuReceipts: exportReceiptIds(tuExport) },
+  );
 
   // ============================================================================================================
   // P6. Yaslandirma (M1 hesap basina), ekstre ve disa aktarma "Hesap" sutunu
@@ -608,6 +625,26 @@ export default async function sectionParties(t) {
     exSt.status === 200 && hesapSt === exSt.body.columns.length - 1 && exSt.body.rows.length >= 2 && exSt.body.rows.every((r) => r[hesapSt] === 'Kiracı hesabı')
       && exReceipts.status === 200 && hesapRc === exReceipts.body.columns.length - 1 && exReceipts.body.rows.some((r) => r[hesapRc] === 'Kiracı hesabı') && exReceipts.body.rows.some((r) => r[hesapRc] === 'Ev sahibi hesabı'),
     { st: exSt.body?.rows?.map((r) => r[hesapSt]), rc: exReceipts.body?.rows?.map((r) => r[hesapRc]) },
+  );
+  // P6f (ikinci inceleme). Hesap suzgecli ekstrenin ACILIS bakiyesi de hesap basina: aralik basindan (70 gun once) onceki 052 oncesi satirlar
+  // kiraci hesabinda 7000 (Lt), ev sahibi hesabinda 5000 (Lo + Lb); bir hesabin eski satiri digerinin acilisina girmez (SQL kahini).
+  const midFrom = ago(70);
+  const midRange = `from=${midFrom}&to=${TODAY}`;
+  const openingOracle = { owner: 0, tenant: 0 };
+  for (const row of (await q(`SELECT ${ACC} AS p, SUM(l.amount_minor)::TEXT AS s FROM ledger_entries l WHERE l.site_code = $1 AND l.apartment_id = $2 AND l.entry_date < $3::DATE GROUP BY 1`, [M.code, A1, midFrom])).rows) {
+    openingOracle[row.p] = Number(row.s);
+  }
+  const midSt = (extra) => call('GET', `${base}/apartments/${A1}/statement?${midRange}${extra}`, MGR);
+  const [midAll, midTenant, midOwner] = [await midSt(''), await midSt('&account_party=tenant'), await midSt('&account_party=owner')];
+  const midExport = await call('GET', `${base}/exports/finance_statement?apartment_id=${A1}&account_party=tenant&${midRange}`, MGR);
+  const devreden = midExport.body?.rows?.[0] ?? null;
+  check(
+    'P6f (ikinci inceleme): hesap suzgecli ekstrenin ACILIS bakiyesi hesap basina (kiraci 7000, ev sahibi 5000, suzgecsiz 12000; SQL kahini); kapanis hesabin bakiyesi (168000 / -10000 / 158000); disa aktarmanin Devreden satiri kiraci hesabinin acilisi',
+    openingOracle.tenant === 7000 && openingOracle.owner === 5000
+      && midTenant.body.opening_balance_minor === openingOracle.tenant && midOwner.body.opening_balance_minor === openingOracle.owner && midAll.body.opening_balance_minor === openingOracle.tenant + openingOracle.owner
+      && midTenant.body.closing_balance_minor === 168000 && midOwner.body.closing_balance_minor === -10000 && midAll.body.closing_balance_minor === 158000
+      && devreden?.[1] === 'Devreden' && devreden?.[9] === openingOracle.tenant,
+    { openingOracle, opening: [midAll.body?.opening_balance_minor, midTenant.body?.opening_balance_minor, midOwner.body?.opening_balance_minor], devreden },
   );
 
   // ============================================================================================================
@@ -680,6 +717,21 @@ export default async function sectionParties(t) {
       { k2Row, debtors: kDebtors.body.items?.map((i) => i.apartment_id), credit: kCredit.body.items?.map((i) => i.apartment_id), summary: kSummary.body },
     );
   }
+  // P4m (ikinci inceleme). Ekstre penceresinin kiraci sekmesi (show_tenant_account): kiracisi cikmis ama kiraci hesabinda satiri kalan dairede (A6) sekme
+  // VAR (yoksa kiracinin borcu ev sahibi hesabiyla karisik tek listede gorunurdu); guncel kiracili dairede (A3, kiraci hesabi bos) VAR; kiracisi hic
+  // olmamis ve kiraci hesabi bos dairede (A4: gecici kiraci kaydi silindi) YOK.
+  const tabState = {};
+  for (const [label, aptId] of [['A3', A3], ['A4', A4], ['A6', A6]]) {
+    const body = (await account(M, aptId)).body;
+    tabState[label] = { show: body.show_tenant_account, current: body.has_current_tenant, tenantRows: body.accounts?.tenant?.entry_count };
+  }
+  check(
+    'P4m (ikinci inceleme): kiraci sekmesi: kiracisi cikmis, kiraci hesabinda satiri olan daire (A6) VAR; guncel kiracili, kiraci hesabi bos daire (A3) VAR; kiracisi hic olmamis, kiraci hesabi bos daire (A4) YOK',
+    tabState.A6.show === true && tabState.A6.current === false && tabState.A6.tenantRows > 0
+      && tabState.A3.show === true && tabState.A3.current === true && tabState.A3.tenantRows === 0
+      && tabState.A4.show === false && tabState.A4.current === false && tabState.A4.tenantRows === 0,
+    tabState,
+  );
 
   // ============================================================================================================
   // P7. Gecikme tazminati: ayni dairenin iki hesabi iki satir
@@ -829,6 +881,42 @@ export default async function sectionParties(t) {
   );
   const rPvAfter = await call('POST', `${rBase}/reminders/preview`, MGR, { tone: 'friendly' });
   check('P8c: gonderim sonrasi onizleme: hatirlatilan 5 hesap aralik nedeniyle hariç (interval 5), kalan alici yok', rPvAfter.body.excluded.interval === 5 && rPvAfter.body.person_count === 0, rPvAfter.body.excluded);
+  // P8d (ikinci inceleme). Ardisik hatirlatma sayaci HESABIN son tahsilatina gore (siklik / sayac kaydi daire basina, temkinli): iki hatirlatmadan SONRA
+  // odeme yapan kiraci hesabinin sayaci sifirlanir (ileti gider); hic odemeyen ev sahibi hesabi ardisik sinirda (2) elden takibe duser.
+  {
+    const C = await mkManaged('P Ardisik Sitesi', { 'C Blok': 1 });
+    const [C1] = C.ids;
+    const cBase = P(C.code);
+    await setResponsible(C1, 'both');
+    await resident(C, C1, 'owner', 'P Ardisik Malik', { email: 'p.co1@qa.example' });
+    await resident(C, C1, 'tenant', 'P Ardisik Kiraci', { email: 'p.ct1@qa.example' });
+    const cCharge = (amount, account) =>
+      q(`INSERT INTO ledger_entries (site_code, apartment_id, kind, amount_minor, period, entry_date, due_date, payer_party, account_party) VALUES ($1, $2, 'charge', $3, $4, $5, $6, 'both', $7)`, [C.code, C1, amount, `${ago(105).slice(0, 7)}-01`, ago(105), ago(100), account]);
+    await cCharge(80000, 'owner');
+    await cCharge(90000, 'tenant');
+    for (const daysBack of [60, 30]) {
+      const run = Number(
+        (
+          await q(
+            `INSERT INTO finance_reminder_runs (site_code, tone, params, apartment_count, person_count, with_amount_count, preview_hash, idempotency_key, request_fingerprint, run_on, status) VALUES ($1, 'friendly', '{}'::jsonb, 1, 1, 0, $2, $3, $2, $4::date, 'active') RETURNING id`,
+            [C.code, 'c'.repeat(64), key('chist'), ago(daysBack)],
+          )
+        ).rows[0].id,
+      );
+      await q(`INSERT INTO finance_reminder_apartments (site_code, apartment_id, run_id, reminded_at) VALUES ($1, $2, $3, NOW() - make_interval(days => $4::int))`, [C.code, C1, run, daysBack]);
+    }
+    // kiraci hesabi son hatirlatmadan (30 gun once) SONRA kismi odedi (20 gun once): kiraci sayaci sifirlanir, gecikmis borc esigin ustunde kalir
+    await q(`INSERT INTO ledger_entries (site_code, apartment_id, kind, amount_minor, period, entry_date, payer_party, method, account_party) VALUES ($1, $2, 'payment', -10000, $3, $4, 'both', 'cash', 'tenant')`, [C.code, C1, `${ago(20).slice(0, 7)}-01`, ago(20)]);
+    const cSettings = await call('GET', `${cBase}/settings`, MGR);
+    const cEnable = await call('PUT', `${cBase}/settings`, MGR, { expected_settings_version: cSettings.body.settings_version, reminders: { enabled: true, min_overdue_minor: 5000, min_days_overdue: 5, min_interval_days: 14, max_consecutive: 2 } });
+    if (cEnable.status !== 200) throw new Error(`ardisik fiksturu: ${JSON.stringify(cEnable.body)}`);
+    const cPv = await call('POST', `${cBase}/reminders/preview`, MGR, { tone: 'friendly' });
+    check(
+      'P8d (ikinci inceleme): ardisik hatirlatma sayaci HESABIN son tahsilatina gore: iki hatirlatmadan sonra odeme yapan kiraci hesabina ileti gider (1 kisi, 1 hesap); hic odemeyen ev sahibi hesabi ardisik sinirda (2) elden takipte (consecutive 1)',
+      cPv.status === 200 && cPv.body.person_count === 1 && cPv.body.account_count === 1 && cPv.body.excluded.consecutive === 1 && cPv.body.hand_follow_up_count === 1,
+      cPv.body,
+    );
+  }
 
   // ============================================================================================================
   // P9. ESZAMANLI tahsilat x borclandirma x ters kayit x duzeltme x CRM degisikligi
@@ -960,6 +1048,8 @@ export default async function sectionParties(t) {
   const first = await direct();
   const again = await direct();
   const conflictSource = await errorOf(direct({ sourceId: 7002 }));
+  // ikinci inceleme: yalniz kaynak TURU farkli (ayni kimlik 7001): dekont 7001 ile banka satiri 7001 ayni tahsilat degildir
+  const conflictKind = await errorOf(direct({ sourceKind: 'payment_notice' }));
   const conflictAccount = await errorOf(direct({ accountParty: 'tenant' }));
   const badKind = await errorOf(direct({ idempotencyKey: 'p-x-1', sourceKind: 'excel' }));
   const idOnly = await errorOf(direct({ idempotencyKey: 'p-x-2', sourceKind: null, sourceId: 5 }));
@@ -968,11 +1058,11 @@ export default async function sectionParties(t) {
   const directRow = (await q(`SELECT account_party, source_kind, source_id::TEXT AS source_id FROM ledger_entries WHERE id = $1`, [first.entryId])).rows[0];
   const directAudit = (await q(`SELECT details FROM audit_log WHERE action = 'finance.payment.recorded' AND target_id = $1`, [String(first.entryId)])).rows[0]?.details;
   check(
-    'P10: postPayment dogrudan: banka satiri kaynak izi (source_kind bank_line, source_id 7001) + hesap; makbuz ayni islemde; ayni anahtar tekrari AYNI kayit (replayed); ayni anahtar + farkli kaynak / hesap 409; bilinmeyen kaynak turu / tursuz kimlik 400; baska sitenin dairesi 404; dekont kaynagi kiraci hesabina',
+    'P10: postPayment dogrudan: banka satiri kaynak izi (source_kind bank_line, source_id 7001) + hesap; makbuz ayni islemde; ayni anahtar tekrari AYNI kayit (replayed); ayni anahtar + farkli kaynak kimligi / kaynak turu / hesap 409; bilinmeyen kaynak turu / tursuz kimlik 400; baska sitenin dairesi 404; dekont kaynagi kiraci hesabina',
     first.replayed === false && first.accountParty === 'owner' && Number.isInteger(first.receiptId) && directRow.account_party === 'owner' && directRow.source_kind === 'bank_line' && directRow.source_id === '7001'
-      && again.replayed === true && again.entryId === first.entryId && conflictSource?.code === 'IDEMPOTENCY_CONFLICT' && conflictAccount?.code === 'IDEMPOTENCY_CONFLICT'
+      && again.replayed === true && again.entryId === first.entryId && conflictSource?.code === 'IDEMPOTENCY_CONFLICT' && conflictKind?.code === 'IDEMPOTENCY_CONFLICT' && conflictAccount?.code === 'IDEMPOTENCY_CONFLICT'
       && badKind?.status === 400 && idOnly?.status === 400 && foreignApt?.status === 404 && notice.accountParty === 'tenant' && directAudit?.source_kind === 'bank_line' && directAudit?.account_party === 'owner',
-    { first, again, conflictSource, conflictAccount, badKind, idOnly, foreignApt, directRow, directAudit },
+    { first, again, conflictSource, conflictKind, conflictAccount, badKind, idOnly, foreignApt, directRow, directAudit },
   );
   const a3Account = await account(M, A3);
   const ooItem = await itemOf(OO.user, A3);

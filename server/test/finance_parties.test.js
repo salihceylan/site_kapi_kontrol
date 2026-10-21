@@ -292,6 +292,30 @@ describe('postPayment (tek tahsilat giriş noktası)', () => {
     );
   });
 
+  it('ikinci inceleme: kaynak izi (dalga 2: dekont / banka satırı / devir / kart) AYNEN yazılır; aynı anahtar + başka kaynak TÜRÜ ya da başka kaynak KİMLİĞİ ayrı ayrı 409', async () => {
+    const client = paymentClient();
+    const posted = await postPayment(client, { ...base, accountParty: 'owner', sourceKind: 'bank_line', sourceId: 7001 });
+    assert.equal(posted.replayed, false);
+    assert.deepEqual(client.inserted().slice(10), ['owner', 'bank_line', 7001], 'INSERT: account_party, source_kind, source_id');
+    const existing = { id: '78', kind: 'payment', apartment_id: '11', amount_minor: '-25000', entry_date: '2026-10-20', method: 'cash', account_party: 'owner', payer_party: 'both', source_kind: 'bank_line', source_id: '7001' };
+    const replay = await postPayment(paymentClient({ existing }), { ...base, accountParty: 'owner', sourceKind: 'bank_line', sourceId: 7001 });
+    assert.deepEqual([replay.replayed, replay.entryId], [true, 78]);
+    // yalnız tür farklı (aynı kimlik): dekont 7001 ile banka satırı 7001 aynı tahsilat DEĞİLDİR
+    await assert.rejects(
+      () => postPayment(paymentClient({ existing }), { ...base, accountParty: 'owner', sourceKind: 'payment_notice', sourceId: 7001 }),
+      (e) => e.code === 'IDEMPOTENCY_CONFLICT',
+      'aynı kimlik, başka kaynak türü',
+    );
+    // yalnız kimlik farklı (aynı tür)
+    await assert.rejects(
+      () => postPayment(paymentClient({ existing }), { ...base, accountParty: 'owner', sourceKind: 'bank_line', sourceId: 7002 }),
+      (e) => e.code === 'IDEMPOTENCY_CONFLICT',
+      'aynı tür, başka kaynak kimliği',
+    );
+    // kaynak verilmeyen (yönetici) istek kaynaklı kaydı tekrar saymaz
+    await assert.rejects(() => postPayment(paymentClient({ existing }), { ...base, accountParty: 'owner' }), (e) => e.code === 'IDEMPOTENCY_CONFLICT', 'kaynaksız istek');
+  });
+
   it('kapalı dönem 409 PERIOD_CLOSED (yazılmaz); daire başka sitede 404; geçersiz hesap / kaynak 400; kaynak kimliği türsüz olamaz', async () => {
     const closed = paymentClient({ closed: true });
     await assert.rejects(() => postPayment(closed, { ...base, accountParty: 'owner' }), (e) => e.code === 'PERIOD_CLOSED');

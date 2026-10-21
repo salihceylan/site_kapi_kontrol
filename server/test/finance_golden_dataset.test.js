@@ -9,8 +9,8 @@ import { computeLateFeePlan } from '../src/modules/finance_late_fee.js';
 import { lateFeeBruteForce, lateFeeForApartment, prepareApartment } from '../src/modules/finance_late_fee_calc.js';
 import { m1Remainders } from '../src/modules/finance_m1.js';
 import { accountForCharge, accountPartyOfRow } from '../src/modules/finance_parties.js';
-import { parseSettingsPatch } from '../src/modules/finance_settings.js';
-import { RULES, normalizeRuleValue } from '../src/modules/platform_rules.js';
+import { LATE_FEE_MAX_RULE_KEY, loadEffectiveSettings, parseSettingsPatch } from '../src/modules/finance_settings.js';
+import { RULES, invalidateRuleCache, normalizeRuleValue } from '../src/modules/platform_rules.js';
 import {
   ACCOUNT_PROFILE,
   DISTRIBUTION_CASES,
@@ -21,6 +21,7 @@ import {
   TWO_ACCOUNT_DISTRIBUTION_CASES,
   TWO_ACCOUNT_LATE_FEE_CASES,
   TWO_ACCOUNT_MAHSUP_CASES,
+  TWO_ACCOUNT_RULE_CAP_CASE,
 } from './fixtures/finance_golden_site.js';
 
 const sum = (values) => values.reduce((acc, value) => acc + value, 0);
@@ -268,6 +269,53 @@ describe('altın veri seti: iki hesap (İP-1A, G12; dağıtım, gecikme tazminat
         }
       });
     }
+  }
+
+  // İkinci inceleme (İP-1A x İP-1B): kurallar tablosundaki üst sınır, iki hesaplı planda da hesabın tazminatına uygulanır (oran gerçek
+  // loadEffectiveSettings ile kırpılır; hesap kodu gerçek computeLateFeePlan). Beklenen değerler fikstürde elle hesaplandı.
+  for (const [method] of LATE_FEE_METHODS) {
+    const capCase = TWO_ACCOUNT_RULE_CAP_CASE;
+    it(`${capCase.name} [${capCase.base}, ${method}]`, async () => {
+      const base = TWO_ACCOUNT_LATE_FEE_CASES.find((scenario) => scenario.apartment === capCase.base);
+      const expected = capCase.expected[method];
+      const norm = (text) => String(text).replace(/\s+/g, ' ').trim();
+      const settingsDb = {
+        async query(text, params = []) {
+          const sql = norm(text);
+          if (/^SELECT receipts_auto_issue, .* FROM finance_settings WHERE site_code = \$1$/.test(sql)) {
+            return {
+              rows: [{
+                receipts_auto_issue: true, late_fee_enabled: true, late_fee_rate_bp: capCase.storedRateBp, late_fee_method: method, late_fee_grace_days: base.graceDays,
+                late_fee_start_period: `${base.period}-01`, reminders_enabled: false, reminder_min_overdue_minor: '5000', reminder_min_days_overdue: 5,
+                reminder_min_interval_days: 14, reminder_max_consecutive: 3, settings_version: 4,
+              }],
+            };
+          }
+          if (/FROM platform_rule_values WHERE rule_key = \$1/.test(sql)) {
+            assert.equal(params[0], LATE_FEE_MAX_RULE_KEY);
+            return { rows: [{ id: '1', site_code: null, value: capCase.ruleCapBp, inherit: false, valid_from: '2026-01-01' }] };
+          }
+          throw new Error(`BEKLENMEYEN SQL: ${sql.slice(0, 160)}`);
+        },
+      };
+      invalidateRuleCache();
+      try {
+        const settings = await loadEffectiveSettings(settingsDb, GOLDEN_SITE_CODE);
+        assert.equal(settings.late_fee_rate_bp, capCase.ruleCapBp, 'etkin oran = min(saklı, kural, yasal)');
+        const plan = await computeLateFeePlan(lateFeeDb(goldenApartment(base.apartment, base.responsibleParty), ledgerRowsOf(base.apartmentId, base.rows)), GOLDEN_SITE_CODE, {
+          period: `${base.period}-01`,
+          settings,
+          excluded: [],
+        });
+        assert.deepEqual(plan.lines.map((line) => [line.apartmentId, line.accountParty]), [[base.apartmentId, 'owner']], 'yalnız ev sahibi hesabı satırı');
+        assert.equal(plan.lines[0].baseDay, BigInt(expected.base), 'S (kuruş x gün) orandan bağımsız');
+        assert.equal(plan.lines[0].amount, BigInt(expected.fee), 'tazminat kırpılmış oranla (kuruş)');
+        assert.equal(plan.params.rate_bp, capCase.ruleCapBp, 'çalıştırma anlık görüntüsü ve önizleme özeti kırpılmış oranla');
+        assert.ok(plan.lines[0].amount < BigInt(base.expected.owner[method].fee), 'kural sınırı 500 bp sonucunun altında');
+      } finally {
+        invalidateRuleCache();
+      }
+    });
   }
 
   it('tek hesaplı daire: L1-L4 satırları hesap bazlı planda (ev sahibi ya da kiracı hesabında) tek hesaplı tabloyla AYNI sonucu verir', async () => {

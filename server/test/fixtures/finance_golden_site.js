@@ -436,6 +436,22 @@ export const TWO_ACCOUNT_LATE_FEE_CASES = Object.freeze([
   },
 ]);
 
+// İL2 (İP-1A x İP-1B; karar G11 + G12; ikinci inceleme): İL1'in AYNI satırları, ama kurallar tablosunda aylık üst sınır
+//   (finance.late_fee.monthly_bp_max) 300 bp (%3) ve sitenin saklı oranı 500 bp. Etkin oran = min(saklı 500, kural 300, yasal 500) = 300
+//   (finance_settings.loadEffectiveSettings, tazminat açıkken). Tazminat yine YALNIZ ev sahibi hesabına; S değişmez (31 x 81.000 = 2.511.000).
+//   daily_30:     (2 x 2.511.000 x 300 + 10.000 x 30) / (20.000 x 30) = (1.506.600.000 + 300.000) / 600.000 = 2.511,5 -> 2.511 (25,11 TL)
+//   daily_actual: (2 x 2.511.000 x 300 + 10.000 x 31) / (20.000 x 31) = (1.506.600.000 + 310.000) / 620.000 = 2.430,5 -> 2.430 (= 81.000 x %3)
+export const TWO_ACCOUNT_RULE_CAP_CASE = Object.freeze({
+  name: 'İL2 kural üst sınırı 300 bp, saklı oran 500 bp: B-2 ev sahibi hesabının tazminatı kırpılmış oranla (%3); kiracı hesabında satır yok',
+  base: 'B-2',
+  storedRateBp: 500,
+  ruleCapBp: 300,
+  expected: {
+    daily_30: { base: 2511000, fee: 2511 },
+    daily_actual: { base: 2511000, fee: 2430 },
+  },
+});
+
 export const TWO_ACCOUNT_MAHSUP_CASES = Object.freeze([
   // İM1 (B-3; sorumlu kiracı, kiracı var): ev sahibi hesabı: çatı payı 81.000 (vade 20.09; kimlik 711), ödeme yok.
   //   Kiracı hesabı: Eylül aidatı 75.000 (vade 05.09; 712), Ekim aidatı 75.000 (vade 05.10; 713); kiracı toplam 100.000 ödedi.
