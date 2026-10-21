@@ -6,7 +6,33 @@ Yasal metinlerin (`server/legal/*.md`) yayına alınabilmesi için sizden (Güde
 
 ## 1. Şirket bilgileri ve platform ayarları eşlemesi
 
-Bu alanlar süper kullanıcı ayarlarından girilir: `PUT /admin/platform-config` gövdesi `legal` grubu (`docs/PLATFORM_SATISA_HAZIRLIK.md` §1.2). Boş dize "ayarsız" demektir; ayarsız alan belgede `[……]` olarak görünür ve belge eksik sayılır.
+### Durum (2026-10-21, karar H1)
+
+| Alan | Değer | Durum |
+| --- | --- | --- |
+| `legal.company_name` | GÜDE TEKNOLOJİ LTD. ŞTİ. | **Verildi** (Cenk, Kararlar 1) |
+| `legal.company_address` | Yalı Mah. 6436 Sok. No:37/A Karşıyaka / İzmir | **Verildi** (Cenk, Kararlar 1) |
+| `legal.contact_phone` | 0543 795 60 44 | **Verildi** (Cenk, Kararlar 1) |
+| `legal.kep_address` | (boş) | **Boş kalır** (karar H1). Boşken KEP cümleleri metinlerde hiç yazılmaz. |
+| `legal.mersis_no` | (boş) | **Verilmedi**, boş kalabilir (karar H1). Boşken MERSİS satırı metinlerde hiç yazılmaz. |
+| `legal.contact_email` | (yok) | **Bekleniyor.** Kişisel veri başvuruları için izlenen kutu (öneri: alan adınızda ayrı bir kutu açın, ör. `kvkk@gudeteknoloji.com.tr`; böyle bir kutu bugün var mı bilinmiyor). Girilene kadar belgelerde `[……]` görünür. |
+
+- Üç değer Platform Ayarları doğrulamasından geçer: 2026-10-21'de sunucunun kendi doğrulama işleviyle (`normalizeConfigPatch`) denendi,
+  hata yok. Canlıda girilip girilmediği bu çalışmada görülmedi (canlı veri). Giriş: süper kullanıcı, Platform Ayarları ekranı.
+- Örnek görünüm (KVKK Aydınlatma 1.1, üç değer girilmiş, e-posta henüz yok): "Unvan: GÜDE TEKNOLOJİ LTD. ŞTİ." / "Adres: Yalı Mah. 6436
+  Sok. No:37/A Karşıyaka / İzmir" / "E-posta: [……]" / "Telefon: 0543 795 60 44". MERSİS ve KEP satırı hiç yok.
+- KEP ya da MERSİS sonradan girilirse ilgili cümleler kendiliğinden görünür; metin, bu alanlar doluyken eskisiyle harfi harfine aynıdır.
+- Avukata sorular (şirket bilgileri): (a) Kullanım Koşulları ve sözleşme metinlerinde ticaret sicil numarası ya da MERSİS numarası gösterilmeli mi? TTK m.39/2: "Tacirin
+  işletmesiyle ilgili olarak düzenlediği ticari mektuplarda ve ticari defterlere yapılan kayıtların dayandığı belgelerde tacirin sicil
+  numarası, ticaret unvanı, işletmesinin merkezi … de gösterilir." (mevzuat.gov.tr, 6102 sayılı Kanun metni, erişim 2026-10-21)
+  `[AVUKAT DOĞRULASIN]`. (b) Ücretli abonelik uygulama içinden satılırsa elektronik ticaret mevzuatı tanıtıcı bilgi olarak MERSİS
+  numarası isteyebilir (6563 sayılı Kanun m.3/1-a "tanıtıcı bilgilerini"; ayrıntı yönetmelikte, yönetmeliğin ilgili fıkrası bu çalışmada
+  okunamadı: **doğrulanamadı**) `[AVUKAT DOĞRULASIN]`. (c) KEP edinmek şirket için zorunlu mu? (**doğrulanamadı**) `[AVUKAT DOĞRULASIN]`.
+  (d) KEP yokken KVKK başvuru cümlesi "kayıtlı e-posta ya da yazılı başvuru" ile sınırlanıyor; Başvuru Tebliği m.5'teki diğer yollar
+  (güvenli elektronik imza, mobil imza; Tebliğ maddesi `AVUKAT_KONTROL_LISTESI.md` madde 25'te kaynaklı) için ayrıca cümle gerekir mi?
+  `[AVUKAT DOĞRULASIN]`
+
+Bu alanlar süper kullanıcı ayarlarından girilir: `PUT /admin/platform-config` gövdesi `legal` grubu (`docs/PLATFORM_SATISA_HAZIRLIK.md` §1.2). Boş dize "ayarsız" demektir; ayarsız alan belgede `[……]` olarak görünür ve belge eksik sayılır. **İstisna (2026-10-21, karar H1):** `mersis_no` ve `kep_address` isteğe bağlıdır; şablonlarda koşullu bölüm içinde durduklarından boşken metinde hiç görünmezler ve belgeyi eksik yapmazlar (`docs/PLATFORM_SATISA_HAZIRLIK.md` §1.4 "Koşullu bölüm").
 
 ```json
 {
@@ -25,9 +51,9 @@ Bu alanlar süper kullanıcı ayarlarından girilir: `PUT /admin/platform-config
 Doğrulama kuralları (`server/src/modules/platform_config_service.js:22-25,43-52,160-166`): ad en çok 200, adres en çok 500 karakter; MERSİS numarası 16 haneli (boşluk ve tire kaldırılır); `kep_address` ve `contact_email` geçerli e-posta; telefon `+90 212 000 00 00` biçimi gibi 6-29 karakter; metin alanlarında `[ ] < > \` \\ **` karakterleri ve satır başında `# > * + -` kabul edilmez (Markdown'a sızmasın diye).
 
 - **`legal.company_name`**: Güde Teknoloji'nin ticaret unvanı (tam, anonim/limited ekiyle). Yer tutucu `{{company_name}}`. Geçtiği belgeler: KVKK Aydınlatma (bölüm 1.1), Gizlilik (bölüm 2), Kullanım Koşulları (giriş, bölüm 15), Veri İşleme Sözleşmesi (giriş), Hesap ve Veri Silme (giriş, bölüm 6).
-- **`legal.mersis_no`**: 16 haneli MERSİS numarası. Yer tutucu `{{mersis_no}}`. KVKK Aydınlatma (1.1), Gizlilik (2), Kullanım Koşulları (giriş), Veri İşleme Sözleşmesi (giriş).
+- **`legal.mersis_no`**: 16 haneli MERSİS numarası. Yer tutucu `{{mersis_no}}` (yalnız `{{#mersis_no}} … {{/mersis_no}}` bölümü içinde; boşken hiç yazılmaz). KVKK Aydınlatma (1.1), Gizlilik (2), Kullanım Koşulları (giriş), Veri İşleme Sözleşmesi (giriş).
 - **`legal.company_address`**: tebligata elverişli açık adres. Yer tutucu `{{company_address}}`. KVKK Aydınlatma (1.1, bölüm 9 yazılı başvuru), Gizlilik (2, 12), Kullanım Koşulları (giriş, 15), Veri İşleme Sözleşmesi (giriş), Hesap ve Veri Silme (bölüm 4, 6).
-- **`legal.kep_address`**: kayıtlı elektronik posta (KEP) adresi. Yer tutucu `{{kep_address}}`. KVKK Aydınlatma (1.1, bölüm 9), Gizlilik (2, 12), Kullanım Koşulları (15), Hesap ve Veri Silme (4, 6). KEP'iniz yoksa edinmeniz gerekir; veri sahipleri başvuruyu KEP ile yapabilir.
+- **`legal.kep_address`**: kayıtlı elektronik posta (KEP) adresi. Yer tutucu `{{kep_address}}` (yalnız `{{#kep_address}} … {{/kep_address}}` bölümü içinde; boşken hiç yazılmaz). KVKK Aydınlatma (1.1, bölüm 9), Gizlilik (2, 12), Kullanım Koşulları (15), Hesap ve Veri Silme (4, 6). Karar H1 (2026-10-21): KEP şimdilik boş kalır; boşken KEP ile başvuru cümleleri metinlerde görünmez. KEP edinilirse bu alana girilir, cümleler kendiliğinden döner. (Bu satırdaki eski "KEP'iniz yoksa edinmeniz gerekir" önerisinin dayanağı belirtilmemişti; zorunluluk avukata soruluyor, yukarıdaki "Durum" bölümü madde c.)
 - **`legal.contact_email`**: kişisel veri, gizlilik ve silme talepleri için izlenen e-posta (öneri: `kvkk@…` gibi ayrı bir kutu). Yer tutucu `{{contact_email}}`. KVKK Aydınlatma (1.1, 9), Gizlilik (2, 8, 12), Kullanım Koşulları (3, 15), Hesap ve Veri Silme (4, 6). Başvurular 30 gün içinde yanıtlanmak zorundadır; kutuyu izleyen bir kişi atayın.
 - **`legal.contact_phone`**: iletişim telefonu. Yer tutucu `{{contact_phone}}`. KVKK Aydınlatma (1.1), Gizlilik (2), Kullanım Koşulları (15), Hesap ve Veri Silme (6).
 - **`legal.enforce_consents`**: tüm belgeler kesinleşip `complete: false` satırları kaldırılana kadar **kapalı** kalsın (bölüm 5'e bakın). Açıldığında kayıt (`terms`, `privacy`, `kvkk_notice`) ve site başvurusu (`dpa`) onaysız tamamlanmaz.
@@ -55,7 +81,7 @@ Aranacak desen: `[KARAR/BİLGİ GEREKLİ: …]`. Her madde için hangi belgede g
 ### 2.2 Site Yönetimi tarafı
 
 9. **Site Yönetimi'nin kimlik/iletişim bilgisi uygulama içinde gösterilecek mi?** KVKK bölüm 1.2. Öneri: evet, sakin için "Site yönetimi" kartında yönetici adı ve iletişim (geliştirme); sonra cümle güncellenir.
-10. **Site Yönetimi için varsayılan saklama süreleri** (kişi/daire/araç kayıtları, duyurular, aidat ve borç kayıtları). Gizlilik bölüm 7; DPA 5.2; Hesap Silme bölüm 3 ve 5. Öneri: aidat/borç ve ilişki geçmişi 10 yıl; araç kaydı pasifleştikten 1 yıl sonra silme; duyurular 5 yıl. Avukat onayı gerekir (kontrol listesi madde 3 ve 15).
+10. **Site Yönetimi için varsayılan saklama süreleri** (kişi/daire/araç kayıtları, duyurular, aidat ve borç kayıtları). Gizlilik bölüm 7; DPA 5.2; Hesap Silme bölüm 3 ve 5. Öneri: aidat/borç ve ilişki geçmişi 10 yıl; araç kaydı pasifleştikten 1 yıl sonra silme; duyurular 5 yıl. Avukat onayı gerekir (kontrol listesi madde 3 ve 15). **[2026-10-21: karar H2 süreleri ve avukata 13 soru: `docs/yasal/SAKLAMA_SURELERI_TASLAGI.md`. Dikkat: önerilen kapı geçiş süresi (1 yıl) bugünkü 30 günden uzun.]**
 11. **Diğer kayıtların saklama süresi:** denetim kaydı, yasal belge onay kayıtları, misafir geçiş bağlantıları, katılım başvuruları ve davetler, abonelikten çıkma listesi. Gizlilik bölüm 7; Hesap Silme bölüm 3 (onay ve denetim kayıtları). Öneri: denetim 5 yıl, onay kayıtları 10 yıl, misafir bağlantıları süre bitiminden 30 gün, katılım başvuruları/davetler karardan 1 yıl, abonelikten çıkma özeti süresiz. Kodda bu kayıtlar için temizlik işi yoktur; süreler kesinleşince geliştirme gerekir.
 12. **Sistem verisinin iadesi (DPA 5.3):** Site Yönetimine hizmet sonunda veri hangi biçim ve araçlarla verilecek (ör. CSV/PDF dışa aktarma, talep üzerine Güde tarafından)? Bugün kişi listesi dışa aktarma (Faz 2b) ve toplu işlemler tamamlanmadıysa, geçiş kayıtlarının PDF çıktısı vardır (`lib/services/pdf_logs_service.dart`).
 
@@ -82,7 +108,7 @@ Aranacak desen: `[KARAR/BİLGİ GEREKLİ: …]`. Her madde için hangi belgede g
 21. **Belge saklama süreleri** (belgeler, gider belgeleri, makbuz ve finans kayıtları, tedarikçi kayıtları, hatırlatma geçmişi). Gizlilik 7; Hesap Silme 3 ve 5. Öneri: avukat listesi madde 36, 37, 39; kodda bu kayıtlar için temizlik işi yoktur (belgeler yalnız yönetim silince 30 gün; gider belgeleri hiç silinmez).
 22. **Belge deposu yedeği üretimde devrede mi?** Gizlilik 7; DPA Ek-2. `deploy/ops/backup_db.sh` belge arşivi yedeği (şifreli, son 5, 210 gün) üretimde zamanlanmış ve dış kopya hedefi yapılandırılmış mı; geri yükleme denemesi (`restore_test.sh`) yapıldı mı? Disk üzerindeki belgeler uygulama düzeyinde şifrelenmez (avukat listesi madde 36).
 23. **`finance.legal_ok` hukuk kapısı kimde?** Gecikme tazminatı ve borç hatırlatma bu anahtar açılmadan açılamaz; anahtarı yalnız süper kullanıcı `PUT /admin/finance-legal-gate` ile açar (`finance_4b_routes.js:492-503`). Avukat onayını kimin vereceği ve kaydedileceği (madde 37-38) belirlenmeli; anahtar kapatılırsa gönderilmemiş hatırlatmalar iptal edilir.
-24. **Makbuz şablonu ve hatırlatma e-posta metni avukat onayı.** Taslak metinler: `finance_receipts.js:43-51`, `finance_reminder_mail.js` (tam metin avukat listesi madde 38'de). Onaydan sonra makbuz `template_version` yükseltilir.
+24. **Makbuz şablonu ve hatırlatma e-posta metni avukat onayı.** Taslak metinler: `finance_receipts.js:43-51`, `finance_reminder_mail.js` (tam metin avukat listesi madde 38'de). Onaydan sonra makbuz `template_version` yükseltilir. **[2026-10-21: avukata gidecek taslak hazır: `docs/yasal/AVUKATA_GECIKME_HATIRLATMA_MAKBUZ.md` (kodla doğrulanmış örnek hesaplar, koddan üretilmiş e-posta ve makbuz metni, dönem kapsamı sorunu, 18 soru).]**
 25. **Toplu yükleme onay penceresindeki KVKK metni.** `docs/PLATFORM_TOPLU_ISLEMLER.md` satır 144'te "KVKK onay kutusu" geçer; metni sizin/avukatın görmesi gerekir (madde 40).
 26. **Tedarikçi ve gider belgesi için silme/anonimleştirme talebi nasıl karşılanacak?** Kodda silme ucu yok (madde 36); geçici çözüm olarak talebin Güde'ye e-postayla gelmesi ve elle düzeltilmesi mi, yoksa geliştirme mi?
 
@@ -113,9 +139,9 @@ Metinler aşağıdaki sayısal ve operasyonel taahhütleri içerir. Güde'nin bu
 3. Saklama süreleri kesinleşince otomatik temizlik işleri (denetim kaydı, misafir bağlantısı, pasif araç, katılım başvuruları/davetler, eski site başvuruları).
 4. Hesapsız kişiler için aydınlatma (şablon veya otomatik e-posta) ve misafir sayfasına kısa bilgilendirme.
 5. İstemci `device_token` saklamaya başlarsa Gizlilik Politikası bölüm 3.7 güncellemesi.
-6. Sunucu `complete` hesabı: `server/src/modules/legal_documents.js` yalnız `{{…}}` ve `[……]` boşluklarını eksik sayar; `[KARAR/BİLGİ GEREKLİ …]` ve `[AVUKAT DOĞRULASIN …]` işaretlerini saymaz. Bu yüzden her dosyada `complete: false` satırı bırakıldı. İsterseniz sunucu tarafında bu iki işareti de "eksik" sayacak küçük bir değişiklik yapılabilir (bu görev kapsamında kod değiştirilmedi).
+6. Sunucu `complete` hesabı: `server/src/modules/legal_documents.js` yalnız `{{…}}` ve `[……]` boşluklarını eksik sayar; `[KARAR/BİLGİ GEREKLİ …]` ve `[AVUKAT DOĞRULASIN …]` işaretlerini saymaz. Bu yüzden her dosyada `complete: false` satırı bırakıldı. İsterseniz sunucu tarafında bu iki işareti de "eksik" sayacak küçük bir değişiklik yapılabilir (bu görev kapsamında kod değiştirilmedi). **[2026-10-21 denetim: YAPILMIŞ. `legal_documents.js` içindeki `OPEN_MARKER_RE` iki işareti de eksik sayıyor; testi `server/test/legal_documents.test.js`. `complete: false` satırları yine de kalır: işaretler temizlenince ayrıca silinir.]**
 7. (2026-10-17) Hesap silme önizlemesi (`account_deletion_service.js` `will_keep`/`will_remove`) ile `server/legal/account_deletion.md` birebir uyumlu tutulmalı; önizlemede olmayan ama yasal metinde yazan iki madde: gönderilmiş aidat hatırlatma geçmişinin (kişi, daire, durum, zaman) kalması ve gecikme tazminatı/gider/tedarikçi kayıtlarının hesap silmeden etkilenmemesi. Önizleme makbuz satırı KMK/VUK saklama yükümlülüğünü kesin ifadeyle yazıyor; dayanak avukat onayına kadar doğrulanmadı.
-8. (2026-10-17) Hatırlatma e-postası altbilgisi hesaplı kullanıcıya "uygulamadaki Bildirim Tercihleri'ni kullanabilir" diyor; `lib/` altında `email_finance_reminders` için ekran anahtarı bulunamadı (sunucu API'si var). Anahtar eklenmeli ya da altbilgi değişmeli.
+8. (2026-10-17) Hatırlatma e-postası altbilgisi hesaplı kullanıcıya "uygulamadaki Bildirim Tercihleri'ni kullanabilir" diyor; `lib/` altında `email_finance_reminders` için ekran anahtarı bulunamadı (sunucu API'si var). Anahtar eklenmeli ya da altbilgi değişmeli. **[2026-10-21 denetim: anahtar VAR. Bildirim Tercihleri'nde "Borç hatırlatma e-postaları" (`lib/ui/widgets/notification_prefs_section.dart` satır 202). Altbilgi doğru.]**
 9. (2026-10-17) `finance_reminder_items` temizleme/saklama işi; tedarikçi, kategori ve kasa/banka hesabı için silme veya anonimleştirme ucu; gider belgeleri için süre sonu silme işi; telefon bildirimi soft istemine Google/Apple aktarım cümlesi; "acil bildirimi de kapat" seçeneği (madde 34).
 10. (2026-10-17) Firebase bileşeninin açılışta Google'a gönderdiği teknik verinin ağ trafiğiyle doğrulanması (madde 35).
 

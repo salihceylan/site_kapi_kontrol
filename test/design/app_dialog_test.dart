@@ -261,7 +261,7 @@ void main() {
 
   group('AppDialogHeader: başlık şeridi', () {
     testWidgets(
-      'ikon rozeti 44 dp (squircle, glow, beyaz ikon 22) + başlık + alt başlık; iç boşluk 24/24/24/12 (açık + koyu)',
+      'ikon rozeti 44 dp (squircle, düz, işaret renkli ikon 22) + başlık + alt başlık; iç boşluk 24/24/24/12 (açık + koyu)',
       (t) async {
         for (final dark in [false, true]) {
           final p = _palette(dark);
@@ -269,11 +269,11 @@ void main() {
           final orb = t.widget<IconOrb>(_iconTile);
           expect(orb.tone, AppTone.primary);
           expect(orb.shape, IconOrbShape.squircle);
-          expect(orb.glow, isTrue);
+          expect(orb.glow, isFalse, reason: 'sade stil: parıltı istenmez');
           expect(t.getSize(_iconTile), const Size(44, 44));
           final icon = t.widget<Icon>(find.byIcon(Icons.lock_reset_rounded));
           expect(icon.size, 22);
-          expect(icon.color, Colors.white);
+          expect(icon.color, AppTone.primary.sign(p));
           // İç boşluk.
           final header = t.getTopLeft(_header);
           expect(
@@ -306,7 +306,7 @@ void main() {
       },
     );
 
-    testWidgets('7 ton: rozet tonu, beyaz ikon (açık + koyu)', (t) async {
+    testWidgets('7 ton: rozet tonu, ikon tonun işaret rengi (durum tonunda ink, ötekinde gövde metni; açık + koyu)', (t) async {
       for (final dark in [false, true]) {
         for (final tone in AppTone.values) {
           await t.pumpWidget(
@@ -329,7 +329,8 @@ void main() {
           );
           expect(
             t.widget<Icon>(find.byIcon(Icons.warning_amber_rounded)).color,
-            Colors.white,
+            tone.sign(_palette(dark)),
+            reason: '${tone.name} dark=$dark',
           );
         }
       }

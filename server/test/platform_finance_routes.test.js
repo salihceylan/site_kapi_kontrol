@@ -400,6 +400,10 @@ function paymentFlow({ balance = '-50000' } = {}) {
     // Faz 4b: hesap gereksinimi (hesap yok) ve ayarlar (makbuz otomatik düzenleme KAPALI: bu test makbuz yolunu sınamaz; makbuz / hesap akışı finance4b_* testleri ve QA)
     [/^SELECT bool_or\(is_active\) AS has_active FROM finance_accounts WHERE site_code = \$1 AND opening_date <= \$2::DATE HAVING COUNT\(\*\) > 0$/, () => ok()],
     [/^SELECT receipts_auto_issue, .* FROM finance_settings WHERE site_code = \$1$/, () => ok([{ receipts_auto_issue: false, late_fee_enabled: false, late_fee_rate_bp: 500, late_fee_method: 'daily_30', late_fee_grace_days: 0, late_fee_start_period: null, reminders_enabled: false, reminder_min_overdue_minor: '5000', reminder_min_days_overdue: 5, reminder_min_interval_days: 14, reminder_max_consecutive: 3, settings_version: 1 }])],
+    // İki hesap (İP-1A): hesap verilmedi -> varsayılan (açık borç yok -> oturanın hesabı; kiracı yok -> ev sahibi); tahsilat hesabının bakiyesi
+    [/FROM ledger_entries l WHERE l\.site_code = \$1 AND l\.apartment_id = \$2 ORDER BY l\.id$/, () => ok()],
+    [/^SELECT a\.responsible_party, EXISTS/, () => ok([{ responsible_party: 'both', has_tenant: false }])],
+    [/^SELECT COALESCE\(SUM\(l\.amount_minor\), 0\)::TEXT AS balance FROM ledger_entries l WHERE l\.site_code = \$1 AND l\.apartment_id = \$2 AND COALESCE/, () => ok([{ balance }])],
     [/^INSERT INTO ledger_entries \(/, () => ok([{ id: '77' }])],
     [/WHERE l\.id = \$1 AND l\.site_code = \$2 LIMIT 1$/, () => ok([entryRow])],
     [/^SELECT COALESCE\(SUM\(amount_minor\), 0\)::TEXT AS balance FROM ledger_entries WHERE site_code = \$1 AND apartment_id = \$2$/, () => ok([{ balance }])],
@@ -411,7 +415,8 @@ describe('finans: işlem sırası ve yeniden deneme', () => {
     handlers.push(...paymentFlow());
     const res = await call('POST', `${base()}/payments`, { body: PAYMENT_BODY });
     assert.equal(res.status, 201, JSON.stringify(res.body));
-    assert.deepEqual(Object.keys(res.body), ['entry', 'balance_minor', 'receipt', 'movement_id']);
+    assert.deepEqual(Object.keys(res.body), ['entry', 'balance_minor', 'account_balance_minor', 'receipt', 'movement_id']);
+    assert.equal(res.body.account_balance_minor, -50000);
     assert.equal(res.body.receipt, null, 'makbuz otomatik düzenleme kapalı');
     assert.equal(res.body.movement_id, null, 'hesap yok: 4a davranışı');
     assert.equal(res.body.entry.kind, 'payment');
@@ -436,6 +441,23 @@ describe('finans: işlem sırası ve yeniden deneme', () => {
     // kayıt: tutar defterde NEGATİF kuruş (metin), dönem ayın ilk günü, ödeyen taraf dairenin değeri, işlem anahtarı
     const insertParams = txLog[insert].params;
     assert.deepEqual(insertParams.slice(0, 9), [SITE_1, 5, '-50000', PAY_PERIOD, PAY_DATE, 'both', 'cash', 'Nakit', 'test-key-1']);
+    // İP-1A: hesap (gövdede yok -> varsayılan ev sahibi) ve kaynak izi (yönetici tahsilatı = manual)
+    assert.deepEqual(insertParams.slice(10), ['owner', 'manual', null]);
+  });
+
+  it('İP-1A: gövdedeki account_party tahsilatın hesabıdır (varsayılan sorgusu çalışmaz); geçersiz hesap 400 ve işlem açılmaz', async () => {
+    handlers.push(...paymentFlow());
+    const res = await call('POST', `${base()}/payments`, { body: { ...PAYMENT_BODY, account_party: 'tenant' } });
+    assert.equal(res.status, 201, JSON.stringify(res.body));
+    const txLog = state.log.filter((e) => e.client);
+    const insert = txLog.find((e) => /^INSERT INTO ledger_entries/.test(e.sql));
+    assert.deepEqual(insert.params.slice(10), ['tenant', 'manual', null]);
+    assert.equal(txLog.some((e) => /ORDER BY l\.id$/.test(e.sql)), false, 'varsayılan hesap sorgusu yok');
+    state.log.length = 0;
+    const bad = await call('POST', `${base()}/payments`, { body: { ...PAYMENT_BODY, account_party: 'both' } });
+    assert.equal(bad.status, 400);
+    assert.equal(bad.body.code, 'INVALID_BODY');
+    assert.equal(state.log.some((e) => e.sql === 'BEGIN'), false);
   });
 
   it('kilit çıkmazı (40P01): işlem TEK SEFER baştan denenir -> 201; ilk deneme ROLLBACK', async () => {
@@ -518,13 +540,56 @@ describe('finans: okuma uçları ve kurul yanıtı temizliği', () => {
     definition_name: 'Aidat', reverses_entry_id: null, reversed_by_entry_id: null, reversal_reason: null, created_by_name: 'Ayşe Yönetici', created_at: new Date('2026-10-01T09:00:00Z'), ...overrides,
   });
 
-  function accountHandlers() {
+  function accountHandlers({ accounts = [{ account_party: 'owner', balance: '150000', not_due: '0', n: '2' }], hasTenant = false, hadTenant = false } = {}) {
     return [
       [/^SELECT a\.id, a\.unit_label, b\.block_name, a\.responsible_party FROM apartments a INNER JOIN site_blocks b ON b\.id = a\.block_id WHERE a\.id = \$1 AND a\.site_code = \$2 LIMIT 1$/, (_sql, params) => (Number(params[1]) === SITE_1 && Number(params[0]) === 5 ? ok([{ id: '5', unit_label: 'Daire 1', block_name: 'A Blok', responsible_party: 'both' }]) : ok())],
-      [/^SELECT COALESCE\(SUM\(amount_minor\), 0\)::TEXT AS balance, COALESCE\(SUM\(amount_minor\) FILTER/, () => ok([{ balance: '150000', not_due: '0' }])],
+      // İki hesap (İP-1A): hesap başına bakiye, kiracı bilgisi ve varsayılan tahsilat hesabı
+      [/AS account_party, COALESCE\(SUM\(l\.amount_minor\), 0\)::TEXT AS balance, .* GROUP BY 1$/, () => ok(accounts)],
+      [/AS has_current_tenant, EXISTS/, () => ok([{ has_current_tenant: hasTenant, had_tenant: hadTenant }])],
+      [/FROM ledger_entries l WHERE l\.site_code = \$1 AND l\.apartment_id = \$2 ORDER BY l\.id$/, () => ok([{ id: '9', kind: 'charge', amount_minor: '150000', entry_date: '2026-10-01', due_date: '2026-10-05', reverses_entry_id: null, account_party: null, payer_party: 'both' }])],
       [/ORDER BY l\.entry_date DESC, l\.id DESC LIMIT/, () => ok([accountRow(), accountRow({ id: '8', created_by_name: 'Bora' })])],
     ];
   }
+
+  it('İP-1A ekstre: hesap başına bakiye (accounts), kiracı sekmesi (show_tenant_account), varsayılan tahsilat hesabı; account_party süzgeci satır sorgusuna ve bakiyeye uygulanır', async () => {
+    handlers.push(...accountHandlers({
+      accounts: [{ account_party: 'owner', balance: '150000', not_due: '50000', n: '2' }, { account_party: 'tenant', balance: '-2000', not_due: '0', n: '1' }],
+      hasTenant: true,
+      hadTenant: true,
+    }));
+    const all = await call('GET', `${base()}/apartments/5/account`, { user: users.mgrA });
+    assert.equal(all.status, 200, JSON.stringify(all.body));
+    assert.deepEqual(all.body.accounts, {
+      owner: { balance_minor: 150000, overdue_minor: 100000, entry_count: 2 },
+      tenant: { balance_minor: -2000, overdue_minor: 0, entry_count: 1 },
+    });
+    // eski alanlar: dairenin toplamı (eski istemci); vadesi geçen hesap başına toplanır (kiracının alacağı ev sahibinin borcunu kapatmaz)
+    assert.equal(all.body.balance_minor, 148000);
+    assert.equal(all.body.overdue_minor, 100000);
+    assert.equal(all.body.account_party, null);
+    assert.equal(all.body.show_tenant_account, true);
+    assert.equal(all.body.has_current_tenant, true);
+    assert.equal(all.body.default_payment_account, 'owner');
+    assert.equal(all.body.items[0].account_party, 'owner');
+    state.log.length = 0;
+    const tenant = await call('GET', `${base()}/apartments/5/account?account_party=tenant`, { user: users.mgrA });
+    assert.equal(tenant.status, 200);
+    assert.equal(tenant.body.account_party, 'tenant');
+    assert.equal(tenant.body.balance_minor, -2000);
+    assert.equal(tenant.body.overdue_minor, 0);
+    const entrySql = state.log.find((e) => /ORDER BY l\.entry_date DESC, l\.id DESC LIMIT/.test(e.sql));
+    assert.match(entrySql.sql, /COALESCE\(l\.account_party, CASE WHEN l\.payer_party = 'tenant' THEN 'tenant' ELSE 'owner' END\) = \$3/);
+    assert.equal(entrySql.params[2], 'tenant');
+    assert.equal((await call('GET', `${base()}/apartments/5/account?account_party=both`, { user: users.mgrA })).body.code, 'INVALID_QUERY');
+  });
+
+  it('İP-1A ekstre: kiracısı hiç olmamış ve kiracı hesabında satırı olmayan dairede kiracı sekmesi yok', async () => {
+    handlers.push(...accountHandlers());
+    const res = await call('GET', `${base()}/apartments/5/account`, { user: users.mgrA });
+    assert.equal(res.status, 200);
+    assert.equal(res.body.show_tenant_account, false);
+    assert.deepEqual(res.body.accounts.tenant, { balance_minor: 0, overdue_minor: 0, entry_count: 0 });
+  });
 
   it('ekstre: yönetici oluşturan adını görür; KURUL created_by_name NULL görür; tutarlar tamsayı kuruş; dönem YYYY-MM', async () => {
     handlers.push(...accountHandlers());

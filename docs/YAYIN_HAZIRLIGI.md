@@ -256,8 +256,10 @@ Ekran görüntülerinde gerçek kişi verisi (ad, telefon, plaka, adres) olması
 - [ ] `G:\site\_anahtarlar\siteyonetim-upload.jks` ve `android\key.properties` dosyalarını güvenli, ayrı iki yere yedekleyin.
 - [ ] Google Play geliştirici hesabı; Play App Signing'i kabul etme; uygulama kaydı.
 - [ ] Apple Developer üyeliği; **Team ID**; App Store Connect uygulama kaydı; (gerekirse) multicast yetkisi başvurusu.
-- [ ] `/admin/platform-config` ile yasal şirket alanlarını doldurun (unvan, adres, MERSİS, KEP, e-posta, telefon):
-      dolmadan gizlilik/silme sayfaları `[……]` yer tutucularıyla ve "tamamlanmamış" yayımlanır, mağaza incelemesi reddedebilir.
+- [ ] `/admin/platform-config` ile yasal şirket alanlarını doldurun (unvan, adres, e-posta, telefon; MERSİS ve KEP varsa):
+      zorunlu alanlar dolmadan gizlilik/silme sayfaları `[……]` yer tutucularıyla ve "tamamlanmamış" yayımlanır, mağaza incelemesi
+      reddedebilir. MERSİS ve KEP boş kalabilir (karar H1, 2026-10-21): boşken metinlerde hiç görünmez. Durum:
+      `docs/yasal/KULLANICIDAN_GEREKENLER.md` bölüm 1 "Durum".
 - [ ] Destek bilgileri (e-posta, telefon, saatler, web) aynı ekranda.
 - [ ] Mağaza metinleri, ekran görüntüleri, simge ve öne çıkan görsel.
 - [ ] İnceleme için demo hesaplar (her rol için, gerçek veri içermeyen).

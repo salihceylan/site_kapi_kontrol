@@ -172,6 +172,15 @@ void main() {
       expect(c.h.api.configCalls, 1);
     });
 
+    testWidgets('karar H1: MERSİS ve KEP isteğe bağlı olarak anlatılır (boşken yasal metinde hiç yazılmaz, "[……]" yalnız diğer alanlar için)', (t) async {
+      await _pump(t, config: const PlatformConfig());
+      expect(find.textContaining('MERSİS numarası ve KEP adresi isteğe bağlıdır'), findsOneWidget);
+      expect(find.textContaining('boşken yasal metinlerde hiç yazılmaz'), findsOneWidget);
+      expect(find.textContaining('Diğer alanlardan boş kalan belgede [……]'), findsOneWidget);
+      expect(find.text('16 rakam; isteğe bağlı.'), findsOneWidget);
+      expect(find.text('İsteğe bağlı.'), findsOneWidget);
+    });
+
     testWidgets('hata -> Tekrar Dene -> form gelir', (t) async {
       final h = AccountHarness(role: UserRole.superUser)..api.configError = ApiException('Sunucu yanıt vermedi, tekrar deneyin.');
       final c = await _pump(t, harness: h);

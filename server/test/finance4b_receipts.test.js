@@ -112,7 +112,9 @@ describe('snapshot', () => {
 
 describe('eşlemeler', () => {
   it('liste özeti: durum yalnız tahsilat için (active/cancelled); iptal makbuzunda null; tutar sayıya', () => {
-    assert.deepEqual(mapReceiptSummary(ROW()), { id: 5, number: 'MK-2026-000017', kind: 'collection', status: 'active', paid_on: '2026-10-10', issued_on: '2026-10-10', amount_minor: 125000, apartment: { id: 12, label: 'A Blok 5' }, payer_name: 'Ali Veli' });
+    // İP-1A: account_party (tahsilatın hesabı; SELECT'te yoksa null) eklemeli alandır
+    assert.deepEqual(mapReceiptSummary(ROW()), { id: 5, number: 'MK-2026-000017', kind: 'collection', status: 'active', paid_on: '2026-10-10', issued_on: '2026-10-10', amount_minor: 125000, apartment: { id: 12, label: 'A Blok 5' }, payer_name: 'Ali Veli', account_party: null });
+    assert.equal(mapReceiptSummary(ROW({ account_party: 'tenant' })).account_party, 'tenant');
     assert.equal(mapReceiptSummary(ROW({ cancelled_by_id: '6', cancelled_by_year: 2026, cancelled_by_no: 18 })).status, 'cancelled');
     assert.equal(mapReceiptSummary(ROW({ kind: 'cancellation' })).status, null);
   });

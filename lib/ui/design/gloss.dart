@@ -1,5 +1,9 @@
 // Premium yüzey: cilalı ("parlatılmış") katman.
 //
+// İP-1C (sade stil, karar G6 + G7): cila YALNIZ kapı düğmesinde ([DoorOpenButton]) kalır; kapı düğmesinin görünüşü
+// karar gereği değişmez. Ortak düğmeler, kartlar ve ikon rozetleri düzdür (cila, degrade, gölge yok). Bu dosyanın
+// boyama kodu kapı düğmesinin kilidi (`test/design/door_open_button_unchanged_test.dart`) altındadır: değiştirmeyin.
+//
 // [Gloss], bir yüzeyin (gradyan düğme, yuvarlak düğme, kart) ÜSTÜNE bindirilen dört ince katmandır:
 //  1. hacim: sol-üstten gelen yumuşak ışık,
 //  2. alt gölge: yüzeyin altına doğru koyulaşma (yüzey "yuvarlak" görünür),
@@ -305,28 +309,4 @@ class GlossPainter extends CustomPainter {
       old.radius != radius ||
       old.strength != strength ||
       old.sweep != sweep;
-}
-
-/// Tema düzeyinde cilalı düğme katmanı: `ElevatedButton`/`FilledButton` stillerinin
-/// `ButtonStyle.backgroundBuilder`'ı olarak bağlanır (`AppTheme`).
-///
-/// Düğmenin düz dolgusunun ÜSTÜNE (InkWell, dalga ve içeriğin ALTINA) [Gloss] biner; devre dışı
-/// düğme düz kalır. Üst düzey işlevdir (kapanış yok): `AppTheme.light() == AppTheme.light()`
-/// eşitliği bozulmaz. Köşe yarıçapı temadaki düğme şekliyle aynıdır (16); farklı şekilli bir
-/// düğmede Material zaten katmanı kendi şekline kırpar.
-Widget glossyButtonLayer(
-  BuildContext context,
-  Set<WidgetState> states,
-  Widget? child,
-) {
-  if (child == null || states.contains(WidgetState.disabled)) {
-    return child ?? const SizedBox.shrink();
-  }
-  return Stack(
-    fit: StackFit.passthrough,
-    children: [
-      const Positioned.fill(child: Gloss(radius: 16, strength: 0.8)),
-      child,
-    ],
-  );
 }

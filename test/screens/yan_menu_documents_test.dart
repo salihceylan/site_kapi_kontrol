@@ -8,6 +8,7 @@ import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/ui/widgets/yan_menu.dart';
 
 import '../design/harness.dart';
+import '../support/menu_nav.dart' show expectUnderDrawerHeader;
 
 Future<List<String>> _pumpMenu(
   WidgetTester t,
@@ -46,15 +47,23 @@ Future<List<String>> _pumpMenu(
     ),
   );
   await t.pump(const Duration(milliseconds: 450));
-  final tiles = find.descendant(
-    of: find.byType(Drawer),
-    matching: find.byType(ListTile),
-  );
+  // İP-1D (G2): çekmece başlıklar altında gruplu çizilir ve ayar öğeleri sağ üstteki dişlidedir. Bu dosyanın sıra
+  // kuralları menü LİSTESİNİN sırasıdır (`YanMenu.visibleItems`: vitrin kartlarının sırası); öğenin çekmecedeki
+  // başlığı [_expectUnderHeader] ile sınanır.
   return <String>[
-    for (var i = 0; i < tiles.evaluate().length; i++)
-      ((t.widget<ListTile>(tiles.at(i))).title! as Text).data!,
+    for (final item in YanMenu.visibleItems(
+      role: role,
+      isResidentMode: resident,
+      canToggleMode: toggle,
+      additionalItems: additional,
+      hiddenItems: hidden,
+    ))
+      YanMenu.titleFor(item, role),
   ];
 }
+
+/// Çekmecede [title] öğesi [header] başlığının altında mı (başlık öğenin üstünde ve öğe çizili)?
+void _expectUnderHeader(WidgetTester t, String title, String header) => expectUnderDrawerHeader(t, title, header);
 
 void main() {
   group('Belgeler çekmece öğesi', () {
@@ -84,6 +93,7 @@ void main() {
           onSelect: selected.add,
         );
         expect(titles.indexOf('Belgeler'), titles.indexOf('Duyurular') + 1);
+        _expectUnderHeader(t, 'Belgeler', 'Site hizmetleri');
         await t.tap(find.text('Belgeler'));
         expect(selected, <SirketMenuItem>[SirketMenuItem.belgeler]);
       },

@@ -1,5 +1,6 @@
 // Bireysel kullanici / sakin modu ekran tanimlari: Panel (modul vitrini) + "Kapılar" (IndividualHomeView) + guvenli
-// etkilesimler. Veri degistiren eylemler (Uyeyi Cikar, Basvuru Gonder, Cihaz Sahiplen, Kaydet...) YAPILMAZ.
+// etkilesimler. Veri degistiren eylemler (Uyeyi Cikar, Basvuru Gonder, Cihaz Sahiplen, Kaydet...) YAPILMAZ. IP-1D:
+// Profilim sag ustteki disliden (Ayarlar paneli) acilir.
 
 import 'package:flutter/material.dart' show ValueKey;
 import 'package:flutter_test/flutter_test.dart' show find;

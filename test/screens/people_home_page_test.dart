@@ -24,6 +24,7 @@ import 'package:site_kapi_kontrol/ui/widgets/person_card.dart';
 
 import 'dialog_layout_harness.dart' show settleFor;
 import 'people_fixtures.dart';
+import '../support/menu_nav.dart';
 
 /// HomePage için sahte servis: Kişi ve Daire Kayıtları uçlarına ek olarak ana kabuğun ihtiyaç duyduğu
 /// uçlar (kapılar, modül durumu) boş döner.
@@ -133,8 +134,8 @@ Future<void> _openDrawer(WidgetTester t) async {
 
 /// Çekmecedeki öğeye dokunur. Bulucu çekmeceyle SINIRLIDIR: Panel modül vitrininde de aynı adlı kartlar vardır.
 Future<void> _tapMenu(WidgetTester t, String label) async {
-  await _openDrawer(t);
-  final tile = find.descendant(of: find.byType(Drawer), matching: find.text(label)).first;
+  // İP-1D: öğe çekmecede yoksa (ayar öğesi) sağ üstteki dişliden açılan Ayarlar panelinde aranır.
+  final tile = await findMenuEntry(t, label);
   await t.ensureVisible(tile);
   await t.pump();
   await t.tap(tile);
@@ -228,7 +229,7 @@ void main() {
         await _pumpHome(t, auth, access: access);
         await _openDrawer(t);
         expect(_tileTitle('Kişiler'), findsNothing, reason: role);
-        expect(_tileTitle('Profilim'), findsOneWidget);
+        expect(_tileTitle('Panel'), findsOneWidget, reason: 'çekmece açık (Profilim Ayarlar panelinde)');
         await _disposeHome(t);
       }
     });

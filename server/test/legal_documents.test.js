@@ -8,6 +8,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   DEFAULT_LEGAL_DIR,
+  LEGAL_OPTIONAL_PLACEHOLDERS,
   LEGAL_PAGE_CSP,
   UNFILLED,
   clearLegalCache,
@@ -264,6 +265,111 @@ describe('yer tutucu doldurma ve complete', () => {
     const nested = fillPlaceholders('A {{company_name}}', { company_name: '{{contact_email}}', contact_email: 'sizmamali@example.com' });
     assert.ok(!nested.text.includes('sizmamali'), 'eklenen değer yeniden taranmaz');
     assert.equal(markdownSafeValue('# - başlık'), 'başlık');
+  });
+
+  it('telefon değerinin başındaki "+" korunur (rakamdan önce liste işareti değildir); "+ " ve diğer satır başı işaretleri yine atılır', () => {
+    assert.equal(markdownSafeValue('+90 312 000 00 00'), '+90 312 000 00 00');
+    assert.equal(fillPlaceholders('Telefon: {{contact_phone}}', { contact_phone: '+90 543 000 00 00' }).text, 'Telefon: +90 543 000 00 00');
+    for (const [raw, expected] of [['+ liste', 'liste'], ['+x', 'x'], ['- +90 1', '+90 1'], ['> alıntı', 'alıntı']]) {
+      assert.equal(markdownSafeValue(raw), expected, raw);
+    }
+  });
+});
+
+describe('isteğe bağlı alanlar: koşullu bölüm {{#alan}} … {{/alan}} (karar H1: boş KEP / MERSİS metinde görünmez)', () => {
+  const NO_OPTIONAL = { ...FULL_SETTINGS, mersis_no: '', kep_address: '' };
+
+  it('yalnız MERSİS ve KEP isteğe bağlıdır (liste dondurulmuş; ikisi de bilinen yer tutucu)', () => {
+    assert.deepEqual([...LEGAL_OPTIONAL_PLACEHOLDERS], ['mersis_no', 'kep_address']);
+    assert.ok(Object.isFrozen(LEGAL_OPTIONAL_PLACEHOLDERS));
+  });
+
+  it('alan doluysa bölüm içeriği yazılır, etiketler kalkar; çıktı bölümsüz şablonla harfi harfine aynı', () => {
+    const withSection = fillPlaceholders('Telefon {{contact_phone}}{{#kep_address}}; KEP {{kep_address}}{{/kep_address}}.', FULL_SETTINGS);
+    const plain = fillPlaceholders('Telefon {{contact_phone}}; KEP {{kep_address}}.', FULL_SETTINGS);
+    assert.equal(withSection.text, 'Telefon +90 312 000 00 00; KEP ornek@hs01.kep.tr.');
+    assert.equal(withSection.text, plain.text);
+    assert.equal(withSection.complete, true);
+  });
+
+  it('alan boşsa, yalnız boşluksa ya da hiç yoksa bölüm yazılmaz ve belge bu yüzden eksik sayılmaz', () => {
+    const body = 'Güde ("Güde"{{#mersis_no}}; MERSİS {{mersis_no}}{{/mersis_no}}; adres {{company_address}}){{#kep_address}}; KEP {{kep_address}}{{/kep_address}}.';
+    for (const settings of [NO_OPTIONAL, { ...FULL_SETTINGS, kep_address: '   ', mersis_no: undefined }, { company_address: FULL_SETTINGS.company_address }]) {
+      const result = fillPlaceholders(body, settings);
+      assert.equal(result.text, 'Güde ("Güde"; adres Atatürk Cad. No:1 Çankaya / Ankara).');
+      assert.equal(result.complete, true);
+    }
+  });
+
+  it('yalnız bölümden oluşan satır boşalınca satır hiç yazılmaz: liste bütün kalır, diğer boş satırlar korunur', () => {
+    const body = [
+      '- **Unvan:** {{company_name}}',
+      '{{#mersis_no}}- **MERSİS no:** {{mersis_no}}{{/mersis_no}}',
+      '- **Adres:** {{company_address}}',
+      '{{#kep_address}}- **KEP adresi:** {{kep_address}}{{/kep_address}}',
+      '',
+      'Son paragraf.',
+    ].join('\n');
+    const empty = fillPlaceholders(body, NO_OPTIONAL);
+    assert.equal(empty.text, ['- **Unvan:** Örnek Teknoloji A.Ş.', '- **Adres:** Atatürk Cad. No:1 Çankaya / Ankara', '', 'Son paragraf.'].join('\n'));
+    assert.equal(empty.complete, true);
+    assert.equal(
+      renderMarkdown(empty.text),
+      '<ul><li><strong>Unvan:</strong> Örnek Teknoloji A.Ş.</li><li><strong>Adres:</strong> Atatürk Cad. No:1 Çankaya / Ankara</li></ul>\n<p>Son paragraf.</p>',
+    );
+    const full = fillPlaceholders(body, FULL_SETTINGS).text.split('\n');
+    assert.equal(full.length, 6);
+    assert.equal(full[1], '- **MERSİS no:** 0123456789012345');
+    assert.equal(full[3], '- **KEP adresi:** ornek@hs01.kep.tr');
+  });
+
+  it('etiket adı büyük / küçük harf ve iç boşluk duyarsızdır (yer tutucularla aynı)', () => {
+    assert.equal(fillPlaceholders('a{{# KEP_ADDRESS }}, KEP {{kep_address}}{{/ kep_address }}.', FULL_SETTINGS).text, 'a, KEP ornek@hs01.kep.tr.');
+    assert.equal(fillPlaceholders('a{{# KEP_ADDRESS }}, KEP {{kep_address}}{{/ kep_address }}.', NO_OPTIONAL).text, 'a.');
+  });
+
+  it('zorunlu alanın bölümü etkisizdir: içerik her zaman yazılır; alan boşsa "[……]" görünür ve belge eksik sayılır', () => {
+    const body = '{{#company_name}}Unvan: {{company_name}}{{/company_name}}';
+    assert.equal(fillPlaceholders(body, FULL_SETTINGS).text, 'Unvan: Örnek Teknoloji A.Ş.');
+    const missing = fillPlaceholders(body, { ...FULL_SETTINGS, company_name: '' });
+    assert.equal(missing.text, `Unvan: ${UNFILLED}`);
+    assert.equal(missing.complete, false);
+  });
+
+  it('isteğe bağlı yer tutucu bölüm DIŞINDA kullanılırsa bugünkü gibi "[……]" olur (şablon hatası görünür kalır)', () => {
+    const result = fillPlaceholders('KEP {{kep_address}}', NO_OPTIONAL);
+    assert.equal(result.text, `KEP ${UNFILLED}`);
+    assert.equal(result.complete, false);
+  });
+
+  it('bilinmeyen alan bölümü, kapanmamış, eşleşmeyen, satırı aşan ya da iç içe etiket "[……]" olur ve belge eksik sayılır', () => {
+    for (const text of [
+      'A {{#secret_key}}gizli{{/secret_key}} B',
+      'A {{#kep_address}}açık kaldı',
+      'A {{/kep_address}} B',
+      'A {{#kep_address}}x{{/mersis_no}} B',
+      'A {{#kep_address}}satır\naşar{{/kep_address}} B',
+      'A {{#kep_address}}{{#mersis_no}}iç içe{{/mersis_no}}{{/kep_address}} B',
+    ]) {
+      const result = fillPlaceholders(text, FULL_SETTINGS);
+      assert.equal(result.complete, false, text);
+      assert.ok(result.text.includes(UNFILLED), text);
+      assert.ok(!result.text.includes('{{'), `${text}: etiket metinde kalmaz`);
+    }
+    assert.equal(fillPlaceholders('A {{#secret_key}}gizli{{/secret_key}} B', { secret_key: 'x' }).text, `A ${UNFILLED} B`, 'bilinmeyen alanın içeriği yazılmaz');
+  });
+
+  it('büyük girdide doğrusal sürede biter: kapanmayan binlerce açılış etiketi tek satırda (ReDoS yok)', () => {
+    const start = Date.now();
+    const result = fillPlaceholders(`${'{{#kep_address}}a'.repeat(30000)}\n${'{{#kep_address}}{{/kep_address}}'.repeat(20000)}`, FULL_SETTINGS);
+    assert.ok(Date.now() - start < 1500, `çok yavaş: ${Date.now() - start} ms`);
+    assert.equal(result.complete, false);
+  });
+
+  it('eklenen değer bölüm etiketi üretemez (tek geçiş): değerdeki "{{#…}}" genişlemez', () => {
+    const result = fillPlaceholders('{{company_name}}{{#kep_address}} KEP{{/kep_address}}', { ...NO_OPTIONAL, company_name: '{{#kep_address}}x' });
+    assert.equal(result.text, '{{#kep_address}}x');
+    assert.equal(result.complete, true);
   });
 });
 

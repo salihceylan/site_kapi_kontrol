@@ -4,6 +4,8 @@ Bu liste, `server/legal/*.md` içindeki yasal metin taslaklarını yayına almad
 
 Bu belge hukuki görüş değildir; kararlar avukata aittir. Öneriler, ürünün mevcut davranışını koruyarak riski azaltan en az değişiklik ilkesine göre yazılmıştır.
 
+**2026-10-21 eki (İP-1E).** Avukata ayrı taslaklar hazırlandı; ilgili maddelerin ayrıntısı oralarda: `docs/yasal/SAKLAMA_SURELERI_TASLAGI.md` (madde 3, 4, 15, 22, 36: karar H2 süreleri, 13 soru), `docs/yasal/AVUKATA_GECIKME_HATIRLATMA_MAKBUZ.md` (madde 37, 38, 39: kodla doğrulanmış örnek hesaplar, e-posta ve makbuz metni, dönem kapsamı sorunu, 18 soru), `docs/yasal/E_GENEL_KURUL_TASLAGI.md` (elektronik genel kurul: mevzuat durumu, taslak akış ve metinler, 11 soru). Bu taslaklarda KMK m.20/2, m.22/1 ve m.29-37, TBK m.100-104, m.115, m.146-147, KVKK m.4, m.5, m.7, m.12, TTK m.82 ve m.1527, VUK m.253 ve 6563 m.2/1-c metinleri mevzuat.gov.tr'deki resmî metinden okundu (erişim 2026-10-21); aşağıdaki "Doğrulanamayanlar" listesindeki bu maddeler o taslaklarda kaynaklıdır. Ayrıca karar H1 gereği KEP ve MERSİS boş kalabilir; boşken yasal metinlerde bu satırlar hiç görünmez (`docs/yasal/KULLANICIDAN_GEREKENLER.md` bölüm 1 "Durum").
+
 ---
 
 ## 1. Rol ayrımı: kim veri sorumlusu, kim veri işleyen?

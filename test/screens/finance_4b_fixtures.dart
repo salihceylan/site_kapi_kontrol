@@ -311,9 +311,15 @@ class FakeFinance4bApi extends Finance4bApi {
     int? apartmentId,
     int limit = 50,
     int? beforeId,
+    AccountParty? accountParty,
   }) async {
     await _enter('listMyReceipts');
-    receiptListCalls.add(<String, Object?>{'resident': true, 'apartment_id': apartmentId, 'before_id': beforeId});
+    receiptListCalls.add(<String, Object?>{
+      'resident': true,
+      'apartment_id': apartmentId,
+      'before_id': beforeId,
+      'account_party': ?accountParty?.apiValue,
+    });
     final result = _page(receipts.values, beforeId, pageSize: receiptPageSize);
     await receiptListGate?.future;
     final error = receiptListError;
@@ -850,6 +856,7 @@ class FakeFinance4bApi extends Finance4bApi {
     String? description,
     int? accountId,
     required String idempotencyKey,
+    AccountParty? accountParty,
   }) async {
     await _enter('recordPayment');
     paymentCalls.add(<String, Object?>{
@@ -859,6 +866,7 @@ class FakeFinance4bApi extends Finance4bApi {
       'account_id': accountId,
       'description': description,
       'key': idempotencyKey,
+      'account_party': ?accountParty?.apiValue,
     });
     await paymentGate?.future;
     final error = paymentError;
@@ -880,6 +888,7 @@ class FakeFinance4bApi extends Finance4bApi {
         'amount_minor': -amountMinor,
         'entry_date': _iso(entryDate),
         'method': method.apiValue,
+        'account_party': ?accountParty?.apiValue,
       },
       'balance_minor': 0,
       'receipt': paymentReceipt,
@@ -903,6 +912,7 @@ class FakeFinance4bApi extends Finance4bApi {
     String? description,
     int? accountId,
     required String idempotencyKey,
+    AccountParty? accountParty,
   }) async {
     await _enter('correctPayment');
     correctPaymentCalls.add(<String, Object?>{
@@ -911,6 +921,7 @@ class FakeFinance4bApi extends Finance4bApi {
       'method': method.apiValue,
       'account_id': accountId,
       'key': idempotencyKey,
+      'account_party': ?accountParty?.apiValue,
     });
     await paymentGate?.future;
     final error = paymentError;
@@ -1389,8 +1400,15 @@ class FakeFinance4bApi extends Finance4bApi {
     String status = 'all',
     int limit = 200,
     int offset = 0,
+    AccountParty? accountParty,
   }) {
-    return _report('getAgingReport', <String, Object?>{'as_of': asOf == null ? null : _iso(asOf), 'status': status, 'limit': limit, 'offset': offset}, () {
+    return _report('getAgingReport', <String, Object?>{
+      'as_of': asOf == null ? null : _iso(asOf),
+      'status': status,
+      'limit': limit,
+      'offset': offset,
+      'account_party': accountParty?.apiValue,
+    }, () {
       final all = (agingJson['all_items'] as List?) ?? (agingJson['items'] as List);
       final page = all.skip(offset).take(limit).toList();
       return AgingReport.fromJson(<String, dynamic>{...agingJson, 'items': page, 'total': all.length});
@@ -1421,10 +1439,16 @@ class FakeFinance4bApi extends Finance4bApi {
     required int apartmentId,
     DateTime? from,
     DateTime? to,
+    AccountParty? accountParty,
   }) {
     return _report(
       'getApartmentStatement',
-      <String, Object?>{'apartment_id': apartmentId, 'from': from == null ? null : _iso(from), 'to': to == null ? null : _iso(to)},
+      <String, Object?>{
+        'apartment_id': apartmentId,
+        'from': from == null ? null : _iso(from),
+        'to': to == null ? null : _iso(to),
+        'account_party': accountParty?.apiValue,
+      },
       () => ApartmentStatement.fromJson(statementJson),
     );
   }
@@ -1483,7 +1507,13 @@ class FakeFinance4bApi extends Finance4bApi {
     final waived = [
       for (final l in lines)
         if (excluded.contains(l['apartment_id']))
-          <String, dynamic>{'apartment_id': l['apartment_id'], 'label': l['label'], 'computed_minor': l['amount_minor']},
+          <String, dynamic>{
+            'apartment_id': l['apartment_id'],
+            'label': l['label'],
+            // İP-1A: sunucu muaf dairenin her hesabını ayrı öğe olarak verir (hesap adıyla)
+            if (l['account_party'] != null) 'account_party': l['account_party'],
+            'computed_minor': l['amount_minor'],
+          },
     ];
     json['lines'] = kept;
     json['waived'] = waived;
@@ -1716,9 +1746,15 @@ class FakeFinance4bApi extends Finance4bApi {
     required int apartmentId,
     DateTime? from,
     DateTime? to,
+    AccountParty? accountParty,
   }) async {
     await _enter('getMyStatement');
-    myStatementCalls.add(<String, Object?>{'apartment_id': apartmentId, 'from': from == null ? null : _iso(from), 'to': to == null ? null : _iso(to)});
+    myStatementCalls.add(<String, Object?>{
+      'apartment_id': apartmentId,
+      'from': from == null ? null : _iso(from),
+      'to': to == null ? null : _iso(to),
+      'account_party': accountParty?.apiValue,
+    });
     final result = ApartmentStatement.fromJson(statementJson);
     await myStatementGate?.future;
     final error = myStatementError;

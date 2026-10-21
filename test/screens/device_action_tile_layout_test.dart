@@ -171,9 +171,9 @@ void main() {
           expect(card.tone, isNull);
           expect(card.onTap, isNull);
 
-          // İkon rozeti: cilalı daire IconOrb (primary tonu, 56 dp, glow'lu). İkon boyutun yarısıdır
-          // (28 dp; düğmedeki 18 dp ikondan ayrı) ve beyazdır (ton gradyanı üstünde >= 3:1:
-          // gloss_test ölçer). Rozet dekoratiftir: etiketsiz, anlamsal ağaçta yok.
+          // İkon rozeti: daire IconOrb (primary tonu, 56 dp). İkon boyutun yarısıdır (28 dp; düğmedeki 18 dp
+          // ikondan ayrı). Sade stilde (İP-1C) rozet düzdür; ikon tonun işaret rengidir (birincil: gövde metni,
+          // soluk yüzeyde >= 4,5:1; glow etkisiz). Rozet dekoratiftir: etiketsiz, anlamsal ağaçta yok.
           final glyph = find.byWidgetPredicate(
             (w) =>
                 w is Icon &&
@@ -181,7 +181,7 @@ void main() {
                 w.size == 28,
           );
           expect(glyph, findsOneWidget);
-          expect(t.widget<Icon>(glyph).color, Colors.white);
+          expect(t.widget<Icon>(glyph).color, AppTone.primary.sign(p));
           final orb = t.widget<IconOrb>(
             find.ancestor(of: glyph, matching: find.byType(IconOrb)),
           );

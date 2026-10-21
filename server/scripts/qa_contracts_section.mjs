@@ -163,8 +163,11 @@ export async function sectionContracts(ctx) {
   const badKind = await failCode(`INSERT INTO contract_reminders (contract_id, site_code, kind, due_date) VALUES ($1, $2, 'baska', '2026-01-01')`, [rawContract, site2]);
   await q(`INSERT INTO contract_reminders (contract_id, site_code, kind, due_date) VALUES ($1, $2, 'bitis', '2026-01-01')`, [rawContract, site2]);
   const dupReminder = await failCode(`INSERT INTO contract_reminders (contract_id, site_code, kind, due_date) VALUES ($1, $2, 'bitis', '2026-01-01')`, [rawContract, site2]);
-  check('S4: ayni sitede ayni ad (buyuk/kucuk harf) 23505, baska sitede serbest; sozlesmesi olan firma silinemez (23503 RESTRICT); hatirlatma turu 23514 ve tekillik 23505',
-    dupLower === '23505' && otherSiteSame === null && restrict === '23503' && badKind === '23514' && dupReminder === '23505', { dupLower, otherSiteSame, restrict, badKind, dupReminder });
+  // PostgreSQL 18'den beri ON DELETE RESTRICT ihlali 23001 (restrict_violation, "violates RESTRICT setting"); 17 ve oncesinde (canli PG 16) 23503.
+  const pgMajor = Math.floor(Number((await q('SHOW server_version_num')).rows[0].server_version_num) / 10000);
+  const restrictCode = pgMajor >= 18 ? '23001' : '23503';
+  check(`S4: ayni sitede ayni ad (buyuk/kucuk harf) 23505, baska sitede serbest; sozlesmesi olan firma silinemez (RESTRICT: PG ${pgMajor} -> ${restrictCode}); hatirlatma turu 23514 ve tekillik 23505`,
+    dupLower === '23505' && otherSiteSame === null && restrict === restrictCode && badKind === '23514' && dupReminder === '23505', { dupLower, otherSiteSame, restrict, badKind, dupReminder, pgMajor });
   await q(`DELETE FROM contract_vendors WHERE site_code = $1 AND name = 'Sema Firma'`, [site]);
   await q(`DELETE FROM site_contracts WHERE site_code = $1`, [site2]);
   await q(`DELETE FROM contract_vendors WHERE site_code = $1`, [site2]);

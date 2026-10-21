@@ -147,6 +147,103 @@ void main() {
     }
   });
 
+  // İP-1C bağımsız inceleme (karar G6 + G7): büyük diyalog parçaları da sade kurala bağlıdır. Durum zemini
+  // BOYANMAZ; mavi yalnız bağlantı ve odakta (bilgi / birincil / mor tonlu panel ve hap mavi-mor boyanmaz).
+  testWidgets(
+    'sade stil (G7): DialogPanel ve DialogMetaPill zemini her tonda nötr soluk yüzey; ton panelde yalnız kenarda '
+    '(durum tonları), hapta yalnız metin ve simgede (açık + koyu)',
+    (t) async {
+      for (final dark in const <bool>[false, true]) {
+        final p = dark ? AppPalette.dark : AppPalette.light;
+        for (final tone in <AppTone?>[null, ...AppTone.values]) {
+          final name = '${tone?.name ?? 'nötr'} / ${dark ? 'koyu' : 'açık'}';
+          final label = 'Etiket ${tone?.name ?? 'nötr'}';
+          await pumpAt(
+            t,
+            SizedBox(
+              width: double.infinity,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  DialogPanel(tone: tone, child: const Text('Panel')),
+                  const SizedBox(height: AppSpace.sm),
+                  DialogMetaPill(label, tone: tone, icon: Icons.info_outline_rounded),
+                ],
+              ),
+            ),
+            width: 360,
+            scale: 1.0,
+            dark: dark,
+          );
+
+          final panel = t
+              .widget<DecoratedBox>(
+                find.descendant(of: find.byType(DialogPanel), matching: find.byType(DecoratedBox)).first,
+              )
+              .decoration as BoxDecoration;
+          expect(panel.color, p.surfaceMuted, reason: 'panel zemini $name');
+          expect(
+            (panel.border! as Border).top.color,
+            tone != null && tone.isStatus ? tone.hue.withValues(alpha: 0.4) : p.border,
+            reason: 'panel kenarı $name',
+          );
+
+          final pill = t
+              .widget<DecoratedBox>(
+                find.descendant(of: find.byType(DialogMetaPill), matching: find.byType(DecoratedBox)).first,
+              )
+              .decoration as BoxDecoration;
+          expect(pill.color, p.surfaceMuted, reason: 'hap zemini $name');
+          expect((pill.border! as Border).top.color, p.border, reason: 'hap kenarı $name');
+          final ink = tone == null ? p.text : tone.sign(p);
+          expect(t.widget<Text>(find.text(label)).style!.color, ink, reason: 'hap metni $name');
+          expect(
+            t.widget<Icon>(find.descendant(of: find.byType(DialogMetaPill), matching: find.byType(Icon))).color,
+            ink,
+            reason: 'hap simgesi $name',
+          );
+          expect(_contrast(ink, p.surfaceMuted), greaterThanOrEqualTo(4.5), reason: name);
+        }
+      }
+    },
+  );
+
+  testWidgets(
+    'sade stil (G6): dialogTonalButtonStyle ikincil düğmedir: yüzey zemin + 1 px palet kenarı + başlık metni '
+    '(durum tonunda ink); tonlu / mavi zemin yok, en az 48 dp (açık + koyu)',
+    (t) async {
+      for (final dark in const <bool>[false, true]) {
+        final p = dark ? AppPalette.dark : AppPalette.light;
+        late BuildContext ctx;
+        await pumpAt(
+          t,
+          Builder(
+            builder: (c) {
+              ctx = c;
+              return const SizedBox();
+            },
+          ),
+          width: 360,
+          scale: 1.0,
+          height: 200,
+          dark: dark,
+        );
+        final none = <WidgetState>{};
+        const disabled = <WidgetState>{WidgetState.disabled};
+        for (final tone in AppTone.values) {
+          final name = '${tone.name} / ${dark ? 'koyu' : 'açık'}';
+          final s = dialogTonalButtonStyle(ctx, tone: tone);
+          expect(s.backgroundColor!.resolve(none), p.surface, reason: name);
+          expect(s.foregroundColor!.resolve(none), tone.isStatus ? tone.ink(p) : p.text, reason: name);
+          expect(s.side!.resolve(none), BorderSide(color: p.border), reason: name);
+          expect(s.minimumSize!.resolve(none)!.height, greaterThanOrEqualTo(48), reason: name);
+          expect(s.foregroundColor!.resolve(disabled), p.textSecondary, reason: name);
+          expect(s.backgroundColor!.resolve(disabled), p.surfaceMuted, reason: name);
+        }
+      }
+    },
+  );
+
   testWidgets(
     'iskelet yalnız yüklenirken ticker çalıştırır; kapsam kalkınca ve hareket azaltmada ticker yok',
     (t) async {

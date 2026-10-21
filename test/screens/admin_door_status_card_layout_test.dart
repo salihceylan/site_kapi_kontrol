@@ -770,8 +770,9 @@ void main() {
                 ),
               ]) {
             await pumpAt(t, c.card, width: 360, scale: 1.0, dark: dark);
-            // Çubuk zemini (AppCard tonlu): yüzey + ton tint'i; rozet zemini bunun üstüne bir tint daha.
-            final bg = g2Over(c.tone.tint(p), p.surface);
+            // Çubuk zemini (AppCard tonlu): sade stilde (G7) zemin BOYANMAZ, yüzeydir; durum rozeti de nokta + metindir
+            // (zeminsiz): metin gövde metni rengi, nokta tonun durum rengi.
+            final bg = p.surface;
             expect(
               g2TextColor(t, find.text('Detaylar')),
               p.textSecondary,
@@ -783,9 +784,9 @@ void main() {
               reason: '${c.name} Detaylar',
             );
             final chipInk = g2TextColor(t, find.text(c.label));
-            expect(chipInk, c.tone.ink(p), reason: c.name);
+            expect(chipInk, p.textSecondary, reason: c.name);
             expect(
-              g2Contrast(chipInk, g2Over(c.tone.tint(p), bg)),
+              g2Contrast(chipInk, bg),
               greaterThanOrEqualTo(4.5),
               reason: '${c.name} rozet',
             );
@@ -815,7 +816,8 @@ void main() {
             dark: dark,
           );
           final err = find.text('Cihaz durumu alınamadı.');
-          final errBg = g2Over(AppTone.danger.tint(p), p.surface);
+          // InlineNotice sade stilde zemin boyamaz (opak yüzey).
+          final errBg = p.surface;
           expect(
             g2Contrast(g2TextColor(t, err), errBg),
             greaterThanOrEqualTo(4.5),

@@ -28,6 +28,7 @@ import 'package:site_kapi_kontrol/ui/views/contracts_view.dart';
 import 'dialog_layout_harness.dart' show settleFor;
 import 'list_fixtures.dart' show fxDoors;
 import 'people_fixtures.dart';
+import '../support/menu_nav.dart';
 
 class _HomeAuth extends PeopleFakeAuth {
   _HomeAuth({super.role});
@@ -142,10 +143,9 @@ Future<void> _openDrawer(WidgetTester t) async {
 
 Finder _tileTitle(String title) => find.descendant(of: find.byType(Drawer), matching: find.text(title));
 
-List<String> _drawerTitles(WidgetTester t) => <String>[
-  for (final tile in t.widgetList<ListTile>(find.descendant(of: find.byType(Drawer), matching: find.byType(ListTile))))
-    (tile.title! as Text).data!,
-];
+/// İP-1D (G2): menü LİSTESİNİN sırası (vitrin sırası; `YanMenu.visibleItems`: çekmece + Ayarlar paneli). Çekmece öğeleri
+/// başlıklar altında gruplar ([expectUnderDrawerHeader]); ayar öğeleri sağ üstteki dişlidedir.
+List<String> _drawerTitles(WidgetTester t) => menuListTitles(t);
 
 Future<void> _tapTile(WidgetTester t, Finder tile) async {
   await t.ensureVisible(tile);
@@ -177,6 +177,7 @@ void main() {
     final titles = _drawerTitles(t);
     expect(titles.where((x) => x == _label).length, 1);
     expect(titles.indexOf(_label), titles.indexOf('Duyurular') + 1);
+    expectUnderDrawerHeader(t, _label, 'Site hizmetleri');
     await _tapTile(t, _tileTitle(_label).first);
     expect(find.byType(ContractsView), findsOneWidget);
     final view = t.widget<ContractsView>(find.byType(ContractsView));

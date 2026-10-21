@@ -17,6 +17,7 @@ import 'package:site_kapi_kontrol/ui/dialogs/module_request_dialog.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/module_card.dart';
 import 'package:site_kapi_kontrol/ui/widgets/module_request_card.dart';
+import 'package:site_kapi_kontrol/ui/widgets/platform_rules_entry_card.dart';
 import 'package:site_kapi_kontrol/ui/widgets/staff_roles_section.dart';
 
 /// Geçiş Kontrol kapatılırken gösterilen uyarı (sunucunun `MODULE_CONFIRM_REQUIRED` metniyle aynı).
@@ -450,6 +451,14 @@ class ModulesViewState extends State<ModulesView> {
           StaffRolesSection(
             key: _rolesKey,
             authService: widget.authService,
+            siteCode: code,
+            siteName: _sites.where((s) => s.id == code).firstOrNull?.name,
+          ),
+          // Kurallar tablosu (G11): seçili sitede geçerli kurallar; yönetici salt okunur, süper kullanıcı siteye özel değer verir.
+          const SizedBox(height: AppSpace.xl),
+          PlatformRulesEntryCard(
+            authService: widget.authService,
+            canEdit: _isSuper,
             siteCode: code,
             siteName: _sites.where((s) => s.id == code).firstOrNull?.name,
           ),

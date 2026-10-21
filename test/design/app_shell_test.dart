@@ -1,7 +1,8 @@
-// FAZ 5 / A0: uygulama kökü (lib/app.dart builder) — yazı ölçeği üst sınırı ve statik ışıma.
+// FAZ 5 / A0: uygulama kökü (lib/app.dart builder) — yazı ölçeği üst sınırı ve sayfa zemini.
 //
-// Mevcut mantık değişmedi: sayfa zemini gradyanı (AppDecorations.pageBackground) ve giriş ekranı aynı;
-// üstüne metin ölçeği <= 2,0 sınırı ve tek, statik sayfa ışıması eklendi.
+// Mevcut mantık değişmedi: sayfa zemini (AppDecorations.pageBackground) ve giriş ekranı aynı; metin ölçeği <= 2,0
+// sınırı korunur. İP-1C (karar G6, sade stil): zemin DÜZ renktir (açıkta #F8FAFC, koyuda #0F172A) ve üstünde ışıma
+// katmanı YOKTUR.
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -34,12 +35,14 @@ Future<void> _pumpApp(
 double _scaled(WidgetTester t) =>
     MediaQuery.textScalerOf(t.element(find.text('Site ve Toplu Yaşam Yönetim Sistemi'))).scale(10);
 
-Finder _glow(Gradient gradient) => find.byWidgetPredicate(
-  (w) =>
-      w is DecoratedBox &&
-      w.decoration is BoxDecoration &&
-      identical((w.decoration as BoxDecoration).gradient, gradient),
-);
+/// Kabuğun (MaterialApp.builder) sayfa içeriğini (Navigator) saran süsleme katmanları, dıştan içe.
+List<BoxDecoration> _shellLayers(WidgetTester t) => t
+    .widgetList<DecoratedBox>(
+      find.ancestor(of: find.byType(Navigator).first, matching: find.byType(DecoratedBox)),
+    )
+    .map((b) => b.decoration)
+    .whereType<BoxDecoration>()
+    .toList();
 
 void main() {
   group('MyApp builder: metin ölçeği sınırı', () {
@@ -90,7 +93,7 @@ void main() {
         savedTheme: 'dark',
       );
       expect(Theme.of(t.element(find.text('Site ve Toplu Yaşam Yönetim Sistemi'))).brightness, Brightness.dark);
-      expect(_glow(AppGradients.pageGlowDark), findsOneWidget);
+      expect(_shellLayers(t).any((d) => identical(d, AppDecorations.pageBackgroundDark)), isTrue);
     });
 
     testWidgets('kayıtlı tercih yoksa sistem teması izlenir (varsayılan davranış)', (t) async {
@@ -102,14 +105,14 @@ void main() {
 
     testWidgets('giriş ekranındaki düğme temayı değiştirir, zemin güncellenir ve tercih saklanır', (t) async {
       await _pumpApp(t, textScale: 1.0, brightness: Brightness.light);
-      expect(_glow(AppGradients.pageGlowLight), findsOneWidget);
+      expect(_shellLayers(t).any((d) => identical(d, AppDecorations.pageBackgroundLight)), isTrue);
 
       await t.tap(find.byTooltip('Koyu temaya geç'));
       await t.pumpAndSettle();
 
       expect(Theme.of(t.element(find.text('Site ve Toplu Yaşam Yönetim Sistemi'))).brightness, Brightness.dark);
-      expect(_glow(AppGradients.pageGlowDark), findsOneWidget);
-      expect(_glow(AppGradients.pageGlowLight), findsNothing);
+      expect(_shellLayers(t).any((d) => identical(d, AppDecorations.pageBackgroundDark)), isTrue);
+      expect(_shellLayers(t).any((d) => identical(d, AppDecorations.pageBackgroundLight)), isFalse);
       expect(find.byTooltip('Aydınlık temaya geç'), findsOneWidget);
       expect(
         (await SharedPreferences.getInstance()).getString('app_theme_mode'),
@@ -119,71 +122,30 @@ void main() {
     });
   });
 
-  group('MyApp builder: sayfa zemini ve statik ışıma', () {
-    testWidgets('açık tema: zemin gradyanı AYNI + üstünde tek açık ışıma', (
-      t,
-    ) async {
-      await _pumpApp(t, textScale: 1.0);
-      final bg = find.byWidgetPredicate(
-        (w) =>
-            w is DecoratedBox &&
-            identical(w.decoration, AppDecorations.pageBackgroundLight),
-      );
-      // Kökteki zemin korunur (giriş sayfası şimdilik kendi zeminini de çiziyor: >= 1).
-      expect(bg, findsWidgets, reason: 'mevcut sayfa zemini korunur');
-      expect(_glow(AppGradients.pageGlowLight), findsOneWidget);
-      expect(_glow(AppGradients.pageGlowDark), findsNothing);
-      // Işıma kök zeminin içinde (üstünde boyanır), uygulama içeriğini sarar.
-      expect(
-        find.descendant(
-          of: bg.first,
-          matching: _glow(AppGradients.pageGlowLight),
-        ),
-        findsOneWidget,
-      );
-      expect(
-        find.descendant(
-          of: _glow(AppGradients.pageGlowLight),
-          matching: find.text('Site ve Toplu Yaşam Yönetim Sistemi'),
-        ),
-        findsOneWidget,
-      );
-    });
+  group('MyApp builder: sayfa zemini (sade stil: düz renk, ışıma yok)', () {
+    for (final dark in const <bool>[false, true]) {
+      testWidgets('${dark ? 'koyu' : 'açık'} tema: kök zemin düz palet zemini, içeriği sarar; degrade / ışıma katmanı yok', (
+        t,
+      ) async {
+        await _pumpApp(t, textScale: 1.0, brightness: dark ? Brightness.dark : Brightness.light);
+        final expected = dark ? AppDecorations.pageBackgroundDark : AppDecorations.pageBackgroundLight;
+        final layers = _shellLayers(t);
+        expect(layers.where((d) => identical(d, expected)), hasLength(1), reason: 'kök zemin tek ve mevcut sabit');
+        expect(expected.color, dark ? AppPalette.dark.background : AppPalette.light.background);
+        expect(expected.gradient, isNull);
+        expect(layers.where((d) => d.gradient != null), isEmpty, reason: 'ışıma / degrade katmanı yok');
+        expect(
+          find.descendant(
+            of: find.byWidgetPredicate((w) => w is DecoratedBox && identical(w.decoration, expected)),
+            matching: find.text('Site ve Toplu Yaşam Yönetim Sistemi'),
+          ),
+          findsOneWidget,
+        );
+      });
+    }
 
-    testWidgets('koyu tema: koyu zemin + koyu ışıma', (t) async {
-      await _pumpApp(t, textScale: 1.0, brightness: Brightness.dark);
-      final bg = find.byWidgetPredicate(
-        (w) =>
-            w is DecoratedBox &&
-            identical(w.decoration, AppDecorations.pageBackgroundDark),
-      );
-      expect(bg, findsWidgets);
-      expect(
-        find.descendant(
-          of: bg.first,
-          matching: _glow(AppGradients.pageGlowDark),
-        ),
-        findsOneWidget,
-      );
-      expect(_glow(AppGradients.pageGlowDark), findsOneWidget);
-      expect(_glow(AppGradients.pageGlowLight), findsNothing);
-    });
-
-    testWidgets('ışıma statik: kararlı durumda ticker/kare yok', (t) async {
+    testWidgets('zemin statik: kararlı durumda ticker/kare yok', (t) async {
       await _pumpApp(t, textScale: 1.0);
-      expect(t.binding.transientCallbackCount, 0);
-      expect(t.binding.hasScheduledFrame, isFalse);
-    });
-
-    testWidgets('ikinci (mor) ışıma: açık/koyu temada tek ve statik', (t) async {
-      await _pumpApp(t, textScale: 1.0);
-      expect(_glow(AppGradients.pageGlowAccentLight), findsOneWidget);
-      expect(_glow(AppGradients.pageGlowAccentDark), findsNothing);
-      expect(t.binding.transientCallbackCount, 0);
-      expect(t.binding.hasScheduledFrame, isFalse);
-      await _pumpApp(t, textScale: 1.0, brightness: Brightness.dark);
-      expect(_glow(AppGradients.pageGlowAccentDark), findsOneWidget);
-      expect(_glow(AppGradients.pageGlowAccentLight), findsNothing);
       expect(t.binding.transientCallbackCount, 0);
       expect(t.binding.hasScheduledFrame, isFalse);
     });

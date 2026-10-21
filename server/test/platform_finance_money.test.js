@@ -308,6 +308,18 @@ describe('dağıtım planı (buildDistributionPlan)', () => {
     assert.notEqual(planHash(buildDistributionPlan({ distribution: 'fixed', amountMinor: 101 }, apartments)), base, 'tutar');
   });
 
+  it('İP-1A: plan satırı dairenin HESABINI taşır (accountParty); hesap değişince planHash değişir (önizleme -> onay arasında kiracı taşındıysa PREVIEW_STALE); hesapsız eski girdi aynı özeti verir', () => {
+    const make = (list) => buildDistributionPlan({ distribution: 'fixed', amountMinor: 100 }, list);
+    const withAccounts = make([apt(1, { accountParty: 'tenant' }), apt(2, { accountParty: 'owner' })]);
+    assert.deepEqual(withAccounts.lines.map((l) => l.accountParty), ['tenant', 'owner']);
+    const flipped = make([apt(1, { accountParty: 'owner' }), apt(2, { accountParty: 'owner' })]);
+    assert.notEqual(planHash(flipped), planHash(withAccounts), 'hesap');
+    // hesabı olmayan (052 öncesi çağıran) plan: özet biçimi değişmez
+    const legacy = make([apt(1), apt(2)]);
+    assert.equal(legacy.lines.every((l) => l.accountParty === undefined), true);
+    assert.equal(planHash(legacy), planHash(make([apt(1), apt(2)])));
+  });
+
   it('eksik veri varsa kalan daireler tutarın TAMAMINI paylaşır (toplam değişmez)', () => {
     const plan = buildDistributionPlan({ distribution: 'equal', amountMinor: 1000 }, [apt(1), apt(2), apt(3)]);
     assert.equal(plan.total, 1000n);

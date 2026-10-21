@@ -79,6 +79,9 @@ describe('finans kaynakları: para hesabında kayan nokta YOK', () => {
       'finance_ledger_service.js',
       'finance_m1.js',
       'finance_money.js',
+      // İP-1A (iki hesap): sözleşme 2.1 modülü ve 052 şeması
+      'finance_parties.js',
+      'finance_parties_schema.js',
       'finance_read_service.js',
       'finance_receipts.js',
       'finance_reminder_mail.js',

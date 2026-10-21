@@ -35,64 +35,27 @@ Finder _gradientBoxes(Finder root) => find.descendant(
   ),
 );
 
-Gradient _gradientOf(WidgetTester t, Finder box) =>
-    (t.widget<DecoratedBox>(box).decoration as BoxDecoration).gradient!;
-
 void main() {
-  group('AppCard: premium yüzey katmanı', () {
-    testWidgets('açık tema, level 1: düz kart (ışık/yıkama yok)', (t) async {
-      await t.pumpWidget(_app(const AppCard(child: Text('x'))));
-      expect(_gradientBoxes(find.byType(AppCard)), findsNothing);
-    });
-
-    testWidgets('koyu tema, level 1: sol-üstten cam gibi hafif üst ışık', (
-      t,
-    ) async {
-      await t.pumpWidget(_app(const AppCard(child: Text('x')), dark: true));
-      await t.pumpAndSettle();
-      final box = _gradientBoxes(find.byType(AppCard));
-      expect(box, findsOneWidget);
-      final g = _gradientOf(t, box) as LinearGradient;
-      expect(g.colors.first.a, lessThan(0.1), reason: 'çok hafif');
-      expect(g.colors.last.a, 0);
-    });
-
-    testWidgets('level >= 2 (hero): tonun sol-üst yıkaması; ton verilirse o ton', (
-      t,
-    ) async {
+  group('AppCard: düz yüzey (sade stil: ışık, yıkama, sızıntı yok)', () {
+    testWidgets('açık ve koyu tema, her seviye ve ton: degrade katmanı yok', (t) async {
       for (final dark in [false, true]) {
-        final p = _palette(dark);
-        for (final level in [2, 3]) {
-          await t.pumpWidget(
-            _app(AppCard(level: level, child: const Text('x')), dark: dark),
-          );
-          await t.pumpAndSettle();
-          final g =
-              _gradientOf(t, _gradientBoxes(find.byType(AppCard)))
-                  as RadialGradient;
-          expect(
-            g.colors.first,
-            AppTone.primary.hue.withValues(alpha: p.isDark ? 0.16 : 0.09),
-            reason: 'L$level dark=$dark',
-          );
-          expect(g.colors.last.a, 0);
+        for (final level in [1, 2, 3]) {
+          for (final tone in <AppTone?>[null, AppTone.warning, AppTone.primary]) {
+            await t.pumpWidget(
+              _app(AppCard(level: level, tone: tone, child: const Text('x')), dark: dark),
+            );
+            await t.pumpAndSettle();
+            expect(
+              _gradientBoxes(find.byType(AppCard)),
+              findsNothing,
+              reason: 'L$level ${tone?.name} dark=$dark',
+            );
+          }
         }
-        await t.pumpWidget(
-          _app(
-            AppCard(level: 2, tone: AppTone.warning, child: const Text('x')),
-            dark: dark,
-          ),
-        );
-        await t.pumpAndSettle();
-        final g =
-            _gradientOf(t, _gradientBoxes(find.byType(AppCard)))
-                as RadialGradient;
-        expect(g.colors.first.toARGB32() & 0x00FFFFFF,
-            AppTone.warning.hue.toARGB32() & 0x00FFFFFF);
       }
     });
 
-    testWidgets('ışık katmanı dokunmayı yutmaz ve opak Material rengi değişmez', (
+    testWidgets('dokunma çalışır ve opak Material rengi seviye yüzeyidir', (
       t,
     ) async {
       var taps = 0;
@@ -114,19 +77,11 @@ void main() {
             .descendant(of: find.byType(AppCard), matching: find.byType(Material))
             .first,
       );
-      expect(material.color, AppPalette.dark.surfaceAt(2));
+      expect(material.color, _palette(true).surfaceAt(2));
       expect(material.color!.a, 1.0);
-      // Katman IgnorePointer içindedir.
-      expect(
-        find.ancestor(
-          of: _gradientBoxes(find.byType(AppCard)),
-          matching: find.byType(IgnorePointer),
-        ),
-        findsWidgets,
-      );
     });
 
-    testWidgets('accentBar: çubuk korunur + altında ince ışık sızıntısı', (
+    testWidgets('accentBar: 3 dp düz çubuk korunur, altında ışık sızıntısı yok', (
       t,
     ) async {
       const bar = Color(0xFF7E22CE);
@@ -143,11 +98,7 @@ void main() {
         findsOneWidget,
         reason: '3 dp çubuk',
       );
-      final spill = _gradientBoxes(find.byType(AppCard));
-      expect(spill, findsOneWidget);
-      final g = _gradientOf(t, spill) as LinearGradient;
-      expect(g.colors.first, bar.withValues(alpha: 0.16));
-      expect(g.colors.last, bar.withValues(alpha: 0));
+      expect(_gradientBoxes(find.byType(AppCard)), findsNothing);
     });
 
     testWidgets('durağan: ticker ve kare yok', (t) async {
@@ -167,7 +118,7 @@ void main() {
     });
   });
 
-  group('StatusChip: LED noktası', () {
+  group('StatusChip: düz nokta (sade stil, LED parıltısı yok)', () {
     Finder ledDot() => find.descendant(
       of: find.byType(StatusChip),
       matching: find.byWidgetPredicate(
@@ -179,7 +130,7 @@ void main() {
       ),
     );
 
-    testWidgets('nabızlı (canlı) nokta tek, küçük, statik bir parıltı taşır', (
+    testWidgets('nabızlı (canlı) nokta da düzdür: gölge / parıltı yok; nabız sonlu', (
       t,
     ) async {
       await t.pumpWidget(
@@ -193,12 +144,8 @@ void main() {
           ),
         ),
       );
-      final dot = t.widget<DecoratedBox>(ledDot().last).decoration
-          as BoxDecoration;
-      expect(dot.boxShadow, hasLength(1));
-      expect(dot.boxShadow!.single.blurRadius, lessThanOrEqualTo(8));
-      expect(dot.boxShadow!.single.spreadRadius, 0);
-      expect(dot.boxShadow!.single.color.a, greaterThan(0));
+      await t.pump();
+      expect(ledDot(), findsNothing);
       await t.pumpAndSettle();
       expect(t.binding.transientCallbackCount, 0, reason: 'nabız biter');
     });
@@ -215,8 +162,8 @@ void main() {
     });
   });
 
-  group('AppSnack: cam rozetli simge', () {
-    testWidgets('simge yarı saydam beyaz daire rozette, anlamsal ağaçta yok', (
+  group('AppSnack: düz simge (sade stil, cam rozet yok)', () {
+    testWidgets('simge doğrudan çizilir (yarı saydam daire rozet yok), tür renginde, anlamsal ağaçta yok', (
       t,
     ) async {
       await pumpAt(t, const SizedBox(), scale: 1.0);
@@ -236,25 +183,17 @@ void main() {
               (w.decoration as BoxDecoration).shape == BoxShape.circle,
         ),
       );
-      expect(badge, findsOneWidget);
-      final deco = t.widget<DecoratedBox>(badge).decoration as BoxDecoration;
-      expect(deco.color, Colors.white.withValues(alpha: 0.20));
-      expect(deco.border, isNotNull);
+      expect(badge, findsNothing);
+      final icon = find.byIcon(Icons.check_circle_rounded);
+      expect(t.widget<Icon>(icon).color, AppTone.success.inkDark);
       expect(
-        t.widget<Icon>(find.byIcon(Icons.check_circle_rounded)).color,
-        Colors.white,
-      );
-      expect(
-        find.ancestor(
-          of: badge,
-          matching: find.byType(ExcludeSemantics),
-        ),
+        find.ancestor(of: icon, matching: find.byType(ExcludeSemantics)),
         findsWidgets,
       );
     });
   });
 
-  group('PrimaryActionButton: cila ve başarı ışıltısı', () {
+  group('PrimaryActionButton: düz (sade stil, cila ve ışıltı yok)', () {
     Finder gloss() => find.descendant(
       of: find.byType(PrimaryActionButton),
       matching: find.byType(Gloss),
@@ -273,52 +212,33 @@ void main() {
       success: success,
     );
 
-    testWidgets('yalnız canlı dolu düğme cilalıdır', (t) async {
-      await t.pumpWidget(_app(button(onPressed: () {})));
-      expect(gloss(), findsOneWidget);
-      await t.pumpWidget(_app(button(onPressed: () {}, loading: true)));
-      expect(gloss(), findsOneWidget, reason: 'yükleniyor: canlı');
-      await t.pumpWidget(_app(button(onPressed: () {}, success: true)));
-      expect(gloss(), findsOneWidget, reason: 'başarılı: canlı');
-      await t.pumpWidget(_app(button()));
-      expect(gloss(), findsNothing, reason: 'devre dışı: düz');
-      for (final v in [AppButtonVariant.tonal, AppButtonVariant.outline]) {
+    testWidgets('hiçbir görünüm ve durumda cila yok', (t) async {
+      for (final v in AppButtonVariant.values) {
         await t.pumpWidget(_app(button(variant: v, onPressed: () {})));
-        expect(gloss(), findsNothing, reason: '${v.name}: ikincil, düz');
+        expect(gloss(), findsNothing, reason: v.name);
+        await t.pumpWidget(_app(button(variant: v, onPressed: () {}, loading: true)));
+        expect(gloss(), findsNothing, reason: '${v.name} yükleniyor');
+        await t.pumpWidget(_app(button(variant: v, onPressed: () {}, success: true)));
+        expect(gloss(), findsNothing, reason: '${v.name} başarılı');
+        await t.pumpWidget(_app(button(variant: v)));
+        expect(gloss(), findsNothing, reason: '${v.name} devre dışı');
       }
     });
 
     testWidgets(
-      'success false -> true: ışıltı bir kez oynar ve biter (ticker kalmaz)',
+      'success false -> true: yalnız 200 ms renk geçişi (ışıltı yok), ticker kalmaz',
       (t) async {
-        Animation<double> sweep() => t.widget<Gloss>(gloss()).sweep!;
         await t.pumpWidget(_app(button(onPressed: () {})));
-        expect(sweep().value, 0);
         await t.pumpWidget(_app(button(onPressed: () {}, success: true)));
         await t.pump();
-        await t.pump(const Duration(milliseconds: 200));
-        expect(sweep().value, greaterThan(0));
-        await t.pump(PrimaryActionButton.sweepDuration);
-        await t.pump(const Duration(milliseconds: 50));
-        expect(sweep().status, AnimationStatus.completed);
-        await t.pumpAndSettle();
+        final settled = await t.pumpAndSettle();
+        expect(settled * 100, lessThanOrEqualTo(400), reason: 'yalnız renk / onay işareti geçişi');
+        expect(gloss(), findsNothing);
         expect(t.binding.transientCallbackCount, 0);
       },
     );
 
-    testWidgets('hareket azaltmada ışıltı oynamaz', (t) async {
-      Animation<double> sweep() => t.widget<Gloss>(gloss()).sweep!;
-      await t.pumpWidget(_app(button(onPressed: () {}), reduce: true));
-      await t.pumpWidget(
-        _app(button(onPressed: () {}, success: true), reduce: true),
-      );
-      await t.pump();
-      await t.pump(const Duration(milliseconds: 200));
-      expect(sweep().value, 0);
-      expect(t.binding.transientCallbackCount, 0);
-    });
-
-    testWidgets('cila dokunmayı yutmaz: onPressed çalışır', (t) async {
+    testWidgets('dokunma çalışır: onPressed', (t) async {
       var calls = 0;
       await t.pumpWidget(_app(button(onPressed: () => calls++)));
       await t.tap(find.text('Kaydet'));
@@ -327,21 +247,15 @@ void main() {
     });
   });
 
-  group('AppTheme: premium ince ayarlar', () {
+  group('AppTheme: sade düğmeler + ince ayarlar', () {
     for (final entry in <String, ThemeData Function()>{
       'açık': AppTheme.light,
       'koyu': AppTheme.dark,
     }.entries) {
-      test('${entry.key}: dolu düğmeler cilalı katmana bağlı, diğerleri düz', () {
+      test('${entry.key}: hiçbir tema düğmesinde cila / degrade katmanı yok (sade stil G6)', () {
         final theme = entry.value();
-        expect(
-          theme.elevatedButtonTheme.style!.backgroundBuilder,
-          same(glossyButtonLayer),
-        );
-        expect(
-          theme.filledButtonTheme.style!.backgroundBuilder,
-          same(glossyButtonLayer),
-        );
+        expect(theme.elevatedButtonTheme.style!.backgroundBuilder, isNull);
+        expect(theme.filledButtonTheme.style!.backgroundBuilder, isNull);
         expect(theme.outlinedButtonTheme.style!.backgroundBuilder, isNull);
         expect(theme.textButtonTheme.style!.backgroundBuilder, isNull);
       });
@@ -365,12 +279,10 @@ void main() {
       });
     }
 
-    testWidgets('ElevatedButton/FilledButton cilalı çizilir; devre dışı ve ikincil düz', (
+    testWidgets('tema düğmeleri (dolu, devre dışı, ikincil, metin) düz çizilir: cila yok, durağan', (
       t,
     ) async {
       for (final dark in [false, true]) {
-        Finder gloss(Finder button) =>
-            find.descendant(of: button, matching: find.byType(Gloss));
         await t.pumpWidget(
           harnessApp(
             Center(
@@ -389,16 +301,12 @@ void main() {
           ),
         );
         await t.pumpAndSettle();
-        expect(gloss(find.byType(ElevatedButton).first), findsOneWidget);
-        expect(gloss(find.byType(FilledButton)), findsOneWidget);
-        expect(gloss(find.byType(ElevatedButton).last), findsNothing);
-        expect(gloss(find.byType(OutlinedButton)), findsNothing);
-        expect(gloss(find.byType(TextButton)), findsNothing);
+        expect(find.byType(Gloss), findsNothing, reason: 'dark=$dark');
         expect(t.binding.transientCallbackCount, 0, reason: 'durağan');
       }
     });
 
-    testWidgets('cilalı tema düğmesi dokunmayı yutmaz (onPressed çalışır)', (
+    testWidgets('tema düğmesi dokunmayı alır (onPressed çalışır)', (
       t,
     ) async {
       var calls = 0;

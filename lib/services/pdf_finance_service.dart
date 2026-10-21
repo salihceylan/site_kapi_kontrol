@@ -550,7 +550,10 @@ Future<Uint8List> _buildStatement(_StatementJob job) async {
       header: (pw.Context context) => _reportHeader(
         'Hesap Ekstresi',
         s.meta.siteName,
-        '$apartment  •  ${_date(s.from)} - ${_date(s.to)}',
+        // İP-1A: ekstre tek hesabınsa hesabın adı yazılır (salt okunur kiracı hesabı işaretlenir).
+        '$apartment'
+        '${s.accountParty == null ? '' : '  •  ${s.accountParty!.label}${s.readOnly ? ' (salt okunur)' : ''}'}'
+        '  •  ${_date(s.from)} - ${_date(s.to)}',
       ),
       footer: (pw.Context context) => _reportFooter(context, job.printedAt, extra: _closedNote(s.meta), footer: s.meta.footer),
       build: (pw.Context context) => <pw.Widget>[

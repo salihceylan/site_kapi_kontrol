@@ -250,13 +250,18 @@ export function buildDistributionPlan(definition, apartments) {
       continue;
     }
     total += amount;
-    lines.push({
+    const line = {
       apartmentId: apartment.id,
       label: apartment.label,
       blockName: apartment.blockName ?? null,
       payerParty: apartment.payerParty,
       amount,
-    });
+    };
+    // İki hesap (İP-1A): çağıran dairenin borç hesabını çözdüyse satır onu taşır (önizleme, özet ve defter satırı).
+    if (apartment.accountParty !== undefined) {
+      line.accountParty = apartment.accountParty;
+    }
+    lines.push(line);
   }
   missing.sort((a, b) => a.apartmentId - b.apartmentId);
   return { lines, missing, total, zeroAmountCount, includedCount: included.length };
@@ -268,11 +273,14 @@ export function redistributesOnSkip(distribution) {
 }
 
 /**
- * Önizleme özeti (sha256 hex): satırların `apartment_id:amount_minor:payer_party` değerleri (apartment_id artan) ve eksik veri kümesi
- * (`m:apartment_id:neden_kodu`) üzerinden DETERMİNİSTİK. Aynı veri -> aynı özet; daire takası, tutar / ödeyen taraf veya eksik veri değişimi -> farklı özet.
+ * Önizleme özeti (sha256 hex): satırların `apartment_id:amount_minor:payer_party[:hesap]` değerleri (apartment_id artan) ve eksik veri kümesi
+ * (`m:apartment_id:neden_kodu`) üzerinden DETERMİNİSTİK. Aynı veri -> aynı özet; daire takası, tutar / ödeyen taraf / hesap (İP-1A: önizlemeyle onay
+ * arasında kiracı taşındıysa) veya eksik veri değişimi -> farklı özet.
  */
 export function planHash(plan) {
-  const lines = [...plan.lines].sort((a, b) => a.apartmentId - b.apartmentId).map((line) => `${line.apartmentId}:${line.amount}:${line.payerParty}`);
+  const lines = [...plan.lines]
+    .sort((a, b) => a.apartmentId - b.apartmentId)
+    .map((line) => `${line.apartmentId}:${line.amount}:${line.payerParty}${line.accountParty === undefined ? '' : `:${line.accountParty}`}`);
   const missing = [...plan.missing].sort((a, b) => a.apartmentId - b.apartmentId).map((entry) => `m:${entry.apartmentId}:${entry.reasonCode}`);
   return createHash('sha256').update(['v1', ...lines, ...missing].join('\n')).digest('hex');
 }

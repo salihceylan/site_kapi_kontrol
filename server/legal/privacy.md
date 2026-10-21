@@ -26,7 +26,7 @@ Bu politika, Site ve Toplu Yaşam Yönetim Sistemi uygulamasını ("Platform"; k
 - **Güde Teknoloji ({{company_name}}):** hesabınız, giriş güvenliği, yasal belge onaylarınız, site kurulum başvuruları, hata kayıtları ve destek için işlenen verilerin sorumlusudur.
 - **Site Yönetimi:** katıldığınız sitenin kişi ve daire kayıtlarının, araç kayıtlarının, kapı yetkilerinin ve geçiş kayıtlarının, duyuruların, aidat/borç, makbuz ve gider kayıtlarının ve yüklenen belgelerin sorumlusudur. Bu kayıtlarda Güde, yönetim adına teknik hizmeti sunar.
 
-Güde iletişim bilgileri: adres {{company_address}}; e-posta {{contact_email}}; telefon {{contact_phone}}; KEP {{kep_address}}; MERSİS {{mersis_no}}.
+Güde iletişim bilgileri: adres {{company_address}}; e-posta {{contact_email}}; telefon {{contact_phone}}{{#kep_address}}; KEP {{kep_address}}{{/kep_address}}{{#mersis_no}}; MERSİS {{mersis_no}}{{/mersis_no}}.
 
 ## 3. Hangi bilgileri işliyoruz?
 
@@ -214,4 +214,4 @@ Bu politika değiştiğinde yeni sürüm uygulamada yayımlanır ve gerekli oldu
 
 ## 12. İletişim
 
-Gizlilikle ilgili soru ve talepleriniz için: {{contact_email}} veya {{company_address}}. KEP: {{kep_address}}.
+Gizlilikle ilgili soru ve talepleriniz için: {{contact_email}} veya {{company_address}}.{{#kep_address}} KEP: {{kep_address}}.{{/kep_address}}

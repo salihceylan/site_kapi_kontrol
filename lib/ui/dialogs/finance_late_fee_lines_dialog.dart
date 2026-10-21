@@ -37,7 +37,8 @@ class FinanceLateFeeLinesDialog extends StatefulWidget {
 }
 
 class _FinanceLateFeeLinesDialogState extends State<FinanceLateFeeLinesDialog> {
-  final Set<int> _explained = <int>{};
+  // İP-1A: aynı dairenin iki hesabı iki satırdır; satırlar daire + hesap anahtarıyla ayrılır ([LateFeeLine.lineKey]).
+  final Set<String> _explained = <String>{};
 
   late final PagedLoader<LateFeeLine> _loader = PagedLoader<LateFeeLine>(
     fetch: (offset, limit) async {
@@ -46,7 +47,7 @@ class _FinanceLateFeeLinesDialogState extends State<FinanceLateFeeLinesDialog> {
       );
       return (items: page.items, total: page.total);
     },
-    keyOf: (l) => l.apartmentId,
+    keyOf: (l) => l.lineKey,
     notify: () {
       if (mounted) setState(() {});
     },
@@ -103,16 +104,17 @@ class _FinanceLateFeeLinesDialogState extends State<FinanceLateFeeLinesDialog> {
             hideItemsOnError: true,
             itemBuilder: (context, line) {
               final title = financeApartmentTitle(line.blockName, line.label);
-              final expanded = _explained.contains(line.apartmentId);
+              final expanded = _explained.contains(line.lineKey);
               final payer = line.payerParty;
+              final account = line.accountParty;
               return DialogPanel(
-                key: ValueKey<String>('finance_latefee_run_line_${line.apartmentId}'),
+                key: ValueKey<String>('finance_latefee_run_line_${line.lineKey}'),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Semantics(
                       container: true,
-                      label: '$title. ${payer == null ? '' : '${payerPartyLabel(payer)}. '}Tazminat: ${moneySemanticLabel(line.amountMinor)}.${line.reversed ? ' İptal edildi.' : ''}',
+                      label: '$title. ${account == null ? '' : '${account.label}. '}${payer == null ? '' : '${payerPartyLabel(payer)}. '}Tazminat: ${moneySemanticLabel(line.amountMinor)}.${line.reversed ? ' İptal edildi.' : ''}',
                       child: ExcludeSemantics(
                         child: Wrap(
                           alignment: WrapAlignment.spaceBetween,
@@ -124,6 +126,7 @@ class _FinanceLateFeeLinesDialogState extends State<FinanceLateFeeLinesDialog> {
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Text(title, style: th.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+                                if (account != null) Text(account.label, style: th.bodySmall?.copyWith(color: p.textSecondary)),
                                 if (payer != null) Text(payerPartyLabel(payer), style: th.bodySmall?.copyWith(color: p.textSecondary)),
                               ],
                             ),
@@ -141,12 +144,12 @@ class _FinanceLateFeeLinesDialogState extends State<FinanceLateFeeLinesDialog> {
                       ),
                     ),
                     TextButton.icon(
-                      key: ValueKey<String>('finance_latefee_run_explain_${line.apartmentId}'),
+                      key: ValueKey<String>('finance_latefee_run_explain_${line.lineKey}'),
                       onPressed: () => setState(() {
                         if (expanded) {
-                          _explained.remove(line.apartmentId);
+                          _explained.remove(line.lineKey);
                         } else {
-                          _explained.add(line.apartmentId);
+                          _explained.add(line.lineKey);
                         }
                       }),
                       icon: Icon(expanded ? Icons.expand_less_rounded : Icons.help_outline_rounded, size: 18),

@@ -9,6 +9,12 @@
 // bulunması ya da front-matter'da "complete: false" olması da belgeyi tamamlanmamış yapar. Değerler yer tutucu olarak girerken Markdown
 // ayırıcılarından arındırılır (bir ayar değeri bağlantı / kalın / başlık üretemez).
 //
+// KOŞULLU BÖLÜM (karar H1, 2026-10-21: KEP ve MERSİS boş kalabilir, boş alan metinde görünmez): "{{#kep_address}} … {{/kep_address}}".
+// Yalnız İSTEĞE BAĞLI alanlar (LEGAL_OPTIONAL_PLACEHOLDERS) gizlenir: alan boşsa bölüm yazılmaz, yalnız bölümden oluşup boşalan satır hiç
+// yazılmaz ve belge bu yüzden eksik SAYILMAZ. Zorunlu alanın bölümü etkisizdir (içerik yazılır; alan boşsa "[……]"). Bölüm tek satırdır ve iç
+// içe olamaz; bilinmeyen alan, kapanmamış / eşleşmeyen / satırı aşan / iç içe etiket "[……]" olur ve belgeyi eksik yapar (yazım hatası metni
+// sessizce silmez). Bölümler ŞABLON üzerinde, değerler eklenmeden önce çözülür: eklenen değer bölüm etiketi üretemez.
+//
 // HTML DÖNÜŞÜMÜ (izinli alt küme): # ## ### başlık, paragraf, "-" ve "1." listeleri, **kalın**, [metin](https://...) bağlantısı, ayırıcı çizgi.
 // TÜM metin kaçışlanır; yalnız https:// bağlantılar; tablo YOK (satırlar düz metin kalır); ham HTML hiçbir koşulda geçmez.
 //
@@ -30,6 +36,8 @@ export const LEGAL_PLACEHOLDERS = Object.freeze([
   'contact_email',
   'contact_phone',
 ]);
+/** Boş kalabilen alanlar (karar H1): koşullu bölüm içindeyken boş değer metne hiç yazılmaz ve belgeyi eksik yapmaz. */
+export const LEGAL_OPTIONAL_PLACEHOLDERS = Object.freeze(['mersis_no', 'kep_address']);
 export const UNFILLED = '[……]';
 export const REQUIRED_FOR_VALUES = Object.freeze(['register', 'site_application']);
 export const DOCUMENT_ORDER = Object.freeze(['terms', 'privacy', 'kvkk_notice', 'dpa', 'account_deletion']);
@@ -42,6 +50,9 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 // BOM'u kaynakta harf olarak yazmamak icin kodla uretilir.
 const BOM_RE = new RegExp(`^${String.fromCharCode(0xfeff)}`);
 const PLACEHOLDER_RE = /\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}/g;
+// Koşullu bölüm etiketi: "{{#ad}}" açılış, "{{/ad}}" kapanış. Satır soldan sağa TEK geçişte taranır (doğrusal süre): açılışın hemen
+// ardından gelen etiket aynı adın kapanışıysa bölümdür; değilse etiket "artık"tır.
+const SECTION_TAG_RE = /\{\{([#/])\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}/g;
 const UNFILLED_LITERAL_RE = /\[(?:…|\.{3,})+\]/;
 // Hukuk taslağındaki açık iş işaretleri: "[KARAR/BİLGİ GEREKLİ: ...]" (karar / bilgi bekleniyor) ve "[AVUKAT DOĞRULASIN: ...]" (hukukçu doğrulaması
 // bekleniyor). Gövdede kaldıkları sürece belge complete:false sayılır; metin olduğu gibi (işaretle birlikte) sunulur.
@@ -242,7 +253,11 @@ export async function loadLegalFiles(dir = legalDir()) {
 // Yer tutucu doldurma
 // ---------------------------------------------------------------------------
 
-/** Ayar değerini Markdown ayırıcılarından arındırır (tek satır; bağlantı / kalın / başlık / HTML üretemez). */
+/**
+ * Ayar değerini Markdown ayırıcılarından arındırır (tek satır; bağlantı / kalın / başlık / HTML üretemez). Satır başı işaretleri atılır;
+ * rakamdan önceki "+" (ör. "+90 …" telefonu) korunur: uygulamanın işleyicisi (lib/ui/views/legal_markdown.dart) "+" işaretini yalnız ardından
+ * boşluk gelirse liste sayar, sunucunun işleyicisi (renderMarkdown) hiç saymaz.
+ */
 export function markdownSafeValue(value) {
   return String(value ?? '')
     // eslint-disable-next-line no-control-regex
@@ -251,19 +266,67 @@ export function markdownSafeValue(value) {
     .replace(/\*{2,}/g, '*')
     .replace(/\s+/g, ' ')
     .trim()
-    .replace(/^(?:[#>*+-]\s*)+/, '');
+    .replace(/^(?:[#>*-]\s*|\+(?!\d)\s*)+/, '');
+}
+
+/** Yer tutucu ve koşullu bölüm için ortak değer: bilinen alan + metin + Markdown'dan arındırılmış; aksi "" (ayarsız). */
+function settingValue(key, legalSettings) {
+  return LEGAL_PLACEHOLDERS.includes(key) && typeof legalSettings?.[key] === 'string' ? markdownSafeValue(legalSettings[key]) : '';
+}
+
+/** Tek satırdaki koşullu bölümleri çözer. @returns {{ text: string, hadSection: boolean, unfilled: boolean }} */
+function resolveLineSections(line, legalSettings) {
+  const tags = [...line.matchAll(SECTION_TAG_RE)];
+  if (tags.length === 0) {
+    return { text: line, hadSection: false, unfilled: false };
+  }
+  let text = '';
+  let last = 0;
+  let hadSection = false;
+  let unfilled = false;
+  for (let i = 0; i < tags.length; i += 1) {
+    const tag = tags[i];
+    const next = tags[i + 1];
+    const key = tag[2].toLowerCase();
+    text += line.slice(last, tag.index);
+    if (tag[1] === '#' && next && next[1] === '/' && next[2].toLowerCase() === key) {
+      hadSection = true;
+      if (!LEGAL_PLACEHOLDERS.includes(key)) {
+        unfilled = true;
+        text += UNFILLED;
+      } else if (!LEGAL_OPTIONAL_PLACEHOLDERS.includes(key) || settingValue(key, legalSettings) !== '') {
+        text += line.slice(tag.index + tag[0].length, next.index);
+      }
+      last = next.index + next[0].length;
+      i += 1;
+      continue;
+    }
+    unfilled = true;
+    text += UNFILLED;
+    last = tag.index + tag[0].length;
+  }
+  return { text: text + line.slice(last), hadSection, unfilled };
 }
 
 /**
- * Gövdedeki yer tutucuları doldurur. Dolu değer kullanılır; boş / bilinmeyen -> "[……]".
+ * Gövdeyi doldurur: önce koşullu bölümler (şablon üzerinde), sonra yer tutucular. Dolu değer kullanılır; boş / bilinmeyen -> "[……]";
+ * isteğe bağlı alanın bölümü alan boşken hiç yazılmaz.
  * @returns {{ text: string, complete: boolean }} complete: hiç "[……]" ve açık iş işareti ("[KARAR/BİLGİ GEREKLİ" / "[AVUKAT DOĞRULASIN") kalmadı
  */
 export function fillPlaceholders(body, legalSettings = {}) {
   let unfilled = false;
+  const lines = [];
+  for (const line of String(body ?? '').split('\n')) {
+    const resolved = resolveLineSections(line, legalSettings);
+    unfilled ||= resolved.unfilled;
+    // Yalnız bölümden oluşup boşalan satır (ör. boş KEP liste maddesi) hiç yazılmaz; şablondaki boş satırlar korunur.
+    if (!(resolved.hadSection && resolved.text.trim() === '')) {
+      lines.push(resolved.text);
+    }
+  }
   // Tek geçiş: eklenen değerler yeniden taranmaz (değer içinde "{{...}}" olsa da genişlemez).
-  const text = String(body ?? '').replace(PLACEHOLDER_RE, (_match, name) => {
-    const key = String(name).toLowerCase();
-    const value = LEGAL_PLACEHOLDERS.includes(key) && typeof legalSettings?.[key] === 'string' ? markdownSafeValue(legalSettings[key]) : '';
+  const text = lines.join('\n').replace(PLACEHOLDER_RE, (_match, name) => {
+    const value = settingValue(String(name).toLowerCase(), legalSettings);
     if (value === '') {
       unfilled = true;
       return UNFILLED;

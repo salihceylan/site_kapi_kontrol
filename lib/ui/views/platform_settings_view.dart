@@ -17,6 +17,7 @@ import 'package:site_kapi_kontrol/ui/helpers/form_validation.dart';
 import 'package:site_kapi_kontrol/ui/helpers/retry_lock.dart';
 import 'package:site_kapi_kontrol/ui/widgets/crm_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
+import 'package:site_kapi_kontrol/ui/widgets/platform_rules_entry_card.dart';
 
 /// "Platform Ayarları" ekranı (yalnız süper kullanıcı): `GET/PUT /admin/platform-config`.
 ///
@@ -576,6 +577,9 @@ class PlatformSettingsViewState extends State<PlatformSettingsView> {
           style: th.bodyMedium,
         ),
         const SizedBox(height: AppSpace.lg),
+        // Kurallar tablosu (G11; docs/PLATFORM_KURALLAR.md): platform geneli değerler ayrı sayfada değiştirilir (bu formun kaydından bağımsız).
+        PlatformRulesEntryCard(authService: widget.authService, canEdit: true),
+        const SizedBox(height: AppSpace.lg),
         content,
       ],
     );
@@ -738,8 +742,9 @@ class PlatformSettingsViewState extends State<PlatformSettingsView> {
                 const SectionHeader(title: 'Şirket ve Yasal Bilgiler', icon: Icons.gavel_rounded),
                 const SizedBox(height: AppSpace.xs),
                 Text(
-                  'Gizlilik politikası ve sözleşme metinlerindeki şirket bilgilerini doldurur. Boş kalan alan '
-                  'belgede [……] olarak görünür ve belge "tamamlanmamış" sayılır.',
+                  'Gizlilik politikası ve sözleşme metinlerindeki şirket bilgilerini doldurur. MERSİS numarası ve KEP '
+                  'adresi isteğe bağlıdır: boşken yasal metinlerde hiç yazılmaz. Diğer alanlardan boş kalan belgede [……] '
+                  'olarak görünür ve belge "tamamlanmamış" sayılır.',
                   style: th.bodySmall,
                 ),
                 const SizedBox(height: AppSpace.md),
@@ -767,7 +772,7 @@ class PlatformSettingsViewState extends State<PlatformSettingsView> {
                   icon: Icons.tag_rounded,
                   keyboardType: TextInputType.number,
                   formatters: <TextInputFormatter>[FilteringTextInputFormatter.allow(RegExp(r'[0-9 ]'))],
-                  helper: '16 rakam.',
+                  helper: '16 rakam; isteğe bağlı.',
                   validator: validatePlatformMersis,
                 ),
                 const SizedBox(height: AppSpace.md),
@@ -776,6 +781,7 @@ class PlatformSettingsViewState extends State<PlatformSettingsView> {
                   'KEP adresi',
                   icon: Icons.alternate_email_rounded,
                   keyboardType: TextInputType.emailAddress,
+                  helper: 'İsteğe bağlı.',
                   validator: (v) => validatePlatformEmail(v, 'KEP adresi'),
                 ),
                 const SizedBox(height: AppSpace.md),

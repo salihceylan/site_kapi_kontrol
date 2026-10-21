@@ -152,19 +152,19 @@ Color _textColor(WidgetTester t, String text) {
 Color _iconColor(WidgetTester t, IconData icon) =>
     t.widget<Icon>(find.byIcon(icon)).color!;
 
-/// [icon] cilalı bir [IconOrb] içindedir: ikon BEYAZ ve [tone] gradyanının iki ucunda >= 3:1
-/// (ikon eşiği; eski düz tint dairesinin ink ikonu yerine geçti, eşik AYNI). Cila dahil gerçek piksel
-/// ölçümü `test/design/gloss_test.dart` ve `icon_orb_test.dart`'tadır.
+/// [icon] bir [IconOrb] içindedir. Sade stilde (İP-1C) rozet düzdür: soluk yüzey zemin, ikon tonun işaret rengi
+/// ([AppTone.sign]: durum tonlarında ink); ikon zemine >= 3:1 (ikon eşiği; ölçüm ayrıca `icon_orb_test.dart`'ta).
 void _expectOrbIcon(
   WidgetTester t,
   IconData icon,
   AppTone tone, {
   required String reason,
 }) {
+  final p = t.element(find.byIcon(icon).first).palette;
   final icons = find.byIcon(icon).evaluate().toList();
   expect(icons, isNotEmpty, reason: reason);
   for (final e in icons) {
-    expect((e.widget as Icon).color, Colors.white, reason: reason);
+    expect((e.widget as Icon).color, tone.sign(p), reason: reason);
   }
   final orbs = find.ancestor(
     of: find.byIcon(icon),
@@ -174,13 +174,11 @@ void _expectOrbIcon(
   for (final e in orbs.evaluate()) {
     expect((e.widget as IconOrb).tone, tone, reason: reason);
   }
-  for (final end in <Color>[tone.a, tone.b]) {
-    expect(
-      _ratio(Colors.white, end),
-      greaterThanOrEqualTo(3.0),
-      reason: '$reason (${tone.name} gradyanı)',
-    );
-  }
+  expect(
+    _ratio(tone.sign(p), p.surfaceMuted),
+    greaterThanOrEqualTo(3.0),
+    reason: '$reason (${tone.name} rozet zemini)',
+  );
 }
 
 void main() {

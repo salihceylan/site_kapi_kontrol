@@ -29,6 +29,7 @@ import 'package:site_kapi_kontrol/ui/views/decision_resident_view.dart';
 import 'dialog_layout_harness.dart' show settleFor;
 import 'list_fixtures.dart' show fxDoors;
 import 'people_fixtures.dart';
+import '../support/menu_nav.dart';
 
 class _HomeAuth extends PeopleFakeAuth {
   _HomeAuth({super.role});
@@ -144,10 +145,9 @@ Future<void> _selectTile(WidgetTester t, String title) async {
 
 Finder _tileTitle(String title) => find.descendant(of: find.byType(Drawer), matching: find.text(title));
 
-List<String> _drawerTitles(WidgetTester t) => <String>[
-  for (final tile in t.widgetList<ListTile>(find.descendant(of: find.byType(Drawer), matching: find.byType(ListTile))))
-    (tile.title! as Text).data!,
-];
+/// İP-1D (G2): menü LİSTESİNİN sırası (vitrin sırası; `YanMenu.visibleItems`: çekmece + Ayarlar paneli). Çekmece öğeleri
+/// başlıklar altında gruplar ([expectUnderDrawerHeader]); ayar öğeleri sağ üstteki dişlidedir.
+List<String> _drawerTitles(WidgetTester t) => menuListTitles(t);
 
 void main() {
   setUp(() {
@@ -168,6 +168,7 @@ void main() {
       expect(titles, contains('Karar Defteri'));
       expect(titles, isNot(contains('Kararlar')), reason: 'yönetici modunda sakin ekranı yok');
       expect(titles.indexOf('Karar Defteri'), titles.indexOf('Duyurular') + 1);
+      expectUnderDrawerHeader(t, 'Karar Defteri', 'Site hizmetleri');
       await _selectTile(t, 'Karar Defteri');
       final view = t.widget<DecisionManagerView>(find.byType(DecisionManagerView));
       expect(view.manageAllSites, isFalse);

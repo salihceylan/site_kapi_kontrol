@@ -52,8 +52,14 @@ abstract final class AppMotion {
 
 /// Tema duyarlı renk paleti (ThemeExtension). `context.palette` ile okunur.
 ///
-/// Sözleşme: [text], [textSecondary] ve [textMuted] renklerinin her biri [surface] ve
-/// [surfaceMuted] üzerinde (koyuda ayrıca [surfaceAt] 2-3. seviyelerinde) en az 4,5:1 kontrast verir.
+/// Sözleşme: [text], [textSecondary] ve [textMuted] renklerinin her biri [surface], [surfaceMuted] ve [background]
+/// üzerinde (koyuda ayrıca [surfaceAt] 2-3. seviyelerinde) en az 4,5:1 kontrast verir.
+///
+/// **Sade stil (karar G6 + G7, sözleşme 2.3)**: sayfa zemini [background] (düz, ışıma yok); kart [surface] + 1 px
+/// [border], gölgesiz; gövde metni [textSecondary], başlık [text]; ana onay düğmesi ve kritik uyarı [action] / [critical]
+/// (düz: cila, degrade, gölge yok); mavi yalnız [link] ve [focusRing]; durum noktaları [statusOk], [statusWarn],
+/// [statusCrit] (zemin boyanmaz). Açık temanın değerleri beyaz etiketin değişkenleridir ([AppShowcaseColors]).
+/// Kontrast tablosu: `test/design/sade_style_test.dart` ve `docs/TASARIM_DILI.md`.
 @immutable
 class AppPalette extends ThemeExtension<AppPalette> {
   const AppPalette._(
@@ -63,37 +69,93 @@ class AppPalette extends ThemeExtension<AppPalette> {
     this.border,
     this.text,
     this.textSecondary,
-    this.textMuted,
-  );
+    this.textMuted, {
+    required this.background,
+    required this.action,
+    required this.onAction,
+    required this.link,
+    required this.focusRing,
+    required this.statusOk,
+    required this.statusWarn,
+    required this.statusCrit,
+    required this.critical,
+    required this.onCritical,
+    required this.criticalBorder,
+  });
 
   final bool isDark;
 
   /// Kart/diyalog/girdi yüzeyi.
   final Color surface;
 
-  /// Soluk iç yüzey (devre dışı zemin, iskelet tabanı, grup içi kutu).
+  /// Soluk iç yüzey (devre dışı zemin, iskelet tabanı, grup içi kutu, ikon rozeti).
   final Color surfaceMuted;
 
-  /// Kart/ayırıcı kenarı. Metin rengi DEĞİLDİR.
+  /// Kart/ayırıcı kenarı ve ikincil düğmenin çerçevesi. Metin rengi DEĞİLDİR.
   final Color border;
 
-  /// Ana metin.
+  /// Ana metin (başlık).
   final Color text;
 
-  /// İkincil metin (varsayılan gövde metni).
+  /// İkincil metin (varsayılan gövde metni; sade stilde ikonlar da bu renktedir).
   final Color textSecondary;
 
   /// Etiket/ipucu metni. Açıkta #5F6F85: surface, surfaceMuted ve #F8FAFC üzerinde >= 4,5:1.
   final Color textMuted;
 
+  /// Sayfa zemini: DÜZ renk (açıkta #F8FAFC "ana zemin", koyuda #0F172A); üstünde ışıma yoktur.
+  final Color background;
+
+  /// Ana onay düğmesinin zemini (açıkta #0F172A; koyuda #F8FAFC: koyu zeminde en yüksek karşıtlık). Düz çizilir.
+  final Color action;
+
+  /// [action] üstündeki metin ve ikon (açık / koyu temada >= 4,5:1; ölçüm 17,06:1).
+  final Color onAction;
+
+  /// Bağlantı metni (mavi yalnız burada ve [focusRing]'de). Yüzeylerde >= 4,5:1.
+  final Color link;
+
+  /// Klavye odak halkası (mavi). Yanındaki yüzeye >= 3:1.
+  final Color focusRing;
+
+  /// Durum noktası: tamam (zümrüt #10B981). Metnin solunda; zemin boyanmaz.
+  final Color statusOk;
+
+  /// Durum noktası: bekliyor (kehribar #F59E0B).
+  final Color statusWarn;
+
+  /// Durum noktası: kritik (mercan #E11D48 = [AppTone.danger] `hue` ve `a`).
+  final Color statusCrit;
+
+  /// Kritik uyarı kutusu (yalnız eylem isteyen yer: dikkat barı, ödenecek borç). Açıkta #0F172A; koyuda zeminden
+  /// ayrışan lacivert #172554 (+ [criticalBorder]).
+  final Color critical;
+
+  /// [critical] üstündeki metin.
+  final Color onCritical;
+
+  /// [critical] kutusunun kenarı: açıkta ince #1E293B, koyuda kutuya ve zemine >= 3:1 mavi (#3B82F6).
+  final Color criticalBorder;
+
   static const AppPalette light = AppPalette._(
     false,
-    Color(0xFFFFFFFF),
+    AppShowcaseColors.card,
     Color(0xFFF1F5F9),
-    Color(0xFFE2E8F0),
+    AppShowcaseColors.cardBorder,
     Color(0xFF0F172A),
-    Color(0xFF475569),
+    AppShowcaseColors.text,
     Color(0xFF5F6F85),
+    background: AppShowcaseColors.background,
+    action: AppShowcaseColors.focus,
+    onAction: AppShowcaseColors.onFocus,
+    link: Color(0xFF1D4ED8),
+    focusRing: Color(0xFF1D4ED8),
+    statusOk: AppShowcaseColors.statusOk,
+    statusWarn: AppShowcaseColors.statusWarn,
+    statusCrit: AppShowcaseColors.statusCrit,
+    critical: AppShowcaseColors.focus,
+    onCritical: AppShowcaseColors.onFocus,
+    criticalBorder: AppShowcaseColors.focusBorder,
   );
 
   static const AppPalette dark = AppPalette._(
@@ -104,10 +166,21 @@ class AppPalette extends ThemeExtension<AppPalette> {
     Color(0xFFF8FAFC),
     Color(0xFFCBD5E1),
     Color(0xFF94A3B8),
+    background: Color(0xFF0F172A),
+    action: Color(0xFFF8FAFC),
+    onAction: Color(0xFF0F172A),
+    link: Color(0xFF93C5FD),
+    focusRing: Color(0xFF93C5FD),
+    statusOk: AppShowcaseColors.statusOk,
+    statusWarn: AppShowcaseColors.statusWarn,
+    statusCrit: AppShowcaseColors.statusCrit,
+    critical: AppShowcaseColors.focusDark,
+    onCritical: AppShowcaseColors.onFocus,
+    criticalBorder: Color(0xFF3B82F6),
   );
 
   /// Yükselti 1..3 için yüzey rengi. Koyu temada yükselti = daha açık yüzey (beyaz %3 x (seviye-1));
-  /// açıkta yüzey sabittir (yükseltiyi gölge verir).
+  /// açıkta yüzey sabittir (sade stilde kartlar gölgesizdir; [shadow] yalnız yüzen katmanlar ve kapı düğmesi içindir).
   Color surfaceAt(int level) {
     assert(level >= 1 && level <= 3, 'Yükselti seviyesi 1..3 olmalı');
     return isDark
@@ -158,6 +231,17 @@ class AppPalette extends ThemeExtension<AppPalette> {
     Color? text,
     Color? textSecondary,
     Color? textMuted,
+    Color? background,
+    Color? action,
+    Color? onAction,
+    Color? link,
+    Color? focusRing,
+    Color? statusOk,
+    Color? statusWarn,
+    Color? statusCrit,
+    Color? critical,
+    Color? onCritical,
+    Color? criticalBorder,
   }) {
     return AppPalette._(
       isDark ?? this.isDark,
@@ -167,6 +251,17 @@ class AppPalette extends ThemeExtension<AppPalette> {
       text ?? this.text,
       textSecondary ?? this.textSecondary,
       textMuted ?? this.textMuted,
+      background: background ?? this.background,
+      action: action ?? this.action,
+      onAction: onAction ?? this.onAction,
+      link: link ?? this.link,
+      focusRing: focusRing ?? this.focusRing,
+      statusOk: statusOk ?? this.statusOk,
+      statusWarn: statusWarn ?? this.statusWarn,
+      statusCrit: statusCrit ?? this.statusCrit,
+      critical: critical ?? this.critical,
+      onCritical: onCritical ?? this.onCritical,
+      criticalBorder: criticalBorder ?? this.criticalBorder,
     );
   }
 
@@ -182,6 +277,17 @@ class AppPalette extends ThemeExtension<AppPalette> {
       Color.lerp(text, other.text, t)!,
       Color.lerp(textSecondary, other.textSecondary, t)!,
       Color.lerp(textMuted, other.textMuted, t)!,
+      background: Color.lerp(background, other.background, t)!,
+      action: Color.lerp(action, other.action, t)!,
+      onAction: Color.lerp(onAction, other.onAction, t)!,
+      link: Color.lerp(link, other.link, t)!,
+      focusRing: Color.lerp(focusRing, other.focusRing, t)!,
+      statusOk: Color.lerp(statusOk, other.statusOk, t)!,
+      statusWarn: Color.lerp(statusWarn, other.statusWarn, t)!,
+      statusCrit: Color.lerp(statusCrit, other.statusCrit, t)!,
+      critical: Color.lerp(critical, other.critical, t)!,
+      onCritical: Color.lerp(onCritical, other.onCritical, t)!,
+      criticalBorder: Color.lerp(criticalBorder, other.criticalBorder, t)!,
     );
   }
 }
@@ -242,13 +348,14 @@ enum AppTone {
     Color(0xFF7DD3FC),
   ),
 
-  /// Çevrimdışı/hata/silme.
+  /// Çevrimdışı/hata/silme. Sade stilin "mercan" tonu (karar G7): hue = dolgu = #E11D48 (kritik durum noktası, vitrin ve
+  /// çekmece rozeti noktası); dolgu sonu ve açık ink #BE123C, koyu ink #FDA4AF.
   danger(
-    Color(0xFFEF4444),
-    Color(0xFFDC2626),
-    Color(0xFFB91C1C),
-    Color(0xFFB91C1C),
-    Color(0xFFFCA5A5),
+    Color(0xFFE11D48),
+    Color(0xFFE11D48),
+    Color(0xFFBE123C),
+    Color(0xFFBE123C),
+    Color(0xFFFDA4AF),
   ),
 
   /// Daire kullanıcısı/bireysel rolü.
@@ -304,6 +411,17 @@ enum AppTone {
 
   /// Soluk zemin: [hue] açıkta %12, koyuda %16 saydamlıkla (yüzey üstüne bindirilir).
   Color tint(AppPalette p) => hue.withValues(alpha: p.isDark ? 0.16 : 0.12);
+
+  /// Sade stil (karar G7): durum tonu mu (tamam / bekliyor / kritik)? Yalnız bu üç ton renkli işaret (nokta, simge,
+  /// dolu düğme, kart kenarı) taşır; öteki tonlar (birincil, bilgi, mor, nötr) nötr görünür: mavi yalnız bağlantı ve odak
+  /// halkasındadır.
+  bool get isStatus => this == success || this == warning || this == danger;
+
+  /// Durum noktasının rengi: durum tonlarında tonun canlı rengi (#10B981 / #F59E0B / #E11D48), ötekilerde nötr gri.
+  Color get dot => isStatus ? hue : neutral.hue;
+
+  /// Simge (ikon) rengi: durum tonlarında [ink], ötekilerde gövde metni rengi (sade stilde "normal metin ve ikon").
+  Color sign(AppPalette p) => isStatus ? ink(p) : p.textSecondary;
 }
 
 /// Rol -> ton köprüsü. `role.tone.hue == role.accentColor` (role_theme.dart) sözleşmesi testle doğrulanır.
@@ -315,43 +433,15 @@ extension RoleTone on UserRole {
   };
 }
 
-/// Sayfa zemini `AppDecorations.pageBackground*` ile DEĞİŞMEZ; üstüne tek, statik ışıma binilir.
-abstract final class AppGradients {
-  static const RadialGradient pageGlowLight = RadialGradient(
-    center: Alignment(0.9, -1.1),
-    radius: 1.1,
-    colors: <Color>[Color(0x143B82F6), Color(0x003B82F6)],
-  );
-
-  static const RadialGradient pageGlowDark = RadialGradient(
-    center: Alignment(0.9, -1.1),
-    radius: 1.1,
-    colors: <Color>[Color(0x1F3B82F6), Color(0x003B82F6)],
-  );
-
-  /// İkinci, çok hafif ışıma (sol-alt köşe, mor): sayfaya derinlik verir. Birincil ışımayla aynı ilke:
-  /// statiktir (ticker yok), tek gradyan boyaması.
-  static const RadialGradient pageGlowAccentLight = RadialGradient(
-    center: Alignment(-1.0, 1.15),
-    radius: 1.0,
-    colors: <Color>[Color(0x0FA855F7), Color(0x00A855F7)],
-  );
-
-  static const RadialGradient pageGlowAccentDark = RadialGradient(
-    center: Alignment(-1.0, 1.15),
-    radius: 1.0,
-    colors: <Color>[Color(0x1AA855F7), Color(0x00A855F7)],
-  );
-}
-
-/// Panel modül vitrininin ("sade" stil: işverenin komutlar.txt renk tablosu) renk değişkenleri. Beyaz etiket teması bu
+/// Sade stilin ("sade": işverenin komutlar.txt renk tablosu, karar G6 + G7) renk değişkenleri. Beyaz etiket teması bu
 /// beş değişkeni değiştirir: [background] (ana zemin), [card] + [cardBorder] (kart ve ince çerçevesi; gölge yok),
 /// [text] (normal metin ve ikon), [focus] (kritik odak kutusu ve ana düğme) ve durum noktaları ([statusOk],
 /// [statusWarn], [statusCrit]: arka planı boyamaz, metnin soluna küçük nokta). Altındakiler bunlardan türeyen yardımcılardır.
 ///
-/// Değerler AÇIK tema içindir. Koyu temada vitrin kart / metin için [AppPalette.dark]'ı, odak kutusu için [focusDark] +
-/// [AppTone.primary] kenarını kullanır. Uygulamanın geri kalanı (G6 kararına kadar) "Cilalı Safir" paletindedir; bu
-/// renkler yalnız vitrinde kullanılır. Kontrastlar `test/screens/module_showcase_view_test.dart` ile doğrulanır.
+/// Değerler AÇIK tema içindir ve [AppPalette.light]'ın sade alanları bunlardan okunur (tek kaynak): uygulamanın tamamı
+/// (İP-1C'den beri) bu renklerdedir; Panel vitrini ayrıca doğrudan kullanır. Koyu temada vitrin kart / metin için
+/// [AppPalette.dark]'ı, odak kutusu için [focusDark] + [AppTone.primary] kenarını kullanır. Kontrastlar
+/// `test/screens/module_showcase_view_test.dart` ve `test/design/sade_style_test.dart` ile doğrulanır.
 abstract final class AppShowcaseColors {
   /// Ana zemin (kırık beyaz / buz grisi): açık temada vitrin sayfasının DÜZ zemini.
   static const Color background = Color(0xFFF8FAFC);
@@ -382,7 +472,7 @@ abstract final class AppShowcaseColors {
   /// Açık temada odak kutusunun ince kenarı.
   static const Color focusBorder = Color(0xFF1E293B);
 
-  /// Koyu temada odak kutusu: koyu sayfa zemininden (#0F172A -> #020617) ayrışan lacivert; kenarı
+  /// Koyu temada odak kutusu: koyu sayfa zemininden (düz #0F172A) ayrışan lacivert; kenarı
   /// [AppTone.primary] `hue` (zemine ve kutuya >= 3:1).
   static const Color focusDark = Color(0xFF172554);
 }

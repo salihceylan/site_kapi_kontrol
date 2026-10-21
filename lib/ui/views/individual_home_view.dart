@@ -437,7 +437,8 @@ class IndividualHomeViewState extends State<IndividualHomeView>
             child: const Text('İptal'),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppTone.danger.a),
+            // Ön plan da verilir: sade temada ana eylem metni koyu temada koyudur (mercan üstünde 3,80:1 kalırdı).
+            style: FilledButton.styleFrom(backgroundColor: AppTone.danger.a, foregroundColor: Colors.white),
             onPressed: () => Navigator.of(ctx).pop(true),
             child: const Text('Çıkar'),
           ),

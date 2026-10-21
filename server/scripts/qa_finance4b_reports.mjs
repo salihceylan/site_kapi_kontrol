@@ -208,7 +208,8 @@ export default async function sectionReports(t) {
   const envRec = await call('GET', `${P(site.code)}/exports/finance_receipts`, MGR);
   check('E8c: kasa durumu / ekstre / gider / makbuz zarflari: sutun tipleri, satir sayilari ve toplam satiri; apartment_id yoksa 400; bilinmeyen tur 404',
     envCash.status === 200 && envCash.body.rows[envCash.body.rows.length - 1][0] === 'Toplam' && envStmt.status === 200 && envStmt.body.rows[0][1] === 'Devreden' && envStmt.body.rows.length === st.body.items.length + 1 && envExp.body.row_count === 2 && envExp.body.columns[4].type === 'money'
-      && envRec.status === 200 && envRec.body.columns.length === 8 && (await call('GET', `${P(s2.code)}/exports/finance_statement`, MGR)).status === 400 && (await call('GET', `${P(s2.code)}/exports/bilinmeyen`, MGR)).status === 404, [envCash.status, envStmt.status, envExp.body.row_count, envRec.status]);
+      // İP-1A (G12): makbuz zarfının sonuna "Hesap" sütunu eklendi (8 -> 9)
+      && envRec.status === 200 && envRec.body.columns.length === 9 && envRec.body.columns[8].key === 'hesap' && (await call('GET', `${P(s2.code)}/exports/finance_statement`, MGR)).status === 400 && (await call('GET', `${P(s2.code)}/exports/bilinmeyen`, MGR)).status === 404, [envCash.status, envStmt.status, envExp.body.row_count, envRec.status]);
   const exportAudit = (await q(`SELECT details FROM audit_log WHERE action = 'export' AND site_code = $1 ORDER BY id DESC LIMIT 1`, [site.code])).rows[0]?.details;
   check('E8d: dışa aktarma audit (export): kind, row_count, format, suzgec ADLARI; veri / ad YOK', exportAudit?.kind && exportAudit.row_count >= 0 && Array.isArray(exportAudit.filters) && !JSON.stringify(exportAudit).includes('Rapor Malik'), exportAudit);
   // 20 000 satir siniri

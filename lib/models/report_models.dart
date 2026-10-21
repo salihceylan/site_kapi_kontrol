@@ -62,6 +62,27 @@ int _bucketMinor(Map<String, dynamic> json, AgingBucket bucket) {
   return value;
 }
 
+/// Bir dairenin TEK hesabının yaşlandırma tutarları (`items[].accounts.owner|tenant`; İP-1A: mahsup hesap başınadır).
+@immutable
+class AgingAccountPart {
+  const AgingAccountPart({required this.totalOverdueMinor, required this.creditMinor});
+
+  final int totalOverdueMinor;
+  final int creditMinor;
+
+  bool get isZero => totalOverdueMinor == 0 && creditMinor == 0;
+
+  /// Okunamazsa null (eski sunucu ya da bozuk alan; ekran kırılımı göstermez).
+  static AgingAccountPart? tryParse(Object? raw) {
+    if (raw is! Map) return null;
+    final json = Map<String, dynamic>.from(raw);
+    final overdue = financeMinor(json['total_overdue_minor']);
+    final credit = financeMinor(json['credit_minor']);
+    if (overdue == null || credit == null) return null;
+    return AgingAccountPart(totalOverdueMinor: overdue, creditMinor: credit);
+  }
+}
+
 /// Yaşlandırma satırı (daire).
 @immutable
 class AgingItem {
@@ -76,6 +97,8 @@ class AgingItem {
     required this.creditMinor,
     this.lateFeeOutstandingMinor,
     required this.totalOverdueMinor,
+    this.accountParty,
+    this.accounts = const <AccountParty, AgingAccountPart>{},
   });
 
   final int apartmentId;
@@ -89,18 +112,32 @@ class AgingItem {
   final int? lateFeeOutstandingMinor;
   final int totalOverdueMinor;
 
-  factory AgingItem.fromJson(Map<String, dynamic> json) => AgingItem(
-    apartmentId: f4Int(json['apartment_id']),
-    label: f4Str(json['label']),
-    blockName: f4Text(json['block_name']),
-    payerParty: json['payer_party'] == null ? null : ResponsibleParty.fromApi(json['payer_party']),
-    ownerName: f4Text(json['owner_name']),
-    tenantName: f4Text(json['tenant_name']),
-    buckets: <AgingBucket, int>{for (final b in AgingBucket.values) b: _bucketMinor(json, b)},
-    creditMinor: f4MinorOrNull(json, 'credit_minor') ?? 0,
-    lateFeeOutstandingMinor: f4MinorOrNull(json, 'late_fee_outstanding_minor'),
-    totalOverdueMinor: f4Minor(json, 'total_overdue_minor'),
-  );
+  /// Hesap süzgeci (`?account_party=`): satır yalnız bu hesabın tutarlarıdır; süzgeçsizse null (iki hesabın toplamı).
+  final AccountParty? accountParty;
+
+  /// Hesap kırılımı (İP-1A); eski sunucuda boş.
+  final Map<AccountParty, AgingAccountPart> accounts;
+
+  factory AgingItem.fromJson(Map<String, dynamic> json) {
+    final rawAccounts = json['accounts'];
+    return AgingItem(
+      apartmentId: f4Int(json['apartment_id']),
+      label: f4Str(json['label']),
+      blockName: f4Text(json['block_name']),
+      payerParty: json['payer_party'] == null ? null : ResponsibleParty.fromApi(json['payer_party']),
+      ownerName: f4Text(json['owner_name']),
+      tenantName: f4Text(json['tenant_name']),
+      buckets: <AgingBucket, int>{for (final b in AgingBucket.values) b: _bucketMinor(json, b)},
+      creditMinor: f4MinorOrNull(json, 'credit_minor') ?? 0,
+      lateFeeOutstandingMinor: f4MinorOrNull(json, 'late_fee_outstanding_minor'),
+      totalOverdueMinor: f4Minor(json, 'total_overdue_minor'),
+      accountParty: AccountParty.tryParse(json['account_party']),
+      accounts: <AccountParty, AgingAccountPart>{
+        if (rawAccounts is Map)
+          for (final party in AccountParty.values) party: ?AgingAccountPart.tryParse(rawAccounts[party.apiValue]),
+      },
+    );
+  }
 }
 
 /// `GET reports/aging`.
@@ -115,6 +152,7 @@ class AgingReport {
     required this.totalOverdueMinor,
     this.items = const <AgingItem>[],
     this.total = 0,
+    this.accountParty,
   });
 
   final ReportMeta meta;
@@ -128,6 +166,9 @@ class AgingReport {
   final List<AgingItem> items;
   final int total;
 
+  /// Raporun hesap süzgeci (İP-1A; yanıt yankısı); süzgeçsizse null.
+  final AccountParty? accountParty;
+
   factory AgingReport.fromJson(Map<String, dynamic> json) {
     final totals = f4Map(json['totals']);
     return AgingReport(
@@ -139,6 +180,7 @@ class AgingReport {
       totalOverdueMinor: f4Minor(totals, 'total_overdue_minor'),
       items: f4List(json['items'], AgingItem.fromJson),
       total: f4Int(json['total']),
+      accountParty: AccountParty.tryParse(json['account_party']),
     );
   }
 }
@@ -383,10 +425,18 @@ class ApartmentStatement {
     this.overdueMinor,
     this.visibleFrom,
     this.offsetNote = false,
+    this.accountParty,
+    this.readOnly = false,
   });
 
   final ReportMeta meta;
   final AccountApartment apartment;
+
+  /// Ekstrenin hesabı (İP-1A): yönetici ekstresinde süzgeç (yoksa null = iki hesap birlikte), sakin ekstresinde görünümün hesabı.
+  final AccountParty? accountParty;
+
+  /// Yalnız sakin ekstresinde: salt okunur kiracı hesabı görünümü (`role: read_only`).
+  final bool readOnly;
   final DateTime? from;
   final DateTime? to;
   final int openingBalanceMinor;
@@ -418,6 +468,8 @@ class ApartmentStatement {
       overdueMinor: f4MinorOrNull(json, 'overdue_minor'),
       visibleFrom: FinancePeriod.tryParse(json['visible_from']),
       offsetNote: json['offset_note'] == true,
+      accountParty: AccountParty.tryParse(json['account_party']),
+      readOnly: json['role'] == 'read_only',
     );
   }
 }

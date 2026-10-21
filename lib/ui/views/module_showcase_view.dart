@@ -303,6 +303,8 @@ class ModuleShowcaseViewState extends State<ModuleShowcaseView> {
         widget.residentSiteName!.trim(),
       if (summary != null && summary.apartmentTitle.isNotEmpty && summary.apartmentTitle != '-')
         summary.apartmentTitle,
+      // İP-1A: tutar kişinin KENDİ hesabıdır; tek dairede hesabın adı yazılır ("Kiracı hesabı").
+      if (summary != null && summary.accountLabel.isNotEmpty) summary.accountLabel,
     ].join(' · ');
     if (summary != null) {
       return _DebtHero(

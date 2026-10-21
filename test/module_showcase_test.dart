@@ -409,5 +409,42 @@ void main() {
       expect(s.hasDebt, isFalse);
       expect(s.hasCredit, isFalse);
     });
+
+    // İP-1A (G12): yalnız KENDİ hesabı sayılır; salt okunur kiracı hesabı (both dairede malike) vitrine eklenmez.
+    test('iki hesap: salt okunur kiracı hesabının borcu sayılmaz; tek dairede kendi hesabının adı', () {
+      const item = MyFinanceApartment(
+        siteCode: 1,
+        siteName: 'Gül Sitesi',
+        apartmentId: 7,
+        label: 'D:3',
+        blockName: 'A Blok',
+        balanceMinor: -10000,
+        overdueMinor: 0,
+        accountParty: AccountParty.owner,
+        accounts: [
+          MyFinanceAccount(accountParty: AccountParty.owner, balanceMinor: -10000, overdueMinor: 0),
+          MyFinanceAccount(accountParty: AccountParty.tenant, role: MyFinanceAccountRole.readOnly, balanceMinor: 168000, overdueMinor: 156000),
+        ],
+      );
+      final s = summarizeMyFinance(const MyFinance(items: [item]));
+      expect(s.debtMinor, 0);
+      expect(s.overdueMinor, 0);
+      expect(s.creditMinor, 10000);
+      expect(s.accountLabel, 'Ev sahibi hesabı');
+    });
+
+    test('eski sunucu (hesap bilgisi yok): hesap adı boş, tutarlar eski alanlardan', () {
+      final s = summarizeMyFinance(MyFinance(items: [apt(5000, overdue: 5000)]));
+      expect(s.accountLabel, isEmpty);
+      expect(s.debtMinor, 5000);
+    });
+
+    test('çok daire: hesap adı yazılmaz (her dairenin hesabı farklı olabilir)', () {
+      const a = MyFinanceApartment(siteCode: 1, apartmentId: 1, balanceMinor: 100, accountParty: AccountParty.tenant);
+      const b = MyFinanceApartment(siteCode: 1, apartmentId: 2, balanceMinor: 200, accountParty: AccountParty.owner);
+      final s = summarizeMyFinance(const MyFinance(items: [a, b]));
+      expect(s.accountLabel, isEmpty);
+      expect(s.debtMinor, 300);
+    });
   });
 }

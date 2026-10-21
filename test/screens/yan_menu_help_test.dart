@@ -112,11 +112,10 @@ void main() {
       for (final role in UserRole.values) {
         expect(await _pumpMenu(t, role), isNot(contains('Yardım ve Destek')), reason: role.name);
       }
+      // İP-1D: Eller Serbest ve Profilim sağ üstteki dişliden açılan Ayarlar panelindedir.
       expect(await _pumpMenu(t, UserRole.apartmentOwner), <String>[
         'Panel',
         'Daireye Katıl & Cihaz Ekle',
-        'Eller Serbest & Kestirmeler',
-        'Profilim',
         'Çıkış Yap',
       ]);
     });

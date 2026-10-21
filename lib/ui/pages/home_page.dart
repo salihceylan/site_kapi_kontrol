@@ -63,6 +63,7 @@ import 'package:site_kapi_kontrol/ui/widgets/voice_control_modal.dart';
 import 'package:site_kapi_kontrol/ui/design/theme_toggle_button.dart';
 
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart' show filledToneStyle;
 
 import 'package:site_kapi_kontrol/ui/dialogs/apartment_pin_dialogs.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/apartment_resident_dialog.dart';
@@ -170,6 +171,9 @@ import 'package:site_kapi_kontrol/models/contract_models.dart';
 import 'package:site_kapi_kontrol/ui/views/contracts_view.dart';
 import 'package:site_kapi_kontrol/ui/helpers/module_showcase.dart';
 import 'package:site_kapi_kontrol/ui/views/module_showcase_view.dart';
+// İP-1D: gruplu menü, Ayarlar paneli ve sakin alt çubuğu.
+import 'package:site_kapi_kontrol/ui/helpers/resident_tabs.dart';
+import 'package:site_kapi_kontrol/ui/widgets/resident_bottom_bar.dart';
 
 
 
@@ -197,6 +201,11 @@ class HomePage extends StatefulWidget {
   /// karta / hızlı "Kapıyı aç"a hızlı ikinci dokunuş, henüz görünmeyen KAPIYI AÇ düğmesine düşmesin (kazara kapı
   /// açılmaz). Kapı açma işlevi değişmez.
   static const Duration doorEntryGuard = Duration(milliseconds: 500);
+
+  /// İP-1D: sakin alt çubuğu yalnız bu yükseklikten (dp) itibaren çizilir. Kısa pencerede (yatay telefon) sabit AppBar,
+  /// acil duyuru şeridi ve 80 dp'lik çubuk büyük yazıda içeriğe yer bırakmaz; orada gezinme çekmeceyle yapılır (çekmece de
+  /// aynı eşikte tek kaydırma düzenine geçer).
+  static const double residentBarMinHeight = 480;
 
 
 
@@ -474,6 +483,27 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   // ve çekmecenin yerel geçmişi pop'u karşılar (sayfa değişmez). Yalnız PopScope'u yeniden kurar.
   final ValueNotifier<bool> _drawerOpen = ValueNotifier<bool>(false);
 
+  // İP-1D: soldaki çekmece ve sağ üstteki dişliden açılan Ayarlar paneli (endDrawer) ayrı ayrı izlenir; [_drawerOpen]
+  // ikisinden biri açıkken true'dur (geri tuşu önce açık olanı kapatır).
+  bool _startDrawerOpen = false;
+  bool _endDrawerOpen = false;
+
+  void _onStartDrawerChanged(bool open) {
+    _startDrawerOpen = open;
+    _drawerOpen.value = _startDrawerOpen || _endDrawerOpen;
+  }
+
+  void _onEndDrawerChanged(bool open) {
+    _endDrawerOpen = open;
+    _drawerOpen.value = _startDrawerOpen || _endDrawerOpen;
+  }
+
+  // İP-1D (a): soğuk açılışta dışarıdan gelen "Kapılar sayfasını aç" isteği modül verisinin İLK yüklemesi bitene dek
+  // bekler ([_applyDoorPanelRequest]); fail-open hâlde Kapılar bir an açılıp vitrine düşmesin.
+  Future<bool?>? _moduleFirstLoad;
+  bool _moduleFirstLoadDone = false;
+  bool _doorRequestWaiting = false;
+
   // Kapılar sayfasına girişten sonra kısa süre ([HomePage.doorEntryGuard]) sayfa dokunuş almaz: bkz. [_armDoorEntryGuard].
   final ValueNotifier<bool> _doorEntryGuard = ValueNotifier<bool>(false);
   Timer? _doorEntryGuardTimer;
@@ -738,7 +768,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     widget.authService.addListener(_onAuthChanged);
     _lastDoorModuleSignature = _doorModuleSignature();
     _lastSeenRole = widget.authService.session?.role;
-    unawaited(_moduleAccess.refresh());
+    // İP-1D (a): ilk yüklemenin sonu (başarı ya da hata) kapı isteği beklemesinin bittiği andır.
+    final firstLoad = _moduleAccess.refresh();
+    _moduleFirstLoad = firstLoad;
+    unawaited(firstLoad.whenComplete(() => _moduleFirstLoadDone = true));
     _moduleAccess.start();
   }
 
@@ -766,6 +799,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (_lastSeenRole != session.role) {
       final previousRole = _lastSeenRole;
       _lastSeenRole = session.role;
+      // İP-1D: site seçicinin kapsamı seçildiği yönetici görünümüne aittir; rol değişince (örn. yöneticilik kalktı)
+      // tüm sitelere dönülür: sakin görünümünde değiştirilemeyen bir kapsam kalmasın.
+      _moduleAccess.setScopeSiteCode(null);
       unawaited(_moduleAccess.refresh());
       // Rol değişti (örn. site başvurusu onaylandı): yeni rolün Panel verisi (siteler / kapılar) yeniden
       // okunur. Başvuru durumu: izlenmeyen role (süper kullanıcı) geçildiyse atılır; yönetici <-> başvuran
@@ -1974,6 +2010,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   /// başka menüye çıkılacaksa önce onay istenir: onaylanırsa [apply] çalışır, vazgeçilirse ekranda kalınır.
   /// [apply] menüyü [setState] içinde değiştirir ve gerekirse [mounted] denetimini kendisi yapar.
   void _requestMenuChange(SirketMenuItem target, VoidCallback apply) {
+    // İP-1D (a): kapı isteği modül verisini beklerken kullanıcı başka bir sayfaya geçerse (çekmece, sekme, vitrin, mod
+    // geçişi, acil duyuru şeridi, Yardım, geri tuşu ...) istek düşer: geç gelen veri sayfayı kendiliğinden Kapılar'a
+    // çevirmez.
+    void applyChange() {
+      if (_doorRequestWaiting && target != SirketMenuItem.kapilar) widget.doorPanelRequests?.clear();
+      apply();
+    }
+
     final leaving = _platformSettingsKey.currentState;
     if (_selectedMenu == SirketMenuItem.platformAyarlari &&
         target != SirketMenuItem.platformAyarlari &&
@@ -1989,13 +2033,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         leaving
             .confirmDiscard()
             .then((discard) {
-              if (discard && mounted) apply();
+              if (discard && mounted) applyChange();
             })
             .whenComplete(() => _menuGuardOpen = false),
       );
       return;
     }
-    apply();
+    applyChange();
   }
 
   /// Menü kapısının onay penceresi açık mı ([_requestMenuChange]).
@@ -2047,16 +2091,40 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   void _applyDoorPanelRequest() {
     final requests = widget.doorPanelRequests;
     final session = widget.authService.session;
-    if (!mounted || requests == null || session == null || !requests.take()) return;
+    if (!mounted || requests == null || session == null || !requests.isPending) return;
+    // İP-1D (a): modül verisi henüz hiç gelmediyse (soğuk açılış) karar verilmez: fail-open hâlde "Kapılar" bir an açılıp
+    // veri gelince vitrine düşerdi. İstek TÜKETİLMEDEN bekler; ilk yükleme bitince (başarı ya da hata) yeniden denenir.
+    if (_awaitsModuleDecision) {
+      if (!_doorRequestWaiting) {
+        _doorRequestWaiting = true;
+        final firstLoad = _moduleFirstLoad ?? _moduleAccess.refresh();
+        // Geri çağrı bir mikro görevdir (kare kurulurken çalışmaz): istek beklemeden, veri gelir gelmez uygulanır.
+        unawaited(
+          firstLoad.whenComplete(() {
+            _doorRequestWaiting = false;
+            if (mounted) _applyDoorPanelRequest();
+          }),
+        );
+      }
+      return;
+    }
+    if (!requests.take()) return;
+    // Kapılar açılınca sakin alt çubuğunda "Kapı" sekmesi seçili görünür (sekme ekrandaki sayfadan türer).
     if (_selectedMenu == SirketMenuItem.kapilar || !_canAccessMenu(SirketMenuItem.kapilar, session.role)) return;
     _openMenuItem(SirketMenuItem.kapilar);
   }
+
+  /// Kapı isteğine karar için modül verisi bekleniyor mu: süper kullanıcı değil, veri hiç gelmedi ve ilk yükleme bitmedi.
+  bool get _awaitsModuleDecision =>
+      !_moduleAccess.isSuper && !_moduleAccess.isLoaded && !_moduleFirstLoadDone;
 
   /// "Sakin Modu / Yönetici Paneli" geçişi (AppBar hapı ve çekmece): yönetici paneline dönüşte menü Panel'e alınır.
   void _toggleResidentMode() {
     _requestMenuChange(SirketMenuItem.dashboard, () {
       if (!mounted) return;
       _jumpBodyToTop();
+      // İP-1D: site seçicinin kapsamı yönetici görünümüne aittir; mod değişince tüm sitelere dönülür.
+      _moduleAccess.setScopeSiteCode(null);
       setState(() {
         _isResidentMode = !_isResidentMode;
         if (!_isResidentMode) {
@@ -2108,6 +2176,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   void _applyMenuSelection(SirketMenuItem item) {
+    // İP-1D (a): bekleyen kapı isteği, kullanıcı başka sayfa açınca [_requestMenuChange] içinde düşer.
     if (_selectedMenu != item) {
       if (item == SirketMenuItem.kapilar) _armDoorEntryGuard();
       _jumpBodyToTop();
@@ -3434,7 +3503,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             child: const Text('İptal'),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            style: filledToneStyle(ctx, tone: AppTone.danger),
             onPressed: () => Navigator.pop(ctx, true),
             child: Text(isSuperUser && !hasManager ? 'Sil' : 'Talebi İlet'),
           ),
@@ -3635,10 +3704,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 child: const Text('Vazgeç'),
               ),
               ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.red,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                style: filledToneStyle(ctx, tone: AppTone.danger).copyWith(
+                  padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: 16, vertical: 10)),
                 ),
                 onPressed: () {
                   final code = codeController.text.trim();
@@ -3716,7 +3783,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             child: const Text('Vazgeç'),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            style: filledToneStyle(ctx, tone: AppTone.danger),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Onayla ve Sil'),
           ),
@@ -3993,7 +4060,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
           ElevatedButton(
 
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            style: filledToneStyle(ctx, tone: AppTone.danger),
 
             onPressed: () => Navigator.pop(ctx, true),
 
@@ -4486,7 +4553,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
           ElevatedButton(
 
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            style: filledToneStyle(ctx, tone: AppTone.danger),
 
             onPressed: () => Navigator.pop(ctx, true),
 
@@ -4561,9 +4628,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('İptal')),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.amber),
+            style: filledToneStyle(ctx, tone: AppTone.warning),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Arızalı İşaretle', style: TextStyle(color: Colors.white)),
+            child: const Text('Arızalı İşaretle'),
           ),
         ],
       ),
@@ -4593,9 +4660,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('İptal')),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF6366F1)),
+            style: filledToneStyle(ctx),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Depoya Al', style: TextStyle(color: Colors.white)),
+            child: const Text('Depoya Al'),
           ),
         ],
       ),
@@ -4968,7 +5035,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
           ElevatedButton(
 
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            style: filledToneStyle(ctx, tone: AppTone.danger),
 
             onPressed: () => Navigator.pop(ctx, true),
 
@@ -5394,6 +5461,116 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
+  // --- İP-1D (G2 + G3): gruplu menü, Ayarlar paneli, site seçici, sakin alt çubuğu ---
+
+  /// Vitrin / alt çubuk kitlesi (yönetici, sakin, bireysel): [showcaseAudience] ile aynı karar.
+  ShowcaseAudience _audienceFor(UserSession session) => showcaseAudience(
+        role: session.role,
+        isResidentMode: _isResidentMode,
+        canToggleMode: _canToggleDualMode,
+      );
+
+  /// Çekmecenin en üstündeki site satırı: kullanıcının bağlı olduğu siteler (modül verisi; süper kullanıcıda yok).
+  /// Yönetici kitlesinde iki ve daha çok site varsa seçicidir: seçilen site [ModuleAccess] kapsamı olur (menü, vitrin ve
+  /// HomePage'in ekranlara verdiği site listeleri o siteyle çalışır). Öteki kitlelerde yalnız bilgi satırıdır.
+  YanMenuSiteContext? _siteContext(UserSession session) {
+    if (session.role == UserRole.superUser || _moduleAccess.isSuper || !_moduleAccess.isLoaded) return null;
+    final sites = <YanMenuSite>[
+      for (final site in _moduleAccess.allSites) YanMenuSite(code: site.siteCode, name: site.siteName),
+    ];
+    if (sites.isEmpty) return null;
+    final selectable = _audienceFor(session) == ShowcaseAudience.admin && sites.length >= 2;
+    return YanMenuSiteContext(
+      sites: sites,
+      selectedCode: selectable ? _moduleAccess.scopeSiteCode : null,
+      onChanged: selectable ? _selectScopeSite : null,
+    );
+  }
+
+  /// Site seçicide seçim (null = tüm siteler): kapsam değişir (dinleyiciler menüyü ve Kapılar panelinin sitelerini
+  /// yeniden kurar); Site Yönetimi de seçilen siteyle açılır.
+  void _selectScopeSite(int? siteCode) {
+    _moduleAccess.setScopeSiteCode(siteCode);
+    // Kapılar panelinin site listesi ve seçili sitesi kapsama göre yeniden kurulur (açık paneldeyken de; kapı açma
+    // mantığı değişmez, yalnız hangi sitenin panelinin gösterileceği).
+    unawaited(_loadDoorControlSites());
+    if (siteCode == null) return;
+    final site = _sitesPage?.sites.where((s) => s.id == siteCode).firstOrNull;
+    if (site != null && _selectedSite?.id != siteCode) unawaited(_selectSite(site));
+  }
+
+  /// Ayarlar panelindeki sayfa seçmeyen eylemler: "Masaüstüne Widget Ekle" (yalnız mobilde ve süper kullanıcı dışında;
+  /// masaüstünde "gönderildi" mesajı yanıltıcı olurdu). Panel kapanır, sonra istek gönderilir.
+  List<YanMenuAction> _settingsExtraActions(UserSession session) => <YanMenuAction>[
+        if (session.role != UserRole.superUser && DoorWidgetService.supportsPinRequest)
+          YanMenuAction(
+            icon: Icons.widgets_outlined,
+            title: 'Masaüstüne Widget Ekle',
+            onTap: () {
+              Navigator.of(context).pop();
+              unawaited(() async {
+                await DoorWidgetService.instance.requestPinWidget();
+                _showMessage('Masaüstü widget ekleme isteği gönderildi.');
+              }());
+            },
+          ),
+      ];
+
+  /// Dişli simgesi: Ayarlar panelindeki öğelerin bekleyen sayıları toplamı rozet olur (örn. süper kullanıcının modül
+  /// talepleri ve site başvuruları); ekran okuyucu "N bekleyen" der.
+  Widget _settingsGearIcon(UserSession session) {
+    final count = YanMenuAyarlar.badgeTotal(_visibleMenuItems(session), _menuBadgeCounts(session));
+    const icon = Icon(Icons.settings_rounded, size: 20);
+    if (count <= 0) return icon;
+    return Semantics(
+      label: '$count bekleyen',
+      child: ExcludeSemantics(
+        child: Badge(
+          key: const ValueKey<String>('ayarlar_rozet'),
+          backgroundColor: AppTone.danger.a,
+          textColor: Colors.white,
+          label: Text(count > 99 ? '99+' : '$count'),
+          child: icon,
+        ),
+      ),
+    );
+  }
+
+  /// Kapı sekmesi için kapı yetkisinin olumlu kanıtı: Geçiş Kontrol açık VE (kapı listesi dolu ya da modül verisinde kapı
+  /// erişimli site var). Modül verisi gelmeden kapısız hesapta Kapı sekmesi çıkmaz.
+  bool _hasDoorPermission(UserSession session) {
+    if (_isDoorControlClosed(session)) return false;
+    if (_hasResidentSignal) return true;
+    return _moduleAccess.isFiltering && _moduleAccess.result!.doorAccessSites.isNotEmpty;
+  }
+
+  /// Sakin alt çubuğu (yalnız sakin kitlesinde; iki sekmeden azsa yok). Sekmeler çekmecenin görünür öğelerinden türer;
+  /// seçili sekme ekrandaki sayfadır (sekme olmayan sayfada Özet). Sekmeye dokunmak çekmeceden seçmekle AYNI yoldur.
+  Widget? _residentBottomBar(UserSession session, SirketMenuItem page) {
+    if (_audienceFor(session) != ShowcaseAudience.resident) return null;
+    if (MediaQuery.sizeOf(context).height < HomePage.residentBarMinHeight) return null;
+    final tabs = residentTabsFor(
+      menuItems: _visibleMenuItems(session),
+      hasDoorAccess: _hasDoorPermission(session),
+    );
+    if (!showsResidentBar(tabs)) return null;
+    final counts = _menuBadgeCounts(session);
+    return ResidentBottomBar(
+      tabs: tabs,
+      selected: residentTabFor(page, tabs),
+      tone: session.role.tone,
+      badges: <ResidentTab, int>{
+        for (final tab in tabs)
+          if ((counts[tab.item] ?? 0) > 0) tab: counts[tab.item]!,
+      },
+      badgeNouns: <ResidentTab, String>{
+        for (final tab in tabs)
+          if (_menuBadgeNouns[tab.item] != null) tab: _menuBadgeNouns[tab.item]!,
+      },
+      onSelect: (tab) => _openMenuItem(tab.item),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -5407,7 +5584,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     // motoru her satırın ascent/descent değerini tam sayıya yuvarlar (satır başına en çok ~1 dp sapma).
     final textScaler = MediaQuery.textScalerOf(context);
     final bottomHeight = 16 + 1.2 * (textScaler.scale(18) + textScaler.scale(12));
-    final showWidgetAction = session.role != UserRole.superUser && DoorWidgetService.supportsPinRequest;
+    // İP-1D: "Masaüstüne Widget Ekle" AppBar'dan Ayarlar paneline taşındı ([_settingsExtraActions]); yerine sağ üstte
+    // dişli (Ayarlar) durur: 320 dp x2,0'da hap + tema + yenile + çıkış + dişli sığar.
     // Tema geçiş düğmesi yalnız ThemeScope varsa çizilir (uygulama kökü); yoksa (tek başına kurulum) yer ayrılmaz.
     final hasThemeToggle = ThemeScope.maybeOf(context) != null;
     // Ekrandaki ("etkin") sayfa: erişimi kalkan öğe (örn. kurul üyeliği biten "Kişiler", Finans'ı kapanan "Borcum",
@@ -5422,7 +5600,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
     return Scaffold(
       backgroundColor: Colors.transparent,
-      onDrawerChanged: (open) => _drawerOpen.value = open,
+      onDrawerChanged: _onStartDrawerChanged,
+      onEndDrawerChanged: _onEndDrawerChanged,
       appBar: AppBar(
         titleSpacing: 0,
         leadingWidth: 48,
@@ -5466,22 +5645,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           if (_canToggleDualMode)
             _buildModeToggle(
               context,
-              // Hapın genişlik payı: yanındaki 44-48 dp'lik düğmeler (yenile, çıkış, [widget], [tema]).
-              otherActions: (showWidgetAction ? 3 : 2) + (hasThemeToggle ? 1 : 0),
-            ),
-          // Widget iğneleme yalnızca mobilde çalışır; masaüstünde "gönderildi" mesajı yanıltıcı olurdu.
-          if (showWidgetAction)
-            _appBarAction(
-              tooltip: 'Masaüstüne Widget Ekle',
-              icon: Icon(
-                Icons.widgets_outlined,
-                color: AppTone.success.ink(palette),
-                size: 20,
-              ),
-              onPressed: () async {
-                await DoorWidgetService.instance.requestPinWidget();
-                _showMessage('Masaüstü widget ekleme isteği gönderildi.');
-              },
+              // Hapın genişlik payı: yanındaki 44-48 dp'lik düğmeler (yenile, çıkış, dişli, [tema]).
+              otherActions: 3 + (hasThemeToggle ? 1 : 0),
             ),
           // Aydınlık / karanlık tema geçişi (44 dp, diğer eylem düğmeleriyle aynı boyut ve yoğunluk).
           const ThemeToggleButton(iconSize: 20),
@@ -5494,6 +5659,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             tooltip: 'Çıkış Yap',
             icon: Icon(Icons.logout_rounded, color: AppTone.danger.ink(palette), size: 20),
             onPressed: () => widget.authService.logout(),
+          ),
+          // İP-1D / G2: Ayarlar sağ üstte dişli; sağdan açılan Ayarlar panelini (endDrawer) açar.
+          Builder(
+            builder: (scaffoldContext) => _appBarAction(
+              tooltip: 'Ayarlar',
+              icon: _settingsGearIcon(session),
+              onPressed: () => Scaffold.of(scaffoldContext).openEndDrawer(),
+            ),
           ),
           const SizedBox(width: 6),
         ],
@@ -5577,7 +5750,24 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           Navigator.pop(context);
           widget.authService.logout();
         },
+        // İP-1D / G2: site seçici çekmecenin en üstünde.
+        siteContext: _siteContext(session),
       ),
+      // İP-1D / G2: Ayarlar öğeleri sağ üstteki dişliden açılan panelde (çekmeceyle aynı görünürlük kuralı ve rozetler).
+      endDrawer: YanMenuAyarlar(
+        role: session.role,
+        selectedItem: effectiveMenu,
+        isResidentMode: _isResidentMode,
+        canToggleMode: _canToggleDualMode,
+        additionalItems: _extraMenuItems(session.role),
+        hiddenItems: _hiddenMenuItems(session.role),
+        badgeCounts: _menuBadgeCounts(session),
+        badgeNouns: _menuBadgeNouns,
+        extraActions: _settingsExtraActions(session),
+        onSelect: _selectMenu,
+      ),
+      // İP-1D / G3: sakin alt çubuğu (Özet · Duyuru · Arıza · Kapı · Belgeler; iki sekmeden azsa yok).
+      bottomNavigationBar: _residentBottomBar(session, effectiveMenu),
       // Geri tuşu: bir modül sayfasındayken Panel vitrinine döner (uygulamadan çıkmaz); vitrindeyken eskisi gibi çıkar.
       // Çekmece AÇIKKEN geri tuşu önce çekmeceyi kapatır, sayfa değişmez: PopScope rota yerel geçmişinden ÖNCE
       // değerlendirildiği için ([ModalRoute.popDisposition]) çekmece açıkken pop'a izin verilir; pop'u çekmecenin

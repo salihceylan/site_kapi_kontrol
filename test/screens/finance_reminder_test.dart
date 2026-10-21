@@ -191,6 +191,28 @@ void main() {
       expect(find.textContaining('@'), findsNothing, reason: 'e-posta adresi gösterilmez');
     });
 
+    testWidgets('İP-1A ikinci inceleme: yeni sunucuda hariç tutma ve elden takip HESAP başınadır: "daire hesabı" yazılır, aynı dairenin iki hesabı hesap adıyla ayrılır', (t) async {
+      final auth = _auth();
+      auth.f4.reminderPreviewJson = <String, dynamic>{
+        ...f4ReminderPreviewJson(),
+        'account_count': 5,
+        'hand_follow_up_accounts': <Map<String, dynamic>>[
+          <String, dynamic>{'label': 'A Blok - 7', 'account_party': 'owner'},
+          <String, dynamic>{'label': 'A Blok - 7', 'account_party': 'tenant'},
+        ],
+        'hand_follow_up_apartments': <String>['A Blok - 7', 'A Blok - 7'],
+      };
+      await _pump(t, auth);
+      await _openSend(t);
+      await _preview(t);
+      expect(find.text('Tutarı eşiğin altında kalan daire hesabı: 2'), findsOneWidget);
+      expect(find.text('Muaf listesindeki daire hesabı: 1'), findsOneWidget);
+      expect(find.text('Tutarı eşiğin altında kalan daire: 2'), findsNothing);
+      expect(find.text('Adresi olmayan kişi: 1'), findsOneWidget, reason: 'kişi sayıları değişmez');
+      expect(find.textContaining('Elden takip: 2 daire hesabı ardışık hatırlatma sınırına ulaştı'), findsOneWidget);
+      expect(find.textContaining('(A Blok - 7 (Ev sahibi hesabı), A Blok - 7 (Kiracı hesabı))'), findsOneWidget, reason: 'aynı daire iki hesapla ayırt edilir');
+    });
+
     testWidgets('onay: ayrı onay penceresi; ton + özet gider; başarıda bildirim + üst ekran yenilenir', (t) async {
       final auth = _auth();
       await _pump(t, auth);

@@ -32,6 +32,7 @@ import 'package:site_kapi_kontrol/ui/widgets/account_privacy_section.dart';
 import 'account_fixtures.dart';
 import 'dialog_layout_harness.dart' show settleFor;
 import 'modules_fixtures.dart';
+import '../support/menu_nav.dart';
 
 class _HomeAuth extends ModulesFakeAuth {
   _HomeAuth({UserRole role = UserRole.superUser}) : _role = role, super();
@@ -140,8 +141,8 @@ Future<void> _openDrawer(WidgetTester t) async {
 }
 
 Future<void> _tapMenu(WidgetTester t, String label) async {
-  await _openDrawer(t);
-  final item = find.descendant(of: find.byType(Drawer), matching: find.text(label));
+  // İP-1D: öğe çekmecede yoksa (ayar öğesi) sağ üstteki dişliden açılan Ayarlar panelinde aranır.
+  final item = await findMenuEntry(t, label);
   await t.ensureVisible(item.first);
   await t.pump();
   await t.tap(item.first);
@@ -152,6 +153,10 @@ Future<void> _tapMenu(WidgetTester t, String label) async {
 Finder _inAppBar(Finder f) => find.descendant(of: find.byType(AppBar), matching: f);
 
 Finder _tile(String title) => find.descendant(of: find.byType(Drawer), matching: find.text(title));
+
+/// İP-1D: ayar öğeleri (Site Başvuruları, Modül Talepleri, Platform Ayarları, İstemci Hataları, Denetim Kaydı ...) sağ
+/// üstteki dişliden açılan Ayarlar panelindedir; panel de bir `Drawer` olduğundan çekmece bulucuları orada da çalışır.
+Future<void> _openSettings(WidgetTester t) => openSettingsPanel(t);
 
 void main() {
   setUp(() {
@@ -172,7 +177,7 @@ void main() {
       final auth = _HomeAuth();
       await _pumpHome(t, auth);
 
-      await _openDrawer(t);
+      await _openSettings(t);
       expect(_tile('Platform Ayarları'), findsOneWidget);
       expect(_tile('İstemci Hataları'), findsOneWidget);
       await t.ensureVisible(_tile('Platform Ayarları'));
@@ -196,7 +201,7 @@ void main() {
     testWidgets('site yöneticisi: iki öğe de YOK', (t) async {
       final auth = _HomeAuth(role: UserRole.siteManager);
       await _pumpHome(t, auth);
-      await _openDrawer(t);
+      await _openSettings(t);
       expect(_tile('Platform Ayarları'), findsNothing);
       expect(_tile('İstemci Hataları'), findsNothing);
       expect(_tile('Denetim Kaydı'), findsNothing);

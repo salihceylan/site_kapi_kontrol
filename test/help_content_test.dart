@@ -170,6 +170,70 @@ void main() {
       });
     });
 
+    // İP-1D (G2 + G3): yardım ve tur yeni gezinmeyi anlatır; ayar ekranları "Menüden" değil, "Ayarlar" düğmesinden açılır.
+    group('yeni gezinme: başlıklı menü, "Ayarlar" (dişli), sakin alt çubuğu, site seçici', () {
+      HelpTopic topic(HelpAudience a, String id) => HelpContent.howToFor(a).firstWhere((t) => t.id == id);
+      String joined(HelpTopic t) => <String>[t.title, ...t.steps, if (t.note != null) t.note!].join('\n');
+
+      test('her grubun "navigation" konusu menü başlıklarını ve "Ayarlar" düğmesini anlatır', () {
+        for (final audience in HelpAudience.values) {
+          final text = joined(topic(audience, 'navigation'));
+          expect(text, contains('“Ana sayfa”'), reason: '$audience');
+          expect(text, contains('“Ayarlar”'), reason: '$audience');
+          expect(text, contains('dişli'), reason: '$audience');
+        }
+      });
+
+      test('sakin: alt çubuğun beş sekmesi, Kapı koşulu ve geri tuşu anlatılır; tur da alt çubuğu anar', () {
+        final text = joined(topic(HelpAudience.resident, 'navigation'));
+        for (final tab in const <String>['“Özet”', '“Duyuru”', '“Arıza”', '“Kapı”', '“Belgeler”']) {
+          expect(text, contains(tab));
+        }
+        expect(text, contains('kapı yetkiniz yoksa'));
+        // Çubuğun HİÇ görünmediği iki durum (residentTabsFor < 2 sekme, HomePage.residentBarMinHeight) de anlatılır:
+        // yalnız görevli bağı olan hesap ve yatay telefon "çubuk nerede?" diye aramasın.
+        expect(text, contains('İkiden az sekme'));
+        expect(text, contains('yatay'));
+        expect(text, contains('Geri tuşu'));
+        final tour = OnboardingSteps.forAudience(HelpAudience.resident).map((s) => s.body).join('\n');
+        expect(tour, contains('“Özet”'));
+        expect(tour, contains('“Kapı”'));
+      });
+
+      test('yönetici: site seçici anlatılır; ayar ekranları "Ayarlar" düğmesinden', () {
+        final text = joined(topic(HelpAudience.siteManager, 'navigation'));
+        expect(text, contains('site satırına'));
+        expect(text, contains('“Tüm siteler”'));
+        expect(joined(topic(HelpAudience.siteManager, 'modules')), contains('“Ayarlar” düğmesinden “Modüller”'));
+      });
+
+      test('bugün öğesi olmayan başlıklar ("Tahsilat", "Giderler", "Raporlar") ekranları varmış gibi anlatılmaz', () {
+        // Hiçbir menü öğesinin eşlenmediği çekmece başlığı bugün hiç çizilmez: yardım onu "ekranların toplandığı başlık"
+        // diye sayarsa yönetici menüde arar, bulamaz. Anılıyorsa boş olduğu da yazmalıdır.
+        final empty = <SirketMenuGroup>[
+          for (final group in SirketMenuGroup.drawerGroups)
+            if (!SirketMenuItem.values.any((item) => menuGroupOf(item) == group)) group,
+        ];
+        for (final audience in HelpAudience.values) {
+          final text = joined(topic(audience, 'navigation'));
+          for (final group in empty) {
+            if (!text.contains('“${group.title}”')) continue;
+            expect(text, contains('henüz ekran yok'), reason: '$audience: “${group.title}” başlığı bugün görünmez');
+          }
+        }
+      });
+
+      test('ayar ekranları (Profilim, Modüller) için eski "Menüden ... açın" adımı kalmadı', () {
+        for (final audience in HelpAudience.values) {
+          for (final t in HelpContent.howToFor(audience)) {
+            for (final stale in const <String>['Menüden “Profilim”', 'Menüden “Modüller”']) {
+              expect(joined(t), isNot(contains(stale)), reason: '$audience/${t.id}');
+            }
+          }
+        }
+      });
+    });
+
     test('metinlerdeki “tırnaklı” arayüz adlarının hepsi bilinen menü / etiket listesinde', () {
       final known = <String>{...HelpContent.knownMenuTitles, ...HelpContent.knownScreenLabels};
       final unknown = <String>{

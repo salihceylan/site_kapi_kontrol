@@ -2,22 +2,24 @@
 //
 // ~40 elle yazılmış `ScaffoldMessenger.of(context).showSnackBar(SnackBar(...))` çağrısının yerine
 // geçer. Mesaj, süre ve davranış AYNIDIR (varsayılan 4 sn, floating, kuyruğa girer); yalnız görünüm
-// tasarım sistemine bağlanır: simge + tonlu dolgu (beyaz metin >= 4,5:1), `AppRadius.md` köşe.
+// tasarım sistemine bağlanır. Sade stil (İP-1C, karar G6 + G7): her tür TEK koyu yüzeydedir (tema rengi: açıkta
+// kritik uyarı rengi #0F172A, koyuda #1E293B + ince kenar); tür, simgesi ve simgenin rengiyle ayrılır (zemin
+// boyanmaz). Beyaz metin >= 4,5:1, simgeler >= 4,5:1; `AppRadius.md` köşe.
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 
 /// [AppSnack] türü. Renk tek başına anlam taşımaz: her türün simgesi de farklıdır.
 enum AppSnackKind {
-  /// Nötr bilgi: tema SnackBar rengi (mevcut davranış).
+  /// Nötr bilgi: beyaz simge.
   info,
 
-  /// Başarı: `AppTone.success` koyu ucu. Eski `AppColors.emerald|success` yerine.
+  /// Başarı: `AppTone.success` açık ink'li simge (#6EE7B7).
   success,
 
-  /// Uyarı: `AppTone.warning` koyu ucu. Eski `AppColors.amber` yerine.
+  /// Uyarı: `AppTone.warning` açık ink'li simge (#FCD34D).
   warning,
 
-  /// Hata: `AppTone.danger` koyu ucu. Eski `AppColors.rose|error` / `Color(0xFFDC2626)` yerine.
+  /// Hata: `AppTone.danger` açık ink'li simge (#FDA4AF).
   error,
 }
 
@@ -28,9 +30,9 @@ abstract final class AppSnack {
 
   /// [message]'ı en yakın [ScaffoldMessenger]'da gösterir; messenger yoksa sessizce hiçbir şey yapmaz.
   ///
-  /// - [kind]: simge ve tonlu dolgu. [AppSnackKind.info] tema rengini kullanır.
+  /// - [kind]: simge ve simge rengi; dolgu her türde tema rengidir.
   /// - [duration]: verilmezse [defaultDuration].
-  /// - [action]: verilirse etiket rengi (belirtilmemişse) tonlu dolguda okunur beyaz olur.
+  /// - [action]: etiket rengi belirtilmemişse temanın eylem rengini alır (koyu yüzeyde okunur bağlantı mavisi).
   /// - [replace]: false (varsayılan) iken mevcut kuyruklama davranışı değişmez (mesaj sıraya girer);
   ///   true iken ekrandaki SnackBar HEMEN kaldırılır, sıradakiler atılır ve bu mesaj hemen gösterilir.
   /// - [persist]: null (varsayılan) iken Flutter'ın kuralı geçerlidir: [action] varsa SnackBar süre dolsa da
@@ -86,43 +88,32 @@ abstract final class AppSnack {
     required int maxLines,
     required String? semanticsLabel,
   }) {
-    final (Color? background, IconData icon) = switch (kind) {
-      AppSnackKind.success => (AppTone.success.b, Icons.check_circle_rounded),
-      AppSnackKind.warning => (AppTone.warning.b, Icons.warning_amber_rounded),
-      AppSnackKind.error => (AppTone.danger.b, Icons.error_rounded),
-      AppSnackKind.info => (null, Icons.info_rounded),
+    // Simge rengi: koyu yüzeyde tonun açık ink'i (>= 4,5:1); bilgi beyaz. Dolgu her türde tema rengidir.
+    final (Color iconColor, IconData icon) = switch (kind) {
+      AppSnackKind.success => (AppTone.success.inkDark, Icons.check_circle_rounded),
+      AppSnackKind.warning => (AppTone.warning.inkDark, Icons.warning_amber_rounded),
+      AppSnackKind.error => (AppTone.danger.inkDark, Icons.error_rounded),
+      AppSnackKind.info => (Colors.white, Icons.info_rounded),
     };
     final p = context.palette;
-    // Koyu temada tema rengi (info) sayfa zeminine yakın: ince kenar çizgisi ayırır (tema da öyle).
-    final side = kind == AppSnackKind.info && p.isDark
-        ? BorderSide(color: p.border)
-        : BorderSide.none;
+    // Koyu temada tema rengi sayfa zeminine yakın: ince kenar çizgisi ayırır (tema da öyle).
+    final side = p.isDark ? BorderSide(color: p.border) : BorderSide.none;
     return SnackBar(
       behavior: SnackBarBehavior.floating,
-      backgroundColor: background,
       duration: duration ?? defaultDuration,
       persist: persist,
-      action: action == null || background == null
-          ? action
-          : _readableAction(action),
+      action: action,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadius.md),
         side: side,
       ),
       content: Row(
         children: <Widget>[
-          // İkon yarı saydam "cam" daire rozet içinde (premium dokunuş; anlamsal ağaçta yok).
+          // Simge doğrudan çizilir (sade stil: rozet yok); anlamsal ağaçta yok, anlam metindedir.
           ExcludeSemantics(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.white.withValues(alpha: 0.20),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.35)),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(AppSpace.xs),
-                child: Icon(icon, color: Colors.white, size: 20),
-              ),
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpace.xs),
+              child: Icon(icon, color: iconColor, size: 20),
             ),
           ),
           const SizedBox(width: AppSpace.md),
@@ -140,20 +131,6 @@ abstract final class AppSnack {
           ),
         ],
       ),
-    );
-  }
-
-  /// Tonlu (koyu) dolguda varsayılan eylem rengi okunmayabilir: rengi belirtilmemiş eylem beyaz olur.
-  static SnackBarAction _readableAction(SnackBarAction action) {
-    if (action.textColor != null) return action;
-    return SnackBarAction(
-      key: action.key,
-      label: action.label,
-      onPressed: action.onPressed,
-      textColor: Colors.white,
-      disabledTextColor: action.disabledTextColor,
-      backgroundColor: action.backgroundColor,
-      disabledBackgroundColor: action.disabledBackgroundColor,
     );
   }
 }

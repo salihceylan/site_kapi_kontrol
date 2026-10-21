@@ -565,7 +565,15 @@ void main() {
       await _dispose(t);
     });
 
-    testWidgets('geri bildirimler tonlu AppSnack: başarı yeşil, uyarı amber', (t) async {
+    testWidgets('geri bildirimler AppSnack: tek koyu yüzey, simge başarıda yeşil, uyarıda amber (sade stil)', (t) async {
+      // Sade stil (İP-1C): dolgu her türde tema rengidir; tür simgesi ve rengiyle ayrılır.
+      void expectKind(IconData icon, Color color, String reason) {
+        expect(t.widget<SnackBar>(find.byType(SnackBar)).backgroundColor, isNull, reason: reason);
+        final glyph = find.descendant(of: find.byType(SnackBar), matching: find.byIcon(icon));
+        expect(glyph, findsOneWidget, reason: reason);
+        expect(t.widget<Icon>(glyph).color, color, reason: reason);
+      }
+
       final service = FakeBleService(
         devices: _devices,
         networks: _networks,
@@ -583,11 +591,7 @@ void main() {
       await _tapVisible(t, find.text('Wi-Fi Bilgilerini Cihaza Kaydet'));
       await t.pump();
       await t.pump(const Duration(milliseconds: 300));
-      expect(
-        t.widget<SnackBar>(find.byType(SnackBar)).backgroundColor,
-        AppTone.warning.b,
-        reason: 'şifre boş: uyarı',
-      );
+      expectKind(Icons.warning_amber_rounded, AppTone.warning.inkDark, 'şifre boş: uyarı');
       ScaffoldMessenger.of(t.element(find.byType(Scaffold).last)).clearSnackBars();
       await t.pump();
       await t.enterText(find.byType(TextField), 'gizli');
@@ -595,10 +599,7 @@ void main() {
       await t.pump();
       await t.pump(const Duration(milliseconds: 300));
       expect(find.text('Wi-Fi ayarı kaydedildi.'), findsOneWidget);
-      expect(
-        t.widget<SnackBar>(find.byType(SnackBar)).backgroundColor,
-        AppTone.success.b,
-      );
+      expectKind(Icons.check_circle_rounded, AppTone.success.inkDark, 'kaydedildi: başarı');
       await _dispose(t);
     });
 

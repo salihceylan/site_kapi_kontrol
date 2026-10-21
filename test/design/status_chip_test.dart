@@ -3,10 +3,14 @@
 // Durumlar (7 ton x açık/koyu, ikon/nokta/nabız), nabzın 3 tur sonra DURMASI (pumpAndSettle biter,
 // kararlı durumda ticker yok), renk geçişi, hareket azaltma, Semantics (tek düğüm, dokunulamaz) ve
 // taşma matrisi (320/360/412/820 x 1,0/1,5/2,0 x açık/koyu).
+//
+// İP-1C (karar G7): varsayılan görünüm StatusDot'tur: nokta + metin, zemin ve kenar BOYANMAZ; nokta rengi
+// AppTone.dot (tamam / bekliyor / kritik renkli, öteki tonlar nötr gri), metin gövde metni rengi.
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
+import 'package:site_kapi_kontrol/ui/design/status_dot.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 
 import 'harness.dart';
@@ -39,17 +43,20 @@ Future<Duration> _settle(WidgetTester t) async =>
 
 AppPalette _palette(bool dark) => dark ? AppPalette.dark : AppPalette.light;
 
-/// Rozet gövdesinin (ilk DecoratedBox) o an çizilen süslemesi.
-BoxDecoration _bodyDecoration(WidgetTester t) {
-  final f = find.descendant(
-    of: find.descendant(
-      of: find.byType(StatusChip),
-      matching: find.byType(AnimatedContainer),
-    ),
-    matching: find.byType(DecoratedBox),
-  );
-  return t.widget<DecoratedBox>(f.first).decoration as BoxDecoration;
-}
+/// Rozette noktadan / halkadan başka boyanan yüzeyler (sade stilde boş olmalı: zemin ve kenar yok).
+Iterable<BoxDecoration> _bodyPaint(WidgetTester t) => t
+    .widgetList<DecoratedBox>(
+      find.descendant(of: find.byType(StatusChip), matching: find.byType(DecoratedBox)),
+    )
+    .map((b) => b.decoration)
+    .whereType<BoxDecoration>()
+    .where(
+      (d) => d.shape != BoxShape.circle && (d.color != null || d.border != null || d.gradient != null),
+    );
+
+/// Noktanın süslemesi (sonuncu daire).
+BoxDecoration _dotDecoration(WidgetTester t) =>
+    t.widget<DecoratedBox>(_circles().last).decoration as BoxDecoration;
 
 /// Daire biçimli süslemeli kutular: nabız halkası (varsa) ve nokta; sonuncusu noktadır.
 Finder _circles() => find.descendant(
@@ -84,35 +91,31 @@ double? _ringScale(WidgetTester t) {
 void main() {
   group('StatusChip: görünüm', () {
     testWidgets(
-      '7 ton x açık/koyu: tint zemin, hue kenarı, ink metin ve nokta, hap biçimi',
+      '7 ton x açık/koyu: zemin ve kenar yok; nokta durum rengi (öteki tonlar nötr), açıkta gerekirse 1 dp kenar; '
+      'metin gövde metni rengi, kalın',
       (t) async {
         for (final dark in [false, true]) {
           final p = _palette(dark);
           for (final tone in AppTone.values) {
+            // Temiz ağaç: aynı MaterialApp'ta tema geçişinin ilk karesi eski paleti gösterir.
+            await t.pumpWidget(const SizedBox.shrink());
             await t.pumpWidget(_app(_chip(tone: tone), dark: dark));
             await t.pumpAndSettle();
-            final deco = _bodyDecoration(t);
-            expect(deco.color, tone.tint(p), reason: '${tone.name} dark=$dark');
-            expect(
-              (deco.border! as Border).top.color,
-              tone.hue.withValues(alpha: 0.4),
-            );
-            expect(
-              deco.borderRadius,
-              BorderRadius.circular(AppRadius.pill),
-              reason: 'hap biçimi',
-            );
+            expect(_bodyPaint(t), isEmpty, reason: 'zemin boyanmaz: ${tone.name} dark=$dark');
+            final dot = _dotDecoration(t);
+            expect(dot.color, tone.dot, reason: '${tone.name} dark=$dark');
+            expect((dot.border as Border?)?.top.color, StatusDot.edgeOf(tone, p), reason: '${tone.name} dark=$dark');
+            expect(dot.boxShadow, isNull, reason: 'parıltı yok');
             final style = _labelStyle(t);
-            expect(style.color, tone.ink(p));
+            expect(style.color, p.textSecondary);
             expect(style.fontWeight, FontWeight.w700);
-            expect(_dotColor(t), tone.ink(p));
             expect(find.text('Çevrimiçi'), findsOneWidget);
           }
         }
       },
     );
 
-    testWidgets('ikon verilir ve nabız kapalıysa nokta yerine ikon çizilir', (
+    testWidgets('ikon verilir ve nabız kapalıysa nokta yerine ikon çizilir (durum tonunda ink, ötekinde gövde metni)', (
       t,
     ) async {
       await t.pumpWidget(
@@ -124,6 +127,10 @@ void main() {
       final icon = t.widget<Icon>(find.byIcon(Icons.wifi_rounded));
       expect(icon.size, 14);
       expect(icon.color, AppTone.warning.ink(AppPalette.light));
+      await t.pumpWidget(const SizedBox.shrink());
+      await t.pumpWidget(_app(_chip(tone: AppTone.info, icon: Icons.cloud_done_rounded)));
+      await t.pumpAndSettle();
+      expect(t.widget<Icon>(find.byIcon(Icons.cloud_done_rounded)).color, AppPalette.light.textSecondary);
     });
 
     testWidgets('ikon yok: nokta (8 dp) çizilir', (t) async {
@@ -207,9 +214,9 @@ void main() {
       expect(_ringScale(t), closeTo(1 + 0.75 * 0.5, 0.02));
       final ring =
           t.widget<DecoratedBox>(_circles().first).decoration as BoxDecoration;
-      final ink = AppTone.success.ink(AppPalette.light);
+      final dot = AppTone.success.dot;
       expect(ring.color!.a, closeTo(0.35 * 0.5, 0.02));
-      expect(ring.color!.toARGB32() & 0x00FFFFFF, ink.toARGB32() & 0x00FFFFFF);
+      expect(ring.color!.toARGB32() & 0x00FFFFFF, dot.toARGB32() & 0x00FFFFFF);
     });
 
     testWidgets(
@@ -376,9 +383,9 @@ void main() {
         _app(_chip(label: 'Çevrimdışı', tone: AppTone.danger), reduce: true),
       );
       await t.pump();
-      expect(_bodyDecoration(t).color, AppTone.danger.tint(p));
-      expect(_labelStyle(t, 'Çevrimdışı').color, AppTone.danger.ink(p));
-      expect(_dotColor(t), AppTone.danger.ink(p));
+      expect(_bodyPaint(t), isEmpty);
+      expect(_labelStyle(t, 'Çevrimdışı').color, p.textSecondary);
+      expect(_dotColor(t), AppTone.danger.dot);
       expect(t.binding.transientCallbackCount, 0);
     });
 
@@ -417,7 +424,7 @@ void main() {
 
   group('StatusChip: renk geçişi (200 ms)', () {
     testWidgets(
-      'ton değişimi: zemin, kenar, metin ve nokta ara değer alır; sonunda yeni tona oturur',
+      'ton değişimi: nokta ara değer alır, sonunda yeni tona oturur; metin gövde metni rengi kalır, zemin hiç boyanmaz',
       (t) async {
         final p = AppPalette.light;
         await t.pumpWidget(_app(_chip()));
@@ -426,28 +433,14 @@ void main() {
           _app(_chip(label: 'Çevrimdışı', tone: AppTone.danger)),
         );
         await t.pump(const Duration(milliseconds: 100));
-        final mid = _bodyDecoration(t);
-        expect(mid.color, isNot(AppTone.success.tint(p)));
-        expect(mid.color, isNot(AppTone.danger.tint(p)));
-        expect(
-          (mid.border! as Border).top.color,
-          isNot(AppTone.danger.hue.withValues(alpha: 0.4)),
-        );
-        expect(
-          _labelStyle(t, 'Çevrimdışı').color,
-          isNot(AppTone.danger.ink(p)),
-        );
-        expect(_dotColor(t), isNot(AppTone.danger.ink(p)));
-        expect(_dotColor(t), isNot(AppTone.success.ink(p)));
+        expect(_dotColor(t), isNot(AppTone.danger.dot));
+        expect(_dotColor(t), isNot(AppTone.success.dot));
+        expect(_bodyPaint(t), isEmpty);
+        expect(_labelStyle(t, 'Çevrimdışı').color, p.textSecondary);
         await t.pumpAndSettle();
-        final end = _bodyDecoration(t);
-        expect(end.color, AppTone.danger.tint(p));
-        expect(
-          (end.border! as Border).top.color,
-          AppTone.danger.hue.withValues(alpha: 0.4),
-        );
-        expect(_labelStyle(t, 'Çevrimdışı').color, AppTone.danger.ink(p));
-        expect(_dotColor(t), AppTone.danger.ink(p));
+        expect(_dotColor(t), AppTone.danger.dot);
+        expect(_bodyPaint(t), isEmpty);
+        expect(_labelStyle(t, 'Çevrimdışı').color, p.textSecondary);
       },
     );
 

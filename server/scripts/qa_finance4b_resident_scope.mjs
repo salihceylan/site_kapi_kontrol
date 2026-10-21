@@ -30,16 +30,20 @@ export default async function sectionResidentScope(t) {
   await addResidency(site.code, x3, await addPerson(site.code, { user: ONBOARD }), 'resident', { moveIn: null });
   await addResidency(site.code, x4, await addPerson(site.code, { user: NEW_TENANT2 }), 'tenant', { moveIn: day(M1, 10) });
 
+  // İP-1A (G12): kiracılı (both) dairelerde aidat KİRACI hesabına yazılır (gerçek kod: borç tarihinde etkin kiracı varsa); kiracı senaryoları (x1, x4, x7)
+  // satırları kiracı hesabında kurar. Tahsilatlar API'den (hesap verilmeden): sunucu vadesi en eski açık borcu olan hesabı (kiracı) seçer.
+  const TENANT_APTS = new Set();
   const insert = async (apartmentId, kind, amount, period, entryDate, due, extra = {}) =>
     Number(
       (
         await q(
-          `INSERT INTO ledger_entries (site_code, apartment_id, kind, amount_minor, period, entry_date, due_date, payer_party, method, reverses_entry_id, late_fee_run_id)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, 'both', $8, $9, $10) RETURNING id`,
-          [site.code, apartmentId, kind, amount, period, entryDate, due, kind === 'payment' ? 'cash' : null, extra.reverses ?? null, extra.lateFeeRun ?? null],
+          `INSERT INTO ledger_entries (site_code, apartment_id, kind, amount_minor, period, entry_date, due_date, payer_party, method, reverses_entry_id, late_fee_run_id, account_party)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, 'both', $8, $9, $10, $11) RETURNING id`,
+          [site.code, apartmentId, kind, amount, period, entryDate, due, kind === 'payment' ? 'cash' : null, extra.reverses ?? null, extra.lateFeeRun ?? null, TENANT_APTS.has(apartmentId) ? 'tenant' : null],
         )
       ).rows[0].id,
     );
+  for (const id of [x1, x4, x5, x7]) TENANT_APTS.add(id);
 
   // --- Daire 1: onceki kiraci (M-3), yeni kiraci (M-1'den), uzun suredir malik
   const c1 = await insert(x1, 'charge', 1000, M3, M3, day(M3, 15));
@@ -106,10 +110,14 @@ export default async function sectionResidentScope(t) {
   // --- S2. malik: tasinma 2020 -> tum defter
   const owner = await call('GET', '/app/my-finance', OWNER);
   const oItem = owner.body?.items?.find((i) => i.apartment_id === x1);
+  const oTenantView = oItem?.accounts?.find((a) => a.account_party === 'tenant');
+  // İP-1A (G12): malikin KENDİ hesabı ev sahibi hesabıdır (boş); both dairede kiracı hesabını SALT OKUNUR görür: tüm kiracı hesabı (kapsam 2020'den)
   check(
-    'S2: uzun suredir malik tum defteri gorur: bakiye 1600 (defter toplami), vadesi gecmis 600, 8 kayit; gizli kayit yok -> visible_from null',
-    owner.status === 200 && oItem?.balance_minor === 1600 && oItem?.overdue_minor === 600 && oItem?.visible_from === null && oItem?.offset_note === false && same(ids(oItem?.recent), [c1, p1, cx, c2, c3, p2, rev, lf]),
-    { item: oItem && { ...oItem, recent: ids(oItem.recent) } },
+    'S2: uzun suredir malik (both): kendi ev sahibi hesabi bos (bakiye 0); kiraci hesabini SALT OKUNUR gorur: bakiye 1600 (hesap toplami), vadesi gecmis 600, 8 kayit; gizli kayit yok -> visible_from null',
+    owner.status === 200 && oItem?.account_party === 'owner' && oItem?.balance_minor === 0 && (oItem?.recent ?? []).length === 0
+      && oTenantView?.role === 'read_only' && oTenantView.balance_minor === 1600 && oTenantView.overdue_minor === 600 && oTenantView.visible_from === null && oTenantView.offset_note === false
+      && same(ids(oTenantView.recent), [c1, p1, cx, c2, c3, p2, rev, lf]),
+    { item: oItem && { ...oItem, recent: ids(oItem.recent), accounts: oItem.accounts?.map((a) => ({ ...a, recent: ids(a.recent) })) } },
   );
 
   // --- S3. ekstre
@@ -121,8 +129,10 @@ export default async function sectionResidentScope(t) {
       && tSt.body.overdue_minor === 500 && tSt.body.offset_note === true && tSt.body.visible_from === ym(-1),
     { status: tSt.status, items: (tSt.body?.items ?? []).map((i) => [i.id, i.amount_minor, i.running_balance_minor]), body: tSt.body && { ...tSt.body, items: undefined } },
   );
-  const oSt = await call('GET', `/app/my-finance/apartments/${x1}/statement?from=${M3}&to=${TODAY}`, OWNER);
-  check('S3b: malik ekstresi tum satirlar (8), kapanis 1600, mahsup notu yok', oSt.status === 200 && ids(oSt.body?.items).length === 8 && oSt.body.closing_balance_minor === 1600 && oSt.body.offset_note === false, { status: oSt.status, n: ids(oSt.body?.items).length, offset: oSt.body?.offset_note });
+  // İP-1A: malik kiracı hesabının ekstresini salt okunur görünümle ister (account_party=tenant); kendi (ev sahibi) hesap ekstresi boştur
+  const oSt = await call('GET', `/app/my-finance/apartments/${x1}/statement?from=${M3}&to=${TODAY}&account_party=tenant`, OWNER);
+  const oOwnSt = await call('GET', `/app/my-finance/apartments/${x1}/statement?from=${M3}&to=${TODAY}`, OWNER);
+  check('S3b: malik kiraci hesabi ekstresi (salt okunur) tum satirlar (8), kapanis 1600, mahsup notu yok; kendi ev sahibi hesabi ekstresi bos', oSt.status === 200 && ids(oSt.body?.items).length === 8 && oSt.body.closing_balance_minor === 1600 && oSt.body.offset_note === false && oSt.body.role === 'read_only' && oOwnSt.status === 200 && ids(oOwnSt.body?.items).length === 0 && oOwnSt.body.account_party === 'owner', { status: oSt.status, n: ids(oSt.body?.items).length, offset: oSt.body?.offset_note, own: oOwnSt.body?.items?.length });
   const mSt = await call('GET', `${P(site.code)}/apartments/${x1}/statement?from=${M3}&to=${TODAY}`, MGR);
   check('S3c: YONETICI ekstresi degismedi: tum satirlar (8), kapanis 1600, kapsam alanlari yok', mSt.status === 200 && ids(mSt.body?.items).length === 8 && mSt.body.closing_balance_minor === 1600 && !('visible_from' in (mSt.body ?? {})) && !('offset_note' in (mSt.body ?? {})), { status: mSt.status, n: ids(mSt.body?.items).length });
   const tStLate = await call('GET', `/app/my-finance/apartments/${x1}/statement?from=${M0}&to=${TODAY}`, NEW_TENANT);
@@ -185,8 +195,12 @@ export default async function sectionResidentScope(t) {
   const d5old = await insert(x5, 'charge', 400, M3, M3, day(M3, 15));
   const buyer = await call('GET', '/app/my-finance', BUYER);
   const bItem = buyer.body?.items?.find((i) => i.apartment_id === x5);
-  check('S11: kiraciyken (M-3) daireyi satin alan kisi (malik iliskisi bugun): kapsam kesintisiz zincirin basi (M-3); eski borcu (400) gorunur', bItem?.balance_minor === 400 && same(ids(bItem?.recent), [d5old]) && bItem?.visible_from === null, {
-    item: bItem && { ...bItem, recent: ids(bItem.recent) },
+  const bTenantView = bItem?.accounts?.find((a) => a.account_party === 'tenant');
+  // İP-1A (G12): eski kiracılık kayıtları KİRACI hesabındadır; kişi artık malik (both) -> kiracı hesabını salt okunur görür ve kapsam zinciri o hesapta M-3'e uzar.
+  // Kendi ev sahibi hesabında kapsam malikliğiyle başlar (önceki malikin ev sahibi hesabı kayıtları görünmez).
+  check('S11: kiraciyken (M-3) daireyi satin alan kisi (malik iliskisi bugun): salt okunur kiraci hesabinda kapsam zincirin basi (M-3), eski borcu (400) gorunur; kendi ev sahibi hesabi bos', bItem?.account_party === 'owner' && bItem?.balance_minor === 0
+    && bTenantView?.role === 'read_only' && bTenantView.balance_minor === 400 && same(ids(bTenantView.recent), [d5old]) && bTenantView.visible_from === null, {
+    item: bItem && { ...bItem, recent: ids(bItem.recent), accounts: bItem.accounts?.map((a) => ({ ...a, recent: ids(a.recent) })) },
   });
 
   // --- S12. malik sorumluyken (owner) kiraciyken daireyi satin alan kisi: kiracilik donemi zincire SAYILMAZ (onceki malikin kayitlari gizli)

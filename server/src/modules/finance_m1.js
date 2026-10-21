@@ -7,6 +7,12 @@
 //
 // Bu dosya hem SQL parçalarını (DB hesabı) hem saf BigInt referans uygulamasını içerir; ikisi QA'da birbiriyle ve kaba kuvvet simülatörüyle karşılaştırılır.
 // PARA BigInt'tir; kayan nokta yok.
+// İki hesap (İP-1A): mahsup HESAP BAZINDADIR (ev sahibi hesabının ödemesi kiracı hesabının borcunu kapatmaz): CTE'ler (daire, hesap) bölümlüdür ve
+// `account_party` sütunu taşır (052 öncesi satırın hesabı payer_party'den türetilir: finance_parties.accountPartySql).
+
+import { accountPartySql } from './finance_parties.js';
+
+const M1_ACCOUNT = accountPartySql('l');
 
 export const AGING_BUCKETS = Object.freeze(['not_due', 'd0_30', 'd31_60', 'd61_90', 'd91_180', 'd181_365', 'd366_plus']);
 
@@ -40,29 +46,30 @@ export function m1Remainders(items, pay) {
 
 /**
  * SQL: T tarihi itibarıyla her kalemin kalanı. `siteParam` / `dateParam`: '$1' / '$2' gibi parametre yer tutucuları. `apartmentClause`: isteğe bağlı
- * ek süzgeç (ör. ' AND l.apartment_id = ANY($3::BIGINT[])'). Çıktı CTE'leri: items(id, apartment_id, a, due, is_lf, c), pay(apartment_id, p), rem(apartment_id, due, is_lf, r, a).
+ * ek süzgeç (ör. ' AND l.apartment_id = ANY($3::BIGINT[])'). Çıktı CTE'leri: items(id, apartment_id, account_party, a, due, is_lf, c),
+ * pay(apartment_id, account_party, p), rem(apartment_id, account_party, due, is_lf, r, a). Mahsup (daire, hesap) bölümlüdür (İP-1A).
  * Ters kayıt aramaları `uq_ledger_entries_reverses` indeksini, kalemler (site_code, ...) indekslerini kullanır; yalnız site satırları okunur.
  */
 export function m1Ctes(siteParam, dateParam, apartmentClause = '') {
   return `
     items AS (
       SELECT
-        l.id, l.apartment_id, l.amount_minor AS a, COALESCE(l.due_date, l.entry_date) AS due, (l.late_fee_run_id IS NOT NULL) AS is_lf,
-        SUM(l.amount_minor) OVER (PARTITION BY l.apartment_id ORDER BY COALESCE(l.due_date, l.entry_date), l.id) AS c
+        l.id, l.apartment_id, ${M1_ACCOUNT} AS account_party, l.amount_minor AS a, COALESCE(l.due_date, l.entry_date) AS due, (l.late_fee_run_id IS NOT NULL) AS is_lf,
+        SUM(l.amount_minor) OVER (PARTITION BY l.apartment_id, ${M1_ACCOUNT} ORDER BY COALESCE(l.due_date, l.entry_date), l.id) AS c
       FROM ledger_entries l
       WHERE l.site_code = ${siteParam} AND l.kind = 'charge' AND l.entry_date <= ${dateParam}::DATE${apartmentClause}
         AND NOT EXISTS (SELECT 1 FROM ledger_entries rv WHERE rv.reverses_entry_id = l.id AND rv.entry_date <= ${dateParam}::DATE)
     ),
     pay AS (
-      SELECT l.apartment_id, -SUM(l.amount_minor) AS p
+      SELECT l.apartment_id, ${M1_ACCOUNT} AS account_party, -SUM(l.amount_minor) AS p
       FROM ledger_entries l
       WHERE l.site_code = ${siteParam} AND l.kind = 'payment' AND l.entry_date <= ${dateParam}::DATE${apartmentClause}
         AND NOT EXISTS (SELECT 1 FROM ledger_entries rv WHERE rv.reverses_entry_id = l.id AND rv.entry_date <= ${dateParam}::DATE)
-      GROUP BY l.apartment_id
+      GROUP BY 1, 2
     ),
     rem AS (
-      SELECT i.apartment_id, i.due, i.is_lf, i.a, LEAST(i.a, GREATEST(0, i.c - COALESCE(p.p, 0))) AS r
-      FROM items i LEFT JOIN pay p ON p.apartment_id = i.apartment_id
+      SELECT i.apartment_id, i.account_party, i.due, i.is_lf, i.a, LEAST(i.a, GREATEST(0, i.c - COALESCE(p.p, 0))) AS r
+      FROM items i LEFT JOIN pay p ON p.apartment_id = i.apartment_id AND p.account_party = i.account_party
     )
   `;
 }

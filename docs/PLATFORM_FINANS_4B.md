@@ -14,7 +14,7 @@ Online kart ödemesi ve banka bağlantısı ("Yakında…", F8); banka ekstresi 
 
 ## Hukuki dayanak (resmî metin, mevzuat.gov.tr, 2026-10-16'da alındı)
 
-- **KMK 634 m.20/2. fıkra** ("Gider ve avans payının tamamını ödemeyen kat maliki ödemede geciktiği günler için **aylık yüzde beş** hesabıyla gecikme tazminatı ödemekle yükümlüdür"; oran 5711/9 ile "yüzde on"dan "yüzde beş"e indi). Son değişiklik **7579 sayılı Kanun (kabul 7/5/2026; RG 22/5/2026)** m.35, m.37, m.70'e dokundu; **m.20 DEĞİŞMEDİ**. Sunucu sabiti `LATE_FEE_MAX_MONTHLY_BP = 500`: oran bu sabitin üstüne ayarlanamaz. Yayından önce metin yeniden doğrulanır `[AVUKAT DOĞRULASIN]`.
+- **KMK 634 m.20/2. fıkra** ("Gider ve avans payının tamamını ödemeyen kat maliki ödemede geciktiği günler için **aylık yüzde beş** hesabıyla gecikme tazminatı ödemekle yükümlüdür"; oran 5711/9 ile "yüzde on"dan "yüzde beş"e indi). Son değişiklik **7579 sayılı Kanun (kabul 7/5/2026; RG 22/5/2026)** m.35, m.37, m.70'e dokundu; **m.20 DEĞİŞMEDİ**. Oran üst sınırı kurallar tablosundaki `finance.late_fee.monthly_bp_max` kuralından okunur (varsayılan 500; etkin sınır = min(kural, yasal tavan `LATE_FEE_MAX_MONTHLY_BP = 500`), ayrıntı `docs/PLATFORM_KURALLAR.md` "Gecikme tazminatı üst sınırı"): oran bu sınırın üstüne ayarlanamaz. Yayından önce metin yeniden doğrulanır `[AVUKAT DOĞRULASIN]`.
 - **KMK m.22:** kiracı/oturan, gider-avans borcundan ve gecikme tazminatından müştereken ve müteselsilen sorumludur (kira miktarı ile sınırlı). **m.35(j)** yöneticinin yönetici sıfatıyla banka hesabı açması (Ö4 dayanağı); **m.36** giderlerin belgeleriyle saklanması ve defterin her yıl noterde kapattırılması (Ö3 dayanağı); **m.39/m.41** yıllık hesap verme ve denetim (Ö5 kurul raporu); **m.32** karar defteri. **Bu sistemin raporları/makbuzları noter onaylı karar defterinin ve yasal defterlerin YERİNE GEÇMEZ** (her rapor altbilgisi bunu söyler) `[AVUKAT DOĞRULASIN]`.
 - **TBK m.101–104:** borçlunun bildirimi yoksa ödeme **makbuzda gösterilen borç** için yapılmış sayılır (m.101); açıklama yoksa muaccel borç, birden çok muaccel borçta vadesi ilk gelen (m.102) → **M1 mahsup kuralı** (aşağıda); borçlu makbuz isteme hakkına sahiptir (m.103); **dönemsel edimde çekincesiz makbuz önceki dönemlerin ifasını, anaparanın tamamı için makbuz faizin alındığını karine yapar (m.104)** → makbuz metni mahsup bildirimi ve **çekince** satırı içermek ZORUNDADIR `[AVUKAT DOĞRULASIN]`.
 - **6563 sayılı Kanun m.2/c, 6, 7, 8:** "ticari elektronik ileti" = **ticari amaçlarla** gönderilen ileti; onay (m.6), içerik/gönderen bilgisi (m.7), reddetme hakkı (m.8). Borç hatırlatma tanıtım/pazarlama içermeyen bilgilendirme iletisidir; içerik kuralları Ö6'da `[AVUKAT DOĞRULASIN]`.
@@ -92,6 +92,8 @@ Ortak: her tabloda `site_code BIGINT NOT NULL REFERENCES sites ON DELETE CASCADE
 
 ## Ö1 — Tahsilat makbuzu (F4.07)
 
+> **İP-1A (2026-10-21):** bu bölüm HESAP başınadır (ev sahibi / kiracı hesabı); ayrıntı en sondaki **İki hesap (2026-10-21)** bölümünde.
+
 **Karar: PDF İSTEMCİDE üretilir (`pdf` + `printing`, GÖMÜLÜ yazı tipi); sunucu değişmez snapshot + doğrulama kodu verir.** Karşılaştırma:
 
 | Ölçüt | Sunucu (`pdfkit` benzeri) | İstemci (mevcut `pdf`/`printing`) |
@@ -122,9 +124,11 @@ Yazı tipi: `assets/fonts/Roboto-Regular.ttf` + `Roboto-Bold.ttf` (Apache-2.0; l
 
 ## Ö2 — Gecikme tazminatı (F4.08)
 
+> **İP-1A (2026-10-21):** bu bölüm HESAP başınadır (ev sahibi / kiracı hesabı); ayrıntı en sondaki **İki hesap (2026-10-21)** bölümünde.
+
 **Karar: OTOMATİK DEĞİL — yönetici onaylı, önizlemeli toplu işlem; aylık; yalnız KAPALI ve BİTMİŞ ay için; varsayılan KAPALI** (kullanıcıya para yükleyen ve hukuki yoruma açık işlem; sessiz otomasyon yok).
 
-**Ayarlar** (`PUT …/settings`, aşağıda): `late_fee_enabled`, `late_fee_rate_bp` (0..500; 500 = aylık %5,00; sunucu sabiti üst sınır), `late_fee_method` (`daily_30`: günlük oran = aylık/30; `daily_actual`: aylık/ayın gerçek gün sayısı), `late_fee_grace_days` (0..90; vadeye ek süre), `late_fee_start_period` (ilk hesaplanacak ay; geçmişe yönelik sürpriz tahakkuk olmasın diye ZORUNLU). `late_fee_start_period` yalnız hiç aktif çalıştırma yokken değişir; oran/yöntem/ek gün her zaman değişir ve yalnız SONRAKİ çalıştırmaları etkiler (her çalıştırma kendi `params` anlık görüntüsünü taşır).
+**Ayarlar** (`PUT …/settings`, aşağıda): `late_fee_enabled`, `late_fee_rate_bp` (0..etkin üst sınır; 500 = aylık %5,00; üst sınır kurallar tablosundan, `docs/PLATFORM_KURALLAR.md`), `late_fee_method` (`daily_30`: günlük oran = aylık/30; `daily_actual`: aylık/ayın gerçek gün sayısı), `late_fee_grace_days` (0..90; vadeye ek süre), `late_fee_start_period` (ilk hesaplanacak ay; geçmişe yönelik sürpriz tahakkuk olmasın diye ZORUNLU). `late_fee_start_period` yalnız hiç aktif çalıştırma yokken değişir; oran/yöntem/ek gün her zaman değişir ve yalnız SONRAKİ çalıştırmaları etkiler (her çalıştırma kendi `params` anlık görüntüsünü taşır).
 
 **Hesap (normatif tanım; optimizasyon yalnız sonucu BİREBİR koruyorsa serbest).** Daire `A`, hesaplanan ay `P` (`P1` ilk gün, `P2` son gün), oran `R` (bp), ek gün `G`, yöntem sabiti `D` (`daily_30` ⇒ 30; `daily_actual` ⇒ `P`'nin gün sayısı). `P1..P2` aralığındaki HER gün `d` için: kalemler ve ödemeler **M1** ile `T = d` günü itibarıyla alınır (ödeme günü dahil: `Pay(d)` `entry_date ≤ d`); `L(d)` = `max(v_i, entry_date_i) + G < d` olan, **gecikme tazminatı OLMAYAN** (`late_fee_run_id IS NULL`) kalemlerin `rem_i(d)` toplamı ("vade gününü izleyen günden başlar; ödeme günü gecikme sayılmaz"; geç kaydedilen kalem kayıt gününden önce gecikmeye girmez). `S = Σ_d L(d)` (kuruş·gün). **`fee = ⌊(2·S·R + 10000·D) / (20000·D)⌋`** (yarım yukarı, BigInt; `S·R` 2^53'ü aşabilir). `fee = 0` ise satır yazılmaz (`zero_amount_count`). **Faiz üstüne faiz yok:** tazminat kalemleri `L(d)` tabanına girmez (ama M1'de ödeme tüketir). Yalnız `is_active` daireler (pasif ve borçlu daire `inactive_skipped_count`'a ve önizleme listesine girer, hesaplanmaz). Bağımsız doğrulama: QA'da gün-gün kaba kuvvet simülatörü (yukarıdaki tanımın doğrudan kodu) rastgele defterlerle (≥ 2000 vaka) üretim hesabıyla eşleşmek ZORUNDADIR; eşik vakalar: ödeme vade günü / ertesi gün, ters kayıtlı borç/ödeme, geçmiş vadeli tek seferlik borç, fazla ödeme (alacak), ay sonu/şubat, kuruş yuvarlama.
 
@@ -164,6 +168,8 @@ Yazı tipi: `assets/fonts/Roboto-Regular.ttf` + `Roboto-Bold.ttf` (Apache-2.0; l
 
 ## Ö5 — Raporlar ve dışa aktarma (F4.11)
 
+> **İP-1A (2026-10-21):** bu bölüm HESAP başınadır (ev sahibi / kiracı hesabı); ayrıntı en sondaki **İki hesap (2026-10-21)** bölümünde.
+
 Rapor uçları `GET …/finance/reports/…` (okuma yetkisi: yönetici/süper + kurul) JSON döner (ekran ve istemci PDF'i içindir); tek `REPEATABLE READ READ ONLY` işlemi, `statement_timeout` 20 sn, site başına en çok 2 eşzamanlı ağır rapor (aşılırsa 503 `REPORT_BUSY` + `Retry-After`), `Cache-Control: no-store`. Ortak yanıt alanları: `site: {name}`, `generated_at`, `closed_through`, `currency:'TRY'`. **CSV/XLSX** dosyaları `GET …/finance/exports/:kind` (ExportEnvelope; "Dış bağımlılık arayüzleri") ile alınır; kind'lar: `finance_aging`, `finance_income_expense`, `finance_cash_position`, `finance_statement` (+ `apartment_id`, `from`, `to`), `finance_expenses` (+ gider süzgeçleri), `finance_receipts` (+ `year`). Kurul özet raporu (`board-summary`) bölümlü olduğundan dosya dışa aktarması YOKTUR (yalnız ekran + PDF). Süzgeç parametreleri rapor uçlarıyla AYNIDIR ve aynı sorgu mantığı paylaşılır (ekranla dosya arasında sapma olmaz; QA eşdeğerliği). Zarf kolonları: kuruş tutarlar `money`, adet/oran `number` (`collection_rate` yüzde olarak `scale: 2`, tamsayı bp'den hesaplanır), tarihler `date`; satır sınırı 20 000 (aşarsa 422 `EXPORT_TOO_LARGE`).
 
 1. **Borç/alacak yaşlandırma** `reports/aging?as_of=YYYY-MM-DD&status=debtor|all&limit=200&offset=0` (`as_of` ≤ bugün, ≥ 5 yıl): M1 ile `T = as_of`; kovalar vade gecikmesine göre `not_due` (vade > T), `d0_30`, `d31_60`, `d61_90`, `d91_180`, `d181_365`, `d366_plus`; ayrıca `credit_minor` (kullanılmamış alacak) ve `late_fee_outstanding_minor` (bilgi). Yanıt: `{ as_of, buckets: [...], totals: {…}, items: [{ apartment_id, label, block_name, payer_party, owner_name, tenant_name, <kova>_minor…, credit_minor, late_fee_outstanding_minor, total_overdue_minor }], total }` (sıra: `total_overdue_minor DESC`). **Değişmez:** `as_of = bugün` için `Σ(d0_30…d366_plus) = 4a overdue_minor` (daire bazında ve toplamda; QA).
@@ -175,6 +181,8 @@ Rapor uçları `GET …/finance/reports/…` (okuma yetkisi: yönetici/süper + 
 **PDF (istemci).** `lib/services/pdf_finance_service.dart`: makbuz, ekstre ve tüm raporlar; `PdfFontSet.loadBundled()`; 200 satırdan uzun çıktı `BackgroundWork` izolesinde; dosya adı ASCII (`Makbuz_MK-2026-000123.pdf`); paylaşım `share_plus`, yazdırma `printing` (mevcut bağımlılıklar). CSV/XLSX dosyalarını da istemci üretir (`ExportSheet`; `PLATFORM_TOPLU_ISLEMLER.md`).
 
 ## Ö6 — Borç hatırlatma (F4.14)
+
+> **İP-1A (2026-10-21):** bu bölüm HESAP başınadır (ev sahibi / kiracı hesabı); ayrıntı en sondaki **İki hesap (2026-10-21)** bölümünde.
 
 **Karar: duyuru e-posta kuyruğunun BAĞLANTILARI yeniden kullanılır, alıcı tablosu ayrıdır** (`announcement_recipients` duyuru kimliğine bağlıdır ve kişiye özgü tutar taşıyamaz). Yeniden kullanılan: `announcement_email_security.js` (kanonik adres, tuzlu özet, abonelik belirteci/`List-Unsubscribe`), `announcement_email_suppressions` (ORTAK bastırma listesi), `announcement_lock.js` (yeni iş numarası `financeReminderQueue: 4`), `mailer.js` taşıyıcı/`isSmtpConfigured`, kuyruk kalıbı (talep → gönderim transaction DIŞI → sonuç; `FOR UPDATE SKIP LOCKED`, 20'lik grup, ≥150 ms, 3 deneme, 1/5 dk geri çekilme, kalıcı SMTP hatasında hemen `failed`, 10 dk bayat talep devri, son durumda `email` NULL). Uygulama `announcement_email_queue.js`'i parametrelendirir (tercih edilen; Faz 3a testleri yeşil kalmalı) ya da davranış eşdeğeri `finance_reminder_queue.js` yazar. Zamanlayıcı tiki bekleyen hatırlatma satırı varsa kuyruğu da sürer.
 
@@ -195,7 +203,7 @@ Rapor uçları `GET …/finance/reports/…` (okuma yetkisi: yönetici/süper + 
 
 ## Ayarlar ucu
 
-`GET …/finance/settings` (okuma; kurul dahil) → `{ settings_version, receipts: { auto_issue }, late_fee: { enabled, rate_bp, max_rate_bp: 500, method, grace_days, start_period, next_period, voidable_run_id }, reminders: { enabled, min_overdue_minor, min_days_overdue, min_interval_days, max_consecutive, smtp_configured } }`. `PUT …/finance/settings` (yazma; kısmi; gövdede `expected_settings_version` ZORUNLU, uyuşmazlık 409 `SETTINGS_STALE`) — doğrulama sınırları DB CHECK'leriyle aynı; audit `finance.settings.updated` (YALNIZ değişen anahtar adları, değerler değil); `late_fee.enabled` açılırken `start_period` yoksa 400.
+`GET …/finance/settings` (okuma; kurul dahil) → `{ settings_version, receipts: { auto_issue }, late_fee: { enabled, rate_bp, max_rate_bp, method, grace_days, start_period, next_period, voidable_run_id }, reminders: { enabled, min_overdue_minor, min_days_overdue, min_interval_days, max_consecutive, smtp_configured } }`; `max_rate_bp` etkin üst sınırdır (kurallar tablosundaki `finance.late_fee.monthly_bp_max` ile yasal tavan 500'ün küçüğü; `docs/PLATFORM_KURALLAR.md`), `rate_bp` bu sınıra kırpılmış gösterilir. `PUT …/finance/settings` (yazma; kısmi; gövdede `expected_settings_version` ZORUNLU, uyuşmazlık 409 `SETTINGS_STALE`) — doğrulama sınırları DB CHECK'leriyle aynı; audit `finance.settings.updated` (YALNIZ değişen anahtar adları, değerler değil); `late_fee.enabled` açılırken `start_period` yoksa 400.
 
 ## Yetki matrisi
 
@@ -240,7 +248,7 @@ Süper kullanıcı kendi yönetmediği sitelerde de yazar (4a gibi). Önizleme u
 | Ö2 | Dönem boşluğu / çift hesap / geriye yazma | Zincir tetikleyicisi (`önceki aktif + 1 ay`), aktif-tekil indeks, ay KAPALI+BİTMİŞ şartı, kalemler AÇIK dönemde; QA: boşluk/tekrar/açık ay hata, `reopen` engeli |
 | Ö2 | Önizleme bayatlığı | `preview_hash` (ayar sürümü + muaf kümesi dahil) + kilit altında yeniden hesap; ödeme/ayar önizleme ile onay arasında değişirse 409 |
 | Ö2 | Para hatası / yuvarlama | BigInt, tanımlı yarım-yukarı, satır toplamı = çalıştırma toplamı (CHECK + QA); kaba kuvvet simülatörü ≥ 2000 vaka |
-| Ö2 | Faiz üstüne faiz; yanlış yüksek tahsil | Tazminat kalemleri tabandan dışlanır; oran üst sınırı kod sabiti 500; "tarihli model" tutucudur; muaf tutma + son çalıştırmayı iptal; varsayılan KAPALI |
+| Ö2 | Faiz üstüne faiz; yanlış yüksek tahsil | Tazminat kalemleri tabandan dışlanır; oran üst sınırı kurallar tablosundan (en çok yasal tavan 500; `docs/PLATFORM_KURALLAR.md`); "tarihli model" tutucudur; muaf tutma + son çalıştırmayı iptal; varsayılan KAPALI |
 | Ö2 | Kilit sırası / 40P01 | Tek `finance_post` kilidi, hesap satırları id sırası; QA kilit turu: tazminat × tahsilat × ters kayıt × daire azaltma × kullanıcı silme, 40P01 = 0 |
 | Ö2 | Yetki | Yalnız yönetici/süper; kurul sadece okur; ayar değişimi audit'li, `SETTINGS_STALE` |
 | Ö3 | Çift kayıt (aynı fatura iki kez) | `idempotency_key` zorunlu + fatura-no tekilliği + 24 sa doğal anahtar + `allow_duplicate`; QA: eşzamanlı çift gönderim tek kayıt |
@@ -361,3 +369,35 @@ Gerçek PG sınamaları `scripts/qa_finance4b_r15.mjs` (bölüm S); düzeltmeden
 - **P2-5:** belge dikişi AÇILIŞ KOŞULU kota maddesini de içerir (BELGELER kotası `expense_documents.size_bytes`'i saymaz; kota ve süpürme bu tabloyu bilmeden dikiş açılmaz). `document_*.js` değiştirilmedi.
 - **P2-6:** (13b) satırı düzeltildi (yukarıda).
 - **P2-7:** `purgeStaleReminderHashes` satırları `ORDER BY run_id, person_id FOR UPDATE` ile kilitler.
+
+## İki hesap (2026-10-21; İP-1A, karar G12 — yukarıdaki metne göre ÖNCELİKLİDİR)
+
+Kurallar, veri (052), var olan satırların hesabı ve 4a uçları: `docs/PLATFORM_FINANS.md` **İki hesap (2026-10-21)**. Faz 4b'deki etkiler:
+
+- **Ö1 makbuz:** ödeyen tahsilatın HESABINA göre seçilir (kiracı hesabı -> dairenin güncel kiracısı, ev sahibi hesabı -> güncel malik; 052 öncesi tahsilat
+  türetilmiş hesapla, eski davranış aynı). Snapshot `payer.account_party` taşır (052 öncesi makbuzda yok; şablon sürümü değişmedi). Makbuz özeti
+  (`GET receipts`, sakin listesi) `account_party` alanını taşır. Sakin makbuzları görünümlerle sınırlıdır: kendi hesabı + (borç sorumlusu `both` dairede
+  malike) salt okunur kiracı hesabı; `GET /app/my-finance/receipts?account_party=` tek görünüm; başka hesabın makbuzu 404.
+- **Ö2 gecikme tazminatı:** plan (daire, HESAP) başınadır: aynı dairenin iki hesabı gecikmişse İKİ satır ve iki tazminat kaydı (`account_party` satır
+  hesabı); her satır kendi hesabının mahsubuyla gün-gün hesaplanır (kaba kuvvet kâhiniyle birebir, gerçek PG `parties` P7). `late_fee_run_lines` anahtarı
+  `(run_id, ledger_entry_id)` (+ hesap başına kısmi tekil); `apartment_count` satır sayısıdır; `preview_hash` hesabı içerir; muaf daire iki hesabı da atlar
+  (`waived[].account_party`). İptal (void) her ters kaydı asılın hesabına yazar. Sakin tazminat açıklaması (`/app/my-finance/entries/:id/late-fee`) yalnız
+  kişinin görünümlerindeki hesabın kalemine açılır (diğer hesabın kalemi 404).
+- **Ö5 raporlar:** M1 (yaşlandırma, tahsilat oranı tabanı) (daire, hesap) bölümlüdür: bir hesabın tahsilatı diğer hesabın kalemine mahsup edilmez.
+  `GET reports/aging?account_party=` tek hesabın tutarları; süzgeçsiz satır iki hesabın toplamı + `accounts.owner|tenant` kırılımı (`credit_minor` hesap başına).
+  Daire ekstresi `GET apartments/:id/statement?account_party=` tek hesap (yoksa iki hesap birlikte). Sakin ekstresi (`/app/my-finance/apartments/:id/statement`)
+  varsayılan KENDİ hesabıdır; `?account_party=` görünümlerinden biri olmalı (aksi 404), yanıt `account_party` + `role` (own | read_only). Dışa aktarma:
+  yaşlandırma satırı HESAP başına (hareketsiz daire tek ev sahibi satırı), ekstre (`account_party` süzgeci; Devreden satırı dahil) ve makbuz listesi son
+  sütun **Hesap** ("Ev sahibi hesabı" / "Kiracı hesabı"); `account_party` bilinen süzgeç anahtarıdır (audit).
+- **Ö6 borç hatırlatma:** aday (daire, HESAP) başınadır (eşik ve gün hesap başına); alıcı = hesabın SAHİBİ (kiracı hesabı -> kiracı, ev sahibi hesabı ->
+  malik, ilişkisi belirtilmemiş -> dairede güncel kiracı varsa kiracı hesabının, yoksa ev sahibi hesabının sahibi, ANCAK yalnız borç sorumlusu `both` iken ya da
+  sorumlu tarafın güncel kişisi yokken: Borcum görünümüyle aynı `visiblePartyOfRelation`, bağımsız inceleme; aile üyesi alıcı değil). Borç
+  sorumlusu `both` dairede malik kiracı hesabının borcu için ALICI DEĞİLDİR (salt okunur görür). İletideki tutar alıcının hesabının tutarıdır; önizleme
+  `account_count` (kapsanan hesap sayısı) ekler, `apartment_count` daire başınadır. Hariç tutma sayıları hesap başınadır. Sıklık kaydı daire başına kalır.
+  İkinci inceleme: elden takip de hesap başınadır; önizleme `hand_follow_up_accounts: [{ label, account_party }]` (≤ 20) ekler (aynı dairenin iki hesabı
+  iki öğe; eski `hand_follow_up_apartments` yalnız etiket olarak kalır). İstemci yeni sunucuda (`account_count` varken) hariç tutma ve elden takip
+  satırlarını "daire hesabı" diye, elden takip öğelerini "A Blok - 5 (Kiracı hesabı)" biçiminde yazar.
+- **İstemci:** yaşlandırma ve daire ekstresi raporlarında hesap süzgeci ("Tüm hesaplar" / "Kiracı hesabı" / "Ev sahibi hesabı"), ekstre PDF'inde hesabın adı
+  ("(salt okunur)" işaretiyle), tazminat önizlemesi ve çalıştırma satırlarında hesap adı ve "N daire, M hesap" sayısı, hatırlatma önizlemesinde hesap sayısı.
+- **Gerçek PG:** `QA_ONLY=chain,live,finance4b` bölümlerinin G12 nedeniyle bilerek güncellenen beklentileri `PLATFORM_FINANS.md` "İki hesap / Doğrulama"
+  maddesindedir; `qa_finance4b_upgrade.mjs` "ensure" yolları 001..son zinciriyle karşılaştırılır (sunucu açılışı semayı son sürüme getirir).

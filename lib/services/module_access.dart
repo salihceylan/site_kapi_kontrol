@@ -21,6 +21,10 @@ import 'package:site_kapi_kontrol/services/adaptive_poller.dart';
 ///   modüller açık sayılır (ağ hatası yüzünden menüler/kapılar kaybolmasın). Sunucu zaten kapalı
 ///   modülü reddeder; burası yalnız arayüz süzgecidir.
 /// - [clear] (çıkış / kullanıcı değişimi) durumu sıfırlar; uçuştaki eski yanıt yok sayılır.
+/// - SİTE KAPSAMI (İP-1D, çekmecenin en üstündeki site seçici): [setScopeSiteCode] ile bir site seçilince [result] ve
+///   bütün sorgular yalnız o siteyle çalışır (kapsam dışı site kapalı sayılır; menüler yalnız daralır, fail-closed);
+///   null = tüm siteler. Seçici tüm siteleri [allSites]'tan listeler. Süper kullanıcıda kapsam yoktur; kapsamdaki
+///   site sonraki yanıtta yoksa (siteden ayrılındı) kapsam düşer; [clear] kapsamı da sıfırlar.
 class ModuleAccess extends ChangeNotifier {
   ModuleAccess({
     required Future<MyModulesResult> Function() fetch,
@@ -49,6 +53,9 @@ class ModuleAccess extends ChangeNotifier {
   late final AdaptivePoller _poller;
 
   MyModulesResult? _result;
+  int? _scopeSiteCode;
+  MyModulesResult? _scopedFrom;
+  MyModulesResult? _scoped;
   int? _pendingRequestCount;
   int? _pendingApplicationCount;
   Future<bool?>? _inFlight;
@@ -56,8 +63,37 @@ class ModuleAccess extends ChangeNotifier {
   bool _disposed = false;
   int _generation = 0;
 
-  /// Son başarılı yanıt; hiç alınmadıysa null.
-  MyModulesResult? get result => _result;
+  /// Son başarılı yanıt; hiç alınmadıysa null. Site kapsamı varken ([scopeSiteCode]) yalnız o sitenin satırı.
+  MyModulesResult? get result {
+    final raw = _result;
+    final scope = scopeSiteCode;
+    if (raw == null || scope == null) return raw;
+    final cached = _scoped;
+    if (cached != null && identical(_scopedFrom, raw)) return cached;
+    _scopedFrom = raw;
+    return _scoped = MyModulesResult(
+      scope: raw.scope,
+      sites: raw.sites.where((s) => s.siteCode == scope).toList(growable: false),
+    );
+  }
+
+  /// Kapsamdan bağımsız, kullanıcının bağlı olduğu tüm siteler (site seçicinin seçenekleri); veri yoksa boş.
+  List<MySiteModules> get allSites => _result?.sites ?? const <MySiteModules>[];
+
+  /// Seçili site kapsamı (çekmecedeki site seçici); null = tüm siteler. Süper kullanıcıda her zaman null.
+  int? get scopeSiteCode => isSuper ? null : _scopeSiteCode;
+
+  /// Site kapsamını ayarlar (null = tüm siteler). Kullanıcının sitelerinde olmayan kod yok sayılır (kapsam kalkar);
+  /// değişince dinleyiciler uyarılır (menüler ve ekran site listeleri yeniden kurulur).
+  void setScopeSiteCode(int? siteCode) {
+    final known = siteCode != null && !isSuper && allSites.any((s) => s.siteCode == siteCode);
+    final next = known ? siteCode : null;
+    if (next == _scopeSiteCode) return;
+    _scopeSiteCode = next;
+    _scoped = null;
+    _scopedFrom = null;
+    if (!_disposed) notifyListeners();
+  }
 
   /// Süper kullanıcı için bekleyen modül talebi sayısı; henüz alınmadıysa (ya da süper kullanıcı
   /// değilse) null. Çağrı hatasında son değer korunur.
@@ -83,7 +119,10 @@ class ModuleAccess extends ChangeNotifier {
   /// ([PlatformModule.defaultEnabled]: yalnız `door_control` ve çekirdek modüller açık).
   bool isEnabled(int siteCode, String code) {
     if (!isFiltering) return true;
-    for (final site in _result!.sites) {
+    // Site kapsamı: kapsam dışı (seçilmemiş) site kapalı sayılır.
+    final scope = scopeSiteCode;
+    if (scope != null && siteCode != scope) return false;
+    for (final site in result!.sites) {
       if (site.siteCode == siteCode) return site.isEnabled(code);
     }
     return PlatformModule.defaultEnabled(code);
@@ -93,7 +132,7 @@ class ModuleAccess extends ChangeNotifier {
   /// yokken true; hiç sitesi olmayan kullanıcıda false (bkz. [isDisabledEverywhere]).
   bool anyEnabled(String code) {
     if (!isFiltering) return true;
-    return _result!.sites.any((s) => s.isEnabled(code));
+    return result!.sites.any((s) => s.isEnabled(code));
   }
 
   /// Kullanıcının Yönetim Kurulu / Denetçi üyesi olduğu siteler (`role == board_member`; sunucu rol
@@ -101,14 +140,14 @@ class ModuleAccess extends ChangeNotifier {
   /// Kişi ve Daire Kayıtları ekranına salt okunur erişim buradan açılır (Faz 2a).
   List<MySiteModules> get boardMemberSites {
     if (!isFiltering) return const <MySiteModules>[];
-    return _result!.sites.where((s) => s.isBoardMember).toList(growable: false);
+    return result!.sites.where((s) => s.isBoardMember).toList(growable: false);
   }
 
   /// [code] modülünün açık olduğu siteler (süper kullanıcıda ya da veri yokken boş liste döner:
   /// bu durumda süzgeç yoktur, tüm siteler için [isEnabled] true'dur).
   List<MySiteModules> sitesWith(String code) {
     if (!isFiltering) return const <MySiteModules>[];
-    return _result!.sites.where((s) => s.isEnabled(code)).toList(growable: false);
+    return result!.sites.where((s) => s.isEnabled(code)).toList(growable: false);
   }
 
   /// Kullanıcı en az bir siteye bağlı VE bağlı olduğu TÜM sitelerde [code] kapalı mı?
@@ -120,7 +159,7 @@ class ModuleAccess extends ChangeNotifier {
   /// kendi cihazını kaydeden bireysel kullanıcı, yalnız kurul üyesi) false'tur: ekranları değişmez.
   bool isDisabledEverywhere(String code) {
     if (!isFiltering) return false;
-    return _result!.isDisabledEverywhere(code);
+    return result!.isDisabledEverywhere(code);
   }
 
   /// Yanıtı şimdi (uçuşta bir tur varsa ondan SONRA bir kez daha) çeker. Dönüş: true başarılı, false
@@ -176,6 +215,11 @@ class ModuleAccess extends ChangeNotifier {
       if (_disposed || generation != _generation) return null;
       if (_result != next) {
         _result = next;
+        _scoped = null;
+        _scopedFrom = null;
+        // Kapsamdaki siteden ayrılındıysa (yanıtta yok) kapsam düşer: tüm siteler.
+        final scope = _scopeSiteCode;
+        if (scope != null && !next.sites.any((s) => s.siteCode == scope)) _scopeSiteCode = null;
         notifyListeners();
       }
       return true;
@@ -234,8 +278,14 @@ class ModuleAccess extends ChangeNotifier {
   /// modülleri sızmaz). Uçuştaki eski yanıt yok sayılır.
   void clear() {
     _generation++;
-    if (_result != null || _pendingRequestCount != null || _pendingApplicationCount != null) {
+    if (_result != null ||
+        _pendingRequestCount != null ||
+        _pendingApplicationCount != null ||
+        _scopeSiteCode != null) {
       _result = null;
+      _scopeSiteCode = null;
+      _scoped = null;
+      _scopedFrom = null;
       _pendingRequestCount = null;
       _pendingApplicationCount = null;
       if (!_disposed) notifyListeners();

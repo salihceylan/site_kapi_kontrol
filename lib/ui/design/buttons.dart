@@ -6,7 +6,6 @@
 // yerine geçer.
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:site_kapi_kontrol/ui/design/gloss.dart';
 import 'package:site_kapi_kontrol/ui/design/motion_widgets.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 
@@ -73,25 +72,27 @@ class _PressableScaleState extends State<PressableScale> {
 
 /// [PrimaryActionButton] görünümü.
 enum AppButtonVariant {
-  /// Gradyan dolgu + beyaz metin + tek glow gölge (sayfada/kartta en fazla bir tane).
+  /// Düz dolgu: ana eylem rengi (açıkta #0F172A, koyuda #F8FAFC) ya da durum tonunun `a` rengi (ör. "Sil");
+  /// gölgesiz, cilasız (sayfada/kartta en fazla bir tane).
   filled,
 
-  /// Tonun soluk (tint) zemini + `ink` metin: ikincil eylem.
+  /// İkincil eylem: yüzey zemin + 1 px çerçeve + başlık metni (durum tonunda `ink` metin).
   tonal,
 
-  /// Yalnız ton kenarlı + `ink` metin.
+  /// İkincil eylem, zeminsiz: yalnız 1 px çerçeve + başlık metni (durum tonunda `ink` metin).
   outline,
 }
 
 /// Özel gradyan düğmelerin yerine geçen birincil/ikincil eylem düğmesi.
 ///
-/// **Premium görünüm**: dolu ([AppButtonVariant.filled]) düğme cilalıdır ([Gloss]: üst ışık, alt
-/// gölge, kenar ışığı); başarı anında ([success] false -> true) üzerinden tek seferlik bir ışıltı
-/// geçer (hareket azaltmada yok). İkincil görünümler (tonal/outline) bilerek düzdür: hiyerarşi.
+/// **Sade görünüm (İP-1C, karar G6)**: dolu ([AppButtonVariant.filled]) düğme DÜZDÜR: degrade, cila, gölge ve ışıltı
+/// yok. Zemin [AppPalette.action] + [AppPalette.onAction] metin; yalnız durum tonları ([AppTone.isStatus]: tamam,
+/// bekliyor, kritik) kendi `a` rengini + beyaz metni alır (ör. "Sil" mercan). Öteki tonlar (birincil, bilgi, mor, nötr)
+/// ana eylem rengindedir: mavi yalnız bağlantı ve odak halkasında. İkincil görünümler (tonal/outline) yüzey + çerçeve.
 ///
 /// Durumlar: normal | basılı (ölçek 0,97) | devre dışı ([onPressed] null) | [loading] (etiket
-/// yerine spinner, tıklama kapalı; etiket ağaçta YOKTUR) | [success] (gradyan success tonuna 200 ms
-/// morph + onay işareti; tıklama kapalı; ebeveyn ~1,2 sn sonra false yapar).
+/// yerine spinner, tıklama kapalı; etiket ağaçta YOKTUR) | [success] (zemin success tonuna 200 ms
+/// renk geçişi + onay işareti; tıklama kapalı; ebeveyn ~1,2 sn sonra false yapar).
 ///
 /// Haptik (`selectionClick`) yalnız dokunma ONAYLANDIĞINDA (parmak kalkınca) verilir; basış
 /// anında değil (kaydırma titretmesin). Dokunma hedefi en az 48 dp yüksekliktedir.
@@ -104,7 +105,7 @@ enum AppButtonVariant {
 ///
 /// Erişilebilirlik: yüklenirken etiket ağaçtan kalkar ama ekran okuyucu "etiket, Yükleniyor"
 /// (canlı bölge) okur; başarılı/yüklenir iken düğme etkin değildir.
-class PrimaryActionButton extends StatefulWidget {
+class PrimaryActionButton extends StatelessWidget {
   const PrimaryActionButton({
     super.key,
     required this.label,
@@ -138,54 +139,26 @@ class PrimaryActionButton extends StatefulWidget {
   /// true: kullanılabilir tüm genişlik; false: içerik genişliği (en az 120 dp).
   final bool expand;
 
-  /// Başarı ışıltısının süresi.
-  static const Duration sweepDuration = Duration(milliseconds: 650);
+  /// Dolu düğmenin zemini: durum tonlarında tonun `a` rengi, ötekilerde ana eylem rengi.
+  static Color fillOf(AppTone tone, AppPalette p) => tone.isStatus ? tone.a : p.action;
 
-  @override
-  State<PrimaryActionButton> createState() => _PrimaryActionButtonState();
-}
+  /// Dolu düğmenin metni: durum tonlarında beyaz, ötekilerde ana eylem metni (>= 4,5:1).
+  static Color onFillOf(AppTone tone, AppPalette p) => tone.isStatus ? Colors.white : p.onAction;
 
-class _PrimaryActionButtonState extends State<PrimaryActionButton>
-    with SingleTickerProviderStateMixin {
-  /// Başarı ışıltısı: yalnız [PrimaryActionButton.success] true olunca bir kez oynar.
-  late final AnimationController _sweep = AnimationController(
-    vsync: this,
-    duration: PrimaryActionButton.sweepDuration,
-  );
-
-  @override
-  void didUpdateWidget(PrimaryActionButton oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (!oldWidget.success &&
-        widget.success &&
-        widget.variant == AppButtonVariant.filled &&
-        !AppMotion.reduced(context)) {
-      _sweep.forward(from: 0);
-    }
-  }
-
-  @override
-  void dispose() {
-    _sweep.dispose();
-    super.dispose();
-  }
+  /// İkincil (tonal / outline) düğmenin metni: durum tonlarında `ink`, ötekilerde başlık metni.
+  static Color secondaryInkOf(AppTone tone, AppPalette p) => tone.isStatus ? tone.ink(p) : p.text;
 
   @override
   Widget build(BuildContext context) {
-    final label = widget.label;
-    final onPressed = widget.onPressed;
-    final icon = widget.icon;
-    final variant = widget.variant;
-    final loading = widget.loading;
-    final success = widget.success;
-    final expand = widget.expand;
     final p = context.palette;
-    final t = success ? AppTone.success : widget.tone;
+    final t = success ? AppTone.success : tone;
     final radius = BorderRadius.circular(AppRadius.md);
+    final onPressed = this.onPressed;
+    final icon = this.icon;
     final canTap = onPressed != null && !loading && !success;
     final live = canTap || loading || success;
     final filled = variant == AppButtonVariant.filled;
-    final fg = !live ? p.textSecondary : (filled ? Colors.white : t.ink(p));
+    final fg = !live ? p.textSecondary : (filled ? onFillOf(t, p) : secondaryInkOf(t, p));
 
     final Widget content;
     if (loading) {
@@ -235,67 +208,37 @@ class _PrimaryActionButtonState extends State<PrimaryActionButton>
             minHeight: 48,
             minWidth: expand ? 0 : 120,
           ),
+          // Düz yüzey (sade stil): degrade, gölge ve cila yok.
           decoration: BoxDecoration(
             borderRadius: radius,
-            gradient: filled && live ? t.gradient : null,
             color: !live
                 ? p.border
-                : (variant == AppButtonVariant.tonal ? t.tint(p) : null),
-            border: variant == AppButtonVariant.outline
-                ? Border.all(
-                    color: live ? t.hue.withValues(alpha: 0.6) : p.border,
-                    width: 1.2,
-                  )
-                : null,
-            boxShadow: filled && live
-                ? [
-                    BoxShadow(
-                      color: t.a.withValues(alpha: 0.30),
-                      blurRadius: 12,
-                      offset: const Offset(0, 4),
-                    ),
-                  ]
-                : null,
+                : (filled
+                      ? fillOf(t, p)
+                      : (variant == AppButtonVariant.tonal ? p.surface : null)),
+            border: live && !filled ? Border.all(color: p.border) : null,
           ),
-          child: Stack(
-            fit: StackFit.passthrough,
-            children: [
-              // Cila yalnız canlı dolu düğmede: zeminin üstünde, dalga ve içeriğin altında.
-              if (filled && live)
-                Positioned.fill(
-                  child: Gloss(
-                    radius: AppRadius.md,
-                    strength: 0.85,
-                    sweep: _sweep,
-                  ),
+          child: Material(
+            type: MaterialType.transparency,
+            child: InkWell(
+              borderRadius: radius,
+              // Dalga ve vurgu metin renginde: düz dolgunun üstünde de seçilir (koyu temada açık zeminde koyu).
+              splashColor: fg.withValues(alpha: 0.16),
+              highlightColor: fg.withValues(alpha: 0.08),
+              onTap: canTap
+                  ? () {
+                      HapticFeedback.selectionClick();
+                      onPressed();
+                    }
+                  : null,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpace.lg,
+                  vertical: AppSpace.md,
                 ),
-              Material(
-                type: MaterialType.transparency,
-                child: InkWell(
-                  borderRadius: radius,
-                  // Gradyan üstünde varsayılan gri dalga neredeyse görünmez: dolguda beyaz, diğerlerinde ton.
-                  splashColor: (filled ? Colors.white : t.hue).withValues(
-                    alpha: filled ? 0.24 : 0.18,
-                  ),
-                  highlightColor: (filled ? Colors.white : t.hue).withValues(
-                    alpha: filled ? 0.10 : 0.08,
-                  ),
-                  onTap: canTap
-                      ? () {
-                          HapticFeedback.selectionClick();
-                          onPressed();
-                        }
-                      : null,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpace.lg,
-                      vertical: AppSpace.md,
-                    ),
-                    child: Center(widthFactor: 1, child: content),
-                  ),
-                ),
+                child: Center(widthFactor: 1, child: content),
               ),
-            ],
+            ),
           ),
         ),
       ),

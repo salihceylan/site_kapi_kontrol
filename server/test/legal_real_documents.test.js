@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {
   DEFAULT_LEGAL_DIR,
+  LEGAL_OPTIONAL_PLACEHOLDERS,
   LEGAL_PLACEHOLDERS,
   UNFILLED,
   clearLegalCache,
@@ -34,6 +35,19 @@ const EXPECTED_REQUIRED_FOR = {
   terms: ['register'],
 };
 const MARKER = /\[(?:KARAR\/BİLGİ GEREKLİ|AVUKAT DOĞRULASIN)/u;
+// Karar H1 (2026-10-21): Cenk'in verdiği unvan, adres ve telefon; KEP ve MERSİS BOŞ. Belgeler iletişim e-postası da istediği için örnek bir
+// e-posta eklenir (yalnız KEP / MERSİS boşluğunun etkisini ayırmak için).
+const H1_SETTINGS = {
+  company_name: 'GÜDE TEKNOLOJİ LTD. ŞTİ.',
+  company_address: 'Yalı Mah. 6436 Sok. No:37/A Karşıyaka / İzmir',
+  contact_phone: '0543 795 60 44',
+  contact_email: 'kvkk@example.com',
+  mersis_no: '',
+  kep_address: '',
+};
+// Değeri silinmiş ama etiketi kalmış satır: "MERSİS ;", "KEP.", "- **MERSİS no:** " gibi.
+const DANGLING_LABEL = /(?:MERSİS|KEP)(?:\s+(?:no|numarası|adresi))?[\s:*]*(?:$|[;.,])/mu;
+const usesPlaceholder = (body, key) => new RegExp(`\\{\\{\\s*${key}\\s*\\}\\}`, 'i').test(body);
 const ALLOWED_TAG = /<\/?(?:h[1-6]|p|ul|ol|li|strong|hr)(?: class="(?:sub|meta|notice)")?>|<a href="https:\/\/[^"<>]*" rel="noopener noreferrer nofollow" target="_blank">|<\/a>/g;
 
 let files; // [{ name, text, meta, body }]
@@ -120,6 +134,45 @@ describe('gerçek server/legal belgeleri', () => {
     assert.deepEqual(Object.keys(privacy), ['id', 'title', 'version', 'effective_date', 'required_for', 'complete', 'content_md']);
     assert.ok(privacy.content_md.includes('Örnek Teknoloji A.Ş.'), 'şirket adı yer tutucudan doldu');
     assert.ok(/^# Gizlilik Politikası/m.test(privacy.content_md));
+  });
+
+  it('karar H1: KEP ve MERSİS boşken hiçbir belgede "[……]" ya da değeri boş kalmış "MERSİS" / "KEP" etiketi yok; tamlık TAM ayarla aynı', () => {
+    const h1 = resolveDocuments(raw, H1_SETTINGS);
+    const full = resolveDocuments(raw, FULL);
+    for (const doc of h1) {
+      const source = raw.find((d) => d.id === doc.id)?.body ?? '';
+      assert.ok(!doc.content_md.includes(UNFILLED), `${doc.id}: "[……]" kaldı`);
+      const dangling = doc.content_md.split('\n').find((line) => DANGLING_LABEL.test(line));
+      assert.equal(dangling, undefined, `${doc.id}: boş etiket kaldı: ${dangling?.slice(0, 160)}`);
+      assert.equal(doc.complete, full.find((d) => d.id === doc.id).complete, `${doc.id}: boş KEP / MERSİS tamlığı değiştirmemeli`);
+      for (const key of ['company_name', 'company_address', 'contact_phone']) {
+        if (usesPlaceholder(source, key)) {
+          assert.ok(doc.content_md.includes(H1_SETTINGS[key]), `${doc.id}: ${key} metne yazılmalı`);
+        }
+      }
+    }
+  });
+
+  it('TAM ayarla KEP ve MERSİS değerleri, şablonda geçtikleri her belgede metne yazılır', () => {
+    for (const doc of resolveDocuments(raw, FULL)) {
+      const source = raw.find((d) => d.id === doc.id)?.body ?? '';
+      for (const key of LEGAL_OPTIONAL_PLACEHOLDERS) {
+        if (usesPlaceholder(source, key)) {
+          assert.ok(doc.content_md.includes(FULL[key]), `${doc.id}: ${key}`);
+        }
+      }
+    }
+  });
+
+  it('şablonlarda isteğe bağlı yer tutucu yalnız KENDİ koşullu bölümünün içinde geçer (bölüm dışında boşken "[……]" üretirdi)', () => {
+    for (const file of files) {
+      for (const line of file.body.split('\n')) {
+        for (const key of LEGAL_OPTIONAL_PLACEHOLDERS) {
+          const outside = line.replace(new RegExp(`\\{\\{#\\s*${key}\\s*\\}\\}.*?\\{\\{/\\s*${key}\\s*\\}\\}`, 'gi'), '');
+          assert.ok(!usesPlaceholder(outside, key), `${file.name}: bölüm dışında {{${key}}}: ${line.slice(0, 140)}`);
+        }
+      }
+    }
   });
 
   it('her belge sayfaya dönüşür: yalnız izinli etiketler, tek h1, betik yok, bağlantılar yalnız https; tamamlanmamışsa uyarı', () => {

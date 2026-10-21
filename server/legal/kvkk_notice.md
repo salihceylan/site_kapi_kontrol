@@ -18,9 +18,9 @@ Platformda iki ayrı veri sorumlusu bulunur. Hangi verilerden kimin sorumlu oldu
 ### 1.1 Güde Teknoloji: hesap ve Platform verileri
 
 - **Unvan:** {{company_name}}
-- **MERSİS no:** {{mersis_no}}
+{{#mersis_no}}- **MERSİS no:** {{mersis_no}}{{/mersis_no}}
 - **Adres:** {{company_address}}
-- **KEP adresi:** {{kep_address}}
+{{#kep_address}}- **KEP adresi:** {{kep_address}}{{/kep_address}}
 - **E-posta:** {{contact_email}}
 - **Telefon:** {{contact_phone}}
 
@@ -127,7 +127,7 @@ haklarına sahipsiniz.
 
 ## 9. Başvuru yöntemi
 
-**Hesap ve Platform Verileri için (Güde):** başvurunuzu Veri Sorumlusuna Başvuru Usul ve Esasları Hakkında Tebliğ'e uygun olarak; sistemde kayıtlı e-posta adresinizle {{contact_email}} adresine e-posta göndererek, {{kep_address}} adresine kayıtlı elektronik posta (KEP) veya güvenli elektronik imza ile ya da {{company_address}} adresine yazılı olarak iletebilirsiniz.
+**Hesap ve Platform Verileri için (Güde):** başvurunuzu Veri Sorumlusuna Başvuru Usul ve Esasları Hakkında Tebliğ'e uygun olarak; sistemde kayıtlı e-posta adresinizle {{contact_email}} adresine e-posta göndererek{{#kep_address}}, {{kep_address}} adresine kayıtlı elektronik posta (KEP) veya güvenli elektronik imza ile{{/kep_address}} ya da {{company_address}} adresine yazılı olarak iletebilirsiniz.
 
 **Siteye ilişkin kayıtlar için (Site Yönetimi):** başvurunuzu doğrudan Site Yönetimine yapabilirsiniz. Güde, Site Yönetiminin başvurularınızı yanıtlamasına yardım eder; başvurunuzu bize iletirseniz ilgili Site Yönetimine yönlendirebiliriz.
 

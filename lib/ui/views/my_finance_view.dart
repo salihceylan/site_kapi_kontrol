@@ -27,6 +27,9 @@ import 'package:site_kapi_kontrol/ui/widgets/my_finance_4b_parts.dart';
 ///   sayfa kabuğunun aşağı çekip yenilemesinden çağrılır.
 /// - Faz 4b: her dairenin kartında **Makbuzlarım** ve **Ekstre** PDF'i; makbuzlu satırda "Makbuz MK-..." ve tazminat
 ///   satırında "Nasıl hesaplandı?" (hepsi salt okuma; sakin hiçbir şey yazmaz).
+/// - İki hesap (İP-1A): kartın tutarları kişinin KENDİ hesabıdır (malik -> "Ev sahibi hesabı", kiracı -> "Kiracı hesabı") ve
+///   hesabın adı yazılır. Borç sorumlusu "malik ve kiracı" olan dairede malik kiracı hesabını kartın altında SALT OKUNUR
+///   ayrı bölümde görür; bu tutarlar kendi hesabına ve toplamlara eklenmez.
 class MyFinanceView extends StatefulWidget {
   const MyFinanceView({super.key, required this.authService, this.now});
 
@@ -282,7 +285,9 @@ class _MyFinanceCardState extends State<MyFinanceCard> {
     final hidden = recent.length - shown.length;
 
     final semantic = StringBuffer(widget.showSite && site.isNotEmpty ? '$site. ' : '');
-    semantic.write('Daire: $title. ${balance.semanticLabel}.');
+    semantic.write('Daire: $title.');
+    if (item.accountParty != null) semantic.write(' ${_ownAccountText(item.accountParty!)}.');
+    semantic.write(' ${balance.semanticLabel}.');
     if (hasOverdue) semantic.write(' Vadesi geçen: ${moneySemanticLabel(overdue)}.');
     if (item.nextDueDate != null) {
       semantic.write(' Sıradaki vade: ${formatCrmDate(item.nextDueDate)}');
@@ -309,6 +314,12 @@ class _MyFinanceCardState extends State<MyFinanceCard> {
                   if (widget.showSite && site.isNotEmpty)
                     Text(site, style: th.bodySmall?.copyWith(color: p.textSecondary)),
                   Text(title, style: th.titleMedium),
+                  if (item.accountParty != null)
+                    Text(
+                      _ownAccountText(item.accountParty!),
+                      key: const ValueKey<String>('my_finance_account_party'),
+                      style: th.bodySmall?.copyWith(color: p.textSecondary, fontWeight: FontWeight.w700),
+                    ),
                   const SizedBox(height: AppSpace.md),
                   Row(
                     children: [
@@ -412,6 +423,169 @@ class _MyFinanceCardState extends State<MyFinanceCard> {
           if (widget.authService != null) ...[
             const SizedBox(height: AppSpace.md),
             MyFinanceActions(authService: widget.authService!, item: item, now: widget.now),
+          ],
+          // İP-1A: salt okunur kiracı hesabı (borç sorumlusu "malik ve kiracı" olan dairede malike); kendi hesabından AYRI.
+          for (final account in item.readOnlyAccounts) ...[
+            const SizedBox(height: AppSpace.lg),
+            _ReadOnlyAccountSection(
+              key: ValueKey<String>('my_finance_ro_${account.accountParty?.apiValue ?? 'hesap'}'),
+              item: item,
+              account: account,
+              authService: widget.authService,
+              now: widget.now,
+              onOpenReceipt: _openReceipt,
+              onExplainLateFee: _explainLateFee,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+String _ownAccountText(AccountParty party) => 'Kendi hesabınız: ${party.label}';
+
+/// Salt okunur hesap bölümü (İP-1A): başlık, açıklama, bakiye / vadesi geçen / sıradaki vade ve son hareketler (ilk 5,
+/// "Tümünü göster"); ekstre PDF'i bu hesabın görünümüyle. Hiçbir yazma eylemi yoktur.
+class _ReadOnlyAccountSection extends StatefulWidget {
+  const _ReadOnlyAccountSection({
+    super.key,
+    required this.item,
+    required this.account,
+    this.authService,
+    this.now,
+    required this.onOpenReceipt,
+    required this.onExplainLateFee,
+  });
+
+  final MyFinanceApartment item;
+  final MyFinanceAccount account;
+  final AuthService? authService;
+  final DateTime Function()? now;
+  final Future<void> Function(ReceiptRef ref) onOpenReceipt;
+  final Future<void> Function(LedgerEntry entry) onExplainLateFee;
+
+  @override
+  State<_ReadOnlyAccountSection> createState() => _ReadOnlyAccountSectionState();
+}
+
+class _ReadOnlyAccountSectionState extends State<_ReadOnlyAccountSection> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final th = Theme.of(context).textTheme;
+    final p = context.palette;
+    final account = widget.account;
+    final label = account.accountParty?.label ?? 'Diğer hesap';
+    final balance = describeBalance(account.balanceMinor);
+    final overdue = account.overdueMinor;
+    final hasOverdue = overdue != null && overdue > 0;
+    final recent = account.recent;
+    final shown = _expanded || recent.length <= MyFinanceCard.collapsedCount
+        ? recent
+        : recent.take(MyFinanceCard.collapsedCount).toList();
+    final hidden = recent.length - shown.length;
+    final prefix = 'my_finance_ro_${account.accountParty?.apiValue ?? 'hesap'}';
+
+    final semantic = StringBuffer('$label, salt okunur. ${balance.semanticLabel}.');
+    if (hasOverdue) semantic.write(' Vadesi geçen: ${moneySemanticLabel(overdue)}.');
+    if (account.nextDueDate != null) {
+      semantic.write(' Sıradaki vade: ${formatCrmDate(account.nextDueDate)}');
+      if (account.nextDueMinor != null) semantic.write(', ${moneySemanticLabel(account.nextDueMinor!)}');
+      semantic.write('.');
+    }
+    semantic.write(' $myFinanceReadOnlyNote');
+    if (account.visibleFrom != null) semantic.write(' ${myFinanceScopeNote(account.visibleFrom!)}');
+    if (account.offsetNote) semantic.write(' ${myFinanceOffsetNote()}');
+
+    return DialogPanel(
+      tone: AppTone.info,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Semantics(
+            container: true,
+            label: semantic.toString(),
+            child: ExcludeSemantics(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Wrap(
+                    spacing: AppSpace.sm,
+                    runSpacing: AppSpace.xs,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Text(label, key: ValueKey<String>('${prefix}_title'), style: th.titleSmall),
+                      const DialogMetaPill('Salt okunur', tone: AppTone.info, icon: Icons.visibility_rounded),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpace.xs),
+                  Text(myFinanceReadOnlyNote, style: th.bodySmall?.copyWith(color: p.textSecondary)),
+                  const SizedBox(height: AppSpace.sm),
+                  Text(
+                    balance.badgeText,
+                    key: ValueKey<String>('${prefix}_balance'),
+                    style: th.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                  ),
+                  if (hasOverdue)
+                    Text(
+                      'Vadesi geçen: ${formatMinor(overdue)}',
+                      style: th.bodyMedium?.copyWith(color: AppTone.warning.ink(p), fontWeight: FontWeight.w700),
+                    ),
+                  if (account.nextDueDate != null)
+                    Text(
+                      account.nextDueMinor == null
+                          ? 'Sıradaki vade: ${formatCrmDate(account.nextDueDate)}'
+                          : 'Sıradaki vade: ${formatCrmDate(account.nextDueDate)} • ${formatMinor(account.nextDueMinor!)}',
+                      style: th.bodyMedium,
+                    ),
+                  if (account.visibleFrom != null)
+                    Text(myFinanceScopeNote(account.visibleFrom!), style: th.bodySmall?.copyWith(color: p.textSecondary)),
+                  if (account.offsetNote)
+                    Text(myFinanceOffsetNote(), style: th.bodySmall?.copyWith(color: p.textSecondary)),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: AppSpace.sm),
+          if (recent.isEmpty)
+            Text('Bu hesapta hareket yok.', key: ValueKey<String>('${prefix}_empty'), style: th.bodyMedium?.copyWith(color: p.textSecondary))
+          else ...[
+            for (final entry in shown)
+              Padding(
+                padding: const EdgeInsets.only(bottom: AppSpace.sm),
+                child: LedgerEntryTile(
+                  entry: entry,
+                  related: {for (final e in recent) e.id: e},
+                  onOpenReceipt: widget.authService == null || entry.receipt == null ? null : () => widget.onOpenReceipt(entry.receipt!),
+                  onExplainLateFee: widget.authService == null || !entry.isLateFee ? null : () => widget.onExplainLateFee(entry),
+                ),
+              ),
+            if (hidden > 0 || _expanded && recent.length > MyFinanceCard.collapsedCount)
+              Align(
+                alignment: Alignment.center,
+                child: PrimaryActionButton(
+                  key: ValueKey<String>('${prefix}_toggle'),
+                  label: _expanded ? 'Daha az göster' : 'Tümünü göster ($hidden)',
+                  icon: _expanded ? Icons.expand_less_rounded : Icons.expand_more_rounded,
+                  variant: AppButtonVariant.tonal,
+                  expand: false,
+                  onPressed: () => setState(() => _expanded = !_expanded),
+                ),
+              ),
+          ],
+          if (widget.authService != null && account.accountParty != null) ...[
+            const SizedBox(height: AppSpace.sm),
+            MyFinanceActions(
+              key: ValueKey<String>('${prefix}_actions'),
+              authService: widget.authService!,
+              item: widget.item,
+              now: widget.now,
+              accountParty: account.accountParty,
+              showReceipts: false,
+              keyPrefix: prefix,
+            ),
           ],
         ],
       ),

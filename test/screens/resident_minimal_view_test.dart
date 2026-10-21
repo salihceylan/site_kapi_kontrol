@@ -245,13 +245,11 @@ void main() {
         .map((w) => (w.title! as Text).data!)
         .toList();
 
-    testWidgets('varsayılan boş: menü eskisi gibi', (t) async {
+    testWidgets('varsayılan boş: menü eskisi gibi (İP-1D: Eller Serbest ve Profilim Ayarlar panelinde)', (t) async {
       await openDrawer(t, menu());
       expect(titles(t), <String>[
         'Panel',
         'Daireye Katıl & Cihaz Ekle',
-        'Eller Serbest & Kestirmeler',
-        'Profilim',
         'Çıkış Yap',
       ]);
     });
@@ -304,13 +302,17 @@ void main() {
           ],
         ),
       );
-      expect(titles(t).take(5).toList(), <String>[
+      // İP-1D (G2): Kapılar "Site hizmetleri" başlığındadır; ek komutlar onun hemen altında.
+      expect(titles(t), <String>[
         'Panel',
+        'Daireye Katıl & Cihaz Ekle',
+        'Duyurular',
         'Kapılar',
         'Kapıya QR Göster',
-        'Duyurular',
-        'Daireye Katıl & Cihaz Ekle',
+        'Çıkış Yap',
       ]);
+      final doors = t.getRect(find.widgetWithText(ListTile, 'Kapılar'));
+      expect(t.getRect(find.text('Site hizmetleri')).bottom, lessThanOrEqualTo(doors.top + 0.01));
     });
 
     testWidgets('320 x 2,0 ve 360 x 1,5 (açık+koyu): taşma yok', (t) async {
@@ -421,13 +423,15 @@ void main() {
           .map((w) => (w.title! as Text).data!)
           .toList();
       expect(titles.first, 'Panel');
-      expect(titles[1], 'Kapılar', reason: 'kapı paneli Panel\'in hemen altında');
-      expect(titles.sublist(2, 5), <String>[
+      // İP-1D (G2): Kapılar "Site hizmetleri" başlığında; kapı komutları onun hemen altında.
+      final doors = titles.indexOf('Kapılar');
+      expect(doors, greaterThan(0));
+      expect(titles.sublist(doors + 1, doors + 4), <String>[
         'Kapıya QR Göster',
         'Kapı Ekranından QR Oku',
         'Kurye / Misafir Geçiş Linki Oluştur',
       ]);
-      expect(titles, contains('Profilim'));
+      expect(titles, isNot(contains('Profilim')), reason: 'Profilim sağ üstteki Ayarlar panelinde');
       await dispose(t);
     });
 

@@ -30,16 +30,22 @@ import {
   idempotencyConflict,
   invalidBody,
   normalizeFreeText,
+  parseAccountPartyQuery,
   parseIdempotencyKey,
   today,
 } from './finance_common.js';
 import { minorToNumber } from './finance_money.js';
-import { enabledFinanceSites, loadResidentLedger, loadVisibleApartments, residentSinceOf } from './finance_read_service.js';
+import { enabledFinanceSites, loadResidentLedger, loadVisibleAccounts, rowsOfView, viewSinceOf } from './finance_read_service.js';
+import { accountPartySql } from './finance_parties.js';
 import { residentEntryOf, residentView } from './finance_resident_view.js';
 import { lockActorRow, recordFinanceAudit, withFinanceTransaction } from './finance_tx.js';
 import { apartmentLabel, escapeLike, foldSql, foldText, parsePositiveId, toIso } from './people_common.js';
 
 export const RECEIPT_TEMPLATE_VERSION = 1;
+
+// İki hesap (İP-1A): tahsilat satırının hesabı (takma ad `le` / `l`; 052 öncesi satır payer_party'den türetilir).
+const RECEIPT_ACCOUNT = accountPartySql('le');
+const RECEIPT_ACCOUNT_L = accountPartySql('l');
 export const RECEIPT_REASON_CODES = Object.freeze(['payment_reversed', 'payment_corrected', 'issued_in_error']);
 
 /** Şablon sürüm 1 sabit metinleri (taslak) [AVUKAT DOĞRULASIN]. İstemci PDF'i bu metinleri sunucudan alır (tek kaynak). */
@@ -96,7 +102,10 @@ export function codesMatch(expected, supplied) {
   return a.length === b.length && a.length > 0 && timingSafeEqual(a, b);
 }
 
-/** Ödeyen: ödeme anındaki payer_party'ye karşılık gelen ilişki (both -> malik). */
+/**
+ * Ödeyen: tahsilatın HESABINA karşılık gelen ilişki (İP-1A: kiracı hesabı -> güncel kiracı, ev sahibi hesabı -> güncel malik). 052 öncesi tahsilatın hesabı
+ * payer_party'den türetildiği için (both -> ev sahibi) eski davranış aynen korunur.
+ */
 export const relationForPayer = (party) => (party === 'tenant' ? 'tenant' : 'owner');
 
 /** Değişmez snapshot (v1). TCKN / telefon / e-posta / adres / bakiye / serbest açıklama YOK. */
@@ -112,7 +121,8 @@ export function buildSnapshot(input) {
     method: input.method,
     site: { name: input.siteName },
     apartment: { label: input.apartmentLabel },
-    payer: { party: input.payerParty, name: input.payerName ?? null },
+    // İP-1A: account_party = tahsilatın yazıldığı hesap (owner | tenant); 052 öncesi makbuzda yoktur
+    payer: { party: input.payerParty, name: input.payerName ?? null, ...(input.accountParty ? { account_party: input.accountParty } : {}) },
     issuer: { name: input.issuerName ?? null },
     cancels_number: input.cancelsNumber ?? null,
     mahsup: 'oldest_due_first',
@@ -133,7 +143,8 @@ const RECEIPT_SELECT = `
     r.verification_code, r.template_version, r.cancel_reason_code, r.cancel_note, u.full_name AS issued_by_name,
     c.id AS cancelled_by_id, c.receipt_year AS cancelled_by_year, c.receipt_no AS cancelled_by_no,
     t.receipt_year AS target_year, t.receipt_no AS target_no,
-    (SELECT COUNT(*) FROM receipt_print_events p WHERE p.receipt_id = r.id)::INTEGER AS copy_count
+    (SELECT COUNT(*) FROM receipt_print_events p WHERE p.receipt_id = r.id)::INTEGER AS copy_count,
+    (SELECT ${RECEIPT_ACCOUNT} FROM ledger_entries le WHERE le.id = r.ledger_entry_id) AS account_party
   FROM receipts r
   LEFT JOIN receipts c ON c.cancels_receipt_id = r.id
   LEFT JOIN receipts t ON t.id = r.cancels_receipt_id
@@ -160,6 +171,8 @@ export function mapReceiptSummary(row) {
     amount_minor: minorToNumber(row.amount_minor),
     apartment: { id: Number(row.apartment_id), label: snapshot.apartment?.label ?? null },
     payer_name: snapshot.payer?.name ?? null,
+    // İki hesap (İP-1A): tahsilatın hesabı (owner | tenant)
+    account_party: row.account_party ?? null,
   };
 }
 
@@ -221,7 +234,7 @@ class ReceiptSecretMissing extends PlatformError {
   }
 }
 
-async function loadIssueContext(client, siteCode, apartmentId, payerParty, issuerUserCode) {
+async function loadIssueContext(client, siteCode, apartmentId, accountParty, issuerUserCode) {
   const site = await client.query(`SELECT name FROM sites WHERE site_code = $1`, [siteCode]);
   const apartment = await client.query(
     `SELECT a.unit_label, b.block_name FROM apartments a INNER JOIN site_blocks b ON b.id = a.block_id WHERE a.id = $1 AND a.site_code = $2`,
@@ -237,7 +250,7 @@ async function loadIssueContext(client, siteCode, apartmentId, payerParty, issue
       ORDER BY r.id
       LIMIT 1
     `,
-    [apartmentId, relationForPayer(payerParty)],
+    [apartmentId, relationForPayer(accountParty)],
   );
   const issuer =
     issuerUserCode === null ? { rows: [] } : await client.query(`SELECT full_name FROM users WHERE user_code = $1`, [issuerUserCode]);
@@ -285,6 +298,7 @@ async function insertReceipt(client, input) {
     siteName: input.context.siteName,
     apartmentLabel: input.context.apartmentLabel,
     payerParty: input.payerParty,
+    accountParty: input.accountParty ?? null,
     payerName: input.context.payerName,
     issuerName: input.context.issuerName,
     cancelsNumber: input.cancelsNumber ?? null,
@@ -327,6 +341,7 @@ async function loadPaymentForReceipt(client, siteCode, entryId) {
   const result = await client.query(
     `
       SELECT l.id, l.apartment_id, l.kind, (-l.amount_minor)::TEXT AS amount, to_char(l.entry_date, 'YYYY-MM-DD') AS entry_date, l.method, l.payer_party,
+             ${RECEIPT_ACCOUNT_L} AS account_party,
              EXISTS (SELECT 1 FROM ledger_entries rv WHERE rv.reverses_entry_id = l.id) AS reversed
       FROM ledger_entries l WHERE l.id = $1 AND l.site_code = $2
     `,
@@ -356,7 +371,7 @@ export async function ensureReceiptForPayment(client, { siteCode, entryId, actor
   if (payment.reversed === true) {
     throw paymentReversed();
   }
-  const context = await loadIssueContext(client, siteCode, Number(payment.apartment_id), payment.payer_party, actorInfo.userCode);
+  const context = await loadIssueContext(client, siteCode, Number(payment.apartment_id), payment.account_party, actorInfo.userCode);
   const id = await insertReceipt(client, {
     siteCode,
     kind: 'collection',
@@ -366,6 +381,7 @@ export async function ensureReceiptForPayment(client, { siteCode, entryId, actor
     paidOn: payment.entry_date,
     method: payment.method,
     payerParty: payment.payer_party,
+    accountParty: payment.account_party,
     context,
     actorUserCode: actorInfo.userCode,
   });
@@ -403,6 +419,7 @@ async function cancelReceiptRow(client, { siteCode, target, reasonCode, note, id
     paidOn: target.paid_on,
     method: snapshot.method ?? null,
     payerParty: snapshot.payer?.party ?? 'owner',
+    accountParty: snapshot.payer?.account_party ?? null,
     context: secretContext,
     reasonCode,
     note,
@@ -722,15 +739,17 @@ export async function getReceipt(siteCode, rawId, db = pool) {
 const INT32_MAX = 2147483647;
 
 /**
- * Sakinin görebildiği daireler ve makbuzu gösterilebilecek tahsilat kayıtları. Makbuz, bağlı olduğu tahsilat sakinin "Borcum" görünümünde
- * görünüyorsa görünür (aynı kural: finance_resident_view.residentView; önceki malikin / kiracının tahsilatı ve makbuzu yeni sakine görünmez).
+ * Sakinin görebildiği daireler ve makbuzu gösterilebilecek tahsilat kayıtları. Makbuz, bağlı olduğu tahsilat sakinin "Borcum" görünümlerinden birinde
+ * görünüyorsa görünür (aynı kural: finance_resident_view.residentView; önceki malikin / kiracının tahsilatı ve makbuzu yeni sakine görünmez). İki hesap
+ * (İP-1A): görünüm hesap başınadır (kendi hesabı + `both` dairede malike salt okunur kiracı hesabı); `ownOnly` yalnız kendi hesabı (kişisel veri dışa
+ * aktarması); `accountParty` yalnız o hesabın görünümü. `sinceAt`: tahsilat kimliği -> o görünümün ilişki başlangıcı (ödeyen adı gizleme).
  */
-async function visibleApartmentIds(db, authUser, now = new Date()) {
+async function visibleApartmentIds(db, authUser, now = new Date(), { ownOnly = false, accountParty = null } = {}) {
   const userCode = parsePositiveId(authUser?.user_code ?? authUser?.userCode ?? authUser?.id, INT32_MAX);
   if (userCode === null) {
     return { siteCodes: [], apartmentIds: [], paymentIds: [], sinceAt: new Map() };
   }
-  const visible = await loadVisibleApartments(db, userCode);
+  const visible = await loadVisibleAccounts(db, userCode);
   const enabled = await enabledFinanceSites(db, [...new Set(visible.map((row) => Number(row.site_code)))]);
   const rows = visible.filter((row) => enabled.has(Number(row.site_code)));
   const siteCodes = [...new Set(rows.map((row) => Number(row.site_code)))];
@@ -738,15 +757,22 @@ async function visibleApartmentIds(db, authUser, now = new Date()) {
   const ledger = await loadResidentLedger(db, siteCodes, apartmentIds);
   const todayIso = today(now);
   const paymentIds = [];
+  const sinceAt = new Map();
   for (const row of rows) {
     const id = Number(row.apartment_id);
     const own = ledger.filter((entry) => Number(entry.apartment_id) === id);
-    const view = residentView(own.map(residentEntryOf), { since: residentSinceOf(row, todayIso), today: todayIso });
-    for (const entry of own) {
-      if (entry.kind === 'payment' && view.visibleIds.has(Number(entry.id))) paymentIds.push(Number(entry.id));
+    const views = (ownOnly ? row.views.slice(0, 1) : row.views).filter((view) => accountParty === null || view.account_party === accountParty);
+    for (const view of views) {
+      const viewRows = rowsOfView(own, view);
+      const result = residentView(viewRows.map(residentEntryOf), { since: viewSinceOf(view, todayIso), today: todayIso });
+      for (const entry of viewRows) {
+        if (entry.kind === 'payment' && result.visibleIds.has(Number(entry.id))) {
+          paymentIds.push(Number(entry.id));
+          sinceAt.set(Number(entry.id), view.relation_since_at ?? null);
+        }
+      }
     }
   }
-  const sinceAt = new Map(rows.map((row) => [Number(row.apartment_id), row.relation_since_at ?? null]));
   return { siteCodes, apartmentIds, paymentIds, sinceAt };
 }
 
@@ -755,7 +781,7 @@ async function visibleApartmentIds(db, authUser, now = new Date()) {
  * birine ait olabilir: ör. önceki kiracının taşınmadan sonra yaptığı ödeme). Yalnız yanıt kopyası değişir; kayıt ve doğrulama kodu aynı kalır.
  */
 function hidePayerBeforeRelation(row, sinceAt) {
-  const since = sinceAt.get(Number(row.apartment_id));
+  const since = sinceAt.get(Number(row.ledger_entry_id));
   if (!since || !row.issued_at || new Date(row.issued_at).getTime() >= new Date(since).getTime()) {
     return row;
   }
@@ -763,10 +789,13 @@ function hidePayerBeforeRelation(row, sinceAt) {
   return { ...row, snapshot };
 }
 
-/** GET /app/my-finance/receipts -> { items, next_before_id } (yalnız çağıranın F2.05 kuralıyla borcu görebildiği daireler). */
-export async function listMyReceipts(authUser, query = {}, db = pool) {
+/**
+ * GET /app/my-finance/receipts -> { items, next_before_id } (yalnız çağıranın görünümlerindeki tahsilatların makbuzları; `?account_party=` o hesapla sınırlar).
+ * `ownOnly` (kişisel veri dışa aktarması): yalnız kendi hesabı.
+ */
+export async function listMyReceipts(authUser, query = {}, db = pool, { ownOnly = false } = {}) {
   const filters = parseReceiptsQuery(query);
-  const scope = await visibleApartmentIds(db, authUser);
+  const scope = await visibleApartmentIds(db, authUser, new Date(), { ownOnly, accountParty: parseAccountPartyQuery(query.account_party) });
   if (scope.apartmentIds.length === 0 || (filters.apartmentId !== null && !scope.apartmentIds.includes(filters.apartmentId))) {
     return { items: [], next_before_id: null };
   }

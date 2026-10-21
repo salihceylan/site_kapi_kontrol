@@ -8,6 +8,10 @@
 //
 // Not: widget testleri Ahem yazı tipiyle çalışır (her harf 1 em genişliğinde): satır sarma gerçek
 // cihazdan daha serttir; geçen taşma testi gerçek yazı tipinde de geçer.
+//
+// İP-1D (G2): çekmece başlıklar altında (boş başlık yok); ayar öğeleri (Profilim, Modüller, cihazlar, kullanıcı yönetimi,
+// Denetim Kaydı ...) çekmecede değil, sağ üstteki dişliden açılan Ayarlar panelindedir (yan_menu_groups_test.dart). Öğe
+// sayıları ve sıralar bu yüzden çekmecenin gruplu sırasından ([_Cfg.drawerOrder]) gelir.
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -23,32 +27,51 @@ import 'package:site_kapi_kontrol/ui/widgets/yan_menu.dart';
 
 import '../design/harness.dart';
 
-/// Bir çekmece yapılandırması (rol + mod + seçili öğe + başlık metinleri).
+/// Bir çekmece yapılandırması (rol + mod + seçili öğe + başlık metinleri + ek öğeler).
 class _Cfg {
   const _Cfg(
     this.name,
-    this.role,
-    this.itemCount, {
+    this.role, {
     this.selected = SirketMenuItem.dashboard,
     this.resident = false,
     this.toggle = false,
     this.fullName = 'Ali Veli',
     this.email = 'ali@example.com',
+    this.extras = const <SirketMenuItem>{},
   });
 
   final String name;
   final UserRole role;
-
-  /// Menü öğesi sayısı (mod geçişi ve "Çıkış Yap" hariç).
-  final int itemCount;
   final SirketMenuItem selected;
   final bool resident;
   final bool toggle;
   final String fullName;
   final String email;
 
+  /// Rol listesinde olmayan ek öğeler (HomePage'in modül öğeleri gibi).
+  final Set<SirketMenuItem> extras;
+
+  List<SirketMenuItem> get _visible => YanMenu.visibleItems(
+        role: role,
+        isResidentMode: resident,
+        canToggleMode: toggle,
+        additionalItems: extras,
+      );
+
+  /// Çekmecedeki öğeler, ekrandaki (gruplu) sırayla; ayar öğeleri burada değil.
+  List<SirketMenuItem> get drawerOrder => YanMenu.drawerItems(_visible);
+
+  /// Çekmecedeki başlık (grup) sayısı.
+  int get headerCount => YanMenu.drawerSections(_visible).length;
+
+  /// Menü öğesi sayısı (mod geçişi ve "Çıkış Yap" hariç).
+  int get itemCount => drawerOrder.length;
+
   /// Ekrandaki ListTile sayısı: öğeler + (geçiş) + çıkış.
   int get tileCount => itemCount + (toggle ? 1 : 0) + 1;
+
+  /// StaggeredEntry sayısı: ListTile'lar + grup başlıkları.
+  int get entryCount => tileCount + headerCount;
 
   /// Seçili öğenin ListTile sırası (geçiş öğesi varsa başta).
   int selectedTileIndex(List<SirketMenuItem> order) =>
@@ -59,54 +82,65 @@ const String _longName = 'Muhammet Alperen Yıldırım Kaya';
 const String _longEmail =
     'muhammet.alperen.yildirim.kaya@ornek-alan-adi.com.tr';
 
+/// Süper kullanıcının modülleri açık sitelerdeki gibi uzun çekmecesi (kaydırma ve kademe testleri için).
+const Set<SirketMenuItem> _superExtras = <SirketMenuItem>{
+  SirketMenuItem.kapilar,
+  SirketMenuItem.duyurular,
+  SirketMenuItem.finans,
+  SirketMenuItem.belgeler,
+  SirketMenuItem.talepler,
+  SirketMenuItem.rezervasyonlar,
+  SirketMenuItem.anketler,
+  SirketMenuItem.kararDefteri,
+  SirketMenuItem.ziyaretciKayitlari,
+  SirketMenuItem.sozlesmeler,
+};
+
 const List<_Cfg> _cfgs = <_Cfg>[
-  // Platform modül sistemi: süper kullanıcıya "Modüller", "Modül Talepleri" (Faz 1.1) ve
-  // "Denetim Kaydı", site yöneticisine (yönetici modunda) "Modüller" eklendi (11 -> 14, 6 -> 7).
-  // Platform Faz 2a: ikisine de "Kişiler" eklendi (14 -> 15, 7 -> 8).
-  // Platform: site başvurusu: süper kullanıcıya "Site Başvuruları" eklendi (15 -> 16).
-  // Satışa hazırlık: süper kullanıcıya "Platform Ayarları" ve "İstemci Hataları" eklendi (16 -> 18).
   _Cfg(
-    'süper kullanıcı (18 öğe)',
+    'süper kullanıcı (modüllerle uzun çekmece)',
     UserRole.superUser,
-    18,
     selected: SirketMenuItem.siteler,
+    extras: _superExtras,
   ),
   _Cfg(
     'site yöneticisi + mod geçişi',
     UserRole.siteManager,
-    8,
     selected: SirketMenuItem.siteler,
     toggle: true,
   ),
   _Cfg(
     'site yöneticisi sakin modu',
     UserRole.siteManager,
-    4,
-    selected: SirketMenuItem.ellerSerbest,
+    selected: SirketMenuItem.katilimVeKurulum,
     resident: true,
     toggle: true,
   ),
   _Cfg(
     'daire kullanıcısı (uzun ad/e-posta)',
     UserRole.apartmentOwner,
-    4,
     selected: SirketMenuItem.katilimVeKurulum,
     fullName: _longName,
     email: _longEmail,
+    extras: <SirketMenuItem>{
+      SirketMenuItem.kapilar,
+      SirketMenuItem.duyurular,
+      SirketMenuItem.borcum,
+      SirketMenuItem.belgeler,
+      SirketMenuItem.taleplerim,
+    },
   ),
   _Cfg(
     'bireysel (uzun ad/e-posta)',
     UserRole.individual,
-    3,
-    selected: SirketMenuItem.profilim,
+    selected: SirketMenuItem.katilimVeKurulum,
     fullName: _longName,
     email: _longEmail,
   ),
   _Cfg(
     'bireysel çift mod',
     UserRole.individual,
-    6,
-    selected: SirketMenuItem.kayitliCihazlar,
+    selected: SirketMenuItem.siteler,
     toggle: true,
   ),
 ];
@@ -151,6 +185,7 @@ YanMenu _menu(
     onToggleMode: c.toggle ? (onToggle ?? () {}) : null,
     onSelect: onSelect ?? (_) {},
     onLogout: onLogout ?? () {},
+    additionalItems: c.extras,
   );
 }
 
@@ -310,6 +345,18 @@ double _entryOpacity(WidgetTester t, int i) => t
     )
     .opacity;
 
+/// [item] öğesinin satırını saran StaggeredEntry'nin saydamlığı (başlıklar da sırada olduğundan sıra numarasıyla değil).
+double _itemOpacity(WidgetTester t, SirketMenuItem item) => t
+    .widget<Opacity>(
+      find
+          .descendant(
+            of: find.byKey(ValueKey<SirketMenuItem>(item)),
+            matching: find.byType(Opacity),
+          )
+          .first,
+    )
+    .opacity;
+
 /// Başlık metninin (ListTile.title) layout sırasında aldığı en büyük genişlik.
 double _titleMaxWidth(WidgetTester t, String title) {
   final paragraph = find.descendant(
@@ -417,7 +464,7 @@ void main() {
         testWidgets(
           '${role.name} ${dark ? 'koyu' : 'açık'}: gradyan role.tone.gradient; ad/e-posta tam beyaz >= 4,5:1; rozet >= 4,5:1',
           (t) async {
-            final c = _Cfg('başlık', role, 3);
+            final c = _Cfg('başlık', role);
             await _pumpMenu(
               t,
               c,
@@ -594,40 +641,9 @@ void main() {
   );
 
   group('YanMenu öğeleri: seçili hap (ListTile korunur), çubuk, genişlik', () {
+    // Çekmecenin gruplu sırası (ayar öğeleri Ayarlar panelinde).
     final orders = <_Cfg, List<SirketMenuItem>>{
-      _cfgs[0]: const [
-        SirketMenuItem.dashboard,
-        SirketMenuItem.profilim,
-        SirketMenuItem.kullaniciYonetimi,
-        SirketMenuItem.superUserYonetimi,
-        SirketMenuItem.siteYoneticileriYonetimi,
-        SirketMenuItem.daireKullanicilariYonetimi,
-        SirketMenuItem.siteler,
-        SirketMenuItem.kisiler,
-        SirketMenuItem.moduller,
-        SirketMenuItem.modulTalepleri,
-        SirketMenuItem.siteBasvurulari,
-        SirketMenuItem.katilimVeKurulum,
-        SirketMenuItem.cihazEkle,
-        SirketMenuItem.kayitliCihazlar,
-        SirketMenuItem.bluetoothWifiKur,
-        SirketMenuItem.denetimKaydi,
-      ],
-      _cfgs[1]: const [
-        SirketMenuItem.dashboard,
-        SirketMenuItem.profilim,
-        SirketMenuItem.siteler,
-        SirketMenuItem.kisiler,
-        SirketMenuItem.moduller,
-        SirketMenuItem.kayitliCihazlar,
-        SirketMenuItem.katilimVeKurulum,
-        SirketMenuItem.bluetoothWifiKur,
-      ],
-      _cfgs[4]: const [
-        SirketMenuItem.dashboard,
-        SirketMenuItem.katilimVeKurulum,
-        SirketMenuItem.profilim,
-      ],
+      for (final c in <_Cfg>[_cfgs[0], _cfgs[1], _cfgs[4]]) c: c.drawerOrder,
     };
 
     for (final entry in orders.entries) {
@@ -713,7 +729,7 @@ void main() {
         for (final entry in expected.entries) {
           await _pumpMenu(
             t,
-            _Cfg('ton', entry.key, 3),
+            _Cfg('ton', entry.key),
             width: 360,
             height: 640,
             scale: 1.0,
@@ -740,13 +756,11 @@ void main() {
         const unselected = _Cfg(
           'seçili değil',
           UserRole.individual,
-          3,
-          selected: SirketMenuItem.profilim,
+          selected: SirketMenuItem.dashboard,
         );
         const selected = _Cfg(
           'seçili',
           UserRole.individual,
-          3,
           selected: SirketMenuItem.katilimVeKurulum,
         );
         await _pumpMenu(t, unselected, width: 360, height: 640, scale: 1.0);
@@ -770,7 +784,7 @@ void main() {
     );
 
     testWidgets(
-      'mod geçişi + ayırıcılar + çıkış: metinler ve sıra eski menüyle AYNI',
+      'mod geçişi + başlıklar + ayırıcılar + çıkış: gruplu sıra (İP-1D); ayar öğeleri çekmecede yok',
       (t) async {
         await _pumpMenu(t, _cfgs[1], width: 360, height: 640, scale: 1.0);
         final titles = <String>[
@@ -780,43 +794,66 @@ void main() {
         expect(titles, <String>[
           'Sakin Moduna Geç',
           'Panel',
-          'Profilim',
           'Site Yönetimi',
           'Kişiler',
-          'Modüller',
-          'Kayıtlı Cihazlar',
           'Daireye Katıl & Cihaz Ekle',
-          'Bluetooth ile Wi-Fi Kur',
           'Çıkış Yap',
         ]);
+        expect(find.text('Ana sayfa'), findsOneWidget);
+        expect(find.text('Daireler'), findsOneWidget);
+        expect(find.text('Borçlar'), findsNothing, reason: 'öğesi olmayan başlık görünmez');
+        for (final settings in const <String>['Profilim', 'Modüller', 'Kayıtlı Cihazlar', 'Bluetooth ile Wi-Fi Kur']) {
+          expect(find.text(settings), findsNothing, reason: '$settings Ayarlar panelinde');
+        }
         expect(find.byType(Divider), findsNWidgets(2));
 
         await _pumpMenu(t, _cfgs[2], width: 360, height: 640, scale: 1.0);
         expect(find.text('Yönetici Paneline Geç'), findsOneWidget);
         expect(find.text('Sakin Moduna Geç'), findsNothing);
 
-        // Tüm süper kullanıcı başlıkları.
-        await _pumpMenu(t, _cfgs[0], width: 360, height: 640, scale: 1.0);
+        // Süper kullanıcı (modüllerle): çekmece başlıkları ve öğeleri; yönetim / ayar ekranları dişlide.
+        await _pumpMenu(t, _cfgs[0], width: 360, height: 1400, scale: 1.0);
         for (final title in const <String>[
+          'Ana sayfa',
           'Panel',
+          'Daireler',
+          'Daire Sakinleri',
+          'Site Yönetimi',
+          'Kişiler',
+          'Daireye Katıl & Cihaz Ekle',
+          'Borçlar',
+          'Finans',
+          'İletişim',
+          'Duyurular',
+          'Talepler',
+          'Anket ve Oylama',
+          'Site hizmetleri',
+          'Kapılar',
+          'Belgeler',
+          'Rezervasyonlar',
+          'Ziyaretçi ve Kargo',
+          'Sözleşmeler',
+          'Karar Defteri',
+          'Çıkış Yap',
+        ]) {
+          expect(find.text(title), findsOneWidget, reason: title);
+        }
+        for (final settings in const <String>[
           'Profilim',
           'Kullanıcı Yönetimi',
           'Süper Kullanıcı Yönetimi',
           'Site Yöneticileri Yönetimi',
-          'Daire Sakinleri',
-          'Site Yönetimi',
-          'Kişiler',
           'Modüller',
           'Modül Talepleri',
           'Site Başvuruları',
-          'Daireye Katıl & Cihaz Ekle',
           'Şirket Cihazı Kaydet',
           'Şirket Cihaz Envanteri',
           'Bluetooth ile Wi-Fi Kur',
           'Denetim Kaydı',
-          'Çıkış Yap',
+          'Platform Ayarları',
+          'İstemci Hataları',
         ]) {
-          expect(find.text(title), findsOneWidget, reason: title);
+          expect(find.text(settings), findsNothing, reason: '$settings Ayarlar panelinde');
         }
       },
     );
@@ -914,15 +951,7 @@ void main() {
               t,
               key,
               _cfgs[0],
-              _cfgs[0].selectedTileIndex(const [
-                SirketMenuItem.dashboard,
-                SirketMenuItem.profilim,
-                SirketMenuItem.kullaniciYonetimi,
-                SirketMenuItem.superUserYonetimi,
-                SirketMenuItem.siteYoneticileriYonetimi,
-                SirketMenuItem.daireKullanicilariYonetimi,
-                SirketMenuItem.siteler,
-              ]),
+              _cfgs[0].selectedTileIndex(_cfgs[0].drawerOrder),
             );
           },
         );
@@ -939,16 +968,12 @@ void main() {
                 reduce: reduce,
                 boundaryKey: key,
               );
-              // Site yöneticisi + geçiş öğesi: seçili "Site Yönetimi" (geçiş, Panel, Profilim, Site...).
+              // Site yöneticisi + geçiş öğesi: seçili "Site Yönetimi" (geçiş, Panel, [Daireler] Site Yönetimi ...).
               await expectPill(
                 t,
                 key,
                 _cfgs[1],
-                _cfgs[1].selectedTileIndex(const [
-                  SirketMenuItem.dashboard,
-                  SirketMenuItem.profilim,
-                  SirketMenuItem.siteler,
-                ]),
+                _cfgs[1].selectedTileIndex(_cfgs[1].drawerOrder),
               );
             },
           );
@@ -970,22 +995,14 @@ void main() {
           );
           final p = _palette(t);
           final bg = p.surface;
-          final selected = _cfgs[0].selectedTileIndex(const [
-            SirketMenuItem.dashboard,
-            SirketMenuItem.profilim,
-            SirketMenuItem.kullaniciYonetimi,
-            SirketMenuItem.superUserYonetimi,
-            SirketMenuItem.siteYoneticileriYonetimi,
-            SirketMenuItem.daireKullanicilariYonetimi,
-            SirketMenuItem.siteler,
-          ]);
+          final selected = _cfgs[0].selectedTileIndex(_cfgs[0].drawerOrder);
           Future<Color> sample() async {
             final rect = t.getRect(_tiles.at(selected));
             return _pixel(t, key, Offset(rect.left + 6, rect.center.dy));
           }
 
-          // 7. öğe (gecikme 180 ms): ilk karede tamamen saydam, hap da yok.
-          expect(_entryOpacity(t, selected), 0);
+          // Seçili öğe ilk 8 satırdadır (gecikmeli giriş): ilk karede tamamen saydam, hap da yok.
+          expect(_itemOpacity(t, _cfgs[0].selected), 0);
           expect(
             _sameColor(await sample(), bg),
             isTrue,
@@ -1021,13 +1038,12 @@ void main() {
         onToggle: () => toggles++,
       );
 
-      await t.tap(find.text('Profilim'));
-      // Menü uzadı (Kişiler eklendi): alttaki öğeye inilir.
+      await t.tap(find.text('Site Yönetimi'));
       await t.ensureVisible(find.text('Daireye Katıl & Cihaz Ekle'));
       await t.pump();
       await t.tap(find.text('Daireye Katıl & Cihaz Ekle'));
       expect(selected, <SirketMenuItem>[
-        SirketMenuItem.profilim,
+        SirketMenuItem.siteler,
         SirketMenuItem.katilimVeKurulum,
       ]);
 
@@ -1063,8 +1079,8 @@ void main() {
       final handle = t.ensureSemantics();
       await _pumpMenu(t, _cfgs[4], width: 360, height: 640, scale: 1.0);
       expect(
-        t.getSemantics(find.widgetWithText(ListTile, 'Profilim')),
-        isSemantics(isSelected: true, isButton: true, label: 'Profilim'),
+        t.getSemantics(find.widgetWithText(ListTile, 'Daireye Katıl & Cihaz Ekle')),
+        isSemantics(isSelected: true, isButton: true, label: 'Daireye Katıl & Cihaz Ekle'),
       );
       expect(
         t.getSemantics(find.widgetWithText(ListTile, 'Panel')),
@@ -1076,7 +1092,9 @@ void main() {
           .map((n) => n.getSemanticsData().label)
           .where((l) => l.isNotEmpty)
           .toList();
-      expect(labels.where((l) => l == 'Profilim'), hasLength(1));
+      expect(labels.where((l) => l == 'Daireye Katıl & Cihaz Ekle'), hasLength(1));
+      // Grup başlıkları ekran okuyucuda başlık olarak tek kez okunur.
+      expect(labels.where((l) => l == 'Ana sayfa'), hasLength(1));
       handle.dispose();
     });
   });
@@ -1085,7 +1103,7 @@ void main() {
     'YanMenu hareketi: ilk 8 öğe StaggeredEntry, hareket azaltma, sonsuz animasyon yok',
     () {
       testWidgets(
-        'sıra ekrandaki sıradır (geçiş=0, öğeler, çıkış) ve ilk 8 sonrası sırada kalır',
+        'sıra ekrandaki sıradır (geçiş=0, başlıklar ve öğeler, çıkış) ve ilk 8 sonrası sırada kalır',
         (t) async {
           await _pumpMenu(t, _cfgs[0], width: 360, height: 640, scale: 1.0);
           final indexes = t
@@ -1093,7 +1111,7 @@ void main() {
               .map((e) => e.index)
               .toList();
           expect(indexes, <int>[
-            for (var i = 0; i < _cfgs[0].tileCount; i++) i,
+            for (var i = 0; i < _cfgs[0].entryCount; i++) i,
           ]);
 
           await _pumpMenu(t, _cfgs[1], width: 360, height: 640, scale: 1.0);
@@ -1102,7 +1120,7 @@ void main() {
               .map((e) => e.index)
               .toList();
           expect(withToggle, <int>[
-            for (var i = 0; i < _cfgs[1].tileCount; i++) i,
+            for (var i = 0; i < _cfgs[1].entryCount; i++) i,
           ]);
         },
       );
@@ -1111,7 +1129,7 @@ void main() {
         'giriş: ilk karede gizli, kademeli belirir, 450 ms sonra hepsi tam görünür',
         (t) async {
           await _pumpRaw(t, _cfgs[0]);
-          final count = _cfgs[0].tileCount;
+          final count = _cfgs[0].entryCount;
           expect(find.byType(StaggeredEntry), findsNWidgets(count));
           expect(_entryOpacity(t, 0), 0, reason: 'ilk karede gizli');
 
@@ -1137,7 +1155,7 @@ void main() {
         'hareket azaltma: ilk karede hepsi görünür; çubuk süresi sıfır',
         (t) async {
           await _pumpRaw(t, _cfgs[0], reduce: true);
-          for (var i = 0; i < _cfgs[0].tileCount; i++) {
+          for (var i = 0; i < _cfgs[0].entryCount; i++) {
             expect(_entryOpacity(t, i), 1, reason: '$i. öğe hemen görünür');
           }
           final bar = t.widget<AnimatedContainer>(_bars.first);
@@ -1176,7 +1194,7 @@ void main() {
           }
 
           await build(SirketMenuItem.dashboard);
-          expect(t.getSize(_bars.at(2)).height, 0);
+          expect(t.getSize(_bars.at(1)).height, 0);
           // Aynı ağaç, yeni seçim: çubuk animasyonla büyür.
           await t.pumpWidget(
             harnessApp(
@@ -1186,7 +1204,7 @@ void main() {
                   fullName: 'Ali Veli',
                   userEmail: 'ali@example.com',
                   role: UserRole.individual,
-                  selectedItem: SirketMenuItem.profilim,
+                  selectedItem: SirketMenuItem.katilimVeKurulum,
                   onSelect: (_) {},
                   onLogout: () {},
                 ),
@@ -1194,11 +1212,11 @@ void main() {
             ),
           );
           await t.pump(const Duration(milliseconds: 100));
-          final mid = t.getSize(_bars.at(2)).height;
+          final mid = t.getSize(_bars.at(1)).height;
           expect(mid, greaterThan(0));
           expect(mid, lessThan(22), reason: 'animasyon sürüyor');
           await t.pump(const Duration(milliseconds: 300));
-          expect(t.getSize(_bars.at(2)).height, 22);
+          expect(t.getSize(_bars.at(1)).height, 22);
           expect(t.getSize(_bars.at(0)).height, 0);
           await t.pumpAndSettle();
         },
@@ -1266,13 +1284,15 @@ void main() {
           of: find.byType(Drawer),
           matching: find.byType(Scrollable),
         );
+        final last = _cfgs[0].drawerOrder.last;
+        final lastTitle = YanMenu.titleFor(last, _cfgs[0].role);
         await t.scrollUntilVisible(
-          find.text('Bluetooth ile Wi-Fi Kur'),
+          find.text(lastTitle),
           120,
           scrollable: scrollable,
         );
-        await t.tap(find.text('Bluetooth ile Wi-Fi Kur'));
-        expect(selected, <SirketMenuItem>[SirketMenuItem.bluetoothWifiKur]);
+        await t.tap(find.text(lastTitle));
+        expect(selected, <SirketMenuItem>[last]);
         expect(t.takeException(), isNull);
       },
     );
@@ -1289,8 +1309,8 @@ void main() {
         t.state<ScaffoldState>(find.byType(Scaffold)).openDrawer();
         await t.pump();
         await t.pump(const Duration(milliseconds: 400));
-        await t.tap(find.text('Profilim'));
-        expect(selected, <SirketMenuItem>[SirketMenuItem.profilim]);
+        await t.tap(find.text('Daireye Katıl & Cihaz Ekle'));
+        expect(selected, <SirketMenuItem>[SirketMenuItem.katilimVeKurulum]);
         expect(t.takeException(), isNull);
       },
     );

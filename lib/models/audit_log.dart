@@ -5,6 +5,7 @@ import 'package:site_kapi_kontrol/models/decision_models.dart' show decisionBook
 import 'package:site_kapi_kontrol/models/document_models.dart' show documentActionLabel;
 import 'package:site_kapi_kontrol/models/finance.dart';
 import 'package:site_kapi_kontrol/models/history_item.dart';
+import 'package:site_kapi_kontrol/models/platform_rule.dart' show platformRuleActionLabel, platformRuleTargetLabel;
 import 'package:site_kapi_kontrol/models/site_application.dart';
 
 /// Denetim kaydı satırı (`GET /admin/audit-log` -> `items[]`). Kayıtlar yalnız eklenir.
@@ -101,6 +102,7 @@ class AuditLogEntry {
             visitorLogActionLabel(action) ??
             decisionBookActionLabel(action) ??
             contractActionLabel(action, details) ??
+            platformRuleActionLabel(action) ??
             'Diğer işlem';
     }
   }
@@ -164,6 +166,9 @@ class AuditLogEntry {
       case 'contract':
         // Sözleşme başlığı / tutarı denetim kaydına yazılmaz; yalnız numara gösterilir.
         return _numbered('Sözleşme');
+      case 'platform_rule':
+        // Kurallar tablosu (G11): hedef kural anahtarıdır; ham anahtar yerine kuralın adı ve kapsamı gösterilir.
+        return platformRuleTargetLabel(targetId, details);
       default:
         final id = targetId;
         return id == null || id.isEmpty ? null : id;

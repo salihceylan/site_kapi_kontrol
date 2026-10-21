@@ -20,6 +20,8 @@ export default async function sectionReminders(t) {
   const charge = (aptNo, amount, daysAgo) => q(`INSERT INTO ledger_entries (site_code, apartment_id, kind, amount_minor, period, entry_date, due_date, payer_party) VALUES ($1, $2, 'charge', $3, $4, $5, $5, 'both')`, [site.code, A[aptNo], amount, periodOf(ago(daysAgo + 5)), ago(daysAgo + 5)]).then(() => q(`UPDATE ledger_entries SET due_date = $3 WHERE FALSE`, [0, 0, TODAY]));
   void charge;
   const addCharge = (aptNo, amount, dueDaysAgo) => q(`INSERT INTO ledger_entries (site_code, apartment_id, kind, amount_minor, period, entry_date, due_date, payer_party) VALUES ($1, $2, 'charge', $3, $4::date, $5::date, $6::date, 'both')`, [site.code, A[aptNo], amount, periodOf(ago(dueDaysAgo + 5)), ago(dueDaysAgo + 5), ago(dueDaysAgo)]);
+  // İP-1A (G12): satırın hesabı açıkça (kiracı / ev sahibi hesabı); gerçek kod yeni satırlara hesabı yazar
+  const addAccountCharge = (aptNo, amount, dueDaysAgo, account) => q(`INSERT INTO ledger_entries (site_code, apartment_id, kind, amount_minor, period, entry_date, due_date, payer_party, account_party) VALUES ($1, $2, 'charge', $3, $4::date, $5::date, $6::date, 'both', $7)`, [site.code, A[aptNo], amount, periodOf(ago(dueDaysAgo + 5)), ago(dueDaysAgo + 5), ago(dueDaysAgo), account]);
   const mkAccountPerson = async (aptNo, relation, name, email, { verified = true, pref = true, role = 'apartment_owner' } = {}) => {
     const user = await mkUser(name, role, { email, verified });
     const person = await addPerson(site.code, { user });
@@ -41,11 +43,14 @@ export default async function sectionReminders(t) {
   await setResponsible(2, 'tenant');  // A2: kiraci sorumlu, hesapsiz CRM adresi -> tutarsiz
   await mkCrmPerson(2, 'tenant', 'Hatirlatma Kiraci Iki', 'kiraci2@qa.example');
   await mkAccountPerson(2, 'owner', 'Hatirlatma Malik Iki', 'malik2@qa.example');
-  await addCharge(2, 80000, 35);
+  // İP-1A: sorumlu kiracı + kiracı var -> aidat kiracı hesabına (hatırlatma kiracıya; malik ALMAZ)
+  await addAccountCharge(2, 80000, 35, 'tenant');
   await setResponsible(3, 'both');    // A3: malik (dogrulanmis) + kiraci (dogrulanmamis hesap)
   await mkAccountPerson(3, 'owner', 'Hatirlatma Malik Uc', 'malik3@qa.example');
   await mkAccountPerson(3, 'tenant', 'Hatirlatma Kiraci Uc', 'kiraci3@qa.example', { verified: false });
+  // İP-1A (G12): A3'te İKİ hesap da borçlu: ev sahibi hesabı (malik) + kiracı hesabı (kiracı); her hesabın sahibine ayrı ileti (malik + kiracı)
   await addCharge(3, 60000, 50);
+  await addAccountCharge(3, 60000, 50, 'tenant');
   await setResponsible(4, 'both');    // A4: yalniz aile uyesi -> alici YOK
   await mkCrmPerson(4, 'family_member', 'Hatirlatma Aile Dort', 'aile4@qa.example');
   await addCharge(4, 70000, 40);
@@ -166,7 +171,8 @@ export default async function sectionReminders(t) {
 
   // --- G5. ertesi gun: aralik, adres basina 7 gun, gonderilmis daire hesaplari
   const pvAfter = await call('POST', `${base(site)}/reminders/preview`, MGR, { tone: 'friendly' });
-  check('G5: gonderimden hemen sonra onizleme: hatirlatilan daireler aralik (14 gun) nedeniyle hariç (interval 7); kalan alici yok', pvAfter.body.excluded.interval === 7 && pvAfter.body.person_count === 0 && pvAfter.body.blockers.includes('NO_REMINDER_RECIPIENTS') && pvAfter.body.blockers.includes('REMINDER_DAILY_LIMIT'), pvAfter.body);
+  // İP-1A: hariç tutma sayıları HESAP başınadır (aday = daire + hesap): 7 daire, A3'ün iki hesabı -> 8
+  check('G5: gonderimden hemen sonra onizleme: hatirlatilan daireler aralik (14 gun) nedeniyle hariç (interval 8 hesap = 7 daire, A3 iki hesap); kalan alici yok', pvAfter.body.excluded.interval === 8 && pvAfter.body.person_count === 0 && pvAfter.body.blockers.includes('NO_REMINDER_RECIPIENTS') && pvAfter.body.blockers.includes('REMINDER_DAILY_LIMIT'), pvAfter.body);
 
   // --- G6. istatistik / liste / yetki
   const runs = await call('GET', `${base(site)}/reminders/runs`, BOARD);

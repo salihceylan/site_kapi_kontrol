@@ -40,8 +40,8 @@ abstract final class OnboardingSteps {
             icon: Icons.lock_open_rounded,
             title: 'Kapınız cebinizde',
             body:
-                'Girişte açılan “Panel” ekranı modüllerinizin vitrinidir. Kapınız “Kapılar” kartının arkasında: karta '
-                'dokunun, “KAPIYI AÇ” düğmesiyle kapıyı açın.',
+                'Girişte açılan “Panel” ekranı (alttaki “Özet” sekmesi) modüllerinizin vitrinidir. Kapınız “Kapılar” '
+                'kartının ve alttaki “Kapı” sekmesinin arkasında: dokunun, “KAPIYI AÇ” düğmesiyle kapıyı açın.',
           ),
           OnboardingStep(
             icon: Icons.qr_code_2_rounded,
@@ -52,10 +52,11 @@ abstract final class OnboardingSteps {
           ),
           OnboardingStep(
             icon: Icons.campaign_rounded,
-            title: 'Duyurular ve borcunuz',
+            title: 'Alt çubuk, duyurular ve borcunuz',
             body:
-                'Yönetimin duyurularını “Duyurular” ekranında okursunuz. Sitenizde Finans modülü açıksa '
-                '“Borcum” ekranından borç ve ödemelerinizi görürsünüz.',
+                'Alttaki “Duyuru”, “Arıza” ve “Belgeler” sekmeleri duyuruları, arıza taleplerinizi ve site belgelerini '
+                'açar. Sitenizde Finans modülü açıksa “Borcum” ekranından borç ve ödemelerinizi görürsünüz; hesap '
+                'ayarlarınız sağ üstteki “Ayarlar” düğmesindedir.',
           ),
           _help,
         ];
@@ -66,7 +67,8 @@ abstract final class OnboardingSteps {
             title: 'Hoş geldiniz',
             body:
                 'Hesabınız hazır. Girişte açılan “Panel” ekranındaki kartlardan bir siteye daire sakini olarak '
-                'katılabilir, cihazınızı hesabınıza ekleyebilir ya da site kurmak için başvurabilirsiniz.',
+                'katılabilir, cihazınızı hesabınıza ekleyebilir ya da site kurmak için başvurabilirsiniz. Hesap '
+                'ayarlarınız sağ üstteki “Ayarlar” düğmesindedir.',
           ),
           OnboardingStep(
             icon: Icons.qr_code_scanner_rounded,
@@ -105,8 +107,8 @@ abstract final class OnboardingSteps {
             title: 'Panel ve modüller',
             body:
                 'Açık modüller girişte açılan “Panel” ekranında kart olarak dizilir; kapı paneli “Kapılar” '
-                'kartındadır. “Modüller” ekranında sitenizin özelliklerini görür, kapalı bir modül için talep '
-                'gönderirsiniz. Finans modülü açılınca menüde “Finans” ekranı belirir.',
+                'kartındadır. Menü başlıklar altında toplanır, birden çok siteniz varsa en üstten site seçersiniz. '
+                'Sağ üstteki “Ayarlar” düğmesindeki “Modüller” ekranında kapalı bir modül için talep gönderirsiniz.',
           ),
           _help,
         ];
@@ -125,14 +127,14 @@ abstract final class OnboardingSteps {
             title: 'Başvurular ve talepler',
             body:
                 '“Site Başvuruları” ve “Modül Talepleri” ekranlarında bekleyen işleri değerlendirirsiniz; '
-                'bekleyen sayılar menüde rozetle görünür.',
+                'bekleyen sayılar Panel\'deki dikkat barında ve “Ayarlar” düğmesinde rozetle görünür.',
           ),
           OnboardingStep(
             icon: Icons.fact_check_rounded,
             title: 'Cihazlar ve denetim',
             body:
-                '“Şirket Cihaz Envanteri” ekranında cihazları, “Denetim Kaydı” ekranında yönetim işlemlerinin '
-                'kaydını görürsünüz.',
+                'Sağ üstteki “Ayarlar” düğmesi “Şirket Cihaz Envanteri”, “Denetim Kaydı” ve “Platform Ayarları” '
+                'gibi yönetim ekranlarını açar; bekleyen talepler düğmede rozetle görünür.',
           ),
           _help,
         ];
