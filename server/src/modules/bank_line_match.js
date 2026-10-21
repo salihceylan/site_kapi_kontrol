@@ -1,11 +1,13 @@
-// Banka satırı eşleme (saf; DB'siz). Sıra (F3 kararı): referans kodu -> açıklamadaki daire kodu -> IBAN hafızası -> gönderen adı -> bekliyor.
-// Güçlü (otomatik işlenir): ref, iban. Zayıf ('kontrol edin', onayla işlenir): code, name. Birden çok aday = eşleşme YAPILMAZ.
+// Banka satırı eşleme (saf; DB'siz). Sıra (F3 kararı): referans kodu -> açıklamadaki daire kodu -> IBAN hafızası -> daire numarası + kişi adı -> gönderen adı -> bekliyor.
+// Güçlü (otomatik işlenir): ref, iban, unit_name (açıklamada daire numarası VE o dairenin bir kişisinin adı soyadı birlikte). Zayıf ('kontrol edin', onayla işlenir):
+// code, unit (yalnız daire numarası), name (yalnız ad). Birden çok aday ya da çelişen kanıt = eşleşme YAPILMAZ.
 import { createHash } from 'node:crypto';
 import { findRefs } from './finance_payment_ref.js';
 import { foldText } from './people_common.js';
+import { unitCandidates } from './bank_match_hints.js';
 
-export const STRONG_METHODS = Object.freeze(['ref', 'iban']);
-export const WEAK_METHODS = Object.freeze(['code', 'name']);
+export const STRONG_METHODS = Object.freeze(['ref', 'iban', 'unit_name']);
+export const WEAK_METHODS = Object.freeze(['code', 'unit', 'name']);
 
 const norm = (text) => foldText(String(text ?? '')).toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim();
 export const normalizeIban = (value) => {
@@ -26,7 +28,7 @@ export function computeFingerprints(accountId, lines) {
 
 /**
  * ctx: { refKnown (findRefs 'known'), codes: [{ code, apartment_id }], ibans: Map<iban, [{ apartment_id, party, stale }]>,
- *        people: [{ apartment_id, party: 'owner'|'tenant', tokens: Set<string> }] }
+ *        people: [{ apartment_id, party: 'owner'|'tenant', tokens: Set<string> }], unitIndex?: buildUnitIndex(apartments) (yoksa daire numarası kuralı çalışmaz) }
  * Dönüş: { method, apartmentId, party, strength: 'strong'|'weak', warning? } | null. Yalnız giriş (tutar > 0) satırları eşlenir.
  */
 export function matchLine(line, ctx) {
@@ -56,19 +58,35 @@ export function matchLine(line, ctx) {
   if (memIds.length === 1) {
     return { method: 'iban', apartmentId: memIds[0], party: mem.find((m) => m.apartment_id === memIds[0])?.party ?? partyOf(memIds[0]), strength: 'strong' };
   }
-  // 4. gönderen adı: güncel kişilerle en az 2 ortak belirteç, tekil sonuç
-  const senderTokens = new Set(norm(line.counterparty_name || line.description).split(' ').filter((t) => t.length >= 2));
-  const scores = new Map();
-  for (const p of ctx.people ?? []) {
-    let n = 0;
-    for (const t of p.tokens) if (senderTokens.has(t)) n += 1;
-    if (n >= 2) {
-      const cur = scores.get(p.apartment_id);
-      if (!cur || n > cur.n) scores.set(p.apartment_id, { n, party: p.party });
+  // 4. daire numarası + kişi adı (açıklama ve gönderen birlikte), sonra yalnız gönderen adı
+  const scoreNames = (tokens) => {
+    const scores = new Map();
+    for (const p of ctx.people ?? []) {
+      let n = 0;
+      for (const t of p.tokens) if (tokens.has(t)) n += 1;
+      if (n >= 2) {
+        const cur = scores.get(p.apartment_id);
+        if (!cur || n > cur.n) scores.set(p.apartment_id, { n, party: p.party });
+      }
     }
+    return scores;
+  };
+  const tokenSet = (text) => new Set(norm(text).split(' ').filter((t) => t.length >= 2));
+  const senderScores = scoreNames(tokenSet(line.counterparty_name || line.description));
+  const units = unitCandidates(`${line.description ?? ''} ${line.counterparty_name ?? ''}`, ctx.unitIndex);
+  if (units.size > 0) {
+    const named = scoreNames(tokenSet(`${line.description ?? ''} ${line.counterparty_name ?? ''}`));
+    const both = [...units].filter((id) => named.has(id));
+    if (both.length === 1) return { method: 'unit_name', apartmentId: both[0], party: named.get(both[0]).party, strength: 'strong' };
+    if (both.length === 0 && units.size === 1 && senderScores.size === 0 && named.size === 0) {
+      const [apartmentId] = [...units];
+      return { method: 'unit', apartmentId, party: partyOf(apartmentId), strength: 'weak' };
+    }
+    return null; // belirsiz ya da çelişen kanıt (birden çok aday / numara ile ad farklı daireyi gösteriyor)
   }
-  if (scores.size === 1) {
-    const [[apartmentId, { party }]] = [...scores];
+  // 5. yalnız gönderen adı: güncel kişilerle en az 2 ortak belirteç, tekil sonuç
+  if (senderScores.size === 1) {
+    const [[apartmentId, { party }]] = [...senderScores];
     return { method: 'name', apartmentId, party, strength: 'weak' };
   }
   return null;

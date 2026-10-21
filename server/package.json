@@ -24,6 +24,7 @@
     "jsonwebtoken": "^9.0.2",
     "mqtt": "^5.14.1",
     "nodemailer": "^10.0.13",
+    "pdfjs-dist": "6.4.299",
     "pg": "^8.13.1",
     "web-push": "^3.6.7"
   },

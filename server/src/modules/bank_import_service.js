@@ -12,6 +12,7 @@ import { periodOfDate, today } from './finance_common.js';
 import { isPeriodClosed, recordFinanceAudit, withFinanceTransaction } from './finance_tx.js';
 import { apartmentLabel } from './people_common.js';
 import { computeFingerprints, matchLine, normalizeIban, outcomeOf, previewHash, summarize } from './bank_line_match.js';
+import { buildUnitIndex, periodHintOf } from './bank_match_hints.js';
 import {
   MAX_AUTO_POST,
   accountNotFound,
@@ -73,7 +74,7 @@ export async function putProfile({ siteCode, rawAccountId, body, actor }) {
 // --- Çözümleme (önizleme ve commit ortak) -----------------------------------------------------------------
 
 async function loadContext(db, siteCode) {
-  const [prefixes, codes, ibans, people] = await Promise.all([
+  const [prefixes, codes, ibans, people, apartments] = await Promise.all([
     db.query(`SELECT prefix, site_code FROM finance_site_ref_prefixes WHERE site_code = $1`, [siteCode]),
     db.query(`SELECT code, apartment_id, site_code FROM finance_apartment_ref_codes WHERE site_code = $1`, [siteCode]),
     db.query(
@@ -87,6 +88,7 @@ async function loadContext(db, siteCode) {
        WHERE r.site_code = $1 AND r.is_current AND r.relation IN ('owner', 'tenant') AND p.full_name IS NOT NULL`,
       [siteCode],
     ),
+    db.query(`SELECT a.id AS apartment_id, a.unit_label, b.block_name FROM apartments a JOIN site_blocks b ON b.id = a.block_id WHERE a.site_code = $1 AND a.is_active`, [siteCode]),
   ]);
   const ibanMap = new Map();
   for (const row of ibans.rows ?? []) {
@@ -105,6 +107,7 @@ async function loadContext(db, siteCode) {
       party: r.relation,
       tokens: new Set(norm(r.full_name).split(' ').filter((t) => t.length >= 2)),
     })),
+    unitIndex: buildUnitIndex(apartments.rows ?? []),
   };
 }
 
@@ -142,6 +145,11 @@ async function analyze(db, siteCode, input, now) {
     const duplicate = known.has(fingerprint);
     const warnings = [];
     let match = duplicate ? null : matchLine(line, ctx);
+    // PDF'den okunan, güveni düşük satır otomatik işlenmez: güçlü eşleşme bile "kontrol edin"e düşer.
+    if (match && match.strength === 'strong' && line.confidence === 'low') {
+      match = { ...match, strength: 'weak' };
+      warnings.push('LOW_CONFIDENCE');
+    }
     let linkedEntryId = null;
     let ambiguousLink = false;
     if (match && match.strength === 'strong') {
@@ -215,6 +223,7 @@ export async function previewImport({ siteCode, body, now = new Date() }) {
       match: r.match ? { method: r.match.method, apartment_id: r.match.apartmentId, apartment_label: labels.get(r.match.apartmentId) ?? null, party: r.match.party } : null,
       linked_entry_id: r.linkedEntryId,
       warnings: r.warnings,
+      period_hint: periodHintOf(r.description, r.value_date),
     })),
   };
 }
