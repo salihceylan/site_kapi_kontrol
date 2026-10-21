@@ -45,6 +45,7 @@ import { surveyRouter } from './modules/survey_routes.js';
 import { visitorLogRouter } from './modules/visitor_log_routes.js';
 import { cardAccessRouter } from './modules/card_access_routes.js';
 import { deviceIntegrationsRouter } from './modules/device_integrations_routes.js';
+import { plateRecognitionRouter } from './modules/plate_recognition_routes.js';
 import { contractsRouter } from './modules/contracts_routes.js';
 import { equipmentRouter } from './modules/equipment_routes.js';
 import { cctvRouter } from './modules/cctv_routes.js';
@@ -155,6 +156,8 @@ app.use(visitorLogRouter);
 app.use(cardAccessRouter);
 // Kart odemesi saglayici arayuzu (F6) + kamera/plaka baglastiricilari (T8): modul card_payments / plate_cameras, varsayilan KAPALI.
 app.use(deviceIntegrationsRouter);
+// Plaka tanima (073): /manager/sites/:siteCode/plate-recognition/... + /app/plate-permits (modul plate_recognition, varsayilan KAPALI; kapi acmaz).
+app.use(plateRecognitionRouter);
 // Firma ve sozlesme takibi: /manager/sites/:siteCode/contract-vendors[/:id] + /manager/sites/:siteCode/contracts[/summary|/:id] (modul contracts, varsayilan KAPALI; sakin ucu yok).
 app.use(contractsRouter);
 // Ekipman, bakim ve teklif: /manager/sites/:siteCode/equipment[...] + /quotes[...] (modul equipment, varsayilan KAPALI; sakin ucu yok).

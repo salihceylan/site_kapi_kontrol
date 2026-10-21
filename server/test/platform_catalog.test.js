@@ -77,7 +77,7 @@ describe('platform katalog: sozlesme tablosu', () => {
       drive_storage: [false, 'available'], // Dosya Deposu (Google Drive, D1): varsayilan KAPALI
       neighbor_board: [false, 'available'], // Komsu Panosu: kullanilabilir (varsayilan KAPALI)
       annual_report: [false, 'available'], // Faaliyet Raporu (R2): varsayilan KAPALI
-      plate_recognition: [false, 'coming_soon'],
+      plate_recognition: [false, 'available'], // Plaka Tanima (073): kullanilabilir, varsayilan KAPALI; kapi acmaz (would_open)
       hgs_access: [false, 'coming_soon'],
       cctv_link: [false, 'available'], // Kamera (CCTV) Baglantisi (072): kullanilabilir, varsayilan KAPALI
       equipment: [false, 'available'], // Ekipman ve Bakim (068): kullanilabilir, varsayilan KAPALI
@@ -115,6 +115,7 @@ describe('platform katalog: sozlesme tablosu', () => {
     assert.deepEqual(
       MODULE_CATALOG.filter(isToggleable).map((m) => m.code),
       ['door_control', 'finance', 'documents', 'reservation', 'work_tracking', 'metering', 'survey', 'visitor_log', 'card_access', 'card_payments', 'plate_cameras', 'contracts', 'decision_book', 'directory', 'budget', 'drive_storage', 'neighbor_board', 'annual_report', 'cctv_link', 'equipment'],
+      ['door_control', 'finance', 'documents', 'reservation', 'work_tracking', 'metering', 'survey', 'visitor_log', 'card_access', 'card_payments', 'plate_cameras', 'contracts', 'decision_book', 'directory', 'budget', 'drive_storage', 'neighbor_board', 'annual_report', 'plate_recognition', 'equipment'],
     );
     assert.equal(isToggleable(null), false);
   });
@@ -143,6 +144,7 @@ describe('platform katalog: enabled hesabi', () => {
 
   it('status !== available ise HER ZAMAN false (satir ne derse desin)', () => {
     for (const code of ['online_payment', 'plate_recognition', 'hgs_access']) {
+    for (const code of ['online_payment', 'hgs_access', 'cctv_link']) {
       assert.equal(computeModuleEnabled(def(code), undefined), false, code);
       assert.equal(computeModuleEnabled(def(code), { enabled: true }), false, code);
     }

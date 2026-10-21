@@ -218,8 +218,11 @@ export async function listPlateEvents(siteCode, query = {}) {
 
 // --- Kamera olay ucu (belirteçli, oturumsuz) -----------------------------------------------------------------------
 
-/** Kimliği belirteçle doğrular, plakayı sitenin araç listesiyle karşılaştırıp KAYDEDER. Kapı açmaz. */
-export async function recordPlateEvent({ rawToken, body, isModuleOn }) {
+/**
+ * Kimliği belirteçle doğrular, plakayı sitenin araç listesiyle karşılaştırıp KAYDEDER. Kapı açmaz.
+ * `onRecorded` (isteğe bağlı): olay yazıldıktan sonra çağrılır (Plaka Tanıma karar kaydı, 073); hatası olayı ve yanıtı ETKİLEMEZ.
+ */
+export async function recordPlateEvent({ rawToken, body, isModuleOn, onRecorded = null }) {
   const token = parseDeviceToken(rawToken);
   if (!token) throw invalidToken();
   const device = await pool.query(`SELECT id, site_code, token_hash, is_active FROM camera_devices WHERE id = $1`, [token.id]);
@@ -230,10 +233,17 @@ export async function recordPlateEvent({ rawToken, body, isModuleOn }) {
   const { plate, seenAt } = parsePlateEvent(body);
   const vehicle = await pool.query(`SELECT id FROM vehicles WHERE site_code = $1 AND plate = $2 AND is_active LIMIT 1`, [siteCode, plate]);
   const vehicleId = vehicle.rows[0]?.id ?? null;
-  await pool.query(
-    `INSERT INTO plate_events (site_code, device_id, plate, matched, vehicle_id, seen_at) VALUES ($1, $2, $3, $4, $5, $6)`,
+  const inserted = await pool.query(
+    `INSERT INTO plate_events (site_code, device_id, plate, matched, vehicle_id, seen_at) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
     [siteCode, token.id, plate, vehicleId !== null, vehicleId, seenAt],
   );
   await pool.query(`UPDATE camera_devices SET last_event_at = NOW() WHERE id = $1`, [token.id]);
+  if (typeof onRecorded === 'function') {
+    try {
+      await onRecorded({ siteCode, deviceId: token.id, eventId: Number(inserted.rows[0].id), plate, body });
+    } catch (error) {
+      console.error('[plate] karar kaydedilemedi:', error?.code || error?.message || error);
+    }
+  }
   return { ok: true, matched: vehicleId !== null };
 }

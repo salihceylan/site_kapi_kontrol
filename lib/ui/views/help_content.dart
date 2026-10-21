@@ -73,6 +73,7 @@ abstract final class HelpContent {
     'Ekipman ve Bakım',
     'Kamera (CCTV)',
     'Faaliyet Raporu',
+    'Plaka Tanıma',
     'Kapılar',
     'Profilim',
     'Eller Serbest & Kestirmeler',
@@ -376,6 +377,17 @@ abstract final class HelpContent {
       note: 'Yönetici reddederse gerekçeyi ilanınızın altında görürsünüz. İlanınızı istediğiniz an geri çekebilirsiniz.',
     ),
     HelpTopic(
+      id: 'guest_plate',
+      title: 'Misafirimin aracı için plaka izni nasıl veririm?',
+      icon: Icons.directions_car_rounded,
+      steps: <String>[
+        'Plaka Tanıma modülü sitenizde açıksa menüden “Plaka Tanıma” ekranını açın.',
+        'Misafir plakası ekle düğmesine dokunup plakayı yazın (örneğin 34 ABC 123), süreyi seçin (1 gün, 1 hafta ya da en çok 30 gün) ve kaydedin.',
+        'İzin süresi dolunca kendiliğinden biter; erken bitirmek için listedeki iptal düğmesine dokunun.',
+      ],
+      note: 'Bir günde en çok 5 misafir plakası tanımlayabilirsiniz; yalnız kendi daireniz için. Kapı açma Yakında…: şimdilik plaka kamerada tanınınca yönetim ekranında izinli olarak görünür.',
+    ),
+    HelpTopic(
       id: 'open_door',
       title: 'Kapıyı nasıl açarım?',
       icon: Icons.lock_open_rounded,
@@ -581,6 +593,18 @@ abstract final class HelpContent {
         '“Taslağı kaydet” düzenlemelerinizi saklar, “PDF” raporu verir.',
       ],
       note: 'Kapalı modüllerin bölümleri boş kalır. Düzenlemediğiniz bölüm her açılışta güncel kayıtlardan gelir. Ekipman envanteri “Yakında…”.',
+    ),
+    HelpTopic(
+      id: 'plate_recognition',
+      title: 'Plaka kayıtlarını, misafir plakalarını ve kara listeyi nasıl yönetirim?',
+      icon: Icons.directions_car_rounded,
+      steps: <String>[
+        'Plaka Tanıma modülü açıkken menüden “Plaka Tanıma” ekranını açın. Olaylar sekmesi kameradan gelen plakaları ve kararı (izinli, engelli, bilinmiyor) nedeniyle gösterir.',
+        'Kalıcı yetkili araçlar Araçlar ekranından yönetilir. Geçici misafirler için Misafir izinleri sekmesinde daire seçip plakayı ve süreyi (en çok 30 gün) girin; izni istediğiniz an iptal edebilirsiniz.',
+        'Kara liste sekmesine eklediğiniz plaka, araç listesinde ya da misafir izninde olsa bile hiçbir zaman izinli sayılmaz.',
+        'Ayarlar sekmesinde kameranın baktığı kapıyı eşleyin. Plakayla otomatik açma varsayılan olarak kapalıdır; açarken risk uyarısını onaylamanız gerekir.',
+      ],
+      note: 'Kapı açma Yakında…: otomatik açma açık kapıda izinli okumalar şimdilik yalnız "açılırdı" diye kaydedilir. Plaka kişisel veridir; yalnız güvenlik amacıyla kullanın.',
     ),
     HelpTopic(
       id: 'metering',

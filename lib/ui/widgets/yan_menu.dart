@@ -160,6 +160,10 @@ enum SirketMenuItem {
   /// Faaliyet Raporu (`annual_report`): yönetici yıllık raporu kayıtlardan hazırlar, düzenler, PDF alır. Rol listesinde YOKTUR;
   /// modül AÇIK sitesi olan yöneticiye [YanMenu.additionalItems] ile eklenir (Site hizmetleri).
   faaliyetRaporu,
+  /// Plaka Tanıma (`plate_recognition`): yönetici olay / misafir izni / kara liste / kapı ayarlarını yönetir, kurul ve görevli salt okur,
+  /// sakin yalnız kendi dairesi için "Misafir plakası" verir. Rol listesinde YOKTUR; modül AÇIK sitesi olan kullanıcıya
+  /// [YanMenu.additionalItems] ile eklenir (Site hizmetleri).
+  plakaTanima,
   /// Ödeme ve Kamera yönetim ekranı. Rol listesinde YOKTUR; `card_payments` ya da `plate_cameras` modülü AÇIK olan sitenin
   /// yöneticisine / kurul üyesine [YanMenu.additionalItems] ile eklenir. Sakin ve görevli için yoktur.
   odemeKamera,
@@ -249,6 +253,7 @@ SirketMenuGroup menuGroupOf(SirketMenuItem item) => switch (item) {
       SirketMenuItem.kararDefteri ||
       SirketMenuItem.isletmeProjesi ||
       SirketMenuItem.faaliyetRaporu ||
+      SirketMenuItem.plakaTanima ||
       SirketMenuItem.kararlar ||
       SirketMenuItem.odemeKamera ||
       SirketMenuItem.kameraCctv ||
@@ -1239,6 +1244,10 @@ List<SirketMenuItem> _withExtras(
     if (extra == SirketMenuItem.kameraCctv) {
       for (final above in const <SirketMenuItem>[
         SirketMenuItem.odemeKamera,
+    // "Plaka Tanıma": "Karar Defteri" / "Sözleşmeler" / ... / "Kişiler" sırasıyla ilk bulunanın altına (numaralandırmada önde olduğundan
+    // "Ödeme ve Kamera" ve "Ekipman ve Bakım" sonradan ekleniyor ve kendi çıpalarının altına giriyor).
+    if (extra == SirketMenuItem.plakaTanima) {
+      for (final above in const <SirketMenuItem>[
         SirketMenuItem.kararDefteri,
         SirketMenuItem.sozlesmeler,
         SirketMenuItem.ziyaretciKayitlari,
@@ -1442,6 +1451,8 @@ String _titleForItem(SirketMenuItem item, [UserRole? role]) {
       return 'Komşu Panosu';
     case SirketMenuItem.faaliyetRaporu:
       return 'Faaliyet Raporu';
+    case SirketMenuItem.plakaTanima:
+      return 'Plaka Tanıma';
     case SirketMenuItem.odemeKamera:
       return 'Ödeme ve Kamera';
     case SirketMenuItem.kameraCctv:
@@ -1537,6 +1548,8 @@ IconData _iconForItem(SirketMenuItem item) {
       return PhosphorIconsRegular.chatsCircle;
     case SirketMenuItem.faaliyetRaporu:
       return PhosphorIconsRegular.clipboardText;
+    case SirketMenuItem.plakaTanima:
+      return PhosphorIconsRegular.car;
     case SirketMenuItem.odemeKamera:
       return PhosphorIconsRegular.videoCamera;
     case SirketMenuItem.kameraCctv:

@@ -14,6 +14,7 @@ import { ensureSurveySchema } from './modules/survey_schema.js';
 import { ensureVisitorLogSchema } from './modules/visitor_log_schema.js';
 import { ensureCardAccessSchema } from './modules/card_access_schema.js';
 import { ensureDeviceIntegrationsSchema } from './modules/device_integrations_schema.js';
+import { ensurePlateRecognitionSchema } from './modules/plate_recognition_schema.js';
 import { ensurePaymentNoticesSchema } from './modules/payment_notice_schema.js';
 import { ensureBrandThemeSchema } from './modules/brand_theme_schema.js';
 import { ensureContractsSchema } from './modules/contracts_schema.js';
@@ -1940,6 +1941,8 @@ export async function ensureDbSchema() {
     await ensureNeighborBoardSchema(client);
     // 065 (kart odemesi ayarlari + kamera/plaka): dev blokta DEGIL; katalog kontrolu (device_integrations_schema.js = migrations/065).
     await ensureDeviceIntegrationsSchema(client);
+    // 073 (plaka tanima: misafir izni, kara liste, kapi/kamera ayari, karar kaydi): dev blokta DEGIL; katalog kontrolu (plate_recognition_schema.js = migrations/073).
+    await ensurePlateRecognitionSchema(client);
     // 066 (dekont bildirimi, 2B): ledger_entries/apartments sonrasi; katalog kontrolu (payment_notice_schema.js = migrations/066).
     await ensurePaymentNoticesSchema(client);
     // 067 (banka dosyasi, 2C): finance_accounts/apartments'tan SONRA; her ifade kendi otomatik onayinda (bank_import_schema.js = migrations/067).

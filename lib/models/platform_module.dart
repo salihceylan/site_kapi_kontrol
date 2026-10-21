@@ -43,6 +43,8 @@ abstract final class PlatformModuleCodes {
   static const String cardPayments = 'card_payments';
   /// Kamera ve Plaka (plaka olayı kaydı; kapı açmaz). Varsayılan KAPALI.
   static const String plateCameras = 'plate_cameras';
+  /// Plaka Tanıma (misafir plaka izni, kara liste, olay kararları; kapı açma "Yakında…"). Varsayılan KAPALI.
+  static const String plateRecognition = 'plate_recognition';
 }
 
 DateTime? _parseDate(Object? raw) {

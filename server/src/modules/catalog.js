@@ -196,7 +196,7 @@ export const MODULE_CATALOG = Object.freeze([
     name: 'Plaka Tanıma',
     description: 'Araç plakasını tanıyarak otopark kapısını açma; plaka kayıtları.',
     core: false,
-    status: MODULE_STATUS_COMING_SOON,
+    status: MODULE_STATUS_AVAILABLE,
     defaultEnabled: false,
   }),
   defineModule({
