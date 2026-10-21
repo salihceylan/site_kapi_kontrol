@@ -136,6 +136,14 @@ export const MODULE_CATALOG = Object.freeze([
     defaultEnabled: false,
   }),
   defineModule({
+    code: 'budget',
+    name: 'İşletme Projesi (Bütçe)',
+    description: 'Yıllık gider bütçesi; taslak, tebliğ, kesin durumları ve planlanan-gerçekleşen karşılaştırması.',
+    core: false,
+    status: MODULE_STATUS_AVAILABLE,
+    defaultEnabled: false,
+  }),
+  defineModule({
     code: 'plate_recognition',
     name: 'Plaka Tanıma',
     description: 'Araç plakasını tanıyarak otopark kapısını açma; plaka kayıtları.',

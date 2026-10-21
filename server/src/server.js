@@ -43,6 +43,7 @@ import { cardAccessRouter } from './modules/card_access_routes.js';
 import { contractsRouter } from './modules/contracts_routes.js';
 import { startContractReminders, stopContractReminders } from './modules/contracts_reminders.js';
 import { decisionBookRouter } from './modules/decision_book_routes.js';
+import { budgetRouter } from './modules/budget_routes.js';
 import { startDocumentsMaintenance, stopDocumentsMaintenance } from './modules/document_maintenance.js';
 import { pushRouter } from './modules/push_routes.js';
 import { startPushWorker, stopPushWorker } from './modules/push_worker.js';
@@ -134,6 +135,8 @@ app.use(cardAccessRouter);
 app.use(contractsRouter);
 // Karar defteri: /manager/sites/:siteCode/decisions[/:id[/finalize]] + /app/decisions[/:id] (modul decision_book, varsayilan KAPALI).
 app.use(decisionBookRouter);
+// Isletme projesi (butce): /manager/sites/:siteCode/budget-projects[/:id[/items|/notify|/revert|/finalize|/comparison]] (modul budget, varsayilan KAPALI).
+app.use(budgetRouter);
 // Telefon bildirimi (Faz 3b-B): /app/push/devices[/:installId], /app/push/test, /admin/push/status (tercihler /app/notification-preferences'ta).
 app.use(pushRouter);
 // Hesap silme (kimliksizlestirme) ve kisisel veri disa aktarma: /me/account-deletion[/preview], /me/data-export (yalniz kendi hesabi).

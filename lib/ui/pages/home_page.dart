@@ -152,6 +152,8 @@ import 'package:site_kapi_kontrol/models/survey_models.dart';
 import 'package:site_kapi_kontrol/ui/views/survey_manager_view.dart';
 import 'package:site_kapi_kontrol/ui/views/survey_resident_view.dart';
 import 'package:site_kapi_kontrol/models/decision_models.dart';
+import 'package:site_kapi_kontrol/ui/views/budget_view.dart';
+import 'package:site_kapi_kontrol/models/budget_models.dart';
 import 'package:site_kapi_kontrol/ui/views/decision_manager_view.dart';
 import 'package:site_kapi_kontrol/ui/views/decision_resident_view.dart';
 import 'package:site_kapi_kontrol/ui/widgets/announcement_parts.dart';
@@ -298,6 +300,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final GlobalKey<SurveyResidentViewState> _surveyResidentKey = GlobalKey<SurveyResidentViewState>();
   final GlobalKey<DecisionManagerViewState> _decisionManagerKey = GlobalKey<DecisionManagerViewState>();
   final GlobalKey<DecisionResidentViewState> _decisionResidentKey = GlobalKey<DecisionResidentViewState>();
+  final GlobalKey<BudgetViewState> _budgetKey = GlobalKey<BudgetViewState>();
   final GlobalKey<VisitorManagerViewState> _visitorManagerKey = GlobalKey<VisitorManagerViewState>();
   final GlobalKey<VisitorResidentViewState> _visitorResidentKey = GlobalKey<VisitorResidentViewState>();
   final GlobalKey<ContractsViewState> _contractsKey = GlobalKey<ContractsViewState>();
@@ -929,6 +932,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         if (_surveyResidentSites(role).isNotEmpty) SirketMenuItem.anket,
         if (_canAccessDecisionManage(role)) SirketMenuItem.kararDefteri,
         if (_decisionResidentSites(role).isNotEmpty) SirketMenuItem.kararlar,
+        if (_canAccessBudget(role)) SirketMenuItem.isletmeProjesi,
         if (_canAccessVisitorManage(role)) SirketMenuItem.ziyaretciKayitlari,
         if (_visitorResidentSites(role).isNotEmpty) SirketMenuItem.ziyaretcilerim,
         if (_canAccessContracts(role)) SirketMenuItem.sozlesmeler,
@@ -1118,6 +1122,23 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       role == UserRole.superUser || _surveyManageSites(role).isNotEmpty;
 
   // --- Karar Defteri ---
+
+  /// "İşletme Projesi" ekranındaki siteler: `budget` modülü AÇIK siteler (yönetici yazar, kurul salt okur). Süper kullanıcıda boştur
+  /// (ekran tüm siteleri çeker). FAIL-OPEN YOK: modül verisi yoksa site yoktur.
+  List<BudgetSite> _budgetSites(UserRole role) {
+    if (role == UserRole.superUser || !_moduleAccess.isFiltering) return const <BudgetSite>[];
+    final canManage = _canManagePeople(role);
+    return <BudgetSite>[
+      for (final site in _moduleAccess.result!.sites)
+        if (site.isEnabled(PlatformModuleCodes.budget))
+          if (site.role == 'manager' && canManage)
+            BudgetSite(code: site.siteCode, name: site.siteName)
+          else if (site.isBoardMember)
+            BudgetSite(code: site.siteCode, name: site.siteName, canWrite: false),
+    ];
+  }
+
+  bool _canAccessBudget(UserRole role) => role == UserRole.superUser || _budgetSites(role).isNotEmpty;
 
   /// "Karar Defteri" (yönetim) ekranındaki siteler: `decision_book` modülü AÇIK siteler. Yönetici (yönetici modunda)
   /// yazar ve kesinleştirir; kurul üyesi taslaklar dahil SALT OKUR; görevli ve sakin GÖREMEZ. Süper kullanıcıda boştur
@@ -1709,6 +1730,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (item == SirketMenuItem.kararlar) {
       return _decisionResidentSites(role).isNotEmpty;
     }
+    // İşletme Projesi: `budget` modülü açık siteye bağlı yönetici / kurul; sakin ve görevli için yok.
+    if (item == SirketMenuItem.isletmeProjesi) {
+      return _canAccessBudget(role);
+    }
 
     // Ziyaretçi ve Kargo: `visitor_log` modülü açık siteye bağlı yönetici / görevli / kurul (yönetim ekranı) ya da
     // sakin; modül kapalıyken ya da modül verisi yokken erişim YOKTUR.
@@ -1886,6 +1911,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
       case SirketMenuItem.kararlar:
         return 'Kararlar';
+
+      case SirketMenuItem.isletmeProjesi:
+        return 'İşletme Projesi';
 
       case SirketMenuItem.ziyaretciKayitlari:
         return 'Ziyaretçi ve Kargo';
@@ -5320,6 +5348,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       case SirketMenuItem.kararlar:
         await _decisionResidentKey.currentState?.reload();
         break;
+      case SirketMenuItem.isletmeProjesi:
+        await _budgetKey.currentState?.reload();
+        break;
       case SirketMenuItem.modulTalepleri:
         await _moduleRequestsViewKey.currentState?.reload();
         break;
@@ -6479,6 +6510,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           key: _surveyResidentKey,
           authService: widget.authService,
           sites: _surveyResidentSites(session.role),
+        );
+
+      case SirketMenuItem.isletmeProjesi:
+        return BudgetView(
+          key: _budgetKey,
+          authService: widget.authService,
+          manageAllSites: session.role == UserRole.superUser,
+          sites: _budgetSites(session.role),
+          onOpenModules: _canManagePeople(session.role) ? () => _goToMenu(SirketMenuItem.moduller) : null,
         );
 
       case SirketMenuItem.kararDefteri:

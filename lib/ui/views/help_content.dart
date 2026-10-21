@@ -68,6 +68,7 @@ abstract final class HelpContent {
   /// paneli (kapı durumu, kapıyı aç) "Kapılar" ekranındadır.
   static const Set<String> knownMenuTitles = <String>{
     'Panel',
+    'İşletme Projesi',
     'Kapılar',
     'Profilim',
     'Eller Serbest & Kestirmeler',
@@ -115,6 +116,13 @@ abstract final class HelpContent {
   /// Menü dışı ekran içi etiketler (düğme, bölüm, sekme adları; kodda aynen geçer).
   static const Set<String> knownScreenLabels = <String>{
     'KAPIYI AÇ',
+    'Yeni proje',
+    'Geçici proje',
+    'Kalemleri kaydet',
+    'Tebliğ et',
+    'Kesinleştir',
+    'İtiraz: taslağa al',
+    'PDF',
     'YEREL AĞDAN AÇ',
     'QR KOD İLE AÇ',
     'QR / Kod ile Daireye Katıl',
@@ -413,6 +421,18 @@ abstract final class HelpContent {
         'Finans modülü açılınca menüde “Finans” ekranı (“Daireler”, “Tanımlar” ve “Dönemler” sekmeleri) görünür.',
         'Sitenizde geçerli kuralları (gecikme tazminatı üst sınırı, işletme projesi ve saklama süreleri) aynı ekrandaki “Kurallar” bölümünde “Kuralları Görüntüle” ile görürsünüz; değerleri sistem yöneticisi belirler.',
       ],
+    ),
+    HelpTopic(
+      id: 'budget',
+      title: 'İşletme projesini (bütçe) nasıl hazırlarım?',
+      icon: Icons.account_balance_wallet_rounded,
+      steps: <String>[
+        'İşletme Projesi modülü açıkken menüden “İşletme Projesi” ekranını açın ve “Yeni proje” ile yılı seçin; onaylı proje yokken “Geçici proje” seçeneğini işaretleyin.',
+        'Proje ekranında her gider kategorisi için yıllık tutarı girip “Kalemleri kaydet”e basın.',
+        '“Tebliğ et” ile tebliğ tarihini girin; itiraz süresi bitince “Kesinleştir” açılır. İtiraz gelirse “İtiraz: taslağa al” ile projeyi düzeltin.',
+        'Aynı ekranda planlanan ve gerçekleşen giderleri kategori bazında görür, “PDF” ile indirirsiniz.',
+      ],
+      note: 'Geçici projenin kalan günü listede görünür. Süreleri sistem yöneticisi “Kurallar”dan belirler; yasal adımları kendi karar defterinizle birlikte takip edin.',
     ),
     HelpTopic(
       id: 'finance_accounts',
