@@ -101,7 +101,8 @@ Yazma gövdesi ve kuralları:
                { "key": "forecast.default_increase_bp", "inherit": true } ] }
 ```
 
-- `valid_from` yoksa bugün (İstanbul); bugünden eski olamaz, en çok 5 yıl ileri (400 `INVALID_BODY`). Not tek satıra indirilir, en çok 200.
+- `valid_from` yoksa bugün (İstanbul); bugünden eski olamaz, en çok 5 yıl ileri (400 `INVALID_BODY`). Not projedeki serbest metin kuralıyla
+  temizlenir (`finance_common.normalizeFreeText`: NFC, tek satır, görünmez ve yön denetim karakterleri atılır), en çok 200 karakter (kod noktası).
   1..20 değişiklik; bilinmeyen kök alan / biçimsiz değişiklik 400 `INVALID_BODY`.
 - Kural hataları TEK yanıtta: 400 `VALIDATION_FAILED` + `fields` (anahtar -> Türkçe metin) + `rule_codes` (anahtar -> kod):
   `RULE_UNKNOWN`, `RULE_DUPLICATE`, `RULE_VALUE_INVALID` (tür, sınır, izin verilmeyen null), `RULE_LOCKED`, `RULE_NOT_SITE_OVERRIDABLE`,
@@ -134,7 +135,8 @@ korunur. Bu, `docs/PLATFORM_FINANS_4B.md` "Hukuki dayanak"taki sabit üst sını
 - **Platform Ayarları** (yalnız süper kullanıcı): üstte "Kurallar" kartı -> "Kuralları Aç" -> `PlatformRulesScreen` (platform geneli; kurallar
   gruplu, her kartta değer, kaynak, sınır, varsayılan, geçerlilik tarihi, planlı değerler, son değiştiren ve not, mevzuat notu; kilitli kuralda
   neden). "Değiştir" -> `PlatformRuleDialog`: değer (baz puan yüzde metniyle "4,50"; sınır dışı kaydedilmez), süresiz anahtarı, ısı payında eşin değeri
-  toplamdan hesaplanıp birlikte gönderilir, planlanabilen kuralda geçerlilik tarihi (GG.AA.YYYY, bugün..5 yıl), not; sunucu reddi pencerede gösterilir.
+  toplamdan hesaplanıp birlikte gönderilir, planlanabilen kuralda geçerlilik tarihi (GG.AA.YYYY, bugün..5 yıl), not; sunucu reddi pencerede gösterilir;
+  kayıt sürerken geri tuşu pencereyi kapatmaz. Site görünümünde planlı platform değeri "(platform geneli)" ekiyle yazılır.
 - **Modüller** (seçili site): altta "Kurallar" kartı. Site yöneticisi "Kuralları Görüntüle" ile salt okunur görür (yönetici ucu, değiştirenin adı yok).
   Süper kullanıcı "Kuralları Aç" ile site görünümünde yalnız sitede değişebilen kuralları değiştirir ("Platform değerini kullan" = siteye özel değeri kaldır);
   diğer kurallarda "Platform genelinden değiştirilir".
