@@ -4,8 +4,9 @@
 Kullanim:
     python make_pdf.py --creds out/creds.json --out out/demo_hesaplar.pdf
 
-Girdi: seed.mjs --creds-out dosyasi (JSON). Cikti: yonetim kadrosu ve gorevliler tablosu, ardindan daire daire sakinler
-(daire amiri isaretli). Yazi tipi: Windows C:\\Windows\\Fonts\\arial.ttf ya da DejaVu Sans; yoksa reportlab'in
+Girdi: seed.mjs ya da restructure_families.mjs --creds-out dosyasi (JSON). Cikti: yonetim kadrosu ve gorevliler tablosu, ardindan daire daire
+sakinler. Yeniden yapilandirilmis dosyada (accounts[].familyRole var) her dairede Malik, Daire admini (isaretli: sari satir, kalin) ve aile uyeleri
+(es / cocuk / yasli ebeveyn; yas, hesapsiz olanlar belirtilir) rolleriyle birlikte gelir; eski bicimde (yalniz tohum ciktisi) daire amiri isaretlenir. Yazi tipi: Windows C:\\Windows\\Fonts\\arial.ttf ya da DejaVu Sans; yoksa reportlab'in
 yerlesik fontlari (Turkce harfler eksik cikabilir; uyari verir).
 Gereken: pip install reportlab
 """
@@ -98,31 +99,55 @@ def main():
     # --- daire daire ---
     story.append(PageBreak())
     story.append(Paragraph("Daireler ve sakinler", title))
-    story.append(Paragraph("Kalın yazılan ve rolünde &quot;daire amiri&quot; yazan kişi daire amiridir (APARTMENT_ADMIN). Rol: Malik / Kiracı / Aile üyesi.", small))
+    restructured = any(acc.get("familyRole") for acc in accounts if acc.get("group") == "daire")
+    if restructured:
+        story.append(Paragraph(
+            "Her dairede TEK <b>daire admini</b> vardır (sarı satır, kalın): dairede oturan kişi - kiracı oturuyorsa kiracı, aksi halde malik. "
+            "Kiracılı dairede malik dışarıda oturur (kapı yetkisi yoktur) ve yönetim kiracıdadır. Aile üyeleri: eş, çocuk, yaşlı ebeveyn; "
+            "18 yaşından küçükler reşit değildir, hesapsız olanların giriş bilgisi yoktur.", small))
+    else:
+        story.append(Paragraph("Kalın yazılan ve rolünde &quot;daire amiri&quot; yazan kişi daire amiridir (APARTMENT_ADMIN). Rol: Malik / Kiracı / Aile üyesi.", small))
+    meta_by_label = {h.get("apartmentLabel"): h for h in data.get("households", [])}
     groups = OrderedDict()
     for acc in accounts:
         if acc.get("group") != "daire":
             continue
         groups.setdefault(acc["apartmentLabel"], []).append(acc)
     for label, members in groups.items():
-        story.append(Paragraph(f"{label}", h2))
+        meta = meta_by_label.get(label)
+        if meta:
+            who = "Kiracı oturuyor, yönetim kiracıda" if meta.get("occupancy") == "tenant" else "Malik oturuyor, yönetim malikte"
+            story.append(Paragraph(f"{label} &nbsp;<font size=9 color='#555555'>({who}; {meta.get('residentCount', len(members))} kişi oturuyor)</font>", h2))
+        else:
+            story.append(Paragraph(f"{label}", h2))
         rows = [[Paragraph("Ad Soyad", cell_b), Paragraph("Rol", cell_b), Paragraph("Kullanıcı adı", cell_b), Paragraph("Şifre", cell_b)]]
-        for m in members:
+        admin_rows = []
+        for idx, m in enumerate(members, start=1):
             name = m["fullName"]
-            role = m["roleLabel"] + (" - daire amiri" if m.get("isAmir") else "")
-            rows.append([Paragraph(name, cell_b if m.get("isAmir") else cell), Paragraph(role, cell), Paragraph(m["username"], mono), Paragraph(m["password"], mono)])
-        t = Table(rows, colWidths=[50 * mm, 48 * mm, 42 * mm, 34 * mm], repeatRows=1)
-        t.setStyle(
-            TableStyle(
-                [
-                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#eef2f7")),
-                    ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#b4bdc9")),
-                    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                    ("TOPPADDING", (0, 0), (-1, -1), 2.5),
-                    ("BOTTOMPADDING", (0, 0), (-1, -1), 2.5),
-                ]
-            )
-        )
+            if restructured:
+                role = m.get("roleLabel", "")
+                has_account = m.get("hasAccount", True) and m.get("username")
+                user_txt = m["username"] if has_account else "-"
+                pass_txt = (m.get("password") or "(bilinmiyor)") if has_account else "hesap yok"
+            else:
+                role = m["roleLabel"] + (" - daire amiri" if m.get("isAmir") else "")
+                user_txt = m["username"]
+                pass_txt = m["password"]
+            if m.get("isAmir"):
+                admin_rows.append(idx)
+            rows.append([Paragraph(name, cell_b if m.get("isAmir") else cell), Paragraph(role, cell_b if m.get("isAmir") else cell), Paragraph(user_txt, mono), Paragraph(pass_txt, mono)])
+        t = Table(rows, colWidths=[46 * mm, 56 * mm, 40 * mm, 32 * mm], repeatRows=1)
+        style = [
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#eef2f7")),
+            ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#b4bdc9")),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("TOPPADDING", (0, 0), (-1, -1), 2.5),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 2.5),
+        ]
+        if restructured:
+            for idx in admin_rows:
+                style.append(("BACKGROUND", (0, idx), (-1, idx), colors.HexColor("#fff3c4")))
+        t.setStyle(TableStyle(style))
         story.append(t)
 
     def footer(canvas, doc):
