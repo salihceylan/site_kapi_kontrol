@@ -20,7 +20,7 @@ const ok = (rows = []) => ({ rows, rowCount: rows.length });
 let log;
 let handlers;
 
-const INFRA = [/^BEGIN$/, /^COMMIT$/, /^ROLLBACK$/, /^SELECT pg_advisory_xact_lock/, /^SAVEPOINT /, /^RELEASE SAVEPOINT /, /^ROLLBACK TO SAVEPOINT /, /^INSERT INTO audit_log/];
+const INFRA = [/^BEGIN$/, /^COMMIT$/, /^ROLLBACK$/, /^SELECT pg_advisory_xact_lock/, /^SAVEPOINT /, /^RELEASE SAVEPOINT /, /^ROLLBACK TO SAVEPOINT /, /^INSERT INTO audit_log/, /^INSERT INTO apartment_residency_log/];
 const STEP_SQLS = new Set(SYNC_STEPS.map((step) => norm(step.sql)));
 
 function install() {

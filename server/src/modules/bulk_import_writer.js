@@ -6,6 +6,7 @@
 // Beklenmeyen 23505 / 23503 (yarış) ya da beklenen satır sayısının tutmaması -> 409 PREVIEW_STALE (çağıran ROLLBACK yapar).
 
 import { PlatformError } from './errors.js';
+import { logResidenciesBulk } from './residency_log.js';
 
 export const ENTITY_CHUNK = 5000;
 export const AUDIT_CHUNK = 10000;
@@ -254,6 +255,8 @@ export async function applyPeopleOps(client, { siteCode, ops, runId, today, acto
     if (Number(result.rowCount) !== part.length) {
       throw staleError();
     }
+    // ADLI KAYIT (residency_log): "sakin" -> malik / kiraci / aile yukseltmesi (rol degisimi), ayni transaction'da.
+    await logResidenciesBulk(client, { ids: part.map((op) => op.residencyId), eventType: 'role_changed', actorUserCode });
   }
   for (const op of residencyUpgrades) {
     audits.push({
@@ -286,6 +289,8 @@ export async function applyPeopleOps(client, { siteCode, ops, runId, today, acto
     if (inserted.rows.length !== part.length) {
       throw staleError();
     }
+    // ADLI KAYIT (residency_log): toplu yuklemeyle eklenen ilişkiler (tasinma / sakin kaydi).
+    await logResidenciesBulk(client, { ids: inserted.rows.map((row) => row.id), eventType: 'moved_in', actorUserCode });
     for (const row of inserted.rows) {
       audits.push({
         action: 'residency.added',

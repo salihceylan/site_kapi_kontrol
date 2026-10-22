@@ -249,7 +249,13 @@ export async function suspendMemberAccess({ siteCode, apartmentId, userCode, bod
   });
   try {
     // Mevcut uyelik servisi: gecici pasife alma (iliskiler / baglar korunur, yonetici ise devir, kapi izin temizligi, anahtar dondurme).
-    await toggleApartmentMemberStatus({ apartmentId: aptId, targetUserCode: target, isActive: false, authUser });
+    await toggleApartmentMemberStatus({
+      apartmentId: aptId,
+      targetUserCode: target,
+      isActive: false,
+      authUser,
+      logContext: { reasonCode: 'suspension', related: { suspension_reason: reason } },
+    });
   } catch (error) {
     await pool.query(
       `UPDATE apartment_access_suspensions SET lifted_at = NOW(), lifted_by = $3, lift_note = 'islem basarisiz, geri alindi' WHERE apartment_id = $1 AND user_code = $2 AND lifted_at IS NULL`,
@@ -273,7 +279,13 @@ export async function liftMemberSuspension({ siteCode, apartmentId, userCode, bo
   if (!open) {
     throw new PlatformError(404, 'SUSPENSION_NOT_FOUND', 'Bu kişi için açık bir askıya alma yok.');
   }
-  await toggleApartmentMemberStatus({ apartmentId: state.apartment.id, targetUserCode: target, isActive: true, authUser });
+  await toggleApartmentMemberStatus({
+    apartmentId: state.apartment.id,
+    targetUserCode: target,
+    isActive: true,
+    authUser,
+    logContext: { reasonCode: 'suspension' },
+  });
   await withSiteTransaction(Number(siteCode), async (client) => {
     await client.query(`UPDATE apartment_access_suspensions SET lifted_at = NOW(), lifted_by = $2, lift_note = $3 WHERE id = $1`, [open.id, uc, note]);
     // Askidayken baska bir admin atanmissa, geri acilan kisi ikinci admin olmasin.

@@ -4,6 +4,7 @@
 // Kilit sırası (genel): apartments (id sırasıyla) -> users -> site_people / apartment_residencies / vehicles.
 
 import { recordAudit } from './audit_service.js';
+import { logResidencyEvent } from './residency_log.js';
 import { INTERNAL_EMAIL_SUFFIX, runSyncSteps, siteTiePredicate } from './people_sync_sql.js';
 import { todayIso } from './people_common.js';
 
@@ -115,7 +116,10 @@ export async function deactivatePersonUnlessTied(client, { siteCode, personId, u
  * Güvenli: SAVEPOINT içinde çalışır; hata daireden çıkarma işlemini BOZMAZ (loglanır).
  * @returns {Promise<number>} biten ilişki sayısı
  */
-export async function endResidenciesForMemberRemoval(client, { apartmentId, userCode, actor = null, reason = 'member_removed' }) {
+export async function endResidenciesForMemberRemoval(
+  client,
+  { apartmentId, userCode, actor = null, reason = 'member_removed', logReason = 'site_manager', actorRole = null },
+) {
   const savepoint = 'crm_member_removal';
   try {
     await client.query(`SAVEPOINT ${savepoint}`);
@@ -141,6 +145,18 @@ export async function endResidenciesForMemberRemoval(client, { apartmentId, user
         `UPDATE apartment_residencies SET is_current = FALSE, move_out_date = $2, updated_at = NOW() WHERE id = $1`,
         [residency.id, moveOutDate],
       );
+      // ADLI KAYIT (residency_log): kişi hesaptan koparılmadan ÖNCE, aynı transaction'da.
+      await logResidencyEvent(client, {
+        siteCode: residency.site_code,
+        apartmentId,
+        residencyId: residency.id,
+        userCode,
+        eventType: 'member_removed',
+        reasonCode: logReason,
+        periodEnd: moveOutDate,
+        actor,
+        actorRole,
+      });
       await audit(client, actor, 'residency.ended', residency.site_code, 'person', residency.person_id, {
         residency_id: Number(residency.id),
         apartment_id: Number(apartmentId),
@@ -174,7 +190,19 @@ export async function endResidenciesForMemberRemoval(client, { apartmentId, user
     }
     // eslint-disable-next-line no-console
     console.error('[people] daireden cikarma CRM yansimasi basarisiz:', error?.code || error?.message || error);
-    return 0;
+    ended = 0;
+  }
+  if (ended === 0) {
+    // ADLI KAYIT: CRM'de güncel ilişkisi olmayan (ya da yansıması başarısız olan) üyenin çıkarılması da kayda geçer (kişi/ilişki yoksa kullanıcıdan).
+    await logResidencyEvent(client, {
+      apartmentId,
+      userCode,
+      relation: 'resident',
+      eventType: 'member_removed',
+      reasonCode: logReason,
+      actor,
+      actorRole,
+    });
   }
   return ended;
 }

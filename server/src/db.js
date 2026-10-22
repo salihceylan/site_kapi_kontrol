@@ -21,6 +21,7 @@ import { ensureContractsSchema } from './modules/contracts_schema.js';
 import { ensureEquipmentSchema } from './modules/equipment_schema.js';
 import { ensureCctvSchema } from './modules/cctv_schema.js';
 import { ensureApartmentMgmtSchema } from './modules/apartment_mgmt_schema.js';
+import { ensureResidencyLogSchema } from './modules/residency_log_schema.js';
 import { ensureDecisionBookSchema } from './modules/decision_book_schema.js';
 import { ensureBudgetSchema } from './modules/budget_schema.js';
 import { ensureNeighborBoardSchema } from './modules/neighbor_board_schema.js';
@@ -1958,6 +1959,8 @@ export async function ensureDbSchema() {
     await ensureCctvSchema(client);
     // 074 (daire sahipligi ve yonetimi: yonetim devri, bag kesme / davet talepleri, vekalet + residencies.sponsor_person_id): apartment_residencies'ten SONRA; katalog kontrolu (apartment_mgmt_schema.js = migrations/074).
     await ensureApartmentMgmtSchema(client);
+    // 075 (daire sakini ADLI KAYDI: yalniz-ekleme apartment_residency_log + users silme kayit tetikleyicisi): sites / users / apartment_residencies'ten SONRA; katalog kontrolu (residency_log_schema.js = migrations/075).
+    await ensureResidencyLogSchema(client);
 
     // 031 people_v1: mevcut sakinlerin CRM'e tek seferlik aktarimi. Savunmaci: hata sunucunun acilmasini ENGELLEMEZ
     // (kendi transaction'i geri alinir, isaret yazilmaz => sonraki acilista yeniden denenir; okuma anindaki

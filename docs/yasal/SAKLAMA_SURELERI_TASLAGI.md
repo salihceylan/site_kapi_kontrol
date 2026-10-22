@@ -20,6 +20,7 @@ okutacak anahtardır (bölüm 3).
 | İş takibi fotoğrafları | talep kapandıktan 2 yıl sonra | `retention.work_photos_after_close_days` (730) | Kendiliğinden silinmez; yalnız elle silinir. |
 | Duyurular | 5 yıl | `retention.announcements_days` (1825) | Yayımlanmış duyuru silinmez (taslak ve zamanlanmış silinebilir). |
 | Denetim kaydı (kim, ne zaman, ne yaptı) | 5 yıl | `retention.audit_days` (1825) | Silinmez (temizlik işi yok); uygulamada düzenleme yolu yok (veritabanında ayrıca değişmezlik kilidi yok). |
+| Daire sakini adli kaydı (kim, hangi daire, hangi dönem, hangi rolde, nasıl ayrıldı; ad ve kodlar, iletişim bilgisi YOK) | 10 yıl; yalnız resmî talep halinde bilgi amaçlı | `retention.residency_log_days` (3650) | Yeni (migration 075). Değiştirilemez ve silinemez (veritabanı tetikleyicisi; yalnız site silinince birlikte gider); hesap silinse de kalır; yalnız site yöneticisi ve süper kullanıcı görür. Ayrıntı: `docs/PLATFORM_ADLI_KAYIT.md`. Sorular 14-15. |
 | Karar defteri | süresiz | `retention.decision_book_days` (boş = süresiz) | Kesinleşmiş karar silinmez ve değiştirilemez (veritabanı tetikleyicisi); taslak karar silinebilir. Site silinince birlikte silinir. |
 | Otomatik silme anahtarı | avukat onayına kadar kapalı | `retention.enforce` (kapalı) | Yukarıdaki yeni süreler için silme işi yok. |
 
@@ -131,6 +132,16 @@ Bugün (kaynak: `docs/OPERASYON_YEDEK_IZLEME.md`, 2026-10-16; dış kopya için 
     ayda siler (m.11/3). Güde ve siteler kayıt yükümlüsü mü? Değilse de politika yazılsın mı; site yönetimleri için örnek politika
     hazırlayalım mı?
 13. **Silme kaydı.** Silme turlarının denetim kaydında yalnız sayıyla tutulması (yönetmelik m.7/3) yeterli mi?
+14. **Daire sakini adli kaydı (`retention.residency_log_days`).** Eski kiracının/sakinin ayrılışının (ad, ilişki, dönem, daire, nasıl ayrıldığı; iletişim
+    bilgisi ve serbest not yok) hesap silinse bile 10 yıl saklanması, yalnız resmî talep halinde bilgi amacıyla ve yalnız site yöneticisinin erişimiyle,
+    hangi dayanağa oturur: hukuki yükümlülük / hakkın tesisi, kullanılması veya korunması (KVKK m.5/2-ç, e) mi, meşru menfaat (m.5/2-f) mi?
+    Kira sözleşmesinden doğan alacakların zamanaşımı (TBK m.146-147) süreyi belirliyor mu; 10 yıl ölçülülük ilkesine (m.4/2-ç) uyuyor mu,
+    yoksa daha kısa mı olmalı? Hesap silme talebinde (m.7, m.11) bu kaydın saklama istisnası olarak kalması kabul edilebilir mi?
+    `[AVUKAT DOĞRULASIN]`
+15. **Aydınlatma metni.** Bu kaydın (amaç: adli/resmî talep halinde bilgi; saklama süresi; erişen: yalnız site yönetimi) aydınlatma metninde **ayrı bir
+    madde olarak** anılması gerekir mi? Önerilen cümle: "Daireden ayrılan kişinin ad, ilişki türü, dairede bulunduğu dönem ve ayrılış biçimi, resmî
+    talep halinde paylaşılmak üzere değiştirilemez bir kayıtta tutulur; sakinlere gösterilmez." (`server/legal/*.md` şablonlarına bu işte dokunulmadı.)
+    `[AVUKAT DOĞRULASIN]`
 
 ## 7. Kaynaklar (hepsine 2026-10-21'de erişildi)
 

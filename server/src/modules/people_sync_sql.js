@@ -32,6 +32,14 @@ const DESIRED_CTE = `
   )
 `;
 
+/**
+ * ADLI KAYIT (residency_log, 075) SQL parçaları: eşitleme adımlarının açtığı / kapattığı ilişkiler AYNI ifadede kayda geçer (SİSTEM adına).
+ * İletişim bilgisi (telefon, e-posta) kayda GİTMEZ; yalnız ad anlık görüntüsü. Parçalar `a` (apartments), `b` (site_blocks), `u` (users), `sp` (site_people) takma adlarını bekler.
+ */
+const LOG_LABEL_SQL = `LEFT(NULLIF(btrim(CASE WHEN COALESCE(b.block_name, '') <> '' AND COALESCE(a.unit_label, '') <> '' THEN b.block_name || ' - ' || a.unit_label ELSE COALESCE(NULLIF(b.block_name, ''), a.unit_label, '') END), ''), 80)`;
+const LOG_NAME_SQL = `LEFT(NULLIF(btrim(COALESCE(NULLIF(u.full_name, ''), sp.full_name, '')), ''), 120)`;
+const LOG_COLUMNS_SQL = `site_code, apartment_id, apartment_label, event_type, reason_code, subject_name, subject_relation, subject_person_id, subject_user_code, period_start, period_end, actor_role, related`;
+
 /** Dahili (daire hesabı) e-posta alanı: gerçek iletişim adresi değildir. */
 export const INTERNAL_EMAIL_SUFFIX = '@ahbu.local';
 
@@ -130,12 +138,27 @@ const REACTIVATE_PEOPLE_SQL = `
 
 /** 4) Eksik güncel ilişki kayıtları ('resident' = ilişki belirtilmemiş; tarih üyelik oluşturma gününden; kaynak 'sync'). */
 const INSERT_RESIDENCIES_SQL = `
-  WITH ${DESIRED_CTE}
-  INSERT INTO apartment_residencies (site_code, apartment_id, person_id, relation, is_current, move_in_date, origin)
-  SELECT d.site_code, d.apartment_id, sp.id, 'resident', TRUE, d.move_in, 'sync'
-  FROM desired d
-  INNER JOIN site_people sp ON sp.site_code = d.site_code AND sp.user_code = d.user_code
-  ON CONFLICT (apartment_id, person_id) WHERE is_current DO NOTHING
+  WITH ${DESIRED_CTE},
+  ins AS (
+    INSERT INTO apartment_residencies (site_code, apartment_id, person_id, relation, is_current, move_in_date, origin)
+    SELECT d.site_code, d.apartment_id, sp.id, 'resident', TRUE, d.move_in, 'sync'
+    FROM desired d
+    INNER JOIN site_people sp ON sp.site_code = d.site_code AND sp.user_code = d.user_code
+    ON CONFLICT (apartment_id, person_id) WHERE is_current DO NOTHING
+    RETURNING id, site_code, apartment_id, person_id, relation, move_in_date
+  ),
+  logged AS (
+    INSERT INTO apartment_residency_log (${LOG_COLUMNS_SQL})
+    SELECT i.site_code, i.apartment_id, ${LOG_LABEL_SQL}, 'moved_in', 'sync', ${LOG_NAME_SQL}, i.relation, i.person_id, sp.user_code, i.move_in_date, NULL,
+           'system', jsonb_build_object('residency_id', i.id, 'auto', TRUE)
+    FROM ins i
+    INNER JOIN site_people sp ON sp.id = i.person_id
+    LEFT JOIN users u ON u.user_code = sp.user_code
+    LEFT JOIN apartments a ON a.id = i.apartment_id
+    LEFT JOIN site_blocks b ON b.id = a.block_id
+    RETURNING id
+  )
+  SELECT id FROM ins
 `;
 
 /**
@@ -163,7 +186,7 @@ const END_UNBACKED_SQL = `
       AND NOT EXISTS (
         SELECT 1 FROM apartments a WHERE a.id = r.apartment_id AND a.resident_user_code = sp.user_code
       )
-    RETURNING r.id, r.site_code, r.apartment_id, r.person_id, r.relation
+    RETURNING r.id, r.site_code, r.apartment_id, r.person_id, r.relation, r.move_in_date
   ),
   logged AS (
     INSERT INTO audit_log (actor_name, actor_role, action, site_code, target_type, target_id, details)
@@ -176,6 +199,17 @@ const END_UNBACKED_SQL = `
       e.person_id::text,
       jsonb_build_object('residency_id', e.id, 'apartment_id', e.apartment_id, 'relation', e.relation, 'auto', TRUE)
     FROM ended e
+    RETURNING id
+  ),
+  logged_residency AS (
+    INSERT INTO apartment_residency_log (${LOG_COLUMNS_SQL})
+    SELECT e.site_code, e.apartment_id, ${LOG_LABEL_SQL}, 'moved_out', 'sync', ${LOG_NAME_SQL}, e.relation, e.person_id, sp.user_code, e.move_in_date,
+           GREATEST(CURRENT_DATE, e.move_in_date), 'system', jsonb_build_object('residency_id', e.id, 'auto', TRUE)
+    FROM ended e
+    INNER JOIN site_people sp ON sp.id = e.person_id
+    LEFT JOIN users u ON u.user_code = sp.user_code
+    LEFT JOIN apartments a ON a.id = e.apartment_id
+    LEFT JOIN site_blocks b ON b.id = a.block_id
     RETURNING id
   ),
   deactivated AS (
@@ -239,7 +273,7 @@ const DEACTIVATE_ORPHANS_SQL = `
     SET is_current = FALSE, move_out_date = CURRENT_DATE, updated_at = NOW()
     FROM orphans o
     WHERE r.person_id = o.id AND r.is_current = TRUE
-    RETURNING r.id, r.site_code, r.apartment_id, r.person_id, r.relation
+    RETURNING r.id, r.site_code, r.apartment_id, r.person_id, r.relation, r.move_in_date
   ),
   logged AS (
     INSERT INTO audit_log (actor_name, actor_role, action, site_code, target_type, target_id, details)
@@ -252,6 +286,17 @@ const DEACTIVATE_ORPHANS_SQL = `
       e.person_id::text,
       jsonb_build_object('residency_id', e.id, 'apartment_id', e.apartment_id, 'relation', e.relation, 'auto', TRUE, 'reason', 'account_deleted')
     FROM ended e
+    RETURNING id
+  ),
+  logged_residency AS (
+    INSERT INTO apartment_residency_log (${LOG_COLUMNS_SQL})
+    SELECT e.site_code, e.apartment_id, ${LOG_LABEL_SQL}, 'moved_out', 'account_deleted', ${LOG_NAME_SQL}, e.relation, e.person_id, NULL, e.move_in_date,
+           GREATEST(CURRENT_DATE, e.move_in_date), 'system', jsonb_build_object('residency_id', e.id, 'auto', TRUE)
+    FROM ended e
+    INNER JOIN site_people sp ON sp.id = e.person_id
+    LEFT JOIN users u ON u.user_code = sp.user_code
+    LEFT JOIN apartments a ON a.id = e.apartment_id
+    LEFT JOIN site_blocks b ON b.id = a.block_id
     RETURNING id
   ),
   vehicles_off AS (

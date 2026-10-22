@@ -53,6 +53,8 @@ import {
 } from './account_common.js';
 import { verifyCurrentPassword } from './account_password_guard.js';
 import { recordAudit } from './audit_service.js';
+import { todayIso } from './people_common.js';
+import { logResidencyEvent } from './residency_log.js';
 import { peopleLockKey } from './people_sync.js';
 import { deletePushDataForUser } from './push_devices.js';
 import { ownOpenDebts } from './finance_read_service.js';
@@ -775,6 +777,45 @@ async function runAttempt(userCode) {
         [userCode],
       ),
     );
+    // ADLI KAYIT (residency_log, 075): ayrilik kaydi hesap silinse de KALIR (KVKK saklama istisnasi; bkz. docs/PLATFORM_ADLI_KAYIT.md). Ad, hesap
+    // kimliksizlestirilmeden ONCE okunan (adim 0) degerdir; iletisim bilgisi (telefon / e-posta) kayda GITMEZ. Iliskisi olmayan uyelikler de kayda gecer.
+    const loggedName = typeof user.full_name === 'string' && user.full_name.trim() !== '' ? user.full_name : null;
+    const endingResidencies = await client.query(
+      `
+        SELECT r.id, r.apartment_id, r.site_code
+        FROM apartment_residencies r
+        INNER JOIN site_people sp ON sp.id = r.person_id
+        WHERE sp.user_code = $1 AND r.is_current
+        ORDER BY r.id
+      `,
+      [userCode],
+    );
+    for (const residency of endingResidencies.rows ?? []) {
+      await logResidencyEvent(client, {
+        siteCode: num(residency.site_code),
+        apartmentId: num(residency.apartment_id),
+        residencyId: num(residency.id),
+        userCode,
+        eventType: 'moved_out',
+        reasonCode: 'account_deleted',
+        periodEnd: todayIso(),
+        subjectName: loggedName,
+        related: { residency_id: num(residency.id) },
+      });
+    }
+    const residencyApartments = new Set((endingResidencies.rows ?? []).map((row) => num(row.apartment_id)));
+    for (const membership of removedMemberships.rows ?? []) {
+      if (!residencyApartments.has(num(membership.apartment_id))) {
+        await logResidencyEvent(client, {
+          apartmentId: num(membership.apartment_id),
+          userCode,
+          relation: 'resident',
+          eventType: 'member_removed',
+          reasonCode: 'account_deleted',
+          subjectName: loggedName,
+        });
+      }
+    }
     await client.query(
       `
         UPDATE apartment_residencies r

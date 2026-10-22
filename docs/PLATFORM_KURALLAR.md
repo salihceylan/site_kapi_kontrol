@@ -28,6 +28,7 @@ Kayıt defteri: `server/src/modules/platform_rules.js` (`RULES`, sıra = ekranda
 | `retention.work_photos_after_close_days` | İş takibi fotoğrafları (talep kapandıktan sonra) | gün | 730 | 30..3650 | hayır | evet | H2: 2 yıl |
 | `retention.announcements_days` | Duyurular | gün | 1825 | 365..3650 | hayır | evet | H2: 5 yıl |
 | `retention.audit_days` | Denetim kaydı | gün | 1825 | 365..3650 | hayır | evet | H2: 5 yıl (denetim kaydı bugün hiç silinmez) |
+| `retention.residency_log_days` | Daire sakini adli kaydı | gün | 3650 | 1825..7300 | hayır | evet | KVKK m.4/2-d, m.5/2-ç,e,f, m.7; TBK m.146-147; yalnız resmî talep halinde bilgi amaçlı (`docs/PLATFORM_ADLI_KAYIT.md`); kayıt değiştirilemez, otomatik silme kapalı |
 | `retention.decision_book_days` | Karar defteri | gün, süresiz olabilir | null (süresiz) | 3650..36500 ya da null | hayır | evet | KMK m.32; H2: süresiz |
 | `retention.enforce` | Otomatik silme | açık / kapalı | kapalı | — | hayır | evet | KİLİTLİ: değiştirilemez (aşağıda) |
 

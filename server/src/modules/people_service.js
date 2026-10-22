@@ -40,6 +40,7 @@ import {
   toIso,
 } from './people_common.js';
 import { deactivatePersonRecord, deactivatePersonUnlessTied } from './people_records.js';
+import { closeLogFor, logResidencyEvent } from './residency_log.js';
 import { INTERNAL_EMAIL_SUFFIX, runSyncSteps, siteTiePredicate } from './people_sync_sql.js';
 import { peopleLockKey, syncSitePeopleSafe } from './people_sync.js';
 
@@ -511,7 +512,11 @@ export async function grantApartmentAccess(client, { siteCode, apartmentId, user
   );
 }
 
-async function insertResidency(client, { siteCode, apartmentId, personId, relation, moveInDate }) {
+/**
+ * Güncel ilişki ekler (taşınma / sakin kaydı). ADLI KAYIT (residency_log): aynı transaction'da `moved_in` satırı yazılır.
+ * `actor`: işlemi yapan (authUser); verilmezse SİSTEM. `reasonCode`: neden kodu. `actorRole`: bağlamdan bilinen rol.
+ */
+async function insertResidency(client, { siteCode, apartmentId, personId, relation, moveInDate, actor = null, reasonCode = 'manual_add', actorRole = null }) {
   try {
     const result = await client.query(
       `
@@ -521,7 +526,9 @@ async function insertResidency(client, { siteCode, apartmentId, personId, relati
       `,
       [siteCode, apartmentId, personId, relation, moveInDate],
     );
-    return Number(result.rows[0].id);
+    const residencyId = Number(result.rows[0].id);
+    await logResidencyEvent(client, { siteCode, apartmentId, residencyId, eventType: 'moved_in', reasonCode, actor, actorRole });
+    return residencyId;
   } catch (error) {
     if (error?.code === '23505') {
       const constraint = constraintOf(error);
@@ -542,7 +549,7 @@ async function insertResidency(client, { siteCode, apartmentId, personId, relati
  * Daire satırı çağıran tarafından FOR UPDATE ile kilitlenmiştir (üyelik akışlarıyla aynı kilit sırası).
  * @returns {Promise<boolean>} erişim gerçekten kapandı mı (anahtar döndürme gerekir mi)
  */
-async function revokeApartmentAccess(client, { siteCode, apartment, userCode }) {
+async function revokeApartmentAccess(client, { siteCode, apartment, userCode, actor = null, actorRole = null }) {
   const apartmentId = Number(apartment.id);
   const memberResult = await client.query(
     `SELECT role, is_active FROM apartment_memberships WHERE apartment_id = $1 AND user_code = $2 FOR UPDATE`,
@@ -562,7 +569,7 @@ async function revokeApartmentAccess(client, { siteCode, apartment, userCode }) 
   // Yönetici devri YALNIZ çıkarılan kişi göstergenin sahibiyse (legacy) ya da AKTİF daire yöneticisiyse; gösterge/PIN'e yalnız
   // gösterge çıkarılan kişiye aitse dokunulur (başka sakinin - ör. dahili hesabın - göstergesi ve PIN'i korunur).
   if (legacy || wasActiveAdmin) {
-    await handOverApartmentResident(client, apartmentId, userCode, { indicatorOwnedByRemoved: legacy });
+    await handOverApartmentResident(client, apartmentId, userCode, { indicatorOwnedByRemoved: legacy, actor, actorRole });
     closed = closed || legacy;
   }
   const internalOff = await client.query(
@@ -593,7 +600,7 @@ async function revokeApartmentAccess(client, { siteCode, apartment, userCode }) 
  * (anlık kopya) ve araçları pasifleşir.
  * @returns {Promise<{ accessClosed: boolean }>}
  */
-async function closeResidency(client, { siteCode, residency, userCode, moveOutDate, actor, reason = null }) {
+async function closeResidency(client, { siteCode, residency, userCode, moveOutDate, actor, reason = null, actorRole = null }) {
   const apartmentLock = await client.query(
     `SELECT id, site_code, resident_user_code, resident_email FROM apartments WHERE id = $1 FOR UPDATE`,
     [residency.apartment_id],
@@ -613,6 +620,18 @@ async function closeResidency(client, { siteCode, residency, userCode, moveOutDa
     throw RESIDENCY_NOT_CURRENT();
   }
 
+  // ADLI KAYIT (residency_log): ayrılma / çıkarma olayı, kişi hesaptan koparılmadan ve erişim kapanmadan ÖNCE (anlık görüntü doğru kalsın), AYNI transaction'da.
+  await logResidencyEvent(client, {
+    siteCode,
+    apartmentId: residency.apartment_id,
+    residencyId: residency.id,
+    userCode,
+    ...closeLogFor(reason),
+    periodEnd: moveOutDate,
+    actor,
+    actorRole,
+  });
+
   const contactEmailBeforeRevoke =
     userCode !== null && userCode !== undefined && apartment.resident_user_code !== null && apartment.resident_user_code !== undefined
     && Number(apartment.resident_user_code) === Number(userCode)
@@ -620,7 +639,7 @@ async function closeResidency(client, { siteCode, residency, userCode, moveOutDa
       : null;
   let accessClosed = false;
   if (userCode !== null && userCode !== undefined) {
-    accessClosed = await revokeApartmentAccess(client, { siteCode, apartment, userCode });
+    accessClosed = await revokeApartmentAccess(client, { siteCode, apartment, userCode, actor, actorRole });
   }
 
   await audit(client, actor, 'residency.ended', siteCode, 'person', residency.person_id, {
@@ -918,6 +937,7 @@ export async function createPerson({ siteCode, input, actor, includeUserCode = t
         personId: id,
         relation: input.relation,
         moveInDate: input.moveInDate ?? todayIso(),
+        actor,
       });
       if (linkedUserCode !== null) {
         await grantApartmentAccess(client, { siteCode, apartmentId: Number(apartment.id), userCode: linkedUserCode });
@@ -1200,6 +1220,7 @@ export async function addResidency({ siteCode, personId, body = {}, actor, inclu
       personId: id,
       relation,
       moveInDate: moveInDate ?? todayIso(),
+      actor,
     });
     if (person.is_active !== true) {
       await activatePersonRecord(client, { siteCode, person });
@@ -1288,6 +1309,19 @@ export async function updateResidency({ siteCode, residencyId, body = {}, actor,
         apartment_id: Number(row.apartment_id),
         changes,
       });
+      if (relation !== undefined && relation !== row.relation) {
+        // ADLI KAYIT: rol / ilişki değişimi (örn. kiracı -> malik); eski ve yeni ilişki kod olarak bağlanır.
+        await logResidencyEvent(client, {
+          siteCode,
+          apartmentId: Number(row.apartment_id),
+          residencyId: id,
+          eventType: 'role_changed',
+          reasonCode: 'role_change',
+          relation,
+          actor,
+          related: { residency_id: id, from_relation: row.relation, to_relation: relation },
+        });
+      }
     }
     return Number(row.person_id);
   });

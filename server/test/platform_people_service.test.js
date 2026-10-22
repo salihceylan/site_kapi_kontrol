@@ -42,6 +42,7 @@ const INFRA = [
   /^RELEASE SAVEPOINT /,
   /^ROLLBACK TO SAVEPOINT /,
   /^INSERT INTO audit_log/,
+  /^INSERT INTO apartment_residency_log/,
 ];
 
 function install() {
