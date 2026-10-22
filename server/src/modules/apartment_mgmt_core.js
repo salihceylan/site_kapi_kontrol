@@ -28,7 +28,7 @@ const MEMBERS_SQL = `
 `;
 
 const RESIDENCIES_SQL = `
-  SELECT r.id, r.person_id, r.relation, r.origin, r.sponsor_person_id, r.move_in_date,
+  SELECT r.id, r.person_id, r.relation, r.origin, r.sponsor_person_id, r.is_minor, r.move_in_date,
          sp.user_code, sp.is_active AS person_active,
          COALESCE(NULLIF(u.full_name, ''), sp.full_name) AS name,
          ${ACCOUNT_KIND_SQL} AS account_kind
@@ -93,13 +93,13 @@ export async function endOpenDelegation(client, apartmentId, reason) {
 }
 
 /** Kiraciya yonetim devri kaydi acar (eski acik kayit kapanir). state: 'active' (kiracinin uyeligi var) | 'pending_account' (hesabi yok). */
-export async function recordDelegation(client, { siteCode, apartmentId, ownerPersonId, adminPersonId, adminUserCode, state, createdBy }) {
+export async function recordDelegation(client, { siteCode, apartmentId, ownerPersonId, adminPersonId, adminUserCode, state, createdBy, source = 'tenant_delegated' }) {
   await endOpenDelegation(client, apartmentId, 'replaced');
   await client.query(
     `INSERT INTO apartment_admin_delegations
        (site_code, apartment_id, owner_person_id, admin_person_id, admin_user_code, source, state, created_by)
-     VALUES ($1, $2, $3, $4, $5, 'tenant_delegated', $6, $7)`,
-    [siteCode, apartmentId, ownerPersonId ?? null, adminPersonId, adminUserCode ?? null, state, createdBy ?? null],
+     VALUES ($1, $2, $3, $4, $5, $8, $6, $7)`,
+    [siteCode, apartmentId, ownerPersonId ?? null, adminPersonId, adminUserCode ?? null, state, createdBy ?? null, source],
   );
 }
 
@@ -154,4 +154,41 @@ export async function activatePendingDelegations(client, { personId, userCode })
       await client.query(`UPDATE apartment_admin_delegations SET state = 'active', admin_user_code = $2 WHERE id = $1`, [row.id, userCode]);
     }
   }
+}
+
+/**
+ * Uygulama ici bildirim kutusu (apartment_notices): ilgili kullanicilara kisa Turkce ileti. E-posta DEGILDIR. Ayni kullanici bir kez yazilir;
+ * `exceptUserCode` (islemi yapan) atlanir. Hata yutulmaz ama ana islem bir SAVEPOINT icinde korunur (bildirim yazilamazsa islem bozulmaz).
+ */
+export async function notifyApartmentUsers(client, { siteCode, apartmentId, userCodes, kind, message, exceptUserCode = null }) {
+  const targets = [...new Set((userCodes ?? []).map(Number).filter((n) => Number.isSafeInteger(n) && n > 0 && n !== Number(exceptUserCode)))];
+  if (targets.length === 0) {
+    return 0;
+  }
+  const text = String(message).replace(/\s+/g, ' ').trim().slice(0, 300);
+  try {
+    await client.query('SAVEPOINT apartment_notice');
+    for (const userCode of targets) {
+      await client.query(
+        `INSERT INTO apartment_notices (site_code, apartment_id, user_code, kind, message) VALUES ($1, $2, $3, $4, $5)`,
+        [siteCode, apartmentId, userCode, String(kind).slice(0, 60), text],
+      );
+    }
+    await client.query('RELEASE SAVEPOINT apartment_notice');
+    return targets.length;
+  } catch (error) {
+    await client.query('ROLLBACK TO SAVEPOINT apartment_notice').catch(() => {});
+    // eslint-disable-next-line no-console
+    console.error('[apartment_mgmt] bildirim yazilamadi:', error?.code || error?.message);
+    return 0;
+  }
+}
+
+/** Kullanicinin bu dairede ACIK (kaldirilmamis) kapi erisimi askiya alma kaydi var mi (site yonetiminin guvenlik karari). */
+export async function isSuspended(db, apartmentId, userCode) {
+  const r = await db.query(
+    `SELECT 1 FROM apartment_access_suspensions WHERE apartment_id = $1 AND user_code = $2 AND lifted_at IS NULL LIMIT 1`,
+    [apartmentId, userCode],
+  );
+  return Boolean(r.rows?.[0]);
 }

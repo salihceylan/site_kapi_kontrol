@@ -8,8 +8,13 @@
 import crypto from 'node:crypto';
 
 export const SCOPES = Object.freeze(['toplanti_imza', 'kurul_uyeligi']);
-export const REQUEST_KINDS = Object.freeze(['tenant_invite', 'family_invite', 'disconnect']);
+export const REQUEST_KINDS = Object.freeze(['tenant_invite', 'family_invite', 'disconnect', 'member_removal']);
 export const REQUEST_TTL_DAYS = 14;
+// Yetiskin uyeyi cikarma istegi: 7 gun yanitsiz kalirsa KAPANIR (otomatik kesme YOK).
+export const REMOVAL_TTL_DAYS = 7;
+export const SAFETY_REASONS = Object.freeze(['court_order', 'safety', 'other']);
+export const SAFETY_CONTACTS = Object.freeze(['app', 'phone', 'email']);
+export const SAFETY_STATUSES = Object.freeze(['open', 'in_review', 'resolved']);
 export const SEARCH_MIN_CHARS = 3;
 export const SEARCH_MAX_RESULTS = 5;
 export const SEARCH_HOURLY_LIMIT = 60;
@@ -124,8 +129,17 @@ export function disconnectCounterpart(roles, userCode) {
 // Talep (durum makinesi)
 // ---------------------------------------------------------------------------
 
-export function requestExpiresAt(now = new Date()) {
-  return new Date(now.getTime() + REQUEST_TTL_DAYS * DAY_MS);
+export function requestExpiresAt(now = new Date(), kind = 'tenant_invite') {
+  const days = kind === 'member_removal' ? REMOVAL_TTL_DAYS : REQUEST_TTL_DAYS;
+  return new Date(now.getTime() + days * DAY_MS);
+}
+
+/**
+ * Koruma politikasi: daire admini bir uyenin baglarini TEK TARAFLI yalniz su durumlarda keser: uye 18 yasindan kucuk isaretliyse ya da
+ * uyenin hesabi yoksa (kesilecek bir kapi erisimi / uygulama yetkisi yok). Hesabi olan YETISKIN uye icin onay istegi gerekir.
+ */
+export function adminMayRemoveWithoutConsent(residency) {
+  return Boolean(residency) && (residency.is_minor === true || asCode(residency.user_code) === null);
 }
 
 /** Talep gercek durumu: bekleyen ama suresi dolmus talep 'expired' sayilir. */
@@ -161,7 +175,7 @@ export function addOneYear(iso) {
   const [y, m, d] = iso.split('-').map(Number);
   const target = new Date(Date.UTC(y + 1, m - 1, d));
   if (target.getUTCMonth() !== m - 1) {
-    return new Date(Date.UTC(y + 1, m - 1, 0)).toISOString().slice(0, 10);
+    return new Date(Date.UTC(y + 1, m, 0)).toISOString().slice(0, 10);
   }
   return target.toISOString().slice(0, 10);
 }
@@ -277,7 +291,7 @@ export function verifyCandidateHandle(secret, searcherUserCode, handle, now = Da
   if (parts.length !== 4) return null;
   const [searcher, target, exp, mac] = parts;
   if (asCode(searcher) !== asCode(searcherUserCode) || asCode(target) === null) return null;
-  if (!/^\d{10,16}$/.test(exp) || Number(exp) < now) return null;
+  if (!/^\d{1,16}$/.test(exp) || Number(exp) < now) return null;
   const expected = crypto.createHmac('sha256', String(secret)).update(`apt-candidate:${searcher}.${target}.${exp}`).digest('base64url');
   const a = Buffer.from(mac);
   const b = Buffer.from(expected);
@@ -296,4 +310,30 @@ export function familyEndingWithTenant(family, tenantPersonId) {
 export function canManageFamilyMember({ isAdmin, actorPersonId, residency }) {
   if (isAdmin) return true;
   return asCode(actorPersonId) !== null && asCode(residency?.sponsor_person_id) === asCode(actorPersonId);
+}
+
+// ---------------------------------------------------------------------------
+// Kisi arama: tam eslesme / gorunurluk ayari
+// ---------------------------------------------------------------------------
+
+const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * Arama metninin turu. E-posta ve telefon YALNIZ TAM ESLESME ile aranir; ad-soyad bulanik aramasi yalniz "Beni aramalarda goster"i
+ * acmis kisileri doner. @returns {{ kind: 'email'|'phone'|'name', value: string }}
+ */
+export function classifySearchQuery(q) {
+  const text = String(q ?? '').trim();
+  if (EMAIL_SHAPE.test(text)) return { kind: 'email', value: text.toLowerCase() };
+  const digits = text.replace(/\D/g, '');
+  if (digits.length >= 10 && /^[+\d\s()\-.]+$/.test(text)) return { kind: 'phone', value: digits.slice(-10) };
+  return { kind: 'name', value: text };
+}
+
+/** Denetim kaydi icin MASKELI arama metni (ne arandigi anlasilir, tam deger saklanmaz). */
+export function maskSearchQuery(q) {
+  const { kind, value } = classifySearchQuery(q);
+  if (kind === 'email') return maskEmail(value);
+  if (kind === 'phone') return `+90 *** *** ** ${value.slice(-2)}`;
+  return `${Array.from(value).slice(0, 2).join('')}***`;
 }

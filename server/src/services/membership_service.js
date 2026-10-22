@@ -1657,6 +1657,39 @@ function parseTargetUserCode(value) {
 }
 
 /**
+ * KORUMA POLITIKASI (docs/PLATFORM_DAIRE_GUVENLIK_POLITIKASI.md): yalniz DAIRE ADMINI olan cagiran (site yoneticisi / super degil), baska bir uyenin
+ * erisimini TEK TARAFLI kesemez: hesabi olan YETISKIN uye icin onay istegi gerekir (Dairem > Aile uyeleri). 18 yasindan kucuk isaretli uyeler ve
+ * hesabi olmayan kisiler tek tarafli cikarilabilir. Site yonetiminin guvenlik karariyla askiya alinmis kisiyi admin yeniden ETKINLESTIREMEZ.
+ */
+async function assertAdminMayActOnMember(apartmentId, targetUserCode, { activating = false } = {}) {
+  if (activating) {
+    const suspended = await pool.query(
+      `SELECT 1 FROM apartment_access_suspensions WHERE apartment_id = $1 AND user_code = $2 AND lifted_at IS NULL LIMIT 1`,
+      [apartmentId, targetUserCode],
+    );
+    if (suspended.rows?.[0]) {
+      throw httpError(403, 'Bu işlem şu anda yapılamıyor. Site yönetimine başvurun.');
+    }
+    return;
+  }
+  const rows = await pool.query(
+    `SELECT r.is_minor FROM apartment_residencies r
+     INNER JOIN site_people sp ON sp.id = r.person_id
+     WHERE r.apartment_id = $1 AND r.is_current = TRUE AND sp.user_code = $2`,
+    [apartmentId, targetUserCode],
+  );
+  const allMinor = (rows.rows ?? []).length > 0 && rows.rows.every((row) => row.is_minor === true);
+  if (!allMinor) {
+    const err = httpError(
+      403,
+      'Yetişkin bir üyenin erişimi tek taraflı kesilemez. Dairem ekranından üyeye onay isteği gönderin ya da site yönetimine başvurun.',
+    );
+    err.code = 'CONSENT_REQUIRED';
+    throw err;
+  }
+}
+
+/**
  * Daire Üyesini Pasife Al / Çıkar
  * (Süper Kullanıcı, Site Yöneticisi veya Daire Yöneticisi)
  * Erişim kesilir: üyelik pasifleşir, eski sakin göstergesi devredilir, manuel kapı izinleri temizlenir
@@ -1670,6 +1703,9 @@ export async function removeApartmentMember({ apartmentId, targetUserCode, authU
   // Daire yöneticisi kendisini çıkaramaz (süper kullanıcı veya site yöneticisi çıkarabilir)
   if (!isSuperUser && !isSiteManager && tUserCode === reviewerUserCode) {
     throw httpError(400, 'Daire yöneticisi kendi kendisini daireden çıkaramaz.');
+  }
+  if (!isSuperUser && !isSiteManager) {
+    await assertAdminMayActOnMember(apt.id, tUserCode);
   }
 
   const client = await pool.connect();
@@ -1755,6 +1791,9 @@ export async function toggleApartmentMemberStatus({ apartmentId, targetUserCode,
   }
 
   const activeBool = parseBooleanFlag(isActive, 'is_active');
+  if (!isSuperUser && !isSiteManager) {
+    await assertAdminMayActOnMember(apt.id, tUserCode, { activating: activeBool });
+  }
 
   const client = await pool.connect();
   let committed = false;

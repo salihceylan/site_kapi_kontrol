@@ -15,14 +15,17 @@ import {
   FAMILY_MAX_PER_APARTMENT,
   SEARCH_HOURLY_LIMIT,
   SEARCH_MAX_RESULTS,
+  adminMayRemoveWithoutConsent,
   adminSideOf,
   canCancelRequest,
   canManageFamilyMember,
   canRespondToRequest,
+  classifySearchQuery,
   disconnectCounterpart,
   familyEndingWithTenant,
   maskEmail,
   maskName,
+  maskSearchQuery,
   normalizeSearchQuery,
   pickSigningHolder,
   requestExpiresAt,
@@ -32,7 +35,9 @@ import {
 } from './apartment_mgmt_rules.js';
 import {
   endOpenDelegation,
+  isSuspended,
   loadApartmentState,
+  notifyApartmentUsers,
   openDelegation,
   recordDelegation,
   transferApartmentAdmin,
@@ -60,6 +65,7 @@ import {
   withSiteTransaction,
 } from './people_service.js';
 import { sendInvitation } from './person_invite_service.js';
+import { cleanupDoorOverridesIfNoMembership, handOverApartmentResident } from '../services/membership_service.js';
 
 export { SEARCH_HOURLY_LIMIT };
 
@@ -132,6 +138,10 @@ async function meOf(db, state, uc) {
   if (!isRelated(state, uc, me)) {
     throw aptNotFound();
   }
+  // Site yonetiminin guvenlik karariyla kapi erisimi askiya alinmis kisi: hicbir yonetim islemi yapamaz (neden ve durum gosterilmez).
+  if (await isSuspended(db, state.apartment.id, uc)) {
+    return { ...me, suspended: true, can: Object.fromEntries(Object.keys(me.can).map((k) => [k, false])) };
+  }
   return me;
 }
 
@@ -155,6 +165,9 @@ async function withApartment(authUser, rawApartmentId, work) {
       throw aptNotFound();
     }
     const me = await meOf(client, state, uc);
+    if (me.suspended) {
+      throw forbidden('Bu işlem şu anda yapılamıyor. Site yönetimine başvurun.');
+    }
     return work({ client, state, me, uc, siteCode: state.apartment.site_code, apartmentId });
   });
 }
@@ -339,6 +352,7 @@ async function buildItem(db, state, uc, today) {
       residency_id: r.id,
       ...personView(r),
       relation: r.relation,
+      is_minor: r.is_minor === true,
       can_remove: canManageFamilyMember({ isAdmin: me.is_admin, actorPersonId: actorPerson?.person_id, residency: r }),
     }));
 
@@ -428,7 +442,49 @@ export async function listMyApartments(authUser) {
     created_at: toIso(r.created_at),
   }));
   const canSearch = ((await pool.query(CAN_SEARCH_SQL, [uc])).rows ?? []).length > 0;
-  return { apartments, incoming_requests: incoming, can_search: canSearch };
+  const notices = ((await pool.query(NOTICES_SQL, [uc])).rows ?? []).map((n) => ({
+    id: Number(n.id),
+    kind: n.kind,
+    message: n.message,
+    apartment_id: Number(n.apartment_id),
+    created_at: toIso(n.created_at),
+  }));
+  return { apartments, incoming_requests: incoming, can_search: canSearch, notices };
+}
+
+const NOTICES_SQL = `
+  SELECT id, kind, message, apartment_id, created_at
+  FROM apartment_notices
+  WHERE user_code = $1 AND read_at IS NULL
+  ORDER BY id DESC
+  LIMIT 20
+`;
+
+/** POST /app/apartments/notices/read  { ids?: number[] } (ids yoksa tumu): bildirimleri okundu isaretler. */
+export async function markNoticesRead(authUser, ids) {
+  const uc = userCodeOf(authUser);
+  const list = Array.isArray(ids) ? ids.map(Number).filter((n) => Number.isSafeInteger(n) && n > 0).slice(0, 100) : null;
+  const r = await pool.query(
+    `UPDATE apartment_notices SET read_at = NOW() WHERE user_code = $1 AND read_at IS NULL AND ($2::BIGINT[] IS NULL OR id = ANY($2::BIGINT[]))`,
+    [uc, list],
+  );
+  return { ok: true, updated: r.rowCount ?? 0 };
+}
+
+async function nameOfUser(client, userCode) {
+  const r = await client.query(`SELECT full_name FROM users WHERE user_code = $1`, [userCode]);
+  return r.rows?.[0]?.full_name ?? 'Bir kullanıcı';
+}
+
+async function notify(client, state, userCodes, kind, message, exceptUserCode = null) {
+  return notifyApartmentUsers(client, {
+    siteCode: state.apartment.site_code,
+    apartmentId: state.apartment.id,
+    userCodes,
+    kind,
+    message,
+    exceptUserCode,
+  });
 }
 
 /** GET /app/apartments/:id  (tek daire karti; ilgisiz kullanici 404) */
@@ -446,7 +502,7 @@ export async function readApartmentItem(authUser, rawApartmentId) {
 // Kisi arama (gizlilik: yalniz maskeli ad / e-posta, daire ya da site bilgisi YOK)
 // ---------------------------------------------------------------------------
 
-const SEARCH_SQL = `
+const SEARCH_BASE = `
   SELECT u.user_code, u.full_name, u.email
   FROM users u
   WHERE u.user_code <> $1
@@ -455,18 +511,16 @@ const SEARCH_SQL = `
     AND u.email_verified = TRUE
     AND u.role <> 'super_user'
     AND u.email NOT LIKE '%${INTERNAL_EMAIL_SUFFIX}'
-    AND (
-      ${foldSql('u.full_name')} LIKE $2 ESCAPE '\\'
-      OR lower(u.email) LIKE $3 ESCAPE '\\'
-      OR ($4::TEXT IS NOT NULL AND regexp_replace(COALESCE(u.phone_number, ''), '\\D', '', 'g') LIKE $4 ESCAPE '\\')
-    )
-  ORDER BY u.user_code
-  LIMIT ${SEARCH_MAX_RESULTS + 1}
 `;
+// E-posta ve telefon: YALNIZ TAM ESLESME. Ad-soyad: yalniz "Beni aramalarda goster"i ACMIS (varsayilan KAPALI) kisiler.
+const SEARCH_EMAIL_SQL = `${SEARCH_BASE} AND lower(u.email) = $2 ORDER BY u.user_code LIMIT ${SEARCH_MAX_RESULTS + 1}`;
+const SEARCH_PHONE_SQL = `${SEARCH_BASE} AND right(regexp_replace(COALESCE(u.phone_number, ''), '\\D', '', 'g'), 10) = $2 ORDER BY u.user_code LIMIT ${SEARCH_MAX_RESULTS + 1}`;
+const SEARCH_NAME_SQL = `${SEARCH_BASE} AND u.search_visible = TRUE AND ${foldSql('u.full_name')} LIKE $2 ESCAPE '\\' ORDER BY u.user_code LIMIT ${SEARCH_MAX_RESULTS + 1}`;
 
 /**
- * GET /app/apartments/people-search?q=. En az 3 karakter; yalniz malik ya da admin; sonuc <= 5 (daha fazla eslesme varsa HIC liste donmez:
- * toplu listeleme yok). Sonuc maskeli ad / e-posta ve kisa omurlu imzali bir `handle` tasir; kullanici kodu, daire ya da site bilgisi YOK.
+ * GET /app/apartments/people-search?q=. En az 3 karakter; yalniz malik ya da admin. E-posta / telefon TAM ESLESME; ad-soyad yalniz aramada gorunmeyi
+ * acmis kisileri doner. Sonuc <= 5 (daha fazla eslesme varsa HIC liste donmez). Sonuc maskeli ad / e-posta ve kisa omurlu imzali `handle` tasir;
+ * kullanici kodu, daire, site ya da adres bilgisi YOK. Her arama MASKELI sorguyla audit'e yazilir.
  */
 export async function searchPeople(authUser, rawQuery) {
   const uc = userCodeOf(authUser);
@@ -478,16 +532,18 @@ export async function searchPeople(authUser, rawQuery) {
   if (!allowed) {
     throw forbidden('Kişi aramak için dairenizin maliki ya da yöneticisi olmalısınız.');
   }
-  const digits = q.replace(/\D/g, '');
-  const phonePattern = digits.length >= 4 ? `%${escapeLike(digits)}%` : null;
-  const result = await pool.query(SEARCH_SQL, [
-    uc,
-    `%${escapeLike(foldText(q))}%`,
-    `%${escapeLike(q.toLowerCase())}%`,
-    phonePattern,
-  ]);
-  const rows = result.rows ?? [];
-  if (rows.length > SEARCH_MAX_RESULTS) {
+  const { kind, value } = classifySearchQuery(q);
+  const sql = kind === 'email' ? SEARCH_EMAIL_SQL : kind === 'phone' ? SEARCH_PHONE_SQL : SEARCH_NAME_SQL;
+  const param = kind === 'name' ? `%${escapeLike(foldText(value))}%` : value;
+  const rows = (await pool.query(sql, [uc, param])).rows ?? [];
+  const tooMany = rows.length > SEARCH_MAX_RESULTS;
+  await recordAudit(pool, {
+    actor: authUser,
+    action: 'apartment_mgmt.person_search',
+    targetType: 'search',
+    details: { query: maskSearchQuery(q), kind, results: tooMany ? SEARCH_MAX_RESULTS + 1 : rows.length },
+  });
+  if (tooMany) {
     return { items: [], too_many: true };
   }
   const secret = handleSecret();
@@ -500,6 +556,24 @@ export async function searchPeople(authUser, rawQuery) {
     too_many: false,
     expires_in_seconds: Math.floor(CANDIDATE_TTL_MS / 1000),
   };
+}
+
+/** GET /app/apartments/search-visibility */
+export async function getSearchVisibility(authUser) {
+  const uc = userCodeOf(authUser);
+  const r = await pool.query(`SELECT search_visible FROM users WHERE user_code = $1 AND deleted_at IS NULL`, [uc]);
+  return { search_visible: r.rows?.[0]?.search_visible === true };
+}
+
+/** PUT /app/apartments/search-visibility  { search_visible: boolean } ("Beni aramalarda goster"; varsayilan KAPALI) */
+export async function setSearchVisibility(authUser, value) {
+  if (typeof value !== 'boolean') {
+    throw invalidBody('search_visible', 'search_visible true ya da false olmalı.');
+  }
+  const uc = userCodeOf(authUser);
+  await pool.query(`UPDATE users SET search_visible = $2 WHERE user_code = $1 AND deleted_at IS NULL`, [uc, value]);
+  await recordAudit(pool, { actor: authUser, action: 'apartment_mgmt.search_visibility_changed', targetType: 'user', targetId: String(uc), details: { visible: value } });
+  return { search_visible: value };
 }
 
 // ---------------------------------------------------------------------------
@@ -541,6 +615,9 @@ async function resolveCandidate(client, uc, handle, state) {
   )).rows?.[0];
   if (!user) {
     throw new PlatformError(400, 'CANDIDATE_INVALID', 'Bu kişi artık seçilemiyor. Yeniden arayın.');
+  }
+  if (await isSuspended(client, state.apartment.id, targetCode)) {
+    throw conflict('ALREADY_IN_APARTMENT', 'Bu kişi bu daireye eklenemiyor.');
   }
   const already =
     state.members.some((m) => Number(m.user_code) === targetCode) ||
@@ -597,7 +674,7 @@ async function insertRequest(client, { state, uc, kind, targetUserCode, payload 
     const inserted = await client.query(
       `INSERT INTO apartment_link_requests (site_code, apartment_id, kind, requested_by, target_user_code, payload, expires_at)
        VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7) RETURNING id, expires_at`,
-      [state.apartment.site_code, state.apartment.id, kind, uc, targetUserCode, JSON.stringify(payload ?? {}), requestExpiresAt()],
+      [state.apartment.site_code, state.apartment.id, kind, uc, targetUserCode, JSON.stringify(payload ?? {}), requestExpiresAt(new Date(), kind)],
     );
     return { id: Number(inserted.rows[0].id), expires_at: toIso(inserted.rows[0].expires_at) };
   } catch (error) {
@@ -695,17 +772,18 @@ export async function addFamilyMember({ authUser, apartmentId, body }) {
     if (current >= FAMILY_MAX_PER_APARTMENT) {
       throw conflict('FAMILY_LIMIT', `Bir dairede en fazla ${FAMILY_MAX_PER_APARTMENT} aile üyesi eklenebilir.`);
     }
+    const isMinor = body?.is_minor === true;
     if (target.candidate) {
       const targetCode = await resolveCandidate(client, uc, target.candidate, state);
-      const request = await insertRequest(client, { state, uc, kind: 'family_invite', targetUserCode: targetCode, payload: {} });
+      const request = await insertRequest(client, { state, uc, kind: 'family_invite', targetUserCode: targetCode, payload: { is_minor: isMinor } });
       await audit(client, authUser, 'apartment_mgmt.family_invited', state, { request_id: request.id });
       return { mode: 'invited', request };
     }
     const sponsorId = await ensureUserPerson(client, siteCode, uc, uc);
     const personId = await createAccountlessPerson(client, siteCode, target.person, uc);
     const residencyId = await insertResidency(client, { siteCode, apartmentId: state.apartment.id, personId, relation: 'family_member', moveInDate: todayIso() });
-    await client.query(`UPDATE apartment_residencies SET sponsor_person_id = $2 WHERE id = $1`, [residencyId, sponsorId]);
-    await audit(client, authUser, 'apartment_mgmt.family_added', state, { person_id: personId, has_email: Boolean(target.person.email) });
+    await client.query(`UPDATE apartment_residencies SET sponsor_person_id = $2, is_minor = $3 WHERE id = $1`, [residencyId, sponsorId, isMinor]);
+    await audit(client, authUser, 'apartment_mgmt.family_added', state, { person_id: personId, has_email: Boolean(target.person.email), is_minor: isMinor });
     newPersonId = personId;
     hasEmail = Boolean(target.person.email);
     return { mode: 'added', person_id: personId, residency_id: residencyId };
@@ -721,7 +799,7 @@ export async function removeFamilyMember({ authUser, apartmentId, residencyId })
   const rid = parsePositiveId(residencyId);
   let closed = false;
   let siteCode = null;
-  await withApartment(authUser, apartmentId, async ({ client, state, me, uc, siteCode: site }) => {
+  const result = await withApartment(authUser, apartmentId, async ({ client, state, me, uc, siteCode: site }) => {
     closed = false;
     siteCode = site;
     const residency = state.residencies.find((r) => r.id === rid) ?? null;
@@ -735,6 +813,18 @@ export async function removeFamilyMember({ authUser, apartmentId, residencyId })
     if (!canManageFamilyMember({ isAdmin: me.is_admin, actorPersonId: actorPerson?.person_id, residency })) {
       throw forbidden('Aile üyelerini yalnızca daire yöneticisi çıkarabilir.');
     }
+    // KORUMA POLITIKASI: hesabi olan YETISKIN uyenin baglari tek tarafli kesilemez; uyeye onay istegi gider (7 gun, otomatik kesme YOK).
+    if (!adminMayRemoveWithoutConsent(residency)) {
+      const request = await insertRequest(client, {
+        state,
+        uc,
+        kind: 'member_removal',
+        targetUserCode: residency.user_code,
+        payload: { residency_id: residency.id },
+      });
+      await audit(client, authUser, 'apartment_mgmt.member_removal_requested', state, { request_id: request.id, residency_id: residency.id });
+      return { ok: true, mode: 'consent_requested', request };
+    }
     const res = await closeResidency(client, {
       siteCode: site,
       residency: { id: residency.id, person_id: residency.person_id, apartment_id: state.apartment.id, relation: residency.relation },
@@ -744,10 +834,11 @@ export async function removeFamilyMember({ authUser, apartmentId, residencyId })
       reason: 'family_removed_by_admin',
     });
     closed = res.accessClosed;
-    await audit(client, authUser, 'apartment_mgmt.family_removed', state, { residency_id: residency.id, person_id: residency.person_id });
+    await audit(client, authUser, 'apartment_mgmt.family_removed', state, { residency_id: residency.id, person_id: residency.person_id, is_minor: residency.is_minor === true });
+    return { ok: true, mode: 'removed' };
   });
   await afterAccessClosed(siteCode, closed, 'apartment_mgmt_family_removed');
-  return { ok: true };
+  return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -785,6 +876,9 @@ export async function delegateManagement({ authUser, apartmentId }) {
       createdBy: uc,
     });
     await audit(client, authUser, 'apartment_mgmt.management_delegated', state, { tenant_person_id: tenant.person_id, active: activeNow });
+    if (tenant.user_code !== null && activeNow) {
+      await notify(client, state, [tenant.user_code], 'management_delegated', `${aptLabel(state.apartment)} dairesinin yönetimi mal sahibi tarafından size devredildi.`, uc);
+    }
     return { ok: true, changed: true, active: activeNow };
   });
 }
@@ -866,8 +960,61 @@ export async function exitTenancy({ authUser, apartmentId }) {
     }
     closed = await endTenancy(client, authUser, state, 'tenant_exit');
     await audit(client, authUser, 'apartment_mgmt.tenant_exit', state, { tenant_person_id: state.roles.tenant.person_id });
+    await notify(client, state, [state.roles.owner?.user_code], 'tenant_exit', `Kiracı ${aptLabel(state.apartment)} dairesinden ayrıldı. Daire yönetimi size döndü.`);
   });
   await afterAccessClosed(siteCode, closed, 'apartment_mgmt_tenant_exit');
+  return { ok: true };
+}
+
+/** Malik / eski kayit icin: yalniz KENDI uyeligini kapatir (malik KAYDI kalir; yonetici ise devir mevcut kuralla yapilir). */
+async function revokeOwnMembership(client, state, uc) {
+  const updated = await client.query(
+    `UPDATE apartment_memberships SET is_active = FALSE, updated_at = NOW() WHERE apartment_id = $1 AND user_code = $2 AND is_active = TRUE RETURNING role`,
+    [state.apartment.id, uc],
+  );
+  const legacy = state.apartment.resident_user_code === uc;
+  if (legacy || updated.rows?.[0]?.role === 'APARTMENT_ADMIN') {
+    await handOverApartmentResident(client, state.apartment.id, uc, { indicatorOwnedByRemoved: legacy });
+  }
+  await cleanupDoorOverridesIfNoMembership(client, state.apartment.site_code, uc);
+  return (updated.rowCount ?? 0) > 0 || legacy;
+}
+
+/**
+ * POST /app/apartments/:id/leave  ("Bu daireden ayril"): KORUMA POLITIKASI - her uye kendi bagini onaysiz ve tek tarafli keser.
+ * Diger uyelere / admine BILDIRIM gitmez (admin listesinde yalniz kisi kalkar); yalniz denetim kaydina yazilir. Kiraci ayrilirsa cikis yolu
+ * (kiracinin ailesiyle birlikte) uygulanir; malik ayrilirsa yalniz erisimi kapanir, malik KAYDI site yonetiminde kalir.
+ */
+export async function leaveApartment({ authUser, apartmentId }) {
+  let closed = false;
+  let siteCode = null;
+  await withApartment(authUser, apartmentId, async ({ client, state, me, uc, siteCode: site }) => {
+    closed = false;
+    siteCode = site;
+    if (me.is_tenant) {
+      closed = await endTenancy(client, authUser, state, 'tenant_left');
+    } else if (state.roles.owner?.user_code === uc || !state.residencies.some((r) => r.user_code === uc)) {
+      closed = await revokeOwnMembership(client, state, uc);
+    } else {
+      const residency = state.residencies.find((r) => r.user_code === uc);
+      const res = await closeResidency(client, {
+        siteCode: site,
+        residency: { id: residency.id, person_id: residency.person_id, apartment_id: state.apartment.id, relation: residency.relation },
+        userCode: uc,
+        moveOutDate: todayIso(),
+        actor: authUser,
+        reason: 'member_left',
+      });
+      closed = res.accessClosed;
+    }
+    await client.query(
+      `UPDATE apartment_link_requests SET status = 'cancelled', responded_at = NOW(), updated_at = NOW()
+       WHERE apartment_id = $1 AND status = 'pending' AND (requested_by = $2 OR target_user_code = $2)`,
+      [state.apartment.id, uc],
+    );
+    await audit(client, authUser, 'apartment_mgmt.member_left', state, { relation: me.my_role });
+  });
+  await afterAccessClosed(siteCode, closed, 'apartment_mgmt_member_left');
   return { ok: true };
 }
 
@@ -952,10 +1099,45 @@ export async function respondToRequest({ authUser, requestId, accept }) {
     if (accept === false) {
       await closeRequest(client, request.id, 'rejected', uc);
       await audit(client, authUser, `apartment_mgmt.${request.kind}_rejected`, state, { request_id: Number(request.id) });
+      await notify(
+        client,
+        state,
+        [request.requested_by],
+        `${request.kind}_rejected`,
+        request.kind === 'disconnect' ? 'Bağlantı kesme talebiniz reddedildi.' : request.kind === 'member_removal' ? 'Üye çıkarma isteğiniz reddedildi. Üyenin onayı olmadan bağ kesilemez.' : 'Gönderdiğiniz davet reddedildi.',
+      );
       return { status: 'rejected' };
     }
     const requesterCode = request.requested_by === null ? null : Number(request.requested_by);
     const requesterState = requesterCode === null ? null : rolesOfUser(state.roles, requesterCode);
+    // Site yonetiminin askiya aldigi kisi, davetle ya da onayla bu daireye geri baglanamaz (neden gosterilmez).
+    if (request.kind !== 'member_removal' && (await isSuspended(client, state.apartment.id, uc))) {
+      await closeRequest(client, request.id, 'cancelled', uc);
+      throw conflict('REQUEST_VOID', 'Bu talep artık geçerli değil.');
+    }
+
+    if (request.kind === 'member_removal') {
+      // Uye KENDI baginin kesilmesini onaylar: yalniz kendi iliskisi biter (baskasininki degil).
+      const residency = state.residencies.find((r) => r.id === Number(request.payload?.residency_id) && r.user_code === uc) ?? null;
+      const mayAsk = requesterState?.is_admin || (residency && Number(residency.sponsor_person_id) === Number(state.residencies.find((r) => r.user_code === requesterCode)?.person_id));
+      if (!residency || !mayAsk) {
+        await closeRequest(client, request.id, 'cancelled', uc);
+        throw conflict('REQUEST_VOID', 'Bu istek artık geçerli değil.');
+      }
+      await closeRequest(client, request.id, 'approved', uc);
+      const res = await closeResidency(client, {
+        siteCode,
+        residency: { id: residency.id, person_id: residency.person_id, apartment_id: state.apartment.id, relation: residency.relation },
+        userCode: uc,
+        moveOutDate: todayIso(),
+        actor: authUser,
+        reason: 'member_removal_consented',
+      });
+      closed = res.accessClosed;
+      await audit(client, authUser, 'apartment_mgmt.member_removal_approved', state, { request_id: Number(request.id), residency_id: residency.id });
+      await notify(client, state, [requesterCode], 'member_removal_approved', 'Üye çıkarma isteğiniz onaylandı.');
+      return { status: 'approved' };
+    }
 
     if (request.kind === 'tenant_invite') {
       if (state.roles.tenant || !requesterState?.is_owner) {
@@ -975,6 +1157,7 @@ export async function respondToRequest({ authUser, requestId, accept }) {
       }
       await closeRequest(client, request.id, 'approved', uc);
       await audit(client, authUser, 'apartment_mgmt.tenant_invite_accepted', state, { request_id: Number(request.id), delegated });
+      await notify(client, state, [requesterCode], 'tenant_invite_accepted', `${await nameOfUser(client, uc)} kiracı davetinizi kabul etti.`);
       return { status: 'approved' };
     }
 
@@ -989,10 +1172,11 @@ export async function respondToRequest({ authUser, requestId, accept }) {
       const sponsorId = await ensureUserPerson(client, siteCode, requesterCode, requesterCode);
       const personId = await ensureUserPerson(client, siteCode, uc, requesterCode);
       const residencyId = await insertResidency(client, { siteCode, apartmentId: state.apartment.id, personId, relation: 'family_member', moveInDate: todayIso() });
-      await client.query(`UPDATE apartment_residencies SET sponsor_person_id = $2 WHERE id = $1`, [residencyId, sponsorId]);
+      await client.query(`UPDATE apartment_residencies SET sponsor_person_id = $2, is_minor = $3 WHERE id = $1`, [residencyId, sponsorId, request.payload?.is_minor === true]);
       await grantApartmentAccess(client, { siteCode, apartmentId: state.apartment.id, userCode: uc });
       await closeRequest(client, request.id, 'approved', uc);
       await audit(client, authUser, 'apartment_mgmt.family_invite_accepted', state, { request_id: Number(request.id) });
+      await notify(client, state, [requesterCode], 'family_invite_accepted', `${await nameOfUser(client, uc)} aile üyesi davetinizi kabul etti.`);
       return { status: 'approved' };
     }
 
@@ -1004,6 +1188,7 @@ export async function respondToRequest({ authUser, requestId, accept }) {
     await closeRequest(client, request.id, 'approved', uc);
     closed = await endTenancy(client, authUser, state, 'disconnect_approved');
     await audit(client, authUser, 'apartment_mgmt.disconnect_approved', state, { request_id: Number(request.id) });
+    await notify(client, state, [request.requested_by], 'disconnect_approved', `${aptLabel(state.apartment)} dairesi için bağlantı kesme talebiniz onaylandı; bağ sona erdi.`);
     return { status: 'approved' };
   });
   if (outcome?.expired) {

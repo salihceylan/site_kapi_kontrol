@@ -1,6 +1,8 @@
 // Daire sahipligi ve yonetimi sema (074): tek kaynak. migrations/074_apartment_management.sql bu adimlarin birlesimidir (test: apartment_mgmt).
 // Tablolar FK'SIZ olusturulur, her FK ayri ve katalog korumalidir (ifade basina tek ust tablo; acilis 40P01 dersi). Tamamen ekleyici ve idempotent.
 // Sozlesme: docs/PLATFORM_DAIRE_YONETIMI.md. Bu dosya db.js'i ICE AKTARMAZ.
+// apartment_notices: uygulama ici bildirim kutusu (e-posta degil); okunanlar bakimda temizlenir.
+// Guvenlik: apartment_safety_requests / _notes (gizli talep; YALNIZ site yoneticisi ve super gorur), apartment_access_suspensions (kapi erisimi askiya alma kaydi).
 // Silme: site / daire silinince hepsi CASCADE; kullanici silinince created_by / requested_by / responded_by SET NULL, hedef kullanici CASCADE.
 
 function fk(table, column, parent, parentColumn, onDelete) {
@@ -52,9 +54,63 @@ const T = {
   responded_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  CONSTRAINT chk_apartment_link_requests_kind CHECK (kind IN ('tenant_invite', 'family_invite', 'disconnect')),
+  CONSTRAINT chk_apartment_link_requests_kind CHECK (kind IN ('tenant_invite', 'family_invite', 'disconnect', 'member_removal')),
   CONSTRAINT chk_apartment_link_requests_status CHECK (status IN ('pending', 'approved', 'rejected', 'expired', 'cancelled')),
   CONSTRAINT chk_apartment_link_requests_answered CHECK ((status = 'pending') = (responded_at IS NULL))
+);`,
+  apartment_notices: `CREATE TABLE IF NOT EXISTS apartment_notices (
+  id BIGSERIAL PRIMARY KEY,
+  site_code BIGINT NOT NULL,
+  apartment_id BIGINT NOT NULL,
+  user_code INTEGER NOT NULL,
+  kind TEXT NOT NULL,
+  message TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  read_at TIMESTAMPTZ,
+  CONSTRAINT chk_apartment_notices_kind CHECK (char_length(kind) BETWEEN 1 AND 60),
+  CONSTRAINT chk_apartment_notices_message CHECK (char_length(message) BETWEEN 1 AND 300)
+);`,
+  apartment_safety_requests: `CREATE TABLE IF NOT EXISTS apartment_safety_requests (
+  id BIGSERIAL PRIMARY KEY,
+  site_code BIGINT NOT NULL,
+  apartment_id BIGINT NOT NULL,
+  requested_by INTEGER,
+  message TEXT NOT NULL,
+  contact_pref TEXT,
+  status TEXT NOT NULL DEFAULT 'open',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  resolved_at TIMESTAMPTZ,
+  resolved_by INTEGER,
+  CONSTRAINT chk_apartment_safety_requests_message CHECK (char_length(message) BETWEEN 1 AND 1000),
+  CONSTRAINT chk_apartment_safety_requests_contact CHECK (contact_pref IS NULL OR contact_pref IN ('app', 'phone', 'email')),
+  CONSTRAINT chk_apartment_safety_requests_status CHECK (status IN ('open', 'in_review', 'resolved')),
+  CONSTRAINT chk_apartment_safety_requests_resolved CHECK ((status = 'resolved') = (resolved_at IS NOT NULL))
+);`,
+  apartment_safety_notes: `CREATE TABLE IF NOT EXISTS apartment_safety_notes (
+  id BIGSERIAL PRIMARY KEY,
+  request_id BIGINT NOT NULL,
+  site_code BIGINT NOT NULL,
+  author_user_code INTEGER,
+  note TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT chk_apartment_safety_notes_note CHECK (char_length(note) BETWEEN 1 AND 1000)
+);`,
+  apartment_access_suspensions: `CREATE TABLE IF NOT EXISTS apartment_access_suspensions (
+  id BIGSERIAL PRIMARY KEY,
+  site_code BIGINT NOT NULL,
+  apartment_id BIGINT NOT NULL,
+  user_code INTEGER NOT NULL,
+  reason_code TEXT NOT NULL,
+  note TEXT NOT NULL,
+  suspended_by INTEGER,
+  suspended_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  lifted_at TIMESTAMPTZ,
+  lifted_by INTEGER,
+  lift_note TEXT,
+  CONSTRAINT chk_apartment_access_suspensions_reason CHECK (reason_code IN ('court_order', 'safety', 'other')),
+  CONSTRAINT chk_apartment_access_suspensions_note CHECK (char_length(note) BETWEEN 1 AND 500),
+  CONSTRAINT chk_apartment_access_suspensions_lift CHECK (lift_note IS NULL OR char_length(lift_note) BETWEEN 1 AND 500)
 );`,
   apartment_proxies: `CREATE TABLE IF NOT EXISTS apartment_proxies (
   id BIGSERIAL PRIMARY KEY,
@@ -84,6 +140,20 @@ const COLUMNS = [
     column: 'sponsor_person_id',
     sql: 'ALTER TABLE apartment_residencies ADD COLUMN IF NOT EXISTS sponsor_person_id BIGINT;',
   },
+  {
+    // 18 yasindan kucuk isareti: yalniz bu uyeleri daire admini TEK TARAFLI cikarabilir (yetiskin uye cikarmasi onay ister).
+    name: 'apartment_residencies.is_minor',
+    table: 'apartment_residencies',
+    column: 'is_minor',
+    sql: 'ALTER TABLE apartment_residencies ADD COLUMN IF NOT EXISTS is_minor BOOLEAN NOT NULL DEFAULT FALSE;',
+  },
+  {
+    // "Beni aramalarda goster": ad-soyad ile bulanik aramada yalniz bunu ACAN kisiler doner (varsayilan KAPALI).
+    name: 'users.search_visible',
+    table: 'users',
+    column: 'search_visible',
+    sql: 'ALTER TABLE users ADD COLUMN IF NOT EXISTS search_visible BOOLEAN NOT NULL DEFAULT FALSE;',
+  },
 ];
 
 const FKS = [
@@ -98,6 +168,21 @@ const FKS = [
   fk('apartment_link_requests', 'requested_by', 'users', 'user_code', 'SET NULL'),
   fk('apartment_link_requests', 'target_user_code', 'users', 'user_code', 'CASCADE'),
   fk('apartment_link_requests', 'responded_by', 'users', 'user_code', 'SET NULL'),
+  fk('apartment_notices', 'site_code', 'sites', 'site_code', 'CASCADE'),
+  fk('apartment_notices', 'apartment_id', 'apartments', 'id', 'CASCADE'),
+  fk('apartment_notices', 'user_code', 'users', 'user_code', 'CASCADE'),
+  fk('apartment_safety_requests', 'site_code', 'sites', 'site_code', 'CASCADE'),
+  fk('apartment_safety_requests', 'apartment_id', 'apartments', 'id', 'CASCADE'),
+  fk('apartment_safety_requests', 'requested_by', 'users', 'user_code', 'SET NULL'),
+  fk('apartment_safety_requests', 'resolved_by', 'users', 'user_code', 'SET NULL'),
+  fk('apartment_safety_notes', 'request_id', 'apartment_safety_requests', 'id', 'CASCADE'),
+  fk('apartment_safety_notes', 'site_code', 'sites', 'site_code', 'CASCADE'),
+  fk('apartment_safety_notes', 'author_user_code', 'users', 'user_code', 'SET NULL'),
+  fk('apartment_access_suspensions', 'site_code', 'sites', 'site_code', 'CASCADE'),
+  fk('apartment_access_suspensions', 'apartment_id', 'apartments', 'id', 'CASCADE'),
+  fk('apartment_access_suspensions', 'user_code', 'users', 'user_code', 'CASCADE'),
+  fk('apartment_access_suspensions', 'suspended_by', 'users', 'user_code', 'SET NULL'),
+  fk('apartment_access_suspensions', 'lifted_by', 'users', 'user_code', 'SET NULL'),
   fk('apartment_proxies', 'site_code', 'sites', 'site_code', 'CASCADE'),
   fk('apartment_proxies', 'apartment_id', 'apartments', 'id', 'CASCADE'),
   fk('apartment_proxies', 'owner_person_id', 'site_people', 'id', 'CASCADE'),
@@ -142,6 +227,36 @@ const INDEXES = [
     'idx_apartment_link_requests_apartment',
     'apartment_link_requests',
     'CREATE INDEX IF NOT EXISTS idx_apartment_link_requests_apartment ON apartment_link_requests (apartment_id, id DESC);',
+  ],
+  [
+    'idx_apartment_notices_user',
+    'apartment_notices',
+    'CREATE INDEX IF NOT EXISTS idx_apartment_notices_user ON apartment_notices (user_code, id DESC);',
+  ],
+  [
+    'uq_apartment_link_requests_removal',
+    'apartment_link_requests',
+    "CREATE UNIQUE INDEX IF NOT EXISTS uq_apartment_link_requests_removal ON apartment_link_requests (apartment_id, target_user_code) WHERE status = 'pending' AND kind = 'member_removal';",
+  ],
+  [
+    'idx_apartment_safety_requests_site',
+    'apartment_safety_requests',
+    'CREATE INDEX IF NOT EXISTS idx_apartment_safety_requests_site ON apartment_safety_requests (site_code, status, id DESC);',
+  ],
+  [
+    'idx_apartment_safety_notes_request',
+    'apartment_safety_notes',
+    'CREATE INDEX IF NOT EXISTS idx_apartment_safety_notes_request ON apartment_safety_notes (request_id, id);',
+  ],
+  [
+    'uq_apartment_access_suspensions_open',
+    'apartment_access_suspensions',
+    'CREATE UNIQUE INDEX IF NOT EXISTS uq_apartment_access_suspensions_open ON apartment_access_suspensions (apartment_id, user_code) WHERE lifted_at IS NULL;',
+  ],
+  [
+    'idx_apartment_access_suspensions_site',
+    'apartment_access_suspensions',
+    'CREATE INDEX IF NOT EXISTS idx_apartment_access_suspensions_site ON apartment_access_suspensions (site_code, id DESC);',
   ],
   [
     'uq_apartment_proxies_open',

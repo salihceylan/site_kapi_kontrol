@@ -1,7 +1,9 @@
--- 074: Daire sahipligi ve yonetimi: apartment_admin_delegations, apartment_link_requests, apartment_proxies (+ apartment_residencies.sponsor_person_id). Sozlesme: docs/PLATFORM_DAIRE_YONETIMI.md
+-- 074: Daire sahipligi ve yonetimi: apartment_admin_delegations, apartment_link_requests, apartment_notices, apartment_proxies,
+-- apartment_safety_requests / apartment_safety_notes / apartment_access_suspensions (+ apartment_residencies.sponsor_person_id / is_minor, users.search_visible).
+-- Sozlesme: docs/PLATFORM_DAIRE_YONETIMI.md, docs/PLATFORM_DAIRE_GUVENLIK_POLITIKASI.md
 -- db.js ensureDbSchema ile ayni DDL (src/modules/apartment_mgmt_schema.js APARTMENT_MGMT_STEPS; ayni sira). Tamamen ekleyici ve idempotent; mevcut satirlara dokunmaz.
 -- Tablolar FK'SIZ olusturulur, her FK ayri ve katalog korumalidir. Silme: site / daire CASCADE; kullanici silinirse created_by / requested_by SET NULL, hedef kullanici CASCADE.
--- Erisim yetkisinin tek kaynagi apartment_memberships kalir; bu tablolar yonetim devri, bag kesme / davet durumu ve vekalet KAYDIdir.
+-- Erisim yetkisinin tek kaynagi apartment_memberships kalir; bu tablolar yonetim devri, bag kesme / davet durumu, bildirim kutusu, vekalet ve guvenlik KAYDIdir.
 
 CREATE TABLE IF NOT EXISTS apartment_admin_delegations (
   id BIGSERIAL PRIMARY KEY,
@@ -36,9 +38,67 @@ CREATE TABLE IF NOT EXISTS apartment_link_requests (
   responded_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  CONSTRAINT chk_apartment_link_requests_kind CHECK (kind IN ('tenant_invite', 'family_invite', 'disconnect')),
+  CONSTRAINT chk_apartment_link_requests_kind CHECK (kind IN ('tenant_invite', 'family_invite', 'disconnect', 'member_removal')),
   CONSTRAINT chk_apartment_link_requests_status CHECK (status IN ('pending', 'approved', 'rejected', 'expired', 'cancelled')),
   CONSTRAINT chk_apartment_link_requests_answered CHECK ((status = 'pending') = (responded_at IS NULL))
+);
+
+CREATE TABLE IF NOT EXISTS apartment_notices (
+  id BIGSERIAL PRIMARY KEY,
+  site_code BIGINT NOT NULL,
+  apartment_id BIGINT NOT NULL,
+  user_code INTEGER NOT NULL,
+  kind TEXT NOT NULL,
+  message TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  read_at TIMESTAMPTZ,
+  CONSTRAINT chk_apartment_notices_kind CHECK (char_length(kind) BETWEEN 1 AND 60),
+  CONSTRAINT chk_apartment_notices_message CHECK (char_length(message) BETWEEN 1 AND 300)
+);
+
+CREATE TABLE IF NOT EXISTS apartment_safety_requests (
+  id BIGSERIAL PRIMARY KEY,
+  site_code BIGINT NOT NULL,
+  apartment_id BIGINT NOT NULL,
+  requested_by INTEGER,
+  message TEXT NOT NULL,
+  contact_pref TEXT,
+  status TEXT NOT NULL DEFAULT 'open',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  resolved_at TIMESTAMPTZ,
+  resolved_by INTEGER,
+  CONSTRAINT chk_apartment_safety_requests_message CHECK (char_length(message) BETWEEN 1 AND 1000),
+  CONSTRAINT chk_apartment_safety_requests_contact CHECK (contact_pref IS NULL OR contact_pref IN ('app', 'phone', 'email')),
+  CONSTRAINT chk_apartment_safety_requests_status CHECK (status IN ('open', 'in_review', 'resolved')),
+  CONSTRAINT chk_apartment_safety_requests_resolved CHECK ((status = 'resolved') = (resolved_at IS NOT NULL))
+);
+
+CREATE TABLE IF NOT EXISTS apartment_safety_notes (
+  id BIGSERIAL PRIMARY KEY,
+  request_id BIGINT NOT NULL,
+  site_code BIGINT NOT NULL,
+  author_user_code INTEGER,
+  note TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT chk_apartment_safety_notes_note CHECK (char_length(note) BETWEEN 1 AND 1000)
+);
+
+CREATE TABLE IF NOT EXISTS apartment_access_suspensions (
+  id BIGSERIAL PRIMARY KEY,
+  site_code BIGINT NOT NULL,
+  apartment_id BIGINT NOT NULL,
+  user_code INTEGER NOT NULL,
+  reason_code TEXT NOT NULL,
+  note TEXT NOT NULL,
+  suspended_by INTEGER,
+  suspended_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  lifted_at TIMESTAMPTZ,
+  lifted_by INTEGER,
+  lift_note TEXT,
+  CONSTRAINT chk_apartment_access_suspensions_reason CHECK (reason_code IN ('court_order', 'safety', 'other')),
+  CONSTRAINT chk_apartment_access_suspensions_note CHECK (char_length(note) BETWEEN 1 AND 500),
+  CONSTRAINT chk_apartment_access_suspensions_lift CHECK (lift_note IS NULL OR char_length(lift_note) BETWEEN 1 AND 500)
 );
 
 CREATE TABLE IF NOT EXISTS apartment_proxies (
@@ -61,6 +121,10 @@ CREATE TABLE IF NOT EXISTS apartment_proxies (
 );
 
 ALTER TABLE apartment_residencies ADD COLUMN IF NOT EXISTS sponsor_person_id BIGINT;
+
+ALTER TABLE apartment_residencies ADD COLUMN IF NOT EXISTS is_minor BOOLEAN NOT NULL DEFAULT FALSE;
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS search_visible BOOLEAN NOT NULL DEFAULT FALSE;
 
 DO $$
 BEGIN
@@ -164,6 +228,141 @@ END $$;
 DO $$
 BEGIN
   IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'apartment_notices_site_code_fkey' AND conrelid = 'apartment_notices'::regclass
+  ) THEN
+    ALTER TABLE apartment_notices ADD CONSTRAINT apartment_notices_site_code_fkey FOREIGN KEY (site_code) REFERENCES sites(site_code) ON DELETE CASCADE;
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'apartment_notices_apartment_id_fkey' AND conrelid = 'apartment_notices'::regclass
+  ) THEN
+    ALTER TABLE apartment_notices ADD CONSTRAINT apartment_notices_apartment_id_fkey FOREIGN KEY (apartment_id) REFERENCES apartments(id) ON DELETE CASCADE;
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'apartment_notices_user_code_fkey' AND conrelid = 'apartment_notices'::regclass
+  ) THEN
+    ALTER TABLE apartment_notices ADD CONSTRAINT apartment_notices_user_code_fkey FOREIGN KEY (user_code) REFERENCES users(user_code) ON DELETE CASCADE;
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'apartment_safety_requests_site_code_fkey' AND conrelid = 'apartment_safety_requests'::regclass
+  ) THEN
+    ALTER TABLE apartment_safety_requests ADD CONSTRAINT apartment_safety_requests_site_code_fkey FOREIGN KEY (site_code) REFERENCES sites(site_code) ON DELETE CASCADE;
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'apartment_safety_requests_apartment_id_fkey' AND conrelid = 'apartment_safety_requests'::regclass
+  ) THEN
+    ALTER TABLE apartment_safety_requests ADD CONSTRAINT apartment_safety_requests_apartment_id_fkey FOREIGN KEY (apartment_id) REFERENCES apartments(id) ON DELETE CASCADE;
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'apartment_safety_requests_requested_by_fkey' AND conrelid = 'apartment_safety_requests'::regclass
+  ) THEN
+    ALTER TABLE apartment_safety_requests ADD CONSTRAINT apartment_safety_requests_requested_by_fkey FOREIGN KEY (requested_by) REFERENCES users(user_code) ON DELETE SET NULL;
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'apartment_safety_requests_resolved_by_fkey' AND conrelid = 'apartment_safety_requests'::regclass
+  ) THEN
+    ALTER TABLE apartment_safety_requests ADD CONSTRAINT apartment_safety_requests_resolved_by_fkey FOREIGN KEY (resolved_by) REFERENCES users(user_code) ON DELETE SET NULL;
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'apartment_safety_notes_request_id_fkey' AND conrelid = 'apartment_safety_notes'::regclass
+  ) THEN
+    ALTER TABLE apartment_safety_notes ADD CONSTRAINT apartment_safety_notes_request_id_fkey FOREIGN KEY (request_id) REFERENCES apartment_safety_requests(id) ON DELETE CASCADE;
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'apartment_safety_notes_site_code_fkey' AND conrelid = 'apartment_safety_notes'::regclass
+  ) THEN
+    ALTER TABLE apartment_safety_notes ADD CONSTRAINT apartment_safety_notes_site_code_fkey FOREIGN KEY (site_code) REFERENCES sites(site_code) ON DELETE CASCADE;
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'apartment_safety_notes_author_user_code_fkey' AND conrelid = 'apartment_safety_notes'::regclass
+  ) THEN
+    ALTER TABLE apartment_safety_notes ADD CONSTRAINT apartment_safety_notes_author_user_code_fkey FOREIGN KEY (author_user_code) REFERENCES users(user_code) ON DELETE SET NULL;
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'apartment_access_suspensions_site_code_fkey' AND conrelid = 'apartment_access_suspensions'::regclass
+  ) THEN
+    ALTER TABLE apartment_access_suspensions ADD CONSTRAINT apartment_access_suspensions_site_code_fkey FOREIGN KEY (site_code) REFERENCES sites(site_code) ON DELETE CASCADE;
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'apartment_access_suspensions_apartment_id_fkey' AND conrelid = 'apartment_access_suspensions'::regclass
+  ) THEN
+    ALTER TABLE apartment_access_suspensions ADD CONSTRAINT apartment_access_suspensions_apartment_id_fkey FOREIGN KEY (apartment_id) REFERENCES apartments(id) ON DELETE CASCADE;
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'apartment_access_suspensions_user_code_fkey' AND conrelid = 'apartment_access_suspensions'::regclass
+  ) THEN
+    ALTER TABLE apartment_access_suspensions ADD CONSTRAINT apartment_access_suspensions_user_code_fkey FOREIGN KEY (user_code) REFERENCES users(user_code) ON DELETE CASCADE;
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'apartment_access_suspensions_suspended_by_fkey' AND conrelid = 'apartment_access_suspensions'::regclass
+  ) THEN
+    ALTER TABLE apartment_access_suspensions ADD CONSTRAINT apartment_access_suspensions_suspended_by_fkey FOREIGN KEY (suspended_by) REFERENCES users(user_code) ON DELETE SET NULL;
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'apartment_access_suspensions_lifted_by_fkey' AND conrelid = 'apartment_access_suspensions'::regclass
+  ) THEN
+    ALTER TABLE apartment_access_suspensions ADD CONSTRAINT apartment_access_suspensions_lifted_by_fkey FOREIGN KEY (lifted_by) REFERENCES users(user_code) ON DELETE SET NULL;
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
     SELECT 1 FROM pg_constraint WHERE conname = 'apartment_proxies_site_code_fkey' AND conrelid = 'apartment_proxies'::regclass
   ) THEN
     ALTER TABLE apartment_proxies ADD CONSTRAINT apartment_proxies_site_code_fkey FOREIGN KEY (site_code) REFERENCES sites(site_code) ON DELETE CASCADE;
@@ -237,6 +436,18 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_apartment_link_requests_family ON apartment
 CREATE INDEX IF NOT EXISTS idx_apartment_link_requests_target ON apartment_link_requests (target_user_code, id DESC) WHERE status = 'pending';
 
 CREATE INDEX IF NOT EXISTS idx_apartment_link_requests_apartment ON apartment_link_requests (apartment_id, id DESC);
+
+CREATE INDEX IF NOT EXISTS idx_apartment_notices_user ON apartment_notices (user_code, id DESC);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_apartment_link_requests_removal ON apartment_link_requests (apartment_id, target_user_code) WHERE status = 'pending' AND kind = 'member_removal';
+
+CREATE INDEX IF NOT EXISTS idx_apartment_safety_requests_site ON apartment_safety_requests (site_code, status, id DESC);
+
+CREATE INDEX IF NOT EXISTS idx_apartment_safety_notes_request ON apartment_safety_notes (request_id, id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_apartment_access_suspensions_open ON apartment_access_suspensions (apartment_id, user_code) WHERE lifted_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_apartment_access_suspensions_site ON apartment_access_suspensions (site_code, id DESC);
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_apartment_proxies_open ON apartment_proxies (apartment_id, scope) WHERE revoked_at IS NULL;
 

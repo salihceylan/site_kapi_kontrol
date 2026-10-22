@@ -55,6 +55,8 @@ export async function runDatabaseCleanup(db = pool) {
     // 3d. Suresi dolan daire talepleri (074): bekleyen davet / bag kesme talebi 14 gunde 'expired' olur (otomatik kesme YOK).
     await db.query(`UPDATE apartment_link_requests SET status = 'expired', responded_at = NOW(), updated_at = NOW() WHERE status = 'pending' AND expires_at <= NOW()`);
 
+    await db.query(`DELETE FROM apartment_notices WHERE (read_at IS NOT NULL AND read_at < NOW() - INTERVAL '30 days') OR created_at < NOW() - INTERVAL '90 days'`);
+
     // 4. 30 günden eski cihaz bağlantı (connectivity) loglarını temizle
     const delConn = await db.query(`
       DELETE FROM device_connectivity_logs

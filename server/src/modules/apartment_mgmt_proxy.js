@@ -6,6 +6,7 @@
 import { pool } from '../db.js';
 import { PlatformError } from './errors.js';
 import { SCOPES, pickSigningHolder, proxyIsActive, resolveProxyWindow, signingLabel } from './apartment_mgmt_rules.js';
+import { notifyApartmentUsers } from './apartment_mgmt_core.js';
 import { auditApartment, ensureOwnerRecord, withApartment } from './apartment_mgmt_service.js';
 import { apartmentLabel, dateToIso, invalidBody, parsePositiveId, todayIso } from './people_common.js';
 
@@ -59,6 +60,14 @@ export async function createProxy({ authUser, apartmentId, body }) {
       proxy_person_id: tenant.person_id,
       valid_from: window.valid_from,
       valid_until: window.valid_until,
+    });
+    await notifyApartmentUsers(client, {
+      siteCode,
+      apartmentId: state.apartment.id,
+      userCodes: [tenant.user_code],
+      kind: 'proxy_given',
+      message: `${apartmentLabel(state.apartment.block_name, state.apartment.unit_label)} dairesinin maliki size ${scope === 'toplanti_imza' ? 'toplantı imzası' : 'kurul üyeliği'} için vekalet verdi (${window.valid_until} tarihine kadar).`,
+      exceptUserCode: uc,
     });
     return { ok: true, id: Number(inserted.rows[0].id), valid_from: window.valid_from, valid_until: window.valid_until };
   });
