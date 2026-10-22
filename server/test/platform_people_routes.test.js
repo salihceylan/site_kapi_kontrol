@@ -777,7 +777,7 @@ describe('GET apartments / vehicles / history / my-records', () => {
     overrides.push(
       [/^SELECT COUNT\(\*\)::INTEGER AS total FROM vehicles v/, () => ok([{ total: 3 }])],
       [
-        /^SELECT v\.id, v\.plate, v\.plate_display, v\.note, v\.person_id, v\.is_active/,
+        /^SELECT v\.id, v\.plate, v\.plate_display, v\.note, v.person_id, v.apartment_id, v.is_active/,
         () => ok([{ id: '4', plate: '34ABC123', plate_display: '34 ABC 123', note: 'beyaz', person_id: '5', is_active: true, person_name: 'Ali Veli', block_name: 'A Blok', unit_label: 'Daire 2' }]),
       ],
     );
@@ -797,7 +797,7 @@ describe('GET apartments / vehicles / history / my-records', () => {
     overrides.push(
       [/^SELECT COUNT\(\*\)::INTEGER AS total FROM vehicles v/, () => ok([{ total: 1 }])],
       [
-        /^SELECT v\.id, v\.plate, v\.plate_display, v\.note, v\.person_id, v\.is_active/,
+        /^SELECT v\.id, v\.plate, v\.plate_display, v\.note, v.person_id, v.apartment_id, v.is_active/,
         () => ok([{ id: '4', plate: '34ABC123', plate_display: '34 ABC 123', note: 'ic not', person_id: '5', is_active: true, person_name: 'Ali Veli', block_name: null, unit_label: null }]),
       ],
     );
