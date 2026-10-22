@@ -17,6 +17,7 @@ import { isEnforced, loadLegalState, recordConsents, resolveAcceptedDocuments } 
 import { ACCOUNT_KIND_SQL } from './people_common.js';
 import { grantApartmentAccess } from './people_service.js';
 import { applyDutyMembership } from './team_service.js';
+import { activatePendingDelegations } from './apartment_mgmt_core.js';
 
 export const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 export const INVITE_COOLDOWN_MS = 60 * 1000;
@@ -147,7 +148,7 @@ export async function sendInvitation({ siteCode, personId, actor }) {
         [code, pid, email, hashToken(token), expiresAt, actorInfo.userCode],
       );
     }
-    const site = await client.query(`SELECT site_name FROM sites WHERE site_code = $1`, [code]);
+    const site = await client.query(`SELECT name AS site_name FROM sites WHERE site_code = $1`, [code]);
     await recordAudit(
       client,
       { actor: actorInfo, action: 'person.invitation_sent', siteCode: code, targetType: 'person', targetId: String(pid), details: { send_count: sendCount } },
@@ -198,7 +199,7 @@ export async function getInviteSummary(token) {
   if (typeof token !== 'string' || !TOKEN_PATTERN.test(token)) throw inviteInvalid();
   const r = await pool.query(
     `
-      SELECT i.email, s.site_name, COALESCE(sp.full_name, '') AS full_name
+      SELECT i.email, s.name AS site_name, COALESCE(sp.full_name, '') AS full_name
       FROM person_invitations i
       INNER JOIN sites s ON s.site_code = i.site_code
       INNER JOIN site_people sp ON sp.id = i.person_id
@@ -233,6 +234,8 @@ async function bindPersonToUser(client, { siteCode, person, userCode }) {
   for (const row of residencies.rows) {
     await grantApartmentAccess(client, { siteCode, apartmentId: Number(row.apartment_id), userCode });
   }
+  // Daire yönetimi: kiracıya "yönetimi devret" işaretliyse (hesabı olmadığı için bekleyen devir) hesap bağlanınca yönetim ona geçer.
+  await activatePendingDelegations(client, { personId: person.id, userCode });
   const duty = (await client.query(`SELECT duty FROM site_team_duties WHERE person_id = $1 AND ended_at IS NULL`, [person.id])).rows?.[0];
   if (duty) {
     const u = (await client.query(`SELECT role, is_active, email_verified, approval_status FROM users WHERE user_code = $1`, [userCode])).rows[0];
@@ -321,7 +324,7 @@ export async function listMyInvitations(authUser) {
   if (userCode === null) return { invitations: [] };
   const r = await pool.query(
     `
-      SELECT i.id, i.expires_at, s.site_name,
+      SELECT i.id, i.expires_at, s.name AS site_name,
              (SELECT d.duty FROM site_team_duties d WHERE d.person_id = i.person_id AND d.ended_at IS NULL) AS duty
       FROM users u
       INNER JOIN person_invitations i ON LOWER(i.email) = LOWER(u.email)
