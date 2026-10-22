@@ -82,10 +82,44 @@ Bekleyen talep süresi dolunca `expired` sayılır (okuma / yanıt anında) ve b
 | `POST /app/apartments/requests/:id/respond` `{accept}` , `.../cancel` | hedef / açan | |
 | `GET\|POST /app/apartments/:id/proxies`, `DELETE .../proxies/:proxyId` | malik (vekil çekilebilir) | vekil = güncel kiracı |
 | `POST /app/apartments/notices/read` | sakin | bildirimleri okundu işaretle |
+| `GET /app/apartments/:id/vehicles` | dairede bağı olan herkes + site yöneticisi | dairenin aktif araçları, `can_manage`, `limit`, `owners`; aşağıdaki "Araçlar" bölümü |
+| `POST /app/apartments/:id/vehicles`, `PUT .../vehicles/:vehicleId`, `DELETE .../vehicles/:vehicleId` | daire admini VEYA site yöneticisi / süper | ekle `{ plate, note?, person_id? }`, not / sahip düzenle, çıkar (pasife al) |
 | `GET\|PUT /manager/sites/:siteCode/apartments/:id/admin-candidates`, `.../admin` | site yöneticisi / süper | daire adminini değiştir (aşağıda) |
 | `GET /manager/sites/:siteCode/signing-roster?date=` | yönetici / kurul okur | Karar Defteri imza hakkı sahipleri; `decision_book` modülü AÇIK olmalı |
 
 Audit eylemleri (`target_type: apartment`): `apartment_mgmt.tenant_added | tenant_invited | tenant_invite_accepted | family_added | family_invited | family_removed | member_removal_requested | member_removal_approved | management_delegated | tenant_exit | disconnect_requested | disconnect_approved | member_left | proxy_created | proxy_revoked | owner_recorded | admin_changed_by_manager`. Kişi araması: `apartment_mgmt.person_search` (maskeli sorgu).
+
+## Araçlar ("Dairem > Araçlarım")
+
+Aracı yalnız site yöneticisi değil, **daire admini de** girer ("bu işler sırf site yöneticisine kalmasın"); site yöneticisi de yapabilir. Kod: `src/modules/apartment_mgmt_vehicles.js`
+(plaka / not / kayıt biçimi mevcut `people_common` ve `plate_recognition_common` kurallarını, listeleme ve kaynak etiketi `vehicle_service.js`'i kullanır). Yeni tablo ya da migration YOKTUR:
+araç `vehicles` satırıdır; daire yöneticisinin eklediği araçta mevcut `apartment_id` kolonu bu daireye bağlanır.
+
+| Kim | Ne yapar |
+|---|---|
+| Daire admini (dairede oturan: kiracı varsa kiracı, yoksa malik) | KENDİ dairesi adına araç ekler, notu / sahibi düzenler, aracı çıkarır (pasife alır) |
+| Aile üyesi, admin olmayan malik / kiracı | dairenin araçlarını yalnız GÖRÜR; ekleme / düzenleme / çıkarma 403 `FORBIDDEN_ROLE` |
+| Site yöneticisi / süper | mevcut Kişiler > Araçlar ekranı aynen kalır; ayrıca aynı uçlarla da yazabilir (kaynak etiketi "Site yönetimi") |
+| Dairede bağı olmayan | 404 `APARTMENT_NOT_FOUND` (dairenin varlığı sızdırılmaz); başka dairenin aracı 404 `VEHICLE_NOT_FOUND` |
+
+Kurallar:
+
+1. **Sınır**: daire başına en çok **4** aktif araç (site yöneticisi için **8**); aşılırsa 409 `VEHICLE_LIMIT`. Çıkarılan araç yer açar.
+2. **Plaka**: geçerli Türk plakası (il kodu 01-81 + 1-3 harf + 2-4 rakam, `plate_recognition_common.TR_PLATE_RE`); aksi 400 `PLATE_INVALID`. Plaka kaydedildikten sonra DEĞİŞMEZ (çıkarılıp yeniden eklenir). Not en çok 200 karakter (marka / model / renk).
+3. **Tekillik**: aynı sitede aynı plaka bir kez (mevcut kısmi tekil indeks `uq_vehicles_plate`; site kilidi altında). Plaka başka bir kayıtta kullanılıyorsa 409 `PLATE_IN_USE` ve iletide hiçbir daire / kişi bilgisi yoktur:
+   "Bu plaka başka bir kayıtta kullanılıyor; site yönetimiyle görüşün." Aynı dairenin kendi aracıysa 409 `PLATE_EXISTS`.
+4. **Sahip**: dairenin aktif sakinlerinden biri (`person_id`; varsayılan daire admini). Başka dairenin kişisi 409 `NOT_AN_ACTIVE_RESIDENT`. Kapı erişimi askıya alınmış admin yazamaz.
+5. **Hız sınırı**: yazma uçları kullanıcı başına saatte 60 (plaka denemesiyle başka kayıtları yoklamayı sınırlar).
+6. **Audit**: `vehicle.added | vehicle.updated | vehicle.removed` (`target_type: vehicle`); plaka MASKELİ (`34***23`), `details`: `apartment_id`, `person_id`, `source` (`apartment_admin` | `site_manager`).
+   Kaynak etiketi ayrı kolonda değil audit'te tutulur; `GET .../vehicles` ve site yöneticisinin Araçlar ekranı bunu `source` / `added_by` olarak gösterir ("Ekleyen: Daire yöneticisi (Ad) / Site yönetimi").
+   Eski kayıtlar (ve yönetici ekranından eklenenler) `apartment_id` boş olduğundan "Site yönetimi" sayılır.
+
+**ÖNEMLİ ETKİ**: kayıtlı aktif araç plaka tanıma modülünde **yetkili araç** sayılır (`plate_recognition_service` aktif araç listesi). Bu yüzden admin yalnız KENDİ dairesi adına ekler ve ekranda
+"Eklediğiniz plaka, sitede plaka tanıma açıksa yetkili araç sayılır." uyarısı yazar. Kara liste (blacklist) araç kaydından üstündür; yani eklenen plaka kara listedeyse yine izinli olmaz.
+Kapı açma kodu (kapı komutları, MQTT, BLE, firmware, kapı servisleri) bu özellikte DEĞİŞMEZ.
+
+Kapsam kararı ("daire düzeyinde yalnız site yöneticisinin yaptığı işler" incelemesi): yetkisi admine açılan tek diğer iş yoktur; kendi telefon / e-postasını zaten Profilim'den değiştirir.
+Mali / yapısal alanlar (m2, arsa payı, aidat, borç sorumlusu, daire silme / birleştirme, PIN sıfırlama) SİTE YÖNETİCİSİNDE KALIR.
 
 ## Site yöneticisi: "Daire adminini değiştir"
 
@@ -120,8 +154,9 @@ kayıtları özel hassasiyetli sayılır (güvenlik politikası belgesi).
 - Uygulama içi bildirim kutusu vardır; telefon bildirimi (push) ve e-posta bu olaylar için gönderilmez.
 - Kurul üyesi atama ekranında vekil için özel bir seçici yoktur; imza listesi vekili gösterir, atama mevcut Kadro ekranından yapılır.
 - Eski `getMyApartments` (Daire Kullanıcıları ekranı) üyelerin e-posta / telefonunu aynı dairedekilere gösterir; bu özellikte değiştirilmedi.
+- Daireden ayrılan / çıkarılan kişinin araçları kendiliğinden pasifleşmez (mevcut CRM davranışı); yeni daire admini "Araçlarım"dan çıkarır. Site yöneticisinin eski Kişiler > Araçlar uçları 4/8 sınırını ve katı Türk plakası kuralını uygulamaz (davranış değişmedi).
 - Gerçek PostgreSQL ile uçtan uca sınama yapılmadı (saf kural testleri, şema / migration eşitliği ve kaynak denetimleri var).
 
 ## Doğrulama
 
-`server/test/apartment_mgmt.test.js` (şema <-> migration, admin çözümleme, devir, vekalet, imza hakkı, arama gizliliği, yetişkin üye kuralı), `test/screens/my_apartment_view_test.dart`.
+`server/test/apartment_mgmt.test.js` (şema <-> migration, admin çözümleme, devir, vekalet, imza hakkı, arama gizliliği, yetişkin üye kuralı), `server/test/apartment_mgmt_vehicles.test.js` (araçlar: yetki, limit, tekil plaka, mesaj sızdırmama), `test/screens/my_apartment_view_test.dart`.

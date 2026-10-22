@@ -163,6 +163,7 @@ export const VEHICLE_SELECT = `
     v.plate_display,
     v.note,
     v.person_id,
+    v.apartment_id,
     v.is_active,
     COALESCE(NULLIF(u.full_name, ''), sp.full_name) AS person_name,
     ap.block_name,

@@ -131,7 +131,7 @@ async function pendingFlags(db, apartmentId) {
   return { pendingTenantInvite: kinds.has('tenant_invite'), pendingDisconnect: kinds.has('disconnect') };
 }
 
-async function meOf(db, state, uc) {
+export async function meOf(db, state, uc) {
   const flags = await pendingFlags(db, state.apartment.id);
   const hasMembership = state.members.some((m) => Number(m.user_code) === uc);
   const me = rolesOfUser(state.roles, uc, { ...flags, hasMembership });

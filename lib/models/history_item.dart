@@ -24,6 +24,8 @@ String? peopleActionLabel(String action) {
       return 'Araç eklendi';
     case 'vehicle.removed':
       return 'Araç kaldırıldı';
+    case 'vehicle.updated':
+      return 'Araç bilgisi güncellendi';
     case 'apartment.deleted':
       return 'Daire silindi';
     case 'apartment.pin_reset':

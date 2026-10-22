@@ -9,6 +9,8 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:http/http.dart' as http;
 import 'package:site_kapi_kontrol/models/apartment_management.dart';
+import 'package:site_kapi_kontrol/models/apartment_vehicles.dart';
+import 'package:site_kapi_kontrol/models/vehicle_record.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/services/auth_api.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
@@ -187,6 +189,36 @@ class ApartmentManagementService {
 
   Future<void> revokeProxy(int apartmentId, int proxyId) =>
       _guard((t) => api.call('DELETE', _apt(apartmentId, 'proxies/$proxyId'), token: t));
+
+  // --- Araçlarım (daire araçları; yazma: daire yöneticisi ya da site yöneticisi) ---
+
+  Future<ApartmentVehicles> vehicles(int apartmentId) async =>
+      ApartmentVehicles.fromJson(await _guard((t) => api.call('GET', _apt(apartmentId, 'vehicles'), token: t)));
+
+  Future<VehicleRecord> addVehicle(int apartmentId, {required String plate, String? note, int? personId}) async {
+    final r = await _guard(
+      (t) => api.call(
+        'POST',
+        _apt(apartmentId, 'vehicles'),
+        token: t,
+        body: <String, Object?>{'plate': plate, 'note': ?note, 'person_id': ?personId},
+      ),
+    );
+    return VehicleRecord.fromJson(Map<String, dynamic>.from(r['vehicle'] as Map));
+  }
+
+  /// Plaka değişmez; not (boş metin = notu sil) ve/veya sahip.
+  Future<void> updateVehicle(int apartmentId, int vehicleId, {String? note, int? personId}) => _guard(
+    (t) => api.call(
+      'PUT',
+      _apt(apartmentId, 'vehicles/$vehicleId'),
+      token: t,
+      body: <String, Object?>{'note': ?note, 'person_id': ?personId},
+    ),
+  );
+
+  Future<void> removeVehicle(int apartmentId, int vehicleId) =>
+      _guard((t) => api.call('DELETE', _apt(apartmentId, 'vehicles/$vehicleId'), token: t));
 
   Future<void> markNoticesRead([List<int>? ids]) => _guard(
     (t) => api.call('POST', '/app/apartments/notices/read', token: t, body: <String, Object?>{'ids': ?ids}),
