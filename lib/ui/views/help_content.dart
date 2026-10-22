@@ -122,6 +122,16 @@ abstract final class HelpContent {
 
   /// Menü dışı ekran içi etiketler (düğme, bölüm, sekme adları; kodda aynen geçer).
   static const Set<String> knownScreenLabels = <String>{
+    // Dairem (daire sahipliği ve yönetimi, güvenlik ve destek)
+    'Kiracı ekle',
+    'Sistemden ara',
+    'Yönetimi kiracıya devret',
+    'Aile üyesi ekle',
+    'Daireyi devret / Çıkış',
+    'Bağlantıyı kes talebi',
+    'Bu daireden ayrıl',
+    'Güvenlik ve destek',
+    'Site yönetimine gizli talep gönder',
     // Banka dosyası (2C) ve liste dışa aktarımı (3E)
     'Kasa',
     'Banka dosyası yükle',

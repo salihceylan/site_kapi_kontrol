@@ -10,6 +10,7 @@ import 'package:site_kapi_kontrol/services/apartment_management_api.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_snack.dart';
+import 'package:site_kapi_kontrol/ui/design/buttons.dart';
 import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/apartment_mgmt_dialogs.dart';
@@ -363,18 +364,18 @@ class MyApartmentViewState extends State<MyApartmentView> {
             ..._familySection(apt, canSearch),
             ..._tenantSection(apt),
             const SizedBox(height: AppSpace.md),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton.icon(
-                onPressed: _busy ? null : () => unawaited(_leave(apt)),
-                icon: const Icon(Icons.logout_rounded),
-                label: const Text('Bu daireden ayrıl'),
-              ),
-            ),
+            _act('Bu daireden ayrıl', Icons.logout_rounded, _busy ? null : () => unawaited(_leave(apt)), tone: AppTone.danger),
             _safetySection(apt),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _act(String label, IconData icon, VoidCallback? onPressed, {AppTone tone = AppTone.primary}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpace.sm),
+      child: PrimaryActionButton(label: label, icon: icon, variant: AppButtonVariant.outline, tone: tone, onPressed: onPressed),
     );
   }
 
@@ -407,17 +408,9 @@ class MyApartmentViewState extends State<MyApartmentView> {
     return [
       _section('Kiracı', [
         if (apt.can.addTenant)
-          OutlinedButton.icon(
-            onPressed: _busy ? null : () => unawaited(_addTenant(apt, canSearch && apt.can.searchPeople)),
-            icon: const Icon(Icons.person_add_alt_1_rounded),
-            label: const Text('Kiracı ekle'),
-          ),
+          _act('Kiracı ekle', Icons.person_add_alt_1_rounded, _busy ? null : () => unawaited(_addTenant(apt, canSearch && apt.can.searchPeople))),
         if (apt.can.delegateManagement)
-          OutlinedButton.icon(
-            onPressed: _busy ? null : () => unawaited(_delegate(apt)),
-            icon: const Icon(Icons.swap_horiz_rounded),
-            label: const Text('Yönetimi kiracıya devret'),
-          ),
+          _act('Yönetimi kiracıya devret', Icons.swap_horiz_rounded, _busy ? null : () => unawaited(_delegate(apt))),
       ]),
     ];
   }
@@ -463,11 +456,7 @@ class MyApartmentViewState extends State<MyApartmentView> {
             ],
           ),
         if (apt.can.manageProxy)
-          OutlinedButton.icon(
-            onPressed: _busy ? null : () => unawaited(_giveProxy(apt)),
-            icon: const Icon(Icons.assignment_ind_rounded),
-            label: const Text('Vekalet ver'),
-          ),
+          _act('Vekalet ver', Icons.assignment_ind_rounded, _busy ? null : () => unawaited(_giveProxy(apt))),
       ]),
     ];
   }
@@ -479,10 +468,12 @@ class MyApartmentViewState extends State<MyApartmentView> {
       _section('Aile üyeleri', [
         if (apt.family.isEmpty) Text('Kayıtlı aile üyesi yok.', style: th.bodyMedium),
         for (final m in apt.family)
-          Row(
-            children: [
-              Expanded(
-                child: Wrap(
+          Padding(
+            padding: const EdgeInsets.only(bottom: AppSpace.xs),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Wrap(
                   spacing: AppSpace.sm,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
@@ -490,20 +481,19 @@ class MyApartmentViewState extends State<MyApartmentView> {
                     if (m.isMinor) const StatusChip(label: '18 yaş altı', tone: AppTone.info),
                   ],
                 ),
-              ),
-              if (m.canRemove)
-                TextButton(
-                  onPressed: _busy ? null : () => unawaited(_removeFamily(apt, m)),
-                  child: Text(m.removalNeedsConsent ? 'Çıkarma isteği' : 'Çıkar'),
-                ),
-            ],
+                if (m.canRemove)
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: _busy ? null : () => unawaited(_removeFamily(apt, m)),
+                      child: Text(m.removalNeedsConsent ? 'Çıkarma isteği' : 'Çıkar'),
+                    ),
+                  ),
+              ],
+            ),
           ),
         if (apt.can.manageFamily)
-          OutlinedButton.icon(
-            onPressed: _busy ? null : () => unawaited(_addFamily(apt, canSearch && apt.can.searchPeople)),
-            icon: const Icon(Icons.group_add_rounded),
-            label: const Text('Aile üyesi ekle'),
-          ),
+          _act('Aile üyesi ekle', Icons.group_add_rounded, _busy ? null : () => unawaited(_addFamily(apt, canSearch && apt.can.searchPeople))),
       ]),
     ];
   }
@@ -513,17 +503,9 @@ class MyApartmentViewState extends State<MyApartmentView> {
     return [
       _section('Kiracılık', [
         if (apt.can.exit)
-          OutlinedButton.icon(
-            onPressed: _busy ? null : () => unawaited(_exit(apt)),
-            icon: const Icon(Icons.exit_to_app_rounded),
-            label: const Text('Daireyi devret / Çıkış'),
-          ),
+          _act('Daireyi devret / Çıkış', Icons.exit_to_app_rounded, _busy ? null : () => unawaited(_exit(apt))),
         if (apt.can.requestDisconnect)
-          OutlinedButton.icon(
-            onPressed: _busy ? null : () => unawaited(_disconnect(apt)),
-            icon: const Icon(Icons.link_off_rounded),
-            label: const Text('Bağlantıyı kes talebi'),
-          ),
+          _act('Bağlantıyı kes talebi', Icons.link_off_rounded, _busy ? null : () => unawaited(_disconnect(apt))),
       ]),
     ];
   }
@@ -552,11 +534,7 @@ class MyApartmentViewState extends State<MyApartmentView> {
             style: th.bodySmall?.copyWith(color: context.palette.textSecondary),
           ),
           const SizedBox(height: AppSpace.sm),
-          OutlinedButton.icon(
-            onPressed: _busy ? null : () => unawaited(_safety(apt)),
-            icon: const Icon(Icons.shield_outlined),
-            label: const Text('Site yönetimine gizli talep gönder'),
-          ),
+          _act('Site yönetimine gizli talep gönder', Icons.shield_outlined, _busy ? null : () => unawaited(_safety(apt))),
           const SizedBox(height: AppSpace.sm),
         ],
       ),

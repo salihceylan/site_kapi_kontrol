@@ -6,6 +6,7 @@ import 'package:site_kapi_kontrol/models/apartment_management.dart';
 import 'package:site_kapi_kontrol/services/apartment_management_api.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
+import 'package:site_kapi_kontrol/ui/design/buttons.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/helpers/dialog_guard.dart';
 import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart' show crmMessageOf;
@@ -141,16 +142,27 @@ class _AddPersonDialogState extends State<AddPersonDialog> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (widget.canSearch) ...[
-            SegmentedButton<bool>(
-              segments: const [
-                ButtonSegment<bool>(value: false, label: Text('Yeni kişi')),
-                ButtonSegment<bool>(value: true, label: Text('Sistemden ara')),
+            Wrap(
+              spacing: AppSpace.sm,
+              runSpacing: AppSpace.sm,
+              children: [
+                ChoiceChip(
+                  label: const Text('Yeni kişi'),
+                  selected: !_search,
+                  onSelected: (_) => setState(() {
+                    _search = false;
+                    _error = null;
+                  }),
+                ),
+                ChoiceChip(
+                  label: const Text('Sistemden ara'),
+                  selected: _search,
+                  onSelected: (_) => setState(() {
+                    _search = true;
+                    _error = null;
+                  }),
+                ),
               ],
-              selected: <bool>{_search},
-              onSelectionChanged: (s) => setState(() {
-                _search = s.first;
-                _error = null;
-              }),
             ),
             const SizedBox(height: AppSpace.md),
           ],
@@ -326,10 +338,11 @@ class _ProxyDialogState extends State<ProxyDialog> {
               ],
             ),
           ),
-          OutlinedButton.icon(
+          PrimaryActionButton(
+            label: _until == null ? 'Bitiş: 1 yıl (varsayılan)' : 'Bitiş: ${_fmt(_until!)}',
+            icon: Icons.event_rounded,
+            variant: AppButtonVariant.outline,
             onPressed: _pickUntil,
-            icon: const Icon(Icons.event_rounded),
-            label: Text(_until == null ? 'Bitiş: 1 yıl (varsayılan)' : 'Bitiş: ${_fmt(_until!)}'),
           ),
           const SizedBox(height: AppSpace.sm),
           Text(
