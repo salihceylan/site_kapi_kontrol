@@ -149,6 +149,7 @@ import 'package:site_kapi_kontrol/ui/dialogs/announcement_read_dialog.dart';
 import 'package:site_kapi_kontrol/ui/views/announcements_view.dart';
 import 'package:site_kapi_kontrol/ui/views/document_view.dart';
 import 'package:site_kapi_kontrol/ui/views/finance_view.dart';
+import 'package:site_kapi_kontrol/ui/views/my_apartment_view.dart';
 import 'package:site_kapi_kontrol/ui/views/my_finance_view.dart';
 import 'package:site_kapi_kontrol/ui/widgets/pay_sheet.dart';
 import 'package:site_kapi_kontrol/ui/views/work_manager_view.dart';
@@ -324,6 +325,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final GlobalKey<DecisionManagerViewState> _decisionManagerKey = GlobalKey<DecisionManagerViewState>();
   final GlobalKey<DecisionResidentViewState> _decisionResidentKey = GlobalKey<DecisionResidentViewState>();
   final GlobalKey<DirectoryViewState> _directoryKey = GlobalKey<DirectoryViewState>();
+  final GlobalKey<MyApartmentViewState> _myApartmentKey = GlobalKey<MyApartmentViewState>();
   final GlobalKey<BudgetViewState> _budgetKey = GlobalKey<BudgetViewState>();
   final GlobalKey<NeighborBoardViewState> _neighborBoardKey = GlobalKey<NeighborBoardViewState>();
   final GlobalKey<AnnualReportViewState> _annualReportKey = GlobalKey<AnnualReportViewState>();
@@ -976,6 +978,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         // Kapı paneli ("Panel" artık vitrin): her rolde; Geçiş Kontrol kapalıyken ve daire sakini rolünde kapı erişimi /
         // kapısı yokken [_hiddenMenuItems] gizler.
         SirketMenuItem.kapilar,
+        if (_canAccessDairem(role)) SirketMenuItem.dairem,
         if (_moduleAccess.boardMemberSites.isNotEmpty) SirketMenuItem.kisiler,
         if (_canAccessAnnouncements(role)) SirketMenuItem.duyurular,
         if (_canAccessFinance(role)) SirketMenuItem.finans,
@@ -1002,6 +1005,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         if (_canAccessContracts(role)) SirketMenuItem.sozlesmeler,
         if (_canAccessMeters(role)) SirketMenuItem.sayaclar,
       };
+
+  /// Dairem: daire sakini, bireysel sakin ve sakin modundaki yönetici (modül gerektirmez). Ekran, bağlı daire yoksa bunu açıkça söyler.
+  bool _canAccessDairem(UserRole role) =>
+      role == UserRole.apartmentOwner || role == UserRole.individual || (role == UserRole.siteManager && _isResidentMode);
 
   // --- Belgeler (Faz 3b-A) ---
 
@@ -1959,6 +1966,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (item == SirketMenuItem.rehber) {
       return _directoryResidentSites(role).isNotEmpty;
     }
+    if (item == SirketMenuItem.dairem) {
+      return _canAccessDairem(role);
+    }
     // İşletme Projesi: `budget` modülü açık siteye bağlı yönetici / kurul; sakin ve görevli için yok.
     if (item == SirketMenuItem.isletmeProjesi) {
       return _canAccessBudget(role);
@@ -2194,6 +2204,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
       case SirketMenuItem.kapilar:
         return 'Kapılar';
+
+      case SirketMenuItem.dairem:
+        return 'Dairem';
 
     }
 
@@ -5625,6 +5638,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         break;
       case SirketMenuItem.rehber:
         await _directoryKey.currentState?.reload();
+      case SirketMenuItem.dairem:
+        await _myApartmentKey.currentState?.reload();
       case SirketMenuItem.isletmeProjesi:
         await _budgetKey.currentState?.reload();
       case SirketMenuItem.komsuPanosu:
@@ -6869,6 +6884,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
       case SirketMenuItem.rehber:
         return DirectoryView(key: _directoryKey, authService: widget.authService);
+
+      case SirketMenuItem.dairem:
+        return MyApartmentView(
+          key: _myApartmentKey,
+          authService: widget.authService,
+          onChanged: () => unawaited(_moduleAccess.refresh()),
+        );
 
       case SirketMenuItem.komsuPanosu:
         return NeighborBoardView(

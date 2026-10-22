@@ -84,6 +84,7 @@ const Set<SirketMenuItem> _featureModuleItems = <SirketMenuItem>{
 
 const Map<SirketMenuItem, ModuleArtKind> _artKinds = <SirketMenuItem, ModuleArtKind>{
   SirketMenuItem.kapilar: ModuleArtKind.door,
+  SirketMenuItem.dairem: ModuleArtKind.people,
   SirketMenuItem.kisiler: ModuleArtKind.people,
   SirketMenuItem.duyurular: ModuleArtKind.announcements,
   SirketMenuItem.finans: ModuleArtKind.finance,
@@ -135,6 +136,7 @@ ModuleArtKind moduleArtKindFor(SirketMenuItem item) => _artKinds[item] ?? Module
 
 const Map<SirketMenuItem, String> _descriptions = <SirketMenuItem, String>{
   SirketMenuItem.kapilar: 'Kapı durumu ve kapıyı aç',
+  SirketMenuItem.dairem: 'Daire yönetimi, kiracı ve aile üyeleri',
   SirketMenuItem.kisiler: 'Kişiler, daireler ve araçlar',
   SirketMenuItem.duyurular: 'Site duyuruları ve bildirimler',
   SirketMenuItem.finans: 'Aidat, borç ve tahsilat',

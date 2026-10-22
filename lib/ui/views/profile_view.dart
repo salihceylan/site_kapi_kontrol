@@ -11,6 +11,7 @@ import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/managed_user_card.dart';
 import 'package:site_kapi_kontrol/ui/widgets/my_records_section.dart';
 import 'package:site_kapi_kontrol/ui/widgets/notification_prefs_section.dart';
+import 'package:site_kapi_kontrol/ui/widgets/search_visibility_section.dart';
 
 class ProfileView extends StatelessWidget {
   const ProfileView({
@@ -169,6 +170,8 @@ class ProfileView extends StatelessWidget {
           if (authService != null) ...[
             const SizedBox(height: AppSpace.lg),
             MyRecordsSection(authService: authService!),
+            const SizedBox(height: AppSpace.lg),
+            SearchVisibilitySection(authService: authService!),
           ],
           if (authService != null && showNotificationPrefs) ...[
             const SizedBox(height: AppSpace.lg),
@@ -339,6 +342,8 @@ class ResidentProfileView extends StatelessWidget {
         card,
         const SizedBox(height: AppSpace.lg),
         MyRecordsSection(authService: service, showWhenEmpty: true),
+        const SizedBox(height: AppSpace.lg),
+        SearchVisibilitySection(authService: service),
         if (showNotificationPrefs) ...[
           const SizedBox(height: AppSpace.lg),
           NotificationPrefsSection(authService: service),

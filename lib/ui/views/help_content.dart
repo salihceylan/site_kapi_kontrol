@@ -75,6 +75,7 @@ abstract final class HelpContent {
     'Faaliyet Raporu',
     'Plaka Tanıma',
     'Kapılar',
+    'Dairem',
     'Profilim',
     'Eller Serbest & Kestirmeler',
     'Kullanıcı Yönetimi',
@@ -229,6 +230,35 @@ abstract final class HelpContent {
 
   // --- Konular ----------------------------------------------------------------------------------
 
+  /// Dairem: daire sahipliği ve yönetimi (kim yönetir, kiracı, aile üyeleri, ayrılma).
+  static const HelpTopic _apartmentManagement = HelpTopic(
+    id: 'apartment_management',
+    title: 'Dairemi kim yönetir?',
+    icon: Icons.manage_accounts_rounded,
+    steps: <String>[
+      'Menüden “Dairem” ekranını açın; üstte dairenizin yönetimini kimin yaptığı yazar.',
+      'Kiracı yoksa daireyi malik yönetir. Malik “Kiracı ekle” ile yeni kişi ekler ya da “Sistemden ara” ile kayıtlı birini seçer. “Yönetimi kiracıya devret” açıksa yönetim kiracıya geçer ve kiracı çıkana kadar sürer.',
+      'Daire yöneticisi “Aile üyesi ekle” ile aile üyelerini ekler. Yetişkin bir üyeyi tek başına çıkaramaz; üyeye onay isteği gider. 18 yaşından küçükler için ekleme sırasında işaretleme yapılır.',
+      'Kiracı “Daireyi devret / Çıkış” ile ayrılır; yönetim malike döner. Malik ile kiracı arasındaki bağı “Bağlantıyı kes talebi” ile, karşı tarafın onayıyla kesebilirsiniz.',
+      'Herkes “Bu daireden ayrıl” ile kendi bağını onaysız keser; diğer üyelere bildirim gitmez.',
+    ],
+    note: 'Aile üyeleri borç bilgisini görmez. Anlaşmazlıkta kararı site yönetimi verir.',
+  );
+
+  /// Güvenlik ve destek: yardım hatları, gizli talep, koruma kararı.
+  static const HelpTopic _apartmentSafety = HelpTopic(
+    id: 'apartment_safety',
+    title: 'Güvenlik ve destek',
+    icon: Icons.shield_outlined,
+    steps: <String>[
+      '“Dairem” ekranında dairenizin kartında “Güvenlik ve destek” bölümünü açın.',
+      'Acil tehlikede 112’yi arayın. ALO 183 Sosyal Destek Hattı, KADES uygulaması ve ŞÖNİM destek verir.',
+      'İsterseniz “Site yönetimine gizli talep gönder” ile durumunuzu yalnızca site yöneticisine iletin; daire yöneticisi, malik ve diğer üyeler görmez ve haberdar edilmez.',
+      'Uzaklaştırma ya da koruma kararınız varsa belgeyi site yönetimine bildirin; site yöneticisi gerekirse kişinin kapı erişimini askıya alabilir.',
+    ],
+    note: 'Uygulama polisin ya da mahkemenin yerine geçmez. Sistem iddiayı doğrulayamaz ve otomatik kilitleme yapmaz; kararı site yöneticisi verir.',
+  );
+
   static const HelpTopic _joinApartment = HelpTopic(
     id: 'join_apartment',
     title: 'Daireme nasıl katılırım?',
@@ -353,6 +383,8 @@ abstract final class HelpContent {
   );
 
   static const List<HelpTopic> _resident = <HelpTopic>[
+    _apartmentManagement,
+    _apartmentSafety,
     HelpTopic(
       id: 'payment_notice_resident',
       title: 'Ödememi nasıl bildiririm (dekont)?',
@@ -447,6 +479,8 @@ abstract final class HelpContent {
   ];
 
   static const List<HelpTopic> _individual = <HelpTopic>[
+    _apartmentManagement,
+    _apartmentSafety,
     _panelIndividual,
     _navigationIndividual,
     HelpTopic(

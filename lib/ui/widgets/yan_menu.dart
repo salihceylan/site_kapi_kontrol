@@ -184,6 +184,10 @@ enum SirketMenuItem {
   /// hesapta (yalnız görevli / kurul / site üyeliği bağı) [YanMenu.hiddenItems] ile gizlenir (kapı kartı vitrinde de
   /// görünmez).
   kapilar,
+
+  /// Dairem: daire sahipliği ve yönetimi (kimin yönettiği, kiracı, aile üyeleri, vekalet, ayrılma, güvenlik ve destek). Modül gerektirmez. Rol
+  /// listesinde YOKTUR; daire sakini ve bireysel sakine (sakin modunda yönetici dahil) [YanMenu.additionalItems] ile eklenir.
+  dairem,
 }
 
 /// İP-1D / G2 (karar kaydı 2026-10-21, sözleşme 2.4): çekmece menüsünün başlıkları. Çekmecede yalnız [drawerGroups]
@@ -230,6 +234,7 @@ SirketMenuGroup menuGroupOf(SirketMenuItem item) => switch (item) {
       SirketMenuItem.siteler ||
       SirketMenuItem.daireKullanicilariYonetimi ||
       SirketMenuItem.kisiler ||
+      SirketMenuItem.dairem ||
       SirketMenuItem.katilimVeKurulum =>
         SirketMenuGroup.daireler,
       SirketMenuItem.finans ||
@@ -1476,6 +1481,8 @@ String _titleForItem(SirketMenuItem item, [UserRole? role]) {
       return 'Ekipman ve Bakım';
     case SirketMenuItem.kapilar:
       return 'Kapılar';
+    case SirketMenuItem.dairem:
+      return 'Dairem';
   }
 }
 
@@ -1573,6 +1580,8 @@ IconData _iconForItem(SirketMenuItem item) {
       return PhosphorIconsRegular.wrench;
     case SirketMenuItem.kapilar:
       return PhosphorIconsRegular.doorOpen;
+    case SirketMenuItem.dairem:
+      return PhosphorIconsRegular.house;
   }
 }
 
