@@ -18,6 +18,7 @@ import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart';
 import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
 import 'package:site_kapi_kontrol/ui/widgets/crm_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
+import 'package:site_kapi_kontrol/ui/widgets/residency_log_section.dart';
 
 /// Daire kartı penceresi (Platform Faz 2a): alanlar (kat, m², arsa payı, kategori, borç ve bildirim
 /// muhatabı), güncel malik / kiracı ve sakinler, geçmiş sakinler.
@@ -66,6 +67,9 @@ class _ApartmentCardDialogState extends State<ApartmentCardDialog> {
   bool _loading = false;
   String? _error;
   int _token = 0;
+
+  /// Adli kayıt bölümü için tek servis (her yeniden çizimde yeni HTTP istemcisi açılmasın).
+  late final ApartmentManagementService _residencyService = ApartmentManagementService(authService: widget.scope.authService);
 
   @override
   void initState() {
@@ -307,6 +311,14 @@ class _ApartmentCardDialogState extends State<ApartmentCardDialog> {
           ),
         ],
         if (widget.scope.canWrite) ...[
+          // Adli kayıt: YALNIZ yönetici / süper kullanıcı (canWrite); kurul ve görevli görmez, sunucu da 403 verir.
+          const SizedBox(height: AppSpace.md),
+          ResidencyLogSection(
+            service: _residencyService,
+            siteCode: widget.scope.siteCode,
+            apartmentId: detail.id,
+            apartmentLabel: detail.fullLabel,
+          ),
           const SizedBox(height: AppSpace.md),
           PrimaryActionButton(
             label: 'Daire adminini değiştir',

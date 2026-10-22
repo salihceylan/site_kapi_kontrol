@@ -5,10 +5,12 @@
 // Kurallar: mutasyonlar ASLA otomatik yeniden denenmez; 401 yetkili uçlarda "oturum bitti"dir; yanıt gövdeleri günlüğe YAZILMAZ.
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:http/http.dart' as http;
 import 'package:site_kapi_kontrol/models/apartment_management.dart';
+import 'package:site_kapi_kontrol/models/residency_log.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/services/auth_api.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
@@ -56,6 +58,31 @@ class ApartmentManagementApi {
     final parsed = _object(response.bodyBytes);
     if (response.statusCode >= 200 && response.statusCode < 300) return parsed ?? <String, dynamic>{};
     throw _failure(response, parsed);
+  }
+
+  /// Dosya (PDF / CSV) döndüren uç: başarıda gövde baytları ve `Content-Disposition` dosya adı; hata gövdesi [call] ile aynı çevrilir.
+  Future<({Uint8List bytes, String? fileName})> callFile(String method, String path, {required String token, Object? body}) async {
+    final request = http.Request(method, Uri.parse('$_baseUrl$path'))
+      ..headers.addAll(<String, String>{
+        'Authorization': 'Bearer $token',
+        'Accept': '*/*',
+        if (body != null) 'Content-Type': 'application/json; charset=utf-8',
+      });
+    if (body != null) request.body = jsonEncode(body);
+    final http.Response response;
+    try {
+      response = await _client.send(request).then(http.Response.fromStream).timeout(_timeout);
+    } on TimeoutException {
+      throw ApiException('Sunucu yanıt vermedi, tekrar deneyin.');
+    } on Exception {
+      throw ApiException('Sunucuya bağlanılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin.');
+    }
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      final disposition = response.headers['content-disposition'] ?? '';
+      final match = RegExp(r'filename="([A-Za-z0-9._-]{1,120})"').firstMatch(disposition);
+      return (bytes: response.bodyBytes, fileName: match?.group(1));
+    }
+    throw _failure(response, _object(response.bodyBytes));
   }
 
   static Map<String, dynamic>? _object(List<int> bytes) {
@@ -268,4 +295,41 @@ class ApartmentManagementService {
       body: <String, Object?>{'note': ?note},
     ),
   );
+
+  // --- Adli kayıt (yalnız site yöneticisi / süper kullanıcı; kurul ve görevli 403) ---
+
+  /// Dairenin eski sakin / adli kaydı (yeniden eskiye, sayfalı) + kayda yazılmamış eski dönemler (yalnız ilk sayfa).
+  Future<ResidencyLogPage> residencyLog(int siteCode, int apartmentId, {int offset = 0, int limit = 20}) async => ResidencyLogPage.fromJson(
+    await _guard(
+      (t) => api.call(
+        'GET',
+        _mgr(siteCode, 'apartments/$apartmentId/residency-log'),
+        token: t,
+        query: <String, String>{'limit': '$limit', 'offset': '$offset'},
+      ),
+    ),
+  );
+
+  /// Adli bilgi dökümü (PDF ya da CSV). Gerekçe kodu ve not ZORUNLUdur; not URL'ye değil POST gövdesine konur. Döküm alma sunucuda denetim kaydına yazılır.
+  Future<ForensicExportFile> residencyLogExport(
+    int siteCode, {
+    required String format,
+    required String reasonCode,
+    required String note,
+    int? apartmentId,
+  }) {
+    return _guard((t) async {
+      final file = await api.callFile(
+        'POST',
+        _mgr(siteCode, 'residency-log/export'),
+        token: t,
+        body: <String, Object?>{'format': format, 'reason_code': reasonCode, 'note': note, 'apartment_id': ?apartmentId},
+      );
+      return ForensicExportFile(
+        bytes: file.bytes,
+        fileName: file.fileName ?? 'adli-bilgi-dokumu.$format',
+        mimeType: format == 'pdf' ? 'application/pdf' : 'text/csv',
+      );
+    });
+  }
 }
