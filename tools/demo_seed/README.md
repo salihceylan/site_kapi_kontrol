@@ -15,8 +15,8 @@ DEGISMEZ; arac uygulamanin kendi servislerini ve tablo kisitlarini kullanir. Her
 | `cleanup.mjs` | `--list`, `--batch <id> --yes`: kayitli satirlari siler (SUPERUSER gerekir), diskteki belge dosyalarini siler, degistirilen satirlari eski haline getirir; yeniden yapilandirma batch'i varken tohum batch'ini reddeder (`--force`) |
 | `make_pdf.py` | `--creds creds.json --out hesaplar.pdf` : A4 PDF (yonetim kadrosu + gorevliler + daire daire sakinler; yeniden yapilandirilmis JSON'da Malik / Daire admini (sari satir) / aile uyeleri). `pip install reportlab` |
 | `run_remote.sh` | Sunucuda: pg_dump yedegi -> yedekten gecici DB -> tohum + cleanup provasi -> `--prod` ile canli |
-| `restructure_families.mjs` | Tohumlanmis sitenin dairelerini YENI DAIRE YONETIMI modeline gore duzenler (asagidaki bolum): `--prev-creds`, `--creds-out`, `--dry-run`, `--seed`, `--force` |
-| `run_remote_restructure.sh` | Sunucuda: yedek -> gecici DB provasi (yeniden yapilandirma + cleanup, icerik ozeti karsilastirmasi) -> `--prod` ile canli |
+| `restructure_families.mjs` | Tohumlanmis sitenin dairelerini YENI DAIRE YONETIMI modeline gore duzenler (asagidaki bolum): `--prev-creds`, `--creds-out`, `--dry-run`, `--seed`, `--force`, `--ensure-composition` (her haneye en az 1 cocuk + 1 yasli ekler) |
+| `run_remote_restructure.sh` | Sunucuda: yedek -> gecici DB provasi (yeniden yapilandirma + cleanup, icerik ozeti karsilastirmasi) -> `--prod` ile canli; `--force`, `--extra "<bayraklar>"` / `EXTRA_ARGS` ile `restructure_families.mjs`'e ek bayrak iletir |
 | `test/local_restructure_test.mjs` | Yeniden yapilandirma icin yerel uctan uca test (seed + 2 bozulma + dry-run + uygulama + dogrulamalar + PDF + iki cleanup) |
 | `test/local_test.mjs` | Yerel uctan uca test (gecici PostgreSQL, fixture site, dogrulamalar, cleanup, PDF) |
 | `lib/`, `steps/` | Yardimcilar ve modul adimlari (`people`, `metering`, `finance`, `budget`, `announcements`, `neighbor`, `documents`, `work`, `reservation`, `visitors`, `contracts`, `decisions`, `surveys`, `equipment`, `devices`, `annual_report`) |
@@ -94,6 +94,31 @@ DATABASE_URL=postgres://... node cleanup.mjs --batch demo-restructure-YYYYMMDDHH
 * **Cikti**: `--creds-out` JSON'u (sifreler duz metin: commit etmeyin) tum daire hesaplarini `familyRole` (`landlord` / `head` / `spouse` / `child` / `elder`), `apartmentRole`, `isAmir`, `age`, `isMinor`, `hasAccount`, `isNew` ve kullanici adi / sifreyle icerir; ayrica `households` (daire basina malik / admin / devir) ve `roleChanges` (mevcut hesaplarin onceki / yeni rolu). Rapor: `out/restructure-report-<batch>.json` (sifresiz). `make_pdf.py` bu dosyadan her dairede Malik, Daire admini (sari satir), aile uyeleri ve kullanici adi / sifre tablolarini uretir.
 * **Test**: `node tools/demo_seed/test/local_restructure_test.mjs --port <gecici PG>` (seed + admin kaymasi + malik yok bozulmasi + dry-run + uygulama + dogrulamalar + PDF + iki cleanup).
 * **Bilinen sinirlar**: yaslar veritabaninda tutulmaz (yalniz `is_minor` ve kimlik JSON'unda `age`); denetim kaydi (`audit_log`) yazilmaz; hesapsiz kucuk cocuklarin e-postasi / telefonu yoktur (12 yas alti).
+
+### Her ailede cocuk ve yasli (`--ensure-composition`)
+
+Ilk yeniden yapilandirma turu aile boyutunu 3-5 ile sinirladigindan bazi haneler cocuksuz ya da yaslisiz kalabilir. `--ensure-composition` ikinci turdur: **HER hane (daire)** en az 1 cocuk (`is_minor = true`, 2-17 yas) ve en az 1 yasli (62-84 yas, hesapli yetiskin ebeveyn / buyukanne-buyukbaba) icerir; eksik haneye yeni `family_member` EKLER. Hane boyutu ust siniri bu modda **7**'dir (uygulamanin aile limiti 12'nin cok altinda).
+
+* **Ne yapar / yapmaz**: mevcut kisi, hesap, sifre, daire uyeligi (kapi yetkisi), admin, malik ve devir kayitlari DEGISMEZ, hicbir sey silinmez; mevcut uyelerin sinifi planin zaten kullandigi sekilde cikarilir (es / cocuk / yasli; cocuk = DB'de `is_minor`, yasli = yasli ad havuzu ya da onceki kimlik dosyasinda yas >= 60). Zaten cocugu ve yaslisi olan haneye TEKRAR eklenmez (idempotent: ikinci calistirmada "eklenecek uye yok", yeni batch acilmaz). Bir hane boyutu 7'yi asacaksa HICBIR sey yazilmadan durur (cikis 6).
+* **Yeni uyeler**: ayni soyad, ad cesitli (yasli kadin / erkek); yasli 62-84, cocuk 2-17 (ana kisiden en az ~20 yas kucuk). Yasli ve 13+ cocuk HESAPLI (12 karakter rastgele sifre, bcrypt, kullanici adi `ad.soyad`, cakisinca sayi eki, `@demo.invalid`, hesapli uyeye `FAMILY_MEMBER` daire uyeligi - ilk turdaki yeni uyelerle ayni); 13 alti cocuk hesapsiz. Telefon yapay (`0 500 000 xx xx`). `sponsor_person_id` = daire admini. E-posta / davet / bildirim / talep satiri YAZILMAZ.
+* **Onkosul**: sitede onceki bir `demo-restructure-...` batch'i olmali (yoksa durur, cikis 4) ve `--prev-creds` = o turun `--creds-out` dosyasi (mevcut hesaplarin sifreleri ve yaslari oradan gelir). Onceki restructure batch'i kayitli oldugundan **`--force` ZORUNLUDUR** (`--force` olmadan arac yazmadan durur, cikis 4; ayrica `--ensure-composition`'siz varsayilan mod batch varken ayni sekilde durur). Bu modda `--force` yalniz EKLER, baska korumayi gevsetmez.
+* **Geri alma**: yeni satirlar yeni bir `demo-restructure-<zaman>` batch'ine (yalniz `insert`) yazilir; `cleanup.mjs --batch <o batch> --yes` yalniz onlari siler. Sira: ONCE bu (ikinci) batch, SONRA ilk restructure batch'i, SONRA tohum batch'i.
+* **Cikti**: `--creds-out` JSON'u `--prev-creds`'teki tum hesaplari (gorevli / kurul / daire) AYNEN korur, yeni hesaplar `isNew: true`, `familyRole` `child` / `elder` ve `age` ile eklenir; `make_pdf.py` her dairenin tablosuna **Yas** sutunu ve rol etiketini (`Çocuk (9 yaş) - hesapsız`, `Yaşlı ebeveyn (74 yaş)`) yazar, hane basliginda reşit olmayan cocuk / yasli sayisini gosterir.
+
+```bash
+# Elle: once --dry-run (plani + hangi hanede ne eksik oldugunu yazdirir, hicbir sey yazmaz)
+DATABASE_URL=postgres://... node restructure_families.mjs --site Cenk --ensure-composition --force --prev-creds out/creds_restructured.json --dry-run
+DATABASE_URL=postgres://... node restructure_families.mjs --site Cenk --ensure-composition --force --prev-creds out/creds_restructured.json --creds-out out/creds_composition.json
+
+# Sunucuda (yedek + gecici DB provasi + cleanup provasi + canli); ilk turun creds_restructured.json'u sunucuya geri kopyalanir
+scp out/creds_restructured.json <kullanici>@<sunucu>:~/demo_seed/out/creds_restructured.json
+ssh <sunucu> 'bash ~/demo_seed/run_remote_restructure.sh --prev-creds ~/demo_seed/out/creds_restructured.json --force --extra "--ensure-composition"'          # yalniz yedek + prova
+ssh <sunucu> 'bash ~/demo_seed/run_remote_restructure.sh --prev-creds ~/demo_seed/out/creds_restructured.json --force --extra "--ensure-composition" --prod --skip-rehearsal --creds-out ~/demo_seed/out/creds_composition.json'
+scp <sunucu>:~/demo_seed/out/creds_composition.json out/ && python make_pdf.py --creds out/creds_composition.json --out out/demo_hesaplar.pdf
+ssh <sunucu> 'shred -u ~/demo_seed/out/creds_composition.json ~/demo_seed/out/creds_restructured.json'
+```
+
+Test: `node tools/demo_seed/test/local_restructure_test.mjs --port <gecici PG>` bu modu da kapsar (fixture + tohum + varsayilan restructure + `--ensure-composition --force`: her dairede cocuk + yasli, hane <= 7, tek admin / tek malik, mevcut satirlar degismedi, ikinci calistirma eklemez, e-posta kuyrugu 0, PDF, cleanup).
 
 ## Modul eslemesi ve atlama
 
