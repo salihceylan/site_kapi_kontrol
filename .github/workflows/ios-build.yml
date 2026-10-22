@@ -30,6 +30,10 @@ jobs:
       - name: Show Xcode version
         run: xcodebuild -version
 
+      # SwiftPM + CocoaPods karisik entegrasyonu 'Pods_Runner not found' hatasi veriyor; yalniz CocoaPods kullan.
+      - name: Disable Swift Package Manager integration
+        run: flutter config --no-enable-swift-package-manager
+
       - name: Install Flutter dependencies
         run: flutter pub get
 
