@@ -731,7 +731,22 @@ export async function listSiteApartments(siteCode, db = pool) {
     `${APARTMENT_ROW_SELECT_SQL} WHERE a.site_code = $1 ORDER BY b.sort_order ASC, a.sort_order ASC`,
     [siteCode],
   );
-  return result.rows;
+  // Daire başına güncel kişi sayısı (daire satırı özeti "5 kişi"): tek toplu sorgu. Eski tek-sakin alanları (resident_*) aynen kalır.
+  // Kişi eşitlemesi henüz çalışmamış sitede ilişki sayısı 0 olabilir; bu yüzden aktif üyelik sayısıyla büyük olan alınır.
+  const counts = await db.query(
+    `
+      SELECT a.id,
+             GREATEST(
+               (SELECT COUNT(*) FROM apartment_residencies r WHERE r.apartment_id = a.id AND r.is_current = TRUE),
+               (SELECT COUNT(*) FROM apartment_memberships am WHERE am.apartment_id = a.id AND am.is_active = TRUE)
+             )::INTEGER AS household_count
+      FROM apartments a
+      WHERE a.site_code = $1
+    `,
+    [siteCode],
+  );
+  const byApartment = new Map((counts.rows ?? []).map((r) => [Number(r.id), Number(r.household_count)]));
+  return result.rows.map((row) => ({ ...row, household_count: byApartment.get(Number(row.id)) ?? 0 }));
 }
 
 export async function listBlockApartments(blockId, db = pool) {

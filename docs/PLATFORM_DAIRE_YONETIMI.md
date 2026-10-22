@@ -85,6 +85,7 @@ Bekleyen talep süresi dolunca `expired` sayılır (okuma / yanıt anında) ve b
 | `GET /app/apartments/:id/vehicles` | dairede bağı olan herkes + site yöneticisi | dairenin aktif araçları, `can_manage`, `limit`, `owners`; aşağıdaki "Araçlar" bölümü |
 | `POST /app/apartments/:id/vehicles`, `PUT .../vehicles/:vehicleId`, `DELETE .../vehicles/:vehicleId` | daire admini VEYA site yöneticisi / süper | ekle `{ plate, note?, person_id? }`, not / sahip düzenle, çıkar (pasife al) |
 | `GET\|PUT /manager/sites/:siteCode/apartments/:id/admin-candidates`, `.../admin` | site yöneticisi / süper | daire adminini değiştir (aşağıda) |
+| `GET /manager/sites/:siteCode/apartments/:id/household` | site yöneticisi / süper tam; kurul yalnız ad + ilişki | dairenin TÜM güncel sakinleri + daire admini (aşağıda "Site yöneticisi: dairenin sakinleri") |
 | `GET /manager/sites/:siteCode/signing-roster?date=` | yönetici / kurul okur | Karar Defteri imza hakkı sahipleri; `decision_book` modülü AÇIK olmalı |
 
 Audit eylemleri (`target_type: apartment`): `apartment_mgmt.tenant_added | tenant_invited | tenant_invite_accepted | family_added | family_invited | family_removed | member_removal_requested | member_removal_approved | management_delegated | tenant_exit | disconnect_requested | disconnect_approved | member_left | proxy_created | proxy_revoked | owner_recorded | admin_changed_by_manager`. Kişi araması: `apartment_mgmt.person_search` (maskeli sorgu).
@@ -126,6 +127,19 @@ Mali / yapısal alanlar (m2, arsa payı, aidat, borç sorumlusu, daire silme / b
 Kişiler > Daireler > daire kartı > "Daire adminini değiştir" -> aktif sakin listesi (malik, kiracı, aile üyesi: dairede AKTİF bağı olan) -> onay ("Daire admini X yerine Y olacak").
 Sunucu: yetki site yöneticisi / süper (kurul ve görevli 403, başka site 403, başka sitenin dairesi 404). Eski admin dairede KALIR (bağı silinmez, kapı erişimi değişmez); yalnız yönetim yetkisi geçer.
 Malik-kiracı "kiracı çıkana kadar geri alınamaz" kuralı site yöneticisini BAĞLAMAZ (acil durum / anlaşmazlık müdahalesi). Audit `apartment_mgmt.admin_changed_by_manager`; eski ve yeni admine uygulama içi bildirim (`apartment_notices`).
+
+## Site yöneticisi: dairenin sakinleri (Site Yönetimi > Daireler)
+
+Eski sorun: Site Yönetimi'nin yapı ucu (`GET /sites/:id/structure`) daire satırına yalnız eski tek-sakin göstergesini (`apartments.resident_user_code` -> `resident_*` alanları) verdiği için dairede tek kişi görünüyordu.
+Çözüm (salt okunur, migration YOK): `GET /manager/sites/:siteCode/apartments/:id/household` (`src/modules/apartment_mgmt_household.js`) dairenin güncel kişilerini tek istekte verir:
+`{ apartment_id, label, detail: 'full'|'basic', admin, absent_owner, members[], total }`. Kaynak: `apartment_residencies` (is_current; hesapsız çocuk / yaşlı dahil) + `apartment_memberships` + eski gösterge;
+admin `resolveApartmentRoles` ile çözülür. Kiracı varsa ve malik admin değilse malik `absent_owner` ("Malik (oturmuyor)") olur.
+
+- Yetki: `resolvePeopleAccess` (okuma): yönetici / süper `detail: 'full'` (telefon, `is_minor`, `has_account`, `access_suspended` = açık askıya alma kaydı ya da pasife alınmış üyelik);
+  kurul üyesi `detail: 'basic'` (YALNIZ `person_id`, `name`, `relation`, `is_admin`). Görevli / sakin 403 `FORBIDDEN_ROLE`, başka sitenin yöneticisi 403 `FORBIDDEN_SITE`, başka sitenin dairesi 404 `APARTMENT_NOT_FOUND`. Kullanıcı kodu hiçbir durumda dönmez.
+- Yapı ucu eski `resident_*` alanlarını AYNEN korur; ek olarak daire satırına `household_count` (güncel kişi sayısı, tek toplu sorgu) eklenir. Eski istemci bu alanı yok sayar.
+- İlişki türleri `owner | tenant | family_member | resident`; "eş / yaşlı ebeveyn" ayrımı sunucuda tutulmaz. Küçük (`is_minor`) "Çocuk" olarak gösterilir.
+- Uygulama: `ApartmentCard` (Site Yönetimi) daire açılınca bu ucu çağırır; üstte daire admini, altında "Aile üyeleri (N)" akordiyonu; kişi satırı kişi kartını, "Daire kartı" düğmesi daire kartını (admin değiştir, kapı erişimi askısı, adli kayıt, geçmiş) açar.
 
 ## Karar Defteri: imza hakkı sahibi
 

@@ -393,6 +393,8 @@ export function mapApartmentRow(row) {
         ? null
         : Boolean(row.resident_is_active),
     created_at: row.created_at,
+    // Dairenin güncel kişi sayısı (yalnız site yapısı listesinde dolu; "5 kişi" özeti). Yoksa anahtar hiç yazılmaz (eski yanıt biçimi aynen).
+    ...(row.household_count === undefined || row.household_count === null ? {} : { household_count: Number(row.household_count) }),
   };
 }
 

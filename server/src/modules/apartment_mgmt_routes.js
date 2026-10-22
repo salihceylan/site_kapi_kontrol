@@ -19,6 +19,7 @@
 //           GET|POST /app/apartments/:id/vehicles, PUT|DELETE .../vehicles/:vehicleId   daire araclari: admin (ve site yoneticisi) yazar, uyeler gorur
 //           GET|PUT /app/apartments/search-visibility        "Beni aramalarda goster" (varsayilan KAPALI)
 //   Yonetim GET    /manager/sites/:siteCode/signing-roster?date=     Karar Defteri: imza hakki sahipleri (yonetici / kurul okur)
+//           GET    /manager/sites/:siteCode/apartments/:id/household          dairenin TUM guncel sakinleri + daire admini (yonetici / super tam; kurul yalniz ad + iliski)
 //           GET    /manager/sites/:siteCode/apartments/:id/admin-candidates   site yoneticisi: admin olabilecek aktif sakinler
 //           PUT    /manager/sites/:siteCode/apartments/:id/admin  {user_code}  site yoneticisi / super: daire adminini degistir
 //           GET|PUT /manager/sites/:siteCode/safety-requests[/:id]            guvenlik talepleri (YALNIZ site yoneticisi / super)
@@ -51,6 +52,7 @@ import {
 } from './apartment_mgmt_service.js';
 import { createProxy, revokeProxy, signingRoster } from './apartment_mgmt_proxy.js';
 import { changeApartmentAdmin, listAdminCandidates } from './apartment_mgmt_manager.js';
+import { getApartmentHousehold } from './apartment_mgmt_household.js';
 import { createApartmentVehicle, listApartmentVehicles, removeApartmentVehicle, updateApartmentVehicle } from './apartment_mgmt_vehicles.js';
 import {
   createSafetyRequest,
@@ -335,6 +337,22 @@ apartmentMgmtRouter.get('/manager/sites/:siteCode/signing-roster', authRequired,
     return res.json(await signingRoster({ siteCode: access.siteCode, date }));
   } catch (error) {
     return respondError(res, 'apartment_mgmt_signing_roster', error, 'İmza hakkı listesi yüklenemedi.');
+  }
+});
+
+// Daire halki: dairenin TUM guncel sakinleri tek istekte, daire adminiyle birlikte (salt okunur). Yonetici / super: telefon, kucuk, hesap durumu ve
+// kapi erisimi askisi dahil; kurul uyesi: YALNIZ ad + iliski + admin. Gorevli / sakin 403 FORBIDDEN_ROLE, baska sitenin yoneticisi 403 FORBIDDEN_SITE,
+// baska sitenin dairesi 404 APARTMENT_NOT_FOUND.
+apartmentMgmtRouter.get('/manager/sites/:siteCode/apartments/:apartmentId/household', authRequired, readLimiter, async (req, res) => {
+  try {
+    const access = await resolvePeopleAccess(req, res);
+    if (!access) {
+      return null;
+    }
+    noStore(res);
+    return res.json(await getApartmentHousehold({ siteCode: access.siteCode, apartmentId: req.params.apartmentId, detailed: access.canWrite }));
+  } catch (error) {
+    return respondError(res, 'apartment_mgmt_household', error, 'Daire sakinleri yüklenemedi.');
   }
 });
 
