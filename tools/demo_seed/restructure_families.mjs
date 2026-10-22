@@ -10,6 +10,12 @@
 //
 // Geri alma: node cleanup.mjs --batch <rapordaki restructure batch> --yes  (seed batch'inden ONCE bunu geri alin; eklenenleri siler, degisenleri eski haline getirir).
 // E-posta GONDERILMEZ: davet / bildirim / talep satiri yazilmaz; yeni e-postalar @demo.invalid.
+//
+// --ensure-composition (ikinci tur; ONCE varsayilan yeniden yapilandirma calismis olmali, --prev-creds = o turun --creds-out dosyasi, --force ZORUNLU):
+//   HER hane en az 1 cocuk (is_minor, 2-17 yas) ve en az 1 yasli (62-84 yas, hesapli yetiskin) icersin; eksik haneye yeni family_member EKLENIR
+//   (aile boyutu ust siniri 7). Mevcut kisi / hesap / sifre / uyelik / admin / malik DEGISMEZ, hicbir sey silinmez; zaten cocugu ve yaslisi olan hane
+//   atlanir (tekrar calistirmada yeni uye eklenmez). Yeni satirlar yeni bir demo-restructure-<zaman> batch'ine yazilir (cleanup.mjs geri alir).
+//   DATABASE_URL=... node restructure_families.mjs --site Cenk --ensure-composition --force --prev-creds <onceki creds_restructured.json> --creds-out <yeni.json> [--dry-run]
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -18,7 +24,7 @@ import { applyDbEnv, describeTarget, importFromServer, loadServerRequire, newPgC
 import { loadContext } from './lib/context.mjs';
 import { ensureRegistry, hookPool, installCapture, registryCounts, removeCapture, setBatch, trackUpdate } from './lib/registry.mjs';
 import { displayPhone, emailOf, fakePhone, generatePassword, uniqueUsername } from './lib/identity.mjs';
-import { ADULT_AGE, assignAges, classifyHousehold, planAdditions, roleLabelOf, surnameOf, givenOf } from './lib/family_plan.mjs';
+import { ADULT_AGE, COMPOSITION_MAX, assignAges, classifyHousehold, planAdditions, planComposition, roleLabelOf, surnameOf, givenOf } from './lib/family_plan.mjs';
 import { makeRng } from './lib/util.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -29,6 +35,7 @@ if (!url) {
   process.exit(2);
 }
 const siteQuery = String(args.site ?? 'Cenk');
+const ENSURE = Boolean(args['ensure-composition']);
 const serverDir = resolveServerDir(args);
 const serverRequire = loadServerRequire(serverDir);
 try {
@@ -48,7 +55,7 @@ const client = newPgClient(serverRequire, url);
 await client.connect();
 const q = (sql, params = []) => client.query(sql, params);
 
-const report = { batchId, mode: args['dry-run'] ? 'dry-run' : 'apply', problems: [], notes: [], apartments: [], roleChanges: [], summary: {}, errors: [] };
+const report = { batchId, mode: args['dry-run'] ? 'dry-run' : 'apply', composition: ENSURE, problems: [], notes: [], apartments: [], roleChanges: [], summary: {}, errors: [] };
 let captureInstalled = false;
 let inTransaction = false;
 let committed = false;
@@ -58,7 +65,7 @@ let poolRef = null;
 const DEMO_BATCH_SQL = `r.op = 'insert' AND r.batch_id LIKE 'demo-%' AND r.batch_id NOT LIKE 'demo-restructure-%'`;
 
 try {
-  log(`Hedef veritabani: ${describeTarget(url)}  batch=${batchId}  bugun=${TODAY}`);
+  log(`Hedef veritabani: ${describeTarget(url)}  batch=${batchId}  bugun=${TODAY}${ENSURE ? '  MOD=ensure-composition (her haneye en az 1 cocuk + 1 yasli)' : ''}`);
   const dbMod = await importFromServer(serverDir, 'src/db.js');
   poolRef = dbMod.pool;
   const passwordHashing = await importFromServer(serverDir, 'src/security/password_hashing.js');
@@ -70,9 +77,13 @@ try {
   // --- onceki kimlikler (sifreler) ---------------------------------------------------------------------------------------------------------
   let prev = null;
   const prevByUser = new Map();
+  const prevByName = new Map(); // hesapsiz kisiler icin: "daire etiketi|ad soyad" -> onceki kayit (yas, isNew)
   if (args['prev-creds']) {
     prev = JSON.parse(fs.readFileSync(path.resolve(String(args['prev-creds'])), 'utf8'));
-    for (const acc of prev.accounts ?? []) if (acc.username) prevByUser.set(String(acc.username).toLowerCase(), acc);
+    for (const acc of prev.accounts ?? []) {
+      if (acc.username) prevByUser.set(String(acc.username).toLowerCase(), acc);
+      if (acc.group === 'daire') prevByName.set(`${acc.apartmentLabel}|${acc.fullName}`, acc);
+    }
     log(`Onceki kimlik dosyasi: ${(prev.accounts ?? []).length} hesap (batch ${prev.batchId ?? '?'})`);
   } else if (!args['allow-missing-passwords'] && !args['dry-run']) {
     console.error('DURDURULDU: --prev-creds (seed.mjs kimlik JSON dosyasi, ornegin creds_prod.json) gerekli; eski hesaplarin sifreleri olmadan PDF eksik kalir. Bilerek gecmek icin --allow-missing-passwords.');
@@ -91,19 +102,34 @@ try {
   ).rows.map((r) => r.batch_id);
   const seedBatches = batches.filter((b) => b.startsWith('demo-') && !b.startsWith('demo-restructure-'));
   const priorRestructure = (await q(`SELECT DISTINCT batch_id FROM demo_seed_registry WHERE batch_id LIKE 'demo-restructure-%'`)).rows.map((r) => r.batch_id);
+  if (ENSURE && priorRestructure.length === 0) {
+    console.error('DURDURULDU: --ensure-composition yalniz daha once yeniden yapilandirilmis sitede calisir (kayitli demo-restructure-... batch yok). Once varsayilan restructure_families.mjs calistirin.');
+    process.exit(4);
+  }
+  if ((await q(`SELECT 1 FROM demo_seed_registry WHERE batch_id = $1 LIMIT 1`, [batchId])).rowCount > 0) {
+    console.error(`DURDURULDU: batch kimligi zaten kayitli: ${batchId} (bir saniye sonra yeniden deneyin ya da --batch-id verin).`);
+    process.exit(4);
+  }
   const guardProblems = [];
   if (seedBatches.length === 0) guardProblems.push('sitede demo tohum (seed) kaydi yok: bu arac yalniz tohumlanmis demo sitesi icindir');
-  if (priorRestructure.length) guardProblems.push(`zaten yeniden yapilandirma batch'i var: ${priorRestructure.join(', ')} (once cleanup.mjs ile geri alin)`);
+  if (priorRestructure.length) {
+    guardProblems.push(
+      `zaten yeniden yapilandirma batch'i var: ${priorRestructure.join(', ')} ` +
+        (ENSURE ? '(--ensure-composition bu durumda --force ile calisir: yalniz EKLER, mevcut hicbir sey degismez)' : '(once cleanup.mjs ile geri alin)'),
+    );
+  }
   if (guardProblems.length && !args.force) {
     console.error(`DURDURULDU: ${guardProblems.join('; ')}. Bilerek devam etmek icin --force.`);
     process.exit(4);
   }
   if (guardProblems.length) log(`UYARI (--force ile devam): ${guardProblems.join('; ')}`);
+  // ensure-composition: ilk turun (demo-restructure-...) ekledigi kisiler de "demo kisisi" sayilir
+  const peopleBatches = ENSURE ? [...seedBatches, ...priorRestructure] : seedBatches;
   const seedPeople = new Set(
     (
       await q(
-        `SELECT r.row_id FROM demo_seed_registry r WHERE r.table_name = 'site_people' AND ${DEMO_BATCH_SQL} AND r.batch_id = ANY($1::text[])`,
-        [seedBatches],
+        `SELECT r.row_id FROM demo_seed_registry r WHERE r.table_name = 'site_people' AND ${ENSURE ? `r.op = 'insert' AND r.batch_id LIKE 'demo-%'` : DEMO_BATCH_SQL} AND r.batch_id = ANY($1::text[])`,
+        [peopleBatches],
       )
     ).rows.map((r) => String(r.row_id)),
   );
@@ -137,6 +163,9 @@ try {
     LEFT JOIN apartment_memberships am ON am.apartment_id = r.apartment_id AND am.user_code = sp.user_code
     WHERE r.apartment_id = $1 AND r.is_current = TRUE
     ORDER BY r.id`;
+
+  // onceki kimlik dosyasindaki kayit (kullanici adina gore; hesapsizlar icin daire + ad soyad)
+  const prevAccOf = (label, r) => (r.username ? prevByUser.get(r.username.toLowerCase()) : undefined) ?? prevByName.get(`${label}|${r.fullName}`) ?? null;
 
   const rng = makeRng(Number(args.seed ?? 20261023));
   const houses = [];
@@ -182,29 +211,44 @@ try {
     if (cls.landlord?.memId) report.notes.push(`${apt.label}: malik (${cls.landlord.fullName}) icin daire uyeligi (kapi yetkisi) var; dokunulmadi`);
     for (const r of residents) takenSurnames.add(surnameOf(r.fullName));
     const usedGiven = new Set(residents.map((r) => givenOf(r.fullName)));
-    const ages = cls.principal ? assignAges(rng, cls) : new Map();
+    const ages = cls.principal && !ENSURE ? assignAges(rng, cls) : new Map();
+    // --ensure-composition: hanede reşit olmayan cocuk (DB: is_minor) ve yasli (ad havuzu ya da onceki kimlik dosyasinda yas >= 60) var mi?
+    const familyNow = residents.filter((r) => cls.principal && r !== cls.principal && r !== cls.landlord);
+    const hasMinorChild = familyNow.some((r) => r.isMinor);
+    const hasElder = cls.elders.length > 0 || familyNow.some((r) => (prevAccOf(apt.label, r)?.age ?? 0) >= 60);
+    const headAge = ENSURE && cls.principal ? Number(prevAccOf(apt.label, cls.principal)?.age) || rng.int(38, 55) : 0;
     houses.push({
       apt, residents, memberships, residentUserCode: aptRow?.resident_user_code === null || aptRow?.resident_user_code === undefined ? null : Number(aptRow.resident_user_code),
-      cls, ages, usedGiven, surname: cls.principal ? surnameOf(cls.principal.fullName) : '', problems,
+      cls, ages, usedGiven, surname: cls.principal ? surnameOf(cls.principal.fullName) : '', problems, hasMinorChild, hasElder, headAge,
+      baseSize: cls.principal ? familyNow.length + 1 : 0,
     });
   }
 
-  const adds = planAdditions(rng, houses.filter((h) => h.cls.principal), takenSurnames, {
-    minElderHouses: Number(args['min-elder-houses'] ?? 3),
-    extraChildChance: Number(args['extra-child-chance'] ?? 0.3),
-  });
   const housesWithPrincipal = houses.filter((h) => h.cls.principal);
+  const adds = ENSURE
+    ? planComposition(rng, housesWithPrincipal)
+    : planAdditions(rng, housesWithPrincipal, takenSurnames, {
+        minElderHouses: Number(args['min-elder-houses'] ?? 3),
+        extraChildChance: Number(args['extra-child-chance'] ?? 0.3),
+      });
   housesWithPrincipal.forEach((h, i) => {
     h.adds = adds.get(i) ?? [];
   });
+  if (ENSURE) {
+    for (const h of housesWithPrincipal) {
+      const finalSize = h.baseSize + h.adds.length;
+      if (finalSize > COMPOSITION_MAX) h.problems.push(`hane boyutu ${finalSize} > ${COMPOSITION_MAX} olacak (mevcut ${h.baseSize} + ${h.adds.length} yeni); eklenmedi, elle inceleyin`);
+    }
+  }
 
   // --- plan ozeti --------------------------------------------------------------------------------------------------------------------------
   const allProblems = houses.flatMap((h) => h.problems.map((p) => `${h.apt.label}: ${p}`));
   report.problems = allProblems;
   for (const h of houses) {
-    const size = h.cls.principal ? 1 + (h.cls.spouse ? 1 : 0) + h.cls.children.length + h.cls.elders.length + (h.adds ?? []).filter((a) => a.kind !== 'landlord').length : 0;
+    const size = h.cls.principal ? (ENSURE ? h.baseSize : 1 + (h.cls.spouse ? 1 : 0) + h.cls.children.length + h.cls.elders.length) + (h.adds ?? []).filter((a) => a.kind !== 'landlord').length : 0;
     const addsText = (h.adds ?? []).map((a) => `${a.kind}:${a.fullName}(${a.age}${a.hasAccount ? '' : ',hesapsiz'})`).join(', ');
-    log(`  ${h.apt.label}: ${h.cls.occupancy === 'tenant' ? 'kiraci oturuyor' : 'malik oturuyor'}; ana kisi=${h.cls.principal?.fullName ?? '-'}; aile boyutu=${size}; malik=${h.cls.landlord ? h.cls.landlord.fullName : h.cls.occupancy === 'owner' ? '(oturan)' : '(EKLENECEK)'}${addsText ? `; eklenecek: ${addsText}` : ''}`);
+    const compText = ENSURE ? `; mevcut: cocuk ${h.hasMinorChild ? 'var' : 'YOK'}, yasli ${h.hasElder ? 'var' : 'YOK'}` : '';
+    log(`  ${h.apt.label}: ${h.cls.occupancy === 'tenant' ? 'kiraci oturuyor' : 'malik oturuyor'}; ana kisi=${h.cls.principal?.fullName ?? '-'}; aile boyutu=${size}; malik=${h.cls.landlord ? h.cls.landlord.fullName : h.cls.occupancy === 'owner' ? '(oturan)' : '(EKLENECEK)'}${compText}${addsText ? `; eklenecek: ${addsText}` : ''}`);
   }
   if (allProblems.length) {
     console.error(`DURDURULDU (yazilmadi): ${allProblems.length} sorun:\n  - ${allProblems.join('\n  - ')}`);
@@ -216,6 +260,10 @@ try {
     log('--dry-run: hicbir sey yazilmadi.');
     throw new Error('DRY_RUN');
   }
+  if (ENSURE && housesWithPrincipal.every((h) => h.adds.length === 0)) {
+    log('--ensure-composition: tum hanelerde zaten en az 1 cocuk ve 1 yasli var; eklenecek uye yok, hicbir sey yazilmadi.');
+    throw new Error('NOTHING_TO_DO');
+  }
 
   // --- uygulama servisleri -----------------------------------------------------------------------------------------------------------------
   const needsAdminFix = (h) => {
@@ -223,7 +271,7 @@ try {
     return !(admins.length === 1 && admins[0].userCode === h.cls.principal.userCode) || h.residentUserCode !== h.cls.principal.userCode;
   };
   let applyPrimaryAdmin = null;
-  if (houses.some(needsAdminFix)) {
+  if (!ENSURE && houses.some(needsAdminFix)) {
     try {
       ({ applyApartmentPrimaryAdmin: applyPrimaryAdmin } = await importFromServer(serverDir, 'src/services/membership_service.js'));
       log('Yonetim devri: membership_service.applyApartmentPrimaryAdmin kullanilacak.');
@@ -301,10 +349,100 @@ try {
   const outRows = []; // creds (group daire)
   const householdMeta = [];
 
+  // mevcut bir kisinin kimlik-dosyasi satiri (sifre / kurul gorevi onceki kimlik dosyasindan)
+  const makeDescriber = (apt, cls) => (r, familyRole, extra = {}) => ({
+    group: 'daire',
+    block: apt.blockName,
+    unit: apt.unitLabel,
+    apartmentLabel: apt.label,
+    fullName: r.fullName,
+    familyRole,
+    relation: extra.relation ?? r.relation,
+    apartmentRole: extra.apartmentRole ?? (familyRole === 'landlord' ? 'malik' : familyRole === 'head' ? (cls.occupancy === 'tenant' ? 'kiraci' : 'malik') : 'aile'),
+    isAmir: familyRole === 'head',
+    residesHere: familyRole !== 'landlord',
+    age: extra.age ?? null,
+    isMinor: extra.isMinor ?? false,
+    hasAccount: extra.hasAccount ?? r.userCode !== null,
+    isNew: Boolean(extra.isNew),
+    username: extra.username ?? r.username ?? null,
+    email: extra.email ?? r.email ?? null,
+    phone: extra.phoneDisplay ?? (r.phone ? displayPhone(r.phone) : null),
+    password: extra.password ?? (r.username ? prevByUser.get(r.username.toLowerCase())?.password ?? null : null),
+    boardRole: r.username ? prevByUser.get(r.username.toLowerCase())?.boardRole ?? null : null,
+  });
+
+  // YENI aile uyesi (family_member; sponsor = ana kisi) ekler: cocuk (13+ hesapli) ya da yasli (hesapli yetiskin). Satir kaydi: kimlik-dosyasi uyesi.
+  const insertFamilyMember = async (h, a) => {
+    const { apt, cls } = h;
+    const principal = cls.principal;
+    const createdAt = `${TODAY}T10:00:00+03:00`;
+    const moveInDate = principal.moveIn ?? TODAY;
+    let userCode = null;
+    let personId;
+    let acc = null;
+    const phone = a.hasAccount || a.age >= 12 ? nextPhone() : null;
+    if (a.hasAccount) {
+      acc = await insertAccount({ fullName: a.fullName, phone, createdAt });
+      userCode = acc.userCode;
+      personId = await insertPerson({ userCode, createdBy: principal.userCode, createdAt });
+      await insertResidency({ aptId: apt.id, personId, relation: 'family_member', moveIn: moveInDate, createdAt, sponsor: principal.personId, isMinor: a.age < ADULT_AGE });
+      await insertMemberships({ aptId: apt.id, userCode, role: 'FAMILY_MEMBER', createdAt, withApartment: true });
+      stats.newAccounts += 1;
+    } else {
+      personId = await insertPerson({ userCode: null, fullName: a.fullName, phone, createdBy: principal.userCode, createdAt });
+      await insertResidency({ aptId: apt.id, personId, relation: 'family_member', moveIn: moveInDate, createdAt, sponsor: principal.personId, isMinor: a.age < ADULT_AGE });
+      stats.newAccountless += 1;
+    }
+    if (a.kind === 'elder') stats.newElders += 1;
+    else stats.newChildren += 1;
+    if (a.age < ADULT_AGE) stats.minorsFlagged += 1;
+    return {
+      group: 'daire', block: apt.blockName, unit: apt.unitLabel, apartmentLabel: apt.label, fullName: a.fullName, familyRole: a.kind, relation: 'family_member', apartmentRole: 'aile',
+      isAmir: false, residesHere: true, age: a.age, isMinor: a.age < ADULT_AGE, hasAccount: a.hasAccount, isNew: true,
+      username: acc?.username ?? null, email: acc?.email ?? null, phone: phone ? displayPhone(phone) : null, password: acc?.password ?? null, boardRole: null,
+    };
+  };
+
+  // hanenin kimlik-dosyasi satirlarini sirala (malik, admin, es, cocuklar buyukten kucuge, yasli) + hane ozeti
+  const finalizeHousehold = (h, members) => {
+    const { apt, cls } = h;
+    const order = { landlord: 0, head: 1, spouse: 2, child: 3, elder: 4 };
+    members.sort((x, y) => (order[x.familyRole] - order[y.familyRole]) || ((y.age ?? 0) - (x.age ?? 0)));
+    for (const m of members) {
+      m.roleLabel = roleLabelOf({ familyRole: m.familyRole, age: m.age, hasAccount: m.hasAccount, occupancy: cls.occupancy });
+      outRows.push(m);
+    }
+    const adminRow = members.find((m) => m.familyRole === 'head');
+    const ownerRow = members.find((m) => m.familyRole === 'landlord') ?? adminRow;
+    householdMeta.push({
+      apartmentLabel: apt.label, occupancy: cls.occupancy, adminName: adminRow.fullName, adminUsername: adminRow.username, ownerName: ownerRow.fullName, ownerUsername: ownerRow.username,
+      managementOnTenant: cls.occupancy === 'tenant', residentCount: members.filter((m) => m.residesHere).length, personCount: members.length,
+    });
+    report.apartments.push({ ...householdMeta[householdMeta.length - 1], adds: (h.adds ?? []).map((a) => ({ kind: a.kind, fullName: a.fullName, age: a.age, hasAccount: a.hasAccount })) });
+  };
+
+  // --ensure-composition: mevcut hane uyelerinin (DEGISMEYEN) kimlik-dosyasi satirlari; yas / isNew onceki kimlik dosyasindan
+  const existingRows = (h) => {
+    const { apt, cls } = h;
+    const describe = makeDescriber(apt, cls);
+    const ageOf = (r) => {
+      const v = Number(prevAccOf(apt.label, r)?.age);
+      return Number.isFinite(v) && v > 0 ? v : null;
+    };
+    const newOf = (r) => Boolean(prevAccOf(apt.label, r)?.isNew);
+    const rows = [];
+    if (cls.landlord) rows.push(describe(cls.landlord, 'landlord', { relation: 'owner', age: ageOf(cls.landlord), hasAccount: cls.landlord.userCode !== null, isNew: newOf(cls.landlord) }));
+    rows.push(describe(cls.principal, 'head', { age: ageOf(cls.principal), isNew: newOf(cls.principal) }));
+    const family = [...(cls.spouse ? [{ r: cls.spouse, role: 'spouse' }] : []), ...cls.children.map((r) => ({ r, role: 'child' })), ...cls.elders.map((r) => ({ r, role: 'elder' }))];
+    for (const { r, role } of family) rows.push(describe(r, role, { relation: 'family_member', age: ageOf(r), isMinor: r.isMinor, isNew: newOf(r) }));
+    return rows;
+  };
+
   await q('BEGIN');
   inTransaction = true;
 
-  for (const h of housesWithPrincipal) {
+  for (const h of ENSURE ? [] : housesWithPrincipal) {
     const { apt, cls } = h;
     const principal = cls.principal;
     const createdAt = `${TODAY}T10:00:00+03:00`;
@@ -313,27 +451,7 @@ try {
     stats.apartments += 1;
     const members = []; // sirali cikti kayitlari
 
-    const describe = (r, familyRole, extra = {}) => ({
-      group: 'daire',
-      block: apt.blockName,
-      unit: apt.unitLabel,
-      apartmentLabel: label,
-      fullName: r.fullName,
-      familyRole,
-      relation: extra.relation ?? r.relation,
-      apartmentRole: extra.apartmentRole ?? (familyRole === 'landlord' ? 'malik' : familyRole === 'head' ? (cls.occupancy === 'tenant' ? 'kiraci' : 'malik') : 'aile'),
-      isAmir: familyRole === 'head',
-      residesHere: familyRole !== 'landlord',
-      age: extra.age ?? null,
-      isMinor: extra.isMinor ?? false,
-      hasAccount: extra.hasAccount ?? r.userCode !== null,
-      isNew: Boolean(extra.isNew),
-      username: extra.username ?? r.username ?? null,
-      email: extra.email ?? r.email ?? null,
-      phone: extra.phoneDisplay ?? (r.phone ? displayPhone(r.phone) : null),
-      password: extra.password ?? (r.username ? prevByUser.get(r.username.toLowerCase())?.password ?? null : null),
-      boardRole: r.username ? prevByUser.get(r.username.toLowerCase())?.boardRole ?? null : null,
-    });
+    const describe = makeDescriber(apt, cls);
 
     // 1) ana kisinin iliskisi (owner / tenant) yoksa duzelt
     if (!['owner', 'tenant'].includes(principal.relation)) {
@@ -402,32 +520,7 @@ try {
     }
 
     // 5) yeni aile uyeleri
-    for (const a of (h.adds ?? []).filter((x) => x.kind !== 'landlord')) {
-      let userCode = null;
-      let personId;
-      let acc = null;
-      const phone = a.hasAccount || a.age >= 12 ? nextPhone() : null;
-      if (a.hasAccount) {
-        acc = await insertAccount({ fullName: a.fullName, phone, createdAt });
-        userCode = acc.userCode;
-        personId = await insertPerson({ userCode, createdBy: principal.userCode, createdAt });
-        await insertResidency({ aptId: apt.id, personId, relation: 'family_member', moveIn: moveInDate, createdAt, sponsor: principal.personId, isMinor: a.age < ADULT_AGE });
-        await insertMemberships({ aptId: apt.id, userCode, role: 'FAMILY_MEMBER', createdAt, withApartment: true });
-        stats.newAccounts += 1;
-      } else {
-        personId = await insertPerson({ userCode: null, fullName: a.fullName, phone, createdBy: principal.userCode, createdAt });
-        await insertResidency({ aptId: apt.id, personId, relation: 'family_member', moveIn: moveInDate, createdAt, sponsor: principal.personId, isMinor: a.age < ADULT_AGE });
-        stats.newAccountless += 1;
-      }
-      if (a.kind === 'elder') stats.newElders += 1;
-      else stats.newChildren += 1;
-      if (a.age < ADULT_AGE) stats.minorsFlagged += 1;
-      members.push({
-        group: 'daire', block: apt.blockName, unit: apt.unitLabel, apartmentLabel: label, fullName: a.fullName, familyRole: a.kind, relation: 'family_member', apartmentRole: 'aile',
-        isAmir: false, residesHere: true, age: a.age, isMinor: a.age < ADULT_AGE, hasAccount: a.hasAccount, isNew: true,
-        username: acc?.username ?? null, email: acc?.email ?? null, phone: phone ? displayPhone(phone) : null, password: acc?.password ?? null, boardRole: null,
-      });
-    }
+    for (const a of (h.adds ?? []).filter((x) => x.kind !== 'landlord')) members.push(await insertFamilyMember(h, a));
 
     // 6) daire admini = ana kisi (tek)
     if (needsAdminFix(h)) {
@@ -465,26 +558,29 @@ try {
     }
 
     // cikti kayitlari: malik, admin, es, cocuklar (buyukten kucuge), yasli
-    const order = { landlord: 0, head: 1, spouse: 2, child: 3, elder: 4 };
-    members.sort((x, y) => (order[x.familyRole] - order[y.familyRole]) || ((y.age ?? 0) - (x.age ?? 0)));
-    for (const m of members) {
-      m.roleLabel = roleLabelOf({ familyRole: m.familyRole, age: m.age, hasAccount: m.hasAccount, occupancy: cls.occupancy });
-      outRows.push(m);
+    finalizeHousehold(h, members);
+  }
+
+  // --ensure-composition: yalniz EKLEME (mevcut satirlara dokunulmaz); cikti = mevcut uyeler (degismeden) + yeni uyeler
+  if (ENSURE) {
+    for (const h of housesWithPrincipal) {
+      stats.apartments += 1;
+      const members = existingRows(h);
+      for (const a of h.adds) members.push(await insertFamilyMember(h, a));
+      finalizeHousehold(h, members);
     }
-    const adminRow = members.find((m) => m.familyRole === 'head');
-    const ownerRow = members.find((m) => m.familyRole === 'landlord') ?? adminRow;
-    householdMeta.push({
-      apartmentLabel: label, occupancy: cls.occupancy, adminName: adminRow.fullName, adminUsername: adminRow.username, ownerName: ownerRow.fullName, ownerUsername: ownerRow.username,
-      managementOnTenant: cls.occupancy === 'tenant', residentCount: members.filter((m) => m.residesHere).length, personCount: members.length,
-    });
-    report.apartments.push({ ...householdMeta[householdMeta.length - 1], adds: (h.adds ?? []).map((a) => ({ kind: a.kind, fullName: a.fullName, age: a.age, hasAccount: a.hasAccount })) });
   }
 
   await q('COMMIT');
   inTransaction = false;
   committed = true;
   Object.assign(report.summary, stats);
-  log(`TAMAM: ${stats.apartments} daire; yeni hesap=${stats.newAccounts} (malik ${stats.newLandlords}), hesapsiz yeni=${stats.newAccountless}, yeni cocuk=${stats.newChildren}, yeni yasli=${stats.newElders}, yeniden baglanan=${stats.relinked}, devir kaydi=${stats.delegationsAdded}, admin duzeltme=${stats.adminFixed}`);
+  if (ENSURE) {
+    const touched = housesWithPrincipal.filter((h) => h.adds.length > 0).length;
+    log(`TAMAM (ensure-composition): ${stats.apartments} daire incelendi, ${touched} haneye uye eklendi; yeni cocuk=${stats.newChildren}, yeni yasli=${stats.newElders}, yeni hesap=${stats.newAccounts}, hesapsiz yeni=${stats.newAccountless}`);
+  } else {
+    log(`TAMAM: ${stats.apartments} daire; yeni hesap=${stats.newAccounts} (malik ${stats.newLandlords}), hesapsiz yeni=${stats.newAccountless}, yeni cocuk=${stats.newChildren}, yeni yasli=${stats.newElders}, yeniden baglanan=${stats.relinked}, devir kaydi=${stats.delegationsAdded}, admin duzeltme=${stats.adminFixed}`);
+  }
 
   // --- kimlik bilgileri --------------------------------------------------------------------------------------------------------------------
   const missingPw = outRows.filter((m) => m.hasAccount && !m.password);
@@ -499,9 +595,10 @@ try {
     const payload = {
       generatedAt: new Date().toISOString(),
       generatedOn: TODAY,
-      kind: 'restructure',
+      kind: ENSURE ? 'restructure-composition' : 'restructure',
       batchId,
-      seedBatchId: prev?.batchId ?? seedBatches[0] ?? null,
+      seedBatchId: ENSURE ? prev?.seedBatchId ?? seedBatches[0] ?? null : prev?.batchId ?? seedBatches[0] ?? null,
+      ...(ENSURE ? { previousBatchId: prev?.batchId ?? null } : {}),
       siteCode,
       siteName: ctx.site.name,
       warning: 'SAHTE DEMO HESAPLAR - sifreler bu dosyada duz metin; commit etmeyin.',
@@ -509,7 +606,7 @@ try {
       board: prev?.board ?? [],
       accounts: [...staff, ...outRows],
       households: householdMeta,
-      roleChanges: report.roleChanges,
+      roleChanges: ENSURE ? prev?.roleChanges ?? [] : report.roleChanges,
     };
     fs.writeFileSync(out, `${JSON.stringify(payload, null, 2)}\n`, { mode: 0o600 });
     try {
@@ -522,7 +619,7 @@ try {
 } catch (error) {
   if (error?.message === 'DRY_RUN') {
     // normal cikis
-  } else if (error?.message === 'PLAN_PROBLEMS') {
+  } else if (error?.message === 'PLAN_PROBLEMS' || error?.message === 'NOTHING_TO_DO') {
     // mesaj yazildi
   } else {
     console.error('KRITIK HATA:', error?.stack ?? error);

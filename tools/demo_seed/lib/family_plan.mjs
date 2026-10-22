@@ -172,6 +172,45 @@ export function planAdditions(rng, houses, takenSurnames, opts = {}) {
   return adds;
 }
 
+// --- --ensure-composition: her hanede en az 1 cocuk (18 yas alti) ve 1 yasli (60+) ---------------------------------------------------------
+
+export const COMPOSITION_MAX = 7; // bu modda hane boyutu ust siniri (uygulamanin aile limiti 12'nin cok altinda)
+export const ELDER_AGE_MIN = 62;
+export const ELDER_AGE_MAX = 84;
+export const CHILD_AGE_MIN = 2;
+export const CHILD_AGE_MAX = 17;
+export const CHILD_ACCOUNT_MIN_AGE = 13; // 13 yas ve ustu cocugun hesabi var, altinin yok
+
+/**
+ * Eksik haneler icin EKLENECEK yeni uyeleri planlar (var olan kimse degismez). Saf fonksiyon (DB yok).
+ * @param {object[]} houses [{ headAge:number, surname:string, usedGiven:Set<string>, hasMinorChild:boolean, hasElder:boolean }]
+ * @returns {Map<number, object[]>} houses dizisindeki sira -> eklenecek kisi tarifleri ({ kind:'child'|'elder', male, age, surname, hasAccount, isMinor, given, fullName })
+ */
+export function planComposition(rng, houses) {
+  const adds = new Map(houses.map((_, i) => [i, []]));
+  for (const [i, house] of houses.entries()) {
+    if (!house.hasMinorChild) {
+      // cocuk, ana kisiden en az ~20 yas kucuk olsun
+      const maxAge = Math.max(CHILD_AGE_MIN, Math.min(CHILD_AGE_MAX, house.headAge - 20));
+      const age = rng.int(CHILD_AGE_MIN, maxAge);
+      adds.get(i).push({ kind: 'child', male: rng.chance(0.5), age, surname: house.surname, hasAccount: age >= CHILD_ACCOUNT_MIN_AGE, isMinor: true });
+    }
+    if (!house.hasElder) {
+      const age = clamp(house.headAge + rng.int(23, 30), ELDER_AGE_MIN, ELDER_AGE_MAX);
+      adds.get(i).push({ kind: 'elder', male: rng.chance(0.5), age, surname: house.surname, hasAccount: true, isMinor: false });
+    }
+  }
+  // ad ata (hane icinde tekrar yok)
+  for (const [i, house] of houses.entries()) {
+    for (const a of adds.get(i)) {
+      const pool = a.kind === 'child' ? (a.male ? BOY_NAMES : GIRL_NAMES) : a.male ? ELDER_MALE : ELDER_FEMALE;
+      a.given = pickGiven(rng, pool, house.usedGiven);
+      a.fullName = `${a.given} ${a.surname}`;
+    }
+  }
+  return adds;
+}
+
 /** PDF / JSON icin okunur rol etiketi. */
 export function roleLabelOf({ familyRole, age = null, hasAccount = true, occupancy = 'owner' }) {
   switch (familyRole) {

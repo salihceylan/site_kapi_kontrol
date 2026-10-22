@@ -6,7 +6,8 @@ Kullanim:
 
 Girdi: seed.mjs ya da restructure_families.mjs --creds-out dosyasi (JSON). Cikti: yonetim kadrosu ve gorevliler tablosu, ardindan daire daire
 sakinler. Yeniden yapilandirilmis dosyada (accounts[].familyRole var) her dairede Malik, Daire admini (isaretli: sari satir, kalin) ve aile uyeleri
-(es / cocuk / yasli ebeveyn; yas, hesapsiz olanlar belirtilir) rolleriyle birlikte gelir; eski bicimde (yalniz tohum ciktisi) daire amiri isaretlenir. Yazi tipi: Windows C:\\Windows\\Fonts\\arial.ttf ya da DejaVu Sans; yoksa reportlab'in
+(es / cocuk / yasli ebeveyn; "Yas" sutunu ve rol etiketinde yas, hesapsiz olanlar belirtilir; hane basliginda resit olmayan cocuk / yasli sayisi) rolleriyle birlikte gelir
+(--ensure-composition ciktisi da ayni bicimdedir); eski bicimde (yalniz tohum ciktisi) daire amiri isaretlenir. Yazi tipi: Windows C:\\Windows\\Fonts\\arial.ttf ya da DejaVu Sans; yoksa reportlab'in
 yerlesik fontlari (Turkce harfler eksik cikabilir; uyari verir).
 Gereken: pip install reportlab
 """
@@ -117,10 +118,19 @@ def main():
         meta = meta_by_label.get(label)
         if meta:
             who = "Kiracı oturuyor, yönetim kiracıda" if meta.get("occupancy") == "tenant" else "Malik oturuyor, yönetim malikte"
-            story.append(Paragraph(f"{label} &nbsp;<font size=9 color='#555555'>({who}; {meta.get('residentCount', len(members))} kişi oturuyor)</font>", h2))
+            comp = ""
+            if restructured:
+                n_child = sum(1 for m in members if m.get("familyRole") == "child" and m.get("isMinor"))
+                n_elder = sum(1 for m in members if m.get("familyRole") == "elder")
+                comp = f"; {n_child} reşit olmayan çocuk, {n_elder} yaşlı"
+            story.append(Paragraph(f"{label} &nbsp;<font size=9 color='#555555'>({who}; {meta.get('residentCount', len(members))} kişi oturuyor{comp})</font>", h2))
         else:
             story.append(Paragraph(f"{label}", h2))
-        rows = [[Paragraph("Ad Soyad", cell_b), Paragraph("Rol", cell_b), Paragraph("Kullanıcı adı", cell_b), Paragraph("Şifre", cell_b)]]
+        header = [Paragraph("Ad Soyad", cell_b), Paragraph("Rol", cell_b)]
+        if restructured:
+            header.append(Paragraph("Yaş", cell_b))
+        header += [Paragraph("Kullanıcı adı", cell_b), Paragraph("Şifre", cell_b)]
+        rows = [header]
         admin_rows = []
         for idx, m in enumerate(members, start=1):
             name = m["fullName"]
@@ -129,14 +139,20 @@ def main():
                 has_account = m.get("hasAccount", True) and m.get("username")
                 user_txt = m["username"] if has_account else "-"
                 pass_txt = (m.get("password") or "(bilinmiyor)") if has_account else "hesap yok"
+                age_txt = str(m["age"]) if m.get("age") else "-"
             else:
                 role = m["roleLabel"] + (" - daire amiri" if m.get("isAmir") else "")
                 user_txt = m["username"]
                 pass_txt = m["password"]
             if m.get("isAmir"):
                 admin_rows.append(idx)
-            rows.append([Paragraph(name, cell_b if m.get("isAmir") else cell), Paragraph(role, cell_b if m.get("isAmir") else cell), Paragraph(user_txt, mono), Paragraph(pass_txt, mono)])
-        t = Table(rows, colWidths=[46 * mm, 56 * mm, 40 * mm, 32 * mm], repeatRows=1)
+            line = [Paragraph(name, cell_b if m.get("isAmir") else cell), Paragraph(role, cell_b if m.get("isAmir") else cell)]
+            if restructured:
+                line.append(Paragraph(age_txt, cell))
+            line += [Paragraph(user_txt, mono), Paragraph(pass_txt, mono)]
+            rows.append(line)
+        col_widths = [42 * mm, 50 * mm, 11 * mm, 39 * mm, 32 * mm] if restructured else [46 * mm, 56 * mm, 40 * mm, 32 * mm]
+        t = Table(rows, colWidths=col_widths, repeatRows=1)
         style = [
             ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#eef2f7")),
             ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#b4bdc9")),

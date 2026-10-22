@@ -200,7 +200,7 @@ const changedTables = Object.keys(preCounts).filter((t) => preCounts[t] !== post
 check('yalniz kisi / bag tablolarina satir eklendi', changedTables.every((t) => allowed.has(t)), changedTables.join(','));
 
 // eposta / kuyruk
-for (const [name, sql] of [
+const queueChecks = [
   ['person_invitations', `SELECT COUNT(*)::INT AS n FROM person_invitations`],
   ['apartment_link_requests', `SELECT COUNT(*)::INT AS n FROM apartment_link_requests`],
   ['apartment_notices', `SELECT COUNT(*)::INT AS n FROM apartment_notices`],
@@ -210,7 +210,8 @@ for (const [name, sql] of [
   ['pending_registrations', `SELECT COUNT(*)::INT AS n FROM pending_registrations`],
   ['email_verifications', `SELECT COUNT(*)::INT AS n FROM email_verifications`],
   ['kullanici e-posta/push tercihi acik', `SELECT COUNT(*)::INT AS n FROM notification_preferences WHERE email_announcements OR email_finance_reminders OR push_announcements`],
-]) {
+];
+for (const [name, sql] of queueChecks) {
   check(`e-posta/kuyruk bos: ${name}`, (await q(sql)).rows[0].n === 0);
 }
 const badEmail = (await q(`SELECT COUNT(*)::INT AS n FROM users WHERE login_name IS NOT NULL AND email NOT LIKE '%@demo.invalid' AND email NOT IN ('cenk@fixture.test','baska@fixture.test')`)).rows[0].n;
@@ -294,6 +295,215 @@ check('PDF uretildi', pdf.status === 0 && fs.existsSync(pdfPath), (pdf.stdout + 
     check('PDF: tum kullanici adlari ve sifreler yazili', missingU.length === 0 && missingP.length === 0, `eksik ad ${missingU.length} (${missingU.slice(0, 3).map((d) => d.username)}), sifre ${missingP.length}`);
     check('PDF: her daire basligi', [...new Set(daire.map((d) => d.apartmentLabel))].every((l) => flat.includes(l)));
   }
+}
+
+// --- 7b) --ensure-composition: her haneye en az 1 cocuk (is_minor) + 1 yasli (60+) -----------------------------------------------------------
+{
+  const rowTables = ['users', 'site_people', 'apartment_residencies', 'apartment_memberships', 'site_memberships', 'apartments', 'notification_preferences', 'apartment_admin_delegations'];
+  const rowHashes = async () => {
+    const out = {};
+    for (const t of rowTables) out[t] = new Set((await q(`SELECT md5(x::text) AS h FROM ${t} x`)).rows.map((r) => r.h));
+    return out;
+  };
+  const loadRows = async () =>
+    (
+      await q(
+        `SELECT r.id AS res_id, r.apartment_id, r.relation, r.is_minor, r.sponsor_person_id, r.person_id, sp.user_code, COALESCE(u.full_name, sp.full_name) AS name, u.login_name, u.email,
+                am.role AS mem_role, am.is_active AS mem_active, a.unit_label, b.block_name
+         FROM apartment_residencies r
+         JOIN site_people sp ON sp.id = r.person_id
+         LEFT JOIN users u ON u.user_code = sp.user_code
+         LEFT JOIN apartment_memberships am ON am.apartment_id = r.apartment_id AND am.user_code = sp.user_code
+         JOIN apartments a ON a.id = r.apartment_id JOIN site_blocks b ON b.id = a.block_id
+         WHERE r.site_code = $1 AND r.is_current ORDER BY r.apartment_id, r.id`,
+        [siteCode],
+      )
+    ).rows.map((r) => ({ ...r, res_id: Number(r.res_id), apartment_id: Number(r.apartment_id), person_id: Number(r.person_id), user_code: r.user_code === null ? null : Number(r.user_code), sponsor: r.sponsor_person_id === null ? null : Number(r.sponsor_person_id) }));
+  // cocuk dalini da sinamak icin: ilk turdan sonra TUM hanelerin resit olmayan isaretini kaldir (bu satirlar ilk turun registry'sinde izli; restructure cleanup eski haline getirir)
+  const flipped = await q(`UPDATE apartment_residencies SET is_minor = FALSE WHERE site_code = $1 AND is_current AND is_minor`, [siteCode]);
+  check('ensure oncesi: tum reşit olmayan isaretleri kaldirildi (cocuk dalini zorlar)', flipped.rowCount >= 10, `${flipped.rowCount} satir`);
+  const rowsNow = await loadRows();
+  const ensDigestBefore = await digest();
+  const ensCountsBefore = await tableCounts(url);
+  const ensHashBefore = await rowHashes();
+  const resIdsBefore = new Set(rowsNow.map((r) => Number(r.res_id)));
+  const ensCredsPath = path.join(outDir, 'creds_restrtest_ensure.json');
+  const ensCreds2Path = path.join(outDir, 'creds_restrtest_ensure2.json');
+  const labelOf = (r) => `${r.block_name} - ${r.unit_label}`;
+
+  // ilk tur sonrasi eksikler (beklenen ekleme sayisi)
+  let expectChild = 0;
+  let expectElder = 0;
+  for (const a of apts) {
+    const list = rowsNow.filter((r) => r.apartment_id === a.id);
+    const label = labelOf(list[0]);
+    if (!list.some((r) => r.relation === 'family_member' && r.is_minor)) expectChild += 1;
+    if (!daire.some((c) => c.apartmentLabel === label && c.familyRole === 'elder')) expectElder += 1;
+  }
+  console.log(`  ensure oncesi eksik: cocuk ${expectChild} hane, yasli ${expectElder} hane`);
+  check('ensure oncesi: bazi haneler cocuk ya da yasli eksik (test anlamli)', expectChild + expectElder > 0, `cocuk ${expectChild}, yasli ${expectElder}`);
+
+  const ensArgs = ['restructure_families.mjs', '--site', 'Cenk', '--ensure-composition', '--prev-creds', newCreds, '--today', '2026-10-22'];
+  const ensNoForce = run('node', ensArgs, env);
+  check('ensure --force olmadan reddedilir (cikis 4)', ensNoForce.status === 4, `cikis ${ensNoForce.status}`);
+  const ensDry = run('node', [...ensArgs, '--force', '--dry-run'], env);
+  check('ensure dry-run calisti (cikis 0)', ensDry.status === 0, ensDry.status === 0 ? '' : (ensDry.stdout.slice(-400) + ensDry.stderr.slice(-400)));
+  check('ensure dry-run hicbir sey yazmadi', JSON.stringify(await digest()) === JSON.stringify(ensDigestBefore));
+  const ensNoPrevClean = run('node', ['restructure_families.mjs', '--site', 'Cenk', '--ensure-composition', '--force', '--today', '2026-10-22'], env);
+  check('ensure --prev-creds yoksa yazmadan durur (cikis 2)', ensNoPrevClean.status === 2, `cikis ${ensNoPrevClean.status}`);
+
+  const te = Date.now();
+  const ens = run('node', [...ensArgs, '--force', '--creds-out', ensCredsPath], env);
+  console.log(ens.stdout.split('\n').slice(-12).join('\n'));
+  if (ens.stderr && !/DeprecationWarning|trace-deprecation/.test(ens.stderr)) console.log(ens.stderr.slice(-800));
+  check('ensure-composition calisti (cikis 0)', ens.status === 0, `${((Date.now() - te) / 1000).toFixed(1)} sn`);
+  const ensBatch = (ens.stdout.match(/batch=(demo-restructure-\d+)/) ?? [])[1];
+  check('ensure batch bulundu ve ilk restructure batch inden farkli', !!ensBatch && ensBatch !== restrBatch, ensBatch);
+
+  const eCreds = JSON.parse(fs.readFileSync(ensCredsPath, 'utf8'));
+  const eDaire = eCreds.accounts.filter((a) => a.group === 'daire');
+  const rows2 = await loadRows();
+  const admins2 = (await q(`SELECT apartment_id, user_code FROM apartment_memberships WHERE is_active AND role = 'APARTMENT_ADMIN'`)).rows;
+  const eBad = [];
+  const eSizes = [];
+  const principalByApt = new Map();
+  let eMinors = 0;
+  let eElders = 0;
+  for (const a of apts) {
+    const list = rows2.filter((r) => r.apartment_id === a.id);
+    const label = labelOf(list[0]);
+    const tenant = list.find((r) => r.relation === 'tenant') ?? null;
+    const owners = list.filter((r) => r.relation === 'owner');
+    const principal = tenant ?? owners[0];
+    const landlord = tenant ? owners[0] : null;
+    principalByApt.set(a.id, principal);
+    const residents = list.filter((r) => r !== landlord);
+    eSizes.push(residents.length);
+    const fam = list.filter((r) => r.relation === 'family_member');
+    const minors = fam.filter((r) => r.is_minor);
+    const elders = fam.filter((r) => {
+      const c = eDaire.find((x) => x.apartmentLabel === label && x.fullName === r.name);
+      return c && c.familyRole === 'elder' && c.age >= 60 && !r.is_minor && r.user_code !== null && c.hasAccount;
+    });
+    eMinors += minors.length;
+    eElders += elders.length;
+    if (minors.length < 1) eBad.push(`${a.unit}: cocuk (is_minor) yok`);
+    if (elders.length < 1) eBad.push(`${a.unit}: yasli yok`);
+    if (residents.length > 7) eBad.push(`${a.unit}: hane boyutu ${residents.length} > 7`);
+    if (owners.length !== 1) eBad.push(`${a.unit}: malik sayisi ${owners.length}`);
+    const adm = admins2.filter((x) => Number(x.apartment_id) === a.id);
+    if (adm.length !== 1 || Number(adm[0].user_code) !== principal.user_code) eBad.push(`${a.unit}: daire admini sayisi/kisi yanlis`);
+    for (const r of list) if (!eDaire.some((c) => c.apartmentLabel === label && c.fullName === r.name)) eBad.push(`${a.unit}: ${r.name} kimlik dosyasinda yok`);
+  }
+  console.log('  ensure hane boyutlari:', eSizes.join(','), `| cocuk(is_minor) ${eMinors}, yasli ${eElders}`);
+  check('ensure: HER dairede >=1 cocuk (is_minor) ve >=1 yasli (60+, hesapli yetiskin)', eBad.every((b) => !/cocuk|yasli/.test(b)), eBad.filter((b) => /cocuk|yasli/.test(b)).join('; '));
+  check('ensure: hane boyutu <= 7', Math.max(...eSizes) <= 7, eSizes.join(','));
+  check('ensure: her dairede tek admin + tek malik, admin = oturan ana kisi', eBad.every((b) => !/malik sayisi|admin/.test(b)), eBad.filter((b) => /malik sayisi|admin/.test(b)).join('; '));
+  check('ensure: tum sakinler kimlik dosyasinda', eBad.every((b) => !/kimlik dosyasinda/.test(b)));
+
+  // yeni uyeler
+  const newRes = rows2.filter((r) => !resIdsBefore.has(r.res_id));
+  check('ensure: eklenen kisi sayisi beklenen kadar (eksik cocuk + eksik yasli)', newRes.length === expectChild + expectElder, `${newRes.length}/${expectChild + expectElder}`);
+  const newBad = [];
+  let newElderCount = 0;
+  let newChildCount = 0;
+  for (const r of newRes) {
+    const c = eDaire.find((x) => x.apartmentLabel === labelOf(r) && x.fullName === r.name);
+    const principal = principalByApt.get(r.apartment_id);
+    if (!c) {
+      newBad.push(`${r.name}: kimlik dosyasinda yok`);
+      continue;
+    }
+    if (r.relation !== 'family_member') newBad.push(`${r.name}: iliski ${r.relation}`);
+    if (r.sponsor !== principal.person_id) newBad.push(`${r.name}: sponsor ana kisi degil`);
+    if (!c.isNew) newBad.push(`${r.name}: isNew isaretli degil`);
+    if (r.name.split(' ').pop() !== principal.name.split(' ').pop()) newBad.push(`${r.name}: soyad hane ile ayni degil`);
+    if (c.familyRole === 'child') {
+      newChildCount += 1;
+      if (!(c.age >= 2 && c.age <= 17) || !r.is_minor || c.isMinor !== true) newBad.push(`${r.name}: cocuk yas/minor tutarsiz (${c.age}, db ${r.is_minor})`);
+      if ((r.user_code !== null) !== (c.age >= 13) || c.hasAccount !== (c.age >= 13)) newBad.push(`${r.name}: cocuk hesap kurali (13+ hesapli) bozuk (yas ${c.age})`);
+    } else if (c.familyRole === 'elder') {
+      newElderCount += 1;
+      if (!(c.age >= 62 && c.age <= 84) || r.is_minor) newBad.push(`${r.name}: yasli yas/minor tutarsiz (${c.age})`);
+      if (r.user_code === null || !c.hasAccount) newBad.push(`${r.name}: yasli hesapsiz`);
+    } else {
+      newBad.push(`${r.name}: beklenmeyen rol ${c.familyRole}`);
+    }
+    if (r.user_code !== null) {
+      if (!(r.email ?? '').endsWith('@demo.invalid')) newBad.push(`${r.name}: e-posta demo.invalid degil`);
+      if (r.mem_role !== 'FAMILY_MEMBER' || !r.mem_active) newBad.push(`${r.name}: daire uyeligi FAMILY_MEMBER degil (${r.mem_role})`);
+      if (!c.password || !c.username) newBad.push(`${r.name}: hesap bilgisi kimlik dosyasinda eksik`);
+    }
+  }
+  check('ensure: yeni uyeler tutarli (family_member, sponsor=admin, ayni soyad, yas araliklari, 13+ hesapli, hesapli yasli, @demo.invalid)', newBad.length === 0, newBad.join('; '));
+  check('ensure: yeni cocuk ve yasli sayilari beklenenle ayni', newChildCount === expectChild && newElderCount === expectElder, `cocuk ${newChildCount}/${expectChild}, yasli ${newElderCount}/${expectElder}`);
+
+  // mevcut hicbir sey degismedi / silinmedi
+  const ensHashAfter = await rowHashes();
+  const changedRows = rowTables.flatMap((t) => [...ensHashBefore[t]].filter((h) => !ensHashAfter[t].has(h)).map(() => t));
+  check('ensure: mevcut hicbir satir degismedi ya da silinmedi (satir hash)', changedRows.length === 0, [...new Set(changedRows)].join(','));
+  const ensCountsAfter = await tableCounts(url);
+  const allowedEns = new Set(['users', 'notification_preferences', 'site_people', 'apartment_residencies', 'apartment_memberships', 'site_memberships']);
+  const changedEnsTables = Object.keys(ensCountsBefore).filter((t) => ensCountsBefore[t] !== ensCountsAfter[t]);
+  check('ensure: yalniz kisi / bag tablolarina satir eklendi (silme yok)', changedEnsTables.every((t) => allowedEns.has(t) && ensCountsAfter[t] > ensCountsBefore[t]), changedEnsTables.join(','));
+  const postEnsMem = (await q(`SELECT apartment_id, user_code, is_active, role FROM apartment_memberships`)).rows;
+  const ensKey = new Map(postEnsMem.map((m) => [`${m.apartment_id}|${m.user_code}`, m]));
+  const lostEns = postMem.filter((m) => m.is_active && !(ensKey.get(`${m.apartment_id}|${m.user_code}`)?.is_active && ensKey.get(`${m.apartment_id}|${m.user_code}`)?.role === m.role));
+  check('ensure: mevcut daire uyelikleri (kapi yetkisi) ve roller AYNEN duruyor', lostEns.length === 0, `${lostEns.length} fark`);
+
+  // kayit: yalniz insert
+  const regOps = (await q(`SELECT op, table_name, COUNT(*)::int AS n FROM demo_seed_registry WHERE batch_id = $1 GROUP BY 1, 2 ORDER BY 2`, [ensBatch])).rows;
+  check('ensure registry: yalniz insert, yalniz kisi/bag tablolari', regOps.length > 0 && regOps.every((r) => r.op === 'insert' && allowedEns.has(r.table_name)), regOps.map((r) => `${r.table_name}:${r.op}=${r.n}`).join(','));
+  check('ensure registry: site_people ve apartment_residencies insert sayisi = yeni kisi', regOps.find((r) => r.table_name === 'site_people')?.n === newRes.length && regOps.find((r) => r.table_name === 'apartment_residencies')?.n === newRes.length);
+
+  // e-posta / kuyruk / telefon / sifre
+  for (const [name, sql] of queueChecks) check(`ensure e-posta/kuyruk bos: ${name}`, (await q(sql)).rows[0].n === 0);
+  const badEmail2 = (await q(`SELECT COUNT(*)::INT AS n FROM users WHERE login_name IS NOT NULL AND email NOT LIKE '%@demo.invalid' AND email NOT IN ('cenk@fixture.test','baska@fixture.test')`)).rows[0].n;
+  check('ensure: tum demo e-postalari @demo.invalid', badEmail2 === 0, String(badEmail2));
+  const badPhone2 = (await q(`SELECT COUNT(*)::INT AS n FROM users WHERE login_name IS NOT NULL AND phone_number IS NOT NULL AND phone_number !~ '^\\+90500000[0-9]{4}$'`)).rows[0].n;
+  check('ensure: telefonlar yapay (+90 500 000 xx xx)', badPhone2 === 0, String(badPhone2));
+  let ePwOk = 0;
+  let ePwTotal = 0;
+  for (const acc of eDaire.filter((a) => a.hasAccount)) {
+    ePwTotal += 1;
+    const row = (await q(`SELECT password_hash FROM users WHERE lower(login_name) = lower($1)`, [acc.username])).rows[0];
+    if (row && acc.password && (await bcrypt.compare(acc.password, row.password_hash))) ePwOk += 1;
+  }
+  check('ensure kimlik JSON: tum hesaplarin (eski + yeni) sifresi giris sorgusunu dogrular', ePwOk === ePwTotal && ePwTotal > daire.filter((a) => a.hasAccount).length - 1, `${ePwOk}/${ePwTotal}`);
+  const oldKept = daire.filter((o) => o.username && eDaire.some((n) => n.username === o.username && n.password === o.password));
+  check('ensure: ilk turun tum hesaplari ayni kullanici adi + sifreyle JSON da (birlestirme)', oldKept.length === daire.filter((o) => o.username).length, `${oldKept.length}/${daire.filter((o) => o.username).length}`);
+  check('ensure: gorevli / kurul kayitlari JSON da korundu', eCreds.accounts.filter((a) => a.group !== 'daire').length === creds.accounts.filter((a) => a.group !== 'daire').length);
+
+  // ikinci calistirma: yeni uye eklemez
+  // ikinci tur: --prev-creds = ensure turunun kimlik dosyasi (yeni hesaplarin sifreleri orada)
+  const ens2 = run('node', ['restructure_families.mjs', '--site', 'Cenk', '--ensure-composition', '--force', '--prev-creds', ensCredsPath, '--creds-out', ensCreds2Path, '--today', '2026-10-22'], env);
+  const cnt2 = await tableCounts(url);
+  check('ensure ikinci calistirma yeni uye eklemez (cikis 0, "eklenecek uye yok", tablo sayilari ayni)', ens2.status === 0 && /eklenecek uye yok/.test(ens2.stdout) && Object.keys(ensCountsAfter).every((t) => ensCountsAfter[t] === cnt2[t]), `cikis ${ens2.status}`);
+  const nBatches = (await q(`SELECT COUNT(DISTINCT batch_id)::int AS n FROM demo_seed_registry WHERE batch_id LIKE 'demo-restructure-%'`)).rows[0].n;
+  check('ensure ikinci calistirma yeni batch acmadi', nBatches === 2, String(nBatches));
+
+  // PDF
+  const pdf2Path = path.join(outDir, 'demo_hesaplar_restrtest_ensure.pdf');
+  const pdf2 = run('python', ['make_pdf.py', '--creds', ensCredsPath, '--out', pdf2Path]);
+  check('ensure PDF uretildi', pdf2.status === 0 && fs.existsSync(pdf2Path), (pdf2.stdout + pdf2.stderr).trim().slice(0, 200));
+  {
+    const ex = run('python', ['-X', 'utf8', '-I', '-c', "import sys; from pypdf import PdfReader; r = PdfReader(sys.argv[1]); print(' '.join((p.extract_text() or '') for p in r.pages))", pdf2Path], { PYTHONIOENCODING: 'utf-8' });
+    const flat = ex.stdout.replace(/\s+/g, ' ');
+    check('ensure PDF: Yaş sutunu, Çocuk, Yaşlı ebeveyn, reşit olmayan çocuk / yaşlı sayilari', ex.status === 0 && ['Yaş', 'Çocuk (', 'Yaşlı ebeveyn (', 'reşit olmayan çocuk', 'yaşlı'].every((w) => flat.includes(w)), ex.status === 0 ? '' : (ex.stderr || '').slice(-200));
+    const newAcc = eDaire.filter((d) => d.isNew && d.hasAccount && ['child', 'elder'].includes(d.familyRole));
+    const missU = newAcc.filter((d) => !flat.includes(d.username) || !flat.includes(d.password));
+    check('ensure PDF: tum (yeni dahil) kullanici adlari ve sifreler yazili', eDaire.filter((d) => d.hasAccount).every((d) => flat.includes(d.username) && flat.includes(d.password)), `yeni hesap ${newAcc.length}, eksik ${missU.length}`);
+  }
+
+  // cleanup: ensure batch geri alinir -> ilk-tur-sonrasi hale AYNEN doner
+  const cEns = run('node', ['cleanup.mjs', '--batch', ensBatch, '--yes'], { DATABASE_URL: url });
+  check('ensure cleanup calisti', cEns.status === 0, cEns.status === 0 ? '' : cEns.stderr.slice(-300));
+  const afterEnsClean = await digest();
+  const dEns = hashTables.filter((t) => JSON.stringify(ensDigestBefore[t]) !== JSON.stringify(afterEnsClean[t]));
+  check('ensure cleanup sonrasi kisi/bag tablolari ilk-tur-sonrasi haline AYNEN dondu (icerik hash)', dEns.length === 0, dEns.map((t) => `${t}:${ensDigestBefore[t].n}->${afterEnsClean[t].n}`).join(', '));
+  const cntClean = await tableCounts(url);
+  const dEnsCnt = Object.keys(ensCountsBefore).filter((t) => ensCountsBefore[t] !== cntClean[t]);
+  check('ensure cleanup sonrasi tum tablo satir sayilari ayni', dEnsCnt.length === 0, dEnsCnt.join(','));
 }
 
 // --- 8) restructure cleanup: BOZULMUS (on) hale TAM donus ---------------------------------------------------------------------------------------

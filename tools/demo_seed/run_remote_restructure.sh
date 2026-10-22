@@ -12,7 +12,12 @@
 #   --prev-creds      seed.mjs kimlik JSON'u (ZORUNLU: eski hesaplarin parolalari buradan gelir)
 #   --prod            provadan sonra CANLI veritabanina da uygular (bayraksiz yalniz yedek + prova)
 #   --skip-rehearsal  prova adimini atlar (yalniz yedek + canli; ONERILMEZ)
-#   --force           tohum korumalarini asar (ONERILMEZ)
+#   --force           tohum korumalarini asar (ONERILMEZ; --ensure-composition icin ZORUNLU: onceki restructure batch'i kayitli oldugundan)
+#   --extra "<bayraklar>"  restructure_families.mjs'e aynen iletilen ek bayraklar (birden cok kez verilebilir). EXTRA_ARGS ortam degiskeni de ayni isi gorur.
+#
+# Her ailede cocuk + yasli (ikinci tur; ilk restructure turu CANLIDA calismis olmali; --prev-creds = o turun creds_restructured.json'u):
+#   bash run_remote_restructure.sh --prev-creds ~/demo_seed/out/creds_restructured.json --force --extra "--ensure-composition" --prod --skip-rehearsal --creds-out ~/demo_seed/out/creds_composition.json
+#   (once --prod'suz calistirip proyi gorun; ayni bayraklarla gecici DB'de de uygulanir ve cleanup provasi yapilir)
 #
 # .env dosyasi source EDILMEZ: DATABASE_URL node + dotenv ile okunur (parola ekrana yazilmaz). E-posta GONDERILMEZ (davet / bildirim yazilmaz).
 # Geri alma: node cleanup.mjs --batch <demo-restructure-...> --yes   (seed batch'inden ONCE; SUPERUSER gerekir).
@@ -24,8 +29,10 @@ CREDS_OUT=""
 PROD=0
 FORCE=0
 SKIP_REH=0
+EXTRA_FLAGS="${EXTRA_ARGS:-}"
 while [ $# -gt 0 ]; do
   case "$1" in
+    --extra) [ $# -ge 2 ] || { echo "HATA: --extra bir deger ister"; exit 2; }; EXTRA_FLAGS="$EXTRA_FLAGS $2"; shift 2 ;;
     --site) SITE="$2"; shift 2 ;;
     --prev-creds) PREV="$2"; shift 2 ;;
     --creds-out) CREDS_OUT="$2"; shift 2 ;;
@@ -51,6 +58,9 @@ chmod 700 "$BK"
 [ -n "$CREDS_OUT" ] || CREDS_OUT="$OUT/creds_restructured_$STAMP.json"
 EXTRA=""
 [ "$FORCE" = 1 ] && EXTRA="--force"
+# ek bayraklar (--extra / EXTRA_ARGS): kelime bolunerek iletilir; yalniz restructure_families.mjs bayraklari verin
+[ -n "${EXTRA_FLAGS// /}" ] && EXTRA="$EXTRA $EXTRA_FLAGS"
+case " $EXTRA " in *" --ensure-composition "*) echo "Mod: --ensure-composition (her haneye en az 1 cocuk + 1 yasli; yalniz EKLER)"; case " $EXTRA " in *" --force "*) ;; *) echo "UYARI: onceki restructure batch'i kayitli oldugundan --force gerekir; arac --force'suz DURUR." ;; esac ;; esac
 
 [ -d "$APP_DIR/node_modules" ] || { echo "HATA: $APP_DIR/node_modules yok"; exit 2; }
 [ -f "$ENVF" ] || { echo "HATA: $ENVF yok"; exit 2; }
