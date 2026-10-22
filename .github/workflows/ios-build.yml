@@ -36,6 +36,19 @@ jobs:
       - name: Build for iOS Simulator (debug, no codesign)
         run: flutter build ios --simulator --debug --no-codesign
 
+      - name: Diagnostics on failure
+        if: failure()
+        shell: bash
+        run: |
+          echo "=== Podfile ==="; cat ios/Podfile 2>&1 | head -60
+          echo "=== Pods_Runner in pbxproj ==="; grep -c "Pods_Runner" ios/Runner.xcodeproj/project.pbxproj || true
+          echo "=== workspace ==="; cat ios/Runner.xcworkspace/contents.xcworkspacedata
+          echo "=== ls ios/Pods ==="; ls ios/Pods 2>&1 | head -20
+          echo "=== Pods targets ==="; ls "ios/Pods/Target Support Files" 2>&1 | head -30
+          echo "=== Debug.xcconfig ==="; cat ios/Flutter/Debug.xcconfig
+          echo "=== configurations ==="; grep -n "buildConfiguration\|name = \(Debug\|Release\|Profile\)" ios/Runner.xcodeproj/project.pbxproj | head -20
+          exit 1
+
       - name: Zip Runner.app
         shell: bash
         run: |
