@@ -1,5 +1,5 @@
 // "Dairem" ekranı (modül gerektirmez; daire sakini ve bireysel sakin): daire yönetimi kimde, malik / kiracı / aile, vekalet,
-// bekleyen davet ve talepler, "Bu daireden ayrıl" ve gizli "Güvenlik ve destek" bölümü.
+// bekleyen davet ve talepler, "Araçlarım" (daire yöneticisi araç ekler), "Bu daireden ayrıl" ve gizli "Güvenlik ve destek" bölümü.
 // Sözleşme: docs/PLATFORM_DAIRE_YONETIMI.md, docs/PLATFORM_DAIRE_GUVENLIK_POLITIKASI.md.
 // Ana sayfa gövdesinde sınırsız yükseklik hatası vermesin diye liste yok: Column + kartlar (kaydırmayı üst sayfa yapar).
 import 'dart:async';
@@ -16,6 +16,7 @@ import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/apartment_mgmt_dialogs.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/crm_confirm_dialog.dart';
 import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart' show crmMessageOf;
+import 'package:site_kapi_kontrol/ui/views/my_apartment_vehicles.dart';
 
 class MyApartmentView extends StatefulWidget {
   const MyApartmentView({super.key, required this.authService, this.service, this.onChanged});
@@ -362,6 +363,7 @@ class MyApartmentViewState extends State<MyApartmentView> {
             ..._requestsSection(apt),
             ..._proxySection(apt),
             ..._familySection(apt, canSearch),
+            ApartmentVehiclesSection(service: _service, apartmentId: apt.apartmentId),
             ..._tenantSection(apt),
             const SizedBox(height: AppSpace.md),
             _act('Bu daireden ayrıl', Icons.logout_rounded, _busy ? null : () => unawaited(_leave(apt)), tone: AppTone.danger),

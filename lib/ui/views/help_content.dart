@@ -127,6 +127,10 @@ abstract final class HelpContent {
     'Sistemden ara',
     'Yönetimi kiracıya devret',
     'Aile üyesi ekle',
+    'Araçlarım',
+    'Araç ekle',
+    'Notu düzenle',
+    'Aracı çıkar',
     'Daireyi devret / Çıkış',
     'Bağlantıyı kes talebi',
     'Bu daireden ayrıl',
@@ -253,6 +257,20 @@ abstract final class HelpContent {
       'Herkes “Bu daireden ayrıl” ile kendi bağını onaysız keser; diğer üyelere bildirim gitmez.',
     ],
     note: 'Aile üyeleri borç bilgisini görmez. Anlaşmazlıkta kararı site yönetimi verir.',
+  );
+
+  /// Araçlarım: daire yöneticisi dairenin araçlarını ekler / düzenler / çıkarır; diğer üyeler yalnız görür.
+  static const HelpTopic _myVehicles = HelpTopic(
+    id: 'my_vehicles',
+    title: 'Araçlarımı nasıl eklerim?',
+    icon: Icons.directions_car_rounded,
+    steps: <String>[
+      'Menüden “Dairem” ekranını açın ve dairenizin kartında “Araçlarım” bölümüne gidin.',
+      'Daire yöneticisiyseniz “Araç ekle” ile plakayı (örnek: 34 ABC 123) ve isterseniz marka, model, renk notunu yazın. Araç sahibi olarak dairenin aktif sakinlerinden birini seçebilirsiniz; varsayılan siz olursunuz.',
+      '“Notu düzenle” ile notu değiştirin, “Aracı çıkar” ile aracı kaldırın (kayıt silinmez, pasifleşir). Plaka değişmez; yanlışsa aracı çıkarıp doğru plakayla yeniden ekleyin.',
+      'Aile üyeleri ve daire yöneticisi olmayan malik ya da kiracı dairenin araçlarını yalnızca görür.',
+    ],
+    note: 'Dairenize en fazla 4 araç kaydedilebilir; daha fazlası için site yönetimine başvurun. Eklediğiniz plaka, sitede plaka tanıma açıksa yetkili araç sayılır; bu yüzden yalnızca kendi dairenizin araçlarını ekleyin. Aynı plaka başka bir kayıtta varsa site yönetimiyle görüşün.',
   );
 
   /// Güvenlik ve destek: yardım hatları, gizli talep, koruma kararı.
@@ -394,6 +412,7 @@ abstract final class HelpContent {
 
   static const List<HelpTopic> _resident = <HelpTopic>[
     _apartmentManagement,
+    _myVehicles,
     _apartmentSafety,
     HelpTopic(
       id: 'payment_notice_resident',
@@ -490,6 +509,7 @@ abstract final class HelpContent {
 
   static const List<HelpTopic> _individual = <HelpTopic>[
     _apartmentManagement,
+    _myVehicles,
     _apartmentSafety,
     _panelIndividual,
     _navigationIndividual,

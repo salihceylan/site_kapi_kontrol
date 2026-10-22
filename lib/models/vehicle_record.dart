@@ -67,6 +67,10 @@ String crmDateParam(DateTime date) {
   return '${date.year.toString().padLeft(4, '0')}-$month-$day';
 }
 
+/// Araç kaydını yapan: daire yöneticisi ("Dairem > Araçlarım") ya da site yönetimi (Kişiler > Araçlar).
+const String kVehicleSourceApartmentAdmin = 'apartment_admin';
+const String kVehicleSourceSiteManager = 'site_manager';
+
 /// Araç kaydı (`vehicles`). Plaka sunucuda normalize edilir (büyük harf, boşluksuz); [plateDisplay]
 /// kullanıcının yazdığı biçimdir.
 @immutable
@@ -80,6 +84,8 @@ class VehicleRecord {
     this.personName,
     this.apartmentLabel,
     this.isActive = true,
+    this.source = kVehicleSourceSiteManager,
+    this.addedBy,
   });
 
   final int id;
@@ -91,6 +97,18 @@ class VehicleRecord {
   final String? apartmentLabel;
   final bool isActive;
 
+  /// Kaydı yapan: [kVehicleSourceApartmentAdmin] (daire yöneticisi) ya da [kVehicleSourceSiteManager] (site yönetimi; eski
+  /// kayıtlar dahil). [addedBy]: daire yöneticisinin adı (yalnız o durumda).
+  final String source;
+  final String? addedBy;
+
+  /// "Daire yöneticisi (Ali Kaya)" ya da "Site yönetimi".
+  String get sourceLabel {
+    if (source != kVehicleSourceApartmentAdmin) return 'Site yönetimi';
+    final name = addedBy;
+    return name == null || name.isEmpty ? 'Daire yöneticisi' : 'Daire yöneticisi ($name)';
+  }
+
   /// Notsuz kopya: sakinin kendi kayıtlarında (`/app/my-records`) araç notu gösterilmez.
   VehicleRecord withoutNote() => VehicleRecord(
     id: id,
@@ -100,6 +118,8 @@ class VehicleRecord {
     personName: personName,
     apartmentLabel: apartmentLabel,
     isActive: isActive,
+    source: source,
+    addedBy: addedBy,
   );
 
   /// Gösterilecek plaka: görüntüleme biçimi varsa o, yoksa normalize plaka.
@@ -115,6 +135,8 @@ class VehicleRecord {
       personName: crmText(json['person_name']),
       apartmentLabel: crmText(json['apartment_label']),
       isActive: json['is_active'] is bool ? json['is_active'] as bool : true,
+      source: json['source'] == kVehicleSourceApartmentAdmin ? kVehicleSourceApartmentAdmin : kVehicleSourceSiteManager,
+      addedBy: crmText(json['added_by']),
     );
   }
 

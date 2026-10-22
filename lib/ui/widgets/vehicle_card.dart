@@ -16,9 +16,13 @@ class VehicleCard extends StatelessWidget {
     this.onRemove,
     this.busy = false,
     this.showNote = false,
+    this.showSource = false,
   });
 
   final VehicleRecord vehicle;
+
+  /// "Ekleyen: Daire yöneticisi (Ad) / Site yönetimi" satırı (yönetici Araçlar ekranı: kaydı kimin yaptığı).
+  final bool showSource;
 
   /// Araç notu yönetime özeldir: yalnız yazma yetkisi olanda true (kurul üyesi notu görmez).
   final bool showNote;
@@ -52,6 +56,7 @@ class VehicleCard extends StatelessWidget {
                 if (person.isNotEmpty) Text(person, style: secondary),
                 if (apartment.isNotEmpty) Text(apartment, style: secondary),
                 if (note.isNotEmpty) Text(note, style: th.bodySmall),
+                if (showSource) Text('Ekleyen: ${vehicle.sourceLabel}', style: th.bodySmall?.copyWith(color: p.textSecondary)),
               ],
             ),
           ),

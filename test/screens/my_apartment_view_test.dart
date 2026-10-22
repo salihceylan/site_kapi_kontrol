@@ -2,6 +2,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:site_kapi_kontrol/models/apartment_management.dart';
+import 'package:site_kapi_kontrol/models/apartment_vehicles.dart';
+import 'package:site_kapi_kontrol/models/vehicle_record.dart';
 import 'package:site_kapi_kontrol/services/apartment_management_api.dart';
 import 'package:site_kapi_kontrol/ui/views/my_apartment_view.dart';
 
@@ -18,6 +20,21 @@ class _FakeApt extends ApartmentManagementService {
 
   @override
   Future<MyApartmentsData> mine() async => data;
+
+  ApartmentVehicles vehiclesData = const ApartmentVehicles();
+  final List<String> vehicleCalls = <String>[];
+
+  @override
+  Future<ApartmentVehicles> vehicles(int apartmentId) async => vehiclesData;
+
+  @override
+  Future<VehicleRecord> addVehicle(int apartmentId, {required String plate, String? note, int? personId}) async {
+    vehicleCalls.add('add:$plate:$note:$personId');
+    return VehicleRecord(id: 99, plate: plate.replaceAll(' ', '').toUpperCase());
+  }
+
+  @override
+  Future<void> removeVehicle(int apartmentId, int vehicleId) async => vehicleCalls.add('remove:$vehicleId');
 
   @override
   Future<String> removeFamily(int apartmentId, int residencyId) async {
@@ -200,5 +217,55 @@ void main() {
     );
     await _pump(t, svc, width: 320, scale: 2.0);
     expect(t.takeException(), isNull);
+  });
+
+  testWidgets('Araçlarım: daire yöneticisi araç ekler (geçersiz plaka gönderilmez, uyarı yazar); aile üyesi yalnız görür', (t) async {
+    const car = VehicleRecord(
+      id: 1,
+      plate: '34ABC123',
+      plateDisplay: '34 ABC 123',
+      personName: 'Veli Kaya',
+      note: 'beyaz Fiat',
+      source: kVehicleSourceApartmentAdmin,
+      addedBy: 'Veli Kaya',
+    );
+    const owners = <AptVehicleOwner>[AptVehicleOwner(personId: 1, name: 'Veli Kaya', isDefault: true)];
+    final svc = _FakeApt(MyApartmentsData(apartments: <MyApartment>[_apt()]))
+      ..vehiclesData = const ApartmentVehicles(items: <VehicleRecord>[car], canManage: true, owners: owners);
+    await _pump(t, svc, width: 400);
+    expect(find.text('Araçlarım'), findsOneWidget);
+    expect(find.text('34 ABC 123'), findsOneWidget);
+    expect(find.text('Sahibi: Veli Kaya'), findsOneWidget);
+    expect(find.text('1 / 4 araç'), findsOneWidget);
+    expect(find.text(kPlateRecognitionNotice), findsOneWidget);
+    expect(find.text('Notu düzenle'), findsOneWidget);
+    expect(find.text('Aracı çıkar'), findsOneWidget);
+
+    await t.tap(find.text('Araç ekle'));
+    await settleFor(t);
+    await t.enterText(find.byKey(const ValueKey<String>('apt_vehicle_plate')), '99 zz 1');
+    await t.tap(find.text('Ekle'));
+    await settleFor(t);
+    expect(find.text('Geçerli bir plaka girin. Örnek: 34 ABC 123'), findsOneWidget);
+    expect(svc.vehicleCalls, isEmpty);
+
+    await t.enterText(find.byKey(const ValueKey<String>('apt_vehicle_plate')), '34 abc 124');
+    await t.tap(find.text('Ekle'));
+    await settleFor(t);
+    expect(svc.vehicleCalls, <String>['add:34 ABC 124:null:1']);
+  });
+
+  testWidgets('Araçlarım: aile üyesi dairenin araçlarını yalnız görür (ekle / not / çıkar yok)', (t) async {
+    const car = VehicleRecord(id: 1, plate: '34ABC123', plateDisplay: '34 ABC 123', personName: 'Veli Kaya');
+    final svc = _FakeApt(MyApartmentsData(apartments: <MyApartment>[_apt(role: 'family_member', admin: false, can: const AptCan())]))
+      ..vehiclesData = const ApartmentVehicles(items: <VehicleRecord>[car]);
+    await _pump(t, svc, width: 320, scale: 2.0);
+    expect(t.takeException(), isNull);
+    expect(find.text('34 ABC 123'), findsOneWidget);
+    expect(find.text('Ekleyen: Site yönetimi'), findsOneWidget);
+    expect(find.text('Araç ekle'), findsNothing);
+    expect(find.text('Notu düzenle'), findsNothing);
+    expect(find.text('Aracı çıkar'), findsNothing);
+    expect(find.text('Araçları yalnızca daire yöneticisi ekleyip değiştirebilir.'), findsOneWidget);
   });
 }

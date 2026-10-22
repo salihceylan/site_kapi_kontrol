@@ -73,10 +73,51 @@ export async function listVehicles(siteCode, query = {}, db = pool) {
     `,
     [...params, filters.limit, filters.offset],
   );
+  const rows = pageResult.rows ?? [];
+  const sources = await loadVehicleSources(db, siteCode, rows);
   return {
-    items: (pageResult.rows ?? []).map(mapVehicleRow),
+    items: rows.map((row) => ({ ...mapVehicleRow(row), ...sourceOf(sources, row.id) })),
     total: Number(countResult.rows?.[0]?.total ?? 0),
   };
+}
+
+/** Kaydi yapanin etiketi: 'apartment_admin' (daire yoneticisi) | 'site_manager' (site yonetimi; eski kayitlar dahil). */
+export const VEHICLE_SOURCE_APARTMENT_ADMIN = 'apartment_admin';
+export const VEHICLE_SOURCE_SITE_MANAGER = 'site_manager';
+
+/**
+ * Araclarin kaynak etiketi (audit'ten; ek kolon yok). Yalniz `apartment_id` dolu araclar sorgulanir: daire uclari yazdigi aracin
+ * apartment_id'sini doldurur, eski / yonetici ekrani kayitlarinda bos kalir (kaynak = site yonetimi, ek sorgu yok).
+ * @returns {Promise<Map<number, { source: string, added_by: string|null }>>}
+ */
+export async function loadVehicleSources(db, siteCode, rows) {
+  const ids = (rows ?? []).filter((row) => row.apartment_id !== null && row.apartment_id !== undefined).map((row) => String(row.id));
+  const map = new Map();
+  if (ids.length === 0) {
+    return map;
+  }
+  const result = await db.query(
+    `
+      SELECT DISTINCT ON (target_id) target_id, actor_name, details->>'source' AS source
+      FROM audit_log
+      WHERE site_code = $1 AND target_type = 'vehicle' AND action = 'vehicle.added' AND target_id = ANY($2::TEXT[])
+      ORDER BY target_id, id
+    `,
+    [siteCode, ids],
+  );
+  for (const row of result.rows ?? []) {
+    const apartmentAdmin = row.source === VEHICLE_SOURCE_APARTMENT_ADMIN;
+    map.set(Number(row.target_id), {
+      source: apartmentAdmin ? VEHICLE_SOURCE_APARTMENT_ADMIN : VEHICLE_SOURCE_SITE_MANAGER,
+      added_by: apartmentAdmin ? row.actor_name ?? null : null,
+    });
+  }
+  return map;
+}
+
+/** Kaynak bilgisi yoksa (eski kayit) site yonetimi sayilir. */
+export function sourceOf(sources, vehicleId) {
+  return sources.get(Number(vehicleId)) ?? { source: VEHICLE_SOURCE_SITE_MANAGER, added_by: null };
 }
 
 async function loadVehicle(db, siteCode, vehicleId) {

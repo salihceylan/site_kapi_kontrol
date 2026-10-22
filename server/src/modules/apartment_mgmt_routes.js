@@ -16,6 +16,7 @@
 //           POST   /app/apartments/notices/read              uygulama ici bildirimleri okundu isaretle
 //           POST   /app/apartments/:id/leave                 "Bu daireden ayril": her uye KENDI bagini onaysiz keser (kimseye bildirilmez)
 //           POST   /app/apartments/:id/safety-requests       gizli guvenlik talebi (yetiskin uye; yanit yalniz { ok })
+//           GET|POST /app/apartments/:id/vehicles, PUT|DELETE .../vehicles/:vehicleId   daire araclari: admin (ve site yoneticisi) yazar, uyeler gorur
 //           GET|PUT /app/apartments/search-visibility        "Beni aramalarda goster" (varsayilan KAPALI)
 //   Yonetim GET    /manager/sites/:siteCode/signing-roster?date=     Karar Defteri: imza hakki sahipleri (yonetici / kurul okur)
 //           GET    /manager/sites/:siteCode/apartments/:id/admin-candidates   site yoneticisi: admin olabilecek aktif sakinler
@@ -50,6 +51,7 @@ import {
 } from './apartment_mgmt_service.js';
 import { createProxy, revokeProxy, signingRoster } from './apartment_mgmt_proxy.js';
 import { changeApartmentAdmin, listAdminCandidates } from './apartment_mgmt_manager.js';
+import { createApartmentVehicle, listApartmentVehicles, removeApartmentVehicle, updateApartmentVehicle } from './apartment_mgmt_vehicles.js';
 import {
   createSafetyRequest,
   liftMemberSuspension,
@@ -97,6 +99,16 @@ const safetyLimiter = createRuleLimiter({
     { windowMs: HOUR_MS, max: 120, key: ipKey },
   ],
   message: 'Çok fazla istek. Biraz sonra tekrar deneyin.',
+  includeRetryBody: true,
+});
+
+// Arac yazma: kullanici basina saatte 60 (plaka denemesiyle baska kayitlari yoklamayi sinirlar).
+const vehicleLimiter = createRuleLimiter({
+  rules: [
+    { windowMs: HOUR_MS, max: 60, key: userKey },
+    { windowMs: HOUR_MS, max: 600, key: ipKey },
+  ],
+  message: 'Çok fazla araç işlemi. Biraz sonra tekrar deneyin.',
   includeRetryBody: true,
 });
 
@@ -227,6 +239,42 @@ apartmentMgmtRouter.post('/app/apartments/:apartmentId/safety-requests', authReq
     return res.status(201).json(await createSafetyRequest({ authUser: req.authUser, apartmentId: req.params.apartmentId, body: bodyOf(req) }));
   } catch (error) {
     return respondError(res, 'apartment_mgmt_safety_create', error, 'Talep gönderilemedi.');
+  }
+});
+
+// Daire araclari. Okuma: dairede bagi olan herkes + site yoneticisi; yazma: daire admini ya da site yoneticisi (kural: apartment_mgmt_vehicles.js).
+apartmentMgmtRouter.get('/app/apartments/:apartmentId/vehicles', authRequired, readLimiter, async (req, res) => {
+  try {
+    noStore(res);
+    return res.json(await listApartmentVehicles({ authUser: req.authUser, apartmentId: req.params.apartmentId }));
+  } catch (error) {
+    return respondError(res, 'apartment_mgmt_vehicles_list', error, 'Araçlar yüklenemedi.');
+  }
+});
+
+apartmentMgmtRouter.post('/app/apartments/:apartmentId/vehicles', authRequired, vehicleLimiter, async (req, res) => {
+  try {
+    return res.status(201).json(await createApartmentVehicle({ authUser: req.authUser, apartmentId: req.params.apartmentId, body: bodyOf(req) }));
+  } catch (error) {
+    return respondError(res, 'apartment_mgmt_vehicle_add', error, 'Araç eklenemedi.');
+  }
+});
+
+apartmentMgmtRouter.put('/app/apartments/:apartmentId/vehicles/:vehicleId', authRequired, vehicleLimiter, async (req, res) => {
+  try {
+    return res.json(
+      await updateApartmentVehicle({ authUser: req.authUser, apartmentId: req.params.apartmentId, vehicleId: req.params.vehicleId, body: bodyOf(req) }),
+    );
+  } catch (error) {
+    return respondError(res, 'apartment_mgmt_vehicle_update', error, 'Araç güncellenemedi.');
+  }
+});
+
+apartmentMgmtRouter.delete('/app/apartments/:apartmentId/vehicles/:vehicleId', authRequired, vehicleLimiter, async (req, res) => {
+  try {
+    return res.json(await removeApartmentVehicle({ authUser: req.authUser, apartmentId: req.params.apartmentId, vehicleId: req.params.vehicleId }));
+  } catch (error) {
+    return respondError(res, 'apartment_mgmt_vehicle_remove', error, 'Araç çıkarılamadı.');
   }
 });
 
