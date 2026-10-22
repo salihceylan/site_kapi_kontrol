@@ -7423,7 +7423,7 @@
           "beklenen": "Her dairede 4-5 kişi ve 1 daire amiri vardır. 2023'ten bugüne aidat, tahsilat, gider, duyuru, talep, rezervasyon, sözleşme, karar, anket, sayaç, belge verisi görünür; grafikler 46 aylık seri gösterir. Veriler sahtedir.",
           "rol_notu": "Site yöneticisi, sakin, kurul, görevli",
           "on_kosul": "Demo hesaplar PDF'i: G:\\site\\demo_hesaplar",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -7436,7 +7436,7 @@
           "beklenen": "Grafikler boş değildir, kartlar sırayla girerek animasyonla çizilir (çubuklar alttan büyür, çizgiler soldan sağa, sayılar sıfırdan sayar). Yıllık gelir ve gider birbirine yakındır; kasa bakiyesi eksiye düşmez; geciken borçlar süre dilimlerine dağılmıştır.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -7449,7 +7449,7 @@
           "beklenen": "Ayar açıkken grafikler animasyonsuz, doğrudan son hâliyle görünür. Sekmeye dönünce animasyon tekrar oynamaz.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -7463,7 +7463,7 @@
           "beklenen": "Kamera listede görünür; http veya yerel ağ adresi reddedilir. 'Kaydı aç' şablonu olay saatinin 30 sn öncesi ve sonrasıyla doldurup açar; Denetim Kaydı'nda kayıt oluşur. Kurul ve görevli yalnız görüntüler, sakin göremez.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "Kamera (CCTV) modülü açık",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -7476,7 +7476,7 @@
           "beklenen": "Misafir izni 'Geçerli' görünür, iptal edilebilir, günde 5'ten fazlasında uyarı çıkar. Kara listedeki plaka 'Engelli – Kara listede' olur. Otomatik kapı açma 'Yakında…' notuyla yalnız kayıt tutar; kapı açılmaz.",
           "rol_notu": "Sakin, site yöneticisi",
           "on_kosul": "Plaka Tanıma modülü açık",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -7486,6 +7486,117 @@
             "Site yöneticisiyle çok sayıda modül talebi gönderin."
           ],
           "beklenen": "'Çok fazla talep' uyarısı artık normal kullanımda çıkmaz (saatte 200'e kadar).",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "hazir"
+        }
+      ]
+    },
+    {
+      "id": "F36",
+      "baslik": "Daire yönetimi: malik, kiracı, daire admini, aile, vekalet ve güvenlik",
+      "durum": "hazir",
+      "ozet": "Her dairenin bir maliki; kiracı eklenip yönetim devredilebilir; admin aile üyelerini yönetir; yetişkin üyenin kapı erişimi tek taraflı kesilemez; vekalet; gizli güvenlik talebi ve site yöneticisi askıya alma.",
+      "maddeler": [
+        {
+          "id": "F36.01",
+          "baslik": "Malik kiracı ekler ve yönetimi devreder",
+          "adimlar": [
+            "Malik hesabıyla menüden 'Dairem' > 'Kiracı ekle' > yeni kişi (ad, e-posta), 'Yönetimi kiracıya devret' açık > Ekle.",
+            "Kiracı e-postadaki davetle hesabını açın."
+          ],
+          "beklenen": "Davet gider; kiracı hesap açınca üst kartta 'Daire yönetimi: <kiracı> (kiracı)' yazar. Malik aile üyesi ekleyip çıkaramaz. Kutu kapalı eklenirse admin malik kalır.",
+          "rol_notu": "Malik, kiracı",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F36.02",
+          "baslik": "Sistemden kişi arayıp seçme",
+          "adimlar": [
+            "Malik ya da admin 'Sistemden ara'da önce yalnız ad yazın, sonra tam e-posta yazın.",
+            "Sonuçtan davet gönderin; davetli hesabıyla kabul edin."
+          ],
+          "beklenen": "Adla arama yalnız 'Beni aramalarda göster'i açanları bulur (varsayılan kapalı, Profilim'de). Tam e-postayla maskeli sonuç gelir (daire ya da site bilgisi yok); saatte 60 sınırı. Kabul edilince bağ kurulur, kabul edilmeden kurulmaz.",
+          "rol_notu": "Malik, daire admini",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F36.03",
+          "baslik": "Aile üyesi ekleme ve yetişkini tek taraflı çıkaramama",
+          "adimlar": [
+            "Daire admini 'Aile üyesi ekle' ile yeni kişi ya da sistemden seçilen kişiyi ekler; '18 yaşından küçük' seçeneğini deneyin.",
+            "Hesaplı yetişkin üyede 'Çıkarma isteği' gönderin; üyenin hesabıyla reddedin."
+          ],
+          "beklenen": "Aile üyeleri daireyle ilgili modüllere girer, borcu göremez, daire yönetimini yapamaz. Yetişkin üye tek taraflı çıkarılamaz: onay kartı gelir; reddedilirse bağ sürer, 7 gün yanıtsızsa istek kapanır. 18 yaşından küçük üye hemen çıkarılır.",
+          "rol_notu": "Daire admini, aile üyesi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F36.04",
+          "baslik": "Üye kendi bağını keser",
+          "adimlar": [
+            "Aile üyesi hesabıyla 'Bu daireden ayrıl' > Ayrıl."
+          ],
+          "beklenen": "Onay gerekmez, kapı erişimi kapanır, admine ve diğer üyelere bildirim gitmez.",
+          "rol_notu": "Aile üyesi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F36.05",
+          "baslik": "Kiracı devri ve karşılıklı bağ kesme",
+          "adimlar": [
+            "Kiracı (admin) 'Daireyi devret / çıkış'ı seçin; kiracı borçluysa uyarı çıkmasını bekleyin.",
+            "Malik 'Bağlantıyı kes' talebi açın, kiracı onaylasın; bir de reddettirin."
+          ],
+          "beklenen": "Devirde kiracının ve aile üyelerinin daire bağı sona erer, hesapları silinmez, admin yeniden malik olur. Karşılıklı kesmede diğer taraf onaylayınca bağ biter; 14 gün yanıtsız kalırsa talep kapanır.",
+          "rol_notu": "Malik, kiracı",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F36.06",
+          "baslik": "Vekalet",
+          "adimlar": [
+            "Malik 'Vekalet ver' ile kiracıya toplantı imzası ve kurul üyeliği vekaleti verin (en çok 1 yıl); sonra iptal edin.",
+            "Karar Defteri'nde 'İmza hakkı sahipleri' listesine bakın."
+          ],
+          "beklenen": "Vekalet varken dairenin imza hakkı sahibi vekil, yokken malik görünür; iptalde malike döner. Resmî genel kurulda yazılı vekaletname gerekebileceği notu görünür.",
+          "rol_notu": "Malik, kurul",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F36.07",
+          "baslik": "Güvenlik ve destek (gizli talep)",
+          "adimlar": [
+            "Aile üyesi 'Güvenlik ve destek' > 'Site yönetimine gizli talep gönder'.",
+            "Site yöneticisiyle Kişiler > 'Güvenlik talepleri'ne bakın; daire admini ve kurul hesaplarıyla aynı yere bakın."
+          ],
+          "beklenen": "Talebi yalnız site yöneticisi ve süper kullanıcı görür; hanedeki kimseye bildirim gitmez. Ekranda 112, ALO 183 ve KADES bilgisi görünür.",
+          "rol_notu": "Aile üyesi, site yöneticisi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F36.08",
+          "baslik": "Kapı erişimini askıya alma ve admin değiştirme (site yöneticisi)",
+          "adimlar": [
+            "Site yöneticisi daire kartından 'Kapı erişimi (askıya alma)' ile bir kişiyi neden ve notla askıya alın, sonra geri açın.",
+            "Aynı kartta 'Daire adminini değiştir' ile aktif bir sakini seçip onaylayın."
+          ],
+          "beklenen": "Askıdaki kişi kapıyı açamaz, kişiye bildirim gitmez, geri açınca erişim döner. Admin değişince eski admin dairede kalır, ikisine uygulama içi bildirim gider. Kurul ve görevlide bu düğmeler yoktur.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
           "yeni": true,
