@@ -6,7 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const serverRequire = createRequire(path.join(here, '..', '..', '..', 'server', 'package.json'));
+const serverRequire = createRequire(path.join(process.env.DEMO_SEED_SERVER_DIR || path.join(here, '..', '..', '..', 'server'), 'package.json'));
 
 export async function createFixture(url) {
   const pg = serverRequire('pg');
