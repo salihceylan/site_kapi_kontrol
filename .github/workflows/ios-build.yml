@@ -26,6 +26,10 @@ jobs:
           channel: stable
           cache: true
 
+      # Firebase iOS SDK (Swift tools 6.2) runner'daki Xcode ile Swift Package Manager'da cozulmuyor: CocoaPods yolu kullanilir.
+      - name: Disable Swift Package Manager (use CocoaPods)
+        run: flutter config --no-enable-swift-package-manager
+
       - name: Install Flutter dependencies
         run: flutter pub get
 
