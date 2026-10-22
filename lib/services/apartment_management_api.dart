@@ -9,6 +9,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:http/http.dart' as http;
+import 'package:site_kapi_kontrol/models/apartment_household.dart';
 import 'package:site_kapi_kontrol/models/apartment_management.dart';
 import 'package:site_kapi_kontrol/models/apartment_vehicles.dart';
 import 'package:site_kapi_kontrol/models/vehicle_record.dart';
@@ -273,6 +274,11 @@ class ApartmentManagementService {
     await _guard(
       (t) => api.call('GET', _mgr(siteCode, 'signing-roster'), token: t, query: <String, String>{'date': ?date}),
     ),
+  );
+
+  /// Dairenin TÜM güncel sakinleri + daire admini (salt okunur). Yönetici / süper tam bilgi, kurul yalnız ad + ilişki alır.
+  Future<ApartmentHousehold> household(int siteCode, int apartmentId) async => ApartmentHousehold.fromJson(
+    await _guard((t) => api.call('GET', _mgr(siteCode, 'apartments/$apartmentId/household'), token: t)),
   );
 
   Future<AdminCandidates> adminCandidates(int siteCode, int apartmentId) async => AdminCandidates.fromJson(

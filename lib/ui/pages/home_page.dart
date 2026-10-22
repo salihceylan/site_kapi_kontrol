@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import 'package:site_kapi_kontrol/models/apartment_household.dart';
 import 'package:site_kapi_kontrol/models/apartment_record.dart';
 
 import 'package:site_kapi_kontrol/models/device_page.dart';
@@ -68,7 +69,10 @@ import 'package:site_kapi_kontrol/ui/design/theme_toggle_button.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart' show filledToneStyle;
 
+import 'package:site_kapi_kontrol/services/apartment_management_api.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/apartment_card_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/apartment_pin_dialogs.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/person_card_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/apartment_resident_dialog.dart';
 
 import 'package:site_kapi_kontrol/ui/dialogs/create_guest_pass_dialog.dart';
@@ -4709,6 +4713,48 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
+  /// Site Yönetimi > Daireler: dairenin TÜM güncel sakinleri (daire admini + aile üyeleri), tek istekle.
+  Future<ApartmentHousehold> _loadApartmentHousehold(ApartmentRecord apartment) {
+    return ApartmentManagementService(
+      authService: widget.authService,
+    ).household(apartment.siteCode, apartment.id);
+  }
+
+  /// Kişi ve daire kartı pencerelerinin bağlamı: yazma yetkisi yalnız site yöneticisi / süper kullanıcıda.
+  PeopleScope _peopleScopeOf(ApartmentRecord apartment) {
+    final role = widget.authService.session?.role;
+    return PeopleScope(
+      authService: widget.authService,
+      siteCode: apartment.siteCode,
+      siteName: _selectedSite?.name ?? '',
+      canWrite: role == UserRole.superUser || role == UserRole.siteManager,
+    );
+  }
+
+  Future<void> _openHouseholdPerson(
+    ApartmentRecord apartment,
+    HouseholdPerson person,
+  ) async {
+    final personId = person.personId;
+    if (personId == null || !mounted) return;
+    await PersonCardDialog.show(
+      context,
+      scope: _peopleScopeOf(apartment),
+      personId: personId,
+      initialName: person.name,
+    );
+  }
+
+  Future<void> _openApartmentCardFromSites(ApartmentRecord apartment) async {
+    if (!mounted) return;
+    await ApartmentCardDialog.show(
+      context,
+      scope: _peopleScopeOf(apartment),
+      apartmentId: apartment.id,
+      initialLabel: apartment.label,
+    );
+  }
+
   Future<void> _openDeviceRegistrationFlow() async {
 
     final scannedUid = await Navigator.of(
@@ -6667,6 +6713,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           onShowSiteJoinQr: _openSiteJoinQrDialog,
           onManageJoinRequests: _openManageJoinRequestsDialog,
           onShowResidentsAccordion: _openSiteResidentsAccordionDialog,
+          householdLoader: _loadApartmentHousehold,
+          onOpenHouseholdPerson: _openHouseholdPerson,
+          onOpenApartmentCard: _openApartmentCardFromSites,
           siteManagersData: _selectedSiteManagersData,
           isLoadingManagers: _isLoadingSiteManagers,
           onInviteSiteManager: _openInviteSiteManagerDialog,
