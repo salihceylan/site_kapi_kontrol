@@ -784,7 +784,7 @@ describe('GET apartments / vehicles / history / my-records', () => {
     const res = await call('GET', `${base()}/vehicles?q=${encodeURIComponent('34 abc')}&person_id=5`);
     assert.equal(res.status, 200);
     assert.deepEqual(res.body, {
-      items: [{ id: 4, plate: '34ABC123', plate_display: '34 ABC 123', note: 'beyaz', person_id: 5, person_name: 'Ali Veli', apartment_label: 'A Blok - Daire 2', is_active: true }],
+      items: [{ id: 4, plate: '34ABC123', plate_display: '34 ABC 123', note: 'beyaz', person_id: 5, person_name: 'Ali Veli', apartment_label: 'A Blok - Daire 2', is_active: true, added_by: null, source: 'site_manager' }],
       total: 3,
     });
     const count = state.log.find((q) => /^SELECT COUNT\(\*\)::INTEGER AS total FROM vehicles/.test(q.sql));
