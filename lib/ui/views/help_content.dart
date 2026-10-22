@@ -138,6 +138,10 @@ abstract final class HelpContent {
     'Site yönetimine gizli talep gönder',
     // Daire kartı: eski sakinler / adli kayıt (yalnız site yöneticisi)
     'Eski sakinler / Adli kayıt',
+    // Site Yönetimi > Daireler: daire admini + aile üyeleri akordiyonu ve "Daire kartı" düğmesi
+    'Aile üyeleri',
+    'Daire kartı',
+    'Malik (oturmuyor)',
     'Kayıtları göster',
     'Adli bilgi dökümü al',
     // Banka dosyası (2C) ve liste dışa aktarımı (3E)
@@ -605,6 +609,17 @@ abstract final class HelpContent {
         'Seçili sitede blokları, daireleri, kapıları ve daire sakini hesaplarını yönetirsiniz.',
         'Site katılım QR kodunu gösterebilir, gelen katılım başvurularını onaylayabilir ya da reddedebilirsiniz.',
       ],
+    ),
+    HelpTopic(
+      id: 'apartment_residents',
+      title: 'Dairenin sakinleri nerede görünür?',
+      icon: Icons.groups_2_rounded,
+      steps: <String>[
+        'Menüden “Site Yönetimi” ekranını açın, sitenizi seçin ve “Daireler” bölümünü açın. Daire satırında dairedeki kişi sayısı görünür.',
+        'Daireye dokununca üstte daire admini, altında “Aile üyeleri” akordiyonu görünür; akordiyona dokununca dairedeki herkes listelenir. Kiracı oturan dairede malik ayrı satırda “Malik (oturmuyor)” olarak yazar.',
+        'Bir kişiye dokununca kişi kartı açılır. Daire adminini değiştirmek, kapı erişimini askıya almak ve eski sakinlere (“Eski sakinler / Adli kayıt”) bakmak için “Daire kartı”na dokunun.',
+      ],
+      note: 'Telefon, hesap durumu ve çocuk bilgisi yalnız site yöneticisi ve sistem yöneticisi içindir; kurul üyesi yalnız ad ve ilişkiyi görür.',
     ),
     HelpTopic(
       id: 'people',

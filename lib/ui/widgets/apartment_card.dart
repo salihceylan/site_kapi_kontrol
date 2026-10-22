@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:site_kapi_kontrol/models/apartment_household.dart';
 import 'package:site_kapi_kontrol/models/apartment_record.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/apartment_pin_dialogs.dart'
     show kApartmentPinNeedsSuper;
+import 'package:site_kapi_kontrol/ui/widgets/apartment_household_section.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 
 /// Daire satırındaki PIN notu (KVKK m.12: sunucu PIN'i saklamaz, liste PIN taşımaz).
@@ -22,6 +24,9 @@ class ApartmentCard extends StatefulWidget {
     this.resettingPin = false,
     this.isSuperUser = false,
     this.onDelete,
+    this.householdLoader,
+    this.onOpenHouseholdPerson,
+    this.onOpenApartmentCard,
   });
 
   final ApartmentRecord apartment;
@@ -36,12 +41,49 @@ class ApartmentCard extends StatefulWidget {
   final bool isSuperUser;
   final VoidCallback? onDelete;
 
+  /// Verilirse daire açılınca dairenin TÜM güncel sakinleri (daire admini + "Aile üyeleri" akordiyonu) yüklenir.
+  /// Verilmezse eski görünüm: yalnız daire hesabının sahibi (`resident_*`). Veri ilk açılışta çekilir, daire kapanıp açılınca korunur.
+  final Future<ApartmentHousehold> Function()? householdLoader;
+
+  /// Kişi satırına dokunma: kişi kartını açar (dönünce liste yenilenir).
+  final Future<void> Function(HouseholdPerson person)? onOpenHouseholdPerson;
+
+  /// "Daire kartı": daire adminini değiştir, kapı erişimi (askıya alma), adli kayıt, geçmiş gibi işlerin penceresi.
+  final Future<void> Function()? onOpenApartmentCard;
+
   @override
   State<ApartmentCard> createState() => _ApartmentCardState();
 }
 
 class _ApartmentCardState extends State<ApartmentCard> {
   bool _expanded = false;
+  ApartmentHouseholdController? _household;
+
+  /// Yüklenecek veri yoksa null. Denetleyici ilk ihtiyaçta kurulur; iş (ağ çağrısı) bölüm çizilince başlar.
+  ApartmentHouseholdController? get _householdController {
+    final loader = widget.householdLoader;
+    if (loader == null) return null;
+    return _household ??= ApartmentHouseholdController(loader);
+  }
+
+  @override
+  void didUpdateWidget(ApartmentCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Daire kaydı değiştiyse (sayı, sakin, pasifleşme) eski sakin listesi atılır; açıksa yeniden çekilir.
+    if (oldWidget.apartment.id != widget.apartment.id ||
+        oldWidget.apartment.householdCount != widget.apartment.householdCount ||
+        oldWidget.apartment.residentUserCode != widget.apartment.residentUserCode ||
+        oldWidget.apartment.residentFullName != widget.apartment.residentFullName) {
+      _household?.dispose();
+      _household = null;
+    }
+  }
+
+  @override
+  void dispose() {
+    _household?.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -52,6 +94,9 @@ class _ApartmentCardState extends State<ApartmentCard> {
         apartment.residentFullName!.trim().isNotEmpty;
     final active =
         apartment.residentIsActive ?? (hasResident && apartment.isActive);
+    // Daire hesabı sahibi yok ama aile kayıtlı olabilir (daire admini hesapsız ya da kayıtlı e-postayla bağlı): boş sayılmaz.
+    final peopleCount = apartment.householdCount ?? 0;
+    final hasPeople = hasResident || peopleCount > 0;
 
     return Material(
       type: MaterialType.transparency,
@@ -69,7 +114,7 @@ class _ApartmentCardState extends State<ApartmentCard> {
                   // Dolu daire = mor (daire kullanıcısı rolü), boş daire = uyarı: ton anlam taşır.
                   IconTile(
                     icon: Icons.home_rounded,
-                    tone: hasResident ? AppTone.violet : AppTone.warning,
+                    tone: hasPeople ? AppTone.violet : AppTone.warning,
                     size: 40,
                     gap: AppSpace.md,
                   ),
@@ -87,14 +132,17 @@ class _ApartmentCardState extends State<ApartmentCard> {
                               label: active ? 'Aktif' : 'Pasif',
                               tone: active ? AppTone.success : AppTone.danger,
                             ),
+                            if (peopleCount > 0) InfoChip('$peopleCount kişi'),
                           ],
                         ),
                         const SizedBox(height: AppSpace.xs),
                         Text(
                           hasResident
                               ? 'Sakin: ${apartment.residentFullName}'
+                              : hasPeople
+                              ? 'Daire admini ve aile üyeleri için dokunun'
                               : 'Daire Boş / Sakin Yok',
-                          style: hasResident
+                          style: hasPeople
                               ? th.bodyMedium
                               : th.bodyMedium?.copyWith(
                                   color: AppTone.warning.ink(p),
@@ -136,12 +184,27 @@ class _ApartmentCardState extends State<ApartmentCard> {
         hasResident &&
         (apartment.residentPinIssued || apartment.residentPinResettable);
 
+    final household = _householdController;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: AppSpace.md),
         const Divider(),
         const SizedBox(height: AppSpace.md),
+        if (household != null) ...[
+          // Dairenin TÜM güncel sakinleri: daire admini + "Aile üyeleri (N)" akordiyonu (kişi kartı satırdan açılır).
+          ApartmentHouseholdSection(
+            controller: household,
+            onOpenPerson: widget.onOpenHouseholdPerson,
+          ),
+          if (hasResident) ...[
+            const SizedBox(height: AppSpace.md),
+            const Divider(),
+            const SizedBox(height: AppSpace.md),
+            Text('Daire hesabı (giriş bilgileri)', style: th.titleSmall?.copyWith(color: p.text)),
+            const SizedBox(height: AppSpace.sm),
+          ],
+        ],
         Wrap(
           spacing: AppSpace.lg,
           runSpacing: AppSpace.xs,
@@ -214,6 +277,16 @@ class _ApartmentCardState extends State<ApartmentCard> {
               icon: const Icon(Icons.edit_outlined, size: 16),
               label: const Text('Düzenle'),
             ),
+            if (widget.onOpenApartmentCard != null)
+              OutlinedButton.icon(
+                onPressed: () async {
+                  await widget.onOpenApartmentCard!();
+                  if (mounted) _household?.load(force: true);
+                },
+                style: tonalActionStyle(context),
+                icon: const Icon(Icons.badge_outlined, size: 16),
+                label: const Text('Daire kartı'),
+              ),
             if (hasResident && widget.onDelete != null)
               OutlinedButton.icon(
                 onPressed: widget.onDelete,

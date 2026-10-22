@@ -17,6 +17,7 @@ class ApartmentRecord {
     required this.createdAt,
     this.residentPinIssued = false,
     this.residentPinResettable = false,
+    this.householdCount,
   });
 
   final int id;
@@ -45,6 +46,11 @@ class ApartmentRecord {
   /// yönetici tarafından değiştirilemez).
   final bool residentPinResettable;
 
+  /// Dairenin güncel kişi sayısı (daire satırı özeti "5 kişi"). Eski sunucuda alan yoktur: null (özet çizilmez).
+  /// Eski tek-sakin alanları ([residentFullName] ...) yalnız daire HESABININ sahibini gösterir; tüm kişiler için
+  /// `ApartmentManagementService.household` kullanılır.
+  final int? householdCount;
+
   String get label => '$blockName / $unitLabel';
 
   factory ApartmentRecord.fromJson(Map<String, dynamic> json) {
@@ -69,6 +75,9 @@ class ApartmentRecord {
       // Eski sunucu bu alanları göndermez: false (PIN notu ve sıfırlama düğmesi gösterilmez).
       residentPinIssued: json['resident_pin_issued'] == true,
       residentPinResettable: json['resident_pin_resettable'] == true,
+      householdCount: json['household_count'] is num
+          ? (json['household_count'] as num).toInt()
+          : null,
     );
   }
 }

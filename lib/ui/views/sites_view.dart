@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:site_kapi_kontrol/models/apartment_household.dart';
 import 'package:site_kapi_kontrol/models/apartment_record.dart';
 import 'package:site_kapi_kontrol/models/door_record.dart';
 import 'package:site_kapi_kontrol/models/site_page.dart';
@@ -62,6 +63,9 @@ class SitesView extends StatelessWidget {
     this.onShowSiteJoinQr,
     this.onManageJoinRequests,
     this.onShowResidentsAccordion,
+    this.householdLoader,
+    this.onOpenHouseholdPerson,
+    this.onOpenApartmentCard,
     this.isSuperUser = false,
     this.onApproveDeleteSite,
     this.onRejectDeleteSite,
@@ -118,6 +122,15 @@ class SitesView extends StatelessWidget {
   final ValueChanged<SiteRecord>? onShowSiteJoinQr;
   final ValueChanged<SiteRecord>? onManageJoinRequests;
   final ValueChanged<SiteRecord>? onShowResidentsAccordion;
+
+  /// Daire açılınca dairenin TÜM güncel sakinlerini (daire admini + aile üyeleri akordiyonu) getirir; verilmezse eski tek-sakin görünüm.
+  final Future<ApartmentHousehold> Function(ApartmentRecord apartment)? householdLoader;
+
+  /// Daire halkındaki kişi satırı: kişi kartını açar.
+  final Future<void> Function(ApartmentRecord apartment, HouseholdPerson person)? onOpenHouseholdPerson;
+
+  /// "Daire kartı" penceresi (daire adminini değiştir, kapı erişimi askısı, adli kayıt, geçmiş).
+  final Future<void> Function(ApartmentRecord apartment)? onOpenApartmentCard;
 
   @override
   Widget build(BuildContext context) {
@@ -596,6 +609,18 @@ class SitesView extends StatelessWidget {
                       ? () =>
                             onDeleteApartmentResident!(structure.apartments[i])
                       : null,
+                  householdLoader: householdLoader == null
+                      ? null
+                      : () => householdLoader!(structure.apartments[i]),
+                  onOpenHouseholdPerson: onOpenHouseholdPerson == null
+                      ? null
+                      : (person) => onOpenHouseholdPerson!(
+                          structure.apartments[i],
+                          person,
+                        ),
+                  onOpenApartmentCard: onOpenApartmentCard == null
+                      ? null
+                      : () => onOpenApartmentCard!(structure.apartments[i]),
                 ),
               ),
             ],
