@@ -12,9 +12,12 @@ DEGISMEZ; arac uygulamanin kendi servislerini ve tablo kisitlarini kullanir. Her
 | Dosya | Gorev |
 |---|---|
 | `seed.mjs` | Ana arac. `--site "Cenk"` (birden cok ya da hic eslesme: DURUR), `--creds-out <json>`, `--only people,finance`, `--force`, `--dry-run`, `--today`, `--close-through 2026-08` |
-| `cleanup.mjs` | `--list`, `--batch <id> --yes`: kayitli satirlari siler (SUPERUSER gerekir), diskteki belge dosyalarini siler, degistirilen satirlari eski haline getirir |
-| `make_pdf.py` | `--creds creds.json --out hesaplar.pdf` : A4 PDF (yonetim kadrosu + gorevliler + daire daire sakinler, daire amiri belirtilmis). `pip install reportlab` |
+| `cleanup.mjs` | `--list`, `--batch <id> --yes`: kayitli satirlari siler (SUPERUSER gerekir), diskteki belge dosyalarini siler, degistirilen satirlari eski haline getirir; yeniden yapilandirma batch'i varken tohum batch'ini reddeder (`--force`) |
+| `make_pdf.py` | `--creds creds.json --out hesaplar.pdf` : A4 PDF (yonetim kadrosu + gorevliler + daire daire sakinler; yeniden yapilandirilmis JSON'da Malik / Daire admini (sari satir) / aile uyeleri). `pip install reportlab` |
 | `run_remote.sh` | Sunucuda: pg_dump yedegi -> yedekten gecici DB -> tohum + cleanup provasi -> `--prod` ile canli |
+| `restructure_families.mjs` | Tohumlanmis sitenin dairelerini YENI DAIRE YONETIMI modeline gore duzenler (asagidaki bolum): `--prev-creds`, `--creds-out`, `--dry-run`, `--seed`, `--force` |
+| `run_remote_restructure.sh` | Sunucuda: yedek -> gecici DB provasi (yeniden yapilandirma + cleanup, icerik ozeti karsilastirmasi) -> `--prod` ile canli |
+| `test/local_restructure_test.mjs` | Yeniden yapilandirma icin yerel uctan uca test (seed + 2 bozulma + dry-run + uygulama + dogrulamalar + PDF + iki cleanup) |
 | `test/local_test.mjs` | Yerel uctan uca test (gecici PostgreSQL, fixture site, dogrulamalar, cleanup, PDF) |
 | `lib/`, `steps/` | Yardimcilar ve modul adimlari (`people`, `metering`, `finance`, `budget`, `announcements`, `neighbor`, `documents`, `work`, `reservation`, `visitors`, `contracts`, `decisions`, `surveys`, `equipment`, `devices`, `annual_report`) |
 
@@ -55,6 +58,42 @@ yuklenir (mevcut ortam degiskenlerini ezmez): `FINANCE_RECEIPT_SECRET` (makbuz),
   ceyreklik su faturalandirma (deftere yazilir). **Duyurular**: ~47 (okundu kayitlari, 3 okunmamis guncel). **Komsu panosu**: 15 ilan. **Belgeler**: 21 gercek PDF (servis uzerinden, sha256/kota tutarli). **Is takibi**: 60 talep (fotograf eki yok).
   **Rezervasyon**: 3 alan, ~118 rezervasyon, 8 konsiyerj. **Ziyaretci/kargo**: ~155 kayit (bugun 4 bekleyen kargo). **Firma/sozlesme**: 8 firma, 11 sozlesme (2 yakinda biten). **Karar defteri**: ~53 numarali karar (uc aylik kurul + yillik genel kurul).
   **Anket**: 6 (4 kapali sonuclu, 2 acik; daire basina tek oy). **Ekipman**: 10 ekipman, 11 plan, ~160 bakim kaydi, gider baglantilari. **Odeme/Kamera**: sahte kapali saglayici bilgisi, 3 kamera (Hikvision/Tiandy/ONVIF, yerel IP), ~104 plaka olayi.
+
+## Aile yeniden yapilandirma (`restructure_families.mjs`)
+
+Tohumlanmis demo sitesini uygulamanin YENI daire yonetimi modeline (migration 074, `docs/PLATFORM_DAIRE_YONETIMI.md` ve `PLATFORM_DAIRE_GUVENLIK_POLITIKASI.md`) uydurur. Uygulama kodu (`lib/`, `server/src`) DEGISMEZ; kapi komutlari, MQTT, BLE, firmware ve kapi servislerine dokunulmaz.
+
+**Kararlar (her dairede):**
+
+* **Tek daire admini = dairede oturan kisi**: kiraci oturuyorsa kiraci, malik oturuyorsa malik (`apartment_memberships.role = 'APARTMENT_ADMIN'`; admin baska kisideyse `membership_service.applyApartmentPrimaryAdmin` ile tasinir, `apartments.resident_user_code` gostergesi dahil).
+* **Aile**: ayni dairedeki es / cocuk / yasli ebeveyn `family_member` olarak yeniden baglanir (`sponsor_person_id` = admin, `is_minor` = yas < 18). Rol ve yas, tohumun ad havuzlarindan (yetiskin / cocuk / yasli) cikarilir; ayni soyad korunur. Yaslar tutarli atanir (cocuk 3-17 = reşit degil, 18-26 genc yetiskin; yasli ebeveyn >= 62). Aile boyutu (oturanlar) 3-5; en az 3 dairede yasli ebeveyn (`--min-elder-houses`); reşit olmayan cocugu olmayan hanelere cogunlukla, boyutu <=4 olanlara %30 olasilikla (`--extra-child-chance`) 3-15 yas cocuk eklenir. 13+ yas ve yetiskin yeni uyelerin hesabi vardir (12 karakter rastgele sifre, bcrypt, `@demo.invalid`).
+* **Malik**: her dairede tek guncel malik. Kiraci oturan dairede mevcut dis malik korunur; malik kaydi YOKSA ayri bir malik kisisi + hesabi eklenir (oturmaz, `RESIDENT` site uyeligi var, daire uyeligi = kapi yetkisi YOK). Malik oturan dairede malik = admin.
+* **Kiraci oturuyorsa yonetim kiraciya devredilmis**: `apartment_admin_delegations` (`source='tenant_delegated'`, `state='active'`, `note` "Demo: ..."; acik kayit zaten varsa dokunulmaz).
+* **Silinmez / kesilmez**: mevcut kisi ve hesaplar, sifreleri ve yetiskin uyelerin kapi erisimi (uyelikler) AYNEN kalir; yalniz yeniden siniflandirilir, eksikler eklenir. E-posta / davet / bildirim / talep satiri yazilmaz.
+
+```bash
+# Sunucuda (yedek + prova + canli); eski hesaplarin parolalari creds_prod.json'dan gelir
+scp -r tools/demo_seed <kullanici>@<sunucu>:~/demo_seed
+scp G:\site\demo_hesaplar\creds_prod.json <kullanici>@<sunucu>:~/demo_seed/out/creds_prod.json
+ssh <sunucu> 'bash ~/demo_seed/run_remote_restructure.sh --prev-creds ~/demo_seed/out/creds_prod.json'            # yalniz yedek + prova
+ssh <sunucu> 'bash ~/demo_seed/run_remote_restructure.sh --prev-creds ~/demo_seed/out/creds_prod.json --prod --skip-rehearsal --creds-out ~/demo_seed/out/creds_restructured.json'
+scp <sunucu>:~/demo_seed/out/creds_restructured.json out/ && python make_pdf.py --creds out/creds_restructured.json --out out/demo_hesaplar.pdf
+ssh <sunucu> 'shred -u ~/demo_seed/out/creds_restructured.json ~/demo_seed/out/creds_prod.json'
+
+# Elle: once --dry-run (plani yazdirir, hicbir sey yazmaz)
+DATABASE_URL=postgres://... node restructure_families.mjs --site Cenk --prev-creds out/creds_prod.json --dry-run
+DATABASE_URL=postgres://... node restructure_families.mjs --site Cenk --prev-creds out/creds_prod.json --creds-out out/creds_restructured.json
+
+# Geri alma (SEED batch'inden ONCE): eklenenleri siler, degisenleri eski haline getirir
+DATABASE_URL=postgres://... node cleanup.mjs --list
+DATABASE_URL=postgres://... node cleanup.mjs --batch demo-restructure-YYYYMMDDHHMMSS --yes
+```
+
+* **Korumalar**: sitede demo tohum kaydi yoksa, daha once yeniden yapilandirma batch'i varsa (cleanup yapilmadan tekrar calismaz), demo tohum disi kisi varsa, oturan ana kisinin hesabi / aktif daire uyeligi yoksa ya da `--prev-creds` dosyasinda sifresi olmayan eski hesap varsa HICBIR sey yazilmadan durur (cikis 4 / 6; `--force` ve `--allow-missing-passwords` ile asilir). Tum degisiklik TEK transaction'dadir: hata olursa tamami geri alinir.
+* **Geri alma kaydi**: yeni satirlar `demo_seed_registry`'ye `insert`, degisen mevcut satirlar (`apartment_residencies`, `apartment_memberships`, `apartments`) `update` + `before_image` ile yazilir (batch `demo-restructure-<zaman>`). `cleanup.mjs` ayni batch'i geri alinca kisi / bag tablolari yeniden yapilandirma ONCESI haline AYNEN doner. Yeniden yapilandirma batch'i geri alinmadan tohum batch'i geri alinmaya calisilirsa `cleanup.mjs` durur (cikis 5; `--force` ile asilir) - sira: ONCE `demo-restructure-...`, SONRA `demo-...`.
+* **Cikti**: `--creds-out` JSON'u (sifreler duz metin: commit etmeyin) tum daire hesaplarini `familyRole` (`landlord` / `head` / `spouse` / `child` / `elder`), `apartmentRole`, `isAmir`, `age`, `isMinor`, `hasAccount`, `isNew` ve kullanici adi / sifreyle icerir; ayrica `households` (daire basina malik / admin / devir) ve `roleChanges` (mevcut hesaplarin onceki / yeni rolu). Rapor: `out/restructure-report-<batch>.json` (sifresiz). `make_pdf.py` bu dosyadan her dairede Malik, Daire admini (sari satir), aile uyeleri ve kullanici adi / sifre tablolarini uretir.
+* **Test**: `node tools/demo_seed/test/local_restructure_test.mjs --port <gecici PG>` (seed + admin kaymasi + malik yok bozulmasi + dry-run + uygulama + dogrulamalar + PDF + iki cleanup).
+* **Bilinen sinirlar**: yaslar veritabaninda tutulmaz (yalniz `is_minor` ve kimlik JSON'unda `age`); denetim kaydi (`audit_log`) yazilmaz; hesapsiz kucuk cocuklarin e-postasi / telefonu yoktur (12 yas alti).
 
 ## Modul eslemesi ve atlama
 

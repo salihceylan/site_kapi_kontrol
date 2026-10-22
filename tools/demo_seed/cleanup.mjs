@@ -47,6 +47,14 @@ try {
     console.error('Bu kullanici SUPERUSER degil: append-only tablolarda DELETE icin session_replication_role=replica gerekir. SUPERUSER URL ile calistirin.');
     process.exit(3);
   }
+  // Yeniden yapilandirma batch'i (restructure_families.mjs) tohum kisilerine baglanir: tohum batch'i ondan ONCE geri alinirsa yetim kayit kalir.
+  if (!batch.startsWith('demo-restructure-') && !args.force) {
+    const later = await q(`SELECT DISTINCT batch_id FROM ${REGISTRY_TABLE} WHERE batch_id LIKE 'demo-restructure-%' ORDER BY 1`);
+    if (later.rowCount > 0) {
+      console.error(`DURDURULDU: ${later.rows.map((r) => r.batch_id).join(', ')} yeniden yapilandirma batch'i hala kayitli. Once onu geri alin (cleanup.mjs --batch <o batch> --yes), sonra tohum batch'ini. Bilerek devam etmek icin --force.`);
+      process.exit(5);
+    }
+  }
   const total = await q(`SELECT COUNT(*)::INT AS n FROM ${REGISTRY_TABLE} WHERE batch_id = $1`, [batch]);
   console.log(`Hedef: ${describeTarget(url)}  batch=${batch}  kayitli satir=${total.rows[0].n}`);
   if (total.rows[0].n === 0) {
