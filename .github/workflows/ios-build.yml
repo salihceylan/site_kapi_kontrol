@@ -30,6 +30,10 @@ jobs:
       - name: Show Xcode version
         run: xcodebuild -version
 
+      # Swift paketi + CocoaPods karisimi Xcode 26'da 'Pods_Runner not found' veriyor: yalniz CocoaPods kullanilir.
+      - name: Disable Swift Package Manager (CocoaPods only)
+        run: flutter config --no-enable-swift-package-manager
+
       - name: Install Flutter dependencies
         run: flutter pub get
 
