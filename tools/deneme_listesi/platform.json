@@ -7509,7 +7509,7 @@
           "beklenen": "Davet gider; kiracı hesap açınca üst kartta 'Daire yönetimi: <kiracı> (kiracı)' yazar. Malik aile üyesi ekleyip çıkaramaz. Kutu kapalı eklenirse admin malik kalır.",
           "rol_notu": "Malik, kiracı",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -7522,7 +7522,7 @@
           "beklenen": "Adla arama yalnız 'Beni aramalarda göster'i açanları bulur (varsayılan kapalı, Profilim'de). Tam e-postayla maskeli sonuç gelir (daire ya da site bilgisi yok); saatte 60 sınırı. Kabul edilince bağ kurulur, kabul edilmeden kurulmaz.",
           "rol_notu": "Malik, daire admini",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -7535,7 +7535,7 @@
           "beklenen": "Aile üyeleri daireyle ilgili modüllere girer, borcu göremez, daire yönetimini yapamaz. Yetişkin üye tek taraflı çıkarılamaz: onay kartı gelir; reddedilirse bağ sürer, 7 gün yanıtsızsa istek kapanır. 18 yaşından küçük üye hemen çıkarılır.",
           "rol_notu": "Daire admini, aile üyesi",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -7547,7 +7547,7 @@
           "beklenen": "Onay gerekmez, kapı erişimi kapanır, admine ve diğer üyelere bildirim gitmez.",
           "rol_notu": "Aile üyesi",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -7560,7 +7560,7 @@
           "beklenen": "Devirde kiracının ve aile üyelerinin daire bağı sona erer, hesapları silinmez, admin yeniden malik olur. Karşılıklı kesmede diğer taraf onaylayınca bağ biter; 14 gün yanıtsız kalırsa talep kapanır.",
           "rol_notu": "Malik, kiracı",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -7573,7 +7573,7 @@
           "beklenen": "Vekalet varken dairenin imza hakkı sahibi vekil, yokken malik görünür; iptalde malike döner. Resmî genel kurulda yazılı vekaletname gerekebileceği notu görünür.",
           "rol_notu": "Malik, kurul",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -7586,7 +7586,7 @@
           "beklenen": "Talebi yalnız site yöneticisi ve süper kullanıcı görür; hanedeki kimseye bildirim gitmez. Ekranda 112, ALO 183 ve KADES bilgisi görünür.",
           "rol_notu": "Aile üyesi, site yöneticisi",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -7598,6 +7598,79 @@
           ],
           "beklenen": "Askıdaki kişi kapıyı açamaz, kişiye bildirim gitmez, geri açınca erişim döner. Admin değişince eski admin dairede kalır, ikisine uygulama içi bildirim gider. Kurul ve görevlide bu düğmeler yoktur.",
           "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "hazir"
+        }
+      ]
+    },
+    {
+      "id": "F37",
+      "baslik": "Daire admini araç girişi ve adli kayıt",
+      "durum": "hazir",
+      "ozet": "Daire admini kendi dairesinin araçlarını girer; site yöneticisi de yapabilir. Kiracı ayrılsa da değiştirilemez adli kayıt kalır, yalnız site yöneticisi görür.",
+      "maddeler": [
+        {
+          "id": "F37.01",
+          "baslik": "Daire admini araç ekler",
+          "adimlar": [
+            "Daire adminiyle Dairem > Araçlarım > Araç ekle: plaka '34 ABC 123', not 'beyaz Fiat' > Ekle.",
+            "Site yöneticisiyle Kişiler > Araçlar ekranına bakın."
+          ],
+          "beklenen": "Araç listede görünür; 'Eklediğiniz plaka, sitede plaka tanıma açıksa yetkili araç sayılır' uyarısı yazar. Site yöneticisinin listesinde 'Ekleyen: Daire yöneticisi (ad)' görünür.",
+          "rol_notu": "Daire admini, site yöneticisi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F37.02",
+          "baslik": "Araç kuralları ve yetki",
+          "adimlar": [
+            "Aile üyesi hesabıyla Dairem'i açın.",
+            "Adminle geçersiz plaka (99 ZZ 1), başka dairede kayıtlı bir plaka ve 5. aracı deneyin; bir aracı çıkarın."
+          ],
+          "beklenen": "Aile üyesi araçları yalnız görür (ekle, düzenle, çıkar yok). Geçersiz plaka reddedilir. Başka dairedeki plaka 'başka bir kayıtta kullanılıyor; site yönetimiyle görüşün' mesajıyla reddedilir, daire ya da kişi bilgisi verilmez. Daire başına en çok 4 araç (site yöneticisi 8).",
+          "rol_notu": "Daire admini, aile üyesi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F37.03",
+          "baslik": "Kiracı taşındı: adli kayıt",
+          "adimlar": [
+            "Site yöneticisiyle Kişiler'de bir kiracının kartında 'Taşındı' yapın.",
+            "Daireler > o dairenin kartı > 'Eski sakinler / Adli kayıt' > 'Kayıtları göster'."
+          ],
+          "beklenen": "'Taşındı (çıkış)' satırı görünür: kişi adı, rol (Kiracı), dönem, neden ve işlemi yapan. Telefon ve e-posta yoktur. Yeni kiracı eski kiracıdan hiçbir bilgi görmez.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F37.04",
+          "baslik": "Adli bilgi dökümü",
+          "adimlar": [
+            "Aynı bölümde 'Adli bilgi dökümü al'a basıp gerekçe notunu boş bırakın.",
+            "Gerekçe 'Mahkeme' seçip not yazarak PDF alın."
+          ],
+          "beklenen": "Not zorunludur, boşsa dosya inmez. PDF iner (site, daire, dönemler, gerekçe). Denetim Kaydı'nda 'residency_log.exported' satırı görünür.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F37.05",
+          "baslik": "Adli kayıt gizliliği",
+          "adimlar": [
+            "Kurul üyesi hesabıyla aynı daire kartını açın.",
+            "Sakin ya da yeni kiracı hesabıyla Dairem'i açın."
+          ],
+          "beklenen": "Kurul kartında adli kayıt bölümü yoktur. Sakin ve yeni kiracı hiçbir adli kayıt görmez.",
+          "rol_notu": "Kurul, sakin",
           "on_kosul": "",
           "yeni": true,
           "gelistirme": "hazir"
