@@ -410,7 +410,7 @@ export async function getResidentDirectory(authUser) {
   if (userCode === null) return { sites: [] };
   const sitesRes = await pool.query(
     `
-      SELECT s.site_code, s.site_name
+      SELECT s.site_code, s.name AS site_name
       FROM sites s
       WHERE s.site_code IN (
         SELECT a.site_code FROM apartment_memberships am INNER JOIN apartments a ON a.id = am.apartment_id
@@ -418,7 +418,7 @@ export async function getResidentDirectory(authUser) {
         UNION
         SELECT m.site_code FROM site_memberships m WHERE m.user_code = $1 AND m.is_active = TRUE AND m.role IN ('BOARD_MEMBER', 'STAFF')
       )
-      ORDER BY s.site_name
+      ORDER BY s.name
     `,
     [userCode],
   );
