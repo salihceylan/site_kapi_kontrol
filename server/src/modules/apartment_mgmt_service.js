@@ -65,6 +65,7 @@ import {
   withSiteTransaction,
 } from './people_service.js';
 import { sendInvitation } from './person_invite_service.js';
+import { logResidencyEvent } from './residency_log.js';
 import { cleanupDoorOverridesIfNoMembership, handOverApartmentResident } from '../services/membership_service.js';
 
 export { SEARCH_HOURLY_LIMIT };
@@ -109,6 +110,16 @@ async function audit(client, authUser, action, state, details = {}) {
 }
 
 const aptLabel = (apartment) => apartmentLabel(apartment.block_name, apartment.unit_label);
+
+/** ADLI KAYIT (residency_log): islemi yapanin bu daireyle baglamindaki rolu (kayda yalniz rol kodu yazilir). */
+function logRole(authUser, state) {
+  if (authUser?.role === 'super_user') return 'super_user';
+  const uc = actorFromAuthUser(authUser).userCode;
+  if (uc !== null && state.roles.owner?.user_code === uc) return 'owner';
+  if (uc !== null && state.roles.tenant?.user_code === uc) return 'tenant';
+  if (uc !== null && state.roles.adminUserCode === uc) return 'apartment_admin';
+  return 'resident';
+}
 
 /** Kullanicinin bu dairede bagi var mi (uyelik, iliski ya da eski gosterge). */
 function isRelated(state, uc, me) {
@@ -210,6 +221,19 @@ async function ensureOwnerRecord(client, authUser, state, me, uc) {
       `UPDATE apartment_residencies SET relation = 'owner', origin = 'manual', updated_at = NOW() WHERE id = $1 AND is_current = TRUE`,
       [mine.id],
     );
+    if (mine.relation !== 'owner') {
+      await logResidencyEvent(client, {
+        siteCode: state.apartment.site_code,
+        apartmentId: state.apartment.id,
+        residencyId: mine.id,
+        eventType: 'role_changed',
+        reasonCode: 'owner_record',
+        relation: 'owner',
+        actor: authUser,
+        actorRole: logRole(authUser, state),
+        related: { residency_id: mine.id, from_relation: mine.relation, to_relation: 'owner' },
+      });
+    }
     personId = mine.person_id;
   } else {
     personId = await ensureUserPerson(client, state.apartment.site_code, uc, uc);
@@ -219,6 +243,9 @@ async function ensureOwnerRecord(client, authUser, state, me, uc) {
       personId,
       relation: 'owner',
       moveInDate: todayIso(),
+      actor: authUser,
+      actorRole: logRole(authUser, state),
+      reasonCode: 'owner_record',
     });
   }
   await audit(client, authUser, 'apartment_mgmt.owner_recorded', state, { person_id: personId });
@@ -733,7 +760,7 @@ export async function addTenant({ authUser, apartmentId, body }) {
     }
 
     const personId = await createAccountlessPerson(client, siteCode, target.person, uc);
-    await insertResidency(client, { siteCode, apartmentId: state.apartment.id, personId, relation: 'tenant', moveInDate: todayIso() });
+    await insertResidency(client, { siteCode, apartmentId: state.apartment.id, personId, relation: 'tenant', moveInDate: todayIso(), actor: authUser, actorRole: logRole(authUser, state) });
     if (delegate) {
       await recordDelegation(client, {
         siteCode,
@@ -781,7 +808,7 @@ export async function addFamilyMember({ authUser, apartmentId, body }) {
     }
     const sponsorId = await ensureUserPerson(client, siteCode, uc, uc);
     const personId = await createAccountlessPerson(client, siteCode, target.person, uc);
-    const residencyId = await insertResidency(client, { siteCode, apartmentId: state.apartment.id, personId, relation: 'family_member', moveInDate: todayIso() });
+    const residencyId = await insertResidency(client, { siteCode, apartmentId: state.apartment.id, personId, relation: 'family_member', moveInDate: todayIso(), actor: authUser, actorRole: logRole(authUser, state) });
     await client.query(`UPDATE apartment_residencies SET sponsor_person_id = $2, is_minor = $3 WHERE id = $1`, [residencyId, sponsorId, isMinor]);
     await audit(client, authUser, 'apartment_mgmt.family_added', state, { person_id: personId, has_email: Boolean(target.person.email), is_minor: isMinor });
     newPersonId = personId;
@@ -831,6 +858,7 @@ export async function removeFamilyMember({ authUser, apartmentId, residencyId })
       userCode: residency.user_code,
       moveOutDate: todayIso(),
       actor: authUser,
+      actorRole: logRole(authUser, state),
       reason: 'family_removed_by_admin',
     });
     closed = res.accessClosed;
@@ -864,7 +892,13 @@ export async function delegateManagement({ authUser, apartmentId }) {
       if (!state.members.some((m) => Number(m.user_code) === tenant.user_code)) {
         await grantApartmentAccess(client, { siteCode, apartmentId: state.apartment.id, userCode: tenant.user_code });
       }
-      activeNow = await transferApartmentAdmin(client, { apartmentId: state.apartment.id, userCode: tenant.user_code });
+      activeNow = await transferApartmentAdmin(client, {
+        apartmentId: state.apartment.id,
+        userCode: tenant.user_code,
+        actor: authUser,
+        actorRole: logRole(authUser, state),
+        reasonCode: 'handover',
+      });
     }
     await recordDelegation(client, {
       siteCode,
@@ -897,7 +931,7 @@ async function endTenancy(client, authUser, state, reason) {
     if (!state.members.some((m) => Number(m.user_code) === ownerCode)) {
       await grantApartmentAccess(client, { siteCode, apartmentId: apartment.id, userCode: ownerCode });
     }
-    await transferApartmentAdmin(client, { apartmentId: apartment.id, userCode: ownerCode });
+    await transferApartmentAdmin(client, { apartmentId: apartment.id, userCode: ownerCode, actor: authUser, actorRole: logRole(authUser, state), reasonCode: 'handover' });
   }
   let accessClosed = false;
   const ending = [...familyEndingWithTenant(roles.family, tenant.person_id), tenant];
@@ -908,6 +942,7 @@ async function endTenancy(client, authUser, state, reason) {
       userCode: r.user_code,
       moveOutDate: todayIso(),
       actor: authUser,
+      actorRole: logRole(authUser, state),
       reason,
     });
     accessClosed = accessClosed || res.accessClosed;
@@ -967,16 +1002,30 @@ export async function exitTenancy({ authUser, apartmentId }) {
 }
 
 /** Malik / eski kayit icin: yalniz KENDI uyeligini kapatir (malik KAYDI kalir; yonetici ise devir mevcut kuralla yapilir). */
-async function revokeOwnMembership(client, state, uc) {
+async function revokeOwnMembership(client, state, uc, authUser = null) {
   const updated = await client.query(
     `UPDATE apartment_memberships SET is_active = FALSE, updated_at = NOW() WHERE apartment_id = $1 AND user_code = $2 AND is_active = TRUE RETURNING role`,
     [state.apartment.id, uc],
   );
   const legacy = state.apartment.resident_user_code === uc;
   if (legacy || updated.rows?.[0]?.role === 'APARTMENT_ADMIN') {
-    await handOverApartmentResident(client, state.apartment.id, uc, { indicatorOwnedByRemoved: legacy });
+    await handOverApartmentResident(client, state.apartment.id, uc, {
+      indicatorOwnedByRemoved: legacy,
+      actor: authUser,
+      actorRole: authUser ? logRole(authUser, state) : null,
+    });
   }
   await cleanupDoorOverridesIfNoMembership(client, state.apartment.site_code, uc);
+  // ADLI KAYIT (residency_log): malik / eski kayit kendi uyeligini kapatti (malik KAYDI kalir; yalniz erisim biter).
+  await logResidencyEvent(client, {
+    siteCode: state.apartment.site_code,
+    apartmentId: state.apartment.id,
+    userCode: uc,
+    eventType: 'member_left',
+    reasonCode: 'self',
+    actor: authUser,
+    actorRole: authUser ? logRole(authUser, state) : null,
+  });
   return (updated.rowCount ?? 0) > 0 || legacy;
 }
 
@@ -994,7 +1043,7 @@ export async function leaveApartment({ authUser, apartmentId }) {
     if (me.is_tenant) {
       closed = await endTenancy(client, authUser, state, 'tenant_left');
     } else if (state.roles.owner?.user_code === uc || !state.residencies.some((r) => r.user_code === uc)) {
-      closed = await revokeOwnMembership(client, state, uc);
+      closed = await revokeOwnMembership(client, state, uc, authUser);
     } else {
       const residency = state.residencies.find((r) => r.user_code === uc);
       const res = await closeResidency(client, {
@@ -1003,6 +1052,7 @@ export async function leaveApartment({ authUser, apartmentId }) {
         userCode: uc,
         moveOutDate: todayIso(),
         actor: authUser,
+        actorRole: logRole(authUser, state),
         reason: 'member_left',
       });
       closed = res.accessClosed;
@@ -1131,6 +1181,7 @@ export async function respondToRequest({ authUser, requestId, accept }) {
         userCode: uc,
         moveOutDate: todayIso(),
         actor: authUser,
+        actorRole: logRole(authUser, state),
         reason: 'member_removal_consented',
       });
       closed = res.accessClosed;
@@ -1145,12 +1196,12 @@ export async function respondToRequest({ authUser, requestId, accept }) {
         throw conflict('REQUEST_VOID', 'Bu davet artık geçerli değil.');
       }
       const personId = await ensureUserPerson(client, siteCode, uc, requesterCode);
-      await insertResidency(client, { siteCode, apartmentId: state.apartment.id, personId, relation: 'tenant', moveInDate: todayIso() });
+      await insertResidency(client, { siteCode, apartmentId: state.apartment.id, personId, relation: 'tenant', moveInDate: todayIso(), actor: authUser, actorRole: 'tenant', reasonCode: 'invite_accepted' });
       await grantApartmentAccess(client, { siteCode, apartmentId: state.apartment.id, userCode: uc });
       let delegated = false;
       if (request.payload?.delegate_management === true) {
         const ownerPersonId = state.roles.owner ? state.roles.owner.person_id : state.residencies.find((r) => r.user_code === requesterCode)?.person_id ?? null;
-        delegated = await transferApartmentAdmin(client, { apartmentId: state.apartment.id, userCode: uc });
+        delegated = await transferApartmentAdmin(client, { apartmentId: state.apartment.id, userCode: uc, actor: authUser, actorRole: 'tenant', reasonCode: 'handover' });
         if (delegated) {
           await recordDelegation(client, { siteCode, apartmentId: state.apartment.id, ownerPersonId, adminPersonId: personId, adminUserCode: uc, state: 'active', createdBy: requesterCode });
         }
@@ -1171,7 +1222,7 @@ export async function respondToRequest({ authUser, requestId, accept }) {
       }
       const sponsorId = await ensureUserPerson(client, siteCode, requesterCode, requesterCode);
       const personId = await ensureUserPerson(client, siteCode, uc, requesterCode);
-      const residencyId = await insertResidency(client, { siteCode, apartmentId: state.apartment.id, personId, relation: 'family_member', moveInDate: todayIso() });
+      const residencyId = await insertResidency(client, { siteCode, apartmentId: state.apartment.id, personId, relation: 'family_member', moveInDate: todayIso(), actor: authUser, actorRole: 'resident', reasonCode: 'invite_accepted' });
       await client.query(`UPDATE apartment_residencies SET sponsor_person_id = $2, is_minor = $3 WHERE id = $1`, [residencyId, sponsorId, request.payload?.is_minor === true]);
       await grantApartmentAccess(client, { siteCode, apartmentId: state.apartment.id, userCode: uc });
       await closeRequest(client, request.id, 'approved', uc);

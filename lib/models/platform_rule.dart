@@ -420,6 +420,7 @@ const Map<String, String> kPlatformRuleLabels = <String, String>{
   'retention.work_photos_after_close_days': 'İş takibi fotoğrafları (talep kapandıktan sonra)',
   'retention.announcements_days': 'Duyurular',
   'retention.audit_days': 'Denetim kaydı',
+  'retention.residency_log_days': 'Daire sakini adli kaydı',
   'retention.decision_book_days': 'Karar defteri',
   'retention.enforce': 'Otomatik silme',
 };

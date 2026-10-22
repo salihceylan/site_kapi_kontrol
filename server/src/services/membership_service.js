@@ -14,6 +14,7 @@ import { describeErrorForLog } from '../security/log_redact.js';
 import { BCRYPT_COST } from '../security/password_hashing.js';
 import { reissueDeviceToken } from '../security/login_device_token.js';
 import { endResidenciesForMemberRemoval } from '../modules/people_records.js';
+import { logResidencyEvent } from '../modules/residency_log.js';
 import { createSiteWithStructure, userHasOwnerLink } from './site_setup_core.js';
 import {
   SQL_BULK_APARTMENT_USERS,
@@ -1591,8 +1592,19 @@ export async function handOverApartmentResident(
   client,
   apartmentId,
   removedUserCode,
-  { keepPin = false, indicatorOwnedByRemoved = true } = {},
+  { keepPin = false, indicatorOwnedByRemoved = true, actor = null, actorRole = null } = {},
 ) {
+  // ADLI KAYIT (residency_log): yönetim / sakin göstergesi başka kişiye geçerse `handover` satırı (neden kodu handover; eski ve yeni kullanıcı kodu bağlanır).
+  const logHandover = (toUserCode) =>
+    logResidencyEvent(client, {
+      apartmentId,
+      userCode: toUserCode,
+      eventType: 'handover',
+      reasonCode: 'handover',
+      actor,
+      actorRole,
+      related: { from_user_code: Number(removedUserCode), to_user_code: Number(toUserCode) },
+    });
   // indicatorOwnedByRemoved=false: apartments.resident_user_code çıkarılan kişiye ait DEĞİL (ör. dahili daire hesabı göstergede,
   // çıkarılan kayıtlı kullanıcı yalnız APARTMENT_ADMIN): gösterge ve PIN'e DOKUNULMAZ; yalnız admin rolü devredilir.
   // Varsayılan (true) eski davranıştır; çağıranlar daire satırı kilitliyken gösterge sahipliğini bilir.
@@ -1613,6 +1625,7 @@ export async function handOverApartmentResident(
         `UPDATE apartments SET resident_user_code = $1, resident_pin_issued = FALSE, resident_pin_code = NULL, resident_email = NULL WHERE id = $2`,
         [Number(otherAdminRes.rows[0].user_code), apartmentId],
       );
+      await logHandover(Number(otherAdminRes.rows[0].user_code));
     }
     return;
   }
@@ -1630,6 +1643,7 @@ export async function handOverApartmentResident(
       `UPDATE apartment_memberships SET role = 'APARTMENT_ADMIN', updated_at = NOW() WHERE apartment_id = $1 AND user_code = $2`,
       [apartmentId, newAdminCode],
     );
+    await logHandover(newAdminCode);
     if (indicatorOwnedByRemoved) {
       // Eski PIN yeni yöneticiye geçerken silinir (yukarıdaki açıklama).
       await client.query(
@@ -1731,7 +1745,7 @@ export async function removeApartmentMember({ apartmentId, targetUserCode, authU
     }
 
     if (legacy || memUpdate.rows[0]?.role === 'APARTMENT_ADMIN') {
-      await handOverApartmentResident(client, apt.id, tUserCode, { indicatorOwnedByRemoved: legacy });
+      await handOverApartmentResident(client, apt.id, tUserCode, { indicatorOwnedByRemoved: legacy, actor: authUser, actorRole: isSuperUser ? 'super_user' : isSiteManager ? 'site_manager' : 'apartment_admin' });
     }
 
     // Kapı istisnalarını temizle (yalnızca kişinin başka aktif üyeliği kalmadıysa)
@@ -1739,7 +1753,13 @@ export async function removeApartmentMember({ apartmentId, targetUserCode, authU
 
     // CRM (Kişi ve Daire Kayıtları): "Daireden çıkar" kalıcı bir çıkarmadır -> o (kullanıcı, daire) için güncel ilişkiler biter.
     // (Geçici pasife alma - toggleApartmentMemberStatus - bunu YAPMAZ.) Hata çıkarma işlemini bozmaz.
-    await endResidenciesForMemberRemoval(client, { apartmentId: apt.id, userCode: tUserCode, actor: authUser });
+    await endResidenciesForMemberRemoval(client, {
+      apartmentId: apt.id,
+      userCode: tUserCode,
+      actor: authUser,
+      logReason: isSuperUser || isSiteManager ? 'site_manager' : 'apartment_admin',
+      actorRole: isSuperUser ? 'super_user' : isSiteManager ? 'site_manager' : 'apartment_admin',
+    });
 
     await client.query('COMMIT');
     committed = true;
@@ -1781,7 +1801,7 @@ function parseBooleanFlag(value, fieldName) {
  * YALNIZCA bu dairedeki üyeliği etkiler. Global hesap durumu (users.is_active) burada ASLA değişmez;
  * hesabı pasifleştirmek yalnızca süper kullanıcı rotasının işidir. Üyelik satırı yoksa 404.
  */
-export async function toggleApartmentMemberStatus({ apartmentId, targetUserCode, isActive, authUser }) {
+export async function toggleApartmentMemberStatus({ apartmentId, targetUserCode, isActive, authUser, logContext = null }) {
   const { apt, isSuperUser, isSiteManager } = await checkApartmentManagementAccess(authUser, apartmentId);
   const tUserCode = parseTargetUserCode(targetUserCode);
   const reviewerUserCode = authUserCodeOf(authUser);
@@ -1823,6 +1843,18 @@ export async function toggleApartmentMemberStatus({ apartmentId, targetUserCode,
       throw httpError(404, 'Kullanıcı bu dairede kayıtlı değil.');
     }
 
+    // ADLI KAYIT (residency_log): geçici pasife alma / yeniden açma (askıya alma da buradan geçer; neden kodu logContext ile gelir).
+    await logResidencyEvent(client, {
+      siteCode: apt.site_code,
+      apartmentId: apt.id,
+      userCode: tUserCode,
+      eventType: activeBool ? 'access_lifted' : 'access_suspended',
+      reasonCode: logContext?.reasonCode ?? (isSuperUser || isSiteManager ? 'site_manager' : 'apartment_admin'),
+      actor: authUser,
+      actorRole: isSuperUser ? 'super_user' : isSiteManager ? 'site_manager' : 'apartment_admin',
+      related: logContext?.related ?? null,
+    });
+
     // 2. Eski (legacy) tekil sakin göstergesi (apartments.resident_user_code).
     //    - SAF legacy sakin (üyelik satırı yok): apartments tablosu senkronize edilir (eski davranış).
     //    - Aktif etme: gösterge bu kişiyse daire de aktif edilir (eski davranış).
@@ -1836,7 +1868,7 @@ export async function toggleApartmentMemberStatus({ apartmentId, targetUserCode,
           [activeBool, apt.id],
         );
       } else {
-        await handOverApartmentResident(client, apt.id, tUserCode, { keepPin: true });
+        await handOverApartmentResident(client, apt.id, tUserCode, { keepPin: true, actor: authUser, actorRole: isSuperUser ? 'super_user' : isSiteManager ? 'site_manager' : 'apartment_admin' });
       }
     }
     // Aktif etme: aile reisi yeniden aktifse ve gösterge boşsa geri konur (devir sonrası boş kalmışsa).
@@ -1927,12 +1959,19 @@ export async function deleteApartmentMember({ apartmentId, targetUserCode, authU
 
     // 3. Silinen kişi dairenin yöneticisi / apartments.resident_user_code ise yönetici devri
     if (legacy || delRes.rows[0]?.role === 'APARTMENT_ADMIN') {
-      await handOverApartmentResident(client, apt.id, tUserCode, { indicatorOwnedByRemoved: legacy });
+      await handOverApartmentResident(client, apt.id, tUserCode, { indicatorOwnedByRemoved: legacy, actor: authUser, actorRole: isSuperUser ? 'super_user' : isSiteManager ? 'site_manager' : 'apartment_admin' });
     }
 
     // CRM (Kişi ve Daire Kayıtları): "Sakini Daireden Sil" de kalıcı bir çıkarmadır -> o (kullanıcı, daire) için güncel ilişkiler (origin manual dahil)
     // biter; böylece elle girilmiş malik güncel kalıp yeni malik eklemeyi 409 yapmaz. Hata silme işlemini bozmaz (SAVEPOINT).
-    await endResidenciesForMemberRemoval(client, { apartmentId: apt.id, userCode: tUserCode, actor: authUser, reason: 'member_deleted' });
+    await endResidenciesForMemberRemoval(client, {
+      apartmentId: apt.id,
+      userCode: tUserCode,
+      actor: authUser,
+      reason: 'member_deleted',
+      logReason: 'site_manager',
+      actorRole: isSuperUser ? 'super_user' : 'site_manager',
+    });
 
     await client.query('COMMIT');
     committed = true;
@@ -2097,11 +2136,12 @@ export async function changeApartmentMemberPassword({
  * "PIN verildi" işareti temizlenir; inceleme P2). Çağıran transaction'ı yönetir ve daire satırını FOR UPDATE kilitlemiştir.
  * `setApartmentPrimaryAdmin` ("Aile Reisini Değiştir") ve daire yönetimi devri (apartment_mgmt_service) AYNI kuralı kullanır.
  */
-export async function applyApartmentPrimaryAdmin(client, { apartmentId, userCode }) {
+export async function applyApartmentPrimaryAdmin(client, { apartmentId, userCode, actor = null, actorRole = null, reasonCode = 'admin_change' }) {
   // 1. Mevcut tüm APARTMENT_ADMIN'leri FAMILY_MEMBER yap
-  await client.query(
+  const demoted = await client.query(
     `UPDATE apartment_memberships SET role = 'FAMILY_MEMBER', updated_at = NOW()
-     WHERE apartment_id = $1 AND role = 'APARTMENT_ADMIN'`,
+     WHERE apartment_id = $1 AND role = 'APARTMENT_ADMIN'
+     RETURNING user_code`,
     [apartmentId],
   );
 
@@ -2123,6 +2163,18 @@ export async function applyApartmentPrimaryAdmin(client, { apartmentId, userCode
      WHERE id = $2`,
     [userCode, apartmentId],
   );
+
+  // 4. ADLI KAYIT (residency_log): yönetici (daire admini) değişimi; eski yönetici kullanıcı kodu varsa olay bağına yazılır.
+  const previous = (demoted?.rows ?? []).map((row) => Number(row.user_code)).find((code) => code !== Number(userCode));
+  await logResidencyEvent(client, {
+    apartmentId,
+    userCode,
+    eventType: 'admin_changed',
+    reasonCode,
+    actor,
+    actorRole,
+    related: { from_user_code: previous ?? null, to_user_code: Number(userCode) },
+  });
 }
 
 /**
@@ -2131,7 +2183,7 @@ export async function applyApartmentPrimaryAdmin(client, { apartmentId, userCode
  * Pasif / çıkarılmış üye aile reisi yapılarak yeniden aktifleştirilemez (409).
  */
 export async function setApartmentPrimaryAdmin({ apartmentId, targetUserCode, authUser }) {
-  const { apt } = await checkApartmentManagementAccess(authUser, apartmentId);
+  const { apt, isSuperUser, isSiteManager } = await checkApartmentManagementAccess(authUser, apartmentId);
   const tUserCode = parseTargetUserCode(targetUserCode);
 
   const client = await pool.connect();
@@ -2167,7 +2219,13 @@ export async function setApartmentPrimaryAdmin({ apartmentId, targetUserCode, au
       return { ok: true, message: 'Bu kullanıcı zaten dairenin Aile Reisidir (Daire Yöneticisi).' };
     }
 
-    await applyApartmentPrimaryAdmin(client, { apartmentId: apt.id, userCode: tUserCode });
+    await applyApartmentPrimaryAdmin(client, {
+      apartmentId: apt.id,
+      userCode: tUserCode,
+      actor: authUser,
+      actorRole: isSuperUser ? 'super_user' : isSiteManager ? 'site_manager' : 'apartment_admin',
+      reasonCode: isSuperUser || isSiteManager ? 'site_manager' : 'apartment_admin',
+    });
 
     await client.query('COMMIT');
     committed = true;

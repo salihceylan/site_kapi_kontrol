@@ -173,6 +173,16 @@ const DEFINITIONS = [
     max: 3650,
     legalNote: `Karar H2: 5 yıl. ${H2_NOTE} [AVUKAT DOĞRULASIN]`,
   }),
+  rule('retention.residency_log_days', {
+    label: 'Daire sakini adli kaydı',
+    description:
+      'Sakin ayrılığı ve değişikliği adli kaydının (kim, hangi daire, hangi dönem, nasıl ayrıldı) saklanacağı gün sayısı. Kayıt YALNIZ resmî talep halinde bilgi amaçlıdır; yalnız site yöneticisi ve süper kullanıcı görür. Kayıt değiştirilemez; otomatik silme kapalıdır.',
+    unit: 'days',
+    defaultValue: 3650,
+    min: 1825,
+    max: 7300,
+    legalNote: `Saklama dayanağı: hukuki yükümlülük / hakkın tesisi, kullanılması veya korunması (KVKK m.5/2-ç, e) ve meşru menfaat (m.5/2-f); kira sözleşmesinden doğan alacaklar için TBK m.146-147 zamanaşımı; KVKK m.4/2-d ve m.7. Aydınlatma metninde ayrıca belirtilmelidir. ${H2_NOTE} [AVUKAT DOĞRULASIN]`,
+  }),
   rule('retention.decision_book_days', {
     label: 'Karar defteri',
     description: 'Karar defteri kayıtlarının saklanacağı gün sayısı; boş değer süresiz saklama demektir.',

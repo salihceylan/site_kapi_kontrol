@@ -107,7 +107,7 @@ export async function recordDelegation(client, { siteCode, apartmentId, ownerPer
  * Yonetimi hedef kullaniciya gecirir: yoneticilik ve eski sakin gostergesi mevcut kuralla (applyApartmentPrimaryAdmin) tasinir.
  * Hedefin bu dairede AKTIF uyeligi olmalidir; yoksa false doner ve hicbir sey degismez. Daire satiri cagiran tarafindan kilitlenmistir.
  */
-export async function transferApartmentAdmin(client, { apartmentId, userCode }) {
+export async function transferApartmentAdmin(client, { apartmentId, userCode, actor = null, actorRole = null, reasonCode = 'admin_change' }) {
   const member = await client.query(
     `SELECT role FROM apartment_memberships WHERE apartment_id = $1 AND user_code = $2 AND is_active = TRUE FOR UPDATE`,
     [apartmentId, userCode],
@@ -116,7 +116,7 @@ export async function transferApartmentAdmin(client, { apartmentId, userCode }) 
     return false;
   }
   if (member.rows[0].role !== 'APARTMENT_ADMIN') {
-    await applyApartmentPrimaryAdmin(client, { apartmentId, userCode });
+    await applyApartmentPrimaryAdmin(client, { apartmentId, userCode, actor, actorRole, reasonCode });
   } else {
     // Zaten yonetici: baska aktif yonetici kalmasin (ikinci admin olusmaz).
     await client.query(

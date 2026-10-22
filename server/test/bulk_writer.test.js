@@ -156,7 +156,7 @@ describe('applyPeopleOps: işlem birleştirme ve ifadeler', () => {
         { t: 'va', ref: `new:${i + 2}`, plate: `34K${String(i).padStart(5, '0')}`, display: '', note: null },
       ]).flat(),
     });
-    assert.equal(small.log.length, 4, 'nextval + kişi + ilişki + araç');
+    assert.equal(small.log.length, 5, 'nextval + kişi + ilişki + ilişki adli kaydı (tek kümesel ifade) + araç');
   });
 });
 

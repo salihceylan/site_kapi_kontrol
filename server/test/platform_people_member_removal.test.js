@@ -23,7 +23,7 @@ function scripted(handlers, { strict = false } = {}) {
       for (const [pattern, handler] of handlers) {
         if (pattern.test(sql)) return typeof handler === 'function' ? handler(sql, params ?? []) : handler;
       }
-      if (/^(BEGIN|COMMIT|ROLLBACK|SAVEPOINT|RELEASE SAVEPOINT|ROLLBACK TO SAVEPOINT)\b/.test(sql) || /^INSERT INTO audit_log/.test(sql)) return ok();
+      if (/^(BEGIN|COMMIT|ROLLBACK|SAVEPOINT|RELEASE SAVEPOINT|ROLLBACK TO SAVEPOINT)\b/.test(sql) || /^INSERT INTO (audit_log|apartment_residency_log)/.test(sql)) return ok();
       if (strict) throw new Error(`BEKLENMEYEN SQL: ${sql.slice(0, 200)}`);
       return ok();
     },
@@ -196,7 +196,12 @@ describe('S6: removeApartmentMember CRM kancasini AYNI transaction\'da cagirir; 
   it('toggleApartmentMemberStatus (geçici pasife alma): CRM iliskilerine DOKUNMAZ', async () => {
     const { clientLog } = setup({ resident: 20000, role: 'APARTMENT_ADMIN' });
     await toggleApartmentMemberStatus({ apartmentId: 3, targetUserCode: 20000, isActive: false, authUser: superUser });
-    assert.equal(has(clientLog, /apartment_residencies|site_people/), false);
+    // ADLI KAYIT satiri (tek INSERT) hesaba katilmaz: gecici pasife alma yalniz ccess_suspended olayi yazar, iliskileri DEGISTIRMEZ.
+    const writes = clientLog.filter((q) => !/^INSERT INTO apartment_residency_log/.test(q.sql));
+    assert.equal(has(writes, /apartment_residencies|site_people/), false);
+    const logged = find(clientLog, /^INSERT INTO apartment_residency_log/);
+    assert.equal(logged.params[2], 'access_suspended');
+    assert.equal(logged.params[3], 'site_manager');
   });
 });
 

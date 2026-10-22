@@ -345,7 +345,7 @@ describe('updateRules (yazma akışı)', () => {
 });
 
 describe('listRules', () => {
-  it('platform görünümü: site null, gruplar, 15 kural sırayla; site görünümü: site yoksa 404', async () => {
+  it('platform görünümü: site null, gruplar, 16 kural sırayla; site görünümü: site yoksa 404', async () => {
     const db = fakeDb();
     const body = await listRules(db, { siteCode: null, onDate: TODAY, includeNames: true, canEdit: true });
     assert.equal(body.site, null);

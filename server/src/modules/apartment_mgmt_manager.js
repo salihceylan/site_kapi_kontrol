@@ -68,7 +68,15 @@ export async function changeApartmentAdmin({ siteCode, apartmentId, body, authUs
     if (next.is_admin) {
       return { ok: true, changed: false, admin: { user_code: next.user_code, name: next.name } };
     }
-    if (!(await transferApartmentAdmin(client, { apartmentId: state.apartment.id, userCode: target }))) {
+    if (
+      !(await transferApartmentAdmin(client, {
+        apartmentId: state.apartment.id,
+        userCode: target,
+        actor: authUser,
+        actorRole: authUser?.role === 'super_user' ? 'super_user' : 'site_manager',
+        reasonCode: 'site_manager',
+      }))
+    ) {
       throw new PlatformError(409, 'NOT_AN_ACTIVE_RESIDENT', 'Yeni admin, dairede aktif bağı olan bir sakin olmalıdır.');
     }
     // Yonetim kaydi: acik devir kapanir; yeni admin malik degilse tarihce satiri (source 'manager') acilir.

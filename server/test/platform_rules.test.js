@@ -38,7 +38,7 @@ const row = (value, validFrom, { site = null, inherit = false, id = ++nextRowId 
 });
 
 describe('kayıt defteri (sözleşme 2.2)', () => {
-  it('15 anahtar, sözleşmedeki sırayla ve varsayılanlarla', () => {
+  it('16 anahtar, sözleşmedeki sırayla ve varsayılanlarla', () => {
     assert.deepEqual(
       RULE_KEYS.map((key) => [key, RULES[key].defaultValue]),
       [
@@ -55,6 +55,7 @@ describe('kayıt defteri (sözleşme 2.2)', () => {
         ['retention.work_photos_after_close_days', 730],
         ['retention.announcements_days', 1825],
         ['retention.audit_days', 1825],
+        ['retention.residency_log_days', 3650],
         ['retention.decision_book_days', null],
         ['retention.enforce', false],
       ],

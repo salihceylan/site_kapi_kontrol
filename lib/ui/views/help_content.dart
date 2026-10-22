@@ -136,6 +136,10 @@ abstract final class HelpContent {
     'Bu daireden ayrıl',
     'Güvenlik ve destek',
     'Site yönetimine gizli talep gönder',
+    // Daire kartı: eski sakinler / adli kayıt (yalnız site yöneticisi)
+    'Eski sakinler / Adli kayıt',
+    'Kayıtları göster',
+    'Adli bilgi dökümü al',
     // Banka dosyası (2C) ve liste dışa aktarımı (3E)
     'Kasa',
     'Banka dosyası yükle',
@@ -285,6 +289,20 @@ abstract final class HelpContent {
       'Uzaklaştırma ya da koruma kararınız varsa belgeyi site yönetimine bildirin; site yöneticisi gerekirse kişinin kapı erişimini askıya alabilir.',
     ],
     note: 'Uygulama polisin ya da mahkemenin yerine geçmez. Sistem iddiayı doğrulayamaz ve otomatik kilitleme yapmaz; kararı site yöneticisi verir.',
+  );
+
+  /// Site yöneticisi: eski sakin / adli kayıt (sakin yardımına EKLENMEZ; kayıt sakinlere gösterilmez).
+  static const HelpTopic _formerResidentRecords = HelpTopic(
+    id: 'former_resident_records',
+    title: 'Eski sakin kayıtları',
+    icon: Icons.history_edu_rounded,
+    steps: <String>[
+      'Menüden “Kişiler” ekranını açın, “Daireler” listesinden dairenin kartına girin.',
+      'Kartta “Eski sakinler / Adli kayıt” bölümünde “Kayıtları göster” ile daireden ayrılan kiracı, malik ve aile üyelerinin kaydını görürsünüz: kim, hangi rolde, hangi dönemde, nasıl ayrıldı ve işlemi kim yaptı.',
+      'Resmî talep (mahkeme, kolluk) gelirse “Adli bilgi dökümü al” ile PDF ya da CSV alın; gerekçeyi seçmeniz ve kısa bir not yazmanız zorunludur, döküm alma denetim kaydına yazılır.',
+    ],
+    note:
+        'Bu kayıt yalnız resmî talep halinde bilgi amaçlıdır. Yalnız site yöneticisi görür; kurul, görevli, daire yöneticisi, malik, kiracı ve yeni kiracı göremez. Kayıtta telefon, e-posta ve kimlik numarası bulunmaz; kayıt değiştirilemez ve silinemez.',
   );
 
   static const HelpTopic _joinApartment = HelpTopic(
@@ -784,6 +802,7 @@ abstract final class HelpContent {
       ],
       note: 'Bu seçenek yalnız hem yönetici hem sakin olarak kayıtlı hesaplarda görünür.',
     ),
+    _formerResidentRecords,
     _profile,
   ];
 
