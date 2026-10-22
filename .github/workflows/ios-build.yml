@@ -1,0 +1,51 @@
+name: iOS Build (Appetize)
+
+# Appetize.io icin iPhone Simulator derlemesi: Runner.app zip olarak artifact'a konur.
+# Calistirma: GitHub > Actions > "iOS Build (Appetize)" > Run workflow; bitince "Runner-simulator" artifact'ini indirin
+# (indirilen zip icinde Runner.app.zip var; Appetize'a O ICTEKI Runner.app.zip yuklenir).
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ios-build:
+    name: Build iOS Simulator app
+    runs-on: macos-15
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install Flutter dependencies
+        run: flutter pub get
+
+      - name: Build for iOS Simulator (debug, no codesign)
+        run: flutter build ios --simulator --debug --no-codesign
+
+      - name: Zip Runner.app
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP_DIR="build/ios/iphonesimulator"
+          test -d "$APP_DIR/Runner.app"
+          mkdir -p dist
+          (cd "$APP_DIR" && zip -qry "$GITHUB_WORKSPACE/dist/Runner.app.zip" Runner.app)
+          ls -lh dist
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Runner-simulator
+          path: dist/Runner.app.zip
+          if-no-files-found: error
+          retention-days: 14
