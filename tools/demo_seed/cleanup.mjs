@@ -47,8 +47,17 @@ try {
     console.error('Bu kullanici SUPERUSER degil: append-only tablolarda DELETE icin session_replication_role=replica gerekir. SUPERUSER URL ile calistirin.');
     process.exit(3);
   }
+  // Arac batch'i (add_vehicles.mjs) tohum / yeniden yapilandirma kisilerine baglanir: o batch'ler arac batch'inden ONCE geri alinirsa yetim arac kalir.
+  const isVehicleBatch = batch.startsWith('demo-vehicles-');
+  if (!isVehicleBatch && !args.force) {
+    const vehicles = await q(`SELECT DISTINCT batch_id FROM ${REGISTRY_TABLE} WHERE batch_id LIKE 'demo-vehicles-%' ORDER BY 1`);
+    if (vehicles.rowCount > 0) {
+      console.error(`DURDURULDU: ${vehicles.rows.map((r) => r.batch_id).join(', ')} arac batch'i hala kayitli. Once onu geri alin (cleanup.mjs --batch <o batch> --yes), sonra bunu. Bilerek devam etmek icin --force.`);
+      process.exit(5);
+    }
+  }
   // Yeniden yapilandirma batch'i (restructure_families.mjs) tohum kisilerine baglanir: tohum batch'i ondan ONCE geri alinirsa yetim kayit kalir.
-  if (!batch.startsWith('demo-restructure-') && !args.force) {
+  if (!batch.startsWith('demo-restructure-') && !isVehicleBatch && !args.force) {
     const later = await q(`SELECT DISTINCT batch_id FROM ${REGISTRY_TABLE} WHERE batch_id LIKE 'demo-restructure-%' ORDER BY 1`);
     if (later.rowCount > 0) {
       console.error(`DURDURULDU: ${later.rows.map((r) => r.batch_id).join(', ')} yeniden yapilandirma batch'i hala kayitli. Once onu geri alin (cleanup.mjs --batch <o batch> --yes), sonra tohum batch'ini. Bilerek devam etmek icin --force.`);

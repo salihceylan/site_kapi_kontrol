@@ -12,11 +12,15 @@ DEGISMEZ; arac uygulamanin kendi servislerini ve tablo kisitlarini kullanir. Her
 | Dosya | Gorev |
 |---|---|
 | `seed.mjs` | Ana arac. `--site "Cenk"` (birden cok ya da hic eslesme: DURUR), `--creds-out <json>`, `--only people,finance`, `--force`, `--dry-run`, `--today`, `--close-through 2026-08` |
-| `cleanup.mjs` | `--list`, `--batch <id> --yes`: kayitli satirlari siler (SUPERUSER gerekir), diskteki belge dosyalarini siler, degistirilen satirlari eski haline getirir; yeniden yapilandirma batch'i varken tohum batch'ini reddeder (`--force`) |
+| `cleanup.mjs` | `--list`, `--batch <id> --yes`: kayitli satirlari siler (SUPERUSER gerekir), diskteki belge dosyalarini siler, degistirilen satirlari eski haline getirir; arac batch'i varken tohum / yeniden yapilandirma batch'ini, yeniden yapilandirma batch'i varken tohum batch'ini reddeder (`--force`) |
 | `make_pdf.py` | `--creds creds.json --out hesaplar.pdf` : A4 PDF (yonetim kadrosu + gorevliler + daire daire sakinler; yeniden yapilandirilmis JSON'da Malik / Daire admini (sari satir) / aile uyeleri). `pip install reportlab` |
 | `run_remote.sh` | Sunucuda: pg_dump yedegi -> yedekten gecici DB -> tohum + cleanup provasi -> `--prod` ile canli |
 | `restructure_families.mjs` | Tohumlanmis sitenin dairelerini YENI DAIRE YONETIMI modeline gore duzenler (asagidaki bolum): `--prev-creds`, `--creds-out`, `--dry-run`, `--seed`, `--force` |
 | `run_remote_restructure.sh` | Sunucuda: yedek -> gecici DB provasi (yeniden yapilandirma + cleanup, icerik ozeti karsilastirmasi) -> `--prod` ile canli |
+| `add_vehicles.mjs` | Araci olmayan her aileye (daire) gercekci Turk plakali TEK arac ekler, idempotent (asagidaki bolum): `--dry-run`, `--seed`, `--report-out`, `--force` |
+| `run_remote_vehicles.sh` | Sunucuda: yedek -> gecici DB provasi (arac ekleme + cleanup, icerik ozeti karsilastirmasi) -> `--prod` ile canli |
+| `make_plate_previews.py` | `--report out/vehicles-report-<batch>.json`: her plaka icin Turk plakasi gorunumunde PNG + tek sayfa `plakalar.png` (`pip install pillow`) |
+| `test/local_vehicles_test.mjs` | `add_vehicles` icin yerel uctan uca test (gecici PostgreSQL) |
 | `test/local_restructure_test.mjs` | Yeniden yapilandirma icin yerel uctan uca test (seed + 2 bozulma + dry-run + uygulama + dogrulamalar + PDF + iki cleanup) |
 | `test/local_test.mjs` | Yerel uctan uca test (gecici PostgreSQL, fixture site, dogrulamalar, cleanup, PDF) |
 | `lib/`, `steps/` | Yardimcilar ve modul adimlari (`people`, `metering`, `finance`, `budget`, `announcements`, `neighbor`, `documents`, `work`, `reservation`, `visitors`, `contracts`, `decisions`, `surveys`, `equipment`, `devices`, `annual_report`) |
@@ -94,6 +98,37 @@ DATABASE_URL=postgres://... node cleanup.mjs --batch demo-restructure-YYYYMMDDHH
 * **Cikti**: `--creds-out` JSON'u (sifreler duz metin: commit etmeyin) tum daire hesaplarini `familyRole` (`landlord` / `head` / `spouse` / `child` / `elder`), `apartmentRole`, `isAmir`, `age`, `isMinor`, `hasAccount`, `isNew` ve kullanici adi / sifreyle icerir; ayrica `households` (daire basina malik / admin / devir) ve `roleChanges` (mevcut hesaplarin onceki / yeni rolu). Rapor: `out/restructure-report-<batch>.json` (sifresiz). `make_pdf.py` bu dosyadan her dairede Malik, Daire admini (sari satir), aile uyeleri ve kullanici adi / sifre tablolarini uretir.
 * **Test**: `node tools/demo_seed/test/local_restructure_test.mjs --port <gecici PG>` (seed + admin kaymasi + malik yok bozulmasi + dry-run + uygulama + dogrulamalar + PDF + iki cleanup).
 * **Bilinen sinirlar**: yaslar veritabaninda tutulmaz (yalniz `is_minor` ve kimlik JSON'unda `age`); denetim kaydi (`audit_log`) yazilmaz; hesapsiz kucuk cocuklarin e-postasi / telefonu yoktur (12 yas alti).
+
+## Her aileye bir arac (`add_vehicles.mjs`)
+
+Tohumlanmis demo sitesinde (yeniden yapilandirmadan once de sonra da calisir) ARACI OLMAYAN her daireye (aile/hane) TEK arac ekler; zaten aktif araci olan daireye DOKUNMAZ (ikinci calistirma bir sey eklemez, "Eklenecek arac yok"). Uygulama kodu (`lib/`, `server/src`) DEGISMEZ.
+
+* **Sahip**: dairenin aile reisi = aktif `APARTMENT_ADMIN` uyeligi olan sakin (yoksa kiraci, yoksa malik); kiraci oturuyorsa dis oturan malik aileden sayilmaz. Aile reisi demo tohum kisisi degilse (gercek sakin) o daire ATLANIR ve rapora yazilir.
+* **Kayit biciminin dayanagi**: `server/src/modules/vehicle_service.js` + migration 031 `vehicles` (plaka bosluksuz buyuk harf `35ABC123`, `plate_display` = `35 ABC 123`, `note`, `person_id`, `apartment_id`, `is_active`, aktif plaka tekil `uq_vehicles_plate`). Servis islevi (`createVehicle`) kullanilmaz (kullanici/yetki baglami ister, `apartment_id` yazmaz); tohum gibi dogrudan SQL yazilir. Her plaka sunucunun kendi kurallariyla dogrulanir (`people_common.normalizePlate` + `plate_recognition_common.normalizeTrPlate`); uymayan olursa tum islem geri alinir. Yazma TEK transaction'dadir ve uygulamanin CRM yazmalariyla ayni advisory kilidi (`people_sync:<site>`) alinir.
+* **Gercekci Turk plakasi** (`lib/tr_plate.mjs`): `<il kodu 01-81> <1-3 harf> <2-4 rakam>` (35 ABC 123, 35 AB 1234, 35 A 1234 ...; harf+rakam <= 6). Il: %65 `35` (Izmir), kalani 34, 06, 45, 09, 16, 07, 01, 48, 20. Harfler yalniz `A B C D E F G H J K L M N P R S T U V Y Z`: Turk plakalarinda Ç Ğ İ Ö Ş Ü ve Q W X yoktur; rakamlarla karisan I ve O da uretilmez. Rakam grubu 0 ile baslamaz; tekrar / ardisik / bilinen sayilar (1923, 1453, 1905...) elenir. Ozel seriler (polis, resmi arac, diplomatik, konsolosluk, ticari taksi, gecici, yabanci ikamet, jandarma...) uretilmez; siyasi / sakincali harf kisaltmalari elenir. Plakalar rastgeledir, gercek bir kisiye ait bilinen plakalarla eslestirilmez. Siteye ait tum plakalar, pasif araclar, kamera olaylari, misafir izinleri, kara liste ve plaka kararlariyla CAKISMAZ.
+* **Arac notu**: `<Renk> <Marka> <Model>` (ornek "Beyaz Renault Clio", "Gri Fiat Egea", "Siyah Volkswagen Passat"); `lib/vehicle_catalog.mjs` Turkiye'de yaygin ~70 model / 12 renk (agirlikli); ayni renk+marka+model tekrarlanmaz, ayni model en cok 2 kez. Hepsi sahte demo verisidir.
+* **Geri alma**: eklenen satirlar `demo_seed_registry`'ye `demo-vehicles-<zaman>` batch'iyle yazilir (yalniz `vehicles` + registry; e-posta / bildirim / davet kuyruguna HICBIR sey yazilmaz). `node cleanup.mjs --batch demo-vehicles-... --yes`. Sira: ONCE arac batch'i, SONRA yeniden yapilandirma batch'i, SONRA tohum batch'i (`cleanup.mjs` arac batch'i varken digerlerini reddeder; arac batch'i digerleri varken de geri alinabilir).
+* **Rapor**: `out/vehicles-report-<batch>.json` (`--report-out` ile degistirilir; sifre/kimlik YOK): eklenen (daire, sahip, plaka, not), mevcut (kept) ve atlanan araclar.
+* **Plaka onizlemesi**: uygulamada plaka DUZ METIN gosterilir (`VehicleCard` -> `Text(vehicle.displayPlate)`; Kisiler > Araclar sekmesi, kisi karti, sakinin "Kayitlarim" bolumu `InfoChip`; plaka tanima ekranlarinda `formatTrPlate`). Gorunumu gormek icin `python make_plate_previews.py --report out/vehicles-report-<batch>.json` (Pillow) `out/plaka_onizleme/<plaka>.png` (beyaz zemin, solda mavi serit + "TR", siyah kalin karakterler, yuvarlak cerceve) ve hepsini tek sayfada gosteren `plakalar.png` uretir (`out/` .gitignore'dadir). Gercek Turk plakasinda mavi seritte yalniz "TR" yazar (AB'nin 12 yildizi yoktur).
+
+```bash
+# Sunucuda (yedek + prova + canli)
+scp -r tools/demo_seed <kullanici>@<sunucu>:~/demo_seed
+ssh <sunucu> 'bash ~/demo_seed/run_remote_vehicles.sh'                                  # yalniz yedek + prova (canliya YAZMAZ)
+ssh <sunucu> 'bash ~/demo_seed/run_remote_vehicles.sh --prod --skip-rehearsal'          # prova temizse canliya
+scp <sunucu>:~/demo_seed/out/vehicles-report-*.json out/ && python make_plate_previews.py --report out/vehicles-report-<zaman>.json
+
+# Elle: once --dry-run (plani yazdirir, hicbir sey yazmaz)
+DATABASE_URL=postgres://... node add_vehicles.mjs --site Cenk --dry-run
+DATABASE_URL=postgres://... node add_vehicles.mjs --site Cenk
+
+# Geri alma
+DATABASE_URL=postgres://... node cleanup.mjs --batch demo-vehicles-YYYYMMDDHHMMSS --yes
+```
+
+* **Korumalar**: sitede demo tohum kaydi yoksa (`demo_seed_registry`'de `demo-` batch'li `site_people`) cikis 4 (`--force` ile asilir). Hatada tum islem geri alinir.
+* **Bilinen sinir**: tohumun ilk 12 araci (eski uretec, rastgele il kodlu, not "Ana arac") bu aracla DEGISTIRILMEZ; yalniz eksik dairelere yeni, gercekci plakali arac eklenir.
+* **Test**: `node tools/demo_seed/test/local_vehicles_test.mjs --port <gecici PG>` (saf plaka testleri + seed + restructure + add_vehicles + dogrulamalar + ikinci calistirma + PNG + cleanup sirasi; `server/node_modules` yoksa `DEMO_SEED_SERVER_DIR`).
 
 ## Modul eslemesi ve atlama
 
