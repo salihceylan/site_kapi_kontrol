@@ -12,6 +12,7 @@ const Map<SirketMenuItem, SirketMenuGroup> _expected = <SirketMenuItem, SirketMe
   SirketMenuItem.siteler: SirketMenuGroup.daireler,
   SirketMenuItem.daireKullanicilariYonetimi: SirketMenuGroup.daireler,
   SirketMenuItem.kisiler: SirketMenuGroup.daireler,
+  SirketMenuItem.dairem: SirketMenuGroup.daireler,
   SirketMenuItem.katilimVeKurulum: SirketMenuGroup.daireler,
   SirketMenuItem.finans: SirketMenuGroup.borclar,
   SirketMenuItem.borcum: SirketMenuGroup.borclar,

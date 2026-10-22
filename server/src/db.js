@@ -20,6 +20,7 @@ import { ensureBrandThemeSchema } from './modules/brand_theme_schema.js';
 import { ensureContractsSchema } from './modules/contracts_schema.js';
 import { ensureEquipmentSchema } from './modules/equipment_schema.js';
 import { ensureCctvSchema } from './modules/cctv_schema.js';
+import { ensureApartmentMgmtSchema } from './modules/apartment_mgmt_schema.js';
 import { ensureDecisionBookSchema } from './modules/decision_book_schema.js';
 import { ensureBudgetSchema } from './modules/budget_schema.js';
 import { ensureNeighborBoardSchema } from './modules/neighbor_board_schema.js';
@@ -1955,6 +1956,8 @@ export async function ensureDbSchema() {
     await ensureBrandThemeSchema(client);
     // 072 (kamera / CCTV baglantisi): site_doors'tan SONRA; katalog kontrolu + her adim kendi otomatik onayli ifadesi (cctv_schema.js = migrations/072).
     await ensureCctvSchema(client);
+    // 074 (daire sahipligi ve yonetimi: yonetim devri, bag kesme / davet talepleri, vekalet + residencies.sponsor_person_id): apartment_residencies'ten SONRA; katalog kontrolu (apartment_mgmt_schema.js = migrations/074).
+    await ensureApartmentMgmtSchema(client);
 
     // 031 people_v1: mevcut sakinlerin CRM'e tek seferlik aktarimi. Savunmaci: hata sunucunun acilmasini ENGELLEMEZ
     // (kendi transaction'i geri alinir, isaret yazilmaz => sonraki acilista yeniden denenir; okuma anindaki

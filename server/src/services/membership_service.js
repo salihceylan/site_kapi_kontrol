@@ -1657,6 +1657,39 @@ function parseTargetUserCode(value) {
 }
 
 /**
+ * KORUMA POLITIKASI (docs/PLATFORM_DAIRE_GUVENLIK_POLITIKASI.md): yalniz DAIRE ADMINI olan cagiran (site yoneticisi / super degil), baska bir uyenin
+ * erisimini TEK TARAFLI kesemez: hesabi olan YETISKIN uye icin onay istegi gerekir (Dairem > Aile uyeleri). 18 yasindan kucuk isaretli uyeler ve
+ * hesabi olmayan kisiler tek tarafli cikarilabilir. Site yonetiminin guvenlik karariyla askiya alinmis kisiyi admin yeniden ETKINLESTIREMEZ.
+ */
+async function assertAdminMayActOnMember(apartmentId, targetUserCode, { activating = false } = {}) {
+  if (activating) {
+    const suspended = await pool.query(
+      `SELECT 1 FROM apartment_access_suspensions WHERE apartment_id = $1 AND user_code = $2 AND lifted_at IS NULL LIMIT 1`,
+      [apartmentId, targetUserCode],
+    );
+    if (suspended.rows?.[0]) {
+      throw httpError(403, 'Bu işlem şu anda yapılamıyor. Site yönetimine başvurun.');
+    }
+    return;
+  }
+  const rows = await pool.query(
+    `SELECT r.is_minor FROM apartment_residencies r
+     INNER JOIN site_people sp ON sp.id = r.person_id
+     WHERE r.apartment_id = $1 AND r.is_current = TRUE AND sp.user_code = $2`,
+    [apartmentId, targetUserCode],
+  );
+  const allMinor = (rows.rows ?? []).length > 0 && rows.rows.every((row) => row.is_minor === true);
+  if (!allMinor) {
+    const err = httpError(
+      403,
+      'Yetişkin bir üyenin erişimi tek taraflı kesilemez. Dairem ekranından üyeye onay isteği gönderin ya da site yönetimine başvurun.',
+    );
+    err.code = 'CONSENT_REQUIRED';
+    throw err;
+  }
+}
+
+/**
  * Daire Üyesini Pasife Al / Çıkar
  * (Süper Kullanıcı, Site Yöneticisi veya Daire Yöneticisi)
  * Erişim kesilir: üyelik pasifleşir, eski sakin göstergesi devredilir, manuel kapı izinleri temizlenir
@@ -1670,6 +1703,9 @@ export async function removeApartmentMember({ apartmentId, targetUserCode, authU
   // Daire yöneticisi kendisini çıkaramaz (süper kullanıcı veya site yöneticisi çıkarabilir)
   if (!isSuperUser && !isSiteManager && tUserCode === reviewerUserCode) {
     throw httpError(400, 'Daire yöneticisi kendi kendisini daireden çıkaramaz.');
+  }
+  if (!isSuperUser && !isSiteManager) {
+    await assertAdminMayActOnMember(apt.id, tUserCode);
   }
 
   const client = await pool.connect();
@@ -1755,6 +1791,9 @@ export async function toggleApartmentMemberStatus({ apartmentId, targetUserCode,
   }
 
   const activeBool = parseBooleanFlag(isActive, 'is_active');
+  if (!isSuperUser && !isSiteManager) {
+    await assertAdminMayActOnMember(apt.id, tUserCode, { activating: activeBool });
+  }
 
   const client = await pool.connect();
   let committed = false;
@@ -2053,6 +2092,40 @@ export async function changeApartmentMemberPassword({
 }
 
 /**
+ * Dairenin yöneticisini (APARTMENT_ADMIN) hedef AKTİF üyeye devreder: mevcut tüm yöneticiler FAMILY_MEMBER olur, hedef APARTMENT_ADMIN olur,
+ * eski sakin göstergesi (apartments.resident_user_code) hedefe taşınır (gösterge başkasına geçiyorsa önceki göstergenin iletişim e-postası ve
+ * "PIN verildi" işareti temizlenir; inceleme P2). Çağıran transaction'ı yönetir ve daire satırını FOR UPDATE kilitlemiştir.
+ * `setApartmentPrimaryAdmin` ("Aile Reisini Değiştir") ve daire yönetimi devri (apartment_mgmt_service) AYNI kuralı kullanır.
+ */
+export async function applyApartmentPrimaryAdmin(client, { apartmentId, userCode }) {
+  // 1. Mevcut tüm APARTMENT_ADMIN'leri FAMILY_MEMBER yap
+  await client.query(
+    `UPDATE apartment_memberships SET role = 'FAMILY_MEMBER', updated_at = NOW()
+     WHERE apartment_id = $1 AND role = 'APARTMENT_ADMIN'`,
+    [apartmentId],
+  );
+
+  // 2. Hedef (aktif) kullanıcıyı APARTMENT_ADMIN yap
+  await client.query(
+    `UPDATE apartment_memberships SET role = 'APARTMENT_ADMIN', updated_at = NOW()
+     WHERE apartment_id = $1 AND user_code = $2 AND is_active = TRUE`,
+    [apartmentId, userCode],
+  );
+
+  // 3. apartments.resident_user_code kolonunu güncelle. Gösterge BAŞKA kişiye geçiyorsa önceki göstergenin iletişim e-postası ve
+  // "PIN verildi" işareti ona aitti: temizlenir (inceleme P2; yeni göstergenin parolası yönetimin verdiği PIN değildir).
+  await client.query(
+    `UPDATE apartments
+     SET resident_email = CASE WHEN resident_user_code IS DISTINCT FROM $1 THEN NULL ELSE resident_email END,
+         resident_pin_issued = CASE WHEN resident_user_code IS DISTINCT FROM $1 THEN FALSE ELSE resident_pin_issued END,
+         resident_pin_code = NULL,
+         resident_user_code = $1
+     WHERE id = $2`,
+    [userCode, apartmentId],
+  );
+}
+
+/**
  * Aile Reisini Değiştir (Yeni Daire Yöneticisi / APARTMENT_ADMIN Ata)
  * (Süper Kullanıcı, Site Yöneticisi ve Daire Yöneticisi yetkilidir)
  * Pasif / çıkarılmış üye aile reisi yapılarak yeniden aktifleştirilemez (409).
@@ -2094,31 +2167,7 @@ export async function setApartmentPrimaryAdmin({ apartmentId, targetUserCode, au
       return { ok: true, message: 'Bu kullanıcı zaten dairenin Aile Reisidir (Daire Yöneticisi).' };
     }
 
-    // 1. Mevcut tüm APARTMENT_ADMIN'leri FAMILY_MEMBER yap
-    await client.query(
-      `UPDATE apartment_memberships SET role = 'FAMILY_MEMBER', updated_at = NOW()
-       WHERE apartment_id = $1 AND role = 'APARTMENT_ADMIN'`,
-      [apt.id],
-    );
-
-    // 2. Hedef (aktif) kullanıcıyı APARTMENT_ADMIN yap
-    await client.query(
-      `UPDATE apartment_memberships SET role = 'APARTMENT_ADMIN', updated_at = NOW()
-       WHERE apartment_id = $1 AND user_code = $2 AND is_active = TRUE`,
-      [apt.id, tUserCode],
-    );
-
-    // 3. apartments.resident_user_code kolonunu güncelle. Gösterge BAŞKA kişiye geçiyorsa önceki göstergenin iletişim e-postası ve
-    // "PIN verildi" işareti ona aitti: temizlenir (inceleme P2; yeni göstergenin parolası yönetimin verdiği PIN değildir).
-    await client.query(
-      `UPDATE apartments
-       SET resident_email = CASE WHEN resident_user_code IS DISTINCT FROM $1 THEN NULL ELSE resident_email END,
-           resident_pin_issued = CASE WHEN resident_user_code IS DISTINCT FROM $1 THEN FALSE ELSE resident_pin_issued END,
-           resident_pin_code = NULL,
-           resident_user_code = $1
-       WHERE id = $2`,
-      [tUserCode, apt.id],
-    );
+    await applyApartmentPrimaryAdmin(client, { apartmentId: apt.id, userCode: tUserCode });
 
     await client.query('COMMIT');
     committed = true;

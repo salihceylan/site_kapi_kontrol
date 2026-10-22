@@ -5,7 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/models/bulk_import.dart' show BulkExportFilters, ImportKind;
 import 'package:site_kapi_kontrol/models/platform_module.dart' show MySiteModules;
 import 'package:site_kapi_kontrol/services/auth_service.dart';
+import 'package:site_kapi_kontrol/services/apartment_management_api.dart';
 import 'package:site_kapi_kontrol/services/bulk_api.dart' show BulkService;
+import 'package:site_kapi_kontrol/ui/dialogs/apartment_admin_dialogs.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart';
@@ -382,6 +384,23 @@ class PeopleViewState extends State<PeopleView> {
               onPressed: () => _selectTab(3),
               icon: const Icon(Icons.badge_rounded, size: 18),
               label: const Text('Yönetim Kurulu ve Görevliler'),
+            ),
+          ),
+          const SizedBox(height: AppSpace.sm),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+              key: const ValueKey<String>('people_safety_requests'),
+              onPressed: () => unawaited(
+                SafetyRequestsDialog.show(
+                  context,
+                  service: ApartmentManagementService(authService: widget.authService),
+                  siteCode: site.code,
+                  siteName: site.label,
+                ),
+              ),
+              icon: const Icon(Icons.shield_outlined, size: 18),
+              label: const Text('Güvenlik talepleri'),
             ),
           ),
           const SizedBox(height: AppSpace.md),

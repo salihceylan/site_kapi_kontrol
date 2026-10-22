@@ -14,6 +14,7 @@ import 'package:site_kapi_kontrol/ui/design/buttons.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/decision_detail_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/decision_form_dialog.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/signing_roster_dialog.dart';
 import 'package:site_kapi_kontrol/ui/helpers/decision_loader.dart';
 import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart' show crmMessageOf;
 import 'package:site_kapi_kontrol/ui/widgets/decision_parts.dart';
@@ -558,6 +559,14 @@ class DecisionManagerViewState extends State<DecisionManagerView> {
               expand: false,
               loading: _pdfBusy,
               onPressed: _pdfBusy ? null : () => unawaited(_downloadPdf(site)),
+            ),
+            PrimaryActionButton(
+              key: const ValueKey<String>('decision_signing_roster'),
+              label: 'İmza hakkı sahipleri',
+              icon: Icons.draw_rounded,
+              variant: AppButtonVariant.outline,
+              expand: false,
+              onPressed: () => unawaited(SigningRosterDialog.show(context, authService: widget.authService, siteCode: site.code)),
             ),
             Text(
               year == null ? 'Seçilen yılın kesin kararları.' : '$year yılının kesin kararları.',

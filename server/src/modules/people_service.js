@@ -1345,3 +1345,13 @@ export async function endResidency({ siteCode, residencyId, body = {}, actor, in
   return loadPersonDetail(pool, siteCode, personId, { includeUserCode });
 }
 
+// Daire yönetimi (apartment_mgmt_service.js) AYNI site kilidi, ilişki ve erişim kapatma kurallarını yeniden kullanır (kopya yok).
+export {
+  afterAccessClosed,
+  assertRelationAvailable,
+  closeResidency,
+  insertResidency,
+  loadApartmentForSite,
+  withSiteTransaction,
+};
+

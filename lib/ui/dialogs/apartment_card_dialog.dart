@@ -8,6 +8,8 @@ import 'package:site_kapi_kontrol/ui/design/app_snack.dart';
 import 'package:site_kapi_kontrol/ui/design/buttons.dart';
 import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+import 'package:site_kapi_kontrol/services/apartment_management_api.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/apartment_admin_dialogs.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/apartment_edit_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/history_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/large_dialog_parts.dart';
@@ -123,6 +125,34 @@ class _ApartmentCardDialogState extends State<ApartmentCardDialog> {
     });
     widget.onChanged?.call();
     AppSnack.show(context, 'Daire bilgileri güncellendi.', kind: AppSnackKind.success);
+  }
+
+  Future<void> _changeAdmin() async {
+    final detail = _detail;
+    if (detail == null) return;
+    final changed = await ChangeAdminDialog.show(
+      context,
+      service: ApartmentManagementService(authService: widget.scope.authService),
+      siteCode: widget.scope.siteCode,
+      apartmentId: detail.id,
+      apartmentLabel: detail.fullLabel,
+    );
+    if (changed && mounted) {
+      widget.onChanged?.call();
+      await _load();
+    }
+  }
+
+  Future<void> _suspension() {
+    final detail = _detail;
+    if (detail == null) return Future<void>.value();
+    return AccessSuspensionDialog.show(
+      context,
+      service: ApartmentManagementService(authService: widget.scope.authService),
+      siteCode: widget.scope.siteCode,
+      apartmentId: detail.id,
+      apartmentLabel: detail.fullLabel,
+    );
   }
 
   Future<void> _showHistory() {
@@ -274,6 +304,22 @@ class _ApartmentCardDialogState extends State<ApartmentCardDialog> {
                 ],
               ],
             ),
+          ),
+        ],
+        if (widget.scope.canWrite) ...[
+          const SizedBox(height: AppSpace.md),
+          PrimaryActionButton(
+            label: 'Daire adminini değiştir',
+            icon: Icons.manage_accounts_rounded,
+            variant: AppButtonVariant.outline,
+            onPressed: _changeAdmin,
+          ),
+          const SizedBox(height: AppSpace.sm),
+          PrimaryActionButton(
+            label: 'Kapı erişimi (askıya alma)',
+            icon: Icons.lock_person_rounded,
+            variant: AppButtonVariant.outline,
+            onPressed: _suspension,
           ),
         ],
         const SizedBox(height: AppSpace.md),

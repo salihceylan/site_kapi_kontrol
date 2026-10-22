@@ -49,6 +49,7 @@ import { plateRecognitionRouter } from './modules/plate_recognition_routes.js';
 import { contractsRouter } from './modules/contracts_routes.js';
 import { equipmentRouter } from './modules/equipment_routes.js';
 import { cctvRouter } from './modules/cctv_routes.js';
+import { apartmentMgmtRouter } from './modules/apartment_mgmt_routes.js';
 import { meteringRouter } from './modules/metering_routes.js';
 import { meteringFieldRouter } from './modules/metering_field_routes.js';
 import { startContractReminders, stopContractReminders } from './modules/contracts_reminders.js';
@@ -181,6 +182,8 @@ app.use(neighborBoardRouter);
 app.use(annualReportRouter);
 // Kamera (CCTV) baglantisi: /manager/sites/:siteCode/cctv/{cameras,events,clip-link}[...] (modul cctv_link, varsayilan KAPALI; sakin ucu yok).
 app.use(cctvRouter);
+// Daire sahipligi ve yonetimi (074): /app/apartments/{mine,people-search,requests/:id/*,:id/{tenant,family,exit,proxies,...}} + /manager/sites/:siteCode/signing-roster (cekirdek; modul gerektirmez).
+app.use(apartmentMgmtRouter);
 // Telefon bildirimi (Faz 3b-B): /app/push/devices[/:installId], /app/push/test, /admin/push/status (tercihler /app/notification-preferences'ta).
 app.use(pushRouter);
 // SMS ile giris + tarayici bildirimi (063): /auth/sms/*, /app/web-push/* (SMS / VAPID anahtari yoksa kapali).
