@@ -140,7 +140,23 @@ function renderResetPasswordHtml({ status, message, token, fullName }) {
           <div class="icon">⚠️</div>
           <h2>Bağlantı Geçersiz</h2>
           <p>${message || 'Bu şifre sıfırlama bağlantısı geçersiz veya süresi dolmuş.'}</p>
-          <a href="sitekapi://door_control" class="btn">Uygulamaya Dön</a>
+          <a href="/" class="btn" onclick="handleOpenApp(event)">Uygulamaya Dön</a>
+        </div>
+        <script>
+          function handleOpenApp(e) {
+            var isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+            if (isMobile) {
+              e.preventDefault();
+              var start = Date.now();
+              window.location.href = 'sitekapi://door_control';
+              setTimeout(function () {
+                if (Date.now() - start < 2500) {
+                  window.location.href = '/';
+                }
+              }, 1500);
+            }
+          }
+        </script>
         </div>
       </body>
       </html>
@@ -220,11 +236,28 @@ function renderResetPasswordHtml({ status, message, token, fullName }) {
           <p style="color: #94a3b8; font-size: 15px; margin: 12px 0 28px 0; line-height: 1.6;">
             Yeni şifreniz başarıyla kaydedildi. Artık yeni şifrenizle Site ve Toplu Yaşam Yönetim Sistemi uygulamasına giriş yapabilirsiniz.
           </p>
-          <a href="sitekapi://door_control" class="btn-submit" style="display:inline-block; text-decoration: none;">Uygulamayı Aç</a>
+          <a href="/" id="open-app-btn" class="btn-submit" onclick="handleOpenApp(event)" style="display:inline-block; text-decoration: none; width: 100%; box-sizing: border-box; text-align: center;">Uygulamayı Aç</a>
+          <div style="margin-top: 14px; text-align: center;">
+            <a href="/" style="color: #60a5fa; font-size: 14px; text-decoration: none;">Web Giriş Ekranına Git &rarr;</a>
+          </div>
         </div>
       </div>
 
       <script>
+        function handleOpenApp(e) {
+          var isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+          if (isMobile) {
+            if (e && e.preventDefault) e.preventDefault();
+            var start = Date.now();
+            window.location.href = 'sitekapi://door_control';
+            setTimeout(function () {
+              if (Date.now() - start < 2500) {
+                window.location.href = '/';
+              }
+            }, 1500);
+          }
+        }
+
         function toggleVisibility(inputId, btn) {
           const input = document.getElementById(inputId);
           if (input.type === 'password') {

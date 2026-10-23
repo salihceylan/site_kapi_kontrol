@@ -75,8 +75,27 @@ function formPage(summary, token) {
       <div class="alert" id="alert-box"></div>
       <button id="submit-btn" type="button">Hesabı oluştur</button>
     </div>
-    <div class="ok" id="success-box"><h2>Hesabınız hazır</h2><p>Uygulamayı açıp e-postanız ve şifrenizle giriş yapabilirsiniz.</p></div>
+    <div class="ok" id="success-box" style="text-align: center;">
+      <div style="width: 60px; height: 60px; background: rgba(16, 185, 129, 0.15); border: 2px solid #10b981; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px; font-size: 28px; color: #10b981;">✓</div>
+      <h2 style="color: #10b981;">Hesabınız hazır!</h2>
+      <p style="margin-bottom: 20px;">Artık e-postanız ve şifrenizle uygulamaya giriş yapabilirsiniz.</p>
+      <a href="/" class="btn-submit" onclick="handleOpenApp(event)" style="display:inline-block; text-decoration: none; width: 100%; box-sizing: border-box; text-align: center; padding: 14px; background: #2563eb; color: #fff; border-radius: 12px; font-weight: 600;">Uygulamayı Aç</a>
+      <div style="margin-top: 14px;"><a href="/" style="color: #60a5fa; font-size: 14px; text-decoration: none;">Web Giriş Ekranına Git &rarr;</a></div>
+    </div>
     <script>
+      function handleOpenApp(e) {
+        var isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+        if (isMobile) {
+          if (e && e.preventDefault) e.preventDefault();
+          var start = Date.now();
+          window.location.href = 'sitekapi://door_control';
+          setTimeout(function () {
+            if (Date.now() - start < 2500) {
+              window.location.href = '/';
+            }
+          }, 1500);
+        }
+      }
       (function () {
         var state = JSON.parse(document.getElementById('form-container').getAttribute('data-state'));
         var alertBox = document.getElementById('alert-box');
