@@ -65,6 +65,7 @@ import { annualReportRouter } from './modules/annual_report_routes.js';
 import { startDocumentsMaintenance, stopDocumentsMaintenance } from './modules/document_maintenance.js';
 import { pushRouter } from './modules/push_routes.js';
 import { notifyChannelsRouter } from './modules/notify_channels_routes.js';
+import { oauthRouter } from './modules/oauth_routes.js';
 import { startPushWorker, stopPushWorker } from './modules/push_worker.js';
 
 import { buildCorsAllowlist, createCorsOptionsDelegate } from './config/cors.js';
@@ -191,6 +192,8 @@ app.use(residencyLogRouter);
 app.use(pushRouter);
 // SMS ile giris + tarayici bildirimi (063): /auth/sms/*, /app/web-push/* (SMS / VAPID anahtari yoksa kapali).
 app.use(notifyChannelsRouter);
+// Google ve Apple (iCloud) sosyal giris / kayit (076): /auth/oauth/status, /auth/oauth/google, /auth/oauth/apple.
+app.use(oauthRouter);
 // Hesap silme (kimliksizlestirme) ve kisisel veri disa aktarma: /me/account-deletion[/preview], /me/data-export (yalniz kendi hesabi).
 app.use(accountRouter);
 // Platform hizmetleri: yasal belgeler (/public/legal-documents, /legal/:id, /me/consents), /public/app-config, /public/client-errors, /admin/platform-config.
@@ -200,6 +203,18 @@ app.use(platformServicesRouter);
 // Serve Flutter Web SPA if build/web exists
 if (fs.existsSync(webBuildPath)) {
   console.log(`[WEB] Serving Flutter Web from: ${webBuildPath}`);
+
+  // Android APK dogrudan indirme uc noktasi (resmi native uygulamayi dogrudan indirir)
+  app.get(['/download/app', '/download/site_yonetim.apk', '/site_yonetim.apk'], (req, res, next) => {
+    const apkPath = path.join(webBuildPath, 'site_yonetim.apk');
+    if (fs.existsSync(apkPath)) {
+      res.setHeader('Content-Type', 'application/vnd.android.package-archive');
+      res.setHeader('Content-Disposition', 'attachment; filename="site_yonetim.apk"');
+      res.setHeader('Cache-Control', 'no-cache');
+      return res.sendFile(apkPath);
+    }
+    next();
+  });
   // Giriş dosyaları her açılışta yeniden doğrulanır (ETag ile 304): yeni sürüm tarayıcı önbelleğinde 1 saat beklemesin.
   const WEB_ENTRY_FILES = new Set(['index.html', 'main.dart.js', 'flutter_bootstrap.js', 'flutter_service_worker.js', 'flutter.js', 'version.json', 'manifest.json']);
   app.use(express.static(webBuildPath, { maxAge: '1h', setHeaders: (res, filePath) => {

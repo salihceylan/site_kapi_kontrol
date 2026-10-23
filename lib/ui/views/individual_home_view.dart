@@ -662,34 +662,23 @@ class IndividualHomeViewState extends State<IndividualHomeView>
           ),
         ),
 
-        // 2. KART: SİTE KURULUMU (yalnız başvuru akışı açık rollerde; cihaz ekleme yalnız site yöneticisinde)
-        if (widget.applications != null || widget.canAddDevice) ...[
+        // Cihaz ekleme (yalnız canAddDevice true ise: site kurulumu Kapılar altında değil, Site Hizmetleri altındadır)
+        if (widget.canAddDevice) ...[
           const SizedBox(height: AppSpace.lg),
           StaggeredEntry(
             index: firstIndex + 1,
             child: SetupOptionCard(
               tone: AppTone.primary,
-              icon: widget.applications == null
-                  ? Icons.add_to_photos_rounded
-                  : Icons.domain_add_rounded,
-              title: widget.applications == null ? 'Cihaz' : 'Site Kurulumu',
-              badge: widget.applications == null ? 'CİHAZ' : 'BAŞVURU',
-              description: widget.applications == null
-                  ? 'Yeni cihazınızı kutu QR koduyla hesabınıza ekleyin.'
-                  : 'Sitenizi tanımlayıp başvurun; süper kullanıcı onayladığında siteniz kurulur ve '
-                        'site yöneticisi olursunuz. Cihazı site kurulduktan sonra siz (site yöneticisi) eklersiniz.',
-              action: widget.applications == null
-                  ? PrimaryActionButton(
-                      label: 'Cihaz Ekle',
-                      icon: Icons.add_to_photos_rounded,
-                      tone: AppTone.primary,
-                      onPressed: _openClaimDialog,
-                    )
-                  : _SiteApplyActions(
-                      tracker: widget.applications!,
-                      onApply: _openApplicationForm,
-                      onClaimDevice: widget.canAddDevice ? _openClaimDialog : null,
-                    ),
+              icon: Icons.add_to_photos_rounded,
+              title: 'Cihaz',
+              badge: 'CİHAZ',
+              description: 'Yeni cihazınızı kutu QR koduyla hesabınıza ekleyin.',
+              action: PrimaryActionButton(
+                label: 'Cihaz Ekle',
+                icon: Icons.add_to_photos_rounded,
+                tone: AppTone.primary,
+                onPressed: _openClaimDialog,
+              ),
             ),
           ),
         ],

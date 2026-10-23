@@ -129,6 +129,7 @@ const Map<SirketMenuItem, ModuleArtKind> _artKinds = <SirketMenuItem, ModuleArtK
   SirketMenuItem.platformAyarlari: ModuleArtKind.settings,
   SirketMenuItem.ellerSerbest: ModuleArtKind.settings,
   SirketMenuItem.profilim: ModuleArtKind.users,
+  SirketMenuItem.yeniSite: ModuleArtKind.sites,
 };
 
 /// Menü öğesinin vitrin görseli; eşlemesi olmayan (bilinmeyen / yeni) öğe [ModuleArtKind.generic].
@@ -182,6 +183,7 @@ const Map<SirketMenuItem, String> _descriptions = <SirketMenuItem, String>{
   SirketMenuItem.istemciHatalari: 'Uygulama hata raporları',
   SirketMenuItem.ellerSerbest: 'Eller serbest ve kestirmeler',
   SirketMenuItem.profilim: 'Hesap bilgileriniz',
+  SirketMenuItem.yeniSite: 'Yeni site ve apartman kurun veya başvurun',
 };
 
 /// Rolüne göre farklı söylenen açıklamalar: kart, kullanıcının o sayfada YAPABİLECEĞİNİ söyler (yetki kuralıyla

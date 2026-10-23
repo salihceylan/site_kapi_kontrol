@@ -213,6 +213,145 @@ class AuthApi {
     _ensureStatus(response, 200, unauthorizedIsSession: false);
   }
 
+  /// Sosyal giriş (076): `GET /auth/oauth/status` -> Google ve iCloud (Apple) yapılandırma durumu.
+  Future<Map<String, dynamic>> oauthStatus() async {
+    try {
+      final response = await _sendRequest(
+        method: 'GET',
+        uri: Uri.parse('$baseUrl/auth/oauth/status'),
+        headers: const {'Content-Type': 'application/json'},
+      );
+      _ensureStatus(response, 200, unauthorizedIsSession: false);
+      return _decodePayload(response);
+    } catch (_) {
+      return const <String, dynamic>{
+        'google': <String, dynamic>{'enabled': false, 'client_id': null},
+        'apple': <String, dynamic>{'enabled': false, 'client_id': null},
+      };
+    }
+  }
+
+  /// `POST /auth/oauth/$provider` (`google` veya `apple`): sosyal sağlayıcı id_token ile kayıt veya giriş yapar.
+  Future<UserSession> loginWithOAuth({
+    required String provider,
+    required String idToken,
+    String? fullName,
+    String? firstName,
+    String? lastName,
+    List<AcceptedDocument>? acceptedDocuments,
+    String? deviceToken,
+    void Function(String deviceToken)? onDeviceToken,
+  }) {
+    final cleanProvider = provider.trim().toLowerCase();
+    return _authRequest(
+      path: '/auth/oauth/$cleanProvider',
+      body: {
+        'id_token': idToken,
+        if (fullName != null && fullName.trim().isNotEmpty) 'full_name': fullName.trim(),
+        if (firstName != null && firstName.trim().isNotEmpty) 'first_name': firstName.trim(),
+        if (lastName != null && lastName.trim().isNotEmpty) 'last_name': lastName.trim(),
+        if (deviceToken != null && deviceToken.isNotEmpty) 'device_token': deviceToken,
+        ..._acceptedDocumentsBody(acceptedDocuments),
+      },
+      expectedCode: 200,
+      onDeviceToken: onDeviceToken,
+    );
+  }
+
+  /// `POST /auth/oauth/$provider/request-code`: Google veya iCloud e-postasına 6 haneli doğrulama kodu gönderir.
+  Future<Map<String, dynamic>> requestOAuthEmailCode({
+    required String provider,
+    required String email,
+    String? fullName,
+    String? firstName,
+    String? lastName,
+  }) async {
+    final cleanProvider = provider.trim().toLowerCase();
+    final response = await _sendRequest(
+      method: 'POST',
+      uri: Uri.parse('$baseUrl/auth/oauth/$cleanProvider/request-code'),
+      headers: const {'Content-Type': 'application/json'},
+      body: {
+        'email': email.trim(),
+        if (fullName != null && fullName.trim().isNotEmpty) 'full_name': fullName.trim(),
+        if (firstName != null && firstName.trim().isNotEmpty) 'first_name': firstName.trim(),
+        if (lastName != null && lastName.trim().isNotEmpty) 'last_name': lastName.trim(),
+      },
+      retryOnTransportError: false,
+    );
+    _ensureStatus(response, 200, unauthorizedIsSession: false);
+    return _decodePayload(response);
+  }
+
+  /// `POST /auth/oauth/$provider/verify-code`: Google veya iCloud e-postasına gelen 6 haneli kodu onaylar.
+  Future<UserSession> verifyOAuthEmailCode({
+    required String provider,
+    required String email,
+    required String code,
+    String? fullName,
+    String? firstName,
+    String? lastName,
+    List<AcceptedDocument>? acceptedDocuments,
+    String? deviceToken,
+    void Function(String deviceToken)? onDeviceToken,
+  }) {
+    final cleanProvider = provider.trim().toLowerCase();
+    return _authRequest(
+      path: '/auth/oauth/$cleanProvider/verify-code',
+      body: {
+        'email': email.trim(),
+        'code': code.trim(),
+        if (fullName != null && fullName.trim().isNotEmpty) 'full_name': fullName.trim(),
+        if (firstName != null && firstName.trim().isNotEmpty) 'first_name': firstName.trim(),
+        if (lastName != null && lastName.trim().isNotEmpty) 'last_name': lastName.trim(),
+        if (deviceToken != null && deviceToken.isNotEmpty) 'device_token': deviceToken,
+        ..._acceptedDocumentsBody(acceptedDocuments),
+      },
+      expectedCode: 200,
+      onDeviceToken: onDeviceToken,
+    );
+  }
+
+  /// `POST /auth/oauth/$provider/start`: Tarayıcı yönlendirme oturumu başlatır veya e-posta kod modunu bildirir.
+  Future<Map<String, dynamic>> startOAuthWebSession({
+    required String provider,
+    List<AcceptedDocument>? acceptedDocuments,
+  }) async {
+    final cleanProvider = provider.trim().toLowerCase();
+    try {
+      final response = await _sendRequest(
+        method: 'POST',
+        uri: Uri.parse('$baseUrl/auth/oauth/$cleanProvider/start'),
+        headers: const {'Content-Type': 'application/json'},
+        body: {
+          ..._acceptedDocumentsBody(acceptedDocuments),
+        },
+        retryOnTransportError: false,
+      );
+      _ensureStatus(response, 200, unauthorizedIsSession: false);
+      return _decodePayload(response);
+    } catch (_) {
+      return <String, dynamic>{
+        'mode': 'email_code',
+        'provider': cleanProvider,
+        'redirect_enabled': false,
+      };
+    }
+  }
+
+  /// `GET /auth/oauth/session/$sessionId`: Tarayıcı yönlendirmesiyle başlatılan oturumun durumunu sorgular.
+  Future<Map<String, dynamic>> pollOAuthWebSession({
+    required String sessionId,
+  }) async {
+    final response = await _sendRequest(
+      method: 'GET',
+      uri: Uri.parse('$baseUrl/auth/oauth/session/${Uri.encodeComponent(sessionId)}'),
+      headers: const {'Content-Type': 'application/json'},
+    );
+    _ensureStatus(response, 200, unauthorizedIsSession: false);
+    return _decodePayload(response);
+  }
+
   /// `POST /auth/sms/verify`: kod doğruysa oturum açar.
   Future<UserSession> verifySmsCode({required String phone, required String code}) {
     return _authRequest(

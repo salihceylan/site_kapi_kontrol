@@ -15,9 +15,17 @@ import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/pages/register_individual_page.dart';
 import 'package:site_kapi_kontrol/ui/pages/sms_login_page.dart';
 import 'package:site_kapi_kontrol/ui/views/legal_footer_links.dart';
+import 'package:site_kapi_kontrol/ui/widgets/social_auth_buttons.dart';
 
 class LoginPage extends StatefulWidget {
-  const LoginPage({super.key, required this.authService, this.legalApi});
+  const LoginPage({
+    super.key,
+    required this.authService,
+    this.legalApi,
+    this.onProvideSocialCredentials,
+  });
+
+  final Future<SocialAuthCredentials?> Function(String provider)? onProvideSocialCredentials;
 
   final AuthService authService;
 
@@ -382,6 +390,19 @@ class _LoginPageState extends State<LoginPage> {
                               ),
                         icon: const Icon(Icons.sms_outlined, size: 18),
                         label: const Text('Telefonla giriş (SMS)'),
+                      ),
+                      const SizedBox(height: AppSpace.md),
+                      SocialAuthButtons(
+                        authService: widget.authService,
+                        isRegisterMode: false,
+                        enabled: !_isLoading,
+                        onProvideCredentials: widget.onProvideSocialCredentials,
+                        onError: (msg) {
+                          if (!mounted) return;
+                          AppSnack.show(context, msg, kind: AppSnackKind.error, maxLines: 8);
+                        },
+                      ),
+                      const SizedBox.shrink(
                       ),
                       const SizedBox(height: AppSpace.lg),
                       Wrap(

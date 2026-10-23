@@ -316,6 +316,160 @@ class AuthService extends ChangeNotifier {
   }
 
   /// Telefon + SMS koduyla giriş; hata mesajı ya da null (başarı).
+  /// Sosyal giriş (Google / iCloud Apple) yapılandırma durumu.
+  Future<Map<String, dynamic>> oauthStatus() => api.oauthStatus();
+
+  /// Google veya iCloud (Apple) kimlik doğrulama belirteci ile kayıt / giriş yapar; hata mesajı ya da null (başarı).
+  Future<String?> loginWithOAuth({
+    required String provider,
+    required String idToken,
+    String? fullName,
+    String? firstName,
+    String? lastName,
+    List<AcceptedDocument>? acceptedDocuments,
+  }) async {
+    try {
+      String? issuedDeviceToken;
+      _session = await api.loginWithOAuth(
+        provider: provider,
+        idToken: idToken,
+        fullName: fullName,
+        firstName: firstName,
+        lastName: lastName,
+        acceptedDocuments: acceptedDocuments,
+        onDeviceToken: (token) => issuedDeviceToken = token,
+      );
+      final issued = issuedDeviceToken;
+      if (issued != null) {
+        final active = _session;
+        await _deviceTokenStore.save(<String?>[active?.email, active?.loginName], issued);
+      }
+      _lastSessionCheckAt = DateTime.now();
+      await _persist();
+      _notifySafely();
+      return null;
+    } on ApiException catch (e) {
+      return e.message;
+    } catch (_) {
+      return 'Sunucuya baglanilamadi.';
+    }
+  }
+
+  /// Google veya iCloud (Apple) e-posta adresine 6 haneli doğrulama kodu gönderir; hata mesajı ya da null.
+  Future<String?> requestOAuthEmailCode({
+    required String provider,
+    required String email,
+    String? fullName,
+    String? firstName,
+    String? lastName,
+  }) async {
+    try {
+      await api.requestOAuthEmailCode(
+        provider: provider,
+        email: email,
+        fullName: fullName,
+        firstName: firstName,
+        lastName: lastName,
+      );
+      return null;
+    } on ApiException catch (e) {
+      return e.message;
+    } catch (_) {
+      return 'Sunucuya bağlanılamadı. Lütfen internet bağlantınızı kontrol ediniz.';
+    }
+  }
+
+  /// Google veya iCloud (Apple) e-posta adresine gönderilen 6 haneli doğrulama kodunu onaylar.
+  Future<String?> verifyOAuthEmailCode({
+    required String provider,
+    required String email,
+    required String code,
+    String? fullName,
+    String? firstName,
+    String? lastName,
+    List<AcceptedDocument>? acceptedDocuments,
+  }) async {
+    try {
+      final deviceToken = await _deviceTokenStore.read(email);
+      String? issuedDeviceToken;
+      _session = await api.verifyOAuthEmailCode(
+        provider: provider,
+        email: email,
+        code: code,
+        fullName: fullName,
+        firstName: firstName,
+        lastName: lastName,
+        acceptedDocuments: acceptedDocuments,
+        deviceToken: deviceToken,
+        onDeviceToken: (token) => issuedDeviceToken = token,
+      );
+      final issued = issuedDeviceToken;
+      if (issued != null) {
+        final active = _session;
+        await _deviceTokenStore.save(<String?>[email, active?.email, active?.loginName], issued);
+      }
+      _lastSessionCheckAt = DateTime.now();
+      await _persist();
+      _notifySafely();
+      return null;
+    } on ApiException catch (e) {
+      return e.message;
+    } catch (_) {
+      return 'Sunucuya bağlanılamadı. Lütfen internet bağlantınızı kontrol ediniz.';
+    }
+  }
+
+  /// Tarayıcı yönlendirme oturumunu başlatır (`redirect` veya `email_code` döner).
+  Future<Map<String, dynamic>> startOAuthWebSession({
+    required String provider,
+    List<AcceptedDocument>? acceptedDocuments,
+  }) => api.startOAuthWebSession(
+        provider: provider,
+        acceptedDocuments: acceptedDocuments,
+      );
+
+  /// Tarayıcı yönlendirmesi tamamlandıysa oturumu kaydedip `completed` döndürür.
+  Future<({String status, String? error})> pollOAuthWebSession({
+    required String sessionId,
+  }) async {
+    try {
+      final payload = await api.pollOAuthWebSession(sessionId: sessionId);
+      final status = payload['status'] as String? ?? 'pending';
+      if (status == 'completed') {
+        final userMap = payload['user'] as Map<String, dynamic>?;
+        final token = payload['token'] as String?;
+        if (userMap != null && token != null && token.isNotEmpty) {
+          _session = UserSession.fromJson(<String, dynamic>{
+            ...userMap,
+            'token': token,
+          });
+          final deviceToken = payload['device_token'] as String?;
+          if (deviceToken != null && deviceToken.isNotEmpty) {
+            await _deviceTokenStore.save(
+              <String?>[_session?.email, _session?.loginName],
+              deviceToken,
+            );
+          }
+          _lastSessionCheckAt = DateTime.now();
+          await _persist();
+          _notifySafely();
+          return (status: 'completed', error: null);
+        }
+      }
+      if (status == 'error') {
+        return (
+          status: 'error',
+          error: payload['error'] as String? ?? 'Giriş tamamlanamadı.',
+        );
+      }
+      return (status: 'pending', error: null);
+    } on ApiException catch (e) {
+      return (status: 'error', error: e.message);
+    } catch (_) {
+      return (status: 'pending', error: null);
+    }
+  }
+
   Future<String?> loginWithSms({required String phone, required String code}) async {
     try {
       _session = await api.verifySmsCode(phone: phone, code: code);

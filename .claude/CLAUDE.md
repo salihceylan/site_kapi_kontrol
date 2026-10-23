@@ -16,3 +16,16 @@ Proje için önerilen skill'ler:
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -41,6 +41,7 @@ import { ensureMeteringSchema } from './modules/metering_schema.js';
 import { ensureManagementCompanySchema } from './modules/management_company_schema.js';
 import { ensureNotifyChannelsSchema } from './modules/notify_channels_schema.js';
 import { ensureBankImportSchema } from './modules/bank_import_schema.js';
+import { ensureOAuthSchema } from './modules/oauth_schema.js';
 
 dotenv.config();
 
@@ -1961,6 +1962,8 @@ export async function ensureDbSchema() {
     await ensureApartmentMgmtSchema(client);
     // 075 (daire sakini ADLI KAYDI: yalniz-ekleme apartment_residency_log + users silme kayit tetikleyicisi): sites / users / apartment_residencies'ten SONRA; katalog kontrolu (residency_log_schema.js = migrations/075).
     await ensureResidencyLogSchema(client);
+    // 076 (Google ve Apple / iCloud OAuth kimlik baglantilari): katalog kontrolu (oauth_schema.js = migrations/076).
+    await ensureOAuthSchema(client);
 
     // 031 people_v1: mevcut sakinlerin CRM'e tek seferlik aktarimi. Savunmaci: hata sunucunun acilmasini ENGELLEMEZ
     // (kendi transaction'i geri alinir, isaret yazilmaz => sonraki acilista yeniden denenir; okuma anindaki

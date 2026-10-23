@@ -13,3 +13,9 @@
 
 # Flutter gömme katmanı Play Core (ertelenmiş bileşenler) sınıflarına başvurur; kullanılmıyor.
 -dontwarn com.google.android.play.core.**
+
+# ML Kit Text Recognition opsiyonel dil modelleri (yalnız Latin/varsayılan kullanılır, diğer diller uyarısını yut)
+-dontwarn com.google.mlkit.vision.text.chinese.**
+-dontwarn com.google.mlkit.vision.text.devanagari.**
+-dontwarn com.google.mlkit.vision.text.japanese.**
+-dontwarn com.google.mlkit.vision.text.korean.**

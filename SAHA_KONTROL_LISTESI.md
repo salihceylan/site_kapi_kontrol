@@ -3003,3 +3003,59 @@ Dalga 2-6'nın ikinci aşaması: dekont bildirimi, banka dosyasından tahsilat, 
 - [ ] **90.41. Varsayılana dön (F34.16):**
   - **Nasıl Test Edilir:** Rol: Firma sahibi veya süper. Tema ekranında 'Varsayılana dön' deyin, kullanıcıyla yeniden girin.
   - **Beklenen Sonuç:** Uygulama eski Güde temasına döner.
+
+---
+
+## 91. 🔐 Google ile Kaydol / Giriş Yap & iCloud (Apple) ile Kaydol / Giriş Yap (076)
+
+- [ ] **91.1. Giriş Ekranında Google ve iCloud (Apple) Butonları:**
+  - **Nasıl Test Edilir:** Uygulamayı açıp Giriş (Login) ekranına bakın; dar ekranlarda ve büyük yazı boyutunda da inceleyin.
+  - **Beklenen Sonuç:** "Telefonla giriş (SMS)" düğmesinin altında taşma (overflow) olmadan **Google ile Giriş Yap / Kaydol** ve **iCloud ile Giriş Yap / Kaydol** düğmeleri görünür.
+- [ ] **91.2. Yeni Hesap Oluşturma Ekranında Google ve iCloud ile Hızlı Kayıt:**
+  - **Nasıl Test Edilir:** "Yeni Hesap Oluştur" ekranına girin, yasal belgeler onay kutusunu işaretleyin ve **Google ile Kaydol** veya **iCloud ile Kaydol** düğmesine dokunun.
+  - **Beklenen Sonuç:** Yasal onay kutusu işaretlenmeden düğmeler pasiftir; onaylandıktan sonra Google veya iCloud e-posta adresine gönderilen 6 haneli doğrulama kodu (veya OAuth tarayıcı yönlendirmesi) ile yeni bireysel kullanıcı oluşturulur, onaylar `user_consents` tablosuna kaydedilir ve uygulama kapatılıp açılmaya gerek kalmadan doğrudan ana ekrana giriş yapılır.
+- [ ] **91.3. Mevcut E-posta ve Sonraki iCloud/Google Girişlerinin Eşleşmesi:**
+  - **Nasıl Test Edilir:** Daha önce Google veya iCloud ile kaydolmuş bir hesapla tekrar giriş yapın (Apple sonraki girişlerde e-posta paylaşmasa bile `provider_sub` üzerinden kontrol edilir).
+  - **Beklenen Sonuç:** `user_oauth_identities` tablosundaki `(provider, provider_sub)` bağı üzerinden mevcut kullanıcı tanınır ve oturum anında açılır.
+- [ ] **91.4. Android ve Web Platformlarinda iCloud (Apple) Butonunun Gizlenmesi:**
+  - **Nasil Test Edilir:** Uygulamayi Android cihazda/emulator veya Web tarayicisinda acin.
+  - **Beklenen Sonuc:** Apple ile oturum acma destegi yalnizca iOS ve macOS cihazlarinda yerel olarak calistigindan, Android ve Web ekranlarinda iCloud butonu gizlenir; yalnizca **Google ile Giris Yap / Kaydol** butonu gorunur. Tasma veya eksik hizalama olusmaz.
+
+---
+
+## 92. 📱 Mobil Akıllı Kurulum & Doğrudan Android APK İndirme Şeridi (Web)
+
+- [ ] **92.1. Android Tarayıcısında Doğrudan APK İndirme Şeridi:**
+  - **Nasıl Test Edilir:** Android cihazın tarayıcısından (Chrome, Samsung Internet vb.) https://api.gudeteknoloji.com.tr adresine girin.
+  - **Beklenen Sonuç:** Ekranın alt kısmında taşma olmadan şık Güde temalı 'Site Yönetim (Android) — Resmi Android uygulamasını (.APK) doğrudan telefonunuza indirin.' şeridi ve 'APK İndir' butonu çıkar. 'APK İndir'e dokunulduğunda web kısayolu yerine doğrudan resmi `site_yonetim.apk` dosyası indirilir; açıklama 'İndirme başladı! İndirilen APK dosyasını açıp Kur / Yükle diyerek yükleyebilirsiniz.' metnine dönüşür.
+- [ ] **92.2. Kapatıldığında Kaybolmayan Yüzen İndirme Rozeti (Floating Pill):**
+  - **Nasıl Test Edilir:** Şeritteki Kapat (X) düğmesine dokunun.
+  - **Beklenen Sonuç:** Tam şerit gizlenir ancak ekranın sağ alt köşesinde hafif, şık altın sarısı 'Android APK İndir' rozeti kalır. Kullanıcı dilediği an bu rozete dokunarak şeridi tekrar açabilir veya doğrudan APK indirebilir; 24 saatlik engellemeye kilitlenmez.
+- [ ] **92.3. iOS (iPhone / iPad Safari) Özel Yönlendirme:**
+  - **Nasıl Test Edilir:** iPhone veya iPad Safari tarayıcısından web adresini açın.
+  - **Beklenen Sonuç:** iOS Safari'ye özel olarak 'App Store' veya 'Safari alttaki Paylaş simgesine dokunup Ana Ekrana Ekle'yi seçin' rehberi görüntülenir; uygulama zaten ana ekrandan tam ekran (standalone) açılmışsa şerit kesinlikle gösterilmez.
+
+---
+
+## 93. 🚀 Android 12+ Açılış Ekranı (Splash Screen) Kusursuzlaştırma
+
+- [ ] **93.1. Soğuk Başlangıçta Kare Kutu / Amatör Geçişin Engellenmesi:**
+  - **Nasıl Test Edilir:** Android 12 veya daha yeni bir cihazda uygulamayı tamamen kapatıp (RAM'den temizleyip) simgesine dokunarak açın.
+  - **Beklenen Sonuç:** Açılışta geçici kare kutu, bozuk ikon veya amatör zemin geçişi oluşmaz; saydam zemin (`launch_transparent`) ve akıcı marka teması ile Flutter arayüzüne kusursuz ve profesyonel bir geçiş sağlanır.
+
+---
+
+## 94. 🏢 Yeni Site Oluşturma Süreci — Site Hizmetleri Menüsü & Dairesiz Kullanıcı Panel Kartı
+
+- [ ] **94.1. "Site Hizmetleri" Menüsü Altında "Yeni Site Oluştur":**
+  - **Nasıl Test Edilir:** Bireysel kullanıcı, daire sakini veya site yöneticisi hesabıyla çekmece (yan menü) menüsünü açın.
+  - **Beklenen Sonuç:** "Site Hizmetleri" menü grubu altında "Yeni Site Oluştur" seçeneği görüntülenir. Dokunulduğunda "Yeni Site Oluştur" sayfası (YeniSiteView) açılır.
+- [ ] **94.2. Bireysel ve Yönetici Rollerine Göre Sihirbaz / Başvuru Uyarlaması:**
+  - **Nasıl Test Edilir:** Bireysel kullanıcı hesabı ile "Yeni Site Oluştur" sayfasındaki "Site Oluşturma Başvurusu Yap" butonuna dokunun. Daha sonra site yöneticisi veya süper kullanıcı hesabıyla girip "Site Kurulum Sihirbazını Başlat" butonuna dokunun.
+  - **Beklenen Sonuç:** Bireysel kullanıcıda başvuru akışı (openSiteApplicationForm) açılır; yönetici veya süper kullanıcıda anlık site kurulum sihirbazı (SetupSiteDialog) açılır.
+- [ ] **94.3. "Kapılar" Altından Site Kurulumunun Kaldırılması:**
+  - **Nasıl Test Edilir:** Bireysel kullanıcı veya daire sakini olarak "Kapılar" menüsüne girin.
+  - **Beklenen Sonuç:** "Kapılar" ekranında eski "Site Kurulumu" başvuru kartı yer almaz; kapı kontrolü ve varsa sakin girişi odaklı temiz görünüm korunur.
+- [ ] **94.4. Dairesi Olmayan Bireysel Kullanıcılar İçin Panel Kartı:**
+  - **Nasıl Test Edilir:** Henüz hiçbir daireye atanmamış, site yöneticisi veya süper kullanıcı olmayan yeni bir hesapla ana ekrana (Panel / Dashboard) girin.
+  - **Beklenen Sonuç:** Panelde üst özet alanının hemen altında taşma olmaksızın "Yeni Site Oluştur / YÖNETİCİ OLUN" kartı görüntülenir. "Site Kurulumunu Başlat" butonuna dokunulduğunda doğrudan başvuru formu açılır. Kullanıcı bir daireye katıldığında veya yönetici olduğunda bu kart otomatik olarak kaybolur.

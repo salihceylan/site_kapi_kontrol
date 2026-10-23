@@ -14,13 +14,17 @@ import 'package:site_kapi_kontrol/ui/helpers/password_policy.dart';
 import 'package:site_kapi_kontrol/ui/pages/verify_email_code_page.dart';
 import 'package:site_kapi_kontrol/ui/views/legal_consent_controller.dart';
 import 'package:site_kapi_kontrol/ui/views/legal_consent_field.dart';
+import 'package:site_kapi_kontrol/ui/widgets/social_auth_buttons.dart';
 
 class RegisterIndividualPage extends StatefulWidget {
   const RegisterIndividualPage({
     super.key,
     required this.authService,
     this.legalApi,
+    this.onProvideSocialCredentials,
   });
+
+  final Future<SocialAuthCredentials?> Function(String provider)? onProvideSocialCredentials;
 
   final AuthService authService;
 
@@ -338,6 +342,22 @@ class _RegisterIndividualPageState extends State<RegisterIndividualPage> {
                                   onPressed: (_isLoading || blocked) ? null : _submit,
                                   loading: _isLoading,
                                 ),
+                              ),
+                              const SizedBox(height: AppSpace.md),
+                              SocialAuthButtons(
+                                authService: widget.authService,
+                                isRegisterMode: true,
+                                enabled: !_isLoading && !blocked,
+                                acceptedDocumentsBuilder: () => _consent.acceptedDocuments,
+                                onProvideCredentials: widget.onProvideSocialCredentials,
+                                onError: (msg) {
+                                  if (!mounted) return;
+                                  setState(() => _errorMessage = msg);
+                                },
+                                onSuccess: () {
+                                  if (!mounted) return;
+                                  Navigator.of(context).popUntil((route) => route.isFirst);
+                                },
                               ),
                             ],
                           );

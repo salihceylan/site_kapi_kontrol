@@ -102,3 +102,7 @@ fcm-*.json
 
 # Demo veri tohumu: kimlik bilgileri ve cikti (SIFRELER commit edilmez)
 tools/demo_seed/out/
+
+*.apk
+
+.claude/worktrees/

@@ -44,6 +44,8 @@ dependencies:
   xml: ^7.1.0
   firebase_core: ^5.0.0
   firebase_messaging: ^17.0.0
+  google_sign_in: ^6.2.2
+  sign_in_with_apple: ^8.2.0
 
 dev_dependencies:
   flutter_test:

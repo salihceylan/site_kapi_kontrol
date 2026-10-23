@@ -93,6 +93,8 @@ import 'package:site_kapi_kontrol/ui/dialogs/site_residents_accordion_dialog.dar
 import 'package:site_kapi_kontrol/ui/dialogs/manage_join_requests_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/submit_join_request_dialog.dart';
 import 'package:site_kapi_kontrol/ui/views/join_and_setup_view.dart';
+import 'package:site_kapi_kontrol/ui/views/yeni_site_view.dart';
+import 'package:site_kapi_kontrol/ui/widgets/panel_site_creation_card.dart';
 
 import 'package:site_kapi_kontrol/ui/pages/qr_scan_page.dart';
 
@@ -303,6 +305,65 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     // `mine` ÇAĞRILMAZ.
     isEligible: () => tracksSiteApplications(widget.authService.session?.role),
   );
+
+  List<MyApartmentRecord>? _myApartmentsList;
+  bool _myApartmentsLoaded = false;
+
+  Future<void> _loadMyApartmentsSummary() async {
+    final session = widget.authService.session;
+    if (session == null) return;
+    if (session.role == UserRole.superUser || session.role == UserRole.siteManager) {
+      return;
+    }
+    final (list, _) = await widget.authService.getMyApartments();
+    if (!mounted) return;
+    setState(() {
+      _myApartmentsList = list ?? <MyApartmentRecord>[];
+      _myApartmentsLoaded = true;
+    });
+  }
+
+  bool _canShowSiteCreationOnPanel(UserSession session) {
+    if (session.role == UserRole.superUser || session.role == UserRole.siteManager) {
+      return false;
+    }
+    if (_siteApplications.pending != null) {
+      return false;
+    }
+    if (_myApartmentsLoaded && (_myApartmentsList?.isNotEmpty ?? false)) {
+      return false;
+    }
+    return _myApartmentsLoaded
+        ? (_myApartmentsList == null || _myApartmentsList!.isEmpty)
+        : (session.role == UserRole.individual);
+  }
+
+  Future<void> _openCreateSiteFlow() async {
+    final session = widget.authService.session;
+    if (session == null) return;
+    await _siteApplications.ensureLoaded();
+    if (!mounted) return;
+
+    if (usesSiteApplicationFlow(session.role, _siteApplications)) {
+      await openSiteApplicationForm(
+        context,
+        authService: widget.authService,
+        tracker: _siteApplications,
+      );
+    } else {
+      final created = await SetupSiteDialog.show(
+        context,
+        authService: widget.authService,
+        mode: SetupSiteMode.instant,
+      );
+      if (created == SetupSiteOutcome.created) {
+        await _loadSites(force: true);
+        unawaited(_moduleAccess.refresh());
+      } else {
+        syncApplicationsAfterForm(_siteApplications, created);
+      }
+    }
+  }
   StreamSubscription<SiteApplication>? _siteApplicationApprovals;
 
   // Yönetici panosunun başvuru kartı / "Yeni Site" kipi takipçinin şu imzasına bağlıdır; imza değişince sayfa
@@ -813,6 +874,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final role = widget.authService.session?.role;
     if (role == UserRole.siteManager || role == UserRole.superUser) {
       _loadSites();
+    } else {
+      _loadMyApartmentsSummary();
     }
 
   }
@@ -1899,7 +1962,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (_hiddenMenuItems(role).contains(item)) {
       return false;
     }
-    if (item == SirketMenuItem.katilimVeKurulum) {
+    if (item == SirketMenuItem.katilimVeKurulum || item == SirketMenuItem.yeniSite) {
       return true;
     }
 
@@ -2211,6 +2274,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
       case SirketMenuItem.dairem:
         return 'Dairem';
+
+      case SirketMenuItem.yeniSite:
+        return 'Yeni Site Oluştur';
 
     }
 
@@ -5751,6 +5817,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       case SirketMenuItem.sayaclar:
         await _metersKey.currentState?.reload();
         break;
+      case SirketMenuItem.yeniSite:
       case SirketMenuItem.katilimVeKurulum:
       case SirketMenuItem.cihazEkle:
       case SirketMenuItem.bluetoothWifiKur:
@@ -6442,8 +6509,22 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       onRefreshAccount: () => _refreshAccountAfterApproval(),
       applicantRole: canApplyForSite(session.role),
       aboveHero: resident ? _unreadAnnouncementCardSlot(session) : null,
-      // Bekleyen site davetleri (058): e-postası eşleşen davet varsa Kabul et / Reddet kartı; yoksa görünmez.
-      belowHero: PendingInvitationsCard(authService: widget.authService, onAccepted: () => unawaited(_moduleAccess.refresh())),
+      // Bekleyen site davetleri (058) ve daireye ait olmayanlar için yeni site oluşturma kartı.
+      belowHero: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          PendingInvitationsCard(
+            authService: widget.authService,
+            onAccepted: () => unawaited(_moduleAccess.refresh()),
+          ),
+          if (_canShowSiteCreationOnPanel(session))
+            PanelSiteCreationCard(
+              onStartSetup: _openCreateSiteFlow,
+              tracker: _siteApplications,
+            ),
+        ],
+      ),
       onOpenHelp: _openHelpPage,
       debtSiteCodes: resident ? _debtSiteCodes() : null,
       quickActionItems: resident ? _quickActionItems() : null,
@@ -7144,6 +7225,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           onOpenJoinSite: _openJoinRequestFlow,
           onRefreshAll: _loadInitialData,
           applications: _applicationsFor(session),
+          onRefreshAccount: () => _refreshAccountAfterApproval(),
+        );
+
+      case SirketMenuItem.yeniSite:
+        return YeniSiteView(
+          session: session,
+          authService: widget.authService,
+          onStartSetup: _openCreateSiteFlow,
+          tracker: _applicationsFor(session),
           onRefreshAccount: () => _refreshAccountAfterApproval(),
         );
 

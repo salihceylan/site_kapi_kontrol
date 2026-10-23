@@ -188,6 +188,10 @@ enum SirketMenuItem {
   /// Dairem: daire sahipliği ve yönetimi (kimin yönettiği, kiracı, aile üyeleri, vekalet, ayrılma, güvenlik ve destek). Modül gerektirmez. Rol
   /// listesinde YOKTUR; daire sakini ve bireysel sakine (sakin modunda yönetici dahil) [YanMenu.additionalItems] ile eklenir.
   dairem,
+
+  /// Yeni Site Oluştur: "Site hizmetleri" menüsü altında bireysel, site yöneticisi ve süper kullanıcıların
+  /// yeni site oluşturma sürecini başlattığı öğe.
+  yeniSite,
 }
 
 /// İP-1D / G2 (karar kaydı 2026-10-21, sözleşme 2.4): çekmece menüsünün başlıkları. Çekmecede yalnız [drawerGroups]
@@ -248,6 +252,7 @@ SirketMenuGroup menuGroupOf(SirketMenuItem item) => switch (item) {
       SirketMenuItem.anket ||
       SirketMenuItem.komsuPanosu =>
         SirketMenuGroup.iletisim,
+      SirketMenuItem.yeniSite ||
       SirketMenuItem.kapilar ||
       SirketMenuItem.belgeler ||
       SirketMenuItem.rezervasyonlar ||
@@ -1324,6 +1329,7 @@ List<SirketMenuItem> _itemsForRole(
       SirketMenuItem.siteler,
       SirketMenuItem.kayitliCihazlar,
       SirketMenuItem.katilimVeKurulum,
+      SirketMenuItem.yeniSite,
       SirketMenuItem.bluetoothWifiKur,
     ];
   }
@@ -1342,6 +1348,7 @@ List<SirketMenuItem> _itemsForRole(
         SirketMenuItem.modulTalepleri,
         SirketMenuItem.siteBasvurulari,
         SirketMenuItem.katilimVeKurulum,
+        SirketMenuItem.yeniSite,
         SirketMenuItem.cihazEkle,
         SirketMenuItem.kayitliCihazlar,
         SirketMenuItem.bluetoothWifiKur,
@@ -1354,6 +1361,7 @@ List<SirketMenuItem> _itemsForRole(
         return const [
           SirketMenuItem.dashboard,
           SirketMenuItem.katilimVeKurulum,
+          SirketMenuItem.yeniSite,
           SirketMenuItem.profilim,
           SirketMenuItem.ellerSerbest,
         ];
@@ -1366,12 +1374,14 @@ List<SirketMenuItem> _itemsForRole(
         SirketMenuItem.moduller,
         SirketMenuItem.kayitliCihazlar,
         SirketMenuItem.katilimVeKurulum,
+        SirketMenuItem.yeniSite,
         SirketMenuItem.bluetoothWifiKur,
       ];
     case UserRole.apartmentOwner:
       return const [
         SirketMenuItem.dashboard,
         SirketMenuItem.katilimVeKurulum,
+        SirketMenuItem.yeniSite,
         SirketMenuItem.ellerSerbest,
         SirketMenuItem.profilim,
       ];
@@ -1379,6 +1389,7 @@ List<SirketMenuItem> _itemsForRole(
       return const [
         SirketMenuItem.dashboard,
         SirketMenuItem.katilimVeKurulum,
+        SirketMenuItem.yeniSite,
         SirketMenuItem.profilim,
       ];
   }
@@ -1483,6 +1494,8 @@ String _titleForItem(SirketMenuItem item, [UserRole? role]) {
       return 'Kapılar';
     case SirketMenuItem.dairem:
       return 'Dairem';
+    case SirketMenuItem.yeniSite:
+      return 'Yeni Site Oluştur';
   }
 }
 
@@ -1582,6 +1595,8 @@ IconData _iconForItem(SirketMenuItem item) {
       return PhosphorIconsRegular.doorOpen;
     case SirketMenuItem.dairem:
       return PhosphorIconsRegular.house;
+    case SirketMenuItem.yeniSite:
+      return PhosphorIconsRegular.plusCircle;
   }
 }
 
