@@ -41,6 +41,8 @@ import 'package:site_kapi_kontrol/services/adaptive_poller.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/services/share_inbox.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/payment_notice_dialog.dart';
+import 'package:site_kapi_kontrol/models/bulk_import.dart' show ImportKind;
+import 'package:site_kapi_kontrol/ui/views/bulk_import_view.dart';
 
 import 'package:site_kapi_kontrol/services/pdf_credentials_service.dart';
 
@@ -4822,6 +4824,28 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
+  Future<void> _openBulkImportFromSites(int siteCode, String siteName) async {
+    final role = widget.authService.session?.role;
+    final canWrite = role == UserRole.superUser || role == UserRole.siteManager;
+    final outcome = await BulkImportView.open(
+      context,
+      scope: PeopleScope(
+        authService: widget.authService,
+        siteCode: siteCode,
+        siteName: siteName,
+        canWrite: canWrite,
+      ),
+      initialKind: ImportKind.allInOne,
+    );
+    if (outcome?.changed == true) {
+      await _loadSites(force: true);
+      final current = _selectedSite;
+      if (current != null && current.id == siteCode) {
+        await _selectSite(current);
+      }
+    }
+  }
+
   Future<void> _openDeviceRegistrationFlow() async {
 
     final scannedUid = await Navigator.of(
@@ -6798,6 +6822,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           householdLoader: _loadApartmentHousehold,
           onOpenHouseholdPerson: _openHouseholdPerson,
           onOpenApartmentCard: _openApartmentCardFromSites,
+          onOpenBulkImport: _openBulkImportFromSites,
           siteManagersData: _selectedSiteManagersData,
           isLoadingManagers: _isLoadingSiteManagers,
           onInviteSiteManager: _openInviteSiteManagerDialog,

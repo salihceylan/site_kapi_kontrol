@@ -7,6 +7,7 @@ import 'package:site_kapi_kontrol/models/site_record.dart';
 import 'package:site_kapi_kontrol/models/site_structure_record.dart';
 import 'package:site_kapi_kontrol/models/site_manager_record.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
+import 'package:site_kapi_kontrol/ui/design/buttons.dart';
 import 'package:site_kapi_kontrol/ui/design/empty_state.dart';
 import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
 import 'package:site_kapi_kontrol/ui/design/motion_widgets.dart';
@@ -66,6 +67,7 @@ class SitesView extends StatelessWidget {
     this.householdLoader,
     this.onOpenHouseholdPerson,
     this.onOpenApartmentCard,
+    this.onOpenBulkImport,
     this.isSuperUser = false,
     this.onApproveDeleteSite,
     this.onRejectDeleteSite,
@@ -131,6 +133,7 @@ class SitesView extends StatelessWidget {
 
   /// "Daire kartı" penceresi (daire adminini değiştir, kapı erişimi askısı, adli kayıt, geçmiş).
   final Future<void> Function(ApartmentRecord apartment)? onOpenApartmentCard;
+  final void Function(int siteCode, String siteName)? onOpenBulkImport;
 
   @override
   Widget build(BuildContext context) {
@@ -575,6 +578,13 @@ class SitesView extends StatelessWidget {
           title: 'Daireler',
           count: structure.apartments.length,
           countSuffix: ' Daire',
+          trailing: onOpenBulkImport != null
+              ? TextButton.icon(
+                  onPressed: () => onOpenBulkImport!(structure.site.id, structure.site.name),
+                  icon: const Icon(Icons.upload_file_rounded, size: 18),
+                  label: const Text('Toplu Yükle (Excel)'),
+                )
+              : null,
         ),
         subtitle: Text(
           structure.apartments.isEmpty
@@ -583,12 +593,25 @@ class SitesView extends StatelessWidget {
           style: th.bodySmall,
         ),
         children: [
-          if (structure.apartments.isEmpty)
+          if (structure.apartments.isEmpty) ...[
             const EmptyState.compact(
               icon: Icons.home_outlined,
               title: 'Bu site için daire kaydı bulunamadı.',
               tone: AppTone.neutral,
-            )
+            ),
+            if (onOpenBulkImport != null) ...[
+              const SizedBox(height: AppSpace.md),
+              Center(
+                child: PrimaryActionButton(
+                  label: "Excel'den Daire ve Kişileri Yükle",
+                  icon: Icons.upload_file_rounded,
+                  variant: AppButtonVariant.tonal,
+                  expand: false,
+                  onPressed: () => onOpenBulkImport!(structure.site.id, structure.site.name),
+                ),
+              ),
+            ],
+          ]
           else
             for (var i = 0; i < structure.apartments.length; i++) ...[
               if (i > 0) const Divider(),

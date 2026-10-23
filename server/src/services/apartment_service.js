@@ -29,13 +29,65 @@ export const APARTMENT_ROW_SELECT_SQL = `
     a.sort_order,
     a.is_active,
     a.resident_user_code,
-    u.full_name AS resident_full_name,
+    COALESCE(
+      u.full_name,
+      (
+        SELECT sp.full_name
+        FROM apartment_residencies ar
+        INNER JOIN site_people sp ON sp.id = ar.person_id
+        WHERE ar.apartment_id = a.id AND ar.is_current = TRUE
+        ORDER BY
+          CASE ar.relation
+            WHEN 'tenant' THEN 1
+            WHEN 'owner' THEN 2
+            WHEN 'family_member' THEN 3
+            ELSE 4
+          END,
+          ar.id ASC
+        LIMIT 1
+      )
+    ) AS resident_full_name,
     u.login_name AS resident_login_name,
-    a.resident_email,
+    COALESCE(
+      a.resident_email,
+      u.email,
+      (
+        SELECT sp.email
+        FROM apartment_residencies ar
+        INNER JOIN site_people sp ON sp.id = ar.person_id
+        WHERE ar.apartment_id = a.id AND ar.is_current = TRUE
+        ORDER BY
+          CASE ar.relation
+            WHEN 'tenant' THEN 1
+            WHEN 'owner' THEN 2
+            WHEN 'family_member' THEN 3
+            ELSE 4
+          END,
+          ar.id ASC
+        LIMIT 1
+      )
+    ) AS resident_email,
     a.resident_pin_issued,
     (u.user_code IS NOT NULL AND u.deleted_at IS NULL AND LOWER(u.email) LIKE '%${INTERNAL_EMAIL_SUFFIX}') AS resident_pin_resettable,
-    u.phone_number AS resident_phone_number,
-    u.is_active AS resident_is_active,
+    COALESCE(
+      u.phone_number,
+      (
+        SELECT sp.phone
+        FROM apartment_residencies ar
+        INNER JOIN site_people sp ON sp.id = ar.person_id
+        WHERE ar.apartment_id = a.id AND ar.is_current = TRUE
+        ORDER BY
+          CASE ar.relation
+            WHEN 'tenant' THEN 1
+            WHEN 'owner' THEN 2
+            WHEN 'family_member' THEN 3
+            ELSE 4
+          END,
+          ar.id ASC
+        LIMIT 1
+      )
+    ) AS resident_phone_number,
+    COALESCE(u.is_active, TRUE) AS resident_is_active,
     a.created_at
   FROM apartments a
   INNER JOIN site_blocks b ON b.id = a.block_id
