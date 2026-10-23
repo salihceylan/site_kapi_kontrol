@@ -130,10 +130,10 @@ describe('platform katalog: sozlesme tablosu', () => {
 });
 
 describe('platform katalog: enabled hesabi', () => {
-  it('satiri olmayan site katalog varsayilanina gore davranir: door_control ACIK', () => {
-    assert.equal(computeModuleEnabled(def('door_control'), undefined), true);
-    assert.equal(computeModuleEnabled(def('door_control'), null), true);
-    assert.equal(computeModuleEnabled(def('door_control'), {}), true);
+  it('satiri olmayan site katalog varsayilanina gore davranir: door_control KAPALI', () => {
+    assert.equal(computeModuleEnabled(def('door_control'), undefined), false);
+    assert.equal(computeModuleEnabled(def('door_control'), null), false);
+    assert.equal(computeModuleEnabled(def('door_control'), {}), false);
   });
 
   it('door_control satiri varsa satirin enabled degeri gecerlidir', () => {
@@ -195,7 +195,7 @@ describe('platform katalog: enabled hesabi', () => {
   it('computeEnabledMap katalogdaki TUM kodlari icerir; satir dizisi veya Map kabul eder', () => {
     const empty = computeEnabledMap([]);
     assert.deepEqual(Object.keys(empty), MODULE_CODES);
-    assert.equal(empty.door_control, true);
+    assert.equal(empty.door_control, false);
     assert.equal(empty.finance, false);
 
     const closed = computeEnabledMap([{ module_code: 'door_control', enabled: false }]);

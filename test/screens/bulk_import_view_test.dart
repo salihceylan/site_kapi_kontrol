@@ -774,6 +774,8 @@ void main() {
       await _launch(t, s);
       final handle = t.ensureSemantics();
       await _toMapping(t, s);
+      await t.tap(find.byKey(const ValueKey<String>('bulk_advanced_column_mapping')));
+      await _settle(t, 300);
       expect(find.bySemanticsLabel(RegExp('Ad Soyad için dosyadaki sütun')), findsOneWidget);
       expect(find.text('Zorunlu'), findsWidgets);
       handle.dispose();

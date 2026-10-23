@@ -42,8 +42,9 @@ Bu kurallar projede geliştirme yapılırken MUTLAKA ve İSTİSNASIZ olarak uygu
    - Güncelleme sonrasında PM2 logları (`pm2 logs kapi-api --lines 20 --nostream`), sağlık kontrolü (`/health`) ve veritabanı/MQTT bağlantı durumu doğrulanmadan iş tamamlandı sayılmaz.
    - Sadece yerelde kod yazıp bırakmak kesinlikle yasaktır; her sunucu geliştirmesi derlenmeli, canlıya yüklenmeli ve çalıştığı uçtan uca teyit edilmelidir.
 
-9. **Kod Değişikliklerini Doğrudan Uygula (Kullanıcı Onayı Sorma):**
-   - Kodlarda veya dosyalarda değişiklik yapılması gerektiğinde kullanıcıya "kabul ediyor musun?", "değiştireyim mi?" gibi ara onay soruları sorulmayacak, değişiklikler tereddütsüz ve doğrudan koda işlenecektir.
+9. **Tam Yetki ve Doğrudan Uygulama (İzin İsteme Kesinlikle Yasaktır):**
+   - Ajan tam yetkilidir (full access / autonomous). Kodlarda, dosyalarda, veritabanında, VPS sunucuda veya komutlarda değişiklik veya operasyon yapılması gerektiğinde kullanıcıdan ASLA "kabul ediyor musun?", "değiştireyim mi?", "onaylıyor musunuz?", "izin veriyor musunuz?" gibi ara onay soruları sorulmayacak, hiçbir şey için izin istenmeyecektir.
+   - Gerekli tüm düzeltmeler, dosya yazımları, testler, migrasyonlar ve canlı sunucu dağıtımları doğrudan, tereddütsüz ve eksiksiz olarak icra edilecektir.
 
 10. **Git Yüklemeleri ve `.git/index` Bütünlüğü (Index Temizliği & Hata Engelleme):**
     - Her Git commit / push (GitHub yüklemesi) işleminden önce `.git/index` dosyasının bütünlüğü doğrulanmalı; kilit (`.git/index.lock`) veya bozulma ihtimaline karşı index temizliği yapılmalı (`Remove-Item -Force .git\index; git reset`).

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:phosphor_glyphs/phosphor_glyphs.dart';
-import 'package:site_kapi_kontrol/brand/brand_scope.dart';
 import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/models/user_session.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';

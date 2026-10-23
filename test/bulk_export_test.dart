@@ -303,11 +303,11 @@ void main() {
       final people = reader.readSheet(reader.sheets[0]);
       expect(people.rows.length, 1, reason: 'örnek satır KONMAZ');
       expect(people.rows.first.cells, <Object?>[
-        'Ad Soyad', 'Telefon', 'E-posta', 'Blok', 'Daire No', 'İlişki', 'Giriş Tarihi', 'Plaka', 'Not',
+        'Ad Soyad*', 'Telefon', 'E-posta', 'Blok', 'Daire No', 'İlişki', 'Giriş Tarihi', 'Plaka',
       ]);
       final apt = reader.readSheet(reader.sheets[1]);
       expect(apt.rows.length, 4);
-      expect(apt.rows[1].cells.take(5), <Object?>['A Blok', '1', 0, '2+1', 95.5]);
+      expect(apt.rows[1].cells.take(4), <Object?>['A Blok', '1', 0, '2+1']);
       expect(apt.rows[3].cells[0], 'B Blok');
       final vehicles = reader.readSheet(reader.sheets[2]);
       expect(vehicles.rows.length, 1);
@@ -360,7 +360,7 @@ void main() {
       expect(people.bytes.sublist(0, 3), <int>[0xEF, 0xBB, 0xBF]);
       final rows = _csvRows(people);
       expect(rows.length, 1);
-      expect(rows.first.first, 'Ad Soyad');
+      expect(rows.first.first, 'Ad Soyad*');
       final apt = buildImportTemplate(
         spec: spec,
         kind: ImportKind.apartments,
@@ -369,7 +369,7 @@ void main() {
       );
       final aptRows = _csvRows(apt);
       expect(aptRows.length, 4);
-      expect(aptRows[1].take(5), <String>['A Blok', '1', '0', '2+1', '95,5']);
+      expect(aptRows[1].take(4), <String>['A Blok', '1', '0', '2+1']);
     });
   });
 

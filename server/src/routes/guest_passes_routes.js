@@ -247,7 +247,7 @@ guestPassesRouter.post('/public/guest-pass/:token/open', doorCommandRateLimiter,
           s.geofence_latitude,
           s.geofence_longitude,
           s.geofence_radius_meters,
-          COALESCE(smod.enabled, TRUE) AS module_door_control
+          COALESCE(smod.enabled, FALSE) AS module_door_control
         FROM guest_passes gp
         JOIN site_doors d ON d.id = gp.door_id
         JOIN sites s ON s.site_code = gp.site_code
@@ -495,7 +495,7 @@ guestPassesRouter.get('/guest/:token', async (req, res) => {
           gp.*,
           d.door_name,
           s.name AS site_name,
-          COALESCE(smod.enabled, TRUE) AS module_door_control
+          COALESCE(smod.enabled, FALSE) AS module_door_control
         FROM guest_passes gp
         JOIN site_doors d ON d.id = gp.door_id
         JOIN sites s ON s.site_code = gp.site_code

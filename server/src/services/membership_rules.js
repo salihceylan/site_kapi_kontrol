@@ -520,9 +520,9 @@ export function normalizeSetupSiteInput({
     throw httpError(400, `Toplam daire sayısı en fazla ${SITE_LIMITS.maxApartments} olabilir.`);
   }
 
-  // Kapılar
+  // Kapılar (İsteğe bağlı: kapı tanımlanması zorunlu değildir)
   let doorList = [];
-  if (Array.isArray(doors) && doors.length > 0) {
+  if (Array.isArray(doors)) {
     if (doors.length > SITE_LIMITS.maxDoors) {
       throw httpError(400, `En fazla ${SITE_LIMITS.maxDoors} kapı tanımlanabilir.`);
     }
@@ -531,16 +531,18 @@ export function normalizeSetupSiteInput({
       const dName = clipChars(cleanText(rawName ?? ''), SETUP_LABEL_MAX);
       return { name: dName || `Kapı ${idx + 1}`, doorIndex: idx + 1 };
     });
-  } else {
+  } else if (doorCount !== undefined && doorCount !== null && doorCount !== '') {
     const count = parseBoundedInteger(doorCount, {
-      min: 1,
+      min: 0,
       max: SITE_LIMITS.maxDoors,
-      defaultValue: 1,
+      defaultValue: 0,
       label: 'Kapı sayısı',
     });
     for (let i = 1; i <= count; i += 1) {
       doorList.push({ name: `Kapı ${i}`, doorIndex: i });
     }
+  } else {
+    doorList.push({ name: 'Kapı 1', doorIndex: 1 });
   }
 
   return {

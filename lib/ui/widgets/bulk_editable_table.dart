@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/models/bulk_import.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/views/bulk_import_controller.dart';
+import 'package:site_kapi_kontrol/services/bulk_template.dart';
 
 /// Toplu yükleme sırasında yöneticinin verileri Excel görünümünde doğrudan inceleyebileceği,
 /// hücre hücre düzenleyebileceği, satır ekleyip silebileceği etkileşimli elektronik tablo bileşeni.
@@ -20,6 +21,7 @@ class BulkEditableTable extends StatefulWidget {
 
 class _BulkEditableTableState extends State<BulkEditableTable> {
   final TextEditingController _searchCtrl = TextEditingController();
+  final ScrollController _horizontalScrollController = ScrollController();
   String _searchQuery = '';
   int _page = 0;
   static const int _pageSize = 25;
@@ -41,13 +43,22 @@ class _BulkEditableTableState extends State<BulkEditableTable> {
   @override
   void dispose() {
     _searchCtrl.dispose();
+    _horizontalScrollController.dispose();
     super.dispose();
   }
 
   List<ImportColumn> _visibleColumns() {
     final spec = widget.controller.kindSpec;
     if (spec == null) return const <ImportColumn>[];
-    return spec.columns;
+    final rows = widget.controller.rows;
+    return spec.columns.where((col) {
+      if (!kExcludedTemplateKeys.contains(col.key)) return true;
+      // Eğer kaldırılan alanlardan biri satırlardan birinde doluysa göster (geriye dönük uyumluluk)
+      return rows.any((r) {
+        final val = r.cells[col.key];
+        return val != null && val.toString().trim().isNotEmpty;
+      });
+    }).toList();
   }
 
   List<int> _filteredRowIndices() {
@@ -357,10 +368,19 @@ class _BulkEditableTableState extends State<BulkEditableTable> {
           ),
           const Divider(height: 1),
 
-          // Yatay Kaydırılabilir Excel Görünümlü Tablo
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: DataTable(
+          // Yatay Kaydırılabilir Excel Görünümlü Tablo (Altta görünür ve sürüklenebilir kaydırma çubuğu)
+          Scrollbar(
+            controller: _horizontalScrollController,
+            thumbVisibility: true,
+            trackVisibility: true,
+            interactive: true,
+            thickness: 8.0,
+            radius: const Radius.circular(4),
+            child: SingleChildScrollView(
+              controller: _horizontalScrollController,
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.only(bottom: 8),
+              child: DataTable(
               headingRowColor: WidgetStateProperty.all(p.surface),
               dataRowMinHeight: 40,
               dataRowMaxHeight: 46,
@@ -382,7 +402,7 @@ class _BulkEditableTableState extends State<BulkEditableTable> {
                           style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
                         ),
                         if (col.required)
-                          const Text(' *', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                          const Text('*', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
                       ],
                     ),
                   ),
@@ -400,6 +420,7 @@ class _BulkEditableTableState extends State<BulkEditableTable> {
                   ),
               ],
             ),
+          ),
           ),
           const Divider(height: 1),
 

@@ -231,6 +231,15 @@ export async function createSiteWithStructure(
       device_uid: device.device_uid,
       hardware_type: device.hardware_type,
     };
+
+    // Cihaz tanımlandığında Geçiş Kontrol (door_control) modülü aktif edilir
+    await client.query(
+      `INSERT INTO site_modules (site_code, module_code, enabled, updated_at)
+       VALUES ($1, 'door_control', TRUE, NOW())
+       ON CONFLICT (site_code, module_code)
+       DO UPDATE SET enabled = TRUE, updated_at = NOW()`,
+      [siteCode],
+    );
   }
 
   // 8. Abonelik satırı (her yeni site): başvuru onayında source 'manual_approval' + application_id, anlık yolda source 'admin'

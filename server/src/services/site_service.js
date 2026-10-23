@@ -1033,7 +1033,7 @@ export async function createSiteWithStructure({
       resolvedDoorNames = doors.map((d) => typeof d === 'object' ? String(d.name || '').trim() : String(d || '').trim());
     }
 
-    const actualDoorCount = Math.max(doorCount || 1, resolvedDoorNames.length);
+    const actualDoorCount = Math.max(doorCount != null ? doorCount : 0, resolvedDoorNames.length);
 
     for (let doorIndex = 1; doorIndex <= actualDoorCount; doorIndex += 1) {
       const dName = resolvedDoorNames[doorIndex - 1] || `Kapi ${doorIndex}`;

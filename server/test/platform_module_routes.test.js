@@ -494,7 +494,7 @@ describe('GET /app/modules/catalog', () => {
 // ---------------------------------------------------------------------------
 
 describe('GET /manager/sites/:siteCode/modules: yetki matrisi', () => {
-  it('site yoneticisi kendi sitesi: 200 ve sozlesme govdesi (varsayilan door_control ACIK)', async () => {
+  it('site yoneticisi kendi sitesi: 200 ve sozlesme govdesi (varsayilan door_control KAPALI)', async () => {
     const res = await call('GET', `/manager/sites/${SITE_1}/modules`, { user: users.mgrA });
     assert.equal(res.status, 200);
     assert.equal(res.body.site_code, SITE_1);
@@ -508,7 +508,7 @@ describe('GET /manager/sites/:siteCode/modules: yetki matrisi', () => {
       description: doorOf(res.body).description,
       core: false,
       status: 'available',
-      enabled: true,
+      enabled: false,
       toggleable: true,
       // Faz 1.1 (ekleyici alanlar): yonetici modul acip kapatamaz; bekleyen talep yok
       can_toggle: false,
@@ -654,6 +654,7 @@ describe('PUT modul: onay zorunlulugu ve denetim kaydi', () => {
   });
 
   it('confirm:true ile kapatma: 200, GET ile ayni govde, satir + module.disabled audit (ayni transaction)', async () => {
+    state.siteModules.set(`${SITE_1}:door_control`, { site_code: SITE_1, module_code: 'door_control', enabled: true });
     const res = await call('PUT', moduleUrl(), { user: users.superUser, body: { enabled: false, confirm: true } });
     assert.equal(res.status, 200);
     assert.equal(res.body.site_code, SITE_1);
@@ -703,6 +704,7 @@ describe('PUT modul: onay zorunlulugu ve denetim kaydi', () => {
   });
 
   it('kapaliyken acmak: onay gerekmez, module.enabled audit yazilir', async () => {
+    state.siteModules.set(`${SITE_1}:door_control`, { site_code: SITE_1, module_code: 'door_control', enabled: true });
     await call('PUT', moduleUrl(), { user: users.superUser, body: { enabled: false, confirm: true } });
     const res = await call('PUT', moduleUrl(), { user: users.superUser, body: { enabled: true } });
     assert.equal(res.status, 200);
@@ -712,14 +714,16 @@ describe('PUT modul: onay zorunlulugu ve denetim kaydi', () => {
   });
 
   it('degisiklik yoksa audit YAZILMAZ ve site_modules satiri olusmaz (zaten acik modulu acmak)', async () => {
+    state.siteModules.set(`${SITE_1}:door_control`, { site_code: SITE_1, module_code: 'door_control', enabled: true });
     const res = await call('PUT', moduleUrl(), { user: users.superUser, body: { enabled: true } });
     assert.equal(res.status, 200);
     assert.equal(doorOf(res.body).enabled, true);
     assert.equal(state.audit.length, 0);
-    assert.equal(state.siteModules.size, 0);
+    assert.equal(state.siteModules.size, 1);
   });
 
   it('degisiklik yoksa audit YAZILMAZ (zaten kapali modulu tekrar kapatmak)', async () => {
+    state.siteModules.set(`${SITE_1}:door_control`, { site_code: SITE_1, module_code: 'door_control', enabled: true });
     await call('PUT', moduleUrl(), { user: users.superUser, body: { enabled: false, confirm: true } });
     state.rotations.length = 0;
     const res = await call('PUT', moduleUrl(), { user: users.superUser, body: { enabled: false, confirm: true } });
@@ -730,6 +734,7 @@ describe('PUT modul: onay zorunlulugu ve denetim kaydi', () => {
   });
 
   it('super kullanici ayni uc ile calisir; audit actor_role super_user', async () => {
+    state.siteModules.set(`${SITE_2}:door_control`, { site_code: SITE_2, module_code: 'door_control', enabled: true });
     const res = await call('PUT', moduleUrl(SITE_2), { user: users.superUser, body: { enabled: false, confirm: true } });
     assert.equal(res.status, 200);
     assert.equal(state.audit[0].actor_role, 'super_user');
@@ -838,6 +843,7 @@ describe('PUT modul: onay zorunlulugu ve denetim kaydi', () => {
   });
 
   it('denetim kaydi yazilamazsa ana islem BOZULMAZ (savepoint ile yutulur ve loglanir)', async () => {
+    state.siteModules.set(`${SITE_1}:door_control`, { site_code: SITE_1, module_code: 'door_control', enabled: true });
     state.failAuditInsert = true;
     const res = await call('PUT', moduleUrl(), { user: users.superUser, body: { enabled: false, confirm: true } });
     assert.equal(res.status, 200);
@@ -849,6 +855,7 @@ describe('PUT modul: onay zorunlulugu ve denetim kaydi', () => {
   });
 
   it('modul satiri yazilamazsa transaction geri alinir: audit yok, 500 + errorId, ic ayrinti sizmaz', async () => {
+    state.siteModules.set(`${SITE_1}:door_control`, { site_code: SITE_1, module_code: 'door_control', enabled: true });
     state.failModuleUpsert = true;
     const res = await call('PUT', moduleUrl(), { user: users.superUser, body: { enabled: false, confirm: true } });
     assert.equal(res.status, 500);
@@ -856,7 +863,7 @@ describe('PUT modul: onay zorunlulugu ve denetim kaydi', () => {
     assert.equal(JSON.stringify(res.body).includes('SECRET_DB_DETAIL'), false);
     assert.ok(state.log.some((q) => q.sql === 'ROLLBACK'));
     assert.equal(state.log.some((q) => q.sql === 'COMMIT'), false);
-    assert.equal(state.siteModules.size, 0);
+    assert.equal(state.siteModules.size, 1);
     assert.equal(state.audit.length, 0);
   });
 
@@ -954,6 +961,10 @@ describe('PUT modul: super kullanici modulu DOGRUDAN acarsa bekleyen talep onayl
 });
 
 describe('PUT modul: door_control kapaninca yerel kontrol anahtarlari dondurulur', () => {
+  beforeEach(() => {
+    state.siteModules.set(`${SITE_1}:door_control`, { site_code: SITE_1, module_code: 'door_control', enabled: true });
+    state.siteModules.set(`${SITE_2}:door_control`, { site_code: SITE_2, module_code: 'door_control', enabled: true });
+  });
   const close = (site = SITE_1, user = users.superUser) =>
     call('PUT', moduleUrl(site), { user, body: { enabled: false, confirm: true } });
 
@@ -1559,9 +1570,11 @@ describe('GET /app/my-modules', () => {
       { site_code: '1000000003', site_name: 'Papatya', management_type: 'apartment_site', rank: 3, door_access: false },
       { site_code: '1000000004', site_name: 'Zambak', management_type: 'apartment_site', rank: 2, door_access: false },
     ];
+    state.siteModules.set(`${SITE_1}:door_control`, { site_code: SITE_1, module_code: 'door_control', enabled: true });
     state.siteModules.set(`${SITE_2}:door_control`, { site_code: SITE_2, module_code: 'door_control', enabled: false });
     // katalogda olmayan ve "yakinda" modul satirlari sonucu degistirmez; finance (Faz 4a, available) satiri enabled: true ise ACIK
     state.siteModules.set(`${SITE_1}:online_payment`, { site_code: SITE_1, module_code: 'online_payment', enabled: true });
+    state.siteModules.set(`${SITE_1}:door_control`, { site_code: SITE_1, module_code: 'door_control', enabled: true });
     state.siteModules.set(`${SITE_1}:finance`, { site_code: SITE_1, module_code: 'finance', enabled: true });
     state.siteModules.set(`${SITE_1}:baska`, { site_code: SITE_1, module_code: 'baska', enabled: true });
 
@@ -1676,6 +1689,7 @@ describe('GET /app/my-modules', () => {
       { site_code: String(SITE_1), site_name: 'A', management_type: 'apartment_site', rank: 3, door_access: false },
       { site_code: String(SITE_2), site_name: 'B', management_type: 'apartment_site', rank: 1, door_access: true },
     ];
+    state.siteModules.set(`${SITE_1}:door_control`, { site_code: SITE_1, module_code: 'door_control', enabled: true });
     state.siteModules.set(`${SITE_2}:door_control`, { site_code: SITE_2, module_code: 'door_control', enabled: false });
     const res = await call('GET', '/app/my-modules', { user: users.resident });
     assert.deepEqual(

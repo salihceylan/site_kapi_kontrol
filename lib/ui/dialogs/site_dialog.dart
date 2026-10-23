@@ -133,7 +133,7 @@ class _SiteDialogState extends State<SiteDialog> {
       text: initialBlockCount.toString(),
     );
     _doorCountController = TextEditingController(
-      text: (site?.doorCount ?? 1).toString(),
+      text: (site?.doorCount ?? 0).toString(),
     );
 
     _selectedManagerUserCode = site?.managerUserCode;
@@ -462,8 +462,8 @@ class _SiteDialogState extends State<SiteDialog> {
                     ),
                     validator: (value) {
                       final val = int.tryParse((value ?? '').trim());
-                      return val == null || val < 1
-                          ? 'En az 1 kapı olmalı.'
+                      return val == null || val < 0
+                          ? 'Geçerli bir kapı sayısı girin.'
                           : null;
                     },
                   ),

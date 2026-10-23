@@ -26,7 +26,6 @@ import 'package:site_kapi_kontrol/services/site_application_tracker.dart';
 import 'package:site_kapi_kontrol/ui/helpers/site_application_flow.dart';
 import 'package:site_kapi_kontrol/ui/widgets/site_application_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/site_application_status_card.dart';
-import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 import 'package:site_kapi_kontrol/ui/helpers/ui_helpers.dart';
 import 'package:site_kapi_kontrol/services/geofence_service.dart';
 import 'package:site_kapi_kontrol/ui/pages/qr_scan_page.dart';
@@ -952,42 +951,6 @@ class IndividualHomeViewState extends State<IndividualHomeView>
 }
 
 /// "Site Kurulumu" kartının eylemleri (başvuru akışı): birincil "Site Kurmak İçin Başvur"
-/// (bekleyen başvuru varken "Başvurunuz İnceleniyor", durum bilinmezken de pasif; [SiteApplyCta]), ikincil
-/// "Cihaz Ekle" (YALNIZ [onClaimDevice] verilirse: site yöneticisi / süper) ve
-/// "Abonelikle hemen site aç — Yakında…" pasif satırı. Düğme etiketleri sarar; kırpılmaz.
-class _SiteApplyActions extends StatelessWidget {
-  const _SiteApplyActions({
-    required this.tracker,
-    required this.onApply,
-    this.onClaimDevice,
-  });
-
-  final SiteApplicationTracker tracker;
-  final Future<void> Function() onApply;
-  final VoidCallback? onClaimDevice;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        SiteApplyCta(tracker: tracker, onApply: onApply),
-        if (onClaimDevice != null) ...[
-          const SizedBox(height: AppSpace.sm),
-          OutlinedButton.icon(
-            key: const ValueKey<String>('site_application_claim_device'),
-            onPressed: onClaimDevice,
-            style: tonalActionStyle(context),
-            icon: const Icon(Icons.add_to_photos_rounded, size: 20),
-            label: const Text('Cihaz Ekle', textAlign: TextAlign.center),
-          ),
-        ],
-        const SizedBox(height: AppSpace.sm),
-        const SiteSubscriptionComingSoonRow(),
-      ],
-    );
-  }
-}
 
 /// Site filtre çipi: seçili = birincil ton zemini + kenar; en az 44 dp yükseklik; sayaç rozeti.
 class _SiteFilterChip extends StatelessWidget {

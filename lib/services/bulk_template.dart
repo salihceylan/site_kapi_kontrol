@@ -72,6 +72,20 @@ const Map<String, List<String>> _fallbackResponsibleWords = <String, List<String
 
 const String _fileBase = 'toplu_yukleme_sablonu';
 
+/// Şablonda gösterilmeyecek (kullanıcı isteğiyle gizlenen), ancak geriye dönük uyumluluk
+/// kapsamında sistem ve parser tarafından desteklenmeye devam eden isteğe bağlı sütunlar.
+const Set<String> kExcludedTemplateKeys = <String>{
+  'brut_m2',
+  'net_m2',
+  'arsa_payi_pay',
+  'arsa_payi_payda',
+  'not',
+};
+
+String templateHeaderLabel(ImportColumn column) {
+  return column.required ? '${column.label}*' : column.label;
+}
+
 XlsxColumn _templateColumn(ImportColumn column) {
   final XlsxFormat format;
   if (kTextFormattedKeys.contains(column.key)) {
@@ -81,11 +95,11 @@ XlsxColumn _templateColumn(ImportColumn column) {
   } else {
     format = XlsxFormat.general;
   }
-  return XlsxColumn(column.label, format: format, width: _width(column));
+  return XlsxColumn(templateHeaderLabel(column), format: format, width: _width(column));
 }
 
 double _width(ImportColumn column) {
-  final base = column.label.length + 4;
+  final base = templateHeaderLabel(column).length + 4;
   final hint = switch (column.key) {
     'ad_soyad' => 24,
     'e_posta' => 26,
@@ -114,7 +128,7 @@ Map<String, int> _envelopeIndex(ExportEnvelope envelope, ImportKindSpec spec) {
 }
 
 /// Dolu şablon satırları (yalnız `apartments` + zarf varsa).
-List<List<Object?>> _prefilledRows(ExportEnvelope? envelope, ImportKindSpec spec) {
+List<List<Object?>> _prefilledRows(ExportEnvelope? envelope, ImportKindSpec spec, List<ImportColumn> columns) {
   if (envelope == null) return const <List<Object?>>[];
   final index = _envelopeIndex(envelope, spec);
   // Anahtar sütunlar (blok, daire no) eşlenmediyse zarf bu şablona uymaz: ön doldurma yapılmaz.
@@ -122,7 +136,7 @@ List<List<Object?>> _prefilledRows(ExportEnvelope? envelope, ImportKindSpec spec
   return <List<Object?>>[
     for (final row in envelope.rows)
       <Object?>[
-        for (final column in spec.columns)
+        for (final column in columns)
           index.containsKey(column.key) ? _cellFor(column, envelope.columns[index[column.key]!], row[index[column.key]!]) : null,
       ],
   ];
@@ -173,13 +187,13 @@ List<List<String>> _explanationRows(ImportSpec spec, {required String siteName, 
     if (kindSpec == null) continue;
     rows.add(<String>['${kind.label} sayfası', '', '', '']);
     rows.add(<String>['Sütun', 'Zorunlu mu?', 'Kural', 'Örnek']);
-    for (final column in kindSpec.columns) {
+    for (final column in kindSpec.columns.where((c) => !kExcludedTemplateKeys.contains(c.key))) {
       final rule = <String>[
         if (column.hint != null) column.hint!,
         if (column.maxLength != null) 'En çok ${column.maxLength} karakter.',
       ].join(' ');
       rows.add(<String>[
-        column.label,
+        templateHeaderLabel(column),
         column.required ? 'Evet' : 'Hayır',
         rule,
         _examples[column.key] ?? '',
@@ -233,13 +247,14 @@ RenderedFile buildImportTemplate({
 }) {
   final kindSpec = spec.of(kind);
   if (kindSpec == null) throw ArgumentError('Şablonda ${kind.apiValue} türü yok.');
+  final activeKindColumns = kindSpec.columns.where((c) => !kExcludedTemplateKeys.contains(c.key)).toList();
   if (format == ExportFormat.csv) {
     final rows = <List<String>>[
-      <String>[for (final c in kindSpec.columns) c.label],
+      <String>[for (final c in activeKindColumns) templateHeaderLabel(c)],
       if (_prefillsApartments(kind))
-        for (final row in _prefilledRows(apartments, kindSpec))
+        for (final row in _prefilledRows(apartments, kindSpec, activeKindColumns))
           <String>[
-            for (var i = 0; i < kindSpec.columns.length; i++)
+            for (var i = 0; i < activeKindColumns.length; i++)
               row[i] == null
                   ? ''
                   : (row[i] is num ? formatPlainNumber(row[i]) : '${row[i]}'),
@@ -257,11 +272,12 @@ RenderedFile buildImportTemplate({
   for (final k in order) {
     final s = spec.of(k);
     if (s == null) continue;
+    final activeCols = s.columns.where((c) => !kExcludedTemplateKeys.contains(c.key)).toList();
     sheets.add(
       XlsxSheet(
         name: k.sheetName,
-        columns: <XlsxColumn>[for (final c in s.columns) _templateColumn(c)],
-        rows: _prefillsApartments(k) ? _prefilledRows(apartments, s) : const <List<Object?>>[],
+        columns: <XlsxColumn>[for (final c in activeCols) _templateColumn(c)],
+        rows: _prefillsApartments(k) ? _prefilledRows(apartments, s, activeCols) : const <List<Object?>>[],
       ),
     );
   }

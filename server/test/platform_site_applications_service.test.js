@@ -133,6 +133,7 @@ function install(config = {}) {
     if (/^INSERT INTO site_doors/.test(sql)) return ok([{ id: 40 + Number(params[2]), site_code: 900, door_name: params[1], door_index: params[2], is_active: true }]);
     if (/^UPDATE devices SET site_code/.test(sql) || /^UPDATE site_doors SET assigned_device_id/.test(sql)) return ok();
     if (/^INSERT INTO site_subscriptions/.test(sql)) return ok();
+    if (/^INSERT INTO site_modules/.test(sql)) return ok();
     if (/^UPDATE site_applications SET/.test(sql)) return ok();
     if (/^SELECT full_name, email FROM users WHERE user_code = \$1 LIMIT 1$/.test(sql)) return ok([{ full_name: 'Ayşe Başvuran', email: 'ayse@example.com' }]);
     // iptal
@@ -678,7 +679,7 @@ describe('approveSiteApplication', () => {
   });
 
   it('yarıda hata (herhangi bir adımda): ROLLBACK, COMMIT YOK, bağlantı bırakılır, hata sızdırılmaz biçimde yukarı çıkar', async () => {
-    const steps = [/^INSERT INTO sites/, /^INSERT INTO site_manager_sites/, /^INSERT INTO site_memberships/, /^UPDATE users SET role/, /^INSERT INTO site_blocks/, /^INSERT INTO apartments/, /^INSERT INTO site_doors/, /^UPDATE devices SET site_code/, /^INSERT INTO site_subscriptions/, /^UPDATE site_applications SET status = 'approved'/];
+    const steps = [/^INSERT INTO sites/, /^INSERT INTO site_manager_sites/, /^INSERT INTO site_memberships/, /^UPDATE users SET role/, /^INSERT INTO site_blocks/, /^INSERT INTO apartments/, /^INSERT INTO site_doors/, /^UPDATE devices SET site_code/, /^INSERT INTO site_modules/, /^INSERT INTO site_subscriptions/, /^UPDATE site_applications SET status = 'approved'/];
     for (const failOn of steps) {
       const db = install({ row: storedRow({ device_uid: 'A0B1C2D3E4F5' }), failOn });
       await assert.rejects(() => approveSiteApplication({ applicationId: 41, actor: superUser }), (error) => error.code === 'XX000' && !isPlatformError(error), String(failOn));
@@ -696,7 +697,7 @@ describe('approveSiteApplication', () => {
   });
 
   it('ANLIK KURULUMLA AYNI çekirdek: site..kapı..cihaz..abonelik SQL ifadeleri ve parametreleri birebir aynı (yalnız abonelik kaynağı / başvuru kimliği farklı)', async () => {
-    const coreRegex = /^(INSERT INTO sites|INSERT INTO site_manager_sites|INSERT INTO site_memberships|UPDATE users SET role|INSERT INTO site_blocks|INSERT INTO apartments|INSERT INTO site_doors|UPDATE devices SET site_code|UPDATE site_doors SET assigned_device_id|INSERT INTO site_subscriptions)/;
+    const coreRegex = /^(INSERT INTO sites|INSERT INTO site_manager_sites|INSERT INTO site_memberships|UPDATE users SET role|INSERT INTO site_blocks|INSERT INTO apartments|INSERT INTO site_doors|UPDATE devices SET site_code|UPDATE site_doors SET assigned_device_id|INSERT INTO site_modules|INSERT INTO site_subscriptions)/;
     const coreOf = (log) => log.filter((entry) => coreRegex.test(entry.sql)).map((entry) => ({ sql: entry.sql, params: entry.params }));
 
     const approved = install({ row: storedRow({ device_uid: 'A0B1C2D3E4F5' }) });

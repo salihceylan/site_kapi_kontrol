@@ -408,7 +408,7 @@ describe('kapi rotalari (appDoorsRouter): modul kapaliyken', () => {
     assert.equal(selects.length, 2);
     for (const select of selects) {
       assert.match(select.sql, /LEFT JOIN site_modules smod ON smod\.site_code = s\.site_code AND smod\.module_code = 'door_control'/);
-      assert.match(select.sql, /COALESCE\(smod\.enabled, TRUE\) AS module_door_control/);
+      assert.match(select.sql, /COALESCE\(smod\.enabled, FALSE\) AS module_door_control/);
     }
   });
 
@@ -678,7 +678,7 @@ describe('misafir gecisi (guestPassesRouter): modul kapaliyken', () => {
     await callGuest('POST', `/public/guest-pass/${TOKEN}/open`);
     const select = guestQueries.find((q) => q.sql.includes('LEFT JOIN devices dev'));
     assert.match(select.sql, /LEFT JOIN site_modules smod ON smod\.site_code = s\.site_code AND smod\.module_code = 'door_control'/);
-    assert.match(select.sql, /COALESCE\(smod\.enabled, TRUE\) AS module_door_control/);
+    assert.match(select.sql, /COALESCE\(smod\.enabled, FALSE\) AS module_door_control/);
   });
 
   it('GET /guest/:token: kibar bilgi sayfasi; kapi acma duğmesi YOK, site adi kacislenir, CSP basliklari var', async () => {
@@ -693,7 +693,7 @@ describe('misafir gecisi (guestPassesRouter): modul kapaliyken', () => {
     assert.equal(res.text.includes('Gül <Sitesi>'), false);
     assert.match(res.text, /Gül &lt;Sitesi&gt;/);
     const select = guestQueries.find((q) => q.sql.includes('FROM guest_passes gp JOIN site_doors d'));
-    assert.match(select.sql, /COALESCE\(smod\.enabled, TRUE\) AS module_door_control/);
+    assert.match(select.sql, /COALESCE\(smod\.enabled, FALSE\) AS module_door_control/);
   });
 
   it('GET /guest/:token: modul acikken (veya alan yokken) normal gecis sayfasi', async () => {

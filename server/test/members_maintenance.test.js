@@ -43,6 +43,7 @@ describe('members: maintenance_service yıkıcı işlem yapmaz', () => {
       .filter((sql) => /^DELETE FROM/i.test(sql));
     const tables = deletes.map((sql) => sql.match(/^DELETE FROM (\w+)/i)[1]).sort();
     assert.deepEqual(tables, [
+      'apartment_notices',
       'device_connectivity_logs',
       'door_access_logs',
       'email_verifications',

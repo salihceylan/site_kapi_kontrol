@@ -134,17 +134,17 @@ class BulkMappingStep extends StatelessWidget {
           data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
           child: ExpansionTile(
             key: const ValueKey<String>('bulk_advanced_column_mapping'),
-            initiallyExpanded: true,
+            initiallyExpanded: blockers.isNotEmpty,
             tilePadding: EdgeInsets.zero,
             leading: Icon(Icons.tune_rounded, color: p.textSecondary),
             title: Text(
-              'Sütun Eşlemelerini Özelleştir (Gelişmiş)',
+              'Sütun Eşlemelerini Özelleştir (İsteğe Bağlı)',
               style: th.titleSmall?.copyWith(color: p.text),
             ),
             subtitle: Text(
               blockers.isNotEmpty
                   ? 'Zorunlu sütun eşlemesi gerekiyor'
-                  : 'Excel sütun başlıkları alanlarla otomatik eşleştirildi. Değiştirmek için dokunun.',
+                  : 'Sütunlar otomatik eşleştirildi. Değiştirmek isterseniz dokunun.',
               style: th.bodySmall?.copyWith(
                 color: blockers.isNotEmpty ? p.statusWarn : p.textMuted,
               ),

@@ -128,6 +128,16 @@ describe('members: setup-site girdi sınırları', () => {
     assert.equal(ok.totalApartmentCount, 5000);
   });
 
+  it('kapı listesi isteğe bağlıdır: doors: [] veya doorCount: 0 verildiğinde 0 kapılı kuruluma izin verilir', () => {
+    const out1 = normalizeSetupSiteInput({ name: 'S', doors: [] });
+    assert.equal(out1.totalDoorCount, 0);
+    assert.deepEqual(out1.doors, []);
+
+    const out2 = normalizeSetupSiteInput({ name: 'S', doorCount: 0 });
+    assert.equal(out2.totalDoorCount, 0);
+    assert.deepEqual(out2.doors, []);
+  });
+
   it('kapı listesi ve doorCount üst sınırı uygulanır', () => {
     const doors = Array.from({ length: SITE_LIMITS.maxDoors + 1 }, (_, i) => ({ name: `K${i}` }));
     assert.throws(() => normalizeSetupSiteInput({ name: 'S', doors }), (err) => err.statusCode === 400);

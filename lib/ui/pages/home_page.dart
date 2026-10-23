@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'package:site_kapi_kontrol/models/apartment_household.dart';
+import 'package:site_kapi_kontrol/models/apartment_member_record.dart';
 import 'package:site_kapi_kontrol/models/apartment_record.dart';
 
 import 'package:site_kapi_kontrol/models/device_page.dart';

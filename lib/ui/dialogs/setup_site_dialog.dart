@@ -272,9 +272,11 @@ class _SetupSiteDialogState extends State<SetupSiteDialog> {
         _doors.add(_DoorDraft(name: door.name.isEmpty ? 'Kapı ${_doors.length + 1}' : door.name));
       }
     }
-    // Başlangıçta 1 blok ve 1 kapı ekle
+    // Başlangıçta 1 blok ekle; kapılar isteğe bağlıdır (kullanıcı isterse silebilir veya kapısız kurabilir)
     if (_blocks.isEmpty) _blocks.add(_BlockDraft(name: 'A Blok', apartmentCount: 10));
-    if (_doors.isEmpty) _doors.add(_DoorDraft(name: 'Ana Giriş Kapısı'));
+    if (_doors.isEmpty) {
+      _doors.add(_DoorDraft(name: 'Ana Giriş Kapısı'));
+    }
 
     if (_isApplication) {
       _selectedDevice = widget.deviceUid ?? _noDevice;
@@ -419,7 +421,7 @@ class _SetupSiteDialogState extends State<SetupSiteDialog> {
   }
 
   void _removeDoor(int index) {
-    if (_doors.length <= 1) return;
+    if (index < 0 || index >= _doors.length) return;
     setState(() {
       final removed = _doors.removeAt(index);
       removed.dispose();
@@ -932,9 +934,9 @@ class _SetupSiteDialogState extends State<SetupSiteDialog> {
       ],
       const SizedBox(height: AppSpace.xl),
 
-      // Dinamik Kapılar Başlığı
+      // Dinamik Kapılar Başlığı (İsteğe Bağlı)
       SectionHeader(
-        title: 'Kapılar',
+        title: 'Kapılar (İsteğe Bağlı)',
         icon: Icons.meeting_room_rounded,
         trailing: TextButton.icon(
           onPressed: (_submitting || _doors.length >= SetupSiteDialog.maxDoors)
@@ -947,15 +949,35 @@ class _SetupSiteDialogState extends State<SetupSiteDialog> {
       Text(
         _doors.length >= SetupSiteDialog.maxDoors
             ? 'En fazla ${SetupSiteDialog.maxDoors} kapı eklenebilir.'
-            : 'Sitenin kapılarını ve isimlerini belirleyin',
+            : 'Giriş ve çıkış kapılarını şimdi ekleyebilir veya daha sonra dilediğiniz zaman düzenleyebilirsiniz.',
         style: th.bodySmall,
       ),
       const SizedBox(height: AppSpace.md),
 
-      // Kapı Kartları Listesi (ilk 8 satır girişte kademeli belirir)
-      for (var idx = 0; idx < _doors.length; idx++) ...[
-        if (idx > 0) const SizedBox(height: AppSpace.sm),
-        StaggeredEntry(index: idx, child: _buildDoorRow(context, idx)),
+      if (_doors.isEmpty) ...[
+        DialogPanel(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: AppSpace.sm),
+            child: Row(
+              children: [
+                Icon(Icons.info_outline_rounded, size: 20, color: p.textMuted),
+                const SizedBox(width: AppSpace.sm),
+                Expanded(
+                  child: Text(
+                    'Henüz kapı eklenmedi. Dilerseniz şimdi kapı ekleyebilir veya kuruluma kapısız devam edebilirsiniz.',
+                    style: th.bodySmall?.copyWith(color: p.textMuted),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ] else ...[
+        // Kapı Kartları Listesi (ilk 8 satır girişte kademeli belirir)
+        for (var idx = 0; idx < _doors.length; idx++) ...[
+          if (idx > 0) const SizedBox(height: AppSpace.sm),
+          StaggeredEntry(index: idx, child: _buildDoorRow(context, idx)),
+        ],
       ],
 
       if (_isApplication) ...[
@@ -1320,8 +1342,7 @@ class _SetupSiteDialogState extends State<SetupSiteDialog> {
                   : null,
             ),
           ),
-          if (_doors.length > 1)
-            IconButton(
+          IconButton(
               onPressed: _submitting ? null : () => _removeDoor(idx),
               icon: Icon(Icons.delete_outline_rounded, color: AppTone.danger.ink(p), size: 20),
               // Bağlamlı ipucu / ekran okuyucu etiketi: hangi kapı silinir.

@@ -157,6 +157,7 @@ describe('onaysız site yöneticisi terfisi: kaynak taraması', () => {
 
   it("`role = 'site_manager'` atayan UPDATE'ler yalnızca bilinen, onaylı yollardadır (başvuru onayı, davet / ortak yönetici ataması, davet kabulü)", () => {
     const allowed = new Map([
+      ['modules/oauth_login.js', 1], // OAuth ile giriş yapan kullanıcının bekleyen yönetici daveti kabulü
       ['services/site_setup_core.js', 1], // başvuru onayı + anlık kurulum (site yöneticisi / süper)
       ['services/membership_service.js', 1], // bekleyen yönetici DAVETİ olan e-posta doğrulanınca (davet = mevcut yönetici kararı)
       ['services/site_service.js', 1], // mevcut yöneticinin / süperin siteye ortak yönetici ataması (addSiteManager)

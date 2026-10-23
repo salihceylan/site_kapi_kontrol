@@ -530,7 +530,8 @@ describe('POST module-requests', () => {
       assert.equal(soon.status, 409, code);
       assert.equal(soon.body.code, 'MODULE_COMING_SOON');
     }
-    // SITE_2'de door_control satiri yok -> varsayilan ACIK -> zaten acik
+    // SITE_2'de door_control açıkken -> zaten acik
+    state.siteModules.set(`${SITE_2}:door_control`, { enabled: true });
     const open = await post({ module_code: 'door_control' }, users.mgrB, SITE_2);
     assert.equal(open.status, 409);
     assert.equal(open.body.code, 'MODULE_ALREADY_ENABLED');

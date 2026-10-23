@@ -228,6 +228,17 @@ export async function updateDoorDeviceAssignment({
       [Number(door.site_code), door.door_name, Number(device.id)],
     );
 
+    // Cihaz kapıya bağlandığında Geçiş Kontrol (door_control) modülü otomatik aktif edilir
+    await client.query(
+      `
+        INSERT INTO site_modules (site_code, module_code, enabled, updated_at)
+        VALUES ($1, 'door_control', TRUE, NOW())
+        ON CONFLICT (site_code, module_code)
+        DO UPDATE SET enabled = TRUE, updated_at = NOW()
+      `,
+      [Number(door.site_code)],
+    );
+
     const finalResult = await client.query(
       `
         SELECT
@@ -317,7 +328,7 @@ export async function listAccessibleDoorsForUser(authUser, { doorId = null } = {
           s.geofence_longitude,
           s.geofence_radius_meters,
           s.qr_rotation_seconds,
-          COALESCE(smod.enabled, TRUE) AS module_door_control,
+          COALESCE(smod.enabled, FALSE) AS module_door_control,
           d.created_at
         FROM site_doors d
         INNER JOIN sites s ON s.site_code = d.site_code
@@ -371,7 +382,7 @@ export async function listAccessibleDoorsForUser(authUser, { doorId = null } = {
         s.geofence_longitude,
         s.geofence_radius_meters,
         s.qr_rotation_seconds,
-        COALESCE(smod.enabled, TRUE) AS module_door_control,
+        COALESCE(smod.enabled, FALSE) AS module_door_control,
         d.created_at
       FROM site_doors d
       INNER JOIN sites s ON s.site_code = d.site_code
@@ -994,6 +1005,17 @@ export async function replaceDoorDevice({ doorId, newDeviceInput, newDeviceId, a
     await client.query(
       `UPDATE devices SET site_code = $1, gate_name = $2 WHERE id = $3`,
       [Number(door.site_code), door.door_name, targetDeviceId],
+    );
+
+    // Cihaz kapıya bağlandığında Geçiş Kontrol (door_control) modülü otomatik aktif edilir
+    await client.query(
+      `
+        INSERT INTO site_modules (site_code, module_code, enabled, updated_at)
+        VALUES ($1, 'door_control', TRUE, NOW())
+        ON CONFLICT (site_code, module_code)
+        DO UPDATE SET enabled = TRUE, updated_at = NOW()
+      `,
+      [Number(door.site_code)],
     );
 
     // 7. Güncellenmiş kapıyı çek

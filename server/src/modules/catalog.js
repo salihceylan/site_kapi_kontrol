@@ -28,7 +28,7 @@ export const MODULE_CATALOG = Object.freeze([
     description: 'Telefondan kapı açma, karekod ve misafir geçişi; kapı ve cihaz yönetimi.',
     core: false,
     status: MODULE_STATUS_AVAILABLE,
-    defaultEnabled: true,
+    defaultEnabled: false,
     confirmOnDisable: DOOR_CONTROL_DISABLE_WARNING,
   }),
   defineModule({

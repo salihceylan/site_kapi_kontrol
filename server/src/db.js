@@ -1117,6 +1117,7 @@ export async function ensureDbSchema() {
         PRIMARY KEY (site_code, module_code)
       );
 
+
       CREATE TABLE IF NOT EXISTS audit_log (
         id BIGSERIAL PRIMARY KEY,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -1973,6 +1974,23 @@ export async function ensureDbSchema() {
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('[DB] people_v1 aktarimi basarisiz (sonraki acilista tekrar denenecek):', error?.code || error?.message);
+    }
+
+    // Sahadaki aktif cihazların çalışmasını asla bozma (Kural 2 & 3):
+    try {
+      await client.query(`
+        INSERT INTO site_modules (site_code, module_code, enabled, updated_at)
+        SELECT DISTINCT s.site_code, 'door_control', TRUE, NOW()
+        FROM sites s
+        WHERE (
+          EXISTS (SELECT 1 FROM devices d WHERE d.site_code = s.site_code)
+          OR EXISTS (SELECT 1 FROM site_doors sd WHERE sd.site_code = s.site_code AND sd.assigned_device_id IS NOT NULL)
+        )
+        ON CONFLICT (site_code, module_code) DO NOTHING
+      `);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('[DB] door_control backfill hatasi:', e?.message);
     }
   } finally {
     client.release();

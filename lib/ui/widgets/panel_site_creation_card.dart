@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:site_kapi_kontrol/brand/brand_scope.dart';
 import 'package:site_kapi_kontrol/services/site_application_tracker.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 

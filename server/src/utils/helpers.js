@@ -556,8 +556,8 @@ export function validateStructuredSiteInput({
   if (!name || name.length < 2) {
     return 'Site adi en az 2 karakter olmali.';
   }
-  if (!Number.isInteger(doorCount) || doorCount <= 0) {
-    return 'Otomatik kapi sayisi pozitif tamsayi olmali.';
+  if (!Number.isInteger(doorCount) || doorCount < 0) {
+    return 'Otomatik kapi sayisi pozitif tamsayi veya sifir olmali.';
   }
   if (doorCount > 100) {
     return 'Bu islem icin kapi sayisi fazla buyuk.';

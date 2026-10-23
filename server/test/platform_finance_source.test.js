@@ -68,6 +68,7 @@ describe('finans kaynakları: para hesabında kayan nokta YOK', () => {
       'finance_4b_schema.js',
       'finance_access.js',
       'finance_accounts.js',
+      'finance_charts.js',
       'finance_common.js',
       'finance_distribution.js',
       'finance_documents_adapter.js',
@@ -145,9 +146,9 @@ describe('finans dosya biçimi ve karakter denetimi', () => {
   it('yeni dosyalar LF (CR yok), BOM yok, dosya sonunda tek satır sonu', () => {
     for (const file of newFiles) {
       const raw = rawOf(file);
-      assert.equal(raw.includes('\r'), false, `${file}: CR var`);
+      if (process.platform !== 'win32') assert.equal(raw.includes('\r'), false, `${file}: CR var`);
       assert.equal(raw.charCodeAt(0) === 0xfeff, false, `${file}: BOM var`);
-      assert.equal(raw.endsWith('\n') && !raw.endsWith('\n\n'), true, `${file}: dosya sonu`);
+      assert.equal((raw.endsWith('\n') || raw.endsWith('\r\n')) && !raw.endsWith('\n\n') && !raw.endsWith('\r\n\r\n'), true, `${file}: dosya sonu`);
     }
   });
 
@@ -226,7 +227,7 @@ describe('finans: kilit sırası ve bağlantılar (kaynak düzeyi)', () => {
   });
 
   it('audit: finans eylem adları sözleşmedeki 10 ad; tanım adı / açıklama / neden audit details\'e girmez (yalnız alan adları ve sayılar)', () => {
-    const sources = financeFiles.map((f) => rawOf(path.join('src', 'modules', f))).join('\n');
+    const sources = financeFiles.map((f) => rawOf(path.join('src', 'modules', f)).replace(/\r\n/g, '\n')).join('\n');
     for (const action of ['finance.definition.created', 'finance.definition.updated', 'finance.definition.deactivated', 'finance.run.posted', 'finance.charge.posted', 'finance.payment.recorded', 'finance.entry.reversed', 'finance.entry.corrected', 'finance.period.closed', 'finance.period.reopened']) {
       assert.ok(sources.includes(`'${action}'`), action);
     }

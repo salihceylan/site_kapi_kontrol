@@ -193,7 +193,7 @@ function isPlainObject(value) {
 export function revalidateStoredStructure(row) {
   const blocksRaw = parseJsonColumn(row.blocks);
   const doorsRaw = parseJsonColumn(row.doors);
-  if (!Array.isArray(blocksRaw) || blocksRaw.length === 0 || !Array.isArray(doorsRaw) || doorsRaw.length === 0) {
+  if (!Array.isArray(blocksRaw) || blocksRaw.length === 0 || !Array.isArray(doorsRaw)) {
     throw applicationDataInvalid();
   }
   for (const block of blocksRaw) {
