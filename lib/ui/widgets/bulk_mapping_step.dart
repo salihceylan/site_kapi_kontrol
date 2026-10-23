@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/models/bulk_import.dart';
 import 'package:site_kapi_kontrol/services/bulk_header_mapper.dart';
 import 'package:site_kapi_kontrol/ui/widgets/bulk_error_notice.dart';
+import 'package:site_kapi_kontrol/ui/widgets/bulk_editable_table.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/buttons.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
@@ -66,7 +67,9 @@ class BulkMappingStep extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
-          'Dosyanızın sütunları aşağıdaki alanlarla eşlendi. Yanlış olanı düzeltin; bir alanı boş bırakabilirsiniz.',
+          c.rows.isNotEmpty
+              ? 'Dosyanızdaki veriler aşağıda tablo olarak listelenmiştir. Hücrelere dokunarak değerleri düzenleyebilir, satır silebilir veya ekleyebilirsiniz.'
+              : 'Dosyanızın sütunları aşağıdaki alanlarla eşlendi. Yanlış olanı düzeltin; bir alanı boş bırakabilirsiniz.',
           style: th.bodyMedium?.copyWith(color: p.textSecondary),
         ),
         const SizedBox(height: AppSpace.md),
@@ -114,10 +117,6 @@ class BulkMappingStep extends StatelessWidget {
           ),
         ],
         const SizedBox(height: AppSpace.lg),
-        for (final column in kindSpec.columns) ...[
-          _FieldRow(controller: c, column: column, mapping: mapping),
-          const SizedBox(height: AppSpace.md),
-        ],
         if (ignored.isNotEmpty) ...[
           InlineNotice(
             key: const ValueKey<String>('bulk_ignored_columns'),
@@ -125,8 +124,41 @@ class BulkMappingStep extends StatelessWidget {
             message:
                 'Yok sayılacak sütunlar: ${_ignoredText(mapping, ignored)}. Bu sütunlardaki veriler yüklenmez.',
           ),
-          const SizedBox(height: AppSpace.lg),
+          const SizedBox(height: AppSpace.md),
         ],
+        if (c.rows.isNotEmpty) ...[
+          BulkEditableTable(controller: c),
+          const SizedBox(height: AppSpace.md),
+        ],
+        Theme(
+          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+          child: ExpansionTile(
+            key: const ValueKey<String>('bulk_advanced_column_mapping'),
+            initiallyExpanded: true,
+            tilePadding: EdgeInsets.zero,
+            leading: Icon(Icons.tune_rounded, color: p.textSecondary),
+            title: Text(
+              'Sütun Eşlemelerini Özelleştir (Gelişmiş)',
+              style: th.titleSmall?.copyWith(color: p.text),
+            ),
+            subtitle: Text(
+              blockers.isNotEmpty
+                  ? 'Zorunlu sütun eşlemesi gerekiyor'
+                  : 'Excel sütun başlıkları alanlarla otomatik eşleştirildi. Değiştirmek için dokunun.',
+              style: th.bodySmall?.copyWith(
+                color: blockers.isNotEmpty ? p.statusWarn : p.textMuted,
+              ),
+            ),
+            children: [
+              const SizedBox(height: AppSpace.sm),
+              for (final column in kindSpec.columns) ...[
+                _FieldRow(controller: c, column: column, mapping: mapping),
+                const SizedBox(height: AppSpace.md),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: AppSpace.lg),
         confirm,
         const SizedBox(height: AppSpace.sm),
         SizedBox(

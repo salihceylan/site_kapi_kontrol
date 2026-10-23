@@ -3059,3 +3059,26 @@ Dalga 2-6'nın ikinci aşaması: dekont bildirimi, banka dosyasından tahsilat, 
 - [ ] **94.4. Dairesi Olmayan Bireysel Kullanıcılar İçin Panel Kartı:**
   - **Nasıl Test Edilir:** Henüz hiçbir daireye atanmamış, site yöneticisi veya süper kullanıcı olmayan yeni bir hesapla ana ekrana (Panel / Dashboard) girin.
   - **Beklenen Sonuç:** Panelde üst özet alanının hemen altında taşma olmaksızın "Yeni Site Oluştur / YÖNETİCİ OLUN" kartı görüntülenir. "Site Kurulumunu Başlat" butonuna dokunulduğunda doğrudan başvuru formu açılır. Kullanıcı bir daireye katıldığında veya yönetici olduğunda bu kart otomatik olarak kaybolur.
+
+---
+
+## 95. 📊 Toplu Kişi Yükleme — Excel Görünümünde Düzenlenebilir Veri Tablosu
+
+- [ ] **95.1. Excel Yüklemesi Sonrası Veri Tablosunun Doğrudan Gösterilmesi:**
+  - **Nasıl Test Edilir:** Site yöneticisi olarak Kişiler menüsünden "Toplu Kişi Yükle" sihirbazını açın. Tür olarak "Kişiler" veya "Hepsi Bir Arada" seçip örnek Excel dosyasını seçin.
+  - **Beklenen Sonuç:** Dosya okunduktan sonra yöneticinin kafasını karıştıran sütun açılır kartları yerine, ekranda doğrudan Excel görünümünde veri tablosu (`BulkEditableTable`) listelenir. Sıra numarası, kişi adları, telefon, e-posta, daire no gibi veriler aynen Excel dosyasındaki satır ve sütun yapısıyla görünür.
+- [ ] **95.2. Hücre Hücre Canlı Düzenleme:**
+  - **Nasıl Test Edilir:** Veri tablosundaki herhangi bir hücreye (örneğin bir sakinin hatalı yazılmış telefon numarasına veya adına) dokunun.
+  - **Beklenen Sonuç:** Düzenleme diyalogu açılır. Yeni değer yazılıp "Uygula" denildiğinde tablodaki hücre anında güncellenir ve arka planda aktarım verisine işlenir.
+- [ ] **95.3. Satır Silme ve Yeni Satır Ekleme:**
+  - **Nasıl Test Edilir:** İstenmeyen bir satırın sağındaki çöp kutusu simgesine dokunarak satırı silin; ardından tablonun üstündeki "Satır Ekle" butonuna dokunup yeni sakin verisi girin.
+  - **Beklenen Sonuç:** Silinen satır tablodan anında kalkar ve satır sayısı güncellenir; yeni eklenen satır tablonun sonuna eklenir.
+- [ ] **95.4. Tabloda Arama ve Sayfalama:**
+  - **Nasıl Test Edilir:** Arama çubuğuna bir isim veya daire no yazın; ardından çok satırlı yüklemelerde sayfa geçiş butonlarını test edin.
+  - **Beklenen Sonuç:** Tablo arama kriterine göre filtrelenir; 25'ten fazla kayıt varsa sayfalama kusursuz çalışır.
+- [ ] **95.5. Sütun Eşlemelerini Özelleştir (Gelişmiş) Daraltılabilir Paneli:**
+  - **Nasıl Test Edilir:** Veri tablosunun altındaki "Sütun Eşlemelerini Özelleştir (Gelişmiş)" başlığına dokunun.
+  - **Beklenen Sonuç:** Otomatik eşleşen sütunlar varsayılan olarak düzenli bir akordeon panelinde gizli tutulur; tıklandığında açılır ve istenirse manuel eşleme yapılabilir. Zorunlu bir sütun eksik kalırsa panel otomatik olarak açık gelir ve yöneticiyi uyarır.
+- [ ] **95.6. Düzenlenen Verilerle Önizleme ve İçe Aktarma:**
+  - **Nasıl Test Edilir:** Hücreleri düzenledikten sonra "Önizlemeyi Hazırla" butonuna dokunun.
+  - **Beklenen Sonuç:** Önizleme adımı kullanıcının tabloda yaptığı tüm hücre düzenlemelerini, silinen ve eklenen satırları koruyarak hatasız şekilde hesaplar ve onay penceresine aktarır.

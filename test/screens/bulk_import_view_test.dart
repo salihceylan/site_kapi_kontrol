@@ -1,3 +1,4 @@
+import 'package:site_kapi_kontrol/ui/widgets/bulk_editable_table.dart';
 // Toplu yükleme sihirbazı ekran testleri (Platform Faz 2b).
 //
 // Taşma matrisi: 320x640 x2,0 · 360x640 x1,5 · yatay 640x360 x2,0 · tablet 820x1180 x1,0; her biri açık + koyu tema.
@@ -1020,6 +1021,48 @@ void main() {
         });
       }
     }
+  });
+
+  group('excel görünümü ve tablo hücre düzenleme', () {
+    testWidgets('yüklenen veriler tabloda listelenir ve hücre düzenlenebilir', (t) async {
+      final s = _Screen(csv: 'Ad Soyad;Telefon;E-posta\nMehmet Kaya;05551112233;mehmet@test.com\n');
+      await _launch(t, s);
+      await _toMapping(t, s);
+      expect(find.byType(BulkEditableTable), findsOneWidget);
+      expect(find.text('Mehmet Kaya'), findsOneWidget);
+
+      // Hücreye tıkla ve düzenle
+      await t.tap(find.text('Mehmet Kaya'));
+      await _settle(t);
+      expect(find.textContaining('Hücreyi Düzenle'), findsOneWidget);
+
+      final tf = find.byType(TextField).last;
+      await t.enterText(tf, 'Mehmet Can Kaya');
+      await t.tap(find.text('Uygula'));
+      await _settle(t);
+
+      expect(find.text('Mehmet Can Kaya'), findsOneWidget);
+      expect(s.controller.rows.first.cells['ad_soyad'], 'Mehmet Can Kaya');
+      _noError(t);
+    });
+
+    testWidgets('tablodan satır silme satırı controller listesinden kaldırır', (t) async {
+      final s = _Screen(csv: 'Ad Soyad;Telefon;E-posta\nAli Yılmaz;555;a@x.com\nZeynep Kaya;556;z@x.com\n');
+      await _launch(t, s);
+      await _toMapping(t, s);
+      expect(s.controller.rows.length, 2);
+
+      final deleteButtons = find.byTooltip('Satırı Sil');
+      expect(deleteButtons, findsNWidgets(2));
+      await t.ensureVisible(deleteButtons.first);
+      await t.pump();
+      await t.tap(deleteButtons.first);
+      await _settle(t);
+
+      expect(s.controller.rows.length, 1);
+      expect(s.controller.rows.first.cells['ad_soyad'], 'Zeynep Kaya');
+      _noError(t);
+    });
   });
 }
 

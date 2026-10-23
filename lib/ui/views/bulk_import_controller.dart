@@ -339,6 +339,9 @@ class BulkImportController extends ChangeNotifier {
   /// Dosya adımından, okunmuş dosyanın sütun eşlemesine dön.
   void goToMappingStep() {
     if (parsed == null || mapping == null || busy) return;
+    if (rows.isEmpty) {
+      _extractRowsIfReady();
+    }
     step = BulkStep.mapping;
     notifyListeners();
   }
@@ -469,6 +472,7 @@ class BulkImportController extends ChangeNotifier {
         sheetChoices = null;
         mapping = outcome.header.mapping;
         mappingError = null;
+        _extractRowsIfReady();
         step = BulkStep.mapping;
     }
   }
@@ -490,6 +494,8 @@ class BulkImportController extends ChangeNotifier {
     if (m == null || previewing || committing) return;
     mapping = m.assign(key, column);
     mappingError = null;
+    rows = const <ImportRow>[];
+    _extractRowsIfReady();
     notifyListeners();
   }
 
@@ -501,14 +507,16 @@ class BulkImportController extends ChangeNotifier {
     final s = spec;
     if (m == null || p == null || ks == null || s == null || previewing) return;
     if (!m.canProceed(ks)) return;
-    try {
-      final extracted = extractImportRows(p.table, m, ks, maxRows: s.maxRows);
-      rows = extracted.rows;
-      blankRows = extracted.blankRows;
-    } on SpreadsheetException catch (e) {
-      mappingError = e.message;
-      notifyListeners();
-      return;
+    if (rows.isEmpty) {
+      try {
+        final extracted = extractImportRows(p.table, m, ks, maxRows: s.maxRows);
+        rows = extracted.rows;
+        blankRows = extracted.blankRows;
+      } on SpreadsheetException catch (e) {
+        mappingError = e.message;
+        notifyListeners();
+        return;
+      }
     }
     if (rows.isEmpty) {
       mappingError = 'Dosyada yüklenecek dolu satır yok. Başlık satırının altındaki hücreler boş görünüyor.';
@@ -566,6 +574,69 @@ class BulkImportController extends ChangeNotifier {
       total += table.uncachedFormulaColumns[column] ?? 0;
     }
     return total;
+  }
+
+  void _extractRowsIfReady() {
+    final m = mapping;
+    final p = parsed;
+    final ks = kindSpec;
+    final s = spec;
+    if (m == null || p == null || ks == null || s == null) return;
+    if (!m.canProceed(ks)) return;
+    try {
+      final extracted = extractImportRows(p.table, m, ks, maxRows: s.maxRows);
+      rows = extracted.rows;
+      blankRows = extracted.blankRows;
+      mappingError = null;
+    } catch (_) {
+      // Başlık eşlemesi henüz tamamlanmamış veya eksik olabilir.
+    }
+  }
+
+  /// Belirli bir satırdaki hücre değerini günceller.
+  void updateCell(int rowIndex, String columnKey, Object? newValue) {
+    if (rowIndex < 0 || rowIndex >= rows.length) return;
+    final currentRow = rows[rowIndex];
+    final updatedCells = Map<String, Object?>.from(currentRow.cells);
+    if (newValue == null || (newValue is String && newValue.trim().isEmpty)) {
+      updatedCells.remove(columnKey);
+    } else {
+      updatedCells[columnKey] = newValue;
+    }
+    final updatedRow = ImportRow(
+      n: currentRow.n,
+      cells: updatedCells,
+    );
+    final newRows = List<ImportRow>.from(rows);
+    newRows[rowIndex] = updatedRow;
+    rows = List<ImportRow>.unmodifiable(newRows);
+    _onRowsChanged();
+  }
+
+  /// Satırı tablodan siler.
+  void deleteRow(int rowIndex) {
+    if (rowIndex < 0 || rowIndex >= rows.length) return;
+    final newRows = List<ImportRow>.from(rows)..removeAt(rowIndex);
+    rows = List<ImportRow>.unmodifiable(newRows);
+    _onRowsChanged();
+  }
+
+  /// Yeni satır ekler.
+  void addRow({Map<String, Object?>? initialCells}) {
+    final nextN = rows.isEmpty ? 1 : (rows.map((r) => r.n).reduce((a, b) => a > b ? a : b) + 1);
+    final newRow = ImportRow(
+      n: nextN,
+      cells: initialCells ?? const <String, Object?>{},
+    );
+    final newRows = List<ImportRow>.from(rows)..add(newRow);
+    rows = List<ImportRow>.unmodifiable(newRows);
+    _onRowsChanged();
+  }
+
+  void _onRowsChanged() {
+    mappingError = null;
+    previewStale = true;
+    notifyListeners();
   }
 
   // --- 4. Önizleme -----------------------------------------------------------------------------

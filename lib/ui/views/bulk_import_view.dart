@@ -233,7 +233,7 @@ class BulkImportViewState extends State<BulkImportView> {
               keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
               padding: EdgeInsets.symmetric(horizontal: hPad, vertical: AppSpace.lg),
               child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 640),
+                constraints: BoxConstraints(maxWidth: _c.step == BulkStep.mapping ? 1000 : 640),
                 child: widget.scope.canWrite ? _buildSteps() : _buildForbidden(),
               ),
             ),
