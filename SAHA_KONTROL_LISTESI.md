@@ -3082,3 +3082,17 @@ Dalga 2-6'nın ikinci aşaması: dekont bildirimi, banka dosyasından tahsilat, 
 - [ ] **95.6. Düzenlenen Verilerle Önizleme ve İçe Aktarma:**
   - **Nasıl Test Edilir:** Hücreleri düzenledikten sonra "Önizlemeyi Hazırla" butonuna dokunun.
   - **Beklenen Sonuç:** Önizleme adımı kullanıcının tabloda yaptığı tüm hücre düzenlemelerini, silinen ve eklenen satırları koruyarak hatasız şekilde hesaplar ve onay penceresine aktarır.
+
+---
+
+## 96. 🏢 Daire ve Kişi Birlikte Kurulumu (Hepsi Bir Arada) & Site Yönetimi Daire Sakini Görünürlüğü
+
+- [ ] **96.1. Excel'den Yüklenen Sakinlerin Site Yönetimi Daire Kartlarında Otomatik Görünmesi:**
+  - **Nasıl Test Edilir:** Site Yönetimi > Siteler sayfasına girip sitenizi seçin ve "Daireler" listesini açın.
+  - **Beklenen Sonuç:** Excel ile yüklenmiş olan kişilerin adları (malik/kiracı) doğrudan kendi daire kartlarının üzerinde ('Sakin: Ad Soyad') mor ev simgesiyle ve telefon/iletişim bilgileriyle birlikte listelenir. 'Daire Boş / Sakin Yok' yanıltıcı uyarısı oluşmaz.
+- [ ] **96.2. Site Yönetimi > Daireler Ekranında Doğrudan "Toplu Yükle (Excel)" Butonu:**
+  - **Nasıl Test Edilir:** Siteler ekranında "Daireler" bölüm başlığını inceleyin veya henüz daire bulunmayan bir sitede Daireler alanına bakın.
+  - **Beklenen Sonuç:** Bölüm başlığında 'Toplu Yükle (Excel)' butonu ve boş durumda 'Excel'den Daire ve Kişileri Yükle' butonu yer alır. Dokunulduğunda doğrudan sihirbaz açılır ve işlem tamamlandığında daire listesi uygulamayı kapatıp açmaya gerek kalmadan canlı olarak yenilenir.
+- [ ] **96.3. Toplu Yükleme Sihirbazında Varsayılan Olarak "Hepsi Bir Arada" Seçilmesi:**
+  - **Nasıl Test Edilir:** Herhangi bir ekrandan "Toplu Yükle" sihirbazını başlatın.
+  - **Beklenen Sonuç:** Sihirbaz açıldığında tek adımda hem daireleri hem sakinleri oluşturan 'Hepsi bir arada' seçeneği varsayılan olarak seçili gelir. Yönetici tek bir Excel dosyasıyla hem daireleri hem sakinleri tek seferde kurabilir.
