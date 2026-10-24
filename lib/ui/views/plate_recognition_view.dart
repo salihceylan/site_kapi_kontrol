@@ -9,6 +9,7 @@ import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_snack.dart';
 import 'package:site_kapi_kontrol/ui/design/buttons.dart';
 import 'package:site_kapi_kontrol/ui/design/status_dot.dart';
+import 'package:site_kapi_kontrol/ui/design/license_plate.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 
 /// "Plaka Tanıma" ekranı (`plate_recognition` modülü, varsayılan KAPALI).
@@ -315,7 +316,7 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
           children: <Widget>[
             Row(
               children: <Widget>[
-                Expanded(child: Text(e.plate, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800))),
+                Expanded(child: Align(alignment: Alignment.centerLeft, child: LicensePlateBadge(plate: e.plate))),
                 Flexible(child: StatusDot(label: label, tone: tone)),
               ],
             ),
@@ -354,7 +355,7 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  Text(formatTrPlate(p.plate), style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+                  LicensePlateBadge(plate: p.plate),
                   const SizedBox(height: AppSpace.xs),
                   StatusDot(label: label, tone: tone),
                   if (lines.isNotEmpty) Padding(padding: const EdgeInsets.only(top: AppSpace.xs), child: Text(lines)),
@@ -400,7 +401,8 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
-                      Text(b.plate, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+                      LicensePlateBadge(plate: b.plate),
+                      const SizedBox(height: AppSpace.xs),
                       if ((b.reason ?? '').isNotEmpty) Text(b.reason!),
                       if ((b.createdByName ?? '').isNotEmpty) Text('Ekleyen: ${b.createdByName}', style: Theme.of(context).textTheme.bodySmall),
                     ],

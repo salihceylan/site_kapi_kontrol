@@ -12,6 +12,7 @@ import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_snack.dart';
 import 'package:site_kapi_kontrol/ui/design/buttons.dart';
 import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
+import 'package:site_kapi_kontrol/ui/design/license_plate.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/apartment_vehicle_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/crm_confirm_dialog.dart';
@@ -186,8 +187,7 @@ class ApartmentVehiclesSectionState extends State<ApartmentVehiclesSection> {
                 runSpacing: AppSpace.xs,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  const Icon(Icons.directions_car_rounded, size: 20),
-                  Text(v.displayPlate, style: th.titleSmall),
+                  LicensePlateBadge(plate: v.displayPlate, compact: true),
                   if (v.source == kVehicleSourceApartmentAdmin) const StatusChip(label: 'Daire yöneticisi ekledi', tone: AppTone.info),
                 ],
               ),

@@ -10,6 +10,7 @@ import 'package:site_kapi_kontrol/ui/helpers/date_input.dart';
 import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart';
 import 'package:site_kapi_kontrol/ui/widgets/crm_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
+import 'package:site_kapi_kontrol/ui/design/license_plate.dart';
 
 /// Profilde "Kayıtlarım" bölümü (Platform Faz 2a, F2.10): sakinin KENDİ güncel kayıtları — dairelerim,
 /// ilişkim (malik / kiracı / aile üyesi / sakin), giriş tarihim ve araçlarım. SALT OKUNUR: değişiklik
@@ -181,7 +182,7 @@ class _MyRecordPanel extends StatelessWidget {
               spacing: AppSpace.sm,
               runSpacing: AppSpace.xs,
               children: [
-                for (final vehicle in record.vehicles) InfoChip(vehicle.displayPlate),
+                for (final vehicle in record.vehicles) LicensePlateBadge(plate: vehicle.displayPlate, compact: true),
               ],
             ),
         ],

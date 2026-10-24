@@ -3147,3 +3147,21 @@ Dalga 2-6'nın ikinci aşaması: dekont bildirimi, banka dosyasından tahsilat, 
 - [ ] **99.2. Varsayılan Seçim ve Şablon İndirme:**
   - **Nasıl Test Edilir:** "Hepsi bir arada" seçiliyken "Şablon Excel İndir" ve "Örnek Excel İndir" butonlarına dokunun.
   - **Beklenen Sonuç:** Tek bir Excel tablosunda Blok, Daire No, Kat, Malik, Kiracı, Telefon, E-posta ve Plakaları içeren kapsamlı ve anlaşılır şablon başarıyla indirilmeli ve sonraki adımlara sorunsuz geçilmelidir.
+
+
+---
+
+## 100. 🏢 Canlı Daire Yapısı Otomatik Yenileme, Rol Renk Rozetleri ve Gerçekçi Plaka Tasarımı
+
+- [ ] **100.1. Sayfa Yenilemeden Anında Daire ve Kişi Yansıması:**
+  - **Nasıl Test Edilir:** "Kişiler" menüsünden toplu Excel yüklemesi yapın veya bir kişiyi düzenleyin. Ardından sol menüden "Site Yönetimi" veya "Daireler" menüsüne geçin. Sayfayı F5/Ctrl+R ile yenilemeyin.
+  - **Beklenen Sonuç:** Uygulama taze daire ve sakin yapısını otomatik olarak arka planda çekmeli; daireler boş kalmadan anında dolu ve güncel olarak ekrana gelmelidir.
+- [ ] **100.2. Daireler Altında Rol Renk Rozetleri:**
+  - **Nasıl Test Edilir:** "Site Yönetimi > Daireler" sekmesinde herhangi bir dairenin sakinler listesini açın.
+  - **Beklenen Sonuç:** Kişilerin rolleri ayırt edici renklerle gösterilmelidir: Daire Yöneticisi için Turuncu (`Admin`), Malik için Yeşil (`Malik`), Kiracı için Açık Mavi (`Kiracı`), Sakin/Aile Üyesi için Mavi rozet basılmalıdır.
+- [ ] **100.3. Kişiler Menüsünde Daire Admini ve Rol Görünürlüğü:**
+  - **Nasıl Test Edilir:** "Kişiler" menüsündeki kişi kartlarını inceleyin.
+  - **Beklenen Sonuç:** Daire admini olan kişilerin kartında turuncu kalkanlı "Daire Admini" rozeti belirgin şekilde yer almalı; malik, kiracı, sakin rolleri kendi renk tonlarıyla gösterilmelidir.
+- [ ] **100.4. Gerçekçi Türk Plaka (License Plate) Görünümü:**
+  - **Nasıl Test Edilir:** "Araçlar" sekmesine, "Dairem > Araçlarım" ekranına, kişi kartı detayındaki araç listesine ve "Kayıtlarım" bölümüne bakın.
+  - **Beklenen Sonuç:** Tüm araç plakaları yalın metin yerine solunda mavi TR bandı (`#003399`), beyaz zemin, kabartmalı siyah çerçeve ve karakteristik plaka karakterleriyle gerçek bir araç plakası gibi (`LicensePlateBadge`) görünmelidir.

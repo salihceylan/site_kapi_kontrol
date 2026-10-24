@@ -55,7 +55,8 @@ export function parseKind(value, { required = true } = {}) {
 
 export function parseSerial(value) {
   const text = typeof value === 'string' ? value.trim() : '';
-  if (text.length < 1 || text.length > SERIAL_MAX || /[\u0000-\u001f\u007f​-‏‪-‮⁦-⁩﻿]/.test(text)) {
+  /* eslint-disable-next-line no-control-regex */
+  if (text.length < 1 || text.length > SERIAL_MAX || /[\u0000-\u001f\u007f\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/.test(text)) {
     throw invalid(`Seri numarası 1-${SERIAL_MAX} karakter olmalıdır.`, 'serial_no');
   }
   return text;

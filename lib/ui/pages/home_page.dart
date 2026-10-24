@@ -2586,6 +2586,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       case SirketMenuItem.daireKullanicilariYonetimi:
 
         _loadSites(force: true);
+        if (_selectedSite != null) {
+          unawaited(_reloadSiteStructure(_selectedSite!.id));
+        }
 
         break;
 
@@ -2688,6 +2691,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         unawaited(_selectSite(siteToSelect!));
       } else if (refreshManagersOnly && _selectedSite != null) {
         unawaited(_loadSiteManagers(_selectedSite!.id));
+        if (force) {
+          unawaited(_reloadSiteStructure(_selectedSite!.id));
+        }
       }
     } catch (e) {
       if (!mounted || requestToken != _sitesRequestToken) return;
@@ -2750,6 +2756,20 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       _selectedSiteStructure = structure;
     });
 
+    if (error != null && structure == null) _showMessage(error);
+  }
+
+  Future<void> _reloadSiteStructure(int siteCode) async {
+    if (!mounted) return;
+    final token = ++_siteSelectionToken;
+    final (structure, error) = await widget.authService.getSiteStructure(
+      siteCode: siteCode,
+    );
+    if (!mounted || token != _siteSelectionToken) return;
+    if (_selectedSite?.id != siteCode) return;
+    setState(() {
+      _selectedSiteStructure = structure;
+    });
     if (error != null && structure == null) _showMessage(error);
   }
 
@@ -7113,6 +7133,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           authService: widget.authService,
           manageSites: _canManagePeople(session.role),
           readOnlySites: _boardPeopleSites(),
+          onDataChanged: () {
+            if (_selectedSite != null) {
+              unawaited(_reloadSiteStructure(_selectedSite!.id));
+            }
+          },
         );
 
       case SirketMenuItem.duyurular:

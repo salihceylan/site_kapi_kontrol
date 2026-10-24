@@ -10,12 +10,14 @@ class PersonApartmentRef {
     this.label = '',
     this.blockName,
     this.relation = ResidencyRelation.resident,
+    this.isAdmin = false,
   });
 
   final int apartmentId;
   final String label;
   final String? blockName;
   final ResidencyRelation relation;
+  final bool isAdmin;
 
   /// "A Blok / Daire 5" gibi tek metin (blok adı etikette yoksa başa eklenir).
   String get fullLabel => crmApartmentTitle(blockName, label);
@@ -26,6 +28,7 @@ class PersonApartmentRef {
       label: json['label']?.toString() ?? '',
       blockName: crmText(json['block_name']),
       relation: ResidencyRelation.fromApi(json['relation']),
+      isAdmin: json['is_admin'] == true,
     );
   }
 }
@@ -57,6 +60,7 @@ class PersonSummary {
     this.apartments = const <PersonApartmentRef>[],
     this.vehicleCount = 0,
     this.accountKind,
+    this.isAdmin = false,
   });
 
   final int id;
@@ -65,6 +69,7 @@ class PersonSummary {
   final String? email;
   final bool hasAccount;
   final bool isActive;
+  final bool isAdmin;
 
   /// Hesap türü: `internal` (dahili @ahbu.local hesabı), `registered` (kayıtlı kullanıcı), `none`.
   /// Alan yoksa null (eski sunucu): `hasAccount` true ise tüm kimlik alanları salt okunur sayılır.
@@ -97,6 +102,12 @@ class PersonSummary {
   }
 
   factory PersonSummary.fromJson(Map<String, dynamic> json) {
+    final rels = _relationsFrom(json['relations']);
+    final apts = _apartmentsFrom(json['apartments']);
+    final isDaireAdmin = json['is_admin'] == true ||
+        rels.contains(ResidencyRelation.owner) ||
+        rels.contains(ResidencyRelation.tenant) ||
+        apts.any((a) => a.isAdmin || a.relation == ResidencyRelation.owner || a.relation == ResidencyRelation.tenant);
     return PersonSummary(
       id: crmInt(json['id']),
       fullName: json['full_name']?.toString() ?? '',
@@ -104,10 +115,11 @@ class PersonSummary {
       email: crmText(json['email']),
       hasAccount: json['has_account'] == true,
       isActive: json['is_active'] is bool ? json['is_active'] as bool : true,
-      relations: _relationsFrom(json['relations']),
-      apartments: _apartmentsFrom(json['apartments']),
+      relations: rels,
+      apartments: apts,
       vehicleCount: crmInt(json['vehicle_count']),
       accountKind: crmText(json['account_kind']),
+      isAdmin: isDaireAdmin,
     );
   }
 }

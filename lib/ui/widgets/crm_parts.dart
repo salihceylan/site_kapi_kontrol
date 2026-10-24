@@ -1,3 +1,4 @@
+import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/models/residency_relation.dart';
 import 'package:site_kapi_kontrol/models/vehicle_record.dart' show crmFormatNumber;
@@ -13,13 +14,13 @@ import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 AppTone? relationTone(ResidencyRelation relation) {
   switch (relation) {
     case ResidencyRelation.owner:
-      return AppTone.primary;
+      return AppTone.success;
     case ResidencyRelation.tenant:
       return AppTone.info;
     case ResidencyRelation.familyMember:
-      return AppTone.success;
+      return AppTone.primary;
     case ResidencyRelation.resident:
-      return null;
+      return AppTone.primary;
   }
 }
 
@@ -31,7 +32,10 @@ class RelationChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) =>
-      InfoChip(relation.label, tone: relationTone(relation));
+      StatusChip(
+        label: relation.label,
+        tone: relationTone(relation) ?? AppTone.primary,
+      );
 }
 
 /// Pencere / form içindeki hata bildirimi: ekrana gelince (ya da mesajı değişince) kaydırılabilir üst

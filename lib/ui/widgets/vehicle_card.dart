@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/models/vehicle_record.dart';
+import 'package:site_kapi_kontrol/ui/design/license_plate.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
@@ -52,7 +53,8 @@ class VehicleCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(vehicle.displayPlate, style: th.titleMedium),
+                LicensePlateBadge(plate: vehicle.displayPlate),
+                const SizedBox(height: AppSpace.xs),
                 if (person.isNotEmpty) Text(person, style: secondary),
                 if (apartment.isNotEmpty) Text(apartment, style: secondary),
                 if (note.isNotEmpty) Text(note, style: th.bodySmall),

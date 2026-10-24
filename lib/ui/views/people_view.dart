@@ -40,11 +40,13 @@ class PeopleView extends StatefulWidget {
     required this.authService,
     this.manageSites = true,
     this.readOnlySites = const <PeopleSite>[],
+    this.onDataChanged,
   });
 
   final AuthService authService;
   final bool manageSites;
   final List<PeopleSite> readOnlySites;
+  final VoidCallback? onDataChanged;
 
   @override
   State<PeopleView> createState() => PeopleViewState();
@@ -254,6 +256,7 @@ class PeopleViewState extends State<PeopleView> {
     if (outcome.changed) {
       _markOthersDirty(_tab);
       _reloadVisibleTab();
+      widget.onDataChanged?.call();
     }
     final tab = outcome.goToTab;
     if (tab != null && tab != _tab) _selectTab(tab);
@@ -436,7 +439,10 @@ class PeopleViewState extends State<PeopleView> {
   }
 
   Widget _buildTab(int index, PeopleScope scope, int siteCode) {
-    void changed() => _markOthersDirty(index);
+    void changed() {
+      _markOthersDirty(index);
+      widget.onDataChanged?.call();
+    }
     switch (index) {
       case 0:
         return PeoplePersonsTab(

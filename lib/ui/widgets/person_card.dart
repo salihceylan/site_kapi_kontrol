@@ -78,12 +78,18 @@ class PersonCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(name, style: th.titleMedium),
-                if (person.hasAccount || !person.isActive) ...[
+                if (person.isAdmin || person.hasAccount || !person.isActive) ...[
                   const SizedBox(height: AppSpace.xs),
                   Wrap(
                     spacing: AppSpace.sm,
                     runSpacing: AppSpace.xs,
                     children: [
+                      if (person.isAdmin)
+                        const StatusChip(
+                          label: 'Daire Admini',
+                          tone: AppTone.warning,
+                          icon: Icons.shield_rounded,
+                        ),
                       if (person.hasAccount)
                         const StatusChip(
                           label: 'Hesabı var',
@@ -114,7 +120,10 @@ class PersonCard extends StatelessWidget {
                     children: [
                       for (final relation in person.relations) RelationChip(relation),
                       for (final apartment in person.apartments)
-                        InfoChip(apartment.fullLabel),
+                        InfoChip(
+                          apartment.fullLabel,
+                          tone: apartment.isAdmin ? AppTone.warning : null,
+                        ),
                       if (person.vehicleCount > 0)
                         InfoChip('${person.vehicleCount} araç'),
                     ],

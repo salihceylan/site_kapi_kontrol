@@ -7,6 +7,7 @@ import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
 import 'package:site_kapi_kontrol/ui/design/app_snack.dart';
 import 'package:site_kapi_kontrol/ui/design/buttons.dart';
+import 'package:site_kapi_kontrol/ui/design/license_plate.dart';
 import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/apartment_card_dialog.dart';
@@ -439,7 +440,8 @@ class _PersonCardDialogState extends State<PersonCardDialog> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(vehicle.displayPlate, style: th.titleSmall),
+                          LicensePlateBadge(plate: vehicle.displayPlate, compact: true),
+                          const SizedBox(height: AppSpace.xs),
                           if (_canWrite && (vehicle.note ?? '').isNotEmpty)
                             Text(vehicle.note!, style: th.bodySmall),
                         ],

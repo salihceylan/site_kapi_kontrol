@@ -1,3 +1,4 @@
+import 'package:site_kapi_kontrol/ui/widgets/crm_parts.dart' show relationTone;
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/models/apartment_household.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
@@ -304,9 +305,20 @@ class _PersonRow extends StatelessWidget {
                     spacing: AppSpace.sm,
                     runSpacing: AppSpace.xs,
                     children: [
-                      if (isAdminRow) const StatusChip(label: 'Admin', tone: AppTone.violet),
+                      if (isAdminRow)
+                        const StatusChip(
+                          label: 'Admin',
+                          tone: AppTone.warning,
+                          icon: Icons.shield_rounded,
+                        ),
                       // Kurulda çocuk ayrımı gösterilmez (yaş bilgisi yönetime özeldir): [isMinor] yalnız ayrıntılı yanıtta dolu gelir.
-                      InfoChip(person.relationLabel),
+                      if (relationTone(person.relation) != null)
+                        StatusChip(
+                          label: person.relationLabel,
+                          tone: relationTone(person.relation)!,
+                        )
+                      else
+                        InfoChip(person.relationLabel),
                       if (detailed && person.accessSuspended)
                         const StatusChip(
                           label: 'Erişim askıda',
