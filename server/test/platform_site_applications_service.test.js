@@ -178,16 +178,12 @@ async function rejectsWith(promise, status, code) {
 }
 
 describe('assertMayApply / isApplicantUnavailable', () => {
-  it('başvurabilen: bireysel / daire sahibi ve SAHİP BAĞI olmayan site yöneticisi; sahip bağı olan yönetici 409 ALREADY_SITE_MANAGER; süper ve diğerleri 403 FORBIDDEN_ROLE', () => {
+  it('başvurabilen: bireysel / daire sahibi ve site yöneticisi; süper ve diğerleri 403 FORBIDDEN_ROLE', () => {
     assertMayApply('individual');
     assertMayApply('apartment_owner');
-    assertMayApply('individual', { hasOwnerLink: true });
-    assertMayApply('site_manager'); // ön rol kontrolü: bağ ayrıca denetlenir
-    assertMayApply('site_manager', { hasOwnerLink: false });
-    assert.throws(() => assertMayApply('site_manager', { hasOwnerLink: true }), (e) => e.statusCode === 409 && e.code === 'ALREADY_SITE_MANAGER');
+    assertMayApply('site_manager');
     for (const role of ['super_user', 'staff', undefined, null, '']) {
       assert.throws(() => assertMayApply(role), (e) => e.statusCode === 403 && e.code === 'FORBIDDEN_ROLE', String(role));
-      assert.throws(() => assertMayApply(role, { hasOwnerLink: true }), (e) => e.statusCode === 403 && e.code === 'FORBIDDEN_ROLE', String(role));
     }
   });
 
@@ -202,9 +198,8 @@ describe('assertMayApply / isApplicantUnavailable', () => {
 });
 
 describe('createSiteApplication', () => {
-  it('rol ve girdi hataları transaction AÇMAZ (bağlantı alınmaz): sahip bağı olan yönetici 409 (salt-okunur ön kapı), süper 403, geçersiz girdi 400', async () => {
-    const db = install({ ownerLink: true });
-    await rejectsWith(createSiteApplication({ actor: { ...individual, role: 'site_manager' }, body: goodBody }), 409, 'ALREADY_SITE_MANAGER');
+  it('rol ve girdi hataları transaction AÇMAZ (bağlantı alınmaz): süper 403, geçersiz girdi 400', async () => {
+    const db = install();
     await rejectsWith(createSiteApplication({ actor: superUser, body: goodBody }), 403, 'FORBIDDEN_ROLE');
     await rejectsWith(createSiteApplication({ actor: { ...individual, role: 'staff' }, body: goodBody }), 403, 'FORBIDDEN_ROLE');
     await rejectsWith(createSiteApplication({ actor: individual, body: { ...goodBody, name: '   ' } }), 400, 'INVALID_BODY');
@@ -216,31 +211,20 @@ describe('createSiteApplication', () => {
     await rejectsWith(createSiteApplication({ actor: individual, body: { ...goodBody, management_type: 'otel' } }), 400, 'MANAGEMENT_TYPE_INVALID');
     assert.equal(db.connects(), 0);
     assert.equal(db.log.length, 0, 'transaction içinde hiçbir ifade yok');
-    // sahip bağı OLMAYAN yönetici ön kapıyı geçer; geçersiz girdi yine bağlantı almadan 400
-    const linkless = install({ ownerLink: false });
+    // yönetici de başvurur; geçersiz girdi yine bağlantı almadan 400
     await rejectsWith(createSiteApplication({ actor: { ...individual, role: 'site_manager' }, body: { ...goodBody, name: '' } }), 400, 'INVALID_BODY');
-    assert.equal(linkless.connects(), 0);
-    assert.equal(linkless.poolLog.filter((e) => /site_manager_sites m INNER JOIN/.test(e.sql)).length, 1, 'yalnız bağ sorgusu (salt-okunur)');
+    assert.equal(db.connects(), 0);
   });
 
-  it('SAHİP BAĞI olmayan site yöneticisi (davetle yönetici olan, sitesi olmayan) başvurur: 201; rol ve bağ transaction içinde TAZE okunur', async () => {
-    const db = install({ role: 'site_manager', ownerLink: false });
+  it('site yöneticisi de yeni site için başvurur: 201; talep süper kullanıcı onayına düşer', async () => {
+    const db = install({ role: 'site_manager' });
     siteApplicationHooks.notifyCreated = async () => {};
     const application = await createSiteApplication({ actor: { ...individual, role: 'site_manager' }, body: goodBody });
     assert.equal(application.id, 41);
     const roleAt = indexOfSql(db.log, /^SELECT id, user_code, role, full_name FROM users/);
-    const linkAt = indexOfSql(db.log, /^SELECT 1 FROM site_manager_sites m INNER JOIN sites s/);
     const insertAt = indexOfSql(db.log, /^INSERT INTO site_applications/);
-    assert.ok(roleAt >= 0 && linkAt > roleAt && insertAt > linkAt, 'sıra: taze rol -> sahip bağı -> INSERT');
-    assert.deepEqual(find(db.log, /site_manager_sites m INNER JOIN/).params, [48213]);
+    assert.ok(roleAt >= 0 && insertAt > roleAt, 'sıra: taze rol -> INSERT');
     assert.ok(has(db.log, /^COMMIT/));
-
-    // ön kapıda bağ yok görünür ama transaction'da sahip bağı çıkmıştır (arada başvuru onayı / site kuruldu) -> 409, ROLLBACK
-    const racing = install({ role: 'site_manager', ownerLink: true });
-    pool.query = async () => ok();
-    await rejectsWith(createSiteApplication({ actor: { ...individual, role: 'site_manager' }, body: goodBody }), 409, 'ALREADY_SITE_MANAGER');
-    assert.ok(has(racing.log, /^ROLLBACK/));
-    assert.equal(has(racing.log, /^INSERT INTO site_applications/), false);
   });
 
   it('güvenli normalizasyon: NUL, eşsiz vekil, yön / görünmez karakter ad / adres / şehirden atılır (JSONB 22P05 / metin 22021 ASLA); sonuç boşsa 400 INVALID_BODY', async () => {
@@ -375,9 +359,7 @@ describe('createSiteApplication', () => {
     let db = install({ mode: 'payment' });
     await rejectsWith(createSiteApplication({ actor: individual, body: goodBody }), 409, 'PAYMENT_NOT_AVAILABLE');
     assert.equal(has(db.log, /^INSERT INTO site_applications/), false);
-    db = install({ role: 'site_manager', ownerLink: true });
-    await rejectsWith(createSiteApplication({ actor: individual, body: goodBody }), 409, 'ALREADY_SITE_MANAGER');
-    db = install({ role: 'site_manager', ownerLink: false });
+    db = install({ role: 'site_manager' });
     assert.equal((await createSiteApplication({ actor: individual, body: goodBody })).id, 41);
     db = install({ role: 'super_user' });
     await rejectsWith(createSiteApplication({ actor: individual, body: goodBody }), 403, 'FORBIDDEN_ROLE');
@@ -467,12 +449,12 @@ describe('listMyApplications / cancelMyApplication', () => {
     assert.deepEqual(await listMyApplications('abc'), { pending: null, items: [], requires_application: false });
   });
 
-  it('mine.requires_application: bireysel / daire sahibi ve sahip bağı olmayan yönetici true; sahip bağı olan yönetici, süper ve uygunsuz roller false', async () => {
+  it('mine.requires_application: super_user hariç tüm roller (site_manager dahil) true; super false', async () => {
     const cases = [
       ['individual', false, true],
       ['apartment_owner', false, true],
       ['site_manager', false, true],
-      ['site_manager', true, false],
+      ['site_manager', true, true],
       ['super_user', false, false],
       ['super_user', true, false],
       ['staff', false, false],
@@ -483,8 +465,6 @@ describe('listMyApplications / cancelMyApplication', () => {
       const result = await listMyApplications(48213);
       assert.equal(result.requires_application, expected, role + ' ' + ownerLink);
       assert.deepEqual(Object.keys(result), ['pending', 'items', 'requires_application']);
-      const consultedLink = db.poolLog.some((entry) => /site_manager_sites m INNER JOIN/.test(entry.sql));
-      assert.equal(consultedLink, role === 'site_manager', 'bağ yalnız site_manager için sorgulanır');
     }
   });
   it('iptal: kendi bekleyen başvurusu cancelled olur (audit: yalnız sayılar); başkasının / olmayan 404; bekleyen değilse 409; ROLLBACK', async () => {
@@ -700,14 +680,14 @@ describe('approveSiteApplication', () => {
     const coreRegex = /^(INSERT INTO sites|INSERT INTO site_manager_sites|INSERT INTO site_memberships|UPDATE users SET role|INSERT INTO site_blocks|INSERT INTO apartments|INSERT INTO site_doors|UPDATE devices SET site_code|UPDATE site_doors SET assigned_device_id|INSERT INTO site_modules|INSERT INTO site_subscriptions)/;
     const coreOf = (log) => log.filter((entry) => coreRegex.test(entry.sql)).map((entry) => ({ sql: entry.sql, params: entry.params }));
 
-    const approved = install({ row: storedRow({ device_uid: 'A0B1C2D3E4F5' }) });
+    const approved = install({ row: storedRow({ device_uid: 'A0B1C2D3E4F5' }), applicant: { id: 7, user_code: 48213, role: 'super_user', full_name: 'Ayşe Başvuran', email: 'ayse@example.com', is_active: true, email_verified: true, approval_status: 'approved' } });
     await approveSiteApplication({ applicationId: 41, actor: superUser });
     const fromApproval = coreOf(approved.log);
 
-    // anlık yol: aynı kullanıcı (sahip bağı olan site_manager) ve aynı girdi; cihaz sahibi
+    // anlık yol: süper kullanıcı ve aynı girdi; cihaz sahibi
     pool.query = async (text) => {
       const sql = norm(text);
-      if (/^SELECT role FROM users/.test(sql)) return ok([{ role: 'site_manager' }]);
+      if (/^SELECT role FROM users/.test(sql)) return ok([{ role: 'super_user' }]);
       if (/site_manager_sites m INNER JOIN/.test(sql)) return ok([{ x: 1 }]);
       return ok();
     };
@@ -718,7 +698,7 @@ describe('approveSiteApplication', () => {
       query: async (text, params = []) => {
         const sql = norm(text);
         instantLog.push({ sql, params });
-        if (/^SELECT id, user_code, role, full_name, email FROM users/.test(sql)) return ok([{ id: 7, user_code: 48213, role: 'site_manager', full_name: 'A', email: 'a@example.com' }]);
+        if (/^SELECT id, user_code, role, full_name, email FROM users/.test(sql)) return ok([{ id: 7, user_code: 48213, role: 'super_user', full_name: 'A', email: 'a@example.com' }]);
         if (/site_manager_sites m INNER JOIN/.test(sql)) return ok([{ x: 1 }]);
         if (/^UPDATE users SET role/.test(sql)) return { rows: [], rowCount: 1 };
         if (/^SELECT \* FROM devices/.test(sql)) return ok([{ id: 77, device_uid: 'A0B1C2D3E4F5', hardware_type: 'esp32_wroom' }]);

@@ -12,22 +12,19 @@ import 'package:site_kapi_kontrol/ui/dialogs/setup_site_dialog.dart';
 import 'package:site_kapi_kontrol/ui/helpers/dialog_guard.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 
-/// HER ZAMAN site BAŞVURUSU yapan roller: bireysel kullanıcı ve daire kullanıcısı. Süper kullanıcı
-/// başvuramaz. Site yöneticisi yalnız sunucu `requires_application: true` derse başvurur
-/// ([usesSiteApplicationFlow]).
+/// HER ZAMAN site BAŞVURUSU yapan roller: bireysel kullanıcı, daire kullanıcısı ve site yöneticisi.
+/// Bir site yöneticisi süper user'dan izin almadan yeni site oluşturamaz; talep süper user onayına düşer.
 bool canApplyForSite(UserRole? role) =>
-    role == UserRole.individual || role == UserRole.apartmentOwner;
+    role == UserRole.individual || role == UserRole.apartmentOwner || role == UserRole.siteManager;
 
-/// Başvuru durumu (`GET .../mine`) izlenen roller: başvuranlar ve site yöneticisi (sahip bağı olmayan
-/// yönetici de başvurabilir). Süper kullanıcıda `mine` ÇAĞRILMAZ.
+/// Başvuru durumu (`GET .../mine`) izlenen roller: süper kullanıcı hariç tüm roller.
 bool tracksSiteApplications(UserRole? role) =>
-    canApplyForSite(role) || role == UserRole.siteManager;
+    role != UserRole.superUser;
 
-/// Bu kullanıcı için "site kur / ekle" BAŞVURU akışı mı? Bireysel / daire kullanıcısı: her zaman. Site
-/// yöneticisi: yalnız sunucu `requires_application: true` bildirdiyse (false / alan yok: anlık "Site Ekle").
+/// Bu kullanıcı için "site kur / ekle" BAŞVURU akışı mı?
+/// Süper kullanıcı dışındaki herkes (site yöneticisi dahil) süper kullanıcı onayına tabi başvuru akışını kullanır.
 bool usesSiteApplicationFlow(UserRole? role, SiteApplicationTracker? tracker) =>
-    canApplyForSite(role) ||
-    (role == UserRole.siteManager && tracker?.requiresApplication == true);
+    role != UserRole.superUser;
 
 /// Başvuru formu kapandıktan sonra durumu sunucudan okur: YALNIZ başvuru gönderildiyse (`applied`), zaten
 /// bekleyen başvuru varsa (`alreadyPending`) ya da sonuç belirsizse (`uncertain`). Form hiçbir şey

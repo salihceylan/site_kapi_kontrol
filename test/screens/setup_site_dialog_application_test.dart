@@ -108,8 +108,8 @@ void main() {
   tearDown(() => LegalApi.debugDefaultFactory = null);
 
   group('rol kapısı', () {
-    testWidgets('bireysel ve daire kullanıcısı: BAŞVURU formu; başlık, düğme ve bilgi metni', (t) async {
-      for (final role in const [UserRole.individual, UserRole.apartmentOwner]) {
+    testWidgets('bireysel, daire kullanıcısı ve site yöneticisi: BAŞVURU formu; başlık, düğme ve bilgi metni', (t) async {
+      for (final role in const [UserRole.individual, UserRole.apartmentOwner, UserRole.siteManager]) {
         final auth = _auth(role);
         await _open(t, auth);
         expect(find.text('Site Başvurusu'), findsOneWidget, reason: '$role');
@@ -122,8 +122,8 @@ void main() {
       }
     });
 
-    testWidgets('site yöneticisi ve süper kullanıcı: ANLIK kurulum sihirbazı (başvuru yok)', (t) async {
-      for (final role in const [UserRole.siteManager, UserRole.superUser]) {
+    testWidgets('yalnızca süper kullanıcı: ANLIK kurulum sihirbazı (başvuru yok)', (t) async {
+      for (final role in const [UserRole.superUser]) {
         final auth = _auth(role);
         await _open(t, auth);
         expect(find.text('Site Kurulum Sihirbazı'), findsOneWidget, reason: '$role');
@@ -137,7 +137,7 @@ void main() {
     });
 
     testWidgets('anlık kurulum: setupSite çağrılır, başarıda created ile kapanır; başvuru ucu çağrılmaz', (t) async {
-      final auth = _auth(UserRole.siteManager);
+      final auth = _auth(UserRole.superUser);
       final out = await _open(t, auth, deviceUid: 'ESP32_X');
       await _enter(t, 'Site Adı *', 'Güneş Sitesi');
       await _submit(t);
@@ -154,9 +154,9 @@ void main() {
     });
 
     testWidgets('B1 ÇIKMAZ YOK: anlık kurulum 409 APPLICATION_REQUIRED -> form BAŞVURU kipine geçer, bilgiler korunur, aynı formdan başvurulur', (t) async {
-      // Sahip bağı olmayan yönetici: istemci "anlık" sanır (alan eksik / bayat), sunucu 409 der.
+      // İstemci "anlık" sanıp açarsa, sunucu 409 APPLICATION_REQUIRED der.
       final auth = _auth(UserRole.siteManager)..serverRequiresApplication = true;
-      final out = await _open(t, auth);
+      final out = await _open(t, auth, mode: SetupSiteMode.instant);
       expect(find.text('Site Kurulum Sihirbazı'), findsOneWidget);
       await _enter(t, 'Site Adı *', 'Güneş Sitesi');
       await _submit(t);
@@ -182,7 +182,7 @@ void main() {
 
     testWidgets('B1: APPLICATION_REQUIRED sonrası başvuru göndermeden kapanış -> applicationRequired (çağıran durumu yeniden okur)', (t) async {
       final auth = _auth(UserRole.siteManager)..serverRequiresApplication = true;
-      final out = await _open(t, auth);
+      final out = await _open(t, auth, mode: SetupSiteMode.instant);
       await _enter(t, 'Site Adı *', 'Güneş Sitesi');
       await _submit(t);
       await t.tap(find.byTooltip('Kapat'));
@@ -191,11 +191,11 @@ void main() {
       expect(out.outcome, SetupSiteOutcome.applicationRequired);
     });
 
-    testWidgets('B1: modeFor: yönetici requires_application:true ise BAŞVURU; false / null ise anlık; bireysel hep başvuru', (t) async {
+    testWidgets('B1: modeFor: yönetici ve bireysel her zaman BAŞVURU; yalnızca süper kullanıcı anlık', (t) async {
       final manager = _auth(UserRole.siteManager);
       expect(SetupSiteDialog.modeFor(manager, requiresApplication: true), SetupSiteMode.application);
-      expect(SetupSiteDialog.modeFor(manager, requiresApplication: false), SetupSiteMode.instant);
-      expect(SetupSiteDialog.modeFor(manager), SetupSiteMode.instant, reason: 'alan yoksa eski davranış');
+      expect(SetupSiteDialog.modeFor(manager, requiresApplication: false), SetupSiteMode.application);
+      expect(SetupSiteDialog.modeFor(manager), SetupSiteMode.application);
       expect(SetupSiteDialog.modeFor(_auth(UserRole.individual), requiresApplication: false), SetupSiteMode.application);
       expect(SetupSiteDialog.modeFor(_auth(UserRole.superUser), requiresApplication: true), SetupSiteMode.instant,
           reason: 'süper kullanıcı başvurmaz');
@@ -237,7 +237,7 @@ void main() {
     });
 
     testWidgets('B3: anlık sihirbazın alt başlığı iç rol kodu (SITE_OWNER) göstermez', (t) async {
-      final auth = _auth(UserRole.siteManager);
+      final auth = _auth(UserRole.superUser);
       await _open(t, auth);
       expect(find.text('Site Yönetimi Ayarları'), findsOneWidget);
       expect(find.textContaining('SITE_OWNER'), findsNothing);
@@ -654,7 +654,7 @@ void main() {
         testWidgets(
           '${application ? 'başvuru' : 'anlık'} formu 640x360 x2,0 + klavye (200 dp) ${dark ? 'koyu' : 'açık'}: taşma yok, gönder düğmesine kaydırılıp basılır',
           (t) async {
-            final auth = _auth(application ? UserRole.individual : UserRole.siteManager);
+            final auth = _auth(application ? UserRole.individual : UserRole.superUser);
             await _open(t, auth, width: 640, height: 360, scale: 2.0, dark: dark);
             t.view.viewInsets = const FakeViewPadding(bottom: 200);
             addTearDown(t.view.resetViewInsets);

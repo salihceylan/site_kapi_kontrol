@@ -277,8 +277,7 @@ class SiteApplicationFakeAuth extends AuthService {
     await createGate?.future;
     final error = createError;
     if (error != null) throw error;
-    // Sahip bağı olan site yöneticisi başvuramaz (anlık "Site Ekle"yi kullanır); sahip bağı olmayan yönetici
-    // (`requires_application: true`) başvurur.
+    // Geriye dönük uyumluluk testi: serverRequiresApplication true değilse ALREADY_SITE_MANAGER simülasyonu
     if (serverRole == UserRole.siteManager && serverRequiresApplication != true) {
       throw ApiException(
         AuthApi.siteApplicationAlreadyManagerMessage,
@@ -374,10 +373,8 @@ class SiteApplicationFakeAuth extends AuthService {
     });
     final error = setupError;
     if (error != null) throw error;
-    // Bireysel / daire kullanıcısı ve sahip bağı olmayan yönetici için anlık kurulum kapalıdır (sunucu kuralı).
-    if (serverRole == UserRole.individual ||
-        serverRole == UserRole.apartmentOwner ||
-        (serverRole == UserRole.siteManager && serverRequiresApplication == true)) {
+    // Yalnızca süper kullanıcı doğrudan site kurabilir. Bireysel, daire kullanıcısı ve site yöneticisi için anlık kurulum kapalıdır (başvuru gerekir).
+    if (serverRole != UserRole.superUser) {
       throw _coded('APPLICATION_REQUIRED', 409);
     }
     return <String, dynamic>{'ok': true};

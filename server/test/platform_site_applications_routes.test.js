@@ -200,21 +200,7 @@ describe('site başvurusu uçları: HTTP', () => {
   it('POST /membership/site-applications: rol ve doğrulama hataları { error, code } biçiminde, DB\'siz', async () => {
     const touched = installNoDb();
     const body = { name: 'Gül Sitesi', city: 'Ankara', blocks: [{ name: 'A', apartmentCount: 5 }] };
-    // sahip bağı olan site yöneticisi: salt-okunur ön kapı (yalnız bağ sorgusu) 409; başka hiçbir ifade çalışmaz
-    const linkQueries = [];
-    pool.query = async (text) => {
-      const sql = norm(text);
-      linkQueries.push(sql);
-      if (/^SELECT 1 FROM site_manager_sites m INNER JOIN sites s/.test(sql)) return ok([{ x: 1 }]);
-      throw new Error('yalnız sahip bağı sorgusu beklenir');
-    };
-    let res = await call('POST', '/membership/site-applications', 'manager', body);
-    assert.equal(res.status, 409);
-    assert.deepEqual(Object.keys(res.body).sort(), ['code', 'error']);
-    assert.equal(res.body.code, 'ALREADY_SITE_MANAGER');
-    assert.equal(linkQueries.length, 1);
-    const touchedAfterManager = installNoDb();
-    res = await call('POST', '/membership/site-applications', 'superUser', body);
+    let res = await call('POST', '/membership/site-applications', 'superUser', body);
     assert.equal(res.status, 403);
     assert.equal(res.body.code, 'FORBIDDEN_ROLE');
     res = await call('POST', '/membership/site-applications', 'individual', { ...body, name: '' });
@@ -226,7 +212,7 @@ describe('site başvurusu uçları: HTTP', () => {
     assert.equal(res.status, 400);
     res = await call('POST', '/membership/site-applications', 'individual', ['dizi']);
     assert.equal(res.status, 400, 'dizi gövde boş sayılır (ad zorunlu)');
-    assert.deepEqual(touchedAfterManager, []);
+    assert.deepEqual(touched, []);
   });
 
   it('beklenmeyen veritabanı hatası 500: genel mesaj + errorId, DB ayrıntısı SIZMAZ', async () => {

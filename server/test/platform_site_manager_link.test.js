@@ -88,20 +88,12 @@ describe('setup-site kapısı: rol ve sahip bağı, doğrulamalardan ÖNCE', () 
     }
   });
 
-  it('sahip bağı OLAN site yöneticisi: geçerli gövde 201, kurulum AYNEN; geçersiz gövde yine 400 (eski doğrulama sırası)', async () => {
-    let db = install({ poolRole: 'site_manager', ownerLink: true });
-    const result = await setupSiteWithClaimedDevice({ ...base });
-    assert.equal(result.ok, true);
-    assert.ok(has(db.clientLog, /^INSERT INTO sites/));
-    assert.ok(has(db.clientLog, /^COMMIT/));
-    for (const [label, extra] of INVALID_BODIES) {
-      db = install({ poolRole: 'site_manager', ownerLink: true });
-      await assert.rejects(
-        () => setupSiteWithClaimedDevice({ ...base, ...extra }),
-        (error) => error.statusCode === 400 && error.code !== 'APPLICATION_REQUIRED',
-        label,
-      );
-      assert.equal(db.connects(), 0, `${label}: doğrulama hatası bağlantı almadan`);
+  it('site yöneticisi (sahip bağı olsa dahi): doğrudan site kuramaz, her gövdede 409 APPLICATION_REQUIRED (süper kullanıcı onayı gerekir)', async () => {
+    for (const [label, extra] of [['geçerli gövde', {}], ...INVALID_BODIES]) {
+      const db = install({ poolRole: 'site_manager', ownerLink: true });
+      await assert.rejects(() => setupSiteWithClaimedDevice({ ...base, ...extra }), requiredError, label);
+      assert.equal(db.connects(), 0, label);
+      assert.equal(has(db.poolLog, /^INSERT INTO sites/), false);
     }
   });
 
@@ -113,32 +105,21 @@ describe('setup-site kapısı: rol ve sahip bağı, doğrulamalardan ÖNCE', () 
     assert.equal(has(db.clientLog, /site_manager_sites m INNER JOIN/), false);
   });
 
-  it('transaction içinde TAZE rol: ön kapıdan geçen ama arada bireysel olan / bağını yitiren kullanıcı yine 409; site kurulmaz, ROLLBACK', async () => {
-    let db = install({ poolRole: 'site_manager', txRole: 'individual', ownerLink: true });
+  it('transaction içinde TAZE rol: ön kapıdan geçen ama arada süper kullanıcılığı kalmayan kullanıcı yine 409; site kurulmaz, ROLLBACK', async () => {
+    let db = install({ poolRole: 'super_user', txRole: 'individual', ownerLink: true });
     await assert.rejects(() => setupSiteWithClaimedDevice({ ...base }), requiredError);
     assert.equal(has(db.clientLog, /^INSERT INTO sites/), false);
     assert.ok(has(db.clientLog, /^ROLLBACK/));
     assert.equal(has(db.clientLog, /^COMMIT/), false);
     assert.equal(db.client.released, true);
 
-    // ön kapı bağı görür, transaction'da yöneticilik bağı kalmamıştır (ör. bağlı olduğu site silindi)
-    let linkChecks = 0;
-    db = install({ poolRole: 'site_manager', ownerLink: true });
-    const original = pool.connect;
-    pool.connect = async () => {
-      const connected = await original();
-      const query = connected.query;
-      connected.query = async (text, params) => {
-        if (/site_manager_sites m INNER JOIN/.test(norm(text))) {
-          linkChecks += 1;
-          return ok();
-        }
-        return query(text, params);
-      };
-      return connected;
-    };
+    // ön kapı süper görür, transaction'da site_manager olmuştur -> yine onay gerekir (409) ve ROLLBACK
+    db = install({ poolRole: 'super_user', txRole: 'site_manager', ownerLink: true });
     await assert.rejects(() => setupSiteWithClaimedDevice({ ...base }), requiredError);
-    assert.equal(linkChecks, 1, 'bağ transaction içinde yeniden denetlendi');
+    assert.equal(has(db.clientLog, /^INSERT INTO sites/), false);
+    assert.ok(has(db.clientLog, /^ROLLBACK/));
+    assert.equal(has(db.clientLog, /^COMMIT/), false);
+    assert.equal(db.client.released, true);
   });
 
   it('hesap yoksa ön kapı geçer ve eski davranış (404) korunur; oturum yoksa 401 (veritabanına dokunmaz)', async () => {

@@ -125,17 +125,12 @@ class SetupSiteDialog extends StatefulWidget {
   static const int maxDoors = 100;
   static const int maxApartments = 5000;
 
-  /// Oturumun rolüne göre varsayılan çalışma biçimi: bireysel / daire kullanıcısı başvurur; site
-  /// yöneticisi ve süper kullanıcı anlık kurar (oturum yoksa eski davranış: anlık).
-  ///
-  /// [requiresApplication]: sunucunun `requires_application` bildirimi. Sahip bağı olmayan site yöneticisi
-  /// (true) de BAŞVURUR; false / null ise anlık kurar (alan yoksa eski davranış).
+  /// Oturumun rolüne göre varsayılan çalışma biçimi: yalnızca süper kullanıcı doğrudan site kurabilir.
+  /// Site yöneticisi, bireysel ve diğer tüm kullanıcılar süper kullanıcıdan onay almadan site kuramaz;
+  /// talep başvuru kipine (`SetupSiteMode.application`) geçer ve süper kullanıcının onayına düşer.
   static SetupSiteMode modeFor(AuthService authService, {bool? requiresApplication}) {
     final role = authService.session?.role;
-    if (role == UserRole.individual || role == UserRole.apartmentOwner) {
-      return SetupSiteMode.application;
-    }
-    if (role == UserRole.siteManager && requiresApplication == true) {
+    if (role != UserRole.superUser) {
       return SetupSiteMode.application;
     }
     return SetupSiteMode.instant;

@@ -45,7 +45,7 @@ const has = (log, regex) => log.some((entry) => regex.test(entry.sql));
 const find = (log, regex) => log.find((entry) => regex.test(entry.sql));
 
 // createSiteWithStructure / setupSiteWithClaimedDevice icin ortak istemci betigi
-function siteCreationHandlers({ role = 'site_manager' } = {}) {
+function siteCreationHandlers({ role = 'super_user' } = {}) {
   let storedType = null;
   return {
     clientHandlers: [
@@ -145,7 +145,7 @@ describe('POST /membership/setup-site: management_type', () => {
       if (layer.route?.path !== '/membership/setup-site') continue;
       const handlers = layer.route.stack;
       handlers[0].handle = (req, _res, next) => {
-        req.authUser = { ...manager };
+        req.authUser = { ...manager, role: 'super_user' };
         next();
       };
       handlers[1].handle = (_req, _res, next) => next(); // hiz sinirlayici

@@ -258,8 +258,8 @@ describe('setupSiteWithClaimedDevice: cihaz sahipligi site kurulmadan ONCE dogru
     }
   });
 
-  it('belirtilen cihaz kullaniciya ait degil/bulunamadi (site yoneticisi): 404, site kurulmaz (artik sessizce cihazsiz kurulmaz)', async () => {
-    for (const role of ['site_manager']) {
+  it('belirtilen cihaz kullaniciya ait degil/bulunamadi (super user): 404, site kurulmaz (artik sessizce cihazsiz kurulmaz)', async () => {
+    for (const role of ['super_user']) {
       const { clientLog } = install({ clientHandlers: handlers({ role, device: null }) });
       await assert.rejects(
         () => setupSiteWithClaimedDevice({ ...baseInput, deviceUid: 'a0b1c2d3e4f5' }),
@@ -276,7 +276,7 @@ describe('setupSiteWithClaimedDevice: cihaz sahipligi site kurulmadan ONCE dogru
   it('sahip oldugu cihazla (belirtilen veya en son sahiplenilen) kurulum calisir ve cihaz 1. kapiya atanir', async () => {
     for (const deviceUid of ['A0B1C2D3E4F5', undefined]) {
       const { clientLog } = install({
-        clientHandlers: handlers({ role: 'site_manager', device: { id: 77, device_uid: 'A0B1C2D3E4F5', hardware_type: 'esp32_wroom' } }),
+        clientHandlers: handlers({ role: 'super_user', device: { id: 77, device_uid: 'A0B1C2D3E4F5', hardware_type: 'esp32_wroom' } }),
       });
       const result = await setupSiteWithClaimedDevice({ ...baseInput, deviceUid });
       assert.equal(result.ok, true);
@@ -291,8 +291,8 @@ describe('setupSiteWithClaimedDevice: cihaz sahipligi site kurulmadan ONCE dogru
     }
   });
 
-  it('mevcut site yoneticisi ("Site Ekle", cihaz belirtmeden) ve super user cihazsiz kurulum yapabilir (bilincli ozellik korunur)', async () => {
-    for (const role of ['site_manager', 'super_user']) {
+  it('super user cihazsiz kurulum yapabilir', async () => {
+    for (const role of ['super_user']) {
       const { clientLog } = install({ clientHandlers: handlers({ role, device: null }) });
       const result = await setupSiteWithClaimedDevice({ ...baseInput });
       assert.equal(result.ok, true, role);

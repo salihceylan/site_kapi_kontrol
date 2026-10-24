@@ -77,20 +77,14 @@ const alreadySiteManager = () =>
 const forbiddenRole = () => new PlatformError(403, 'FORBIDDEN_ROLE', 'Bu işlem için yetkiniz yok.');
 
 /**
- * Kim başvurabilir: bireysel / daire sahibi VE sahip bağı olmayan site yöneticisi (davetle yönetici olan, sitesi olmayan). Sahip bağı olan
- * site yöneticisi -> 409 ALREADY_SITE_MANAGER (Site Ekle'yi kullanır); süper kullanıcı ve diğer roller -> 403 FORBIDDEN_ROLE.
- * `hasOwnerLink`: site_manager için bağ durumu (DB'den; bilinmiyorsa verilmez = ön rol kontrolü, bağ ayrıca denetlenir).
+ * Kim başvurabilir: Bireysel kullanıcı, daire sahibi ve site yöneticisi yeni site için başvurabilir.
+ * Süper kullanıcı ve diğer roller -> 403 FORBIDDEN_ROLE.
  */
-export function assertMayApply(role, { hasOwnerLink = false } = {}) {
-  if (role === 'site_manager') {
-    if (hasOwnerLink) {
-      throw alreadySiteManager();
-    }
+export function assertMayApply(role) {
+  if (role === 'site_manager' || shouldPromoteToSiteManager(role)) {
     return;
   }
-  if (!shouldPromoteToSiteManager(role)) {
-    throw forbiddenRole();
-  }
+  throw forbiddenRole();
 }
 
 /**
@@ -100,11 +94,11 @@ export function assertMayApply(role, { hasOwnerLink = false } = {}) {
 async function requiresApplication(db, userCode) {
   const roleResult = await db.query(`SELECT role FROM users WHERE user_code = $1 LIMIT 1`, [userCode]);
   const role = roleResult.rows?.[0]?.role;
-  if (shouldPromoteToSiteManager(role)) {
-    return true;
+  if (role === 'super_user') {
+    return false;
   }
-  if (role === 'site_manager') {
-    return !(await userHasOwnerLink(db, userCode));
+  if (shouldPromoteToSiteManager(role) || role === 'site_manager') {
+    return true;
   }
   return false;
 }
@@ -344,10 +338,6 @@ export async function createSiteApplication({ actor, body, consents = null }) {
     throw new PlatformError(401, 'UNAUTHORIZED', 'Kullanıcı oturumu gereklidir.');
   }
   assertMayApply(actorInfo.role);
-  if (actorInfo.role === 'site_manager') {
-    // Sahip bağı olan yönetici başvuramaz (Site Ekle'yi kullanır): girdi doğrulamasından ÖNCE, salt-okunur ön kapı.
-    assertMayApply(actorInfo.role, { hasOwnerLink: await userHasOwnerLink(pool, userCode) });
-  }
 
   const source = body && typeof body === 'object' && !Array.isArray(body) ? body : {};
   const managementType = resolveManagementTypeInput(source.management_type ?? source.managementType);
@@ -391,7 +381,7 @@ export async function createSiteApplication({ actor, body, consents = null }) {
     if (!user) {
       throw new PlatformError(404, 'USER_NOT_FOUND', 'Kullanıcı hesabı bulunamadı.');
     }
-    assertMayApply(user.role, { hasOwnerLink: user.role === 'site_manager' ? await userHasOwnerLink(client, userCode) : false });
+    assertMayApply(user.role);
     applicantName = user.full_name ?? applicantName;
 
     if ((await readOnboardingMode(client)) === 'payment') {

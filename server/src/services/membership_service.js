@@ -743,10 +743,8 @@ async function assertInstantSetupAllowed(db, code, knownRole) {
       return;
     }
   }
-  if (shouldPromoteToSiteManager(role)) {
-    throw applicationRequiredError();
-  }
-  if (role === 'site_manager' && !(await userHasOwnerLink(db, code))) {
+  // Yalnizca super_user dogrudan site kurabilir; site yoneticisi ve tum diger kullanicilar basvuruya tabidir
+  if (role !== 'super_user') {
     throw applicationRequiredError();
   }
 }
@@ -828,7 +826,7 @@ export async function setupSiteWithClaimedDevice({
 
     const devRes = await client.query(devQuery, devParams);
     let dev = devRes.rowCount > 0 ? devRes.rows[0] : null;
-    if (!dev && user.role !== 'super_user') {
+    if (!dev) {
       if (targetDeviceUid) {
         throw httpError(404, 'Belirtilen cihaz hesabınıza ait değil.');
       }
