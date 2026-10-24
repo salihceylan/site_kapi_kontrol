@@ -19,6 +19,7 @@ import 'package:site_kapi_kontrol/ui/dialogs/large_dialog_parts.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/staff_role_dialog.dart';
 import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart';
 import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
+import 'package:site_kapi_kontrol/ui/widgets/crm_parts.dart' show RelationChip;
 
 /// Kişi kartındaki "Roller" bölümü: tanıtımdaki beş rolün hepsi tek yerde (yalnız yönetim yetkisi olana).
 ///
@@ -307,7 +308,12 @@ class _PersonRolesPanelState extends State<PersonRolesPanel> {
         const StatusChip(label: 'Yönetici daveti bekliyor', tone: AppTone.warning, icon: Icons.schedule_rounded),
       if (_duty != null) StatusChip(label: _duty!.label, tone: AppTone.info, icon: Icons.badge_rounded),
       if (staffRole != null && _duty == null) StatusChip(label: staffRole.roleLabel, tone: AppTone.info, icon: Icons.badge_rounded),
-      if (isResident) const StatusChip(label: 'Daire sakini', tone: AppTone.success, icon: Icons.home_rounded),
+      if (_person.isAdmin)
+        const StatusChip(label: 'Daire Admini', tone: AppTone.warning, icon: Icons.shield_rounded),
+      for (final rel in _person.relations)
+        RelationChip(rel),
+      if (isResident && _person.relations.isEmpty)
+        const StatusChip(label: 'Daire sakini', tone: AppTone.success, icon: Icons.home_rounded),
     ];
 
     return DialogPanel(
