@@ -104,7 +104,7 @@ class BulkImportViewState extends State<BulkImportView> {
           if (!mounted) return;
           final wanted = widget.initialKind ?? ImportKind.allInOne;
           final ImportKind initial = wanted == ImportKind.allInOne && _c.spec?.of(ImportKind.allInOne) == null
-              ? ImportKind.people
+              ? (_c.allowedKinds.contains(ImportKind.people) ? ImportKind.people : _c.allowedKinds.first)
               : wanted;
           // Sunucu «Hepsi bir arada» türünü bilmiyorsa (eski sürüm) klasik Kişiler türüne düşülür.
           final chosen = initial;

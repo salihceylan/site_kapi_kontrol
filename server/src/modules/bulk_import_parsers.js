@@ -519,7 +519,7 @@ export function readMoney(raw) {
     return text;
   }
   const invalid = { value: null, error: 'MONEY_INVALID' };
-  let body = text.value.replace(/₺|TRY|TL/gi, '').replace(/[\s ]/g, '');
+  let body = text.value.replace(/₺|TRY|TL/gi, '').replace(/[\s\u00a0]/g, '');
   let negative = false;
   if (/^\(.*\)$/.test(body)) {
     negative = true;

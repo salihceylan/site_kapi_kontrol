@@ -8,15 +8,35 @@ import 'package:site_kapi_kontrol/ui/widgets/crm_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 
 /// Kişi listesi kartı (Platform Faz 2a): ad, hesap / eski sakin rozeti, telefon, e-posta, ilişki
-/// çipleri, daire etiketleri ve araç sayısı. Dokununca kişi kartı açılır ([onTap]).
+/// çipleri, daire etiketleri ve araç sayısı.
 ///
-/// Taşma: tüm metinler sarar (kırpılmaz); çipler `Wrap` içindedir. Büyük yazıda (>= 1,75x) avatar
-/// `InitialAvatar` tarafından kendiliğinden gizlenir (kod koşulsuz çizer, gizlemeyi bileşen yapar).
+/// Kart yanında tekil işlem menüsü (düzenle, şifre sıfırlama, davet, ilişik kesme) ve
+/// çoklu seçim kipi (checkbox) destekler.
+///
+/// Taşma: tüm metinler esnektir (`Expanded`, `Wrap`); çipler `Wrap` içindedir.
 class PersonCard extends StatelessWidget {
-  const PersonCard({super.key, required this.person, required this.onTap});
+  const PersonCard({
+    super.key,
+    required this.person,
+    required this.onTap,
+    this.isSelected = false,
+    this.isSelectionMode = false,
+    this.onSelectChanged,
+    this.onEdit,
+    this.onPasswordReset,
+    this.onInvite,
+    this.onToggleActive,
+  });
 
   final PersonSummary person;
   final VoidCallback onTap;
+  final bool isSelected;
+  final bool isSelectionMode;
+  final ValueChanged<bool?>? onSelectChanged;
+  final VoidCallback? onEdit;
+  final VoidCallback? onPasswordReset;
+  final VoidCallback? onInvite;
+  final VoidCallback? onToggleActive;
 
   @override
   Widget build(BuildContext context) {
@@ -27,13 +47,27 @@ class PersonCard extends StatelessWidget {
     final email = person.email ?? '';
     final name = person.fullName.trim().isEmpty ? 'İsimsiz kişi' : person.fullName.trim();
 
+    final hasAnyAction =
+        onEdit != null || onPasswordReset != null || onInvite != null || onToggleActive != null;
+
     return AppCard(
       padding: listCardPadding(context),
-      onTap: onTap,
+      onTap: isSelectionMode ? () => onSelectChanged?.call(!isSelected) : onTap,
       semanticLabel: 'Kişi kartı: $name',
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (isSelectionMode) ...[
+            Padding(
+              padding: const EdgeInsets.only(right: AppSpace.xs),
+              child: Checkbox(
+                value: isSelected,
+                onChanged: onSelectChanged,
+                activeColor: AppTone.primary.a,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+              ),
+            ),
+          ],
           InitialAvatar(
             name: name,
             tone: person.isActive ? AppTone.primary : AppTone.neutral,
@@ -89,6 +123,88 @@ class PersonCard extends StatelessWidget {
               ],
             ),
           ),
+          if (!isSelectionMode && hasAnyAction) ...[
+            PopupMenuButton<String>(
+              icon: Icon(Icons.more_vert_rounded, color: p.textMuted, size: 22),
+              tooltip: 'İşlemler',
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              color: p.surface,
+              onSelected: (action) {
+                switch (action) {
+                  case 'details':
+                    onTap();
+                  case 'edit':
+                    onEdit?.call();
+                  case 'reset_password':
+                    onPasswordReset?.call();
+                  case 'invite':
+                    onInvite?.call();
+                  case 'toggle_active':
+                    onToggleActive?.call();
+                }
+              },
+              itemBuilder: (context) => [
+                const PopupMenuItem<String>(
+                  value: 'details',
+                  child: Row(
+                    children: [
+                      Icon(Icons.person_search_rounded, size: 18),
+                      SizedBox(width: AppSpace.sm),
+                      Text('Detayları Gör'),
+                    ],
+                  ),
+                ),
+                if (onEdit != null)
+                  const PopupMenuItem<String>(
+                    value: 'edit',
+                    child: Row(
+                      children: [
+                        Icon(Icons.edit_rounded, size: 18),
+                        SizedBox(width: AppSpace.sm),
+                        Text('Düzenle'),
+                      ],
+                    ),
+                  ),
+                if (person.hasAccount && onPasswordReset != null)
+                  const PopupMenuItem<String>(
+                    value: 'reset_password',
+                    child: Row(
+                      children: [
+                        Icon(Icons.lock_reset_rounded, size: 18, color: Colors.blue),
+                        SizedBox(width: AppSpace.sm),
+                        Text('Şifre Sıfırlama Gönder'),
+                      ],
+                    ),
+                  ),
+                if (!person.hasAccount && email.isNotEmpty && onInvite != null)
+                  const PopupMenuItem<String>(
+                    value: 'invite',
+                    child: Row(
+                      children: [
+                        Icon(Icons.send_rounded, size: 18, color: Colors.green),
+                        SizedBox(width: AppSpace.sm),
+                        Text('Uygulamaya Davet Et'),
+                      ],
+                    ),
+                  ),
+                if (onToggleActive != null)
+                  PopupMenuItem<String>(
+                    value: 'toggle_active',
+                    child: Row(
+                      children: [
+                        Icon(
+                          person.isActive ? Icons.person_off_rounded : Icons.person_add_alt_1_rounded,
+                          size: 18,
+                          color: person.isActive ? Colors.red : Colors.green,
+                        ),
+                        const SizedBox(width: AppSpace.sm),
+                        Text(person.isActive ? 'İlişiği Kes (Pasife Al)' : 'Yeniden Etkinleştir'),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ],
         ],
       ),
     );

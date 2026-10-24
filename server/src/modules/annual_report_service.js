@@ -20,7 +20,9 @@ export const GROWTH_MIN_BP = -5000;
 export const GROWTH_MAX_BP = 50000;
 export const LIST_LIMIT = 30;
 export const MAX_BODY_BYTES = 64 * 1024;
-const INVISIBLE_RE = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f​-‏‪-‮⁠﻿]/g;
+/* eslint-disable no-control-regex */
+const INVISIBLE_RE = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\u200b-\u200f\u202a-\u202e\u2060\ufeff]/g;
+/* eslint-enable no-control-regex */
 
 export const moduleDisabled = () => new PlatformError(403, 'MODULE_DISABLED', 'Faaliyet Raporu modülü kapalı.', { module: ANNUAL_REPORT_MODULE });
 const invalid = (field, message) => new PlatformError(400, 'INVALID_FIELD', message, { field });

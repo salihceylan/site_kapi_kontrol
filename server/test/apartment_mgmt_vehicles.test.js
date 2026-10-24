@@ -74,6 +74,7 @@ function run(text, params = []) {
   if (/FROM site_manager_sites/.test(sql)) return ok(world.managerOf.has(`${params[0]}:${params[1]}`) ? [{ '?column?': 1 }] : []);
   if (/FROM site_memberships/.test(sql)) return ok();
   if (/FROM apartment_link_requests/.test(sql)) return ok();
+  if (/FROM apartment_admin_delegations/.test(sql)) return ok();
   if (/FROM apartment_access_suspensions/.test(sql)) return ok(world.suspended.has(params[1]) ? [{ '?column?': 1 }] : []);
   if (/^SELECT DISTINCT ON \(target_id\) target_id, actor_name/.test(sql)) {
     const rows = world.audit

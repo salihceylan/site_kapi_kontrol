@@ -31,6 +31,7 @@ import {
 } from './people_service.js';
 import { HOUR_MS, ipKey, respondError, userKey } from './route_helpers.js';
 import { createVehicle, listVehicles, removeVehicle } from './vehicle_service.js';
+import { executePeopleBulkAction, sendPersonPasswordReset } from './people_bulk_service.js';
 
 export const peopleRouter = express.Router();
 
@@ -125,6 +126,33 @@ peopleRouter.patch(
       body: bodyOf(req),
       actor: req.authUser,
       includeUserCode: canSeeUserCode(access),
+    }),
+  })),
+);
+
+peopleRouter.post(
+  '/manager/sites/:siteCode/people/:personId/password-reset',
+  authRequired,
+  peopleWriteLimiter,
+  handler({ context: 'people_password_reset', fallback: 'Şifre sıfırlama bağlantısı gönderilemedi.', write: true }, async ({ req, access }) => ({
+    body: await sendPersonPasswordReset({
+      siteCode: access.siteCode,
+      personId: req.params.personId,
+      actor: req.authUser,
+    }),
+  })),
+);
+
+peopleRouter.post(
+  '/manager/sites/:siteCode/people/bulk-actions',
+  authRequired,
+  peopleWriteLimiter,
+  handler({ context: 'people_bulk_action', fallback: 'Toplu işlem yürütülemedi.', write: true }, async ({ req, access }) => ({
+    body: await executePeopleBulkAction({
+      siteCode: access.siteCode,
+      action: req.body?.action,
+      personIds: req.body?.person_ids,
+      actor: req.authUser,
     }),
   })),
 );

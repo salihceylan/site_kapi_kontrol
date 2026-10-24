@@ -8,6 +8,7 @@ import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_snack.dart';
 import 'package:site_kapi_kontrol/ui/design/buttons.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/crm_confirm_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/person_card_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/person_form_dialog.dart';
 import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart';
@@ -17,11 +18,8 @@ import 'package:site_kapi_kontrol/ui/widgets/crm_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/person_card.dart';
 
 /// "Kişiler" sekmesi (Platform Faz 2a): arama + ilişki / durum süzgeçleri, sayfalı kişi listesi,
-/// "Kişi Ekle" (yalnız yazma yetkisi olanda) ve kişi kartı.
-///
-/// Hızlı art arda aramada eski yanıt yenisini ezmez ([PagedLoader] jetonu). Arama duraksayınca (350 ms)
-/// ya da klavyeden gönderilince çalışır. Her başarılı işlemden sonra liste otomatik yenilenir ve
-/// [onDataChanged] çağrılır (diğer sekmeler bayatlar).
+/// "Kişi Ekle", kişi bazlı işlem seçenekleri (düzenle, şifre sıfırlama, davet, ilişik kesme)
+/// ve seçerek toplu işlem (çoklu seçim) yapabilme.
 class PeoplePersonsTab extends StatefulWidget {
   const PeoplePersonsTab({
     super.key,
@@ -48,6 +46,11 @@ class PeoplePersonsTabState extends State<PeoplePersonsTab> {
   String _query = '';
   ResidencyRelation? _relation;
   String _status = 'active';
+
+  // Çoklu seçim durumu
+  bool _selectionMode = false;
+  final Set<int> _selectedIds = <int>{};
+  bool _bulkRunning = false;
 
   late final PagedLoader<PersonSummary> _loader = PagedLoader<PersonSummary>(
     fetch: (offset, limit) async {
@@ -83,15 +86,13 @@ class PeoplePersonsTabState extends State<PeoplePersonsTab> {
     super.dispose();
   }
 
-  /// Listeyi yeniden çeker (sayfa kabuğunun çekip yenilemesi ve yenile düğmesi).
+  /// Listeyi yeniden çeker.
   Future<void> reload() => _loader.reload();
 
-  /// Dışa aktarmanın kullanacağı süzgeçler (listede UYGULANMIŞ arama / ilişki / durum).
+  /// Dışa aktarmanın kullanacağı süzgeçler.
   BulkExportFilters get exportFilters =>
       BulkExportFilters(query: _query, status: _status, relation: _relation?.apiValue);
 
-  // Son çalıştırılan sorgunun imzası: okuma hız sınırı düşük olduğundan AYNI sorgu tekrar çağrılmaz
-  // (Enter + gecikme sayacı, aynı süzgeci yeniden seçme).
   String _lastSignature = '|null|active';
 
   void _applyFilters() {
@@ -120,15 +121,12 @@ class PeoplePersonsTabState extends State<PeoplePersonsTab> {
   }
 
   Future<void> _add() async {
-    // "Kişiyi Aç" ile açılan mevcut kişinin kartında yapılan değişiklik de listeyi tazeler.
     final created = await PersonFormDialog.show(
       context,
       scope: widget.scope,
       onChanged: _afterChange,
     );
     if (created == null || !mounted) return;
-    // Boş daireye dahili hesap açıldıysa giriş bilgisi e-postasının sonucu (`credentials_sent`): alan
-    // yoksa (null) ek mesaj gösterilmez.
     switch (created.credentialsSent) {
       case true:
         AppSnack.show(
@@ -139,19 +137,16 @@ class PeoplePersonsTabState extends State<PeoplePersonsTab> {
       case false:
         AppSnack.show(
           context,
-          // PIN sunucuda saklanmaz: e-posta gitmediyse PIN yalnız Daireler ekranından sıfırlanarak verilebilir.
           "Kişi eklendi ve hesap açıldı; ancak giriş bilgisi e-postası gönderilemedi. PIN saklanmadığı için Daireler ekranından PIN'i sıfırlayın.",
           kind: AppSnackKind.warning,
         );
       case null when created.credentialsEmail != null:
-        // Hesap açıldı, e-posta gönderimi yanıt süresinde bitmedi (sunucu beklemeden yanıtladı).
         AppSnack.show(
           context,
           "Kişi eklendi ve hesap açıldı; giriş bilgisi e-postası gönderiliyor. Ulaşmazsa Daireler ekranından PIN'i sıfırlayın.",
           kind: AppSnackKind.info,
         );
       case null:
-        // Hesap açılmadı: e-posta bu sitedeki kayıtlı bir hesaba aitse kişi o hesaba bağlanır, değilse yalnız kayıt.
         AppSnack.show(
           context,
           created.hasAccount
@@ -173,12 +168,208 @@ class PeoplePersonsTabState extends State<PeoplePersonsTab> {
     );
   }
 
+  Future<void> _editPerson(PersonSummary person) async {
+    try {
+      final detail = await widget.scope.authService.getPerson(
+        widget.scope.siteCode,
+        person.id,
+      );
+      if (!mounted) return;
+      final result = await PersonFormDialog.show(
+        context,
+        scope: widget.scope,
+        person: detail,
+        onChanged: _afterChange,
+      );
+      if (result != null && mounted) {
+        _afterChange();
+      }
+    } catch (e) {
+      if (!mounted) return;
+      AppSnack.show(
+        context,
+        crmMessageOf(e, 'Kişi bilgileri yüklenemedi.'),
+        kind: AppSnackKind.error,
+      );
+    }
+  }
+
+  Future<void> _sendPasswordReset(PersonSummary person) async {
+    final confirmed = await confirmCrmAction(
+      context,
+      title: 'Şifre Sıfırlama Bağlantısı',
+      message:
+          '${person.fullName} kullanıcısının kayıtlı e-posta adresine güvenli şifre sıfırlama bağlantısı gönderilsin mi?\n\n(Şifreyi yalnızca kullanıcının kendisi belirleyebilir.)',
+      confirmLabel: 'Bağlantı Gönder',
+      icon: Icons.lock_reset_rounded,
+      tone: AppTone.primary,
+    );
+    if (!confirmed || !mounted) return;
+
+    try {
+      final res = await widget.scope.authService.sendPersonPasswordReset(
+        widget.scope.siteCode,
+        person.id,
+      );
+      if (!mounted) return;
+      AppSnack.show(
+        context,
+        res['message']?.toString() ?? 'Şifre sıfırlama bağlantısı e-posta adresine iletildi.',
+        kind: AppSnackKind.success,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      AppSnack.show(
+        context,
+        crmMessageOf(e, 'Şifre sıfırlama bağlantısı gönderilemedi.'),
+        kind: AppSnackKind.error,
+      );
+    }
+  }
+
+  Future<void> _sendInvite(PersonSummary person) async {
+    final confirmed = await confirmCrmAction(
+      context,
+      title: 'Uygulamaya Davet Et',
+      message:
+          '${person.fullName} kişisine (${person.email ?? ''}) uygulamaya katılım ve şifre belirleme bağlantısı gönderilsin mi?',
+      confirmLabel: 'Davet Gönder',
+      icon: Icons.send_rounded,
+      tone: AppTone.primary,
+    );
+    if (!confirmed || !mounted) return;
+
+    try {
+      await widget.scope.authService.sendPersonInvitation(
+        widget.scope.siteCode,
+        person.id,
+      );
+      if (!mounted) return;
+      AppSnack.show(
+        context,
+        'Davet bağlantısı e-posta adresine başarıyla gönderildi.',
+        kind: AppSnackKind.success,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      AppSnack.show(
+        context,
+        crmMessageOf(e, 'Davet gönderilemedi.'),
+        kind: AppSnackKind.error,
+      );
+    }
+  }
+
+  Future<void> _toggleActive(PersonSummary person) async {
+    final isDeactivating = person.isActive;
+    final confirmed = await confirmCrmAction(
+      context,
+      title: isDeactivating ? 'Siteden İlişiği Kes' : 'Yeniden Etkinleştir',
+      message: isDeactivating
+          ? '${person.fullName} kişisinin siteyle ilişiği kesilsin mi?\n\nDaire bağlantıları sonlandırılacak, kapı erişimleri iptal edilecek ve kişi pasife alınacaktır (geçmiş kayıtlar korunur).'
+          : '${person.fullName} kişisi yeniden aktif sakine dönüştürülsün mü?',
+      confirmLabel: isDeactivating ? 'İlişiği Kes' : 'Etkinleştir',
+      icon: isDeactivating ? Icons.person_off_rounded : Icons.person_add_alt_1_rounded,
+      tone: isDeactivating ? AppTone.danger : AppTone.primary,
+    );
+    if (!confirmed || !mounted) return;
+
+    try {
+      await widget.scope.authService.updatePerson(
+        widget.scope.siteCode,
+        person.id,
+        {'is_active': !isDeactivating},
+      );
+      if (!mounted) return;
+      AppSnack.show(
+        context,
+        isDeactivating ? 'Kişinin ilişiği kesildi ve pasife alındı.' : 'Kişi yeniden etkinleştirildi.',
+        kind: AppSnackKind.success,
+      );
+      _afterChange();
+    } catch (e) {
+      if (!mounted) return;
+      AppSnack.show(
+        context,
+        crmMessageOf(e, 'İşlem gerçekleştirilemedi.'),
+        kind: AppSnackKind.error,
+      );
+    }
+  }
+
+  void _toggleSelectAll() {
+    setState(() {
+      final loadedIds = _loader.items.map((p) => p.id).toSet();
+      if (_selectedIds.containsAll(loadedIds)) {
+        _selectedIds.clear();
+      } else {
+        _selectedIds.addAll(loadedIds);
+      }
+    });
+  }
+
+  Future<void> _runBulkAction({
+    required String action,
+    required String title,
+    required String message,
+    required String confirmLabel,
+    required IconData icon,
+    required AppTone tone,
+  }) async {
+    if (_selectedIds.isEmpty) return;
+    final confirmed = await confirmCrmAction(
+      context,
+      title: title,
+      message: message,
+      confirmLabel: confirmLabel,
+      icon: icon,
+      tone: tone,
+    );
+    if (!confirmed || !mounted) return;
+
+    setState(() => _bulkRunning = true);
+    try {
+      final res = await widget.scope.authService.executePeopleBulkAction(
+        widget.scope.siteCode,
+        action: action,
+        personIds: _selectedIds.toList(),
+      );
+      if (!mounted) return;
+      final succeeded = res['succeeded'] ?? 0;
+      final failed = res['failed'] ?? 0;
+      AppSnack.show(
+        context,
+        failed == 0
+            ? '$succeeded kişi için toplu işlem başarıyla tamamlandı.'
+            : '$succeeded işlem başarılı, $failed işlem başarısız oldu.',
+        kind: failed == 0 ? AppSnackKind.success : AppSnackKind.warning,
+      );
+      setState(() {
+        _selectedIds.clear();
+        _selectionMode = false;
+      });
+      _afterChange();
+    } catch (e) {
+      if (!mounted) return;
+      AppSnack.show(
+        context,
+        crmMessageOf(e, 'Toplu işlem gerçekleştirilemedi.'),
+        kind: AppSnackKind.error,
+      );
+    } finally {
+      if (mounted) setState(() => _bulkRunning = false);
+    }
+  }
+
   bool get _filtered => _query.isNotEmpty || _relation != null || _status != 'active';
 
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
     final th = Theme.of(context).textTheme;
+    final allLoadedSelected =
+        _loader.items.isNotEmpty && _selectedIds.containsAll(_loader.items.map((e) => e.id));
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -288,15 +479,154 @@ class PeoplePersonsTabState extends State<PeoplePersonsTab> {
           ),
         ),
         const SizedBox(height: AppSpace.md),
+
+        // Bölüm Başlığı & Çoklu Seçim Tetikleyicisi
         SectionHeader(
           title: 'Kişiler',
           count: _loader.loadedOnce ? _loader.total : null,
-          trailing: IconButton(
-            onPressed: _loader.loading ? null : reload,
-            tooltip: 'Yenile',
-            icon: const Icon(Icons.refresh_rounded),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (widget.scope.canWrite && _loader.items.isNotEmpty)
+                IconButton(
+                  onPressed: () {
+                    setState(() {
+                      _selectionMode = !_selectionMode;
+                      if (!_selectionMode) _selectedIds.clear();
+                    });
+                  },
+                  tooltip: _selectionMode ? 'Seçimi Kapat' : 'Çoklu Seçim',
+                  icon: Icon(_selectionMode ? Icons.check_box_rounded : Icons.checklist_rounded),
+                  color: _selectionMode ? AppTone.primary.a : null,
+                ),
+              IconButton(
+                onPressed: _loader.loading ? null : reload,
+                tooltip: 'Yenile',
+                icon: const Icon(Icons.refresh_rounded),
+              ),
+            ],
           ),
         ),
+
+        // Çoklu Seçim İşlem Paneli
+        if (_selectionMode) ...[
+          const SizedBox(height: AppSpace.sm),
+          AppCard(
+            tone: AppTone.primary,
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpace.md),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Checkbox(
+                        value: allLoadedSelected,
+                        onChanged: (_) => _toggleSelectAll(),
+                        activeColor: AppTone.primary.a,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                      ),
+                      const SizedBox(width: AppSpace.xs),
+                      Expanded(
+                        child: Text(
+                          _selectedIds.isEmpty
+                              ? 'İşlem yapılacak kişileri seçin'
+                              : '${_selectedIds.length} kişi seçildi',
+                          style: th.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: _loader.items.isEmpty ? null : _toggleSelectAll,
+                        child: Text(allLoadedSelected ? 'Seçimi Bırak' : 'Tümünü Seç'),
+                      ),
+                      IconButton(
+                        onPressed: () {
+                          setState(() {
+                            _selectionMode = false;
+                            _selectedIds.clear();
+                          });
+                        },
+                        tooltip: 'Kapat',
+                        icon: const Icon(Icons.close_rounded, size: 20),
+                      ),
+                    ],
+                  ),
+                  if (_bulkRunning) ...[
+                    const SizedBox(height: AppSpace.sm),
+                    const LinearProgressIndicator(),
+                  ],
+                  if (_selectedIds.isNotEmpty && !_bulkRunning) ...[
+                    const SizedBox(height: AppSpace.sm),
+                    Wrap(
+                      spacing: AppSpace.sm,
+                      runSpacing: AppSpace.sm,
+                      children: [
+                        ElevatedButton.icon(
+                          onPressed: () => _runBulkAction(
+                            action: 'password_reset_or_invite',
+                            title: 'Toplu Şifre / Davet Gönder',
+                            message:
+                                'Seçilen ${_selectedIds.length} kişiye bağlantı gönderilsin mi?\n\n(Hesabı olanlara şifre sıfırlama, hesabı olmayanlara uygulamaya davet linki gönderilir.)',
+                            confirmLabel: 'Gönder',
+                            icon: Icons.forward_to_inbox_rounded,
+                            tone: AppTone.primary,
+                          ),
+                          icon: const Icon(Icons.forward_to_inbox_rounded, size: 16),
+                          label: const Text('Şifre / Davet Gönder'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTone.primary.a,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                        ),
+                        ElevatedButton.icon(
+                          onPressed: () => _runBulkAction(
+                            action: 'end_residency',
+                            title: 'Toplu Siteden İlişik Kes',
+                            message:
+                                'Seçilen ${_selectedIds.length} kişinin siteden ilişiği kesilsin mi?\n\nDaire bağları sonlandırılacak, kapı erişimleri iptal edilecek ve pasife alınacaktır (geçmiş kayıtlar korunur).',
+                            confirmLabel: 'İlişik Kes',
+                            icon: Icons.person_remove_rounded,
+                            tone: AppTone.danger,
+                          ),
+                          icon: const Icon(Icons.person_remove_rounded, size: 16),
+                          label: const Text('İlişiği Kes (Pasife Al)'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTone.danger.a,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                        ),
+                        OutlinedButton.icon(
+                          onPressed: () => _runBulkAction(
+                            action: 'activate',
+                            title: 'Toplu Yeniden Etkinleştir',
+                            message:
+                                'Seçilen ${_selectedIds.length} kişi yeniden aktif sakine dönüştürülsün mü?',
+                            confirmLabel: 'Etkinleştir',
+                            icon: Icons.check_circle_outline_rounded,
+                            tone: AppTone.primary,
+                          ),
+                          icon: const Icon(Icons.check_circle_outline_rounded, size: 16),
+                          label: const Text('Yeniden Etkinleştir'),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ],
+
         const SizedBox(height: AppSpace.md),
         CrmListBody<PersonSummary>(
           loader: _loader,
@@ -310,8 +640,32 @@ class PeoplePersonsTabState extends State<PeoplePersonsTab> {
           emptyAction: widget.scope.canWrite && widget.onImportRequested != null
               ? BulkEmptyImportAction(onImport: widget.onImportRequested!)
               : null,
-          itemBuilder: (context, person) =>
-              PersonCard(person: person, onTap: () => _open(person)),
+          itemBuilder: (context, person) => PersonCard(
+            person: person,
+            onTap: () => _open(person),
+            isSelectionMode: _selectionMode,
+            isSelected: _selectedIds.contains(person.id),
+            onSelectChanged: (selected) {
+              setState(() {
+                if (selected == true) {
+                  _selectedIds.add(person.id);
+                } else {
+                  _selectedIds.remove(person.id);
+                }
+              });
+            },
+            onEdit: widget.scope.canWrite ? () => _editPerson(person) : null,
+            onPasswordReset: widget.scope.canWrite && person.hasAccount
+                ? () => _sendPasswordReset(person)
+                : null,
+            onInvite: widget.scope.canWrite &&
+                    !person.hasAccount &&
+                    person.email != null &&
+                    person.email!.isNotEmpty
+                ? () => _sendInvite(person)
+                : null,
+            onToggleActive: widget.scope.canWrite ? () => _toggleActive(person) : null,
+          ),
         ),
       ],
     );

@@ -3111,3 +3111,39 @@ Dalga 2-6'nın ikinci aşaması: dekont bildirimi, banka dosyasından tahsilat, 
   - **Nasıl Test Edilir:** Daire kartı üzerinden "Daire adminini değiştir" butonuna dokunun.
   - **Beklenen Sonuç:** Dairedeki tüm sakinler (uygulamada hesabı olsun veya olmasın, CRM sakinleri dahil) radyo butonları şeklinde aday listesinde görünür. Mevcut admin "şu an admin" olarak işaretlenir. Yönetici, kavgalı eş veya güvenlik gerekçesiyle diğer sakini seçip "Devam" dediğinde daire adminliği güvenle diğer kişiye devreder ve liste canlı güncellenir.
 
+
+
+---
+
+## 98. 👥 Kişiler Ekranında Tekil İşlem Seçenekleri ve Çoklu / Toplu İşlemler
+
+- [ ] **98.1. Kişi Kartı Yanındaki İşlemler Menüsü:**
+  - **Nasıl Test Edilir:** Site Yönetimi > Kişiler sekmesine gidin. Herhangi bir kişinin kartının sağındaki üç nokta (⋮) butonuna dokunun.
+  - **Beklenen Sonuç:** "Detayları Gör", "Düzenle", "Şifre Sıfırlama Gönder" (hesabı varsa), "Uygulamaya Davet Et" (hesabı yoksa ve maili varsa) ve "İlişiği Kes (Pasife Al)" / "Yeniden Etkinleştir" seçenekleri temiz bir menü olarak açılmalıdır.
+- [ ] **98.2. Güvenli Şifre Sıfırlama Bağlantısı Gönderme:**
+  - **Nasıl Test Edilir:** Hesabı olan bir kişinin üç nokta menüsünden "Şifre Sıfırlama Gönder" seçeneğine dokunun ve onay penceresini onaylayın.
+  - **Beklenen Sonuç:** Yöneticinin şifreyi elle belirlemesi veya görmesi engellenir; sistem sakinin kayıtlı e-posta adresine tek kullanımlık, güvenli şifre sıfırlama linki gönderir ve başarılı bildirimi gösterir.
+- [ ] **98.3. Siteden / Daireden İlişiği Kesme:**
+  - **Nasıl Test Edilir:** Bir kişinin menüsünden "İlişiği Kes (Pasife Al)" seçeneğine dokunup onaylayın.
+  - **Beklenen Sonuç:** Kişinin tüm sistemdeki hesabı silinmez; yalnızca bu sitedeki aktif daire ve kapı yetkileri kaldırılır, kişi pasife alınır ve liste uygulamayı kapatıp açmaya gerek kalmadan canlı olarak güncellenir.
+- [ ] **98.4. Seçerek Çoklu Seçim Modu (Checklist):**
+  - **Nasıl Test Edilir:** "Kişiler" başlığının yanındaki çoklu seçim butonuna (☑️) dokunun.
+  - **Beklenen Sonuç:** Her kartın solunda seçim kutucukları (checkbox) açılır; listenin üzerinde "X kişi seçildi", "Tümünü Seç", "Temizle" ve toplu işlem butonlarını içeren panel belirir.
+- [ ] **98.5. Toplu Şifre / Davet Gönderme:**
+  - **Nasıl Test Edilir:** Çoklu seçim modunda birkaç kişi seçip "Şifre / Davet Gönder" butonuna basın.
+  - **Beklenen Sonuç:** Seçili kişilerden hesabı olanlara şifre sıfırlama, hesabı olmayanlara uygulamaya davet bağlantısı tek seferde toplu olarak gönderilir ve sonuç özeti görüntülenir.
+- [ ] **98.6. Toplu İlişik Kesme (Pasife Alma):**
+  - **Nasıl Test Edilir:** Çoklu seçim modunda kişileri seçip "İlişiği Kes (Pasife Al)" butonuna basın.
+  - **Beklenen Sonuç:** Onay penceresi sonrası seçilen tüm kişilerin daire bağları ve kapı erişimleri tek hamlede sonlandırılır ve liste anında taze olarak güncellenir.
+
+
+---
+
+## 99. 📥 Toplu Yükleme Tür Seçiminin Sadeleştirilmesi (Daireler ve Kişiler Seçeneklerinin Kaldırılması)
+
+- [ ] **99.1. Adım 1 Tür Seçiminde Sadeleştirilmiş Seçenekler:**
+  - **Nasıl Test Edilir:** Daireler sekmesinden veya araç çubuğundan "Toplu Yükle (Excel)" sihirbazını başlatın. İlk adım olan "Yükleme Türü Seçimi" ekranına bakın.
+  - **Beklenen Sonuç:** Kafa karışıklığı yaratan ayrı "Daireler" ve "Kişiler" seçenekleri listeden kaldırılmış olmalı; yalnızca ana akış olan "Hepsi bir arada (Daireler + Sakinler + Araçlar)" ve opsiyonel "Sadece Araçlar" seçenekleri yer almalıdır.
+- [ ] **99.2. Varsayılan Seçim ve Şablon İndirme:**
+  - **Nasıl Test Edilir:** "Hepsi bir arada" seçiliyken "Şablon Excel İndir" ve "Örnek Excel İndir" butonlarına dokunun.
+  - **Beklenen Sonuç:** Tek bir Excel tablosunda Blok, Daire No, Kat, Malik, Kiracı, Telefon, E-posta ve Plakaları içeren kapsamlı ve anlaşılır şablon başarıyla indirilmeli ve sonraki adımlara sorunsuz geçilmelidir.

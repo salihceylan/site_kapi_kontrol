@@ -333,7 +333,7 @@ function sendResetPage(res, statusCode, html) {
 }
 
 // Token üretip e-posta gönderir (arka planda çalışır; hata yalnızca loglanır).
-async function issuePasswordReset(user) {
+export async function issuePasswordReset(user) {
   const token = crypto.randomBytes(32).toString('hex');
   const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
   const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 dakika

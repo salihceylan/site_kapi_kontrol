@@ -1055,6 +1055,37 @@ class AuthApi {
     await _teamJson('DELETE', '/manager/sites/$siteCode/people/$personId/invitation', token, 200);
   }
 
+  Future<Map<String, dynamic>> sendPersonPasswordReset({
+    required String token,
+    required int siteCode,
+    required int personId,
+  }) async {
+    return _teamJson(
+      'POST',
+      '/manager/sites/$siteCode/people/$personId/password-reset',
+      token,
+      200,
+    );
+  }
+
+  Future<Map<String, dynamic>> executePeopleBulkAction({
+    required String token,
+    required int siteCode,
+    required String action,
+    required List<int> personIds,
+  }) async {
+    return _teamJson(
+      'POST',
+      '/manager/sites/$siteCode/people/bulk-actions',
+      token,
+      200,
+      body: <String, dynamic>{
+        'action': action,
+        'person_ids': personIds,
+      },
+    );
+  }
+
   Future<void> saveDirectoryContact({
     required String token,
     required int siteCode,

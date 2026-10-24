@@ -199,7 +199,7 @@ const base = (site = SITE_1) => `/manager/sites/${site}`;
 // ---------------------------------------------------------------------------
 
 describe('people rotalari: zincir', () => {
-  it('15 rota; hepsi authRequired ile baslar; /manager uclari ve my-records hiz sinirli (okuma 1200/saat, yazma 120/saat)', () => {
+  it('17 rota; hepsi authRequired ile baslar; /manager uclari ve my-records hiz sinirli (okuma 1200/saat, yazma 120/saat)', () => {
     const summary = ORIGINAL_ROUTES.map((r) => `${r.method.toUpperCase()} ${r.path}`).sort();
     assert.deepEqual(summary, [
       'DELETE /manager/sites/:siteCode/vehicles/:vehicleId',
@@ -214,7 +214,9 @@ describe('people rotalari: zincir', () => {
       'PATCH /manager/sites/:siteCode/people/:personId',
       'PATCH /manager/sites/:siteCode/residencies/:residencyId',
       'POST /manager/sites/:siteCode/people',
+      'POST /manager/sites/:siteCode/people/:personId/password-reset',
       'POST /manager/sites/:siteCode/people/:personId/residencies',
+      'POST /manager/sites/:siteCode/people/bulk-actions',
       'POST /manager/sites/:siteCode/residencies/:residencyId/end',
       'POST /manager/sites/:siteCode/vehicles',
     ]);

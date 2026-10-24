@@ -34,11 +34,7 @@ class BulkKindStep extends StatelessWidget {
         'Eski yazılımdan devreden daire borçlarını tek seferde deftere yazar. Yüklemeyi sonradan geri alabilirsiniz.',
   };
 
-  static const Map<ImportKind, int> _order = <ImportKind, int>{
-    ImportKind.apartments: 1,
-    ImportKind.people: 2,
-    ImportKind.vehicles: 3,
-  };
+  static const Map<ImportKind, int> _order = <ImportKind, int>{};
 
   @override
   Widget build(BuildContext context) {
@@ -77,8 +73,7 @@ class BulkKindStep extends StatelessWidget {
         Text(
           c.allowedKinds.contains(ImportKind.openingBalances) && c.allowedKinds.length == 1
               ? 'Excel (.xlsx) veya CSV dosyasıyla eski yazılımdan devreden bakiyeleri yükleyin.'
-              : 'Excel (.xlsx) veya CSV dosyasıyla toplu yükleme yapın. «Hepsi bir arada» tek dosyada her şeyi yükler; '
-                    'ayrı ayrı yüklemek için Daireler, Kişiler, Araçlar sırasını izleyin.',
+              : 'Excel (.xlsx) veya CSV dosyasıyla toplu yükleme yapın. «Hepsi bir arada» tek dosyada daireleri, sakinleri ve araçları birlikte yükler.',
           style: th.bodyMedium?.copyWith(color: p.textSecondary),
         ),
         const SizedBox(height: AppSpace.md),
