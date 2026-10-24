@@ -3096,3 +3096,18 @@ Dalga 2-6'nın ikinci aşaması: dekont bildirimi, banka dosyasından tahsilat, 
 - [ ] **96.3. Toplu Yükleme Sihirbazında Varsayılan Olarak "Hepsi Bir Arada" Seçilmesi:**
   - **Nasıl Test Edilir:** Herhangi bir ekrandan "Toplu Yükle" sihirbazını başlatın.
   - **Beklenen Sonuç:** Sihirbaz açıldığında tek adımda hem daireleri hem sakinleri oluşturan 'Hepsi bir arada' seçeneği varsayılan olarak seçili gelir. Yönetici tek bir Excel dosyasıyla hem daireleri hem sakinleri tek seferde kurabilir.
+
+---
+
+## 97. 👑 Daire Admini Otomatik Belirleme, Tanıtım Turu Kaldırılması ve Daire Admini Değiştirme
+
+- [ ] **97.1. Başlangıçtaki Tanıtım Turu Popup'ının Kaldırılması:**
+  - **Nasıl Test Edilir:** Uygulamaya giriş yapın veya tarayıcıyı tazeleyin.
+  - **Beklenen Sonuç:** Her girişte ekrana gelen ve kullanıcı deneyimini bozan "Sitenizi Yönetin" 4 adımlı tanıtım turu popup'ı artık kesinlikle çıkmaz; kullanıcı doğrudan kendi paneline erişir.
+- [ ] **97.2. Excel'den Eklenen Sakinlerin Otomatik Olarak Daire Admini Olması:**
+  - **Nasıl Test Edilir:** Excel veya toplu yükleme yöntemiyle bir daireye sakin (malik/kiracı) ekleyin. Ardından "Siteler > Daireler" bölümünden daire kartını açın veya daire halkı listesini inceleyin.
+  - **Beklenen Sonuç:** "Bu dairede daire admini görünmüyor" uyarısı kesinlikle çıkmaz. Daireye eklenen sakin otomatik olarak Daire Admini rozetiyle üst sırada yer alır (kiracı varsa kiracı, yoksa malik, yoksa ilk sakin daire adminidir).
+- [ ] **97.3. Site Yöneticisinin Daire Adminini Değiştirebilmesi (Kavgalı Eş / Anlaşmazlık Müdahalesi):**
+  - **Nasıl Test Edilir:** Daire kartı üzerinden "Daire adminini değiştir" butonuna dokunun.
+  - **Beklenen Sonuç:** Dairedeki tüm sakinler (uygulamada hesabı olsun veya olmasın, CRM sakinleri dahil) radyo butonları şeklinde aday listesinde görünür. Mevcut admin "şu an admin" olarak işaretlenir. Yönetici, kavgalı eş veya güvenlik gerekçesiyle diğer sakini seçip "Devam" dediğinde daire adminliği güvenle diğer kişiye devreder ve liste canlı güncellenir.
+

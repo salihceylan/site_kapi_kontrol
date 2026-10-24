@@ -14,18 +14,59 @@ import { pool } from '../db.js';
 
 const notFound = () => new PlatformError(404, 'APARTMENT_NOT_FOUND', 'Daire bulunamadı.');
 
-/** Aktif uyeler + iliski turu (uyeligi olup iliskisi yoksa 'resident'). */
+/** Aktif uyeler ve guncel sakinler (daire admini adaylari). */
 function candidatesOf(state) {
-  const byUser = new Map(state.residencies.filter((r) => r.user_code !== null).map((r) => [r.user_code, r]));
-  return state.members.map((m) => {
-    const userCode = Number(m.user_code);
-    return {
+  const seenPersons = new Set();
+  const seenUsers = new Set();
+  const candidates = [];
+
+  const adminUserCode = state.roles?.adminUserCode ?? null;
+  const adminPersonId = state.roles?.adminPersonId ?? null;
+
+  // 1. Guncel residency kayitlari (site_people)
+  for (const r of state.residencies ?? []) {
+    const personId = parsePositiveId(r.person_id);
+    const userCode = parsePositiveId(r.user_code);
+    if (personId !== null) seenPersons.add(personId);
+    if (userCode !== null) seenUsers.add(userCode);
+
+    const isAdmin = (userCode !== null && userCode === adminUserCode) ||
+                    (personId !== null && personId === adminPersonId);
+
+    candidates.push({
+      person_id: personId,
       user_code: userCode,
-      name: m.full_name ?? byUser.get(userCode)?.name ?? 'Sakin',
-      relation: byUser.get(userCode)?.relation ?? 'resident',
-      is_admin: userCode === state.roles.adminUserCode,
-    };
-  });
+      name: r.name ?? 'Sakin',
+      relation: r.relation ?? 'resident',
+      is_admin: isAdmin,
+    });
+  }
+
+  // 2. Iliskisi esitlenmemis ama apartment_memberships uyeligi olanlar
+  for (const m of state.members ?? []) {
+    const userCode = Number(m.user_code);
+    if (seenUsers.has(userCode)) continue;
+    seenUsers.add(userCode);
+
+    const isAdmin = userCode === adminUserCode;
+    candidates.push({
+      person_id: null,
+      user_code: userCode,
+      name: m.full_name ?? 'Sakin',
+      relation: m.role === 'APARTMENT_ADMIN' ? 'admin' : 'resident',
+      is_admin: isAdmin,
+    });
+  }
+
+  // Eger hicbiri is_admin olmadiysa ve aday varsa: ilk adayi admin say
+  if (candidates.length > 0 && !candidates.some((c) => c.is_admin)) {
+    const tenant = candidates.find((c) => c.relation === 'tenant');
+    const owner = candidates.find((c) => c.relation === 'owner');
+    const target = tenant ?? owner ?? candidates[0];
+    target.is_admin = true;
+  }
+
+  return candidates;
 }
 
 async function loadForSite(db, siteCode, apartmentId, lock) {
@@ -46,68 +87,95 @@ export async function listAdminCandidates({ siteCode, apartmentId }) {
   return {
     apartment_id: state.apartment.id,
     label: apartmentLabel(state.apartment.block_name, state.apartment.unit_label),
-    current_admin: current ? { user_code: current.user_code, name: current.name, relation: current.relation } : null,
+    current_admin: current ? { user_code: current.user_code, person_id: current.person_id, name: current.name, relation: current.relation } : null,
     items,
   };
 }
 
-/** PUT /manager/sites/:siteCode/apartments/:apartmentId/admin  { user_code } */
+/** PUT /manager/sites/:siteCode/apartments/:apartmentId/admin  { user_code, person_id } */
 export async function changeApartmentAdmin({ siteCode, apartmentId, body, authUser }) {
-  const target = parsePositiveId(body?.user_code);
-  if (target === null) {
+  const targetUserCode = parsePositiveId(body?.user_code);
+  const targetPersonId = parsePositiveId(body?.person_id);
+  if (targetUserCode === null && targetPersonId === null) {
     throw new PlatformError(400, 'INVALID_BODY', 'Yeni admin için bir sakin seçin.');
   }
   return withSiteTransaction(Number(siteCode), async (client) => {
     const state = await loadForSite(client, siteCode, apartmentId, true);
     const candidates = candidatesOf(state);
-    const next = candidates.find((c) => c.user_code === target) ?? null;
+    const next = candidates.find((c) =>
+      (targetUserCode !== null && c.user_code === targetUserCode) ||
+      (targetPersonId !== null && c.person_id === targetPersonId)
+    ) ?? null;
     if (!next) {
       throw new PlatformError(409, 'NOT_AN_ACTIVE_RESIDENT', 'Yeni admin, dairede aktif bağı olan bir sakin olmalıdır.');
     }
     const previous = candidates.find((c) => c.is_admin) ?? null;
     if (next.is_admin) {
-      return { ok: true, changed: false, admin: { user_code: next.user_code, name: next.name } };
+      return { ok: true, changed: false, admin: { user_code: next.user_code, person_id: next.person_id, name: next.name } };
     }
-    if (
-      !(await transferApartmentAdmin(client, {
+
+    if (next.user_code) {
+      const hasMember = await client.query(
+        `SELECT 1 FROM apartment_memberships WHERE apartment_id = $1 AND user_code = $2`,
+        [state.apartment.id, next.user_code],
+      );
+      if (!hasMember.rows?.[0]) {
+        await client.query(
+          `INSERT INTO apartment_memberships (site_code, apartment_id, user_code, role, is_active)
+           VALUES ($1, $2, $3, 'APARTMENT_ADMIN', TRUE)`,
+          [Number(siteCode), state.apartment.id, next.user_code],
+        );
+      }
+      await transferApartmentAdmin(client, {
         apartmentId: state.apartment.id,
-        userCode: target,
+        userCode: next.user_code,
         actor: authUser,
         actorRole: authUser?.role === 'super_user' ? 'super_user' : 'site_manager',
         reasonCode: 'site_manager',
-      }))
-    ) {
-      throw new PlatformError(409, 'NOT_AN_ACTIVE_RESIDENT', 'Yeni admin, dairede aktif bağı olan bir sakin olmalıdır.');
-    }
-    // Yonetim kaydi: acik devir kapanir; yeni admin malik degilse tarihce satiri (source 'manager') acilir.
-    await endOpenDelegation(client, state.apartment.id, 'manager_changed');
-    if (next.relation !== 'owner') {
-      const person = state.residencies.find((r) => r.user_code === target) ?? null;
-      await recordDelegation(client, {
-        siteCode: Number(siteCode),
-        apartmentId: state.apartment.id,
-        ownerPersonId: state.roles.owner?.person_id ?? null,
-        adminPersonId: person?.person_id ?? null,
-        adminUserCode: target,
-        state: 'active',
-        createdBy: authUser?.id ?? null,
-        source: 'manager',
       });
+    } else {
+      await client.query(
+        `UPDATE apartment_memberships SET role = 'FAMILY_MEMBER', updated_at = NOW()
+         WHERE apartment_id = $1 AND role = 'APARTMENT_ADMIN'`,
+        [state.apartment.id],
+      );
+      await client.query(
+        `UPDATE apartments SET resident_user_code = NULL, updated_at = NOW() WHERE id = $1`,
+        [state.apartment.id],
+      );
     }
+
+    // Yonetim devri kaydi: acik devir kapanir; yeni admin icin acilir
+    await endOpenDelegation(client, state.apartment.id, 'manager_changed');
+    await recordDelegation(client, {
+      siteCode: Number(siteCode),
+      apartmentId: state.apartment.id,
+      ownerPersonId: state.roles.owner?.person_id ?? null,
+      adminPersonId: next.person_id ?? null,
+      adminUserCode: next.user_code ?? null,
+      state: next.user_code ? 'active' : 'pending_account',
+      createdBy: authUser?.id ?? null,
+      source: 'manager',
+    });
+
     const label = apartmentLabel(state.apartment.block_name, state.apartment.unit_label);
     await auditApartment(client, authUser, 'apartment_mgmt.admin_changed_by_manager', state, {
       from_user_code: previous?.user_code ?? null,
-      to_user_code: target,
+      from_person_id: previous?.person_id ?? null,
+      to_user_code: next.user_code ?? null,
+      to_person_id: next.person_id ?? null,
       to_relation: next.relation,
     });
-    await notifyApartmentUsers(client, {
-      siteCode: Number(siteCode),
-      apartmentId: state.apartment.id,
-      userCodes: [target],
-      kind: 'admin_changed_new',
-      message: `${label} dairesinin yönetimi site yöneticisi tarafından size verildi.`,
-    });
-    if (previous) {
+    if (next.user_code) {
+      await notifyApartmentUsers(client, {
+        siteCode: Number(siteCode),
+        apartmentId: state.apartment.id,
+        userCodes: [next.user_code],
+        kind: 'admin_changed_new',
+        message: `${label} dairesinin yönetimi site yöneticisi tarafından size verildi.`,
+      });
+    }
+    if (previous?.user_code && previous.user_code !== next.user_code) {
       await notifyApartmentUsers(client, {
         siteCode: Number(siteCode),
         apartmentId: state.apartment.id,
@@ -116,6 +184,11 @@ export async function changeApartmentAdmin({ siteCode, apartmentId, body, authUs
         message: `${label} dairesinin yönetimi site yöneticisi tarafından ${next.name} kişisine verildi. Dairede kalmaya devam ediyorsunuz.`,
       });
     }
-    return { ok: true, changed: true, admin: { user_code: next.user_code, name: next.name }, previous: previous ? { user_code: previous.user_code, name: previous.name } : null };
+    return {
+      ok: true,
+      changed: true,
+      admin: { user_code: next.user_code, person_id: next.person_id, name: next.name },
+      previous: previous ? { user_code: previous.user_code, person_id: previous.person_id, name: previous.name } : null,
+    };
   });
 }

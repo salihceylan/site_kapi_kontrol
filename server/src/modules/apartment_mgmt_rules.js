@@ -43,32 +43,69 @@ const asCode = (value) => {
 export function resolveApartmentRoles(state) {
   const members = (state?.members ?? []).filter((m) => m.is_active !== false);
   const residencies = state?.residencies ?? [];
+  const delegation = state?.delegation ?? null;
   const owner = residencies.find((r) => r.relation === 'owner') ?? null;
   const tenant = residencies.find((r) => r.relation === 'tenant') ?? null;
   const family = residencies.filter((r) => r.relation === 'family_member');
 
-  // Admin: ilk aktif APARTMENT_ADMIN (eskiden yeniye); yoksa eski sakin gostergesi (uyeligi acikca pasif degilse).
+  // Admin: ilk aktif APARTMENT_ADMIN (eskiden yeniye); yoksa acik devir kaydi; yoksa eski sakin gostergesi.
   const sorted = [...members].sort((a, b) => new Date(a.created_at ?? 0) - new Date(b.created_at ?? 0));
   const adminMember = sorted.find((m) => m.role === 'APARTMENT_ADMIN') ?? null;
   const legacy = asCode(state?.legacyUserCode);
   let adminUserCode = adminMember ? asCode(adminMember.user_code) : null;
   let adminSource = adminMember ? 'membership' : null;
+
+  let adminPersonId = null;
+  if (delegation && delegation.ended_at == null) {
+    if (delegation.admin_user_code) {
+      adminUserCode = asCode(delegation.admin_user_code);
+      adminSource = delegation.source || 'delegation';
+    }
+    if (delegation.admin_person_id) {
+      adminPersonId = asCode(delegation.admin_person_id);
+    }
+  }
+
   if (adminUserCode === null && legacy !== null) {
     adminUserCode = legacy;
     adminSource = 'legacy';
   }
-  const adminResidency = adminUserCode === null ? null : residencies.find((r) => asCode(r.user_code) === adminUserCode) ?? null;
+
+  let adminResidency = adminUserCode === null
+    ? (adminPersonId !== null ? residencies.find((r) => asCode(r.person_id) === adminPersonId) ?? null : null)
+    : residencies.find((r) => asCode(r.user_code) === adminUserCode) ?? null;
+
+  if (adminPersonId === null && adminResidency) {
+    adminPersonId = asCode(adminResidency.person_id);
+  }
+
+  // Varsayilan admin (hicbir hesap veya devir yoksa): tenant > owner > ilk sakin
+  if (adminUserCode === null && adminPersonId === null && residencies.length > 0) {
+    const defaultRes = tenant ?? owner ?? residencies[0];
+    if (defaultRes) {
+      adminPersonId = asCode(defaultRes.person_id);
+      if (defaultRes.user_code) {
+        adminUserCode = asCode(defaultRes.user_code);
+      }
+      adminResidency = defaultRes;
+      adminSource = 'default_resident';
+    }
+  }
 
   let adminKind = 'none';
-  if (adminUserCode !== null) {
-    if (owner && asCode(owner.user_code) === adminUserCode) adminKind = 'owner';
-    else if (tenant && asCode(tenant.user_code) === adminUserCode) adminKind = 'tenant';
+  if (adminUserCode !== null || adminPersonId !== null) {
+    const isOwnerMatch = (adminUserCode !== null && owner && asCode(owner.user_code) === adminUserCode) ||
+                         (adminPersonId !== null && owner && asCode(owner.person_id) === adminPersonId);
+    const isTenantMatch = (adminUserCode !== null && tenant && asCode(tenant.user_code) === adminUserCode) ||
+                          (adminPersonId !== null && tenant && asCode(tenant.person_id) === adminPersonId);
+    if (isOwnerMatch) adminKind = 'owner';
+    else if (isTenantMatch) adminKind = 'tenant';
     else if (adminResidency?.relation === 'family_member') adminKind = 'family';
     // Kiraci yoksa ve malik kaydi yoksa admin maliktir (turetilmis); aksi halde ilişkisi belirsiz yonetici.
     else if (!owner && !tenant) adminKind = 'owner_derived';
     else adminKind = 'other';
   }
-  return { owner, tenant, family, adminUserCode, adminSource, adminResidency, adminKind };
+  return { owner, tenant, family, adminUserCode, adminPersonId, adminSource, adminResidency, adminKind };
 }
 
 /** Admin (yonetimi yapan) tarafindan gosterilen etiket: 'owner' | 'tenant' | 'other' | 'none'. */

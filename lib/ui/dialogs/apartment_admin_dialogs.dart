@@ -44,7 +44,7 @@ class ChangeAdminDialog extends StatefulWidget {
 
 class _ChangeAdminDialogState extends State<ChangeAdminDialog> {
   AdminCandidates? _data;
-  int? _selected;
+  String? _selectedKey;
   String? _error;
   bool _loading = true;
   bool _saving = false;
@@ -78,7 +78,7 @@ class _ChangeAdminDialogState extends State<ChangeAdminDialog> {
 
   Future<void> _apply() async {
     final data = _data;
-    final target = data?.items.where((c) => c.userCode == _selected).firstOrNull;
+    final target = data?.items.where((c) => c.candidateKey == _selectedKey).firstOrNull;
     if (data == null || target == null) return;
     final from = data.currentAdmin?.name ?? 'mevcut admin';
     final ok = await confirmCrmAction(
@@ -91,7 +91,12 @@ class _ChangeAdminDialogState extends State<ChangeAdminDialog> {
     if (!ok || !mounted) return;
     setState(() => _saving = true);
     try {
-      await widget.service.changeAdmin(widget.siteCode, widget.apartmentId, target.userCode);
+      await widget.service.changeAdmin(
+        widget.siteCode,
+        widget.apartmentId,
+        userCode: target.userCode,
+        personId: target.personId,
+      );
       if (!mounted) return;
       AppSnack.show(context, 'Daire admini değiştirildi.', kind: AppSnackKind.success);
       popIfCurrent(context, true);
@@ -114,7 +119,7 @@ class _ChangeAdminDialogState extends State<ChangeAdminDialog> {
       icon: Icons.manage_accounts_rounded,
       actions: [
         TextButton(onPressed: () => popIfCurrent(context, false), child: const Text('Vazgeç')),
-        ElevatedButton(onPressed: _saving || _selected == null ? null : () => unawaited(_apply()), child: const Text('Devam')),
+        ElevatedButton(onPressed: _saving || _selectedKey == null ? null : () => unawaited(_apply()), child: const Text('Devam')),
       ],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -127,14 +132,14 @@ class _ChangeAdminDialogState extends State<ChangeAdminDialog> {
             if (data.items.isEmpty)
               Text('Dairede aktif bağı olan sakin yok.', style: th.bodyMedium)
             else
-              RadioGroup<int>(
-                groupValue: _selected,
-                onChanged: (v) => setState(() => _selected = v),
+              RadioGroup<String>(
+                groupValue: _selectedKey,
+                onChanged: (v) => setState(() => _selectedKey = v),
                 child: Column(
                   children: [
                     for (final c in data.items)
-                      RadioListTile<int>(
-                        value: c.userCode,
+                      RadioListTile<String>(
+                        value: c.candidateKey,
                         enabled: !c.isAdmin,
                         contentPadding: EdgeInsets.zero,
                         title: Text(c.name),
@@ -229,8 +234,8 @@ class _AccessSuspensionDialogState extends State<AccessSuspensionDialog> {
   Future<void> _suspend() async {
     final target = _members?.items.where((c) => c.userCode == _selected).firstOrNull;
     final note = _note.text.trim();
-    if (target == null) {
-      setState(() => _error = 'Askıya alınacak kişiyi seçin.');
+    if (target == null || target.userCode == null) {
+      setState(() => _error = 'Askıya alınacak hesabı olan kişiyi seçin.');
       return;
     }
     if (note.isEmpty) {
@@ -246,7 +251,7 @@ class _AccessSuspensionDialogState extends State<AccessSuspensionDialog> {
       tone: AppTone.danger,
     );
     if (!ok || !mounted) return;
-    await _act(() => widget.service.suspend(widget.siteCode, widget.apartmentId, target.userCode, reasonCode: _reason, note: note), 'Erişim askıya alındı.');
+    await _act(() => widget.service.suspend(widget.siteCode, widget.apartmentId, target.userCode!, reasonCode: _reason, note: note), 'Erişim askıya alındı.');
   }
 
   Future<void> _lift(SuspensionItem item) async {
@@ -312,8 +317,8 @@ class _AccessSuspensionDialogState extends State<AccessSuspensionDialog> {
               onChanged: (v) => setState(() => _selected = v),
               child: Column(
                 children: [
-                  for (final c in _members!.items.where((c) => !suspendedCodes.contains(c.userCode)))
-                    RadioListTile<int>(value: c.userCode, contentPadding: EdgeInsets.zero, title: Text(c.name), subtitle: Text(c.relationLabel)),
+                  for (final c in _members!.items.where((c) => c.userCode != null && !suspendedCodes.contains(c.userCode!)))
+                    RadioListTile<int>(value: c.userCode!, contentPadding: EdgeInsets.zero, title: Text(c.name), subtitle: Text(c.relationLabel)),
                 ],
               ),
             ),

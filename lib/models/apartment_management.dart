@@ -459,19 +459,29 @@ class SigningRoster {
 
 @immutable
 class AdminCandidate {
-  const AdminCandidate({required this.userCode, required this.name, required this.relation, this.isAdmin = false});
+  const AdminCandidate({
+    this.userCode,
+    this.personId,
+    required this.name,
+    required this.relation,
+    this.isAdmin = false,
+  });
 
   factory AdminCandidate.fromJson(Map<String, dynamic> j) => AdminCandidate(
-    userCode: _i(j['user_code']),
+    userCode: j['user_code'] is num ? _i(j['user_code']) : null,
+    personId: j['person_id'] is num ? _i(j['person_id']) : null,
     name: _s(j['name'], 'Sakin'),
     relation: _s(j['relation'], 'resident'),
     isAdmin: _b(j['is_admin']),
   );
 
-  final int userCode;
+  final int? userCode;
+  final int? personId;
   final String name;
   final String relation;
   final bool isAdmin;
+
+  String get candidateKey => userCode != null ? 'u:$userCode' : 'p:$personId';
 
   String get relationLabel => switch (relation) {
     'owner' => 'Malik',

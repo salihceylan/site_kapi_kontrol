@@ -34,7 +34,6 @@ import 'package:site_kapi_kontrol/ui/pages/home_page.dart';
 import 'package:site_kapi_kontrol/ui/pages/login_page.dart';
 import 'package:site_kapi_kontrol/ui/pages/no_internet_page.dart';
 import 'package:site_kapi_kontrol/ui/views/legal_consent_gate.dart';
-import 'package:site_kapi_kontrol/ui/views/onboarding_tour.dart';
 import 'package:site_kapi_kontrol/ui/widgets/dynamic_qr_pass_modal.dart';
 import 'package:site_kapi_kontrol/ui/widgets/voice_control_modal.dart';
 
@@ -447,9 +446,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             return LegalConsentGate(
               authService: _authService,
               enabled: widget.networkCheckEnabled,
-              onSettled: (gateContext) => unawaited(
-                OnboardingTour.maybeShow(gateContext, authService: _authService),
-              ),
               child: HomePage(
                 authService: _authService,
                 voiceDoorService: _voiceDoorService,

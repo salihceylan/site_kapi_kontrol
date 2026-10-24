@@ -285,8 +285,16 @@ class ApartmentManagementService {
     await _guard((t) => api.call('GET', _mgr(siteCode, 'apartments/$apartmentId/admin-candidates'), token: t)),
   );
 
-  Future<void> changeAdmin(int siteCode, int apartmentId, int userCode) => _guard(
-    (t) => api.call('PUT', _mgr(siteCode, 'apartments/$apartmentId/admin'), token: t, body: <String, Object?>{'user_code': userCode}),
+  Future<void> changeAdmin(
+    int siteCode,
+    int apartmentId, {
+    int? userCode,
+    int? personId,
+  }) => _guard(
+    (t) => api.call('PUT', _mgr(siteCode, 'apartments/$apartmentId/admin'), token: t, body: <String, Object?>{
+      'user_code': ?userCode,
+      'person_id': ?personId,
+    }),
   );
 
   Future<List<SafetyRequestItem>> safetyRequests(int siteCode, {String? status}) async {

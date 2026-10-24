@@ -103,6 +103,42 @@ describe('buildHousehold', () => {
     assert.deepEqual(h.members.map((m) => [m.name, m.relation]), [['Yeni Uye', 'family_member']]);
   });
 
+  it('toplu yukleme ile eklenen hesapsiz kisiler otomatik admin alir (kiraci > malik > ilk kisi)', () => {
+    const h = buildHousehold({
+      members: [],
+      residencies: [
+        res(101, null, 'owner', 'Malik Ali'),
+        res(102, null, 'tenant', 'Kiraci Veli'),
+        res(103, null, 'family_member', 'Cocuk Veli', { is_minor: true }),
+      ],
+      detailed: true,
+    });
+    assert.ok(h.admin, 'admin olmali');
+    assert.equal(h.admin.name, 'Kiraci Veli');
+    assert.equal(h.admin.is_admin, true);
+    assert.equal(h.admin.relation, 'tenant');
+    assert.equal(h.absent_owner.name, 'Malik Ali');
+    assert.deepEqual(h.members.map((m) => m.name), ['Cocuk Veli']);
+    assert.equal(h.total, 3);
+  });
+
+  it('yonetici acik devir kaydi varsa (delegation) hesapsiz admin belirlenir', () => {
+    const h = buildHousehold({
+      members: [],
+      residencies: [
+        res(201, null, 'owner', 'Es A'),
+        res(202, null, 'family_member', 'Es B'),
+      ],
+      delegation: { admin_person_id: 202, source: 'manager', ended_at: null },
+      detailed: true,
+    });
+    assert.ok(h.admin);
+    assert.equal(h.admin.name, 'Es B');
+    assert.equal(h.admin.is_admin, true);
+    assert.deepEqual(h.members.map((m) => m.name), ['Es A']);
+    assert.equal(h.total, 2);
+  });
+
   it('kapi erisimi askisi: acik askiya alma kaydi ya da pasife alinmis uyelik "access_suspended" olur', () => {
     const h = buildHousehold({
       members: [member(1, 'APARTMENT_ADMIN'), member(2, 'FAMILY_MEMBER', { is_active: false }), member(3, 'FAMILY_MEMBER')],

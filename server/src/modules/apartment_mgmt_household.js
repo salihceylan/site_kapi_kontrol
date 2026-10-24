@@ -75,9 +75,9 @@ const USERS_SQL = `
  *  - detailed: true = site yoneticisi / super, false = kurul (ad + iliski)
  * @returns {{ admin: object|null, absent_owner: object|null, members: object[], total: number }}
  */
-export function buildHousehold({ residencies = [], members = [], legacyUserCode = null, extraUsers = new Map(), suspended = new Set(), detailed = false }) {
+export function buildHousehold({ residencies = [], members = [], legacyUserCode = null, extraUsers = new Map(), suspended = new Set(), delegation = null, detailed = false }) {
   const activeMembers = members.filter((m) => m.is_active !== false).map((m) => ({ ...m, user_code: Number(m.user_code) }));
-  const roles = resolveApartmentRoles({ members: activeMembers, legacyUserCode, residencies });
+  const roles = resolveApartmentRoles({ members: activeMembers, legacyUserCode, residencies, delegation });
 
   // Uyeligi pasif olup baska aktif uyeligi olmayan kisi = kapi erisimi askida / pasife alinmis.
   const activeCodes = new Set(activeMembers.map((m) => m.user_code));
@@ -117,7 +117,20 @@ export function buildHousehold({ residencies = [], members = [], legacyUserCode 
   }
 
   const adminCode = roles.adminUserCode;
-  const adminIdx = adminCode === null ? -1 : people.findIndex((p) => p.user_code === adminCode);
+  const adminPersonId = roles.adminPersonId;
+  let adminIdx = -1;
+  if (adminCode !== null) {
+    adminIdx = people.findIndex((p) => p.user_code === adminCode);
+  }
+  if (adminIdx < 0 && adminPersonId !== null) {
+    adminIdx = people.findIndex((p) => p.person_id === adminPersonId);
+  }
+  if (adminIdx < 0 && people.length > 0) {
+    let candidateIdx = people.findIndex((p) => p.relation === 'tenant');
+    if (candidateIdx < 0) candidateIdx = people.findIndex((p) => p.relation === 'owner');
+    if (candidateIdx < 0) candidateIdx = 0;
+    adminIdx = candidateIdx;
+  }
   const ownerIdx = roles.owner ? people.findIndex((p) => p.person_id === asCode(roles.owner.person_id)) : -1;
   // Kiraci varsa ve malik admin degilse malik OTURMAZ: ayri satir.
   const absentIdx = roles.tenant && ownerIdx >= 0 && ownerIdx !== adminIdx ? ownerIdx : -1;
@@ -195,12 +208,15 @@ export async function getApartmentHousehold({ siteCode, apartmentId, detailed = 
     }
   }
 
+  const delegation = (await db.query(`SELECT * FROM apartment_admin_delegations WHERE apartment_id = $1 AND ended_at IS NULL LIMIT 1`, [id])).rows?.[0] ?? null;
+
   const household = buildHousehold({
     residencies,
     members,
     legacyUserCode: legacy !== null && (extraUsers.has(legacy) || known.has(legacy)) ? legacy : null,
     extraUsers,
     suspended,
+    delegation,
     detailed,
   });
   return {

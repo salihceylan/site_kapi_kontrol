@@ -57,10 +57,12 @@ export async function loadApartmentState(db, apartmentId, { lock = false } = {})
     sponsor_person_id: row.sponsor_person_id === null || row.sponsor_person_id === undefined ? null : Number(row.sponsor_person_id),
     name: row.name ?? FALLBACK_NAME,
   }));
+  const delegation = await openDelegation(db, apartmentId);
   const roles = resolveApartmentRoles({
     members: members.map((m) => ({ ...m, user_code: Number(m.user_code) })),
     legacyUserCode: apt.resident_user_code,
     residencies,
+    delegation,
   });
   return {
     apartment: {
