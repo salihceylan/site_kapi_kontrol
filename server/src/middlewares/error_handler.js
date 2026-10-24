@@ -74,6 +74,22 @@ export function respondWithServiceError(res, error, { fallbackMessage = GENERIC_
     return res.status(status).json(body);
   }
 
+  // Bilinen veritabani kisit hatalari (23505 = unique_violation): kullaniciya mantikli hata mesaji dondur
+  if (error?.code === '23505') {
+    let msg = 'Bu kayit sistemde zaten mevcut.';
+    const constraint = String(error.constraint || '');
+    if (constraint.includes('assigned_device') || constraint === 'idx_site_doors_assigned_device_unique') {
+      msg = 'Bu cihaz (SmartKeyPass) zaten baska bir kapiya atanmis.';
+    } else if (constraint.includes('sites_name') || constraint === 'sites_name_key') {
+      msg = 'Bu isimde bir site zaten kayitli.';
+    } else if (constraint.includes('email')) {
+      msg = 'Bu e-posta adresiyle kayitli bir hesap zaten var.';
+    } else if (constraint.includes('phone')) {
+      msg = 'Bu telefon numarasiyla kayitli bir hesap zaten var.';
+    }
+    return res.status(409).json({ error: msg, code: 'RECORD_CONFLICT' });
+  }
+
   const looksUnexpected =
     status !== null ||
     error instanceof TypeError ||

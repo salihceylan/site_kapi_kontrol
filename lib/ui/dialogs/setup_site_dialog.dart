@@ -80,18 +80,6 @@ class _BlockDraft {
   }
 }
 
-class _DoorDraft {
-  _DoorDraft({required this.name})
-      : nameController = TextEditingController(text: name);
-
-  String name;
-  final TextEditingController nameController;
-
-  void dispose() {
-    nameController.dispose();
-  }
-}
-
 /// Site kurma / site başvurusu formu (Platform: site başvurusu).
 ///
 /// - [SetupSiteMode.instant]: eski "Site Kurulum Sihirbazı" (site yöneticisi ve süper kullanıcı; anlık).
@@ -212,7 +200,6 @@ class _SetupSiteDialogState extends State<SetupSiteDialog> {
   ManagementType _managementType = ManagementType.apartmentSite;
 
   final List<_BlockDraft> _blocks = [];
-  final List<_DoorDraft> _doors = [];
   bool _submitting = false;
   String? _error;
   String? _infoNote;
@@ -268,15 +255,9 @@ class _SetupSiteDialogState extends State<SetupSiteDialog> {
           ),
         );
       }
-      for (final door in prefill.doors.take(SetupSiteDialog.maxDoors)) {
-        _doors.add(_DoorDraft(name: door.name.isEmpty ? 'Kapı ${_doors.length + 1}' : door.name));
-      }
     }
-    // Başlangıçta 1 blok ekle; kapılar isteğe bağlıdır (kullanıcı isterse silebilir veya kapısız kurabilir)
+    // Başlangıçta 1 blok ekle (kapılar site kurulumunda girilmez; Akıllı Geçiş Modülü'nde yönetilir)
     if (_blocks.isEmpty) _blocks.add(_BlockDraft(name: 'A Blok', apartmentCount: 10));
-    if (_doors.isEmpty) {
-      _doors.add(_DoorDraft(name: 'Ana Giriş Kapısı'));
-    }
 
     if (_isApplication) {
       _selectedDevice = widget.deviceUid ?? _noDevice;
@@ -316,9 +297,6 @@ class _SetupSiteDialogState extends State<SetupSiteDialog> {
     _noteController.dispose();
     for (final b in _blocks) {
       b.dispose();
-    }
-    for (final d in _doors) {
-      d.dispose();
     }
     super.dispose();
   }
@@ -412,22 +390,6 @@ class _SetupSiteDialogState extends State<SetupSiteDialog> {
     });
   }
 
-  void _addDoor() {
-    if (_doors.length >= SetupSiteDialog.maxDoors) return;
-    final nextIndex = _doors.length + 1;
-    setState(() {
-      _doors.add(_DoorDraft(name: 'Kapı $nextIndex'));
-    });
-  }
-
-  void _removeDoor(int index) {
-    if (index < 0 || index >= _doors.length) return;
-    setState(() {
-      final removed = _doors.removeAt(index);
-      removed.dispose();
-    });
-  }
-
   /// Daire sayısı alanı: 1..5000 tam sayı (sunucu aynı aralığı uygular; boş / geçersiz değer sessizce
   /// düzeltilmez).
   String? _validateApartmentCount(String? value) {
@@ -462,15 +424,7 @@ class _SetupSiteDialogState extends State<SetupSiteDialog> {
       return;
     }
 
-    final doorsPayload = _doors.asMap().entries.map((entry) {
-      final idx = entry.key;
-      final d = entry.value;
-      final dName = d.nameController.text.trim();
-      return {
-        'name': dName.isEmpty ? 'Kapı ${idx + 1}' : dName,
-        'doorIndex': idx + 1,
-      };
-    }).toList();
+    const doorsPayload = <Map<String, dynamic>>[];
 
     FocusScope.of(context).unfocus();
     setState(() {
@@ -934,52 +888,6 @@ class _SetupSiteDialogState extends State<SetupSiteDialog> {
       ],
       const SizedBox(height: AppSpace.xl),
 
-      // Dinamik Kapılar Başlığı (İsteğe Bağlı)
-      SectionHeader(
-        title: 'Kapılar (İsteğe Bağlı)',
-        icon: Icons.meeting_room_rounded,
-        trailing: TextButton.icon(
-          onPressed: (_submitting || _doors.length >= SetupSiteDialog.maxDoors)
-              ? null
-              : _addDoor,
-          icon: const Icon(Icons.add_rounded, size: 18),
-          label: const Text('Kapı Ekle'),
-        ),
-      ),
-      Text(
-        _doors.length >= SetupSiteDialog.maxDoors
-            ? 'En fazla ${SetupSiteDialog.maxDoors} kapı eklenebilir.'
-            : 'Giriş ve çıkış kapılarını şimdi ekleyebilir veya daha sonra dilediğiniz zaman düzenleyebilirsiniz.',
-        style: th.bodySmall,
-      ),
-      const SizedBox(height: AppSpace.md),
-
-      if (_doors.isEmpty) ...[
-        DialogPanel(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: AppSpace.sm),
-            child: Row(
-              children: [
-                Icon(Icons.info_outline_rounded, size: 20, color: p.textMuted),
-                const SizedBox(width: AppSpace.sm),
-                Expanded(
-                  child: Text(
-                    'Henüz kapı eklenmedi. Dilerseniz şimdi kapı ekleyebilir veya kuruluma kapısız devam edebilirsiniz.',
-                    style: th.bodySmall?.copyWith(color: p.textMuted),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ] else ...[
-        // Kapı Kartları Listesi (ilk 8 satır girişte kademeli belirir)
-        for (var idx = 0; idx < _doors.length; idx++) ...[
-          if (idx > 0) const SizedBox(height: AppSpace.sm),
-          StaggeredEntry(index: idx, child: _buildDoorRow(context, idx)),
-        ],
-      ],
-
       if (_isApplication) ...[
         const SizedBox(height: AppSpace.xl),
         // Süper kullanıcıya iletilecek isteğe bağlı not.
@@ -1145,7 +1053,7 @@ class _SetupSiteDialogState extends State<SetupSiteDialog> {
           Text(
             _selectedDevice == _noDevice
                 ? 'Cihaz sonra eklenebilir.'
-                : 'Onaylanırsa bu cihaz 1. kapıya bağlanır (cihaz hâlâ hesabınızdaysa).',
+                : 'Onaylanırsa bu cihaz siteye bağlanır (cihaz hâlâ hesabınızdaysa).',
             style: th.bodySmall,
           ),
         ],
@@ -1216,7 +1124,7 @@ class _SetupSiteDialogState extends State<SetupSiteDialog> {
           const SizedBox(height: AppSpace.sm),
           // Sarabilen hap: tek satırlı StatusChip büyük yazıda "Kapı 1'e Atan…" diye keserdi.
           const DialogMetaPill(
-            'Kapı 1\'e Atanacak',
+            'Siteye Bağlanacak',
             tone: AppTone.success,
             icon: Icons.link_rounded,
           ),
@@ -1307,49 +1215,6 @@ class _SetupSiteDialogState extends State<SetupSiteDialog> {
             ],
           );
         },
-      ),
-    );
-  }
-
-  /// Tek kapı satırı: [kapı ikon rozeti] [kapı adı] [sil]. Büyük yazıda (>= 1,75x) rozet gizlenir.
-  Widget _buildDoorRow(BuildContext context, int idx) {
-    final p = context.palette;
-    final d = _doors[idx];
-    return DialogPanel(
-      child: Row(
-        children: [
-          if (!hideRowOrbs(context)) ...[
-            const IconOrb(
-              icon: Icons.meeting_room_rounded,
-              size: 32,
-              shape: IconOrbShape.squircle,
-            ),
-            const SizedBox(width: AppSpace.md),
-          ],
-          Expanded(
-            child: TextFormField(
-              controller: d.nameController,
-              enabled: !_submitting,
-              onChanged: (_) => setState(() {}),
-              decoration: InputDecoration(
-                labelText: 'Kapı ${idx + 1} Adı',
-                hintText: 'Örn: Ana Giriş, Blok Girişi, Otopark...',
-                isDense: true,
-                border: const UnderlineInputBorder(),
-              ),
-              validator: (val) => (val ?? '').trim().length > SetupSiteDialog.maxLabelLength
-                  ? 'Kapı adı en çok ${SetupSiteDialog.maxLabelLength} karakter olabilir.'
-                  : null,
-            ),
-          ),
-          IconButton(
-              onPressed: _submitting ? null : () => _removeDoor(idx),
-              icon: Icon(Icons.delete_outline_rounded, color: AppTone.danger.ink(p), size: 20),
-              // Bağlamlı ipucu / ekran okuyucu etiketi: hangi kapı silinir.
-              tooltip:
-                  'Kapıyı sil: ${d.nameController.text.trim().isEmpty ? 'Kapı ${idx + 1}' : d.nameController.text.trim()}',
-            ),
-        ],
       ),
     );
   }

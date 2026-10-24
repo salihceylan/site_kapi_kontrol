@@ -822,15 +822,33 @@ export async function setupSiteWithClaimedDevice({
       devQuery = `SELECT * FROM devices WHERE UPPER(device_uid) = $1 AND (owner_user_id = $2 OR assigned_user_code = $3) LIMIT 1 FOR UPDATE`;
       devParams = [targetDeviceUid, user.id, user.user_code];
     } else {
-      devQuery = `SELECT * FROM devices WHERE (owner_user_id = $1 OR assigned_user_code = $2) ORDER BY claimed_at DESC NULLS LAST LIMIT 1 FOR UPDATE`;
+      devQuery = `SELECT * FROM devices WHERE (owner_user_id = $1 OR assigned_user_code = $2) AND site_code IS NULL ORDER BY claimed_at DESC NULLS LAST LIMIT 1 FOR UPDATE`;
       devParams = [user.id, user.user_code];
     }
 
     const devRes = await client.query(devQuery, devParams);
-    const dev = devRes.rowCount > 0 ? devRes.rows[0] : null;
+    let dev = devRes.rowCount > 0 ? devRes.rows[0] : null;
     if (!dev && user.role !== 'super_user') {
       if (targetDeviceUid) {
         throw httpError(404, 'Belirtilen cihaz hesabınıza ait değil.');
+      }
+    }
+
+    
+    if (dev) {
+      if (targetDeviceUid && dev.site_code) {
+        throw httpError(409, 'Belirtilen cihaz zaten başka bir sitede kullanımda.');
+      }
+      const doorAssigned = await client.query(
+        'SELECT 1 FROM site_doors WHERE assigned_device_id = $1 LIMIT 1',
+        [dev.id],
+      );
+      if (doorAssigned.rowCount > 0) {
+        if (targetDeviceUid) {
+          throw httpError(409, 'Belirtilen cihaz zaten başka bir kapıya atanmış.');
+        } else {
+          dev = null;
+        }
       }
     }
 

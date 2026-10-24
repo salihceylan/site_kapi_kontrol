@@ -263,7 +263,7 @@ void main() {
       expect(call['blocks'], <Map<String, dynamic>>[
         <String, dynamic>{'name': 'A Blok', 'apartmentCount': 10},
       ]);
-      expect(call['doorCount'], 1);
+      expect(call['doorCount'], 0);
       expect(auth.setupCalls, isEmpty, reason: 'bireysel kullanıcıda anlık kurulum ucu hiç çağrılmaz');
 
       // Başarı iletisi (sözleşme metni).
@@ -306,7 +306,7 @@ void main() {
       expect(find.text('ESP32_USED'), findsNothing, reason: 'başka siteye atanmış cihaz önerilmez');
       await t.tap(find.text('ESP32_FREE2').last);
       await settleFor(t, 400);
-      expect(find.textContaining('Onaylanırsa bu cihaz 1. kapıya bağlanır'), findsOneWidget);
+      expect(find.textContaining('Onaylanırsa bu cihaz siteye bağlanır'), findsOneWidget);
 
       await _enter(t, 'Site Adı *', 'Gül Sitesi');
       await _submit(t);
@@ -379,7 +379,7 @@ void main() {
         <String, dynamic>{'name': 'Kuzey', 'apartmentCount': 12},
         <String, dynamic>{'name': 'Güney', 'apartmentCount': 8},
       ]);
-      expect((call['doors'] as List).map((d) => (d as Map)['name']), <String>['Ana Kapı', 'Otopark']);
+      expect(call['doors'], isEmpty);
     });
 
     testWidgets('"Yeniden başvur": önceki cihaz artık hesapta değilse sessizce cihazsız', (t) async {
@@ -494,10 +494,7 @@ void main() {
       await _submit(t);
       expect(find.text('Blok adı en çok 60 karakter olabilir.'), findsOneWidget);
       await t.enterText(names.at(1), 'B Blok');
-      await t.enterText(find.widgetWithText(TextFormField, 'Kapı 1 Adı'), 'k' * 61);
       await t.pump();
-      await _submit(t);
-      expect(find.text('Kapı adı en çok 60 karakter olabilir.'), findsOneWidget);
     });
 
     testWidgets('blok ve kapı üst sınırı 100: ekleme düğmesi kapanır, açıklama gösterilir', (t) async {
@@ -762,13 +759,8 @@ void main() {
       await scrollTo(t, find.text('Blok Ekle'));
       await t.tap(find.text('Blok Ekle'));
       await settleFor(t, 200);
-      await scrollTo(t, find.text('Kapı Ekle'));
-      await t.tap(find.text('Kapı Ekle'));
-      await settleFor(t, 200);
       expect(find.byTooltip('Bloğu sil: A Blok'), findsOneWidget);
       expect(find.byTooltip('Bloğu sil: B Blok'), findsOneWidget);
-      expect(find.byTooltip('Kapıyı sil: Ana Giriş Kapısı'), findsOneWidget);
-      expect(find.byTooltip('Kapıyı sil: Kapı 2'), findsOneWidget);
       final handle = t.ensureSemantics();
       expect(
         t.getSemantics(find.byTooltip('Bloğu sil: B Blok')).getSemanticsData().tooltip,

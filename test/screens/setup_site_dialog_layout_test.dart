@@ -102,19 +102,13 @@ void main() {
     expect(find.text('Bağlanacak Cihaz:'), findsOneWidget);
     expect(find.byType(PrimaryActionButton), findsOneWidget);
 
-    // Blok ve kapı ekle: satırlar çoğalır (silme düğmeleri çıkar), taşma olmamalı.
+    // Blok ekle: satırlar çoğalır (silme düğmeleri çıkar), taşma olmamalı.
     await scrollTo(t, find.text('Blok Ekle'));
     await t.tap(find.text('Blok Ekle'));
     await settleFor(t);
-    await scrollTo(t, find.text('Kapı Ekle'));
-    await t.tap(find.text('Kapı Ekle'));
-    await settleFor(t);
     // Silme düğmeleri hangi satırı sildiklerini ipucunda söyler (ekran okuyucu etiketi de budur).
     expect(_deleteButtons('Bloğu sil: '), findsNWidgets(2));
-    expect(_deleteButtons('Kapıyı sil: '), findsNWidgets(2));
     expect(find.byTooltip('Bloğu sil: A Blok'), findsOneWidget);
-    expect(find.byTooltip('Kapıyı sil: Kapı 2'), findsOneWidget);
-    await scrollTo(t, _deleteButtons('Kapıyı sil: ').last);
 
     // Boş site adıyla gönderim: doğrulama iletisi.
     await scrollTo(t, find.byType(PrimaryActionButton));
@@ -153,7 +147,7 @@ void main() {
     await t.tap(find.byType(PrimaryActionButton));
     await settleFor(t, 800);
 
-    expect(auth.setups, ['Güneş Sitesi|1|1|null']);
+    expect(auth.setups, ['Güneş Sitesi|1|0|null']);
     expect(find.byType(InlineNotice), findsOneWidget);
     expect(find.textContaining('Bu site adı zaten kayıtlı'), findsOneWidget);
   });
@@ -211,19 +205,16 @@ void main() {
         dark: false,
       );
 
-      // Başlık + cihaz paneli + kapı satırı rozetleri; atama durumu metni korunur.
-      expect(find.byType(IconOrb), findsAtLeastNWidgets(3));
-      expect(find.text("Kapı 1'e Atanacak"), findsOneWidget);
+      // Başlık + cihaz paneli rozetleri; atama durumu metni korunur.
+      expect(find.byType(IconOrb), findsAtLeastNWidgets(2));
+      expect(find.text('Siteye Bağlanacak'), findsOneWidget);
 
-      // Başlangıçta 1 blok + 1 kapı satırı; eklenince satırlar da kademeli giriş sarmalayıcısındadır.
-      expect(find.byType(StaggeredEntry), findsNWidgets(2));
+      // Başlangıçta 1 blok satırı; eklenince satırlar da kademeli giriş sarmalayıcısındadır.
+      expect(find.byType(StaggeredEntry), findsNWidgets(1));
       await scrollTo(t, find.text('Blok Ekle'));
       await t.tap(find.text('Blok Ekle'));
       await settleFor(t);
-      await scrollTo(t, find.text('Kapı Ekle'));
-      await t.tap(find.text('Kapı Ekle'));
-      await settleFor(t);
-      expect(find.byType(StaggeredEntry), findsNWidgets(4));
+      expect(find.byType(StaggeredEntry), findsNWidgets(2));
       expect(t.takeException(), isNull);
     },
   );
