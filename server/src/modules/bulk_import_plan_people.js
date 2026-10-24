@@ -244,8 +244,17 @@ export function planPeople({ rows, snapshot, today }) {
   const results = [];
 
   for (const row of rows) {
-    const result = newRowResult(row.n);
     const cells = row.cells;
+    // Ön doldurulmuş şablonda yalnızca blok ve daire kalmış, hiçbir kişi verisi girilmemişse boş satır sayıp atla
+    const hasPerson = Boolean(
+      (cells.ad_soyad !== null && cells.ad_soyad !== undefined && String(cells.ad_soyad).trim() !== '') ||
+      (cells.telefon !== null && cells.telefon !== undefined && String(cells.telefon).trim() !== '') ||
+      (cells.e_posta !== null && cells.e_posta !== undefined && String(cells.e_posta).trim() !== '') ||
+      (cells.plaka !== null && cells.plaka !== undefined && String(cells.plaka).trim() !== '')
+    );
+    if (!hasPerson) continue;
+
+    const result = newRowResult(row.n);
     const issue = (code, field, ctx, severity) => addIssue(result, KIND, code, field, ctx, severity);
     const local = { residencyUnchanged: 0, vehicleUnchanged: 0, linkedKey: null, touch: null };
     let targetSig = '';
@@ -485,8 +494,16 @@ export function planVehicles({ rows, snapshot }) {
   const results = [];
 
   for (const row of rows) {
-    const result = newRowResult(row.n);
     const cells = row.cells;
+    // Ön doldurulmuş şablonda yalnızca blok ve daire kalmış, hiçbir araç/plaka verisi girilmemişse boş satır sayıp atla
+    const hasVehicle = Boolean(
+      (cells.plaka !== null && cells.plaka !== undefined && String(cells.plaka).trim() !== '') ||
+      (cells.e_posta !== null && cells.e_posta !== undefined && String(cells.e_posta).trim() !== '') ||
+      (cells.ad_soyad !== null && cells.ad_soyad !== undefined && String(cells.ad_soyad).trim() !== '')
+    );
+    if (!hasVehicle) continue;
+
+    const result = newRowResult(row.n);
     const issue = (code, field, ctx, severity) => addIssue(result, KIND, code, field, ctx, severity);
     const local = { vehicleUnchanged: 0, linkedKey: null };
     let targetSig = '';

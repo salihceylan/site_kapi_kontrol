@@ -1,9 +1,9 @@
 // Toplu yükleme şablonu (Platform Faz 2b).
 //
-// XLSX: `Daireler` sayfası sitenin MEVCUT blok / daire numaralarıyla ön dolu (`exports/apartments` zarfından),
-// `Kişiler` ve `Araçlar` yalnız başlık satırı, `Açıklama` sayfası sütunları, kuralları, örnekleri ve ilişki
-// sözlüğünü anlatır. CSV: seçilen türün başlık satırı (`;` + BOM); daire şablonu ön doludur. Veri sayfalarına
-// ÖRNEK SATIR KONMAZ: yanlışlıkla yüklenmesin diye örnekler yalnız `Açıklama` sayfasındadır.
+// XLSX: `Daireler`, `Kişiler` ve `Araçlar` sayfaları sitenin MEVCUT blok / daire numaralarıyla ön dolu
+// (`exports/apartments` zarfından), `Açıklama` sayfası sütunları, kuralları, örnekleri ve ilişki
+// sözlüğünü anlatır. CSV: seçilen türün başlık satırı (`;` + BOM); daire, kişi ve araç şablonları ön doludur.
+// Veri sayfalarına ÖRNEK SATIR KONMAZ: yanlışlıkla yüklenmesin diye örnekler yalnız `Açıklama` sayfasındadır.
 import 'package:site_kapi_kontrol/models/bulk_import.dart';
 import 'package:site_kapi_kontrol/services/bulk_csv_codec.dart';
 import 'package:site_kapi_kontrol/services/bulk_export_renderer.dart';
@@ -42,7 +42,11 @@ List<ImportKind> _groupOf(ImportKind kind) => switch (kind) {
 };
 
 bool _prefillsApartments(ImportKind kind) =>
-    kind == ImportKind.apartments || kind == ImportKind.allInOne || kind == ImportKind.openingBalances;
+    kind == ImportKind.apartments ||
+    kind == ImportKind.people ||
+    kind == ImportKind.vehicles ||
+    kind == ImportKind.allInOne ||
+    kind == ImportKind.openingBalances;
 
 const Map<String, String> _relationLabels = <String, String>{
   'owner': 'Malik',

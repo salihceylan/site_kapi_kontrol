@@ -289,7 +289,7 @@ void main() {
     final spec = testSpec();
     final apartments = ExportEnvelope.fromJson(apartmentsEnvelopeJson());
 
-    test('XLSX: seçilen tür ilk sayfa, daireler ön dolu, kişiler ve araçlar yalnız başlık, Açıklama sayfası', () {
+    test('XLSX: seçilen tür ilk sayfa, daireler, kişiler ve araçlar blok/daire ön dolu, Açıklama sayfası', () {
       final f = buildImportTemplate(
         spec: spec,
         kind: ImportKind.people,
@@ -301,16 +301,23 @@ void main() {
       final reader = XlsxReader.open(f.bytes);
       expect(reader.sheets.map((s) => s.name), <String>['Kişiler', 'Daireler', 'Araçlar', 'Açıklama']);
       final people = reader.readSheet(reader.sheets[0]);
-      expect(people.rows.length, 1, reason: 'örnek satır KONMAZ');
+      expect(people.rows.length, 4, reason: '1 başlık + sitenin 3 dairesi ön dolu');
       expect(people.rows.first.cells, <Object?>[
         'Ad Soyad*', 'Telefon', 'E-posta', 'Blok', 'Daire No', 'İlişki', 'Giriş Tarihi', 'Plaka',
       ]);
+      expect(people.rows[1].cells.take(5), <Object?>[
+        null, null, null, 'A Blok', '1',
+      ]);
+      expect(people.rows[3].cells[3], 'B Blok');
+      expect(people.rows[3].cells[4], '1');
       final apt = reader.readSheet(reader.sheets[1]);
       expect(apt.rows.length, 4);
       expect(apt.rows[1].cells.take(4), <Object?>['A Blok', '1', 0, '2+1']);
       expect(apt.rows[3].cells[0], 'B Blok');
       final vehicles = reader.readSheet(reader.sheets[2]);
-      expect(vehicles.rows.length, 1);
+      expect(vehicles.rows.length, 4, reason: '1 başlık + sitenin 3 dairesi ön dolu');
+      expect(vehicles.rows[1].cells[2], 'A Blok');
+      expect(vehicles.rows[1].cells[3], '1');
       final info = reader.readSheet(reader.sheets[3]);
       final text = info.rows.map((r) => r.cells.join(' ')).join('\n');
       expect(text, contains('İlişki sözlüğü'));
@@ -334,6 +341,22 @@ void main() {
       expect(rows.first.cells['blok'], 'A Blok');
       expect(rows.first.cells['daire_no'], '1');
       expect(rows.first.cells['kat'], 0);
+    });
+
+    test('kişiler şablonunda doldurulmamış (yalnız blok/daire no içeren) satırlar boş sayılır', () {
+      final f = buildImportTemplate(
+        spec: spec,
+        kind: ImportKind.people,
+        format: ExportFormat.xlsx,
+        apartments: apartments,
+      );
+      final out = runParse(
+        ParseRequest(bytes: f.bytes, fileName: f.fileName, kind: ImportKind.people, spec: spec),
+      ) as ParseDone;
+      expect(out.table.sheetName, 'Kişiler');
+      final result = extractImportRows(out.table, out.header.mapping, spec.of(ImportKind.people)!);
+      expect(result.rows, isEmpty, reason: 'Kişi bilgisi girilmemiş ön doldurulmuş satırlar aktarılmaz');
+      expect(result.blankRows, 3, reason: 'Sitenin 3 dairesi kişi girilmediği için boş satır sayılır');
     });
 
     test('daire zarfı yoksa daire sayfası yalnız başlık', () {

@@ -37,6 +37,8 @@ enum BulkStep { kind, file, mapping, preview, result }
 /// Kişiler girişindeki türler: «Hepsi bir arada» önerilen (ilk), ardından klasik üçlü.
 const List<ImportKind> kClassicImportKinds = <ImportKind>[
   ImportKind.allInOne,
+  ImportKind.apartments,
+  ImportKind.people,
   ImportKind.vehicles,
 ];
 

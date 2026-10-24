@@ -168,11 +168,8 @@ class _TemplateCard extends StatelessWidget {
           const SectionHeader(title: 'Şablon', icon: Icons.description_outlined),
           const SizedBox(height: AppSpace.sm),
           Text(
-            kind == ImportKind.apartments || kind == ImportKind.allInOne || kind == ImportKind.openingBalances
-                ? 'Şablondaki daire sayfası sitenizin mevcut blok ve daire numaralarıyla hazır gelir; boş '
-                      'alanları doldurmanız yeterli.'
-                : 'Şablonu indirip doldurun ya da kendi dosyanızı kullanın. Başlıklar tanınırsa sütunlar '
-                      'otomatik eşlenir. Şablonda örnek satır yoktur.',
+            'Şablon sitenizin mevcut blok ve daire numaraları doldurulmuş olarak hazır gelir; ilgili '
+            'bilgileri yazmanız yeterlidir. Kendi dosyanızı da doğrudan yükleyebilirsiniz.',
             style: th.bodyMedium?.copyWith(color: p.textSecondary),
           ),
           const SizedBox(height: AppSpace.md),

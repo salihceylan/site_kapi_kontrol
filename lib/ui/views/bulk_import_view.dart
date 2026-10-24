@@ -102,13 +102,10 @@ class BulkImportViewState extends State<BulkImportView> {
       unawaited(
         _c.loadSpec().then((_) {
           if (!mounted) return;
-          final wanted = widget.initialKind ?? ImportKind.allInOne;
-          final ImportKind initial = wanted == ImportKind.allInOne && _c.spec?.of(ImportKind.allInOne) == null
-              ? (_c.allowedKinds.contains(ImportKind.people) ? ImportKind.people : _c.allowedKinds.first)
-              : wanted;
-          // Sunucu «Hepsi bir arada» türünü bilmiyorsa (eski sürüm) klasik Kişiler türüne düşülür.
-          final chosen = initial;
-          if (_c.spec?.of(chosen) != null && _c.kind == null) _c.selectKind(chosen);
+          final initial = widget.initialKind;
+          if (initial != null && _c.spec?.of(initial) != null && _c.kind == null) {
+            _c.selectKind(initial);
+          }
         }),
       );
     }

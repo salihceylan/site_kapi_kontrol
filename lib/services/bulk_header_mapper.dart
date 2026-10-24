@@ -304,6 +304,35 @@ ExtractResult extractImportRows(
       blank++;
       continue;
     }
+    final hasAdSoyad = fields.any((f) => f.$1.key == 'ad_soyad');
+    final hasTelefon = fields.any((f) => f.$1.key == 'telefon');
+    final hasPlaka = fields.any((f) => f.$1.key == 'plaka');
+    final hasTutar = fields.any((f) => f.$1.key == 'tutar');
+
+    if (hasAdSoyad && hasTelefon) {
+      final hasPerson = cells['ad_soyad'] != null ||
+          cells['telefon'] != null ||
+          cells['e_posta'] != null ||
+          cells['plaka'] != null;
+      if (!hasPerson) {
+        blank++;
+        continue;
+      }
+    } else if (hasPlaka && !hasTelefon) {
+      final hasVehicle = cells['plaka'] != null ||
+          cells['ad_soyad'] != null ||
+          cells['e_posta'] != null;
+      if (!hasVehicle) {
+        blank++;
+        continue;
+      }
+    } else if (hasTutar) {
+      final hasBalance = cells['tutar'] != null;
+      if (!hasBalance) {
+        blank++;
+        continue;
+      }
+    }
     rows.add(ImportRow(n: source.n, cells: cells));
     if (rows.length > maxRows) {
       throw SpreadsheetException(
