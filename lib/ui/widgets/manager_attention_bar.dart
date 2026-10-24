@@ -89,12 +89,16 @@ class _ManagerAttentionBarState extends State<ManagerAttentionBar> {
     });
   }
 
-  static (String, int) _describe(FinanceHomeAttention a) {
+  static (String, int, String) _describe(FinanceHomeAttention a) {
     switch (a.key) {
       case 'unassigned_payments':
-        return ('${a.count} tahsilat kasa / bankaya eşlenmedi', FinanceHomeTab.cash);
+        return ('${a.count} tahsilat kasa / bankaya eşlenmedi', FinanceHomeTab.cash, 'Eşle');
+      case 'bank_lines':
+        return ('${a.count} banka hareketi onay bekliyor', FinanceHomeTab.cash, 'Eşle');
+      case 'payment_notices':
+        return ('${a.count} ödeme bildirimi onay bekliyor', FinanceHomeTab.notices, 'İncele');
       default:
-        return ('${a.count} bekleyen iş var', FinanceHomeTab.balances);
+        return ('${a.count} bekleyen iş var', FinanceHomeTab.balances, 'İncele');
     }
   }
 
@@ -144,15 +148,36 @@ class _ManagerAttentionBarState extends State<ManagerAttentionBar> {
                       OutlinedButton(
                         key: ValueKey<String>('month_attention_${site.code}_${a.key}'),
                         style: OutlinedButton.styleFrom(
-                          foregroundColor: AppShowcaseColors.onFocus,
-                          side: const BorderSide(color: AppShowcaseColors.onFocus),
+                          backgroundColor: AppShowcaseColors.onFocus,
+                          foregroundColor: AppShowcaseColors.focus,
+                          side: BorderSide.none,
+                          shape: const StadiumBorder(),
+                          padding: const EdgeInsets.symmetric(horizontal: AppSpace.md, vertical: AppSpace.xs),
                           minimumSize: const Size(48, 48),
                         ),
                         onPressed: () => widget.onOpenFinance(site.code, _describe(a).$2),
                         child: Semantics(
-                          label: '${multi ? '${site.label}: ' : ''}${_describe(a).$1}. Eşle',
+                          label: '${multi ? '${site.label}: ' : ''}${_describe(a).$1}. ${_describe(a).$3}',
                           excludeSemantics: true,
-                          child: const Text('Eşle'),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                _describe(a).$3,
+                                style: const TextStyle(
+                                  color: AppShowcaseColors.focus,
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              const Icon(
+                                Icons.arrow_forward_rounded,
+                                size: 16,
+                                color: AppShowcaseColors.focus,
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ],

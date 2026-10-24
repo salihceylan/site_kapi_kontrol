@@ -68,9 +68,27 @@ void main() {
     expect(find.byKey(const ValueKey<String>('month_attention_bar')), findsOneWidget);
     expect(find.text('Dikkat edilmesi gereken 1 iş var'), findsOneWidget);
     expect(find.textContaining('2 tahsilat kasa / bankaya eşlenmedi'), findsOneWidget);
+    expect(find.text('Eşle'), findsOneWidget);
+    expect(find.byIcon(Icons.arrow_forward_rounded), findsOneWidget);
     _expectNoMonthPanel();
     await t.tap(find.byKey(const ValueKey<String>('month_attention_1_unassigned_payments')));
     expect(opened, <(int, int)>[(1, FinanceHomeTab.cash)]);
+  });
+
+  testWidgets('genel bekleyen iş varken buton İncele yazar ve bakiyeler sekmesini açar', (t) async {
+    final opened = <(int, int)>[];
+    await t.pumpWidget(_wrap(ManagerAttentionBar(
+      sites: sites,
+      fetch: (_) async => _home(attention: const [FinanceHomeAttention(key: 'general', count: 4)]),
+      onOpenFinance: (s, tab) => opened.add((s, tab)),
+    )));
+    await t.pumpAndSettle();
+    expect(find.byKey(const ValueKey<String>('month_attention_bar')), findsOneWidget);
+    expect(find.text('Dikkat edilmesi gereken 1 iş var'), findsOneWidget);
+    expect(find.textContaining('4 bekleyen iş var'), findsOneWidget);
+    expect(find.text('İncele'), findsOneWidget);
+    await t.tap(find.byKey(const ValueKey<String>('month_attention_1_general')));
+    expect(opened, <(int, int)>[(1, FinanceHomeTab.balances)]);
   });
 
   testWidgets('bekleyen iş yokken hiçbir şey çizilmez (boşluk bile yok)', (t) async {
