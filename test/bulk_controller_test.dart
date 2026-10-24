@@ -14,7 +14,16 @@ import 'bulk_fakes.dart';
 import 'bulk_test_support.dart';
 
 class _H {
-  _H({String? fileName = 'kisiler.csv', String csv = kPeopleCsv}) {
+  _H({
+    String? fileName = 'kisiler.csv',
+    String csv = kPeopleCsv,
+    List<ImportKind> allowedKinds = const <ImportKind>[
+      ImportKind.allInOne,
+      ImportKind.apartments,
+      ImportKind.people,
+      ImportKind.vehicles,
+    ],
+  }) {
     controller = BulkImportController(
       service: BulkService(authService: auth, api: api),
       siteCode: 12,
@@ -24,6 +33,7 @@ class _H {
       picker: fakePicker(fileName, utf8Bytes(csv)),
       siteSummaryLoader: () async => '3 blok, 120 daire',
       purgePickerCache: () async => pickerPurges++,
+      allowedKinds: allowedKinds,
     );
   }
 

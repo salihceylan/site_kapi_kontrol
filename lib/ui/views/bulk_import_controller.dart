@@ -34,11 +34,9 @@ import 'package:site_kapi_kontrol/ui/helpers/retry_lock.dart';
 
 enum BulkStep { kind, file, mapping, preview, result }
 
-/// Kişiler girişindeki türler: «Hepsi bir arada» önerilen (ilk), ardından klasik üçlü.
+/// Kişiler girişindeki türler: «Hepsi bir arada» ve «Araçlar».
 const List<ImportKind> kClassicImportKinds = <ImportKind>[
   ImportKind.allInOne,
-  ImportKind.apartments,
-  ImportKind.people,
   ImportKind.vehicles,
 ];
 

@@ -33,13 +33,23 @@ const List<(double, double, double)> kCells = <(double, double, double)>[
 const String _longSite = 'Çok Uzun Adlı Konut Yapı Kooperatifi Gül Bahçesi Sitesi Yönetimi';
 
 class _Screen {
-  _Screen({this.csv = kPeopleCsv, this.name = 'kisiler.csv'}) {
+  _Screen({
+    this.csv = kPeopleCsv,
+    this.name = 'kisiler.csv',
+    List<ImportKind> allowedKinds = const <ImportKind>[
+      ImportKind.allInOne,
+      ImportKind.apartments,
+      ImportKind.people,
+      ImportKind.vehicles,
+    ],
+  }) {
     fileBytes = utf8Bytes(csv);
     controller = BulkImportController(
       service: BulkService(authService: auth, api: api),
       siteCode: 12,
       siteName: _longSite,
       delivery: delivery,
+      allowedKinds: allowedKinds,
       parseRunner: (r) async {
         await parseGate?.future;
         return runParse(r);
