@@ -121,3 +121,13 @@ Bu kurallar projede geliştirme yapılırken MUTLAKA ve İSTİSNASIZ olarak uygu
       - Gereksiz ve kafa karıştırıcı sütunlar (`brut_m2`, `net_m2`, `arsa_payi_pay`, `arsa_payi_payda`, `not`) şablondan çıkarılmıştır.
     - **Gelecek Ajanlar İçin Kesin Yasaklar ve Koruma İlkeleri:**
       - `bulk_template.dart` içindeki akıllı blok/daire ön-doldurma mekanizmasını ASLA bozma veya boş şablon indirmeye geri döndürme.
+
+20. **Reddedilen Site Başvurusunun Panelde Sürekli Kalmaması ve "Yeniden Başvur" Düğmesinin Kaldırılması:**
+    - **Neden Yapıldı:**
+      - Bir kullanıcının site kurulum başvurusu reddedildiğinde, kullanıcının ana panelinde (Dashboard / Vitrin / Bireysel Ekran) kalıcı olarak "Yeniden başvur" butonunun ve kartının asılı kalması kullanıcı deneyimini bozuyordu.
+      - Kullanıcı başvurusunun reddedildiğini ve gerekçesini gördükten sonra bunu tek tıkla kapatabilmeli ve ana panelde sürekli aynı bildirimle karşılaşmamalıdır.
+      - Paneldeki `SiteApplicationStatusCard` üzerinde `showReapplyOnRejected: false` tanımlanarak "Yeniden başvur" düğmesi kaldırıldı; yerine ret gerekçesini onaylayıp kartı ekrandan silen "Anladım" (`site_application_dismiss_rejected`) butonu getirildi.
+      - Kapatılan ret bildirimleri `SiteApplicationTracker.consumeRejected(id)` ile yerel hafızaya (`SharedPreferences`) kaydedilir ve sayfa yenilense veya uygulama kapatılıp açılsa dahi panelde tekrar görünmez.
+    - **Gelecek Ajanlar İçin Kesin Yasaklar ve Koruma İlkeleri:**
+      - Panel ve bireysel ana ekranlardaki `SiteApplicationStatusCard` bileşenlerine "Yeniden başvur" butonunu ASLA geri koyma (`showReapplyOnRejected: false` kuralını koru).
+      - Ret kartından "Anladım" / kapatma butonunu ve `consumeRejected` mekanizmasını ASLA kaldırma.

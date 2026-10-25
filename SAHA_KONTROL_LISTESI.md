@@ -3223,3 +3223,14 @@ Dalga 2-6'nın ikinci aşaması: dekont bildirimi, banka dosyasından tahsilat, 
 - [ ] **103.6. Excel Toplu Şablon İndirildiğinde Mevcut Blok ve Dairelerin Otomatik Dolu Gelmesi:**
   - **Nasıl Test Edilir:** Sitede tanımlı blok ve daireler varken "Toplu Yükle" penceresini açıp "Şablonu İndir" butonuna tıklayın ve indirilen dosyayı açın.
   - **Beklenen Sonuç:** İndirilen şablonda sitenin mevcut tüm blok ve daire numaraları hazır doldurulmuş satırlar olarak gelmeli; yönetici blok/daire yazmakla uğraşmadan yalnızca sakin bilgilerini girerek yükleme yapabilmelidir.
+
+---
+
+## 104. 🚫 Site Başvurusu Reddedildiğinde Panelde "Yeniden Başvur" Butonunun Olmaması ve Bildirimin Kapatılabilmesi
+
+- [ ] **104.1. Reddedilen Başvuru Sonrası Panelde "Yeniden Başvur" Düğmesinin Gösterilmemesi:**
+  - **Nasıl Test Edilir:** Site kurulum başvurusu yapmış bir kullanıcının başvurusunu süper kullanıcı panelinden gerekçe yazarak reddedin. Ardından başvuran kullanıcının paneline (Dashboard / Vitrin) girin.
+  - **Beklenen Sonuç:** Ana panelde yer alan ret kartında "Yeniden başvur" düğmesi kesinlikle GÖSTERİLMEMELİDİR. Kullanıcıya yalnızca başvurusunun reddedildiği ve yöneticinin yazdığı gerekçe sunulmalıdır.
+- [ ] **104.2. Ret Bildiriminin "Anladım" Butonuyla Panelden Kalıcı Olarak Kapatılması:**
+  - **Nasıl Test Edilir:** Reddedilen başvuru kartındaki **"Anladım"** butonuna dokunun. Ardından sayfayı yenileyin veya uygulamadan çıkıp tekrar girin.
+  - **Beklenen Sonuç:** "Anladım" butonuna basıldığı anda ret kartı panelden anında silinmeli; kapatma tercihi yerel hafızaya kaydedilerek (`consumeRejected`), sayfa yenilense ya da uygulama kapatılıp açılsa bile panelde bir daha sürekli olarak görünmemelidir.

@@ -35,6 +35,7 @@ class SiteApplicationStatusCard extends StatefulWidget {
     this.onRefreshAccount,
     this.showApproved = true,
     this.showLoadFailure = true,
+    this.showReapplyOnRejected = false,
   });
 
   final SiteApplicationTracker tracker;
@@ -52,6 +53,10 @@ class SiteApplicationStatusCard extends StatefulWidget {
   /// Durum HİÇ alınamadığında hata gösterilsin mi? Site yöneticisi panosunda (başvuru gerekli mi belirsiz)
   /// kapatılır: anlık "Site Ekle" çalışmaya devam eder ve sunucu yine de 409 ile yönlendirir.
   final bool showLoadFailure;
+
+  /// Reddedilen başvuruda "Yeniden başvur" düğmesi gösterilsin mi? Panelde (vitrin, bireysel ana ekran)
+  /// gereksiz kalabalığı önlemek için false'tur; "Yeni Site" / "Katılım ve Kurulum" gibi başvuru ekranlarında açılabilir.
+  final bool showReapplyOnRejected;
 
   @override
   State<SiteApplicationStatusCard> createState() => _SiteApplicationStatusCardState();
@@ -181,8 +186,18 @@ class _SiteApplicationStatusCardState extends State<SiteApplicationStatusCard> {
     final latest = tracker.latest;
     if (latest == null) return null;
     if (latest.isPending) return _buildPending(context, tracker, latest);
-    if (latest.isRejected) return _buildRejected(context, latest);
-    if (latest.isCancelled) return _buildCancelled(context, latest);
+    if (latest.isRejected) {
+      if (tracker.isRejectedConsumed(latest.id)) {
+        return null;
+      }
+      return _buildRejected(context, tracker, latest);
+    }
+    if (latest.isCancelled) {
+      if (tracker.isCancelledConsumed(latest.id)) {
+        return null;
+      }
+      return _buildCancelled(context, tracker, latest);
+    }
     if (latest.isApproved) {
       if (!widget.showApproved || tracker.isApprovalConsumed(latest.id) || !_recentlyDecided(latest)) {
         return null;
@@ -300,10 +315,11 @@ class _SiteApplicationStatusCardState extends State<SiteApplicationStatusCard> {
     );
   }
 
-  Widget _buildRejected(BuildContext context, SiteApplication a) {
+  Widget _buildRejected(BuildContext context, SiteApplicationTracker tracker, SiteApplication a) {
     final p = context.palette;
     final th = Theme.of(context).textTheme;
     final reason = a.decisionNote;
+    final canReapply = widget.showReapplyOnRejected;
     return _frame(
       context,
       tone: AppTone.danger,
@@ -322,12 +338,29 @@ class _SiteApplicationStatusCardState extends State<SiteApplicationStatusCard> {
           Text('Karar: ${formatIstanbulDateTime(a.decidedAt)}', style: th.bodySmall),
         ],
         const SizedBox(height: AppSpace.md),
-        _reapplyButton(a),
+        Wrap(
+          spacing: AppSpace.sm,
+          runSpacing: AppSpace.sm,
+          children: [
+            OutlinedButton.icon(
+              key: const ValueKey<String>('site_application_dismiss_rejected'),
+              onPressed: _busy ? null : () => _dismissRejected(a),
+              icon: const Icon(Icons.check_rounded, size: 18),
+              label: const Text('Anladım'),
+            ),
+            if (canReapply) _reapplyButton(a),
+          ],
+        ),
       ],
     );
   }
 
-  Widget _buildCancelled(BuildContext context, SiteApplication a) {
+  void _dismissRejected(SiteApplication a) {
+    widget.tracker.consumeRejected(a.id);
+    announcePolite(context, 'Bildirim kapatıldı.');
+  }
+
+  Widget _buildCancelled(BuildContext context, SiteApplicationTracker tracker, SiteApplication a) {
     final th = Theme.of(context).textTheme;
     return _frame(
       context,
@@ -340,9 +373,26 @@ class _SiteApplicationStatusCardState extends State<SiteApplicationStatusCard> {
         const SizedBox(height: AppSpace.sm),
         Text('İsterseniz yeniden başvurabilirsiniz.', style: th.bodyMedium),
         const SizedBox(height: AppSpace.md),
-        _reapplyButton(a),
+        Wrap(
+          spacing: AppSpace.sm,
+          runSpacing: AppSpace.sm,
+          children: [
+            OutlinedButton.icon(
+              key: const ValueKey<String>('site_application_dismiss_cancelled'),
+              onPressed: _busy ? null : () => _dismissCancelled(a),
+              icon: const Icon(Icons.check_rounded, size: 18),
+              label: const Text('Kapat'),
+            ),
+            _reapplyButton(a),
+          ],
+        ),
       ],
     );
+  }
+
+  void _dismissCancelled(SiteApplication a) {
+    widget.tracker.consumeCancelled(a.id);
+    announcePolite(context, 'Bildirim kapatıldı.');
   }
 
   Widget _buildApproved(BuildContext context, SiteApplication a) {

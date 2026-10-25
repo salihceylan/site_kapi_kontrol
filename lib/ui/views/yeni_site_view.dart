@@ -55,6 +55,7 @@ class YeniSiteView extends StatelessWidget {
                     onRefreshAccount: onRefreshAccount,
                     showApproved: true,
                     showLoadFailure: true,
+                    showReapplyOnRejected: true,
                   ),
                 ),
 

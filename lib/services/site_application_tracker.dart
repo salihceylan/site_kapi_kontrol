@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:site_kapi_kontrol/models/site_application.dart';
 import 'package:site_kapi_kontrol/services/adaptive_poller.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
@@ -46,12 +47,15 @@ class SiteApplicationTracker extends ChangeNotifier {
     bool Function()? isActive,
     bool Function()? isEligible,
     DateTime Function()? now,
+    Future<SharedPreferences> Function()? prefsLoader,
     Duration interval = const Duration(seconds: 30),
     Duration maxDelay = const Duration(minutes: 2),
   }) : _fetch = fetch,
        _cancel = cancel,
        _isEligible = isEligible,
-       _now = now ?? DateTime.now {
+       _now = now ?? DateTime.now,
+       _prefsLoader = prefsLoader {
+    _loadConsumedRejected();
     _poller = AdaptivePoller(
       interval: interval,
       maxDelay: maxDelay,
@@ -81,6 +85,10 @@ class SiteApplicationTracker extends ChangeNotifier {
   DateTime? _loadedAt;
   final Set<int> _announced = <int>{};
   final Set<int> _consumed = <int>{};
+  final Set<int> _consumedRejected = <int>{};
+  final Set<int> _consumedCancelled = <int>{};
+  final Future<SharedPreferences> Function()? _prefsLoader;
+  static const String _consumedRejectedPrefsKey = 'site_application_consumed_rejected_ids';
   int _seq = 0;
   int _epoch = 0;
   bool _disposed = false;
@@ -136,6 +144,12 @@ class SiteApplicationTracker extends ChangeNotifier {
 
   /// [id] numaralı onay kartı kaldırıldı mı? (Yenileme sonrası rol hâlâ değişmediyse kart gösterilmez.)
   bool isApprovalConsumed(int id) => _consumed.contains(id);
+
+  /// [id] numaralı ret kartı kullanıcı tarafından kapatıldı mı?
+  bool isRejectedConsumed(int id) => _consumedRejected.contains(id);
+
+  /// [id] numaralı iptal kartı kullanıcı tarafından kapatıldı mı?
+  bool isCancelledConsumed(int id) => _consumedCancelled.contains(id);
 
   bool get _eligible => _isEligible?.call() ?? true;
 
@@ -250,6 +264,45 @@ class SiteApplicationTracker extends ChangeNotifier {
   void consumeApproval(int id) {
     if (_disposed || !_consumed.add(id)) return;
     notifyListeners();
+  }
+
+  /// Ret kartını kaldırır; olay tüketilmiş sayılır.
+  void consumeRejected(int id) {
+    if (_disposed || !_consumedRejected.add(id)) return;
+    _persistConsumedRejected();
+    notifyListeners();
+  }
+
+  /// İptal kartını kaldırır; olay tüketilmiş sayılır.
+  void consumeCancelled(int id) {
+    if (_disposed || !_consumedCancelled.add(id)) return;
+    notifyListeners();
+  }
+
+  void _loadConsumedRejected() async {
+    try {
+      final prefs = _prefsLoader != null ? await _prefsLoader() : await SharedPreferences.getInstance();
+      final list = prefs.getStringList(_consumedRejectedPrefsKey);
+      if (list != null && list.isNotEmpty) {
+        for (final item in list) {
+          final id = int.tryParse(item);
+          if (id != null) _consumedRejected.add(id);
+        }
+        if (!_disposed) notifyListeners();
+      }
+    } catch (_) {
+      // SharedPreferences erişilemediğinde (örn. birim testleri) sessizce geçilir
+    }
+  }
+
+  void _persistConsumedRejected() async {
+    try {
+      final prefs = _prefsLoader != null ? await _prefsLoader() : await SharedPreferences.getInstance();
+      final list = _consumedRejected.map((id) => id.toString()).toList();
+      await prefs.setStringList(_consumedRejectedPrefsKey, list);
+    } catch (_) {
+      // SharedPreferences erişilemediğinde sessizce geçilir
+    }
   }
 
   void _announceApproval(SiteApplication? latest) {

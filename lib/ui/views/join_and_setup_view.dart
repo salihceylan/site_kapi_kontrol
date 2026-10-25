@@ -173,6 +173,7 @@ class _JoinAndSetupViewState extends State<JoinAndSetupView> {
                     onRefreshAccount: widget.onRefreshAccount,
                     showApproved: canApplyForSite(widget.session.role),
                     showLoadFailure: canApplyForSite(widget.session.role),
+                    showReapplyOnRejected: true,
                   ),
 
                 // ==========================================

@@ -42,6 +42,7 @@ Future<_Card> _pump(
   bool load = true,
   bool showApproved = true,
   bool showLoadFailure = true,
+  bool showReapplyOnRejected = true,
 }) async {
   final tracker = SiteApplicationTracker(
     fetch: () => auth.getMySiteApplications(),
@@ -64,6 +65,7 @@ Future<_Card> _pump(
           : null,
       showApproved: showApproved,
       showLoadFailure: showLoadFailure,
+      showReapplyOnRejected: showReapplyOnRejected,
     ),
     width: width,
     height: height,
@@ -268,6 +270,30 @@ void main() {
       card.reapplyGate!.complete();
       await t.pump();
       expect(t.widget<ElevatedButton>(reapply).onPressed, isNotNull);
+      await _end(t, card);
+    });
+
+    testWidgets('reddedildi (panel varsayılanı): yeniden başvur düğmesi gizlenir, Anladım düğmesi kartı kapatır', (t) async {
+      final auth = _auth()
+        ..seed([
+          saRow(
+            7,
+            status: 'rejected',
+            siteName: 'Gül Sitesi',
+            decisionNote: 'Adres eksik',
+            decidedAt: DateTime.utc(2026, 10, 16, 8),
+          ),
+        ]);
+      final card = await _pump(t, auth, showReapplyOnRejected: false);
+      expect(find.text('Site başvurunuz reddedildi'), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('site_application_reapply')), findsNothing,
+          reason: 'panelde yeniden başvur düğmesi gösterilmez');
+      final dismiss = find.byKey(const ValueKey<String>('site_application_dismiss_rejected'));
+      expect(dismiss, findsOneWidget);
+      await t.tap(dismiss);
+      await t.pump();
+      expect(find.text('Site başvurunuz reddedildi'), findsNothing, reason: 'kapatılınca kart kaybolur');
+      expect(card.tracker.isRejectedConsumed(7), isTrue);
       await _end(t, card);
     });
 

@@ -484,7 +484,7 @@ void main() {
       await _disposeHome(t);
     });
 
-    testWidgets('reddedildi: gerekçe + Yeniden başvur formu önceki değerlerle açar', (t) async {
+    testWidgets('reddedildi: gerekçe ve Anladım butonu ile panelden kapatılır; panelde yeniden başvur düğmesi gösterilmez', (t) async {
       final auth = _HomeApp(role: UserRole.individual)
         ..seed([
           saRow(
@@ -498,12 +498,11 @@ void main() {
       await _pumpHome(t, auth, height: 1400);
       expect(find.text('Site başvurunuz reddedildi'), findsOneWidget);
       expect(find.text('Gerekçe: Adres eksik'), findsOneWidget);
-      await t.tap(find.byKey(const ValueKey<String>('site_application_reapply')));
+      expect(find.byKey(const ValueKey<String>('site_application_reapply')), findsNothing,
+          reason: 'panelde yeniden başvur düğmesi gösterilmez');
+      await t.tap(find.byKey(const ValueKey<String>('site_application_dismiss_rejected')));
       await settleFor(t, 500);
-      final name = t.widget<EditableText>(
-        find.descendant(of: find.widgetWithText(TextFormField, 'Site Adı *'), matching: find.byType(EditableText)),
-      );
-      expect(name.controller.text, 'Eski Sitesi');
+      expect(find.text('Site başvurunuz reddedildi'), findsNothing, reason: 'kapatılınca kart panelden kalkar');
       await _disposeHome(t);
     });
 
