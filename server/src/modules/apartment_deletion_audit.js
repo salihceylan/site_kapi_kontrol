@@ -27,7 +27,7 @@ export async function recordApartmentDeletionSnapshot(client, { siteCode, apartm
   try {
     const apartmentResult = await client.query(
       `
-        SELECT a.id, a.unit_label, a.floor, a.gross_area_m2, a.net_area_m2, a.land_share_numerator,
+        SELECT a.id, a.unit_label, a.floor, NULL AS gross_area_m2, NULL AS net_area_m2, a.land_share_numerator,
                a.land_share_denominator, a.category, a.responsible_party, b.block_name
         FROM apartments a
         INNER JOIN site_blocks b ON b.id = a.block_id

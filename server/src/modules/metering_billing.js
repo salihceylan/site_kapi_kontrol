@@ -77,7 +77,7 @@ export async function computeBillingPlan(client, siteCode, input, { entryDate, l
   else params.total_minor = input.totalMinor;
   const result = await client.query(
     `
-      SELECT m.id AS meter_id, m.apartment_id, a.responsible_party, a.unit_label, b.block_name, a.gross_area_m2::TEXT AS area,
+      SELECT m.id AS meter_id, m.apartment_id, a.responsible_party, a.unit_label, b.block_name, NULL::TEXT AS area,
              ${tenantOnDateSql('a', '$5::DATE')} AS has_tenant,
              (SELECT r.value::TEXT FROM meter_readings r WHERE r.meter_id = m.id AND r.reading_date <= $3::DATE ORDER BY r.reading_date DESC LIMIT 1) AS opening,
              (SELECT to_char(r.reading_date, 'YYYY-MM-DD') FROM meter_readings r WHERE r.meter_id = m.id AND r.reading_date <= $3::DATE ORDER BY r.reading_date DESC LIMIT 1) AS opening_date,

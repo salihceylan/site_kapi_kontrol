@@ -326,7 +326,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     });
   }
 
-  bool _canShowSiteCreationOnPanel(UserSession session) {
+  bool _canShowSiteCreationOnPanel(UserSession session) => false;
+  bool _canShowSiteCreationOnPanelOld(UserSession session) {
     if (session.role == UserRole.superUser || session.role == UserRole.siteManager) {
       return false;
     }

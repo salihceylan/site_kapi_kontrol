@@ -1239,8 +1239,8 @@ export async function ensureDbSchema() {
 
       -- 3. Daire alanları (hepsi isteğe bağlı; borç ve bildirim tarafı varsayılan "ikisi de").
       ALTER TABLE apartments ADD COLUMN IF NOT EXISTS floor INTEGER;
-      ALTER TABLE apartments ADD COLUMN IF NOT EXISTS gross_area_m2 NUMERIC(8,2);
-      ALTER TABLE apartments ADD COLUMN IF NOT EXISTS net_area_m2 NUMERIC(8,2);
+      ALTER TABLE apartments DROP COLUMN IF EXISTS gross_area_m2;
+      ALTER TABLE apartments DROP COLUMN IF EXISTS net_area_m2;
       ALTER TABLE apartments ADD COLUMN IF NOT EXISTS land_share_numerator INTEGER;
       ALTER TABLE apartments ADD COLUMN IF NOT EXISTS land_share_denominator INTEGER;
       ALTER TABLE apartments ADD COLUMN IF NOT EXISTS category TEXT;

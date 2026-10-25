@@ -11,7 +11,7 @@ export async function loadBlocksAndApartments(db, siteCode, { withFinance = fals
   const blocks = await db.query(`SELECT id, block_name FROM site_blocks WHERE site_code = $1 ORDER BY sort_order, id`, [siteCode]);
   const apartments = await db.query(
     `
-      SELECT a.id, a.block_id, a.unit_label, a.floor, a.category, a.gross_area_m2, a.net_area_m2,
+      SELECT a.id, a.block_id, a.unit_label, a.floor, a.category, NULL AS gross_area_m2, NULL AS net_area_m2,
              a.land_share_numerator, a.land_share_denominator, a.responsible_party,
              ${
                withFinance
@@ -32,8 +32,8 @@ export async function loadBlocksAndApartments(db, siteCode, { withFinance = fals
       label: row.unit_label,
       floor: num(row.floor),
       category: row.category ?? null,
-      gross: row.gross_area_m2 === null ? null : String(row.gross_area_m2),
-      net: row.net_area_m2 === null ? null : String(row.net_area_m2),
+      gross: null,
+      net: null,
       lsNum: num(row.land_share_numerator),
       lsDen: num(row.land_share_denominator),
       responsible: row.responsible_party ?? 'both',

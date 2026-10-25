@@ -275,7 +275,7 @@ async function exportApartments(siteCode, f) {
   }
   const apartments = await pool.query(
     `
-      SELECT a.id, a.unit_label, b.block_name, a.floor, a.category, a.gross_area_m2, a.net_area_m2,
+      SELECT a.id, a.unit_label, b.block_name, a.floor, a.category, NULL AS gross_area_m2, NULL AS net_area_m2,
              a.land_share_numerator, a.land_share_denominator, a.responsible_party
       FROM apartments a
       INNER JOIN site_blocks b ON b.id = a.block_id
@@ -315,8 +315,6 @@ async function exportApartments(siteCode, f) {
       unitNumber(row.unit_label),
       numberOrNull(row.floor),
       row.category ?? null,
-      numberOrNull(row.gross_area_m2),
-      numberOrNull(row.net_area_m2),
       numberOrNull(row.land_share_numerator),
       numberOrNull(row.land_share_denominator),
       RESPONSIBLE_TR[row.responsible_party] ?? RESPONSIBLE_TR.both,
@@ -330,8 +328,6 @@ async function exportApartments(siteCode, f) {
     column('apartments', 'daire_no', 'text'),
     column('apartments', 'kat', 'number', { scale: 0 }),
     column('apartments', 'tip', 'text'),
-    column('apartments', 'brut_m2', 'number', { scale: 2 }),
-    column('apartments', 'net_m2', 'number', { scale: 2 }),
     column('apartments', 'arsa_payi_pay', 'number', { scale: 0 }),
     column('apartments', 'arsa_payi_payda', 'number', { scale: 0 }),
     column('apartments', 'sorumlu', 'text'),

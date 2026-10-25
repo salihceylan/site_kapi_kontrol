@@ -613,7 +613,6 @@ describe('yazma uclari: girdi dogrulama (400, DB yazmasi yok)', () => {
   it('PATCH apartments: gecersiz alan 400 INVALID_BODY (alan adiyla)', async () => {
     for (const [body, pattern] of [
       [{ floor: 1.5 }, /floor/],
-      [{ gross_area_m2: 0 }, /gross_area_m2/],
       [{ land_share_denominator: 0 }, /land_share_denominator/],
       [{ category: 'x'.repeat(41) }, /category/],
       [{ responsible_party: 'z' }, /responsible_party/],

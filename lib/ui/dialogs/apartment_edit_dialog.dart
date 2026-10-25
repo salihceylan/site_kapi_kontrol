@@ -179,19 +179,7 @@ class ApartmentFieldsDraft {
     final floorValue = floor.text.trim().isEmpty ? null : _parseInt(floor.text);
     if (floorValue != initial.floor) fields['floor'] = floorValue;
 
-    double? roundArea(double? v) => v == null ? null : (v * 100).round() / 100;
-    final grossValue = gross.text.trim().isEmpty
-        ? null
-        : roundArea(parseAreaInput(gross.text));
-    if (grossValue != roundArea(initial.grossAreaM2)) {
-      fields['gross_area_m2'] = grossValue;
-    }
-    final netValue = net.text.trim().isEmpty
-        ? null
-        : roundArea(parseAreaInput(net.text));
-    if (netValue != roundArea(initial.netAreaM2)) {
-      fields['net_area_m2'] = netValue;
-    }
+
 
     final hasShare = numerator.text.trim().isNotEmpty;
     final numeratorValue = hasShare ? _parseInt(numerator.text) : null;
@@ -344,34 +332,7 @@ class _ApartmentEditDialogState extends State<ApartmentEditDialog> {
                 validator: ApartmentFieldsDraft.validateFloor,
               ),
               const SizedBox(height: AppSpace.md),
-              TextFormField(
-                key: const ValueKey<String>('apartment_gross'),
-                controller: _draft.gross,
-                enabled: !_submitting,
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                decoration: const InputDecoration(
-                  labelText: 'Brüt alan (m²)',
-                  prefixIcon: Icon(Icons.square_foot_rounded),
-                ),
-                validator: ApartmentFieldsDraft.validateArea,
-              ),
-              const SizedBox(height: AppSpace.md),
-              TextFormField(
-                key: const ValueKey<String>('apartment_net'),
-                controller: _draft.net,
-                enabled: !_submitting,
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                decoration: const InputDecoration(
-                  labelText: 'Net alan (m²)',
-                  prefixIcon: Icon(Icons.square_foot_rounded),
-                ),
-                validator: ApartmentFieldsDraft.validateArea,
-              ),
-              const SizedBox(height: AppSpace.md),
+
               TextFormField(
                 key: const ValueKey<String>('apartment_numerator'),
                 controller: _draft.numerator,

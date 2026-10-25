@@ -34,8 +34,8 @@ const APARTMENT_COLUMNS = `
   b.block_name,
   a.floor,
   a.category,
-  a.gross_area_m2,
-  a.net_area_m2,
+  NULL::NUMERIC(8,2) AS gross_area_m2,
+  NULL::NUMERIC(8,2) AS net_area_m2,
   a.land_share_numerator,
   a.land_share_denominator,
   a.responsible_party
@@ -251,12 +251,7 @@ export function parseApartmentPatch(body = {}) {
   if (body.floor !== undefined) {
     patch.floor = parseNullableInteger(body.floor, 'floor', { min: -20, max: 500 });
   }
-  if (body.gross_area_m2 !== undefined) {
-    patch.gross_area_m2 = parseNullableArea(body.gross_area_m2, 'gross_area_m2');
-  }
-  if (body.net_area_m2 !== undefined) {
-    patch.net_area_m2 = parseNullableArea(body.net_area_m2, 'net_area_m2');
-  }
+
   if (body.land_share_numerator !== undefined) {
     patch.land_share_numerator = parseNullableInteger(body.land_share_numerator, 'land_share_numerator', {
       min: 0,
@@ -294,8 +289,6 @@ export function parseApartmentPatch(body = {}) {
 
 const PATCH_COLUMNS = [
   'floor',
-  'gross_area_m2',
-  'net_area_m2',
   'land_share_numerator',
   'land_share_denominator',
   'category',
@@ -336,7 +329,7 @@ export async function updateApartment({ siteCode, apartmentId, body = {}, actor 
     await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [peopleLockKey(siteCode)]);
     const found = await client.query(
       `
-        SELECT floor, gross_area_m2, net_area_m2, land_share_numerator, land_share_denominator, category, responsible_party
+        SELECT floor, land_share_numerator, land_share_denominator, category, responsible_party
         FROM apartments
         WHERE id = $1 AND site_code = $2
         FOR UPDATE

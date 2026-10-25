@@ -10,8 +10,7 @@ List<String> apartmentFactLabels(ApartmentSummary apartment) {
   return <String>[
     if (apartment.floor != null) 'Kat ${apartment.floor}',
     if (apartment.category != null) apartment.category!,
-    if (apartment.grossAreaM2 != null) 'Brüt ${formatNumber(apartment.grossAreaM2!)} m²',
-    if (apartment.netAreaM2 != null) 'Net ${formatNumber(apartment.netAreaM2!)} m²',
+
     if (apartment.landShare != null) 'Arsa payı ${apartment.landShare!.label}',
   ];
 }

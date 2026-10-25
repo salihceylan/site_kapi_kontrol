@@ -51,8 +51,6 @@ export async function insertAudits(client, { siteCode, actor, rows }) {
 const APARTMENT_COLUMNS = Object.freeze([
   ['floor', 'floor', 'integer'],
   ['category', 'category', 'text'],
-  ['gross_area_m2', 'gross', 'numeric'],
-  ['net_area_m2', 'net', 'numeric'],
   ['land_share_numerator', 'ln', 'integer'],
   ['land_share_denominator', 'ld', 'integer'],
   ['responsible_party', 'rp', 'text'],

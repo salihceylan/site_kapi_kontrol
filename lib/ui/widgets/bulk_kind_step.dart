@@ -23,7 +23,7 @@ class BulkKindStep extends StatelessWidget {
 
   static const Map<ImportKind, String> descriptions = <ImportKind, String>{
     ImportKind.apartments:
-        'Var olan dairelerin kat, tip, m², arsa payı ve borç sorumlusu bilgilerini doldurur. Yeni daire eklemez.',
+        'Var olan dairelerin kat, tip, arsa payı ve borç sorumlusu bilgilerini doldurur. Yeni daire eklemez.',
     ImportKind.people:
         'Kişileri, daire ilişkilerini ve araç plakalarını ekler. Hesap açmaz, e-posta göndermez.',
     ImportKind.vehicles: 'Yalnızca araç plakalarını sitedeki mevcut kişilere bağlar.',

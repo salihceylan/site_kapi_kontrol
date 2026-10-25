@@ -66,7 +66,7 @@ class ApartmentInfoSection extends StatelessWidget {
                         children: [
                           Text('Daire bilgileri', style: th.titleSmall),
                           Text(
-                            '$apartmentLabel • kat, tip, m², arsa payı, borç sorumlusu',
+                            '$apartmentLabel • kat, tip, arsa payı, borç sorumlusu',
                             style: th.bodySmall?.copyWith(
                               color: p.textSecondary,
                             ),
@@ -146,30 +146,7 @@ class ApartmentInfoSection extends StatelessWidget {
           ),
         ),
         const SizedBox(height: AppSpace.md),
-        TextFormField(
-          key: const ValueKey<String>('person_apt_gross'),
-          controller: draft.gross,
-          enabled: enabled,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: const InputDecoration(
-            labelText: 'Brüt alan (m²)',
-            prefixIcon: Icon(Icons.square_foot_rounded),
-          ),
-          validator: ApartmentFieldsDraft.validateArea,
-        ),
-        const SizedBox(height: AppSpace.md),
-        TextFormField(
-          key: const ValueKey<String>('person_apt_net'),
-          controller: draft.net,
-          enabled: enabled,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: const InputDecoration(
-            labelText: 'Net alan (m²)',
-            prefixIcon: Icon(Icons.square_foot_rounded),
-          ),
-          validator: ApartmentFieldsDraft.validateArea,
-        ),
-        const SizedBox(height: AppSpace.md),
+
         TextFormField(
           key: const ValueKey<String>('person_apt_numerator'),
           controller: draft.numerator,

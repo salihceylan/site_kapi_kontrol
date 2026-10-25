@@ -80,7 +80,7 @@ const METER_SELECT = `
 export async function listApartments(siteCode) {
   const result = await pool.query(
     `
-      SELECT a.id, a.unit_label, b.block_name, a.gross_area_m2::TEXT AS area
+      SELECT a.id, a.unit_label, b.block_name, NULL::TEXT AS area
       FROM apartments a INNER JOIN site_blocks b ON b.id = a.block_id
       WHERE a.site_code = $1 AND a.is_active = TRUE
       ORDER BY b.sort_order, a.sort_order

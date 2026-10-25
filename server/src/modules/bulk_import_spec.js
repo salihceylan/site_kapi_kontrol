@@ -82,8 +82,6 @@ const BASE_COLUMNS = Object.freeze({
     APARTMENT_NO_COLUMN(true, 'Daire numarası: «5», «05» ya da «Daire 5». Daire sayısı Site Yapısı’ndan belirlenir.'),
     col('kat', 'Kat', false, 'text', 20, ['Kat No', 'Bulunduğu Kat'], 'Tam sayı (−20 ile 500). «Zemin» 0, «Bodrum» −1 sayılır.'),
     col('tip', 'Tip', false, 'text', 40, ['Daire Tipi', 'Tür', 'Kategori'], 'Örneğin «3+1» ya da «Dükkan» (en çok 40 karakter).'),
-    col('brut_m2', 'Brüt m²', false, 'number', null, ['Brüt', 'Brüt m2', 'Brüt Alan', 'Brüt Metrekare', 'm2 Brüt'], 'Metrekare, 0’dan büyük. Ondalık için virgül kullanın: 125,5'),
-    col('net_m2', 'Net m²', false, 'number', null, ['Net', 'Net m2', 'Net Alan', 'Net Metrekare', 'm2 Net'], 'Metrekare, 0’dan büyük. Ondalık için virgül kullanın: 110,25'),
     col('arsa_payi_pay', 'Arsa Payı (Pay)', false, 'number', null, ['Arsa Payı Pay', 'Pay'], 'Arsa payının payı (tam sayı). Örneğin 35/1000 için 35.'),
     col('arsa_payi_payda', 'Arsa Payı (Payda)', false, 'number', null, ['Arsa Payı Payda', 'Payda'], 'Arsa payının paydası (tam sayı). Örneğin 35/1000 için 1000.'),
     col('sorumlu', 'Borç Sorumlusu', false, 'enum', 20, ['Sorumlu', 'Borçlandırma', 'Kim Öder'], 'Malik, Kiracı ya da İkisi. Borç ve bildirimlerin kime gideceğini belirler.'),

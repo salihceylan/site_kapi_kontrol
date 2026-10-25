@@ -878,7 +878,7 @@ describe('iliskiler: ekle / guncelle', () => {
 // ---------------------------------------------------------------------------
 
 describe('updateApartment', () => {
-  const lockApartment = /^SELECT floor, gross_area_m2, net_area_m2, land_share_numerator, land_share_denominator, category, responsible_party FROM apartments WHERE id = \$1 AND site_code = \$2 FOR UPDATE$/;
+  const lockApartment = /^SELECT floor, land_share_numerator, land_share_denominator, category, responsible_party FROM apartments WHERE id = \$1 AND site_code = \$2 FOR UPDATE$/;
   const row = (extra = {}) => ({ floor: 2, gross_area_m2: '120.50', net_area_m2: null, land_share_numerator: null, land_share_denominator: null, category: null, responsible_party: 'both', ...extra });
   // ApartmentDetail yuklemesi (yazma sonrasi donen yanit): acikca tanimli - kati sahte DB hicbir sorguyu sessizce yutmaz
   const detailHandlers = () => [

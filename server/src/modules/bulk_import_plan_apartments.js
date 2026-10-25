@@ -19,13 +19,11 @@ const AREA_EPSILON = 0.005;
 const COLUMN_MAP = Object.freeze([
   ['kat', 'floor'],
   ['tip', 'category'],
-  ['brut_m2', 'gross_area_m2'],
-  ['net_m2', 'net_area_m2'],
   ['arsa_payi_pay', 'land_share_numerator'],
   ['arsa_payi_payda', 'land_share_denominator'],
   ['sorumlu', 'responsible_party'],
 ]);
-const FINANCE_SENSITIVE = new Set(['gross_area_m2', 'net_area_m2', 'land_share_numerator', 'land_share_denominator', 'category', 'responsible_party']);
+const FINANCE_SENSITIVE = new Set(['land_share_numerator', 'land_share_denominator', 'category', 'responsible_party']);
 const FIELD_OF_COLUMN = Object.fromEntries(COLUMN_MAP.map(([key, column]) => [column, key]));
 
 function sameValue(column, current, wanted) {
@@ -39,8 +37,8 @@ function currentOf(apartment) {
   return {
     floor: apartment.floor,
     category: apartment.category,
-    gross_area_m2: apartment.gross === null ? null : Number(apartment.gross),
-    net_area_m2: apartment.net === null ? null : Number(apartment.net),
+    gross_area_m2: null,
+    net_area_m2: null,
     land_share_numerator: apartment.lsNum,
     land_share_denominator: apartment.lsDen,
     responsible_party: apartment.responsible,
@@ -162,9 +160,7 @@ export function planApartments({ rows, snapshot, allowOverwrite }) {
         if (apartment.hasFinance && Object.keys(set).some((column) => FINANCE_SENSITIVE.has(column))) {
           addIssue(result, KIND, 'FINANCE_RECORDS', null);
         }
-        if (after.gross_area_m2 !== null && after.net_area_m2 !== null && after.net_area_m2 > after.gross_area_m2) {
-          addIssue(result, KIND, 'NET_GT_GROSS', 'net_m2');
-        }
+
         if (Object.keys(set).length > 0) {
           result.ops.push({ t: 'au', aptId: apartment.id, set, changes });
           counts.apartment_update += 1;

@@ -222,20 +222,7 @@ class _ApartmentCardDialogState extends State<ApartmentCardDialog> {
               const SizedBox(height: AppSpace.sm),
               CrmInfoLine(label: 'Kategori', value: valueOrDash(detail.category)),
               const SizedBox(height: AppSpace.sm),
-              CrmInfoLine(
-                label: 'Brüt alan',
-                value: valueOrDash(
-                  detail.grossAreaM2 == null ? null : '${formatNumber(detail.grossAreaM2!)} m²',
-                ),
-              ),
-              const SizedBox(height: AppSpace.sm),
-              CrmInfoLine(
-                label: 'Net alan',
-                value: valueOrDash(
-                  detail.netAreaM2 == null ? null : '${formatNumber(detail.netAreaM2!)} m²',
-                ),
-              ),
-              const SizedBox(height: AppSpace.sm),
+
               CrmInfoLine(
                 label: 'Arsa payı',
                 value: valueOrDash(detail.landShare?.label),

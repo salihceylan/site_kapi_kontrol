@@ -190,7 +190,7 @@ async function loadTargetApartments(db, siteCode, target, { lock = false, onDate
     `
       SELECT
         a.id, a.unit_label, b.block_name, b.sort_order AS block_sort, a.sort_order AS apt_sort, a.responsible_party, a.category,
-        (a.gross_area_m2 * 100)::BIGINT AS gross_x100, (a.net_area_m2 * 100)::BIGINT AS net_x100,
+        NULL::BIGINT AS gross_x100, NULL::BIGINT AS net_x100,
         a.land_share_numerator, a.land_share_denominator,
         ($5::DATE IS NOT NULL AND ${TENANT_ON_CHARGE_DATE}) AS has_tenant
       FROM apartments a
