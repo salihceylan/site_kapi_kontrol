@@ -278,6 +278,11 @@ export function planPeople({ rows, snapshot, today }) {
     const initialPassword = (passwordR.value !== null && passwordR.value !== undefined && String(passwordR.value).trim() !== '')
       ? String(passwordR.value).trim()
       : '1234';
+    const usernameR = readText(cells.kullanici_adi, { max: 50 });
+    if (usernameR.error) issue(usernameR.error, 'kullanici_adi', usernameR);
+    const customLoginName = (usernameR.value !== null && usernameR.value !== undefined && String(usernameR.value).trim() !== '')
+      ? String(usernameR.value).trim()
+      : null;
 
     const email = emailR.value ?? null;
     const phone = phoneR.value ?? null;
@@ -381,7 +386,7 @@ export function planPeople({ rows, snapshot, today }) {
         finish();
         continue;
       }
-      result.ops.push({ t: 'pc', ref, name, phone, email, note, password: initialPassword });
+      result.ops.push({ t: 'pc', ref, name, phone, email, note, password: initialPassword, loginName: customLoginName });
       if (apartment !== null) {
         result.ops.push({ t: 'ra', ref, aptId: apartment.id, relation: relationForNew, moveIn });
         summaryRelation = relationForNew;

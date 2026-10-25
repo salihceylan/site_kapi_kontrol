@@ -95,62 +95,94 @@ class _BulkEditableTableState extends State<BulkEditableTable> {
   }) async {
     final currentVal = row.cells[col.key]?.toString() ?? '';
     final editCtrl = TextEditingController(text: currentVal);
+    String? fieldError;
 
     final updated = await showDialog<String?>(
       context: context,
       builder: (ctx) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Row(
-            children: [
-              Icon(Icons.edit_note_rounded, color: AppTone.primary.a, size: 24),
-              const SizedBox(width: AppSpace.sm),
-              Expanded(
-                child: Text('Hücreyi Düzenle: ${col.label}', style: const TextStyle(fontSize: 16)),
-              ),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (col.hint != null && col.hint!.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: AppSpace.sm),
-                  child: Text(
-                    col.hint!,
-                    style: TextStyle(fontSize: 12, color: ctx.palette.textSecondary),
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: Row(
+                children: [
+                  Icon(Icons.edit_note_rounded, color: AppTone.primary.a, size: 24),
+                  const SizedBox(width: AppSpace.sm),
+                  Expanded(
+                    child: Text('Hücreyi Düzenle: ${col.label}', style: const TextStyle(fontSize: 16)),
                   ),
-                ),
-              TextField(
-                controller: editCtrl,
-                autofocus: true,
-                decoration: InputDecoration(
-                  labelText: col.label,
-                  helperText: col.required ? 'Bu alan zorunludur' : 'İsteğe bağlı',
-                  border: const OutlineInputBorder(),
-                ),
+                ],
               ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(null),
-              child: const Text('İptal'),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTone.primary.a,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (col.hint != null && col.hint!.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: AppSpace.sm),
+                      child: Text(
+                        col.hint!,
+                        style: TextStyle(fontSize: 12, color: ctx.palette.textSecondary),
+                      ),
+                    ),
+                  TextField(
+                    controller: editCtrl,
+                    autofocus: true,
+                    decoration: InputDecoration(
+                      labelText: col.label,
+                      helperText: col.key == 'kullanici_adi'
+                          ? 'Benzersiz kullanıcı adı (örn. ad.soyad)'
+                          : (col.required ? 'Bu alan zorunludur' : 'İsteğe bağlı'),
+                      errorText: fieldError,
+                      border: const OutlineInputBorder(),
+                    ),
+                    onChanged: (_) {
+                      if (fieldError != null) {
+                        setDialogState(() => fieldError = null);
+                      }
+                    },
+                  ),
+                ],
               ),
-              onPressed: () => Navigator.of(ctx).pop(editCtrl.text),
-              child: const Text('Uygula'),
-            ),
-          ],
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(null),
+                  child: const Text('İptal'),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTone.primary.a,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  onPressed: () {
+                    final text = editCtrl.text.trim();
+                    if (col.key == 'kullanici_adi' && text.isNotEmpty) {
+                      final lower = text.toLowerCase();
+                      final isDup = widget.controller.rows.asMap().entries.any(
+                            (entry) =>
+                                entry.key != realIndex &&
+                                entry.value.cells['kullanici_adi']?.toString().trim().toLowerCase() == lower,
+                          );
+                      if (isDup) {
+                        setDialogState(() {
+                          fieldError = 'Bu kullanıcı adı başka bir satırda zaten var!';
+                        });
+                        return;
+                      }
+                    }
+                    Navigator.of(ctx).pop(editCtrl.text);
+                  },
+                  child: const Text('Uygula'),
+                ),
+              ],
+            );
+          },
         );
       },
     );
+
+    editCtrl.dispose();
 
     if (updated != null && mounted) {
       widget.controller.updateCell(realIndex, col.key, updated);

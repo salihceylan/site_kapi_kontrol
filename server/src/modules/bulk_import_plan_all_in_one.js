@@ -14,7 +14,7 @@ import { planPeople } from './bulk_import_plan_people.js';
 
 const KIND = 'all_in_one';
 const APARTMENT_KEYS = Object.freeze(['kat', 'tip', 'brut_m2', 'net_m2', 'arsa_payi_pay', 'arsa_payi_payda', 'sorumlu']);
-const PERSON_KEYS = Object.freeze(['ad_soyad', 'telefon', 'e_posta', 'sifre', 'iliski', 'giris_tarihi', 'plaka', 'not']);
+const PERSON_KEYS = Object.freeze(['ad_soyad', 'kullanici_adi', 'telefon', 'e_posta', 'sifre', 'iliski', 'giris_tarihi', 'plaka', 'not']);
 
 const textOf = (value) => {
   const text = cellToText(value);

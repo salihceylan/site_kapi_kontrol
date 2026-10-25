@@ -7,7 +7,7 @@
 
 import bcrypt from 'bcryptjs';
 import { BCRYPT_COST } from '../security/password_hashing.js';
-import { generateUniqueApartmentLoginName } from '../services/apartment_service.js';
+import { ensureUniqueLoginName, generateUniqueApartmentLoginName } from '../services/apartment_service.js';
 import { generateInternalApartmentEmail } from '../utils/helpers.js';
 import { PlatformError } from './errors.js';
 import { logResidenciesBulk } from './residency_log.js';
@@ -363,6 +363,17 @@ export async function applyOpeningOps(client, { siteCode, ops, runId, cutoverDat
   return { audits: [], total };
 }
 
+function slugifyLoginName(fullName, fallback = 'kullanici') {
+  if (!fullName || typeof fullName !== 'string') return fallback;
+  const trMap = {
+    'ç': 'c', 'Ç': 'c', 'ğ': 'g', 'Ğ': 'g', 'ı': 'i', 'I': 'i', 'İ': 'i',
+    'ö': 'o', 'Ö': 'o', 'ş': 's', 'Ş': 's', 'ü': 'u', 'Ü': 'u',
+  };
+  let clean = fullName.replace(/[çÇğĞıIİöÖşŞüÜ]/g, (m) => trMap[m] || m).toLowerCase();
+  clean = clean.replace(/[^a-z0-9]+/g, '.').replace(/^\.+|\.+$/g, '').replace(/\.+/g, '.');
+  return clean || fallback;
+}
+
 /**
  * Toplu yükleme ile daireye eklenen sakinler için kullanıcı hesabı, üyelik (APARTMENT_ADMIN)
  * ve başlangıç şifresi (1234) oluşturur / bağlar.
@@ -400,12 +411,24 @@ export async function provisionImportedResidents(client, { siteCode, ops }) {
       const blockName = row.block_name || 'Blok';
       const sortOrder = Number(row.sort_order || 1);
 
-      const finalLoginName = await generateUniqueApartmentLoginName({
-        db: client,
-        blockName,
-        sortOrder,
-        siteCode: Number(siteCode),
-      });
+      const rawDesired = (matchedOp && matchedOp.loginName)
+        ? matchedOp.loginName
+        : (row.full_name ? row.full_name : null);
+
+      const desiredLogin = rawDesired ? slugifyLoginName(rawDesired) : null;
+
+      const finalLoginName = desiredLogin
+        ? await ensureUniqueLoginName({
+            db: client,
+            desiredLoginName: desiredLogin,
+            siteCode: Number(siteCode),
+          })
+        : await generateUniqueApartmentLoginName({
+            db: client,
+            blockName,
+            sortOrder,
+            siteCode: Number(siteCode),
+          });
 
       const internalEmail = generateInternalApartmentEmail({
         loginName: finalLoginName,

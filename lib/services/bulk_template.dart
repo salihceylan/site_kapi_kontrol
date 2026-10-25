@@ -22,6 +22,7 @@ const Map<String, String> _examples = <String, String>{
   'arsa_payi_payda': '1000',
   'sorumlu': 'Malik',
   'ad_soyad': 'Ahmet Yılmaz',
+  'kullanici_adi': 'ahmet.yilmaz',
   'telefon': '0 (555) 123 45 67',
   'e_posta': 'ahmet@ornek.com',
   'sifre': '1234',
@@ -107,6 +108,7 @@ double _width(ImportColumn column) {
   final base = templateHeaderLabel(column).length + 4;
   final hint = switch (column.key) {
     'ad_soyad' => 24,
+    'kullanici_adi' => 20,
     'e_posta' => 26,
     'plaka' => 24,
     'telefon' => 20,

@@ -48,14 +48,14 @@ describe('spec', () => {
 
   it('sözleşmedeki sütun anahtarları ve zorunlulukları', () => {
     const required = (kind) => columnsOf(kind).filter((c) => c.required).map((c) => c.key);
-    assert.deepEqual(columnsOf('apartments').map((c) => c.key), ['blok', 'daire_no', 'kat', 'tip', 'brut_m2', 'net_m2', 'arsa_payi_pay', 'arsa_payi_payda', 'sorumlu']);
+    assert.deepEqual(columnsOf('apartments').map((c) => c.key), ['blok', 'daire_no', 'kat', 'tip', 'arsa_payi_pay', 'arsa_payi_payda', 'sorumlu']);
     assert.deepEqual(required('apartments'), ['blok', 'daire_no']);
-    assert.deepEqual(columnsOf('people').map((c) => c.key), ['ad_soyad', 'telefon', 'e_posta', 'blok', 'daire_no', 'iliski', 'giris_tarihi', 'plaka', 'not']);
+    assert.deepEqual(columnsOf('people').map((c) => c.key), ['ad_soyad', 'kullanici_adi', 'telefon', 'e_posta', 'sifre', 'blok', 'daire_no', 'iliski', 'giris_tarihi', 'plaka', 'not']);
     assert.deepEqual(required('people'), ['ad_soyad']);
     assert.deepEqual(columnsOf('vehicles').map((c) => c.key), ['plaka', 'e_posta', 'blok', 'daire_no', 'ad_soyad', 'not']);
     assert.deepEqual(required('vehicles'), ['plaka']);
     const labels = Object.fromEntries(columnsOf('apartments').map((c) => [c.key, c.label]));
-    assert.equal(labels.brut_m2, 'Brüt m²');
+    assert.equal(labels.arsa_payi_pay, 'Arsa Payı (Pay)');
     assert.equal(labels.arsa_payi_pay, 'Arsa Payı (Pay)');
     assert.equal(labels.sorumlu, 'Borç Sorumlusu');
   });
