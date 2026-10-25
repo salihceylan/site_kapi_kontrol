@@ -29,6 +29,7 @@ class ManagerAttentionBar extends StatefulWidget {
     required this.sites,
     required this.fetch,
     required this.onOpenFinance,
+    this.onOpenBankLines,
   });
 
   /// Yazma yetkili finans siteleri.
@@ -37,6 +38,9 @@ class ManagerAttentionBar extends StatefulWidget {
 
   /// Finans ekranını site ve sekmeyle açar.
   final void Function(int siteCode, int tab) onOpenFinance;
+
+  /// Banka hareketleri ekranını (BankLinesView) doğrudan açar.
+  final Future<void> Function(PeopleSite site)? onOpenBankLines;
 
   @override
   State<ManagerAttentionBar> createState() => _ManagerAttentionBarState();
@@ -89,14 +93,33 @@ class _ManagerAttentionBarState extends State<ManagerAttentionBar> {
     });
   }
 
+  Future<void> reload() => _load();
+
+  Future<void> _handleAction(PeopleSite site, FinanceHomeAttention a) async {
+    if (a.key == 'bank_lines' && widget.onOpenBankLines != null) {
+      await widget.onOpenBankLines!(site);
+      if (mounted) unawaited(_load());
+    } else {
+      widget.onOpenFinance(site.code, _describe(a).$2);
+    }
+  }
+
   static (String, int, String) _describe(FinanceHomeAttention a) {
     switch (a.key) {
       case 'unassigned_payments':
-        return ('${a.count} tahsilat kasa / bankaya eşlenmedi', FinanceHomeTab.cash, 'Eşle');
+        return ('${a.count} tahsilat kasa / banka hesabına eşlenmedi', FinanceHomeTab.cash, 'Hesaba Aktar');
       case 'bank_lines':
-        return ('${a.count} banka hareketi onay bekliyor', FinanceHomeTab.cash, 'Eşle');
+        return (
+          'Bankadan gelen ${a.count} ödeme daireyle eşleştirilmeyi ve onayınızı bekliyor',
+          FinanceHomeTab.cash,
+          'İncele ve Onayla',
+        );
       case 'payment_notices':
-        return ('${a.count} ödeme bildirimi onay bekliyor', FinanceHomeTab.notices, 'İncele');
+        return (
+          'Sakinlerden gelen ${a.count} dekont / ödeme bildirimi onay bekliyor',
+          FinanceHomeTab.notices,
+          'Dekontları Gör',
+        );
       default:
         return ('${a.count} bekleyen iş var', FinanceHomeTab.balances, 'İncele');
     }
@@ -136,16 +159,10 @@ class _ManagerAttentionBarState extends State<ManagerAttentionBar> {
               for (final (site, a) in rows)
                 Padding(
                   padding: const EdgeInsets.only(top: AppSpace.md),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          multi ? '${site.label}: ${_describe(a).$1}' : _describe(a).$1,
-                          style: th.bodyLarge?.copyWith(color: AppShowcaseColors.onFocus),
-                        ),
-                      ),
-                      const SizedBox(width: AppSpace.sm),
-                      OutlinedButton(
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final labelText = multi ? '${site.label}: ${_describe(a).$1}' : _describe(a).$1;
+                      final button = OutlinedButton(
                         key: ValueKey<String>('month_attention_${site.code}_${a.key}'),
                         style: OutlinedButton.styleFrom(
                           backgroundColor: AppShowcaseColors.onFocus,
@@ -155,19 +172,23 @@ class _ManagerAttentionBarState extends State<ManagerAttentionBar> {
                           padding: const EdgeInsets.symmetric(horizontal: AppSpace.md, vertical: AppSpace.xs),
                           minimumSize: const Size(48, 48),
                         ),
-                        onPressed: () => widget.onOpenFinance(site.code, _describe(a).$2),
+                        onPressed: () => _handleAction(site, a),
                         child: Semantics(
                           label: '${multi ? '${site.label}: ' : ''}${_describe(a).$1}. ${_describe(a).$3}',
                           excludeSemantics: true,
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Text(
-                                _describe(a).$3,
-                                style: const TextStyle(
-                                  color: AppShowcaseColors.focus,
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: 14,
+                              Flexible(
+                                child: Text(
+                                  _describe(a).$3,
+                                  style: const TextStyle(
+                                    color: AppShowcaseColors.focus,
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 14,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
                               const SizedBox(width: 4),
@@ -179,8 +200,38 @@ class _ManagerAttentionBarState extends State<ManagerAttentionBar> {
                             ],
                           ),
                         ),
-                      ),
-                    ],
+                      );
+
+                      if (constraints.maxWidth < 420) {
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              labelText,
+                              style: th.bodyLarge?.copyWith(color: AppShowcaseColors.onFocus),
+                            ),
+                            const SizedBox(height: AppSpace.sm),
+                            Align(
+                              alignment: AlignmentDirectional.centerStart,
+                              child: button,
+                            ),
+                          ],
+                        );
+                      }
+
+                      return Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              labelText,
+                              style: th.bodyLarge?.copyWith(color: AppShowcaseColors.onFocus),
+                            ),
+                          ),
+                          const SizedBox(width: AppSpace.sm),
+                          button,
+                        ],
+                      );
+                    },
                   ),
                 ),
             ],

@@ -3280,4 +3280,6 @@ Dalga 2-6'nın ikinci aşaması: dekont bildirimi, banka dosyasından tahsilat, 
 - [ ] **108.3. Bildirim Tercihlerinin Profilim Ekranından Yönetilebilmesi:**
   - **Nasıl Test Edilir:** Profilim ekranını açın ve "Bildirim Tercihleri" kartını inceleyin.
   - **Beklenen Sonuç:** Sakin veya yönetici; "E-posta ile duyuru al" ve "Borç hatırlatma e-postaları" seçeneklerini dilediği zaman kapatıp açabilmeli; tercihler anında kaydedilerek sonraki oturumlarda korunmalıdır.
-
+- [ ] **108.4. Yönetici Paneli Dikkat Barı ve Banka Hareketleri Eşleştirme / Onaylama:**
+  - **Nasıl Test Edilir:** Site yöneticisi olarak oturum açıp ana panele (Dashboard) bakın. Banka ekstresinden yüklenmiş onay bekleyen satırlar olduğunda dikkat barındaki metni ve eylem butonunu inceleyin. Butona tıklayın.
+  - **Beklenen Sonuç:** Koyu dikkat barında muğlak ve anlaşılmaz "X banka hareketi onay bekliyor - Eşle" yerine, "Bankadan gelen X ödeme daireyle eşleştirilmeyi ve onayınızı bekliyor" açıklaması ve "İncele ve Onayla" butonu yer almalıdır. Butona tıklandığında doğrudan "Banka Ödemeleri ve Daire Onayları" ekranı açılmalı; yönetici gelen paraları, banka açıklamasını ve önerilen daireleri tek dokunuşla ("Önerilen dairelerin hepsini onayla" veya "Onayla") işleyebilmelidir. İşlem tamamlanıp geri dönüldüğünde panel otomatik yenilenmeli ve dikkat barı kalkmalıdır.

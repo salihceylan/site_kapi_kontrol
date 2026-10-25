@@ -172,7 +172,7 @@ class _BankLinesViewState extends State<BankLinesView> {
   Widget build(BuildContext context) {
     final canConfirmAll = !_done && widget.scope.canWrite && _lines.any((l) => l.status == 'suggested' && l.apartmentId != null);
     return Scaffold(
-      appBar: AppBar(title: const Text('Eşleşmeyen banka satırları')),
+      appBar: AppBar(title: const Text('Banka Ödemeleri ve Daire Onayları')),
       body: RefreshIndicator(
         onRefresh: _load,
         child: ListView(
@@ -205,7 +205,7 @@ class _BankLinesViewState extends State<BankLinesView> {
               Text(_error!),
               TextButton(onPressed: _load, child: const Text('Tekrar dene')),
             ],
-            if (!_loading && _error == null && _lines.isEmpty) Padding(padding: const EdgeInsets.all(AppSpace.xl), child: Text(_done ? 'Henüz ayrılmış satır yok.' : 'Bekleyen satır yok.', textAlign: TextAlign.center)),
+            if (!_loading && _error == null && _lines.isEmpty) Padding(padding: const EdgeInsets.all(AppSpace.xl), child: Text(_done ? 'Henüz ayrılmış satır yok.' : 'Onay bekleyen banka hareketi bulunmuyor.', textAlign: TextAlign.center)),
             if (!_loading && _error == null) for (final l in _lines) _tile(l),
           ],
         ),

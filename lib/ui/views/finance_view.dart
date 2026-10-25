@@ -150,6 +150,15 @@ class FinanceViewState extends State<FinanceView> {
   @override
   void didUpdateWidget(FinanceView oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.initialTab != null && widget.initialTab != _tab) {
+      final target = widget.initialTab!;
+      if (target >= 0 && target < _tabs.length) {
+        _selectTab(target);
+      }
+    }
+    if (widget.initialSiteCode != null && widget.initialSiteCode != _siteCode) {
+      _selectSite(widget.initialSiteCode!);
+    }
     if (oldWidget.manageAllSites != widget.manageAllSites ||
         !listEquals(oldWidget.sites, widget.sites)) {
       unawaited(_loadSites());

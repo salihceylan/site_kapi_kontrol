@@ -67,12 +67,30 @@ void main() {
     await t.pumpAndSettle();
     expect(find.byKey(const ValueKey<String>('month_attention_bar')), findsOneWidget);
     expect(find.text('Dikkat edilmesi gereken 1 iş var'), findsOneWidget);
-    expect(find.textContaining('2 tahsilat kasa / bankaya eşlenmedi'), findsOneWidget);
-    expect(find.text('Eşle'), findsOneWidget);
+    expect(find.textContaining('2 tahsilat kasa / banka hesabına eşlenmedi'), findsOneWidget);
+    expect(find.text('Hesaba Aktar'), findsOneWidget);
     expect(find.byIcon(Icons.arrow_forward_rounded), findsOneWidget);
     _expectNoMonthPanel();
     await t.tap(find.byKey(const ValueKey<String>('month_attention_1_unassigned_payments')));
     expect(opened, <(int, int)>[(1, FinanceHomeTab.cash)]);
+  });
+
+  
+  testWidgets('bank_lines bekleyen iş varken açıklayıcı metin, İncele ve Onayla butonu ve onOpenBankLines çağrısı', (t) async {
+    PeopleSite? openedSite;
+    await t.pumpWidget(_wrap(ManagerAttentionBar(
+      sites: sites,
+      fetch: (_) async => _home(attention: const [FinanceHomeAttention(key: 'bank_lines', count: 4)]),
+      onOpenFinance: (_, _) {},
+      onOpenBankLines: (site) async => openedSite = site,
+    )));
+    await t.pumpAndSettle();
+    expect(find.byKey(const ValueKey<String>('month_attention_bar')), findsOneWidget);
+    expect(find.text('Dikkat edilmesi gereken 1 iş var'), findsOneWidget);
+    expect(find.textContaining('Bankadan gelen 4 ödeme daireyle eşleştirilmeyi ve onayınızı bekliyor'), findsOneWidget);
+    expect(find.text('İncele ve Onayla'), findsOneWidget);
+    await t.tap(find.byKey(const ValueKey<String>('month_attention_1_bank_lines')));
+    expect(openedSite?.code, 1);
   });
 
   testWidgets('genel bekleyen iş varken buton İncele yazar ve bakiyeler sekmesini açar', (t) async {
@@ -153,7 +171,7 @@ void main() {
     await t.pumpAndSettle();
     expect(fetched.toSet(), <int>{1, 2, 3});
     expect(find.text('Dikkat edilmesi gereken 1 iş var'), findsOneWidget);
-    expect(find.textContaining('Site B: 5 tahsilat kasa / bankaya eşlenmedi'), findsOneWidget);
+    expect(find.textContaining('Site B: 5 tahsilat kasa / banka hesabına eşlenmedi'), findsOneWidget);
     expect(find.textContaining('Site A'), findsNothing);
     await t.tap(find.byKey(const ValueKey<String>('month_attention_2_unassigned_payments')));
     expect(opened, <(int, int)>[(2, FinanceHomeTab.cash)]);
