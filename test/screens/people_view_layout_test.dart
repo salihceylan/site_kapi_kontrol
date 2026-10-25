@@ -163,8 +163,6 @@ void main() {
       expect(find.text('A Blok - 5'), findsOneWidget);
       expect(find.text('Kat 2'), findsOneWidget);
       expect(find.text('3+1'), findsOneWidget);
-      expect(find.text('Brüt 120,5 m²'), findsOneWidget);
-      expect(find.text('Net 100 m²'), findsOneWidget);
       expect(find.text('Arsa payı 35/1000'), findsOneWidget);
       expect(find.text('Malik: Ayşe Yılmaz'), findsOneWidget);
       expect(find.text('Kiracı: Mehmet Demir'), findsOneWidget);

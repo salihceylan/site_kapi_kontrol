@@ -71,18 +71,23 @@ class LicensePlateBadge extends StatelessWidget {
               ),
             ),
             // Plaka metni
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: compact ? 6 : 8),
-              child: Center(
-                child: Text(
-                  formatted,
-                  style: TextStyle(
-                    color: const Color(0xFF111111),
-                    fontFamily: 'monospace',
-                    fontSize: fs,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: compact ? 1.0 : 1.5,
-                    height: 1.0,
+            Flexible(
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: compact ? 6 : 8),
+                child: Center(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      formatted,
+                      style: TextStyle(
+                        color: const Color(0xFF111111),
+                        fontFamily: 'monospace',
+                        fontSize: fs,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: compact ? 1.0 : 1.5,
+                        height: 1.0,
+                      ),
+                    ),
                   ),
                 ),
               ),

@@ -191,11 +191,27 @@ class _CreateGuestPassDialogState extends State<CreateGuestPassDialog> {
               decoration: const InputDecoration(
                 labelText: 'Geçiş Başlığı / Açıklama',
                 hintText: 'Örn: Trendyol Kuryesi, Misafir vb.',
+                helperText: 'İsteğe bağlı: boş bırakılabilir.',
                 prefixIcon: Icon(Icons.edit_note_rounded),
               ),
-              validator: (value) => (value ?? '').trim().isEmpty
-                  ? 'Başlık alanı boş bırakılamaz.'
-                  : null,
+              // Boş başlık serbest: sunucu varsayılan başlığı kullanır (guest_pass_utils.js).
+              // Kapıda bekleyen kuryeye yazı yazmak zorunlu olmasın.
+            ),
+            const SizedBox(height: AppSpace.sm),
+            // Tek dokunuşla hazır başlık (yazmadan seç).
+            Wrap(
+              spacing: AppSpace.sm,
+              runSpacing: AppSpace.xs,
+              children: [
+                for (final label in const ['Kurye', 'Misafir', 'Usta / Servis', 'Nakliye'])
+                  ActionChip(
+                    key: ValueKey<String>('guest_title_chip_$label'),
+                    label: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+                    onPressed: _isCreating
+                        ? null
+                        : () => setState(() => _titleController.text = label),
+                  ),
+              ],
             ),
             const SizedBox(height: AppSpace.lg),
             Text('Geçiş Süresi ve Türü', style: th.titleMedium),

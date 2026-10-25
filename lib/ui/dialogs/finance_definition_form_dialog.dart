@@ -225,9 +225,7 @@ class _FinanceDefinitionFormDialogState extends State<FinanceDefinitionFormDialo
     }
     if (spec != null && initial.neverPosted && _specChanged(initial, spec)) {
       fields['distribution'] = spec.distribution.apiValue;
-      if (spec.distribution == FeeDistribution.area && spec.areaBasis != null) {
-        fields['area_basis'] = spec.areaBasis!.apiValue;
-      }
+      
       if (spec.distribution.needsAmount) {
         fields['amount_minor'] = spec.amountMinor;
       }
@@ -241,7 +239,6 @@ class _FinanceDefinitionFormDialogState extends State<FinanceDefinitionFormDialo
 
   static bool _specChanged(FeeDefinition initial, FeeSpec spec) {
     if (spec.distribution != initial.distribution) return true;
-    if (spec.distribution == FeeDistribution.area && spec.areaBasis != initial.areaBasis) return true;
     if (spec.distribution.needsAmount && spec.amountMinor != initial.amountMinor) return true;
     if (spec.distribution == FeeDistribution.category &&
         !mapEquals(spec.categoryAmounts, initial.categoryAmounts)) {

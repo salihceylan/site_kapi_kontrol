@@ -303,20 +303,14 @@ void main() {
       expect(find.byKey(const ValueKey<String>('fee_spec_category_name_30')), findsNothing);
     });
 
-    testWidgets('yönteme göre etiket / açıklama: m² için alan esası seçilir', (t) async {
+    testWidgets('yönteme göre etiket / açıklama: m² dağıtımı formda yer almaz', (t) async {
       final auth = FinanceFakeAuth.seeded();
-      final key = await pumpSpec(t, auth, amount: 100000);
-      await t.tap(find.byKey(const ValueKey<String>('fee_spec_dist_area')));
-      await t.pump();
-      await t.tap(find.byKey(const ValueKey<String>('fee_spec_area_net')));
-      await t.pump();
+      final key = await pumpSpec(t, auth, amount: 100000, distribution: FeeDistribution.area);
+      expect(find.byKey(const ValueKey<String>('fee_spec_dist_area')), findsNothing);
+      expect(find.byKey(const ValueKey<String>('fee_spec_area_net')), findsNothing);
       final spec = key.currentState!.read()!;
-      expect(spec.distribution, FeeDistribution.area);
-      expect(spec.areaBasis, AreaBasis.net);
-      // m² dışına geçince alan esası taşınmaz.
-      await t.tap(find.byKey(const ValueKey<String>('fee_spec_dist_equal')));
-      await t.pump();
-      expect(key.currentState!.read()!.areaBasis, isNull);
+      expect(spec.distribution, FeeDistribution.fixed);
+      expect(spec.areaBasis, isNull);
     });
 
     testWidgets('320 dp x2,0: kategori satırları taşmaz', (t) async {

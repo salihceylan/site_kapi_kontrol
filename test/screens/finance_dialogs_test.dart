@@ -134,14 +134,13 @@ void main() {
       }
     });
 
-    layoutMatrix('Yeni Tanım: kategori + m² + bitiş dönemi + bloklar', (t, w, h, s, dark) async {
+    layoutMatrix('Yeni Tanım: kategori + arsa payı + bitiş dönemi + bloklar', (t, w, h, s, dark) async {
       final auth = FinanceFakeAuth.seeded();
       await _openForm(t, auth, width: w, height: h, scale: s, dark: dark);
       await _tapKey(t, 'finance_has_end');
       await _tapKey(t, 'def_spec_dist_category');
       await _tapKey(t, 'def_spec_add_category');
-      await _tapKey(t, 'def_spec_dist_area');
-      await _tapKey(t, 'def_spec_area_net');
+      await _tapKey(t, 'def_spec_dist_land_share');
       await _tapKey(t, 'finance_target_apartments');
       await scrollTo(t, find.text('Kaydet'));
     });
@@ -262,18 +261,19 @@ void main() {
       expect(body.containsKey('area_basis'), isFalse);
     });
 
-    testWidgets('m² dağıtımı: alan esası (net) ve toplam tutar gider', (t) async {
+    testWidgets('metrekare seçeneği kaldırılmıştır; formda görünmez, arsa payı seçilebilir', (t) async {
       final auth = FinanceFakeAuth.seeded();
       await _openForm(t, auth);
-      await _enter(t, 'finance_definition_name', 'Metrekare');
-      await _tapKey(t, 'def_spec_dist_area');
-      await _tapKey(t, 'def_spec_area_net');
+      expect(find.byKey(const ValueKey<String>('def_spec_dist_area')), findsNothing);
+      expect(find.text('Metrekareye göre'), findsNothing);
+      expect(find.text('Metrekare türü'), findsNothing);
+      await _enter(t, 'finance_definition_name', 'Arsa Payı');
+      await _tapKey(t, 'def_spec_dist_land_share');
       expect(find.text('Toplam tutar'), findsOneWidget, reason: 'sabit dışında tutar TOPLAMDIR');
       await _enter(t, 'def_spec_amount', '12.000');
       await _save(t);
       final body = auth.definitionCreateCalls.single;
-      expect(body['distribution'], 'area');
-      expect(body['area_basis'], 'net');
+      expect(body['distribution'], 'land_share');
       expect(body['amount_minor'], 1200000);
     });
 

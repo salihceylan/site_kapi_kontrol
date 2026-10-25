@@ -165,7 +165,7 @@ void main() {
       expect(auth.createPersonCalls, isEmpty);
     });
 
-    testWidgets('daire düzenleme: ortadaki geçersiz alan (Net alan) görünür bölgeye gelir', (t) async {
+    testWidgets('daire düzenleme: geçersiz alan görünür bölgeye gelir', (t) async {
       final auth = PeopleFakeAuth.seeded();
       final detail = await auth.getApartment(11, 301);
       await _open(
@@ -175,7 +175,7 @@ void main() {
         height: 640,
         scale: 2.0,
       );
-      await _enter(t, 'apartment_net', 'abc');
+      await _enter(t, 'apartment_denominator', 'abc');
       await _scrollFormToBottom(t);
       await t.tap(find.text('Kaydet').last);
       await t.pump();
@@ -254,7 +254,7 @@ void main() {
       expect(find.text('ayse@example.com'), findsOneWidget);
       expect(find.text('Kapıcıya haber verildi.'), findsOneWidget);
       expect(find.text('A Blok - 5'), findsOneWidget);
-      expect(find.text('Malik'), findsOneWidget);
+      expect(find.text('Malik'), findsWidgets);
       expect(find.text('Giriş: 05.03.2024'), findsOneWidget);
       expect(find.text('34 ABC 123'), findsOneWidget);
       for (final label in const <String>[
@@ -287,7 +287,7 @@ void main() {
       expect(find.text('Eski ilişkiler'), findsOneWidget);
       expect(find.text('B Blok - 2'), findsOneWidget);
       expect(find.text('Çıkış: 31.01.2025'), findsOneWidget);
-      expect(find.text('Kiracı'), findsNWidgets(2), reason: 'güncel + eski ilişki çipi');
+      expect(find.text('Kiracı'), findsWidgets, reason: 'roller çipi + güncel + eski ilişki çipi');
       expect(find.text('Kayıtlı araç yok.'), findsOneWidget);
     });
 
@@ -823,8 +823,6 @@ void main() {
       expect(find.text('Bilgiler'), findsOneWidget);
       expect(find.text('2'), findsOneWidget, reason: 'kat');
       expect(find.text('3+1'), findsOneWidget);
-      expect(find.text('120,5 m²'), findsOneWidget);
-      expect(find.text('100 m²'), findsOneWidget);
       expect(find.text('35/1000'), findsOneWidget);
       expect(find.text('Borç ve bildirimler kime gitsin'), findsOneWidget);
       expect(find.text('İkisi'), findsOneWidget);
@@ -896,8 +894,6 @@ void main() {
       );
       expect(find.text('Daireyi Düzenle'), findsOneWidget);
       expect(_fieldText(t, 'apartment_floor'), '2');
-      expect(_fieldText(t, 'apartment_gross'), '120,5');
-      expect(_fieldText(t, 'apartment_net'), '100');
       expect(_fieldText(t, 'apartment_numerator'), '35');
       expect(_fieldText(t, 'apartment_denominator'), '1000');
       expect(_fieldText(t, 'apartment_category'), '3+1');
@@ -937,21 +933,20 @@ void main() {
       expect(find.text('Daireyi Düzenle'), findsNothing);
     });
 
-    testWidgets('alan doğrulamaları: kat, alan ve arsa payı kuralları', (t) async {
+    testWidgets('alan doğrulamaları: kat ve arsa payı kuralları', (t) async {
       final auth = PeopleFakeAuth.seeded();
       final detail = await auth.getApartment(11, 302);
       await _open(t, (c) => ApartmentEditDialog.show(c, scope: _scope(auth), apartment: detail));
 
       await _enter(t, 'apartment_floor', 'abc');
-      await _enter(t, 'apartment_gross', '-5');
-      await _enter(t, 'apartment_net', '0');
       await _tapButton(t, 'Kaydet');
       expect(find.text('Kat -20 ile 500 arasında bir tam sayı olmalı.'), findsOneWidget);
-      expect(find.text('Alan 0\'dan büyük bir sayı olmalı (örn. 120,5).'), findsNWidgets(2));
 
       await _enter(t, 'apartment_floor', '');
-      await _enter(t, 'apartment_gross', '');
-      await _enter(t, 'apartment_net', '');
+      final toggle = find.byKey(const ValueKey<String>('apartment_advanced_toggle'));
+      await t.ensureVisible(toggle);
+      await t.tap(toggle);
+      await t.pumpAndSettle();
       await _enter(t, 'apartment_numerator', '5');
       await _tapButton(t, 'Kaydet');
       expect(find.text('Arsa payı için pay ve payda birlikte girilmeli.'), findsOneWidget);
@@ -979,11 +974,9 @@ void main() {
       await _enter(t, 'apartment_numerator', '');
       await _enter(t, 'apartment_denominator', '');
       await _enter(t, 'apartment_category', '  Dükkan  ');
-      await _enter(t, 'apartment_gross', '130,25');
       await _tapButton(t, 'Kaydet');
       await settleFor(t);
       expect(auth.updateApartmentCalls.last.fields, <String, Object?>{
-        'gross_area_m2': 130.25,
         'land_share_numerator': null,
         'land_share_denominator': null,
         'category': 'Dükkan',

@@ -95,15 +95,14 @@ void main() {
     expect(find.text('Geçiş Süresi ve Türü'), findsOneWidget);
     expect(find.text('Tek Kullanımlık (30 Dakika)'), findsOneWidget);
 
-    // Başka bir ön ayar seçilir (seçili durum görünümü) ve boş başlıkla doğrulama hatası alınır.
+    // Başka bir ön ayar seçilir (seçili durum görünümü) ve hazır başlık seçeneği dokunulur (taşma yok).
     await scrollTo(t, find.text('Günlük Geçiş (12 Saat - 10 Kullanım)'));
     await t.tap(find.text('Günlük Geçiş (12 Saat - 10 Kullanım)'));
     await settleFor(t);
-    await t.enterText(find.byType(TextFormField), '');
-    await scrollTo(t, find.text('Linki Oluştur'));
-    await t.tap(find.text('Linki Oluştur'));
+    await scrollTo(t, find.byKey(const ValueKey<String>('guest_title_chip_Usta / Servis')));
+    await t.tap(find.byKey(const ValueKey<String>('guest_title_chip_Usta / Servis')));
     await settleFor(t);
-    expect(find.text('Başlık alanı boş bırakılamaz.'), findsOneWidget);
+    expect(find.text('Başlık alanı boş bırakılamaz.'), findsNothing);
   });
 
   layoutMatrix('CreateGuestPassDialog (sunucu hatası: InlineNotice)', (
@@ -212,6 +211,7 @@ void main() {
       expect(toneOf(timed), AppTone.neutral);
       expect(find.byIcon(Icons.check_circle_rounded), findsOneWidget);
 
+      await scrollTo(t, find.text(timed));
       await t.tap(find.text(timed));
       await settleFor(t);
 

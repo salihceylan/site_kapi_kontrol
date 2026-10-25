@@ -56,8 +56,6 @@ double? parseAreaInput(String? text) {
 /// tabandan farklı alanları `PATCH .../apartments/:id` gövdesi olarak döner (hiçbiri değişmediyse boş).
 class ApartmentFieldsDraft {
   final TextEditingController floor = TextEditingController();
-  final TextEditingController gross = TextEditingController();
-  final TextEditingController net = TextEditingController();
   final TextEditingController numerator = TextEditingController();
   final TextEditingController denominator = TextEditingController();
   final TextEditingController category = TextEditingController();
@@ -71,12 +69,6 @@ class ApartmentFieldsDraft {
   void load(ApartmentDetail apartment) {
     _initial = apartment;
     floor.text = apartment.floor?.toString() ?? '';
-    gross.text = apartment.grossAreaM2 == null
-        ? ''
-        : formatNumber(apartment.grossAreaM2!);
-    net.text = apartment.netAreaM2 == null
-        ? ''
-        : formatNumber(apartment.netAreaM2!);
     numerator.text = apartment.landShare?.numerator.toString() ?? '';
     denominator.text = apartment.landShare?.denominator.toString() ?? '';
     category.text = apartment.category ?? '';
@@ -87,8 +79,6 @@ class ApartmentFieldsDraft {
   void clear() {
     _initial = null;
     floor.clear();
-    gross.clear();
-    net.clear();
     numerator.clear();
     denominator.clear();
     category.clear();
@@ -97,8 +87,6 @@ class ApartmentFieldsDraft {
 
   void dispose() {
     floor.dispose();
-    gross.dispose();
-    net.dispose();
     numerator.dispose();
     denominator.dispose();
     category.dispose();
@@ -165,8 +153,6 @@ class ApartmentFieldsDraft {
   /// Alanların TÜMÜ (form alanı çizilmemiş olsa da): ilk hata iletisi, yoksa null.
   String? validateAll() =>
       validateFloor(floor.text) ??
-      validateArea(gross.text) ??
-      validateArea(net.text) ??
       validateNumerator(numerator.text) ??
       validateDenominator(denominator.text) ??
       validateLandShare();
@@ -244,6 +230,11 @@ class _ApartmentEditDialogState extends State<ApartmentEditDialog> {
   bool _submitting = false;
   String? _error;
 
+  /// Arsa payı / kategori bölümü: değer girilmiş dairede açık, aksi halde katlı başlar.
+  late bool _showAdvanced =
+      _initial.landShare != null ||
+      (_initial.category ?? '').trim().isNotEmpty;
+
   @override
   void dispose() {
     _draft.dispose();
@@ -293,8 +284,6 @@ class _ApartmentEditDialogState extends State<ApartmentEditDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final th = Theme.of(context).textTheme;
-    final p = context.palette;
     return PopScope(
       canPop: !_submitting,
       child: AppDialog(
@@ -332,7 +321,32 @@ class _ApartmentEditDialogState extends State<ApartmentEditDialog> {
                 validator: ApartmentFieldsDraft.validateFloor,
               ),
               const SizedBox(height: AppSpace.md),
-
+              _partyField(),
+              const SizedBox(height: AppSpace.sm),
+              // Sadelik: arsa payı ve kategori çoğu sitede gerekmez (aidat eşit dağıtılır). Silinmez -
+              // "arsa payına göre dağıtım" kullanan siteler için finans dağıtımında (finance_distribution.js)
+              // kullanılır - ama varsayılan olarak katlı durur. Değer girilmiş dairede açık gelir.
+              Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: TextButton.icon(
+                  key: const ValueKey<String>('apartment_advanced_toggle'),
+                  onPressed: () => setState(() => _showAdvanced = !_showAdvanced),
+                  icon: Icon(
+                    _showAdvanced
+                        ? Icons.expand_less_rounded
+                        : Icons.expand_more_rounded,
+                  ),
+                  label: Text(
+                    _showAdvanced
+                        ? 'Gelişmiş bilgileri gizle'
+                        : 'Gelişmiş bilgiler (arsa payı, kategori - isteğe bağlı)',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
+              if (_showAdvanced) ...[
+              const SizedBox(height: AppSpace.sm),
               TextFormField(
                 key: const ValueKey<String>('apartment_numerator'),
                 controller: _draft.numerator,
@@ -371,38 +385,43 @@ class _ApartmentEditDialogState extends State<ApartmentEditDialog> {
                   counterText: '',
                 ),
               ),
-              const SizedBox(height: AppSpace.md),
-              DropdownButtonFormField<ResponsibleParty>(
-                key: const ValueKey<String>('apartment_party'),
-                isExpanded: true,
-                initialValue: _draft.party,
-                dropdownColor: p.surface,
-                style: th.bodyLarge?.copyWith(color: p.text),
-                decoration: const InputDecoration(
-                  labelText: 'Borç ve bildirimler kime gitsin',
-                  prefixIcon: Icon(Icons.notifications_active_rounded),
-                ),
-                items: [
-                  for (final party in ResponsibleParty.values)
-                    DropdownMenuItem<ResponsibleParty>(
-                      value: party,
-                      child: Text(
-                        party.label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                ],
-                onChanged: _submitting
-                    ? null
-                    : (value) {
-                        if (value != null) setState(() => _draft.party = value);
-                      },
-              ),
+              ],
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _partyField() {
+    final th = Theme.of(context).textTheme;
+    final p = context.palette;
+    return DropdownButtonFormField<ResponsibleParty>(
+      key: const ValueKey<String>('apartment_party'),
+      isExpanded: true,
+      initialValue: _draft.party,
+      dropdownColor: p.surface,
+      style: th.bodyLarge?.copyWith(color: p.text),
+      decoration: const InputDecoration(
+        labelText: 'Borç ve bildirimler kime gitsin',
+        prefixIcon: Icon(Icons.notifications_active_rounded),
+      ),
+      items: [
+        for (final party in ResponsibleParty.values)
+          DropdownMenuItem<ResponsibleParty>(
+            value: party,
+            child: Text(
+              party.label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+      ],
+      onChanged: _submitting
+          ? null
+          : (value) {
+              if (value != null) setState(() => _draft.party = value);
+            },
     );
   }
 }

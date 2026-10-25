@@ -56,14 +56,18 @@ void main() {
       expect(find.text('Linki Olustur'), findsNothing);
     });
 
-    testWidgets('boş başlık doğrulama mesajı Türkçe karakterlidir', (tester) async {
+    testWidgets('başlık isteğe bağlıdır; hazır seçenek tek dokunuşla doldurur', (tester) async {
       await _pumpDialog(tester);
 
-      await tester.enterText(find.byType(TextFormField), '');
-      await tester.tap(find.text('Linki Oluştur'));
+      await tester.tap(find.byKey(const ValueKey<String>('guest_title_chip_Misafir')));
       await tester.pump();
+      final field = tester.widget<TextFormField>(find.byType(TextFormField));
+      expect(field.controller?.text, 'Misafir');
 
-      expect(find.text('Başlık alanı boş bırakılamaz.'), findsOneWidget);
+      // Boş başlık artık doğrulama hatası vermez (sunucu varsayılan başlığı kullanır).
+      await tester.enterText(find.byType(TextFormField), '');
+      await tester.pump();
+      expect(find.text('Başlık alanı boş bırakılamaz.'), findsNothing);
     });
 
     testWidgets('küçük ekran + yazı ölçeği 1.5: taşma yok', (tester) async {

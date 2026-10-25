@@ -761,21 +761,6 @@ void main() {
       expect(parseAreaInput('1.23.456'), isNull);
       expect(parseAreaInput('1,234.56,7'), isNull);
     });
-
-    testWidgets('formda "1e3" hata verir ve sunucuya gitmez', (t) async {
-      final auth = PeopleFakeAuth.seeded();
-      final detail = await auth.getApartment(11, 302);
-      await _open(t, (c) => ApartmentEditDialog.show(c, scope: _scope(auth), apartment: detail));
-      await _enter(t, 'apartment_gross', '1e3');
-      await _tapLast(t, 'Kaydet');
-      expect(find.text('Alan 0\'dan büyük bir sayı olmalı (örn. 120,5).'), findsOneWidget);
-      expect(auth.updateApartmentCalls, isEmpty);
-
-      await _enter(t, 'apartment_gross', '1.234,5');
-      await _tapLast(t, 'Kaydet');
-      await settleFor(t);
-      expect(auth.updateApartmentCalls.single.fields, <String, Object?>{'gross_area_m2': 1234.5});
-    });
   });
 
   group('F24 plaka ve e-posta alanları', () {

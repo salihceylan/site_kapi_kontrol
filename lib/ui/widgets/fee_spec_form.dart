@@ -89,7 +89,6 @@ class FeeSpecForm extends StatefulWidget {
     FeeDistribution.equal,
     FeeDistribution.category,
     FeeDistribution.landShare,
-    FeeDistribution.area,
   ];
 
   static const int maxCategories = 30;
@@ -100,10 +99,9 @@ class FeeSpecForm extends StatefulWidget {
 }
 
 class FeeSpecFormState extends State<FeeSpecForm> {
-  late FeeDistribution _distribution = widget.initialDistribution == FeeDistribution.unknown
+  late FeeDistribution _distribution = (widget.initialDistribution == FeeDistribution.unknown || widget.initialDistribution == FeeDistribution.area)
       ? FeeDistribution.fixed
       : widget.initialDistribution;
-  late AreaBasis _areaBasis = widget.initialAreaBasis;
   late final TextEditingController _amount = TextEditingController(
     text: widget.initialAmountMinor == null
         ? ''
@@ -195,7 +193,7 @@ class FeeSpecFormState extends State<FeeSpecForm> {
     }
     return FeeSpec(
       distribution: _distribution,
-      areaBasis: _distribution == FeeDistribution.area ? _areaBasis : null,
+      areaBasis: null,
       amountMinor: amount,
       categoryAmounts: categories,
       target: target,
@@ -283,29 +281,7 @@ class FeeSpecFormState extends State<FeeSpecForm> {
           key: ValueKey<String>('${prefix}_dist_help'),
           style: th.bodySmall?.copyWith(color: p.textSecondary),
         ),
-        if (_distribution == FeeDistribution.area) ...[
-          const SizedBox(height: AppSpace.md),
-          const FinanceGroupTitle('Metrekare türü'),
-          const SizedBox(height: AppSpace.sm),
-          Wrap(
-            spacing: AppSpace.sm,
-            runSpacing: AppSpace.sm,
-            children: [
-              for (final basis in AreaBasis.values)
-                ChoiceChip(
-                  key: ValueKey<String>('${prefix}_area_${basis.apiValue}'),
-                  label: Text(basis.label),
-                  selected: _areaBasis == basis,
-                  onSelected: enabled
-                      ? (_) {
-                          setState(() => _areaBasis = basis);
-                          _changed();
-                        }
-                      : null,
-                ),
-            ],
-          ),
-        ],
+        
         if (_distribution.needsAmount) ...[
           const SizedBox(height: AppSpace.md),
           MoneyFormField(

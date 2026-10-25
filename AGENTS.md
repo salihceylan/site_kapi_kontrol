@@ -151,3 +151,13 @@ Bu kurallar projede geliştirme yapılırken MUTLAKA ve İSTİSNASIZ olarak uygu
     - **Gelecek Ajanlar İçin Kesin Yasaklar ve Koruma İlkeleri:**
       - `createSiteApplication`, `createSiteWithStructure` veya `createSite` fonksiyonlarındaki site adı benzersizlik kontrollerini ASLA kaldırma veya bypass etme.
       - `sites` tablosundaki `idx_sites_unique_name` benzersizlik indeksini ASLA silme.
+
+23. **Aidat ve Borç Tanımlarında Metrekare (m²) Dağıtımının Kaldırılması (ASLA GERİ EKLENMEYECEK):**
+    - **Neden Yapıldı:**
+      - Kullanıcı kararıyla metrekareyle ilgili tüm veriler sistemden temizlendiği için, finans ve aidat tanımlarında "Metrekareye göre" (`FeeDistribution.area`) borç dağıtımı yöntemi ve arayüzdeki "Metrekare türü (Brüt m² / Net m²)" seçim bileşenleri tamamen kaldırılmıştır.
+      - Aidat ve borç dağıtımları yalnızca "Sabit tutar" (`fixed`), "Eşit paylaşım" (`equal`), "Kategoriye göre" (`category`) veya "Arsa payına göre" (`landShare`) yöntemleriyle yapılır.
+    - **Gelecek Ajanlar İçin Kesin Yasaklar ve Koruma İlkeleri:**
+      - `FeeDistribution.area` ('Metrekareye göre') seçeneğini `FeeSpecForm.distributions` listesine veya aidat/borçlandırma formlarına ASLA geri ekleme.
+      - Aidat ve borçlandırma UI ekranlarına "Brüt m² / Net m²" seçimi veya metrekare giriş kutusu ASLA koyma.
+      - `FeeSpecFormState` içine metrekare hesaplama mantığı ekleme.
+

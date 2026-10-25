@@ -3255,3 +3255,15 @@ Dalga 2-6'nın ikinci aşaması: dekont bildirimi, banka dosyasından tahsilat, 
 - [ ] **106.2. Onay Bekleyen Başvuru Varken Aynı İsimle İkinci Başvuru Yapılamaması:**
   - **Nasıl Test Edilir:** Onay bekleyen bir site başvurusu varken, aynı isimle başka bir başvuru oluşturmayı deneyin.
   - **Beklenen Sonuç:** Sistem `""..." adında onay bekleyen bir site başvurusu zaten bulunmaktadır. Lütfen farklı bir site adı belirleyin."` hatası ile talebi doğrudan engellemelidir.
+
+---
+
+## 107. 💰 Aidat ve Borç Tanımlarında Metrekare (m²) Dağıtımının Kaldırılması
+
+- [ ] **107.1. Aidat / Borç Tanımında Metrekare Dağıtım Seçeneğinin Bulunmaması:**
+  - **Nasıl Test Edilir:** Finans / Aidat Tanımları sayfasına gidin ve "Yeni Tanım Ekle" butonuna tıklayın. Dağıtım yöntemi seçeneklerini inceleyin.
+  - **Beklenen Sonuç:** Dağıtım yöntemleri arasında "Metrekareye göre" seçeneği KESİNLİKLE YER ALMAMALIDIR. Yalnızca "Sabit tutar", "Eşit", "Kategoriye göre" ve "Arsa payına göre" seçenekleri bulunmalıdır.
+- [ ] **107.2. Formda Metrekare Türü (Brüt m² / Net m²) Alanının Görünmemesi:**
+  - **Nasıl Test Edilir:** Yeni Aidat Tanımı veya Düzenleme formundaki tüm alanları inceleyin.
+  - **Beklenen Sonuç:** Formda hiçbir yerde "Metrekare türü", "Brüt m²", "Net m²" seçim veya giriş alanı yer almamalı; form hatasız şekilde kaydedilebilmelidir.
+
