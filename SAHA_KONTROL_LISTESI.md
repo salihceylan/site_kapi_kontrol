@@ -3234,3 +3234,12 @@ Dalga 2-6'nın ikinci aşaması: dekont bildirimi, banka dosyasından tahsilat, 
 - [ ] **104.2. Ret Bildiriminin "Anladım" Butonuyla Panelden Kalıcı Olarak Kapatılması:**
   - **Nasıl Test Edilir:** Reddedilen başvuru kartındaki **"Anladım"** butonuna dokunun. Ardından sayfayı yenileyin veya uygulamadan çıkıp tekrar girin.
   - **Beklenen Sonuç:** "Anladım" butonuna basıldığı anda ret kartı panelden anında silinmeli; kapatma tercihi yerel hafızaya kaydedilerek (`consumeRejected`), sayfa yenilense ya da uygulama kapatılıp açılsa bile panelde bir daha sürekli olarak görünmemelidir.
+
+
+---
+
+## 105. 👥 Daire Sakinine Kullanıcı Adı/Şifre Verildiğinde Hesapsız Sakinin Bağlanması ve Tek Kişi Bütünlüğü
+
+- [ ] **105.1. Hesapsız Sakine Daire Giriş Bilgisi Verildiğinde İkinci Kişi Oluşmaması (Mükerrerlik Engeli):**
+  - **Nasıl Test Edilir:** Dairede halihazırda hesapsız olarak ikamet eden bir sakin varken (örneğin toplu yükleme veya sakin ekleme ile oluşturulmuş "SALİH CEYLAN 1"), daire detayından "Daire hesabı (giriş bilgileri) / Düzenle" diyerek kullanıcı adı ve şifre/PIN tanımlayın ve kaydedin.
+  - **Beklenen Sonuç:** Daire kartında veya sakinler listesinde mükerrer ikinci bir kişi ("Aktif - 2 kişi: 1 Admin Hesaplı, 1 Aile Üyesi Hesapsız") OLUŞMAMALIDIR. Sistem mevcut hesapsız sakini otomatik olarak bu kullanıcı hesabına bağlamalı; dairede tam olarak 1 kişi ("SALİH CEYLAN 1 - Daire Admini - Hesabı var") görüntülenmelidir.

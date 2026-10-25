@@ -131,3 +131,12 @@ Bu kurallar projede geliştirme yapılırken MUTLAKA ve İSTİSNASIZ olarak uygu
     - **Gelecek Ajanlar İçin Kesin Yasaklar ve Koruma İlkeleri:**
       - Panel ve bireysel ana ekranlardaki `SiteApplicationStatusCard` bileşenlerine "Yeniden başvur" butonunu ASLA geri koyma (`showReapplyOnRejected: false` kuralını koru).
       - Ret kartından "Anladım" / kapatma butonunu ve `consumeRejected` mekanizmasını ASLA kaldırma.
+
+21. **Daireye Kullanıcı Adı ve Şifre Verildiğinde Hesapsız Sakinin Bağlanması ve İkinci Kişi Oluşumunun Engellenmesi:**
+    - **Neden Yapıldı:**
+      - Excel toplu yüklemesi veya sakin ekleme ile daireye hesapsız bir sakin kaydedildikten sonra, yönetici bu daireye kullanıcı adı ve şifre verdiğinde (`PATCH /manager/apartments/:id/resident` ve `/admin/apartments/:id/resident`), backend yeni bir `users` ve `apartments.resident_user_code` açıyordu ancak bu hesabı dairedeki mevcut hesapsız sakinle (`site_people`) doğrudan bağlamıyordu.
+      - Sonrasında tetiklenen kişi senkronizasyonu (`syncSitePeople`), bu `resident_user_code` için `site_people`'da eşleşme bulamayıp daireye sıfırdan ikinci bir kişi ve ikinci bir ikamet kaydı açıyor, daire kartında aynı isimde biri "Daire admini (Hesaplı)" diğeri "Aile üyesi (Hesapsız)" olmak üzere "Aktif - 2 kişi" saçmalığına yol açıyordu.
+      - Yapılan geliştirmeyle `provisionApartmentResident` sonrasında dairede mevcut hesapsız aktif bir sakin varsa bu yeni hesap doğrudan o sakine bağlanır (`UPDATE site_people SET user_code = ... WHERE ...`) ve `apartment_memberships` kaydı atanır.
+    - **Gelecek Ajanlar İçin Kesin Yasaklar ve Koruma İlkeleri:**
+      - `manager_routes.js` ve `admin_routes.js` içerisindeki sakin bağlama (`UPDATE site_people SET user_code = ... FROM apartment_residencies`) mantığını ASLA kaldırma.
+      - Daire hesabı oluşturulduğunda veya güncellendiğinde dairedeki mevcut hesapsız sakini yok sayarak mükerrer kişi türeten kodlar yazma.
