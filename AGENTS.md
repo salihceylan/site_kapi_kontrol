@@ -161,3 +161,14 @@ Bu kurallar projede geliştirme yapılırken MUTLAKA ve İSTİSNASIZ olarak uygu
       - Aidat ve borçlandırma UI ekranlarına "Brüt m² / Net m²" seçimi veya metrekare giriş kutusu ASLA koyma.
       - `FeeSpecFormState` içine metrekare hesaplama mantığı ekleme.
 
+24. **Sadelik ve Kolay Kullanım İlkesi (Gereksiz Veri Talebi ve Karmaşıklığın Engellenmesi):**
+    - **Neden Yapıldı:**
+      - Toplu yaşam yönetiminde yöneticinin ve sakinin işini zorlaştıran, gereksiz veri girişi dayatan ve kafa karıştıran form alanları sadeleştirildi.
+      - Misafir geçiş linki oluşturmada başlık zorunluluğu kaldırıldı; başlık isteğe bağlı yapıldı (boş bırakıldığında sunucu varsayılan "Misafir" başlığını kullanır) ve altına tek dokunuşla dolan hazır etiketler (`Kurye`, `Misafir`, `Usta / Servis`, `Nakliye`) eklendi.
+      - Daire düzenleme penceresinde (`ApartmentEditDialog`) çoğu sitede girilmeyen arsa payı (pay/payda) ve kategori alanları "Gelişmiş bilgiler" akordeonuna katlandı (`apartment_advanced_toggle`). Finans dağıtımında (`finance_distribution.js`) kullanıldığı için arsa payı kesinlikle silinmez, yalnızca ilk bakışta gizlenir; değeri olan dairede açık gelir.
+    - **Gelecek Ajanlar İçin Kesin Yasaklar ve Koruma İlkeleri:**
+      - Sakin ve yönetici formlarına zorunlu olmayan hiçbir alanı "zorunlu (required)" yapma; isteğe bağlı alanları güvenli varsayılanlarla destekle.
+      - Misafir linki başlığını yeniden zorunlu hale getirme; hazır hızlı etiketleri (`guest_title_chip_*`) kaldırma.
+      - Daire düzenlemedeki `apartment_advanced_toggle` ve katlı arsa payı/kategori yapısını bozma, arsa payını finans motorundan koparma.
+
+

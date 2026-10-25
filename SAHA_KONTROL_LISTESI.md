@@ -3267,3 +3267,17 @@ Dalga 2-6'nın ikinci aşaması: dekont bildirimi, banka dosyasından tahsilat, 
   - **Nasıl Test Edilir:** Yeni Aidat Tanımı veya Düzenleme formundaki tüm alanları inceleyin.
   - **Beklenen Sonuç:** Formda hiçbir yerde "Metrekare türü", "Brüt m²", "Net m²" seçim veya giriş alanı yer almamalı; form hatasız şekilde kaydedilebilmelidir.
 
+---
+
+## 108. 🌟 Sadeleştirme ve Kolay Kullanım (Yönetici & Sakin Deneyimi)
+
+- [ ] **108.1. Misafir Linki Oluşturmada Başlığın İsteğe Bağlı Olması ve Hazır Hızlı Seçenekler (Chips):**
+  - **Nasıl Test Edilir:** Kapı kontrolü veya kişi kartından "Misafir Geçiş Linki" / "Geçiş Linki Oluştur" penceresini açın. Başlık alanını boş bırakarak veya alttaki hazır hızlı etiketlerden birine dokunarak ("Kurye", "Misafir", "Usta / Servis", "Nakliye") link oluşturun.
+  - **Beklenen Sonuç:** Başlık yazmak artık zorunlu tutulmamalı; boş bırakıldığında sistem varsayılan ("Misafir") başlığı otomatik kullanmalı, hazır etiketlere dokunulduğunda başlık kutusu tek dokunuşla dolmalıdır.
+- [ ] **108.2. Daire Düzenlemede Sade Form ve Katlı "Gelişmiş Bilgiler" Bölümü:**
+  - **Nasıl Test Edilir:** Kişiler / Daireler sekmesinden bir dairenin "Düzenle" penceresini açın.
+  - **Beklenen Sonuç:** Formda ilk bakışta yalnızca Kat ve "Borç ve bildirimler kime gitsin" alanları yer almalı; çoğu sitede kullanılmayan Arsa Payı ve Kategori alanları "Gelişmiş bilgiler (arsa payı, kategori - isteğe bağlı)" başlığı altında varsayılan olarak katlı (kapalı) durmalıdır. Halihazırda arsa payı veya kategorisi girilmiş dairelerde bu bölüm açık gelmeli; arsa payı silinmeyip finansal dağıtım uyumluluğu korunmalıdır.
+- [ ] **108.3. Bildirim Tercihlerinin Profilim Ekranından Yönetilebilmesi:**
+  - **Nasıl Test Edilir:** Profilim ekranını açın ve "Bildirim Tercihleri" kartını inceleyin.
+  - **Beklenen Sonuç:** Sakin veya yönetici; "E-posta ile duyuru al" ve "Borç hatırlatma e-postaları" seçeneklerini dilediği zaman kapatıp açabilmeli; tercihler anında kaydedilerek sonraki oturumlarda korunmalıdır.
+
