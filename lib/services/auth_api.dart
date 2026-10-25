@@ -4847,6 +4847,7 @@ class AuthApi {
           : UserRole.fromApi(user['role'] as String),
       isActive: user['is_active'] as bool? ?? fallbackIsActive,
       token: token,
+      mustChangePassword: user['must_change_password'] == true,
       phoneNumber: user['phone_number'] as String?,
       createdAt: user['created_at'] == null
           ? null

@@ -752,7 +752,10 @@ authRouter.post('/auth/login', loginRateLimiter, async (req, res) => {
         approval_status,
         phone_number,
         created_at,
-        password_hash
+        password_hash,
+        (COALESCE(users.must_change_password, FALSE) OR EXISTS (
+          SELECT 1 FROM apartments a WHERE a.resident_user_code = users.user_code AND a.resident_pin_issued = TRUE
+        )) AS must_change_password
       FROM users
       WHERE LOWER(email) = LOWER($1) OR LOWER(login_name) = LOWER($1)
       LIMIT 1
@@ -955,7 +958,8 @@ authRouter.patch('/me', authRequired, profileUpdateLimiter, async (req, res) => 
       // Daire hesabı kendi parolasını belirledi: yönetimin verdiği PIN artık geçerli değil -> "PIN verildi" işareti kalkar (migration 051;
       // daire sakini change-password ucuyla aynı). Ayrı otomatik onaylı ifade: users güncellemesiyle aynı işlemde DEĞİL (kilit sırası apartments -> users).
       await pool.query(
-        'UPDATE apartments SET resident_pin_issued = FALSE, resident_pin_code = NULL WHERE resident_user_code = $1 AND (resident_pin_issued OR resident_pin_code IS NOT NULL)',
+        'UPDATE users SET must_change_password = FALSE WHERE user_code = $1', [userCode]);
+      await pool.query('UPDATE apartments SET resident_pin_issued = FALSE, resident_pin_code = NULL WHERE resident_user_code = $1 AND (resident_pin_issued OR resident_pin_code IS NOT NULL)',
         [userCode],
       );
       const newHashRes = await pool.query(

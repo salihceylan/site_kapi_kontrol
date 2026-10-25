@@ -9,6 +9,7 @@ class UserSession {
     required this.role,
     required this.isActive,
     required this.token,
+    this.mustChangePassword = false,
     this.phoneNumber,
     this.createdAt,
   });
@@ -20,6 +21,7 @@ class UserSession {
   final UserRole role;
   final bool isActive;
   final String token;
+  final bool mustChangePassword;
   final String? phoneNumber;
   final DateTime? createdAt;
 
@@ -31,6 +33,7 @@ class UserSession {
     UserRole? role,
     bool? isActive,
     String? token,
+    bool? mustChangePassword,
     String? phoneNumber,
     DateTime? createdAt,
   }) {
@@ -42,6 +45,7 @@ class UserSession {
       role: role ?? this.role,
       isActive: isActive ?? this.isActive,
       token: token ?? this.token,
+      mustChangePassword: mustChangePassword ?? this.mustChangePassword,
       phoneNumber: phoneNumber ?? this.phoneNumber,
       createdAt: createdAt ?? this.createdAt,
     );
@@ -56,6 +60,7 @@ class UserSession {
       'role': role.apiValue,
       'is_active': isActive,
       'token': token,
+      'must_change_password': mustChangePassword,
       'phone_number': phoneNumber,
       'created_at': createdAt?.toIso8601String(),
     };
@@ -71,6 +76,7 @@ class UserSession {
       role: UserRole.fromApi(json['role'] as String),
       isActive: json['is_active'] as bool? ?? true,
       token: json['token'] as String,
+      mustChangePassword: json['must_change_password'] == true,
       phoneNumber: json['phone_number'] as String?,
       createdAt: createdAtRaw == null || createdAtRaw.isEmpty
           ? null

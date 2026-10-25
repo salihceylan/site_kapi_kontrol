@@ -50,7 +50,10 @@ export async function authRequired(req, res, next) {
         phone_number,
         created_at,
         deleted_at,
-        password_hash
+        password_hash,
+        (COALESCE(users.must_change_password, FALSE) OR EXISTS (
+          SELECT 1 FROM apartments a WHERE a.resident_user_code = users.user_code AND a.resident_pin_issued = TRUE
+        )) AS must_change_password
       FROM users
       WHERE user_code = $1
       LIMIT 1

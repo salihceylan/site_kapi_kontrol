@@ -41,6 +41,7 @@ import 'package:site_kapi_kontrol/services/adaptive_poller.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/services/share_inbox.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/payment_notice_dialog.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/force_change_password_dialog.dart';
 import 'package:site_kapi_kontrol/models/bulk_import.dart' show ImportKind;
 import 'package:site_kapi_kontrol/ui/views/bulk_import_view.dart';
 
@@ -327,20 +328,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   bool _canShowSiteCreationOnPanel(UserSession session) => false;
-  bool _canShowSiteCreationOnPanelOld(UserSession session) {
-    if (session.role == UserRole.superUser || session.role == UserRole.siteManager) {
-      return false;
-    }
-    if (_siteApplications.pending != null) {
-      return false;
-    }
-    if (_myApartmentsLoaded && (_myApartmentsList?.isNotEmpty ?? false)) {
-      return false;
-    }
-    return _myApartmentsLoaded
-        ? (_myApartmentsList == null || _myApartmentsList!.isEmpty)
-        : (session.role == UserRole.individual);
-  }
+  
 
   Future<void> _openCreateSiteFlow() async {
     final session = widget.authService.session;
@@ -656,7 +644,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     super.initState();
 
     WidgetsBinding.instance.addObserver(this);
-    WidgetsBinding.instance.addPostFrameCallback((_) => unawaited(_openSharedReceipt()));
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_openSharedReceipt());
+      _checkForceChangePassword();
+    });
 
     final session = widget.authService.session;
 
@@ -1780,6 +1771,24 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   /// Telefon bildirimine dokunuldu (arka plan / kapalıyken; numara beyaz listeden geçti). Olay bir kare kurulurken
   /// gelebilir: pencere bir sonraki karede, merkezi menü kapısından ([_openAnnouncement]) açılır.
+
+  void _checkForceChangePassword() {
+    final session = widget.authService.session;
+    if (session == null || !session.mustChangePassword) return;
+    if (!mounted) return;
+    ForceChangePasswordDialog.show(
+      context: context,
+      session: session,
+      authService: widget.authService,
+      onPasswordChanged: (updated) {
+        setState(() {});
+      },
+      onLogout: () {
+        widget.authService.logout();
+      },
+    );
+  }
+
   void _openAnnouncementFromPush(int id) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _openAnnouncement(id);

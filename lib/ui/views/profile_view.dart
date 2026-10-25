@@ -341,6 +341,8 @@ class ResidentProfileView extends StatelessWidget {
       children: [
         card,
         const SizedBox(height: AppSpace.lg),
+        _ResidentPasswordSection(authService: service, session: session),
+        const SizedBox(height: AppSpace.lg),
         MyRecordsSection(authService: service, showWhenEmpty: true),
         const SizedBox(height: AppSpace.lg),
         SearchVisibilitySection(authService: service),
@@ -351,6 +353,164 @@ class ResidentProfileView extends StatelessWidget {
         const SizedBox(height: AppSpace.lg),
         AccountPrivacySection(authService: service, onOpenDebt: onOpenDebt),
       ],
+    );
+  }
+}
+
+
+class _ResidentPasswordSection extends StatefulWidget {
+  const _ResidentPasswordSection({
+    required this.authService,
+    required this.session,
+  });
+
+  final AuthService authService;
+  final UserSession session;
+
+  @override
+  State<_ResidentPasswordSection> createState() => _ResidentPasswordSectionState();
+}
+
+class _ResidentPasswordSectionState extends State<_ResidentPasswordSection> {
+  final _formKey = GlobalKey<FormState>();
+  final _currentController = TextEditingController();
+  final _newController = TextEditingController();
+  final _confirmController = TextEditingController();
+  bool _isSaving = false;
+  bool _obscureCurrent = true;
+  bool _obscureNew = true;
+  bool _obscureConfirm = true;
+
+  @override
+  void dispose() {
+    _currentController.dispose();
+    _newController.dispose();
+    _confirmController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (_isSaving) return;
+    if (!_formKey.currentState!.validate()) return;
+    final currentPass = _currentController.text.trim();
+    final newPass = _newController.text.trim();
+    final confirmPass = _confirmController.text.trim();
+    if (newPass != confirmPass) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Yeni şifreler eşleşmiyor.'), backgroundColor: Colors.red),
+      );
+      return;
+    }
+    setState(() => _isSaving = true);
+    try {
+      final error = await widget.authService.updateMyProfile(
+        fullName: widget.session.fullName,
+        email: widget.session.email,
+        password: newPass,
+        currentPassword: currentPass,
+      );
+      if (error != null) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error), backgroundColor: Colors.red));
+        return;
+      }
+      if (!mounted) return;
+      _currentController.clear();
+      _newController.clear();
+      _confirmController.clear();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Şifreniz başarıyla değiştirildi.'), backgroundColor: Colors.green),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', '')), backgroundColor: Colors.red),
+      );
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      level: 2,
+      padding: const EdgeInsets.all(AppSpace.lg),
+      child: Form(
+        key: _formKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.lock_reset_rounded, size: 24),
+                const SizedBox(width: AppSpace.sm),
+                const Expanded(child: SectionHeader(title: 'Şifremi Değiştir')),
+              ],
+            ),
+            const SizedBox(height: AppSpace.md),
+            TextFormField(
+              controller: _currentController,
+              obscureText: _obscureCurrent,
+              decoration: InputDecoration(
+                labelText: 'Mevcut Şifre / PIN',
+                suffixIcon: IconButton(
+                  icon: Icon(_obscureCurrent ? Icons.visibility_off : Icons.visibility),
+                  onPressed: () => setState(() => _obscureCurrent = !_obscureCurrent),
+                ),
+              ),
+              validator: (v) => (v ?? '').trim().isEmpty ? 'Mevcut şifrenizi girin.' : null,
+            ),
+            const SizedBox(height: AppSpace.md),
+            TextFormField(
+              controller: _newController,
+              obscureText: _obscureNew,
+              decoration: InputDecoration(
+                labelText: 'Yeni Şifre',
+                helperText: PasswordPolicy.hint,
+                suffixIcon: IconButton(
+                  icon: Icon(_obscureNew ? Icons.visibility_off : Icons.visibility),
+                  onPressed: () => setState(() => _obscureNew = !_obscureNew),
+                ),
+              ),
+              validator: (v) => PasswordPolicy.validate(
+                (v ?? '').trim(),
+                allowEmpty: false,
+                email: widget.session.email,
+                names: [widget.session.fullName],
+              ),
+            ),
+            const SizedBox(height: AppSpace.md),
+            TextFormField(
+              controller: _confirmController,
+              obscureText: _obscureConfirm,
+              decoration: InputDecoration(
+                labelText: 'Yeni Şifre (Tekrar)',
+                suffixIcon: IconButton(
+                  icon: Icon(_obscureConfirm ? Icons.visibility_off : Icons.visibility),
+                  onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
+                ),
+              ),
+              validator: (v) => (v ?? '').trim().isEmpty ? 'Yeni şifrenizi tekrar girin.' : null,
+            ),
+            const SizedBox(height: AppSpace.lg),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _isSaving ? null : _submit,
+                icon: _isSaving
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Icon(Icons.check_rounded),
+                label: Text(_isSaving ? 'Kaydediliyor...' : 'Şifremi Güncelle'),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

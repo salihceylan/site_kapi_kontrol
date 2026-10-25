@@ -202,6 +202,10 @@ export async function ensureDbSchema() {
     `);
     await client.query(`
       ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN NOT NULL DEFAULT FALSE
+    `);
+    await client.query(`
+      ALTER TABLE users
       ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE
     `);
     await client.query(`
@@ -1965,6 +1969,7 @@ export async function ensureDbSchema() {
     await ensureResidencyLogSchema(client);
     // 076 (Google ve Apple / iCloud OAuth kimlik baglantilari): katalog kontrolu (oauth_schema.js = migrations/076).
     await ensureOAuthSchema(client);
+    await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN NOT NULL DEFAULT FALSE');
 
     // 031 people_v1: mevcut sakinlerin CRM'e tek seferlik aktarimi. Savunmaci: hata sunucunun acilmasini ENGELLEMEZ
     // (kendi transaction'i geri alinir, isaret yazilmaz => sonraki acilista yeniden denenir; okuma anindaki

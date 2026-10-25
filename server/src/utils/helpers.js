@@ -187,6 +187,7 @@ export function mapUserRow(row) {
     approval_status: row.approval_status,
     phone_number: row.phone_number,
     created_at: row.created_at,
+    must_change_password: Boolean(row.must_change_password),
   };
 }
 

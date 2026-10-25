@@ -3165,3 +3165,21 @@ Dalga 2-6'nın ikinci aşaması: dekont bildirimi, banka dosyasından tahsilat, 
 - [ ] **100.4. Gerçekçi Türk Plaka (License Plate) Görünümü:**
   - **Nasıl Test Edilir:** "Araçlar" sekmesine, "Dairem > Araçlarım" ekranına, kişi kartı detayındaki araç listesine ve "Kayıtlarım" bölümüne bakın.
   - **Beklenen Sonuç:** Tüm araç plakaları yalın metin yerine solunda mavi TR bandı (`#003399`), beyaz zemin, kabartmalı siyah çerçeve ve karakteristik plaka karakterleriyle gerçek bir araç plakası gibi (`LicensePlateBadge`) görünmelidir.
+
+
+---
+
+## 101. 🔐 İlk Girişte Zorunlu Şifre Değiştirme Popup'ı, Profilde Şifre Değiştirme ve Google OAuth Hesap Eşleme
+
+- [ ] **101.1. İlk Girişte Zorunlu Şifre Belirleme Popup'ı:**
+  - **Nasıl Test Edilir:** Site yöneticisi tarafından yeni PIN atanmış veya Excel tablosuyla ilk yüklenen geçici şifresi olan bir daire sakini ile oturum açın.
+  - **Beklenen Sonuç:** Uygulama açılır açılmaz ekrana modal "Yeni Şifrenizi Belirleyin" popup'ı gelmelidir. Popup kullanıcının mevcut geçici şifresini, yeni şifresini ve yeni şifre tekrarını istemeli; kullanıcı yeni şifresini belirleyip kaydettiğinde geçici durum kalkmalı ve popup kapanarak oturum kesintisiz devam etmelidir.
+- [ ] **101.2. Daire Sakini Profilinde Şifre Değiştirme Kartı:**
+  - **Nasıl Test Edilir:** Daire sakini hesabıyla "Profilim" sekmesine geçin.
+  - **Beklenen Sonuç:** Salt okunur profil bilgilerinin hemen altında "Şifremi Değiştir" kartı yer almalıdır. Sakin mevcut şifresini ve yeni şifresini girip "Şifremi Güncelle" butonuna bastığında şifresi başarıyla güncellenmeli ve yeşil onay bildirimi verilmelidir.
+- [ ] **101.3. Google ile Giriş ve Kullanıcı Adı ile Giriş Arasında Hesap Eşleşmesi:**
+  - **Nasıl Test Edilir:** Sistemde daha önceden e-posta adresiyle kayıtlı olan bir kullanıcı ile "Google ile Giriş Yap" butonunu kullanarak oturum açın.
+  - **Beklenen Sonuç:** Sistem aynı e-postayı taşıyan hesabı anında tanımalı, Google kimliğini mevcut hesapla bağlamalı ve kullanıcının daireleri/yetkileri eksiksiz olarak açılmalıdır. Kullanıcı ister kullanıcı adı ister e-posta ister Google ile girsin aynı tekil kullanıcı profiline ulaşmalıdır.
+- [ ] **101.4. Aynı Kullanıcı Adı Çakışması Kontrolü:**
+  - **Nasıl Test Edilir:** Sistemde mevcut olan bir kullanıcı adı ile yeni bir kullanıcı oluşturulmaya veya profil güncellenmeye çalışıldığında davranışı inceleyin.
+  - **Beklenen Sonuç:** Veritabanındaki `idx_users_login_name_unique` benzersizlik kuralı devreye girmeli; sistem 409 "Bu kullanıcı adı zaten kayıtlı." cevabı dönerek çakışmayı engellemeli; toplu yüklemede ise `ensureUniqueLoginName` otomatik `_2`, `_3` takısı ekleyerek çakışmayı sıfıra indirmelidir.
