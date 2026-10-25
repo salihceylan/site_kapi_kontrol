@@ -71,6 +71,18 @@ export async function createSiteWithStructure(
     blockApartmentCounts,
   } = input;
 
+  // Site adı benzersizliği kontrolü (case-insensitive)
+  const duplicateSiteCheck = await client.query(
+    `SELECT site_code, name FROM sites WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) LIMIT 1`,
+    [siteName.trim()],
+  );
+  if (duplicateSiteCheck.rows?.[0]) {
+    const error = new Error(`"${siteName.trim()}" adında bir site zaten mevcut. Her sitenin adı benzersiz olmalıdır.`);
+    error.statusCode = 409;
+    error.code = 'SITE_NAME_EXISTS';
+    throw error;
+  }
+
   // 1. Yeni Siteyi oluştur (anında onaylı)
   const siteRes = await client.query(
     `

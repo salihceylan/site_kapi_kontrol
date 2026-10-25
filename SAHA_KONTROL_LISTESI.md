@@ -3243,3 +3243,15 @@ Dalga 2-6'nın ikinci aşaması: dekont bildirimi, banka dosyasından tahsilat, 
 - [ ] **105.1. Hesapsız Sakine Daire Giriş Bilgisi Verildiğinde İkinci Kişi Oluşmaması (Mükerrerlik Engeli):**
   - **Nasıl Test Edilir:** Dairede halihazırda hesapsız olarak ikamet eden bir sakin varken (örneğin toplu yükleme veya sakin ekleme ile oluşturulmuş "SALİH CEYLAN 1"), daire detayından "Daire hesabı (giriş bilgileri) / Düzenle" diyerek kullanıcı adı ve şifre/PIN tanımlayın ve kaydedin.
   - **Beklenen Sonuç:** Daire kartında veya sakinler listesinde mükerrer ikinci bir kişi ("Aktif - 2 kişi: 1 Admin Hesaplı, 1 Aile Üyesi Hesapsız") OLUŞMAMALIDIR. Sistem mevcut hesapsız sakini otomatik olarak bu kullanıcı hesabına bağlamalı; dairede tam olarak 1 kişi ("SALİH CEYLAN 1 - Daire Admini - Hesabı var") görüntülenmelidir.
+
+
+---
+
+## 106. 🏛️ Site Adı Benzersizliği (Uniqueness) ve Başvuru Aşamasında Mükerrerlik Engeli
+
+- [ ] **106.1. Aynı İsimde Mevcut Bir Site Varken Başvuru Yapılmasının Engellenmesi:**
+  - **Nasıl Test Edilir:** Sistemde zaten kayıtlı olan bir site adını (örneğin "Cenk2") girerek yeni bir site başvurusu yapmayı deneyin (büyük/küçük harf: "cenk2", "CENK2" veya boşluklu).
+  - **Beklenen Sonuç:** Sistem daha başvuru gönderme anında işlemi reddetmeli; kullanıcıya `""Cenk2" adında bir site zaten mevcut. Her sitenin adı benzersiz olmalıdır."` uyarısı verilmeli ve başvuru kaydı oluşturulmamalıdır.
+- [ ] **106.2. Onay Bekleyen Başvuru Varken Aynı İsimle İkinci Başvuru Yapılamaması:**
+  - **Nasıl Test Edilir:** Onay bekleyen bir site başvurusu varken, aynı isimle başka bir başvuru oluşturmayı deneyin.
+  - **Beklenen Sonuç:** Sistem `""..." adında onay bekleyen bir site başvurusu zaten bulunmaktadır. Lütfen farklı bir site adı belirleyin."` hatası ile talebi doğrudan engellemelidir.

@@ -140,3 +140,14 @@ Bu kurallar projede geliştirme yapılırken MUTLAKA ve İSTİSNASIZ olarak uygu
     - **Gelecek Ajanlar İçin Kesin Yasaklar ve Koruma İlkeleri:**
       - `manager_routes.js` ve `admin_routes.js` içerisindeki sakin bağlama (`UPDATE site_people SET user_code = ... FROM apartment_residencies`) mantığını ASLA kaldırma.
       - Daire hesabı oluşturulduğunda veya güncellendiğinde dairedeki mevcut hesapsız sakini yok sayarak mükerrer kişi türeten kodlar yazma.
+
+22. **Site Adlarının Benzersizliği (Uniqueness) ve Başvuru Aşamasında Mükerrerliğin Engellenmesi:**
+    - **Neden Yapıldı:**
+      - Türkiye'de hiçbir sitede iki aynı isimde site olamaz; her sitenin adı büyük/küçük harf ve boşluk fark etmeksizin benzersiz olmak zorundadır.
+      - Kullanıcıların veya yöneticilerin aynı isimde (örneğin iki tane "Cenk2") site açabilmesi veya başvuru yapabilmesi engellendi.
+      - Daha başvuru (`POST /api/site-applications`) aşamasında: Veritabanında mevcut/onaylı aynı isimde bir site varsa veya onay bekleyen (`status = 'pending'`) bir başvuru varsa anında `409 Conflict` (`SITE_NAME_EXISTS` veya `SITE_APPLICATION_NAME_PENDING`) ile talep aşamasında engellenir.
+      - Doğrudan kurulum (`createSiteWithStructure`, `setupSiteWithClaimedDevice`, `createSite`) aşamasında da isim tekilliği denetlenir.
+      - Veritabanında `sites(LOWER(TRIM(name)))` ve `site_applications(LOWER(TRIM(site_name))) WHERE status = 'pending'` unique indexleri oluşturulmuştur.
+    - **Gelecek Ajanlar İçin Kesin Yasaklar ve Koruma İlkeleri:**
+      - `createSiteApplication`, `createSiteWithStructure` veya `createSite` fonksiyonlarındaki site adı benzersizlik kontrollerini ASLA kaldırma veya bypass etme.
+      - `sites` tablosundaki `idx_sites_unique_name` benzersizlik indeksini ASLA silme.

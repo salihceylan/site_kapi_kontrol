@@ -49,6 +49,18 @@ export async function createSite({
     apartmentCount,
     blockApartmentCounts,
   });
+
+  const duplicateCheck = await pool.query(
+    `SELECT site_code, name FROM sites WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) LIMIT 1`,
+    [name.trim()],
+  );
+  if (duplicateCheck.rows?.[0]) {
+    const error = new Error(`"${name.trim()}" adında bir site zaten mevcut. Her sitenin adı benzersiz olmalıdır.`);
+    error.statusCode = 409;
+    error.code = 'SITE_NAME_EXISTS';
+    throw error;
+  }
+
   const result = await pool.query(
     `
       INSERT INTO sites (
@@ -878,6 +890,18 @@ export async function createSiteWithStructure({
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+
+    const duplicateCheck = await client.query(
+      `SELECT site_code, name FROM sites WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) LIMIT 1`,
+      [name.trim()],
+    );
+    if (duplicateCheck.rows?.[0]) {
+      const error = new Error(`"${name.trim()}" adında bir site zaten mevcut. Her sitenin adı benzersiz olmalıdır.`);
+      error.statusCode = 409;
+      error.code = 'SITE_NAME_EXISTS';
+      throw error;
+    }
+
     const siteResult = await client.query(
       `
         INSERT INTO sites (

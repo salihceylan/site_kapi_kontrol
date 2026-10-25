@@ -1971,6 +1971,17 @@ export async function ensureDbSchema() {
     await ensureOAuthSchema(client);
     await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN NOT NULL DEFAULT FALSE');
 
+    // Site adı tekilliği güvencesi (büyük/küçük harf duyarsız) ve bekleyen başvurular
+    try {
+      await client.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_sites_unique_name ON sites (LOWER(TRIM(name)));
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_site_applications_pending_unique_name ON site_applications (LOWER(TRIM(site_name))) WHERE status = 'pending';
+      `);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('[DB] unique site name index hatasi:', e?.message);
+    }
+
     // 031 people_v1: mevcut sakinlerin CRM'e tek seferlik aktarimi. Savunmaci: hata sunucunun acilmasini ENGELLEMEZ
     // (kendi transaction'i geri alinir, isaret yazilmaz => sonraki acilista yeniden denenir; okuma anindaki
     // syncSitePeople zaten eksikleri tamamlar). Hicbir apartment_memberships / kapi yetkisi satirina dokunmaz.

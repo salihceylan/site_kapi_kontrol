@@ -388,6 +388,32 @@ export async function createSiteApplication({ actor, body, consents = null }) {
       throw paymentNotAvailable();
     }
 
+    // Site adı tekilliği (1): Mevcut/onaylı bir site aynı ada sahip mi?
+    const existingSiteRes = await client.query(
+      `SELECT site_code, name FROM sites WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) LIMIT 1`,
+      [input.siteName],
+    );
+    if (existingSiteRes.rows?.[0]) {
+      throw new PlatformError(
+        409,
+        'SITE_NAME_EXISTS',
+        `"${input.siteName}" adında bir site zaten mevcut. Her sitenin adı benzersiz olmalıdır.`,
+      );
+    }
+
+    // Site adı tekilliği (2): Onay bekleyen aynı isimde bir başvuru var mı?
+    const pendingNameRes = await client.query(
+      `SELECT id, site_name FROM site_applications WHERE status = 'pending' AND LOWER(TRIM(site_name)) = LOWER(TRIM($1)) LIMIT 1`,
+      [input.siteName],
+    );
+    if (pendingNameRes.rows?.[0]) {
+      throw new PlatformError(
+        409,
+        'SITE_APPLICATION_NAME_PENDING',
+        `"${input.siteName}" adında onay bekleyen bir site başvurusu zaten bulunmaktadır. Lütfen farklı bir site adı belirleyin.`,
+      );
+    }
+
     const pendingResult = await client.query(
       `${SELECT_APPLICANT_VIEW} WHERE a.applicant_user_code = $1 AND a.status = 'pending' LIMIT 1`,
       [userCode],

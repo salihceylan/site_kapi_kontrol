@@ -78,6 +78,8 @@ function install(config = {}) {
     device: { id: 77, device_uid: 'A0B1C2D3E4F5', hardware_type: 'esp32_wroom' },
     failOn: null,
     insertConflict: false,
+    siteNameExists: false,
+    pendingNameExists: false,
     ...config,
   };
   const log = [];
@@ -96,6 +98,12 @@ function install(config = {}) {
     // başvuran satırı FOR KEY SHARE + deleted_at IS NULL ile okunur (hesap silme yarışı: silinmiş hesaba başvuru yazılmaz)
     if (/^SELECT id, user_code, role, full_name FROM users WHERE user_code = \$1 AND deleted_at IS NULL LIMIT 1 FOR KEY SHARE$/.test(sql)) {
       return ok([{ id: 7, user_code: Number(params[0]), role: state.role, full_name: 'Ayşe Başvuran' }]);
+    }
+    if (/FROM sites WHERE LOWER\(TRIM\(name\)\) = LOWER\(TRIM\(\$1\)\) LIMIT 1$/.test(sql)) {
+      return ok(state.siteNameExists ? [{ site_code: 1, name: params[0] }] : []);
+    }
+    if (/FROM site_applications WHERE status = 'pending' AND LOWER\(TRIM\(site_name\)\) = LOWER\(TRIM\(\$1\)\) LIMIT 1$/.test(sql)) {
+      return ok(state.pendingNameExists ? [{ id: 1, site_name: params[0] }] : []);
     }
     if (/^SELECT value FROM platform_settings WHERE key = \$1 LIMIT 1$/.test(sql)) return ok([{ value: { mode: state.mode } }]);
     if (/WHERE a\.applicant_user_code = \$1 AND a\.status = 'pending' LIMIT 1$/.test(sql)) return ok(state.pending ? [state.pending] : []);
@@ -325,6 +333,22 @@ describe('createSiteApplication', () => {
     assert.equal(has(db.log, /^INSERT INTO site_applications/), false);
     assert.ok(has(db.log, /^ROLLBACK/));
     assert.equal(has(db.log, /^COMMIT/), false);
+  });
+
+  it('aynı isimde onaylı/mevcut bir site varsa 409 SITE_NAME_EXISTS fırlatır', async () => {
+    install({ siteNameExists: true });
+    await assert.rejects(
+      createSiteApplication({ actor: individual, body: goodBody }),
+      (err) => err?.statusCode === 409 && err?.code === 'SITE_NAME_EXISTS' && /zaten mevcut/i.test(err?.message),
+    );
+  });
+
+  it('aynı isimde onay bekleyen bir başvuru varsa 409 SITE_APPLICATION_NAME_PENDING fırlatır', async () => {
+    install({ pendingNameExists: true });
+    await assert.rejects(
+      createSiteApplication({ actor: individual, body: goodBody }),
+      (err) => err?.statusCode === 409 && err?.code === 'SITE_APPLICATION_NAME_PENDING' && /onay bekleyen/i.test(err?.message),
+    );
   });
 
   it('bekleyen başvuru varsa 409 APPLICATION_PENDING + mevcut başvuru (başvuran görünümü); INSERT yok', async () => {
