@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'package:site_kapi_kontrol/models/apartment_household.dart';
-import 'package:site_kapi_kontrol/models/apartment_member_record.dart';
 import 'package:site_kapi_kontrol/models/apartment_record.dart';
 
 import 'package:site_kapi_kontrol/models/device_page.dart';
@@ -310,22 +309,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     isEligible: () => tracksSiteApplications(widget.authService.session?.role),
   );
 
-  List<MyApartmentRecord>? _myApartmentsList;
-  bool _myApartmentsLoaded = false;
-
-  Future<void> _loadMyApartmentsSummary() async {
-    final session = widget.authService.session;
-    if (session == null) return;
-    if (session.role == UserRole.superUser || session.role == UserRole.siteManager) {
-      return;
-    }
-    final (list, _) = await widget.authService.getMyApartments();
-    if (!mounted) return;
-    setState(() {
-      _myApartmentsList = list ?? <MyApartmentRecord>[];
-      _myApartmentsLoaded = true;
-    });
-  }
 
   bool _canShowSiteCreationOnPanel(UserSession session) => false;
   
@@ -869,8 +852,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final role = widget.authService.session?.role;
     if (role == UserRole.siteManager || role == UserRole.superUser) {
       _loadSites();
-    } else {
-      _loadMyApartmentsSummary();
     }
 
   }

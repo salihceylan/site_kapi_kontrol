@@ -75,6 +75,8 @@ const NAME_COLUMN = (required, hint) =>
   col('ad_soyad', 'Ad Soyad', required, 'text', 100, ['Ad', 'İsim', 'Adı Soyadı', 'Ad-Soyad', 'İsim Soyisim', 'Kişi', 'Sakin Adı'], hint);
 const EMAIL_COLUMN = (hint) =>
   col('e_posta', 'E-posta', false, 'text', 254, ['Eposta', 'E Posta', 'E-posta Adresi', 'Email', 'E-mail', 'Mail'], hint);
+const PASSWORD_COLUMN = (hint) =>
+  col('sifre', 'Başlangıç Şifresi', false, 'text', 30, ['Şifre', 'Geçici Şifre', 'PIN', 'Parola', 'Sifre', 'Baslangic Sifresi'], hint);
 
 const BASE_COLUMNS = Object.freeze({
   apartments: Object.freeze([
@@ -90,6 +92,7 @@ const BASE_COLUMNS = Object.freeze({
     NAME_COLUMN(true, 'Kişinin adı ve soyadı (2–100 karakter).'),
     col('telefon', 'Telefon', false, 'text', 30, ['Tel', 'Cep', 'Cep Telefonu', 'GSM', 'Telefon No'], '10 haneli cep telefonu: 0 (555) 123 45 67. Excel baştaki sıfırı atsa da kabul edilir.'),
     EMAIL_COLUMN('Kişinin e-posta adresi. Aynı kişiyi tekrar yüklemede tanımak için en güvenilir alandır.'),
+    PASSWORD_COLUMN('Kişinin ilk giriş şifresi (boş bırakılırsa 1234 tanımlanır).'),
     BLOCK_COLUMN(false, 'Daire verilecekse Blok ve Daire No birlikte doldurulmalıdır.'),
     APARTMENT_NO_COLUMN(false, 'Daire verilecekse Blok ve Daire No birlikte doldurulmalıdır.'),
     col('iliski', 'İlişki', false, 'enum', 40, ['İlişki Türü', 'Sakin Türü'], 'Malik, Kiracı, Aile (eş/çocuk) ya da Sakin. Boşsa «Sakin» sayılır.'),

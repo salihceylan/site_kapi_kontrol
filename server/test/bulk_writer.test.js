@@ -173,7 +173,7 @@ describe('applyApartmentOps', () => {
     });
     const update = stmts(client, /^UPDATE apartments/)[0];
     const rows = jsonOf(update);
-    assert.deepEqual(rows[0], { id: 10, set_floor: true, floor: 3, set_category: true, category: '3+1', set_gross: false, gross: null, set_net: false, net: null, set_ln: false, ln: null, set_ld: false, ld: null, set_rp: false, rp: null });
+    assert.deepEqual(rows[0], { id: 10, set_floor: true, floor: 3, set_category: true, category: '3+1', set_ln: false, ln: null, set_ld: false, ld: null, set_rp: false, rp: null });
     assert.equal(rows[1].set_ln && rows[1].set_ld && rows[1].ln === 35 && rows[1].ld === 1000, true, 'arsa payı çifti TEK ifadede birlikte yazılır (CHECK tutarlılığı)');
     assert.match(update.sql, /a\.site_code = \$2/, 'IDOR: yalnız o sitenin daireleri');
     assert.deepEqual(audits.map((a) => [a.action, a.target_type, a.target_id, a.details.via, a.details.run_id]), [

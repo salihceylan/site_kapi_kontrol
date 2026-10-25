@@ -158,7 +158,6 @@ class _TemplateCard extends StatelessWidget {
     final c = controller;
     final th = Theme.of(context).textTheme;
     final p = context.palette;
-    final kind = c.kind!;
     return AppCard(
       key: const ValueKey<String>('bulk_template_card'),
       padding: listCardPadding(context),

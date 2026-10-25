@@ -5,6 +5,10 @@
 // (jsonb_to_recordset) gider; SQL'e metin birleştirilmez. Sabit sayıda sorgu: parça boyutu 5000 (audit 10000) olduğundan 5000 satırlık dosya <= birkaç ifade.
 // Beklenmeyen 23505 / 23503 (yarış) ya da beklenen satır sayısının tutmaması -> 409 PREVIEW_STALE (çağıran ROLLBACK yapar).
 
+import bcrypt from 'bcryptjs';
+import { BCRYPT_COST } from '../security/password_hashing.js';
+import { generateUniqueApartmentLoginName } from '../services/apartment_service.js';
+import { generateInternalApartmentEmail } from '../utils/helpers.js';
 import { PlatformError } from './errors.js';
 import { logResidenciesBulk } from './residency_log.js';
 
@@ -122,7 +126,7 @@ export async function applyPeopleOps(client, { siteCode, ops, runId, today, acto
   for (const op of ops) {
     switch (op.t) {
       case 'pc':
-        newPeople.set(op.ref, { ref: op.ref, name: op.name, phone: op.phone, email: op.email, note: op.note });
+        newPeople.set(op.ref, { ref: op.ref, name: op.name, phone: op.phone, email: op.email, note: op.note, password: op.password });
         break;
       case 'pf':
         if (op.ref.startsWith('new:')) {
@@ -357,4 +361,110 @@ export async function applyOpeningOps(client, { siteCode, ops, runId, cutoverDat
     total += part.reduce((sum, op) => sum + op.minor, 0);
   }
   return { audits: [], total };
+}
+
+/**
+ * Toplu yükleme ile daireye eklenen sakinler için kullanıcı hesabı, üyelik (APARTMENT_ADMIN)
+ * ve başlangıç şifresi (1234) oluşturur / bağlar.
+ */
+export async function provisionImportedResidents(client, { siteCode, ops }) {
+  if (!client || typeof client.query !== 'function') return;
+
+  const pcOps = ops ? ops.filter((op) => op.t === 'pc') : [];
+
+  const unlinkedResidents = await client.query(
+    `
+      SELECT sp.id AS person_id, sp.full_name, sp.email, sp.phone,
+             a.id AS apartment_id, a.unit_label, a.resident_user_code, a.sort_order,
+             b.block_name
+      FROM apartment_residencies ar
+      JOIN site_people sp ON sp.id = ar.person_id
+      JOIN apartments a ON a.id = ar.apartment_id
+      LEFT JOIN site_blocks b ON b.id = a.block_id
+      WHERE a.site_code = $1 AND sp.user_code IS NULL AND ar.is_current = TRUE
+    `,
+    [Number(siteCode)],
+  );
+
+  for (const row of unlinkedResidents.rows) {
+    try {
+      const matchedOp = pcOps.find(
+        (o) =>
+          o.name === row.full_name ||
+          (o.email && o.email === row.email) ||
+          (o.phone && o.phone === row.phone),
+      );
+      const customPass = (matchedOp && matchedOp.password) ? String(matchedOp.password).trim() : '1234';
+      const passwordHash = await bcrypt.hash(customPass || '1234', BCRYPT_COST);
+
+      const blockName = row.block_name || 'Blok';
+      const sortOrder = Number(row.sort_order || 1);
+
+      const finalLoginName = await generateUniqueApartmentLoginName({
+        db: client,
+        blockName,
+        sortOrder,
+        siteCode: Number(siteCode),
+      });
+
+      const internalEmail = generateInternalApartmentEmail({
+        loginName: finalLoginName,
+        apartmentId: Number(row.apartment_id),
+        siteCode: Number(siteCode),
+      });
+
+      const userEmail = (row.email && !row.email.endsWith('@ahbu.local')) ? row.email : internalEmail;
+
+      const existingUser = await client.query(
+        `SELECT user_code FROM users WHERE LOWER(email) = LOWER($1) AND deleted_at IS NULL LIMIT 1`,
+        [userEmail],
+      );
+
+      let userCode;
+      if (existingUser.rowCount > 0) {
+        userCode = existingUser.rows[0].user_code;
+      } else {
+        const insUser = await client.query(
+          `
+            INSERT INTO users (full_name, email, login_name, role, is_active, email_verified, approval_status, phone_number, password_hash, must_change_password)
+            VALUES ($1, $2, $3, 'apartment_owner', TRUE, TRUE, 'approved', $4, $5, TRUE)
+            RETURNING user_code
+          `,
+          [row.full_name || `${blockName} Daire ${row.unit_label}`, userEmail, finalLoginName, row.phone, passwordHash],
+        );
+        userCode = insUser.rows[0].user_code;
+      }
+
+      await client.query(`UPDATE site_people SET user_code = $1 WHERE id = $2`, [userCode, row.person_id]);
+
+      if (!row.resident_user_code) {
+        await client.query(
+          `UPDATE apartments SET resident_user_code = $1, resident_pin_issued = TRUE, is_active = TRUE WHERE id = $2`,
+          [userCode, row.apartment_id],
+        );
+      }
+
+      await client.query(
+        `
+          INSERT INTO apartment_memberships (apartment_id, user_code, role, is_active)
+          VALUES ($1, $2, 'APARTMENT_ADMIN', TRUE)
+          ON CONFLICT (apartment_id, user_code)
+          DO UPDATE SET role = 'APARTMENT_ADMIN', is_active = TRUE, updated_at = NOW()
+        `,
+        [row.apartment_id, userCode],
+      );
+
+      await client.query(
+        `
+          INSERT INTO site_memberships (site_code, user_code, role, is_active)
+          VALUES ($1, $2, 'RESIDENT', TRUE)
+          ON CONFLICT (site_code, user_code)
+          DO UPDATE SET is_active = TRUE, updated_at = NOW()
+        `,
+        [Number(siteCode), userCode],
+      );
+    } catch (err) {
+      console.error('[provisionImportedResidents] hata (atlandı):', err?.message);
+    }
+  }
 }

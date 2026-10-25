@@ -274,6 +274,10 @@ export function planPeople({ rows, snapshot, today }) {
     if (noteR.error) issue(noteR.error, 'not', noteR);
     const platesR = readPlates(cells.plaka);
     if (platesR.error) issue(platesR.error, 'plaka', platesR);
+    const passwordR = readText(cells.sifre, { max: 30 });
+    const initialPassword = (passwordR.value !== null && passwordR.value !== undefined && String(passwordR.value).trim() !== '')
+      ? String(passwordR.value).trim()
+      : '1234';
 
     const email = emailR.value ?? null;
     const phone = phoneR.value ?? null;
@@ -377,7 +381,7 @@ export function planPeople({ rows, snapshot, today }) {
         finish();
         continue;
       }
-      result.ops.push({ t: 'pc', ref, name, phone, email, note });
+      result.ops.push({ t: 'pc', ref, name, phone, email, note, password: initialPassword });
       if (apartment !== null) {
         result.ops.push({ t: 'ra', ref, aptId: apartment.id, relation: relationForNew, moveIn });
         summaryRelation = relationForNew;

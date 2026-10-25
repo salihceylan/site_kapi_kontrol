@@ -16,7 +16,7 @@ import { requestFingerprint, validateImportBody } from './bulk_import_body.js';
 import { computePlan, collectApartmentIds } from './bulk_import_plan.js';
 import { loadBlocksAndApartments, loadSnapshot } from './bulk_import_snapshot.js';
 import { KIND_MODULE, SPEC_VERSION, isImportDisabled } from './bulk_import_spec.js';
-import { ENTITY_CHUNK, applyApartmentOps, applyOpeningOps, applyPeopleOps, insertAudits } from './bulk_import_writer.js';
+import { ENTITY_CHUNK, applyApartmentOps, applyOpeningOps, applyPeopleOps, insertAudits, provisionImportedResidents } from './bulk_import_writer.js';
 import { todayIso } from './people_common.js';
 import { peopleLockKey } from './people_sync.js';
 import { runSyncSteps } from './people_sync_sql.js';
@@ -298,6 +298,7 @@ async function commitOnce({ siteCode, kind, parsed, fingerprint, actor }) {
       if (kind !== 'apartments') {
         const peopleOps = plan.ops.filter((op) => op.t !== 'au');
         audits = audits.concat(await applyPeopleOps(client, { siteCode, ops: peopleOps, runId, today, actorUserCode: actorInfo.userCode }));
+        await provisionImportedResidents(client, { siteCode, ops: peopleOps });
       }
     }
     audits.push({

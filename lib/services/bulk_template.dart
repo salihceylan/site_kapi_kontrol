@@ -24,6 +24,7 @@ const Map<String, String> _examples = <String, String>{
   'ad_soyad': 'Ahmet Yılmaz',
   'telefon': '0 (555) 123 45 67',
   'e_posta': 'ahmet@ornek.com',
+  'sifre': '1234',
   'iliski': 'Malik',
   'giris_tarihi': '15.03.2021',
   'plaka': '34 ABC 123, 06 XY 789',
@@ -109,6 +110,7 @@ double _width(ImportColumn column) {
     'e_posta' => 26,
     'plaka' => 24,
     'telefon' => 20,
+    'sifre' => 16,
     'not' => 30,
     _ => 12,
   };
@@ -141,7 +143,12 @@ List<List<Object?>> _prefilledRows(ExportEnvelope? envelope, ImportKindSpec spec
     for (final row in envelope.rows)
       <Object?>[
         for (final column in columns)
-          index.containsKey(column.key) ? _cellFor(column, envelope.columns[index[column.key]!], row[index[column.key]!]) : null,
+          if (column.key == 'sifre')
+            '1234'
+          else if (index.containsKey(column.key))
+            _cellFor(column, envelope.columns[index[column.key]!], row[index[column.key]!])
+          else
+            null,
       ],
   ];
 }
