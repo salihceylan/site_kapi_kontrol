@@ -295,3 +295,25 @@ KVKK: dosya sunucuya girmez; gövde loglanmaz, çalıştırma kaydı/audit kişi
 - Düğme liste başlığında: duyurular, iş talepleri, ziyaretçi/kargo, konsiyerj, rezervasyonlar, anket sonuçları, firmalar, sözleşmeler, kararlar, belgeler. Yalnız ekranda yüklü (süzgeç/aramaya uyan) kayıtlar yazılır.
 - Anket listesine yerel başlık araması eklendi. Konsiyerj ve rezervasyon listeleri sunucu imleçli olduğundan aramaları "Yakında".
 - Finans dili: tahakkuk -> "Yazılan borç", mutabakat -> "Banka / kasa kontrolü". Rapor adları: Aylık özet, Yıllık hesap (kurul özeti), Daire ekstresi, İcra dökümü, Gecikmiş borçlar.
+
+
+---
+
+## 📑 Toplu Yükleme Otomatik Kullanıcı Adı, Başlangıç Şifresi ve Daire Admini Hesabı Açılışı (`provisionImportedResidents`)
+
+Bu bölüm son kullanıcı gereksinimleri ve saha operasyonları doğrultusunda eklenmiştir:
+
+1. **Sütun Tanımları (`kullanici_adi`, `sifre`):**
+   - `kullanici_adi`: İsteğe bağlı. Boş bırakıldığında kişinin ad-soyadından Türkçe karakterler arındırılarak küçük harfli ve nokta ayırıcılı (`generateUsernameFromFullName`, örn: `ahmet.yilmaz`, mükerrerde `ahmet.yilmaz2`) otomatik üretilir.
+   - `sifre`: İsteğe bağlı. Excel ve CSV şablonlarında her satırda hazır `1234` dolu gelir. Boş bırakılsa dahi `1234` kabul edilir.
+
+2. **Elektronik Tablo Önizleme ve Canlı Teklik Doğrulaması (`BulkEditableTable`):**
+   - Excel tarandığında veya yüklendiğinde, `BulkImportController` her satır için kullanıcı adını otomatik üretir ve tabloda gösterir.
+   - Yönetici hücreye tıklayarak kullanıcı adını değiştirebilir. Değiştirme penceresinde anlık mükerrerlik kontrolü yapılır; aynı kullanıcı adı tablodaki başka bir satırda varsa kaydetmeye izin verilmez.
+
+3. **Commit ve Daire Hesabı / Admin Ataması (`provisionImportedResidents`):**
+   - Toplu yükleme onaylandığında (`commit`), yüklenen sakinler için `users` tablosunda hesap açılır.
+   - `users.login_name` belirlenen kullanıcı adı olarak kaydedilir (`ensureUniqueLoginName` ile veritabanı düzeyinde de tekillik güvenceye alınır).
+   - Şifre `1234` (veya tablodaki şifre) olarak bcrypt ile hashlenir; `must_change_password = TRUE` ve `resident_pin_issued = TRUE` atanır.
+   - Daireye atanan kişi `apartment_memberships` tablosunda doğrudan **`APARTMENT_ADMIN`** olarak yetkilendirilir; `apartments.resident_user_code` bağlanır.
+   - Sakin `1234` ile ilk girişinde `ForceChangePasswordDialog` popup'ı ile karşılanır ve kendi yeni şifresini belirler.

@@ -174,3 +174,15 @@ kayıtları özel hassasiyetli sayılır (güvenlik politikası belgesi).
 ## Doğrulama
 
 `server/test/apartment_mgmt.test.js` (şema <-> migration, admin çözümleme, devir, vekalet, imza hakkı, arama gizliliği, yetişkin üye kuralı), `server/test/apartment_mgmt_vehicles.test.js` (araçlar: yetki, limit, tekil plaka, mesaj sızdırmama), `test/screens/my_apartment_view_test.dart`.
+
+
+---
+
+## Daire Sakini İlk Şifre ve Zorunlu Şifre Değişimi (`must_change_password`)
+
+Toplu Excel yüklemesi veya site yöneticisi tarafından daireye ilk kez atanan sakinler için:
+1. Başlangıç şifresi (varsayılan `1234` veya Excel'de belirtilen değer) tanımlanır ve bcrypt ile hashlenir.
+2. `users.must_change_password = TRUE` ve `apartments.resident_pin_issued = TRUE` olarak işaretlenir.
+3. Sakin mobil veya web uygulamada oturum açtığında `authService.session.mustChangePassword == true` ise ekrana zorunlu `ForceChangePasswordDialog` açılır.
+4. Sakin kendi belirlediği kalıcı şifreyi girip kaydetmeden diğer ekranlara devam edemez. Başarılı güncelleme sonrası `must_change_password = FALSE` olur ve bayrak sıfırlanır.
+5. Sakin ayrıca dilediği zaman "Profilim" ekranındaki "Şifremi Değiştir" kartından şifresini güncelleyebilir.

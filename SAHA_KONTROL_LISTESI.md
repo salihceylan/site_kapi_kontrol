@@ -3183,3 +3183,21 @@ Dalga 2-6'nın ikinci aşaması: dekont bildirimi, banka dosyasından tahsilat, 
 - [ ] **101.4. Aynı Kullanıcı Adı Çakışması Kontrolü:**
   - **Nasıl Test Edilir:** Sistemde mevcut olan bir kullanıcı adı ile yeni bir kullanıcı oluşturulmaya veya profil güncellenmeye çalışıldığında davranışı inceleyin.
   - **Beklenen Sonuç:** Veritabanındaki `idx_users_login_name_unique` benzersizlik kuralı devreye girmeli; sistem 409 "Bu kullanıcı adı zaten kayıtlı." cevabı dönerek çakışmayı engellemeli; toplu yüklemede ise `ensureUniqueLoginName` otomatik `_2`, `_3` takısı ekleyerek çakışmayı sıfıra indirmelidir.
+
+
+---
+
+## 102. 📑 Toplu Excel Yüklemesinde Otomatik Kullanıcı Adı (Ad Soyadından Slug), Başlangıç Şifresi (1234), Tabloda Canlı Düzenleme & Teklik Doğrulaması
+
+- [ ] **102.1. İndirilen Şablonda Başlangıç Şifresi ve Kullanıcı Adı Sütunları:**
+  - **Nasıl Test Edilir:** Daireler veya Kişiler menüsünden "Toplu Yükle" diyerek Excel veya CSV şablonunu indirin.
+  - **Beklenen Sonuç:** İndirilen şablonda "Başlangıç Şifresi" sütununda her satırda hazır olarak `1234` yazılı gelmeli; "Kullanıcı Adı" sütunu ise boş bırakıldığında sistemin otomatik oluşturacağını belirten açıklamayla birlikte hazır bulunmalıdır.
+- [ ] **102.2. Excel Yüklendiğinde Tabloda Otomatik Kullanıcı Adı Üretimi:**
+  - **Nasıl Test Edilir:** İçinde sakin ad ve soyadları bulunan bir Excel dosyasını (kullanıcı adı sütunu boş bırakılmış olsa dahi) yükleyin ve tarama tamamlandığında ekrana gelen "Elektronik Tablo" (`BulkEditableTable`) önizlemesini inceleyin.
+  - **Beklenen Sonuç:** Her satır için kişinin ad ve soyadından Türkçe karakterler dönüştürülerek türetilmiş benzersiz kullanıcı adı (örn: "Ahmet Yılmaz" -> `ahmet.yilmaz`) otomatik olarak tabloda dolu ve hazır olarak görünmelidir.
+- [ ] **102.3. Kullanıcı Adı Hücre Düzenlemesi ve Canlı Mükerrer Engeli:**
+  - **Nasıl Test Edilir:** Tablodaki bir satırın "Kullanıcı Adı" hücresine tıklayın. Açılan düzenleme penceresine tablodaki başka bir satırda zaten var olan bir kullanıcı adını yazıp "Uygula" butonuna basın.
+  - **Beklenen Sonuç:** Sistem mükerrer girişe izin vermemeli; doğrudan diyalog üzerinde kırmızı `Bu kullanıcı adı başka bir satırda zaten var!` uyarısı gösterilmeli ve kullanıcı adı benzersiz olmadan kaydedilmemelidir.
+- [ ] **102.4. Toplu Yükleme Sonrasında Daire Admin Hesabı ve Oturum Açılışı:**
+  - **Nasıl Test Edilir:** Toplu yüklemeyi onaylayıp tamamlayın. Ardından yüklenen bir sakinin tabloda oluşan kullanıcı adı (veya e-postası) ve `1234` başlangıç şifresi ile mobil/web uygulamadan oturum açın.
+  - **Beklenen Sonuç:** Sakin başarıyla oturum açabilmeli; ilk girişte anında "Yeni Şifrenizi Belirleyin" (`ForceChangePasswordDialog`) modal popup'ı açılmalı ve yeni şifresini belirledikten sonra daireye `APARTMENT_ADMIN` olarak yetkili erişim sağlayabilmelidir.

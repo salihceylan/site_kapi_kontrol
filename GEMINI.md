@@ -56,7 +56,17 @@ Bu kurallar projede geliştirme yapılırken MUTLAKA ve İSTİSNASIZ olarak uygu
 12. **Üyelik Yönetim Sistemi Çalışma Kuralları (`uyelik_sistemi_asamalar.md`):**
     - Üyelik Yönetim Sistemi geliştirmesi (Aşama 0'dan Aşama 14'e kadar) %100 tamamlanmıştır.
     - Saha ve uygulama doğrulamaları için `uyelik_adim_adim_test.md` kılavuzu hazırdır.
-
-
-
-
+13. **Toplu Yükleme, Otomatik Kullanıcı Adı (Slug), Başlangıç Şifresi (1234), Zorunlu Şifre Değişimi ve Daire Adminliği (ASLA SİLİNMEYECEK / BOZULMAYACAK):**
+    - **Neden Yapıldı:**
+      - Yöneticilerin toplu Excel yüklemesiyle sakinleri sisteme aktardıklarında dairelerin boş kalmaması, her daire sakininin oturum açabileceği hazır kullanıcı hesabı (users) ve daire yöneticiliği (APARTMENT_ADMIN) ile donatılması sağlandı.
+      - Şablon Excel/CSV dosyalarında her satırda hazır Başlangıç Şifresi (1234) ve Kullanıcı Adı (kullanici_adi) sütunu tanımlandı.
+      - Excel yüklendiğinde ve tarandığında, BulkImportController ve BulkEditableTable kişinin ad-soyadından yola çıkarak Türkçe karakterleri arındırıp nokta ayırıcılı ve dosya içinde benzersiz kullanıcı adını (generateUsernameFromFullName, örn: hmet.yilmaz, mükerrerlikte hmet.yilmaz2) otomatik üretir ve tabloda gösterir.
+      - Yönetici tabloda kullanıcı adını tıklayarak düzenleyebilir; düzenleme ekranında anlık teklik (uniqueness) denetimi vardır, mükerrer kullanıcı adına izin verilmez.
+      - Toplu yükleme onaylandığında (ulk_import_writer.js -> provisionImportedResidents): Daireye atanan kişi için kullanıcı hesabı oluşturulur, users.login_name atanır (ve ensureUniqueLoginName ile DB tekilliği garanti edilir), rolü APARTMENT_ADMIN yapılır, şifresi 1234 (veya tablodaki şifre) olarak bcrypt ile hashlenir ve must_change_password = TRUE atanır.
+      - Sakin 1234 şifresiyle ilk girişini yaptığında ForceChangePasswordDialog popup'ı ile karşılanır ve kendi yeni şifresini belirler. Profilim ekranında da şifre değiştirme kartı bulunur.
+    - **Gelecek Ajanlar İçin Kesin Yasaklar ve Koruma İlkeleri:**
+      - kullanici_adi ve sifre sütunlarını ulk_import_spec.js ve ulk_template.dart içerisinden ASLA kaldırma.
+      - BulkImportController._enrichRowsWithAutoDefaults ve generateUsernameFromFullName fonksiyonlarını ASLA silme; Excel okunduğunda tablodaki kullanıcı adının ve 1234 şifresinin dolu gelmesi şarttır.
+      - BulkEditableTable içindeki kullanıcı adı hücre düzenleme ve mükerrer engelleme kontrollerini bozma.
+      - provisionImportedResidents fonksiyonunu veya ulk_import_service.js içerisindeki çağrısını ASLA kaldırma; toplu yüklenen her sakinin daire admini hesabı açılmak zorundadır.
+      - ForceChangePasswordDialog zorunlu şifre değiştirme popup'ını ve UserSession.mustChangePassword bayrağını ASLA iptal etme.
