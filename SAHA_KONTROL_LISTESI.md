@@ -3201,3 +3201,25 @@ Dalga 2-6'nın ikinci aşaması: dekont bildirimi, banka dosyasından tahsilat, 
 - [ ] **102.4. Toplu Yükleme Sonrasında Daire Admin Hesabı ve Oturum Açılışı:**
   - **Nasıl Test Edilir:** Toplu yüklemeyi onaylayıp tamamlayın. Ardından yüklenen bir sakinin tabloda oluşan kullanıcı adı (veya e-postası) ve `1234` başlangıç şifresi ile mobil/web uygulamadan oturum açın.
   - **Beklenen Sonuç:** Sakin başarıyla oturum açabilmeli; ilk girişte anında "Yeni Şifrenizi Belirleyin" (`ForceChangePasswordDialog`) modal popup'ı açılmalı ve yeni şifresini belirledikten sonra daireye `APARTMENT_ADMIN` olarak yetkili erişim sağlayabilmelidir.
+---
+
+## 103. 🏢 Site Başvuru İzni, Metrekarelerin (m²) Kaldırılması, Panel Banner Temizliği ve PIN Güvenliği
+
+- [ ] **103.1. Site Yöneticisinin Doğrudan Site Kuramaması ve Süper Kullanıcı Onayı:**
+  - **Nasıl Test Edilir:** Site yöneticisi veya bireysel kullanıcı rolüyle oturum açarak "Site Kur" akışını başlatın ya da `POST /api/sites` uç noktasına doğrudan istek atın.
+  - **Beklenen Sonuç:** Sistem doğrudan site kurmaya izin vermemeli; kullanıcıyı site başvurusu formuna yönlendirmeli ve `POST /api/site-applications` üzerinden başvuru `pending` olarak açılmalıdır. Doğrudan `POST /api/sites` çağrısı süper kullanıcı dışındakilere 403 Forbidden dönmelidir. Site ancak süper kullanıcı onayladığında kurulmalıdır.
+- [ ] **103.2. Metrekare (m²) Bilgilerinin Tüm Sistemden ve Ekranlardan Kaldırılması:**
+  - **Nasıl Test Edilir:** Daire Ekle/Düzenle pencerelerine, Daire Kartı detayına, Daire CRM kartına, Sayaç faturalandırma formlarına ve Toplu Excel şablonuna bakın.
+  - **Beklenen Sonuç:** Hiçbir ekranda veya Excel şablonunda brüt ya da net metrekare (m²) alanı yer almamalıdır. Veritabanındaki `apartments` tablosunda `gross_area_m2` ve `net_area_m2` sütunları bulunmamalı; sistem metrekare olmadan hatasız ve yalın çalışmalıdır.
+- [ ] **103.3. Daire Sakini Panelinde "Yeni Site Oluştur - YÖNETİCİ OLUN" Kartının Görünmemesi:**
+  - **Nasıl Test Edilir:** Daire kullanıcısı veya sakin olarak sisteme giriş yapın ve ana gösterge paneline bakın.
+  - **Beklenen Sonuç:** Panelde eskiden yer alan "Yeni Site Oluştur - YÖNETİCİ OLUN / Henüz kayıtlı bir daireniz bulunmuyor..." mavi tanıtım kartı kesinlikle görüntülenmemeli; sakin arayüzü temiz ve sade olmalıdır.
+- [ ] **103.4. Daire Giriş Adı ve PIN Mimarisi (KVKK Güvenliği ve PIN Sıfırlama):**
+  - **Nasıl Test Edilir:** Yönetici ekranında Daireler ve Kişi Detayı sayfalarını inceleyin.
+  - **Beklenen Sonuç:** KVKK veri güvenliği gereği düz metin şifreler veritabanında saklanmadığı için ekranda "PIN Göster" butonu yer almamalıdır. Bunun yerine "PIN Sıfırla" butonu olmalı; basıldığında tek seferlik geçici 6 haneli yeni PIN ekranda gösterilmeli ve sakinin ilk girişte bunu değiştirmesi istenmelidir.
+- [ ] **103.5. Attention Bar (Görev Çubuğu) Buton ve Metin Kontrastı:**
+  - **Nasıl Test Edilir:** Yönetici ana panelinde bekleyen işler olduğunda üstteki dikkat çubuğunu (`attention_bar`) ve sağındaki aksiyon butonunu inceleyin.
+  - **Beklenen Sonuç:** Koyu zemin üzerindeki buton ve buton içerisindeki metin yüksek kontrastlı, okunaklı ve belirgin olmalı; "beyaz üstüne beyaz" ya da görünmez boş buton hissi oluşmamalıdır.
+- [ ] **103.6. Excel Toplu Şablon İndirildiğinde Mevcut Blok ve Dairelerin Otomatik Dolu Gelmesi:**
+  - **Nasıl Test Edilir:** Sitede tanımlı blok ve daireler varken "Toplu Yükle" penceresini açıp "Şablonu İndir" butonuna tıklayın ve indirilen dosyayı açın.
+  - **Beklenen Sonuç:** İndirilen şablonda sitenin mevcut tüm blok ve daire numaraları hazır doldurulmuş satırlar olarak gelmeli; yönetici blok/daire yazmakla uğraşmadan yalnızca sakin bilgilerini girerek yükleme yapabilmelidir.

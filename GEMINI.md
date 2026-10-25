@@ -56,17 +56,68 @@ Bu kurallar projede geliştirme yapılırken MUTLAKA ve İSTİSNASIZ olarak uygu
 12. **Üyelik Yönetim Sistemi Çalışma Kuralları (`uyelik_sistemi_asamalar.md`):**
     - Üyelik Yönetim Sistemi geliştirmesi (Aşama 0'dan Aşama 14'e kadar) %100 tamamlanmıştır.
     - Saha ve uygulama doğrulamaları için `uyelik_adim_adim_test.md` kılavuzu hazırdır.
-13. **Toplu Yükleme, Otomatik Kullanıcı Adı (Slug), Başlangıç Şifresi (1234), Zorunlu Şifre Değişimi ve Daire Adminliği (ASLA SİLİNMEYECEK / BOZULMAYACAK):**
+
+13. **Toplu Yükleme, Otomatik Kullanıcı Adı (Slug), Başlangıç Şifresi (1234), Zorunlu Şifre Değişimi ve Daire Adminliği (ASLA BOZULMAYACAK):**
     - **Neden Yapıldı:**
-      - Yöneticilerin toplu Excel yüklemesiyle sakinleri sisteme aktardıklarında dairelerin boş kalmaması, her daire sakininin oturum açabileceği hazır kullanıcı hesabı (users) ve daire yöneticiliği (APARTMENT_ADMIN) ile donatılması sağlandı.
-      - Şablon Excel/CSV dosyalarında her satırda hazır Başlangıç Şifresi (1234) ve Kullanıcı Adı (kullanici_adi) sütunu tanımlandı.
-      - Excel yüklendiğinde ve tarandığında, BulkImportController ve BulkEditableTable kişinin ad-soyadından yola çıkarak Türkçe karakterleri arındırıp nokta ayırıcılı ve dosya içinde benzersiz kullanıcı adını (generateUsernameFromFullName, örn: hmet.yilmaz, mükerrerlikte hmet.yilmaz2) otomatik üretir ve tabloda gösterir.
+      - Yöneticilerin toplu Excel yüklemesiyle sakinleri sisteme aktardıklarında dairelerin boş kalmaması, her daire sakininin oturum açabileceği hazır kullanıcı hesabı (`users`) ve daire yöneticiliği (`APARTMENT_ADMIN`) ile donatılması sağlandı.
+      - Şablon Excel/CSV dosyalarında her satırda hazır Başlangıç Şifresi (`1234`) ve Kullanıcı Adı (`kullanici_adi`) sütunu tanımlandı.
+      - Excel yüklendiğinde ve tarandığında, `BulkImportController` ve `BulkEditableTable` kişinin ad-soyadından yola çıkarak Türkçe karakterleri arındırıp nokta ayırıcılı ve dosya içinde benzersiz kullanıcı adını (`generateUsernameFromFullName`, örn: `ahmet.yilmaz`, mükerrerlikte `ahmet.yilmaz2`) otomatik üretir ve tabloda gösterir.
       - Yönetici tabloda kullanıcı adını tıklayarak düzenleyebilir; düzenleme ekranında anlık teklik (uniqueness) denetimi vardır, mükerrer kullanıcı adına izin verilmez.
-      - Toplu yükleme onaylandığında (ulk_import_writer.js -> provisionImportedResidents): Daireye atanan kişi için kullanıcı hesabı oluşturulur, users.login_name atanır (ve ensureUniqueLoginName ile DB tekilliği garanti edilir), rolü APARTMENT_ADMIN yapılır, şifresi 1234 (veya tablodaki şifre) olarak bcrypt ile hashlenir ve must_change_password = TRUE atanır.
-      - Sakin 1234 şifresiyle ilk girişini yaptığında ForceChangePasswordDialog popup'ı ile karşılanır ve kendi yeni şifresini belirler. Profilim ekranında da şifre değiştirme kartı bulunur.
+      - Toplu yükleme onaylandığında (`bulk_import_writer.js` -> `provisionImportedResidents`): Daireye atanan kişi için kullanıcı hesabı oluşturulur, `users.login_name` atanır (ve `ensureUniqueLoginName` ile DB tekilliği garanti edilir), rolü `APARTMENT_ADMIN` yapılır, şifresi `1234` (veya tablodaki şifre) olarak bcrypt ile hashlenir ve `must_change_password = TRUE` atanır.
+      - Sakin 1234 şifresiyle ilk girişini yaptığında `ForceChangePasswordDialog` modalı ile karşılanır ve kendi yeni şifresini belirler. Profilim ekranında da şifre değiştirme kartı bulunur.
     - **Gelecek Ajanlar İçin Kesin Yasaklar ve Koruma İlkeleri:**
-      - kullanici_adi ve sifre sütunlarını ulk_import_spec.js ve ulk_template.dart içerisinden ASLA kaldırma.
-      - BulkImportController._enrichRowsWithAutoDefaults ve generateUsernameFromFullName fonksiyonlarını ASLA silme; Excel okunduğunda tablodaki kullanıcı adının ve 1234 şifresinin dolu gelmesi şarttır.
-      - BulkEditableTable içindeki kullanıcı adı hücre düzenleme ve mükerrer engelleme kontrollerini bozma.
-      - provisionImportedResidents fonksiyonunu veya ulk_import_service.js içerisindeki çağrısını ASLA kaldırma; toplu yüklenen her sakinin daire admini hesabı açılmak zorundadır.
-      - ForceChangePasswordDialog zorunlu şifre değiştirme popup'ını ve UserSession.mustChangePassword bayrağını ASLA iptal etme.
+      - `kullanici_adi` ve `sifre` sütunlarını `bulk_import_spec.js` ve `bulk_template.dart` içerisinden ASLA kaldırma.
+      - `BulkImportController._enrichRowsWithAutoDefaults` ve `generateUsernameFromFullName` fonksiyonlarını ASLA silme; Excel okunduğunda tablodaki kullanıcı adının ve 1234 şifresinin dolu gelmesi şarttır.
+      - `BulkEditableTable` içindeki kullanıcı adı hücre düzenleme ve mükerrer engelleme kontrollerini bozma.
+      - `provisionImportedResidents` fonksiyonunu veya `bulk_import_service.js` içerisindeki çağrısını ASLA kaldırma; toplu yüklenen her sakinin daire admini hesabı açılmak zorundadır.
+      - `ForceChangePasswordDialog` zorunlu şifre değiştirme modalını ve `UserSession.mustChangePassword` bayrağını ASLA iptal etme.
+
+14. **Site Yöneticisi Doğrudan Site Kuramaz - Süper Kullanıcı Onayı Zorunludur (Site Başvuru Mimarisi):**
+    - **Neden Yapıldı:**
+      - Hiçbir site yöneticisi veya kullanıcı, platform süper kullanıcısının (`SUPER_USER`) onayı olmadan doğrudan yeni bir site (apartman, rezidans, kooperatif, iş merkezi, AVM vb.) oluşturamaz.
+      - Tüm yeni site talepleri `POST /api/site-applications` üzerinden başvuru statüsünde (`PENDING`) toplanır; süper kullanıcı onayladığında site kurulur ve yetkiler atanır.
+    - **Gelecek Ajanlar İçin Kesin Yasaklar ve Koruma İlkeleri:**
+      - `POST /api/sites` uç noktasını süper kullanıcı harici rollere ASLA açma. Doğrudan site oluşturma izni yalnızca `SUPER_USER` rolündedir.
+      - Rezidans, apartman veya herhangi bir mülk tipi için süper kullanıcı onay mekanizmasını bypass eden hiçbir kod yazma.
+      - UI tarafındaki site oluşturma butonlarını süper onayından geçmeyen doğrudan API çağrılarına ASLA bağlama.
+
+15. **Metrekare (m²) Alanları Tüm Sistemden Kaldırılmıştır (ASLA GERİ EKLENMEYECEK):**
+    - **Neden Yapıldı:**
+      - Kullanıcı kararı doğrultusunda dairelerin metrekaresi sistemden tamamen çıkarılmıştır. Daire metrekaresi sisteme girilmekle uğraşılmayacak, hiçbir ekranda istenmeyecek ve yer kaplamayacaktır.
+      - Veritabanında `apartments` tablosundaki `gross_area_m2` ve `net_area_m2` sütunları kalıcı olarak silinmiştir (DROP COLUMN).
+      - Mobil/Web arayüzünde (Daire Ekle, Daire Düzenle, Daire Kartı, CRM, sayaç faturalandırma ve toplu içe aktarma şablonlarında) metrekareyle ilgili tüm alanlar kaldırılmıştır.
+    - **Gelecek Ajanlar İçin Kesin Yasaklar ve Koruma İlkeleri:**
+      - Veritabanına `gross_area_m2`, `net_area_m2` veya benzeri metrekare sütunlarını ASLA tekrar ekleme.
+      - Flutter UI formlarına (kartlar, diyaloglar, detay sayfaları) metrekare giriş veya gösterim alanları ASLA ekleme.
+      - Excel toplu içe aktarma şablonuna (`brut_m2`, `net_m2`) sütunlarını ASLA geri koyma.
+
+16. **Panelden "Yeni Site Oluştur - YÖNETİCİ OLUN" Bannerı Kaldırılmıştır:**
+    - **Neden Yapıldı:**
+      - Daire kullanıcısı veya sakin olarak giriş yapıldığında ana panelde beliren "Yeni Site Oluştur - YÖNETİCİ OLUN / Henüz kayıtlı bir daireniz bulunmuyor..." kartı kullanıcının isteğiyle panelden kaldırılmıştır.
+      - `lib/ui/pages/home_page.dart` içerisindeki `_canShowSiteCreationOnPanel` kontrolü `false` yapılarak sakin/daire kullanıcısı paneli sadeleştirilmiştir.
+    - **Gelecek Ajanlar İçin Kesin Yasaklar ve Koruma İlkeleri:**
+      - Panel ekranına sakinler veya normal kullanıcılar için izinsiz site oluşturma davet kartlarını ASLA tekrar yerleştirme.
+
+17. **Daire Giriş ve PIN Mimarisi (KVKK m.12 Güvenlik Standardı):**
+    - **Neden Yapıldı:**
+      - KVKK m.12 veri güvenliği standardı gereği, sakinlerin PIN ve şifreleri veritabanında ASLA düz metin (plain text) olarak saklanmaz; yalnızca tek yönlü bcrypt hash ile tutulur.
+      - Bu nedenle yönetici ekranlarında "PIN Göster" butonu bulunmaz ve bulunamaz (düz metin PIN geri okunamaz).
+      - Bunun yerine "PIN Sıfırla" özelliği mevcuttur: Yönetici tıkladığında 6 haneli geçici tek seferlik bir PIN üretilir, ekranda o an modalda gösterilir ve hashlenerek DB'ye yazılır. Sakin dilerse ayrıca e-posta davetiyle kendi şifresini belirleyebilir.
+    - **Gelecek Ajanlar İçin Kesin Yasaklar ve Koruma İlkeleri:**
+      - Veritabanında PIN'leri veya şifreleri düz metin saklayacak sütunlar ASLA açma.
+      - "PIN Göster" adı altında veritabanından şifre/PIN çekmeye çalışan güvensiz mekanizmalar kurma.
+
+18. **Panel Görev / Dikkat Çubuğu (Attention Bar) Kontrast ve Buton Görünürlüğü:**
+    - **Neden Yapıldı:**
+      - Panelde "Dikkat edilmesi gereken işler" çubuğundaki eylem butonu koyu arka plan üzerinde beyaz kutu içinde beyaz yazı kaldığı için okunaksızdı ("buton boş" hatası).
+      - Butonun arka plan rengi, kenarlığı ve yazı rengi net, kontrastlı ve okunabilir olacak şekilde (`attention_action_button`) standartlaştırıldı.
+    - **Gelecek Ajanlar İçin Kesin Yasaklar ve Koruma İlkeleri:**
+      - Attention bar butonunun kontrastını bozma, buton içi metnin arka planla aynı renk olmasına yol açacak stil değişiklikleri yapma.
+
+19. **Excel Toplu Sakin ve Daire Yüklemede Akıllı Şablon Doldurma:**
+    - **Neden Yapıldı:**
+      - Yönetici "Şablonu İndir" butonuna bastığında, sitenin veritabanında zaten kayıtlı olan blokları ve daire numaraları Excel şablonunda hazır dolu olarak gelir.
+      - Yönetici blok ve daireleri tek tek elle yazmak zorunda kalmaz; yalnızca ad_soyad, telefon, eposta vb. sakin bilgilerini doldurur.
+      - Gereksiz ve kafa karıştırıcı sütunlar (`brut_m2`, `net_m2`, `arsa_payi_pay`, `arsa_payi_payda`, `not`) şablondan çıkarılmıştır.
+    - **Gelecek Ajanlar İçin Kesin Yasaklar ve Koruma İlkeleri:**
+      - `bulk_template.dart` içindeki akıllı blok/daire ön-doldurma mekanizmasını ASLA bozma veya boş şablon indirmeye geri döndürme.

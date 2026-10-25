@@ -77,3 +77,8 @@ Yeni bağımlılık YOK. Kalıplar: Modül talebi ekranı (`module_requests_view
 13. **Rozet:** `summary.pending` başvuranı silinmiş bekleyenleri saymaz; liste yine gösterir (süper reddedebilir). İstek günlüğünde `q` sorgusu maskelenir.
 14. **COMMIT sonrası okuma hatası** isteği başarısız yapmaz (commit edilmiş değerlerle asgari yanıt).
 15. **Dağıtım sırası:** yeni uygulama sürümü ile sunucu birlikte yayınlanır (eski istemciler bireysel "Site Kur"da 409 `APPLICATION_REQUIRED` alır). Canlıya almadan önce doğrulama sorguları: onaylı sitede bağı olmayan `site_manager` yok mu; onaysız sitede yönetici bağı yok mu.
+16. **Site Yöneticisi Doğrudan Site Kuramaz - Süper Kullanıcı Onayı Şarttır (2026-10-25 Kesin Kural):**
+    - Kullanıcının doğrudan talimatı doğrultusunda, hiçbir site yöneticisi veya bireysel kullanıcı süper kullanıcının (`SUPER_USER`) izni/onayı olmadan doğrudan yeni bir site (apartman, rezidans, iş merkezi, kooperatif, AVM vb.) OLUŞTURAMAZ.
+    - `POST /api/sites` uç noktası yalnızca `SUPER_USER` rolüne açıktır. Diğer roller doğrudan site oluşturmaya çalışırsa 403 Forbidden alır.
+    - Rezidans dahil her mülk tipi için site oluşturma süreci `POST /api/site-applications` başvuru onay mekanizmasına tabidir.
+    - Başvuru süper kullanıcının onayına düşer, incelenir ve süper kullanıcı tarafından onaylandığında site oluşturulup yönetici yetkileri atanır.

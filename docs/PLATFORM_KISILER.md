@@ -109,3 +109,21 @@ Yetki: yazma = yönetici/süper kullanıcı (`hasSiteManagementAccess`); okuma =
 **Davet** (`person_invite_service.js`): `GET|POST|DELETE .../people/:personId/invitation`. Yalnız `account_kind = none`, e-postalı, aktif kişi (409 PERSON_NO_EMAIL / PERSON_HAS_ACCOUNT / PERSON_INTERNAL_ACCOUNT / PERSON_INACTIVE); SMTP yoksa 503 ve hiçbir şey yazılmaz. Belirteç 32 bayt CSPRNG, 7 gün, tek kullanım; yeniden gönderim eskisini geçersiz kılar; bağlantı yanıtta ASLA dönmez. Sınırlar: kullanıcı 30/saat, site 200/gün, kişi için 60 sn bekleme ve en çok 5 gönderim. E-posta işlem bittikten sonra gider (hata -> `sent:false`). Kabul: `GET|POST /auth/accept-invite` (CSP `default-src 'none'`, no-store, no-referrer) yeni hesap açar (doğrulanmış hesap varsa 409 `ACCOUNT_EXISTS`: uygulamada giriş + Kabul et; bekleyen kayıt silinir, doğrulanmamış eski satır sahiplenilir), kişiyi bağlar, güncel ilişkiler için daire erişimi ve görev üyeliğini verir, onayları `source='invite'` yazar. Mevcut hesap: `GET /app/invitations`, `POST /app/invitations/:id/accept|decline` (doğrulanmış e-posta eşleşmesi; bu sitede başka kişi kaydı varsa 409 `INVITE_PERSON_CONFLICT`). Geçersiz / dolmuş / kullanılmış belirteç tek tip 400 `INVITE_INVALID`. Kabulde kişi hâlâ aktif, hesapsız ve e-postası davetteki ile aynı olmalıdır (e-posta değişimi / pasifleşme daveti fiilen geçersiz kılar); bakım (`runDatabaseCleanup`) dolanı `expired`, bağlanmış / pasif kişinin bekleyenini `revoked` yapar. Kilit sırası: `email_verify:<e-posta>` -> `people_sync:<site>` -> davet satırı.
 
 **Kararlar / sınırlar.** Boş dairede bugünkü daire hesabı + PIN akışı DEĞİŞMEDİ; dahili daire hesabına davet / görev yetkisi yok. Eski `PUT /staff-roles` uç davranışı aynen duruyor (kişi kaydı olmayan hesaba e-postayla rol; numaralandırma riski kabul edilmiş durumda, daraltma sonraya). Telefonu sakinlere göstermek aydınlatma / rıza gerektirebilir [AVUKAT DOĞRULASIN]; arayüz "kişinin onayını alın" uyarısı verir. SMS ile davet "Yakında…".
+
+## Mimari Güncellemeler ve Koruma Kuralları (2026-10-25)
+
+1. **Metrekare (m²) Bilgilerinin Kalıcı Olarak Kaldırılması:**
+   - Daire metrekaresi kullanıcı isteğiyle tüm sistemden tamamen çıkarılmıştır.
+   - Veritabanındaki `apartments` tablosunda `gross_area_m2` ve `net_area_m2` sütunları silinmiştir (DROP COLUMN).
+   - UI tarafındaki daire kartları, ekleme/düzenleme diyalogları, sayaç faturalandırma ve Excel toplu içe aktarma şablonlarından metrekare alanları temizlenmiştir. Gelecek ajanlar bu alanları ASLA tekrar eklememelidir.
+
+2. **Daire Giriş & PIN Mimarisi (KVKK m.12 Güvenlik Standardı):**
+   - Sakinlerin daire PIN'leri veritabanında kesinlikle düz metin saklanmaz; yalnızca tek yönlü bcrypt hash ile tutulur.
+   - Arayüzde "PIN Göster" butonu bulunmaz ve eklenemez. Düz metin PIN geri okunamaz.
+   - "PIN Sıfırla" butonu ile yönetici tek seferlik 6 haneli geçici PIN üretebilir; bu PIN sadece o an modalda yöneticiye gösterilir ve veritabanına bcrypt ile kaydedilir.
+   - Sakinler ilk girişlerinde `ForceChangePasswordDialog` ile zorunlu yeni şifre belirler veya e-posta davetiyle kendi şifrelerini oluştururlar.
+
+3. **Akıllı Toplu Excel Yükleme Şablonu:**
+   - "Şablonu İndir" tıklandığında sitenin mevcut blok ve daireleri hazır doldurulmuş olarak gelir.
+   - Sütunlar sadeleştirilmiş; gereksiz alanlar çıkarılmıştır.
+   - Excel taranıp yüklendiğinde sakin ad-soyadından otomatik tekil kullanıcı adı (`kullanici_adi`) ve başlangıç şifresi (`1234`) atanır.
