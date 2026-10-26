@@ -72,14 +72,16 @@ export default async function sectionReview(t) {
   check('R1: P1-1 hukuk onayi (finance.legal_ok) GERI ALINIRSA kuyruktaki hatirlatma GONDERILMEZ: satir cancelled, adres silinir, ileti 0; nedeni denetimde (gate kodu)',
     same(legalResult.states, ['cancelled']) && legalResult.cleared && legalResult.sent === 0 && legalAudit.some((d) => d?.gate === 'legal_gate' && d?.cancelled_count === 1), { legalResult, legalAudit });
 
-  // P1-1 / S-B: finans modulu kapatilir
+  // P1-1 / S-B: finans modulu kapali sayilirsa. Kural 25 (079): finans TEMEL modul, API'den KAPATILAMAZ (400 MODULE_NOT_TOGGLEABLE); ancak kuyruk site_modules satirini DOGRUDAN SQL ile
+  // okur (satir yoksa acik): satir elle / eski kayitla enabled=FALSE ise (ensureDbSchema bunu her acilista TRUE'ya ceker) hatirlatma yine GONDERILMEZ - savunma katmani korunur.
   const mod = await mkReminderRun('modul');
-  await call('PUT', `/manager/sites/${mod.site.code}/modules/finance`, SUPER, { enabled: false });
+  const closeTry = await call('PUT', `/manager/sites/${mod.site.code}/modules/finance`, SUPER, { enabled: false });
+  await q(`INSERT INTO site_modules (site_code, module_code, enabled) VALUES ($1, 'finance', FALSE) ON CONFLICT (site_code, module_code) DO UPDATE SET enabled = FALSE`, [mod.site.code]);
   const modResult = await drain(mod);
-  await call('PUT', `/manager/sites/${mod.site.code}/modules/finance`, SUPER, { enabled: true });
+  await q(`DELETE FROM site_modules WHERE site_code = $1 AND module_code = 'finance'`, [mod.site.code]);
   const modAudit = await audits(mod);
-  check('R2: P1-1 finans MODULU kapatilirsa bekleyen hatirlatma GONDERILMEZ (cancelled, ileti 0, neden module_disabled)',
-    same(modResult.states, ['cancelled']) && modResult.cleared && modResult.sent === 0 && modAudit.some((d) => d?.gate === 'module_disabled'), { modResult, modAudit });
+  check('R2: P1-1 finans temel modul API ile kapatilamaz (400 MODULE_NOT_TOGGLEABLE); site_modules satiri enabled=FALSE ise bekleyen hatirlatma yine GONDERILMEZ (cancelled, ileti 0, neden module_disabled)',
+    closeTry.status === 400 && closeTry.body.code === 'MODULE_NOT_TOGGLEABLE' && same(modResult.states, ['cancelled']) && modResult.cleared && modResult.sent === 0 && modAudit.some((d) => d?.gate === 'module_disabled'), { closeTry: closeTry.body, modResult, modAudit });
 
   // P1-1 / S-C: yonetici hatirlatma ayarini kapatir
   const setting = await mkReminderRun('ayar');

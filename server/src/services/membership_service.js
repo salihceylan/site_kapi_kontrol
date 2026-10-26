@@ -702,7 +702,7 @@ export async function claimDevice({ userCode, deviceInput }) {
       role: user.role,
       message: shouldPromoteToSiteManager(user.role)
         ? `Cihaz (${deviceRow.device_uid}) başarıyla hesabınıza bağlandı! Site kurmak için başvuru yapabilir ve bu cihazı başvuruda seçebilirsiniz.`
-        : `Cihaz (${deviceRow.device_uid}) başarıyla hesabınıza bağlandı! Artık bu cihaz ile site ve kapı kurulumu yapabilirsiniz.`,
+        : `Cihaz (${deviceRow.device_uid}) başarıyla hesabınıza bağlandı! Kayıtlı Cihazlar ekranından sitenizin bir kapısına bağlayabilirsiniz.`,
       device: updateRes.rows[0] || deviceRow,
     };
   } catch (error) {

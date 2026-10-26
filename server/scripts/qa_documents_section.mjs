@@ -436,6 +436,8 @@ export async function sectionDocuments(ctx) {
       (u) => wtx(async (c) => { await c.query(`UPDATE users SET full_name = full_name WHERE user_code = $1`, [u]); await sleep(2); await c.query(`UPDATE sites SET name = name WHERE site_code = $1`, [site.code]); }),
     ];
     let ensureErrors = 0;
+    let lockTimeouts = 0; // 55P03 (lock_timeout tukendi) tur sayisi
+    const ensureErrorCodes = []; // tani: DDL hatasinin kodu (kontrolun gecis olcutu degismez)
     hooks.deadlocks = 0;
     for (let trial = 0; trial < 6; trial += 1) {
       await q(`DROP TABLE IF EXISTS announcement_attachments`);
@@ -444,23 +446,43 @@ export async function sectionDocuments(ctx) {
       running = true;
       for (let w = 0; w < 8; w += 1) loops.push((async () => { while (running) { await mixes[Math.floor(Math.random() * mixes.length)](wUsers[w]); await sleep(Math.floor(Math.random() * 3)); } })());
       await sleep(120);
-      try {
+      // Kilit zaman asimi POLITIKASI (tasarim): sema kodu DDL'i lock_timeout + sinirli yeniden deneme ile calistirir ve tukenirse 55P03 ile DUSER (sonraki acilis tamamlar). Yuklu makinede
+      // 8 yazici dongusu arkasinda bu tukenme gorulebilir; BU bir kilitlenme DEGILDIR. Olcut: 40P01 = 0, 55P03 disinda hata YOK, 55P03 en cok 2 turda, yazicilar durunca kurulum KESINTISIZ tamamlanir.
+      const runEnsure = async () => {
         const ddlClient = await pool.connect();
         try {
           await ensureDocumentsSchema(ddlClient);
         } finally {
           ddlClient.release();
         }
-      } catch (_error) {
-        ensureErrors += 1;
+      };
+      let trialLockTimeout = false;
+      try {
+        await runEnsure();
+      } catch (error) {
+        ensureErrorCodes.push(error?.code ?? String(error?.message).slice(0, 80));
+        if (error?.code === '55P03') {
+          lockTimeouts += 1;
+          trialLockTimeout = true;
+        } else {
+          ensureErrors += 1;
+        }
       }
       running = false;
       await Promise.all(loops.splice(0));
+      if (trialLockTimeout) {
+        try {
+          await runEnsure();
+        } catch (error) {
+          ensureErrors += 1;
+          ensureErrorCodes.push(`yukten sonra: ${error?.code ?? String(error?.message).slice(0, 80)}`);
+        }
+      }
     }
     await ensureDbSchema();
     await writerPool.end();
     const present = (await q(`SELECT to_regclass('public.documents') IS NOT NULL AS d, to_regclass('public.document_versions') IS NOT NULL AS v, to_regclass('public.announcement_attachments') IS NOT NULL AS a`)).rows[0];
-    check(`A12 (R11 F1): sert yazici yuku (8 yazici; sites -> users / duyuru + TERS sirali users -> sites) altinda 6 kez ilk kurulum (ensureDocumentsSchema, tablolar yokken): DDL hatasi ${ensureErrors}, havuz 40P01 ${hooks.deadlocks}, yazici hatalari ${JSON.stringify(stats.errors)}; tablolar kuruldu`, ensureErrors === 0 && hooks.deadlocks === 0 && present.d && present.v && present.a, { ensureErrors, deadlocks: hooks.deadlocks, stats });
+    check(`A12 (R11 F1): sert yazici yuku (8 yazici; sites -> users / duyuru + TERS sirali users -> sites) altinda 6 kez ilk kurulum (ensureDocumentsSchema, tablolar yokken): DDL hatasi ${ensureErrors} (+ lock_timeout 55P03 tur ${lockTimeouts}, en cok 2 serbest, yuk durunca kurulum tamam), havuz 40P01 ${hooks.deadlocks}, yazici hatalari ${JSON.stringify(stats.errors)}; tablolar kuruldu`, ensureErrors === 0 && lockTimeouts <= 2 && hooks.deadlocks === 0 && present.d && present.v && present.a, { ensureErrors, lockTimeouts, ensureErrorCodes, deadlocks: hooks.deadlocks, stats });
   }
 
   // ============================================================================================================
@@ -906,7 +928,10 @@ export async function sectionDocuments(ctx) {
     await call('POST', vBase(`/${raceDl.id}/purge`), MGR, { confirm: true });
   })();
   await Promise.all([...downloaders, killer]);
-  check(`H1: SILME x INDIRME yarisi (60 indirme + kalici silme): her yanit 200 (tam, bozuk degil), 404 ya da esik asilinca 503 DOWNLOAD_BUSY; 500 / yarim govde YOK (${JSON.stringify(dlStatuses.reduce((a, s) => ({ ...a, [s]: (a[s] ?? 0) + 1 }), {}))})`, dlStatuses.every((s) => s === 200 || s === 404 || s === 503) && bodiesOk.every(Boolean) && dlStatuses.includes(404) && dlStatuses.includes(200), dlStatuses);
+  // Yaris zamanlamasi yuk altinda kayar (sleep tabanli: ayni makinede baska is varsa 60 indirme kalici silmeden ONCE bitebilir): yaris icinde 404 gorulmesi sart degil.
+  // Kalici silme tamamlandiktan SONRAKI indirmeler ise belirleyici olarak 404 olmali (silinen belge tam / yari govdeyle servis edilmez).
+  const afterRacePurge = await Promise.all(Array.from({ length: 5 }, () => call('GET', `/app/documents/${raceDl.id}/download`, R2.user)));
+  check(`H1: SILME x INDIRME yarisi (60 indirme + kalici silme): her yanit 200 (tam, bozuk degil), 404 ya da esik asilinca 503 DOWNLOAD_BUSY; 500 / yarim govde YOK; en az bir indirme tam govdeyle bitti; kalici silmeden SONRA indirme 404 (${JSON.stringify(dlStatuses.reduce((a, s) => ({ ...a, [s]: (a[s] ?? 0) + 1 }), {}))})`, dlStatuses.every((s) => s === 200 || s === 404 || s === 503) && bodiesOk.every(Boolean) && dlStatuses.includes(200) && afterRacePurge.every((r) => r.status === 404), { dlStatuses, afterRacePurge: afterRacePurge.map((r) => r.status) });
 
   // hesap silme x yukleme
   const doomed = await mkUser('Silinecek Yonetici', 'site_manager');

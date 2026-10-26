@@ -31,11 +31,11 @@
 //             sinir, yeniden baslama devami, 3 deneme, SMTP yok -> failed, yavas SMTP istegi bekletmez, CRLF/HTML), zamanlayici
 //             (tek calisan, sizinti yok), audit gizliligi, 3000 daireli sitede yayin suresi ve kilit sirasi turlari (CRM yazmalari,
 //             uye cikarma, hesap silme, site silme, zamanlayici x elle; 40P01 OLMAMALI).
-//   site_applications  Site yoneticisi olma (site basvurusu): sema kisitlari ve tohum, yetki matrisi (yalniz individual/apartment_owner basvurur;
-//             yonetici/super basvuramaz; yalniz super onaylar; baskasinin basvurusuna IDOR 404), basvuru -> onay -> site/blok/daire/kapi +
+//   site_applications  Site yoneticisi olma (site basvurusu): sema kisitlari ve tohum, yetki matrisi (super DISINDA herkes basvurur: individual / apartment_owner / site_manager, 907b137;
+//             super basvuramaz 403; yalniz super onaylar; Kural 22 site adi benzersiz: SITE_NAME_EXISTS / SITE_APPLICATION_NAME_PENDING; baskasinin basvurusuna IDOR 404), basvuru -> onay -> site/blok/daire/kapi +
 //             site_manager_sites + SITE_OWNER + rol + site_subscriptions + cihaz baglama, cihaz artik basvuranin degilse cihazsiz kurulum, red/iptal,
 //             cift basvuru, ESZAMANLI cift basvuru/cift onay/onay x iptal x red, gunluk 5 siniri, odeme kipi, setup-site 409 APPLICATION_REQUIRED
-//             (yonetici/super aynen), bozuk saklanan veri (422, kalinti yok), yarida hata enjeksiyonu (ROLLBACK, kalinti yok), hesap silme/pasif,
+//             (yonetici dahil super disinda herkes; yalniz super anlik kurar; cihaz ekleme kurali DEVICE_ADD_FORBIDDEN; yeni sitede 60 gunluk deneme abonelik satiri), bozuk saklanan veri (422, kalinti yok), yarida hata enjeksiyonu (ROLLBACK, kalinti yok), hesap silme/pasif,
 //             e-posta (yavas/hatali SMTP istegi bozmaz, adres loga yazilmaz), audit gizliligi, 3000 daireli onay suresi, kilit sirasi turlari
 //             (onay x hesap silme, onay x cihaz sahiplenme, onay x yeni basvuru; 40P01 OLMAMALI). QA_ONLY=site_applications ile ayri kosulur.
 //
@@ -99,9 +99,18 @@
 //             dogru hesaba, geri doldurma yok), sema + ters kayit tetikleyicisi, "kim oder" (ay ortasi tasinan / cikan kiraci, PREVIEW_STALE), tahsilat hesabi
 //             ve hesap basina mahsup (iki hesap ASLA karismaz), sakin gorunum matrisi + IDOR, duzeltme / ters kayit, gecikme tazminati (iki hesap iki satir),
 //             hatirlatma alicisi = hesabin sahibi, postPayment kaynak izi, eszamanli tahsilat x borclandirma x CRM (40P01 = 0). QA_ONLY=chain,live,parties.
+//   funds     Iki kasa (Isletme / Yatirim ve Demirbas Fon, 080; govde scripts/qa_finance_funds_section.mjs, finance4b ortamini kullanir): 080 sema + degismezlik (CHECK, ters kayit kasa
+//             tetikleyicisi, aktarim tetikleyicileri, site CASCADE), ensure idempotans, "kim oder" <-> kasa, borclandirma kasayi yazar, tahsilat dagitimi (en eski vade onde, kasa kisiti,
+//             avans), ters kayit / duzeltme kasayi korur, ekstre + Borcum kasa kirilimi, gider / kategori kasasi, kasa ozeti + dokumu + aktarim (degismez: Isletme + Fon + avans =
+//             hesaplarin toplami), gecikme tazminati kasasi, yetki matrisi + IDOR, eszamanli aktarim (40P01 = 0). QA_ONLY=chain,live,funds.
 //   platform_rules  Kurallar tablosu (053, G11; govde scripts/qa_platform_rules_section.mjs): sema, yalniz ekleme tetikleyicisi (CASCADE / SET NULL istisnalari),
 //             cozum sirasi + tarih + kirpma (dogrudan SQL ile sinir disi deger), getRule onbellegi, HTTP yetki matrisi + IDOR, dogrulama, no-op, audit, eszamanli
 //             yazma (40P01 = 0), gecikme tazminati ust siniri (ayar 400, GET ve onizleme kirpilmis oran). QA_ONLY=platform_rules (zincir esitligi icin chain,live,platform_rules).
+//   tenant_admin  Kiraci her zaman daire admini (081; govde scripts/qa_tenant_admin_section.mjs): migration dosyasi = acilis adimi (aday disinda HICBIR sey degismez: hesapsiz kiraci,
+//             pasif uyelik, askida kisi, silinmis hesap, pasif daire, zaten admin; site yoneticisi karari korunur), denetim / adli kayit / devir / bildirim, kapi izinleri
+//             ve uyelik satirlari degismez, idempotans, JS applyApartmentPrimaryAdmin ile parite, calisma ani yollari (kiraci ekleme, davet kabulu, hesap baglama,
+//             kisi karti / daire ekrani, iliski turu, cikis, Tasindi), toplu yukleme admin onceligi (kiraci > malik > diger), eszamanli (40P01 = 0).
+//             QA_ONLY=tenant_admin (zincir esitligi icin chain,live,tenant_admin).
 //
 // GEREKSINIMLER
 //   - Yerelde calisan, SUPERUSER ile erisilebilen BIR PostgreSQL sunucusu (tek kullanimlik; ornegin gecici bir dizinde
@@ -137,6 +146,7 @@ import { sectionContracts } from './qa_contracts_section.mjs';
 import { sectionDecisionBook } from './qa_decision_book_section.mjs';
 import { sectionApartmentPin } from './qa_apartment_pin_section.mjs';
 import { sectionPlatformRules } from './qa_platform_rules_section.mjs';
+import { sectionTenantAdmin } from './qa_tenant_admin_section.mjs';
 
 const SELF = fileURLToPath(import.meta.url);
 const SERVER_DIR = path.resolve(path.dirname(SELF), '..');
@@ -211,6 +221,8 @@ const CATALOG_TABLES = [
   'late_fee_runs',
   'late_fee_run_lines',
   'expenses',
+  'expense_categories', // 080: fund sutunu (NOT NULL DEFAULT operating) + CHECK
+  'finance_fund_transfers', // 080: kasalar arasi aktarim (degismez; ters aktarimla duzeltme)
   'account_movements',
   'finance_reminder_runs',
   'user_consents',
@@ -269,10 +281,10 @@ async function readCatalog(client) {
   const triggers = await client.query(
     `SELECT c.relname AS tbl, t.tgname, regexp_replace(pg_get_triggerdef(t.oid), '\\s+', ' ', 'g') AS def
      FROM pg_trigger t INNER JOIN pg_class c ON c.oid = t.tgrelid
-     WHERE NOT t.tgisinternal AND t.tgname IN ('trg_users_preserve_site_people', 'trg_ledger_entries_append_only', 'trg_ledger_entries_reversal_check', 'trg_ledger_entries_no_truncate', 'trg_fee_runs_append_only', 'trg_fee_runs_no_truncate', 'trg_finance_period_closures_no_update', 'trg_board_decisions_immutable', 'trg_board_decisions_no_truncate', 'trg_ledger_entries_account_party', 'trg_late_fee_run_lines_account', 'trg_platform_rule_values_immutable', 'trg_platform_rule_values_no_truncate') ORDER BY 1, 2`,
+     WHERE NOT t.tgisinternal AND t.tgname IN ('trg_users_preserve_site_people', 'trg_ledger_entries_append_only', 'trg_ledger_entries_reversal_check', 'trg_ledger_entries_no_truncate', 'trg_fee_runs_append_only', 'trg_fee_runs_no_truncate', 'trg_finance_period_closures_no_update', 'trg_board_decisions_immutable', 'trg_board_decisions_no_truncate', 'trg_ledger_entries_account_party', 'trg_late_fee_run_lines_account', 'trg_platform_rule_values_immutable', 'trg_platform_rule_values_no_truncate', 'trg_ledger_entries_fund', 'trg_finance_fund_transfers_immutable', 'trg_finance_fund_transfers_no_truncate', 'trg_finance_fund_transfers_check') ORDER BY 1, 2`,
   );
   const functions = await client.query(
-    `SELECT proname, regexp_replace(prosrc, '\\s+', ' ', 'g') AS src FROM pg_proc WHERE proname IN ('trg_users_preserve_site_people', 'trg_ledger_entries_append_only', 'trg_ledger_entries_reversal_check', 'trg_fee_runs_append_only', 'trg_finance_period_closures_no_update', 'trg_finance_block_truncate', 'trg_board_decisions_immutable', 'trg_board_decisions_block_truncate', 'trg_ledger_entries_account_party', 'trg_late_fee_run_lines_account', 'trg_platform_rule_values_immutable', 'trg_platform_rule_values_block_truncate', 'site_name_key') ORDER BY 1`,
+    `SELECT proname, regexp_replace(prosrc, '\\s+', ' ', 'g') AS src FROM pg_proc WHERE proname IN ('trg_users_preserve_site_people', 'trg_ledger_entries_append_only', 'trg_ledger_entries_reversal_check', 'trg_fee_runs_append_only', 'trg_finance_period_closures_no_update', 'trg_finance_block_truncate', 'trg_board_decisions_immutable', 'trg_board_decisions_block_truncate', 'trg_ledger_entries_account_party', 'trg_late_fee_run_lines_account', 'trg_platform_rule_values_immutable', 'trg_platform_rule_values_block_truncate', 'site_name_key', 'trg_ledger_entries_fund', 'trg_finance_fund_transfers_check') ORDER BY 1`,
   );
   // tohum satirlari (zamandan bagimsiz alanlar): migration zinciri ile ensureDbSchema ayni tohumu yazmali
   const seeds = {
@@ -347,12 +359,18 @@ function runMigrate(databaseName, dir) {
   return result.status === 0;
 }
 
+// Windows'ta Node sureci ARA SIRA sessizce 0xC0000409 (STATUS_STACK_BUFFER_OVERRUN, 3221226505) ile coker (belgeler H1 60 x 3 MB indirme, hesap silme, finans bolumlerinde goruldu;
+// tabanda da vardir, kod hatasi degildir). Bu durumda bolum KONTROL SONUCU URETMEDEN olur; ust surec o bolumu temiz veritabaniyla BIR KEZ yeniden kosturur (asagida). Baska her
+// cikis kodu (1 = basarisiz kontrol, sinyal vb.) dogrudan basarisizliktir; yeniden kosuda tum kontroller yine gecmelidir.
+const NATIVE_CRASH_STATUS = 3221226505;
+let lastSectionStatus = 0;
 function runSection(section, databaseName, extraEnv = {}) {
   const result = spawnSync(process.execPath, [SELF], {
     cwd: SERVER_DIR,
     env: { ...process.env, QA_SECTION: section, DB_NAME: databaseName, ...extraEnv },
     stdio: 'inherit',
   });
+  lastSectionStatus = result.status;
   if (result.status !== 0) {
     // Sessiz cocuk cikislarini (denetleyici / OOM / sinyal) ayirt edebilmek icin neden yazilir.
     console.log(`\n[bolum ${section}] cocuk surec cikis kodu=${result.status} sinyal=${result.signal ?? '-'}${result.error ? ` hata=${result.error.message}` : ''}`);
@@ -389,7 +407,9 @@ async function runParent() {
     decision_book: `${prefix}_decision_book`,
     apartment_pin: `${prefix}_apartment_pin`,
     parties: `${prefix}_parties`,
+    funds: `${prefix}_funds`,
     platform_rules: `${prefix}_platform_rules`,
+    tenant_admin: `${prefix}_tenant_admin`,
     finance_upgrade_base: `${prefix}_fu_base`,
     finance_upgrade_ensure: `${prefix}_fu_ensure`,
     finance_upgrade_migrate: `${prefix}_fu_migrate`,
@@ -410,6 +430,7 @@ async function runParent() {
     }
   };
   const results = [];
+  const retried = []; // 0xC0000409 yuzunden yeniden kosulan bolumler (OZET'te gorunur)
   const record = (name, ok) => {
     results.push([name, ok]);
     console.log(`\n=== ${ok ? 'GECTI' : 'BASARISIZ'}: ${name}\n`);
@@ -448,7 +469,7 @@ async function runParent() {
 
     // legacy ve live: yukseltme senaryolari
     for (const [key, limit, scenario] of [['legacy', platformFirst, 'legacy'], ['live', peopleFirst, 'live']]) {
-      if (!wants(key) && !(key === 'live' && (wants('platform') || wants('people') || wants('locks') || wants('announcements') || wants('site_applications') || wants('finance') || wants('finance4b') || wants('platform_services') || wants('account') || wants('bulk_import') || wants('documents') || wants('push') || wants('work_tracking') || wants('reservation') || wants('survey') || wants('visitor_log') || wants('card_access') || wants('contracts') || wants('decision_book') || wants('apartment_pin') || wants('parties') || wants('platform_rules')))) continue;
+      if (!wants(key) && !(key === 'live' && (wants('platform') || wants('people') || wants('locks') || wants('announcements') || wants('site_applications') || wants('finance') || wants('finance4b') || wants('platform_services') || wants('account') || wants('bulk_import') || wants('documents') || wants('push') || wants('work_tracking') || wants('reservation') || wants('survey') || wants('visitor_log') || wants('card_access') || wants('contracts') || wants('decision_book') || wants('apartment_pin') || wants('parties') || wants('funds') || wants('platform_rules') || wants('tenant_admin')))) continue;
       await recreate(names[key]);
       const subset = subsetMigrations(limit);
       dirs.push(subset);
@@ -486,10 +507,19 @@ async function runParent() {
     }
 
     // platform / people / locks: yukseltilmis "live" veritabaninin kopyalari
-    for (const key of ['platform', 'people', 'locks', 'announcements', 'site_applications', 'finance', 'finance4b', 'parties', 'platform_services', 'account', 'bulk_import', 'documents', 'push', 'work_tracking', 'reservation', 'survey', 'visitor_log', 'card_access', 'contracts', 'decision_book', 'apartment_pin', 'platform_rules']) {
+    for (const key of ['platform', 'people', 'locks', 'announcements', 'site_applications', 'finance', 'finance4b', 'parties', 'funds', 'platform_services', 'account', 'bulk_import', 'documents', 'push', 'work_tracking', 'reservation', 'survey', 'visitor_log', 'card_access', 'contracts', 'decision_book', 'apartment_pin', 'platform_rules', 'tenant_admin']) {
       if (!wants(key)) continue;
       await recreate(names[key], names.live);
-      record(key, runSection(key, names[key]));
+      let sectionOk = runSection(key, names[key]);
+      if (!sectionOk && lastSectionStatus === NATIVE_CRASH_STATUS) {
+        console.log(`
+[bolum ${key}] Windows 0xC0000409 sessiz yerel cokmesi (bilinen ortam oynakligi, kod hatasi degil): bolum TEMIZ veritabaniyla BIR KEZ yeniden kosuluyor
+`);
+        retried.push(key);
+        await recreate(names[key], names.live);
+        sectionOk = runSection(key, names[key]);
+      }
+      record(key, sectionOk);
     }
   } finally {
     if (!process.env.QA_KEEP_DBS) {
@@ -501,7 +531,7 @@ async function runParent() {
     for (const dir of dirs) fs.rmSync(dir, { recursive: true, force: true });
   }
   console.log('\nOZET');
-  for (const [name, ok] of results) console.log(`  ${ok ? 'GECTI    ' : 'BASARISIZ'}  ${name}`);
+  for (const [name, ok] of results) console.log(`  ${ok ? 'GECTI    ' : 'BASARISIZ'}  ${name}${retried.includes(name) ? '  (0xC0000409 sonrasi yeniden kosuldu)' : ''}`);
   const allOk = results.length > 0 && results.every(([, ok]) => ok);
   console.log(allOk ? '\nTUM BOLUMLER GECTI' : '\nBASARISIZ BOLUM VAR');
   process.exit(allOk ? 0 : 1);
@@ -961,8 +991,14 @@ async function sectionUpgrade() {
   // --- 029/030 varsayilanlari
   const mt = await q(`SELECT management_type, COUNT(*)::int AS n FROM sites GROUP BY management_type`);
   check(`${scenario}: mevcut sitelerin tamami apartment_site`, mt.rows.length === 1 && mt.rows[0].management_type === 'apartment_site');
-  check(`${scenario}: eski sitelere site_modules/module_requests/audit satiri YAZILMADI`,
-    (await q(`SELECT (SELECT COUNT(*) FROM site_modules)::int + (SELECT COUNT(*) FROM module_requests)::int + (SELECT COUNT(*) FROM audit_log)::int AS n`)).rows[0].n === 0);
+  // Aidat ve Finans TEMEL modul (Kural 25, 079): her mevcut siteye YALNIZ 'finance' icin acik site_modules satiri yazilir; baska modul, talep ve audit satiri YAZILMAZ.
+  // 2bf1bd4: door_control katalog varsayilani KAPALI; sahadaki cihazi/atanmis kapisi olan siteler (yalniz S1: AABBCCDDEE01 cihazi + atanmis ana kapi) calismaya devam etsin diye
+  // ensureDbSchema onlara ACIK door_control satiri yazar (Kural 2 & 3). Cihazsiz siteler (S2, S3) icin door_control satiri YAZILMAZ (kapali kalir).
+  const legacyModuleRows = (await q(`SELECT site_code::text AS site_code, module_code, enabled FROM site_modules ORDER BY site_code, module_code`)).rows;
+  const expectedModuleRows = [[S1, 'door_control', true], [S1, 'finance', true], [S2, 'finance', true], [S3, 'finance', true]].map(([site, code, enabled]) => ({ site_code: String(site), module_code: code, enabled }));
+  const legacyRequestAudit = (await q(`SELECT (SELECT COUNT(*) FROM module_requests)::int AS requests, (SELECT COUNT(*) FROM audit_log)::int AS audits`)).rows[0];
+  check(`${scenario}: eski sitelere site_modules (yalniz temel modul 'finance' + cihazli S1'e door_control)/module_requests/audit satiri YAZILMADI`,
+    same(legacyModuleRows, expectedModuleRows) && legacyRequestAudit.requests === 0 && legacyRequestAudit.audits === 0, { legacyModuleRows, legacyRequestAudit });
   const roleCheck = await q(`SELECT conname, pg_get_constraintdef(oid) AS def FROM pg_constraint WHERE conrelid = 'site_memberships'::regclass AND contype = 'c'`);
   check(`${scenario}: site_memberships rol kisiti tek ve 5 rolu icerir`, roleCheck.rows.length === 1 && /BOARD_MEMBER/.test(roleCheck.rows[0].def) && /STAFF/.test(roleCheck.rows[0].def), roleCheck.rows);
   const apartmentDefaults = await q(`SELECT responsible_party, floor, category, land_share_numerator FROM apartments ORDER BY id LIMIT 1`);
@@ -1133,7 +1169,8 @@ async function sectionPlatform() {
   check('my-modules: super scope all', res.status === 200 && res.body.scope === 'all');
   res = await call('GET', '/app/my-modules', MGR1);
   const siteOne = res.body.sites.find((s) => s.site_code === S1);
-  check('my-modules: yonetici S1 manager; people.enabled true (core); door_control true; finance false', siteOne?.role === 'manager' && siteOne.modules.people === true && siteOne.modules.door_control === true && siteOne.modules.finance === false, siteOne);
+  // Kural 25 (079): finance TEMEL modul => her sitede acik (talep / super acmasi gerekmez). door_control cihazli S1'de ensureDbSchema'nin yazdigi acik satirdan gelir (2bf1bd4).
+  check('my-modules: yonetici S1 manager; people.enabled true (core); door_control true; finance true (temel modul, Kural 25)', siteOne?.role === 'manager' && siteOne.modules.people === true && siteOne.modules.door_control === true && siteOne.modules.finance === true, siteOne);
   const roleIn = async (user, site) => (await call('GET', '/app/my-modules', user)).body.sites.find((s) => s.site_code === site);
   const board = await roleIn(10012, S1);
   const staff = await roleIn(10013, S1);
@@ -1170,6 +1207,11 @@ async function sectionPlatform() {
   check('kapatinca sitenin yerel kontrol anahtari donduruldu', tokenAfter !== tokenBefore && tokenAfter.length >= 16);
   res = await call('GET', '/app/my-doors', RESIDENT);
   check('kapali modul: my-doors o sitenin kapilarini LISTELEMEZ', res.status === 200 && res.body.doors.length === 0, res.body);
+  // 2bf1bd4: door_control katalog varsayilani KAPALI. Cihazsiz S2'de site_modules satiri YOK => modul kapali => kapilari listelenmez (S1 de kapali: cift rolde hic kapi yok).
+  res = await call('GET', '/app/my-doors', 10008);
+  check('door_control varsayilani KAPALI (satir yok): cihazsiz S2 kapilari listelenmez; S1 kapaliyken cift rolde (S1 yonetici + S2 sakin) hic kapi yok', res.status === 200 && res.body.doors.length === 0, res.body);
+  res = await call('PUT', `/manager/sites/${S2}/modules/door_control`, SUPER, { enabled: true });
+  check('super cihazsiz S2 icin door_control acar (varsayilan kapaliydi): 200, modul acik', res.status === 200 && res.body.modules.find((m) => m.code === 'door_control').enabled === true, res.body);
   res = await call('GET', '/app/my-doors', 10008);
   check('cift rol (S1 yonetici + S2 sakin): yalniz acik sitenin (S2) kapilari', res.status === 200 && res.body.doors.length === 2 && res.body.doors.every((d) => d.site_code === S2));
   const doorId = Number((await q(`SELECT id FROM site_doors WHERE site_code = $1 AND door_index = 1`, [S1])).rows[0].id);
@@ -1179,8 +1221,16 @@ async function sectionPlatform() {
   check('super yeniden acar (onay gerekmez); kapilar geri gelir', res.status === 200 && (await call('GET', '/app/my-doors', RESIDENT)).body.doors.length === 2);
   res = await call('PUT', `/manager/sites/${S1}/modules/people`, SUPER, { enabled: false, confirm: true });
   check('cekirdek modul (people) kapatilamaz -> MODULE_NOT_TOGGLEABLE', res.body?.code === 'MODULE_NOT_TOGGLEABLE', res.body);
-  res = await call('PUT', `/manager/sites/${S1}/modules/metering`, SUPER, { enabled: true });
-  check('yakinda modulu (metering) acmak -> MODULE_COMING_SOON', res.body?.code === 'MODULE_COMING_SOON', res.body);
+  // Kural 25 (079): finance da TEMEL modul => ne kapatilir ne acilir (400 MODULE_NOT_TOGGLEABLE); kapatma denemesi modulu degistirmez.
+  res = await call('PUT', `/manager/sites/${S1}/modules/finance`, SUPER, { enabled: false, confirm: true });
+  check('temel modul (finance) kapatilamaz -> 400 MODULE_NOT_TOGGLEABLE; modul hala acik', res.status === 400 && res.body?.code === 'MODULE_NOT_TOGGLEABLE' && (await call('GET', `/manager/sites/${S1}/modules`, MGR1)).body.modules.find((m) => m.code === 'finance').enabled === true, res.body);
+  res = await call('PUT', `/manager/sites/${S1}/modules/finance`, SUPER, { enabled: true });
+  check('temel modul (finance) acma istegi de 400 MODULE_NOT_TOGGLEABLE (talep/toggle yolu yok)', res.status === 400 && res.body?.code === 'MODULE_NOT_TOGGLEABLE', res.body);
+  res = await call('POST', `/manager/sites/${S1}/module-requests`, MGR1, { module_code: 'finance' });
+  check('temel modul (finance) icin talep -> 400 MODULE_NOT_TOGGLEABLE (talep edilemez)', res.status === 400 && res.body?.code === 'MODULE_NOT_TOGGLEABLE', res.body);
+  // metering artik "available"; hala yakinda olan bir modul (online_payment) ile MODULE_COMING_SOON kurali sinanir.
+  res = await call('PUT', `/manager/sites/${S1}/modules/online_payment`, SUPER, { enabled: true });
+  check('yakinda modulu (online_payment) acmak -> MODULE_COMING_SOON', res.body?.code === 'MODULE_COMING_SOON', res.body);
   const auditCodes = (await q(`SELECT action FROM audit_log WHERE site_code = $1 ORDER BY id`, [S1])).rows.map((r) => r.action);
   check('audit: module.disabled sonra module.enabled', same(auditCodes.filter((a) => a.startsWith('module.')), ['module.disabled', 'module.enabled']), auditCodes);
 
@@ -2022,6 +2072,21 @@ async function sectionPeople() {
     const shrinkPerson = Number((await q(`INSERT INTO site_people (site_code, full_name) VALUES ($1, 'Silinen Daire Sakini') RETURNING id`, [shrinkSite])).rows[0].id);
     await q(`INSERT INTO apartment_residencies (site_code, apartment_id, person_id, relation, move_in_date) VALUES ($1, $2, $3, 'owner', '2024-05-01')`, [shrinkSite, lastApartment, shrinkPerson]);
     await q(`INSERT INTO vehicles (site_code, person_id, plate) VALUES ($1, $2, '06DLT001')`, [shrinkSite, shrinkPerson]);
+    // 83f81e0 (dolu daire korumasi): GUNCEL sakin kaydi olan daire daire-azaltma ile SILINEMEZ -> 409 APARTMENT_OCCUPIED, hicbir sey silinmez, audit anlik goruntusu YAZILMAZ.
+    let occupiedError = null;
+    try {
+      await siteSvc.syncSiteStructureCounts({ siteCode: shrinkSite, blockCount: 1, apartmentCount: 2, blockApartmentCounts: [2], doorCount: 1, actor: superActor });
+    } catch (error) {
+      occupiedError = error;
+    }
+    check('H6: GUNCEL sakin kaydi olan (dolu) daire daire-azaltma ile silinemez: 409 APARTMENT_OCCUPIED (guncel sakin kaydi); daire, iliski, arac KALIR; apartment.deleted audit YOK',
+      occupiedError?.statusCode === 409 && occupiedError?.code === 'APARTMENT_OCCUPIED' && /ncel sakin kayd/.test(String(occupiedError.message))
+        && (await q(`SELECT COUNT(*)::int AS n FROM apartments WHERE id = $1`, [lastApartment])).rows[0].n === 1
+        && (await q(`SELECT COUNT(*)::int AS n FROM apartment_residencies WHERE apartment_id = $1 AND is_current`, [lastApartment])).rows[0].n === 1
+        && (await q(`SELECT COUNT(*)::int AS n FROM vehicles WHERE plate = '06DLT001' AND person_id = $1`, [shrinkPerson])).rows[0].n === 1
+        && (await q(`SELECT COUNT(*)::int AS n FROM audit_log WHERE action = 'apartment.deleted' AND target_id = $1`, [String(lastApartment)])).rows[0].n === 0, { statusCode: occupiedError?.statusCode, code: occupiedError?.code, message: occupiedError?.message });
+    // Sakin daireden cikinca (iliski bitti: gecmis kayit KALIR) daire BOSTUR: silme + anlik goruntu yolu (H6) aynen calisir.
+    await q(`UPDATE apartment_residencies SET is_current = FALSE, move_out_date = '2025-06-01' WHERE apartment_id = $1 AND person_id = $2`, [lastApartment, shrinkPerson]);
     let shrinkError = null;
     try {
       await siteSvc.syncSiteStructureCounts({ siteCode: shrinkSite, blockCount: 1, apartmentCount: 2, blockApartmentCounts: [2], doorCount: 1, actor: superActor });
@@ -2029,10 +2094,11 @@ async function sectionPeople() {
       shrinkError = error;
     }
     const snapshot = (await q(`SELECT site_code, actor_name, details FROM audit_log WHERE action = 'apartment.deleted' AND target_id = $1`, [String(lastApartment)])).rows[0];
-    check('H6: daire azaltma ozelligi calismaya devam eder (FK engeli yok): daire silindi', shrinkError === null && (await q(`SELECT COUNT(*)::int AS n FROM apartments WHERE id = $1`, [lastApartment])).rows[0].n === 0, shrinkError?.message);
-    check('H6: CRM kaydi olan daire silinmeden `apartment.deleted` audit anlik goruntusu: etiket, alanlar, iliskiler (ad/iliski/tarih), arac sayisi; site_code dolu',
+    check('H6: daire azaltma ozelligi BOS (sakin cikmis) daire icin calismaya devam eder (FK engeli yok): daire silindi', shrinkError === null && (await q(`SELECT COUNT(*)::int AS n FROM apartments WHERE id = $1`, [lastApartment])).rows[0].n === 0, shrinkError?.message);
+    check('H6: CRM kaydi (gecmis iliski + arac + alanlar) olan daire silinmeden `apartment.deleted` audit anlik goruntusu: etiket, alanlar, iliskiler (ad/iliski/tarih/guncel degil), arac sayisi; site_code dolu',
       snapshot && Number(snapshot.site_code) === shrinkSite && snapshot.actor_name === 'Super Kisi' && snapshot.details.label.endsWith('Daire 3') && snapshot.details.floor === 3 && snapshot.details.land_share.numerator === 35
-        && snapshot.details.residencies[0].name === 'Silinen Daire Sakini' && snapshot.details.residencies[0].relation === 'owner' && snapshot.details.residencies[0].move_in_date === '2024-05-01' && snapshot.details.vehicle_count === 1, snapshot);
+        && snapshot.details.residencies[0].name === 'Silinen Daire Sakini' && snapshot.details.residencies[0].relation === 'owner' && snapshot.details.residencies[0].move_in_date === '2024-05-01'
+        && snapshot.details.residencies[0].is_current === false && snapshot.details.residencies[0].move_out_date === '2025-06-01' && snapshot.details.vehicle_count === 1, snapshot);
     check('H6: arac ve kisi kaydi KALIR (arac apartment_id NULL, person_id bagi korunur)', (await q(`SELECT person_id, apartment_id FROM vehicles WHERE plate = '06DLT001'`)).rows[0].person_id !== null && (await personRowById(shrinkPerson)) !== undefined);
 
     // --- H7: esitleme kilidi meshgulse okuma BEKLEMEZ; kisitlama
@@ -3039,6 +3105,7 @@ async function sectionAnnouncements() {
   // blok ve daire hedefleri yayin
   res = await create(S4, MGR, { publish: 'now', target: { type: 'blocks', block_ids: [s4.blockIds.B] } });
   check('yayin (B Blok): 4 kisi; hedef etiketi blok adi, block_ids dolu', res.status === 201 && res.body.recipient_count === 4 && same(res.body.target.labels, ['B Blok']) && same(res.body.target.block_ids, [s4.blockIds.B]), res.body);
+  const blockAnnId = res.body.id; // yumusak silme (057) kontrolu bu yayinlanmis duyuru uzerinde yapilir (mainId sonraki liste / arama kontrolleri icin kalir)
   res = await create(S4, MGR, { publish: 'now', target: { type: 'apartments', apartment_ids: [B(1), A(2), A(2)] } });
   check('yayin (A2 + B1 + tekrarli kimlik): 1 kisi (iki daireli kisi TEK satir), tekrarlar tekillestirilir, etiketler blok-daire', res.status === 201 && res.body.recipient_count === 1 && res.body.target.apartment_ids.length === 2 && same(res.body.target.labels, ['A Blok - Daire 2', 'B Blok - Daire 1']), res.body);
   const multiAnnId = res.body.id;
@@ -3154,15 +3221,28 @@ async function sectionAnnouncements() {
   check('withdrawn audit: announcement.withdrawn (sayilar)', (await auditOf(multiAnnId)).some((a) => a.action === 'announcement.withdrawn' && a.details.recipient_count === 1));
 
   // sil
-  res = await call('DELETE', `${P(S4)}/${mainId}`, MGR);
-  check('yayinlanmis duyuru silinemez -> 409 INVALID_STATE', res.status === 409 && res.body.code === 'INVALID_STATE' && (await rowOf(mainId)) !== undefined);
+  // 057 (N1, yumusak silme): yayinlanmis duyuru silinince AYNI islemde geri cekilir + deleted_at yazilir (mode 'archived'); geri cekilmis duyuru da yumusak silinir.
+  // Kayit DB'den SILINMEZ (saklama / delil); yonetici listesi, ayrinti ve alicilar silinmisi gostermez; ikinci silme 404.
+  const blockRecipientsBefore = (await recipientsOf(blockAnnId)).length;
+  res = await call('DELETE', `${P(S4)}/${blockAnnId}`, MGR);
+  const archivedRow = await rowOf(blockAnnId);
+  check('yayinlanmis duyuru silinir: 200 { ok, mode: archived }; kayit veritabaninda KALIR (status withdrawn + deleted_at dolu); alici satirlari silinmez',
+    res.status === 200 && res.body.ok === true && res.body.mode === 'archived' && archivedRow !== undefined && archivedRow.status === 'withdrawn' && archivedRow.deleted_at !== null && (await recipientsOf(blockAnnId)).length === blockRecipientsBefore && blockRecipientsBefore === 4, res.body);
+  res = await call('GET', `${P(S4)}/${blockAnnId}`, MGR);
+  check('silinen (arsivlenen) duyuru yonetici ayrintisinda 404; listede ve withdrawn suzgecinde yok', res.status === 404 && !(await call('GET', `${P(S4)}?limit=100`, MGR)).body.items.some((i) => i.id === blockAnnId) && !(await call('GET', `${P(S4)}?status=withdrawn`, MGR)).body.items.some((i) => i.id === blockAnnId), res.body);
+  const archivedAudit = (await auditOf(blockAnnId)).filter((a) => a.action === 'announcement.deleted');
+  check('arsivleme audit: tek announcement.deleted { from_status: published, archived: true }; baslik / metin yok',
+    archivedAudit.length === 1 && archivedAudit[0].details.from_status === 'published' && archivedAudit[0].details.archived === true && !JSON.stringify(archivedAudit[0].details).includes('Baslik'), archivedAudit);
+  res = await call('DELETE', `${P(S4)}/${blockAnnId}`, MGR);
+  check('ikinci silme (zaten silinmis) 404', res.status === 404, res.body);
   res = await call('DELETE', `${P(S4)}/${multiAnnId}`, MGR);
-  check('geri cekilmis duyuru da silinemez -> 409', res.status === 409);
+  const withdrawnDeleted = await rowOf(multiAnnId);
+  check('geri cekilmis duyuru da yumusak silinir: 200 { ok, mode: archived }; kayit KALIR (deleted_at dolu); ayrinti 404', res.status === 200 && res.body.mode === 'archived' && withdrawnDeleted.deleted_at !== null && withdrawnDeleted.status === 'withdrawn' && (await call('GET', `${P(S4)}/${multiAnnId}`, MGR)).status === 404, res.body);
   res = await call('DELETE', `${P(S4)}/${scheduledId}`, MGR);
   check('zamanlanmis duyuru silinir ({ ok: true }), kayit kalmaz', res.status === 200 && res.body.ok === true && (await rowOf(scheduledId)) === undefined);
   res = await call('DELETE', `${P(S4)}/${tzScheduledId}`, MGR);
   const deleteAudit = (await q(`SELECT details FROM audit_log WHERE action = 'announcement.deleted' AND target_id = $1`, [String(scheduledId)])).rows[0];
-  check('silme audit: announcement.deleted (yalniz durum); ikinci silme 404', deleteAudit?.details?.status === 'scheduled' && res.status === 200 && (await call('DELETE', `${P(S4)}/${scheduledId}`, MGR)).status === 404);
+  check('silme audit: announcement.deleted (yalniz durum: from_status, archived=false); ikinci silme 404', deleteAudit?.details?.from_status === 'scheduled' && deleteAudit.details.archived === false && !('title' in deleteAudit.details) && !('body' in deleteAudit.details) && res.status === 200 && (await call('DELETE', `${P(S4)}/${scheduledId}`, MGR)).status === 404);
 
   // liste: siralama, suzgec, arama, sayfalama
   console.log('--- liste ---');
@@ -3653,7 +3733,7 @@ async function sectionAnnouncements() {
   async function fixture() {
     const code = raceSiteCode;
     raceSiteCode += 1;
-    const made = await makeSite(code, 'Kilit Sitesi', { 'K Blok': [1, 2, 3] });
+    const made = await makeSite(code, `Kilit Sitesi ${code}`, { 'K Blok': [1, 2, 3] }); // site adi benzersiz (077 site_name_key): her tur kendi adini alir
     await q(`INSERT INTO site_manager_sites (site_code, manager_user_code) VALUES ($1, $2)`, [code, MGR]);
     const users = [];
     for (let i = 1; i <= 3; i += 1) {
@@ -3879,8 +3959,10 @@ async function sectionAnnouncements() {
   const perfFull = await timedScheduledPublish('Perf tum site', { type: 'site' });
   const perfFullCounts = await statusCounts(perfFull.id);
   console.log(`  bilgi: e-postali yayin 1000 adres ${perfThird.ms} ms, 3000 adres ${perfFull.ms} ms`);
-  check(`D2: 3000 daire / 3000 kisi / 3000 adresli e-postali yayin ${perfFull.ms} ms (< 3000 ms; eski UPDATE...ROW_NUMBER kalibi 15 sn'yi asiyordu); 1000 adresli ${perfThird.ms} ms`,
-    perfThird.result.published === true && perfFull.result.published === true && perfFull.ms < 3000 && perfThird.ms < 3000, [perfThird, perfFull]);
+  // Mutlak sure siniri yuke duyarlidir (bos makinede ~1.5 sn, yuklu makinede 4-5 kat): sinir 12 sn'ye cekildi - eski UPDATE...ROW_NUMBER kalibi 15 sn'yi asiyordu ve asagidaki DOGRUSAL oran
+  // kontrolu (3x kitle < 6x sure; karesel plan ~9x) yapisal korumadir. Bu iki kontrol birlikte hem karesel plani hem mutlak ciglik regresyonunu yakalar.
+  check(`D2: 3000 daire / 3000 kisi / 3000 adresli e-postali yayin ${perfFull.ms} ms (< 12000 ms; eski UPDATE...ROW_NUMBER kalibi 15 sn'yi asiyordu; bos makinede ~1500 ms); 1000 adresli ${perfThird.ms} ms`,
+    perfThird.result.published === true && perfFull.result.published === true && perfFull.ms < 12000 && perfThird.ms < 12000, [perfThird, perfFull]);
   check('D2: sonuc dogru: ilk yayin 1000 pending (tek yayin siniri), tum site yayininda kalan kota 4000 -> pending 1000 / capped 2000', perfThird.result.email.pending === 1000 && perfFullCounts.pending === 1000 && perfFullCounts.capped === 2000, [perfThird.result.email, perfFullCounts]);
   check(`D2: sure DOGRUSAL: 3x daha buyuk kitle < 6x sure (${perfFull.ms} ms / ${perfThird.ms} ms); karesel plan olsaydi ~9x`, perfFull.ms / Math.max(perfThird.ms, 25) < 6, [perfFull.ms, perfThird.ms]);
   // reddedilen (> 1000 adres) yonetici yayini KILIT TUTMAZ: BEGIN / advisory kilit hic kosulmaz, hizli doner
@@ -3891,7 +3973,7 @@ async function sectionAnnouncements() {
   const rejectLog = hooks.log.map((entry) => String(entry.text));
   hooks.log = null;
   check(`D2: > 1000 adresli yonetici yayini ${rejectMs} ms'de 400 ANNOUNCEMENT_EMAIL_LIMIT ile reddedilir ve site kisi kilidi HIC alinmaz (BEGIN / advisory kilit sorgusu yok)`,
-    res.status === 400 && res.body.code === 'ANNOUNCEMENT_EMAIL_LIMIT' && rejectMs < 2000 && !rejectLog.some((sql) => /^\s*BEGIN/.test(sql) || /pg_advisory_xact_lock/.test(sql)), { rejectMs, queries: rejectLog.length });
+    res.status === 400 && res.body.code === 'ANNOUNCEMENT_EMAIL_LIMIT' && rejectMs < 10000 && !rejectLog.some((sql) => /^\s*BEGIN/.test(sql) || /pg_advisory_xact_lock/.test(sql)), { rejectMs, queries: rejectLog.length });
   delete process.env.ANNOUNCEMENT_EMAIL_MAX_PER_DAY_PER_SITE;
   await q(`DELETE FROM sites WHERE site_code = $1`, [S15]);
 
@@ -4650,8 +4732,11 @@ async function sectionAnnouncements() {
       assertOutcome: async (settled, fx) => {
         const [published, deleted] = statusesOf(settled);
         const row = await rowOf(fx.first);
-        const orphans = (await recipientsOf(fx.first)).length;
-        if (published === 200) return deleted === 409 && row?.status === 'published' ? null : `yayin 200, sil ${deleted}`;
+        const recipients = await recipientsOf(fx.first);
+        const orphans = recipients.length;
+        // 057 (yumusak silme): YAYIN once kazanirsa silme yayinlanmis duyuruyu AYNI islemde geri cekip arsivler (200, mode archived): kayit KALIR (status withdrawn + deleted_at),
+        // bekleyen e-posta / adres kalmaz. SILME once kazanirsa taslak kalici silinir (200) ve yayin 404 alir. Karisik / yari durum (silme 409, yayinda kalip silinmis, alicisi kalan) asla olmamali.
+        if (published === 200) return deleted === 200 && row?.status === 'withdrawn' && row.deleted_at !== null && recipients.every((r) => r.email_status !== 'pending' && r.email === null) ? null : `yayin 200, sil ${deleted}, durum ${row?.status}, deleted_at ${row?.deleted_at ?? null}`;
         return published === 404 && deleted === 200 && row === undefined && orphans === 0 ? null : `yayin ${published}, sil ${deleted}, satir ${row?.status}, artik alici ${orphans}`;
       },
     },
@@ -5531,7 +5616,10 @@ async function sectionSiteApplications() {
     applicantBodies.push(JSON.stringify(result.body));
     return result;
   };
-  const apply = (user, extra) => seen(call('POST', '/membership/site-applications', user, appBody(extra)));
+  // Site adi benzersizdir (077 site_name_key; Kural 22): ayni adla ikinci BEKLEYEN basvuru / var olan site adi 409 olur. Bu yuzden her basvuru varsayilan olarak kendi
+  // benzersiz adini alir (a1'in ilk basvurusu ve adi ozellikle sinanan basvurular `name` verir).
+  let appNameSeq = 0;
+  const apply = (user, extra) => seen(call('POST', '/membership/site-applications', user, appBody({ name: `QA Sitesi ${(appNameSeq += 1)}`, ...extra })));
   const mine = (user) => seen(call('GET', '/membership/site-applications/mine', user));
   const approve = (id, note) => call('POST', `/admin/site-applications/${id}/approve`, SUPER, note === undefined ? {} : { note });
   const reject = (id, reason) => call('POST', `/admin/site-applications/${id}/reject`, SUPER, reason === undefined ? {} : { reason });
@@ -5571,7 +5659,8 @@ async function sectionSiteApplications() {
 
   const schemaUser = await mkUser('Sema Kullanici');
   const baseApp = `INSERT INTO site_applications (applicant_user_code, site_name, blocks, doors, block_count, apartment_count, door_count`;
-  const valuesOf = (extraCols = '', extraVals = '') => `${baseApp}${extraCols}) VALUES ($1, 'S', '[]'::jsonb, '[]'::jsonb, 1, 1, 1${extraVals})`;
+  // 077 (site_name_key): ayni anahtarli ad ile ikinci BEKLEYEN basvuru 23505 olur; bu yuzden her bekleyen deneme satiri kendi benzersiz adini alir (varsayilan 'S').
+  const valuesOf = (extraCols = '', extraVals = '', siteName = 'S') => `${baseApp}${extraCols}) VALUES ($1, '${siteName}', '[]'::jsonb, '[]'::jsonb, 1, 1, 1${extraVals})`;
   check('CHECK: gecersiz plan fiyati (negatif) 23514', (await failCode(`INSERT INTO subscription_plans (code, name, price_minor) VALUES ('qa_neg', 'x', -1)`)) === '23514');
   check('CHECK: gecersiz faturalama donemi (weekly) 23514', (await failCode(`INSERT INTO subscription_plans (code, name, billing_period) VALUES ('qa_wk', 'x', 'weekly')`)) === '23514');
   check('plan: fiyat NULL ve gecerli donem (monthly/yearly) kabul edilir', (await failCode(`INSERT INTO subscription_plans (code, name, price_minor, billing_period) VALUES ('qa_ok', 'x', 0, 'yearly')`)) === null);
@@ -5595,8 +5684,9 @@ async function sectionSiteApplications() {
   check('NOT NULL: blocks / doors / site_name zorunlu 23502; olmayan plan 23503', (await failCode(`INSERT INTO site_applications (applicant_user_code, site_name, doors, block_count, apartment_count, door_count) VALUES ($1, 'S', '[]'::jsonb, 1, 1, 1)`, [schemaUser])) === '23502' && (await failCode(`INSERT INTO site_applications (applicant_user_code, blocks, doors, block_count, apartment_count, door_count) VALUES ($1, '[]'::jsonb, '[]'::jsonb, 1, 1, 1)`, [schemaUser])) === '23502' && (await failCode(valuesOf(', plan_code', ", 'yok_plan'"), [schemaUser])) === '23503');
   const defaults = (await q(valuesOf() + ' RETURNING status, management_type, payment_status, plan_code, decision_source', [schemaUser])).rows[0];
   check('varsayilanlar: pending, apartment_site, not_required, plan/karar kaynagi NULL', defaults.status === 'pending' && defaults.management_type === 'apartment_site' && defaults.payment_status === 'not_required' && defaults.plan_code === null && defaults.decision_source === null, defaults);
-  check('kismi tekil indeks: AYNI kisi icin ikinci BEKLEYEN 23505', (await failCode(valuesOf(), [schemaUser])) === '23505');
-  check('kismi tekil indeks: bekleyen yanina onayli / reddedilmis satir eklenebilir; applicant NULL bekleyenler birden fazla olabilir', (await failCode(valuesOf(', status', ", 'rejected'"), [schemaUser])) === null && (await failCode(valuesOf(), [null])) === null && (await failCode(valuesOf(), [null])) === null);
+  check('kismi tekil indeks: AYNI kisi icin ikinci BEKLEYEN 23505 (farkli adla de: basvuran bazli indeks)', (await failCode(valuesOf('', '', 'S-baska-ad'), [schemaUser])) === '23505');
+  check('kismi tekil indeks (077 site_name_key): AYNI ad icin (buyuk/kucuk harf, Turkce harf, bosluk farki dahil) ikinci BEKLEYEN 23505 - baska basvuranla da', (await failCode(valuesOf('', '', 's'), [null])) === '23505' && (await failCode(valuesOf('', '', ' S  '), [null])) === '23505');
+  check('kismi tekil indeks: bekleyen yanina onayli / reddedilmis satir eklenebilir; applicant NULL bekleyenler birden fazla olabilir', (await failCode(valuesOf(', status', ", 'rejected'"), [schemaUser])) === null && (await failCode(valuesOf('', '', 'S-null-1'), [null])) === null && (await failCode(valuesOf('', '', 'S-null-2'), [null])) === null);
   const onDelete = await mkUser('Silinecek Basvuran');
   const decidedBy = await mkUser('Silinecek Karar Veren', 'individual');
   await q(`INSERT INTO site_applications (applicant_user_code, status, site_name, blocks, doors, block_count, apartment_count, door_count, decided_by, site_code) VALUES ($1, 'approved', 'FK', '[]'::jsonb, '[]'::jsonb, 1, 1, 1, $2, ${S1})`, [onDelete, decidedBy]);
@@ -5607,7 +5697,7 @@ async function sectionSiteApplications() {
   await q(`UPDATE site_applications SET site_code = 1000000555 WHERE site_name = 'FK'`);
   await q(`DELETE FROM sites WHERE site_code = 1000000555`);
   check('site silinince basvuruda site_code NULL olur (basvuru KALIR)', (await q(`SELECT site_code FROM site_applications WHERE site_name = 'FK'`)).rows[0].site_code === null);
-  await q(`DELETE FROM site_applications WHERE site_name IN ('S', 'FK')`);
+  await q(`DELETE FROM site_applications WHERE site_name IN ('S', 'FK') OR site_name LIKE 'S-%'`);
 
   // A9(a): yonetici planlari / ayari ELLE degistirmisken ensureDbSchema (sunucu acilisinda HER seferinde calisir) tohumu EZMEZ
   await q(`UPDATE subscription_plans SET name = 'Standart (elle)', description = 'elle degistirildi', is_active = TRUE, price_minor = 24900, currency = 'USD', billing_period = 'monthly' WHERE code = 'standard'`);
@@ -5640,13 +5730,21 @@ async function sectionSiteApplications() {
   let res = await call('POST', '/membership/site-applications', null, appBody());
   check('kimliksiz basvuru 401', res.status === 401);
   const before = await world();
-  res = await apply(MANAGER);
-  check('site yoneticisi basvuramaz: 409 ALREADY_SITE_MANAGER (Site Ekle kullanir)', res.status === 409 && res.body.code === 'ALREADY_SITE_MANAGER', res.body);
   res = await apply(SUPER);
   check('super kullanici basvuramaz: 403 FORBIDDEN_ROLE', res.status === 403 && res.body.code === 'FORBIDDEN_ROLE', res.body);
-  check('reddedilen basvurular HIC satir yazmaz', (await q(`SELECT COUNT(*)::int AS n FROM site_applications WHERE applicant_user_code IN (${MANAGER}, ${SUPER})`)).rows[0].n === 0 && same(await world(), before));
+  check('reddedilen basvurular HIC satir yazmaz', (await q(`SELECT COUNT(*)::int AS n FROM site_applications WHERE applicant_user_code = ${SUPER}`)).rows[0].n === 0 && same(await world(), before));
+  // 907b137: super kullanici DISINDA herkes site basvurusu yapar; sahip bagi olan site yoneticisi (10002) de (artik 409 ALREADY_SITE_MANAGER yok). Rol degismez, bekleyen basvuru iptal edilebilir.
+  res = await apply(MANAGER, { name: 'Yonetici Basvuru Sitesi' });
+  const managerApp = res.body?.application;
+  check('sahip bagi olan site yoneticisi de basvurur: 201 bekleyen; rol site_manager KALIR; site / yonetici bagi YAZILMAZ (onay bekler)', res.status === 201 && managerApp?.status === 'pending' && (await roleOf(MANAGER)) === 'site_manager' && same(await world(), before), res.body);
+  res = await cancel(MANAGER, managerApp?.id);
+  check('yonetici kendi bekleyen basvurusunu iptal eder (cancelled)', res.status === 200 && (await appRow(managerApp.id)).status === 'cancelled', res.body);
+  // yonetici basvurusunun super bildirim e-postalari (asenkron) bitmeden sonraki e-posta kontrolleri baslamasin: ikisini bekle, sonra kutuyu temizle
+  await waitMail((m) => m.to === 'u10001@example.com' && m.subject === SUBJECT_NEW);
+  await waitMail((m) => m.to === 'ikinci-super@qa.example' && m.subject === SUBJECT_NEW);
+  mails.length = 0;
 
-  res = await apply(a1);
+  res = await apply(a1, { name: 'QA Sitesi' });
   const app1 = res.body.application;
   check('bireysel kullanici basvurur: 201 { application } (bekleyen, kirpilmis ad / not, sayilar, bloklar / kapilar, plan / odeme alanlari)',
     res.status === 201 && app1.status === 'pending' && app1.site_name === 'QA Sitesi' && app1.note === 'Hizli olursa sevinirim' && app1.block_count === 2 && app1.apartment_count === 20 && app1.door_count === 2
@@ -5839,7 +5937,9 @@ async function sectionSiteApplications() {
     (await q(`SELECT COUNT(*)::int AS n FROM site_manager_sites WHERE site_code = $1 AND manager_user_code = $2`, [siteCode, b1])).rows[0].n === 1
       && (await q(`SELECT role, is_active FROM site_memberships WHERE site_code = $1 AND user_code = $2`, [siteCode, b1])).rows.every((r) => r.role === 'SITE_OWNER' && r.is_active === true) && (await roleOf(b1)) === 'site_manager');
   const sub = (await q(`SELECT * FROM site_subscriptions WHERE site_code = $1`, [siteCode])).rows;
-  check('site_subscriptions: manual_approval / active / source manual_approval / application_id = basvuru; sure sinirsiz', sub.length === 1 && sub[0].plan_code === 'manual_approval' && sub[0].status === 'active' && sub[0].source === 'manual_approval' && Number(sub[0].application_id) === b1App && sub[0].expires_at === null && sub[0].started_at !== null, sub);
+  // 062 (yonetim firmasi, deneme suresi): yeni acilan her site abonelik satirini 'trial' + trial_ends_at (varsayilan subscription.trial_days = 60 gun) ile alir; expires_at (sure siniri) NULL kalir.
+  const trialDaysLeft = sub[0]?.trial_ends_at ? Math.round((new Date(sub[0].trial_ends_at).getTime() - Date.now()) / 86400000) : null;
+  check('site_subscriptions: manual_approval / trial (60 gun) / source manual_approval / application_id = basvuru; expires_at sinirsiz', sub.length === 1 && sub[0].plan_code === 'manual_approval' && sub[0].status === 'trial' && trialDaysLeft === 60 && sub[0].source === 'manual_approval' && Number(sub[0].application_id) === b1App && sub[0].expires_at === null && sub[0].started_at !== null, sub);
   const decided = await appRow(b1App);
   check('basvuru satiri: approved, decision_source super_user, decided_by = super, decided_at, site_code, decision_note', decided.status === 'approved' && decided.decision_source === 'super_user' && decided.decided_by === SUPER && decided.decided_at !== null && Number(decided.site_code) === siteCode && decided.decision_note === 'Uygun  GIZLI-NOT-KARAR' && decided.plan_code === null, decided);
   const dev = (await q(`SELECT id, site_code, gate_name, owner_user_id FROM devices WHERE device_uid = $1`, [b1Device])).rows[0];
@@ -5857,10 +5957,18 @@ async function sectionSiteApplications() {
   check('ikinci onay 409 APPLICATION_NOT_PENDING; veri CIFTLENMEZ', res.status === 409 && res.body.code === 'APPLICATION_NOT_PENDING' && same(await world(), { ...worldBeforeApprove, sites: worldBeforeApprove.sites + 1, blocks: worldBeforeApprove.blocks + 2, apartments: worldBeforeApprove.apartments + 20, doors: worldBeforeApprove.doors + 2, managers: worldBeforeApprove.managers + 1, memberships: worldBeforeApprove.memberships + 1, subscriptions: worldBeforeApprove.subscriptions + 1, approved_audit: worldBeforeApprove.approved_audit + 1, bound_devices: worldBeforeApprove.bound_devices + 1 }));
   res = await reject(b1App, 'artik gecmis');
   check('onaylanmis basvuru reddedilemez: 409 APPLICATION_NOT_PENDING', res.status === 409 && res.body.code === 'APPLICATION_NOT_PENDING' && (await appRow(b1App)).status === 'approved');
-  res = await apply(b1);
-  check('onaydan sonra basvuran artik YONETICI: yeni basvuru 409 ALREADY_SITE_MANAGER', res.status === 409 && res.body.code === 'ALREADY_SITE_MANAGER');
+  // Kural 22: site adi benzersiz (site_name_key): onayli sitenin adiyla yeni basvuru 409 SITE_NAME_EXISTS ve satir yazmaz.
+  const applicationRowsBeforeReapply = (await q(`SELECT COUNT(*)::int AS n FROM site_applications`)).rows[0].n;
+  res = await apply(b1, { name: ' onayli  SITE ' });
+  check('Kural 22: onayli sitenin adiyla (buyuk/kucuk harf + bosluk farkli) basvuru 409 SITE_NAME_EXISTS; satir yazilmaz', res.status === 409 && res.body.code === 'SITE_NAME_EXISTS' && (await q(`SELECT COUNT(*)::int AS n FROM site_applications`)).rows[0].n === applicationRowsBeforeReapply, res.body);
+  // 907b137: onaydan sonra basvuran artik site_manager'dir ve YENI bir site icin yeniden basvurabilir (409 ALREADY_SITE_MANAGER YOK); rol degismez, site / bag super onayina kadar olusmaz.
+  res = await apply(b1, { name: 'Onayli Ikinci Site' });
+  const reapplyId = res.body.application?.id;
+  check('onaydan sonra basvuran (artik site_manager) yeni site icin yeniden basvurur: 201 bekleyen; rol site_manager KALIR; ikinci site / bag olusmaz', res.status === 201 && res.body.application.status === 'pending' && (await roleOf(b1)) === 'site_manager' && (await q(`SELECT COUNT(*)::int AS n FROM site_manager_sites WHERE manager_user_code = $1`, [b1])).rows[0].n === 1, res.body);
   res = await mine(b1);
-  check('mine onaylanan basvuruyu gosterir (pending null, site_code dolu, karar kaynagi yok)', res.status === 200 && res.body.pending === null && res.body.items[0].status === 'approved' && res.body.items[0].site_code === siteCode && SECRET_KEYS.every((key) => !(key in res.body.items[0])));
+  check('mine: pending = yeni basvuru; items onaylanan basvuruyu da gosterir (site_code dolu, karar kaynagi yok); requires_application true (super disinda herkes basvurur)', res.status === 200 && res.body.pending?.id === reapplyId && res.body.requires_application === true && res.body.items.some((i) => i.id === b1App && i.status === 'approved' && i.site_code === siteCode && SECRET_KEYS.every((key) => !(key in i))), res.body);
+  res = await cancel(b1, reapplyId);
+  check('yeniden basvuru iptal edilir (cancelled); mine.pending null', res.status === 200 && (await mine(b1)).body.pending === null);
   res = await call('GET', '/admin/site-applications?status=approved&limit=100', SUPER);
   check('liste status=approved: onayli basvuru karar ayrintisiyla', res.body.items.some((i) => i.id === b1App && i.decision_source === 'super_user' && i.decided_by_name === 'Super Kisi' && i.site_code === siteCode));
 
@@ -5868,10 +5976,11 @@ async function sectionSiteApplications() {
   const equivUser = await mkUser('Denklik', 'individual');
   const equivApp = await mkApp(equivUser, { name: 'Denklik Sitesi' });
   const equivApproved = await approve(equivApp);
-  const instant = await call('POST', '/membership/setup-site', MANAGER, appBody({ name: 'Denklik Sitesi' }));
+  // 907b137: ANLIK kurulum (setup-site) yalniz super_user'a aciktir; site yoneticisi dahil diger herkes basvurur. Site adi benzersiz oldugundan anlik site ayri ad alir (yapi karsilastirmasi adi dislar).
+  const instant = await call('POST', '/membership/setup-site', SUPER, appBody({ name: 'Denklik Sitesi Anlik' }));
   const instantCode = instant.body?.site?.id;
   const shapeOf = async (code) => ({
-    site: (await q(`SELECT name, address, city, district, block_count, apartment_count, door_count, block_apartment_counts, approval_status, feature_qr_enabled, feature_remote_open_enabled, feature_local_udp_enabled, feature_guest_pass_enabled, qr_entry_active, require_geofence, management_type, (mqtt_site_id IS NOT NULL) AS has_mqtt, (approved_at IS NOT NULL) AS has_approved_at FROM sites WHERE site_code = $1`, [code])).rows[0],
+    site: (await q(`SELECT address, city, district, block_count, apartment_count, door_count, block_apartment_counts, approval_status, feature_qr_enabled, feature_remote_open_enabled, feature_local_udp_enabled, feature_guest_pass_enabled, qr_entry_active, require_geofence, management_type, (mqtt_site_id IS NOT NULL) AS has_mqtt, (approved_at IS NOT NULL) AS has_approved_at FROM sites WHERE site_code = $1`, [code])).rows[0],
     blocks: (await q(`SELECT block_name, sort_order FROM site_blocks WHERE site_code = $1 ORDER BY sort_order`, [code])).rows,
     apartments: (await q(`SELECT b.block_name, a.unit_label, a.sort_order, a.is_active FROM apartments a JOIN site_blocks b ON b.id = a.block_id WHERE a.site_code = $1 ORDER BY b.sort_order, a.sort_order`, [code])).rows,
     doors: (await q(`SELECT door_name, door_index, is_active, assigned_device_id, access_scope FROM site_doors WHERE site_code = $1 ORDER BY door_index`, [code])).rows,
@@ -5879,10 +5988,10 @@ async function sectionSiteApplications() {
     memberships: (await q(`SELECT role, is_active FROM site_memberships WHERE site_code = $1`, [code])).rows,
     modules: (await q(`SELECT COUNT(*)::int AS n FROM site_modules WHERE site_code = $1`, [code])).rows[0].n,
   });
-  check('ANLIK kurulum (setup-site, site_manager) hala 201 ve onayla kurulan siteyle YAPISAL OLARAK AYNI (site, bloklar, daireler, kapilar, uyelik)',
+  check('ANLIK kurulum (setup-site, super) 201 ve onayla kurulan siteyle YAPISAL OLARAK AYNI (site, bloklar, daireler, kapilar, uyelik, ad haric)',
     instant.status === 201 && equivApproved.status === 200 && same(await shapeOf(instantCode), await shapeOf(equivApproved.body.site.site_code)), [instant.status, equivApproved.status]);
-  const subscriptionRows = async (code) => (await q(`SELECT plan_code, status, source, application_id FROM site_subscriptions WHERE site_code = $1`, [code])).rows;
-  check('A7: anlik kurulum (yonetici) da abonelik satiri yazar (source admin, application_id YOK); onayli site source manual_approval + application_id', same(await subscriptionRows(instantCode), [{ plan_code: 'manual_approval', status: 'active', source: 'admin', application_id: null }]) && same(await subscriptionRows(equivApproved.body.site.site_code), [{ plan_code: 'manual_approval', status: 'active', source: 'manual_approval', application_id: String(equivApp) }]));
+  const subscriptionRows = async (code) => (await q(`SELECT plan_code, status, source, application_id, ROUND(EXTRACT(EPOCH FROM (trial_ends_at - NOW())) / 86400)::int AS trial_days_left FROM site_subscriptions WHERE site_code = $1`, [code])).rows;
+  check('A7: anlik kurulum (super) da abonelik satiri yazar (source admin, application_id YOK, deneme 60 gun); onayli site source manual_approval + application_id', same(await subscriptionRows(instantCode), [{ plan_code: 'manual_approval', status: 'trial', source: 'admin', application_id: null, trial_days_left: 60 }]) && same(await subscriptionRows(equivApproved.body.site.site_code), [{ plan_code: 'manual_approval', status: 'trial', source: 'manual_approval', application_id: String(equivApp), trial_days_left: 60 }]));
 
   // ============================================================================================================
   // D. setup-site (anlik kurulum) politikasi
@@ -5896,55 +6005,73 @@ async function sectionSiteApplications() {
     check(`setup-site ${label}: 409 APPLICATION_REQUIRED "Site kurmak için başvuru yapmalısınız."`, res.status === 409 && res.body.code === 'APPLICATION_REQUIRED' && res.body.error === 'Site kurmak için başvuru yapmalısınız.', res.body);
   }
   check('APPLICATION_REQUIRED hicbir site / blok olusturmadi, cihaz baglanmadi', (await q(`SELECT COUNT(*)::int AS n FROM sites`)).rows[0].n === sitesBeforeSetup && (await q(`SELECT COUNT(*)::int AS n FROM devices WHERE owner_user_id = (SELECT id FROM users WHERE user_code = $1) AND site_code IS NOT NULL`, [indDevice])).rows[0].n === 0);
+  // 907b137: site yoneticisi (sahip bagi olan 10002 dahil) de anlik kuramaz: 409 APPLICATION_REQUIRED, site / blok olusmaz, HER govdede (dogrulamalardan once)
+  const sitesBeforeManagerSetup = (await q(`SELECT COUNT(*)::int AS n FROM sites`)).rows[0].n;
   res = await call('POST', '/membership/setup-site', MANAGER, appBody({ name: 'Yonetici Anlik Sitesi' }));
-  check('site_manager anlik kurulumu AYNEN calisir (201, ok, bloklar / kapilar, cihazsiz)', res.status === 201 && res.body.ok === true && res.body.site.blocks.length === 2 && res.body.site.doors.length === 2 && res.body.site.assignedDevice === null && res.body.site.approval_status === 'approved');
+  const managerSetupDenied = res.status === 409 && res.body.code === 'APPLICATION_REQUIRED' && res.body.error === 'Site kurmak için başvuru yapmalısınız.';
+  res = await call('POST', '/membership/setup-site', MANAGER, appBody({ name: 'Yonetici Bos', deviceUid: 'YOK-BOYLE-CIHAZ' }));
+  const managerSetupDeniedDevice = res.status === 409 && res.body.code === 'APPLICATION_REQUIRED';
+  check('site_manager anlik kuramaz (907b137): 409 APPLICATION_REQUIRED (gecerli govde ve olmayan cihaz dahil); site olusmaz', managerSetupDenied && managerSetupDeniedDevice && (await q(`SELECT COUNT(*)::int AS n FROM sites`)).rows[0].n === sitesBeforeManagerSetup);
   res = await call('POST', '/membership/setup-site', SUPER, appBody({ name: 'Super Anlik Sitesi' }));
   check('super kullanici anlik kurulumu AYNEN calisir (201, rol super kalir)', res.status === 201 && res.body.ok === true && (await roleOf(SUPER)) === 'super_user');
-  res = await call('POST', '/membership/setup-site', MANAGER, appBody({ name: 'Yonetici Bos', deviceUid: 'YOK-BOYLE-CIHAZ' }));
-  check('anlik kurulum: sahip olunmayan cihaz hala 404 (site kurulmaz)', res.status === 404 && /cihaz/i.test(res.body.error));
+  res = await call('POST', '/membership/setup-site', SUPER, appBody({ name: 'Super Bos', deviceUid: 'YOK-BOYLE-CIHAZ' }));
+  check('anlik kurulum (super): sahip olunmayan cihaz hala 404 (site kurulmaz)', res.status === 404 && /cihaz/i.test(res.body.error));
   res = await call('GET', '/admin/subscription-requests', SUPER);
   check('mevcut uclar bozulmadi: GET /admin/subscription-requests (site yoneticisi KAYIT onayi) hala 200', res.status === 200 && Array.isArray(res.body.items ?? res.body.requests ?? res.body.data ?? []), Object.keys(res.body ?? {}));
 
   // ============================================================================================================
-  // D2. Cihaz sahiplenmek kisiyi YONETICI YAPMAZ (urun karari): sahiplen -> rol ayni -> setup-site 409 -> basvuru + cihaz -> onay
+  // D2. Cihaz ekleme kurali (docs/PLATFORM_MODUL_SISTEMI.md): yalniz super ya da Gecis Kontrol modulu ACIK bir sitenin yoneticisi cihaz ekler (bireysel /
+  // daire sahibi 403 DEVICE_ADD_FORBIDDEN). Cihaz sahiplenmek kisiyi YONETICI YAPMAZ (urun karari): ekle -> rol ayni -> setup-site 409 -> basvuru + cihaz -> onay
   // ============================================================================================================
+  const linksOfQuick = async (user) => (await q(`SELECT site_code, link_source FROM site_manager_sites WHERE manager_user_code = $1 ORDER BY site_code`, [user])).rows.map((r) => [Number(r.site_code), r.link_source]);
   const claimer = await mkUser('Cihaz Sahiplenen', 'individual', { email: 'sahiplenen@qa.example' });
   const claimerOwner = await mkUser('Cihaz Sahiplenen Daire Sahibi', 'apartment_owner');
+  const claimerMgr = await mkUser('Cihaz Sahiplenen Yonetici', 'site_manager', { email: 'sahiplenen.yonetici@qa.example' });
+  const claimerMgr2 = await mkUser('Cihaz Baska Yonetici', 'site_manager', { email: 'baska.yonetici@qa.example' });
+  await q(`INSERT INTO site_manager_sites (site_code, manager_user_code, link_source) VALUES (${S1}, $1, 'invited'), (${S1}, $2, 'invited')`, [claimerMgr, claimerMgr2]);
   await q(`INSERT INTO devices (device_uid, hardware_type, local_control_token) VALUES ('QACLAIM00001', 'esp32_wroom', 'tok-claim-1'), ('QACLAIM00002', 'esp32_wroom', 'tok-claim-2')`);
-  const claimerId = (await q(`SELECT id FROM users WHERE user_code = $1`, [claimer])).rows[0].id;
-  res = await call('POST', '/membership/claim-device', claimer, { deviceInput: 'GD-C3-QACLAIM00001' });
-  const claimedRow = (await q(`SELECT owner_user_id, assigned_user_code, site_code, claimed_at FROM devices WHERE device_uid = 'QACLAIM00001'`)).rows[0];
-  check('cihaz sahiplenme (bireysel): 200, cihaz kullaniciya atandi; yanitta ve DB\'de rol HALA individual (yonetici OLMADI)',
-    res.status === 200 && res.body.ok === true && res.body.role === 'individual' && String(claimedRow.owner_user_id) === String(claimerId) && claimedRow.assigned_user_code === claimer && claimedRow.claimed_at !== null && claimedRow.site_code === null && (await roleOf(claimer)) === 'individual', res.body);
-  check('sahiplenme yanitindaki mesaj basvuruya yonlendirir ("yonetici oldunuz" / anlik kurulum vaadi yok)', /başvuru yapabilir/.test(res.body.message) && !/Artık bu cihaz ile site ve kapı kurulumu yapabilirsiniz/.test(res.body.message), res.body.message);
-  check('sahiplenme yonetici KAYDI olusturmadi: site_manager_sites / SITE_OWNER-SITE_ADMIN uyeligi yok', (await q(`SELECT COUNT(*)::int AS n FROM site_manager_sites WHERE manager_user_code = $1`, [claimer])).rows[0].n === 0 && (await q(`SELECT COUNT(*)::int AS n FROM site_memberships WHERE user_code = $1`, [claimer])).rows[0].n === 0);
-  res = await call('POST', '/membership/claim-device', claimer, { deviceInput: 'QACLAIM00001' });
-  check('ayni cihazi yeniden okutmak (idempotent): 200 already_owned, rol hala individual', res.status === 200 && res.body.already_owned === true && res.body.role === 'individual' && (await roleOf(claimer)) === 'individual');
-  res = await call('GET', '/membership/my-devices', claimer);
-  check('GET my-devices: sahiplenilen cihaz listelenir, rol individual', res.status === 200 && res.body.role === 'individual' && res.body.devices.some((d) => d.device_uid === 'QACLAIM00001'), res.body);
-  res = await call('POST', '/membership/claim-device', claimerOwner, { deviceInput: 'QACLAIM00002' });
-  check('cihaz sahiplenme (daire sahibi): 200, rol HALA apartment_owner', res.status === 200 && res.body.role === 'apartment_owner' && (await roleOf(claimerOwner)) === 'apartment_owner');
-  res = await call('POST', '/membership/claim-device', claimer, { deviceInput: 'QACLAIM00002' });
+  const deviceRowOf = async (uid) => (await q(`SELECT owner_user_id, assigned_user_code, site_code, claimed_at FROM devices WHERE device_uid = $1`, [uid])).rows[0];
+  for (const [label, user, role] of [['bireysel', claimer, 'individual'], ['daire sahibi', claimerOwner, 'apartment_owner']]) {
+    res = await call('POST', '/membership/claim-device', user, { deviceInput: 'GD-C3-QACLAIM00001' });
+    const unclaimed = await deviceRowOf('QACLAIM00001');
+    check(`cihaz ekleme (${label}): 403 DEVICE_ADD_FORBIDDEN; cihaz sahipsiz KALIR; rol ${role} KALIR (yonetici OLMAZ); yonetici kaydi yok`,
+      res.status === 403 && res.body.code === 'DEVICE_ADD_FORBIDDEN' && unclaimed.owner_user_id === null && unclaimed.assigned_user_code === null && unclaimed.claimed_at === null && (await roleOf(user)) === role
+        && (await q(`SELECT COUNT(*)::int AS n FROM site_manager_sites WHERE manager_user_code = $1`, [user])).rows[0].n === 0 && (await q(`SELECT COUNT(*)::int AS n FROM site_memberships WHERE user_code = $1`, [user])).rows[0].n === 0, res.body);
+  }
+  const claimerMgrId = (await q(`SELECT id FROM users WHERE user_code = $1`, [claimerMgr])).rows[0].id;
+  res = await call('POST', '/membership/claim-device', claimerMgr, { deviceInput: 'GD-C3-QACLAIM00001' });
+  const claimedRow = await deviceRowOf('QACLAIM00001');
+  check('cihaz ekleme (Gecis Kontrol acik sitenin yoneticisi): 200, cihaz yoneticiye atandi; rol site_manager KALIR; site baglanmadi',
+    res.status === 200 && res.body.ok === true && res.body.role === 'site_manager' && String(claimedRow.owner_user_id) === String(claimerMgrId) && claimedRow.assigned_user_code === claimerMgr && claimedRow.claimed_at !== null && claimedRow.site_code === null && (await roleOf(claimerMgr)) === 'site_manager', res.body);
+  // Mesaj dali: yalniz bireysel / daire sahibi icin "basvuru yapabilir" metni var (onlar artik cihaz ekleyemez, 403); site yoneticisine cihazin baglandigi bildirilir. Hicbir dalda "yonetici oldunuz" denmez.
+  check('sahiplenme yanitindaki mesaj cihazin hesaba baglandigini soyler; "yonetici oldunuz" vaadi yok', /QACLAIM00001/.test(res.body.message) && /hesabınıza bağlandı/.test(res.body.message) && !/yönetici oldunuz/i.test(res.body.message), res.body.message);
+  check('sahiplenme yeni yonetici KAYDI olusturmadi: site_manager_sites yalniz mevcut davet bagi (S1), uyelik yok', same(await linksOfQuick(claimerMgr), [[S1, 'invited']]) && (await q(`SELECT COUNT(*)::int AS n FROM site_memberships WHERE user_code = $1`, [claimerMgr])).rows[0].n === 0);
+  res = await call('POST', '/membership/claim-device', claimerMgr, { deviceInput: 'QACLAIM00001' });
+  check('ayni cihazi yeniden okutmak (idempotent): 200 already_owned, rol hala site_manager', res.status === 200 && res.body.already_owned === true && res.body.role === 'site_manager' && (await roleOf(claimerMgr)) === 'site_manager');
+  res = await call('GET', '/membership/my-devices', claimerMgr);
+  check('GET my-devices: sahiplenilen cihaz listelenir, rol site_manager', res.status === 200 && res.body.role === 'site_manager' && res.body.devices.some((d) => d.device_uid === 'QACLAIM00001'), res.body);
+  res = await call('POST', '/membership/claim-device', claimerMgr2, { deviceInput: 'QACLAIM00002' });
+  check('baska yonetici de kendi cihazini ekler: 200, rol site_manager', res.status === 200 && res.body.role === 'site_manager' && (await roleOf(claimerMgr2)) === 'site_manager');
+  res = await call('POST', '/membership/claim-device', claimerMgr, { deviceInput: 'QACLAIM00002' });
   check('baska kullanicinin cihazi hala 409 (sahiplenme kurallari degismedi)', res.status === 409);
   const sitesBeforeClaimSetup = (await q(`SELECT COUNT(*)::int AS n FROM sites`)).rows[0].n;
-  res = await call('POST', '/membership/setup-site', claimer, appBody({ name: 'Sahiplenen Anlik', deviceUid: 'QACLAIM00001' }));
-  check('cihazini sahiplenmis bireysel icin ANLIK kurulum yine KAPALI: 409 APPLICATION_REQUIRED; site / baglama olusmaz', res.status === 409 && res.body.code === 'APPLICATION_REQUIRED' && (await q(`SELECT COUNT(*)::int AS n FROM sites`)).rows[0].n === sitesBeforeClaimSetup && (await q(`SELECT site_code FROM devices WHERE device_uid = 'QACLAIM00001'`)).rows[0].site_code === null);
-  res = await call('GET', '/admin/site-applications', claimer);
-  check('sahiplenen kisinin yonetici yetkisi YOK: super uclari 403', res.status === 403);
-  res = await apply(claimer, { name: 'Sahiplenen Site', deviceUid: 'QACLAIM00001' });
+  res = await call('POST', '/membership/setup-site', claimerMgr, appBody({ name: 'Sahiplenen Anlik', deviceUid: 'QACLAIM00001' }));
+  check('cihazini ekleyen yonetici icin ANLIK kurulum KAPALI: 409 APPLICATION_REQUIRED; site / baglama olusmaz', res.status === 409 && res.body.code === 'APPLICATION_REQUIRED' && (await q(`SELECT COUNT(*)::int AS n FROM sites`)).rows[0].n === sitesBeforeClaimSetup && (await q(`SELECT site_code FROM devices WHERE device_uid = 'QACLAIM00001'`)).rows[0].site_code === null);
+  res = await call('GET', '/admin/site-applications', claimerMgr);
+  check('cihaz ekleyen yoneticinin super yetkisi YOK: super uclari 403', res.status === 403);
+  res = await apply(claimerMgr, { name: 'Sahiplenen Site', deviceUid: 'QACLAIM00001' });
   const claimApp = res.body.application?.id;
-  check('sahiplenen cihazla BASVURU: 201, device_uid kayitli; onaya kadar rol individual ve cihaz bagli degil', res.status === 201 && res.body.application.device_uid === 'QACLAIM00001' && (await roleOf(claimer)) === 'individual' && (await q(`SELECT site_code FROM devices WHERE device_uid = 'QACLAIM00001'`)).rows[0].site_code === null);
+  check('eklenen cihazla BASVURU: 201, device_uid kayitli; onaya kadar rol site_manager ve cihaz bagli degil', res.status === 201 && res.body.application.device_uid === 'QACLAIM00001' && (await roleOf(claimerMgr)) === 'site_manager' && (await q(`SELECT site_code FROM devices WHERE device_uid = 'QACLAIM00001'`)).rows[0].site_code === null);
   res = await approve(claimApp);
   const claimSite = res.body?.site?.site_code;
   const claimDoors = (await q(`SELECT door_index, assigned_device_id FROM site_doors WHERE site_code = $1 ORDER BY door_index`, [claimSite])).rows;
   const claimDev = (await q(`SELECT id, site_code, gate_name FROM devices WHERE device_uid = 'QACLAIM00001'`)).rows[0];
-  check('super onaylar: site kurulur, sahiplenilen cihaz 1. kapiya BAGLANIR (device_attached true), rol ANCAK simdi site_manager',
-    res.status === 200 && res.body.device_attached === true && Number(claimDev.site_code) === claimSite && claimDev.gate_name === 'Ana Kapi' && claimDoors[0].assigned_device_id === claimDev.id && claimDoors[1].assigned_device_id === null && (await roleOf(claimer)) === 'site_manager', res.body);
-  check('sahiplenme + basvuru + onay sonunda yonetici kaydi tam: site_manager_sites 1, SITE_OWNER uyeligi 1', (await q(`SELECT COUNT(*)::int AS n FROM site_manager_sites WHERE manager_user_code = $1`, [claimer])).rows[0].n === 1 && (await q(`SELECT COUNT(*)::int AS n FROM site_memberships WHERE user_code = $1 AND role = 'SITE_OWNER'`, [claimer])).rows[0].n === 1);
+  check('super onaylar: site kurulur, eklenen cihaz 1. kapiya BAGLANIR (device_attached true), rol site_manager', res.status === 200 && res.body.device_attached === true && Number(claimDev.site_code) === claimSite && claimDev.gate_name === 'Ana Kapi' && claimDoors[0].assigned_device_id === claimDev.id && claimDoors[1].assigned_device_id === null && (await roleOf(claimerMgr)) === 'site_manager', res.body);
+  check('ekleme + basvuru + onay sonunda yeni sitede yonetici kaydi tam: site_manager_sites (owner), SITE_OWNER uyeligi 1 (eski S1 daveti KORUNUR)', same(await linksOfQuick(claimerMgr), [[S1, 'invited'], [Number(claimSite), 'owner']].sort((x, y) => x[0] - y[0])) && (await q(`SELECT COUNT(*)::int AS n FROM site_memberships WHERE user_code = $1 AND role = 'SITE_OWNER' AND site_code = $2`, [claimerMgr, claimSite])).rows[0].n === 1);
 
   // ============================================================================================================
-  // D3. Yonetici bagi kaynagi (site_manager_sites.link_source): davetle yonetici olan SAHIP BAGI kazanmaz; anlik kurulum yalniz
-  // onayli bir sitede 'invited' OLMAYAN bagi (NULL = eski kayit dahil) olan yoneticiye acik; digerleri site icin BASVURUR
+  // D3. Yonetici bagi kaynagi (site_manager_sites.link_source): davetle yonetici olan SAHIP BAGI kazanmaz. 907b137'den beri ANLIK kurulum yalniz super_user'a
+  // aciktir: bag kaynagi (owner / invited / NULL eski kayit) kapiyi ACMAZ; her site yoneticisi site icin BASVURUR (requires_application true), baglar degismez
   // ============================================================================================================
   const bcrypt = (await import('bcryptjs')).default;
   const siteSvc = await import('../src/services/site_service.js');
@@ -5953,20 +6080,24 @@ async function sectionSiteApplications() {
   const linksOf = async (user) => (await q(`SELECT site_code, link_source FROM site_manager_sites WHERE manager_user_code = $1 ORDER BY site_code`, [user])).rows.map((r) => [Number(r.site_code), r.link_source]);
   const requires = async (user) => (await mine(user)).body.requires_application;
   const sorted = (links) => [...links].sort((a, b) => a[0] - b[0]);
-  const subscriptionOf = async (siteCode) => (await q(`SELECT plan_code, status, source, application_id FROM site_subscriptions WHERE site_code = $1`, [siteCode])).rows;
+  const subscriptionOf = async (siteCode) => (await q(`SELECT plan_code, status, source, application_id, ROUND(EXTRACT(EPOCH FROM (trial_ends_at - NOW())) / 86400)::int AS trial_days_left FROM site_subscriptions WHERE site_code = $1`, [siteCode])).rows;
 
   // (1) sahip bagi olan mevcut yonetici (10002: S1 icin eski kayit, link_source NULL) HICBIR SEY KAYBETMEZ
   const managerBefore = await linksOf(MANAGER);
-  check('mevcut yonetici (10002): S1 bagi eski kayit (NULL) = sahip sayilir; mine.requires_application = false', managerBefore.some(([site, source]) => site === S1 && source === null) && (await requires(MANAGER)) === false, managerBefore);
-  res = await apply(MANAGER);
-  check('sahip bagi olan yonetici basvuramaz: 409 ALREADY_SITE_MANAGER (Site Ekle kullanir)', res.status === 409 && res.body.code === 'ALREADY_SITE_MANAGER', res.body);
+  check('mevcut yonetici (10002): S1 bagi eski kayit (NULL); mine.requires_application = true (super disinda herkes basvurur)', managerBefore.some(([site, source]) => site === S1 && source === null) && (await requires(MANAGER)) === true, managerBefore);
+  const sitesBeforeOwnerSetup = (await q(`SELECT COUNT(*)::int AS n FROM sites`)).rows[0].n;
   res = await call('POST', '/membership/setup-site', MANAGER, appBody({ name: '' }));
-  check('sahip bagi olan yonetici icin gecersiz gövde HALA 400 (kapi yalniz kapali kullaniciya 409 verir)', res.status === 400 && res.body.code !== 'APPLICATION_REQUIRED', res.body);
+  check('sahip bagi olan yonetici icin gecersiz govdede de 409 APPLICATION_REQUIRED (kapi dogrulamalardan ONCE; 400 degil)', res.status === 409 && res.body.code === 'APPLICATION_REQUIRED', res.body);
   res = await call('POST', '/membership/setup-site', MANAGER, appBody({ name: 'Sahip Yonetici Ek Site' }));
-  const managerNewSite = res.body?.site?.id;
-  check('sahip bagi olan yonetici anlik kurulumu AYNEN: 201; yeni bag "owner"; S1 bagi (NULL), onceki baglar ve rol DEGISMEDI', res.status === 201 && same(await linksOf(MANAGER), sorted([...managerBefore, [Number(managerNewSite), 'owner']])) && (await roleOf(MANAGER)) === 'site_manager', res.body);
-  // A7: anlik kurulum da abonelik satiri yazar (source admin)
-  check('A7: anlik kurulumla acilan site de abonelik satiriyla acilir (manual_approval / active / source admin / application_id NULL)', same(await subscriptionOf(managerNewSite), [{ plan_code: 'manual_approval', status: 'active', source: 'admin', application_id: null }]));
+  check('sahip bagi olan yonetici anlik kuramaz (907b137): 409 APPLICATION_REQUIRED; site olusmaz; baglar ve rol DEGISMEDI', res.status === 409 && res.body.code === 'APPLICATION_REQUIRED' && (await q(`SELECT COUNT(*)::int AS n FROM sites`)).rows[0].n === sitesBeforeOwnerSetup && same(await linksOf(MANAGER), managerBefore) && (await roleOf(MANAGER)) === 'site_manager', res.body);
+  res = await apply(MANAGER, { name: 'Sahip Yonetici Ek Site' });
+  const ownerLinkApp = res.body.application?.id;
+  check('sahip bagi olan yonetici site icin BASVURUR: 201 bekleyen; baglar ve rol onaya kadar DEGISMEZ', res.status === 201 && res.body.application.status === 'pending' && same(await linksOf(MANAGER), managerBefore) && (await roleOf(MANAGER)) === 'site_manager', res.body);
+  res = await approve(ownerLinkApp);
+  const managerNewSite = res.body?.site?.site_code;
+  check('onay: yeni bag "owner" yazilir; S1 bagi (NULL), onceki baglar ve rol DEGISMEDI', res.status === 200 && same(await linksOf(MANAGER), sorted([...managerBefore, [Number(managerNewSite), 'owner']])) && (await roleOf(MANAGER)) === 'site_manager', res.body);
+  // A7: onayla acilan site de abonelik satirini deneme ile alir (062)
+  check('A7: onayla acilan yonetici sitesi de abonelik satiriyla acilir (manual_approval / trial 60 gun / source manual_approval / application_id)', same(await subscriptionOf(managerNewSite), [{ plan_code: 'manual_approval', status: 'trial', source: 'manual_approval', application_id: String(ownerLinkApp), trial_days_left: 60 }]));
 
   // (2) hic bagi olmayan eski site yoneticisi (10003: yalniz S2 SITE_ADMIN uyeligi) -> anlik kurulum KAPALI, basvurur
   check('hic site_manager_sites bagi olmayan yonetici (10003): mine.requires_application = true', (await linksOf(MANAGER2)).length === 0 && (await requires(MANAGER2)) === true);
@@ -5983,8 +6114,15 @@ async function sectionSiteApplications() {
   check('bagsiz site yoneticisi site icin BASVURUR: 201', res.status === 201 && res.body.application.status === 'pending', res.body);
   res = await approve(linklessApp);
   const linklessSite = res.body?.site?.site_code;
-  check('onay: rol zaten site_manager (degismez), sahip bagi "owner" yazilir, abonelik source manual_approval + application_id', res.status === 200 && (await roleOf(MANAGER2)) === 'site_manager' && same(await linksOf(MANAGER2), [[Number(linklessSite), 'owner']]) && same(await subscriptionOf(linklessSite), [{ plan_code: 'manual_approval', status: 'active', source: 'manual_approval', application_id: String(linklessApp) }]), res.body);
-  check('artik sahip bagi VAR: requires_application false; yeniden basvuru 409 ALREADY_SITE_MANAGER; anlik kurulum (Site Ekle) 201', (await requires(MANAGER2)) === false && (await apply(MANAGER2)).body?.code === 'ALREADY_SITE_MANAGER' && (await call('POST', '/membership/setup-site', MANAGER2, appBody({ name: 'Artik Sahip Ek Site' }))).status === 201);
+  check('onay: rol zaten site_manager (degismez), sahip bagi "owner" yazilir, abonelik source manual_approval + application_id (deneme 60 gun)', res.status === 200 && (await roleOf(MANAGER2)) === 'site_manager' && same(await linksOf(MANAGER2), [[Number(linklessSite), 'owner']]) && same(await subscriptionOf(linklessSite), [{ plan_code: 'manual_approval', status: 'trial', source: 'manual_approval', application_id: String(linklessApp), trial_days_left: 60 }]), res.body);
+  // 907b137: sahip bagi kazanmak anlik kurulum hakki VERMEZ ve yeniden basvuruyu ENGELLEMEZ (409 ALREADY_SITE_MANAGER yok): requires_application hep true
+  const sitesBeforeArtik = (await q(`SELECT COUNT(*)::int AS n FROM sites`)).rows[0].n;
+  res = await apply(MANAGER2, { name: 'Artik Sahip Ek Site' });
+  const artikApp = res.body.application?.id;
+  const artikInstant = await call('POST', '/membership/setup-site', MANAGER2, appBody({ name: 'Artik Sahip Anlik' }));
+  check('artik sahip bagi VAR: requires_application hala true; yeniden basvuru 201 (ALREADY_SITE_MANAGER yok); anlik kurulum 409 APPLICATION_REQUIRED, site olusmaz', (await requires(MANAGER2)) === true && res.status === 201 && artikInstant.status === 409 && artikInstant.body.code === 'APPLICATION_REQUIRED' && (await q(`SELECT COUNT(*)::int AS n FROM sites`)).rows[0].n === sitesBeforeArtik, [res.body, artikInstant.body]);
+  res = await cancel(MANAGER2, artikApp);
+  check('yeniden basvuru iptal edilir (cancelled)', res.status === 200 && (await appRow(artikApp)).status === 'cancelled');
 
   // (3) mevcut hesabin DAVETI (inviteSiteManager): 'invited' bag, rol site_manager; sahip bagi yok
   const invitee = await mkUser('Davetli Mevcut', 'individual', { email: 'davetli.mevcut@qa.example' });
@@ -6004,7 +6142,8 @@ async function sectionSiteApplications() {
   res = await approve(inviteeApp);
   const inviteeSite = res.body?.site?.site_code;
   check('onay: rol degismez; yeni bag "owner"; S1 daveti ("invited") KORUNUR', res.status === 200 && (await roleOf(invitee)) === 'site_manager' && same(await linksOf(invitee), sorted([[S1, 'invited'], [Number(inviteeSite), 'owner']])), res.body);
-  check('onaydan sonra davetli artik sahip bagli: requires_application false; anlik kurulum (Site Ekle) 201', (await requires(invitee)) === false && (await call('POST', '/membership/setup-site', invitee, appBody({ name: 'Davetli Artik Anlik' }))).status === 201);
+  res = await call('POST', '/membership/setup-site', invitee, appBody({ name: 'Davetli Artik Anlik' }));
+  check('onaydan sonra davetli sahip bagli olsa da requires_application true ve anlik kurulum 409 APPLICATION_REQUIRED (907b137: yalniz super anlik kurar)', (await requires(invitee)) === true && res.status === 409 && res.body.code === 'APPLICATION_REQUIRED', res.body);
 
   // (4) davet kabulu (e-posta dogrulama): bekleyen davetli kayit -> hesap + 'invited' bag
   const acceptEmail = 'davetli.kayit@qa.example';
@@ -6022,9 +6161,11 @@ async function sectionSiteApplications() {
   const pendingSite = await siteSvc.createSiteWithStructure({ name: 'Bekleyen QA Sitesi', blockCount: 1, apartmentCount: 3, blockApartmentCounts: [3], doorCount: 1, managerUserCode: pendingOwner, approvalStatus: 'pending', managementType: 'apartment_site' });
   const pendingSiteCode = Number(pendingSite.site_code ?? pendingSite.id);
   check('bekleyen (onaysiz) sitede bag NULL yazilir ama SAYILMAZ: requires_application true, setup-site 409', same(await linksOf(pendingOwner), [[pendingSiteCode, null]]) && (await requires(pendingOwner)) === true && (await call('POST', '/membership/setup-site', pendingOwner, appBody())).status === 409);
-  check('A7: bekleyen (admin akisi) site de abonelik satiriyla acilir (source admin)', same(await subscriptionOf(pendingSiteCode), [{ plan_code: 'manual_approval', status: 'active', source: 'admin', application_id: null }]));
+  check('A7: bekleyen (admin akisi) site de abonelik satiriyla acilir (source admin, deneme 60 gun)', same(await subscriptionOf(pendingSiteCode), [{ plan_code: 'manual_approval', status: 'trial', source: 'admin', application_id: null, trial_days_left: 60 }]));
   await q(`UPDATE sites SET approval_status = 'approved', approved_at = NOW() WHERE site_code = $1`, [pendingSiteCode]);
-  check('site super tarafindan ONAYLANINCA ayni (NULL) bag sahip sayilir: requires_application false, anlik kurulum 201', (await requires(pendingOwner)) === false && (await call('POST', '/membership/setup-site', pendingOwner, appBody({ name: 'Onaydan Sonra Anlik' }))).status === 201);
+  const sitesBeforeApprovedSetup = (await q(`SELECT COUNT(*)::int AS n FROM sites`)).rows[0].n;
+  res = await call('POST', '/membership/setup-site', pendingOwner, appBody({ name: 'Onaydan Sonra Anlik' }));
+  check('site super tarafindan ONAYLANINCA bile anlik kurulum 409 APPLICATION_REQUIRED (bag artik anlik kurulum hakki vermez); requires_application true; site olusmaz', (await requires(pendingOwner)) === true && res.status === 409 && res.body.code === 'APPLICATION_REQUIRED' && (await q(`SELECT COUNT(*)::int AS n FROM sites`)).rows[0].n === sitesBeforeApprovedSetup, res.body);
 
   // ============================================================================================================
   // E. Cihaz onay aninda yeniden dogrulanir
@@ -6157,9 +6298,10 @@ async function sectionSiteApplications() {
   check('cihaz kodunda NUL / esiz vekil: temizlenir, bulunamazsa 404 DEVICE_NOT_FOUND (500 DEGIL)', res.status === 404 && res.body.code === 'DEVICE_NOT_FOUND', res.body);
   res = await call('GET', `/admin/site-applications?q=${encodeURIComponent(`${NUL}${RLO}ayse`)}&status=all`, SUPER);
   check('arama metninde NUL / yon karakteri: 500 DEGIL, 200 (temizlenmis metinle arar)', res.status === 200 && Array.isArray(res.body.items), res.status);
-  res = await call('POST', '/membership/setup-site', MANAGER, appBody({ name: `Anlik${NUL} Tehlikeli${RLO}`, blocks: [{ name: `B${LONE_HIGH} Blok`, apartmentCount: 2 }], doors: [{ name: `K${NUL}` }], address: `Ad${NUL}res` }));
+  // 907b137: anlik kurulumu yalniz super_user yapabilir (normallestirici yolu super ile sinanir)
+  res = await call('POST', '/membership/setup-site', SUPER, appBody({ name: `Anlik${NUL} Tehlikeli${RLO}`, blocks: [{ name: `B${LONE_HIGH} Blok`, apartmentCount: 2 }], doors: [{ name: `K${NUL}` }], address: `Ad${NUL}res` }));
   check('anlik kurulum (setup-site) ayni normallestiriciyi kullanir: tehlikeli karakterler atilir, 201 (500 DEGIL)', res.status === 201 && res.body.site.name === 'Anlik Tehlikeli' && res.body.site.blocks[0].block_name === 'B Blok' && res.body.site.doors[0].door_name === 'K', res.body);
-  res = await call('POST', '/membership/setup-site', MANAGER, appBody({ name: NUL }));
+  res = await call('POST', '/membership/setup-site', SUPER, appBody({ name: NUL }));
   check('anlik kurulum: ad yalniz NUL ise 400 (500 DEGIL)', res.status === 400, res.body);
 
   // ============================================================================================================
@@ -6483,16 +6625,20 @@ async function sectionSiteApplications() {
   for (let round = 0; round < lockRounds; round += 1) {
     const owner = await mkUser(`Yeni Basvuru Yarisi ${round}`);
     const id = await mkApp(owner, { name: `Yeni Basvuru Yarisi ${round}` });
-    const out = await Promise.all([approve(id), apply(owner, { name: 'Ikinci' }), apply(owner, { name: 'Ucuncu' })]);
+    // site adi benzersiz (Kural 22): her tur kendi adlarini kullanir; boylece yalniz basvuran-bazli bekleyen kurali (APPLICATION_PENDING) sinanir
+    const out = await Promise.all([approve(id), apply(owner, { name: `Ikinci ${round}` }), apply(owner, { name: `Ucuncu ${round}` })]);
     const pendingNow = (await q(`SELECT COUNT(*)::int AS n FROM site_applications WHERE applicant_user_code = $1 AND status = 'pending'`, [owner])).rows[0].n;
     const total = (await q(`SELECT COUNT(*)::int AS n FROM site_applications WHERE applicant_user_code = $1`, [owner])).rows[0].n;
-    const conflict = (r) => r.status === 409 && ['APPLICATION_PENDING', 'ALREADY_SITE_MANAGER'].includes(r.body.code);
-    if (out[0].status !== 200 || !conflict(out[1]) || !conflict(out[2]) || pendingNow !== 0 || total !== 1) {
+    // 907b137: onaylanan basvuran yeniden basvurabilir (ALREADY_SITE_MANAGER yok). Onay bitmeden gelen yeni basvuru 409 APPLICATION_PENDING; onaydan SONRA gelen 201 olabilir,
+    // ama basvuran basina AZAMI TEK bekleyen basvuru vardir (iki yeni basvurudan en cok biri 201), onay hep 200, 500 / 40P01 yok.
+    const conflict = (r) => r.status === 409 && r.body.code === 'APPLICATION_PENDING';
+    const created = [out[1], out[2]].filter((r) => r.status === 201).length;
+    if (out[0].status !== 200 || !(out[1].status === 201 || conflict(out[1])) || !(out[2].status === 201 || conflict(out[2])) || created > 1 || pendingNow !== created || total !== 1 + created) {
       o3Ok = false;
       o3Log.push({ round, approve: out[0].status, a2: [out[1].status, out[1].body?.code], a3: [out[2].status, out[2].body?.code], pendingNow, total });
     }
   }
-  check(`KILIT SIRASI: onay x ayni kisinin yeni basvurulari (${lockRounds} tur): onay 200, yenileri 409 (PENDING / ALREADY_SITE_MANAGER); ikinci bekleyen / ikinci kayit YOK`, o3Ok && hooks.deadlocks === 0, { o3Log, deadlocks: hooks.deadlocks });
+  check(`KILIT SIRASI: onay x ayni kisinin yeni basvurulari (${lockRounds} tur): onay 200, yenileri 409 APPLICATION_PENDING ya da (onaydan sonra) en cok BIR tanesi 201; ikinci bekleyen YOK`, o3Ok && hooks.deadlocks === 0, { o3Log, deadlocks: hooks.deadlocks });
   // O4. farkli kisilerin esanli onaylari (mqtt_site_id uretimi dahil)
   const mass = await Promise.all(Array.from({ length: 8 }, async (_, i) => {
     const owner = await mkUser(`Toplu Onay ${i}`);
@@ -6750,7 +6896,15 @@ async function sectionFinance() {
   const P = (site) => `/manager/sites/${site}/finance`;
   let keyCounter = 0;
   const key = (label = 'k') => `qa-${label}-${(keyCounter += 1)}-${Date.now()}`;
-  const enableModule = (site) => call('PUT', `/manager/sites/${site}/modules/finance`, SUPER, { enabled: true });
+  // Kural 25 (079): finans TEMEL modul: her sitede hep acik, acma istegi 400 MODULE_NOT_TOGGLEABLE ile reddedilir. Yardimci, modulun katalogda gercekten ACIK oldugunu dogrulayip 200 sayar.
+  const enableModule = async (site) => {
+    const res = await call('PUT', `/manager/sites/${site}/modules/finance`, SUPER, { enabled: true });
+    if (res.status === 400 && res.body?.code === 'MODULE_NOT_TOGGLEABLE') {
+      const catalogNow = await call('GET', `/manager/sites/${site}/modules`, SUPER);
+      return catalogNow.status === 200 && catalogNow.body.modules.find((m) => m.code === 'finance')?.enabled === true ? { status: 200, body: res.body } : { status: 500, body: catalogNow.body };
+    }
+    return res;
+  };
   const ledgerRows = async (site) => (await q(`SELECT * FROM ledger_entries WHERE site_code = $1 ORDER BY id`, [site])).rows;
   const ledgerSum = async (site, extra = '') => BigInt((await q(`SELECT COALESCE(SUM(amount_minor), 0)::text AS s FROM ledger_entries WHERE site_code = $1 ${extra}`, [site])).rows[0].s);
   const balanceOf = async (site, apartment) => BigInt((await q(`SELECT COALESCE(SUM(amount_minor), 0)::text AS s FROM ledger_entries WHERE site_code = $1 AND apartment_id = $2`, [site, apartment])).rows[0].s);
@@ -7066,30 +7220,42 @@ async function sectionFinance() {
   const c2Run = Number((await q(`INSERT INTO fee_runs (site_code, definition_id, period, total_minor, apartment_count) VALUES ($1, $2, '2026-01-01', 100, 1) RETURNING id`, [fs2.code, c2Def])).rows[0].id);
   const c2Entry = Number((await q(`INSERT INTO ledger_entries (site_code, apartment_id, kind, amount_minor, period, entry_date, due_date, definition_id, run_id, payer_party) VALUES ($1, $2, 'charge', 100, '2026-01-01', '2026-01-01', '2026-01-05', $3, $4, 'both') RETURNING id`, [fs2.code, fs2.ids[0], c2Def, c2Run])).rows[0].id);
 
-  // --- modul KAPALI: tum finans uclari 403 MODULE_DISABLED (module: finance); rol kontrolu modulden ONCE
+  // --- Kural 25 (079): finans TEMEL modul => "modul kapali" durumu YOKTUR; tum finans uclari rol kurallari dahilinde HER sitede calisir (MODULE_DISABLED asla donmez)
   const readProbes = [`${P(fs1.code)}/definitions`, `${P(fs1.code)}/balances`, `${P(fs1.code)}/periods`, `${P(fs1.code)}/summary`, `${P(fs1.code)}/apartments/${A(1).id}/account`];
   const writeProbes = [['POST', `${P(fs1.code)}/definitions`], ['POST', `${P(fs1.code)}/definitions/1/preview`], ['POST', `${P(fs1.code)}/definitions/1/post`], ['POST', `${P(fs1.code)}/charges/preview`], ['POST', `${P(fs1.code)}/charges`], ['POST', `${P(fs1.code)}/payments`], ['POST', `${P(fs1.code)}/entries/1/reverse`], ['POST', `${P(fs1.code)}/entries/1/correct`], ['POST', `${P(fs1.code)}/periods/${ym(0)}/close`]];
-  const disabledResults = [];
+  const openReads = [];
   for (const user of [SUPER, MGR, BOARD]) {
-    for (const url of readProbes) disabledResults.push(['GET', url, user, await call('GET', url, user)]);
+    for (const url of readProbes) openReads.push(['GET', url, user, await call('GET', url, user)]);
   }
+  // Yazma ucu denemeleri bos govdeyle: dogrulama / bulunamama hatasi (4xx) beklenir, MODULE_DISABLED asla; "donem kapat" ucu BOS govdeyle gercekten ay kapatir (N4: secilen aya kadar acik aylar birlikte), bu yuzden burada denenmez (kapatma kurallari F bolumunde).
+  const openWrites = [];
   for (const user of [SUPER, MGR]) {
-    for (const [method, url] of writeProbes) disabledResults.push([method, url, user, await call(method, url, user, {})]);
+    for (const [method, url] of writeProbes.filter(([, probeUrl]) => !/\/close$/.test(probeUrl))) openWrites.push([method, url, user, await call(method, url, user, {})]);
   }
-  check('C1: finance modulu KAPALI (varsayilan): super, yonetici ve kurul icin TUM finans uclari 403 MODULE_DISABLED { module: finance }',
-    disabledResults.every(([, , , r]) => r.status === 403 && r.body.code === 'MODULE_DISABLED' && r.body.module === 'finance'), disabledResults.filter(([, , , r]) => !(r.status === 403 && r.body.code === 'MODULE_DISABLED')).map(([m, u, who, r]) => `${m} ${u} ${who} ${r.status} ${r.body?.code}`).slice(0, 4));
+  check('C1: finance TEMEL modul (Kural 25, 079): satir olmasa da super, yonetici ve kurul icin TUM okuma uclari 200; yazma uclari bos govdede 4xx dogrulama / bulunamama (MODULE_DISABLED YOK, 5xx YOK)',
+    openReads.every(([, , , r]) => r.status === 200) && openWrites.every(([, , , r]) => r.status >= 400 && r.status < 500 && r.body?.code !== 'MODULE_DISABLED'),
+    [...openReads.filter(([, , , r]) => r.status !== 200), ...openWrites.filter(([, , , r]) => !(r.status >= 400 && r.status < 500 && r.body?.code !== 'MODULE_DISABLED'))].map(([m, u, who, r]) => `${m} ${u} ${who} ${r.status} ${r.body?.code}`).slice(0, 4));
+  // Eski / elle duzenlenmis bir site_modules satiri enabled=FALSE olsa bile API acik kalir (katalog bayragi tek dogruluk kaynagi; satir yalniz dogrudan SQL okuyanlar icindir)
+  await q(`INSERT INTO site_modules (site_code, module_code, enabled) VALUES ($1, 'finance', FALSE) ON CONFLICT (site_code, module_code) DO UPDATE SET enabled = FALSE`, [fs1.code]);
+  const forcedOffRead = await call('GET', `${P(fs1.code)}/definitions`, MGR);
+  const forcedOffCatalog = (await call('GET', `/manager/sites/${fs1.code}/modules`, MGR)).body?.modules?.find((m) => m.code === 'finance');
+  await q(`DELETE FROM site_modules WHERE site_code = $1 AND module_code = 'finance'`, [fs1.code]);
+  check('C1b: site_modules satiri enabled=FALSE yazilsa bile finans uclari 200 ve katalogda enabled true (temel modul satira bakmaz)', forcedOffRead.status === 200 && forcedOffCatalog?.enabled === true && forcedOffCatalog.toggleable === false, [forcedOffRead.status, forcedOffCatalog]);
   const roleBeforeModule = [];
   for (const [user, expected] of [[STAFF, 'FORBIDDEN_ROLE'], [RESIDENT, 'FORBIDDEN_ROLE'], [OUTSIDER, 'FORBIDDEN_ROLE'], [MGR2, 'FORBIDDEN_SITE']]) {
     roleBeforeModule.push([user, (await call('GET', `${P(fs1.code)}/definitions`, user)).body?.code === expected]);
   }
-  check('C2: modul kapaliyken bile yetkisiz roller modulu ogrenemez: gorevli/sakin/ilgisiz 403 FORBIDDEN_ROLE, baska site yoneticisi 403 FORBIDDEN_SITE', roleBeforeModule.every(([, ok]) => ok), roleBeforeModule);
-  check('C3: kurul uye KAPALI modulde POST dener: once rol (403 FORBIDDEN_ROLE)', (await call('POST', `${P(fs1.code)}/payments`, BOARD, {})).body?.code === 'FORBIDDEN_ROLE');
+  check('C2: yetkisiz roller (modul her zaman acik olsa da) finansa giremez: gorevli/sakin/ilgisiz 403 FORBIDDEN_ROLE, baska site yoneticisi 403 FORBIDDEN_SITE', roleBeforeModule.every(([, ok]) => ok), roleBeforeModule);
+  check('C3: kurul uye POST dener: 403 FORBIDDEN_ROLE (kurul yalniz okur)', (await call('POST', `${P(fs1.code)}/payments`, BOARD, {})).body?.code === 'FORBIDDEN_ROLE');
   const catalog = await call('GET', `/manager/sites/${fs1.code}/modules`, MGR);
   const financeModule = catalog.body?.modules?.find((m) => m.code === 'finance');
-  check('C4: katalog: finance "available" + toggleable, varsayilan KAPALI (yonetici modul talep eder, super acar)', catalog.status === 200 && financeModule?.status === 'available' && financeModule.toggleable === true && financeModule.enabled === false && financeModule.core === false, financeModule);
-  check('C4b: yonetici modulu DOGRUDAN acamaz (yalniz super): 403', (await call('PUT', `/manager/sites/${fs1.code}/modules/finance`, MGR, { enabled: true })).status === 403);
-  const enabled = await enableModule(fs1.code);
-  check('C5: super finance modulunu acar (artik "yakinda" degil): 200', enabled.status === 200, enabled.body);
+  check('C4: katalog: finance "available" + core + ACIK + toggleable false / can_toggle false (talep edilemez, kapatilamaz; Kural 25)', catalog.status === 200 && financeModule?.status === 'available' && financeModule.core === true && financeModule.enabled === true && financeModule.toggleable === false && financeModule.can_toggle === false && financeModule.request_status === null, financeModule);
+  check('C4b: yonetici modul ucuna dokunamaz (yalniz super): 403', (await call('PUT', `/manager/sites/${fs1.code}/modules/finance`, MGR, { enabled: true })).status === 403);
+  const enabled = await call('PUT', `/manager/sites/${fs1.code}/modules/finance`, SUPER, { enabled: true });
+  const disabledTry = await call('PUT', `/manager/sites/${fs1.code}/modules/finance`, SUPER, { enabled: false, confirm: true });
+  check('C5: super finansi ne acabilir ne kapatabilir (400 MODULE_NOT_TOGGLEABLE); modul hep acik, talep / module.* audit satiri yazilmaz (talep ucu platform bolumunde: 400 MODULE_NOT_TOGGLEABLE)',
+    enabled.status === 400 && enabled.body.code === 'MODULE_NOT_TOGGLEABLE' && disabledTry.status === 400 && disabledTry.body.code === 'MODULE_NOT_TOGGLEABLE'
+      && (await q(`SELECT COUNT(*)::int AS n FROM module_requests WHERE site_code = $1 AND module_code = 'finance'`, [fs1.code])).rows[0].n === 0 && (await q(`SELECT COUNT(*)::int AS n FROM audit_log WHERE site_code = $1 AND action LIKE 'module.%'`, [fs1.code])).rows[0].n === 0, [enabled.body, disabledTry.body]);
   await enableModule(fs2.code);
 
   // --- yetki matrisi (modul ACIK)
@@ -7493,7 +7659,7 @@ async function sectionFinance() {
   const [dA, dB] = await Promise.all([call('POST', `${b3}/payments`, MGR, payBody(P3(5).id, { amount_minor: 1000, idempotency_key: key('d1') })), call('POST', `${b3}/payments`, MGR, payBody(P3(5).id, { amount_minor: 1000, idempotency_key: key('d2') }))]);
   check('G7b: ESZAMANLI iki FARKLI anahtarli tahsilat ikisi de yazilir (gercek iki tahsilat); bakiye 400000 - 2000', dA.status === 201 && dB.status === 201 && (await balanceOf(fs3.code, P3(5).id)) === 398000n);
   // İP-1A (G12): denetime tahsilatın hesabı (account_party) ve kaynak izi (source_kind) KODLARI eklendi (serbest metin değil)
-  check('G8: audit finance.payment.recorded: details { account_id (Faz 4b), account_party + source_kind (İP-1A), apartment_id, amount_minor, period, method } - aciklama YOK', (await auditRows(fs3.code, 'finance.payment.recorded')).every((r) => same(Object.keys(r.details).sort(), ['account_id', 'account_party', 'amount_minor', 'apartment_id', 'method', 'period', 'source_kind']) && !JSON.stringify(r.details).includes('Nakit')));
+  check('G8: audit finance.payment.recorded: details { account_id (Faz 4b), account_party + source_kind (İP-1A), fund (080 kasa kodu), apartment_id, amount_minor, period, method } - aciklama YOK', (await auditRows(fs3.code, 'finance.payment.recorded')).every((r) => same(Object.keys(r.details).sort(), ['account_id', 'account_party', 'amount_minor', 'apartment_id', 'fund', 'method', 'period', 'source_kind']) && !JSON.stringify(r.details).includes('Nakit')));
 
   // --- ters kayit
   const reverseUrl = (id) => `${b3}/entries/${id}/reverse`;
@@ -7772,11 +7938,13 @@ async function sectionFinance() {
   const O8 = await person('Eski Malik 8', 8, 'owner', { current: false }); const R8 = await person('Sakin 8', 8, 'resident');
   // O1 ayni zamanda 3. dairede de "sakin" (cok daireli kullanici)
   await addResidency(fs5.code, S5(3).id, O1.personId, 'resident');
-  // alakasiz kullanici ve baska siteler (modul kapali; onay bekleyen)
+  // alakasiz kullanici ve baska siteler (ikinci onayli site baska kullanicida; onay bekleyen site)
   const NOBODY = await mkUser('Kimse', 'apartment_owner');
-  const closedSite = await mkSite('Modulsuz Sakin Sitesi', { 'M Blok': 1 });
+  // Kural 25: finans TEMEL modul, "modulu kapali site" kalmadi. Ikinci (onayli) site BASKA bir kullaniciya aittir: O1'in yanitinda cikmamali (siteler arasi yalitim) ve kendi sahibine hic modul islemi yapilmadan gorunmeli.
+  const closedSite = await mkSite('Ikinci Sakin Sitesi', { 'M Blok': 1 });
+  const OTHER_OWNER = await mkUser('Ikinci Site Maliki', 'apartment_owner');
   const pendingSite = await mkSite('Onaysiz Sakin Sitesi', { 'N Blok': 1 }, { approved: false });
-  const closedPerson = await addPerson(closedSite.code, { user: O1.user });
+  const closedPerson = await addPerson(closedSite.code, { user: OTHER_OWNER });
   await addResidency(closedSite.code, closedSite.ids[0], closedPerson, 'owner');
   await q(`INSERT INTO site_modules (site_code, module_code, enabled) VALUES ($1, 'finance', TRUE)`, [pendingSite.code]);
   const pendingPerson = await addPerson(pendingSite.code, { user: O1.user });
@@ -7839,15 +8007,19 @@ async function sectionFinance() {
   const noDebt = await mine(T2.user);
   check('I5: bagimsiz kontrol: S2 kiracisi 200000 borclu, vade bilgileri dolu', noDebt.items[0].balance_minor === 200000 && noDebt.items[0].overdue_minor === 100000 && noDebt.items[0].next_due_minor === 100000);
   const residentText = JSON.stringify([o1, await mine(T2.user), await mine(R8.user)]);
-  check('I6: sakin yanitinda yonetici serbest metinleri (aciklama, ters kayit nedeni), olusturan yonetici adi, tanim adi disindaki hicbir sey ve BASKA dairenin / sitenin verisi YOK', !/GIZLI-ACIKLAMA|GIZLI-NEDEN|Finans Yonetici|Gizli Site Borcu/.test(residentText) && !residentText.includes('Modulsuz') && !residentText.includes('Onaysiz') && o1s1.recent.every((e) => e.description === null && e.reversal_reason === null && e.created_by_name === null));
+  check('I6: sakin yanitinda yonetici serbest metinleri (aciklama, ters kayit nedeni), olusturan yonetici adi, tanim adi disindaki hicbir sey ve BASKA dairenin / sitenin verisi YOK', !/GIZLI-ACIKLAMA|GIZLI-NEDEN|Finans Yonetici|Gizli Site Borcu/.test(residentText) && !residentText.includes('Ikinci Sakin') && !residentText.includes('Onaysiz') && o1s1.recent.every((e) => e.description === null && e.reversal_reason === null && e.created_by_name === null));
   check('I6b: recent: yalniz KENDI dairesi, son hareketler yeni -> eski; S1\'de borclar + odeme + ters kayit; Entry alanlari tam', o1s1.recent.length === 4 && o1s1.recent.every((e, i, a) => i === 0 || a[i - 1].entry_date >= e.entry_date) && o1s1.recent.some((e) => e.kind === 'reversal' && e.reverses_entry_id !== null) && o1s1.recent.some((e) => e.kind === 'payment' && e.amount_minor === -30000 && e.method === 'cash') && o1s1.recent.every((e) => 'definition_name' in e && 'reversed_by_entry_id' in e && 'payer_party' in e));
   // modulu KAPALI ve onay bekleyen siteler gorunmez (O1 oralarda da malik); modul kapatilirsa daire kaybolur
-  check('I7: O1 modulu KAPALI siteye ve ONAYSIZ siteye bagli ama bu sitelerin borcu GORUNMEZ', o1.items.every((i) => i.site_code === fs5.code));
-  await call('PUT', `/manager/sites/${fs5.code}/modules/finance`, SUPER, { enabled: false });
+  const otherOwnerView = await mine(OTHER_OWNER);
+  check('I7: O1 ONAYSIZ siteye de bagli ama o sitenin borcu GORUNMEZ; ikinci (modul islemi yapilmamis) sitenin sahibi YALNIZ kendi dairesini gorur (Kural 25: finans her sitede acik) ve O1 onun verisini gormez',
+    o1.items.every((i) => i.site_code === fs5.code) && otherOwnerView.items.length === 1 && otherOwnerView.items[0].site_code === closedSite.code && otherOwnerView.items[0].apartment_id === closedSite.ids[0] && otherOwnerView.items[0].balance_minor === 99999 && !JSON.stringify(otherOwnerView).includes('GIZLI-TANIM'), otherOwnerView);
+  // Finans kapatilamaz (Kural 25): kapatma istegi 400, sakin ucu AYNEN; satir elle enabled=FALSE yazilsa bile Borcum gorunur (katalog bayragi)
+  const disableTry = await call('PUT', `/manager/sites/${fs5.code}/modules/finance`, SUPER, { enabled: false });
+  await q(`INSERT INTO site_modules (site_code, module_code, enabled) VALUES ($1, 'finance', FALSE) ON CONFLICT (site_code, module_code) DO UPDATE SET enabled = FALSE`, [fs5.code]);
   const afterDisable = await mine(O1.user);
-  check('I8: finance modulu KAPANINCA sakin uc bos doner (Borcum gorunmez)', afterDisable.items.length === 0);
-  await enableModule(fs5.code);
-  check('I8b: modul tekrar acilinca veri yerinde', (await mine(O1.user)).items.length === 2);
+  await q(`DELETE FROM site_modules WHERE site_code = $1 AND module_code = 'finance'`, [fs5.code]);
+  check('I8: finans kapatilamaz (400 MODULE_NOT_TOGGLEABLE); site_modules satiri enabled=FALSE olsa bile sakin ucu 2 daireyi gostermeye DEVAM eder (Borcum gorunur)', disableTry.status === 400 && disableTry.body.code === 'MODULE_NOT_TOGGLEABLE' && afterDisable.items.length === 2, [disableTry.body, afterDisable.items.length]);
+  check('I8b: satir silinince (varsayilan acik) veri yerinde', (await mine(O1.user)).items.length === 2);
   // recent siniri: 30
   for (let i = 0; i < 40; i += 1) {
     // İP-1A (G12): S2'nin sorumlusu kiracı; gerçek kod ödeyen anlık görüntüsünü dairenin değeriyle (tenant) yazar ve satır kiracı hesabına düşer
@@ -7967,8 +8139,17 @@ async function sectionFinance() {
   await q(`INSERT INTO site_blocks (site_code, block_name, sort_order) VALUES ($1, 'Dolgu', 1)`, [fillerCode]);
   await q(`INSERT INTO apartments (site_code, block_id, unit_label, sort_order) SELECT $1, b.id, 'D' || g, g FROM site_blocks b CROSS JOIN generate_series(1, 2000) g WHERE b.site_code = $1`, [fillerCode]);
   // toplu dolgu (250 bin satir; tek sitede): havuzun 30 sn'lik statement_timeout'u yuklu makinede asilabilir -> ayri baglantida zaman asimi kapali
+  // Havuz istemcileri pg 'query_timeout' (statement_timeout + 5 sn) tasir ve "Query read timeout" ile ISTEMCI tarafinda keser; SET statement_timeout = 0 yetmez.
+  // 080 ile her defter satirina iki satir-basi tetikleyici (hesap / kasa) eklendi: 250 bin satirlik dolgu yuklu makinede 35 sn'yi asar. Bu yuzden uzun toplu islemler
+  // havuz DISINDA, istemci zaman asimi OLMAYAN tek kullanimlik baglantida kosulur (QA'da zaman asimi kapali; sunucu kodunun zaman asimi degismez).
+  const openLongClient = async () => {
+    const client = new pg.Client({ ...connectConfig(process.env.DB_NAME), options: '-c timezone=Europe/Istanbul' });
+    await client.connect();
+    await client.query('SET statement_timeout = 0');
+    return client;
+  };
   const bulkStart = Date.now();
-  const bulkClient = await pool.connect();
+  const bulkClient = await openLongClient();
   try {
     await bulkClient.query('SET statement_timeout = 0');
     await bulkClient.query(`INSERT INTO ledger_entries (site_code, apartment_id, kind, amount_minor, period, entry_date, due_date, payer_party)
@@ -7977,8 +8158,7 @@ async function sectionFinance() {
     await bulkClient.query('SET statement_timeout = 0');
     await bulkClient.query('ANALYZE ledger_entries');
   } finally {
-    await bulkClient.query('RESET statement_timeout').catch(() => {});
-    bulkClient.release();
+    await bulkClient.end().catch(() => {});
   }
   console.log(`   (dolgu: 250000 defter satiri ${Date.now() - bulkStart} ms)`);
   await q('ANALYZE apartments');
@@ -8063,7 +8243,7 @@ async function sectionFinance() {
   check(`V9 OLCUM (bilgi; basarisizlik yok) 250000 defter satirli TEK site, 2000 daire: ${v9Reads.join('; ')}`, true);
   // kullanici silme: created_by -> NULL (satir basina tetikleyici + UPDATE); 100000 satirlik izli kullanici
   const v9User = await mkUser('V9 Cok Satirli Kullanici', 'site_manager');
-  const v9Client = await pool.connect();
+  const v9Client = await openLongClient();
   let v9UserMs = null;
   try {
     await v9Client.query('SET statement_timeout = 0');
@@ -8074,19 +8254,17 @@ async function sectionFinance() {
     await v9Client.query(`DELETE FROM users WHERE user_code = $1`, [v9User]);
     v9UserMs = Date.now() - startedAt;
   } finally {
-    await v9Client.query('RESET statement_timeout').catch(() => {});
-    v9Client.release();
+    await v9Client.end().catch(() => {});
   }
   const v9NullCount = (await q(`SELECT COUNT(*)::int AS n FROM ledger_entries WHERE site_code = $1 AND amount_minor = 5 AND created_by IS NULL`, [fillerCode])).rows[0].n;
   check(`V9 OLCUM (bilgi): 100000 defter satirli kullanicinin silinmesi ${v9UserMs} ms (30 sn statement_timeout'a yaklasma riski; QA'da zaman asimi kapali); satirlar KALDI (created_by NULL: ${v9NullCount})`, v9NullCount === 100000);
   const cleanupStart = Date.now();
-  const cleanupClient = await pool.connect();
+  const cleanupClient = await openLongClient();
   try {
     await cleanupClient.query('SET statement_timeout = 0');
     await cleanupClient.query(`DELETE FROM sites WHERE site_code = ANY($1::bigint[])`, [[bigCode, fillerCode]]);
   } finally {
-    await cleanupClient.query('RESET statement_timeout').catch(() => {});
-    cleanupClient.release();
+    await cleanupClient.end().catch(() => {});
   }
   console.log(`   (V9: 350000 + 3000 satirli iki sitenin silinmesi ${Date.now() - cleanupStart} ms; havuz zaman asimi kapali)`);
   check('L7: buyuk site silinince defter dahil CASCADE (3000+ satir; tetikleyici ve RESTRICT engellemez)', (await q(`SELECT COUNT(*)::int AS n FROM ledger_entries WHERE site_code = ANY($1::bigint[])`, [[bigCode, fillerCode]])).rows[0].n === 0);
@@ -8664,7 +8842,7 @@ async function sectionFinance() {
   const leakyAudits = financeAudits.filter((r) => forbidden.test(JSON.stringify(r.details)));
   check('N3: audit details\'te tanim adi, aciklama, neden metni, kisi adi HICBIR satirda yok (yalniz toplam / sayi / donem / alan adi)', leakyAudits.length === 0, leakyAudits.slice(0, 2));
   const allDetailKeys = new Set(financeAudits.flatMap((r) => Object.keys(r.details)));
-  check('N4: audit details anahtarlari beyaz listede', [...allDetailKeys].every((k) => ['kind', 'distribution', 'target_type', 'start_period', 'fields', 'definition_id', 'period', 'total_minor', 'apartment_count', 'skipped_missing_count', 'apartment_id', 'amount_minor', 'method', 'reversed_entry_id', 'reversed_kind', 'reversal_entry_id', 'old_amount_minor', 'new_amount_minor', 'account_id', 'ledger_entry_id', 'reason_code', 'cancelled_receipt_id', 'receipt_cancelled', 'movement_mirrored', 'account_party', 'source_kind', 'from', 'months'].includes(k)), [...allDetailKeys]); // Faz 4b ekleri: hepsi kimlik / kod / bayrak (metin YOK); İP-1A: account_party, source_kind (kod); N4 (sirasiz / cok aylik ay kapatma): from (ilk kapanan ay), months (kapanan ay sayisi)
+  check('N4: audit details anahtarlari beyaz listede', [...allDetailKeys].every((k) => ['kind', 'distribution', 'target_type', 'start_period', 'fields', 'definition_id', 'period', 'total_minor', 'apartment_count', 'skipped_missing_count', 'apartment_id', 'amount_minor', 'method', 'reversed_entry_id', 'reversed_kind', 'reversal_entry_id', 'old_amount_minor', 'new_amount_minor', 'account_id', 'ledger_entry_id', 'reason_code', 'cancelled_receipt_id', 'receipt_cancelled', 'movement_mirrored', 'account_party', 'source_kind', 'from', 'months', 'fund'].includes(k)), [...allDetailKeys]); // 080: fund (kasa kodu: operating / capital); Faz 4b ekleri: hepsi kimlik / kod / bayrak (metin YOK); İP-1A: account_party, source_kind (kod); N4 (sirasiz / cok aylik ay kapatma): from (ilk kapanan ay), months (kapanan ay sayisi)
 
   // son tutarlilik (tum veritabani)
   const apartmentSites = (await q(`SELECT COUNT(*)::int AS n FROM ledger_entries l JOIN apartments a ON a.id = l.apartment_id WHERE a.site_code <> l.site_code`)).rows[0].n;
@@ -9238,7 +9416,9 @@ async function sectionPlatformServices() {
 
   // --- site basvurusu ---
   const applicant = await mkUser('Basvuran Bir', 'individual');
-  const appBody = (extra = {}) => ({ name: 'Onay Sitesi', city: 'Ankara', blocks: [{ name: 'A Blok', apartmentCount: 6 }], doors: [{ name: 'Ana Kapi' }], ...extra });
+  // Site adi benzersiz (077 site_name_key / Kural 22): ayni adla ikinci BEKLEYEN basvuru 409 SITE_APPLICATION_NAME_PENDING olur; her govde kendi adini alir.
+  let appNameSeq = 0;
+  const appBody = (extra = {}) => ({ name: `Onay Sitesi ${(appNameSeq += 1)}`, city: 'Ankara', blocks: [{ name: 'A Blok', apartmentCount: 6 }], doors: [{ name: 'Ana Kapi' }], ...extra });
   const siteDocs = [{ id: 'terms', version: '2026-10-01' }, { id: 'dpa', version: '2026-10-05' }];
   const appCount = async () => (await q(`SELECT COUNT(*)::int AS n FROM site_applications WHERE applicant_user_code = $1`, [applicant])).rows[0].n;
   await call('PUT', '/admin/platform-config', SUPER, { legal: { enforce_consents: true } });
@@ -9703,6 +9883,8 @@ async function sectionAccount() {
     qrToken: 'KAREKOD-JETON-GIZLI',
   };
 
+  // N5 (ef21d24): acik borc hesap silmeyi engeller (OPEN_DEBT). Tohumdaki acik borcu (99900 kurus) tahsil eder: degismez defter, yeni tahsilat satiri; eski satirlara dokunulmaz.
+  const settleSeedDebt = (site, apartmentId) => q(`INSERT INTO ledger_entries (site_code, apartment_id, kind, amount_minor, period, entry_date, payer_party, method) VALUES ($1, $2, 'payment', -99900, date_trunc('month', CURRENT_DATE)::date, CURRENT_DATE, 'both', 'cash')`, [site.code, apartmentId]);
   async function seedAda(site, { heavy = true, name = 'Ada Lovelace', fresh = false } = {}) {
     // fresh: ayni sitede tekrarli tohumlarda (yarislar) her sakin KENDI dairesinde olsun (daire basina tek guncel malik kurali)
     const apt1 = fresh ? await newApartment(site) : site.apts[0];
@@ -9741,7 +9923,7 @@ async function sectionAccount() {
     await q(`INSERT INTO join_requests (site_code, block_id, apartment_id, user_code, status, notes) VALUES ($1, $2, $3, $4, 'PENDING', 'KATILIM-NOTU-ADA')`, [site.code, site.blockId, site.apts[1], ada]);
     await q(`INSERT INTO join_requests (site_code, block_id, apartment_id, user_code, status, reviewed_by_user_code, rejection_reason) VALUES ($1, $2, $3, $4, 'REJECTED', $5, $6)`, [site.code, site.blockId, site.apts[2], ada, mgr, MARK.rejectReason]);
     await q(`INSERT INTO site_applications (applicant_user_code, status, site_name, blocks, doors, block_count, apartment_count, door_count, note, decision_note, decided_by, decision_source, decided_at) VALUES ($1, 'rejected', 'Eski Basvuru Sitesi', '[]'::jsonb, '[]'::jsonb, 1, 1, 1, 'BASVURU-NOTU-ESKI', $2, $3, 'super_user', NOW())`, [ada, MARK.decisionNote, mgr]);
-    await q(`INSERT INTO site_applications (applicant_user_code, status, site_name, blocks, doors, block_count, apartment_count, door_count, note) VALUES ($1, 'pending', 'Bekleyen Site', '[{"name":"A","apartmentCount":4}]'::jsonb, '[{"name":"Kapi"}]'::jsonb, 1, 4, 1, 'BASVURU-NOTU-ADA')`, [ada]);
+    await q(`INSERT INTO site_applications (applicant_user_code, status, site_name, blocks, doors, block_count, apartment_count, door_count, note) VALUES ($1, 'pending', $2, '[{"name":"A","apartmentCount":4}]'::jsonb, '[{"name":"Kapi"}]'::jsonb, 1, 4, 1, 'BASVURU-NOTU-ADA')`, [ada, `Bekleyen Site ${ada}`]); // site adi benzersiz (077): her Ada kendi bekleyen basvuru adini alir
     out.deviceUid = uniq(`QAACC${ada}`).toUpperCase().replace(/[^A-Z0-9]/g, '');
     await q(`INSERT INTO devices (device_uid, hardware_type, assigned_user_code, owner_user_id, claimed_at, local_control_token, mqtt_username, mqtt_password, inventory_notes, gate_name) VALUES ($1, 'esp32_wroom', $2, $3, NOW(), $4, $5, $6, $7, 'Ada Kapisi')`, [out.deviceUid, ada, out.dbId, MARK.controlToken, `device_${out.deviceUid}`, MARK.mqttPassword, MARK.inventoryNote]);
     await q(`INSERT INTO audit_log (actor_user_code, actor_name, actor_role, action, site_code) SELECT $1, 'Ada Lovelace', 'apartment_owner', 'qa.ada_islem', $2 FROM generate_series(1, 3)`, [ada, site.code]);
@@ -9937,6 +10119,50 @@ async function sectionAccount() {
     'board_decisions.finalized_by': 'TOMBSTONE (degismez kesin karar; kesinlestiren JOIN ile Silinmis Kullanici)',
     // Kurallar tablosu (053): kural degeri yalniz eklenir (tetikleyici); degistiren UPDATE edilmez, FK SET NULL yalniz users satiri silinirse; ad JOIN ile Silinmis Kullanici
     'platform_rule_values.created_by': 'TOMBSTONE (kural degeri platforma aittir; degistiren JOIN ile Silinmis Kullanici)',
+    // Sonradan eklenen modullerin users FK'leri (platform modulleri, 062-081): her biri icin karar kaydi. Hesap silme akisi bu tablolara dokunmaz (tombstone yaklasimi); ayrinti etiketlerde.
+    'annual_reports.updated_by': 'TOMBSTONE (rapor siteye aittir; guncelleyen JOIN ile Silinmis Kullanici)',
+    'apartment_admin_delegations.admin_user_code': 'TOMBSTONE (devir kaydi; hesap silme akisi bu tabloya dokunmaz)',
+    'apartment_admin_delegations.created_by': 'TOMBSTONE (devir kaydi siteye aittir)',
+    'apartment_access_suspensions.suspended_by': 'TOMBSTONE (guvenlik / mahkeme karari kaydi; askiya alan JOIN ile Silinmis Kullanici)',
+    'apartment_access_suspensions.lifted_by': 'TOMBSTONE (askiyi kaldiran JOIN ile Silinmis Kullanici)',
+    'apartment_proxies.created_by': 'TOMBSTONE (vekalet kaydi siteye aittir)',
+    'apartment_proxies.revoked_by': 'TOMBSTONE',
+    'apartment_safety_requests.requested_by': 'TOMBSTONE (guvenlik talebi siteye aittir; hesap silme akisi bu tabloya dokunmaz)',
+    'apartment_safety_requests.resolved_by': 'TOMBSTONE',
+    'budget_projects.created_by': 'TOMBSTONE (butce projesi siteye aittir)',
+    'budget_projects.finalized_by': 'TOMBSTONE (kesinlestiren JOIN ile Silinmis Kullanici)',
+    'cctv_cameras.created_by': 'TOMBSTONE (kamera kaydi siteye aittir)',
+    'drive_files.uploaded_by': 'TOMBSTONE (dosya siteye aittir; yukleyen JOIN ile Silinmis Kullanici)',
+    'equipment_items.created_by': 'TOMBSTONE (demirbas siteye aittir)',
+    'equipment_maintenance_logs.created_by': 'TOMBSTONE (bakim kaydi siteye aittir)',
+    'equipment_quotes.created_by': 'TOMBSTONE (teklif siteye aittir)',
+    'expense_natures.set_by': 'TOMBSTONE (gider niteligini belirleyen JOIN ile Silinmis Kullanici)',
+    'finance_account_bank_details.created_by': 'TOMBSTONE (hesap bilgisi siteye aittir)',
+    'finance_fund_transfers.created_by': 'TOMBSTONE (degismez kasa aktarimi; 080)',
+    'finance_opening_reverts.reverted_by': 'TOMBSTONE (degismez acilis geri alma kaydi)',
+    'finance_payment_settings.updated_by': 'TOMBSTONE',
+    'finance_site_ref_prefixes.created_by': 'TOMBSTONE',
+    'management_companies.created_by': 'TOMBSTONE (firma kaydi platforma aittir)',
+    'meter_billings.posted_by': 'TOMBSTONE (sayac faturalamasi; degismez borc kaydina baglidir)',
+    'meter_readings.created_by': 'TOMBSTONE (okuma siteye aittir)',
+    'meters.created_by': 'TOMBSTONE (sayac siteye aittir)',
+    'neighbor_posts.decided_by': 'TOMBSTONE (karari veren JOIN ile Silinmis Kullanici)',
+    'payment_notices.decided_by': 'TOMBSTONE (karari veren JOIN ile Silinmis Kullanici)',
+    'site_directory_contacts.created_by': 'TOMBSTONE (rehber kaydi siteye aittir)',
+    'site_drive_connections.connected_by': 'TOMBSTONE (baglayan JOIN ile Silinmis Kullanici)',
+    'site_team_duties.created_by': 'TOMBSTONE (gorev tanimi siteye aittir)',
+    'person_invitations.invited_by': 'TOMBSTONE (davet siteye aittir; davet eden JOIN ile Silinmis Kullanici)',
+    'apartment_access_suspensions.user_code': 'DOKUNMA (tombstone; guvenlik / mahkeme karari kaydi yasal saklama; FK CASCADE yalniz kalici silmede)',
+    'apartment_notices.user_code': 'ACIK KARAR (tombstone\'a bagli kalir; kullaniciya gonderilen bildirim metni; FK CASCADE yalniz kalici silmede)',
+    'apartment_link_requests.requested_by': 'ACIK KARAR (tombstone; baglanti talebi)',
+    'apartment_link_requests.responded_by': 'TOMBSTONE',
+    'apartment_link_requests.target_user_code': 'ACIK KARAR (tombstone; FK CASCADE yalniz kalici silmede)',
+    'apartment_safety_notes.author_user_code': 'ACIK KARAR (serbest metin guvenlik notu; yazan JOIN ile Silinmis Kullanici, metin kalir)',
+    'management_company_members.user_code': 'ACIK KARAR (firma uyeligi tombstone\'a bagli kalir; FK CASCADE yalniz kalici silmede)',
+    'neighbor_post_reports.reporter_user_code': 'ACIK KARAR (sikayet eden tombstone\'a bagli; serbest metin olabilir)',
+    'neighbor_posts.author_user_code': 'ACIK KARAR (komsu panosu ilani serbest metindir; yazan JOIN ile Silinmis Kullanici, metin kalir)',
+    'payment_notices.submitted_by': 'TOMBSTONE (dekont bildirimi; onaya kadar hesap silme ENGELLI - bkz. blockers; sonrasi degismez defter kaydina baglidir)',
+    'person_invitations.accepted_user_code': 'TOMBSTONE (davet kabul eden JOIN ile Silinmis Kullanici)',
     // Butunluk sertlestirme (077): kimlik / abonelik kullaniciya aittir; FK ON DELETE CASCADE (kalici admin silmede birlikte gider), hesap silme (kimliksizlestirme) kodu ayrica siler
     'user_oauth_identities.user_code': 'SIL (FK CASCADE; hesap silme ayrica siler)',
     'web_push_subscriptions.user_code': 'SIL (FK CASCADE; hesap silme ayrica siler)',
@@ -10060,6 +10286,20 @@ async function sectionAccount() {
   const adaPhoneBefore = (await tombstone(adaCode)).phone_number;
   const preAudit = Number((await q(`SELECT COALESCE(MAX(id), 0) AS m FROM audit_log`)).rows[0].m);
   const adaAuditBefore = await countOf(`SELECT COUNT(*)::int AS n FROM audit_log WHERE actor_user_code = $1`, [adaCode]);
+
+  // N5 (ef21d24): KENDI hesabinda odenmemis borc (Borcum bakiyesi > 0) varsa hesap silinemez (OPEN_DEBT; aile uyesi / salt okunur karsi hesap / alacak sayilmaz).
+  // Ada'nin tohumunda 99900 kurus acik borc var: once ENGEL sinanir (hicbir sey degismez), sonra borc tahsil edilir (degismez defter: yeni tahsilat satiri) ve silme akisi aynen sinanir.
+  const debtAuditBefore = await countOf(`SELECT COUNT(*)::int AS n FROM audit_log WHERE id > $1`, [preAudit]);
+  res = await preview(adaCode);
+  const debtBlocker = res.body?.blockers?.find((b) => b.code === 'OPEN_DEBT');
+  check('C0: ODENMEMIS BORC: onizleme can_delete false, engel OPEN_DEBT { site_id, apartment_id, amount_minor 99900 (kurus tamsayi), account_party owner }; engel metni kisisel veri icermez',
+    ok200(res) && res.body.can_delete === false && res.body.blockers.length === 1 && debtBlocker?.site_id === siteC.code && debtBlocker.apartment_id === A.apt1 && debtBlocker.amount_minor === 99900 && debtBlocker.account_party === 'owner'
+      && typeof debtBlocker.message === 'string' && !debtBlocker.message.includes('Lovelace') && !debtBlocker.message.includes(A.email), res.body);
+  res = await del(adaCode);
+  check('C0b: borcluyken silme 409 ACCOUNT_DELETE_BLOCKED + OPEN_DEBT; hesap, uyelikler, kapi izni, cihaz DOKUNULMAZ; yeni denetim satiri yok',
+    res.status === 409 && res.body.code === 'ACCOUNT_DELETE_BLOCKED' && res.body.blockers.some((b) => b.code === 'OPEN_DEBT') && (await tombstone(adaCode)).deleted_at === null && (await tombstone(adaCode)).is_active === true
+      && (await countOf(`SELECT COUNT(*)::int AS n FROM apartment_memberships WHERE user_code = $1 AND is_active = TRUE`, [adaCode])) >= 1 && (await countOf(`SELECT COUNT(*)::int AS n FROM audit_log WHERE id > $1`, [preAudit])) === debtAuditBefore, res.body);
+  await settleSeedDebt(siteC, A.apt1);
 
   res = await preview(adaCode);
   check('C1: onizleme: can_delete true, engel yok; will_remove / will_keep dolu Turkce satirlar (sayilar yalniz kendi kayitlarindan); kisisel veri icermez',
@@ -10322,7 +10562,9 @@ async function sectionAccount() {
     check('D7: 6 deneme: silme ile yonetici cikarma ESZAMANLI - tam olarak biri basarili, sitede 1 aktif yonetici kalir; 40P01 = 0', rows.every((r) => r.ok === 1 && r.remaining === 1) && deadlocks() === 0, { rows, deadlocks: deadlocks() });
   }
 
-  // D8: silme x site basvurusu onayi: onay sonrasi tombstone'a bagli yonetici KALMAZ; bekleyen basvuru ASLA onaylanmis olarak kalmaz
+  // D8: silme x site basvurusu onayi. N5 (ef21d24): sitenin TEK aktif yoneticisi (uyesiz site dahil) hesabini silemez (LAST_SITE_MANAGER). Bu yuzden iki tutarli sonuc vardir:
+  //   (a) silme ONCE: 200, onay APPLICANT_UNAVAILABLE, site YOK, bag YOK;  (b) onay ONCE: silme 409 ACCOUNT_DELETE_BLOCKED (LAST_SITE_MANAGER), hesap AKTIF, site + yonetici bagi + uyelik SAKLI.
+  // Karisik durum (silme 200 ama site/bag var = tombstone'a bagli yonetici) asla olmamali; bekleyen basvuru ASLA onaylanmis olarak kalmaz.
   {
     resetDeadlocks();
     const rows = [];
@@ -10339,10 +10581,11 @@ async function sectionAccount() {
       const links = await countOf(`SELECT (SELECT COUNT(*) FROM site_manager_sites WHERE manager_user_code = $1) + (SELECT COUNT(*) FROM site_memberships WHERE user_code = $1) AS n`, [applicant]);
       const pending = await countOf(`SELECT COUNT(*)::int AS n FROM site_applications WHERE applicant_user_code = $1 AND status = 'pending'`, [applicant]);
       const sitesMade = await countOf(`SELECT COUNT(*)::int AS n FROM sites WHERE name = $1`, [`Yaris Basvuru Sitesi ${trial}`]);
-      rows.push({ deleted: deleted.status, approved: approved.ok, approveCode: approved.code, links, pending, sitesMade });
+      const alive = (await tombstone(applicant)).deleted_at === null;
+      rows.push({ deleted: deleted.status, blocker: deleted.body?.blockers?.[0]?.code ?? null, alive, approved: approved.ok, approveCode: approved.code, links, pending, sitesMade });
     }
-    check('D8: 8 deneme: silme (200) ile basvuru onayi ESZAMANLI - tombstone\'a bagli yonetici / uyelik YOK, bekleyen basvuru YOK; onay ya basarili (site olustu) ya da APPLICANT_UNAVAILABLE (site yok); 40P01 = 0',
-      rows.every((r) => r.deleted === 200 && r.links === 0 && r.pending === 0 && ((r.approved && r.sitesMade === 1) || (!r.approved && r.sitesMade === 0))) && deadlocks() === 0, { rows, deadlocks: deadlocks() });
+    check('D8: 8 deneme: silme x basvuru onayi ESZAMANLI - ya silme once (200, onay APPLICANT_UNAVAILABLE, site / bag YOK) ya da onay once (silme 409 LAST_SITE_MANAGER, hesap aktif, site + yonetici + uyelik sakli); tombstone\'a bagli yonetici YOK, bekleyen basvuru YOK; 40P01 = 0',
+      rows.every((r) => r.pending === 0 && ((r.deleted === 200 && !r.alive && !r.approved && r.approveCode === 'APPLICANT_UNAVAILABLE' && r.sitesMade === 0 && r.links === 0) || (r.deleted === 409 && r.blocker === 'LAST_SITE_MANAGER' && r.alive && r.approved && r.sitesMade === 1 && r.links === 2))) && deadlocks() === 0, { rows, deadlocks: deadlocks() });
     check(`D8b: OLCUM (bilgi): onay basarili ${rows.filter((r) => r.approved).length}/8 (site olustu), silme once gelen ${rows.filter((r) => !r.approved).length}/8`, true, rows.map((r) => r.approveCode ?? 'ok'));
   }
 
@@ -10425,19 +10668,44 @@ async function sectionAccount() {
     check('D7c: silme yonetici satirlarini tutarken "yoneticiyi cikar" BEKLER (blocked); silme 200; sonra cikarma 400 (son yonetici) - sitede yonetici 2. (cikarilamayan) kalir; 40P01 = 0',
       pausedRemoval.duringResult === 'blocked' && pausedRemoval.result.status === 200 && removalResult.ok === false && removalResult.status === 400 && (await countOf(`SELECT COUNT(*)::int AS n FROM site_manager_sites WHERE site_code = $1 AND manager_user_code = $2`, [g.site.code, g.ms[1]])) === 1 && deadlocks() === 0, { during: pausedRemoval.duringResult, status: pausedRemoval.result.status, removalResult });
 
-    // D8c: silme bekletilirken basvuru ONAYLANIR (kullanici satiri henuz kilitli degil); silme devam edince kapsam BUYUMUS gorur -> islem geri alinir, bastan denenir, TEK denemede tutarli biter
+    // D8c: silme bekletilirken basvuru ONAYLANIR (kullanici satiri henuz kilitli degil); silme devam edince kapsam BUYUMUS gorur -> islem geri alinir, bastan denenir, 2. denemede tutarli biter.
+    // N5: basvuran yeni sitenin TEK yoneticisi olur ve silme LAST_SITE_MANAGER ile engellenir; "silme basarili + kalinti yok" yolunu da sinamak icin onayin hemen ardindan sitede ikinci bir aktif yonetici olusturulur (D8c), engel yolu D8e'de ayri sinanir.
     const applicant = await mkUser('Belirleyici Basvuran', 'individual');
     const created = await appSvc.createSiteApplication({
       actor: await actorOf2(applicant),
       body: { name: 'Belirleyici Basvuru Sitesi', city: 'Ankara', district: 'Cankaya', address: 'Cadde 1', blocks: [{ name: 'A Blok', apartmentCount: 4 }], doors: [{ name: 'Ana Kapi' }], note: 'n' },
     });
     hooks.log = [];
-    const pausedApproval = await withPausedDeletion(applicant, async () => appSvc.approveSiteApplication({ applicationId: created.id, note: undefined, actor: superActor }).then(() => 'approved', (error) => `hata:${error.code}`));
+    const backupManager = await mkUser('Belirleyici Yedek Yonetici', 'site_manager');
+    const pausedApproval = await withPausedDeletion(applicant, async () => {
+      const approvalState = await appSvc.approveSiteApplication({ applicationId: created.id, note: undefined, actor: superActor }).then(() => 'approved', (error) => `hata:${error.code}`);
+      if (approvalState === 'approved') {
+        const newSite = (await q(`SELECT site_code FROM sites WHERE name = 'Belirleyici Basvuru Sitesi'`)).rows[0].site_code;
+        await q(`INSERT INTO site_manager_sites (site_code, manager_user_code, link_source) VALUES ($1, $2, 'invited')`, [newSite, backupManager]);
+      }
+      return approvalState;
+    });
     const attempts = hooks.log.filter((entry) => /pg_advisory_xact_lock/.test(entry.text ?? '') && Array.isArray(entry.values) && entry.values[0] === 'account_deletion').length;
     hooks.log = null;
-    check('D8c: silme beklerken onay tamamlandi (approved); silme kapsam buyumesini gordu, ISLEM GERI ALINIP 2. denemede 200 ile bitti; basvurana bagli yonetici / uyelik YOK, site duruyor, basvuru bekleyen degil; 40P01 = 0',
+    check('D8c: silme beklerken onay tamamlandi (approved) ve sitede ikinci yonetici var; silme kapsam buyumesini gordu, ISLEM GERI ALINIP 2. denemede 200 ile bitti; basvurana bagli yonetici / uyelik YOK, site duruyor, basvuru bekleyen degil; 40P01 = 0',
       pausedApproval.duringResult === 'approved' && pausedApproval.result.status === 200 && attempts === 2 && (await countOf(`SELECT (SELECT COUNT(*) FROM site_manager_sites WHERE manager_user_code = $1) + (SELECT COUNT(*) FROM site_memberships WHERE user_code = $1) AS n`, [applicant])) === 0
         && (await countOf(`SELECT COUNT(*)::int AS n FROM sites WHERE name = 'Belirleyici Basvuru Sitesi'`)) === 1 && (await countOf(`SELECT COUNT(*)::int AS n FROM site_applications WHERE applicant_user_code = $1 AND status = 'pending'`, [applicant])) === 0 && deadlocks() === 0, { attempts, during: pausedApproval.duringResult, status: pausedApproval.result.status });
+
+    // D8e (N5): silme bekletilirken onay tamamlanir ve sitede BASKA yonetici YOKTUR: silme kapsam buyumesini gorur, geri alinip 2. denemede 409 ACCOUNT_DELETE_BLOCKED (LAST_SITE_MANAGER) ile biter;
+    // hesap AKTIF kalir, yonetici bagi + uyelik + site SAKLI (silme hicbir sey silmemeli: yari silinmis hesap yok)
+    const applicantE = await mkUser('Belirleyici Basvuran E', 'individual');
+    const createdE = await appSvc.createSiteApplication({
+      actor: await actorOf2(applicantE),
+      body: { name: 'Belirleyici Basvuru Sitesi E', city: 'Ankara', district: 'Cankaya', address: 'Cadde 1', blocks: [{ name: 'A Blok', apartmentCount: 4 }], doors: [{ name: 'Ana Kapi' }], note: 'n' },
+    });
+    hooks.log = [];
+    const pausedApprovalE = await withPausedDeletion(applicantE, async () => appSvc.approveSiteApplication({ applicationId: createdE.id, note: undefined, actor: superActor }).then(() => 'approved', (error) => `hata:${error.code}`));
+    const attemptsE = hooks.log.filter((entry) => /pg_advisory_xact_lock/.test(entry.text ?? '') && Array.isArray(entry.values) && entry.values[0] === 'account_deletion').length;
+    hooks.log = null;
+    check('D8e: silme beklerken onay tamamlandi ve baska yonetici YOK: silme kapsam buyumesini gordu, 2. denemede 409 ACCOUNT_DELETE_BLOCKED (LAST_SITE_MANAGER); hesap aktif, yonetici bagi + uyelik + site SAKLI; 40P01 = 0',
+      pausedApprovalE.duringResult === 'approved' && pausedApprovalE.result.status === 409 && pausedApprovalE.result.body?.blockers?.[0]?.code === 'LAST_SITE_MANAGER' && attemptsE === 2 && (await tombstone(applicantE)).deleted_at === null
+        && (await countOf(`SELECT (SELECT COUNT(*) FROM site_manager_sites WHERE manager_user_code = $1) + (SELECT COUNT(*) FROM site_memberships WHERE user_code = $1) AS n`, [applicantE])) === 2 && (await countOf(`SELECT COUNT(*)::int AS n FROM sites WHERE name = 'Belirleyici Basvuru Sitesi E'`)) === 1 && deadlocks() === 0,
+      { attemptsE, during: pausedApprovalE.duringResult, status: pausedApprovalE.result.status, body: pausedApprovalE.result.body });
 
     // D8d: silme ONCE gelirse onay reddedilir ve site OLUSMAZ
     const applicant2 = await mkUser('Belirleyici Basvuran 2', 'individual');
@@ -10811,7 +11079,9 @@ async function sectionAccount() {
     }));
     check('G5b: silme sonrasi site basvurusu 404 USER_NOT_FOUND; basvuru YAZILMAZ', !late5.ok && late5.code === 'USER_NOT_FOUND' && (await countOf(`SELECT COUNT(*)::int AS n FROM site_applications WHERE applicant_user_code = $1 AND status = 'pending'`, [u5])) === 0, late5);
 
-    // G6: yonetici daveti (kayitli kullanici yolu)
+    // G6: yonetici daveti (kayitli kullanici yolu). N5 (ef21d24): sitenin TEK aktif yoneticisi hesabini silemez; davetlinin silmesi (kalinti yok) yolunu sinamak icin sitede onceden BASKA bir aktif yonetici vardir.
+    const raceBackupManager = await mkUser('Yaris Yedek Yonetici', 'site_manager');
+    await q(`INSERT INTO site_manager_sites (site_code, manager_user_code, link_source) VALUES ($1, $2, 'invited')`, [raceSite.code, raceBackupManager]);
     const u6 = await mkUser('Yaris Davetli');
     const email6 = (await tombstone(u6)).email;
     const r6 = await flowHoldsThenDeletion(u6, () => siteSvc.inviteSiteManager({ siteCode: raceSite.code, email: email6, fullName: 'Yaris Davetli', inviterUser: superActor }), /INSERT INTO site_manager_sites/);
@@ -11127,50 +11397,25 @@ async function sectionAccount() {
     resetDeadlocks();
   }
 
-  // ---- R7 (P2): anlik site kurulumu, kurulum sirasinda silme commit ederse tombstone'a rol YAZMAZ ve site KURMAZ
+  // ---- R7 (P2, 907b137 SONRASI): anlik site kurulumu (setup-site) YALNIZ super_user'a aciktir ve super hesap silinemez (SUPER_USER engeli); bu yuzden eski "kurulum x hesap silme"
+  // yarisi (kurulum sirasinda silme commit ederse tombstone'a rol YAZMAMA / site KURMAMA) urun yolu olmaktan cikti. Es degeri BASVURU ONAYI x silme (D8 / D8c / D8d / D8e: tombstone'a bagli
+  // yonetici YOK, site yalniz yasayan basvuran icin) ve BASVURU x silme (G5) bolumlerinde sinanir. Burada kapanan kapi dogrulanir: yonetici (ve silinmis hesap) icin anlik kurulum
+  // hicbir sey yazmadan 409 APPLICATION_REQUIRED ile reddedilir; rol / site / bag / uyelik OLUSMAZ.
   {
     resetDeadlocks();
-    const raceSetup = async (label, { control }) => {
-      const gm = await mkManaged(label, { managers: 2, members: 1 });
-      const mgr = gm.ms[0];
-      const siteName = `${label} Yeni Site`;
-      let release;
-      const gate = new Promise((resolve) => {
-        release = resolve;
-      });
-      const pause = { match: /INSERT INTO site_manager_sites/, gate, hit: false };
-      if (control) hooks.rewrite = (text) => text.replace("UPDATE users SET role = 'site_manager' WHERE id = $1 AND deleted_at IS NULL", "UPDATE users SET role = 'site_manager' WHERE id = $1");
-      hooks.pause = pause;
-      let setup;
-      let deleted;
-      try {
-        setup = outcomeOf(membershipSvc.setupSiteWithClaimedDevice({ userCode: mgr, name: siteName, city: 'Ankara', district: 'Cankaya', address: 'Cadde 1', blocks: [{ name: 'A Blok', apartmentCount: 3 }], doors: [{ name: 'Ana Kapi' }] }));
-        const reached = await waitFor(() => pause.hit === true, 15000);
-        if (!reached) throw new Error('kurulum bekletilemedi');
-        hooks.pause = null;
-        deleted = await del(mgr); // kurulum henuz hesap satirini tutmuyor (ilk FK INSERT'i bekliyor): silme kilitsiz commit eder
-      } finally {
-        hooks.pause = null;
-        release();
-      }
-      const result = await setup;
-      hooks.rewrite = null;
-      return { mgr, siteName, result, deleted };
-    };
+    const gm = await mkManaged('Kurulum Kapisi', { managers: 2, members: 1 });
+    const mgr = gm.ms[0];
     const siteCount = (name) => countOf(`SELECT COUNT(*)::int AS n FROM sites WHERE name = $1`, [name]);
-    const fixed = await raceSetup('Kurulum Yarisi Duzeltme', { control: false });
-    check('G18a: kurulum sirasinda hesap silindi (silme ONCE commit): kurulum 401 ACCOUNT_DELETED ile GERI ALINIR; site YOK, tombstone\'a bagli yonetici / uyelik YOK, tombstone rolu individual; 40P01 = 0',
-      fixed.deleted.status === 200 && !fixed.result.ok && fixed.result.status === 401 && fixed.result.code === 'ACCOUNT_DELETED' && (await siteCount(fixed.siteName)) === 0
-        && (await countOf(`SELECT (SELECT COUNT(*) FROM site_manager_sites WHERE manager_user_code = $1) + (SELECT COUNT(*) FROM site_memberships WHERE user_code = $1) AS n`, [fixed.mgr])) === 0 && (await tombstone(fixed.mgr)).role === 'individual' && deadlocks() === 0,
-      { status: fixed.result.status, code: fixed.result.code });
-    const control = await raceSetup('Kurulum Yarisi Kontrol', { control: true });
-    const ctlSite = await siteCount(control.siteName);
-    const ctlRole = (await tombstone(control.mgr)).role;
-    check('G18b: KONTROL DENEYI: `AND deleted_at IS NULL` YOKKEN ayni yaris tombstone\'a site_manager rolu yazar ve site tombstone sahipli KURULUR - duzeltme bunu kapatiyor',
-      control.deleted.status === 200 && control.result.ok === true && ctlSite === 1 && ctlRole === 'site_manager', { ok: control.result.ok, ctlSite, ctlRole });
-    // kontrol deneyinin kirlettigi veriyi temizle (F4 tutarlilik denetimi tombstone'larin rolu individual ister)
-    await q(`DELETE FROM sites WHERE name = $1`, [control.siteName]);
-    await q(`UPDATE users SET role = 'individual' WHERE user_code = $1`, [control.mgr]);
+    const linkCount = (code) => countOf(`SELECT (SELECT COUNT(*) FROM site_manager_sites WHERE manager_user_code = $1) + (SELECT COUNT(*) FROM site_memberships WHERE user_code = $1) AS n`, [code]);
+    const linksBefore = await linkCount(mgr);
+    const denied = await outcomeOf(membershipSvc.setupSiteWithClaimedDevice({ userCode: mgr, name: 'Kurulum Kapisi Yeni Site', city: 'Ankara', district: 'Cankaya', address: 'Cadde 1', blocks: [{ name: 'A Blok', apartmentCount: 3 }], doors: [{ name: 'Ana Kapi' }] }));
+    check('G18a: yonetici icin anlik kurulum KAPALI: 409 APPLICATION_REQUIRED; site olusmaz, yonetici bagi / uyelik sayisi ve rol degismez',
+      !denied.ok && denied.status === 409 && denied.code === 'APPLICATION_REQUIRED' && (await siteCount('Kurulum Kapisi Yeni Site')) === 0 && (await linkCount(mgr)) === linksBefore && (await tombstone(mgr)).role === 'site_manager', denied);
+    const goneManager = gm.ms[1];
+    const goneDeleted = await del(goneManager);
+    const deniedGone = await outcomeOf(membershipSvc.setupSiteWithClaimedDevice({ userCode: goneManager, name: 'Kurulum Kapisi Silinmis Site', city: 'Ankara', district: 'Cankaya', address: 'Cadde 1', blocks: [{ name: 'A Blok', apartmentCount: 3 }], doors: [{ name: 'Ana Kapi' }] }));
+    check('G18b: silinmis (tombstone) hesap icin anlik kurulum de reddedilir (APPLICATION_REQUIRED ya da ACCOUNT_DELETED); site YOK, tombstone\'a bagli yonetici / uyelik YOK, tombstone rolu individual; 40P01 = 0',
+      goneDeleted.status === 200 && !deniedGone.ok && (deniedGone.code === 'APPLICATION_REQUIRED' || deniedGone.code === 'ACCOUNT_DELETED') && (await siteCount('Kurulum Kapisi Silinmis Site')) === 0 && (await linkCount(goneManager)) === 0 && (await tombstone(goneManager)).role === 'individual' && deadlocks() === 0, { goneStatus: goneDeleted.status, deniedGone });
     resetDeadlocks();
   }
 
@@ -11179,6 +11424,7 @@ async function sectionAccount() {
     resetDeadlocks();
     const s = await mkSite('P1 Kapsam Sitesi', 3);
     const L = await seedAda(s, { fresh: true, name: 'P1 Kapsam Sakin' });
+    await settleSeedDebt(s, L.apt1); // bu bolum P1 modullerinin silme kapsamini sinar; acik borc silmeyi engellerdi (OPEN_DEBT, C0 / C0b'de ayrica sinanir)
     const FCM_MARK = `FCM-JETON-GIZLI-${L.ada}`;
     const PAYER_MARK = 'ODEYEN-ADI-GIZLI';
     const STORAGE_MARK = `${s.code}/${uniq('depo-anahtari-gizli')}`;
@@ -11541,6 +11787,32 @@ async function sectionParties() {
 }
 // <parties-section-end>
 
+// <funds-section-start>
+// CHILD bolum: funds (Iki kasa: Isletme / Yatirim ve Demirbas Fon, 080; docs/PLATFORM_FINANS_KASALAR.md). Govde scripts/qa_finance_funds_section.mjs;
+// finance4b ortamini (gercek authRequired + JWT, fabrikalar) kullanir, 040 sema denetimlerini (A) tekrarlamaz.
+async function sectionFunds() {
+  const { runFinance4bSection } = await import('./qa_finance4b.mjs');
+  await runFinance4bSection({
+    check,
+    same,
+    sleep,
+    waitFor,
+    childEnv,
+    installPoolHooks,
+    finishChild,
+    mails,
+    serverErrors,
+    migrationFiles,
+    MIGRATIONS_DIR,
+    SERVER_DIR,
+    connectConfig,
+    runMigrate,
+    parts: ['funds'],
+    skipSchema: true,
+  });
+}
+// <funds-section-end>
+
 // <bulk-import-section-start>
 // CHILD bolum: bulk_import (Toplu yukleme / disa aktarma Faz 2b; docs/PLATFORM_TOPLU_ISLEMLER.md). Govde scripts/qa_bulk_import.mjs icindedir (bu dosyaya yalniz delege eden ince kanca eklenir).
 async function sectionBulkImport() {
@@ -11562,6 +11834,8 @@ const SECTIONS = {
   finance4b: sectionFinance4b,
   // Iki hesap (IP-1A, 052); govde scripts/qa_finance_parties_section.mjs
   parties: sectionParties,
+  // Iki kasa (080); govde scripts/qa_finance_funds_section.mjs
+  funds: sectionFunds,
   platform_services: sectionPlatformServices,
   account: sectionAccount,
   bulk_import: sectionBulkImport,
@@ -11586,6 +11860,8 @@ const SECTIONS = {
   apartment_pin: () => sectionApartmentPin({ check, same, sleep, childEnv, finishChild, installPoolHooks, serverErrors, mails }),
   // Kurallar tablosu (053, G11); govde scripts/qa_platform_rules_section.mjs
   platform_rules: () => sectionPlatformRules({ check, same, sleep, childEnv, finishChild, installPoolHooks, serverErrors }),
+  // Kiraci her zaman daire admini (081); govde scripts/qa_tenant_admin_section.mjs
+  tenant_admin: () => sectionTenantAdmin({ check, same, sleep, childEnv, finishChild, installPoolHooks, serverErrors }),
 };
 
 if (SECTION === '') {

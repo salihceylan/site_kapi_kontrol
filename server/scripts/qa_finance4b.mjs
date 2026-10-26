@@ -108,7 +108,8 @@ export async function runFinance4bSection(ctx) {
     await link.member(site.code, BOARD, 'BOARD_MEMBER');
     await link.member(site.code, STAFF, 'STAFF');
     const res = await enableModule(site.code);
-    if (res.status !== 200) throw new Error(`modul acilamadi: ${res.status} ${JSON.stringify(res.body)}`);
+    // Aidat ve Finans TEMEL modul (Kural 25): her sitede acik ve kapatilamaz / acilamaz (400 MODULE_NOT_TOGGLEABLE) - bu da "acik" demektir.
+    if (res.status !== 200 && !(res.status === 400 && res.body?.code === 'MODULE_NOT_TOGGLEABLE')) throw new Error(`modul acilamadi: ${res.status} ${JSON.stringify(res.body)}`);
     return site;
   };
   const pay = (site, apartment, amount, over = {}) =>
@@ -294,7 +295,8 @@ export async function runFinance4bSection(ctx) {
 // Bolum dosyalari: scripts/qa_finance4b_<ad>.mjs (varsayilan export async (t) => ...). QA_PART=receipts,accounts ile secilir.
 const PART_NAMES = ['receipts', 'accounts', 'expenses', 'reports', 'late_fee', 'reminders', 'locks', 'review', 'r15', 'resident_scope'];
 // Ayri bolum olarak kosulan, ayni ortami kullanan dosyalar (varsayilan kosuda YOK; ctx.parts / QA_PART ile): iki hesap (IP-1A) -> qa_platform_pg.mjs "parties".
-const EXTRA_PARTS = { parties: './qa_finance_parties_section.mjs' };
+// Iki kasa (Isletme / Yatirim ve Demirbas Fon, 080) -> qa_platform_pg.mjs "funds" (govde scripts/qa_finance_funds_section.mjs).
+const EXTRA_PARTS = { parties: './qa_finance_parties_section.mjs', funds: './qa_finance_funds_section.mjs' };
 
 /** Gercek authRequired + gercek JWT; hiz sinirlayicilar devre disi, requireSiteManager/requireSuperUser KALIR. */
 async function startHttp(pool) {
@@ -303,10 +305,11 @@ async function startHttp(pool) {
   const { requireSiteManager, requireSuperUser } = await import('../src/middlewares/auth_middleware.js');
   const { financeRouter } = await import('../src/modules/finance_routes.js');
   const { finance4bRouter } = await import('../src/modules/finance_4b_routes.js');
+  const { financeFundsRouter } = await import('../src/modules/finance_funds_routes.js');
   const { moduleRouter } = await import('../src/modules/module_routes.js');
   const { adminRouter } = await import('../src/routes/admin_routes.js');
   const keep = new Set([requireSiteManager, requireSuperUser]);
-  for (const router of [financeRouter, finance4bRouter, moduleRouter, adminRouter]) {
+  for (const router of [financeRouter, finance4bRouter, financeFundsRouter, moduleRouter, adminRouter]) {
     for (const layer of router.stack) {
       if (!layer.route) continue;
       const stack = layer.route.stack;
@@ -319,6 +322,7 @@ async function startHttp(pool) {
   app.use(express.json());
   app.use(financeRouter);
   app.use(finance4bRouter);
+  app.use(financeFundsRouter);
   app.use(moduleRouter);
   app.use(adminRouter);
   const server = await new Promise((resolve) => {

@@ -284,6 +284,7 @@ export async function sectionApartmentPin(ctx) {
     () => wtx(async (c) => { const l = legacyApt(); await c.query(`SELECT id FROM apartments WHERE id = $1 FOR UPDATE`, [aptNo(l.n)]); await c.query(`UPDATE users SET updated_at = updated_at WHERE user_code = $1`, [l.userCode]); }),
   ];
   let ensureErrors = 0;
+  const ensureErrorCodes = []; // tani: DDL / aktarim hatasinin kodu (kontrolun gecis olcutu degismez)
   let remainingAfterLoad = 0;
   hooks.deadlocks = 0;
   const savedTuning = { ...apartmentPinTuning };
@@ -294,7 +295,7 @@ export async function sectionApartmentPin(ctx) {
     for (let w = 0; w < 10; w += 1) loops.push((async () => { while (running) { await mixes[Math.floor(Math.random() * mixes.length)](); await sleep(Math.floor(Math.random() * 3)); } })());
     await sleep(150);
     const c = await pool.connect();
-    try { await ensureApartmentPinSchema(c); } catch (_error) { ensureErrors += 1; } finally { c.release(); }
+    try { await ensureApartmentPinSchema(c); } catch (error) { ensureErrors += 1; ensureErrorCodes.push(error?.code ?? String(error?.message).slice(0, 80)); } finally { c.release(); }
     remainingAfterLoad += await plainCount();
     running = false;
     await Promise.all(loops.splice(0));
@@ -304,7 +305,7 @@ export async function sectionApartmentPin(ctx) {
   Object.assign(apartmentPinTuning, savedTuning);
   await writerPool.end();
   check(`D1: 10 yazici (artan sira, uzun satir kilitleri, KEY SHARE, apartments -> users) altinda 5 kez ilk kurulum: DDL/aktarim hatasi ${ensureErrors}, havuz 40P01 ${hooks.deadlocks}, yazici 40P01 ${stats.errors['40P01'] ?? 0}, yazici hatalari ${JSON.stringify(stats.errors)} (${stats.ops} islem)`,
-    ensureErrors === 0 && hooks.deadlocks === 0 && Object.keys(stats.errors).length === 0 && stats.ops > 50, { ensureErrors, deadlocks: hooks.deadlocks, stats });
+    ensureErrors === 0 && hooks.deadlocks === 0 && Object.keys(stats.errors).length === 0 && stats.ops > 50, { ensureErrors, ensureErrorCodes, deadlocks: hooks.deadlocks, stats });
   check(`D2: yuk altinda atlanan satirlar sonraki acilista tamamlandi: duz PIN 0, isaret ${expectedIssued} (yuk sirasinda kalan toplam ${remainingAfterLoad})`, (await plainCount()) === 0 && (await issuedCount()) === expectedIssued);
   check('D3: yuk sonrasi eski PIN ile giris CALISIR', (await login(legacy[2].loginName, legacy[2].pin)).status === 200);
 
@@ -442,9 +443,12 @@ export async function sectionApartmentPin(ctx) {
       && kept.resident_user_code === null && kept.resident_email === 'gecici@qa.example' && kept.resident_pin_issued === true, { cleared, kept });
   mails.length = 0;
   const reprovision = await call('PATCH', `/manager/apartments/${aptNo(12)}/resident`, manager, { full_name: 'Sonraki Sakin', login_name: 'sonraki.sakin12', password: '7310', is_active: true });
-  check('E15: e-postasiz yeni hesap (dairede eski adres kalsa bile): PIN eski adrese GITMEZ (credentials_email null, e-posta 0, satirdaki adres null)',
+  // Liste / yanit alani resident_email = COALESCE(satirdaki iletisim adresi, hesap e-postasi, CRM kisi e-postasi) (apartment_service.js): e-postasiz yeni hesapta GOSTERILEN deger hesabin kendi
+  // DAHILI adresidir (@ahbu.local, gercek posta kutusu degil). Guvence: SATIRDAKI (saklanan) iletisim adresi NULL, eski adres ('gecici@qa.example') hicbir yerde YOK ve PIN e-postasi gitmez.
+  const storedAfterReprovision = (await q(`SELECT resident_email FROM apartments WHERE id = $1`, [aptNo(12)])).rows[0];
+  check('E15: e-postasiz yeni hesap (dairede eski adres kalsa bile): PIN eski adrese GITMEZ (credentials_email null, e-posta 0, SATIRDAKI adres null, yanitta eski adres YOK; gosterilen deger dahili hesap adresi)',
     reprovision.status === 200 && reprovision.body.apartment.resident_pin_code === '7310' && reprovision.body.credentials_sent === null && reprovision.body.credentials_email === null
-      && mails.length === 0 && reprovision.body.apartment.resident_email === null, { body: reprovision.body, mails: mails.length });
+      && mails.length === 0 && storedAfterReprovision.resident_email === null && !JSON.stringify(reprovision.body).includes('gecici@qa.example') && /@ahbu.local$/.test(String(reprovision.body.apartment.resident_email)), { body: reprovision.body, stored: storedAfterReprovision, mails: mails.length });
 
   // --- inceleme P4: SMTP yavasken PIN'in tek kopyasi yaniti bekletmez (~8 sn yerine burada 300 ms)
   const nodemailer = (await import('nodemailer')).default;

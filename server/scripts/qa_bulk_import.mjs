@@ -139,7 +139,8 @@ export async function runBulkImportSection(ctx) {
   const mkSite = async (name, blocks = { 'A Blok': 6, 'B Blok': 3 }) => {
     nextSite += 1;
     const code = nextSite;
-    await q(`INSERT INTO sites (site_code, name, approval_status, approved_at) VALUES ($1, $2, 'approved', NOW())`, [code, name]);
+    // site adi benzersiz (077 site_name_key; canli tohumda 'Gul Sitesi' zaten var): ad koda baglanir
+    await q(`INSERT INTO sites (site_code, name, approval_status, approved_at) VALUES ($1, $2, 'approved', NOW())`, [code, `${name} ${code}`]);
     const apts = [];
     let order = 0;
     for (const [blockName, count] of Object.entries(blocks)) {
@@ -509,15 +510,15 @@ export async function runBulkImportSection(ctx) {
   const membershipLabels = (await membershipsOf(acctCodes)).map((m) => `${Object.keys(accts).find((k) => accts[k].user_code === m.user_code)}:${m.block_name}${m.sort_order}:${m.role}:${m.is_active}`);
   const aptA3 = S.apt('A', 3).id;
   const aptB1 = S.apt('B', 1).id;
-  check('C3b: DAIRE UYELIGI (grantApartmentAccess kurali): A3 = malik admin, kiraci + aile FAMILY_MEMBER; B1 = tek sakin admin; her dairede TEK aktif admin',
-    membershipLabels.length === 4 && membershipLabels.includes('ahmet:A Blok3:APARTMENT_ADMIN:true') && membershipLabels.includes('ayse:A Blok3:FAMILY_MEMBER:true') && membershipLabels.includes('veli:A Blok3:FAMILY_MEMBER:true') && membershipLabels.includes('mehmet:B Blok1:APARTMENT_ADMIN:true')
+  check('C3b: DAIRE UYELIGI (grantApartmentAccess kurali + kiraci her zaman daire admini, 081): A3 = KIRACI (Ayse) admin, malik + aile FAMILY_MEMBER; B1 = tek sakin admin; her dairede TEK aktif admin',
+    membershipLabels.length === 4 && membershipLabels.includes('ahmet:A Blok3:FAMILY_MEMBER:true') && membershipLabels.includes('ayse:A Blok3:APARTMENT_ADMIN:true') && membershipLabels.includes('veli:A Blok3:FAMILY_MEMBER:true') && membershipLabels.includes('mehmet:B Blok1:APARTMENT_ADMIN:true')
     && (await adminsOf([aptA3, aptB1])).every((row) => row.admins === 1), { membershipLabels, admins: await adminsOf([aptA3, aptB1]) });
   const siteRolesNew = (await q(`SELECT user_code, role, is_active FROM site_memberships WHERE site_code = $1 AND user_code = ANY($2::int[]) ORDER BY user_code`, [S.code, acctCodes])).rows;
   const aptRows = (await q(`SELECT id, resident_user_code, resident_pin_issued FROM apartments WHERE id = ANY($1::bigint[]) ORDER BY id`, [[aptA3, aptB1]])).rows;
   const newDoors = await doorsOf(ahmet.user_code);
-  check('C3c: site duzeyi RESIDENT (4 hesap); daire gostergesi ilk uyede (A3 -> malik, B1 -> Mehmet) ve "parola yonetimce verildi" isareti; yeni hesap sitenin ortak kapilarini gorur (komsu hesapla ayni liste)',
+  check('C3c: site duzeyi RESIDENT (4 hesap); daire gostergesi admin olan uyede (A3 -> kiraci Ayse, B1 -> Mehmet) ve "parola yonetimce verildi" isareti; yeni hesap sitenin ortak kapilarini gorur (komsu hesapla ayni liste)',
     siteRolesNew.length === 4 && siteRolesNew.every((r) => r.role === 'RESIDENT' && r.is_active === true)
-    && aptRows.find((a) => Number(a.id) === aptA3).resident_user_code === ahmet.user_code && aptRows.find((a) => Number(a.id) === aptB1).resident_user_code === mehmet.user_code && aptRows.every((a) => a.resident_pin_issued === true)
+    && aptRows.find((a) => Number(a.id) === aptA3).resident_user_code === ayse.user_code && aptRows.find((a) => Number(a.id) === aptB1).resident_user_code === mehmet.user_code && aptRows.every((a) => a.resident_pin_issued === true)
     && JSON.parse(newDoors).length >= 1 && newDoors === (await doorsOf(doorUser)), { siteRolesNew, aptRows, newDoors });
   check('C3d: MEVCUT erisim DEGISMEDI: yeni 4 hesap disinda users / apartment_memberships / site_memberships / kapi izinleri aynen; mevcut hesaplarin kapi listeleri ayni; e-posta / davet GONDERILMEDI',
     accessWithout(await access(S.code), acctCodes) === accessWithout(accessBefore, []) && same(doorsBefore, [await doorsOf(doorUser), await doorsOf(RESIDENT), await doorsOf(MGR)]) && JSON.parse(doorsBefore[0]).length >= 1 && mails.length === mailsBefore);

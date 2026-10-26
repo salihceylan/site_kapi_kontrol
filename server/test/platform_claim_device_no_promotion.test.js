@@ -121,13 +121,14 @@ describe('claimDevice: rol DEĞİŞMEZ', () => {
     assert.equal(writesUsers(log), false);
   });
 
-  it('site yöneticisi / süper kullanıcı sahiplenmesi AYNEN çalışır: rol değişmez, eski mesaj korunur', async () => {
+  it('site yöneticisi / süper kullanıcı sahiplenmesi AYNEN çalışır: rol değişmez; mesaj kapıya bağlamayı söyler, site kurulumu vaat etmez', async () => {
     for (const role of ['site_manager', 'super_user']) {
       const { log } = install({ role });
       const result = await claimDevice({ userCode: 48213, deviceInput: '00861A0D5020' });
       assert.equal(result.role, role);
       assert.equal(writesUsers(log), false);
-      assert.match(result.message, /Artık bu cihaz ile site ve kapı kurulumu yapabilirsiniz/);
+      assert.match(result.message, /Kayıtlı Cihazlar ekranından sitenizin bir kapısına bağlayabilirsiniz/);
+      assert.doesNotMatch(result.message, /site .*kurulumu/);
     }
   });
 

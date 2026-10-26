@@ -148,10 +148,12 @@ export default async function sectionReceipts(t) {
     mine.status === 200 && mine.body.items.length === 1 && mine.body.items[0].id === rc1.id && mineOne.status === 200 && !('ledger_entry_id' in mineOne.body) && !('copy_count' in mineOne.body) && !('cancel_note' in mineOne.body) && !('issued_by_name' in mineOne.body)
       && mineOther.status === 404 && stranger.body.items.length === 0, [mine.body, mineOther.status]);
 
-  // --- B12. modul kapali
-  await call('PUT', `/manager/sites/${other.code}/modules/finance`, SUPER, { enabled: false });
-  const disabled = await call('GET', `${P(other.code)}/receipts`, MGR);
-  check('B12: finans modulu KAPALI -> makbuz uclari 403 MODULE_DISABLED', disabled.status === 403 && disabled.body.code === 'MODULE_DISABLED', disabled.body);
+  // --- B12. finans TEMEL modul (Kural 25, 079): kapatilamaz; satir elle enabled=FALSE yazilsa bile makbuz uclari acik kalir (MODULE_DISABLED asla)
+  const closeTry = await call('PUT', `/manager/sites/${other.code}/modules/finance`, SUPER, { enabled: false });
+  await q(`INSERT INTO site_modules (site_code, module_code, enabled) VALUES ($1, 'finance', FALSE) ON CONFLICT (site_code, module_code) DO UPDATE SET enabled = FALSE`, [other.code]);
+  const stillOpen = await call('GET', `${P(other.code)}/receipts`, MGR);
+  await q(`DELETE FROM site_modules WHERE site_code = $1 AND module_code = 'finance'`, [other.code]);
+  check('B12: finans kapatilamaz (400 MODULE_NOT_TOGGLEABLE); site_modules satiri enabled=FALSE olsa bile makbuz uclari 200 (MODULE_DISABLED YOK)', closeTry.status === 400 && closeTry.body.code === 'MODULE_NOT_TOGGLEABLE' && stillOpen.status === 200 && Array.isArray(stillOpen.body.items), [closeTry.body, stillOpen.status]);
 
   // --- B13. 50 eszamanli tahsilat: bosluksuz numara dizisi
   const race = await mkManaged('F4B Makbuz Yaris', { 'Y Blok': 10 });

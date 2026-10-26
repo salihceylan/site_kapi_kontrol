@@ -65,9 +65,10 @@ export default async function sectionExpenses(t) {
 
   // --- D1. kategoriler
   const cats = await call('GET', `${P(site.code)}/expense-categories`, BOARD);
-  check('D1: ilk GET varsayilan 12 kategoriyi ekler (kurul de okur); is_system', cats.status === 200 && cats.body.items.length === 12 && cats.body.items.every((c) => c.is_system && c.is_active) && cats.body.items.some((c) => c.name === 'Doğalgaz/Yakıt'), cats.body.items?.length);
+  // 080: varsayilan kume 12 klasik kategori + sistem kategorisi "Yatirim ve demirbas" (capital) = 13
+  check('D1: ilk GET varsayilan 13 kategoriyi ekler (12 klasik + sistem "Yatirim ve demirbas", capital; kurul de okur); is_system', cats.status === 200 && cats.body.items.length === 13 && cats.body.items.filter((c) => c.fund === 'capital').length === 1 && cats.body.items.every((c) => c.is_system && c.is_active) && cats.body.items.some((c) => c.name === 'Doğalgaz/Yakıt'), cats.body.items?.length);
   const cats2 = await call('GET', `${P(site.code)}/expense-categories`, MGR);
-  check('D1b: ikinci GET tekrar eklemez (hala 12; eszamanli ilk cagrilarda da tekil)', cats2.body.items.length === 12);
+  check('D1b: ikinci GET tekrar eklemez (hala 13; eszamanli ilk cagrilarda da tekil)', cats2.body.items.length === 13);
   const catNew = await call('POST', `${P(site.code)}/expense-categories`, MGR, { name: 'Bahce bakimi' });
   const catDup = await call('POST', `${P(site.code)}/expense-categories`, MGR, { name: 'BAHCE BAKIMI' });
   const catBoard = await call('POST', `${P(site.code)}/expense-categories`, BOARD, { name: 'Kurul kategori' });
@@ -338,10 +339,12 @@ export default async function sectionExpenses(t) {
     matrix.push([label, r.status, w.status === 409 ? 201 : w.status, readStatus, writeStatus]);
   }
   check('D16: yetki matrisi: yonetici / super yazar + okur; kurul YALNIZ okur; gorevli / sakin / ilgisiz / baska site 403', matrix.every(([, r, w, er, ew]) => r === er && w === ew), matrix);
-  await call('PUT', `/manager/sites/${site.code}/modules/finance`, SUPER, { enabled: false });
+  // Kural 25 (079): finans TEMEL modul - kapatilamaz; satir elle enabled=FALSE yazilsa bile gider uclari acik kalir (MODULE_DISABLED asla)
+  const closeTry = await call('PUT', `/manager/sites/${site.code}/modules/finance`, SUPER, { enabled: false });
+  await q(`INSERT INTO site_modules (site_code, module_code, enabled) VALUES ($1, 'finance', FALSE) ON CONFLICT (site_code, module_code) DO UPDATE SET enabled = FALSE`, [site.code]);
   const off = await call('GET', `${P(site.code)}/expenses`, MGR);
-  check('D16b: finans modulu KAPALI -> gider uclari 403 MODULE_DISABLED', off.status === 403 && off.body.code === 'MODULE_DISABLED', off.body);
-  await call('PUT', `/manager/sites/${site.code}/modules/finance`, SUPER, { enabled: true });
+  await q(`DELETE FROM site_modules WHERE site_code = $1 AND module_code = 'finance'`, [site.code]);
+  check('D16b: finans kapatilamaz (400 MODULE_NOT_TOGGLEABLE); site_modules satiri enabled=FALSE olsa bile gider uclari 200 (MODULE_DISABLED YOK)', closeTry.status === 400 && closeTry.body.code === 'MODULE_NOT_TOGGLEABLE' && off.status === 200 && Array.isArray(off.body.items), [closeTry.body, off.status]);
   fs.rmSync(docsDir, { recursive: true, force: true });
   void mkUser; void mkSite; void link; void RESIDENT;
 }
