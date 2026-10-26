@@ -61,9 +61,12 @@ after_sites=$($PSQL -d "$RDB" -Atc "select count(*) from sites")
 after_users=$($PSQL -d "$RDB" -Atc "select count(*) from users")
 after_sm=$($PSQL -d "$RDB" -Atc "select count(*) from site_memberships")
 after_am=$($PSQL -d "$RDB" -Atc "select count(*) from apartment_memberships where is_active")
-typed=$($PSQL -d "$RDB" -Atc "select count(*) from sites where management_type='apartment_site'")
+# Faz 1 (029) her siteye bir yonetim turu yazar; 2026-10-19'dan beri bes tur kullanimda (apartment_site disi da gecerli).
+# Kosul: her sitenin taninan bir yonetim turu olmali (eskiden "hepsi apartment_site" bekleniyordu, canlida artik yanlis).
+typed=$($PSQL -d "$RDB" -Atc "select count(*) from sites where management_type is not null and management_type <> ''")
+typed_apt=$($PSQL -d "$RDB" -Atc "select count(*) from sites where management_type='apartment_site'")
 echo "   aktif daire uyeligi once/sonra: $before_am/$after_am"
-echo "   sonra: sites=$after_sites (apartment_site=$typed) users=$after_users site_memberships=$after_sm"
+echo "   sonra: sites=$after_sites (yonetim turu tanimli=$typed, apartment_site=$typed_apt) users=$after_users site_memberships=$after_sm"
 echo "   tablolar: $($PSQL -d "$RDB" -Atc "select string_agg(table_name, ',') from information_schema.tables where table_schema='public' and table_name in ('site_modules','audit_log')")"
 echo "   site_modules satir: $($PSQL -d "$RDB" -Atc "select count(*) from site_modules") (bilgi: canlida yonetici bir modulu degistirdiyse 0dan buyuk olur)"
 q() { $PSQL -d "$RDB" -Atc "$1" 2>&1 | head -n 1; }
