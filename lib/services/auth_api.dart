@@ -1055,6 +1055,40 @@ class AuthApi {
     await _teamJson('DELETE', '/manager/sites/$siteCode/people/$personId/invitation', token, 200);
   }
 
+  Future<Map<String, dynamic>> provisionPersonAccount({
+    required String token,
+    required int siteCode,
+    required int personId,
+    String? loginName,
+    String? password,
+    String? email,
+  }) async {
+    return _teamJson(
+      'POST',
+      '/manager/sites/$siteCode/people/$personId/account',
+      token,
+      200,
+      body: {
+        if (loginName != null && loginName.isNotEmpty) 'login_name': loginName,
+        if (password != null && password.isNotEmpty) 'password': password,
+        if (email != null && email.isNotEmpty) 'email': email,
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>> resetPersonPinDirect({
+    required String token,
+    required int siteCode,
+    required int personId,
+  }) async {
+    return _teamJson(
+      'POST',
+      '/manager/sites/$siteCode/people/$personId/reset-pin',
+      token,
+      200,
+    );
+  }
+
   Future<Map<String, dynamic>> sendPersonPasswordReset({
     required String token,
     required int siteCode,

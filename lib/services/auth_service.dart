@@ -1327,6 +1327,33 @@ class AuthService extends ChangeNotifier {
     (token) => api.revokePersonInvitation(token: token, siteCode: siteCode, personId: personId),
   );
 
+  Future<Map<String, dynamic>> provisionPersonAccount(
+    int siteCode,
+    int personId, {
+    String? loginName,
+    String? password,
+    String? email,
+  }) =>
+      _runAuthorized(
+        (token) => api.provisionPersonAccount(
+          token: token,
+          siteCode: siteCode,
+          personId: personId,
+          loginName: loginName,
+          password: password,
+          email: email,
+        ),
+      );
+
+  Future<Map<String, dynamic>> resetPersonPinDirect(int siteCode, int personId) =>
+      _runAuthorized(
+        (token) => api.resetPersonPinDirect(
+          token: token,
+          siteCode: siteCode,
+          personId: personId,
+        ),
+      );
+
   Future<Map<String, dynamic>> sendPersonPasswordReset(int siteCode, int personId) =>
       _runAuthorized(
         (token) => api.sendPersonPasswordReset(token: token, siteCode: siteCode, personId: personId),

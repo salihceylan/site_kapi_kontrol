@@ -7,13 +7,14 @@ import 'package:site_kapi_kontrol/ui/helpers/phone_input.dart';
 import 'package:site_kapi_kontrol/ui/widgets/crm_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 
-/// Kişi listesi kartı (Platform Faz 2a): ad, hesap / eski sakin rozeti, telefon, e-posta, ilişki
+/// Kişi listesi kartı: ad, hesap / eski sakin rozeti, telefon, e-posta, ilişki
 /// çipleri, daire etiketleri ve araç sayısı.
 ///
-/// Kart yanında tekil işlem menüsü (düzenle, şifre sıfırlama, davet, ilişik kesme) ve
-/// çoklu seçim kipi (checkbox) destekler.
+/// Kart yanında tekil işlem menüsü (düzenle, hesap tanımlama, şifre sıfırlama, davet, ilişik kesme)
+/// ve çoklu seçim kipi (checkbox) destekler.
 ///
-/// Taşma: tüm metinler esnektir (`Expanded`, `Wrap`); çipler `Wrap` içindedir.
+/// Ad soyadının altında veya sağındaki üç noktada kolayca hesap (kullanıcı adı ve geçici şifre)
+/// tanımlama imkânı sunar.
 class PersonCard extends StatelessWidget {
   const PersonCard({
     super.key,
@@ -26,6 +27,8 @@ class PersonCard extends StatelessWidget {
     this.onPasswordReset,
     this.onInvite,
     this.onToggleActive,
+    this.onProvisionAccount,
+    this.onDirectResetPin,
   });
 
   final PersonSummary person;
@@ -37,6 +40,8 @@ class PersonCard extends StatelessWidget {
   final VoidCallback? onPasswordReset;
   final VoidCallback? onInvite;
   final VoidCallback? onToggleActive;
+  final VoidCallback? onProvisionAccount;
+  final VoidCallback? onDirectResetPin;
 
   @override
   Widget build(BuildContext context) {
@@ -47,8 +52,12 @@ class PersonCard extends StatelessWidget {
     final email = person.email ?? '';
     final name = person.fullName.trim().isEmpty ? 'İsimsiz kişi' : person.fullName.trim();
 
-    final hasAnyAction =
-        onEdit != null || onPasswordReset != null || onInvite != null || onToggleActive != null;
+    final hasAnyAction = onEdit != null ||
+        onPasswordReset != null ||
+        onInvite != null ||
+        onToggleActive != null ||
+        onProvisionAccount != null ||
+        onDirectResetPin != null;
 
     return AppCard(
       padding: listCardPadding(context),
@@ -105,6 +114,38 @@ class PersonCard extends StatelessWidget {
                     ],
                   ),
                 ],
+                // Ad soyadın hemen altında: Hesapsız kişiye tek tıkla hesap tanımlama / şifre verme butonu
+                if (!person.hasAccount && onProvisionAccount != null) ...[
+                  const SizedBox(height: AppSpace.xs),
+                  OutlinedButton.icon(
+                    onPressed: onProvisionAccount,
+                    icon: const Icon(Icons.key_rounded, size: 14, color: Colors.teal),
+                    label: const Text('Hesap Tanımla (Kullanıcı Adı / Şifre)'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.teal.shade800,
+                      side: BorderSide(color: Colors.teal.shade300),
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                  ),
+                ] else if (person.hasAccount && onDirectResetPin != null) ...[
+                  const SizedBox(height: AppSpace.xs),
+                  OutlinedButton.icon(
+                    onPressed: onDirectResetPin,
+                    icon: const Icon(Icons.lock_reset_rounded, size: 14, color: Colors.orange),
+                    label: const Text('Geçici Şifre / PIN Sıfırla'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.orange.shade800,
+                      side: BorderSide(color: Colors.orange.shade300),
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                  ),
+                ],
                 if (phone.isNotEmpty) ...[
                   const SizedBox(height: AppSpace.xs),
                   Text(phone, style: secondary),
@@ -142,6 +183,10 @@ class PersonCard extends StatelessWidget {
                 switch (action) {
                   case 'details':
                     onTap();
+                  case 'provision_account':
+                    onProvisionAccount?.call();
+                  case 'direct_reset_pin':
+                    onDirectResetPin?.call();
                   case 'edit':
                     onEdit?.call();
                   case 'reset_password':
@@ -163,6 +208,28 @@ class PersonCard extends StatelessWidget {
                     ],
                   ),
                 ),
+                if (!person.hasAccount && onProvisionAccount != null)
+                  const PopupMenuItem<String>(
+                    value: 'provision_account',
+                    child: Row(
+                      children: [
+                        Icon(Icons.key_rounded, size: 18, color: Colors.teal),
+                        SizedBox(width: AppSpace.sm),
+                        Text('Hesap Tanımla (Kullanıcı Adı / Şifre)'),
+                      ],
+                    ),
+                  ),
+                if (person.hasAccount && onDirectResetPin != null)
+                  PopupMenuItem<String>(
+                    value: 'direct_reset_pin',
+                    child: Row(
+                      children: [
+                        Icon(Icons.lock_reset_rounded, size: 18, color: Colors.orange.shade800),
+                        const SizedBox(width: AppSpace.sm),
+                        const Text('Geçici Şifre / PIN Sıfırla'),
+                      ],
+                    ),
+                  ),
                 if (onEdit != null)
                   const PopupMenuItem<String>(
                     value: 'edit',
@@ -179,9 +246,9 @@ class PersonCard extends StatelessWidget {
                     value: 'reset_password',
                     child: Row(
                       children: [
-                        Icon(Icons.lock_reset_rounded, size: 18, color: Colors.blue),
+                        Icon(Icons.forward_to_inbox_rounded, size: 18, color: Colors.blue),
                         SizedBox(width: AppSpace.sm),
-                        Text('Şifre Sıfırlama Gönder'),
+                        Text('Şifre Sıfırlama E-postası Gönder'),
                       ],
                     ),
                   ),

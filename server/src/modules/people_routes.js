@@ -28,6 +28,8 @@ import {
   parsePersonCreateInput,
   updatePerson,
   updateResidency,
+  provisionPersonAccount,
+  resetPersonPinDirect,
 } from './people_service.js';
 import { HOUR_MS, ipKey, respondError, userKey } from './route_helpers.js';
 import { createVehicle, listVehicles, removeVehicle } from './vehicle_service.js';
@@ -136,6 +138,35 @@ peopleRouter.post(
   peopleWriteLimiter,
   handler({ context: 'people_password_reset', fallback: 'Şifre sıfırlama bağlantısı gönderilemedi.', write: true }, async ({ req, access }) => ({
     body: await sendPersonPasswordReset({
+      siteCode: access.siteCode,
+      personId: req.params.personId,
+      actor: req.authUser,
+    }),
+  })),
+);
+
+peopleRouter.post(
+  '/manager/sites/:siteCode/people/:personId/account',
+  authRequired,
+  peopleWriteLimiter,
+  handler({ context: 'people_account_provision', fallback: 'Hesap tanımlanamadı.', write: true }, async ({ req, access }) => ({
+    body: await provisionPersonAccount({
+      siteCode: access.siteCode,
+      personId: req.params.personId,
+      loginName: req.body?.login_name,
+      password: req.body?.password,
+      email: req.body?.email,
+      actor: req.authUser,
+    }),
+  })),
+);
+
+peopleRouter.post(
+  '/manager/sites/:siteCode/people/:personId/reset-pin',
+  authRequired,
+  peopleWriteLimiter,
+  handler({ context: 'people_pin_reset', fallback: 'Geçici şifre sıfırlanamadı.', write: true }, async ({ req, access }) => ({
+    body: await resetPersonPinDirect({
       siteCode: access.siteCode,
       personId: req.params.personId,
       actor: req.authUser,

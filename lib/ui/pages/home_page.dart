@@ -44,6 +44,9 @@ import 'package:site_kapi_kontrol/ui/dialogs/force_change_password_dialog.dart';
 import 'package:site_kapi_kontrol/models/bulk_import.dart' show ImportKind;
 import 'package:site_kapi_kontrol/ui/views/bulk_import_view.dart';
 import 'package:site_kapi_kontrol/ui/views/bank_lines_view.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/crm_confirm_dialog.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/person_account_dialog.dart';
+import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart' show crmMessageOf;
 
 import 'package:site_kapi_kontrol/services/pdf_credentials_service.dart';
 
@@ -4827,6 +4830,67 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
+  Future<void> _openHouseholdPersonAccountDialog(
+    ApartmentRecord apartment,
+    HouseholdPerson person,
+  ) async {
+    final personId = person.personId;
+    if (personId == null || !mounted) return;
+    final res = await PersonAccountDialog.show(
+      context,
+      siteCode: apartment.siteCode,
+      personId: personId,
+      personName: person.name,
+      initialEmail: null,
+      hasAccount: person.hasAccount,
+      authService: widget.authService,
+    );
+    if (res != null && mounted) {
+      if (_selectedSite != null) {
+        _selectSite(_selectedSite!);
+      }
+    }
+  }
+
+  Future<void> _directResetHouseholdPersonPin(
+    ApartmentRecord apartment,
+    HouseholdPerson person,
+  ) async {
+    final personId = person.personId;
+    if (personId == null || !mounted) return;
+    final confirmed = await confirmCrmAction(
+      context,
+      title: 'Geçici Şifre / PIN Sıfırlansın mı?',
+      message:
+          '${person.name} kişisinin geçici şifresi sıfırlansın mı?\n\nYeni bir geçici şifre (PIN) üretilecek ve sakine iletmeniz için ekranda gösterilecektir.',
+      confirmLabel: 'Şifreyi Sıfırla',
+      icon: Icons.lock_reset_rounded,
+      tone: AppTone.warning,
+    );
+    if (!confirmed || !mounted) return;
+
+    try {
+      final res = await widget.authService.resetPersonPinDirect(
+        apartment.siteCode,
+        personId,
+      );
+      if (!mounted) return;
+      if (_selectedSite != null) {
+        _selectSite(_selectedSite!);
+      }
+      await AccountCredentialsIssuedDialog.show(
+        context,
+        personName: person.name,
+        loginName: res['login_name']?.toString() ?? person.name,
+        password: res['pin_code']?.toString() ?? '1234',
+        isNew: false,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      _showMessage(crmMessageOf(e, 'Geçici şifre sıfırlanamadı.'));
+    }
+  }
+
   Future<void> _openHouseholdPerson(
     ApartmentRecord apartment,
     HouseholdPerson person,
@@ -6848,6 +6912,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           onShowResidentsAccordion: _openSiteResidentsAccordionDialog,
           householdLoader: _loadApartmentHousehold,
           onOpenHouseholdPerson: _openHouseholdPerson,
+          onProvisionHouseholdPersonAccount: _openHouseholdPersonAccountDialog,
+          onResetHouseholdPersonPin: _directResetHouseholdPersonPin,
           onOpenApartmentCard: _openApartmentCardFromSites,
           onOpenBulkImport: _openBulkImportFromSites,
           siteManagersData: _selectedSiteManagersData,

@@ -9,6 +9,7 @@ import 'package:site_kapi_kontrol/ui/design/app_snack.dart';
 import 'package:site_kapi_kontrol/ui/design/buttons.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/crm_confirm_dialog.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/person_account_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/person_card_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/person_form_dialog.dart';
 import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart';
@@ -222,6 +223,57 @@ class PeoplePersonsTabState extends State<PeoplePersonsTab> {
       AppSnack.show(
         context,
         crmMessageOf(e, 'Şifre sıfırlama bağlantısı gönderilemedi.'),
+        kind: AppSnackKind.error,
+      );
+    }
+  }
+
+  Future<void> _openAccountDialog(PersonSummary person) async {
+    final result = await PersonAccountDialog.show(
+      context,
+      siteCode: widget.scope.siteCode,
+      personId: person.id,
+      personName: person.fullName,
+      initialEmail: person.email,
+      hasAccount: person.hasAccount,
+      authService: widget.scope.authService,
+    );
+    if (result != null) {
+      _afterChange();
+    }
+  }
+
+  Future<void> _directResetPin(PersonSummary person) async {
+    final confirmed = await confirmCrmAction(
+      context,
+      title: 'Geçici Şifre / PIN Sıfırlansın mı?',
+      message:
+          '${person.fullName} kişisinin geçici şifresi sıfırlansın mı?\n\nYeni bir geçici şifre (PIN) üretilecek ve sakine iletmeniz için ekranda gösterilecektir.',
+      confirmLabel: 'Şifreyi Sıfırla',
+      icon: Icons.lock_reset_rounded,
+      tone: AppTone.warning,
+    );
+    if (!confirmed || !mounted) return;
+
+    try {
+      final res = await widget.scope.authService.resetPersonPinDirect(
+        widget.scope.siteCode,
+        person.id,
+      );
+      if (!mounted) return;
+      _afterChange();
+      await AccountCredentialsIssuedDialog.show(
+        context,
+        personName: person.fullName,
+        loginName: res['login_name']?.toString() ?? person.fullName,
+        password: res['pin_code']?.toString() ?? '1234',
+        isNew: false,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      AppSnack.show(
+        context,
+        crmMessageOf(e, 'Geçici şifre sıfırlanamadı.'),
         kind: AppSnackKind.error,
       );
     }
@@ -665,6 +717,8 @@ class PeoplePersonsTabState extends State<PeoplePersonsTab> {
                 ? () => _sendInvite(person)
                 : null,
             onToggleActive: widget.scope.canWrite ? () => _toggleActive(person) : null,
+            onProvisionAccount: widget.scope.canWrite ? () => _openAccountDialog(person) : null,
+            onDirectResetPin: widget.scope.canWrite && person.hasAccount ? () => _directResetPin(person) : null,
           ),
         ),
       ],

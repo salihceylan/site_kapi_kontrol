@@ -66,6 +66,8 @@ class SitesView extends StatelessWidget {
     this.onShowResidentsAccordion,
     this.householdLoader,
     this.onOpenHouseholdPerson,
+    this.onProvisionHouseholdPersonAccount,
+    this.onResetHouseholdPersonPin,
     this.onOpenApartmentCard,
     this.onOpenBulkImport,
     this.isSuperUser = false,
@@ -130,6 +132,8 @@ class SitesView extends StatelessWidget {
 
   /// Daire halkındaki kişi satırı: kişi kartını açar.
   final Future<void> Function(ApartmentRecord apartment, HouseholdPerson person)? onOpenHouseholdPerson;
+  final Future<void> Function(ApartmentRecord apartment, HouseholdPerson person)? onProvisionHouseholdPersonAccount;
+  final Future<void> Function(ApartmentRecord apartment, HouseholdPerson person)? onResetHouseholdPersonPin;
 
   /// "Daire kartı" penceresi (daire adminini değiştir, kapı erişimi askısı, adli kayıt, geçmiş).
   final Future<void> Function(ApartmentRecord apartment)? onOpenApartmentCard;

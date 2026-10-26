@@ -12,6 +12,7 @@ import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/apartment_card_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/crm_confirm_dialog.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/person_account_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/history_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/large_dialog_parts.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/person_form_dialog.dart';
@@ -154,6 +155,63 @@ class _PersonCardDialogState extends State<PersonCardDialog> {
     // Değişiklik yoksa (aynı nesne) mesaj gösterilmez.
     if (identical(result, detail)) return;
     _apply(result, 'Kişi bilgileri güncellendi.');
+  }
+
+  Future<void> _openAccountDialog() async {
+    final detail = _detail;
+    if (detail == null) return;
+    final res = await PersonAccountDialog.show(
+      context,
+      siteCode: widget.scope.siteCode,
+      personId: detail.id,
+      personName: detail.fullName,
+      initialEmail: detail.email,
+      hasAccount: detail.hasAccount,
+      authService: widget.scope.authService,
+    );
+    if (res != null) {
+      widget.onChanged?.call();
+      _load();
+    }
+  }
+
+  Future<void> _directResetPin() async {
+    final detail = _detail;
+    if (detail == null) return;
+    final confirmed = await confirmCrmAction(
+      context,
+      title: 'Geçici Şifre / PIN Sıfırlansın mı?',
+      message:
+          '${detail.fullName} kişisinin geçici şifresi sıfırlansın mı?\n\nYeni bir geçici şifre (PIN) üretilecek ve sakine iletmeniz için ekranda gösterilecektir.',
+      confirmLabel: 'Şifreyi Sıfırla',
+      icon: Icons.lock_reset_rounded,
+      tone: AppTone.warning,
+    );
+    if (!confirmed || !mounted) return;
+
+    try {
+      final res = await widget.scope.authService.resetPersonPinDirect(
+        widget.scope.siteCode,
+        detail.id,
+      );
+      if (!mounted) return;
+      widget.onChanged?.call();
+      _load();
+      await AccountCredentialsIssuedDialog.show(
+        context,
+        personName: detail.fullName,
+        loginName: res['login_name']?.toString() ?? detail.fullName,
+        password: res['pin_code']?.toString() ?? '1234',
+        isNew: false,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      AppSnack.show(
+        context,
+        crmMessageOf(e, 'Geçici şifre sıfırlanamadı.'),
+        kind: AppSnackKind.error,
+      );
+    }
   }
 
   Future<void> _addResidency() async {
@@ -375,6 +433,55 @@ class _PersonCardDialogState extends State<PersonCardDialog> {
             ],
           ),
         ),
+        if (_canWrite) ...[
+          const SizedBox(height: AppSpace.md),
+          DialogPanel(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const DialogSectionTitle(
+                  icon: Icons.key_rounded,
+                  title: 'Uygulama Giriş Hesabı',
+                ),
+                const SizedBox(height: AppSpace.md),
+                if (!detail.hasAccount) ...[
+                  Text(
+                    'Bu kişinin henüz mobil/web giriş hesabı bulunmuyor.',
+                    style: th.bodyMedium?.copyWith(color: p.textSecondary),
+                  ),
+                  const SizedBox(height: AppSpace.md),
+                  PrimaryActionButton(
+                    label: 'Hesap Tanımla (Kullanıcı Adı ve Şifre Ver)',
+                    icon: Icons.key_rounded,
+                    onPressed: _openAccountDialog,
+                  ),
+                ] else ...[
+                  Wrap(
+                    spacing: AppSpace.md,
+                    runSpacing: AppSpace.sm,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      const StatusChip(
+                        label: 'Giriş Hesabı Aktif',
+                        tone: AppTone.success,
+                        icon: Icons.verified_user_rounded,
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: _directResetPin,
+                        icon: const Icon(Icons.lock_reset_rounded, size: 16),
+                        label: const Text('Geçici Şifre / PIN Sıfırla'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.orange.shade800,
+                          side: BorderSide(color: Colors.orange.shade300),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
         const SizedBox(height: AppSpace.md),
         // Roller (tanıtımdaki beş rol tek yerde): yalnız yönetim yetkisi olana; kurul üyesi salt okur.
         if (_canWrite) ...[

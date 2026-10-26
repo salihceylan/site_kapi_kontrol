@@ -51,6 +51,8 @@ class ApartmentHouseholdSection extends StatefulWidget {
     super.key,
     required this.controller,
     this.onOpenPerson,
+    this.onProvisionAccount,
+    this.onResetPin,
     this.initiallyExpanded = false,
   });
 
@@ -58,6 +60,12 @@ class ApartmentHouseholdSection extends StatefulWidget {
 
   /// Kişi kartını açar (kişi numarası olan satırlarda).
   final Future<void> Function(HouseholdPerson person)? onOpenPerson;
+
+  /// Kişiye hesap tanımlar (kullanıcı adı ve geçici şifre).
+  final Future<void> Function(HouseholdPerson person)? onProvisionAccount;
+
+  /// Kişinin geçici şifresini / PIN'ini sıfırlar.
+  final Future<void> Function(HouseholdPerson person)? onResetPin;
 
   /// Aile üyeleri akordiyonu ilk çizimde açık mı (varsayılan kapalı).
   final bool initiallyExpanded;
@@ -178,6 +186,8 @@ class _ApartmentHouseholdSectionState extends State<ApartmentHouseholdSection> {
             person: absent,
             detailed: detailed,
             onTap: widget.onOpenPerson == null || absent.personId == null ? null : () => _open(absent),
+            onProvisionAccount: widget.onProvisionAccount == null || absent.personId == null ? null : () => widget.onProvisionAccount!(absent),
+            onResetPin: widget.onResetPin == null || absent.personId == null ? null : () => widget.onResetPin!(absent),
           ),
         ],
         const SizedBox(height: AppSpace.sm),
@@ -276,12 +286,16 @@ class _PersonRow extends StatelessWidget {
     required this.detailed,
     this.isAdminRow = false,
     this.onTap,
+    this.onProvisionAccount,
+    this.onResetPin,
   });
 
   final HouseholdPerson person;
   final bool detailed;
   final bool isAdminRow;
   final VoidCallback? onTap;
+  final VoidCallback? onProvisionAccount;
+  final VoidCallback? onResetPin;
 
   @override
   Widget build(BuildContext context) {

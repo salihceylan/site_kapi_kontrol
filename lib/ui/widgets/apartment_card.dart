@@ -26,6 +26,8 @@ class ApartmentCard extends StatefulWidget {
     this.onDelete,
     this.householdLoader,
     this.onOpenHouseholdPerson,
+    this.onProvisionHouseholdPersonAccount,
+    this.onResetHouseholdPersonPin,
     this.onOpenApartmentCard,
   });
 
@@ -47,6 +49,12 @@ class ApartmentCard extends StatefulWidget {
 
   /// Kişi satırına dokunma: kişi kartını açar (dönünce liste yenilenir).
   final Future<void> Function(HouseholdPerson person)? onOpenHouseholdPerson;
+
+  /// Kişiye hesap tanımlar (kullanıcı adı ve geçici şifre).
+  final Future<void> Function(HouseholdPerson person)? onProvisionHouseholdPersonAccount;
+
+  /// Kişinin geçici şifresini / PIN'ini sıfırlar.
+  final Future<void> Function(HouseholdPerson person)? onResetHouseholdPersonPin;
 
   /// "Daire kartı": daire adminini değiştir, kapı erişimi (askıya alma), adli kayıt, geçmiş gibi işlerin penceresi.
   final Future<void> Function()? onOpenApartmentCard;

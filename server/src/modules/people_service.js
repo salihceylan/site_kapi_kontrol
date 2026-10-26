@@ -7,10 +7,11 @@
 //  - Yazma işlemleri site bazlı advisory kilit altında (eşitleme ile aynı anahtar) tek transaction'da yapılır.
 
 import { pool } from '../db.js';
-import { sendIssuedApartmentPin, provisionApartmentResident } from '../services/apartment_service.js';
+import { sendIssuedApartmentPin, provisionApartmentResident, ensureUniqueLoginName } from '../services/apartment_service.js';
+import { hashPassword } from '../security/password_hashing.js';
 import { rotateTokensForSite } from '../services/local_token_service.js';
 import { cleanupDoorOverridesIfNoMembership, handOverApartmentResident } from '../services/membership_service.js';
-import { generateApartmentPin } from '../utils/helpers.js';
+import { generateApartmentPin, generateInternalApartmentEmail } from '../utils/helpers.js';
 import { actorFromAuthUser, recordAudit } from './audit_service.js';
 import { PlatformError } from './errors.js';
 import {
@@ -1381,6 +1382,258 @@ export async function endResidency({ siteCode, residencyId, body = {}, actor, in
 }
 
 // Daire yönetimi (apartment_mgmt_service.js) AYNI site kilidi, ilişki ve erişim kapatma kurallarını yeniden kullanır (kopya yok).
+
+function slugifyLoginName(fullName, fallback = 'kullanici') {
+  if (!fullName || typeof fullName !== 'string') return fallback;
+  const trMap = {
+    'ç': 'c', 'Ç': 'c', 'ğ': 'g', 'Ğ': 'g', 'ı': 'i', 'I': 'i', 'İ': 'i',
+    'ö': 'o', 'Ö': 'o', 'ş': 's', 'Ş': 's', 'ü': 'u', 'Ü': 'u',
+  };
+  let clean = fullName.replace(/[çÇğĞıIİöÖşŞüÜ]/g, (m) => trMap[m] || m).toLowerCase();
+  clean = clean.replace(/[^a-z0-9]+/g, '.').replace(/^\.+|\.+$/g, '').replace(/\.+/g, '.');
+  return clean || fallback;
+}
+
+/**
+ * Site yöneticisi tarafından bir kişiye (site_people) kullanıcı hesabı (kullanıcı adı ve şifre) tanımlanması.
+ * Kişinin hesabı yoksa users'ta yeni hesap açar, site_people'a bağlar ve varsa dairesine daire adminliği verir.
+ * Kişinin zaten hesabı varsa şifresini ve (verildiyse) kullanıcı adını günceller.
+ */
+export async function provisionPersonAccount({
+  siteCode,
+  personId,
+  loginName = null,
+  password = null,
+  email = null,
+  actor,
+}) {
+  const id = parsePositiveId(personId);
+  if (id === null) throw PERSON_NOT_FOUND();
+
+  return await withSiteTransaction(siteCode, async (client) => {
+    const found = await client.query(
+      `
+        SELECT sp.id, sp.site_code, sp.user_code, sp.full_name, sp.phone, sp.email, sp.is_active,
+               u.login_name, u.email AS account_email
+        FROM site_people sp
+        LEFT JOIN users u ON u.user_code = sp.user_code
+        WHERE sp.id = $1 AND sp.site_code = $2
+        FOR UPDATE OF sp
+      `,
+      [id, siteCode],
+    );
+    const person = found.rows?.[0];
+    if (!person) throw PERSON_NOT_FOUND();
+
+    // 1. Kişinin zaten kullanıcı hesabı varsa: şifresini ve istenirse kullanıcı adını güncelle
+    if (person.user_code != null) {
+      let finalLoginName = person.login_name;
+      if (loginName && loginName.trim() && loginName.trim().toLowerCase() !== (person.login_name || '').toLowerCase()) {
+        finalLoginName = await ensureUniqueLoginName({
+          db: client,
+          desiredLoginName: loginName.trim().toLowerCase(),
+          siteCode,
+          excludeUserCode: person.user_code,
+        });
+      }
+      const rawPassword = (password && String(password).trim().length > 0)
+        ? String(password).trim()
+        : '1234';
+      const passwordHash = await hashPassword(rawPassword);
+
+      await client.query(
+        `
+          UPDATE users
+          SET password_hash = $1,
+              login_name = COALESCE($2, login_name),
+              must_change_password = TRUE,
+              updated_at = NOW()
+          WHERE user_code = $3
+        `,
+        [passwordHash, finalLoginName, person.user_code],
+      );
+
+      await audit(client, actor, 'person.account_password_reset', siteCode, 'person', id, {
+        user_code: person.user_code,
+        login_name: finalLoginName,
+      });
+
+      return {
+        ok: true,
+        user_code: Number(person.user_code),
+        login_name: finalLoginName,
+        temp_password: rawPassword,
+        is_new: false,
+      };
+    }
+
+    // 2. Kişinin hesabı yoksa (hesapsız): Yeni kullanıcı hesabı oluştur
+    const personFullName = (person.full_name || '').trim();
+    const candidateName = (loginName && loginName.trim().length > 0)
+      ? loginName.trim().toLowerCase()
+      : (personFullName ? slugifyLoginName(personFullName) : `sakin.${id}`);
+
+    const finalLoginName = await ensureUniqueLoginName({
+      db: client,
+      desiredLoginName: candidateName,
+      siteCode,
+    });
+
+    const rawPassword = (password && String(password).trim().length > 0)
+      ? String(password).trim()
+      : '1234';
+    const passwordHash = await hashPassword(rawPassword);
+
+    const internalEmail = generateInternalApartmentEmail({
+      loginName: finalLoginName,
+      apartmentId: id,
+      siteCode,
+    });
+    const userEmail = (email && email.trim() && !email.trim().endsWith('@ahbu.local'))
+      ? email.trim()
+      : (person.email && !person.email.endsWith('@ahbu.local') ? person.email : internalEmail);
+
+    const userInsert = await client.query(
+      `
+        INSERT INTO users (
+          full_name,
+          email,
+          phone_number,
+          login_name,
+          password_hash,
+          role,
+          must_change_password,
+          is_active,
+          email_verified,
+          approval_status
+        ) VALUES (
+          $1, $2, $3, $4, $5, 'APARTMENT_ADMIN', TRUE, TRUE, TRUE, 'approved'
+        ) RETURNING user_code
+      `,
+      [
+        personFullName || 'Daire Sakini',
+        userEmail,
+        person.phone || null,
+        finalLoginName,
+        passwordHash,
+      ],
+    );
+    const newUserCode = Number(userInsert.rows[0].user_code);
+
+    // site_people kaydını hesaba bağla (CRM kuralları gereği ad/telefon/email users'tan okunacağı için temizlenir)
+    await client.query(
+      `
+        UPDATE site_people
+        SET user_code = $1, full_name = NULL, phone = NULL, email = NULL, updated_at = NOW()
+        WHERE id = $2
+      `,
+      [newUserCode, id],
+    );
+
+    // Kişinin aktif daire ilişkileri varsa daire adminliği ve üyelik bağla
+    const currentApts = await client.query(
+      `
+        SELECT ar.apartment_id, a.resident_user_code
+        FROM apartment_residencies ar
+        JOIN apartments a ON a.id = ar.apartment_id
+        WHERE ar.person_id = $1 AND ar.is_current = TRUE
+      `,
+      [id],
+    );
+
+    for (const apt of currentApts.rows) {
+      await client.query(
+        `
+          INSERT INTO apartment_memberships (apartment_id, user_code, role, is_active)
+          VALUES ($1, $2, 'APARTMENT_ADMIN', TRUE)
+          ON CONFLICT (apartment_id, user_code) DO UPDATE SET is_active = TRUE
+        `,
+        [apt.apartment_id, newUserCode],
+      );
+      if (apt.resident_user_code == null) {
+        await client.query(
+          `
+            UPDATE apartments
+            SET resident_user_code = $1, resident_pin_issued = TRUE, is_active = TRUE
+            WHERE id = $2
+          `,
+          [newUserCode, apt.apartment_id],
+        );
+      }
+    }
+
+    await audit(client, actor, 'person.account_created', siteCode, 'person', id, {
+      user_code: newUserCode,
+      login_name: finalLoginName,
+    });
+
+    return {
+      ok: true,
+      user_code: newUserCode,
+      login_name: finalLoginName,
+      temp_password: rawPassword,
+      is_new: true,
+    };
+  });
+}
+
+/**
+ * Kişinin geçici şifresini / PIN kodunu doğrudan sıfırlayıp ekranda yöneticinin sakine vermesi için döndürür.
+ */
+export async function resetPersonPinDirect({
+  siteCode,
+  personId,
+  actor,
+}) {
+  const id = parsePositiveId(personId);
+  if (id === null) throw PERSON_NOT_FOUND();
+
+  return await withSiteTransaction(siteCode, async (client) => {
+    const found = await client.query(
+      `
+        SELECT sp.id, sp.user_code, u.login_name
+        FROM site_people sp
+        LEFT JOIN users u ON u.user_code = sp.user_code
+        WHERE sp.id = $1 AND sp.site_code = $2
+        FOR UPDATE OF sp
+      `,
+      [id, siteCode],
+    );
+    const person = found.rows?.[0];
+    if (!person) throw PERSON_NOT_FOUND();
+    if (!person.user_code) {
+      const err = new Error('Bu kişinin henüz bir hesabı bulunmuyor. Önce hesap tanımlayın.');
+      err.statusCode = 400;
+      throw err;
+    }
+
+    const pinCode = generateApartmentPin();
+    const passwordHash = await hashPassword(pinCode);
+
+    await client.query(
+      `
+        UPDATE users
+        SET password_hash = $1,
+            must_change_password = TRUE,
+            updated_at = NOW()
+        WHERE user_code = $2
+      `,
+      [passwordHash, person.user_code],
+    );
+
+    await audit(client, actor, 'person.pin_reset', siteCode, 'person', id, {
+      user_code: person.user_code,
+      login_name: person.login_name,
+    });
+
+    return {
+      ok: true,
+      pin_code: pinCode,
+      login_name: person.login_name,
+    };
+  });
+}
+
 export {
   afterAccessClosed,
   assertRelationAvailable,

@@ -13,6 +13,8 @@ import {
   addResidency,
   createPerson,
   parsePersonCreateInput,
+  provisionPersonAccount,
+  resetPersonPinDirect,
   updatePerson,
   updateResidency,
 } from '../src/modules/people_service.js';
@@ -982,5 +984,67 @@ describe('araclar', () => {
     handlers.length = 0;
     handlers.push([/^SELECT id, plate, person_id FROM vehicles WHERE id = \$1 AND site_code = \$2 AND is_active = TRUE FOR UPDATE$/, () => ok()]);
     await assert.rejects(() => removeVehicle({ siteCode: SITE, vehicleId: 4, actor }), (e) => e.code === 'VEHICLE_NOT_FOUND' && e.statusCode === 404);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// provisionPersonAccount and resetPersonPinDirect
+// ---------------------------------------------------------------------------
+
+describe('provisionPersonAccount and resetPersonPinDirect', () => {
+  it('provisionPersonAccount: hesapsiz kisiye yeni hesap acar, site_people baglar ve APARTMENT_ADMIN yapar', async () => {
+    const personLock = /SELECT sp\.id, sp\.site_code, sp\.user_code, sp\.full_name/;
+    const loginCheck = /SELECT user_code FROM users WHERE LOWER\(login_name\) = LOWER/;
+    const userInsert = /INSERT INTO users/;
+    const updatePersonSql = /UPDATE site_people SET user_code =/;
+    const currentApts = /SELECT ar\.apartment_id, a\.resident_user_code/;
+    const aptMembership = /INSERT INTO apartment_memberships/;
+    const updateApt = /UPDATE apartments SET resident_user_code =/;
+
+    handlers.push(
+      [personLock, () => ok([{ id: '5', site_code: SITE, user_code: null, full_name: 'Salih Ceylan', phone: '05551112233', email: null, is_active: true }])],
+      [loginCheck, () => ok([])],
+      [userInsert, () => ok([{ user_code: '44001' }])],
+      [updatePersonSql, () => ok()],
+      [currentApts, () => ok([{ apartment_id: '9', resident_user_code: null }])],
+      [aptMembership, () => ok()],
+      [updateApt, () => ok()],
+    );
+
+    const res = await provisionPersonAccount({
+      siteCode: SITE,
+      personId: 5,
+      loginName: 'salih.ceylan',
+      password: 'custompassword',
+      actor,
+    });
+
+    assert.equal(res.ok, true);
+    assert.equal(res.user_code, 44001);
+    assert.equal(res.login_name, 'salih.ceylan');
+    assert.equal(res.temp_password, 'custompassword');
+    assert.equal(res.is_new, true);
+    assert.deepEqual(auditActions(), ['person.account_created']);
+  });
+
+  it('resetPersonPinDirect: hesapli kisinin PIN kodunu sifirlar', async () => {
+    const personLock = /SELECT sp\.id, sp\.user_code, u\.login_name/;
+    const userUpdate = /UPDATE users SET password_hash =/;
+
+    handlers.push(
+      [personLock, () => ok([{ id: '5', user_code: 44001, login_name: 'salih.ceylan' }])],
+      [userUpdate, () => ok()],
+    );
+
+    const res = await resetPersonPinDirect({
+      siteCode: SITE,
+      personId: 5,
+      actor,
+    });
+
+    assert.equal(res.ok, true);
+    assert.equal(res.login_name, 'salih.ceylan');
+    assert.ok(typeof res.pin_code === 'string' && res.pin_code.length >= 4);
+    assert.deepEqual(auditActions(), ['person.pin_reset']);
   });
 });
