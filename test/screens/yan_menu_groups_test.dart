@@ -158,16 +158,30 @@ void main() {
     });
 
     testWidgets('rozet korunur; gizli öğe (fail-closed) ve boşalan başlığı çizilmez', (t) async {
+      // "Yeni Site Oluştur" her rolde Site hizmetleri başlığındadır: Kapılar tek başına gizlenince başlık KALIR.
       await _pump(
         t,
         drawer: _menu(
           extras: const <SirketMenuItem>{SirketMenuItem.kapilar, SirketMenuItem.duyurular},
           hidden: const <SirketMenuItem>{SirketMenuItem.kapilar},
+        ),
+      );
+      expect(_tile(SirketMenuItem.kapilar), findsNothing);
+      expect(_tile(SirketMenuItem.yeniSite), findsOneWidget);
+      expect(_header(SirketMenuGroup.siteHizmetleri), findsOneWidget, reason: 'grupta öğe kaldı: başlık durur');
+
+      // Grubun TÜM öğeleri gizliyse başlık da çizilmez.
+      await _pump(
+        t,
+        drawer: _menu(
+          extras: const <SirketMenuItem>{SirketMenuItem.kapilar, SirketMenuItem.duyurular},
+          hidden: const <SirketMenuItem>{SirketMenuItem.kapilar, SirketMenuItem.yeniSite},
           badges: const <SirketMenuItem, int>{SirketMenuItem.duyurular: 3},
         ),
       );
       expect(_tile(SirketMenuItem.kapilar), findsNothing);
-      expect(_header(SirketMenuGroup.siteHizmetleri), findsNothing, reason: 'tek öğesi gizli: başlık da yok');
+      expect(_tile(SirketMenuItem.yeniSite), findsNothing);
+      expect(_header(SirketMenuGroup.siteHizmetleri), findsNothing, reason: 'tüm öğeleri gizli: başlık da yok');
       final badge = find.descendant(
         of: _tile(SirketMenuItem.duyurular),
         matching: find.byKey(const ValueKey<String>('yan_menu_rozet')),

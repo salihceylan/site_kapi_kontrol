@@ -202,7 +202,7 @@ void main() {
       await _openEdit(t, 'heat.measured_share_pct');
       await t.enterText(find.byKey(_dialogValue), '60');
       await t.pump();
-      expect(_inDialog(find.text('Isınma gideri: alana göre pay: %40 (toplam 100).')), findsOneWidget);
+      expect(_inDialog(find.text('Isınma gideri: alan payı: %40 (toplam 100).')), findsOneWidget);
       final date = find.byKey(const ValueKey<String>('rule_dialog_date'));
       expect(_text(t, const ValueKey<String>('rule_dialog_date')), '21.10.2026');
       await t.enterText(date, '20.10.2026');

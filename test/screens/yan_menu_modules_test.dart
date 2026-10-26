@@ -97,11 +97,19 @@ List<String> _titles(WidgetTester t) {
 
 void main() {
   group('yeni öğeler ve sayılar', () {
-    testWidgets('süper kullanıcı: 18 öğe = çekmecede 5 + Ayarlar panelinde 13; Kişiler Site Yönetimi\'nin altında; panelde Modül Talepleri Modüller\'in, Site Başvuruları Modül Talepleri\'nin altında; sonda Denetim Kaydı, Platform Ayarları, İstemci Hataları', (t) async {
-      expect(YanMenu.visibleItems(role: UserRole.superUser), hasLength(18));
+    testWidgets('süper kullanıcı: 19 öğe = çekmecede 6 + Ayarlar panelinde 13; Kişiler Site Yönetimi\'nin altında; panelde Modül Talepleri Modüller\'in, Site Başvuruları Modül Talepleri\'nin altında; sonda Denetim Kaydı, Platform Ayarları, İstemci Hataları', (t) async {
+      expect(YanMenu.visibleItems(role: UserRole.superUser), hasLength(19));
       await _pumpMenu(t, UserRole.superUser, height: 1200);
       final drawer = _titles(t);
-      expect(drawer, <String>['Panel', 'Daire Sakinleri', 'Site Yönetimi', 'Kişiler', 'Daireye Katıl', 'Çıkış Yap']);
+      expect(drawer, <String>[
+        'Panel',
+        'Daire Sakinleri',
+        'Site Yönetimi',
+        'Kişiler',
+        'Daireye Katıl',
+        'Yeni Site Oluştur',
+        'Çıkış Yap',
+      ]);
       expect(drawer.indexOf('Kişiler'), drawer.indexOf('Site Yönetimi') + 1);
 
       await _pumpSettings(t, UserRole.superUser, height: 1200);
@@ -115,26 +123,26 @@ void main() {
       expect(settings.last, 'İstemci Hataları');
     });
 
-    testWidgets('site yöneticisi (yönetici modu): 8 öğe, Kişiler ve Modüller var; Denetim Kaydı ve Modül Talepleri YOK', (t) async {
+    testWidgets('site yöneticisi (yönetici modu): 9 öğe, Kişiler ve Modüller var; Denetim Kaydı ve Modül Talepleri YOK', (t) async {
       await _pumpMenu(t, UserRole.siteManager, toggle: true, height: 1200);
       final titles = _titles(t);
       expect(titles, contains('Kişiler'));
       expect(titles.indexOf('Kişiler'), titles.indexOf('Site Yönetimi') + 1);
-      expect(titles, hasLength(1 + 4 + 1), reason: 'mod geçişi + çekmecedeki 4 öğe + çıkış');
+      expect(titles, hasLength(1 + 5 + 1), reason: 'mod geçişi + çekmecedeki 5 öğe + çıkış');
       await _pumpSettings(t, UserRole.siteManager, toggle: true, height: 1200);
       final settings = _titles(t);
       expect(settings, <String>['Profilim', 'Modüller', 'Kayıtlı Cihazlar', 'Bluetooth ile Wi-Fi Kur']);
       expect(settings, isNot(contains('Denetim Kaydı')));
       expect(settings, isNot(contains('Modül Talepleri')));
-      expect(titles.length - 2 + settings.length, 8, reason: 'toplam 8 öğe');
+      expect(titles.length - 2 + settings.length, 9, reason: 'toplam 9 öğe');
     });
 
     testWidgets('site yöneticisi sakin modu, daire kullanıcısı, bireysel: Modüller/Denetim Kaydı YOK', (t) async {
       for (final (role, resident, toggle, count) in <(UserRole, bool, bool, int)>[
-        (UserRole.siteManager, true, true, 4),
-        (UserRole.apartmentOwner, false, false, 4),
-        (UserRole.individual, false, false, 3),
-        (UserRole.individual, false, true, 6),
+        (UserRole.siteManager, true, true, 5),
+        (UserRole.apartmentOwner, false, false, 5),
+        (UserRole.individual, false, false, 4),
+        (UserRole.individual, false, true, 7),
       ]) {
         await _pumpMenu(t, role, resident: resident, toggle: toggle, height: 1200);
         final drawer = _titles(t);
@@ -268,7 +276,7 @@ void main() {
         hidden: doorControlMenuItems,
       );
       final titles = _titles(t);
-      expect(titles, <String>['Panel', 'Daireye Katıl', 'Çıkış Yap']);
+      expect(titles, <String>['Panel', 'Daireye Katıl', 'Yeni Site Oluştur', 'Çıkış Yap']);
       await _pumpSettings(t, UserRole.apartmentOwner, hidden: doorControlMenuItems);
       expect(_titles(t), isNot(contains('Eller Serbest & Kestirmeler')));
       expect(_titles(t), <String>['Profilim']);

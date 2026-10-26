@@ -407,6 +407,7 @@ void main() {
     const d = SirketMenuGroup.daireler;
     const b = SirketMenuGroup.borclar;
     const i = SirketMenuGroup.iletisim;
+    // "Yeni Site Oluştur" her rolde Site hizmetleri başlığındadır: kapı / modül kapalı olsa da başlık görünür.
     const h = SirketMenuGroup.siteHizmetleri;
 
     final cases = <(String, UserRole, List<MySiteModules> Function(), bool, List<DoorRecord>?, List<SirketMenuGroup>)>[
@@ -416,15 +417,15 @@ void main() {
       ('site yöneticisi, Finans açık', UserRole.siteManager, () => <MySiteModules>[_my('manager', modules: {'finance': true})],
           false, null, <SirketMenuGroup>[a, d, b, i, h]),
       ('site yöneticisi, Geçiş Kontrol kapalı ve modül yok', UserRole.siteManager,
-          () => <MySiteModules>[_my('manager', door: false)], false, null, <SirketMenuGroup>[a, d, i]),
+          () => <MySiteModules>[_my('manager', door: false)], false, null, <SirketMenuGroup>[a, d, i, h]),
       ('daire sakini, kapı + Finans + Belgeler + İş Takibi', UserRole.apartmentOwner,
           () => <MySiteModules>[_my('resident', modules: {'finance': true, 'documents': true, 'work_tracking': true})], false,
           null, <SirketMenuGroup>[a, d, b, i, h]),
       ('daire sakini, Geçiş Kontrol kapalı, modül yok', UserRole.apartmentOwner,
-          () => <MySiteModules>[_my('resident', door: false)], false, null, <SirketMenuGroup>[a, d, i]),
+          () => <MySiteModules>[_my('resident', door: false)], false, null, <SirketMenuGroup>[a, d, i, h]),
       ('yalnız görevli bağı (kapısız), İş Takibi açık', UserRole.apartmentOwner,
           () => <MySiteModules>[_my('staff', modules: {'work_tracking': true})], false, const <DoorRecord>[],
-          <SirketMenuGroup>[a, d, i]),
+          <SirketMenuGroup>[a, d, i, h]),
       ('bireysel kullanıcı', UserRole.individual, () => const <MySiteModules>[], false, null, <SirketMenuGroup>[a, d, h]),
     ];
     for (final (label, role, sites, superUser, doors, expected) in cases) {

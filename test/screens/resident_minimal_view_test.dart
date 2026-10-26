@@ -250,6 +250,7 @@ void main() {
       expect(titles(t), <String>[
         'Panel',
         'Daireye Katıl',
+        'Yeni Site Oluştur',
         'Çıkış Yap',
       ]);
     });
@@ -309,6 +310,7 @@ void main() {
         'Duyurular',
         'Kapılar',
         'Kapıya QR Göster',
+        'Yeni Site Oluştur',
         'Çıkış Yap',
       ]);
       final doors = t.getRect(find.widgetWithText(ListTile, 'Kapılar'));

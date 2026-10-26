@@ -17,6 +17,12 @@ import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 bool canApplyForSite(UserRole? role) =>
     role == UserRole.individual || role == UserRole.apartmentOwner || role == UserRole.siteManager;
 
+/// "Site başvurunuz onaylandı" kartı ve "Hesabı yenile" eylemi yalnız hesabı HENÜZ site yöneticisine yükselmemiş rollerde
+/// (bireysel / daire kullanıcısı) anlamlıdır. Site yöneticisinde (ek başvurusu onaylanmış ya da onayla yöneticiliğe
+/// yükselmiş hesap) "hesabınız güncelleniyor" kartı yanıltır; orada yalnız bekleyen / reddedilen / iptal kartları çıkar.
+bool showsApprovedApplicationCard(UserRole? role) =>
+    role == UserRole.individual || role == UserRole.apartmentOwner;
+
 /// Başvuru durumu (`GET .../mine`) izlenen roller: süper kullanıcı hariç tüm roller.
 bool tracksSiteApplications(UserRole? role) =>
     role != UserRole.superUser;

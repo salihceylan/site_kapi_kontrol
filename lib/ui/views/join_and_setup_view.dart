@@ -171,7 +171,7 @@ class _JoinAndSetupViewState extends State<JoinAndSetupView> {
                     tracker: widget.applications!,
                     onReapply: _openApplicationForm,
                     onRefreshAccount: widget.onRefreshAccount,
-                    showApproved: canApplyForSite(widget.session.role),
+                    showApproved: showsApprovedApplicationCard(widget.session.role),
                     showLoadFailure: canApplyForSite(widget.session.role),
                     showReapplyOnRejected: true,
                   ),

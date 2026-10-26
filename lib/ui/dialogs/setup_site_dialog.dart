@@ -642,20 +642,24 @@ class _SetupSiteDialogState extends State<SetupSiteDialog> {
         children: [
           header,
           const Divider(height: 1),
-          // Form İçeriği
+          // Form İçeriği. Form'un altı (Padding > Column > alanlar) iki düzende AYNI olmalıdır: klavye açılınca
+          // `scrollAll` düzenine geçilir ve Form (GlobalKey) yeni yerine taşınır; altındaki tür değişirse alanlar
+          // yeniden kurulur, odak düşer, klavye kapanır ve düzen geri döner (klavye açılıp kapanır, yazılamaz).
           Expanded(
-            child: Form(
-              key: _formKey,
-              // Düzeltilen alanın hatası kendiliğinden kalkar (yalnız gönderimde değil).
-              autovalidateMode: AutovalidateMode.onUserInteraction,
-              child: SingleChildScrollView(
-                padding: formPadding,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: _fieldChildren(
-                    context,
-                    compactHeader: compactHeader,
-                    subtitle: subtitle,
+            child: SingleChildScrollView(
+              child: Form(
+                key: _formKey,
+                // Düzeltilen alanın hatası kendiliğinden kalkar (yalnız gönderimde değil).
+                autovalidateMode: AutovalidateMode.onUserInteraction,
+                child: Padding(
+                  padding: formPadding,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: _fieldChildren(
+                      context,
+                      compactHeader: compactHeader,
+                      subtitle: subtitle,
+                    ),
                   ),
                 ),
               ),

@@ -6,7 +6,9 @@ import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/services/site_application_tracker.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+import 'package:site_kapi_kontrol/ui/helpers/site_application_flow.dart';
 import 'package:site_kapi_kontrol/ui/widgets/setup_option_card.dart';
+import 'package:site_kapi_kontrol/ui/widgets/site_application_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/site_application_status_card.dart';
 
 /// Yeni Site Oluşturma Görünümü (Site Hizmetleri menüsü altındadır).
@@ -29,6 +31,47 @@ class YeniSiteView extends StatelessWidget {
   final VoidCallback onStartSetup;
   final SiteApplicationTracker? tracker;
   final Future<void> Function()? onRefreshAccount;
+
+  /// Başlatma düğmesi. [tracker] verilmişse (başvuru akışındaki roller) düğme, durum biliniyor ve bekleyen başvuru
+  /// yokken etkindir; bekleyen başvuru varken, durum kontrol edilirken ya da ALINAMADIYKEN pasiftir ve nedeni ipucunda
+  /// yazılıdır (sunucuya gidip 409 almaz; [SiteApplyCta] ile aynı kural). [tracker] yoksa (süper kullanıcı) hep etkin.
+  Widget _startAction(String readyLabel) {
+    Widget button(String label, IconData icon, VoidCallback? onPressed) => ElevatedButton.icon(
+      key: const ValueKey<String>('yeni_site_start'),
+      onPressed: onPressed,
+      icon: Icon(icon, size: 20),
+      label: Text(label, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w700)),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: AppTone.primary.a,
+        foregroundColor: Colors.white,
+        padding: const EdgeInsets.symmetric(horizontal: AppSpace.lg, vertical: 14),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    );
+    final tracker = this.tracker;
+    if (tracker == null) {
+      return button(readyLabel, Icons.add_circle_outline_rounded, onStartSetup);
+    }
+    return ListenableBuilder(
+      listenable: tracker,
+      builder: (context, _) {
+        final availability = tracker.applyAvailability;
+        final reason = siteApplyDisabledReason(availability);
+        final (IconData icon, String label) = switch (availability) {
+          SiteApplyAvailability.ready => (Icons.add_circle_outline_rounded, readyLabel),
+          SiteApplyAvailability.pending => (Icons.hourglass_top_rounded, 'Başvurunuz İnceleniyor'),
+          SiteApplyAvailability.checking => (Icons.sync_rounded, 'Durum Kontrol Ediliyor...'),
+          SiteApplyAvailability.unknown => (Icons.sync_problem_rounded, 'Başvuru Durumu Alınamadı'),
+        };
+        final built = button(label, icon, reason == null ? onStartSetup : null);
+        if (reason == null) return built;
+        return Tooltip(
+          message: reason,
+          child: Semantics(hint: reason, child: built),
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -53,7 +96,7 @@ class YeniSiteView extends StatelessWidget {
                     tracker: tracker!,
                     onReapply: (_) async => onStartSetup(),
                     onRefreshAccount: onRefreshAccount,
-                    showApproved: true,
+                    showApproved: showsApprovedApplicationCard(session.role),
                     showLoadFailure: true,
                     showReapplyOnRejected: true,
                   ),
@@ -67,26 +110,10 @@ class YeniSiteView extends StatelessWidget {
                 description: isManagerOrSuper
                     ? 'Yeni bir site, blok ve kapı yapısını anında tanımlayarak dijital site yönetimini hemen başlatın.'
                     : 'Sitenizi, bloğunuzu ve tahmini daire sayılarınızı tanımlayarak site oluşturma başvurusunu başlatın. Başvurunuz onaylandığında sitenizin yöneticisi olursunuz.',
-                action: ElevatedButton.icon(
-                  onPressed: onStartSetup,
-                  icon: const Icon(Icons.add_circle_outline_rounded, size: 20),
-                  label: Text(
-                    isManagerOrSuper
-                        ? 'Site Kurulum Sihirbazını Başlat'
-                        : 'Site Oluşturma Başvurusu Yap',
-                    style: const TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTone.primary.a,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpace.lg,
-                      vertical: 14,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
+                action: _startAction(
+                  isManagerOrSuper
+                      ? 'Site Kurulum Sihirbazını Başlat'
+                      : 'Site Oluşturma Başvurusu Yap',
                 ),
               ),
 

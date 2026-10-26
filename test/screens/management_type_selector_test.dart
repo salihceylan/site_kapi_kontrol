@@ -197,7 +197,8 @@ void main() {
       final auth = _SetupAuth();
       await openDialogAt(
         t,
-        (context) => SetupSiteDialog.show(context, authService: auth),
+        // Oturumsuz sahte servis BAŞVURU kipine düşer (yalnız süper kullanıcı anlık kurar): sihirbaz kipi açıkça istenir.
+        (context) => SetupSiteDialog.show(context, authService: auth, mode: SetupSiteMode.instant),
         width: 400,
         height: 1400,
         scale: 1.0,

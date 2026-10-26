@@ -797,10 +797,12 @@ void main() {
           'Site Yönetimi',
           'Kişiler',
           'Daireye Katıl',
+          'Yeni Site Oluştur',
           'Çıkış Yap',
         ]);
         expect(find.text('Ana sayfa'), findsOneWidget);
         expect(find.text('Daireler'), findsOneWidget);
+        expect(find.text('Site hizmetleri'), findsOneWidget);
         expect(find.text('Borçlar'), findsNothing, reason: 'öğesi olmayan başlık görünmez');
         for (final settings in const <String>['Profilim', 'Modüller', 'Kayıtlı Cihazlar', 'Bluetooth ile Wi-Fi Kur']) {
           expect(find.text(settings), findsNothing, reason: '$settings Ayarlar panelinde');

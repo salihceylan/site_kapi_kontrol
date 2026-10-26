@@ -12,6 +12,7 @@ import 'package:site_kapi_kontrol/ui/helpers/date_input.dart';
 import 'package:site_kapi_kontrol/ui/helpers/finance_errors.dart';
 import 'package:site_kapi_kontrol/ui/helpers/module_showcase.dart';
 import 'package:site_kapi_kontrol/ui/helpers/money.dart';
+import 'package:site_kapi_kontrol/ui/helpers/site_application_flow.dart';
 import 'package:site_kapi_kontrol/ui/widgets/site_application_status_card.dart';
 import 'package:site_kapi_kontrol/ui/widgets/yan_menu.dart';
 
@@ -91,7 +92,8 @@ class ModuleShowcaseView extends StatefulWidget {
   final Future<void> Function(SiteApplication previous)? onReapply;
   final Future<void> Function()? onRefreshAccount;
 
-  /// Rol her zaman başvuran mı (bireysel / daire kullanıcısı)? Onaylandı kartı ve yükleme hatası yalnız o zaman çıkar.
+  /// Rol her zaman başvuran mı (bireysel / daire kullanıcısı / site yöneticisi)? Yükleme hatası yalnız o zaman çıkar;
+  /// onaylandı kartı ayrıca rolün henüz yöneticiye yükselmemiş olmasını ister ([showsApprovedApplicationCard]).
   final bool applicantRole;
 
   /// Sakin hero kartının hemen altı (örn. "Yeni duyuru" kartı).
@@ -235,8 +237,8 @@ class ModuleShowcaseViewState extends State<ModuleShowcaseView> {
         SiteApplicationStatusCard(
           tracker: widget.applications!,
           onReapply: widget.onReapply!,
-          onRefreshAccount: widget.applicantRole ? widget.onRefreshAccount : null,
-          showApproved: widget.applicantRole,
+          onRefreshAccount: widget.applicantRole && showsApprovedApplicationCard(role) ? widget.onRefreshAccount : null,
+          showApproved: widget.applicantRole && showsApprovedApplicationCard(role),
           showLoadFailure: widget.applicantRole,
         ),
       if (focus.isNotEmpty) ...[

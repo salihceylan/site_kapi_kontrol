@@ -1,8 +1,9 @@
 // Kişiler ekranındaki toplu yükleme / dışa aktarma giriş noktaları (Platform Faz 2b).
 //
 // Düğmeler yalnız yazma yetkisi olanda (site yöneticisi / süper kullanıcı) görünür; kurul GÖRMEZ. Sihirbaz
-// kapanınca görünen sekme yeniden çekilir, diğerleri bayatlar; «Kişilere git» sekmeye geçirir. Boş Kişiler
-// listesinde «Excel'den yükle» sihirbazı Kişiler önseçili açar.
+// kapanınca görünen sekme yeniden çekilir, diğerleri bayatlar; «Kişilere git» / «Araçlara git» sekmeye geçirir.
+// Boş Kişiler listesinde «Excel'den yükle» sihirbazı «Hepsi bir arada» önseçili açar. Bu girişte seçilebilen
+// türler yalnız «Hepsi bir arada» ve «Araçlar»dır (Daireler / Kişiler klasik listeden kaldırıldı).
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:site_kapi_kontrol/models/bulk_import.dart';
@@ -16,12 +17,22 @@ import 'package:site_kapi_kontrol/ui/widgets/bulk_export_sheet.dart';
 import 'package:site_kapi_kontrol/services/bulk_file_picker.dart';
 
 import '../bulk_fakes.dart';
+import '../bulk_test_support.dart' show specJson;
 import 'dialog_layout_harness.dart' show settleFor;
 import 'list_fixtures.dart';
 import 'people_fixtures.dart';
 
+/// Sahte sunucu şeması: gerçek sunucudaki gibi «all_in_one» türü de vardır (Kişiler sütunlarıyla).
+ImportSpec _spec() {
+  final json = specJson();
+  final kinds = Map<String, dynamic>.from(json['kinds'] as Map);
+  kinds['all_in_one'] = Map<String, dynamic>.from(kinds['people'] as Map);
+  json['kinds'] = kinds;
+  return ImportSpec.fromJson(json);
+}
+
 class _Bulk {
-  final FakeBulkApi api = FakeBulkApi();
+  final FakeBulkApi api = FakeBulkApi()..spec = _spec();
   final FakeDelivery delivery = FakeDelivery();
   String fileName = 'kisiler.csv';
   String csv = kPeopleCsv;
@@ -164,7 +175,7 @@ void main() {
       final people0 = auth.peopleCalls.length;
       final apts0 = auth.apartmentCalls.length;
       await _tap(t, 'people_bulk_import');
-      await _tap(t, 'bulk_kind_people');
+      await _tap(t, 'bulk_kind_all_in_one');
       await _tap(t, 'bulk_kind_continue');
       await _tap(t, 'bulk_pick_file');
       await t.pump();
@@ -180,33 +191,34 @@ void main() {
       expect(auth.apartmentCalls.length, greaterThan(apts0), reason: 'bayat sekme açılınca yenilenir');
     });
 
-    testWidgets('«Dairelere git» Daireler sekmesine geçirir', (t) async {
+    testWidgets('«Araçlara git» Araçlar sekmesine geçirir', (t) async {
       final bulk = _Bulk()
-        ..csv = 'Blok;Daire No;Tip\nA;1;3+1\n'
-        ..fileName = 'daireler.csv'
+        ..csv = 'Plaka;Blok;Daire No\n34 ABC 123;A;1\n'
+        ..fileName = 'araclar.csv'
         ..install();
       final auth = PeopleFakeAuth.seeded();
       await _pump(t, auth);
       await _tap(t, 'people_bulk_import');
-      await _tap(t, 'bulk_kind_apartments');
+      expect(find.byKey(const ValueKey<String>('bulk_kind_apartments')), findsNothing, reason: 'Daireler klasik listede yok');
+      expect(find.byKey(const ValueKey<String>('bulk_kind_people')), findsNothing, reason: 'Kişiler klasik listede yok');
+      await _tap(t, 'bulk_kind_vehicles');
       await _tap(t, 'bulk_kind_continue');
       await _tap(t, 'bulk_pick_file');
       await t.pump();
       await _tap(t, 'bulk_mapping_continue');
       await t.pump();
       await _tap(t, 'bulk_commit');
-      await t.tap(find.byKey(const ValueKey<String>('bulk_confirm_submit')));
-      await settleFor(t, 400);
-      expect(bulk.api.commitCalls.single.kind, ImportKind.apartments);
+      await _ackAndSubmit(t);
+      expect(bulk.api.commitCalls.single.kind, ImportKind.vehicles);
       await _tap(t, 'bulk_result_go');
-      expect(auth.apartmentCalls, isNotEmpty);
-      final chip = t.widget<ChoiceChip>(find.byKey(const ValueKey<String>('people_tab_1')));
+      expect(auth.vehicleCalls, isNotEmpty);
+      final chip = t.widget<ChoiceChip>(find.byKey(const ValueKey<String>('people_tab_2')));
       expect(chip.selected, isTrue);
     });
   });
 
   group('boş liste kısayolu', () {
-    testWidgets('boş Kişiler: «Excel\'den yükle» sihirbazı Kişiler önseçili açar', (t) async {
+    testWidgets('boş Kişiler: «Excel\'den yükle» sihirbazı «Hepsi bir arada» önseçili açar', (t) async {
       _Bulk().install();
       final auth = PeopleFakeAuth();
       await _pump(t, auth);

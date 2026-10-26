@@ -113,6 +113,7 @@ void main() {
         'Duyurular',
         'Borcum',
         'Daireye Katıl',
+        'Yeni Site Oluştur',
         'Eller Serbest & Kestirmeler',
         'Profilim',
       ]);

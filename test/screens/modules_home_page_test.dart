@@ -1103,8 +1103,8 @@ void main() {
       expect(find.byKey(const ValueKey<String>('panel_kart_kapilar')), findsNothing);
       expect(find.byType(IndividualHomeView), findsOneWidget);
       expect(find.text('Site Sakini Olarak Devam Et'), findsOneWidget);
-      // Site başvurusu akışı: cihaz sahiplenmek yönetici yapmaz; "Site Kurmak İçin Başvur" birincil eylemdir.
-      expect(find.text('Site Kurmak İçin Başvur'), findsOneWidget);
+      // Site başvurusu artık bu ekranda değil: çekmecedeki "Yeni Site Oluştur" (Site hizmetleri) altındadır.
+      expect(find.text('Site Kurmak İçin Başvur'), findsNothing, reason: 'site kurma girişi Yeni Site Oluştur ekranında');
       expect(find.text('Cihaz Ekle'), findsNothing, reason: 'cihazı yalnız site yöneticisi ekler');
       expect(find.byType(DoorControlDisabledCard), findsOneWidget);
       expect(find.text('Modüller Ekranını Aç'), findsNothing);

@@ -138,7 +138,9 @@ void main() {
       );
       await settleFor(t);
       expect(find.text('Sunucu yanıt vermedi, tekrar deneyin.'), findsOneWidget);
-      expect(find.text('Tekrar Dene'), findsOneWidget);
+      // Profildeki öteki bölümler (ör. "Aramalarda Görünme") kendi yüklemelerini yapar ve kendi "Tekrar Dene"sini çizer:
+      // bu test yalnız "Kayıtlarım" bölümünün hata durumunu sınar.
+      expect(find.descendant(of: find.byType(MyRecordsSection), matching: find.text('Tekrar Dene')), findsOneWidget);
       expect(find.textContaining('Henüz size ait bir kayıt'), findsNothing);
     });
 

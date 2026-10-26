@@ -564,8 +564,8 @@ export async function resendIndividualVerificationCode({ email }) {
  * Sahiplenme ATOMİKTİR: `UPDATE devices ... WHERE id = $ AND owner_user_id IS NULL RETURNING`
  * (0 satır -> başka biri sahiplenmiş -> 409).
  *
- * YETKİ (docs/PLATFORM_MODUL_SISTEMI.md "Cihaz ekleme kuralı"): yalnız süper kullanıcı ya da Geçiş Kontrol (door_control) modülü açık bir
- * sitenin yöneticisi cihaz ekleyebilir; diğer herkese 403 DEVICE_ADD_FORBIDDEN. Kapı açma / MQTT / mevcut cihaz kayıtları etkilenmez.
+ * YETKİ (docs/PLATFORM_MODUL_SISTEMI.md "Cihaz ekleme kuralı"): yalnız süper kullanıcı ya da Geçiş Kontrol (door_control) modülü açıkça kapatılmamış
+ * (satırı yoksa izin; yeni sitede modül kapalıdır, cihaz kapıya bağlanınca açılır) bir sitenin yöneticisi cihaz ekleyebilir; diğer herkese 403 DEVICE_ADD_FORBIDDEN. Kapı açma / MQTT / mevcut cihaz kayıtları etkilenmez.
  *
  * ROL DEĞİŞMEZ (ürün kararı, docs/PLATFORM_SITE_BASVURUSU.md): cihaz sahiplenmek kişiyi site yöneticisi YAPMAZ. Eskiden bireysel /
  * daire sahibi kullanıcı sahiplenmede anında site_manager olurdu; artık yönetici olmanın tek yolu site BAŞVURUSU + süper kullanıcı
@@ -599,7 +599,7 @@ export async function claimDevice({ userCode, deviceInput }) {
     }
 
     // Cihaz ekleme yetkisi (cihaz sorgusundan ÖNCE: yetkisiz kullanıcıya cihazın varlığı/sahipliği sızmaz): yalnız süper kullanıcı ya da
-    // Geçiş Kontrol (door_control) modülü AÇIK bir sitenin yöneticisi. Sakin, bireysel, kurul ve görevli ekleyemez (403).
+    // Geçiş Kontrol (door_control) modülü açıkça KAPATILMAMIŞ bir sitenin yöneticisi. Sakin, bireysel, kurul ve görevli ekleyemez (403).
     if (user.role !== 'super_user') {
       const allowedRes = await client.query(SQL_MANAGED_SITE_WITH_DOOR_CONTROL, [user.user_code]);
       if (allowedRes.rowCount === 0) {

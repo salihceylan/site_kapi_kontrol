@@ -23,6 +23,7 @@ const Map<SirketMenuItem, SirketMenuGroup> _expected = <SirketMenuItem, SirketMe
   SirketMenuItem.anketler: SirketMenuGroup.iletisim,
   SirketMenuItem.anket: SirketMenuGroup.iletisim,
   SirketMenuItem.komsuPanosu: SirketMenuGroup.iletisim,
+  SirketMenuItem.yeniSite: SirketMenuGroup.siteHizmetleri,
   SirketMenuItem.kapilar: SirketMenuGroup.siteHizmetleri,
   SirketMenuItem.belgeler: SirketMenuGroup.siteHizmetleri,
   SirketMenuItem.rezervasyonlar: SirketMenuGroup.siteHizmetleri,
@@ -81,13 +82,15 @@ void main() {
       }
     });
 
-    test('"Site hizmetleri" karar G2 listesidir (kapı, ziyaretçi ve kargo, rezervasyon, sözleşme, karar defteri, belge)',
+    test(
+        '"Site hizmetleri" karar G2 listesidir (kapı, ziyaretçi ve kargo, rezervasyon, sözleşme, karar defteri, belge, yeni site)',
         () {
       final services = <SirketMenuItem>{
         for (final item in SirketMenuItem.values)
           if (menuGroupOf(item) == SirketMenuGroup.siteHizmetleri) item,
       };
       expect(services, <SirketMenuItem>{
+        SirketMenuItem.yeniSite,
         SirketMenuItem.kapilar,
         SirketMenuItem.ziyaretciKayitlari,
         SirketMenuItem.ziyaretcilerim,

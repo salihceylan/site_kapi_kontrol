@@ -116,6 +116,7 @@ void main() {
       expect(await _pumpMenu(t, UserRole.apartmentOwner), <String>[
         'Panel',
         'Daireye Katıl',
+        'Yeni Site Oluştur',
         'Çıkış Yap',
       ]);
     });

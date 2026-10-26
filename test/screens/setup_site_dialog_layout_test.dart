@@ -62,8 +62,13 @@ Future<void> _open(
   required bool dark,
 }) => openDialogAt(
   t,
-  (context) =>
-      SetupSiteDialog.show(context, authService: auth, deviceUid: deviceUid),
+  // Oturumsuz sahte servis artık BAŞVURU kipine düşer (yalnız süper kullanıcı anlık kurar): sihirbaz kipi açıkça istenir.
+  (context) => SetupSiteDialog.show(
+    context,
+    authService: auth,
+    deviceUid: deviceUid,
+    mode: SetupSiteMode.instant,
+  ),
   width: width,
   height: height,
   scale: scale,
@@ -218,4 +223,40 @@ void main() {
       expect(t.takeException(), isNull);
     },
   );
+
+  // Klavye açılınca kullanılabilir yükseklik eşiğin altına düşer ve pencere "hepsi kaydırılır" düzenine geçer. Alanlar
+  // bu geçişte yeniden kurulursa odak düşer, klavye kapanır, düzen geri döner: telefonda klavye açılıp kapanır, yazılamaz.
+  for (final mode in SetupSiteMode.values) {
+    testWidgets('SetupSiteDialog (${mode.name}): klavye açılıp düzen değişince site adı alanı odağı korur', (t) async {
+      await openDialogAt(
+        t,
+        (context) => SetupSiteDialog.show(context, authService: _FakeAuth(), mode: mode),
+        width: 360,
+        height: 800,
+        scale: 1.0,
+        dark: false,
+      );
+      final nameField = find.ancestor(of: find.text('Site Adı *'), matching: find.byType(TextField));
+      expect(nameField, findsOneWidget);
+      await t.showKeyboard(nameField);
+      await t.pump();
+
+      // Telefon klavyesi (~320 dp): 800 - 320 - kenar boşlukları < eşik.
+      t.view.viewInsets = const FakeViewPadding(bottom: 320);
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 300));
+
+      final editable = t.widget<EditableText>(find.descendant(of: nameField, matching: find.byType(EditableText)));
+      expect(editable.focusNode.hasFocus, isTrue, reason: 'odak düşerse klavye kapanır');
+      expect(t.takeException(), isNull);
+
+      // Klavye kapanınca (geri düzene dönüş) da odak korunur.
+      t.view.viewInsets = FakeViewPadding.zero;
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 300));
+      final after = t.widget<EditableText>(find.descendant(of: nameField, matching: find.byType(EditableText)));
+      expect(after.focusNode.hasFocus, isTrue);
+      expect(t.takeException(), isNull);
+    });
+  }
 }

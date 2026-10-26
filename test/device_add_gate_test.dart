@@ -1,4 +1,4 @@
-// Cihaz ekleme kuralı: yalnız süper kullanıcı ya da Geçiş Kontrol (door_control) modülü AÇIK sitenin yöneticisi.
+// Cihaz ekleme kuralı (istemci): süper kullanıcı ve site yöneticisi; sakin, bireysel, kurul ve görevli ekleyemez.
 import 'package:flutter_test/flutter_test.dart';
 import 'package:site_kapi_kontrol/models/platform_module.dart';
 import 'package:site_kapi_kontrol/models/user_role.dart';
@@ -24,17 +24,19 @@ void main() {
     expect(canAddDevice(role: UserRole.superUser, access: access), isTrue);
   });
 
-  test('site yöneticisi: door_control AÇIK bir sitesi varsa ekler; hepsinde kapalıysa ekleyemez', () async {
+  // 2bf1bd4: Geçiş Kontrol yeni sitede varsayılan KAPALI; cihaz kapıya bağlanınca açılır. Bu yüzden istemci modül durumuna
+  // bakmaz. Süper kullanıcının modülü AÇIKÇA kapattığı sitede sunucu 403 DEVICE_ADD_FORBIDDEN ile son kapıdır.
+  test('site yöneticisi: Geçiş Kontrol kapalı (yeni site varsayılanı) olsa da ekler', () async {
     final open = await _access([_site(1, 'manager', doorControl: false), _site(2, 'manager', doorControl: true)]);
     expect(canAddDevice(role: UserRole.siteManager, access: open), isTrue);
     final closed = await _access([_site(1, 'manager', doorControl: false)]);
-    expect(canAddDevice(role: UserRole.siteManager, access: closed), isFalse);
+    expect(canAddDevice(role: UserRole.siteManager, access: closed), isTrue);
   });
 
-  test('site seçici kapsamı: yalnız seçili site değerlendirilir', () async {
+  test('site seçici kapsamı: seçili sitenin modül durumu yöneticinin ekleme hakkını değiştirmez', () async {
     final access = await _access([_site(1, 'manager', doorControl: false), _site(2, 'manager', doorControl: true)]);
     access.setScopeSiteCode(1);
-    expect(canAddDevice(role: UserRole.siteManager, access: access), isFalse);
+    expect(canAddDevice(role: UserRole.siteManager, access: access), isTrue);
     access.setScopeSiteCode(2);
     expect(canAddDevice(role: UserRole.siteManager, access: access), isTrue);
   });

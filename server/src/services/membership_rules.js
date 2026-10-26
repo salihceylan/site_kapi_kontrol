@@ -287,8 +287,8 @@ export const SQL_CLAIM_DEVICE_ATOMIC = `
 
 /**
  * Cihaz ekleme (sahiplenme) kuralı: cihazı YALNIZ süper kullanıcı ya da en az bir sitenin yöneticisi (site_manager_sites ya da aktif
- * SITE_OWNER / SITE_ADMIN üyeliği) ekleyebilir; o sitenin Geçiş Kontrol (door_control) modülü AÇIK olmalıdır (satır yoksa katalog
- * varsayılanı AÇIK). Sakin, bireysel kullanıcı, kurul ve görevli ekleyemez. $1 = users.user_code. Satır dönerse izin vardır.
+ * SITE_OWNER / SITE_ADMIN üyeliği) ekleyebilir; o sitede Geçiş Kontrol (door_control) süper kullanıcıca AÇIKÇA kapatılmamış olmalıdır
+ * (satır yoksa izin: katalog varsayılanı kapalı olsa da yeni sitede cihaz eklenir, kapıya bağlanınca modül açılır). Sakin, bireysel kullanıcı, kurul ve görevli ekleyemez. $1 = users.user_code. Satır dönerse izin vardır.
  */
 export const SQL_MANAGED_SITE_WITH_DOOR_CONTROL = `
   SELECT s.site_code

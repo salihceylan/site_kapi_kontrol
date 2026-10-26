@@ -86,6 +86,7 @@ void main() {
         'Panel',
         'Kişiler',
         'Daireye Katıl',
+        'Yeni Site Oluştur',
         'Eller Serbest & Kestirmeler',
         'Profilim',
       ]);
@@ -137,6 +138,7 @@ void main() {
       expect(plain, <String>[
         'Panel',
         'Daireye Katıl',
+        'Yeni Site Oluştur',
         'Eller Serbest & Kestirmeler',
         'Profilim',
       ]);

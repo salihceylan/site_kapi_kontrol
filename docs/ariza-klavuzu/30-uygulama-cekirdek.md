@@ -1649,7 +1649,7 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 200 --nostrea
 | [lib/data/turkey_cities_districts.dart:1146](../../lib/data/turkey_cities_districts.dart#L1146) | <code>List&lt;String&gt; getDistrictsForCity(String? city) {</code> | İl adı haritada birebir yoksa BOŞ liste döner (örn. "Istanbul" yazımı "İstanbul" ile eşleşmez) |
 | [lib/data/turkey_cities_districts.dart:1140](../../lib/data/turkey_cities_districts.dart#L1140) | <code>List&lt;String&gt; get turkeyCityNames {</code> | İl adları alfabetik sıralanır (Dart varsayılan sıralaması: Türkçe harf sırası değildir) |
 | [lib/ui/dialogs/site_dialog.dart:365](../../lib/ui/dialogs/site_dialog.dart#L365) | <code>turkeyCityNames.contains(_selectedCity)</code> | Kayıtlı il listede yoksa (yazım farkı) seçim BOŞ görünür |
-| [lib/ui/dialogs/setup_site_dialog.dart:730](../../lib/ui/dialogs/setup_site_dialog.dart#L730) | <code>final cities = turkeyCitiesAndDistricts.keys.toList();</code> | Kurulum diyaloğu listeyi doğrudan haritadan alır |
+| [lib/ui/dialogs/setup_site_dialog.dart:734](../../lib/ui/dialogs/setup_site_dialog.dart#L734) | <code>final cities = turkeyCitiesAndDistricts.keys.toList();</code> | Kurulum diyaloğu listeyi doğrudan haritadan alır |
 
 **Olası nedenler**
 - Sitede kayıtlı il/ilçe adı listedeki yazımla birebir değil (ör. eski/ASCII yazım): seçili görünmez, ilçe listesi boş olur

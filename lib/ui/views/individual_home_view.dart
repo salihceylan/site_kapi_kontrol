@@ -744,9 +744,8 @@ class IndividualHomeViewState extends State<IndividualHomeView>
               tracker: widget.applications!,
               onReapply: _openApplicationForm,
               onRefreshAccount: widget.onRefreshAccount,
-              // Onaylandı kartı ve durum-alınamadı hatası yalnız her zaman başvuran olan rollerde; yönetici
-              // panosunda (başvuru gerekli mi belirsiz) sessiz kalır.
-              showApproved: canApplyForSite(widget.session.role),
+              // Onaylandı kartı yalnız henüz yöneticiye yükselmemiş rollerde; durum-alınamadı hatası her başvuran rolde.
+              showApproved: showsApprovedApplicationCard(widget.session.role),
               showLoadFailure: canApplyForSite(widget.session.role),
             ),
 

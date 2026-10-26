@@ -1,8 +1,8 @@
 // Site başvurusu formunda Veri İşleme Sözleşmesi (dpa) onayı (SetupSiteDialog, başvuru kipi).
 //
 // Belgeler yüklenmeden / kutu işaretlenmeden "Başvuruyu Gönder" kapalıdır ve nedeni yazılıdır; gönderimde
-// accepted_documents:[{id:dpa,version}] yollanır; anlık kurulumda (yönetici / süper kullanıcı) kutu ve ağ
-// çağrısı yoktur.
+// accepted_documents:[{id:dpa,version}] yollanır; anlık kurulumda (yalnız süper kullanıcı) kutu ve ağ
+// çağrısı yoktur. Site yöneticisi de BAŞVURU yapar (süper kullanıcı onayı), dolayısıyla kutuyu görür.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:site_kapi_kontrol/models/user_role.dart';
@@ -160,13 +160,22 @@ void main() {
       expect(_button(t).onPressed, isNull);
     });
 
-    testWidgets('anlık kurulum (site yöneticisi): kutu yok, belge uçları çağrılmaz, gönderme açık', (t) async {
+    testWidgets('anlık kurulum (süper kullanıcı): kutu yok, belge uçları çağrılmaz, gönderme açık', (t) async {
       final server = FakeLegalServer();
-      final auth = SiteApplicationFakeAuth(role: UserRole.siteManager);
+      final auth = SiteApplicationFakeAuth(role: UserRole.superUser);
       await _open(t, auth, server);
       expect(find.byType(Checkbox), findsNothing);
       expect(server.requests, isEmpty);
       expect(_button(t).onPressed, isNotNull);
+    });
+
+    testWidgets('site yöneticisi de başvuru yapar: kutu görünür, işaretsizken gönderme kapalı', (t) async {
+      final server = FakeLegalServer();
+      final auth = SiteApplicationFakeAuth(role: UserRole.siteManager);
+      await _open(t, auth, server);
+      await scrollTo(t, find.byType(Checkbox));
+      expect(find.byType(Checkbox), findsOneWidget);
+      expect(_button(t).onPressed, isNull);
     });
 
     for (final (w, h, s) in const <(double, double, double)>[

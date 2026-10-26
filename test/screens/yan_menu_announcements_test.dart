@@ -90,12 +90,14 @@ void main() {
       expect(_listTitles(UserRole.apartmentOwner), <String>[
         'Panel',
         'Daireye Katıl',
+        'Yeni Site Oluştur',
         'Eller Serbest & Kestirmeler',
         'Profilim',
       ]);
       expect(await _pumpMenu(t, UserRole.apartmentOwner), <String>[
         'Panel',
         'Daireye Katıl',
+        'Yeni Site Oluştur',
         'Çıkış Yap',
       ]);
     });
@@ -117,6 +119,7 @@ void main() {
         'Panel',
         'Daireye Katıl',
         'Duyurular',
+        'Yeni Site Oluştur',
         'Çıkış Yap',
       ]);
       _expectUnderHeader(t, 'Duyurular', 'İletişim');
@@ -157,7 +160,7 @@ void main() {
         ).take(3).toList(),
         <String>['Panel', 'Kişiler', 'Duyurular'],
       );
-      expect(titles, <String>['Panel', 'Kişiler', 'Daireye Katıl', 'Duyurular', 'Çıkış Yap']);
+      expect(titles, <String>['Panel', 'Kişiler', 'Daireye Katıl', 'Duyurular', 'Yeni Site Oluştur', 'Çıkış Yap']);
     });
 
     testWidgets('sakin modundaki site yöneticisi: Duyurular eklenir (kişiler rol listesinde yok)', (t) async {
