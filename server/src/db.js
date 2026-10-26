@@ -1244,9 +1244,7 @@ export async function ensureDbSchema() {
 
       -- 3. Daire alanları (hepsi isteğe bağlı; borç ve bildirim tarafı varsayılan "ikisi de").
       ALTER TABLE apartments ADD COLUMN IF NOT EXISTS floor INTEGER;
-      -- gross_area_m2 / net_area_m2: kod artik KULLANMAZ ama bu surumde DUSURULMEZ (surum geri alinirsa eski kod bekler); sonraki surumde ayri migration ile dusurulecek (bkz. 077).
-      ALTER TABLE apartments ADD COLUMN IF NOT EXISTS gross_area_m2 NUMERIC(8,2);
-      ALTER TABLE apartments ADD COLUMN IF NOT EXISTS net_area_m2 NUMERIC(8,2);
+      -- Daire m2 sutunlari (brut / net) ARTIK EKLENMEZ: m2 sistemden kaldirildi; var olan sutunlari 078 dusurur (asagida ensureIntegritySchema, katalog kontrollu).
       ALTER TABLE apartments ADD COLUMN IF NOT EXISTS land_share_numerator INTEGER;
       ALTER TABLE apartments ADD COLUMN IF NOT EXISTS land_share_denominator INTEGER;
       ALTER TABLE apartments ADD COLUMN IF NOT EXISTS category TEXT;
@@ -1975,6 +1973,8 @@ export async function ensureDbSchema() {
     // eski idx_sites_unique_name / idx_site_applications_pending_unique_name yenileri kurulunca duser; mukerrer ad varsa kurulmaz, acilista loglanir),
     // user_oauth_identities / web_push_subscriptions -> users(user_code) FK (CASCADE; yetimler silinir) ve users.must_change_password (katalog kontrollu):
     // dev blokta DEGIL; her sey varsa hicbir ifade gonderilmez (integrity_schema.js = migrations/077). oauth (076) ve push (063) tablolarindan SONRA.
+    // 078 (daire m2 sutunlarinin kalici dusurulmesi): ayni cagri, ayni katalog sorgusu; apartments tablosundaki brut / net m2 sutunlari VARSA tek ALTER ile dusurulur
+    // (yoksa hicbir ifade / kilit yok); canlidaki geri alma hedefi bu sutunlari hic okumadigindan geri alma icin guvenlidir (integrity_schema.js = migrations/078).
     await ensureIntegritySchema(client);
 
     // 031 people_v1: mevcut sakinlerin CRM'e tek seferlik aktarimi. Savunmaci: hata sunucunun acilmasini ENGELLEMEZ

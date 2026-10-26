@@ -1,8 +1,8 @@
 ---
 id: dpa
 title: Veri İşleme Sözleşmesi
-version: 2026-10-19
-effective_date: 2026-10-19
+version: 2026-10-26
+effective_date: 2026-10-26
 required_for: [site_application]
 complete: false   # köşeli [KARAR/BİLGİ GEREKLİ ...] ve [AVUKAT DOĞRULASIN ...] işaretleri çözülünce bu satır silinir
 ---
@@ -54,7 +54,7 @@ Bu Sözleşme, kişisel verileri kendi amaçları doğrultusunda işleyen site, 
 
 **3.1 Talimat.** Güde, Site Verisini yalnızca Site Yönetiminin talimatları doğrultusunda işler. Platformun kullanımı ve ayarları Talimat sayılır. Güde, bir talimatın mevzuata aykırı olduğunu düşünürse Site Yönetimini bilgilendirir ve gerekli düzeltme yapılana kadar o talimatı uygulamayabilir.
 
-**3.2 Gizlilik.** Güde, Site Verisine erişen personelini gizlilik yükümlülüğü altına alır ve erişimi görevleri için gerekli olanla sınırlar. Güde'nin yetkili personelinin sitelere teknik erişimi yalnızca destek, bakım, güvenlik ve site başvurusu değerlendirmesi amacıyla kullanılır. Personelin değiştirme işlemleri denetim kaydına yazılır; salt görüntüleme erişimi ayrıca kaydedilmez. [KARAR/BİLGİ GEREKLİ: personel için yazılı gizlilik taahhüdü var mı; görüntüleme erişimlerinin kaydı geliştirilecek mi]
+**3.2 Gizlilik.** Güde, Site Verisine erişen personelini gizlilik yükümlülüğü altına alır ve erişimi görevleri için gerekli olanla sınırlar. Güde'nin yetkili personelinin sitelere teknik erişimi yalnızca destek, bakım, güvenlik ve site başvurusu değerlendirmesi amacıyla kullanılır. Personelin sitelerde yaptığı değiştirme işlemlerinin büyük bölümü denetim kaydına yazılır: kullanıcı hesabı oluşturma, güncelleme, rol ve etkinlik değişiklikleri ile silme; site oluşturma, onaylama, bilgi değişikliği ve silme; site yöneticisi ekleme, davet etme ve çıkarma; katılım başvurusu kararları; kapı özel izinleri; daire hesabı tanımlama, sıfırlama ve PIN sıfırlama; cihaz sahipliğini sıfırlama; modül açma ve kapatma ile modül talepleri, ek rol atama ve kaldırma, finans işlemleri, kişi, daire, daire ilişkisi ve araç değişiklikleri, belge, duyuru, sözleşme ve anket işlemleri, site başvurusu kararları, toplu yükleme. Cihaz tanımlama ve kapıya cihaz atama gibi bazı teknik bakım işlemleri denetim kaydına yazılmaz; salt görüntüleme erişimi genel olarak ayrıca kaydedilmez. [KARAR/BİLGİ GEREKLİ: personel için yazılı gizlilik taahhüdü var mı; görüntüleme erişimlerinin kaydı geliştirilecek mi]
 
 **3.3 Güvenlik.** Güde, Kanun'un 12. maddesi uyarınca Site Verisinin hukuka aykırı işlenmesini ve erişilmesini önlemek ve muhafazasını sağlamak için Ek-2'de sayılan teknik ve idari tedbirleri uygular. Veri sorumlusu ve veri işleyen, bu tedbirlerin alınmasından Kanun'un 12. maddesi uyarınca müştereken sorumludur.
 
@@ -121,7 +121,7 @@ Site başvurusunu yapan (veya Platformda siteyi oluşturan) kişi, bu Sözleşme
 - Rezervasyon ve konsiyerj: ortak alan, tarih ve saat dilimi, durum, sakinin notu, yönetimin onay/ret gerekçesi ve notu; konsiyerj talep türü, not, istenen zaman, durum ve yönetimin notu; kaydı yapan ve işlem yapan hesaplar.
 - Firma ve sözleşme: hizmet alınan firmanın adı, kategorisi, yetkili kişinin adı, telefonu ve e-postası, vergi numarası, not; sözleşme başlığı, başlangıç ve bitiş tarihleri, tutar ve dönemi, otomatik yenileme ve fesih bildirim süresi, durum; kaydı oluşturan ve güncelleyen yönetici; bitiş hatırlatmalarının gönderim kaydı.
 - Karar defteri: toplantı türü ve tarihi, karar başlığı ve metni, katılanlar, oy sonucu ve oy sayıları, sakinlere açık olup olmadığı, karar numarası, kararı yazan ve kesinleştiren yönetici. Bu kayıt noter onaylı karar defterinin yerine geçmez.
-- Denetim: yönetim işlemlerinin kaydı (kim, ne zaman, hangi işlem); ayrıntı alanında hesabı olmayan kişinin eski ve yeni adı, araç plakası, silinen dairenin geçmiş sakinlerinin adları, ilişki türleri ve tarihleri bulunabilir.
+- Denetim: başlıca yönetim işlemlerinin kaydı (kim, ne zaman, hangi işlem); ayrıntı alanında hesabı olmayan kişinin eski ve yeni adı, araç plakası, silinen dairenin geçmiş sakinlerinin adları, ilişki türleri ve tarihleri bulunabilir.
 
 Özel nitelikli kişisel verilerin işlenmesi amaçlanmaz; serbest metin alanlarına bu tür veri girilmemelidir.
 
@@ -131,7 +131,7 @@ Site başvurusunu yapan (veya Platformda siteyi oluşturan) kişi, bu Sözleşme
 - Parolalar geri döndürülemez özet (bcrypt) olarak saklanır; e-posta doğrulama kodları ve parola sıfırlama belirteçleri özet olarak saklanır. Daire hesabı PIN'leri de yalnızca özet olarak saklanır; Site Yönetimi PIN'i yalnızca oluşturma veya sıfırlama anında bir kez görür; sakin şifresini kendisi belirlemişse Site Yönetimi PIN'i sıfırlayamaz; yalnızca platform işleticisi sıfırlayabilir (denetim kaydına yazılır). Sıfırlama denetim kaydına PIN olmadan yazılır ve hesabın misafir geçişlerini, kapı karekodlarını ve telefon bildirimi kayıtlarını kapatır.
 - İmzalı ve süreli oturum belirteçleri (belirteç kullanıcı kodu, parola sürümü ve süre taşır); parola değişince eski oturumların geçersiz olması; hatalı giriş denemelerinin sınırlandırılması ve geçici kilit; imzalı giriş cihazı belirteci; istek hız sınırlaması.
 - Rol ve site bazlı erişim denetimi: yönetici yalnızca kendi sitesini yönetir, kurul üyesi salt okur, görevli kişi listesi ve finans kayıtlarını göremez, sakin yalnızca kendi kayıtlarını ve aynı dairedeki üyelerin iletişim bilgisini görür.
-- Yönetim değiştirme işlemleri için denetim kaydı; salt görüntüleme erişimi ayrıca kaydedilmez.
+- Yönetim değiştirme işlemlerinin büyük bölümü için denetim kaydı (kullanıcı hesabı ve rol değişiklikleri, site oluşturma, onay ve silme, site yöneticisi ekleme, davet ve çıkarma, katılım başvurusu kararları, kapı özel izinleri, daire hesabı işlemleri, modül, ek rol, finans, kişi, daire ve araç, belge, duyuru, sözleşme, anket, site başvurusu ve toplu yükleme işlemleri; ayrıca hesap silme ve veri dışa aktarma). Bu kayıtların ayrıntısına parola, PIN ve hesap işlemlerinde ad, e-posta veya telefon yazılmaz. Cihaz tanımlama ve kapıya cihaz atama gibi bazı teknik bakım işlemleri yazılmaz; salt görüntüleme erişimi genel olarak ayrıca kaydedilmez.
 - Finans defterinin, makbuzların, giderlerin ve kasa ve banka hareketlerinin veritabanı düzeyinde değiştirilemez ve silinemez olması (site silinince defter de silinir); düzeltmelerin ters kayıtla yapılması.
 - Belge dosyalarının veritabanı dışında, yalnızca sunucu hesabına açık dizin ve dosya izinleriyle tutulması; dosya türünün içerikten doğrulanması, boyut ve kota sınırı, yetki denetimli ve doğrudan açılmayan indirme. Dosyalar uygulama düzeyinde şifrelenmez.
 - Telefon bildirimlerinde ayrıntısız metin (finansal ve kişisel ayrıntı yok), kullanıcı bazında kapatılabilme ve cihaz kaydının çıkışta, hesap silmede ve hareketsizlikte silinmesi.

@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:site_kapi_kontrol/models/access_audit_label.dart' show accessAuditActionLabel;
 import 'package:site_kapi_kontrol/models/announcement.dart';
 import 'package:site_kapi_kontrol/models/contract_models.dart' show contractActionLabel;
 import 'package:site_kapi_kontrol/models/decision_models.dart' show decisionBookActionLabel;
@@ -63,10 +64,26 @@ class AuditLogEntry {
     'budget': 'İşletme Projesi',
   };
 
+  /// Rol kodlarının Türkçe adları: ek roller (`staff_role.*`), hesap / site rolleri (`user.*`, `site_manager.*`) ve
+  /// katılım başvurusunda verilen daire rolü (`join_request.*`). Bilinmeyen kod olduğu gibi gösterilir.
   static const Map<String, String> _staffRoleNames = <String, String>{
     'BOARD_MEMBER': 'Yönetim Kurulu / Denetçi',
     'STAFF': 'Görevli',
+    'SITE_OWNER': 'Site Sahibi',
+    'SITE_ADMIN': 'Site Yöneticisi',
+    'APARTMENT_ADMIN': 'Daire Yöneticisi',
+    'FAMILY_MEMBER': 'Aile Üyesi',
+    'super_user': 'Süper Kullanıcı',
+    'site_manager': 'Site Yöneticisi',
+    'apartment_owner': 'Daire Sakini',
+    'individual': 'Bireysel Kullanıcı',
   };
+
+  String? _roleName(Object? code) {
+    final text = code?.toString();
+    if (text == null || text.isEmpty) return null;
+    return _staffRoleNames[text] ?? text;
+  }
 
   /// "Ne yapıldı" kısa başlığı. Bilinmeyen eylemde "Diğer işlem" yazılır (ham kod gösterilmez; kayıt
   /// yine listelenir).
@@ -107,6 +124,7 @@ class AuditLogEntry {
             contractActionLabel(action, details) ??
             platformRuleActionLabel(action) ??
             plateActionLabel(action) ??
+            accessAuditActionLabel(action) ??
             'Diğer işlem';
     }
   }
@@ -128,13 +146,20 @@ class AuditLogEntry {
         if (moduleName != null && request != null) return '$moduleName • $request';
         return moduleName ?? request;
       case 'user':
-        final role = details['role']?.toString();
-        final roleName = role == null ? null : (_staffRoleNames[role] ?? role);
-        final who = targetId == null || targetId!.isEmpty
-            ? null
-            : 'Kullanıcı $targetId';
-        if (who != null && roleName != null) return '$who • $roleName';
-        return who ?? roleName;
+        return _userTarget();
+      case 'site':
+        // Site adı denetim kaydına yazılmaz (site silinmiş olabilir); yalnız site kodu gösterilir.
+        return _numbered('Site');
+      case 'site_manager_invitation':
+        // Davet edilenin e-postası / adı denetim kaydına yazılmaz; yalnız davet numarası gösterilir.
+        return _numbered('Davet');
+      case 'join_request':
+        return _joinRequestTarget();
+      case 'door':
+        return _doorTarget();
+      case 'device':
+        // Cihaz UID'i denetim kaydına yazılmaz; yalnız cihaz numarası gösterilir.
+        return _numbered('Cihaz');
       case 'person':
         return _numbered('Kişi');
       case 'apartment':
@@ -177,6 +202,52 @@ class AuditLogEntry {
         final id = targetId;
         return id == null || id.isEmpty ? null : id;
     }
+  }
+
+  /// Kullanıcı hedefi: "Kullanıcı 42" + rol adı (`details.role`). Rol değişiminde "eski → yeni", kapı özel izninde kapı numarası eklenir.
+  /// Ad / e-posta denetim kaydına yazılmaz; yalnız kullanıcı kodu ve rol kodu gösterilir.
+  String? _userTarget() {
+    final id = targetId;
+    final who = id == null || id.isEmpty ? null : 'Kullanıcı $id';
+    String? role;
+    if (action == 'user.role_changed') {
+      final from = _roleName(details['old_role']);
+      final to = _roleName(details['new_role']);
+      if (from != null || to != null) role = '${from ?? '?'} → ${to ?? '?'}';
+    } else {
+      role = _roleName(details['role']);
+    }
+    final doorId = details['door_id']?.toString();
+    final parts = <String>[
+      ?who,
+      ?role,
+      if (doorId != null && doorId.isNotEmpty) 'Kapı #$doorId',
+    ];
+    return parts.isEmpty ? null : parts.join(' • ');
+  }
+
+  /// Katılım başvurusu hedefi: "Başvuru #9" + başvuran kullanıcı kodu + (onayda) verilen daire rolü. Ad / e-posta / ret gerekçesi yazılmaz.
+  String? _joinRequestTarget() {
+    final request = _numbered('Başvuru');
+    final user = details['user_code']?.toString();
+    final role = _roleName(details['assigned_role']);
+    final parts = <String>[
+      ?request,
+      if (user != null && user.isNotEmpty) 'Kullanıcı $user',
+      ?role,
+    ];
+    return parts.isEmpty ? null : parts.join(' • ');
+  }
+
+  /// Toplu kapı özel izni hedefi: "Kapı #12 • 24 kişi". Kişi adları yazılmaz; yalnız kapı numarası ve kişi sayısı gösterilir.
+  String? _doorTarget() {
+    final door = _numbered('Kapı');
+    final count = details['count'];
+    final parts = <String>[
+      ?door,
+      if (count is num) '${count.toInt()} kişi',
+    ];
+    return parts.isEmpty ? null : parts.join(' • ');
   }
 
   /// Mali eylemin hedefi (Faz 4a): açıklama / neden metni ve kişi adı denetim kaydına yazılmaz; yalnız numara

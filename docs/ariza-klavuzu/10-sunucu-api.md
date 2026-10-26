@@ -145,11 +145,11 @@ Bu bölüm Express sunucusunun (server/src) HTTP uçlarını kapsar: giriş/JWT,
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/routes/auth_routes.js:691](../../server/src/routes/auth_routes.js#L691) | <code>authRouter.post('/auth/login', loginRateLimiter, async (req, res) =&gt; {</code> | Giriş ucu: kimlik (e-posta ya da kullanıcı adı) ve parola alır |
-| [server/src/routes/auth_routes.js:693](../../server/src/routes/auth_routes.js#L693) | <code>req.body?.email ?? req.body?.login ?? req.body?.identifier,</code> | Kimlik küçük harfe çevrilir; alan adı email, login ya da identifier olabilir |
-| [server/src/routes/auth_routes.js:724](../../server/src/routes/auth_routes.js#L724) | <code>WHERE LOWER(email) = LOWER($1) OR LOWER(login_name) = LOWER($1)</code> | Kullanıcı e-posta VEYA login_name ile bulunur (daire sakinleri login_name ile girer) |
-| [server/src/routes/auth_routes.js:761](../../server/src/routes/auth_routes.js#L761) | <code>const compared = await bcrypt.compare(candidate, usableHash ? storedHash : DUMMY_PASSWORD…</code> | bcrypt karşılaştırması; kullanıcı yoksa ya da saklı özet bcrypt biçiminde değilse (silinmiş hesap, boş özet) sahte özetle karşılaştırılır (süre sızmasın) |
-| [server/src/routes/auth_routes.js:768](../../server/src/routes/auth_routes.js#L768) | <code>return res.status(401).json({ error: 'Giris bilgileri hatali.' });</code> | 401 yanıtının üretildiği satır (yanlış parola ve olmayan hesap AYNI yanıtı alır) |
+| [server/src/routes/auth_routes.js:738](../../server/src/routes/auth_routes.js#L738) | <code>authRouter.post('/auth/login', loginRateLimiter, async (req, res) =&gt; {</code> | Giriş ucu: kimlik (e-posta ya da kullanıcı adı) ve parola alır |
+| [server/src/routes/auth_routes.js:740](../../server/src/routes/auth_routes.js#L740) | <code>req.body?.email ?? req.body?.login ?? req.body?.identifier,</code> | Kimlik küçük harfe çevrilir; alan adı email, login ya da identifier olabilir |
+| [server/src/routes/auth_routes.js:774](../../server/src/routes/auth_routes.js#L774) | <code>WHERE LOWER(email) = LOWER($1) OR LOWER(login_name) = LOWER($1)</code> | Kullanıcı e-posta VEYA login_name ile bulunur (daire sakinleri login_name ile girer) |
+| [server/src/routes/auth_routes.js:812](../../server/src/routes/auth_routes.js#L812) | <code>const compared = await bcrypt.compare(candidate, usableHash ? storedHash : DUMMY_PASSWORD…</code> | bcrypt karşılaştırması; kullanıcı yoksa ya da saklı özet bcrypt biçiminde değilse (silinmiş hesap, boş özet) sahte özetle karşılaştırılır (süre sızmasın) |
+| [server/src/routes/auth_routes.js:819](../../server/src/routes/auth_routes.js#L819) | <code>return res.status(401).json({ error: 'Giris bilgileri hatali.' });</code> | 401 yanıtının üretildiği satır (yanlış parola ve olmayan hesap AYNI yanıtı alır) |
 
 **Olası nedenler**
 - Parola gerçekten yanlış (parola baş/son boşlukları kırpılır; kayıtta da kırpıldığı için tutarlıdır)
@@ -185,9 +185,9 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 200 --nostrea
 | [server/src/security/login_guard.js:47](../../server/src/security/login_guard.js#L47) | <code>export const LOGIN_GUARD_DEFAULTS = Object.freeze({</code> | Eşikler: hesap × kaynak (IP ya da güvenilir cihaz) 5 hata / 15 dk; hesap geneli 20 hata / 60 dk; IP geneli 30 hata / 15 dk; ilk kilit 15 dk, tekrarında uzar (tavan 2-4 sa) |
 | [server/src/security/login_guard.js:190](../../server/src/security/login_guard.js#L190) | <code>entry.lockedUntil = at + lockMs;</code> | Eşik dolunca anahtar kilitlenir; süre her yeni kilitte iki katına çıkar, 24 sa hatasız kalınca seviye sıfırlanır |
 | [server/src/middlewares/login_throttle.js:102](../../server/src/middlewares/login_throttle.js#L102) | <code>export const loginGuard = createLoginGuard();</code> | Giriş kilidinin tek örneği: bellek içi, süreç başına (PM2 yeniden başlayınca sıfırlanır) |
-| [server/src/routes/auth_routes.js:678](../../server/src/routes/auth_routes.js#L678) | <code>function respondLoginLocked(res, retryAfterSeconds) {</code> | 429 + Retry-After + code LOGIN_LOCKED + retry_after_seconds; tek tip yanıt (hangi katmanın kilitlediği ve hesabın var olup olmadığı anlaşılmaz) |
-| [server/src/routes/auth_routes.js:752](../../server/src/routes/auth_routes.js#L752) | <code>const reservation = loginGuard.reserve(attempt);</code> | Her denemede önce kilit sorgulanır ve hata hakkı bcrypt'ten ÖNCE ayrılır; kilitliyken parola karşılaştırılmaz |
-| [server/src/routes/auth_routes.js:770](../../server/src/routes/auth_routes.js#L770) | <code>loginGuard.recordSuccess(attempt, reservation);</code> | Doğru parola bu hesap × kaynak sayacını sıfırlar; hesap ve IP geneli katmanda ayrılan hakkı iade eder |
+| [server/src/routes/auth_routes.js:725](../../server/src/routes/auth_routes.js#L725) | <code>function respondLoginLocked(res, retryAfterSeconds) {</code> | 429 + Retry-After + code LOGIN_LOCKED + retry_after_seconds; tek tip yanıt (hangi katmanın kilitlediği ve hesabın var olup olmadığı anlaşılmaz) |
+| [server/src/routes/auth_routes.js:803](../../server/src/routes/auth_routes.js#L803) | <code>const reservation = loginGuard.reserve(attempt);</code> | Her denemede önce kilit sorgulanır ve hata hakkı bcrypt'ten ÖNCE ayrılır; kilitliyken parola karşılaştırılmaz |
+| [server/src/routes/auth_routes.js:821](../../server/src/routes/auth_routes.js#L821) | <code>loginGuard.recordSuccess(attempt, reservation);</code> | Doğru parola bu hesap × kaynak sayacını sıfırlar; hesap ve IP geneli katmanda ayrılan hakkı iade eder |
 | [server/src/security/login_guard.js:436](../../server/src/security/login_guard.js#L436) | <code>export function buildLoginAttempt({ req, identifier, userCode, device, passwordHash }) {</code> | Kaynak: hesapla ve güncel parola sürümüyle eşleşen imzalı device_token varsa cihaz (hesap ve IP geneli kilitten muaf), yoksa IP kovası; IP çözülemiyorsa IP geneli katman uygulanmaz |
 | [server/src/middlewares/login_throttle.js:158](../../server/src/middlewares/login_throttle.js#L158) | <code>export function clearAccountLocks({ email, loginName, userCode } = {}) {</code> | Şifre sıfırlama başarılı olunca hesabın giriş kilitleri (hesap × kaynak, hesap geneli) ve mevcut-parola kilidi açılır |
 
@@ -254,10 +254,10 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 300 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/routes/auth_routes.js:735](../../server/src/routes/auth_routes.js#L735) | <code>const pendingRes = await pool.query(SQL_FIND_PENDING_LOGIN_HASH, [identifier]);</code> | Hesap yoksa bekleyen kaydın parola özeti aranır (doğru parola -> 403, yanlış -> 401) |
-| [server/src/routes/auth_routes.js:778](../../server/src/routes/auth_routes.js#L778) | <code>return res.status(403).json({ error: 'E-posta adresiniz dogrulanmadi.' });</code> | Doğrulanmamış hesap/bekleyen kayıt için 403; token verilmez |
+| [server/src/routes/auth_routes.js:786](../../server/src/routes/auth_routes.js#L786) | <code>const pendingRes = await pool.query(SQL_FIND_PENDING_LOGIN_HASH, [identifier]);</code> | Hesap yoksa bekleyen kaydın parola özeti aranır (doğru parola -> 403, yanlış -> 401) |
+| [server/src/routes/auth_routes.js:829](../../server/src/routes/auth_routes.js#L829) | <code>return res.status(403).json({ error: 'E-posta adresiniz dogrulanmadi.' });</code> | Doğrulanmamış hesap/bekleyen kayıt için 403; token verilmez |
 | [server/src/services/membership_rules.js:166](../../server/src/services/membership_rules.js#L166) | <code>export const SQL_FIND_PENDING_LOGIN_HASH = `</code> | pending_registrations tablosundan e-posta ile parola özeti okuyan sorgu |
-| [server/src/services/membership_service.js:332](../../server/src/services/membership_service.js#L332) | <code>export async function verifyIndividualEmailCode({ email, code }) {</code> | Doğru kod girilince hesap tek işlemde açılır (users satırı ancak burada oluşur) |
+| [server/src/services/membership_service.js:359](../../server/src/services/membership_service.js#L359) | <code>export async function verifyIndividualEmailCode({ email, code }) {</code> | Doğru kod girilince hesap tek işlemde açılır (users satırı ancak burada oluşur) |
 
 **Olası nedenler**
 - Kullanıcı kayıt oldu ama e-postadaki 6 haneli kodu henüz girmedi: yeni modelde users satırı kod girilene kadar YOKTUR, bekleyen kayıt vardır
@@ -282,12 +282,12 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 300 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/routes/auth_routes.js:775](../../server/src/routes/auth_routes.js#L775) | <code>.json({ error: 'Kullanici rolu ile secilen rol uyusmuyor.' });</code> | İstemci body.role gönderdiyse DB'deki rolle eşleşmeli (parola doğrulandıktan sonra bakılır) |
-| [server/src/routes/auth_routes.js:781](../../server/src/routes/auth_routes.js#L781) | <code>return res.status(403).json({ error: 'Abonelik talebiniz onay bekliyor.' });</code> | approval_status = pending (eski site yöneticisi abonelik akışı) |
-| [server/src/routes/auth_routes.js:784](../../server/src/routes/auth_routes.js#L784) | <code>return res.status(403).json({ error: 'Abonelik talebiniz reddedildi.' });</code> | approval_status = rejected |
-| [server/src/routes/auth_routes.js:787](../../server/src/routes/auth_routes.js#L787) | <code>return res.status(403).json({ error: 'Hesap aktif degil.' });</code> | users.is_active = FALSE |
-| [server/src/routes/admin_routes.js:429](../../server/src/routes/admin_routes.js#L429) | <code>'/admin/users/:id/activation',</code> | Süper kullanıcının hesabı aktif/pasif yaptığı uç |
-| [server/src/routes/admin_routes.js:662](../../server/src/routes/admin_routes.js#L662) | <code>'/admin/subscription-requests/:id',</code> | Bekleyen abonelik talebini onaylama/reddetme (approval_status ve is_active'i birlikte değiştirir) |
+| [server/src/routes/auth_routes.js:826](../../server/src/routes/auth_routes.js#L826) | <code>.json({ error: 'Kullanici rolu ile secilen rol uyusmuyor.' });</code> | İstemci body.role gönderdiyse DB'deki rolle eşleşmeli (parola doğrulandıktan sonra bakılır) |
+| [server/src/routes/auth_routes.js:832](../../server/src/routes/auth_routes.js#L832) | <code>return res.status(403).json({ error: 'Abonelik talebiniz onay bekliyor.' });</code> | approval_status = pending (eski site yöneticisi abonelik akışı) |
+| [server/src/routes/auth_routes.js:835](../../server/src/routes/auth_routes.js#L835) | <code>return res.status(403).json({ error: 'Abonelik talebiniz reddedildi.' });</code> | approval_status = rejected |
+| [server/src/routes/auth_routes.js:838](../../server/src/routes/auth_routes.js#L838) | <code>return res.status(403).json({ error: 'Hesap aktif degil.' });</code> | users.is_active = FALSE |
+| [server/src/routes/admin_routes.js:503](../../server/src/routes/admin_routes.js#L503) | <code>'/admin/users/:id/activation',</code> | Süper kullanıcının hesabı aktif/pasif yaptığı uç |
+| [server/src/routes/admin_routes.js:759](../../server/src/routes/admin_routes.js#L759) | <code>'/admin/subscription-requests/:id',</code> | Bekleyen abonelik talebini onaylama/reddetme (approval_status ve is_active'i birlikte değiştirir) |
 
 **Olası nedenler**
 - Süper kullanıcı hesabı pasife aldı (is_active = FALSE) ya da PATCH /me ile kullanıcı kendisini pasif yaptı
@@ -307,9 +307,9 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 300 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/middlewares/auth_middleware.js:14](../../server/src/middlewares/auth_middleware.js#L14) | <code>if (!header.startsWith('Bearer ')) {</code> | Authorization: Bearer başlığı yoksa 401 "Yetkisiz erisim." |
+| [server/src/middlewares/auth_middleware.js:35](../../server/src/middlewares/auth_middleware.js#L35) | <code>if (!header.startsWith('Bearer ')) {</code> | Authorization: Bearer başlığı yoksa 401 "Yetkisiz erisim." |
 | [server/src/middlewares/auth_middleware.js:7](../../server/src/middlewares/auth_middleware.js#L7) | <code>function isTokenVerificationError(error) {</code> | Yalnızca imza/süre/biçim hataları 401 sayılır; DB/yapılandırma hatası 5xx olur |
-| [server/src/middlewares/auth_middleware.js:24](../../server/src/middlewares/auth_middleware.js#L24) | <code>return res.status(401).json({ error: 'Gecersiz veya suresi dolmus token.' });</code> | 401 yanıtının üretildiği satır |
+| [server/src/middlewares/auth_middleware.js:45](../../server/src/middlewares/auth_middleware.js#L45) | <code>return res.status(401).json({ error: 'Gecersiz veya suresi dolmus token.' });</code> | 401 yanıtının üretildiği satır |
 | [server/src/jwt.js:113](../../server/src/jwt.js#L113) | <code>export function verifyAccessToken(token) {</code> | HS256 doğrulaması; JWT_SECRET ile imzalanmış olmalı |
 | [server/src/jwt.js:19](../../server/src/jwt.js#L19) | <code>export const DEFAULT_JWT_EXPIRES_IN = '30d';</code> | Token ömrü varsayılan 30 gün (JWT_EXPIRES_IN ile değişir) |
 | [server/src/jwt.js:30](../../server/src/jwt.js#L30) | <code>function getJwtSecret() {</code> | JWT_SECRET boş/yer tutucuysa hata fırlatır (imzalama/doğrulama 500 olur) |
@@ -343,12 +343,12 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 200 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/middlewares/auth_middleware.js:79](../../server/src/middlewares/auth_middleware.js#L79) | <code>if (!isPasswordVersionValid(claims, passwordHash)) {</code> | Token'daki pv claim'i güncel parola özetiyle uyuşmuyorsa reddedilir |
-| [server/src/middlewares/auth_middleware.js:82](../../server/src/middlewares/auth_middleware.js#L82) | <code>.json({ error: 'Oturum gecersiz. Lutfen tekrar giris yapin.', code: 'TOKEN_REVOKED' });</code> | 401 gövdesindeki code alanı (istemci bunu görünce çıkış yapar) |
+| [server/src/middlewares/auth_middleware.js:103](../../server/src/middlewares/auth_middleware.js#L103) | <code>if (!isPasswordVersionValid(claims, passwordHash)) {</code> | Token'daki pv claim'i güncel parola özetiyle uyuşmuyorsa reddedilir |
+| [server/src/middlewares/auth_middleware.js:106](../../server/src/middlewares/auth_middleware.js#L106) | <code>.json({ error: 'Oturum gecersiz. Lutfen tekrar giris yapin.', code: 'TOKEN_REVOKED' });</code> | 401 gövdesindeki code alanı (istemci bunu görünce çıkış yapar) |
 | [server/src/jwt.js:49](../../server/src/jwt.js#L49) | <code>export function passwordVersionOf(passwordHash) {</code> | pv = parola özetinden türetilen kısa geri çevrilemez parmak izi |
 | [server/src/jwt.js:62](../../server/src/jwt.js#L62) | <code>export function isPasswordVersionValid(claims, passwordHash) {</code> | pv claim'i olmayan eski tokenlar süresi dolana dek geçerli kalır |
-| [server/src/routes/auth_routes.js:478](../../server/src/routes/auth_routes.js#L478) | <code>password_reset_token_hash = NULL,</code> | Şifre sıfırlama parola özetini değiştirir -> o hesabın tüm pv'li tokenları düşer |
-| [server/src/routes/admin_routes.js:320](../../server/src/routes/admin_routes.js#L320) | <code>adminRouter.patch('/admin/users/:id', authRequired, requireSuperUser, async (req, res) =&gt;…</code> | Süper kullanıcı başka kullanıcının parolasını değiştirirse o kullanıcının oturumları da düşer |
+| [server/src/routes/auth_routes.js:511](../../server/src/routes/auth_routes.js#L511) | <code>password_reset_token_hash = NULL,</code> | Şifre sıfırlama parola özetini değiştirir -> o hesabın tüm pv'li tokenları düşer |
+| [server/src/routes/admin_routes.js:381](../../server/src/routes/admin_routes.js#L381) | <code>adminRouter.patch('/admin/users/:id', authRequired, requireSuperUser, async (req, res) =&gt;…</code> | Süper kullanıcı başka kullanıcının parolasını değiştirirse o kullanıcının oturumları da düşer |
 
 **Olası nedenler**
 - Kullanıcı şifre sıfırladı ya da değiştirdi: diğer cihazlardaki tokenlar TOKEN_REVOKED olur (beklenen davranış)
@@ -368,10 +368,10 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 200 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/middlewares/auth_middleware.js:32](../../server/src/middlewares/auth_middleware.js#L32) | <code>return res.status(401).json({ error: 'Gecersiz token.' });</code> | Token sub alanı geçerli bir pozitif tamsayı değilse 401 |
-| [server/src/middlewares/auth_middleware.js:36](../../server/src/middlewares/auth_middleware.js#L36) | <code>// Rol / aktiflik / onay durumu HER istekte DB'den TAZE okunur (token'daki role guvenilme…</code> | Rol/aktiflik her istekte users tablosundan okunur; token'daki rol önemsizdir |
-| [server/src/middlewares/auth_middleware.js:62](../../server/src/middlewares/auth_middleware.js#L62) | <code>return res.status(401).json({ error: 'Kullanici bulunamadi.' });</code> | users satırı yoksa 401 |
-| [server/src/routes/admin_routes.js:462](../../server/src/routes/admin_routes.js#L462) | <code>adminRouter.delete('/admin/users/:id', authRequired, requireSuperUser, async (req, res) =…</code> | Süper kullanıcının hesabı sildiği uç; silinen kullanıcının token'ı artık 401 alır |
+| [server/src/middlewares/auth_middleware.js:53](../../server/src/middlewares/auth_middleware.js#L53) | <code>return res.status(401).json({ error: 'Gecersiz token.' });</code> | Token sub alanı geçerli bir pozitif tamsayı değilse 401 |
+| [server/src/middlewares/auth_middleware.js:57](../../server/src/middlewares/auth_middleware.js#L57) | <code>// Rol / aktiflik / onay durumu HER istekte DB'den TAZE okunur (token'daki role guvenilme…</code> | Rol/aktiflik her istekte users tablosundan okunur; token'daki rol önemsizdir |
+| [server/src/middlewares/auth_middleware.js:86](../../server/src/middlewares/auth_middleware.js#L86) | <code>return res.status(401).json({ error: 'Kullanici bulunamadi.' });</code> | users satırı yoksa 401 |
+| [server/src/routes/admin_routes.js:544](../../server/src/routes/admin_routes.js#L544) | <code>adminRouter.delete('/admin/users/:id', authRequired, requireSuperUser, async (req, res) =…</code> | Süper kullanıcının hesabı sildiği uç; silinen kullanıcının token'ı artık 401 alır |
 
 **Olası nedenler**
 - Süper kullanıcı hesabı sildi (DELETE /admin/users/:id)
@@ -390,10 +390,10 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 200 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/middlewares/auth_middleware.js:88](../../server/src/middlewares/auth_middleware.js#L88) | <code>return res.status(403).json({ error: 'Hesap aktif degil.' });</code> | authRequired her istekte is_active kontrol eder (token geçerli olsa da) |
-| [server/src/middlewares/auth_middleware.js:91](../../server/src/middlewares/auth_middleware.js#L91) | <code>return res.status(403).json({ error: 'E-posta adresiniz dogrulanmadi.' });</code> | email_verified = FALSE ise tüm korumalı uçlar 403 |
-| [server/src/routes/auth_routes.js:917](../../server/src/routes/auth_routes.js#L917) | <code>await rotateLocalControlTokensForUserAccess(userCode, 'user_deactivated');</code> | Kullanıcı kendini pasif yapınca cihazların yerel kontrol tokenı döndürülür |
-| [server/src/routes/admin_routes.js:443](../../server/src/routes/admin_routes.js#L443) | <code>return res.status(400).json({ error: 'Kendi hesabinizi pasif yapamazsiniz.' });</code> | Aktivasyon ucunda süper kullanıcı kendi hesabını pasif yapamaz (ilk eşleşme PATCH /admin/users/:id içindedir) |
+| [server/src/middlewares/auth_middleware.js:112](../../server/src/middlewares/auth_middleware.js#L112) | <code>return res.status(403).json({ error: 'Hesap aktif degil.' });</code> | authRequired her istekte is_active kontrol eder (token geçerli olsa da) |
+| [server/src/middlewares/auth_middleware.js:115](../../server/src/middlewares/auth_middleware.js#L115) | <code>return res.status(403).json({ error: 'E-posta adresiniz dogrulanmadi.' });</code> | email_verified = FALSE ise tüm korumalı uçlar 403 |
+| [server/src/routes/auth_routes.js:976](../../server/src/routes/auth_routes.js#L976) | <code>await rotateLocalControlTokensForUserAccess(userCode, 'user_deactivated');</code> | Kullanıcı kendini pasif yapınca cihazların yerel kontrol tokenı döndürülür |
+| [server/src/routes/admin_routes.js:517](../../server/src/routes/admin_routes.js#L517) | <code>return res.status(400).json({ error: 'Kendi hesabinizi pasif yapamazsiniz.' });</code> | Aktivasyon ucunda süper kullanıcı kendi hesabını pasif yapamaz (ilk eşleşme PATCH /admin/users/:id içindedir) |
 
 **Olası nedenler**
 - Hesap yönetici tarafından pasife alındı (PATCH /admin/users/:id/activation ya da PATCH /admin/users/:id)
@@ -414,8 +414,8 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 200 --nostrea
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
 | [server/src/middlewares/auth_middleware.js:7](../../server/src/middlewares/auth_middleware.js#L7) | <code>function isTokenVerificationError(error) {</code> | DB kesintisi/yapılandırma hatası token hatası sayılmaz -> 401 değil next(error) -> 500 |
-| [server/src/middlewares/auth_middleware.js:37](../../server/src/middlewares/auth_middleware.js#L37) | <code>const result = await pool.query(</code> | Her istekte users sorgusu: veritabanı yoksa tüm korumalı uçlar hata verir |
-| [server/src/middlewares/error_handler.js:103](../../server/src/middlewares/error_handler.js#L103) | <code>export function createErrorHandler({ logger = console } = {}) {</code> | Global hata yakalayıcı: 5xx'te genel mesaj + errorId, ayrıntı yalnız günlükte |
+| [server/src/middlewares/auth_middleware.js:58](../../server/src/middlewares/auth_middleware.js#L58) | <code>const result = await pool.query(</code> | Her istekte users sorgusu: veritabanı yoksa tüm korumalı uçlar hata verir |
+| [server/src/middlewares/error_handler.js:119](../../server/src/middlewares/error_handler.js#L119) | <code>export function createErrorHandler({ logger = console } = {}) {</code> | Global hata yakalayıcı: 5xx'te genel mesaj + errorId, ayrıntı yalnız günlükte |
 | [server/src/routes/firmware_routes.js:95](../../server/src/routes/firmware_routes.js#L95) | <code>firmwareRouter.get('/health', async (_req, res) =&gt; {</code> | /health veritabanı bağlantısını denetler (kopuksa 500 database: disconnected) |
 
 **Olası nedenler**
@@ -445,9 +445,9 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 100 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/middlewares/auth_middleware.js:107](../../server/src/middlewares/auth_middleware.js#L107) | <code>export function requireSuperUser(req, res, next) {</code> | Rol DB'den taze okunan req.authUser.role === super_user olmalı |
-| [server/src/middlewares/auth_middleware.js:111](../../server/src/middlewares/auth_middleware.js#L111) | <code>.json({ error: 'Bu islem icin super user yetkisi gerekir.' });</code> | 403 yanıtı |
-| [server/src/routes/admin_routes.js:168](../../server/src/routes/admin_routes.js#L168) | <code>adminRouter.get('/admin/users', authRequired, requireSuperUser, async (req, res) =&gt; {</code> | /admin/* uçlarının tamamı authRequired + requireSuperUser kullanır (örnek: kullanıcı listesi) |
+| [server/src/middlewares/auth_middleware.js:138](../../server/src/middlewares/auth_middleware.js#L138) | <code>export function requireSuperUser(req, res, next) {</code> | Rol DB'den taze okunan req.authUser.role === super_user olmalı |
+| [server/src/middlewares/auth_middleware.js:142](../../server/src/middlewares/auth_middleware.js#L142) | <code>.json({ error: 'Bu islem icin super user yetkisi gerekir.' });</code> | 403 yanıtı |
+| [server/src/routes/admin_routes.js:219](../../server/src/routes/admin_routes.js#L219) | <code>adminRouter.get('/admin/users', authRequired, requireSuperUser, async (req, res) =&gt; {</code> | /admin/* uçlarının tamamı authRequired + requireSuperUser kullanır (örnek: kullanıcı listesi) |
 
 **Olası nedenler**
 - Giriş yapan kullanıcının rolü super_user değil (rol token'dan değil DB'den okunur; rol yeni değiştiyse hemen geçerlidir)
@@ -466,10 +466,10 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 100 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/middlewares/auth_middleware.js:116](../../server/src/middlewares/auth_middleware.js#L116) | <code>export async function requireSiteManager(req, res, next) {</code> | Geçiş: rol site_manager/super_user VEYA site_manager_sites kaydı VEYA aktif SITE_OWNER/SITE_ADMIN üyeliği |
-| [server/src/middlewares/auth_middleware.js:140](../../server/src/middlewares/auth_middleware.js#L140) | <code>.json({ error: 'Bu islem icin site yoneticisi yetkisi gerekir.' });</code> | Hiçbiri yoksa 403 |
-| [server/src/services/site_service.js:299](../../server/src/services/site_service.js#L299) | <code>export async function hasSiteManagementAccess(authUser, siteCode) {</code> | Belirli bir site için yetki: super_user, site_manager_sites ya da SITE_OWNER/SITE_ADMIN üyeliği |
-| [server/src/routes/manager_routes.js:232](../../server/src/routes/manager_routes.js#L232) | <code>return res.status(403).json({ error: 'Bu siteyi yonetme yetkiniz yok.' });</code> | Site bazlı yetki yoksa uçlar bu mesajla 403 döner |
+| [server/src/middlewares/auth_middleware.js:147](../../server/src/middlewares/auth_middleware.js#L147) | <code>export async function requireSiteManager(req, res, next) {</code> | Geçiş: rol site_manager/super_user VEYA site_manager_sites kaydı VEYA aktif SITE_OWNER/SITE_ADMIN üyeliği |
+| [server/src/middlewares/auth_middleware.js:171](../../server/src/middlewares/auth_middleware.js#L171) | <code>.json({ error: 'Bu islem icin site yoneticisi yetkisi gerekir.' });</code> | Hiçbiri yoksa 403 |
+| [server/src/services/site_service.js:324](../../server/src/services/site_service.js#L324) | <code>export async function hasSiteManagementAccess(authUser, siteCode) {</code> | Belirli bir site için yetki: super_user, site_manager_sites ya da SITE_OWNER/SITE_ADMIN üyeliği |
+| [server/src/routes/manager_routes.js:234](../../server/src/routes/manager_routes.js#L234) | <code>return res.status(403).json({ error: 'Bu siteyi yonetme yetkiniz yok.' });</code> | Site bazlı yetki yoksa uçlar bu mesajla 403 döner |
 
 **Olası nedenler**
 - Kullanıcı bu sitenin yöneticisi değil (site_manager_sites ve site_memberships satırı yok/pasif)
@@ -490,14 +490,14 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 100 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/routes/auth_routes.js:812](../../server/src/routes/auth_routes.js#L812) | <code>authRouter.patch('/me', authRequired, profileUpdateLimiter, async (req, res) =&gt; {</code> | Profil güncelleme ucu; parola değişiyorsa current_password ZORUNLU |
-| [server/src/routes/auth_routes.js:843](../../server/src/routes/auth_routes.js#L843) | <code>if (password !== undefined &amp;&amp; rejectWeakPassword(res, password, weakContext)) {</code> | Yeni parola ilkesi mevcut parola denetiminden ÖNCE: zayıfsa 400 WEAK_PASSWORD + reason (deneme sayacına yazılmaz) |
-| [server/src/routes/auth_routes.js:880](../../server/src/routes/auth_routes.js#L880) | <code>code: 'CURRENT_PASSWORD_REQUIRED',</code> | 400: mevcut parola gönderilmemiş |
-| [server/src/routes/auth_routes.js:887](../../server/src/routes/auth_routes.js#L887) | <code>await verifyCurrentPassword({ userCode, currentPassword });</code> | Mevcut parola ortak denetimle doğrulanır; hata kodu, ileti ve Retry-After yanıta aynen aktarılır |
+| [server/src/routes/auth_routes.js:863](../../server/src/routes/auth_routes.js#L863) | <code>authRouter.patch('/me', authRequired, profileUpdateLimiter, async (req, res) =&gt; {</code> | Profil güncelleme ucu; parola değişiyorsa current_password ZORUNLU |
+| [server/src/routes/auth_routes.js:894](../../server/src/routes/auth_routes.js#L894) | <code>if (password !== undefined &amp;&amp; rejectWeakPassword(res, password, weakContext)) {</code> | Yeni parola ilkesi mevcut parola denetiminden ÖNCE: zayıfsa 400 WEAK_PASSWORD + reason (deneme sayacına yazılmaz) |
+| [server/src/routes/auth_routes.js:931](../../server/src/routes/auth_routes.js#L931) | <code>code: 'CURRENT_PASSWORD_REQUIRED',</code> | 400: mevcut parola gönderilmemiş |
+| [server/src/routes/auth_routes.js:946](../../server/src/routes/auth_routes.js#L946) | <code>await verifyCurrentPassword({ userCode, currentPassword });</code> | Mevcut parola ortak denetimle doğrulanır; hata kodu, ileti ve Retry-After yanıta aynen aktarılır |
 | [server/src/modules/account_password_guard.js:66](../../server/src/modules/account_password_guard.js#L66) | <code>const key = passwordChangeThrottleKey(userCode);</code> | Hesap bazlı sayaç u:<user_code> (PATCH /me, sakin change-password, hesap silme ve veri dışa aktarma ORTAK); hata hakkı karşılaştırmadan ÖNCE ayrılır, doğru parolada sıfırlanır |
 | [server/src/modules/account_common.js:97](../../server/src/modules/account_common.js#L97) | <code>export const currentPasswordInvalid = () =&gt; new PlatformError(400, 'CURRENT_PASSWORD_INVA…</code> | 400 (bilerek 401/403 değil: istemci oturum hatası sanıp çıkış yapmasın) |
 | [server/src/middlewares/login_throttle.js:134](../../server/src/middlewares/login_throttle.js#L134) | <code>export const passwordChangeFailureTracker = createFailureTracker({ maxFailures: 5, window…</code> | 5 hata / 15 dk -> 15 dk kilit (429 CURRENT_PASSWORD_LOCKED) |
-| [server/src/services/membership_service.js:1981](../../server/src/services/membership_service.js#L1981) | <code>await verifyCurrentPassword({ userCode: tUserCode, currentPassword: cleanCurrent });</code> | Daire sakini change-password ucu AYNI denetimi ve kilidi paylaşır (yanlışta "Mevcut şifre hatalı.") |
+| [server/src/services/membership_service.js:2166](../../server/src/services/membership_service.js#L2166) | <code>await verifyCurrentPassword({ userCode: tUserCode, currentPassword: cleanCurrent });</code> | Daire sakini change-password ucu AYNI denetimi ve kilidi paylaşır (yanlışta "Mevcut şifre hatalı.") |
 | [server/src/security/password_policy.js:16](../../server/src/security/password_policy.js#L16) | <code>export const PASSWORD_MIN_LENGTH = 8;</code> | Yeni parola ilkesi: en az 8, en çok 128 karakter ve 72 bayt; e-posta, ad ya da kullanıcı adıyla aynı ya da yaygın olamaz (reason: too_short, too_long, same_as_email, same_as_name, common) |
 
 **Olası nedenler**
@@ -519,8 +519,8 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 100 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/routes/auth_routes.js:873](../../server/src/routes/auth_routes.js#L873) | <code>return res.status(400).json({ error: 'E-posta adresi güvenlik nedeniyle değiştirilemez.' …</code> | PATCH /me: mevcut e-postadan farklı bir değer gönderilirse 400 |
-| [server/src/routes/admin_routes.js:396](../../server/src/routes/admin_routes.js#L396) | <code>return res.status(400).json({ error: 'E-posta adresi güvenlik nedeniyle değiştirilemez.' …</code> | PATCH /admin/users/:id: süper kullanıcı için de aynı kural |
+| [server/src/routes/auth_routes.js:924](../../server/src/routes/auth_routes.js#L924) | <code>return res.status(400).json({ error: 'E-posta adresi güvenlik nedeniyle değiştirilemez.' …</code> | PATCH /me: mevcut e-postadan farklı bir değer gönderilirse 400 |
+| [server/src/routes/admin_routes.js:457](../../server/src/routes/admin_routes.js#L457) | <code>return res.status(400).json({ error: 'E-posta adresi güvenlik nedeniyle değiştirilemez.' …</code> | PATCH /admin/users/:id: süper kullanıcı için de aynı kural |
 | [server/src/services/user_service.js:65](../../server/src/services/user_service.js#L65) | <code>export async function updateUserByCode({</code> | Güncelleme servisi (e-posta kuralı route katmanında uygulanır) |
 
 **Olası nedenler**
@@ -537,10 +537,10 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 100 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/routes/admin_routes.js:356](../../server/src/routes/admin_routes.js#L356) | <code>code: 'USE_PROFILE_PASSWORD_CHANGE',</code> | Süper kullanıcı kendi parolasını bu uçtan değiştiremez; Profilim (PATCH /me) kullanılmalı |
-| [server/src/routes/admin_routes.js:404](../../server/src/routes/admin_routes.js#L404) | <code>error: 'Güvenlik kuralı: Daire sakinlerinin şifresi yöneticiler tarafından değiştirilemez…</code> | apartment_owner/individual hesabının parolası yönetici tarafından değiştirilemez (403) |
-| [server/src/services/membership_service.js:1935](../../server/src/services/membership_service.js#L1935) | <code>if (callerCode === null &#124;&#124; callerCode !== tUserCode) {</code> | change-password ucu yalnızca kullanıcının KENDİ şifresi içindir (yönetici olsa da 403) |
-| [server/src/routes/membership_routes.js:274](../../server/src/routes/membership_routes.js#L274) | <code>'/membership/apartments/:apartmentId/members/:targetUserCode/change-password',</code> | Daire sakini şifre değiştirme ucu (current_password zorunlu) |
+| [server/src/routes/admin_routes.js:417](../../server/src/routes/admin_routes.js#L417) | <code>code: 'USE_PROFILE_PASSWORD_CHANGE',</code> | Süper kullanıcı kendi parolasını bu uçtan değiştiremez; Profilim (PATCH /me) kullanılmalı |
+| [server/src/routes/admin_routes.js:465](../../server/src/routes/admin_routes.js#L465) | <code>error: 'Güvenlik kuralı: Daire sakinlerinin şifresi yöneticiler tarafından değiştirilemez…</code> | apartment_owner/individual hesabının parolası yönetici tarafından değiştirilemez (403) |
+| [server/src/services/membership_service.js:2120](../../server/src/services/membership_service.js#L2120) | <code>if (callerCode === null &#124;&#124; callerCode !== tUserCode) {</code> | change-password ucu yalnızca kullanıcının KENDİ şifresi içindir (yönetici olsa da 403) |
+| [server/src/routes/membership_routes.js:280](../../server/src/routes/membership_routes.js#L280) | <code>'/membership/apartments/:apartmentId/members/:targetUserCode/change-password',</code> | Daire sakini şifre değiştirme ucu (current_password zorunlu) |
 
 **Olası nedenler**
 - Tasarım gereği: yöneticiler sakinlerin şifresini değiştiremez, sakin kendi hesabıyla girip değiştirir
@@ -558,9 +558,9 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 100 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/services/membership_service.js:135](../../server/src/services/membership_service.js#L135) | <code>async function issueVerificationCode({ email, fullName, persistCredentials }) {</code> | Kod üretir, DB'ye yazar, e-posta gönderir; gönderim hatası fırlatılmaz, { sent:false } döner |
-| [server/src/services/membership_service.js:182](../../server/src/services/membership_service.js#L182) | <code>console.error('[Mail Gönderim Hatası]:', describeMailError(mailError));</code> | SMTP hatasının günlüğe yazıldığı satır (code/responseCode alanları, adres maskeli) |
-| [server/src/services/membership_service.js:97](../../server/src/services/membership_service.js#L97) | <code>function describeMailError(error) {</code> | Günlüğe giden alanlar: code (ETIMEDOUT, EAUTH...), responseCode (535, 550...), command |
+| [server/src/services/membership_service.js:162](../../server/src/services/membership_service.js#L162) | <code>async function issueVerificationCode({ email, fullName, persistCredentials }) {</code> | Kod üretir, DB'ye yazar, e-posta gönderir; gönderim hatası fırlatılmaz, { sent:false } döner |
+| [server/src/services/membership_service.js:209](../../server/src/services/membership_service.js#L209) | <code>console.error('[Mail Gönderim Hatası]:', describeMailError(mailError));</code> | SMTP hatasının günlüğe yazıldığı satır (code/responseCode alanları, adres maskeli) |
+| [server/src/services/membership_service.js:124](../../server/src/services/membership_service.js#L124) | <code>function describeMailError(error) {</code> | Günlüğe giden alanlar: code (ETIMEDOUT, EAUTH...), responseCode (535, 550...), command |
 | [server/src/mailer.js:88](../../server/src/mailer.js#L88) | <code>export async function sendIndividualVerificationEmail({</code> | Bireysel kayıt kod e-postası: konu "Site ve Toplu Yaşam Yönetim Sistemi - E-posta doğrulama kodunuz" |
 | [server/src/mailer.js:27](../../server/src/mailer.js#L27) | <code>connectionTimeout: 8_000,</code> | SMTP zaman aşımları: ad çözümleme 5 sn, bağlantı 8 sn, karşılama 8 sn, soket 20 sn |
 | [server/src/config/env.js:284](../../server/src/config/env.js#L284) | <code>warnings.push(`SMTP ayarlari eksik: ${missingSmtp.join(', ')}; e-posta gonderilemez.`);</code> | Açılışta SMTP_HOST/SMTP_USER/SMTP_PASSWORD eksikse uyarı yazılır |
@@ -599,8 +599,8 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 300 --nostrea
 | --- | --- | --- |
 | [server/src/routes/auth_routes.js:73](../../server/src/routes/auth_routes.js#L73) | <code>if (error?.code === 'EMAIL_DELIVERY_FAILED' &amp;&amp; error.expose === true) {</code> | 503 + Retry-After: 60 yanıtı (respondWithServiceError 5xx mesajını gizlediği için burada üretilir) |
 | [server/src/services/membership_rules.js:110](../../server/src/services/membership_rules.js#L110) | <code>export function verificationIssueError(result) {</code> | MAIL_FAILED -> 503 EMAIL_DELIVERY_FAILED; COOLDOWN/HOURLY_CAP -> 429 |
-| [server/src/services/membership_service.js:303](../../server/src/services/membership_service.js#L303) | <code>const issued = await issueVerificationCode({ email: cleanEmail, fullName, persistCredenti…</code> | Gönderilemediyse hata fırlatılır; kullanıcıya hiç gönderilmemiş kod vaat edilmez |
-| [server/src/services/membership_service.js:112](../../server/src/services/membership_service.js#L112) | <code>async function discardUndeliveredCode(codeRowId) {</code> | Gönderilemeyen kod satırı silinir: bekleme süresi/saatlik tavan tüketilmez, hemen yeniden denenebilir |
+| [server/src/services/membership_service.js:330](../../server/src/services/membership_service.js#L330) | <code>const issued = await issueVerificationCode({ email: cleanEmail, fullName, persistCredenti…</code> | Gönderilemediyse hata fırlatılır; kullanıcıya hiç gönderilmemiş kod vaat edilmez |
+| [server/src/services/membership_service.js:139](../../server/src/services/membership_service.js#L139) | <code>async function discardUndeliveredCode(codeRowId) {</code> | Gönderilemeyen kod satırı silinir: bekleme süresi/saatlik tavan tüketilmez, hemen yeniden denenebilir |
 
 **Olası nedenler**
 - SMTP sunucusuna ulaşılamıyor / kimlik doğrulama hatası / zaman aşımı (günlükte "[Mail Gönderim Hatası]")
@@ -651,9 +651,9 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 300 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/services/membership_service.js:251](../../server/src/services/membership_service.js#L251) | <code>const alreadyRegisteredError = () =&gt;</code> | 409 metni burada tanımlı |
-| [server/src/services/membership_service.js:272](../../server/src/services/membership_service.js#L272) | <code>if (existing.role !== 'individual') {</code> | Başka rolde (örn. site_manager, apartment_owner) doğrulanmamış hesap da 409 verir: şifresi bu uçtan ezilemez |
-| [server/src/services/membership_service.js:421](../../server/src/services/membership_service.js#L421) | <code>if (insertError?.code === '23505') {</code> | Doğrulama anında araya aynı e-postayla hesap girmişse 409 ve işlem geri alınır |
+| [server/src/services/membership_service.js:278](../../server/src/services/membership_service.js#L278) | <code>const alreadyRegisteredError = () =&gt;</code> | 409 metni burada tanımlı |
+| [server/src/services/membership_service.js:299](../../server/src/services/membership_service.js#L299) | <code>if (existing.role !== 'individual') {</code> | Başka rolde (örn. site_manager, apartment_owner) doğrulanmamış hesap da 409 verir: şifresi bu uçtan ezilemez |
+| [server/src/services/membership_service.js:448](../../server/src/services/membership_service.js#L448) | <code>if (insertError?.code === '23505') {</code> | Doğrulama anında araya aynı e-postayla hesap girmişse 409 ve işlem geri alınır |
 | [server/src/routes/auth_routes.js:48](../../server/src/routes/auth_routes.js#L48) | <code>authRouter.post('/auth/register-individual', registerLimiter, async (req, res) =&gt; {</code> | Bireysel kayıt ucu |
 
 **Olası nedenler**
@@ -674,9 +674,9 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 300 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/services/membership_service.js:235](../../server/src/services/membership_service.js#L235) | <code>throw httpError(400, 'Ad ve soyad alanları zorunludur.');</code> | Ad ve soyad boş olamaz (en çok 80 karakter) |
-| [server/src/services/membership_service.js:244](../../server/src/services/membership_service.js#L244) | <code>throw httpError(400, 'Şifre en az 6 karakter olmalıdır.');</code> | Şifre 6-128 karakter |
-| [server/src/utils/validators.js:50](../../server/src/utils/validators.js#L50) | <code>export function isValidEmail(raw) {</code> | E-posta biçim denetimi (alan adında nokta zorunlu, 254 karakter sınırı) |
+| [server/src/services/membership_service.js:262](../../server/src/services/membership_service.js#L262) | <code>throw httpError(400, 'Ad ve soyad alanları zorunludur.');</code> | Ad ve soyad boş olamaz (en çok 80 karakter) |
+| [server/src/services/membership_service.js:271](../../server/src/services/membership_service.js#L271) | <code>throw httpError(400, 'Şifre en az 6 karakter olmalıdır.');</code> | Şifre 6-128 karakter |
+| [server/src/utils/validators.js:68](../../server/src/utils/validators.js#L68) | <code>export function isValidEmail(raw) {</code> | E-posta biçim denetimi (alan adında nokta zorunlu, 254 karakter sınırı) |
 | [server/src/routes/auth_routes.js:79](../../server/src/routes/auth_routes.js#L79) | <code>logLabel: 'register-individual',</code> | Hatalar respondWithServiceError ile yanıtlanır (4xx mesajı istemciye gider) |
 
 **Olası nedenler**
@@ -697,8 +697,8 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 300 --nostrea
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
 | [server/src/routes/auth_routes.js:85](../../server/src/routes/auth_routes.js#L85) | <code>authRouter.post('/auth/verify-code', verifyCodeLimiter, async (req, res) =&gt; {</code> | Doğrulama ucu |
-| [server/src/services/membership_service.js:382](../../server/src/services/membership_service.js#L382) | <code>const isMatch = await bcrypt.compare(cleanCode, record.code_hash);</code> | Kod, EN SON açık kodun bcrypt özetiyle karşılaştırılır |
-| [server/src/services/membership_service.js:387](../../server/src/services/membership_service.js#L387) | <code>throw httpError(400, `Girdiğiniz ${VERIFICATION_CODE_DIGITS} haneli kod hatalıdır.`);</code> | Hatalı kod yanıtı; deneme sayacı COMMIT ile kalıcı artar |
+| [server/src/services/membership_service.js:409](../../server/src/services/membership_service.js#L409) | <code>const isMatch = await bcrypt.compare(cleanCode, record.code_hash);</code> | Kod, EN SON açık kodun bcrypt özetiyle karşılaştırılır |
+| [server/src/services/membership_service.js:414](../../server/src/services/membership_service.js#L414) | <code>throw httpError(400, `Girdiğiniz ${VERIFICATION_CODE_DIGITS} haneli kod hatalıdır.`);</code> | Hatalı kod yanıtı; deneme sayacı COMMIT ile kalıcı artar |
 | [server/src/services/membership_rules.js:45](../../server/src/services/membership_rules.js#L45) | <code>export function isValidVerificationCodeFormat(code) {</code> | Biçim: 6 haneli (geçiş için 4 haneli de) rakam |
 | [server/src/services/membership_rules.js:250](../../server/src/services/membership_rules.js#L250) | <code>export const SQL_SUPERSEDE_OLDER_VERIFICATION_CODES = `</code> | Yeni kod başarıyla gönderilince daha eski açık kodlar kapatılır |
 
@@ -745,7 +745,7 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 300 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/services/membership_service.js:408](../../server/src/services/membership_service.js#L408) | <code>throw httpError(404, 'Bekleyen kayıt bulunamadı. Lütfen yeniden kayıt olunuz.');</code> | Kod doğru ama bekleyen kayıt silinmiş: işlem geri alınır (kod tüketilmez) |
+| [server/src/services/membership_service.js:435](../../server/src/services/membership_service.js#L435) | <code>throw httpError(404, 'Bekleyen kayıt bulunamadı. Lütfen yeniden kayıt olunuz.');</code> | Kod doğru ama bekleyen kayıt silinmiş: işlem geri alınır (kod tüketilmez) |
 | [server/src/services/membership_rules.js:171](../../server/src/services/membership_rules.js#L171) | <code>export const SQL_TAKE_PENDING_REGISTRATION = `</code> | Bekleyen kayıt DELETE ... RETURNING ile atomik alınır |
 | [server/src/services/membership_rules.js:29](../../server/src/services/membership_rules.js#L29) | <code>export const VERIFICATION_CODE_TTL_MINUTES = 30;</code> | Kod 30 dk geçerli; süre dolunca aktif kod bulunamaz |
 | [server/src/services/maintenance_service.js:46](../../server/src/services/maintenance_service.js#L46) | <code>DELETE FROM pending_registrations</code> | Bakım: 2 günden eski bekleyen kayıtlar silinir (hesap silmez) |
@@ -770,8 +770,8 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 300 --nostrea
 | --- | --- | --- |
 | [server/src/routes/auth_routes.js:104](../../server/src/routes/auth_routes.js#L104) | <code>authRouter.post('/auth/resend-code', resendCodeLimiter, async (req, res) =&gt; {</code> | Yanıt HER durumda 200 ok:true; gönderim arka planda yapılır |
 | [server/src/routes/auth_routes.js:113](../../server/src/routes/auth_routes.js#L113) | <code>console.error('[resend-code] gonderim basarisiz:', error?.statusCode &#124;&#124; error?.code &#124;&#124; er…</code> | Gönderim hatası yalnızca günlüğe yazılır (kullanıcı varlığı sızdırılmasın) |
-| [server/src/services/membership_service.js:494](../../server/src/services/membership_service.js#L494) | <code>export async function resendIndividualVerificationCode({ email }) {</code> | Hesap yoksa ya da doğrulanmışsa kod gönderilmez |
-| [server/src/services/membership_service.js:522](../../server/src/services/membership_service.js#L522) | <code>void issueVerificationCode({ email: cleanEmail, fullName }).catch((error) =&gt; {</code> | Bekleme (30 sn) ve saatlik tavan burada da geçerlidir; reddedilirse sessizce gönderilmez |
+| [server/src/services/membership_service.js:521](../../server/src/services/membership_service.js#L521) | <code>export async function resendIndividualVerificationCode({ email }) {</code> | Hesap yoksa ya da doğrulanmışsa kod gönderilmez |
+| [server/src/services/membership_service.js:549](../../server/src/services/membership_service.js#L549) | <code>void issueVerificationCode({ email: cleanEmail, fullName }).catch((error) =&gt; {</code> | Bekleme (30 sn) ve saatlik tavan burada da geçerlidir; reddedilirse sessizce gönderilmez |
 
 **Olası nedenler**
 - E-posta için bekleyen kayıt/doğrulanmamış hesap yok (ör. 2 gün geçip silindi ya da hesap zaten doğrulanmış): gönderim yapılmaz, yanıt yine ok
@@ -800,10 +800,10 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 300 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/routes/auth_routes.js:339](../../server/src/routes/auth_routes.js#L339) | <code>authRouter.post('/auth/forgot-password', forgotPasswordLimiter, async (req, res) =&gt; {</code> | Yanıt her durumda aynı (200 ok:true); işlem arka planda |
-| [server/src/routes/auth_routes.js:357](../../server/src/routes/auth_routes.js#L357) | <code>if (userRes.rowCount === 0 &#124;&#124; !userRes.rows[0].is_active) {</code> | Hesap yoksa ya da pasifse sessizce çıkılır (e-posta gitmez) |
-| [server/src/routes/auth_routes.js:303](../../server/src/routes/auth_routes.js#L303) | <code>async function issuePasswordReset(user) {</code> | Token üretir (sha256 özeti DB'de), 30 dk süre verir, e-posta gönderir |
-| [server/src/routes/auth_routes.js:362](../../server/src/routes/auth_routes.js#L362) | <code>console.error('[forgot-password] islem basarisiz:', error?.code &#124;&#124; error?.message);</code> | SMTP/DB hatası yalnızca günlüğe yazılır |
+| [server/src/routes/auth_routes.js:372](../../server/src/routes/auth_routes.js#L372) | <code>authRouter.post('/auth/forgot-password', forgotPasswordLimiter, async (req, res) =&gt; {</code> | Yanıt her durumda aynı (200 ok:true); işlem arka planda |
+| [server/src/routes/auth_routes.js:390](../../server/src/routes/auth_routes.js#L390) | <code>if (userRes.rowCount === 0 &#124;&#124; !userRes.rows[0].is_active) {</code> | Hesap yoksa ya da pasifse sessizce çıkılır (e-posta gitmez) |
+| [server/src/routes/auth_routes.js:336](../../server/src/routes/auth_routes.js#L336) | <code>export async function issuePasswordReset(user) {</code> | Token üretir (sha256 özeti DB'de), 30 dk süre verir, e-posta gönderir |
+| [server/src/routes/auth_routes.js:395](../../server/src/routes/auth_routes.js#L395) | <code>console.error('[forgot-password] islem basarisiz:', error?.code &#124;&#124; error?.message);</code> | SMTP/DB hatası yalnızca günlüğe yazılır |
 | [server/src/middlewares/rate_limiters.js:245](../../server/src/middlewares/rate_limiters.js#L245) | <code>export const forgotPasswordLimiter = createRuleLimiter({</code> | IP+e-posta 3/15 dk, e-posta 5/saat, IP 30/saat |
 | [server/src/mailer.js:376](../../server/src/mailer.js#L376) | <code>export async function sendPasswordResetEmail({</code> | Sıfırlama e-postası şablonu (bağlantı + 30 dk bilgisi) |
 
@@ -834,11 +834,11 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 300 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/routes/auth_routes.js:373](../../server/src/routes/auth_routes.js#L373) | <code>authRouter.get('/auth/reset-password', resetPasswordLimiter, async (req, res) =&gt; {</code> | Web sayfası: 400 (token yok), 404 (biçim/özet yok), 410 (süre dolmuş) |
-| [server/src/routes/auth_routes.js:289](../../server/src/routes/auth_routes.js#L289) | <code>const RESET_TOKEN_PATTERN = /^[0-9a-f]{64}$/i;</code> | Token tam 64 onaltılık karakter olmalı (e-posta istemcisi bağlantıyı kırparsa 404) |
-| [server/src/routes/auth_routes.js:431](../../server/src/routes/auth_routes.js#L431) | <code>authRouter.post('/auth/reset-password', resetPasswordLimiter, async (req, res) =&gt; {</code> | Parolayı güncelleyen uç |
-| [server/src/routes/auth_routes.js:482](../../server/src/routes/auth_routes.js#L482) | <code>AND password_reset_expires_at &gt; NOW()</code> | Atomik tek kullanım: süre dolmuş ya da zaten kullanılmışsa güncelleme 0 satır -> 400 |
-| [server/src/routes/auth_routes.js:323](../../server/src/routes/auth_routes.js#L323) | <code>process.env.PUBLIC_APP_URL &#124;&#124;</code> | Bağlantının kök adresi PUBLIC_APP_URL / PUBLIC_BASE_URL (yoksa api.gudeteknoloji.com.tr) |
+| [server/src/routes/auth_routes.js:406](../../server/src/routes/auth_routes.js#L406) | <code>authRouter.get('/auth/reset-password', resetPasswordLimiter, async (req, res) =&gt; {</code> | Web sayfası: 400 (token yok), 404 (biçim/özet yok), 410 (süre dolmuş) |
+| [server/src/routes/auth_routes.js:322](../../server/src/routes/auth_routes.js#L322) | <code>const RESET_TOKEN_PATTERN = /^[0-9a-f]{64}$/i;</code> | Token tam 64 onaltılık karakter olmalı (e-posta istemcisi bağlantıyı kırparsa 404) |
+| [server/src/routes/auth_routes.js:464](../../server/src/routes/auth_routes.js#L464) | <code>authRouter.post('/auth/reset-password', resetPasswordLimiter, async (req, res) =&gt; {</code> | Parolayı güncelleyen uç |
+| [server/src/routes/auth_routes.js:517](../../server/src/routes/auth_routes.js#L517) | <code>AND password_reset_expires_at &gt; NOW()</code> | Atomik tek kullanım: süre dolmuş ya da zaten kullanılmışsa güncelleme 0 satır -> 400 |
+| [server/src/routes/auth_routes.js:356](../../server/src/routes/auth_routes.js#L356) | <code>process.env.PUBLIC_APP_URL &#124;&#124;</code> | Bağlantının kök adresi PUBLIC_APP_URL / PUBLIC_BASE_URL (yoksa api.gudeteknoloji.com.tr) |
 
 **Olası nedenler**
 - Bağlantı 30 dakikadan eski
@@ -861,10 +861,10 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 300 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/routes/auth_routes.js:512](../../server/src/routes/auth_routes.js#L512) | <code>authRouter.post('/auth/register', async (req, res) =&gt; {</code> | Eski genel kayıt ucu: 410 |
-| [server/src/routes/auth_routes.js:555](../../server/src/routes/auth_routes.js#L555) | <code>authRouter.post('/auth/site-manager/register', async (req, res) =&gt; {</code> | Eski site yöneticisi kayıt ucu: 410 |
-| [server/src/routes/auth_routes.js:657](../../server/src/routes/auth_routes.js#L657) | <code>authRouter.post('/auth/site-manager/verify-email', async (req, res) =&gt; {</code> | Eski yönetici doğrulama ucu: 410 |
-| [server/src/routes/auth_routes.js:664](../../server/src/routes/auth_routes.js#L664) | <code>authRouter.post('/auth/site-manager/resend-code', async (req, res) =&gt; {</code> | Eski yönetici kod ucu: 410 |
+| [server/src/routes/auth_routes.js:559](../../server/src/routes/auth_routes.js#L559) | <code>authRouter.post('/auth/register', async (req, res) =&gt; {</code> | Eski genel kayıt ucu: 410 |
+| [server/src/routes/auth_routes.js:602](../../server/src/routes/auth_routes.js#L602) | <code>authRouter.post('/auth/site-manager/register', async (req, res) =&gt; {</code> | Eski site yöneticisi kayıt ucu: 410 |
+| [server/src/routes/auth_routes.js:704](../../server/src/routes/auth_routes.js#L704) | <code>authRouter.post('/auth/site-manager/verify-email', async (req, res) =&gt; {</code> | Eski yönetici doğrulama ucu: 410 |
+| [server/src/routes/auth_routes.js:711](../../server/src/routes/auth_routes.js#L711) | <code>authRouter.post('/auth/site-manager/resend-code', async (req, res) =&gt; {</code> | Eski yönetici kod ucu: 410 |
 
 **Olası nedenler**
 - Uygulama sürümü eski: yeni kayıt ucu POST /auth/register-individual ve POST /auth/verify-code kullanılır
@@ -916,10 +916,10 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 300 --nostrea
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
 | [server/src/routes/app_doors_routes.js:161](../../server/src/routes/app_doors_routes.js#L161) | <code>appDoorsRouter.post('/app/doors/:id/open', authRequired, doorCommandRateLimiter, async (r…</code> | Uzaktan kapı açma ucu; önce kullanıcının bu kapıya erişimi sorgulanır |
-| [server/src/services/door_service.js:496](../../server/src/services/door_service.js#L496) | <code>export async function getAccessibleDoorForUser({ authUser, doorId }) {</code> | Kapı, kullanıcının erişebildiği kapılar listesinde yoksa null -> 404 |
-| [server/src/services/door_service.js:383](../../server/src/services/door_service.js#L383) | <code>AND s.approval_status = 'approved'</code> | Süper kullanıcı dışında yalnızca ONAYLI sitelerin kapıları görünür |
-| [server/src/services/door_service.js:386](../../server/src/services/door_service.js#L386) | <code>-- 1. Site Yöneticisi veya Site Sahibi / Admini (Tüm kapıları görür)</code> | Yönetici/site sahibi sitenin tüm kapılarına erişir |
-| [server/src/services/door_service.js:445](../../server/src/services/door_service.js#L445) | <code>AND dao_neg.is_allowed = FALSE</code> | Kapıya özel "engelle" kaydı varsa sakin otomatik yetkisi çalışmaz |
+| [server/src/services/door_service.js:507](../../server/src/services/door_service.js#L507) | <code>export async function getAccessibleDoorForUser({ authUser, doorId }) {</code> | Kapı, kullanıcının erişebildiği kapılar listesinde yoksa null -> 404 |
+| [server/src/services/door_service.js:394](../../server/src/services/door_service.js#L394) | <code>AND s.approval_status = 'approved'</code> | Süper kullanıcı dışında yalnızca ONAYLI sitelerin kapıları görünür |
+| [server/src/services/door_service.js:397](../../server/src/services/door_service.js#L397) | <code>-- 1. Site Yöneticisi veya Site Sahibi / Admini (Tüm kapıları görür)</code> | Yönetici/site sahibi sitenin tüm kapılarına erişir |
+| [server/src/services/door_service.js:456](../../server/src/services/door_service.js#L456) | <code>AND dao_neg.is_allowed = FALSE</code> | Kapıya özel "engelle" kaydı varsa sakin otomatik yetkisi çalışmaz |
 
 **Olası nedenler**
 - Kullanıcının bu kapıya yetkisi yok: aktif daire üyeliği/site üyeliği yok, katılım başvurusu henüz onaylanmamış ya da üyelik pasif
@@ -944,11 +944,11 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 300 --nostrea
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
 | [server/src/routes/app_doors_routes.js:109](../../server/src/routes/app_doors_routes.js#L109) | <code>appDoorsRouter.get('/app/my-doors', authRequired, async (req, res) =&gt; {</code> | Kullanıcının erişebildiği kapı listesi |
-| [server/src/services/door_service.js:277](../../server/src/services/door_service.js#L277) | <code>export async function listAccessibleDoorsForUser(authUser, { doorId = null } = {}) {</code> | Tüm erişim kuralları tek SQL'de: yönetici, ek izin, sakin otomatik yetkisi |
-| [server/src/services/door_service.js:398](../../server/src/services/door_service.js#L398) | <code>-- 2. Özel Kapı İzni (Manuel ek yetki verilmiş)</code> | Ek izin yalnızca üyeliği pasife alınmamış kullanıcı için çalışır |
-| [server/src/services/door_service.js:448](../../server/src/services/door_service.js#L448) | <code>-- 3a. Sitenin tüm ortak kapıları (SITE_COMMON)</code> | Aktif daire üyesi/sakini sitenin SITE_COMMON kapılarını görür |
-| [server/src/services/door_service.js:466](../../server/src/services/door_service.js#L466) | <code>-- 3b. Yalnızca sakinin kendi bloğuna ait kapılar (BLOCK)</code> | BLOCK kapsamlı kapı yalnızca o bloktaki sakinlere görünür |
-| [server/src/services/membership_service.js:1195](../../server/src/services/membership_service.js#L1195) | <code>export async function approveJoinRequest({ requestId, authUser }) {</code> | Onay, apartment_memberships ve site_memberships (RESIDENT) kayıtlarını oluşturur |
+| [server/src/services/door_service.js:288](../../server/src/services/door_service.js#L288) | <code>export async function listAccessibleDoorsForUser(authUser, { doorId = null } = {}) {</code> | Tüm erişim kuralları tek SQL'de: yönetici, ek izin, sakin otomatik yetkisi |
+| [server/src/services/door_service.js:409](../../server/src/services/door_service.js#L409) | <code>-- 2. Özel Kapı İzni (Manuel ek yetki verilmiş)</code> | Ek izin yalnızca üyeliği pasife alınmamış kullanıcı için çalışır |
+| [server/src/services/door_service.js:459](../../server/src/services/door_service.js#L459) | <code>-- 3a. Sitenin tüm ortak kapıları (SITE_COMMON)</code> | Aktif daire üyesi/sakini sitenin SITE_COMMON kapılarını görür |
+| [server/src/services/door_service.js:477](../../server/src/services/door_service.js#L477) | <code>-- 3b. Yalnızca sakinin kendi bloğuna ait kapılar (BLOCK)</code> | BLOCK kapsamlı kapı yalnızca o bloktaki sakinlere görünür |
+| [server/src/services/membership_service.js:1258](../../server/src/services/membership_service.js#L1258) | <code>export async function approveJoinRequest({ requestId, authUser }) {</code> | Onay, apartment_memberships ve site_memberships (RESIDENT) kayıtlarını oluşturur |
 
 **Olası nedenler**
 - Katılım başvurusu PENDING (yönetici onaylamadı) ya da REJECTED
@@ -972,8 +972,8 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 300 --nostrea
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
 | [server/src/routes/app_doors_routes.js:177](../../server/src/routes/app_doors_routes.js#L177) | <code>return res.status(409).json({ error: 'Bu kapiya cihaz atanmamis.' });</code> | Açma ucunda cihaz atanmamışsa 409 (1. eşleşme durum ucunda, 3. eşleşme karekod ucundadır) |
-| [server/src/services/door_service.js:508](../../server/src/services/door_service.js#L508) | <code>export async function unassignDoorDevice({ doorId, authUser = null }) {</code> | Yönetici kapıdan cihazı çıkarınca assigned_device_id boşalır |
-| [server/src/services/device_service.js:991](../../server/src/services/device_service.js#L991) | <code>export async function releaseDeviceOwnership({ deviceId, authUser }) {</code> | Sahiplik sıfırlanınca cihaz kapıdan da sökülür |
+| [server/src/services/door_service.js:519](../../server/src/services/door_service.js#L519) | <code>export async function unassignDoorDevice({ doorId, authUser = null }) {</code> | Yönetici kapıdan cihazı çıkarınca assigned_device_id boşalır |
+| [server/src/services/device_service.js:992](../../server/src/services/device_service.js#L992) | <code>export async function releaseDeviceOwnership({ deviceId, authUser }) {</code> | Sahiplik sıfırlanınca cihaz kapıdan da sökülür |
 | [server/src/routes/company_routes.js:162](../../server/src/routes/company_routes.js#L162) | <code>export async function removeCompanyDeviceRecord(db, deviceUid) {</code> | Şirket aracıyla cihaz silinince kapı ataması da temizlenir |
 
 **Olası nedenler**
@@ -1052,7 +1052,7 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 200 --nostrea
 | [server/src/services/door_access_policy.js:89](../../server/src/services/door_access_policy.js#L89) | <code>code: 'REMOTE_OPEN_DISABLED',</code> | feature_remote_open_enabled === false ve kullanıcı super_user değilse red |
 | [server/src/routes/app_doors_routes.js:181](../../server/src/routes/app_doors_routes.js#L181) | <code>assertDoorOpenAllowed({ door, channel: 'remote', authUser: req.authUser });</code> | Açma ucunda politika kontrolü (kanal: remote) |
 | [server/src/utils/site_rules.js:398](../../server/src/utils/site_rules.js#L398) | <code>error: 'Giris yontemi yetkilendirmesi (Uygulama/QR) yalnizca super user tarafindan yapila…</code> | Bu bayrağı yalnızca süper kullanıcı değiştirebilir (site yöneticisi 403 alır) |
-| [server/src/routes/admin_routes.js:1033](../../server/src/routes/admin_routes.js#L1033) | <code>adminRouter.patch('/admin/sites/:id/features', authRequired, requireSuperUser, async (req…</code> | Süper kullanıcı site modüllerini (uzaktan açma/QR/yerel/misafir) buradan açar-kapatır |
+| [server/src/routes/admin_routes.js:1175](../../server/src/routes/admin_routes.js#L1175) | <code>adminRouter.patch('/admin/sites/:id/features', authRequired, requireSuperUser, async (req…</code> | Süper kullanıcı site modüllerini (uzaktan açma/QR/yerel/misafir) buradan açar-kapatır |
 
 **Olası nedenler**
 - Sitede sites.feature_remote_open_enabled = FALSE (yönetim uzaktan açmayı kapatmış; kapı önü QR okuyucu kullanılmalı)
@@ -1075,7 +1075,7 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 200 --nostrea
 | [server/src/services/door_access_policy.js:110](../../server/src/services/door_access_policy.js#L110) | <code>code: 'QR_ENTRY_INACTIVE',</code> | qr_entry_active === false (yönetim geçici durdurdu) -> red |
 | [server/src/services/qr_access_service.js:37](../../server/src/services/qr_access_service.js#L37) | <code>assertDoorOpenAllowed({ door, channel: 'qr', authUser });</code> | QR token üretiminde politika kontrolü |
 | [server/src/utils/site_rules.js:426](../../server/src/utils/site_rules.js#L426) | <code>if (!effQr) {</code> | QR özelliği kapanınca qr_entry_active otomatik FALSE yapılır (kapalı özellik aktif olamaz) |
-| [server/src/routes/manager_routes.js:262](../../server/src/routes/manager_routes.js#L262) | <code>managerRouter.patch('/manager/sites/:id/security-policy', authRequired, requireSiteManage…</code> | Yönetici qr_entry_active (geçici durdurma) ve geofence ayarlarını buradan değiştirir |
+| [server/src/routes/manager_routes.js:264](../../server/src/routes/manager_routes.js#L264) | <code>managerRouter.patch('/manager/sites/:id/security-policy', authRequired, requireSiteManage…</code> | Yönetici qr_entry_active (geçici durdurma) ve geofence ayarlarını buradan değiştirir |
 
 **Olası nedenler**
 - Süper kullanıcı sitede karekod özelliğini kapattı (feature_qr_enabled = FALSE)
@@ -1335,7 +1335,7 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 300 --nostrea
 | [server/src/services/door_service.js:36](../../server/src/services/door_service.js#L36) | <code>export async function localDoorControlForStatus({ deviceUid, currentToken, status, allowL…</code> | Durum/açma yanıtındaki local_control (token, ip, port, available) buradan gelir |
 | [server/src/services/door_service.js:39](../../server/src/services/door_service.js#L39) | <code>if (!allowLocal) {</code> | Site yerel açmayı kapattıysa token VERİLMEZ (uygulama buluta düşer) |
 | [server/src/services/door_service.js:52](../../server/src/services/door_service.js#L52) | <code>(now - lastSent &gt; 60000)</code> | Cihaza local_control_config en çok 60 sn'de bir yeniden gönderilir |
-| [server/src/services/device_service.js:189](../../server/src/services/device_service.js#L189) | <code>export async function ensureDeviceLocalControlToken(deviceUid) {</code> | Token yoksa üretir; cihaz kayıtlı değilse null |
+| [server/src/services/device_service.js:190](../../server/src/services/device_service.js#L190) | <code>export async function ensureDeviceLocalControlToken(deviceUid) {</code> | Token yoksa üretir; cihaz kayıtlı değilse null |
 | [server/src/services/door_access_policy.js:130](../../server/src/services/door_access_policy.js#L130) | <code>code: 'LOCAL_DISABLED',</code> | local-open-notify ucu: feature_local_udp_enabled = FALSE ise 403 |
 
 **Olası nedenler**
@@ -1368,9 +1368,9 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 300 --nostrea
 | --- | --- | --- |
 | [server/src/services/local_token_service.js:38](../../server/src/services/local_token_service.js#L38) | <code>export async function rotateTokensForDevices({ deviceIds, reason, throwOnError = false })…</code> | Belirli cihazların token'ını döndürür (varsayılan: fırlatmaz, hata günlüğe; yalnız hesap silme sonrası yeniden deneyen çağıran throwOnError ister) |
 | [server/src/services/local_token_service.js:61](../../server/src/services/local_token_service.js#L61) | <code>export async function rotateTokensForSite({ siteCode, reason, throwOnError = false }) {</code> | Sitedeki tüm cihazların token'ını döndürür (hata günlüğü "[LocalToken] Site token döndürme başarısız") |
-| [server/src/services/device_service.js:252](../../server/src/services/device_service.js#L252) | <code>export async function rotateLocalControlTokensForDeviceIds(deviceIds, reason) {</code> | DB'de yeni token yazar ve cihaza MQTT ile iletir |
-| [server/src/services/device_service.js:225](../../server/src/services/device_service.js#L225) | <code>export async function pushLocalControlTokenToDevice({ deviceUid, token, reason }) {</code> | Cihaz çevrimdışıysa iletilemez (local_control_token_sync_failed) |
-| [server/src/services/membership_service.js:1703](../../server/src/services/membership_service.js#L1703) | <code>await rotateTokensForSite({ siteCode: apt.site_code, reason: 'apartment_member_removed' }…</code> | Sakin daireden çıkarılınca site cihazlarının token'ı döndürülür |
+| [server/src/services/device_service.js:253](../../server/src/services/device_service.js#L253) | <code>export async function rotateLocalControlTokensForDeviceIds(deviceIds, reason) {</code> | DB'de yeni token yazar ve cihaza MQTT ile iletir |
+| [server/src/services/device_service.js:226](../../server/src/services/device_service.js#L226) | <code>export async function pushLocalControlTokenToDevice({ deviceUid, token, reason }) {</code> | Cihaz çevrimdışıysa iletilemez (local_control_token_sync_failed) |
+| [server/src/services/membership_service.js:1863](../../server/src/services/membership_service.js#L1863) | <code>await rotateTokensForSite({ siteCode: apt.site_code, reason: 'apartment_member_removed' }…</code> | Sakin daireden çıkarılınca site cihazlarının token'ı döndürülür |
 
 **Olası nedenler**
 - Token döndürme DB'de hemen olur ama cihaza MQTT ile iletilir: cihaz o sırada çevrimdışıysa eski token cihazda kalır (günlükte local_control_token_sync_failed)
@@ -1404,7 +1404,7 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 300 --nostrea
 | [server/src/services/door_service.js:70](../../server/src/services/door_service.js#L70) | <code>export async function recordDoorAccessLog({</code> | Günlük yazımı: hata YUTULUR (false döner), kapı yine açılmış olur |
 | [server/src/services/door_service.js:119](../../server/src/services/door_service.js#L119) | <code>auditLog('door_access_log_write_failed', {</code> | Yazım hatasında denetim satırı |
 | [server/src/routes/app_doors_routes.js:236](../../server/src/routes/app_doors_routes.js#L236) | <code>console.error('Kapi gecis logu DB kayit hatasi:', err.message);</code> | Açma ucu günlüğü arka planda yazar; hata yalnız burada görünür |
-| [server/src/services/maintenance_service.js:64](../../server/src/services/maintenance_service.js#L64) | <code>DELETE FROM door_access_logs</code> | Günlük bakım 30 günden eski geçiş kayıtlarını siler |
+| [server/src/services/maintenance_service.js:69](../../server/src/services/maintenance_service.js#L69) | <code>DELETE FROM door_access_logs</code> | Günlük bakım 30 günden eski geçiş kayıtlarını siler |
 
 **Olası nedenler**
 - Günlük yazımı DB hatasıyla başarısız oldu (kapı açma etkilenmez; yalnız günlük kaybolur)
@@ -1437,7 +1437,7 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 300 --nostrea
 | [server/src/routes/door_log_routes.js:106](../../server/src/routes/door_log_routes.js#L106) | <code>doorLogRouter.get('/manager/door-logs', authRequired, requireSiteManager, async (req, res…</code> | Yönetici günlük ucu |
 | [server/src/routes/door_log_routes.js:13](../../server/src/routes/door_log_routes.js#L13) | <code>async function getManagedSiteCodes(authUser) {</code> | Bu dosyadaki yerel sürüm YALNIZCA site_manager_sites tablosuna bakar (site_memberships'e bakmaz) |
 | [server/src/routes/door_log_routes.js:136](../../server/src/routes/door_log_routes.js#L136) | <code>return res.status(403).json({ error: 'Bu sitenin loglarini gorme yetkiniz yok.' });</code> | İstenen site_code yönetilen siteler arasında değilse 403 |
-| [server/src/services/site_service.js:334](../../server/src/services/site_service.js#L334) | <code>export async function getManagedSiteCodes(authUser) {</code> | Diğer uçların kullandığı sürüm site_memberships'i de sayar (fark bu) |
+| [server/src/services/site_service.js:359](../../server/src/services/site_service.js#L359) | <code>export async function getManagedSiteCodes(authUser) {</code> | Diğer uçların kullandığı sürüm site_memberships'i de sayar (fark bu) |
 
 **Olası nedenler**
 - Kullanıcı yalnızca site_memberships (SITE_OWNER/SITE_ADMIN) ile yönetici, site_manager_sites satırı yok: günlük ucu boş liste döndürür
@@ -1519,12 +1519,12 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 300 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/middlewares/error_handler.js:103](../../server/src/middlewares/error_handler.js#L103) | <code>export function createErrorHandler({ logger = console } = {}) {</code> | Global yakalayıcı: 5xx'te stack/mesaj istemciye gitmez, errorId üretilir |
-| [server/src/middlewares/error_handler.js:131](../../server/src/middlewares/error_handler.js#L131) | <code>`[ERROR] ${errorId} ${req.method} ${maskSensitiveUrl(req.originalUrl)}:`,</code> | Ayrıntı yalnızca sunucu günlüğüne yazılır; errorId ile eşleşir |
+| [server/src/middlewares/error_handler.js:119](../../server/src/middlewares/error_handler.js#L119) | <code>export function createErrorHandler({ logger = console } = {}) {</code> | Global yakalayıcı: 5xx'te stack/mesaj istemciye gitmez, errorId üretilir |
+| [server/src/middlewares/error_handler.js:147](../../server/src/middlewares/error_handler.js#L147) | <code>`[ERROR] ${errorId} ${req.method} ${maskSensitiveUrl(req.originalUrl)}:`,</code> | Ayrıntı yalnızca sunucu günlüğüne yazılır; errorId ile eşleşir |
 | [server/src/middlewares/error_handler.js:67](../../server/src/middlewares/error_handler.js#L67) | <code>export function respondWithServiceError(res, error, { fallbackMessage = GENERIC_SERVER_ER…</code> | Route'ların servis hatasını 4xx mesajı ya da 500+errorId'ye çevirdiği ortak yardımcı |
-| [server/src/middlewares/error_handler.js:95](../../server/src/middlewares/error_handler.js#L95) | <code>logger.error(`[${logLabel}] ${errorId}:`, error?.stack &#124;&#124; error);</code> | respondWithServiceError yolunun günlük satırı |
-| [server/src/utils/validators.js:352](../../server/src/utils/validators.js#L352) | <code>console.error(`[mutation-error] error_id=${errorId}`, error?.code &#124;&#124; error?.name &#124;&#124; 'erro…</code> | Mutasyon uçlarında errorId alan adı error_id (alt çizgili) olarak döner |
-| [server/src/routes/admin_routes.js:123](../../server/src/routes/admin_routes.js#L123) | <code>console.error(`[admin] ${errorId} ${fallbackMessage}`, error);</code> | Admin uçlarının beklenmeyen hata günlüğü |
+| [server/src/middlewares/error_handler.js:111](../../server/src/middlewares/error_handler.js#L111) | <code>logger.error(`[${logLabel}] ${errorId}:`, error?.stack &#124;&#124; error);</code> | respondWithServiceError yolunun günlük satırı |
+| [server/src/utils/validators.js:399](../../server/src/utils/validators.js#L399) | <code>console.error(`[mutation-error] error_id=${errorId}`, error?.code &#124;&#124; error?.name &#124;&#124; 'erro…</code> | Mutasyon uçlarında errorId alan adı error_id (alt çizgili) olarak döner |
+| [server/src/routes/admin_routes.js:146](../../server/src/routes/admin_routes.js#L146) | <code>console.error(`[admin] ${errorId} ${fallbackMessage}`, error);</code> | Admin uçlarının beklenmeyen hata günlüğü |
 
 **Olası nedenler**
 - Kodda ya da veritabanı sorgusunda beklenmeyen hata (TypeError, pg hatası, SMTP/ağ hatası); asıl neden yalnızca günlüktedir
@@ -1554,13 +1554,13 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 500 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/routes/admin_routes.js:277](../../server/src/routes/admin_routes.js#L277) | <code>adminRouter.post('/admin/users', authRequired, requireSuperUser, async (req, res) =&gt; {</code> | Kullanıcı oluşturma: validateCreateInput ardından createUser (201) |
-| [server/src/routes/admin_routes.js:320](../../server/src/routes/admin_routes.js#L320) | <code>adminRouter.patch('/admin/users/:id', authRequired, requireSuperUser, async (req, res) =&gt;…</code> | Düzenleme: boş alan, kendi parolası, e-posta değişimi ve daire sakini parolası kuralları |
-| [server/src/routes/admin_routes.js:356](../../server/src/routes/admin_routes.js#L356) | <code>code: 'USE_PROFILE_PASSWORD_CHANGE',</code> | Süper kullanıcı kendi parolasını bu uçtan değiştiremez (Profilim kullanılmalı) |
-| [server/src/routes/admin_routes.js:404](../../server/src/routes/admin_routes.js#L404) | <code>error: 'Güvenlik kuralı: Daire sakinlerinin şifresi yöneticiler tarafından değiştirilemez…</code> | apartment_owner/individual parolası yöneticice değiştirilemez (403) |
-| [server/src/routes/admin_routes.js:396](../../server/src/routes/admin_routes.js#L396) | <code>return res.status(400).json({ error: 'E-posta adresi güvenlik nedeniyle değiştirilemez.' …</code> | Mevcut e-postası olan kullanıcıda e-posta değişikliği reddedilir |
-| [server/src/utils/validators.js:77](../../server/src/utils/validators.js#L77) | <code>export function validateCreateInput({</code> | Oluşturma girdi kuralları (ad >= 3, parola >= 6, rol, telefon) |
-| [server/src/utils/validators.js:356](../../server/src/utils/validators.js#L356) | <code>export function handleUserMutationError(error, res, genericErrorMessage) {</code> | 23505 çakışmaları 409 (e-posta, kullanıcı adı, kod) olur |
+| [server/src/routes/admin_routes.js:328](../../server/src/routes/admin_routes.js#L328) | <code>adminRouter.post('/admin/users', authRequired, requireSuperUser, async (req, res) =&gt; {</code> | Kullanıcı oluşturma: validateCreateInput ardından createUser (201) |
+| [server/src/routes/admin_routes.js:381](../../server/src/routes/admin_routes.js#L381) | <code>adminRouter.patch('/admin/users/:id', authRequired, requireSuperUser, async (req, res) =&gt;…</code> | Düzenleme: boş alan, kendi parolası, e-posta değişimi ve daire sakini parolası kuralları |
+| [server/src/routes/admin_routes.js:417](../../server/src/routes/admin_routes.js#L417) | <code>code: 'USE_PROFILE_PASSWORD_CHANGE',</code> | Süper kullanıcı kendi parolasını bu uçtan değiştiremez (Profilim kullanılmalı) |
+| [server/src/routes/admin_routes.js:465](../../server/src/routes/admin_routes.js#L465) | <code>error: 'Güvenlik kuralı: Daire sakinlerinin şifresi yöneticiler tarafından değiştirilemez…</code> | apartment_owner/individual parolası yöneticice değiştirilemez (403) |
+| [server/src/routes/admin_routes.js:457](../../server/src/routes/admin_routes.js#L457) | <code>return res.status(400).json({ error: 'E-posta adresi güvenlik nedeniyle değiştirilemez.' …</code> | Mevcut e-postası olan kullanıcıda e-posta değişikliği reddedilir |
+| [server/src/utils/validators.js:95](../../server/src/utils/validators.js#L95) | <code>export function validateCreateInput({</code> | Oluşturma girdi kuralları (ad >= 3, parola >= 6, rol, telefon) |
+| [server/src/utils/validators.js:403](../../server/src/utils/validators.js#L403) | <code>export function handleUserMutationError(error, res, genericErrorMessage) {</code> | 23505 çakışmaları 409 (e-posta, kullanıcı adı, kod) olur |
 | [server/src/services/user_service.js:5](../../server/src/services/user_service.js#L5) | <code>export async function createUser({</code> | bcrypt ile parola özeti üretip users satırını ekler |
 
 **Olası nedenler**
@@ -1584,12 +1584,12 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 500 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/routes/admin_routes.js:462](../../server/src/routes/admin_routes.js#L462) | <code>adminRouter.delete('/admin/users/:id', authRequired, requireSuperUser, async (req, res) =…</code> | Silme ucu: tek işlemde (BEGIN/COMMIT) bağlı kayıtları temizleyip users satırını siler |
-| [server/src/routes/admin_routes.js:473](../../server/src/routes/admin_routes.js#L473) | <code>return res.status(400).json({ error: 'Kendi hesabinizi silemezsiniz.' });</code> | Kendi hesabını silme engeli (400) |
-| [server/src/routes/admin_routes.js:529](../../server/src/routes/admin_routes.js#L529) | <code>await client.query('DELETE FROM site_manager_sites WHERE manager_user_code = $1', [target…</code> | Bağlı satır temizliği sırası; yeni bir FK eklenip buraya eklenmezse DELETE users patlar |
-| [server/src/routes/admin_routes.js:145](../../server/src/routes/admin_routes.js#L145) | <code>async function runOptionalStep(client, sql, params) {</code> | İsteğe bağlı tablolar SAVEPOINT ile atlanabilir (tablo yoksa silme bozulmaz) |
-| [server/src/routes/admin_routes.js:595](../../server/src/routes/admin_routes.js#L595) | <code>console.error(`Kullanici silinirken hata (${errorId}):`, error);</code> | Başarısızlıkta ayrıntı günlüğe yazılır; istemciye yalnız errorId gider |
-| [server/src/routes/admin_routes.js:584](../../server/src/routes/admin_routes.js#L584) | <code>await rotateLocalControlTokensForDeviceIds(deviceIds, 'user_deleted');</code> | Silinen kullanıcının eriştiği cihazların yerel token'ı döndürülür (başarısızlık yalnız uyarı) |
+| [server/src/routes/admin_routes.js:544](../../server/src/routes/admin_routes.js#L544) | <code>adminRouter.delete('/admin/users/:id', authRequired, requireSuperUser, async (req, res) =…</code> | Silme ucu: tek işlemde (BEGIN/COMMIT) bağlı kayıtları temizleyip users satırını siler |
+| [server/src/routes/admin_routes.js:555](../../server/src/routes/admin_routes.js#L555) | <code>return res.status(400).json({ error: 'Kendi hesabinizi silemezsiniz.' });</code> | Kendi hesabını silme engeli (400) |
+| [server/src/routes/admin_routes.js:611](../../server/src/routes/admin_routes.js#L611) | <code>await client.query('DELETE FROM site_manager_sites WHERE manager_user_code = $1', [target…</code> | Bağlı satır temizliği sırası; yeni bir FK eklenip buraya eklenmezse DELETE users patlar |
+| [server/src/routes/admin_routes.js:168](../../server/src/routes/admin_routes.js#L168) | <code>async function runOptionalStep(client, sql, params) {</code> | İsteğe bağlı tablolar SAVEPOINT ile atlanabilir (tablo yoksa silme bozulmaz) |
+| [server/src/routes/admin_routes.js:692](../../server/src/routes/admin_routes.js#L692) | <code>console.error(`Kullanici silinirken hata (${errorId}):`, error);</code> | Başarısızlıkta ayrıntı günlüğe yazılır; istemciye yalnız errorId gider |
+| [server/src/routes/admin_routes.js:681](../../server/src/routes/admin_routes.js#L681) | <code>await rotateLocalControlTokensForDeviceIds(deviceIds, 'user_deleted');</code> | Silinen kullanıcının eriştiği cihazların yerel token'ı döndürülür (başarısızlık yalnız uyarı) |
 
 **Olası nedenler**
 - Kullanıcıya bağlı, temizlik listesinde olmayan bir yabancı anahtar var (users satırı silinemez, 500)
@@ -1620,11 +1620,11 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 500 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/services/site_service.js:2018](../../server/src/services/site_service.js#L2018) | <code>export async function inviteSiteManager({ siteCode, email, fullName, inviterUser }) {</code> | Kayıtsız e-posta için 7 gün geçerli PENDING davet satırı yazılır |
-| [server/src/services/site_service.js:2174](../../server/src/services/site_service.js#L2174) | <code>VALUES ($1, $2, $3, $4, $5, 'PENDING', NOW() + INTERVAL '7 days')</code> | Davet 7 gün sonra süresi dolar (expires_at) |
-| [server/src/services/membership_service.js:433](../../server/src/services/membership_service.js#L433) | <code>`SELECT id, site_code FROM site_manager_invitations WHERE LOWER(email) = LOWER($1) AND st…</code> | Davet YALNIZCA e-posta doğrulama kodu girilince (verifyIndividualEmailCode) uygulanır; e-posta birebir (büyük/küçük harf duyarsız) eşleşmeli |
-| [server/src/services/membership_service.js:449](../../server/src/services/membership_service.js#L449) | <code>`UPDATE site_manager_invitations SET status = 'ACCEPTED' WHERE id = $1 AND status = 'PEND…</code> | Uygulanan davet ACCEPTED olur ve kullanıcı rolü site_manager yapılır |
-| [server/src/services/site_service.js:2354](../../server/src/services/site_service.js#L2354) | <code>SET status = 'REVOKED'</code> | İptal edilen davet artık uygulanmaz |
+| [server/src/services/site_service.js:2213](../../server/src/services/site_service.js#L2213) | <code>export async function inviteSiteManager({ siteCode, email, fullName, inviterUser }) {</code> | Kayıtsız e-posta için 7 gün geçerli PENDING davet satırı yazılır |
+| [server/src/services/site_service.js:2388](../../server/src/services/site_service.js#L2388) | <code>VALUES ($1, $2, $3, $4, $5, 'PENDING', NOW() + INTERVAL '7 days')</code> | Davet 7 gün sonra süresi dolar (expires_at) |
+| [server/src/services/membership_service.js:460](../../server/src/services/membership_service.js#L460) | <code>`SELECT id, site_code FROM site_manager_invitations WHERE LOWER(email) = LOWER($1) AND st…</code> | Davet YALNIZCA e-posta doğrulama kodu girilince (verifyIndividualEmailCode) uygulanır; e-posta birebir (büyük/küçük harf duyarsız) eşleşmeli |
+| [server/src/services/membership_service.js:476](../../server/src/services/membership_service.js#L476) | <code>`UPDATE site_manager_invitations SET status = 'ACCEPTED' WHERE id = $1 AND status = 'PEND…</code> | Uygulanan davet ACCEPTED olur ve kullanıcı rolü site_manager yapılır |
+| [server/src/services/site_service.js:2606](../../server/src/services/site_service.js#L2606) | <code>SET status = 'REVOKED'</code> | İptal edilen davet artık uygulanmaz |
 
 **Olası nedenler**
 - Kişi davetteki e-postadan FARKLI bir e-postayla kayıt oldu (eşleşme yalnız e-posta iledir)
@@ -1646,12 +1646,12 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 500 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/services/site_service.js:2196](../../server/src/services/site_service.js#L2196) | <code>console.error('[Mailer] Yönetici davet e-postası gönderilemedi:', describeErrorForLog(mai…</code> | Kayıtsız e-posta için gönderim hatası YUTULUR: davet satırı yazılıdır, yanıt yine ok:true; günlüğe hata kodu ve kişisel verisi maskelenmiş ileti yazılır |
-| [server/src/services/site_service.js:2138](../../server/src/services/site_service.js#L2138) | <code>console.error('[Mailer] Yönetici ekleme bildirimi gönderilemedi:', describeErrorForLog(ma…</code> | Kayıtlı kullanıcı için bildirim hatası da yutulur (yetki zaten verilmiştir) |
+| [server/src/services/site_service.js:2430](../../server/src/services/site_service.js#L2430) | <code>console.error('[Mailer] Yönetici davet e-postası gönderilemedi:', describeErrorForLog(mai…</code> | Kayıtsız e-posta için gönderim hatası YUTULUR: davet satırı yazılıdır, yanıt yine ok:true; günlüğe hata kodu ve kişisel verisi maskelenmiş ileti yazılır |
+| [server/src/services/site_service.js:2348](../../server/src/services/site_service.js#L2348) | <code>console.error('[Mailer] Yönetici ekleme bildirimi gönderilemedi:', describeErrorForLog(ma…</code> | Kayıtlı kullanıcı için bildirim hatası da yutulur (yetki zaten verilmiştir) |
 | [server/src/security/log_redact.js:21](../../server/src/security/log_redact.js#L21) | <code>export function describeErrorForLog(error) {</code> | Günlük özeti: kod (EAUTH, ETIMEDOUT, responseCode...) + e-posta / telefon / belirteç maskelenmiş ileti (en çok 200 karakter) |
 | [server/src/mailer.js:243](../../server/src/mailer.js#L243) | <code>export async function sendSiteManagerInvitationEmail({</code> | Davet e-postası: SMTP_FROM/SMTP_USER yoksa hata fırlatır |
 | [server/src/mailer.js:11](../../server/src/mailer.js#L11) | <code>function createTransporter() {</code> | SMTP_HOST/SMTP_USER/SMTP_PASSWORD eksikse hata; zaman aşımları 5-20 sn |
-| [server/src/routes/manager_routes.js:1348](../../server/src/routes/manager_routes.js#L1348) | <code>managerRouter.post('/manager/sites/:siteCode/managers/invite', authRequired, requireSiteM…</code> | Davet ucu inviteLimiter ile korunur (saatte 20) |
+| [server/src/routes/manager_routes.js:1353](../../server/src/routes/manager_routes.js#L1353) | <code>managerRouter.post('/manager/sites/:siteCode/managers/invite', authRequired, requireSiteM…</code> | Davet ucu inviteLimiter ile korunur (saatte 20) |
 
 **Olası nedenler**
 - SMTP ayarı eksik/yanlış ya da SMTP sağlayıcısı reddediyor: davet kaydedilir ama e-posta gitmez (sessiz başarı, bilinçli tasarım)
@@ -1681,11 +1681,11 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 500 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/routes/manager_routes.js:1378](../../server/src/routes/manager_routes.js#L1378) | <code>managerRouter.delete('/manager/sites/:siteCode/managers/:userCode', authRequired, require…</code> | Yönetici çıkarma ucu |
-| [server/src/services/site_service.js:2213](../../server/src/services/site_service.js#L2213) | <code>export async function removeSiteManager({ siteCode, targetUserCode, callerUser }) {</code> | Tek işlem + FOR UPDATE: eşzamanlı iki çıkarma son yöneticiyi silemez |
+| [server/src/routes/manager_routes.js:1383](../../server/src/routes/manager_routes.js#L1383) | <code>managerRouter.delete('/manager/sites/:siteCode/managers/:userCode', authRequired, require…</code> | Yönetici çıkarma ucu |
+| [server/src/services/site_service.js:2447](../../server/src/services/site_service.js#L2447) | <code>export async function removeSiteManager({ siteCode, targetUserCode, callerUser }) {</code> | Tek işlem + FOR UPDATE: eşzamanlı iki çıkarma son yöneticiyi silemez |
 | [server/src/utils/site_rules.js:166](../../server/src/utils/site_rules.js#L166) | <code>export function evaluateManagerRemoval({</code> | Kurallar: hedef yönetici değilse 404, son yönetici 400, kurucu (SITE_OWNER) yalnız süper kullanıcı 403 |
 | [server/src/utils/site_rules.js:187](../../server/src/utils/site_rules.js#L187) | <code>message: 'Sitenin en az 1 aktif yöneticisi bulunmalıdır. Son yönetici çıkarılamaz.',</code> | Son yönetici koruması |
-| [server/src/services/site_service.js:2347](../../server/src/services/site_service.js#L2347) | <code>export async function revokeSiteManagerInvitation({ siteCode, invitationId }) {</code> | Bekleyen davet iptali: PENDING değilse 404 "İptal edilecek bekleyen davet bulunamadı." |
+| [server/src/services/site_service.js:2595](../../server/src/services/site_service.js#L2595) | <code>export async function revokeSiteManagerInvitation({ siteCode, invitationId, callerUser = …</code> | Bekleyen davet iptali: PENDING değilse 404 "İptal edilecek bekleyen davet bulunamadı." |
 
 **Olası nedenler**
 - Çıkarılmak istenen kişi sitenin tek yöneticisi (bilinçli koruma)
@@ -1707,11 +1707,11 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 500 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/routes/manager_routes.js:779](../../server/src/routes/manager_routes.js#L779) | <code>managerRouter.post('/manager/apartments/:id/send-credentials', authRequired, requireSiteM…</code> | Yönetici ucu; hata eşlemesi (400/500) burada |
-| [server/src/routes/admin_routes.js:1291](../../server/src/routes/admin_routes.js#L1291) | <code>adminRouter.post('/admin/apartments/:id/send-credentials', authRequired, requireSuperUser…</code> | Süper kullanıcı eşdeğeri |
-| [server/src/services/apartment_service.js:426](../../server/src/services/apartment_service.js#L426) | <code>export async function sendApartmentCredentials(apartmentId, { pinCode = null } = {}) {</code> | e-posta, kullanıcı adı ve PIN'in üçü de dolu olmalı |
-| [server/src/services/apartment_service.js:432](../../server/src/services/apartment_service.js#L432) | <code>throw new Error('APARTMENT_EMAIL_REQUIRED');</code> | Dairede resident_email boş (e-posta alanı kaydedilmemiş) |
-| [server/src/services/apartment_service.js:435](../../server/src/services/apartment_service.js#L435) | <code>throw new Error('APARTMENT_CREDENTIALS_NOT_READY');</code> | login_name boş (sakin hesabı oluşturulmamış). Migration 051: PIN saklanmadığı için eski uç PIN verilmezse 409 APARTMENT_PIN_NOT_STORED döner; yeni PIN reset-pin ile verilir |
+| [server/src/routes/manager_routes.js:784](../../server/src/routes/manager_routes.js#L784) | <code>managerRouter.post('/manager/apartments/:id/send-credentials', authRequired, requireSiteM…</code> | Yönetici ucu; hata eşlemesi (400/500) burada |
+| [server/src/routes/admin_routes.js:1446](../../server/src/routes/admin_routes.js#L1446) | <code>adminRouter.post('/admin/apartments/:id/send-credentials', authRequired, requireSuperUser…</code> | Süper kullanıcı eşdeğeri |
+| [server/src/services/apartment_service.js:478](../../server/src/services/apartment_service.js#L478) | <code>export async function sendApartmentCredentials(apartmentId, { pinCode = null } = {}) {</code> | e-posta, kullanıcı adı ve PIN'in üçü de dolu olmalı |
+| [server/src/services/apartment_service.js:484](../../server/src/services/apartment_service.js#L484) | <code>throw new Error('APARTMENT_EMAIL_REQUIRED');</code> | Dairede resident_email boş (e-posta alanı kaydedilmemiş) |
+| [server/src/services/apartment_service.js:487](../../server/src/services/apartment_service.js#L487) | <code>throw new Error('APARTMENT_CREDENTIALS_NOT_READY');</code> | login_name boş (sakin hesabı oluşturulmamış). Migration 051: PIN saklanmadığı için eski uç PIN verilmezse 409 APARTMENT_PIN_NOT_STORED döner; yeni PIN reset-pin ile verilir |
 | [server/src/mailer.js:163](../../server/src/mailer.js#L163) | <code>export async function sendApartmentCredentialsEmail({</code> | SMTP gönderimi; başarısızlık 500 + error_id ile döner |
 
 **Olası nedenler**
@@ -1738,13 +1738,13 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 500 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/routes/manager_routes.js:683](../../server/src/routes/manager_routes.js#L683) | <code>managerRouter.patch('/manager/apartments/:id/resident', authRequired, requireSiteManager,…</code> | Sakin kaydetme: yetki (hasSiteManagementAccess) + doğrulama + provisionApartmentResident |
-| [server/src/routes/manager_routes.js:749](../../server/src/routes/manager_routes.js#L749) | <code>managerRouter.delete('/manager/apartments/:id/resident', authRequired, requireSiteManager…</code> | Sakin sıfırlama ucu |
-| [server/src/utils/validators.js:238](../../server/src/utils/validators.js#L238) | <code>export function validateApartmentResidentInput({</code> | Ad >= 3, parola 4 haneli sayı, e-posta ve telefon biçimi |
-| [server/src/services/apartment_service.js:246](../../server/src/services/apartment_service.js#L246) | <code>passwordError.code = 'APARTMENT_PASSWORD_REQUIRED';</code> | YENİ sakin için 4 haneli sayısal şifre zorunlu; mevcut sakin düzenlemede boş şifre "değiştirme" sayılır |
-| [server/src/services/apartment_service.js:66](../../server/src/services/apartment_service.js#L66) | <code>export async function ensureUniqueLoginName({</code> | login_name çakışırsa _2, _3... eklenir; 100 denemede bulunamazsa APARTMENT_LOGIN_GENERATION_FAILED (500) |
-| [server/src/services/apartment_service.js:289](../../server/src/services/apartment_service.js#L289) | <code>const isInternalAccount = existingUserRes.rowCount &gt; 0 &amp;&amp; existingEmail.endsWith('@ahbu.l…</code> | Ad/e-posta/kullanıcı adı yalnız dahili hesapta güncellenir; üyelikle gelen gerçek kullanıcı ezilmez |
-| [server/src/services/apartment_service.js:336](../../server/src/services/apartment_service.js#L336) | <code>export async function resetApartmentResident(apartmentId, db = pool) {</code> | Sıfırlama: yalnız @ahbu.local hesabı SİLİNİR; gerçek kullanıcı hesabı silinmez, yalnız daire bağı kaldırılır |
+| [server/src/routes/manager_routes.js:685](../../server/src/routes/manager_routes.js#L685) | <code>managerRouter.patch('/manager/apartments/:id/resident', authRequired, requireSiteManager,…</code> | Sakin kaydetme: yetki (hasSiteManagementAccess) + doğrulama + provisionApartmentResident |
+| [server/src/routes/manager_routes.js:754](../../server/src/routes/manager_routes.js#L754) | <code>managerRouter.delete('/manager/apartments/:id/resident', authRequired, requireSiteManager…</code> | Sakin sıfırlama ucu |
+| [server/src/utils/validators.js:267](../../server/src/utils/validators.js#L267) | <code>export function validateApartmentResidentInput({</code> | Ad >= 3, parola 4 haneli sayı, e-posta ve telefon biçimi |
+| [server/src/services/apartment_service.js:298](../../server/src/services/apartment_service.js#L298) | <code>passwordError.code = 'APARTMENT_PASSWORD_REQUIRED';</code> | YENİ sakin için 4 haneli sayısal şifre zorunlu; mevcut sakin düzenlemede boş şifre "değiştirme" sayılır |
+| [server/src/services/apartment_service.js:118](../../server/src/services/apartment_service.js#L118) | <code>export async function ensureUniqueLoginName({</code> | login_name çakışırsa _2, _3... eklenir; 100 denemede bulunamazsa APARTMENT_LOGIN_GENERATION_FAILED (500) |
+| [server/src/services/apartment_service.js:341](../../server/src/services/apartment_service.js#L341) | <code>const isInternalAccount = existingUserRes.rowCount &gt; 0 &amp;&amp; existingEmail.endsWith('@ahbu.l…</code> | Ad/e-posta/kullanıcı adı yalnız dahili hesapta güncellenir; üyelikle gelen gerçek kullanıcı ezilmez |
+| [server/src/services/apartment_service.js:388](../../server/src/services/apartment_service.js#L388) | <code>export async function resetApartmentResident(apartmentId, db = pool) {</code> | Sıfırlama: yalnız @ahbu.local hesabı SİLİNİR; gerçek kullanıcı hesabı silinmez, yalnız daire bağı kaldırılır |
 
 **Olası nedenler**
 - Yeni sakinde şifre 4 haneli rakam değil (400, code APARTMENT_PASSWORD_REQUIRED)
@@ -1770,13 +1770,13 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 500 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/routes/membership_routes.js:137](../../server/src/routes/membership_routes.js#L137) | <code>membershipRouter.get('/membership/join-info/:token', authRequired, async (req, res) =&gt; {</code> | QR okutulunca site bilgisi: token yoksa 404, biçim bozuksa 400 |
-| [server/src/routes/membership_routes.js:157](../../server/src/routes/membership_routes.js#L157) | <code>membershipRouter.post('/membership/join-request', authRequired, async (req, res) =&gt; {</code> | Başvuru ucu (201) |
-| [server/src/services/membership_service.js:864](../../server/src/services/membership_service.js#L864) | <code>export async function createJoinRequest({</code> | Doğrulama sırası: oturum, daire/blok, e-posta doğrulanmış mı, token aktif mi, daire siteye ait mi, mükerrer başvuru |
-| [server/src/services/membership_service.js:972](../../server/src/services/membership_service.js#L972) | <code>throw httpError(409, 'Bu site için zaten onay bekleyen bir katılım başvurunuz bulunmaktad…</code> | Aynı site için bekleyen başvuru varken ikincisi 409 |
-| [server/src/services/membership_service.js:1029](../../server/src/services/membership_service.js#L1029) | <code>console.error('[Mailer] Katılım bildirimi e-postası gönderilemedi:', describeErrorForLog(…</code> | Yöneticiye bildirim e-postası başarısız olsa da başvuru kaydedilir (yalnız günlük; alıcı adresi yazılmaz, ileti maskelenir) |
-| [server/src/services/site_service.js:1390](../../server/src/services/site_service.js#L1390) | <code>export async function getSiteByJoinToken({ token }) {</code> | Katılım tokeninin aktif olup olmadığını çözen sorgu |
-| [server/src/services/site_service.js:1333](../../server/src/services/site_service.js#L1333) | <code>export async function rotateSiteJoinToken({ siteCode, authUser = null }) {</code> | Yönetici QR'ı yeniletince eski QR geçersiz olur ("iptal edilmiş") |
+| [server/src/routes/membership_routes.js:143](../../server/src/routes/membership_routes.js#L143) | <code>membershipRouter.get('/membership/join-info/:token', authRequired, async (req, res) =&gt; {</code> | QR okutulunca site bilgisi: token yoksa 404, biçim bozuksa 400 |
+| [server/src/routes/membership_routes.js:163](../../server/src/routes/membership_routes.js#L163) | <code>membershipRouter.post('/membership/join-request', authRequired, async (req, res) =&gt; {</code> | Başvuru ucu (201) |
+| [server/src/services/membership_service.js:921](../../server/src/services/membership_service.js#L921) | <code>export async function createJoinRequest({</code> | Doğrulama sırası: oturum, daire/blok, e-posta doğrulanmış mı, token aktif mi, daire siteye ait mi, mükerrer başvuru |
+| [server/src/services/membership_service.js:1035](../../server/src/services/membership_service.js#L1035) | <code>throw httpError(409, 'Bu site için zaten onay bekleyen bir katılım başvurunuz bulunmaktad…</code> | Aynı site için bekleyen başvuru varken ikincisi 409 |
+| [server/src/services/membership_service.js:1092](../../server/src/services/membership_service.js#L1092) | <code>console.error('[Mailer] Katılım bildirimi e-postası gönderilemedi:', describeErrorForLog(…</code> | Yöneticiye bildirim e-postası başarısız olsa da başvuru kaydedilir (yalnız günlük; alıcı adresi yazılmaz, ileti maskelenir) |
+| [server/src/services/site_service.js:1531](../../server/src/services/site_service.js#L1531) | <code>export async function getSiteByJoinToken({ token }) {</code> | Katılım tokeninin aktif olup olmadığını çözen sorgu |
+| [server/src/services/site_service.js:1474](../../server/src/services/site_service.js#L1474) | <code>export async function rotateSiteJoinToken({ siteCode, authUser = null }) {</code> | Yönetici QR'ı yeniletince eski QR geçersiz olur ("iptal edilmiş") |
 
 **Olası nedenler**
 - Site yöneticisi katılım QR'ını yeniledi: eski basılı QR artık geçersiz (404)
@@ -1802,13 +1802,13 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 500 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/routes/manager_routes.js:1277](../../server/src/routes/manager_routes.js#L1277) | <code>managerRouter.post('/manager/join-requests/:requestId/approve', authRequired, requireSite…</code> | Onay ucu |
-| [server/src/routes/manager_routes.js:1298](../../server/src/routes/manager_routes.js#L1298) | <code>managerRouter.post('/manager/join-requests/:requestId/reject', authRequired, requireSiteM…</code> | Red ucu (reason en çok 500 karakter) |
-| [server/src/services/membership_service.js:1195](../../server/src/services/membership_service.js#L1195) | <code>export async function approveJoinRequest({ requestId, authUser }) {</code> | Yetki durumdan ÖNCE denetlenir; PENDING değilse 409; ilk sakin APARTMENT_ADMIN, sonrakiler FAMILY_MEMBER |
-| [server/src/services/membership_service.js:1236](../../server/src/services/membership_service.js#L1236) | <code>throw httpError(403, 'Bu talebi onaylama yetkiniz bulunmamaktadır.');</code> | Talebin sitesinde yönetici/SITE_ADMIN olmayan yönetici 403 alır |
-| [server/src/services/membership_service.js:1253](../../server/src/services/membership_service.js#L1253) | <code>const assignedRole = adminCheckRes.rowCount === 0 ? 'APARTMENT_ADMIN' : 'FAMILY_MEMBER';</code> | Rol belirleme: dairede aktif APARTMENT_ADMIN yoksa yeni sakin yönetici olur |
-| [server/src/services/membership_service.js:1315](../../server/src/services/membership_service.js#L1315) | <code>export async function rejectJoinRequest({ requestId, authUser, reason }) {</code> | Red: aynı yetki/durum kuralları; gerekçe verilmezse varsayılan metin yazılır |
-| [server/src/services/membership_service.js:1111](../../server/src/services/membership_service.js#L1111) | <code>export async function getSiteJoinRequests({ siteCode, authUser, status }) {</code> | Başvuru listesi: PENDING önde; yönetici olmayan 403 |
+| [server/src/routes/manager_routes.js:1282](../../server/src/routes/manager_routes.js#L1282) | <code>managerRouter.post('/manager/join-requests/:requestId/approve', authRequired, requireSite…</code> | Onay ucu |
+| [server/src/routes/manager_routes.js:1303](../../server/src/routes/manager_routes.js#L1303) | <code>managerRouter.post('/manager/join-requests/:requestId/reject', authRequired, requireSiteM…</code> | Red ucu (reason en çok 500 karakter) |
+| [server/src/services/membership_service.js:1258](../../server/src/services/membership_service.js#L1258) | <code>export async function approveJoinRequest({ requestId, authUser }) {</code> | Yetki durumdan ÖNCE denetlenir; PENDING değilse 409; ilk sakin APARTMENT_ADMIN, sonrakiler FAMILY_MEMBER |
+| [server/src/services/membership_service.js:1299](../../server/src/services/membership_service.js#L1299) | <code>throw httpError(403, 'Bu talebi onaylama yetkiniz bulunmamaktadır.');</code> | Talebin sitesinde yönetici/SITE_ADMIN olmayan yönetici 403 alır |
+| [server/src/services/membership_service.js:1322](../../server/src/services/membership_service.js#L1322) | <code>const assignedRole = adminCheckRes.rowCount === 0 ? 'APARTMENT_ADMIN' : 'FAMILY_MEMBER';</code> | Rol belirleme: dairede aktif APARTMENT_ADMIN yoksa yeni sakin yönetici olur |
+| [server/src/services/membership_service.js:1402](../../server/src/services/membership_service.js#L1402) | <code>export async function rejectJoinRequest({ requestId, authUser, reason }) {</code> | Red: aynı yetki/durum kuralları; gerekçe verilmezse varsayılan metin yazılır |
+| [server/src/services/membership_service.js:1174](../../server/src/services/membership_service.js#L1174) | <code>export async function getSiteJoinRequests({ siteCode, authUser, status }) {</code> | Başvuru listesi: PENDING önde; yönetici olmayan 403 |
 
 **Olası nedenler**
 - Başvuru başka bir yönetici tarafından zaten onaylandı/reddedildi (409)
@@ -1830,13 +1830,13 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 500 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/routes/membership_routes.js:327](../../server/src/routes/membership_routes.js#L327) | <code>membershipRouter.get('/membership/doors/:id/permissions', authRequired, async (req, res) …</code> | Yetki ağacı (blok > daire > sakin) okuma |
-| [server/src/routes/membership_routes.js:375](../../server/src/routes/membership_routes.js#L375) | <code>membershipRouter.post('/membership/doors/:id/permissions/bulk', authRequired, async (req,…</code> | Blok, daire ya da kullanıcı listesi için toplu yetki |
-| [server/src/services/membership_service.js:2131](../../server/src/services/membership_service.js#L2131) | <code>export async function checkDoorManagementAccess(authUser, doorId) {</code> | Yetki kapısı: süper kullanıcı, site_manager_sites ya da aktif SITE_OWNER/SITE_ADMIN; aksi 403 |
-| [server/src/services/membership_service.js:2358](../../server/src/services/membership_service.js#L2358) | <code>export async function setDoorAccessOverride({</code> | isAllowed null = varsayılana dön (override silinir); true/false = ek yetki/engel |
-| [server/src/services/membership_service.js:2428](../../server/src/services/membership_service.js#L2428) | <code>export async function setBulkDoorAccessOverride({</code> | Toplu: userCodes > apartmentId > blockId önceliği; hiçbiri yoksa 400 |
-| [server/src/services/membership_service.js:2378](../../server/src/services/membership_service.js#L2378) | <code>await rotateTokensForDevices({</code> | Erişim daralınca cihazın yerel kontrol token'ı döndürülür (yetki kalkan kullanıcı çevrimdışı açamasın) |
-| [server/src/services/membership_rules.js:371](../../server/src/services/membership_rules.js#L371) | <code>export function overrideRevokesAccess(isAllowed) {</code> | Hangi değişikliklerin token döndürmeyi tetiklediği (reddet / varsayılana dön) |
+| [server/src/routes/membership_routes.js:333](../../server/src/routes/membership_routes.js#L333) | <code>membershipRouter.get('/membership/doors/:id/permissions', authRequired, async (req, res) …</code> | Yetki ağacı (blok > daire > sakin) okuma |
+| [server/src/routes/membership_routes.js:381](../../server/src/routes/membership_routes.js#L381) | <code>membershipRouter.post('/membership/doors/:id/permissions/bulk', authRequired, async (req,…</code> | Blok, daire ya da kullanıcı listesi için toplu yetki |
+| [server/src/services/membership_service.js:2348](../../server/src/services/membership_service.js#L2348) | <code>export async function checkDoorManagementAccess(authUser, doorId) {</code> | Yetki kapısı: süper kullanıcı, site_manager_sites ya da aktif SITE_OWNER/SITE_ADMIN; aksi 403 |
+| [server/src/services/membership_service.js:2575](../../server/src/services/membership_service.js#L2575) | <code>export async function setDoorAccessOverride({</code> | isAllowed null = varsayılana dön (override silinir); true/false = ek yetki/engel |
+| [server/src/services/membership_service.js:2692](../../server/src/services/membership_service.js#L2692) | <code>export async function setBulkDoorAccessOverride({</code> | Toplu: userCodes > apartmentId > blockId önceliği; hiçbiri yoksa 400 |
+| [server/src/services/membership_service.js:2662](../../server/src/services/membership_service.js#L2662) | <code>await rotateTokensForDevices({</code> | Erişim daralınca cihazın yerel kontrol token'ı döndürülür (yetki kalkan kullanıcı çevrimdışı açamasın) |
+| [server/src/services/membership_rules.js:396](../../server/src/services/membership_rules.js#L396) | <code>export function overrideRevokesAccess(isAllowed) {</code> | Hangi değişikliklerin token döndürmeyi tetiklediği (reddet / varsayılana dön) |
 
 **Olası nedenler**
 - Çağıran kişi kapının sitesinin yöneticisi değil (başka site ya da sıradan sakin) -> 403
@@ -1859,13 +1859,13 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 500 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/services/membership_service.js:1479](../../server/src/services/membership_service.js#L1479) | <code>export async function checkApartmentManagementAccess(authUser, apartmentId) {</code> | Daireyi yönetme yetkisi: süper kullanıcı, site yöneticisi ya da dairenin aktif yöneticisi (APARTMENT_ADMIN) |
-| [server/src/services/membership_service.js:1649](../../server/src/services/membership_service.js#L1649) | <code>export async function removeApartmentMember({ apartmentId, targetUserCode, authUser }) {</code> | Üye çıkarma; daire yöneticisi kendini çıkaramaz (400); gerekirse daire devri yapılır |
-| [server/src/services/membership_service.js:1732](../../server/src/services/membership_service.js#L1732) | <code>export async function toggleApartmentMemberStatus({ apartmentId, targetUserCode, isActive…</code> | Aktif/pasif: daire yöneticisi kendini pasife alamaz |
-| [server/src/services/membership_service.js:1839](../../server/src/services/membership_service.js#L1839) | <code>export async function deleteApartmentMember({ apartmentId, targetUserCode, authUser }) {</code> | Kalıcı silme yalnızca süper kullanıcı/site yöneticisi |
-| [server/src/services/membership_service.js:1916](../../server/src/services/membership_service.js#L1916) | <code>export async function changeApartmentMemberPassword({</code> | Yalnız kullanıcının KENDİ şifresi ve mevcut şifre zorunlu; başkasınınki 403 |
-| [server/src/services/membership_service.js:2044](../../server/src/services/membership_service.js#L2044) | <code>export async function setApartmentPrimaryAdmin({ apartmentId, targetUserCode, authUser })…</code> | Aile reisi değiştirme |
-| [server/src/services/membership_service.js:1550](../../server/src/services/membership_service.js#L1550) | <code>export async function cleanupDoorOverridesIfNoMembership(client, siteCode, userCode) {</code> | Üyelik bitince o sitede başka üyeliği kalmayan kullanıcının özel kapı izinleri silinir |
+| [server/src/services/membership_service.js:1584](../../server/src/services/membership_service.js#L1584) | <code>export async function checkApartmentManagementAccess(authUser, apartmentId) {</code> | Daireyi yönetme yetkisi: süper kullanıcı, site yöneticisi ya da dairenin aktif yöneticisi (APARTMENT_ADMIN) |
+| [server/src/services/membership_service.js:1796](../../server/src/services/membership_service.js#L1796) | <code>export async function removeApartmentMember({ apartmentId, targetUserCode, authUser }) {</code> | Üye çıkarma; daire yöneticisi kendini çıkaramaz (400); gerekirse daire devri yapılır |
+| [server/src/services/membership_service.js:1892](../../server/src/services/membership_service.js#L1892) | <code>export async function toggleApartmentMemberStatus({ apartmentId, targetUserCode, isActive…</code> | Aktif/pasif: daire yöneticisi kendini pasife alamaz |
+| [server/src/services/membership_service.js:2014](../../server/src/services/membership_service.js#L2014) | <code>export async function deleteApartmentMember({ apartmentId, targetUserCode, authUser }) {</code> | Kalıcı silme yalnızca süper kullanıcı/site yöneticisi |
+| [server/src/services/membership_service.js:2101](../../server/src/services/membership_service.js#L2101) | <code>export async function changeApartmentMemberPassword({</code> | Yalnız kullanıcının KENDİ şifresi ve mevcut şifre zorunlu; başkasınınki 403 |
+| [server/src/services/membership_service.js:2277](../../server/src/services/membership_service.js#L2277) | <code>export async function setApartmentPrimaryAdmin({ apartmentId, targetUserCode, authUser })…</code> | Aile reisi değiştirme |
+| [server/src/services/membership_service.js:1655](../../server/src/services/membership_service.js#L1655) | <code>export async function cleanupDoorOverridesIfNoMembership(client, siteCode, userCode) {</code> | Üyelik bitince o sitede başka üyeliği kalmayan kullanıcının özel kapı izinleri silinir |
 
 **Olası nedenler**
 - Çağıran kişi dairenin yöneticisi ya da site yöneticisi değil (403 "Bu daireyi yönetme yetkiniz bulunmamaktadır.")
@@ -1888,11 +1888,11 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 500 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/routes/manager_routes.js:547](../../server/src/routes/manager_routes.js#L547) | <code>managerRouter.get('/manager/sites/:id/join-token', authRequired, requireSiteManager, asyn…</code> | Aktif katılım tokenini getirir (yoksa oluşturur) |
-| [server/src/routes/manager_routes.js:572](../../server/src/routes/manager_routes.js#L572) | <code>managerRouter.post('/manager/sites/:id/join-token/rotate', authRequired, requireSiteManag…</code> | Yeni token üretir; eski QR'lar iptal edilir |
-| [server/src/services/site_service.js:1260](../../server/src/services/site_service.js#L1260) | <code>export async function getOrCreateSiteJoinToken({ siteCode, authUser = null }) {</code> | Siteyi kilitler (FOR NO KEY UPDATE), aktif token yoksa üretir |
-| [server/src/services/site_service.js:1333](../../server/src/services/site_service.js#L1333) | <code>export async function rotateSiteJoinToken({ siteCode, authUser = null }) {</code> | Eskiyi pasifleştirip yenisini yazar |
-| [server/src/services/site_service.js:299](../../server/src/services/site_service.js#L299) | <code>export async function hasSiteManagementAccess(authUser, siteCode) {</code> | Yönetim yetkisi: süper kullanıcı, site_manager_sites ya da aktif SITE_OWNER/SITE_ADMIN |
+| [server/src/routes/manager_routes.js:549](../../server/src/routes/manager_routes.js#L549) | <code>managerRouter.get('/manager/sites/:id/join-token', authRequired, requireSiteManager, asyn…</code> | Aktif katılım tokenini getirir (yoksa oluşturur) |
+| [server/src/routes/manager_routes.js:574](../../server/src/routes/manager_routes.js#L574) | <code>managerRouter.post('/manager/sites/:id/join-token/rotate', authRequired, requireSiteManag…</code> | Yeni token üretir; eski QR'lar iptal edilir |
+| [server/src/services/site_service.js:1401](../../server/src/services/site_service.js#L1401) | <code>export async function getOrCreateSiteJoinToken({ siteCode, authUser = null }) {</code> | Siteyi kilitler (FOR NO KEY UPDATE), aktif token yoksa üretir |
+| [server/src/services/site_service.js:1474](../../server/src/services/site_service.js#L1474) | <code>export async function rotateSiteJoinToken({ siteCode, authUser = null }) {</code> | Eskiyi pasifleştirip yenisini yazar |
+| [server/src/services/site_service.js:324](../../server/src/services/site_service.js#L324) | <code>export async function hasSiteManagementAccess(authUser, siteCode) {</code> | Yönetim yetkisi: süper kullanıcı, site_manager_sites ya da aktif SITE_OWNER/SITE_ADMIN |
 
 **Olası nedenler**
 - Çağıran kişi o sitenin yöneticisi değil (403)
@@ -1914,13 +1914,13 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 500 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/services/site_service.js:1532](../../server/src/services/site_service.js#L1532) | <code>export async function requestSiteDeletion({ siteCode, authUser }) {</code> | Çift taraflı teyit: ilk talep bekletilir, karşı taraf onaylayınca silinir; yöneticisiz sitede süper kullanıcı doğrudan siler |
-| [server/src/services/site_service.js:1658](../../server/src/services/site_service.js#L1658) | <code>export async function approveSiteDeletion({ siteCode, authUser }) {</code> | Bekleyen talebi YALNIZ karşı rol onaylayabilir (talep süper kullanıcıdansa yönetici, yöneticiden ise süper kullanıcı) |
-| [server/src/services/site_service.js:1705](../../server/src/services/site_service.js#L1705) | <code>export async function rejectOrCancelSiteDeletion({ siteCode, authUser }) {</code> | Talebi iptal/red: deletion_status none yapılır; bekleyen yoksa 400 |
-| [server/src/services/site_service.js:1455](../../server/src/services/site_service.js#L1455) | <code>export async function deleteSitePermanently(siteCode, authUser) {</code> | Kalıcı silme: daire kullanıcıları silinmez; cihaz yerel token'ı döndürülür |
-| [server/src/routes/manager_routes.js:480](../../server/src/routes/manager_routes.js#L480) | <code>managerRouter.delete('/manager/sites/:id', authRequired, requireSiteManager, async (req, …</code> | Yönetici silme talebi ucu |
-| [server/src/routes/admin_routes.js:1102](../../server/src/routes/admin_routes.js#L1102) | <code>adminRouter.delete('/admin/sites/:id', authRequired, requireSuperUser, async (req, res) =…</code> | Süper kullanıcı silme talebi ucu |
-| [server/src/routes/admin_routes.js:1117](../../server/src/routes/admin_routes.js#L1117) | <code>adminRouter.post('/admin/sites/:id/approve-deletion', authRequired, requireSuperUser, asy…</code> | Süper kullanıcının yönetici talebini onay ucu |
+| [server/src/services/site_service.js:1695](../../server/src/services/site_service.js#L1695) | <code>export async function requestSiteDeletion({ siteCode, authUser }) {</code> | Çift taraflı teyit: ilk talep bekletilir, karşı taraf onaylayınca silinir; yöneticisiz sitede süper kullanıcı doğrudan siler |
+| [server/src/services/site_service.js:1837](../../server/src/services/site_service.js#L1837) | <code>export async function approveSiteDeletion({ siteCode, authUser }) {</code> | Bekleyen talebi YALNIZ karşı rol onaylayabilir (talep süper kullanıcıdansa yönetici, yöneticiden ise süper kullanıcı) |
+| [server/src/services/site_service.js:1884](../../server/src/services/site_service.js#L1884) | <code>export async function rejectOrCancelSiteDeletion({ siteCode, authUser }) {</code> | Talebi iptal/red: deletion_status none yapılır; bekleyen yoksa 400 |
+| [server/src/services/site_service.js:1596](../../server/src/services/site_service.js#L1596) | <code>export async function deleteSitePermanently(siteCode, authUser) {</code> | Kalıcı silme: daire kullanıcıları silinmez; cihaz yerel token'ı döndürülür |
+| [server/src/routes/manager_routes.js:482](../../server/src/routes/manager_routes.js#L482) | <code>managerRouter.delete('/manager/sites/:id', authRequired, requireSiteManager, async (req, …</code> | Yönetici silme talebi ucu |
+| [server/src/routes/admin_routes.js:1244](../../server/src/routes/admin_routes.js#L1244) | <code>adminRouter.delete('/admin/sites/:id', authRequired, requireSuperUser, async (req, res) =…</code> | Süper kullanıcı silme talebi ucu |
+| [server/src/routes/admin_routes.js:1259](../../server/src/routes/admin_routes.js#L1259) | <code>adminRouter.post('/admin/sites/:id/approve-deletion', authRequired, requireSuperUser, asy…</code> | Süper kullanıcının yönetici talebini onay ucu |
 
 **Olası nedenler**
 - Bu bilinçli iki taraflı onay akışıdır: talep eden taraf tek başına silemez
@@ -1946,11 +1946,11 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 500 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/services/site_service.js:1757](../../server/src/services/site_service.js#L1757) | <code>export async function requestSiteDeletionEmailCode({ siteCode, authUser }) {</code> | Süper kullanıcının KENDİ e-postasına 6 haneli kod; 10 dk geçerli |
-| [server/src/services/site_service.js:1839](../../server/src/services/site_service.js#L1839) | <code>export async function confirmSiteDeletionWithEmailCode({ siteCode, code, authUser }) {</code> | Kod doğrulama + tek kullanımlık tüketim + kalıcı silme |
-| [server/src/services/site_service.js:1830](../../server/src/services/site_service.js#L1830) | <code>const deletionCodeAttempts = createAttemptTracker({</code> | Site+kullanıcı başına 5 hatada 15 dk kilit ve kod iptali |
-| [server/src/services/site_service.js:1930](../../server/src/services/site_service.js#L1930) | <code>const err = new Error('Bu silme doğrulama kodu artık geçerli değil. Lütfen yeni bir kod i…</code> | Atomik tüketim: eşzamanlı ikinci istek aynı kodla silemez |
-| [server/src/routes/admin_routes.js:1162](../../server/src/routes/admin_routes.js#L1162) | <code>adminRouter.post('/admin/sites/:id/confirm-email-deletion', authRequired, requireSuperUse…</code> | Doğrulama ucu ayrıca adminSensitiveLimiter ile sınırlı (15 dk'da 10) |
+| [server/src/services/site_service.js:1944](../../server/src/services/site_service.js#L1944) | <code>export async function requestSiteDeletionEmailCode({ siteCode, authUser }) {</code> | Süper kullanıcının KENDİ e-postasına 6 haneli kod; 10 dk geçerli |
+| [server/src/services/site_service.js:2026](../../server/src/services/site_service.js#L2026) | <code>export async function confirmSiteDeletionWithEmailCode({ siteCode, code, authUser }) {</code> | Kod doğrulama + tek kullanımlık tüketim + kalıcı silme |
+| [server/src/services/site_service.js:2017](../../server/src/services/site_service.js#L2017) | <code>const deletionCodeAttempts = createAttemptTracker({</code> | Site+kullanıcı başına 5 hatada 15 dk kilit ve kod iptali |
+| [server/src/services/site_service.js:2125](../../server/src/services/site_service.js#L2125) | <code>const err = new Error('Bu silme doğrulama kodu artık geçerli değil. Lütfen yeni bir kod i…</code> | Atomik tüketim: eşzamanlı ikinci istek aynı kodla silemez |
+| [server/src/routes/admin_routes.js:1304](../../server/src/routes/admin_routes.js#L1304) | <code>adminRouter.post('/admin/sites/:id/confirm-email-deletion', authRequired, requireSuperUse…</code> | Doğrulama ucu ayrıca adminSensitiveLimiter ile sınırlı (15 dk'da 10) |
 | [server/src/mailer.js:199](../../server/src/mailer.js#L199) | <code>export async function sendSuperUserSiteDeletionEmail({</code> | Kod e-postası; SMTP yoksa gönderim hatası |
 
 **Olası nedenler**
@@ -1974,13 +1974,13 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 500 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/routes/manager_routes.js:852](../../server/src/routes/manager_routes.js#L852) | <code>managerRouter.patch('/manager/doors/:id/device', authRequired, requireSiteManager, async …</code> | Atama ucu: yetki, site onayı (siteHasApprovedStatus), uid doğrulama, updateDoorDeviceAssignment |
-| [server/src/routes/manager_routes.js:869](../../server/src/routes/manager_routes.js#L869) | <code>return res.status(403).json({ error: 'Site sirket tarafindan onaylanmadan cihaza kapi ata…</code> | Şirket onayı olmayan sitede atama 403 |
-| [server/src/routes/manager_routes.js:925](../../server/src/routes/manager_routes.js#L925) | <code>managerRouter.post('/manager/doors/:id/replace-device', authRequired, requireSiteManager,…</code> | Cihaz değiştirme: eski kapı yetkileri/ayarları korunur |
+| [server/src/routes/manager_routes.js:857](../../server/src/routes/manager_routes.js#L857) | <code>managerRouter.patch('/manager/doors/:id/device', authRequired, requireSiteManager, async …</code> | Atama ucu: yetki, site onayı (siteHasApprovedStatus), uid doğrulama, updateDoorDeviceAssignment |
+| [server/src/routes/manager_routes.js:874](../../server/src/routes/manager_routes.js#L874) | <code>return res.status(403).json({ error: 'Site sirket tarafindan onaylanmadan cihaza kapi ata…</code> | Şirket onayı olmayan sitede atama 403 |
+| [server/src/routes/manager_routes.js:930](../../server/src/routes/manager_routes.js#L930) | <code>managerRouter.post('/manager/doors/:id/replace-device', authRequired, requireSiteManager,…</code> | Cihaz değiştirme: eski kapı yetkileri/ayarları korunur |
 | [server/src/services/door_service.js:143](../../server/src/services/door_service.js#L143) | <code>export async function updateDoorDeviceAssignment({</code> | Cihaz uid ile bulunur; isDeviceAssignableToManagedSite false ise DEVICE_NOT_ASSIGNABLE |
-| [server/src/services/site_service.js:397](../../server/src/services/site_service.js#L397) | <code>export function isDeviceAssignableToManagedSite(device, managedSiteCodes, targetSiteCode,…</code> | Atanabilirlik kuralı: arızalı değil, hedef site yönetilen sitelerde, başka sahibin cihazı değil; sahiplenilmemiş serbest envanter cihazı doğrudan atanamaz |
+| [server/src/services/site_service.js:422](../../server/src/services/site_service.js#L422) | <code>export function isDeviceAssignableToManagedSite(device, managedSiteCodes, targetSiteCode,…</code> | Atanabilirlik kuralı: arızalı değil, hedef site yönetilen sitelerde, başka sahibin cihazı değil; sahiplenilmemiş serbest envanter cihazı doğrudan atanamaz |
 | [server/src/utils/site_rules.js:480](../../server/src/utils/site_rules.js#L480) | <code>const DOOR_ERROR_MAP = {</code> | Servis kodu -> HTTP durum/mesaj eşlemesi (404/403/409) |
-| [server/src/services/door_service.js:823](../../server/src/services/door_service.js#L823) | <code>export async function replaceDoorDevice({ doorId, newDeviceInput, newDeviceId, authUser }…</code> | Değiştirmede DEVICE_DEFECTIVE / DEVICE_OWNED_BY_ANOTHER / DEVICE_NOT_ASSIGNABLE kodları burada fırlatılır |
+| [server/src/services/door_service.js:834](../../server/src/services/door_service.js#L834) | <code>export async function replaceDoorDevice({ doorId, newDeviceInput, newDeviceId, authUser }…</code> | Değiştirmede DEVICE_DEFECTIVE / DEVICE_OWNED_BY_ANOTHER / DEVICE_NOT_ASSIGNABLE kodları burada fırlatılır |
 
 **Olası nedenler**
 - Yönetici cihazı önce kutu QR/seri no ile SAHİPLENMEDİ: sahipsiz şirket envanteri cihazı doğrudan kapıya atanamaz (bilinçli kural)
@@ -2005,12 +2005,12 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 500 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/routes/manager_routes.js:224](../../server/src/routes/manager_routes.js#L224) | <code>async function handleSecurityPolicyPatch(req, res) {</code> | Tek işleyici: /manager/... (yönetici + süper kullanıcı) ve /admin/... (yalnız süper kullanıcı) |
+| [server/src/routes/manager_routes.js:226](../../server/src/routes/manager_routes.js#L226) | <code>async function handleSecurityPolicyPatch(req, res) {</code> | Tek işleyici: /manager/... (yönetici + süper kullanıcı) ve /admin/... (yalnız süper kullanıcı) |
 | [server/src/utils/site_rules.js:305](../../server/src/utils/site_rules.js#L305) | <code>export function parseSecurityPolicyBody(body) {</code> | Alan biçimi: true/false bayrakları, enlem -90..90, boylam -180..180, yarıçap sınırı, QR dönüş süresi kıstırılır |
 | [server/src/utils/site_rules.js:384](../../server/src/utils/site_rules.js#L384) | <code>export function resolveSecurityPolicyUpdate({ patch, existing, isSuperUser }) {</code> | İş kuralları: giriş yöntemi bayraklarını yalnız süper kullanıcı değiştirir; en az bir yöntem açık; konum açıkken koordinat zorunlu |
 | [server/src/utils/site_rules.js:421](../../server/src/utils/site_rules.js#L421) | <code>error: 'En az bir giris yontemi (Mobil Uygulama veya QR Kod) acik olmalidir.',</code> | Hem uzaktan hem QR kapatılamaz (400) |
 | [server/src/utils/site_rules.js:468](../../server/src/utils/site_rules.js#L468) | <code>error: 'Konum dogrulamasi acikken gecerli bir enlem ve boylam (site merkezi) zorunludur.',</code> | require_geofence açıkken site merkezi koordinatı şart (400) |
-| [server/src/services/site_service.js:98](../../server/src/services/site_service.js#L98) | <code>export async function updateSiteByCode({</code> | Politika alanlarını sites satırına yazar |
+| [server/src/services/site_service.js:111](../../server/src/services/site_service.js#L111) | <code>export async function updateSiteByCode({</code> | Politika alanlarını sites satırına yazar |
 
 **Olası nedenler**
 - Site yöneticisi, süper kullanıcıya ait "Mobil Uygulama/QR" açma-kapama bayrağını değiştirmeye çalışıyor (403); aynı değeri göndermek zararsızdır
@@ -2033,12 +2033,12 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 500 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/routes/membership_routes.js:74](../../server/src/routes/membership_routes.js#L74) | <code>membershipRouter.post('/membership/claim-device', authRequired, claimDeviceLimiter, async…</code> | Sahiplenme ucu; deviceInput ya da deviceUid alır; claimDeviceLimiter ile korunur |
-| [server/src/services/membership_service.js:544](../../server/src/services/membership_service.js#L544) | <code>export async function claimDevice({ userCode, deviceInput }) {</code> | Doğrulama: e-posta doğrulanmış, cihaz envanterde, arızalı değil, sahibi yok; atomik UPDATE; ilk sahiplenmede rol site_manager olur |
-| [server/src/services/membership_rules.js:303](../../server/src/services/membership_rules.js#L303) | <code>export function normalizeClaimDeviceInput(deviceInput) {</code> | GD-C3-<UID>, MAC (: ve -), URL ve DEVICE: önekleri ayıklanarak UID'ye indirgenir |
+| [server/src/routes/membership_routes.js:80](../../server/src/routes/membership_routes.js#L80) | <code>membershipRouter.post('/membership/claim-device', authRequired, claimDeviceLimiter, async…</code> | Sahiplenme ucu; deviceInput ya da deviceUid alır; claimDeviceLimiter ile korunur |
+| [server/src/services/membership_service.js:574](../../server/src/services/membership_service.js#L574) | <code>export async function claimDevice({ userCode, deviceInput }) {</code> | Doğrulama: e-posta doğrulanmış, cihaz envanterde, arızalı değil, sahibi yok; atomik UPDATE; ilk sahiplenmede rol site_manager olur |
+| [server/src/services/membership_rules.js:328](../../server/src/services/membership_rules.js#L328) | <code>export function normalizeClaimDeviceInput(deviceInput) {</code> | GD-C3-<UID>, MAC (: ve -), URL ve DEVICE: önekleri ayıklanarak UID'ye indirgenir |
 | [server/src/services/membership_rules.js:279](../../server/src/services/membership_rules.js#L279) | <code>export const SQL_CLAIM_DEVICE_ATOMIC = `</code> | Yalnız sahibi olmayan ve arızalı olmayan cihaz güncellenir (yarış koruması) |
-| [server/src/services/membership_service.js:586](../../server/src/services/membership_service.js#L586) | <code>'Bu cihaz şirket envanterinde kayıtlı değildir. Lütfen geçerli bir şirket cihazı karekodu…</code> | 404: UID şirket aracının kayıt ettiği devices tablosunda yok |
-| [server/src/routes/admin_routes.js:1660](../../server/src/routes/admin_routes.js#L1660) | <code>adminRouter.post('/admin/devices/:id/release-ownership', authRequired, requireSuperUser, …</code> | Sahipliği serbest bırakma (süper kullanıcı): başka kullanıcıya devir için gerekir |
+| [server/src/services/membership_service.js:627](../../server/src/services/membership_service.js#L627) | <code>'Bu cihaz şirket envanterinde kayıtlı değildir. Lütfen geçerli bir şirket cihazı karekodu…</code> | 404: UID şirket aracının kayıt ettiği devices tablosunda yok |
+| [server/src/routes/admin_routes.js:1815](../../server/src/routes/admin_routes.js#L1815) | <code>adminRouter.post('/admin/devices/:id/release-ownership', authRequired, requireSuperUser, …</code> | Sahipliği serbest bırakma (süper kullanıcı): başka kullanıcıya devir için gerekir |
 
 **Olası nedenler**
 - Cihaz şirket aracıyla (company_qr_tool) kaydedilmemiş: devices tablosunda satır yok
@@ -2062,13 +2062,13 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 500 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/routes/membership_routes.js:107](../../server/src/routes/membership_routes.js#L107) | <code>membershipRouter.post('/membership/setup-site', authRequired, setupSiteLimiter, async (re…</code> | Kurulum ucu (201); setupSiteLimiter: 10 dk'da 10 (kullanıcı) |
-| [server/src/services/membership_service.js:741](../../server/src/services/membership_service.js#L741) | <code>export async function setupSiteWithClaimedDevice({</code> | Tek işlemde site + SITE_OWNER + bloklar + daireler + kapılar (ortak çekirdek site_setup_core.js); cihaz varsa 1. kapıya atanır; hata olursa hiçbir şey kurulmaz (ROLLBACK) |
-| [server/src/services/membership_service.js:710](../../server/src/services/membership_service.js#L710) | <code>const error = httpError(409, 'Site kurmak için başvuru yapmalısınız.');</code> | Anlık kurulum yalnız sahip bağı olan site yöneticisine ve süper kullanıcıya açık; bireysel / daire sahibi ve sahip bağı olmayan yönetici 409 APPLICATION_REQUIRED alır (site başvurusu yapılır, süper kullanıcı onaylayınca site kurulur) |
-| [server/src/services/membership_service.js:816](../../server/src/services/membership_service.js#L816) | <code>throw httpError(404, 'Belirtilen cihaz hesabınıza ait değil.');</code> | deviceUid verildiyse kullanıcıya ait olmalı; cihaz belirtilmezse cihazsız da kurulabilir |
-| [server/src/services/membership_rules.js:448](../../server/src/services/membership_rules.js#L448) | <code>export function normalizeSetupSiteInput({</code> | Ad zorunlu ve <= 120; blok adları benzersiz; üst sınırlar |
-| [server/src/utils/validators.js:14](../../server/src/utils/validators.js#L14) | <code>export const SITE_LIMITS = Object.freeze({</code> | En çok 100 blok, 5000 daire, 100 kapı (taşma/şişme koruması) |
-| [server/src/routes/membership_routes.js:36](../../server/src/routes/membership_routes.js#L36) | <code>export const setupSiteLimiter = createRuleLimiter({</code> | Kurulum hız sınırı tanımı |
+| [server/src/routes/membership_routes.js:113](../../server/src/routes/membership_routes.js#L113) | <code>membershipRouter.post('/membership/setup-site', authRequired, setupSiteLimiter, async (re…</code> | Kurulum ucu (201); setupSiteLimiter: 10 dk'da 10 (kullanıcı) |
+| [server/src/services/membership_service.js:780](../../server/src/services/membership_service.js#L780) | <code>export async function setupSiteWithClaimedDevice({</code> | Tek işlemde site + SITE_OWNER + bloklar + daireler + kapılar (ortak çekirdek site_setup_core.js); cihaz varsa 1. kapıya atanır; hata olursa hiçbir şey kurulmaz (ROLLBACK) |
+| [server/src/services/membership_service.js:751](../../server/src/services/membership_service.js#L751) | <code>const error = httpError(409, 'Site kurmak için başvuru yapmalısınız.');</code> | Anlık kurulum yalnız sahip bağı olan site yöneticisine ve süper kullanıcıya açık; bireysel / daire sahibi ve sahip bağı olmayan yönetici 409 APPLICATION_REQUIRED alır (site başvurusu yapılır, süper kullanıcı onaylayınca site kurulur) |
+| [server/src/services/membership_service.js:855](../../server/src/services/membership_service.js#L855) | <code>throw httpError(404, 'Belirtilen cihaz hesabınıza ait değil.');</code> | deviceUid verildiyse kullanıcıya ait olmalı; cihaz belirtilmezse cihazsız da kurulabilir |
+| [server/src/services/membership_rules.js:473](../../server/src/services/membership_rules.js#L473) | <code>export function normalizeSetupSiteInput({</code> | Ad zorunlu ve <= 120; blok adları benzersiz; üst sınırlar |
+| [server/src/utils/validators.js:15](../../server/src/utils/validators.js#L15) | <code>export const SITE_LIMITS = Object.freeze({</code> | En çok 100 blok, 5000 daire, 100 kapı (taşma/şişme koruması) |
+| [server/src/routes/membership_routes.js:37](../../server/src/routes/membership_routes.js#L37) | <code>export const setupSiteLimiter = createRuleLimiter({</code> | Kurulum hız sınırı tanımı |
 
 **Olası nedenler**
 - Hesap anında site kuramaz (bireysel / daire sahibi ya da sahip bağı olmayan, örneğin davetle yönetici olmuş site yöneticisi): 409 APPLICATION_REQUIRED; uygulama pencereyi başvuru kipine geçirir
@@ -2163,7 +2163,7 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 50 --nostream
 | [server/src/utils/ids.js:13](../../server/src/utils/ids.js#L13) | <code>export function parseId(value, { max = Number.MAX_SAFE_INTEGER } = {}) {</code> | Yalnız 1-16 haneli ondalık rakam kabul edilir; "1e3", "0x10", ondalık, negatif, sıfır ve üst sınırı aşan değer null olur |
 | [server/src/utils/ids.js:37](../../server/src/utils/ids.js#L37) | <code>export function parseOptionalId(value, options) {</code> | Alan hiç gelmediyse undefined, geldi ama bozuksa null (400 ile reddedilir) |
 | [server/src/utils/ids.js:6](../../server/src/utils/ids.js#L6) | <code>export const INT32_MAX = 2147483647;</code> | PostgreSQL INTEGER sütunları için üst sınır: taşma 500 yerine 400 olur |
-| [server/src/utils/validators.js:28](../../server/src/utils/validators.js#L28) | <code>export function parsePositiveId(value, { max = Number.MAX_SAFE_INTEGER } = {}) {</code> | Servis katmanındaki eşdeğer ayrıştırıcı |
+| [server/src/utils/validators.js:46](../../server/src/utils/validators.js#L46) | <code>export function parsePositiveId(value, { max = Number.MAX_SAFE_INTEGER } = {}) {</code> | Servis katmanındaki eşdeğer ayrıştırıcı |
 
 **Olası nedenler**
 - İstemci kimliği sayı yerine metin/boş/null gönderiyor (örn. id henüz yüklenmemiş)
@@ -2449,11 +2449,11 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 300 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/routes/admin_routes.js:1426](../../server/src/routes/admin_routes.js#L1426) | <code>adminRouter.post('/admin/devices/ota-check', authRequired, requireSuperUser, async (req, …</code> | Tüm kayıtlı cihazlara OTA denetim komutu yayınlar; iş kaydı (ota_update_jobs) açar/kapatır; 202 döner |
-| [server/src/routes/admin_routes.js:1461](../../server/src/routes/admin_routes.js#L1461) | <code>return res.status(503).json({ error: 'MQTT baglantisi hazir degil.' });</code> | MQTT köprüsü bağlı değilse komut yayınlanamaz |
-| [server/src/services/device_service.js:427](../../server/src/services/device_service.js#L427) | <code>export async function createOtaUpdateJob({ authUser, deviceUids }) {</code> | İş satırı oluşturma (requested_by_user_code) |
-| [server/src/services/device_service.js:465](../../server/src/services/device_service.js#L465) | <code>export async function finishOtaUpdateJob({ jobId, result }) {</code> | Gönderilen/başarısız sayılarını işe yazar |
-| [server/src/services/device_service.js:416](../../server/src/services/device_service.js#L416) | <code>export async function listAllDeviceUids() {</code> | Komutun hedefi: devices tablosundaki tüm UID'ler |
+| [server/src/routes/admin_routes.js:1581](../../server/src/routes/admin_routes.js#L1581) | <code>adminRouter.post('/admin/devices/ota-check', authRequired, requireSuperUser, async (req, …</code> | Tüm kayıtlı cihazlara OTA denetim komutu yayınlar; iş kaydı (ota_update_jobs) açar/kapatır; 202 döner |
+| [server/src/routes/admin_routes.js:1616](../../server/src/routes/admin_routes.js#L1616) | <code>return res.status(503).json({ error: 'MQTT baglantisi hazir degil.' });</code> | MQTT köprüsü bağlı değilse komut yayınlanamaz |
+| [server/src/services/device_service.js:428](../../server/src/services/device_service.js#L428) | <code>export async function createOtaUpdateJob({ authUser, deviceUids }) {</code> | İş satırı oluşturma (requested_by_user_code) |
+| [server/src/services/device_service.js:466](../../server/src/services/device_service.js#L466) | <code>export async function finishOtaUpdateJob({ jobId, result }) {</code> | Gönderilen/başarısız sayılarını işe yazar |
+| [server/src/services/device_service.js:417](../../server/src/services/device_service.js#L417) | <code>export async function listAllDeviceUids() {</code> | Komutun hedefi: devices tablosundaki tüm UID'ler |
 
 **Olası nedenler**
 - MQTT köprüsü sunucuda bağlı değil (broker kapalı ya da kimlik hatası): 503
@@ -2483,13 +2483,13 @@ curl -s https://api.gudeteknoloji.com.tr/health
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/routes/admin_routes.js:1566](../../server/src/routes/admin_routes.js#L1566) | <code>adminRouter.post('/admin/devices', authRequired, requireSuperUser, async (req, res) =&gt; {</code> | Envantere cihaz ekler (201) ve ACL senkronu yapar |
-| [server/src/routes/admin_routes.js:1468](../../server/src/routes/admin_routes.js#L1468) | <code>adminRouter.patch('/admin/devices/:id', authRequired, requireSuperUser, async (req, res) …</code> | Kısmi güncelleme: yalnız gönderilen atama alanları değişir; hardware_type yalnız esp32_c3/esp32_wroom |
-| [server/src/routes/admin_routes.js:1541](../../server/src/routes/admin_routes.js#L1541) | <code>adminRouter.delete('/admin/devices/:id', authRequired, requireSuperUser, async (req, res)…</code> | Silme: cihaz silinir, sonra ACL senkronu; senkron hatası 503 ama cihaz SİLİNMİŞTİR |
-| [server/src/routes/admin_routes.js:1615](../../server/src/routes/admin_routes.js#L1615) | <code>error: 'Cihaz kaydedildi ama MQTT broker senkronu basarisiz.',</code> | Kayıt başarılı, broker yetkisi güncellenemedi: 503 (kayıt geri alınmaz) |
-| [server/src/utils/validators.js:402](../../server/src/utils/validators.js#L402) | <code>export function handleDeviceMutationError(error, res, genericErrorMessage) {</code> | 23505 devices_device_uid_key -> 409 "Bu cihazin unique id kayitli." |
-| [server/src/services/device_service.js:885](../../server/src/services/device_service.js#L885) | <code>export async function registerCompanyDevice({ deviceUid, hardwareType = 'esp32_wroom', in…</code> | Envanter kaydı; mevcut UID için durum/tip kuralları |
-| [server/src/services/device_service.js:730](../../server/src/services/device_service.js#L730) | <code>export async function deleteDeviceById(deviceId) {</code> | Cihaz silme (bağlı kapı ataması vb. temizliği) |
+| [server/src/routes/admin_routes.js:1721](../../server/src/routes/admin_routes.js#L1721) | <code>adminRouter.post('/admin/devices', authRequired, requireSuperUser, async (req, res) =&gt; {</code> | Envantere cihaz ekler (201) ve ACL senkronu yapar |
+| [server/src/routes/admin_routes.js:1623](../../server/src/routes/admin_routes.js#L1623) | <code>adminRouter.patch('/admin/devices/:id', authRequired, requireSuperUser, async (req, res) …</code> | Kısmi güncelleme: yalnız gönderilen atama alanları değişir; hardware_type yalnız esp32_c3/esp32_wroom |
+| [server/src/routes/admin_routes.js:1696](../../server/src/routes/admin_routes.js#L1696) | <code>adminRouter.delete('/admin/devices/:id', authRequired, requireSuperUser, async (req, res)…</code> | Silme: cihaz silinir, sonra ACL senkronu; senkron hatası 503 ama cihaz SİLİNMİŞTİR |
+| [server/src/routes/admin_routes.js:1770](../../server/src/routes/admin_routes.js#L1770) | <code>error: 'Cihaz kaydedildi ama MQTT broker senkronu basarisiz.',</code> | Kayıt başarılı, broker yetkisi güncellenemedi: 503 (kayıt geri alınmaz) |
+| [server/src/utils/validators.js:460](../../server/src/utils/validators.js#L460) | <code>export function handleDeviceMutationError(error, res, genericErrorMessage) {</code> | 23505 devices_device_uid_key -> 409 "Bu cihazin unique id kayitli." |
+| [server/src/services/device_service.js:886](../../server/src/services/device_service.js#L886) | <code>export async function registerCompanyDevice({ deviceUid, hardwareType = 'esp32_wroom', in…</code> | Envanter kaydı; mevcut UID için durum/tip kuralları |
+| [server/src/services/device_service.js:731](../../server/src/services/device_service.js#L731) | <code>export async function deleteDeviceById(deviceId) {</code> | Cihaz silme (bağlı kapı ataması vb. temizliği) |
 
 **Olası nedenler**
 - Aynı UID zaten kayıtlı (409)
@@ -2511,11 +2511,11 @@ curl -s https://api.gudeteknoloji.com.tr/health
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/routes/admin_routes.js:1627](../../server/src/routes/admin_routes.js#L1627) | <code>adminRouter.patch('/admin/devices/:id/defect', authRequired, requireSuperUser, async (req…</code> | is_defective true/false zorunlu; neden en çok 300 karakter |
-| [server/src/routes/admin_routes.js:1660](../../server/src/routes/admin_routes.js#L1660) | <code>adminRouter.post('/admin/devices/:id/release-ownership', authRequired, requireSuperUser, …</code> | Sahiplik sıfırlama ucu |
-| [server/src/services/device_service.js:945](../../server/src/services/device_service.js#L945) | <code>export async function setDeviceDefectStatus({ deviceId, isDefective, defectiveReason, aut…</code> | Arıza bayrağı ve gerekçesi yazılır; yoksa 404 |
-| [server/src/services/device_service.js:991](../../server/src/services/device_service.js#L991) | <code>export async function releaseDeviceOwnership({ deviceId, authUser }) {</code> | Tek işlemde kapıdan sök + owner/assigned/site/gate/claimed_at sıfırla; sonra yerel token döndür |
-| [server/src/services/device_service.js:1053](../../server/src/services/device_service.js#L1053) | <code>console.warn('Local control token rotasyonu atlandi:', tokenErr.message);</code> | Token döndürme başarısızlığı yalnız uyarıdır; sıfırlama geri alınmaz |
+| [server/src/routes/admin_routes.js:1782](../../server/src/routes/admin_routes.js#L1782) | <code>adminRouter.patch('/admin/devices/:id/defect', authRequired, requireSuperUser, async (req…</code> | is_defective true/false zorunlu; neden en çok 300 karakter |
+| [server/src/routes/admin_routes.js:1815](../../server/src/routes/admin_routes.js#L1815) | <code>adminRouter.post('/admin/devices/:id/release-ownership', authRequired, requireSuperUser, …</code> | Sahiplik sıfırlama ucu |
+| [server/src/services/device_service.js:946](../../server/src/services/device_service.js#L946) | <code>export async function setDeviceDefectStatus({ deviceId, isDefective, defectiveReason, aut…</code> | Arıza bayrağı ve gerekçesi yazılır; yoksa 404 |
+| [server/src/services/device_service.js:992](../../server/src/services/device_service.js#L992) | <code>export async function releaseDeviceOwnership({ deviceId, authUser }) {</code> | Tek işlemde kapıdan sök + owner/assigned/site/gate/claimed_at sıfırla; sonra yerel token döndür |
+| [server/src/services/device_service.js:1068](../../server/src/services/device_service.js#L1068) | <code>console.warn('Local control token rotasyonu atlandi:', tokenErr.message);</code> | Token döndürme başarısızlığı yalnız uyarıdır; sıfırlama geri alınmaz |
 
 **Olası nedenler**
 - Cihaz arızalı işaretli: sahiplenme (400) ve kapıya atama (409/atanamaz) reddedilir

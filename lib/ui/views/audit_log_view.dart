@@ -101,6 +101,39 @@ class AuditLogView extends StatefulWidget {
     ('document.version_deleted', 'Belge sürümü silindi'),
     ('document.attached', 'Belge duyuruya eklendi'),
     ('document.detached', 'Belge duyurudan çıkarıldı'),
+    // Kritik yetki olayları (hesap, site yöneticisi, site silme, katılım başvurusu, kapı özel izni, cihaz sahipliği).
+    ('user.created', 'Kullanıcı hesabı oluşturuldu'),
+    ('user.updated', 'Kullanıcı hesabı güncellendi'),
+    ('user.role_changed', 'Kullanıcı rolü değiştirildi'),
+    ('user.password_set', 'Kullanıcı için parola belirlendi'),
+    ('user.activated', 'Kullanıcı hesabı etkinleştirildi'),
+    ('user.deactivated', 'Kullanıcı hesabı pasifleştirildi'),
+    ('user.deleted', 'Kullanıcı hesabı kalıcı silindi'),
+    ('user.subscription_approved', 'Yönetici abonelik talebi onaylandı'),
+    ('user.subscription_rejected', 'Yönetici abonelik talebi reddedildi'),
+    ('site_manager.added', 'Site yöneticisi eklendi'),
+    ('site_manager.invited', 'Site yöneticisi daveti gönderildi'),
+    ('site_manager.invitation_revoked', 'Site yöneticisi daveti iptal edildi'),
+    ('site_manager.removed', 'Site yöneticisi çıkarıldı'),
+    ('site.deleted', 'Site silindi'),
+    ('site.deletion_requested', 'Site silme talebi oluşturuldu'),
+    ('site.deletion_cancelled', 'Site silme talebi iptal edildi'),
+    ('site.deletion_code_locked', 'Site silme doğrulaması kilitlendi'),
+    ('site.created', 'Site oluşturuldu'),
+    ('site.approved', 'Site talebi onaylandı'),
+    ('site.rejected', 'Site talebi reddedildi'),
+    ('site.updated', 'Site bilgileri güncellendi'),
+    ('apartment.resident_set', 'Daire hesabı tanımlandı'),
+    ('apartment.resident_cleared', 'Daire hesabı sıfırlandı'),
+    ('join_request.approved', 'Katılım başvurusu onaylandı'),
+    ('join_request.rejected', 'Katılım başvurusu reddedildi'),
+    ('door_permission.granted', 'Kapı özel izni verildi'),
+    ('door_permission.denied', 'Kapı erişimi engellendi (özel izin)'),
+    ('door_permission.removed', 'Kapı özel izni kaldırıldı'),
+    ('door_permission.bulk_granted', 'Toplu kapı özel izni verildi'),
+    ('door_permission.bulk_denied', 'Toplu kapı erişimi engellendi'),
+    ('door_permission.bulk_removed', 'Toplu kapı özel izni kaldırıldı'),
+    ('device.ownership_released', 'Cihaz sahipliği sıfırlandı'),
   ];
 
   @override
@@ -272,7 +305,7 @@ class AuditLogViewState extends State<AuditLogView> {
         title: _filtered
             ? 'Bu filtre için denetim kaydı yok.'
             : 'Henüz denetim kaydı yok.',
-        message: 'Modül ve ek rol işlemleri burada listelenir.',
+        message: 'Modül, ek rol, hesap, yönetici, başvuru ve kapı izni işlemleri burada listelenir.',
       );
     } else {
       list = Column(
@@ -317,7 +350,7 @@ class AuditLogViewState extends State<AuditLogView> {
         const PageHeaderCard(title: 'Denetim Kaydı', icon: Icons.fact_check_rounded),
         const SizedBox(height: AppSpace.sm),
         Text(
-          'Yönetim işlemleri (modül açma/kapama, ek rol atama) değiştirilemez bir kayıt olarak tutulur.',
+          'Yönetim işlemleri (modül açma/kapama, ek rol atama, hesap ve yönetici yetkileri, kapı izinleri) değiştirilemez bir kayıt olarak tutulur.',
           style: th.bodyMedium,
         ),
         const SizedBox(height: AppSpace.lg),

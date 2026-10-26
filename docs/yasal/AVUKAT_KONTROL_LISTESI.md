@@ -130,8 +130,8 @@ Bu belge hukuki görüş değildir; kararlar avukata aittir. Öneriler, ürünü
 ## 16. Güde personeli / süper kullanıcı erişimi
 
 - **Soru:** Güde personelinin tüm sitelerin verisine teknik erişimi var. DPA'daki "yalnız destek/bakım/güvenlik/başvuru" sınırı ve gizlilik taahhüdü yeterli mi? Personel için ayrı bir gizlilik sözleşmesi ve erişim kaydı gerekli mi?
-- **Önerilen varsayılan:** Süper kullanıcı sayısını en aza indirin; personel gizlilik taahhütnamesi imzalatın; yönetim işlemleri denetim kaydına yazılıyor (okuma erişimi yazılmıyor). Süper kullanıcının site verisini görüntülemesi için "destek talebi" ilkesini DPA'ya ekleyin.
-- **Kodda:** `people_access.js:29-33`; denetim yalnız yönetim yazma işlemlerinde (`audit_service.js`); süper kullanıcının **okumaları kaydedilmez**; bazı olaylar yalnız konsol günlüğüne düşer (`helpers.js:7-14`). Metinlerde "kayıtlı erişim" iddiası bu duruma göre yazıldı (değiştirme işlemleri kayıtlı, salt görüntüleme kayıtsız).
+- **Önerilen varsayılan:** Süper kullanıcı sayısını en aza indirin; personel gizlilik taahhütnamesi imzalatın; yönetim değiştirme işlemlerinin büyük bölümü (süper kullanıcının hesap/rol değişiklikleri dahil) denetim kaydına yazılıyor; okuma erişimi yazılmıyor. Süper kullanıcının site verisini görüntülemesi için "destek talebi" ilkesini DPA'ya ekleyin.
+- **Kodda:** `people_access.js:29-33`; denetim yalnız yönetim yazma işlemlerinde (`audit_service.js`); süper kullanıcının **okumaları kaydedilmez**; bazı olaylar yalnız konsol günlüğüne düşer (`helpers.js:7-14`). 2026-10-26'da kullanıcı hesabı (`user.*`, `user_account_audit.js`), site oluşturma/onay/düzenleme/silme ve site yöneticisi (`site.*`, `site_manager.*`), katılım başvurusu kararları, kapı özel izinleri, daire hesabı tanımlama/sıfırlama ve cihaz sahipliği sıfırlama denetim kaydına alındı; ayrıntıya ad, e-posta, telefon, parola yazılmaz. Hâlâ kaydedilmeyen değiştirme işlemleri: cihaz tanımlama/güncelleme/silme, kapıya cihaz atama, MQTT kimliği üretme (`admin_routes.js`, teknik bakım). Metinler (kvkk_notice 94, DPA 3.2 ve Ek-2) bu kapsama göre güncellendi.
 - **Metinde:** DPA 3.2 (KARAR işareti), Ek-2.
 
 ## 17. Veri ihlali bildirim akışı

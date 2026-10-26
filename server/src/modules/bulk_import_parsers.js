@@ -16,7 +16,6 @@ import { INTERNAL_EMAIL_SUFFIX } from './people_sync_sql.js';
 import { CELL_MAX_LENGTH, RELATION_WORDS, RESPONSIBLE_WORDS, foldHeader } from './bulk_import_spec.js';
 
 export const MAX_PLATES_PER_CELL = 5;
-export const AREA_MAX = 999999.99;
 export const FLOOR_MIN = -20;
 export const FLOOR_MAX = 500;
 export const LAND_SHARE_MAX = 1_000_000_000;
@@ -148,96 +147,11 @@ export function readEmail(raw) {
   return { value: email };
 }
 
-// --- Sayı (m²) -----------------------------------------------------------------------------------------------
+// --- Tam sayı yardımcıları -----------------------------------------------------------------------------------
 
+// Türkçe binlik noktası: ilk grup 1-3 rakam, kalan her grup tam 3 rakam (["1","250"] -> 1.250). readLandShareInt kullanır.
 const isThousandsGroups = (parts) =>
   parts.length >= 2 && /^[1-9]\d{0,2}$/.test(parts[0]) && parts.slice(1).every((part) => /^\d{3}$/.test(part));
-
-/**
- * m² sayısı. JSON number olduğu gibi. Metinde: boşluk/NBSP silinir, sondaki m2/m²/㎡ atılır; hem `.` hem `,` varsa SONUNCUSU ondalık, öbürü binlik
- * (3'lü gruplar şart); yalnız `,` -> ondalık; yalnız `.`: ondalık (125.5) ya da tam 3 rakamlı gruplarla binlik (1.250 -> 1250); aksi NUMBER_INVALID.
- * 2'den fazla ondalık yuvarlanır (ROUNDED). 0 < değer <= 999999.99 (NUMBER_RANGE); < 10 ya da > 2000 m² AREA_UNUSUAL (uyarı).
- */
-export function readArea(raw) {
-  if (raw === null || raw === undefined) {
-    return { value: null };
-  }
-  const warnings = [];
-  let number;
-  if (typeof raw === 'number') {
-    if (!Number.isFinite(raw)) {
-      return { value: null, error: 'NUMBER_INVALID' };
-    }
-    number = raw;
-    if (Math.abs(number * 100 - Math.round(number * 100)) > 1e-6) {
-      warnings.push('ROUNDED');
-    }
-  } else {
-    const text = readText(raw);
-    if (text.error || text.value === null) {
-      return text;
-    }
-    let source = text.value.replace(/\s/g, '').replace(/(?:m2|m²|㎡)$/i, '');
-    let sign = 1;
-    if (source.startsWith('-') || source.startsWith('+')) {
-      sign = source.startsWith('-') ? -1 : 1;
-      source = source.slice(1);
-    }
-    if (source === '' || !/^[0-9.,]+$/.test(source) || !/\d/.test(source)) {
-      return { value: null, error: 'NUMBER_INVALID' };
-    }
-    let intPart;
-    let fracPart = '';
-    const hasDot = source.includes('.');
-    const hasComma = source.includes(',');
-    if (hasDot && hasComma) {
-      const decimalSeparator = source.lastIndexOf('.') > source.lastIndexOf(',') ? '.' : ',';
-      const thousandsSeparator = decimalSeparator === '.' ? ',' : '.';
-      const pieces = source.split(decimalSeparator);
-      if (pieces.length !== 2 || pieces[1].includes(thousandsSeparator)) {
-        return { value: null, error: 'NUMBER_INVALID' };
-      }
-      const groups = pieces[0].split(thousandsSeparator);
-      if (groups.length > 1 && !isThousandsGroups(groups)) {
-        return { value: null, error: 'NUMBER_INVALID' };
-      }
-      intPart = groups.join('');
-      fracPart = pieces[1];
-    } else if (hasComma) {
-      const pieces = source.split(',');
-      if (pieces.length !== 2) {
-        return { value: null, error: 'NUMBER_INVALID' };
-      }
-      [intPart, fracPart] = pieces;
-    } else if (hasDot) {
-      const pieces = source.split('.');
-      if (isThousandsGroups(pieces)) {
-        intPart = pieces.join('');
-      } else if (pieces.length === 2) {
-        [intPart, fracPart] = pieces;
-      } else {
-        return { value: null, error: 'NUMBER_INVALID' };
-      }
-    } else {
-      intPart = source;
-    }
-    if (!/^\d*$/.test(intPart) || !/^\d*$/.test(fracPart) || (intPart === '' && fracPart === '')) {
-      return { value: null, error: 'NUMBER_INVALID' };
-    }
-    if (fracPart.replace(/0+$/, '').length > 2) {
-      warnings.push('ROUNDED');
-    }
-    number = sign * Number(`${intPart === '' ? '0' : intPart}.${fracPart === '' ? '0' : fracPart}`);
-  }
-  const value = Math.round(number * 100) / 100;
-  if (!Number.isFinite(value) || value <= 0 || value > AREA_MAX) {
-    return { value: null, error: 'NUMBER_RANGE' };
-  }
-  if (value < 10 || value > 2000) {
-    warnings.push('AREA_UNUSUAL');
-  }
-  return { value, warnings };
-}
 
 /**
  * Arsa payı parçası (pay ya da payda): tam sayı. Metinde 3'lü binlik noktası kabul edilir (1.000 -> 1000). Aralık LAND_SHARE_INVALID.

@@ -1,8 +1,8 @@
 ---
 id: privacy
 title: Gizlilik Politikası
-version: 2026-10-19
-effective_date: 2026-10-19
+version: 2026-10-26
+effective_date: 2026-10-26
 required_for: [register]
 complete: false   # köşeli [KARAR/BİLGİ GEREKLİ ...] ve [AVUKAT DOĞRULASIN ...] işaretleri çözülünce bu satır silinir
 ---
@@ -186,7 +186,7 @@ Yalnızca gerçekten uygulanan önlemler:
 - Oturumlar imzalı ve süreli belirteçlerle yürür; belirteç yalnızca kullanıcı kodunu, parola sürümünü ve süre bilgisini taşır; e-posta veya rol taşımaz. Parolanız değişince eski oturumlar geçersiz olur. Hatalı giriş denemeleri sınırlandırılır ve art arda hatalı denemede hesap geçici olarak kilitlenir.
 - Oturum anahtarınızın ana ekran widget'ı için tutulan kopyası işletim sisteminin anahtar deposunda değil, widget deposundadır (bölüm 3.7); çıkışta silinir.
 - Erişim rol ve site bazında sınırlandırılmıştır: bir site yöneticisi yalnızca kendi sitesinin kayıtlarını görür; sakin yalnızca kendi kayıtlarını, kendi dairesinin borcunu ve aynı dairedeki üyelerin iletişim bilgisini görür.
-- Yönetim işlemleri denetim kaydına yazılır. Aidat ve finans defteri ile makbuz, gider, kasa ve banka hareketleri veritabanı düzeyinde değiştirilemez ve silinemez; hatalar ters kayıtla düzeltilir. Tek istisna: bir site kalıcı olarak silindiğinde o sitenin defteri de silinir.
+- Başlıca yönetim işlemleri denetim kaydına yazılır. Aidat ve finans defteri ile makbuz, gider, kasa ve banka hareketleri veritabanı düzeyinde değiştirilemez ve silinemez; hatalar ters kayıtla düzeltilir. Tek istisna: bir site kalıcı olarak silindiğinde o sitenin defteri de silinir.
 - Yüklenen belgeler sunucuda veritabanı dışındaki ayrı bir dizinde (dizin ve dosya izinleri yalnızca sunucu hesabına açık) tutulur; dosya türü içeriğinden doğrulanır, boyut ve site başına kota sınırlanır, indirmeler yetki denetiminden geçer ve tarayıcıda doğrudan açılmak yerine indirme olarak sunulur. Dosyalar uygulama düzeyinde ayrıca şifrelenmez. Telefon bildirimlerine finansal veya kişisel ayrıntı yazılmaz; bildirim metni varsayılan olarak ayrıntısızdır.
 - Veritabanı yalnızca sunucunun kendisinden erişilebilir durumdadır.
 - Telefonunuzdaki oturum anahtarı işletim sisteminin güvenli depolama alanında tutulur.

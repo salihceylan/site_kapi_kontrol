@@ -13,8 +13,6 @@ export const ERROR_CODES = Object.freeze([
   'PHONE_INVALID',
   'DATE_INVALID',
   'DATE_RANGE',
-  'NUMBER_INVALID',
-  'NUMBER_RANGE',
   'FLOOR_INVALID',
   'LAND_SHARE_INVALID',
   'RELATION_INVALID',
@@ -107,12 +105,6 @@ export function issueMessage(code, ctx = {}) {
       break;
     case 'DATE_RANGE':
       text = `${label} 1900 ile bugünden en çok 1 yıl sonrası arasında olmalıdır.`;
-      break;
-    case 'NUMBER_INVALID':
-      text = `${label} sayı değil: «${value}».`;
-      break;
-    case 'NUMBER_RANGE':
-      text = `${label} 0’dan büyük ve en çok 999.999,99 olmalıdır.`;
       break;
     case 'FLOOR_INVALID':
       text = `Kat geçersiz: «${value}». -20 ile 500 arası bir sayı ya da «Zemin» yazın.`;

@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import { pool } from '../db.js';
 import { recordApartmentDeletionSnapshot } from '../modules/apartment_deletion_audit.js';
 import { apartmentHasFinance, financeLockKey } from '../modules/finance_common.js';
+import { recordAudit } from '../modules/audit_service.js';
 import { PlatformError } from '../modules/errors.js';
 import { peopleLockKey } from '../modules/people_sync.js';
 import { APARTMENT_ROW_SELECT_SQL, ensureSiteApartmentResidents } from './apartment_service.js';
@@ -1341,25 +1342,48 @@ export async function syncSiteStructureCounts({
   }
 }
 
-export async function upsertSiteManagerLink({ siteCode, managerUserCode }) {
+// `actor`: işlemi yapan kullanıcı (süper kullanıcı; denetim kaydı için). Bağ + üyelik + denetim kaydı (site_manager.added) TEK transaction'da yazılır.
+export async function upsertSiteManagerLink({ siteCode, managerUserCode, actor = null }) {
   if (managerUserCode != null) {
-    await pool.query(
-      `
-        INSERT INTO site_manager_sites (site_code, manager_user_code)
-        VALUES ($1, $2)
-        ON CONFLICT (site_code, manager_user_code) DO NOTHING
-      `,
-      [siteCode, managerUserCode],
-    );
-    await pool.query(
-      `
-        INSERT INTO site_memberships (site_code, user_code, role, is_active)
-        VALUES ($1, $2, 'SITE_ADMIN', TRUE)
-        ON CONFLICT (site_code, user_code)
-        DO UPDATE SET role = CASE WHEN site_memberships.role = 'SITE_OWNER' THEN 'SITE_OWNER' ELSE 'SITE_ADMIN' END, is_active = TRUE, updated_at = NOW()
-      `,
-      [siteCode, managerUserCode],
-    );
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(
+        `
+          INSERT INTO site_manager_sites (site_code, manager_user_code)
+          VALUES ($1, $2)
+          ON CONFLICT (site_code, manager_user_code) DO NOTHING
+        `,
+        [siteCode, managerUserCode],
+      );
+      await client.query(
+        `
+          INSERT INTO site_memberships (site_code, user_code, role, is_active)
+          VALUES ($1, $2, 'SITE_ADMIN', TRUE)
+          ON CONFLICT (site_code, user_code)
+          DO UPDATE SET role = CASE WHEN site_memberships.role = 'SITE_OWNER' THEN 'SITE_OWNER' ELSE 'SITE_ADMIN' END, is_active = TRUE, updated_at = NOW()
+        `,
+        [siteCode, managerUserCode],
+      );
+      await recordAudit(
+        client,
+        {
+          actor,
+          action: 'site_manager.added',
+          siteCode,
+          targetType: 'user',
+          targetId: String(managerUserCode),
+          details: { role: 'SITE_ADMIN', via: 'admin_assignment' },
+        },
+        { inTransaction: true },
+      );
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
   }
   await rotateLocalControlTokensForSite(siteCode, 'site_manager_changed');
 }
@@ -1610,6 +1634,21 @@ export async function deleteSitePermanently(siteCode, authUser) {
       [code],
     );
 
+    // Denetim kaydı (site.deleted): site satırı silinmeden ÖNCE ve AYNI işlemde. audit_log.site_code'un sites'a yabancı anahtarı YOKTUR
+    // (site silinse de kayıt kalır); site kodu kayıtta durur. Site adı yazılmaz (yalnız kod ve cihaz sayısı).
+    await recordAudit(
+      client,
+      {
+        actor: authUser,
+        action: 'site.deleted',
+        siteCode: code,
+        targetType: 'site',
+        targetId: String(code),
+        details: { device_count: affectedDeviceIds.length },
+      },
+      { inTransaction: true },
+    );
+
     const result = await client.query(
       `DELETE FROM sites WHERE site_code = $1`,
       [code],
@@ -1728,6 +1767,14 @@ export async function requestSiteDeletion({ siteCode, authUser }) {
        WHERE site_code = $3`,
       [callerUserCode, callerName, code],
     );
+    await recordAudit(pool, {
+      actor: authUser,
+      action: 'site.deletion_requested',
+      siteCode: code,
+      targetType: 'site',
+      targetId: String(code),
+      details: { requested_by_role: 'super_user' },
+    });
 
     return {
       ok: true,
@@ -1766,6 +1813,14 @@ export async function requestSiteDeletion({ siteCode, authUser }) {
      WHERE site_code = $3`,
     [callerUserCode, callerName, code],
   );
+  await recordAudit(pool, {
+    actor: authUser,
+    action: 'site.deletion_requested',
+    siteCode: code,
+    targetType: 'site',
+    targetId: String(code),
+    details: { requested_by_role: 'site_manager' },
+  });
 
   return {
     ok: true,
@@ -1868,6 +1923,14 @@ export async function rejectOrCancelSiteDeletion({ siteCode, authUser }) {
      WHERE site_code = $1`,
     [code],
   );
+  await recordAudit(pool, {
+    actor: authUser,
+    action: 'site.deletion_cancelled',
+    siteCode: code,
+    targetType: 'site',
+    targetId: String(code),
+    details: { previous_status: site.deletion_status },
+  });
 
   return {
     ok: true,
@@ -2031,6 +2094,14 @@ export async function confirmSiteDeletionWithEmailCode({ siteCode, code, authUse
       auditLog('site_deletion_code_locked', {
         site_code: numericSiteCode,
         actor_user_code: actorCode || null,
+      });
+      await recordAudit(pool, {
+        actor: authUser,
+        action: 'site.deletion_code_locked',
+        siteCode: numericSiteCode,
+        targetType: 'site',
+        targetId: String(numericSiteCode),
+        details: {},
       });
       const err = new Error('Çok fazla hatalı doğrulama denemesi yapıldı. Kod iptal edildi; lütfen daha sonra yeni bir kod isteyiniz.');
       err.statusCode = 429;
@@ -2234,12 +2305,27 @@ export async function inviteSiteManager({ siteCode, email, fullName, inviterUser
       );
 
       // Eğer global rolü individual veya apartment_owner ise, site_manager yap
-      if (targetUser.role !== 'super_user' && targetUser.role !== 'site_manager') {
+      const promotedToSiteManager = targetUser.role !== 'super_user' && targetUser.role !== 'site_manager';
+      if (promotedToSiteManager) {
         await client.query(
           `UPDATE users SET role = 'site_manager', updated_at = NOW() WHERE user_code = $1`,
           [targetUser.user_code],
         );
       }
+
+      // Denetim kaydı (site_manager.added): yetki tanımlama ile AYNI işlemde. Yalnız kimlik / rol kodu; ad ve e-posta yazılmaz.
+      await recordAudit(
+        client,
+        {
+          actor: inviterUser,
+          action: 'site_manager.added',
+          siteCode: code,
+          targetType: 'user',
+          targetId: String(targetUser.user_code),
+          details: { role: 'SITE_ADMIN', via: 'invitation', promoted_to_site_manager: promotedToSiteManager },
+        },
+        { inTransaction: true },
+      );
 
       await client.query('COMMIT');
     } catch (error) {
@@ -2284,29 +2370,53 @@ export async function inviteSiteManager({ siteCode, email, fullName, inviterUser
   // Kullanıcı sistemde henüz kayıtlı değil -> site_manager_invitations oluştur
   const token = `SMI-${crypto.randomBytes(16).toString('hex').toUpperCase()}`;
 
-  await pool.query(
-    `
-      INSERT INTO site_manager_invitations (
-        site_code,
-        email,
-        full_name,
-        invited_by_user_code,
-        token,
-        status,
-        expires_at
-      )
-      VALUES ($1, $2, $3, $4, $5, 'PENDING', NOW() + INTERVAL '7 days')
-      ON CONFLICT (site_code, email)
-      DO UPDATE SET
-        token = $5,
-        status = 'PENDING',
-        full_name = COALESCE($3, site_manager_invitations.full_name),
-        invited_by_user_code = $4,
-        expires_at = NOW() + INTERVAL '7 days',
-        created_at = NOW()
-    `,
-    [code, cleanEmail, cleanFullName, inviterUserCode, token],
-  );
+  // Davet satırı ve denetim kaydı (site_manager.invited) TEK işlemde. Kayda e-posta / ad yazılmaz; yalnız davet numarası.
+  const inviteClient = await pool.connect();
+  try {
+    await inviteClient.query('BEGIN');
+    const invitationRes = await inviteClient.query(
+      `
+        INSERT INTO site_manager_invitations (
+          site_code,
+          email,
+          full_name,
+          invited_by_user_code,
+          token,
+          status,
+          expires_at
+        )
+        VALUES ($1, $2, $3, $4, $5, 'PENDING', NOW() + INTERVAL '7 days')
+        ON CONFLICT (site_code, email)
+        DO UPDATE SET
+          token = $5,
+          status = 'PENDING',
+          full_name = COALESCE($3, site_manager_invitations.full_name),
+          invited_by_user_code = $4,
+          expires_at = NOW() + INTERVAL '7 days',
+          created_at = NOW()
+        RETURNING id
+      `,
+      [code, cleanEmail, cleanFullName, inviterUserCode, token],
+    );
+    await recordAudit(
+      inviteClient,
+      {
+        actor: inviterUser,
+        action: 'site_manager.invited',
+        siteCode: code,
+        targetType: 'site_manager_invitation',
+        targetId: invitationRes.rows?.[0]?.id != null ? String(invitationRes.rows[0].id) : null,
+        details: { expires_in_days: 7 },
+      },
+      { inTransaction: true },
+    );
+    await inviteClient.query('COMMIT');
+  } catch (error) {
+    await inviteClient.query('ROLLBACK').catch(() => {});
+    throw error;
+  } finally {
+    inviteClient.release();
+  }
 
   try {
     await sendSiteManagerInvitationEmail({
@@ -2432,6 +2542,20 @@ export async function removeSiteManager({ siteCode, targetUserCode, callerUser }
       );
     }
 
+    // Denetim kaydı (site_manager.removed): çıkarma ile AYNI işlemde. Çıkarılan sitedeki rol kodu ve (varsa) hesabın düştüğü genel rol; ad / e-posta yazılmaz.
+    await recordAudit(
+      client,
+      {
+        actor: callerUser,
+        action: 'site_manager.removed',
+        siteCode: code,
+        targetType: 'user',
+        targetId: String(targetCode),
+        details: { role: targetMembership?.role ?? null, new_user_role: nextRole ?? null },
+      },
+      { inTransaction: true },
+    );
+
     await client.query('COMMIT');
   } catch (error) {
     await client.query('ROLLBACK').catch(() => {});
@@ -2468,24 +2592,48 @@ export async function removeSiteManager({ siteCode, targetUserCode, callerUser }
 /**
  * Bekleyen yönetici davetini iptal eder.
  */
-export async function revokeSiteManagerInvitation({ siteCode, invitationId }) {
+export async function revokeSiteManagerInvitation({ siteCode, invitationId, callerUser = null }) {
   const code = Number(siteCode);
   const id = Number(invitationId);
 
-  const res = await pool.query(
-    `
-      UPDATE site_manager_invitations
-      SET status = 'REVOKED'
-      WHERE id = $1 AND site_code = $2 AND status = 'PENDING'
-      RETURNING id
-    `,
-    [id, code],
-  );
+  // İptal ve denetim kaydı (site_manager.invitation_revoked) TEK işlemde.
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const res = await client.query(
+      `
+        UPDATE site_manager_invitations
+        SET status = 'REVOKED'
+        WHERE id = $1 AND site_code = $2 AND status = 'PENDING'
+        RETURNING id
+      `,
+      [id, code],
+    );
 
-  if (res.rowCount === 0) {
-    const err = new Error('İptal edilecek bekleyen davet bulunamadı.');
-    err.statusCode = 404;
-    throw err;
+    if (res.rowCount === 0) {
+      const err = new Error('İptal edilecek bekleyen davet bulunamadı.');
+      err.statusCode = 404;
+      throw err;
+    }
+
+    await recordAudit(
+      client,
+      {
+        actor: callerUser,
+        action: 'site_manager.invitation_revoked',
+        siteCode: code,
+        targetType: 'site_manager_invitation',
+        targetId: String(id),
+        details: {},
+      },
+      { inTransaction: true },
+    );
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw error;
+  } finally {
+    client.release();
   }
 
   return {

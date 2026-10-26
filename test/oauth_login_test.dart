@@ -1,5 +1,7 @@
 import 'dart:convert';
+import 'dart:math';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -29,10 +31,12 @@ class _FakeSocialAuth extends AuthService {
     String? firstName,
     String? lastName,
     List<AcceptedDocument>? acceptedDocuments,
+    String? nonce,
   }) async {
     oauthCalls.add(<String, dynamic>{
       'provider': provider,
       'idToken': idToken,
+      'nonce': nonce,
       'fullName': fullName,
       'firstName': firstName,
       'lastName': lastName,
@@ -102,6 +106,55 @@ void main() {
     expect(session.token, 'jwt-social-123');
   });
 
+  test('AuthApi.loginWithOAuth nonce verilirse govdeye HAM nonce alanini koyar, verilmezse hic koymaz', () async {
+    final bodies = <Map<String, dynamic>>[];
+    final client = MockClient((request) async {
+      bodies.add(jsonDecode(request.body) as Map<String, dynamic>);
+      return http.Response(
+        jsonEncode({
+          'ok': true,
+          'is_new_user': false,
+          'provider': 'apple',
+          'token': 'jwt-social-456',
+          'user': {'id': 502, 'full_name': 'Selin Demir', 'email': 'selin@icloud.com', 'role': 'individual', 'is_active': true},
+        }),
+        200,
+        headers: {'content-type': 'application/json'},
+      );
+    });
+    final api = AuthApi(baseUrl: 'http://localhost', client: client);
+
+    await api.loginWithOAuth(provider: 'apple', idToken: 'tok', nonce: 'ham-nonce-degeri-0123456789');
+    await api.loginWithOAuth(provider: 'google', idToken: 'tok');
+    await api.loginWithOAuth(provider: 'apple', idToken: 'tok', nonce: '');
+
+    expect(bodies[0]['nonce'], 'ham-nonce-degeri-0123456789');
+    expect(bodies[1].containsKey('nonce'), isFalse, reason: 'Google 6.x nonce iletemez: alan hic gonderilmez');
+    expect(bodies[2].containsKey('nonce'), isFalse, reason: 'bos nonce gonderilmez');
+  });
+
+  test('generateOAuthNonce: her cagrida farkli, base64url, sunucu desenine (16-128, A-Za-z0-9._~-) uyar; oauthNonceHash = SHA-256 onaltili', () {
+    final seen = <String>{};
+    for (var i = 0; i < 50; i++) {
+      final nonce = generateOAuthNonce();
+      expect(RegExp(r'^[A-Za-z0-9._~-]{16,128}$').hasMatch(nonce), isTrue, reason: nonce);
+      expect(nonce.length, 43, reason: '32 bayt -> dolgusuz base64url');
+      seen.add(nonce);
+    }
+    expect(seen.length, 50, reason: 'kriptografik rastgele: tekrar yok');
+
+    // Ayni tohumlu Random ayni degeri uretir (belirlenimli uretim yalniz testte); varsayilan Random.secure()'dur.
+    expect(generateOAuthNonce(Random(7)), generateOAuthNonce(Random(7)));
+
+    const raw = 'Zk3-q_Wl9xT0aB7cD1eF2gH4iJ5kL6mN8oP';
+    final hashed = oauthNonceHash(raw);
+    expect(hashed, sha256.convert(utf8.encode(raw)).toString());
+    expect(hashed, matches(RegExp(r'^[0-9a-f]{64}$')));
+    expect(hashed, isNot(raw), reason: 'saglayiciya ham deger degil ozet verilir');
+    // Bilinen SHA-256 test vektoru (sunucu node:crypto ile ayni ozeti uretmeli).
+    expect(oauthNonceHash('abc'), 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
+  });
+
   testWidgets('LoginPage Google ve iCloud (Apple) butonlarini tasma olmadan gosterir ve tetikler', (tester) async {
     final auth = _FakeSocialAuth();
     await pumpAt(
@@ -143,6 +196,37 @@ void main() {
     expect(auth.oauthCalls.length, 2);
     expect(auth.oauthCalls.last['provider'], 'apple');
     expect(auth.oauthCalls.last['idToken'], 'token-apple');
+    expect(auth.oauthCalls.last['nonce'], isNull, reason: 'enjekte kimlik bilgisinde nonce yoksa gonderilmez (eski davranis)');
+  });
+
+  testWidgets('enjekte kimlik bilgisindeki HAM nonce loginWithOAuth a aynen iletilir (Apple akisi sozlesmesi)', (tester) async {
+    final auth = _FakeSocialAuth();
+    await pumpAt(
+      tester,
+      SizedBox(
+        width: 360,
+        height: 640,
+        child: LoginPage(
+          authService: auth,
+          onProvideSocialCredentials: (provider) async => SocialAuthCredentials(
+            idToken: 'apple-token',
+            nonce: 'Zk3-q_Wl9xT0aB7cD1eF2gH4iJ5kL6mN8oP',
+          ),
+        ),
+      ),
+      width: 360,
+      height: 640,
+      scale: 1.0,
+    );
+    final appleBtn = find.byKey(const Key('social-auth-apple-button'));
+    await tester.ensureVisible(appleBtn);
+    await tester.pumpAndSettle();
+    await tester.tap(appleBtn);
+    await tester.pumpAndSettle();
+
+    expect(auth.oauthCalls.length, 1);
+    expect(auth.oauthCalls.single['provider'], 'apple');
+    expect(auth.oauthCalls.single['nonce'], 'Zk3-q_Wl9xT0aB7cD1eF2gH4iJ5kL6mN8oP');
   });
 
   testWidgets('Android ve web ortaminda iCloud (Apple) butonu gosterilmez, yalniz Google gosterilir', (tester) async {

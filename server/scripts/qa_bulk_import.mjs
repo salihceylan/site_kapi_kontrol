@@ -5,9 +5,25 @@
 
 import v8 from 'node:v8';
 import vm from 'node:vm';
+import http from 'node:http';
+import bcrypt from 'bcryptjs';
 
 v8.setFlagsFromString('--expose-gc');
 const gc = vm.runInNewContext('gc');
+
+/** node:http istemcisi: fetch (undici) yanit basligini en cok 300 sn bekler; 2500 hesapli onay (kisi basina bcrypt) bunu asabilir. Yanit: { status, text, headers }. */
+function httpRequest(url, { method, headers, body }) {
+  return new Promise((resolve, reject) => {
+    const req = http.request(url, { method, headers }, (res) => {
+      const chunks = [];
+      res.on('data', (chunk) => chunks.push(chunk));
+      res.on('end', () => resolve({ status: res.statusCode, text: Buffer.concat(chunks).toString('utf8'), headers: new Headers(Object.entries(res.headers).map(([k, v]) => [k, Array.isArray(v) ? v.join(', ') : v])) }));
+    });
+    req.on('error', reject);
+    if (body !== undefined) req.write(body);
+    req.end();
+  });
+}
 
 async function startHttp(pool) {
   const express = (await import('express')).default;
@@ -37,8 +53,8 @@ async function startHttp(pool) {
     if (!keepLimits) for (const limiter of limiters) limiter.reset();
     const headers = { 'content-type': 'application/json' };
     if (userCode !== null) headers.authorization = `Bearer ${await tokenFor(userCode)}`;
-    const response = await fetch(`${base}${urlPath}`, { method, headers, body: raw !== undefined ? raw : body === undefined ? undefined : JSON.stringify(body) });
-    const text = await response.text();
+    const response = await httpRequest(`${base}${urlPath}`, { method, headers, body: raw !== undefined ? raw : body === undefined ? undefined : JSON.stringify(body) });
+    const text = response.text;
     let json = null;
     try {
       json = JSON.parse(text);
@@ -102,15 +118,22 @@ export async function runBulkImportSection(ctx) {
 
   // ---- fabrikalar
   let nextUser = 61000;
+  // user_code: sabit sayac; ancak toplu yuklemede acilan hesaplar users.user_code'u RASTGELE (10000-99999, generate_unique_user_code) alir ve sayacla cakisabilir -> 23505'te sonraki kod denenir
   const mkUser = async (name, role = 'individual', options = {}) => {
-    nextUser += 1;
-    const code = nextUser;
-    await q(
-      `INSERT INTO users (user_code, full_name, email, role, password_hash, is_active, email_verified, approval_status, phone_number)
-       VALUES ($1, $2, $3, $4, 'x', $5, TRUE, 'approved', $6)`,
-      [code, name, options.email ?? `bulk${code}@qa.example`, role, options.active ?? true, options.phone ?? null],
-    );
-    return code;
+    for (;;) {
+      nextUser += 1;
+      const code = nextUser;
+      try {
+        await q(
+          `INSERT INTO users (user_code, full_name, email, role, password_hash, is_active, email_verified, approval_status, phone_number)
+           VALUES ($1, $2, $3, $4, 'x', $5, TRUE, 'approved', $6)`,
+          [code, name, options.email ?? `bulk${code}@qa.example`, role, options.active ?? true, options.phone ?? null],
+        );
+        return code;
+      } catch (error) {
+        if (error?.code !== '23505' || !/user_code/.test(String(error.constraint ?? ''))) throw error;
+      }
+    }
   };
   let nextSite = 1000001000;
   const mkSite = async (name, blocks = { 'A Blok': 6, 'B Blok': 3 }) => {
@@ -196,7 +219,14 @@ export async function runBulkImportSection(ctx) {
   const runsOf = async (site) => (await q(`SELECT * FROM bulk_import_runs WHERE site_code = $1 ORDER BY id`, [site])).rows;
   const auditOf = async (site, action) => (await q(`SELECT * FROM audit_log WHERE site_code = $1 AND action = $2 ORDER BY id`, [site, action])).rows;
   const auditCount = (site) => countOf(`SELECT COUNT(*)::int AS n FROM audit_log WHERE site_code = $1`, [site]);
-  const personByEmail = async (site, email) => (await q(`SELECT * FROM site_people WHERE site_code = $1 AND lower(email) = lower($2) ORDER BY id`, [site, email])).rows;
+  // CRM kurali: hesabi olan kisinin ad / telefon / e-postasi site_people'da NULL'dur ve users'tan okunur (hesapsiz kisi site_people'dan). Bu gorunum ikisini birlestirir.
+  const PERSON_VIEW = `SELECT sp.id, sp.user_code, sp.is_active, sp.note, sp.created_by,
+      COALESCE(u.full_name, sp.full_name) AS full_name, COALESCE(u.phone_number, sp.phone) AS phone, COALESCE(u.email, sp.email) AS email,
+      sp.full_name AS sp_full_name, sp.phone AS sp_phone, sp.email AS sp_email
+    FROM site_people sp LEFT JOIN users u ON u.user_code = sp.user_code`;
+  const peopleWhere = async (site, condition, params = []) => (await q(`${PERSON_VIEW} WHERE sp.site_code = $1 AND (${condition}) ORDER BY sp.id`, [site, ...params])).rows;
+  const personByEmail = (site, email) => peopleWhere(site, `lower(COALESCE(u.email, sp.email)) = lower($2)`, [email]);
+  const peopleNamed = (site, name) => peopleWhere(site, `COALESCE(u.full_name, sp.full_name) = $2`, [name]);
   const piiLeak = (value, markers = [MARK.name, MARK.email, MARK.phone, MARK.note, MARK.plate, 'Gizlibulk', 'gizlibulk']) => {
     const text = typeof value === 'string' ? value : JSON.stringify(value);
     return markers.filter((marker) => text.includes(marker));
@@ -260,11 +290,13 @@ export async function runBulkImportSection(ctx) {
   }
   check('A9: her sey varken ensureBulkImportSchema YALNIZ katalog sorgusu calistirir (DDL / kilit yok)', ddlQueries.length === 1 && !/\bCREATE\s+(TABLE|INDEX|UNIQUE)|\bALTER\s+TABLE/i.test(ddlQueries[0].text), ddlQueries.map((e) => e.text.slice(0, 80)));
   // tablo kayipken yeniden olusturma (DDL acilistaki sirayla)
-  await q('DROP TABLE bulk_import_runs');
+  // 055: finance_opening_reverts.run_id -> bulk_import_runs(id) FK'si tabloya bagli; CASCADE yalniz o FK'yi dusurur (ensureBulkOpeningSchema geri kurar, asagida dogrulanir).
+  await q('DROP TABLE bulk_import_runs CASCADE');
   await ensureDbSchema();
   const recreated = (await q(`SELECT COUNT(*)::int AS n FROM pg_indexes WHERE tablename = 'bulk_import_runs'`)).rows[0].n;
   const recreatedFks = (await q(`SELECT COUNT(*)::int AS n FROM pg_constraint WHERE conrelid = 'bulk_import_runs'::regclass AND contype = 'f'`)).rows[0].n;
-  check('A10: tablo yoksa ensureDbSchema onu, 2 yabanci anahtari ve 3 indeksi geri kurar', recreated === 4 && recreatedFks === 2 && BULK_IMPORT_DDL.table.length > 0, { recreated, recreatedFks });
+  const openingRunFk = (await q(`SELECT COUNT(*)::int AS n FROM pg_constraint WHERE conname = 'fk_finance_opening_reverts_run' AND conrelid = 'finance_opening_reverts'::regclass`)).rows[0].n;
+  check('A10: tablo yoksa ensureDbSchema onu, 2 yabanci anahtari ve 3 indeksi geri kurar; 055 devir geri alma tablosunun run_id FK\'si de geri gelir', recreated === 4 && recreatedFks === 2 && openingRunFk === 1 && BULK_IMPORT_DDL.table.length > 0, { recreated, recreatedFks, openingRunFk });
 
   // ============================================================================================================
   // B. DAIRELER: onizleme / onay / idempotans / bayatlik / strict / ezme
@@ -406,6 +438,10 @@ export async function runBulkImportSection(ctx) {
   // C. KISILER
   // ============================================================================================================
   console.log('--- C. kisiler ---');
+  // HESAP KURALI (toplu yukleme, kind people / all_in_one): hesap YALNIZ bu yuklemede daire iliskisi EKLENEN kisilere acilir (kisi basina TEK hesap, varsayilan sifre 1234,
+  // users.role = apartment_owner, must_change_password); daire uyeligi grantApartmentAccess kuralidir (dairede TEK admin); dairesiz kisi hesapsiz kalir; arac yuklemesi hesap
+  // acmaz; e-posta bu sitede bagi olmayan hesaba / yoneticiye aitse BAGLANMAZ (EMAIL_IN_USE: kisi yazilir, hesap yok). CRM kurali: hesapli kisinin ad / telefon /
+  // e-postasi site_people'da NULL'dur, users'tan okunur (PERSON_VIEW).
   const { listAccessibleDoorsForUser } = await import('../src/services/door_service.js');
   await q(`INSERT INTO site_doors (site_code, door_name, door_index) VALUES ($1, 'Ana Kapi', 1), ($1, 'Yan Kapi', 2)`, [S.code]);
   const doorUser = await mkUser('Kapi Sakini', 'apartment_owner');
@@ -415,6 +451,17 @@ export async function runBulkImportSection(ctx) {
   const accessBefore = await access(S.code);
   const mailsBefore = mails.length;
   const usersBefore = await countOf(`SELECT COUNT(*)::int AS n FROM users`);
+  /** Erisim goruntusunden verilen kullanicilari ayirir (yeni acilan hesaplar disinda hicbir sey degismemeli). */
+  const accessWithout = (json, codes) => {
+    const value = JSON.parse(json);
+    for (const field of ['memberships', 'siteMemberships', 'users', 'overrides']) value[field] = value[field].filter((row) => !codes.includes(Number(row.user_code)));
+    return JSON.stringify(value);
+  };
+  const adminsOf = async (apartmentIds) => (await q(`SELECT apartment_id, COUNT(*) FILTER (WHERE role = 'APARTMENT_ADMIN' AND is_active)::int AS admins FROM apartment_memberships WHERE apartment_id = ANY($1::bigint[]) GROUP BY 1 ORDER BY 1`, [apartmentIds])).rows;
+  const membershipsOf = async (codes) =>
+    (await q(`SELECT b.block_name, a.sort_order, am.user_code, am.role, am.is_active FROM apartment_memberships am JOIN apartments a ON a.id = am.apartment_id JOIN site_blocks b ON b.id = a.block_id WHERE am.user_code = ANY($1::int[]) ORDER BY b.block_name, a.sort_order, am.user_code`, [codes])).rows;
+  const userRow = async (code) => (await q(`SELECT * FROM users WHERE user_code = $1`, [code])).rows[0];
+
   const peopleFile = [
     { ad_soyad: MARK.name, telefon: `0 (${MARK.phone.slice(0, 3)}) ${MARK.phone.slice(3, 6)} ${MARK.phone.slice(6, 8)} ${MARK.phone.slice(8)}`, e_posta: MARK.email.toUpperCase(), blok: 'A', daire_no: '3', iliski: 'Malik', giris_tarihi: '15.03.2021', plaka: `${MARK.plateRaw}, 06 XY 789`, not: MARK.note },
     { ad_soyad: 'Ayşe Demir', blok: 'A', daire_no: '3', iliski: 'Kiracı', telefon: '532 111 22 33' },
@@ -423,45 +470,87 @@ export async function runBulkImportSection(ctx) {
     { ad_soyad: 'Mehmet Sakin', blok: 'B', daire_no: '1' },
   ];
   const pvP = await previewOf(MGR, S.code, 'people', peopleFile);
-  check('C1: kisi onizlemesi: 5 satir olusacak (hesapsiz), 4 iliski, 2 arac; ornekler "Ad -> Blok - Daire (Iliski)"', pvP.status === 200 && same(pvP.body.totals, { rows: 5, ok: 5, unchanged: 0, error: 0, with_warnings: 0 })
-    && pvP.body.plan.people_create === 5 && pvP.body.plan.residency_add === 4 && pvP.body.plan.vehicle_add === 2 && pvP.body.samples[0].summary === `${MARK.name} → A Blok - Daire 3 (Malik) + 2 plaka`, pvP.body);
+  check('C1: kisi onizlemesi: 5 satir olusacak, 4 iliski, 2 arac, 4 HESAP (yalniz daire iliskisi eklenen kisilere; dairesiz Zeynep hesapsiz); ornekler "Ad -> Blok - Daire (Iliski)"', pvP.status === 200 && same(pvP.body.totals, { rows: 5, ok: 5, unchanged: 0, error: 0, with_warnings: 0 })
+    && pvP.body.plan.people_create === 5 && pvP.body.plan.residency_add === 4 && pvP.body.plan.vehicle_add === 2 && pvP.body.plan.account_create === 4 && pvP.body.samples[0].summary === `${MARK.name} → A Blok - Daire 3 (Malik) + 2 plaka`, pvP.body);
   const cmP = await call('POST', `${P(S.code)}/imports/people/commit`, MGR, body(peopleFile, { expected_hash: pvP.body.preview_hash, idempotency_key: key('ppl'), acknowledged: true }));
-  check('C2: kisi onayi 201; 5 kisi / 4 iliski / 2 arac yazildi', cmP.status === 201 && same(cmP.body.result.rows, { applied: 5, unchanged: 0, skipped: 0 }) && cmP.body.result.counts.people_create === 5, cmP.body);
+  const accountsP = cmP.body?.result?.accounts;
+  check('C2: kisi onayi 201; 5 kisi / 4 iliski / 2 arac yazildi; 4 hesap ACILDI (satir 2, 3, 4, 6), 0 baglandi, 0 atlandi; yanitta satir no + nihai kullanici adi',
+    cmP.status === 201 && same(cmP.body.result.rows, { applied: 5, unchanged: 0, skipped: 0 }) && cmP.body.result.counts.people_create === 5 && cmP.body.result.counts.account_create === 4
+    && accountsP?.created === 4 && accountsP.linked === 0 && accountsP.skipped === 0 && same([...accountsP.items].sort((a, b) => a.n - b.n).map((i) => [i.n, i.status]), [[2, 'created'], [3, 'created'], [4, 'created'], [6, 'created']])
+    && accountsP.items.every((i) => typeof i.login_name === 'string' && i.login_name.length > 0) && accountsP.skipped_items.length === 0, cmP.body);
+
   const ahmet = (await personByEmail(S.code, MARK.email))[0];
+  const ayse = (await peopleNamed(S.code, 'Ayşe Demir'))[0];
+  const veli = (await personByEmail(S.code, 'veli.demir@bulk.qa.example'))[0];
+  const zeynep = (await personByEmail(S.code, 'zeynep.kaya@bulk.qa.example'))[0];
+  const mehmet = (await peopleNamed(S.code, 'Mehmet Sakin'))[0];
   const ahmetRes = (await q(`SELECT * FROM apartment_residencies WHERE person_id = $1`, [ahmet.id])).rows[0];
   const ahmetVeh = (await q(`SELECT plate, plate_display FROM vehicles WHERE person_id = $1 ORDER BY id`, [ahmet.id])).rows;
-  check('C2b: kisi HESAPSIZ (user_code NULL), alanlar normalize (e-posta kucuk harf, telefon +90..., not), created_by = yonetici; iliski origin=manual, giris tarihi dosyadan; plakalar normalize + gorunen biçim',
-    ahmet.user_code === null && ahmet.full_name === MARK.name && ahmet.email === MARK.email && ahmet.phone === MARK.phoneNorm && ahmet.note === MARK.note && ahmet.created_by === MGR && ahmet.is_active === true
+  check('C2b: kisi HESAPLI (user_code dolu): ad / telefon (+90...) / e-posta (kucuk harf) users\'ta, site_people\'da NULL (CRM kurali); not site_people\'da; created_by = yonetici; iliski origin=manual, giris tarihi dosyadan; plakalar normalize + gorunen biçim',
+    ahmet.user_code !== null && ahmet.full_name === MARK.name && ahmet.email === MARK.email && ahmet.phone === MARK.phoneNorm && ahmet.sp_full_name === null && ahmet.sp_phone === null && ahmet.sp_email === null
+    && ahmet.note === MARK.note && ahmet.created_by === MGR && ahmet.is_active === true
     && ahmetRes.relation === 'owner' && ahmetRes.origin === 'manual' && ahmetRes.is_current === true && String(ahmetRes.move_in_date).includes('2021') && same(ahmetVeh, [{ plate: '34GZL901', plate_display: '34 GZL 901' }, { plate: '06XY789', plate_display: '06 XY 789' }]), { ahmet, ahmetRes, ahmetVeh });
-  const noDateRow = (await q(`SELECT r.move_in_date::text AS d FROM apartment_residencies r JOIN site_people sp ON sp.id = r.person_id WHERE sp.site_code = $1 AND sp.full_name = 'Ayşe Demir'`, [S.code])).rows[0];
+  const noDateRow = (await q(`SELECT r.move_in_date::text AS d FROM apartment_residencies r WHERE r.person_id = $1`, [ayse.id])).rows[0];
   check('C2c: giris tarihi bos satirda bugun (Istanbul) yazilir', noDateRow.d === TODAY, noDateRow);
-  check('C3: ERISIM YOK: users sayisi, apartment_memberships, site_memberships, kapi izinleri ve e-posta gonderimi DEGISMEDI (hesap/davet/erisim yazilmaz)',
-    (await access(S.code)) === accessBefore && (await countOf(`SELECT COUNT(*)::int AS n FROM users`)) === usersBefore && mails.length === mailsBefore
-    && same(doorsBefore, [await doorsOf(doorUser), await doorsOf(RESIDENT), await doorsOf(MGR)]) && JSON.parse(doorsBefore[0]).length >= 1);
+
+  // --- hesap kurali: acilan hesaplar
+  const accts = { ahmet: await userRow(ahmet.user_code), ayse: await userRow(ayse.user_code), veli: await userRow(veli.user_code), mehmet: await userRow(mehmet.user_code) };
+  const acctList = Object.values(accts);
+  const acctCodes = acctList.map((u) => u.user_code);
+  const hashOk = await Promise.all(acctList.map((u) => bcrypt.compare('1234', u.password_hash)));
+  check('C3: HESAP: users +4 (kisi basina TEK hesap); hepsi apartment_owner, aktif, e-posta dogrulanmis, onayli, must_change_password; varsayilan sifre 1234 (bcrypt, her hesap KENDI tuzuyla); dahili e-posta yalniz e-postasiz kisilerde; dairesiz Zeynep hesapsiz (users\'ta e-postasi yok)',
+    (await countOf(`SELECT COUNT(*)::int AS n FROM users`)) === usersBefore + 4 && new Set(acctCodes).size === 4
+    && acctList.every((u) => u.role === 'apartment_owner' && u.is_active === true && u.email_verified === true && u.approval_status === 'approved' && u.must_change_password === true)
+    && hashOk.every(Boolean) && new Set(acctList.map((u) => u.password_hash)).size === 4
+    && accts.ahmet.email === MARK.email && accts.veli.email === 'veli.demir@bulk.qa.example' && accts.ayse.email.endsWith('@ahbu.local') && accts.mehmet.email.endsWith('@ahbu.local')
+    && accts.ahmet.phone_number === MARK.phoneNorm && accts.ayse.phone_number === '+905321112233'
+    && zeynep.user_code === null && zeynep.sp_full_name === 'Zeynep Kaya' && (await countOf(`SELECT COUNT(*)::int AS n FROM users WHERE lower(email) = 'zeynep.kaya@bulk.qa.example'`)) === 0
+    && same(accountsP.items.map((i) => i.login_name).sort(), acctList.map((u) => u.login_name).sort()), acctList.map((u) => [u.login_name, u.role]));
+  const membershipLabels = (await membershipsOf(acctCodes)).map((m) => `${Object.keys(accts).find((k) => accts[k].user_code === m.user_code)}:${m.block_name}${m.sort_order}:${m.role}:${m.is_active}`);
+  const aptA3 = S.apt('A', 3).id;
+  const aptB1 = S.apt('B', 1).id;
+  check('C3b: DAIRE UYELIGI (grantApartmentAccess kurali): A3 = malik admin, kiraci + aile FAMILY_MEMBER; B1 = tek sakin admin; her dairede TEK aktif admin',
+    membershipLabels.length === 4 && membershipLabels.includes('ahmet:A Blok3:APARTMENT_ADMIN:true') && membershipLabels.includes('ayse:A Blok3:FAMILY_MEMBER:true') && membershipLabels.includes('veli:A Blok3:FAMILY_MEMBER:true') && membershipLabels.includes('mehmet:B Blok1:APARTMENT_ADMIN:true')
+    && (await adminsOf([aptA3, aptB1])).every((row) => row.admins === 1), { membershipLabels, admins: await adminsOf([aptA3, aptB1]) });
+  const siteRolesNew = (await q(`SELECT user_code, role, is_active FROM site_memberships WHERE site_code = $1 AND user_code = ANY($2::int[]) ORDER BY user_code`, [S.code, acctCodes])).rows;
+  const aptRows = (await q(`SELECT id, resident_user_code, resident_pin_issued FROM apartments WHERE id = ANY($1::bigint[]) ORDER BY id`, [[aptA3, aptB1]])).rows;
+  const newDoors = await doorsOf(ahmet.user_code);
+  check('C3c: site duzeyi RESIDENT (4 hesap); daire gostergesi ilk uyede (A3 -> malik, B1 -> Mehmet) ve "parola yonetimce verildi" isareti; yeni hesap sitenin ortak kapilarini gorur (komsu hesapla ayni liste)',
+    siteRolesNew.length === 4 && siteRolesNew.every((r) => r.role === 'RESIDENT' && r.is_active === true)
+    && aptRows.find((a) => Number(a.id) === aptA3).resident_user_code === ahmet.user_code && aptRows.find((a) => Number(a.id) === aptB1).resident_user_code === mehmet.user_code && aptRows.every((a) => a.resident_pin_issued === true)
+    && JSON.parse(newDoors).length >= 1 && newDoors === (await doorsOf(doorUser)), { siteRolesNew, aptRows, newDoors });
+  check('C3d: MEVCUT erisim DEGISMEDI: yeni 4 hesap disinda users / apartment_memberships / site_memberships / kapi izinleri aynen; mevcut hesaplarin kapi listeleri ayni; e-posta / davet GONDERILMEDI',
+    accessWithout(await access(S.code), acctCodes) === accessWithout(accessBefore, []) && same(doorsBefore, [await doorsOf(doorUser), await doorsOf(RESIDENT), await doorsOf(MGR)]) && JSON.parse(doorsBefore[0]).length >= 1 && mails.length === mailsBefore);
+
   const personAudit = await auditOf(S.code, 'person.created');
   const resAudit = await auditOf(S.code, 'residency.added');
   const vehAudit = await auditOf(S.code, 'vehicle.added');
+  const accAudit = await auditOf(S.code, 'person.account_created');
   const importAudit = (await auditOf(S.code, 'import.committed')).pop();
-  check('C4: audit: person.created x5, residency.added x4, vehicle.added x2 hepsinde via:import + run_id; import.committed tek satir, acknowledged:true',
-    personAudit.length === 5 && personAudit.every((r) => r.details.via === 'import' && r.details.run_id === cmP.body.run.id && r.details.has_account === false) && resAudit.length === 4 && resAudit.every((r) => r.details.via === 'import' && r.details.relation)
-    && vehAudit.length === 2 && vehAudit.every((r) => r.details.via === 'import' && typeof r.details.plate === 'string') && importAudit.details.acknowledged === true && importAudit.details.counts.people_create === 5, importAudit.details);
+  check('C4: audit: person.created x5, residency.added x4, vehicle.added x2, person.account_created x4 hepsinde via:import + run_id; import.committed tek satir, acknowledged:true, hesap sayilari',
+    personAudit.length === 5 && personAudit.every((r) => r.details.via === 'import' && r.details.run_id === cmP.body.run.id) && resAudit.length === 4 && resAudit.every((r) => r.details.via === 'import' && r.details.relation)
+    && vehAudit.length === 2 && vehAudit.every((r) => r.details.via === 'import' && typeof r.details.plate === 'string')
+    && accAudit.length === 4 && accAudit.every((r) => r.target_type === 'person' && r.details.via === 'import' && r.details.run_id === cmP.body.run.id && r.details.status === 'created' && acctCodes.includes(Number(r.details.user_code)) && same(Object.keys(r.details).sort(), ['run_id', 'status', 'user_code', 'via']))
+    && importAudit.details.acknowledged === true && importAudit.details.counts.people_create === 5 && importAudit.details.counts.account_create === 4 && importAudit.details.counts.accounts_created === 4 && importAudit.details.counts.accounts_skipped === 0, importAudit.details);
   const allBulkAudit = (await q(`SELECT action, details FROM audit_log WHERE site_code = $1 AND details->>'via' = 'import' OR (site_code = $1 AND action = 'import.committed')`, [S.code])).rows;
   const leakInAudit = allBulkAudit.filter((r) => r.action !== 'vehicle.added').flatMap((r) => piiLeak(r.details));
   const leakInVehicleAudit = allBulkAudit.filter((r) => r.action === 'vehicle.added').flatMap((r) => piiLeak(r.details, [MARK.name, MARK.email, MARK.phone, MARK.note]));
   const runLeak = piiLeak((await runsOf(S.code)).map((r) => ({ counts: r.counts, key: r.idempotency_key })));
-  check('C5: GIZLILIK: audit (import.committed dahil) ve calistirma kaydi ad / e-posta / telefon / not / plaka ICERMEZ (yalniz vehicle.added tekil yolla uyumlu olarak plaka tasir)', leakInAudit.length === 0 && leakInVehicleAudit.length === 0 && runLeak.length === 0, { leakInAudit, leakInVehicleAudit, runLeak });
+  check('C5: GIZLILIK: audit (import.committed ve person.account_created dahil) ve calistirma kaydi ad / e-posta / telefon / not / plaka / kullanici adi / sifre ICERMEZ (yalniz vehicle.added tekil yolla uyumlu olarak plaka tasir)',
+    leakInAudit.length === 0 && leakInVehicleAudit.length === 0 && runLeak.length === 0 && !JSON.stringify(allBulkAudit).includes('1234') && acctList.every((u) => !JSON.stringify(allBulkAudit).includes(u.login_name)), { leakInAudit, leakInVehicleAudit, runLeak });
 
   // F2.11 gecmis: toplu kayitlar da kisi gecmisinde gorunur (via:import, run_id)
   const { listPeopleHistory } = await import('../src/modules/people_history_service.js');
   const history = await listPeopleHistory(S.code, { target_type: 'person', target_id: String(ahmet.id) });
   const historyActions = history.items.map((item) => item.action).sort();
-  check('C5b: kisi gecmisi (F2.11) toplu kayitlari gosterir: person.created + residency.added, details.via:import + run_id', same(historyActions, ['person.created', 'residency.added']) && history.items.every((item) => item.details.via === 'import' && item.details.run_id === cmP.body.run.id), history.items.map((item) => [item.action, item.details]));
+  check('C5b: kisi gecmisi (F2.11) toplu kayitlari gosterir: person.account_created + person.created + residency.added, details.via:import + run_id', same(historyActions, ['person.account_created', 'person.created', 'residency.added']) && history.items.every((item) => item.details.via === 'import' && item.details.run_id === cmP.body.run.id), history.items.map((item) => [item.action, item.details]));
 
-  // ikinci yukleme
+  // ikinci yukleme: ayni dosya hicbir sey degistirmez, ikinci hesap ACILMAZ
   const snapPeople = await crm(S.code);
   const secondP = await run(MGR, S.code, 'people', peopleFile);
-  check('C6: AYNI kisi dosyasi ikinci kez: tum satirlar "degisiklik yok"; kisi / iliski / arac DEGISMEZ (cift kayit yok)', secondP.pv.body.totals.unchanged === 5 && secondP.pv.body.totals.ok === 0 && secondP.cm.status === 201 && (await crm(S.code)) === snapPeople
-    && secondP.pv.body.plan.residency_unchanged === 4 && secondP.pv.body.plan.vehicle_unchanged === 2, secondP.pv.body.plan);
+  check('C6: AYNI kisi dosyasi ikinci kez: tum satirlar "degisiklik yok"; kisi / iliski / arac DEGISMEZ (cift kayit yok); YENI HESAP ACILMAZ (users sayisi ayni, account_create 0)', secondP.pv.body.totals.unchanged === 5 && secondP.pv.body.totals.ok === 0 && secondP.cm.status === 201 && (await crm(S.code)) === snapPeople
+    && secondP.pv.body.plan.residency_unchanged === 4 && secondP.pv.body.plan.vehicle_unchanged === 2 && secondP.pv.body.plan.account_create === 0 && (secondP.cm.body.result.accounts?.created ?? 0) === 0
+    && (await countOf(`SELECT COUNT(*)::int AS n FROM users`)) === usersBefore + 4, secondP.pv.body.plan);
 
   // eslesme matrisi
   const seedPlain = await plain(S.code, { name: 'Ali Veli', phone: '+905441112233', email: 'ali.veli@bulk.qa.example', apt: S.apt('A', 1).id });
@@ -480,20 +569,25 @@ export async function runBulkImportSection(ctx) {
     { ad_soyad: 'Zeynep Kaya', telefon: '0 555 000 11 22' }, // ad + (e-posta/daire yok) telefon farkli -> yeni kisi
     { ad_soyad: 'Kimliksiz Kisi' }, // NO_IDENTIFIER
   ];
+  const usersBeforeMatch = await countOf(`SELECT COUNT(*)::int AS n FROM users`);
   const mt = await run(MGR, S.code, 'people', matchFile);
-  const aliAfter = (await q(`SELECT phone, note FROM site_people WHERE id = $1`, [seedPlain.id])).rows[0];
+  const aliAfter = (await q(`SELECT user_code, phone, note FROM site_people WHERE id = $1`, [seedPlain.id])).rows[0];
   const hasanAfter = JSON.stringify({ user: (await q(`SELECT full_name, email, phone_number FROM users WHERE user_code = $1`, [accountUser])).rows, person: (await q(`SELECT full_name, phone, email, note FROM site_people WHERE id = $1`, [accountPerson.id])).rows });
   const hasanRes = (await q(`SELECT apartment_id, relation, origin, is_current FROM apartment_residencies WHERE person_id = $1 ORDER BY apartment_id`, [accountPerson.id])).rows;
   check('C7: eslesme matrisi onizleme: e-posta+ad+telefon', mt.pv.status === 200 && same(issueCodes(mt.pv, 3), ['w:ACCOUNT_NEW_APARTMENT']) && same(issueCodes(mt.pv, 8), ['e:NO_IDENTIFIER']) && mt.pv.body.plan.people_create === 2 && mt.pv.body.plan.residency_upgrade === 1, mt.pv.body);
   check('C7b: hesapsiz kisi: BOS not dolar, DOLU telefon EZILMEZ; hesapli kisi: users + site_people AYNEN (ad/telefon/e-posta/not), yeni daire EKLENMEZ, resident -> owner yukseltildi (origin manual), plaka eklendi',
     aliAfter.phone === '+905441112233' && aliAfter.note === 'yeni not' && hasanAfter === accountSnapshot && same(hasanRes.map((r) => [r.relation, r.origin, r.is_current]), [['owner', 'manual', true]]) && hasanRes.length === 1
     && (await countOf(`SELECT COUNT(*)::int AS n FROM vehicles WHERE person_id = $1 AND plate = '35HSN001' AND is_active`, [accountPerson.id])) === 1, { aliAfter, hasanRes });
-  const ayse = await q(`SELECT id FROM site_people WHERE site_code = $1 AND full_name = 'Ayşe Demir'`, [S.code]);
+  const ayseRows = await peopleNamed(S.code, 'Ayşe Demir');
   check('C7c: "Ayse Demir" (Turkce katlama) dairede ad ile Ayşe Demir\'e baglandi (cift kayit yok); yalniz telefon ayni olan YENI kisi (telefon tek basina eslestirmez)',
-    ayse.rows.length === 1 && (await countOf(`SELECT COUNT(*)::int AS n FROM site_people WHERE site_code = $1 AND full_name = 'Telefon Ortak'`, [S.code])) === 1);
+    ayseRows.length === 1 && (await peopleNamed(S.code, 'Telefon Ortak')).length === 1);
   check('C7d: hesapli kisiye dokunulmadi: apartment_memberships / users degismedi (resident -> owner YALNIZ CRM ilisksi)', (await q(`SELECT role, is_active FROM apartment_memberships WHERE user_code = $1`, [accountUser])).rows[0].role === 'APARTMENT_ADMIN');
+  check('C7e: bu yuklemede daire iliskisi EKLENMEYEN kisilere (e-posta ile eslesen hesapsiz Ali Veli, hesapli Hasan, dairesiz yeni kisiler) HESAP ACILMAZ: account_create 0, users sayisi ayni; Ali Veli hesapsiz kalir',
+    mt.pv.body.plan.account_create === 0 && (mt.cm.body.result.accounts?.created ?? 0) === 0 && (await countOf(`SELECT COUNT(*)::int AS n FROM users`)) === usersBeforeMatch && aliAfter.user_code === null
+    && (await peopleNamed(S.code, 'Telefon Ortak'))[0].user_code === null, mt.pv.body.plan);
 
   // ikinci malik, baba/ogul
+  const usersBeforeRt = await countOf(`SELECT COUNT(*)::int AS n FROM users`);
   const rt = await run(MGR, S.code, 'people', [
     { ad_soyad: 'Ikinci Malik', e_posta: 'ikinci.malik@bulk.qa.example', blok: 'A', daire_no: '3', iliski: 'Malik' }, // A3 malik: Gizlibulk (Ahmet) var
     { ad_soyad: 'Es Hissedar', e_posta: 'es.hissedar@bulk.qa.example', blok: 'A', daire_no: '3', iliski: 'Aile' },
@@ -502,21 +596,35 @@ export async function runBulkImportSection(ctx) {
     { ad_soyad: 'Cift Yildiz', blok: 'A', daire_no: '5', iliski: 'Malik' },
     { ad_soyad: 'Cift Yildiz', blok: 'A', daire_no: '5', iliski: 'Aile' },
   ]);
-  check('C8: ikinci malik RELATION_TAKEN (hatali satirin KISISI da olusmaz); "Aile" kabul; baba/ogul e-posta ile ayrilir; iletisimsiz cakisan satir CONFLICTING_ROWS',
+  check('C8: ikinci malik RELATION_TAKEN (hatali satirin KISISI ve HESABI da olusmaz); "Aile" kabul; baba/ogul e-posta ile ayrilir; iletisimsiz cakisan satir CONFLICTING_ROWS',
     same(issueCodes(rt.pv, 2), ['e:RELATION_TAKEN']) && rt.pv.body.totals.ok === 4 && same(issueCodes(rt.pv, 7), ['e:CONFLICTING_ROWS'])
-    && (await personByEmail(S.code, 'ikinci.malik@bulk.qa.example')).length === 0 && (await personByEmail(S.code, 'es.hissedar@bulk.qa.example')).length === 1
-    && (await countOf(`SELECT COUNT(*)::int AS n FROM site_people WHERE site_code = $1 AND full_name = 'Baba Yildiz'`, [S.code])) === 2
-    && (await countOf(`SELECT COUNT(*)::int AS n FROM site_people WHERE site_code = $1 AND full_name = 'Cift Yildiz'`, [S.code])) === 1, rt.pv.body.issues);
+    && (await personByEmail(S.code, 'ikinci.malik@bulk.qa.example')).length === 0 && (await countOf(`SELECT COUNT(*)::int AS n FROM users WHERE lower(email) = 'ikinci.malik@bulk.qa.example'`)) === 0
+    && (await personByEmail(S.code, 'es.hissedar@bulk.qa.example')).length === 1
+    && (await peopleNamed(S.code, 'Baba Yildiz')).length === 2
+    && (await peopleNamed(S.code, 'Cift Yildiz')).length === 1, rt.pv.body.issues);
+  const babas = await peopleNamed(S.code, 'Baba Yildiz');
+  const babaLogins = (await Promise.all(babas.map((p) => userRow(p.user_code)))).map((u) => u.login_name).sort();
+  const hissedar = (await personByEmail(S.code, 'es.hissedar@bulk.qa.example'))[0];
+  const ciftYildiz = (await peopleNamed(S.code, 'Cift Yildiz'))[0];
+  const aptA4 = S.apt('A', 4).id;
+  const aptA5 = S.apt('A', 5).id;
+  const rtMemberships = await membershipsOf([hissedar.user_code, ciftYildiz.user_code, ...babas.map((p) => p.user_code)]);
+  check('C8b: aciklanan hesaplar: 4 yeni hesap (esit adli iki Baba = IKI ayri hesap, kullanici adi sunucuda benzersizlesir: baba.yildiz + baba.yildiz_2); MEVCUT admin korunur (A3 Ahmet, A4 kapi sakini): yeni hesaplar FAMILY_MEMBER; bos A5\'te Cift Yildiz admin; her dairede TEK admin',
+    rt.cm.status === 201 && rt.cm.body.result.accounts.created === 4 && (await countOf(`SELECT COUNT(*)::int AS n FROM users`)) === usersBeforeRt + 4 && same(babaLogins, ['baba.yildiz', 'baba.yildiz_2'])
+    && rtMemberships.find((m) => m.user_code === hissedar.user_code).role === 'FAMILY_MEMBER' && babas.every((p) => rtMemberships.find((m) => m.user_code === p.user_code).role === 'FAMILY_MEMBER')
+    && rtMemberships.find((m) => m.user_code === ciftYildiz.user_code).role === 'APARTMENT_ADMIN' && (await adminsOf([aptA3, aptA4, aptA5])).every((row) => row.admins === 1) && (await adminsOf([aptA3, aptA4, aptA5])).length === 3,
+    { rtMemberships, admins: await adminsOf([aptA3, aptA4, aptA5]), babaLogins });
 
   // pasif kisi yeniden etkinlestirme
   const deactivated = await plain(S.code, { name: 'Eski Sakin', email: 'eski.sakin@bulk.qa.example', apt: S.apt('B', 2).id, relation: 'tenant' });
   await peopleSvc.updatePerson({ siteCode: S.code, personId: deactivated.id, body: { is_active: false }, actor: MGR_ACTOR });
   const reAct = await run(MGR, S.code, 'people', [{ ad_soyad: 'Eski Sakin Yeni Ad', e_posta: 'eski.sakin@bulk.qa.example', telefon: '0533 222 11 00', blok: 'B', daire_no: '2', iliski: 'Kiracı' }]);
-  const reRow = (await q(`SELECT * FROM site_people WHERE id = $1`, [deactivated.id])).rows[0];
+  const reRow = (await personByEmail(S.code, 'eski.sakin@bulk.qa.example'))[0];
   const reResidencies = (await q(`SELECT is_current, relation FROM apartment_residencies WHERE person_id = $1 ORDER BY id`, [deactivated.id])).rows;
-  check('C9: pasif kisi YALNIZ e-posta ile bulunur: ayni kisi yeniden etkinlesir (REACTIVATE_PERSON), ad + telefon dosyadan, GECMIS korunur (eski iliski kapali kalir, yeni iliski eklenir), cift kayit yok',
-    same(issueCodes(reAct.pv, 2), ['w:REACTIVATE_PERSON']) && reRow.is_active === true && reRow.full_name === 'Eski Sakin Yeni Ad' && reRow.phone === '+905332221100'
-    && reResidencies.length === 2 && reResidencies[0].is_current === false && reResidencies[1].is_current === true && (await personByEmail(S.code, 'eski.sakin@bulk.qa.example')).length === 1, { reRow, reResidencies });
+  check('C9: pasif kisi YALNIZ e-posta ile bulunur: ayni kisi yeniden etkinlesir (REACTIVATE_PERSON), ad + telefon dosyadan, GECMIS korunur (eski iliski kapali kalir, yeni iliski eklenir), cift kayit yok; yeni iliski eklendigi icin HESAP acilir (ad / telefon / e-posta users\'ta)',
+    same(issueCodes(reAct.pv, 2), ['w:REACTIVATE_PERSON']) && Number(reRow.id) === deactivated.id && reRow.is_active === true && reRow.full_name === 'Eski Sakin Yeni Ad' && reRow.phone === '+905332221100' && reRow.user_code !== null && reRow.email === 'eski.sakin@bulk.qa.example'
+    && reResidencies.length === 2 && reResidencies[0].is_current === false && reResidencies[1].is_current === true && (await personByEmail(S.code, 'eski.sakin@bulk.qa.example')).length === 1
+    && reAct.cm.body.result.accounts.created === 1, { reRow, reResidencies });
 
   // plaka kurallari
   const plates = await run(MGR, S.code, 'people', [
@@ -525,8 +633,8 @@ export async function runBulkImportSection(ctx) {
     { ad_soyad: MARK.name, e_posta: MARK.email, plaka: MARK.plateRaw }, // ayni kisi: degisiklik yok
   ]);
   const p1 = (await personByEmail(S.code, 'plaka1@bulk.qa.example'))[0];
-  check('C10: plaka: gecersiz / sitede baskasinda / dosyada baska kisi ATLANIR (uyari), kisi YAZILIR; ayni kisi "degisiklik yok"',
-    same(issueCodes(plates.pv, 2), ['w:PLATE_EXISTS', 'w:PLATE_INVALID']) && same(issueCodes(plates.pv, 3), ['w:PLATE_DUP_IN_FILE']) && plates.pv.body.totals.error === 0 && !!p1 && plates.cm.status === 201
+  check('C10: plaka: gecersiz / sitede baskasinda / dosyada baska kisi ATLANIR (uyari), kisi YAZILIR (dairesiz -> hesapsiz); ayni kisi "degisiklik yok"',
+    same(issueCodes(plates.pv, 2), ['w:PLATE_EXISTS', 'w:PLATE_INVALID']) && same(issueCodes(plates.pv, 3), ['w:PLATE_DUP_IN_FILE']) && plates.pv.body.totals.error === 0 && !!p1 && p1.user_code === null && plates.cm.status === 201
     && (await countOf(`SELECT COUNT(*)::int AS n FROM vehicles WHERE site_code = $1 AND plate = '35NEW111' AND is_active`, [S.code])) === 1 && (await countOf(`SELECT COUNT(*)::int AS n FROM vehicles WHERE site_code = $1 AND plate = '34GZL901' AND is_active`, [S.code])) === 1, plates.pv.body.issues);
 
   // onizleme-onay arasi bayatlik
@@ -534,8 +642,9 @@ export async function runBulkImportSection(ctx) {
   const pvSp = await previewOf(MGR, S.code, 'people', staleP);
   await plain(S.code, { name: 'Araya Giren', email: 'araya@bulk.qa.example', apt: S.apt('B', 3).id, relation: 'owner' }); // onizleme ile onay arasinda B3'e malik eklendi
   const snapSp = await crm(S.code);
+  const usersBeforeStale = await countOf(`SELECT COUNT(*)::int AS n FROM users`);
   const cmSp = await commitRaw(MGR, S.code, 'people', staleP, pvSp.body.preview_hash);
-  check('C11: onizleme ile onay arasinda kisi eklenirse (malik doldu) 409 PREVIEW_STALE; hicbir sey yazilmaz', cmSp.status === 409 && cmSp.body.code === 'PREVIEW_STALE' && (await crm(S.code)) === snapSp && cmSp.body.totals.error === 1, cmSp.body);
+  check('C11: onizleme ile onay arasinda kisi eklenirse (malik doldu) 409 PREVIEW_STALE; hicbir sey yazilmaz (hesap dahil)', cmSp.status === 409 && cmSp.body.code === 'PREVIEW_STALE' && (await crm(S.code)) === snapSp && cmSp.body.totals.error === 1 && (await countOf(`SELECT COUNT(*)::int AS n FROM users`)) === usersBeforeStale, cmSp.body);
 
   // onizleme ile onay arasinda PLAKA baskasina eklenirse de bayat
   const plateStaleRows = [{ ad_soyad: 'Plaka Bayat Kisi', e_posta: 'plakabayat@bulk.qa.example', plaka: '35 BYT 777' }];
@@ -549,21 +658,24 @@ export async function runBulkImportSection(ctx) {
   // KVKK onayi
   const snapAck = await crm(S.code);
   const noAck = await call('POST', `${P(S.code)}/imports/people/commit`, MGR, body(staleP, { expected_hash: pvSp.body.preview_hash, idempotency_key: key('ack'), acknowledged: false }));
-  check('C12: acknowledged:false -> 400 ACK_REQUIRED, hicbir sey yazilmaz', noAck.status === 400 && noAck.body.code === 'ACK_REQUIRED' && (await crm(S.code)) === snapAck);
+  check('C12: acknowledged:false -> 400 ACK_REQUIRED, hicbir sey yazilmaz', noAck.status === 400 && noAck.body.code === 'ACK_REQUIRED' && (await crm(S.code)) === snapAck && (await countOf(`SELECT COUNT(*)::int AS n FROM users`)) === usersBeforeStale);
 
-  // esitleme etkilesimi: sonradan katilan kullanici LINK ile baglanir (hayalet yok); elle iliski sessizce bitmez
-  const link = await run(MGR, S.code, 'people', [{ ad_soyad: 'Sonradan Katilan', e_posta: 'sonradan@bulk.qa.example', blok: 'B', daire_no: '1', iliski: 'Aile' }]);
+  // esitleme etkilesimi: dairesiz (hesapsiz) ice aktarilan kisi sonradan katilan hesaba LINK ile baglanir (hayalet yok)
+  const link = await run(MGR, S.code, 'people', [{ ad_soyad: 'Sonradan Katilan', e_posta: 'sonradan@bulk.qa.example' }]);
   const joiner = await mkUser('Sonradan Katilan Hesap', 'apartment_owner', { email: 'sonradan@bulk.qa.example' });
   await member(S.apt('B', 1).id, joiner, 'FAMILY_MEMBER');
   await peopleSync.syncSitePeople(S.code);
   const joinedRows = (await q(`SELECT sp.id, sp.user_code, sp.full_name, sp.email, sp.is_active FROM site_people sp WHERE sp.site_code = $1 AND (sp.user_code = $2 OR lower(sp.email) = 'sonradan@bulk.qa.example')`, [S.code, joiner])).rows;
   const joinedRes = (await q(`SELECT r.relation, r.origin, r.is_current FROM apartment_residencies r WHERE r.person_id = $1 AND r.apartment_id = $2`, [joinedRows[0]?.id ?? 0, S.apt('B', 1).id])).rows;
-  check('C13: ice aktarilan hesapsiz kisi sonradan katilan hesaba LINK ile baglanir: TEK kayit (hayalet yok), user_code dolu, iliski (Aile, origin manual) korunur',
-    link.cm.status === 201 && joinedRows.length === 1 && joinedRows[0].user_code === joiner && joinedRows[0].is_active === true && joinedRes.length === 1 && joinedRes[0].relation === 'family_member' && joinedRes[0].origin === 'manual', { joinedRows, joinedRes });
-  await q(`DELETE FROM apartment_memberships WHERE user_code = $1`, [joiner]);
+  check('C13: ice aktarilan DAIRESIZ (hesapsiz) kisi sonradan katilan hesaba LINK ile baglanir: TEK kayit (hayalet yok), user_code dolu, ad / e-posta users\'tan; esitleme dairede guncel iliski kurar',
+    link.cm.status === 201 && (link.cm.body.result.accounts?.created ?? 0) === 0 && joinedRows.length === 1 && joinedRows[0].user_code === joiner && joinedRows[0].full_name === null && joinedRows[0].email === null && joinedRows[0].is_active === true
+    && joinedRes.length === 1 && joinedRes[0].is_current === true, { joinedRows, joinedRes });
+  // toplu yuklemede acilan hesabin uyeligi kalksa da yuklemeyle yazilan (origin=manual) iliski eslemede SESSIZCE BITMEZ
+  const mehmetRes = (await q(`SELECT is_current, origin FROM apartment_residencies WHERE person_id = $1 AND apartment_id = $2`, [mehmet.id, aptB1])).rows;
+  await q(`DELETE FROM apartment_memberships WHERE user_code = $1`, [mehmet.user_code]);
   await peopleSync.syncSitePeople(S.code);
-  const keptRes = (await q(`SELECT is_current FROM apartment_residencies WHERE person_id = $1 AND apartment_id = $2`, [joinedRows[0].id, S.apt('B', 1).id])).rows;
-  check('C14: origin=manual iliski, destekleyen uyelik kalkinca eslemede SESSIZCE BITMEZ', keptRes.length === 1 && keptRes[0].is_current === true);
+  const keptRes = (await q(`SELECT is_current, origin FROM apartment_residencies WHERE person_id = $1 AND apartment_id = $2`, [mehmet.id, aptB1])).rows;
+  check('C14: toplu yuklemeyle yazilan origin=manual iliski, destekleyen uyelik kalkinca eslemede SESSIZCE BITMEZ', mehmetRes.length === 1 && mehmetRes[0].origin === 'manual' && keptRes.length === 1 && keptRes[0].is_current === true && keptRes[0].origin === 'manual', { mehmetRes, keptRes });
 
   // hatali satir hicbir iz birakmaz + hepsi-ya-da-hic
   const snapBeforeStrictP = await crm(S.code);
@@ -573,6 +685,57 @@ export async function runBulkImportSection(ctx) {
   check('C15: strict + hatali satir: 409 IMPORT_HAS_ERRORS, gecerli satir da YAZILMAZ (hepsi ya da hic)', strictP.status === 409 && strictP.body.code === 'IMPORT_HAS_ERRORS' && (await crm(S.code)) === snapBeforeStrictP);
   const softP = await commitRaw(MGR, S.code, 'people', mixedP, pvMp.body.preview_hash);
   check('C15b: varsayilan: gecerli satir yazilir, hatali iz birakmaz', softP.status === 201 && (await personByEmail(S.code, 'gecerli.yeni@bulk.qa.example')).length === 1 && (await personByEmail(S.code, 'bozuk-eposta')).length === 0);
+
+  // --- C16: hesap KAPSAMI kurallari (ayri site): e-posta bu sitede bagi olmayan hesaba / yoneticiye aitse BAGLANMAZ; sitede bagi olan hesapli kisiye hesap / yeni daire eklenmez;
+  //     kisi iki dairede eklenirse TEK hesap; ozel sifre + kullanici adi; SAVEPOINT: atlanan kisi diger kisilerin hesabini bozmaz
+  const H = await mkSite('Hesap Kurali Sitesi', { 'A Blok': 6 });
+  const H2 = await mkSite('Yabanci Site', { 'A Blok': 2 });
+  await linkManager(H.code, MGR);
+  const strangerEmail = 'baska.sitenin@bulk.qa.example';
+  const stranger = await mkUser('Baska Sitenin Sakini', 'apartment_owner', { email: strangerEmail });
+  await member(H2.apt('A', 1).id, stranger, 'APARTMENT_ADMIN'); // bagi YALNIZ baska sitede
+  const tied = await mkUser('Sitede Bagli Sakin', 'apartment_owner', { email: 'sitede.bagli@bulk.qa.example' });
+  await member(H.apt('A', 6).id, tied, 'APARTMENT_ADMIN'); // bagi bu sitede
+  const mgrEmail = (await q(`SELECT email FROM users WHERE user_code = $1`, [MGR])).rows[0].email;
+  const protectedBefore = JSON.stringify((await q(`SELECT user_code, role, password_hash, must_change_password, is_active FROM users WHERE user_code = ANY($1::int[]) ORDER BY user_code`, [[stranger, tied, MGR]])).rows);
+  const strangerMembershipsBefore = JSON.stringify(await membershipsOf([stranger]));
+  const usersBeforeH = await countOf(`SELECT COUNT(*)::int AS n FROM users`);
+  const mailsBeforeH = mails.length;
+  const accountFile = [
+    { ad_soyad: 'Baska Sitenin Sakini', e_posta: strangerEmail, blok: 'A', daire_no: '1', iliski: 'Malik' }, // n=2: e-posta BU sitede bagi olmayan hesaba ait -> EMAIL_IN_USE
+    { ad_soyad: 'Yonetici Adli Kisi', e_posta: mgrEmail, blok: 'A', daire_no: '2', iliski: 'Malik' }, // n=3: e-posta yoneticiye ait -> EMAIL_IN_USE
+    { ad_soyad: 'Sitede Bagli Sakin', e_posta: 'sitede.bagli@bulk.qa.example', blok: 'A', daire_no: '3', iliski: 'Malik' }, // n=4: sitede bagi olan hesapli kisi: yeni daire / hesap EKLENMEZ (uyari)
+    { ad_soyad: 'Cok Daireli', e_posta: 'cok.daireli@bulk.qa.example', blok: 'A', daire_no: '4', iliski: 'Malik', sifre: '4321', kullanici_adi: 'ozel.cok.daireli' }, // n=5: iki daire, TEK hesap, ozel sifre + kullanici adi
+    { ad_soyad: 'Cok Daireli', e_posta: 'cok.daireli@bulk.qa.example', blok: 'A', daire_no: '5', iliski: 'Malik' }, // n=6
+  ];
+  const ac = await run(MGR, H.code, 'people', accountFile);
+  const acAccounts = ac.cm?.body?.result?.accounts;
+  check('C16: hesap KAPSAMI onizleme: 5 satir; "Sitede Bagli Sakin" (zaten hesapli) icin ACCOUNT_NEW_APARTMENT uyarisi; 3 kisi + 3 iliski, 1 HESAP (yalniz Cok Daireli)', ac.pv.status === 200 && same(issueCodes(ac.pv, 4), ['w:ACCOUNT_NEW_APARTMENT']) && ac.pv.body.plan.account_create === 3 && ac.pv.body.plan.people_create === 3, ac.pv.body);
+  check('C16b: onay 201: 1 hesap acildi, 2 ATLANDI (EMAIL_IN_USE: satir 2 ve 3, kisi yazildi / hesap yok); users +1; baska siteye ait hesap + yonetici + sitede bagli hesap ve gonderilmis e-posta DEGISMEDI',
+    ac.cm?.status === 201 && acAccounts?.created === 1 && acAccounts.linked === 0 && acAccounts.skipped === 2 && same([...acAccounts.skipped_items].sort((a, b) => a.n - b.n).map((i) => [i.n, i.code]), [[2, 'EMAIL_IN_USE'], [3, 'EMAIL_IN_USE']])
+    && acAccounts.skipped_items.every((i) => typeof i.message === 'string' && i.message.length > 0) && (await countOf(`SELECT COUNT(*)::int AS n FROM users`)) === usersBeforeH + 1
+    && JSON.stringify((await q(`SELECT user_code, role, password_hash, must_change_password, is_active FROM users WHERE user_code = ANY($1::int[]) ORDER BY user_code`, [[stranger, tied, MGR]])).rows) === protectedBefore
+    && JSON.stringify(await membershipsOf([stranger])) === strangerMembershipsBefore && mails.length === mailsBeforeH, acAccounts);
+  const strangerPerson = (await personByEmail(H.code, strangerEmail))[0];
+  const mgrPerson = (await personByEmail(H.code, mgrEmail))[0];
+  check('C16c: atlanan kisiler YAZILDI ama hesapsiz (user_code NULL, iletisim site_people\'da) ve dairede iliskileri var; yonetici / baska siteye ait hesap bu kisilere BAGLANMADI; sitede bagli hesaba yeni daire uyeligi eklenmedi',
+    !!strangerPerson && strangerPerson.user_code === null && strangerPerson.sp_email === strangerEmail && !!mgrPerson && mgrPerson.user_code === null
+    && (await countOf(`SELECT COUNT(*)::int AS n FROM apartment_residencies WHERE person_id = ANY($1::bigint[]) AND is_current`, [[strangerPerson.id, mgrPerson.id]])) === 2
+    && (await countOf(`SELECT COUNT(*)::int AS n FROM apartment_memberships WHERE user_code = ANY($1::int[]) AND apartment_id = ANY($2::bigint[])`, [[stranger, MGR, tied], [H.apt('A', 1).id, H.apt('A', 2).id, H.apt('A', 3).id]])) === 0);
+  const coklu = (await personByEmail(H.code, 'cok.daireli@bulk.qa.example'))[0];
+  const kokUser = coklu?.user_code ? await userRow(coklu.user_code) : null;
+  const kokMemberships = coklu?.user_code ? await membershipsOf([coklu.user_code]) : [];
+  check('C16d: kisi iki dairede eklendi -> TEK hesap, iki daire uyeligi (bos dairelerde admin); ozel kullanici adi + ozel sifre (4321, 1234 DEGIL); must_change_password; ikinci satirdaki sifre/ad bos olsa da ilk satirdaki gecerli',
+    !!kokUser && (await peopleNamed(H.code, 'Cok Daireli')).length === 1 && kokUser.login_name === 'ozel.cok.daireli' && (await bcrypt.compare('4321', kokUser.password_hash)) && !(await bcrypt.compare('1234', kokUser.password_hash)) && kokUser.must_change_password === true
+    && kokMemberships.length === 2 && kokMemberships.every((m) => m.role === 'APARTMENT_ADMIN' && m.is_active === true) && same(kokMemberships.map((m) => m.sort_order), [4, 5])
+    && (await countOf(`SELECT COUNT(*)::int AS n FROM users WHERE lower(email) = 'cok.daireli@bulk.qa.example'`)) === 1, { kokUser: kokUser?.login_name, kokMemberships });
+  const acAudit = await auditOf(H.code, 'person.account_created');
+  check('C16e: audit: person.account_created yalniz acilan 1 hesap icin (atlananlar icin yok); import.committed accounts_created 1, accounts_skipped 2', acAudit.length === 1 && acAudit[0].details.status === 'created' && Number(acAudit[0].details.user_code) === kokUser?.user_code
+    && (await auditOf(H.code, 'import.committed')).pop().details.counts.accounts_created === 1 && (await auditOf(H.code, 'import.committed')).pop().details.counts.accounts_skipped === 2);
+  // ayni dosya tekrar: atlanan iki kisi artik MEVCUT kisi (e-posta ile eslesir): hesap acilmaz, uyari yok, users ayni
+  const acAgain = await run(MGR, H.code, 'people', accountFile);
+  check('C16f: ayni hesap dosyasi ikinci kez: degisiklik yok, hesap ACILMAZ (atlanan kisilere yeniden denenmez), users sayisi ayni', acAgain.cm?.status === 201 && acAgain.pv.body.plan.account_create === 0 && (acAgain.cm.body.result.accounts?.created ?? 0) === 0
+    && (await countOf(`SELECT COUNT(*)::int AS n FROM users`)) === usersBeforeH + 1, acAgain.pv.body.plan);
 
   // kapi listeleri AYNI (my-doors)
 
@@ -597,10 +760,15 @@ export async function runBulkImportSection(ctx) {
     { plaka: '34 AAA 111', blok: 'A', daire_no: '2', ad_soyad: 'Birinci Ikiz' },
     { plaka: '', e_posta: 'tek.sakin@bulk.qa.example' },
   ];
+  const usersBeforeVeh = await countOf(`SELECT COUNT(*)::int AS n FROM users`);
+  const mailsBeforeVeh = mails.length;
   const vh = await run(MGR, V.code, 'vehicles', vehFile);
   check('D1: arac sahibi: e-posta; dairenin TEK sakini; coklu sakinde ad; belirsiz PERSON_AMBIGUOUS; bos daire PERSON_NOT_FOUND; mevcut plaka "degisiklik yok"; dosyada baska kisiye giden plaka atlanir; bos plaka PLATE_REQUIRED',
     vh.pv.body.plan.vehicle_add === 3 && same(issueCodes(vh.pv, 5), ['e:PERSON_AMBIGUOUS']) && same(issueCodes(vh.pv, 6), ['e:PERSON_NOT_FOUND']) && vh.pv.body.plan.vehicle_unchanged === 1
     && same(issueCodes(vh.pv, 8), ['e:PLATE_DUP_IN_FILE']) && same(issueCodes(vh.pv, 9), ['e:PLATE_REQUIRED']) && vh.cm.status === 201, vh.pv.body);
+  check('D1b: ARAC yuklemesi HESAP ACMAZ: users sayisi ayni, yanitta hesap bolumu YOK, arac sahibi kisiler hesapsiz kaldi (user_code NULL), yeni daire uyeligi / e-posta yok',
+    (await countOf(`SELECT COUNT(*)::int AS n FROM users`)) === usersBeforeVeh && vh.cm.body.result.accounts === undefined && vh.pv.body.plan.account_create === undefined
+    && (await countOf(`SELECT COUNT(*)::int AS n FROM site_people WHERE site_code = $1 AND user_code IS NOT NULL`, [V.code])) === 0 && mails.length === mailsBeforeVeh, vh.cm.body.result);
   const owners = (await q(`SELECT v.plate, v.note, sp.full_name FROM vehicles v JOIN site_people sp ON sp.id = v.person_id WHERE v.site_code = $1 ORDER BY v.plate`, [V.code])).rows;
   check('D2: araclar dogru kisilere yazildi (e-posta -> Tek Sakin; tek sakin; "ikinci ikiz" ad katlamasi); arac notu yazildi', same(owners.map((o) => [o.plate, o.full_name]), [['06MVC001', 'Tek Sakin'], ['34AAA111', 'Tek Sakin'], ['34AAA112', 'Tek Sakin'], ['34AAA113', 'Ikinci Ikiz']]) && owners.find((o) => o.plate === '34AAA112').note === 'ziyaretci', owners);
   const vAudit = await auditOf(V.code, 'vehicle.added');
@@ -634,7 +802,8 @@ export async function runBulkImportSection(ctx) {
   const two = await Promise.all([1, 2].map((i) => call('POST', commitUrl, MGR, body(raceFile2, { expected_hash: pvRace2.body.preview_hash, idempotency_key: key(`race2-${i}`), acknowledged: true }))));
   check('E2: FARKLI anahtarla 2 paralel onay (ayni dosya): en cok biri veri yazar; digeri IMPORT_IN_PROGRESS ya da PREVIEW_STALE; kisiler IKI KEZ olusmaz',
     two.filter((r) => r.status === 201 && r.body.result.rows.applied > 0).length <= 1 && two.every((r) => r.status === 201 || (r.status === 409 && ['IMPORT_IN_PROGRESS', 'PREVIEW_STALE'].includes(r.body.code)))
-    && (await countOf(`SELECT COUNT(*)::int AS n FROM site_people WHERE site_code = $1 AND full_name LIKE 'Cift Onay Kisi%'`, [E.code])) === 4, two.map((r) => [r.status, r.body?.code]));
+    && (await peopleWhere(E.code, `COALESCE(u.full_name, sp.full_name) LIKE 'Cift Onay Kisi%'`)).length === 4
+    && (await countOf(`SELECT COUNT(*)::int AS n FROM users WHERE lower(email) LIKE 'ciftonay%@bulk.qa.example'`)) === 4, two.map((r) => [r.status, r.body?.code]));
 
   // ayni site icin harici bulk_import kilidi -> IMPORT_IN_PROGRESS (ucu hemen doner); baska site etkilenmez
   const holder = await pool.connect();
@@ -793,15 +962,17 @@ export async function runBulkImportSection(ctx) {
     SELECT $1, ap.id, pe.id, (ARRAY['owner', 'tenant', 'family_member'])[((pe.rn - 1) / 5000)::int + 1], TRUE, DATE '2020-01-01', 'manual'
     FROM pe JOIN ap ON ap.rn = ((pe.rn - 1) % 5000) + 1`, [BIG]);
   // 50 hesapli kisi (kullanici satirlari birincil anahtarla okunur): e-posta kisi{g}@big.qa.example, alanlar users'ta
-  await q(`INSERT INTO users (user_code, full_name, email, role, password_hash, is_active, email_verified, approval_status, phone_number)
-           SELECT 70000 + g, 'Kisi ' || g, 'kisi' || g || '@big.qa.example', 'apartment_owner', 'x', TRUE, TRUE, 'approved', '+90555' || lpad(g::text, 7, '0') FROM generate_series(1, 50) g`);
-  await q(`UPDATE site_people SET user_code = 70000 + split_part(full_name, ' ', 2)::int, full_name = NULL, phone = NULL, email = NULL WHERE site_code = $1 AND full_name LIKE 'Kisi %' AND split_part(full_name, ' ', 2)::int <= 50`, [BIG]);
+  await q(`INSERT INTO users (full_name, email, role, password_hash, is_active, email_verified, approval_status, phone_number)
+           SELECT 'Kisi ' || g, 'kisi' || g || '@big.qa.example', 'apartment_owner', 'x', TRUE, TRUE, 'approved', '+90555' || lpad(g::text, 7, '0') FROM generate_series(1, 50) g`);
+  await q(`UPDATE site_people sp SET user_code = u.user_code, full_name = NULL, phone = NULL, email = NULL FROM users u WHERE sp.site_code = $1 AND sp.full_name LIKE 'Kisi %' AND split_part(sp.full_name, ' ', 2)::int <= 50 AND lower(u.email) = lower(sp.email)`, [BIG]);
   await q(`INSERT INTO vehicles (site_code, person_id, plate, plate_display) SELECT $1, pe.id, '34Q' || lpad(pe.rn::text, 5, '0'), '34 Q ' || lpad(pe.rn::text, 5, '0') FROM (SELECT id, row_number() OVER (ORDER BY id) AS rn FROM site_people WHERE site_code = $1) pe WHERE pe.rn <= 5000`, [BIG]);
   // dolgu: baska sitelerin verisi (planlayici tablonun KUCUK bir kismini okudugu icin indeks kullanmali)
   await q(`INSERT INTO sites (site_code, name, approval_status, approved_at) SELECT 1000090000 + g, 'Dolgu ' || g, 'approved', NOW() FROM generate_series(1, 60) g`);
   await q(`INSERT INTO site_blocks (site_code, block_name, sort_order) SELECT 1000090000 + g, 'A Blok', 1 FROM generate_series(1, 60) g`);
   await q(`INSERT INTO apartments (site_code, block_id, unit_label, sort_order) SELECT b.site_code, b.id, 'Daire ' || n, n FROM site_blocks b CROSS JOIN generate_series(1, 1000) n WHERE b.site_code BETWEEN 1000090001 AND 1000090060`);
   await q(`INSERT INTO site_people (site_code, full_name, email) SELECT 1000090000 + s, 'Dolgu ' || s || '-' || g, 'dolgu' || s || '-' || g || '@dolgu.qa.example' FROM generate_series(1, 60) s CROSS JOIN generate_series(1, 3000) g`);
+  // istatistik yokken (taze yuklenen 180 bin kisi + 60 bin daire) planlayici pencere-alt sorgulari iç içe döngüyle birlestirip dakikalarca surebiliyor: once ANALYZE
+  for (const table of ['site_people', 'apartments']) await q(`ANALYZE ${table}`);
   await q(`INSERT INTO apartment_residencies (site_code, apartment_id, person_id, relation, is_current, origin)
            SELECT sp.site_code, a.id, sp.id, 'resident', TRUE, 'manual'
            FROM (SELECT id, site_code, row_number() OVER (PARTITION BY site_code ORDER BY id) AS rn FROM site_people WHERE site_code BETWEEN 1000090001 AND 1000090060) sp
@@ -821,7 +992,7 @@ export async function runBulkImportSection(ctx) {
   const bigPreview = await previewOf(MGR, BIG, 'people', bigRows);
   const previewMs = Date.now() - tPreview;
   console.log(`OLCUM  onizleme ${previewMs} ms, yanit ${bigPreview.text.length} bayt`);
-  check('F1: 5000 satirlik kisi dosyasi ONIZLEME <= 3 sn (15.000 kisilik sitede) ve dogru plan', bigPreview.status === 200 && previewMs <= 3000 && bigPreview.body.plan.people_create === 2500 && bigPreview.body.plan.people_filled === 2450 && bigPreview.body.plan.vehicle_add === 2500 && bigPreview.body.plan.residency_add === 2500 && bigPreview.body.totals.error === 0,
+  check('F1: 5000 satirlik kisi dosyasi ONIZLEME <= 3 sn (15.000 kisilik sitede) ve dogru plan (2500 yeni kisi = 2500 hesap adayi)', bigPreview.status === 200 && previewMs <= 3000 && bigPreview.body.plan.people_create === 2500 && bigPreview.body.plan.people_filled === 2450 && bigPreview.body.plan.vehicle_add === 2500 && bigPreview.body.plan.residency_add === 2500 && bigPreview.body.plan.account_create === 2500 && bigPreview.body.totals.error === 0,
     { previewMs, plan: bigPreview.body.plan, totals: bigPreview.body.totals, issues: bigPreview.body.issues?.slice(0, 3) });
   check('F1b: onizleme yaniti <= 1 MB', bigPreview.text.length <= 1024 * 1024, bigPreview.text.length);
   const counter = ctx.installQueryCounter(pool);
@@ -831,13 +1002,24 @@ export async function runBulkImportSection(ctx) {
   const commitMs = Date.now() - tCommit;
   const commitQueries = counter.stop();
   console.log(`OLCUM  onay ${commitMs} ms, ${commitQueries} sorgu (kimlik/yetki dahil)`);
-  check('F2: 5000 satirlik ONAY <= 6 sn; sorgu sayisi satir sayisindan BAGIMSIZ (<= 45, kimlik/yetki sorgulari dahil); yanit <= 1 MB', bigCommit.status === 201 && commitMs <= 6000 && commitQueries <= 45 && bigCommit.text.length <= 1024 * 1024,
-    { status: bigCommit.status, commitMs, commitQueries, size: bigCommit.text.length, body: bigCommit.status === 201 ? undefined : bigCommit.body });
+  const bigAccounts = bigCommit.body?.result?.accounts;
+  const perAccountMs = Math.round(commitMs / 2500);
+  console.log(`OLCUM  onay: kisi basina ${perAccountMs} ms (2500 hesap: bcrypt + daire uyeligi), sorgu sayisi ${commitQueries}`);
+  check('F2: 5000 satirlik ONAY (2500 yeni kisi = 2500 HESAP; kisi basina bcrypt ~80 ms AYNI surecte + SAVEPOINT): 201, 2500 hesap acildi, 0 atlandi; hesap basina <= 400 ms; sorgu sayisi hesap basina <= 15 (olculen ~12) (hesap disi sabit ~45); yanit <= 1 MB',
+    bigCommit.status === 201 && bigAccounts?.created === 2500 && bigAccounts.skipped === 0 && bigAccounts.linked === 0 && perAccountMs <= 400 && commitQueries <= 45 + 15 * 2500 && bigCommit.text.length <= 1024 * 1024,
+    { status: bigCommit.status, commitMs, perAccountMs, commitQueries, size: bigCommit.text.length, accounts: bigAccounts ? { created: bigAccounts.created, skipped: bigAccounts.skipped } : null, body: bigCommit.status === 201 ? undefined : bigCommit.body });
   check('F2c: yazilanlar: 2500 yeni kisi + 2500 iliski + 2500 arac + 2450 not dolumu (50 hesapli kisinin notu doldurulmaz); mevcut kisiler cogalmadi', (await countOf(`SELECT COUNT(*)::int AS n FROM site_people WHERE site_code = $1`, [BIG])) === 17500
     && (await countOf(`SELECT COUNT(*)::int AS n FROM vehicles WHERE site_code = $1`, [BIG])) === 7500 && (await countOf(`SELECT COUNT(*)::int AS n FROM site_people WHERE site_code = $1 AND note LIKE 'yonetici notu%'`, [BIG])) === 2450
     && (await countOf(`SELECT COUNT(*)::int AS n FROM apartment_residencies WHERE site_code = $1 AND is_current`, [BIG])) === 17500, bigCommit.body?.result?.counts);
   const bigAudit = await countOf(`SELECT COUNT(*)::int AS n FROM audit_log WHERE site_code = $1 AND details->>'via' = 'import'`, [BIG]);
-  check('F2d: toplu audit: 2500 person.created + 2450 person.updated(not) + 2500 residency.added + 2500 vehicle.added', bigAudit === 9950, bigAudit);
+  check('F2d: toplu audit: 2500 person.created + 2450 person.updated(not) + 2500 residency.added + 2500 vehicle.added + 2500 person.account_created', bigAudit === 12450, bigAudit);
+  const bigNewUsers = (await q(`SELECT u.user_code, u.password_hash, u.role, u.must_change_password FROM users u JOIN site_people sp ON sp.user_code = u.user_code WHERE sp.site_code = $1 AND u.email NOT LIKE 'kisi%@big.qa.example'`, [BIG])).rows;
+  const bigAdminDup = await countOf(`SELECT COUNT(*)::int AS n FROM (SELECT am.apartment_id FROM apartment_memberships am JOIN apartments a ON a.id = am.apartment_id WHERE a.site_code = $1 AND am.role = 'APARTMENT_ADMIN' AND am.is_active GROUP BY 1 HAVING COUNT(*) > 1) x`, [BIG]);
+  const bigSampleOk = await Promise.all([0, 1249, 2499].map((k) => bcrypt.compare('1234', bigNewUsers[k]?.password_hash ?? '')));
+  check('F2e: 2500 yeni kisi = 2500 hesap: hepsi apartment_owner + must_change_password; 2500 daire uyeligi; HICBIR dairede 2 admin yok; ornek 3 hesapta varsayilan sifre 1234 dogrulanir; 50 mevcut hesapli kisi icin yeni hesap acilmadi',
+    bigNewUsers.length === 2500 && bigNewUsers.every((u) => u.role === 'apartment_owner' && u.must_change_password === true) && bigSampleOk.every(Boolean)
+    && (await countOf(`SELECT COUNT(*)::int AS n FROM apartment_memberships WHERE user_code = ANY($1::int[])`, [bigNewUsers.map((u) => u.user_code)])) === 2500 && bigAdminDup === 0
+    && (await countOf(`SELECT COUNT(*)::int AS n FROM site_people WHERE site_code = $1 AND user_code IS NOT NULL`, [BIG])) === 2550, { newUsers: bigNewUsers.length, bigAdminDup, bigSampleOk });
   const again = await run(MGR, BIG, 'people', bigRows);
   check('F3: ayni 5000 satir ikinci kez: hepsi "degisiklik yok", veri degismez (idempotans)', again.pv.body.totals.unchanged === 5000 && again.pv.body.totals.ok === 0 && again.cm.status === 201 && (await countOf(`SELECT COUNT(*)::int AS n FROM site_people WHERE site_code = $1`, [BIG])) === 17500
     && (await countOf(`SELECT COUNT(*)::int AS n FROM vehicles WHERE site_code = $1`, [BIG])) === 7500, again.pv.body.totals);
@@ -845,7 +1027,7 @@ export async function runBulkImportSection(ctx) {
   // bellek: ikinci 5000 satirlik dosya (yeni kisiler + mevcut kisilere not/plaka); canli yigin her 15 ms'de zorunlu GC sonrasi olculur (artik cop sayilmaz)
   const memRows = [];
   for (let g = 2501; g <= 5000; g += 1) memRows.push({ ad_soyad: `Kisi ${g}`, e_posta: `kisi${g}@big.qa.example`, not: `bellek notu ${g}`, plaka: `36 M ${String(g).padStart(5, '0')}` });
-  for (let g = 1; g <= 2500; g += 1) memRows.push({ ad_soyad: `Bellek Yeni ${g}`, e_posta: `bellekyeni${g}@big.qa.example`, blok: `B${String(((g - 1) % 50) + 1).padStart(2, '0')}`, daire_no: String(((g * 11) % 100) + 1), iliski: 'Aile' });
+  for (let g = 1; g <= 2500; g += 1) memRows.push(g <= 300 ? { ad_soyad: `Bellek Yeni ${g}`, e_posta: `bellekyeni${g}@big.qa.example`, blok: `B${String(((g - 1) % 50) + 1).padStart(2, '0')}`, daire_no: String(((g * 11) % 100) + 1), iliski: 'Aile' } : { ad_soyad: `Bellek Yeni ${g}`, e_posta: `bellekyeni${g}@big.qa.example` });
   const memPreview = await previewOf(MGR, BIG, 'people', memRows);
   gc();
   const heapBase = process.memoryUsage().heapUsed;
@@ -864,18 +1046,18 @@ export async function runBulkImportSection(ctx) {
   const heapSpike = Math.round((heapPeak - heapBase) / (1024 * 1024));
   const rssSpike = Math.round((rssPeak - rssBase) / (1024 * 1024));
   console.log(`OLCUM  bellek: canli yigin sicramasi ~${heapSpike} MB, RSS ~${rssSpike} MB (istemci govdesi + sunucu AYNI surecte; GC zorlamali)`);
-  check('F2b: bellek sicramasi <= 100 MB (canli yigin, zorunlu GC ile; istemci + sunucu ayni surecte)', memCommit.status === 201 && heapSpike <= 100, { heapSpike, rssSpike, status: memCommit.status });
+  check('F2b: bellek sicramasi <= 100 MB (canli yigin, zorunlu GC ile; istemci + sunucu ayni surecte); 300 yeni hesap acildi', memCommit.status === 201 && memCommit.body.result.accounts.created === 300 && heapSpike <= 100, { heapSpike, rssSpike, status: memCommit.status });
 
   // EXPLAIN: anlik goruntu sorgulari. Tipik site (300 daire / 900 kisi) icin buyuk tablolarda Seq Scan YOK olmali; 5000 daireli site tablonun ~%8'ini okudugundan
   // planlayicinin Seq Scan secmesi MESRUDUR (bilgi olarak raporlanir).
-  await q(`INSERT INTO users (user_code, full_name, email, role, password_hash, is_active, email_verified, approval_status)
-           SELECT 80000 + g, 'Dolgu Kullanici ' || g, 'dolgu-user' || g || '@dolgu.qa.example', 'individual', 'x', TRUE, TRUE, 'approved' FROM generate_series(1, 19000) g`);
+  await q(`INSERT INTO users (full_name, email, role, password_hash, is_active, email_verified, approval_status)
+           SELECT 'Dolgu Kullanici ' || g, 'dolgu-user' || g || '@dolgu.qa.example', 'individual', 'x', TRUE, TRUE, 'approved' FROM generate_series(1, 19000) g`);
   nextSite += 1;
   const TYP = nextSite;
   await q(`INSERT INTO sites (site_code, name, approval_status, approved_at) VALUES ($1, 'Tipik Site', 'approved', NOW())`, [TYP]);
   await q(`INSERT INTO site_blocks (site_code, block_name, sort_order) SELECT $1, 'T' || g || ' Blok', g FROM generate_series(1, 3) g`, [TYP]);
   await q(`INSERT INTO apartments (site_code, block_id, unit_label, sort_order) SELECT $1, b.id, 'Daire ' || n, n FROM site_blocks b CROSS JOIN generate_series(1, 100) n WHERE b.site_code = $1`, [TYP]);
-  await q(`INSERT INTO site_people (site_code, user_code, full_name, email) SELECT $1, CASE WHEN g <= 20 THEN 80000 + g END, CASE WHEN g <= 20 THEN NULL ELSE 'Tipik ' || g END, 'tipik' || g || '@tipik.qa.example' FROM generate_series(1, 900) g`, [TYP]);
+  await q(`INSERT INTO site_people (site_code, user_code, full_name, email) SELECT $1, CASE WHEN g <= 20 THEN (SELECT du.user_code FROM users du WHERE du.email = 'dolgu-user' || g || '@dolgu.qa.example') END, CASE WHEN g <= 20 THEN NULL ELSE 'Tipik ' || g END, 'tipik' || g || '@tipik.qa.example' FROM generate_series(1, 900) g`, [TYP]);
   await q(`
     WITH ap AS (SELECT id, row_number() OVER (ORDER BY id) AS rn FROM apartments WHERE site_code = $1),
          pe AS (SELECT id, row_number() OVER (ORDER BY id) AS rn FROM site_people WHERE site_code = $1)

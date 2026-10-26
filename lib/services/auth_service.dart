@@ -325,6 +325,8 @@ class AuthService extends ChangeNotifier {
   Future<Map<String, dynamic>> oauthStatus() => api.oauthStatus();
 
   /// Google veya iCloud (Apple) kimlik doğrulama belirteci ile kayıt / giriş yapar; hata mesajı ya da null (başarı).
+  /// [nonce]: yerel girişte üretilen HAM nonce (sağlayıcıya SHA-256 özeti verilmiş olmalı; bkz. social_auth_buttons.dart). Sağlayıcı nonce'u
+  /// belirtece koyamıyorsa (google_sign_in 6.x) null bırakılır; sunucu OAUTH_REQUIRE_NONCE kapalıyken bunu kabul eder.
   Future<String?> loginWithOAuth({
     required String provider,
     required String idToken,
@@ -332,12 +334,14 @@ class AuthService extends ChangeNotifier {
     String? firstName,
     String? lastName,
     List<AcceptedDocument>? acceptedDocuments,
+    String? nonce,
   }) async {
     try {
       String? issuedDeviceToken;
       _session = await api.loginWithOAuth(
         provider: provider,
         idToken: idToken,
+        nonce: nonce,
         fullName: fullName,
         firstName: firstName,
         lastName: lastName,

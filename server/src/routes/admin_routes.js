@@ -35,6 +35,7 @@ import {
   handleUserMutationError,
   handleSiteMutationError,
   handleDeviceMutationError,
+  errorBodyExtras,
 } from '../utils/validators.js';
 import { createUser, updateUserByCode, userExists } from '../services/user_service.js';
 import { rejectWeakPassword } from '../security/password_policy.js';
@@ -89,8 +90,30 @@ import { syncMqttAclOrThrow } from '../mqtt_acl_sync.js';
 import { publishOtaCheckToDevices } from '../mqtt_bridge.js';
 import { releaseAssignedWorkItems } from '../modules/work_tracking_service.js';
 import { releaseUserReservations } from '../modules/reservation_service.js';
+import {
+  auditSubscriptionDecision,
+  auditUserActiveChange,
+  auditUserCreated,
+  auditUserDeleted,
+  auditUserUpdated,
+  readUserStateForAudit,
+} from '../modules/user_account_audit.js';
+import { recordAudit } from '../modules/audit_service.js';
 
 export const adminRouter = express.Router();
+
+// Süper kullanıcının site / daire sakini işlemleri: işlem kendi transaction'ında tamamlandıktan SONRA yazılır
+// (recordAudit hatayı günlüğe yazıp yutar; yanıtı bozmaz). Ayrıntıda ad, e-posta, telefon, parola/PIN bulunmaz.
+function auditAdminAction(req, action, { siteCode = null, targetType, targetId, details = {} }) {
+  return recordAudit(pool, {
+    actor: req.authUser,
+    action,
+    siteCode,
+    targetType,
+    targetId: String(targetId),
+    details,
+  });
+}
 
 const INT4_MAX = 2147483647;
 
@@ -117,7 +140,7 @@ export function sendServiceError(res, error, fallbackMessage) {
       res.setHeader('Retry-After', String(retryAfter));
       return res.status(status).json({ error: error.message, retry_after_seconds: retryAfter });
     }
-    return res.status(status).json({ error: error.message });
+    return res.status(status).json({ error: error.message, ...errorBodyExtras(error) });
   }
   const errorId = newErrorId();
   console.error(`[admin] ${errorId} ${fallbackMessage}`, error);
@@ -162,6 +185,34 @@ async function respondUserNotUpdated(res, userCode) {
     return res.status(409).json({ error: 'Bu hesap kullanıcının isteğiyle silinmiş (kimliksizleştirilmiş); düzenlenemez veya etkinleştirilemez.', code: 'ACCOUNT_DELETED' });
   }
   return res.status(404).json({ error: 'Kullanici bulunamadi.' });
+}
+
+// Süper kullanıcının kullanıcı satırına yazdığı her işlem TEK transaction'dadır: kullanıcı yazımı, (gerekirse) geçici parola bayrağı ve DENETİM KAYDI
+// (audit_log; modules/user_account_audit.js) birlikte işlenir / geri alınır.
+// Süper kullanıcının BAŞKASI için belirlediği (ya da ilk kez verdiği) parola GEÇİCİDİR (`temporaryPassword: true`): hesap sahibi ilk girişte değiştirmek zorundadır
+// (users.must_change_password = TRUE; auth_middleware GET/PATCH /me dışındaki istekleri 403 PASSWORD_CHANGE_REQUIRED ile keser, kullanıcı kendi parolasını
+// PATCH /me ile değiştirince bayrak FALSE olur). Kullanıcı yazımı ve bayrak AYNI işlemde yapılır (parola yazılıp bayrak yazılamayan ara durum olmaz).
+// `run(client)`: createUser / updateUserByCode çağrısı (db: client) + denetim yazımı; kullanıcı satırı döndürür (yoksa null -> bayrak yazılmaz).
+async function withUserTransaction(run, { temporaryPassword = false } = {}) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const user = await run(client);
+    if (user && temporaryPassword) {
+      await client.query(
+        'UPDATE users SET must_change_password = TRUE, updated_at = NOW() WHERE user_code = $1 AND deleted_at IS NULL',
+        [user.id],
+      );
+      user.must_change_password = true;
+    }
+    await client.query('COMMIT');
+    return user;
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 // GET /admin/users
@@ -302,14 +353,24 @@ adminRouter.post('/admin/users', authRequired, requireSuperUser, async (req, res
   }
 
   try {
-    const user = await createUser({
-      fullName,
-      email,
-      role,
-      isActive,
-      phoneNumber,
-      password,
-    });
+    // Yönetimin belirlediği ilk parola geçicidir (must_change_password = TRUE, aynı işlemde).
+    const user = await withUserTransaction(
+      async (db) => {
+        const created = await createUser({
+          fullName,
+          email,
+          role,
+          isActive,
+          phoneNumber,
+          password,
+          db,
+        });
+        // Denetim kaydı (user.created): rol / aktiflik / geçici parola bilgisi; ad, e-posta, telefon ve parola YAZILMAZ.
+        await auditUserCreated(db, req.authUser, created, { temporaryPassword: true });
+        return created;
+      },
+      { temporaryPassword: true },
+    );
     return res.status(201).json({ user: mapUserRow(user) });
   } catch (error) {
     return handleUserMutationError(error, res, 'Kullanici olusturma basarisiz.');
@@ -406,7 +467,7 @@ adminRouter.patch('/admin/users/:id', authRequired, requireSuperUser, async (req
       }
     }
 
-    const updated = await updateUserByCode({
+    const changes = {
       userCode,
       fullName,
       phoneNumber,
@@ -414,7 +475,20 @@ adminRouter.patch('/admin/users/:id', authRequired, requireSuperUser, async (req
       isActive,
       role,
       emailVerified,
-    });
+    };
+    // Kullanıcı yazımı ve denetim kaydı (user.updated / user.role_changed / user.password_set / user.activated|deactivated) TEK işlemde.
+    // Parola gönderildiyse (yalnız BAŞKASI için; kendi parolası yukarıda 400) yeni parola geçicidir: bayrak da aynı işlemde yazılır.
+    const updated = await withUserTransaction(
+      async (db) => {
+        const before = await readUserStateForAudit(db, userCode);
+        const row = await updateUserByCode({ ...changes, db });
+        if (row) {
+          await auditUserUpdated(db, req.authUser, { before, user: row, changes });
+        }
+        return row;
+      },
+      { temporaryPassword: password !== undefined },
+    );
     if (!updated) {
       return respondUserNotUpdated(res, userCode);
     }
@@ -444,7 +518,15 @@ adminRouter.patch(
     }
 
     try {
-      const updated = await updateUserByCode({ userCode, isActive });
+      // Aktiflik yazımı ve denetim kaydı (user.activated / user.deactivated; değişim yoksa kayıt yok) TEK işlemde.
+      const updated = await withUserTransaction(async (db) => {
+        const before = await readUserStateForAudit(db, userCode);
+        const row = await updateUserByCode({ userCode, isActive, db });
+        if (row) {
+          await auditUserActiveChange(db, req.authUser, { before, user: row });
+        }
+        return row;
+      });
       if (!updated) {
         return respondUserNotUpdated(res, userCode);
       }
@@ -567,7 +649,7 @@ adminRouter.delete('/admin/users/:id', authRequired, requireSuperUser, async (re
     // 9. Kullanici kaydini sil
     // deleted_at IS NULL: hesap silme (kimliksizleştirme) bu arada commit ettiyse tombstone KALICI silinmez (yukarıdaki ön kontrolle yarışı kapatır).
     const result = await client.query(
-      `DELETE FROM users WHERE user_code = $1 AND deleted_at IS NULL`,
+      `DELETE FROM users WHERE user_code = $1 AND deleted_at IS NULL RETURNING role`,
       [targetCode],
     );
     if (result.rowCount === 0) {
@@ -581,6 +663,13 @@ adminRouter.delete('/admin/users/:id', authRequired, requireSuperUser, async (re
       }
       return res.status(404).json({ error: 'Kullanici bulunamadi.' });
     }
+
+    // Denetim kaydı (user.deleted): silinen hesabın ROL kodu ve etkilenen site sayısı; kimlik bilgisi yazılmaz. Silme ile AYNI işlemde.
+    await auditUserDeleted(client, req.authUser, {
+      userCode: targetCode,
+      role: result.rows?.[0]?.role,
+      affectedSiteCount: affectedSiteCodes.length,
+    });
 
     await client.query('COMMIT');
 
@@ -682,8 +771,10 @@ adminRouter.patch(
     }
 
     try {
-      const result = await pool.query(
-        `
+      // Karar yazımı ve denetim kaydı (user.subscription_approved / user.subscription_rejected) TEK işlemde.
+      const decided = await withUserTransaction(async (db) => {
+        const result = await db.query(
+          `
         UPDATE users
         SET
           approval_status = $1,
@@ -695,6 +786,7 @@ adminRouter.patch(
           user_code = $3
           AND role = 'site_manager'
           AND approval_status = 'pending'
+          AND deleted_at IS NULL
         RETURNING
           user_code AS id,
           full_name,
@@ -707,14 +799,20 @@ adminRouter.patch(
           phone_number,
           created_at
         `,
-        [action === 'approve' ? 'approved' : 'rejected', action === 'approve', userCode],
-      );
+          [action === 'approve' ? 'approved' : 'rejected', action === 'approve', userCode],
+        );
+        const row = result.rows?.[0] ?? null;
+        if (row) {
+          await auditSubscriptionDecision(db, req.authUser, row, { approved: action === 'approve' });
+        }
+        return row;
+      });
 
-      if (result.rowCount === 0) {
+      if (!decided) {
         return res.status(404).json({ error: 'Bekleyen abonelik talebi bulunamadi.' });
       }
 
-      return res.status(200).json({ user: mapUserRow(result.rows[0]) });
+      return res.status(200).json({ user: mapUserRow(decided) });
     } catch (error) {
       return sendServiceError(res, error, 'Abonelik talebi guncellenemedi.');
     }
@@ -828,6 +926,16 @@ adminRouter.post('/admin/sites', authRequired, requireSuperUser, async (req, res
       managerUser: managerUserInput?.value ?? null,
       managementType: managementType.value,
     });
+    await auditAdminAction(req, 'site.created', {
+      siteCode: site.id,
+      targetType: 'site',
+      targetId: site.id,
+      details: {
+        management_type: managementType.value,
+        manager_user_code: managerUserCode ?? null,
+        manager_account_created: managerUserInput?.value != null,
+      },
+    });
     return res.status(201).json({ site: mapSiteRow(site) });
   } catch (error) {
     return sendSiteMutationError(error, res, 'Site olusturulamadi.');
@@ -897,6 +1005,11 @@ adminRouter.patch('/admin/sites/:id/approval', authRequired, requireSuperUser, a
       return res.status(409).json({ error: 'Site talebi baska bir islemle zaten sonuclandirildi.' });
     }
 
+    await auditAdminAction(req, action === 'approve' ? 'site.approved' : 'site.rejected', {
+      siteCode,
+      targetType: 'site',
+      targetId: siteCode,
+    });
     return res.status(200).json({ site: mapSiteRow(result.rows[0]) });
   } catch (error) {
     return sendSiteMutationError(error, res, 'Site onayi guncellenemedi.');
@@ -1027,9 +1140,30 @@ adminRouter.patch('/admin/sites/:id', authRequired, requireSuperUser, async (req
       await upsertSiteManagerLink({
         siteCode,
         managerUserCode: managerUserCode ?? null,
+        actor: req.authUser,
       });
     }
 
+    const changedFields = Object.entries({
+      name,
+      address,
+      city,
+      district,
+      block_count: blockCount,
+      apartment_count: apartmentCount,
+      block_apartment_counts: blockApartmentCounts,
+      door_count: doorCount,
+    })
+      .filter(([, value]) => value !== undefined)
+      .map(([field]) => field);
+    if (changedFields.length > 0) {
+      await auditAdminAction(req, 'site.updated', {
+        siteCode,
+        targetType: 'site',
+        targetId: siteCode,
+        details: { fields: changedFields },
+      });
+    }
     const updated = await getSiteByCode(siteCode);
     return res.status(200).json({ site: mapSiteRow(updated) });
   } catch (error) {
@@ -1238,6 +1372,12 @@ adminRouter.patch('/admin/apartments/:id/resident', authRequired, requireSuperUs
     if (apartment.issued_pin_code) {
       res.setHeader('Cache-Control', 'no-store');
     }
+    await auditAdminAction(req, 'apartment.resident_set', {
+      siteCode: Number(apartment.site_code),
+      targetType: 'apartment',
+      targetId: apartmentId,
+      details: { is_active: isActive, pin_issued: Boolean(apartment.issued_pin_code) },
+    });
     return res.status(200).json({ apartment: mapApartmentRow(apartment), credentials_sent: mail.sent, credentials_email: mail.to });
   } catch (error) {
     if (error?.message === 'APARTMENT_NOT_FOUND') {
@@ -1288,6 +1428,11 @@ adminRouter.delete('/admin/apartments/:id/resident', authRequired, requireSuperU
       Number(apartment.site_code),
       'apartment_resident_reset',
     );
+    await auditAdminAction(req, 'apartment.resident_cleared', {
+      siteCode: Number(apartment.site_code),
+      targetType: 'apartment',
+      targetId: apartmentId,
+    });
     return res.status(200).json({ ok: true, message: 'Daire sakini sifirlandi.' });
   } catch (error) {
     if (error?.message === 'APARTMENT_NOT_FOUND') {

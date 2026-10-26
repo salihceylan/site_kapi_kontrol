@@ -1,5 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { LOGIN_NAME_PATTERN, normalizeLoginName } from '../src/modules/people_common.js';
 import {
   validateCreateInput,
   validateStructuredSiteInput,
@@ -74,6 +75,37 @@ describe('Server Validators Tests', () => {
         password: '1234',
       });
       assert.ok(error && error.includes('Kullanici adi'));
+    });
+
+    const residentWith = (loginName) =>
+      validateApartmentResidentInput({ fullName: 'Mehmet Kaya', loginName, password: '1234', isActive: true });
+
+    it('kullanici adi kurali people_common.normalizeLoginName ile AYNI: ayni girdi ikisinde de kabul ya da ikisinde de red', () => {
+      const samples = [
+        'abc', 'ab', '', '   ', 'a'.repeat(40), 'a'.repeat(41), 'ada.l', 'ada_l', 'ada-l', 'site1_ablok_d1', 'Ada.L', '  ada.l  ',
+        'ali@x.com', 'ali@', 'ada l', 'ada/l', 'ada\u00e7', 'ada\u0131', '..-', 'a.b', '___', '12345', 'ADA',
+      ];
+      for (const sample of samples) {
+        let accepted;
+        try {
+          accepted = normalizeLoginName(sample) !== null;
+        } catch (_error) {
+          accepted = false;
+        }
+        assert.equal(residentWith(sample) === null, accepted, `girdi: ${JSON.stringify(sample)}`);
+      }
+      // Yapi sabiti de ayni (3-40, yalniz a-z 0-9 . _ -)
+      assert.equal(String(LOGIN_NAME_PATTERN), String(/^[a-z0-9._-]{3,40}$/));
+    });
+
+    it('kullanici adi: 40 karakterden uzun, @ iceren ve Turkce harfli adlar reddedilir; buyuk harf kucultulerek kabul edilir (normalizeLoginName gibi)', () => {
+      assert.match(residentWith('a'.repeat(41)), /en fazla 40/);
+      assert.match(residentWith('ali@x.com'), /@ kullanilamaz/);
+      assert.match(residentWith('ada\u00e7'), /kucuk harf, rakam/);
+      assert.equal(residentWith('a'.repeat(40)), null);
+      assert.equal(residentWith('Ada.L'), null);
+      assert.match(residentWith('ab'), /en az 3/);
+      assert.match(residentWith(undefined), /en az 3/);
     });
   });
 

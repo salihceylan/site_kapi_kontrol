@@ -1,3 +1,7 @@
+import 'dart:convert';
+import 'dart:math';
+
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -7,18 +11,34 @@ import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/ui/design/app_snack.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 
+/// Her sosyal girişte yeniden üretilen kriptografik rastgele nonce (HAM değer): 32 bayt `Random.secure()` -> base64url (dolgusuz, 43 karakter).
+/// Ham değer yalnız sunucuya (`nonce` alanı) gider; sağlayıcıya [oauthNonceHash] verilir.
+String generateOAuthNonce([Random? random]) {
+  final rng = random ?? Random.secure();
+  final bytes = List<int>.generate(32, (_) => rng.nextInt(256));
+  return base64UrlEncode(bytes).replaceAll('=', '');
+}
+
+/// Sağlayıcıya verilen nonce: ham değerin SHA-256 özeti (onaltılı, küçük harf). Belirteçteki `nonce` talebi bu özettir; sunucu ham değeri özetleyip
+/// karşılaştırır. Ham değer belirteçte görünmediği için ele geçirilen belirteç tek başına yeniden oynatılamaz.
+String oauthNonceHash(String rawNonce) => sha256.convert(utf8.encode(rawNonce)).toString();
+
 class SocialAuthCredentials {
   const SocialAuthCredentials({
     required this.idToken,
     this.fullName,
     this.firstName,
     this.lastName,
+    this.nonce,
   });
 
   final String idToken;
   final String? fullName;
   final String? firstName;
   final String? lastName;
+
+  /// Belirtecin bağlandığı HAM nonce (varsa sunucuya iletilir); sağlayıcı nonce desteklemiyorsa null.
+  final String? nonce;
 }
 
 class SocialAuthButtons extends StatefulWidget {
@@ -78,6 +98,7 @@ class _SocialAuthButtonsState extends State<SocialAuthButtons> {
           firstName: creds.firstName,
           lastName: creds.lastName,
           acceptedDocuments: acceptedDocs,
+          nonce: creds.nonce,
         );
         if (!mounted) return;
         if (error != null) {
@@ -112,6 +133,9 @@ class _SocialAuthButtonsState extends State<SocialAuthButtons> {
         return;
       }
 
+      // NOT: google_sign_in 6.x (platform paketleri dahil) nonce'u sağlayıcıya iletemez; belirteçte nonce talebi olmaz. Bu yüzden Google yerel
+      // girişinde nonce GÖNDERİLMEZ (sunucu OAUTH_REQUIRE_NONCE=apple gibi sağlayıcı bazlı açılır). google_sign_in ^7 ile
+      // `GoogleSignIn.instance.initialize(nonce: oauthNonceHash(ham))` + loginWithOAuth(nonce: ham) eklenmeli.
       final GoogleSignInAuthentication auth = await account.authentication;
       final String tokenToSend = (auth.idToken != null && auth.idToken!.isNotEmpty)
           ? auth.idToken!
@@ -165,6 +189,7 @@ class _SocialAuthButtonsState extends State<SocialAuthButtons> {
           firstName: creds.firstName,
           lastName: creds.lastName,
           acceptedDocuments: acceptedDocs,
+          nonce: creds.nonce,
         );
         if (!mounted) return;
         if (error != null) {
@@ -186,11 +211,14 @@ class _SocialAuthButtonsState extends State<SocialAuthButtons> {
         return;
       }
 
+      // Her girişte yeni nonce: sağlayıcıya SHA-256 özeti verilir (identityToken içindeki `nonce` talebi bu özet olur), ham değer sunucuya gider.
+      final String rawNonce = generateOAuthNonce();
       final credential = await SignInWithApple.getAppleIDCredential(
         scopes: [
           AppleIDAuthorizationScopes.email,
           AppleIDAuthorizationScopes.fullName,
         ],
+        nonce: oauthNonceHash(rawNonce),
       );
 
       final idToken = credential.identityToken;
@@ -211,6 +239,7 @@ class _SocialAuthButtonsState extends State<SocialAuthButtons> {
         firstName: credential.givenName,
         lastName: credential.familyName,
         acceptedDocuments: acceptedDocs,
+        nonce: rawNonce,
       );
 
       if (!mounted) return;

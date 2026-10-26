@@ -11,7 +11,9 @@ import { OAUTH_DDL, OAUTH_TABLES, ensureOAuthSchema } from '../src/modules/oauth
 import {
   authenticateWithOAuth,
   clearJwksCache,
+  expectedNonceFromClient,
   getOAuthConfig,
+  isOAuthNonceRequired,
   oauthHooks,
   oauthStatus,
   startOAuthWebSession,
@@ -836,5 +838,182 @@ describe('authenticateWithOAuth ve HTTP rotalari (/auth/oauth/google & /auth/oau
     );
     const noCheck = await authenticateWithOAuth({ provider: 'google', idToken: 'valid-google-token' });
     assert.equal(noCheck.ok, true);
+  });
+
+  // --- Yerel (mobil) nonce: istemci HAM nonce'u gonderir, saglayiciya SHA-256 ozetini verir; belirtecteki nonce talebi ozettir ---
+  const RAW_NONCE = 'Zk3-q_Wl9xT0aB7cD1eF2gH4iJ5kL6mN8oP';
+  const digestOf = (value) => crypto.createHash('sha256').update(value).digest('hex');
+  const withNonceClaim = (claim) => {
+    const original = oauthHooks.verifyProviderToken;
+    oauthHooks.verifyProviderToken = async (provider, idToken, env) => ({ ...(await original(provider, idToken, env)), nonce: claim });
+    return () => {
+      oauthHooks.verifyProviderToken = original;
+    };
+  };
+  const postOAuth = (provider, body) =>
+    fetch(`${baseUrl}/auth/oauth/${provider}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  let savedRequireNonce;
+  beforeEach(() => {
+    savedRequireNonce = process.env.OAUTH_REQUIRE_NONCE;
+    delete process.env.OAUTH_REQUIRE_NONCE;
+  });
+  afterEach(() => {
+    if (savedRequireNonce === undefined) delete process.env.OAUTH_REQUIRE_NONCE;
+    else process.env.OAUTH_REQUIRE_NONCE = savedRequireNonce;
+  });
+
+  it('HTTP: ham nonce gonderilirse belirtecteki nonce talebi SHA-256(ham) olmali; ayni ham deger belirtecte gorunuyorsa (ozetlenmemis) REDDEDILIR', async () => {
+    const restore = withNonceClaim(digestOf(RAW_NONCE));
+    try {
+      const ok = await postOAuth('apple', { id_token: 'valid-apple-token', nonce: RAW_NONCE });
+      assert.equal(ok.status, 200);
+      assert.equal((await ok.json()).ok, true);
+    } finally {
+      restore();
+    }
+
+    // belirtecte ozet degil HAM deger var: nonce belirtec yukunden okunup kopyalanabilirdi, bu yuzden kabul edilmez
+    const restoreRaw = withNonceClaim(RAW_NONCE);
+    try {
+      const rawRes = await postOAuth('apple', { id_token: 'valid-apple-token', nonce: RAW_NONCE });
+      assert.equal(rawRes.status, 401);
+      assert.equal((await rawRes.json()).code, 'INVALID_OAUTH_NONCE');
+    } finally {
+      restoreRaw();
+    }
+  });
+
+  it('HTTP: baska oturumun belirteci (farkli nonce) ve nonce talebi OLMAYAN belirtec 401 INVALID_OAUTH_NONCE; hesap olusmaz', async () => {
+    const restore = withNonceClaim(digestOf('baska-oturumun-nonce-degeri-0123'));
+    try {
+      const other = await postOAuth('apple', { id_token: 'valid-apple-token', nonce: RAW_NONCE });
+      assert.equal(other.status, 401);
+      assert.equal((await other.json()).code, 'INVALID_OAUTH_NONCE');
+    } finally {
+      restore();
+    }
+    // belirtecte hic nonce yok (ornek: Google 6.x istemcisi nonce iletemez) ama istemci nonce gonderdi
+    const missing = await postOAuth('apple', { id_token: 'valid-apple-token', nonce: RAW_NONCE });
+    assert.equal(missing.status, 401);
+    assert.equal((await missing.json()).code, 'INVALID_OAUTH_NONCE');
+    assert.equal(usersByCode.size, 0);
+    assert.equal(identities.size, 0);
+  });
+
+  it('HTTP: bicimsiz nonce (kisa / yasak karakter / dizi / sayi) 400 INVALID_OAUTH_NONCE; bos nonce "gonderilmedi" sayilir', async () => {
+    for (const nonce of ['kisa', 'bosluk iceren nonce degeri 123456', 'a'.repeat(129), ['x'], 42, { a: 1 }]) {
+      const res = await postOAuth('apple', { id_token: 'valid-apple-token', nonce });
+      assert.equal(res.status, 400, JSON.stringify(nonce));
+      assert.equal((await res.json()).code, 'INVALID_OAUTH_NONCE');
+    }
+    assert.equal(usersByCode.size, 0);
+    const empty = await postOAuth('apple', { id_token: 'valid-apple-token', nonce: '' });
+    assert.equal(empty.status, 200, 'bos nonce = eski istemci: varsayilan (zorunlu degil) kipte kabul');
+  });
+
+  it('GERIYE UYUM: nonce gondermeyen eski istemci varsayilan kipte kabul edilir (Google ve Apple)', async () => {
+    const google = await postOAuth('google', { id_token: 'valid-google-token' });
+    assert.equal(google.status, 200);
+    const apple = await postOAuth('apple', { id_token: 'valid-apple-token' });
+    assert.equal(apple.status, 200);
+  });
+
+  it('OAUTH_REQUIRE_NONCE=1: nonce olmayan istek 400 OAUTH_NONCE_REQUIRED (saglayiciya gidilmez, hesap olusmaz); nonce olan istek gecer', async () => {
+    process.env.OAUTH_REQUIRE_NONCE = '1';
+    let providerCalls = 0;
+    const original = oauthHooks.verifyProviderToken;
+    oauthHooks.verifyProviderToken = async (...args) => {
+      providerCalls += 1;
+      return { ...(await original(...args)), nonce: digestOf(RAW_NONCE) };
+    };
+    try {
+      for (const provider of ['google', 'apple']) {
+        const res = await postOAuth(provider, { id_token: `valid-${provider}-token` });
+        assert.equal(res.status, 400);
+        assert.equal((await res.json()).code, 'OAUTH_NONCE_REQUIRED');
+      }
+      assert.equal(providerCalls, 0, 'nonce kontrolu belirtec dogrulamasindan ONCE');
+      assert.equal(usersByCode.size, 0);
+      const ok = await postOAuth('apple', { id_token: 'valid-apple-token', nonce: RAW_NONCE });
+      assert.equal(ok.status, 200);
+    } finally {
+      oauthHooks.verifyProviderToken = original;
+    }
+  });
+
+  it('OAUTH_REQUIRE_NONCE=apple: yalniz Apple zorunlu, Google (google_sign_in 6.x nonce iletemez) eskisi gibi kabul', async () => {
+    process.env.OAUTH_REQUIRE_NONCE = 'apple';
+    const apple = await postOAuth('apple', { id_token: 'valid-apple-token' });
+    assert.equal(apple.status, 400);
+    assert.equal((await apple.json()).code, 'OAUTH_NONCE_REQUIRED');
+    const google = await postOAuth('google', { id_token: 'valid-google-token' });
+    assert.equal(google.status, 200);
+  });
+
+  it('web oturumu etkilenmez: OAUTH_REQUIRE_NONCE=1 iken sunucunun urettigi oturum nonce degeri yine zorunlu ve yeterli', async () => {
+    process.env.OAUTH_REQUIRE_NONCE = '1';
+    const env = { GOOGLE_CLIENT_ID: 'google-client-1', OAUTH_REQUIRE_NONCE: '1' };
+    const started = startOAuthWebSession({ provider: 'google', env });
+    const nonce = new URL(started.auth_url).searchParams.get('nonce');
+    const original = oauthHooks.verifyProviderToken;
+    oauthHooks.verifyProviderToken = async (provider, idToken, e) => ({ ...(await original(provider, idToken, e)), nonce });
+    try {
+      const out = await completeOAuthWebCallback({ provider: 'google', state: started.session_id, idToken: 'valid-google-token', env });
+      assert.equal(out.ok, true);
+    } finally {
+      oauthHooks.verifyProviderToken = original;
+    }
+  });
+});
+
+describe('expectedNonceFromClient ve isOAuthNonceRequired', () => {
+  it('expectedNonceFromClient: yok / bos -> null; gecerli ham deger -> SHA-256 onaltili ozet; bicimsiz -> 400', () => {
+    assert.equal(expectedNonceFromClient(undefined), null);
+    assert.equal(expectedNonceFromClient(null), null);
+    assert.equal(expectedNonceFromClient(''), null);
+    const raw = 'abcDEF0123456789_-abcDEF0123456789_-abc';
+    const digest = crypto.createHash('sha256').update(raw).digest('hex');
+    assert.equal(expectedNonceFromClient(raw), digest);
+    assert.equal(expectedNonceFromClient(`  ${raw}  `), digest, 'kenar bosluklari kirpilir');
+    for (const bad of ['a'.repeat(15), 'a'.repeat(129), 'bosluk var 1234567890', 'turkce-ğüşiöç-1234567890', 5, true, {}, []]) {
+      assert.throws(() => expectedNonceFromClient(bad), (error) => error.statusCode === 400 && error.code === 'INVALID_OAUTH_NONCE', String(bad));
+    }
+  });
+
+  it('isOAuthNonceRequired: varsayilan KAPALI; 1/true/all hepsi; virgullu liste yalniz listedekiler; 0/false/bilinmeyen kapali', () => {
+    for (const provider of ['google', 'apple']) {
+      for (const off of [undefined, '', '  ', '0', 'false', 'off', 'none']) {
+        assert.equal(isOAuthNonceRequired(provider, { OAUTH_REQUIRE_NONCE: off }), false, `${provider}:${off}`);
+      }
+      for (const on of ['1', 'true', 'TRUE', 'yes', 'on', 'all', ' 1 ']) {
+        assert.equal(isOAuthNonceRequired(provider, { OAUTH_REQUIRE_NONCE: on }), true, `${provider}:${on}`);
+      }
+    }
+    assert.equal(isOAuthNonceRequired('apple', { OAUTH_REQUIRE_NONCE: 'apple' }), true);
+    assert.equal(isOAuthNonceRequired('google', { OAUTH_REQUIRE_NONCE: 'apple' }), false);
+    assert.equal(isOAuthNonceRequired('google', { OAUTH_REQUIRE_NONCE: 'Google, Apple' }), true);
+    assert.equal(isOAuthNonceRequired('apple', {}), false);
+  });
+
+  it('authenticateWithOAuth: zorunlu kipte expectedNonce yoksa saglayici dogrulamasina GIDILMEDEN 400 OAUTH_NONCE_REQUIRED', async () => {
+    let called = false;
+    const saved = oauthHooks.verifyProviderToken;
+    oauthHooks.verifyProviderToken = async () => {
+      called = true;
+      return { sub: 's', email: 'a@gmail.com', emailVerified: true };
+    };
+    try {
+      await assert.rejects(
+        () => authenticateWithOAuth({ provider: 'apple', idToken: 'x', env: { OAUTH_REQUIRE_NONCE: 'apple' } }),
+        (error) => error.statusCode === 400 && error.code === 'OAUTH_NONCE_REQUIRED',
+      );
+      assert.equal(called, false);
+    } finally {
+      oauthHooks.verifyProviderToken = saved;
+    }
   });
 });

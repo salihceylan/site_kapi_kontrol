@@ -698,10 +698,48 @@ function safeEqualStrings(a, b) {
   return crypto.timingSafeEqual(left, right);
 }
 
+// Yerel (mobil) istemcinin gönderdiği HAM nonce: uygulamanın her girişte ürettiği rastgele değer (base64url, en az 16 karakter). Sağlayıcıya ham değer
+// DEĞİL SHA-256 özeti (onaltılı, küçük harf) verilir; belirteçteki `nonce` talebi bu özettir. Ham değeri yalnız uygulama bilir: belirteç tek başına
+// (günlük, ara katman, sızıntı) ele geçirilse bile özetten ham değer çıkarılamaz, dolayısıyla belirteç yeniden oynatılamaz. (Ham değeri doğrudan sağlayıcıya
+// verip aynısını göndermek bu korumayı sağlamazdı: nonce belirteç yükünde okunabilir olduğundan saldıran belirteçten kopyalardı.)
+const CLIENT_NONCE_PATTERN = /^[A-Za-z0-9._~-]{16,128}$/;
+
 /**
- * `expectedNonce`: istemcinin/sunucunun yetkilendirme isteğine koyduğu nonce. Verilirse belirteçteki `nonce` talebi AYNI olmalıdır (aksi halde 401
- * INVALID_OAUTH_NONCE: başka oturum için alınmış belirteç yeniden oynatılamaz). Sunucunun başlattığı web oturumunda (completeOAuthWebCallback) her zaman
- * verilir. Yerel (mobil) akışlarda istemci nonce üretip göndermediği sürece verilmez; bkz. rapor (istemci + oauth_routes değişikliği gerektirir).
+ * İstemcinin gövdede gönderdiği ham `nonce` -> `authenticateWithOAuth({ expectedNonce })` değeri (SHA-256 onaltılı özet). Yok / boş -> null (eski
+ * istemci; OAUTH_REQUIRE_NONCE açıksa authenticateWithOAuth reddeder). Biçimsiz değer 400 INVALID_OAUTH_NONCE.
+ */
+export function expectedNonceFromClient(rawNonce) {
+  if (rawNonce === undefined || rawNonce === null || rawNonce === '') {
+    return null;
+  }
+  if (typeof rawNonce !== 'string' || !CLIENT_NONCE_PATTERN.test(rawNonce.trim())) {
+    throw httpError(400, 'Giriş doğrulama değeri (nonce) geçersiz.', 'INVALID_OAUTH_NONCE');
+  }
+  return crypto.createHash('sha256').update(rawNonce.trim(), 'utf8').digest('hex');
+}
+
+/**
+ * Nonce'suz yerel girişin reddedilip reddedilmeyeceği (`OAUTH_REQUIRE_NONCE`). Varsayılan KAPALI: nonce göndermeyen eski istemci şimdilik kabul edilir.
+ * Değer `1` / `true` / `all` -> tüm sağlayıcılar; virgüllü liste (`apple` ya da `google,apple`) -> yalnız listedeki sağlayıcılar. Sağlayıcı bazlı açma
+ * gerekir: google_sign_in 6.x paketi nonce'u sağlayıcıya iletemez (yalnız Apple istemcisi nonce gönderir), bu yüzden `all` ancak Google istemcisi de
+ * nonce destekleyince açılmalıdır.
+ */
+export function isOAuthNonceRequired(provider, env = process.env) {
+  const raw = String(env?.OAUTH_REQUIRE_NONCE ?? '').trim().toLowerCase();
+  if (raw === '') {
+    return false;
+  }
+  if (raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on' || raw === 'all') {
+    return true;
+  }
+  return raw.split(',').map((part) => part.trim()).includes(String(provider).toLowerCase());
+}
+
+/**
+ * `expectedNonce`: yetkilendirme isteğine konan nonce'un BELİRTEÇTE görünmesi beklenen değeri. Verilirse belirteçteki `nonce` talebi AYNI olmalıdır (aksi halde
+ * 401 INVALID_OAUTH_NONCE: başka oturum için alınmış belirteç yeniden oynatılamaz). Sunucunun başlattığı web oturumunda (completeOAuthWebCallback) her zaman
+ * verilir. Yerel (mobil) akışta istemci ham nonce'u gönderir, rota bunu `expectedNonceFromClient` ile özete çevirip buraya geçirir. Verilmezse (eski istemci)
+ * denetim yapılmaz; ancak `OAUTH_REQUIRE_NONCE` o sağlayıcı için açıksa 400 OAUTH_NONCE_REQUIRED (sağlayıcıya hiç gidilmez).
  */
 export async function authenticateWithOAuth({
   provider,
@@ -718,6 +756,13 @@ export async function authenticateWithOAuth({
   const cleanProvider = typeof provider === 'string' ? provider.trim().toLowerCase() : '';
   if (!OAUTH_PROVIDERS.includes(cleanProvider)) {
     throw httpError(400, 'Geçersiz kimlik doğrulama sağlayıcısı.', 'INVALID_OAUTH_PROVIDER');
+  }
+  if ((expectedNonce === null || expectedNonce === undefined) && isOAuthNonceRequired(cleanProvider, env)) {
+    throw httpError(
+      400,
+      'Güvenli giriş için uygulamanın güncel sürümü gerekiyor. Lütfen uygulamayı güncelleyin.',
+      'OAUTH_NONCE_REQUIRED',
+    );
   }
   const claims = await verifyProviderIdToken(cleanProvider, idToken, env);
   if (expectedNonce !== null && expectedNonce !== undefined) {

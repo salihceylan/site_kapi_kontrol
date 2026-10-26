@@ -474,8 +474,8 @@ export function collectAccountPasswords(ops) {
 
 /**
  * Şifre özetlerini TRANSACTION DIŞINDA, sınırlı eşzamanlılıkla hesaplar (bcrypt kişi başına ~60 ms: 1500 kişi transaction kilitlerini dakikalarca
- * tutardı). Varsayılan başlangıç şifresi ("1234", belgelenmiş geçici PIN; ilk girişte değiştirilmesi zorunlu) için TEK özet paylaşılır; özel
- * şifrelerin her biri kendi tuzuyla özetlenir.
+ * tutardı). Varsayılan başlangıç şifresi ("1234", belgelenmiş geçici PIN; ilk girişte değiştirilmesi zorunlu) dahil her şifre
+ * BCRYPT_COST ile ve kendi tuzuyla özetlenir.
  * @param {Map<string, string>} passwords ref -> düz şifre
  * @returns {Promise<Map<string, { password: string, hash: string }>>} ref -> { password, hash }
  */

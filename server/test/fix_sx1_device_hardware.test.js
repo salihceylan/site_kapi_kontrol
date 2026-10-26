@@ -290,13 +290,16 @@ describe('SX1: PATCH /admin/users/:id kendi parolasi', () => {
 
   it('kendi hesabinda bos parola "degistirme" sayilir ve diger alanlar duzenlenebilir', silence(async () => {
     const queries = [];
-    pool.query = async (sql, params) => {
+    const answer = async (sql, params) => {
       queries.push({ text: flat(sql), params });
       return {
         rowCount: 1,
         rows: [{ id: 1, user_code: 1, full_name: 'Yeni Ad Soyad', email: 'a@b.c', role: 'super_user', is_active: true, email_verified: true }],
       };
     };
+    pool.query = answer;
+    // Kullanıcı yazımı ve denetim kaydı artık tek işlemde (bağlantı üzerinden) yapılır.
+    pool.connect = async () => ({ query: answer, release() {} });
     const res = await call('patch', '/admin/users/:id', {
       params: { id: '1' },
       body: { full_name: 'Yeni Ad Soyad', password: '' },
@@ -320,12 +323,27 @@ describe('SX1: PATCH /admin/users/:id kendi parolasi', () => {
         rows: [{ id: 2, user_code: 2, full_name: 'Yonetici Kisi', email: 'y@b.c', role: 'site_manager', is_active: true, email_verified: true }],
       };
     };
+    // Yönetimin belirlediği parola geçici sayılır: kullanıcı yazımı + must_change_password AYNI işlemde (pool.connect); havuz sorguları yalnız ön denetim.
+    const clientQueries = [];
+    pool.connect = async () => ({
+      query: async (sql, params) => {
+        const text = flat(sql);
+        clientQueries.push({ text, params });
+        return /^UPDATE users SET .*password_hash/.test(text)
+          ? { rowCount: 1, rows: [{ id: 2, user_code: 2, full_name: 'Yonetici Kisi', email: 'y@b.c', role: 'site_manager', is_active: true, email_verified: true }] }
+          : { rowCount: 0, rows: [] };
+      },
+      release() {},
+    });
     const res = await call('patch', '/admin/users/:id', {
       params: { id: '2' },
       body: { password: 'Gecerli-Parola-123' },
     });
     assert.equal(res.statusCode, 200);
-    assert.ok(queries.some((query) => /^UPDATE users/.test(query.text) && /password_hash/.test(query.text)));
+    assert.ok(clientQueries.some((query) => /^UPDATE users/.test(query.text) && /password_hash/.test(query.text)));
+    assert.ok(clientQueries.some((query) => /^UPDATE users SET must_change_password = TRUE/.test(query.text) && /deleted_at IS NULL/.test(query.text)));
+    assert.equal(res.body.user.must_change_password, true);
+    assert.equal(queries.some((query) => /^UPDATE users/.test(query.text)), false);
   }));
 });
 

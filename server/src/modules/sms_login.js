@@ -38,7 +38,7 @@ async function findUserByPhone(phone, db = pool) {
   const last10 = phone.slice(-10);
   const result = await db.query(
     `SELECT user_code FROM users
-     WHERE is_active = TRUE AND email_verified = TRUE AND COALESCE(approval_status, 'approved') = 'approved'
+     WHERE is_active = TRUE AND email_verified = TRUE AND deleted_at IS NULL AND COALESCE(approval_status, 'approved') = 'approved'
        AND RIGHT(regexp_replace(COALESCE(phone_number, ''), '\\D', '', 'g'), 10) = $1
      LIMIT 2`,
     [last10],
@@ -91,9 +91,14 @@ export async function verifySmsCode(rawPhone, rawCode, db = pool) {
   if (!row || row.user_code === null || !safeEqual(row.code_hash, hashCode(phone, code))) throw badCode();
   const used = await db.query(`UPDATE sms_login_codes SET consumed_at = NOW() WHERE id = $1 AND consumed_at IS NULL RETURNING id`, [row.id]);
   if (!used.rows?.length) throw badCode();
+  // deleted_at IS NULL: kimliksizleştirilmiş (silinmiş) hesaba SMS ile oturum açılmaz. must_change_password: yönetimin verdiği geçici parola / PIN
+  // henüz değişmediyse bayrak oturum yanıtına girer (POST /auth/login, OAuth ve auth_middleware ile AYNI tanım: bayrak VEYA dairede "PIN verildi").
   const userRes = await db.query(
-    `SELECT user_code AS id, full_name, email, login_name, role, is_active, email_verified, approval_status, phone_number, created_at, password_hash
-     FROM users WHERE user_code = $1`,
+    `SELECT user_code AS id, full_name, email, login_name, role, is_active, email_verified, approval_status, phone_number, created_at, password_hash,
+            (COALESCE(users.must_change_password, FALSE) OR EXISTS (
+              SELECT 1 FROM apartments a WHERE a.resident_user_code = users.user_code AND a.resident_pin_issued = TRUE
+            )) AS must_change_password
+     FROM users WHERE user_code = $1 AND deleted_at IS NULL`,
     [row.user_code],
   );
   const user = userRes.rows?.[0];

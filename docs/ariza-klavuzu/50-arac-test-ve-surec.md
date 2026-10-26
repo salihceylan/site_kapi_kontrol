@@ -284,7 +284,7 @@ ssh-keygen -R "[178.210.161.55]:22667"
 | [server/src/routes/company_routes.js:326](../../server/src/routes/company_routes.js#L326) | <code>return res.status(400).json({ error: 'device_uid 12 haneli hex (0-9, A-F) olmalidir.' });</code> | Sunucu UID'yi 12 haneli büyük harf hex ister (":" ve "-" ayırıcıları tolere edilir) |
 | [server/src/routes/company_routes.js:110](../../server/src/routes/company_routes.js#L110) | <code>export function resolveCompanyHardwareType(body) {</code> | hardware_type/hardware_target/chip alanlarından türü çıkarır; çıkaramazsa null |
 | [server/src/routes/company_routes.js:127](../../server/src/routes/company_routes.js#L127) | <code>const DEFAULT_COMPANY_HARDWARE_TYPE = 'esp32_c3';</code> | Tür belirlenemezse varsayılan esp32_c3 yazılır; cihaz MQTT bildirimi sonradan düzeltir |
-| [server/src/server.js:108](../../server/src/server.js#L108) | <code>app.post('/api/company/labeled-devices', companyAccessLimiter, requireCompanyAccess, expr…</code> | Bu uca özel 5 MB JSON limiti (QR PNG base64); hız sınırı yetkiden ÖNCE çalışır |
+| [server/src/server.js:113](../../server/src/server.js#L113) | <code>app.post('/api/company/labeled-devices', companyAccessLimiter, requireCompanyAccess, expr…</code> | Bu uca özel 5 MB JSON limiti (QR PNG base64); hız sınırı yetkiden ÖNCE çalışır |
 
 **Olası nedenler**
 - UID 12 haneli değil (ör. eski firmware farklı uzunlukta UID bildiriyor) → 400
@@ -744,7 +744,7 @@ cd server && npm test
 | --- | --- | --- |
 | [server/test/sites_source_guards.test.js:14](../../server/test/sites_source_guards.test.js#L14) | <code>function sliceFunction(source, startMarker) {</code> | Kaynakta işaretçi metni arar; işaretçi (fonksiyon başlığı) değişirse "bulunamadi" ile düşer |
 | [server/test/sites_source_guards.test.js:12](../../server/test/sites_source_guards.test.js#L12) | <code>const read = (relative) =&gt; readFileSync(path.join(srcRoot, relative), 'utf8').replace(/\r…</code> | Testler src/ dosyalarını METİN olarak okur (import etmez) |
-| [server/test/members_maintenance.test.js:95](../../server/test/members_maintenance.test.js#L95) | <code>describe('members: db.js yalnızca additive şema değişikliği içerir', () =&gt; {</code> | db.js yalnızca ekleyici (additive) şema değişikliği içermeli; yıkıcı ifade eklenince düşer |
+| [server/test/members_maintenance.test.js:96](../../server/test/members_maintenance.test.js#L96) | <code>describe('members: db.js yalnızca additive şema değişikliği içerir', () =&gt; {</code> | db.js yalnızca ekleyici (additive) şema değişikliği içermeli; yıkıcı ifade eklenince düşer |
 | [server/test/members_maintenance.test.js:23](../../server/test/members_maintenance.test.js#L23) | <code>describe('members: maintenance_service yıkıcı işlem yapmaz', () =&gt; {</code> | Bakım servisi kullanıcı silmez / tablo düşürmez iddiası |
 
 **Olası nedenler**
@@ -946,7 +946,7 @@ flutter test test/home_polling_test.dart test/adaptive_poller_test.dart test/clo
 | --- | --- | --- |
 | [test/widget_test.dart:8](../../test/widget_test.dart#L8) | <code>SharedPreferences.setMockInitialValues(&lt;String, Object&gt;{});</code> | Her uygulama kökü testi SharedPreferences'ı sahte değerle başlatır |
 | [test/widget_test.dart:9](../../test/widget_test.dart#L9) | <code>FlutterSecureStorage.setMockInitialValues(&lt;String, String&gt;{});</code> | Güvenli depo da sahtelenir (oturum anahtarı) |
-| [lib/app.dart:42](../../lib/app.dart#L42) | <code>const MyApp({super.key, this.networkCheckEnabled = true, this.themeService});</code> | MyApp(networkCheckEnabled: false) ağ sağlık yoklamasını kapatır; testlerde verilmezse gerçek ağa çıkılır |
+| [lib/app.dart:41](../../lib/app.dart#L41) | <code>const MyApp({super.key, this.networkCheckEnabled = true, this.themeService});</code> | MyApp(networkCheckEnabled: false) ağ sağlık yoklamasını kapatır; testlerde verilmezse gerçek ağa çıkılır |
 | [test/screens/dialog_layout_harness.dart:50](../../test/screens/dialog_layout_harness.dart#L50) | <code>/// girişi (~450 ms) bitene kadar ilerletilir. `pumpAndSettle` KULLANILMAZ: yüklenirken d…</code> | Yüklenirken dönen göstergeler bitmeyen animasyondur: sabit süreli pump kullanılır |
 | [test/screens/login_layout_test.dart:33](../../test/screens/login_layout_test.dart#L33) | <code>class _FakeAuth extends AuthService {</code> | Ağa çıkmayan sahte kimlik servisi örneği |
 | [integration_test/support/e2e_driver.dart:15](../../integration_test/support/e2e_driver.dart#L15) | <code>//  - pumpAndSettle KULLANMAZ (uygulamada 3 sn'lik yoklamalar var): sabit aralikli pump d…</code> | Uygulamada 3 sn'lik yoklamalar olduğundan yürüyüş düzeneği de sabit aralıklı pump döngüsü kullanır |
@@ -1187,7 +1187,7 @@ flutter test
 | [AGENTS.md:25](../../AGENTS.md#L25) | <code>5. **Saha Kontrol Listesini Güncel Tut:**</code> | Yeni özellik tamamlanınca SAHA_KONTROL_LISTESI.md'ye "- [ ]" test adımı eklenir (bkz. surec-saha-listesi-ekleme) |
 | [AGENTS.md:29](../../AGENTS.md#L29) | <code>6. **Mobil ve Arayüz Tasarımlarında Taşma (Overflow) Kesinlikle Yasaktır:**</code> | Arayüz değişikliği: Flexible/Expanded/ellipsis/Wrap; taşma matrisi testi bunu doğrular (bkz. test-flutter-tasma-matrisi) |
 | [AGENTS.md:39](../../AGENTS.md#L39) | <code>8. **Sunucuyu (Backend VPS) Her Zaman Güncelle ve Canlı Doğrula (Zorunlu):**</code> | Backend değişikliği: canlıya al, PM2 günlüğü + /health doğrula (bkz. surec-canliya-alma-kural8) |
-| [AGENTS.md:48](../../AGENTS.md#L48) | <code>10. **Git Yüklemeleri ve `.git/index` Bütünlüğü (Index Temizliği &amp; Hata Engelleme):**</code> | Commit/push öncesi .git/index bütünlüğü (bkz. surec-git-index-bozuldu) |
+| [AGENTS.md:49](../../AGENTS.md#L49) | <code>10. **Git Yüklemeleri ve `.git/index` Bütünlüğü (Index Temizliği &amp; Hata Engelleme):**</code> | Commit/push öncesi .git/index bütünlüğü (bkz. surec-git-index-bozuldu) |
 
 **Olası nedenler**
 - Backend (services/routes/db.js/migration/MQTT köprüsü) değişti -> kural 8: canlıya al ve uçtan uca doğrula; kural 2: ekleyici şema, eski istemci uyumu
@@ -1238,8 +1238,8 @@ node tools/klavuz/build.mjs --check
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [AGENTS.md:48](../../AGENTS.md#L48) | <code>10. **Git Yüklemeleri ve `.git/index` Bütünlüğü (Index Temizliği &amp; Hata Engelleme):**</code> | Kural 10: commit/push öncesi indeks doğrulanır; kilit/bozulma varsa temizlenir |
-| [AGENTS.md:50](../../AGENTS.md#L50) | <code>- `fatal: .git/index: index file smaller than expected` hatasının oluşması kesinlikle eng…</code> | Bozuk indeks bulunursa otomatik onarım uygulanır (çalışma ağacı dosyalarına dokunmadan) |
+| [AGENTS.md:49](../../AGENTS.md#L49) | <code>10. **Git Yüklemeleri ve `.git/index` Bütünlüğü (Index Temizliği &amp; Hata Engelleme):**</code> | Kural 10: commit/push öncesi indeks doğrulanır; kilit/bozulma varsa temizlenir |
+| [AGENTS.md:51](../../AGENTS.md#L51) | <code>- `fatal: .git/index: index file smaller than expected` hatasının oluşması kesinlikle eng…</code> | Bozuk indeks bulunursa otomatik onarım uygulanır (çalışma ağacı dosyalarına dokunmadan) |
 | [.vscode/settings.json:17](../../.vscode/settings.json#L17) | <code>"git.autorefresh": true,</code> | VS Code git durumunu kendiliğinden tazeler (son commit d79075e bu ayarı açtı); eski ayar kapalı kalırsa durum bayat görünür |
 | [.vscode/settings.json:19](../../.vscode/settings.json#L19) | <code>"git.openRepositoryInParentFolders": "always"</code> | Çalışma alanı depo kökünün altındaysa üst klasördeki depoyu açar |
 | [.gitattributes:4](../../.gitattributes#L4) | <code>* text=auto</code> | Satır sonu normalizasyonu: Windows'ta LF/CRLF uyarıları bu dosyadan gelir (hata değildir) |
@@ -1490,7 +1490,7 @@ flutter doctor -v
 | --- | --- | --- |
 | [analysis_options.yaml:19](../../analysis_options.yaml#L19) | <code>include: package:flutter_lints/flutter.yaml</code> | Varsayılan Flutter lint seti; özel kural geçersiz kılmaları yorum satırında (kapalı) |
 | [analysis_options.yaml:13](../../analysis_options.yaml#L13) | <code>- android/**</code> | build, android, ios, web, windows, macos, linux klasörleri analiz dışıdır: oradaki kodu analyze görmez |
-| [pubspec.yaml:53](../../pubspec.yaml#L53) | <code>flutter_lints: ^6.0.0</code> | Lint paketi sürümü (sürüm yükselince yeni kurallar yeni uyarı çıkarabilir) |
+| [pubspec.yaml:55](../../pubspec.yaml#L55) | <code>flutter_lints: ^6.0.0</code> | Lint paketi sürümü (sürüm yükselince yeni kurallar yeni uyarı çıkarabilir) |
 | [.github/workflows/ci.yml:69](../../.github/workflows/ci.yml#L69) | <code>run: flutter analyze --no-fatal-infos</code> | CI hata ve uyarıda kırılır, yalnız info düzeyi kırmaz |
 | [docs/codebase/CONVENTIONS.md:14](../../docs/codebase/CONVENTIONS.md#L14) | <code>### 2) Formatting and Linting</code> | Linter/biçimlendirici kuralları ve çalıştırma komutları |
 

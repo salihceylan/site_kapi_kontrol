@@ -25,7 +25,8 @@ import {
   getSiteResidentsTree,
 } from '../services/membership_service.js';
 import { getSiteByJoinToken } from '../services/site_service.js';
-import { parsePositiveId } from '../utils/validators.js';
+import { errorBodyExtras, parsePositiveId } from '../utils/validators.js';
+import { isPlatformError } from '../modules/errors.js';
 import { rejectWeakPassword } from '../security/password_policy.js';
 import { readDeviceToken } from '../security/login_device_token.js';
 
@@ -58,6 +59,11 @@ function respondError(res, context, error, fallbackMessage) {
       body.code = error.code;
     }
     return res.status(429).json(body);
+  }
+  // PlatformError: { error, code, ...extra } (respondWithServiceError `extra` alanlarını taşımaz). Diğer kasıtlı 4xx hatalarda (ör. 403/409
+  // ACCESS_SUSPENDED) `code` respondWithServiceError ile zaten gövdeye girer.
+  if (isPlatformError(error)) {
+    return res.status(error.statusCode).json({ error: error.message, ...errorBodyExtras(error) });
   }
   return respondWithServiceError(res, error, { fallbackMessage, logLabel: `membership:${context}` });
 }

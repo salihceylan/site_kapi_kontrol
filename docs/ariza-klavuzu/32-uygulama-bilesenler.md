@@ -848,11 +848,11 @@ Bu bölüm lib/ui/design (jeton, hareket, kart, düğme, rozet, iskelet, geri sa
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/ui/widgets/apartment_card.dart:54](../../lib/ui/widgets/apartment_card.dart#L54) | <code>apartment.residentIsActive ?? (hasResident &amp;&amp; apartment.isActive);</code> | Aktif/Pasif: sakin durumu varsa o, yoksa sakin var ve daire aktif |
-| [lib/ui/widgets/apartment_card.dart:87](../../lib/ui/widgets/apartment_card.dart#L87) | <code>label: active ? 'Aktif' : 'Pasif',</code> | Rozet etiketi ve rengi |
-| [lib/ui/widgets/apartment_card.dart:198](../../lib/ui/widgets/apartment_card.dart#L198) | <code>onPressed: widget.resettingPin &#124;&#124; needsSuper</code> | PIN'i Sıfırla yalnız dahili daire hesabında (resident_pin_resettable); sakin şifresini kendisi belirlemişse (resident_pin_issued false) yöneticide devre dışı + 'yalnız süper kullanıcı' notu; sıfırlanırken pasif ve dönen gösterge |
-| [lib/ui/widgets/apartment_card.dart:157](../../lib/ui/widgets/apartment_card.dart#L157) | <code>? 'Şifre (PIN): yönetim verdi'</code> | PIN değeri ASLA yazılmaz (sunucu saklamaz, migration 051); yalnız "verildi" durumu ve "bir kez gösterilir" notu |
-| [lib/ui/widgets/apartment_card.dart:217](../../lib/ui/widgets/apartment_card.dart#L217) | <code>if (hasResident &amp;&amp; widget.onDelete != null)</code> | Sakini Sil düğmesi yalnız sakin varsa |
+| [lib/ui/widgets/apartment_card.dart:104](../../lib/ui/widgets/apartment_card.dart#L104) | <code>apartment.residentIsActive ?? (hasResident &amp;&amp; apartment.isActive);</code> | Aktif/Pasif: sakin durumu varsa o, yoksa sakin var ve daire aktif |
+| [lib/ui/widgets/apartment_card.dart:140](../../lib/ui/widgets/apartment_card.dart#L140) | <code>label: active ? 'Aktif' : 'Pasif',</code> | Rozet etiketi ve rengi |
+| [lib/ui/widgets/apartment_card.dart:269](../../lib/ui/widgets/apartment_card.dart#L269) | <code>onPressed: widget.resettingPin &#124;&#124; needsSuper</code> | PIN'i Sıfırla yalnız dahili daire hesabında (resident_pin_resettable); sakin şifresini kendisi belirlemişse (resident_pin_issued false) yöneticide devre dışı + 'yalnız süper kullanıcı' notu; sıfırlanırken pasif ve dönen gösterge |
+| [lib/ui/widgets/apartment_card.dart:228](../../lib/ui/widgets/apartment_card.dart#L228) | <code>? 'Şifre (PIN): yönetim verdi'</code> | PIN değeri ASLA yazılmaz (sunucu saklamaz, migration 051); yalnız "verildi" durumu ve "bir kez gösterilir" notu |
+| [lib/ui/widgets/apartment_card.dart:298](../../lib/ui/widgets/apartment_card.dart#L298) | <code>if (hasResident &amp;&amp; widget.onDelete != null)</code> | Sakini Sil düğmesi yalnız sakin varsa |
 
 **Olası nedenler**
 - Sakin adı boş: daire boş sayılır (turuncu ikon, Sakini Sil yok)
@@ -1074,8 +1074,8 @@ Bu bölüm lib/ui/design (jeton, hareket, kart, düğme, rozet, iskelet, geri sa
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
 | [lib/menu.dart:1](../../lib/menu.dart#L1) | <code>export 'package:site_kapi_kontrol/ui/widgets/yan_menu.dart';</code> | menu.dart tek satırlık yeniden dışa aktarımdır; gerçek kod yan_menu.dart ta |
-| [lib/ui/widgets/yan_menu.dart:1261](../../lib/ui/widgets/yan_menu.dart#L1261) | <code>List&lt;SirketMenuItem&gt; _itemsForRole(</code> | Rol ve mod başına menü öğeleri burada seçilir |
-| [lib/ui/widgets/yan_menu.dart:474](../../lib/ui/widgets/yan_menu.dart#L474) | <code>title: isResidentMode ? context.l10n.menuSwitchToAdmin : context.l10n.menuSwitchToResiden…</code> | Çift rollü kullanıcıda mod değiştirme satırı |
+| [lib/ui/widgets/yan_menu.dart:1320](../../lib/ui/widgets/yan_menu.dart#L1320) | <code>List&lt;SirketMenuItem&gt; _itemsForRole(</code> | Rol ve mod başına menü öğeleri burada seçilir |
+| [lib/ui/widgets/yan_menu.dart:495](../../lib/ui/widgets/yan_menu.dart#L495) | <code>title: isResidentMode ? context.l10n.menuSwitchToAdmin : context.l10n.menuSwitchToResiden…</code> | Çift rollü kullanıcıda mod değiştirme satırı |
 
 **Olası nedenler**
 - _itemsForRole listesinde öğe o rol/mod için yok

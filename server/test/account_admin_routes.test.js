@@ -114,7 +114,8 @@ describe('admin uçları: silinmiş (tombstone) hesap', () => {
     const res = await send('DELETE', '/admin/users/40002');
     assert.equal(res.status, 204);
     const finalDelete = clientCalls.find((c) => /^DELETE FROM users WHERE user_code = \$1/.test(c.sql));
-    assert.equal(finalDelete.sql, 'DELETE FROM users WHERE user_code = $1 AND deleted_at IS NULL');
+    // RETURNING role: silinen hesabın rol kodu denetim kaydına (user.deleted) yazılır.
+    assert.equal(finalDelete.sql, 'DELETE FROM users WHERE user_code = $1 AND deleted_at IS NULL RETURNING role');
     assert.deepEqual(finalDelete.params, [40002]);
     assert.ok(clientCalls.some((c) => c.sql === 'COMMIT'));
   });
@@ -135,7 +136,7 @@ describe('admin uçları: silinmiş (tombstone) hesap', () => {
     const event = at(/^INSERT INTO work_item_events .* VALUES \(\$1, \$2, 'assigned', 'internal', \$3, 'staff', \$4, NULL\)$/);
     const reservations = at(/^UPDATE reservations SET status = 'iptal'/);
     const concierge = at(/^UPDATE concierge_requests SET status = 'iptal'/);
-    const finalDelete = at(/^DELETE FROM users WHERE user_code = \$1 AND deleted_at IS NULL$/);
+    const finalDelete = at(/^DELETE FROM users WHERE user_code = \$1 AND deleted_at IS NULL RETURNING role$/);
     const commit = at(/^COMMIT$/);
     assert.ok(begin >= 0 && begin < lock && lock < release && release < event && event < reservations && reservations < concierge && concierge < finalDelete && finalDelete < commit,
       JSON.stringify({ begin, lock, release, event, reservations, concierge, finalDelete, commit }));
@@ -148,7 +149,7 @@ describe('admin uçları: silinmiş (tombstone) hesap', () => {
     const res = await send('DELETE', '/admin/users/40011');
     assert.equal(res.status, 204);
     const at = (pattern) => clientCalls.findIndex((c) => pattern.test(c.sql));
-    const finalDelete = at(/^DELETE FROM users WHERE user_code = \$1 AND deleted_at IS NULL$/);
+    const finalDelete = at(/^DELETE FROM users WHERE user_code = \$1 AND deleted_at IS NULL RETURNING role$/);
     for (const table of ['user_oauth_identities', 'web_push_subscriptions', 'sms_login_codes', 'push_devices', 'push_outbox']) {
       const index = at(new RegExp(`^DELETE FROM ${table} WHERE user_code = [$]1$`));
       assert.ok(index >= 0, `${table} silinmedi`);
@@ -186,10 +187,12 @@ describe('admin uçları: silinmiş (tombstone) hesap', () => {
     const res = await send('PATCH', '/admin/users/40005/activation', { is_active: true });
     assert.equal(res.status, 409);
     assert.equal(res.body.code, 'ACCOUNT_DELETED');
-    const update = calls.find((c) => /^UPDATE users SET/.test(c.sql));
+    // Aktiflik yazımı ve denetim kaydı artık tek işlemde (bağlantı üzerinden); silinmişlik sorgusu UPDATE'ten sonra havuzdan.
+    const update = clientCalls.find((c) => /^UPDATE users SET/.test(c.sql));
     assert.ok(update, 'UPDATE denendi');
     assert.match(update.sql, /WHERE user_code = \$\d+ AND deleted_at IS NULL/);
-    assert.ok(calls.findIndex((c) => isDeletedLookup(c.sql)) > calls.indexOf(update));
+    assert.ok(calls.some((c) => isDeletedLookup(c.sql)), 'UPDATE satır döndürmeyince silinmişlik sorgulanır');
+    assert.equal(clientCalls.some((c) => /^INSERT INTO audit_log/.test(c.sql)), false, 'satır güncellenmedi -> denetim kaydı yok');
   });
 
   it('PATCH activation olmayan kullanıcı: 404; PATCH düzenleme tombstone\'a: 409 ACCOUNT_DELETED', async () => {

@@ -1,5 +1,6 @@
 import { pool } from '../db.js';
 import { getAuthUserCode } from '../middlewares/auth_middleware.js';
+import { recordAudit } from '../modules/audit_service.js';
 import { publishLocalControlConfig } from '../mqtt_bridge.js';
 import {
   auditLog,
@@ -1034,6 +1035,20 @@ export async function releaseDeviceOwnership({ deviceId, authUser }) {
         RETURNING id, device_uid, hardware_type, is_defective, owner_user_id, site_code
       `,
       [id],
+    );
+
+    // Denetim kaydı (device.ownership_released): sıfırlama ile AYNI işlemde. Yalnız cihaz numarası, önceki site kodu ve sahibin kimliği (cihaz UID'i / e-posta yazılmaz).
+    await recordAudit(
+      client,
+      {
+        actor: authUser,
+        action: 'device.ownership_released',
+        siteCode: dev.site_code,
+        targetType: 'device',
+        targetId: String(id),
+        details: { previous_owner_id: dev.owner_user_id ?? null },
+      },
+      { inTransaction: true },
     );
 
     await client.query('COMMIT');

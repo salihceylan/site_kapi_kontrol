@@ -1,6 +1,7 @@
-// 077 butunluk sertlestirme (site_name_key + site adi tekillik indeksleri, OAuth / web push FK'si, users.must_change_password): sema <-> migration
-// birebir esitligi, katalog kontrollu / lock_timeout'lu / yeniden denemeli ensure, db.js baglantisi (dev blok DISINDA) ve m2 sutunlarinin DUSURULMEMESI.
-// DB gerektirmez. Gercek PostgreSQL dogrulamasi: scripts/qa_platform_pg.mjs (chain bolumu) ve deploy/remote_rehearse_schema.sh (ok077).
+// 077 butunluk sertlestirme (site_name_key + site adi tekillik indeksleri, OAuth / web push FK'si, users.must_change_password) ve 078 (daire m2
+// sutunlarinin kalici dusurulmesi): sema <-> migration birebir esitligi, katalog kontrollu / lock_timeout'lu / yeniden denemeli ensure,
+// db.js baglantisi (dev blok DISINDA).
+// DB gerektirmez. Gercek PostgreSQL dogrulamasi: scripts/qa_platform_pg.mjs (chain bolumu) ve deploy/remote_rehearse_schema.sh (ok077, ok078).
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -8,7 +9,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_MIGRATIONS_DIR, findUnsafeStatements, listMigrations } from '../scripts/migrate.js';
 import {
+  AREA_DROP_COLUMNS,
+  AREA_DROP_STEPS,
   INTEGRITY_STEPS,
+  areaDropMigrationBody,
   ensureIntegritySchema,
   integrityMigrationBody,
   schemaTuning,
@@ -19,6 +23,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const read = (rel) => readFileSync(path.join(here, '..', rel), 'utf8').replace(/\r\n/g, '\n');
 const norm = (s) => s.replace(/\r\n/g, '\n').replace(/--.*$/gm, '').replace(/\s+/g, ' ').trim();
 const MIGRATION = read('migrations/077_integrity_hardening.sql');
+const MIGRATION_078 = read('migrations/078_apartment_area_columns_drop.sql');
 const DB_SOURCE = read('src/db.js');
 const stepSql = (name) => INTEGRITY_STEPS.find((s) => s.name === name).sql;
 
@@ -42,6 +47,7 @@ function mockClient(present, { failures = {} } = {}) {
             functions: pick('function'),
             fks: [...pick('fk'), ...pick('check')],
             indexes: [...pick('index'), ...OLD_INDEXES.filter((n) => set.has(n))],
+            drop_columns: AREA_DROP_COLUMNS.filter((n) => set.has(n)),
           }],
         };
       }
@@ -56,7 +62,7 @@ function mockClient(present, { failures = {} } = {}) {
   };
   return client;
 }
-const ddl = (client) => client.sent.filter((q) => !/lock_timeout/.test(q));
+const ddl = (client) => client.sent.filter((q) => !/^(?:SET|RESET) lock_timeout/.test(q));
 
 async function captureErrors(fn) {
   const original = console.error;
@@ -84,7 +90,7 @@ describe('migration 077: butunluk sertlestirme', () => {
     assert.ok(norm(MIGRATION).includes(norm(integrityMigrationBody())));
   });
 
-  it('sutun / tablo DUSURMEZ: DROP yalniz eski site adi indeksleri (yeni indeks varken); m2 sutunlari bu surumde DUSURULMEZ', () => {
+  it('077 sutun / tablo DUSURMEZ: DROP yalniz eski site adi indeksleri (yeni indeks varken); m2 sutunlarini 077 dusurmez, 078 dusurur (077 metni tarihsel, degistirilmez)', () => {
     const sql = norm(MIGRATION);
     const drops = sql.match(/DROP\s+\w+(\s+IF EXISTS)?\s+\w+/gi) ?? [];
     assert.deepEqual(drops.sort(), [
@@ -93,7 +99,7 @@ describe('migration 077: butunluk sertlestirme', () => {
     ]);
     assert.doesNotMatch(sql, /DROP\s+(TABLE|COLUMN|CONSTRAINT)/i);
     assert.doesNotMatch(sql, /\bTRUNCATE\b/i);
-    // yorumda bir SONRAKI surumde dusurulecegi belirtilir (kod artik kullanmaz; geri alma uyumlulugu)
+    // yorumda bir SONRAKI surumde dusurulecegi belirtilir (kod artik kullanmaz; geri alma uyumlulugu): o surum 078'dir
     assert.match(MIGRATION, /gross_area_m2 \/ net_area_m2 sutunlari bu surumde DUSURULMEZ/);
     assert.match(MIGRATION, /SONRAKI surumde ayri bir migration/);
   });
@@ -168,7 +174,7 @@ describe('migration 077: butunluk sertlestirme', () => {
     assert.match(DB_SOURCE, /ADD COLUMN IF NOT EXISTS approval_status TEXT NOT NULL DEFAULT 'approved'/);
     assert.match(DB_SOURCE, /ADD CONSTRAINT sites_approval_status_check\s+CHECK \(approval_status IN \('pending', 'approved', 'rejected'\)\)/);
     // basvuru sutun adi semadan dogrulanir
-    assert.match(listMigrations(DEFAULT_MIGRATIONS_DIR).find((m) => m.number === 33).sql, /CREATE TABLE IF NOT EXISTS site_applications \([\s\S]*?\n  site_name TEXT NOT NULL,/);
+    assert.match(listMigrations(DEFAULT_MIGRATIONS_DIR).find((m) => m.number === 33).sql, /CREATE TABLE IF NOT EXISTS site_applications \([\s\S]*?\n {2}site_name TEXT NOT NULL,/);
   });
 
   it('FK: user_oauth_identities (076) ve web_push_subscriptions (063) -> users(user_code) ON DELETE CASCADE; yetimler FK\'den ONCE silinir; users once kilitlenir', () => {
@@ -261,6 +267,97 @@ describe('ensureIntegritySchema (katalog kontrollu, lock_timeout, yeniden deneme
   });
 });
 
+describe('migration 078: daire m2 sutunlarinin kalici dusurulmesi', () => {
+  const dropSql = () => AREA_DROP_STEPS[0].sql;
+
+  it('078 var, 78. siradadir (ardisik, 031 SONRASI) ve calistirici icin guvenli (ust duzey BEGIN/COMMIT, CONCURRENTLY yok)', () => {
+    const list = listMigrations(DEFAULT_MIGRATIONS_DIR);
+    const entry = list.find((m) => m.number === 78);
+    assert.ok(entry, '078 numarali migration yok');
+    assert.equal(entry.file, '078_apartment_area_columns_drop.sql');
+    assert.equal(list[77], entry);
+    assert.ok(list.find((m) => m.number === 31).sql.includes('ADD COLUMN IF NOT EXISTS gross_area_m2'), '031 sutunlari tarihsel olarak ekler (degistirilmez)');
+    assert.deepEqual(findUnsafeStatements(MIGRATION_078), []);
+  });
+
+  it('govde AREA_DROP_STEPS adimlarinin birlesimidir (db.js ensure yolu ile AYNI ifade)', () => {
+    assert.ok(norm(MIGRATION_078).includes(norm(areaDropMigrationBody())));
+    assert.equal(AREA_DROP_STEPS.length, 1);
+    assert.deepEqual([...AREA_DROP_COLUMNS], ['apartments.gross_area_m2', 'apartments.net_area_m2']);
+  });
+
+  it('YALNIZ iki m2 sutununu dusurur: tek ALTER, DROP COLUMN IF EXISTS, katalog (pg_attribute) kontrollu DO blogu; baska DROP / TRUNCATE / veri degisikligi yok', () => {
+    const sql = norm(MIGRATION_078);
+    assert.deepEqual(sql.match(/\bDROP\s+\w+(\s+IF EXISTS)?\s+\w+/gi), ['DROP COLUMN IF EXISTS gross_area_m2', 'DROP COLUMN IF EXISTS net_area_m2']);
+    assert.equal((sql.match(/\bALTER TABLE\b/g) ?? []).length, 1, 'iki sutun TEK ifadede (tek kilit, atomik)');
+    assert.match(sql, /ALTER TABLE apartments DROP COLUMN IF EXISTS gross_area_m2, DROP COLUMN IF EXISTS net_area_m2;/);
+    assert.match(sql, /IF EXISTS \( SELECT 1 FROM pg_attribute WHERE attrelid = to_regclass\('public\.apartments'\) AND attnum > 0 AND NOT attisdropped AND attname IN \('gross_area_m2', 'net_area_m2'\) \) THEN ALTER TABLE/);
+    assert.doesNotMatch(sql, /\b(TRUNCATE|DELETE\s+FROM|UPDATE\s+\w+\s+SET|INSERT\s+INTO|CASCADE)\b/i);
+    assert.doesNotMatch(sql, /DROP\s+(TABLE|CONSTRAINT|INDEX)/i);
+  });
+
+  it('lock_timeout: hic ayarli degilse islem-yerel 5 sn konur; ayarli olan (migrate.js 15 sn, ensure 2 sn) KISALTILMAZ / UZATILMAZ; ALTER\'den ONCE', () => {
+    const sql = norm(dropSql());
+    assert.match(sql, /IF current_setting\('lock_timeout'\) = '0' THEN PERFORM set_config\('lock_timeout', '5s', true\); END IF;/);
+    assert.ok(sql.indexOf("set_config('lock_timeout'") < sql.indexOf('ALTER TABLE'));
+    assert.doesNotMatch(sql, /SET LOCAL/i, 'SET LOCAL ensure yolunda (islem disi) uyari verir; islem-yerel set_config kullanilir');
+  });
+
+  it('db.js: m2 sutunlarini artik EKLEMEZ; 031 blogu geri kalan sutunlari ekler; dusurme dev blok DISINDA ensureIntegritySchema\'dadir', () => {
+    assert.doesNotMatch(DB_SOURCE, /(?:gross|net)_area_m2/);
+    assert.match(DB_SOURCE, /ALTER TABLE apartments ADD COLUMN IF NOT EXISTS floor INTEGER;/);
+    assert.match(DB_SOURCE, /ALTER TABLE apartments ADD COLUMN IF NOT EXISTS land_share_numerator INTEGER;/);
+    const source = read('src/modules/integrity_schema.js');
+    assert.match(source, /export const AREA_DROP_STEPS/);
+  });
+
+  it('ensure: sutunlar yoksa hicbir ifade (ve lock_timeout) gonderilmez; tek katalog sorgusu', async () => {
+    const client = mockClient(ALL_NAMES);
+    await ensureIntegritySchema(client);
+    assert.deepEqual(client.sent, []);
+  });
+
+  it('ensure: iki sutun da VARSA yalniz dusurme adimi calisir (tek ifade), SET lock_timeout 2s ... RESET', async () => {
+    const client = mockClient([...ALL_NAMES, ...AREA_DROP_COLUMNS]);
+    await ensureIntegritySchema(client);
+    assert.equal(client.sent[0], "SET lock_timeout = '2s'");
+    assert.equal(client.sent.at(-1), 'RESET lock_timeout');
+    assert.deepEqual(ddl(client), [dropSql()]);
+  });
+
+  it('ensure: yalniz bir sutun kalmissa (yarim durum) yine dusurulur', async () => {
+    for (const only of AREA_DROP_COLUMNS) {
+      const client = mockClient([...ALL_NAMES, only]);
+      await ensureIntegritySchema(client);
+      assert.deepEqual(ddl(client), [dropSql()], only);
+    }
+  });
+
+  it('ensure: dusurme hatasi / kilit zaman asimi acilisi DURDURMAZ (loglanir); 40P01 / 55P03\'te yeniden dener', async () => {
+    const locked = Object.assign(new Error('lock'), { code: '55P03' });
+    const deadlock = Object.assign(new Error('deadlock'), { code: '40P01' });
+    const retry = mockClient([...ALL_NAMES, ...AREA_DROP_COLUMNS], { failures: { 'DROP COLUMN IF EXISTS': [deadlock, locked] } });
+    await ensureIntegritySchema(retry);
+    assert.equal(ddl(retry).length, 3, '2 hata + 1 basari');
+
+    const stuck = mockClient([...ALL_NAMES, ...AREA_DROP_COLUMNS], { failures: { 'DROP COLUMN IF EXISTS': Array.from({ length: 12 }, () => locked) } });
+    const logged = await captureErrors(() => ensureIntegritySchema(stuck));
+    assert.equal(ddl(stuck).length, 6);
+    assert.equal(stuck.sent.at(-1), 'RESET lock_timeout');
+    assert.ok(logged.some((l) => /UYARI 078 drop_column apartments\.area_columns dusurulemedi/.test(l)), logged.join('\n'));
+
+    const fatal = mockClient([...ALL_NAMES, ...AREA_DROP_COLUMNS], { failures: { 'DROP COLUMN IF EXISTS': [Object.assign(new Error('permission denied'), { code: '42501' })] } });
+    const loggedFatal = await captureErrors(() => ensureIntegritySchema(fatal));
+    assert.ok(loggedFatal.some((l) => /UYARI 078 drop_column .* 42501/.test(l)), loggedFatal.join('\n'));
+  });
+
+  it('077 adimlari ve 078 birlikte eksikse: once 077 adimlari (sabit sira), en son dusurme', async () => {
+    const client = mockClient([...AREA_DROP_COLUMNS]);
+    await captureErrors(() => ensureIntegritySchema(client));
+    assert.deepEqual(ddl(client), [...INTEGRITY_STEPS.map((s) => s.sql), dropSql()]);
+  });
+});
+
 describe('db.js baglantisi (kaynak koruma)', () => {
   it('ensureIntegritySchema dev blok DISINDA: ensureOAuthSchema (076) SONRASI, people_v1 aktarimindan ONCE; yalniz bir kez', () => {
     assert.equal(DB_SOURCE.split('await ensureIntegritySchema(client);').length - 1, 1);
@@ -281,11 +378,11 @@ describe('db.js baglantisi (kaynak koruma)', () => {
     assert.doesNotMatch(DB_SOURCE, /client\.query\('ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password/);
   });
 
-  it('apartments m2 sutunlari acilista DUSURULMEZ (031 ekleyici DDL\'i; deploy geri almasi eski kodu cokertirmez)', () => {
-    assert.doesNotMatch(DB_SOURCE, /DROP\s+COLUMN[^;]*(gross_area_m2|net_area_m2)/i);
-    assert.match(DB_SOURCE, /ALTER TABLE apartments ADD COLUMN IF NOT EXISTS gross_area_m2 NUMERIC\(8,2\);/);
-    assert.match(DB_SOURCE, /ALTER TABLE apartments ADD COLUMN IF NOT EXISTS net_area_m2 NUMERIC\(8,2\);/);
-    assert.doesNotMatch(DB_SOURCE, /DROP\s+COLUMN\s+IF\s+EXISTS\s+\w*area/i);
+  it('apartments m2 sutunlari: db.js artik EKLEMEZ ve dev blokta DUSURMEZ (dusurme dev blok DISINDA, katalog kontrollu ensureIntegritySchema adimidir, 078)', () => {
+    assert.doesNotMatch(DB_SOURCE, /(?:gross|net)_area_m2/);
+    assert.doesNotMatch(DB_SOURCE, /DROP\s+COLUMN/i);
+    assert.doesNotMatch(DB_SOURCE, /ADD COLUMN IF NOT EXISTS (?:gross|net)_area/);
+    assert.equal(DB_SOURCE.split('await ensureIntegritySchema(client);').length - 1, 1);
   });
 
   it('modul db.js\'i ICE AKTARMAZ (dongu yok) ve hicbir modulu ice aktarmaz', () => {

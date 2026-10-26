@@ -4,8 +4,8 @@ Bu belge sunucu (`server/`) ve uygulama (`lib/`) için BAĞLAYICIDIR. Öncül be
 
 ## Kapsam
 
-**Faz 2b (bu belge):** (a) Excel (.xlsx) ve CSV ile toplu yükleme: **daireler** (var olan dairelerin kat/tip/m²/arsa payı/sorumlu taraf alanlarını doldurma), **kişiler** (+ daire ilişkisi + araç plakası), **yalnız araçlar**; site kurulumunun hemen ardından ve sonradan; (b) dışa aktarma: kişiler, daireler, araçlar (CSV ve XLSX); (c) ortak **dışa aktarma zarfı** (`ExportEnvelope`) ve istemci dışa aktarma altyapısı. Faz 4b finans raporları (F4.11) aynı zarfı ve aynı "Dışa Aktar" arayüzünü kullanır; arayüz burada tanımlıdır.
-**Kapsam dışı (bilinçli):** daire/blok OLUŞTURMA, silme, yeniden adlandırma (yapı, mevcut sayı tabanlı "Site Yapısı" akışında kalır; Karar 3); hesap açma, davet e-postası, kapı erişimi verme; var olan kişi alanlarını ezen "güncelleme modu"; toplu geri alma (Karar 9); .xls/.ods/.xlsm/.xlsb; tek istekte çok sayfa; PDF; finans raporu dışa aktarma (4b).
+**Faz 2b (bu belge):** (a) Excel (.xlsx) ve CSV ile toplu yükleme: **daireler** (var olan dairelerin kat/tip/arsa payı/sorumlu taraf alanlarını doldurma; m² (brüt/net) alanları 2026-10-25'te sistemden kaldırıldı), **kişiler** (+ daire ilişkisi + araç plakası), **yalnız araçlar**; site kurulumunun hemen ardından ve sonradan; (b) dışa aktarma: kişiler, daireler, araçlar (CSV ve XLSX); (c) ortak **dışa aktarma zarfı** (`ExportEnvelope`) ve istemci dışa aktarma altyapısı. Faz 4b finans raporları (F4.11) aynı zarfı ve aynı "Dışa Aktar" arayüzünü kullanır; arayüz burada tanımlıdır.
+**Kapsam dışı (bilinçli):** daire/blok OLUŞTURMA, silme, yeniden adlandırma (yapı, mevcut sayı tabanlı "Site Yapısı" akışında kalır; Karar 3); davet e-postası, kapı erişimi verme (hesap açma yalnız `people` ve `all_in_one` türlerinde ve yalnız bu yüklemede daire ilişkisi eklenen kişiler için vardır, bkz. son bölüm «Hesap açma»; o kişilere dairenin üyeliği dışında kapıya özel bir yetki yazılmaz); var olan kişi alanlarını ezen "güncelleme modu"; toplu geri alma (Karar 9); .xls/.ods/.xlsm/.xlsb; tek istekte çok sayfa; PDF; finans raporu dışa aktarma (4b).
 
 ## Mimari karar: dosya nerede ayrıştırılır?
 
@@ -15,7 +15,7 @@ Bu belge sunucu (`server/`) ve uygulama (`lib/`) için BAĞLAYICIDIR. Öncül be
 | B. Sunucu yalnız CSV ayrıştırır (JSON içinde metin) | zip yok | XLSX yok (Excel kullanıcısı için sürtünme); Windows-1254 kodlama sunucuya ham bayt taşımayı gerektirir; ayrıştırıcı yine sunucuda | REDDEDİLDİ |
 | **C. İstemci ayrıştırır, sunucuya yalnız JSON satırları gider** | sunucuya yeni bağımlılık YOK; ham dosya sunucuya hiç girmez (KVKK); saldırı yüzeyi yöneticinin kendi cihazı ve kendi dosyasıdır; sunucu aynı veriyi `POST people` ile zaten alabilir | CSV+XLSX okuyucu istemcide yazılıp sınanmalı; sunucu her hücreyi yeniden doğrulamalı | **SEÇİLDİ** |
 
-Güvenlik varsayımı: sunucu istemciden gelen HER hücreyi güvenilmez sayar; istemci ayrıştırması yalnız kolaylıktır. Toplu uç, tek tek uçlardan (`POST people`, `POST vehicles`, `PATCH apartments`) FAZLA yetki vermez: hesap, davet e-postası, kapı/uygulama erişimi, rol ve silme yoktur.
+Güvenlik varsayımı: sunucu istemciden gelen HER hücreyi güvenilmez sayar; istemci ayrıştırması yalnız kolaylıktır. Toplu uç, tek tek uçlardan (`POST people`, `POST vehicles`, `PATCH apartments`) FAZLA yetki vermez: hesap, davet e-postası, kapı/uygulama erişimi, rol ve silme yoktur. (Tek istisna: `people` ve `all_in_one` türlerinde commit'in son aşamasında, bu yüklemede daire ilişkisi eklenen kişiler için hesap ve daire üyeliği açılır; bkz. son bölüm «Hesap açma». `apartments`, `vehicles` ve `opening_balances` hâlâ hiçbir hesap/erişim yazmaz.)
 
 ## İlkeler
 
@@ -46,20 +46,22 @@ Güvenlik varsayımı: sunucu istemciden gelen HER hücreyi güvenilmez sayar; i
 | `daire_no` ("Daire No") | evet | "5", "05", "Daire 5", "D5", "No: 5" → sitedeki `unit_label` ("Daire 5") ile eşleşir (mevcut etiketler hep "Daire N") |
 | `kat` | hayır | tamsayı −20..500; "zemin"/"giriş"=0, "bodrum"=−1, "3. kat"=3 |
 | `tip` | hayır | ≤ 40 karakter (`category`) |
-| `brut_m2`, `net_m2` | hayır | sayı kuralı (aşağıda) |
-| `arsa_payi_pay`, `arsa_payi_payda` | hayır | tamsayılar; payda 1..10⁹, 0 ≤ pay ≤ payda; **iki ayrı sütun** (tek hücrede "35/1000" Excel tarafından tarihe çevrilir) |
+| `brut_m2`, `net_m2` (KALDIRILDI) | — | Şablonda, spec'te ve dışa aktarmada YOK. Eski bir dosyada bu sütunlar dolu gelirse istek reddedilmez; değerler yok sayılır ve dosya başına BİR kez `AREA_COLUMN_IGNORED` uyarısı verilir |
+| `arsa_payi_pay`, `arsa_payi_payda` | hayır | tamsayılar; payda 1..10⁹, 0 ≤ pay ≤ payda; **iki ayrı sütun** (tek hücrede "35/1000" Excel tarafından tarihe çevrilir). İndirilen şablonda gösterilmez (istemcide `kExcludedTemplateKeys`), ancak dosyada bu sütunlar varsa okunur |
 | `sorumlu` ("Borç Sorumlusu") | hayır | Malik / Kiracı / İkisi → `owner|tenant|both` |
 
 | `people` | zorunlu | kural |
 |---|---|---|
 | `ad_soyad` | evet | 2–100 karakter (`normalizePersonName`) |
+| `kullanici_adi` ("Kullanıcı Adı") | hayır | ≤ 50 karakter; boşsa ad-soyaddan üretilir, çakışmada `_2`, `_3` … eklenir (bkz. son bölüm «Hesap açma») |
 | `telefon` | hayır | `normalizePersonPhone`; Excel'in baştaki sıfırı attığı 10 haneli numara da kabul |
 | `e_posta` | hayır | `normalizePersonEmail`; `@ahbu.local` `EMAIL_INTERNAL` |
+| `sifre` ("Başlangıç Şifresi") | hayır | ≤ 30 karakter; boşsa `1234` (şablonda her satırda `1234` hazır gelir); ilk girişte değiştirilmesi zorunludur |
 | `blok`, `daire_no` | birlikte | ikisi de dolu ya da ikisi de boş (`APARTMENT_REQUIRED`) |
 | `iliski` | hayır | malik/mal sahibi/ev sahibi → owner; kiracı/kiraci → tenant; aile/aile üyesi/eş/çocuk → family_member; sakin/oturan/boş → resident. Bilinmeyen → `RELATION_INVALID`. Daire yokken yok sayılır (uyarı yok) |
 | `giris_tarihi` | hayır | GG.AA.YYYY, G.A.YYYY, GG/AA/YYYY, GG-AA-YYYY, YYYY-AA-GG; 2 haneli yıl reddedilir; 1900..bugün+366 gün (gelecek tarih `FUTURE_DATE` uyarı; ötesi `DATE_RANGE`). Boşsa bugün (İstanbul) |
 | `plaka` | hayır | hücrede en çok 5 plaka; ayırıcı `,` `;` `/` `\|` satır sonu; `normalizePlate` |
-| `not` | hayır | ≤ 500 karakter |
+| `not` | hayır | ≤ 500 karakter; indirilen şablonda gösterilmez, dosyada varsa okunur |
 
 | `vehicles` | zorunlu | kural |
 |---|---|---|
@@ -71,13 +73,13 @@ Güvenlik varsayımı: sunucu istemciden gelen HER hücreyi güvenilmez sayar; i
 
 1. **Metin:** NFC; kontrol karakterleri ve görünmez/çift yönlü kontrol karakterleri (U+200B–200F, U+202A–202E, U+2066–2069, U+FEFF) silinir; NBSP boşluğa, ardışık boşluklar tekile; kırpılır; boş = yok. Hücre > 600 karakter `TOO_LONG` satır hatasıdır (alanın kendi sınırı daha küçükse o geçerlidir: `ad_soyad` 100, `tip` 40, `not` 500; ileti «… çok uzun (en çok N karakter).»). Bunun ÖNÜNDE sert bir sınır vardır: gövdede tek bir metin hücresi > 5000 karakter (Unicode kod noktası) ise TÜM istek 400 `INVALID_BODY` ile reddedilir («rows[i].cells.<anahtar> çok uzun.»; `CELL_HARD_LIMIT`). Bu yüzden istemci okuyucusu hücre metnini 601 karakterde keser: fazlası isteği düşürmez, o satırda `TOO_LONG` hatası olur.
 2. **Formül önekli hücre (içe aktarma):** kırpılmış metin `=`, `@`, TAB ya da CR ile başlıyorsa HER metin alanında `FORMULA_LIKE` (satır hatası); `+`/`-` ile başlıyorsa `ad_soyad`, `e_posta`, `blok`, `tip`, `plaka`'da hata; `not` ile sayı/telefon/tarih alanlarında izinli (kendi ayrıştırıcılarından geçer; `not` her dışa aktarmada kaçışlanır, bkz. Dışa aktarma). Sessiz "temizleme" YOK: kullanıcı neyin reddedildiğini görür.
-3. **Sayı (m²):** JSON number olduğu gibi. Metinde: boşluk/NBSP silinir, sondaki `m2`/`m²`/`㎡` atılır; hem `.` hem `,` varsa SONUNCUSU ondalık, öbürü binlik (3'lü gruplar şart); yalnız `,` → ondalık; yalnız `.`: ondalık (`125.5`) ya da tam 3 rakamlı gruplarla binlik (`1.250` → 1250); aksi `NUMBER_INVALID`. 2'den fazla ondalık yuvarlanır (`ROUNDED` uyarı). 0 < değer ≤ 999999.99; < 10 ya da > 2000 m² `AREA_UNUSUAL` uyarı; net > brüt `NET_GT_GROSS` uyarı.
+3. **Sayı (m²) — KALDIRILDI (2026-10-25):** hiçbir sütun m² okumaz; m² ayrıştırıcısı (`readArea`) kaynaktan çıkarıldı, `AREA_UNUSUAL` ve `NET_GT_GROSS` uyarıları üretilmez. Eski şablondan kalan dolu `brut_m2`/`net_m2` hücreleri yok sayılır (`AREA_COLUMN_IGNORED`, dosya başına bir uyarı). Eski kural (tarihçe): JSON number olduğu gibi; metinde boşluk/NBSP silinir, sondaki `m2`/`m²`/`㎡` atılır; hem `.` hem `,` varsa SONUNCUSU ondalık, öbürü binlik; yalnız `,` → ondalık; yalnız `.`: ondalık ya da tam 3 rakamlı gruplarla binlik; 2'den fazla ondalık yuvarlanır.
 4. **Arsa payı:** `mergeLandShare` kuralı (yalnız biri verilirse DB'deki diğeriyle birleştirilip doğrulanır). Önizlemede `checks.land_share` (yalnız `apartments`; diğer türlerde `null`): dosyada arsa payı hücresi olan en az bir satır varsa VE sitenin TÜM daireleri (dosyadaki değişiklikler uygulanmış hâliyle) tek paydada ve hepsinin payı doluysa `{ "sum": 987, "denominator": 1000, "complete": false, "message": "987/1000: eksik olabilir" }` döner. `message` sunucuda üretilir: tam eşitlikte `"1000/1000 ✓"`, `sum < denominator` iken `"S/D: eksik olabilir"`, `sum > denominator` iken `"S/D: fazla olabilir"` (S = pay toplamı, D = payda). Paydalar farklıysa, bir dairenin payı boşsa ya da dosyada arsa payı yoksa `land_share: null` (kontrol yapılmaz). Engellemez, yalnız bilgilendirir; istemci `message`'ı olduğu gibi gösterir (yoksa `sum`/`denominator`/`complete` alanlarından aynı metni kurar).
 5. **Daire etiketi eşleşmesi** `foldText` ile; bulunamayan blok için yanıt sitedeki blok adlarını sayar; bulunamayan daire için "Daire sayısını Site Yapısı'ndan artırın" ipucu verir.
 
 ## Eşleşme / yinelenen kayıt politikası
 
-**Daireler:** anahtar (blok, daire no). Dosyada aynı daire ikinci kez → ikinci satır `DUPLICATE_IN_FILE` hatası (ilk satır geçerli). Boş hücre HİÇBİR ZAMAN değeri silmez. Dolu hücre: DB'de NULL ise yazılır; DB'deki değerle aynıysa "değişiklik yok"; farklıysa `allow_overwrite:false` iken korunur (`VALUE_KEPT` uyarı), `true` iken yazılır (`overwritten_cells` sayısı onayda gösterilir). Mali kaydı (`ledger_entries`) olan dairede `m²/arsa payı/tip/sorumlu` değişirse `FINANCE_RECORDS` uyarısı (geçmiş defter satırları anlık görüntüdür, değişmez; yalnız sonraki borçlandırma etkilenir).
+**Daireler:** anahtar (blok, daire no). Dosyada aynı daire ikinci kez → ikinci satır `DUPLICATE_IN_FILE` hatası (ilk satır geçerli). Boş hücre HİÇBİR ZAMAN değeri silmez. Dolu hücre: DB'de NULL ise yazılır; DB'deki değerle aynıysa "değişiklik yok"; farklıysa `allow_overwrite:false` iken korunur (`VALUE_KEPT` uyarı), `true` iken yazılır (`overwritten_cells` sayısı onayda gösterilir). Mali kaydı (`ledger_entries`) olan dairede `arsa payı/tip/sorumlu` değişirse `FINANCE_RECORDS` uyarısı (geçmiş defter satırları anlık görüntüdür, değişmez; yalnız sonraki borçlandırma etkilenir).
 
 **Kişiler** (satır → kişi), sırayla:
 1. `e_posta` varsa: sitenin kişi kayıtlarında e-posta eşleşmesi (hesapsızın e-postası ya da hesaplı kişinin hesap/iletişim e-postası; `findPersonByEmail` ile AYNI kural; başka sitenin kaydı görünmez, hesap var/yok bilgisi sızmaz). Pasif kişi de bulunur.
@@ -91,7 +93,7 @@ Eşleşen kişiye yazma kuralları:
 - **Hesaplı kişi** (`has_account`): ad/telefon/e-posta/not'a dokunulmaz; o dairede mevcut ilişki `resident` ise dosyadaki açık ilişkiye YÜKSELTİLİR; plaka eklenir; bu dairede ilişkisi yoksa YENİ ilişki eklenmez (`ACCOUNT_NEW_APARTMENT` uyarı: hesaplı kişiye yanlış bir daire eklemek finansını ve kayıtlarını o kişiye açar; kişi kartından elle eklenir).
 - **Hesapsız aktif kişi:** boş telefon/e-posta/not dosyadan doldurulur, doluya dokunulmaz; ilişki yoksa eklenir; `resident` → açık ilişkiye yükseltilir; açık ilişki farklıysa değişmez (`RELATION_DIFFERS` uyarı); plaka eklenir.
 - **Pasif kişi** (yalnız e-posta ile bulunur): yeniden etkinleştirilir, ad ve (varsa) telefon dosyadan yazılır, geçmiş korunur (`createPerson` yeniden kullanım kuralı; `REACTIVATE_PERSON` uyarı).
-- **Yeni kişi:** hesapsız oluşturulur (`created_by` = yönetici); hesap OLUŞTURULMAZ, e-posta GÖNDERİLMEZ, `apartment_memberships`/`site_memberships` YAZILMAZ. Aynı e-postalı kullanıcı sonradan siteye katılırsa mevcut `syncSitePeople` LINK adımı onu bağlar (bu yüzden commit, eşleşmeden ÖNCE `runSyncSteps` çalıştırır; aksi halde hesaplı kişi için ikinci, hayalet kayıt doğardı).
+- **Yeni kişi:** hesapsız oluşturulur (`created_by` = yönetici); bu adımda hesap OLUŞTURULMAZ, e-posta GÖNDERİLMEZ, `apartment_memberships`/`site_memberships` YAZILMAZ (`people` ve `all_in_one` türlerinde hesap ve üyelik, commit'in AYRI bir son aşamasında açılır; bkz. son bölüm «Hesap açma». E-posta o aşamada da gönderilmez). Aynı e-postalı kullanıcı sonradan siteye katılırsa mevcut `syncSitePeople` LINK adımı onu bağlar (bu yüzden commit, eşleşmeden ÖNCE `runSyncSteps` çalıştırır; aksi halde hesaplı kişi için ikinci, hayalet kayıt doğardı).
 
 **İlişki kuralı:** bir dairede en çok bir güncel malik ve bir kiracı (Faz 2a). Dosyada ya da DB'de ikinci malik/kiracı → `RELATION_TAKEN` satır hatası ("Eş/hissedar için «aile» yazın"). Aynı kişi+daire için dosyada çelişen ilişki → ikinci satır `CONFLICTING_ROWS`; aynı ilişki tekrarı → `DUPLICATE_IN_FILE` uyarısıyla birleştirilir (plakalar birleşir). Aynı ad+daire, farklı ilişki, iletişim bilgisi yok → baba/oğul ayrımı yapılamaz; hata mesajı "farklı kişiyseniz e-posta ya da telefon ekleyin" der.
 
@@ -136,7 +138,7 @@ Gövde sınırı: `preview` ve `commit` POST uçları için `express.json({ limi
 3. İlgili daireler id sırasıyla kilitlenir (`apartments`: `FOR NO KEY UPDATE`; `people/vehicles`: `FOR KEY SHARE`), sonra işlemi yapan `users` satırı `FOR KEY SHARE`.
 4. `people/vehicles`: `runSyncSteps` (üyelikleri CRM'e yansıtır). Sonra DB anlık görüntüsü yüklenir (daireler, aktif kişiler, güncel ilişkiler, aktif araçlar: sabit sayıda sorgu), plan yeniden hesaplanır, `preview_hash` karşılaştırılır → fark varsa 409 `PREVIEW_STALE` (+ güncel `totals`, `plan`, `preview_hash`). `strict:true` ve `error` > 0 ise 409 `IMPORT_HAS_ERRORS` (+ sayılar).
 5. Yazma, **küme tabanlı** (`unnest` dizileriyle), 1000'lik parçalarla: kişi kimlikleri `nextval` ile önceden ayrılır (RETURNING sırasına güvenilmez) → kişi INSERT/UPDATE → ilişki INSERT (`origin='manual'`) / UPDATE → araç INSERT → toplu audit INSERT (`unnest`, SAVEPOINT'siz) → `bulk_import_runs` satırı. Beklenmeyen 23505 (yarış) → ROLLBACK + 409 `PREVIEW_STALE`; 40P01 → tek yeniden deneme.
-6. `COMMIT`. Erişim anahtarı döndürme/rotasyon GEREKMEZ (hiçbir erişim yetkisi değişmez).
+6. `COMMIT`. Erişim anahtarı döndürme/rotasyon GEREKMEZ (hiçbir erişim KAPANMAZ; `people` ve `all_in_one` türlerinde yalnız yeni hesaplara daire üyeliği VERİLİR, bkz. son bölüm «Hesap açma»).
 
 **Ölçek hedefi** (5000 satır, 5000 daireli site, ~15.000 kişi; gerçek-PG QA'da ölçülür): önizleme ≤ 3 sn, commit ≤ 6 sn, commit başına ≤ 40 sorgu (satır sayısından bağımsız), yanıt ≤ 1 MB, sunucu bellek sıçraması ≤ 100 MB, `EXPLAIN`'de büyük tablolarda seq scan yok (mevcut indeksler: `idx_apartment_residencies_apartment`, `uq_vehicles_plate`, `idx_site_people_site`, `uq_site_people_email`). Daha büyük dosya parçalara bölünür (eşleşme kuralları parçalı yüklemeyi güvenli yapar). Commit süresince `people_sync` kilidi tutulur: aynı sitenin diğer CRM yazmaları bekler (≤ 8 sn sonra `SITE_BUSY`), okuma uçları etkilenmez (eşitleme atlanır).
 
@@ -156,12 +158,12 @@ Tek `import.committed` (`target_type:'import'`, `target_id:<run_id>`, `site_code
 ```json
 { "kind": "people", "spec_version": 1, "generated_at": "ISO", "filename_base": "kisiler_gul-sitesi_20261016",
   "columns": [ { "key": "ad_soyad", "label": "Ad Soyad", "type": "text" }, { "key": "giris_tarihi", "label": "Giriş Tarihi", "type": "date" },
-               { "key": "brut_m2", "label": "Brüt m²", "type": "number", "scale": 2 } ],
+               { "key": "sakin_sayisi", "label": "Sakin Sayısı", "type": "number", "scale": 0 } ],
   "rows": [ [ "Ahmet Yılmaz", "0 (555) 123 45 67", … ] ], "row_count": 318 }
 ```
 - Sütun tipleri: `text`, `number` (JSON sayı, `scale` ondalık), `date` (ISO `YYYY-MM-DD`), **`money`** (TAMSAYI KURUŞ; çıktıda yalnız tamsayı/metin aritmetiğiyle 2 ondalık, kayan nokta YOK; Faz 4b için). Hücre ham değerdir (sunucu `'` öneki eklemez); kaçış istemci üreticisinin işidir (tek geçiş noktası).
 - `people`: bir satır = bir (kişi, güncel ilişki); ilişkisi olmayan kişi tek satır. Sütunlar içe aktarma şablonuyla AYNI başlıklar (gidiş-dönüş mümkün) + salt okunur `Hesap` (Var/Yok), `Durum` (Aktif/Pasif). `telefon` `0 (555) 123 45 67` biçiminde (baştaki 0 ve parantez/boşluk: Excel sayıya çevirip sıfırı atmaz; içe aktarma geri okur). `plaka`: kişinin tüm aktif plakaları `, ` ile. `not` yalnız `include_notes=true` iken (varsayılan false).
-- `apartments`: `Blok`, `Daire No`, `Kat`, `Tip`, `Brüt m²`, `Net m²`, `Arsa Payı (Pay)`, `Arsa Payı (Payda)`, `Borç Sorumlusu` + salt okunur `Malik`, `Kiracı`, `Sakin Sayısı`. `vehicles`: `Plaka`, `Ad Soyad`, `Blok`, `Daire No`, `İlişki`, `Not` (opsiyonel).
+- `apartments`: `Blok`, `Daire No`, `Kat`, `Tip`, `Arsa Payı (Pay)`, `Arsa Payı (Payda)`, `Borç Sorumlusu` + salt okunur `Malik`, `Kiracı`, `Sakin Sayısı`. `vehicles`: `Plaka`, `Ad Soyad`, `Blok`, `Daire No`, `İlişki`, `Not` (opsiyonel).
 - Üst sınır 20.000 satır; aşılırsa 422 `EXPORT_TOO_LARGE` ("Süzgeç kullanarak daraltın"). `daire_no` etiketi "Daire N" ise yalnız N yazılır.
 - **Faz 4b:** finans raporları aynı `ExportEnvelope` ile yeni `kind`'lar ekler (kendi modül/yetki kuralıyla; `MODULE_DISABLED` korunur); Flutter tarafı değişmez.
 
@@ -186,7 +188,7 @@ Modül: `people` çekirdektir, `MODULE_DISABLED` yok. IDOR: her sorgu `site_code
 ## Hata kodları
 
 Uç düzeyi (`{ error, code }`): 400 `INVALID_BODY` (alan adıyla), 400 `IMPORT_EMPTY`, 400 `IMPORT_TOO_MANY_ROWS` (> 5000), 400 `ACK_REQUIRED`, 404 `IMPORT_KIND_NOT_FOUND`, 409 `IMPORT_SPEC_MISMATCH`, 409 `PREVIEW_STALE` (+ yeni `totals/plan/preview_hash`), 409 `IMPORT_HAS_ERRORS` (`strict`), 409 `IDEMPOTENCY_CONFLICT`, 409 `IMPORT_IN_PROGRESS`, 409 `SITE_BUSY`, 413 `PAYLOAD_TOO_LARGE` (nginx keserse gövdesiz gelebilir), 422 `EXPORT_TOO_LARGE`, 429 hız sınırı (mevcut gövde), 503 `IMPORT_DISABLED`, 403 `FORBIDDEN_ROLE`/`FORBIDDEN_SITE`.
-Satır düzeyi (`issues[].code`): **error** — `REQUIRED`, `TOO_LONG`, `FORMULA_LIKE`, `NAME_INVALID`, `EMAIL_INVALID`, `EMAIL_INTERNAL`, `PHONE_INVALID`, `DATE_INVALID`, `DATE_RANGE`, `NUMBER_INVALID`, `NUMBER_RANGE`, `FLOOR_INVALID`, `LAND_SHARE_INVALID`, `RELATION_INVALID`, `RESPONSIBLE_INVALID`, `NO_IDENTIFIER`, `APARTMENT_REQUIRED`, `BLOCK_NOT_FOUND`, `BLOCK_AMBIGUOUS`, `APARTMENT_NOT_FOUND`, `DUPLICATE_IN_FILE`, `CONFLICTING_ROWS`, `RELATION_TAKEN`, `PERSON_AMBIGUOUS`, `PERSON_NOT_FOUND`, `TOO_MANY_PLATES`, `PLATE_REQUIRED`; **warning** — `PLATE_INVALID`, `PLATE_EXISTS`, `PLATE_DUP_IN_FILE`, `ACCOUNT_NEW_APARTMENT`, `RELATION_DIFFERS`, `REACTIVATE_PERSON`, `VALUE_KEPT`, `FINANCE_RECORDS`, `ROUNDED`, `AREA_UNUSUAL`, `NET_GT_GROSS`, `FUTURE_DATE`, `NO_VALUES`. İleti: Türkçe, alan etiketiyle, < 140 karakter; hücre değeri en çok 40 karakter yankılanır; teknik ifade yok.
+Satır düzeyi (`issues[].code`): **error** — `REQUIRED`, `TOO_LONG`, `FORMULA_LIKE`, `NAME_INVALID`, `EMAIL_INVALID`, `EMAIL_INTERNAL`, `PHONE_INVALID`, `DATE_INVALID`, `DATE_RANGE`, `FLOOR_INVALID`, `LAND_SHARE_INVALID`, `RELATION_INVALID`, `RESPONSIBLE_INVALID`, `NO_IDENTIFIER`, `APARTMENT_REQUIRED`, `BLOCK_NOT_FOUND`, `BLOCK_AMBIGUOUS`, `APARTMENT_NOT_FOUND`, `DUPLICATE_IN_FILE`, `CONFLICTING_ROWS`, `RELATION_TAKEN`, `PERSON_AMBIGUOUS`, `PERSON_NOT_FOUND`, `TOO_MANY_PLATES`, `PLATE_REQUIRED`; **warning** — `PLATE_INVALID`, `PLATE_EXISTS`, `PLATE_DUP_IN_FILE`, `ACCOUNT_NEW_APARTMENT`, `RELATION_DIFFERS`, `REACTIVATE_PERSON`, `VALUE_KEPT`, `FINANCE_RECORDS`, `ROUNDED`, `AREA_COLUMN_IGNORED` (eski m² sütunu yok sayıldı), `FUTURE_DATE`, `NO_VALUES`. İleti: Türkçe, alan etiketiyle, < 140 karakter; hücre değeri en çok 40 karakter yankılanır; teknik ifade yok.
 
 ## Flutter
 
@@ -218,7 +220,7 @@ macOS: `macos/Runner/*.entitlements` içine `com.apple.security.files.user-selec
 
 ## Güvenlik ve gizlilik (özet)
 
-KVKK: dosya sunucuya girmez; gövde loglanmaz, çalıştırma kaydı/audit kişisel veri taşımaz; yükleme anında yönetici yasal dayanağı onaylar (onay metnini hukuk onaylar, `legal` belgeleri kvkk_notice/dpa ile uyumlu; kayıt `acknowledged:true`); dışa aktarma yalnız yönetici, audit'li, hız sınırlı, `no-store`, notlar varsayılan hariç; sunucu dışa aktarılan dosyayı hiç saklamaz. Enjeksiyon: tüm değerler parametreli dizilerle (SQL'e metin birleştirilmez); XSS: değerler düz metin gösterilir (duyuru e-postaları zaten kaçışlar); CSV/XLSX formül enjeksiyonu hem içe (`FORMULA_LIKE`) hem dışa (kaçış) kapalı; prototype pollution: sunucuda anahtar beyaz listesi + Map; XLSX: istemci yalnız kendi cihazında, sınırlı ve diske yazmadan okur. Yetki yükseltme yok: toplu uç hiçbir erişim/rol/hesap yazmaz. Kötüye kullanım: hız sınırları, 5000 satır/5 MB, site başına tek commit, süreç başına 2 commit.
+KVKK: dosya sunucuya girmez; gövde loglanmaz, çalıştırma kaydı/audit kişisel veri taşımaz; yükleme anında yönetici yasal dayanağı onaylar (onay metnini hukuk onaylar, `legal` belgeleri kvkk_notice/dpa ile uyumlu; kayıt `acknowledged:true`); dışa aktarma yalnız yönetici, audit'li, hız sınırlı, `no-store`, notlar varsayılan hariç; sunucu dışa aktarılan dosyayı hiç saklamaz. Enjeksiyon: tüm değerler parametreli dizilerle (SQL'e metin birleştirilmez); XSS: değerler düz metin gösterilir (duyuru e-postaları zaten kaçışlar); CSV/XLSX formül enjeksiyonu hem içe (`FORMULA_LIKE`) hem dışa (kaçış) kapalı; prototype pollution: sunucuda anahtar beyaz listesi + Map; XLSX: istemci yalnız kendi cihazında, sınırlı ve diske yazmadan okur. Yetki yükseltme sınırlıdır: `apartments`, `vehicles` ve `opening_balances` hiçbir erişim/rol/hesap yazmaz; `people` ve `all_in_one` yalnız bu yüklemede daire ilişkisi eklenen kişiler için hesap ve daire üyeliği açar (başka siteye ya da yöneticiye ait bir hesaba bağlanmaz; bkz. son bölüm «Hesap açma»). Kötüye kullanım: hız sınırları, 5000 satır/5 MB, site başına tek commit, süreç başına 2 commit.
 
 ## Doğrulama (kabul)
 
@@ -247,7 +249,7 @@ KVKK: dosya sunucuya girmez; gövde loglanmaz, çalıştırma kaydı/audit kişi
 4. **Çıktı sadece ekleyici/boş-doldurucu:** CRM ilkesi (kayıt silinmez, hesaplı kişinin verisi `users`'ta). Daire alanları için ezme `allow_overwrite` ile açık onaylıdır.
 5. **Hesaplı kişiye toplu yoluyla YENİ daire eklenmez:** yazım hatası o kişinin finans/kayıtlarını başka daireye açardı; kişi kartından elle eklenir.
 6. **Telefon tek başına eşleştirme anahtarı değil;** e-posta → (daire+ad) → (ad+telefon) sırası; eşleşme yoksa kişi YENİ, belirsizse hata (tahmin yok).
-7. **Hesap/e-posta/erişim yok:** toplu yükleme erişim yetkisi vermez; sonradan katılım mevcut LINK adımıyla bağlanır.
+7. **Hesap/e-posta/erişim yok:** toplu yükleme erişim yetkisi vermez; sonradan katılım mevcut LINK adımıyla bağlanır. (Sonradan değişti: `people` ve `all_in_one` türlerinde hesap ve daire üyeliği açılır, e-posta hâlâ GÖNDERİLMEZ; bkz. son bölüm «Hesap açma».)
 8. **"Geçerli olanları al" varsayılan, `strict` isteğe bağlı:** idempotans düzeltilmiş dosyanın tekrar yüklenmesini güvenli kılar.
 9. **Toplu geri alma yok:** "kayıt silinmez" ilkesi + yazım sonrası hızlı bağımlılık (eşitleme, duyuru kitlesi, sakin ekranları); tedbir olarak önizleme+hash+idempotans+audit'te `run_id`.
 10. **Satır numarası = dosyadaki numara (`n`):** kullanıcı Excel'de neye bakıyorsa hata raporu odur.
@@ -299,21 +301,36 @@ KVKK: dosya sunucuya girmez; gövde loglanmaz, çalıştırma kaydı/audit kişi
 
 ---
 
-## 📑 Toplu Yükleme Otomatik Kullanıcı Adı, Başlangıç Şifresi ve Daire Admini Hesabı Açılışı (`provisionImportedResidents`)
+## 📑 Hesap açma: kullanıcı adı, başlangıç şifresi ve daire admini (`provisionImportedResidents`)
 
-Bu bölüm son kullanıcı gereksinimleri ve saha operasyonları doğrultusunda eklenmiştir:
+Bu bölüm son kullanıcı gereksinimleri ve saha operasyonları doğrultusunda eklenmiştir. Kod: `server/src/modules/bulk_import_writer.js` (`provisionImportedResidents`, `slugifyLoginName`), `bulk_import_service.js` (commit akışı), `server/src/services/apartment_service.js` (`ensureUniqueLoginName`), `server/src/modules/people_service.js` (`grantApartmentAccess`). 2026-10-26'da koddan doğrulandı; bu bölüm üstteki metinle çeliştiği yerde ÖNCELİKLİDİR.
 
-1. **Sütun Tanımları (`kullanici_adi`, `sifre`):**
-   - `kullanici_adi`: İsteğe bağlı. Boş bırakıldığında kişinin ad-soyadından Türkçe karakterler arındırılarak küçük harfli ve nokta ayırıcılı (`generateUsernameFromFullName`, örn: `ahmet.yilmaz`, mükerrerde `ahmet.yilmaz2`) otomatik üretilir.
-   - `sifre`: İsteğe bağlı. Excel ve CSV şablonlarında her satırda hazır `1234` dolu gelir. Boş bırakılsa dahi `1234` kabul edilir.
+1. **Kapsam:**
+   - Hesap yalnız `people` ve `all_in_one` türlerinde açılır (`ACCOUNT_KINDS`). `apartments`, `vehicles` (araç yüklemesi) ve `opening_balances` hesap AÇMAZ.
+   - Hesap adayı yalnız BU çalıştırmada daire ilişkisi (`apartment_residencies`) EKLENEN kişilerdir (yeni kişi ya da hesapsız mevcut kişi). Sitedeki diğer hesapsız sakinlere dokunulmaz; ad/e-posta/telefon ile ayrıca eşleştirme yapılmaz.
+   - Kişi başına TEK hesap açılır: aynı kişiye iki dairede ilişki eklendiyse iki daire aynı hesaba bağlanır.
 
-2. **Elektronik Tablo Önizleme ve Canlı Teklik Doğrulaması (`BulkEditableTable`):**
-   - Excel tarandığında veya yüklendiğinde, `BulkImportController` her satır için kullanıcı adını otomatik üretir ve tabloda gösterir.
-   - Yönetici hücreye tıklayarak kullanıcı adını değiştirebilir. Değiştirme penceresinde anlık mükerrerlik kontrolü yapılır; aynı kullanıcı adı tablodaki başka bir satırda varsa kaydetmeye izin verilmez.
+2. **Sütun tanımları (`kullanici_adi`, `sifre`; yalnız `people` ve `all_in_one` şemalarında):**
+   - `kullanici_adi`: İsteğe bağlı (en çok 50 karakter). Boş bırakıldığında kişinin ad-soyadından üretilir. Üretim kuralı sunucuda `slugifyLoginName`, istemcide `generateUsernameFromFullName` (AYNI kural): Türkçe harfler sadeleşir, küçük harf, `[a-z0-9]` dışındaki her öbek tek nokta, baştaki/sondaki nokta atılır, en çok 36 karakter (örn. `ahmet.yilmaz`).
+   - Çakışmada ek `_2`, `_3` … olur (örn. `ahmet.yilmaz_2`; `ahmet.yilmaz2` DEĞİL). Sunucu `ensureUniqueLoginName` ile adı tüm kullanıcılar arasında büyük/küçük harf duyarsız benzersizleştirir (en çok 100 deneme).
+   - `sifre`: İsteğe bağlı (en çok 30 karakter). Excel ve CSV şablonlarında her satırda hazır `1234` dolu gelir. Boş bırakılsa dahi `1234` kabul edilir (`DEFAULT_ACCOUNT_PASSWORD`).
 
-3. **Commit ve Daire Hesabı / Admin Ataması (`provisionImportedResidents`):**
-   - Toplu yükleme onaylandığında (`commit`), yüklenen sakinler için `users` tablosunda hesap açılır.
-   - `users.login_name` belirlenen kullanıcı adı olarak kaydedilir (`ensureUniqueLoginName` ile veritabanı düzeyinde de tekillik güvenceye alınır).
-   - Şifre `1234` (veya tablodaki şifre) olarak bcrypt ile hashlenir; `must_change_password = TRUE` ve `resident_pin_issued = TRUE` atanır.
-   - Daireye atanan kişi `apartment_memberships` tablosunda doğrudan **`APARTMENT_ADMIN`** olarak yetkilendirilir; `apartments.resident_user_code` bağlanır.
-   - Sakin `1234` ile ilk girişinde `ForceChangePasswordDialog` popup'ı ile karşılanır ve kendi yeni şifresini belirler.
+3. **Önizleme tablosu ve canlı teklik doğrulaması (`BulkEditableTable`):**
+   - Excel yüklenince `BulkImportController` her satır için kullanıcı adını üretir (tablodaki başka satırlarla çakışırsa `_2`, `_3` … ekler) ve tabloda gösterir.
+   - Yönetici hücreye tıklayarak kullanıcı adını değiştirebilir. Değiştirme penceresinde yazılan ad sunucudaki kuralla sadeleştirilip tablodaki DİĞER satırlarla karşılaştırılır; aynı ad başka satırda varsa «Bu kullanıcı adı başka bir satırda zaten var!» denir ve kaydedilmez.
+   - Bu denetim yalnız dosyadaki satırları kapsar. Veritabanında zaten var olan bir kullanıcı adıyla çakışırsa sunucu commit sırasında ek koyar; kesin ad sonuç ekranından öğrenilir (madde 6).
+
+4. **Commit ve hesap açma (`provisionImportedResidents`):**
+   - Aşama, kişi/ilişki yazımından SONRA ve AYNI transaction'dadır. Her kişi kendi `SAVEPOINT`'inde işlenir: veri sorunu olursa yalnız o kişinin hesabı geri alınır (kişi kaydı yazılmış kalır) ve `skipped_items` içinde nedeniyle bildirilir. Kilitlenme, kilit zaman aşımı ve bağlantı hataları yutulmaz; commit geri alınır.
+   - **E-posta kuralı:** kişinin gerçek e-postası varsa (`@ahbu.local` dışında) ve bu e-postayla kayıtlı bir kullanıcı bulunursa, yalnız şu hesaba bağlanır: silinmemiş, `super_user`/`site_manager` OLMAYAN ve bu sitede zaten bağı olan (`siteTiePredicate`) hesap (`status: linked`; mevcut şifre ve kullanıcı adı değişmez). Başka siteye ya da yöneticiye ait e-postaya BAĞLANMAZ: hesap açılmaz, `EMAIL_IN_USE` («Bu e-posta başka bir hesaba ait; hesap açılmadı. Kişi kaydı yapıldı, hesabı kişi kartından açabilirsiniz.») bildirilir. Hesap bu sitede zaten başka bir kişiye bağlıysa `ACCOUNT_ALREADY_LINKED`.
+   - **Yeni hesap:** `users` satırı rol `apartment_owner`, aktif, e-postası doğrulanmış, `approval_status = 'approved'`, `must_change_password = TRUE`; şifre (`1234` ya da tablodaki) bcrypt ile özetlenir (her hesap kendi tuzuyla, özetler transaction dışında hesaplanır). Kişinin e-postası yoksa dahili bir daire e-postası üretilir. `users.login_name` madde 2'deki nihai ad olur.
+   - Kişi kaydı hesaba bağlanır (`site_people.user_code`; ad/telefon/e-posta bundan sonra `users`'tan okunur).
+   - **Daire admini:** daire erişimi `grantApartmentAccess` ile verilir (daire kilitli; `apartment_memberships`, boşsa `apartments.resident_user_code`, site düzeyinde `RESIDENT`). Dairede TEK `APARTMENT_ADMIN` olur: dairede başka aktif admin yoksa kişi `APARTMENT_ADMIN`, varsa `FAMILY_MEMBER` yazılır. Adaylar en iyi ilişkiye göre sıralanır (malik, kiracı, sakin, aile üyesi), bu yüzden aynı dairede önce malik admin olur.
+   - Yeni açılan hesapta, hesabın daire göstergesi (`resident_user_code`) olduğu dairelerde `apartments.resident_pin_issued = TRUE` ve `is_active = TRUE` işaretlenir.
+   - Audit: kişi başına `person.account_created` (`details`: `user_code`, `status` created|linked, `via:'import'`, `run_id`; kullanıcı adı/şifre YOK); `import.committed` sayıları `accounts_created`, `accounts_linked`, `accounts_skipped` taşır.
+
+5. **İlk giriş ve zorunlu şifre değişimi:**
+   - Sakin `1234` (ya da tablodaki şifre) ile girer. `users.must_change_password` iken sunucu (`auth_middleware.js`) şu uçlar dışındaki TÜM kimlik doğrulamalı isteklere `403 PASSWORD_CHANGE_REQUIRED` döner: `GET /me`, `PATCH /me`, `GET|POST /me/consents`, daire sakininin kendi şifresini değiştirme ucu ve telefon bildirimi cihaz kaydını silme.
+   - Uygulama bu durumda `ForceChangePasswordDialog` açar. Yeni şifre kaydedilince `must_change_password = FALSE` olur.
+
+6. **Sonuçta nihai kullanıcı adları:** commit yanıtı `result.accounts` taşır: `{ created, linked, skipped, items: [{ n, login_name, status }], skipped_items: [{ n, code, message }] }`. `login_name` sunucunun yazdığı NİHAİ addır (çakışmada ek konmuş olabilir). Sonuç adımı en çok 30 hesabı listeler (`kMaxListedAccounts`); fazlası için «Kullanıcı adlarını kişi kartlarında görebilirsiniz» der. Hesabı açılmayan kişiler satır numarası ve nedenle gösterilir.

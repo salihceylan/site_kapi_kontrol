@@ -7,7 +7,6 @@ import {
   cellToText,
   leadingChar,
   matchBlock,
-  readArea,
   readDate,
   readEmail,
   readFloor,
@@ -109,48 +108,6 @@ describe('ad, telefon, e-posta', () => {
     assert.equal(readEmail('=x@y.com').error, 'FORMULA_LIKE');
     assert.equal(readEmail('+x@y.com').error, 'FORMULA_LIKE');
     assert.equal(readEmail(null).value, null);
-  });
-});
-
-describe('readArea (m²)', () => {
-  const v = (input) => readArea(input).value;
-  it('JSON sayı olduğu gibi; metinde virgül ondalık; nokta ondalık; binlik gruplar', () => {
-    assert.equal(v(125.5), 125.5);
-    assert.equal(v('125,5'), 125.5);
-    assert.equal(v('125.5'), 125.5);
-    assert.equal(v('1.250'), 1250);
-    assert.equal(v('1.250,5'), 1250.5);
-    assert.equal(v('1,250.5'), 1250.5);
-    assert.equal(readArea('1.250.000').error, 'NUMBER_RANGE'); // 1.250.000 m2 > 999999.99
-    assert.equal(v('110 m2'), 110);
-    assert.equal(v('110 m²'), 110);
-    assert.equal(v('110㎡'), 110);
-    assert.equal(v(`1${NBSP}250,5 M2`), 1250.5);
-    assert.equal(v('0,5'), 0.5);
-  });
-
-  it('hatalar: NUMBER_INVALID (harf, çoklu ayırıcı, bozuk binlik), NUMBER_RANGE (0, negatif, > 999999.99)', () => {
-    for (const bad of ['abc', '12a', '1.2.3', '1,2,3', '1.25,0.5', '', 'e5', '..', ',', 'm2']) {
-      const result = readArea(bad);
-      if (bad === '') {
-        assert.equal(result.value, null);
-      } else {
-        assert.equal(result.error, 'NUMBER_INVALID', bad);
-      }
-    }
-    for (const bad of ['0', '-5', '1000000', 0, -1]) {
-      assert.equal(readArea(bad).error, 'NUMBER_RANGE', String(bad));
-    }
-    assert.equal(readArea('=1').error, 'FORMULA_LIKE');
-  });
-
-  it('ROUNDED (2 ondalıktan fazla yuvarlanır), AREA_UNUSUAL (< 10 ya da > 2000)', () => {
-    assert.deepEqual(readArea('125,456'), { value: 125.46, warnings: ['ROUNDED'] });
-    assert.deepEqual(readArea(125.456).warnings, ['ROUNDED']);
-    assert.deepEqual(readArea('125,50').warnings, []);
-    assert.deepEqual(readArea('5').warnings, ['AREA_UNUSUAL']);
-    assert.deepEqual(readArea('2500').warnings, ['AREA_UNUSUAL']);
-    assert.deepEqual(readArea('125').warnings, []);
   });
 });
 
@@ -308,7 +265,6 @@ describe('özellik testi: hiçbir okuyucu için rastgele girdi özel hata fırla
       (x) => readName(x),
       (x) => readPhone(x),
       (x) => readEmail(x),
-      (x) => readArea(x),
       (x) => readFloor(x),
       (x) => readLandShareInt(x, { min: 0 }),
       (x) => readDate(x, TODAY),
@@ -327,7 +283,6 @@ describe('özellik testi: hiçbir okuyucu için rastgele girdi özel hata fırla
     }
     // sayılar da güvenli
     for (const n of [0, -0, 1e308, -1e308, 1e-9, 0.1 + 0.2, 123456789.12345679, Number.MAX_SAFE_INTEGER]) {
-      assert.doesNotThrow(() => readArea(n));
       assert.doesNotThrow(() => readFloor(n));
       assert.doesNotThrow(() => readText(n));
       assert.doesNotThrow(() => readPhone(n));

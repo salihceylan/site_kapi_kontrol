@@ -93,173 +93,29 @@ class _BulkEditableTableState extends State<BulkEditableTable> {
     required ImportRow row,
     required ImportColumn col,
   }) async {
-    final currentVal = row.cells[col.key]?.toString() ?? '';
-    final editCtrl = TextEditingController(text: currentVal);
-    String? fieldError;
-
     final updated = await showDialog<String?>(
       context: context,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              title: Row(
-                children: [
-                  Icon(Icons.edit_note_rounded, color: AppTone.primary.a, size: 24),
-                  const SizedBox(width: AppSpace.sm),
-                  Expanded(
-                    child: Text('Hücreyi Düzenle: ${col.label}', style: const TextStyle(fontSize: 16)),
-                  ),
-                ],
-              ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (col.hint != null && col.hint!.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: AppSpace.sm),
-                      child: Text(
-                        col.hint!,
-                        style: TextStyle(fontSize: 12, color: ctx.palette.textSecondary),
-                      ),
-                    ),
-                  TextField(
-                    controller: editCtrl,
-                    autofocus: true,
-                    decoration: InputDecoration(
-                      labelText: col.label,
-                      helperText: col.key == 'kullanici_adi'
-                          ? 'Benzersiz kullanıcı adı (örn. ad.soyad)'
-                          : (col.required ? 'Bu alan zorunludur' : 'İsteğe bağlı'),
-                      errorText: fieldError,
-                      border: const OutlineInputBorder(),
-                    ),
-                    onChanged: (_) {
-                      if (fieldError != null) {
-                        setDialogState(() => fieldError = null);
-                      }
-                    },
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(ctx).pop(null),
-                  child: const Text('İptal'),
-                ),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTone.primary.a,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  ),
-                  onPressed: () {
-                    final text = editCtrl.text.trim();
-                    if (col.key == 'kullanici_adi' && text.isNotEmpty) {
-                      // Sunucunun kullanacağı biçimle karşılaştır (tabloda görünen ad = yazılanın sadeleşmiş hali)
-                      final lower = generateUsernameFromFullName(text);
-                      final isDup = widget.controller.rows.asMap().entries.any(
-                            (entry) =>
-                                entry.key != realIndex &&
-                                entry.value.cells['kullanici_adi']?.toString().trim().toLowerCase() == lower,
-                          );
-                      if (isDup) {
-                        setDialogState(() {
-                          fieldError = 'Bu kullanıcı adı başka bir satırda zaten var!';
-                        });
-                        return;
-                      }
-                    }
-                    Navigator.of(ctx).pop(editCtrl.text);
-                  },
-                  child: const Text('Uygula'),
-                ),
-              ],
-            );
-          },
-        );
-      },
+      builder: (_) => _CellEditDialog(
+        col: col,
+        initialValue: row.cells[col.key]?.toString() ?? '',
+        isDuplicateUsername: (lower) => widget.controller.rows.asMap().entries.any(
+              (entry) =>
+                  entry.key != realIndex &&
+                  entry.value.cells['kullanici_adi']?.toString().trim().toLowerCase() == lower,
+            ),
+      ),
     );
-
-    editCtrl.dispose();
-
     if (updated != null && mounted) {
       widget.controller.updateCell(realIndex, col.key, updated);
     }
   }
 
   Future<void> _addNewRow() async {
-    final cols = _visibleColumns();
-    final values = <String, String>{};
-    final controllers = <String, TextEditingController>{};
-    for (final col in cols) {
-      controllers[col.key] = TextEditingController();
-    }
-
-    final confirmed = await showDialog<bool>(
+    final values = await showDialog<Map<String, String>?>(
       context: context,
-      builder: (ctx) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Row(
-            children: [
-              Icon(Icons.add_circle_outline_rounded, color: AppTone.primary.a),
-              const SizedBox(width: AppSpace.sm),
-              const Expanded(
-                child: Text('Yeni Satır Ekle'),
-              ),
-            ],
-          ),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  for (final col in cols) ...[
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 6),
-                      child: TextField(
-                        controller: controllers[col.key],
-                        decoration: InputDecoration(
-                          labelText: '${col.label}${col.required ? ' *' : ''}',
-                          isDense: true,
-                          border: const OutlineInputBorder(),
-                        ),
-                        onChanged: (v) => values[col.key] = v,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('İptal'),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTone.primary.a,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              ),
-              onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('Ekle'),
-            ),
-          ],
-        );
-      },
+      builder: (_) => _AddRowDialog(cols: _visibleColumns()),
     );
-
-    for (final c in controllers.values) {
-      c.dispose();
-    }
-
-    if (confirmed == true && mounted) {
+    if (values != null && mounted) {
       widget.controller.addRow(initialCells: values);
     }
   }
@@ -597,6 +453,186 @@ class _BulkEditableTableState extends State<BulkEditableTable> {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
+    );
+  }
+}
+
+/// Hücre düzenleme penceresi. Metin denetleyicisi pencerenin kendi durumundadır ve pencere ağaçtan çıkınca
+/// (kapanış animasyonu bittikten sonra) silinir: çağıran tarafta `showDialog` döner dönmez silmek, kapanış
+/// animasyonu sürerken "TextEditingController was used after being disposed" hatası veriyordu.
+class _CellEditDialog extends StatefulWidget {
+  const _CellEditDialog({required this.col, required this.initialValue, required this.isDuplicateUsername});
+
+  final ImportColumn col;
+  final String initialValue;
+  final bool Function(String lowerUsername) isDuplicateUsername;
+
+  @override
+  State<_CellEditDialog> createState() => _CellEditDialogState();
+}
+
+class _CellEditDialogState extends State<_CellEditDialog> {
+  late final TextEditingController _ctrl = TextEditingController(text: widget.initialValue);
+  String? _fieldError;
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  void _apply() {
+    final col = widget.col;
+    final text = _ctrl.text.trim();
+    if (col.key == 'kullanici_adi' && text.isNotEmpty) {
+      // Sunucunun kullanacağı biçimle karşılaştır (tabloda görünen ad = yazılanın sadeleşmiş hali)
+      if (widget.isDuplicateUsername(generateUsernameFromFullName(text))) {
+        setState(() => _fieldError = 'Bu kullanıcı adı başka bir satırda zaten var!');
+        return;
+      }
+    }
+    Navigator.of(context).pop(_ctrl.text);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final col = widget.col;
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: Row(
+        children: [
+          Icon(Icons.edit_note_rounded, color: AppTone.primary.a, size: 24),
+          const SizedBox(width: AppSpace.sm),
+          Expanded(
+            child: Text('Hücreyi Düzenle: ${col.label}', style: const TextStyle(fontSize: 16)),
+          ),
+        ],
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (col.hint != null && col.hint!.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: AppSpace.sm),
+              child: Text(
+                col.hint!,
+                style: TextStyle(fontSize: 12, color: context.palette.textSecondary),
+              ),
+            ),
+          TextField(
+            controller: _ctrl,
+            autofocus: true,
+            decoration: InputDecoration(
+              labelText: col.label,
+              helperText: col.key == 'kullanici_adi'
+                  ? 'Benzersiz kullanıcı adı (örn. ad.soyad)'
+                  : (col.required ? 'Bu alan zorunludur' : 'İsteğe bağlı'),
+              errorText: _fieldError,
+              border: const OutlineInputBorder(),
+            ),
+            onChanged: (_) {
+              if (_fieldError != null) setState(() => _fieldError = null);
+            },
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(null),
+          child: const Text('İptal'),
+        ),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppTone.primary.a,
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          ),
+          onPressed: _apply,
+          child: const Text('Uygula'),
+        ),
+      ],
+    );
+  }
+}
+
+/// Yeni satır penceresi; sütun başına metin denetleyicileri pencereyle birlikte yaşar ve silinir
+/// (bkz. [_CellEditDialog]). "Ekle" girilen değerleri döndürür, "İptal" null.
+class _AddRowDialog extends StatefulWidget {
+  const _AddRowDialog({required this.cols});
+
+  final List<ImportColumn> cols;
+
+  @override
+  State<_AddRowDialog> createState() => _AddRowDialogState();
+}
+
+class _AddRowDialogState extends State<_AddRowDialog> {
+  late final Map<String, TextEditingController> _ctrls = {
+    for (final col in widget.cols) col.key: TextEditingController(),
+  };
+
+  @override
+  void dispose() {
+    for (final c in _ctrls.values) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: Row(
+        children: [
+          Icon(Icons.add_circle_outline_rounded, color: AppTone.primary.a),
+          const SizedBox(width: AppSpace.sm),
+          const Expanded(
+            child: Text('Yeni Satır Ekle'),
+          ),
+        ],
+      ),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (final col in widget.cols)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: TextField(
+                    controller: _ctrls[col.key],
+                    decoration: InputDecoration(
+                      labelText: '${col.label}${col.required ? ' *' : ''}',
+                      isDense: true,
+                      border: const OutlineInputBorder(),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(null),
+          child: const Text('İptal'),
+        ),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppTone.primary.a,
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          ),
+          onPressed: () => Navigator.of(context).pop(<String, String>{
+            for (final entry in _ctrls.entries)
+              if (entry.value.text.isNotEmpty) entry.key: entry.value.text,
+          }),
+          child: const Text('Ekle'),
+        ),
+      ],
     );
   }
 }

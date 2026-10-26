@@ -4,6 +4,7 @@ import { signAccessToken } from '../jwt.js';
 import { sendIndividualVerificationEmail, sendJoinRequestNotificationEmail } from '../mailer.js';
 import { currentPasswordLockedError } from '../middlewares/login_throttle.js';
 import { verifyCurrentPassword } from '../modules/account_password_guard.js';
+import { recordAudit } from '../modules/audit_service.js';
 import { mapUserRow, normalizeEmail } from '../utils/helpers.js';
 import { PG_INT4_MAX, isValidEmail, parsePositiveId } from '../utils/validators.js';
 import { rotateTokensForDevices, rotateTokensForSite } from './local_token_service.js';
@@ -59,6 +60,8 @@ import {
 const NAME_MAX_LENGTH = 80;
 const PASSWORD_MAX_LENGTH = 128;
 const NOTE_MAX_LENGTH = 500;
+// Toplu kapı özel izninin denetim kaydında listelenen en çok kullanıcı kodu (kalanı yalnız sayıdadır).
+const BULK_AUDIT_USER_CODES_MAX = 200;
 
 // Doğrulama sonrası oturum/yanıt için gereken kullanıcı kolonları (UPDATE ve INSERT ... RETURNING ortak listesi).
 const VERIFIED_USER_COLUMNS = `
@@ -1360,6 +1363,24 @@ export async function approveJoinRequest({ requestId, authUser }) {
       [reviewerUserCode, reqId],
     );
 
+    // Denetim kaydı (join_request.approved): onay ile AYNI işlemde. Başvuranın kodu, daire ve verilen daire rolü; ad / e-posta yazılmaz.
+    await recordAudit(
+      client,
+      {
+        actor: authUser,
+        action: 'join_request.approved',
+        siteCode: Number(req.site_code),
+        targetType: 'join_request',
+        targetId: String(reqId),
+        details: {
+          user_code: Number(req.user_code),
+          apartment_id: Number(req.apartment_id),
+          assigned_role: assignedRole,
+        },
+      },
+      { inTransaction: true },
+    );
+
     await client.query('COMMIT');
 
     return {
@@ -1431,6 +1452,24 @@ export async function rejectJoinRequest({ requestId, authUser, reason }) {
         WHERE id = $3
       `,
       [cleanReason, reviewerUserCode, reqId],
+    );
+
+    // Denetim kaydı (join_request.rejected): ret ile AYNI işlemde. Ret gerekçesi (serbest metin) ve kişi bilgisi yazılmaz.
+    await recordAudit(
+      client,
+      {
+        actor: authUser,
+        action: 'join_request.rejected',
+        siteCode: Number(req.site_code),
+        targetType: 'join_request',
+        targetId: String(reqId),
+        details: {
+          user_code: Number(req.user_code),
+          apartment_id: Number(req.apartment_id),
+          has_reason: Boolean(reason),
+        },
+      },
+      { inTransaction: true },
     );
 
     await client.query('COMMIT');
@@ -2548,11 +2587,78 @@ export async function setDoorAccessOverride({
   const reviewerCode = authUserCodeOf(authUser);
 
   // isAllowed null veya undefined ise yetki sıfırlanır (varsayılana döner)
-  if (isAllowed === null || isAllowed === undefined) {
-    await pool.query(
-      `DELETE FROM door_access_overrides WHERE door_id = $1 AND user_code = $2`,
-      [Number(door.id), targetUserCode],
-    );
+  const isReset = isAllowed === null || isAllowed === undefined;
+  const boolAllowed = isReset ? null : parseBooleanFlag(isAllowed, 'isAllowed');
+  const cleanNotes = !isReset && notes ? String(notes).trim().slice(0, NOTE_MAX_LENGTH) : null;
+
+  // Yazım ve denetim kaydı (door_permission.granted / denied / removed) AYNI işlemde. Not (serbest metin) kayda yazılmaz.
+  const client = await pool.connect();
+  let committed = false;
+  let result = null;
+  try {
+    await client.query('BEGIN');
+    if (isReset) {
+      const removal = await client.query(
+        `DELETE FROM door_access_overrides WHERE door_id = $1 AND user_code = $2`,
+        [Number(door.id), targetUserCode],
+      );
+      // Kaldırılacak özel izin yoksa değişiklik de yoktur: kayıt yazılmaz.
+      if ((removal.rowCount ?? 0) > 0) {
+        await recordAudit(
+          client,
+          {
+            actor: authUser,
+            action: 'door_permission.removed',
+            siteCode: Number(door.site_code),
+            targetType: 'user',
+            targetId: String(targetUserCode),
+            details: { door_id: Number(door.id) },
+          },
+          { inTransaction: true },
+        );
+      }
+    } else {
+      // TEK ifade: hedef hesap CTE'de FOR KEY SHARE ile kilitlenir ve INSERT aynı ifadede ondan beslenir. Ayrı "var mı" okuması + INSERT arasında hesap silme
+      // (kimliksizleştirme) commit edebiliyordu ve tombstone hesaba kapı izni yazılıyordu (R2 F-3); şimdi silme commit ettiyse satır dönmez -> 404.
+      result = await client.query(
+        `WITH target AS (
+           SELECT user_code FROM users WHERE user_code = $3 AND deleted_at IS NULL FOR KEY SHARE
+         )
+         INSERT INTO door_access_overrides (site_code, door_id, user_code, is_allowed, granted_by_user_code, notes, updated_at)
+         SELECT $1::BIGINT, $2::BIGINT, target.user_code, $4::BOOLEAN, $5::INTEGER, $6::TEXT, NOW() FROM target
+         ON CONFLICT (door_id, user_code)
+         DO UPDATE SET is_allowed = $4, granted_by_user_code = $5, notes = $6, updated_at = NOW()
+         RETURNING id, site_code, door_id, user_code, is_allowed, notes, updated_at`,
+        [Number(door.site_code), Number(door.id), targetUserCode, boolAllowed, reviewerCode, cleanNotes],
+      );
+      if (result.rowCount === 0) {
+        throw httpError(404, 'Kullanıcı bulunamadı.');
+      }
+      await recordAudit(
+        client,
+        {
+          actor: authUser,
+          action: boolAllowed ? 'door_permission.granted' : 'door_permission.denied',
+          siteCode: Number(door.site_code),
+          targetType: 'user',
+          targetId: String(targetUserCode),
+          details: { door_id: Number(door.id), is_allowed: boolAllowed },
+        },
+        { inTransaction: true },
+      );
+    }
+    await client.query('COMMIT');
+    committed = true;
+  } catch (error) {
+    if (!committed) {
+      await rollbackQuietly(client);
+    }
+    throw error;
+  } finally {
+    client.release();
+  }
+
+  if (isReset) {
     await rotateTokensForDevices({
       deviceIds: [door.assigned_device_id],
       reason: 'door_permission_reset',
@@ -2562,26 +2668,6 @@ export async function setDoorAccessOverride({
       action: 'RESET',
       message: 'Kapı yetkisi varsayılan ayarlara döndürüldü.',
     };
-  }
-
-  const boolAllowed = parseBooleanFlag(isAllowed, 'isAllowed');
-  const cleanNotes = notes ? String(notes).trim().slice(0, NOTE_MAX_LENGTH) : null;
-
-  // TEK ifade: hedef hesap CTE'de FOR KEY SHARE ile kilitlenir ve INSERT aynı ifadede ondan beslenir. Ayrı "var mı" okuması + INSERT arasında hesap silme
-  // (kimliksizleştirme) commit edebiliyordu ve tombstone hesaba kapı izni yazılıyordu (R2 F-3); şimdi silme commit ettiyse satır dönmez -> 404.
-  const result = await pool.query(
-    `WITH target AS (
-       SELECT user_code FROM users WHERE user_code = $3 AND deleted_at IS NULL FOR KEY SHARE
-     )
-     INSERT INTO door_access_overrides (site_code, door_id, user_code, is_allowed, granted_by_user_code, notes, updated_at)
-     SELECT $1::BIGINT, $2::BIGINT, target.user_code, $4::BOOLEAN, $5::INTEGER, $6::TEXT, NOW() FROM target
-     ON CONFLICT (door_id, user_code)
-     DO UPDATE SET is_allowed = $4, granted_by_user_code = $5, notes = $6, updated_at = NOW()
-     RETURNING id, site_code, door_id, user_code, is_allowed, notes, updated_at`,
-    [Number(door.site_code), Number(door.id), targetUserCode, boolAllowed, reviewerCode, cleanNotes],
-  );
-  if (result.rowCount === 0) {
-    throw httpError(404, 'Kullanıcı bulunamadı.');
   }
 
   if (overrideRevokesAccess(boolAllowed)) {
@@ -2621,6 +2707,8 @@ export async function setBulkDoorAccessOverride({
     : parseBooleanFlag(isAllowed, 'isAllowed');
 
   let targetUserCodes = [];
+  // Denetim kaydı için kapsam: kişi listesi / daire / blok (ve varsa daire ya da blok kimliği).
+  const auditScope = { scope: 'users' };
 
   if (Array.isArray(userCodes) && userCodes.length > 0) {
     // Yalnızca gerçekten var olan kullanıcılar (FK hatasıyla 500 olmasın); int4 aralığı doğrulanır
@@ -2639,6 +2727,8 @@ export async function setBulkDoorAccessOverride({
     }
     const aptRes = await pool.query(SQL_BULK_APARTMENT_USERS, [aptId, siteCode]);
     targetUserCodes = aptRes.rows.map((r) => Number(r.user_code));
+    auditScope.scope = 'apartment';
+    auditScope.apartment_id = aptId;
   } else if (blockId) {
     const blkId = parsePositiveId(blockId);
     if (blkId === null) {
@@ -2646,6 +2736,8 @@ export async function setBulkDoorAccessOverride({
     }
     const blkRes = await pool.query(SQL_BULK_BLOCK_USERS, [blkId, siteCode]);
     targetUserCodes = blkRes.rows.map((r) => Number(r.user_code));
+    auditScope.scope = 'block';
+    auditScope.block_id = blkId;
   } else {
     throw httpError(400, 'Toplu yetkilendirme için blok, daire veya kullanıcı listesi belirtilmelidir.');
   }
@@ -2683,6 +2775,29 @@ export async function setBulkDoorAccessOverride({
         );
       }
     }
+
+    // Denetim kaydı (door_permission.bulk_granted / bulk_denied / bulk_removed): toplu yazım ile AYNI işlemde, TEK özet satır.
+    // Ayrıntıda yalnız kapı, kapsam, kişi sayısı ve (ilk BULK_AUDIT_USER_CODES_MAX) kullanıcı kodu bulunur; not (serbest metin) ve ad yazılmaz.
+    await recordAudit(
+      client,
+      {
+        actor: authUser,
+        action: allowFlag === null
+          ? 'door_permission.bulk_removed'
+          : (allowFlag ? 'door_permission.bulk_granted' : 'door_permission.bulk_denied'),
+        siteCode,
+        targetType: 'door',
+        targetId: String(door.id),
+        details: {
+          door_id: Number(door.id),
+          ...auditScope,
+          count: targetUserCodes.length,
+          user_codes: targetUserCodes.slice(0, BULK_AUDIT_USER_CODES_MAX),
+          user_codes_truncated: targetUserCodes.length > BULK_AUDIT_USER_CODES_MAX,
+        },
+      },
+      { inTransaction: true },
+    );
 
     await client.query('COMMIT');
     committed = true;

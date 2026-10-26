@@ -8,6 +8,7 @@ function fk(table, column, parent, parentColumn, onDelete) {
   return {
     name,
     table,
+    parent,
     sql: `DO $$
 BEGIN
   IF NOT EXISTS (
@@ -130,7 +131,7 @@ const INDEXES = [
 /** Sira BAGLAYICIDIR (migration ile ayni): once tablolar, sonra FK'ler, sonra indeksler. */
 export const EQUIPMENT_STEPS = Object.freeze([
   ...Object.entries(T).map(([table, sql]) => ({ kind: 'table', name: table, table, sql })),
-  ...FKS.map((f) => ({ kind: 'fk', name: f.name, table: f.table, sql: f.sql })),
+  ...FKS.map((f) => ({ kind: 'fk', name: f.name, table: f.table, parent: f.parent, sql: f.sql })),
   ...INDEXES.map(([name, table, sql]) => ({ kind: 'index', name, table, sql })),
 ]);
 
@@ -144,15 +145,20 @@ export async function ensureEquipmentSchema(client) {
   const tables = EQUIPMENT_STEPS.filter((s) => s.kind === 'table').map((s) => s.name);
   const fks = EQUIPMENT_STEPS.filter((s) => s.kind === 'fk').map((s) => s.name);
   const idx = EQUIPMENT_STEPS.filter((s) => s.kind === 'index').map((s) => s.name);
+  // Bu modülün dışındaki üst tablolar (ör. finans 4b'nin `expenses`'i): eski bir şemayı yükseltirken henüz yoksa o FK atlanır
+  // (sonraki açılışta eklenir); yoksa ALTER "relation does not exist" ile açılışı durdururdu.
+  const externalParents = [...new Set(EQUIPMENT_STEPS.filter((s) => s.kind === 'fk' && !tables.includes(s.parent)).map((s) => s.parent))];
   const found = await client.query(
     `SELECT ARRAY(SELECT t FROM unnest($1::TEXT[]) AS t WHERE to_regclass('public.' || t) IS NOT NULL) AS tables,
        ARRAY(SELECT conname::TEXT FROM pg_constraint WHERE contype = 'f' AND connamespace = 'public'::regnamespace AND conname = ANY($2::TEXT[])) AS fks,
-       ARRAY(SELECT indexname::TEXT FROM pg_indexes WHERE schemaname = 'public' AND indexname = ANY($3::TEXT[])) AS indexes`,
-    [tables, fks, idx],
+       ARRAY(SELECT indexname::TEXT FROM pg_indexes WHERE schemaname = 'public' AND indexname = ANY($3::TEXT[])) AS indexes,
+       ARRAY(SELECT t FROM unnest($4::TEXT[]) AS t WHERE to_regclass('public.' || t) IS NOT NULL) AS parents`,
+    [tables, fks, idx, externalParents],
   );
   const row = found.rows[0] ?? {};
   const present = new Set([...(row.tables ?? []), ...(row.fks ?? []), ...(row.indexes ?? [])]);
-  const pending = EQUIPMENT_STEPS.filter((s) => !present.has(s.name));
+  const missingParents = new Set(row.parents ? externalParents.filter((p) => !row.parents.includes(p)) : []);
+  const pending = EQUIPMENT_STEPS.filter((s) => !present.has(s.name) && !(s.kind === 'fk' && missingParents.has(s.parent)));
   if (pending.length === 0) {
     return;
   }

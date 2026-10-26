@@ -241,12 +241,15 @@ class AuthApi {
     List<AcceptedDocument>? acceptedDocuments,
     String? deviceToken,
     void Function(String deviceToken)? onDeviceToken,
+    // Yerel giriş nonce'u (HAM değer): sağlayıcıya bunun SHA-256 özeti verilmiştir; sunucu belirteçteki nonce talebini özetle karşılaştırır.
+    String? nonce,
   }) {
     final cleanProvider = provider.trim().toLowerCase();
     return _authRequest(
       path: '/auth/oauth/$cleanProvider',
       body: {
         'id_token': idToken,
+        if (nonce != null && nonce.isNotEmpty) 'nonce': nonce,
         if (fullName != null && fullName.trim().isNotEmpty) 'full_name': fullName.trim(),
         if (firstName != null && firstName.trim().isNotEmpty) 'first_name': firstName.trim(),
         if (lastName != null && lastName.trim().isNotEmpty) 'last_name': lastName.trim(),

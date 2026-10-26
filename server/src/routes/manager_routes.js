@@ -29,6 +29,7 @@ import {
   handleSiteMutationError,
   handleUserMutationError,
   handleDeviceMutationError,
+  errorBodyExtras,
 } from '../utils/validators.js';
 import { INT32_MAX, parseId, parseOptionalId } from '../utils/ids.js';
 import {
@@ -115,7 +116,8 @@ function respondServiceError(res, context, error, fallbackMessage, defaultStatus
   if (isClientSafeError(error)) {
     const explicit = Number(error.statusCode);
     const status = Number.isInteger(explicit) && explicit >= 400 && explicit < 500 ? explicit : defaultStatus;
-    return res.status(status).json({ error: error.message });
+    // Makine okunur `code` (ör. 409 ACCESS_SUSPENDED: askıdaki kişinin başvurusu onaylanamaz) ve PlatformError ek alanları da taşınır.
+    return res.status(status).json({ error: error.message, ...errorBodyExtras(error) });
   }
   return respondServerError(res, context, error, fallbackMessage);
 }
@@ -1420,6 +1422,7 @@ managerRouter.delete('/manager/sites/:siteCode/invitations/:invitationId', authR
     const result = await revokeSiteManagerInvitation({
       siteCode,
       invitationId,
+      callerUser: req.authUser,
     });
     return res.status(200).json(result);
   } catch (error) {

@@ -1,6 +1,7 @@
 ﻿import crypto from 'crypto';
 import { isClientSafeError } from './site_rules.js';
 import { isReservedEmail } from './reserved_email.js';
+import { isPlatformError } from '../modules/errors.js';
 import {
   generateNumericCode,
   normalizeEmail,
@@ -120,12 +121,23 @@ export function validateCreateInput({
   return null;
 }
 
+// Kullanıcı (giriş) adı kuralı modules/people_common.js normalizeLoginName / LOGIN_NAME_PATTERN ile AYNIDIR: kırp + küçük harfe çevir, sonra
+// /^[a-z0-9._-]{3,40}$/ ('@' YOK: giriş sorgusu e-posta VE kullanıcı adıyla eşleşir; kullanıcı adı başkasının e-postasına benzeyemesin).
+// people_common ağır bağımlılıklar (db, mailer) çektiği için buraya içe aktarılmaz; iki kuralın eşitliği test/validators.test.js'te denetlenir.
+const LOGIN_NAME_MIN_LENGTH = 3;
+const LOGIN_NAME_MAX_LENGTH = 40;
+const LOGIN_NAME_RULE = /^[a-z0-9._-]{3,40}$/;
+
 export function validateLoginName(loginName) {
-  if (!loginName || loginName.length < 3) {
+  const name = typeof loginName === 'string' ? loginName.trim().toLowerCase() : '';
+  if (name.length < LOGIN_NAME_MIN_LENGTH) {
     return 'Kullanici adi en az 3 karakter olmali.';
   }
-  if (!/^[a-z0-9._-]+$/i.test(loginName)) {
-    return 'Kullanici adi yalnizca harf, rakam, nokta, alt tire ve tire icerebilir.';
+  if (name.length > LOGIN_NAME_MAX_LENGTH) {
+    return `Kullanici adi en fazla ${LOGIN_NAME_MAX_LENGTH} karakter olabilir.`;
+  }
+  if (!LOGIN_NAME_RULE.test(name)) {
+    return 'Kullanici adi yalnizca kucuk harf, rakam, nokta, alt tire ve tire icerebilir (@ kullanilamaz).';
   }
   return null;
 }
@@ -357,6 +369,24 @@ export function parseApprovalStatus(value) {
 
 export function parseRole(value) {
   return validRoles.has(value) ? value : null;
+}
+
+const ERROR_CODE_PATTERN = /^[A-Z][A-Z0-9_]{2,63}$/;
+
+/**
+ * Servis hatasının yanıt gövdesine taşınacak makine okunur alanları (kalıp: middlewares/error_handler.respondWithServiceError ve
+ * modules/route_helpers.respondError ile AYNI): `code` yalnız BÜYÜK_HARF_KOD biçimindeyse (ör. ACCESS_SUSPENDED; pg kodları '23505' vb. taşınmaz) ve
+ * PlatformError ise `extra` alanları (ör. PERSON_EXISTS -> person_id). Çağıran yalnız kasıtlı 4xx (istemciye gösterilebilir) hatalarda kullanır.
+ */
+export function errorBodyExtras(error) {
+  const body = {};
+  if (typeof error?.code === 'string' && ERROR_CODE_PATTERN.test(error.code)) {
+    body.code = error.code;
+  }
+  if (isPlatformError(error) && error.extra) {
+    Object.assign(body, error.extra);
+  }
+  return body;
 }
 
 /**

@@ -41,7 +41,7 @@ Bilinen kalan nokta: eski `getMyApartments` (Daire Kullanıcıları ekranı) ayn
 - Denetim kayıtlarının hedef türü `safety_request` / `access_suspension` olduğundan Kişi / Daire geçmişi uçlarında (kurul üyesi okur) GÖRÜNMEZ; talep metni ve talep eden adı denetim kaydına YAZILMAZ.
 - Saklama: kapanan talep `resolved_at` taşır; 90 gün sonra silinmeye aday sayılır, ancak OTOMATİK SİLME KAPALIDIR (site yönetimi karar verir).
 - Talep başına açık talep sınırı 3; gün başına 10 talep (kötüye kullanım).
-- Askıya alınan kişi "Dairem" işlemlerini yapamaz (neden gösterilmez), davetle / onayla geri bağlanamaz, daire admini eski uçlarla yeniden etkinleştiremez.
+- Askıya alınan kişi "Dairem" işlemlerini yapamaz (neden gösterilmez), davetle / onayla geri bağlanamaz, daire admini eski uçlarla yeniden etkinleştiremez. Katılım başvurusu da reddedilir: katılım QR'ı ile başvuru `403 ACCESS_SUSPENDED`, askılı kişinin bekleyen başvurusunu onaylamak `409 ACCESS_SUSPENDED` döner (`membership_service.js`; ayrıntı `docs/PLATFORM_DAIRE_YONETIMI.md` «Askıya alınmış kişinin katılım başvurusu»).
 
 ## KVKK
 

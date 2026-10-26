@@ -33,13 +33,26 @@ describe('migration 031: kisi ve daire kayitlari', () => {
     assert.deepEqual(findUnsafeStatements(MIGRATION), []);
   });
 
-  it('db.js ensureDbSchema ayni DDL\'i icerir (yorumlar ve bosluklar disinda birebir); 030\'dan sonra gelir', () => {
+  it('db.js ensureDbSchema ayni DDL\'i icerir (yorumlar ve bosluklar disinda birebir; 078 sonrasi: m2 sutunlarini EKLEYEN iki satir HARIC); 030\'dan sonra gelir', () => {
     const normalizedDb = normalizeSql(DB_SOURCE);
-    const migration = normalizeSql(MIGRATION);
+    // 031 tarihsel hali degismez (uygulanmis migration); 078 m2 sutunlarini dusurdugunden db.js bu iki ADD COLUMN satirini artik tasimaz.
+    const migration = normalizeSql(MIGRATION).replace(/ ALTER TABLE apartments ADD COLUMN IF NOT EXISTS (?:gross|net)_area_m2 NUMERIC\(8,2\);/g, '');
     assert.ok(migration.length > 2000);
-    assert.ok(normalizedDb.includes(migration), 'migrations/031 ile db.js ayni DDL degil');
+    assert.ok(normalizedDb.includes(migration), 'migrations/031 (m2 satirlari haric) ile db.js ayni DDL degil');
+    assert.doesNotMatch(normalizedDb, /ADD COLUMN IF NOT EXISTS (?:gross|net)_area_m2/, 'db.js m2 sutunlarini artik EKLEMEZ (078 dusurur)');
     const migration030 = normalizeSql(readFileSync(path.join(DEFAULT_MIGRATIONS_DIR, '030_module_requests.sql'), 'utf8'));
     assert.ok(normalizedDb.indexOf(migration030) < normalizedDb.indexOf(migration));
+  });
+
+  it('031 TARIHSEL olarak m2 sutunlarini ekler (degistirilmez); 078 onlari dusurur (zincir sonunda yok), db.js eklemez', () => {
+    const sql = normalizeSql(MIGRATION);
+    for (const column of ['gross_area_m2', 'net_area_m2']) {
+      assert.match(sql, new RegExp(`ALTER TABLE apartments ADD COLUMN IF NOT EXISTS ${column} NUMERIC\\(8,2\\);`), column);
+    }
+    const drop = listMigrations(DEFAULT_MIGRATIONS_DIR).find((m) => m.number === 78);
+    assert.ok(drop, '078 yok');
+    assert.match(normalizeSql(drop.sql), /ALTER TABLE apartments DROP COLUMN IF EXISTS gross_area_m2, DROP COLUMN IF EXISTS net_area_m2;/);
+    assert.doesNotMatch(normalizeSql(DB_SOURCE), /(?:gross|net)_area_m2/);
   });
 
   it('site_people: alanlar, FK davranislari ve kismi tekil indeksler (hesap ve hesapsiz e-posta)', () => {
@@ -74,8 +87,6 @@ describe('migration 031: kisi ve daire kayitlari', () => {
     const sql = normalizeSql(MIGRATION);
     for (const column of [
       'floor INTEGER',
-      'gross_area_m2 NUMERIC\\(8,2\\)',
-      'net_area_m2 NUMERIC\\(8,2\\)',
       'land_share_numerator INTEGER',
       'land_share_denominator INTEGER',
       'category TEXT',

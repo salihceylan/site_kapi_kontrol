@@ -36,6 +36,16 @@ AppTone auditToneOf(String action) {
     case 'document.version_added':
     case 'document.restored':
     case 'document.attached':
+    case 'user.created':
+    case 'user.activated':
+    case 'user.subscription_approved':
+    case 'site_manager.added':
+    case 'site_manager.invited':
+    case 'site.created':
+    case 'site.approved':
+    case 'join_request.approved':
+    case 'door_permission.granted':
+    case 'door_permission.bulk_granted':
       return AppTone.success;
     case 'module.disabled':
     case 'person.deactivated':
@@ -53,6 +63,14 @@ AppTone auditToneOf(String action) {
     case 'document.deleted':
     case 'document.version_deleted':
     case 'document.detached':
+    case 'user.deactivated':
+    case 'user.role_changed':
+    case 'user.password_set':
+    case 'site.deletion_requested':
+    case 'site.deletion_code_locked':
+    case 'door_permission.denied':
+    case 'door_permission.bulk_denied':
+    case 'device.ownership_released':
       return AppTone.warning;
     case 'staff_role.removed':
     case 'module_request.cancelled':
@@ -63,6 +81,11 @@ AppTone auditToneOf(String action) {
     case 'finance.expense.document_removed':
     case 'finance.reminder.cancelled':
     case 'finance.reminder.exclusion_removed':
+    case 'site_manager.invitation_revoked':
+    case 'site_manager.removed':
+    case 'site.deletion_cancelled':
+    case 'door_permission.removed':
+    case 'door_permission.bulk_removed':
       return AppTone.neutral;
     case 'module_request.created':
     case 'announcement.updated':
@@ -88,6 +111,11 @@ AppTone auditToneOf(String action) {
     case 'module_request.rejected':
     case 'site_application.rejected':
     case 'document.purged':
+    case 'user.deleted':
+    case 'user.subscription_rejected':
+    case 'site.deleted':
+    case 'site.rejected':
+    case 'join_request.rejected':
       return AppTone.danger;
     default:
       return AppTone.info;

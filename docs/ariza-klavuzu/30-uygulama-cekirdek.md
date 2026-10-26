@@ -99,12 +99,12 @@ Bu bölüm lib/main.dart, lib/app.dart, lib/config, lib/models, lib/data, lib/se
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/services/auth_api.dart:3356](../../lib/services/auth_api.dart#L3356) | <code>} on http.ClientException catch (error) {</code> | Aktarım hatası (DNS, bağlantı kopması, TLS) burada yakalanır; GET ise bir kez yeniden denenir, değilse ApiException üretilir |
-| [lib/services/auth_api.dart:3986](../../lib/services/auth_api.dart#L3986) | <code>String _mapClientError(http.ClientException error) {</code> | ClientException metnini üç Türkçe mesaja eşler: SSL, "Sunucuya ulasilamadi" (DNS/soket), genel istemci hatası |
-| [lib/services/auth_api.dart:3972](../../lib/services/auth_api.dart#L3972) | <code>'Sunucuya ulaşılamadı. İnternet bağlantınızı kontrol edin.',</code> | Yanıt JSON değil (5xx/413/429 dışı) ve gövdede "<html"/"<!doctype"/router/modem/gateway YOK (düz metin vb.): ara katman hatası sayılır. HTML/router/modem/gateway içeren gövde ise "İnternet bağlantısı yok (Modem internete bağlı değil)." olur |
-| [lib/services/auth_api.dart:3542](../../lib/services/auth_api.dart#L3542) | <code>'Sunucuya ulaşılamadı. Ağ bağlantınızı (güvenlik duvarı/proxy) kontrol edip tekrar deneyi…</code> | 401/403 yanıtının gövdesi JSON hata zarfı değil: proxy/WAF/captive portal; oturum SONU değildir |
-| [lib/services/auth_service.dart:280-299](../../lib/services/auth_service.dart#L280-L299) | <code>_session = await api.login(</code> | Giriş: ApiException mesajı aynen döner; ApiException dışındaki HER istisna "Sunucuya baglanilamadi." olur (güvenilir cihaz belirtecinin okunup yazılması hata verse de girişi bozmaz) |
-| [lib/services/auth_service.dart:341-352](../../lib/services/auth_service.dart#L341-L352) | <code>await api.registerIndividual(</code> | Kayıt (ve parola sıfırlama) için ayrı genel mesaj (Unicode yazımlı) |
+| [lib/services/auth_api.dart:3563](../../lib/services/auth_api.dart#L3563) | <code>} on http.ClientException catch (error) {</code> | Aktarım hatası (DNS, bağlantı kopması, TLS) burada yakalanır; GET ise bir kez yeniden denenir, değilse ApiException üretilir |
+| [lib/services/auth_api.dart:4193](../../lib/services/auth_api.dart#L4193) | <code>String _mapClientError(http.ClientException error) {</code> | ClientException metnini üç Türkçe mesaja eşler: SSL, "Sunucuya ulasilamadi" (DNS/soket), genel istemci hatası |
+| [lib/services/auth_api.dart:4179](../../lib/services/auth_api.dart#L4179) | <code>'Sunucuya ulaşılamadı. İnternet bağlantınızı kontrol edin.',</code> | Yanıt JSON değil (5xx/413/429 dışı) ve gövdede "<html"/"<!doctype"/router/modem/gateway YOK (düz metin vb.): ara katman hatası sayılır. HTML/router/modem/gateway içeren gövde ise "İnternet bağlantısı yok (Modem internete bağlı değil)." olur |
+| [lib/services/auth_api.dart:3749](../../lib/services/auth_api.dart#L3749) | <code>'Sunucuya ulaşılamadı. Ağ bağlantınızı (güvenlik duvarı/proxy) kontrol edip tekrar deneyi…</code> | 401/403 yanıtının gövdesi JSON hata zarfı değil: proxy/WAF/captive portal; oturum SONU değildir |
+| [lib/services/auth_service.dart:285-304](../../lib/services/auth_service.dart#L285-L304) | <code>_session = await api.login(</code> | Giriş: ApiException mesajı aynen döner; ApiException dışındaki HER istisna "Sunucuya baglanilamadi." olur (güvenilir cihaz belirtecinin okunup yazılması hata verse de girişi bozmaz) |
+| [lib/services/auth_service.dart:504-515](../../lib/services/auth_service.dart#L504-L515) | <code>await api.registerIndividual(</code> | Kayıt (ve parola sıfırlama) için ayrı genel mesaj (Unicode yazımlı) |
 
 **Olası nedenler**
 - Telefonda internet yok ya da alan adı çözülemiyor (ClientException metninde "failed host lookup"/"socket" -> "Sunucuya ulasilamadi. Internet veya DNS ...")
@@ -138,9 +138,9 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/auth_api_policy_te
 | [lib/config/app_config.dart:1](../../lib/config/app_config.dart#L1) | <code>const String _defaultApiBaseUrl = 'https://api.gudeteknoloji.com.tr';</code> | Varsayılan (canlı) API adresi: --dart-define verilmediyse bu kullanılır |
 | [lib/config/app_config.dart:12](../../lib/config/app_config.dart#L12) | <code>'API_BASE_URL',</code> | Derleme zamanı geçersiz kılma anahtarı: --dart-define=API_BASE_URL=... (çalışma zamanında değişmez) |
 | [lib/config/app_config.dart:20](../../lib/config/app_config.dart#L20) | <code>const String apiBaseUrl = AppConfig.baseUrl;</code> | Eski kodun kullandığı üst düzey takma ad; kök widget bunu okur |
-| [lib/app.dart:88](../../lib/app.dart#L88) | <code>_authService = AuthService(api: AuthApi(baseUrl: apiBaseUrl));</code> | Tüm API istekleri bu tek AuthApi örneğiyle gider |
+| [lib/app.dart:87](../../lib/app.dart#L87) | <code>_authService = AuthService(api: AuthApi(baseUrl: apiBaseUrl));</code> | Tüm API istekleri bu tek AuthApi örneğiyle gider |
 | [lib/services/network_service.dart:58](../../lib/services/network_service.dart#L58) | <code>Uri.parse('$apiBaseUrl/health'),</code> | Açılıştaki internet yoklaması da aynı adresin /health ucuna gider |
-| [lib/services/auth_api.dart:3209](../../lib/services/auth_api.dart#L3209) | <code>final uri = Uri.parse('$baseUrl$path');</code> | Adres + yol düz birleştirilir (sonda "/" kırpılmaz): sonda "/" kalırsa "//auth/login" olur |
+| [lib/services/auth_api.dart:3416](../../lib/services/auth_api.dart#L3416) | <code>final uri = Uri.parse('$baseUrl$path');</code> | Adres + yol düz birleştirilir (sonda "/" kırpılmaz): sonda "/" kalırsa "//auth/login" olur |
 | [lib/services/door_widget_service.dart:72](../../lib/services/door_widget_service.dart#L72) | <code>String? normalizeWidgetApiBase(String? raw) {</code> | Widget yalnız https (ya da derlemedeki aynı http adresi) kabul eder; aksi halde widget "Giriş Yapın" der |
 | [android/app/src/main/AndroidManifest.xml:36](../../android/app/src/main/AndroidManifest.xml#L36) | <code>android:usesCleartextTraffic="false"&gt;</code> | Release derlemede düz http KAPALI: http adresli release sürüm bağlanamaz |
 | [android/app/src/debug/AndroidManifest.xml:11](../../android/app/src/debug/AndroidManifest.xml#L11) | <code>android:usesCleartextTraffic="true"</code> | Yalnız debug derlemede http serbest (emülatörde http://10.0.2.2:8080 için) |
@@ -172,8 +172,8 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat run --dart-define=API_BASE_U
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/app.dart:464](../../lib/app.dart#L464) | <code>if (!_networkService.hasInternet) {</code> | Yalnız OTURUMSUZ kullanıcı için: internet yoksa NoInternetPage gösterilir (oturumluysa HomePage daha önce döner) |
-| [lib/app.dart:467](../../lib/app.dart#L467) | <code>onRetry: _networkService.refresh,</code> | "Tekrar dene" düğmesi yoklamayı yeniden çalıştırır |
+| [lib/app.dart:460](../../lib/app.dart#L460) | <code>if (!_networkService.hasInternet) {</code> | Yalnız OTURUMSUZ kullanıcı için: internet yoksa NoInternetPage gösterilir (oturumluysa HomePage daha önce döner) |
+| [lib/app.dart:463](../../lib/app.dart#L463) | <code>onRetry: _networkService.refresh,</code> | "Tekrar dene" düğmesi yoklamayı yeniden çalıştırır |
 | [lib/services/network_service.dart:53](../../lib/services/network_service.dart#L53) | <code>Future&lt;bool&gt; _probeInternet() async {</code> | Önce API /health, yanıt gecikirse/başarısızsa yedek adres; biri başarılıysa internet VAR sayılır |
 | [lib/services/network_service.dart:59](../../lib/services/network_service.dart#L59) | <code>Uri.parse('https://clients3.google.com/generate_204'),</code> | Yedek adres: /health erişilemezse bu denenir (bu alan adı engelli ağda yedek de başarısız olur) |
 | [lib/services/network_service.dart:102](../../lib/services/network_service.dart#L102) | <code>return response.statusCode &gt;= 200 &amp;&amp; response.statusCode &lt; 400;</code> | 4xx/5xx yanıt "internet yok" sayılır: /health 404/500 dönerse yedek adrese bakılır |
@@ -205,9 +205,9 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/cold_start_test.da
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/app.dart:441](../../lib/app.dart#L441) | <code>if (!authReady) {</code> | Oturum yüklemesi bitene kadar her durumda StartupSplash |
-| [lib/app.dart:461](../../lib/app.dart#L461) | <code>if (!networkReady) {</code> | Oturumsuzsa ağ yoklaması bitene kadar da splash (oturumluysa beklenmez) |
-| [lib/app.dart:96](../../lib/app.dart#L96) | <code>final authInit = _authService.initialize();</code> | Oturum başlatma açılışta bir kez, beklenmeden başlar; bitince deep link kuyruğu işlenir |
+| [lib/app.dart:440](../../lib/app.dart#L440) | <code>if (!authReady) {</code> | Oturum yüklemesi bitene kadar her durumda StartupSplash |
+| [lib/app.dart:457](../../lib/app.dart#L457) | <code>if (!networkReady) {</code> | Oturumsuzsa ağ yoklaması bitene kadar da splash (oturumluysa beklenmez) |
+| [lib/app.dart:95](../../lib/app.dart#L95) | <code>final authInit = _authService.initialize();</code> | Oturum başlatma açılışta bir kez, beklenmeden başlar; bitince deep link kuyruğu işlenir |
 | [lib/services/auth_service.dart:120](../../lib/services/auth_service.dart#L120) | <code>Future&lt;String?&gt; _readStoredSessionRaw() async {</code> | Güvenli depo okuması ZAMAN AŞIMSIZDIR: platform kanalı yanıt vermezse initialize bitmez |
 | [lib/services/auth_service.dart:161](../../lib/services/auth_service.dart#L161) | <code>await cacheFuture;</code> | Açılış, üç bağımsız okumanın EN YAVAŞINI bekler (oturum, eski kopya, yerel erişim önbelleği) |
 | [lib/services/auth_service.dart:164](../../lib/services/auth_service.dart#L164) | <code>_isReady = true;</code> | Hata olsa bile (try/catch dışında) hazır işaretlenir; yani hata splash'ı kalıcı yapmaz, askıda kalan okuma yapar |
@@ -236,12 +236,12 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/cold_start_test.da
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/app.dart:437](../../lib/app.dart#L437) | <code>animation: Listenable.merge([_authService, _networkService]),</code> | Ekran seçimi hem oturumu hem ağ durumunu dinler; oturum açılınca yeniden kurulup HomePage döner |
-| [lib/app.dart:453](../../lib/app.dart#L453) | <code>child: HomePage(</code> | Oturumlu kullanıcı için ana sayfa ("Güncellenen koşullar" kapısı LegalConsentGate'in çocuğu: bekleyen yasal onay varsa üstüne tam ekran onay sayfası biner, hata/zaman aşımında kilitlemez); bu widget'ın kendi build hatası ekranı boş/gri bırakabilir (ekran alanı: lib/ui) |
-| [lib/services/auth_service.dart:280](../../lib/services/auth_service.dart#L280) | <code>_session = await api.login(</code> | Oturum atanır, kalıcılaştırılır, SONRA dinleyiciler bilgilendirilir |
-| [lib/services/auth_service.dart:4070](../../lib/services/auth_service.dart#L4070) | <code>void _notifySafely() {</code> | AuthService dispose edilmişse bildirim atlanır: ekran yenilenmez |
-| [lib/services/auth_api.dart:3219](../../lib/services/auth_api.dart#L3219) | <code>final session = _parsePayload('Oturum bilgisi', () {</code> | Giriş yanıtı beklenen şekilde değilse (user/token eksik) ekran değil HATA MESAJI döner: "Oturum bilgisi verisi beklenen formatta degil." |
-| [lib/app.dart:425](../../lib/app.dart#L425) | <code>builder: (context, child) {</code> | Tüm sayfaların zemini burada çizilir; Scaffold zemini şeffaf olduğu için bu katman yoksa sayfa boş görünür |
+| [lib/app.dart:436](../../lib/app.dart#L436) | <code>animation: Listenable.merge([_authService, _networkService]),</code> | Ekran seçimi hem oturumu hem ağ durumunu dinler; oturum açılınca yeniden kurulup HomePage döner |
+| [lib/app.dart:449](../../lib/app.dart#L449) | <code>child: HomePage(</code> | Oturumlu kullanıcı için ana sayfa ("Güncellenen koşullar" kapısı LegalConsentGate'in çocuğu: bekleyen yasal onay varsa üstüne tam ekran onay sayfası biner, hata/zaman aşımında kilitlemez); bu widget'ın kendi build hatası ekranı boş/gri bırakabilir (ekran alanı: lib/ui) |
+| [lib/services/auth_service.dart:285](../../lib/services/auth_service.dart#L285) | <code>_session = await api.login(</code> | Oturum atanır, kalıcılaştırılır, SONRA dinleyiciler bilgilendirilir |
+| [lib/services/auth_service.dart:4300](../../lib/services/auth_service.dart#L4300) | <code>void _notifySafely() {</code> | AuthService dispose edilmişse bildirim atlanır: ekran yenilenmez |
+| [lib/services/auth_api.dart:3426](../../lib/services/auth_api.dart#L3426) | <code>final session = _parsePayload('Oturum bilgisi', () {</code> | Giriş yanıtı beklenen şekilde değilse (user/token eksik) ekran değil HATA MESAJI döner: "Oturum bilgisi verisi beklenen formatta degil." |
+| [lib/app.dart:424](../../lib/app.dart#L424) | <code>builder: (context, child) {</code> | Tüm sayfaların zemini burada çizilir; Scaffold zemini şeffaf olduğu için bu katman yoksa sayfa boş görünür |
 | [lib/styles/app_theme.dart:35](../../lib/styles/app_theme.dart#L35) | <code>scaffoldBackgroundColor: Colors.transparent,</code> | Aydınlık temada Scaffold şeffaf (karanlık temada da aynı satır var): zemin MaterialApp builder'ından gelir |
 
 **Olası nedenler**
@@ -270,13 +270,13 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/design/app_shell_t
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/services/auth_service.dart:3283](../../lib/services/auth_service.dart#L3283) | <code>void _handleSessionError(</code> | Her yetkili istek hatası buradan geçer: 401 (SessionExpiredException) oturumu kapatır, 403 ise önce /me ile doğrulanır |
-| [lib/services/auth_service.dart:3304](../../lib/services/auth_service.dart#L3304) | <code>if (error is SessionExpiredException &#124;&#124;</code> | Oturumu kapatma kararı: durum koduna dayanır (metne değil); mesaj girişte bir kez gösterilmek üzere saklanır |
-| [lib/services/auth_api.dart:3454](../../lib/services/auth_api.dart#L3454) | <code>if (status == 401 &amp;&amp; unauthorizedIsSession) {</code> | Yetkili uçlarda 401 -> SessionExpiredException ("Oturum süreniz doldu..."); giriş uçlarında bu dal atlanır |
+| [lib/services/auth_service.dart:3492](../../lib/services/auth_service.dart#L3492) | <code>void _handleSessionError(</code> | Her yetkili istek hatası buradan geçer: 401 (SessionExpiredException) oturumu kapatır, 403 ise önce /me ile doğrulanır |
+| [lib/services/auth_service.dart:3519](../../lib/services/auth_service.dart#L3519) | <code>if (error is SessionExpiredException &#124;&#124;</code> | Oturumu kapatma kararı: durum koduna dayanır (metne değil); mesaj girişte bir kez gösterilmek üzere saklanır |
+| [lib/services/auth_api.dart:3661](../../lib/services/auth_api.dart#L3661) | <code>if (status == 401 &amp;&amp; unauthorizedIsSession) {</code> | Yetkili uçlarda 401 -> SessionExpiredException ("Oturum süreniz doldu..."); giriş uçlarında bu dal atlanır |
 | [lib/services/api_exception.dart:42](../../lib/services/api_exception.dart#L42) | <code>bool get invalidatesSession =&gt;</code> | Varsayılan: yalnız 401 ve ara katmandan gelmeyen yanıt oturumu geçersiz sayar |
 | [lib/services/auth_service.dart:224](../../lib/services/auth_service.dart#L224) | <code>Future&lt;void&gt; _runSessionRefresh(UserSession active) async {</code> | GET /me doğrulaması: 401/403 oturumu kapatır; ağ/5xx/ara katman hatasında çevrimdışı oturum KORUNUR |
 | [lib/services/auth_service.dart:69](../../lib/services/auth_service.dart#L69) | <code>static const Duration _sessionCheckMinInterval = Duration(seconds: 20);</code> | /me doğrulaması art arda en çok 20 sn'de bir (force olmadıkça) |
-| [lib/ui/pages/home_page.dart:693](../../lib/ui/pages/home_page.dart#L693) | <code>unawaited(widget.authService.refreshSession());</code> | Uygulama ön plana dönünce /me doğrulaması tetiklenir (oturum bu anda düşebilir) |
+| [lib/ui/pages/home_page.dart:749](../../lib/ui/pages/home_page.dart#L749) | <code>unawaited(widget.authService.refreshSession());</code> | Uygulama ön plana dönünce /me doğrulaması tetiklenir (oturum bu anda düşebilir) |
 | [lib/services/auth_service.dart:113](../../lib/services/auth_service.dart#L113) | <code>String? takeSessionNotice() {</code> | Düşme nedeni mesajı giriş ekranında BİR KEZ gösterilir ve temizlenir |
 
 **Olası nedenler**
@@ -307,11 +307,11 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/auth_service_sessi
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/services/auth_api.dart:3456](../../lib/services/auth_api.dart#L3456) | <code>if (code == 'TOKEN_REVOKED') {</code> | Parola değişince eski token'lar iptal edilir (sunucu 401 TOKEN_REVOKED): özel mesajlı SessionExpiredException |
+| [lib/services/auth_api.dart:3663](../../lib/services/auth_api.dart#L3663) | <code>if (code == 'TOKEN_REVOKED') {</code> | Parola değişince eski token'lar iptal edilir (sunucu 401 TOKEN_REVOKED): özel mesajlı SessionExpiredException |
 | [lib/services/auth_service.dart:94](../../lib/services/auth_service.dart#L94) | <code>int _credentialSwapDepth = 0;</code> | Süren parola değişimi sayısı: bu aralıkta eşzamanlı isteklerin TOKEN_REVOKED 401'i yok sayılır |
-| [lib/services/auth_service.dart:3107](../../lib/services/auth_service.dart#L3107) | <code>Future&lt;String?&gt; updateMyProfile({</code> | Profil/şifre güncelleme: sunucunun döndürdüğü YENİ token oturuma yazılır; kendi 401'i gerçek oturum sonudur |
-| [lib/services/auth_api.dart:3167](../../lib/services/auth_api.dart#L3167) | <code>final newToken = payload['token'];</code> | Şifre değişiminde sunucu yeni token döndürürse o kullanılır, yoksa eski token korunur |
-| [lib/services/auth_service.dart:3164](../../lib/services/auth_service.dart#L3164) | <code>if (tokenChanged &amp;&amp; knownDoors != null) {</code> | Token değişince ana ekran widget'ı da yeni token ile yeniden yazılır (aksi halde widget eski token ile 401 alır) |
+| [lib/services/auth_service.dart:3316](../../lib/services/auth_service.dart#L3316) | <code>Future&lt;String?&gt; updateMyProfile({</code> | Profil/şifre güncelleme: sunucunun döndürdüğü YENİ token oturuma yazılır; kendi 401'i gerçek oturum sonudur |
+| [lib/services/auth_api.dart:3374](../../lib/services/auth_api.dart#L3374) | <code>final newToken = payload['token'];</code> | Şifre değişiminde sunucu yeni token döndürürse o kullanılır, yoksa eski token korunur |
+| [lib/services/auth_service.dart:3373](../../lib/services/auth_service.dart#L3373) | <code>if (tokenChanged &amp;&amp; knownDoors != null) {</code> | Token değişince ana ekran widget'ı da yeni token ile yeniden yazılır (aksi halde widget eski token ile 401 alır) |
 
 **Olası nedenler**
 - Başka cihazda parola değiştirildi: bu cihazdaki eski token iptal oldu (beklenen davranış)
@@ -333,9 +333,9 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/auth_service_sessi
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
 | [lib/services/auth_service.dart:232](../../lib/services/auth_service.dart#L232) | <code>_sessionNotice = 'Hesabınız pasif duruma alındı. Lütfen yöneticinizle iletişime geçin.';</code> | /me yanıtında is_active=false ise bu mesajla çıkış yapılır |
-| [lib/services/auth_service.dart:3317](../../lib/services/auth_service.dart#L3317) | <code>} else if (error is ApiException &amp;&amp; error.isForbidden) {</code> | Bir istek 403 alırsa oturum hemen kapanmaz: önce /me ile hesabın gerçekten pasif olup olmadığı doğrulanır |
+| [lib/services/auth_service.dart:3532](../../lib/services/auth_service.dart#L3532) | <code>} else if (error is ApiException &amp;&amp; error.isForbidden) {</code> | Bir istek 403 alırsa oturum hemen kapanmaz: önce /me ile hesabın gerçekten pasif olup olmadığı doğrulanır |
 | [lib/services/api_exception.dart:46](../../lib/services/api_exception.dart#L46) | <code>bool get isForbidden =&gt; statusCode == 403 &amp;&amp; !fromIntermediary;</code> | Proxy/WAF kaynaklı 403 bu sınıfa girmez (hesap pasif sinyali sayılmaz) |
-| [lib/services/auth_api.dart:3180](../../lib/services/auth_api.dart#L3180) | <code>Future&lt;UserSession&gt; fetchMe({</code> | GET /me: 401 -> SessionExpiredException; 403 -> ApiException(403); is_active alanı oturuma işlenir |
+| [lib/services/auth_api.dart:3387](../../lib/services/auth_api.dart#L3387) | <code>Future&lt;UserSession&gt; fetchMe({</code> | GET /me: 401 -> SessionExpiredException; 403 -> ApiException(403); is_active alanı oturuma işlenir |
 
 **Olası nedenler**
 - Sunucu auth_middleware 403 döner: hesap pasif ("Hesap aktif degil."), e-posta doğrulanmamış, abonelik talebi onay bekliyor ya da reddedilmiş. İstemci 403 durumunda /me ile doğrular; /me de 403 verince sunucunun mesajı olduğu gibi girişte gösterilir
@@ -357,11 +357,11 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/auth_service_sessi
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
 | [lib/services/auth_service.dart:152-154](../../lib/services/auth_service.dart#L152-L154) | <code>final data = jsonDecode(raw) as Map&lt;String, dynamic&gt;;</code> | Kayıtlı oturum JSON'u çözülemezse ya da UserSession.fromJson fırlatırsa kayıt SESSİZCE SİLİNİR ve giriş ekranı gelir |
-| [lib/models/user_session.dart:64](../../lib/models/user_session.dart#L64) | <code>factory UserSession.fromJson(Map&lt;String, dynamic&gt; json) {</code> | id/full_name/email/role/token zorunlu cast'ler: biri eksik/tipi farklıysa fırlatır (eski şemalı kayıtlar silinir) |
-| [lib/services/auth_service.dart:3339](../../lib/services/auth_service.dart#L3339) | <code>Future&lt;void&gt; _persist() async {</code> | Oturumu güvenli depoya yazar; yazma hatası YUTULUR (catch (_) {}): giriş çalışır ama kalıcı olmaz |
+| [lib/models/user_session.dart:69](../../lib/models/user_session.dart#L69) | <code>factory UserSession.fromJson(Map&lt;String, dynamic&gt; json) {</code> | id/full_name/email/role/token zorunlu cast'ler: biri eksik/tipi farklıysa fırlatır (eski şemalı kayıtlar silinir) |
+| [lib/services/auth_service.dart:3569](../../lib/services/auth_service.dart#L3569) | <code>Future&lt;void&gt; _persist() async {</code> | Oturumu güvenli depoya yazar; yazma hatası YUTULUR (catch (_) {}): giriş çalışır ama kalıcı olmaz |
 | [lib/services/auth_service.dart:66](../../lib/services/auth_service.dart#L66) | <code>static const FlutterSecureStorage _secureStorage = FlutterSecureStorage();</code> | Oturum yalnızca güvenli depoda tutulur (SharedPreferences'ta tutulmaz) |
 | [lib/services/auth_service.dart:175](../../lib/services/auth_service.dart#L175) | <code>Future&lt;String?&gt; _takeLegacySession() async {</code> | Eski sürümlerin SharedPreferences kopyası bir kez güvenli depoya taşınır ve silinir |
-| [lib/services/auth_service.dart:611](../../lib/services/auth_service.dart#L611) | <code>Future&lt;void&gt; logout() async {</code> | Çıkış: oturum + yerel erişim önbelleği + widget verisi silinir; sonraki açılışta oturum olmaması normaldir |
+| [lib/services/auth_service.dart:774](../../lib/services/auth_service.dart#L774) | <code>Future&lt;void&gt; logout() async {</code> | Çıkış: oturum + yerel erişim önbelleği + widget verisi silinir; sonraki açılışta oturum olmaması normaldir |
 
 **Olası nedenler**
 - Güvenli depo yazması başarısız (platform Keystore/Keychain hatası): _persist hatayı yutar, oturum yalnızca bellekte kalır
@@ -384,10 +384,10 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/auth_service_sessi
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
 | [lib/models/user_role.dart:15](../../lib/models/user_role.dart#L15) | <code>orElse: () =&gt; UserRole.apartmentOwner,</code> | Bilinmeyen/yeni rol değeri SESSİZCE daire kullanıcısına düşer (hata vermez) |
-| [lib/services/auth_service.dart:261](../../lib/services/auth_service.dart#L261) | <code>bool _sessionDiffers(UserSession a, UserSession b) {</code> | /me yanıtındaki rol/aktiflik/ad/e-posta farkı oturuma yazılır ve ekran yenilenir |
-| [lib/services/auth_api.dart:4663](../../lib/services/auth_api.dart#L4663) | <code>UserSession _toUserSession({</code> | Sunucu yanıtından oturum üretir; rol alanı yoksa önceki (fallback) rol korunur |
-| [lib/services/auth_service.dart:411](../../lib/services/auth_service.dart#L411) | <code>Future&lt;Map&lt;String, dynamic&gt;&gt; claimDevice({</code> | Cihaz sahiplenince rol sunucuda yükselir; istemci tahmin etmez, /me ile eşitler |
-| [lib/app.dart:197](../../lib/app.dart#L197) | <code>final currentRole = _authService.session?.role;</code> | Kısayol/deep link ile sesli komut yalnız daire kullanıcısı ve bireysel kullanıcı için açılır |
+| [lib/services/auth_service.dart:266](../../lib/services/auth_service.dart#L266) | <code>bool _sessionDiffers(UserSession a, UserSession b) {</code> | /me yanıtındaki rol/aktiflik/ad/e-posta farkı oturuma yazılır ve ekran yenilenir |
+| [lib/services/auth_api.dart:4870](../../lib/services/auth_api.dart#L4870) | <code>UserSession _toUserSession({</code> | Sunucu yanıtından oturum üretir; rol alanı yoksa önceki (fallback) rol korunur |
+| [lib/services/auth_service.dart:574](../../lib/services/auth_service.dart#L574) | <code>Future&lt;Map&lt;String, dynamic&gt;&gt; claimDevice({</code> | Cihaz sahiplenince rol sunucuda yükselir; istemci tahmin etmez, /me ile eşitler |
+| [lib/app.dart:196](../../lib/app.dart#L196) | <code>final currentRole = _authService.session?.role;</code> | Kısayol/deep link ile sesli komut yalnız daire kullanıcısı ve bireysel kullanıcı için açılır |
 
 **Olası nedenler**
 - Sunucuda rol değişti ama /me henüz çalışmadı: açılışta, ön plana dönüşte (20 sn aralık) ve cihaz sahiplenmeden sonra eşitlenir
@@ -408,11 +408,11 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/auth_service_sessi
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/services/auth_service.dart:3121](../../lib/services/auth_service.dart#L3121) | <code>return 'Şifrenizi değiştirmek için mevcut şifrenizi girin.';</code> | İstemci tarafı ön kontrol: yeni şifre varsa mevcut şifre boş olamaz (istek gitmez) |
-| [lib/services/auth_api.dart:3142](../../lib/services/auth_api.dart#L3142) | <code>if (password != null) 'current_password': currentPassword,</code> | Şifre değişiyorsa mevcut şifre sunucuya zorunlu olarak gönderilir |
-| [lib/services/auth_api.dart:3726](../../lib/services/auth_api.dart#L3726) | <code>case 'CURRENT_PASSWORD_INVALID':</code> | Yanlış mevcut şifre: 400 ve oturumu KAPATMAZ |
-| [lib/services/auth_api.dart:3728](../../lib/services/auth_api.dart#L3728) | <code>case 'CURRENT_PASSWORD_LOCKED':</code> | Mevcut şifre için çok fazla hatalı deneme: bekleme süresi mesaja eklenir |
-| [lib/services/auth_api.dart:3732](../../lib/services/auth_api.dart#L3732) | <code>case 'USE_PROFILE_PASSWORD_CHANGE':</code> | Yönetici ekranından kendi parolasını değiştirmeye çalışınca çıkar (Profilim kullanılmalı) |
+| [lib/services/auth_service.dart:3330](../../lib/services/auth_service.dart#L3330) | <code>return 'Şifrenizi değiştirmek için mevcut şifrenizi girin.';</code> | İstemci tarafı ön kontrol: yeni şifre varsa mevcut şifre boş olamaz (istek gitmez) |
+| [lib/services/auth_api.dart:3349](../../lib/services/auth_api.dart#L3349) | <code>if (password != null) 'current_password': currentPassword,</code> | Şifre değişiyorsa mevcut şifre sunucuya zorunlu olarak gönderilir |
+| [lib/services/auth_api.dart:3933](../../lib/services/auth_api.dart#L3933) | <code>case 'CURRENT_PASSWORD_INVALID':</code> | Yanlış mevcut şifre: 400 ve oturumu KAPATMAZ |
+| [lib/services/auth_api.dart:3935](../../lib/services/auth_api.dart#L3935) | <code>case 'CURRENT_PASSWORD_LOCKED':</code> | Mevcut şifre için çok fazla hatalı deneme: bekleme süresi mesaja eklenir |
+| [lib/services/auth_api.dart:3939](../../lib/services/auth_api.dart#L3939) | <code>case 'USE_PROFILE_PASSWORD_CHANGE':</code> | Yönetici ekranından kendi parolasını değiştirmeye çalışınca çıkar (Profilim kullanılmalı) |
 
 **Olası nedenler**
 - Mevcut şifre yanlış girildi (CURRENT_PASSWORD_INVALID)
@@ -433,11 +433,11 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/auth_service_sessi
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/services/auth_api.dart:3730](../../lib/services/auth_api.dart#L3730) | <code>case 'LOGIN_LOCKED':</code> | Giriş kilidi: "Çok fazla hatalı deneme yapıldı." + bekleme süresi |
-| [lib/services/auth_api.dart:3564](../../lib/services/auth_api.dart#L3564) | <code>int? _retryAfterSeconds(http.Response response, Map&lt;String, dynamic&gt; payload) {</code> | Bekleme süresi: önce gövdedeki retry_after_seconds, yoksa Retry-After başlığı |
-| [lib/services/auth_api.dart:3582](../../lib/services/auth_api.dart#L3582) | <code>static String formatWait(int seconds) {</code> | Saniyeyi "45 saniye / 5 dakika / 2 saat" yazar (yukarı yuvarlar) |
-| [lib/services/auth_api.dart:3500](../../lib/services/auth_api.dart#L3500) | <code>if (status == 429 &amp;&amp; mappedMessage == null) {</code> | Kodu eşlenmemiş genel 429: mesaja "Lütfen X sonra tekrar deneyin." eklenir |
-| [lib/services/auth_api.dart:3951](../../lib/services/auth_api.dart#L3951) | <code>if (status == 429) {</code> | Proxy (nginx) JSON olmayan 429 döndürürse de "Çok fazla istek gönderildi." sınıflanır |
+| [lib/services/auth_api.dart:3937](../../lib/services/auth_api.dart#L3937) | <code>case 'LOGIN_LOCKED':</code> | Giriş kilidi: "Çok fazla hatalı deneme yapıldı." + bekleme süresi |
+| [lib/services/auth_api.dart:3771](../../lib/services/auth_api.dart#L3771) | <code>int? _retryAfterSeconds(http.Response response, Map&lt;String, dynamic&gt; payload) {</code> | Bekleme süresi: önce gövdedeki retry_after_seconds, yoksa Retry-After başlığı |
+| [lib/services/auth_api.dart:3789](../../lib/services/auth_api.dart#L3789) | <code>static String formatWait(int seconds) {</code> | Saniyeyi "45 saniye / 5 dakika / 2 saat" yazar (yukarı yuvarlar) |
+| [lib/services/auth_api.dart:3707](../../lib/services/auth_api.dart#L3707) | <code>if (status == 429 &amp;&amp; mappedMessage == null) {</code> | Kodu eşlenmemiş genel 429: mesaja "Lütfen X sonra tekrar deneyin." eklenir |
+| [lib/services/auth_api.dart:4158](../../lib/services/auth_api.dart#L4158) | <code>if (status == 429) {</code> | Proxy (nginx) JSON olmayan 429 döndürürse de "Çok fazla istek gönderildi." sınıflanır |
 | [lib/services/api_exception.dart:47](../../lib/services/api_exception.dart#L47) | <code>bool get isRateLimited =&gt; statusCode == 429;</code> | Arayüzün 429 durumunu ayırt etmesi için |
 
 **Olası nedenler**
@@ -466,8 +466,8 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 200 --nostrea
 | --- | --- | --- |
 | [lib/services/auth_api.dart:119](../../lib/services/auth_api.dart#L119) | <code>Future&lt;Map&lt;String, dynamic&gt;&gt; registerIndividual({</code> | Bireysel kayıt: oturum DÖNMEZ; kullanıcı kodu doğrulayınca oturum açılır |
 | [lib/services/auth_api.dart:143](../../lib/services/auth_api.dart#L143) | <code>Future&lt;UserSession&gt; verifyIndividualCode({</code> | Kod doğrulama: başarılıysa sunucu oturum (token) döndürür |
-| [lib/services/auth_service.dart:370](../../lib/services/auth_service.dart#L370) | <code>if (e.statusCode == 404) {</code> | 404 = aktif kod yok: mesaja "Kod 30 dakika geçerlidir; yeni kod için ..." yönlendirmesi eklenir |
-| [lib/services/auth_service.dart:389](../../lib/services/auth_service.dart#L389) | <code>return 'Kod tekrar gönderilemedi.';</code> | Tekrar gönderme ApiException dışı hatada bu genel mesajı verir |
+| [lib/services/auth_service.dart:533](../../lib/services/auth_service.dart#L533) | <code>if (e.statusCode == 404) {</code> | 404 = aktif kod yok: mesaja "Kod 30 dakika geçerlidir; yeni kod için ..." yönlendirmesi eklenir |
+| [lib/services/auth_service.dart:552](../../lib/services/auth_service.dart#L552) | <code>return 'Kod tekrar gönderilemedi.';</code> | Tekrar gönderme ApiException dışı hatada bu genel mesajı verir |
 | [lib/services/auth_api.dart:157](../../lib/services/auth_api.dart#L157) | <code>Future&lt;Map&lt;String, dynamic&gt;&gt; resendIndividualCode({</code> | Kodu yeniden gönderme isteği (POST /auth/resend-code) |
 
 **Olası nedenler**
@@ -496,14 +496,14 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 200 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/services/auth_api.dart:2945](../../lib/services/auth_api.dart#L2945) | <code>Future&lt;DoorRuntimeStatus&gt; openDoor({</code> | Bulut kapı açma: POST /app/doors/:id/open, kısa zaman aşımı ile; beklenen yanıt kodu 202 |
+| [lib/services/auth_api.dart:3152](../../lib/services/auth_api.dart#L3152) | <code>Future&lt;DoorRuntimeStatus&gt; openDoor({</code> | Bulut kapı açma: POST /app/doors/:id/open, kısa zaman aşımı ile; beklenen yanıt kodu 202 |
 | [lib/services/auth_api.dart:61](../../lib/services/auth_api.dart#L61) | <code>_doorOpenTimeout = doorOpenTimeout ?? const Duration(seconds: 10),</code> | Kapı açma zaman aşımı 10 sn (kullanıcı kapıda bekler); okuma 20 sn, yazma 45 sn |
-| [lib/services/auth_api.dart:2958](../../lib/services/auth_api.dart#L2958) | <code>'Kapı komutuna zamanında yanıt alınamadı. Kapı açılmış olabilir; durumu kontrol edip gere…</code> | Zaman aşımı mesajı: komut sunucuya GİTMİŞ olabilir, kapı açılmış olabilir; tekrar denemeden önce durum kontrol edilmeli |
-| [lib/services/auth_api.dart:3346](../../lib/services/auth_api.dart#L3346) | <code>} on TimeoutException {</code> | Zaman aşımında ApiException; yazma isteği (POST) ASLA otomatik tekrar edilmez (çift açma riski) |
-| [lib/services/auth_api.dart:3338](../../lib/services/auth_api.dart#L3338) | <code>final isIdempotentRead = method == 'GET';</code> | Yeniden deneme yalnız GET'te; kapı açma POST olduğu için tek denemedir |
-| [lib/services/auth_api.dart:2961](../../lib/services/auth_api.dart#L2961) | <code>_ensureStatus(response, 202);</code> | Açma yanıtı YALNIZ 202 kabul edilir; başka 2xx (örn. 200) "İşlem başarısız (200)" olur (bu dosyada ikinci eşleşme: openDoor içinde) |
+| [lib/services/auth_api.dart:3165](../../lib/services/auth_api.dart#L3165) | <code>'Kapı komutuna zamanında yanıt alınamadı. Kapı açılmış olabilir; durumu kontrol edip gere…</code> | Zaman aşımı mesajı: komut sunucuya GİTMİŞ olabilir, kapı açılmış olabilir; tekrar denemeden önce durum kontrol edilmeli |
+| [lib/services/auth_api.dart:3553](../../lib/services/auth_api.dart#L3553) | <code>} on TimeoutException {</code> | Zaman aşımında ApiException; yazma isteği (POST) ASLA otomatik tekrar edilmez (çift açma riski) |
+| [lib/services/auth_api.dart:3545](../../lib/services/auth_api.dart#L3545) | <code>final isIdempotentRead = method == 'GET';</code> | Yeniden deneme yalnız GET'te; kapı açma POST olduğu için tek denemedir |
+| [lib/services/auth_api.dart:3168](../../lib/services/auth_api.dart#L3168) | <code>_ensureStatus(response, 202);</code> | Açma yanıtı YALNIZ 202 kabul edilir; başka 2xx (örn. 200) "İşlem başarısız (200)" olur (bu dosyada ikinci eşleşme: openDoor içinde) |
 | [server/src/routes/app_doors_routes.js:240](../../server/src/routes/app_doors_routes.js#L240) | <code>return res.status(202).json({</code> | Sunucu tarafı: açma komutu kabul edilince 202 döner (sözleşme) |
-| [lib/services/auth_service.dart:2889](../../lib/services/auth_service.dart#L2889) | <code>return (null, 'Kapı açılamadı. Sunucuya bağlanılamadı.');</code> | ApiException dışı her istisna bu genel mesaja düşer |
+| [lib/services/auth_service.dart:3098](../../lib/services/auth_service.dart#L3098) | <code>return (null, 'Kapı açılamadı. Sunucuya bağlanılamadı.');</code> | ApiException dışı her istisna bu genel mesaja düşer |
 
 **Olası nedenler**
 - Ağ yavaş/kopuk: 10 sn içinde yanıt gelmedi (komut sunucuya ulaşmış olabilir)
@@ -531,12 +531,12 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/auth_api_policy_te
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/services/auth_api.dart:3689](../../lib/services/auth_api.dart#L3689) | <code>static String? messageForErrorCode(</code> | Sunucunun makine kodunu (code alanı) Türkçe mesaja çevirir; bilinmeyen kodda sunucunun error metni kullanılır |
-| [lib/services/auth_api.dart:3790](../../lib/services/auth_api.dart#L3790) | <code>case 'DEVICE_OFFLINE':</code> | Cihaz sunucuya bağlı değil (MQTT çevrimdışı): cihazın internetini kontrol edin |
-| [lib/services/auth_api.dart:3788](../../lib/services/auth_api.dart#L3788) | <code>case 'MQTT_BRIDGE_NOT_CONNECTED':</code> | Sunucunun MQTT köprüsü hazır değil: sorun cihazda değil sunucu/MQTT tarafında |
-| [lib/services/auth_api.dart:3758](../../lib/services/auth_api.dart#L3758) | <code>case 'REMOTE_OPEN_DISABLED':</code> | Site politikası uzaktan açmayı kapatmış (site özellik/güvenlik ayarı) |
-| [lib/services/auth_api.dart:3786](../../lib/services/auth_api.dart#L3786) | <code>case 'DOOR_ACCESS_DENIED':</code> | Kullanıcının bu kapı için yetkisi yok (daire/blok/özel erişim kapsamı) |
-| [lib/services/auth_api.dart:3474](../../lib/services/auth_api.dart#L3474) | <code>final rawCode = payload['code'];</code> | Hata gövdesindeki code alanı burada okunur; code yoksa error metni, o da yoksa "İşlem başarısız (durum)" |
+| [lib/services/auth_api.dart:3896](../../lib/services/auth_api.dart#L3896) | <code>static String? messageForErrorCode(</code> | Sunucunun makine kodunu (code alanı) Türkçe mesaja çevirir; bilinmeyen kodda sunucunun error metni kullanılır |
+| [lib/services/auth_api.dart:3997](../../lib/services/auth_api.dart#L3997) | <code>case 'DEVICE_OFFLINE':</code> | Cihaz sunucuya bağlı değil (MQTT çevrimdışı): cihazın internetini kontrol edin |
+| [lib/services/auth_api.dart:3995](../../lib/services/auth_api.dart#L3995) | <code>case 'MQTT_BRIDGE_NOT_CONNECTED':</code> | Sunucunun MQTT köprüsü hazır değil: sorun cihazda değil sunucu/MQTT tarafında |
+| [lib/services/auth_api.dart:3965](../../lib/services/auth_api.dart#L3965) | <code>case 'REMOTE_OPEN_DISABLED':</code> | Site politikası uzaktan açmayı kapatmış (site özellik/güvenlik ayarı) |
+| [lib/services/auth_api.dart:3993](../../lib/services/auth_api.dart#L3993) | <code>case 'DOOR_ACCESS_DENIED':</code> | Kullanıcının bu kapı için yetkisi yok (daire/blok/özel erişim kapsamı) |
+| [lib/services/auth_api.dart:3681](../../lib/services/auth_api.dart#L3681) | <code>final rawCode = payload['code'];</code> | Hata gövdesindeki code alanı burada okunur; code yoksa error metni, o da yoksa "İşlem başarısız (durum)" |
 
 **Olası nedenler**
 - DEVICE_OFFLINE: cihazın Wi-Fi/internet bağlantısı yok ya da MQTT'ye bağlanamıyor
@@ -559,9 +559,9 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/auth_api_policy_te
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/services/auth_service.dart:2810](../../lib/services/auth_service.dart#L2810) | <code>final allowRemote = door == null &#124;&#124; door.canOpenRemote &#124;&#124; isSuper;</code> | İstemci politikası: kapı bayrakları biliniyorsa uzaktan açma izni bayraktan gelir (süper kullanıcı istisna) |
-| [lib/services/auth_service.dart:2819](../../lib/services/auth_service.dart#L2819) | <code>: 'Bu kapı için uygulamadan açma kapalı.',</code> | Hem uzaktan hem yerel kapalıysa istek GÖNDERİLMEZ |
-| [lib/services/auth_service.dart:2837](../../lib/services/auth_service.dart#L2837) | <code>: 'Bu kapıda uzaktan açma kapalı. Cihaza yerel ağdan ulaşılamadı; telefonu cihazla aynı W…</code> | Uzaktan kapalı, yerel açma denendi ama cihaza ulaşılamadı |
+| [lib/services/auth_service.dart:3019](../../lib/services/auth_service.dart#L3019) | <code>final allowRemote = door == null &#124;&#124; door.canOpenRemote &#124;&#124; isSuper;</code> | İstemci politikası: kapı bayrakları biliniyorsa uzaktan açma izni bayraktan gelir (süper kullanıcı istisna) |
+| [lib/services/auth_service.dart:3028](../../lib/services/auth_service.dart#L3028) | <code>: 'Bu kapı için uygulamadan açma kapalı.',</code> | Hem uzaktan hem yerel kapalıysa istek GÖNDERİLMEZ |
+| [lib/services/auth_service.dart:3046](../../lib/services/auth_service.dart#L3046) | <code>: 'Bu kapıda uzaktan açma kapalı. Cihaza yerel ağdan ulaşılamadı; telefonu cihazla aynı W…</code> | Uzaktan kapalı, yerel açma denendi ama cihaza ulaşılamadı |
 | [lib/models/door_record.dart:205](../../lib/models/door_record.dart#L205) | <code>featureRemoteOpenEnabled: json['feature_remote_open_enabled'] as bool? ?? true,</code> | Bayrak sunucudan gelmezse true varsayılır (kapalıysa sunucu false göndermeli) |
 | [lib/models/door_record.dart:161](../../lib/models/door_record.dart#L161) | <code>bool get isQrOnly =&gt; !canOpenRemote &amp;&amp; (canOpenQr &#124;&#124; hasDisplay);</code> | Uzaktan açma kapalı ve QR/ekran varsa kapı "yalnız QR" kabul edilir |
 
@@ -584,10 +584,10 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/auth_api_policy_te
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/services/auth_service.dart:2843](../../lib/services/auth_service.dart#L2843) | <code>if (door != null &amp;&amp; door.requireGeofence) {</code> | Konum zorunlu kapıda önce konum alınır; alınamazsa istek HİÇ gönderilmez ve neden mesaj olur |
-| [lib/services/auth_service.dart:2868](../../lib/services/auth_service.dart#L2868) | <code>if (location == null &amp;&amp; e.code == 'GEOFENCE_LOCATION_REQUIRED') {</code> | Kapı bayrağı bayatsa sunucu konum ister: konum alınıp BİR KEZ yeniden denenir (açma isteği için) |
+| [lib/services/auth_service.dart:3052](../../lib/services/auth_service.dart#L3052) | <code>if (door != null &amp;&amp; door.requireGeofence) {</code> | Konum zorunlu kapıda önce konum alınır; alınamazsa istek HİÇ gönderilmez ve neden mesaj olur |
+| [lib/services/auth_service.dart:3077](../../lib/services/auth_service.dart#L3077) | <code>if (location == null &amp;&amp; e.code == 'GEOFENCE_LOCATION_REQUIRED') {</code> | Kapı bayrağı bayatsa sunucu konum ister: konum alınıp BİR KEZ yeniden denenir (açma isteği için) |
 | [lib/services/geofence_service.dart:94](../../lib/services/geofence_service.dart#L94) | <code>static Map&lt;String, dynamic&gt; locationRequestFields(Position position) {</code> | Sunucuya giden konum alanları: latitude, longitude, accuracy, timestamp (UTC), is_mocked |
-| [lib/services/auth_api.dart:3737](../../lib/services/auth_api.dart#L3737) | <code>case 'GEOFENCE_LOCATION_REQUIRED':</code> | Sunucu konum istedi ve istemci göndermedi: "Bu kapı için konum doğrulaması zorunludur..." |
+| [lib/services/auth_api.dart:3944](../../lib/services/auth_api.dart#L3944) | <code>case 'GEOFENCE_LOCATION_REQUIRED':</code> | Sunucu konum istedi ve istemci göndermedi: "Bu kapı için konum doğrulaması zorunludur..." |
 | [lib/models/door_record.dart:135](../../lib/models/door_record.dart#L135) | <code>bool get requiresLocationForQrScan =&gt; requireGeofence &#124;&#124; (hasDevice &amp;&amp; !hasDisplay);</code> | Karekodla açmada da konum gerekir: konum çemberi açıksa ya da ekransız (statik UID karekodlu) cihazlarda |
 
 **Olası nedenler**
@@ -645,13 +645,13 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/geofence_and_site_
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/services/auth_api.dart:3747](../../lib/services/auth_api.dart#L3747) | <code>case 'GEOFENCE_OUT_OF_RANGE':</code> | Sunucu mesafe dışı dedi: mesaj distance_meters ve allowed_radius_meters alanlarından kurulur |
-| [lib/services/auth_api.dart:3754](../../lib/services/auth_api.dart#L3754) | <code>case 'GEOFENCE_SITE_MISCONFIGURED':</code> | Sitenin konum çemberi sunucuda hatalı tanımlı: site yöneticisi düzeltmeli |
+| [lib/services/auth_api.dart:3954](../../lib/services/auth_api.dart#L3954) | <code>case 'GEOFENCE_OUT_OF_RANGE':</code> | Sunucu mesafe dışı dedi: mesaj distance_meters ve allowed_radius_meters alanlarından kurulur |
+| [lib/services/auth_api.dart:3961](../../lib/services/auth_api.dart#L3961) | <code>case 'GEOFENCE_SITE_MISCONFIGURED':</code> | Sitenin konum çemberi sunucuda hatalı tanımlı: site yöneticisi düzeltmeli |
 | [lib/services/geofence_service.dart:201](../../lib/services/geofence_service.dart#L201) | <code>Future&lt;GeofenceCheckResult&gt; verifyWithinGeofence({</code> | İstemci tarafı mesafe kontrolü: hedef koordinat geçersizse fail-closed (izin verilmez) |
 | [lib/services/geofence_service.dart:223](../../lib/services/geofence_service.dart#L223) | <code>'Bu kapı için konum çemberi tanımlı değil. Lütfen site yöneticinize başvurun.',</code> | Kapıda enlem/boylam tanımsız ya da geçersiz aralıkta |
 | [lib/services/geofence_service.dart:38](../../lib/services/geofence_service.dart#L38) | <code>static const int defaultRadiusMeters = 100;</code> | Yarıçap 0/negatifse 100 m varsayılır (sunucu sözleşmesiyle aynı sabit) |
 | [lib/models/door_record.dart:212](../../lib/models/door_record.dart#L212) | <code>geofenceRadiusMeters: (json['geofence_radius_meters'] as num?)?.toInt() ?? 100,</code> | Sunucudan yarıçap gelmezse 100 m varsayılır |
-| [lib/ui/views/individual_home_view.dart:301](../../lib/ui/views/individual_home_view.dart#L301) | <code>final result = await GeofenceService.instance.verifyWithinGeofence(</code> | Çağrı noktası (bireysel ana ekran): kapı açmadan önce istemci mesafe kontrolü |
+| [lib/ui/views/individual_home_view.dart:305](../../lib/ui/views/individual_home_view.dart#L305) | <code>final result = await GeofenceService.instance.verifyWithinGeofence(</code> | Çağrı noktası (bireysel ana ekran): kapı açmadan önce istemci mesafe kontrolü |
 | [lib/ui/widgets/resident_door_actions.dart:60](../../lib/ui/widgets/resident_door_actions.dart#L60) | <code>final result = await GeofenceService.instance.verifyWithinGeofence(</code> | Çağrı noktası (daire kullanıcısı: kart ve çekmece aynı yardımcıyı kullanır) |
 
 **Olası nedenler**
@@ -674,13 +674,13 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/geofence_and_site_
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/services/auth_service.dart:2908](../../lib/services/auth_service.dart#L2908) | <code>Future&lt;(Map&lt;String, dynamic&gt;?, String?)&gt; openDoorWithScannedQr({</code> | Karekodla açma: konum zorunluysa önce konum alınır; sunucu konum isterse bir kez yeniden denenir |
-| [lib/services/auth_api.dart:2969](../../lib/services/auth_api.dart#L2969) | <code>Future&lt;Map&lt;String, dynamic&gt;&gt; openDoorWithScannedQr({</code> | POST /app/doors/scan-qr-open; 10 sn zaman aşımı, yeniden deneme yok |
-| [lib/services/auth_api.dart:3770](../../lib/services/auth_api.dart#L3770) | <code>case 'DYNAMIC_QR_REQUIRED':</code> | Kapıda dinamik karekod geçerli: statik/eski karekod reddedilir |
-| [lib/services/auth_api.dart:3772](../../lib/services/auth_api.dart#L3772) | <code>case 'SCREEN_QR_ALREADY_USED':</code> | Ekran karekodu tek kullanımlık: aynı kod ikinci kez okutuldu |
-| [lib/services/auth_api.dart:3776](../../lib/services/auth_api.dart#L3776) | <code>case 'EKRAN_QR_BEKLENIYOR':</code> | Kapı ekranı henüz karekod üretmedi/göndermedi: birkaç sn sonra tekrar denenmeli |
-| [lib/services/auth_api.dart:3778](../../lib/services/auth_api.dart#L3778) | <code>case 'INVALID_QR_PAYLOAD':</code> | Okutulan metin karekod biçiminde değil |
-| [lib/services/auth_service.dart:2963](../../lib/services/auth_service.dart#L2963) | <code>return (null, 'Karekod okutularak kapı açılamadı. Sunucuya bağlanılamadı.');</code> | ApiException dışı hata genel mesajı |
+| [lib/services/auth_service.dart:3117](../../lib/services/auth_service.dart#L3117) | <code>Future&lt;(Map&lt;String, dynamic&gt;?, String?)&gt; openDoorWithScannedQr({</code> | Karekodla açma: konum zorunluysa önce konum alınır; sunucu konum isterse bir kez yeniden denenir |
+| [lib/services/auth_api.dart:3176](../../lib/services/auth_api.dart#L3176) | <code>Future&lt;Map&lt;String, dynamic&gt;&gt; openDoorWithScannedQr({</code> | POST /app/doors/scan-qr-open; 10 sn zaman aşımı, yeniden deneme yok |
+| [lib/services/auth_api.dart:3977](../../lib/services/auth_api.dart#L3977) | <code>case 'DYNAMIC_QR_REQUIRED':</code> | Kapıda dinamik karekod geçerli: statik/eski karekod reddedilir |
+| [lib/services/auth_api.dart:3979](../../lib/services/auth_api.dart#L3979) | <code>case 'SCREEN_QR_ALREADY_USED':</code> | Ekran karekodu tek kullanımlık: aynı kod ikinci kez okutuldu |
+| [lib/services/auth_api.dart:3983](../../lib/services/auth_api.dart#L3983) | <code>case 'EKRAN_QR_BEKLENIYOR':</code> | Kapı ekranı henüz karekod üretmedi/göndermedi: birkaç sn sonra tekrar denenmeli |
+| [lib/services/auth_api.dart:3985](../../lib/services/auth_api.dart#L3985) | <code>case 'INVALID_QR_PAYLOAD':</code> | Okutulan metin karekod biçiminde değil |
+| [lib/services/auth_service.dart:3172](../../lib/services/auth_service.dart#L3172) | <code>return (null, 'Karekod okutularak kapı açılamadı. Sunucuya bağlanılamadı.');</code> | ApiException dışı hata genel mesajı |
 | [lib/models/door_record.dart:124](../../lib/models/door_record.dart#L124) | <code>bool get canOpenQr =&gt;</code> | QR ile giriş için: özellik + kapı QR aktif + fiziksel QR okuyucu (C3 olmayan, qr_reader_enabled) |
 
 **Olası nedenler**
@@ -704,11 +704,11 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/geofence_and_site_
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/services/auth_service.dart:3440](../../lib/services/auth_service.dart#L3440) | <code>Future&lt;(DoorRuntimeStatus?, String?)?&gt; _tryOpenDoorLocallyIfAlive(</code> | Yerel yol YALNIZ şu koşullarda denenir: sunucudan alınmış token + telefon Wi-Fi'da + cihazın taze beacon'ı var |
-| [lib/services/auth_service.dart:3455](../../lib/services/auth_service.dart#L3455) | <code>if (liveBeacon == null &#124;&#124; !liveBeacon.isFresh) {</code> | Taze beacon yoksa yerel deneme yapılmaz, bulutla devam edilir |
-| [lib/services/auth_service.dart:3464](../../lib/services/auth_service.dart#L3464) | <code>debugPrint('[AuthService] Yerel ağ yanıt vermedi -&gt; buluta devrediliyor...');</code> | Yerel açma başarısız: hata KULLANICIYA gösterilmez, sessizce buluta düşülür (yalnız bu günlük iz bırakır) |
-| [lib/services/auth_service.dart:2813](../../lib/services/auth_service.dart#L2813) | <code>final allowLocal = door != null &amp;&amp; (door.canOpenLocalUdp &#124;&#124; isSuper) &amp;&amp; !moduleClosed;</code> | Kapı politikası yerel açmaya izin vermiyorsa yerel yol hiç denenmez |
-| [lib/services/auth_service.dart:2895](../../lib/services/auth_service.dart#L2895) | <code>bool canTryLocalDoorOpen(DoorRecord door) {</code> | Arayüzün "yerelden açılabilir" kararı: politika + cihaz UID + kullanılabilir token önbelleği |
+| [lib/services/auth_service.dart:3670](../../lib/services/auth_service.dart#L3670) | <code>Future&lt;(DoorRuntimeStatus?, String?)?&gt; _tryOpenDoorLocallyIfAlive(</code> | Yerel yol YALNIZ şu koşullarda denenir: sunucudan alınmış token + telefon Wi-Fi'da + cihazın taze beacon'ı var |
+| [lib/services/auth_service.dart:3685](../../lib/services/auth_service.dart#L3685) | <code>if (liveBeacon == null &#124;&#124; !liveBeacon.isFresh) {</code> | Taze beacon yoksa yerel deneme yapılmaz, bulutla devam edilir |
+| [lib/services/auth_service.dart:3694](../../lib/services/auth_service.dart#L3694) | <code>debugPrint('[AuthService] Yerel ağ yanıt vermedi -&gt; buluta devrediliyor...');</code> | Yerel açma başarısız: hata KULLANICIYA gösterilmez, sessizce buluta düşülür (yalnız bu günlük iz bırakır) |
+| [lib/services/auth_service.dart:3022](../../lib/services/auth_service.dart#L3022) | <code>final allowLocal = door != null &amp;&amp; (door.canOpenLocalUdp &#124;&#124; isSuper) &amp;&amp; !moduleClosed;</code> | Kapı politikası yerel açmaya izin vermiyorsa yerel yol hiç denenmez |
+| [lib/services/auth_service.dart:3104](../../lib/services/auth_service.dart#L3104) | <code>bool canTryLocalDoorOpen(DoorRecord door) {</code> | Arayüzün "yerelden açılabilir" kararı: politika + cihaz UID + kullanılabilir token önbelleği |
 | [lib/services/local_door_service.dart:92](../../lib/services/local_door_service.dart#L92) | <code>bool get isFresh =&gt;</code> | Beacon 60 sn'den eskiyse "taze değil": cihaz yerelde yok sayılır |
 | [lib/services/local_door_service.dart:565](../../lib/services/local_door_service.dart#L565) | <code>CachedDeviceLocation? getCachedDevice(String deviceUid) {</code> | Beacon önbelleğinden cihazı döndürür (yalnız taze kayıt) |
 | [lib/services/local_door_service.dart:574](../../lib/services/local_door_service.dart#L574) | <code>Future&lt;bool&gt; hasLocalWifiConnection() async {</code> | Telefon yerel Wi-Fi'da mı: Android'de yerel köprü, değilse özel adresli ağ arayüzü araması |
@@ -819,12 +819,12 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/local_door_service
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/services/auth_service.dart:3398](../../lib/services/auth_service.dart#L3398) | <code>Future&lt;void&gt; _cacheLocalDoorAccess(DoorRuntimeStatus status) async {</code> | Token önbelleğini sunucu yanıtından doldurur; sunucu token vermezse eski token SİLİNİR (fail-closed) |
-| [lib/services/auth_service.dart:2691](../../lib/services/auth_service.dart#L2691) | <code>await _cacheLocalDoorAccess(status);</code> | Önbellek kapı DURUMU yoklamasından dolar: durum hiç alınmadıysa token yoktur |
-| [lib/services/auth_service.dart:2883](../../lib/services/auth_service.dart#L2883) | <code>unawaited(_cacheLocalDoorAccess(status));</code> | Bulut açma yanıtı da önbelleği tazeler |
+| [lib/services/auth_service.dart:3628](../../lib/services/auth_service.dart#L3628) | <code>Future&lt;void&gt; _cacheLocalDoorAccess(DoorRuntimeStatus status) async {</code> | Token önbelleğini sunucu yanıtından doldurur; sunucu token vermezse eski token SİLİNİR (fail-closed) |
+| [lib/services/auth_service.dart:2900](../../lib/services/auth_service.dart#L2900) | <code>await _cacheLocalDoorAccess(status);</code> | Önbellek kapı DURUMU yoklamasından dolar: durum hiç alınmadıysa token yoktur |
+| [lib/services/auth_service.dart:3092](../../lib/services/auth_service.dart#L3092) | <code>unawaited(_cacheLocalDoorAccess(status));</code> | Bulut açma yanıtı da önbelleği tazeler |
 | [lib/models/door_runtime_status.dart:110](../../lib/models/door_runtime_status.dart#L110) | <code>localControlToken: localControl['token'] as String?,</code> | Sunucu yanıtındaki device_status.local_control.token alanı |
 | [lib/models/local_door_access.dart:18](../../lib/models/local_door_access.dart#L18) | <code>static const Duration cacheValidity = Duration(hours: 24);</code> | Önbellek kaydı 24 saatten eskiyse kullanılmaz (üyelik/izin kalkınca token döndürüldüğü için) |
-| [lib/services/auth_service.dart:3352](../../lib/services/auth_service.dart#L3352) | <code>Future&lt;void&gt; _loadLocalDoorCache() async {</code> | Açılışta güvenli depodan yalnız kullanılabilir (geçerli) kayıtlar yüklenir; bozuk kayıt silinir |
+| [lib/services/auth_service.dart:3582](../../lib/services/auth_service.dart#L3582) | <code>Future&lt;void&gt; _loadLocalDoorCache() async {</code> | Açılışta güvenli depodan yalnız kullanılabilir (geçerli) kayıtlar yüklenir; bozuk kayıt silinir |
 | [lib/services/local_door_service.dart:654](../../lib/services/local_door_service.dart#L654) | <code>message: 'Yerel kontrol anahtarı yok, bulut üzerinden açılıyor.',</code> | Token yoksa yerel açma ağa hiç çıkmadan reddedilir |
 
 **Olası nedenler**
@@ -847,12 +847,12 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/local_door_service
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/services/auth_service.dart:2677](../../lib/services/auth_service.dart#L2677) | <code>Future&lt;(DoorRuntimeStatus?, String?)&gt; getDoorRuntimeStatus({</code> | GET /app/doors/:id/status: başarıda yerel erişim önbelleği tazelenir, hatada bulut-erişilemez bayrağı güncellenir |
-| [lib/services/auth_service.dart:2674](../../lib/services/auth_service.dart#L2674) | <code>static bool _isCloudUnreachableError(ApiException e) =&gt;</code> | "Bulut erişilemiyor" = durum kodu yok (ağ/zaman aşımı), 5xx ya da ara katman yanıtı; 403/404 gibi iş hataları sayılmaz |
+| [lib/services/auth_service.dart:2886](../../lib/services/auth_service.dart#L2886) | <code>Future&lt;(DoorRuntimeStatus?, String?)&gt; getDoorRuntimeStatus({</code> | GET /app/doors/:id/status: başarıda yerel erişim önbelleği tazelenir, hatada bulut-erişilemez bayrağı güncellenir |
+| [lib/services/auth_service.dart:2883](../../lib/services/auth_service.dart#L2883) | <code>static bool _isCloudUnreachableError(ApiException e) =&gt;</code> | "Bulut erişilemiyor" = durum kodu yok (ağ/zaman aşımı), 5xx ya da ara katman yanıtı; 403/404 gibi iş hataları sayılmaz |
 | [lib/models/door_runtime_status.dart:84](../../lib/models/door_runtime_status.dart#L84) | <code>bool get commandEnabled =&gt;</code> | Komut gönderilebilir mi: (MQTT köprüsü VE cihaz bağlı) ya da (yerel kontrol token + IP var) |
 | [lib/models/door_runtime_status.dart:124](../../lib/models/door_runtime_status.dart#L124) | <code>DoorRuntimeStatus copyWithOffline() {</code> | Durum alınamadı ve yerelde de erişilemiyorsa son durum "çevrimdışı"ya çevrilir |
-| [lib/ui/pages/home_page.dart:2954](../../lib/ui/pages/home_page.dart#L2954) | <code>_doorRuntimeStatus = _doorRuntimeStatus!.copyWithOffline();</code> | Çağrı noktası (ekran): arka plan yoklaması hata verip yerel ulaşılamazsa çevrimdışı gösterilir |
-| [lib/ui/pages/home_page.dart:361](../../lib/ui/pages/home_page.dart#L361) | <code>late final AdaptivePoller _statusPoller = AdaptivePoller(</code> | Durum yoklaması 3 sn aralıklı kurulur (görünür ve ön plandayken) |
+| [lib/ui/pages/home_page.dart:3131](../../lib/ui/pages/home_page.dart#L3131) | <code>_doorRuntimeStatus = _doorRuntimeStatus!.copyWithOffline();</code> | Çağrı noktası (ekran): arka plan yoklaması hata verip yerel ulaşılamazsa çevrimdışı gösterilir |
+| [lib/ui/pages/home_page.dart:414](../../lib/ui/pages/home_page.dart#L414) | <code>late final AdaptivePoller _statusPoller = AdaptivePoller(</code> | Durum yoklaması 3 sn aralıklı kurulur (görünür ve ön plandayken) |
 | [lib/services/adaptive_poller.dart:52](../../lib/services/adaptive_poller.dart#L52) | <code>Duration get currentDelay {</code> | Ardışık hatada aralık üstel artar (en çok 30 sn): hata sürerken durum geç güncellenir; başarıda 3 sn'ye döner |
 | [lib/services/adaptive_poller.dart:114](../../lib/services/adaptive_poller.dart#L114) | <code>if (active != null &amp;&amp; !active()) {</code> | Ekran görünür/ön planda değilse tur atlanır: ağ isteği yapılmaz |
 
@@ -877,10 +877,10 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/local_door_service
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/app.dart:361](../../lib/app.dart#L361) | <code>void didChangeAppLifecycleState(AppLifecycleState state) {</code> | Ön plan: yerel dinleyici yeniden başlar; arka plan/inactive/hidden/detached: durdurulur |
+| [lib/app.dart:360](../../lib/app.dart#L360) | <code>void didChangeAppLifecycleState(AppLifecycleState state) {</code> | Ön plan: yerel dinleyici yeniden başlar; arka plan/inactive/hidden/detached: durdurulur |
 | [lib/services/local_door_service.dart:548](../../lib/services/local_door_service.dart#L548) | <code>void pauseListening() {</code> | Soketleri ve 10 sn'lik yenileme zamanlayıcısını kapatır, çok-yayın kilidini bırakır |
 | [lib/services/local_door_service.dart:555](../../lib/services/local_door_service.dart#L555) | <code>void resumeListening() {</code> | Dinleyiciyi yeniden başlatır; ilk beacon gelene kadar cihaz yerelde "görünmez" |
-| [lib/ui/pages/home_page.dart:693](../../lib/ui/pages/home_page.dart#L693) | <code>unawaited(widget.authService.refreshSession());</code> | Ön plana dönüşte oturum doğrulaması (durum yoklaması da yeniden başlar) |
+| [lib/ui/pages/home_page.dart:749](../../lib/ui/pages/home_page.dart#L749) | <code>unawaited(widget.authService.refreshSession());</code> | Ön plana dönüşte oturum doğrulaması (durum yoklaması da yeniden başlar) |
 
 **Olası nedenler**
 - Dinleyici bilerek arka planda durdurulur (pil tasarrufu); ön plana dönünce yeniden kurulur
@@ -904,10 +904,10 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/local_door_service
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/app.dart:118](../../lib/app.dart#L118) | <code>void _onAuthChanged() {</code> | Oturum kapanınca ya da kullanıcı değişince sesli servis, bekleyen eylemler ve yerel ağ önbelleği temizlenir |
-| [lib/app.dart:126](../../lib/app.dart#L126) | <code>_voiceDoorService.clearSession();</code> | Önceki kullanıcının kapı listesi/eşleşmesi/konuşma durumu silinir |
+| [lib/app.dart:117](../../lib/app.dart#L117) | <code>void _onAuthChanged() {</code> | Oturum kapanınca ya da kullanıcı değişince sesli servis, bekleyen eylemler ve yerel ağ önbelleği temizlenir |
+| [lib/app.dart:125](../../lib/app.dart#L125) | <code>_voiceDoorService.clearSession();</code> | Önceki kullanıcının kapı listesi/eşleşmesi/konuşma durumu silinir |
 | [lib/services/voice_door_service.dart:119](../../lib/services/voice_door_service.dart#L119) | <code>void clearSession() {</code> | Oturum sayacını artırır: eski oturumdan kalan asenkron işlerin sonucu yok sayılır |
-| [lib/services/auth_service.dart:611](../../lib/services/auth_service.dart#L611) | <code>Future&lt;void&gt; logout() async {</code> | Bellek, güvenli depo ve widget verisi temizlenir; ekran hemen giriş ekranına döner |
+| [lib/services/auth_service.dart:774](../../lib/services/auth_service.dart#L774) | <code>Future&lt;void&gt; logout() async {</code> | Bellek, güvenli depo ve widget verisi temizlenir; ekran hemen giriş ekranına döner |
 | [lib/services/deep_link_service.dart:220](../../lib/services/deep_link_service.dart#L220) | <code>void clearPending() {</code> | Oturum hazır olmadan kuyruğa alınmış eylemler atılır |
 
 **Olası nedenler**
@@ -927,10 +927,10 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/local_door_service
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/services/auth_api.dart:3925](../../lib/services/auth_api.dart#L3925) | <code>Map&lt;String, dynamic&gt; _decodePayload(http.Response response) {</code> | Gövde JSON değilse durum koduna göre sınıflar: 5xx sunucu mesajı, 413, 429, sonra HTML/modem sezgisi, sonra genel mesaj |
-| [lib/services/auth_api.dart:3963](../../lib/services/auth_api.dart#L3963) | <code>bodyLower.contains('modem') &#124;&#124;</code> | Gövdede html/doctype/router/modem/gateway geçerse "Modem internete bağlı değil" denir (sezgisel: proxy/captive portal sayfası da buna düşer) |
-| [lib/services/auth_api.dart:3966](../../lib/services/auth_api.dart#L3966) | <code>'İnternet bağlantısı yok (Modem internete bağlı değil).',</code> | Kullanıcıya görünen mesaj; fromIntermediary=true olduğu için oturum kapanmaz |
-| [lib/services/auth_api.dart:3525](../../lib/services/auth_api.dart#L3525) | <code>ApiException? _intermediaryAuthError(http.Response response) {</code> | 401/403 gövdesi JSON hata zarfı değilse "güvenlik duvarı/proxy" mesajı: oturum sonu değildir |
+| [lib/services/auth_api.dart:4132](../../lib/services/auth_api.dart#L4132) | <code>Map&lt;String, dynamic&gt; _decodePayload(http.Response response) {</code> | Gövde JSON değilse durum koduna göre sınıflar: 5xx sunucu mesajı, 413, 429, sonra HTML/modem sezgisi, sonra genel mesaj |
+| [lib/services/auth_api.dart:4170](../../lib/services/auth_api.dart#L4170) | <code>bodyLower.contains('modem') &#124;&#124;</code> | Gövdede html/doctype/router/modem/gateway geçerse "Modem internete bağlı değil" denir (sezgisel: proxy/captive portal sayfası da buna düşer) |
+| [lib/services/auth_api.dart:4173](../../lib/services/auth_api.dart#L4173) | <code>'İnternet bağlantısı yok (Modem internete bağlı değil).',</code> | Kullanıcıya görünen mesaj; fromIntermediary=true olduğu için oturum kapanmaz |
+| [lib/services/auth_api.dart:3732](../../lib/services/auth_api.dart#L3732) | <code>ApiException? _intermediaryAuthError(http.Response response) {</code> | 401/403 gövdesi JSON hata zarfı değilse "güvenlik duvarı/proxy" mesajı: oturum sonu değildir |
 | [lib/services/api_exception.dart:8](../../lib/services/api_exception.dart#L8) | <code>this.fromIntermediary = false,</code> | Ara katman işareti: invalidatesSession ve isForbidden bu bayrakla yok sayılır |
 
 **Olası nedenler**
@@ -960,12 +960,12 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/auth_api_policy_te
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/services/auth_api.dart:4002](../../lib/services/auth_api.dart#L4002) | <code>T _parsePayload&lt;T&gt;(String label, T Function() parser) {</code> | Her model ayrıştırması buradan geçer: FormatException "verisi islenemedi", TypeError (null/yanlış tip cast) "verisi beklenen formatta degil" |
-| [lib/services/auth_api.dart:4008](../../lib/services/auth_api.dart#L4008) | <code>throw ApiException('$label verisi beklenen formatta degil.');</code> | Sunucu alanı eksik/başka tipte döndürünce fromJson içindeki "as" dönüşümü TypeError fırlatır; etiket hangi isteğin olduğunu söyler |
-| [lib/services/auth_api.dart:3384](../../lib/services/auth_api.dart#L3384) | <code>Future&lt;void&gt; _decodeLargeBodyInBackground(http.Response response) async {</code> | 64 KB üstü gövdeler arka planda çözülür; çözülemezse eşzamanlı yol aynı hatayı üretir |
+| [lib/services/auth_api.dart:4209](../../lib/services/auth_api.dart#L4209) | <code>T _parsePayload&lt;T&gt;(String label, T Function() parser) {</code> | Her model ayrıştırması buradan geçer: FormatException "verisi islenemedi", TypeError (null/yanlış tip cast) "verisi beklenen formatta degil" |
+| [lib/services/auth_api.dart:4215](../../lib/services/auth_api.dart#L4215) | <code>throw ApiException('$label verisi beklenen formatta degil.');</code> | Sunucu alanı eksik/başka tipte döndürünce fromJson içindeki "as" dönüşümü TypeError fırlatır; etiket hangi isteğin olduğunu söyler |
+| [lib/services/auth_api.dart:3591](../../lib/services/auth_api.dart#L3591) | <code>Future&lt;void&gt; _decodeLargeBodyInBackground(http.Response response) async {</code> | 64 KB üstü gövdeler arka planda çözülür; çözülemezse eşzamanlı yol aynı hatayı üretir |
 | [lib/services/background_work.dart:16](../../lib/services/background_work.dart#L16) | <code>static const int jsonIsolateThresholdBytes = 64 * 1024;</code> | Arka plan çözümleme eşiği |
 | [lib/models/door_record.dart:178](../../lib/models/door_record.dart#L178) | <code>factory DoorRecord.fromJson(Map&lt;String, dynamic&gt; json) {</code> | En sık ayrıştırılan model: zorunlu alanlar "as int/String" ile okunur, eksikse TypeError |
-| [lib/models/user_session.dart:64](../../lib/models/user_session.dart#L64) | <code>factory UserSession.fromJson(Map&lt;String, dynamic&gt; json) {</code> | Giriş yanıtının "Oturum bilgisi" ayrıştırması buraya dayanır |
+| [lib/models/user_session.dart:69](../../lib/models/user_session.dart#L69) | <code>factory UserSession.fromJson(Map&lt;String, dynamic&gt; json) {</code> | Giriş yanıtının "Oturum bilgisi" ayrıştırması buraya dayanır |
 
 **Olası nedenler**
 - Sunucu yanıt şeması değişti (alan adı/tipi) ama uygulama eski: zorunlu cast patlar
@@ -997,7 +997,7 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/model_parsing_test
 | [lib/services/door_widget_service.dart:566](../../lib/services/door_widget_service.dart#L566) | <code>Future&lt;void&gt; clearDoorData() async {</code> | Çıkışta/kapı kalmayınca widget belleği silinir: yer tutucu "Giriş Yapın" kalır |
 | [lib/services/door_widget_service.dart:475](../../lib/services/door_widget_service.dart#L475) | <code>Future&lt;void&gt; syncDoorsList({</code> | Kapı listesini widget belleğine yazar; liste boşsa temizler. Yalnız uygulama çalıştığında/kapı listesi alındığında tetiklenir |
 | [lib/services/door_widget_service.dart:340](../../lib/services/door_widget_service.dart#L340) | <code>// Token geçersiz/iptal edildi (ör. parola değişti, hesap pasif): widget'ta TUTMA.</code> | Açma isteği 401 alırsa widget token'ı silinir: sonraki durum "Giriş Yapın" |
-| [lib/services/auth_service.dart:2989](../../lib/services/auth_service.dart#L2989) | <code>void _syncDoorWidget(UserSession active, List&lt;DoorRecord&gt; doors) {</code> | Süper kullanıcı ve web için widget senkronu YOK; diğerleri listMyDoors sonrası senkronlanır |
+| [lib/services/auth_service.dart:3198](../../lib/services/auth_service.dart#L3198) | <code>void _syncDoorWidget(UserSession active, List&lt;DoorRecord&gt; doors) {</code> | Süper kullanıcı ve web için widget senkronu YOK; diğerleri listMyDoors sonrası senkronlanır |
 | [lib/services/door_widget_service.dart:72](../../lib/services/door_widget_service.dart#L72) | <code>String? normalizeWidgetApiBase(String? raw) {</code> | Kayıtlı API adresi geçersiz/http ise adres null olur ve widget "Giriş Yapın" der |
 
 **Olası nedenler**
@@ -1078,7 +1078,7 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/door_widget_servic
 | [lib/services/door_widget_service.dart:422](../../lib/services/door_widget_service.dart#L422) | <code>if (activeNow == doorId &amp;&amp; mqttConn != cachedOnline) {</code> | Canlı doğrulama yalnız hâlâ aynı kapı aktifse yazılır; ağ hatasında önbellekteki durum kalır (bayat olabilir) |
 | [lib/services/door_widget_service.dart:226](../../lib/services/door_widget_service.dart#L226) | <code>online ? 'Çevrimiçi / Hazır' : 'Kapı Çevrimdışı';</code> | Dinlenme durumu metni: is_online değerinden gelir |
 | [lib/services/door_widget_service.dart:510](../../lib/services/door_widget_service.dart#L510) | <code>final doorOnline = d.assignedDeviceIsOnline ?? false;</code> | Çevrimiçi bilgisi kapı listesinden gelir; bilinmiyorsa (null) widget çevrimdışı gösterir |
-| [lib/services/auth_service.dart:3010](../../lib/services/auth_service.dart#L3010) | <code>void selectWidgetDoor(DoorRecord door, {bool? isOnline}) {</code> | Uygulamada bir kapı seçilince widget aktif kapısı da ona çekilir (forceSelectDoor) |
+| [lib/services/auth_service.dart:3219](../../lib/services/auth_service.dart#L3219) | <code>void selectWidgetDoor(DoorRecord door, {bool? isOnline}) {</code> | Uygulamada bir kapı seçilince widget aktif kapısı da ona çekilir (forceSelectDoor) |
 
 **Olası nedenler**
 - Kullanıcının tek kapısı var (door_count <= 1): ok düğmeleri bir şey yapmaz
@@ -1145,7 +1145,7 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/voice_door_service
 | [lib/services/voice_door_service.dart:174](../../lib/services/voice_door_service.dart#L174) | <code>Future&lt;void&gt; speak(String text) async {</code> | Sesli geri bildirim: web'de ya da ttsEnabled=false iken sessiz; hatalar yutulur |
 | [lib/services/voice_door_service.dart:165](../../lib/services/voice_door_service.dart#L165) | <code>await _tts.setLanguage('tr-TR');</code> | TTS Türkçe ayarlanır; cihazda Türkçe ses paketi yoksa hata yutulur ve varsayılan/sessiz kalabilir |
 | [android/app/src/main/AndroidManifest.xml:8](../../android/app/src/main/AndroidManifest.xml#L8) | <code>&lt;uses-permission android:name="android.permission.RECORD_AUDIO"/&gt;</code> | Android mikrofon izni bildirimi |
-| [lib/app.dart:198](../../lib/app.dart#L198) | <code>if (currentRole != UserRole.apartmentOwner &amp;&amp;</code> | Sesli komut kısayolu yalnız daire kullanıcısı ve bireysel kullanıcı için çalışır; diğer rollerde sessizce yok sayılır |
+| [lib/app.dart:197](../../lib/app.dart#L197) | <code>if (currentRole != UserRole.apartmentOwner &amp;&amp;</code> | Sesli komut kısayolu yalnız daire kullanıcısı ve bireysel kullanıcı için çalışır; diğer rollerde sessizce yok sayılır |
 
 **Olası nedenler**
 - Mikrofon ya da konuşma tanıma izni verilmedi/kalıcı engellendi
@@ -1180,9 +1180,9 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/voice_door_service
 | [lib/services/deep_link_service.dart:195](../../lib/services/deep_link_service.dart#L195) | <code>void markReady({DateTime? now}) {</code> | Oturum hazır olana dek eylemler kuyruktadır; 60 sn'den eski olanlar atılır, kuyruk en çok 3 eylem tutar |
 | [lib/services/deep_link_service.dart:150](../../lib/services/deep_link_service.dart#L150) | <code>static const int _maxUriLength = 512;</code> | 512 karakterden uzun bağlantılar reddedilir |
 | [lib/services/deep_link_service.dart:72](../../lib/services/deep_link_service.dart#L72) | <code>static DeepLinkDoorResolution resolve(</code> | Kapı kullanıcının KENDİ kapıları içinde aranır; yoksa "Kapı bulunamadı."; "ilk kapı" yalnız tek kapıda, çoklu kapıda seçtirilir |
-| [lib/app.dart:175](../../lib/app.dart#L175) | <code>Future&lt;void&gt; _handleDeepLinkAction(DeepLinkAction action) async {</code> | Oturum yoksa yalnız "Lütfen önce uygulamaya giriş yapın." okunur; eylem kaybolur |
-| [lib/app.dart:321](../../lib/app.dart#L321) | <code>Future&lt;DoorRecord?&gt; _confirmDoorOpen(List&lt;DoorRecord&gt; candidates) async {</code> | Kapı açan her bağlantı onay ister; arayüz hazır değilse ya da başka onay penceresi açıksa GÜVENLİ taraf: açılmaz |
-| [lib/app.dart:152](../../lib/app.dart#L152) | <code>Future&lt;void&gt; _handleQuickAction(String actionType) async {</code> | Kısayol eylemleri de aynı deep link/onay yolundan geçer |
+| [lib/app.dart:174](../../lib/app.dart#L174) | <code>Future&lt;void&gt; _handleDeepLinkAction(DeepLinkAction action) async {</code> | Oturum yoksa yalnız "Lütfen önce uygulamaya giriş yapın." okunur; eylem kaybolur |
+| [lib/app.dart:320](../../lib/app.dart#L320) | <code>Future&lt;DoorRecord?&gt; _confirmDoorOpen(List&lt;DoorRecord&gt; candidates) async {</code> | Kapı açan her bağlantı onay ister; arayüz hazır değilse ya da başka onay penceresi açıksa GÜVENLİ taraf: açılmaz |
+| [lib/app.dart:151](../../lib/app.dart#L151) | <code>Future&lt;void&gt; _handleQuickAction(String actionType) async {</code> | Kısayol eylemleri de aynı deep link/onay yolundan geçer |
 | [android/app/src/main/AndroidManifest.xml:59](../../android/app/src/main/AndroidManifest.xml#L59) | <code>&lt;data android:scheme="sitekapi"/&gt;</code> | Android intent-filter: sitekapi şeması bu satırla uygulamaya bağlanır |
 
 **Olası nedenler**
@@ -1217,8 +1217,8 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/deep_link_service_
 | [lib/services/quick_actions_service.dart:34](../../lib/services/quick_actions_service.dart#L34) | <code>Future&lt;void&gt; updateDoorShortcuts(List&lt;DoorRecord&gt; doors) async {</code> | Sesli Kapı Aç + en çok 3 kapı (doorIndex sırasıyla) kısayolu üretir; hata sessizce yutulur |
 | [lib/services/quick_actions_service.dart:50](../../lib/services/quick_actions_service.dart#L50) | <code>for (final door in sortedDoors.take(3)) {</code> | En fazla 3 kapı kısayolu: 4. ve sonraki kapılar için kısayol YOKTUR |
 | [lib/services/quick_actions_service.dart:12](../../lib/services/quick_actions_service.dart#L12) | <code>void initialize(void Function(String actionType) onAction) {</code> | Web'de çalışmaz; eklenti yoksa (masaüstü) hata yutulur ve "[QuickActions] initialize yok sayıldı" yazılır |
-| [lib/app.dart:101](../../lib/app.dart#L101) | <code>_quickActionsService.initialize(_handleQuickAction);</code> | Seçilen kısayol _handleQuickAction ile deep link yoluna aktarılır |
-| [lib/ui/pages/home_page.dart:232](../../lib/ui/pages/home_page.dart#L232) | <code>final QuickActionsService? quickActionsService;</code> | Ana sayfa servisi alır; kodda updateDoorShortcuts çağrısı SADECE test dosyasında geçer (depoda başka çağrı bulunamadı) |
+| [lib/app.dart:100](../../lib/app.dart#L100) | <code>_quickActionsService.initialize(_handleQuickAction);</code> | Seçilen kısayol _handleQuickAction ile deep link yoluna aktarılır |
+| [lib/ui/pages/home_page.dart:251](../../lib/ui/pages/home_page.dart#L251) | <code>final QuickActionsService? quickActionsService;</code> | Ana sayfa servisi alır; kodda updateDoorShortcuts çağrısı SADECE test dosyasında geçer (depoda başka çağrı bulunamadı) |
 
 **Olası nedenler**
 - Kısayol listesi uygulama kodunda hiçbir yerde güncellenmiyor görünüyor (updateDoorShortcuts çağıranı yok): kısayollar oluşmaz
@@ -1253,7 +1253,7 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/quick_actions_serv
 | [lib/services/theme_service.dart:35](../../lib/services/theme_service.dart#L35) | <code>Future&lt;void&gt; setMode(ThemeMode mode) async {</code> | Önce bellekte değişir sonra yazılır: yazma hatası yutulur, tercih yalnız o oturum için geçerli kalır |
 | [lib/services/theme_service.dart:51](../../lib/services/theme_service.dart#L51) | <code>Future&lt;void&gt; toggle(Brightness effective) {</code> | Düğme GÖRÜNEN temanın tersini seçer; sistem modunda da bir kez basınca açık kalır (system seçeneği düğmeyle dönülmez) |
 | [lib/main.dart:32](../../lib/main.dart#L32) | <code>await themeService.load();</code> | Tercih ilk kareden önce yüklenir (yanlış temayla açılıp değişmesin) |
-| [lib/app.dart:416](../../lib/app.dart#L416) | <code>themeMode: _themeService.mode,</code> | MaterialApp tema modu servisten gelir; light()/dark() AppTheme'dedir |
+| [lib/app.dart:415](../../lib/app.dart#L415) | <code>themeMode: _themeService.mode,</code> | MaterialApp tema modu servisten gelir; light()/dark() AppTheme'dedir |
 | [lib/styles/app_theme.dart:261](../../lib/styles/app_theme.dart#L261) | <code>static ThemeData dark() {</code> | Koyu tema üretimi: renk/kontrast sorunları (okunmayan metin) burada ve AppPalette'te aranır |
 
 **Olası nedenler**
@@ -1384,7 +1384,7 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/ble_wifi_provision
 | [lib/services/ble_wifi_provision_service.dart:476](../../lib/services/ble_wifi_provision_service.dart#L476) | <code>message: 'Wi-Fi bilgileri cihaza yazildi. Cihaz yeniden baslatiliyor.',</code> | Sonuç okunamaz hale gelirse (cihaz yeniden başladı, bağlantı koptu) BAŞARI sayılır |
 | [lib/services/ble_wifi_provision_service.dart:101](../../lib/services/ble_wifi_provision_service.dart#L101) | <code>bool get isProvisionAccepted =&gt;</code> | connected / restarting / saved durumları kabul sayılır; error ve failed hata sayılır |
 | [lib/ui/pages/wifi_provision_page.dart:324](../../lib/ui/pages/wifi_provision_page.dart#L324) | <code>await authService.getDeviceMqttCredentials(deviceUid: deviceUid);</code> | Çağrı noktası: MQTT kimliği sunucudan (yönetim yetkisiyle) alınır; yetki yok/sunucu hatası burada çıkar |
-| [lib/services/auth_service.dart:2644](../../lib/services/auth_service.dart#L2644) | <code>Future&lt;(Map&lt;String, dynamic&gt;?, String?)&gt; getDeviceMqttCredentials({</code> | Yalnız yönetim rolleri için; daire kullanıcısı "site yonetim yetkisi gerekir" alır |
+| [lib/services/auth_service.dart:2853](../../lib/services/auth_service.dart#L2853) | <code>Future&lt;(Map&lt;String, dynamic&gt;?, String?)&gt; getDeviceMqttCredentials({</code> | Yalnız yönetim rolleri için; daire kullanıcısı "site yonetim yetkisi gerekir" alır |
 | [cihaz_kontrol/include/wifi_baglanti.h:492](../../cihaz_kontrol/include/wifi_baglanti.h#L492) | <code>wifiNotifyBleResult("error", "MQTT sunucu adresi izinli degil.");</code> | Cihaz izinli MQTT adresi listesi dışındaki sunucuyu reddeder (ESP32-C3 sahada çalışıyor: bu davranışı bozmayın) |
 | [cihaz_kontrol/include/wifi_baglanti.h:405](../../cihaz_kontrol/include/wifi_baglanti.h#L405) | <code>wifiNotifyBleResult("restarting", "WiFi ve MQTT bilgileri kaydedildi. Cihaz temiz baglant…</code> | Cihaz kaydı tamamlayınca yeniden başlar; bağlantı bu yüzden kopar |
 
@@ -1445,14 +1445,14 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/pdf_background_tes
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/ui/pages/home_page.dart:5369](../../lib/ui/pages/home_page.dart#L5369) | <code>_fetchLogsForPdf({</code> | Çağrı noktası: kayıtlar sayfa sayfa alınır; hata olursa o ana kadarki kayıtlarla devam edilir (error alanı doldurulur) |
-| [lib/ui/pages/home_page.dart:5427](../../lib/ui/pages/home_page.dart#L5427) | <code>_showMessage('Çok sayıda kayıt var; rapor en yeni kayıtlarla sınırlandırıldı.');</code> | Sayfa üst sınırına ulaşılınca rapor kısıtlanır (eski kayıtlar PDF'e girmez) |
-| [lib/ui/pages/home_page.dart:5420](../../lib/ui/pages/home_page.dart#L5420) | <code>'${door.doorName} için son 7 güne ait kapı geçiş kaydı bulunamadı.',</code> | Rapor yalnız son 7 gün içindir; kayıt yoksa PDF üretilmez, bu mesaj gösterilir |
+| [lib/ui/pages/home_page.dart:5679](../../lib/ui/pages/home_page.dart#L5679) | <code>_fetchLogsForPdf({</code> | Çağrı noktası: kayıtlar sayfa sayfa alınır; hata olursa o ana kadarki kayıtlarla devam edilir (error alanı doldurulur) |
+| [lib/ui/pages/home_page.dart:5737](../../lib/ui/pages/home_page.dart#L5737) | <code>_showMessage('Çok sayıda kayıt var; rapor en yeni kayıtlarla sınırlandırıldı.');</code> | Sayfa üst sınırına ulaşılınca rapor kısıtlanır (eski kayıtlar PDF'e girmez) |
+| [lib/ui/pages/home_page.dart:5730](../../lib/ui/pages/home_page.dart#L5730) | <code>'${door.doorName} için son 7 güne ait kapı geçiş kaydı bulunamadı.',</code> | Rapor yalnız son 7 gün içindir; kayıt yoksa PDF üretilmez, bu mesaj gösterilir |
 | [lib/services/pdf_logs_service.dart:44](../../lib/services/pdf_logs_service.dart#L44) | <code>static Future&lt;Uint8List&gt; generateLogsPdf({</code> | PDF arka plan izolesinde derlenir; hata fırlarsa çağıran "Geçiş raporu PDF oluşturulurken hata:" gösterir |
 | [lib/services/pdf_logs_service.dart:85](../../lib/services/pdf_logs_service.dart#L85) | <code>int countGroup(String group) =&gt; logs.where((l) =&gt; l.triggerGroup == group).length;</code> | İstatistik kutuları tetik gruplarından (cloud/local/guest/voice/offline/other) hesaplanır |
 | [lib/services/pdf_logs_service.dart:33](../../lib/services/pdf_logs_service.dart#L33) | <code>await Printing.layoutPdf(</code> | Yazdır/kaydet/paylaş önizlemesi platform eklentisiyle açılır; eklenti yoksa (bazı masaüstü/web ortamları) istisna olur |
-| [lib/services/auth_service.dart:2416](../../lib/services/auth_service.dart#L2416) | <code>Future&lt;(DoorAccessLogPage?, String?)&gt; listDoorAccessLogs({</code> | Günlük sayfası alma: yetki/ağ hatası burada ApiException mesajına çevrilir |
-| [lib/services/auth_api.dart:2582](../../lib/services/auth_api.dart#L2582) | <code>if (startDate != null) 'start_date': startDate.toUtc().toIso8601String(),</code> | Tarih aralığı UTC gönderilir; sunucu tarafı filtre/saat dilimi için sunucu alanına bakın |
+| [lib/services/auth_service.dart:2625](../../lib/services/auth_service.dart#L2625) | <code>Future&lt;(DoorAccessLogPage?, String?)&gt; listDoorAccessLogs({</code> | Günlük sayfası alma: yetki/ağ hatası burada ApiException mesajına çevrilir |
+| [lib/services/auth_api.dart:2789](../../lib/services/auth_api.dart#L2789) | <code>if (startDate != null) 'start_date': startDate.toUtc().toIso8601String(),</code> | Tarih aralığı UTC gönderilir; sunucu tarafı filtre/saat dilimi için sunucu alanına bakın |
 
 **Olası nedenler**
 - Seçilen aralıkta (son 7 gün) hiç geçiş kaydı yok
@@ -1487,8 +1487,8 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/pdf_background_tes
 | [lib/services/pdf_credentials_service.dart:152](../../lib/services/pdf_credentials_service.dart#L152) | <code>static Future&lt;void&gt; printOrShareSitePdf({</code> | Yazdır/kaydet önizlemesi (Printing.layoutPdf); dosya adı site adından türetilir |
 | [lib/services/pdf_credentials_service.dart:168](../../lib/services/pdf_credentials_service.dart#L168) | <code>static Future&lt;void&gt; shareSitePdf({</code> | Doğrudan paylaşım (Printing.sharePdf) |
 | [lib/services/pdf_credentials_service.dart:399](../../lib/services/pdf_credentials_service.dart#L399) | <code>'Kullanıcı Adı (Giriş)',</code> | Tablo sütunları: PIN sütunu YOK (migration 051: sunucu PIN saklamaz; PIN yalnız oluşturma / sıfırlamada bir kez gösterilir) |
-| [lib/ui/pages/home_page.dart:5345](../../lib/ui/pages/home_page.dart#L5345) | <code>await PdfCredentialsService.printOrShareSitePdf(</code> | Çağrı noktası (ana sayfa): site yapısı alındıktan sonra çağrılır |
-| [lib/services/auth_service.dart:2308](../../lib/services/auth_service.dart#L2308) | <code>Future&lt;(SiteStructureRecord?, String?)&gt; getSiteStructure({</code> | PDF'in veri kaynağı: site yapısı alınamazsa rapor üretilmez |
+| [lib/ui/pages/home_page.dart:5655](../../lib/ui/pages/home_page.dart#L5655) | <code>await PdfCredentialsService.printOrShareSitePdf(</code> | Çağrı noktası (ana sayfa): site yapısı alındıktan sonra çağrılır |
+| [lib/services/auth_service.dart:2517](../../lib/services/auth_service.dart#L2517) | <code>Future&lt;(SiteStructureRecord?, String?)&gt; getSiteStructure({</code> | PDF'in veri kaynağı: site yapısı alınamazsa rapor üretilmez |
 
 **Olası nedenler**
 - Site yapısı (daire listesi) alınamadı ya da boş: PDF boş/eksik
@@ -1520,7 +1520,7 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/pdf_background_tes
 | [lib/services/pdf_device_firmware_service.dart:161](../../lib/services/pdf_device_firmware_service.dart#L161) | <code>final ver = (dev.firmwareVersion ?? 'Bilinmiyor').trim();</code> | Sürüm alanı boşsa "Bilinmiyor" kovasına düşer (cihaz sürümü hiç bildirmemiş) |
 | [lib/services/pdf_device_firmware_service.dart:35](../../lib/services/pdf_device_firmware_service.dart#L35) | <code>static String _targetKey(DeviceRecord d) =&gt; d.hardwareTarget ?? 'bilinmiyor';</code> | Donanım hedefi boşsa tüm cihazlar tek "bilinmiyor" hattında karşılaştırılır |
 | [lib/services/pdf_device_firmware_service.dart:141](../../lib/services/pdf_device_firmware_service.dart#L141) | <code>final onlineDevices = devices.where((d) =&gt; d.mqttConnected == true).length;</code> | Çevrimiçi sayısı mqttConnected alanından gelir |
-| [lib/ui/pages/home_page.dart:4973](../../lib/ui/pages/home_page.dart#L4973) | <code>await PdfDeviceFirmwareService.printOrShareFirmwareReportPdf(</code> | Çağrı noktası: latestTargetVersion VERİLMİYOR, bu yüzden en yüksek listedeki sürüm esas alınır |
+| [lib/ui/pages/home_page.dart:5283](../../lib/ui/pages/home_page.dart#L5283) | <code>await PdfDeviceFirmwareService.printOrShareFirmwareReportPdf(</code> | Çağrı noktası: latestTargetVersion VERİLMİYOR, bu yüzden en yüksek listedeki sürüm esas alınır |
 
 **Olası nedenler**
 - Listede hiçbir cihaz en güncel sürümde değilse hepsi "güncel" sayılabilir (en yüksek sürüm yine listeden)
@@ -1547,9 +1547,9 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/pdf_background_tes
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/services/auth_service.dart:600](../../lib/services/auth_service.dart#L600) | <code>Future&lt;String?&gt; forgotPassword({required String email}) async {</code> | Başarıda null döner (başarı mesajı arayüzde); ApiException mesajı ya da genel "Sunucuya bağlanılamadı..." döner |
+| [lib/services/auth_service.dart:763](../../lib/services/auth_service.dart#L763) | <code>Future&lt;String?&gt; forgotPassword({required String email}) async {</code> | Başarıda null döner (başarı mesajı arayüzde); ApiException mesajı ya da genel "Sunucuya bağlanılamadı..." döner |
 | [lib/services/auth_api.dart:176](../../lib/services/auth_api.dart#L176) | <code>final uri = Uri.parse('$baseUrl/auth/forgot-password');</code> | POST /auth/forgot-password; yalnız 200 beklenir |
-| [server/src/routes/auth_routes.js:339](../../server/src/routes/auth_routes.js#L339) | <code>authRouter.post('/auth/forgot-password', forgotPasswordLimiter, async (req, res) =&gt; {</code> | Sunucu hesap yoksa/pasifse/e-posta gönderimi başarısızsa da AYNI 200 yanıtını döner (istemci farkı göremez); işlem arka planda yürür |
+| [server/src/routes/auth_routes.js:372](../../server/src/routes/auth_routes.js#L372) | <code>authRouter.post('/auth/forgot-password', forgotPasswordLimiter, async (req, res) =&gt; {</code> | Sunucu hesap yoksa/pasifse/e-posta gönderimi başarısızsa da AYNI 200 yanıtını döner (istemci farkı göremez); işlem arka planda yürür |
 
 **Olası nedenler**
 - E-posta adresi sistemde kayıtlı değil ya da hesap pasif: sunucu bilerek aynı başarı yanıtını verir, e-posta gönderilmez
@@ -1580,10 +1580,10 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 300 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/services/auth_service.dart:2967](../../lib/services/auth_service.dart#L2967) | <code>Future&lt;(List&lt;DoorRecord&gt;?, String?)&gt; listMyDoors() async {</code> | GET /app/my-doors: oturum yoksa "Oturum bulunamadi."; ApiException mesajı aynen döner; diğer istisna "Sunucuya baglanilamadi." |
-| [lib/services/auth_api.dart:3055](../../lib/services/auth_api.dart#L3055) | <code>Future&lt;List&lt;DoorRecord&gt;&gt; listMyDoors({required String token}) async {</code> | Yanıttaki doors dizisi yoksa boş liste olur (hata verilmez); bir kapı satırı bozuksa tüm liste "Kapilar verisi ..." hatasına düşer |
-| [lib/app.dart:237](../../lib/app.dart#L237) | <code>_showFeedback(error ?? 'Kapılar alınamadı.');</code> | Kısayol/deep link yolunda kapı listesi alınamazsa gösterilen mesaj |
-| [lib/services/auth_service.dart:2975](../../lib/services/auth_service.dart#L2975) | <code>if (_session?.token == active.token) {</code> | Liste yalnız oturum hâlâ aynı token'dayken widget'a senkronlanır |
+| [lib/services/auth_service.dart:3176](../../lib/services/auth_service.dart#L3176) | <code>Future&lt;(List&lt;DoorRecord&gt;?, String?)&gt; listMyDoors() async {</code> | GET /app/my-doors: oturum yoksa "Oturum bulunamadi."; ApiException mesajı aynen döner; diğer istisna "Sunucuya baglanilamadi." |
+| [lib/services/auth_api.dart:3262](../../lib/services/auth_api.dart#L3262) | <code>Future&lt;List&lt;DoorRecord&gt;&gt; listMyDoors({required String token}) async {</code> | Yanıttaki doors dizisi yoksa boş liste olur (hata verilmez); bir kapı satırı bozuksa tüm liste "Kapilar verisi ..." hatasına düşer |
+| [lib/app.dart:236](../../lib/app.dart#L236) | <code>_showFeedback(error ?? 'Kapılar alınamadı.');</code> | Kısayol/deep link yolunda kapı listesi alınamazsa gösterilen mesaj |
+| [lib/services/auth_service.dart:3184](../../lib/services/auth_service.dart#L3184) | <code>if (_session?.token == active.token) {</code> | Liste yalnız oturum hâlâ aynı token'dayken widget'a senkronlanır |
 | [server/src/routes/app_doors_routes.js:109](../../server/src/routes/app_doors_routes.js#L109) | <code>appDoorsRouter.get('/app/my-doors', authRequired, async (req, res) =&gt; {</code> | Sunucu tarafı: kullanıcının erişebildiği kapıları döndüren uç nokta |
 
 **Olası nedenler**
@@ -1611,13 +1611,13 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 200 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/services/auth_service.dart:411](../../lib/services/auth_service.dart#L411) | <code>Future&lt;Map&lt;String, dynamic&gt;&gt; claimDevice({</code> | Başarıdan sonra rol sunucuda yükselir; istemci /me ile zorla eşitler (force) |
-| [lib/services/auth_api.dart:4083](../../lib/services/auth_api.dart#L4083) | <code>path: '/membership/claim-device',</code> | POST /membership/claim-device {deviceInput}; yalnız 200 beklenir |
-| [lib/services/auth_api.dart:3794](../../lib/services/auth_api.dart#L3794) | <code>case 'DEVICE_OWNED_BY_ANOTHER':</code> | Cihaz başka bir hesapta kayıtlı (devir gerekir) |
-| [lib/services/auth_api.dart:3796](../../lib/services/auth_api.dart#L3796) | <code>case 'DEVICE_DEFECTIVE':</code> | Cihaz arızalı işaretli: sahiplenme/atama reddedilir |
-| [lib/services/auth_api.dart:3792](../../lib/services/auth_api.dart#L3792) | <code>case 'DEVICE_NOT_ASSIGNABLE':</code> | Cihaz bu kapıya atanamaz (durumu uygun değil) |
-| [lib/services/auth_api.dart:3798](../../lib/services/auth_api.dart#L3798) | <code>case 'DEVICE_NOT_FOUND':</code> | Girilen cihaz kimliği/QR sistemde yok |
-| [server/src/routes/membership_routes.js:74](../../server/src/routes/membership_routes.js#L74) | <code>membershipRouter.post('/membership/claim-device', authRequired, claimDeviceLimiter, async…</code> | Sunucu tarafı: hız sınırlı sahiplenme uç noktası |
+| [lib/services/auth_service.dart:574](../../lib/services/auth_service.dart#L574) | <code>Future&lt;Map&lt;String, dynamic&gt;&gt; claimDevice({</code> | Başarıdan sonra rol sunucuda yükselir; istemci /me ile zorla eşitler (force) |
+| [lib/services/auth_api.dart:4290](../../lib/services/auth_api.dart#L4290) | <code>path: '/membership/claim-device',</code> | POST /membership/claim-device {deviceInput}; yalnız 200 beklenir |
+| [lib/services/auth_api.dart:4001](../../lib/services/auth_api.dart#L4001) | <code>case 'DEVICE_OWNED_BY_ANOTHER':</code> | Cihaz başka bir hesapta kayıtlı (devir gerekir) |
+| [lib/services/auth_api.dart:4003](../../lib/services/auth_api.dart#L4003) | <code>case 'DEVICE_DEFECTIVE':</code> | Cihaz arızalı işaretli: sahiplenme/atama reddedilir |
+| [lib/services/auth_api.dart:3999](../../lib/services/auth_api.dart#L3999) | <code>case 'DEVICE_NOT_ASSIGNABLE':</code> | Cihaz bu kapıya atanamaz (durumu uygun değil) |
+| [lib/services/auth_api.dart:4005](../../lib/services/auth_api.dart#L4005) | <code>case 'DEVICE_NOT_FOUND':</code> | Girilen cihaz kimliği/QR sistemde yok |
+| [server/src/routes/membership_routes.js:80](../../server/src/routes/membership_routes.js#L80) | <code>membershipRouter.post('/membership/claim-device', authRequired, claimDeviceLimiter, async…</code> | Sunucu tarafı: hız sınırlı sahiplenme uç noktası |
 
 **Olası nedenler**
 - Cihaz kimliği yanlış yazıldı ya da cihaz henüz sisteme kaydedilmedi (DEVICE_NOT_FOUND)
@@ -1649,7 +1649,7 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 200 --nostrea
 | [lib/data/turkey_cities_districts.dart:1146](../../lib/data/turkey_cities_districts.dart#L1146) | <code>List&lt;String&gt; getDistrictsForCity(String? city) {</code> | İl adı haritada birebir yoksa BOŞ liste döner (örn. "Istanbul" yazımı "İstanbul" ile eşleşmez) |
 | [lib/data/turkey_cities_districts.dart:1140](../../lib/data/turkey_cities_districts.dart#L1140) | <code>List&lt;String&gt; get turkeyCityNames {</code> | İl adları alfabetik sıralanır (Dart varsayılan sıralaması: Türkçe harf sırası değildir) |
 | [lib/ui/dialogs/site_dialog.dart:365](../../lib/ui/dialogs/site_dialog.dart#L365) | <code>turkeyCityNames.contains(_selectedCity)</code> | Kayıtlı il listede yoksa (yazım farkı) seçim BOŞ görünür |
-| [lib/ui/dialogs/setup_site_dialog.dart:779](../../lib/ui/dialogs/setup_site_dialog.dart#L779) | <code>final cities = turkeyCitiesAndDistricts.keys.toList();</code> | Kurulum diyaloğu listeyi doğrudan haritadan alır |
+| [lib/ui/dialogs/setup_site_dialog.dart:730](../../lib/ui/dialogs/setup_site_dialog.dart#L730) | <code>final cities = turkeyCitiesAndDistricts.keys.toList();</code> | Kurulum diyaloğu listeyi doğrudan haritadan alır |
 
 **Olası nedenler**
 - Sitede kayıtlı il/ilçe adı listedeki yazımla birebir değil (ör. eski/ASCII yazım): seçili görünmez, ilçe listesi boş olur
@@ -1670,7 +1670,7 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 200 --nostrea
 | [lib/services/background_work.dart:28](../../lib/services/background_work.dart#L28) | <code>static Future&lt;R&gt; run&lt;M, R&gt;(</code> | Ağır işleri compute (isolate) ile çalıştırır; web'de aynı izolede çalışır (web'de takılma beklenir) |
 | [lib/services/background_work.dart:16](../../lib/services/background_work.dart#L16) | <code>static const int jsonIsolateThresholdBytes = 64 * 1024;</code> | 64 KB altı JSON ana izolede çözülür (isolate maliyeti daha yüksek olduğu için) |
 | [lib/services/background_work.dart:46](../../lib/services/background_work.dart#L46) | <code>Object? decodeJsonUtf8Bytes(Uint8List bytes) =&gt; jsonDecode(utf8.decode(bytes));</code> | UTF-8 baytlar arka planda çözülür |
-| [lib/services/auth_api.dart:3384](../../lib/services/auth_api.dart#L3384) | <code>Future&lt;void&gt; _decodeLargeBodyInBackground(http.Response response) async {</code> | Büyük yanıtlar için arka plan çözümleme: hata olursa eşzamanlı yola düşer (yine çalışır ama ana izolede) |
+| [lib/services/auth_api.dart:3591](../../lib/services/auth_api.dart#L3591) | <code>Future&lt;void&gt; _decodeLargeBodyInBackground(http.Response response) async {</code> | Büyük yanıtlar için arka plan çözümleme: hata olursa eşzamanlı yola düşer (yine çalışır ama ana izolede) |
 | [lib/services/pdf_logs_service.dart:64](../../lib/services/pdf_logs_service.dart#L64) | <code>debugLabel: 'pdf.logs',</code> | PDF derlemesi arka planda; takılma sürüyorsa asıl maliyet yazı tipi yükleme (ağ) ya da önizleme olabilir |
 | [lib/services/adaptive_poller.dart:52](../../lib/services/adaptive_poller.dart#L52) | <code>Duration get currentDelay {</code> | Yoklama sıklığı: görünür değilken atlanır, hata sürerken seyrekleşir |
 
@@ -1701,7 +1701,7 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/auth_api_offload_t
 | --- | --- | --- |
 | [lib/main.dart:24](../../lib/main.dart#L24) | <code>await SystemChrome.setPreferredOrientations([</code> | Web dışında yalnız dikey (portraitUp/Down) kilitlenir: yatay döndürme KASITLI olarak kapalı; hata yutulur |
 | [lib/main.dart:38](../../lib/main.dart#L38) | <code>child: MyApp(themeService: themeService),</code> | Başlatma sırası: binding + çökme raporlama kancaları -> yön kilidi -> tema yükleme -> açılış kapısı (AppGate: bakım/zorunlu güncelleme) -> uygulama |
-| [lib/app.dart:429](../../lib/app.dart#L429) | <code>maxScaleFactor: 2.0,</code> | Yazı ölçeği 2.0 ile sınırlanır: sistem yazı boyutu daha büyükse uygulama onu kırpar |
+| [lib/app.dart:428](../../lib/app.dart#L428) | <code>maxScaleFactor: 2.0,</code> | Yazı ölçeği 2.0 ile sınırlanır: sistem yazı boyutu daha büyükse uygulama onu kırpar |
 
 **Olası nedenler**
 - Yatay mod bilerek kapalı (portrait kilidi)

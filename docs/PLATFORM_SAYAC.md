@@ -21,7 +21,7 @@ Tüketim = kapanış okuması (tarih <= dönem sonu) - açılış okuması (tari
 
 - `unit_price`: tutar = tüketim x birim fiyat (kuruş/birim), en yakın kuruşa yuvarlanır.
 - `invoice`: fatura tutarı tüketime orantılı, en büyük kalan yöntemiyle (toplam birebir).
-- `heat` (yalnız ısı): `heat.measured_share_pct` (varsayılan 70) ölçüme, kalan (`heat.area_share_pct`, 30) brüt m²'ye göre. Alanı olmayan daire alan payı almaz (eksik listesinde `area_missing`).
+- `heat` (yalnız ısı): `heat.measured_share_pct` (varsayılan 70) ölçüme, kalan (`heat.area_share_pct`, 30) "alan payı" olarak dağıtılır. m² sistemden kaldırıldığı için alan payı, katılan dairelerin HEPSİNDE arsa payı tanımlıysa arsa payına göre, tek bir daire bile eksikse herkese EŞİT dağıtılır (karma dağıtım yapılmaz; `metering_calc.areaShareItems`). Seçilen taban (`land_share` | `equal`) önizleme parametrelerine `area_basis` olarak yazılır. Arsa payı paydaları ortak paydaya getirilemeyecek kadar farklıysa 409 `LAND_SHARE_UNSUPPORTED` (sessizce eşit paya düşülmez). Alan nedeniyle eksik daire (`area_missing`) artık oluşmaz.
 - Eksik daire varsa kayıt 409 `READINGS_INCOMPLETE`; `skip_missing: true` ile eksikler atlanır.
 
 ## Deftere yazma

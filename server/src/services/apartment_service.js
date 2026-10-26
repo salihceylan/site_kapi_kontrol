@@ -5,7 +5,7 @@ import { hashPassword } from '../security/password_hashing.js';
 import { clearAccountLocks } from '../middlewares/login_throttle.js';
 import { recordAudit } from '../modules/audit_service.js';
 import { INTERNAL_EMAIL_SUFFIX } from '../modules/people_sync_sql.js';
-import { deletePushDataForUser } from '../modules/push_devices.js';
+import { revokeCredentialAccess } from '../modules/credential_revocation.js';
 import {
   apartmentBaseLoginName,
   apartmentResidentFullName,
@@ -573,7 +573,7 @@ export async function apartmentPinResetBody(apartmentId, reset, { sendEmail = tr
  * Yeni PIN CSPRNG ile üretilir, yalnız users.password_hash'e (BCRYPT_COST) yazılır ve dönüşte BİR KEZ verilir; düz kopyası saklanmaz.
  * Parola özeti değiştiği için hesabın açık oturumları (JWT pv) ve güvenilir cihaz belirteçleri geçersizleşir; giriş kilitleri açılır.
  * Eski PIN'le edinilmiş JWT DIŞI erişim de AYNI işlemde kapanır: hesabın oluşturduğu misafir geçişleri pasif, kapı karekod belirteçleri iptal,
- * telefon bildirimi cihaz kayıtları / kuyruğu silinir (deletePushDataForUser).
+ * telefon bildirimi cihaz kayıtları / kuyruğu silinir (credential_revocation.revokeCredentialAccess; people_service ile ORTAK kural).
  *
  * Yetki kuralı (inceleme 2. tur P2): sakin parolasını KENDİSİ belirlemişse (resident_pin_issued FALSE) YÖNETİCİ sıfırlayamaz: e-posta olsa da olmasa
  * da 409 APARTMENT_PIN_RESET_NEEDS_SUPER ve ROLLBACK (parola, işaret, misafir geçişi, karekod, bildirim kaydı DEĞİŞMEZ). Yalnız süper kullanıcı
@@ -588,7 +588,7 @@ export async function resetApartmentPin(apartmentId, { actor = null, actorIsSupe
   const client = await pool.connect();
   let user;
   let row;
-  const revoked = { guest_passes: 0, qr_tokens: 0, push_devices: 0, push_outbox: 0 };
+  let revoked; // { guest_passes, qr_tokens, push_devices, push_outbox }; transaction başarıyla biterse her zaman atanmıştır
   try {
     await client.query('BEGIN');
     const aptRes = await client.query(
@@ -627,19 +627,8 @@ export async function resetApartmentPin(apartmentId, { actor = null, actorIsSupe
       `UPDATE apartments SET resident_pin_issued = TRUE, resident_pin_code = NULL WHERE id = $1`,
       [apartmentId],
     );
-    // Eski PIN'le edinilmiş JWT dışı erişim: misafir geçişleri, kapı karekodları, telefon bildirimi kayıtları.
-    revoked.guest_passes = Number(
-      (await client.query(`UPDATE guest_passes SET is_active = FALSE WHERE created_by_user_code = $1 AND is_active = TRUE`, [userCode])).rowCount ?? 0,
-    );
-    revoked.qr_tokens = Number(
-      (await client.query(
-        `UPDATE qr_access_tokens SET is_active = FALSE, revoked_at = NOW() WHERE user_code = $1 AND is_active = TRUE AND revoked_at IS NULL`,
-        [userCode],
-      )).rowCount ?? 0,
-    );
-    const push = await deletePushDataForUser(client, userCode);
-    revoked.push_devices = push.devices;
-    revoked.push_outbox = push.outbox;
+    // Eski PIN'le edinilmiş JWT dışı erişim: misafir geçişleri, kapı karekodları, telefon bildirimi kayıtları (ortak kural: credential_revocation.js).
+    revoked = await revokeCredentialAccess(client, userCode);
     // Kim, hangi dairenin PIN'ini sıfırladı; sakinin kendi parolası mı ezildi (yalnız süper) ve kapanan erişim SAYILARI (PIN / e-posta YAZILMAZ).
     await recordAudit(
       client,

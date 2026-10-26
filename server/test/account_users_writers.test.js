@@ -52,11 +52,6 @@ const REVIEWED_SAFE = [
     reason: 'yalnız dahili daire hesabı (@ahbu.local) pasifleştirir; tombstone e-postası @deleted.invalid olduğundan eşleşmez, is_active=FALSE zaten tombstone durumudur',
   },
   {
-    file: 'routes/admin_routes.js',
-    startsWith: 'UPDATE users SET approval_status = $1, is_active = $2',
-    reason: "WHERE role = 'site_manager': silme rolü AYNI UPDATE'te 'individual' yapar, silme sonrası satır eşleşmez; silme commit etmediyse satır kilidi yüzünden bekler",
-  },
-  {
     file: 'services/membership_service.js',
     startsWith: 'UPDATE users SET email_verified = TRUE WHERE LOWER(email) = LOWER($1)',
     reason: 'e-posta ile anahtarlı: silme e-postayı tombstone adresiyle değiştirir, silme sonrası eşleşmez (statement-düzeyi kilit + yeniden değerlendirme)',
@@ -90,6 +85,9 @@ describe('UPDATE users yazıcıları: silinmiş hesabı dışlar ya da gözden g
     assert.equal(guarded('UPDATE users SET password_hash = $1, must_change_password = FALSE, updated_at = NOW() WHERE user_code = $2'), 1, 'daire sakini change-password');
     assert.ok(all.some((entry) => entry.file === 'services/membership_service.js' && entry.sql.startsWith('UPDATE users SET password_hash = $1, must_change_password = FALSE, updated_at = NOW() WHERE user_code = $2 AND deleted_at IS NULL')), 'daire sakini change-password');
     assert.ok(all.some((entry) => entry.file === 'services/apartment_service.js' && entry.sql.startsWith('UPDATE users SET password_hash = $1, updated_at = NOW() WHERE user_code = $2 AND deleted_at IS NULL')), 'daire PIN sıfırlama');
+    // admin_routes: abonelik talebi onayı / reddi artık korumalı (eskiden REVIEWED_SAFE'ti) ve yönetimin belirlediği geçici parola bayrağı yazıcısı korumalı.
+    assert.ok(all.some((entry) => entry.file === 'routes/admin_routes.js' && entry.sql.startsWith('UPDATE users SET approval_status = $1, is_active = $2') && /deleted_at IS NULL/.test(entry.sql)), 'abonelik talebi');
+    assert.ok(all.some((entry) => entry.file === 'routes/admin_routes.js' && entry.sql.startsWith('UPDATE users SET must_change_password = TRUE, updated_at = NOW() WHERE user_code = $1 AND deleted_at IS NULL')), 'admin geçici parola bayrağı');
     assert.equal(guarded('UPDATE users SET full_name = $1, password_hash = $2, updated_at = NOW() WHERE user_code = $3'), 1, 'doğrulanmamış hesap kimlik bilgileri');
     assert.equal(guarded('UPDATE users SET password_reset_token_hash = $1'), 1, 'parola sıfırlama isteği');
     assert.ok(all.some((entry) => entry.file === 'services/user_service.js' && /email_verification_code_hash/.test(entry.sql) && /deleted_at IS NULL/.test(entry.sql)));

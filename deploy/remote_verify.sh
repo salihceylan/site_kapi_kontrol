@@ -38,10 +38,13 @@ echo -n "hesap silme kimliksiz (401 beklenir): "; curl -s -m 8 -X POST -H 'Conte
 echo -n "platform-config kimliksiz (401 beklenir): "; curl -s -m 8 -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8080/admin/platform-config
 echo "== yeni tablolar 038-041 (25 beklenir: bulk_import_runs 1 + belgeler 3 + finans 4b 19 + push 2)"
 echo "bulunan: $(q1 "select count(*) from information_schema.tables where table_schema='public' and table_name in ('bulk_import_runs','documents','document_versions','announcement_attachments','finance_settings','late_fee_runs','late_fee_run_lines','receipt_counters','receipts','receipt_print_events','finance_accounts','expense_categories','finance_suppliers','expenses','expense_voids','expense_documents','account_movements','account_transfers','account_reconciliations','finance_reminder_runs','finance_reminder_items','finance_reminder_apartments','finance_reminder_exclusions','push_devices','push_outbox')")"
-echo "== site_modules: documents ve finance KAPALI olmali (yeni moduller varsayilan kapali; dagitim aninda 0 beklenir)"
+# Seçmeli modüller varsayılan kapalıdır, ama ilk dağıtımdan sonra site yöneticileri talep ederek açar: açık site sayısı
+# artık bilgidir (eskiden "0 beklenir" SORUNLU basıyordu). Dağıtım öncesi/sonrası sayı değişmemeli: değiştiyse bir
+# migration modülü kendiliğinden açmış olabilir.
+echo "== site_modules: secmeli modullerin acik site sayisi (bilgi; dagitim oncesi/sonrasi ayni kalmali)"
 for m in documents finance; do
   n="$(q1 "select count(*) from site_modules where module_code='$m' and enabled")"
-  if [ "$n" = "0" ]; then echo "OK      $m: acik site sayisi 0"; else echo "SORUNLU $m: acik site sayisi ${n:-?} (0 beklenir)"; fi
+  echo "bilgi   $m: acik site sayisi ${n:-?}"
 done
 echo "== yeni uclar 038-041 kimliksiz (401 beklenir; 5xx OLMAMALI)"
 expect401 "toplu yukleme sablon/spec" GET /manager/sites/1000000001/imports/spec

@@ -480,7 +480,7 @@ describe('devices: kullanici guncelleme (null != undefined)', () => {
 
   it('bos parola alani degistirme sayilir (bcrypt(null) 500 uretmez)', silence(async () => {
     const queries = [];
-    pool.query = async (sql, params) => {
+    const answer = async (sql, params) => {
       const text = flat(sql);
       queries.push({ text, params });
       return {
@@ -488,6 +488,9 @@ describe('devices: kullanici guncelleme (null != undefined)', () => {
         rows: [{ id: 12345, full_name: 'Ali Veli', email: 'a@b.c', role: 'individual', is_active: true, email_verified: true }],
       };
     };
+    pool.query = answer;
+    // Kullanıcı yazımı ve denetim kaydı artık tek işlemde (bağlantı üzerinden) yapılır.
+    pool.connect = async () => ({ query: answer, release() {} });
     const res = await call('patch', '/admin/users/:id', {
       params: { id: '12345' },
       body: { full_name: 'Ali Veli', password: '' },

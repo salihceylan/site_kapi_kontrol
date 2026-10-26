@@ -66,8 +66,8 @@
 //             SET NULL, ensureDbSchema idempotans + yalniz katalog sorgusu), daireler/kisiler/araclar onizleme (YAZMAZ) -> onay, hepsi-ya-da-hic (strict),
 //             idempotans (ayni dosya ikinci kez = 0 degisiklik, replay, IDEMPOTENCY_CONFLICT), PREVIEW_STALE, eslesme matrisi (e-posta / daire+ad / ad+telefon,
 //             telefon tek basina eslestirmez, hesapli kisi alanlari ezilmez, hesapliya yeni daire eklenmez, resident -> owner, pasif yeniden etkinlestirme,
-//             RELATION_TAKEN, baba/ogul), plaka kurallari, ERISIM YOK (uyelik/kullanici/e-posta degismez), eslemeyle LINK (hayalet kisi yok), kilitler
-//             (cift onay, IMPORT_IN_PROGRESS, SITE_BUSY, CRM yazmalari bekler, finance_post, kilit turlari: 40P01 = 0), olcek (5000 satir / 15.000 kisi:
+//             RELATION_TAKEN, baba/ogul), plaka kurallari, HESAP KURALI (hesap YALNIZ bu yuklemede daire iliskisi eklenen kisilere: kisi basina tek hesap, sifre 1234, apartment_owner, dairede tek admin; arac yuklemesi ve dairesiz kisi hesap acmaz; e-posta baska siteye / yoneticiye aitse baglanmaz), eslemeyle LINK (hayalet kisi yok), kilitler
+//             (cift onay, IMPORT_IN_PROGRESS, SITE_BUSY, CRM yazmalari bekler, finance_post, kilit turlari: 40P01 = 0), olcek (5000 satir / 15.000 kisi; 2500 yeni kisi = 2500 hesap, kisi basina bcrypt:
 //             sure, sorgu sayisi, bellek, EXPLAIN), disa aktarma (liste ile suzgec esdegerligi, yetki, 20.000 siniri, audit, gidis-donus), gizlilik. QA_ONLY=bulk_import.
 //   push      Telefon bildirimi (Faz 3b-B, 041; govde scripts/qa_push_section.mjs; sahte oauth2 + FCM sunucusu, gercek Google'a baglanilmaz): sema, cihaz kaydi
 //             (devir, 10 cihaz, eszamanli ayni jeton -> tek sahip, kayit x hesap silme), yayinda outbox (3000 alici, PUSH_ENABLED=0 -> 0 satir, UNIQUE), kilit
@@ -231,7 +231,7 @@ const CATALOG_TABLES = [
   'user_oauth_identities', // 076 + 077 FK (users, CASCADE)
   'web_push_subscriptions', // 063 + 077 FK (users, CASCADE)
 ];
-// m2 (gross_area_m2 / net_area_m2) KATALOGA ALINMAZ: sistemden kaldirildi; sutunlar bu surumde geri alma uyumlulugu icin KALIR (db.js 031 DDL'i) ama QA onlari yazmaz / okumaz.
+// m2 (brut / net) sutunlari KATALOGA ALINMAZ: sistemden kaldirildi ve 078 ile KALICI dusuruldu (db.js artik eklemez); QA onlari yazmaz / okumaz. Yoklugu chain bolumunde ayrica sinanir.
 const APARTMENT_COLUMNS = ['floor', 'land_share_numerator', 'land_share_denominator', 'category', 'responsible_party'];
 const NAMED_CONSTRAINTS = [
   'sites_management_type_check',
@@ -705,6 +705,43 @@ async function sectionChain() {
   check('tohum planlar: manual_approval ACIK, standard KAPALI, ikisi de fiyatsiz', same(seedRows.rows.map((r) => [r.code, r.is_active, r.price_minor, r.billing_period]), [['manual_approval', true, null, null], ['standard', false, null, null]]), seedRows.rows);
   const seedSetting = await pool.query(`SELECT value FROM platform_settings WHERE key = 'site_onboarding'`);
   check('tohum ayar: site_onboarding = {"mode":"approval"}', same(seedSetting.rows[0]?.value, { mode: 'approval' }), seedSetting.rows);
+  // --- 078: daire m2 sutunlari KALICI dusuruldu (migration zinciri 001..078 sonunda yok; db.js ensureDbSchema geri eklemez)
+  const areaColumns = async () => (await pool.query(`SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'apartments' AND column_name IN ('gross_area_m2', 'net_area_m2') ORDER BY 1`)).rows.map((r) => r.column_name);
+  check('078: migration zinciri (001..078) + ensureDbSchema x2 sonunda apartments.gross_area_m2 / net_area_m2 YOK (db.js sutunlari geri eklemez)', same(await areaColumns(), []), await areaColumns());
+  const recorded = (await pool.query(`SELECT version FROM schema_migrations WHERE version LIKE '078%'`)).rows;
+  check('078: schema_migrations kaydi var (078_apartment_area_columns_drop)', recorded.length === 1 && recorded[0].version === '078_apartment_area_columns_drop', recorded);
+  // eski kod (geri alma hedefi) acilista sutunlari BOS geri ekler: yeni kod sonraki acilista yeniden dusurur; baska kolon / satir DEGISMEZ
+  const hooks = installPoolHooks(pool);
+  const qa078Site = 1000000078;
+  await pool.query(`INSERT INTO sites (site_code, name, approval_status, approved_at) VALUES ($1, 'm2 Dusurme Sitesi', 'approved', NOW())`, [qa078Site]);
+  const qa078Block = Number((await pool.query(`INSERT INTO site_blocks (site_code, block_name, sort_order) VALUES ($1, 'A Blok', 1) RETURNING id`, [qa078Site])).rows[0].id);
+  for (const n of [1, 2]) {
+    await pool.query(`INSERT INTO apartments (site_code, block_id, unit_label, sort_order, floor, category) VALUES ($1, $2, $3, $4, $5, '3+1')`, [qa078Site, qa078Block, `Daire ${n}`, n, n + 1]);
+  }
+  const apartmentSnapshot = async () => (await pool.query(`SELECT id, unit_label, sort_order, floor, category, responsible_party FROM apartments WHERE site_code = $1 ORDER BY id`, [qa078Site])).rows;
+  const snapshotBefore = await apartmentSnapshot();
+  await pool.query(`ALTER TABLE apartments ADD COLUMN gross_area_m2 NUMERIC(8,2), ADD COLUMN net_area_m2 NUMERIC(8,2)`);
+  await pool.query(`UPDATE apartments SET gross_area_m2 = 120.50, net_area_m2 = 100 WHERE site_code = $1`, [qa078Site]);
+  check('078 (hazirlik): eski kod sutunlari geri ekledi (iki sutun + dolu veri)', same(await areaColumns(), ['gross_area_m2', 'net_area_m2']));
+  hooks.log = [];
+  await ensureDbSchema();
+  const dropStatements = hooks.log.filter((entry) => /DROP COLUMN/.test(entry.text ?? ''));
+  hooks.log = null;
+  check('078: ensureDbSchema geri eklenen sutunlari dusurur (TEK DROP ifadesi); apartments satirlari / diger kolonlar AYNEN', same(await areaColumns(), []) && dropStatements.length === 1 && same(await apartmentSnapshot(), snapshotBefore), { dropStatements: dropStatements.length });
+  hooks.log = [];
+  await ensureDbSchema();
+  const noOpStatements = hooks.log.filter((entry) => /DROP COLUMN/.test(entry.text ?? ''));
+  hooks.log = null;
+  check('078: sutunlar yokken ensureDbSchema HICBIR DROP ifadesi gondermez (katalog kontrollu)', noOpStatements.length === 0 && same(await areaColumns(), []), noOpStatements.map((entry) => entry.text?.slice(0, 80)));
+  // 078 dosyasi migrate.js disinda (elle / psql) calistirilsa da ayni: yalniz bir sutun kalmissa (yarim durum) onu da dusurur; sutun yokken no-op
+  const migrationSql = fs.readFileSync(path.join(MIGRATIONS_DIR, '078_apartment_area_columns_drop.sql'), 'utf8');
+  await pool.query(`ALTER TABLE apartments ADD COLUMN net_area_m2 NUMERIC(8,2)`);
+  await pool.query(migrationSql);
+  const afterFile = await areaColumns();
+  await pool.query(migrationSql);
+  check('078: migration dosyasi elle calistirilinca yarim durumu (tek sutun) temizler; ikinci calistirma no-op', same(afterFile, []) && same(await areaColumns(), []) && same(await apartmentSnapshot(), snapshotBefore), afterFile);
+  await pool.query(`DELETE FROM sites WHERE site_code = $1`, [qa078Site]);
+  check('078: temizlik (deneme sitesi CASCADE ile silindi)', (await pool.query(`SELECT COUNT(*)::int AS n FROM apartments WHERE site_code = $1`, [qa078Site])).rows[0].n === 0);
   await finishChild(pool);
 }
 
@@ -7625,9 +7662,9 @@ async function sectionFinance() {
   check('H4: siteye ILK kapatma serbest (3 ay once): 200; closed_through, open_period (bu ay), kapatan adi', closeFirst.status === 200 && closeFirst.body.closed_through === ym(-3) && closeFirst.body.open_period === ym(0) && closeFirst.body.items.length === 1 && closeFirst.body.items[0].period === ym(-3) && closeFirst.body.items[0].closed_by_name === 'Finans Yonetici' && typeof closeFirst.body.items[0].closed_at === 'string', closeFirst.body);
   const skip = await call('POST', closeUrl(-1), MGR, {});
   const dup = await call('POST', closeUrl(-3), MGR, {});
-  check('H5: donemler SIRAYLA kapanir: onceki ay kapali degilse 409 PERIOD_NOT_CLOSABLE; zaten kapali donem tekrar kapatilamaz', skip.status === 409 && skip.body.code === 'PERIOD_NOT_CLOSABLE' && dup.status === 409 && dup.body.code === 'PERIOD_NOT_CLOSABLE');
+  check('H5: kapatma SIRASIZ ve cok aylidir (N4): closed_through ym(-3) iken ym(-1) secilince arada kalan ym(-2) de BIRLIKTE kapanir (200; closed_through = ym(-1); 3 ayri kapanis satiri, yeni -> eski); zaten kapali donem tekrar kapatilamaz 409 PERIOD_NOT_CLOSABLE', skip.status === 200 && skip.body.closed_through === ym(-1) && same(skip.body.items.map((i) => i.period), [ym(-1), ym(-2), ym(-3)]) && same(skip.body.closable, [ym(0)]) && skip.body.open_period === ym(0) && dup.status === 409 && dup.body.code === 'PERIOD_NOT_CLOSABLE', skip.body);
   const earlier = await call('POST', closeUrl(-5), MGR, {});
-  check('H5b: kapali donemlerden ONCEKI bir ay kapatilamaz (onceki ay kapali degil)', earlier.status === 409 && earlier.body.code === 'PERIOD_NOT_CLOSABLE');
+  check('H5b: kapali donemlerden ONCEKI bir ay (ym(-5)) ve kapanisin arasinda kalan ay (ym(-2)) tekrar kapatilamaz: zaten kapali sayilir, 409 PERIOD_NOT_CLOSABLE', earlier.status === 409 && earlier.body.code === 'PERIOD_NOT_CLOSABLE' && (await call('POST', closeUrl(-2), MGR, {})).body?.code === 'PERIOD_NOT_CLOSABLE');
   check('H6: kapali doneme borclandirma / tahsilat / ek borc eklenemez: 409 PERIOD_CLOSED (ledger degismez)', await (async () => {
     const before = (await ledgerRows(fs4.code)).length;
     const otherDef = (await call('POST', `${b4}/definitions`, MGR, { name: 'Ikinci', kind: 'recurring', distribution: 'equal', amount_minor: 3000, due_day: 1, start_period: ym(-5), target: { type: 'site' } })).body;
@@ -7636,7 +7673,7 @@ async function sectionFinance() {
     const payment = await call('POST', `${b4}/payments`, MGR, { apartment_id: D4(1).id, amount_minor: 100, entry_date: dayOf(-3, 5), method: 'cash', idempotency_key: key('closed') });
     return preview.closed === true && post.status === 409 && post.body.code === 'PERIOD_CLOSED' && payment.status === 409 && payment.body.code === 'PERIOD_CLOSED' && (await ledgerRows(fs4.code)).length === before;
   })());
-  for (const offset of [-2, -1]) await call('POST', closeUrl(offset), MGR, {});
+  // ym(-2) ve ym(-1) H5'te birlikte kapandi (sirasiz kapatma, N4); burada ayrica kapatilmaz.
   const closeCurrent = await call('POST', closeUrl(0), MGR, {});
   check('H7: bu ay da (gelecek degil) kapatilabilir; acik donem sonraki aya kayar (open_period)', closeCurrent.status === 200 && closeCurrent.body.closed_through === ym(0) && closeCurrent.body.open_period === ym(1) && closeCurrent.body.items.map((i) => i.period).join(',') === [ym(0), ym(-1), ym(-2), ym(-3)].join(','), closeCurrent.body);
   const lateCharge = await call('POST', `${b4}/charges`, MGR, { name: 'Gec', distribution: 'equal', amount_minor: 900, target: { type: 'site' }, expected_total_minor: 900, expected_apartment_count: 3, expected_hash: '0'.repeat(64), idempotency_key: key('late') });
@@ -7658,7 +7695,7 @@ async function sectionFinance() {
   check('H12: yeniden acilan ayda tahsilat yine mumkun', payAgain.status === 201);
   const closeAudit = await auditRows(fs4.code, 'finance.period.closed');
   const reopenAudit = await auditRows(fs4.code, 'finance.period.reopened');
-  check('H13: audit finance.period.closed (4) / reopened (1): target_id = donem, details { period } (baska bir sey YOK)', closeAudit.length === 4 && reopenAudit.length === 1 && closeAudit.every((r) => same(Object.keys(r.details), ['period']) && r.target_type === 'finance' && Number(r.site_code) === fs4.code) && reopenAudit[0].target_id === ym(0) && reopenAudit[0].actor_user_code === SUPER, [closeAudit[0], reopenAudit[0]]);
+  check('H13: audit finance.period.closed (3: ym(-3) tek ay, ym(-1) iki ay birlikte, ym(0) tek ay) / reopened (1): target_id = donem, details { period, from, months } (baska bir sey YOK)', closeAudit.length === 3 && reopenAudit.length === 1 && closeAudit.every((r) => same(Object.keys(r.details).sort(), ['from', 'months', 'period']) && r.target_type === 'finance' && Number(r.site_code) === fs4.code) && same(closeAudit.map((r) => [r.target_id, r.details.period, r.details.from, r.details.months]), [[ym(-3), ym(-3), ym(-3), 1], [ym(-1), ym(-1), ym(-2), 2], [ym(0), ym(0), ym(0), 1]]) && reopenAudit[0].target_id === ym(0) && same(Object.keys(reopenAudit[0].details), ['period']) && reopenAudit[0].actor_user_code === SUPER, [closeAudit.map((r) => r.details), reopenAudit[0]]);
   const boardPeriods = await periodsOf(BOARD);
   check('H14: kurul donemleri okur ama kapatan adi NULL; kurul kapatamaz (403)', boardPeriods.status === 200 && boardPeriods.body.items.length === 3 && boardPeriods.body.items.every((i) => i.closed_by_name === null) && (await call('POST', closeUrl(0), BOARD, {})).status === 403);
   // yeniden acilan ay tekrar kapatilabilir ve tum kapanislar tek tek geri alinabilir
@@ -8237,7 +8274,7 @@ async function sectionFinance() {
 
   // ilk kapatma: "Eylul" gibi herhangi bir ay (ym(-3)); aradaki aylar SATIR degil ama kapali sayilir
   const firstClose = await closeP(-3);
-  check('V1e: ilk kapatma herhangi bir ay (ym(-3)): 200; closed_through = ym(-3); items YALNIZ gercek kapanis satiri (1); closable = [ym(-2)]; open_period = bu ay (kapanisin sonrasi ama bu aydan once degil)', firstClose.status === 200 && firstClose.body.closed_through === ym(-3) && firstClose.body.items.length === 1 && same(firstClose.body.closable, [ym(-2)]) && firstClose.body.open_period === ym(0), firstClose.body);
+  check('V1e: ilk kapatma herhangi bir ay (ym(-3)): 200; closed_through = ym(-3); items YALNIZ gercek kapanis satiri (1); closable = [bu ay, ym(-1), ym(-2)] (closed_through + 1 aydan bu aya kadar butun aylar, yeni -> eski); open_period = bu ay (kapanisin sonrasi ama bu aydan once degil)', firstClose.status === 200 && firstClose.body.closed_through === ym(-3) && firstClose.body.items.length === 1 && same(firstClose.body.closable, [ym(0), ym(-1), ym(-2)]) && firstClose.body.open_period === ym(0), firstClose.body);
   const ledgerBeforeMax = (await ledgerRows(fsP.code)).length;
   const maxPosts = [await postP(-4), await postP(-5), await postP(-7)];
   const maxPays = [await payP(KP(2).id, dayOf(-4, 3)), await payP(KP(2).id, dayOf(-6, 20)), await payP(KP(2).id, dayOf(-3, 20))];
@@ -8253,13 +8290,15 @@ async function sectionFinance() {
   check('V1i: kapali aydaki (ym(-5)) tahsilatin tersi her zaman ACIK doneme yazilir (bu ay)', revOld.status === 201 && revOld.body.entry.period === ym(0), revOld.body.entry);
 
   // kapatma sirasi
-  const notClosable = [await closeP(-5), await closeP(-3), await closeP(-1), await closeP(0), await closeP(1)];
-  check('V1j: kapanis sirasi: kapali/aradaki ay (ym(-5), ym(-3)) 409; atlama (ym(-1), ym(0)) 409; gelecek ay 409 — hepsi PERIOD_NOT_CLOSABLE', notClosable.every((r) => r.status === 409 && r.body.code === 'PERIOD_NOT_CLOSABLE'), notClosable.map((r) => r.body?.code));
-  const closeTwo = await closeP(-2);
-  check('V1k: closed_through + 1 (ym(-2)) kapanir; closable = [ym(-1)]; items 2', closeTwo.status === 200 && closeTwo.body.closed_through === ym(-2) && same(closeTwo.body.closable, [ym(-1)]) && closeTwo.body.items.length === 2, closeTwo.body);
-  const closeThree = await closeP(-1);
+  const notClosable = [await closeP(-5), await closeP(-3), await closeP(1)];
+  check('V1j: kapatma sirasiz ama KAPALI aya donmez: kapali/onceki ay (ym(-5), ym(-3)) ve gelecek ay (ym(1)) 409 PERIOD_NOT_CLOSABLE; hicbir kapanis satiri eklenmez', notClosable.every((r) => r.status === 409 && r.body.code === 'PERIOD_NOT_CLOSABLE') && (await q(`SELECT COUNT(*)::int AS n FROM finance_period_closures WHERE site_code = $1`, [fsP.code])).rows[0].n === 1, notClosable.map((r) => r.body?.code));
+  const closeTwo = await closeP(-1);
+  check('V1k: closed_through + 2 (ym(-1)) secilince ym(-2) de birlikte kapanir (atlama YOK, tek istekte iki satir): 200; closed_through = ym(-1); closable = [bu ay]; items 3', closeTwo.status === 200 && closeTwo.body.closed_through === ym(-1) && same(closeTwo.body.closable, [ym(0)]) && closeTwo.body.items.length === 3 && same(closeTwo.body.items.map((i) => i.period), [ym(-1), ym(-2), ym(-3)]), closeTwo.body);
+  const closeAuditP = (await q(`SELECT target_id, details FROM audit_log WHERE site_code = $1 AND action = 'finance.period.closed' ORDER BY id`, [fsP.code])).rows;
+  check('V1k2: audit finance.period.closed: ilk kapatma { period: ym(-3), from: ym(-3), months: 1 }; cok aylik kapatma { period: ym(-1), from: ym(-2), months: 2 }', closeAuditP.length === 2 && same([closeAuditP[0].details.period, closeAuditP[0].details.from, closeAuditP[0].details.months], [ym(-3), ym(-3), 1]) && same([closeAuditP[1].details.period, closeAuditP[1].details.from, closeAuditP[1].details.months], [ym(-1), ym(-2), 2]), closeAuditP.map((r) => r.details));
+  const closeThree = closeTwo;
   const closeNow = await closeP(0);
-  check('V1l: bu ay da kapatilir: closable BOS (closed_through + 1 bu aydan sonra); open_period = sonraki ay; closed_through = bu ay', closeThree.status === 200 && same(closeThree.body.closable, [ym(0)]) && closeNow.status === 200 && same(closeNow.body.closable, []) && closeNow.body.closed_through === ym(0) && closeNow.body.open_period === ym(1) && closeNow.body.items.length === 4,[closeThree.body.closable, closeNow.body]);
+  check('V1l: bu ay da kapatilir: closable (kapatmadan once) = [bu ay]; sonra closable BOS (closed_through + 1 bu aydan sonra); open_period = sonraki ay; closed_through = bu ay; items 4', same(closeThree.body.closable, [ym(0)]) && closeNow.status === 200 && same(closeNow.body.closable, []) && closeNow.body.closed_through === ym(0) && closeNow.body.open_period === ym(1) && closeNow.body.items.length === 4, [closeThree.body.closable, closeNow.body]);
   const lateChargeP = await call('POST', `${bP}/charges`, MGR, { name: 'Gec Borc', distribution: 'equal', amount_minor: 900, target: { type: 'site' }, expected_total_minor: 900, expected_apartment_count: 3, expected_hash: '0'.repeat(64), idempotency_key: key('v1late') });
   const latePayP = await payP(KP(3).id, TODAY);
   check('V1m: bu ay kapaliyken ek borc ve bugunun tahsilati 409 PERIOD_CLOSED', lateChargeP.body?.code === 'PERIOD_CLOSED' && latePayP.body?.code === 'PERIOD_CLOSED', [lateChargeP.body, latePayP.body]);
@@ -8625,7 +8664,7 @@ async function sectionFinance() {
   const leakyAudits = financeAudits.filter((r) => forbidden.test(JSON.stringify(r.details)));
   check('N3: audit details\'te tanim adi, aciklama, neden metni, kisi adi HICBIR satirda yok (yalniz toplam / sayi / donem / alan adi)', leakyAudits.length === 0, leakyAudits.slice(0, 2));
   const allDetailKeys = new Set(financeAudits.flatMap((r) => Object.keys(r.details)));
-  check('N4: audit details anahtarlari beyaz listede', [...allDetailKeys].every((k) => ['kind', 'distribution', 'target_type', 'start_period', 'fields', 'definition_id', 'period', 'total_minor', 'apartment_count', 'skipped_missing_count', 'apartment_id', 'amount_minor', 'method', 'reversed_entry_id', 'reversed_kind', 'reversal_entry_id', 'old_amount_minor', 'new_amount_minor', 'account_id', 'ledger_entry_id', 'reason_code', 'cancelled_receipt_id', 'receipt_cancelled', 'movement_mirrored', 'account_party', 'source_kind'].includes(k)), [...allDetailKeys]); // Faz 4b ekleri: hepsi kimlik / kod / bayrak (metin YOK); İP-1A: account_party, source_kind (kod)
+  check('N4: audit details anahtarlari beyaz listede', [...allDetailKeys].every((k) => ['kind', 'distribution', 'target_type', 'start_period', 'fields', 'definition_id', 'period', 'total_minor', 'apartment_count', 'skipped_missing_count', 'apartment_id', 'amount_minor', 'method', 'reversed_entry_id', 'reversed_kind', 'reversal_entry_id', 'old_amount_minor', 'new_amount_minor', 'account_id', 'ledger_entry_id', 'reason_code', 'cancelled_receipt_id', 'receipt_cancelled', 'movement_mirrored', 'account_party', 'source_kind', 'from', 'months'].includes(k)), [...allDetailKeys]); // Faz 4b ekleri: hepsi kimlik / kod / bayrak (metin YOK); İP-1A: account_party, source_kind (kod); N4 (sirasiz / cok aylik ay kapatma): from (ilk kapanan ay), months (kapanan ay sayisi)
 
   // son tutarlilik (tum veritabani)
   const apartmentSites = (await q(`SELECT COUNT(*)::int AS n FROM ledger_entries l JOIN apartments a ON a.id = l.apartment_id WHERE a.site_code <> l.site_code`)).rows[0].n;

@@ -10,8 +10,11 @@
 // hatada acilisi DURDURMAZ ama gorunur bicimde loglanir (sonraki acilista katalog yeniden dener).
 // Mukerrer site adi varsa indeks KURULMAZ: RAISE WARNING ile mukerrerler bildirilir (acilista loglanir) ve acilis cokmez; eski indeks korunur.
 //
-// DIKKAT (surum notu): apartments.gross_area_m2 / net_area_m2 sutunlari bu surumde DUSURULMEZ (031'in ekleyici DDL'i geri yuklendi; kod artik
-// kullanmaz). Surum geri alinirsa eski kod bu sutunlari bekler. Bir SONRAKI surumde ayri bir migration ile dusurulecek.
+// 078 (daire m2 sutunlarinin KALICI dusurulmesi): apartments.gross_area_m2 / net_area_m2 sutunlari 077 surumunde geri alma uyumlulugu icin
+// birakilmisti (eski kod acilista ADD IF NOT EXISTS ile bos geri ekliyordu). Canlidaki geri alma hedefi artik bu sutunlari hic okumuyor; bu yuzden
+// dusurmek geri alma icin guvenlidir. db.js 031 blogu sutunlari ARTIK EKLEMEZ; asagidaki AREA_DROP_STEPS katalog kontrollu (sutun yoksa hicbir
+// ifade gonderilmez, tabloda kilit alinmaz) tek `ALTER TABLE ... DROP COLUMN IF EXISTS` calistirir. 031 migration'i tarihsel olarak sutunlari ekler
+// (degistirilmez); migrations/078 ayni adimlari uygular, zincir sonunda sutunlar YOKTUR. Hata acilisi durdurmaz (loglanir, sonraki acilista denenir).
 
 const NEWLINE = String.fromCharCode(10);
 
@@ -149,6 +152,41 @@ END $$;`,
 /** Migration dosyasinin govdesi (adimlarin birlesimi). */
 export const integrityMigrationBody = () => `${INTEGRITY_STEPS.map((s) => s.sql).join('\n\n')}\n`;
 
+/** 078: dusurulecek daire m2 sutunlari ("tablo.sutun"). Sutun VARSA adim bekliyor demektir (diger adimlarin tersi). */
+export const AREA_DROP_COLUMNS = Object.freeze(['apartments.gross_area_m2', 'apartments.net_area_m2']);
+
+/**
+ * 078: daire m2 sutunlarini kalici dusurur. DO blogu katalog kontrollu: sutunlar yoksa ALTER gonderilmez (DROP COLUMN IF EXISTS sutun olmasa da
+ * ACCESS EXCLUSIVE kilit alirdi); iki sutun TEK ifadede dusurulur (tek kilit, atomik). lock_timeout hic ayarli degilse (psql / elle calistirma)
+ * islem-yerel 5 sn konur; migrate.js (MIGRATE_LOCK_TIMEOUT_MS) ve ensure yolu (2 sn) kendi ayarini tasir ve KISALTILMAZ / UZATILMAZ.
+ */
+export const AREA_DROP_STEPS = Object.freeze([
+  {
+    kind: 'drop_column',
+    tag: '078',
+    name: 'apartments.area_columns',
+    table: 'apartments',
+    columns: AREA_DROP_COLUMNS,
+    fatal: false,
+    sql: `DO $$
+BEGIN
+  IF current_setting('lock_timeout') = '0' THEN
+    PERFORM set_config('lock_timeout', '5s', true);
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM pg_attribute
+    WHERE attrelid = to_regclass('public.apartments') AND attnum > 0 AND NOT attisdropped
+      AND attname IN ('gross_area_m2', 'net_area_m2')
+  ) THEN
+    ALTER TABLE apartments DROP COLUMN IF EXISTS gross_area_m2, DROP COLUMN IF EXISTS net_area_m2;
+  END IF;
+END $$;`,
+  },
+]);
+
+/** 078 migration dosyasinin govdesi (adimlarin birlesimi). */
+export const areaDropMigrationBody = () => `${AREA_DROP_STEPS.map((s) => s.sql).join('\n\n')}\n`;
+
 export const schemaTuning = { retryDelayMs: 300 };
 
 const CATALOG_SQL = `SELECT
@@ -157,7 +195,9 @@ const CATALOG_SQL = `SELECT
     ARRAY(SELECT proname::TEXT FROM pg_proc WHERE pronamespace = 'public'::regnamespace AND proname = ANY($2::TEXT[])) AS functions,
     ARRAY(SELECT conname::TEXT FROM pg_constraint
           WHERE contype IN ('f', 'c') AND connamespace = 'public'::regnamespace AND conname = ANY($3::TEXT[])) AS fks,
-    ARRAY(SELECT indexname::TEXT FROM pg_indexes WHERE schemaname = 'public' AND indexname = ANY($4::TEXT[])) AS indexes`;
+    ARRAY(SELECT indexname::TEXT FROM pg_indexes WHERE schemaname = 'public' AND indexname = ANY($4::TEXT[])) AS indexes,
+    ARRAY(SELECT (table_name || '.' || column_name)::TEXT FROM information_schema.columns
+          WHERE table_schema = 'public' AND (table_name || '.' || column_name) = ANY($5::TEXT[])) AS drop_columns`;
 
 const namesOf = (kind) => INTEGRITY_STEPS.filter((s) => s.kind === kind).map((s) => s.name);
 const oldIndexNames = () => INTEGRITY_STEPS.flatMap((s) => s.drops ?? []);
@@ -168,13 +208,23 @@ async function readPresent(client) {
     namesOf('function'),
     [...namesOf('fk'), ...namesOf('check')],
     [...namesOf('index'), ...oldIndexNames()],
+    [...AREA_DROP_COLUMNS],
   ]);
   const row = found.rows?.[0] ?? {};
-  return new Set([...(row.columns ?? []), ...(row.functions ?? []), ...(row.fks ?? []), ...(row.indexes ?? [])]);
+  return new Set([
+    ...(row.columns ?? []),
+    ...(row.functions ?? []),
+    ...(row.fks ?? []),
+    ...(row.indexes ?? []),
+    ...(row.drop_columns ?? []),
+  ]);
 }
 
 /** Adim tamam mi: nesne var ve (indekste) dusurulmesi gereken eski indeks kalmadi. */
 const isDone = (step, present) => present.has(step.name) && !(step.drops ?? []).some((old) => present.has(old));
+
+/** 078 dusurme adimi bekliyor mu: dusurulecek sutunlardan en az biri hala VAR. */
+const isDropPending = (step, present) => step.columns.some((column) => present.has(column));
 
 const logLine = (text) => {
   // eslint-disable-next-line no-console
@@ -187,7 +237,10 @@ const logLine = (text) => {
  */
 export async function ensureIntegritySchema(client) {
   const present = await readPresent(client);
-  const pending = INTEGRITY_STEPS.filter((s) => !isDone(s, present));
+  const pending = [
+    ...INTEGRITY_STEPS.filter((s) => !isDone(s, present)),
+    ...AREA_DROP_STEPS.filter((s) => isDropPending(s, present)),
+  ];
   if (pending.length === 0) {
     return;
   }
@@ -210,7 +263,8 @@ export async function ensureIntegritySchema(client) {
         }
       } catch (error) {
         if (step.fatal) throw error;
-        logLine(`UYARI 077 ${step.kind} ${step.name} kurulamadi (sonraki acilista yeniden denenecek): ${error?.code || error?.message}`);
+        const verb = step.kind === 'drop_column' ? 'dusurulemedi' : 'kurulamadi';
+        logLine(`UYARI ${step.tag ?? '077'} ${step.kind} ${step.name} ${verb} (sonraki acilista yeniden denenecek): ${error?.code || error?.message}`);
       }
     }
     // Kurulamayan koruma acilista GORUNUR olsun (ornegin mukerrer site adi): katalog yeniden okunur.

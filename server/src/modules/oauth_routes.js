@@ -1,6 +1,7 @@
 // Sosyal giris / kayit uclari (076): Google ile Giris / Kaydol ve iCloud (Apple) ile Giris / Kaydol.
 //   Acik GET  /auth/oauth/status                   -> { google: { enabled, client_id }, apple: { enabled, client_id } }
 //   Acik POST /auth/oauth/:provider                -> { ok, is_new_user, provider, token, user, device_token? }
+//                                                     govde: id_token, nonce? (ham; saglayiciya SHA-256 ozeti verilir), full_name?, accepted_documents?
 //   Acik POST /auth/oauth/:provider/request-code   -> { ok, provider, email, code_length, expires_in_minutes, message }
 //   Acik POST /auth/oauth/:provider/verify-code    -> { ok, is_new_user, provider, token, user, device_token? }
 //   Acik POST /auth/oauth/:provider/start          -> { mode, provider, redirect_enabled, session_id?, auth_url? }
@@ -13,6 +14,7 @@ import { HOUR_MS, ipKey, respondError } from './route_helpers.js';
 import {
   authenticateWithOAuth,
   completeOAuthWebCallback,
+  expectedNonceFromClient,
   oauthStatus,
   pollOAuthWebSession,
   requestOAuthEmailCode,
@@ -80,6 +82,9 @@ function handleProviderAuth(provider) {
         lastName: body.last_name ?? body.lastName ?? body.family_name ?? null,
         acceptedDocuments: body.accepted_documents ?? body.acceptedDocuments,
         rawDeviceToken: readDeviceToken(req),
+        // Yerel (mobil) istemci her girişte ham nonce üretir, sağlayıcıya SHA-256 özetini verir ve ham değeri buraya gönderir. Gönderilmediyse (eski
+        // istemci) null: OAUTH_REQUIRE_NONCE kapalıyken denetlenmez, açıkken authenticateWithOAuth 400 OAUTH_NONCE_REQUIRED ile reddeder.
+        expectedNonce: expectedNonceFromClient(body.nonce),
       });
     },
   );
