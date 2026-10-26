@@ -9,6 +9,27 @@ function isTokenVerificationError(error) {
   return name === 'JsonWebTokenError' || name === 'TokenExpiredError' || name === 'NotBeforeError';
 }
 
+// Zorunlu parola degisimi (must_change_password): yonetimin verdigi gecici parola / PIN ile acilan oturum YALNIZ parolayi degistirebilsin diye bu
+// uclar disindaki TUM kimlik dogrulamali uclar 403 PASSWORD_CHANGE_REQUIRED doner (eskiden bayrak yalniz yanita konan bir ipucuydu; API dogrudan
+// kullanilarak atlanabilirdi). Izinli: oturum bilgisi (GET /me), parola degistirme (PATCH /me ve daire sakini kendi parolasi), yasal onay uclari
+// (GET|POST /me/consents) ve cikis (sunucuda oturum yoktur; telefon bildirimi cihaz kaydi silinebilir: DELETE /app/push/devices/:id).
+// Token yenileme ucu yoktur (JWT sure sonunda yeniden giris).
+const PASSWORD_CHANGE_EXEMPT = Object.freeze([
+  { method: 'GET', pattern: /^\/me$/ },
+  { method: 'PATCH', pattern: /^\/me$/ },
+  { method: 'GET', pattern: /^\/me\/consents$/ },
+  { method: 'POST', pattern: /^\/me\/consents$/ },
+  { method: 'POST', pattern: /^\/membership\/apartments\/\d+\/members\/\d+\/change-password$/ },
+  { method: 'DELETE', pattern: /^\/app\/push\/devices\/[^/]+$/ },
+]);
+
+/** Istek, zorunlu parola degisimi bekleyen oturumun yapabilecegi uclardan biri mi? (sorgu dizesi ve sondaki egik cizgi yok sayilir) */
+export function isPasswordChangeExempt(req) {
+  const path = String(req?.originalUrl ?? req?.url ?? '').split('?')[0].replace(/\/+$/, '') || '/';
+  const method = String(req?.method ?? '').toUpperCase();
+  return PASSWORD_CHANGE_EXEMPT.some((rule) => rule.method === method && rule.pattern.test(path));
+}
+
 export async function authRequired(req, res, next) {
   const header = String(req.headers.authorization || '');
   if (!header.startsWith('Bearer ')) {
@@ -98,6 +119,13 @@ export async function authRequired(req, res, next) {
     }
     if (authUser.approval_status === 'rejected') {
       return res.status(403).json({ error: 'Abonelik talebiniz reddedildi.' });
+    }
+
+    if (authUser.must_change_password === true && !isPasswordChangeExempt(req)) {
+      return res.status(403).json({
+        error: 'Devam etmeden once yeni bir sifre belirlemelisiniz.',
+        code: 'PASSWORD_CHANGE_REQUIRED',
+      });
     }
 
     req.authUser = authUser;

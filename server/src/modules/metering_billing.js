@@ -77,7 +77,7 @@ export async function computeBillingPlan(client, siteCode, input, { entryDate, l
   else params.total_minor = input.totalMinor;
   const result = await client.query(
     `
-      SELECT m.id AS meter_id, m.apartment_id, a.responsible_party, a.unit_label, b.block_name, NULL::TEXT AS area,
+      SELECT m.id AS meter_id, m.apartment_id, a.responsible_party, a.unit_label, b.block_name, a.land_share_numerator, a.land_share_denominator,
              ${tenantOnDateSql('a', '$5::DATE')} AS has_tenant,
              (SELECT r.value::TEXT FROM meter_readings r WHERE r.meter_id = m.id AND r.reading_date <= $3::DATE ORDER BY r.reading_date DESC LIMIT 1) AS opening,
              (SELECT to_char(r.reading_date, 'YYYY-MM-DD') FROM meter_readings r WHERE r.meter_id = m.id AND r.reading_date <= $3::DATE ORDER BY r.reading_date DESC LIMIT 1) AS opening_date,
@@ -98,7 +98,9 @@ export async function computeBillingPlan(client, siteCode, input, { entryDate, l
       label: apartmentLabel(row.block_name, row.unit_label),
       responsibleParty: row.responsible_party,
       hasTenant: row.has_tenant === true,
-      areaX100: row.area === null || row.area === undefined ? null : BigInt(Math.round(Number(row.area) * 100)),
+      // m2 sistemden kaldirildi: isinma gideri alan payi arsa payi (hepsi tanimliysa) ya da esit pay ile dagitilir (metering_calc.areaShareItems).
+      landShareNumerator: row.land_share_numerator ?? null,
+      landShareDenominator: row.land_share_denominator ?? null,
     });
   }
   const { byApartment, missing: missingMap } = consumptionByApartment(
@@ -110,7 +112,11 @@ export async function computeBillingPlan(client, siteCode, input, { entryDate, l
       closingDate: row.closing_date,
     })),
   );
-  const participants = [...byApartment.keys()].map((id) => ({ id, areaX100: apartments.get(id).areaX100 }));
+  const participants = [...byApartment.keys()].map((id) => ({
+    id,
+    landShareNumerator: apartments.get(id).landShareNumerator,
+    landShareDenominator: apartments.get(id).landShareDenominator,
+  }));
   const missingList = () => [
     ...[...missingMap].map(([id, reason]) => ({ apartment_id: id, label: apartments.get(id).label, reason })),
   ];
@@ -135,10 +141,9 @@ export async function computeBillingPlan(client, siteCode, input, { entryDate, l
       accountParty: occupantAccount(apartment.responsibleParty, apartment.hasTenant),
     };
   });
-  const missing = [
-    ...missingList(),
-    ...calc.areaMissing.map((id) => ({ apartment_id: id, label: apartments.get(id).label, reason: 'area_missing' })),
-  ];
+  // Alan payi tabani (arsa payi / esit) onizleme parametrelerinde gorunur ve plan ozetine girer (tabani degisen plan eski onizlemeyle kaydedilemez).
+  if (calc.areaBasis !== null) params.area_basis = calc.areaBasis;
+  const missing = missingList();
   return {
     params,
     lines,

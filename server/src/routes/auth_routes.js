@@ -509,7 +509,9 @@ authRouter.post('/auth/reset-password', resetPasswordLimiter, async (req, res) =
       UPDATE users
       SET password_hash = $1,
           password_reset_token_hash = NULL,
-          password_reset_expires_at = NULL
+          password_reset_expires_at = NULL,
+          must_change_password = FALSE,
+          email_verified = TRUE
       WHERE user_code = $2
         AND password_reset_token_hash = $3
         AND password_reset_expires_at > NOW()
@@ -529,6 +531,18 @@ authRouter.post('/auth/reset-password', resetPasswordLimiter, async (req, res) =
       loginName: updateRes.rows?.[0]?.login_name,
       userCode: user.user_code,
     });
+
+    // Sıfırlama bağlantısı posta kutusuna erişimi kanıtladı: e-posta doğrulanmış sayılır (yönetimin açtığı doğrulanmamış hesap giriş yapabilsin) ve
+    // yönetimin verdiği geçici parola / PIN artık geçerli değil -> daire sakin göstergesindeki "PIN verildi" işareti kalkar (zorunlu değişim bayrağı
+    // ayrıca yukarıda kapandı). users güncellemesinden AYRI otomatik onaylı ifade (kilit sırası apartments -> users); başarısızlığı sıfırlamayı bozmaz.
+    try {
+      await pool.query(
+        'UPDATE apartments SET resident_pin_issued = FALSE, resident_pin_code = NULL WHERE resident_user_code = $1 AND (resident_pin_issued OR resident_pin_code IS NOT NULL)',
+        [Number(user.user_code)],
+      );
+    } catch (pinFlagError) {
+      console.error('[reset-password:post] daire PIN isareti temizlenemedi:', pinFlagError?.code || pinFlagError?.message);
+    }
 
     return res.status(200).json({
       ok: true,
@@ -758,6 +772,7 @@ authRouter.post('/auth/login', loginRateLimiter, async (req, res) => {
         )) AS must_change_password
       FROM users
       WHERE LOWER(email) = LOWER($1) OR LOWER(login_name) = LOWER($1)
+      ORDER BY (LOWER(email) = LOWER($1)) DESC, user_code ASC
       LIMIT 1
       `,
       [identifier],
@@ -916,6 +931,14 @@ authRouter.patch('/me', authRequired, profileUpdateLimiter, async (req, res) => 
           code: 'CURRENT_PASSWORD_REQUIRED',
         });
       }
+      // Yönetimin verdiği geçici parola / PIN aynen "yeni parola" olarak girilip zorunlu değişim atlatılamaz (iki değer de kullanıcının kendi girdisi:
+      // karşılaştırma bilgi sızdırmaz ve hesap bazlı deneme sayacına yazılmaz).
+      if (password === currentPassword) {
+        return res.status(400).json({
+          error: 'Yeni şifre mevcut şifrenizle aynı olamaz.',
+          code: 'PASSWORD_UNCHANGED',
+        });
+      }
       // Hesap bazlı sayaç `u:<user_code>` (PATCH /me, daire sakini change-password, hesap silme ve veri dışa aktarma ORTAK). Hata hakkı bcrypt
       // karşılaştırmasından ÖNCE ayrılır (eski "check -> bcrypt -> recordFailure" sırası çalıntı oturumla paralel tahmine açıktı: N paralel istek N tahmin);
       // doğru parolada sıfırlanır. 400 INVALID (401/403 DEĞİL: istemci oturum hatası sanıp çıkış yapmasın) / 429 LOCKED (+ Retry-After).
@@ -958,7 +981,9 @@ authRouter.patch('/me', authRequired, profileUpdateLimiter, async (req, res) => 
       // Daire hesabı kendi parolasını belirledi: yönetimin verdiği PIN artık geçerli değil -> "PIN verildi" işareti kalkar (migration 051;
       // daire sakini change-password ucuyla aynı). Ayrı otomatik onaylı ifade: users güncellemesiyle aynı işlemde DEĞİL (kilit sırası apartments -> users).
       await pool.query(
-        'UPDATE users SET must_change_password = FALSE WHERE user_code = $1', [userCode]);
+        `UPDATE users SET must_change_password = FALSE WHERE user_code = $1 AND deleted_at IS NULL`,
+        [userCode],
+      );
       await pool.query('UPDATE apartments SET resident_pin_issued = FALSE, resident_pin_code = NULL WHERE resident_user_code = $1 AND (resident_pin_issued OR resident_pin_code IS NOT NULL)',
         [userCode],
       );

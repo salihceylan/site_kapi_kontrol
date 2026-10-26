@@ -218,7 +218,6 @@ class BillingMissing {
     'no_opening' => 'başlangıç okuması yok',
     'no_closing' => 'bitiş okuması yok',
     'decreasing' => 'okuma azalmış',
-    'area_missing' => 'daire alanı (m²) girilmemiş',
     _ => 'eksik',
   };
 }

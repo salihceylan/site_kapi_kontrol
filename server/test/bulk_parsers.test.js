@@ -12,6 +12,7 @@ import {
   readEmail,
   readFloor,
   readLandShareInt,
+  readMoney,
   readName,
   readPhone,
   readPlates,
@@ -341,5 +342,38 @@ describe('özellik testi: hiçbir okuyucu için rastgele girdi özel hata fırla
         assert.equal(readText(first.value).value, first.value);
       }
     }
+  });
+});
+
+describe('readMoney: devir bakiyesi sayısal hücre ile metin hücresi ayrımı', () => {
+  it('SAYISAL hücrede ondalık nokta KESİN ondalıktır (123.456 TL, 123456 TL değil); 2 haneye yuvarlanır ve ROUNDED uyarısı verir', () => {
+    assert.deepEqual(readMoney(123.456), { value: 12346, warnings: ['ROUNDED'] });
+    assert.deepEqual(readMoney(1000.999), { value: 100100, warnings: ['ROUNDED'] });
+    assert.deepEqual(readMoney(1.005), { value: 101, warnings: ['ROUNDED'] });
+    assert.deepEqual(readMoney(-123.456), { value: -12346, warnings: ['ROUNDED'] });
+  });
+
+  it('SAYISAL hücre: tamsayı, 1-2 ondalık ve kayan nokta gürültüsü uyarısız; sıfır -0 olmaz', () => {
+    assert.deepEqual(readMoney(1250), { value: 125000, warnings: [] });
+    assert.deepEqual(readMoney(1234.56), { value: 123456, warnings: [] });
+    assert.deepEqual(readMoney(0.1 + 0.2), { value: 30, warnings: [] }, '0.30000000000000004 gürültüdür, ROUNDED değil');
+    assert.deepEqual(readMoney(19.999999999999996), { value: 2000, warnings: [] });
+    assert.equal(Object.is(readMoney(-0).value, 0), true);
+  });
+
+  it('SAYISAL hücre: aşırı büyük MONEY_RANGE; sonlu olmayan sayı hata değil boş/okunamaz gibi davranır (özel hata fırlatmaz)', () => {
+    assert.equal(readMoney(1e10).error, 'MONEY_RANGE');
+    assert.equal(readMoney(1e22).error, 'MONEY_RANGE');
+    assert.deepEqual(readMoney(99999999.99), { value: 9999999999, warnings: [] });
+    assert.doesNotThrow(() => readMoney(Number.NaN));
+    assert.doesNotThrow(() => readMoney(Number.POSITIVE_INFINITY));
+  });
+
+  it('METİN hücresinde TR binlik sezgisi AYNEN korunur: "123.456" = 123456 TL, "1.250" = 1250 TL, "1250.5" = 1250,50 TL', () => {
+    assert.deepEqual(readMoney('123.456'), { value: 12345600, warnings: [] });
+    assert.deepEqual(readMoney('1.250'), { value: 125000, warnings: [] });
+    assert.deepEqual(readMoney('1.250,50'), { value: 125050, warnings: [] });
+    assert.deepEqual(readMoney('1250.5'), { value: 125050, warnings: [] });
+    assert.deepEqual(readMoney('125,4567'), { value: 12546, warnings: ['ROUNDED'] }, '3 hane DEĞİL 4 hane: binlik sayılmaz, yuvarlanır');
   });
 });

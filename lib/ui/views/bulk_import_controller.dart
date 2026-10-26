@@ -175,6 +175,10 @@ class BulkImportController extends ChangeNotifier {
 
   ImportKindSpec? get kindSpec => kind == null ? null : spec?.of(kind!);
 
+  /// Seçili türün şemadaki sütun anahtarları. `sifre` / `kullanici_adi` yalnız bunları tanımlayan türlerde (kişiler,
+  /// hepsi bir arada) eklenir; sunucu tanımsız anahtarı olan satırı 400 INVALID_BODY ile reddeder (araçlar, devir bakiyesi).
+  Set<String> get _kindColumnKeys => <String>{for (final column in kindSpec?.columns ?? const <ImportColumn>[]) column.key};
+
   bool get busy => picking || parsing || previewing || committing || templateBusy;
 
   /// Kayıtlar değişti ya da değişmiş olabilir.
@@ -508,7 +512,7 @@ class BulkImportController extends ChangeNotifier {
     if (rows.isEmpty) {
       try {
         final extracted = extractImportRows(p.table, m, ks, maxRows: s.maxRows);
-        rows = enrichImportRowsWithDefaults(extracted.rows);
+        rows = enrichImportRowsWithDefaults(extracted.rows, columnKeys: _kindColumnKeys);
         blankRows = extracted.blankRows;
       } on SpreadsheetException catch (e) {
         mappingError = e.message;
@@ -583,7 +587,7 @@ class BulkImportController extends ChangeNotifier {
     if (!m.canProceed(ks)) return;
     try {
       final extracted = extractImportRows(p.table, m, ks, maxRows: s.maxRows);
-      rows = enrichImportRowsWithDefaults(extracted.rows);
+      rows = enrichImportRowsWithDefaults(extracted.rows, columnKeys: _kindColumnKeys);
       blankRows = extracted.blankRows;
       mappingError = null;
     } catch (_) {
@@ -602,12 +606,21 @@ class BulkImportController extends ChangeNotifier {
       updatedCells[columnKey] = newValue;
     }
 
-    if (columnKey == 'ad_soyad' && (updatedCells['kullanici_adi'] == null || updatedCells['kullanici_adi'].toString().trim().isEmpty)) {
-      final existingUsernames = rows.map((r) => r.cells['kullanici_adi']?.toString().toLowerCase()).whereType<String>().toSet();
-      final blok = updatedCells['blok']?.toString().trim() ?? '';
-      final daireNo = updatedCells['daire_no']?.toString().trim() ?? '';
-      final fallback = (blok.isNotEmpty || daireNo.isNotEmpty) ? '${blok}_d$daireNo' : 'kullanici';
-      updatedCells['kullanici_adi'] = generateUsernameFromFullName(newValue.toString(), existing: existingUsernames, fallback: fallback);
+    if (_kindColumnKeys.contains('kullanici_adi')) {
+      final typedUsername = updatedCells['kullanici_adi']?.toString().trim() ?? '';
+      if (columnKey == 'kullanici_adi' && typedUsername.isNotEmpty) {
+        // yazılan ad, sunucunun kullanacağı kuralla aynı biçime getirilir (tabloda görünen = sunucudaki; çakışmada sunucu `_2` ekler)
+        updatedCells['kullanici_adi'] = generateUsernameFromFullName(typedUsername);
+      } else if (columnKey == 'ad_soyad' && typedUsername.isEmpty && newValue != null && newValue.toString().trim().isNotEmpty) {
+        final existingUsernames = <String>{
+          for (var i = 0; i < rows.length; i++)
+            if (i != rowIndex) ...<String>[?rows[i].cells['kullanici_adi']?.toString().toLowerCase()],
+        };
+        final blok = updatedCells['blok']?.toString().trim() ?? '';
+        final daireNo = updatedCells['daire_no']?.toString().trim() ?? '';
+        final fallback = (blok.isNotEmpty || daireNo.isNotEmpty) ? '${blok}_d$daireNo' : 'kullanici';
+        updatedCells['kullanici_adi'] = generateUsernameFromFullName(newValue.toString(), existing: existingUsernames, fallback: fallback);
+      }
     }
 
     final updatedRow = ImportRow(
@@ -632,16 +645,22 @@ class BulkImportController extends ChangeNotifier {
   void addRow({Map<String, Object?>? initialCells}) {
     final nextN = rows.isEmpty ? 1 : (rows.map((r) => r.n).reduce((a, b) => a > b ? a : b) + 1);
     final cells = Map<String, Object?>.from(initialCells ?? const <String, Object?>{});
-    if (cells['sifre'] == null || cells['sifre'].toString().trim().isEmpty) {
+    final keys = _kindColumnKeys;
+    final hasName = (cells['ad_soyad']?.toString().trim() ?? '').isNotEmpty;
+    if (hasName && keys.contains('sifre') && (cells['sifre'] == null || cells['sifre'].toString().trim().isEmpty)) {
       cells['sifre'] = '1234';
     }
-    if (cells['kullanici_adi'] == null || cells['kullanici_adi'].toString().trim().isEmpty) {
-      final adSoyad = cells['ad_soyad']?.toString().trim() ?? '';
-      final blok = cells['blok']?.toString().trim() ?? '';
-      final daireNo = cells['daire_no']?.toString().trim() ?? '';
-      final fallback = (blok.isNotEmpty || daireNo.isNotEmpty) ? '${blok}_d$daireNo' : 'kullanici';
+    if (hasName && keys.contains('kullanici_adi')) {
+      final typed = cells['kullanici_adi']?.toString().trim() ?? '';
       final existingUsernames = rows.map((r) => r.cells['kullanici_adi']?.toString().toLowerCase()).whereType<String>().toSet();
-      cells['kullanici_adi'] = generateUsernameFromFullName(adSoyad, existing: existingUsernames, fallback: fallback);
+      if (typed.isEmpty) {
+        final blok = cells['blok']?.toString().trim() ?? '';
+        final daireNo = cells['daire_no']?.toString().trim() ?? '';
+        final fallback = (blok.isNotEmpty || daireNo.isNotEmpty) ? '${blok}_d$daireNo' : 'kullanici';
+        cells['kullanici_adi'] = generateUsernameFromFullName(cells['ad_soyad']!.toString(), existing: existingUsernames, fallback: fallback);
+      } else {
+        cells['kullanici_adi'] = generateUsernameFromFullName(typed, existing: existingUsernames);
+      }
     }
     final newRow = ImportRow(
       n: nextN,
@@ -966,7 +985,12 @@ class BulkImportController extends ChangeNotifier {
   }
 }
 
-/// Türkçe ad soyad veya metinden geçerli, küçük harf ve benzersiz kullanıcı adı üretir.
+/// Kullanıcı adı tabanı üst sınırı: sunucudaki LOGIN_NAME_MAX (40) - "_NN" benzersizlik eki payı. Sunucu AYNI sınırı uygular.
+const int kLoginNameBaseMax = 36;
+
+/// Ad soyad veya yazılan metinden kullanıcı adı üretir. Sunucudaki `slugifyLoginName` ile AYNI kural: Türkçe harfler sadeleşir,
+/// küçük harf, [a-z0-9] dışındaki her öbek tek nokta, baş/son nokta atılır, en çok 36 karakter; boşsa yedek (ya da «kullanici»).
+/// [existing] verilirse çakışmada `_2`, `_3` ... eklenir (sunucudaki benzersizleştirmeyle aynı biçim) ve ad kümeye eklenir.
 String generateUsernameFromFullName(
   String fullName, {
   Set<String>? existing,
@@ -992,8 +1016,10 @@ String generateUsernameFromFullName(
   }
 
   var clean = sb.toString().toLowerCase();
-  clean = clean.replaceAll(RegExp(r'[^a-z0-9]+'), '.');
-  clean = clean.replaceAll(RegExp(r'\.+'), '.').replaceAll(RegExp(r'^\.|\.$'), '');
+  clean = clean.replaceAll(RegExp(r'[^a-z0-9]+'), '.').replaceAll(RegExp(r'^\.+|\.+$'), '');
+  if (clean.length > kLoginNameBaseMax) {
+    clean = clean.substring(0, kLoginNameBaseMax).replaceAll(RegExp(r'\.+$'), '');
+  }
 
   if (clean.isEmpty) {
     clean = 'kullanici';
@@ -1004,45 +1030,74 @@ String generateUsernameFromFullName(
   var candidate = clean;
   var counter = 2;
   while (existing.contains(candidate.toLowerCase())) {
-    candidate = '$clean$counter';
+    candidate = '${clean}_$counter';
     counter++;
   }
   existing.add(candidate.toLowerCase());
   return candidate;
 }
 
-List<ImportRow> enrichImportRowsWithDefaults(List<ImportRow> rawRows) {
-  final existingUsernames = <String>{};
-  for (final row in rawRows) {
-    final u = row.cells['kullanici_adi']?.toString().trim().toLowerCase();
-    if (u != null && u.isNotEmpty) {
-      existingUsernames.add(u);
+/// Kişi satırlarına başlangıç şifresi (`1234`) ve benzersiz kullanıcı adı ekler. YALNIZ türün tanımladığı sütunlar için
+/// ([columnKeys]): sunucu tanımsız anahtarı olan satırı 400 INVALID_BODY ile reddeder, bu yüzden araç ve devir bakiyesi
+/// satırlarına `sifre` / `kullanici_adi` EKLENMEZ. Ad soyadı olmayan satır (yalnız daire bilgisi ya da hatalı satır) değişmez.
+List<ImportRow> enrichImportRowsWithDefaults(List<ImportRow> rawRows, {required Set<String> columnKeys}) {
+  final wantsPassword = columnKeys.contains('sifre');
+  final wantsUsername = columnKeys.contains('kullanici_adi');
+  if (!wantsPassword && !wantsUsername) return rawRows;
+
+  String textOf(Object? value) => value?.toString().trim() ?? '';
+
+  // Dosyada YAZILMIŞ adlar sunucuyla aynı biçime getirilir ve rezerve edilir (üretilen ad onlarla çakışmaz).
+  final typedByIndex = <int, String>{};
+  final reserved = <String>{};
+  if (wantsUsername) {
+    for (var i = 0; i < rawRows.length; i++) {
+      final cells = rawRows[i].cells;
+      if (textOf(cells['ad_soyad']).isEmpty) continue;
+      final typed = textOf(cells['kullanici_adi']);
+      if (typed.isEmpty) continue;
+      final slug = generateUsernameFromFullName(typed);
+      typedByIndex[i] = slug;
+      reserved.add(slug.toLowerCase());
     }
   }
 
+  final taken = <String>{};
   final enriched = <ImportRow>[];
-  for (final row in rawRows) {
+  for (var i = 0; i < rawRows.length; i++) {
+    final row = rawRows[i];
+    final adSoyad = textOf(row.cells['ad_soyad']);
+    if (adSoyad.isEmpty) {
+      enriched.add(row);
+      continue;
+    }
     final cells = Map<String, Object?>.from(row.cells);
 
     // 1. Şifre boşsa varsayılan 1234 ata
-    final currentPass = cells['sifre']?.toString().trim();
-    if (currentPass == null || currentPass.isEmpty) {
+    if (wantsPassword && textOf(cells['sifre']).isEmpty) {
       cells['sifre'] = '1234';
     }
 
-    // 2. Kullanıcı adı boşsa ad_soyad üzerinden (yoksa blok ve daire no) benzersiz kullanıcı adı üret
-    final currentUsername = cells['kullanici_adi']?.toString().trim();
-    if (currentUsername == null || currentUsername.isEmpty) {
-      final adSoyad = cells['ad_soyad']?.toString().trim() ?? '';
-      final blok = cells['blok']?.toString().trim() ?? '';
-      final daireNo = cells['daire_no']?.toString().trim() ?? '';
-      final fallback = (blok.isNotEmpty || daireNo.isNotEmpty) ? '${blok}_d$daireNo' : 'kullanici';
-      final generated = generateUsernameFromFullName(
-        adSoyad,
-        existing: existingUsernames,
-        fallback: fallback,
-      );
-      cells['kullanici_adi'] = generated;
+    // 2. Kullanıcı adı: yazılmışsa sadeleşmiş hali, boşsa ad soyaddan (yoksa blok ve daire no) üretilir; çakışma `_2`, `_3` ...
+    if (wantsUsername) {
+      final typed = typedByIndex[i];
+      String base;
+      if (typed != null) {
+        base = typed;
+      } else {
+        final blok = textOf(cells['blok']);
+        final daireNo = textOf(cells['daire_no']);
+        final fallback = (blok.isNotEmpty || daireNo.isNotEmpty) ? '${blok}_d$daireNo' : 'kullanici';
+        base = generateUsernameFromFullName(adSoyad, fallback: fallback);
+      }
+      var candidate = base;
+      var counter = 2;
+      while (taken.contains(candidate.toLowerCase()) || (typed == null && reserved.contains(candidate.toLowerCase()))) {
+        candidate = '${base}_$counter';
+        counter++;
+      }
+      taken.add(candidate.toLowerCase());
+      cells['kullanici_adi'] = candidate;
     }
 
     enriched.add(ImportRow(n: row.n, cells: cells));

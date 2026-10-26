@@ -78,6 +78,7 @@ function install(config = {}) {
     device: { id: 77, device_uid: 'A0B1C2D3E4F5', hardware_type: 'esp32_wroom' },
     failOn: null,
     insertConflict: false,
+    insertConflictConstraint: 'uq_site_applications_pending',
     siteNameExists: false,
     pendingNameExists: false,
     ...config,
@@ -99,10 +100,10 @@ function install(config = {}) {
     if (/^SELECT id, user_code, role, full_name FROM users WHERE user_code = \$1 AND deleted_at IS NULL LIMIT 1 FOR KEY SHARE$/.test(sql)) {
       return ok([{ id: 7, user_code: Number(params[0]), role: state.role, full_name: 'Ayşe Başvuran' }]);
     }
-    if (/FROM sites WHERE LOWER\(TRIM\(name\)\) = LOWER\(TRIM\(\$1\)\) LIMIT 1$/.test(sql)) {
+    if (/FROM sites WHERE site_name_key\(name\) = site_name_key\(\$1\) AND approval_status IS DISTINCT FROM 'rejected' LIMIT 1$/.test(sql)) {
       return ok(state.siteNameExists ? [{ site_code: 1, name: params[0] }] : []);
     }
-    if (/FROM site_applications WHERE status = 'pending' AND LOWER\(TRIM\(site_name\)\) = LOWER\(TRIM\(\$1\)\) LIMIT 1$/.test(sql)) {
+    if (/FROM site_applications WHERE status = 'pending' AND site_name_key\(site_name\) = site_name_key\(\$1\) LIMIT 1$/.test(sql)) {
       return ok(state.pendingNameExists ? [{ id: 1, site_name: params[0] }] : []);
     }
     if (/^SELECT value FROM platform_settings WHERE key = \$1 LIMIT 1$/.test(sql)) return ok([{ value: { mode: state.mode } }]);
@@ -113,7 +114,7 @@ function install(config = {}) {
       return ok(state.deviceOwned ? [{ id: 77 }] : []);
     }
     if (/^INSERT INTO site_applications /.test(sql)) {
-      if (state.insertConflict) throw Object.assign(new Error('duplicate key'), { code: '23505' });
+      if (state.insertConflict) throw Object.assign(new Error('duplicate key'), { code: '23505', constraint: state.insertConflictConstraint });
       return ok([{ id: '41', created_at: new Date('2026-10-16T07:00:00.000Z') }]);
     }
     if (/^INSERT INTO audit_log/.test(sql)) return ok();
@@ -280,7 +281,7 @@ describe('createSiteApplication', () => {
     siteApplicationHooks.notifyCreated = async (payload) => { mailed.push(payload); };
     const application = await createSiteApplication({ actor: individual, body: goodBody });
 
-    const order = [/^BEGIN/, /^SELECT pg_advisory_xact_lock/, /^SELECT id, user_code, role, full_name FROM users/, /^SELECT value FROM platform_settings/, /a\.status = 'pending' LIMIT 1$/, /^SELECT COUNT\(\*\)::INTEGER AS applied/, /^INSERT INTO site_applications/, /^INSERT INTO audit_log/, /^COMMIT/];
+    const order = [/^BEGIN/, /^SELECT pg_advisory_xact_lock/, /^SELECT id, user_code, role, full_name FROM users/, /^SELECT value FROM platform_settings/, /a\.status = 'pending' LIMIT 1$/, /FROM sites WHERE site_name_key\(name\)/, /FROM site_applications WHERE status = 'pending' AND site_name_key\(site_name\)/, /^SELECT COUNT\(\*\)::INTEGER AS applied/, /^INSERT INTO site_applications/, /^INSERT INTO audit_log/, /^COMMIT/];
     const positions = order.map((regex) => indexOfSql(db.log, regex));
     assert.ok(positions.every((p) => p >= 0), JSON.stringify(positions));
     assert.deepEqual([...positions].sort((a, b) => a - b), positions, 'sıra');
@@ -351,6 +352,28 @@ describe('createSiteApplication', () => {
     );
   });
 
+  it('ad denetimi site_name_key işleviyle yapılır (Türkçe harf / boşluk farkına dayanıklı) ve reddedilmiş siteleri saymaz; her iki sorgu da ham adı parametre alır', async () => {
+    const db = install();
+    siteApplicationHooks.notifyCreated = async () => {};
+    await createSiteApplication({ actor: individual, body: { ...goodBody, name: '  İpek   Sitesi ' } });
+    const siteCheck = find(db.log, /FROM sites WHERE site_name_key\(name\)/);
+    assert.match(siteCheck.sql, /approval_status IS DISTINCT FROM 'rejected'/);
+    // Ad JS'te katlanmaz (yalnız kırpılır); Türkçe harf / çoklu boşluk katlaması DB işlevi site_name_key'dedir.
+    assert.deepEqual(siteCheck.params, ['İpek   Sitesi']);
+    assert.deepEqual(find(db.log, /FROM site_applications WHERE status = 'pending' AND site_name_key\(site_name\)/).params, ['İpek   Sitesi']);
+    assert.equal(has(db.log, /LOWER\(TRIM/), false, 'eski LOWER(TRIM(..)) karşılaştırması kalmadı');
+  });
+
+  it('P3: kullanıcının KENDİ bekleyen başvurusu ad denetimlerinden ÖNCE bakılır: aynı adla yeniden başvuran APPLICATION_PENDING alır (ad çakışması değil)', async () => {
+    const db = install({ pending: storedRow(), siteNameExists: true, pendingNameExists: true });
+    await assert.rejects(
+      () => createSiteApplication({ actor: individual, body: goodBody }),
+      (error) => error.statusCode === 409 && error.code === 'APPLICATION_PENDING' && error.extra.application.id === 41,
+    );
+    assert.equal(has(db.log, /FROM sites WHERE site_name_key/), false, 'bekleyen başvuru varken ad sorguları çalışmaz');
+    assert.equal(has(db.log, /FROM site_applications WHERE status = 'pending' AND site_name_key/), false);
+  });
+
   it('bekleyen başvuru varsa 409 APPLICATION_PENDING + mevcut başvuru (başvuran görünümü); INSERT yok', async () => {
     const db = install({ pending: storedRow() });
     await assert.rejects(
@@ -389,12 +412,29 @@ describe('createSiteApplication', () => {
     await rejectsWith(createSiteApplication({ actor: individual, body: goodBody }), 403, 'FORBIDDEN_ROLE');
     assert.ok(db.client.released);
   });
-  it('tekil indeks ihlali (23505) bekleyen başvuru olarak yanıtlanır; ROLLBACK; bağlantı bırakılır', async () => {
+  it('tekil indeks ihlali (23505, uq_site_applications_pending) bekleyen başvuru olarak yanıtlanır; ROLLBACK; bağlantı bırakılır', async () => {
     const db = install({ insertConflict: true, pending: null });
     await rejectsWith(createSiteApplication({ actor: individual, body: goodBody }), 409, 'APPLICATION_PENDING');
     assert.ok(has(db.log, /^ROLLBACK/));
     assert.equal(has(db.log, /^COMMIT/), false);
     assert.ok(db.client.released);
+  });
+
+  it('23505 error.constraint ile ayrılır: site adı indeksleri (yeni ve eski ad) SITE_NAME_EXISTS, bekleyen başvuru adı indeksleri SITE_APPLICATION_NAME_PENDING; bilinmeyen kısıt olduğu gibi yükselir', async () => {
+    for (const constraint of ['uq_sites_name_key', 'idx_sites_unique_name']) {
+      const db = install({ insertConflict: true, insertConflictConstraint: constraint });
+      await rejectsWith(createSiteApplication({ actor: individual, body: goodBody }), 409, 'SITE_NAME_EXISTS');
+      assert.ok(has(db.log, /^ROLLBACK/), constraint);
+    }
+    for (const constraint of ['uq_site_applications_pending_name_key', 'idx_site_applications_pending_unique_name']) {
+      install({ insertConflict: true, insertConflictConstraint: constraint });
+      await rejectsWith(createSiteApplication({ actor: individual, body: goodBody }), 409, 'SITE_APPLICATION_NAME_PENDING');
+    }
+    install({ insertConflict: true, insertConflictConstraint: 'baska_kisit' });
+    await assert.rejects(
+      createSiteApplication({ actor: individual, body: goodBody }),
+      (error) => !isPlatformError(error) && error.code === '23505',
+    );
   });
 
   it('başvuran hesabı eşzamanlı silinirse (FK 23503) 404 USER_NOT_FOUND; ayrıntı sızmaz', async () => {

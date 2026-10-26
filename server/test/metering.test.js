@@ -7,8 +7,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_MIGRATIONS_DIR, findUnsafeStatements } from '../scripts/migrate.js';
 import { METERING_DDL, METERING_STEP_NAMES, ensureMeteringSchema, schemaTuning } from '../src/modules/metering_schema.js';
-import { buildMeterPlan, consumptionByApartment, consumptionOfMeter, priceOf } from '../src/modules/metering_calc.js';
-import { parseBillingInput } from '../src/modules/metering_billing.js';
+import { areaShareItems, buildMeterPlan, consumptionByApartment, consumptionOfMeter, priceOf } from '../src/modules/metering_calc.js';
+import { computeBillingPlan, parseBillingInput } from '../src/modules/metering_billing.js';
 import { milliOf, milliText, parseReadingValue } from '../src/modules/metering_common.js';
 import { MODULE_CATALOG } from '../src/modules/catalog.js';
 
@@ -107,7 +107,8 @@ describe('tuketim', () => {
 });
 
 describe('dagitim', () => {
-  const apartments = [{ id: 1, areaX100: 10000n }, { id: 2, areaX100: 10000n }, { id: 3, areaX100: 20000n }];
+  // m2 sistemden kaldirildi: dairelerin alan bilgisi yok. Arsa payi yoksa alan payi ESIT dagitilir.
+  const apartments = [{ id: 1 }, { id: 2 }, { id: 3 }];
   const consumption = new Map([[1, 10000n], [2, 30000n], [3, 0n]]);
   it('birim fiyat: yarim yukari yuvarlar, sifir tutari atlar', () => {
     assert.equal(priceOf(1500n, 333), 500n);
@@ -115,6 +116,7 @@ describe('dagitim', () => {
     assert.deepEqual(plan.lines.map((l) => [l.apartmentId, l.amount]), [[1, 2500n], [2, 7500n]]);
     assert.equal(plan.zeroCount, 1);
     assert.equal(plan.total, 10000n);
+    assert.equal(plan.areaBasis, null);
   });
   it('fatura: tuketime orantili, toplam birebir', () => {
     const plan = buildMeterPlan({ method: 'invoice', apartments, consumption, totalMinor: 10001 });
@@ -124,23 +126,124 @@ describe('dagitim', () => {
   it('fatura: tuketim yoksa NO_CONSUMPTION', () => {
     assert.throws(() => buildMeterPlan({ method: 'invoice', apartments, consumption: new Map(), totalMinor: 100 }), { code: 'NO_CONSUMPTION' });
   });
-  it('isi: %70 olcum + %30 alan, toplam birebir', () => {
+  it('isi: %70 olcum + %30 alan payi (arsa payi yoksa ESIT), toplam birebir', () => {
     const plan = buildMeterPlan({ method: 'heat', apartments, consumption, totalMinor: 100000, measuredPct: 70 });
-    // olcum 70000: 1 -> 17500, 2 -> 52500; alan 30000: 1 -> 7500, 2 -> 7500, 3 -> 15000
+    // olcum 70000: 1 -> 17500, 2 -> 52500; alan payi 30000 esit: her daire 10000
+    assert.deepEqual(plan.lines.map((l) => [l.apartmentId, l.amount]), [[1, 27500n], [2, 62500n], [3, 10000n]]);
+    assert.equal(plan.total, 100000n);
+    assert.equal(plan.areaBasis, 'equal');
+    assert.equal('areaMissing' in plan, false);
+  });
+  it('isi: TUM dairelerin arsa payi tanimliysa alan payi arsa payina gore dagitilir', () => {
+    const withShare = [
+      { id: 1, landShareNumerator: 1, landShareDenominator: 4 },
+      { id: 2, landShareNumerator: 1, landShareDenominator: 4 },
+      { id: 3, landShareNumerator: 2, landShareDenominator: 4 },
+    ];
+    const plan = buildMeterPlan({ method: 'heat', apartments: withShare, consumption, totalMinor: 100000, measuredPct: 70 });
+    // olcum 70000: 1 -> 17500, 2 -> 52500; alan payi 30000 arsa payina gore: 1 -> 7500, 2 -> 7500, 3 -> 15000
     assert.deepEqual(plan.lines.map((l) => [l.apartmentId, l.amount]), [[1, 25000n], [2, 60000n], [3, 15000n]]);
     assert.equal(plan.total, 100000n);
+    assert.equal(plan.areaBasis, 'land_share');
   });
-  it('isi: alani olmayan daire alan payi almaz ve raporlanir', () => {
-    const plan = buildMeterPlan({
-      method: 'heat',
-      apartments: [{ id: 1, areaX100: 10000n }, { id: 2, areaX100: null }],
-      consumption: new Map([[1, 1000n], [2, 1000n]]),
-      totalMinor: 1000,
-      measuredPct: 50,
-    });
-    assert.deepEqual(plan.areaMissing, [2]);
+  it('isi: farkli paydalar ortak paydaya getirilir (1/2, 1/3, 1/6)', () => {
+    const items = areaShareItems([
+      { id: 1, landShareNumerator: 1, landShareDenominator: 2 },
+      { id: 2, landShareNumerator: 1, landShareDenominator: 3 },
+      { id: 3, landShareNumerator: 1, landShareDenominator: 6 },
+    ]);
+    assert.equal(items.basis, 'land_share');
+    assert.deepEqual(items.items.map((i) => [i.id, i.weight]), [[1, 3n], [2, 2n], [3, 1n]]);
+  });
+  it('isi: tek dairenin bile arsa payi eksikse (ya da gecersizse) herkese ESIT; karma dagitim yok', () => {
+    const missingOne = [
+      { id: 1, landShareNumerator: 1, landShareDenominator: 4 },
+      { id: 2, landShareNumerator: null, landShareDenominator: null },
+      { id: 3, landShareNumerator: 2, landShareDenominator: 4 },
+    ];
+    assert.equal(areaShareItems(missingOne).basis, 'equal');
+    assert.deepEqual(areaShareItems(missingOne).items.map((i) => i.weight), [1n, 1n, 1n]);
+    assert.equal(areaShareItems([{ id: 1, landShareNumerator: 1, landShareDenominator: 0 }]).basis, 'equal');
+    // tum paylar 0: agirlik toplami 0 -> dagitilamaz, esit paya duser
+    assert.equal(areaShareItems([{ id: 1, landShareNumerator: 0, landShareDenominator: 4 }, { id: 2, landShareNumerator: 0, landShareDenominator: 4 }]).basis, 'equal');
+  });
+  it('isi: alan payi tuketimden bagimsizdir; olcum payi %0 iken tuketim olmasa da hata vermez (yaniltici NO_CONSUMPTION yok)', () => {
+    const plan = buildMeterPlan({ method: 'heat', apartments, consumption: new Map([[1, 0n], [2, 0n], [3, 0n]]), totalMinor: 9001, measuredPct: 0 });
+    assert.equal(plan.total, 9001n);
+    assert.equal(plan.lines.length, 3);
+    assert.equal(plan.areaBasis, 'equal');
+  });
+  it('isi: tuketim yoksa YALNIZ olcum payi icin NO_CONSUMPTION; olcum payi %0 ise alan payi yine de dagitilir', () => {
+    const none = new Map();
+    assert.throws(() => buildMeterPlan({ method: 'heat', apartments, consumption: none, totalMinor: 1000, measuredPct: 70 }), { code: 'NO_CONSUMPTION' });
+    const plan = buildMeterPlan({ method: 'heat', apartments, consumption: none, totalMinor: 1000, measuredPct: 0 });
     assert.equal(plan.total, 1000n);
-    assert.equal(plan.lines.find((l) => l.apartmentId === 1).amount, 750n);
+  });
+  it('isi: olcum payi %100 ise alan tabani yok (areaBasis null)', () => {
+    const plan = buildMeterPlan({ method: 'heat', apartments, consumption, totalMinor: 1000, measuredPct: 100 });
+    assert.equal(plan.areaBasis, null);
+    assert.equal(plan.total, 1000n);
+  });
+  it('isi: kurus kalani esit payda da toplam birebir (3 daireye 100 kurus)', () => {
+    const plan = buildMeterPlan({ method: 'heat', apartments, consumption: new Map([[1, 1n], [2, 1n], [3, 1n]]), totalMinor: 100, measuredPct: 0 });
+    assert.equal(plan.total, 100n);
+    assert.deepEqual(plan.lines.map((l) => l.amount), [34n, 33n, 33n]);
+  });
+});
+
+describe('isi plani (computeBillingPlan, sahte istemci): m2 yok, alan payi arsa payi ya da esit', () => {
+  const meterRow = (id, extra = {}) => ({
+    meter_id: id, apartment_id: id, responsible_party: 'both', unit_label: String(id), block_name: 'A', has_tenant: false,
+    land_share_numerator: null, land_share_denominator: null,
+    opening: '0', opening_date: '2026-01-01', closing: String(id * 10), closing_date: '2026-02-01', ...extra,
+  });
+  // meters sorgusu satir dondurur; kural (heat.measured_share_pct) sorgusu satirsiz: varsayilan %70
+  const fakeClient = (rows) => ({
+    sql: [],
+    async query(text) {
+      this.sql.push(text);
+      return /FROM meters m/.test(text) ? { rows } : { rows: [] };
+    },
+  });
+  const input = { kind: 'heat', method: 'heat', from: '2026-01-01', to: '2026-02-01', totalMinor: 100000, unitPriceMinor: null };
+
+  it('arsa payi yoksa alan payi esit dagitilir, area_basis=equal; area_missing / NO_CONSUMPTION yok', async () => {
+    const client = fakeClient([meterRow(1), meterRow(2), meterRow(3)]);
+    const plan = await computeBillingPlan(client, 1, input, { entryDate: '2026-02-05', lock: true });
+    assert.equal(plan.params.area_basis, 'equal');
+    assert.equal(plan.params.measured_pct, 70);
+    assert.equal(plan.params.area_pct, 30);
+    assert.deepEqual(plan.missing, []);
+    assert.equal(plan.total, 100000n);
+    // tuketim 10:20:30 (toplam 60): olcum 70000 -> 11667, 23333, 35000; alan payi 30000 esit -> 10000
+    assert.deepEqual(plan.lines.map((l) => l.amount), [21667n, 33333n, 45000n]);
+    assert.match(client.sql.find((t) => /FROM meters m/.test(t)), /a\.land_share_numerator, a\.land_share_denominator/);
+    assert.doesNotMatch(client.sql.find((t) => /FROM meters m/.test(t)), /AS area/);
+  });
+
+  it('tum dairelerin arsa payi varsa area_basis=land_share ve plan ozeti esit paydakinden farklidir', async () => {
+    const withShare = [
+      meterRow(1, { land_share_numerator: 1, land_share_denominator: 6 }),
+      meterRow(2, { land_share_numerator: 2, land_share_denominator: 6 }),
+      meterRow(3, { land_share_numerator: 3, land_share_denominator: 6 }),
+    ];
+    const byShare = await computeBillingPlan(fakeClient(withShare), 1, input, { entryDate: '2026-02-05', lock: true });
+    const equal = await computeBillingPlan(fakeClient([meterRow(1), meterRow(2), meterRow(3)]), 1, input, { entryDate: '2026-02-05', lock: true });
+    assert.equal(byShare.params.area_basis, 'land_share');
+    // alan payi 30000 arsa payina gore: 5000, 10000, 15000 (+ olcum 11667, 23333, 35000)
+    assert.deepEqual(byShare.lines.map((l) => l.amount), [16667n, 33333n, 50000n]);
+    assert.notEqual(byShare.hash, equal.hash);
+  });
+
+  it('tek dairenin arsa payi eksikse herkese esit (karma dagitim yok)', async () => {
+    const rows = [meterRow(1, { land_share_numerator: 1, land_share_denominator: 6 }), meterRow(2), meterRow(3, { land_share_numerator: 3, land_share_denominator: 6 })];
+    const plan = await computeBillingPlan(fakeClient(rows), 1, input, { entryDate: '2026-02-05', lock: true });
+    assert.equal(plan.params.area_basis, 'equal');
+  });
+
+  it('olcum payi disindaki tum dairelerin tuketimi sifirsa olcum payi icin NO_CONSUMPTION (alan payiyla karismaz)', async () => {
+    const zero = [meterRow(1, { closing: '0' }), meterRow(2, { closing: '0' })];
+    await assert.rejects(() => computeBillingPlan(fakeClient(zero), 1, input, { entryDate: '2026-02-05', lock: true }), { code: 'NO_CONSUMPTION' });
   });
 });
 

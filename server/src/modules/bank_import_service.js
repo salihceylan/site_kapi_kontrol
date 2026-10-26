@@ -11,7 +11,7 @@ import { postPayment } from './finance_parties.js';
 import { periodOfDate, today } from './finance_common.js';
 import { isPeriodClosed, recordFinanceAudit, withFinanceTransaction } from './finance_tx.js';
 import { apartmentLabel } from './people_common.js';
-import { computeFingerprints, matchLine, normalizeIban, outcomeOf, previewHash, summarize } from './bank_line_match.js';
+import { computeFingerprints, computeLegacyFingerprints, matchLine, normalizeIban, outcomeOf, previewHash, summarize } from './bank_line_match.js';
 import { buildUnitIndex, periodHintOf } from './bank_match_hints.js';
 import {
   MAX_AUTO_POST,
@@ -127,13 +127,32 @@ export async function findExistingPayments(db, siteCode, { apartmentId, accountI
   return (r.rows ?? []).map((x) => num(x.id));
 }
 
+/**
+ * Aynı hesap + daire + tutar + valörde, BAŞKA bir banka satırına bağlı (yazılmış ya da bağlanmış) iptal edilmemiş tahsilat sayısı.
+ * Aynı ekstrenin farklı biçimde (PDF -> XLSX) ya da eski parmak izi formülüyle yeniden yüklenmesi satırı "yeni" gösterebilir; bu durumda
+ * ikinci kez tahsil etmemek için satır elle onaya (`check`) düşer. Gerçekten iki ayrı aynı tutarlı havale de buraya takılır: yönetici onaylar.
+ */
+export async function countBankLinkedPayments(db, siteCode, { apartmentId, accountId, amountMinor, valueDate }) {
+  const r = await db.query(
+    `SELECT count(*)::INT AS n FROM ledger_entries l
+       JOIN account_movements m ON m.ledger_entry_id = l.id AND m.kind = 'collection' AND m.account_id = $3
+      WHERE l.site_code = $1 AND l.apartment_id = $2 AND l.kind = 'payment' AND l.amount_minor = $4::BIGINT AND l.entry_date = $5::DATE
+        AND NOT EXISTS (SELECT 1 FROM ledger_entries x WHERE x.reverses_entry_id = l.id)
+        AND EXISTS (SELECT 1 FROM bank_statement_lines b WHERE b.ledger_entry_id = l.id AND b.status IN ('posted', 'linked'))`,
+    [siteCode, apartmentId, accountId, String(-amountMinor), valueDate],
+  );
+  return Number(r.rows?.[0]?.n ?? 0);
+}
+
 async function analyze(db, siteCode, input, now) {
   const account = await loadBankAccount(db, siteCode, input.accountId);
   const ctx = await loadContext(db, siteCode);
   const fingerprints = computeFingerprints(input.accountId, input.lines);
+  // Eski formülle (açıklama + ref) kaydedilmiş satırlar da yineleme sayılır (parmak izi formülü değişti; geçmiş yüklemeler çift tahsilata açılmasın).
+  const legacyFingerprints = computeLegacyFingerprints(input.accountId, input.lines);
   const dup = await db.query(
     `SELECT fingerprint FROM bank_statement_lines WHERE account_id = $1 AND fingerprint = ANY($2::TEXT[]) AND status <> 'reverted'`,
-    [input.accountId, fingerprints],
+    [input.accountId, [...new Set([...fingerprints, ...legacyFingerprints])]],
   );
   const known = new Set((dup.rows ?? []).map((r) => r.fingerprint));
   const closed = new Map();
@@ -142,7 +161,7 @@ async function analyze(db, siteCode, input, now) {
   for (let i = 0; i < input.lines.length; i += 1) {
     const line = input.lines[i];
     const fingerprint = fingerprints[i];
-    const duplicate = known.has(fingerprint);
+    const duplicate = known.has(fingerprint) || known.has(legacyFingerprints[i]);
     const warnings = [];
     let match = duplicate ? null : matchLine(line, ctx);
     // PDF'den okunan, güveni düşük satır otomatik işlenmez: güçlü eşleşme bile "kontrol edin"e düşer.
@@ -153,19 +172,32 @@ async function analyze(db, siteCode, input, now) {
     let linkedEntryId = null;
     let ambiguousLink = false;
     if (match && match.strength === 'strong') {
-      const found = await findExistingPayments(db, siteCode, {
+      const bankLinked = await countBankLinkedPayments(db, siteCode, {
         apartmentId: match.apartmentId,
         accountId: input.accountId,
         amountMinor: line.amount_minor,
         valueDate: line.value_date,
-        exclude: claimed,
       });
-      if (found.length === 1) {
-        linkedEntryId = found[0];
-        claimed.push(found[0]);
-      } else if (found.length > 1) {
+      if (bankLinked > 0) {
+        // Aynı daire + hesap + tutar + valörde başka bir banka satırının tahsilatı var: büyük olasılıkla aynı havale (ör. aynı ekstre başka biçimde
+        // yüklendi). Otomatik tahsilat YAZILMAZ; yönetici elle onaylar.
         ambiguousLink = true;
-        warnings.push('LINK_AMBIGUOUS');
+        warnings.push('POSSIBLE_DUPLICATE_PAYMENT');
+      } else {
+        const found = await findExistingPayments(db, siteCode, {
+          apartmentId: match.apartmentId,
+          accountId: input.accountId,
+          amountMinor: line.amount_minor,
+          valueDate: line.value_date,
+          exclude: claimed,
+        });
+        if (found.length === 1) {
+          linkedEntryId = found[0];
+          claimed.push(found[0]);
+        } else if (found.length > 1) {
+          ambiguousLink = true;
+          warnings.push('LINK_AMBIGUOUS');
+        }
       }
     }
     if (match && match.strength === 'strong' && !linkedEntryId && !ambiguousLink) {
@@ -268,7 +300,7 @@ export async function commitImport({ siteCode, body, actor, now = new Date() }) 
     rows.forEach((r, i) => {
       r.id = num(idRes.rows[i].id);
       r.status = r.outcome === 'check' ? 'suggested' : 'unmatched';
-      r.note = r.warnings.includes('PERIOD_CLOSED') ? 'PERIOD_CLOSED' : null;
+      r.note = r.warnings.includes('PERIOD_CLOSED') ? 'PERIOD_CLOSED' : r.warnings.includes('POSSIBLE_DUPLICATE_PAYMENT') ? 'POSSIBLE_DUPLICATE_PAYMENT' : null;
       r.entryId = null;
     });
     // tanınanlar daire sırasıyla işlenir; kayıt başına en çok MAX_AUTO_POST

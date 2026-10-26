@@ -2,7 +2,19 @@
 // parça boyutları ve yarış tespiti (satır sayısı tutmazsa / 23505 -> 409 PREVIEW_STALE). Gerçek PG: scripts/qa_platform_pg.mjs bölüm bulk_import.
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { AUDIT_CHUNK, ENTITY_CHUNK, applyApartmentOps, applyPeopleOps, insertAudits } from '../src/modules/bulk_import_writer.js';
+import bcrypt from 'bcryptjs';
+import {
+  AUDIT_CHUNK,
+  ENTITY_CHUNK,
+  LOGIN_NAME_BASE_MAX,
+  applyApartmentOps,
+  applyPeopleOps,
+  collectAccountPasswords,
+  hashAccountPasswords,
+  insertAudits,
+  provisionImportedResidents,
+  slugifyLoginName,
+} from '../src/modules/bulk_import_writer.js';
 
 const norm = (text) => String(text).replace(/\s+/g, ' ').trim();
 
@@ -55,7 +67,7 @@ describe('applyPeopleOps: işlem birleştirme ve ifadeler', () => {
 
   it('yeni kişi: kimlikler nextval ile ayrılır; fill (pf) ve aynı dosyadaki yükseltme (ru) ekleme işlemine birleşir; tek INSERT', async () => {
     const client = fakeClient();
-    const audits = await applyPeopleOps(client, { ...BASE, ops });
+    const { audits } = await applyPeopleOps(client, { ...BASE, ops });
     const nextval = stmts(client, /^SELECT nextval/);
     assert.equal(nextval.length, 1);
     assert.equal(nextval[0].params[0], 2);
@@ -84,7 +96,7 @@ describe('applyPeopleOps: işlem birleştirme ve ifadeler', () => {
 
   it('audit: person.updated / created / residency.* satırlarında ad, e-posta, telefon, not YOK (yalnız alan adları); vehicle.added plaka taşır', async () => {
     const client = fakeClient();
-    const audits = await applyPeopleOps(client, { ...BASE, ops });
+    const { audits } = await applyPeopleOps(client, { ...BASE, ops });
     const text = JSON.stringify(audits.filter((a) => a.action !== 'vehicle.added'));
     assert.ok(!/Ahmet|Ayşe|a@example|5551234567/.test(text), text);
     assert.equal(audits.find((a) => a.action === 'vehicle.added').details.plate, '34ABC123');
@@ -93,7 +105,7 @@ describe('applyPeopleOps: işlem birleştirme ve ifadeler', () => {
 
   it('mevcut kişiler: aynı kişinin fill / yeniden etkinleştirme işlemleri TEK satırda toplanır; audit yalnız { field, changed } / is_active', async () => {
     const client = fakeClient();
-    const audits = await applyPeopleOps(client, {
+    const { audits } = await applyPeopleOps(client, {
       ...BASE,
       ops: [
         { t: 'pr', ref: 'p5', name: 'Yeni Ad', phone: '+905321112233' },
@@ -201,5 +213,313 @@ describe('insertAudits', () => {
     assert.equal(client.log.some((entry) => /SAVEPOINT/i.test(entry.sql)), false);
     assert.deepEqual(inserts[0].params.slice(1), [42, 'Yönetici', 'site_manager', 9]);
     assert.equal(stmts(client, /^INSERT INTO audit_log/).length, 3);
+  });
+});
+
+// ===============================================================================================================
+// Hesap açma (provisionImportedResidents): kapsam sınırı, tek hesap, site bağı, SAVEPOINT, şifre/kullanıcı adı eşleşmesi
+// ===============================================================================================================
+
+describe('applyPeopleOps: hesap adayları ve ref -> kişi kimliği', () => {
+  it('yalnız bu çalıştırmada daire ilişkisi EKLENEN kişiler aday olur; ref -> kimlik haritası döner; şifre/kullanıcı adı ref üzerinden taşınır', async () => {
+    const client = fakeClient();
+    const { idByRef, accountCandidates } = await applyPeopleOps(client, {
+      ...BASE,
+      ops: [
+        { t: 'pc', ref: 'new:2', n: 2, name: 'Ali Aynı', phone: null, email: null, note: null, password: 'ali-sifre', loginName: 'ali.a' },
+        { t: 'ra', ref: 'new:2', n: 2, aptId: 10, relation: 'resident', moveIn: null },
+        { t: 'pc', ref: 'new:3', n: 3, name: 'Ali Aynı', phone: null, email: null, note: null, password: 'baska', loginName: null },
+        { t: 'ra', ref: 'new:3', n: 3, aptId: 11, relation: 'tenant', moveIn: null },
+        { t: 'pc', ref: 'new:4', n: 4, name: 'Dairesiz', phone: null, email: null, note: null, password: '1234', loginName: null },
+        { t: 'pf', ref: 'p9', field: 'note', value: 'x' }, // mevcut kişi, yeni daire yok -> aday DEĞİL
+        { t: 'ra', ref: 'p7', n: 5, aptId: 12, relation: 'owner', moveIn: null, password: 'mevcut', loginName: null },
+        { t: 'ra', ref: 'p7', n: 6, aptId: 13, relation: 'owner', moveIn: null },
+      ],
+    });
+    assert.deepEqual([...idByRef.entries()], [['new:2', 101], ['new:3', 102], ['new:4', 103], ['p9', 9], ['p7', 7]]);
+    assert.deepEqual(accountCandidates.map((c) => [c.ref, c.personId, c.n, c.password, c.loginName]), [
+      ['new:2', 101, 2, 'ali-sifre', 'ali.a'],
+      ['new:3', 102, 3, 'baska', null],
+      ['p7', 7, 5, 'mevcut', null],
+    ]);
+    assert.deepEqual(accountCandidates[2].apartments.map((a) => a.aptId), [12, 13], 'iki daire -> tek aday, iki ilişki');
+    assert.equal(accountCandidates.some((c) => c.ref === 'new:4' || c.ref === 'p9'), false);
+  });
+
+  it('aynı dosyada kişiye eklenen ilişkinin yükseltmesi (ru) adayın ilişkisine yansır', async () => {
+    const client = fakeClient();
+    const { accountCandidates } = await applyPeopleOps(client, {
+      ...BASE,
+      ops: [
+        { t: 'pc', ref: 'new:2', name: 'Ahmet Yılmaz', phone: null, email: 'a@example.com', note: null },
+        { t: 'ra', ref: 'new:2', aptId: 10, relation: 'resident', moveIn: null },
+        { t: 'ru', ref: 'new:2', aptId: 10, residencyId: null, from: 'resident', to: 'owner' },
+        { t: 'pc', ref: 'new:3', name: 'Ayşe Demir', phone: null, email: null, note: 'n' },
+        { t: 'ra', ref: 'new:3', aptId: 10, relation: 'tenant', moveIn: '2021-03-15' },
+      ],
+    });
+    assert.deepEqual(accountCandidates.map((c) => [c.ref, c.apartments[0].relation]), [['new:2', 'owner'], ['new:3', 'tenant']]);
+  });
+});
+
+/**
+ * Hesap açma için sahte istemci: kilitli kişi okuması, daire bilgisi, e-posta/kullanıcı adı aramaları, kullanıcı INSERT'i, SAVEPOINT kaydı.
+ * `people`: id -> { full_name, email, phone }; `emailUsers`: e-posta -> { user_code, login_name, linkable }; `taken`: kullanılmış kullanıcı adları.
+ */
+function accountClient({ people, emailUsers = {}, taken = [], failOnInsert = null, linkRowCount = 1 } = {}) {
+  const log = [];
+  const takenNames = new Set(taken);
+  const inserted = [];
+  let nextUser = 900;
+  return {
+    log,
+    inserted,
+    async query(text, params = []) {
+      const sql = norm(text);
+      log.push({ sql, params });
+      if (/^SELECT sp\.id, sp\.full_name/.test(sql)) {
+        const ids = params[0];
+        return { rows: ids.filter((id) => people[id]).map((id) => ({ id: String(id), ...people[id] })), rowCount: 0 };
+      }
+      if (/^SELECT a\.id, a\.unit_label, a\.sort_order, b\.block_name/.test(sql)) {
+        return { rows: params[0].map((id) => ({ id: String(id), unit_label: `Daire ${id}`, sort_order: 1, block_name: 'A Blok' })), rowCount: params[0].length };
+      }
+      if (/FROM users u WHERE LOWER\(u\.email\) = \$1/.test(sql)) {
+        const row = emailUsers[params[0]];
+        return { rows: row ? [row] : [], rowCount: row ? 1 : 0 };
+      }
+      if (/^SELECT user_code FROM users WHERE LOWER\(login_name\)/.test(sql)) {
+        return { rows: takenNames.has(String(params[0]).toLowerCase()) ? [{ user_code: 1 }] : [], rowCount: takenNames.has(String(params[0]).toLowerCase()) ? 1 : 0 };
+      }
+      if (/^INSERT INTO users/.test(sql)) {
+        if (failOnInsert && failOnInsert(params, inserted.length)) {
+          const code = failOnInsert(params, inserted.length);
+          throw Object.assign(new Error('enjekte'), { code });
+        }
+        nextUser += 1;
+        takenNames.add(String(params[2]).toLowerCase());
+        inserted.push({ user_code: nextUser, full_name: params[0], email: params[1], login_name: params[2], phone: params[3], password_hash: params[4] });
+        return { rows: [{ user_code: nextUser }], rowCount: 1 };
+      }
+      if (/^UPDATE site_people sp SET user_code/.test(sql)) return { rows: [], rowCount: linkRowCount };
+      return { rows: [], rowCount: 0 };
+    },
+  };
+}
+
+const candidate = (ref, personId, apartments, extra = {}) => ({ ref, personId, n: personId, password: '1234', loginName: null, apartments, ...extra });
+const sqlOf = (client, pattern) => client.log.filter((entry) => pattern.test(entry.sql));
+
+describe('provisionImportedResidents', () => {
+  it('KAPSAM: yalnız adaylar kilitlenir ve işlenir; sitedeki diğer hesapsız sakinlere dokunulmaz (toplu "tüm sakinler" sorgusu YOK)', async () => {
+    const client = accountClient({ people: { 101: { full_name: 'Ali Yılmaz', email: null, phone: '+905551112233' } } });
+    const result = await provisionImportedResidents(client, { siteCode: 9, runId: 7, accountCandidates: [candidate('new:2', 101, [{ aptId: 10, relation: 'resident' }])] });
+    assert.deepEqual([result.created, result.linked, result.skipped], [1, 0, 0]);
+    assert.equal(client.inserted.length, 1);
+    const lock = sqlOf(client, /^SELECT sp\.id, sp\.full_name/)[0];
+    assert.deepEqual(lock.params, [[101], 9]);
+    assert.match(lock.sql, /sp\.user_code IS NULL/, 'kişi başına user_code IS NULL yeniden doğrulanır');
+    assert.match(lock.sql, /FOR UPDATE OF sp/);
+    assert.equal(client.log.some((entry) => /FROM apartment_residencies/.test(entry.sql)), false, 'tüm güncel sakinleri tarayan sorgu yok');
+    assert.deepEqual(result.items, [{ n: 101, login_name: 'ali.yilmaz', status: 'created' }]);
+    assert.deepEqual(result.audits.map((a) => [a.action, a.target_id, a.details.status, a.details.run_id]), [['person.account_created', '101', 'created', 7]]);
+    assert.ok(!/Ali|Yılmaz|5551112233/.test(JSON.stringify(result.audits)), 'audit kişisel veri taşımaz');
+  });
+
+  it('kilit altında artık hesaplı (user_code dolu) çıkan kişi sessizce atlanır: kullanıcı INSERT edilmez', async () => {
+    const client = accountClient({ people: {} });
+    const result = await provisionImportedResidents(client, { siteCode: 9, accountCandidates: [candidate('p7', 7, [{ aptId: 10, relation: 'resident' }])] });
+    assert.deepEqual([result.created, result.linked, result.skipped], [0, 0, 0]);
+    assert.equal(sqlOf(client, /^INSERT INTO users/).length, 0);
+  });
+
+  it('kişi başına TEK hesap: iki dairede eklenen kişi tek kullanıcı alır, her daire için üyelik kuralı (grantApartmentAccess) çalışır', async () => {
+    const client = accountClient({ people: { 101: { full_name: 'Ayşe Demir', email: null, phone: null } } });
+    const result = await provisionImportedResidents(client, {
+      siteCode: 9,
+      accountCandidates: [candidate('new:2', 101, [{ aptId: 12, relation: 'owner' }, { aptId: 10, relation: 'owner' }])],
+    });
+    assert.equal(client.inserted.length, 1);
+    assert.equal(result.created, 1);
+    const locks = sqlOf(client, /^SELECT id FROM apartments WHERE id = \$1 FOR UPDATE/);
+    assert.deepEqual(locks.map((entry) => entry.params[0]), [10, 12], 'daire kilitleri artan sırada');
+    assert.equal(sqlOf(client, /INTO apartment_memberships/).length, 2);
+    assert.equal(sqlOf(client, /INTO site_memberships/).length, 2);
+    // sakin göstergesine yazılan yeni hesabın PIN bayrağı: yalnız yeni hesapta
+    const pin = sqlOf(client, /SET resident_pin_issued = TRUE/)[0];
+    assert.deepEqual(pin.params, [[10, 12], 9, 901]);
+    assert.match(pin.sql, /resident_user_code = \$3/);
+  });
+
+  it('üyelik sırası: aynı dairede MALİK kiracıdan/sakinden önce işlenir (ilk gelen daire admini olur)', async () => {
+    const client = accountClient({
+      people: {
+        101: { full_name: 'Sakin Kişi', email: null, phone: null },
+        102: { full_name: 'Malik Kişi', email: null, phone: null },
+        103: { full_name: 'Kiracı Kişi', email: null, phone: null },
+      },
+    });
+    await provisionImportedResidents(client, {
+      siteCode: 9,
+      accountCandidates: [
+        candidate('new:2', 101, [{ aptId: 10, relation: 'resident' }]),
+        candidate('new:3', 102, [{ aptId: 10, relation: 'owner' }]),
+        candidate('new:4', 103, [{ aptId: 10, relation: 'tenant' }]),
+      ],
+    });
+    assert.deepEqual(client.inserted.map((u) => u.full_name), ['Malik Kişi', 'Kiracı Kişi', 'Sakin Kişi']);
+  });
+
+  it('ŞİFRE / KULLANICI ADI kişi kimliğiyle (ref) eşleşir: aynı adlı iki kişi birbirinin şifresini ALMAZ; nihai ad çakışmada _2 olur ve sonuçta döner', async () => {
+    const client = accountClient({
+      people: {
+        101: { full_name: 'Ali Veli', email: null, phone: null },
+        102: { full_name: 'Ali Veli', email: null, phone: null },
+      },
+    });
+    const hashes = new Map([
+      ['new:2', { password: 'birinci', hash: 'HASH-BIRINCI' }],
+      ['new:3', { password: 'ikinci', hash: 'HASH-IKINCI' }],
+    ]);
+    const result = await provisionImportedResidents(client, {
+      siteCode: 9,
+      hashes,
+      accountCandidates: [
+        candidate('new:3', 102, [{ aptId: 11, relation: 'resident' }], { password: 'ikinci' }),
+        candidate('new:2', 101, [{ aptId: 10, relation: 'resident' }], { password: 'birinci' }),
+      ],
+    });
+    const byName = Object.fromEntries(client.inserted.map((u) => [u.password_hash, u.login_name]));
+    assert.deepEqual(Object.keys(byName).sort(), ['HASH-BIRINCI', 'HASH-IKINCI']);
+    assert.deepEqual(result.items.map((i) => i.login_name).sort(), ['ali.veli', 'ali.veli_2']);
+    assert.deepEqual(client.inserted.map((u) => u.password_hash), ['HASH-BIRINCI', 'HASH-IKINCI'], 'kişi kimliği sırasıyla; her kişinin KENDİ özeti');
+    assert.deepEqual(result.items.map((i) => [i.n, i.login_name]), [[101, 'ali.veli'], [102, 'ali.veli_2']]);
+  });
+
+  it('yazılan kullanıcı adı aynı kuralla sadeleşir; boş şifre için varsayılan 1234 özeti yerinde hesaplanır (bcrypt doğrulanır)', async () => {
+    const client = accountClient({ people: { 101: { full_name: 'Çağrı Öztürk', email: null, phone: null } } });
+    const result = await provisionImportedResidents(client, {
+      siteCode: 9,
+      accountCandidates: [candidate('new:2', 101, [{ aptId: 10, relation: 'resident' }], { loginName: 'Özel Ad_1', password: '' })],
+    });
+    assert.equal(result.items[0].login_name, 'ozel.ad.1');
+    assert.equal(await bcrypt.compare('1234', client.inserted[0].password_hash), true);
+    assert.match(sqlOf(client, /^INSERT INTO users/)[0].sql, /must_change_password\) VALUES \(\$1, \$2, \$3, 'apartment_owner', TRUE, TRUE, 'approved', \$4, \$5, TRUE\)/);
+  });
+
+  it('SİTE BAĞI: e-posta başka sitenin / yöneticinin hesabına aitse (bağ yok ya da yönetici) hesap AÇILMAZ ve kullanıcı bağlanmaz; uyarı döner', async () => {
+    const client = accountClient({
+      people: { 101: { full_name: 'Yabancı Kişi', email: 'yonetici@example.com', phone: null } },
+      emailUsers: { 'yonetici@example.com': { user_code: 55, login_name: 'yonetici', linkable: false } },
+    });
+    const result = await provisionImportedResidents(client, { siteCode: 9, accountCandidates: [candidate('new:2', 101, [{ aptId: 10, relation: 'resident' }])] });
+    assert.deepEqual([result.created, result.linked, result.skipped], [0, 0, 1]);
+    assert.equal(sqlOf(client, /^INSERT INTO users/).length, 0, 'aynı e-postayla ikinci hesap da açılmaz');
+    assert.equal(sqlOf(client, /^UPDATE site_people sp SET user_code/).length, 0, 'kişi o kullanıcıya bağlanmaz');
+    assert.deepEqual(result.skipped_items.map((i) => [i.n, i.code]), [[101, 'EMAIL_IN_USE']]);
+    assert.match(result.skipped_items[0].message, /e-posta/);
+    const lookup = sqlOf(client, /FROM users u WHERE LOWER\(u\.email\) = \$1/)[0];
+    assert.match(lookup.sql, /u\.role NOT IN \('super_user', 'site_manager'\)/, 'süper kullanıcı / site yöneticisi asla bağlanmaz');
+    assert.match(lookup.sql, /tie_u\.is_active = TRUE/, 'siteTiePredicate (aktif hesap + sitede bağ) kuralı');
+    assert.match(lookup.sql, /apartment_memberships/);
+  });
+
+  it('SİTE BAĞI: sitede bağı olan kullanıcıya bağlanır (yeni hesap açılmaz, şifresi değişmez), üyelik kuralı çalışır', async () => {
+    const client = accountClient({
+      people: { 101: { full_name: 'Komşu Kişi', email: 'komsu@example.com', phone: null } },
+      emailUsers: { 'komsu@example.com': { user_code: 77, login_name: 'komsu', linkable: true } },
+    });
+    const result = await provisionImportedResidents(client, { siteCode: 9, accountCandidates: [candidate('new:2', 101, [{ aptId: 10, relation: 'resident' }])] });
+    assert.deepEqual([result.created, result.linked, result.skipped], [0, 1, 0]);
+    assert.equal(sqlOf(client, /^INSERT INTO users/).length, 0);
+    const link = sqlOf(client, /^UPDATE site_people sp SET user_code/)[0];
+    assert.deepEqual(link.params, [77, 101, 9]);
+    assert.deepEqual(result.items, [{ n: 101, login_name: 'komsu', status: 'linked' }]);
+    assert.equal(sqlOf(client, /SET resident_pin_issued = TRUE/).length, 0, 'mevcut hesabın PIN bayrağı değişmez');
+    assert.equal(sqlOf(client, /INTO apartment_memberships/).length, 1);
+  });
+
+  it('bağlama satırı etkilenmezse (hesap sitede başka kişiye bağlı) kişi atlanır ve oluşan kullanıcı SAVEPOINT ile geri alınır', async () => {
+    const client = accountClient({ people: { 101: { full_name: 'Çifte Kişi', email: null, phone: null } }, linkRowCount: 0 });
+    const result = await provisionImportedResidents(client, { siteCode: 9, accountCandidates: [candidate('new:2', 101, [{ aptId: 10, relation: 'resident' }])] });
+    assert.deepEqual(result.skipped_items.map((i) => i.code), ['ACCOUNT_ALREADY_LINKED']);
+    assert.ok(client.log.some((entry) => /^ROLLBACK TO SAVEPOINT import_account/.test(entry.sql)));
+  });
+
+  it('SAVEPOINT: bir kişide veri hatası (23505) yalnız o kişiyi geri alır, diğerleri hesaplanır; atlananlar sayılır; transaction bozulmaz', async () => {
+    const client = accountClient({
+      people: {
+        101: { full_name: 'Birinci Kişi', email: null, phone: null },
+        102: { full_name: 'İkinci Kişi', email: null, phone: null },
+        103: { full_name: 'Üçüncü Kişi', email: null, phone: null },
+      },
+      failOnInsert: (params) => (params[2] === 'ikinci.kisi' ? '23505' : null),
+    });
+    const result = await provisionImportedResidents(client, {
+      siteCode: 9,
+      accountCandidates: [101, 102, 103].map((id) => candidate(`new:${id}`, id, [{ aptId: 10 + id, relation: 'resident' }])),
+    });
+    assert.deepEqual([result.created, result.skipped], [2, 1]);
+    assert.deepEqual(result.skipped_items.map((i) => [i.n, i.code]), [[102, 'ACCOUNT_FAILED']]);
+    assert.deepEqual(client.inserted.map((u) => u.login_name), ['birinci.kisi', 'ucuncu.kisi']);
+    const order = client.log.map((entry) => entry.sql).filter((sql) => /SAVEPOINT/.test(sql));
+    assert.equal(order.filter((sql) => /^SAVEPOINT/.test(sql)).length, 3, 'kişi başına SAVEPOINT');
+    assert.equal(order.filter((sql) => /^ROLLBACK TO SAVEPOINT/.test(sql)).length, 1);
+    assert.ok(order.filter((sql) => /^RELEASE SAVEPOINT/.test(sql)).length >= 3, 'her SAVEPOINT serbest bırakılır');
+  });
+
+  it('kilitlenme (40P01) ve kilit zaman aşımı (55P03) YUTULMAZ: yukarı fırlar, kişi atlanmış sayılmaz', async () => {
+    for (const code of ['40P01', '55P03']) {
+      const client = accountClient({
+        people: { 101: { full_name: 'Kilit Kişi', email: null, phone: null } },
+        failOnInsert: () => code,
+      });
+      await assert.rejects(
+        () => provisionImportedResidents(client, { siteCode: 9, accountCandidates: [candidate('new:2', 101, [{ aptId: 10, relation: 'resident' }])] }),
+        (error) => error.code === code,
+      );
+      assert.equal(client.log.some((entry) => /^ROLLBACK TO SAVEPOINT/.test(entry.sql)), false);
+    }
+  });
+
+  it('boş aday listesi: hiçbir sorgu çalışmaz', async () => {
+    const client = accountClient({ people: {} });
+    const result = await provisionImportedResidents(client, { siteCode: 9, accountCandidates: [] });
+    assert.deepEqual([result.created, result.linked, result.skipped], [0, 0, 0]);
+    assert.equal(client.log.length, 0);
+  });
+});
+
+describe('hashAccountPasswords / collectAccountPasswords / slugifyLoginName', () => {
+  it('collectAccountPasswords: yalnız daire ilişkisi eklenen kişiler; yeni kişide pc, mevcut kişide ilk ra; boş şifre -> 1234', () => {
+    const passwords = collectAccountPasswords([
+      { t: 'pc', ref: 'new:2', password: 'abc' },
+      { t: 'ra', ref: 'new:2', aptId: 1 },
+      { t: 'pc', ref: 'new:3', password: 'xyz' }, // dairesiz -> hesap yok
+      { t: 'ra', ref: 'p7', aptId: 2, password: '  özel  ' },
+      { t: 'ra', ref: 'p7', aptId: 3, password: 'ikinci' },
+      { t: 'pc', ref: 'new:4', password: '' },
+      { t: 'ra', ref: 'new:4', aptId: 4 },
+    ]);
+    assert.deepEqual([...passwords.entries()], [['new:2', 'abc'], ['p7', 'özel'], ['new:4', '1234']]);
+  });
+
+  it('hashAccountPasswords: varsayılan dahil her şifre kendi tuzuyla özetlenir (ortak özet yok); hepsi bcrypt ile doğrulanır', async () => {
+    const hashes = await hashAccountPasswords(new Map([['a', '1234'], ['b', '1234'], ['c', 'özel-1'], ['d', 'özel-1']]), { concurrency: 2 });
+    assert.notEqual(hashes.get('a').hash, hashes.get('b').hash, 'varsayılan şifrede de kişi başına ayrı tuz');
+    assert.equal(await bcrypt.compare('1234', hashes.get('b').hash), true);
+    assert.notEqual(hashes.get('c').hash, hashes.get('d').hash, 'özel şifreler kişi başına ayrı tuz');
+    assert.equal(await bcrypt.compare('1234', hashes.get('a').hash), true);
+    assert.equal(await bcrypt.compare('özel-1', hashes.get('d').hash), true);
+    assert.equal(hashes.get('c').password, 'özel-1');
+  });
+
+  it('slugifyLoginName: Türkçe sadeleşir, [a-z0-9] dışı tek nokta, uçlardaki nokta atılır, en çok 36 karakter, boşsa yedek ad', () => {
+    assert.equal(slugifyLoginName('Çağrı  Öztürk-Şahin'), 'cagri.ozturk.sahin');
+    assert.equal(slugifyLoginName('  İsmail Iğdır '), 'ismail.igdir');
+    assert.equal(slugifyLoginName('...'), 'kullanici');
+    assert.equal(slugifyLoginName(null), 'kullanici');
+    const long = slugifyLoginName('a'.repeat(30) + ' ' + 'b'.repeat(30));
+    assert.ok(long.length <= LOGIN_NAME_BASE_MAX && !long.endsWith('.'), long);
   });
 });

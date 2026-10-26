@@ -18,7 +18,7 @@ function makeSnapshot() {
   for (const [blockId, count] of [[1, 6], [2, 3]]) {
     for (let n = 1; n <= count; n += 1) {
       id += 1;
-      apartments.push({ id, blockId, label: `Daire ${n}`, floor: null, category: null, gross: null, net: null, lsNum: null, lsDen: null, responsible: 'both', hasFinance: false });
+      apartments.push({ id, blockId, label: `Daire ${n}`, floor: null, category: null, lsNum: null, lsDen: null, responsible: 'both', hasFinance: false });
     }
   }
   return { blocks, apartments, people: [], residencies: [], vehicles: [] };
@@ -104,8 +104,8 @@ function applyPlan(snapshot, result) {
         break;
       case 'au': {
         const apartment = snapshot.apartments.find((a) => a.id === op.aptId);
-        const map = { floor: 'floor', category: 'category', gross_area_m2: 'gross', net_area_m2: 'net', land_share_numerator: 'lsNum', land_share_denominator: 'lsDen', responsible_party: 'responsible' };
-        for (const [column, value] of Object.entries(op.set)) apartment[map[column]] = typeof value === 'number' && (column === 'gross_area_m2' || column === 'net_area_m2') ? String(value) : value;
+        const map = { floor: 'floor', category: 'category', land_share_numerator: 'lsNum', land_share_denominator: 'lsDen', responsible_party: 'responsible' };
+        for (const [column, value] of Object.entries(op.set)) apartment[map[column]] = value;
         break;
       }
       default:
@@ -119,21 +119,21 @@ describe('DAİRELER planlayıcısı', () => {
   it('boş alanlar dolar; 2. yükleme "değişiklik yok" (idempotans); hash aynı dosya için kararlı', () => {
     const snapshot = makeSnapshot();
     const file = [
-      { blok: 'A', daire_no: '1', kat: 'Zemin', tip: '3+1', brut_m2: '125,5', net_m2: 110, arsa_payi_pay: 35, arsa_payi_payda: 1000, sorumlu: 'Kiracı' },
+      { blok: 'A', daire_no: '1', kat: 'Zemin', tip: '3+1', arsa_payi_pay: 35, arsa_payi_payda: 1000, sorumlu: 'Kiracı' },
       { blok: 'Blok A', daire_no: 'Daire 2', kat: '1. kat', tip: '2+1' },
-      { blok: 'B Blok', daire_no: '03', brut_m2: 90 },
+      { blok: 'B Blok', daire_no: '03', kat: 4 },
     ];
     const first = plan('apartments', snapshot, file);
     assert.deepEqual(first.totals, { rows: 3, ok: 3, unchanged: 0, error: 0, with_warnings: 0 });
     assert.equal(first.counts.apartment_update, 3);
-    assert.equal(first.counts.cells_set, 7 + 2 + 1);
+    assert.equal(first.counts.cells_set, 5 + 2 + 1);
     assert.equal(first.counts.overwritten_cells, 0);
     assert.equal(first.counts.cells_kept, 0);
     assert.equal(plan('apartments', snapshot, file).previewHash, first.previewHash);
     assert.match(first.previewHash, /^[0-9a-f]{64}$/);
     applyPlan(snapshot, first);
     const apt1 = snapshot.apartments.find((a) => a.id === aptId(snapshot, 'A', 1));
-    assert.deepEqual([apt1.floor, apt1.category, apt1.gross, apt1.net, apt1.lsNum, apt1.lsDen, apt1.responsible], [0, '3+1', '125.5', '110', 35, 1000, 'tenant']);
+    assert.deepEqual([apt1.floor, apt1.category, apt1.lsNum, apt1.lsDen, apt1.responsible], [0, '3+1', 35, 1000, 'tenant']);
     const second = plan('apartments', snapshot, file);
     assert.deepEqual(second.totals, { rows: 3, ok: 0, unchanged: 3, error: 0, with_warnings: 0 });
     assert.equal(second.ops.length, 0);
@@ -143,18 +143,18 @@ describe('DAİRELER planlayıcısı', () => {
   it('dolu alan varsayılan KORUNUR (VALUE_KEPT); allow_overwrite ile yazılır ve overwritten_cells sayılır', () => {
     const snapshot = makeSnapshot();
     const apt = snapshot.apartments[0];
-    Object.assign(apt, { floor: 2, category: '2+1', gross: '100.00' });
-    const file = [{ blok: 'A', daire_no: '1', kat: 5, tip: '3+1', brut_m2: 100, net_m2: 80 }];
+    Object.assign(apt, { floor: 2, category: '2+1' });
+    const file = [{ blok: 'A', daire_no: '1', kat: 5, tip: '3+1', arsa_payi_pay: 35, arsa_payi_payda: 1000 }];
     const kept = plan('apartments', snapshot, file);
     assert.equal(kept.counts.cells_kept, 2);
-    assert.equal(kept.counts.cells_set, 1); // yalnız net_m2 (boştu)
+    assert.equal(kept.counts.cells_set, 2); // yalnız arsa payı çifti (boştu)
     assert.deepEqual(codesOf(kept, 2).sort(), ['w:VALUE_KEPT', 'w:VALUE_KEPT']);
-    assert.deepEqual(kept.ops[0].set, { net_area_m2: 80 });
+    assert.deepEqual(kept.ops[0].set, { land_share_numerator: 35, land_share_denominator: 1000 });
     const overwritten = plan('apartments', snapshot, file, { allowOverwrite: true });
     assert.equal(overwritten.counts.overwritten_cells, 2); // kat, tip
-    assert.equal(overwritten.counts.cells_set, 1);
+    assert.equal(overwritten.counts.cells_set, 2);
     assert.equal(overwritten.counts.cells_kept, 0);
-    assert.deepEqual(overwritten.ops[0].set, { floor: 5, category: '3+1', net_area_m2: 80 });
+    assert.deepEqual(overwritten.ops[0].set, { floor: 5, category: '3+1', land_share_numerator: 35, land_share_denominator: 1000 });
     assert.notEqual(kept.previewHash, overwritten.previewHash);
   });
 
@@ -162,7 +162,7 @@ describe('DAİRELER planlayıcısı', () => {
     const snapshot = makeSnapshot();
     Object.assign(snapshot.apartments[0], { floor: 3, category: 'Dükkan' });
     const result = plan('apartments', snapshot, [
-      { blok: 'A', daire_no: '1', kat: null, tip: '', brut_m2: ' ' },
+      { blok: 'A', daire_no: '1', kat: null, tip: '', sorumlu: ' ' },
       { blok: 'A', daire_no: '2' },
     ]);
     assert.equal(result.ops.length, 0);
@@ -210,15 +210,15 @@ describe('DAİRELER planlayıcısı', () => {
     assert.deepEqual(codesOf(plan('apartments', ambiguous, [{ blok: 'blok a', daire_no: '1', kat: 1 }]), 2), ['e:BLOCK_AMBIGUOUS']);
   });
 
-  it('değer hataları: NUMBER_INVALID/RANGE, FLOOR_INVALID, RESPONSIBLE_INVALID, FORMULA_LIKE, TOO_LONG; hatalı satır HİÇ uygulanmaz', () => {
+  it('değer hataları: LAND_SHARE_INVALID (sayı değil / payda 0), FLOOR_INVALID, RESPONSIBLE_INVALID, FORMULA_LIKE, TOO_LONG; hatalı satır HİÇ uygulanmaz', () => {
     const snapshot = makeSnapshot();
     const result = plan('apartments', snapshot, [
-      { blok: 'A', daire_no: '1', brut_m2: 'çok', kat: 'yedinci', sorumlu: 'komşu', tip: '=1+1' },
-      { blok: 'A', daire_no: '2', tip: 'x'.repeat(41), net_m2: 0 },
+      { blok: 'A', daire_no: '1', arsa_payi_pay: 'çok', kat: 'yedinci', sorumlu: 'komşu', tip: '=1+1' },
+      { blok: 'A', daire_no: '2', tip: 'x'.repeat(41), arsa_payi_payda: 0 },
       { blok: 'A', daire_no: '3', kat: 4, tip: '2+1' },
     ]);
-    assert.deepEqual(codesOf(result, 2).sort(), ['e:FLOOR_INVALID', 'e:FORMULA_LIKE', 'e:NUMBER_INVALID', 'e:RESPONSIBLE_INVALID']);
-    assert.deepEqual(codesOf(result, 3).sort(), ['e:NUMBER_RANGE', 'e:TOO_LONG']);
+    assert.deepEqual(codesOf(result, 2).sort(), ['e:FLOOR_INVALID', 'e:FORMULA_LIKE', 'e:LAND_SHARE_INVALID', 'e:RESPONSIBLE_INVALID']);
+    assert.deepEqual(codesOf(result, 3).sort(), ['e:LAND_SHARE_INVALID', 'e:TOO_LONG']);
     assert.equal(statusOf(result, 4), 'ok');
     assert.equal(result.ops.length, 1);
     assert.equal(result.ops[0].aptId, aptId(snapshot, 'A', 3));
@@ -255,20 +255,39 @@ describe('DAİRELER planlayıcısı', () => {
     assert.equal(plan('apartments', snapshot, [{ blok: 'A', daire_no: '1', kat: 1 }]).view.checks.land_share, null);
   });
 
-  it('uyarılar: ROUNDED, AREA_UNUSUAL, NET_GT_GROSS, FINANCE_RECORDS (yalnız mali alan değişirse)', () => {
+  it('uyarılar: FINANCE_RECORDS yalnız mali alan (tip, arsa payı, sorumlu) değişirse; kat mali alan değil', () => {
     const snapshot = makeSnapshot();
     snapshot.apartments[0].hasFinance = true;
     snapshot.apartments[1].hasFinance = true;
     const result = plan('apartments', snapshot, [
-      { blok: 'A', daire_no: '1', brut_m2: '100,456', net_m2: '120' },
-      { blok: 'A', daire_no: '2', kat: 3 }, // kat mali alan değil
-      { blok: 'A', daire_no: '3', brut_m2: 4 },
+      { blok: 'A', daire_no: '1', tip: '3+1' },
+      { blok: 'A', daire_no: '2', kat: 3 },
+      { blok: 'A', daire_no: '3', kat: 1 },
     ]);
-    assert.deepEqual(codesOf(result, 2).sort(), ['w:FINANCE_RECORDS', 'w:NET_GT_GROSS', 'w:ROUNDED']);
+    assert.deepEqual(codesOf(result, 2), ['w:FINANCE_RECORDS']);
     assert.deepEqual(codesOf(result, 3), []);
-    assert.deepEqual(codesOf(result, 4), ['w:AREA_UNUSUAL']);
-    assert.equal(result.totals.with_warnings, 2);
+    assert.deepEqual(codesOf(result, 4), []);
+    assert.equal(result.totals.with_warnings, 1);
     assert.equal(result.totals.error, 0);
+  });
+
+  it('ESKİ m² SÜTUNLARI: gövde reddetmez, değerler yazılmaz; dosya başına TEK "m² artık kullanılmıyor" uyarısı; m² mantığı (AREA_UNUSUAL / NET_GT_GROSS / ROUNDED) yok', () => {
+    const snapshot = makeSnapshot();
+    const result = plan('apartments', snapshot, [
+      { blok: 'A', daire_no: '1', kat: 2, brut_m2: '100,456', net_m2: '120' },
+      { blok: 'A', daire_no: '2', brut_m2: 4 },
+      { blok: 'A', daire_no: '3', kat: 1, net_m2: 'çok' }, // eskiden NUMBER_INVALID hatasıydı; artık yok sayılır
+    ]);
+    assert.equal(result.totals.error, 0);
+    assert.deepEqual(codesOf(result, 2), ['w:AREA_COLUMN_IGNORED']);
+    assert.equal(issuesOf(result, 2)[0].field, null);
+    assert.match(issuesOf(result, 2)[0].message, /m²/);
+    assert.deepEqual(codesOf(result, 3), ['w:NO_VALUES'], 'ikinci uyarı yok');
+    assert.deepEqual(codesOf(result, 4), []);
+    assert.deepEqual(result.ops.map((op) => op.set), [{ floor: 2 }, { floor: 1 }]);
+    assert.ok(result.ops.every((op) => !('gross_area_m2' in op.set) && !('net_area_m2' in op.set)));
+    // başka türler eski anahtarı hâlâ reddeder (tanımsız sütun)
+    assert.throws(() => rowsOf('people', [{ ad_soyad: 'Ali', brut_m2: 5 }]), (error) => error.code === 'INVALID_BODY');
   });
 
   it('hash: veritabanı değeri değişirse değişir; ileti metni ve satır sırası dışı değişmezler', () => {
@@ -304,8 +323,10 @@ describe('KİŞİLER planlayıcısı', () => {
     assert.equal(first.counts.people_create, 4);
     assert.equal(first.counts.residency_add, 3);
     assert.equal(first.counts.vehicle_add, 2);
+    assert.equal(first.counts.account_create, 3, 'hesap açılacak kişi = daire ilişkisi eklenenler (dairesiz Zeynep hesap almaz)');
     const pc = first.ops.find((op) => op.t === 'pc');
     assert.deepEqual([pc.name, pc.phone, pc.email, pc.note], ['Ahmet Yılmaz', '+905551234567', 'ahmet@example.com', 'ilk not']);
+    assert.equal(pc.n, 2, 'op kaynak satır numarasını taşır (sonuçta kullanıcı adı satırla eşleşir)');
     const ra = first.ops.find((op) => op.t === 'ra');
     assert.deepEqual([ra.relation, ra.moveIn], ['owner', '2021-03-15']);
     assert.equal(first.ops.filter((op) => op.t === 'ra').find((op) => op.ref === 'new:3').moveIn, null); // boş tarih = bugün (yazarken)
@@ -317,6 +338,7 @@ describe('KİŞİLER planlayıcısı', () => {
     assert.equal(second.counts.people_create, 0);
     assert.equal(second.counts.residency_unchanged, 3);
     assert.equal(second.counts.vehicle_unchanged, 2);
+    assert.equal(second.counts.account_create, 0, 'ikinci yükleme yeni hesap açmaz');
   });
 
   it('eşleşme: e-posta -> (daire + ad) -> (ad + telefon, e-posta ve daire yokken); NO_IDENTIFIER; telefon TEK BAŞINA eşleştirmez', () => {

@@ -77,3 +77,42 @@ test('deneme: ayar 60 gün ise abonelik trial olur; hata siteyi bozmaz', async (
   };
   await applyTrialToNewSubscription(failing, 1);
 });
+
+// --- Pasif firma (is_active = false): süper kullanıcı hariç firma erişimi kesilir (404) ---------------------------------------------
+
+test('companyRoleOf: süper her zaman "super"; üye sorgusu firmayı AKTİF koşuluyla birleştirir (pasif firmada rol dönmez)', async () => {
+  const { companyRoleOf } = await import('../src/modules/management_company_service.js');
+  const asked = [];
+  const db = {
+    async query(text, params) {
+      asked.push([String(text).replace(/\s+/g, ' ').trim(), params]);
+      return { rows: [] };
+    },
+  };
+  assert.equal(await companyRoleOf(db, 5, { role: 'super_user', id: 1 }), 'super');
+  assert.equal(asked.length, 0, 'süper için sorgu yok');
+  assert.equal(await companyRoleOf(db, 5, { userCode: 77 }), null, 'pasif firma / üye değil: rol yok');
+  assert.match(asked[0][0], /JOIN management_companies c ON c\.id = m\.company_id AND c\.is_active = TRUE/);
+  assert.deepEqual(asked[0][1], [5, 77]);
+  assert.equal(await companyRoleOf(db, 5, {}), null, 'kimliksiz kullanıcı');
+  const active = { async query() { return { rows: [{ role: 'owner' }] }; } };
+  assert.equal(await companyRoleOf(active, 5, { userCode: 77 }), 'owner');
+});
+
+test('requireCompanyAccess: pasif firmada üye/sahip 404 COMPANY_NOT_FOUND (varlığı sızmaz); süper erişir', async () => {
+  const { pool } = await import('../src/db.js');
+  const { requireCompanyAccess } = await import('../src/modules/management_company_service.js');
+  const original = pool.query;
+  try {
+    // pasif firma: üyelik satırı var ama JOIN is_active koşulu satırı eler -> boş
+    pool.query = async () => ({ rows: [], rowCount: 0 });
+    await assert.rejects(requireCompanyAccess(5, { userCode: 77 }), (e) => e.statusCode === 404 && e.code === 'COMPANY_NOT_FOUND');
+    await assert.rejects(requireCompanyAccess(5, { userCode: 77 }, { needOwner: true }), (e) => e.statusCode === 404);
+    assert.equal(await requireCompanyAccess(5, { role: 'super_user', id: 1 }, { needSuper: true }), 'super');
+    pool.query = async () => ({ rows: [{ role: 'staff' }], rowCount: 1 });
+    assert.equal(await requireCompanyAccess(5, { userCode: 77 }), 'staff');
+    await assert.rejects(requireCompanyAccess(5, { userCode: 77 }, { needOwner: true }), (e) => e.statusCode === 403);
+  } finally {
+    pool.query = original;
+  }
+});

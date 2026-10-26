@@ -421,6 +421,7 @@ const Map<String, String> kImportPlanLabels = <String, String>{
   'residency_add': 'Eklenecek daire ilişkisi',
   'residency_upgrade': 'Türü güncellenecek ilişki',
   'residency_unchanged': 'Değişmeyen ilişki',
+  'account_create': 'Hesap açılacak kişi',
   'vehicle_add': 'Eklenecek araç',
   'vehicle_unchanged': 'Değişmeyen araç',
   'apartment_update': 'Güncellenecek daire',
@@ -517,6 +518,7 @@ class ImportResult {
     this.counts = const <String, int>{},
     this.issues,
     this.issuesTruncated = false,
+    this.accounts,
   });
 
   factory ImportResult.fromJson(Map<String, dynamic> json) {
@@ -539,6 +541,9 @@ class ImportResult {
       // `issues: null` = tekrar oynatma (satır ayrıntısı saklanmadı); boş liste = sorun yok.
       issues: rawIssues is List ? _issues(rawIssues) : null,
       issuesTruncated: result['issues_truncated'] == true,
+      accounts: result['accounts'] is Map
+          ? ImportAccountsResult.fromJson(Map<String, dynamic>.from(result['accounts'] as Map))
+          : null,
     );
   }
 
@@ -557,6 +562,86 @@ class ImportResult {
 
   /// Sorun listesi kesildi.
   final bool issuesTruncated;
+
+  /// Açılan / bağlanan kullanıcı hesapları (kişi yüklemelerinde; tekrar oynatmada ve diğer türlerde null).
+  final ImportAccountsResult? accounts;
+}
+
+/// Toplu yüklemede açılan / bağlanan hesaplar: satır numarası + sunucunun verdiği NİHAİ kullanıcı adı.
+@immutable
+class ImportAccountsResult {
+  const ImportAccountsResult({
+    this.created = 0,
+    this.linked = 0,
+    this.skipped = 0,
+    this.items = const <ImportAccountItem>[],
+    this.skippedItems = const <ImportAccountSkip>[],
+  });
+
+  factory ImportAccountsResult.fromJson(Map<String, dynamic> json) {
+    final rawItems = json['items'];
+    final rawSkipped = json['skipped_items'];
+    return ImportAccountsResult(
+      created: _int(json['created']) ?? 0,
+      linked: _int(json['linked']) ?? 0,
+      skipped: _int(json['skipped']) ?? 0,
+      items: <ImportAccountItem>[
+        if (rawItems is List)
+          for (final item in rawItems)
+            if (item is Map && _string(item['login_name']) != null)
+              ImportAccountItem(
+                n: _int(item['n']),
+                loginName: _string(item['login_name'])!,
+                linked: item['status'] == 'linked',
+              ),
+      ],
+      skippedItems: <ImportAccountSkip>[
+        if (rawSkipped is List)
+          for (final item in rawSkipped)
+            if (item is Map)
+              ImportAccountSkip(
+                n: _int(item['n']),
+                code: _string(item['code']) ?? '',
+                message: _string(item['message']) ?? 'Hesap açılmadı.',
+              ),
+      ],
+    );
+  }
+
+  /// Yeni açılan hesap sayısı.
+  final int created;
+
+  /// Sitede zaten bağı olan mevcut hesaba bağlanan kişi sayısı.
+  final int linked;
+
+  /// Hesabı açılamayan kişi sayısı (kişi kaydı yapıldı; hesap kişi kartından açılabilir).
+  final int skipped;
+  final List<ImportAccountItem> items;
+  final List<ImportAccountSkip> skippedItems;
+
+  bool get isEmpty => created == 0 && linked == 0 && skipped == 0;
+}
+
+/// Açılan / bağlanan tek hesap: dosyadaki satır no ve sunucudaki NİHAİ kullanıcı adı (çakışmada `_2` eki olabilir).
+@immutable
+class ImportAccountItem {
+  const ImportAccountItem({required this.n, required this.loginName, this.linked = false});
+
+  final int? n;
+  final String loginName;
+
+  /// true: mevcut hesaba bağlandı (yeni hesap açılmadı, şifre değişmedi).
+  final bool linked;
+}
+
+/// Hesabı açılmayan kişi: satır no, kod ve kullanıcıya gösterilecek neden.
+@immutable
+class ImportAccountSkip {
+  const ImportAccountSkip({required this.n, required this.code, required this.message});
+
+  final int? n;
+  final String code;
+  final String message;
 }
 
 // --- Dışa aktarma ------------------------------------------------------------------------------

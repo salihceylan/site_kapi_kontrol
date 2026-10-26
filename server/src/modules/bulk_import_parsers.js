@@ -509,11 +509,42 @@ export function readAccount(raw) {
   return party ? { value: party } : { value: null, error: 'ACCOUNT_INVALID' };
 }
 
+/** Tamsayı + ondalık basamak metninden kuruş (yarım yukarı; metin aritmetiği). Dönüş: { minor: bigint, rounded: boolean }. */
+function minorFromParts(intPart, fraction) {
+  const carry = fraction.length > 2 && fraction.charCodeAt(2) >= 53 ? 1n : 0n;
+  return { minor: BigInt(intPart) * 100n + BigInt(fraction.slice(0, 2).padEnd(2, '0')) + carry, rounded: fraction.length > 2 };
+}
+
+/**
+ * Sayısal hücre (xlsx sayı hücresi JSON'da number gelir) -> kuruş. Ondalık nokta KESİN ondalıktır: 123.456 TL = 12346 kuruş (metin yolundaki TR
+ * binlik sezgisi — "123.456" = 123456 TL — YALNIZ metin hücrelerinde geçerlidir; sayıya uygulanınca tutar 1000 kat okunurdu). 2 haneye yuvarlanır;
+ * gerçek bir 3. ondalık yüzünden yuvarlandıysa ROUNDED uyarısı verilir (kayan nokta gürültüsü — 0.30000000000000004 — uyarı üretmez).
+ */
+function readMoneyNumber(value) {
+  const negative = value < 0;
+  const abs = Math.abs(value);
+  if (abs >= 1e21) {
+    return { value: null, error: 'MONEY_RANGE' };
+  }
+  const plain = /e/i.test(String(abs)) ? abs.toFixed(10) : String(abs);
+  const [intPart, fraction = ''] = plain.split('.');
+  const { minor, rounded } = minorFromParts(intPart === '' ? '0' : intPart, fraction);
+  if (minor >= BigInt(MONEY_MAX_MINOR)) {
+    return { value: null, error: 'MONEY_RANGE' };
+  }
+  const warnings = rounded && Math.abs(abs * 100 - Math.round(abs * 100)) > 1e-6 ? ['ROUNDED'] : [];
+  return { value: negative && minor !== 0n ? -Number(minor) : Number(minor), warnings };
+}
+
 /**
  * TL tutarı -> kuruş (tamsayı; metin aritmetiği, kayan nokta yok). '1.250,50', '1250.5', '₺ 1.250', '1250 TL' kabul edilir.
  * 2'den fazla ondalık yarım yukarı yuvarlanır (ROUNDED uyarısı). Eksi değer işaretiyle döner (çağıran karar verir). Aşırı büyük MONEY_RANGE.
+ * Sayısal (number) hücre ayrı yoldan okunur (readMoneyNumber): nokta kesin ondalıktır, TR binlik sezgisi yalnız METİN hücrelerinde uygulanır.
  */
 export function readMoney(raw) {
+  if (typeof raw === 'number' && Number.isFinite(raw)) {
+    return readMoneyNumber(raw);
+  }
   const text = readText(raw, { max: 40 });
   if (text.error || text.value === null) {
     return text;
@@ -565,9 +596,8 @@ export function readMoney(raw) {
     return invalid;
   }
   const warnings = [];
-  const carry = fraction.length > 2 && fraction.charCodeAt(2) >= 53 ? 1n : 0n;
-  if (fraction.length > 2) warnings.push('ROUNDED');
-  const minor = BigInt(intPart) * 100n + BigInt(fraction.slice(0, 2).padEnd(2, '0')) + carry;
+  const { minor, rounded } = minorFromParts(intPart, fraction);
+  if (rounded) warnings.push('ROUNDED');
   if (minor >= BigInt(MONEY_MAX_MINOR)) {
     return { value: null, error: 'MONEY_RANGE' };
   }

@@ -153,6 +153,20 @@ export function columnKeysOf(kind) {
   return new Set((COLUMNS[kind] ?? []).map((column) => column.key));
 }
 
+/**
+ * Eski şablonlardan kalan, ARTIK KULLANILMAYAN sütun anahtarları (m² kaldırıldı). Gövde doğrulaması bunları reddetmez (eski dosya 400 ile düşmesin);
+ * planlayıcı dolu olanı yok sayar ve "m² artık kullanılmıyor" uyarısı verir. Şablonda/spec'te ve dışa aktarmada YOKTUR.
+ */
+export const LEGACY_IGNORED_KEYS = Object.freeze({
+  apartments: Object.freeze(['brut_m2', 'net_m2']),
+  all_in_one: Object.freeze(['brut_m2', 'net_m2']),
+});
+
+/** Gövdede kabul edilen hücre anahtarları = spec sütunları + o türün eski/yok sayılan anahtarları. */
+export function acceptedKeysOf(kind) {
+  return new Set([...columnKeysOf(kind), ...(LEGACY_IGNORED_KEYS[kind] ?? [])]);
+}
+
 /** Başlık katlaması -> sütun anahtarı (label + aliases). Aynı katlamış başlık iki sütuna düşmez (test). */
 export function headerIndexOf(kind) {
   const index = new Map();

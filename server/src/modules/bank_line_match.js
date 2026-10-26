@@ -15,16 +15,32 @@ export const normalizeIban = (value) => {
   return /^[A-Z]{2}\d{2}[A-Z0-9]{11,30}$/.test(v) ? v : null;
 };
 
-/** Dosyadaki satırlara kararlı parmak izi: (hesap, valör, tutar, katlanmış açıklama, banka ref, dosyadaki eş satır sırası). */
-export function computeFingerprints(accountId, lines) {
+/**
+ * Dosyadaki satırlara kararlı parmak izi.
+ *  - Banka referansı (bank_reference) DOLUysa: (hesap, valör, tutar, ref, dosyadaki eş satır sırası). Serbest açıklama kasıtlı olarak dışarıda:
+ *    aynı ekstre önce PDF sonra XLSX yüklenince açıklama metni biçime göre değişir (PDF kırpar / birleştirir); referans değişmez, böylece
+ *    ikinci yükleme yeni satır sayılıp ikinci kez tahsil edilmez.
+ *  - Referans yoksa: (hesap, valör, tutar, katlanmış açıklama, dosyadaki eş satır sırası) — eski davranış.
+ * `legacy: true` eski formülü (açıklama + ref birlikte) üretir; DAHA ÖNCE kaydedilmiş parmak izleriyle eşleştirmek içindir (bkz. computeLegacyFingerprints).
+ */
+function fingerprintsOf(accountId, lines, { legacy }) {
   const seen = new Map();
   return lines.map((line) => {
-    const base = [accountId, line.value_date, line.amount_minor, norm(line.description), norm(line.bank_reference)].join('|');
+    const ref = norm(line.bank_reference);
+    const base =
+      !legacy && ref !== ''
+        ? [accountId, line.value_date, line.amount_minor, 'ref', ref].join('|')
+        : [accountId, line.value_date, line.amount_minor, norm(line.description), ref].join('|');
     const nth = seen.get(base) ?? 0;
     seen.set(base, nth + 1);
     return createHash('sha256').update(`${base}|${nth}`).digest('hex');
   });
 }
+
+export const computeFingerprints = (accountId, lines) => fingerprintsOf(accountId, lines, { legacy: false });
+
+/** Eski (açıklama + ref) parmak izi formülü: yeni formülden ÖNCE kaydedilmiş satırları yinelenen saymak için (referansı olmayan satırda yenisiyle aynıdır). */
+export const computeLegacyFingerprints = (accountId, lines) => fingerprintsOf(accountId, lines, { legacy: true });
 
 /**
  * ctx: { refKnown (findRefs 'known'), codes: [{ code, apartment_id }], ibans: Map<iban, [{ apartment_id, party, stale }]>,
@@ -54,6 +70,9 @@ export function matchLine(line, ctx) {
     // ref yoksa IBAN daha güçlü kanıttır; ikisi aynı daireyi gösteriyorsa güçlü say.
     if (memIds.length === 1 && memIds[0] === byCode[0]) return { ...hit, method: 'iban', party: mem[0].party ?? hit.party, strength: 'strong' };
     if (memIds.length !== 1) return hit;
+    // Açıklamadaki daire kodu B, IBAN hafızası TEK ve FARKLI daire A diyor: çelişen kanıt = eşleşme YAPILMAZ (eskiden A'ya 'strong' eşleşip
+    // yanlış daireye otomatik tahsilat yazılıyordu). Satır eşleşmemiş kalır; yönetici elle seçer.
+    return null;
   }
   if (memIds.length === 1) {
     return { method: 'iban', apartmentId: memIds[0], party: mem.find((m) => m.apartment_id === memIds[0])?.party ?? partyOf(memIds[0]), strength: 'strong' };

@@ -731,8 +731,8 @@ class _BillingTabState extends State<_BillingTab> {
             onChanged: (_) => setState(_dirty),
             decoration: InputDecoration(labelText: _method == MeterMethod.unitPrice ? 'Birim fiyat (TL / birim)' : _method == MeterMethod.invoice ? 'Fatura tutarı (TL)' : 'Toplam ısınma gideri (TL)'),
           ),
-          if (_method == MeterMethod.heat) const Padding(padding: EdgeInsets.only(top: AppSpace.xs), child: Text('Gider; ölçüme göre ve daire alanına (m²) göre, platform kuralındaki oranla (varsayılan %70 / %30) paylaştırılır.')),
-          SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Okuması ya da alanı eksik daireleri atla'), value: _skipMissing, onChanged: _busy ? null : (v) => setState(() {
+          if (_method == MeterMethod.heat) const Padding(padding: EdgeInsets.only(top: AppSpace.xs), child: Text('Gider; ölçüme göre ve alan payıyla (hepsinde arsa payı tanımlıysa arsa payına, değilse eşit), platform kuralındaki oranla (varsayılan %70 / %30) paylaştırılır.')),
+          SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Okuması eksik daireleri atla'), value: _skipMissing, onChanged: _busy ? null : (v) => setState(() {
             _skipMissing = v;
             _dirty();
           })),

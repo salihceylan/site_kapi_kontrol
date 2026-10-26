@@ -19,8 +19,12 @@ export const FINANCE_MODULE = 'finance';
 export const financeLockKey = (siteCode) => `finance_post:${Number(siteCode)}`;
 
 export const KINDS = Object.freeze(['recurring', 'one_time']);
+// 'area' (m²) yalnız ESKİ tanım satırları için listede kalır (DB CHECK ve okuma uyumu): m² sistemden kaldırıldı, daire alanı tutulmuyor; yeni tanım /
+// ek borç / dağıtım değişikliğinde 400 AREA_DISTRIBUTION_REMOVED ile reddedilir (parseDefinitionCore, parseDefinitionPatch). Mevcut 'area' tanımı
+// önizleme / borçlandırmada 409 AREA_DISTRIBUTION_REMOVED verir; tanım pasifleştirilebilir ya da (borçlandırılmamışsa) başka yönteme çevrilebilir.
 export const DISTRIBUTIONS = Object.freeze(['fixed', 'equal', 'category', 'land_share', 'area']);
 export const AREA_BASES = Object.freeze(['gross', 'net']);
+export const AREA_DISTRIBUTION_REMOVED = 'AREA_DISTRIBUTION_REMOVED';
 export const TARGET_TYPES = Object.freeze(['site', 'blocks', 'apartments']);
 export const METHODS = Object.freeze(['cash', 'transfer', 'cheque']);
 export const BALANCE_STATUSES = Object.freeze(['debtor', 'credit', 'all']);
@@ -87,6 +91,20 @@ export const periodNotReopenable = (message) =>
   new PlatformError(409, 'PERIOD_NOT_REOPENABLE', message ?? 'Bu dönem yeniden açılamaz.');
 export const definitionInactive = () =>
   new PlatformError(409, 'DEFINITION_INACTIVE', 'Tanım pasif ya da bu dönem tanımın geçerlilik süresinin dışında.');
+/** Girdi: yeni tanım / ek borç / dağıtım değişikliği 'area' (m²) istiyor. 400. */
+export const areaDistributionRemoved = () =>
+  new PlatformError(
+    400,
+    AREA_DISTRIBUTION_REMOVED,
+    'Metrekareye (m²) göre dağıtım kaldırıldı; daire alanı sistemde tutulmuyor. Eşit, arsa payı, sabit tutar ya da kategori dağıtımını seçin.',
+  );
+/** Durum: MEVCUT tanım m² dağıtımlı, önizleme / borçlandırma yapılamaz. 409 (aynı kod); çıkış: tanımı pasifleştirmek ya da yeni tanım açmak. */
+export const areaDefinitionUnusable = () =>
+  new PlatformError(
+    409,
+    AREA_DISTRIBUTION_REMOVED,
+    'Bu tanım metrekareye (m²) göre dağıtım kullanıyor; m² sistemden kaldırıldığı için borçlandırılamaz. Tanımı pasifleştirin (borçlandırılmadıysa dağıtım yöntemini değiştirin) ve eşit, arsa payı, sabit tutar ya da kategori dağıtımlı yeni bir tanım oluşturun.',
+  );
 export const definitionLocked = (message) =>
   new PlatformError(
     409,
@@ -460,9 +478,10 @@ export function parseDefinitionCore(input) {
   const amountRaw = readAmountField(input);
   const result = { name, distribution, areaBasis: null, amountMinor: null, categoryAmounts: null };
   if (distribution === 'area') {
-    result.areaBasis = parseEnum(input.area_basis, AREA_BASES, 'Alan esası (brüt veya net)');
-  } else if (present(input.area_basis)) {
-    throw invalidBody('Alan esası yalnızca m² dağıtımında girilir.');
+    throw areaDistributionRemoved();
+  }
+  if (present(input.area_basis)) {
+    throw invalidBody('Alan esası (m²) kaldırıldı; gönderilmemelidir.');
   }
   if (distribution === 'category') {
     if (present(amountRaw)) {
@@ -545,9 +564,16 @@ export function parseDefinitionPatch(body) {
   }
   if (keys.includes('distribution')) {
     patch.distribution = parseEnum(input.distribution, DISTRIBUTIONS, 'Dağıtım yöntemi');
+    if (patch.distribution === 'area') {
+      throw areaDistributionRemoved();
+    }
   }
   if (keys.includes('area_basis')) {
-    patch.areaBasis = input.area_basis === null ? null : parseEnum(input.area_basis, AREA_BASES, 'Alan esası (brüt veya net)');
+    // Yeni bir alan esası girilemez (m² kaldırıldı); null yalnız eski m² tanımında temizlik içindir ve şekil doğrulamasında elenir.
+    if (input.area_basis !== null) {
+      throw areaDistributionRemoved();
+    }
+    patch.areaBasis = null;
   }
   if (keys.includes('amount_minor') || keys.includes('amount')) {
     const raw = readAmountField(input);
@@ -610,7 +636,11 @@ export function mergeDefinitionPatch(existing, patch) {
   return next;
 }
 
-/** Çapraz alan kuralları (veritabanı CHECK'leriyle aynı). Geçersizse 400 INVALID_BODY. */
+/**
+ * Çapraz alan kuralları (veritabanı CHECK'leriyle aynı). Geçersizse 400 INVALID_BODY.
+ * 'area' burada GEÇERLİ kalır: yalnız eski tanım satırının (ad / aktiflik / vade günü gibi) güncellenebilmesi ve pasifleştirilebilmesi içindir.
+ * Yeni 'area' girişi parseDefinitionCore / parseDefinitionPatch'te reddedilir.
+ */
 export function assertDefinitionShape(shape) {
   const { distribution } = shape;
   if (distribution === 'area') {

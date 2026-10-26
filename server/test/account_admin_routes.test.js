@@ -143,6 +143,21 @@ describe('admin uçları: silinmiş (tombstone) hesap', () => {
     assert.deepEqual(clientCalls[event].params, [7, 1000000001, 40010, '40010']);
   });
 
+  it('DELETE (kalıcı silme): Google/Apple kimlikleri, tarayıcı bildirim abonelikleri, SMS giriş kodları ve telefon bildirimi kayıtları AÇIKÇA silinir (SAVEPOINT içinde isteğe bağlı adımlar, kullanıcı satırından ÖNCE)', async () => {
+    clientHandler = async (sql) => (/^DELETE FROM users WHERE user_code = \$1/.test(sql) ? { rows: [], rowCount: 1 } : { rows: [], rowCount: 0 });
+    const res = await send('DELETE', '/admin/users/40011');
+    assert.equal(res.status, 204);
+    const at = (pattern) => clientCalls.findIndex((c) => pattern.test(c.sql));
+    const finalDelete = at(/^DELETE FROM users WHERE user_code = \$1 AND deleted_at IS NULL$/);
+    for (const table of ['user_oauth_identities', 'web_push_subscriptions', 'sms_login_codes', 'push_devices', 'push_outbox']) {
+      const index = at(new RegExp(`^DELETE FROM ${table} WHERE user_code = [$]1$`));
+      assert.ok(index >= 0, `${table} silinmedi`);
+      assert.equal(clientCalls[index].params[0], 40011);
+      assert.ok(index < finalDelete, `${table} kullanıcı satırından ÖNCE silinmeli`);
+      assert.ok(clientCalls[index - 1].sql === 'SAVEPOINT optional_step', `${table} SAVEPOINT içinde (tablo yoksa işlem bozulmaz)`);
+    }
+  });
+
   it('DELETE yarışı: ön kontrolde silinmemişti, kullanıcı silme bu arada commit etti -> son DELETE 0 satır, ROLLBACK, 409 ACCOUNT_ALREADY_DELETED (tombstone kalıcı silinmez)', async () => {
     let lookups = 0;
     poolHandler = async (sql) => {

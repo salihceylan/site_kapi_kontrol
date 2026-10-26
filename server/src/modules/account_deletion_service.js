@@ -844,6 +844,11 @@ async function runAttempt(userCode) {
     // 16. Ad / e-posta anlık görüntüleri ve adres tabanlı kayıtlar.
     await client.query('DELETE FROM email_verifications WHERE LOWER(email) = LOWER($1)', [user.email]);
     await client.query('DELETE FROM pending_registrations WHERE LOWER(email) = LOWER($1)', [user.email]);
+    // Google / Apple kimlikleri (sağlayıcı e-postası dahil), SMS giriş kodları ve tarayıcı bildirim abonelikleri: hesap satırı tombstone olarak KALDIĞI için
+    // FK CASCADE çalışmaz (satır silinmez); kişisel iz AÇIKÇA silinir. Tablo yoksa (eski şema) adım atlanır (SAVEPOINT).
+    await bestEffort(client, 'oauth_identities', () => client.query('DELETE FROM user_oauth_identities WHERE user_code = $1', [userCode]));
+    await bestEffort(client, 'sms_login_codes', () => client.query('DELETE FROM sms_login_codes WHERE user_code = $1', [userCode]));
+    await bestEffort(client, 'web_push_subscriptions', () => client.query('DELETE FROM web_push_subscriptions WHERE user_code = $1', [userCode]));
     // audit_log'a DOKUNULMAZ: denetim kaydı yalnızca EKLENİR (platform değişmezi; bkz. audit_service.js ve test/platform_schema.test.js). Eski
     // satırlardaki actor_name anlık görüntüsü güvenlik / yasal saklama gerekçesiyle kalır ve YALNIZ süper kullanıcı okur (GET /admin/audit-log).
     // module_requests ise site yöneticilerinin de gördüğü bir listedir: oradaki ad anlık görüntüleri kimliksizleştirilir.

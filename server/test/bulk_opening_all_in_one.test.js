@@ -10,7 +10,7 @@ const TODAY = '2026-10-21';
 
 function makeSnapshot() {
   const apartments = [1, 2, 3].map((n) => ({
-    id: 100 + n, blockId: 1, label: `Daire ${n}`, floor: null, category: null, gross: null, net: null, lsNum: null, lsDen: null, responsible: 'both', hasFinance: false,
+    id: 100 + n, blockId: 1, label: `Daire ${n}`, floor: null, category: null, lsNum: null, lsDen: null, responsible: 'both', hasFinance: false,
   }));
   return {
     blocks: [{ id: 1, name: 'A Blok' }],
@@ -160,5 +160,73 @@ describe('planAllInOne', () => {
     const result = run([row(1, { blok: 'A', daire_no: '3', kat: '4' }), row(2, { blok: 'A', daire_no: '9', ad_soyad: 'Veli Kaya' })]);
     assert.equal(result.ops.filter((op) => op.t === 'au').length, 1);
     assert.equal(result.view.issues.find((i) => i.n === 2).code, 'APARTMENT_NOT_FOUND');
+  });
+
+  const codes = (result, n) => result.view.issues.filter((issue) => issue.n === n).map((issue) => `${issue.severity[0]}:${issue.code}`);
+
+  it('daire alanı hatası KAYNAK satıra yazılır; taşıyıcı (ilk satır) kişisiyle normal işlenir ve "daire uygulanmadı" uyarısı alır', () => {
+    const result = run([
+      row(1, { blok: 'A', daire_no: '1', kat: '2', ad_soyad: 'Ali Yılmaz', iliski: 'Malik' }),
+      row(2, { blok: 'A', daire_no: '1', tip: 'x'.repeat(41), ad_soyad: 'Ayşe Yılmaz', iliski: 'Aile' }),
+      row(3, { blok: 'A', daire_no: '1', ad_soyad: 'Can Yılmaz', iliski: 'Aile' }),
+    ]);
+    assert.deepEqual(codes(result, 2), ['e:TOO_LONG'], 'hata değeri yazan satırda');
+    assert.deepEqual(codes(result, 1), ['w:APARTMENT_NOT_APPLIED'], 'taşıyıcıda hata YOK, yalnız açıklayıcı uyarı');
+    assert.match(result.view.issues.find((i) => i.n === 1).message, /satır 2/);
+    assert.deepEqual(codes(result, 3), []);
+    assert.equal(result.ops.filter((op) => op.t === 'au').length, 0, 'dairenin birleşik hücrelerinden biri hatalı: daire işlemi düşer (tutarlı)');
+    // taşıyıcının kişisi ve hatasız satırın kişisi işlenir; hatalı satırın kişisi işlenmez
+    assert.deepEqual(result.ops.filter((op) => op.t === 'pc').map((op) => op.name), ['Ali Yılmaz', 'Can Yılmaz']);
+    assert.equal(result.totals.error, 1);
+    assert.equal(result.results.find((r) => r.n === 1).status, 'ok');
+    assert.equal(result.results.find((r) => r.n === 2).status, 'error');
+  });
+
+  it('taşıyıcının KENDİ daire hücresi hatalıysa taşıyıcı hatalı sayılır (kişisi işlenmez); diğer satırların kişileri işlenir', () => {
+    const result = run([
+      row(1, { blok: 'A', daire_no: '1', kat: 'yedinci', ad_soyad: 'Ali Yılmaz' }),
+      row(2, { blok: 'A', daire_no: '1', ad_soyad: 'Ayşe Yılmaz', iliski: 'Aile' }),
+    ]);
+    assert.deepEqual(codes(result, 1), ['e:FLOOR_INVALID']);
+    assert.deepEqual(codes(result, 2), []);
+    assert.equal(result.ops.filter((op) => op.t === 'au').length, 0);
+    assert.deepEqual(result.ops.filter((op) => op.t === 'pc').map((op) => op.name), ['Ayşe Yılmaz']);
+  });
+
+  it('arsa payı çifti farklı satırlardaysa LAND_SHARE_INVALID pay hücresini yazan satıra gider', () => {
+    const result = run([
+      row(1, { blok: 'A', daire_no: '1', ad_soyad: 'Ali Yılmaz' }),
+      row(2, { blok: 'A', daire_no: '1', arsa_payi_pay: 50, ad_soyad: 'Ayşe Yılmaz', iliski: 'Aile' }), // payda yok -> geçersiz
+    ]);
+    assert.deepEqual(codes(result, 2), ['e:LAND_SHARE_INVALID']);
+    assert.deepEqual(codes(result, 1), ['w:APARTMENT_NOT_APPLIED']);
+  });
+
+  it('ESKİ m² SÜTUNLARI: gövde kabul eder, yok sayar, dosya başına tek uyarı verir; daire işlemi m² içermez', () => {
+    const body = { spec_version: 1, acknowledged: true, rows: [
+      { n: 2, cells: { blok: 'A', daire_no: '1', kat: '2', brut_m2: '120', net_m2: 100, ad_soyad: 'Ali Yılmaz' } },
+      { n: 3, cells: { blok: 'A', daire_no: '2', brut_m2: '90', ad_soyad: 'Veli Kaya' } },
+    ] };
+    const rows = validateImportBody(body, 'all_in_one').rows;
+    const result = run(rows);
+    assert.deepEqual(codes(result, 2), ['w:AREA_COLUMN_IGNORED']);
+    assert.deepEqual(codes(result, 3), []);
+    assert.equal(result.totals.error, 0);
+    assert.deepEqual(result.ops.filter((op) => op.t === 'au').map((op) => op.set), [{ floor: 2 }]);
+    // yalnız eski anahtarlar kabul edilir: başka tanımsız anahtar hâlâ 400
+    assert.throws(() => validateImportBody({ spec_version: 1, rows: [{ n: 2, cells: { blok: 'A', daire_no: '1', alan_m2: 5 } }] }, 'all_in_one'), (error) => error.code === 'INVALID_BODY');
+    // spec/şablonda m² sütunu yok
+    assert.equal(buildSpec().kinds.all_in_one.columns.some((c) => /m2$/.test(c.key)), false);
+    assert.equal(buildSpec().kinds.apartments.columns.some((c) => /m2$/.test(c.key)), false);
+  });
+
+  it('hesap açılacak kişi sayısı (account_create): yalnız daire ilişkisi eklenen kişiler; dairesiz ve daire-yalnız satırlar sayılmaz', () => {
+    const result = run([
+      row(1, { blok: 'A', daire_no: '1', kat: '2', ad_soyad: 'Ali Yılmaz', iliski: 'Malik' }),
+      row(2, { blok: 'A', daire_no: '1', ad_soyad: 'Ayşe Yılmaz', iliski: 'Aile' }),
+      row(3, { blok: 'A', daire_no: '3', kat: '4' }),
+      row(4, { ad_soyad: 'Dairesiz Kişi', e_posta: 'd@example.com' }),
+    ]);
+    assert.equal(result.counts.account_create, 2);
   });
 });

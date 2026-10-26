@@ -363,6 +363,9 @@ describe('createSiteApplication: onaylar başvuruyla aynı işlemde', () => {
       if (/^SELECT id, user_code, role, full_name FROM users/.test(sql)) return { rows: [{ id: 7, user_code: 48213, role: 'individual', full_name: 'Ayşe Başvuran' }], rowCount: 1 };
       if (/^SELECT value FROM platform_settings WHERE key = \$1 LIMIT 1$/.test(sql)) return { rows: [{ value: { mode: 'approval' } }], rowCount: 1 };
       if (/a\.status = 'pending' LIMIT 1$/.test(sql)) return { rows: [], rowCount: 0 };
+      // Site adı tekilliği ön denetimleri (site_name_key; ad boş): mevcut/bekleyen aynı adlı site ya da başvuru yok.
+      if (/^SELECT site_code, name FROM sites WHERE site_name_key\(name\) = site_name_key\(\$1\)/.test(sql)) return { rows: [], rowCount: 0 };
+      if (/^SELECT id, site_name FROM site_applications WHERE status = 'pending' AND site_name_key\(site_name\) = site_name_key\(\$1\)/.test(sql)) return { rows: [], rowCount: 0 };
       if (/^SELECT COUNT\(\*\)::INTEGER AS applied/.test(sql)) return { rows: [{ applied: 0 }], rowCount: 1 };
       if (/^INSERT INTO site_applications/.test(sql)) {
         log.push({ via, sql, params });

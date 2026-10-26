@@ -158,7 +158,8 @@ class _BulkEditableTableState extends State<BulkEditableTable> {
                   onPressed: () {
                     final text = editCtrl.text.trim();
                     if (col.key == 'kullanici_adi' && text.isNotEmpty) {
-                      final lower = text.toLowerCase();
+                      // Sunucunun kullanacağı biçimle karşılaştır (tabloda görünen ad = yazılanın sadeleşmiş hali)
+                      final lower = generateUsernameFromFullName(text);
                       final isDup = widget.controller.rows.asMap().entries.any(
                             (entry) =>
                                 entry.key != realIndex &&

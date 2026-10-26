@@ -170,7 +170,17 @@ export async function verifyOAuthJwt(idToken, { jwksUrl, allowedIssuers, allowed
     throw httpError(401, 'Desteklenmeyen veya eksik imzalama algoritması.', 'INVALID_OAUTH_TOKEN');
   }
 
-  const jwk = await getJwkByKid(jwksUrl, header.kid, nowMs);
+  let jwk;
+  try {
+    jwk = await getJwkByKid(jwksUrl, header.kid, nowMs);
+  } catch (error) {
+    // Anahtar listesine ulaşılamadı (ağ / zaman aşımı / sağlayıcı hatası): belirteç hakkında karar DEĞİLDİR; çağıran (yalnız bu durumda)
+    // sağlayıcının kendi doğrulama ucuna düşebilir. İmza / iss / aud / süre hataları ise asla bu koda dönüşmez (kesin red).
+    if (error?.code === 'OAUTH_JWKS_UNAVAILABLE' || error?.code === 'OAUTH_JWKS_INVALID') {
+      throw error;
+    }
+    throw httpError(503, 'Kimlik doğrulama sağlayıcısına şu anda ulaşılamıyor.', 'OAUTH_JWKS_UNAVAILABLE');
+  }
   if (!jwk) {
     throw httpError(401, 'Kimlik doğrulama imzası doğrulanamadı (anahtar bulunamadı).', 'INVALID_OAUTH_TOKEN');
   }
@@ -203,14 +213,19 @@ export async function verifyOAuthJwt(idToken, { jwksUrl, allowedIssuers, allowed
     throw httpError(401, 'Kimlik doğrulama sağlayıcısı (iss) geçersiz.', 'INVALID_OAUTH_TOKEN');
   }
 
-  if (Array.isArray(allowedAudiences) && allowedAudiences.length > 0) {
-    const audList = Array.isArray(payload?.aud) ? payload.aud : [payload?.aud];
-    const audMatched = audList.some((a) => typeof a === 'string' && allowedAudiences.includes(a));
-    if (!audMatched) {
-      throw httpError(401, 'Kimlik doğrulama hedef istemcisi (aud) eşleşmiyor.', 'INVALID_OAUTH_AUDIENCE');
-    }
+  // Audience denetimi ZORUNLUDUR (fail-closed): istemci kimliği listesi boşsa belirteç kabul edilmez (başka uygulamaya verilmiş belirteç kimlik kanıtı olmaz).
+  if (!Array.isArray(allowedAudiences) || allowedAudiences.length === 0) {
+    throw httpError(503, 'Bu kimlik sağlayıcısıyla giriş şu anda kapalı (sunucu yapılandırması eksik).', 'OAUTH_NOT_CONFIGURED');
+  }
+  if (!audienceMatches(payload?.aud, allowedAudiences)) {
+    throw httpError(401, 'Kimlik doğrulama hedef istemcisi (aud) eşleşmiyor.', 'INVALID_OAUTH_AUDIENCE');
   }
 
+  return claimsFromPayload(payload);
+}
+
+/** Doğrulanmış belirteç yükünden (JWT payload / tokeninfo yanıtı) sağlayıcıdan bağımsız talep nesnesi. sub yoksa 401. */
+function claimsFromPayload(payload) {
   const sub = typeof payload?.sub === 'string' ? payload.sub.trim() : '';
   if (!sub || sub.length > 255) {
     throw httpError(401, 'Kimlik doğrulama kullanıcı tanımlayıcısı (sub) geçersiz.', 'INVALID_OAUTH_TOKEN');
@@ -228,60 +243,114 @@ export async function verifyOAuthJwt(idToken, { jwksUrl, allowedIssuers, allowed
     name: typeof payload?.name === 'string' ? payload.name.trim() : '',
     givenName: typeof payload?.given_name === 'string' ? payload.given_name.trim() : '',
     familyName: typeof payload?.family_name === 'string' ? payload.family_name.trim() : '',
+    nonce: typeof payload?.nonce === 'string' ? payload.nonce : null,
   };
 }
 
-async function verifyGoogleTokenWithApi(idToken) {
-  try {
-    const url = `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`;
-    const resp = await fetch(url, { signal: AbortSignal.timeout(7000) });
-    if (resp.ok) {
-      const data = await resp.json();
-      const sub = String(data.sub || '').trim();
-      const email = data.email ? normalizeEmail(data.email) : null;
-      const emailVerified = data.email_verified === 'true' || data.email_verified === true;
-      if (sub && email && emailVerified) {
-        return {
-          sub,
-          email,
-          emailVerified,
-          name: data.name || '',
-          givenName: data.given_name || '',
-          familyName: data.family_name || '',
-        };
-      }
-    }
-  } catch (_e) {
-    // continue
-  }
+const GOOGLE_TOKENINFO_URL = 'https://oauth2.googleapis.com/tokeninfo';
+const GOOGLE_USERINFO_URL = 'https://www.googleapis.com/oauth2/v3/userinfo';
 
-  try {
-    const userinfoResp = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-      headers: { Authorization: `Bearer ${idToken}` },
-      signal: AbortSignal.timeout(7000),
-    });
-    if (userinfoResp.ok) {
-      const data = await userinfoResp.json();
-      const sub = String(data.sub || '').trim();
-      const email = data.email ? normalizeEmail(data.email) : null;
-      const emailVerified = data.email_verified === 'true' || data.email_verified === true;
-      if (sub && email && emailVerified) {
-        return {
-          sub,
-          email,
-          emailVerified,
-          name: data.name || '',
-          givenName: data.given_name || '',
-          familyName: data.family_name || '',
-        };
-      }
-    }
-  } catch (_e) {
-    // continue
-  }
-
-  throw httpError(401, 'Google kimlik doğrulama belirteci geçersiz veya süresi dolmuş.', 'INVALID_OAUTH_TOKEN');
+function oauthUnavailable() {
+  return httpError(503, 'Kimlik doğrulama sağlayıcısına şu anda ulaşılamıyor.', 'OAUTH_JWKS_UNAVAILABLE');
 }
+
+function oauthInvalidToken() {
+  return httpError(401, 'Google kimlik doğrulama belirteci geçersiz veya süresi dolmuş.', 'INVALID_OAUTH_TOKEN');
+}
+
+/** Google JSON ucu: ağ hatası / zaman aşımı / 5xx -> 503 (belirteç hakkında karar değil); diğer başarısız yanıt (400 invalid_token) -> 401. */
+async function fetchGoogleJson(url, init = {}) {
+  let response;
+  try {
+    response = await fetch(url, { ...init, signal: AbortSignal.timeout(7000) });
+  } catch (_networkError) {
+    throw oauthUnavailable();
+  }
+  if (response.status >= 500) {
+    throw oauthUnavailable();
+  }
+  if (!response.ok) {
+    throw oauthInvalidToken();
+  }
+  try {
+    return await response.json();
+  } catch (_parseError) {
+    throw oauthUnavailable();
+  }
+}
+
+function audienceMatches(aud, allowedAudiences) {
+  const list = Array.isArray(aud) ? aud : [aud];
+  return list.some((value) => typeof value === 'string' && allowedAudiences.includes(value));
+}
+
+/**
+ * YEDEK doğrulama (yalnız JWKS'e ulaşılamadığında): Google'ın tokeninfo ucu imza ve süreyi doğrular, hedef istemciyi (aud) DOĞRULAMAZ; bu yüzden
+ * aud (yapılandırılmış istemci kimlikleri), iss ve exp BURADA denetlenir. Bunlardan biri tutmazsa kesin red (başka uygulamaya verilmiş belirteç kabul edilmez).
+ */
+async function verifyGoogleIdTokenWithApi(idToken, allowedAudiences, nowMs = Date.now()) {
+  const data = await fetchGoogleJson(`${GOOGLE_TOKENINFO_URL}?id_token=${encodeURIComponent(idToken)}`);
+  const iss = typeof data?.iss === 'string' ? data.iss : '';
+  if (!GOOGLE_ISSUERS.has(iss)) {
+    throw httpError(401, 'Kimlik doğrulama sağlayıcısı (iss) geçersiz.', 'INVALID_OAUTH_TOKEN');
+  }
+  if (!audienceMatches(data?.aud, allowedAudiences)) {
+    throw httpError(401, 'Kimlik doğrulama hedef istemcisi (aud) eşleşmiyor.', 'INVALID_OAUTH_AUDIENCE');
+  }
+  const exp = Number(data?.exp);
+  if (!Number.isFinite(exp) || exp + CLOCK_SKEW_SECONDS <= Math.floor(nowMs / 1000)) {
+    throw httpError(401, 'Kimlik doğrulama belirtecinin süresi dolmuş.', 'OAUTH_TOKEN_EXPIRED');
+  }
+  return claimsFromPayload(data);
+}
+
+/**
+ * Opak Google ERİŞİM belirteci (web'de id_token yoksa istemci erişim belirteci gönderir): tokeninfo belirtecin hangi istemciye verildiğini (aud) söyler;
+ * yapılandırılmış istemci kimliklerinden biri DEĞİLSE kesin red (başka uygulamanın belirteci kimlik kanıtı sayılmaz). Ad / e-posta tokeninfo'da yoksa
+ * userinfo'dan alınır, ancak yalnız aud doğrulandıktan sonra ve aynı kullanıcı (sub) için.
+ */
+async function verifyGoogleAccessToken(accessToken, allowedAudiences, nowMs = Date.now()) {
+  const info = await fetchGoogleJson(`${GOOGLE_TOKENINFO_URL}?access_token=${encodeURIComponent(accessToken)}`);
+  if (!audienceMatches(info?.aud, allowedAudiences)) {
+    throw httpError(401, 'Kimlik doğrulama hedef istemcisi (aud) eşleşmiyor.', 'INVALID_OAUTH_AUDIENCE');
+  }
+  const expiresIn = Number(info?.expires_in);
+  const exp = Number(info?.exp);
+  const expired = Number.isFinite(expiresIn)
+    ? expiresIn <= 0
+    : !Number.isFinite(exp) || exp + CLOCK_SKEW_SECONDS <= Math.floor(nowMs / 1000);
+  if (expired) {
+    throw httpError(401, 'Kimlik doğrulama belirtecinin süresi dolmuş.', 'OAUTH_TOKEN_EXPIRED');
+  }
+  let payload = info;
+  if (typeof info?.email !== 'string' || info.email.trim() === '') {
+    const profile = await fetchGoogleJson(GOOGLE_USERINFO_URL, { headers: { Authorization: `Bearer ${accessToken}` } });
+    if (info?.sub && profile?.sub && String(info.sub) !== String(profile.sub)) {
+      throw oauthInvalidToken();
+    }
+    payload = { ...profile, sub: profile?.sub ?? info?.sub };
+  }
+  return claimsFromPayload(payload);
+}
+
+function looksLikeJwt(token) {
+  return typeof token === 'string' && token.trim().split('.').length === 3;
+}
+
+/** Sağlayıcı istemci kimliği tanımlı DEĞİLSE giriş kapalıdır (fail-closed): audience denetimi yapılamayan belirteç kabul edilmez. */
+function requireClientIds(provider, cfg) {
+  const clientIds = cfg?.[provider]?.clientIds ?? [];
+  if (clientIds.length === 0) {
+    throw httpError(
+      503,
+      'Bu kimlik sağlayıcısıyla giriş şu anda kapalı (sunucu yapılandırması eksik). E-posta doğrulama koduyla devam edebilirsiniz.',
+      'OAUTH_NOT_CONFIGURED',
+    );
+  }
+  return clientIds;
+}
+
+const isJwksUnavailable = (error) => error?.code === 'OAUTH_JWKS_UNAVAILABLE' || error?.code === 'OAUTH_JWKS_INVALID';
 
 export async function verifyProviderIdToken(provider, idToken, env = process.env) {
   if (typeof oauthHooks.verifyProviderToken === 'function') {
@@ -289,24 +358,32 @@ export async function verifyProviderIdToken(provider, idToken, env = process.env
   }
   const cfg = getOAuthConfig(env);
   if (provider === 'google') {
+    const clientIds = requireClientIds('google', cfg);
+    if (!looksLikeJwt(idToken)) {
+      return verifyGoogleAccessToken(idToken, clientIds);
+    }
     try {
       return await verifyOAuthJwt(idToken, {
         jwksUrl: GOOGLE_JWKS_URL,
         allowedIssuers: GOOGLE_ISSUERS,
-        allowedAudiences: cfg.google.clientIds.length > 0 ? cfg.google.clientIds : null,
+        allowedAudiences: clientIds,
       });
-    } catch (jwkErr) {
-      if (typeof oauthHooks.verifyWithGoogleApi === 'function') {
-        return oauthHooks.verifyWithGoogleApi(idToken);
+    } catch (jwtError) {
+      // YALNIZ anahtar listesine ulaşılamadıysa yedeğe düşülür; imza / aud / iss / süre hatasında kesin red.
+      if (!isJwksUnavailable(jwtError)) {
+        throw jwtError;
       }
-      return verifyGoogleTokenWithApi(idToken);
+      if (typeof oauthHooks.verifyWithGoogleApi === 'function') {
+        return oauthHooks.verifyWithGoogleApi(idToken, clientIds);
+      }
+      return verifyGoogleIdTokenWithApi(idToken, clientIds);
     }
   }
   if (provider === 'apple') {
     return verifyOAuthJwt(idToken, {
       jwksUrl: APPLE_JWKS_URL,
       allowedIssuers: APPLE_ISSUERS,
-      allowedAudiences: cfg.apple.clientIds.length > 0 ? cfg.apple.clientIds : null,
+      allowedAudiences: requireClientIds('apple', cfg),
     });
   }
   throw httpError(400, 'Desteklenmeyen kimlik sağlayıcısı.', 'INVALID_OAUTH_PROVIDER');
@@ -354,6 +431,12 @@ const USER_SELECT_COLUMNS = `
   deleted_at
 `;
 
+// Yönetimin verdiği parola henüz değişmedi mi: users.must_change_password YA DA hesap bir dairenin sakin göstergesi ve "PIN verildi" işaretli
+// (auth_middleware / POST /auth/login ile AYNI tanım). OAuth girişinde bayrak TRUE ise yönetimin bildiği parola döndürülür (aşağıda).
+const MUST_CHANGE_SQL = `(COALESCE(users.must_change_password, FALSE) OR EXISTS (
+  SELECT 1 FROM apartments a WHERE a.resident_user_code = users.user_code AND a.resident_pin_issued = TRUE
+)) AS must_change_password`;
+
 async function completeVerifiedSocialLogin({
   cleanProvider,
   claims,
@@ -381,6 +464,8 @@ async function completeVerifiedSocialLogin({
   let committed = false;
   let user = null;
   let isNewUser = false;
+  let wasUnverified = false;
+  let passwordRotated = false;
 
   try {
     await client.query('BEGIN');
@@ -391,7 +476,10 @@ async function completeVerifiedSocialLogin({
         SELECT o.id AS identity_id, o.user_code AS linked_user_code,
                u.user_code AS id, u.id AS db_id, u.user_code, u.full_name, u.email, u.login_name,
                u.role, u.is_active, u.email_verified, u.approval_status, u.phone_number,
-               u.created_at, u.password_hash, u.deleted_at
+               u.created_at, u.password_hash, u.deleted_at,
+               (COALESCE(u.must_change_password, FALSE) OR EXISTS (
+                 SELECT 1 FROM apartments a WHERE a.resident_user_code = u.user_code AND a.resident_pin_issued = TRUE
+               )) AS must_change_password
         FROM user_oauth_identities o
         LEFT JOIN users u ON u.user_code = o.user_code
         WHERE o.provider = $1 AND o.provider_sub = $2
@@ -424,19 +512,24 @@ async function completeVerifiedSocialLogin({
       }
 
       const existingRes = await client.query(
-        `SELECT ${USER_SELECT_COLUMNS} FROM users WHERE LOWER(email) = LOWER($1) AND deleted_at IS NULL FOR UPDATE`,
+        `SELECT ${USER_SELECT_COLUMNS}, ${MUST_CHANGE_SQL} FROM users WHERE LOWER(email) = LOWER($1) AND deleted_at IS NULL ORDER BY user_code FOR UPDATE`,
         [cleanEmail],
       );
 
+      // E-posta eşleşmesi TEKİL olmalı: aynı adresin büyük/küçük harf farkıyla birden çok hesabı varsa hangisine bağlanacağı belirsizdir (fail-closed).
+      if (existingRes.rowCount > 1) {
+        throw httpError(
+          409,
+          'Bu e-posta adresiyle birden fazla hesap kayıtlı; giriş yapılamadı. Lütfen destek ile iletişime geçin.',
+          'OAUTH_ACCOUNT_AMBIGUOUS',
+        );
+      }
+
       if (existingRes.rowCount > 0) {
         user = existingRes.rows[0];
-        if (!user.email_verified) {
-          await client.query(
-            `UPDATE users SET email_verified = TRUE, updated_at = NOW() WHERE user_code = $1 AND deleted_at IS NULL`,
-            [user.user_code],
-          );
-          user.email_verified = true;
-        }
+        // Doğrulanmamış hesap: e-posta sahipliği sağlayıcıyla şimdi kanıtlandı; ama hesabın parolasını başkası (kayıt öncesi sahte kayıt, yönetim) belirlemiş
+        // olabilir -> aşağıda parola döndürülür ve e-posta doğrulanır (önceden-ele-geçirme koruması).
+        wasUnverified = !user.email_verified;
         if (acceptedDocuments !== undefined) {
           const consentPlan = await resolveAcceptedDocuments({ raw: acceptedDocuments, context: 'register', db: client });
           await recordConsents(client, user.user_code, consentPlan.records, 'register');
@@ -523,6 +616,29 @@ async function completeVerifiedSocialLogin({
       throw httpError(403, 'Hesabiniz pasif durumda. Yonetici ile iletisime gecin.');
     }
 
+    // Yönetimin verdiği geçici parola (must_change_password) ya da doğrulanmamış hesabın parolası: sağlayıcı e-posta sahipliğini kanıtladığı için
+    // parola RASTGELE bir değerle değiştirilir (yönetimin / kayıt öncesi sahte kaydın bildiği parola artık işe yaramaz), bayrak kapanır, e-posta doğrulanır.
+    // Açık oturumlar ve güvenilir cihaz belirteçleri parola özeti değiştiği için geçersizleşir; bu girişin jetonu yeni özetle imzalanır.
+    if (user.must_change_password === true || wasUnverified) {
+      const rotatedHash = await bcrypt.hash(crypto.randomBytes(32).toString('hex'), BCRYPT_COST);
+      const rotated = await client.query(
+        `
+          UPDATE users
+          SET password_hash = $2, must_change_password = FALSE, email_verified = TRUE, updated_at = NOW()
+          WHERE user_code = $1 AND deleted_at IS NULL
+          RETURNING password_hash
+        `,
+        [user.user_code, rotatedHash],
+      );
+      if (!rotated.rows?.[0]) {
+        throw httpError(401, 'Bu hesap silinmis.', 'ACCOUNT_DELETED');
+      }
+      user.password_hash = rotated.rows[0].password_hash;
+      user.email_verified = true;
+      user.must_change_password = false;
+      passwordRotated = true;
+    }
+
     await client.query('COMMIT');
     committed = true;
   } catch (err) {
@@ -536,6 +652,20 @@ async function completeVerifiedSocialLogin({
     throw err;
   } finally {
     client.release();
+  }
+
+  if (passwordRotated) {
+    // Yönetimin verdiği PIN artık geçerli değil -> daire sakin göstergesindeki "PIN verildi" işareti kalkar (PATCH /me ile aynı). users satırı yukarıda
+    // commit edildi; bu ifade AYRI otomatik onaylı (kilit sırası apartments -> users bozulmasın). Başarısızlık girişi engellemez (bayrak yalnız istemci ipucudur).
+    try {
+      await db.query(
+        'UPDATE apartments SET resident_pin_issued = FALSE, resident_pin_code = NULL WHERE resident_user_code = $1 AND (resident_pin_issued OR resident_pin_code IS NOT NULL)',
+        [user.user_code],
+      );
+    } catch (clearError) {
+      // eslint-disable-next-line no-console
+      console.error('[oauth] daire PIN isareti temizlenemedi:', clearError?.code || 'hata');
+    }
   }
 
   const passwordHash = user.password_hash;
@@ -561,6 +691,18 @@ async function completeVerifiedSocialLogin({
   };
 }
 
+/** Sabit zamanlı metin eşitliği (uzunluk farkı sızmasın diye özetler karşılaştırılır). */
+function safeEqualStrings(a, b) {
+  const left = crypto.createHash('sha256').update(String(a ?? '')).digest();
+  const right = crypto.createHash('sha256').update(String(b ?? '')).digest();
+  return crypto.timingSafeEqual(left, right);
+}
+
+/**
+ * `expectedNonce`: istemcinin/sunucunun yetkilendirme isteğine koyduğu nonce. Verilirse belirteçteki `nonce` talebi AYNI olmalıdır (aksi halde 401
+ * INVALID_OAUTH_NONCE: başka oturum için alınmış belirteç yeniden oynatılamaz). Sunucunun başlattığı web oturumunda (completeOAuthWebCallback) her zaman
+ * verilir. Yerel (mobil) akışlarda istemci nonce üretip göndermediği sürece verilmez; bkz. rapor (istemci + oauth_routes değişikliği gerektirir).
+ */
 export async function authenticateWithOAuth({
   provider,
   idToken,
@@ -569,6 +711,7 @@ export async function authenticateWithOAuth({
   lastName = null,
   acceptedDocuments = undefined,
   rawDeviceToken = null,
+  expectedNonce = null,
   db = pool,
   env = process.env,
 }) {
@@ -577,6 +720,11 @@ export async function authenticateWithOAuth({
     throw httpError(400, 'Geçersiz kimlik doğrulama sağlayıcısı.', 'INVALID_OAUTH_PROVIDER');
   }
   const claims = await verifyProviderIdToken(cleanProvider, idToken, env);
+  if (expectedNonce !== null && expectedNonce !== undefined) {
+    if (typeof claims?.nonce !== 'string' || !safeEqualStrings(claims.nonce, expectedNonce)) {
+      throw httpError(401, 'Kimlik doğrulama belirteci bu oturum için üretilmemiş (nonce eşleşmiyor).', 'INVALID_OAUTH_NONCE');
+    }
+  }
   return completeVerifiedSocialLogin({
     cleanProvider,
     claims,
@@ -923,6 +1071,8 @@ export async function completeOAuthWebCallback({
       firstName,
       lastName,
       acceptedDocuments: session.acceptedDocuments,
+      // Sunucunun bu oturum için ürettiği nonce: belirteçteki nonce ile birebir eşleşmezse kabul edilmez.
+      expectedNonce: session.nonce,
       db,
       env,
     });

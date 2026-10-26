@@ -107,12 +107,20 @@ export async function setSiteTrial({ siteCode, body, actor }) {
 
 // --- Firma ve yetki ---------------------------------------------------------------------------------------------------------
 
-/** 'super' | 'owner' | 'staff' | null (üye değil). */
+/**
+ * 'super' | 'owner' | 'staff' | null (üye değil YA DA firma PASİF). Pasif firma (is_active = false) yalnız süper kullanıcıya açıktır: üyelik satırı
+ * kalsa bile firma sahibi / personeli için null döner (-> 404; firmanın varlığı sızdırılmaz, pasife alınan firma yetkisini sürdüremez).
+ */
 export async function companyRoleOf(db, companyId, user) {
   if (isSuper(user)) return 'super';
   const code = userCodeOf(user);
   if (code === null) return null;
-  const res = await db.query('SELECT role FROM management_company_members WHERE company_id = $1 AND user_code = $2', [companyId, code]);
+  const res = await db.query(
+    `SELECT m.role FROM management_company_members m
+     JOIN management_companies c ON c.id = m.company_id AND c.is_active = TRUE
+     WHERE m.company_id = $1 AND m.user_code = $2`,
+    [companyId, code],
+  );
   return res.rows[0]?.role ?? null;
 }
 

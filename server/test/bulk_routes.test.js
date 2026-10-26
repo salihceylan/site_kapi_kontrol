@@ -60,8 +60,8 @@ function makeState() {
 
 const BLOCKS = [{ id: '1', block_name: 'A Blok' }];
 const APARTMENTS = [
-  { id: '101', block_id: '1', unit_label: 'Daire 1', floor: null, category: null, gross_area_m2: null, net_area_m2: null, land_share_numerator: null, land_share_denominator: null, responsible_party: 'both', has_finance: false },
-  { id: '102', block_id: '1', unit_label: 'Daire 2', floor: null, category: null, gross_area_m2: null, net_area_m2: null, land_share_numerator: null, land_share_denominator: null, responsible_party: 'both', has_finance: false },
+  { id: '101', block_id: '1', unit_label: 'Daire 1', floor: null, category: null, land_share_numerator: null, land_share_denominator: null, responsible_party: 'both', has_finance: false },
+  { id: '102', block_id: '1', unit_label: 'Daire 2', floor: null, category: null, land_share_numerator: null, land_share_denominator: null, responsible_party: 'both', has_finance: false },
 ];
 
 function handle(sql, params) {
@@ -554,8 +554,8 @@ describe('dışa aktarma ucu', () => {
 
   it('daireler: Blok, Daire No (yalnız sayı), sayısal sütunlar sayı, Borç Sorumlusu Türkçe + salt okunur Malik/Kiracı/Sakin Sayısı', async () => {
     overrides.push([/^SELECT a\.id, a\.unit_label, b\.block_name/, () => ok([
-      { id: '101', unit_label: 'Daire 1', block_name: 'A Blok', floor: 2, category: '3+1', gross_area_m2: '125.50', net_area_m2: '110.00', land_share_numerator: 35, land_share_denominator: 1000, responsible_party: 'tenant' },
-      { id: '102', unit_label: 'Dükkan', block_name: 'A Blok', floor: null, category: null, gross_area_m2: null, net_area_m2: null, land_share_numerator: null, land_share_denominator: null, responsible_party: 'both' },
+      { id: '101', unit_label: 'Daire 1', block_name: 'A Blok', floor: 2, category: '3+1', land_share_numerator: 35, land_share_denominator: 1000, responsible_party: 'tenant' },
+      { id: '102', unit_label: 'Dükkan', block_name: 'A Blok', floor: null, category: null, land_share_numerator: null, land_share_denominator: null, responsible_party: 'both' },
     ])]);
     overrides.push([/FROM apartment_residencies r INNER JOIN site_people sp ON sp\.id = r\.person_id LEFT JOIN users u/, () => ok([
       { apartment_id: '101', relation: 'owner', full_name: 'Ali Malik' },
@@ -564,10 +564,10 @@ describe('dışa aktarma ucu', () => {
     ])]);
     const response = await call('GET', `${base()}/exports/apartments`);
     assert.equal(response.status, 200);
-    assert.deepEqual(response.body.columns.map((c) => c.label), ['Blok', 'Daire No', 'Kat', 'Tip', 'Brüt m²', 'Net m²', 'Arsa Payı (Pay)', 'Arsa Payı (Payda)', 'Borç Sorumlusu', 'Malik', 'Kiracı', 'Sakin Sayısı']);
-    assert.deepEqual(response.body.columns.find((c) => c.key === 'brut_m2'), { key: 'brut_m2', label: 'Brüt m²', type: 'number', scale: 2 });
-    assert.deepEqual(response.body.rows[0], ['A Blok', '1', 2, '3+1', 125.5, 110, 35, 1000, 'Kiracı', 'Ali Malik', 'Veli Kiracı', 3]);
-    assert.deepEqual(response.body.rows[1], ['A Blok', 'Dükkan', null, null, null, null, null, null, 'İkisi', null, null, 0]);
+    assert.deepEqual(response.body.columns.map((c) => c.label), ['Blok', 'Daire No', 'Kat', 'Tip', 'Arsa Payı (Pay)', 'Arsa Payı (Payda)', 'Borç Sorumlusu', 'Malik', 'Kiracı', 'Sakin Sayısı']);
+    assert.equal(response.body.columns.some((c) => c.key === 'brut_m2' || c.key === 'net_m2'), false, 'm² sütunları dışa aktarmada yok');
+    assert.deepEqual(response.body.rows[0], ['A Blok', '1', 2, '3+1', 35, 1000, 'Kiracı', 'Ali Malik', 'Veli Kiracı', 3]);
+    assert.deepEqual(response.body.rows[1], ['A Blok', 'Dükkan', null, null, null, null, 'İkisi', null, null, 0]);
   });
 
   it('araçlar: Plaka, Ad Soyad, Blok, Daire No, İlişki; not yalnız include_notes ile', async () => {

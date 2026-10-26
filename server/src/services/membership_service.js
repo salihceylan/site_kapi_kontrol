@@ -15,6 +15,7 @@ import { BCRYPT_COST } from '../security/password_hashing.js';
 import { reissueDeviceToken } from '../security/login_device_token.js';
 import { endResidenciesForMemberRemoval } from '../modules/people_records.js';
 import { logResidencyEvent } from '../modules/residency_log.js';
+import { closeDelegationsOnLeave, endOpenDelegation } from '../modules/apartment_delegation_close.js';
 import { createSiteWithStructure, userHasOwnerLink } from './site_setup_core.js';
 import {
   SQL_BULK_APARTMENT_USERS,
@@ -93,6 +94,26 @@ async function rollbackQuietly(client) {
   } catch (_rollbackError) {
     // bağlantı zaten kopmuş olabilir; asıl hata yukarıda fırlatılır
   }
+}
+
+/**
+ * Kullanıcının bu dairede ACIK (kaldırılmamış) kapı erişimi askıya alma kaydı var mı (site yönetiminin güvenlik kararı; mahkeme kararı vb.).
+ * Askıdaki kişi katılım QR'ı ile başvurup onaylanarak ya da admin tarafından yeniden etkinleştirilerek erişimi geri alamaz.
+ * @param {{ query: Function }} db pool veya transaction client'ı
+ */
+async function hasOpenAccessSuspension(db, apartmentId, userCode) {
+  const result = await db.query(
+    `SELECT 1 FROM apartment_access_suspensions WHERE apartment_id = $1 AND user_code = $2 AND lifted_at IS NULL LIMIT 1`,
+    [apartmentId, userCode],
+  );
+  return Boolean(result.rows?.[0]);
+}
+
+/** Askı nedeniyle reddedilen işlem: 403 (başvuran) / 409 (onaylayan yönetici); makine okunur kod ACCESS_SUSPENDED. */
+function suspendedHttpError(statusCode, message) {
+  const error = httpError(statusCode, message);
+  error.code = 'ACCESS_SUSPENDED';
+  return error;
 }
 
 // SMTP hata iletileri çoğu zaman alıcı adresini içerir ("<ali@x.com>: Recipient address rejected"): günlüğe
@@ -987,6 +1008,12 @@ export async function createJoinRequest({
       throw httpError(400, 'Seçilen daire belirtilen bloğa ait değil.');
     }
 
+    // Site yönetiminin kapı erişimini askıya aldığı kişi, katılım QR'ı ile de bu daireye başvuramaz (onaylanınca erişim geri gelirdi).
+    // Neden gösterilmez (mahkeme kararı vb. gizli kalır); yönetim askıyı kaldırana dek başvuru alınmaz.
+    if (await hasOpenAccessSuspension(client, aptId, user.user_code)) {
+      throw suspendedHttpError(403, 'Bu daireye şu anda başvuru yapılamıyor. Site yönetimine başvurun.');
+    }
+
     // Kullanıcı zaten bu dairenin sakini mi?
     const existingMemberRes = await client.query(
       `SELECT role FROM apartment_memberships WHERE apartment_id = $1 AND user_code = $2 AND is_active = TRUE LIMIT 1`,
@@ -1277,6 +1304,12 @@ export async function approveJoinRequest({ requestId, authUser }) {
 
     // Aynı dairede eşzamanlı onaylar çift APARTMENT_ADMIN üretmesin: daire satırını kilitle
     await client.query(`SELECT id FROM apartments WHERE id = $1 FOR UPDATE`, [Number(req.apartment_id)]);
+
+    // Başvuru sonradan askıya alınmış kişiden geliyorsa (ya da askı başvurudan sonra konduysa) onay erişimi GERİ VERİRDİ (üyelik yeniden aktifleşir):
+    // onaylanmaz; yönetici askıyı kaldırana dek bekler ya da başvuruyu reddeder.
+    if (await hasOpenAccessSuspension(client, Number(req.apartment_id), Number(req.user_code))) {
+      throw suspendedHttpError(409, 'Bu kişinin bu daire için kapı erişimi askıya alınmış. Önce askıyı kaldırın ya da başvuruyu reddedin.');
+    }
 
     // Aşama 9 Hiyerarşisi: Dairede daha önce aktif APARTMENT_ADMIN var mı?
     const adminCheckRes = await client.query(
@@ -1693,11 +1726,7 @@ function parseTargetUserCode(value) {
  */
 async function assertAdminMayActOnMember(apartmentId, targetUserCode, { activating = false } = {}) {
   if (activating) {
-    const suspended = await pool.query(
-      `SELECT 1 FROM apartment_access_suspensions WHERE apartment_id = $1 AND user_code = $2 AND lifted_at IS NULL LIMIT 1`,
-      [apartmentId, targetUserCode],
-    );
-    if (suspended.rows?.[0]) {
+    if (await hasOpenAccessSuspension(pool, apartmentId, targetUserCode)) {
       throw httpError(403, 'Bu işlem şu anda yapılamıyor. Site yönetimine başvurun.');
     }
     return;
@@ -1766,6 +1795,10 @@ export async function removeApartmentMember({ apartmentId, targetUserCode, authU
 
     // Kapı istisnalarını temizle (yalnızca kişinin başka aktif üyeliği kalmadıysa)
     await cleanupDoorOverridesIfNoMembership(client, apt.site_code, tUserCode);
+
+    // Çıkarılan kişi yönetim DEVRALANI (kiracı) ise açık devir satırı kapanır, vekâletleri iptal edilir: aksi halde devir aktif üyeliği ezmeye devam ederdi.
+    // CRM adımından ÖNCE: son ilişki bitince kişi kaydı hesaptan koparılır (user_code NULL) ve kişi aranamazdı.
+    await closeDelegationsOnLeave(client, { siteCode: apt.site_code, apartmentId: apt.id, userCode: tUserCode, reason: 'member_removed' });
 
     // CRM (Kişi ve Daire Kayıtları): "Daireden çıkar" kalıcı bir çıkarmadır -> o (kullanıcı, daire) için güncel ilişkiler biter.
     // (Geçici pasife alma - toggleApartmentMemberStatus - bunu YAPMAZ.) Hata çıkarma işlemini bozmaz.
@@ -1973,6 +2006,9 @@ export async function deleteApartmentMember({ apartmentId, targetUserCode, authU
     // 2. Kapı istisnalarını temizle (yalnızca kişinin başka aktif üyeliği kalmadıysa)
     await cleanupDoorOverridesIfNoMembership(client, apt.site_code, tUserCode);
 
+    // 2b. Silinen kişi yönetim devralanı ise açık devir kapanır, vekâletleri iptal edilir (CRM adımından ÖNCE: kişi kaydı hesaptan kopmadan).
+    await closeDelegationsOnLeave(client, { siteCode: apt.site_code, apartmentId: apt.id, userCode: tUserCode, reason: 'member_deleted' });
+
     // 3. Silinen kişi dairenin yöneticisi / apartments.resident_user_code ise yönetici devri
     if (legacy || delRes.rows[0]?.role === 'APARTMENT_ADMIN') {
       await handOverApartmentResident(client, apt.id, tUserCode, { indicatorOwnedByRemoved: legacy, actor: authUser, actorRole: isSuperUser ? 'super_user' : isSiteManager ? 'site_manager' : 'apartment_admin' });
@@ -2108,8 +2144,9 @@ export async function changeApartmentMemberPassword({
 
   // users tablosunu güncelle. deleted_at IS NULL: doğrulama ile bu yazma arasında (bcrypt.hash ~70 ms) hesap silme commit ettiyse silinmiş (kimliksizleştirilmiş)
   // hesaba GERÇEK bcrypt özeti yazılmaz ("kullanılamaz özet" değişmezi: hiçbir parola eşleşmez) ve yeni token imzalanmaz; aşağıda 401 ACCOUNT_DELETED / 404.
+  // must_change_password = FALSE: sakin kendi parolasını belirledi (geçici parola / yönetimin verdiği PIN artık geçersiz); bayrak kalırsa her girişte yeniden parola istenirdi.
   const updatedUserRes = await pool.query(
-    `UPDATE users SET password_hash = $1, updated_at = NOW() WHERE user_code = $2 AND deleted_at IS NULL
+    `UPDATE users SET password_hash = $1, must_change_password = FALSE, updated_at = NOW() WHERE user_code = $2 AND deleted_at IS NULL
      RETURNING user_code AS id, email, role`,
     [passwordHash, tUserCode],
   );
@@ -2242,6 +2279,8 @@ export async function setApartmentPrimaryAdmin({ apartmentId, targetUserCode, au
       actorRole: isSuperUser ? 'super_user' : isSiteManager ? 'site_manager' : 'apartment_admin',
       reasonCode: isSuperUser || isSiteManager ? 'site_manager' : 'apartment_admin',
     });
+    // Yönetici elle değiştirildi: önceki yönetim devri (malik -> kiracı vb.) geçersizdir; kapanmazsa devir yeni yöneticiyi ezerdi.
+    await endOpenDelegation(client, apt.id, 'admin_changed');
 
     await client.query('COMMIT');
     committed = true;

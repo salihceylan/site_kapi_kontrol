@@ -184,7 +184,7 @@ export async function runBulkImportSection(ctx) {
       people: (await q(`SELECT id, user_code, full_name, phone, email, note, is_active FROM site_people WHERE site_code = $1 ORDER BY id`, [site])).rows,
       res: (await q(`SELECT id, apartment_id, person_id, relation, is_current, move_in_date::text AS move_in, move_out_date::text AS move_out, origin FROM apartment_residencies WHERE site_code = $1 ORDER BY id`, [site])).rows,
       veh: (await q(`SELECT id, person_id, plate, plate_display, note, is_active FROM vehicles WHERE site_code = $1 ORDER BY id`, [site])).rows,
-      apts: (await q(`SELECT id, floor, category, gross_area_m2::text AS gross, net_area_m2::text AS net, land_share_numerator, land_share_denominator, responsible_party FROM apartments WHERE site_code = $1 ORDER BY id`, [site])).rows,
+      apts: (await q(`SELECT id, floor, category, land_share_numerator, land_share_denominator, responsible_party FROM apartments WHERE site_code = $1 ORDER BY id`, [site])).rows,
     });
   const access = async (site) =>
     JSON.stringify({
@@ -279,8 +279,8 @@ export async function runBulkImportSection(ctx) {
   await linkManager(S2.code, MGR2);
 
   const aptFile = [
-    { blok: 'A', daire_no: '1', kat: 'Zemin', tip: '3+1', brut_m2: '125,5', net_m2: 110, arsa_payi_pay: 35, arsa_payi_payda: 1000, sorumlu: 'Kiracı' },
-    { blok: 'Blok A', daire_no: 'Daire 2', kat: '1. kat', tip: '2+1', brut_m2: 90 },
+    { blok: 'A', daire_no: '1', kat: 'Zemin', tip: '3+1', arsa_payi_pay: 35, arsa_payi_payda: 1000, sorumlu: 'Kiracı' },
+    { blok: 'Blok A', daire_no: 'Daire 2', kat: '1. kat', tip: '2+1' },
     { blok: 'B Blok', daire_no: '03', kat: 2 },
     { blok: 'C', daire_no: '1', kat: 1 },
     { blok: 'A', daire_no: '99' },
@@ -290,7 +290,7 @@ export async function runBulkImportSection(ctx) {
   const pvA = await previewOf(MGR, S.code, 'apartments', aptFile);
   check('B1: onizleme 200; sozlesme sekli (totals, plan, issues, samples, checks, preview_hash); hata satirlari listelenir',
     pvA.status === 200 && pvA.body.kind === 'apartments' && pvA.body.spec_version === 1 && /^[0-9a-f]{64}$/.test(pvA.body.preview_hash)
-    && same(pvA.body.totals, { rows: 5, ok: 3, unchanged: 0, error: 2, with_warnings: 0 }) && pvA.body.plan.apartment_update === 3 && pvA.body.plan.cells_set === 7 + 3 + 1
+    && same(pvA.body.totals, { rows: 5, ok: 3, unchanged: 0, error: 2, with_warnings: 0 }) && pvA.body.plan.apartment_update === 3 && pvA.body.plan.cells_set === 5 + 2 + 1
     && same(issueCodes(pvA, 5), ['e:BLOCK_NOT_FOUND']) && same(issueCodes(pvA, 6), ['e:APARTMENT_NOT_FOUND']) && pvA.headers.get('cache-control') === 'no-store', pvA.body);
   check('B1b: onizleme YAZMAZ (CRM/daire goruntusu, audit, calistirma kaydi degismedi)', (await crm(S.code)) === snapBefore && (await auditCount(S.code)) === auditBefore && (await runsOf(S.code)).length === 0);
 
@@ -299,9 +299,9 @@ export async function runBulkImportSection(ctx) {
   check('B2: onay 201; yanit sekli { replayed:false, run, result:{rows,counts,issues} }; satirlar: 3 uygulandi, 2 atlandi',
     cmA.status === 201 && cmA.body.replayed === false && cmA.body.run.kind === 'apartments' && cmA.body.run.row_count === 5 && typeof cmA.body.run.id === 'number'
     && same(cmA.body.result.rows, { applied: 3, unchanged: 0, skipped: 2 }) && cmA.body.result.counts.apartment_update === 3 && cmA.body.result.issues.length === 2, cmA.body);
-  const a1 = (await q(`SELECT floor, category, gross_area_m2::text AS gross, net_area_m2::text AS net, land_share_numerator AS n, land_share_denominator AS d, responsible_party AS rp FROM apartments WHERE id = $1`, [S.apt('A', 1).id])).rows[0];
+  const a1 = (await q(`SELECT floor, category, land_share_numerator AS n, land_share_denominator AS d, responsible_party AS rp FROM apartments WHERE id = $1`, [S.apt('A', 1).id])).rows[0];
   const b3 = (await q(`SELECT floor FROM apartments WHERE id = $1`, [S.apt('B', 3).id])).rows[0];
-  check('B2b: daire alanlari yazildi (kat Zemin=0, brut 125,5 -> 125.50, net 110, arsa payi 35/1000, sorumlu Kiracı=tenant); "B Blok / 03" dogru daire', same(a1, { floor: 0, category: '3+1', gross: '125.50', net: '110.00', n: 35, d: 1000, rp: 'tenant' }) && b3.floor === 2, [a1, b3]);
+  check('B2b: daire alanlari yazildi (kat Zemin=0, arsa payi 35/1000, sorumlu Kiracı=tenant); "B Blok / 03" dogru daire', same(a1, { floor: 0, category: '3+1', n: 35, d: 1000, rp: 'tenant' }) && b3.floor === 2, [a1, b3]);
   const runRows = await runsOf(S.code);
   const run1 = runRows[0];
   check('B2c: calistirma kaydi: tur, anahtar, parmak izi/karma 64, strict=false, allow_overwrite=false, satir sayisi, olusturan; counts yalniz sayi (kisisel veri yok)',
@@ -355,7 +355,7 @@ export async function runBulkImportSection(ctx) {
   check('B6b: varsayilan "gecerli olanlari al": gecerli satir yazilir, hatali atlanir (satir atomik)', partial.status === 201 && a5 === 4 && same(partial.body.result.rows, { applied: 1, unchanged: 0, skipped: 1 }));
 
   // ezme
-  const overwriteFile = [{ blok: 'A', daire_no: '1', kat: 5, tip: '4+1', net_m2: 100 }];
+  const overwriteFile = [{ blok: 'A', daire_no: '1', kat: 5, tip: '4+1', arsa_payi_pay: 40 }];
   const pvKeep = await previewOf(MGR, S.code, 'apartments', overwriteFile);
   const pvOver = await previewOf(MGR, S.code, 'apartments', overwriteFile, { allow_overwrite: true });
   check('B7: dolu alan varsayilan KORUNUR (VALUE_KEPT, cells_kept); allow_overwrite ile overwritten_cells sayilir; iki karma farkli',
@@ -364,16 +364,16 @@ export async function runBulkImportSection(ctx) {
   const keptRow = (await q(`SELECT floor, category FROM apartments WHERE id = $1`, [S.apt('A', 1).id])).rows[0];
   check('B7b: korumali onay dolu alani EZMEZ', cmKeep.status === 201 && keptRow.floor === 0 && keptRow.category === '3+1');
   const cmOver = await commitRaw(MGR, S.code, 'apartments', overwriteFile, pvOver.body.preview_hash, { allow_overwrite: true });
-  const overRow = (await q(`SELECT floor, category, net_area_m2::text AS net FROM apartments WHERE id = $1`, [S.apt('A', 1).id])).rows[0];
+  const overRow = (await q(`SELECT floor, category, land_share_numerator AS n FROM apartments WHERE id = $1`, [S.apt('A', 1).id])).rows[0];
   const overAudit = (await auditOf(S.code, 'apartment.updated')).filter((r) => r.target_id === String(S.apt('A', 1).id)).pop();
-  check('B7c: allow_overwrite ile yazilir; audit changes {field, from, to}; run.allow_overwrite=true', cmOver.status === 201 && overRow.floor === 5 && overRow.category === '4+1' && overRow.net === '100.00'
+  check('B7c: allow_overwrite ile yazilir; audit changes {field, from, to}; run.allow_overwrite=true', cmOver.status === 201 && overRow.floor === 5 && overRow.category === '4+1' && overRow.n === 40
     && overAudit.details.changes.some((c) => c.field === 'floor' && c.from === 0 && c.to === 5) && (await runsOf(S.code)).pop().allow_overwrite === true, overAudit?.details);
 
   // mali kayit uyarisi
   await q(`INSERT INTO ledger_entries (site_code, apartment_id, kind, amount_minor, period, entry_date, payer_party) VALUES ($1, $2, 'charge', 1000, date_trunc('month', CURRENT_DATE)::date, CURRENT_DATE, 'both')`, [S.code, S.apt('A', 6).id]);
-  const pvFin = await previewOf(MGR, S.code, 'apartments', [{ blok: 'A', daire_no: '6', brut_m2: 80, net_m2: 90 }, { blok: 'A', daire_no: '6', kat: 1 }]);
-  check('B8: mali kaydi olan dairede m2 degisirse FINANCE_RECORDS + NET_GT_GROSS uyarisi (engellemez); ayni daire ikinci satir DUPLICATE_IN_FILE hatasi',
-    same(issueCodes(pvFin, 2), ['w:FINANCE_RECORDS', 'w:NET_GT_GROSS']) && same(issueCodes(pvFin, 3), ['e:DUPLICATE_IN_FILE']) && pvFin.body.totals.ok === 1);
+  const pvFin = await previewOf(MGR, S.code, 'apartments', [{ blok: 'A', daire_no: '6', tip: 'Dükkan' }, { blok: 'A', daire_no: '6', kat: 1 }]);
+  check('B8: mali kaydi olan dairede mali alan (tip) degisirse FINANCE_RECORDS uyarisi (engellemez); ayni daire ikinci satir DUPLICATE_IN_FILE hatasi',
+    same(issueCodes(pvFin, 2), ['w:FINANCE_RECORDS']) && same(issueCodes(pvFin, 3), ['e:DUPLICATE_IN_FILE']) && pvFin.body.totals.ok === 1);
 
   // arsa payi toplam kontrolu
   const pvLs = await previewOf(MGR, S.code, 'apartments', S.apts.map((a) => ({ blok: a.block, daire_no: String(a.n), arsa_payi_pay: 100, arsa_payi_payda: 1000 })), { allow_overwrite: true });
@@ -901,7 +901,7 @@ export async function runBulkImportSection(ctx) {
   const huge = await explainSnapshot(BIG);
   console.log(`OLCUM  5000 daireli sitede Seq Scan yapan tablolar (site tablonun ~%8'i, planlayici icin mesru): ${JSON.stringify(huge.seq)}`);
   check('F4b: 5000 daireli sitede de sorgu sayisi sabit (6) ve kisi / arac / daire tablolarinda Seq Scan YOK (iliski tablosu bilgi olarak raporlanir)', huge.queries === 6 && !huge.seq.some((name) => ['site_people', 'vehicles', 'apartments', 'users'].includes(name)), huge);
-  const aptFileBig = Array.from({ length: 5000 }, (_, i) => ({ blok: `B${String((i % 50) + 1).padStart(2, '0')}`, daire_no: String(Math.floor(i / 50) + 1), kat: (i % 12) + 1, tip: i % 2 === 0 ? '2+1' : '3+1', brut_m2: 100 + (i % 40), arsa_payi_pay: 1, arsa_payi_payda: 5000 }));
+  const aptFileBig = Array.from({ length: 5000 }, (_, i) => ({ blok: `B${String((i % 50) + 1).padStart(2, '0')}`, daire_no: String(Math.floor(i / 50) + 1), kat: (i % 12) + 1, tip: i % 2 === 0 ? '2+1' : '3+1', arsa_payi_pay: 1, arsa_payi_payda: 5000 }));
   const t1 = Date.now();
   const bigApt = await run(MGR, BIG, 'apartments', aptFileBig);
   const aptMs = Date.now() - t1;

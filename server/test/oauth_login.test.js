@@ -1,6 +1,7 @@
-import { describe, it, before, after, beforeEach } from 'node:test';
+import { describe, it, before, after, beforeEach, afterEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
+import bcrypt from 'bcryptjs';
 import { readFileSync } from 'node:fs';
 import express from 'express';
 import '../src/utils/async_errors.js';
@@ -13,7 +14,10 @@ import {
   getOAuthConfig,
   oauthHooks,
   oauthStatus,
+  startOAuthWebSession,
+  completeOAuthWebCallback,
   verifyOAuthJwt,
+  verifyProviderIdToken,
 } from '../src/modules/oauth_login.js';
 import { oauthCodeRequestLimiter, oauthRouter, oauthVerifyLimiter } from '../src/modules/oauth_routes.js';
 
@@ -149,6 +153,236 @@ describe('OAuth yapilandirma ve RS256 JWKS dogrulama', () => {
   });
 });
 
+describe('verifyProviderIdToken: istemci kimligi yoksa KAPALI; aud / iss / imza hatasinda kesin red; yalniz JWKS erisim hatasinda yedek (aud + iss + exp yine denetlenir)', () => {
+  const GOOGLE_ENV = { GOOGLE_CLIENT_ID: 'google-client-1', APPLE_CLIENT_ID: 'apple-client-1' };
+  let fetchCalls;
+  let fetchReply;
+  let originalHooks;
+
+  const nowSec = () => Math.floor(Date.now() / 1000);
+  const googleToken = (overrides = {}, options) =>
+    signTestRs256Jwt(
+      {
+        iss: 'https://accounts.google.com',
+        aud: 'google-client-1',
+        sub: 'g-sub-9',
+        email: 'Deniz@Gmail.com',
+        email_verified: true,
+        iat: nowSec() - 10,
+        exp: nowSec() + 3600,
+        ...overrides,
+      },
+      options,
+    );
+  const appleToken = (overrides = {}) =>
+    signTestRs256Jwt({
+      iss: 'https://appleid.apple.com',
+      aud: 'apple-client-1',
+      sub: 'a-sub-9',
+      email: 'selin@icloud.com',
+      email_verified: 'true',
+      iat: nowSec() - 10,
+      exp: nowSec() + 3600,
+      ...overrides,
+    });
+  const tokeninfo = (overrides = {}) => ({
+    iss: 'https://accounts.google.com',
+    aud: 'google-client-1',
+    sub: 'g-sub-9',
+    email: 'Deniz@Gmail.com',
+    email_verified: 'true',
+    exp: String(nowSec() + 3600),
+    ...overrides,
+  });
+
+  beforeEach(() => {
+    clearJwksCache();
+    originalHooks = { ...oauthHooks };
+    oauthHooks.verifyProviderToken = null;
+    oauthHooks.verifyWithGoogleApi = undefined;
+    oauthHooks.fetchJwks = async () => [publicJwk];
+    fetchCalls = [];
+    fetchReply = () => ({ status: 200, body: {} });
+    mock.method(globalThis, 'fetch', async (url) => {
+      fetchCalls.push(String(url));
+      const reply = fetchReply(String(url));
+      if (reply instanceof Error) throw reply;
+      return { ok: reply.status >= 200 && reply.status < 300, status: reply.status, json: async () => reply.body };
+    });
+  });
+
+  afterEach(() => {
+    mock.restoreAll();
+    Object.assign(oauthHooks, originalHooks);
+  });
+
+  it('istemci kimligi TANIMSIZ ise Google ve Apple girisi KAPALI (fail-closed): 503 OAUTH_NOT_CONFIGURED, JWKS / ag cagrisi yok', async () => {
+    for (const provider of ['google', 'apple']) {
+      await assert.rejects(
+        () => verifyProviderIdToken(provider, provider === 'google' ? googleToken() : appleToken(), {}),
+        (error) => error.statusCode === 503 && error.code === 'OAUTH_NOT_CONFIGURED',
+        provider,
+      );
+    }
+    // Opak (erisim) belirteci de ayni sekilde kapali
+    await assert.rejects(
+      () => verifyProviderIdToken('google', 'ya29.opak-erisim-belirteci', {}),
+      (error) => error.code === 'OAUTH_NOT_CONFIGURED',
+    );
+    assert.deepEqual(fetchCalls, []);
+  });
+
+  it('verifyOAuthJwt audience listesi bos / yok ise belirteci KABUL ETMEZ (audience denetimi atlanamaz)', async () => {
+    for (const allowedAudiences of [null, undefined, []]) {
+      await assert.rejects(
+        () => verifyOAuthJwt(googleToken(), { jwksUrl: 'https://www.googleapis.com/oauth2/v3/certs', allowedIssuers: new Set(['https://accounts.google.com']), allowedAudiences }),
+        (error) => error.statusCode === 503 && error.code === 'OAUTH_NOT_CONFIGURED',
+      );
+    }
+  });
+
+  it('gecerli Google JWT JWKS ile dogrulanir; ag yedegi KULLANILMAZ; nonce talebi claims icinde doner', async () => {
+    const claims = await verifyProviderIdToken('google', googleToken({ nonce: 'n-123' }), GOOGLE_ENV);
+    assert.equal(claims.sub, 'g-sub-9');
+    assert.equal(claims.email, 'deniz@gmail.com');
+    assert.equal(claims.nonce, 'n-123');
+    assert.deepEqual(fetchCalls, []);
+  });
+
+  it('aud / iss / imza / sure hatasi KESIN red: tokeninfo yedegine DUSULMEZ (ag cagrisi yok, yedek kanca cagrilmaz)', async () => {
+    let hookCalled = false;
+    oauthHooks.verifyWithGoogleApi = async () => {
+      hookCalled = true;
+      return { sub: 'x' };
+    };
+    const cases = [
+      [googleToken({ aud: 'baska-uygulama' }), 'INVALID_OAUTH_AUDIENCE'],
+      [googleToken({ aud: ['baska-1', 'baska-2'] }), 'INVALID_OAUTH_AUDIENCE'],
+      [googleToken({ iss: 'https://evil.example.com' }), 'INVALID_OAUTH_TOKEN'],
+      [googleToken({ exp: nowSec() - 3600 }), 'OAUTH_TOKEN_EXPIRED'],
+      [googleToken({}, { key: crypto.generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey }), 'INVALID_OAUTH_TOKEN'],
+      [googleToken({}, { kid: 'bilinmeyen-kid' }), 'INVALID_OAUTH_TOKEN'],
+      [googleToken({}, { alg: 'HS256' }), 'INVALID_OAUTH_TOKEN'],
+    ];
+    for (const [token, code] of cases) {
+      await assert.rejects(() => verifyProviderIdToken('google', token, GOOGLE_ENV), (error) => error.statusCode >= 400 && error.statusCode < 500 && error.code === code, code);
+    }
+    assert.equal(hookCalled, false);
+    assert.deepEqual(fetchCalls, [], 'JWT hatalarinda tokeninfo yedegi YOK');
+  });
+
+  it('JWKS\'e ulasilamazsa (ag hatasi) tokeninfo yedegine dusulur; aud / iss / exp BURADA denetlenir ve gecerliyse kabul edilir', async () => {
+    oauthHooks.fetchJwks = async () => {
+      throw new Error('ECONNREFUSED');
+    };
+    fetchReply = () => ({ status: 200, body: tokeninfo() });
+    const claims = await verifyProviderIdToken('google', googleToken(), GOOGLE_ENV);
+    assert.equal(claims.sub, 'g-sub-9');
+    assert.equal(claims.email, 'deniz@gmail.com');
+    assert.equal(claims.emailVerified, true);
+    assert.equal(fetchCalls.length, 1);
+    assert.match(fetchCalls[0], /^https:\/\/oauth2\.googleapis\.com\/tokeninfo\?id_token=/);
+  });
+
+  it('yedekte aud / iss / exp tutmazsa KESIN red (baska uygulamaya verilmis belirteci tokeninfo "gecerli" dese de)', async () => {
+    oauthHooks.fetchJwks = async () => {
+      throw new Error('ETIMEDOUT');
+    };
+    const cases = [
+      [tokeninfo({ aud: 'baska-uygulama' }), 'INVALID_OAUTH_AUDIENCE'],
+      [tokeninfo({ aud: undefined }), 'INVALID_OAUTH_AUDIENCE'],
+      [tokeninfo({ iss: 'https://evil.example.com' }), 'INVALID_OAUTH_TOKEN'],
+      [tokeninfo({ exp: String(nowSec() - 3600) }), 'OAUTH_TOKEN_EXPIRED'],
+      [tokeninfo({ exp: 'yok' }), 'OAUTH_TOKEN_EXPIRED'],
+      [tokeninfo({ sub: '' }), 'INVALID_OAUTH_TOKEN'],
+    ];
+    for (const [body, code] of cases) {
+      fetchReply = () => ({ status: 200, body });
+      await assert.rejects(() => verifyProviderIdToken('google', googleToken(), GOOGLE_ENV), (error) => error.code === code, code);
+    }
+  });
+
+  it('yedek ucu da yanit vermezse: ag hatasi / 5xx -> 503 OAUTH_JWKS_UNAVAILABLE; 400 invalid_token -> 401', async () => {
+    oauthHooks.fetchJwks = async () => {
+      throw new Error('ECONNRESET');
+    };
+    fetchReply = () => new Error('fetch failed');
+    await assert.rejects(() => verifyProviderIdToken('google', googleToken(), GOOGLE_ENV), (error) => error.statusCode === 503 && error.code === 'OAUTH_JWKS_UNAVAILABLE');
+    fetchReply = () => ({ status: 502, body: {} });
+    await assert.rejects(() => verifyProviderIdToken('google', googleToken(), GOOGLE_ENV), (error) => error.statusCode === 503);
+    fetchReply = () => ({ status: 400, body: { error: 'invalid_token' } });
+    await assert.rejects(() => verifyProviderIdToken('google', googleToken(), GOOGLE_ENV), (error) => error.statusCode === 401 && error.code === 'INVALID_OAUTH_TOKEN');
+  });
+
+  it('opak Google ERISIM belirteci (web: id_token yok): tokeninfo aud\'u yapilandirilmis istemci degilse kesin red; degilse kabul', async () => {
+    fetchReply = () => ({ status: 200, body: { aud: 'baska-uygulama', sub: 'g-sub-9', email: 'deniz@gmail.com', email_verified: 'true', expires_in: '3000' } });
+    await assert.rejects(() => verifyProviderIdToken('google', 'ya29.opak', GOOGLE_ENV), (error) => error.code === 'INVALID_OAUTH_AUDIENCE');
+    assert.equal(fetchCalls.length, 1, 'userinfo\'ya gidilmedi (aud tutmadi)');
+    assert.match(fetchCalls[0], /tokeninfo\?access_token=/);
+
+    fetchCalls.length = 0;
+    fetchReply = () => ({ status: 200, body: { aud: 'google-client-1', sub: 'g-sub-9', email: 'Deniz@Gmail.com', email_verified: 'true', expires_in: '3000' } });
+    const claims = await verifyProviderIdToken('google', 'ya29.opak', GOOGLE_ENV);
+    assert.equal(claims.sub, 'g-sub-9');
+    assert.equal(claims.email, 'deniz@gmail.com');
+
+    fetchReply = () => ({ status: 200, body: { aud: 'google-client-1', sub: 'g-sub-9', expires_in: '0' } });
+    await assert.rejects(() => verifyProviderIdToken('google', 'ya29.opak', GOOGLE_ENV), (error) => error.code === 'OAUTH_TOKEN_EXPIRED');
+  });
+
+  it('opak erisim belirtecinde e-posta tokeninfo\'da yoksa userinfo\'dan alinir; ama yalniz aud dogrulandiktan sonra ve AYNI kullanici icin', async () => {
+    const replies = [
+      { status: 200, body: { aud: 'google-client-1', sub: 'g-sub-9', expires_in: '3000' } },
+      { status: 200, body: { sub: 'g-sub-9', email: 'deniz@gmail.com', email_verified: true, name: 'Deniz Kaya' } },
+    ];
+    fetchReply = () => replies.shift();
+    const claims = await verifyProviderIdToken('google', 'ya29.opak', GOOGLE_ENV);
+    assert.equal(claims.email, 'deniz@gmail.com');
+    assert.equal(claims.name, 'Deniz Kaya');
+
+    const other = [
+      { status: 200, body: { aud: 'google-client-1', sub: 'g-sub-9', expires_in: '3000' } },
+      { status: 200, body: { sub: 'BASKA-KULLANICI', email: 'x@gmail.com', email_verified: true } },
+    ];
+    fetchReply = () => other.shift();
+    await assert.rejects(() => verifyProviderIdToken('google', 'ya29.opak', GOOGLE_ENV), (error) => error.code === 'INVALID_OAUTH_TOKEN');
+  });
+
+  it('Apple: yanlis aud kesin red; JWKS erisilemezse YEDEK YOK (503)', async () => {
+    const ok = await verifyProviderIdToken('apple', appleToken({ nonce: 'abc' }), GOOGLE_ENV);
+    assert.equal(ok.sub, 'a-sub-9');
+    assert.equal(ok.nonce, 'abc');
+    await assert.rejects(() => verifyProviderIdToken('apple', appleToken({ aud: 'baska' }), GOOGLE_ENV), (error) => error.code === 'INVALID_OAUTH_AUDIENCE');
+    await assert.rejects(() => verifyProviderIdToken('apple', appleToken({ iss: 'https://accounts.google.com' }), GOOGLE_ENV), (error) => error.code === 'INVALID_OAUTH_TOKEN');
+
+    clearJwksCache();
+    oauthHooks.fetchJwks = async () => {
+      throw new Error('ENOTFOUND');
+    };
+    await assert.rejects(() => verifyProviderIdToken('apple', appleToken(), GOOGLE_ENV), (error) => error.statusCode === 503 && error.code === 'OAUTH_JWKS_UNAVAILABLE');
+    assert.deepEqual(fetchCalls, []);
+  });
+
+  it('web oturumu: sunucunun urettigi nonce belirteçte AYNEN bulunmali (eksik / farkli nonce 401 INVALID_OAUTH_NONCE)', async () => {
+    const started = startOAuthWebSession({ provider: 'google', env: GOOGLE_ENV });
+    assert.equal(started.mode, 'redirect');
+    const nonce = new URL(started.auth_url).searchParams.get('nonce');
+    assert.ok(nonce && nonce.length >= 16);
+
+    // nonce'suz belirtec (baska oturum icin alinmis olabilir): reddedilir
+    await assert.rejects(
+      () => completeOAuthWebCallback({ provider: 'google', state: started.session_id, idToken: googleToken(), env: GOOGLE_ENV }),
+      (error) => error.statusCode === 401 && error.code === 'INVALID_OAUTH_NONCE',
+    );
+    // farkli nonce
+    const second = startOAuthWebSession({ provider: 'google', env: GOOGLE_ENV });
+    await assert.rejects(
+      () => completeOAuthWebCallback({ provider: 'google', state: second.session_id, idToken: googleToken({ nonce: 'baska-oturumun-nonce-degeri' }), env: GOOGLE_ENV }),
+      (error) => error.code === 'INVALID_OAUTH_NONCE',
+    );
+  });
+});
+
 describe('authenticateWithOAuth ve HTTP rotalari (/auth/oauth/google & /auth/oauth/apple)', () => {
   let server;
   let baseUrl;
@@ -164,8 +398,14 @@ describe('authenticateWithOAuth ve HTTP rotalari (/auth/oauth/google & /auth/oau
   let emailVerifications;
   let sentEmails;
   let nextUserCode;
+  let ambiguousEmails;
+  let pinClears;
+  let rotations;
 
   function resetFakeStore() {
+    ambiguousEmails = new Set();
+    pinClears = [];
+    rotations = [];
     usersByEmail = new Map();
     usersByCode = new Map();
     identities = new Map(); // `${provider}:${sub}` -> { id, user_code, provider, provider_sub, email }
@@ -250,7 +490,21 @@ describe('authenticateWithOAuth ve HTTP rotalari (/auth/oauth/google & /auth/oau
           const email = String(params[0]).toLowerCase();
           const u = usersByEmail.get(email);
           if (!u || u.deleted_at !== null) return { rows: [], rowCount: 0 };
+          if (ambiguousEmails.has(email)) return { rows: [{ ...u }, { ...u, user_code: u.user_code + 1000, id: u.id + 1000 }], rowCount: 2 };
           return { rows: [{ ...u }], rowCount: 1 };
+        }
+        if (sql.startsWith('UPDATE users SET password_hash = $2, must_change_password = FALSE, email_verified = TRUE')) {
+          const u = usersByCode.get(params[0]);
+          if (!u || u.deleted_at !== null) return { rows: [], rowCount: 0 };
+          u.password_hash = params[1];
+          u.must_change_password = false;
+          u.email_verified = true;
+          rotations.push(params[0]);
+          return { rows: [{ password_hash: u.password_hash }], rowCount: 1 };
+        }
+        if (sql.startsWith('UPDATE apartments SET resident_pin_issued = FALSE')) {
+          pinClears.push(params[0]);
+          return { rows: [], rowCount: 1 };
         }
         if (sql.startsWith('UPDATE users SET email_verified = TRUE')) {
           const u = usersByCode.get(params[0]);
@@ -482,5 +736,105 @@ describe('authenticateWithOAuth ve HTTP rotalari (/auth/oauth/google & /auth/oau
     assert.equal(verBody.user.email, 'emre@gmail.com');
     assert.equal(verBody.user.full_name, 'Emre Yıldız');
     assert.ok(verBody.token);
+  });
+  const seedUser = (extra = {}) => {
+    const code = nextUserCode++;
+    const u = {
+      id: code,
+      db_id: code,
+      user_code: code,
+      full_name: 'Hazir Kullanici',
+      email: 'sakin@example.com',
+      login_name: 'sakin.k',
+      role: 'apartment_owner',
+      is_active: true,
+      email_verified: true,
+      approval_status: 'approved',
+      phone_number: null,
+      created_at: new Date(),
+      password_hash: bcrypt.hashSync('1234', 4),
+      must_change_password: false,
+      deleted_at: null,
+      ...extra,
+    };
+    usersByCode.set(code, u);
+    usersByEmail.set(u.email.toLowerCase(), u);
+    return u;
+  };
+
+  it('yonetimin verdigi gecici parola (must_change_password): ilk OAuth girisinde parola RASTGELE dondurulur, bayrak kapanir, e-posta dogrulanir; eski parola isler OLMAZ', async () => {
+    const seeded = seedUser({ email: 'deniz@gmail.com', must_change_password: true, email_verified: false });
+    const result = await authenticateWithOAuth({ provider: 'google', idToken: 'valid-google-token' });
+    assert.equal(result.is_new_user, false);
+    assert.equal(result.user.id, seeded.user_code);
+    assert.equal(result.user.must_change_password, false, 'yanitta bayrak kapali');
+    assert.equal(result.user.email_verified, true);
+    assert.deepEqual(rotations, [seeded.user_code]);
+    assert.equal(await bcrypt.compare('1234', seeded.password_hash), false, 'yonetimin bildigi parola artik gecersiz');
+    assert.equal(seeded.must_change_password, false);
+    assert.deepEqual(pinClears, [seeded.user_code], 'dairedeki "PIN verildi" isareti temizlenir (COMMIT sonrasi ayri ifade)');
+    assert.ok(result.token);
+  });
+
+  it('bayrak bagli kimlik (provider_sub) yolunda da uygulanir', async () => {
+    const seeded = seedUser({ email: 'deniz@gmail.com', must_change_password: true });
+    identities.set('google:g-sub-1', { id: 1, user_code: seeded.user_code, provider: 'google', provider_sub: 'g-sub-1', email: 'deniz@gmail.com' });
+    const result = await authenticateWithOAuth({ provider: 'google', idToken: 'valid-google-token' });
+    assert.equal(result.user.must_change_password, false);
+    assert.deepEqual(rotations, [seeded.user_code]);
+  });
+
+  it('DOGRULANMAMIS hesap (kayit oncesi sahte kayit / yonetim): sahiplik sagliyiciyla kanitlaninca parola dondurulur (onceden-ele-gecirme korumasi)', async () => {
+    const seeded = seedUser({ email: 'deniz@gmail.com', email_verified: false, password_hash: bcrypt.hashSync('saldirgan-parolasi', 4) });
+    await authenticateWithOAuth({ provider: 'google', idToken: 'valid-google-token' });
+    assert.deepEqual(rotations, [seeded.user_code]);
+    assert.equal(await bcrypt.compare('saldirgan-parolasi', seeded.password_hash), false);
+    assert.equal(seeded.email_verified, true);
+  });
+
+  it('bayraksiz ve dogrulanmis hesapta parola DONDURULMEZ (normal giris etkilenmez)', async () => {
+    const seeded = seedUser({ email: 'deniz@gmail.com' });
+    const before = seeded.password_hash;
+    const result = await authenticateWithOAuth({ provider: 'google', idToken: 'valid-google-token' });
+    assert.equal(seeded.password_hash, before);
+    assert.deepEqual(rotations, []);
+    assert.deepEqual(pinClears, []);
+    assert.ok(result.token);
+  });
+
+  it('pasif / onay bekleyen hesapta giris reddedilir ve parola DONDURULMEZ (rollback)', async () => {
+    const seeded = seedUser({ email: 'deniz@gmail.com', must_change_password: true, is_active: false });
+    await assert.rejects(() => authenticateWithOAuth({ provider: 'google', idToken: 'valid-google-token' }), (error) => error.statusCode === 403);
+    assert.deepEqual(rotations, []);
+    assert.equal(seeded.must_change_password, true);
+  });
+
+  it('ayni e-postanin birden cok hesabi varsa (buyuk/kucuk harf farki) fail-closed: 409 OAUTH_ACCOUNT_AMBIGUOUS, hicbir hesaba baglanmaz', async () => {
+    seedUser({ email: 'deniz@gmail.com' });
+    ambiguousEmails.add('deniz@gmail.com');
+    await assert.rejects(
+      () => authenticateWithOAuth({ provider: 'google', idToken: 'valid-google-token' }),
+      (error) => error.statusCode === 409 && error.code === 'OAUTH_ACCOUNT_AMBIGUOUS',
+    );
+    assert.equal(identities.size, 0);
+  });
+
+  it('nonce: expectedNonce verilirse belirteçteki nonce AYNI olmali (eksik / farkli 401 INVALID_OAUTH_NONCE); verilmezse denetlenmez', async () => {
+    const original = oauthHooks.verifyProviderToken;
+    oauthHooks.verifyProviderToken = async (provider, idToken, env) => ({ ...(await original(provider, idToken, env)), nonce: 'oturum-nonce-1' });
+    const ok = await authenticateWithOAuth({ provider: 'google', idToken: 'valid-google-token', expectedNonce: 'oturum-nonce-1' });
+    assert.equal(ok.ok, true);
+    await assert.rejects(
+      () => authenticateWithOAuth({ provider: 'google', idToken: 'valid-google-token', expectedNonce: 'baska-nonce' }),
+      (error) => error.statusCode === 401 && error.code === 'INVALID_OAUTH_NONCE',
+    );
+    oauthHooks.verifyProviderToken = original;
+    await assert.rejects(
+      () => authenticateWithOAuth({ provider: 'google', idToken: 'valid-google-token', expectedNonce: 'oturum-nonce-1' }),
+      (error) => error.code === 'INVALID_OAUTH_NONCE',
+      'belirteçte nonce yok',
+    );
+    const noCheck = await authenticateWithOAuth({ provider: 'google', idToken: 'valid-google-token' });
+    assert.equal(noCheck.ok, true);
   });
 });

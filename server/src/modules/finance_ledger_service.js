@@ -207,16 +207,21 @@ async function isReversed(client, entryId) {
 
 const isReverseUniqueViolation = (error) => error?.code === '23505' && String(error?.constraint ?? '') === 'uq_ledger_entries_reverses';
 
-/** Karşı işaretli ters kayıt satırını yazar (asılın hesabıyla; İP-1A); yeni kaydın kimliğini döndürür. */
-async function insertReversal(client, { siteCode, original, openPeriod, todayIsoDate, reason, key, actorUserCode }) {
+/**
+ * Karşı işaretli ters kayıt satırını yazar (asılın hesabıyla; İP-1A); yeni kaydın kimliğini döndürür.
+ * Asılın kaynak izi (`source_kind` / `source_id`) ters kayda da KOPYALANIR: devir (opening) kaydı tek tek iptal edilince ters kaydı kaynaksız kalırsa
+ * raporlarda (finance_reports / finance_home "borçlandırılan": source_kind <> 'opening' süzgeci) asıl dışarıda, ters kayıt içeride kalır ve tahakkuku
+ * düşürürdü. Toplu devir geri alması (finance_opening.js) zaten aynı izi yazar. chk_ledger_entries_source: kaynak türü listede, source_id yalnız tür varken.
+ */
+export async function insertReversal(client, { siteCode, original, openPeriod, todayIsoDate, reason, key, actorUserCode }) {
   try {
     const inserted = await client.query(
       `
         INSERT INTO ledger_entries (
           site_code, apartment_id, kind, amount_minor, period, entry_date, due_date, definition_id, definition_name, run_id, payer_party,
-          reverses_entry_id, reversal_reason, idempotency_key, created_by, late_fee_run_id, account_party
+          reverses_entry_id, reversal_reason, idempotency_key, created_by, late_fee_run_id, account_party, source_kind, source_id
         )
-        VALUES ($1, $2, 'reversal', $3::BIGINT, $4::DATE, $5::DATE, $6::DATE, $7, $8::TEXT, $9, $10, $11, $12, $13, $14, $15, $16)
+        VALUES ($1, $2, 'reversal', $3::BIGINT, $4::DATE, $5::DATE, $6::DATE, $7, $8::TEXT, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18::BIGINT)
         RETURNING id
       `,
       [
@@ -236,6 +241,9 @@ async function insertReversal(client, { siteCode, original, openPeriod, todayIso
         actorUserCode,
         original.late_fee_run_id === null || original.late_fee_run_id === undefined ? null : Number(original.late_fee_run_id),
         entryAccountParty(original),
+        original.source_kind ?? null,
+        // source_id yalnız source_kind varken yazılır (CHECK); pg BIGINT'i metin döndürür
+        original.source_kind && original.source_id !== null && original.source_id !== undefined ? String(original.source_id) : null,
       ],
     );
     return Number(inserted.rows[0].id);

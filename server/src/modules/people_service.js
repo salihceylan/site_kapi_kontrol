@@ -8,11 +8,16 @@
 
 import { pool } from '../db.js';
 import { sendIssuedApartmentPin, provisionApartmentResident, ensureUniqueLoginName } from '../services/apartment_service.js';
+import { clearAccountLocks } from '../middlewares/login_throttle.js';
 import { hashPassword } from '../security/password_hashing.js';
+import { PASSWORD_MAX_LENGTH } from '../security/password_policy.js';
 import { rotateTokensForSite } from '../services/local_token_service.js';
 import { cleanupDoorOverridesIfNoMembership, handOverApartmentResident } from '../services/membership_service.js';
 import { generateApartmentPin, generateInternalApartmentEmail } from '../utils/helpers.js';
+import { isReservedEmail } from '../utils/reserved_email.js';
+import { closeDelegationsOnLeave } from './apartment_delegation_close.js';
 import { actorFromAuthUser, recordAudit } from './audit_service.js';
+import { revokeCredentialAccess } from './credential_revocation.js';
 import { PlatformError } from './errors.js';
 import {
   ACCOUNT_KIND_SQL,
@@ -26,6 +31,7 @@ import {
   foldText,
   invalidBody,
   normalizeDateInput,
+  normalizeLoginName,
   normalizePersonEmail,
   normalizePersonName,
   normalizePersonNote,
@@ -633,6 +639,19 @@ async function closeResidency(client, { siteCode, residency, userCode, moveOutDa
     actor,
     actorRole,
   });
+
+  // Kiracı ilişkisi (ya da hesaplı kişinin herhangi bir ilişkisi) bitince bu kişiyle ilgili AÇIK yönetim devri (apartment_admin_delegations) ve
+  // vekaletler (apartment_proxies) AYNI işlemde kapanır; aksi halde yönetim/vekalet gidene "bağlı" kalırdı. Kişi kaydı hesaptan KOPARILMADAN önce
+  // (deactivatePersonUnlessTied user_code'u boşaltır; kapatma kişiyi hem person_id hem user_code ile bulur) ve erişim kapanmadan önce çağrılır.
+  if (residency.relation === 'tenant' || (userCode !== null && userCode !== undefined)) {
+    await closeDelegationsOnLeave(client, {
+      siteCode,
+      apartmentId: residency.apartment_id,
+      userCode: userCode ?? null,
+      personId: residency.person_id,
+      reason: reason ? `residency_${reason}` : 'residency_ended',
+    });
+  }
 
   const contactEmailBeforeRevoke =
     userCode !== null && userCode !== undefined && apartment.resident_user_code !== null && apartment.resident_user_code !== undefined
@@ -1383,21 +1402,210 @@ export async function endResidency({ siteCode, residencyId, body = {}, actor, in
 
 // Daire yönetimi (apartment_mgmt_service.js) AYNI site kilidi, ilişki ve erişim kapatma kurallarını yeniden kullanır (kopya yok).
 
-function slugifyLoginName(fullName, fallback = 'kullanici') {
-  if (!fullName || typeof fullName !== 'string') return fallback;
+// ---------------------------------------------------------------------------
+// Hesap tanımlama / geçici parola (yönetici -> kişi hesabı)
+// ---------------------------------------------------------------------------
+
+// Varsayılan geçici parola EKİP KARARIDIR (belgelenmiş kural); değiştirilmez. Zorunlu değişim sunucuda uygulanır (auth_middleware:
+// must_change_password iken PATCH /me dışındaki uçlar 403 PASSWORD_CHANGE_REQUIRED), risk bu yolla azalır.
+const DEFAULT_TEMP_PASSWORD = '1234';
+
+const ACCOUNT_NOT_MANAGEABLE = () =>
+  new PlatformError(
+    409,
+    'PERSON_ACCOUNT_NOT_MANAGEABLE',
+    'Bu hesabın şifresi ve kullanıcı adı yönetici tarafından değiştirilemez. Yalnız bu sitede yönetim tarafından açılmış ve sakini henüz kendi şifresini belirlememiş daire hesapları değiştirilebilir; diğer hesaplar "Şifremi unuttum" ile yenilenir.',
+  );
+const ACCOUNT_NEEDS_SUPER = () =>
+  new PlatformError(
+    409,
+    'PERSON_ACCOUNT_RESET_NEEDS_SUPER',
+    'Sakin şifresini kendisi belirlemiş. Bu durumda şifreyi yalnız süper kullanıcı sıfırlayabilir; sakin giriş ekranındaki "Şifremi unuttum?" bağlantısıyla yenileyebilir.',
+  );
+
+/** Yönetimin verdiği hesap e-postası olamayacak adresler: dahili (@ahbu.local) ve sistem alan adları (deleted.invalid). */
+function isSystemAccountEmail(email) {
+  return typeof email === 'string' && (email.toLowerCase().endsWith(INTERNAL_EMAIL_SUFFIX) || isReservedEmail(email));
+}
+
+/** Kullanıcı adı önerisi: ad soyad -> a-z0-9 ve nokta (en çok 30 karakter, en az 3); kişi kimliği son çare. */
+function suggestLoginName(fullName, personId) {
   const trMap = {
     'ç': 'c', 'Ç': 'c', 'ğ': 'g', 'Ğ': 'g', 'ı': 'i', 'I': 'i', 'İ': 'i',
     'ö': 'o', 'Ö': 'o', 'ş': 's', 'Ş': 's', 'ü': 'u', 'Ü': 'u',
   };
-  let clean = fullName.replace(/[çÇğĞıIİöÖşŞüÜ]/g, (m) => trMap[m] || m).toLowerCase();
-  clean = clean.replace(/[^a-z0-9]+/g, '.').replace(/^\.+|\.+$/g, '').replace(/\.+/g, '.');
-  return clean || fallback;
+  const folded = typeof fullName === 'string'
+    ? fullName.replace(/[çÇğĞıIİöÖşŞüÜ]/g, (m) => trMap[m] || m).toLowerCase()
+    : '';
+  const slug = folded.replace(/[^a-z0-9]+/g, '.').replace(/^\.+|\.+$/g, '').replace(/\.+/g, '.').slice(0, 30).replace(/\.+$/g, '');
+  if (slug.length >= 3) {
+    return slug;
+  }
+  return slug ? `${slug}.${personId}` : `sakin.${personId}`;
+}
+
+/**
+ * Yönetimin parola/kullanıcı adı değiştirebileceği hesap mı? SAF karar (DB yok; satır loadManageableAccount'tan).
+ * Yalnız BU sitede yönetici tarafından açılmış sakin hesabına izin verilir:
+ *  - rol apartment_owner (yönetici / bireysel / süper kullanıcı hesabı ASLA);
+ *  - başka siteye ya da role bağlı DEĞİL (yöneticilik, RESIDENT dışı site rolü, başka sitede üyelik / kişi kaydı / sakin göstergesi yok);
+ *  - dahili (@ahbu.local) daire hesabı YA DA yönetimin verdiği parola henüz değişmemiş (daire göstergesinde resident_pin_issued veya must_change_password).
+ * Dahili hesapta sakin parolasını KENDİSİ belirlemişse (verilmiş-parola işareti yok) yalnız süper kullanıcı sıfırlar (resetApartmentPin kuralı).
+ * Gerçek e-postalı ve parolasını kendisi belirlemiş hesap (kendi kaydolan / üye olan) kimse tarafından sıfırlanamaz ("Şifremi unuttum").
+ * @returns {null | 'PERSON_ACCOUNT_NOT_MANAGEABLE' | 'PERSON_ACCOUNT_RESET_NEEDS_SUPER'} null: izinli
+ */
+export function evaluateManagedAccount(row, { actorIsSuper = false } = {}) {
+  if (!row || row.deleted_at) {
+    return 'PERSON_ACCOUNT_NOT_MANAGEABLE';
+  }
+  if (row.role !== 'apartment_owner') {
+    return 'PERSON_ACCOUNT_NOT_MANAGEABLE';
+  }
+  if (row.is_manager === true || row.foreign_membership === true || row.foreign_apartment === true || row.foreign_person === true) {
+    return 'PERSON_ACCOUNT_NOT_MANAGEABLE';
+  }
+  const internal = String(row.email ?? '').toLowerCase().endsWith(INTERNAL_EMAIL_SUFFIX);
+  const issued = row.pin_issued === true || row.must_change_password === true;
+  if (!internal && !issued) {
+    return 'PERSON_ACCOUNT_NOT_MANAGEABLE';
+  }
+  if (!issued && !actorIsSuper) {
+    return 'PERSON_ACCOUNT_RESET_NEEDS_SUPER';
+  }
+  return null;
+}
+
+/**
+ * Kişiye bağlı hesabı kilitleyip yönetilebilirliğini denetler (evaluateManagedAccount). Kilit sırası apartments -> users: hesabın sakin
+ * göstergesi olduğu daireler ÖNCE (id sırasıyla) kilitlenir.
+ * @returns {Promise<object>} hesap satırı (user_code, login_name, email, ...)
+ */
+async function loadManageableAccount(client, { siteCode, userCode, actor }) {
+  await client.query(`SELECT id FROM apartments WHERE resident_user_code = $1 ORDER BY id FOR UPDATE`, [userCode]);
+  const result = await client.query(
+    `
+      SELECT u.user_code, u.role, u.email, u.login_name, u.must_change_password, u.deleted_at,
+             EXISTS (SELECT 1 FROM apartments a WHERE a.resident_user_code = u.user_code AND a.resident_pin_issued = TRUE) AS pin_issued,
+             EXISTS (SELECT 1 FROM site_manager_sites s WHERE s.manager_user_code = u.user_code) AS is_manager,
+             EXISTS (
+               SELECT 1 FROM site_memberships sm
+               WHERE sm.user_code = u.user_code AND (sm.site_code <> $2 OR sm.role <> 'RESIDENT')
+             ) AS foreign_membership,
+             (
+               EXISTS (
+                 SELECT 1 FROM apartment_memberships am
+                 INNER JOIN apartments xa ON xa.id = am.apartment_id
+                 WHERE am.user_code = u.user_code AND xa.site_code <> $2
+               )
+               OR EXISTS (SELECT 1 FROM apartments ra WHERE ra.resident_user_code = u.user_code AND ra.site_code <> $2)
+             ) AS foreign_apartment,
+             EXISTS (SELECT 1 FROM site_people x WHERE x.user_code = u.user_code AND x.site_code <> $2) AS foreign_person
+      FROM users u
+      WHERE u.user_code = $1 AND u.deleted_at IS NULL
+      FOR UPDATE OF u
+    `,
+    [userCode, siteCode],
+  );
+  const row = result.rows?.[0] ?? null;
+  const verdict = evaluateManagedAccount(row, { actorIsSuper: actor?.role === 'super_user' });
+  if (verdict === 'PERSON_ACCOUNT_RESET_NEEDS_SUPER') {
+    throw ACCOUNT_NEEDS_SUPER();
+  }
+  if (verdict) {
+    throw ACCOUNT_NOT_MANAGEABLE();
+  }
+  return row;
+}
+
+/**
+ * Kullanıcı adı yazımı: benzersiz ad seçilir (ensureUniqueLoginName) ve yazım SAVEPOINT içinde yapılır; kontrol-sonra-yaz yarışında (eşzamanlı
+ * başka işlem aynı adı aldı) UNIQUE ihlali (23505, idx_users_login_name_unique) yeni ad seçilerek en çok 5 kez yeniden denenir. Hata alan
+ * ifade transaction'ı bozmasın diye her deneme SAVEPOINT'tedir.
+ */
+async function writeWithUniqueLoginName(client, { desired, siteCode, excludeUserCode = null }, write) {
+  for (let attempt = 0; ; attempt += 1) {
+    const loginName = await ensureUniqueLoginName({ db: client, desiredLoginName: desired, siteCode, excludeUserCode });
+    await client.query('SAVEPOINT login_name_write');
+    try {
+      const outcome = await write(loginName);
+      await client.query('RELEASE SAVEPOINT login_name_write');
+      return outcome;
+    } catch (error) {
+      await client.query('ROLLBACK TO SAVEPOINT login_name_write');
+      await client.query('RELEASE SAVEPOINT login_name_write');
+      if (error?.code === '23505' && constraintOf(error).includes('login_name') && attempt < 4) {
+        continue;
+      }
+      throw error;
+    }
+  }
+}
+
+/** Yönetimin verdiği parola: boşsa varsayılan geçici parola; bcrypt özeti DIŞARIDA hesaplanır (kilit tutulurken CPU harcanmaz). */
+async function prepareIssuedPassword(rawPassword) {
+  if (rawPassword !== undefined && rawPassword !== null && typeof rawPassword !== 'string' && typeof rawPassword !== 'number') {
+    throw invalidBody('password');
+  }
+  const trimmed = rawPassword === undefined || rawPassword === null ? '' : String(rawPassword).trim();
+  if (trimmed.length > PASSWORD_MAX_LENGTH) {
+    throw invalidBody('password', `password en fazla ${PASSWORD_MAX_LENGTH} karakter olabilir.`);
+  }
+  const plain = trimmed.length > 0 ? trimmed : DEFAULT_TEMP_PASSWORD;
+  return { plain, hash: await hashPassword(plain) };
+}
+
+/**
+ * Mevcut hesaba yönetimin verdiği parolayı (ve istenirse kullanıcı adını) yazar; hesabın daire göstergesindeki "PIN verildi" işareti kurulur
+ * (resetApartmentPin ile aynı), eski parolayla edinilmiş JWT dışı erişim (misafir geçişi, karekod, telefon bildirimi) AYNI işlemde kapanır.
+ * must_change_password = TRUE ve `deleted_at IS NULL` AYNI UPDATE'tedir (silinmiş hesaba parola yazılmaz).
+ * @returns {Promise<{ user: object, previousLoginName: string|null, revoked: object }>}
+ */
+async function applyIssuedPassword(client, { siteCode, userCode, actor, passwordHash, desiredLoginName = null }) {
+  const account = await loadManageableAccount(client, { siteCode, userCode, actor });
+  const update = (loginName) =>
+    client.query(
+      `
+        UPDATE users
+        SET password_hash = $1,
+            login_name = COALESCE($2, login_name),
+            must_change_password = TRUE,
+            updated_at = NOW()
+        WHERE user_code = $3 AND deleted_at IS NULL
+        RETURNING user_code, login_name, email
+      `,
+      [passwordHash, loginName, userCode],
+    );
+  const written = desiredLoginName
+    ? await writeWithUniqueLoginName(client, { desired: desiredLoginName, siteCode, excludeUserCode: userCode }, update)
+    : await update(null);
+  const user = written.rows?.[0] ?? null;
+  if (!user) {
+    // Hesap bu arada silindi (kimliksizleştirildi): tombstone'a parola yazılmaz.
+    throw ACCOUNT_NOT_MANAGEABLE();
+  }
+  await client.query(`UPDATE apartments SET resident_pin_issued = TRUE, resident_pin_code = NULL WHERE resident_user_code = $1`, [userCode]);
+  const revoked = await revokeCredentialAccess(client, userCode);
+  return { user, previousLoginName: account.login_name ?? null, revoked };
+}
+
+/** COMMIT sonrası: giriş / parola-değişim kilitleri açılır (yetkili yeni parola verdi); karekod iptal edildiyse kontrol anahtarları yenilenir. */
+async function afterIssuedPassword(siteCode, applied) {
+  for (const loginName of new Set([applied.user.login_name, applied.previousLoginName])) {
+    clearAccountLocks({ email: applied.user.email, loginName, userCode: applied.user.user_code });
+  }
+  await afterAccessClosed(siteCode, applied.revoked.qr_tokens > 0 || applied.revoked.guest_passes > 0, 'people_account_password_reset');
 }
 
 /**
  * Site yöneticisi tarafından bir kişiye (site_people) kullanıcı hesabı (kullanıcı adı ve şifre) tanımlanması.
- * Kişinin hesabı yoksa users'ta yeni hesap açar, site_people'a bağlar ve varsa dairesine daire adminliği verir.
- * Kişinin zaten hesabı varsa şifresini ve (verildiyse) kullanıcı adını günceller.
+ * Kişinin hesabı yoksa users'ta yeni hesap açar (rol apartment_owner; daire erişimi grantApartmentAccess kuralıyla: dairede aktif yönetici yoksa
+ * APARTMENT_ADMIN, varsa FAMILY_MEMBER), site_people'a bağlar. Hesap e-postası verildiyse (ya da kişi kaydında varsa) users.email'e
+ * normalize edilerek yazılır; verilmediyse dahili (@ahbu.local) adres kullanılır. Her iki durumda da hesap doğrulanmış açılır: giriş
+ * (auth_routes) doğrulanmamış hesabı kullanıcı adıyla da reddettiği için aksi hâlde yönetimin verdiği kullanıcı adı ve geçici şifre hiç
+ * çalışmaz. Koruma: must_change_password (sunucuda zorunlu; şifre değişmeden hiçbir uç açılmaz) ve ilk OAuth girişinde parolanın
+ * döndürülmesi (oauth_login). Başka hesapta kayıtlı e-posta dahili adrese düşer.
+ * Kişinin zaten hesabı varsa şifresini ve (verildiyse) kullanıcı adını günceller: YALNIZ yönetimce açılmış sakin hesabı için
+ * (evaluateManagedAccount); aksi halde 409.
  */
 export async function provisionPersonAccount({
   siteCode,
@@ -1410,7 +1618,15 @@ export async function provisionPersonAccount({
   const id = parsePositiveId(personId);
   if (id === null) throw PERSON_NOT_FOUND();
 
-  return await withSiteTransaction(siteCode, async (client) => {
+  // Girdi doğrulaması kilitlerden ÖNCE (400): kullanıcı adı biçimi, parola uzunluğu, e-posta biçimi.
+  const requestedLoginName = normalizeLoginName(loginName);
+  const issued = await prepareIssuedPassword(password);
+  let requestedEmail = normalizePersonEmail(email);
+  if (requestedEmail !== null && isSystemAccountEmail(requestedEmail)) {
+    throw invalidBody('email');
+  }
+
+  const result = await withSiteTransaction(siteCode, async (client) => {
     const found = await client.query(
       `
         SELECT sp.id, sp.site_code, sp.user_code, sp.full_name, sp.phone, sp.email, sp.is_active,
@@ -1425,100 +1641,99 @@ export async function provisionPersonAccount({
     const person = found.rows?.[0];
     if (!person) throw PERSON_NOT_FOUND();
 
-    // 1. Kişinin zaten kullanıcı hesabı varsa: şifresini ve istenirse kullanıcı adını güncelle
+    // 1. Kişinin zaten kullanıcı hesabı varsa: şifresini ve istenirse kullanıcı adını güncelle (yalnız yönetimce açılmış sakin hesabı).
     if (person.user_code != null) {
-      let finalLoginName = person.login_name;
-      if (loginName && loginName.trim() && loginName.trim().toLowerCase() !== (person.login_name || '').toLowerCase()) {
-        finalLoginName = await ensureUniqueLoginName({
-          db: client,
-          desiredLoginName: loginName.trim().toLowerCase(),
-          siteCode,
-          excludeUserCode: person.user_code,
-        });
-      }
-      const rawPassword = (password && String(password).trim().length > 0)
-        ? String(password).trim()
-        : '1234';
-      const passwordHash = await hashPassword(rawPassword);
-
-      await client.query(
-        `
-          UPDATE users
-          SET password_hash = $1,
-              login_name = COALESCE($2, login_name),
-              must_change_password = TRUE,
-              updated_at = NOW()
-          WHERE user_code = $3
-        `,
-        [passwordHash, finalLoginName, person.user_code],
-      );
+      const applied = await applyIssuedPassword(client, {
+        siteCode,
+        userCode: Number(person.user_code),
+        actor,
+        passwordHash: issued.hash,
+        desiredLoginName: requestedLoginName,
+      });
 
       await audit(client, actor, 'person.account_password_reset', siteCode, 'person', id, {
-        user_code: person.user_code,
-        login_name: finalLoginName,
+        user_code: Number(applied.user.user_code),
+        login_name: applied.user.login_name,
+        ...applied.revoked,
       });
 
       return {
-        ok: true,
-        user_code: Number(person.user_code),
-        login_name: finalLoginName,
-        temp_password: rawPassword,
-        is_new: false,
+        applied,
+        body: {
+          ok: true,
+          user_code: Number(applied.user.user_code),
+          login_name: applied.user.login_name,
+          temp_password: issued.plain,
+          is_new: false,
+        },
       };
     }
 
     // 2. Kişinin hesabı yoksa (hesapsız): Yeni kullanıcı hesabı oluştur
     const personFullName = (person.full_name || '').trim();
-    const candidateName = (loginName && loginName.trim().length > 0)
-      ? loginName.trim().toLowerCase()
-      : (personFullName ? slugifyLoginName(personFullName) : `sakin.${id}`);
+    const candidateName = requestedLoginName ?? suggestLoginName(personFullName, id);
 
-    const finalLoginName = await ensureUniqueLoginName({
-      db: client,
-      desiredLoginName: candidateName,
-      siteCode,
-    });
+    // Hesap e-postası: istekte verilen, yoksa kişi kaydındaki (CRM) adres; normalize edilir, dahili / sistem adresleri kullanılmaz. Başka bir hesapta
+    // zaten kayıtlıysa o adres KULLANILMAZ (dahili adrese düşülür): hesabın var olup olmadığı yönetici yanıtından anlaşılamaz.
+    if (requestedEmail === null && person.email) {
+      try {
+        requestedEmail = normalizePersonEmail(person.email);
+      } catch (_invalidStoredEmail) {
+        requestedEmail = null;
+      }
+      if (requestedEmail !== null && isSystemAccountEmail(requestedEmail)) {
+        requestedEmail = null;
+      }
+    }
+    let accountEmail = requestedEmail;
+    if (accountEmail !== null) {
+      const taken = await client.query(`SELECT 1 FROM users WHERE LOWER(email) = $1 LIMIT 1`, [accountEmail]);
+      if (taken.rows?.[0]) {
+        accountEmail = null;
+      }
+    }
 
-    const rawPassword = (password && String(password).trim().length > 0)
-      ? String(password).trim()
-      : '1234';
-    const passwordHash = await hashPassword(rawPassword);
-
-    const internalEmail = generateInternalApartmentEmail({
-      loginName: finalLoginName,
-      apartmentId: id,
-      siteCode,
-    });
-    const userEmail = (email && email.trim() && !email.trim().endsWith('@ahbu.local'))
-      ? email.trim()
-      : (person.email && !person.email.endsWith('@ahbu.local') ? person.email : internalEmail);
-
-    const userInsert = await client.query(
-      `
-        INSERT INTO users (
-          full_name,
-          email,
-          phone_number,
-          login_name,
-          password_hash,
-          role,
-          must_change_password,
-          is_active,
-          email_verified,
-          approval_status
-        ) VALUES (
-          $1, $2, $3, $4, $5, 'APARTMENT_ADMIN', TRUE, TRUE, TRUE, 'approved'
-        ) RETURNING user_code
-      `,
-      [
-        personFullName || 'Daire Sakini',
-        userEmail,
-        person.phone || null,
-        finalLoginName,
-        passwordHash,
-      ],
-    );
-    const newUserCode = Number(userInsert.rows[0].user_code);
+    let finalLoginName = null;
+    const insertUser = (chosenLoginName) => {
+      finalLoginName = chosenLoginName;
+      return client.query(
+        `
+          INSERT INTO users (
+            full_name,
+            email,
+            phone_number,
+            login_name,
+            password_hash,
+            role,
+            must_change_password,
+            is_active,
+            email_verified,
+            approval_status
+          ) VALUES (
+            $1, $2, $3, $4, $5, 'apartment_owner', TRUE, TRUE, $6, 'approved'
+          ) RETURNING user_code
+        `,
+        [
+          personFullName || 'Daire Sakini',
+          accountEmail ?? generateInternalApartmentEmail({ loginName: chosenLoginName, apartmentId: id, siteCode }),
+          person.phone || null,
+          chosenLoginName,
+          issued.hash,
+          // Yönetimin açtığı hesap doğrulanmış açılır (bkz. işlev açıklaması); aksi hâlde kullanıcı adı + geçici şifre girişi 403 olur.
+          true,
+        ],
+      );
+    };
+    let created;
+    try {
+      created = await writeWithUniqueLoginName(client, { desired: candidateName, siteCode }, insertUser);
+    } catch (error) {
+      if (error?.code === '23505' && /email/i.test(constraintOf(error))) {
+        throw new PlatformError(409, 'ACCOUNT_EMAIL_TAKEN', 'Bu e-posta adresiyle kayıtlı bir hesap zaten var.');
+      }
+      throw error;
+    }
+    const newUserCode = Number(created.rows[0].user_code);
 
     // site_people kaydını hesaba bağla (CRM kuralları gereği ad/telefon/email users'tan okunacağı için temizlenir)
     await client.query(
@@ -1530,36 +1745,27 @@ export async function provisionPersonAccount({
       [newUserCode, id],
     );
 
-    // Kişinin aktif daire ilişkileri varsa daire adminliği ve üyelik bağla
+    // Kişinin aktif daire ilişkileri varsa daire erişimi (mevcut onay akışıyla AYNI kural: grantApartmentAccess) ve sakin göstergesi bağla
     const currentApts = await client.query(
       `
-        SELECT ar.apartment_id, a.resident_user_code
+        SELECT ar.apartment_id
         FROM apartment_residencies ar
-        JOIN apartments a ON a.id = ar.apartment_id
         WHERE ar.person_id = $1 AND ar.is_current = TRUE
+        ORDER BY ar.apartment_id
       `,
       [id],
     );
-
     for (const apt of currentApts.rows) {
+      await grantApartmentAccess(client, { siteCode, apartmentId: Number(apt.apartment_id), userCode: newUserCode });
+      // Hesap bu dairenin sakin göstergesi olduysa (gösterge boştu) "yönetimin verdiği PIN" işareti kurulur ve daire etkinleşir.
       await client.query(
         `
-          INSERT INTO apartment_memberships (apartment_id, user_code, role, is_active)
-          VALUES ($1, $2, 'APARTMENT_ADMIN', TRUE)
-          ON CONFLICT (apartment_id, user_code) DO UPDATE SET is_active = TRUE
+          UPDATE apartments
+          SET resident_pin_issued = TRUE, resident_pin_code = NULL, is_active = TRUE
+          WHERE id = $1 AND resident_user_code = $2
         `,
         [apt.apartment_id, newUserCode],
       );
-      if (apt.resident_user_code == null) {
-        await client.query(
-          `
-            UPDATE apartments
-            SET resident_user_code = $1, resident_pin_issued = TRUE, is_active = TRUE
-            WHERE id = $2
-          `,
-          [newUserCode, apt.apartment_id],
-        );
-      }
     }
 
     await audit(client, actor, 'person.account_created', siteCode, 'person', id, {
@@ -1568,17 +1774,29 @@ export async function provisionPersonAccount({
     });
 
     return {
-      ok: true,
-      user_code: newUserCode,
-      login_name: finalLoginName,
-      temp_password: rawPassword,
-      is_new: true,
+      applied: null,
+      body: {
+        ok: true,
+        user_code: newUserCode,
+        login_name: finalLoginName,
+        temp_password: issued.plain,
+        is_new: true,
+        // Gerçek e-posta yazıldıysa sahibi doğrulayana (Google girişi / "Şifremi unuttum") kadar parolayla giriş yapılamaz.
+        email_verification_required: false,
+      },
     };
   });
+
+  if (result.applied) {
+    await afterIssuedPassword(siteCode, result.applied);
+  }
+  return result.body;
 }
 
 /**
  * Kişinin geçici şifresini / PIN kodunu doğrudan sıfırlayıp ekranda yöneticinin sakine vermesi için döndürür.
+ * YALNIZ yönetimce açılmış sakin hesabı için (evaluateManagedAccount; aksi halde 409). Eski parolayla edinilmiş karekod / misafir geçişi /
+ * telefon bildirimi kayıtları kapanır, giriş kilitleri açılır.
  */
 export async function resetPersonPinDirect({
   siteCode,
@@ -1588,7 +1806,11 @@ export async function resetPersonPinDirect({
   const id = parsePositiveId(personId);
   if (id === null) throw PERSON_NOT_FOUND();
 
-  return await withSiteTransaction(siteCode, async (client) => {
+  // Parola ve özeti kilitlerden ÖNCE hazırlanır (bcrypt kilit tutarken CPU harcamasın).
+  const pinCode = generateApartmentPin();
+  const passwordHash = await hashPassword(pinCode);
+
+  const applied = await withSiteTransaction(siteCode, async (client) => {
     const found = await client.query(
       `
         SELECT sp.id, sp.user_code, u.login_name
@@ -1602,35 +1824,118 @@ export async function resetPersonPinDirect({
     const person = found.rows?.[0];
     if (!person) throw PERSON_NOT_FOUND();
     if (!person.user_code) {
-      const err = new Error('Bu kişinin henüz bir hesabı bulunmuyor. Önce hesap tanımlayın.');
-      err.statusCode = 400;
-      throw err;
+      throw new PlatformError(400, 'PERSON_NO_ACCOUNT', 'Bu kişinin henüz bir hesabı bulunmuyor. Önce hesap tanımlayın.');
     }
 
-    const pinCode = generateApartmentPin();
-    const passwordHash = await hashPassword(pinCode);
-
-    await client.query(
-      `
-        UPDATE users
-        SET password_hash = $1,
-            must_change_password = TRUE,
-            updated_at = NOW()
-        WHERE user_code = $2
-      `,
-      [passwordHash, person.user_code],
-    );
-
-    await audit(client, actor, 'person.pin_reset', siteCode, 'person', id, {
-      user_code: person.user_code,
-      login_name: person.login_name,
+    const result = await applyIssuedPassword(client, {
+      siteCode,
+      userCode: Number(person.user_code),
+      actor,
+      passwordHash,
     });
 
-    return {
-      ok: true,
-      pin_code: pinCode,
-      login_name: person.login_name,
-    };
+    await audit(client, actor, 'person.pin_reset', siteCode, 'person', id, {
+      user_code: Number(person.user_code),
+      login_name: result.user.login_name,
+      ...result.revoked,
+    });
+    return result;
+  });
+
+  await afterIssuedPassword(siteCode, applied);
+  return {
+    ok: true,
+    pin_code: pinCode,
+    login_name: applied.user.login_name,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Daire sakini uçları (PATCH /manager|admin/apartments/:id/resident): hesap + "mükerrer kişi" bağlama
+// ---------------------------------------------------------------------------
+
+/**
+ * Yeni açılan daire sakini hesabını, dairedeki hesapsız güncel kişiyle bağlar (mükerrer kişi doğmasın). Ancak YALNIZ ad ya da e-posta
+ * eşleşen TEK aday varsa: kimliği eşleşmeyen kişiler asla bağlanmaz; birden çok aday ya da bağ çakışması (UNIQUE) varsa atlanır (hata vermez,
+ * eşitleme sonradan ayrı kişi açar). Bağlama SAVEPOINT içindedir: başarısızlığı hesap açmayı geri almaz.
+ * @returns {Promise<number|null>} bağlanan kişi kimliği ya da null
+ */
+async function linkNewResidentToPerson(client, { siteCode, apartmentId, userCode, fullName, email }) {
+  const candidates = await client.query(
+    `
+      SELECT sp.id, sp.full_name, sp.email
+      FROM apartment_residencies ar
+      INNER JOIN site_people sp ON sp.id = ar.person_id
+      WHERE ar.apartment_id = $1
+        AND ar.is_current = TRUE
+        AND sp.site_code = $2
+        AND sp.user_code IS NULL
+        AND sp.is_active = TRUE
+      ORDER BY sp.id
+      FOR UPDATE OF sp
+    `,
+    [apartmentId, siteCode],
+  );
+  const wantedName = foldText(String(fullName ?? '').replace(/\s+/g, ' ').trim());
+  const wantedEmail = typeof email === 'string' && email.trim() !== '' ? email.trim().toLowerCase() : null;
+  const matches = (candidates.rows ?? []).filter((row) => {
+    const nameMatch = wantedName !== '' && foldText(String(row.full_name ?? '').replace(/\s+/g, ' ').trim()) === wantedName;
+    const emailMatch = wantedEmail !== null && typeof row.email === 'string' && row.email.trim().toLowerCase() === wantedEmail;
+    return nameMatch || emailMatch;
+  });
+  if (matches.length !== 1) {
+    return null;
+  }
+  await client.query('SAVEPOINT resident_person_link');
+  try {
+    const linked = await client.query(
+      `
+        UPDATE site_people
+        SET user_code = $1, full_name = NULL, phone = NULL, email = NULL, updated_at = NOW()
+        WHERE id = $2 AND site_code = $3 AND user_code IS NULL AND is_active = TRUE
+        RETURNING id
+      `,
+      [userCode, matches[0].id, siteCode],
+    );
+    await client.query('RELEASE SAVEPOINT resident_person_link');
+    return linked.rows?.[0] ? Number(linked.rows[0].id) : null;
+  } catch (_linkConflict) {
+    await client.query('ROLLBACK TO SAVEPOINT resident_person_link');
+    await client.query('RELEASE SAVEPOINT resident_person_link');
+    return null;
+  }
+}
+
+/**
+ * Daire sakini hesabını açar/günceller (provisionApartmentResident) ve — YALNIZ yeni hesap açıldıysa (apartment.issued_pin_code dolu) — AYNI
+ * transaction'da (site kilidi altında) hesabı dairenin erişimine (grantApartmentAccess: aktif yönetici yoksa APARTMENT_ADMIN, varsa FAMILY_MEMBER)
+ * ve ad/e-posta eşleşen TEK hesapsız kişiye bağlar. Mevcut hesabın düzenlenmesi üyelik / kişi bağlantısına DOKUNMAZ (eskiden her düzenlemede
+ * dairenin TÜM hesapsız kişileri kimlik denetimsiz bağlanır ve üyelik yeniden etkinleştirilirdi).
+ * Fırlatır: Error('APARTMENT_NOT_FOUND') (rotalar 404'e çevirir), provisionApartmentResident hataları (23505, APARTMENT_PASSWORD_REQUIRED).
+ */
+export async function provisionResidentAndLinkPerson({ apartmentId, siteCode = null, fullName, loginName, password, email, phoneNumber, isActive }) {
+  let resolvedSite = siteCode;
+  if (resolvedSite === null || resolvedSite === undefined) {
+    const site = await pool.query(`SELECT site_code FROM apartments WHERE id = $1 LIMIT 1`, [apartmentId]);
+    if (!site.rows?.[0]) {
+      throw new Error('APARTMENT_NOT_FOUND');
+    }
+    resolvedSite = Number(site.rows[0].site_code);
+  }
+  return withSiteTransaction(resolvedSite, async (client) => {
+    const apartment = await provisionApartmentResident({ apartmentId, fullName, loginName, password, email, phoneNumber, isActive, db: client });
+    if (apartment?.issued_pin_code && apartment.resident_user_code) {
+      const userCode = Number(apartment.resident_user_code);
+      await grantApartmentAccess(client, { siteCode: Number(apartment.site_code), apartmentId, userCode });
+      await linkNewResidentToPerson(client, {
+        siteCode: Number(apartment.site_code),
+        apartmentId,
+        userCode,
+        fullName,
+        email,
+      });
+    }
+    return apartment;
   });
 }
 

@@ -51,8 +51,8 @@ export const WARNING_CODES = Object.freeze([
   'VALUE_KEPT',
   'FINANCE_RECORDS',
   'ROUNDED',
-  'AREA_UNUSUAL',
-  'NET_GT_GROSS',
+  'AREA_COLUMN_IGNORED',
+  'APARTMENT_NOT_APPLIED',
   'FUTURE_DATE',
   'NO_VALUES',
   'OPENING_ZERO',
@@ -193,11 +193,11 @@ export function issueMessage(code, ctx = {}) {
     case 'ROUNDED':
       text = `${label} 2 ondalığa yuvarlandı.`;
       break;
-    case 'AREA_UNUSUAL':
-      text = `${label} olağandışı görünüyor (${value} m²). Kontrol edin.`;
+    case 'AREA_COLUMN_IGNORED':
+      text = 'm² (Brüt/Net) sütunları artık kullanılmıyor; yok sayıldı.';
       break;
-    case 'NET_GT_GROSS':
-      text = 'Net m², brüt m²’den büyük. Kontrol edin.';
+    case 'APARTMENT_NOT_APPLIED':
+      text = `Daire bilgileri uygulanmadı: satır ${ctx.line} hatalı. Önce onu düzeltin.`;
       break;
     case 'FUTURE_DATE':
       text = `${label} gelecekte: ${value}.`;

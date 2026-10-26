@@ -37,8 +37,6 @@ Map<String, dynamic> specJson({int version = 1}) => <String, dynamic>{
         _col('daire_no', 'Daire No', required: true, aliases: ['Daire', 'Kapı No', 'No'], hint: '5, 05, Daire 5'),
         _col('kat', 'Kat', type: 'number', hint: 'Zemin, bodrum ya da sayı'),
         _col('tip', 'Tip', maxLength: 40, aliases: ['Daire Tipi', 'Kategori']),
-        _col('brut_m2', 'Brüt m²', type: 'number', aliases: ['Brüt Alan', 'Brüt m2']),
-        _col('net_m2', 'Net m²', type: 'number', aliases: ['Net Alan', 'Net m2']),
         _col('arsa_payi_pay', 'Arsa Payı (Pay)', type: 'number'),
         _col('arsa_payi_payda', 'Arsa Payı (Payda)', type: 'number'),
         _col('sorumlu', 'Borç Sorumlusu', type: 'enum', aliases: ['Sorumlu']),

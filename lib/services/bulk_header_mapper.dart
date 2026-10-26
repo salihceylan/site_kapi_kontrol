@@ -274,8 +274,15 @@ class ExtractResult {
   const ExtractResult(this.rows, this.blankRows);
 
   final List<ImportRow> rows;
+
+  /// Atlanan satır sayısı: tamamen boş satırlar ile yalnız ön doldurulmuş anahtar sütunları (blok / daire no)
+  /// dolu, yüklenecek başka verisi olmayan satırlar. Önizlemede gösterilir.
   final int blankRows;
 }
+
+/// «Hepsi bir arada» dosyasındaki daire bilgisi sütunları (blok ve daire no anahtardır, veri sayılmaz): bunlardan biri
+/// dolu satır kişi verisi olmasa da yüklenecek veridir (yalnız daire bilgisi güncellenir).
+const Set<String> _apartmentDataKeys = <String>{'kat', 'tip', 'arsa_payi_pay', 'arsa_payi_payda', 'sorumlu'};
 
 /// Başlık satırından sonraki satırları eşlenmiş sütunlarla sunucu satırlarına çevirir. Tamamen boş satırlar
 /// atılır. [maxRows] aşılırsa [SpreadsheetException].
@@ -314,7 +321,9 @@ ExtractResult extractImportRows(
           cells['telefon'] != null ||
           cells['e_posta'] != null ||
           cells['plaka'] != null;
-      if (!hasPerson) {
+      // Hepsi bir arada: kişi verisi olmayan ama daire bilgisi (kat, tip, arsa payı, sorumlu) dolu satır SESSİZCE atılmaz.
+      final hasApartmentData = fields.any((f) => _apartmentDataKeys.contains(f.$1.key) && cells[f.$1.key] != null);
+      if (!hasPerson && !hasApartmentData) {
         blank++;
         continue;
       }

@@ -7,6 +7,10 @@
 import { applyApartmentPrimaryAdmin } from '../services/membership_service.js';
 import { ACCOUNT_KIND_SQL } from './people_common.js';
 import { resolveApartmentRoles } from './apartment_mgmt_rules.js';
+import { endOpenDelegation } from './apartment_delegation_close.js';
+
+// Acik devri kapatma kurali (ve ayrilirken kapatma: closeDelegationsOnLeave) bagimsiz yaprak modulde; geriye uyumlu yeniden disa aktarim.
+export { endOpenDelegation };
 
 const FALLBACK_NAME = 'Silinmiş hesap';
 
@@ -84,14 +88,6 @@ export async function loadApartmentState(db, apartmentId, { lock = false } = {})
 export async function openDelegation(db, apartmentId) {
   const r = await db.query(`SELECT * FROM apartment_admin_delegations WHERE apartment_id = $1 AND ended_at IS NULL LIMIT 1`, [apartmentId]);
   return r.rows?.[0] ?? null;
-}
-
-/** Acik devri kapatir (idempotent). */
-export async function endOpenDelegation(client, apartmentId, reason) {
-  await client.query(
-    `UPDATE apartment_admin_delegations SET state = 'ended', ended_at = NOW(), end_reason = $2 WHERE apartment_id = $1 AND ended_at IS NULL`,
-    [apartmentId, String(reason).slice(0, 60)],
-  );
 }
 
 /** Kiraciya yonetim devri kaydi acar (eski acik kayit kapanir). state: 'active' (kiracinin uyeligi var) | 'pending_account' (hesabi yok). */

@@ -39,6 +39,7 @@ import {
 import { createUser, updateUserByCode, userExists } from '../services/user_service.js';
 import { rejectWeakPassword } from '../security/password_policy.js';
 import { resolveManagementTypeInput } from '../modules/management_types.js';
+import { provisionResidentAndLinkPerson } from '../modules/people_service.js';
 import {
   listSitesForAuthUser,
   getSiteByCode,
@@ -58,7 +59,6 @@ import {
 import {
   APARTMENT_PIN_ERROR_MESSAGES,
   APARTMENT_PIN_NOT_STORED_MESSAGE,
-  provisionApartmentResident,
   apartmentPinResetBody,
   resetApartmentPin,
   resetApartmentResident,
@@ -545,6 +545,14 @@ adminRouter.delete('/admin/users/:id', authRequired, requireSuperUser, async (re
     await runOptionalStep(client, 'DELETE FROM door_access_overrides WHERE user_code = $1', [targetCode]);
     await runOptionalStep(client, 'UPDATE door_access_overrides SET granted_by_user_code = NULL WHERE granted_by_user_code = $1', [targetCode]);
     await runOptionalStep(client, 'UPDATE door_access_logs SET user_code = NULL WHERE user_code = $1', [targetCode]);
+
+    // 7b. Kullaniciya bagli kimlik / bildirim kayitlari (FK CASCADE ayrica 077'de eklenir; burada ACIK temizlik): Google/Apple kimlikleri,
+    //     tarayici bildirim abonelikleri, SMS giris kodlari, telefon bildirimi cihazlari ve kuyrugu (push_outbox'ta FK yok). Tablo yoksa adim atlanir.
+    await runOptionalStep(client, 'DELETE FROM user_oauth_identities WHERE user_code = $1', [targetCode]);
+    await runOptionalStep(client, 'DELETE FROM web_push_subscriptions WHERE user_code = $1', [targetCode]);
+    await runOptionalStep(client, 'DELETE FROM sms_login_codes WHERE user_code = $1', [targetCode]);
+    await runOptionalStep(client, 'DELETE FROM push_devices WHERE user_code = $1', [targetCode]);
+    await runOptionalStep(client, 'DELETE FROM push_outbox WHERE user_code = $1', [targetCode]);
 
     // 8. OTA guncelleme isleri
     await runOptionalStep(client, 'UPDATE ota_update_jobs SET requested_by_user_code = NULL WHERE requested_by_user_code = $1', [targetCode]);
@@ -1209,7 +1217,9 @@ adminRouter.patch('/admin/apartments/:id/resident', authRequired, requireSuperUs
   }
 
   try {
-    const apartment = await provisionApartmentResident({
+    // Hesap açma/düzenleme + (yalnız YENİ hesapta) dairenin erişimi ve ad/e-posta eşleşen TEK hesapsız kişiye bağlama: tek transaction
+    // (mükerrer kişi oluşmasını önler; kimliği eşleşmeyen kişiler bağlanmaz).
+    const apartment = await provisionResidentAndLinkPerson({
       apartmentId,
       fullName,
       loginName,
@@ -1218,33 +1228,6 @@ adminRouter.patch('/admin/apartments/:id/resident', authRequired, requireSuperUs
       phoneNumber,
       isActive,
     });
-
-    // Eğer dairede önceden hesapsız bir sakin (site_people) varsa,
-    // yeni açılan kullanıcı hesabını doğrudan bu mevcut sakine bağla (mükerrer kişi oluşmasını önler).
-    if (apartment.resident_user_code) {
-      await pool.query(
-        `
-          UPDATE site_people sp
-          SET user_code = $1, full_name = NULL, phone = NULL, email = NULL, updated_at = NOW()
-          FROM apartment_residencies ar
-          WHERE ar.apartment_id = $2
-            AND ar.is_current = TRUE
-            AND ar.person_id = sp.id
-            AND sp.user_code IS NULL
-            AND sp.is_active = TRUE
-        `,
-        [Number(apartment.resident_user_code), apartmentId],
-      );
-      await pool.query(
-        `
-          INSERT INTO apartment_memberships (apartment_id, user_code, role, is_active)
-          VALUES ($1, $2, 'APARTMENT_ADMIN', TRUE)
-          ON CONFLICT (apartment_id, user_code)
-          DO UPDATE SET role = 'APARTMENT_ADMIN', is_active = TRUE, updated_at = NOW()
-        `,
-        [apartmentId, Number(apartment.resident_user_code)],
-      );
-    }
     await rotateLocalControlTokensForSite(
       Number(apartment.site_code),
       'apartment_resident_changed',

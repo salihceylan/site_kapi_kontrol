@@ -6,7 +6,7 @@
 import { createHash } from 'node:crypto';
 import { PlatformError } from './errors.js';
 import { todayIso } from './people_common.js';
-import { CELL_HARD_LIMIT, SPEC_VERSION, columnKeysOf, maxRows } from './bulk_import_spec.js';
+import { CELL_HARD_LIMIT, SPEC_VERSION, acceptedKeysOf, maxRows } from './bulk_import_spec.js';
 
 const MAX_ABS_NUMBER = 1e15;
 const MAX_LINE_NUMBER = 10_000_000;
@@ -93,7 +93,7 @@ export function validateImportBody(body, kind, { commit = false, env = process.e
   if (rawRows.length > limit) {
     throw new PlatformError(400, 'IMPORT_TOO_MANY_ROWS', `Bir seferde en çok ${limit} satır yüklenebilir.`);
   }
-  const allowed = columnKeysOf(kind);
+  const allowed = acceptedKeysOf(kind);
   const rows = [];
   let previousN = 0;
   for (let index = 0; index < rawRows.length; index += 1) {

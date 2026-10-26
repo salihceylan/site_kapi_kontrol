@@ -203,6 +203,33 @@ export function normalizePersonEmail(value, field = 'email') {
   return text;
 }
 
+export const LOGIN_NAME_MIN = 3;
+export const LOGIN_NAME_MAX = 40;
+// Kullanıcı (giriş) adı: yalnız küçük harf, rakam, nokta, alt çizgi, tire. '@' YOK: giriş sorgusu e-posta VE kullanıcı adıyla eşleşir; kullanıcı adı
+// başkasının e-postasına benzeyemesin (hesap ele geçirme / belirsiz eşleşme).
+export const LOGIN_NAME_PATTERN = /^[a-z0-9._-]{3,40}$/;
+
+/** Kullanıcı adı: kırpılır, küçük harfe çevrilir; boş/yok -> null; biçim uymazsa 400 INVALID_BODY. */
+export function normalizeLoginName(value, field = 'login_name') {
+  if (value === undefined || value === null) {
+    return null;
+  }
+  if (typeof value !== 'string') {
+    throw invalidBody(field, `${field} alanı geçersiz.`);
+  }
+  const text = value.trim().toLowerCase();
+  if (text === '') {
+    return null;
+  }
+  if (!LOGIN_NAME_PATTERN.test(text)) {
+    throw invalidBody(
+      field,
+      `${field} ${LOGIN_NAME_MIN}-${LOGIN_NAME_MAX} karakter olmalı; yalnız küçük harf, rakam, nokta, alt çizgi ve tire kullanılabilir (@ kullanılamaz).`,
+    );
+  }
+  return text;
+}
+
 /** İsteğe bağlı not (<=500 karakter); ortak not normalleştirici. */
 export function normalizePersonNote(value, field = 'note') {
   const note = normalizeRequestNote(value, field);

@@ -33,6 +33,25 @@ const asCode = (value) => {
 };
 
 /**
+ * Acik yonetim devri (apartment_admin_delegations) admini YALNIZ su durumda belirler; aksi halde kayit BAYAT sayilir ve yok hukmundedir
+ * (satir kapatilmadan devralan gitmis / pasiflesmis olabilir; eskiden devir aktif APARTMENT_ADMIN uyeligini kosulsuz eziyordu):
+ *  - devralan hesapliysa (admin_user_code) bu dairede AKTIF uyeligi vardir,
+ *  - kaynak 'tenant_delegated' ise (malik -> kiraci devri) devralan GUNCEL KIRACIDIR; diger kaynaklarda ('manager' vb.) devralan en az guncel
+ *    bir sakindir (site yoneticisi malik / aile uyesini de atayabilir),
+ *  - hesapsiz devralanda (pending_account) kisi kaydi guncel iliskilerde bulunur.
+ */
+function delegationApplies(delegation, { members, residencies, tenant }) {
+  if (!delegation || delegation.ended_at != null) return false;
+  const delegateCode = asCode(delegation.admin_user_code);
+  const delegatePerson = asCode(delegation.admin_person_id);
+  if (delegateCode === null && delegatePerson === null) return false;
+  if (delegateCode !== null && !members.some((m) => asCode(m.user_code) === delegateCode)) return false;
+  const isSame = (r) => Boolean(r) && ((delegateCode !== null && asCode(r.user_code) === delegateCode) || (delegatePerson !== null && asCode(r.person_id) === delegatePerson));
+  if ((delegation.source ?? 'tenant_delegated') === 'tenant_delegated') return isSame(tenant);
+  return residencies.some(isSame);
+}
+
+/**
  * Bir dairenin rol durumu.
  * @param {{
  *   members: Array<{ user_code: number, role: string, is_active?: boolean, created_at?: any }>,
@@ -56,7 +75,7 @@ export function resolveApartmentRoles(state) {
   let adminSource = adminMember ? 'membership' : null;
 
   let adminPersonId = null;
-  if (delegation && delegation.ended_at == null) {
+  if (delegationApplies(delegation, { members, residencies, tenant })) {
     if (delegation.admin_user_code) {
       adminUserCode = asCode(delegation.admin_user_code);
       adminSource = delegation.source || 'delegation';

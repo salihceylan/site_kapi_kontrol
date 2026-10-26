@@ -20,6 +20,23 @@ export const SITE_LIMITS = Object.freeze({
 // PostgreSQL INTEGER (int4) üst sınırı: user_code gibi kolonlara taşma ile 500 döndürmemek için.
 export const PG_INT4_MAX = 2147483647;
 
+// Site adı tekillik indeksleri (23505 `error.constraint` adları): yeni (site_name_key işleviyle: büyük/küçük harf, Türkçe harf katlama, boşluk
+// farkı) ve eski (LOWER(TRIM(..)); yeni indeks kurulana dek ya da geri alınırsa görülebilir). Reddedilmiş (rejected) siteler tekillik dışıdır.
+export const SITE_NAME_UNIQUE_INDEXES = Object.freeze(['uq_sites_name_key', 'idx_sites_unique_name']);
+// Onay bekleyen başvuruların site adı tekillik indeksleri (yeni ve eski ad). Kullanıcının KENDİ bekleyen başvurusu (uq_site_applications_pending) AYRI kısıttır.
+export const SITE_APPLICATION_NAME_UNIQUE_INDEXES = Object.freeze([
+  'uq_site_applications_pending_name_key',
+  'idx_site_applications_pending_unique_name',
+]);
+
+export function siteNameTakenMessage(name) {
+  return `"${String(name ?? '').trim()}" adında bir site zaten mevcut. Her sitenin adı benzersiz olmalıdır.`;
+}
+
+export function siteApplicationNamePendingMessage(name) {
+  return `"${String(name ?? '').trim()}" adında onay bekleyen bir site başvurusu zaten bulunmaktadır. Lütfen farklı bir site adı belirleyin.`;
+}
+
 /**
  * Güvenli pozitif tamsayı kimliği ayrıştırıcı.
  * Number (isSafeInteger) veya yalnızca rakamlardan oluşan metin kabul eder; aksi halde null döner.
@@ -380,6 +397,17 @@ export function handleSiteMutationError(error, res, genericErrorMessage) {
   if (error?.code === '23505' && error?.constraint === 'idx_users_login_name_unique') {
     return res.status(409).json({ error: 'Daire kullanicisi hesabi uretilirken kullanici adi cakismasi oldu.' });
   }
+  // Site adı tekillik indeksleri (eşzamanlı çift istek ön denetimi geçtiğinde): doğru mesaj + makine okunur kod (eskiden "site kodu" çakışması deniyordu).
+  if (error?.code === '23505' && SITE_NAME_UNIQUE_INDEXES.includes(error?.constraint)) {
+    return res.status(409).json({ error: 'Bu adda bir site zaten mevcut. Her sitenin adı benzersiz olmalıdır.', code: 'SITE_NAME_EXISTS' });
+  }
+  if (error?.code === '23505' && SITE_APPLICATION_NAME_UNIQUE_INDEXES.includes(error?.constraint)) {
+    return res.status(409).json({
+      error: 'Bu adda onay bekleyen bir site başvurusu zaten bulunmaktadır. Lütfen farklı bir site adı belirleyin.',
+      code: 'SITE_APPLICATION_NAME_PENDING',
+    });
+  }
+  // Bilinmeyen tekillik kısıtı (ör. mqtt_site_id): ad dışı çakışma; ayrıntı sızdırılmaz.
   if (error?.code === '23505') {
     return res.status(409).json({ error: 'Site kodu olusturulurken cakisma oldu.' });
   }

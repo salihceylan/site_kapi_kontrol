@@ -28,10 +28,11 @@ void main() {
       expect(spec.maxBodyBytes, 5 * 1024 * 1024);
       final apt = spec.of(ImportKind.apartments)!;
       expect(apt.columns.map((c) => c.key), <String>[
-        'blok', 'daire_no', 'kat', 'tip', 'brut_m2', 'net_m2', 'arsa_payi_pay', 'arsa_payi_payda', 'sorumlu',
+        'blok', 'daire_no', 'kat', 'tip', 'arsa_payi_pay', 'arsa_payi_payda', 'sorumlu',
       ]);
       expect(apt.requiredColumns.map((c) => c.key), <String>['blok', 'daire_no']);
-      expect(apt.column('brut_m2')!.type, ImportColumnType.number);
+      expect(apt.column('arsa_payi_pay')!.type, ImportColumnType.number);
+      expect(apt.column('brut_m2'), isNull, reason: 'm² sütunları kaldırıldı');
       expect(apt.column('sorumlu')!.type, ImportColumnType.enumeration);
       final people = spec.of(ImportKind.people)!;
       expect(people.requiredColumns.map((c) => c.key), <String>['ad_soyad']);
@@ -40,6 +41,20 @@ void main() {
       expect(people.relationWords.keys, containsAll(<String>['owner', 'tenant', 'family_member', 'resident']));
       expect(spec.of(ImportKind.vehicles)!.requiredColumns.map((c) => c.key), <String>['plaka']);
       expect(apt.responsibleWords['both'], containsAll(<String>['İkisi', 'Her ikisi']));
+    });
+
+    test('hesap sütunları (sifre, kullanici_adi) YALNIZ kişi türlerinde tanımlıdır; araç, daire ve devir bakiyesi satırına eklenmez', () {
+      for (final kind in <ImportKind>[ImportKind.people, ImportKind.allInOne]) {
+        final keys = spec.of(kind)!.columns.map((c) => c.key).toSet();
+        expect(keys, containsAll(<String>['sifre', 'kullanici_adi']), reason: kind.apiValue);
+      }
+      for (final kind in <ImportKind>[ImportKind.vehicles, ImportKind.openingBalances, ImportKind.apartments]) {
+        final keys = spec.of(kind)!.columns.map((c) => c.key).toSet();
+        expect(keys.intersection(<String>{'sifre', 'kullanici_adi'}), isEmpty, reason: kind.apiValue);
+      }
+      for (final kind in ImportKind.values) {
+        expect(spec.of(kind)!.columns.any((c) => c.key == 'brut_m2' || c.key == 'net_m2'), isFalse, reason: kind.apiValue);
+      }
     });
 
     test('gerçek takma adlarla tipik Türkçe Excel başlıkları eşlenir', () {
@@ -63,17 +78,19 @@ void main() {
       final apt = spec.of(ImportKind.apartments)!;
       final table = SheetTable(
         rows: <SheetRow>[
-          const SheetRow(1, <Object?>['BLOK', 'DAİRE NO', 'BRÜT M2', 'NET M²', 'ARSAPAYI(PAY)', 'Arsa Payı Payda', 'SORUMLU']),
+          const SheetRow(1, <Object?>['BLOK', 'DAİRE NO', 'KAT', 'TİP', 'ARSAPAYI(PAY)', 'Arsa Payı Payda', 'SORUMLU', 'BRÜT M2']),
         ],
       );
-      final a = detectHeader(table, apt)!.mapping.assignment;
+      final found = detectHeader(table, apt)!;
+      final a = found.mapping.assignment;
       expect(a['blok'], 0);
       expect(a['daire_no'], 1);
-      expect(a['brut_m2'], 2);
-      expect(a['net_m2'], 3);
+      expect(a['kat'], 2);
+      expect(a['tip'], 3);
       expect(a['arsa_payi_pay'], 4);
       expect(a['arsa_payi_payda'], 5);
       expect(a['sorumlu'], 6);
+      expect(found.mapping.ignoredColumns(), <int>[7], reason: 'eski m² sütunu eşlenmez, yok sayılır (sunucuya gitmez)');
     });
   });
 
@@ -154,7 +171,8 @@ void main() {
       expect(text0, contains('Mal sahibi'));
       final csv = buildImportTemplate(spec: spec, kind: ImportKind.vehicles, format: ExportFormat.csv);
       final text = utf8.decode(csv.bytes.sublist(3));
-      expect(text, startsWith('Plaka;E-posta;Blok;Daire No;Ad Soyad;Not\r\n'));
+      // Zorunlu sütun «*» ile işaretlenir; isteğe bağlı «Not» şablonda gizlidir (kExcludedTemplateKeys).
+      expect(text, startsWith('Plaka*;E-posta;Blok;Daire No;Ad Soyad\r\n'));
     });
   });
 }

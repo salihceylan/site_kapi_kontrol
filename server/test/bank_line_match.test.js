@@ -2,7 +2,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { computeFingerprints, matchLine, outcomeOf, previewHash, summarize } from '../src/modules/bank_line_match.js';
+import { computeFingerprints, computeLegacyFingerprints, matchLine, outcomeOf, previewHash, summarize } from '../src/modules/bank_line_match.js';
 import { BANK_IMPORT_STATEMENTS } from '../src/modules/bank_import_schema.js';
 import { parseStatementBody } from '../src/modules/bank_import_common.js';
 
@@ -45,6 +45,24 @@ describe('matchLine sırası', () => {
   it('iki farklı daire kodu geçen açıklama eşleşmez', () => {
     assert.equal(matchLine(line({ description: 'A2 ve B3 icin' }), ctx), null);
   });
+  it('açıklamadaki daire kodu ile IBAN hafızası AYNI daireyi gösteriyorsa güçlü (iban)', () => {
+    const both = { ...ctx, ibans: new Map([['TR330006100519786457841326', [{ apartment_id: 8, party: 'owner', stale: false }]]]) };
+    const m = matchLine(line({ description: 'B3 aidat', counterparty_iban: 'TR330006100519786457841326' }), both);
+    assert.deepEqual([m.method, m.apartmentId, m.party, m.strength], ['iban', 8, 'owner', 'strong']);
+  });
+  it('ÇELİŞEN kanıt: açıklamadaki tekil daire kodu B (8), IBAN hafızası tek ve FARKLI daire A (9) -> eşleşme YOK (eskiden yanlış daireye strong)', () => {
+    // ctx: B3 -> daire 8; TR33... IBAN'ı -> daire 9 (tenant, bayat değil)
+    assert.equal(matchLine(line({ description: 'B3 aidat ekim', counterparty_iban: 'TR33 0006 1005 1978 6457 8413 26' }), ctx), null);
+    // sonuç sınıfı: eşleşme yok -> unmatched (otomatik tahsilat yazılmaz)
+    assert.equal(outcomeOf({ line: line({}), duplicate: false, match: null, linkedEntryId: null, ambiguousLink: false }), 'unmatched');
+  });
+  it('kod B + IBAN hafızası BAYAT ya da BİRDEN ÇOK daire: çelişki sayılmaz, kod zayıf eşleşir', () => {
+    const stale = matchLine(line({ description: 'B3 aidat', counterparty_iban: 'TR000000000000000000000001' }), ctx);
+    assert.deepEqual([stale.method, stale.apartmentId, stale.strength], ['code', 8, 'weak']);
+    const many = { ...ctx, ibans: new Map([['TR330006100519786457841326', [{ apartment_id: 9, party: 'tenant', stale: false }, { apartment_id: 10, party: 'owner', stale: false }]]]) };
+    const m = matchLine(line({ description: 'B3 aidat', counterparty_iban: 'TR330006100519786457841326' }), many);
+    assert.deepEqual([m.method, m.apartmentId, m.strength], ['code', 8, 'weak']);
+  });
 });
 
 describe('parmak izi, özet, hash', () => {
@@ -54,6 +72,29 @@ describe('parmak izi, özet, hash', () => {
     assert.equal(new Set(a).size, 3);
     assert.deepEqual(a, computeFingerprints(5, [l, { ...l, n: 2 }, line({ description: 'Başka' })]));
     assert.notEqual(a[0], computeFingerprints(6, [l])[0]);
+  });
+  it('banka referansı DOLUysa parmak izi açıklamadan BAĞIMSIZ: aynı ekstre PDF ve XLSX ta (farklı açıklama metni) aynı parmak izi', () => {
+    const pdf = line({ description: 'EFT GELEN GÜL-A2 AİDAT', bank_reference: 'REF 2026/10/0042' });
+    const xlsx = line({ description: 'Gelen EFT - Gul-A2 aidat ekim (ahmet yilmaz)', bank_reference: 'ref-2026-10-0042' });
+    assert.deepEqual(computeFingerprints(5, [pdf]), computeFingerprints(5, [xlsx]));
+    // valör / tutar / hesap / referans farkı yine ayırır
+    assert.notEqual(computeFingerprints(5, [pdf])[0], computeFingerprints(5, [{ ...pdf, bank_reference: 'REF 2026/10/0043' }])[0]);
+    assert.notEqual(computeFingerprints(5, [pdf])[0], computeFingerprints(5, [{ ...pdf, amount_minor: 150001 }])[0]);
+    assert.notEqual(computeFingerprints(5, [pdf])[0], computeFingerprints(5, [{ ...pdf, value_date: '2026-10-02' }])[0]);
+    assert.notEqual(computeFingerprints(5, [pdf])[0], computeFingerprints(6, [pdf])[0]);
+    // aynı referans + aynı tutar + aynı gün iki satır dosya içinde sıra numarası ile ayrılır
+    const twin = computeFingerprints(5, [pdf, { ...pdf, n: 2 }]);
+    assert.equal(new Set(twin).size, 2);
+  });
+  it('referans YOKSA parmak izi açıklamaya bağlı kalır (eski davranış); eski formül referanslı satırda açıklamayı da içerir', () => {
+    const a = line({ description: 'Aidat ekim' });
+    const b = line({ description: 'Başka açıklama' });
+    assert.notEqual(computeFingerprints(5, [a])[0], computeFingerprints(5, [b])[0]);
+    assert.deepEqual(computeFingerprints(5, [a]), computeLegacyFingerprints(5, [a]), 'referanssız satırda yeni = eski');
+    const withRef = line({ description: 'Aidat', bank_reference: 'R1' });
+    assert.notEqual(computeFingerprints(5, [withRef])[0], computeLegacyFingerprints(5, [withRef])[0]);
+    const withRefOtherText = { ...withRef, description: 'Aidat (PDF)' };
+    assert.notEqual(computeLegacyFingerprints(5, [withRef])[0], computeLegacyFingerprints(5, [withRefOtherText])[0], 'eski formül açıklamaya bağlıydı');
   });
   it('sonuç sınıfları ve özet', () => {
     const strong = { strength: 'strong' };

@@ -87,6 +87,8 @@ export async function listApartments(siteCode) {
     `,
     [siteCode],
   );
+  // area_m2: m² sistemden kaldırıldı, HEP null (eski istemciler alanı okuyabilsin diye yalnız geriye uyum için döner). Isınma gideri alan payı artık
+  // arsa payına ya da eşit paya göre dağıtılır (metering_calc.areaShareItems).
   return { items: result.rows.map((row) => ({ id: Number(row.id), label: label(row), area_m2: row.area })) };
 }
 

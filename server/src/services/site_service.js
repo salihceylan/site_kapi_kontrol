@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import { pool } from '../db.js';
 import { recordApartmentDeletionSnapshot } from '../modules/apartment_deletion_audit.js';
 import { apartmentHasFinance, financeLockKey } from '../modules/finance_common.js';
+import { PlatformError } from '../modules/errors.js';
 import { peopleLockKey } from '../modules/people_sync.js';
 import { APARTMENT_ROW_SELECT_SQL, ensureSiteApartmentResidents } from './apartment_service.js';
 import {
@@ -11,6 +12,7 @@ import {
 } from './device_service.js';
 import { createUser } from './user_service.js';
 import { applyTrialToNewSubscription } from '../modules/management_company_service.js';
+import { assertSiteNameAvailable, siteNameConflictOrSame } from './site_setup_core.js';
 import { sendSuperUserSiteDeletionEmail, sendSiteManagerInvitationEmail } from '../mailer.js';
 import { describeErrorForLog } from '../security/log_redact.js';
 import {
@@ -50,60 +52,58 @@ export async function createSite({
     blockApartmentCounts,
   });
 
-  const duplicateCheck = await pool.query(
-    `SELECT site_code, name FROM sites WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) LIMIT 1`,
-    [name.trim()],
-  );
-  if (duplicateCheck.rows?.[0]) {
-    const error = new Error(`"${name.trim()}" adında bir site zaten mevcut. Her sitenin adı benzersiz olmalıdır.`);
-    error.statusCode = 409;
-    error.code = 'SITE_NAME_EXISTS';
-    throw error;
-  }
+  // Ad tekilliği: site_name_key (büyük/küçük harf, Türkçe harf ve boşluk farkına dayanıklı; reddedilmiş siteler hariç).
+  await assertSiteNameAvailable(pool, name);
 
-  const result = await pool.query(
-    `
-      INSERT INTO sites (
+  let result;
+  try {
+    result = await pool.query(
+      `
+        INSERT INTO sites (
+          name,
+          address,
+          city,
+          district,
+          block_count,
+          apartment_count,
+          door_count,
+          block_apartment_counts,
+          mqtt_site_id,
+          approval_status,
+          approved_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, generate_unique_mqtt_site_id(), $9, $10)
+        RETURNING
+          site_code AS id,
+          name,
+          address,
+          city,
+          district,
+          block_count,
+          apartment_count,
+          door_count,
+          approval_status,
+          approved_at,
+          mqtt_site_id,
+          created_at
+      `,
+      [
         name,
         address,
         city,
         district,
-        block_count,
-        apartment_count,
-        door_count,
-        block_apartment_counts,
-        mqtt_site_id,
-        approval_status,
-        approved_at
-      )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, generate_unique_mqtt_site_id(), $9, $10)
-      RETURNING
-        site_code AS id,
-        name,
-        address,
-        city,
-        district,
-        block_count,
-        apartment_count,
-        door_count,
-        approval_status,
-        approved_at,
-        mqtt_site_id,
-        created_at
-    `,
-    [
-      name,
-      address,
-      city,
-      district,
-      blockCount,
-      apartmentCount,
-      doorCount,
-      resolvedBlockApartmentCounts,
-      approvalStatus,
-      approvalStatus === 'approved' ? new Date() : null,
-    ],
-  );
+        blockCount,
+        apartmentCount,
+        doorCount,
+        resolvedBlockApartmentCounts,
+        approvalStatus,
+        approvalStatus === 'approved' ? new Date() : null,
+      ],
+    );
+  } catch (error) {
+    // Eşzamanlı çift istek ön denetimi geçerse ad indeksi 23505 verir -> SITE_NAME_EXISTS.
+    throw siteNameConflictOrSame(error, name);
+  }
   return result.rows[0];
 }
 
@@ -220,6 +220,12 @@ export async function updateSiteByCode({
     return null;
   }
 
+  // Ad değişikliği de oluşturmadakiyle AYNI tekillik denetiminden geçer (yeniden adlandırma tekil indeksi aşamaz; kendisi hariç, reddedilmiş siteler tekillik dışı).
+  // Site reddedilmiş duruma alınıyorsa ad artık tekillik kapsamında değildir.
+  if (name !== undefined && approvalStatus !== 'rejected') {
+    await assertSiteNameAvailable(pool, name, { excludeSiteCode: siteCode });
+  }
+
   // Yerel ağ (UDP/HTTP) ile açma KAPATILIYORSA önceki durumu oku: yalnızca açık -> kapalı geçişinde
   // cihazlardaki mevcut yerel token'lar döndürülür (aynı değeri tekrar kaydetmek cihaz trafiği üretmez).
   let localUdpWasEnabled = false;
@@ -232,40 +238,46 @@ export async function updateSiteByCode({
   }
 
   values.push(siteCode);
-  const result = await pool.query(
-    `
-      UPDATE sites
-      SET ${sets.join(', ')}
-      WHERE site_code = $${values.length}
-      RETURNING
-        site_code AS id,
-        name,
-        address,
-        city,
-        district,
-        block_count,
-        apartment_count,
-        door_count,
-        approval_status,
-        approved_at,
-        mqtt_site_id,
-        feature_qr_enabled,
-        feature_remote_open_enabled,
-        feature_local_udp_enabled,
-        feature_guest_pass_enabled,
-        qr_entry_active,
-        require_geofence,
-        geofence_latitude,
-        geofence_longitude,
-        geofence_radius_meters,
-        block_apartment_counts,
-        qr_totp_secret,
-        qr_rotation_seconds,
-        management_type,
-        created_at
-    `,
-    values,
-  );
+  let result;
+  try {
+    result = await pool.query(
+      `
+        UPDATE sites
+        SET ${sets.join(', ')}
+        WHERE site_code = $${values.length}
+        RETURNING
+          site_code AS id,
+          name,
+          address,
+          city,
+          district,
+          block_count,
+          apartment_count,
+          door_count,
+          approval_status,
+          approved_at,
+          mqtt_site_id,
+          feature_qr_enabled,
+          feature_remote_open_enabled,
+          feature_local_udp_enabled,
+          feature_guest_pass_enabled,
+          qr_entry_active,
+          require_geofence,
+          geofence_latitude,
+          geofence_longitude,
+          geofence_radius_meters,
+          block_apartment_counts,
+          qr_totp_secret,
+          qr_rotation_seconds,
+          management_type,
+          created_at
+      `,
+      values,
+    );
+  } catch (error) {
+    // Ön denetim ile UPDATE arasında aynı adı alan eşzamanlı istek: ad indeksi 23505 -> SITE_NAME_EXISTS.
+    throw siteNameConflictOrSame(error, name);
+  }
   const updatedSite = result.rows[0] || null;
 
   // door-open#7: politika "yerel ağ kapalı" olunca cihazdaki mevcut token geçerli kalmasın.
@@ -891,16 +903,7 @@ export async function createSiteWithStructure({
   try {
     await client.query('BEGIN');
 
-    const duplicateCheck = await client.query(
-      `SELECT site_code, name FROM sites WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) LIMIT 1`,
-      [name.trim()],
-    );
-    if (duplicateCheck.rows?.[0]) {
-      const error = new Error(`"${name.trim()}" adında bir site zaten mevcut. Her sitenin adı benzersiz olmalıdır.`);
-      error.statusCode = 409;
-      error.code = 'SITE_NAME_EXISTS';
-      throw error;
-    }
+    await assertSiteNameAvailable(client, name);
 
     const siteResult = await client.query(
       `
@@ -1074,10 +1077,70 @@ export async function createSiteWithStructure({
     return getSiteByCode(siteCode);
   } catch (error) {
     await client.query('ROLLBACK');
-    throw error;
+    // Eşzamanlı çift istek: ad indeksi 23505 -> SITE_NAME_EXISTS (diğer hatalar olduğu gibi).
+    throw siteNameConflictOrSame(error, name);
   } finally {
     client.release();
   }
+}
+
+// Daire azaltılırken silinecek dairenin DOLU sayılma nedenleri (etiketler 409 mesajında listelenir).
+const OCCUPIED_REASONS = Object.freeze([
+  ['has_legacy_resident', 'aktif sakin'],
+  ['has_residency', 'güncel sakin kaydı'],
+  ['has_membership', 'aktif üyelik'],
+  ['has_suspension', 'kapı erişimi askı kaydı'],
+  ['has_safety_request', 'açık güvenlik talebi'],
+]);
+const OCCUPIED_LABELS_MAX = 10;
+
+/**
+ * Daire sayısı azaltılırken silinecek dairelerden DOLU olan varsa işlemi 409 APARTMENT_OCCUPIED ile durdurur (çağıran ROLLBACK eder; hiçbir şey silinmemiştir).
+ * Dolu: aktif sakin (eski gösterge dahil), güncel sakin kaydı, aktif üyelik, kapı erişimi askı kaydı (mahkeme kararı vb.; açık ya da kaldırılmış) ya da çözülmemiş
+ * güvenlik talebi. Bu kayıtlar daire silinince CASCADE ile geri dönüşsüz giderdi (anlık görüntü yalnız sakin ilişkilerini yazar). Boş dairelerin silinmesi
+ * (anlık görüntü + denetim yolu) AYNEN sürer. Adaylar FOR UPDATE ile ve id sırasıyla (diğer çok daireli akışlarla aynı sıra) kilitlenir: eşzamanlı sakin
+ * ekleme (daire satırı kilidi) denetimle silme arasında araya giremez.
+ * @param {{ query: Function }} client açık transaction'daki bağlantı (site kilidi alınmış)
+ */
+async function assertApartmentsRemovable(client, apartmentIds) {
+  if (apartmentIds.length === 0) {
+    return;
+  }
+  const result = await client.query(
+    `
+      SELECT a.id, a.unit_label, b.block_name,
+             (a.resident_user_code IS NOT NULL) AS has_legacy_resident,
+             EXISTS (SELECT 1 FROM apartment_residencies r WHERE r.apartment_id = a.id AND r.is_current = TRUE) AS has_residency,
+             EXISTS (SELECT 1 FROM apartment_memberships m WHERE m.apartment_id = a.id AND m.is_active = TRUE) AS has_membership,
+             EXISTS (SELECT 1 FROM apartment_access_suspensions s WHERE s.apartment_id = a.id) AS has_suspension,
+             EXISTS (SELECT 1 FROM apartment_safety_requests q WHERE q.apartment_id = a.id AND q.status <> 'resolved') AS has_safety_request
+      FROM apartments a
+      LEFT JOIN site_blocks b ON b.id = a.block_id
+      WHERE a.id = ANY($1::bigint[])
+      ORDER BY a.id ASC
+      FOR UPDATE OF a
+    `,
+    [apartmentIds],
+  );
+  const occupied = [];
+  for (const row of result.rows ?? []) {
+    const reasons = OCCUPIED_REASONS.filter(([column]) => row[column] === true).map(([, label]) => label);
+    if (reasons.length > 0) {
+      const label = [row.block_name, row.unit_label].filter(Boolean).join(' ');
+      occupied.push({ id: Number(row.id), label, reasons });
+    }
+  }
+  if (occupied.length === 0) {
+    return;
+  }
+  const shown = occupied.slice(0, OCCUPIED_LABELS_MAX).map((item) => `${item.label} (${item.reasons.join(', ')})`);
+  const more = occupied.length > shown.length ? ` ve ${occupied.length - shown.length} daire daha` : '';
+  throw new PlatformError(
+    409,
+    'APARTMENT_OCCUPIED',
+    `Dolu daireler silinemez: ${shown.join('; ')}${more}. Önce sakinleri daireden çıkarın ve askı / güvenlik kayıtlarını sonuçlandırın; ya da daire sayısını azaltmayın.`,
+    { apartments: occupied.slice(0, OCCUPIED_LABELS_MAX) },
+  );
 }
 
 export async function syncSiteStructureCounts({
@@ -1133,6 +1196,21 @@ export async function syncSiteStructureCounts({
         [blockNameFromIndex(index), index + 1, Number(block.id)],
       );
     }
+
+    // Dolu daire koruması: silinecek TÜM daireler (bütün bloklar) hiçbir şey silinmeden ÖNCE denetlenir; biri bile doluysa 409 ve ROLLBACK.
+    const removalCandidateIds = [];
+    for (let index = 0; index < refreshedBlocks.length; index += 1) {
+      const target = resolvedBlockApartmentCounts[index] ?? 0;
+      const existing = await listBlockApartments(Number(refreshedBlocks[index].id), client);
+      if (target < existing.length) {
+        existing
+          .slice()
+          .sort((a, b) => Number(b.sort_order) - Number(a.sort_order))
+          .slice(0, existing.length - target)
+          .forEach((apartment) => removalCandidateIds.push(Number(apartment.id)));
+      }
+    }
+    await assertApartmentsRemovable(client, removalCandidateIds);
 
     for (let index = 0; index < refreshedBlocks.length; index += 1) {
       const block = refreshedBlocks[index];
@@ -1522,6 +1600,13 @@ export async function deleteSitePermanently(siteCode, authUser) {
     // Daire kullanıcıları (users) silinmez; yalnızca daireler ve site kayıtları silinir.
     await client.query(
       `UPDATE apartments SET resident_user_code = NULL WHERE site_code = $1`,
+      [code],
+    );
+
+    // Beyaz etiket tema (brand_themes) çok biçimli kapsam kullanır (scope_type, scope_id): sites'a yabancı anahtarı YOKTUR, CASCADE ile gitmez.
+    // Kalırsa silinen sitenin teması (logo dahil) yetim satır olarak kalır ve aynı kod yeniden kullanılırsa başka siteye uygulanırdı.
+    await client.query(
+      `DELETE FROM brand_themes WHERE scope_type = 'site' AND scope_id = $1`,
       [code],
     );
 

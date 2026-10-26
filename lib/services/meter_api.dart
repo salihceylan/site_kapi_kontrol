@@ -209,7 +209,7 @@ class MeterApi {
     'READING_OUT_OF_ORDER' => serverText ?? 'Okuma, komşu tarihlerdeki okumalarla tutarsız.',
     'READING_LOCKED' => 'Bu okuma faturalandırılmış bir döneme dahil olduğu için silinemez.',
     'PREVIEW_STALE' => 'Okumalar önizlemeden sonra değişti. Önizlemeyi yenileyip tekrar deneyin.',
-    'READINGS_INCOMPLETE' => 'Bazı dairelerin okuması ya da alanı eksik. Eksikleri tamamlayın ya da "eksikleri atla" seçeneğini işaretleyin.',
+    'READINGS_INCOMPLETE' => 'Bazı dairelerin okuması eksik. Eksikleri tamamlayın ya da "eksikleri atla" seçeneğini işaretleyin.',
     'BILLING_OVERLAP' => 'Seçilen tarih aralığı daha önce faturalandırılmış bir aralıkla çakışıyor.',
     'NO_CONSUMPTION' => 'Seçilen aralıkta dağıtılacak tüketim yok.',
     'NOTHING_TO_POST' => 'Borçlandırılacak daire yok.',

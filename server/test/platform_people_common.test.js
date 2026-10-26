@@ -13,6 +13,7 @@ import {
   foldSql,
   foldText,
   normalizeDateInput,
+  normalizeLoginName,
   normalizePersonEmail,
   normalizePersonName,
   normalizePersonPhone,
@@ -232,10 +233,12 @@ describe('POST people girdi ayristirma', () => {
 describe('PATCH apartments girdi ayristirma ve arsa payi', () => {
   it('gecerli degerler; null alani temizler; yalniz gonderilen anahtarlar doner', () => {
     assert.deepEqual(parseApartmentPatch({}), {});
+    // m2 alanlari sistemden KALDIRILDI (apartments.gross_area_m2 / net_area_m2 yok): gonderilse de yok sayilir, ne dogrulanir ne yazilir.
     assert.deepEqual(
       parseApartmentPatch({ floor: 3, gross_area_m2: 120.456, net_area_m2: null, category: '  3+1  ', responsible_party: 'tenant' }),
-      { floor: 3, gross_area_m2: 120.46, net_area_m2: null, category: '3+1', responsible_party: 'tenant' },
+      { floor: 3, category: '3+1', responsible_party: 'tenant' },
     );
+    assert.deepEqual(parseApartmentPatch({ gross_area_m2: 'gecersiz', net_area_m2: -1 }), {}, 'bilinmeyen (kaldirilmis) alanlar hata vermez, patch bos kalir');
     assert.deepEqual(parseApartmentPatch({ category: '   ' }), { category: null });
     assert.deepEqual(parseApartmentPatch({ category: null }), { category: null });
     assert.deepEqual(parseApartmentPatch({ floor: -1, unknown_field: 5 }), { floor: -1 });
@@ -246,9 +249,6 @@ describe('PATCH apartments girdi ayristirma ve arsa payi', () => {
       [{ floor: 1.5 }, /floor/],
       [{ floor: '3' }, /floor/],
       [{ floor: 501 }, /floor/],
-      [{ gross_area_m2: 0 }, /gross_area_m2/],
-      [{ gross_area_m2: -5 }, /gross_area_m2/],
-      [{ net_area_m2: '90' }, /net_area_m2/],
       [{ land_share_numerator: -1 }, /land_share_numerator/],
       [{ land_share_denominator: 0 }, /land_share_denominator/],
       [{ category: 'x'.repeat(41) }, /category/],
@@ -361,5 +361,28 @@ describe('people_common: hesap durumu TEK tanim (SQL ve JS birebir)', () => {
       flat(ACCOUNT_KIND_SQL),
       `( CASE WHEN u.user_code IS NULL OR ${DEAD_INTERNAL_ACCOUNT_SQL} THEN 'none' WHEN u.email LIKE '%@ahbu.local' THEN 'internal' ELSE 'registered' END )`,
     );
+  });
+});
+
+describe('normalizeLoginName: kullanici (giris) adi', () => {
+  it('kirpilir ve kucuk harfe cevrilir; bos/yok null', () => {
+    assert.equal(normalizeLoginName('  Salih.Ceylan_1  '), 'salih.ceylan_1');
+    assert.equal(normalizeLoginName(undefined), null);
+    assert.equal(normalizeLoginName(null), null);
+    assert.equal(normalizeLoginName('   '), null);
+    assert.equal(normalizeLoginName('a-b.c_d'), 'a-b.c_d');
+    assert.equal(normalizeLoginName('x'.repeat(40)), 'x'.repeat(40));
+    assert.equal(normalizeLoginName('abc'), 'abc');
+  });
+
+  it("'@' iceremez (e-posta ile karismasin); 3-40 karakter; yalniz a-z 0-9 . _ - ; aksi 400 INVALID_BODY ve alan adi mesajda", () => {
+    for (const bad of ['ab', 'x'.repeat(41), 'ali@example.com', 'ali veli', 'ali/veli', 'çağrı', 'a+b', 'ali,veli', 'ali\u0000x']) {
+      const result = codeOf(() => normalizeLoginName(bad));
+      assert.equal(result?.code, 'INVALID_BODY', JSON.stringify(bad));
+      assert.match(result.message, /login_name/);
+    }
+    assert.equal(codeOf(() => normalizeLoginName(12345))?.code, 'INVALID_BODY');
+    assert.equal(codeOf(() => normalizeLoginName({}))?.code, 'INVALID_BODY');
+    assert.match(codeOf(() => normalizeLoginName('a@b', 'kullanici'))?.message, /kullanici/);
   });
 });

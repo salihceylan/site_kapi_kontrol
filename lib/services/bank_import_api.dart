@@ -26,6 +26,8 @@ String? bankErrorMessage(String? code) {
       return 'Gelir/gider olarak ayrılmış satırlar var. Önce onları tek tek geri alın.';
     case 'BANK_IMPORT_REVERTED':
       return 'Bu yükleme zaten geri alınmış.';
+    case 'POSSIBLE_DUPLICATE_PAYMENT':
+      return 'Aynı tutar ve tarihte başka bir banka satırının tahsilatı var; çift tahsilat olmasın diye kontrol edin.';
     case 'LINK_AMBIGUOUS':
       return 'Birden çok benzer tahsilat var. "Mevcut tahsilata bağla" ile birini seçin.';
     case 'LINK_NOT_POSSIBLE':

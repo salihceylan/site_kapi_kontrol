@@ -94,7 +94,7 @@ Map<String, dynamic> prRulesJson({int? siteCode, String? siteName, bool canEdit 
       ),
       _rule('heat.measured_share_pct', label: 'Isınma gideri: ölçüme göre pay', unit: 'pct', min: 0, max: 100, defaultValue: 70,
           pair: <String, dynamic>{'key': 'heat.area_share_pct', 'sum': 100}),
-      _rule('heat.area_share_pct', label: 'Isınma gideri: alana göre pay', unit: 'pct', min: 0, max: 100, defaultValue: 30,
+      _rule('heat.area_share_pct', label: 'Isınma gideri: alan payı', unit: 'pct', min: 0, max: 100, defaultValue: 30,
           pair: <String, dynamic>{'key': 'heat.measured_share_pct', 'sum': 100}),
       _rule(
         'forecast.default_increase_bp',

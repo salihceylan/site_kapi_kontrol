@@ -85,9 +85,10 @@ describe('UPDATE users yazıcıları: silinmiş hesabı dışlar ya da gözden g
   it('tarama çalışıyor (en az 12 yazıcı bulundu) ve kritik yazıcılar korumalı', () => {
     assert.ok(all.length >= 12, `bulunan ${all.length}`);
     const guarded = (needle) => all.filter((entry) => entry.sql.includes(needle) && /deleted_at IS NULL/.test(entry.sql)).length;
-    // Aynı ifade başlangıcı iki yazıcıda: daire sakini change-password (membership_service) ve daire PIN'i sıfırlama (apartment_service, migration 051).
-    assert.equal(guarded('UPDATE users SET password_hash = $1, updated_at = NOW() WHERE user_code = $2'), 2, 'daire sakini change-password + daire PIN sıfırlama');
-    assert.ok(all.some((entry) => entry.file === 'services/membership_service.js' && entry.sql.startsWith('UPDATE users SET password_hash = $1, updated_at = NOW() WHERE user_code = $2 AND deleted_at IS NULL')), 'daire sakini change-password');
+    // İki yazıcı: daire sakini change-password (membership_service; sakin kendi parolasını belirleyince must_change_password da kalkar) ve daire PIN'i sıfırlama (apartment_service, migration 051).
+    assert.equal(guarded('UPDATE users SET password_hash = $1, updated_at = NOW() WHERE user_code = $2'), 1, 'daire PIN sıfırlama');
+    assert.equal(guarded('UPDATE users SET password_hash = $1, must_change_password = FALSE, updated_at = NOW() WHERE user_code = $2'), 1, 'daire sakini change-password');
+    assert.ok(all.some((entry) => entry.file === 'services/membership_service.js' && entry.sql.startsWith('UPDATE users SET password_hash = $1, must_change_password = FALSE, updated_at = NOW() WHERE user_code = $2 AND deleted_at IS NULL')), 'daire sakini change-password');
     assert.ok(all.some((entry) => entry.file === 'services/apartment_service.js' && entry.sql.startsWith('UPDATE users SET password_hash = $1, updated_at = NOW() WHERE user_code = $2 AND deleted_at IS NULL')), 'daire PIN sıfırlama');
     assert.equal(guarded('UPDATE users SET full_name = $1, password_hash = $2, updated_at = NOW() WHERE user_code = $3'), 1, 'doğrulanmamış hesap kimlik bilgileri');
     assert.equal(guarded('UPDATE users SET password_reset_token_hash = $1'), 1, 'parola sıfırlama isteği');

@@ -17,9 +17,14 @@ async function themeRow(db, scopeType, scopeId) {
   return res.rows[0] ?? null;
 }
 
-/** Sitenin bağlı olduğu firma kimliği (yoksa null). */
+/** Sitenin bağlı olduğu AKTİF firma kimliği (yoksa ya da firma pasifse null: pasif firmanın teması siteye miras kalmaz, firma sahibi siteyi düzenleyemez). */
 async function companyOfSite(db, siteCode) {
-  const res = await db.query('SELECT company_id FROM management_company_sites WHERE site_code = $1', [siteCode]);
+  const res = await db.query(
+    `SELECT cs.company_id FROM management_company_sites cs
+     JOIN management_companies c ON c.id = cs.company_id AND c.is_active = TRUE
+     WHERE cs.site_code = $1`,
+    [siteCode],
+  );
   return res.rows[0] ? Number(res.rows[0].company_id) : null;
 }
 
@@ -48,7 +53,13 @@ export async function themeForUser(user, db = pool) {
     [code],
   );
   if (site.rows[0]) return { theme: await resolveSiteTheme(db, Number(site.rows[0].site_code)) };
-  const member = await db.query('SELECT company_id FROM management_company_members WHERE user_code = $1 ORDER BY company_id LIMIT 1', [code]);
+  // Yalnız AKTİF firmanın üyeliği sayılır (pasif firmanın teması üyesine uygulanmaz).
+  const member = await db.query(
+    `SELECT m.company_id FROM management_company_members m
+     JOIN management_companies c ON c.id = m.company_id AND c.is_active = TRUE
+     WHERE m.user_code = $1 ORDER BY m.company_id LIMIT 1`,
+    [code],
+  );
   if (member.rows[0]) {
     const row = await themeRow(db, 'company', Number(member.rows[0].company_id));
     return { theme: themeFromRow(row, 'company') };
@@ -70,6 +81,7 @@ async function requireEditor(user, scopeType, scopeId) {
     const exists = await pool.query('SELECT 1 FROM management_companies WHERE id = $1', [scopeId]);
     if (!exists.rows[0]) throw new PlatformError(404, 'COMPANY_NOT_FOUND', 'Yönetim firması bulunamadı.');
     if (isSuper) return;
+    // Pasif firma: companyRoleOf null döner -> 404 (süper kullanıcı hariç firma teması düzenlenemez).
     const role = await companyRoleOf(pool, scopeId, user);
     if (role === null) throw new PlatformError(404, 'COMPANY_NOT_FOUND', 'Yönetim firması bulunamadı.');
     if (role !== 'owner') throw new PlatformError(403, 'FORBIDDEN_COMPANY', 'Bu işlem için firma sahibi yetkisi gerekir.');

@@ -60,36 +60,6 @@
      "hint": "Örneğin «3+1» ya da «Dükkan» (en çok 40 karakter)."
     },
     {
-     "key": "brut_m2",
-     "label": "Brüt m²",
-     "required": false,
-     "type": "number",
-     "max_length": null,
-     "aliases": [
-      "Brüt",
-      "Brüt m2",
-      "Brüt Alan",
-      "Brüt Metrekare",
-      "m2 Brüt"
-     ],
-     "hint": "Metrekare, 0’dan büyük. Ondalık için virgül kullanın: 125,5"
-    },
-    {
-     "key": "net_m2",
-     "label": "Net m²",
-     "required": false,
-     "type": "number",
-     "max_length": null,
-     "aliases": [
-      "Net",
-      "Net m2",
-      "Net Alan",
-      "Net Metrekare",
-      "m2 Net"
-     ],
-     "hint": "Metrekare, 0’dan büyük. Ondalık için virgül kullanın: 110,25"
-    },
-    {
      "key": "arsa_payi_pay",
      "label": "Arsa Payı (Pay)",
      "required": false,
@@ -164,6 +134,25 @@
      "hint": "Kişinin adı ve soyadı (2–100 karakter)."
     },
     {
+     "key": "kullanici_adi",
+     "label": "Kullanıcı Adı",
+     "required": false,
+     "type": "text",
+     "max_length": 50,
+     "aliases": [
+      "Kullanıcı Adı",
+      "Kullanici Adi",
+      "Giriş Adı",
+      "Giris Adi",
+      "Username",
+      "User Name",
+      "Kullanıcı",
+      "Kullanici",
+      "Hesap Adı"
+     ],
+     "hint": "Kullanıcının sisteme giriş yapacağı kullanıcı adı (boşsa ad soyadından otomatik üretilir)."
+    },
+    {
      "key": "telefon",
      "label": "Telefon",
      "required": false,
@@ -193,6 +182,22 @@
       "Mail"
      ],
      "hint": "Kişinin e-posta adresi. Aynı kişiyi tekrar yüklemede tanımak için en güvenilir alandır."
+    },
+    {
+     "key": "sifre",
+     "label": "Başlangıç Şifresi",
+     "required": false,
+     "type": "text",
+     "max_length": 30,
+     "aliases": [
+      "Şifre",
+      "Geçici Şifre",
+      "PIN",
+      "Parola",
+      "Sifre",
+      "Baslangic Sifresi"
+     ],
+     "hint": "Kişinin ilk giriş şifresi (boş bırakılırsa 1234 tanımlanır)."
     },
     {
      "key": "blok",
@@ -390,6 +395,371 @@
     }
    ],
    "relation_words": {}
+  },
+  "opening_balances": {
+   "columns": [
+    {
+     "key": "blok",
+     "label": "Blok",
+     "required": true,
+     "type": "text",
+     "max_length": 60,
+     "aliases": [
+      "Blok Adı",
+      "Blok No",
+      "Bloğu"
+     ],
+     "hint": "Sitedeki blok adı: «A», «A Blok» ya da «Blok A» aynı sayılır."
+    },
+    {
+     "key": "daire_no",
+     "label": "Daire No",
+     "required": true,
+     "type": "text",
+     "max_length": 30,
+     "aliases": [
+      "Daire",
+      "Daire Numarası",
+      "Kapı No",
+      "Kapı Numarası",
+      "Bağımsız Bölüm No",
+      "No"
+     ],
+     "hint": "Daire numarası: «5», «05» ya da «Daire 5»."
+    },
+    {
+     "key": "hesap",
+     "label": "Hesap",
+     "required": false,
+     "type": "enum",
+     "max_length": 40,
+     "aliases": [
+      "Ev Sahibi",
+      "Malik",
+      "Mal Sahibi",
+      "Kiracı",
+      "Borçlu",
+      "Hesap Türü"
+     ],
+     "hint": "Ev sahibi ya da Kiracı. Boşsa ev sahibi hesabına yazılır."
+    },
+    {
+     "key": "tutar",
+     "label": "Tutar",
+     "required": true,
+     "type": "text",
+     "max_length": 40,
+     "aliases": [
+      "Devir Tutarı",
+      "Devir Bakiyesi",
+      "Borç",
+      "Bakiye",
+      "Tutar TL"
+     ],
+     "hint": "Devreden borç, TL: 1.250,50 ya da 1250,5. Eksi (alacak) desteklenmez."
+    },
+    {
+     "key": "vade",
+     "label": "Vade",
+     "required": false,
+     "type": "date",
+     "max_length": 20,
+     "aliases": [
+      "Vade Tarihi",
+      "Son Ödeme Tarihi"
+     ],
+     "hint": "GG.AA.YYYY. Boşsa devir tarihi."
+    },
+    {
+     "key": "aciklama",
+     "label": "Açıklama",
+     "required": false,
+     "type": "text",
+     "max_length": 200,
+     "aliases": [
+      "Not",
+      "Notlar"
+     ],
+     "hint": "En çok 200 karakter (yalnız yönetici ekstresinde görünür)."
+    }
+   ],
+   "relation_words": {},
+   "account_words": {
+    "owner": [
+     "Ev sahibi",
+     "Malik",
+     "Mal sahibi"
+    ],
+    "tenant": [
+     "Kiracı"
+    ]
+   },
+   "module": "finance"
+  },
+  "all_in_one": {
+   "columns": [
+    {
+     "key": "blok",
+     "label": "Blok",
+     "required": true,
+     "type": "text",
+     "max_length": 60,
+     "aliases": [
+      "Blok Adı",
+      "Blok No",
+      "Bloğu"
+     ],
+     "hint": "Sitedeki blok adı: «A», «A Blok» ya da «Blok A» aynı sayılır."
+    },
+    {
+     "key": "daire_no",
+     "label": "Daire No",
+     "required": true,
+     "type": "text",
+     "max_length": 30,
+     "aliases": [
+      "Daire",
+      "Daire Numarası",
+      "Kapı No",
+      "Kapı Numarası",
+      "Bağımsız Bölüm No",
+      "No"
+     ],
+     "hint": "Daire numarası: «5», «05» ya da «Daire 5». Daire sayısı Site Yapısı’ndan belirlenir."
+    },
+    {
+     "key": "kat",
+     "label": "Kat",
+     "required": false,
+     "type": "text",
+     "max_length": 20,
+     "aliases": [
+      "Kat No",
+      "Bulunduğu Kat"
+     ],
+     "hint": "Tam sayı (−20 ile 500). «Zemin» 0, «Bodrum» −1 sayılır."
+    },
+    {
+     "key": "tip",
+     "label": "Tip",
+     "required": false,
+     "type": "text",
+     "max_length": 40,
+     "aliases": [
+      "Daire Tipi",
+      "Tür",
+      "Kategori"
+     ],
+     "hint": "Örneğin «3+1» ya da «Dükkan» (en çok 40 karakter)."
+    },
+    {
+     "key": "arsa_payi_pay",
+     "label": "Arsa Payı (Pay)",
+     "required": false,
+     "type": "number",
+     "max_length": null,
+     "aliases": [
+      "Arsa Payı Pay",
+      "Pay"
+     ],
+     "hint": "Arsa payının payı (tam sayı). Örneğin 35/1000 için 35."
+    },
+    {
+     "key": "arsa_payi_payda",
+     "label": "Arsa Payı (Payda)",
+     "required": false,
+     "type": "number",
+     "max_length": null,
+     "aliases": [
+      "Arsa Payı Payda",
+      "Payda"
+     ],
+     "hint": "Arsa payının paydası (tam sayı). Örneğin 35/1000 için 1000."
+    },
+    {
+     "key": "sorumlu",
+     "label": "Borç Sorumlusu",
+     "required": false,
+     "type": "enum",
+     "max_length": 20,
+     "aliases": [
+      "Sorumlu",
+      "Borçlandırma",
+      "Kim Öder"
+     ],
+     "hint": "Malik, Kiracı ya da İkisi. Borç ve bildirimlerin kime gideceğini belirler."
+    },
+    {
+     "key": "ad_soyad",
+     "label": "Ad Soyad",
+     "required": true,
+     "type": "text",
+     "max_length": 100,
+     "aliases": [
+      "Ad",
+      "İsim",
+      "Adı Soyadı",
+      "Ad-Soyad",
+      "İsim Soyisim",
+      "Kişi",
+      "Sakin Adı"
+     ],
+     "hint": "Kişinin adı ve soyadı (2–100 karakter)."
+    },
+    {
+     "key": "kullanici_adi",
+     "label": "Kullanıcı Adı",
+     "required": false,
+     "type": "text",
+     "max_length": 50,
+     "aliases": [
+      "Kullanıcı Adı",
+      "Kullanici Adi",
+      "Giriş Adı",
+      "Giris Adi",
+      "Username",
+      "User Name",
+      "Kullanıcı",
+      "Kullanici",
+      "Hesap Adı"
+     ],
+     "hint": "Kullanıcının sisteme giriş yapacağı kullanıcı adı (boşsa ad soyadından otomatik üretilir)."
+    },
+    {
+     "key": "telefon",
+     "label": "Telefon",
+     "required": false,
+     "type": "text",
+     "max_length": 30,
+     "aliases": [
+      "Tel",
+      "Cep",
+      "Cep Telefonu",
+      "GSM",
+      "Telefon No"
+     ],
+     "hint": "10 haneli cep telefonu: 0 (555) 123 45 67. Excel baştaki sıfırı atsa da kabul edilir."
+    },
+    {
+     "key": "e_posta",
+     "label": "E-posta",
+     "required": false,
+     "type": "text",
+     "max_length": 254,
+     "aliases": [
+      "Eposta",
+      "E Posta",
+      "E-posta Adresi",
+      "Email",
+      "E-mail",
+      "Mail"
+     ],
+     "hint": "Kişinin e-posta adresi. Aynı kişiyi tekrar yüklemede tanımak için en güvenilir alandır."
+    },
+    {
+     "key": "sifre",
+     "label": "Başlangıç Şifresi",
+     "required": false,
+     "type": "text",
+     "max_length": 30,
+     "aliases": [
+      "Şifre",
+      "Geçici Şifre",
+      "PIN",
+      "Parola",
+      "Sifre",
+      "Baslangic Sifresi"
+     ],
+     "hint": "Kişinin ilk giriş şifresi (boş bırakılırsa 1234 tanımlanır)."
+    },
+    {
+     "key": "iliski",
+     "label": "İlişki",
+     "required": false,
+     "type": "enum",
+     "max_length": 40,
+     "aliases": [
+      "İlişki Türü",
+      "Sakin Türü"
+     ],
+     "hint": "Malik, Kiracı, Aile (eş/çocuk) ya da Sakin. Boşsa «Sakin» sayılır."
+    },
+    {
+     "key": "giris_tarihi",
+     "label": "Taşınma Tarihi",
+     "required": false,
+     "type": "date",
+     "max_length": 20,
+     "aliases": [
+      "Giriş Tarihi",
+      "Giriş",
+      "Oturum Başlangıcı"
+     ],
+     "hint": "GG.AA.YYYY. Sakin, Borcum’da borçlarını bu tarihin ayından itibaren görür."
+    },
+    {
+     "key": "plaka",
+     "label": "Plaka",
+     "required": false,
+     "type": "text",
+     "max_length": 120,
+     "aliases": [
+      "Plakalar",
+      "Araç Plakası",
+      "Araç Plakaları",
+      "Araç"
+     ],
+     "hint": "Araç plakası. Birden çok plaka için virgül, noktalı virgül ya da / ile ayırın (en çok 5)."
+    },
+    {
+     "key": "not",
+     "label": "Not",
+     "required": false,
+     "type": "text",
+     "max_length": 500,
+     "aliases": [
+      "Notlar",
+      "Açıklama",
+      "Yönetici Notu"
+     ],
+     "hint": "Yönetici notu (en çok 500 karakter)."
+    }
+   ],
+   "relation_words": {
+    "owner": [
+     "Malik",
+     "Mal sahibi",
+     "Ev sahibi"
+    ],
+    "tenant": [
+     "Kiracı"
+    ],
+    "family_member": [
+     "Aile",
+     "Aile üyesi",
+     "Eş",
+     "Çocuk"
+    ],
+    "resident": [
+     "Sakin",
+     "Oturan"
+    ]
+   },
+   "responsible_words": {
+    "owner": [
+     "Malik",
+     "Mal sahibi",
+     "Ev sahibi"
+    ],
+    "tenant": [
+     "Kiracı"
+    ],
+    "both": [
+     "İkisi",
+     "İkisi de",
+     "Her ikisi"
+    ]
+   }
   }
  }
 }

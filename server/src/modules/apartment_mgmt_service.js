@@ -697,6 +697,13 @@ async function createAccountlessPerson(client, siteCode, person, createdBy) {
 }
 
 async function insertRequest(client, { state, uc, kind, targetUserCode, payload }) {
+  // Suresi dolmus ama durumu hala 'pending' kalan talep, kismi tekil indeks (uq_apartment_link_requests_*) yuzunden yeni talebi bakim gorevi gelene dek
+  // (24 saate kadar) engellerdi: ayni dairenin suresi dolmus bekleyenleri once 'expired' yapilir (bakim gorevindeki ifadeyle AYNI; ayni transaction).
+  await client.query(
+    `UPDATE apartment_link_requests SET status = 'expired', responded_at = NOW(), updated_at = NOW()
+     WHERE apartment_id = $1 AND status = 'pending' AND expires_at <= NOW()`,
+    [state.apartment.id],
+  );
   try {
     const inserted = await client.query(
       `INSERT INTO apartment_link_requests (site_code, apartment_id, kind, requested_by, target_user_code, payload, expires_at)

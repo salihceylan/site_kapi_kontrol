@@ -238,9 +238,12 @@ export function planPeople({ rows, snapshot, today }) {
     residency_unchanged: 0,
     vehicle_add: 0,
     vehicle_unchanged: 0,
+    account_create: 0,
   };
   const linked = new Set();
   const filled = new Set();
+  // Hesap açılacak kişiler: bu yüklemede daire ilişkisi EKLENEN (yeni ya da hesapsız mevcut) kişiler; yazıcı yalnız bu kümeye hesap açar.
+  const accountRefs = new Set();
   const results = [];
 
   for (const row of rows) {
@@ -324,8 +327,10 @@ export function planPeople({ rows, snapshot, today }) {
         for (const op of result.ops) {
           if (op.t === 'pc') counts.people_create += 1;
           else if (op.t === 'pr') counts.people_reactivate += 1;
-          else if (op.t === 'ra') counts.residency_add += 1;
-          else if (op.t === 'ru') counts.residency_upgrade += 1;
+          else if (op.t === 'ra') {
+            counts.residency_add += 1;
+            accountRefs.add(op.ref);
+          } else if (op.t === 'ru') counts.residency_upgrade += 1;
           else if (op.t === 'va') counts.vehicle_add += 1;
           else if (op.t === 'pf' && !op.ref.startsWith('new:')) filled.add(op.ref);
         }
@@ -386,9 +391,9 @@ export function planPeople({ rows, snapshot, today }) {
         finish();
         continue;
       }
-      result.ops.push({ t: 'pc', ref, name, phone, email, note, password: initialPassword, loginName: customLoginName });
+      result.ops.push({ t: 'pc', ref, n: row.n, name, phone, email, note, password: initialPassword, loginName: customLoginName });
       if (apartment !== null) {
-        result.ops.push({ t: 'ra', ref, aptId: apartment.id, relation: relationForNew, moveIn });
+        result.ops.push({ t: 'ra', ref, n: row.n, aptId: apartment.id, relation: relationForNew, moveIn });
         summaryRelation = relationForNew;
         local.touch = { key: `${ref}|${apartment.id}`, n: row.n, relation: fileRelation };
       }
@@ -430,7 +435,8 @@ export function planPeople({ rows, snapshot, today }) {
           } else if (!relationAvailable(state, apartment.id, relationForNew, ref)) {
             issue('RELATION_TAKEN', 'iliski');
           } else {
-            result.ops.push({ t: 'ra', ref, aptId: apartment.id, relation: relationForNew, moveIn });
+            // hesapsız mevcut kişiye yeni daire: hesap bilgileri (şifre / kullanıcı adı) bu satırdan alınır
+            result.ops.push({ t: 'ra', ref, n: row.n, aptId: apartment.id, relation: relationForNew, moveIn, password: initialPassword, loginName: customLoginName });
             summaryRelation = relationForNew;
           }
         } else if (current.relation === 'resident' && fileRelation !== null) {
@@ -484,6 +490,7 @@ export function planPeople({ rows, snapshot, today }) {
 
   counts.people_link = linked.size;
   counts.people_filled = filled.size;
+  counts.account_create = accountRefs.size;
   return finalizePlan({ kind: KIND, results, counts });
 }
 

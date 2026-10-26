@@ -42,6 +42,7 @@ import { ensureManagementCompanySchema } from './modules/management_company_sche
 import { ensureNotifyChannelsSchema } from './modules/notify_channels_schema.js';
 import { ensureBankImportSchema } from './modules/bank_import_schema.js';
 import { ensureOAuthSchema } from './modules/oauth_schema.js';
+import { ensureIntegritySchema } from './modules/integrity_schema.js';
 
 dotenv.config();
 
@@ -1243,8 +1244,9 @@ export async function ensureDbSchema() {
 
       -- 3. Daire alanları (hepsi isteğe bağlı; borç ve bildirim tarafı varsayılan "ikisi de").
       ALTER TABLE apartments ADD COLUMN IF NOT EXISTS floor INTEGER;
-      ALTER TABLE apartments DROP COLUMN IF EXISTS gross_area_m2;
-      ALTER TABLE apartments DROP COLUMN IF EXISTS net_area_m2;
+      -- gross_area_m2 / net_area_m2: kod artik KULLANMAZ ama bu surumde DUSURULMEZ (surum geri alinirsa eski kod bekler); sonraki surumde ayri migration ile dusurulecek (bkz. 077).
+      ALTER TABLE apartments ADD COLUMN IF NOT EXISTS gross_area_m2 NUMERIC(8,2);
+      ALTER TABLE apartments ADD COLUMN IF NOT EXISTS net_area_m2 NUMERIC(8,2);
       ALTER TABLE apartments ADD COLUMN IF NOT EXISTS land_share_numerator INTEGER;
       ALTER TABLE apartments ADD COLUMN IF NOT EXISTS land_share_denominator INTEGER;
       ALTER TABLE apartments ADD COLUMN IF NOT EXISTS category TEXT;
@@ -1969,18 +1971,11 @@ export async function ensureDbSchema() {
     await ensureResidencyLogSchema(client);
     // 076 (Google ve Apple / iCloud OAuth kimlik baglantilari): katalog kontrolu (oauth_schema.js = migrations/076).
     await ensureOAuthSchema(client);
-    await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN NOT NULL DEFAULT FALSE');
-
-    // Site adı tekilliği güvencesi (büyük/küçük harf duyarsız) ve bekleyen başvurular
-    try {
-      await client.query(`
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_sites_unique_name ON sites (LOWER(TRIM(name)));
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_site_applications_pending_unique_name ON site_applications (LOWER(TRIM(site_name))) WHERE status = 'pending';
-      `);
-    } catch (e) {
-      // eslint-disable-next-line no-console
-      console.error('[DB] unique site name index hatasi:', e?.message);
-    }
+    // 077 (butunluk sertlestirme): site_name_key() islevi + site adi tekillik indeksleri (uq_sites_name_key, uq_site_applications_pending_name_key;
+    // eski idx_sites_unique_name / idx_site_applications_pending_unique_name yenileri kurulunca duser; mukerrer ad varsa kurulmaz, acilista loglanir),
+    // user_oauth_identities / web_push_subscriptions -> users(user_code) FK (CASCADE; yetimler silinir) ve users.must_change_password (katalog kontrollu):
+    // dev blokta DEGIL; her sey varsa hicbir ifade gonderilmez (integrity_schema.js = migrations/077). oauth (076) ve push (063) tablolarindan SONRA.
+    await ensureIntegritySchema(client);
 
     // 031 people_v1: mevcut sakinlerin CRM'e tek seferlik aktarimi. Savunmaci: hata sunucunun acilmasini ENGELLEMEZ
     // (kendi transaction'i geri alinir, isaret yazilmaz => sonraki acilista yeniden denenir; okuma anindaki

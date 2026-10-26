@@ -171,14 +171,16 @@ export async function createMyNotice(authUser, body, { now = new Date() } = {}) 
   const visible = await loadVisibleAccounts(pool, userCode);
   const apartment = visible.find((row) => Number(row.apartment_id) === input.apartmentId);
   const own = apartment?.views?.find((view) => view.role === 'own');
-  if (!apartment || !own) throw apartmentNotFound();
+  // loadVisibleAccounts görünümünde hesap alanı `account_party`dir (`party` YOK): undefined -> NULL -> NOT NULL ihlali (500) olurdu.
+  const ownParty = own?.account_party;
+  if (!apartment || (ownParty !== 'owner' && ownParty !== 'tenant')) throw apartmentNotFound();
   const siteCode = Number(apartment.site_code);
   if (!(await enabledFinanceSites(pool, [siteCode])).has(siteCode)) throw moduleDisabled();
   const settings = await pool.query(`SELECT notices_enabled FROM finance_payment_settings WHERE site_code = $1`, [siteCode]);
   if (settings.rows[0]?.notices_enabled !== true) throw noticesDisabled();
   const { row, replayed } = await withTx(async (client) => {
     await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`payment_notice_user:${userCode}`]);
-    return insertNotice(client, { siteCode, userCode, input, accountParty: own.party });
+    return insertNotice(client, { siteCode, userCode, input, accountParty: ownParty });
   });
   return { replayed, notice: publicNotice(row), upload: row.status === 'uploading' ? uploadDescriptor(row, RESIDENT_BASE) : null };
 }
@@ -280,6 +282,10 @@ export async function computeNoticeWarnings(db, row, now = new Date()) {
     const same = await db.query(`SELECT count(*)::INT AS n FROM payment_notices WHERE site_code = $1 AND sha256 = $2 AND id <> $3 AND status IN ('pending', 'approved')`, [siteCode, row.sha256, row.id]);
     sameFileCount = same.rows[0].n;
   }
+  // Olası çift tahsilat: aynı daire + hesap + tutar + ±3 gün. Sayılanlar: (1) iptal edilmemiş her tahsilat — bir bildirime ya da banka satırına
+  // bağlı olanlar DAHİL (eskiden bildirime bağlı tahsilat dışlanıyordu: aynı havaleyi başka biri farklı dosyayla bildirip onaylatınca çift tahsilat
+  // oluyordu); (2) bekleyen bildirimler; (3) onaylı bildirimler (defter satırı iptal edilmemişse; açık döneme yazılan onayda defter tarihi dekont
+  // tarihinden farklı olabildiği için paid_on penceresiyle ayrıca aranır). Yalnız `> 0` önemlidir; aynı olay iki yoldan görünürse sorun olmaz.
   const dup = await db.query(
     `
       SELECT (
@@ -287,11 +293,11 @@ export async function computeNoticeWarnings(db, row, now = new Date()) {
         WHERE l.site_code = $1 AND l.apartment_id = $2 AND l.kind = 'payment' AND l.amount_minor = -$3::BIGINT
           AND l.entry_date BETWEEN $4::DATE - 3 AND $4::DATE + 3 AND ${accountPartySql('l')} = $5
           AND NOT EXISTS (SELECT 1 FROM ledger_entries r WHERE r.reverses_entry_id = l.id)
-          AND NOT EXISTS (SELECT 1 FROM payment_notices pn WHERE pn.ledger_entry_id = l.id)
       )::INT + (
         SELECT count(*) FROM payment_notices o
-        WHERE o.site_code = $1 AND o.apartment_id = $2 AND o.id <> $6 AND o.status = 'pending' AND o.amount_minor = $3::BIGINT
+        WHERE o.site_code = $1 AND o.apartment_id = $2 AND o.id <> $6 AND o.status IN ('pending', 'approved') AND o.amount_minor = $3::BIGINT
           AND o.account_party = $5 AND o.paid_on BETWEEN $4::DATE - 3 AND $4::DATE + 3
+          AND (o.status = 'pending' OR NOT EXISTS (SELECT 1 FROM ledger_entries r WHERE r.reverses_entry_id = o.ledger_entry_id))
       )::INT AS n
     `,
     [siteCode, apartmentId, row.amount_minor, row.paid_on, row.account_party, row.id],

@@ -78,7 +78,7 @@ const DEFINITIONS = [
   }),
   rule('heat.measured_share_pct', {
     label: 'Isınma gideri: ölçüme göre pay',
-    description: 'Merkezi ısıtma giderinin dairelerin ölçülen tüketimine göre dağıtılan yüzdesi. Alana göre payla toplamı 100 olmalıdır.',
+    description: 'Merkezi ısıtma giderinin dairelerin ölçülen tüketimine göre dağıtılan yüzdesi. Alan payıyla toplamı 100 olmalıdır.',
     unit: 'pct',
     defaultValue: 70,
     min: 0,
@@ -88,8 +88,8 @@ const DEFINITIONS = [
       'Karar T2: %70 ölçüm, %30 alan (m²). Isınma gideri paylaştırma yönetmeliğinin (RG 26847) numarası ve oranları mevzuat.gov.tr\'den doğrulanmadı. [AVUKAT DOĞRULASIN]',
   }),
   rule('heat.area_share_pct', {
-    label: 'Isınma gideri: alana göre pay',
-    description: 'Merkezi ısıtma giderinin daire alanına (m²) göre dağıtılan yüzdesi. Ölçüme göre payla toplamı 100 olmalıdır.',
+    label: 'Isınma gideri: alan payı',
+    description: 'Merkezi ısıtma giderinin ölçüm dışında kalan yüzdesi. Katılan dairelerin hepsinde arsa payı tanımlıysa arsa payına, değilse eşit dağıtılır (daire alanı kullanılmaz). Ölçüme göre payla toplamı 100 olmalıdır.',
     unit: 'pct',
     defaultValue: 30,
     min: 0,

@@ -65,6 +65,9 @@ const SNAPSHOT_SELECT = /^SELECT sp\.id, sp\.user_code, sp\.is_active, sp\.full_
 const PERSON_OFF = /^UPDATE site_people SET is_active = FALSE, user_code = NULL, full_name = \$2, phone = \$3, email = \$4, updated_at = NOW\(\) WHERE id = \$1 AND is_active = TRUE RETURNING id$/;
 const VEHICLES_OFF = /^UPDATE vehicles SET is_active = FALSE WHERE person_id = \$1 AND is_active = TRUE RETURNING id, plate$/;
 const ROTATION = /^SELECT DISTINCT devices\.id FROM devices/;
+// Kiraci / hesapli kisi daireden ayrilinca acik yonetim devri ve vekaletler kapanir (apartment_delegation_close.closeDelegationsOnLeave).
+const DELEGATION_CLOSE = /^UPDATE apartment_admin_delegations SET state = 'ended', ended_at = NOW\(\), end_reason = \$5::text WHERE apartment_id = \$1::bigint AND ended_at IS NULL/;
+const PROXY_REVOKE = /^UPDATE apartment_proxies SET revoked_at = NOW\(\), revoked_reason = \$5::text WHERE apartment_id = \$1::bigint AND revoked_at IS NULL/;
 const DETAIL_PERSON = /^SELECT sp\.id, sp\.user_code, sp\.is_active, sp\.note[\s\S]*WHERE sp\.site_code = \$1 AND sp\.id = \$2 LIMIT 1$/;
 const DETAIL_RESIDENCIES = /FROM apartment_residencies r INNER JOIN apartments a ON a\.id = r\.apartment_id INNER JOIN site_blocks b ON b\.id = a\.block_id WHERE r\.person_id = \$1 ORDER BY/;
 const DETAIL_VEHICLES = /FROM vehicles v LEFT JOIN site_people sp ON sp\.id = v\.person_id[\s\S]*WHERE v\.person_id = \$1 AND v\.is_active = TRUE ORDER BY v\.id$/;
@@ -99,12 +102,17 @@ function closeHandlers({
   remaining = false,
   tied = false,
   vehicles = [],
+  delegations = 0,
+  proxies = 0,
+  residency = {},
   snapshot = { id: '5', user_code: 30001, is_active: true, full_name: null, phone: null, email: null, account_name: 'Ali Hesap', account_phone: '+905551112233', account_email: 'ali@example.com' },
 } = {}) {
   handlers.push(
     [PRE_READ, () => ok([{ apartment_id: '9' }])],
     [APT_FIRST_LOCK, (_sql, params) => ok([{ id: String(params[0]) }])],
-    [RESIDENCY_LOOKUP, () => ok([residencyRow()])],
+    [RESIDENCY_LOOKUP, () => ok([residencyRow(residency)])],
+    [DELEGATION_CLOSE, () => ({ rows: [], rowCount: delegations })],
+    [PROXY_REVOKE, () => ({ rows: [], rowCount: proxies })],
     [APT_LOCK, (_sql, params) => ok([{ id: String(params[0]), site_code: String(SITE), resident_user_code: indicator, resident_email: residentEmail }])],
     [RESIDENCY_END, () => ok([{ id: '31' }])],
     [MEMBER_SELECT, () => (member ? ok([member]) : ok())],
@@ -437,5 +445,36 @@ describe('H10/S4: kisiyi pasiflestirme once site\'i esitler, bilinen daireleri i
     assert.ok(has(VEHICLES_OFF));
     assert.equal(has(MEMBER_SELECT), false);
     assert.equal(has(KNOWN_LOCK), false, 'bilinen daire yok -> daire kilidi sorgusu yok');
+  });
+});
+
+describe('kiraci / hesapli kisi ayrilinca acik yonetim devri ve vekaletler AYNI transaction\'da kapanir (apartment_delegation_close sozlesmesi)', () => {
+  it('kiraci iliskisi (hesapsiz) bitince: devir + vekalet kapatma cagrilir; kisi kimligi ve neden gider; kisi hesaptan KOPARILMADAN ve erisim kapanmadan ONCE', async () => {
+    closeHandlers({ residency: { relation: 'tenant', user_code: null }, delegations: 1, proxies: 2 });
+    await endResidency({ siteCode: SITE, residencyId: 31, body: {}, actor });
+    const delegation = find(DELEGATION_CLOSE);
+    const proxy = find(PROXY_REVOKE);
+    assert.ok(delegation && proxy, 'ikisi de calisti');
+    // [apartmentId, siteCode, userCode, personId, reason]
+    assert.deepEqual(delegation.params, ['9', SITE, null, 5, 'residency_ended']);
+    assert.deepEqual(proxy.params, ['9', SITE, null, 5, 'residency_ended']);
+    assert.ok(at(RESIDENCY_END) < at(DELEGATION_CLOSE), 'iliski bittikten sonra');
+    assert.ok(at(DELEGATION_CLOSE) < at(PERSON_OFF), 'kisi hesaptan koparilmadan ONCE');
+    assert.equal(find(DELEGATION_CLOSE).inTx, true, 'ayni transaction');
+  });
+
+  it('hesapli kisinin (malik / aile uyesi...) herhangi bir iliskisi bitince de kapatma cagrilir: user_code gider', async () => {
+    closeHandlers({ residency: { relation: 'owner' } });
+    await endResidency({ siteCode: SITE, residencyId: 31, body: {}, actor });
+    assert.ok(has(DELEGATION_CLOSE));
+    assert.deepEqual(find(DELEGATION_CLOSE).params.slice(2, 4), [30001, 5]);
+    assert.ok(at(DELEGATION_CLOSE) < at(MEMBER_OFF), 'erisim kapanmadan ONCE');
+  });
+
+  it('hesapsiz MALIK (kiraci degil, hesabi yok): devir / vekalet sorgusu calismaz', async () => {
+    closeHandlers({ residency: { relation: 'owner', user_code: null } });
+    await endResidency({ siteCode: SITE, residencyId: 31, body: {}, actor });
+    assert.equal(has(DELEGATION_CLOSE), false);
+    assert.equal(has(PROXY_REVOKE), false);
   });
 });

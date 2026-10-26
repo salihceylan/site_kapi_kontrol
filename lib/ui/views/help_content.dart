@@ -711,7 +711,7 @@ abstract final class HelpContent {
         'Sayaç modülü sitenizde açıksa menünün Borçlar başlığında Sayaçlar ekranı görünür. Önce Sayaçlar sekmesinden daire, tür (su, elektrik, ısı, sıcak su) ve seri numarasıyla sayacı ekleyin.',
         'Okumayı sayaca dokunarak elle girin ya da uzaktan okuyan sayaçların CSV / Excel dosyasını Okuma aktar sekmesinden yükleyin: ilk sütun daire kodu ya da seri no, ikinci sütun değer. Aktarmadan önce Kontrol et ile sorunlu satırları görürsünüz.',
         'Görevli ya da yönetici "Fotoğrafla oku" ile kamerayı açar: ekranın üstünde sıradaki daire yazar, fotoğraf çekilince değer telefonda okunur, siz onaylar ya da düzeltirsiniz ve kamera sıradaki daire için açık kalır. İnternet yoksa okuma ve fotoğraf telefonda bekler (Bekleyen: N), gelince kendiliğinden gönderilir.',
-        'Faturalandır sekmesinde tür, yöntem (birim fiyat, fatura tutarı ya da ısı için ölçüm + m² payı) ve iki tarihi seçip Önizle deyin; tutarlar uygunsa Borçlandır ile her dairenin oturanının hesabına borç yazılır.',
+        'Faturalandır sekmesinde tür, yöntem (birim fiyat, fatura tutarı ya da ısı için ölçüm + alan payı) ve iki tarihi seçip Önizle deyin; tutarlar uygunsa Borçlandır ile her dairenin oturanının hesabına borç yazılır.',
       ],
       note:
           'Okunan değeri sayaçla karşılaştırmadan onaylamayın; fotoğraf Drive bağlıysa Drive a, değilse sunucuya kaydedilir. Webde kamera yok, değer elle yazılır. Borçlandırma için Aidat ve Finans modülü de açık olmalıdır; yanlış borç Finans ekranından ters kayıtla düzeltilir.',
@@ -782,7 +782,7 @@ abstract final class HelpContent {
       steps: <String>[
         '“Kişiler” ekranında “Toplu Yükle”ye dokunun ve “Hepsi bir arada”yı seçin.',
         'Şablonda daire bilgisi, sakin adı, ilişki, telefon, e-posta, taşınma tarihi, plaka ve not tek satırdadır; bir dairenin birden çok sakini alt alta yazılır.',
-        'Aynı dairenin satırlarında daire bilgisi (kat, tip, m²) farklıysa o satır hata olur; tek değer bırakın.',
+        'Aynı dairenin satırlarında daire bilgisi (kat, tip) farklıysa o satır hata olur; tek değer bırakın.',
       ],
     ),
     HelpTopic(

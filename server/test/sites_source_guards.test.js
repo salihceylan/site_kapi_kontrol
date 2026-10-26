@@ -34,6 +34,24 @@ test('manager_routes: route govdelerinde dogrudan pool.query yok (yalniz 3 yardi
   assert.equal(count, 3, 'pool.query yalnizca getDoorSiteCode/getApartmentSiteCode/blockBelongsToSite icinde olmali');
 });
 
+test('daire sakini PATCH uclari (manager + admin): hesap baglama route govdesinde DEGIL, people_service.provisionResidentAndLinkPerson icinde (tek transaction, yalniz yeni hesapta, tek eslesen kisi)', () => {
+  for (const file of ['routes/manager_routes.js', 'routes/admin_routes.js']) {
+    const source = read(file);
+    assert.ok(source.includes("import { provisionResidentAndLinkPerson } from '../modules/people_service.js'"), file);
+    assert.ok(source.includes('await provisionResidentAndLinkPerson({'), file);
+    assert.equal(source.includes('UPDATE site_people'), false, `${file}: kisi baglama SQL'i route govdesinde olmamali`);
+    assert.equal(/INSERT INTO apartment_memberships/.test(source), false, `${file}: uyelik yazimi route govdesinde olmamali`);
+    assert.equal(/await provisionApartmentResident\(/.test(source), false, `${file}: provisionApartmentResident dogrudan cagrilmamali`);
+  }
+  const service = read('modules/people_service.js');
+  const body = sliceFunction(service, 'export async function provisionResidentAndLinkPerson');
+  assert.ok(body.includes('withSiteTransaction('), 'site kilidi + tek transaction');
+  assert.ok(body.includes('apartment?.issued_pin_code'), 'yalniz YENI hesap acildiginda baglanir');
+  assert.ok(body.includes('linkNewResidentToPerson('));
+  const link = sliceFunction(service, 'async function linkNewResidentToPerson');
+  assert.ok(link.includes('matches.length !== 1'), 'ad/e-posta eslesen TEK aday disinda baglanmaz');
+});
+
 test('manager_routes: error.message istemciye sizmaz', () => {
   const source = read('routes/manager_routes.js');
   assert.equal(/error\.message\s*\|\|/.test(source), false);

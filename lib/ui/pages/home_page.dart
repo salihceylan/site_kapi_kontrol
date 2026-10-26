@@ -905,6 +905,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       _siteApplications.clear();
       return;
     }
+    if (session.mustChangePassword) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _checkForceChangePassword());
+    }
     if (_lastSeenRole != session.role) {
       final previousRole = _lastSeenRole;
       _lastSeenRole = session.role;
@@ -1772,10 +1775,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   /// Telefon bildirimine dokunuldu (arka plan / kapalıyken; numara beyaz listeden geçti). Olay bir kare kurulurken
   /// gelebilir: pencere bir sonraki karede, merkezi menü kapısından ([_openAnnouncement]) açılır.
 
+  // Zorunlu şifre diyaloğu açıkken ikinci kez açılmasın (sunucu 403 PASSWORD_CHANGE_REQUIRED dönünce oturum işaretlenir ve _onAuthChanged tekrar çağırır).
+  bool _forcePasswordDialogOpen = false;
+
   void _checkForceChangePassword() {
     final session = widget.authService.session;
     if (session == null || !session.mustChangePassword) return;
-    if (!mounted) return;
+    if (!mounted || _forcePasswordDialogOpen) return;
+    _forcePasswordDialogOpen = true;
     ForceChangePasswordDialog.show(
       context: context,
       session: session,
@@ -1786,7 +1793,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       onLogout: () {
         widget.authService.logout();
       },
-    );
+    ).whenComplete(() => _forcePasswordDialogOpen = false);
   }
 
   void _openAnnouncementFromPush(int id) {

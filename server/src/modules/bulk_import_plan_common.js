@@ -4,7 +4,7 @@
 // `preview_hash` ile karşılaştırır. Hash yalnız KOD/KİMLİK/DEĞER özetini kapsar (ileti metinleri girmez).
 
 import { apartmentLabel, foldText } from './people_common.js';
-import { matchBlock, apartmentKey } from './bulk_import_parsers.js';
+import { matchBlock, apartmentKey, cellToText } from './bulk_import_parsers.js';
 import { issueMessage, severityOf } from './bulk_import_messages.js';
 import { labelOf } from './bulk_import_spec.js';
 import { sha256 } from './bulk_import_body.js';
@@ -32,6 +32,12 @@ export function addIssue(result, kind, code, field, ctx = {}, severity = null) {
   if (level === 'error') {
     result.hasError = true;
   }
+}
+
+/** Hücrede boşluk dışında bir değer var mı (null / undefined / yalnız boşluk = yok). */
+export function cellHasValue(value) {
+  const text = cellToText(value);
+  return text !== null && text.trim() !== '';
 }
 
 /** Blok + daire arama dizinleri. */

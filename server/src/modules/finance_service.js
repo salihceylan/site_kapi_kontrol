@@ -17,6 +17,7 @@ import {
   MAX_FUTURE_PERIOD_MONTHS,
   addDays,
   addMonths,
+  areaDefinitionUnusable,
   assertDefinitionShape,
   chargeNaturalKey,
   chargeRequestFingerprint,
@@ -425,6 +426,10 @@ export async function previewDefinition({ siteCode, rawId, body, now = new Date(
   if (!shape.isActive) {
     throw definitionInactive();
   }
+  // Eski m² tanımı: daire alanı yok, her daire area_missing olurdu (belirsiz tıkanma). Açık hata: 409 AREA_DISTRIBUTION_REMOVED.
+  if (shape.distribution === 'area') {
+    throw areaDefinitionUnusable();
+  }
   const timing = resolveTiming(shape, input, now);
   const alreadyPosted = await runExists(db, id, shape.kind === 'recurring' ? timing.period : null);
   const closed = await isPeriodClosed(db, siteCode, timing.period);
@@ -621,6 +626,9 @@ export async function postDefinition({ siteCode, rawId, body, actor, now = new D
     }
     if (!shape.isActive) {
       throw definitionInactive();
+    }
+    if (shape.distribution === 'area') {
+      throw areaDefinitionUnusable();
     }
     const resolved = resolveTiming(shape, input, now);
     if (await isPeriodClosed(client, siteCode, resolved.period)) {

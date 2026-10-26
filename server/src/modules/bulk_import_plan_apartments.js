@@ -4,16 +4,15 @@
 // NULL ise yazılır; aynıysa "değişiklik yok"; farklıysa `allowOverwrite:false` iken korunur (VALUE_KEPT), `true` iken yazılır. Daire OLUŞTURULMAZ/yeniden adlandırılmaz.
 
 import {
-  readArea,
   readFloor,
   readLandShareInt,
   readResponsible,
   readText,
 } from './bulk_import_parsers.js';
-import { addIssue, buildLocator, completeRow, finalizePlan, newRowResult } from './bulk_import_plan_common.js';
+import { LEGACY_IGNORED_KEYS } from './bulk_import_spec.js';
+import { addIssue, buildLocator, cellHasValue, completeRow, finalizePlan, newRowResult } from './bulk_import_plan_common.js';
 
 const KIND = 'apartments';
-const AREA_EPSILON = 0.005;
 
 // dosya sütunu -> apartments sütunu
 const COLUMN_MAP = Object.freeze([
@@ -26,19 +25,10 @@ const COLUMN_MAP = Object.freeze([
 const FINANCE_SENSITIVE = new Set(['land_share_numerator', 'land_share_denominator', 'category', 'responsible_party']);
 const FIELD_OF_COLUMN = Object.fromEntries(COLUMN_MAP.map(([key, column]) => [column, key]));
 
-function sameValue(column, current, wanted) {
-  if (column === 'gross_area_m2' || column === 'net_area_m2') {
-    return Math.abs(Number(current) - Number(wanted)) < AREA_EPSILON;
-  }
-  return current === wanted;
-}
-
 function currentOf(apartment) {
   return {
     floor: apartment.floor,
     category: apartment.category,
-    gross_area_m2: null,
-    net_area_m2: null,
     land_share_numerator: apartment.lsNum,
     land_share_denominator: apartment.lsDen,
     responsible_party: apartment.responsible,
@@ -52,7 +42,7 @@ function landShareText(sum, denominator) {
 
 /**
  * @param {{ rows: { n: number, cells: object }[], snapshot: object, allowOverwrite: boolean }} input
- *   snapshot.apartments: { id, blockId, label, floor, category, gross, net, lsNum, lsDen, responsible, hasFinance }
+ *   snapshot.apartments: { id, blockId, label, floor, category, lsNum, lsDen, responsible, hasFinance }
  */
 export function planApartments({ rows, snapshot, allowOverwrite }) {
   const locator = buildLocator(snapshot);
@@ -61,10 +51,17 @@ export function planApartments({ rows, snapshot, allowOverwrite }) {
   const counts = { apartment_update: 0, cells_set: 0, overwritten_cells: 0, cells_kept: 0 };
   const results = [];
   let touchedLandShare = false;
+  let legacyAreaWarned = false;
 
   for (const row of rows) {
     const result = newRowResult(row.n);
     const cells = row.cells;
+
+    // Eski şablondan kalan m² sütunları (Brüt/Net) artık kullanılmaz: dolu olan ilk satırda dosya başına BİR uyarı, değerler yok sayılır.
+    if (!legacyAreaWarned && LEGACY_IGNORED_KEYS.apartments.some((key) => cellHasValue(cells[key]))) {
+      legacyAreaWarned = true;
+      addIssue(result, KIND, 'AREA_COLUMN_IGNORED', null, {}, 'warning');
+    }
 
     const blockText = readText(cells.blok, { forbidSigned: true, max: 60 });
     const numberText = readText(cells.daire_no, { max: 30 });
@@ -92,8 +89,6 @@ export function planApartments({ rows, snapshot, allowOverwrite }) {
     const readers = {
       kat: readFloor,
       tip: (raw) => readText(raw, { forbidSigned: true, max: 40 }),
-      brut_m2: readArea,
-      net_m2: readArea,
       arsa_payi_pay: (raw) => readLandShareInt(raw, { min: 0 }),
       arsa_payi_payda: (raw) => readLandShareInt(raw, { min: 1 }),
       sorumlu: readResponsible,
@@ -128,12 +123,12 @@ export function planApartments({ rows, snapshot, allowOverwrite }) {
         const existing = current[column];
         const unset = existing === null || existing === undefined || (column === 'responsible_party' && existing === 'both');
         if (unset) {
-          if (!sameValue(column, existing, wanted)) {
+          if (existing !== wanted) {
             set[column] = wanted;
             changes.push({ field: column, from: existing ?? null, to: wanted });
             cellsSet += 1;
           }
-        } else if (sameValue(column, existing, wanted)) {
+        } else if (existing === wanted) {
           // değişiklik yok
         } else if (allowOverwrite) {
           set[column] = wanted;

@@ -242,6 +242,11 @@ class AuthService extends ChangeNotifier {
       if (_session?.token != active.token) {
         return;
       }
+      if (e.code == _passwordChangeRequiredCode) {
+        // Sunucu zorunlu şifre belirlemeyi istiyor (hesap geçerli): oturum düşürülmez, "şifre belirleme gerekli" durumuna geçilir.
+        _markPasswordChangeRequired();
+        return;
+      }
       if (e.isUnauthorized || e.isForbidden) {
         if (_credentialSwapDepth > 0 && e.code == 'TOKEN_REVOKED') {
           return; // Parola değişimi sürüyor: yeni token değişim yanıtıyla gelecek.
@@ -3501,6 +3506,12 @@ class AuthService extends ChangeNotifier {
         error.code == 'TOKEN_REVOKED') {
       return;
     }
+    // Sunucu (auth_middleware) yönetimin verdiği geçici şifre değişene kadar GET/PATCH /me dışındaki her isteğe 403 PASSWORD_CHANGE_REQUIRED
+    // döner. Bu bir oturum sonu DEĞİLDİR: oturum korunur, ana sayfadaki zorunlu şifre diyaloğu açılır.
+    if (error is ApiException && error.code == _passwordChangeRequiredCode) {
+      _markPasswordChangeRequired();
+      return;
+    }
     if (error is SessionExpiredException ||
         (error is ApiException && error.invalidatesSession)) {
       final deleted = (error as ApiException).code == _accountDeletedCode;
@@ -3518,6 +3529,21 @@ class AuthService extends ChangeNotifier {
       // 403 hesap pasifleştirme/onay bekleme olabilir: /me ile doğrula (kısıtlı sıklıkta).
       unawaited(refreshSession());
     }
+  }
+
+  /// Sunucu zorunlu şifre belirlemeyi istiyor (`403 PASSWORD_CHANGE_REQUIRED`): yönetimin verdiği geçici şifre / PIN değişene kadar
+  /// yalnız `GET /me` ve `PATCH /me` (+ yasal onay) çalışır. Oturum DÜŞMEZ; yerel oturum `mustChangePassword` olarak işaretlenir ve dinleyiciler
+  /// (ana sayfa) zorunlu şifre diyaloğunu açar. Şifre `PATCH /me` ile değişince sunucu yanıtı bayrağı kapatır.
+  static const String _passwordChangeRequiredCode = 'PASSWORD_CHANGE_REQUIRED';
+
+  void _markPasswordChangeRequired() {
+    final current = _session;
+    if (current == null || current.mustChangePassword) {
+      return;
+    }
+    _session = current.copyWith(mustChangePassword: true);
+    unawaited(_persist());
+    _notifySafely();
   }
 
   /// Sunucu hesabın silindiğini bildirir (`401 ACCOUNT_DELETED`): başka cihazda ya da yanıtı kaybolan bir silme

@@ -23,6 +23,12 @@ import { pool } from '../db.js';
 import { sendSiteApplicationDecisionEmail, sendSiteApplicationNotificationEmail } from '../mailer.js';
 import { normalizeSetupSiteInput, shouldPromoteToSiteManager } from '../services/membership_rules.js';
 import { createSiteWithStructure, userHasOwnerLink } from '../services/site_setup_core.js';
+import {
+  SITE_APPLICATION_NAME_UNIQUE_INDEXES,
+  SITE_NAME_UNIQUE_INDEXES,
+  siteApplicationNamePendingMessage,
+  siteNameTakenMessage,
+} from '../utils/validators.js';
 import { actorFromAuthUser, recordAudit } from './audit_service.js';
 import { PlatformError } from './errors.js';
 import { resolveManagementTypeInput } from './management_types.js';
@@ -388,32 +394,8 @@ export async function createSiteApplication({ actor, body, consents = null }) {
       throw paymentNotAvailable();
     }
 
-    // Site adı tekilliği (1): Mevcut/onaylı bir site aynı ada sahip mi?
-    const existingSiteRes = await client.query(
-      `SELECT site_code, name FROM sites WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) LIMIT 1`,
-      [input.siteName],
-    );
-    if (existingSiteRes.rows?.[0]) {
-      throw new PlatformError(
-        409,
-        'SITE_NAME_EXISTS',
-        `"${input.siteName}" adında bir site zaten mevcut. Her sitenin adı benzersiz olmalıdır.`,
-      );
-    }
-
-    // Site adı tekilliği (2): Onay bekleyen aynı isimde bir başvuru var mı?
-    const pendingNameRes = await client.query(
-      `SELECT id, site_name FROM site_applications WHERE status = 'pending' AND LOWER(TRIM(site_name)) = LOWER(TRIM($1)) LIMIT 1`,
-      [input.siteName],
-    );
-    if (pendingNameRes.rows?.[0]) {
-      throw new PlatformError(
-        409,
-        'SITE_APPLICATION_NAME_PENDING',
-        `"${input.siteName}" adında onay bekleyen bir site başvurusu zaten bulunmaktadır. Lütfen farklı bir site adı belirleyin.`,
-      );
-    }
-
+    // Kullanıcının KENDİ bekleyen başvurusu ad denetimlerinden ÖNCE bakılır: aynı adla yeniden başvuran kişiye "başka birinin başvurusu" demek yerine
+    // istemcinin beklediği APPLICATION_PENDING (+ mevcut başvuru) döner.
     const pendingResult = await client.query(
       `${SELECT_APPLICANT_VIEW} WHERE a.applicant_user_code = $1 AND a.status = 'pending' LIMIT 1`,
       [userCode],
@@ -422,6 +404,25 @@ export async function createSiteApplication({ actor, body, consents = null }) {
       throw new PlatformError(409, 'APPLICATION_PENDING', 'Zaten inceleme bekleyen bir site başvurunuz var.', {
         application: mapApplicationRow(pendingResult.rows[0]),
       });
+    }
+
+    // Site adı tekilliği (1): aynı ada sahip mevcut / onay bekleyen site var mı? DB işlevi site_name_key: büyük/küçük harf, Türkçe harf katlama ve
+    // boşluk farkına dayanıklıdır; reddedilmiş (rejected) siteler hariçtir (uq_sites_name_key kısmi indeksiyle AYNI koşul).
+    const existingSiteRes = await client.query(
+      `SELECT site_code, name FROM sites WHERE site_name_key(name) = site_name_key($1) AND approval_status IS DISTINCT FROM 'rejected' LIMIT 1`,
+      [input.siteName],
+    );
+    if (existingSiteRes.rows?.[0]) {
+      throw new PlatformError(409, 'SITE_NAME_EXISTS', siteNameTakenMessage(input.siteName));
+    }
+
+    // Site adı tekilliği (2): Onay bekleyen aynı isimde (başka kişinin) bir başvuru var mı?
+    const pendingNameRes = await client.query(
+      `SELECT id, site_name FROM site_applications WHERE status = 'pending' AND site_name_key(site_name) = site_name_key($1) LIMIT 1`,
+      [input.siteName],
+    );
+    if (pendingNameRes.rows?.[0]) {
+      throw new PlatformError(409, 'SITE_APPLICATION_NAME_PENDING', siteApplicationNamePendingMessage(input.siteName));
     }
 
     const dailyResult = await client.query(
@@ -516,16 +517,26 @@ export async function createSiteApplication({ actor, body, consents = null }) {
       throw new PlatformError(404, 'USER_NOT_FOUND', 'Kullanıcı hesabı bulunamadı.');
     }
     if (error?.code === '23505') {
-      // kısmi tekil indeks (advisory kilide rağmen çift bekleyen): bekleyen başvuru var
-      const pending = await pool
-        .query(`${SELECT_APPLICANT_VIEW} WHERE a.applicant_user_code = $1 AND a.status = 'pending' LIMIT 1`, [userCode])
-        .catch(() => null);
-      throw new PlatformError(
-        409,
-        'APPLICATION_PENDING',
-        'Zaten inceleme bekleyen bir site başvurunuz var.',
-        pending?.rows?.[0] ? { application: mapApplicationRow(pending.rows[0]) } : null,
-      );
+      // Tekil kısıtı `error.constraint` ile ayrılır (eskiden her 23505 "bekleyen başvuru var" sayılıyordu): ad indeksleri (ön denetimi geçen eşzamanlı
+      // çift istek) ayrı koda çevrilir; kullanıcının kendi bekleyen başvurusu (uq_site_applications_pending) APPLICATION_PENDING kalır.
+      if (SITE_NAME_UNIQUE_INDEXES.includes(error.constraint)) {
+        throw new PlatformError(409, 'SITE_NAME_EXISTS', siteNameTakenMessage(input.siteName));
+      }
+      if (SITE_APPLICATION_NAME_UNIQUE_INDEXES.includes(error.constraint)) {
+        throw new PlatformError(409, 'SITE_APPLICATION_NAME_PENDING', siteApplicationNamePendingMessage(input.siteName));
+      }
+      if (error.constraint === 'uq_site_applications_pending') {
+        // kısmi tekil indeks (advisory kilide rağmen çift bekleyen): bekleyen başvuru var
+        const pending = await pool
+          .query(`${SELECT_APPLICANT_VIEW} WHERE a.applicant_user_code = $1 AND a.status = 'pending' LIMIT 1`, [userCode])
+          .catch(() => null);
+        throw new PlatformError(
+          409,
+          'APPLICATION_PENDING',
+          'Zaten inceleme bekleyen bir site başvurunuz var.',
+          pending?.rows?.[0] ? { application: mapApplicationRow(pending.rows[0]) } : null,
+        );
+      }
     }
     throw error;
   } finally {

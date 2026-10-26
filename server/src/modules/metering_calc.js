@@ -3,11 +3,14 @@
 // Yontemler:
 //  - unit_price: tutar = yuvarlanmis (tuketim x birim fiyat); birim fiyat kurus / birim.
 //  - invoice:    fatura tutari tuketime orantili dagitilir (en buyuk kalan; toplam birebir).
-//  - heat:       toplam isinma gideri; olcum payi (heat.measured_share_pct) tuketime, kalani alana (m2) gore dagitilir.
+//  - heat:       toplam isinma gideri; olcum payi (heat.measured_share_pct) tuketime, kalani "alan payi" olarak dagitilir.
+//                m2 sistemden kaldirildi (dairede alan bilgisi yok): alan payi katilan TUM dairelerin arsa payi tanimliysa arsa payina
+//                gore, degilse (tek eksik bile) herkese ESIT pay olarak dagitilir (bkz. areaShareItems). Secilen taban plan sonucunda
+//                `areaBasis` ('land_share' | 'equal') olarak doner ve onizleme parametrelerine yazilir.
 // Tuketim = kapanis okumasi - acilis okumasi. Acilis: tarih <= donem basi olan son okuma; kapanis: tarih <= donem sonu olan son okuma ve acilistan SONRA olmali.
 
 import { createHash } from 'node:crypto';
-import { distributeLargestRemainder } from './finance_distribution.js';
+import { distributeLargestRemainder, landShareWeights } from './finance_distribution.js';
 import { noConsumption } from './metering_common.js';
 
 /** Bir sayacin tuketimi: { milli } ya da { missing: 'no_opening' | 'no_closing' }. */
@@ -44,14 +47,42 @@ export function priceOf(consumptionMilli, unitPriceMinor) {
 }
 
 /**
- * Plan satirlari. `apartments`: [{ id, areaX100: bigint|null }] (yalniz katilan daireler); `consumption`: Map(id -> milli).
- * @returns {{ lines: Array<{apartmentId:number, consumptionMilli:bigint, amount:bigint}>, total: bigint, areaMissing: number[], zeroCount: number }}
+ * Isinma giderinin "alan payi" agirliklari (m2 yok). Katilan TUM dairelerin arsa payi (pay/payda) tanimliysa arsa payina gore, degilse
+ * (tek eksik bile) herkese esit. Karma dagitim YAPILMAZ: eksik dairenin payi sessizce baskalarina kayardi. Arsa payi paydalari ortak
+ * paydaya getirilemeyecek kadar farkliysa finance_distribution.landShareWeights LAND_SHARE_UNSUPPORTED (409) firlatir (sessiz esit paya dusulmez).
+ * @param {Array<{ id:number, landShareNumerator?:number|string|bigint|null, landShareDenominator?:number|string|bigint|null }>} apartments
+ * @returns {{ basis: 'land_share'|'equal', items: Array<{id:number, weight:bigint}> }}
+ */
+export function areaShareItems(apartments) {
+  const ordered = [...apartments].sort((x, y) => x.id - y.id);
+  const equal = { basis: 'equal', items: ordered.map((a) => ({ id: a.id, weight: 1n })) };
+  const shares = [];
+  for (const a of ordered) {
+    const n = a.landShareNumerator;
+    const d = a.landShareDenominator;
+    if (n === null || n === undefined || d === null || d === undefined) return equal;
+    const numerator = BigInt(n);
+    const denominator = BigInt(d);
+    if (denominator <= 0n || numerator < 0n) return equal;
+    shares.push({ id: a.id, numerator, denominator });
+  }
+  if (shares.length === 0) return equal;
+  const items = landShareWeights(shares);
+  // Tum paylar 0 ise agirlik toplami 0 olur (dagitilamaz): esit paya dus.
+  if (!items.some((item) => item.weight > 0n)) return equal;
+  return { basis: 'land_share', items };
+}
+
+/**
+ * Plan satirlari. `apartments`: [{ id, landShareNumerator?, landShareDenominator? }] (yalniz katilan daireler); `consumption`: Map(id -> milli).
+ * @returns {{ lines: Array<{apartmentId:number, consumptionMilli:bigint, amount:bigint}>, total: bigint, areaBasis: ('land_share'|'equal'|null), zeroCount: number }}
+ * `areaBasis`: yalniz isi yonteminde ve alan payi (> 0) varken dolu; diger durumlarda null.
  */
 export function buildMeterPlan({ method, apartments, consumption, unitPriceMinor, totalMinor, measuredPct }) {
   const ids = apartments.map((a) => a.id).sort((a, b) => a - b);
   const cons = (id) => consumption.get(id) ?? 0n;
   const amounts = new Map(ids.map((id) => [id, 0n]));
-  const areaMissing = [];
+  let areaBasis = null;
   if (method === 'unit_price') {
     for (const id of ids) amounts.set(id, priceOf(cons(id), unitPriceMinor));
   } else if (method === 'invoice') {
@@ -64,17 +95,16 @@ export function buildMeterPlan({ method, apartments, consumption, unitPriceMinor
     const areaPart = total - measured;
     if (measured > 0n) {
       const items = ids.map((id) => ({ id, weight: cons(id) }));
+      // Yalniz OLCUM payi tuketim ister: tum farklar sifirsa olcum payi dagitilamaz.
       if (items.reduce((s, i) => s + i.weight, 0n) === 0n) throw noConsumption();
       for (const [id, v] of distributeLargestRemainder(measured, items)) amounts.set(id, amounts.get(id) + v);
     }
     if (areaPart > 0n) {
-      const items = [];
-      for (const a of [...apartments].sort((x, y) => x.id - y.id)) {
-        if (a.areaX100 === null || a.areaX100 === undefined || a.areaX100 <= 0n) areaMissing.push(a.id);
-        else items.push({ id: a.id, weight: a.areaX100 });
-      }
-      if (items.length === 0) throw noConsumption();
-      for (const [id, v] of distributeLargestRemainder(areaPart, items)) amounts.set(id, amounts.get(id) + v);
+      // Alan payi tuketimden BAGIMSIZDIR (arsa payi ya da esit); katilan daire yoksa dagitilacak kimse yoktur.
+      if (ids.length === 0) throw noConsumption();
+      const share = areaShareItems(apartments);
+      areaBasis = share.basis;
+      for (const [id, v] of distributeLargestRemainder(areaPart, share.items)) amounts.set(id, amounts.get(id) + v);
     }
   }
   const lines = [];
@@ -89,7 +119,7 @@ export function buildMeterPlan({ method, apartments, consumption, unitPriceMinor
     lines.push({ apartmentId: id, consumptionMilli: cons(id), amount });
     total += amount;
   }
-  return { lines, total, areaMissing, zeroCount };
+  return { lines, total, areaBasis, zeroCount };
 }
 
 /** Onizleme ozeti: sirali daire:tutar:hesap + parametreler. */

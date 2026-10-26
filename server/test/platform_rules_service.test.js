@@ -286,7 +286,7 @@ describe('updateRules (yazma akışı)', () => {
     const pairMessage = (await updateRules({ body: { changes: [{ key: 'heat.measured_share_pct', value: 60 }] }, actor: SUPER, now: NOW }, fakeDb()).catch((e) => e)).extra
       .fields['heat.measured_share_pct'];
     // Türkçe küçük harf: "Isınma" -> "ısınma" (toLowerCase() "isınma" yazardı).
-    assert.match(pairMessage, /ile ısınma gideri: alana göre pay toplamı 100 olmalıdır/);
+    assert.match(pairMessage, /ile ısınma gideri: alan payı toplamı 100 olmalıdır/);
     assert.equal(single.state.rolledBack, true);
     assert.equal(single.state.committed, false);
     const both = fakeDb();

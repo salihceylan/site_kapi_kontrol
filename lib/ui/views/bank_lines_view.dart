@@ -148,6 +148,7 @@ class _BankLinesViewState extends State<BankLinesView> {
               Text('Öneri: ${l.apartmentLabel ?? 'Daire'}${l.party == 'tenant' ? ' (kiracı)' : l.party == 'owner' ? ' (ev sahibi)' : ''}', style: th.bodyMedium),
             ],
             if (l.note == 'PERIOD_CLOSED') Text('Bu tarihin dönemi kapalı; dönemi açıp tekrar deneyin.', style: th.bodySmall),
+            if (l.note == 'POSSIBLE_DUPLICATE_PAYMENT') Text('Aynı tutar ve tarihte başka bir banka satırının tahsilatı var; çift tahsilat olmasın diye kontrol edin.', style: th.bodySmall),
             const SizedBox(height: AppSpace.sm),
             Wrap(
               spacing: AppSpace.sm,

@@ -8,6 +8,9 @@ import {
   addDays,
   addMonths,
   apartmentHasFinance,
+  AREA_DISTRIBUTION_REMOVED,
+  areaDefinitionUnusable,
+  areaDistributionRemoved,
   assertDefinitionShape,
   canonicalJson,
   chargeNaturalKey,
@@ -251,8 +254,9 @@ describe('finans: tanım gövdeleri', () => {
     const category = parseDefinitionCreate({ ...baseDef(), distribution: 'category', amount_minor: undefined, category_amounts: { ' 2+1 ': 100, 'Dükkan': 250 } });
     assert.deepEqual(category.categoryAmounts, { '2+1': 100, 'Dükkan': 250 });
     assert.equal(category.amountMinor, null);
-    const area = parseDefinitionCreate({ ...baseDef(), distribution: 'area', area_basis: 'net' });
-    assert.equal(area.areaBasis, 'net');
+    // m² (alan) dağıtımı KALDIRILDI: yeni tanım 400 AREA_DISTRIBUTION_REMOVED (alan esası ile ya da onsuz)
+    throwsCode(() => parseDefinitionCreate({ ...baseDef(), distribution: 'area', area_basis: 'net' }), 'AREA_DISTRIBUTION_REMOVED');
+    throwsCode(() => parseDefinitionCreate({ ...baseDef(), distribution: 'area' }), 'AREA_DISTRIBUTION_REMOVED');
     const oneTime = parseDefinitionCreate({ ...baseDef(), kind: 'one_time', due_day: undefined });
     assert.equal(oneTime.dueDay, null);
     assert.equal(parseDefinitionCreate({ ...baseDef(), kind: 'one_time', due_day: 9 }).dueDay, null, 'tek seferlikte vade günü yok sayılır');
@@ -264,7 +268,7 @@ describe('finans: tanım gövdeleri', () => {
       [{ amount_minor: 1500.5 }, 'INVALID_BODY'], [{ amount_minor: '150000' }, 'INVALID_BODY'], [{ amount_minor: 0 }, 'INVALID_BODY'], [{ amount_minor: -1 }, 'INVALID_BODY'], [{ amount_minor: 1e12 + 1 }, 'INVALID_BODY'],
       [{ amount_minor: undefined }, 'INVALID_BODY'], [{ due_day: undefined }, 'INVALID_BODY'], [{ due_day: 29 }, 'INVALID_BODY'], [{ due_day: 0 }, 'INVALID_BODY'], [{ due_day: '5' }, 'INVALID_BODY'], [{ due_day: 2.5 }, 'INVALID_BODY'],
       [{ start_period: undefined }, 'INVALID_BODY'], [{ start_period: '2026-13' }, 'INVALID_BODY'], [{ end_period: '2025-12' }, 'INVALID_BODY'],
-      [{ distribution: 'area' }, 'INVALID_BODY'], [{ distribution: 'area', area_basis: 'x' }, 'INVALID_BODY'], [{ area_basis: 'gross' }, 'INVALID_BODY'],
+      [{ distribution: 'area' }, 'AREA_DISTRIBUTION_REMOVED'], [{ distribution: 'area', area_basis: 'x' }, 'AREA_DISTRIBUTION_REMOVED'], [{ area_basis: 'gross' }, 'INVALID_BODY'],
       [{ category_amounts: { a: 1 } }, 'INVALID_BODY'], [{ distribution: 'category', category_amounts: { a: 1 } }, 'INVALID_BODY'], [{ distribution: 'category', amount_minor: undefined }, 'INVALID_BODY'],
       [{ distribution: 'category', amount_minor: undefined, category_amounts: {} }, 'INVALID_BODY'], [{ distribution: 'category', amount_minor: undefined, category_amounts: { a: 1.5 } }, 'INVALID_BODY'],
       [{ distribution: 'category', amount_minor: undefined, category_amounts: { Dukkan: 1, DUKKAN: 2 } }, 'INVALID_BODY'], [{ distribution: 'category', amount_minor: undefined, category_amounts: { ['x'.repeat(41)]: 1 } }, 'INVALID_BODY'],
@@ -304,12 +308,40 @@ describe('finans: tanım gövdeleri', () => {
     const toCategoryNoAmounts = mergeDefinitionPatch(existing, parseDefinitionPatch({ distribution: 'category' }));
     assert.equal(toCategoryNoAmounts.amountMinor, null);
     assert.throws(() => assertDefinitionShape(toCategoryNoAmounts), (error) => error.code === 'INVALID_BODY');
-    const toArea = mergeDefinitionPatch(existing, parseDefinitionPatch({ distribution: 'area' }));
-    assert.throws(() => assertDefinitionShape(toArea), (error) => error.code === 'INVALID_BODY');
+    // m²'ye geçiş (ve yeni alan esası) artık PATCH'te de reddedilir
+    throwsCode(() => parseDefinitionPatch({ distribution: 'area' }), 'AREA_DISTRIBUTION_REMOVED');
+    throwsCode(() => parseDefinitionPatch({ distribution: 'area', area_basis: 'gross' }), 'AREA_DISTRIBUTION_REMOVED');
+    throwsCode(() => parseDefinitionPatch({ area_basis: 'net' }), 'AREA_DISTRIBUTION_REMOVED');
     const cleared = mergeDefinitionPatch({ ...existing, distribution: 'area', areaBasis: 'gross' }, parseDefinitionPatch({ distribution: 'equal' }));
     assert.equal(cleared.areaBasis, null, 'm²den çıkınca alan esası sıfırlanır');
     const badEnd = mergeDefinitionPatch(existing, parseDefinitionPatch({ end_period: '2025-01' }));
     assert.throws(() => assertDefinitionShape(badEnd), (error) => error.code === 'INVALID_BODY');
+  });
+
+  it('eski m² tanımı: pasifleştirilebilir / yeniden adlandırılabilir (borçlandırılmışsa da); başka yönteme çevrilebilir; ek borçta m² 400', () => {
+    const legacy = { name: 'Eski alan aidatı', kind: 'recurring', distribution: 'area', areaBasis: 'gross', amountMinor: 500000, categoryAmounts: null, dueDay: 5, startPeriod: '2026-01-01', endPeriod: null, isActive: true, target: { type: 'site', blockIds: [], apartmentIds: [] }, chargeParty: 'occupant' };
+    assert.doesNotThrow(() => assertDefinitionShape(legacy), 'okuma / güncelleme için eski şekil geçerli kalır');
+    const off = mergeDefinitionPatch(legacy, parseDefinitionPatch({ is_active: false }));
+    assert.equal(off.isActive, false);
+    assert.equal(off.distribution, 'area');
+    assert.doesNotThrow(() => assertDefinitionShape(off), 'pasifleştirme m² yüzünden takılmaz (borçlandırılmış tanımda izinli alanlar: is_active, name, ...)');
+    assert.ok(POSTED_PATCH_KEYS.includes('is_active') && POSTED_PATCH_KEYS.includes('name'));
+    const renamed = mergeDefinitionPatch(legacy, parseDefinitionPatch({ name: 'Yeni ad' }));
+    assert.doesNotThrow(() => assertDefinitionShape(renamed));
+    const toEqual = mergeDefinitionPatch(legacy, parseDefinitionPatch({ distribution: 'equal', amount_minor: 500000 }));
+    assert.equal(toEqual.areaBasis, null);
+    assert.doesNotThrow(() => assertDefinitionShape(toEqual));
+    throwsCode(() => parseChargeInput({ name: 'Asansör', distribution: 'area', area_basis: 'gross', amount_minor: 1000, target: { type: 'site' } }, { requireExpected: false, now: NOW }), 'AREA_DISTRIBUTION_REMOVED');
+  });
+
+  it('AREA_DISTRIBUTION_REMOVED: girdi 400, mevcut tanımın önizleme / borçlandırması 409 (aynı kod)', () => {
+    assert.equal(AREA_DISTRIBUTION_REMOVED, 'AREA_DISTRIBUTION_REMOVED');
+    const input = areaDistributionRemoved();
+    assert.deepEqual([input.statusCode, input.code], [400, 'AREA_DISTRIBUTION_REMOVED']);
+    assert.match(input.message, /m²/);
+    const state = areaDefinitionUnusable();
+    assert.deepEqual([state.statusCode, state.code], [409, 'AREA_DISTRIBUTION_REMOVED']);
+    assert.match(state.message, /pasifleştirin/);
   });
 
   it('İP-1A: PATCH charge_party borçlandırılmış tanımda da değişebilir (yalnız SONRAKİ borçlandırmaları etkiler); geçersiz 400', () => {

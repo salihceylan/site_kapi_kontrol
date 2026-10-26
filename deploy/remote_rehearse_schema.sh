@@ -1,6 +1,8 @@
 #!/bin/bash
 # Canli veritabani YEDEGINI gecici bir veritabanina yukleyip yeni kodun ensureDbSchema()'sini orada iki kez calistirir (canli DB'ye dokunmaz).
-# 035/036 (platform hizmetleri, hesap silme), 038-041 (toplu yukleme, belgeler, finans 4b, push) ve 044-046 (anket, ziyaretci, kartli gecis), 047-048 (is takibi fotograf, rezervasyon okunmamis) varlik kontrolleri + IDEMPOTANS:
+# 035/036 (platform hizmetleri, hesap silme), 038-041 (toplu yukleme, belgeler, finans 4b, push), 044-046 (anket, ziyaretci, kartli gecis), 047-048 (is takibi fotograf, rezervasyon okunmamis), 049-051 ve 052-077
+# (her migration icin o migration'in olusturdugu nesne: tablo / sutun / indeks / kisit / tetikleyici / islev) varlik kontrolleri + IDEMPOTANS:
+# ensureDbSchema turlarinda node CIKIS KODU ve "ENSURE_OK tur N" satiri ZORUNLUDUR; yoksa (migration/sema coktuyse) PROVA_SORUNLU basar.
 # ikinci ensureDbSchema turundan sonra TUM public semasinin parmak izi (kolon, kisit, indeks, tetikleyici, islev) ilk turla AYNI olmali.
 # Kullanim: bash remote_rehearse_schema.sh <TS>   (once remote_deploy.sh <TS> prepare calismis olmali)
 set -u
@@ -38,14 +40,21 @@ schema_fp() {
     union all select 'fn ' || p.proname || ' ' || md5(p.prosrc) from pg_proc p where p.pronamespace = 'public'::regnamespace
   ) s" 2>&1 | head -n 1
 }
-FP1=""; FP2=""
+FP1=""; FP2=""; ENSURE_OK_ALL=t
 cd "$STAGE" || exit 4
 export $(grep -E '^(DB_HOST|DB_PORT|DB_USER|DB_PASSWORD)=' "$ENVF" | xargs)
 export DB_NAME="$RDB"
 for i in 1 2; do
-  node --input-type=module -e "const m = await import('./src/db.js'); await m.ensureDbSchema(); console.log('ENSURE_OK tur $i'); process.exit(0)" 2>&1 | cut -c1-220 | tail -n 6
+  # Boru (| tail) node'un cikis kodunu yutardi: ciktiyi degiskene al, kodu ve ENSURE_OK satirini AYRI denetle.
+  ensure_out=$(node --input-type=module -e "const m = await import('./src/db.js'); await m.ensureDbSchema(); console.log('ENSURE_OK tur $i'); process.exit(0)" 2>&1); ensure_rc=$?
+  printf '%s\n' "$ensure_out" | cut -c1-220 | tail -n 6
+  if [ "$ensure_rc" -ne 0 ] || ! printf '%s\n' "$ensure_out" | grep -qx "ENSURE_OK tur $i"; then
+    ENSURE_OK_ALL=f
+    echo "   HATA: ensureDbSchema tur $i BASARISIZ (node cikis kodu=$ensure_rc, 'ENSURE_OK tur $i' satiri $(printf '%s\n' "$ensure_out" | grep -qx "ENSURE_OK tur $i" && echo VAR || echo YOK))"
+  fi
   if [ "$i" = 1 ]; then FP1="$(schema_fp)"; else FP2="$(schema_fp)"; fi
 done
+echo "   ensureDbSchema tur1+tur2: node cikis kodu 0 ve ENSURE_OK satirlari: $([ "$ENSURE_OK_ALL" = t ] && echo TAMAM || echo SORUNLU)"
 echo "   sema parmak izi tur1/tur2: ${FP1:0:12} / ${FP2:0:12} ($([ -n "$FP1" ] && [ "$FP1" = "$FP2" ] && echo ESIT-idempotent || echo FARKLI-SORUNLU))"
 echo "[4/5] dogrulama"
 after_sites=$($PSQL -d "$RDB" -Atc "select count(*) from sites")
@@ -105,9 +114,50 @@ ok044=$(q "select (select count(*) from information_schema.tables where table_sc
 ok047=$(q "select (select count(*) from information_schema.tables where table_schema='public' and table_name='work_item_attachments')=1 and (select count(*) from pg_constraint where conname in ('work_item_attachments_work_item_id_fkey','work_item_attachments_site_code_fkey','work_item_attachments_uploaded_by_fkey','chk_work_item_attachments_status','chk_work_item_attachments_ready'))=5 and (select count(*) from pg_constraint where conname='chk_work_item_events_type' and pg_get_constraintdef(oid) like '%attachment_removed%')=1 and (select count(*) from information_schema.columns where table_name in ('reservations','concierge_requests') and column_name in ('resident_updated_at','resident_seen_at'))=4")
 ok049=$(q "select (select count(*) from information_schema.tables where table_schema='public' and table_name in ('contract_vendors','site_contracts','contract_reminders','board_decisions'))=4 and (select count(*) from information_schema.columns where table_name='contract_reminders' and column_name='claimed_at')=1 and (select count(*) from pg_trigger where not tgisinternal and tgname in ('trg_board_decisions_immutable','trg_board_decisions_no_truncate'))=2")
 ok051=$(q "select (select count(*) from information_schema.columns where table_name='apartments' and column_name='resident_pin_issued')=1 and (select count(*) from apartments where resident_pin_code is not null)=0")
+# --- 052..077 varlik kontrolleri: HER migration icin o migration'in olusturdugu nesnelerden en az biri (tablo / sutun / indeks / kisit / tetikleyici / islev) saymayla denetlenir.
+# Parcalar SQL kosul metni uretir (sayi esitligi); okNNN = hepsi dogru ise 't'. psql hatasi / eksik nesne 't' DEGIL uretir ve PROVA_SORUNLU olur.
+tb() { echo "(select count(*) from information_schema.tables where table_schema='public' and table_name in ($1))=$2"; }
+cl() { echo "(select count(*) from information_schema.columns where table_schema='public' and (table_name||'.'||column_name) in ($1))=$2"; }
+ix() { echo "(select count(*) from pg_indexes where schemaname='public' and indexname in ($1))=$2"; }
+ks() { echo "(select count(*) from pg_constraint where connamespace='public'::regnamespace and conname in ($1))=$2"; }
+tg() { echo "(select count(*) from pg_trigger where not tgisinternal and tgname in ($1))=$2"; }
+fn() { echo "(select count(*) from pg_proc where pronamespace='public'::regnamespace and proname in ($1))=$2"; }
+ok052=$(q "select $(cl "'ledger_entries.account_party','ledger_entries.source_kind','ledger_entries.source_id','fee_definitions.charge_party','late_fee_run_lines.account_party'" 5) and $(ks "'chk_fee_definitions_charge_party','chk_ledger_entries_account_party','chk_ledger_entries_source','chk_late_fee_run_lines_account'" 4) and $(ix "'idx_ledger_entries_source','uq_late_fee_run_lines_account'" 2) and $(tg "'trg_late_fee_run_lines_account','trg_ledger_entries_account_party'" 2)")
+ok053=$(q "select $(tb "'platform_rule_values'" 1) and $(ks "'platform_rule_values_site_code_fkey','platform_rule_values_created_by_fkey','chk_platform_rule_values_value','chk_platform_rule_values_key'" 4) and $(ix "'idx_platform_rule_values_lookup','idx_platform_rule_values_site'" 2) and $(tg "'trg_platform_rule_values_immutable','trg_platform_rule_values_no_truncate'" 2) and $(fn "'trg_platform_rule_values_immutable','trg_platform_rule_values_block_truncate'" 2)")
+ok054=$(q "select $(tb "'finance_account_bank_details','finance_apartment_ref_codes','finance_payment_settings','finance_site_ref_prefixes'" 4) and $(ks "'uq_finance_apartment_ref_codes_site_code','chk_finance_account_bank_details_iban','chk_finance_payment_settings_version'" 3) and $(tg "'trg_finance_account_bank_details_immutable','trg_finance_account_bank_details_no_truncate','trg_finance_settings_guard'" 3) and $(ix "'idx_finance_account_bank_details_account','idx_finance_apartment_ref_codes_site'" 2)")
+ok055=$(q "select $(tb "'finance_opening_reverts'" 1) and $(ks "'fk_finance_opening_reverts_run','fk_finance_opening_reverts_site','fk_finance_opening_reverts_user','chk_finance_opening_reverts_key','chk_bulk_import_runs_kind_fmt'" 5) and $(ix "'uq_finance_opening_reverts_key','idx_finance_opening_reverts_user'" 2)")
+ok056=$(q "select $(tb "'expense_natures'" 1) and $(ks "'expense_natures_expense_id_fkey','expense_natures_site_code_fkey','chk_expense_natures_nature','chk_expense_natures_source'" 4) and $(ix "'idx_expense_natures_site'" 1)")
+ok057=$(q "select $(cl "'announcements.deleted_at','announcement_recipients.hidden_at'" 2) and $(ks "'chk_announcements_deleted_withdrawn'" 1)")
+ok058=$(q "select $(tb "'person_invitations','site_directory_contacts','site_team_duties'" 3) and $(ix "'uq_person_invitations_pending','idx_site_team_duties_site','idx_site_directory_contacts_site'" 3) and $(ks "'chk_person_invitations_status','chk_site_team_duties_duty','chk_site_directory_contacts_category'" 3)")
+ok059=$(q "select $(tb "'budget_projects','budget_items'" 2) and $(ix "'uq_budget_projects_final','idx_budget_projects_site_year'" 2) and $(ks "'chk_budget_projects_status','uq_budget_items_category','uq_budget_projects_site_id'" 3)")
+ok060=$(q "select $(tb "'drive_files','drive_oauth_states','drive_pending_uploads','site_drive_connections'" 4) and $(ix "'idx_drive_files_site','idx_drive_pending_due','idx_drive_oauth_states_expiry'" 3)")
+ok061=$(q "select $(tb "'meters','meter_readings','meter_billings','meter_billing_lines'" 4) and $(ix "'uq_meters_site_kind_serial','uq_meter_readings_meter_date','uq_meter_billings_key'" 3)")
+ok062=$(q "select $(tb "'management_companies','management_company_members','management_company_sites'" 3) and $(cl "'site_subscriptions.trial_ends_at'" 1) and (select count(*) from platform_settings where key='subscription.trial_days')=1")
+ok063=$(q "select $(tb "'sms_login_codes','web_push_subscriptions','cargo_notify_log'" 3) and $(ix "'idx_sms_login_codes_phone','idx_web_push_user'" 2) and $(ks "'uq_web_push_endpoint','chk_web_push_endpoint'" 2)")
+ok064=$(q "select $(tb "'neighbor_posts','neighbor_post_reports'" 2) and $(ix "'idx_neighbor_posts_site_status','uq_neighbor_post_reports_once'" 2)")
+ok065=$(q "select $(tb "'camera_devices','payment_provider_settings','plate_events'" 3) and $(ix "'idx_camera_devices_site','idx_plate_events_site'" 2)")
+ok066=$(q "select $(tb "'payment_notices'" 1) and $(tg "'trg_payment_notices_guard'" 1) and $(fn "'trg_payment_notices_guard'" 1) and $(ix "'uq_payment_notices_idempotency','uq_payment_notices_ledger','idx_payment_notices_site_status'" 3)")
+ok067=$(q "select $(tb "'bank_import_profiles','bank_imports','bank_payer_ibans','bank_statement_lines'" 4) and $(ix "'uq_bank_imports_key','uq_bank_lines_fingerprint','uq_bank_lines_ledger','idx_bank_lines_site_status'" 4)")
+ok068=$(q "select $(tb "'equipment_items','equipment_plans','equipment_maintenance_logs','equipment_quotes','equipment_expense_links'" 5) and $(ks "'equipment_expense_links_expense_id_fkey'" 1) and $(ix "'idx_equipment_items_site','idx_equipment_plans_due'" 2)")
+ok069=$(q "select $(tb "'annual_reports'" 1)")
+ok070=$(q "select $(tb "'meter_reading_photos'" 1) and $(ix "'idx_meter_reading_photos_site'" 1)")
+ok071=$(q "select $(tb "'brand_themes'" 1) and $(ks "'uq_brand_themes_scope','chk_brand_themes_hex'" 2)")
+ok072=$(q "select $(tb "'cctv_cameras','cctv_camera_doors'" 2) and $(ix "'idx_cctv_cameras_site','idx_cctv_camera_doors_door'" 2)")
+ok073=$(q "select $(tb "'plate_blacklist','plate_decisions','plate_gate_settings','plate_guest_permits'" 4) and $(ix "'uq_plate_blacklist_active','uq_plate_gate_settings_device','idx_plate_decisions_open'" 3)")
+ok074=$(q "select $(tb "'apartment_admin_delegations','apartment_link_requests','apartment_proxies','apartment_notices','apartment_safety_requests','apartment_safety_notes','apartment_access_suspensions'" 7) and $(cl "'apartment_residencies.is_minor','apartment_residencies.sponsor_person_id','users.search_visible'" 3) and $(ix "'uq_apartment_proxies_open','uq_apartment_link_requests_tenant','uq_apartment_admin_delegations_open'" 3)")
+ok075=$(q "select $(tb "'apartment_residency_log'" 1) and $(tg "'trg_apartment_residency_log_immutable','trg_apartment_residency_log_no_truncate','trg_users_log_residencies'" 3) and $(ix "'idx_apartment_residency_log_apartment','idx_apartment_residency_log_site'" 2)")
+ok076=$(q "select $(tb "'user_oauth_identities'" 1) and $(ks "'uq_user_oauth_provider_sub','chk_user_oauth_provider'" 2) and $(ix "'idx_user_oauth_user_code'" 1)")
+# 077: must_change_password + sites.approval_status; site_name_key islevi (davranis dahil); iki FK (CASCADE); iki yeni tekillik indeksi VAR, iki eski indeks YOK; yetim satir YOK.
+# apartments m2 sutunlari bu surumde DUSURULMEZ (geri alma uyumlulugu): var olabilir, ama ya ikisi birden var ya ikisi de yok olmali (bilgi: [077] m2 satiri).
+ok077=$(q "select $(cl "'users.must_change_password','sites.approval_status'" 2) and $(fn "'site_name_key'" 1) and site_name_key('X'||chr(160)||'  '||chr(304)||'ZM'||chr(9)||'Y')='x izm y' and site_name_key(NULL)='' and (select provolatile from pg_proc where proname='site_name_key' and pronamespace='public'::regnamespace)='i' and $(ks "'user_oauth_identities_user_code_fkey','web_push_subscriptions_user_code_fkey'" 2) and (select count(*) from pg_constraint where conname in ('user_oauth_identities_user_code_fkey','web_push_subscriptions_user_code_fkey') and confdeltype='c' and convalidated)=2 and $(ix "'uq_sites_name_key','uq_site_applications_pending_name_key'" 2) and $(ix "'idx_sites_unique_name','idx_site_applications_pending_unique_name'" 0) and (select count(*) from user_oauth_identities o where not exists (select 1 from users u where u.user_code=o.user_code))=0 and (select count(*) from web_push_subscriptions w where not exists (select 1 from users u where u.user_code=w.user_code))=0 and (select count(*) from information_schema.columns where table_schema='public' and table_name='apartments' and column_name in ('gross_area_m2','net_area_m2')) in (0,2)")
+echo "   [052-077] varlik kontrolleri: ok052=$ok052 ok053=$ok053 ok054=$ok054 ok055=$ok055 ok056=$ok056 ok057=$ok057 ok058=$ok058 ok059=$ok059 ok060=$ok060 ok061=$ok061 ok062=$ok062 ok063=$ok063 ok064=$ok064 ok065=$ok065 ok066=$ok066 ok067=$ok067 ok068=$ok068 ok069=$ok069 ok070=$ok070 ok071=$ok071 ok072=$ok072 ok073=$ok073 ok074=$ok074 ok075=$ok075 ok076=$ok076 ok077=$ok077"
+echo "   [077] site_name_key('X'||NBSP||'  I-nokta-ustte'||'ZM'||tab||'Y') = $(q "select site_name_key('X'||chr(160)||'  '||chr(304)||'ZM'||chr(9)||'Y')") ('x izm y' olmali); yeni indeks: $(q "select string_agg(indexname, ',' order by indexname) from pg_indexes where indexname in ('uq_sites_name_key','uq_site_applications_pending_name_key')") (2 olmali); eski indeks kalan: $(q "select count(*) from pg_indexes where indexname in ('idx_sites_unique_name','idx_site_applications_pending_unique_name')") (0 olmali; mukerrer ad varsa yeni kurulamaz ve eski KALIR: acilis gunlugundaki UYARI satirlarina bak)"
+echo "   [077] FK: $(q "select string_agg(conname||'/'||confdeltype::text, ',' order by conname) from pg_constraint where conname in ('user_oauth_identities_user_code_fkey','web_push_subscriptions_user_code_fkey')") (2 olmali, 'c' = CASCADE); apartments m2 sutunlari (bilgi: bu surumde DUSURULMEZ, 0 veya 2): $(q "select count(*) from information_schema.columns where table_schema='public' and table_name='apartments' and column_name in ('gross_area_m2','net_area_m2')")"
+all052=t
+for v in "$ok052" "$ok053" "$ok054" "$ok055" "$ok056" "$ok057" "$ok058" "$ok059" "$ok060" "$ok061" "$ok062" "$ok063" "$ok064" "$ok065" "$ok066" "$ok067" "$ok068" "$ok069" "$ok070" "$ok071" "$ok072" "$ok073" "$ok074" "$ok075" "$ok076" "$ok077"; do [ "$v" = "t" ] || all052=f; done
 idem=f; [ -n "$FP1" ] && [ "$FP1" = "$FP2" ] && idem=t
-echo "   ok035=$ok035 ok038=$ok038 ok039=$ok039 ok040=$ok040 ok041=$ok041 ok044=$ok044 ok047=$ok047 ok049=$ok049 ok051=$ok051 idempotent=$idem"
-if [ "$before_sites" = "$after_sites" ] && [ "$before_users" = "$after_users" ] && [ "$before_sm" = "$after_sm" ] && [ "$before_am" = "$after_am" ] && [ "$typed" = "$after_sites" ] && [ "$ok035" = "t" ] && [ "$ok038" = "t" ] && [ "$ok039" = "t" ] && [ "$ok040" = "t" ] && [ "$ok041" = "t" ] && [ "$ok044" = "t" ] && [ "$ok047" = "t" ] && [ "$ok049" = "t" ] && [ "$ok051" = "t" ] && [ "$idem" = "t" ]; then
+echo "   ok035=$ok035 ok038=$ok038 ok039=$ok039 ok040=$ok040 ok041=$ok041 ok044=$ok044 ok047=$ok047 ok049=$ok049 ok051=$ok051 ok052-077=$all052 ensure=$ENSURE_OK_ALL idempotent=$idem"
+if [ "$before_sites" = "$after_sites" ] && [ "$before_users" = "$after_users" ] && [ "$before_sm" = "$after_sm" ] && [ "$before_am" = "$after_am" ] && [ "$typed" = "$after_sites" ] && [ "$ok035" = "t" ] && [ "$ok038" = "t" ] && [ "$ok039" = "t" ] && [ "$ok040" = "t" ] && [ "$ok041" = "t" ] && [ "$ok044" = "t" ] && [ "$ok047" = "t" ] && [ "$ok049" = "t" ] && [ "$ok051" = "t" ] && [ "$all052" = "t" ] && [ "$ENSURE_OK_ALL" = "t" ] && [ "$idem" = "t" ]; then
   echo "PROVA_OK"
 else
   echo "PROVA_SORUNLU"

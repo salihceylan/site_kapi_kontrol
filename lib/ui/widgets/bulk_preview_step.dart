@@ -251,6 +251,20 @@ class _BulkPreviewStepState extends State<BulkPreviewStep> {
         ..add(const SizedBox(height: AppSpace.md));
     }
 
+    if (c.blankRows > 0) {
+      children
+        ..add(
+          InlineNotice(
+            key: const ValueKey<String>('bulk_blank_rows'),
+            tone: AppTone.info,
+            message:
+                '${c.blankRows} satır atlandı: boş ya da yalnız Blok / Daire No dolu (yüklenecek veri yok). '
+                'Bu satırlar önizlemeye ve yüklemeye girmez.',
+          ),
+        )
+        ..add(const SizedBox(height: AppSpace.md));
+    }
+
     if (preview.landShare != null) {
       children
         ..add(

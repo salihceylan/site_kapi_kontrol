@@ -228,8 +228,11 @@ const CATALOG_TABLES = [
   'site_contracts',
   'contract_reminders',
   'platform_rule_values',
+  'user_oauth_identities', // 076 + 077 FK (users, CASCADE)
+  'web_push_subscriptions', // 063 + 077 FK (users, CASCADE)
 ];
-const APARTMENT_COLUMNS = ['floor', 'gross_area_m2', 'net_area_m2', 'land_share_numerator', 'land_share_denominator', 'category', 'responsible_party'];
+// m2 (gross_area_m2 / net_area_m2) KATALOGA ALINMAZ: sistemden kaldirildi; sutunlar bu surumde geri alma uyumlulugu icin KALIR (db.js 031 DDL'i) ama QA onlari yazmaz / okumaz.
+const APARTMENT_COLUMNS = ['floor', 'land_share_numerator', 'land_share_denominator', 'category', 'responsible_party'];
 const NAMED_CONSTRAINTS = [
   'sites_management_type_check',
   'chk_site_membership_role',
@@ -246,7 +249,7 @@ async function readCatalog(client) {
      WHERE table_schema = 'public'
        AND (table_name = ANY($1::text[])
             OR (table_name = 'apartments' AND column_name = ANY($2::text[]))
-            OR (table_name = 'users' AND column_name = 'deleted_at')
+            OR (table_name = 'users' AND column_name IN ('deleted_at', 'must_change_password'))
             OR (table_name = 'sites' AND column_name = 'management_type'))
      ORDER BY table_name, column_name`,
     [CATALOG_TABLES, APARTMENT_COLUMNS],
@@ -260,7 +263,7 @@ async function readCatalog(client) {
   );
   const indexes = await client.query(
     `SELECT tablename, indexname, indexdef FROM pg_indexes
-     WHERE schemaname = 'public' AND tablename = ANY($1::text[]) ORDER BY 1, 2`,
+     WHERE schemaname = 'public' AND (tablename = ANY($1::text[]) OR indexname IN ('uq_sites_name_key', 'idx_sites_unique_name', 'uq_site_applications_pending_name_key', 'idx_site_applications_pending_unique_name')) ORDER BY 1, 2`,
     [CATALOG_TABLES],
   );
   const triggers = await client.query(
@@ -269,7 +272,7 @@ async function readCatalog(client) {
      WHERE NOT t.tgisinternal AND t.tgname IN ('trg_users_preserve_site_people', 'trg_ledger_entries_append_only', 'trg_ledger_entries_reversal_check', 'trg_ledger_entries_no_truncate', 'trg_fee_runs_append_only', 'trg_fee_runs_no_truncate', 'trg_finance_period_closures_no_update', 'trg_board_decisions_immutable', 'trg_board_decisions_no_truncate', 'trg_ledger_entries_account_party', 'trg_late_fee_run_lines_account', 'trg_platform_rule_values_immutable', 'trg_platform_rule_values_no_truncate') ORDER BY 1, 2`,
   );
   const functions = await client.query(
-    `SELECT proname, regexp_replace(prosrc, '\\s+', ' ', 'g') AS src FROM pg_proc WHERE proname IN ('trg_users_preserve_site_people', 'trg_ledger_entries_append_only', 'trg_ledger_entries_reversal_check', 'trg_fee_runs_append_only', 'trg_finance_period_closures_no_update', 'trg_finance_block_truncate', 'trg_board_decisions_immutable', 'trg_board_decisions_block_truncate', 'trg_ledger_entries_account_party', 'trg_late_fee_run_lines_account', 'trg_platform_rule_values_immutable', 'trg_platform_rule_values_block_truncate') ORDER BY 1`,
+    `SELECT proname, regexp_replace(prosrc, '\\s+', ' ', 'g') AS src FROM pg_proc WHERE proname IN ('trg_users_preserve_site_people', 'trg_ledger_entries_append_only', 'trg_ledger_entries_reversal_check', 'trg_fee_runs_append_only', 'trg_finance_period_closures_no_update', 'trg_finance_block_truncate', 'trg_board_decisions_immutable', 'trg_board_decisions_block_truncate', 'trg_ledger_entries_account_party', 'trg_late_fee_run_lines_account', 'trg_platform_rule_values_immutable', 'trg_platform_rule_values_block_truncate', 'site_name_key') ORDER BY 1`,
   );
   // tohum satirlari (zamandan bagimsiz alanlar): migration zinciri ile ensureDbSchema ayni tohumu yazmali
   const seeds = {
@@ -695,7 +698,7 @@ async function sectionChain() {
   const announcementCounts = await pool.query(`SELECT (SELECT COUNT(*) FROM announcements)::int AS a, (SELECT COUNT(*) FROM announcement_recipients)::int AS r, (SELECT COUNT(*) FROM notification_preferences)::int AS p`);
   check('bos DB: duyuru tablolari (032) var ve BOS', announcementCounts.rows[0].a === 0 && announcementCounts.rows[0].r === 0 && announcementCounts.rows[0].p === 0);
   const applicationCounts = await pool.query(`SELECT (SELECT COUNT(*) FROM site_applications)::int AS a, (SELECT COUNT(*) FROM site_subscriptions)::int AS s, (SELECT COUNT(*) FROM subscription_plans)::int AS p, (SELECT COUNT(*) FROM platform_settings)::int AS c`);
-  check('bos DB: site basvurusu tablolari (033) var; basvuru ve abonelik BOS; 2 plan + 1 ayar tohumu', applicationCounts.rows[0].a === 0 && applicationCounts.rows[0].s === 0 && applicationCounts.rows[0].p === 2 && applicationCounts.rows[0].c === 1, applicationCounts.rows[0]);
+  check('bos DB: site basvurusu tablolari (033) var; basvuru ve abonelik BOS; 2 plan + 2 ayar tohumu (site_onboarding + subscription.trial_days, 062)', applicationCounts.rows[0].a === 0 && applicationCounts.rows[0].s === 0 && applicationCounts.rows[0].p === 2 && applicationCounts.rows[0].c === 2, applicationCounts.rows[0]);
   const financeCounts = await pool.query(`SELECT (SELECT COUNT(*) FROM fee_definitions)::int AS d, (SELECT COUNT(*) FROM fee_runs)::int AS r, (SELECT COUNT(*) FROM ledger_entries)::int AS l, (SELECT COUNT(*) FROM finance_period_closures)::int AS c, (SELECT COUNT(*) FROM pg_trigger WHERE tgname IN ('trg_ledger_entries_append_only', 'trg_ledger_entries_reversal_check', 'trg_ledger_entries_no_truncate', 'trg_fee_runs_append_only', 'trg_fee_runs_no_truncate', 'trg_finance_period_closures_no_update') AND NOT tgisinternal)::int AS t`);
   check('bos DB: finans tablolari (034) var ve BOS; 6 degismezlik tetikleyicisi kurulu', financeCounts.rows[0].d === 0 && financeCounts.rows[0].r === 0 && financeCounts.rows[0].l === 0 && financeCounts.rows[0].c === 0 && financeCounts.rows[0].t === 6, financeCounts.rows[0]);
   const seedRows = await pool.query(`SELECT code, is_active, price_minor, billing_period FROM subscription_plans ORDER BY code`);
@@ -832,7 +835,7 @@ async function sectionUpgrade() {
   const announcementRows = (await q(`SELECT (SELECT COUNT(*) FROM announcements)::int + (SELECT COUNT(*) FROM announcement_recipients)::int + (SELECT COUNT(*) FROM notification_preferences)::int AS n`)).rows[0].n;
   check(`${scenario}: 032 tablolari (announcements, announcement_recipients, notification_preferences) olustu ve BOS (eski veriye satir yazilmadi)`, announcementTables.rows[0].a !== null && announcementTables.rows[0].r !== null && announcementTables.rows[0].p !== null && announcementRows === 0);
   const applicationTables = (await q(`SELECT (SELECT COUNT(*) FROM site_applications)::int AS a, (SELECT COUNT(*) FROM site_subscriptions)::int AS s, (SELECT COUNT(*) FROM subscription_plans)::int AS p, (SELECT COUNT(*) FROM platform_settings)::int AS c, (SELECT COUNT(*) FROM sites)::int AS sites`)).rows[0];
-  check(`${scenario}: 033 tablolari olustu; MEVCUT sitelere abonelik satiri YAZILMADI (backfill yok); basvuru BOS; yalniz 2 plan + 1 ayar tohumu`, applicationTables.sites >= 3 && applicationTables.a === 0 && applicationTables.s === 0 && applicationTables.p === 2 && applicationTables.c === 1, applicationTables);
+  check(`${scenario}: 033 tablolari olustu; MEVCUT sitelere abonelik satiri YAZILMADI (backfill yok); basvuru BOS; yalniz 2 plan + 2 ayar tohumu (site_onboarding + subscription.trial_days, 062)`, applicationTables.sites >= 3 && applicationTables.a === 0 && applicationTables.s === 0 && applicationTables.p === 2 && applicationTables.c === 2, applicationTables);
   const financeTables = (await q(`SELECT (SELECT COUNT(*) FROM fee_definitions)::int AS d, (SELECT COUNT(*) FROM fee_runs)::int AS r, (SELECT COUNT(*) FROM ledger_entries)::int AS l, (SELECT COUNT(*) FROM finance_period_closures)::int AS c`)).rows[0];
   const ledgerTrigger = (await q(`SELECT 1 FROM pg_trigger WHERE tgname IN ('trg_ledger_entries_append_only', 'trg_ledger_entries_reversal_check', 'trg_ledger_entries_no_truncate', 'trg_fee_runs_append_only', 'trg_fee_runs_no_truncate', 'trg_finance_period_closures_no_update') AND NOT tgisinternal`)).rowCount;
   check(`${scenario}: 034 finans tablolari olustu ve BOS (eski veriye satir yazilmadi); 6 degismezlik tetikleyicisi kurulu`, financeTables.d === 0 && financeTables.r === 0 && financeTables.l === 0 && financeTables.c === 0 && ledgerTrigger === 6, financeTables);
@@ -1702,14 +1705,13 @@ async function sectionPeople() {
   const a5 = await apt(S1, 5);
   res = await call('GET', `${P(S1)}/apartments?limit=100`, MGR);
   check('daire listesi: S1 icin 8 daire, owner/tenant/resident_count alanlari', res.status === 200 && res.body.total === 8 && res.body.items.every((i) => 'resident_count' in i && 'owner' in i && 'tenant' in i && i.responsible_party === 'both'));
-  res = await call('PATCH', `${P(S1)}/apartments/${a5}`, MGR, { floor: 3, gross_area_m2: 120.5, net_area_m2: 98, land_share_numerator: 35, land_share_denominator: 1000, category: '3+1', responsible_party: 'tenant' });
+  res = await call('PATCH', `${P(S1)}/apartments/${a5}`, MGR, { floor: 3, land_share_numerator: 35, land_share_denominator: 1000, category: '3+1', responsible_party: 'tenant' });
   check('PATCH daire: alanlar yazildi, unit_label/blok degismedi', res.status === 200 && res.body.floor === 3 && res.body.land_share?.numerator === 35 && res.body.land_share.denominator === 1000 && res.body.category === '3+1' && res.body.responsible_party === 'tenant' && res.body.label === 'A Blok - Daire 5', res.body);
   const invalidPatches = [
     [{ land_share_denominator: null }, 'land_share'],
     [{ land_share_numerator: 20, land_share_denominator: 10 }, 'land_share'],
     [{ category: 'x'.repeat(41) }, 'category'],
     [{ responsible_party: 'kimse' }, 'responsible_party'],
-    [{ gross_area_m2: -5 }, 'gross_area_m2'],
     [{ floor: 'abc' }, 'floor'],
   ];
   for (const [body, field] of invalidPatches) {
@@ -1979,7 +1981,7 @@ async function sectionPeople() {
     const createdSite = await siteSvc.createSiteWithStructure({ name: 'Azaltma Sitesi', blockCount: 1, apartmentCount: 3, blockApartmentCounts: [3], doorCount: 1, managerUserCode: 10003, managementType: 'apartment_site' });
     const shrinkSite = Number(createdSite.site_code ?? createdSite.id);
     const lastApartment = Number((await q(`SELECT id FROM apartments WHERE site_code = $1 ORDER BY sort_order DESC LIMIT 1`, [shrinkSite])).rows[0].id);
-    await q(`UPDATE apartments SET floor = 3, gross_area_m2 = 120.5, land_share_numerator = 35, land_share_denominator = 1000, category = '3+1' WHERE id = $1`, [lastApartment]);
+    await q(`UPDATE apartments SET floor = 3, land_share_numerator = 35, land_share_denominator = 1000, category = '3+1' WHERE id = $1`, [lastApartment]);
     const shrinkPerson = Number((await q(`INSERT INTO site_people (site_code, full_name) VALUES ($1, 'Silinen Daire Sakini') RETURNING id`, [shrinkSite])).rows[0].id);
     await q(`INSERT INTO apartment_residencies (site_code, apartment_id, person_id, relation, move_in_date) VALUES ($1, $2, $3, 'owner', '2024-05-01')`, [shrinkSite, lastApartment, shrinkPerson]);
     await q(`INSERT INTO vehicles (site_code, person_id, plate) VALUES ($1, $2, '06DLT001')`, [shrinkSite, shrinkPerson]);
@@ -6760,6 +6762,7 @@ async function sectionFinance() {
     ['baslangic ayin ilk gunu degil', { start_period: '2026-01-02' }], ['bitis baslangictan once', { start_period: '2026-05-01', end_period: '2026-04-01' }], ['bitis ayin ilk gunu degil', { end_period: '2026-06-15' }],
     ['hedef bloklar ama kimlik yok', { target_type: 'blocks' }], ['site hedefinde blok kimligi', { target_type: 'site', target_block_ids: [1] }], ['daire hedefinde hem daire hem blok', { target_type: 'apartments', target_apartment_ids: [1], target_block_ids: [1] }], ['gecersiz hedef turu', { target_type: 'x' }],
   ];
+  // NOT: m2 sistemden kaldirildi (API 400 AREA_DISTRIBUTION_REMOVED) ama DB CHECK'i 'area'yi ESKI satirlar icin korur; bu bolum yalniz DB kisitlarini sinar (dogrudan INSERT).
   const badDefResults = [];
   for (const [label, over] of badDefs) badDefResults.push([label, await insertDef(over)]);
   check(`A3: fee_definitions CHECK'leri ${badDefs.length} gecersiz kombinasyonu 23514 ile reddeder (area_basis NULL gecisi dahil)`, badDefResults.every(([, code]) => code === '23514'), badDefResults.filter(([, c]) => c !== '23514'));
@@ -7009,14 +7012,14 @@ async function sectionFinance() {
   await link.member(fs1.code, BOARD, 'BOARD_MEMBER');
   await link.member(fs1.code, STAFF, 'STAFF');
   await link.member(fs1.code, RESIDENT, 'RESIDENT');
-  // daire alanlari: A blok (10 daire): brut 90+n, net 70+n, arsa payi n/1000, kategori 2+1 (n<=5) / 3+1, odeyen owner/both/tenant donusumlu.
-  // B blok (10 daire): brut 120.50, net 100.25, arsa payi 12/2000, kategori Dukkan (n<=2) / 2+1; B Daire 10 hicbir verisi olmayan (eksik veri) daire.
+  // daire alanlari (m2 YOK: sistemden kaldirildi): A blok (10 daire): arsa payi n/1000, kategori 2+1 (n<=5) / 3+1, odeyen owner/both/tenant donusumlu.
+  // B blok (10 daire): arsa payi 12/2000, kategori Dukkan (n<=2) / 2+1; B Daire 10 hicbir verisi olmayan (eksik veri) daire.
   const PARTIES = ['owner', 'both', 'tenant'];
   for (const a of fs1.apts) {
     if (a.block === 'A Blok') {
-      await q(`UPDATE apartments SET gross_area_m2 = $2, net_area_m2 = $3, land_share_numerator = $4, land_share_denominator = 1000, category = $5, responsible_party = $6 WHERE id = $1`, [a.id, `${90 + a.n}.00`, `${70 + a.n}.00`, a.n, a.n <= 5 ? '2+1' : '3+1', PARTIES[a.n % 3]]);
+      await q(`UPDATE apartments SET land_share_numerator = $2, land_share_denominator = 1000, category = $3, responsible_party = $4 WHERE id = $1`, [a.id, a.n, a.n <= 5 ? '2+1' : '3+1', PARTIES[a.n % 3]]);
     } else if (a.n < 10) {
-      await q(`UPDATE apartments SET gross_area_m2 = 120.50, net_area_m2 = 100.25, land_share_numerator = 12, land_share_denominator = 2000, category = $2, responsible_party = 'both' WHERE id = $1`, [a.id, a.n <= 2 ? 'Dükkan' : '2+1']);
+      await q(`UPDATE apartments SET land_share_numerator = 12, land_share_denominator = 2000, category = $2, responsible_party = 'both' WHERE id = $1`, [a.id, a.n <= 2 ? 'Dükkan' : '2+1']);
     }
   }
   const A = (n) => fs1.apt(`A Blok - Daire ${n}`);
@@ -7089,7 +7092,7 @@ async function sectionFinance() {
     ['10^12 + 1 tutar', { amount_minor: 1000000000001 }, 'INVALID_BODY'], ['1e21 tutar', { amount_minor: 1e21 }, 'INVALID_BODY'], ['tutar yok', { amount_minor: undefined }, 'INVALID_BODY'], ['amount / amount_minor farkli', { amount: 5, amount_minor: 6 }, 'INVALID_BODY'],
     ['aylikta vade gunu yok', { due_day: undefined }, 'INVALID_BODY'], ['vade gunu 29', { due_day: 29 }, 'INVALID_BODY'], ['vade gunu 0', { due_day: 0 }, 'INVALID_BODY'], ['vade gunu metin', { due_day: '5' }, 'INVALID_BODY'],
     ['baslangic donemi yok', { start_period: undefined }, 'INVALID_BODY'], ['baslangic 2026-13', { start_period: '2026-13' }, 'INVALID_BODY'], ['baslangic ayin ikinci gunu', { start_period: '2026-01-02' }, 'INVALID_BODY'], ['bitis < baslangic', { end_period: ym(-5) }, 'INVALID_BODY'],
-    ['m2 dagitimi alan esassiz', { distribution: 'area' }, 'INVALID_BODY'], ['esit dagitimda kategori tutarlari', { distribution: 'equal', category_amounts: { a: 100 } }, 'INVALID_BODY'], ['kategori dagitiminda tutar', { distribution: 'category', category_amounts: { a: 100 } }, 'INVALID_BODY'],
+    ['m2 dagitimi (kaldirildi)', { distribution: 'area' }, 'AREA_DISTRIBUTION_REMOVED'], ['esit dagitimda kategori tutarlari', { distribution: 'equal', category_amounts: { a: 100 } }, 'INVALID_BODY'], ['kategori dagitiminda tutar', { distribution: 'category', category_amounts: { a: 100 } }, 'INVALID_BODY'],
     ['kategori tutari ondalik', { distribution: 'category', amount_minor: undefined, category_amounts: { a: 1.5 } }, 'INVALID_BODY'], ['ayni kategori iki kez (harf farki)', { distribution: 'category', amount_minor: undefined, category_amounts: { DUKKAN: 1000, dukkan: 2000 } }, 'INVALID_BODY'],
     ['hedef yok', { target: undefined }, 'INVALID_BODY'], ['gecersiz hedef turu', { target: { type: 'kat' } }, 'INVALID_BODY'], ['blok hedefi bos', { target: { type: 'blocks', block_ids: [] } }, 'INVALID_TARGET'],
     ['BASKA sitenin blogu', { target: { type: 'blocks', block_ids: [foreignBlock] } }, 'INVALID_TARGET'], ['BASKA sitenin dairesi', { target: { type: 'apartments', apartment_ids: [fs2.ids[0]] } }, 'INVALID_TARGET'], ['hedef dairelerde metin kimlik', { target: { type: 'apartments', apartment_ids: ['abc'] } }, 'INVALID_TARGET'],
@@ -7115,8 +7118,16 @@ async function sectionFinance() {
 
   const categoryDef = await call('POST', `${base}/definitions`, MGR, { name: 'Kategori Aidat', kind: 'recurring', distribution: 'category', category_amounts: { '2+1': 100000, '3+1': 150000, 'Dükkan': 250000 }, due_day: 10, start_period: ym(-3), target: { type: 'site' } });
   check('D3: kategori tanimi: category_amounts kurus tamsayi; amount_minor null', categoryDef.status === 201 && categoryDef.body.amount_minor === null && categoryDef.body.category_amounts['2+1'] === 100000 && categoryDef.body.category_amounts['Dükkan'] === 250000, categoryDef.body);
-  const areaDef = await call('POST', `${base}/definitions`, MGR, { name: 'Alan Aidat', kind: 'recurring', distribution: 'area', area_basis: 'gross', amount_minor: 5000000, due_day: 15, start_period: ym(-3), target: { type: 'blocks', block_ids: [A(1).blockId] } });
-  check('D3b: m2 tanimi + blok hedefi (etiketli): area_basis gross, hedef blok adi dondu', areaDef.status === 201 && areaDef.body.area_basis === 'gross' && areaDef.body.target.block_ids[0] === A(1).blockId && areaDef.body.target.blocks[0]?.name === 'A Blok', areaDef.body);
+  const areaRejected = await call('POST', `${base}/definitions`, MGR, { name: 'Alan Aidat', kind: 'recurring', distribution: 'area', area_basis: 'gross', amount_minor: 5000000, due_day: 15, start_period: ym(-3), target: { type: 'site' } });
+  check('D3a: m2 (area) dagitimli YENI tanim reddedilir: 400 AREA_DISTRIBUTION_REMOVED (m2 sistemden kaldirildi), tanim olusmaz', areaRejected.status === 400 && areaRejected.body.code === 'AREA_DISTRIBUTION_REMOVED', areaRejected.body);
+  const blockDef = await call('POST', `${base}/definitions`, MGR, { name: 'Blok Aidat', kind: 'recurring', distribution: 'equal', amount_minor: 5000000, due_day: 15, start_period: ym(-3), target: { type: 'blocks', block_ids: [A(1).blockId] } });
+  check('D3b: esit dagitimli tanim + blok hedefi (etiketli): area_basis NULL, hedef blok adi dondu', blockDef.status === 201 && blockDef.body.area_basis === null && blockDef.body.target.block_ids[0] === A(1).blockId && blockDef.body.target.blocks[0]?.name === 'A Blok', blockDef.body);
+  // ESKI m2 tanimi (m2 kaldirilmadan once yazilmis; DB CHECK 'area'yi korur): onizleme / borclandirma 409 AREA_DISTRIBUTION_REMOVED, tanim pasiflestirilebilir
+  const legacyAreaId = (await q(`INSERT INTO fee_definitions (site_code, name, kind, distribution, area_basis, amount_minor, due_day, start_period, target_type) VALUES ($1, 'Eski Alan Aidat', 'recurring', 'area', 'gross', 5000000, 15, $2, 'site') RETURNING id`, [fs1.code, `${ym(-3)}-01`])).rows[0].id;
+  const legacyAreaPreview = await call('POST', `${base}/definitions/${legacyAreaId}/preview`, MGR, { period: ym(0) });
+  const legacyAreaPost = await call('POST', `${base}/definitions/${legacyAreaId}/post`, MGR, { period: ym(0), expected_total_minor: 0, expected_apartment_count: 0, expected_hash: 'a'.repeat(64) });
+  check('D3c: ESKI m2 tanimi: onizleme ve borclandirma 409 AREA_DISTRIBUTION_REMOVED (belirsiz tikanma yok); hicbir borc satiri yazilmaz', legacyAreaPreview.status === 409 && legacyAreaPreview.body.code === 'AREA_DISTRIBUTION_REMOVED' && legacyAreaPost.status === 409 && legacyAreaPost.body.code === 'AREA_DISTRIBUTION_REMOVED' && (await q(`SELECT COUNT(*)::int AS n FROM fee_runs WHERE definition_id = $1`, [legacyAreaId])).rows[0].n === 0, [legacyAreaPreview.body, legacyAreaPost.body]);
+  await q(`DELETE FROM fee_definitions WHERE id = $1`, [legacyAreaId]);
 
   const listAll = await call('GET', `${base}/definitions`, MGR);
   const listRecurring = await call('GET', `${base}/definitions?kind=recurring&active=true`, MGR);
@@ -7127,7 +7138,7 @@ async function sectionFinance() {
 
   // PATCH (borclandirilmamis): tutar / dagitim degisir; capraz kurallar
   const patchBad = [
-    ['bos govde', {}, 'INVALID_BODY'], ['ondalik tutar', { amount_minor: 10.5 }, 'INVALID_BODY'], ['kategoriye gecis ama kategori tutari yok', { distribution: 'category' }, 'INVALID_BODY'], ['m2 gecisi esassiz', { distribution: 'area' }, 'INVALID_BODY'],
+    ['bos govde', {}, 'INVALID_BODY'], ['ondalik tutar', { amount_minor: 10.5 }, 'INVALID_BODY'], ['kategoriye gecis ama kategori tutari yok', { distribution: 'category' }, 'INVALID_BODY'], ['m2 gecisi (kaldirildi)', { distribution: 'area' }, 'AREA_DISTRIBUTION_REMOVED'],
     ['vade gunu 40', { due_day: 40 }, 'INVALID_BODY'], ['bitis baslangictan once', { end_period: ym(-9) }, 'INVALID_BODY'], ['aktiflik metin', { is_active: 'evet' }, 'INVALID_BODY'], ['baska sitenin blogu', { target: { type: 'blocks', block_ids: [foreignBlock] } }, 'INVALID_TARGET'],
   ];
   const patchResults = [];
@@ -7329,16 +7340,11 @@ async function sectionFinance() {
   check('F3c: skip_missing: true ile eksik daire HARIC tutulur, kalanlar 2000/1000 ortak paydasiyla orantili (A n/1000 -> 2n/2000, B 12/2000); toplam 2000000 BIREBIR; eksik daire borclandirilmaz; audit sayisi', lsPost.status === 201 && sameAmounts(lsAmounts, refSplit(2000000n, lsWeights)) && [...lsAmounts.values()].reduce((a, b) => a + b, 0n) === 2000000n && !lsAmounts.has(B(10).id)
     && (await auditRows(fs1.code, 'finance.charge.posted')).some((r) => r.details.skipped_missing_count === 1), [lsPost.status, [...lsAmounts]]);
 
-  // F4: m2 (brut ve net)
+  // F4: m2 (brut ve net) dagitimi KALDIRILDI: onizleme / borclandirma 400 AREA_DISTRIBUTION_REMOVED, hicbir satir yazilmaz
   for (const basis of ['gross', 'net']) {
-    const body = chargeBody({ name: `Alan ${basis}`, distribution: 'area', area_basis: basis, amount_minor: 3333333 });
-    const out = await doCharge(body, { skip: true });
-    const weights = fs1.apts.filter((a) => a.id !== B(10).id).map((a) => {
-      const x100 = a.block === 'A Blok' ? BigInt((basis === 'gross' ? 90 + a.n : 70 + a.n) * 100) : basis === 'gross' ? 12050n : 10025n;
-      return { id: a.id, w: x100 };
-    });
-    const amounts = await amountsOfRun(out.post.body?.run?.id ?? 0);
-    check(`F4: m2 dagitimi (${basis}): agirlik = m2 x 100 tamsayi; B Daire 10 (m2 yok) eksik; paylar referansla BIREBIR, toplam 3333333`, out.preview.body.missing_data.length === 1 && out.preview.body.missing_data[0].reason_code === 'area_missing' && out.post.status === 201 && sameAmounts(amounts, refSplit(3333333n, weights)) && [...amounts.values()].reduce((a, b) => a + b, 0n) === 3333333n, out.post.body);
+    const snapF4 = await counts(fs1.code);
+    const out = await doCharge(chargeBody({ name: `Alan ${basis}`, distribution: 'area', area_basis: basis, amount_minor: 3333333 }), { skip: true });
+    check(`F4: m2 dagitimi (${basis}) kaldirildi: ek borc onizleme 400 AREA_DISTRIBUTION_REMOVED, borclandirma denenmez, hicbir kayit yazilmaz`, out.preview.status === 400 && out.preview.body.code === 'AREA_DISTRIBUTION_REMOVED' && out.post === null && same(snapF4, await counts(fs1.code)), out.preview.body);
   }
 
   // F5: kategori
@@ -7913,8 +7919,8 @@ async function sectionFinance() {
   const bigCode = ++nextSite;
   await q(`INSERT INTO sites (site_code, name, approval_status, approved_at) VALUES ($1, 'Buyuk Site', 'approved', NOW())`, [bigCode]);
   await q(`INSERT INTO site_blocks (site_code, block_name, sort_order) SELECT $1, 'Blok ' || g, g FROM generate_series(1, 6) g`, [bigCode]);
-  await q(`INSERT INTO apartments (site_code, block_id, unit_label, sort_order, gross_area_m2, net_area_m2, land_share_numerator, land_share_denominator, category, responsible_party)
-           SELECT $1, b.id, 'Daire ' || g, g, 80 + (g % 40), 60 + (g % 40), 1 + (g % 9), 10000, CASE WHEN g % 3 = 0 THEN '3+1' ELSE '2+1' END, 'both'
+  await q(`INSERT INTO apartments (site_code, block_id, unit_label, sort_order, land_share_numerator, land_share_denominator, category, responsible_party)
+           SELECT $1, b.id, 'Daire ' || g, g, 1 + (g % 9), 10000, CASE WHEN g % 3 = 0 THEN '3+1' ELSE '2+1' END, 'both'
            FROM site_blocks b CROSS JOIN generate_series(1, 500) g WHERE b.site_code = $1`, [bigCode]);
   await link.manager(bigCode, MGR);
   await enableModule(bigCode);
@@ -8424,11 +8430,9 @@ async function sectionFinance() {
   const zeroPv = await call('POST', `${bS}/charges/preview`, MGR, zeroOnly);
   const zeroPost = await call('POST', `${bS}/charges`, MGR, { ...zeroOnly, expected_total_minor: 0, expected_apartment_count: 0, expected_hash: zeroPv.body.preview_hash, idempotency_key: key('v5d') });
   check('V5e: yalniz pay-0 daire hedefi: onizleme eksik veri YOK, zero_amount_count 1, 0 satir; onay 409 NOTHING_TO_POST', zeroPv.status === 200 && zeroPv.body.missing_data.length === 0 && zeroPv.body.zero_amount_count === 1 && zeroPv.body.lines.length === 0 && zeroPost.status === 409 && zeroPost.body.code === 'NOTHING_TO_POST', [zeroPv.body, zeroPost.body]);
-  // m2 ve esit dagitimda hariç tutma da yeniden dagitir
-  await q(`UPDATE apartments SET gross_area_m2 = $2 WHERE id = $1`, [SA(1).id, '100.00']);
-  await q(`UPDATE apartments SET gross_area_m2 = $2 WHERE id = $1`, [SA(2).id, '100.00']);
+  // m2 dagitimi kaldirildi: onizleme 400 AREA_DISTRIBUTION_REMOVED (alan sutunlari yazilmaz / okunmaz)
   const sArea = await call('POST', `${bS}/charges/preview`, MGR, sBody({ name: 'Alan Pay', distribution: 'area', area_basis: 'gross', amount_minor: 999 }));
-  check('V5f: m2 dagitiminda alani olmayan daireler eksik: skipped_count 3, redistributed true; kalan 2 daireye toplam 999 BIREBIR (500 / 499)', sArea.body.skipped_count === 3 && sArea.body.redistributed === true && sArea.body.total_minor === 999 && sArea.body.lines.length === 2, sArea.body);
+  check('V5f: m2 dagitimi kaldirildi: onizleme 400 AREA_DISTRIBUTION_REMOVED (daire alani sistemde tutulmuyor)', sArea.status === 400 && sArea.body.code === 'AREA_DISTRIBUTION_REMOVED', sArea.body);
 
   // ============================================================================================================
   // T. V6: ledger_entries.definition_name ANLIK GORUNTU (tanim adi sonradan degisse de satirlar eski adi gosterir)
@@ -9894,6 +9898,9 @@ async function sectionAccount() {
     'board_decisions.finalized_by': 'TOMBSTONE (degismez kesin karar; kesinlestiren JOIN ile Silinmis Kullanici)',
     // Kurallar tablosu (053): kural degeri yalniz eklenir (tetikleyici); degistiren UPDATE edilmez, FK SET NULL yalniz users satiri silinirse; ad JOIN ile Silinmis Kullanici
     'platform_rule_values.created_by': 'TOMBSTONE (kural degeri platforma aittir; degistiren JOIN ile Silinmis Kullanici)',
+    // Butunluk sertlestirme (077): kimlik / abonelik kullaniciya aittir; FK ON DELETE CASCADE (kalici admin silmede birlikte gider), hesap silme (kimliksizlestirme) kodu ayrica siler
+    'user_oauth_identities.user_code': 'SIL (FK CASCADE; hesap silme ayrica siler)',
+    'web_push_subscriptions.user_code': 'SIL (FK CASCADE; hesap silme ayrica siler)',
   };
   const fkRows = (
     await q(`

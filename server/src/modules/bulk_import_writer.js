@@ -4,12 +4,16 @@
 // INSERT/UPDATE -> ilişki INSERT (origin='manual') / UPDATE -> araç INSERT -> toplu audit INSERT (SAVEPOINT'siz). Tüm değerler PARAMETRELİ JSON dizileriyle
 // (jsonb_to_recordset) gider; SQL'e metin birleştirilmez. Sabit sayıda sorgu: parça boyutu 5000 (audit 10000) olduğundan 5000 satırlık dosya <= birkaç ifade.
 // Beklenmeyen 23505 / 23503 (yarış) ya da beklenen satır sayısının tutmaması -> 409 PREVIEW_STALE (çağıran ROLLBACK yapar).
+//
+// Hesap açma (`provisionImportedResidents`) kişi/ilişki yazımından SONRA, aynı transaction'da çalışır ve YALNIZ bu çalıştırmada daire ilişkisi eklenen
+// kişilerle sınırlıdır (applyPeopleOps `accountCandidates` döner). Her kişi kendi SAVEPOINT'inde işlenir; üyelik kuralı people_service.grantApartmentAccess'indir.
 
-import bcrypt from 'bcryptjs';
-import { BCRYPT_COST } from '../security/password_hashing.js';
+import { hashPassword } from '../security/password_hashing.js';
 import { ensureUniqueLoginName, generateUniqueApartmentLoginName } from '../services/apartment_service.js';
 import { generateInternalApartmentEmail } from '../utils/helpers.js';
 import { PlatformError } from './errors.js';
+import { grantApartmentAccess } from './people_service.js';
+import { siteTiePredicate } from './people_sync_sql.js';
 import { logResidenciesBulk } from './residency_log.js';
 
 export const ENTITY_CHUNK = 5000;
@@ -105,7 +109,8 @@ export async function applyApartmentOps(client, { siteCode, ops, runId }) {
 
 /**
  * @param {{ siteCode: number, ops: object[], runId: number, today: string, actorUserCode: number|null }} input
- * @returns {Promise<object[]>} audit satırları (henüz yazılmadı)
+ * @returns {Promise<{ audits: object[], idByRef: Map<string, number>, accountCandidates: object[] }>} audit satırları (henüz yazılmadı), ref -> site_people.id
+ *   haritası (yeni kişiler ayrılan kimlikle, mevcutlar kendi kimliğiyle) ve hesap açılabilecek adaylar (bu çalıştırmada daire ilişkisi EKLENEN kişiler)
  */
 export async function applyPeopleOps(client, { siteCode, ops, runId, today, actorUserCode }) {
   const newPeople = new Map();
@@ -126,7 +131,16 @@ export async function applyPeopleOps(client, { siteCode, ops, runId, today, acto
   for (const op of ops) {
     switch (op.t) {
       case 'pc':
-        newPeople.set(op.ref, { ref: op.ref, name: op.name, phone: op.phone, email: op.email, note: op.note, password: op.password });
+        newPeople.set(op.ref, {
+          ref: op.ref,
+          n: op.n ?? null,
+          name: op.name,
+          phone: op.phone,
+          email: op.email,
+          note: op.note,
+          password: op.password,
+          loginName: op.loginName ?? null,
+        });
         break;
       case 'pf':
         if (op.ref.startsWith('new:')) {
@@ -143,7 +157,15 @@ export async function applyPeopleOps(client, { siteCode, ops, runId, today, acto
         break;
       }
       case 'ra':
-        residencyAdds.push({ ref: op.ref, aptId: op.aptId, relation: op.relation, moveIn: op.moveIn ?? today });
+        residencyAdds.push({
+          ref: op.ref,
+          n: op.n ?? null,
+          aptId: op.aptId,
+          relation: op.relation,
+          moveIn: op.moveIn ?? today,
+          password: op.password,
+          loginName: op.loginName ?? null,
+        });
         break;
       case 'ru':
         if (op.residencyId === null || op.residencyId === undefined) {
@@ -330,7 +352,40 @@ export async function applyPeopleOps(client, { siteCode, ops, runId, today, acto
       });
     }
   }
-  return audits;
+
+  // ref -> kişi kimliği (bu çalıştırmada adı geçen tüm kişiler) ve hesap adayları
+  for (const op of ops) {
+    if (typeof op.ref === 'string' && !idByRef.has(op.ref)) idByRef.set(op.ref, personIdOf(op.ref));
+  }
+  return { audits, idByRef, accountCandidates: collectAccountCandidates({ newPeople, residencyAdds, idByRef }) };
+}
+
+/**
+ * Hesap adayları: BU çalıştırmada daire ilişkisi eklenen (yeni ya da hesapsız mevcut) kişiler; kişi başına TEK aday (kişi iki dairede
+ * eklenmişse iki daire ilişkilenir, tek hesap açılır). Şifre / kullanıcı adı kişi kimliğine (ref) bağlı işlemlerden gelir: yeni kişide `pc`,
+ * mevcut kişide ilk `ra`. Ad / e-posta / telefon ile eşleştirme YAPILMAZ.
+ */
+function collectAccountCandidates({ newPeople, residencyAdds, idByRef }) {
+  const byRef = new Map();
+  for (const add of residencyAdds) {
+    let candidate = byRef.get(add.ref);
+    if (!candidate) {
+      const created = newPeople.get(add.ref) ?? null;
+      candidate = {
+        ref: add.ref,
+        personId: idByRef.get(add.ref),
+        n: created?.n ?? add.n ?? null,
+        password: created ? created.password : add.password,
+        loginName: created ? created.loginName : add.loginName,
+        apartments: [],
+      };
+      byRef.set(add.ref, candidate);
+    }
+    if (!candidate.apartments.some((entry) => entry.aptId === add.aptId)) {
+      candidate.apartments.push({ aptId: add.aptId, relation: add.relation });
+    }
+  }
+  return [...byRef.values()];
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -363,131 +418,265 @@ export async function applyOpeningOps(client, { siteCode, ops, runId, cutoverDat
   return { audits: [], total };
 }
 
-function slugifyLoginName(fullName, fallback = 'kullanici') {
+
+// ---------------------------------------------------------------------------------------------------------------
+// Hesap açma (kullanıcı adı + başlangıç şifresi + daire üyeliği)
+// ---------------------------------------------------------------------------------------------------------------
+
+/** Başlangıç şifresi boşsa verilen değer. Bu değer için TEK özet paylaşılır (aşağıda). */
+export const DEFAULT_ACCOUNT_PASSWORD = '1234';
+/** Kullanıcı adı tabanı üst sınırı: LOGIN_NAME_MAX (40) - "_NN" benzersizlik eki payı. İstemci (generateUsernameFromFullName) AYNI sınırı kullanır. */
+export const LOGIN_NAME_BASE_MAX = 36;
+const HASH_CONCURRENCY = 4;
+
+/**
+ * Ad ya da yazılan kullanıcı adından kullanıcı adı tabanı: Türkçe harfler sadeleşir, küçük harf, [a-z0-9] dışındaki her öbek tek nokta, baş/son nokta
+ * atılır, en çok 36 karakter. İstemci tarafındaki `generateUsernameFromFullName` ile AYNI kural (tablodaki ad = sunucunun kullanacağı ad; çakışmada
+ * sunucu `_2`, `_3` ... ekler ve nihai adı sonuçta döner).
+ */
+export function slugifyLoginName(fullName, fallback = 'kullanici') {
   if (!fullName || typeof fullName !== 'string') return fallback;
   const trMap = {
     'ç': 'c', 'Ç': 'c', 'ğ': 'g', 'Ğ': 'g', 'ı': 'i', 'I': 'i', 'İ': 'i',
     'ö': 'o', 'Ö': 'o', 'ş': 's', 'Ş': 's', 'ü': 'u', 'Ü': 'u',
   };
   let clean = fullName.replace(/[çÇğĞıIİöÖşŞüÜ]/g, (m) => trMap[m] || m).toLowerCase();
-  clean = clean.replace(/[^a-z0-9]+/g, '.').replace(/^\.+|\.+$/g, '').replace(/\.+/g, '.');
+  clean = clean.replace(/[^a-z0-9]+/g, '.').replace(/^\.+|\.+$/g, '');
+  if (clean.length > LOGIN_NAME_BASE_MAX) clean = clean.slice(0, LOGIN_NAME_BASE_MAX).replace(/\.+$/, '');
   return clean || fallback;
 }
 
-/**
- * Toplu yükleme ile daireye eklenen sakinler için kullanıcı hesabı, üyelik (APARTMENT_ADMIN)
- * ve başlangıç şifresi (1234) oluşturur / bağlar.
- */
-export async function provisionImportedResidents(client, { siteCode, ops }) {
-  if (!client || typeof client.query !== 'function') return;
+/** Sınırlı eşzamanlılıkla eşleme (sıra korunmaz; her öğe tam bir kez işlenir). */
+async function mapLimit(items, limit, handler) {
+  let next = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) {
+      const index = next;
+      next += 1;
+      await handler(items[index], index);
+    }
+  });
+  await Promise.all(workers);
+}
 
-  const pcOps = ops ? ops.filter((op) => op.t === 'pc') : [];
-
-  const unlinkedResidents = await client.query(
-    `
-      SELECT sp.id AS person_id, sp.full_name, sp.email, sp.phone,
-             a.id AS apartment_id, a.unit_label, a.resident_user_code, a.sort_order,
-             b.block_name
-      FROM apartment_residencies ar
-      JOIN site_people sp ON sp.id = ar.person_id
-      JOIN apartments a ON a.id = ar.apartment_id
-      LEFT JOIN site_blocks b ON b.id = a.block_id
-      WHERE a.site_code = $1 AND sp.user_code IS NULL AND ar.is_current = TRUE
-    `,
-    [Number(siteCode)],
-  );
-
-  for (const row of unlinkedResidents.rows) {
-    try {
-      const matchedOp = pcOps.find(
-        (o) =>
-          o.name === row.full_name ||
-          (o.email && o.email === row.email) ||
-          (o.phone && o.phone === row.phone),
-      );
-      const customPass = (matchedOp && matchedOp.password) ? String(matchedOp.password).trim() : '1234';
-      const passwordHash = await bcrypt.hash(customPass || '1234', BCRYPT_COST);
-
-      const blockName = row.block_name || 'Blok';
-      const sortOrder = Number(row.sort_order || 1);
-
-      const rawDesired = (matchedOp && matchedOp.loginName)
-        ? matchedOp.loginName
-        : (row.full_name ? row.full_name : null);
-
-      const desiredLogin = rawDesired ? slugifyLoginName(rawDesired) : null;
-
-      const finalLoginName = desiredLogin
-        ? await ensureUniqueLoginName({
-            db: client,
-            desiredLoginName: desiredLogin,
-            siteCode: Number(siteCode),
-          })
-        : await generateUniqueApartmentLoginName({
-            db: client,
-            blockName,
-            sortOrder,
-            siteCode: Number(siteCode),
-          });
-
-      const internalEmail = generateInternalApartmentEmail({
-        loginName: finalLoginName,
-        apartmentId: Number(row.apartment_id),
-        siteCode: Number(siteCode),
-      });
-
-      const userEmail = (row.email && !row.email.endsWith('@ahbu.local')) ? row.email : internalEmail;
-
-      const existingUser = await client.query(
-        `SELECT user_code FROM users WHERE LOWER(email) = LOWER($1) AND deleted_at IS NULL LIMIT 1`,
-        [userEmail],
-      );
-
-      let userCode;
-      if (existingUser.rowCount > 0) {
-        userCode = existingUser.rows[0].user_code;
-      } else {
-        const insUser = await client.query(
-          `
-            INSERT INTO users (full_name, email, login_name, role, is_active, email_verified, approval_status, phone_number, password_hash, must_change_password)
-            VALUES ($1, $2, $3, 'apartment_owner', TRUE, TRUE, 'approved', $4, $5, TRUE)
-            RETURNING user_code
-          `,
-          [row.full_name || `${blockName} Daire ${row.unit_label}`, userEmail, finalLoginName, row.phone, passwordHash],
-        );
-        userCode = insUser.rows[0].user_code;
-      }
-
-      await client.query(`UPDATE site_people SET user_code = $1 WHERE id = $2`, [userCode, row.person_id]);
-
-      if (!row.resident_user_code) {
-        await client.query(
-          `UPDATE apartments SET resident_user_code = $1, resident_pin_issued = TRUE, is_active = TRUE WHERE id = $2`,
-          [userCode, row.apartment_id],
-        );
-      }
-
-      await client.query(
-        `
-          INSERT INTO apartment_memberships (apartment_id, user_code, role, is_active)
-          VALUES ($1, $2, 'APARTMENT_ADMIN', TRUE)
-          ON CONFLICT (apartment_id, user_code)
-          DO UPDATE SET role = 'APARTMENT_ADMIN', is_active = TRUE, updated_at = NOW()
-        `,
-        [row.apartment_id, userCode],
-      );
-
-      await client.query(
-        `
-          INSERT INTO site_memberships (site_code, user_code, role, is_active)
-          VALUES ($1, $2, 'RESIDENT', TRUE)
-          ON CONFLICT (site_code, user_code)
-          DO UPDATE SET is_active = TRUE, updated_at = NOW()
-        `,
-        [Number(siteCode), userCode],
-      );
-    } catch (err) {
-      console.error('[provisionImportedResidents] hata (atlandı):', err?.message);
+/** Planın işlemlerinden ref -> başlangıç şifresi (yeni kişide `pc`, hesapsız mevcut kişide ilk `ra`); yalnız daire ilişkisi eklenen kişiler. */
+export function collectAccountPasswords(ops) {
+  const withApartment = new Set(ops.filter((op) => op.t === 'ra').map((op) => op.ref));
+  const out = new Map();
+  for (const op of ops) {
+    if ((op.t === 'pc' || op.t === 'ra') && withApartment.has(op.ref) && !out.has(op.ref)) {
+      const password = typeof op.password === 'string' && op.password.trim() !== '' ? op.password.trim() : DEFAULT_ACCOUNT_PASSWORD;
+      out.set(op.ref, password);
     }
   }
+  return out;
+}
+
+/**
+ * Şifre özetlerini TRANSACTION DIŞINDA, sınırlı eşzamanlılıkla hesaplar (bcrypt kişi başına ~60 ms: 1500 kişi transaction kilitlerini dakikalarca
+ * tutardı). Varsayılan başlangıç şifresi ("1234", belgelenmiş geçici PIN; ilk girişte değiştirilmesi zorunlu) için TEK özet paylaşılır; özel
+ * şifrelerin her biri kendi tuzuyla özetlenir.
+ * @param {Map<string, string>} passwords ref -> düz şifre
+ * @returns {Promise<Map<string, { password: string, hash: string }>>} ref -> { password, hash }
+ */
+export async function hashAccountPasswords(passwords, { concurrency = HASH_CONCURRENCY } = {}) {
+  // Varsayılan şifre dahil her hesap kendi tuzuyla özetlenir: tek ortak özet, hangi hesapların şifresini hâlâ
+  // değiştirmediğini veritabanında görünür kılardı.
+  const out = new Map();
+  await mapLimit([...passwords], concurrency, async ([ref, password]) => {
+    out.set(ref, { password, hash: await hashPassword(password) });
+  });
+  return out;
+}
+
+class AccountSkip extends Error {
+  constructor(code) {
+    super(code);
+    this.skipCode = code;
+  }
+}
+
+export const ACCOUNT_SKIP_MESSAGES = Object.freeze({
+  EMAIL_IN_USE: 'Bu e-posta başka bir hesaba ait; hesap açılmadı. Kişi kaydı yapıldı, hesabı kişi kartından açabilirsiniz.',
+  ACCOUNT_ALREADY_LINKED: 'Bu hesap sitede zaten başka bir kişiye bağlı; hesap açılmadı. Kişi kaydı yapıldı.',
+  ACCOUNT_FAILED: 'Hesap açılamadı (beklenmeyen veri sorunu). Kişi kaydı yapıldı, hesabı kişi kartından açabilirsiniz.',
+});
+
+/** Kişi başına SAVEPOINT içinde YUTULMAYAN hata sınıfları: bağlantı (08), geri alma/kilitlenme (40), kaynak (53), kilit zaman aşımı (55), operatör (57), sözdizimi/yetki (42). */
+const FATAL_ERROR_CLASS = /^(08|40|42|53|55|57)/;
+
+const RELATION_RANK = Object.freeze({ owner: 0, tenant: 1, resident: 2, family_member: 3 });
+
+/** Aynı dairede önce malik, sonra kiracı admin olur (grantApartmentAccess ilk gelene admin verir): adaylar en iyi ilişkiye göre sıralanır. */
+function rankOf(candidate) {
+  return Math.min(...candidate.apartments.map((entry) => RELATION_RANK[entry.relation] ?? 2));
+}
+
+const realEmailOf = (value) => {
+  if (typeof value !== 'string') return null;
+  const text = value.trim().toLowerCase();
+  return text !== '' && !text.endsWith('@ahbu.local') ? text : null;
+};
+
+async function provisionOne(client, { siteCode, candidate, person, apartmentInfo, hashFor }) {
+  const apartments = [...candidate.apartments].sort((a, b) => a.aptId - b.aptId);
+  const first = apartmentInfo.get(apartments[0].aptId) ?? {};
+  const blockName = first.block_name || 'Blok';
+  const email = realEmailOf(person.email);
+
+  // 1. e-posta bir kullanıcıya aitse: YALNIZ bu sitede zaten bağı olan (siteTiePredicate), aktif, yönetici olmayan hesaba bağlanır
+  let userCode = null;
+  let loginName = null;
+  let createdAccount = false;
+  if (email) {
+    const found = await client.query(
+      `
+        SELECT u.user_code, u.login_name,
+               (u.deleted_at IS NULL AND u.role NOT IN ('super_user', 'site_manager') AND ${siteTiePredicate('u.user_code', '$2::BIGINT')}) AS linkable
+        FROM users u
+        WHERE LOWER(u.email) = $1
+        LIMIT 1
+      `,
+      [email, Number(siteCode)],
+    );
+    const row = found.rows[0];
+    if (row) {
+      if (row.linkable !== true) throw new AccountSkip('EMAIL_IN_USE');
+      userCode = Number(row.user_code);
+      loginName = row.login_name ?? null;
+    }
+  }
+
+  // 2. yeni hesap: kullanıcı adı (yazılan ya da addan; sunucuda benzersizleştirilir) + başlangıç şifresi
+  if (userCode === null) {
+    const rawDesired = candidate.loginName || person.full_name || null;
+    const desired = rawDesired ? slugifyLoginName(rawDesired) : null;
+    loginName = desired
+      ? await ensureUniqueLoginName({ db: client, desiredLoginName: desired, siteCode: Number(siteCode) })
+      : await generateUniqueApartmentLoginName({ db: client, blockName, sortOrder: Number(first.sort_order || 1), siteCode: Number(siteCode) });
+    const internalEmail = generateInternalApartmentEmail({ loginName, apartmentId: apartments[0].aptId, siteCode: Number(siteCode) });
+    const password = typeof candidate.password === 'string' && candidate.password.trim() !== '' ? candidate.password.trim() : DEFAULT_ACCOUNT_PASSWORD;
+    const passwordHash = await hashFor(candidate.ref, password);
+    const inserted = await client.query(
+      `
+        INSERT INTO users (full_name, email, login_name, role, is_active, email_verified, approval_status, phone_number, password_hash, must_change_password)
+        VALUES ($1, $2, $3, 'apartment_owner', TRUE, TRUE, 'approved', $4, $5, TRUE)
+        RETURNING user_code
+      `,
+      [person.full_name || `${blockName} Daire ${first.unit_label ?? ''}`.trim(), email ?? internalEmail, loginName, person.phone ?? null, passwordHash],
+    );
+    userCode = Number(inserted.rows[0].user_code);
+    createdAccount = true;
+  }
+
+  // 3. kişiyi hesaba bağla (CRM kuralı: hesaplı kişide ad / telefon / e-posta users'tan okunur; siteTiePredicate bağlama kuralıyla aynı)
+  const linked = await client.query(
+    `
+      UPDATE site_people sp
+      SET user_code = $1, full_name = NULL, phone = NULL, email = NULL, updated_at = NOW()
+      WHERE sp.id = $2 AND sp.site_code = $3 AND sp.user_code IS NULL
+        AND NOT EXISTS (SELECT 1 FROM site_people x WHERE x.site_code = sp.site_code AND x.user_code = $1)
+    `,
+    [userCode, candidate.personId, Number(siteCode)],
+  );
+  if (Number(linked.rowCount) !== 1) throw new AccountSkip('ACCOUNT_ALREADY_LINKED');
+
+  // 4. daire erişimi: MEVCUT kural (daire kilidi, dairede tek admin, site düzeyi RESIDENT, sakin göstergesi)
+  for (const entry of apartments) {
+    await grantApartmentAccess(client, { siteCode: Number(siteCode), apartmentId: entry.aptId, userCode });
+  }
+  if (createdAccount) {
+    // parolası yönetimce verilen hesap daire göstergesindeyse işaretlenir (ilk girişte parola değişimi)
+    await client.query(
+      `UPDATE apartments SET resident_pin_issued = TRUE, is_active = TRUE WHERE id = ANY($1::BIGINT[]) AND site_code = $2::BIGINT AND resident_user_code = $3`,
+      [apartments.map((entry) => entry.aptId), Number(siteCode), userCode],
+    );
+  }
+  return { loginName, userCode, status: createdAccount ? 'created' : 'linked' };
+}
+
+/**
+ * Bu çalıştırmada daire ilişkisi EKLENEN kişiler için kullanıcı hesabı, daire üyeliği ve başlangıç şifresi oluşturur / bağlar.
+ * Kapsam `accountCandidates` ile sınırlıdır (sitedeki diğer hesapsız sakinlere DOKUNULMAZ); kişi başına tek hesap; her kişi kendi SAVEPOINT'inde
+ * işlenir: veri hatasında yalnız o kişi geri alınır ve `skipped` içinde bildirilir (transaction bozulmaz). Kilitlenme / kilit zaman aşımı /
+ * bağlantı hataları YUTULMAZ (yukarı fırlar; commit geri alınır).
+ * @param {{ siteCode: number, runId?: number, accountCandidates: object[], hashes?: Map<string, {password: string, hash: string}> }} input
+ * @returns {Promise<{ created: number, linked: number, skipped: number, items: object[], skipped_items: object[], audits: object[] }>}
+ *   `items` / `skipped_items` istemciye döner (satır no + NİHAİ kullanıcı adı / atlama nedeni); `audits` yalnız sunucu içindir (kişi verisi yok).
+ */
+export async function provisionImportedResidents(client, { siteCode, runId = null, accountCandidates, hashes = new Map() }) {
+  const result = { created: 0, linked: 0, skipped: 0, items: [], skipped_items: [], audits: [] };
+  const candidates = (accountCandidates ?? []).filter((candidate) => Number.isInteger(candidate.personId) && candidate.apartments.length > 0);
+  if (!client || typeof client.query !== 'function' || candidates.length === 0) return result;
+
+  // Kişi satırları kilit altında yeniden doğrulanır: hâlâ hesapsız (user_code IS NULL) ve aktif olanlar; id sırasıyla kilitlenir (kilitlenme riski yok)
+  const people = new Map();
+  const ids = candidates.map((candidate) => candidate.personId).sort((a, b) => a - b);
+  for (const part of chunksOf(ids, ENTITY_CHUNK)) {
+    const found = await client.query(
+      `
+        SELECT sp.id, sp.full_name, sp.email, sp.phone
+        FROM site_people sp
+        WHERE sp.id = ANY($1::BIGINT[]) AND sp.site_code = $2::BIGINT AND sp.user_code IS NULL AND sp.is_active = TRUE
+        ORDER BY sp.id
+        FOR UPDATE OF sp
+      `,
+      [part, Number(siteCode)],
+    );
+    for (const row of found.rows) people.set(Number(row.id), row);
+  }
+  const aptIds = [...new Set(candidates.flatMap((candidate) => candidate.apartments.map((entry) => entry.aptId)))];
+  const apartmentInfo = new Map();
+  for (const part of chunksOf(aptIds, ENTITY_CHUNK)) {
+    const found = await client.query(
+      `
+        SELECT a.id, a.unit_label, a.sort_order, b.block_name
+        FROM apartments a
+        LEFT JOIN site_blocks b ON b.id = a.block_id
+        WHERE a.id = ANY($1::BIGINT[]) AND a.site_code = $2::BIGINT
+      `,
+      [part, Number(siteCode)],
+    );
+    for (const row of found.rows) apartmentInfo.set(Number(row.id), row);
+  }
+
+  // transaction öncesi hesaplanmış özet yoksa (ya da şifre değiştiyse) burada hesaplanır; varsayılan şifrenin özeti paylaşılır
+  let defaultHash = null;
+  const hashFor = async (ref, password) => {
+    const known = hashes.get(ref);
+    if (known && known.password === password) return known.hash;
+    if (password === DEFAULT_ACCOUNT_PASSWORD) {
+      defaultHash = defaultHash ?? (await hashPassword(DEFAULT_ACCOUNT_PASSWORD));
+      return defaultHash;
+    }
+    return hashPassword(password);
+  };
+
+  const ordered = candidates.filter((candidate) => people.has(candidate.personId)).sort((a, b) => rankOf(a) - rankOf(b) || a.personId - b.personId);
+  for (const candidate of ordered) {
+    await client.query('SAVEPOINT import_account');
+    try {
+      const outcome = await provisionOne(client, { siteCode, candidate, person: people.get(candidate.personId), apartmentInfo, hashFor });
+      await client.query('RELEASE SAVEPOINT import_account');
+      result[outcome.status] += 1;
+      result.items.push({ n: candidate.n, login_name: outcome.loginName, status: outcome.status });
+      result.audits.push({
+        action: 'person.account_created',
+        target_type: 'person',
+        target_id: String(candidate.personId),
+        details: { user_code: outcome.userCode, status: outcome.status, via: 'import', run_id: runId },
+      });
+    } catch (error) {
+      if (!(error instanceof AccountSkip) && FATAL_ERROR_CLASS.test(String(error?.code ?? ''))) throw error;
+      await client.query('ROLLBACK TO SAVEPOINT import_account');
+      await client.query('RELEASE SAVEPOINT import_account');
+      const code = error instanceof AccountSkip ? error.skipCode : 'ACCOUNT_FAILED';
+      if (!(error instanceof AccountSkip)) {
+        console.error('[provisionImportedResidents] kişi atlandı:', { sqlstate: error?.code ?? null, name: error?.name ?? null });
+      }
+      result.skipped += 1;
+      result.skipped_items.push({ n: candidate.n, code, message: ACCOUNT_SKIP_MESSAGES[code] });
+    }
+  }
+  return result;
 }

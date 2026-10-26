@@ -181,7 +181,7 @@ export function computeWarnings(facts) {
 export const WARNING_TEXT = Object.freeze({
   REFERENCE_OTHER_APARTMENT: 'Açıklamadaki referans kodu başka bir daireye ait.',
   SAME_FILE_OTHER_NOTICE: 'Aynı dosya başka bir bildirimde de var.',
-  POSSIBLE_DUPLICATE: 'Bu daire için yakın tarihte aynı tutarda bir tahsilat ya da bekleyen bildirim var.',
+  POSSIBLE_DUPLICATE: 'Bu daire için yakın tarihte aynı tutarda bir tahsilat, onaylı ya da bekleyen bildirim var.',
   NAME_MISMATCH: 'Gönderen adı dairedeki kişilerle eşleşmiyor.',
   OVERPAYMENT: 'Tutar hesabın borcundan fazla; fazlası alacak olur.',
   OLD_DATE: 'Ödeme tarihi 60 günden eski.',

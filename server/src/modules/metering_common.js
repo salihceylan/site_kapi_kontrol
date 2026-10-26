@@ -35,7 +35,7 @@ export const readingOrder = (message) => new PlatformError(409, 'READING_OUT_OF_
 export const readingLocked = () => new PlatformError(409, 'READING_LOCKED', 'Bu okuma bir faturalandırma dönemine dahil olduğu için silinemez.');
 export const noConsumption = () => new PlatformError(409, 'NO_CONSUMPTION', 'Seçilen aralıkta dağıtılacak tüketim yok (tüm farklar sıfır).');
 export const incompleteReadings = (missing) =>
-  new PlatformError(409, 'READINGS_INCOMPLETE', 'Bazı dairelerin okuması ya da alanı eksik. Eksikleri tamamlayın ya da atlayarak devam edin.', { missing_count: missing });
+  new PlatformError(409, 'READINGS_INCOMPLETE', 'Bazı dairelerin sayaç okuması eksik. Eksikleri tamamlayın ya da atlayarak devam edin.', { missing_count: missing });
 export const nothingToPost = () => new PlatformError(409, 'NOTHING_TO_POST', 'Borçlandırılacak daire yok.');
 export const billingOverlap = () =>
   new PlatformError(409, 'BILLING_OVERLAP', 'Bu tür için seçilen tarih aralığı daha önce faturalandırılmış bir aralıkla çakışıyor.');

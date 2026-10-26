@@ -7,6 +7,9 @@ import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/views/bulk_import_controller.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 
+/// Sonuç ekranında tek tek listelenen en çok hesap sayısı (kalanı sayıyla özetlenir; kullanıcı adları kişi kartlarında da görünür).
+const int kMaxListedAccounts = 30;
+
 /// Adım 5: sonuç özeti, hata raporu, «Kişilere git» ve «Sıradakini yükle».
 class BulkResultStep extends StatelessWidget {
   const BulkResultStep({
@@ -45,8 +48,13 @@ class BulkResultStep extends StatelessWidget {
     final next = c.suggestedNextKind;
     final planStats = <ImportStat>[
       for (final entry in kImportPlanLabels.entries)
-        if ((result.counts[entry.key] ?? 0) > 0) ImportStat(entry.value, result.counts[entry.key]!),
+        // `account_create` önizleme tahminidir; gerçekleşen hesaplar aşağıdaki «Kullanıcı hesapları» bölümünde
+        if (entry.key != 'account_create' && (result.counts[entry.key] ?? 0) > 0) ImportStat(entry.value, result.counts[entry.key]!),
     ];
+    final accounts = result.accounts;
+    final nameByLine = <int, String>{
+      for (final row in c.rows) row.n: row.cells['ad_soyad']?.toString().trim() ?? '',
+    };
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -102,6 +110,70 @@ class BulkResultStep extends StatelessWidget {
                       ),
                     ),
                   ),
+              ],
+            ),
+          ),
+        ],
+        if (accounts != null && !accounts.isEmpty) ...[
+          const SizedBox(height: AppSpace.lg),
+          AppCard(
+            key: const ValueKey<String>('bulk_result_accounts'),
+            padding: listCardPadding(context),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SectionHeader(title: 'Kullanıcı hesapları'),
+                const SizedBox(height: AppSpace.sm),
+                Wrap(
+                  spacing: AppSpace.sm,
+                  runSpacing: AppSpace.sm,
+                  children: [
+                    InfoChip('Açılan hesap: ${accounts.created}', tone: accounts.created > 0 ? AppTone.success : null),
+                    if (accounts.linked > 0) InfoChip('Mevcut hesaba bağlanan: ${accounts.linked}'),
+                    if (accounts.skipped > 0) InfoChip('Hesabı açılmayan: ${accounts.skipped}', tone: AppTone.warning),
+                  ],
+                ),
+                if (accounts.items.isNotEmpty) ...[
+                  const SizedBox(height: AppSpace.sm),
+                  Text(
+                    'Kesinleşen kullanıcı adları (aynı ad başka bir hesapta varsa sonuna _2, _3 eklenir). '
+                    'Kişiler ilk girişte şifrelerini değiştirir.',
+                    style: th.bodySmall?.copyWith(color: p.textSecondary),
+                  ),
+                  const SizedBox(height: AppSpace.xs),
+                  for (final item in accounts.items.take(kMaxListedAccounts))
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: AppSpace.xs),
+                      child: SelectableText.rich(
+                        TextSpan(
+                          style: th.bodyMedium,
+                          children: [
+                            if (item.n != null) TextSpan(text: 'Satır ${item.n}  ', style: th.bodySmall?.copyWith(color: p.textSecondary)),
+                            if ((nameByLine[item.n] ?? '').isNotEmpty) TextSpan(text: '${nameByLine[item.n]} → '),
+                            TextSpan(text: item.loginName, style: th.titleSmall),
+                            if (item.linked) TextSpan(text: '  (mevcut hesap)', style: th.bodySmall?.copyWith(color: p.textSecondary)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  if (accounts.items.length > kMaxListedAccounts)
+                    Text(
+                      '… ve ${accounts.items.length - kMaxListedAccounts} hesap daha. Kullanıcı adlarını kişi kartlarında görebilirsiniz.',
+                      key: const ValueKey<String>('bulk_result_accounts_more'),
+                      style: th.bodySmall?.copyWith(color: p.textSecondary),
+                    ),
+                ],
+                if (accounts.skippedItems.isNotEmpty) ...[
+                  const SizedBox(height: AppSpace.sm),
+                  InlineNotice(
+                    key: const ValueKey<String>('bulk_result_accounts_skipped'),
+                    tone: AppTone.warning,
+                    message:
+                        '${accounts.skippedItems.length} kişinin kaydı yapıldı ama hesabı açılmadı: '
+                        '${[for (final skip in accounts.skippedItems.take(3)) '${skip.n != null ? 'satır ${skip.n}: ' : ''}${skip.message}'].join(' ')}'
+                        '${accounts.skippedItems.length > 3 ? ' …' : ''}',
+                  ),
+                ],
               ],
             ),
           ),

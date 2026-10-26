@@ -39,6 +39,10 @@ function scriptedPool({ apartments = 4, financeIds = [] } = {}) {
         }
         if (/^SAVEPOINT |^RELEASE SAVEPOINT |^ROLLBACK TO SAVEPOINT /.test(sql)) return ok();
         if (/^SELECT a\.id, a\.unit_label, a\.floor/.test(sql)) return ok();
+        // Dolu daire koruması (assertApartmentsRemovable): bu testlerde silinecek daireler BOŞ (dolu daire senaryosu: site_structure_occupied.test.js).
+        if (/^SELECT a\.id, a\.unit_label, b\.block_name, \(a\.resident_user_code IS NOT NULL\) AS has_legacy_resident/.test(sql)) {
+          return ok(params[0].map((id) => ({ id: String(id), unit_label: `Daire ${id}`, block_name: 'A Blok', has_legacy_resident: false, has_residency: false, has_membership: false, has_suspension: false, has_safety_request: false })));
+        }
         if (/^DELETE FROM apartments WHERE id = \$1$/.test(sql)) {
           deleted.push(String(params[0]));
           return ok([], 1);

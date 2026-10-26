@@ -20,8 +20,47 @@
 
 import { managementTypeLabel } from '../modules/management_types.js';
 import { applyTrialToNewSubscription } from '../modules/management_company_service.js';
+import { SITE_NAME_UNIQUE_INDEXES, siteNameTakenMessage } from '../utils/validators.js';
 
 export const PLAN_MANUAL_APPROVAL = 'manual_approval';
+
+/** 409 SITE_NAME_EXISTS (düz Error: istemciye güvenli 4xx; site_service ile aynı biçim). */
+export function siteNameExistsError(name) {
+  const error = new Error(siteNameTakenMessage(name));
+  error.statusCode = 409;
+  error.code = 'SITE_NAME_EXISTS';
+  return error;
+}
+
+/**
+ * Site adı (büyük/küçük harf, Türkçe harf katlama ve boşluk farkı gözetmeksizin: DB işlevi site_name_key) başka bir sitede kullanılıyorsa
+ * 409 SITE_NAME_EXISTS. Reddedilmiş (rejected) siteler tekillik dışıdır (uq_sites_name_key kısmi indeksiyle AYNI koşul). `excludeSiteCode`: yeniden adlandırılan site.
+ * @param {{ query: Function }} db pool veya transaction client'ı
+ */
+export async function assertSiteNameAvailable(db, name, { excludeSiteCode = null } = {}) {
+  const trimmed = String(name ?? '').trim();
+  const params = [trimmed];
+  let exclude = '';
+  if (excludeSiteCode !== null && excludeSiteCode !== undefined) {
+    params.push(excludeSiteCode);
+    exclude = ' AND site_code <> $2';
+  }
+  const result = await db.query(
+    `SELECT site_code, name FROM sites WHERE site_name_key(name) = site_name_key($1) AND approval_status IS DISTINCT FROM 'rejected'${exclude} LIMIT 1`,
+    params,
+  );
+  if (result.rows?.[0]) {
+    throw siteNameExistsError(trimmed);
+  }
+}
+
+/** Eşzamanlı çift istek ön denetimi geçtiğinde ad indeksinin 23505'ini SITE_NAME_EXISTS'e çevirir; başka hatayı olduğu gibi döndürür. */
+export function siteNameConflictOrSame(error, name) {
+  if (error?.code === '23505' && SITE_NAME_UNIQUE_INDEXES.includes(error?.constraint)) {
+    return siteNameExistsError(name);
+  }
+  return error;
+}
 
 /**
  * Kullanıcının "sahip" bağı var mı? Onaylı bir sitede `site_manager_sites.link_source` değeri 'invited' OLMAYAN (NULL = eski kayıt dahil)
@@ -71,71 +110,67 @@ export async function createSiteWithStructure(
     blockApartmentCounts,
   } = input;
 
-  // Site adı benzersizliği kontrolü (case-insensitive)
-  const duplicateSiteCheck = await client.query(
-    `SELECT site_code, name FROM sites WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) LIMIT 1`,
-    [siteName.trim()],
-  );
-  if (duplicateSiteCheck.rows?.[0]) {
-    const error = new Error(`"${siteName.trim()}" adında bir site zaten mevcut. Her sitenin adı benzersiz olmalıdır.`);
-    error.statusCode = 409;
-    error.code = 'SITE_NAME_EXISTS';
-    throw error;
-  }
+  // Site adı benzersizliği kontrolü (site_name_key: büyük/küçük harf, Türkçe harf ve boşluk farkına dayanıklı; reddedilmiş siteler hariç)
+  await assertSiteNameAvailable(client, siteName);
 
-  // 1. Yeni Siteyi oluştur (anında onaylı)
-  const siteRes = await client.query(
-    `
-        INSERT INTO sites (
-          name,
-          address,
-          city,
-          district,
-          block_count,
-          apartment_count,
-          door_count,
-          block_apartment_counts,
-          mqtt_site_id,
-          approval_status,
-          approved_at,
-          feature_qr_enabled,
-          feature_remote_open_enabled,
-          feature_local_udp_enabled,
-          feature_guest_pass_enabled,
-          qr_entry_active,
-          management_type
-        )
-        VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, generate_unique_mqtt_site_id(), 'approved', NOW(),
-          TRUE, TRUE, TRUE, TRUE, TRUE, $9
-        )
-        RETURNING
-          site_code AS id,
-          name,
-          address,
-          city,
-          district,
-          block_count,
-          apartment_count,
-          door_count,
-          approval_status,
-          approved_at,
-          mqtt_site_id,
-          management_type,
-          created_at
-      `,
-    [
-      siteName,
-      input.address,
-      input.city,
-      input.district,
-      totalBlockCount,
-      totalApartmentCount,
-      totalDoorCount,
-      blockApartmentCounts,
-      managementType,
-    ],
-  );
+  // 1. Yeni Siteyi oluştur (anında onaylı). Eşzamanlı çift istek ön denetimi geçerse ad indeksi 23505 verir -> SITE_NAME_EXISTS (çağıran ROLLBACK eder).
+  let siteRes;
+  try {
+    siteRes = await client.query(
+      `
+          INSERT INTO sites (
+            name,
+            address,
+            city,
+            district,
+            block_count,
+            apartment_count,
+            door_count,
+            block_apartment_counts,
+            mqtt_site_id,
+            approval_status,
+            approved_at,
+            feature_qr_enabled,
+            feature_remote_open_enabled,
+            feature_local_udp_enabled,
+            feature_guest_pass_enabled,
+            qr_entry_active,
+            management_type
+          )
+          VALUES (
+            $1, $2, $3, $4, $5, $6, $7, $8, generate_unique_mqtt_site_id(), 'approved', NOW(),
+            TRUE, TRUE, TRUE, TRUE, TRUE, $9
+          )
+          RETURNING
+            site_code AS id,
+            name,
+            address,
+            city,
+            district,
+            block_count,
+            apartment_count,
+            door_count,
+            approval_status,
+            approved_at,
+            mqtt_site_id,
+            management_type,
+            created_at
+        `,
+      [
+        siteName,
+        input.address,
+        input.city,
+        input.district,
+        totalBlockCount,
+        totalApartmentCount,
+        totalDoorCount,
+        blockApartmentCounts,
+        managementType,
+      ],
+    );
+  } catch (error) {
+    throw siteNameConflictOrSame(error, siteName);
+  }
   const site = siteRes.rows[0];
   const siteCode = Number(site.id);
 

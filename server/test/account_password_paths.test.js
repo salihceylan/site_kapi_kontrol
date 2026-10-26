@@ -264,7 +264,7 @@ describe('R7: daire sakini change-password silinmiş hesaba parola özeti YAZMAZ
     const { outcome, seen } = await run({ deletedAfterVerify: true });
     const update = seen.find((entry) => /^UPDATE users SET password_hash/.test(entry.sql));
     assert.ok(update);
-    assert.match(update.sql, /^UPDATE users SET password_hash = \$1, updated_at = NOW\(\) WHERE user_code = \$2 AND deleted_at IS NULL RETURNING /);
+    assert.match(update.sql, /^UPDATE users SET password_hash = \$1, must_change_password = FALSE, updated_at = NOW\(\) WHERE user_code = \$2 AND deleted_at IS NULL RETURNING /);
     assert.equal(update.params[1], 42);
     assert.equal(outcome.ok, false);
     assert.equal(outcome.error.statusCode, 401);

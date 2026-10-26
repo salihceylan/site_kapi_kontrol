@@ -1,6 +1,6 @@
 // Sayac Okuma ve Faturalandirma uclari (modul `metering`, varsayilan KAPALI; sakine acik uc YOK). Sozlesme: docs/PLATFORM_SAYAC.md.
 //
-//   GET    /manager/sites/:siteCode/meter-apartments                       (daire secici: id, etiket, m2)
+//   GET    /manager/sites/:siteCode/meter-apartments                       (daire secici: id, etiket; area_m2 HEP null - m2 kaldirildi)
 //   GET    /manager/sites/:siteCode/meters[?kind=&active=1]                { items }
 //   POST   .../meters                                                       201 { meter }                  { apartment_id, kind, serial_no }
 //   PATCH  .../meters/:id                                                   { meter }                      { serial_no?, is_active? }

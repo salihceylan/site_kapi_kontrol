@@ -12,8 +12,10 @@ import { updateApartment } from '../src/modules/apartment_records_service.js';
 import {
   addResidency,
   createPerson,
+  evaluateManagedAccount,
   parsePersonCreateInput,
   provisionPersonAccount,
+  provisionResidentAndLinkPerson,
   resetPersonPinDirect,
   updatePerson,
   updateResidency,
@@ -53,6 +55,10 @@ function install() {
   const run = async (text, params, inTx) => {
     const sql = norm(text);
     log.push({ sql, params: params ?? [], inTx });
+    // PostgreSQL gibi: SAVEPOINT'e donus (ROLLBACK TO SAVEPOINT) hata durumunu temizler.
+    if (/^ROLLBACK TO SAVEPOINT /.test(sql)) {
+      txAborted = false;
+    }
     if (txAborted && inTx && sql !== 'ROLLBACK') {
       throw Object.assign(new Error('current transaction is aborted, commands ignored until end of transaction block'), { code: '25P02' });
     }
@@ -991,50 +997,354 @@ describe('araclar', () => {
 // provisionPersonAccount and resetPersonPinDirect
 // ---------------------------------------------------------------------------
 
-describe('provisionPersonAccount and resetPersonPinDirect', () => {
-  it('provisionPersonAccount: hesapsiz kisiye yeni hesap acar, site_people baglar ve APARTMENT_ADMIN yapar', async () => {
-    const personLock = /SELECT sp\.id, sp\.site_code, sp\.user_code, sp\.full_name/;
-    const loginCheck = /SELECT user_code FROM users WHERE LOWER\(login_name\) = LOWER/;
-    const userInsert = /INSERT INTO users/;
-    const updatePersonSql = /UPDATE site_people SET user_code =/;
-    const currentApts = /SELECT ar\.apartment_id, a\.resident_user_code/;
-    const aptMembership = /INSERT INTO apartment_memberships/;
-    const updateApt = /UPDATE apartments SET resident_user_code =/;
+describe('evaluateManagedAccount: yonetimin sifre / kullanici adi degistirebilecegi hesap (SAF karar)', () => {
+  const account = (extra = {}) => ({
+    role: 'apartment_owner',
+    email: 'sakin.5.1000000001@ahbu.local',
+    deleted_at: null,
+    must_change_password: false,
+    pin_issued: true,
+    is_manager: false,
+    foreign_membership: false,
+    foreign_apartment: false,
+    foreign_person: false,
+    ...extra,
+  });
 
+  it('yonetimce acilmis sakin hesabi (dahili e-posta + PIN verildi) izinli; yonetici de super de', () => {
+    assert.equal(evaluateManagedAccount(account()), null);
+    assert.equal(evaluateManagedAccount(account(), { actorIsSuper: true }), null);
+  });
+
+  it('gercek e-postali hesap yalniz verilmis parola hala degismediyse (must_change_password ya da PIN isareti) izinli', () => {
+    assert.equal(evaluateManagedAccount(account({ email: 'ali@example.com', pin_issued: false, must_change_password: true })), null);
+    assert.equal(evaluateManagedAccount(account({ email: 'ali@example.com', pin_issued: true, must_change_password: false })), null);
+    // kendi kaydolan / parolasini kendi belirleyen gercek hesap: kimse (super dahil) sifirlayamaz -> "Sifremi unuttum"
+    assert.equal(evaluateManagedAccount(account({ email: 'ali@example.com', pin_issued: false, must_change_password: false })), 'PERSON_ACCOUNT_NOT_MANAGEABLE');
+    assert.equal(evaluateManagedAccount(account({ email: 'ali@example.com', pin_issued: false }), { actorIsSuper: true }), 'PERSON_ACCOUNT_NOT_MANAGEABLE');
+  });
+
+  it('dahili hesapta sakin parolasini kendisi belirlediyse (isaret yok) yalniz super kullanici sifirlar (resetApartmentPin kurali)', () => {
+    const chosen = account({ pin_issued: false, must_change_password: false });
+    assert.equal(evaluateManagedAccount(chosen), 'PERSON_ACCOUNT_RESET_NEEDS_SUPER');
+    assert.equal(evaluateManagedAccount(chosen, { actorIsSuper: false }), 'PERSON_ACCOUNT_RESET_NEEDS_SUPER');
+    assert.equal(evaluateManagedAccount(chosen, { actorIsSuper: true }), null);
+  });
+
+  it('rol apartment_owner disindaki hesap (yonetici / bireysel / super) ve silinmis ya da olmayan hesap ASLA', () => {
+    for (const role of ['site_manager', 'individual', 'super_user']) {
+      assert.equal(evaluateManagedAccount(account({ role }), { actorIsSuper: true }), 'PERSON_ACCOUNT_NOT_MANAGEABLE', role);
+    }
+    assert.equal(evaluateManagedAccount(account({ deleted_at: new Date() })), 'PERSON_ACCOUNT_NOT_MANAGEABLE');
+    assert.equal(evaluateManagedAccount(null), 'PERSON_ACCOUNT_NOT_MANAGEABLE');
+  });
+
+  it('baska siteye ya da role bagli hesap (yoneticilik, RESIDENT disi rol / baska site uyeligi, baska sitede daire / kisi kaydi) ASLA', () => {
+    for (const tie of ['is_manager', 'foreign_membership', 'foreign_apartment', 'foreign_person']) {
+      assert.equal(evaluateManagedAccount(account({ [tie]: true }), { actorIsSuper: true }), 'PERSON_ACCOUNT_NOT_MANAGEABLE', tie);
+    }
+  });
+});
+
+describe('provisionPersonAccount and resetPersonPinDirect', () => {
+  const personLock = /SELECT sp\.id, sp\.site_code, sp\.user_code, sp\.full_name/;
+  const resetPersonLock = /SELECT sp\.id, sp\.user_code, u\.login_name FROM site_people sp/;
+  const loginCheck = /^SELECT user_code FROM users WHERE LOWER\(login_name\) = LOWER/;
+  const emailCheck = /^SELECT 1 FROM users WHERE LOWER\(email\) = \$1 LIMIT 1$/;
+  const userInsert = /^INSERT INTO users/;
+  const updatePersonSql = /^UPDATE site_people SET user_code =/;
+  const currentApts = /^SELECT ar\.apartment_id FROM apartment_residencies ar WHERE ar\.person_id = \$1 AND ar\.is_current = TRUE ORDER BY/;
+  const aptLock = /^SELECT id FROM apartments WHERE id = \$1 FOR UPDATE$/;
+  const otherAdmin = /^SELECT 1 FROM apartment_memberships WHERE apartment_id = \$1 AND role = 'APARTMENT_ADMIN'/;
+  const aptMembership = /^INSERT INTO apartment_memberships/;
+  const aptIndicator = /^UPDATE apartments SET resident_user_code = \$1 WHERE id = \$2 AND resident_user_code IS NULL$/;
+  const siteMembership = /^INSERT INTO site_memberships/;
+  const aptPinMark = /^UPDATE apartments SET resident_pin_issued = TRUE, resident_pin_code = NULL, is_active = TRUE WHERE id = \$1 AND resident_user_code = \$2$/;
+  const residentAptsLock = /^SELECT id FROM apartments WHERE resident_user_code = \$1 ORDER BY id FOR UPDATE$/;
+  const accountLookup = /FROM users u WHERE u\.user_code = \$1 AND u\.deleted_at IS NULL FOR UPDATE OF u$/;
+  const passwordUpdate = /^UPDATE users SET password_hash = \$1, login_name = COALESCE\(\$2, login_name\), must_change_password = TRUE, updated_at = NOW\(\) WHERE user_code = \$3 AND deleted_at IS NULL RETURNING user_code, login_name, email$/;
+  const pinFlagMark = /^UPDATE apartments SET resident_pin_issued = TRUE, resident_pin_code = NULL WHERE resident_user_code = \$1$/;
+  const guestPasses = /^UPDATE guest_passes SET is_active = FALSE WHERE created_by_user_code = \$1 AND is_active = TRUE$/;
+  const qrTokens = /^UPDATE qr_access_tokens SET is_active = FALSE, revoked_at = NOW\(\)/;
+  const pushTables = /^SELECT to_regclass\('public\.push_devices'\) IS NOT NULL AS has_devices/;
+  const webPushTable = /^SELECT to_regclass\('public\.web_push_subscriptions'\) IS NOT NULL AS ok$/;
+
+  const accountRow = (extra = {}) => ({
+    user_code: 44001,
+    role: 'apartment_owner',
+    email: 'salih.ceylan.5.1000000001@ahbu.local',
+    login_name: 'salih.ceylan',
+    must_change_password: true,
+    deleted_at: null,
+    pin_issued: true,
+    is_manager: false,
+    foreign_membership: false,
+    foreign_apartment: false,
+    foreign_person: false,
+    ...extra,
+  });
+
+  /** Yeni hesap akisi: kisi + (isteğe bagli) daire iliskileri. */
+  function newAccountHandlers({ person = {}, apartments = ['9'], otherAdminExists = false, emailTaken = false } = {}) {
     handlers.push(
-      [personLock, () => ok([{ id: '5', site_code: SITE, user_code: null, full_name: 'Salih Ceylan', phone: '05551112233', email: null, is_active: true }])],
+      [personLock, () => ok([{ id: '5', site_code: SITE, user_code: null, full_name: 'Salih Ceylan', phone: '05551112233', email: null, is_active: true, ...person }])],
       [loginCheck, () => ok([])],
+      [emailCheck, () => (emailTaken ? ok([{ '?column?': 1 }]) : ok())],
       [userInsert, () => ok([{ user_code: '44001' }])],
       [updatePersonSql, () => ok()],
-      [currentApts, () => ok([{ apartment_id: '9', resident_user_code: null }])],
+      [currentApts, () => ok(apartments.map((id) => ({ apartment_id: id })))],
+      [aptLock, () => ok()],
+      [otherAdmin, () => (otherAdminExists ? ok([{ '?column?': 1 }]) : ok())],
       [aptMembership, () => ok()],
-      [updateApt, () => ok()],
+      [aptIndicator, () => ok()],
+      [siteMembership, () => ok()],
+      [aptPinMark, () => ok()],
     );
+  }
 
+  /** Mevcut hesap akisi: hesap kilidi + parola yazimi + iptal adimlari. */
+  function existingAccountHandlers({ account = accountRow(), qr = 0, passes = 0, withPersonLock = true } = {}) {
+    if (withPersonLock) {
+      handlers.push([personLock, () => ok([{ id: '5', site_code: SITE, user_code: 44001, full_name: null, phone: null, email: null, is_active: true, login_name: 'salih.ceylan', account_email: account?.email }])]);
+    }
+    handlers.push(
+      [residentAptsLock, () => ok()],
+      [accountLookup, () => ok(account ? [account] : [])],
+      [loginCheck, () => ok([])],
+      [passwordUpdate, (_sql, params) => ok([{ user_code: 44001, login_name: params[1] ?? 'salih.ceylan', email: account?.email ?? null }])],
+      [pinFlagMark, () => ok()],
+      [guestPasses, () => ({ rows: [], rowCount: passes })],
+      [qrTokens, () => ({ rows: [], rowCount: qr })],
+      [pushTables, () => ok([{ has_devices: false, has_outbox: false }])],
+      [webPushTable, () => ok([{ ok: false }])],
+      [/^SELECT DISTINCT devices\.id FROM devices/, () => ok()],
+    );
+  }
+
+  it('provisionPersonAccount: hesapsiz kisiye yeni hesap acar (rol apartment_owner), site_people baglar; daire erisimi grantApartmentAccess kuraliyla APARTMENT_ADMIN', async () => {
+    newAccountHandlers();
     const res = await provisionPersonAccount({
       siteCode: SITE,
       personId: 5,
-      loginName: 'salih.ceylan',
+      loginName: 'Salih.Ceylan',
       password: 'custompassword',
       actor,
     });
 
     assert.equal(res.ok, true);
     assert.equal(res.user_code, 44001);
-    assert.equal(res.login_name, 'salih.ceylan');
+    assert.equal(res.login_name, 'salih.ceylan', 'kullanici adi kirpilip kucuk harfe cevrilir');
     assert.equal(res.temp_password, 'custompassword');
     assert.equal(res.is_new, true);
+    assert.equal(res.email_verification_required, false, 'e-posta verilmedi -> dahili adres, dogrulama gerekmez');
     assert.deepEqual(auditActions(), ['person.account_created']);
+
+    const insert = find(userInsert);
+    assert.match(insert.sql, /'apartment_owner'/, "users.role users_role_check'e uyar (APARTMENT_ADMIN yalniz apartment_memberships.role'de)");
+    assert.equal(/APARTMENT_ADMIN/.test(insert.sql), false);
+    assert.match(insert.params[1], /^salih\.ceylan\.5\.1000000001@ahbu\.local$/, 'dahili e-posta');
+    assert.equal(insert.params[3], 'salih.ceylan');
+    assert.equal(insert.params[5], true, 'dahili adres dogrulanmis sayilir');
+    assert.equal(await bcrypt.compare('custompassword', insert.params[4]), true);
+
+    assert.equal(find(aptMembership).params[2], 'APARTMENT_ADMIN', 'dairede aktif yonetici yok -> yonetici');
+    assert.deepEqual(find(aptPinMark).params.map(Number), [9, 44001]);
+    assert.ok(indexOfQuery(aptLock) < indexOfQuery(aptMembership), 'daire satiri kilitlendikten sonra uyelik yazilir');
   });
 
-  it('resetPersonPinDirect: hesapli kisinin PIN kodunu sifirlar', async () => {
-    const personLock = /SELECT sp\.id, sp\.user_code, u\.login_name/;
-    const userUpdate = /UPDATE users SET password_hash =/;
+  it('dairede baska AKTIF yonetici varsa yeni hesap FAMILY_MEMBER olur (ikinci admin olusmaz)', async () => {
+    newAccountHandlers({ otherAdminExists: true });
+    await provisionPersonAccount({ siteCode: SITE, personId: 5, loginName: 'salih.ceylan', password: 'pass-1234-x', actor });
+    assert.equal(find(aptMembership).params[2], 'FAMILY_MEMBER');
+  });
 
-    handlers.push(
-      [personLock, () => ok([{ id: '5', user_code: 44001, login_name: 'salih.ceylan' }])],
-      [userUpdate, () => ok()],
+  it('parola verilmezse varsayilan gecici parola 1234 (ekip karari) ve must_change_password TRUE', async () => {
+    newAccountHandlers({ apartments: [] });
+    const res = await provisionPersonAccount({ siteCode: SITE, personId: 5, actor });
+    assert.equal(res.temp_password, '1234');
+    assert.match(find(userInsert).sql, /must_change_password,[\s\S]*TRUE, TRUE/);
+    assert.equal(await bcrypt.compare('1234', find(userInsert).params[4]), true);
+    assert.equal(has(aptMembership), false, 'ilişkisi olmayan kisi: daire erisimi yok');
+  });
+
+  it('kullanici adi verilmezse ad soyaddan uretilir (a-z0-9 ve nokta, en az 3 karakter)', async () => {
+    newAccountHandlers({ person: { full_name: 'Çağrı Öztürk' }, apartments: [] });
+    const res = await provisionPersonAccount({ siteCode: SITE, personId: 5, actor });
+    assert.equal(res.login_name, 'cagri.ozturk');
+    handlers.length = 0;
+    install();
+    newAccountHandlers({ person: { full_name: 'Al' }, apartments: [] });
+    const short = await provisionPersonAccount({ siteCode: SITE, personId: 5, actor });
+    assert.equal(short.login_name, 'al.5', 'kisa ad: kisi kimligi eklenir (min 3)');
+  });
+
+  it("yonetici girisli e-posta: kirpilir + kucuk harf + bicim denetimi; users.email'e yazilir, hesap dogrulanmis acilir (aksi halde kullanici adi + gecici sifre girisi 403)", async () => {
+    newAccountHandlers({ apartments: [] });
+    const res = await provisionPersonAccount({ siteCode: SITE, personId: 5, loginName: 'salih.ceylan', email: '  Salih.Ceylan@Example.COM ', actor });
+    const insert = find(userInsert);
+    assert.equal(insert.params[1], 'salih.ceylan@example.com');
+    assert.equal(insert.params[5], true, 'email_verified TRUE (giris must_change_password ile korunur)');
+    assert.equal(res.email_verification_required, false);
+    assert.deepEqual(find(emailCheck).params, ['salih.ceylan@example.com']);
+  });
+
+  it('kisi kaydindaki (CRM) e-posta da ayni kurallarla kullanilir; bozuk ya da dahili/sistem adresi yok sayilir (dahili adrese duser)', async () => {
+    newAccountHandlers({ person: { email: 'Ali@Example.com' }, apartments: [] });
+    await provisionPersonAccount({ siteCode: SITE, personId: 5, loginName: 'salih.ceylan', actor });
+    assert.equal(find(userInsert).params[1], 'ali@example.com');
+    assert.equal(find(userInsert).params[5], true);
+
+    for (const stored of ['bozuk-adres', 'x@ahbu.local', 'x@deleted.invalid']) {
+      handlers.length = 0;
+      install();
+      newAccountHandlers({ person: { email: stored }, apartments: [] });
+      await provisionPersonAccount({ siteCode: SITE, personId: 5, loginName: 'salih.ceylan', actor });
+      assert.match(find(userInsert).params[1], /@ahbu\.local$/, stored);
+      assert.equal(find(userInsert).params[5], true, stored);
+    }
+  });
+
+  it('e-posta baska bir hesapta kayitliysa KULLANILMAZ (dahili adrese duser): hesabin var oldugu yoneticiye sizmaz, 409 yok', async () => {
+    newAccountHandlers({ emailTaken: true, apartments: [] });
+    const res = await provisionPersonAccount({ siteCode: SITE, personId: 5, loginName: 'salih.ceylan', email: 'baskasi@example.com', actor });
+    assert.match(find(userInsert).params[1], /@ahbu\.local$/);
+    assert.equal(res.email_verification_required, false);
+  });
+
+  it('gecersiz girdi 400 INVALID_BODY ve kilit / sorgu ONCESINDE: kullanici adi ("@" yok), e-posta (dahili / sistem alan adi dahil), parola uzunlugu', async () => {
+    const cases = [
+      [{ loginName: 'ali@example.com' }, /login_name/],
+      [{ loginName: 'ab' }, /login_name/],
+      [{ loginName: 'ali veli' }, /login_name/],
+      [{ email: 'bozuk' }, /email/],
+      [{ email: 'x@ahbu.local' }, /email/],
+      [{ email: 'x@deleted.invalid' }, /email/],
+      [{ password: 'x'.repeat(129) }, /password/],
+      [{ password: { a: 1 } }, /password/],
+    ];
+    for (const [extra, pattern] of cases) {
+      await assert.rejects(
+        () => provisionPersonAccount({ siteCode: SITE, personId: 5, actor, ...extra }),
+        (error) => error.code === 'INVALID_BODY' && error.statusCode === 400 && pattern.test(error.message),
+        JSON.stringify(extra),
+      );
+    }
+    assert.equal(log.length, 0, 'dogrulama DB cagrilmadan once yapilir');
+  });
+
+  it('UNIQUE yarisi: kullanici adi yazimi 23505 (idx_users_login_name_unique) verirse SAVEPOINT\'e donulur ve yeni adayla yeniden denenir', async () => {
+    let attempts = 0;
+    newAccountHandlers({ apartments: [] });
+    handlers.unshift([
+      userInsert,
+      () => {
+        attempts += 1;
+        if (attempts === 1) {
+          txAborted = true;
+          throw Object.assign(new Error('duplicate key'), { code: '23505', constraint: 'idx_users_login_name_unique' });
+        }
+        return ok([{ user_code: '44001' }]);
+      },
+    ]);
+    const res = await provisionPersonAccount({ siteCode: SITE, personId: 5, loginName: 'salih.ceylan', actor });
+    assert.equal(attempts, 2);
+    assert.equal(res.ok, true);
+    assert.equal(findAll(/^ROLLBACK TO SAVEPOINT login_name_write$/).length, 1);
+    assert.equal(findAll(loginCheck).length, 2, 'her denemede benzersiz ad yeniden secilir');
+  });
+
+  it('mevcut hesap: yonetimce acilmis sakin hesabinin sifresi guncellenir; must_change_password TRUE + deleted_at korumasi AYNI UPDATE; PIN isareti; eski erisim iptali', async () => {
+    existingAccountHandlers({ qr: 2, passes: 1 });
+    const res = await provisionPersonAccount({ siteCode: SITE, personId: 5, password: 'yeni-gecici-1', actor });
+
+    assert.deepEqual({ ok: res.ok, user_code: res.user_code, login_name: res.login_name, temp_password: res.temp_password, is_new: res.is_new }, {
+      ok: true,
+      user_code: 44001,
+      login_name: 'salih.ceylan',
+      temp_password: 'yeni-gecici-1',
+      is_new: false,
+    });
+    const update = find(passwordUpdate);
+    assert.equal(await bcrypt.compare('yeni-gecici-1', update.params[0]), true);
+    assert.equal(update.params[1], null, 'kullanici adi istenmedi -> degismez');
+    assert.equal(update.params[2], 44001);
+    assert.ok(has(pinFlagMark), 'yonetimin verdigi PIN isareti kuruldu');
+    assert.ok(has(guestPasses) && has(qrTokens) && has(pushTables), 'eski parolayla edinilmis misafir gecisi / karekod / bildirim kayitlari kapatilir');
+    assert.ok(indexOfQuery(residentAptsLock) < indexOfQuery(accountLookup), 'kilit sirasi apartments -> users');
+    assert.ok(indexOfQuery(accountLookup) < indexOfQuery(passwordUpdate));
+    assert.ok(indexOfQuery(passwordUpdate) < indexOfQuery(qrTokens));
+    assert.deepEqual(auditActions(), ['person.account_password_reset']);
+    assert.deepEqual(auditDetails('person.account_password_reset'), { user_code: 44001, login_name: 'salih.ceylan', guest_passes: 1, qr_tokens: 2, push_devices: 0, push_outbox: 0 });
+    assert.ok(has(/^SELECT DISTINCT devices\.id FROM devices/), 'karekod iptal edildi -> yerel kontrol anahtarlari yenilenir');
+  });
+
+  it('mevcut hesap: kullanici adi degisimi dogrulanir (bicim) ve benzersiz secilir', async () => {
+    existingAccountHandlers();
+    const res = await provisionPersonAccount({ siteCode: SITE, personId: 5, loginName: 'Yeni.Ad', actor });
+    assert.equal(res.login_name, 'yeni.ad');
+    assert.equal(find(passwordUpdate).params[1], 'yeni.ad');
+    await assert.rejects(
+      () => provisionPersonAccount({ siteCode: SITE, personId: 5, loginName: 'sakin@example.com', actor }),
+      (error) => error.code === 'INVALID_BODY',
     );
+  });
+
+  it('mevcut hesap 409: yonetici / bireysel hesap, baska siteye bagli hesap ve kendi parolasini belirleyen gercek hesap DEGISTIRILEMEZ (sifre yazilmaz, iptal yok)', async () => {
+    const blocked = [
+      accountRow({ role: 'site_manager' }),
+      accountRow({ role: 'individual', email: 'ali@example.com' }),
+      accountRow({ is_manager: true }),
+      accountRow({ foreign_membership: true }),
+      accountRow({ foreign_apartment: true }),
+      accountRow({ foreign_person: true }),
+      accountRow({ email: 'ali@example.com', must_change_password: false, pin_issued: false }),
+      null,
+    ];
+    for (const account of blocked) {
+      handlers.length = 0;
+      install();
+      existingAccountHandlers({ account });
+      await assert.rejects(
+        () => provisionPersonAccount({ siteCode: SITE, personId: 5, password: 'yeni-gecici-1', actor }),
+        (error) => error.statusCode === 409 && error.code === 'PERSON_ACCOUNT_NOT_MANAGEABLE',
+        JSON.stringify(account && { role: account.role, is_manager: account.is_manager }),
+      );
+      assert.equal(has(passwordUpdate), false);
+      assert.equal(has(qrTokens), false);
+      assert.equal(auditActions().length, 0);
+    }
+  });
+
+  it('mevcut hesap 409 PERSON_ACCOUNT_RESET_NEEDS_SUPER: sakin parolasini kendisi belirlemis dahili hesabi yonetici DEGISTIREMEZ; super kullanici degistirebilir', async () => {
+    const chosen = accountRow({ must_change_password: false, pin_issued: false });
+    existingAccountHandlers({ account: chosen });
+    await assert.rejects(
+      () => provisionPersonAccount({ siteCode: SITE, personId: 5, password: 'yeni-gecici-1', actor }),
+      (error) => error.statusCode === 409 && error.code === 'PERSON_ACCOUNT_RESET_NEEDS_SUPER',
+    );
+    assert.equal(has(passwordUpdate), false);
+
+    handlers.length = 0;
+    install();
+    existingAccountHandlers({ account: chosen });
+    const res = await provisionPersonAccount({ siteCode: SITE, personId: 5, password: 'yeni-gecici-1', actor: { ...actor, role: 'super_user' } });
+    assert.equal(res.ok, true);
+    assert.ok(has(passwordUpdate));
+  });
+
+  it('mevcut hesap: hesap bu arada silindiyse (UPDATE satir donmez) tombstone\'a parola yazilmaz -> 409', async () => {
+    existingAccountHandlers();
+    handlers.unshift([passwordUpdate, () => ok()]);
+    await assert.rejects(
+      () => provisionPersonAccount({ siteCode: SITE, personId: 5, password: 'yeni-gecici-1', actor }),
+      (error) => error.statusCode === 409 && error.code === 'PERSON_ACCOUNT_NOT_MANAGEABLE',
+    );
+    assert.equal(has(qrTokens), false);
+  });
+
+  it('resetPersonPinDirect: yonetimce acilmis hesabin PIN kodunu sifirlar; must_change_password TRUE + deleted_at korumasi; eski erisim iptali', async () => {
+    handlers.push([resetPersonLock, () => ok([{ id: '5', user_code: 44001, login_name: 'salih.ceylan' }])]);
+    existingAccountHandlers({ withPersonLock: false });
 
     const res = await resetPersonPinDirect({
       siteCode: SITE,
@@ -1044,7 +1354,142 @@ describe('provisionPersonAccount and resetPersonPinDirect', () => {
 
     assert.equal(res.ok, true);
     assert.equal(res.login_name, 'salih.ceylan');
-    assert.ok(typeof res.pin_code === 'string' && res.pin_code.length >= 4);
+    assert.match(res.pin_code, /^\d{4}$/);
+    const update = find(passwordUpdate);
+    assert.equal(await bcrypt.compare(res.pin_code, update.params[0]), true, 'yazilan ozet donen PIN\'e ait');
+    assert.ok(has(pinFlagMark) && has(guestPasses) && has(qrTokens));
     assert.deepEqual(auditActions(), ['person.pin_reset']);
+  });
+
+  it('resetPersonPinDirect: hesabi olmayan kisi 400 PERSON_NO_ACCOUNT; yonetilemez hesap 409 (PIN yazilmaz)', async () => {
+    handlers.push([resetPersonLock, () => ok([{ id: '5', user_code: null, login_name: null }])]);
+    await assert.rejects(
+      () => resetPersonPinDirect({ siteCode: SITE, personId: 5, actor }),
+      (error) => error.statusCode === 400 && error.code === 'PERSON_NO_ACCOUNT',
+    );
+
+    handlers.length = 0;
+    install();
+    handlers.push([resetPersonLock, () => ok([{ id: '5', user_code: 44001, login_name: 'ali' }])]);
+    existingAccountHandlers({ account: accountRow({ role: 'site_manager' }), withPersonLock: false });
+    await assert.rejects(
+      () => resetPersonPinDirect({ siteCode: SITE, personId: 5, actor }),
+      (error) => error.statusCode === 409 && error.code === 'PERSON_ACCOUNT_NOT_MANAGEABLE',
+    );
+    assert.equal(has(passwordUpdate), false);
+  });
+});
+
+describe('provisionResidentAndLinkPerson: daire sakini hesabi + (yalniz YENI hesapta) tek eslesen hesapsiz kisiye baglama', () => {
+  const siteLookup = /^SELECT site_code FROM apartments WHERE id = \$1 LIMIT 1$/;
+  const aptSelect = /^SELECT a\.id, a\.site_code, a\.resident_user_code, a\.resident_email, b\.block_name, a\.unit_label, a\.sort_order FROM apartments a/;
+  const loginCheck = /^SELECT user_code FROM users WHERE LOWER\(login_name\) = LOWER/;
+  const createUserInsert = /^INSERT INTO users \(/;
+  const aptAccountUpdate = /^UPDATE apartments SET resident_user_code = \$1, resident_email = \$2, resident_pin_issued = TRUE/;
+  const existingUserSelect = /^SELECT email FROM users WHERE user_code = \$1 AND deleted_at IS NULL LIMIT 1$/;
+  const internalUserUpdate = /^UPDATE users SET full_name = \$1, email = \$2, login_name = \$3/;
+  const aptEmailUpdate = /^UPDATE apartments SET resident_email = \$1, is_active = \$2 WHERE id = \$3$/;
+  const finalSelect = /^SELECT a\.id, a\.site_code, a\.block_id, b\.block_name[\s\S]*WHERE a\.id = \$1$/;
+  const aptLock = /^SELECT id FROM apartments WHERE id = \$1 FOR UPDATE$/;
+  const otherAdmin = /^SELECT 1 FROM apartment_memberships WHERE apartment_id = \$1 AND role = 'APARTMENT_ADMIN'/;
+  const aptMembership = /^INSERT INTO apartment_memberships/;
+  const aptIndicator = /^UPDATE apartments SET resident_user_code = \$1 WHERE id = \$2 AND resident_user_code IS NULL$/;
+  const siteMembership = /^INSERT INTO site_memberships/;
+  const candidates = /^SELECT sp\.id, sp\.full_name, sp\.email FROM apartment_residencies ar INNER JOIN site_people sp ON sp\.id = ar\.person_id WHERE ar\.apartment_id = \$1/;
+  const linkUpdate = /^UPDATE site_people SET user_code = \$1, full_name = NULL, phone = NULL, email = NULL, updated_at = NOW\(\) WHERE id = \$2 AND site_code = \$3 AND user_code IS NULL AND is_active = TRUE RETURNING id$/;
+
+  const request = { apartmentId: 9, fullName: 'Ali Veli', loginName: 'ali.veli', password: '4321', email: undefined, phoneNumber: null, isActive: true };
+
+  function baseHandlers({ residentUserCode = null, people = [] } = {}) {
+    handlers.push(
+      [siteLookup, () => ok([{ site_code: String(SITE) }])],
+      [aptSelect, () => ok([{ id: '9', site_code: String(SITE), resident_user_code: residentUserCode, resident_email: null, block_name: 'A Blok', unit_label: 'Daire 2', sort_order: 2 }])],
+      [loginCheck, () => ok()],
+      [createUserInsert, () => ok([{ id: 777, user_code: 777 }])],
+      [aptAccountUpdate, () => ok()],
+      [existingUserSelect, () => ok([{ email: 'ali.veli.9.1000000001@ahbu.local' }])],
+      [internalUserUpdate, () => ok()],
+      [aptEmailUpdate, () => ok()],
+      [finalSelect, () => ok([{ id: '9', site_code: String(SITE), resident_user_code: residentUserCode ?? 777 }])],
+      [aptLock, () => ok()],
+      [otherAdmin, () => ok()],
+      [aptMembership, () => ok()],
+      [aptIndicator, () => ok()],
+      [siteMembership, () => ok()],
+      [candidates, () => ok(people)],
+      [linkUpdate, (_sql, params) => ok([{ id: String(params[1]) }])],
+    );
+  }
+
+  it('YENI hesap: ayni transaction\'da (site kilidi altinda) dairenin erisimi verilir ve ad eslesen TEK hesapsiz kisi baglanir', async () => {
+    baseHandlers({ people: [{ id: '5', full_name: '  ALİ   veli ', email: null }, { id: '6', full_name: 'Ayse Yilmaz', email: null }] });
+    const apartment = await provisionResidentAndLinkPerson(request);
+    assert.equal(apartment.issued_pin_code, '4321');
+    assert.equal(Number(apartment.resident_user_code), 777);
+    assert.ok(log.some((q) => q.sql === 'BEGIN' && q.inTx));
+    assert.ok(log.some((q) => /^SELECT pg_advisory_xact_lock/.test(q.sql) && q.params[0] === `people_sync:${SITE}`), 'site kilidi');
+    assert.equal(find(aptMembership).params[2], 'APARTMENT_ADMIN');
+    assert.deepEqual(find(linkUpdate).params.map(Number), [777, 5, SITE]);
+    assert.equal(findAll(linkUpdate).length, 1, 'yalniz TEK kisi');
+    assert.ok(indexOfQuery(aptAccountUpdate) < indexOfQuery(aptMembership));
+    assert.ok(indexOfQuery(candidates) < indexOfQuery(linkUpdate));
+    assert.ok(log.filter((q) => /^(INSERT|UPDATE|SELECT)/.test(q.sql) && q.inTx !== true && !siteLookup.test(q.sql)).length === 0, 'tum sorgular transaction icinde');
+    assert.ok(log.some((q) => q.sql === 'COMMIT'));
+  });
+
+  it('e-posta eslesmesi de kimlik sayilir (kisi adi farkli olsa bile)', async () => {
+    baseHandlers({ people: [{ id: '5', full_name: 'Baska Ad', email: 'Ali@Example.com' }, { id: '6', full_name: 'Ayse', email: 'ayse@example.com' }] });
+    await provisionResidentAndLinkPerson({ ...request, email: 'ali@example.com' });
+    assert.deepEqual(find(linkUpdate).params.map(Number), [777, 5, SITE]);
+  });
+
+  it('kimligi eslesmeyen kisi ASLA baglanmaz (dairedeki tek hesapsiz kisi baska birini ifade ediyorsa)', async () => {
+    baseHandlers({ people: [{ id: '6', full_name: 'Ayse Yilmaz', email: 'ayse@example.com' }] });
+    await provisionResidentAndLinkPerson(request);
+    assert.equal(has(linkUpdate), false);
+    assert.ok(log.some((q) => q.sql === 'COMMIT'), 'hesap acma yine tamamlanir');
+  });
+
+  it('birden cok eslesen aday varsa baglanmaz (atlanir; 500/409 yok)', async () => {
+    baseHandlers({ people: [{ id: '5', full_name: 'Ali Veli', email: null }, { id: '7', full_name: 'ali VELI', email: null }] });
+    const apartment = await provisionResidentAndLinkPerson(request);
+    assert.equal(has(linkUpdate), false);
+    assert.equal(apartment.issued_pin_code, '4321');
+  });
+
+  it('baglama sirasinda cakisma (UNIQUE vb.) hesap acmayi geri ALMAZ: SAVEPOINT\'e donulur, atlanir', async () => {
+    baseHandlers({ people: [{ id: '5', full_name: 'Ali Veli', email: null }] });
+    handlers.unshift([
+      linkUpdate,
+      () => {
+        txAborted = true;
+        throw Object.assign(new Error('duplicate key'), { code: '23505' });
+      },
+    ]);
+    const apartment = await provisionResidentAndLinkPerson(request);
+    assert.equal(apartment.issued_pin_code, '4321');
+    assert.equal(findAll(/^ROLLBACK TO SAVEPOINT resident_person_link$/).length, 1);
+    assert.ok(log.some((q) => q.sql === 'COMMIT'));
+  });
+
+  it('MEVCUT hesabin duzenlenmesi (PIN verilmedi): kisi baglama ve uyelik yazimi HIC calismaz (eskiden her duzenlemede dairenin TUM hesapsiz kisileri baglanirdi)', async () => {
+    baseHandlers({ residentUserCode: 555, people: [{ id: '5', full_name: 'Ali Veli', email: null }] });
+    const apartment = await provisionResidentAndLinkPerson({ ...request, password: '' });
+    assert.equal(apartment.issued_pin_code, null);
+    assert.equal(has(candidates), false);
+    assert.equal(has(linkUpdate), false);
+    assert.equal(has(aptMembership), false);
+    assert.equal(has(siteMembership), false);
+  });
+
+  it('daire yok: Error(APARTMENT_NOT_FOUND) (rotalar 404\'e cevirir); site kodu verilirse on sorgu yok', async () => {
+    handlers.push([siteLookup, () => ok()]);
+    await assert.rejects(() => provisionResidentAndLinkPerson(request), (error) => error.message === 'APARTMENT_NOT_FOUND');
+
+    handlers.length = 0;
+    install();
+    baseHandlers();
+    await provisionResidentAndLinkPerson({ ...request, siteCode: SITE });
+    assert.equal(has(siteLookup), false);
   });
 });

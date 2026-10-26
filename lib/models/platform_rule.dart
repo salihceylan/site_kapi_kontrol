@@ -411,7 +411,7 @@ const Map<String, String> kPlatformRuleLabels = <String, String>{
   'budget.provisional_max_days': 'Geçici işletme projesi en uzun süresi',
   'budget.objection_days': 'İşletme projesine itiraz süresi',
   'heat.measured_share_pct': 'Isınma gideri: ölçüme göre pay',
-  'heat.area_share_pct': 'Isınma gideri: alana göre pay',
+  'heat.area_share_pct': 'Isınma gideri: alan payı',
   'forecast.default_increase_bp': 'Gelecek yıl tahmini: varsayılan artış oranı',
   'retention.finance_days': 'Mali kayıtlar',
   'retention.contact_after_moveout_days': 'Taşınan kişinin iletişim bilgileri',

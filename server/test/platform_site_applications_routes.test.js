@@ -241,8 +241,8 @@ describe('site başvurusu uçları: HTTP', () => {
       if (/^SELECT id, user_code, role, full_name FROM users/.test(sql)) return ok([{ id: 7, user_code: 48213, role: 'individual', full_name: 'Ayşe Başvuran' }]);
       if (/^SELECT role FROM users WHERE user_code = \$1 LIMIT 1$/.test(sql)) return ok([{ role: 'individual' }]);
       if (/^SELECT value FROM platform_settings/.test(sql)) return ok([{ value: { mode: 'approval' } }]);
-      if (/FROM sites WHERE LOWER\(TRIM\(name\)\) = LOWER\(TRIM\(\$1\)\) LIMIT 1$/.test(sql)) return ok([]);
-      if (/FROM site_applications WHERE status = 'pending' AND LOWER\(TRIM\(site_name\)\) = LOWER\(TRIM\(\$1\)\) LIMIT 1$/.test(sql)) return ok([]);
+      if (/FROM sites WHERE site_name_key\(name\) = site_name_key\(\$1\) AND approval_status IS DISTINCT FROM 'rejected' LIMIT 1$/.test(sql)) return ok([]);
+      if (/FROM site_applications WHERE status = 'pending' AND site_name_key\(site_name\) = site_name_key\(\$1\) LIMIT 1$/.test(sql)) return ok([]);
       if (/^SELECT key, value FROM platform_settings WHERE key = ANY/.test(sql)) return ok(); // yasal onay ayarları (zorunluluk kapalı)
       if (/a\.status = 'pending' LIMIT 1$/.test(sql)) return ok(created ? [stored] : []);
       if (/^SELECT COUNT\(\*\)::INTEGER AS applied/.test(sql)) return ok([{ applied: 0 }]);

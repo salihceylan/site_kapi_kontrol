@@ -16,7 +16,16 @@ import { requestFingerprint, validateImportBody } from './bulk_import_body.js';
 import { computePlan, collectApartmentIds } from './bulk_import_plan.js';
 import { loadBlocksAndApartments, loadSnapshot } from './bulk_import_snapshot.js';
 import { KIND_MODULE, SPEC_VERSION, isImportDisabled } from './bulk_import_spec.js';
-import { ENTITY_CHUNK, applyApartmentOps, applyOpeningOps, applyPeopleOps, insertAudits, provisionImportedResidents } from './bulk_import_writer.js';
+import {
+  ENTITY_CHUNK,
+  applyApartmentOps,
+  applyOpeningOps,
+  applyPeopleOps,
+  collectAccountPasswords,
+  hashAccountPasswords,
+  insertAudits,
+  provisionImportedResidents,
+} from './bulk_import_writer.js';
 import { todayIso } from './people_common.js';
 import { peopleLockKey } from './people_sync.js';
 import { runSyncSteps } from './people_sync_sql.js';
@@ -28,6 +37,8 @@ const LOCK_TIMEOUT = '8s';
 const SYNC_KINDS = new Set(['people', 'vehicles', 'all_in_one']);
 const FINANCE_LOCK_KINDS = new Set(['apartments', 'all_in_one', 'opening_balances']);
 const APARTMENT_WRITE_KINDS = new Set(['apartments', 'all_in_one']);
+/** Daire ilişkisi eklenen kişilere kullanıcı hesabı açılan türler (araç yüklemesi hesap açmaz). */
+const ACCOUNT_KINDS = new Set(['people', 'all_in_one']);
 const totalError = (plan, expected) =>
   new PlatformError(409, 'TOTAL_MISMATCH', 'Toplam tutar onaylanan tutarla uyuşmuyor. Önizleme yenilendi, tekrar inceleyin.', {
     totals: plan.totals,
@@ -158,7 +169,38 @@ function runView(row) {
   };
 }
 
-async function commitOnce({ siteCode, kind, parsed, fingerprint, actor }) {
+/**
+ * Hesap açacak yüklemelerde şifre özetlerini (bcrypt) TRANSACTION ÖNCESİ, sınırlı eşzamanlılıkla hesaplar: 1500 kişilik dosyada özetler
+ * kilitleri tutan transaction'da sıralı çalışsaydı dakikalar sürerdi. Plan kilitsiz bir anlık görüntüde YAKLAŞIK hesaplanır (yalnız hangi kişilerin
+ * hesap alacağını ve şifrelerini bulmak için); transaction içindeki gerçek plan farklı çıkarsa eksik/değişen özetler yerinde hesaplanır.
+ * Tekrar oynatma, bayat önizleme ya da hata durumunda boş döner (özet gerekmez / sonra hesaplanır).
+ */
+async function prehashAccounts({ siteCode, kind, parsed }) {
+  if (!ACCOUNT_KINDS.has(kind)) return new Map();
+  try {
+    const replay = await pool.query(`SELECT 1 FROM bulk_import_runs WHERE site_code = $1 AND idempotency_key = $2`, [siteCode, parsed.idempotencyKey]);
+    if (replay.rows[0]) return new Map();
+    const client = await pool.connect();
+    let snapshot;
+    try {
+      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+      snapshot = await loadSnapshot(client, siteCode, kind, parsed.options);
+      await client.query('COMMIT');
+    } catch (error) {
+      await rollbackQuietly(client);
+      throw error;
+    } finally {
+      client.release();
+    }
+    const plan = computePlan({ kind, rows: parsed.rows, snapshot, allowOverwrite: parsed.allowOverwrite, today: todayIso(), options: parsed.options });
+    if (plan.previewHash !== parsed.expectedHash || !(plan.counts.account_create > 0)) return new Map();
+    return await hashAccountPasswords(collectAccountPasswords(plan.ops));
+  } catch (_error) {
+    return new Map();
+  }
+}
+
+async function commitOnce({ siteCode, kind, parsed, fingerprint, actor, hashes = new Map() }) {
   const actorInfo = actorFromAuthUser(actor);
   const client = await pool.connect();
   let began = false;
@@ -277,6 +319,7 @@ async function commitOnce({ siteCode, kind, parsed, fingerprint, actor }) {
     const runId = Number(run.id);
 
     let audits = [];
+    let accounts = null;
     if (kind === 'opening_balances') {
       const written = await applyOpeningOps(client, {
         siteCode,
@@ -297,8 +340,13 @@ async function commitOnce({ siteCode, kind, parsed, fingerprint, actor }) {
       }
       if (kind !== 'apartments') {
         const peopleOps = plan.ops.filter((op) => op.t !== 'au');
-        audits = audits.concat(await applyPeopleOps(client, { siteCode, ops: peopleOps, runId, today, actorUserCode: actorInfo.userCode }));
-        await provisionImportedResidents(client, { siteCode, ops: peopleOps });
+        const written = await applyPeopleOps(client, { siteCode, ops: peopleOps, runId, today, actorUserCode: actorInfo.userCode });
+        audits = audits.concat(written.audits);
+        if (ACCOUNT_KINDS.has(kind)) {
+          // yalnız BU yüklemede daire ilişkisi eklenen kişilere hesap (kapsam sınırı); sitedeki diğer hesapsız sakinlere dokunulmaz
+          accounts = await provisionImportedResidents(client, { siteCode, runId, accountCandidates: written.accountCandidates, hashes });
+          audits = audits.concat(accounts.audits);
+        }
       }
     }
     audits.push({
@@ -309,7 +357,12 @@ async function commitOnce({ siteCode, kind, parsed, fingerprint, actor }) {
         kind,
         run_id: runId,
         rows: parsed.rows.length,
-        counts: { ...rows, with_warnings: plan.totals.with_warnings, ...plan.counts },
+        counts: {
+          ...rows,
+          with_warnings: plan.totals.with_warnings,
+          ...plan.counts,
+          ...(accounts ? { accounts_created: accounts.created, accounts_linked: accounts.linked, accounts_skipped: accounts.skipped } : {}),
+        },
         strict: parsed.strict,
         allow_overwrite: parsed.allowOverwrite,
         acknowledged: parsed.acknowledged,
@@ -325,7 +378,16 @@ async function commitOnce({ siteCode, kind, parsed, fingerprint, actor }) {
       body: {
         replayed: false,
         run: runView(run),
-        result: { rows, counts: plan.counts, issues: plan.view.issues, issues_truncated: plan.view.issues_truncated },
+        result: {
+          rows,
+          counts: plan.counts,
+          issues: plan.view.issues,
+          issues_truncated: plan.view.issues_truncated,
+          // açılan / bağlanan hesaplar: satır no + NİHAİ kullanıcı adı (çakışmada sunucu ek koyabilir); atlananlar neden iletisiyle
+          ...(accounts
+            ? { accounts: { created: accounts.created, linked: accounts.linked, skipped: accounts.skipped, items: accounts.items, skipped_items: accounts.skipped_items } }
+            : {}),
+        },
       },
     };
   } catch (error) {
@@ -347,11 +409,12 @@ export async function commitImport({ siteCode, kind, body, actor, env = process.
   if (gauge.commits >= MAX_CONCURRENT_COMMITS) throw serverBusy();
   gauge.commits += 1;
   try {
+    const hashes = await prehashAccounts({ siteCode, kind, parsed });
     try {
-      return await commitOnce({ siteCode, kind, parsed, fingerprint, actor });
+      return await commitOnce({ siteCode, kind, parsed, fingerprint, actor, hashes });
     } catch (error) {
       if (error?.code === '40P01') {
-        return await commitOnce({ siteCode, kind, parsed, fingerprint, actor }).catch((retryError) => {
+        return await commitOnce({ siteCode, kind, parsed, fingerprint, actor, hashes }).catch((retryError) => {
           throw mapLockTimeout(retryError);
         });
       }
