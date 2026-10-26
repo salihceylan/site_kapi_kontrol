@@ -4,8 +4,9 @@
 //  - `toggleable = !core && status === 'available'`
 //  - `enabled` hesabı: status !== 'available' -> false; core -> true; aksi halde site_modules satırı varsa
 //    satırın `enabled` değeri, yoksa katalogdaki varsayılan (`defaultEnabled`).
-//  - Satırı olmayan site katalog varsayılanına göre davranır: door_control varsayılanı AÇIK, bu yüzden
-//    mevcut siteler, mevcut uygulamalar ve cihazlar hiçbir değişiklik görmez.
+//  - Satırı olmayan site katalog varsayılanına göre davranır (door_control varsayılanı 2bf1bd4'ten beri KAPALI;
+//    cihaz kapıya bağlanınca açılır).
+//  - Aidat ve Finans TEMEL modüldür (AGENTS.md Kural 25): talep gerekmeden her sitede açık, kapatılamaz.
 
 export const MODULE_STATUS_AVAILABLE = 'available';
 export const MODULE_STATUS_COMING_SOON = 'coming_soon';
@@ -51,9 +52,10 @@ export const MODULE_CATALOG = Object.freeze([
     code: 'finance',
     name: 'Aidat ve Finans',
     description: 'Aidat, borç ve alacak takibi; gelir ve gider kayıtları.',
-    core: false,
+    // Temel modül (Kural 25): site kurulumunda açık tanımlanır, talep edilmez, kapatılamaz.
+    core: true,
     status: MODULE_STATUS_AVAILABLE,
-    defaultEnabled: false,
+    defaultEnabled: true,
   }),
   defineModule({
     code: 'documents',

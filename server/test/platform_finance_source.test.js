@@ -60,7 +60,7 @@ function codeOnly(text) {
 }
 
 describe('finans kaynakları: para hesabında kayan nokta YOK', () => {
-  it('finance_*.js dosyaları bulundu (4a: money, distribution, common, access, tx, service, ledger_service, read_service, routes + 4b: şema, ortak, koruma, ayarlar, makbuz, kasa, gider, belge adaptörü, tazminat, M1, rapor, dışa aktarma, hatırlatma + sakin kapsamı)', () => {
+  it('finance_*.js dosyaları bulundu (4a: money, distribution, common, access, tx, service, ledger_service, read_service, routes + 4b: şema, ortak, koruma, ayarlar, makbuz, kasa, gider, belge adaptörü, tazminat, M1, rapor, dışa aktarma, hatırlatma + sakin kapsamı + temel modül satırı)', () => {
     assert.deepEqual(financeFiles, [
       'finance_4b_common.js',
       'finance_4b_guard.js',
@@ -70,6 +70,7 @@ describe('finans kaynakları: para hesabında kayan nokta YOK', () => {
       'finance_accounts.js',
       'finance_charts.js',
       'finance_common.js',
+      'finance_core_module.js',
       'finance_distribution.js',
       'finance_documents_adapter.js',
       'finance_enforcement.js',

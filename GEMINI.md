@@ -171,4 +171,13 @@ Bu kurallar projede geliştirme yapılırken MUTLAKA ve İSTİSNASIZ olarak uygu
       - Misafir linki başlığını yeniden zorunlu hale getirme; hazır hızlı etiketleri (`guest_title_chip_*`) kaldırma.
       - Daire düzenlemedeki `apartment_advanced_toggle` ve katlı arsa payı/kategori yapısını bozma, arsa payını finans motorundan koparma.
 
-
+25. **Aidat ve Finans Temel Modüldür (Talep Gerekmez, Kapatılamaz):**
+    - **Neden Yapıldı:**
+      - Kullanıcı kararıyla (2026-10-26) "Aidat ve Finans" (`finance`) modülü temel modüller arasına alındı: her site kurulduğunda modül olarak açık tanımlanır, yöneticinin talep etmesi veya süper kullanıcının açması gerekmez.
+      - Katalogda `core: true, defaultEnabled: true` (`server/src/modules/catalog.js`); `computeModuleEnabled` temel modülde site_modules satırına bakmadan açık döner, `isToggleable` false'tur (açma/kapatma 400 `MODULE_NOT_TOGGLEABLE`, talep 400 "Bu modül her sitede hep açıktır; talep edilemez.").
+      - Site oluşturan her yol (`site_setup_core.js` ve `site_service.js` içindeki `createSiteWithStructure`) aynı transaction'da açık finans satırı yazar (`SQL_ENABLE_FINANCE_FOR_SITE`). Mevcut siteler açılışta `ensureDbSchema` ve `migrations/079_finance_core_module.sql` ile doldurulur; bekleyen finans talepleri "onaylandı" olarak sonuçlanır (`finance_core_module.js`).
+    - **Gelecek Ajanlar İçin Kesin Yasaklar ve Koruma İlkeleri:**
+      - `finance` modülünü katalogda yeniden `core: false` veya varsayılan kapalı YAPMA; finansı modül talebi / vitrin "talep et" akışına geri koyma.
+      - Yeni bir site oluşturma yolu eklenirse finans satırını aynı transaction'da yaz (`SQL_ENABLE_FINANCE_FOR_SITE`); açılıştaki 079 doldurmasını kaldırma.
+      - Finans durumunu doğrudan SQL ile okuyan yerlerde satır yoksa açık say (`COALESCE(..., TRUE)`); `COALESCE(..., FALSE)` yazma.
+      - Bu kural yalnız modülün açık olmasını sağlar: finansın kendi rol denetimleri (yönetici, kurul okuma, görevli yasağı), sistem hukuk onayı (`finance.legal_ok`) ve hatırlatma ayarı (`reminders_enabled`, varsayılan kapalı) aynen geçerlidir.

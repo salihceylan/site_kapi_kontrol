@@ -229,22 +229,24 @@ describe('finans: sunucu bağlantısı ve katalog', () => {
     assert.ok(mount < server.indexOf('webBuildPath, { maxAge'));
   });
 
-  it('catalog.js: finance available, çekirdek değil, varsayılan KAPALI', () => {
+  it('catalog.js: finance temel modül (Kural 25): available, çekirdek (core: true), varsayılan AÇIK', () => {
     const catalog = readSrc('modules/catalog.js');
     const block = /code: 'finance',[\s\S]*?\}\),/.exec(catalog)?.[0] ?? '';
     assert.match(block, /name: 'Aidat ve Finans'/);
-    assert.match(block, /core: false/);
+    assert.match(block, /core: true/);
     assert.match(block, /status: MODULE_STATUS_AVAILABLE/);
-    assert.match(block, /defaultEnabled: false/);
+    assert.match(block, /defaultEnabled: true/);
   });
 
-  it('docs/PLATFORM_MODUL_SISTEMI.md tablosunda finance satırı "available" ve varsayılan KAPALI', () => {
+  it('docs/PLATFORM_MODUL_SISTEMI.md tablosunda finance satırı temel modül (evet), "available" ve hep açık', () => {
     const doc = readFileSync(path.join(here, '..', '..', 'docs', 'PLATFORM_MODUL_SISTEMI.md'), 'utf8');
     const line = doc.split('\n').find((l) => l.startsWith('| `finance`'));
     assert.ok(line, 'finance satırı yok');
     assert.match(line, /Aidat ve Finans/);
     assert.match(line, /`available`/);
-    assert.match(line, /KAPALI/);
+    assert.match(line, /evet/, 'çekirdek (temel) sütunu');
+    assert.match(line, /hep açık/);
+    assert.doesNotMatch(line, /KAPALI/);
     assert.doesNotMatch(line, /coming_soon/);
   });
 });

@@ -519,10 +519,12 @@ describe('GET /manager/sites/:siteCode/modules: yetki matrisi', () => {
       recommended: true,
     });
     const finance = res.body.modules.find((m) => m.code === 'finance');
-    assert.equal(finance.status, 'available', 'Faz 4a: Aidat ve Finans kullanılabilir');
-    assert.equal(finance.enabled, false, 'varsayılan KAPALI');
-    assert.equal(finance.toggleable, true);
-    assert.equal(finance.can_toggle, false, 'yönetici modül açıp kapatamaz (modül talep eder)');
+    assert.equal(finance.status, 'available', 'Aidat ve Finans kullanılabilir');
+    assert.equal(finance.core, true, 'Kural 25: Aidat ve Finans temel modül');
+    assert.equal(finance.enabled, true, 'temel modül: site_modules satırı olmasa da her sitede açık');
+    assert.equal(finance.toggleable, false, 'temel modül açılıp kapatılamaz (talep de edilemez)');
+    assert.equal(finance.can_toggle, false);
+    assert.equal(finance.request_status, null);
     const reservation = res.body.modules.find((m) => m.code === 'reservation');
     assert.equal(reservation.status, 'available', 'Rezervasyon ve Konsiyerj kullanilabilir');
     assert.equal(reservation.enabled, false, 'varsayilan KAPALI');
@@ -544,7 +546,7 @@ describe('GET /manager/sites/:siteCode/modules: yetki matrisi', () => {
         ['door_control', true, true],
         ['people', false, false],
         ['announcements', false, false],
-        ['finance', true, true],
+        ['finance', false, false], // Kural 25: temel modül, süper kullanıcı bile açıp kapatamaz
         ['documents', true, true],
         ['reservation', true, true],
         ['work_tracking', true, true],
@@ -571,8 +573,8 @@ describe('GET /manager/sites/:siteCode/modules: yetki matrisi', () => {
     // bekleyen talep: yalnizca o sitenin o modulu 'pending' olur; baska site / sonuclanmis talep etkilemez
     state.moduleRequests = [
       { site_code: SITE_1, module_code: 'door_control', status: 'pending' },
-      { site_code: SITE_1, module_code: 'finance', status: 'approved' },
-      { site_code: SITE_2, module_code: 'finance', status: 'pending' },
+      { site_code: SITE_1, module_code: 'documents', status: 'approved' },
+      { site_code: SITE_2, module_code: 'documents', status: 'pending' },
     ];
     const asManager = await call('GET', `/manager/sites/${SITE_1}/modules`, { user: users.mgrA });
     assert.deepEqual(
@@ -796,8 +798,8 @@ describe('PUT modul: onay zorunlulugu ve denetim kaydi', () => {
     assert.equal(noBody.status, 400);
   });
 
-  it('core modul (people/announcements) 400 MODULE_NOT_TOGGLEABLE (acma ve kapatma)', async () => {
-    for (const code of ['people', 'announcements']) {
+  it('core modul (people/announcements/finance) 400 MODULE_NOT_TOGGLEABLE (acma ve kapatma)', async () => {
+    for (const code of ['people', 'announcements', 'finance']) {
       for (const enabled of [true, false]) {
         const res = await call('PUT', moduleUrl(SITE_1, code), { user: users.superUser, body: { enabled, confirm: true } });
         assert.equal(res.status, 400, `${code} ${enabled}`);
@@ -819,24 +821,25 @@ describe('PUT modul: onay zorunlulugu ve denetim kaydi', () => {
     assert.equal(state.siteModules.size, 0);
   });
 
-  it('finance (Faz 4a): super acar (200, onay GEREKMEZ, audit module.enabled) ve kapatir (onay gerekmez, audit module.disabled); yerel kontrol anahtari dondurulmez', async () => {
-    const open = await call('PUT', moduleUrl(SITE_1, 'finance'), { user: users.superUser, body: { enabled: true } });
-    assert.equal(open.status, 200, JSON.stringify(open.body));
-    const financeOpen = open.body.modules.find((m) => m.code === 'finance');
-    assert.equal(financeOpen.enabled, true);
-    assert.equal(financeOpen.toggleable, true);
-    assert.equal(state.siteModules.get(`${SITE_1}:finance`).enabled, true);
-    const close = await call('PUT', moduleUrl(SITE_1, 'finance'), { user: users.superUser, body: { enabled: false } });
-    assert.equal(close.status, 200, JSON.stringify(close.body));
-    assert.equal(close.body.modules.find((m) => m.code === 'finance').enabled, false);
-    assert.deepEqual(
-      state.audit.map((a) => [a.action, a.target_id]),
-      [['module.enabled', 'finance'], ['module.disabled', 'finance']],
-    );
+  it('finance temel modul (Kural 25): super bile acip kapatamaz (400 MODULE_NOT_TOGGLEABLE); satir yazilmaz, audit yok, anahtar donmez', async () => {
+    for (const body of [{ enabled: true }, { enabled: false }, { enabled: false, confirm: true }]) {
+      const res = await call('PUT', moduleUrl(SITE_1, 'finance'), { user: users.superUser, body });
+      assert.equal(res.status, 400, JSON.stringify(body));
+      assert.equal(res.body.code, 'MODULE_NOT_TOGGLEABLE');
+    }
+    assert.equal(state.siteModules.has(`${SITE_1}:finance`), false);
+    assert.equal(state.audit.length, 0);
     assert.equal(state.rotations.length, 0, 'yalniz door_control kapaninca anahtar doner');
+    // temel modul satiri (kurulumda yazilan) enabled=false olsa bile GET hep acik gosterir
+    state.siteModules.set(`${SITE_1}:finance`, { site_code: SITE_1, module_code: 'finance', enabled: false });
+    const list = await call('GET', `/manager/sites/${SITE_1}/modules`, { user: users.superUser });
+    const finance = list.body.modules.find((m) => m.code === 'finance');
+    assert.equal(finance.enabled, true);
+    assert.equal(finance.toggleable, false);
+    assert.equal(finance.can_toggle, false);
   });
 
-  it('finance: yonetici (super olmayan) modulu DOGRUDAN acamaz: 403', async () => {
+  it('finance: yonetici (super olmayan) modulu DOGRUDAN acamaz: 403 (rol denetimi toggleable denetiminden ONCE)', async () => {
     const res = await call('PUT', moduleUrl(SITE_1, 'finance'), { user: users.mgrA, body: { enabled: true } });
     assert.equal(res.status, 403);
     assert.equal(state.siteModules.has(`${SITE_1}:finance`), false);
@@ -930,7 +933,7 @@ describe('PUT modul: super kullanici modulu DOGRUDAN acarsa bekleyen talep onayl
 
   it('baska modul / baska site / sonuclanmis talepler dokunulmaz', async () => {
     state.moduleRequests = [
-      { id: 1, site_code: SITE_1, module_code: 'finance', status: 'pending' },
+      { id: 1, site_code: SITE_1, module_code: 'documents', status: 'pending' },
       { id: 2, site_code: SITE_2, module_code: 'door_control', status: 'pending' },
       { id: 3, site_code: SITE_1, module_code: 'door_control', status: 'rejected' },
     ];
@@ -1004,8 +1007,9 @@ describe('PUT modul: door_control kapaninca yerel kontrol anahtarlari dondurulur
     await call('PUT', moduleUrl(), { user: users.superUser, body: { enabled: false } });
     await call('PUT', moduleUrl(), { user: users.superUser, body: { enabled: true } });
     await call('PUT', moduleUrl(SITE_1, 'online_payment'), { user: users.superUser, body: { enabled: false } });
-    await call('PUT', moduleUrl(SITE_1, 'finance'), { user: users.superUser, body: { enabled: true } });
-    await call('PUT', moduleUrl(SITE_1, 'finance'), { user: users.superUser, body: { enabled: false } });
+    await call('PUT', moduleUrl(SITE_1, 'documents'), { user: users.superUser, body: { enabled: true } });
+    await call('PUT', moduleUrl(SITE_1, 'documents'), { user: users.superUser, body: { enabled: false } });
+    await call('PUT', moduleUrl(SITE_1, 'finance'), { user: users.superUser, body: { enabled: false } }); // temel modul: 400
     await call('PUT', moduleUrl(SITE_1), { user: users.mgrB, body: { enabled: false, confirm: true } });
     await call('PUT', moduleUrl(1999999999), { user: users.superUser, body: { enabled: false, confirm: true } });
     assert.equal(state.rotations.length, 0);
@@ -1572,10 +1576,10 @@ describe('GET /app/my-modules', () => {
     ];
     state.siteModules.set(`${SITE_1}:door_control`, { site_code: SITE_1, module_code: 'door_control', enabled: true });
     state.siteModules.set(`${SITE_2}:door_control`, { site_code: SITE_2, module_code: 'door_control', enabled: false });
-    // katalogda olmayan ve "yakinda" modul satirlari sonucu degistirmez; finance (Faz 4a, available) satiri enabled: true ise ACIK
+    // katalogda olmayan ve "yakinda" modul satirlari sonucu degistirmez; finance temel modul (Kural 25): satiri false olsa da / hic olmasa da ACIK
     state.siteModules.set(`${SITE_1}:online_payment`, { site_code: SITE_1, module_code: 'online_payment', enabled: true });
     state.siteModules.set(`${SITE_1}:door_control`, { site_code: SITE_1, module_code: 'door_control', enabled: true });
-    state.siteModules.set(`${SITE_1}:finance`, { site_code: SITE_1, module_code: 'finance', enabled: true });
+    state.siteModules.set(`${SITE_1}:finance`, { site_code: SITE_1, module_code: 'finance', enabled: false });
     state.siteModules.set(`${SITE_1}:baska`, { site_code: SITE_1, module_code: 'baska', enabled: true });
 
     const res = await call('GET', '/app/my-modules', { user: users.resident });
@@ -1624,8 +1628,8 @@ describe('GET /app/my-modules', () => {
     assert.equal(res.body.sites[0].modules.door_control, true);
     assert.equal(res.body.sites[0].modules.online_payment, false, 'yakinda modul satiri olsa bile false');
     assert.equal(res.body.sites[0].modules.reservation, false, 'rezervasyon satiri yoksa varsayilan KAPALI');
-    assert.equal(res.body.sites[0].modules.finance, true, 'Faz 4a: finance satiri enabled ise acik');
-    assert.equal(res.body.sites[1].modules.finance, false, 'satir yoksa varsayilan KAPALI');
+    assert.equal(res.body.sites[0].modules.finance, true, 'finance temel modul: satiri enabled=false olsa da acik');
+    assert.equal(res.body.sites[1].modules.finance, true, 'finance temel modul: satir yoksa da acik');
     assert.equal(res.body.sites[1].modules.door_control, false);
   });
 

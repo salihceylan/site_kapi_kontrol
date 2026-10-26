@@ -1,5 +1,5 @@
 // Finans Faz 4b uçları (DB'siz, KATI sahte veritabanı): rota listesi (sözleşme), hız sınırlayıcı zinciri, yetki matrisi (yönetici / süper / kurul / görevli / sakin /
-// ilgisiz / başka site), modül kapalı, 5xx yanıtında iç ayrıntı yok. Kimlik katmanı sahte (x-test-user). Gerçek PostgreSQL: scripts/qa_finance4b.mjs.
+// ilgisiz / başka site), temel modül (Kural 25: satır kapalı olsa da MODULE_DISABLED yok), 5xx yanıtında iç ayrıntı yok. Kimlik katmanı sahte (x-test-user). Gerçek PostgreSQL: scripts/qa_finance4b.mjs.
 //
 // Yetkili çağıran, veritabanında ilk veri sorgusuna (sahte DB katı: BEKLENMEYEN SQL -> 500) ya da doğrulama hatasına (4xx) ulaşır; yetkisiz çağıran 403 alır ve
 // veri sorgusu HİÇ çalışmaz.
@@ -69,7 +69,9 @@ function access(sql, params) {
     return ok(state.sites.has(Number(params[0])) ? [{ site_code: String(params[0]) }] : []);
   }
   if (/^SELECT enabled FROM site_modules WHERE site_code = \$1 AND module_code = \$2 LIMIT 1$/.test(sql)) {
-    return params[1] === 'finance' && state.financeEnabled.get(Number(params[0])) ? ok([{ enabled: true }]) : ok();
+    // Aidat ve Finans temel modüldür (Kural 25): satır enabled=false / hiç yok olsa da uçlar açıktır; sahte DB yine de gerçek satırı döndürür.
+    if (params[1] !== 'finance' || !state.financeEnabled.has(Number(params[0]))) return ok();
+    return ok([{ enabled: state.financeEnabled.get(Number(params[0])) }]);
   }
   return null;
 }
@@ -261,20 +263,35 @@ describe('4b yetki matrisi', () => {
     });
   }
 
-  it('modül KAPALI: tüm yönetim uçları (yönetici, süper, kurul okuma) 403 MODULE_DISABLED { module: finance } ve veri sorgusu çalışmaz; rol denetimi modülden ÖNCE', async () => {
-    state.financeEnabled.set(SITE_1, false);
-    for (const [method, suffix, kind] of MANAGER_ROUTES) {
-      const body = method === 'GET' ? undefined : {};
-      for (const user of [users.mgrA, users.superUser, ...(kind === 'read' ? [users.board] : [])]) {
-        const res = await call(method, `${B()}${suffix}`, { user, body });
-        assert.equal(res.status, 403, `${user.full_name} ${method} ${suffix}`);
-        assert.equal(res.body.code, 'MODULE_DISABLED', `${method} ${suffix}`);
-        assert.equal(res.body.module, 'finance');
+  it('finans temel modül (Kural 25): site_modules finans satırı enabled=false (ya da hiç yok) olsa bile tüm yönetim uçlarında MODULE_DISABLED YOK (yetkili veri katmanına ulaşır); rol denetimi aynen sürer', async () => {
+    for (const row of [false, undefined]) {
+      // false: satır enabled=false; undefined: satır hiç yok
+      if (row === undefined) state.financeEnabled.delete(SITE_1);
+      else state.financeEnabled.set(SITE_1, row);
+      const label = row === undefined ? 'satır yok' : 'enabled=false';
+      for (const [method, suffix, kind] of MANAGER_ROUTES) {
+        const body = method === 'GET' ? undefined : {};
+        const where = `${label}: ${method} ${suffix}`;
+        // yetkili: modül kapısı 403 vermez (sahte DB'de veri sorgusuna ya da doğrulama hatasına ulaşır)
+        for (const user of [users.mgrA, users.superUser, ...(kind === 'read' ? [users.board] : [])]) {
+          const res = await call(method, `${B()}${suffix}`, { user, body });
+          assert.notEqual(res.status, 403, `${user.full_name} ${where}`);
+          assert.notEqual(res.body?.code, 'MODULE_DISABLED', `${user.full_name} ${where}`);
+        }
+        // rol denetimi aynen: kurul yazamaz, görevli / sakin / ilgisiz FORBIDDEN_ROLE, başka site yöneticisi FORBIDDEN_SITE; veri sorgusu HİÇ çalışmaz
+        state.dataLog.length = 0;
+        const denied = [...(kind === 'read' ? [] : [users.board]), users.staff, users.resident, users.outsider];
+        for (const user of denied) {
+          const res = await call(method, `${B()}${suffix}`, { user, body });
+          assert.equal(res.status, 403, `${user.full_name} ${where}`);
+          assert.equal(res.body.code, 'FORBIDDEN_ROLE', `${user.full_name} ${where}`);
+        }
+        const other = await call(method, `${B()}${suffix}`, { user: users.mgrB, body });
+        assert.equal(other.status, 403, where);
+        assert.equal(other.body.code, 'FORBIDDEN_SITE', where);
+        assert.equal(state.dataLog.length, 0, `${where}: yetkisizler için veri sorgusu çalışmamalı`);
       }
-      const staff = await call(method, `${B()}${suffix}`, { user: users.staff, body });
-      assert.equal(staff.body.code, 'FORBIDDEN_ROLE', `${method} ${suffix}: rol önce`);
     }
-    assert.equal(state.dataLog.length, 0);
   });
 
   it('süper kullanıcı hukuk bayrağı ucu: yönetici / sakin 403 (süper denetimi), süper veri katmanına ulaşır', async () => {

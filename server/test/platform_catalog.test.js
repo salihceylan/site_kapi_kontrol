@@ -59,7 +59,7 @@ describe('platform katalog: sozlesme tablosu', () => {
       door_control: [false, 'available'],
       people: [true, 'available'], // Faz 2a: Kişi ve Daire Kayıtları çekirdek + kullanılabilir (hep açık)
       announcements: [true, 'available'], // Faz 3a: Duyuru ve Bildirim çekirdek + kullanılabilir (hep açık)
-      finance: [false, 'available'], // Faz 4a: Aidat ve Finans kullanılabilir (varsayılan KAPALI; süper açar, yönetici modül talep eder)
+      finance: [true, 'available'], // Kural 25 (2026-10-26): Aidat ve Finans TEMEL modül (hep açık; talep edilmez, kapatılamaz)
       documents: [false, 'available'], // Faz 3b-A: Belgeler (Dosya Deposu) kullanilabilir (varsayilan KAPALI; super acar, yonetici modul talep eder)
       reservation: [false, 'available'], // Rezervasyon ve Konsiyerj: kullanilabilir (varsayilan KAPALI; super acar, yonetici modul talep eder)
       work_tracking: [false, 'available'], // Is Takibi: kullanilabilir (varsayilan KAPALI; super acar, yonetici modul talep eder)
@@ -111,10 +111,10 @@ describe('platform katalog: sozlesme tablosu', () => {
     }
   });
 
-  it('toggleable = !core && status === available (door_control, finance, documents, rezervasyon, is takibi, anket, ziyaretci, kartli gecis, sozlesmeler, karar defteri)', () => {
+  it('toggleable = !core && status === available (door_control, documents, rezervasyon, is takibi, anket, ziyaretci, kartli gecis, sozlesmeler, karar defteri; finance temel modul oldugu icin YOK)', () => {
     assert.deepEqual(
       MODULE_CATALOG.filter(isToggleable).map((m) => m.code),
-      ['door_control',  'finance',  'documents',  'reservation',  'work_tracking',  'metering',  'survey',  'visitor_log',  'card_access',  'card_payments',  'plate_cameras',  'contracts',  'decision_book',  'directory',  'budget',  'drive_storage',  'neighbor_board',  'annual_report',  'plate_recognition',  'cctv_link',  'equipment'],
+      ['door_control',  'documents',  'reservation',  'work_tracking',  'metering',  'survey',  'visitor_log',  'card_access',  'card_payments',  'plate_cameras',  'contracts',  'decision_book',  'directory',  'budget',  'drive_storage',  'neighbor_board',  'annual_report',  'plate_recognition',  'cctv_link',  'equipment'],
     );
     assert.equal(isToggleable(null), false);
   });
@@ -148,16 +148,18 @@ describe('platform katalog: enabled hesabi', () => {
     }
   });
 
-  it('finance (Faz 4a): available + toggleable, varsayilan KAPALI; satir yoksa kapali, satir true ise acik, satir false ise kapali', () => {
+  it('finance temel modul (Kural 25): core + available + varsayilan ACIK -> HEP acik (satir olmasa da, satir false dese de) ve kapatilamaz', () => {
     assert.equal(def('finance').status, 'available');
-    assert.equal(def('finance').core, false);
-    assert.equal(def('finance').defaultEnabled, false);
-    assert.equal(isToggleable(def('finance')), true);
-    assert.equal(computeModuleEnabled(def('finance'), undefined), false);
-    assert.equal(computeModuleEnabled(def('finance'), null), false);
-    assert.equal(computeModuleEnabled(def('finance'), {}), false);
+    assert.equal(def('finance').core, true);
+    assert.equal(def('finance').defaultEnabled, true);
+    assert.equal(isToggleable(def('finance')), false);
+    assert.equal(computeModuleEnabled(def('finance'), undefined), true);
+    assert.equal(computeModuleEnabled(def('finance'), null), true);
+    assert.equal(computeModuleEnabled(def('finance'), {}), true);
     assert.equal(computeModuleEnabled(def('finance'), { enabled: true }), true);
-    assert.equal(computeModuleEnabled(def('finance'), { enabled: false }), false);
+    assert.equal(computeModuleEnabled(def('finance'), { enabled: false }), true);
+    assert.equal(computeEnabledMap([]).finance, true);
+    assert.equal(computeEnabledMap([{ module_code: 'finance', enabled: false }]).finance, true);
   });
 
   it('people (Faz 2a): core + available -> HEP acik (satir olmasa da, satir false dese de) ve kapatilamaz', () => {
@@ -196,7 +198,7 @@ describe('platform katalog: enabled hesabi', () => {
     const empty = computeEnabledMap([]);
     assert.deepEqual(Object.keys(empty), MODULE_CODES);
     assert.equal(empty.door_control, false);
-    assert.equal(empty.finance, false);
+    assert.equal(empty.finance, true, 'finance temel modül: satır olmasa da açık');
 
     const closed = computeEnabledMap([{ module_code: 'door_control', enabled: false }]);
     assert.equal(closed.door_control, false);
@@ -234,9 +236,10 @@ describe('platform katalog: enabled hesabi', () => {
     assert.equal(people.updated_at, null);
     assert.equal(people.updated_by, null);
     const finance = list.find((m) => m.code === 'finance');
-    assert.equal(finance.toggleable, true, 'Faz 4a: finance artık kullanılabilir ve açılıp kapatılabilir');
+    assert.equal(finance.core, true, 'Kural 25: finance temel modül');
+    assert.equal(finance.toggleable, false, 'finance temel modül: açılıp kapatılamaz');
     assert.equal(finance.status, 'available');
-    assert.equal(finance.enabled, false, 'varsayılan KAPALI');
+    assert.equal(finance.enabled, true, 'satır olmasa da her sitede açık');
     const reservation = list.find((m) => m.code === 'reservation');
     assert.equal(reservation.toggleable, true, 'Rezervasyon ve Konsiyerj kullanilabilir ve acilip kapatilabilir');
     assert.equal(reservation.status, 'available');

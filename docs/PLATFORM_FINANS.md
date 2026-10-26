@@ -14,8 +14,8 @@ Bu belge sunucu (`server/`) ve uygulama (`lib/`) için BAĞLAYICIDIR. Öncül be
 3. **Bakiye = satırların işaretli toplamı:** `amount_minor > 0` borç (daire borçlu), `< 0` tahsilat/alacak. `balance_minor = SUM(amount_minor)`; pozitif = borç, negatif = alacak.
 4. **Atomiklik ve idempotans:** borçlandırma, tahsilat ve düzeltme tek işlemde; çift tıklama/yeniden deneme çift kayıt YARATMAZ (kısmi tekil indeksler + `idempotency_key`).
 5. **Dönem (muhasebe ayı):** `period DATE` = ayın ilk günü (Europe/Istanbul). Kapatılmış döneme kayıt eklenemez; düzeltme AÇIK dönemde ters kayıtla yapılır.
-6. **Yetki:** yazma = yönetici/süper (`hasSiteManagementAccess`); okuma = yönetici/süper + `BOARD_MEMBER` (salt okunur; tüm daire bakiyelerini görür); `STAFF` 403; sakin yalnız KENDİ dairesini (`/app/my-finance`). Başka site 403/404. `finance` modülü site için KAPALIYSA tüm finans uçları 403 `MODULE_DISABLED` (`module: 'finance'`).
-7. **Eklemeli şema:** `migrations/034_finance.sql` ile `ensureDbSchema` (server/src/db.js) AYNI idempotent DDL (prod'da yalnız `ensureDbSchema` çalışır, DDL hatası = sunucu açılmaz). Mevcut tablo/akış değişmez; tek istisna: `catalog.js` `finance` → `available` (varsayılan KAPALI, `toggleable`, süper açar; yönetici modül talep eder) ve daire azaltmada mali kaydı olan dairenin silinmesinin engellenmesi (aşağıda).
+6. **Yetki:** yazma = yönetici/süper (`hasSiteManagementAccess`); okuma = yönetici/süper + `BOARD_MEMBER` (salt okunur; tüm daire bakiyelerini görür); `STAFF` 403; sakin yalnız KENDİ dairesini (`/app/my-finance`). Başka site 403/404. `finance` 2026-10-26'dan beri TEMEL modüldür (AGENTS.md Kural 25): her sitede açık, kapatılamaz ve talep edilmez; uçlardaki modül denetimi (`MODULE_DISABLED`) temel modülde hiç tetiklenmez.
+7. **Eklemeli şema:** `migrations/034_finance.sql` ile `ensureDbSchema` (server/src/db.js) AYNI idempotent DDL (prod'da yalnız `ensureDbSchema` çalışır, DDL hatası = sunucu açılmaz). Mevcut tablo/akış değişmez; tek istisna: `catalog.js` `finance` → `available` (Faz 4a'da varsayılan KAPALI ve talep edilirdi; 2026-10-26'dan beri `core`, hep açık, bkz. Kural 25 ve `migrations/079_finance_core_module.sql`) ve daire azaltmada mali kaydı olan dairenin silinmesinin engellenmesi (aşağıda).
 8. Kilit sırası Faz 2/3 kuralı: apartments (id sırasıyla) → users → site_people/… → finans tabloları. Borçlandırma `pg_advisory_xact_lock(finance_post:<site>)` alır; yeni kilit çatışması yaratma. 40P01'de tek yeniden deneme.
 
 ## Veritabanı (migration `034_finance.sql`)
@@ -114,7 +114,7 @@ Yeni bağımlılık YOK. Para girişi/gösterimi: ortak yardımcı (`lib/ui/help
 1. **Yönetici — "Finans" (çekmece öğesi; yalnız modül AÇIKKEN):** sekmeler: **Daireler** (bakiye listesi: arama, borçlu/alacaklı süzgeci, toplam kartı, daireye dokununca ekstre), **Tanımlar** (aidat/ek borç tanımları; "Yeni Tanım", düzenle, pasifleştir), **Dönemler** (açık/kapalı aylar, "Ayı Kapat", süperde "Yeniden Aç"). Eylemler: **Borçlandır** (tanım→dönem→ÖNİZLEME listesi [daire, kim öder, tutar] + toplam + eksik veri uyarısı → onay; `PREVIEW_STALE` olursa önizlemeyi yenile), **Ek Borç Ekle** (ad, toplam tutar, dağıtım, hedef, vade → önizleme → onay), **Tahsilat Ekle** (daire seçici, tutar, tarih, yöntem, açıklama; çift gönderim koruması + `idempotency_key`), **Düzelt / İptal Et** (tahsilat için; borç için yalnız iptal; neden), daire **Ekstre** penceresi (bakiye, hareketler, ters kayıtlar işaretli, sayfalama). Kapalı dönem hataları açık Türkçe.
 2. **Sakin — "Borcum" (çekmece; yalnız alıcısı olabilecek ve modülü açık sitelerde):** toplam borç/alacak, vadesi gelen tutar, sıradaki vade, hareketler; çok daireli kullanıcıda daire seçici/kartlar; boş durum "Borcunuz yok" yalnız gerçekten sıfırken (hata asla "borç yok" demez).
 3. **Kurul:** yalnız okuma (yazma düğmeleri/menüsü yok, "yalnızca görüntüleyebilirsiniz" notu).
-4. **Modül kapalıyken** Finans/Borcum menüsü görünmez; Modüller ekranında `finance` kartı "Aidat ve Finans" artık `available` (kapalı, yönetici "Modül Talep Et").
+4. **Temel modül (2026-10-26):** Finans/Borcum menüsü her sitede görünür; Modüller ekranında "Aidat ve Finans" kartı temel modül olarak hep açıktır, talep düğmesi yoktur.
 5. **Hata kodları** Türkçe eşlenir: `MODULE_DISABLED`, `PREVIEW_STALE`, `PREVIEW_INCOMPLETE`, `PERIOD_ALREADY_POSTED`, `PERIOD_CLOSED`, `PERIOD_NOT_CLOSABLE`, `DEFINITION_INACTIVE`, `ENTRY_ALREADY_REVERSED`, `ENTRY_NOT_REVERSIBLE`, `APARTMENT_HAS_FINANCE`, `INVALID_BODY`.
 6. Süper denetim ekranı: yeni eylem etiketleri/süzgeçleri.
 
@@ -386,7 +386,7 @@ sınanır).
 ## Devir bakiyesi (F4, 2026-10-21)
 
 Eski yazılımdan devreden daire borçları toplu yükleme altyapısıyla yüklenir (`docs/PLATFORM_TOPLU_ISLEMLER.md` «Hepsi bir arada ve devir bakiyesi»).
-Arayüz: Finans > Daireler > «Devir bakiyesi» (yalnız yazma yetkisi) -> «Excel'den yükle», yüklemeler listesi, «Geri al». Modül varsayılan KAPALI (finans modülüne bağlı).
+Arayüz: Finans > Daireler > «Devir bakiyesi» (yalnız yazma yetkisi) -> «Excel'den yükle», yüklemeler listesi, «Geri al». Finans temel modül olduğundan her sitede açıktır.
 
 Tablolar (migration 055): `finance_opening_reverts(run_id PK -> bulk_import_runs, site_code, reversed_count, reversed_total_minor, idempotency_key, reverted_by, reverted_at)`,
 tekil `(site_code, idempotency_key)`. Defter kayıtları `ledger_entries.source_kind='opening'`, `source_id` = yükleme.

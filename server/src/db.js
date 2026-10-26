@@ -43,6 +43,7 @@ import { ensureNotifyChannelsSchema } from './modules/notify_channels_schema.js'
 import { ensureBankImportSchema } from './modules/bank_import_schema.js';
 import { ensureOAuthSchema } from './modules/oauth_schema.js';
 import { ensureIntegritySchema } from './modules/integrity_schema.js';
+import { FINANCE_CORE_BACKFILL_SQL } from './modules/finance_core_module.js';
 
 dotenv.config();
 
@@ -2002,6 +2003,14 @@ export async function ensureDbSchema() {
     } catch (e) {
       // eslint-disable-next-line no-console
       console.error('[DB] door_control backfill hatasi:', e?.message);
+    }
+
+    // 079 Aidat ve Finans temel modül (Kural 25): her sitede açık satır + bekleyen finans talepleri sonuçlanır. Hata açılışı durdurmaz.
+    try {
+      await client.query(FINANCE_CORE_BACKFILL_SQL);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('[DB] 079 finans temel modul doldurma hatasi:', e?.code || e?.message);
     }
   } finally {
     client.release();

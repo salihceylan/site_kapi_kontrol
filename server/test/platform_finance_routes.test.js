@@ -1,5 +1,5 @@
 // Aidat ve Finans (Faz 4a) uçları (DB'siz): rota zinciri, hız sınırları, yetki matrisi (yönetici / süper / kurul / görevli / sakin / başka site),
-// modül kapalı, doğrulama (DB'ye dokunmadan 400), işlem sırası (kilit sırası), 40P01 tek yeniden deneme, kurul yanıtı temizliği, hata biçimleri.
+// temel modül (Kural 25: satır kapalı olsa da MODULE_DISABLED yok), doğrulama (DB'ye dokunmadan 400), işlem sırası (kilit sırası), 40P01 tek yeniden deneme, kurul yanıtı temizliği, hata biçimleri.
 // Kimlik katmanı sahte (x-test-user); pool.query / pool.connect KATI sahte veritabanına bağlanır. Gerçek PostgreSQL: scripts/qa_platform_pg.mjs "finance".
 import { describe, it, before, after, beforeEach, afterEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
@@ -70,7 +70,9 @@ function access(sql, params) {
   }
   if (/^SELECT enabled FROM site_modules WHERE site_code = \$1 AND module_code = \$2 LIMIT 1$/.test(sql)) {
     if (params[1] !== 'finance') return ok();
-    return state.financeEnabled.has(Number(params[0])) && state.financeEnabled.get(Number(params[0])) ? ok([{ enabled: true }]) : ok();
+    // Aidat ve Finans temel modüldür (Kural 25): satır enabled=false / hiç yok olsa da uçlar açıktır; sahte DB yine de gerçek satırı döndürür.
+    if (!state.financeEnabled.has(Number(params[0]))) return ok();
+    return ok([{ enabled: state.financeEnabled.get(Number(params[0])) }]);
   }
   return null;
 }
@@ -248,7 +250,7 @@ describe('finans rotaları: zincir', () => {
 // Yetki matrisi ve modül
 // ---------------------------------------------------------------------------
 
-describe('finans: yetki matrisi ve modül kapalı', () => {
+describe('finans: yetki matrisi ve temel modül', () => {
   const emptyDefinitions = () => [
     [/^SELECT COUNT\(\*\)::INTEGER AS total FROM fee_definitions d WHERE/, () => ok([{ total: 0 }])],
     [/^SELECT d\.id, d\.name, d\.kind/, () => ok()],
@@ -292,25 +294,46 @@ describe('finans: yetki matrisi ve modül kapalı', () => {
     assert.equal(state.log.some((e) => e.sql === 'BEGIN'), false);
   });
 
-  it('modül KAPALI: yönetici, süper ve kurul 403 MODULE_DISABLED { module: finance }; rol denetimi modülden ÖNCE (görevli FORBIDDEN_ROLE)', async () => {
-    state.financeEnabled.set(SITE_1, false);
-    const reads = ['/definitions', '/balances', '/periods', '/summary', '/apartments/5/account'];
-    for (const user of [users.mgrA, users.superUser, users.board]) {
-      for (const suffix of reads) {
-        const res = await call('GET', `${base()}${suffix}`, { user });
-        assert.equal(res.status, 403, `${user.full_name} ${suffix}`);
-        assert.deepEqual(res.body, { error: 'Aidat ve Finans modülü kapalı.', code: 'MODULE_DISABLED', module: 'finance' });
+  it('finans temel modül (Kural 25): site_modules finans satırı enabled=false (ya da hiç yok) olsa bile MODULE_DISABLED YOK; rol denetimi aynen sürer (görevli / sakin FORBIDDEN_ROLE, başka site FORBIDDEN_SITE, kurul yazamaz)', async () => {
+    handlers.push(...emptyDefinitions());
+    handlers.push(...paymentFlow());
+    handlers.push([/^SELECT to_char\(c\.period, 'YYYY-MM-DD'\) AS period, c\.closed_at, u\.full_name AS closed_by_name FROM finance_period_closures c/, () => ok()]);
+    for (const row of [false, undefined]) {
+      // false: satır enabled=false; undefined: satır hiç yok
+      if (row === undefined) state.financeEnabled.delete(SITE_1);
+      else state.financeEnabled.set(SITE_1, row);
+      const label = row === undefined ? 'satır yok' : 'enabled=false';
+      for (const user of [users.mgrA, users.superUser, users.board]) {
+        const defs = await call('GET', `${base()}/definitions`, { user });
+        assert.equal(defs.status, 200, `${label}: ${user.full_name} /definitions ${JSON.stringify(defs.body)}`);
+        assert.deepEqual(defs.body, { items: [], total: 0 });
+        const periods = await call('GET', `${base()}/periods`, { user });
+        assert.equal(periods.status, 200, `${label}: ${user.full_name} /periods`);
+        // veri sorguları bu testte sahte değil (katı sahte DB 500 verir); önemli olan modül kapısının MODULE_DISABLED VERMEMESİ
+        for (const suffix of ['/balances', '/summary', '/apartments/5/account']) {
+          const res = await call('GET', `${base()}${suffix}`, { user });
+          assert.notEqual(res.body?.code, 'MODULE_DISABLED', `${label}: ${user.full_name} ${suffix}`);
+        }
       }
+      // yazma: yönetici ve süper tahsilatı kaydedebilir (modül kapısı 403 vermez)
+      for (const user of [users.mgrA, users.superUser]) {
+        const res = await call('POST', `${base()}/payments`, { user, body: { ...PAYMENT_BODY, idempotency_key: `kapi-${row === undefined ? 'yok' : 'kapali'}-${user.id}` } });
+        assert.equal(res.status, 201, `${label}: ${user.full_name} ${JSON.stringify(res.body)}`);
+      }
+      // rol denetimi modülden ÖNCE ve aynen: yetkisizler modül durumundan bağımsız FORBIDDEN_ROLE / FORBIDDEN_SITE alır
+      for (const user of [users.staff, users.resident, users.outsider]) {
+        const res = await call('GET', `${base()}/definitions`, { user });
+        assert.equal(res.status, 403, `${label}: ${user.full_name}`);
+        assert.equal(res.body.code, 'FORBIDDEN_ROLE', `${label}: ${user.full_name}`);
+      }
+      const other = await call('GET', `${base()}/definitions`, { user: users.mgrB });
+      assert.equal(other.status, 403);
+      assert.equal(other.body.code, 'FORBIDDEN_SITE');
+      const boardWrite = await call('POST', `${base()}/payments`, { user: users.board, body: PAYMENT_BODY });
+      assert.equal(boardWrite.status, 403, label);
+      assert.equal(boardWrite.body.code, 'FORBIDDEN_ROLE', label);
     }
-    for (const user of [users.mgrA, users.superUser]) {
-      const res = await call('POST', `${base()}/payments`, { user, body: {} });
-      assert.equal(res.status, 403);
-      assert.equal(res.body.code, 'MODULE_DISABLED');
-      assert.equal(res.body.module, 'finance');
-    }
-    const staff = await call('GET', `${base()}/definitions`, { user: users.staff });
-    assert.equal(staff.body.code, 'FORBIDDEN_ROLE');
-    assert.deepEqual(writes(), []);
+    assert.equal(state.log.some((e) => e.sql.startsWith('INSERT INTO ledger_entries')), true, 'yönetici/süper tahsilatları yazıldı');
   });
 
   it('geçersiz site kodu 400; olmayan site 404 (süper)', async () => {
@@ -516,17 +539,23 @@ describe('finans: işlem sırası ve yeniden deneme', () => {
     assert.deepEqual(lookup.params, [5, SITE_1]);
   });
 
-  it('modül işlem içinde yeniden denetlenir: yazma sırasında kapatılmışsa 403 MODULE_DISABLED ve ROLLBACK', async () => {
-    handlers.push(...paymentFlow());
-    let calls = 0;
-    handlers.unshift([/^SELECT enabled FROM site_modules WHERE site_code = \$1 AND module_code = \$2 LIMIT 1$/, () => {
-      calls += 1;
-      return calls === 1 ? ok([{ enabled: true }]) : ok();
-    }]);
-    const res = await call('POST', `${base()}/payments`, { body: PAYMENT_BODY });
-    assert.equal(res.status, 403);
-    assert.equal(res.body.code, 'MODULE_DISABLED');
-    assert.ok(state.log.some((e) => e.sql === 'ROLLBACK'));
+  it('finans temel modül (Kural 25): işlem içinde yeniden denetimde finans satırı enabled=false (ya da silinmiş) çıksa bile tahsilat TAMAMLANIR (201, COMMIT, ROLLBACK yok)', async () => {
+    for (const second of [ok([{ enabled: false }]), ok()]) {
+      handlers.length = 0;
+      state.log.length = 0;
+      handlers.push(...paymentFlow());
+      let calls = 0;
+      handlers.unshift([/^SELECT enabled FROM site_modules WHERE site_code = \$1 AND module_code = \$2 LIMIT 1$/, () => {
+        calls += 1;
+        return calls === 1 ? ok([{ enabled: true }]) : second;
+      }]);
+      const res = await call('POST', `${base()}/payments`, { body: PAYMENT_BODY });
+      assert.equal(res.status, 201, JSON.stringify(res.body));
+      assert.ok(res.body.code !== 'MODULE_DISABLED');
+      assert.ok(state.log.some((e) => e.sql.startsWith('INSERT INTO ledger_entries')), 'tahsilat yazıldı');
+      assert.ok(state.log.some((e) => e.sql === 'COMMIT'));
+      assert.equal(state.log.some((e) => e.sql === 'ROLLBACK'), false);
+    }
   });
 });
 

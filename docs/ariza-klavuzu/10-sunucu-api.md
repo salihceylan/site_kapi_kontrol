@@ -468,7 +468,7 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 100 --nostrea
 | --- | --- | --- |
 | [server/src/middlewares/auth_middleware.js:147](../../server/src/middlewares/auth_middleware.js#L147) | <code>export async function requireSiteManager(req, res, next) {</code> | Geçiş: rol site_manager/super_user VEYA site_manager_sites kaydı VEYA aktif SITE_OWNER/SITE_ADMIN üyeliği |
 | [server/src/middlewares/auth_middleware.js:171](../../server/src/middlewares/auth_middleware.js#L171) | <code>.json({ error: 'Bu islem icin site yoneticisi yetkisi gerekir.' });</code> | Hiçbiri yoksa 403 |
-| [server/src/services/site_service.js:324](../../server/src/services/site_service.js#L324) | <code>export async function hasSiteManagementAccess(authUser, siteCode) {</code> | Belirli bir site için yetki: super_user, site_manager_sites ya da SITE_OWNER/SITE_ADMIN üyeliği |
+| [server/src/services/site_service.js:325](../../server/src/services/site_service.js#L325) | <code>export async function hasSiteManagementAccess(authUser, siteCode) {</code> | Belirli bir site için yetki: super_user, site_manager_sites ya da SITE_OWNER/SITE_ADMIN üyeliği |
 | [server/src/routes/manager_routes.js:234](../../server/src/routes/manager_routes.js#L234) | <code>return res.status(403).json({ error: 'Bu siteyi yonetme yetkiniz yok.' });</code> | Site bazlı yetki yoksa uçlar bu mesajla 403 döner |
 
 **Olası nedenler**
@@ -1437,7 +1437,7 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 300 --nostrea
 | [server/src/routes/door_log_routes.js:106](../../server/src/routes/door_log_routes.js#L106) | <code>doorLogRouter.get('/manager/door-logs', authRequired, requireSiteManager, async (req, res…</code> | Yönetici günlük ucu |
 | [server/src/routes/door_log_routes.js:13](../../server/src/routes/door_log_routes.js#L13) | <code>async function getManagedSiteCodes(authUser) {</code> | Bu dosyadaki yerel sürüm YALNIZCA site_manager_sites tablosuna bakar (site_memberships'e bakmaz) |
 | [server/src/routes/door_log_routes.js:136](../../server/src/routes/door_log_routes.js#L136) | <code>return res.status(403).json({ error: 'Bu sitenin loglarini gorme yetkiniz yok.' });</code> | İstenen site_code yönetilen siteler arasında değilse 403 |
-| [server/src/services/site_service.js:359](../../server/src/services/site_service.js#L359) | <code>export async function getManagedSiteCodes(authUser) {</code> | Diğer uçların kullandığı sürüm site_memberships'i de sayar (fark bu) |
+| [server/src/services/site_service.js:360](../../server/src/services/site_service.js#L360) | <code>export async function getManagedSiteCodes(authUser) {</code> | Diğer uçların kullandığı sürüm site_memberships'i de sayar (fark bu) |
 
 **Olası nedenler**
 - Kullanıcı yalnızca site_memberships (SITE_OWNER/SITE_ADMIN) ile yönetici, site_manager_sites satırı yok: günlük ucu boş liste döndürür
@@ -1620,11 +1620,11 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 500 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/services/site_service.js:2213](../../server/src/services/site_service.js#L2213) | <code>export async function inviteSiteManager({ siteCode, email, fullName, inviterUser }) {</code> | Kayıtsız e-posta için 7 gün geçerli PENDING davet satırı yazılır |
-| [server/src/services/site_service.js:2388](../../server/src/services/site_service.js#L2388) | <code>VALUES ($1, $2, $3, $4, $5, 'PENDING', NOW() + INTERVAL '7 days')</code> | Davet 7 gün sonra süresi dolar (expires_at) |
+| [server/src/services/site_service.js:2216](../../server/src/services/site_service.js#L2216) | <code>export async function inviteSiteManager({ siteCode, email, fullName, inviterUser }) {</code> | Kayıtsız e-posta için 7 gün geçerli PENDING davet satırı yazılır |
+| [server/src/services/site_service.js:2391](../../server/src/services/site_service.js#L2391) | <code>VALUES ($1, $2, $3, $4, $5, 'PENDING', NOW() + INTERVAL '7 days')</code> | Davet 7 gün sonra süresi dolar (expires_at) |
 | [server/src/services/membership_service.js:460](../../server/src/services/membership_service.js#L460) | <code>`SELECT id, site_code FROM site_manager_invitations WHERE LOWER(email) = LOWER($1) AND st…</code> | Davet YALNIZCA e-posta doğrulama kodu girilince (verifyIndividualEmailCode) uygulanır; e-posta birebir (büyük/küçük harf duyarsız) eşleşmeli |
 | [server/src/services/membership_service.js:476](../../server/src/services/membership_service.js#L476) | <code>`UPDATE site_manager_invitations SET status = 'ACCEPTED' WHERE id = $1 AND status = 'PEND…</code> | Uygulanan davet ACCEPTED olur ve kullanıcı rolü site_manager yapılır |
-| [server/src/services/site_service.js:2606](../../server/src/services/site_service.js#L2606) | <code>SET status = 'REVOKED'</code> | İptal edilen davet artık uygulanmaz |
+| [server/src/services/site_service.js:2609](../../server/src/services/site_service.js#L2609) | <code>SET status = 'REVOKED'</code> | İptal edilen davet artık uygulanmaz |
 
 **Olası nedenler**
 - Kişi davetteki e-postadan FARKLI bir e-postayla kayıt oldu (eşleşme yalnız e-posta iledir)
@@ -1646,8 +1646,8 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 500 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/services/site_service.js:2430](../../server/src/services/site_service.js#L2430) | <code>console.error('[Mailer] Yönetici davet e-postası gönderilemedi:', describeErrorForLog(mai…</code> | Kayıtsız e-posta için gönderim hatası YUTULUR: davet satırı yazılıdır, yanıt yine ok:true; günlüğe hata kodu ve kişisel verisi maskelenmiş ileti yazılır |
-| [server/src/services/site_service.js:2348](../../server/src/services/site_service.js#L2348) | <code>console.error('[Mailer] Yönetici ekleme bildirimi gönderilemedi:', describeErrorForLog(ma…</code> | Kayıtlı kullanıcı için bildirim hatası da yutulur (yetki zaten verilmiştir) |
+| [server/src/services/site_service.js:2433](../../server/src/services/site_service.js#L2433) | <code>console.error('[Mailer] Yönetici davet e-postası gönderilemedi:', describeErrorForLog(mai…</code> | Kayıtsız e-posta için gönderim hatası YUTULUR: davet satırı yazılıdır, yanıt yine ok:true; günlüğe hata kodu ve kişisel verisi maskelenmiş ileti yazılır |
+| [server/src/services/site_service.js:2351](../../server/src/services/site_service.js#L2351) | <code>console.error('[Mailer] Yönetici ekleme bildirimi gönderilemedi:', describeErrorForLog(ma…</code> | Kayıtlı kullanıcı için bildirim hatası da yutulur (yetki zaten verilmiştir) |
 | [server/src/security/log_redact.js:21](../../server/src/security/log_redact.js#L21) | <code>export function describeErrorForLog(error) {</code> | Günlük özeti: kod (EAUTH, ETIMEDOUT, responseCode...) + e-posta / telefon / belirteç maskelenmiş ileti (en çok 200 karakter) |
 | [server/src/mailer.js:243](../../server/src/mailer.js#L243) | <code>export async function sendSiteManagerInvitationEmail({</code> | Davet e-postası: SMTP_FROM/SMTP_USER yoksa hata fırlatır |
 | [server/src/mailer.js:11](../../server/src/mailer.js#L11) | <code>function createTransporter() {</code> | SMTP_HOST/SMTP_USER/SMTP_PASSWORD eksikse hata; zaman aşımları 5-20 sn |
@@ -1682,10 +1682,10 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 500 --nostrea
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
 | [server/src/routes/manager_routes.js:1383](../../server/src/routes/manager_routes.js#L1383) | <code>managerRouter.delete('/manager/sites/:siteCode/managers/:userCode', authRequired, require…</code> | Yönetici çıkarma ucu |
-| [server/src/services/site_service.js:2447](../../server/src/services/site_service.js#L2447) | <code>export async function removeSiteManager({ siteCode, targetUserCode, callerUser }) {</code> | Tek işlem + FOR UPDATE: eşzamanlı iki çıkarma son yöneticiyi silemez |
+| [server/src/services/site_service.js:2450](../../server/src/services/site_service.js#L2450) | <code>export async function removeSiteManager({ siteCode, targetUserCode, callerUser }) {</code> | Tek işlem + FOR UPDATE: eşzamanlı iki çıkarma son yöneticiyi silemez |
 | [server/src/utils/site_rules.js:166](../../server/src/utils/site_rules.js#L166) | <code>export function evaluateManagerRemoval({</code> | Kurallar: hedef yönetici değilse 404, son yönetici 400, kurucu (SITE_OWNER) yalnız süper kullanıcı 403 |
 | [server/src/utils/site_rules.js:187](../../server/src/utils/site_rules.js#L187) | <code>message: 'Sitenin en az 1 aktif yöneticisi bulunmalıdır. Son yönetici çıkarılamaz.',</code> | Son yönetici koruması |
-| [server/src/services/site_service.js:2595](../../server/src/services/site_service.js#L2595) | <code>export async function revokeSiteManagerInvitation({ siteCode, invitationId, callerUser = …</code> | Bekleyen davet iptali: PENDING değilse 404 "İptal edilecek bekleyen davet bulunamadı." |
+| [server/src/services/site_service.js:2598](../../server/src/services/site_service.js#L2598) | <code>export async function revokeSiteManagerInvitation({ siteCode, invitationId, callerUser = …</code> | Bekleyen davet iptali: PENDING değilse 404 "İptal edilecek bekleyen davet bulunamadı." |
 
 **Olası nedenler**
 - Çıkarılmak istenen kişi sitenin tek yöneticisi (bilinçli koruma)
@@ -1775,8 +1775,8 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 500 --nostrea
 | [server/src/services/membership_service.js:921](../../server/src/services/membership_service.js#L921) | <code>export async function createJoinRequest({</code> | Doğrulama sırası: oturum, daire/blok, e-posta doğrulanmış mı, token aktif mi, daire siteye ait mi, mükerrer başvuru |
 | [server/src/services/membership_service.js:1035](../../server/src/services/membership_service.js#L1035) | <code>throw httpError(409, 'Bu site için zaten onay bekleyen bir katılım başvurunuz bulunmaktad…</code> | Aynı site için bekleyen başvuru varken ikincisi 409 |
 | [server/src/services/membership_service.js:1092](../../server/src/services/membership_service.js#L1092) | <code>console.error('[Mailer] Katılım bildirimi e-postası gönderilemedi:', describeErrorForLog(…</code> | Yöneticiye bildirim e-postası başarısız olsa da başvuru kaydedilir (yalnız günlük; alıcı adresi yazılmaz, ileti maskelenir) |
-| [server/src/services/site_service.js:1531](../../server/src/services/site_service.js#L1531) | <code>export async function getSiteByJoinToken({ token }) {</code> | Katılım tokeninin aktif olup olmadığını çözen sorgu |
-| [server/src/services/site_service.js:1474](../../server/src/services/site_service.js#L1474) | <code>export async function rotateSiteJoinToken({ siteCode, authUser = null }) {</code> | Yönetici QR'ı yeniletince eski QR geçersiz olur ("iptal edilmiş") |
+| [server/src/services/site_service.js:1534](../../server/src/services/site_service.js#L1534) | <code>export async function getSiteByJoinToken({ token }) {</code> | Katılım tokeninin aktif olup olmadığını çözen sorgu |
+| [server/src/services/site_service.js:1477](../../server/src/services/site_service.js#L1477) | <code>export async function rotateSiteJoinToken({ siteCode, authUser = null }) {</code> | Yönetici QR'ı yeniletince eski QR geçersiz olur ("iptal edilmiş") |
 
 **Olası nedenler**
 - Site yöneticisi katılım QR'ını yeniledi: eski basılı QR artık geçersiz (404)
@@ -1890,9 +1890,9 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 500 --nostrea
 | --- | --- | --- |
 | [server/src/routes/manager_routes.js:549](../../server/src/routes/manager_routes.js#L549) | <code>managerRouter.get('/manager/sites/:id/join-token', authRequired, requireSiteManager, asyn…</code> | Aktif katılım tokenini getirir (yoksa oluşturur) |
 | [server/src/routes/manager_routes.js:574](../../server/src/routes/manager_routes.js#L574) | <code>managerRouter.post('/manager/sites/:id/join-token/rotate', authRequired, requireSiteManag…</code> | Yeni token üretir; eski QR'lar iptal edilir |
-| [server/src/services/site_service.js:1401](../../server/src/services/site_service.js#L1401) | <code>export async function getOrCreateSiteJoinToken({ siteCode, authUser = null }) {</code> | Siteyi kilitler (FOR NO KEY UPDATE), aktif token yoksa üretir |
-| [server/src/services/site_service.js:1474](../../server/src/services/site_service.js#L1474) | <code>export async function rotateSiteJoinToken({ siteCode, authUser = null }) {</code> | Eskiyi pasifleştirip yenisini yazar |
-| [server/src/services/site_service.js:324](../../server/src/services/site_service.js#L324) | <code>export async function hasSiteManagementAccess(authUser, siteCode) {</code> | Yönetim yetkisi: süper kullanıcı, site_manager_sites ya da aktif SITE_OWNER/SITE_ADMIN |
+| [server/src/services/site_service.js:1404](../../server/src/services/site_service.js#L1404) | <code>export async function getOrCreateSiteJoinToken({ siteCode, authUser = null }) {</code> | Siteyi kilitler (FOR NO KEY UPDATE), aktif token yoksa üretir |
+| [server/src/services/site_service.js:1477](../../server/src/services/site_service.js#L1477) | <code>export async function rotateSiteJoinToken({ siteCode, authUser = null }) {</code> | Eskiyi pasifleştirip yenisini yazar |
+| [server/src/services/site_service.js:325](../../server/src/services/site_service.js#L325) | <code>export async function hasSiteManagementAccess(authUser, siteCode) {</code> | Yönetim yetkisi: süper kullanıcı, site_manager_sites ya da aktif SITE_OWNER/SITE_ADMIN |
 
 **Olası nedenler**
 - Çağıran kişi o sitenin yöneticisi değil (403)
@@ -1914,10 +1914,10 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 500 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/services/site_service.js:1695](../../server/src/services/site_service.js#L1695) | <code>export async function requestSiteDeletion({ siteCode, authUser }) {</code> | Çift taraflı teyit: ilk talep bekletilir, karşı taraf onaylayınca silinir; yöneticisiz sitede süper kullanıcı doğrudan siler |
-| [server/src/services/site_service.js:1837](../../server/src/services/site_service.js#L1837) | <code>export async function approveSiteDeletion({ siteCode, authUser }) {</code> | Bekleyen talebi YALNIZ karşı rol onaylayabilir (talep süper kullanıcıdansa yönetici, yöneticiden ise süper kullanıcı) |
-| [server/src/services/site_service.js:1884](../../server/src/services/site_service.js#L1884) | <code>export async function rejectOrCancelSiteDeletion({ siteCode, authUser }) {</code> | Talebi iptal/red: deletion_status none yapılır; bekleyen yoksa 400 |
-| [server/src/services/site_service.js:1596](../../server/src/services/site_service.js#L1596) | <code>export async function deleteSitePermanently(siteCode, authUser) {</code> | Kalıcı silme: daire kullanıcıları silinmez; cihaz yerel token'ı döndürülür |
+| [server/src/services/site_service.js:1698](../../server/src/services/site_service.js#L1698) | <code>export async function requestSiteDeletion({ siteCode, authUser }) {</code> | Çift taraflı teyit: ilk talep bekletilir, karşı taraf onaylayınca silinir; yöneticisiz sitede süper kullanıcı doğrudan siler |
+| [server/src/services/site_service.js:1840](../../server/src/services/site_service.js#L1840) | <code>export async function approveSiteDeletion({ siteCode, authUser }) {</code> | Bekleyen talebi YALNIZ karşı rol onaylayabilir (talep süper kullanıcıdansa yönetici, yöneticiden ise süper kullanıcı) |
+| [server/src/services/site_service.js:1887](../../server/src/services/site_service.js#L1887) | <code>export async function rejectOrCancelSiteDeletion({ siteCode, authUser }) {</code> | Talebi iptal/red: deletion_status none yapılır; bekleyen yoksa 400 |
+| [server/src/services/site_service.js:1599](../../server/src/services/site_service.js#L1599) | <code>export async function deleteSitePermanently(siteCode, authUser) {</code> | Kalıcı silme: daire kullanıcıları silinmez; cihaz yerel token'ı döndürülür |
 | [server/src/routes/manager_routes.js:482](../../server/src/routes/manager_routes.js#L482) | <code>managerRouter.delete('/manager/sites/:id', authRequired, requireSiteManager, async (req, …</code> | Yönetici silme talebi ucu |
 | [server/src/routes/admin_routes.js:1244](../../server/src/routes/admin_routes.js#L1244) | <code>adminRouter.delete('/admin/sites/:id', authRequired, requireSuperUser, async (req, res) =…</code> | Süper kullanıcı silme talebi ucu |
 | [server/src/routes/admin_routes.js:1259](../../server/src/routes/admin_routes.js#L1259) | <code>adminRouter.post('/admin/sites/:id/approve-deletion', authRequired, requireSuperUser, asy…</code> | Süper kullanıcının yönetici talebini onay ucu |
@@ -1946,10 +1946,10 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 500 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/services/site_service.js:1944](../../server/src/services/site_service.js#L1944) | <code>export async function requestSiteDeletionEmailCode({ siteCode, authUser }) {</code> | Süper kullanıcının KENDİ e-postasına 6 haneli kod; 10 dk geçerli |
-| [server/src/services/site_service.js:2026](../../server/src/services/site_service.js#L2026) | <code>export async function confirmSiteDeletionWithEmailCode({ siteCode, code, authUser }) {</code> | Kod doğrulama + tek kullanımlık tüketim + kalıcı silme |
-| [server/src/services/site_service.js:2017](../../server/src/services/site_service.js#L2017) | <code>const deletionCodeAttempts = createAttemptTracker({</code> | Site+kullanıcı başına 5 hatada 15 dk kilit ve kod iptali |
-| [server/src/services/site_service.js:2125](../../server/src/services/site_service.js#L2125) | <code>const err = new Error('Bu silme doğrulama kodu artık geçerli değil. Lütfen yeni bir kod i…</code> | Atomik tüketim: eşzamanlı ikinci istek aynı kodla silemez |
+| [server/src/services/site_service.js:1947](../../server/src/services/site_service.js#L1947) | <code>export async function requestSiteDeletionEmailCode({ siteCode, authUser }) {</code> | Süper kullanıcının KENDİ e-postasına 6 haneli kod; 10 dk geçerli |
+| [server/src/services/site_service.js:2029](../../server/src/services/site_service.js#L2029) | <code>export async function confirmSiteDeletionWithEmailCode({ siteCode, code, authUser }) {</code> | Kod doğrulama + tek kullanımlık tüketim + kalıcı silme |
+| [server/src/services/site_service.js:2020](../../server/src/services/site_service.js#L2020) | <code>const deletionCodeAttempts = createAttemptTracker({</code> | Site+kullanıcı başına 5 hatada 15 dk kilit ve kod iptali |
+| [server/src/services/site_service.js:2128](../../server/src/services/site_service.js#L2128) | <code>const err = new Error('Bu silme doğrulama kodu artık geçerli değil. Lütfen yeni bir kod i…</code> | Atomik tüketim: eşzamanlı ikinci istek aynı kodla silemez |
 | [server/src/routes/admin_routes.js:1304](../../server/src/routes/admin_routes.js#L1304) | <code>adminRouter.post('/admin/sites/:id/confirm-email-deletion', authRequired, requireSuperUse…</code> | Doğrulama ucu ayrıca adminSensitiveLimiter ile sınırlı (15 dk'da 10) |
 | [server/src/mailer.js:199](../../server/src/mailer.js#L199) | <code>export async function sendSuperUserSiteDeletionEmail({</code> | Kod e-postası; SMTP yoksa gönderim hatası |
 
@@ -1978,7 +1978,7 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 500 --nostrea
 | [server/src/routes/manager_routes.js:874](../../server/src/routes/manager_routes.js#L874) | <code>return res.status(403).json({ error: 'Site sirket tarafindan onaylanmadan cihaza kapi ata…</code> | Şirket onayı olmayan sitede atama 403 |
 | [server/src/routes/manager_routes.js:930](../../server/src/routes/manager_routes.js#L930) | <code>managerRouter.post('/manager/doors/:id/replace-device', authRequired, requireSiteManager,…</code> | Cihaz değiştirme: eski kapı yetkileri/ayarları korunur |
 | [server/src/services/door_service.js:143](../../server/src/services/door_service.js#L143) | <code>export async function updateDoorDeviceAssignment({</code> | Cihaz uid ile bulunur; isDeviceAssignableToManagedSite false ise DEVICE_NOT_ASSIGNABLE |
-| [server/src/services/site_service.js:422](../../server/src/services/site_service.js#L422) | <code>export function isDeviceAssignableToManagedSite(device, managedSiteCodes, targetSiteCode,…</code> | Atanabilirlik kuralı: arızalı değil, hedef site yönetilen sitelerde, başka sahibin cihazı değil; sahiplenilmemiş serbest envanter cihazı doğrudan atanamaz |
+| [server/src/services/site_service.js:423](../../server/src/services/site_service.js#L423) | <code>export function isDeviceAssignableToManagedSite(device, managedSiteCodes, targetSiteCode,…</code> | Atanabilirlik kuralı: arızalı değil, hedef site yönetilen sitelerde, başka sahibin cihazı değil; sahiplenilmemiş serbest envanter cihazı doğrudan atanamaz |
 | [server/src/utils/site_rules.js:480](../../server/src/utils/site_rules.js#L480) | <code>const DOOR_ERROR_MAP = {</code> | Servis kodu -> HTTP durum/mesaj eşlemesi (404/403/409) |
 | [server/src/services/door_service.js:834](../../server/src/services/door_service.js#L834) | <code>export async function replaceDoorDevice({ doorId, newDeviceInput, newDeviceId, authUser }…</code> | Değiştirmede DEVICE_DEFECTIVE / DEVICE_OWNED_BY_ANOTHER / DEVICE_NOT_ASSIGNABLE kodları burada fırlatılır |
 
@@ -2010,7 +2010,7 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 500 --nostrea
 | [server/src/utils/site_rules.js:384](../../server/src/utils/site_rules.js#L384) | <code>export function resolveSecurityPolicyUpdate({ patch, existing, isSuperUser }) {</code> | İş kuralları: giriş yöntemi bayraklarını yalnız süper kullanıcı değiştirir; en az bir yöntem açık; konum açıkken koordinat zorunlu |
 | [server/src/utils/site_rules.js:421](../../server/src/utils/site_rules.js#L421) | <code>error: 'En az bir giris yontemi (Mobil Uygulama veya QR Kod) acik olmalidir.',</code> | Hem uzaktan hem QR kapatılamaz (400) |
 | [server/src/utils/site_rules.js:468](../../server/src/utils/site_rules.js#L468) | <code>error: 'Konum dogrulamasi acikken gecerli bir enlem ve boylam (site merkezi) zorunludur.',</code> | require_geofence açıkken site merkezi koordinatı şart (400) |
-| [server/src/services/site_service.js:111](../../server/src/services/site_service.js#L111) | <code>export async function updateSiteByCode({</code> | Politika alanlarını sites satırına yazar |
+| [server/src/services/site_service.js:112](../../server/src/services/site_service.js#L112) | <code>export async function updateSiteByCode({</code> | Politika alanlarını sites satırına yazar |
 
 **Olası nedenler**
 - Site yöneticisi, süper kullanıcıya ait "Mobil Uygulama/QR" açma-kapama bayrağını değiştirmeye çalışıyor (403); aynı değeri göndermek zararsızdır

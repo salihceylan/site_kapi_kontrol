@@ -3327,3 +3327,18 @@ Dalga 2-6'nın ikinci aşaması: dekont bildirimi, banka dosyasından tahsilat, 
 - [ ] **109.10. Dolu Daireli Sitede Daire Sayısını Azaltma:**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi (ve süper kullanıcı). Siteyi düzenle penceresinde bir bloğun "Daire Sayısı"nı, silinecek son dairelerden en az birinde sakin/üyelik olacak şekilde azaltıp kaydedin. Sonra o sakini daireden çıkarın ve yalnız BOŞ dairelerin silineceği biçimde tekrar azaltın. Mali kaydı (borç/tahsilat) olan boş bir daireyi de silmeyi deneyin.
   - **Beklenen Sonuç:** Dolu daire varken kayıt 409 "Dolu daireler silinemez: ... Önce sakinleri daireden çıkarın ve askı / güvenlik kayıtlarını sonuçlandırın; ya da daire sayısını azaltmayın." der (dolu daire etiketleri nedenleriyle sayılır) ve HİÇBİR daire silinmez. Boş dairelerde azaltma çalışır. Mali kaydı olan daire için "Mali kaydı olan daire silinemez." hatası çıkar. Kapı erişimi askıya alınmış (açık ya da kaldırılmış) bir kaydı ya da çözülmemiş güvenlik talebi olan daire de dolu sayılır.
+
+## 110. 💰 Aidat ve Finans Temel Modül (2026-10-26, AGENTS.md Kural 25)
+
+- [ ] **110.1. Yeni Sitede Finans Hazır Gelir:**
+  - **Nasıl Test Edilir:** Süper kullanıcıyla yeni bir site oluşturun (ya da bir site başvurusunu onaylayın). O sitenin yöneticisiyle giriş yapıp çekmeceye ve Modüller ekranına bakın.
+  - **Beklenen Sonuç:** "Finans" menüsü hemen görünür; Modüller ekranında "Aidat ve Finans" temel modül olarak açıktır; "Modül Talep Et" düğmesi ve kapatma anahtarı yoktur.
+- [ ] **110.2. Mevcut Sitelerde Finans Açık:**
+  - **Nasıl Test Edilir:** Daha önce finansı kapalı olan bir sitenin yöneticisi ve sakiniyle giriş yapın.
+  - **Beklenen Sonuç:** Yöneticide "Finans", sakinde "Borcum" menüsü görünür; borç tanımı yoksa ekranlar boş ama hatasızdır. Daha önce bekleyen finans modül talebi "onaylandı" olarak görünür.
+- [ ] **110.3. Finans Kapatılamaz ve Talep Edilemez:**
+  - **Nasıl Test Edilir:** Süper kullanıcıyla Modüller ekranında "Aidat ve Finans"ı kapatmayı deneyin; yöneticiyle modül talebi açmayı deneyin.
+  - **Beklenen Sonuç:** Kapatma anahtarı yoktur (ya da "Bu modül kapatılamaz." der); talep "Bu modül her sitede hep açıktır; talep edilemez." ile reddedilir.
+- [ ] **110.4. Otomatik E-posta Gitmez:**
+  - **Nasıl Test Edilir:** Finansı yeni açılan bir sitede hiçbir ayar yapmadan bir gün bekleyin.
+  - **Beklenen Sonuç:** Sakinlere borç hatırlatma e-postası GİTMEZ (hatırlatma ayarı varsayılan kapalıdır; yönetici açmadan çalışmaz).

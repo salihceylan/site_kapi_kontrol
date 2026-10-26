@@ -19,10 +19,10 @@ Sunucu ve Flutter uygulaması bu belgeye göre yazılır. Deneme listesi: `tools
 
 | code | Ad | core | status | Varsayılan (satır yoksa) |
 |---|---|---|---|---|
-| `door_control` | Geçiş Kontrol (SmartKeyPass) | hayır | `available` | AÇIK |
+| `door_control` | Geçiş Kontrol (SmartKeyPass) | hayır | `available` | KAPALI (2bf1bd4; cihaz kapıya bağlanınca açılır) |
 | `people` | Kişi ve Daire Kayıtları | evet | `available` (Faz 2a) | — (hep açık) |
 | `announcements` | Duyuru ve Bildirim | evet | `available` (Faz 3a) | — (hep açık) |
-| `finance` | Aidat ve Finans | hayır | `available` (Faz 4a) | KAPALI |
+| `finance` | Aidat ve Finans | evet (2026-10-26, AGENTS.md Kural 25) | `available` (Faz 4a) | — (hep açık; kurulumda satırı yazılır, talep edilmez) |
 | `documents` | Belgeler (Dosya Deposu) | hayır | `available` (Faz 3b-A) | KAPALI |
 | `reservation` | Rezervasyon ve Konsiyerj | hayır | `coming_soon` | KAPALI |
 | `work_tracking` | İş Takibi | hayır | `available` (bkz. PLATFORM_IS_TAKIBI.md) | KAPALI |

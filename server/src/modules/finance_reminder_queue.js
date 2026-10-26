@@ -205,7 +205,7 @@ async function claimBatch(batchSize, attempted) {
         SELECT
           i.run_id, i.person_id, i.apartment_ids, i.with_amount, i.email, i.email_hash, i.email_attempts,
           r.site_code, r.tone, r.note, r.params, s.name AS site_name,
-          COALESCE((SELECT m.enabled FROM site_modules m WHERE m.site_code = r.site_code AND m.module_code = 'finance'), FALSE) AS module_on,
+          COALESCE((SELECT m.enabled FROM site_modules m WHERE m.site_code = r.site_code AND m.module_code = 'finance'), TRUE) AS module_on,
           COALESCE((SELECT fs.reminders_enabled FROM finance_settings fs WHERE fs.site_code = r.site_code), FALSE) AS reminders_on,
           pc.person_active, pc.has_account, pc.account_kind, pc.verified, pc.pref, pc.current_email,
           (
@@ -237,6 +237,7 @@ async function claimBatch(batchSize, attempted) {
     );
     const rows = picked.rows ?? [];
     // GÖNDERİM ANI KAPILARI (çalıştırma oluşturulduktan sonra değişmiş olabilir): sistem hukuk onayı (finance.legal_ok), finans modülü, hatırlatma ayarı.
+    // Finans temel modüldür (Kural 25): site_modules satırı yoksa açık sayılır.
     // Kapalıysa satır GÖNDERİLMEZ: 'cancelled' (adres silinir) ve nedeni denetime (kod) yazılır.
     const legalOk = rows.length === 0 ? true : await readLegalOk(client);
     // Taze borç: site başına, ilgili dairelerin M1 gecikmiş borcu / en eski vadesi (bugün)
