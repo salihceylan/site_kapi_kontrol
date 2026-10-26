@@ -437,6 +437,8 @@ void main() {
       await fill();
       expect(find.textContaining('Kayıt oluşmuş olabilir'), findsOneWidget);
       await f4TapInDialog(t, 'Vazgeç');
+      // Girilen veri var: kapanış onayı sorulur; pencere GERÇEKTEN kapatılır (yeniden açılınca aynı veri girilir).
+      await f4TapInDialog(t, 'Vazgeç ve Kapat');
       auth.f4.accountWriteError = null;
       await fill();
       await settleFor(t);

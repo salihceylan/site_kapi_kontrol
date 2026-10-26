@@ -446,8 +446,12 @@ describe('finans: borçlandırma / ek borç / tahsilat gövdeleri', () => {
 
   it('tahsilat: kuruş tamsayı, yöntem, GELECEK TARİH 400, anahtar zorunlu; açıklama temizlenir', () => {
     const body = { apartment_id: 9, amount_minor: 50000, entry_date: '2026-10-16', method: 'cash', description: '  Nakit  tahsilat ', idempotency_key: 'k-1' };
-    assert.deepEqual(parsePaymentInput(body, NOW), { apartmentId: 9, amountMinor: 50000, entryDate: '2026-10-16', method: 'cash', description: 'Nakit tahsilat', idempotencyKey: 'k-1', accountId: null, accountParty: null });
+    assert.deepEqual(parsePaymentInput(body, NOW), { apartmentId: 9, amountMinor: 50000, entryDate: '2026-10-16', method: 'cash', description: 'Nakit tahsilat', idempotencyKey: 'k-1', accountId: null, accountParty: null, fund: null });
     assert.equal(parsePaymentInput({ ...body, apartment_id: '9', description: undefined }, NOW).description, null);
+    // Kasa kısıtı (docs/PLATFORM_FINANS_KASALAR.md 3): isteğe bağlı 'operating' | 'capital'; yoksa null = otomatik; geçersizse 400
+    assert.equal(parsePaymentInput({ ...body, fund: 'capital' }, NOW).fund, 'capital');
+    assert.equal(parsePaymentInput({ ...body, fund: 'operating' }, NOW).fund, 'operating');
+    assert.throws(() => parsePaymentInput({ ...body, fund: 'fon' }, NOW), (e) => e.code === 'INVALID_BODY');
     // İki hesap (İP-1A): isteğe bağlı daire hesabı (owner | tenant); yoksa null (sunucu varsayılanı)
     assert.equal(parsePaymentInput({ ...body, account_party: 'tenant' }, NOW).accountParty, 'tenant');
     assert.equal(parsePaymentInput({ ...body, account_party: 'owner' }, NOW).accountParty, 'owner');
@@ -558,8 +562,21 @@ describe('finans: yanıt eşleyicileri ve gizlilik', () => {
       late_fee_run_id: null, receipt: null,
       // İki hesap (İP-1A): 052 öncesi satır (account_party yok) payer_party'den türetilir: both -> ev sahibi; kaynak izi yok
       account_party: 'owner', source_kind: null, source_id: null,
+      // Kasa: tahsilatta KISIT (kısıtsız = null = otomatik)
+      fund: null,
     });
     assert.equal(mapEntryRow({ id: 1, kind: 'charge', amount_minor: '5', period: '2026-10-01', payer_party: 'tenant' }).account_party, 'tenant');
+    // Kasa (docs/PLATFORM_FINANS_KASALAR.md 2): borçta kasa; 080 öncesi satırda tanımın etkin "kim öder" değerinden türetilir (owner => capital)
+    const legacyCharge = { id: 1, kind: 'charge', amount_minor: '5', period: '2026-10-01', payer_party: 'both', definition_id: '3' };
+    assert.equal(mapEntryRow({ ...legacyCharge, def_charge_party: 'owner', def_kind: 'recurring' }).fund, 'capital');
+    assert.equal(mapEntryRow({ ...legacyCharge, def_charge_party: 'occupant', def_kind: 'one_time' }).fund, 'operating');
+    assert.equal(mapEntryRow({ ...legacyCharge, def_charge_party: null, def_kind: 'one_time' }).fund, 'capital', 'tek seferlik varsayılanı owner');
+    assert.equal(mapEntryRow({ ...legacyCharge, def_charge_party: null, def_kind: 'recurring' }).fund, 'operating', 'aylık varsayılanı occupant');
+    assert.equal(mapEntryRow({ ...legacyCharge, fund: 'operating', def_charge_party: 'owner', def_kind: 'recurring' }).fund, 'operating', 'yazılı kasa türetmeyi ezer');
+    assert.equal(mapEntryRow({ id: 1, kind: 'charge', amount_minor: '5', period: '2026-10-01', payer_party: 'both', source_kind: 'opening', source_id: '4' }).fund, 'operating', 'devir => operating');
+    assert.equal(mapEntryRow({ id: 1, kind: 'charge', amount_minor: '5', period: '2026-10-01', payer_party: 'both', late_fee_run_id: '9' }).fund, 'operating', 'tazminat (türetilemiyorsa) => operating');
+    assert.equal(mapEntryRow({ id: 1, kind: 'payment', amount_minor: '-5', period: '2026-10-01', payer_party: 'both', fund: 'capital' }).fund, 'capital', 'tahsilat kısıtı');
+    assert.equal(mapEntryRow({ id: 2, kind: 'reversal', amount_minor: '5', period: '2026-10-01', payer_party: 'both', fund: null }).fund, null, 'tahsilatın ters kaydı kısıtsızsa null');
     assert.equal(mapEntryRow({ id: 1, kind: 'charge', amount_minor: '5', period: '2026-10-01', payer_party: 'owner', account_party: 'tenant' }).account_party, 'tenant');
     const sourced = mapEntryRow({ id: 1, kind: 'payment', amount_minor: '-5', period: '2026-10-01', payer_party: 'both', account_party: 'owner', source_kind: 'bank_line', source_id: '44' });
     assert.deepEqual([sourced.source_kind, sourced.source_id], ['bank_line', 44]);

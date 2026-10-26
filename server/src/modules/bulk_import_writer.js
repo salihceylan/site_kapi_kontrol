@@ -109,7 +109,7 @@ export async function applyApartmentOps(client, { siteCode, ops, runId }) {
 
 /**
  * @param {{ siteCode: number, ops: object[], runId: number, today: string, actorUserCode: number|null }} input
- * @returns {Promise<{ audits: object[], idByRef: Map<string, number>, accountCandidates: object[] }>} audit satırları (henüz yazılmadı), ref -> site_people.id
+ * @returns {Promise<{ audits: object[], idByRef: Map<string, number>, accountCandidates: object[], tenantApartmentIds: number[] }>} audit satırları (henüz yazılmadı), ref -> site_people.id
  *   haritası (yeni kişiler ayrılan kimlikle, mevcutlar kendi kimliğiyle) ve hesap açılabilecek adaylar (bu çalıştırmada daire ilişkisi EKLENEN kişiler)
  */
 export async function applyPeopleOps(client, { siteCode, ops, runId, today, actorUserCode }) {
@@ -357,7 +357,14 @@ export async function applyPeopleOps(client, { siteCode, ops, runId, today, acto
   for (const op of ops) {
     if (typeof op.ref === 'string' && !idByRef.has(op.ref)) idByRef.set(op.ref, personIdOf(op.ref));
   }
-  return { audits, idByRef, accountCandidates: collectAccountCandidates({ newPeople, residencyAdds, idByRef }) };
+  // Kiracı iliskisi eklenen / kiracıya yükseltilen daireler: commit sonunda kiracı daire admini yapılır (hesap açıldıktan SONRA; ensureTenantIsAdmin).
+  const tenantApartmentIds = [
+    ...new Set([
+      ...residencyAdds.filter((entry) => entry.relation === 'tenant').map((entry) => Number(entry.aptId)),
+      ...residencyUpgrades.filter((op) => op.to === 'tenant').map((op) => Number(op.aptId)),
+    ]),
+  ];
+  return { audits, idByRef, accountCandidates: collectAccountCandidates({ newPeople, residencyAdds, idByRef }), tenantApartmentIds };
 }
 
 /**
@@ -505,9 +512,14 @@ export const ACCOUNT_SKIP_MESSAGES = Object.freeze({
 /** Kişi başına SAVEPOINT içinde YUTULMAYAN hata sınıfları: bağlantı (08), geri alma/kilitlenme (40), kaynak (53), kilit zaman aşımı (55), operatör (57), sözdizimi/yetki (42). */
 const FATAL_ERROR_CLASS = /^(08|40|42|53|55|57)/;
 
-const RELATION_RANK = Object.freeze({ owner: 0, tenant: 1, resident: 2, family_member: 3 });
+// Admin önceliği (kullanıcı kararı 2026-10-26): KİRACI > malik > diğerleri. Dosyada (ya da dairede) kiracı varsa daire admini kiracıdır; malik admin kalamaz.
+export const RELATION_RANK = Object.freeze({ tenant: 0, owner: 1, resident: 2, family_member: 3 });
 
-/** Aynı dairede önce malik, sonra kiracı admin olur (grantApartmentAccess ilk gelene admin verir): adaylar en iyi ilişkiye göre sıralanır. */
+/**
+ * Aynı dairede önce kiracı, sonra malik hesabı açılır (grantApartmentAccess ilk gelene admin verir): adaylar en iyi ilişkiye göre sıralanır.
+ * Sıralama yalnız ilk atamayı öngörülebilir kılar; asıl kural grantApartmentAccess'in kiracı kancası ve commit sonundaki ensureTenantIsAdmin ile
+ * (mevcut admin malik olsa bile) uygulanır.
+ */
 function rankOf(candidate) {
   return Math.min(...candidate.apartments.map((entry) => RELATION_RANK[entry.relation] ?? 2));
 }

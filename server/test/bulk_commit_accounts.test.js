@@ -138,9 +138,10 @@ describe('commit: hesap açma kapsamı ve yanıt', () => {
     assert.equal(committed.status, 201);
     const accounts = committed.body.result.accounts;
     assert.deepEqual([accounts.created, accounts.linked, accounts.skipped], [2, 0, 0]);
+    // Admin önceliği kiracı > malik: aynı çalıştırmada KİRACI (satır 3) önce hesap alır; aynı adlı malik (satır 2) ikinci olur ve _2 eki alır.
     assert.deepEqual(accounts.items, [
-      { n: 2, login_name: 'ali.veli', status: 'created' },
-      { n: 3, login_name: 'ali.veli_2', status: 'created' },
+      { n: 3, login_name: 'ali.veli', status: 'created' },
+      { n: 2, login_name: 'ali.veli_2', status: 'created' },
     ]);
     assert.equal(db.users.length, 2, 'dairesiz kişiye hesap açılmaz');
     assert.equal(preview.plan.account_create, 2);
@@ -155,11 +156,12 @@ describe('commit: hesap açma kapsamı ve yanıt', () => {
 
   it('ŞİFRE kişiye aittir: özel şifre kendi satırının hesabına, varsayılan 1234 öbürüne gider (ad aynı olsa da)', async () => {
     await previewAndCommit('people', PEOPLE_ROWS);
-    const first = db.users.find((u) => u.login_name === 'ali.veli');
-    const second = db.users.find((u) => u.login_name === 'ali.veli_2');
-    assert.equal(await bcrypt.compare('özel-sifre-1', first.password_hash), true);
-    assert.equal(await bcrypt.compare('1234', second.password_hash), true);
-    assert.equal(await bcrypt.compare('1234', first.password_hash), false);
+    // özel şifreli satır 2 (malik) kiracıdan sonra işlenir: ali.veli_2; kiracı (satır 3) varsayılan 1234 ile ali.veli
+    const owner = db.users.find((u) => u.login_name === 'ali.veli_2');
+    const tenant = db.users.find((u) => u.login_name === 'ali.veli');
+    assert.equal(await bcrypt.compare('özel-sifre-1', owner.password_hash), true);
+    assert.equal(await bcrypt.compare('1234', tenant.password_hash), true);
+    assert.equal(await bcrypt.compare('1234', owner.password_hash), false);
   });
 
   it('özetler TRANSACTION ÖNCESİ hesaplanır: salt okunur anlık görüntü transaction\'ı yazma transaction\'ından önce; kullanıcı INSERT\'leri yazma transaction\'ında', async () => {
@@ -190,7 +192,8 @@ describe('commit: hesap açma kapsamı ve yanıt', () => {
     assert.equal(committed.status, 201);
     const accounts = committed.body.result.accounts;
     assert.deepEqual([accounts.created, accounts.skipped], [1, 1]);
-    assert.deepEqual(accounts.skipped_items.map((i) => [i.n, i.code]), [[3, 'ACCOUNT_FAILED']]);
+    // kiracı (satır 3) önce işlenip ali.veli alır; malik (satır 2) ali.veli_2'de düşer
+    assert.deepEqual(accounts.skipped_items.map((i) => [i.n, i.code]), [[2, 'ACCOUNT_FAILED']]);
     assert.match(accounts.skipped_items[0].message, /hesap/i);
     assert.ok(db.log.some((entry) => /^ROLLBACK TO SAVEPOINT/.test(entry.sql)));
     assert.equal(db.log.some((entry) => /^ROLLBACK$/.test(entry.sql)), false, 'transaction geri alınmadı');

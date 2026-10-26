@@ -155,11 +155,11 @@ export function rolesOfUser(roles, userCode, { pendingTenantInvite = false, pend
   else if (!isAdmin && hasMembership) myRole = 'family_member';
 
   const tenantExists = Boolean(roles.tenant);
-  const adminIsTenant = roles.adminKind === 'tenant';
   const can = {
     manage_family: isAdmin,
     add_tenant: isOwner && !tenantExists && !pendingTenantInvite,
-    delegate_management: isOwner && tenantExists && !adminIsTenant && asCode(roles.tenant?.user_code) !== null,
+    // Kiraci HER ZAMAN daire admini (kullanici karari 2026-10-26): "yonetimi devret" secenegi kalkti. Alan eski istemciler icin sabit false kalir.
+    delegate_management: false,
     exit: isTenant,
     request_disconnect: (isOwner || isTenant) && tenantExists && !pendingDisconnect,
     manage_proxy: isOwner && tenantExists,

@@ -15,6 +15,8 @@ import 'package:site_kapi_kontrol/models/expense_models.dart';
 import 'package:site_kapi_kontrol/models/finance.dart';
 import 'package:site_kapi_kontrol/models/finance_4b.dart';
 import 'package:site_kapi_kontrol/models/finance_charts.dart';
+import 'package:site_kapi_kontrol/models/finance_funds.dart';
+import 'package:site_kapi_kontrol/models/fund_models.dart';
 import 'package:site_kapi_kontrol/models/late_fee_models.dart';
 import 'package:site_kapi_kontrol/models/receipt_models.dart';
 import 'package:site_kapi_kontrol/models/reminder_models.dart';
@@ -410,6 +412,242 @@ class FakeFinance4bApi extends Finance4bApi {
       issuedOn: DateTime(2026, 10, 16),
       apartmentLabel: 'A Blok - 5',
     );
+  }
+
+  // --- İki kasa -------------------------------------------------------------------------------
+  /// Her kasanın sabit rakamları (açılış, tahsilat, gider, düzeltme); aktarımlar [fundTransfers]'tan hesaplanır.
+  final Map<String, Map<String, int>> fundBase = <String, Map<String, int>>{
+    'operating': <String, int>{'opening': 1000000, 'collections': 500000, 'expenses': 200000, 'adjustments': 0},
+    'capital': <String, int>{'opening': 0, 'collections': 300000, 'expenses': 0, 'adjustments': 0},
+  };
+  int fundAdvanceMinor = 25000;
+  bool fundsBalanced = true;
+  int fundsDifferenceMinor = 0;
+  bool fundsHasAccounts = true;
+  int fundsUnassignedCount = 0;
+  int fundsUnassignedTotal = 0;
+  Object? fundSummaryError;
+  F4Gate? fundSummaryGate;
+  Object? fundMovementsError;
+  Object? fundTransferWriteError;
+  Object? fundTransferListError;
+  final List<Map<String, dynamic>> fundTransfers = <Map<String, dynamic>>[];
+  final List<Map<String, Object?>> fundSummaryCalls = <Map<String, Object?>>[];
+  final List<Map<String, Object?>> fundMovementCalls = <Map<String, Object?>>[];
+  final List<Map<String, Object?>> fundTransferCalls = <Map<String, Object?>>[];
+  final List<Map<String, Object?>> fundReverseCalls = <Map<String, Object?>>[];
+  final Map<String, Map<String, dynamic>> _fundTransferKeys = <String, Map<String, dynamic>>{};
+  final Map<String, String> _fundTransferFingerprints = <String, String>{};
+  int _nextFundTransferId = 10;
+
+  /// Bir kasanın hareket satırları (yeni -> eski sırası sunucuda sıralanır; burada her biri `key`li ham JSON).
+  final Map<String, List<Map<String, dynamic>>> fundMovementRows = <String, List<Map<String, dynamic>>>{
+    'operating': <Map<String, dynamic>>[],
+    'capital': <Map<String, dynamic>>[],
+  };
+
+  int _transferSum(String fund, {required bool incoming}) {
+    var total = 0;
+    for (final t in fundTransfers) {
+      if (incoming && t['to_fund'] == fund) total += t['amount_minor'] as int;
+      if (!incoming && t['from_fund'] == fund) total += t['amount_minor'] as int;
+    }
+    return total;
+  }
+
+  Map<String, dynamic> _fundJson(String fund) {
+    final base = fundBase[fund]!;
+    final incoming = _transferSum(fund, incoming: true);
+    final outgoing = _transferSum(fund, incoming: false);
+    final balance = base['opening']! + base['collections']! - base['expenses']! + incoming - outgoing + base['adjustments']!;
+    return <String, dynamic>{
+      'fund': fund,
+      'fund_label': fund == 'operating' ? kFundOperatingName : kFundCapitalName,
+      'fund_short_label': fund == 'operating' ? kFundOperatingShortName : kFundCapitalShortName,
+      'opening_minor': base['opening'],
+      'collections_minor': base['collections'],
+      'expenses_minor': base['expenses'],
+      'transfers_in_minor': incoming,
+      'transfers_out_minor': outgoing,
+      'adjustments_minor': base['adjustments'],
+      'balance_minor': balance,
+      'negative_balance': balance < 0,
+    };
+  }
+
+  /// Şu anki kasa özeti JSON'u (sunucu biçimi).
+  Map<String, dynamic> fundSummaryJson({DateTime? from, DateTime? to}) {
+    final operating = _fundJson('operating');
+    final capital = _fundJson('capital');
+    final total = (operating['balance_minor'] as int) + (capital['balance_minor'] as int) + fundAdvanceMinor;
+    return <String, dynamic>{
+      'currency': 'TRY',
+      'from': from == null ? null : _iso(from),
+      'to': _iso(to ?? DateTime(2026, 10, 16)),
+      'has_accounts': fundsHasAccounts,
+      'funds': <String, dynamic>{'operating': operating, 'capital': capital},
+      'advance_minor': fundAdvanceMinor,
+      'accounts_total_minor': total - fundsDifferenceMinor,
+      'difference_minor': fundsDifferenceMinor,
+      'balanced': fundsBalanced,
+      'unassigned_payments': <String, dynamic>{'count': fundsUnassignedCount, 'total_minor': fundsUnassignedTotal},
+    };
+  }
+
+  @override
+  Future<FundSummary> getFundSummary({required String token, required int siteCode, DateTime? from, DateTime? to}) async {
+    await _enter('getFundSummary');
+    fundSummaryCalls.add(<String, Object?>{'from': from == null ? null : _iso(from), 'to': to == null ? null : _iso(to)});
+    final result = FundSummary.fromJson(fundSummaryJson(from: from, to: to));
+    await fundSummaryGate?.future;
+    final error = fundSummaryError;
+    if (error != null) throw error;
+    return result;
+  }
+
+  @override
+  Future<FundMovementPage> listFundMovements({
+    required String token,
+    required int siteCode,
+    required FinanceFund fund,
+    DateTime? from,
+    DateTime? to,
+    int limit = 50,
+    int offset = 0,
+  }) async {
+    await _enter('listFundMovements');
+    fundMovementCalls.add(<String, Object?>{'fund': fund.apiValue, 'limit': limit, 'offset': offset, 'from': from == null ? null : _iso(from)});
+    final error = fundMovementsError;
+    if (error != null) throw error;
+    final rows = fundMovementRows[fund.apiValue]!;
+    final page = rows.skip(offset).take(limit).toList();
+    return FundMovementPage.fromJson(<String, dynamic>{
+      'fund': fund.apiValue,
+      'balance_minor': _fundJson(fund.apiValue)['balance_minor'],
+      'total': rows.length,
+      'limit': limit,
+      'offset': offset,
+      'items': page,
+    }, fund);
+  }
+
+  @override
+  Future<FundTransferPage> listFundTransfers({
+    required String token,
+    required int siteCode,
+    DateTime? from,
+    DateTime? to,
+    int limit = 50,
+    int? beforeId,
+  }) async {
+    await _enter('listFundTransfers');
+    final error = fundTransferListError;
+    if (error != null) throw error;
+    var rows = List<Map<String, dynamic>>.of(fundTransfers)..sort((a, b) => (b['id'] as int).compareTo(a['id'] as int));
+    if (beforeId != null) rows = rows.where((r) => (r['id'] as int) < beforeId).toList();
+    final page = rows.take(fundTransferPageSize).toList();
+    return FundTransferPage.fromJson(<String, dynamic>{
+      'items': page,
+      'next_before_id': rows.length > fundTransferPageSize && page.isNotEmpty ? page.last['id'] : null,
+    });
+  }
+
+  int fundTransferPageSize = 50;
+
+  Map<String, dynamic> _transferJson({
+    required String from,
+    required String to,
+    required int amount,
+    required String date,
+    String? description,
+    int? reverses,
+    String? reason,
+  }) => <String, dynamic>{
+    'id': _nextFundTransferId++,
+    'from_fund': from,
+    'to_fund': to,
+    'amount_minor': amount,
+    'transfer_date': date,
+    'period': date.substring(0, 7),
+    'description': description,
+    'reverses_transfer_id': reverses,
+    'reversed_by_transfer_id': null,
+    'reversal_reason': reason,
+    'created_by_name': 'Site Yöneticisi',
+    'created_at': '2026-10-16T09:00:00Z',
+  };
+
+  @override
+  Future<FundTransfer> createFundTransfer({
+    required String token,
+    required int siteCode,
+    required FinanceFund fromFund,
+    required FinanceFund toFund,
+    required int amountMinor,
+    required DateTime transferDate,
+    String? description,
+    required String idempotencyKey,
+  }) async {
+    await _enter('createFundTransfer');
+    fundTransferCalls.add(<String, Object?>{
+      'from_fund': fromFund.apiValue,
+      'to_fund': toFund.apiValue,
+      'amount_minor': amountMinor,
+      'transfer_date': _iso(transferDate),
+      'description': description,
+      'key': idempotencyKey,
+    });
+    final error = fundTransferWriteError;
+    if (error != null) throw error;
+    final fingerprint = '${fromFund.apiValue}|${toFund.apiValue}|$amountMinor|${_iso(transferDate)}|${description ?? ''}';
+    final replay = _fundTransferKeys[idempotencyKey];
+    if (replay != null) {
+      if (_fundTransferFingerprints[idempotencyKey] != fingerprint) throw f4Coded('IDEMPOTENCY_CONFLICT', 409);
+      return FundTransfer.fromJson(replay);
+    }
+    if (fromFund == toFund) throw f4Coded('INVALID_BODY', 400);
+    _requireOpen(transferDate);
+    final json = _transferJson(
+      from: fromFund.apiValue,
+      to: toFund.apiValue,
+      amount: amountMinor,
+      date: _iso(transferDate),
+      description: (description ?? '').trim().isEmpty ? null : description!.trim(),
+    );
+    fundTransfers.add(json);
+    _fundTransferKeys[idempotencyKey] = json;
+    _fundTransferFingerprints[idempotencyKey] = fingerprint;
+    return FundTransfer.fromJson(json);
+  }
+
+  @override
+  Future<FundTransferReverseResult> reverseFundTransfer({
+    required String token,
+    required int siteCode,
+    required int transferId,
+    required String reason,
+    required String idempotencyKey,
+  }) async {
+    await _enter('reverseFundTransfer');
+    fundReverseCalls.add(<String, Object?>{'id': transferId, 'reason': reason, 'key': idempotencyKey});
+    final error = fundTransferWriteError;
+    if (error != null) throw error;
+    final original = fundTransfers.where((t) => t['id'] == transferId).toList();
+    if (original.isEmpty) throw f4Coded('FUND_TRANSFER_NOT_FOUND', 404);
+    final row = original.first;
+    if (row['reverses_transfer_id'] != null) throw f4Coded('FUND_TRANSFER_NOT_REVERSIBLE', 409);
+    if (row['reversed_by_transfer_id'] != null) throw f4Coded('FUND_TRANSFER_ALREADY_REVERSED', 409);
+    final reversal = _transferJson(
+      from: row['to_fund'] as String,
+      to: row['from_fund'] as String,
+      amount: row['amount_minor'] as int,
+      date: '2026-10-16',
+      reverses: transferId,
+      reason: reason.trim(),
+    );
+    row['reversed_by_transfer_id'] = reversal['id'];
+    fundTransfers.add(reversal);
+    return FundTransferReverseResult(transfer: FundTransfer.fromJson(reversal), original: FundTransfer.fromJson(row));
   }
 
   // --- Kasa / banka -------------------------------------------------------------------------
@@ -844,6 +1082,9 @@ class FakeFinance4bApi extends Finance4bApi {
   Object? paymentError;
   F4Gate? paymentGate;
   Map<String, dynamic>? paymentReceipt = <String, dynamic>{'id': 77, 'number': 'MK-2026-000077'};
+
+  /// Tahsilat / düzeltme yanıtındaki `fund_split` (null: eski sunucu, alan yok).
+  Map<String, dynamic>? paymentFundSplit;
   final Map<String, LedgerWriteResult> _paymentKeys = <String, LedgerWriteResult>{};
 
   @override
@@ -858,6 +1099,7 @@ class FakeFinance4bApi extends Finance4bApi {
     int? accountId,
     required String idempotencyKey,
     AccountParty? accountParty,
+    FinanceFund? fund,
   }) async {
     await _enter('recordPayment');
     paymentCalls.add(<String, Object?>{
@@ -868,6 +1110,7 @@ class FakeFinance4bApi extends Finance4bApi {
       'description': description,
       'key': idempotencyKey,
       'account_party': ?accountParty?.apiValue,
+      'fund': ?fund?.apiValue,
     });
     await paymentGate?.future;
     final error = paymentError;
@@ -890,10 +1133,12 @@ class FakeFinance4bApi extends Finance4bApi {
         'entry_date': _iso(entryDate),
         'method': method.apiValue,
         'account_party': ?accountParty?.apiValue,
+        'fund': ?fund?.apiValue,
       },
       'balance_minor': 0,
       'receipt': paymentReceipt,
       'movement_id': accountId == null ? null : 1,
+      'fund_split': ?paymentFundSplit,
     });
     _paymentKeys[idempotencyKey] = result;
     return result;
@@ -914,6 +1159,7 @@ class FakeFinance4bApi extends Finance4bApi {
     int? accountId,
     required String idempotencyKey,
     AccountParty? accountParty,
+    FinanceFund? fund,
   }) async {
     await _enter('correctPayment');
     correctPaymentCalls.add(<String, Object?>{
@@ -923,6 +1169,7 @@ class FakeFinance4bApi extends Finance4bApi {
       'account_id': accountId,
       'key': idempotencyKey,
       'account_party': ?accountParty?.apiValue,
+      'fund': ?fund?.apiValue,
     });
     await paymentGate?.future;
     final error = paymentError;
@@ -934,18 +1181,20 @@ class FakeFinance4bApi extends Finance4bApi {
         'amount_minor': -amountMinor,
         'entry_date': _iso(entryDate),
         'method': method.apiValue,
+        'fund': ?fund?.apiValue,
       },
       'balance_minor': 0,
       'receipt': paymentReceipt,
       'movement_id': accountId,
+      'fund_split': ?paymentFundSplit,
     });
   }
 
   // --- Gider ---------------------------------------------------------------------------------
   final List<Map<String, dynamic>> categories = <Map<String, dynamic>>[
-    <String, dynamic>{'id': 1, 'name': 'Elektrik', 'is_system': true, 'is_active': true, 'sort_order': 1},
-    <String, dynamic>{'id': 2, 'name': 'Asansör bakım', 'is_system': true, 'is_active': true, 'sort_order': 2},
-    <String, dynamic>{'id': 3, 'name': 'Eski kategori', 'is_system': false, 'is_active': false, 'sort_order': 3},
+    <String, dynamic>{'id': 1, 'name': 'Elektrik', 'is_system': true, 'is_active': true, 'sort_order': 1, 'fund': 'operating'},
+    <String, dynamic>{'id': 2, 'name': 'Asansör bakım', 'is_system': true, 'is_active': true, 'sort_order': 2, 'fund': 'operating'},
+    <String, dynamic>{'id': 3, 'name': 'Eski kategori', 'is_system': false, 'is_active': false, 'sort_order': 3, 'fund': 'operating'},
   ];
   final List<Map<String, dynamic>> suppliers = <Map<String, dynamic>>[];
   final List<Map<String, dynamic>> expenses = <Map<String, dynamic>>[];
@@ -979,14 +1228,26 @@ class FakeFinance4bApi extends Finance4bApi {
   }
 
   @override
-  Future<ExpenseCategory> createExpenseCategory({required String token, required int siteCode, required String name}) async {
-    await _enter('createExpenseCategory', <String, Object?>{'name': name});
+  Future<ExpenseCategory> createExpenseCategory({
+    required String token,
+    required int siteCode,
+    required String name,
+    FinanceFund? fund,
+  }) async {
+    await _enter('createExpenseCategory', <String, Object?>{'name': name, 'fund': ?fund?.apiValue});
     final error = catalogWriteError;
     if (error != null) throw error;
     if (categories.any((c) => (c['name'] as String).toLowerCase() == name.trim().toLowerCase())) {
       throw ApiException('Bu adla başka bir kategori var.', statusCode: 409, code: 'CATEGORY_NAME_TAKEN');
     }
-    final json = <String, dynamic>{'id': _nextCategoryId++, 'name': name.trim(), 'is_system': false, 'is_active': true, 'sort_order': 99};
+    final json = <String, dynamic>{
+      'id': _nextCategoryId++,
+      'name': name.trim(),
+      'is_system': false,
+      'is_active': true,
+      'sort_order': 99,
+      'fund': (fund ?? FinanceFund.operating).apiValue,
+    };
     categories.add(json);
     return ExpenseCategory.fromJson(json);
   }
@@ -1002,6 +1263,11 @@ class FakeFinance4bApi extends Finance4bApi {
     final error = catalogWriteError;
     if (error != null) throw error;
     final json = categories.firstWhere((c) => c['id'] == categoryId, orElse: () => throw f4Coded('CATEGORY_NOT_FOUND', 404));
+    // Sunucu: sistem kategorisinin ya da eski gideri olan kategorinin kasası değiştirilemez (409 CATEGORY_FUND_LOCKED).
+    if (fields.containsKey('fund') && fields['fund'] != json['fund']) {
+      final used = expenses.any((e) => e['category_id'] == categoryId);
+      if (json['is_system'] == true || used) throw f4Coded('CATEGORY_FUND_LOCKED', 409);
+    }
     fields.forEach((k, v) => json[k] = v);
     return ExpenseCategory.fromJson(json);
   }
@@ -1089,6 +1355,7 @@ class FakeFinance4bApi extends Finance4bApi {
       'voided': row['voided'],
       'corrects_expense_id': row['corrects_expense_id'],
       'documents_count': docs.length,
+      'fund': ?row['fund'],
       if (detail) 'documents': docs,
       'created_by_name': 'Site Yöneticisi',
       'created_at': '2026-10-16T09:00:00Z',
@@ -1217,6 +1484,8 @@ class FakeFinance4bApi extends Finance4bApi {
       'doc_norm': no.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), ''),
       'voided': null,
       'corrects_expense_id': corrects,
+      // Sunucu: giderin kasası satıra HER ZAMAN yazılır (verilmediyse kategorinin kasası).
+      'fund': input.fund?.apiValue ?? category['fund'],
     };
     expenses.add(row);
     _addMovement(input.accountId, 'expense', -input.amountMinor, _iso(input.expenseDate), label: input.description);
@@ -1305,6 +1574,7 @@ class FakeFinance4bApi extends Finance4bApi {
         documentKind: input.documentKind,
         documentNo: input.documentNo,
         allowDuplicate: true,
+        fund: input.fund,
       ), corrects: expenseId);
       return ExpenseCorrectResult(voided: Expense.fromJson(_expenseJson(old)), expense: Expense.fromJson(_expenseJson(row)));
     } catch (_) {

@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:site_kapi_kontrol/models/announcement.dart' show announcementInstant;
+import 'package:site_kapi_kontrol/models/finance_funds.dart';
 import 'package:site_kapi_kontrol/models/residency_relation.dart';
 import 'package:site_kapi_kontrol/models/vehicle_record.dart'
     show crmDate, crmDateParam, crmInt, crmIntOrNull, crmText;
@@ -350,6 +351,9 @@ enum ChargeParty {
 
   /// Sunucu varsayılanı (alan gönderilmezse): aylık aidat dairede oturan, tek seferlik ek borç ev sahibi.
   static ChargeParty defaultFor(FeeKind kind) => kind == FeeKind.recurring ? occupant : owner;
+
+  /// Borcun kasası: dairede oturan öder ⇒ İşletme Projesi (Aidat) Hesabı, malik öder ⇒ Yatırım ve Demirbaş (Fon) Hesabı.
+  FinanceFund get fund => this == owner ? FinanceFund.capital : FinanceFund.operating;
 }
 
 /// Bir hesabın toplamı (`accounts.owner` / `accounts.tenant`): bakiye (> 0 borç, < 0 alacak), vadesi geçen ve satır sayısı.
@@ -505,6 +509,7 @@ class FeeDefinition {
     this.lastPostedPeriod,
     this.hasRuns,
     this.chargeParty,
+    this.fund,
   });
 
   final int id;
@@ -516,6 +521,12 @@ class FeeDefinition {
 
   /// Etkin "Kim öder": sunucu değeri, yoksa türe göre varsayılan (aylık dairede oturan, tek seferlik ev sahibi).
   ChargeParty get effectiveChargeParty => chargeParty ?? ChargeParty.defaultFor(kind);
+
+  /// Borcun kasası (`fund`). Eski sunucu göndermez: null ([effectiveFund] "kim öder"den türetir).
+  final FinanceFund? fund;
+
+  /// Etkin kasa: sunucu değeri, yoksa "kim öder"den türetilir (dairede oturan ⇒ Aidat Hesabı, ev sahibi ⇒ Fon Hesabı).
+  FinanceFund get effectiveFund => fund ?? effectiveChargeParty.fund;
   final FeeDistribution distribution;
   final AreaBasis? areaBasis;
 
@@ -572,6 +583,7 @@ class FeeDefinition {
       lastPostedPeriod: FinancePeriod.tryParse(json['last_posted_period']),
       hasRuns: json['has_runs'] is bool ? json['has_runs'] as bool : null,
       chargeParty: ChargeParty.tryParse(json['charge_party']),
+      fund: FinanceFund.tryParse(json['fund']),
     );
   }
 }
@@ -591,6 +603,7 @@ class FeeDefinitionInput {
     this.endPeriod,
     this.target = const FeeTarget(),
     this.chargeParty,
+    this.fund,
   });
 
   final String name;
@@ -604,8 +617,12 @@ class FeeDefinitionInput {
   final FinancePeriod? endPeriod;
   final FeeTarget target;
 
-  /// "Kim öder" (İP-1A); null ise alan gönderilmez (sunucu türe göre varsayılanı kullanır).
+  /// "Kim öder" (İP-1A, eski alan); null ise alan gönderilmez (sunucu türe göre varsayılanı kullanır). Yeni formlar
+  /// [fund] gönderir; ikisi birlikte verilirse tutarlı olmalıdır (sunucu çelişkide 400 `INVALID_BODY` döner).
   final ChargeParty? chargeParty;
+
+  /// Borcun kasası; verilirse `fund` gönderilir (sunucu "kim öder"i ondan türetir).
+  final FinanceFund? fund;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
     'name': name.trim(),
@@ -621,6 +638,7 @@ class FeeDefinitionInput {
     if (endPeriod != null) 'end_period': endPeriod!.toApi(),
     'target': target.toJson(),
     if (chargeParty != null) 'charge_party': chargeParty!.apiValue,
+    if (fund != null) 'fund': fund!.apiValue,
   };
 }
 
@@ -636,6 +654,7 @@ class ExtraChargeInput {
     this.target = const FeeTarget(),
     this.dueDate,
     this.chargeParty,
+    this.fund,
   });
 
   final String name;
@@ -646,8 +665,11 @@ class ExtraChargeInput {
   final FeeTarget target;
   final DateTime? dueDate;
 
-  /// "Kim öder" (İP-1A); null ise alan gönderilmez (sunucu varsayılanı: ev sahibi).
+  /// "Kim öder" (İP-1A, eski alan); null ise alan gönderilmez (sunucu varsayılanı: ev sahibi).
   final ChargeParty? chargeParty;
+
+  /// Borcun kasası; verilirse `fund` gönderilir (sunucu varsayılanı: Yatırım ve Demirbaş (Fon) Hesabı).
+  final FinanceFund? fund;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
     'name': name.trim(),
@@ -659,6 +681,7 @@ class ExtraChargeInput {
     'target': target.toJson(),
     if (dueDate != null) 'due_date': crmDateParam(dueDate!),
     if (chargeParty != null) 'charge_party': chargeParty!.apiValue,
+    if (fund != null) 'fund': fund!.apiValue,
   };
 }
 
@@ -945,11 +968,20 @@ class LedgerEntry {
     this.lateFeeRunId,
     this.accountParty,
     this.sourceKind,
+    this.fund,
+    this.fundSplit,
   });
 
   final int id;
   final LedgerKind kind;
   final int amountMinor;
+
+  /// Satırın kasası (`fund`): borç / ters kayıtta borcun kasası; tahsilatta "yalnız bu kasaya" KISITI (null = otomatik,
+  /// kısıtsız). Eski sunucuda null.
+  final FinanceFund? fund;
+
+  /// Tahsilatın şu anki kasa dağılımı (`fund_split`; yalnız ekstre tahsilat satırlarında); diğerlerinde ve eski sunucuda null.
+  final FundSplit? fundSplit;
 
   /// Satırın hesabı (İP-1A: ev sahibi / kiracı hesabı); eski sunucuda null.
   final AccountParty? accountParty;
@@ -1011,6 +1043,8 @@ class LedgerEntry {
     lateFeeRunId: crmIntOrNull(json['late_fee_run_id']),
     accountParty: AccountParty.tryParse(json['account_party']),
     sourceKind: crmText(json['source_kind']),
+    fund: FinanceFund.tryParse(json['fund']),
+    fundSplit: FundSplit.tryParse(json['fund_split']),
   );
 
   /// Tazminat kalemi: `kind = charge` VE (açık bayrak / harita ya da `late_fee_run_id`). Sunucu tazminatın TERS kaydına da
@@ -1036,9 +1070,13 @@ class LedgerWriteResult {
     this.receipt,
     this.movementId,
     this.accountBalanceMinor,
+    this.fundSplit,
   });
 
   final LedgerEntry entry;
+
+  /// Bu tahsilatın şu anki kasa dağılımı (`fund_split`); eski sunucuda null.
+  final FundSplit? fundSplit;
 
   /// Yalnız düzeltmede (`correct`): oluşan ters kayıt.
   final LedgerEntry? reversal;
@@ -1067,6 +1105,7 @@ class LedgerWriteResult {
       receipt: ReceiptRef.tryParse(json['receipt']) ?? parsedEntry.receipt,
       movementId: crmIntOrNull(json['movement_id']),
       accountBalanceMinor: _optionalMinor(json, 'account_balance_minor'),
+      fundSplit: FundSplit.tryParse(json['fund_split']) ?? parsedEntry.fundSplit,
     );
   }
 }
@@ -1201,9 +1240,18 @@ class AccountView {
     this.showTenantAccount = false,
     this.hasCurrentTenant = false,
     this.defaultPaymentAccount,
+    this.funds,
+    this.advanceMinor,
   });
 
   final AccountApartment apartment;
+
+  /// Kasa bazında açık borç / vadesi geçen / avans (kapsam: [accountParty] verilmişse o hesap, yoksa iki hesabın toplamı);
+  /// eski sunucuda null.
+  final FundBreakdown? funds;
+
+  /// TOPLAM avans (kasaya kısıtlı olanlar ve kısıtsız dahil); eski sunucuda null.
+  final int? advanceMinor;
   final int balanceMinor;
   final int? overdueMinor;
   final List<LedgerEntry> items;
@@ -1238,6 +1286,8 @@ class AccountView {
       showTenantAccount: json['show_tenant_account'] == true,
       hasCurrentTenant: json['has_current_tenant'] == true,
       defaultPaymentAccount: AccountParty.tryParse(json['default_payment_account']),
+      funds: FundBreakdown.tryParse(json['funds']),
+      advanceMinor: json['advance_minor'] == null ? null : fundMinor(json['advance_minor']),
     );
   }
 }
@@ -1381,7 +1431,16 @@ class MyFinanceAccount {
     this.visibleFrom,
     this.offsetNote = false,
     this.recent = const <LedgerEntry>[],
+    this.funds,
+    this.advanceMinor,
   });
+
+  /// Kasa bazında açık borç / vadesi geçen / avans (bu hesabın); eski sunucuda null. Kiracı hesabında Fon Hesabı, kiracılı
+  /// dairede malik hesabında Aidat Hesabı sıfır gelir (ekran sıfır kasayı göstermez).
+  final FundBreakdown? funds;
+
+  /// Bu hesabın toplam avansı; eski sunucuda null.
+  final int? advanceMinor;
 
   /// Görünümün hesabı; eski sunucuda null (tek hesap).
   final AccountParty? accountParty;
@@ -1406,6 +1465,8 @@ class MyFinanceAccount {
     visibleFrom: FinancePeriod.tryParse(json['visible_from']),
     offsetNote: json['offset_note'] == true,
     recent: _listOf(json['recent'], LedgerEntry.fromJson),
+    funds: FundBreakdown.tryParse(json['funds']),
+    advanceMinor: json['advance_minor'] == null ? null : fundMinor(json['advance_minor']),
   );
 }
 
@@ -1432,7 +1493,15 @@ class MyFinanceApartment {
     this.recent = const <LedgerEntry>[],
     this.accountParty,
     this.accounts = const <MyFinanceAccount>[],
+    this.funds,
+    this.advanceMinor,
   });
+
+  /// Kişinin KENDİ hesabının kasa kırılımı (üst düzey `funds`); eski sunucuda null.
+  final FundBreakdown? funds;
+
+  /// Kişinin kendi hesabının toplam avansı; eski sunucuda null.
+  final int? advanceMinor;
 
   /// Kişinin kendi hesabı (İP-1A); eski sunucuda null.
   final AccountParty? accountParty;
@@ -1450,6 +1519,8 @@ class MyFinanceApartment {
     visibleFrom: visibleFrom,
     offsetNote: offsetNote,
     recent: recent,
+    funds: funds,
+    advanceMinor: advanceMinor,
   );
 
   /// Salt okunur görünümler (borç sorumlusu "malik ve kiracı" olan dairede malike kiracı hesabı).
@@ -1497,6 +1568,8 @@ class MyFinanceApartment {
     recent: _listOf(json['recent'], LedgerEntry.fromJson),
     accountParty: AccountParty.tryParse(json['account_party']),
     accounts: _listOf(json['accounts'], MyFinanceAccount.fromJson),
+    funds: FundBreakdown.tryParse(json['funds']),
+    advanceMinor: json['advance_minor'] == null ? null : fundMinor(json['advance_minor']),
   );
 }
 
@@ -1572,6 +1645,10 @@ String? financeActionLabel(String action) {
       return 'Hesaplar arası aktarım yapıldı';
     case 'finance.transfer.voided':
       return 'Hesaplar arası aktarım iptal edildi';
+    case 'finance.fund_transfer.created':
+      return 'Kasalar arası aktarım yapıldı';
+    case 'finance.fund_transfer.reversed':
+      return 'Kasalar arası aktarım ters çevrildi';
     case 'finance.reconciliation.recorded':
       return 'Banka / kasa kontrolü kaydedildi';
     case 'finance.payments.assigned':

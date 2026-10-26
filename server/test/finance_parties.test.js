@@ -296,7 +296,7 @@ describe('postPayment (tek tahsilat giriş noktası)', () => {
     const client = paymentClient();
     const posted = await postPayment(client, { ...base, accountParty: 'owner', sourceKind: 'bank_line', sourceId: 7001 });
     assert.equal(posted.replayed, false);
-    assert.deepEqual(client.inserted().slice(10), ['owner', 'bank_line', 7001], 'INSERT: account_party, source_kind, source_id');
+    assert.deepEqual(client.inserted().slice(10), ['owner', 'bank_line', 7001, null], 'INSERT: account_party, source_kind, source_id, fund (kısıtsız = NULL)');
     const existing = { id: '78', kind: 'payment', apartment_id: '11', amount_minor: '-25000', entry_date: '2026-10-20', method: 'cash', account_party: 'owner', payer_party: 'both', source_kind: 'bank_line', source_id: '7001' };
     const replay = await postPayment(paymentClient({ existing }), { ...base, accountParty: 'owner', sourceKind: 'bank_line', sourceId: 7001 });
     assert.deepEqual([replay.replayed, replay.entryId], [true, 78]);

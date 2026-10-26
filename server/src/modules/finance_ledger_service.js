@@ -46,6 +46,7 @@ import {
   mirrorCollectionForEntry,
   resolvePaymentAccount,
 } from './finance_accounts.js';
+import { loadPaymentFundSplit } from './finance_funds.js';
 import { minorToNumber } from './finance_money.js';
 import { loadAccountBalance, postPayment } from './finance_parties.js';
 import { activeReceiptRef, cancelActiveReceiptForEntry } from './finance_receipts.js';
@@ -64,9 +65,10 @@ export const ENTRY_SELECT = `
     l.description, l.method, l.payer_party, l.definition_name, l.reverses_entry_id, rv.id AS reversed_by_entry_id,
     l.reversal_reason, u.full_name AS created_by_name, l.created_at, l.definition_id, l.run_id, l.idempotency_key, l.late_fee_run_id,
     rc.id AS receipt_id, rc.receipt_year, rc.receipt_no, rc.cancel_year AS receipt_cancel_year, rc.cancel_no AS receipt_cancel_no,
-    l.account_party, l.source_kind, l.source_id
+    l.account_party, l.source_kind, l.source_id, l.fund, fd.charge_party AS def_charge_party, fd.kind AS def_kind
   FROM ledger_entries l
   LEFT JOIN ledger_entries rv ON rv.reverses_entry_id = l.id
+  LEFT JOIN fee_definitions fd ON fd.id = l.definition_id
   LEFT JOIN users u ON u.user_code = l.created_by
   LEFT JOIN LATERAL (
     SELECT r.id, r.receipt_year, r.receipt_no, c.receipt_year AS cancel_year, c.receipt_no AS cancel_no
@@ -93,6 +95,11 @@ export async function loadApartmentBalance(db, siteCode, apartmentId) {
     [siteCode, apartmentId],
   );
   return minorToNumber(result.rows?.[0]?.balance ?? '0');
+}
+
+/** Bir tahsilatin su anki kasa dagitimi (hesabin tum satirlariyla; finance_funds.allocateFunds). */
+export function paymentSplit(db, siteCode, apartmentId, accountParty, paymentId) {
+  return loadPaymentFundSplit(db, { siteCode, apartmentId, accountParty, paymentId, toNumber: minorToNumber });
 }
 
 async function lockApartment(client, siteCode, apartmentId) {
@@ -174,6 +181,7 @@ export async function recordPayment({ siteCode, body, actor, now = new Date() })
       idempotencyKey: input.idempotencyKey,
       actor,
       cashAccountId: input.accountId,
+      fund: input.fund,
       now,
     });
     return {
@@ -183,6 +191,8 @@ export async function recordPayment({ siteCode, body, actor, now = new Date() })
       account_balance_minor: await loadAccountBalance(client, { siteCode, apartmentId: input.apartmentId, accountParty: posted.accountParty }),
       receipt: posted.receipt,
       movement_id: posted.movementId,
+      // Kasa dagitimi (docs/PLATFORM_FINANS_KASALAR.md 3): bu tahsilatin SU ANKI dagitimi { operating_minor, capital_minor, advance_minor }
+      fund_split: await paymentSplit(client, siteCode, input.apartmentId, posted.accountParty, posted.entryId),
     };
   });
 }
@@ -219,9 +229,9 @@ export async function insertReversal(client, { siteCode, original, openPeriod, t
       `
         INSERT INTO ledger_entries (
           site_code, apartment_id, kind, amount_minor, period, entry_date, due_date, definition_id, definition_name, run_id, payer_party,
-          reverses_entry_id, reversal_reason, idempotency_key, created_by, late_fee_run_id, account_party, source_kind, source_id
+          reverses_entry_id, reversal_reason, idempotency_key, created_by, late_fee_run_id, account_party, source_kind, source_id, fund
         )
-        VALUES ($1, $2, 'reversal', $3::BIGINT, $4::DATE, $5::DATE, $6::DATE, $7, $8::TEXT, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18::BIGINT)
+        VALUES ($1, $2, 'reversal', $3::BIGINT, $4::DATE, $5::DATE, $6::DATE, $7, $8::TEXT, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18::BIGINT, $19)
         RETURNING id
       `,
       [
@@ -244,6 +254,8 @@ export async function insertReversal(client, { siteCode, original, openPeriod, t
         original.source_kind ?? null,
         // source_id yalnız source_kind varken yazılır (CHECK); pg BIGINT'i metin döndürür
         original.source_kind && original.source_id !== null && original.source_id !== undefined ? String(original.source_id) : null,
+        // Kasa: ters kayit asilin kasasini (ham deger; 080 oncesi asilda NULL) tasir; DB tetikleyicisi (trg_ledger_entries_fund) de zorlar
+        original.fund ?? null,
       ],
     );
     return Number(inserted.rows[0].id);
@@ -365,6 +377,8 @@ export async function correctPayment({ siteCode, rawId, body, actor, now = new D
         (input.accountId === null || (replayMovement !== null && replayMovement !== undefined && Number(replayMovement.account_id) === input.accountId)) &&
         // İP-1A: gövdede daire hesabı verildiyse yeni tahsilat O hesapta olmalı
         (input.accountParty === null || entryAccountParty(existing) === input.accountParty) &&
+        // kasa kisiti verildiyse yeni tahsilat O kisitla yazilmis olmali
+        (input.fund === null || (existing.fund ?? null) === input.fund) &&
         Boolean(reversal.rows?.[0]);
       if (!same) {
         throw idempotencyConflict();
@@ -378,6 +392,7 @@ export async function correctPayment({ siteCode, rawId, body, actor, now = new D
         account_balance_minor: await loadAccountBalance(client, { siteCode, apartmentId, accountParty: entryAccountParty(existing) }),
         receipt: await activeReceiptRef(client, siteCode, Number(existing.id)),
         movement_id: replayMovement ? Number(replayMovement.id) : null,
+        fund_split: await paymentSplit(client, siteCode, apartmentId, entryAccountParty(existing), Number(existing.id)),
       };
     }
     if (original.kind === 'reversal') {
@@ -424,6 +439,8 @@ export async function correctPayment({ siteCode, rawId, body, actor, now = new D
       idempotencyKey: input.idempotencyKey,
       actor,
       cashAccountId: account ? account.id : null,
+      // duzeltmede kasa kisiti gövdede verilmezse ASILIN kisiti korunur
+      fund: input.fund ?? original.fund ?? null,
       now,
       audit: false,
     });
@@ -446,6 +463,7 @@ export async function correctPayment({ siteCode, rawId, body, actor, now = new D
       account_balance_minor: await loadAccountBalance(client, { siteCode, apartmentId, accountParty: posted.accountParty }),
       receipt: posted.receipt,
       movement_id: posted.movementId,
+      fund_split: await paymentSplit(client, siteCode, apartmentId, posted.accountParty, newId),
     };
   });
 }

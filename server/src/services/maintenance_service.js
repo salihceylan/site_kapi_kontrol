@@ -1,4 +1,5 @@
 import { pool } from '../db.js';
+import { ensureTenantAdminRule } from '../modules/apartment_tenant_admin_sql.js';
 
 /**
  * Veritabanı Otomatik Yaşam Döngüsü ve Çöp Temizliği Servisi
@@ -56,6 +57,14 @@ export async function runDatabaseCleanup(db = pool) {
     await db.query(`UPDATE apartment_link_requests SET status = 'expired', responded_at = NOW(), updated_at = NOW() WHERE status = 'pending' AND expires_at <= NOW()`);
 
     await db.query(`DELETE FROM apartment_notices WHERE (read_at IS NOT NULL AND read_at < NOW() - INTERVAL '30 days') OR created_at < NOW() - INTERVAL '90 days'`);
+
+    // 3e. Kiraci her zaman daire admini (081): acilista da calisan kural, yasayan sistemde sapmayi (kiraci hesabi sonradan e-postayla baglandi, pasife alinan
+    // uyelik yeniden acildi vb.) en gec 24 saatte kapatir. Aday yoksa YALNIZ bir okuma; hata temizligi durdurmaz.
+    try {
+      await ensureTenantAdminRule(db);
+    } catch (error) {
+      console.error('[Maintenance Cleanup] kiraci admin kurali atlandi:', error?.code || 'hata');
+    }
 
     // 4. 30 günden eski cihaz bağlantı (connectivity) loglarını temizle
     const delConn = await db.query(`

@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:site_kapi_kontrol/models/announcement.dart' show announcementInstant;
 import 'package:site_kapi_kontrol/models/finance.dart';
 import 'package:site_kapi_kontrol/models/finance_4b.dart';
+import 'package:site_kapi_kontrol/models/finance_funds.dart';
 
 /// Tahsilat makbuzu modelleri (Platform Faz 4b, Ö1; sözleşme: docs/PLATFORM_FINANS_4B.md "Ö1").
 ///
@@ -191,6 +192,7 @@ class Receipt {
     this.copyCount = 0,
     this.ledgerEntryId,
     this.template,
+    this.fundSplit,
   });
 
   final int id;
@@ -200,6 +202,10 @@ class Receipt {
   final DateTime? paidOn;
   final DateTime? issuedOn;
   final DateTime? issuedAt;
+
+  /// Makbuzun düzenlendiği andaki kasa dağılımı (`snapshot.fund_split`; bilgi amaçlı). 080 öncesi makbuzda ve eski
+  /// sunucuda null.
+  final FundSplit? fundSplit;
   final int amountMinor;
   final PaymentMethod? method;
   final String siteName;
@@ -263,6 +269,7 @@ class Receipt {
       copyCount: f4Int(json['copy_count']),
       ledgerEntryId: f4IntOrNull(json['ledger_entry_id']),
       template: ReceiptTemplate.tryParse(json['template']),
+      fundSplit: FundSplit.tryParse(pick('fund_split')),
     );
   }
 }

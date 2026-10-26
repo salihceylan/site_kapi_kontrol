@@ -37,7 +37,7 @@ describe('İP-1A gecikme tazminatı: hesap başına satır', () => {
   const db = (rows) =>
     strictDb([
       [/FROM apartments a INNER JOIN site_blocks b ON b\.id = a\.block_id WHERE a\.site_code = \$1 ORDER BY a\.id/, () => ok([{ id: '7', unit_label: 'Daire 7', block_name: 'A Blok', block_sort: 1, apt_sort: 7, responsible_party: 'both', is_active: true }])],
-      [/AS account_party FROM ledger_entries l WHERE l\.site_code = \$1 AND l\.entry_date <= \$2::DATE ORDER BY l\.apartment_id, l\.id/, () => ok(rows)],
+      [/FROM ledger_entries l LEFT JOIN fee_definitions fd ON fd\.id = l\.definition_id WHERE l\.site_code = \$1 AND l\.entry_date <= \$2::DATE ORDER BY l\.apartment_id, l\.id/, () => ok(rows)],
     ]);
 
   it('aynı dairenin iki hesabı da gecikmişse İKİ satır; her satır kendi hesabının mahsubuyla hesaplanır ve hesabını taşır', async () => {

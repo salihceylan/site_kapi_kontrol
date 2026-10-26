@@ -8,6 +8,7 @@ import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/large_dialog_parts.dart';
 import 'package:site_kapi_kontrol/ui/helpers/a11y_announce.dart';
 import 'package:site_kapi_kontrol/ui/helpers/date_input.dart';
+import 'package:site_kapi_kontrol/ui/helpers/fund_text.dart';
 import 'package:site_kapi_kontrol/ui/helpers/money.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
@@ -444,6 +445,7 @@ class ExpenseTile extends StatelessWidget {
     if (e.supplierName != null) semantic.write(' Tedarikçi: ${e.supplierName}.');
     if (e.description.isNotEmpty) semantic.write(' ${e.description}.');
     if (e.accountName != null) semantic.write(' Hesap: ${e.accountName}.');
+    if (e.fund != null) semantic.write(' Kasa: ${e.fund!.label}.');
     if (e.isVoided) semantic.write(' İptal edildi.');
     return AppCard(
       key: ValueKey<String>('expense_tile_${e.id}'),
@@ -459,6 +461,7 @@ class ExpenseTile extends StatelessWidget {
               runSpacing: AppSpace.xs,
               children: [
                 DialogMetaPill(e.categoryName.isEmpty ? 'Kategorisiz' : e.categoryName, tone: AppTone.info, icon: Icons.sell_rounded),
+                if (e.fund != null) DialogMetaPill(e.fund!.shortLabel, tone: AppTone.info, icon: fundIcon(e.fund!)),
                 if (e.isVoided)
                   const DialogMetaPill('İptal edildi', tone: AppTone.neutral, icon: Icons.block_rounded),
                 if (e.documentsCount > 0)

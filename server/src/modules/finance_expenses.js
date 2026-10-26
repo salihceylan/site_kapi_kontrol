@@ -48,6 +48,7 @@ import {
   requireMinor,
   today,
 } from './finance_common.js';
+import { CAPITAL_CATEGORY_NAME, categoryFundLocked, parseFundField } from './finance_funds.js';
 import { minorToNumber } from './finance_money.js';
 import { categoryDefaultNature, derivedNatureSql, loadSuggestionFacts, parseNature, writeExpenseNature } from './finance_expense_nature.js';
 import { lockActorRow, recordFinanceAudit, withFinanceTransaction } from './finance_tx.js';
@@ -66,6 +67,8 @@ export const DEFAULT_EXPENSE_CATEGORIES = Object.freeze([
   'Vergi/harç',
   'Banka/noter masrafı',
   'Diğer',
+  // Sistem kategorisi (kasa: capital = Yatırım ve Demirbaş (Fon) Hesabı; docs/PLATFORM_FINANS_KASALAR.md 4)
+  CAPITAL_CATEGORY_NAME,
 ]);
 export const DOCUMENT_KINDS = Object.freeze(['invoice', 'receipt', 'contract', 'other', 'none']);
 export const MAX_EXPENSE_MINOR = 1_000_000_000_000;
@@ -73,21 +76,35 @@ const DEFAULT_VOID_REASON = 'Gider düzeltmesi';
 
 // --- Kategoriler ---------------------------------------------------------------------------------------------------------------------------
 
-/** İlk kullanımda varsayılan küme eklenir (kategori yoksa; ON CONFLICT DO NOTHING; sabit sıra: eşzamanlı çağrılar kilitlenmez). */
+/**
+ * İlk kullanımda varsayılan küme eklenir (kategori yoksa; ON CONFLICT DO NOTHING; sabit sıra: eşzamanlı çağrılar kilitlenmez). Kategorisi zaten olan siteye (080 öncesi)
+ * eksikse sistem kategorisi "Yatırım ve demirbaş" (capital) eklenir; adı kullanıcıca değiştirilmiş sistem kategorisi yeniden eklemeyi tetiklemez.
+ */
 export async function ensureDefaultCategories(db, siteCode) {
   const exists = await db.query(`SELECT 1 FROM expense_categories WHERE site_code = $1 LIMIT 1`, [siteCode]);
   if (exists.rows?.[0]) {
+    await db.query(
+      `
+        INSERT INTO expense_categories (site_code, name, is_system, sort_order, fund)
+        SELECT $1, $2::TEXT, TRUE, COALESCE(MAX(c.sort_order), 0) + 1, 'capital'
+        FROM expense_categories c
+        WHERE c.site_code = $1
+        HAVING COUNT(*) > 0 AND NOT COALESCE(bool_or((c.is_system AND c.fund = 'capital') OR lower(c.name) = lower($2::TEXT)), FALSE)
+        ON CONFLICT DO NOTHING
+      `,
+      [siteCode, CAPITAL_CATEGORY_NAME],
+    );
     return;
   }
   await db.query(
     `
-      INSERT INTO expense_categories (site_code, name, is_system, sort_order)
-      SELECT $1, t.name, TRUE, t.ord::INTEGER
+      INSERT INTO expense_categories (site_code, name, is_system, sort_order, fund)
+      SELECT $1, t.name, TRUE, t.ord::INTEGER, CASE WHEN t.name = $3::TEXT THEN 'capital' ELSE 'operating' END
       FROM unnest($2::TEXT[]) WITH ORDINALITY AS t(name, ord)
       ORDER BY t.ord
       ON CONFLICT DO NOTHING
     `,
-    [siteCode, [...DEFAULT_EXPENSE_CATEGORIES]],
+    [siteCode, [...DEFAULT_EXPENSE_CATEGORIES], CAPITAL_CATEGORY_NAME],
   );
 }
 
@@ -97,6 +114,8 @@ const mapCategory = (row) => ({
   is_system: row.is_system === true,
   is_active: row.is_active === true,
   sort_order: Number(row.sort_order),
+  // Kasa: operating (İşletme) | capital (Yatırım ve Demirbaş Fon); giderin kasası seçilmediyse kategorininkidir
+  fund: row.fund === 'capital' ? 'capital' : 'operating',
 });
 
 /** GET expense-categories?active= -> { items }. */
@@ -104,7 +123,7 @@ export async function listCategories(siteCode, query = {}, db = pool) {
   const activeOnly = query.active === undefined || query.active === '' ? null : queryBool(query.active);
   await ensureDefaultCategories(db, siteCode);
   const result = await db.query(
-    `SELECT id, name, is_system, is_active, sort_order FROM expense_categories WHERE site_code = $1 AND ($2::BOOLEAN IS NULL OR is_active = $2) ORDER BY sort_order, id`,
+    `SELECT id, name, is_system, is_active, sort_order, fund FROM expense_categories WHERE site_code = $1 AND ($2::BOOLEAN IS NULL OR is_active = $2) ORDER BY sort_order, id`,
     [siteCode, activeOnly],
   );
   return { items: (result.rows ?? []).map(mapCategory) };
@@ -115,6 +134,16 @@ export function parseCategoryBody(body, { create }) {
   const patch = {};
   if (create || present(input.name)) {
     patch.name = normalizeFreeText(input.name, { label: 'Kategori adı', max: 60, required: true });
+  }
+  // Kasa: oluşturmada yoksa 'operating'; güncellemede gönderildiyse geçerli olmalı
+  if (create) {
+    patch.fund = parseFundField(input.fund) ?? 'operating';
+  } else if (Object.prototype.hasOwnProperty.call(input, 'fund') && input.fund !== undefined) {
+    const fund = parseFundField(input.fund);
+    if (fund === null) {
+      throw invalidBody('Hesap seçimi geçersiz (İşletme Projesi (Aidat) Hesabı veya Yatırım ve Demirbaş (Fon) Hesabı olmalıdır).');
+    }
+    patch.fund = fund;
   }
   if (!create) {
     if (Object.prototype.hasOwnProperty.call(input, 'is_active')) {
@@ -152,8 +181,8 @@ export async function createCategory({ siteCode, body, actor }) {
       throw categoryNameTaken();
     }
     const inserted = await client.query(
-      `INSERT INTO expense_categories (site_code, name, sort_order) VALUES ($1, $2, $3) RETURNING id, name, is_system, is_active, sort_order`,
-      [siteCode, patch.name, Number(count.rows[0].n)],
+      `INSERT INTO expense_categories (site_code, name, sort_order, fund) VALUES ($1, $2, $3, $4) RETURNING id, name, is_system, is_active, sort_order, fund`,
+      [siteCode, patch.name, Number(count.rows[0].n), patch.fund],
     );
     await recordFinanceAudit(client, actor, 'finance.category.created', siteCode, inserted.rows[0].id, {});
     return { category: mapCategory(inserted.rows[0]) };
@@ -170,7 +199,7 @@ export async function updateCategory({ siteCode, rawId, body, actor }) {
   const actorInfo = actorFromAuthUser(actor);
   return withFinanceTransaction(siteCode, async (client) => {
     await lockActorRow(client, actorInfo);
-    const current = await client.query(`SELECT id, name, is_system, is_active, sort_order FROM expense_categories WHERE id = $1 AND site_code = $2 FOR UPDATE`, [id, siteCode]);
+    const current = await client.query(`SELECT id, name, is_system, is_active, sort_order, fund FROM expense_categories WHERE id = $1 AND site_code = $2 FOR UPDATE`, [id, siteCode]);
     if (!current.rows?.[0]) {
       throw categoryNotFound();
     }
@@ -181,9 +210,19 @@ export async function updateCategory({ siteCode, rawId, body, actor }) {
       }
     }
     const row = current.rows[0];
+    if (patch.fund !== undefined && patch.fund !== row.fund) {
+      // Kasa değişimi: sistem kategorisinde YASAK; kasa seçimi kaydedilmemiş (080 öncesi) gider varsa YASAK (o giderlerin kasası kategoriden türetilir, geçmiş bakiye kaymasın).
+      if (row.is_system === true) {
+        throw categoryFundLocked('Sistem kategorisinin hesabı (Yatırım ve Demirbaş (Fon) Hesabı) değiştirilemez.');
+      }
+      const legacy = await client.query(`SELECT 1 FROM expenses WHERE site_code = $1 AND category_id = $2 AND fund IS NULL LIMIT 1`, [siteCode, id]);
+      if (legacy.rows?.[0]) {
+        throw categoryFundLocked('Bu kategoride hesabı (Aidat / Fon) kaydedilmemiş eski giderler var; hesap değiştirilemez. Yeni bir kategori açın.');
+      }
+    }
     const updated = await client.query(
-      `UPDATE expense_categories SET name = $3, is_active = $4, sort_order = $5, updated_at = NOW() WHERE id = $1 AND site_code = $2 RETURNING id, name, is_system, is_active, sort_order`,
-      [id, siteCode, patch.name ?? row.name, patch.isActive ?? row.is_active, patch.sortOrder ?? row.sort_order],
+      `UPDATE expense_categories SET name = $3, is_active = $4, sort_order = $5, fund = $6, updated_at = NOW() WHERE id = $1 AND site_code = $2 RETURNING id, name, is_system, is_active, sort_order, fund`,
+      [id, siteCode, patch.name ?? row.name, patch.isActive ?? row.is_active, patch.sortOrder ?? row.sort_order, patch.fund ?? row.fund],
     );
     await recordFinanceAudit(client, actor, 'finance.category.updated', siteCode, id, { fields: Object.keys(patch) });
     return { category: mapCategory(updated.rows[0]) };
@@ -359,6 +398,8 @@ export function parseExpenseInput(body, now = new Date()) {
     allowDuplicate: parseBooleanFlag(input.allow_duplicate, 'Yinelenen gider seçeneği'),
     idempotencyKey: parseIdempotencyKey(input.idempotency_key, { required: true }),
     nature: parseNature(input.nature),
+    // Kasa seçimi (isteğe bağlı): yoksa kategorinin kasası; yazarken HER ZAMAN çözülüp kaydedilir
+    fund: parseFundField(input.fund),
   };
 }
 
@@ -377,6 +418,7 @@ export const expenseFingerprint = (input) =>
     document_no: input.documentNo,
     // yalnız gönderildiğinde parmak izine girer (eski istemcinin yeniden denemesi bozulmasın)
     ...(input.nature ? { nature: input.nature } : {}),
+    ...(input.fund ? { fund: input.fund } : {}),
   });
 
 const EXPENSE_SELECT = `
@@ -384,10 +426,12 @@ const EXPENSE_SELECT = `
     e.id, e.category_id, e.category_name, e.supplier_id, e.supplier_name, e.description, e.amount_minor::TEXT AS amount_minor, e.vat_minor::TEXT AS vat_minor,
     to_char(e.expense_date, 'YYYY-MM-DD') AS expense_date, e.account_id, a.name AS account_name, e.document_kind, e.document_no, e.corrects_expense_id,
     e.request_fingerprint, e.created_at, u.full_name AS created_by_name, n.nature AS nature_value, n.source AS nature_source_value,
+    e.fund AS expense_fund, ec.fund AS category_fund,
     v.voided_at, v.reason AS void_reason, to_char(v.period, 'YYYY-MM-DD') AS void_period,
     (SELECT COUNT(*) FROM expense_documents d WHERE d.expense_id = e.id AND d.status = 'ready' AND d.removed_at IS NULL)::INTEGER AS documents_count
   FROM expenses e
   INNER JOIN finance_accounts a ON a.id = e.account_id
+  LEFT JOIN expense_categories ec ON ec.id = e.category_id
   LEFT JOIN users u ON u.user_code = e.created_by
   LEFT JOIN expense_voids v ON v.expense_id = e.id
   LEFT JOIN expense_natures n ON n.expense_id = e.id
@@ -410,6 +454,8 @@ export function mapExpenseRow(row) {
     voided: row.voided_at ? { at: toIso(row.voided_at), reason: row.void_reason, period: row.void_period } : null,
     corrects_expense_id: row.corrects_expense_id === null || row.corrects_expense_id === undefined ? null : Number(row.corrects_expense_id),
     documents_count: Number(row.documents_count ?? 0),
+    // Kasa: giderin kendi seçimi; 080 öncesi giderde kategorinin kasası (docs/PLATFORM_FINANS_KASALAR.md 4)
+    fund: row.expense_fund === 'capital' || row.expense_fund === 'operating' ? row.expense_fund : row.category_fund === 'capital' ? 'capital' : 'operating',
     nature: row.nature_value ?? categoryDefaultNature(row.category_name),
     nature_source: row.nature_value ? row.nature_source_value ?? 'manual' : 'derived',
     created_by_name: row.created_by_name ?? null,
@@ -461,7 +507,7 @@ async function writeExpense(client, { siteCode, input, actorInfo, actor, correct
   if (input.expenseDate < account.opening_date) {
     throw beforeOpeningDate();
   }
-  const category = await client.query(`SELECT name, is_active FROM expense_categories WHERE id = $1 AND site_code = $2 FOR KEY SHARE`, [input.categoryId, siteCode]);
+  const category = await client.query(`SELECT name, is_active, fund FROM expense_categories WHERE id = $1 AND site_code = $2 FOR KEY SHARE`, [input.categoryId, siteCode]);
   if (!category.rows?.[0]) {
     throw categoryNotFound();
   }
@@ -508,9 +554,9 @@ async function writeExpense(client, { siteCode, input, actorInfo, actor, correct
     `
       INSERT INTO expenses (
         site_code, category_id, category_name, supplier_id, supplier_name, description, amount_minor, vat_minor, expense_date, period, account_id,
-        document_kind, document_no, document_no_norm, corrects_expense_id, idempotency_key, request_fingerprint, created_by
+        document_kind, document_no, document_no_norm, corrects_expense_id, idempotency_key, request_fingerprint, created_by, fund
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7::BIGINT, $8::BIGINT, $9::DATE, $10::DATE, $11, $12, $13, $14, $15, $16, $17, $18)
+      VALUES ($1, $2, $3, $4, $5, $6, $7::BIGINT, $8::BIGINT, $9::DATE, $10::DATE, $11, $12, $13, $14, $15, $16, $17, $18, $19)
       RETURNING id
     `,
     [
@@ -532,6 +578,8 @@ async function writeExpense(client, { siteCode, input, actorInfo, actor, correct
       input.idempotencyKey,
       fingerprint,
       actorInfo.userCode,
+      // giderin kasası: seçilmediyse kategorinin kasası (kayda yazılır; sonradan kategori kasası değişse de geçmiş gider kaymaz)
+      input.fund ?? (category.rows[0].fund === 'capital' ? 'capital' : 'operating'),
     ],
   );
   const id = Number(inserted.rows[0].id);
@@ -550,6 +598,7 @@ async function writeExpense(client, { siteCode, input, actorInfo, actor, correct
     amount_minor: input.amountMinor,
     account_id: input.accountId,
     corrects_expense_id: correctsExpenseId,
+    fund: input.fund ?? (category.rows[0].fund === 'capital' ? 'capital' : 'operating'),
   });
   return { replayed: false, row: await loadExpenseRow(client, siteCode, id), movementId: Number(movement.rows[0].id) };
 }

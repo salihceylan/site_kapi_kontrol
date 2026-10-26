@@ -50,7 +50,7 @@ export const expenseNatureMigrationBody = () => EXPENSE_NATURE_DDL_ORDER.map((na
 /** Eksik nesneler varsa sırayla uygular; hepsi varsa tek katalog sorgusundan sonra hiçbir ifade göndermez. */
 export async function ensureExpenseNaturesSchema(client) {
   const found = await client.query(
-    `SELECT to_regclass('public.expense_natures') IS NOT NULL AS has_table,
+    `SELECT to_regclass('public.expense_natures') IS NOT NULL AS has_table, to_regclass('public.expenses') IS NOT NULL AS has_expenses,
        ARRAY(SELECT conname::TEXT FROM pg_constraint WHERE contype = 'f' AND conrelid = to_regclass('public.expense_natures')) AS fks,
        ARRAY(SELECT indexname::TEXT FROM pg_indexes WHERE schemaname = 'public' AND tablename = 'expense_natures') AS indexes`,
   );
@@ -65,13 +65,15 @@ export async function ensureExpenseNaturesSchema(client) {
     idx_site: indexes.has('idx_expense_natures_site'),
     idx_user: indexes.has('idx_expense_natures_set_by'),
   };
-  if (EXPENSE_NATURE_DDL_ORDER.every((name) => done[name])) {
+  // Üst tablo `expenses` yoksa (platform öncesi kesilmiş şema: finans 040 tabloları henüz yok) yabancı anahtar ertelenir; sonraki açılışta tamamlanır.
+  const blocked = (name) => name === 'fk_expense' && row.has_expenses === false;
+  if (EXPENSE_NATURE_DDL_ORDER.every((name) => done[name] || blocked(name))) {
     return;
   }
   await client.query("SET lock_timeout = '2s'");
   try {
     for (const name of EXPENSE_NATURE_DDL_ORDER) {
-      if (done[name]) continue;
+      if (done[name] || blocked(name)) continue;
       for (let attempt = 1; ; attempt += 1) {
         try {
           await client.query(EXPENSE_NATURE_DDL[name]);

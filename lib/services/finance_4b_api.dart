@@ -24,6 +24,8 @@ import 'package:site_kapi_kontrol/models/expense_models.dart';
 import 'package:site_kapi_kontrol/models/finance.dart';
 import 'package:site_kapi_kontrol/models/finance_4b.dart';
 import 'package:site_kapi_kontrol/models/finance_charts.dart';
+import 'package:site_kapi_kontrol/models/finance_funds.dart';
+import 'package:site_kapi_kontrol/models/fund_models.dart';
 import 'package:site_kapi_kontrol/models/late_fee_models.dart';
 import 'package:site_kapi_kontrol/models/receipt_models.dart';
 import 'package:site_kapi_kontrol/models/reminder_models.dart';
@@ -633,16 +635,18 @@ class Finance4bApi {
     return _parse('Kategoriler', () => f4List(r.body['items'], ExpenseCategory.fromJson));
   }
 
+  /// Yeni gider kategorisi. [fund] verilmezse sunucu İşletme Projesi (Aidat) Hesabı'nı yazar.
   Future<ExpenseCategory> createExpenseCategory({
     required String token,
     required int siteCode,
     required String name,
+    FinanceFund? fund,
   }) async {
     final r = await _send(
       'POST',
       _site(siteCode, 'expense-categories'),
       token: token,
-      body: <String, dynamic>{'name': name.trim()},
+      body: <String, dynamic>{'name': name.trim(), 'fund': ?fund?.apiValue},
       write: true,
     );
     return _parse('Kategori', () => ExpenseCategory.fromJson(_unwrap(r.body, 'category')));
@@ -1222,7 +1226,8 @@ class Finance4bApi {
 
   /// Hesap seçimli tahsilat kaydı (`POST payments` + `account_id`). Yanıtta düzenlenen makbuz (`receipt`) ve
   /// hesap hareketi (`movement_id`) gelebilir. Sitede en az bir aktif hesap varsa [accountId] ZORUNLUDUR
-  /// (409 `ACCOUNT_REQUIRED`).
+  /// (409 `ACCOUNT_REQUIRED`). [fund] verilirse tahsilat YALNIZ o kasanın borçlarına uygulanır; verilmezse otomatik
+  /// (en eski vade önce).
   Future<LedgerWriteResult> recordPayment({
     required String token,
     required int siteCode,
@@ -1234,6 +1239,7 @@ class Finance4bApi {
     int? accountId,
     required String idempotencyKey,
     AccountParty? accountParty,
+    FinanceFund? fund,
   }) async {
     final note = description?.trim();
     final r = await _send(
@@ -1250,6 +1256,8 @@ class Finance4bApi {
         'idempotency_key': idempotencyKey,
         // İP-1A: daire hesabı (ev sahibi / kiracı); verilmezse sunucu seçer
         'account_party': ?accountParty?.apiValue,
+        // Kasa kısıtı; verilmezse otomatik dağıtım
+        'fund': ?fund?.apiValue,
       },
       write: true,
     );
@@ -1269,6 +1277,7 @@ class Finance4bApi {
     int? accountId,
     required String idempotencyKey,
     AccountParty? accountParty,
+    FinanceFund? fund,
   }) async {
     final note = description?.trim();
     final r = await _send(
@@ -1284,10 +1293,131 @@ class Finance4bApi {
         'idempotency_key': idempotencyKey,
         // İP-1A: verilirse yeni tahsilat bu daire hesabına yazılır (ters kayıt hep eski hesapta)
         'account_party': ?accountParty?.apiValue,
+        // Verilmezse ASIL tahsilatın kasa kısıtı korunur
+        'fund': ?fund?.apiValue,
       },
       write: true,
     );
     return _parse('Düzeltme', () => LedgerWriteResult.fromJson(r.body));
+  }
+
+  // --- İki kasa (İşletme Projesi (Aidat) Hesabı / Yatırım ve Demirbaş (Fon) Hesabı) ----------------
+
+  /// Kasa özeti: iki kasanın açılış / tahsilat / gider / aktarım / düzeltme / bakiye değerleri + avans. [from] / [to] dönem
+  /// süzgecidir (yoksa `to` bugündür ve `from` yoktur: tüm hareketler). Sitenin tüm defterini okur (ağır rapor): 503
+  /// `REPORT_BUSY` gelirse kullanıcı beklemeye yönlendirilir, otomatik yeniden deneme YAPILMAZ.
+  Future<FundSummary> getFundSummary({
+    required String token,
+    required int siteCode,
+    DateTime? from,
+    DateTime? to,
+  }) async {
+    final r = await _send(
+      'GET',
+      _site(siteCode, 'funds'),
+      token: token,
+      query: <String, String>{
+        if (from != null) 'from': crmDateParam(from),
+        if (to != null) 'to': crmDateParam(to),
+      },
+      timeout: const Duration(seconds: 40),
+    );
+    return _parse('Kasa özeti', () => FundSummary.fromJson(r.body));
+  }
+
+  /// Bir kasanın sayfalı dökümü (yeni -> eski; `limit` en çok 200).
+  Future<FundMovementPage> listFundMovements({
+    required String token,
+    required int siteCode,
+    required FinanceFund fund,
+    DateTime? from,
+    DateTime? to,
+    int limit = 50,
+    int offset = 0,
+  }) async {
+    final r = await _send(
+      'GET',
+      _site(siteCode, 'funds/${fund.apiValue}/movements'),
+      token: token,
+      query: <String, String>{
+        if (from != null) 'from': crmDateParam(from),
+        if (to != null) 'to': crmDateParam(to),
+        'limit': '$limit',
+        'offset': '$offset',
+      },
+      timeout: const Duration(seconds: 40),
+    );
+    return _parse('Kasa dökümü', () => FundMovementPage.fromJson(r.body, fund));
+  }
+
+  Future<FundTransferPage> listFundTransfers({
+    required String token,
+    required int siteCode,
+    DateTime? from,
+    DateTime? to,
+    int limit = 50,
+    int? beforeId,
+  }) async {
+    final r = await _send(
+      'GET',
+      _site(siteCode, 'fund-transfers'),
+      token: token,
+      query: <String, String>{
+        if (from != null) 'from': crmDateParam(from),
+        if (to != null) 'to': crmDateParam(to),
+        'limit': '$limit',
+        if (beforeId != null) 'before_id': '$beforeId',
+      },
+    );
+    return _parse('Kasalar arası aktarımlar', () => FundTransferPage.fromJson(r.body));
+  }
+
+  /// Kasalar arası aktarım (fiziksel hesap hareketi doğurmaz). Aynı [idempotencyKey] + aynı gövde = aynı kayıt (200);
+  /// farklı gövde = 409 `IDEMPOTENCY_CONFLICT`.
+  Future<FundTransfer> createFundTransfer({
+    required String token,
+    required int siteCode,
+    required FinanceFund fromFund,
+    required FinanceFund toFund,
+    required int amountMinor,
+    required DateTime transferDate,
+    String? description,
+    required String idempotencyKey,
+  }) async {
+    final text = description?.trim();
+    final r = await _send(
+      'POST',
+      _site(siteCode, 'fund-transfers'),
+      token: token,
+      body: <String, dynamic>{
+        'from_fund': fromFund.apiValue,
+        'to_fund': toFund.apiValue,
+        'amount_minor': amountMinor,
+        'transfer_date': crmDateParam(transferDate),
+        if (text != null && text.isNotEmpty) 'description': text,
+        'idempotency_key': idempotencyKey,
+      },
+      write: true,
+    );
+    return _parse('Aktarım', () => FundTransfer.fromJson(_unwrap(r.body, 'transfer')));
+  }
+
+  /// Aktarımı ters çevirir (silinmez: yönleri değişmiş, bugün tarihli ters aktarım yazılır). Gerekçe zorunludur.
+  Future<FundTransferReverseResult> reverseFundTransfer({
+    required String token,
+    required int siteCode,
+    required int transferId,
+    required String reason,
+    required String idempotencyKey,
+  }) async {
+    final r = await _send(
+      'POST',
+      _site(siteCode, 'fund-transfers/$transferId/reverse'),
+      token: token,
+      body: <String, dynamic>{'reason': reason.trim(), 'idempotency_key': idempotencyKey},
+      write: true,
+    );
+    return _parse('Ters aktarım', () => FundTransferReverseResult.fromJson(r.body));
   }
 
   // --- Taşıma katmanı ----------------------------------------------------------------------------

@@ -125,7 +125,6 @@ abstract final class HelpContent {
     // Dairem (daire sahipliği ve yönetimi, güvenlik ve destek)
     'Kiracı ekle',
     'Sistemden ara',
-    'Yönetimi kiracıya devret',
     'Aile üyesi ekle',
     'Araçlarım',
     'Araç ekle',
@@ -241,9 +240,10 @@ abstract final class HelpContent {
     'Gider türü',
     'Gelecek yıl tahmini',
     'Daire hesabı',
-    'Kim öder',
-    'Dairede oturan',
-    'Ev sahibi',
+    // İki kasa: tanım / ek borç / tahsilat / gider formlarındaki "Kasa" seçimi (menü başlığı 'Kasa' yukarıda) ve kasa adları
+    'İşletme Projesi (Aidat) Hesabı',
+    'Yatırım ve Demirbaş (Fon) Hesabı',
+    'Kasalar Arası Aktarım',
     // İP-1D / G3: sakin alt çubuğunun sekmeleri ve site seçici.
     'Özet',
     'Duyuru',
@@ -261,7 +261,7 @@ abstract final class HelpContent {
     icon: Icons.manage_accounts_rounded,
     steps: <String>[
       'Menüden “Dairem” ekranını açın; üstte dairenizin yönetimini kimin yaptığı yazar.',
-      'Kiracı yoksa daireyi malik yönetir. Malik “Kiracı ekle” ile yeni kişi ekler ya da “Sistemden ara” ile kayıtlı birini seçer. “Yönetimi kiracıya devret” açıksa yönetim kiracıya geçer ve kiracı çıkana kadar sürer.',
+      'Kiracı yoksa daireyi malik yönetir. Malik “Kiracı ekle” ile yeni kişi ekler ya da “Sistemden ara” ile kayıtlı birini seçer. Dairede kiracı varsa daire yöneticisi her zaman kiracıdır; malik ve kiracı birlikte kayıtlı kalır ve yönetim kiracı çıkana kadar kiracıda sürer.',
       'Daire yöneticisi “Aile üyesi ekle” ile aile üyelerini ekler. Yetişkin bir üyeyi tek başına çıkaramaz; üyeye onay isteği gider. 18 yaşından küçükler için ekleme sırasında işaretleme yapılır.',
       'Kiracı “Daireyi devret / Çıkış” ile ayrılır; yönetim malike döner. Malik ile kiracı arasındaki bağı “Bağlantıyı kes talebi” ile, karşı tarafın onayıyla kesebilirsiniz.',
       'Herkes “Bu daireden ayrıl” ile kendi bağını onaysız keser; diğer üyelere bildirim gitmez.',
@@ -741,8 +741,12 @@ abstract final class HelpContent {
         '“Finans” ekranında daireye dokununca açılan “Hesap Ekstresi” penceresinde, dairede kiracı varsa ya da olduysa iki sekme '
             'görünür: “Kiracı hesabı” ve “Ev sahibi hesabı”.',
         'Tahsilat eklerken “Daire hesabı” bölümünden tahsilatın hangi hesaba yazılacağını seçin; ödeme yalnız o hesabın borcundan düşer.',
-        'Aidat tanımında ve ek borçta “Kim öder” seçilir: “Dairede oturan” ya da “Ev sahibi”. Aylık aidatta varsayılan dairede '
-            'oturan, ek borçta ev sahibidir.',
+        'Aidat tanımında ve ek borçta “Kasa” seçilir: “İşletme Projesi (Aidat) Hesabı” (dairede oturan öder, kiracı varsa kiracı) '
+            'ya da “Yatırım ve Demirbaş (Fon) Hesabı” (malik öder). Aylık aidatta varsayılan Aidat Hesabı, ek borçta Fon Hesabı’dır.',
+        'Tahsilat eklerken “Kasa” bölümünden ödemenin hangi kasanın borcuna uygulanacağını seçebilirsiniz; seçmezseniz tahsilat '
+            'en eski vadeden başlayarak otomatik dağıtılır ve kayıttan sonra dağılım gösterilir.',
+        'Finans > Kasa sekmesinin üstünde iki kasanın bakiyesi görünür; “Kasalar Arası Aktarım” ile bir kasadan diğerine bakiye '
+            'aktarılır. Yanlış aktarım silinmez, listeden gerekçeyle ters çevrilir.',
       ],
       note:
           'Daire sorumlusu kiracı ya da malik ve kiracıysa ve dairede kiracı varsa aidat kiracı hesabına yazılır. Malik ve '

@@ -102,6 +102,18 @@ String? finance4bErrorMessage(
     case 'DOCUMENT_STORAGE_FULL':
     case 'DOCUMENT_STORAGE_NOT_CONFIGURED':
       return 'Belge depolama şu an kullanılamıyor. Gider ek belgesiz kaydedilebilir.';
+    // --- İki kasa (İşletme Projesi (Aidat) Hesabı / Yatırım ve Demirbaş (Fon) Hesabı) --------------------
+    case 'FUND_NOT_FOUND':
+      return 'Kasa bulunamadı. İşletme Projesi (Aidat) Hesabı ya da Yatırım ve Demirbaş (Fon) Hesabı seçin.';
+    case 'FUND_TRANSFER_NOT_FOUND':
+      return 'Kasalar arası aktarım bulunamadı. Listeyi yenileyip kontrol edin.';
+    case 'FUND_TRANSFER_ALREADY_REVERSED':
+      return 'Bu aktarım zaten ters çevrilmiş. Listeyi yenileyip kontrol edin.';
+    case 'FUND_TRANSFER_NOT_REVERSIBLE':
+      return 'Bu aktarım ters çevrilemez: ters aktarımlar tekrar ters çevrilmez. Gerekirse yeni bir aktarım yapın.';
+    case 'CATEGORY_FUND_LOCKED':
+      return 'Bu kategorinin kasası değiştirilemez: hazır kategoridir ya da bu kategoriyle daha önce gider yazılmıştır. '
+          'Farklı bir kasa için yeni bir kategori ekleyin; tek bir gideri başka kasadan çıkarmak için gider formunda kasayı seçin.';
     // --- Rapor / dışa aktarma ---------------------------------------------------------------
     case 'STATEMENT_TOO_LARGE':
       return 'Ekstre çok uzun (5.000 satırdan fazla). Tarih aralığını daraltın.';

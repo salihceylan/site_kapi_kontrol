@@ -47,6 +47,8 @@ const INFRA = [
   /^ROLLBACK TO SAVEPOINT /,
   /^INSERT INTO audit_log/,
   /^INSERT INTO apartment_residency_log/,
+  // Kiraci her zaman daire admini: grantApartmentAccess kancasi (ensureTenantIsAdmin) once YALNIZ aday var mi diye okur; bu testlerde aday yok.
+  /^SELECT 1 FROM \(SELECT a\.id AS apartment_id/,
 ];
 
 function install() {

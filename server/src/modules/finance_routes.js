@@ -222,6 +222,8 @@ financeRouter.post(
         account_balance_minor: result.account_balance_minor ?? null,
         receipt: result.receipt ?? null,
         movement_id: result.movement_id ?? null,
+        // Kasa dagitimi (docs/PLATFORM_FINANS_KASALAR.md 5): bu tahsilatin su anki dagitimi
+        fund_split: result.fund_split ?? null,
       },
     };
   }),
@@ -252,6 +254,8 @@ financeRouter.post(
         account_balance_minor: result.account_balance_minor ?? null,
         receipt: result.receipt ?? null,
         movement_id: result.movement_id ?? null,
+        // Kasa dagitimi (docs/PLATFORM_FINANS_KASALAR.md 5): bu tahsilatin su anki dagitimi
+        fund_split: result.fund_split ?? null,
       },
     };
   }),

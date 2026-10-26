@@ -57,7 +57,9 @@ describe('migration 058', () => {
 
   it('açılış: DDL dev blokta DEĞİL, ensureTeamSchema people_v1 öncesi çağrılır', () => {
     assert.equal(/CREATE TABLE IF NOT EXISTS (site_team_duties|person_invitations|site_directory_contacts)\b/.test(DB_SOURCE), false);
-    const call = DB_SOURCE.indexOf('await ensureTeamSchema(client);');
+    // ust tablo yoksa (platform oncesi kesilmis sema) adim ertelenir: ensureDeferred sarmalayicisi 42P01'i yutar, baska hatayi firlatir
+    const call = DB_SOURCE.indexOf("await ensureDeferred('058 yonetim kadrosu', () => ensureTeamSchema(client));");
+    assert.ok(call > 0, 'ensureTeamSchema ensureDeferred ile cagrilir');
     assert.ok(call > DB_SOURCE.indexOf('await ensurePlatformRulesSchema(client);'));
     assert.ok(call < DB_SOURCE.indexOf('await runPeopleBackfill(client);'));
   });

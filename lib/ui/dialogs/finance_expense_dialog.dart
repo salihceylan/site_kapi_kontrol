@@ -5,6 +5,7 @@ import 'package:flutter/services.dart' show MaxLengthEnforcement;
 import 'package:site_kapi_kontrol/models/cash_models.dart';
 import 'package:site_kapi_kontrol/models/expense_analysis.dart';
 import 'package:site_kapi_kontrol/models/expense_models.dart';
+import 'package:site_kapi_kontrol/models/finance_funds.dart';
 import 'package:site_kapi_kontrol/services/expense_attachments.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
@@ -20,12 +21,14 @@ import 'package:site_kapi_kontrol/ui/helpers/finance_4b_access.dart';
 import 'package:site_kapi_kontrol/ui/helpers/finance_errors.dart';
 import 'package:site_kapi_kontrol/ui/helpers/finance_write_mixin.dart';
 import 'package:site_kapi_kontrol/ui/helpers/form_validation.dart';
+import 'package:site_kapi_kontrol/ui/helpers/fund_text.dart';
 import 'package:site_kapi_kontrol/ui/helpers/istanbul_time.dart';
 import 'package:site_kapi_kontrol/ui/helpers/money.dart';
 import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
 import 'package:site_kapi_kontrol/ui/helpers/text_length.dart';
 import 'package:site_kapi_kontrol/ui/widgets/crm_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_4b_parts.dart';
+import 'package:site_kapi_kontrol/ui/widgets/finance_fund_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart' show filledToneStyle;
 import 'package:site_kapi_kontrol/ui/widgets/money_field.dart';
@@ -41,6 +44,8 @@ import 'package:site_kapi_kontrol/ui/widgets/money_field.dart';
 /// - Düzeltme ([correcting]): eski gider İPTAL edilir ve yeni gider yazılır (TEK işlemde; yarım kalmaz).
 /// - Belge eki: [attachmentSource] verilmedikçe ek alanı GİZLİDİR (belge seçici / modül yoksa). Verilirse en çok 5 dosya
 ///   (PDF / JPG / PNG) gider kaydından SONRA yüklenir; yüklenemeyenler bildirilir (gider belgesiz de geçerlidir).
+/// - İki kasa: "Kasa" seçimi kategorinin kasasından öndoldurulur (kullanıcı dokunana kadar kategoriyle birlikte değişir);
+///   gider hangi kasadan çıkacaksa o seçilir ve gövdede HER ZAMAN `fund` gider. Düzeltmede asıl giderin kasasıyla başlar.
 class FinanceExpenseDialog extends StatefulWidget {
   const FinanceExpenseDialog({
     super.key,
@@ -114,6 +119,10 @@ class _FinanceExpenseDialogState extends State<FinanceExpenseDialog> with Financ
   int? _categoryId;
   Supplier? _supplier;
 
+  // İki kasa: kategoriden öndoldurulur; kullanıcı dokununca (ya da düzeltmede asıl giderin kasası varsa) sabitlenir.
+  FinanceFund _fund = FinanceFund.operating;
+  bool _fundTouched = false;
+
   // Gider türü (R1): öneri önseçili gelir; kullanıcı dokunursa o gönderilir, dokunmazsa sunucu öneriyi yazar.
   ExpenseNature? _nature;
   bool _natureTouched = false;
@@ -158,6 +167,10 @@ class _FinanceExpenseDialogState extends State<FinanceExpenseDialog> with Financ
       _accountId = e.accountId;
       _nature = e.nature;
       _natureReason = e.nature == null ? null : 'Asıl giderin türü korunur.';
+      if (e.fund != null) {
+        _fund = e.fund!;
+        _fundTouched = true;
+      }
     }
     unawaited(_load());
   }
@@ -210,7 +223,11 @@ class _FinanceExpenseDialogState extends State<FinanceExpenseDialog> with Financ
         _loading = false;
         if (e != null && _categoryId == null) {
           for (final c in categories) {
-            if (c.id == e.categoryId || (e.categoryId == null && c.name == e.categoryName)) _categoryId = c.id;
+            if (c.id == e.categoryId || (e.categoryId == null && c.name == e.categoryName)) {
+              _categoryId = c.id;
+              // Asıl giderin kasası kayıtlı değilse (080 öncesi) kategorinin kasası önerilir.
+              if (!_fundTouched) _fund = c.effectiveFund;
+            }
           }
         }
         if (_accountId != null && !overview.activeAccounts.any((a) => a.id == _accountId)) _accountId = null;
@@ -352,10 +369,12 @@ class _FinanceExpenseDialogState extends State<FinanceExpenseDialog> with Financ
       documentKind: _docKind,
       documentNo: documentNo,
       nature: _natureTouched ? _nature : null,
+      fund: _fund,
     );
     final base =
         '${widget.correcting?.id ?? 0}|${input.categoryId}|${input.supplierId ?? 0}|${input.description}|$minor|${vat ?? -1}|'
-        '${formatDateField(date)}|${input.accountId}|${_docKind.apiValue}|${documentNo ?? ''}|${input.nature?.apiValue ?? ''}';
+        '${formatDateField(date)}|${input.accountId}|${_docKind.apiValue}|${documentNo ?? ''}|${input.nature?.apiValue ?? ''}|'
+        '${input.fund?.apiValue ?? ''}';
     await _write(input, base);
   }
 
@@ -374,6 +393,7 @@ class _FinanceExpenseDialogState extends State<FinanceExpenseDialog> with Financ
             documentNo: input.documentNo,
             allowDuplicate: true,
             nature: input.nature,
+            fund: input.fund,
           )
         : input;
     final scope = widget.scope;
@@ -583,10 +603,32 @@ class _FinanceExpenseDialogState extends State<FinanceExpenseDialog> with Financ
                                 markDirty();
                                 _categoryId = v;
                                 _categoryError = null;
+                                // Kasa kategoriden öndoldurulur (kullanıcı kasaya dokunduysa onun seçimi korunur).
+                                if (!_fundTouched) {
+                                  for (final c in _categories!) {
+                                    if (c.id == v) _fund = c.effectiveFund;
+                                  }
+                                }
                               });
                               unawaited(_refreshSuggestion());
                             },
                       ),
+                    ),
+                    const SizedBox(height: AppSpace.md),
+                    FundChoice(
+                      key: const ValueKey<String>('finance_expense_fund'),
+                      title: 'Kasa',
+                      selected: _fund,
+                      enabled: !busy,
+                      keyPrefix: 'finance_expense_fund',
+                      noteFor: expenseFundNote,
+                      footer: 'Kasa seçtiğiniz kategoriden öndoldurulur; bu gider için değiştirebilirsiniz.',
+                      onSelected: (value) => setState(() {
+                        if (value == null) return;
+                        markDirty();
+                        _fund = value;
+                        _fundTouched = true;
+                      }),
                     ),
                     const SizedBox(height: AppSpace.md),
                     _natureField(th),

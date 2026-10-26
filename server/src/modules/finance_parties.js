@@ -35,6 +35,7 @@ import {
   periodOfDate,
   today,
 } from './finance_common.js';
+import { parseFundField } from './finance_funds.js';
 import { minorToNumber, parseMinor, toBigInt } from './finance_money.js';
 import { activeReceiptRef, ensureReceiptForPayment, receiptRef } from './finance_receipts.js';
 import { loadEffectiveSettings } from './finance_settings.js';
@@ -346,6 +347,8 @@ function parsePostPaymentInput(input, now) {
     sourceId: source.id,
     idempotencyKey: parseIdempotencyKey(input.idempotencyKey),
     cashAccountId,
+    // Kasa kisiti (docs/PLATFORM_FINANS_KASALAR.md 3): null = otomatik (vadesi en eski borctan baslayarak dagitilir)
+    fund: parseFundField(input.fund),
   };
 }
 
@@ -353,7 +356,7 @@ async function loadPaymentByKey(client, siteCode, key) {
   const result = await client.query(
     `
       SELECT l.id, l.kind, l.apartment_id, l.amount_minor::TEXT AS amount_minor, to_char(l.entry_date, 'YYYY-MM-DD') AS entry_date, l.method,
-             l.account_party, l.payer_party, l.source_kind, l.source_id
+             l.account_party, l.payer_party, l.source_kind, l.source_id, l.fund
       FROM ledger_entries l WHERE l.site_code = $1 AND l.idempotency_key = $2 LIMIT 1
     `,
     [siteCode, key],
@@ -393,6 +396,8 @@ export async function postPayment(client, request) {
         existing.entry_date === input.paidOn &&
         existing.method === input.method &&
         (input.accountParty === null || existingParty === input.accountParty) &&
+        // kasa kisiti verildiyse ayni anahtarla yazilmis tahsilat O kisitla yazilmis olmali (kisitsiz tekrar = eski istemci, ayni kayit)
+        (input.fund === null || (existing.fund ?? null) === input.fund) &&
         (input.cashAccountId === null || (movement !== null && Number(movement.account_id) === input.cashAccountId)) &&
         (existing.source_kind ?? 'manual') === input.sourceKind &&
         (existing.source_id === null || existing.source_id === undefined ? null : Number(existing.source_id)) === input.sourceId;
@@ -406,6 +411,7 @@ export async function postPayment(client, request) {
         receiptId: receipt ? receipt.id : null,
         receipt,
         accountParty: existingParty,
+        fund: existing.fund ?? null,
         movementId: movement ? Number(movement.id) : null,
       };
     }
@@ -420,9 +426,9 @@ export async function postPayment(client, request) {
     `
       INSERT INTO ledger_entries (
         site_code, apartment_id, kind, amount_minor, period, entry_date, payer_party, method, description, idempotency_key, created_by,
-        account_party, source_kind, source_id
+        account_party, source_kind, source_id, fund
       )
-      VALUES ($1, $2, 'payment', $3::BIGINT, $4::DATE, $5::DATE, $6, $7, $8, $9, $10, $11, $12, $13)
+      VALUES ($1, $2, 'payment', $3::BIGINT, $4::DATE, $5::DATE, $6, $7, $8, $9, $10, $11, $12, $13, $14)
       RETURNING id
     `,
     [
@@ -439,6 +445,7 @@ export async function postPayment(client, request) {
       accountParty,
       input.sourceKind,
       input.sourceId,
+      input.fund,
     ],
   );
   const entryId = Number(inserted.rows[0].id);
@@ -469,7 +476,8 @@ export async function postPayment(client, request) {
       account_id: cashAccount ? cashAccount.id : null,
       account_party: accountParty,
       source_kind: input.sourceKind,
+      fund: input.fund,
     });
   }
-  return { replayed: false, entryId, receiptId: receipt ? receipt.id : null, receipt, accountParty, movementId, cashAccountId: cashAccount ? cashAccount.id : null };
+  return { replayed: false, entryId, receiptId: receipt ? receipt.id : null, receipt, accountParty, movementId, cashAccountId: cashAccount ? cashAccount.id : null, fund: input.fund };
 }

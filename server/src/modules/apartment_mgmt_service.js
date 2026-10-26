@@ -65,6 +65,7 @@ import {
   withSiteTransaction,
 } from './people_service.js';
 import { sendInvitation } from './person_invite_service.js';
+import { ensureTenantIsAdmin } from './apartment_tenant_admin.js';
 import { logResidencyEvent } from './residency_log.js';
 import { cleanupDoorOverridesIfNoMembership, handOverApartmentResident } from '../services/membership_service.js';
 
@@ -356,7 +357,8 @@ function requestView(row, uc) {
     requester_name: row.requester_name ?? null,
     // Davet ettigim kisinin TAM adi gosterilmez (aramada yalniz maskeli ad vardi): maskeli ad.
     target_name: row.target_name ? (incoming ? row.target_name : maskName(row.target_name)) : null,
-    delegate_management: row.payload?.delegate_management === true,
+    // Kiracı HER ZAMAN daire admini olur ("yönetimi devret" seçeneği kalktı): kiracı davetinde alan sabit true (eski istemci metinleri için).
+    delegate_management: row.kind === 'tenant_invite',
     expires_at: toIso(row.expires_at),
     created_at: toIso(row.created_at),
   };
@@ -419,7 +421,8 @@ async function buildItem(db, state, uc, today) {
       admin_name: adminName,
       admin_side: adminSideOf(roles),
       delegated: roles.adminKind === 'tenant',
-      delegation_pending: delegation?.state === 'pending_account',
+      // Hesapsız kiracı: yönetim, hesabı bağlanınca kiracıya geçer (kiracı her zaman daire admini).
+      delegation_pending: delegation?.state === 'pending_account' || (Boolean(roles.tenant) && roles.tenant.user_code === null && roles.adminKind !== 'tenant'),
     },
     owner: ownerView,
     tenant: roles.tenant ? personView(roles.tenant) : null,
@@ -464,7 +467,7 @@ export async function listMyApartments(authUser) {
     site_name: r.site_name ?? null,
     apartment_label: apartmentLabel(r.block_name, r.unit_label),
     requester_name: r.requester_name ?? null,
-    delegate_management: r.payload?.delegate_management === true,
+    delegate_management: r.kind === 'tenant_invite',
     expires_at: toIso(r.expires_at),
     created_at: toIso(r.created_at),
   }));
@@ -735,7 +738,8 @@ async function inviteByEmail(siteCode, personId, authUser, hasEmail) {
 /** POST /app/apartments/:id/tenant  { delegate_management?, candidate? | person? } (yalniz malik) */
 export async function addTenant({ authUser, apartmentId, body }) {
   const target = parseTargetBody(body);
-  const delegate = body?.delegate_management !== false;
+  // Kiracı HER ZAMAN daire admini olur: "yönetimi devret" seçeneği kalktı; gövdede delegate_management gelirse (eski istemci) yok sayılır / true kabul edilir.
+  const delegate = true;
   let newPersonId = null;
   let hasEmail = false;
   let inviteSite = null;
@@ -768,17 +772,16 @@ export async function addTenant({ authUser, apartmentId, body }) {
 
     const personId = await createAccountlessPerson(client, siteCode, target.person, uc);
     await insertResidency(client, { siteCode, apartmentId: state.apartment.id, personId, relation: 'tenant', moveInDate: todayIso(), actor: authUser, actorRole: logRole(authUser, state) });
-    if (delegate) {
-      await recordDelegation(client, {
-        siteCode,
-        apartmentId: state.apartment.id,
-        ownerPersonId,
-        adminPersonId: personId,
-        adminUserCode: null,
-        state: 'pending_account',
-        createdBy: uc,
-      });
-    }
+    // Hesapsız kiracı: yönetim, hesabı bağlanınca kiracıya geçer (grantApartmentAccess / activatePendingDelegations); o zamana dek admin malik kalır.
+    await recordDelegation(client, {
+      siteCode,
+      apartmentId: state.apartment.id,
+      ownerPersonId,
+      adminPersonId: personId,
+      adminUserCode: null,
+      state: 'pending_account',
+      createdBy: uc,
+    });
     await audit(client, authUser, 'apartment_mgmt.tenant_added', state, { person_id: personId, delegate_management: delegate, has_email: Boolean(target.person.email) });
     newPersonId = personId;
     hasEmail = Boolean(target.person.email);
@@ -880,7 +883,10 @@ export async function removeFamilyMember({ authUser, apartmentId, residencyId })
 // Yonetim devri, cikis, karsilikli bag kesme
 // ---------------------------------------------------------------------------
 
-/** POST /app/apartments/:id/management/delegate (yalniz malik, kiraci varken) */
+/**
+ * POST /app/apartments/:id/management/delegate (yalniz malik, kiraci varken). ESKI istemci uyumu: kiraci HER ZAMAN daire admini oldugundan uygulamada artik
+ * dugme yoktur ve admin kiraciya kendiliginden gecer (apartment_tenant_admin.js); bu uc yalniz hala malikte kalmis bir daireyi kiraciya gecirir (idempotent).
+ */
 export async function delegateManagement({ authUser, apartmentId }) {
   return withApartment(authUser, apartmentId, async ({ client, state, me, uc, siteCode }) => {
     if (!me.is_owner) {
@@ -1205,14 +1211,14 @@ export async function respondToRequest({ authUser, requestId, accept }) {
       const personId = await ensureUserPerson(client, siteCode, uc, requesterCode);
       await insertResidency(client, { siteCode, apartmentId: state.apartment.id, personId, relation: 'tenant', moveInDate: todayIso(), actor: authUser, actorRole: 'tenant', reasonCode: 'invite_accepted' });
       await grantApartmentAccess(client, { siteCode, apartmentId: state.apartment.id, userCode: uc });
-      let delegated = false;
-      if (request.payload?.delegate_management === true) {
-        const ownerPersonId = state.roles.owner ? state.roles.owner.person_id : state.residencies.find((r) => r.user_code === requesterCode)?.person_id ?? null;
-        delegated = await transferApartmentAdmin(client, { apartmentId: state.apartment.id, userCode: uc, actor: authUser, actorRole: 'tenant', reasonCode: 'handover' });
-        if (delegated) {
-          await recordDelegation(client, { siteCode, apartmentId: state.apartment.id, ownerPersonId, adminPersonId: personId, adminUserCode: uc, state: 'active', createdBy: requesterCode });
-        }
-      }
+      // Kiracı HER ZAMAN daire admini ("yönetimi devret" seçeneği kalktı; eski davetlerdeki delegate_management değeri yok sayılır).
+      await ensureTenantIsAdmin(client, { apartmentIds: [state.apartment.id], userCode: uc, overrideManager: true, via: 'tenant_invite_accepted', actor: authUser, actorRole: 'tenant' });
+      const delegated = Boolean(
+        (await client.query(
+          `SELECT 1 FROM apartment_memberships WHERE apartment_id = $1 AND user_code = $2 AND is_active = TRUE AND role = 'APARTMENT_ADMIN'`,
+          [state.apartment.id, uc],
+        )).rows?.[0],
+      );
       await closeRequest(client, request.id, 'approved', uc);
       await audit(client, authUser, 'apartment_mgmt.tenant_invite_accepted', state, { request_id: Number(request.id), delegated });
       await notify(client, state, [requesterCode], 'tenant_invite_accepted', `${await nameOfUser(client, uc)} kiracı davetinizi kabul etti.`);

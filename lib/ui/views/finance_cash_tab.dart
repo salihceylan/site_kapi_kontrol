@@ -20,12 +20,17 @@ import 'package:site_kapi_kontrol/ui/dialogs/finance_bank_details_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/finance_payment_settings_dialog.dart';
 import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
 import 'package:site_kapi_kontrol/ui/views/bank_import_view.dart';
+import 'package:site_kapi_kontrol/ui/views/finance_funds_section.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_4b_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 
 /// "Kasa" sekmesi (Platform Faz 4b, Ö4): kasa / banka hesapları, toplam bakiye, hesaba eşlenmemiş tahsilat uyarısı ve
 /// hesap işlemleri (hareketler, düzeltme, mutabakat, aktarım, toplu eşleme).
+///
+/// İki kasa: sekmenin ÜSTÜNDE İşletme Projesi (Aidat) Hesabı ve Yatırım ve Demirbaş (Fon) Hesabı kartları, avans satırı ve
+/// "Kasalar Arası Aktarım" durur ([FinanceFundsSection]); altında nakit / banka hesapları listesi AYNEN kalır. İki bölüm
+/// birbirinden bağımsız yüklenir (biri hata verse öteki görünür); sekme yenilenince ikisi de tazelenir.
 ///
 /// - Hesap bakiyesi YALNIZ sunucunun hareket toplamıdır; istemci bakiye hesaplamaz.
 /// - Hata / yükleme durumunda eski tutarlar gösterilmez ve ASLA "hesap yok / bakiye 0" yazılmaz ("Tekrar Dene").
@@ -51,6 +56,7 @@ class FinanceCashTabState extends State<FinanceCashTab> {
   String? _error;
   int _token = 0;
   bool _opening = false;
+  final GlobalKey<FinanceFundsSectionState> _fundsKey = GlobalKey<FinanceFundsSectionState>();
 
   bool get _canWrite => widget.scope.canWrite;
 
@@ -66,9 +72,10 @@ class FinanceCashTabState extends State<FinanceCashTab> {
     super.dispose();
   }
 
-  /// Hesapları yeniden çeker (sekme yenileme / sayfa kabuğu).
+  /// Hesapları ve iki kasanın özetini yeniden çeker (sekme yenileme / sayfa kabuğu).
   Future<void> reload() async {
     if (!mounted) return;
+    unawaited(_fundsKey.currentState?.reload() ?? Future<void>.value());
     final token = ++_token;
     setState(() {
       _loading = true;
@@ -221,6 +228,15 @@ class FinanceCashTabState extends State<FinanceCashTab> {
           ),
         ),
         const SizedBox(height: AppSpace.md),
+        FinanceFundsSection(
+          key: _fundsKey,
+          scope: widget.scope,
+          onDataChanged: widget.onDataChanged,
+          now: widget.now,
+        ),
+        const SizedBox(height: AppSpace.lg),
+        Semantics(header: true, container: true, child: Text('Nakit ve banka hesapları', style: Theme.of(context).textTheme.titleMedium)),
+        const SizedBox(height: AppSpace.sm),
         body,
       ],
     );

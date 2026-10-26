@@ -7,6 +7,7 @@ import 'package:site_kapi_kontrol/ui/design/app_snack.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/large_dialog_parts.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/helpers/date_input.dart';
+import 'package:site_kapi_kontrol/ui/helpers/fund_text.dart';
 import 'package:site_kapi_kontrol/ui/helpers/istanbul_time.dart';
 import 'package:site_kapi_kontrol/ui/helpers/money.dart';
 import 'package:site_kapi_kontrol/ui/widgets/crm_parts.dart' show CrmFormError;
@@ -449,6 +450,8 @@ class BalanceRowCard extends StatelessWidget {
 /// - Faz 4b: [onOpenReceipt] makbuzu olan satırda "Makbuz MK-..." düğmesini, [onIssueReceipt] makbuzu olmayan tahsilatta
 ///   (yalnız yönetici) "Makbuz Düzenle" düğmesini, [onExplainLateFee] sakin ekranında gecikme tazminatı satırında
 ///   "Nasıl hesaplandı?" düğmesini çizer. Gecikme tazminatı satırı rozetle işaretlidir.
+/// - İki kasa: borç / ters kayıt satırında kasa rozeti (kısa ad); tahsilatta "yalnız bu kasaya" kısıtı varsa "Yalnız Aidat
+///   Hesabı" rozeti, ekstre tahsilatında ayrıca kasalara DAĞILIM satırı ("Aidat Hesabı ... , Fon Hesabı ... , avans ...").
 class LedgerEntryTile extends StatelessWidget {
   const LedgerEntryTile({
     super.key,
@@ -535,6 +538,12 @@ class LedgerEntryTile extends StatelessWidget {
     if (e.isReversed) semantic.write(' İptal edildi.');
     semantic.write(' ${e.amountMinor > 0 ? 'Borç artar' : 'Borç azalır'}: ${moneySemanticLabel(e.amountMinor.abs())}.');
     if (e.isLateFee) semantic.write(' Gecikme tazminatı.');
+    final entryFund = e.fund;
+    if (entryFund != null) {
+      semantic.write(e.kind == LedgerKind.payment ? ' Yalnız ${entryFund.label}.' : ' Kasa: ${entryFund.label}.');
+    }
+    final split = e.fundSplit;
+    if (split != null) semantic.write(' Dağıtım: ${spokenMoneyText(fundSplitText(split))}.');
     final receipt = e.receipt;
     if (receipt != null) semantic.write(' Makbuz ${receipt.number}${receipt.isCancelled ? ', iptal edildi' : ''}.');
     if (title.isNotEmpty) semantic.write(' $title.');
@@ -569,6 +578,12 @@ class LedgerEntryTile extends StatelessWidget {
                       if (e.method != null) DialogMetaPill(e.method!.label),
                       if (e.isLateFee)
                         const DialogMetaPill('Gecikme tazminatı', tone: AppTone.warning, icon: Icons.gavel_rounded),
+                      if (entryFund != null)
+                        DialogMetaPill(
+                          e.kind == LedgerKind.payment ? 'Yalnız ${entryFund.shortLabel}' : entryFund.shortLabel,
+                          tone: AppTone.info,
+                          icon: fundIcon(entryFund),
+                        ),
                     ],
                   ),
                   const SizedBox(height: AppSpace.sm),
@@ -603,6 +618,12 @@ class LedgerEntryTile extends StatelessWidget {
                   if (reversedByText != null) Text(reversedByText, style: secondary),
                   if (reason != null) Text('Neden: $reason', style: secondary),
                   if (e.payerParty != null) Text(payerPartyLabel(e.payerParty!), style: secondary),
+                  if (split != null)
+                    Text(
+                      'Dağıtım: ${fundSplitText(split)}',
+                      key: ValueKey<String>('ledger_fund_split_${e.id}'),
+                      style: secondary,
+                    ),
                   if (showActor && e.createdByName != null)
                     Text(
                       'Kaydeden: ${e.createdByName}${e.createdAt == null ? '' : ' • ${formatIstanbulDateTime(e.createdAt)}'}',
@@ -720,6 +741,7 @@ class FeeDefinitionCard extends StatelessWidget {
     final semantic = StringBuffer('Tanım: $name. ${d.kind.label}. ${d.isActive ? 'Aktif' : 'Pasif'}.');
     semantic.write(' ${d.distribution.label}. ${spokenMoneyText(definitionAmountText(d))}.');
     semantic.write(' Hedef: ${d.target.summary}.');
+    semantic.write(' Kasa: ${d.effectiveFund.label}.');
     semantic.write(last == null ? ' Henüz borçlandırılmadı.' : ' Son borçlandırma: ${last.label}.');
     final disabled = busy || !actionsEnabled;
 
@@ -762,6 +784,11 @@ class FeeDefinitionCard extends StatelessWidget {
                   ),
                   if (schedule != null) Text(schedule, style: secondary),
                   Text('Hedef: ${d.target.summary}', style: secondary),
+                  Text(
+                    'Kasa: ${d.effectiveFund.label}',
+                    key: ValueKey<String>('fee_definition_fund_${d.id}'),
+                    style: secondary,
+                  ),
                   Text(
                     last == null ? 'Henüz borçlandırılmadı' : 'Son borçlandırma: ${last.label}',
                     style: secondary,

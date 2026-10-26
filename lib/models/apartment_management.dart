@@ -69,7 +69,6 @@ class AptRequest {
     required this.direction,
     this.requesterName,
     this.targetName,
-    this.delegateManagement = false,
     this.expiresAt,
   });
 
@@ -79,7 +78,6 @@ class AptRequest {
     direction: _s(j['direction'], 'other'),
     requesterName: j['requester_name'] is String ? j['requester_name'] as String : null,
     targetName: j['target_name'] is String ? j['target_name'] as String : null,
-    delegateManagement: _b(j['delegate_management']),
     expiresAt: _d(j['expires_at']),
   );
 
@@ -88,7 +86,6 @@ class AptRequest {
   final String direction;
   final String? requesterName;
   final String? targetName;
-  final bool delegateManagement;
   final DateTime? expiresAt;
 
   String get kindLabel => switch (kind) {
@@ -141,7 +138,6 @@ class AptCan {
   const AptCan({
     this.manageFamily = false,
     this.addTenant = false,
-    this.delegateManagement = false,
     this.exit = false,
     this.requestDisconnect = false,
     this.manageProxy = false,
@@ -151,7 +147,6 @@ class AptCan {
   factory AptCan.fromJson(Map<String, dynamic> j) => AptCan(
     manageFamily: _b(j['manage_family']),
     addTenant: _b(j['add_tenant']),
-    delegateManagement: _b(j['delegate_management']),
     exit: _b(j['exit']),
     requestDisconnect: _b(j['request_disconnect']),
     manageProxy: _b(j['manage_proxy']),
@@ -160,7 +155,6 @@ class AptCan {
 
   final bool manageFamily;
   final bool addTenant;
-  final bool delegateManagement;
   final bool exit;
   final bool requestDisconnect;
   final bool manageProxy;
@@ -261,7 +255,6 @@ class IncomingAptRequest {
     required this.siteName,
     required this.apartmentLabel,
     this.requesterName,
-    this.delegateManagement = false,
   });
 
   factory IncomingAptRequest.fromJson(Map<String, dynamic> j) => IncomingAptRequest(
@@ -271,7 +264,6 @@ class IncomingAptRequest {
     siteName: _s(j['site_name']),
     apartmentLabel: _s(j['apartment_label']),
     requesterName: j['requester_name'] is String ? j['requester_name'] as String : null,
-    delegateManagement: _b(j['delegate_management']),
   );
 
   final int id;
@@ -280,7 +272,6 @@ class IncomingAptRequest {
   final String siteName;
   final String apartmentLabel;
   final String? requesterName;
-  final bool delegateManagement;
 
   /// Kartın başlığı (kimden ne istendiği).
   String get title {
@@ -296,9 +287,8 @@ class IncomingAptRequest {
   }
 
   String get explanation => switch (kind) {
-    'tenant_invite' => delegateManagement
-        ? 'Kabul ederseniz daire kiracısı olursunuz ve dairenin yönetimi size geçer. Reddedebilirsiniz.'
-        : 'Kabul ederseniz daire kiracısı olursunuz. Reddedebilirsiniz.',
+    // Kiracı HER ZAMAN daire yöneticisidir (malik ve kiracı birlikte kayıtlı kalır).
+    'tenant_invite' => 'Kabul ederseniz daire kiracısı olursunuz ve daire yöneticisi siz olursunuz. Reddedebilirsiniz.',
     'family_invite' => 'Kabul ederseniz daireyle ilgili ekranlara erişirsiniz. Borç bilgisi aile üyelerine gösterilmez. Reddedebilirsiniz.',
     'disconnect' => 'Onaylarsanız kiracılık sona erer ve yönetim malike döner. Reddedebilirsiniz; 14 gün yanıtsız kalırsa talep kapanır.',
     'member_removal' => 'Onaylarsanız bu daireyle bağınız ve kapı erişiminiz sona erer. Onaylamazsanız hiçbir şey değişmez; 7 gün yanıtsız kalırsa istek kapanır.',
@@ -389,15 +379,15 @@ class ExitPreview {
 /// Dairem ekranında yeni kişi ekleme penceresinin sonucu.
 @immutable
 class AddPersonInput {
-  const AddPersonInput({this.candidate, this.fullName, this.phone, this.email, this.delegateManagement = true, this.isMinor = false});
+  const AddPersonInput({this.candidate, this.fullName, this.phone, this.email, this.isMinor = false});
 
   final String? candidate;
   final String? fullName;
   final String? phone;
   final String? email;
-  final bool delegateManagement;
   final bool isMinor;
 
+  /// Kiracı eklerken yönetim ayrı bir seçenek DEĞİLDİR: kiracı her zaman daire yöneticisi olur (sunucu kuralı; gövdeye alan konmaz).
   Map<String, Object?> toBody({bool tenant = false}) => <String, Object?>{
     if (candidate != null) 'candidate': candidate,
     if (candidate == null)
@@ -406,7 +396,7 @@ class AddPersonInput {
         if ((phone ?? '').isNotEmpty) 'phone': phone,
         if ((email ?? '').isNotEmpty) 'email': email,
       },
-    if (tenant) 'delegate_management': delegateManagement else 'is_minor': isMinor,
+    if (!tenant) 'is_minor': isMinor,
   };
 }
 

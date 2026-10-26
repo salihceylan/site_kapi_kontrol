@@ -213,6 +213,10 @@ async function runDdl(client, statement) {
 
 const TABLES = STEPS.filter(([, , spec]) => spec.table).map(([, , spec]) => spec.table);
 
+/** Yabancı anahtar adımının başvurduğu üst tablo (SQL metninden): üst tablo yoksa adım ATLANIR (sonraki açılışta tamamlanır). */
+const parentOfStatement = (statement) => /REFERENCES\s+(\w+)\s*\(/.exec(statement)?.[1] ?? null;
+const FK_PARENTS = [...new Set(STEPS.filter(([, , spec]) => spec.fk).map(([, statement]) => parentOfStatement(statement)).filter((name) => name !== null && !TABLES.includes(name)))];
+
 /** 054'ü uygular (db.js'te 040 ve 052'den SONRA). Eksik yoksa hiçbir ifade gönderilmez (kilit alınmaz). */
 export async function ensureFinancePaymentSchema(client) {
   const specs = STEPS.map(([, , spec]) => spec);
@@ -233,7 +237,8 @@ export async function ensureFinancePaymentSchema(client) {
         ARRAY(
           SELECT g.tgname::TEXT FROM pg_trigger g
           WHERE NOT g.tgisinternal AND g.tgrelid = to_regclass('public.finance_account_bank_details') AND g.tgname = ANY($5::TEXT[])
-        ) AS triggers
+        ) AS triggers,
+        ARRAY(SELECT t FROM unnest($7::TEXT[]) AS t WHERE to_regclass('public.' || t) IS NOT NULL) AS parents
     `,
     [
       TABLES,
@@ -242,6 +247,7 @@ export async function ensureFinancePaymentSchema(client) {
       specs.filter((s) => s.fn).map((s) => s.fn),
       specs.filter((s) => s.trigger).map((s) => s.trigger),
       PAYMENT_MARKER,
+      FK_PARENTS,
     ],
   );
   const row = found.rows[0] ?? {};
@@ -259,11 +265,14 @@ export async function ensureFinancePaymentSchema(client) {
     if (spec.fn) return !present.functions.has(spec.fn);
     return !present.triggers.has(spec.trigger);
   };
-  if (!specs.some(isPending)) return;
+  // Üst tablosu henüz olmayan yabancı anahtar (platform öncesi kesilmiş şema: finans 040 tabloları yok) ertelenir; sonraki açılışta tamamlanır.
+  const parentsPresent = new Set(row.parents ?? FK_PARENTS);
+  const blocked = (spec, statement) => Boolean(spec.fk) && !parentsPresent.has(parentOfStatement(statement)) && FK_PARENTS.includes(parentOfStatement(statement));
+  if (!STEPS.some(([, statement, spec]) => isPending(spec) && !blocked(spec, statement))) return;
   await client.query("SET lock_timeout = '2s'");
   try {
     for (const [, statement, spec] of STEPS) {
-      if (!isPending(spec)) continue;
+      if (!isPending(spec) || blocked(spec, statement)) continue;
       if ((spec.fk || spec.index || spec.trigger) && !present.tables.has(spec.on)) continue;
       await runDdl(client, statement);
       if (spec.table) present.tables.add(spec.table);

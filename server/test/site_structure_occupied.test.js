@@ -109,7 +109,23 @@ describe('syncSiteStructureCounts x dolu daire koruması', () => {
     const check = log.find((e) => /has_legacy_resident/.test(e.sql));
     assert.deepEqual([...check.params[0]].sort(), [104, 105]);
     assert.match(check.sql, /FOR UPDATE OF a$/);
-    assert.equal(log.some((e) => /^SELECT pg_advisory_xact_lock/.test(e.sql) && e.params[0] === `finance_post:${SITE}`), false, 'finans kilidine hiç gelinmez');
+    // Kilit sırası (gerçek PG QA H3): finans yazmaları finans kilidini sonra daire satırlarını alır; denetim (FOR UPDATE) finans kilidinden SONRA gelmeli.
+    const financeLockAt = log.findIndex((e) => /^SELECT pg_advisory_xact_lock/.test(e.sql) && e.params[0] === `finance_post:${SITE}`);
+    assert.ok(financeLockAt >= 0, 'silinecek aday varken finans kilidi (denetimden önce) alınır');
+    assert.ok(financeLockAt < log.indexOf(check), 'finans kilidi daire satırlarını FOR UPDATE ile kilitleyen denetimden ÖNCE');
+    assert.equal(log.some((e) => /^DELETE FROM apartments/.test(e.sql)), false, 'dolu daire varken silme yok');
+  });
+
+  it('kilit sırası people_sync -> finance_post -> apartments (FOR UPDATE): finans kilidi, daire satırı kilidinden önce; boş daire silinirken de aynı sıra, finans kilidi TEK kez', async () => {
+    const scripted = scriptedPool({ apartments: 4 });
+    await run(3, scripted);
+    const lockKeys = log.filter((e) => /^SELECT pg_advisory_xact_lock/.test(e.sql)).map((e) => e.params[0]);
+    assert.equal(lockKeys[0], `people_sync:${SITE}`, 'önce kişi eşitleme kilidi');
+    assert.equal(lockKeys.filter((key) => key === `finance_post:${SITE}`).length, 1, 'finans kilidi tek kez');
+    const financeLockAt = log.findIndex((e) => /^SELECT pg_advisory_xact_lock/.test(e.sql) && e.params[0] === `finance_post:${SITE}`);
+    const occupancyAt = log.findIndex((e) => /has_legacy_resident/.test(e.sql));
+    assert.ok(financeLockAt > 0 && occupancyAt > financeLockAt, 'finans kilidi doluluk denetiminden (daire FOR UPDATE) önce');
+    assert.ok(log.findIndex((e) => /^DELETE FROM apartments/.test(e.sql)) > occupancyAt);
   });
 
   it('dolu daire silinmeyecekse (üstteki boş daireler azaltılır) davranış AYNEN sürer: boş daire silinir, COMMIT edilir', async () => {
@@ -124,6 +140,7 @@ describe('syncSiteStructureCounts x dolu daire koruması', () => {
     const scripted = scriptedPool({ apartments: 4, occupied: { 104: { has_residency: true } } });
     await run(4, scripted);
     assert.equal(log.some((e) => /has_legacy_resident/.test(e.sql)), false);
+    assert.equal(log.some((e) => /^SELECT pg_advisory_xact_lock/.test(e.sql) && e.params[0] === `finance_post:${SITE}`), false, 'silinecek aday yoksa finans kilidine gelinmez');
     assert.ok(sqls().includes('COMMIT'));
   });
 

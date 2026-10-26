@@ -6,6 +6,7 @@
 import { createHash } from 'node:crypto';
 import { PlatformError } from './errors.js';
 import { categoryKey } from './finance_distribution.js';
+import { effectiveFund, fundOfChargeParty, parseFundField, resolveChargePartyAndFund } from './finance_funds.js';
 import { MAX_AMOUNT_MINOR, MAX_RUN_TOTAL_MINOR, minorToNumber, minorToNumberOrNull, parseMinor } from './finance_money.js';
 import { apartmentLabel, parsePositiveId, todayIso, toIso } from './people_common.js';
 
@@ -522,7 +523,8 @@ export function parseDefinitionCreate(body) {
     endPeriod,
     target: parseTarget(input.target),
     // İki hesap (İP-1A): "kim öder"; verilmezse aylık aidat dairede oturanın (occupant), tek seferlik borç ev sahibinin hesabına.
-    chargeParty: parseChargeParty(input.charge_party) ?? defaultChargeParty(kind),
+    // Kasa (docs/PLATFORM_FINANS_KASALAR.md 2): `fund` ve `charge_party` birlikte verilirse tutarli olmali (cakisma 400); yalniz fund verilirse kim oder ondan turetilir.
+    chargeParty: resolveChargePartyAndFund({ chargeParty: parseChargeParty(input.charge_party), fund: parseFundField(input.fund), fallback: defaultChargeParty(kind) }),
   };
 }
 
@@ -547,6 +549,7 @@ export const PATCH_KEYS = Object.freeze([
   'target',
   'is_active',
   'charge_party',
+  'fund',
 ]);
 /** Borçlandırılmış tanımda değiştirilebilen alanlar (geçmiş kayıtlar zaten değişmez; "kim öder" yalnız SONRAKİ borçlandırmaları etkiler). */
 export const POSTED_PATCH_KEYS = Object.freeze(['name', 'end_period', 'is_active', 'due_day', 'charge_party']);
@@ -558,7 +561,8 @@ export function parseDefinitionPatch(body) {
   if (keys.length === 0) {
     throw invalidBody('Güncellenecek bir alan gönderilmedi.');
   }
-  const patch = { keys: [...new Set(keys.map((key) => (key === 'amount' ? 'amount_minor' : key)))] };
+  // `fund` (kasa) "kim oder" olarak ele alinir: anahtar listesinde charge_party sayilir (borclandirilmis tanimda da degisebilir, yalniz SONRAKI borclandirmalari etkiler)
+  const patch = { keys: [...new Set(keys.map((key) => (key === 'amount' ? 'amount_minor' : key === 'fund' ? 'charge_party' : key)))] };
   if (keys.includes('name')) {
     patch.name = normalizeFreeText(input.name, { label: 'Ad', max: NAME_MAX, required: true });
   }
@@ -600,12 +604,16 @@ export function parseDefinitionPatch(body) {
     }
     patch.isActive = input.is_active;
   }
-  if (keys.includes('charge_party')) {
-    const chargeParty = parseChargeParty(input.charge_party);
-    if (chargeParty === null) {
+  if (keys.includes('charge_party') || keys.includes('fund')) {
+    const chargeParty = keys.includes('charge_party') ? parseChargeParty(input.charge_party) : null;
+    if (keys.includes('charge_party') && chargeParty === null) {
       throw invalidBody('Kim öder seçimi geçersiz (dairede oturan veya ev sahibi olmalıdır).');
     }
-    patch.chargeParty = chargeParty;
+    const fund = keys.includes('fund') ? parseFundField(input.fund) : null;
+    if (keys.includes('fund') && fund === null) {
+      throw invalidBody('Hesap seçimi geçersiz (İşletme Projesi (Aidat) Hesabı veya Yatırım ve Demirbaş (Fon) Hesabı olmalıdır).');
+    }
+    patch.chargeParty = resolveChargePartyAndFund({ chargeParty, fund, fallback: 'occupant' });
   }
   return patch;
 }
@@ -729,7 +737,8 @@ export function parseChargeInput(body, { requireExpected, now = new Date() }) {
     skipMissing: parseBooleanFlag(input.skip_missing, 'Eksik verili daireleri hariç tutma seçeneği'),
     allowDuplicate: parseBooleanFlag(input.allow_duplicate, 'Yinelenen ek borç seçeneği'),
     // İki hesap (İP-1A): ek borcun varsayılanı ev sahibi hesabı (demirbaş / yatırım / büyük onarım); "dairede oturan" seçilebilir.
-    chargeParty: parseChargeParty(input.charge_party) ?? 'owner',
+    // Kasa: yalniz fund verilirse kim oder ondan turetilir (capital => owner, operating => occupant); ikisi cakisirsa 400 INVALID_BODY.
+    chargeParty: resolveChargePartyAndFund({ chargeParty: parseChargeParty(input.charge_party), fund: parseFundField(input.fund), fallback: 'owner' }),
     idempotencyKey: parseIdempotencyKey(input.idempotency_key, { required: requireExpected === true }),
     expectedTotal: null,
     expectedCount: null,
@@ -771,6 +780,8 @@ function parsePaymentFields(input, now) {
     accountId: parseOptionalAccountId(input.account_id),
     // İki hesap (İP-1A): tahsilatın yazılacağı hesap; verilmezse (eski istemci) sunucu vadesi en eski açık borcu olan hesabı seçer.
     accountParty: parseAccountParty(input.account_party),
+    // Kasa kisiti (docs/PLATFORM_FINANS_KASALAR.md 3): "yalniz su kasaya"; yoksa (null) tahsilat otomatik, vadesi en eski borctan baslayarak dagitilir.
+    fund: parseFundField(input.fund),
   };
 }
 
@@ -947,6 +958,8 @@ export function mapDefinitionRow(row) {
     has_runs: row.has_runs === true,
     // İki hesap (İP-1A): etkin "kim öder" (occupant = dairede oturanın hesabı, owner = ev sahibi hesabı)
     charge_party: definitionChargeParty(row),
+    // Kasa (charge_party'den turetilir): owner => capital (Yatirim ve Demirbas Fon), occupant => operating (Isletme)
+    fund: fundOfChargeParty(definitionChargeParty(row)),
     last_posted_period: periodOrNull(row.last_posted_period),
     currency: 'TRY',
     created_by_name: row.created_by_name ?? null,
@@ -991,6 +1004,8 @@ export function mapEntryRow(row) {
     account_party: entryAccountParty(row),
     source_kind: row.source_kind ?? null,
     source_id: row.source_id === null || row.source_id === undefined ? null : Number(row.source_id),
+    // Kasa: borcun kasasi (080 oncesi satirda turetilir); tahsilatta KISIT (null = otomatik); ters kayit asilinkini tasir
+    fund: effectiveFund(row),
   };
 }
 

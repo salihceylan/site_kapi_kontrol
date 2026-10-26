@@ -46,8 +46,8 @@ describe('insertReversal: kaynak izi kopyalanır', () => {
     const id = await insertReversal(client, request(original({ source_kind: 'opening', source_id: '12' })));
     assert.equal(id, 4001);
     const { sql, params } = client.calls[0];
-    assert.match(sql, /account_party, source_kind, source_id \) VALUES/);
-    assert.deepEqual(params.slice(-3), ['owner', 'opening', '12'], 'hesap, kaynak türü, kaynak kimliği');
+    assert.match(sql, /account_party, source_kind, source_id, fund \) VALUES/);
+    assert.deepEqual(params.slice(-4), ['owner', 'opening', '12', null], 'hesap, kaynak türü, kaynak kimliği, kasa (080 öncesi asılda NULL)');
     assert.equal(params[2], '-250000', 'karşı işaretli tutar');
     // yer tutucu sayısı = parametre sayısı
     const placeholders = new Set([...sql.matchAll(/\$(\d+)/g)].map((m) => Number(m[1])));
@@ -58,21 +58,29 @@ describe('insertReversal: kaynak izi kopyalanır', () => {
     for (const [kind, sourceId] of [['payment_notice', '55'], ['bank_line', '7001'], ['card', '9']]) {
       const client = fakeClient();
       await insertReversal(client, request(original({ kind: 'payment', amount_minor: '-125000', source_kind: kind, source_id: sourceId })));
-      assert.deepEqual(client.calls[0].params.slice(-2), [kind, sourceId], kind);
+      assert.deepEqual(client.calls[0].params.slice(-3, -1), [kind, sourceId], kind);
     }
   });
 
   it('kaynaksız (elle) kayıtta ikisi de NULL; source_id yalnız source_kind varken yazılır (chk_ledger_entries_source)', async () => {
     const manual = fakeClient();
     await insertReversal(manual, request(original()));
-    assert.deepEqual(manual.calls[0].params.slice(-2), [null, null]);
+    assert.deepEqual(manual.calls[0].params.slice(-3, -1), [null, null]);
     const kindOnly = fakeClient();
     await insertReversal(kindOnly, request(original({ source_kind: 'manual', source_id: null })));
-    assert.deepEqual(kindOnly.calls[0].params.slice(-2), ['manual', null]);
+    assert.deepEqual(kindOnly.calls[0].params.slice(-3, -1), ['manual', null]);
     // source_kind yok ama source_id dolu gelirse (bozuk satır) source_id YAZILMAZ: kısıt ihlali olmaz
     const orphanId = fakeClient();
     await insertReversal(orphanId, request(original({ source_kind: null, source_id: '3' })));
-    assert.deepEqual(orphanId.calls[0].params.slice(-2), [null, null]);
+    assert.deepEqual(orphanId.calls[0].params.slice(-3, -1), [null, null]);
+  });
+
+  it('kasa (docs/PLATFORM_FINANS_KASALAR.md 2): ters kayıt asılın kasasını (ham değer) taşır; asılda kasa yoksa (080 öncesi) NULL', async () => {
+    for (const [fund, expected] of [['capital', 'capital'], ['operating', 'operating'], [null, null], [undefined, null]]) {
+      const client = fakeClient();
+      await insertReversal(client, request(original({ fund })));
+      assert.equal(client.calls[0].params.at(-1), expected, String(fund));
+    }
   });
 
   it('sözleşme: devir kaynağı raporlarda süzgeçle dışlanır; ters kayıt aynı izi taşıdığı için asılla birlikte dışarıda kalır', () => {

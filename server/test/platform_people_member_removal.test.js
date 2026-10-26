@@ -197,7 +197,8 @@ describe('S6: removeApartmentMember CRM kancasini AYNI transaction\'da cagirir; 
     const { clientLog } = setup({ resident: 20000, role: 'APARTMENT_ADMIN' });
     await toggleApartmentMemberStatus({ apartmentId: 3, targetUserCode: 20000, isActive: false, authUser: superUser });
     // ADLI KAYIT satiri (tek INSERT) hesaba katilmaz: gecici pasife alma yalniz ccess_suspended olayi yazar, iliskileri DEGISTIRMEZ.
-    const writes = clientLog.filter((q) => !/^INSERT INTO apartment_residency_log/.test(q.sql));
+    // Yonetim devri secimi (apartment_admin_successor.js: kiraci > malik > en eski uye) iliskileri YALNIZ OKUR; yazma ifadeleri iliskilere dokunmaz.
+    const writes = clientLog.filter((q) => /^(INSERT|UPDATE|DELETE)\b/.test(q.sql) && !/^INSERT INTO apartment_residency_log/.test(q.sql));
     assert.equal(has(writes, /apartment_residencies|site_people/), false);
     const logged = find(clientLog, /^INSERT INTO apartment_residency_log/);
     assert.equal(logged.params[2], 'access_suspended');

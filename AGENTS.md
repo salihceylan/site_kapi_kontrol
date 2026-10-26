@@ -181,3 +181,15 @@ Bu kurallar projede geliştirme yapılırken MUTLAKA ve İSTİSNASIZ olarak uygu
       - Yeni bir site oluşturma yolu eklenirse finans satırını aynı transaction'da yaz (`SQL_ENABLE_FINANCE_FOR_SITE`); açılıştaki 079 doldurmasını kaldırma.
       - Finans durumunu doğrudan SQL ile okuyan yerlerde satır yoksa açık say (`COALESCE(..., TRUE)`); `COALESCE(..., FALSE)` yazma.
       - Bu kural yalnız modülün açık olmasını sağlar: finansın kendi rol denetimleri (yönetici, kurul okuma, görevli yasağı), sistem hukuk onayı (`finance.legal_ok`) ve hatırlatma ayarı (`reminders_enabled`, varsayılan kapalı) aynen geçerlidir.
+
+26. **İki Kasa: İşletme Projesi (Aidat) Hesabı ve Yatırım ve Demirbaş (Fon) Hesabı; Kiracı Her Zaman Daire Admini:**
+    - **Neden Yapıldı:**
+      - Kullanıcı kararıyla (2026-10-26) her sitede iki kasa vardır: **"İşletme Projesi (Aidat) Hesabı"** (`operating`; aidat ve işletme giderleri, borcu dairede oturan öder: kiracı varsa kiracı, yoksa malik) ve **"Yatırım ve Demirbaş (Fon) Hesabı"** (`capital`; yatırım, demirbaş, büyük onarım; borcu her zaman malik öder). Bağlayıcı belge: `docs/PLATFORM_FINANS_KASALAR.md`.
+      - Kasalar BAKİYEDİR (nakit / banka hesapları ortaktır). Borcun kasası tanımdan gelir (`charge_party` owner ⇒ Fon, occupant ⇒ Aidat). Tahsilat kasalara OTOMATİK, en eski vade önce dağıtılır (`finance_funds.js` `allocateFunds`, tek saf işlev); yönetici isterse tahsilatı tek kasaya kısıtlar. Gider kategorinin kasasından (değiştirilebilir) düşer. Kasalar arası aktarım eklemelidir (ters aktarımla düzeltilir).
+      - Dairede güncel kiracı varsa daire admini kiracıdır; malik ve kiracı birlikte tanımlıdır. "Yönetimi kiracıya devret" seçimi kaldırıldı; mevcut daireler açılışta (081) kurala çekildi. Kiracı ayrılınca admin malike döner (öncelik: kiracı > malik > en eski aktif üye).
+    - **Gelecek Ajanlar İçin Kesin Yasaklar ve Koruma İlkeleri:**
+      - Kasa adlarını değiştirme; arayüzde, makbuzda ve raporda TAM adları kullan (yer darsa "Aidat Hesabı" / "Fon Hesabı").
+      - Fon borcunu kiracıya, Aidat borcunu (kiracılı dairede) maliğe yazma; tanımın kasası ile ödeyeni ayrı ayrı seçtiren bir alan geri getirme.
+      - Kasa dağıtımını ikinci bir yerde yeniden hesaplama; her ekran ve rapor `allocateFunds` sonucunu kullanır. Dağıtımı değiştiren her değişiklik `server/test/finance_funds.test.js` değişmez testlerini yeşil tutmalı.
+      - Kasa aktarımlarını ve defter satırlarını silme / güncelleme; düzeltme yalnız ters kayıtla.
+      - Kiracı varken maliği admin yapan bir yol ekleme (tek istisna: site yöneticisinin "Daire adminini değiştir" acil durum aracı). Toplu yüklemede admin önceliği kiracı > malik > diğerleri.

@@ -3,6 +3,7 @@ import 'package:site_kapi_kontrol/models/announcement.dart' show announcementIns
 import 'package:site_kapi_kontrol/models/expense_analysis.dart' show ExpenseNature;
 import 'package:site_kapi_kontrol/models/finance.dart';
 import 'package:site_kapi_kontrol/models/finance_4b.dart';
+import 'package:site_kapi_kontrol/models/finance_funds.dart';
 import 'package:site_kapi_kontrol/models/vehicle_record.dart' show crmDateParam;
 
 /// Gider kaydı, kategori, tedarikçi ve gider belgesi modelleri (Platform Faz 4b, Ö3).
@@ -19,6 +20,7 @@ class ExpenseCategory {
     this.isSystem = false,
     this.isActive = true,
     this.sortOrder = 0,
+    this.fund,
   });
 
   final int id;
@@ -27,12 +29,19 @@ class ExpenseCategory {
   final bool isActive;
   final int sortOrder;
 
+  /// Kategorinin kasası (`fund`): bu kategorideki gider varsayılan olarak bu kasadan çıkar. Eski sunucuda null
+  /// ([effectiveFund] İşletme Projesi (Aidat) Hesabı sayar).
+  final FinanceFund? fund;
+
+  FinanceFund get effectiveFund => fund ?? FinanceFund.operating;
+
   factory ExpenseCategory.fromJson(Map<String, dynamic> json) => ExpenseCategory(
     id: f4Int(json['id']),
     name: f4Str(json['name']),
     isSystem: f4Bool(json['is_system']),
     isActive: f4Bool(json['is_active'], fallback: true),
     sortOrder: f4Int(json['sort_order']),
+    fund: FinanceFund.tryParse(json['fund']),
   );
 }
 
@@ -206,10 +215,14 @@ class Expense {
     this.nature,
     this.natureSource,
     this.attachments = const <ExpenseAttachment>[],
+    this.fund,
   });
 
   final int id;
   final String categoryName;
+
+  /// Giderin kasası (`fund`; satıra HER ZAMAN yazılır); 080 öncesi giderde ve eski sunucuda null.
+  final FinanceFund? fund;
   final String? supplierName;
   final String description;
   final int amountMinor;
@@ -265,6 +278,7 @@ class Expense {
       nature: ExpenseNature.tryParse(json['nature']),
       natureSource: f4Text(json['nature_source']),
       attachments: documents,
+      fund: FinanceFund.tryParse(json['fund']),
     );
   }
 }
@@ -355,6 +369,7 @@ class ExpenseInput {
     this.documentNo,
     this.allowDuplicate = false,
     this.nature,
+    this.fund,
   });
 
   final int categoryId;
@@ -371,6 +386,9 @@ class ExpenseInput {
   /// Seçilen gider türü; null ise sunucu öneriyi yazar.
   final ExpenseNature? nature;
 
+  /// Giderin kasası; null ise alan gönderilmez (sunucu kategorinin kasasını yazar).
+  final FinanceFund? fund;
+
   /// İstek parmak izine girmeyen `allow_duplicate` hariç sunucu gövdesi.
   Map<String, dynamic> toJson() {
     final no = documentNo?.trim();
@@ -386,6 +404,7 @@ class ExpenseInput {
       if (no != null && no.isNotEmpty) 'document_no': no,
       if (allowDuplicate) 'allow_duplicate': true,
       if (nature != null) 'nature': nature!.apiValue,
+      if (fund != null) 'fund': fund!.apiValue,
     };
   }
 }

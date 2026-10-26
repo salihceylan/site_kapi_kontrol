@@ -1192,7 +1192,7 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/design/contrast_te
 | [lib/ui/widgets/site_security_policy_dialog.dart:274](../../lib/ui/widgets/site_security_policy_dialog.dart#L274) | <code>final isQrActive = _accessMode != 'app_only';</code> | Kip -> bayrak: app_only QR'ı, qr_only uzaktan açmayı kapatır; hibritte ikisi de açık |
 | [lib/ui/widgets/site_security_policy_dialog.dart:152](../../lib/ui/widgets/site_security_policy_dialog.dart#L152) | <code>radiusError = 'Mesafe 10 ile 2000 metre arasında olmalı.';</code> | Konum doğrulaması: enlem -90..90, boylam -180..180, (0,0) tanımsız, mesafe 10-2000 m |
 | [lib/ui/widgets/site_security_policy_dialog.dart:499](../../lib/ui/widgets/site_security_policy_dialog.dart#L499) | <code>onChanged: widget.isSuperUser</code> | QR yenilenme süresi seçicisi yalnız süper kullanıcıda etkin (misafir geçişi anahtarı da aynı kurala bağlıdır) |
-| [lib/services/auth_service.dart:1112](../../lib/services/auth_service.dart#L1112) | <code>Future&lt;String?&gt; updateSiteSecurityPolicy({</code> | Kayıt sunucuya buradan gider; hata metni döner (pencere "Kaydedilemedi:" ile gösterir) |
+| [lib/services/auth_service.dart:1113](../../lib/services/auth_service.dart#L1113) | <code>Future&lt;String?&gt; updateSiteSecurityPolicy({</code> | Kayıt sunucuya buradan gider; hata metni döner (pencere "Kaydedilemedi:" ile gösterir) |
 
 **Olası nedenler**
 - Konum doğrulaması açık ama enlem/boylam boş ya da (0,0): kaydetme bilerek engellenir, alan altında kırmızı hata çıkar

@@ -1156,7 +1156,6 @@ export async function syncSiteStructureCounts({
   actor = null,
 }) {
   let shouldRotateLocalTokens = false;
-  let financeLocked = false;
   const resolvedBlockApartmentCounts = buildBlockApartmentCounts({
     blockCount,
     apartmentCount,
@@ -1214,6 +1213,14 @@ export async function syncSiteStructureCounts({
           .forEach((apartment) => removalCandidateIds.push(Number(apartment.id)));
       }
     }
+    // Aidat ve Finans (Faz 4a): mali kaydı (defter satırı) olan daire silinemez. Finans yazmalarıyla aynı site kilidi, silinecek aday varsa (artırma / aynı sayıda hiç gelinmez)
+    // dolu daire denetiminden ve ilk silmeden ÖNCE alınır; böylece eşzamanlı tahsilat/borçlandırma ile kontrol ve silme arasında yarış olmaz.
+    // Kilit sırası (people_sync -> finance_post -> apartments): finans yazmaları (borçlandırma, tahsilat, gecikme tazminatı) önce finans kilidini sonra daire satırlarını
+    // (FOR KEY SHARE) alır. Dolu daire denetimi daire satırlarını FOR UPDATE ile kilitlediğinden finans kilidi bundan ÖNCE alınmalıdır; aksi halde (denetim -> finans kilidi)
+    // eşzamanlı bir finans yazmasıyla karşılıklı bekleme olurdu (40P01, gerçek PG QA H3).
+    if (removalCandidateIds.length > 0) {
+      await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [financeLockKey(siteCode)]);
+    }
     await assertApartmentsRemovable(client, removalCandidateIds);
 
     for (let index = 0; index < refreshedBlocks.length; index += 1) {
@@ -1237,13 +1244,7 @@ export async function syncSiteStructureCounts({
           .sort((a, b) => Number(b.sort_order) - Number(a.sort_order));
         const removeCount = currentApartments.length - targetApartmentCount;
         for (const apartment of removableApartments.slice(0, removeCount)) {
-          // Aidat ve Finans (Faz 4a): mali kaydı (defter satırı) olan daire silinemez. Finans yazmalarıyla aynı site kilidi ilk silmeden ÖNCE alınır
-          // (kilit sırası: people_sync -> finance_post -> apartments); böylece eşzamanlı tahsilat/borçlandırma ile kontrol ve silme arasında yarış olmaz.
-          // İşlem GERİ ALINIR (tek daire bile engeller); mali kaydı olmayan dairelerde davranış aynen kalır.
-          if (!financeLocked) {
-            await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [financeLockKey(siteCode)]);
-            financeLocked = true;
-          }
+          // Mali kayıt denetimi (finans kilidi yukarıda, dolu daire denetiminden önce alındı). İşlem GERİ ALINIR (tek daire bile engeller); mali kaydı olmayan dairelerde davranış aynen kalır.
           const financeCheck = await client.query(
             `SELECT 1 FROM ledger_entries WHERE site_code = $1 AND apartment_id = $2 LIMIT 1`,
             [siteCode, Number(apartment.id)],

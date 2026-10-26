@@ -15,6 +15,7 @@ import 'package:site_kapi_kontrol/models/door_access_log_record.dart';
 import 'package:site_kapi_kontrol/models/door_record.dart';
 import 'package:site_kapi_kontrol/models/door_runtime_status.dart';
 import 'package:site_kapi_kontrol/models/finance.dart';
+import 'package:site_kapi_kontrol/models/finance_funds.dart';
 import 'package:site_kapi_kontrol/models/finance_home.dart';
 import 'package:site_kapi_kontrol/models/guest_pass.dart';
 import 'package:site_kapi_kontrol/models/history_item.dart';
@@ -2207,7 +2208,8 @@ class AuthService extends ChangeNotifier {
   }
 
   /// Tahsilat kaydı: [amountMinor] POZİTİF kuruş; aynı [idempotencyKey] = aynı kayıt. [accountParty] (İP-1A): daire hesabı;
-  /// null ise sunucu seçer (vadesi en eski açık borcu olan hesap).
+  /// null ise sunucu seçer (vadesi en eski açık borcu olan hesap). [fund]: tahsilat yalnız o kasanın borçlarına uygulanır;
+  /// null ise otomatik (en eski vade önce).
   Future<LedgerWriteResult> recordFeePayment(
     int siteCode, {
     required int apartmentId,
@@ -2217,6 +2219,7 @@ class AuthService extends ChangeNotifier {
     String? description,
     required String idempotencyKey,
     AccountParty? accountParty,
+    FinanceFund? fund,
   }) {
     return _runAuthorized(
       (token) => api.recordFeePayment(
@@ -2229,6 +2232,7 @@ class AuthService extends ChangeNotifier {
         description: description,
         idempotencyKey: idempotencyKey,
         accountParty: accountParty,
+        fund: fund,
       ),
     );
   }
@@ -2259,6 +2263,7 @@ class AuthService extends ChangeNotifier {
     String? description,
     required String idempotencyKey,
     AccountParty? accountParty,
+    FinanceFund? fund,
   }) {
     return _runAuthorized(
       (token) => api.correctFinancePayment(
@@ -2271,6 +2276,7 @@ class AuthService extends ChangeNotifier {
         description: description,
         idempotencyKey: idempotencyKey,
         accountParty: accountParty,
+        fund: fund,
       ),
     );
   }

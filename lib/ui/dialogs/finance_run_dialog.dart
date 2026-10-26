@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show MaxLengthEnforcement;
 import 'package:site_kapi_kontrol/models/finance.dart';
+import 'package:site_kapi_kontrol/models/finance_funds.dart';
 import 'package:site_kapi_kontrol/models/vehicle_record.dart' show crmDateParam;
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
@@ -24,7 +25,7 @@ import 'package:site_kapi_kontrol/ui/helpers/retry_lock.dart';
 import 'package:site_kapi_kontrol/ui/helpers/text_length.dart';
 import 'package:site_kapi_kontrol/ui/widgets/fee_spec_form.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_4b_parts.dart';
-import 'package:site_kapi_kontrol/ui/widgets/finance_account_parts.dart';
+import 'package:site_kapi_kontrol/ui/widgets/finance_fund_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart' show filledToneStyle;
 
@@ -167,8 +168,9 @@ class _FinanceRunDialogState extends State<FinanceRunDialog> {
   // Kullanıcının "Yine de ekle" dediği ek borç imzası: o imza için `allow_duplicate` gönderilir.
   String? _dupAllowedSignature;
 
-  // İP-1A: ek borcun "Kim öder" seçimi (varsayılan ev sahibi; sunucu varsayılanıyla aynı olduğu için o zaman gönderilmez).
-  ChargeParty _chargeParty = ChargeParty.owner;
+  // Ek borcun kasası (eski "Kim öder"). Varsayılan Yatırım ve Demirbaş (Fon) Hesabı (malik öder; sunucu varsayılanı) ve
+  // seçim HER ZAMAN gövdede gider.
+  FinanceFund _fund = FinanceFund.capital;
   String? _error;
   String? _notice;
   String? _noticeSpoken;
@@ -255,7 +257,7 @@ class _FinanceRunDialogState extends State<FinanceRunDialog> {
       categoryAmounts: read.categoryAmounts,
       target: read.target,
       dueDate: due,
-      chargeParty: _chargeParty == ChargeParty.owner ? null : _chargeParty,
+      fund: _fund,
     );
     return _RunInputs(charge: charge, signature: 'charge:${jsonEncode(charge.toJson())}');
   }
@@ -669,25 +671,28 @@ class _FinanceRunDialogState extends State<FinanceRunDialog> {
               keyPrefix: 'charge_spec',
             ),
             const SizedBox(height: AppSpace.lg),
-            ChargePartyChoice(
-              key: const ValueKey<String>('finance_charge_party_group'),
-              selected: _chargeParty,
+            FundChoice(
+              key: const ValueKey<String>('finance_charge_fund_group'),
+              selected: _fund,
               enabled: !_previewing,
-              onSelected: (value) => setState(() => _chargeParty = value),
+              keyPrefix: 'finance_charge_fund',
+              onSelected: (value) => setState(() {
+                if (value != null) _fund = value;
+              }),
             ),
             const SizedBox(height: AppSpace.md),
             _dueDateField(optionalHint: 'Boşsa kayıt günü vade sayılır.'),
           ] else if (def!.isRecurring) ...[
             _periodStepper(context, def),
             const SizedBox(height: AppSpace.sm),
-            _chargePartyNote(context, def),
+            _fundNote(context, def),
           ] else ...[
             Text(
               'Tek seferlik tanım yalnız bir kez borçlandırılabilir.',
               style: th.bodySmall?.copyWith(color: p.textSecondary),
             ),
             const SizedBox(height: AppSpace.sm),
-            _chargePartyNote(context, def),
+            _fundNote(context, def),
             const SizedBox(height: AppSpace.md),
             _dueDateField(optionalHint: 'Boşsa kayıt günü vade sayılır.'),
           ],
@@ -701,15 +706,15 @@ class _FinanceRunDialogState extends State<FinanceRunDialog> {
     );
   }
 
-  /// İP-1A: tanımın "Kim öder" bilgisi (tanımda değiştirilir; borçlandırma penceresinde yalnız bilgi). Önizleme satırları
-  /// her dairenin hangi hesaba yazılacağını gösterir.
-  Widget _chargePartyNote(BuildContext context, FeeDefinition def) {
+  /// Tanımın kasası (tanımda değiştirilir; borçlandırma penceresinde yalnız bilgi). Önizleme satırları her dairenin
+  /// hangi daire hesabına yazılacağını gösterir.
+  Widget _fundNote(BuildContext context, FeeDefinition def) {
     final th = Theme.of(context).textTheme;
     final p = context.palette;
-    final party = def.effectiveChargeParty;
+    final fund = def.effectiveFund;
     return Text(
-      'Kim öder: ${party.label}. ${party.description}',
-      key: const ValueKey<String>('finance_run_charge_party'),
+      'Kasa: ${fund.choiceText}.',
+      key: const ValueKey<String>('finance_run_fund'),
       style: th.bodySmall?.copyWith(color: p.textSecondary),
     );
   }

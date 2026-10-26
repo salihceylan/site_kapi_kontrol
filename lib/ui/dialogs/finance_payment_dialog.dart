@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show MaxLengthEnforcement;
 import 'package:site_kapi_kontrol/models/cash_models.dart';
 import 'package:site_kapi_kontrol/models/finance.dart';
+import 'package:site_kapi_kontrol/models/finance_funds.dart';
 import 'package:site_kapi_kontrol/models/vehicle_record.dart' show crmDateParam;
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
@@ -18,6 +19,7 @@ import 'package:site_kapi_kontrol/ui/helpers/finance_errors.dart';
 import 'package:site_kapi_kontrol/ui/helpers/finance_write_mixin.dart' show FinanceDiscardGuard;
 import 'package:site_kapi_kontrol/ui/helpers/focus_helpers.dart';
 import 'package:site_kapi_kontrol/ui/helpers/form_validation.dart';
+import 'package:site_kapi_kontrol/ui/helpers/fund_text.dart';
 import 'package:site_kapi_kontrol/ui/helpers/idempotency.dart';
 import 'package:site_kapi_kontrol/ui/helpers/istanbul_time.dart';
 import 'package:site_kapi_kontrol/ui/helpers/money.dart';
@@ -27,6 +29,7 @@ import 'package:site_kapi_kontrol/ui/helpers/text_length.dart';
 import 'package:site_kapi_kontrol/ui/widgets/crm_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_4b_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_account_parts.dart';
+import 'package:site_kapi_kontrol/ui/widgets/finance_fund_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/money_field.dart';
 
@@ -64,6 +67,11 @@ class FinancePaymentOutcome {
 ///   sürerken kayıt gönderilmez (seçim sonradan çıkıp işlem anahtarını değiştirmesin; çift tahsilat koruması).
 ///   Düzeltmede seçim eski tahsilatın hesabıyla başlar; değiştirilirse yeni tahsilat diğer hesaba yazılır (ters kayıt eski
 ///   hesapta kalır).
+/// - İki kasa: "Kasa" seçimi — Otomatik (en eski vade önce) / İşletme Projesi (Aidat) Hesabı / Yatırım ve Demirbaş (Fon)
+///   Hesabı. Otomatik seçilirse gövdede `fund` yoktur; bir kasa seçilirse tahsilat YALNIZ o kasanın borçlarına uygulanır
+///   (artanı o kasanın avansıdır). Kayıttan sonra sunucunun `fund_split` yanıtı ("Aidat Hesabı ..., Fon Hesabı ..., avans ...")
+///   iletiye eklenir. Düzeltmede seçim asıl tahsilatın kısıtıyla başlar; asıl kayıt kısıtlıysa "Otomatik" sunulmaz (sunucu
+///   asıl kısıtı kaldıramaz), kasa DEĞİŞTİRİLMEZSE gövdede `fund` gönderilmez (sunucu asıl kısıtı korur).
 class FinancePaymentDialog extends StatefulWidget {
   const FinancePaymentDialog({
     super.key,
@@ -179,6 +187,9 @@ class _FinancePaymentDialogState extends State<FinancePaymentDialog> with Financ
   bool _partyLoading = false;
   String? _partyError;
   int _partyToken = 0;
+
+  // İki kasa: null = Otomatik (en eski vade önce). Düzeltmede asıl tahsilatın kısıtıyla başlar.
+  late FinanceFund? _fund = widget.correcting?.fund;
 
   bool _submitting = false;
   bool _picking = false;
@@ -470,9 +481,11 @@ class _FinancePaymentDialogState extends State<FinancePaymentDialog> with Financ
     final accountId = useAccounts ? _accountId : null;
     // İP-1A: daire hesabı yalnız seçim gösterildiyse gider (aksi halde sunucu seçer); imzada yer alır (farklı hesap = yeni anahtar).
     final party = _partyChoice ? _party : null;
+    // Kasa: yeni tahsilatta seçilen kısıt; düzeltmede yalnız asıldan FARKLIYSA gider (aksi halde sunucu asıl kısıtı korur).
+    final fund = correcting == null ? _fund : (_fund != correcting.fund ? _fund : null);
     final signature =
         '${widget.scope.siteCode}|${correcting?.id ?? 0}|${apartment.id}|$minor|${crmDateParam(date)}|${method.apiValue}|${accountId ?? 0}'
-        '${party == null ? '' : '|${party.apiValue}'}';
+        '${party == null ? '' : '|${party.apiValue}'}${fund == null ? '' : '|f:${fund.apiValue}'}';
     final key = _keys.keyFor(signature);
 
     FocusScope.of(context).unfocus();
@@ -498,6 +511,7 @@ class _FinancePaymentDialogState extends State<FinancePaymentDialog> with Financ
             accountId: accountId,
             idempotencyKey: key,
             accountParty: party,
+            fund: fund,
           ),
         );
       } else if (correcting != null && useAccounts) {
@@ -514,6 +528,7 @@ class _FinancePaymentDialogState extends State<FinancePaymentDialog> with Financ
             accountId: accountId,
             idempotencyKey: key,
             accountParty: party,
+            fund: fund,
           ),
         );
       } else if (correcting == null) {
@@ -526,6 +541,7 @@ class _FinancePaymentDialogState extends State<FinancePaymentDialog> with Financ
           description: note,
           idempotencyKey: key,
           accountParty: party,
+          fund: fund,
         );
       } else {
         result = await auth.correctFinancePayment(
@@ -537,6 +553,7 @@ class _FinancePaymentDialogState extends State<FinancePaymentDialog> with Financ
           description: note,
           idempotencyKey: key,
           accountParty: party,
+          fund: fund,
         );
       }
       // Yazma tamamlandı: bu imzanın anahtarı atılır (aynı tutardaki sonraki gerçek tahsilat yeni anahtar alır).
@@ -556,7 +573,12 @@ class _FinancePaymentDialogState extends State<FinancePaymentDialog> with Financ
       } else {
         message = balance == null ? head : '$head Güncel bakiye: ${describeBalance(balance).badgeText}.';
       }
-      popIfCurrent(context, FinancePaymentOutcome(result: result, message: message));
+      // İki kasa: sunucunun bu tahsilat için hesapladığı dağılım yazılır (sunucu göndermediyse hiçbir şey eklenmez).
+      final split = result.fundSplit;
+      popIfCurrent(
+        context,
+        FinancePaymentOutcome(result: result, message: split == null ? message : '$message Dağıtım: ${fundSplitText(split)}.'),
+      );
     } catch (e) {
       if (financeOutcomeUncertain(e)) _needsRefreshOnClose = true;
       // Sunucu aynı anahtarı farklı bilgiyle zaten kaydetmiş: bu imzanın anahtarı atılır; kayıt oluşmuş olabilir,
@@ -796,6 +818,8 @@ class _FinancePaymentDialogState extends State<FinancePaymentDialog> with Financ
                 CrmFormError(message: _methodError!, reveal: false),
               ],
               ..._buildAccountSection(context),
+              const SizedBox(height: AppSpace.lg),
+              _buildFundSection(),
               const SizedBox(height: AppSpace.md),
               TextFormField(
                 key: const ValueKey<String>('finance_payment_note'),
@@ -829,6 +853,29 @@ class _FinancePaymentDialogState extends State<FinancePaymentDialog> with Financ
           ),
         ),
       ),
+    );
+  }
+
+  /// İki kasa seçimi. Düzeltmede asıl tahsilat kısıtlıysa "Otomatik" sunulmaz (sunucu asıl kısıtı kaldıramaz).
+  Widget _buildFundSection() {
+    final restricted = _correcting && widget.correcting!.fund != null;
+    return FundChoice(
+      key: const ValueKey<String>('finance_payment_fund'),
+      title: 'Kasa',
+      selected: _fund,
+      enabled: !_submitting,
+      allowAuto: !restricted,
+      keyPrefix: 'finance_payment_fund',
+      noteFor: (_) => 'yalnız bu hesabın borçlarına uygulanır; fazlası avans olur',
+      footer: _correcting
+          ? (restricted
+                ? 'Asıl tahsilat yalnız ${widget.correcting!.fund!.shortLabel} borçlarına uygulanmıştı; kasayı değiştirmezseniz aynı kısıt korunur.'
+                : 'Seçmezseniz düzeltilen tahsilat da otomatik dağıtılır.')
+          : 'Seçmezseniz tahsilat otomatik dağıtılır. Kayıttan sonra kasalara dağılım gösterilir.',
+      onSelected: (value) => setState(() {
+        markDirty();
+        _fund = value;
+      }),
     );
   }
 

@@ -249,9 +249,9 @@ export async function postBilling({ siteCode, body, actor, now = new Date() }) {
     const written = await client.query(
       `
         INSERT INTO ledger_entries (
-          site_code, apartment_id, kind, amount_minor, period, entry_date, due_date, definition_name, description, payer_party, created_by, account_party
+          site_code, apartment_id, kind, amount_minor, period, entry_date, due_date, definition_name, description, payer_party, created_by, account_party, fund
         )
-        SELECT $1, t.apartment_id, 'charge', t.amount, $2::DATE, $3::DATE, $4::DATE, $5::TEXT, t.descr, t.payer, $6, t.account
+        SELECT $1, t.apartment_id, 'charge', t.amount, $2::DATE, $3::DATE, $4::DATE, $5::TEXT, t.descr, t.payer, $6, t.account, 'operating'
         FROM unnest($7::BIGINT[], $8::BIGINT[], $9::TEXT[], $10::TEXT[], $11::TEXT[]) AS t(apartment_id, amount, payer, account, descr)
         ORDER BY t.apartment_id
         RETURNING id, apartment_id

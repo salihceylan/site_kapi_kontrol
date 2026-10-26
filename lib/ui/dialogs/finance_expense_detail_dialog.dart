@@ -326,6 +326,7 @@ class _FinanceExpenseDetailDialogState extends State<FinanceExpenseDetailDialog>
         FinanceInfoRow(label: 'Gider tarihi', value: formatCrmDate(e.expenseDate)),
         if (e.supplierName != null) FinanceInfoRow(label: 'Tedarikçi', value: e.supplierName),
         FinanceInfoRow(label: 'Hesap', value: e.accountName ?? '-'),
+        if (e.fund != null) FinanceInfoRow(label: 'Kasa', value: e.fund!.label),
         FinanceInfoRow(
           label: 'Belge',
           value: e.documentKind == ExpenseDocumentKind.none

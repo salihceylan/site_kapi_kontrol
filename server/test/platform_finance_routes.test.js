@@ -428,6 +428,11 @@ function paymentFlow({ balance = '-50000' } = {}) {
     [/^SELECT a\.responsible_party, EXISTS/, () => ok([{ responsible_party: 'both', has_tenant: false }])],
     [/^SELECT COALESCE\(SUM\(l\.amount_minor\), 0\)::TEXT AS balance FROM ledger_entries l WHERE l\.site_code = \$1 AND l\.apartment_id = \$2 AND COALESCE/, () => ok([{ balance }])],
     [/^INSERT INTO ledger_entries \(/, () => ok([{ id: '77' }])],
+    // Kasa dagitimi (docs/PLATFORM_FINANS_KASALAR.md 3): hesabin satirlari (yalniz bu tahsilat -> tamami avans)
+    [
+      /FROM ledger_entries l LEFT JOIN fee_definitions fd ON fd\.id = l\.definition_id WHERE l\.site_code = \$1 AND \(\$2::BIGINT\[\] IS NULL/,
+      () => ok([{ id: '77', apartment_id: '5', kind: 'payment', amount_minor: '-50000', entry_date: PAY_DATE, due_date: null, reverses_entry_id: null, fund: null, source_kind: 'manual', late_fee_run_id: null, definition_id: null, def_charge_party: null, def_kind: null, account_party: 'owner' }]),
+    ],
     [/WHERE l\.id = \$1 AND l\.site_code = \$2 LIMIT 1$/, () => ok([entryRow])],
     [/^SELECT COALESCE\(SUM\(amount_minor\), 0\)::TEXT AS balance FROM ledger_entries WHERE site_code = \$1 AND apartment_id = \$2$/, () => ok([{ balance }])],
   ];
@@ -438,7 +443,10 @@ describe('finans: işlem sırası ve yeniden deneme', () => {
     handlers.push(...paymentFlow());
     const res = await call('POST', `${base()}/payments`, { body: PAYMENT_BODY });
     assert.equal(res.status, 201, JSON.stringify(res.body));
-    assert.deepEqual(Object.keys(res.body), ['entry', 'balance_minor', 'account_balance_minor', 'receipt', 'movement_id']);
+    assert.deepEqual(Object.keys(res.body), ['entry', 'balance_minor', 'account_balance_minor', 'receipt', 'movement_id', 'fund_split']);
+    // bu tahsilatın kasa dağıtımı (açık borç yok -> tamamı avans) ve satırın kasa kısıtı (kısıtsız = null)
+    assert.deepEqual(res.body.fund_split, { operating_minor: 0, capital_minor: 0, advance_minor: 50000 });
+    assert.equal(res.body.entry.fund, null);
     assert.equal(res.body.account_balance_minor, -50000);
     assert.equal(res.body.receipt, null, 'makbuz otomatik düzenleme kapalı');
     assert.equal(res.body.movement_id, null, 'hesap yok: 4a davranışı');
@@ -465,7 +473,20 @@ describe('finans: işlem sırası ve yeniden deneme', () => {
     const insertParams = txLog[insert].params;
     assert.deepEqual(insertParams.slice(0, 9), [SITE_1, 5, '-50000', PAY_PERIOD, PAY_DATE, 'both', 'cash', 'Nakit', 'test-key-1']);
     // İP-1A: hesap (gövdede yok -> varsayılan ev sahibi) ve kaynak izi (yönetici tahsilatı = manual)
-    assert.deepEqual(insertParams.slice(10), ['owner', 'manual', null]);
+    assert.deepEqual(insertParams.slice(10), ['owner', 'manual', null, null], 'hesap, kaynak türü, kaynak kimliği, kasa kısıtı (yok)');
+  });
+
+  it('kasa kısıtı: gövdedeki fund tahsilat satırına yazılır; geçersiz kasa 400 ve işlem açılmaz', async () => {
+    handlers.push(...paymentFlow());
+    const res = await call('POST', `${base()}/payments`, { body: { ...PAYMENT_BODY, fund: 'capital' } });
+    assert.equal(res.status, 201, JSON.stringify(res.body));
+    const insert = state.log.filter((e) => e.client).find((e) => /^INSERT INTO ledger_entries/.test(e.sql));
+    assert.equal(insert.params[13], 'capital', 'fund son parametre');
+    state.log.length = 0;
+    const bad = await call('POST', `${base()}/payments`, { body: { ...PAYMENT_BODY, fund: 'fon' } });
+    assert.equal(bad.status, 400);
+    assert.equal(bad.body.code, 'INVALID_BODY');
+    assert.equal(state.log.some((e) => e.sql === 'BEGIN'), false);
   });
 
   it('İP-1A: gövdedeki account_party tahsilatın hesabıdır (varsayılan sorgusu çalışmaz); geçersiz hesap 400 ve işlem açılmaz', async () => {
@@ -474,7 +495,7 @@ describe('finans: işlem sırası ve yeniden deneme', () => {
     assert.equal(res.status, 201, JSON.stringify(res.body));
     const txLog = state.log.filter((e) => e.client);
     const insert = txLog.find((e) => /^INSERT INTO ledger_entries/.test(e.sql));
-    assert.deepEqual(insert.params.slice(10), ['tenant', 'manual', null]);
+    assert.deepEqual(insert.params.slice(10), ['tenant', 'manual', null, null]);
     assert.equal(txLog.some((e) => /ORDER BY l\.id$/.test(e.sql)), false, 'varsayılan hesap sorgusu yok');
     state.log.length = 0;
     const bad = await call('POST', `${base()}/payments`, { body: { ...PAYMENT_BODY, account_party: 'both' } });
@@ -577,6 +598,11 @@ describe('finans: okuma uçları ve kurul yanıtı temizliği', () => {
       [/AS has_current_tenant, EXISTS/, () => ok([{ has_current_tenant: hasTenant, had_tenant: hadTenant }])],
       [/FROM ledger_entries l WHERE l\.site_code = \$1 AND l\.apartment_id = \$2 ORDER BY l\.id$/, () => ok([{ id: '9', kind: 'charge', amount_minor: '150000', entry_date: '2026-10-01', due_date: '2026-10-05', reverses_entry_id: null, account_party: null, payer_party: 'both' }])],
       [/ORDER BY l\.entry_date DESC, l\.id DESC LIMIT/, () => ok([accountRow(), accountRow({ id: '8', created_by_name: 'Bora' })])],
+      // Kasa dagitimi: hesabin tum satirlari (tanimsiz borc -> operating)
+      [
+        /FROM ledger_entries l LEFT JOIN fee_definitions fd ON fd\.id = l\.definition_id WHERE l\.site_code = \$1 AND \(\$2::BIGINT\[\] IS NULL/,
+        () => ok([{ id: '9', apartment_id: '5', kind: 'charge', amount_minor: '150000', entry_date: '2026-10-01', due_date: '2026-10-05', reverses_entry_id: null, fund: null, source_kind: null, late_fee_run_id: null, definition_id: null, def_charge_party: null, def_kind: null, account_party: 'owner' }]),
+      ],
     ];
   }
 
@@ -631,6 +657,12 @@ describe('finans: okuma uçları ve kurul yanıtı temizliği', () => {
     assert.equal(manager.body.items[0].amount_minor, 150000);
     assert.equal(manager.body.items[0].period, '2026-10');
     assert.equal(manager.body.next_before_id, null);
+    // Kasa kırılımı (docs/PLATFORM_FINANS_KASALAR.md 5): borç tanımsız -> İşletme; avans yok; her satırda fund (borç: kasası) ve fund_split (yalnız tahsilatta)
+    assert.equal(manager.body.funds.operating.balance_minor, 150000);
+    assert.deepEqual(manager.body.funds.capital, { balance_minor: 0, overdue_minor: 0, advance_minor: 0 });
+    assert.equal(manager.body.advance_minor, 0);
+    assert.equal(manager.body.items[0].fund, 'operating');
+    assert.equal(manager.body.items[0].fund_split, null);
     const board = await call('GET', `${base()}/apartments/5/account`, { user: users.board });
     assert.equal(board.status, 200);
     assert.ok(board.body.items.every((e) => e.created_by_name === null));

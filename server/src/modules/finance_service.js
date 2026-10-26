@@ -51,6 +51,7 @@ import {
   today,
 } from './finance_common.js';
 import { buildDistributionPlan, planHash, redistributesOnSkip } from './finance_distribution.js';
+import { fundOfChargeParty } from './finance_funds.js';
 import { MAX_RUN_TOTAL_MINOR, bigintsToSqlArray, minorToNumber } from './finance_money.js';
 import { accountForCharge, tenantOnDateSql } from './finance_parties.js';
 import { isPeriodClosed, lockActorRow, recordFinanceAudit, withFinanceTransaction } from './finance_tx.js';
@@ -519,7 +520,7 @@ function verifyPlan(plan, { skipMissing, expectedTotal, expectedCount, expectedH
 }
 
 /** Çalıştırma + defter satırları (tek INSERT ... SELECT ... FROM unnest). Çağıran kilidi ve doğrulamaları yapmış olmalıdır. */
-async function writeRun(client, { siteCode, definitionId, definitionName, plan, timing, idempotencyKey, requestFingerprint, naturalKey, actorUserCode }) {
+async function writeRun(client, { siteCode, definitionId, definitionName, plan, timing, idempotencyKey, requestFingerprint, naturalKey, actorUserCode, fund }) {
   const inserted = await client.query(
     `
       INSERT INTO fee_runs (
@@ -535,9 +536,9 @@ async function writeRun(client, { siteCode, definitionId, definitionName, plan, 
   const written = await client.query(
     `
       INSERT INTO ledger_entries (
-        site_code, apartment_id, kind, amount_minor, period, entry_date, due_date, definition_id, definition_name, run_id, payer_party, created_by, account_party
+        site_code, apartment_id, kind, amount_minor, period, entry_date, due_date, definition_id, definition_name, run_id, payer_party, created_by, account_party, fund
       )
-      SELECT $1, t.apartment_id, 'charge', t.amount, $2::DATE, $3::DATE, $4::DATE, $5, $6::TEXT, $7, t.payer, $8, t.account
+      SELECT $1, t.apartment_id, 'charge', t.amount, $2::DATE, $3::DATE, $4::DATE, $5, $6::TEXT, $7, t.payer, $8, t.account, $13::TEXT
       FROM unnest($9::BIGINT[], $10::BIGINT[], $11::TEXT[], $12::TEXT[]) AS t(apartment_id, amount, payer, account)
       ORDER BY t.apartment_id
     `,
@@ -555,6 +556,8 @@ async function writeRun(client, { siteCode, definitionId, definitionName, plan, 
       lines.map((line) => line.payerParty),
       // İki hesap (İP-1A): satırın hesabı (önizlemeyle AYNI kuralla kilit altında çözüldü; planHash'e de girer)
       lines.map((line) => line.accountParty ?? (line.payerParty === 'tenant' ? 'tenant' : 'owner')),
+      // Kasa (docs/PLATFORM_FINANS_KASALAR.md 2): tanimin "kim oder" degerinden (owner => capital, occupant => operating); tum satirlarda ayni
+      fund,
     ],
   );
   if (written.rowCount !== lines.length) {
@@ -650,6 +653,7 @@ export async function postDefinition({ siteCode, rawId, body, actor, now = new D
       requestFingerprint: fingerprint,
       naturalKey: null,
       actorUserCode: actorInfo.userCode,
+      fund: fundOfChargeParty(shape.chargeParty),
     });
     await recordFinanceAudit(client, actor, 'finance.run.posted', siteCode, run.id, {
       definition_id: id,
@@ -731,6 +735,7 @@ export async function postCharge({ siteCode, body, actor, now = new Date() }) {
       requestFingerprint: fingerprint,
       naturalKey,
       actorUserCode: actorInfo.userCode,
+      fund: fundOfChargeParty(input.chargeParty),
     });
     await recordFinanceAudit(client, actor, 'finance.charge.posted', siteCode, run.id, {
       definition_id: definitionId,

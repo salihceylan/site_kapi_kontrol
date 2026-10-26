@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show MaxLengthEnforcement;
 import 'package:site_kapi_kontrol/models/expense_models.dart';
+import 'package:site_kapi_kontrol/models/finance_funds.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
 import 'package:site_kapi_kontrol/ui/design/buttons.dart';
@@ -14,11 +15,13 @@ import 'package:site_kapi_kontrol/ui/helpers/finance_4b_access.dart';
 import 'package:site_kapi_kontrol/ui/helpers/finance_errors.dart';
 import 'package:site_kapi_kontrol/ui/helpers/finance_write_mixin.dart';
 import 'package:site_kapi_kontrol/ui/helpers/form_validation.dart';
+import 'package:site_kapi_kontrol/ui/helpers/fund_text.dart';
 import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart';
 import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
 import 'package:site_kapi_kontrol/ui/helpers/text_length.dart';
 import 'package:site_kapi_kontrol/ui/widgets/crm_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_4b_parts.dart';
+import 'package:site_kapi_kontrol/ui/widgets/finance_fund_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 
@@ -112,6 +115,7 @@ class _CategoriesSectionState extends State<_CategoriesSection> with FinanceWrit
   Object? get keyOwner => widget.scope.authService;
 
   final TextEditingController _name = TextEditingController();
+  FinanceFund _newFund = FinanceFund.operating;
   List<ExpenseCategory>? _items;
   bool _loading = true;
   String? _error;
@@ -166,11 +170,14 @@ class _CategoriesSectionState extends State<_CategoriesSection> with FinanceWrit
       return;
     }
     setState(() => _nameError = null);
+    final fund = _newFund;
     await runWrite<ExpenseCategory>(
-      signature: 'cat|${name.toLowerCase()}',
-      action: (_) => widget.scope.f4Call((api, t, s) => api.createExpenseCategory(token: t, siteCode: s, name: name)),
+      signature: 'cat|${name.toLowerCase()}|${fund.apiValue}',
+      action: (_) =>
+          widget.scope.f4Call((api, t, s) => api.createExpenseCategory(token: t, siteCode: s, name: name, fund: fund)),
       onSuccess: (_) {
         _name.clear();
+        setState(() => _newFund = FinanceFund.operating);
         widget.onChanged?.call();
         unawaited(_load());
       },
@@ -228,6 +235,7 @@ class _CategoriesSectionState extends State<_CategoriesSection> with FinanceWrit
                             spacing: AppSpace.xs,
                             children: [
                               if (c.isSystem) const DialogMetaPill('Hazır kategori', icon: Icons.verified_rounded),
+                              if (c.fund != null) FundPill(c.fund!),
                               if (!c.isActive)
                                 const DialogMetaPill('Pasif', tone: AppTone.neutral, icon: Icons.pause_circle_rounded),
                             ],
@@ -271,6 +279,19 @@ class _CategoriesSectionState extends State<_CategoriesSection> with FinanceWrit
               errorText: _nameError,
               errorMaxLines: 3,
             ),
+          ),
+          const SizedBox(height: AppSpace.sm),
+          FundChoice(
+            key: const ValueKey<String>('finance_category_new_fund'),
+            title: 'Kasa',
+            selected: _newFund,
+            enabled: !submitting,
+            keyPrefix: 'finance_category_new_fund',
+            noteFor: expenseFundNote,
+            footer: 'Bu kategorideki giderler varsayılan olarak seçtiğiniz kasadan çıkar.',
+            onSelected: (value) => setState(() {
+              if (value != null) _newFund = value;
+            }),
           ),
           const SizedBox(height: AppSpace.sm),
           PrimaryActionButton(
@@ -325,6 +346,10 @@ class _CategoryEditDialogState extends State<_CategoryEditDialog> with FinanceWr
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   late final TextEditingController _name = TextEditingController(text: widget.category.name);
   late bool _active = widget.category.isActive;
+  late FinanceFund _fund = widget.category.effectiveFund;
+
+  /// Hazır (sistem) kategorinin kasası değiştirilemez; kullanılmış kategoride sunucu 409 `CATEGORY_FUND_LOCKED` döner.
+  bool get _fundLocked => widget.category.isSystem;
 
   @override
   void dispose() {
@@ -343,13 +368,14 @@ class _CategoryEditDialogState extends State<_CategoryEditDialog> with FinanceWr
     final fields = <String, Object?>{
       if (name != widget.category.name) 'name': name,
       if (_active != widget.category.isActive) 'is_active': _active,
+      if (!_fundLocked && _fund != widget.category.effectiveFund) 'fund': _fund.apiValue,
     };
     if (fields.isEmpty) {
       setState(() => submitError = 'Değişiklik yapmadınız.');
       return;
     }
     await runWrite<ExpenseCategory>(
-      signature: 'edit|${widget.category.id}|$name|$_active',
+      signature: 'edit|${widget.category.id}|$name|$_active|${_fund.apiValue}',
       action: (_) => widget.scope.f4Call(
         (api, t, s) => api.updateExpenseCategory(token: t, siteCode: s, categoryId: widget.category.id, fields: fields),
       ),
@@ -411,6 +437,22 @@ class _CategoryEditDialogState extends State<_CategoryEditDialog> with FinanceWr
                   value: _active,
                   onChanged: submitting ? null : (v) => setState(() => _active = v),
                 ),
+              ),
+              const SizedBox(height: AppSpace.sm),
+              FundChoice(
+                key: const ValueKey<String>('finance_category_edit_fund'),
+                title: 'Kasa',
+                selected: _fund,
+                enabled: !submitting && !_fundLocked,
+                keyPrefix: 'finance_category_edit_fund',
+                noteFor: expenseFundNote,
+                footer: _fundLocked
+                    ? 'Hazır kategorinin kasası değiştirilemez.'
+                    : 'Bu kategoriyle daha önce gider yazıldıysa kasa değiştirilemez; tek bir gideri başka kasadan çıkarmak için '
+                          'gider formunda kasayı seçin.',
+                onSelected: (value) => setState(() {
+                  if (value != null) _fund = value;
+                }),
               ),
             ],
           ),

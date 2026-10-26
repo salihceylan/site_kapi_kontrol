@@ -246,7 +246,7 @@ describe('sakin -> bildirim -> onay zinciri', () => {
     // defter satırı: hesap = owner, kaynak izi payment_notice / 55, anahtar pn:55, tutar negatif
     const ledger = db.state.ledgerInsertParams;
     assert.ok(ledger.includes('owner'));
-    assert.deepEqual(ledger.slice(10), ['owner', 'payment_notice', 55]);
+    assert.deepEqual(ledger.slice(10), ['owner', 'payment_notice', 55, null]);
     assert.ok(ledger.includes('pn:55'));
     assert.ok(ledger.includes('-125000'));
     // bildirim satırı: onayda hesap korunur

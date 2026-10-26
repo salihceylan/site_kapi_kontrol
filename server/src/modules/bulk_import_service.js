@@ -26,6 +26,7 @@ import {
   insertAudits,
   provisionImportedResidents,
 } from './bulk_import_writer.js';
+import { ensureTenantIsAdmin } from './apartment_tenant_admin.js';
 import { todayIso } from './people_common.js';
 import { peopleLockKey } from './people_sync.js';
 import { runSyncSteps } from './people_sync_sql.js';
@@ -346,6 +347,11 @@ async function commitOnce({ siteCode, kind, parsed, fingerprint, actor, hashes =
           // yalnız BU yüklemede daire ilişkisi eklenen kişilere hesap (kapsam sınırı); sitedeki diğer hesapsız sakinlere dokunulmaz
           accounts = await provisionImportedResidents(client, { siteCode, runId, accountCandidates: written.accountCandidates, hashes });
           audits = audits.concat(accounts.audits);
+        }
+        // Kiracı HER ZAMAN daire admini (kullanıcı kararı 2026-10-26; admin önceliği kiracı > malik > diğerleri): dosyada kiracı eklenen / kiracıya yükseltilen
+        // dairelerde, hesaplar açıldıktan SONRA, mevcut admin malik olsa bile yönetim kiracıya geçer (hesapsız / üyeliksiz kiracıda hesap bağlanınca geçer).
+        if ((written.tenantApartmentIds ?? []).length > 0) {
+          await ensureTenantIsAdmin(client, { apartmentIds: written.tenantApartmentIds, overrideManager: true, via: 'bulk_import', actor });
         }
       }
     }

@@ -43,7 +43,9 @@ import { ensureNotifyChannelsSchema } from './modules/notify_channels_schema.js'
 import { ensureBankImportSchema } from './modules/bank_import_schema.js';
 import { ensureOAuthSchema } from './modules/oauth_schema.js';
 import { ensureIntegritySchema } from './modules/integrity_schema.js';
+import { ensureFinanceFundsSchema } from './modules/finance_funds_schema.js';
 import { FINANCE_CORE_BACKFILL_SQL } from './modules/finance_core_module.js';
+import { ensureTenantAdminRule } from './modules/apartment_tenant_admin_sql.js';
 
 dotenv.config();
 
@@ -179,6 +181,24 @@ async function ensureAccountDeletionSchema(client) {
   }
   if (state.has_door_table === true && state.has_door_index !== true) {
     await client.query(ACCOUNT_DELETION_DDL.doorUserIndex);
+  }
+}
+
+/**
+ * Ekleyici ensure adimi bir UST TABLO henuz yok diye (42P01) dusuyorsa adim ERTELENIR ve sonraki acilista tamamlanir; baska her hata acilisi durdurur.
+ * Neden: platform oncesi kesilmis semada (QA "upgrade/live" senaryosu: db.js platform sablonu 031'de kesilir; finans 040, kisi/daire kayitlari 031, basvuru/abonelik 033 tablolari yok)
+ * sonradan eklenen modullerin yabanci anahtar / sutun adimlari ust tablo olmadigi icin aciliri dusuruyordu. Adimlar katalog korumali ve idempotenttir; normal sema akisinda
+ * ust tablolar daha once olustugundan bu yol hic calismaz.
+ */
+async function ensureDeferred(label, run) {
+  try {
+    await run();
+  } catch (error) {
+    if (error?.code !== '42P01') {
+      throw error;
+    }
+    // eslint-disable-next-line no-console
+    console.error(`[DB] ${label} ertelendi (ust tablo henuz yok; sonraki acilista tamamlanir):`, error?.message);
   }
 }
 
@@ -1935,7 +1955,7 @@ export async function ensureDbSchema() {
     // 057 (duyuru gizleme + yumusak silme): dev blokta DEGIL; katalog kontrolu (announcement_hide_schema.js = migrations/057).
     await ensureAnnouncementHideSchema(client);
     // 058 (yonetim kadrosu, davet, rehber): dev blokta DEGIL; katalog kontrolu + her adim kendi otomatik onayli ifadesi (team_schema.js = migrations/058).
-    await ensureTeamSchema(client);
+    await ensureDeferred('058 yonetim kadrosu', () => ensureTeamSchema(client));
     // 059 (isletme projesi / butce): 040'tan SONRA (expense_categories); katalog kontrolu (budget_schema.js = migrations/059).
     await ensureBudgetSchema(client);
     // 060 (site Drive deposu, D1): dev blokta DEGIL; katalog kontrolu + her adim kendi otomatik onayli ifadesi (drive_schema.js = migrations/060).
@@ -1943,7 +1963,7 @@ export async function ensureDbSchema() {
     // 061 (sayac okuma ve faturalandirma): dev blokta DEGIL; katalog kontrolu + her adim kendi otomatik onayli ifadesi (metering_schema.js = migrations/061).
     await ensureMeteringSchema(client);
     // 062 (yonetim firmasi Y1/Y2, deneme suresi): katalog kontrolu; management_company_schema.js = migrations/062.
-    await ensureManagementCompanySchema(client);
+    await ensureDeferred('062 yonetim firmasi', () => ensureManagementCompanySchema(client));
     // 063 (SMS giris kodlari, web push, kargo bildirim kaydi): notify_channels_schema.js = migrations/063.
     await ensureNotifyChannelsSchema(client);
     // 064 (komsu panosu): dev blokta DEGIL; tablolar varsa hicbir ifade gonderilmez (neighbor_board_schema.js = migrations/064).
@@ -1953,9 +1973,9 @@ export async function ensureDbSchema() {
     // 073 (plaka tanima: misafir izni, kara liste, kapi/kamera ayari, karar kaydi): dev blokta DEGIL; katalog kontrolu (plate_recognition_schema.js = migrations/073).
     await ensurePlateRecognitionSchema(client);
     // 066 (dekont bildirimi, 2B): ledger_entries/apartments sonrasi; katalog kontrolu (payment_notice_schema.js = migrations/066).
-    await ensurePaymentNoticesSchema(client);
+    await ensureDeferred('066 dekont bildirimi', () => ensurePaymentNoticesSchema(client));
     // 067 (banka dosyasi, 2C): finance_accounts/apartments'tan SONRA; her ifade kendi otomatik onayinda (bank_import_schema.js = migrations/067).
-    await ensureBankImportSchema(client);
+    await ensureDeferred('067 banka dosyasi', () => ensureBankImportSchema(client));
     // 069 (faaliyet raporu taslagi): tablo varsa hicbir ifade gonderilmez (annual_report_schema.js = migrations/069).
     await ensureAnnualReportSchema(client);
     // 070 (sayac okuma fotograflari): tablo varsa hicbir ifade yok (metering_field_schema.js = migrations/070).
@@ -1965,7 +1985,7 @@ export async function ensureDbSchema() {
     // 072 (kamera / CCTV baglantisi): site_doors'tan SONRA; katalog kontrolu + her adim kendi otomatik onayli ifadesi (cctv_schema.js = migrations/072).
     await ensureCctvSchema(client);
     // 074 (daire sahipligi ve yonetimi: yonetim devri, bag kesme / davet talepleri, vekalet + residencies.sponsor_person_id): apartment_residencies'ten SONRA; katalog kontrolu (apartment_mgmt_schema.js = migrations/074).
-    await ensureApartmentMgmtSchema(client);
+    await ensureDeferred('074 daire sahipligi', () => ensureApartmentMgmtSchema(client));
     // 075 (daire sakini ADLI KAYDI: yalniz-ekleme apartment_residency_log + users silme kayit tetikleyicisi): sites / users / apartment_residencies'ten SONRA; katalog kontrolu (residency_log_schema.js = migrations/075).
     await ensureResidencyLogSchema(client);
     // 076 (Google ve Apple / iCloud OAuth kimlik baglantilari): katalog kontrolu (oauth_schema.js = migrations/076).
@@ -1977,6 +1997,9 @@ export async function ensureDbSchema() {
     // 078 (daire m2 sutunlarinin kalici dusurulmesi): ayni cagri, ayni katalog sorgusu; apartments tablosundaki brut / net m2 sutunlari VARSA tek ALTER ile dusurulur
     // (yoksa hicbir ifade / kilit yok); canlidaki geri alma hedefi bu sutunlari hic okumadigindan geri alma icin guvenlidir (integrity_schema.js = migrations/078).
     await ensureIntegritySchema(client);
+    // 080 (iki kasa: Isletme / Yatirim ve Demirbas Fon): 040 (expense_categories, expenses, trg_finance_immutable) ve ledger_entries SONRASI; dev blokta DEGIL; katalog kontrolu
+    // + her adim kendi otomatik onayli ifadesi (finance_funds_schema.js = migrations/080). Her sey varsa hicbir ifade / kilit yok; sistem kategorisi "Yatirim ve demirbas" veri adimidir.
+    await ensureFinanceFundsSchema(client);
 
     // 031 people_v1: mevcut sakinlerin CRM'e tek seferlik aktarimi. Savunmaci: hata sunucunun acilmasini ENGELLEMEZ
     // (kendi transaction'i geri alinir, isaret yazilmaz => sonraki acilista yeniden denenir; okuma anindaki
@@ -2011,6 +2034,14 @@ export async function ensureDbSchema() {
     } catch (e) {
       // eslint-disable-next-line no-console
       console.error('[DB] 079 finans temel modul doldurma hatasi:', e?.code || e?.message);
+    }
+
+    // 081 Kiraci her zaman daire admini: guncel kiracisi olup admini malik (ya da kiraci olmayan) kalan dairelerde admin kiraciya gecer. Aday yoksa tek okuma. Hata acilisi durdurmaz.
+    try {
+      await ensureTenantAdminRule(client);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('[DB] 081 kiraci admin kurali hatasi:', e?.code || e?.message);
     }
   } finally {
     client.release();

@@ -21,6 +21,7 @@ import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
 import 'package:site_kapi_kontrol/ui/widgets/cursor_list_body.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_4b_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_account_parts.dart';
+import 'package:site_kapi_kontrol/ui/widgets/finance_fund_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_parts.dart';
 
 /// Daire hesap ekstresi penceresi (Platform Faz 4a): güncel bakiye (borç / alacak simge + metinle), vadesi
@@ -40,6 +41,9 @@ import 'package:site_kapi_kontrol/ui/widgets/finance_parts.dart';
 ///   (`show_tenant_account`) iki sekme görünür ([Kiracı hesabı] [Ev sahibi hesabı]); bakiye ve hareketler yalnız seçili
 ///   hesabındır. İlk sekme sunucunun varsayılan tahsilat hesabıdır. Tahsilat / düzeltme penceresi seçili hesapla açılır.
 ///   Eski sunucuda ya da kiracısı hiç olmamış dairede sekme yoktur (tek hesap, eski görünüm).
+/// - İki kasa: başlıkta kasa bazında açık borç / vadesi geçen / avans (seçili hesabın; sekmesiz dairede iki hesabın toplamı),
+///   hareket satırlarında kasa rozeti ve tahsilat satırında kasalara dağılım gösterilir (sunucu `funds` göndermediyse
+///   kırılım hiç çizilmez).
 class FinanceAccountDialog extends StatefulWidget {
   const FinanceAccountDialog({
     super.key,
@@ -475,58 +479,73 @@ class _FinanceAccountDialogState extends State<FinanceAccountDialog> {
     final overdue = header.overdueMinor;
     // İki hesaplı dairede bakiye seçili hesabındır: hangi hesap olduğu açıkça yazılır ve okunur.
     final party = header.hasTwoAccounts ? (header.accountParty ?? _party) : null;
+    final summary = Semantics(
+      container: true,
+      label:
+          '${party == null ? '' : '${party.label}. '}'
+          '${balance.semanticLabel}.'
+          '${overdue != null && overdue > 0 ? ' Vadesi geçen: ${moneySemanticLabel(overdue)}.' : ''}'
+          ' ${payerPartyLabel(header.apartment.responsibleParty)}.',
+      child: ExcludeSemantics(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (party != null)
+              Text(
+                party.label,
+                key: const ValueKey<String>('finance_account_party_label'),
+                style: th.bodySmall?.copyWith(color: p.textSecondary, fontWeight: FontWeight.w700),
+              ),
+            Row(
+              children: [
+                Icon(balance.icon, color: balance.tone.ink(p)),
+                const SizedBox(width: AppSpace.sm),
+                Expanded(child: Text(balance.title, style: th.titleMedium)),
+              ],
+            ),
+            if (balance.amountText.isNotEmpty)
+              Text(
+                balance.amountText,
+                key: const ValueKey<String>('finance_account_balance'),
+                style: th.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
+              ),
+            if (overdue != null && overdue > 0) ...[
+              const SizedBox(height: AppSpace.xs),
+              Text(
+                'Vadesi geçen: ${formatMinor(overdue)}',
+                style: th.bodyMedium?.copyWith(
+                  color: AppTone.warning.ink(p),
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+            const SizedBox(height: AppSpace.xs),
+            Text(
+              payerPartyLabel(header.apartment.responsibleParty),
+              style: th.bodySmall?.copyWith(color: p.textSecondary),
+            ),
+          ],
+        ),
+      ),
+    );
     return DialogPanel(
       key: const ValueKey<String>('finance_account_header'),
       tone: balance.direction == BalanceDirection.debt ? AppTone.danger : null,
-      child: Semantics(
-        container: true,
-        label:
-            '${party == null ? '' : '${party.label}. '}'
-            '${balance.semanticLabel}.'
-            '${overdue != null && overdue > 0 ? ' Vadesi geçen: ${moneySemanticLabel(overdue)}.' : ''}'
-            ' ${payerPartyLabel(header.apartment.responsibleParty)}.',
-        child: ExcludeSemantics(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (party != null)
-                Text(
-                  party.label,
-                  key: const ValueKey<String>('finance_account_party_label'),
-                  style: th.bodySmall?.copyWith(color: p.textSecondary, fontWeight: FontWeight.w700),
-                ),
-              Row(
-                children: [
-                  Icon(balance.icon, color: balance.tone.ink(p)),
-                  const SizedBox(width: AppSpace.sm),
-                  Expanded(child: Text(balance.title, style: th.titleMedium)),
-                ],
-              ),
-              if (balance.amountText.isNotEmpty)
-                Text(
-                  balance.amountText,
-                  key: const ValueKey<String>('finance_account_balance'),
-                  style: th.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
-                ),
-              if (overdue != null && overdue > 0) ...[
-                const SizedBox(height: AppSpace.xs),
-                Text(
-                  'Vadesi geçen: ${formatMinor(overdue)}',
-                  style: th.bodyMedium?.copyWith(
-                    color: AppTone.warning.ink(p),
-                    fontWeight: FontWeight.w700,
-                  ),
+      child: header.funds == null
+          ? summary
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                summary,
+                // İki kasa: kasa bazında durum (kendi birleşik etiketiyle okunur; yukarıdaki etiketin dışında).
+                const SizedBox(height: AppSpace.md),
+                FundBreakdownPanel(
+                  breakdown: header.funds!,
+                  advanceMinor: header.advanceMinor,
+                  keyPrefix: 'finance_account_funds',
                 ),
               ],
-              const SizedBox(height: AppSpace.xs),
-              Text(
-                payerPartyLabel(header.apartment.responsibleParty),
-                style: th.bodySmall?.copyWith(color: p.textSecondary),
-              ),
-            ],
-          ),
-        ),
-      ),
+            ),
     );
   }
 }

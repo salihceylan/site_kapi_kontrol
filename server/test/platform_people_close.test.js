@@ -53,7 +53,8 @@ const RESIDENCY_END = /^UPDATE apartment_residencies SET is_current = FALSE, mov
 const MEMBER_SELECT = /^SELECT role, is_active FROM apartment_memberships WHERE apartment_id = \$1 AND user_code = \$2 FOR UPDATE$/;
 const MEMBER_OFF = /^UPDATE apartment_memberships SET is_active = FALSE, updated_at = NOW\(\) WHERE apartment_id = \$1 AND user_code = \$2$/;
 const OTHER_ADMIN = /^SELECT user_code FROM apartment_memberships WHERE apartment_id = \$1 AND user_code <> \$2 AND is_active = TRUE AND role = 'APARTMENT_ADMIN'/;
-const REMAINING_MEMBER = /^SELECT user_code FROM apartment_memberships WHERE apartment_id = \$1 AND user_code <> \$2 AND is_active = TRUE ORDER BY created_at ASC, id ASC LIMIT 1$/;
+// Kalan uye secimi (apartment_admin_successor.js): guncel kiraci > guncel malik > en eski aktif uye; sorgu eski sorgunun onekiyle baslar, ORDER BY'a siralama eklendi.
+const REMAINING_MEMBER = /^SELECT user_code FROM apartment_memberships WHERE apartment_id = \$1 AND user_code <> \$2 AND is_active = TRUE ORDER BY CASE .* ELSE 2 END, created_at ASC, id ASC LIMIT 1$/;
 const PROMOTE = /^UPDATE apartment_memberships SET role = 'APARTMENT_ADMIN', updated_at = NOW\(\) WHERE apartment_id = \$1 AND user_code = \$2$/;
 const INDICATOR_SET = /^UPDATE apartments SET resident_user_code = \$1, resident_pin_issued = FALSE, resident_pin_code = NULL, resident_email = NULL WHERE id = \$2$/;
 const INDICATOR_CLEAR = /^UPDATE apartments SET resident_user_code = NULL, resident_pin_issued = FALSE, resident_pin_code = NULL, resident_email = NULL WHERE id = \$1$/;

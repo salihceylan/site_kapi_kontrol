@@ -145,18 +145,6 @@ class MyApartmentViewState extends State<MyApartmentView> {
     }
   }
 
-  Future<void> _delegate(MyApartment apt) async {
-    final ok = await confirmCrmAction(
-      context,
-      title: 'Yönetimi kiracıya devret',
-      message:
-          'Daire yönetimi kiracıya geçer ve kiracı çıkana kadar sürer; tek başınıza geri alamazsınız (bağlantıyı kesme talebi ya da site yöneticisi gerekir). Siz dairede kalırsınız.',
-      confirmLabel: 'Devret',
-    );
-    if (!ok || !mounted) return;
-    await _run(() => _service.delegateManagement(apt.apartmentId), success: 'Yönetim kiracıya devredildi.');
-  }
-
   Future<void> _exit(MyApartment apt) async {
     ExitPreview? preview;
     try {
@@ -343,9 +331,9 @@ class MyApartmentViewState extends State<MyApartmentView> {
             ),
             const SizedBox(height: AppSpace.md),
             Text(adminText, style: th.titleSmall),
-            if (apt.delegated) Text('Yönetim kiracıdadır ve kiracı çıkana kadar sürer.', style: secondary),
+            if (apt.delegated) Text('Kiracı daire yöneticisidir; kiracı çıkana kadar sürer. Malik ve kiracı birlikte kayıtlıdır.', style: secondary),
             if (apt.delegationPending)
-              Text('Kiracı uygulamaya katılınca yönetim ona geçecek.', style: secondary),
+              Text('Kiracının hesabı yok: kiracı uygulamaya katılınca daire yöneticisi kiracı olur.', style: secondary),
             const SizedBox(height: AppSpace.sm),
             _personLine('Malik', apt.owner?.name),
             _personLine('Kiracı', apt.tenant?.name),
@@ -406,13 +394,12 @@ class MyApartmentViewState extends State<MyApartmentView> {
   }
 
   List<Widget> _ownerSection(MyApartment apt, bool canSearch) {
-    if (!apt.can.addTenant && !apt.can.delegateManagement) return const <Widget>[];
+    if (!apt.can.addTenant) return const <Widget>[];
+    final secondary = Theme.of(context).textTheme.bodySmall?.copyWith(color: context.palette.textSecondary);
     return [
       _section('Kiracı', [
-        if (apt.can.addTenant)
-          _act('Kiracı ekle', Icons.person_add_alt_1_rounded, _busy ? null : () => unawaited(_addTenant(apt, canSearch && apt.can.searchPeople))),
-        if (apt.can.delegateManagement)
-          _act('Yönetimi kiracıya devret', Icons.swap_horiz_rounded, _busy ? null : () => unawaited(_delegate(apt))),
+        _act('Kiracı ekle', Icons.person_add_alt_1_rounded, _busy ? null : () => unawaited(_addTenant(apt, canSearch && apt.can.searchPeople))),
+        Text('Kiracı eklendiğinde daire yöneticisi kiracı olur; siz malik olarak dairede kalırsınız.', style: secondary),
       ]),
     ];
   }

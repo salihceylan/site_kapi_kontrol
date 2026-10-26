@@ -34,6 +34,7 @@ import {
   parseIdempotencyKey,
   today,
 } from './finance_common.js';
+import { FUND_LABELS, FUND_SHORT_LABELS, loadPaymentFundSplit } from './finance_funds.js';
 import { minorToNumber } from './finance_money.js';
 import { enabledFinanceSites, loadResidentLedger, loadVisibleAccounts, rowsOfView, viewSinceOf } from './finance_read_service.js';
 import { accountPartySql } from './finance_parties.js';
@@ -56,6 +57,9 @@ export const RECEIPT_TEMPLATE = Object.freeze({
   cekince_text:
     'Bu makbuz yalnızca yukarıda belirtilen tutarın tahsil edildiğini gösterir; önceki dönemlere ait borçlara, gecikme tazminatına ve diğer hak ve alacaklara ilişkin haklar saklıdır.',
   disclaimer_text: 'Bu belge noter onaylı karar defteri/yasal defterlerin yerine geçmez.',
+  // Makbuzdaki `fund_split` (operating_minor / capital_minor / advance_minor) satırlarının tam adları (tek kaynak: sunucu); yer darsa kısa ad
+  fund_labels: Object.freeze({ ...FUND_LABELS }),
+  fund_short_labels: Object.freeze({ ...FUND_SHORT_LABELS }),
 });
 
 // --- Saf yardımcılar -----------------------------------------------------------------------------------------------------------------
@@ -123,6 +127,8 @@ export function buildSnapshot(input) {
     apartment: { label: input.apartmentLabel },
     // İP-1A: account_party = tahsilatın yazıldığı hesap (owner | tenant); 052 öncesi makbuzda yoktur
     payer: { party: input.payerParty, name: input.payerName ?? null, ...(input.accountParty ? { account_party: input.accountParty } : {}) },
+    // Kasa dagitimi (bilgi amacli, verildigi andaki): { operating_minor, capital_minor, advance_minor }; 080 oncesi makbuzda yoktur
+    ...(input.fundSplit ? { fund_split: input.fundSplit } : {}),
     issuer: { name: input.issuerName ?? null },
     cancels_number: input.cancelsNumber ?? null,
     mahsup: 'oldest_due_first',
@@ -299,6 +305,7 @@ async function insertReceipt(client, input) {
     apartmentLabel: input.context.apartmentLabel,
     payerParty: input.payerParty,
     accountParty: input.accountParty ?? null,
+    fundSplit: input.fundSplit ?? null,
     payerName: input.context.payerName,
     issuerName: input.context.issuerName,
     cancelsNumber: input.cancelsNumber ?? null,
@@ -382,6 +389,13 @@ export async function ensureReceiptForPayment(client, { siteCode, entryId, actor
     method: payment.method,
     payerParty: payment.payer_party,
     accountParty: payment.account_party,
+    fundSplit: await loadPaymentFundSplit(client, {
+      siteCode,
+      apartmentId: Number(payment.apartment_id),
+      accountParty: payment.account_party,
+      paymentId: entryId,
+      toNumber: minorToNumber,
+    }),
     context,
     actorUserCode: actorInfo.userCode,
   });
@@ -420,6 +434,7 @@ async function cancelReceiptRow(client, { siteCode, target, reasonCode, note, id
     method: snapshot.method ?? null,
     payerParty: snapshot.payer?.party ?? 'owner',
     accountParty: snapshot.payer?.account_party ?? null,
+    fundSplit: snapshot.fund_split ?? null,
     context: secretContext,
     reasonCode,
     note,

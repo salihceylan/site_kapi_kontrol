@@ -36,6 +36,8 @@ export function prepareApartment(rows, graceDays) {
         due,
         rev: reversedOn.get(row.id) ?? NEVER,
         lateFee: row.lateFee === true,
+        // Kasa (docs/PLATFORM_FINANS_KASALAR.md 2): tazminat satirinin kasasi, vadesi gecen anaparanin agirlikli oldugu kasadir
+        fund: row.fund === 'capital' ? 'capital' : 'operating',
         threshold: Math.max(due, row.entryDay) + graceDays,
       };
     })
@@ -46,8 +48,8 @@ export function prepareApartment(rows, graceDays) {
   return { items, pays };
 }
 
-/** d günü itibarıyla L(d) (kuruş): M1 + gecikme koşulu. */
-export function overdueOnDay(prepared, day) {
+/** d günü itibarıyla L(d) (kuruş): M1 + gecikme koşulu. `byFund` verilirse L(d) kasa bazında ({ operating, capital }) bu nesneye EKLENİR. */
+export function overdueOnDay(prepared, day, byFund = null) {
   let pay = 0n;
   for (const p of prepared.pays) {
     if (p.day <= day && p.rev > day) {
@@ -65,6 +67,9 @@ export function overdueOnDay(prepared, day) {
     const clipped = open < 0n ? 0n : open < item.amount ? open : item.amount;
     if (!item.lateFee && item.threshold < day) {
       overdue += clipped;
+      if (byFund !== null) {
+        byFund[item.fund] += clipped;
+      }
     }
   }
   return overdue;
@@ -100,12 +105,16 @@ export function lateFeeForApartment(rows, { p1, p2, graceDays, rateBp, divisor }
   const starts = [...points].sort((a, b) => a - b);
   let base = 0n;
   let peak = 0n;
+  const baseByFund = { operating: 0n, capital: 0n };
   const breakdown = [];
   for (let i = 0; i < starts.length; i += 1) {
     const from = starts[i];
     const next = i + 1 < starts.length ? starts[i + 1] : p2 + 1;
-    const level = overdueOnDay(prepared, from);
+    const levelByFund = { operating: 0n, capital: 0n };
+    const level = overdueOnDay(prepared, from, levelByFund);
     base += level * BigInt(next - from);
+    baseByFund.operating += levelByFund.operating * BigInt(next - from);
+    baseByFund.capital += levelByFund.capital * BigInt(next - from);
     if (level > peak) {
       peak = level;
     }
@@ -121,6 +130,9 @@ export function lateFeeForApartment(rows, { p1, p2, graceDays, rateBp, divisor }
   return {
     base,
     peak,
+    baseByFund,
+    // tazminat satirinin kasasi: kuruş·gun tabaninda agir basan kasa (esitlikte / tabansizda operating)
+    fund: baseByFund.capital > baseByFund.operating ? 'capital' : 'operating',
     fee: feeFromBase(base, rateBp, divisor),
     breakdown: breakdown.map((part) => ({ from: isoOfDay(part.fromDay), to: isoOfDay(part.toDay), overdue: part.level })),
   };

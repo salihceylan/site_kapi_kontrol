@@ -47,6 +47,7 @@ import {
   previewStale,
   today,
 } from './finance_common.js';
+import { effectiveFund } from './finance_funds.js';
 import { lateFeeForApartment } from './finance_late_fee_calc.js';
 import { minorToNumber, toBigInt } from './finance_money.js';
 import { withReportSnapshot } from './finance_reports.js';
@@ -157,8 +158,10 @@ async function loadLedgerRows(db, siteCode, p2Iso) {
     `
       SELECT l.id, l.apartment_id, l.kind, l.amount_minor::TEXT AS amount, (l.entry_date - DATE '1970-01-01') AS entry_day,
              CASE WHEN l.due_date IS NULL THEN NULL ELSE (l.due_date - DATE '1970-01-01') END AS due_day,
-             (l.late_fee_run_id IS NOT NULL) AS late_fee, l.reverses_entry_id, ${LEDGER_ACCOUNT} AS account_party
+             (l.late_fee_run_id IS NOT NULL) AS late_fee, l.reverses_entry_id, ${LEDGER_ACCOUNT} AS account_party,
+             l.fund, l.source_kind, l.definition_id, fd.charge_party AS def_charge_party, fd.kind AS def_kind
       FROM ledger_entries l
+      LEFT JOIN fee_definitions fd ON fd.id = l.definition_id
       WHERE l.site_code = $1 AND l.entry_date <= $2::DATE
       ORDER BY l.apartment_id, l.id
     `,
@@ -181,6 +184,8 @@ async function loadLedgerRows(db, siteCode, p2Iso) {
       dueDay: row.due_day === null ? null : Number(row.due_day),
       lateFee: row.late_fee === true,
       reversesId: row.reverses_entry_id === null ? null : Number(row.reverses_entry_id),
+      // Kasa: borcun (etkin) kasasi; 080 oncesi satirda tanimdan turetilir
+      fund: effectiveFund({ ...row, amount_minor: row.amount }) ?? 'operating',
     });
   }
   return byApartment;
@@ -282,6 +287,7 @@ export async function computeLateFeePlan(db, siteCode, { period, settings, exclu
         baseDay: result.base,
         peak: result.peak,
         breakdown: result.breakdown,
+        fund: result.fund,
       });
     }
   }
@@ -561,10 +567,10 @@ export async function postLateFee({ siteCode, body, actor, now = new Date() }) {
       `
         INSERT INTO ledger_entries (
           site_code, apartment_id, kind, amount_minor, period, entry_date, due_date, definition_name, description, late_fee_run_id, payer_party, created_by,
-          account_party
+          account_party, fund
         )
-        SELECT $1, t.apartment_id, 'charge', t.amount, $2::DATE, $3::DATE, $3::DATE, $4::TEXT, $5::TEXT, $6, t.payer, $7, t.account
-        FROM unnest($8::BIGINT[], $9::BIGINT[], $10::TEXT[], $11::TEXT[]) AS t(apartment_id, amount, payer, account)
+        SELECT $1, t.apartment_id, 'charge', t.amount, $2::DATE, $3::DATE, $3::DATE, $4::TEXT, $5::TEXT, $6, t.payer, $7, t.account, t.fund
+        FROM unnest($8::BIGINT[], $9::BIGINT[], $10::TEXT[], $11::TEXT[], $12::TEXT[]) AS t(apartment_id, amount, payer, account, fund)
         ORDER BY t.apartment_id, t.account
         RETURNING id, apartment_id, account_party
       `,
@@ -580,6 +586,8 @@ export async function postLateFee({ siteCode, body, actor, now = new Date() }) {
         lines.map((line) => line.amount.toString()),
         lines.map((line) => line.payerParty),
         lines.map((line) => line.accountParty),
+        // Kasa: tazminatin kasasi = vadesi gecen anaparanin agirlikli oldugu kasa (docs/PLATFORM_FINANS_KASALAR.md 2)
+        lines.map((line) => line.fund ?? 'operating'),
       ],
     );
     if (written.rowCount !== lines.length) {
@@ -682,10 +690,10 @@ export async function voidLateFeeRun({ siteCode, rawId, body, actor, now = new D
       `
         INSERT INTO ledger_entries (
           site_code, apartment_id, kind, amount_minor, period, entry_date, due_date, definition_name, payer_party, reverses_entry_id, reversal_reason, late_fee_run_id,
-          idempotency_key, created_by, account_party
+          idempotency_key, created_by, account_party, fund
         )
         SELECT l.site_code, l.apartment_id, 'reversal', -l.amount_minor, $2::DATE, $3::DATE, l.due_date, l.definition_name, l.payer_party, l.id, $4, l.late_fee_run_id,
-               CASE WHEN ROW_NUMBER() OVER (ORDER BY l.apartment_id, l.id) = 1 THEN $5 ELSE NULL END, $6, ${LEDGER_ACCOUNT}
+               CASE WHEN ROW_NUMBER() OVER (ORDER BY l.apartment_id, l.id) = 1 THEN $5 ELSE NULL END, $6, ${LEDGER_ACCOUNT}, l.fund
         FROM ledger_entries l
         INNER JOIN late_fee_run_lines ln ON ln.ledger_entry_id = l.id
         WHERE ln.run_id = $1 AND NOT EXISTS (SELECT 1 FROM ledger_entries rv WHERE rv.reverses_entry_id = l.id)

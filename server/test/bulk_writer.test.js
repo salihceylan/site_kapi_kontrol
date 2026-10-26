@@ -7,6 +7,7 @@ import {
   AUDIT_CHUNK,
   ENTITY_CHUNK,
   LOGIN_NAME_BASE_MAX,
+  RELATION_RANK,
   applyApartmentOps,
   applyPeopleOps,
   collectAccountPasswords,
@@ -320,7 +321,12 @@ describe('provisionImportedResidents', () => {
     assert.deepEqual(lock.params, [[101], 9]);
     assert.match(lock.sql, /sp\.user_code IS NULL/, 'kişi başına user_code IS NULL yeniden doğrulanır');
     assert.match(lock.sql, /FOR UPDATE OF sp/);
-    assert.equal(client.log.some((entry) => /FROM apartment_residencies/.test(entry.sql)), false, 'tüm güncel sakinleri tarayan sorgu yok');
+    // Kiracı her zaman daire admini: grantApartmentAccess kancası YALNIZ bu daire + bu kullanıcı için aday okur (kapsamlı; tüm sakinleri taramaz).
+    const scans = client.log.filter((entry) => /FROM apartment_residencies/.test(entry.sql) && !/^SELECT 1 FROM \(SELECT a\.id AS apartment_id/.test(entry.sql));
+    assert.equal(scans.length, 0, 'tüm güncel sakinleri tarayan sorgu yok');
+    const hook = client.log.filter((entry) => /^SELECT 1 FROM \(SELECT a\.id AS apartment_id/.test(entry.sql));
+    assert.equal(hook.length, 1);
+    assert.deepEqual([hook[0].params[0], hook[0].params[1], hook[0].params[2]], [[10], 901, false], 'kanca: yalnız aday dairesi + yeni hesap, site yöneticisi devri KORUNUR');
     assert.deepEqual(result.items, [{ n: 101, login_name: 'ali.yilmaz', status: 'created' }]);
     assert.deepEqual(result.audits.map((a) => [a.action, a.target_id, a.details.status, a.details.run_id]), [['person.account_created', '101', 'created', 7]]);
     assert.ok(!/Ali|Yılmaz|5551112233/.test(JSON.stringify(result.audits)), 'audit kişisel veri taşımaz');
@@ -351,7 +357,7 @@ describe('provisionImportedResidents', () => {
     assert.match(pin.sql, /resident_user_code = \$3/);
   });
 
-  it('üyelik sırası: aynı dairede MALİK kiracıdan/sakinden önce işlenir (ilk gelen daire admini olur)', async () => {
+  it('üyelik sırası: aynı dairede KİRACI maliklerden / sakinden önce işlenir (admin önceliği kiracı > malik > diğerleri; ilk gelen daire admini olur)', async () => {
     const client = accountClient({
       people: {
         101: { full_name: 'Sakin Kişi', email: null, phone: null },
@@ -367,7 +373,8 @@ describe('provisionImportedResidents', () => {
         candidate('new:4', 103, [{ aptId: 10, relation: 'tenant' }]),
       ],
     });
-    assert.deepEqual(client.inserted.map((u) => u.full_name), ['Malik Kişi', 'Kiracı Kişi', 'Sakin Kişi']);
+    assert.deepEqual(client.inserted.map((u) => u.full_name), ['Kiracı Kişi', 'Malik Kişi', 'Sakin Kişi']);
+    assert.deepEqual(Object.entries(RELATION_RANK).sort((a, b) => a[1] - b[1]).map(([name]) => name), ['tenant', 'owner', 'resident', 'family_member']);
   });
 
   it('ŞİFRE / KULLANICI ADI kişi kimliğiyle (ref) eşleşir: aynı adlı iki kişi birbirinin şifresini ALMAZ; nihai ad çakışmada _2 olur ve sonuçta döner', async () => {

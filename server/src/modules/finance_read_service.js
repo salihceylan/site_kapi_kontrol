@@ -27,6 +27,7 @@ import {
   today,
 } from './finance_common.js';
 import { ENTRY_SELECT } from './finance_ledger_service.js';
+import { allocateFunds, fundSplitOf, fundsBodyOf, loadFundLedger, summarizeFunds, toAllocatorEntry } from './finance_funds.js';
 import { minorToNumber, toBigInt } from './finance_money.js';
 import { accountPartySql, currentTenantSql, defaultPaymentParty, partyOfRelation, responsiblePersonSql, visiblePartyOfRelation } from './finance_parties.js';
 import { apartmentLabel, escapeLike, foldSql, foldText, parsePositiveId } from './people_common.js';
@@ -303,6 +304,20 @@ export async function getApartmentAccount(siteCode, rawApartmentId, query = {}, 
   const rows = entries.rows ?? [];
   const hasMore = rows.length > filters.limit;
   const items = rows.slice(0, filters.limit).map(mapEntryRow);
+  // Kasa dagitimi (docs/PLATFORM_FINANS_KASALAR.md 3): hesap basina TEK saf islev; ekstre kasa bazinda acik borc / vadesi gecen / avans + her tahsilatin dagitimi
+  const todayIsoDate = today(now);
+  const ledgerGroups = await loadFundLedger(db, siteCode, { apartmentIds: [apartmentId] });
+  const allocations = {
+    owner: allocateFunds(ledgerGroups.get(`${apartmentId}:owner`) ?? [], { today: todayIsoDate }),
+    tenant: allocateFunds(ledgerGroups.get(`${apartmentId}:tenant`) ?? [], { today: todayIsoDate }),
+  };
+  for (const item of items) {
+    item.fund_split = item.kind === 'payment' ? fundSplitOf(allocations[item.account_party], item.id, minorToNumber) : null;
+  }
+  const fundsView = fundsBodyOf(
+    summarizeFunds(accountParty === null ? [allocations.owner, allocations.tenant] : [allocations[accountParty]], { today: todayIsoDate }),
+    minorToNumber,
+  );
   const selected = accountParty === null
     ? { balance: sums.owner.balance + sums.tenant.balance, overdue: sums.owner.overdue + sums.tenant.overdue }
     : sums[accountParty];
@@ -318,6 +333,8 @@ export async function getApartmentAccount(siteCode, rawApartmentId, query = {}, 
     overdue_minor: minorToNumber(selected.overdue),
     items,
     next_before_id: hasMore && items.length > 0 ? items[items.length - 1].id : null,
+    // Kasa kirilimi (secili hesap ya da iki hesabin toplami): acik borc, vadesi gecen, kasaya kisitli avans; `advance_minor` = toplam avans (kisitsiz dahil)
+    ...fundsView,
     // İki hesap (İP-1A)
     account_party: accountParty,
     accounts: accountSumsBody(sums),
@@ -587,6 +604,15 @@ function myFinanceViewBody(rows, view, todayIsoDate) {
   const shown = own.filter((entry) => result.visibleIds.has(Number(entry.id)));
   // Görünen satırların toplamı bakiyeye eşit değilse bir tahsilat ya da alacak önceki dönem kayıtlarıyla mahsup edilmiştir: istemci açıklar.
   const shownSum = shown.reduce((sum, entry) => sum + BigInt(entry.amount_minor), 0n);
+  // Kasa kirilimi: dagitim hesabin TUM satirlariyla yapilir (kapsam disi eski borclar once odenir), yalniz kapsam ici (dayanak ayi >= since) borclar gosterilir
+  const anchorOf = new Map(own.map((entry) => [Number(entry.id), entry.anchor]));
+  const fundsView = fundsBodyOf(
+    summarizeFunds([allocateFunds(own.map(toAllocatorEntry), { today: todayIsoDate })], {
+      today: todayIsoDate,
+      inScope: since === null ? null : (debtId) => (anchorOf.get(debtId) ?? since) >= since,
+    }),
+    minorToNumber,
+  );
   const recent = shown
     .sort((a, b) => (a.entry_date === b.entry_date ? Number(b.id) - Number(a.id) : a.entry_date < b.entry_date ? 1 : -1))
     .slice(0, RECENT_ENTRIES_LIMIT)
@@ -602,6 +628,8 @@ function myFinanceViewBody(rows, view, todayIsoDate) {
     visible_from: result.hiddenCount > 0 ? periodLabel(since) : null,
     offset_note: shownSum !== result.balance,
     recent,
+    // Kasa kirilimi: { operating: { balance_minor, overdue_minor, advance_minor }, capital: {…} } + toplam avans
+    ...fundsView,
   };
 }
 
@@ -658,6 +686,8 @@ export async function getMyFinance(authUser, now = new Date(), db = pool, { ownO
         offset_note: own.offset_note,
         recent: own.recent,
         account_party: own.account_party,
+        funds: own.funds,
+        advance_minor: own.advance_minor,
         accounts: views,
       };
     }),

@@ -40,7 +40,7 @@ DDL: `server/migrations/075_residency_log.sql` = `server/src/modules/residency_l
 | `moved_in` | `people_service.insertResidency` (kişi + daire, ilişki ekleme, malik kaydı, kiracı/aile ekleme, davet kabulü); eşitleme (`people_sync_sql` insert_residencies; erişim üyeliğinden doğan sakin, katılım onayı dahil); toplu yükleme |
 | `moved_out` | `people_service.closeResidency` (site yöneticisi "Taşındı", kişiyi pasifleştirme, kiracı çıkışı = devir); eşitleme (destekleyen kayıt kalmadı / yetim kişi); hesap silme (`account_deletion_service`) |
 | `role_changed` | `people_service.updateResidency` (ilişki türü); malik kaydı tamamlama; toplu yükleme yükseltmesi |
-| `admin_changed` | `membership_service.applyApartmentPrimaryAdmin` (aile reisi değiştirme, site yöneticisi "Daire adminini değiştir", yönetim devri, davetle gelen kiracıya devir) |
+| `admin_changed` | `membership_service.applyApartmentPrimaryAdmin` (aile reisi değiştirme, site yöneticisi "Daire adminini değiştir", yönetim devri, davetle gelen kiracıya devir, kiracı her zaman daire admini kuralı: çalışma anı ve migration 081 / açılış toplu SQL'i `apartment_tenant_admin_sql.js` aynı alanları yazar, neden `handover`) |
 | `handover` | `membership_service.handOverApartmentResident` (yönetici/gösterge başka kişiye geçti) |
 | `link_cut_mutual` | karşılıklı bağ kesme onayı (`endTenancy`, neden `mutual`) |
 | `member_removed` | `endResidenciesForMemberRemoval` ("Daireden çıkar", "Sakini sil"; CRM ilişkisi yoksa üyelik yine kaydedilir); üyenin onayladığı çıkarma; aile üyesini yönetici çıkarması; hesap silmede ilişkisiz üyelik |

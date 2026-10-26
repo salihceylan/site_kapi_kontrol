@@ -178,7 +178,7 @@ function lateFeeDb(apartment, ledgerRows) {
       if (/FROM apartments a INNER JOIN site_blocks b ON b\.id = a\.block_id WHERE a\.site_code = \$1 ORDER BY a\.id/.test(sql)) {
         return { rows: [apartment], rowCount: 1 };
       }
-      if (/AS account_party FROM ledger_entries l WHERE l\.site_code = \$1 AND l\.entry_date <= \$2::DATE ORDER BY l\.apartment_id, l\.id/.test(sql)) {
+      if (/FROM ledger_entries l LEFT JOIN fee_definitions fd ON fd\.id = l\.definition_id WHERE l\.site_code = \$1 AND l\.entry_date <= \$2::DATE ORDER BY l\.apartment_id, l\.id/.test(sql)) {
         const rows = ledgerRows.filter((row) => row.entry <= params[1]).map(({ entry: _entry, ...row }) => row);
         return { rows, rowCount: rows.length };
       }

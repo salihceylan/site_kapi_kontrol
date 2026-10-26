@@ -14,6 +14,7 @@ import 'package:site_kapi_kontrol/ui/helpers/dialog_guard.dart';
 import 'package:site_kapi_kontrol/ui/helpers/finance_4b_access.dart';
 import 'package:site_kapi_kontrol/ui/helpers/finance_errors.dart';
 import 'package:site_kapi_kontrol/ui/helpers/idempotency.dart';
+import 'package:site_kapi_kontrol/ui/helpers/fund_text.dart';
 import 'package:site_kapi_kontrol/ui/helpers/money.dart';
 import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
 import 'package:site_kapi_kontrol/ui/helpers/retry_lock.dart';
@@ -354,6 +355,28 @@ class _FinanceReceiptDialogState extends State<FinanceReceiptDialog> {
         FinanceInfoRow(label: 'Daire', value: r.apartmentLabel.isEmpty ? '-' : r.apartmentLabel),
         FinanceInfoRow(label: 'Ödeyen', value: payer.isEmpty ? '-' : payer),
         FinanceInfoRow(label: 'Yöntem', value: r.method?.label ?? '-'),
+        if (r.fundSplit != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2),
+            child: Semantics(
+              container: true,
+              label: 'Kasalara dağılım: ${spokenMoneyText(fundSplitText(r.fundSplit!))}',
+              child: ExcludeSemantics(
+                child: Wrap(
+                  spacing: AppSpace.sm,
+                  runSpacing: 2,
+                  children: [
+                    Text('Kasalara dağılım', style: th.bodyMedium?.copyWith(color: p.textSecondary)),
+                    Text(
+                      fundSplitText(r.fundSplit!),
+                      key: const ValueKey<String>('finance_receipt_fund_split'),
+                      style: th.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
         if (r.issuerName != null) FinanceInfoRow(label: 'Düzenleyen', value: r.issuerName),
         FinanceInfoRow(
           label: 'Doğrulama kodu',

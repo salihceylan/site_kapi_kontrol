@@ -29,6 +29,7 @@ import { announcementPublicRouter } from './modules/announcement_public_routes.j
 import { financeRouter } from './modules/finance_routes.js';
 import { financeOpeningRouter } from './modules/finance_opening_routes.js';
 import { finance4bRouter } from './modules/finance_4b_routes.js';
+import { financeFundsRouter } from './modules/finance_funds_routes.js';
 import { financePaymentRouter } from './modules/finance_payment_routes.js';
 import { bankImportRouter } from './modules/bank_import_routes.js';
 import { financeHomeRouter } from './modules/finance_home_routes.js';
@@ -140,6 +141,8 @@ app.use(announcementPublicRouter);
 app.use(financeRouter);
 app.use(financeOpeningRouter);
 app.use(finance4bRouter);
+// Iki kasa (Isletme / Yatirim ve Demirbas Fon): /manager/sites/:siteCode/finance/funds, /funds/:fund/movements, /fund-transfers (docs/PLATFORM_FINANS_KASALAR.md).
+app.use(financeFundsRouter);
 app.use(financePaymentRouter);
 // Dekont bildirimi / gecici kabul (066): /app/my-finance/payment-notices[...] + /manager/sites/:siteCode/finance/payment-notices[...] (finance modulu + 2A notices_enabled).
 app.use(paymentNoticeRouter);

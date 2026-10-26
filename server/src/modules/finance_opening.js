@@ -156,10 +156,10 @@ export async function revertOpeningRun({ siteCode, rawRunId, body, actor, now = 
       `
         INSERT INTO ledger_entries (
           site_code, apartment_id, kind, amount_minor, period, entry_date, due_date, definition_name, payer_party, account_party,
-          reverses_entry_id, reversal_reason, created_by, source_kind, source_id
+          reverses_entry_id, reversal_reason, created_by, source_kind, source_id, fund
         )
         SELECT l.site_code, l.apartment_id, 'reversal', -l.amount_minor, $3::DATE, $4::DATE, l.due_date, l.definition_name, l.payer_party,
-               COALESCE(l.account_party, CASE WHEN l.payer_party = 'tenant' THEN 'tenant' ELSE 'owner' END), l.id, $5::TEXT, $6::INTEGER, 'opening', $2::BIGINT
+               COALESCE(l.account_party, CASE WHEN l.payer_party = 'tenant' THEN 'tenant' ELSE 'owner' END), l.id, $5::TEXT, $6::INTEGER, 'opening', $2::BIGINT, l.fund
         ${ACTIVE_SQL}
         ORDER BY l.id
         RETURNING amount_minor

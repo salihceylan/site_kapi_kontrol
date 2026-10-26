@@ -26,7 +26,7 @@ class AddPersonDialog extends StatefulWidget {
   final ApartmentManagementService service;
   final String title;
 
-  /// true: kiracı (yönetimi devret anahtarı); false: aile üyesi ("18 yaşından küçük" seçeneği).
+  /// true: kiracı (kiracı her zaman daire yöneticisi olur: bilgi notu, anahtar yok); false: aile üyesi ("18 yaşından küçük" seçeneği).
   final bool tenantMode;
   final bool canSearch;
 
@@ -57,7 +57,6 @@ class _AddPersonDialogState extends State<AddPersonDialog> {
   String? _selected;
   bool _searching = false;
   String? _error;
-  bool _delegate = true;
   bool _minor = false;
   int _token = 0;
 
@@ -107,7 +106,7 @@ class _AddPersonDialogState extends State<AddPersonDialog> {
         setState(() => _error = 'Listeden bir kişi seçin.');
         return;
       }
-      popIfCurrent(context, AddPersonInput(candidate: handle, delegateManagement: _delegate, isMinor: _minor));
+      popIfCurrent(context, AddPersonInput(candidate: handle, isMinor: _minor));
       return;
     }
     final name = _name.text.trim();
@@ -121,7 +120,6 @@ class _AddPersonDialogState extends State<AddPersonDialog> {
         fullName: name,
         phone: _phone.text.trim(),
         email: _email.text.trim(),
-        delegateManagement: _delegate,
         isMinor: _minor,
       ),
     );
@@ -244,12 +242,10 @@ class _AddPersonDialogState extends State<AddPersonDialog> {
           ],
           const SizedBox(height: AppSpace.sm),
           if (widget.tenantMode)
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              value: _delegate,
-              onChanged: (v) => setState(() => _delegate = v),
-              title: const Text('Yönetimi kiracıya devret'),
-              subtitle: const Text('Açıksa daire yönetimi kiracıya geçer ve kiracı çıkana kadar sürer.'),
+            const InlineNotice(
+              message:
+                  'Kiracı eklendiğinde daire yöneticisi kiracı olur ve kiracı çıkana kadar sürer. Siz malik olarak dairede kalırsınız; kiracı hesabı olmadan yönetim size ait kalır, hesap bağlanınca kiracıya geçer.',
+              tone: AppTone.info,
             )
           else
             CheckboxListTile(

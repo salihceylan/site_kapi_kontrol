@@ -11,6 +11,7 @@ import 'package:site_kapi_kontrol/ui/dialogs/large_dialog_parts.dart';
 import 'package:site_kapi_kontrol/ui/helpers/date_input.dart';
 import 'package:site_kapi_kontrol/ui/helpers/finance_errors.dart';
 import 'package:site_kapi_kontrol/ui/helpers/money.dart';
+import 'package:site_kapi_kontrol/ui/widgets/finance_fund_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/my_finance_4b_parts.dart';
@@ -32,6 +33,9 @@ import 'package:site_kapi_kontrol/ui/widgets/payment_notice_status.dart';
 /// - İki hesap (İP-1A): kartın tutarları kişinin KENDİ hesabıdır (malik -> "Ev sahibi hesabı", kiracı -> "Kiracı hesabı") ve
 ///   hesabın adı yazılır. Borç sorumlusu "malik ve kiracı" olan dairede malik kiracı hesabını kartın altında SALT OKUNUR
 ///   ayrı bölümde görür; bu tutarlar kendi hesabına ve toplamlara eklenmez.
+/// - İki kasa: her hesap görünümünde kasa bazında açık borç / vadesi geçen / avans gösterilir; üç tutarı da sıfır olan kasa
+///   GÖSTERİLMEZ (kiracı yalnız İşletme Projesi (Aidat) Hesabı'nı, kiracılı dairede malik yalnız Yatırım ve Demirbaş (Fon)
+///   Hesabı'nı görür). Sunucu `funds` göndermediyse (eski sunucu) kırılım çizilmez.
 class MyFinanceView extends StatefulWidget {
   const MyFinanceView({super.key, required this.authService, this.now});
 
@@ -380,6 +384,15 @@ class _MyFinanceCardState extends State<MyFinanceCard> {
               ),
             ),
           ),
+          if (item.funds != null && FundBreakdownPanel.hasContent(item.funds!, item.advanceMinor, hideZero: true)) ...[
+            const SizedBox(height: AppSpace.md),
+            FundBreakdownPanel(
+              breakdown: item.funds!,
+              advanceMinor: item.advanceMinor,
+              hideZero: true,
+              keyPrefix: 'my_finance_funds',
+            ),
+          ],
           const SizedBox(height: AppSpace.md),
           Semantics(header: true, container: true, child: Text('Son hareketler', style: th.titleSmall)),
           const SizedBox(height: AppSpace.sm),
@@ -561,6 +574,15 @@ class _ReadOnlyAccountSectionState extends State<_ReadOnlyAccountSection> {
               ),
             ),
           ),
+          if (account.funds != null && FundBreakdownPanel.hasContent(account.funds!, account.advanceMinor, hideZero: true)) ...[
+            const SizedBox(height: AppSpace.sm),
+            FundBreakdownPanel(
+              breakdown: account.funds!,
+              advanceMinor: account.advanceMinor,
+              hideZero: true,
+              keyPrefix: '${prefix}_funds',
+            ),
+          ],
           const SizedBox(height: AppSpace.sm),
           if (recent.isEmpty)
             Text('Bu hesapta hareket yok.', key: ValueKey<String>('${prefix}_empty'), style: th.bodyMedium?.copyWith(color: p.textSecondary))

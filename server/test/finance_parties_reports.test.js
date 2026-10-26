@@ -114,6 +114,8 @@ describe('ikinci inceleme: ekstre penceresinin kiracı sekmesi (show_tenant_acco
           return { rows: [{ account_party: 'owner', balance: '5000', not_due: '0', n: '2' }, ...(tenantRows > 0 ? [{ account_party: 'tenant', balance: '9000', not_due: '0', n: String(tenantRows) }] : [])] };
         }
         if (/ORDER BY l\.entry_date DESC, l\.id DESC LIMIT/.test(sql)) return { rows: [] };
+        // kasa dağıtımı (finance_funds.loadFundLedger): hesabın tüm satırları
+        if (/FROM ledger_entries l LEFT JOIN fee_definitions fd ON fd\.id = l\.definition_id WHERE l\.site_code = \$1 AND \(\$2::BIGINT\[\] IS NULL/.test(sql)) return { rows: [] };
         if (/FROM ledger_entries l WHERE l\.site_code = \$1 AND l\.apartment_id = \$2 ORDER BY l\.id$/.test(sql)) return { rows: [] };
         if (/^SELECT a\.responsible_party, EXISTS/.test(sql)) return { rows: [{ responsible_party: 'tenant', has_tenant: hasCurrentTenant }] };
         throw new Error(`BEKLENMEYEN SQL: ${sql.slice(0, 160)}`);

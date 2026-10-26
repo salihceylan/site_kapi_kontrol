@@ -133,8 +133,10 @@ describe('gider gövdeleri', () => {
     for (const change of [{ category_id: undefined }, { amount_minor: 0 }, { amount_minor: 12.5 }, { vat_minor: 120001 }, { vat_minor: -1 }, { expense_date: '2026-10-17' }, { description: '' }, { document_kind: 'fatura' }, { document_no: 'x'.repeat(41) }, { idempotency_key: undefined }, { allow_duplicate: 'evet' }]) {
       throws400(() => parseExpenseInput({ ...base, ...change }, NOW), JSON.stringify(change));
     }
-    assert.deepEqual(DEFAULT_EXPENSE_CATEGORIES.length, 12);
-    assert.equal(new Set(DEFAULT_EXPENSE_CATEGORIES).size, 12);
+    // 12 klasik kategori + sistem kategorisi "Yatırım ve demirbaş" (kasa: capital; docs/PLATFORM_FINANS_KASALAR.md 4)
+    assert.deepEqual(DEFAULT_EXPENSE_CATEGORIES.length, 13);
+    assert.equal(new Set(DEFAULT_EXPENSE_CATEGORIES).size, 13);
+    assert.equal(DEFAULT_EXPENSE_CATEGORIES.at(-1), 'Yatırım ve demirbaş');
   });
 
   it('belge numarası normalizasyonu: Türkçe katlama, küçük harf, yalnız harf/rakam; boş -> null (tedarikçi + belge no tekilliği boşta uygulanmaz)', () => {
@@ -157,7 +159,11 @@ describe('gider gövdeleri', () => {
   it('iptal gövdesi, kategori ve tedarikçi gövdeleri', () => {
     assert.deepEqual(parseVoidInput({ reason: ' yanlış girildi ', idempotency_key: KEY }), { reason: 'yanlış girildi', idempotencyKey: KEY });
     throws400(() => parseVoidInput({ idempotency_key: KEY }), 'neden zorunlu');
-    assert.deepEqual(parseCategoryBody({ name: ' Boya ' }, { create: true }), { name: 'Boya' });
+    assert.deepEqual(parseCategoryBody({ name: ' Boya ' }, { create: true }), { name: 'Boya', fund: 'operating' });
+    assert.deepEqual(parseCategoryBody({ name: 'Çatı', fund: 'capital' }, { create: true }), { name: 'Çatı', fund: 'capital' });
+    throws400(() => parseCategoryBody({ name: 'Çatı', fund: 'fon' }, { create: true }), 'geçersiz kasa');
+    assert.deepEqual(parseCategoryBody({ fund: 'capital' }, { create: false }), { fund: 'capital' });
+    throws400(() => parseCategoryBody({ fund: null }, { create: false }), 'kasa boş olamaz');
     throws400(() => parseCategoryBody({}, { create: true }), 'ad zorunlu');
     assert.deepEqual(parseCategoryBody({ is_active: false, sort_order: 4 }, { create: false }), { isActive: false, sortOrder: 4 });
     throws400(() => parseCategoryBody({}, { create: false }), 'boş yama');

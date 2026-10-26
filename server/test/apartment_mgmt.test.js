@@ -79,7 +79,8 @@ describe('apartment_mgmt sema', () => {
     assert.equal(sent.filter((q) => /CREATE TABLE IF NOT EXISTS apartment_proxies/.test(q)).length, 1);
   });
   it('db.js sema ensure cagirir; server.js router kaydeder', () => {
-    assert.match(read('src/db.js'), /await ensureApartmentMgmtSchema\(client\)/);
+    // ust tablo yoksa (platform oncesi kesilmis sema) adim ertelenir: ensureDeferred sarmalayicisi 42P01'i yutar, baska hatayi firlatir
+    assert.match(read('src/db.js'), /await ensureDeferred\('[^']+', \(\) => ensureApartmentMgmtSchema\(client\)\)/);
     assert.match(read('src/server.js'), /app\.use\(apartmentMgmtRouter\)/);
   });
 });
@@ -127,12 +128,12 @@ describe('admin cozumleme ve roller', () => {
     assert.equal(tenant.can.exit, true);
     assert.equal(tenant.can.manage_proxy, false);
   });
-  it('malik admin kalirsa kiraciya devredebilir; aile uyesi yalniz okur', () => {
+  it('kiraci HER ZAMAN admin kurali: "yonetimi devret" secenegi kalkti (can.delegate_management her durumda false); aile uyesi yalniz okur', () => {
     const roles = rules.resolveApartmentRoles({
       members: [member(1, 'APARTMENT_ADMIN'), member(2, 'FAMILY_MEMBER'), member(3, 'FAMILY_MEMBER')],
       residencies: [res(10, 100, 1, 'owner'), res(11, 101, 2, 'tenant'), res(12, 102, 3, 'family_member')],
     });
-    assert.equal(rules.rolesOfUser(roles, 1).can.delegate_management, true);
+    assert.equal(rules.rolesOfUser(roles, 1).can.delegate_management, false, 'malik admin gorunse bile devret secenegi yok (kiraci her zaman admin; sunucu gecisi kendisi yapar)');
     const family = rules.rolesOfUser(roles, 3);
     assert.equal(family.my_role, 'family_member');
     assert.ok(Object.values(family.can).every((v) => v === false), 'aile uyesinin hicbir yonetim yetkisi yok');

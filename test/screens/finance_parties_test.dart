@@ -1,5 +1,5 @@
 // İki hesap (İP-1A, karar G12) istemci davranışı: ekstre penceresinde [Kiracı hesabı] [Ev sahibi hesabı] sekmeleri, tahsilatta
-// "Daire hesabı" seçimi (varsayılan sunucudan), düzeltmede hesap değiştirme, ek borç / tanımda "Kim öder", bakiye listesinde
+// "Daire hesabı" seçimi (varsayılan sunucudan), düzeltmede hesap değiştirme, ek borç / tanımda "Kasa" seçimi, bakiye listesinde
 // hesap kırılımı, Borcum'da kendi hesabı + salt okunur kiracı hesabı, rapor hesap süzgeci ve gecikme tazminatında aynı
 // dairenin iki satırı. Eski sunucu biçimindeki daireler (sahte serviste `twoAccountApartments` dışında) eski görünümü korur.
 import 'dart:async';
@@ -70,6 +70,12 @@ Future<void> _pay(WidgetTester t, String amount) async {
 }
 
 bool _selected(WidgetTester t, String key) => t.widget<ChoiceChip>(find.byKey(ValueKey<String>(key))).selected;
+
+/// "Kasa" seçim satırı seçili mi? (Satır dolu radyo simgesi taşır.)
+bool _fundSelected(WidgetTester t, String key) => find
+    .descendant(of: find.byKey(ValueKey<String>(key)), matching: find.byIcon(Icons.radio_button_checked_rounded))
+    .evaluate()
+    .isNotEmpty;
 
 void main() {
   group('taşma matrisi (dar ekran / büyük yazı / koyu tema)', () {
@@ -266,7 +272,7 @@ void main() {
     });
   });
 
-  group('"Kim öder"', () {
+  group('"Kasa" seçimi (tanım ve ek borç)', () {
     Future<void> openCharge(WidgetTester t, FinanceFakeAuth auth) => openDialogAt(
       t,
       (context) => FinanceRunDialog.showCharge(context, scope: _scope(auth), now: () => _now),
@@ -276,24 +282,28 @@ void main() {
       dark: false,
     );
 
-    testWidgets('ek borç: varsayılan ev sahibi (gövdede alan yok); dairede oturan seçilince charge_party gider; önizleme satırı hesabı yazar', (t) async {
+    testWidgets('ek borç: varsayılan Fon Hesabı; seçilen kasa gövdede gider; önizleme satırı hesabı yazar', (t) async {
       final auth = _twoAccounts();
       auth.previewAccounts[301] = 'tenant';
       await openCharge(t, auth);
       await settleFor(t);
-      expect(_selected(t, 'finance_charge_party_owner'), isTrue);
-      expect(find.byKey(const ValueKey<String>('finance_charge_party_note')), findsOneWidget);
+      expect(_fundSelected(t, 'finance_charge_fund_capital'), isTrue);
+      expect(_fundSelected(t, 'finance_charge_fund_operating'), isFalse);
+      expect(find.text('İşletme Projesi (Aidat) Hesabı — dairede oturan öder (kiracı varsa kiracı)'), findsOneWidget);
+      expect(find.text('Yatırım ve Demirbaş (Fon) Hesabı — malik öder'), findsOneWidget);
       await f4Enter(t, 'finance_charge_name', 'Çatı onarımı');
       await f4Tap(t, 'charge_spec_dist_equal');
       await f4Enter(t, 'charge_spec_amount', '3.000');
       await _tap(t, 'finance_run_preview');
-      expect(auth.chargePreviewCalls.single.containsKey('charge_party'), isFalse, reason: 'varsayılan: eski istekle aynı');
+      expect(auth.chargePreviewCalls.single['fund'], 'capital');
+      expect(auth.chargePreviewCalls.single.containsKey('charge_party'), isFalse, reason: 'yalnız fund gider');
       expect(find.text('Kiracı hesabı'), findsOneWidget, reason: 'iki hesaplı dairenin satırı hesabı yazar');
       await _tap(t, 'finance_run_back');
-      await f4Tap(t, 'finance_charge_party_occupant');
-      expect(_selected(t, 'finance_charge_party_occupant'), isTrue);
+      await f4Tap(t, 'finance_charge_fund_operating');
+      expect(_fundSelected(t, 'finance_charge_fund_operating'), isTrue);
+      expect(_fundSelected(t, 'finance_charge_fund_capital'), isFalse);
       await _tap(t, 'finance_run_preview');
-      expect(auth.chargePreviewCalls.last['charge_party'], 'occupant');
+      expect(auth.chargePreviewCalls.last['fund'], 'operating');
     });
 
     Future<void> openForm(WidgetTester t, FinanceFakeAuth auth, {FeeDefinition? definition}) => openDialogAt(
@@ -305,40 +315,59 @@ void main() {
       dark: false,
     );
 
-    testWidgets('yeni tanım: aylık varsayılan dairede oturan, tek seferlik ev sahibi; varsayılan gönderilmez, değiştirilen gider', (t) async {
+    testWidgets('yeni tanım: aylık varsayılan Aidat Hesabı, tek seferlik Fon Hesabı; seçilen kasa gider (charge_party gitmez)', (t) async {
       final auth = _twoAccounts();
       await openForm(t, auth);
       await settleFor(t);
-      expect(_selected(t, 'finance_def_charge_party_occupant'), isTrue);
+      expect(find.text('Kim öder'), findsNothing, reason: '"Kim öder" yerine "Kasa"');
+      expect(find.text('Kasa'), findsOneWidget);
+      expect(_fundSelected(t, 'finance_def_fund_operating'), isTrue);
       await f4Tap(t, 'finance_kind_one_time');
-      expect(_selected(t, 'finance_def_charge_party_owner'), isTrue, reason: 'tür değişince seçilmemiş değer türün varsayılanına geçer');
+      expect(_fundSelected(t, 'finance_def_fund_capital'), isTrue, reason: 'tür değişince seçilmemiş değer türün varsayılanına geçer');
       await f4Tap(t, 'finance_kind_recurring');
-      expect(_selected(t, 'finance_def_charge_party_occupant'), isTrue);
-      await f4Tap(t, 'finance_def_charge_party_owner');
+      expect(_fundSelected(t, 'finance_def_fund_operating'), isTrue);
+      await f4Tap(t, 'finance_def_fund_capital');
       await f4Enter(t, 'finance_definition_name', 'Demirbaş');
       await f4Enter(t, 'def_spec_amount', '50');
       await _tap(t, 'finance_definition_submit');
-      expect(auth.definitionCreateCalls.single['charge_party'], 'owner');
+      expect(auth.definitionCreateCalls.single['fund'], 'capital');
+      expect(auth.definitionCreateCalls.single.containsKey('charge_party'), isFalse);
     });
 
-    testWidgets('yeni aylık tanım varsayılanla: charge_party gövdede yok (sunucu varsayılanı)', (t) async {
+    testWidgets('yeni aylık tanım varsayılanla: fund=operating açıkça gider', (t) async {
       final auth = _twoAccounts();
       await openForm(t, auth);
       await settleFor(t);
       await f4Enter(t, 'finance_definition_name', 'Aidat');
       await f4Enter(t, 'def_spec_amount', '500');
       await _tap(t, 'finance_definition_submit');
+      expect(auth.definitionCreateCalls.single['fund'], 'operating');
       expect(auth.definitionCreateCalls.single.containsKey('charge_party'), isFalse);
     });
 
-    testWidgets('borçlandırılmış tanım: "Kim öder" değişir (yalnız sonraki borçlandırmalar); yalnız charge_party gider', (t) async {
+    testWidgets('borçlandırılmış tanım: kasa değişir (yalnız sonraki borçlandırmalar); yalnız fund gider', (t) async {
       final auth = _twoAccounts();
       await openForm(t, auth, definition: FeeDefinition.fromJson(auth.definitions[1]!));
       await settleFor(t);
-      expect(find.byKey(const ValueKey<String>('finance_definition_charge_party_note')), findsOneWidget);
-      await f4Tap(t, 'finance_def_charge_party_owner');
+      expect(find.byKey(const ValueKey<String>('finance_definition_fund_note')), findsOneWidget);
+      expect(_fundSelected(t, 'finance_def_fund_operating'), isTrue);
+      await f4Tap(t, 'finance_def_fund_capital');
       await _tap(t, 'finance_definition_submit');
-      expect(auth.definitionUpdateCalls.single.fields, <String, Object?>{'charge_party': 'owner'});
+      expect(auth.definitionUpdateCalls.single.fields, <String, Object?>{'fund': 'capital'});
+    });
+
+    testWidgets('eski sunucu (tanımda fund yok): kasa "kim öder"den türer; değişiklik yoksa sunucuya gidilmez', (t) async {
+      final auth = _twoAccounts();
+      // finDefinition fund göndermez (eski biçim); tek seferlik tanım ev sahibi öder => Fon Hesabı
+      auth.definitions[7] = finDefinition(7, name: 'Çatı', kind: 'one_time', dueDay: null);
+      final old = FeeDefinition.fromJson(auth.definitions[7]!);
+      expect(old.fund, isNull);
+      expect(old.effectiveFund.apiValue, 'capital');
+      await openForm(t, auth, definition: old);
+      await settleFor(t);
+      expect(_fundSelected(t, 'finance_def_fund_capital'), isTrue);
+      await _tap(t, 'finance_definition_submit');
+      expect(auth.definitionUpdateCalls, isEmpty);
     });
   });
 

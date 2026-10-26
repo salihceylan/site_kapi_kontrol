@@ -17,6 +17,7 @@ class _FakeApt extends ApartmentManagementService {
   MyApartmentsData data;
   final List<String> calls = <String>[];
   String removeMode = 'removed';
+  final List<Map<String, Object?>> tenantBodies = <Map<String, Object?>>[];
 
   @override
   Future<MyApartmentsData> mine() async => data;
@@ -40,6 +41,12 @@ class _FakeApt extends ApartmentManagementService {
   Future<String> removeFamily(int apartmentId, int residencyId) async {
     calls.add('removeFamily:$residencyId');
     return removeMode;
+  }
+
+  @override
+  Future<void> addTenant(int apartmentId, Map<String, Object?> body) async {
+    tenantBodies.add(body);
+    calls.add('addTenant:$apartmentId');
   }
 
   @override
@@ -120,7 +127,9 @@ void main() {
     final svc = _FakeApt(MyApartmentsData(apartments: <MyApartment>[owner]));
     await _pump(t, svc);
     expect(find.text('Daire yönetimi: Ali Yılmaz (kiracı)'), findsOneWidget);
-    expect(find.text('Yönetim kiracıdadır ve kiracı çıkana kadar sürer.'), findsOneWidget);
+    expect(find.text('Kiracı daire yöneticisidir; kiracı çıkana kadar sürer. Malik ve kiracı birlikte kayıtlıdır.'), findsOneWidget);
+    // "Yönetimi kiracıya devret" seçeneği kalktı (kiracı her zaman daire yöneticisi): düğme de, devir metni de yok.
+    expect(find.text('Yönetimi kiracıya devret'), findsNothing);
     expect(find.text('Aile üyesi ekle'), findsNothing);
     expect(find.text('Vekalet ver'), findsOneWidget);
 
@@ -133,6 +142,41 @@ void main() {
     await settleFor(t);
     expect(find.text('Daireyi devret / Çıkış'), findsOneWidget);
     expect(find.text('Bağlantıyı kes talebi'), findsOneWidget);
+  });
+
+  testWidgets('Kiracı ekle: "Yönetimi kiracıya devret" kutusu YOK; bilgi notu "kiracı daire yöneticisi olur" yazar; gövdede delegate_management gönderilmez', (t) async {
+    final svc = _FakeApt(MyApartmentsData(apartments: <MyApartment>[_apt()], canSearch: true));
+    await _pump(t, svc);
+    expect(find.text('Kiracı eklendiğinde daire yöneticisi kiracı olur; siz malik olarak dairede kalırsınız.'), findsOneWidget);
+    expect(find.text('Yönetimi kiracıya devret'), findsNothing);
+    await t.tap(find.text('Kiracı ekle'));
+    await settleFor(t);
+    expect(find.textContaining('Kiracı eklendiğinde daire yöneticisi kiracı olur ve kiracı çıkana kadar sürer'), findsOneWidget);
+    expect(find.text('Yönetimi kiracıya devret'), findsNothing);
+    expect(find.byType(Switch), findsNothing);
+    expect(find.byType(SwitchListTile), findsNothing);
+    await t.enterText(find.widgetWithText(TextField, 'Ad soyad'), 'Ali Yılmaz');
+    await t.tap(find.text('Ekle'));
+    await settleFor(t);
+    expect(svc.calls, contains('addTenant:5'));
+    expect(svc.tenantBodies.single.containsKey('delegate_management'), isFalse);
+    expect(svc.tenantBodies.single['person'], isA<Map<String, Object?>>());
+  });
+
+  testWidgets('Kiracı ekle penceresi dar ekran + büyük yazıda taşmaz; aile üyesi penceresinde devret notu yok', (t) async {
+    final svc = _FakeApt(MyApartmentsData(apartments: <MyApartment>[_apt()], canSearch: true));
+    await _pump(t, svc, width: 320, scale: 2.0);
+    await t.tap(find.text('Kiracı ekle'));
+    await settleFor(t);
+    expect(t.takeException(), isNull);
+    expect(find.textContaining('kiracı çıkana kadar sürer'), findsOneWidget);
+    await t.tap(find.text('Vazgeç'));
+    await settleFor(t);
+    await t.tap(find.text('Aile üyesi ekle'));
+    await settleFor(t);
+    expect(t.takeException(), isNull);
+    expect(find.textContaining('kiracı çıkana kadar sürer'), findsNothing);
+    expect(find.text('18 yaşından küçük'), findsOneWidget);
   });
 
   testWidgets('aile üyesi salt okunur: ekleme / çıkarma düğmesi yok, ayrılma ve gizli güvenlik bölümü var', (t) async {
@@ -175,13 +219,14 @@ void main() {
     final svc = _FakeApt(
       const MyApartmentsData(
         incoming: <IncomingAptRequest>[
-          IncomingAptRequest(id: 7, kind: 'tenant_invite', apartmentId: 5, siteName: 'Gül Sitesi', apartmentLabel: 'A Blok - 5', requesterName: 'Veli Kaya', delegateManagement: true),
+          IncomingAptRequest(id: 7, kind: 'tenant_invite', apartmentId: 5, siteName: 'Gül Sitesi', apartmentLabel: 'A Blok - 5', requesterName: 'Veli Kaya'),
           IncomingAptRequest(id: 8, kind: 'member_removal', apartmentId: 5, siteName: 'Gül Sitesi', apartmentLabel: 'A Blok - 5', requesterName: 'Admin Kişi'),
         ],
       ),
     );
     await _pump(t, svc);
     expect(find.textContaining('kiracı olarak davet etti'), findsOneWidget);
+    expect(find.textContaining('daire yöneticisi siz olursunuz'), findsOneWidget, reason: 'kiracı daveti: kabul edince yönetim kiracıya geçer (seçenek yok)');
     expect(find.textContaining('7 gün yanıtsız kalırsa'), findsOneWidget);
     await t.tap(find.descendant(of: find.byKey(const ValueKey<String>('apt_incoming_7')), matching: find.text('Kabul et')));
     await settleFor(t);
@@ -208,7 +253,7 @@ void main() {
         apartments: <MyApartment>[
           _apt(
             tenant: tenant,
-            can: const AptCan(manageFamily: true, delegateManagement: true, manageProxy: true, requestDisconnect: true, searchPeople: true),
+            can: const AptCan(manageFamily: true, manageProxy: true, requestDisconnect: true, searchPeople: true),
             family: const <AptFamilyMember>[AptFamilyMember(residencyId: 21, name: 'Ayşe Kaya Uzun İsimli Aile Üyesi', relation: 'family_member', hasAccount: true, canRemove: true)],
           ),
         ],

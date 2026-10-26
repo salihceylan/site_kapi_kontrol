@@ -186,9 +186,6 @@ class ApartmentManagementService {
     return r['mode'] is String ? r['mode'] as String : 'removed';
   }
 
-  Future<void> delegateManagement(int apartmentId) =>
-      _guard((t) => api.call('POST', _apt(apartmentId, 'management/delegate'), token: t));
-
   Future<ExitPreview> exitPreview(int apartmentId) async =>
       ExitPreview.fromJson(await _guard((t) => api.call('GET', _apt(apartmentId, 'exit-preview'), token: t)));
 

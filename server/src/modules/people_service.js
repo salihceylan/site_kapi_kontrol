@@ -50,6 +50,7 @@ import { deactivatePersonRecord, deactivatePersonUnlessTied } from './people_rec
 import { closeLogFor, logResidencyEvent } from './residency_log.js';
 import { INTERNAL_EMAIL_SUFFIX, runSyncSteps, siteTiePredicate } from './people_sync_sql.js';
 import { peopleLockKey, syncSitePeopleSafe } from './people_sync.js';
+import { ensureTenantIsAdmin } from './apartment_tenant_admin.js';
 
 export const PERSON_NOT_FOUND = () => new PlatformError(404, 'PERSON_NOT_FOUND', 'Kişi bulunamadı.');
 export const RESIDENCY_NOT_FOUND = () => new PlatformError(404, 'RESIDENCY_NOT_FOUND', 'İlişki kaydı bulunamadı.');
@@ -518,6 +519,9 @@ export async function grantApartmentAccess(client, { siteCode, apartmentId, user
     `,
     [siteCode, userCode],
   );
+  // Kiracı HER ZAMAN daire adminidir (docs/PLATFORM_DAIRE_YONETIMI.md): erişim verilen kişi dairenin güncel kiracısıysa yönetim ona geçer
+  // (hesap sonradan bağlanan kiracı dahil: davet kabulü, hesap açma, toplu yükleme). Kiracı değilse yalnız bir okuma yapılır.
+  await ensureTenantIsAdmin(client, { apartmentIds: [apartmentId], userCode, via: 'access_granted' });
 }
 
 /**
@@ -551,8 +555,8 @@ async function insertResidency(client, { siteCode, apartmentId, personId, relati
 
 /**
  * Hesaplı kişinin bir dairedeki erişimini kapatır: mevcut üye çıkarma akışının (membership_service.removeApartmentMember)
- * yan etkileriyle AYNI: üyelik pasif, kişi daire yöneticisi/eski sakin göstergesi ise yönetici devri (başka admin / en eski aktif
- * üye / kimse yoksa gösterge ve PIN temizlenir), manuel kapı izinleri (kişinin sitede başka aktif bağı kalmadıysa) silinir.
+ * yan etkileriyle AYNI: üyelik pasif, kişi daire yöneticisi/eski sakin göstergesi ise yönetici devri (başka admin / güncel kiracı >
+ * güncel malik > en eski aktif üye - kiracı ayrılınca yönetim malike döner / kimse yoksa gösterge ve PIN temizlenir), manuel kapı izinleri (kişinin sitede başka aktif bağı kalmadıysa) silinir.
  * Dahili (@ahbu.local) daire hesabının başka erişimi kalmadıysa hesap PASİFLEŞİR (giriş ve PIN ile kapı kapanır).
  * Daire satırı çağıran tarafından FOR UPDATE ile kilitlenmiştir (üyelik akışlarıyla aynı kilit sırası).
  * @returns {Promise<boolean>} erişim gerçekten kapandı mı (anahtar döndürme gerekir mi)
@@ -968,6 +972,10 @@ export async function createPerson({ siteCode, input, actor, includeUserCode = t
         apartment_id: Number(apartment.id),
         relation: input.relation,
       });
+      if (input.relation === 'tenant') {
+        // Kiracı her zaman daire admini (hesap bağlandıysa / açıldıysa ve aktif üyeliği varsa); hesapsız kiracıda hesap bağlanınca geçer.
+        await ensureTenantIsAdmin(client, { apartmentIds: [Number(apartment.id)], overrideManager: true, via: 'person_created', actor });
+      }
     }
     return id;
   });
@@ -1258,6 +1266,10 @@ export async function addResidency({ siteCode, personId, body = {}, actor, inclu
       apartment_id: apartmentId,
       relation,
     });
+    if (relation === 'tenant') {
+      // Kiracı her zaman daire admini (hesabı ve aktif üyeliği varsa); hesapsız kiracıda hesap bağlanınca geçer.
+      await ensureTenantIsAdmin(client, { apartmentIds: [apartmentId], overrideManager: true, via: 'residency_added', actor });
+    }
   });
   return loadPersonDetail(pool, siteCode, id, { includeUserCode });
 }
@@ -1291,6 +1303,16 @@ export async function updateResidency({ siteCode, residencyId, body = {}, actor,
   const moveInDate = body.move_in_date !== undefined ? normalizeDateInput(body.move_in_date, 'move_in_date') : undefined;
 
   const personId = await withSiteTransaction(siteCode, async (client) => {
+    if (relation === 'tenant') {
+      // Kiracıya çevirme daire adminini değiştirebilir: kilit sırası (apartments -> ilişki) için daire, ilişki satırından ÖNCE kilitlenir.
+      const pre = await client.query(
+        `SELECT r.apartment_id FROM apartment_residencies r INNER JOIN site_people sp ON sp.id = r.person_id WHERE r.id = $1 AND sp.site_code = $2`,
+        [id, siteCode],
+      );
+      if (pre.rows?.[0]) {
+        await client.query(`SELECT id FROM apartments WHERE id = $1 FOR UPDATE`, [Number(pre.rows[0].apartment_id)]);
+      }
+    }
     const row = await loadResidencyForSite(client, siteCode, id);
     const changes = [];
     const sets = [];
@@ -1342,6 +1364,10 @@ export async function updateResidency({ siteCode, residencyId, body = {}, actor,
           actor,
           related: { residency_id: id, from_relation: row.relation, to_relation: relation },
         });
+        if (relation === 'tenant' && row.is_current === true) {
+          // İlişki türü kiracıya çevrildi: kiracı her zaman daire admini (hesabı ve aktif üyeliği varsa).
+          await ensureTenantIsAdmin(client, { apartmentIds: [Number(row.apartment_id)], overrideManager: true, via: 'residency_changed', actor });
+        }
       }
     }
     return Number(row.person_id);
@@ -1934,6 +1960,8 @@ export async function provisionResidentAndLinkPerson({ apartmentId, siteCode = n
         fullName,
         email,
       });
+      // Hesap, dairenin hesapsız KİRACISINA bağlandıysa (ad / e-posta eşleşmesi) kiracı admin olur; bağlanan kişi kiracı değilse yalnız bir okuma.
+      await ensureTenantIsAdmin(client, { apartmentIds: [apartmentId], userCode, via: 'account_linked' });
     }
     return apartment;
   });

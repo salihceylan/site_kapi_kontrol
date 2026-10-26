@@ -17,6 +17,7 @@ import { reissueDeviceToken } from '../security/login_device_token.js';
 import { endResidenciesForMemberRemoval } from '../modules/people_records.js';
 import { logResidencyEvent } from '../modules/residency_log.js';
 import { closeDelegationsOnLeave, endOpenDelegation } from '../modules/apartment_delegation_close.js';
+import { pickAdminSuccessor } from '../modules/apartment_admin_successor.js';
 import { createSiteWithStructure, userHasOwnerLink } from './site_setup_core.js';
 import {
   SQL_BULK_APARTMENT_USERS,
@@ -1673,8 +1674,9 @@ export async function cleanupDoorOverridesIfNoMembership(client, siteCode, userC
 
 /**
  * Çıkarılan/silinen kişi dairenin yöneticisi (veya eski tekil sakin göstergesi) ise yönetici devri:
- * başka aktif APARTMENT_ADMIN varsa gösterge ona taşınır; yoksa en eski aktif üye APARTMENT_ADMIN olur;
- * kimse kalmadıysa gösterge temizlenir (eski sakin göstergesi erişimi sürdürmesin diye).
+ * başka aktif APARTMENT_ADMIN varsa gösterge ona taşınır; yoksa kalan aktif üyelerden öncelik sırasıyla biri APARTMENT_ADMIN olur:
+ * güncel KİRACI > güncel MALİK > en eski aktif üye (apartment_admin_successor.js; kiracı her zaman daire admini kuralı: kiracı çıkarılınca
+ * yönetim malike döner, kiracının aile üyesine geçmez); kimse kalmadıysa gösterge temizlenir (eski sakin göstergesi erişimi sürdürmesin diye).
  */
 export async function handOverApartmentResident(
   client,
@@ -1718,15 +1720,10 @@ export async function handOverApartmentResident(
     return;
   }
 
-  // Dairede kalan başka bir AKTİF üye varsa onu otomatik APARTMENT_ADMIN yap
-  const remainingRes = await client.query(
-    `SELECT user_code FROM apartment_memberships
-     WHERE apartment_id = $1 AND user_code <> $2 AND is_active = TRUE
-     ORDER BY created_at ASC, id ASC LIMIT 1`,
-    [apartmentId, removedUserCode],
-  );
-  if (remainingRes.rowCount > 0) {
-    const newAdminCode = Number(remainingRes.rows[0].user_code);
+  // Dairede kalan başka bir AKTİF üye varsa onu otomatik APARTMENT_ADMIN yap: güncel kiracı > güncel malik > en eski aktif üye
+  const successorCode = await pickAdminSuccessor(client, apartmentId, removedUserCode);
+  if (successorCode !== null) {
+    const newAdminCode = successorCode;
     await client.query(
       `UPDATE apartment_memberships SET role = 'APARTMENT_ADMIN', updated_at = NOW() WHERE apartment_id = $1 AND user_code = $2`,
       [apartmentId, newAdminCode],

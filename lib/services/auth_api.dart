@@ -14,6 +14,7 @@ import 'package:site_kapi_kontrol/models/door_access_log_record.dart';
 import 'package:site_kapi_kontrol/models/door_record.dart';
 import 'package:site_kapi_kontrol/models/door_runtime_status.dart';
 import 'package:site_kapi_kontrol/models/finance.dart';
+import 'package:site_kapi_kontrol/models/finance_funds.dart';
 import 'package:site_kapi_kontrol/models/finance_home.dart';
 import 'package:site_kapi_kontrol/models/guest_pass.dart';
 import 'package:site_kapi_kontrol/models/managed_user_account.dart';
@@ -2509,7 +2510,8 @@ class AuthApi {
   }
 
   /// Tahsilat kaydı. [amountMinor] POZİTİF kuruş (defter −); [entryDate] takvim günü (gelecek olamaz). [accountParty] (İP-1A):
-  /// tahsilatın yazılacağı daire hesabı; verilmezse sunucu vadesi en eski açık borcu olan hesabı seçer.
+  /// tahsilatın yazılacağı daire hesabı; verilmezse sunucu vadesi en eski açık borcu olan hesabı seçer. [fund]: tahsilat YALNIZ
+  /// o kasanın borçlarına uygulanır; verilmezse otomatik (en eski vade önce).
   Future<LedgerWriteResult> recordFeePayment({
     required String token,
     required int siteCode,
@@ -2520,6 +2522,7 @@ class AuthApi {
     String? description,
     required String idempotencyKey,
     AccountParty? accountParty,
+    FinanceFund? fund,
   }) async {
     final note = description?.trim();
     final response = await _authorizedRequest(
@@ -2534,6 +2537,7 @@ class AuthApi {
         if (note != null && note.isNotEmpty) 'description': note,
         'idempotency_key': idempotencyKey,
         'account_party': ?accountParty?.apiValue,
+        'fund': ?fund?.apiValue,
       },
     );
     _ensureCreatedOrOk(response);
@@ -2566,6 +2570,7 @@ class AuthApi {
 
   /// Tahsilatı düzeltir: TEK işlemde ters kayıt + yeni tahsilat. [accountParty] (İP-1A) verilirse yeni tahsilat o hesaba yazılır
   /// (yanlış hesaba girilen tahsilatın düzeltilmesi); verilmezse eski tahsilatın hesabı korunur. Ters kayıt hep eski hesaptadır.
+  /// [fund] verilirse yeni tahsilat yalnız o kasaya uygulanır; verilmezse ASIL tahsilatın kısıtı korunur.
   Future<LedgerWriteResult> correctFinancePayment({
     required String token,
     required int siteCode,
@@ -2576,6 +2581,7 @@ class AuthApi {
     String? description,
     required String idempotencyKey,
     AccountParty? accountParty,
+    FinanceFund? fund,
   }) async {
     final note = description?.trim();
     final response = await _authorizedRequest(
@@ -2589,6 +2595,7 @@ class AuthApi {
         if (note != null && note.isNotEmpty) 'description': note,
         'idempotency_key': idempotencyKey,
         'account_party': ?accountParty?.apiValue,
+        'fund': ?fund?.apiValue,
       },
     );
     _ensureCreatedOrOk(response);

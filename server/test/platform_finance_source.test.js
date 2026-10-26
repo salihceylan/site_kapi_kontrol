@@ -80,6 +80,10 @@ describe('finans kaynakları: para hesabında kayan nokta YOK', () => {
       'finance_expense_nature_schema.js',
       'finance_expenses.js',
       'finance_export_tables.js',
+      'finance_funds.js',
+      'finance_funds_routes.js',
+      'finance_funds_schema.js',
+      'finance_funds_service.js',
       'finance_home.js',
       'finance_home_routes.js',
       'finance_iban.js',
@@ -194,7 +198,7 @@ describe('finans: kilit sırası ve bağlantılar (kaynak düzeyi)', () => {
     assert.equal((tx.match(/return runOnce\(siteCode, work\)/g) || []).length, 1, 'tek yeniden deneme');
   });
 
-  it('site_service.syncSiteStructureCounts: finance kilidi ilk silmeden ÖNCE ve YALNIZ bir kez; mali kayıt denetimi anlık görüntüden ve DELETE\'ten önce', () => {
+  it('site_service.syncSiteStructureCounts: finance kilidi dolu daire denetiminden (daire FOR UPDATE) ve ilk silmeden ÖNCE ve YALNIZ bir kez; mali kayıt denetimi anlık görüntüden ve DELETE\'ten önce', () => {
     const service = rawOf('src/services/site_service.js').replace(/\r\n/g, '\n');
     const start = service.indexOf('export async function syncSiteStructureCounts');
     const end = service.indexOf('export async function upsertSiteManagerLink');
@@ -208,8 +212,11 @@ describe('finans: kilit sırası ve bağlantılar (kaynak düzeyi)', () => {
     const del = body.indexOf('DELETE FROM apartments WHERE id = $1');
     assert.ok(peopleLock > 0 && financeLock > peopleLock, 'önce people_sync, sonra finance_post');
     assert.ok(financeLock < check && check < throwAt && throwAt < residentUpdate && residentUpdate < snapshot && snapshot < del);
-    assert.equal((body.match(/financeLockKey\(siteCode\)/g) || []).length, 1, 'kilit tek yerde, bayrakla bir kez');
-    assert.match(body, /if \(!financeLocked\)/);
+    assert.equal((body.match(/financeLockKey\(siteCode\)/g) || []).length, 1, 'kilit tek yerde');
+    // gerçek PG QA H3: kilit sırası people_sync -> finance_post -> apartments; dolu daire denetimi (apartments FOR UPDATE) finans kilidinden SONRA
+    const occupancy = body.indexOf('await assertApartmentsRemovable(client');
+    assert.ok(financeLock > 0 && occupancy > financeLock, 'finans kilidi dolu daire denetiminden önce');
+    assert.match(body, /if \(removalCandidateIds\.length > 0\) \{\n\s+await client\.query\('SELECT pg_advisory_xact_lock\(hashtext\(\$1\)\)', \[financeLockKey\(siteCode\)\]\);/);
     assert.match(service, /import \{ apartmentHasFinance, financeLockKey \} from '\.\.\/modules\/finance_common\.js';/);
   });
 
