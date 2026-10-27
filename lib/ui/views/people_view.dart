@@ -8,6 +8,7 @@ import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/services/apartment_management_api.dart';
 import 'package:site_kapi_kontrol/services/bulk_api.dart' show BulkService;
 import 'package:site_kapi_kontrol/ui/dialogs/apartment_admin_dialogs.dart';
+import 'package:site_kapi_kontrol/ui/design/action_bar.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart';
@@ -17,7 +18,6 @@ import 'package:site_kapi_kontrol/ui/views/people_apartments_tab.dart';
 import 'package:site_kapi_kontrol/ui/views/people_persons_tab.dart';
 import 'package:site_kapi_kontrol/ui/views/people_team_tab.dart';
 import 'package:site_kapi_kontrol/ui/views/people_vehicles_tab.dart';
-import 'package:site_kapi_kontrol/ui/widgets/bulk_entry_buttons.dart';
 import 'package:site_kapi_kontrol/ui/widgets/bulk_export_sheet.dart';
 import 'package:site_kapi_kontrol/ui/widgets/bulk_export_sources.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
@@ -374,52 +374,49 @@ class PeopleViewState extends State<PeopleView> {
           const SizedBox(height: AppSpace.md),
         ],
         if (site.canWrite) ...[
-          BulkEntryActions(
-            onImport: () => unawaited(_openBulkImport(scope)),
-            onExport: () => unawaited(_openBulkExport(scope)),
-          ),
-          const SizedBox(height: AppSpace.md),
-          // Yönetim kadrosu (058): eski "Yönetim Kurulu ve Görevliler" penceresi yerine Kadro sekmesi açılır.
-          Align(
-            alignment: Alignment.centerLeft,
-            child: OutlinedButton.icon(
-              key: const ValueKey<String>('people_staff_roles'),
-              onPressed: () => _selectTab(3),
-              icon: const Icon(Icons.badge_rounded, size: 18),
-              label: const Text('Yönetim Kurulu ve Görevliler'),
-            ),
-          ),
-          const SizedBox(height: AppSpace.sm),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: OutlinedButton.icon(
-              key: const ValueKey<String>('people_safety_requests'),
-              onPressed: () => unawaited(
-                SafetyRequestsDialog.show(
-                  context,
-                  service: ApartmentManagementService(authService: widget.authService),
-                  siteCode: site.code,
-                  siteName: site.label,
+          AppActionBar(
+            actions: [
+              AppBarAction(
+                actionKey: const ValueKey<String>('people_bulk_import'),
+                label: 'Toplu Yükle',
+                icon: Icons.upload_file_rounded,
+                primary: true,
+                onPressed: () => unawaited(_openBulkImport(scope)),
+              ),
+              AppBarAction(
+                actionKey: const ValueKey<String>('people_bulk_export'),
+                label: 'Dışa Aktar',
+                icon: Icons.download_rounded,
+                onPressed: () => unawaited(_openBulkExport(scope)),
+              ),
+              AppBarAction(
+                actionKey: const ValueKey<String>('people_safety_requests'),
+                label: 'Güvenlik talepleri',
+                icon: Icons.shield_outlined,
+                tone: AppTone.warning,
+                onPressed: () => unawaited(
+                  SafetyRequestsDialog.show(
+                    context,
+                    service: ApartmentManagementService(authService: widget.authService),
+                    siteCode: site.code,
+                    siteName: site.label,
+                  ),
                 ),
               ),
-              icon: const Icon(Icons.shield_outlined, size: 18),
-              label: const Text('Güvenlik talepleri'),
-            ),
+            ],
           ),
           const SizedBox(height: AppSpace.md),
         ],
-        Wrap(
-          spacing: AppSpace.sm,
-          runSpacing: AppSpace.sm,
-          children: [
+        AppChipTabs(
+          selected: _tab,
+          onSelected: _selectTab,
+          items: [
             for (var i = 0; i < _tabs.length; i++)
-              ChoiceChip(
+              AppTabItem(
                 key: ValueKey<String>('people_tab_$i'),
-                avatar: Icon(_tabs[i].$2, size: 18),
+                icon: _tabs[i].$2,
                 // F9: "Daireler" sekmesi türün terimiyle (Ofisler, Mağazalar, ...); iş mantığı aynıdır.
-                label: Text(i == 1 ? site.terms.unitPlural : _tabs[i].$1),
-                selected: _tab == i,
-                onSelected: (_) => _selectTab(i),
+                label: i == 1 ? site.terms.unitPlural : _tabs[i].$1,
               ),
           ],
         ),
