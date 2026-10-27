@@ -4057,7 +4057,7 @@ class AuthApi {
       case 'APARTMENT_NOT_FOUND':
         return 'Daire bulunamadı.';
       case 'PLATE_INVALID':
-        return 'Plaka biçimi geçersiz.';
+        return 'Plaka biçimi geçersiz. Örnek: 34 ABC 123 (il kodu 01-81).';
       case 'PLATE_EXISTS':
         return 'Bu plaka bu sitede zaten kayıtlı.';
       case 'FORBIDDEN_ROLE':

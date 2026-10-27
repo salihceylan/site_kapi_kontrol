@@ -1,18 +1,18 @@
 // Araç kayıtları (CRM): plaka bazlı liste, ekleme, kaldırma (is_active=false; kayıt kalır).
 //
-// Sözleşme: docs/PLATFORM_KISILER.md ("Araçlar"). Plaka: büyük harf, boşluksuz, yalnız A-Z0-9, 5-10 karakter.
-// Aynı sitede aktif aynı plaka tekildir (kısmi tekil indeks uq_vehicles_plate).
+// Sözleşme: docs/PLATFORM_KISILER.md ("Araçlar"). Plaka: Türk plakası (il kodu 01-81 + 1-3 harf + 2-4 rakam; plate_format.js), boşluksuz büyük harf saklanır.
+// Yalnız YENİ yazılan plaka doğrulanır; eski kayıtlı plakalar okuma / liste / kaldırmayı bozmaz. Aynı sitede aktif aynı plaka tekildir (kısmi tekil indeks uq_vehicles_plate).
 
 import { pool } from '../db.js';
 import { actorFromAuthUser, recordAudit } from './audit_service.js';
 import { PlatformError } from './errors.js';
+import { requireTrPlateEntry } from './plate_format.js';
 import {
   escapeLike,
   foldSql,
   foldText,
   invalidBody,
   normalizePersonNote,
-  normalizePlate,
   optionalQueryId,
   parsePage,
   parsePositiveId,
@@ -155,7 +155,7 @@ export async function createVehicle({ siteCode, body = {}, actor }) {
   if (personId === null) {
     throw invalidBody('person_id', 'person_id zorunludur.');
   }
-  const { plate, display } = normalizePlate(body.plate);
+  const { plate, display } = requireTrPlateEntry(body.plate);
   const note = normalizePersonNote(body.note);
 
   const vehicleId = await withSiteTransaction(siteCode, async (client) => {

@@ -955,7 +955,8 @@ class PeopleFakeAuth extends AuthService with ModuleRequestFixtures {
     final error = writeError;
     if (error != null) throw error;
     final normalized = plate.replaceAll(RegExp(r'[\s\-.]'), '').toUpperCase();
-    if (!RegExp(r'^[A-Z0-9]{5,10}$').hasMatch(normalized)) throw _coded('PLATE_INVALID', 400);
+    // Sunucudaki Türk plakası kuralı (plate_format.js): il kodu 01-81 + 1-3 harf + 2-4 rakam.
+    if (!RegExp(r'^(0[1-9]|[1-7][0-9]|8[01])[A-Z]{1,3}[0-9]{2,4}$').hasMatch(normalized)) throw _coded('PLATE_INVALID', 400);
     if (vehiclesJson.any((v) => v['plate'] == normalized)) throw _coded('PLATE_EXISTS', 409);
     final person = peopleJson[personId]!;
     final id = 100 + vehiclesJson.length;

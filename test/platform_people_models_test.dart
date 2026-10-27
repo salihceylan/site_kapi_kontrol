@@ -918,13 +918,16 @@ void main() {
   });
 
   group('plaka girişi', () {
-    test('normalizePlateInput: sunucu kuralı (A-Z0-9, 5-10 karakter, boşluk / tire atılır)', () {
+    test('normalizePlateInput: sunucu kuralı (il kodu 01-81 + 1-3 harf + 2-4 rakam; boşluk / tire atılır, Türkçe harf ASCII olur)', () {
       expect(normalizePlateInput('34 ABC 123'), '34ABC123');
       expect(normalizePlateInput('34-abc-123'), '34ABC123');
       expect(normalizePlateInput('06 XY 12'), '06XY12');
-      expect(normalizePlateInput('1234'), isNull, reason: '5 karakterden kısa');
-      expect(normalizePlateInput('34ABC1234567'), isNull, reason: '10 karakterden uzun');
-      expect(normalizePlateInput('34 ÇAB 123'), isNull, reason: 'Türkçe harf geçersiz');
+      expect(normalizePlateInput('34 ÇAB 123'), '34CAB123', reason: 'Türkçe harf ASCII harfe iner');
+      expect(normalizePlateInput('1234'), isNull, reason: 'harf yok');
+      expect(normalizePlateInput('34ABC1234567'), isNull, reason: 'çok uzun');
+      expect(normalizePlateInput('ABC12345'), isNull, reason: 'eski gevşek biçim (5-10 harf / rakam) artık geçersiz');
+      expect(normalizePlateInput('82 ABC 123'), isNull, reason: 'il kodu 81 üstü');
+      expect(normalizePlateInput('00 ABC 123'), isNull);
       expect(normalizePlateInput(''), isNull);
       expect(normalizePlateInput(null), isNull);
     });

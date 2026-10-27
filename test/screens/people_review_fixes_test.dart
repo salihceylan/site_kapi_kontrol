@@ -768,8 +768,8 @@ void main() {
     testWidgets('plaka yazarken büyük harfe çevrilir; plaka ve e-posta alanlarında otomatik düzeltme / öneri kapalı', (t) async {
       final auth = PeopleFakeAuth.seeded();
       await _open(t, (c) => VehicleDialog.show(c, scope: _scope(auth), person: null));
-      await _enter(t, 'vehicle_plate', 'abc 123');
-      expect(_fieldText(t, 'vehicle_plate'), 'ABC 123');
+      await _enter(t, 'vehicle_plate', '34 abc 123');
+      expect(_fieldText(t, 'vehicle_plate'), '34 ABC 123');
       expect(_textField(t, 'vehicle_plate').autocorrect, isFalse);
       expect(_textField(t, 'vehicle_plate').enableSuggestions, isFalse);
       await t.tap(find.text('Vazgeç'));

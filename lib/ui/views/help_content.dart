@@ -276,7 +276,7 @@ abstract final class HelpContent {
     icon: Icons.directions_car_rounded,
     steps: <String>[
       'Menüden “Dairem” ekranını açın ve dairenizin kartında “Araçlarım” bölümüne gidin.',
-      'Daire yöneticisiyseniz “Araç ekle” ile plakayı (örnek: 34 ABC 123) ve isterseniz marka, model, renk notunu yazın. Araç sahibi olarak dairenin aktif sakinlerinden birini seçebilirsiniz; varsayılan siz olursunuz.',
+      'Daire yöneticisiyseniz “Araç ekle” ile plakayı (örnek: 34 ABC 123; il kodu 01-81, 1-3 harf, 2-4 rakam, yazarken kendiliğinden biçimlenir) ve isterseniz marka, model, renk notunu yazın. Araç sahibi olarak dairenin aktif sakinlerinden birini seçebilirsiniz; varsayılan siz olursunuz.',
       '“Notu düzenle” ile notu değiştirin, “Aracı çıkar” ile aracı kaldırın (kayıt silinmez, pasifleşir). Plaka değişmez; yanlışsa aracı çıkarıp doğru plakayla yeniden ekleyin.',
       'Aile üyeleri ve daire yöneticisi olmayan malik ya da kiracı dairenin araçlarını yalnızca görür.',
     ],
@@ -467,7 +467,7 @@ abstract final class HelpContent {
       icon: Icons.directions_car_rounded,
       steps: <String>[
         'Plaka Tanıma modülü sitenizde açıksa menüden “Plaka Tanıma” ekranını açın.',
-        'Misafir plakası ekle düğmesine dokunup plakayı yazın (örneğin 34 ABC 123), süreyi seçin (1 gün, 1 hafta ya da en çok 30 gün) ve kaydedin.',
+        'Misafir plakası ekle düğmesine dokunup plakayı yazın (örneğin 34 ABC 123; yazarken kendiliğinden biçimlenir), süreyi seçin (1 gün, 1 hafta ya da en çok 30 gün) ve kaydedin.',
         'İzin süresi dolunca kendiliğinden biter; erken bitirmek için listedeki iptal düğmesine dokunun.',
       ],
       note: 'Bir günde en çok 5 misafir plakası tanımlayabilirsiniz; yalnız kendi daireniz için. Kapı açma Yakında…: şimdilik plaka kamerada tanınınca yönetim ekranında izinli olarak görünür.',
@@ -630,6 +630,7 @@ abstract final class HelpContent {
       steps: <String>[
         'Menüden “Kişiler” ekranını açın ve siteyi seçin.',
         '“Kişiler”, “Daireler” ve “Araçlar” sekmelerinden ilgili kayıtları ekleyin ya da düzenleyin.',
+        'Plaka Türk plakası biçiminde yazılır (örnek: 34 ABC 123; il kodu 01-81, 1-3 harf, 2-4 rakam) ve yazarken kendiliğinden biçimlenir. Kişi formunda birden çok plakayı virgülle ayırın (en çok 5).',
       ],
     ),
     HelpTopic(

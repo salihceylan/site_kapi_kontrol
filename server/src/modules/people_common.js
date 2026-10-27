@@ -303,7 +303,11 @@ export function dateToIso(value) {
   return `${y}-${m}-${d}`;
 }
 
-/** Plaka: büyük harf, boşluk/tire/nokta atılır; yalnız A-Z0-9, 5-10 karakter. Aksi 400 PLATE_INVALID. */
+/**
+ * ESKİ gevşek plaka ayrıştırıcı: büyük harf, boşluk/tire/nokta atılır; yalnız A-Z0-9, 5-10 karakter. Aksi 400 PLATE_INVALID.
+ * Yeni plaka yazan uçlar bunu KULLANMAZ: Türk plakası kuralı için plate_format.js (`requireTrPlateEntry`). Burada yalnız toplu
+ * yüklemenin ayrıştırıcısı ile kamera olayı kalmıştır (kamera yabancı / bozuk okuma gönderebilir; araç kaydı değildir).
+ */
 export function normalizePlate(value) {
   if (typeof value !== 'string') {
     throw new PlatformError(400, 'PLATE_INVALID', 'Plaka biçimi geçersiz.');

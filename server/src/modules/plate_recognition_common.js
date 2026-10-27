@@ -5,6 +5,10 @@
 
 import { PlatformError } from './errors.js';
 import { INVISIBLE_RE } from './document_common.js';
+import { TR_PLATE_RE, plateInvalid, requireTrPlate } from './plate_format.js';
+
+// Plaka biçimi kuralı tek yerde (plate_format.js); mevcut içe aktarmalar bozulmasın diye buradan da dışa verilir.
+export { TR_PLATE_RE, canonicalPlate, formatPlate, normalizeTrPlate, plateInvalid, requireTrPlate } from './plate_format.js';
 
 export const PLATE_RECOGNITION_MODULE = 'plate_recognition';
 
@@ -40,44 +44,11 @@ export const REASON_LABELS = Object.freeze({
 });
 
 export const invalidField = (message, field = null) => new PlatformError(400, 'INVALID_BODY', message, field ? { field } : null);
-export const plateInvalid = () => new PlatformError(400, 'PLATE_INVALID', 'Plaka biçimi geçersiz. Örnek: 34 ABC 123 (il kodu 01-81).');
 export const bodyTooLarge = () => new PlatformError(413, 'BODY_TOO_LARGE', 'İstek gövdesi çok büyük.');
 export const moduleDisabled = () => new PlatformError(403, 'MODULE_DISABLED', 'Plaka Tanıma modülü kapalı.', { module: PLATE_RECOGNITION_MODULE });
 export const notFound = (what, code = 'NOT_FOUND') => new PlatformError(404, code, `${what} bulunamadı ya da erişiminiz yok.`);
 
 // --- Plaka ---------------------------------------------------------------------------------------------------------
-
-const TR_LETTERS = Object.freeze({ Ç: 'C', Ğ: 'G', İ: 'I', Ö: 'O', Ş: 'S', Ü: 'U' });
-/** Türkiye plakası: il kodu 01-81 + 1-3 harf + 2-4 rakam (toplam 5-9 karakter). */
-export const TR_PLATE_RE = /^(0[1-9]|[1-7][0-9]|8[01])([A-Z]{1,3})([0-9]{2,4})$/;
-
-/** Boşluk / tire / nokta atılır, büyük harf, Türkçe harfler ASCII'ye indirilir. Biçim DOĞRULANMAZ. Metin değilse ya da 24 karakterden uzunsa ''. */
-export function canonicalPlate(value) {
-  if (typeof value !== 'string' || value.length > 24) return '';
-  return value
-    .replace(/[\s\-._]/g, '')
-    .toUpperCase()
-    .replace(/[ÇĞİÖŞÜ]/g, (ch) => TR_LETTERS[ch]);
-}
-
-/** Geçerli TR plakası ("34ABC123") ya da null. */
-export function normalizeTrPlate(value) {
-  const plate = canonicalPlate(value);
-  return TR_PLATE_RE.test(plate) ? plate : null;
-}
-
-/** Girdiyi doğrular; geçersizse 400 PLATE_INVALID. */
-export function requireTrPlate(value) {
-  const plate = normalizeTrPlate(value);
-  if (!plate) throw plateInvalid();
-  return plate;
-}
-
-/** "34ABC123" -> "34 ABC 123" (biçim geçersizse olduğu gibi). */
-export function formatPlate(plate) {
-  const match = TR_PLATE_RE.exec(String(plate ?? ''));
-  return match ? `${match[1]} ${match[2]} ${match[3]}` : String(plate ?? '');
-}
 
 /** Günlük / denetim için maskeli plaka: "34***23". */
 export function maskPlate(plate) {

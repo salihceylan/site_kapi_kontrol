@@ -436,7 +436,7 @@ void main() {
       'PERSON_HAS_ACCOUNT': 'Hesabı olan kişinin bilgileri kişinin kendi profilinden değişir.',
       'RELATION_TAKEN': 'Bu dairede bu ilişki için aktif bir kişi zaten var.',
       'APARTMENT_NOT_FOUND': 'Daire bulunamadı.',
-      'PLATE_INVALID': 'Plaka biçimi geçersiz.',
+      'PLATE_INVALID': 'Plaka biçimi geçersiz. Örnek: 34 ABC 123 (il kodu 01-81).',
       'PLATE_EXISTS': 'Bu plaka bu sitede zaten kayıtlı.',
       'FORBIDDEN_ROLE': 'Bu işlem için yetkiniz yok.',
     };

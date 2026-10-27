@@ -11,6 +11,7 @@ import 'package:site_kapi_kontrol/ui/design/buttons.dart';
 import 'package:site_kapi_kontrol/ui/design/status_dot.dart';
 import 'package:site_kapi_kontrol/ui/design/license_plate.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+import 'package:site_kapi_kontrol/ui/helpers/plate_input.dart';
 
 /// "Plaka Tanıma" ekranı (`plate_recognition` modülü, varsayılan KAPALI).
 ///
@@ -192,9 +193,11 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
               children: <Widget>[
                 TextField(
                   controller: plate,
-                  maxLength: 14,
+                  inputFormatters: const <TextInputFormatter>[PlateInputFormatter()],
                   textCapitalization: TextCapitalization.characters,
-                  decoration: const InputDecoration(labelText: 'Plaka', hintText: '34 ABC 123', counterText: ''),
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  decoration: const InputDecoration(labelText: 'Plaka', hintText: '34 ABC 123'),
                 ),
                 TextField(controller: reason, maxLength: 200, maxLines: 2, decoration: const InputDecoration(labelText: 'Gerekçe (isteğe bağlı)', counterText: '')),
                 if (formError != null) Text(formError!, style: TextStyle(color: context.palette.statusCrit)),
@@ -206,7 +209,7 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
             FilledButton(
               onPressed: () {
                 if (normalizeTrPlate(plate.text) == null) {
-                  setLocal(() => formError = 'Plaka biçimi geçersiz. Örnek: 34 ABC 123');
+                  setLocal(() => formError = kPlateInvalidMessage);
                   return;
                 }
                 Navigator.pop(context, true);
@@ -706,7 +709,7 @@ class _PermitDialogState extends State<_PermitDialog> {
   void _submit() {
     final plate = normalizeTrPlate(_plate.text);
     if (plate == null) {
-      setState(() => _error = 'Plaka biçimi geçersiz. Örnek: 34 ABC 123 (il kodu 01-81).');
+      setState(() => _error = kPlateInvalidMessage);
       return;
     }
     if (_apartment == null) {
@@ -783,10 +786,11 @@ class _PermitDialogState extends State<_PermitDialog> {
               _apartmentField(),
               TextField(
                 controller: _plate,
-                maxLength: 14,
+                inputFormatters: const <TextInputFormatter>[PlateInputFormatter()],
                 textCapitalization: TextCapitalization.characters,
-                inputFormatters: <TextInputFormatter>[FilteringTextInputFormatter.deny(RegExp(r'[^A-Za-z0-9ÇĞİÖŞÜçğıöşü \-.]'))],
-                decoration: const InputDecoration(labelText: 'Plaka', hintText: '34 ABC 123', counterText: ''),
+                autocorrect: false,
+                enableSuggestions: false,
+                decoration: const InputDecoration(labelText: 'Plaka', hintText: '34 ABC 123'),
               ),
               const SizedBox(height: AppSpace.sm),
               Text('Süre', style: Theme.of(context).textTheme.labelLarge),

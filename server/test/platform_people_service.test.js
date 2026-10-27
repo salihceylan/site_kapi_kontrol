@@ -1083,6 +1083,50 @@ describe('araclar', () => {
     await assert.rejects(() => createVehicle({ siteCode: SITE, body: { person_id: 5, plate: '??' }, actor }), (e) => e.code === 'PLATE_INVALID');
   });
 
+  it('createVehicle: plaka bicimi zorlanir (Turk plakasi); gecersiz yeni plaka hicbir SQL calistirmadan 400 PLATE_INVALID', async () => {
+    for (const plate of ['ABC12345', '99 ABC 123', '00 ABC 123', '34 ABCD 123', '34 ABC 12345', '34 A 1', 'ABCDE', '', null, 34123, '34 ŞŞŞ 123'.repeat(3)]) {
+      install();
+      handlers.length = 0;
+      await assert.rejects(
+        () => createVehicle({ siteCode: SITE, body: { person_id: 5, plate }, actor }),
+        (e) => e.code === 'PLATE_INVALID' && e.statusCode === 400 && e.message === 'Plaka biçimi geçersiz. Örnek: 34 ABC 123 (il kodu 01-81).',
+        String(plate),
+      );
+      assert.equal(has(/INSERT INTO vehicles/), false, `INSERT calismamali: ${plate}`);
+    }
+  });
+
+  it('createVehicle: Turkce harf ASCII harfe iner; plate = bosluksuz, plate_display = "34 ABC 123"', async () => {
+    for (const [raw, plate, display] of [
+      ['34-abc-123', '34ABC123', '34 ABC 123'],
+      ['06 ğüş 12', '06GUS12', '06 GUS 12'],
+      ['  81 a 1234 ', '81A1234', '81 A 1234'],
+      ['01.AB.123', '01AB123', '01 AB 123'],
+      ['34İI 123', '34II123', '34 II 123'],
+    ]) {
+      install();
+      handlers.length = 0;
+      handlers.push([personExists, () => ok([{ id: '5' }])], [plateCheck, () => ok()], [/^INSERT INTO vehicles/, () => ok([{ id: '4' }])], [VEHICLE_ROW, () => ok([{ id: '4', plate, plate_display: display, note: null, person_id: '5', is_active: true, person_name: 'Ali Veli', block_name: null, unit_label: null }])]);
+      await createVehicle({ siteCode: SITE, body: { person_id: 5, plate: raw }, actor });
+      assert.deepEqual(find(/^INSERT INTO vehicles/).params, [SITE, 5, plate, display, null], raw);
+      assert.deepEqual(find(plateCheck).params, [SITE, plate], raw);
+    }
+  });
+
+  it('eski (Turk plakasi olmayan) kayitli plaka okuma ve kaldirmayi BOZMAZ; yalniz yeni yazilan plaka dogrulanir', async () => {
+    handlers.push(
+      [/^SELECT id, plate, person_id FROM vehicles WHERE id = \$1 AND site_code = \$2 AND is_active = TRUE FOR UPDATE$/, () => ok([{ id: '4', plate: 'ABC12345', person_id: '5' }])],
+      [/^UPDATE vehicles SET is_active = FALSE WHERE id = \$1$/, () => ok()],
+    );
+    assert.deepEqual(await removeVehicle({ siteCode: SITE, vehicleId: 4, actor }), { ok: true });
+    assert.deepEqual(auditDetails('vehicle.removed'), { plate: 'ABC12345', person_id: 5 });
+    // ayni eski plakayi YENIDEN yazmak yeni yazimdir: bicim kurali uygulanir (var olan kayit zaten 409 yerine once biclim reddi)
+    install();
+    handlers.length = 0;
+    handlers.push([personExists, () => ok([{ id: '5' }])], [plateCheck, () => ok([{ id: '4' }])]);
+    await assert.rejects(() => createVehicle({ siteCode: SITE, body: { person_id: 5, plate: 'ABC12345' }, actor }), (e) => e.code === 'PLATE_INVALID');
+  });
+
   it('removeVehicle: is_active=false (kayit KALIR), vehicle.removed audit; yok / zaten kaldirilmis 404', async () => {
     handlers.push(
       [/^SELECT id, plate, person_id FROM vehicles WHERE id = \$1 AND site_code = \$2 AND is_active = TRUE FOR UPDATE$/, () => ok([{ id: '4', plate: '34ABC123', person_id: '5' }])],

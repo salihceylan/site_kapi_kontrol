@@ -156,7 +156,7 @@ araç `vehicles` satırıdır; daire yöneticisinin eklediği araçta mevcut `ap
 Kurallar:
 
 1. **Sınır**: daire başına en çok **4** aktif araç (site yöneticisi için **8**); aşılırsa 409 `VEHICLE_LIMIT`. Çıkarılan araç yer açar.
-2. **Plaka**: geçerli Türk plakası (il kodu 01-81 + 1-3 harf + 2-4 rakam, `plate_recognition_common.TR_PLATE_RE`); aksi 400 `PLATE_INVALID`. Plaka kaydedildikten sonra DEĞİŞMEZ (çıkarılıp yeniden eklenir). Not en çok 200 karakter (marka / model / renk).
+2. **Plaka**: geçerli Türk plakası (il kodu 01-81 + 1-3 harf + 2-4 rakam, `plate_format.TR_PLATE_RE`); aksi 400 `PLATE_INVALID`. Plaka kaydedildikten sonra DEĞİŞMEZ (çıkarılıp yeniden eklenir). Not en çok 200 karakter (marka / model / renk).
 3. **Tekillik**: aynı sitede aynı plaka bir kez (mevcut kısmi tekil indeks `uq_vehicles_plate`; site kilidi altında). Plaka başka bir kayıtta kullanılıyorsa 409 `PLATE_IN_USE` ve iletide hiçbir daire / kişi bilgisi yoktur:
    "Bu plaka başka bir kayıtta kullanılıyor; site yönetimiyle görüşün." Aynı dairenin kendi aracıysa 409 `PLATE_EXISTS`.
 4. **Sahip**: dairenin aktif sakinlerinden biri (`person_id`; varsayılan daire admini). Başka dairenin kişisi 409 `NOT_AN_ACTIVE_RESIDENT`. Kapı erişimi askıya alınmış admin yazamaz.
