@@ -630,14 +630,26 @@ export async function runBulkImportSection(ctx) {
 
   // plaka kurallari
   const plates = await run(MGR, S.code, 'people', [
-    { ad_soyad: 'Plaka Deneme Bir', e_posta: 'plaka1@bulk.qa.example', plaka: `${MARK.plateRaw}, XX, 35 NEW 111` }, // GZL901 baskasinda, XX gecersiz
+    { ad_soyad: 'Plaka Deneme Bir', e_posta: 'plaka1@bulk.qa.example', plaka: `${MARK.plateRaw}, 35 NEW 111` }, // GZL901 baskasinda
     { ad_soyad: 'Plaka Deneme Iki', e_posta: 'plaka2@bulk.qa.example', plaka: '35 NEW 111' }, // dosyada baska kisiye gitti
     { ad_soyad: MARK.name, e_posta: MARK.email, plaka: MARK.plateRaw }, // ayni kisi: degisiklik yok
   ]);
   const p1 = (await personByEmail(S.code, 'plaka1@bulk.qa.example'))[0];
-  check('C10: plaka: gecersiz / sitede baskasinda / dosyada baska kisi ATLANIR (uyari), kisi YAZILIR (dairesiz -> hesapsiz); ayni kisi "degisiklik yok"',
-    same(issueCodes(plates.pv, 2), ['w:PLATE_EXISTS', 'w:PLATE_INVALID']) && same(issueCodes(plates.pv, 3), ['w:PLATE_DUP_IN_FILE']) && plates.pv.body.totals.error === 0 && !!p1 && p1.user_code === null && plates.cm.status === 201
+  check('C10: plaka: sitede baskasinda / dosyada baska kisi ATLANIR (uyari), kisi YAZILIR (dairesiz -> hesapsiz); ayni kisi "degisiklik yok"',
+    same(issueCodes(plates.pv, 2), ['w:PLATE_EXISTS']) && same(issueCodes(plates.pv, 3), ['w:PLATE_DUP_IN_FILE']) && plates.pv.body.totals.error === 0 && !!p1 && p1.user_code === null && plates.cm.status === 201
     && (await countOf(`SELECT COUNT(*)::int AS n FROM vehicles WHERE site_code = $1 AND plate = '35NEW111' AND is_active`, [S.code])) === 1 && (await countOf(`SELECT COUNT(*)::int AS n FROM vehicles WHERE site_code = $1 AND plate = '34GZL901' AND is_active`, [S.code])) === 1, plates.pv.body.issues);
+
+  // Turk plakasi biclimi ZORUNLU: gecersiz plaka (XX, il kodu 99, 4 harf, 5 rakam) satiri HATAYA dusurur, hicbir sey yazilmaz
+  const badPlates = await previewOf(MGR, S.code, 'people', [
+    { ad_soyad: 'Plaka Hatali Bir', e_posta: 'plakahata1@bulk.qa.example', plaka: '35 NEW 211, XX' },
+    { ad_soyad: 'Plaka Hatali Iki', e_posta: 'plakahata2@bulk.qa.example', plaka: '99 AA 11' },
+    { ad_soyad: 'Plaka Hatali Uc', e_posta: 'plakahata3@bulk.qa.example', plaka: '34 ABCD 123, 34 AB 12345' },
+    { ad_soyad: 'Plaka Gecerli', e_posta: 'plakaiyi@bulk.qa.example', plaka: '34abc98, 06-xy-7890' },
+  ]);
+  const badMsg = badPlates.body.issues.find((i) => i.n === 2 && i.code === 'PLATE_INVALID')?.message ?? '';
+  check('C10b: gecersiz Turk plakasi (XX / il kodu 99 / 4 harf / 5 rakam) satiri HATAYA dusurur ("Plaka bicimi gecersiz. Ornek: 34 ABC 123 (il kodu 01-81)." + hatali plaka); gecerli yazimlar (kucuk harf, tire) kabul',
+    badPlates.status === 200 && same(issueCodes(badPlates, 2), ['e:PLATE_INVALID']) && same(issueCodes(badPlates, 3), ['e:PLATE_INVALID']) && same(issueCodes(badPlates, 4), ['e:PLATE_INVALID', 'e:PLATE_INVALID']) && issueCodes(badPlates, 5).length === 0
+    && badMsg.includes('Plaka biçimi geçersiz. Örnek: 34 ABC 123 (il kodu 01-81).') && badMsg.includes('«XX»'), badPlates.body.issues);
 
   // onizleme-onay arasi bayatlik
   const staleP = [{ ad_soyad: 'Bayat Kisi', e_posta: 'bayat@bulk.qa.example', blok: 'B', daire_no: '3', iliski: 'Malik', plaka: '35 BYT 001' }];
@@ -1079,7 +1091,7 @@ export async function runBulkImportSection(ctx) {
     && (await countOf(`SELECT COUNT(*)::int AS n FROM apartment_residencies WHERE site_code = $1 AND is_current`, [BIG])) === 15000 && (await countOf(`SELECT COUNT(*)::int AS n FROM vehicles WHERE site_code = $1`, [BIG])) === 5000);
 
   const bigRows = [];
-  for (let g = 1; g <= 2500; g += 1) bigRows.push({ ad_soyad: `Kisi ${g}`, e_posta: `KISI${g}@big.qa.example`, not: `yonetici notu ${g}`, plaka: `35 N ${String(g).padStart(5, '0')}` });
+  for (let g = 1; g <= 2500; g += 1) bigRows.push({ ad_soyad: `Kisi ${g}`, e_posta: `KISI${g}@big.qa.example`, not: `yonetici notu ${g}`, plaka: `35 N ${String(g).padStart(4, '0')}` });
   for (let g = 1; g <= 2500; g += 1) {
     const block = `B${String(((g - 1) % 50) + 1).padStart(2, '0')}`;
     bigRows.push({ ad_soyad: `Yeni Buyuk ${g}`, e_posta: `yenibuyuk${g}@big.qa.example`, blok: block, daire_no: String(((g * 7) % 100) + 1), iliski: 'Aile', telefon: `05${String(300000000 + g).padStart(9, '0')}`.slice(0, 11) });
@@ -1122,7 +1134,7 @@ export async function runBulkImportSection(ctx) {
 
   // bellek: ikinci 5000 satirlik dosya (yeni kisiler + mevcut kisilere not/plaka); canli yigin her 15 ms'de zorunlu GC sonrasi olculur (artik cop sayilmaz)
   const memRows = [];
-  for (let g = 2501; g <= 5000; g += 1) memRows.push({ ad_soyad: `Kisi ${g}`, e_posta: `kisi${g}@big.qa.example`, not: `bellek notu ${g}`, plaka: `36 M ${String(g).padStart(5, '0')}` });
+  for (let g = 2501; g <= 5000; g += 1) memRows.push({ ad_soyad: `Kisi ${g}`, e_posta: `kisi${g}@big.qa.example`, not: `bellek notu ${g}`, plaka: `36 M ${String(g).padStart(4, '0')}` });
   for (let g = 1; g <= 2500; g += 1) memRows.push(g <= 300 ? { ad_soyad: `Bellek Yeni ${g}`, e_posta: `bellekyeni${g}@big.qa.example`, blok: `B${String(((g - 1) % 50) + 1).padStart(2, '0')}`, daire_no: String(((g * 11) % 100) + 1), iliski: 'Aile' } : { ad_soyad: `Bellek Yeni ${g}`, e_posta: `bellekyeni${g}@big.qa.example` });
   const memPreview = await previewOf(MGR, BIG, 'people', memRows);
   gc();

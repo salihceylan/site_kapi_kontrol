@@ -2,10 +2,12 @@ import 'dart:async';
 
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:site_kapi_kontrol/models/bulk_import.dart';
 import 'package:site_kapi_kontrol/services/bulk_choices.dart';
 import 'package:site_kapi_kontrol/services/bulk_login_name.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+import 'package:site_kapi_kontrol/ui/helpers/plate_input.dart';
 import 'package:site_kapi_kontrol/ui/views/bulk_import_controller.dart';
 import 'package:site_kapi_kontrol/services/bulk_template.dart';
 
@@ -728,6 +730,11 @@ class _CellEditDialog extends StatefulWidget {
 class _CellEditDialogState extends State<_CellEditDialog> {
   late final TextEditingController _ctrl = TextEditingController(text: widget.initialValue);
 
+  /// Plaka sütunu: Türk plakası biçimi yazarken zorlanır, geçersiz plaka satır içinde gösterilir (sunucu yüklemede yine doğrular).
+  bool get _isPlate => widget.col.key == 'plaka';
+
+  String? get _plateError => _isPlate ? validatePlateList(_ctrl.text) : null;
+
   @override
   void dispose() {
     _ctrl.dispose();
@@ -761,11 +768,15 @@ class _CellEditDialogState extends State<_CellEditDialog> {
               ),
             ),
           TextField(
+            key: const ValueKey<String>('bulk_cell_field'),
             controller: _ctrl,
             autofocus: true,
+            inputFormatters: _isPlate ? const <TextInputFormatter>[PlateListInputFormatter()] : null,
+            onChanged: _isPlate ? (_) => setState(() {}) : null,
             decoration: InputDecoration(
               labelText: col.label,
-              helperText: col.required ? 'Bu alan zorunludur' : 'İsteğe bağlı',
+              errorText: _plateError,
+              helperText: _isPlate ? 'Örnek: 34 ABC 123. Birden çok plaka virgülle, en çok $maxPlatesPerField.' : (col.required ? 'Bu alan zorunludur' : 'İsteğe bağlı'),
               border: const OutlineInputBorder(),
             ),
           ),
@@ -782,7 +793,7 @@ class _CellEditDialogState extends State<_CellEditDialog> {
             foregroundColor: Colors.white,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           ),
-          onPressed: () => Navigator.of(context).pop(_ctrl.text),
+          onPressed: _plateError != null ? null : () => Navigator.of(context).pop(_isPlate ? formatPlateList(_ctrl.text) : _ctrl.text),
           child: const Text('Uygula'),
         ),
       ],

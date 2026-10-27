@@ -257,7 +257,7 @@
       "Araç Plakaları",
       "Araç"
      ],
-     "hint": "Araç plakası. Birden çok plaka için virgül, noktalı virgül ya da / ile ayırın (en çok 5)."
+     "hint": "Türk plakası biçiminde: 34 ABC 123 (il kodu 01-81, 1-3 harf, 2-4 rakam). Birden çok plaka için virgül, noktalı virgül ya da / ile ayırın (en çok 5). Biçimi geçersiz plaka satırı hataya düşürür."
     },
     {
      "key": "not",
@@ -308,7 +308,7 @@
       "Araç Plakaları",
       "Araç"
      ],
-     "hint": "Araç plakası. Birden çok plaka için virgül, noktalı virgül ya da / ile ayırın (en çok 5)."
+     "hint": "Türk plakası biçiminde: 34 ABC 123 (il kodu 01-81, 1-3 harf, 2-4 rakam). Birden çok plaka için virgül, noktalı virgül ya da / ile ayırın (en çok 5). Biçimi geçersiz plaka satırı hataya düşürür."
     },
     {
      "key": "e_posta",
@@ -697,7 +697,7 @@
       "Araç Plakaları",
       "Araç"
      ],
-     "hint": "Araç plakası. Birden çok plaka için virgül, noktalı virgül ya da / ile ayırın (en çok 5)."
+     "hint": "Türk plakası biçiminde: 34 ABC 123 (il kodu 01-81, 1-3 harf, 2-4 rakam). Birden çok plaka için virgül, noktalı virgül ya da / ile ayırın (en çok 5). Biçimi geçersiz plaka satırı hataya düşürür."
     },
     {
      "key": "not",

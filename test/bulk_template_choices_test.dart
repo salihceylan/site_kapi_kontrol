@@ -37,9 +37,15 @@ Map<String, XmlDocument> _sheets(Uint8List bytes) {
 
 List<String> _childOrder(XmlDocument sheet) => <String>[for (final e in sheet.rootElement.childElements) e.name.local];
 
-/// Sayfadaki doğrulamalar: sqref -> (liste sabiti, nitelikler).
+/// Yalnız giriş ipucu olan (türsüz) doğrulamalar: sqref -> nitelikler.
+List<({String sqref, Map<String, String> attrs})> _prompts(XmlDocument sheet) => <({String sqref, Map<String, String> attrs})>[
+  for (final v in sheet.findAllElements('dataValidation').where((e) => e.getAttribute('type') == null))
+    (sqref: v.getAttribute('sqref')!, attrs: <String, String>{for (final a in v.attributes) a.name.local: a.value}),
+];
+
+/// Sayfadaki liste doğrulamaları: sqref -> (liste sabiti, nitelikler).
 List<({String sqref, String list, Map<String, String> attrs})> _validations(XmlDocument sheet) => <({String sqref, String list, Map<String, String> attrs})>[
-  for (final v in sheet.findAllElements('dataValidation'))
+  for (final v in sheet.findAllElements('dataValidation').where((e) => e.getAttribute('type') == 'list'))
     (
       sqref: v.getAttribute('sqref')!,
       list: v.getElement('formula1')!.innerText,
@@ -203,6 +209,29 @@ void main() {
           expect(_validations(sheets[ref.name]!), hasLength(enumCount), reason: '${kind.apiValue}/${ref.name}');
         }
       }
+    });
+
+    test('PLAKA sütunları (Kişiler, Araçlar, Hepsi bir arada) biçim ipucu taşır; değeri kısıtlamaz (tür yok), liste doğrulamasıyla karışmaz', () {
+      for (final entry in <(ImportKind, String)>[(ImportKind.people, 'Kişiler'), (ImportKind.allInOne, 'Hepsi bir arada')]) {
+        final f = buildImportTemplate(spec: spec, kind: entry.$1, format: ExportFormat.xlsx, apartments: apartments);
+        final sheets = _sheets(f.bytes);
+        final cols = spec.of(entry.$1)!.columns.where((c) => !kExcludedTemplateKeys.contains(c.key)).toList();
+        final plateIndex = cols.indexWhere((c) => c.key == 'plaka');
+        final prompts = _prompts(sheets[entry.$2]!);
+        expect(prompts, hasLength(1), reason: entry.$2);
+        expect(prompts.single.sqref, '${_letters(plateIndex)}2:${_letters(plateIndex)}5001');
+        expect(prompts.single.attrs['prompt'], '34 ABC 123; il kodu 01-81, 1-3 harf, 2-4 rakam; birden çok plaka virgülle, en çok 5');
+        expect(prompts.single.attrs['showInputMessage'], '1');
+        expect(prompts.single.attrs.containsKey('showErrorMessage'), isFalse);
+        final order = _childOrder(sheets[entry.$2]!);
+        expect(order.indexOf('sheetData') < order.indexOf('dataValidations') && order.indexOf('dataValidations') < order.indexOf('pageMargins'), isTrue);
+      }
+      final vehicles = _sheets(buildImportTemplate(spec: spec, kind: ImportKind.vehicles, format: ExportFormat.xlsx, apartments: apartments).bytes);
+      expect(_prompts(vehicles['Araçlar']!), hasLength(1));
+      expect(_validations(vehicles['Araçlar']!), isEmpty);
+      // Açıklama sayfası biçimi anlatır.
+      final text = vehicles['Açıklama']!.toXmlString();
+      expect(text, contains('Türk plakası biçiminde'));
     });
 
     test('doğrulama sınırı spec.maxRows + 1 satırdır (sunucu satır sınırı küçültülmüşse liste de o kadar)', () {

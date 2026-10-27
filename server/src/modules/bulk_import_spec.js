@@ -86,6 +86,8 @@ const APARTMENT_NO_COLUMN = (required, hint) =>
     ['Daire', 'Daire Numarası', 'Kapı No', 'Kapı Numarası', 'Bağımsız Bölüm No', 'No'],
     hint,
   );
+// Plaka sütunu ipucu: yükleme TÜRK plakası biçimini zorlar (34 ABC 123; il kodu 01-81, 1-3 harf, 2-4 rakam).
+const PLATE_HINT = 'Türk plakası biçiminde: 34 ABC 123 (il kodu 01-81, 1-3 harf, 2-4 rakam). Birden çok plaka için virgül, noktalı virgül ya da / ile ayırın (en çok 5). Biçimi geçersiz plaka satırı hataya düşürür.';
 const PLATE_COLUMN = (required, hint) =>
   col('plaka', 'Plaka', required, 'text', 120, ['Plakalar', 'Araç Plakası', 'Araç Plakaları', 'Araç'], hint);
 const NOTE_COLUMN = (hint) => col('not', 'Not', false, 'text', 500, ['Notlar', 'Açıklama', 'Yönetici Notu'], hint);
@@ -115,11 +117,11 @@ const BASE_COLUMNS = Object.freeze({
     APARTMENT_NO_COLUMN(false, 'Daire verilecekse Blok ve Daire No birlikte doldurulmalıdır.'),
     col('iliski', 'İlişki', false, 'enum', 40, ['İlişki Türü', 'Sakin Türü'], 'Listeden seçin: Malik, Kiracı, Aile Üyesi ya da Sakin. Boşsa «Sakin» sayılır.', RELATION_CHOICES),
     col('giris_tarihi', 'Giriş Tarihi', false, 'date', 20, ['Giriş', 'Taşınma Tarihi', 'Oturum Başlangıcı'], 'GG.AA.YYYY (örn. 15.03.2021). Boşsa bugün.'),
-    PLATE_COLUMN(false, 'Araç plakası. Birden çok plaka için virgül, noktalı virgül ya da / ile ayırın (en çok 5).'),
+    PLATE_COLUMN(false, PLATE_HINT),
     NOTE_COLUMN('Yönetici notu (en çok 500 karakter).'),
   ]),
   vehicles: Object.freeze([
-    PLATE_COLUMN(true, 'Araç plakası. Birden çok plaka için virgül, noktalı virgül ya da / ile ayırın (en çok 5).'),
+    PLATE_COLUMN(true, PLATE_HINT),
     EMAIL_COLUMN('Aracın sahibi kişinin e-postası. Boşsa Blok ve Daire No ile bulunur.'),
     BLOCK_COLUMN(false, 'E-posta yoksa sahibi bulmak için Blok ve Daire No birlikte gerekir.'),
     APARTMENT_NO_COLUMN(false, 'E-posta yoksa sahibi bulmak için Blok ve Daire No birlikte gerekir.'),

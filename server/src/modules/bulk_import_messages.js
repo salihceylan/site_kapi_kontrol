@@ -29,6 +29,7 @@ export const ERROR_CODES = Object.freeze([
   'PERSON_NOT_FOUND',
   'TOO_MANY_PLATES',
   'PLATE_REQUIRED',
+  'PLATE_INVALID',
   'MONEY_INVALID',
   'MONEY_RANGE',
   'ACCOUNT_INVALID',
@@ -43,7 +44,6 @@ export const ERROR_CODES = Object.freeze([
 ]);
 
 export const WARNING_CODES = Object.freeze([
-  'PLATE_INVALID',
   'PLATE_EXISTS',
   'PLATE_DUP_IN_FILE',
   'ACCOUNT_NEW_APARTMENT',
@@ -162,7 +162,7 @@ export function issueMessage(code, ctx = {}) {
       text = 'Plaka zorunludur.';
       break;
     case 'PLATE_INVALID':
-      text = `Plaka atlandı (biçim geçersiz): «${value}».`;
+      text = `Plaka biçimi geçersiz. Örnek: 34 ABC 123 (il kodu 01-81). Hatalı plaka: «${value}».`;
       break;
     case 'PLATE_EXISTS':
       text = `Plaka atlandı: «${value}» sitede başka bir kişide kayıtlı.`;

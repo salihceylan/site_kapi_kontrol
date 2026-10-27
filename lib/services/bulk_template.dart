@@ -110,8 +110,15 @@ XlsxColumn _templateColumn(ImportColumn column) {
     format: format,
     width: _width(column),
     listValidation: _listValidation(column),
+    inputPrompt: column.key == 'plaka' ? _plateInputPrompt : null,
   );
 }
+
+/// Plaka sütunlarının giriş ipucu (yalnız balon; değer kısıtlanmaz, gerçek doğrulama yüklemede yapılır).
+final XlsxInputPrompt _plateInputPrompt = XlsxInputPrompt(
+  title: 'Plaka biçimi',
+  message: '34 ABC 123; il kodu 01-81, 1-3 harf, 2-4 rakam; birden çok plaka virgülle, en çok 5',
+);
 
 /// Seçim listesi sütunlarının (İlişki, Borç Sorumlusu, Hesap) açılır listesi: giriş ipucu + «durdur» stilinde hata iletisi.
 XlsxListValidation? _listValidation(ImportColumn column) {

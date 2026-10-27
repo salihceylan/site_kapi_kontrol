@@ -196,7 +196,7 @@ function planPlates({ result, kind, state, ref, plates, invalid, note }) {
   let unchanged = 0;
   const skippedAt = [];
   for (const raw of invalid) {
-    addIssue(result, kind, 'PLATE_INVALID', 'plaka', { value: raw }, 'warning');
+    addIssue(result, kind, 'PLATE_INVALID', 'plaka', { value: raw });
     skippedAt.push(result.issues.length - 1);
   }
   for (const { plate, display } of plates) {

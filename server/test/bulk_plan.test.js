@@ -516,23 +516,29 @@ describe('KİŞİLER planlayıcısı', () => {
     assert.equal(plan('people', snapshot, [{ ad_soyad: 'Yeni Ad', e_posta: 'eski@example.com', telefon: '0555 111 22 33', blok: 'B', daire_no: '2', iliski: 'Kiracı' }]).totals.unchanged, 1);
   });
 
-  it('plaka: geçersiz / sitede başkasında / dosyada başka kişide ATLANIR (uyarı), kişi yazılır; aynı kişide mevcut plaka "değişiklik yok"', () => {
+  it('plaka: sitede başkasında / dosyada başka kişide ATLANIR (uyarı), kişi yazılır; GEÇERSİZ biçim satırı HATAYA düşürür; aynı kişide mevcut plaka "değişiklik yok"', () => {
     const snapshot = makeSnapshot();
     const other = addPerson(snapshot, { spName: 'Plaka Sahibi', spEmail: 'p@example.com' });
     const self = addPerson(snapshot, { spName: 'Kendi Plakası', spEmail: 's@example.com' });
     addVehicle(snapshot, other, '34ABC123');
     addVehicle(snapshot, self, '06XY789');
     const result = plan('people', snapshot, [
-      { ad_soyad: 'Yeni Kişi', e_posta: 'y@example.com', plaka: '34 ABC 123, XX, 35 DE 456' },
+      { ad_soyad: 'Yeni Kişi', e_posta: 'y@example.com', plaka: '34 ABC 123, 35 DE 456' },
+      { ad_soyad: 'Hatalı Plaka', e_posta: 'h@example.com', plaka: '34 ABC 123, XX, 35 DE 457, 99 AA 11, 34 ABCD 12' },
       { ad_soyad: 'Başka Kişi', e_posta: 'b@example.com', plaka: '35 DE 456' },
       { ad_soyad: 'Kendi Plakası', e_posta: 's@example.com', plaka: '06 XY 789' },
     ]);
-    assert.deepEqual(codesOf(result, 2).sort(), ['w:PLATE_EXISTS', 'w:PLATE_INVALID']);
+    assert.deepEqual(codesOf(result, 2), ['w:PLATE_EXISTS']);
     assert.equal(statusOf(result, 2), 'ok'); // kişi yazılır
-    assert.deepEqual(codesOf(result, 3), ['w:PLATE_DUP_IN_FILE']);
-    assert.equal(statusOf(result, 3), 'ok');
-    assert.deepEqual(codesOf(result, 4), []);
-    assert.equal(statusOf(result, 4), 'unchanged');
+    assert.equal(statusOf(result, 3), 'error'); // geçersiz plaka: satır hata
+    assert.equal(codesOf(result, 3).filter((c) => c === 'e:PLATE_INVALID').length, 3);
+    const invalidMessages = issuesOf(result, 3).filter((i) => i.code === 'PLATE_INVALID').map((i) => i.message);
+    assert.ok(invalidMessages.every((m) => m.includes('Plaka biçimi geçersiz. Örnek: 34 ABC 123 (il kodu 01-81).')));
+    assert.ok(invalidMessages.some((m) => m.includes('«99 AA 11»')));
+    assert.deepEqual(codesOf(result, 4), ['w:PLATE_DUP_IN_FILE']);
+    assert.equal(statusOf(result, 4), 'ok');
+    assert.deepEqual(codesOf(result, 5), []);
+    assert.equal(statusOf(result, 5), 'unchanged');
     assert.deepEqual(result.ops.filter((op) => op.t === 'va').map((op) => op.plate), ['35DE456']);
     assert.equal(result.counts.vehicle_unchanged, 1);
     assert.equal(result.totals.with_warnings, 2);

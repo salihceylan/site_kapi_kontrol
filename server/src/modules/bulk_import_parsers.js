@@ -10,8 +10,8 @@ import {
   normalizePersonEmail,
   normalizePersonName,
   normalizePersonPhone,
-  normalizePlate,
 } from './people_common.js';
+import { requireTrPlateEntry } from './plate_format.js';
 import { INTERNAL_EMAIL_SUFFIX } from './people_sync_sql.js';
 import { CELL_MAX_LENGTH, RELATION_WORDS, RESPONSIBLE_WORDS, foldHeader } from './bulk_import_spec.js';
 
@@ -340,7 +340,8 @@ export function readPlates(raw) {
   const seen = new Set();
   for (const part of parts) {
     try {
-      const { plate, display } = normalizePlate(part);
+      // Türk plakası kuralı (createVehicle ile aynı): plate = "34ABC123", display = "34 ABC 123".
+      const { plate, display } = requireTrPlateEntry(part);
       if (!seen.has(plate)) {
         seen.add(plate);
         plates.push({ plate, display });

@@ -66,8 +66,20 @@ class XlsxListValidation {
   final String? error;
 }
 
+/// Sütunun veri satırlarına konan yalnızca GİRİŞ İPUCU (hücre seçilince görünen balon). Değeri kısıtlamaz: gerçek doğrulama yüklemede sunucuda yapılır
+/// (ör. plaka sütunu: çok plakalı, ayraçlı hücreler Excel formülüyle güvenilir doğrulanamaz).
+class XlsxInputPrompt {
+  XlsxInputPrompt({required this.title, required this.message}) {
+    if (title.length > kXlsxValidationTitleMax) throw ArgumentError('İpucu başlığı en çok 32 karakter olabilir.');
+    if (message.length > kXlsxValidationMessageMax) throw ArgumentError('İpucu iletisi en çok 255 karakter olabilir.');
+  }
+
+  final String title;
+  final String message;
+}
+
 class XlsxColumn {
-  const XlsxColumn(this.header, {this.format = XlsxFormat.general, this.scale = 2, this.width, this.listValidation});
+  const XlsxColumn(this.header, {this.format = XlsxFormat.general, this.scale = 2, this.width, this.listValidation, this.inputPrompt});
 
   final String header;
   final XlsxFormat format;
@@ -80,6 +92,9 @@ class XlsxColumn {
 
   /// Veri satırlarına konan açılır liste doğrulaması (yoksa null).
   final XlsxListValidation? listValidation;
+
+  /// Liste doğrulaması olmayan sütunda yalnız giriş ipucu (yoksa null). [listValidation] varsa o önceliklidir.
+  final XlsxInputPrompt? inputPrompt;
 }
 
 class XlsxSheet {
@@ -351,8 +366,18 @@ String _dataValidationsXml(XlsxSheet sheet) {
   var count = 0;
   for (var c = 0; c < sheet.columns.length; c++) {
     final validation = sheet.columns[c].listValidation;
-    if (validation == null) continue;
     final letters = _columnLetters(c);
+    final inputPrompt = sheet.columns[c].inputPrompt;
+    if (validation == null) {
+      if (inputPrompt == null) continue;
+      // Tür yok (= her değer serbest) + giriş iletisi: yalnız ipucu balonu.
+      items.write(
+        '<dataValidation allowBlank="1" showInputMessage="1" promptTitle="${escapeXml(inputPrompt.title)}" '
+        'prompt="${escapeXml(inputPrompt.message)}" sqref="${letters}2:$letters$lastRow"/>',
+      );
+      count++;
+      continue;
+    }
     final attrs = StringBuffer('type="list" errorStyle="stop" allowBlank="1" showInputMessage="1" showErrorMessage="1"');
     void attr(String name, String? value) {
       if (value != null && value.isNotEmpty) attrs.write(' $name="${escapeXml(value)}"');

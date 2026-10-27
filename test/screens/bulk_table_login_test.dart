@@ -163,6 +163,28 @@ void main() {
       env.controller.dispose();
     });
 
+    testWidgets('PLAKA hücresi: yazarken Türk plakası biçimi süzülür (34abc123 -> 34 ABC 123), geçersiz plaka satır içinde gösterilir ve «Uygula» kapanır; düzeltince biçimli yazılır', (t) async {
+      final env = _Env(csv: 'Ad Soyad;Plaka\r\nAli Veli;34 ABC 123\r\n');
+      await env.toMapping();
+      await _pump(t, () => BulkEditableTable(controller: env.controller), controller: env.controller);
+      await t.tap(find.text('34 ABC 123'));
+      await _settle(t);
+      final field = find.byKey(const ValueKey<String>('bulk_cell_field'));
+      expect(field, findsOneWidget);
+      await t.enterText(field, '34 ABC 1');
+      await t.pump();
+      expect(find.textContaining('Plaka biçimi geçersiz: 34 ABC 1'), findsOneWidget);
+      expect(t.widget<ElevatedButton>(find.widgetWithText(ElevatedButton, 'Uygula')).onPressed, isNull);
+      await t.enterText(field, '06xy789, 34abc123');
+      await t.pump();
+      expect(find.textContaining('Plaka biçimi geçersiz: 34 ABC 1'), findsNothing);
+      await t.tap(find.widgetWithText(ElevatedButton, 'Uygula'));
+      await _settle(t);
+      expect(env.controller.rows[0].cells['plaka'], '06 XY 789, 34 ABC 123');
+      _noError(t);
+      env.controller.dispose();
+    });
+
     testWidgets('Satır Ekle penceresinde İlişki açılır listedir; kullanıcı adı alanı yoktur (sistem verir)', (t) async {
       final env = _Env();
       await env.toMapping();
