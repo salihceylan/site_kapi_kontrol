@@ -18,7 +18,9 @@ import {
   readRelation,
   readText,
 } from './bulk_import_parsers.js';
-import { addIssue, buildLocator, completeRow, finalizePlan, newRowResult } from './bulk_import_plan_common.js';
+import { LEGACY_LOGIN_NAME_KEY, LOGIN_NAME_OVERRIDE_KEY } from './bulk_import_spec.js';
+import { normalizeTypedLoginName } from './bulk_import_login_names.js';
+import { addIssue, buildLocator, cellHasValue, completeRow, finalizePlan, newRowResult } from './bulk_import_plan_common.js';
 
 const RELATION_TR = Object.freeze({ owner: 'Malik', tenant: 'Kiracı', family_member: 'Aile Üyesi', resident: 'Sakin' });
 
@@ -86,6 +88,7 @@ export function buildPeopleState(snapshot) {
       isNew: false,
       active: person.isActive === true,
       protectedAccount: hasUser,
+      loginName: hasUser && typeof person.uLogin === 'string' && person.uLogin.trim() !== '' ? person.uLogin : null,
       name: (hasUser ? accountName : null) ?? person.spName ?? null,
       phone: loosePhone((hasUser ? accountPhone : null) ?? person.spPhone),
       email: contactEmail,
@@ -130,6 +133,7 @@ function applyOps(state, ops) {
           isNew: true,
           active: true,
           protectedAccount: false,
+          loginName: null,
           name: op.name,
           phone: op.phone,
           email: op.email,
@@ -245,6 +249,11 @@ export function planPeople({ rows, snapshot, today }) {
   // Hesap açılacak kişiler: bu yüklemede daire ilişkisi EKLENEN (yeni ya da hesapsız mevcut) kişiler; yazıcı yalnız bu kümeye hesap açar.
   const accountRefs = new Set();
   const results = [];
+  // Kullanıcı adı: sistem verir (bulk_import_login_names.js); yönetici tabloda değiştirdiyse hücre `giris_adi` ile gelir. Eski şablonun «Kullanıcı Adı»
+  // sütunu yok sayılır (dosya başına tek bilgi uyarısı).
+  let legacyLoginWarned = false;
+  const takenLoginNames = snapshot.takenLoginNames ?? new Set();
+  const loginNamesInFile = new Map(); // seçilen ad -> ilk satır
 
   for (const row of rows) {
     const cells = row.cells;
@@ -259,7 +268,7 @@ export function planPeople({ rows, snapshot, today }) {
 
     const result = newRowResult(row.n);
     const issue = (code, field, ctx, severity) => addIssue(result, KIND, code, field, ctx, severity);
-    const local = { residencyUnchanged: 0, vehicleUnchanged: 0, linkedKey: null, touch: null };
+    const local = { residencyUnchanged: 0, vehicleUnchanged: 0, linkedKey: null, touch: null, existingAccount: null };
     let targetSig = '';
 
     const nameR = readName(cells.ad_soyad);
@@ -281,11 +290,13 @@ export function planPeople({ rows, snapshot, today }) {
     const initialPassword = (passwordR.value !== null && passwordR.value !== undefined && String(passwordR.value).trim() !== '')
       ? String(passwordR.value).trim()
       : '1234';
-    const usernameR = readText(cells.kullanici_adi, { max: 50 });
-    if (usernameR.error) issue(usernameR.error, 'kullanici_adi', usernameR);
-    const customLoginName = (usernameR.value !== null && usernameR.value !== undefined && String(usernameR.value).trim() !== '')
-      ? String(usernameR.value).trim()
-      : null;
+    if (!legacyLoginWarned && cellHasValue(cells[LEGACY_LOGIN_NAME_KEY])) {
+      legacyLoginWarned = true;
+      issue('LOGIN_COLUMN_IGNORED', null, {}, 'warning');
+    }
+    // Yöneticinin tabloda seçtiği ad: biçim/kullanılabilirlik YALNIZ satırdan yeni hesap açılacaksa (daire ilişkisi eklenen kişi) denetlenir (finish).
+    const loginOverride = cellHasValue(cells[LOGIN_NAME_OVERRIDE_KEY]) ? normalizeTypedLoginName(String(cells[LOGIN_NAME_OVERRIDE_KEY])) : null;
+    const customLoginName = loginOverride && !loginOverride.error ? loginOverride.value : null;
 
     const email = emailR.value ?? null;
     const phone = phoneR.value ?? null;
@@ -321,9 +332,29 @@ export function planPeople({ rows, snapshot, today }) {
     }
 
     const finish = () => {
+      let chosenLoginName = null;
+      if (!result.hasError && loginOverride && result.ops.some((op) => op.t === 'ra')) {
+        if (loginOverride.error) {
+          issue('LOGIN_NAME_INVALID', LOGIN_NAME_OVERRIDE_KEY, { value: cells[LOGIN_NAME_OVERRIDE_KEY] });
+        } else if (takenLoginNames.has(loginOverride.value)) {
+          issue('LOGIN_NAME_TAKEN', LOGIN_NAME_OVERRIDE_KEY, { value: loginOverride.value });
+        } else if (loginNamesInFile.has(loginOverride.value)) {
+          issue('LOGIN_NAME_DUP_IN_FILE', LOGIN_NAME_OVERRIDE_KEY, { value: loginOverride.value, line: loginNamesInFile.get(loginOverride.value) });
+        } else {
+          chosenLoginName = loginOverride.value;
+        }
+      }
       completeRow(result, targetSig);
       if (!result.hasError) {
         applyOps(state, result.ops);
+        const addOp = result.ops.find((op) => op.t === 'ra');
+        if (addOp) {
+          const account = state.persons.get(addOp.ref);
+          result.account = { type: 'candidate', ref: addOp.ref, name: account?.name ?? name, email: account?.email ?? null, loginName: chosenLoginName };
+          if (chosenLoginName !== null) loginNamesInFile.set(chosenLoginName, row.n);
+        } else if (local.existingAccount) {
+          result.account = { type: 'existing', loginName: local.existingAccount.loginName };
+        }
         for (const op of result.ops) {
           if (op.t === 'pc') counts.people_create += 1;
           else if (op.t === 'pr') counts.people_reactivate += 1;
@@ -409,6 +440,8 @@ export function planPeople({ rows, snapshot, today }) {
     const ref = target.key;
     targetSig = `${ref}|${apartment?.id ?? ''}`;
     if (!target.isNew) local.linkedKey = ref;
+    // hesaplı mevcut kişi: yeni hesap açılmaz; kullanıcı adı önizlemede salt okunur gösterilir
+    if (target.protectedAccount && !target.isNew) local.existingAccount = { loginName: target.loginName };
 
     if (!target.active) {
       issue('REACTIVATE_PERSON', null, {}, 'warning');

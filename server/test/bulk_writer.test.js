@@ -289,13 +289,17 @@ function accountClient({ people, emailUsers = {}, taken = [], failOnInsert = nul
         const row = emailUsers[params[0]];
         return { rows: row ? [row] : [], rowCount: row ? 1 : 0 };
       }
-      if (/^SELECT user_code FROM users WHERE LOWER\(login_name\)/.test(sql)) {
-        return { rows: takenNames.has(String(params[0]).toLowerCase()) ? [{ user_code: 1 }] : [], rowCount: takenNames.has(String(params[0]).toLowerCase()) ? 1 : 0 };
+      if (/^SELECT LOWER\(login_name\) AS name FROM users WHERE LOWER\(login_name\) = ANY\(\$1::TEXT\[\]\)$/.test(sql)) {
+        // toplu denetim: aday adlardan veritabanında olanlar döner
+        const hits = params[0].filter((name) => takenNames.has(String(name).toLowerCase()));
+        return { rows: hits.map((name) => ({ name })), rowCount: hits.length };
       }
       if (/^INSERT INTO users/.test(sql)) {
-        if (failOnInsert && failOnInsert(params, inserted.length)) {
-          const code = failOnInsert(params, inserted.length);
-          throw Object.assign(new Error('enjekte'), { code });
+        // failOnInsert: SQLSTATE metni ya da { code, constraint } (kullanıcı adı yarışı için constraint = idx_users_login_name_unique)
+        const failure = failOnInsert ? failOnInsert(params, inserted.length) : null;
+        if (failure) {
+          const injected = typeof failure === 'string' ? { code: failure } : failure;
+          throw Object.assign(new Error('enjekte'), injected);
         }
         nextUser += 1;
         takenNames.add(String(params[2]).toLowerCase());
@@ -403,15 +407,88 @@ describe('provisionImportedResidents', () => {
     assert.deepEqual(result.items.map((i) => [i.n, i.login_name]), [[101, 'ali.veli'], [102, 'ali.veli_2']]);
   });
 
-  it('yazılan kullanıcı adı aynı kuralla sadeleşir; boş şifre için varsayılan 1234 özeti yerinde hesaplanır (bcrypt doğrulanır)', async () => {
+  it('yöneticinin seçtiği kullanıcı adı yazıldığı gibi (Türkçe harf sadeleşir, küçük harf, _ ve - korunur) kullanılır; boş şifre için varsayılan 1234 özeti yerinde hesaplanır (bcrypt doğrulanır)', async () => {
     const client = accountClient({ people: { 101: { full_name: 'Çağrı Öztürk', email: null, phone: null } } });
     const result = await provisionImportedResidents(client, {
       siteCode: 9,
       accountCandidates: [candidate('new:2', 101, [{ aptId: 10, relation: 'resident' }], { loginName: 'Özel Ad_1', password: '' })],
     });
-    assert.equal(result.items[0].login_name, 'ozel.ad.1');
+    assert.equal(result.items[0].login_name, 'ozel.ad_1');
     assert.equal(await bcrypt.compare('1234', client.inserted[0].password_hash), true);
     assert.match(sqlOf(client, /^INSERT INTO users/)[0].sql, /must_change_password\) VALUES \(\$1, \$2, \$3, 'apartment_owner', TRUE, TRUE, 'approved', \$4, \$5, TRUE\)/);
+  });
+
+  it('ÖNİZLEMEDE GÖSTERİLEN ad (expected) boştaysa AYNEN kullanılır; sıra (kiracı önce) gösterilen adı değiştirmez; bildirim yok', async () => {
+    const client = accountClient({
+      people: {
+        101: { full_name: 'Ali Veli', email: null, phone: null }, // malik, satır 1: önizlemede ali.veli
+        102: { full_name: 'Ali Veli', email: null, phone: null }, // kiracı, satır 2: önizlemede ali.veli_2
+      },
+    });
+    const result = await provisionImportedResidents(client, {
+      siteCode: 9,
+      accountCandidates: [
+        candidate('new:2', 101, [{ aptId: 10, relation: 'owner' }]),
+        candidate('new:3', 102, [{ aptId: 10, relation: 'tenant' }]),
+      ],
+      expected: new Map([
+        ['new:2', { status: 'new', loginName: 'ali.veli', n: 101 }],
+        ['new:3', { status: 'new', loginName: 'ali.veli_2', n: 102 }],
+      ]),
+    });
+    // kiracı önce işlenir (admin önceliği) ama kendi gösterilen adını alır; malik önceden ayrılmış ali.veli'yi alır
+    assert.deepEqual(result.items.map((i) => [i.n, i.login_name]).sort((a, b) => a[0] - b[0]), [[101, 'ali.veli'], [102, 'ali.veli_2']]);
+    assert.equal(result.renamed, 0);
+    assert.ok(result.items.every((i) => !('requested_login_name' in i)));
+  });
+
+  it('YARIŞ: gösterilen ad bu arada başkasına geçtiyse sıradaki boş ad seçilir, sonuçta requested_login_name ile bildirilir, kopya YAZILMAZ; başka satıra ayrılmış ad çalınmaz', async () => {
+    const client = accountClient({
+      people: {
+        101: { full_name: 'Ali Veli', email: null, phone: null },
+        102: { full_name: 'Ali Veli', email: null, phone: null },
+      },
+      taken: ['ali.veli'], // önizlemeden sonra başka bir sitede biri aldı
+    });
+    const result = await provisionImportedResidents(client, {
+      siteCode: 9,
+      accountCandidates: [candidate('new:2', 101, [{ aptId: 10, relation: 'owner' }]), candidate('new:3', 102, [{ aptId: 11, relation: 'owner' }])],
+      // önizleme: birinciye ali.veli, ikinciye ali.veli_2 gösterilmişti
+      expected: new Map([
+        ['new:2', { status: 'new', loginName: 'ali.veli', n: 101 }],
+        ['new:3', { status: 'new', loginName: 'ali.veli_2', n: 102 }],
+      ]),
+    });
+    const byN = Object.fromEntries(result.items.map((i) => [i.n, i]));
+    assert.equal(byN[102].login_name, 'ali.veli_2');
+    assert.ok(!('requested_login_name' in byN[102]));
+    // birinci kişi: ali.veli alınmış; ali.veli_2 ikinci kişiye AYRILMIŞ olduğundan çalınmaz -> ali.veli_3
+    assert.equal(byN[101].login_name, 'ali.veli_3');
+    assert.equal(byN[101].requested_login_name, 'ali.veli');
+    assert.equal(result.renamed, 1);
+    const names = client.inserted.map((u) => u.login_name.toLowerCase());
+    assert.equal(new Set(names).size, names.length, 'kopya kullanıcı adı yazılmadı');
+  });
+
+  it('YARIŞ (23505): INSERT sırasında ad kapılırsa SAVEPOINT geri alınır, sıradaki boş adla yeniden denenir ve bildirilir (kişi atlanmaz)', async () => {
+    let failed = false;
+    const client = accountClient({
+      people: { 101: { full_name: 'Veli Kaya', email: null, phone: null } },
+      failOnInsert: (params) => {
+        if (params[2] !== 'veli.kaya' || failed) return null;
+        failed = true;
+        return { code: '23505', constraint: 'idx_users_login_name_unique' };
+      },
+    });
+    const result = await provisionImportedResidents(client, {
+      siteCode: 9,
+      accountCandidates: [candidate('new:2', 101, [{ aptId: 10, relation: 'owner' }])],
+      expected: new Map([['new:2', { status: 'new', loginName: 'veli.kaya', n: 101 }]]),
+    });
+    assert.deepEqual([result.created, result.skipped, result.renamed], [1, 0, 1]);
+    assert.deepEqual(result.items, [{ n: 101, login_name: 'veli.kaya_2', status: 'created', requested_login_name: 'veli.kaya' }]);
+    assert.equal(client.log.filter((entry) => /^ROLLBACK TO SAVEPOINT import_account/.test(entry.sql)).length, 1, 'kişinin kendi SAVEPOINT noktasına dönüldü ve yeniden denendi');
+    assert.equal(client.log.filter((entry) => /^INSERT INTO users/.test(entry.sql)).length, 2);
   });
 
   it('SİTE BAĞI: e-posta başka sitenin / yöneticinin hesabına aitse (bağ yok ya da yönetici) hesap AÇILMAZ ve kullanıcı bağlanmaz; uyarı döner', async () => {
@@ -473,6 +550,7 @@ describe('provisionImportedResidents', () => {
     assert.equal(order.filter((sql) => /^SAVEPOINT/.test(sql)).length, 3, 'kişi başına SAVEPOINT');
     assert.equal(order.filter((sql) => /^ROLLBACK TO SAVEPOINT/.test(sql)).length, 1);
     assert.ok(order.filter((sql) => /^RELEASE SAVEPOINT/.test(sql)).length >= 3, 'her SAVEPOINT serbest bırakılır');
+    assert.equal(order.length, 3 + 1 + 3, 'kullanıcı adı yarışı için EK savepoint açılmaz (hesap başına sorgu sayısı artmaz)');
   });
 
   it('kilitlenme (40P01) ve kilit zaman aşımı (55P03) YUTULMAZ: yukarı fırlar, kişi atlanmış sayılmaz', async () => {

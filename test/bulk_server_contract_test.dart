@@ -43,17 +43,36 @@ void main() {
       expect(apt.responsibleWords['both'], containsAll(<String>['İkisi', 'Her ikisi']));
     });
 
-    test('hesap sütunları (sifre, kullanici_adi) YALNIZ kişi türlerinde tanımlıdır; araç, daire ve devir bakiyesi satırına eklenmez', () {
+    test('hesap sütunu (sifre) YALNIZ kişi türlerinde tanımlıdır; araç, daire ve devir bakiyesi satırına eklenmez; KULLANICI ADI sütunu hiçbir türde YOK (sistem verir)', () {
       for (final kind in <ImportKind>[ImportKind.people, ImportKind.allInOne]) {
         final keys = spec.of(kind)!.columns.map((c) => c.key).toSet();
-        expect(keys, containsAll(<String>['sifre', 'kullanici_adi']), reason: kind.apiValue);
+        expect(keys, contains('sifre'), reason: kind.apiValue);
       }
       for (final kind in <ImportKind>[ImportKind.vehicles, ImportKind.openingBalances, ImportKind.apartments]) {
         final keys = spec.of(kind)!.columns.map((c) => c.key).toSet();
-        expect(keys.intersection(<String>{'sifre', 'kullanici_adi'}), isEmpty, reason: kind.apiValue);
+        expect(keys.intersection(<String>{'sifre'}), isEmpty, reason: kind.apiValue);
       }
       for (final kind in ImportKind.values) {
+        final keys = spec.of(kind)!.columns.map((c) => c.key).toSet();
+        expect(keys, isNot(contains('kullanici_adi')), reason: kind.apiValue);
+        expect(keys, isNot(contains('giris_adi')), reason: kind.apiValue);
         expect(spec.of(kind)!.columns.any((c) => c.key == 'brut_m2' || c.key == 'net_m2'), isFalse, reason: kind.apiValue);
+      }
+    });
+
+    test('SEÇİM LİSTELERİ: sunucu her enum sütununa choices verir; istemci aynısını şablona koyar (Malik, Kiracı, Aile Üyesi, Sakin ...)', () {
+      final people = spec.of(ImportKind.people)!;
+      expect(people.column('iliski')!.choices, <String>['Malik', 'Kiracı', 'Aile Üyesi', 'Sakin']);
+      expect(spec.of(ImportKind.apartments)!.column('sorumlu')!.choices, <String>['Malik', 'Kiracı', 'İkisi']);
+      expect(spec.of(ImportKind.allInOne)!.column('sorumlu')!.choices, <String>['Malik', 'Kiracı', 'İkisi']);
+      expect(spec.of(ImportKind.openingBalances)!.column('hesap')!.choices, <String>['Ev sahibi', 'Kiracı']);
+      for (final kind in ImportKind.values) {
+        for (final column in spec.of(kind)!.columns) {
+          expect(column.choices.isNotEmpty, column.type == ImportColumnType.enumeration, reason: '${kind.apiValue}.${column.key}');
+          if (column.type == ImportColumnType.enumeration) {
+            expect(column.hint, startsWith('Listeden seçin'), reason: '${kind.apiValue}.${column.key}');
+          }
+        }
       }
     });
 

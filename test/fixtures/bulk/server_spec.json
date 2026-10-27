@@ -94,7 +94,12 @@
       "Borçlandırma",
       "Kim Öder"
      ],
-     "hint": "Malik, Kiracı ya da İkisi. Borç ve bildirimlerin kime gideceğini belirler."
+     "hint": "Listeden seçin: Malik, Kiracı ya da İkisi. Borç ve bildirimlerin kime gideceğini belirler.",
+     "choices": [
+      "Malik",
+      "Kiracı",
+      "İkisi"
+     ]
     }
    ],
    "relation_words": {},
@@ -132,25 +137,6 @@
       "Sakin Adı"
      ],
      "hint": "Kişinin adı ve soyadı (2–100 karakter)."
-    },
-    {
-     "key": "kullanici_adi",
-     "label": "Kullanıcı Adı",
-     "required": false,
-     "type": "text",
-     "max_length": 50,
-     "aliases": [
-      "Kullanıcı Adı",
-      "Kullanici Adi",
-      "Giriş Adı",
-      "Giris Adi",
-      "Username",
-      "User Name",
-      "Kullanıcı",
-      "Kullanici",
-      "Hesap Adı"
-     ],
-     "hint": "Kullanıcının sisteme giriş yapacağı kullanıcı adı (boşsa ad soyadından otomatik üretilir)."
     },
     {
      "key": "telefon",
@@ -238,7 +224,13 @@
       "İlişki Türü",
       "Sakin Türü"
      ],
-     "hint": "Malik, Kiracı, Aile (eş/çocuk) ya da Sakin. Boşsa «Sakin» sayılır."
+     "hint": "Listeden seçin: Malik, Kiracı, Aile Üyesi ya da Sakin. Boşsa «Sakin» sayılır.",
+     "choices": [
+      "Malik",
+      "Kiracı",
+      "Aile Üyesi",
+      "Sakin"
+     ]
     },
     {
      "key": "giris_tarihi",
@@ -441,7 +433,11 @@
       "Borçlu",
       "Hesap Türü"
      ],
-     "hint": "Ev sahibi ya da Kiracı. Boşsa ev sahibi hesabına yazılır."
+     "hint": "Listeden seçin: Ev sahibi ya da Kiracı. Boşsa ev sahibi hesabına yazılır.",
+     "choices": [
+      "Ev sahibi",
+      "Kiracı"
+     ]
     },
     {
      "key": "tutar",
@@ -587,7 +583,12 @@
       "Borçlandırma",
       "Kim Öder"
      ],
-     "hint": "Malik, Kiracı ya da İkisi. Borç ve bildirimlerin kime gideceğini belirler."
+     "hint": "Listeden seçin: Malik, Kiracı ya da İkisi. Borç ve bildirimlerin kime gideceğini belirler.",
+     "choices": [
+      "Malik",
+      "Kiracı",
+      "İkisi"
+     ]
     },
     {
      "key": "ad_soyad",
@@ -605,25 +606,6 @@
       "Sakin Adı"
      ],
      "hint": "Kişinin adı ve soyadı (2–100 karakter)."
-    },
-    {
-     "key": "kullanici_adi",
-     "label": "Kullanıcı Adı",
-     "required": false,
-     "type": "text",
-     "max_length": 50,
-     "aliases": [
-      "Kullanıcı Adı",
-      "Kullanici Adi",
-      "Giriş Adı",
-      "Giris Adi",
-      "Username",
-      "User Name",
-      "Kullanıcı",
-      "Kullanici",
-      "Hesap Adı"
-     ],
-     "hint": "Kullanıcının sisteme giriş yapacağı kullanıcı adı (boşsa ad soyadından otomatik üretilir)."
     },
     {
      "key": "telefon",
@@ -682,7 +664,13 @@
       "İlişki Türü",
       "Sakin Türü"
      ],
-     "hint": "Malik, Kiracı, Aile (eş/çocuk) ya da Sakin. Boşsa «Sakin» sayılır."
+     "hint": "Listeden seçin: Malik, Kiracı, Aile Üyesi ya da Sakin. Boşsa «Sakin» sayılır.",
+     "choices": [
+      "Malik",
+      "Kiracı",
+      "Aile Üyesi",
+      "Sakin"
+     ]
     },
     {
      "key": "giris_tarihi",

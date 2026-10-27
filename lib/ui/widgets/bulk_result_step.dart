@@ -136,8 +136,7 @@ class BulkResultStep extends StatelessWidget {
                 if (accounts.items.isNotEmpty) ...[
                   const SizedBox(height: AppSpace.sm),
                   Text(
-                    'Kesinleşen kullanıcı adları (aynı ad başka bir hesapta varsa sonuna _2, _3 eklenir). '
-                    'Kişiler ilk girişte şifrelerini değiştirir.',
+                    'Kesinleşen kullanıcı adları. Kişiler ilk girişte şifrelerini değiştirir.',
                     style: th.bodySmall?.copyWith(color: p.textSecondary),
                   ),
                   const SizedBox(height: AppSpace.xs),
@@ -152,6 +151,11 @@ class BulkResultStep extends StatelessWidget {
                             if ((nameByLine[item.n] ?? '').isNotEmpty) TextSpan(text: '${nameByLine[item.n]} → '),
                             TextSpan(text: item.loginName, style: th.titleSmall),
                             if (item.linked) TextSpan(text: '  (mevcut hesap)', style: th.bodySmall?.copyWith(color: p.textSecondary)),
+                            if (item.requestedLoginName != null)
+                              TextSpan(
+                                text: '  (önizlemedeki «${item.requestedLoginName}» bu arada alındı)',
+                                style: th.bodySmall?.copyWith(color: AppTone.warning.ink(p), fontWeight: FontWeight.w600),
+                              ),
                           ],
                         ),
                       ),
@@ -162,6 +166,16 @@ class BulkResultStep extends StatelessWidget {
                       key: const ValueKey<String>('bulk_result_accounts_more'),
                       style: th.bodySmall?.copyWith(color: p.textSecondary),
                     ),
+                ],
+                if (accounts.renamed > 0) ...[
+                  const SizedBox(height: AppSpace.sm),
+                  InlineNotice(
+                    key: const ValueKey<String>('bulk_result_accounts_renamed'),
+                    tone: AppTone.warning,
+                    message:
+                        '${accounts.renamed} hesapta önizlemede gösterilen kullanıcı adı yükleme sırasında başka bir hesaba verildi; '
+                        'sıradaki boş ad atandı. Yukarıdaki listedeki adları kişilere iletin.',
+                  ),
                 ],
                 if (accounts.skippedItems.isNotEmpty) ...[
                   const SizedBox(height: AppSpace.sm),

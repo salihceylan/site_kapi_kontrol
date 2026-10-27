@@ -66,7 +66,7 @@ export async function loadSnapshot(db, siteCode, kind, options = null) {
   const userCodes = [...new Set(people.rows.filter((row) => row.user_code !== null).map((row) => Number(row.user_code)))];
   const accounts = new Map();
   if (userCodes.length > 0) {
-    const users = await db.query(`SELECT user_code, full_name, phone_number, email FROM users WHERE user_code = ANY($1::INTEGER[])`, [userCodes]);
+    const users = await db.query(`SELECT user_code, full_name, phone_number, email, login_name FROM users WHERE user_code = ANY($1::INTEGER[])`, [userCodes]);
     for (const row of users.rows) {
       accounts.set(Number(row.user_code), row);
     }
@@ -92,6 +92,7 @@ export async function loadSnapshot(db, siteCode, kind, options = null) {
         uName: account?.full_name ?? null,
         uPhone: account?.phone_number ?? null,
         uEmail: account?.email ?? null,
+        uLogin: account?.login_name ?? null,
       };
     }),
     residencies: residencies.rows.map((row) => ({

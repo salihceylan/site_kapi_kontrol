@@ -16,6 +16,7 @@ import 'package:site_kapi_kontrol/services/bulk_export_renderer.dart';
 import 'package:site_kapi_kontrol/services/bulk_file_delivery.dart';
 import 'package:site_kapi_kontrol/services/bulk_file_parser.dart';
 import 'package:site_kapi_kontrol/services/bulk_file_picker.dart';
+import 'package:site_kapi_kontrol/services/bulk_login_name.dart';
 
 import 'bulk_test_support.dart';
 
@@ -77,6 +78,19 @@ class FakeBulkApi extends BulkApi {
   Completer<void>? previewGate;
   final List<PreviewCall> previewCalls = <PreviewCall>[];
 
+  // Kullanıcı adı önerileri (tablodaki «Kullanıcı Adı» sütunu) ve tek ad denetimi.
+  /// Sırayla tüketilen yanıtlar (`List<AccountProposal>` ya da fırlatılacak hata); bitince [accountsBuilder] / sunucu benzeri varsayılan.
+  final List<Object> accountsScript = <Object>[];
+  List<AccountProposal> Function(ImportKind kind, List<ImportRow> rows)? accountsBuilder;
+  Completer<void>? accountsGate;
+  final List<({ImportKind kind, List<ImportRow> rows})> accountsCalls = <({ImportKind kind, List<ImportRow> rows})>[];
+
+  /// Sistemde (başka site / şehir) zaten kayıtlı kullanıcı adları (küçük harf).
+  final Set<String> takenLoginNames = <String>{};
+  Object? checkError;
+  Completer<void>? checkGate;
+  final List<String> checkCalls = <String>[];
+
   // Onay.
   final List<Object> commitScript = <Object>[];
   Completer<void>? commitGate;
@@ -123,6 +137,51 @@ class FakeBulkApi extends BulkApi {
     if (error != null) throw error;
     return previewBuilder?.call(kind, rows, allowOverwrite) ??
         ImportPreview.fromJson(previewJson(kind: kind.apiValue, rows: rows.length));
+  }
+
+  @override
+  Future<List<AccountProposal>> previewAccounts({
+    required String token,
+    required int siteCode,
+    required ImportKind kind,
+    required int specVersion,
+    required List<ImportRow> rows,
+  }) async {
+    accountsCalls.add((kind: kind, rows: rows));
+    await accountsGate?.future;
+    if (accountsScript.isNotEmpty) {
+      final next = accountsScript.removeAt(0);
+      if (next is List<AccountProposal>) return next;
+      throw next;
+    }
+    return accountsBuilder?.call(kind, rows) ?? serverLikeProposals(rows, taken: takenLoginNames);
+  }
+
+  @override
+  Future<LoginNameCheck> checkLoginName({required String token, required int siteCode, required String loginName}) async {
+    checkCalls.add(loginName);
+    await checkGate?.future;
+    final error = checkError;
+    if (error != null) throw error;
+    final typed = normalizeTypedLoginName(loginName);
+    if (typed.error != null) {
+      return LoginNameCheck(ok: false, code: 'INVALID', loginName: typed.value, message: loginNameFormatMessage(typed.error!));
+    }
+    final name = typed.value!;
+    if (takenLoginNames.contains(name)) {
+      var n = 2;
+      while (takenLoginNames.contains('${name}_$n')) {
+        n++;
+      }
+      return LoginNameCheck(
+        ok: false,
+        code: 'TAKEN',
+        loginName: name,
+        message: 'Bu kullanıcı adı sistemde başka bir hesapta kayıtlı.',
+        suggestion: '${name}_$n',
+      );
+    }
+    return LoginNameCheck(ok: true, code: 'OK', loginName: name);
   }
 
   @override
@@ -216,3 +275,61 @@ const String kPeopleCsv =
     'Ad Soyad;Telefon;E-posta;Blok;Daire No;İlişki;Giriş Tarihi;Plaka\r\n'
     'Ahmet Yılmaz;0 (555) 123 45 67;ahmet@x.com;A;3;Malik;15.03.2021;34 ABC 123\r\n'
     'Ayşe Demir;;ayse@x.com;A;3;Kiracı;;\r\n';
+
+/// Sunucunun davranışını taklit eder: blok + daire dolu ve adı olan her satır YENİ hesap alır; ad = Ad Soyad'dan taban, alınmış / önceki satırlarca
+/// kullanılmış adlarda `_2`, `_3`; yönetici seçimi (`giris_adi`) varsa o (alınmışsa `rejected`). `existingEmails`: e-postası mevcut hesaba ait satırlar.
+List<AccountProposal> serverLikeProposals(
+  List<ImportRow> rows, {
+  Set<String> taken = const <String>{},
+  Map<String, String> existingEmails = const <String, String>{},
+}) {
+  final used = <String>{...taken};
+  // yönetici seçimleri önce rezerve edilir
+  final out = <AccountProposal>[];
+  final overrides = <int, String>{};
+  for (final row in rows) {
+    final raw = row.cells['giris_adi']?.toString() ?? '';
+    if (raw.trim().isEmpty) continue;
+    final typed = normalizeTypedLoginName(raw);
+    if (typed.error == null && !taken.contains(typed.value) && !overrides.containsValue(typed.value)) overrides[row.n] = typed.value!;
+  }
+  used.addAll(overrides.values);
+  for (final row in rows) {
+    final name = row.cells['ad_soyad']?.toString().trim() ?? '';
+    final hasApartment = (row.cells['blok']?.toString().trim().isNotEmpty ?? false) && (row.cells['daire_no']?.toString().trim().isNotEmpty ?? false);
+    if (name.isEmpty || !hasApartment) continue;
+    final email = row.cells['e_posta']?.toString().trim().toLowerCase();
+    if (email != null && existingEmails.containsKey(email)) {
+      out.add(AccountProposal(n: row.n, status: AccountProposalStatus.existing, loginName: existingEmails[email]));
+      continue;
+    }
+    final raw = row.cells['giris_adi']?.toString() ?? '';
+    if (raw.trim().isNotEmpty) {
+      final chosen = overrides[row.n];
+      if (chosen != null) {
+        out.add(AccountProposal(n: row.n, status: AccountProposalStatus.create, loginName: chosen, editable: true, custom: true));
+      } else {
+        final typed = normalizeTypedLoginName(raw);
+        out.add(
+          AccountProposal(
+            n: row.n,
+            status: AccountProposalStatus.rejected,
+            editable: true,
+            message: typed.error != null ? loginNameFormatMessage(typed.error!) : 'Kullanıcı adı «${typed.value}» sistemde başka bir hesapta kayıtlı. Başka bir ad seçin.',
+          ),
+        );
+      }
+      continue;
+    }
+    final base = generateUsernameFromFullName(name);
+    var candidate = base;
+    var n = 2;
+    while (used.contains(candidate)) {
+      candidate = '${base}_$n';
+      n++;
+    }
+    used.add(candidate);
+    out.add(AccountProposal(n: row.n, status: AccountProposalStatus.create, loginName: candidate, editable: true));
+  }
+  return out;
+}

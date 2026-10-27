@@ -77,6 +77,76 @@ void main() {
     });
   });
 
+  group('kullanıcı adı uçları', () {
+    test('hesap önerisi: POST yolu, önizlemeyle aynı gövde (yönetici seçimi giris_adi dahil), yanıt AccountProposal listesine çözülür', () async {
+      final rec = _Rec();
+      final api = _api(
+        rec,
+        (r) => _json(<String, dynamic>{
+          'kind': 'people',
+          'spec_version': 1,
+          'accounts': <Map<String, dynamic>>[
+            <String, dynamic>{'n': 2, 'status': 'new', 'login_name': 'ahmet.yilmaz_2', 'editable': true, 'custom': false},
+            <String, dynamic>{'n': 3, 'status': 'existing', 'login_name': 'mevcut', 'editable': false},
+            <String, dynamic>{'n': 4, 'status': 'rejected', 'editable': true, 'code': 'LOGIN_NAME_TAKEN', 'message': 'Kayıtlı.'},
+            <String, dynamic>{'n': 5, 'status': 'email_in_use'},
+            <String, dynamic>{'n': 6, 'status': 'shared', 'line': 2},
+            <String, dynamic>{'n': 7, 'status': 'bilinmeyen'},
+          ],
+        }),
+      );
+      final rows = <ImportRow>[
+        const ImportRow(n: 2, cells: <String, Object?>{'ad_soyad': 'Ahmet Yılmaz', 'giris_adi': 'ahmet.yilmaz_2'}),
+      ];
+      final out = await api.previewAccounts(token: 'T', siteCode: 5, kind: ImportKind.people, specVersion: 1, rows: rows);
+      expect(rec.requests.single.method, 'POST');
+      expect(rec.requests.single.url.path, '/manager/sites/5/imports/people/accounts');
+      expect(rec.lastBody['spec_version'], 1);
+      expect((rec.lastBody['rows'] as List).single['cells'], <String, dynamic>{'ad_soyad': 'Ahmet Yılmaz', 'giris_adi': 'ahmet.yilmaz_2'});
+      expect(out.map((a) => a.status), <AccountProposalStatus>[
+        AccountProposalStatus.create,
+        AccountProposalStatus.existing,
+        AccountProposalStatus.rejected,
+        AccountProposalStatus.emailInUse,
+        AccountProposalStatus.shared,
+        AccountProposalStatus.unavailable,
+      ]);
+      expect(out.first.loginName, 'ahmet.yilmaz_2');
+      expect(out.first.editable, isTrue);
+      expect(out[2].message, 'Kayıtlı.');
+      expect(out[4].line, 2);
+    });
+
+    test('hesap önerisi: accounts dizisi yoksa yapısal hata (boş liste sanılmaz); hız sınırı / yetki hataları Türkçe ApiException', () async {
+      final bad = _api(_Rec(), (r) => _json(<String, dynamic>{'kind': 'people'}));
+      final e = await _caught(() => bad.previewAccounts(token: 'T', siteCode: 1, kind: ImportKind.people, specVersion: 1, rows: _rows));
+      expect(e.message, contains('beklenen biçimde değil'));
+      final limited = _api(_Rec(), (r) => _json(<String, dynamic>{'error': 'Çok fazla kullanıcı adı isteği. Biraz sonra tekrar deneyin.', 'code': 'RATE_LIMITED', 'retry_after_seconds': 30}, 429));
+      final tooMany = await _caught(() => limited.previewAccounts(token: 'T', siteCode: 1, kind: ImportKind.people, specVersion: 1, rows: _rows));
+      expect(tooMany.statusCode, 429);
+      final forbidden = _api(_Rec(), (r) => _json(<String, dynamic>{'error': 'Bu işlem için yetkiniz yok.', 'code': 'FORBIDDEN_ROLE'}, 403));
+      expect((await _caught(() => forbidden.previewAccounts(token: 'T', siteCode: 1, kind: ImportKind.people, specVersion: 1, rows: _rows))).statusCode, 403);
+    });
+
+    test('tek ad denetimi: POST login-names/check, gövde { login_name }, yanıt LoginNameCheck (ok / TAKEN + öneri / biçim hatası)', () async {
+      final rec = _Rec();
+      final api = _api(rec, (r) {
+        final name = (jsonDecode(r.body) as Map<String, dynamic>)['login_name'] as String;
+        if (name == 'dolu') {
+          return _json(<String, dynamic>{'ok': false, 'login_name': 'dolu', 'code': 'TAKEN', 'message': 'Bu kullanıcı adı sistemde başka bir hesapta kayıtlı.', 'suggestion': 'dolu_2'});
+        }
+        return _json(<String, dynamic>{'ok': true, 'login_name': name, 'code': 'OK', 'message': null, 'suggestion': null});
+      });
+      final free = await api.checkLoginName(token: 'T', siteCode: 7, loginName: 'yeni.ad');
+      expect(rec.requests.single.url.path, '/manager/sites/7/imports/login-names/check');
+      expect(rec.lastBody, <String, dynamic>{'login_name': 'yeni.ad'});
+      expect([free.ok, free.code, free.loginName, free.suggestion], [true, 'OK', 'yeni.ad', null]);
+      final taken = await api.checkLoginName(token: 'T', siteCode: 7, loginName: 'dolu');
+      expect([taken.ok, taken.code, taken.suggestion], [false, 'TAKEN', 'dolu_2']);
+      expect(taken.message, contains('sistemde başka bir hesapta kayıtlı'));
+    });
+  });
+
   group('önizleme', () {
     test('gövde: spec_version, rows[n, cells]; allow_overwrite yalnız dairelerde', () async {
       final rec = _Rec();

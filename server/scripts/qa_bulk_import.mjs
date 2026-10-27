@@ -405,8 +405,9 @@ export async function runBulkImportSection(ctx) {
   // mali kayit uyarisi
   await q(`INSERT INTO ledger_entries (site_code, apartment_id, kind, amount_minor, period, entry_date, payer_party) VALUES ($1, $2, 'charge', 1000, date_trunc('month', CURRENT_DATE)::date, CURRENT_DATE, 'both')`, [S.code, S.apt('A', 6).id]);
   const pvFin = await previewOf(MGR, S.code, 'apartments', [{ blok: 'A', daire_no: '6', tip: 'Dükkan' }, { blok: 'A', daire_no: '6', kat: 1 }]);
-  check('B8: mali kaydi olan dairede mali alan (tip) degisirse FINANCE_RECORDS uyarisi (engellemez); ayni daire ikinci satir DUPLICATE_IN_FILE hatasi',
-    same(issueCodes(pvFin, 2), ['w:FINANCE_RECORDS']) && same(issueCodes(pvFin, 3), ['e:DUPLICATE_IN_FILE']) && pvFin.body.totals.ok === 1);
+  check('B8: mali kaydi olan dairede mali alan (tip) degisirse satir uyarisi YOK, onizlemede TEK ozet (checks.finance_records, engellemez); ayni daire ikinci satir DUPLICATE_IN_FILE hatasi',
+    same(issueCodes(pvFin, 2), []) && same(issueCodes(pvFin, 3), ['e:DUPLICATE_IN_FILE']) && pvFin.body.totals.ok === 1 && pvFin.body.totals.with_warnings === 0
+    && pvFin.body.checks?.finance_records?.apartments === 1 && /^1 dairenin mali kaydı var;/.test(pvFin.body.checks.finance_records.message), pvFin.body.checks);
 
   // arsa payi toplam kontrolu
   const pvLs = await previewOf(MGR, S.code, 'apartments', S.apts.map((a) => ({ blok: a.block, daire_no: String(a.n), arsa_payi_pay: 100, arsa_payi_payda: 1000 })), { allow_overwrite: true });
@@ -706,7 +707,7 @@ export async function runBulkImportSection(ctx) {
     { ad_soyad: 'Baska Sitenin Sakini', e_posta: strangerEmail, blok: 'A', daire_no: '1', iliski: 'Malik' }, // n=2: e-posta BU sitede bagi olmayan hesaba ait -> EMAIL_IN_USE
     { ad_soyad: 'Yonetici Adli Kisi', e_posta: mgrEmail, blok: 'A', daire_no: '2', iliski: 'Malik' }, // n=3: e-posta yoneticiye ait -> EMAIL_IN_USE
     { ad_soyad: 'Sitede Bagli Sakin', e_posta: 'sitede.bagli@bulk.qa.example', blok: 'A', daire_no: '3', iliski: 'Malik' }, // n=4: sitede bagi olan hesapli kisi: yeni daire / hesap EKLENMEZ (uyari)
-    { ad_soyad: 'Cok Daireli', e_posta: 'cok.daireli@bulk.qa.example', blok: 'A', daire_no: '4', iliski: 'Malik', sifre: '4321', kullanici_adi: 'ozel.cok.daireli' }, // n=5: iki daire, TEK hesap, ozel sifre + kullanici adi
+    { ad_soyad: 'Cok Daireli', e_posta: 'cok.daireli@bulk.qa.example', blok: 'A', daire_no: '4', iliski: 'Malik', sifre: '4321', giris_adi: 'ozel.cok.daireli' }, // n=5: iki daire, TEK hesap, ozel sifre + kullanici adi
     { ad_soyad: 'Cok Daireli', e_posta: 'cok.daireli@bulk.qa.example', blok: 'A', daire_no: '5', iliski: 'Malik' }, // n=6
   ];
   const ac = await run(MGR, H.code, 'people', accountFile);
@@ -737,6 +738,100 @@ export async function runBulkImportSection(ctx) {
   const acAgain = await run(MGR, H.code, 'people', accountFile);
   check('C16f: ayni hesap dosyasi ikinci kez: degisiklik yok, hesap ACILMAZ (atlanan kisilere yeniden denenmez), users sayisi ayni', acAgain.cm?.status === 201 && acAgain.pv.body.plan.account_create === 0 && (acAgain.cm.body.result.accounts?.created ?? 0) === 0
     && (await countOf(`SELECT COUNT(*)::int AS n FROM users`)) === usersBeforeH + 1, acAgain.pv.body.plan);
+
+  // --- C17: KULLANICI ADI ATAMASI (sablonda sutun YOK; sistem verir). Global teklik (baska site / sehir, buyuk-kucuk harf, pasif hesap), dosya ici teklik, yonetici secimi,
+  //     onizleme hash'i adlara baglidir, yazim aninda yaris (23505) -> siradaki bos ad + bildirim, kopya YOK.
+  const LN = await mkSite('Kullanici Adi Sitesi', { 'A Blok': 8 });
+  await linkManager(LN.code, MGR);
+  const lnTakenA = await mkUser('Ali Veli Baska Sehir', 'apartment_owner');
+  await q(`UPDATE users SET login_name = 'Ali.Veli' WHERE user_code = $1`, [lnTakenA]); // baska sitede, BUYUK/kucuk harf karisik
+  const lnTakenB = await mkUser('Pasif Hesap', 'apartment_owner', { active: false });
+  await q(`UPDATE users SET login_name = 'ali.veli_2' WHERE user_code = $1`, [lnTakenB]); // pasif hesabin adi da ayrilidir
+  const lnRows = [
+    { ad_soyad: 'Ali Veli', blok: 'A', daire_no: '1', iliski: 'Malik' }, // n=2
+    { ad_soyad: 'Ali Veli', blok: 'A', daire_no: '2', iliski: 'Kiracı' }, // n=3
+    { ad_soyad: 'Çağrı Öztürk', blok: 'A', daire_no: '3', iliski: 'Malik' }, // n=4
+    { ad_soyad: 'Çağrı Öztürk', blok: 'A', daire_no: '4', iliski: 'Kiracı', giris_adi: 'Cagri.Ozturk_2' }, // n=5: yonetici secimi
+    { ad_soyad: 'Dairesiz Kisi', e_posta: 'dairesiz.ln@bulk.qa.example' }, // n=6: hesap yok
+  ];
+  const lnPv = await previewOf(MGR, LN.code, 'people', lnRows);
+  const lnAcc = Object.fromEntries((lnPv.body?.accounts ?? []).map((a) => [a.n, a]));
+  check('C17: onizleme her yeni hesap icin SISTEMIN SECTIGI adi verir: baska sehirdeki "Ali.Veli" (karisik harf) ve pasif hesabin "ali.veli_2" adi atlanir -> ali.veli_3, ali.veli_4; yonetici secimi aynen (cagri.ozturk_2, custom) ve uretilen cagri.ozturk onunla cakismaz; dairesiz satirda hesap yok',
+    lnPv.status === 200 && lnAcc[2]?.login_name === 'ali.veli_3' && lnAcc[3]?.login_name === 'ali.veli_4' && lnAcc[4]?.login_name === 'cagri.ozturk' && lnAcc[5]?.login_name === 'cagri.ozturk_2' && lnAcc[5]?.custom === true
+    && lnAcc[2]?.status === 'new' && lnAcc[2]?.editable === true && lnAcc[6] === undefined && lnPv.body.issues.length === 0, lnPv.body?.accounts);
+  const lnAccounts = await call('POST', `${P(LN.code)}/imports/people/accounts`, MGR, body(lnRows));
+  check('C17b: tablo icin hesap onerisi ucu (POST imports/people/accounts) onizlemeyle AYNI adlari verir, yazmaz (users sayisi ayni); arac / daire turunde 404; yetkisiz 403',
+    lnAccounts.status === 200 && same(lnAccounts.body.accounts, lnPv.body.accounts) && (await countOf(`SELECT COUNT(*)::int AS n FROM users WHERE login_name LIKE 'ali.veli_%' OR login_name LIKE 'cagri.%'`)) === 1
+    && (await call('POST', `${P(LN.code)}/imports/vehicles/accounts`, MGR, body([{ plaka: '34 ABC 123' }]))).status === 404
+    && (await call('POST', `${P(LN.code)}/imports/people/accounts`, BOARD, body(lnRows))).status === 403, lnAccounts.body);
+  const chkTaken = await call('POST', `${P(LN.code)}/imports/login-names/check`, MGR, { login_name: ' ALI.veli ' });
+  const chkFree = await call('POST', `${P(LN.code)}/imports/login-names/check`, MGR, { login_name: 'Yeni Çağrı' });
+  const chkBad = await call('POST', `${P(LN.code)}/imports/login-names/check`, MGR, { login_name: 'a@b' });
+  const chkDenied = await call('POST', `${P(LN.code)}/imports/login-names/check`, MGR2, { login_name: 'x.y.z' });
+  check('C17c: tek ad denetimi: alinmis ad (buyuk/kucuk harf duyarsiz) TAKEN + ilk bos ad onerisi; bos ad ok (normallesmis: yeni.cagri); bicim hatasi CHARS; baska sitenin yoneticisi 403',
+    chkTaken.body.code === 'TAKEN' && chkTaken.body.ok === false && chkTaken.body.suggestion === 'ali.veli_3' && chkFree.body.ok === true && chkFree.body.login_name === 'yeni.cagri'
+    && chkBad.body.code === 'CHARS' && chkDenied.status === 403, { chkTaken: chkTaken.body, chkFree: chkFree.body, chkBad: chkBad.body });
+  const lnTakenRows = [...lnRows, { ad_soyad: 'Veli Kaya', blok: 'A', daire_no: '5', iliski: 'Malik', giris_adi: 'ALI.veli' }, { ad_soyad: 'Can Demir', blok: 'A', daire_no: '6', iliski: 'Malik', giris_adi: 'cagri.ozturk_2' }];
+  const lnBad = await previewOf(MGR, LN.code, 'people', lnTakenRows);
+  const lnBadAcc = Object.fromEntries(lnBad.body.accounts.map((a) => [a.n, a]));
+  check('C17d: yonetici secimi sistemde kayitliysa satir hatasi LOGIN_NAME_TAKEN (hesap listesinde rejected + neden), dosyada baska satirla ayniysa LOGIN_NAME_DUP_IN_FILE; diger satirlar etkilenmez',
+    lnBad.status === 200 && same(issueCodes(lnBad, 7), ['e:LOGIN_NAME_TAKEN']) && same(issueCodes(lnBad, 8), ['e:LOGIN_NAME_DUP_IN_FILE']) && lnBadAcc[7]?.status === 'rejected' && lnBadAcc[7].code === 'LOGIN_NAME_TAKEN'
+    && typeof lnBadAcc[7].message === 'string' && lnBad.body.totals.error === 2 && lnBadAcc[2]?.login_name === 'ali.veli_3', lnBad.body.issues);
+
+  // onizleme hash'i adlara bagli: ad bu arada baska sitede alinirsa onay PREVIEW_STALE verir ve HICBIR sey yazilmaz
+  const usersBeforeLn = await countOf(`SELECT COUNT(*)::int AS n FROM users`);
+  const lnRacer = await mkUser('Cagri Rakip', 'apartment_owner');
+  await q(`UPDATE users SET login_name = 'cagri.ozturk' WHERE user_code = $1`, [lnRacer]);
+  const lnStale = await commitRaw(MGR, LN.code, 'people', lnRows, lnPv.body.preview_hash);
+  check('C17e: onizlemeden sonra onerilen ad (cagri.ozturk) baska sitede alinirsa onay 409 PREVIEW_STALE; hicbir kisi / hesap yazilmadi; yeni onizleme cagri.ozturk_3 onerir',
+    lnStale.status === 409 && lnStale.body.code === 'PREVIEW_STALE' && (await countOf(`SELECT COUNT(*)::int AS n FROM users`)) === usersBeforeLn + 1 && (await peopleNamed(LN.code, 'Ali Veli')).length === 0, lnStale.body);
+  const lnRun = await run(MGR, LN.code, 'people', lnRows);
+  const lnItems = Object.fromEntries((lnRun.cm?.body?.result?.accounts?.items ?? []).map((i) => [i.n, i]));
+  check('C17f: onay 201: acilan adlar onizlemede gosterilenlerin AYNISI (ali.veli_3, ali.veli_4, cagri.ozturk_3 [cagri.ozturk alindi], cagri.ozturk_2 [secim]); yarisla degisen ad yok (renamed 0); users.login_name gercekten bu adlar',
+    lnRun.cm?.status === 201 && lnRun.pv.body.accounts.find((a) => a.n === 4)?.login_name === 'cagri.ozturk_3' && lnItems[2]?.login_name === 'ali.veli_3' && lnItems[3]?.login_name === 'ali.veli_4' && lnItems[4]?.login_name === 'cagri.ozturk_3'
+    && lnItems[5]?.login_name === 'cagri.ozturk_2' && lnRun.cm.body.result.accounts.renamed === 0 && lnRun.cm.body.result.accounts.created === 4
+    && same((await q(`SELECT login_name FROM users WHERE login_name IN ('ali.veli_3','ali.veli_4','cagri.ozturk_3','cagri.ozturk_2') ORDER BY 1`)).rows.map((r) => r.login_name), ['ali.veli_3', 'ali.veli_4', 'cagri.ozturk_2', 'cagri.ozturk_3']), lnRun.cm?.body?.result?.accounts);
+  check('C17g: SISTEMDE kopya kullanici adi YOK (LOWER(login_name) tekil) ve ikinci yukleme yeni hesap / yeni ad uretmez',
+    (await countOf(`SELECT COUNT(*)::int AS n FROM (SELECT LOWER(login_name) FROM users WHERE login_name IS NOT NULL GROUP BY 1 HAVING COUNT(*) > 1) d`)) === 0
+    && (await run(MGR, LN.code, 'people', lnRows)).pv.body.accounts.filter((a) => a.status === 'new').length === 0);
+  const dupShape = await (async () => {
+    try {
+      await q(`UPDATE users SET login_name = 'ali.veli_3' WHERE user_code = $1`, [lnRacer]);
+      return null;
+    } catch (error) {
+      return { code: error.code, constraint: error.constraint };
+    }
+  })();
+  check('C17h: gercek PG tekillik hatasi 23505 + constraint = idx_users_login_name_unique (yazici bu seklin ayni oldugunu varsayar: isLoginNameConflict)', dupShape?.code === '23505' && dupShape.constraint === 'idx_users_login_name_unique', dupShape);
+
+  // yazim aninda YARIS: gosterilen ad INSERT aninda baska bir islemce alinmis gibi (tetikleyici 23505 firlatir) -> kisi SAVEPOINT'ine donulur, siradaki bos ad, sonuc + requested_login_name
+  const LN3 = await mkSite('Kullanici Adi Yaris', { 'A Blok': 4 });
+  await linkManager(LN3.code, MGR);
+  await q(`CREATE OR REPLACE FUNCTION qa_login_race_fn() RETURNS trigger LANGUAGE plpgsql AS $fn$
+           BEGIN
+             IF NEW.login_name = 'yaris.kisi' THEN
+               RAISE EXCEPTION 'duplicate key value violates unique constraint "idx_users_login_name_unique"' USING ERRCODE = '23505', CONSTRAINT = 'idx_users_login_name_unique';
+             END IF;
+             RETURN NEW;
+           END $fn$`);
+  await q(`CREATE TRIGGER qa_login_race_trg BEFORE INSERT ON users FOR EACH ROW EXECUTE FUNCTION qa_login_race_fn()`);
+  const raceRows = [
+    { ad_soyad: 'Yaris Kisi', blok: 'A', daire_no: '1', iliski: 'Malik' }, // n=2: onizlemede yaris.kisi; yazimda "alinmis"
+    { ad_soyad: 'Yaris Kisi', blok: 'A', daire_no: '2', iliski: 'Kiracı' }, // n=3: onizlemede yaris.kisi_2 (korunur, calinmaz)
+    { ad_soyad: 'Diger Kisi', blok: 'A', daire_no: '3', iliski: 'Malik' }, // n=4: yarisla ilgisiz, hesabi acilir (transaction bozulmaz)
+  ];
+  const raceRun = await run(MGR, LN3.code, 'people', raceRows);
+  await q(`DROP TRIGGER IF EXISTS qa_login_race_trg ON users`);
+  await q(`DROP FUNCTION IF EXISTS qa_login_race_fn()`);
+  const raceAcc = raceRun.cm?.body?.result?.accounts;
+  const raceItems = Object.fromEntries((raceAcc?.items ?? []).map((i) => [i.n, i]));
+  check('C17i: YAZIM ANI YARISI: onizlemede yaris.kisi gosterilen satir, INSERT aninda ad alinmis (23505) -> sonraki bos ad (kardesine ayrilan yaris.kisi_2 CALINMAZ -> yaris.kisi_3), sonucta requested_login_name=yaris.kisi + renamed=1; digerleri etkilenmez; commit 201; 3 hesap',
+    raceRun.pv.body?.accounts?.map((a) => a.login_name).join() === 'yaris.kisi,yaris.kisi_2,diger.kisi' && raceRun.cm?.status === 201 && raceAcc?.created === 3 && raceAcc.skipped === 0 && raceAcc.renamed === 1
+    && raceItems[2]?.login_name === 'yaris.kisi_3' && raceItems[2]?.requested_login_name === 'yaris.kisi' && raceItems[3]?.login_name === 'yaris.kisi_2' && !('requested_login_name' in raceItems[3]) && raceItems[4]?.login_name === 'diger.kisi'
+    && (await countOf(`SELECT COUNT(*)::int AS n FROM users WHERE login_name LIKE 'yaris.kisi%'`)) === 2, raceAcc);
+  check('C17j: gercek PG tekillik: yaris sonrasi hicbir kopya ad yok ve yarisan satirin kisisi dogru hesaba bagli (user_code dolu)',
+    (await countOf(`SELECT COUNT(*)::int AS n FROM (SELECT LOWER(login_name) FROM users WHERE login_name IS NOT NULL GROUP BY 1 HAVING COUNT(*) > 1) d`)) === 0
+    && (await peopleWhere(LN3.code, `COALESCE(u.full_name, sp.full_name) = 'Yaris Kisi'`)).every((row) => row.user_code !== null));
 
   // kapi listeleri AYNI (my-doors)
 
@@ -1053,6 +1148,19 @@ export async function runBulkImportSection(ctx) {
   // planlayicinin Seq Scan secmesi MESRUDUR (bilgi olarak raporlanir).
   await q(`INSERT INTO users (full_name, email, role, password_hash, is_active, email_verified, approval_status)
            SELECT 'Dolgu Kullanici ' || g, 'dolgu-user' || g || '@dolgu.qa.example', 'individual', 'x', TRUE, TRUE, 'approved' FROM generate_series(1, 19000) g`);
+  await q(`UPDATE users SET login_name = 'dolgu.kisi.' || user_code WHERE email LIKE 'dolgu-user%@dolgu.qa.example'`);
+  await q(`ANALYZE users`);
+  const loginSql = `SELECT LOWER(login_name) AS name FROM users WHERE LOWER(login_name) = ANY($1::TEXT[])`;
+  const loginPlan = (await q(`EXPLAIN ${loginSql}`, [['ali.veli', 'ali.veli_2', 'ali.veli_3', 'ali.veli_4', 'ali.veli_5', 'ali.veli_6']])).rows.map((r) => r['QUERY PLAN']).join(' | ');
+  check('F4d: kullanici adi arama sorgusu (LOWER(login_name) = ANY) 19 bin satirli users tablosunda idx_users_login_name_unique kullanir, Seq Scan YOK', /idx_users_login_name_unique/.test(loginPlan) && !/Seq Scan on users/.test(loginPlan), loginPlan);
+  const { resolveLoginNames } = await import('../src/modules/bulk_import_login_names.js');
+  const manyRequests = Array.from({ length: 5000 }, (_, i) => ({ key: `r${i}`, base: i % 2 === 0 ? 'mehmet.yilmaz' : `kisi.${i}` }));
+  const loginSpy = { query: (...args) => { loginSpy.count += 1; return pool.query(...args); }, count: 0 };
+  const loginStart = Date.now();
+  const manyNames = await resolveLoginNames(loginSpy, manyRequests);
+  const loginMs = Date.now() - loginStart;
+  check('F4c: 5000 satirlik kullanici adi cozumlemesi (2500 ayni ad = mehmet.yilmaz, _2 ... _2500) gercek PG\'de benzersiz adlar uretir; sorgu sayisi sinirli; sure makul',
+    manyNames.size === 5000 && new Set([...manyNames.values()].map((n) => n.toLowerCase())).size === 5000 && manyNames.get('r0') === 'mehmet.yilmaz' && loginSpy.count <= 200 && loginMs < 20000, { queries: loginSpy.count, ms: loginMs });
   nextSite += 1;
   const TYP = nextSite;
   await q(`INSERT INTO sites (site_code, name, approval_status, approved_at) VALUES ($1, 'Tipik Site', 'approved', NOW())`, [TYP]);

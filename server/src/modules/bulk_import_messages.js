@@ -37,6 +37,9 @@ export const ERROR_CODES = Object.freeze([
   'PERIOD_CLOSED',
   'APARTMENT_INACTIVE',
   'APARTMENT_VALUES_CONFLICT',
+  'LOGIN_NAME_INVALID',
+  'LOGIN_NAME_TAKEN',
+  'LOGIN_NAME_DUP_IN_FILE',
 ]);
 
 export const WARNING_CODES = Object.freeze([
@@ -47,9 +50,9 @@ export const WARNING_CODES = Object.freeze([
   'RELATION_DIFFERS',
   'REACTIVATE_PERSON',
   'VALUE_KEPT',
-  'FINANCE_RECORDS',
   'ROUNDED',
   'AREA_COLUMN_IGNORED',
+  'LOGIN_COLUMN_IGNORED',
   'APARTMENT_NOT_APPLIED',
   'FUTURE_DATE',
   'NO_VALUES',
@@ -113,10 +116,10 @@ export function issueMessage(code, ctx = {}) {
       text = 'Arsa payı geçersiz: pay ve payda birlikte dolu olmalı, payda 0’dan büyük, pay payda’dan büyük olmamalı.';
       break;
     case 'RELATION_INVALID':
-      text = `İlişki anlaşılamadı: «${value}». Malik, Kiracı, Aile ya da Sakin yazın.`;
+      text = `İlişki anlaşılamadı: «${value}». Listeden seçin: Malik, Kiracı, Aile Üyesi ya da Sakin.`;
       break;
     case 'RESPONSIBLE_INVALID':
-      text = `Borç Sorumlusu anlaşılamadı: «${value}». Malik, Kiracı ya da İkisi yazın.`;
+      text = `Borç Sorumlusu anlaşılamadı: «${value}». Listeden seçin: Malik, Kiracı ya da İkisi.`;
       break;
     case 'NO_IDENTIFIER':
       text = 'Kişiyi tanımak için e-posta, daire ya da telefon gerekir.';
@@ -179,14 +182,23 @@ export function issueMessage(code, ctx = {}) {
     case 'VALUE_KEPT':
       text = `${label} korundu: dolu alanın üzerine yazılmadı.`;
       break;
-    case 'FINANCE_RECORDS':
-      text = 'Bu dairenin mali kaydı var; yeni değerler yalnız sonraki borçlandırmayı etkiler.';
-      break;
     case 'ROUNDED':
       text = `${label} 2 ondalığa yuvarlandı.`;
       break;
     case 'AREA_COLUMN_IGNORED':
       text = 'm² (Brüt/Net) sütunları artık kullanılmıyor; yok sayıldı.';
+      break;
+    case 'LOGIN_COLUMN_IGNORED':
+      text = 'Kullanıcı Adı sütunu artık kullanılmıyor; adları sistem verir. Önizleme tablosunda değiştirebilirsiniz.';
+      break;
+    case 'LOGIN_NAME_INVALID':
+      text = `Kullanıcı adı geçersiz: «${value}». 3-40 karakter; yalnız harf, rakam, nokta, alt çizgi ve tire kullanın.`;
+      break;
+    case 'LOGIN_NAME_TAKEN':
+      text = `Kullanıcı adı «${value}» sistemde başka bir hesapta kayıtlı. Başka bir ad seçin.`;
+      break;
+    case 'LOGIN_NAME_DUP_IN_FILE':
+      text = `Kullanıcı adı «${value}» dosyada satır ${ctx.line} ile aynı. Farklı bir ad seçin.`;
       break;
     case 'APARTMENT_NOT_APPLIED':
       text = `Daire bilgileri uygulanmadı: satır ${ctx.line} hatalı. Önce onu düzeltin.`;
@@ -204,7 +216,7 @@ export function issueMessage(code, ctx = {}) {
       text = `${label} çok büyük.`;
       break;
     case 'ACCOUNT_INVALID':
-      text = `Hesap anlaşılamadı: «${value}». Ev sahibi ya da Kiracı yazın.`;
+      text = `Hesap anlaşılamadı: «${value}». Listeden seçin: Ev sahibi ya da Kiracı.`;
       break;
     case 'OPENING_CREDIT_UNSUPPORTED':
       text = 'Eksi (alacaklı) devir desteklenmiyor. Bu daireyi dosyadan çıkarın.';
@@ -235,6 +247,14 @@ export function issueMessage(code, ctx = {}) {
   }
   const chars = Array.from(text);
   return chars.length > MESSAGE_MAX_LENGTH ? `${chars.slice(0, MESSAGE_MAX_LENGTH - 1).join('')}…` : text;
+}
+
+/**
+ * Mali kaydı olan dairelerde mali alan değişikliği için önizlemenin ÜSTÜNDEKİ tek özet (satır uyarısı değildir; yüklemeyi engellemez).
+ * `checks.finance_records.message` olarak döner.
+ */
+export function financeRecordsNotice(count) {
+  return `${count} dairenin mali kaydı var; Borç Sorumlusu / Tip / Arsa Payı değişiklikleri mevcut borçları değiştirmez, yalnız sonraki borçlandırmadan itibaren geçerlidir.`;
 }
 
 export function severityOf(code) {

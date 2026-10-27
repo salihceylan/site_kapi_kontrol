@@ -31,6 +31,9 @@ enum ImportKind {
   /// Devir bakiyesi: devir tarihi (`options.cutover_date`) ve onayda toplam tutar (`options.expected_total_minor`) gerekir.
   bool get isOpening => this == ImportKind.openingBalances;
 
+  /// Daire ilişkisi eklenen kişilere kullanıcı hesabı açılan türler: önizleme tablosunda «Kullanıcı Adı» sütunu vardır.
+  bool get createsAccounts => this == ImportKind.people || this == ImportKind.allInOne;
+
   /// `allow_overwrite` yalnız dairelerde geçerlidir.
   bool get supportsOverwrite => this == ImportKind.apartments || this == ImportKind.allInOne;
 
@@ -74,6 +77,7 @@ class ImportColumn {
     this.maxLength,
     this.aliases = const <String>[],
     this.hint,
+    this.choices = const <String>[],
   });
 
   factory ImportColumn.fromJson(Map<String, dynamic> json) {
@@ -95,6 +99,7 @@ class ImportColumn {
             ]
           : const <String>[],
       hint: _string(json['hint']),
+      choices: _stringList(json['choices']),
     );
   }
 
@@ -105,6 +110,10 @@ class ImportColumn {
   final int? maxLength;
   final List<String> aliases;
   final String? hint;
+
+  /// Seçim listesi sütunlarında (İlişki, Borç Sorumlusu, Hesap) izin verilen etiketler: şablonda Excel açılır listesi, önizleme tablosunda açılır
+  /// liste olur. Eski sunucu göndermezse boştur (istemci yedek sözlüğünü kullanır; bkz. bulk_choices.dart).
+  final List<String> choices;
 }
 
 /// Bir türün sütun şeması.
@@ -348,6 +357,134 @@ class LandShareCheck {
   }
 }
 
+/// Bir satırdan açılacak hesabın durumu.
+enum AccountProposalStatus {
+  /// Yeni hesap açılır; kullanıcı adını sistem seçmiştir, yönetici değiştirebilir.
+  create,
+
+  /// Kişi (ya da e-postası) mevcut bir hesaba ait: o hesaba bağlanır, kullanıcı adı SALT OKUNUR.
+  existing,
+
+  /// E-posta başka bir hesaba ait ve bağlanamaz: kişi yazılır, hesap AÇILMAZ.
+  emailInUse,
+
+  /// Aynı kişi dosyada başka bir satırda da var: tek hesap, ad ilk satırdadır (salt okunur).
+  shared,
+
+  /// Ad üretilemedi (beklenmeyen): hesap açılırken sunucu yedek ad verir.
+  unavailable,
+
+  /// Yöneticinin seçtiği ad sunucuca REDDEDİLDİ (geçersiz / sistemde kayıtlı / dosyada tekrar): [AccountProposal.message] nedeni söyler; satır yazılmaz.
+  rejected;
+
+  static AccountProposalStatus parse(Object? value) => switch (value) {
+    'new' => AccountProposalStatus.create,
+    'existing' => AccountProposalStatus.existing,
+    'email_in_use' => AccountProposalStatus.emailInUse,
+    'shared' => AccountProposalStatus.shared,
+    'rejected' => AccountProposalStatus.rejected,
+    _ => AccountProposalStatus.unavailable,
+  };
+}
+
+/// Önizleme tablosundaki «Kullanıcı Adı» hücresi: satır numarası + sistemin seçtiği (ya da yöneticinin verdiği) ad.
+/// `POST imports/:kind/accounts` ve önizleme yanıtının `accounts` dizisi aynı biçimdedir.
+@immutable
+class AccountProposal {
+  const AccountProposal({
+    required this.n,
+    required this.status,
+    this.loginName,
+    this.editable = false,
+    this.custom = false,
+    this.line,
+    this.message,
+  });
+
+  factory AccountProposal.fromJson(Map<String, dynamic> json) => AccountProposal(
+    n: _int(json['n']) ?? 0,
+    status: AccountProposalStatus.parse(json['status']),
+    loginName: _string(json['login_name']),
+    editable: json['editable'] == true,
+    custom: json['custom'] == true,
+    line: _int(json['line']),
+    message: _string(json['message']),
+  );
+
+  static List<AccountProposal> listFrom(Object? raw) {
+    if (raw is! List) return const <AccountProposal>[];
+    return List<AccountProposal>.unmodifiable(<AccountProposal>[
+      for (final item in raw)
+        if (item is Map) AccountProposal.fromJson(Map<String, dynamic>.from(item)),
+    ]);
+  }
+
+  final int n;
+  final AccountProposalStatus status;
+  final String? loginName;
+
+  /// Yönetici adı değiştirebilir (yalnız yeni hesaplarda).
+  final bool editable;
+
+  /// Ad yöneticinin seçtiği ad (sistem önerisi değil).
+  final bool custom;
+
+  /// `shared`: adı taşıyan ilk satır.
+  final int? line;
+
+  /// `rejected`: reddedilme nedeni (sunucu metni).
+  final String? message;
+}
+
+/// `POST imports/login-names/check` yanıtı: yöneticinin yazdığı adın biçimi ve sistemdeki kullanılabilirliği.
+@immutable
+class LoginNameCheck {
+  const LoginNameCheck({required this.ok, required this.code, this.loginName, this.message, this.suggestion});
+
+  factory LoginNameCheck.fromJson(Map<String, dynamic> json) => LoginNameCheck(
+    ok: json['ok'] == true,
+    code: _string(json['code']) ?? (json['ok'] == true ? 'OK' : 'INVALID'),
+    loginName: _string(json['login_name']),
+    message: _string(json['message']),
+    suggestion: _string(json['suggestion']),
+  );
+
+  final bool ok;
+
+  /// `OK`, `EMPTY`, `TOO_SHORT`, `TOO_LONG`, `CHARS`, `TAKEN`.
+  final String code;
+
+  /// Sunucunun normalleştirdiği ad (küçük harf, Türkçe harfler sadeleşmiş).
+  final String? loginName;
+  final String? message;
+
+  /// Ad alınmışsa aynı tabandan ilk boş ad.
+  final String? suggestion;
+}
+
+/// Mali kaydı olan dairelerde mali alan değişikliği özeti (`checks.finance_records`): satır uyarısı değil, önizlemede TEK bilgi satırı.
+/// Yüklemeyi engellemez.
+@immutable
+class FinanceRecordsCheck {
+  const FinanceRecordsCheck({required this.apartments, required this.message});
+
+  /// Mali alanı (Borç Sorumlusu / Tip / Arsa Payı) değişen ve mali kaydı olan daire sayısı.
+  final int apartments;
+
+  /// Sunucunun gönderdiği özet cümle.
+  final String message;
+
+  static FinanceRecordsCheck? tryParse(Object? raw) {
+    if (raw is! Map) return null;
+    final count = _int(raw['apartments']);
+    if (count == null || count <= 0) return null;
+    final text = _string(raw['message']) ??
+        '$count dairenin mali kaydı var; Borç Sorumlusu / Tip / Arsa Payı değişiklikleri mevcut borçları değiştirmez, '
+            'yalnız sonraki borçlandırmadan itibaren geçerlidir.';
+    return FinanceRecordsCheck(apartments: count, message: text);
+  }
+}
+
 /// `POST imports/:kind/preview` yanıtı.
 @immutable
 class ImportPreview {
@@ -360,6 +497,9 @@ class ImportPreview {
     this.issues = const <ImportIssue>[],
     this.samples = const <ImportSample>[],
     this.landShare,
+    this.financeRecords,
+    this.accounts = const <AccountProposal>[],
+    this.accountsProvided = false,
     this.issuesTruncated = false,
   });
 
@@ -380,6 +520,9 @@ class ImportPreview {
       issues: _issues(json['issues']),
       samples: _samples(json['samples']),
       landShare: checks is Map ? LandShareCheck.tryParse(checks['land_share']) : null,
+      financeRecords: checks is Map ? FinanceRecordsCheck.tryParse(checks['finance_records']) : null,
+      accounts: AccountProposal.listFrom(json['accounts']),
+      accountsProvided: json['accounts'] is List,
       issuesTruncated: json['issues_truncated'] == true,
     );
   }
@@ -392,6 +535,15 @@ class ImportPreview {
   final List<ImportIssue> issues;
   final List<ImportSample> samples;
   final LandShareCheck? landShare;
+
+  /// Mali kaydı olan dairelerde mali alan değişikliği özeti (yoksa null). Engellemez.
+  final FinanceRecordsCheck? financeRecords;
+
+  /// Hesap açılacak / bağlanacak satırlar ve sistemin seçtiği kullanıcı adları (kişi türlerinde; diğerlerinde boş).
+  final List<AccountProposal> accounts;
+
+  /// Yanıtta `accounts` alanı vardı (eski sunucu göndermez: tablodaki öneriler korunur).
+  final bool accountsProvided;
 
   /// Sunucu yanıtı sınırlı tutmak için sorun listesini kesti (hatalar önce korunur); tam liste yoktur.
   final bool issuesTruncated;
@@ -574,6 +726,7 @@ class ImportAccountsResult {
     this.created = 0,
     this.linked = 0,
     this.skipped = 0,
+    this.renamed = 0,
     this.items = const <ImportAccountItem>[],
     this.skippedItems = const <ImportAccountSkip>[],
   });
@@ -585,6 +738,7 @@ class ImportAccountsResult {
       created: _int(json['created']) ?? 0,
       linked: _int(json['linked']) ?? 0,
       skipped: _int(json['skipped']) ?? 0,
+      renamed: _int(json['renamed']) ?? 0,
       items: <ImportAccountItem>[
         if (rawItems is List)
           for (final item in rawItems)
@@ -593,6 +747,7 @@ class ImportAccountsResult {
                 n: _int(item['n']),
                 loginName: _string(item['login_name'])!,
                 linked: item['status'] == 'linked',
+                requestedLoginName: _string(item['requested_login_name']),
               ),
       ],
       skippedItems: <ImportAccountSkip>[
@@ -616,6 +771,9 @@ class ImportAccountsResult {
 
   /// Hesabı açılamayan kişi sayısı (kişi kaydı yapıldı; hesap kişi kartından açılabilir).
   final int skipped;
+
+  /// Önizlemede gösterilen kullanıcı adı yazım anında başkasına geçtiği için başka ad verilen hesap sayısı (nadir yarış).
+  final int renamed;
   final List<ImportAccountItem> items;
   final List<ImportAccountSkip> skippedItems;
 
@@ -625,10 +783,13 @@ class ImportAccountsResult {
 /// Açılan / bağlanan tek hesap: dosyadaki satır no ve sunucudaki NİHAİ kullanıcı adı (çakışmada `_2` eki olabilir).
 @immutable
 class ImportAccountItem {
-  const ImportAccountItem({required this.n, required this.loginName, this.linked = false});
+  const ImportAccountItem({required this.n, required this.loginName, this.linked = false, this.requestedLoginName});
 
   final int? n;
   final String loginName;
+
+  /// Önizlemede gösterilen ad (yazım anında başkası aldıysa [loginName]'den farklıdır); yoksa null.
+  final String? requestedLoginName;
 
   /// true: mevcut hesaba bağlandı (yeni hesap açılmadı, şifre değişmedi).
   final bool linked;
@@ -844,6 +1005,14 @@ String? _string(Object? value) {
   if (value is! String) return null;
   final trimmed = value.trim();
   return trimmed.isEmpty ? null : trimmed;
+}
+
+List<String> _stringList(Object? raw) {
+  if (raw is! List) return const <String>[];
+  return List<String>.unmodifiable(<String>[
+    for (final item in raw)
+      if (item is String && item.trim().isNotEmpty) item.trim(),
+  ]);
 }
 
 Map<String, int> _intMap(Object? raw) {

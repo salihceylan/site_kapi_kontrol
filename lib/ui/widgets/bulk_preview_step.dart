@@ -110,6 +110,18 @@ class _BulkPreviewStepState extends State<BulkPreviewStep> {
         )
         ..add(const SizedBox(height: AppSpace.md));
     }
+    // Mali kaydı olan dairelerde mali alan değişikliği: satır başına uyarı yerine TEK bilgi notu (yüklemeyi engellemez).
+    if (preview.financeRecords != null) {
+      children
+        ..add(
+          InlineNotice(
+            key: const ValueKey<String>('bulk_finance_records'),
+            tone: AppTone.info,
+            message: preview.financeRecords!.message,
+          ),
+        )
+        ..add(const SizedBox(height: AppSpace.md));
+    }
     if (c.staleNotice != null) {
       children
         ..add(
@@ -249,6 +261,30 @@ class _BulkPreviewStepState extends State<BulkPreviewStep> {
           ),
         )
         ..add(const SizedBox(height: AppSpace.md));
+    }
+
+    // Kullanıcı adları: sistem verir, tabloda görülür ve değiştirilebilir (Geri -> tablo). Hesap açılmayacak kişiler ayrıca belirtilir.
+    if (kind.createsAccounts && preview.accounts.isNotEmpty) {
+      final created = preview.accounts.where((a) => a.status == AccountProposalStatus.create).length;
+      final linked = preview.accounts.where((a) => a.status == AccountProposalStatus.existing).length;
+      final noAccount = preview.accounts.where((a) => a.status == AccountProposalStatus.emailInUse).length;
+      if (created > 0 || noAccount > 0) {
+        children
+          ..add(
+            InlineNotice(
+              key: const ValueKey<String>('bulk_preview_login_note'),
+              tone: noAccount > 0 ? AppTone.warning : AppTone.info,
+              message: [
+                if (created > 0)
+                  '$created yeni hesap için kullanıcı adlarını sistem verdi${linked > 0 ? ' ($linked kişi mevcut hesabına bağlanır)' : ''}; '
+                      'adları görmek ya da değiştirmek için «Geri» ile dönüp tabloya bakın.',
+                if (noAccount > 0)
+                  '$noAccount kişinin e-postası başka bir hesaba ait olduğundan kişi kaydedilir ama hesabı açılmaz.',
+              ].join(' '),
+            ),
+          )
+          ..add(const SizedBox(height: AppSpace.md));
+      }
     }
 
     if (c.blankRows > 0) {

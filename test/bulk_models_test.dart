@@ -158,4 +158,64 @@ void main() {
       );
     });
   });
+
+  group('seçim listeleri, kullanıcı adı önerileri ve mali kayıt özeti', () {
+    test('ImportColumn.choices: sunucu listesi okunur (boşluk kırpılır, boş / metin olmayan öğe atılır); yoksa boş', () {
+      final column = ImportColumn.fromJson(<String, dynamic>{
+        'key': 'iliski',
+        'label': 'İlişki',
+        'type': 'enum',
+        'choices': <Object?>[' Malik ', 'Kiracı', '', 5, null, 'Sakin'],
+      });
+      expect(column.choices, <String>['Malik', 'Kiracı', 'Sakin']);
+      expect(ImportColumn.fromJson(<String, dynamic>{'key': 'ad_soyad', 'label': 'Ad Soyad'}).choices, isEmpty);
+      expect(ImportColumn.fromJson(<String, dynamic>{'key': 'x', 'label': 'X', 'choices': 'Malik'}).choices, isEmpty);
+    });
+
+    test('ImportPreview.accounts: durumlar çözülür, accountsProvided alanın varlığını söyler (eski sunucuda yok)', () {
+      final withAccounts = ImportPreview.fromJson(<String, dynamic>{
+        ...previewJson(),
+        'accounts': <Map<String, dynamic>>[
+          <String, dynamic>{'n': 2, 'status': 'new', 'login_name': 'ali.veli', 'editable': true, 'custom': true},
+          <String, dynamic>{'n': 3, 'status': 'existing', 'login_name': 'mevcut'},
+        ],
+      });
+      expect(withAccounts.accountsProvided, isTrue);
+      expect(withAccounts.accounts.map((a) => (a.n, a.status, a.loginName, a.editable, a.custom)), <(int, AccountProposalStatus, String?, bool, bool)>[
+        (2, AccountProposalStatus.create, 'ali.veli', true, true),
+        (3, AccountProposalStatus.existing, 'mevcut', false, false),
+      ]);
+      final legacy = ImportPreview.fromJson(previewJson());
+      expect(legacy.accountsProvided, isFalse);
+      expect(legacy.accounts, isEmpty);
+      final empty = ImportPreview.fromJson(<String, dynamic>{...previewJson(), 'accounts': <Object>[]});
+      expect(empty.accountsProvided, isTrue, reason: 'boş liste = hesap açılmayacak (eski sunucu değil)');
+    });
+
+    test('LoginNameCheck: ok / TAKEN + öneri; eksik alanlarda savunmacı varsayılan', () {
+      final taken = LoginNameCheck.fromJson(<String, dynamic>{'ok': false, 'code': 'TAKEN', 'login_name': 'a.b', 'message': 'Kayıtlı.', 'suggestion': 'a.b_2'});
+      expect([taken.ok, taken.code, taken.loginName, taken.message, taken.suggestion], [false, 'TAKEN', 'a.b', 'Kayıtlı.', 'a.b_2']);
+      final bare = LoginNameCheck.fromJson(<String, dynamic>{'ok': true});
+      expect([bare.ok, bare.code, bare.suggestion], [true, 'OK', null]);
+      expect(LoginNameCheck.fromJson(<String, dynamic>{}).ok, isFalse);
+    });
+
+    test('FinanceRecordsCheck: checks.finance_records okunur; sayı 0 / alan yok / biçim bozuk -> null; ileti yoksa yedek cümle', () {
+      ImportPreview preview(Object? value) => ImportPreview.fromJson(<String, dynamic>{
+        ...previewJson(),
+        'checks': <String, dynamic>{'land_share': null, 'finance_records': value},
+      });
+      final ok = preview(<String, dynamic>{'apartments': 3, 'message': '3 dairenin mali kaydı var.'}).financeRecords!;
+      expect([ok.apartments, ok.message], [3, '3 dairenin mali kaydı var.']);
+      expect(preview(<String, dynamic>{'apartments': 2}).financeRecords!.message, startsWith('2 dairenin mali kaydı var;'));
+      expect(preview(<String, dynamic>{'apartments': 0}).financeRecords, isNull);
+      expect(preview(null).financeRecords, isNull);
+      expect(preview('x').financeRecords, isNull);
+      expect(ImportPreview.fromJson(previewJson()).financeRecords, isNull);
+    });
+
+    test('ImportKind.createsAccounts yalnız kişi türleri', () {
+      expect(<ImportKind>[for (final k in ImportKind.values) if (k.createsAccounts) k], <ImportKind>[ImportKind.people, ImportKind.allInOne]);
+    });
+  });
 }

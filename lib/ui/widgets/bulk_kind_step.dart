@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:site_kapi_kontrol/services/bulk_choices.dart';
 import 'package:site_kapi_kontrol/models/bulk_import.dart';
 import 'package:site_kapi_kontrol/ui/widgets/bulk_error_notice.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
@@ -171,6 +172,23 @@ class _TemplateCard extends StatelessWidget {
             'bilgileri yazmanız yeterlidir. Kendi dosyanızı da doğrudan yükleyebilirsiniz.',
             style: th.bodyMedium?.copyWith(color: p.textSecondary),
           ),
+          if (c.kindSpec?.columns.any((col) => choicesFor(col).isNotEmpty) == true) ...[
+            const SizedBox(height: AppSpace.xs),
+            Text(
+              'İlişki, Borç Sorumlusu gibi alanlar Excel şablonunda açılır listeden seçilir. CSV dosyasında açılır liste olmaz; aynı sözcükleri yazarsınız.',
+              key: const ValueKey<String>('bulk_template_choices_note'),
+              style: th.bodySmall?.copyWith(color: p.textSecondary),
+            ),
+          ],
+          if (c.hasLoginColumn) ...[
+            const SizedBox(height: AppSpace.xs),
+            Text(
+              'Şablonda kullanıcı adı sütunu yoktur: kullanıcı adlarını sistem Ad Soyad’dan verir. Dosyayı yükleyince her satırın adını tabloda görür, '
+              'isterseniz değiştirirsiniz.',
+              key: const ValueKey<String>('bulk_template_login_note'),
+              style: th.bodySmall?.copyWith(color: p.textSecondary),
+            ),
+          ],
           const SizedBox(height: AppSpace.md),
           Wrap(
             spacing: AppSpace.sm,

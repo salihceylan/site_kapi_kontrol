@@ -53,8 +53,26 @@ export const RESPONSIBLE_WORDS = Object.freeze({
   both: Object.freeze(['İkisi', 'İkisi de', 'Her ikisi']),
 });
 
-const col = (key, label, required, type, max_length, aliases, hint) =>
-  Object.freeze({ key, label, required, type, max_length, aliases: Object.freeze(aliases), hint });
+/**
+ * Seçim listesi (Excel açılır listesi) etiketleri: şablondaki hücreye bu sözcüklerden biri SEÇİLİR, elle yazılmaz. Her etiket ayrıştırıcının kabul
+ * ettiği sözcüktür (test: her seçenek doğru kanonik değere çözülür); eşanlamlılar (Eş, Çocuk, Mal sahibi ...) eski dosyalar için kabul edilmeye devam eder.
+ * Excel liste sabiti virgülle ayrılır ve en çok 255 karakterdir: seçenekler virgül içeremez.
+ */
+export const RELATION_CHOICES = Object.freeze(['Malik', 'Kiracı', 'Aile Üyesi', 'Sakin']);
+export const RESPONSIBLE_CHOICES = Object.freeze(['Malik', 'Kiracı', 'İkisi']);
+export const ACCOUNT_CHOICES = Object.freeze(['Ev sahibi', 'Kiracı']);
+
+const col = (key, label, required, type, max_length, aliases, hint, choices = null) =>
+  Object.freeze({
+    key,
+    label,
+    required,
+    type,
+    max_length,
+    aliases: Object.freeze(aliases),
+    hint,
+    choices: choices === null ? null : Object.freeze([...choices]),
+  });
 
 const BLOCK_COLUMN = (required, hint) =>
   col('blok', 'Blok', required, 'text', 60, ['Blok Adı', 'Blok No', 'Bloğu'], hint);
@@ -77,8 +95,6 @@ const EMAIL_COLUMN = (hint) =>
   col('e_posta', 'E-posta', false, 'text', 254, ['Eposta', 'E Posta', 'E-posta Adresi', 'Email', 'E-mail', 'Mail'], hint);
 const PASSWORD_COLUMN = (hint) =>
   col('sifre', 'Başlangıç Şifresi', false, 'text', 30, ['Şifre', 'Geçici Şifre', 'PIN', 'Parola', 'Sifre', 'Baslangic Sifresi'], hint);
-const LOGIN_NAME_COLUMN = (hint) =>
-  col('kullanici_adi', 'Kullanıcı Adı', false, 'text', 50, ['Kullanıcı Adı', 'Kullanici Adi', 'Giriş Adı', 'Giris Adi', 'Username', 'User Name', 'Kullanıcı', 'Kullanici', 'Hesap Adı'], hint);
 
 const BASE_COLUMNS = Object.freeze({
   apartments: Object.freeze([
@@ -88,17 +104,16 @@ const BASE_COLUMNS = Object.freeze({
     col('tip', 'Tip', false, 'text', 40, ['Daire Tipi', 'Tür', 'Kategori'], 'Örneğin «3+1» ya da «Dükkan» (en çok 40 karakter).'),
     col('arsa_payi_pay', 'Arsa Payı (Pay)', false, 'number', null, ['Arsa Payı Pay', 'Pay'], 'Arsa payının payı (tam sayı). Örneğin 35/1000 için 35.'),
     col('arsa_payi_payda', 'Arsa Payı (Payda)', false, 'number', null, ['Arsa Payı Payda', 'Payda'], 'Arsa payının paydası (tam sayı). Örneğin 35/1000 için 1000.'),
-    col('sorumlu', 'Borç Sorumlusu', false, 'enum', 20, ['Sorumlu', 'Borçlandırma', 'Kim Öder'], 'Malik, Kiracı ya da İkisi. Borç ve bildirimlerin kime gideceğini belirler.'),
+    col('sorumlu', 'Borç Sorumlusu', false, 'enum', 20, ['Sorumlu', 'Borçlandırma', 'Kim Öder'], 'Listeden seçin: Malik, Kiracı ya da İkisi. Borç ve bildirimlerin kime gideceğini belirler.', RESPONSIBLE_CHOICES),
   ]),
   people: Object.freeze([
     NAME_COLUMN(true, 'Kişinin adı ve soyadı (2–100 karakter).'),
-    LOGIN_NAME_COLUMN('Kullanıcının sisteme giriş yapacağı kullanıcı adı (boşsa ad soyadından otomatik üretilir).'),
     col('telefon', 'Telefon', false, 'text', 30, ['Tel', 'Cep', 'Cep Telefonu', 'GSM', 'Telefon No'], '10 haneli cep telefonu: 0 (555) 123 45 67. Excel baştaki sıfırı atsa da kabul edilir.'),
     EMAIL_COLUMN('Kişinin e-posta adresi. Aynı kişiyi tekrar yüklemede tanımak için en güvenilir alandır.'),
     PASSWORD_COLUMN('Kişinin ilk giriş şifresi (boş bırakılırsa 1234 tanımlanır).'),
     BLOCK_COLUMN(false, 'Daire verilecekse Blok ve Daire No birlikte doldurulmalıdır.'),
     APARTMENT_NO_COLUMN(false, 'Daire verilecekse Blok ve Daire No birlikte doldurulmalıdır.'),
-    col('iliski', 'İlişki', false, 'enum', 40, ['İlişki Türü', 'Sakin Türü'], 'Malik, Kiracı, Aile (eş/çocuk) ya da Sakin. Boşsa «Sakin» sayılır.'),
+    col('iliski', 'İlişki', false, 'enum', 40, ['İlişki Türü', 'Sakin Türü'], 'Listeden seçin: Malik, Kiracı, Aile Üyesi ya da Sakin. Boşsa «Sakin» sayılır.', RELATION_CHOICES),
     col('giris_tarihi', 'Giriş Tarihi', false, 'date', 20, ['Giriş', 'Taşınma Tarihi', 'Oturum Başlangıcı'], 'GG.AA.YYYY (örn. 15.03.2021). Boşsa bugün.'),
     PLATE_COLUMN(false, 'Araç plakası. Birden çok plaka için virgül, noktalı virgül ya da / ile ayırın (en çok 5).'),
     NOTE_COLUMN('Yönetici notu (en çok 500 karakter).'),
@@ -116,7 +131,7 @@ const BASE_COLUMNS = Object.freeze({
 const OPENING_COLUMNS = Object.freeze([
   BLOCK_COLUMN(true, 'Sitedeki blok adı: «A», «A Blok» ya da «Blok A» aynı sayılır.'),
   APARTMENT_NO_COLUMN(true, 'Daire numarası: «5», «05» ya da «Daire 5».'),
-  col('hesap', 'Hesap', false, 'enum', 40, ['Ev Sahibi', 'Malik', 'Mal Sahibi', 'Kiracı', 'Borçlu', 'Hesap Türü'], 'Ev sahibi ya da Kiracı. Boşsa ev sahibi hesabına yazılır.'),
+  col('hesap', 'Hesap', false, 'enum', 40, ['Ev Sahibi', 'Malik', 'Mal Sahibi', 'Kiracı', 'Borçlu', 'Hesap Türü'], 'Listeden seçin: Ev sahibi ya da Kiracı. Boşsa ev sahibi hesabına yazılır.', ACCOUNT_CHOICES),
   col('tutar', 'Tutar', true, 'text', 40, ['Devir Tutarı', 'Devir Bakiyesi', 'Borç', 'Bakiye', 'Tutar TL'], 'Devreden borç, TL: 1.250,50 ya da 1250,5. Eksi (alacak) desteklenmez.'),
   col('vade', 'Vade', false, 'date', 20, ['Vade Tarihi', 'Son Ödeme Tarihi'], 'GG.AA.YYYY. Boşsa devir tarihi.'),
   col('aciklama', 'Açıklama', false, 'text', 200, ['Not', 'Notlar'], 'En çok 200 karakter (yalnız yönetici ekstresinde görünür).'),
@@ -159,12 +174,28 @@ export function columnKeysOf(kind) {
  */
 export const LEGACY_IGNORED_KEYS = Object.freeze({
   apartments: Object.freeze(['brut_m2', 'net_m2']),
-  all_in_one: Object.freeze(['brut_m2', 'net_m2']),
+  // `kullanici_adi`: eski şablonun «Kullanıcı Adı» sütunu. Kullanıcı adlarını artık sistem verir (bkz. bulk_import_login_names.js); dolu hücre yok sayılır,
+  // dosya başına BİR bilgi uyarısı çıkar. Yöneticinin tabloda seçtiği ad bu anahtarla DEĞİL `giris_adi` ile gelir.
+  people: Object.freeze(['kullanici_adi']),
+  all_in_one: Object.freeze(['brut_m2', 'net_m2', 'kullanici_adi']),
 });
 
-/** Gövdede kabul edilen hücre anahtarları = spec sütunları + o türün eski/yok sayılan anahtarları. */
+/** Eski şablonun «Kullanıcı Adı» hücre anahtarı (artık yok sayılır). */
+export const LEGACY_LOGIN_NAME_KEY = 'kullanici_adi';
+
+/**
+ * Önizleme tablosunda yöneticinin seçtiği/değiştirdiği kullanıcı adı: şablon sütunu DEĞİLDİR (spec'te, şablonda, dışa aktarmada yoktur); yalnız istemci
+ * satırlarıyla gelir. Yalnız yeni hesap açılacak satırda anlam taşır; biçim ve kullanılabilirlik plan aşamasında denetlenir.
+ */
+export const LOGIN_NAME_OVERRIDE_KEY = 'giris_adi';
+const OVERRIDE_KEYS = Object.freeze({
+  people: Object.freeze([LOGIN_NAME_OVERRIDE_KEY]),
+  all_in_one: Object.freeze([LOGIN_NAME_OVERRIDE_KEY]),
+});
+
+/** Gövdede kabul edilen hücre anahtarları = spec sütunları + o türün eski/yok sayılan anahtarları + tablo-içi kullanıcı adı anahtarı. */
 export function acceptedKeysOf(kind) {
-  return new Set([...columnKeysOf(kind), ...(LEGACY_IGNORED_KEYS[kind] ?? [])]);
+  return new Set([...columnKeysOf(kind), ...(LEGACY_IGNORED_KEYS[kind] ?? []), ...(OVERRIDE_KEYS[kind] ?? [])]);
 }
 
 /** Başlık katlaması -> sütun anahtarı (label + aliases). Aynı katlamış başlık iki sütuna düşmez (test). */
@@ -195,6 +226,8 @@ export function buildSpec(env = process.env) {
         max_length: column.max_length,
         aliases: [...column.aliases],
         hint: column.hint,
+        // Excel açılır listesi seçenekleri (yalnız enum sütunlarda): istemci şablona veri doğrulaması olarak koyar, önizleme tablosunda açılır liste çizer.
+        ...(column.choices ? { choices: [...column.choices] } : {}),
       })),
       relation_words: kind === 'people' || kind === 'all_in_one' ? clone(RELATION_WORDS) : {},
       ...(kind === 'apartments' || kind === 'all_in_one' ? { responsible_words: clone(RESPONSIBLE_WORDS) } : {}),

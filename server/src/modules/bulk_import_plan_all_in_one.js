@@ -10,15 +10,17 @@
 //      normal işlenir ve taşıyıcıda "daire bilgileri uygulanmadı (satır N)" uyarısı görünür. Düzeltilip yeniden yüklenir (yükleme idempotenttir).
 
 import { cellToText } from './bulk_import_parsers.js';
-import { LEGACY_IGNORED_KEYS } from './bulk_import_spec.js';
+import { LEGACY_IGNORED_KEYS, LEGACY_LOGIN_NAME_KEY, LOGIN_NAME_OVERRIDE_KEY } from './bulk_import_spec.js';
 import { addIssue, buildLocator, cellHasValue, completeRow, finalizePlan, newRowResult } from './bulk_import_plan_common.js';
-import { planApartments } from './bulk_import_plan_apartments.js';
+import { financeRecordsCheck, planApartments } from './bulk_import_plan_apartments.js';
 import { planPeople } from './bulk_import_plan_people.js';
 
 const KIND = 'all_in_one';
 const APARTMENT_KEYS = Object.freeze(['kat', 'tip', 'arsa_payi_pay', 'arsa_payi_payda', 'sorumlu']);
 const LAND_SHARE_KEYS = Object.freeze(['arsa_payi_pay', 'arsa_payi_payda']);
-const PERSON_KEYS = Object.freeze(['ad_soyad', 'kullanici_adi', 'telefon', 'e_posta', 'sifre', 'iliski', 'giris_tarihi', 'plaka', 'not']);
+// Eski şablondan kalan m² anahtarları (LEGACY_IGNORED_KEYS içinde «Kullanıcı Adı» da vardır; o ayrı uyarı verir).
+const LEGACY_AREA_KEYS = Object.freeze(LEGACY_IGNORED_KEYS.all_in_one.filter((key) => key !== LEGACY_LOGIN_NAME_KEY));
+const PERSON_KEYS = Object.freeze(['ad_soyad', LOGIN_NAME_OVERRIDE_KEY, 'telefon', 'e_posta', 'sifre', 'iliski', 'giris_tarihi', 'plaka', 'not']);
 
 const textOf = (value) => {
   const text = cellToText(value);
@@ -125,6 +127,7 @@ export function planAllInOne({ rows, snapshot, allowOverwrite, today }) {
 
   const results = [];
   let legacyAreaWarned = false;
+  let legacyLoginWarned = false;
   for (const row of rows) {
     const result = newRowResult(row.n);
     const conflict = conflictRows.get(row.n);
@@ -134,9 +137,14 @@ export function planAllInOne({ rows, snapshot, allowOverwrite, today }) {
       addIssue(result, KIND, 'APARTMENT_VALUES_CONFLICT', conflict.field, { line: conflict.line }, 'error');
     }
     // Eski şablondan kalan m² sütunları artık kullanılmaz: dolu olan ilk satırda dosya başına BİR uyarı, değerler yok sayılır.
-    if (!legacyAreaWarned && LEGACY_IGNORED_KEYS.all_in_one.some((key) => cellHasValue(row.cells[key]))) {
+    if (!legacyAreaWarned && LEGACY_AREA_KEYS.some((key) => cellHasValue(row.cells[key]))) {
       legacyAreaWarned = true;
       addIssue(result, KIND, 'AREA_COLUMN_IGNORED', null, {}, 'warning');
+    }
+    // Eski şablondan kalan «Kullanıcı Adı» sütunu da yok sayılır (adları sistem verir): dosya başına BİR bilgi uyarısı.
+    if (!legacyLoginWarned && cellHasValue(row.cells[LEGACY_LOGIN_NAME_KEY])) {
+      legacyLoginWarned = true;
+      addIssue(result, KIND, 'LOGIN_COLUMN_IGNORED', null, {}, 'warning');
     }
     for (const issue of aptIssuesByN.get(row.n) ?? []) {
       result.issues.push(issue);
@@ -161,10 +169,13 @@ export function planAllInOne({ rows, snapshot, allowOverwrite, today }) {
         result.action = person.action;
       }
       result.extraSig = person.extraSig ?? '';
+      if (person.account) result.account = person.account;
     }
     results.push(completeRow(result, [apt ? 'a' : '', person ? 'p' : ''].join('')));
   }
 
   const counts = { ...aptPlan.counts, ...peoplePlan.counts };
-  return finalizePlan({ kind: KIND, results, counts, checks: aptPlan.view.checks });
+  // mali kayıt özeti birleşik (son) sonuçlardan yeniden hesaplanır: kaynak satırı hatalı olan dairenin işlemi sayılmaz
+  const financeRecords = financeRecordsCheck({ ops: results.flatMap((result) => result.ops), snapshot });
+  return finalizePlan({ kind: KIND, results, counts, checks: { ...aptPlan.view.checks, finance_records: financeRecords } });
 }

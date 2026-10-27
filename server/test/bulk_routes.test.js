@@ -6,15 +6,19 @@ import assert from 'node:assert/strict';
 import express from 'express';
 import { pool } from '../src/db.js';
 import {
+  BULK_ACCOUNTS_PATH,
   BULK_COMMIT_PATH,
   BULK_PREVIEW_PATH,
+  bulkAccountsGate,
   bulkCommitGate,
   bulkImportRouter,
   bulkPreviewGate,
   exportLimiter,
+  importAccountsLimiter,
   importCommitLimiter,
   importPreviewLimiter,
   importSpecLimiter,
+  loginNameCheckLimiter,
 } from '../src/modules/bulk_import_routes.js';
 import { resetBulkImportGauge } from '../src/modules/bulk_import_service.js';
 import { SYNC_STEPS } from '../src/modules/people_sync_sql.js';
@@ -137,6 +141,7 @@ before(async () => {
   // server.js ile AYNI sıra: önce 5 MB kapıları, sonra genel 1 MB ayrıştırıcı, sonra router
   app.post(BULK_PREVIEW_PATH, ...bulkPreviewGate);
   app.post(BULK_COMMIT_PATH, ...bulkCommitGate);
+  app.post(BULK_ACCOUNTS_PATH, ...bulkAccountsGate);
   app.use(express.json({ limit: '1mb' }));
   app.use(bulkImportRouter);
   app.use((error, _req, res, _next) => {
@@ -162,7 +167,7 @@ beforeEach(() => {
   anonymousHits = 0;
   installFakeDb();
   resetBulkImportGauge();
-  for (const limiter of [importSpecLimiter, importPreviewLimiter, importCommitLimiter, exportLimiter]) limiter.reset();
+  for (const limiter of [importSpecLimiter, importPreviewLimiter, importCommitLimiter, exportLimiter, importAccountsLimiter, loginNameCheckLimiter]) limiter.reset();
   mock.method(console, 'error', () => {});
   mock.method(console, 'log', () => {});
   delete process.env.BULK_IMPORT_DISABLED;
@@ -193,7 +198,7 @@ const previewBody = (over = {}) => ({ spec_version: 1, rows: [{ n: 2, cells: { b
 const commitBody = (over = {}) => previewBody({ expected_hash: 'b'.repeat(64), idempotency_key: 'route-test-0001', acknowledged: true, ...over });
 
 describe('rota zinciri', () => {
-  it('4 rota; preview/commit kapısı: kimlik -> hız sınırı -> yetki -> 5 MB ayrıştırma (bu sırayla)', () => {
+  it('6 rota; preview/commit/accounts kapısı: kimlik -> hız sınırı -> yetki -> 5 MB ayrıştırma (bu sırayla)', () => {
     const routes = bulkImportRouter.stack
       .filter((layer) => layer.route)
       .map((layer) => `${Object.keys(layer.route.methods)[0].toUpperCase()} ${layer.route.path}`)
@@ -201,11 +206,15 @@ describe('rota zinciri', () => {
     assert.deepEqual(routes, [
       'GET /manager/sites/:siteCode/exports/:kind',
       'GET /manager/sites/:siteCode/imports/spec',
+      'POST /manager/sites/:siteCode/imports/:kind/accounts',
       'POST /manager/sites/:siteCode/imports/:kind/commit',
       'POST /manager/sites/:siteCode/imports/:kind/preview',
+      'POST /manager/sites/:siteCode/imports/login-names/check',
     ]);
     assert.equal(bulkPreviewGate.length, 4);
     assert.equal(bulkCommitGate.length, 4);
+    assert.equal(bulkAccountsGate.length, 4);
+    assert.equal(BULK_ACCOUNTS_PATH, '/manager/sites/:siteCode/imports/:kind/accounts');
     assert.equal(BULK_PREVIEW_PATH, '/manager/sites/:siteCode/imports/:kind/preview');
     assert.equal(BULK_COMMIT_PATH, '/manager/sites/:siteCode/imports/:kind/commit');
   });
@@ -273,6 +282,75 @@ describe('yetki matrisi', () => {
   });
 });
 
+describe('kullanıcı adı uçları (öneri ve tek ad denetimi)', () => {
+  const accountsBody = () => ({ spec_version: 1, rows: [{ n: 2, cells: { ad_soyad: 'Ali Veli', blok: 'A', daire_no: '1', iliski: 'Malik' } }] });
+
+  it('yetki matrisi: yönetici/süper 200; kurul, görevli, sakin, ilgisiz 403 FORBIDDEN_ROLE; başka sitenin yöneticisi 403 FORBIDDEN_SITE; kimliksiz 401', async () => {
+    const cases = [
+      [users.superUser, 200],
+      [users.mgrA, 200],
+      [users.board, 403, 'FORBIDDEN_ROLE'],
+      [users.staff, 403, 'FORBIDDEN_ROLE'],
+      [users.resident, 403, 'FORBIDDEN_ROLE'],
+      [users.outsider, 403, 'FORBIDDEN_ROLE'],
+      [users.mgrB, 403, 'FORBIDDEN_SITE'],
+    ];
+    for (const [user, status, code] of cases) {
+      const accounts = await call('POST', `${base()}/imports/people/accounts`, { user, body: accountsBody() });
+      assert.equal(accounts.status, status, `accounts ${user.full_name}`);
+      const check = await call('POST', `${base()}/imports/login-names/check`, { user, body: { login_name: 'ali.veli' } });
+      assert.equal(check.status, status, `check ${user.full_name}`);
+      if (code) for (const response of [accounts, check]) assert.equal(response.body.code, code);
+    }
+    for (const [path, body] of [[`${base()}/imports/people/accounts`, accountsBody()], [`${base()}/imports/login-names/check`, { login_name: 'ali.veli' }]]) {
+      assert.equal((await call('POST', path, { user: null, body })).status, 401, path);
+    }
+    const big = JSON.stringify({ spec_version: 1, rows: [{ n: 2, cells: { not: 'x'.repeat(2 * 1024 * 1024) } }] });
+    assert.equal((await call('POST', `${base()}/imports/people/accounts`, { user: null, raw: big })).status, 401, 'anonim 5 MB okutamaz');
+  });
+
+  it('öneri ucu: yalnız kişi türleri (araç / daire 404), no-store, yazmaz; yanıt { kind, spec_version, accounts }', async () => {
+    const response = await call('POST', `${base()}/imports/people/accounts`, { body: accountsBody() });
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('cache-control'), 'no-store');
+    assert.deepEqual(response.body, { kind: 'people', spec_version: 1, accounts: [{ n: 2, status: 'new', login_name: 'ali.veli', editable: true, custom: false }] });
+    const writes = [...state.log, ...state.clientLog].filter((entry) => /^(INSERT|UPDATE|DELETE)/.test(entry.sql) && !STEP_SQLS.has(entry.sql));
+    assert.equal(writes.length, 0);
+    for (const kind of ['vehicles', 'apartments']) {
+      const bad = await call('POST', `${base()}/imports/${kind}/accounts`, { body: accountsBody() });
+      assert.deepEqual([bad.status, bad.body.code], [404, 'IMPORT_KIND_NOT_FOUND']);
+    }
+    const unknown = await call('POST', `${base()}/imports/foo/accounts`, { body: accountsBody() });
+    assert.equal(unknown.body.code, 'IMPORT_KIND_NOT_FOUND');
+  });
+
+  it('tek ad denetimi: boştaki ad ok; alınmış ad TAKEN + öneri; biçim hatası; gövde hatası 400', async () => {
+    overrides.push([/^SELECT LOWER\(login_name\) AS name FROM users WHERE LOWER\(login_name\) = ANY/, (_sql, params) => {
+      const taken = new Set(['ali.veli']);
+      return ok(params[0].filter((name) => taken.has(name)).map((name) => ({ name })));
+    }]);
+    const free = await call('POST', `${base()}/imports/login-names/check`, { body: { login_name: 'Yeni Ad' } });
+    assert.deepEqual(free.body, { ok: true, login_name: 'yeni.ad', code: 'OK', message: null, suggestion: null });
+    const taken = await call('POST', `${base()}/imports/login-names/check`, { body: { login_name: 'ali.veli' } });
+    assert.deepEqual([taken.status, taken.body.ok, taken.body.code, taken.body.suggestion], [200, false, 'TAKEN', 'ali.veli_2']);
+    const invalid = await call('POST', `${base()}/imports/login-names/check`, { body: { login_name: 'a@b.com' } });
+    assert.deepEqual([invalid.body.ok, invalid.body.code], [false, 'CHARS']);
+    const missing = await call('POST', `${base()}/imports/login-names/check`, { body: {} });
+    assert.deepEqual([missing.status, missing.body.code], [400, 'INVALID_BODY']);
+  });
+
+  it('hız sınırları ayrıdır: öneri ucu 240/saat/kullanıcı, ad denetimi 600/saat/kullanıcı; önizleme sınırını tüketmez', async () => {
+    for (let index = 0; index < 240; index += 1) {
+      const response = await call('POST', `${base()}/imports/people/accounts`, { body: accountsBody() });
+      if (response.status !== 200) assert.fail(`istek ${index + 1}: ${response.status}`);
+    }
+    const limited = await call('POST', `${base()}/imports/people/accounts`, { body: accountsBody() });
+    assert.equal(limited.status, 429);
+    const preview = await call('POST', `${base()}/imports/apartments/preview`, { body: previewBody() });
+    assert.equal(preview.status, 200, 'önizleme sınırı etkilenmedi');
+  });
+});
+
 describe('spec ucu', () => {
   it('sözleşme gövdesi, no-store, kayıtsız DB yazımı yok', async () => {
     const response = await call('GET', `${base()}/imports/spec`);
@@ -298,7 +376,7 @@ describe('önizleme ucu', () => {
     assert.deepEqual(response.body.plan, { apartment_update: 1, cells_set: 2, overwritten_cells: 0, cells_kept: 0 });
     assert.equal(response.body.issues[0].n, 3);
     assert.equal(response.body.issues[0].code, 'BLOCK_NOT_FOUND');
-    assert.deepEqual(response.body.checks, { land_share: null });
+    assert.deepEqual(response.body.checks, { land_share: null, finance_records: null });
     const writes = [...state.log, ...state.clientLog].filter((entry) => /^(INSERT|UPDATE|DELETE)/.test(entry.sql) && !STEP_SQLS.has(entry.sql));
     assert.equal(writes.length, 0);
     assert.ok(state.clientLog.some((entry) => /^BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY$/.test(entry.sql)), 'tutarlı anlık görüntü');

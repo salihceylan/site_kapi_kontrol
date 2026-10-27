@@ -255,20 +255,40 @@ describe('DAİRELER planlayıcısı', () => {
     assert.equal(plan('apartments', snapshot, [{ blok: 'A', daire_no: '1', kat: 1 }]).view.checks.land_share, null);
   });
 
-  it('uyarılar: FINANCE_RECORDS yalnız mali alan (tip, arsa payı, sorumlu) değişirse; kat mali alan değil', () => {
+  it('mali kayıt: satır uyarısı YOK; mali alan (tip, arsa payı, sorumlu) değişen dairelerin sayısı önizlemede TEK özet (checks.finance_records); kat mali alan değil', () => {
     const snapshot = makeSnapshot();
     snapshot.apartments[0].hasFinance = true;
     snapshot.apartments[1].hasFinance = true;
+    snapshot.apartments[3].hasFinance = true;
     const result = plan('apartments', snapshot, [
       { blok: 'A', daire_no: '1', tip: '3+1' },
       { blok: 'A', daire_no: '2', kat: 3 },
       { blok: 'A', daire_no: '3', kat: 1 },
+      { blok: 'A', daire_no: '4', sorumlu: 'Kiracı' }, // 'both' iken doldurmak da değişikliktir
     ]);
-    assert.deepEqual(codesOf(result, 2), ['w:FINANCE_RECORDS']);
-    assert.deepEqual(codesOf(result, 3), []);
-    assert.deepEqual(codesOf(result, 4), []);
-    assert.equal(result.totals.with_warnings, 1);
+    for (const n of [2, 3, 4, 5]) {
+      assert.deepEqual(codesOf(result, n), [], `satır ${n}: FINANCE_RECORDS satır uyarısı kalmamalı`);
+    }
+    assert.equal(result.totals.with_warnings, 0, 'özet uyarı sayılmaz');
     assert.equal(result.totals.error, 0);
+    assert.equal(result.view.checks.finance_records.apartments, 2);
+    assert.match(result.view.checks.finance_records.message, /^2 dairenin mali kaydı var; Borç Sorumlusu \/ Tip \/ Arsa Payı değişiklikleri/);
+    assert.match(result.view.checks.finance_records.message, /yalnız sonraki borçlandırmadan itibaren geçerlidir\.$/);
+    // kat dışında değişiklik yoksa özet de yoktur
+    const katOnly = plan('apartments', snapshot, [{ blok: 'A', daire_no: '2', kat: 3 }]);
+    assert.equal(katOnly.view.checks.finance_records, null);
+    // mali kaydı olmayan dairede özet yok
+    assert.equal(plan('apartments', makeSnapshot(), [{ blok: 'A', daire_no: '1', tip: '3+1' }]).view.checks.finance_records, null);
+  });
+
+  it('mali kayıt özeti önizleme özetine (hash) girmez ve yüklemeyi engellemez', () => {
+    const withFinance = makeSnapshot();
+    withFinance.apartments[0].hasFinance = true;
+    const rows = [{ blok: 'A', daire_no: '1', tip: '3+1' }];
+    const a = plan('apartments', withFinance, rows);
+    const b = plan('apartments', makeSnapshot(), rows);
+    assert.equal(a.previewHash, b.previewHash);
+    assert.equal(a.totals.ok, 1);
   });
 
   it('ESKİ m² SÜTUNLARI: gövde reddetmez, değerler yazılmaz; dosya başına TEK "m² artık kullanılmıyor" uyarısı; m² mantığı (AREA_UNUSUAL / NET_GT_GROSS / ROUNDED) yok', () => {

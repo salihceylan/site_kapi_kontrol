@@ -25,6 +25,7 @@ import 'package:site_kapi_kontrol/services/bulk_file_delivery.dart';
 import 'package:site_kapi_kontrol/services/bulk_file_parser.dart';
 import 'package:site_kapi_kontrol/services/bulk_file_picker.dart';
 import 'package:site_kapi_kontrol/services/bulk_header_mapper.dart';
+import 'package:site_kapi_kontrol/services/bulk_login_name.dart';
 import 'package:site_kapi_kontrol/services/bulk_sheet_types.dart';
 import 'package:site_kapi_kontrol/services/bulk_template.dart';
 import 'package:site_kapi_kontrol/services/local_cache_purge.dart';
@@ -32,7 +33,13 @@ import 'package:site_kapi_kontrol/ui/helpers/finance_errors.dart' show financeOu
 import 'package:site_kapi_kontrol/ui/helpers/idempotency.dart';
 import 'package:site_kapi_kontrol/ui/helpers/retry_lock.dart';
 
+// Kişi hesabı penceresi (tek kişi için ad önerisi) bu yardımcıyı denetleyici üzerinden içe aktarıyordu: yer değişti, içe aktarma yolu korunur.
+export 'package:site_kapi_kontrol/services/bulk_login_name.dart' show generateUsernameFromFullName, kLoginNameBaseMax;
+
 enum BulkStep { kind, file, mapping, preview, result }
+
+/// Satırdaki yöneticinin seçtiği kullanıcı adı hücresi (şablon sütunu DEĞİL; yalnız önizleme tablosundan gelir). Sunucudaki `LOGIN_NAME_OVERRIDE_KEY`.
+const String kLoginNameKey = 'giris_adi';
 
 /// Kişiler girişindeki türler: «Hepsi bir arada» ve «Araçlar».
 const List<ImportKind> kClassicImportKinds = <ImportKind>[
@@ -81,6 +88,7 @@ class BulkImportController extends ChangeNotifier {
     Future<void> Function()? purgePickerCache,
     this.previewPageSize = 20,
     this.allowedKinds = kClassicImportKinds,
+    this.proposalDelay = const Duration(milliseconds: 700),
   }) : delivery = delivery ?? BulkFileSharer(),
        _purgePickerCache = purgePickerCache ?? (() => purgeLocalSharedCaches(shareCache: false)),
        _parseRunner = parseRunner ?? parseInBackground,
@@ -93,6 +101,9 @@ class BulkImportController extends ChangeNotifier {
   final String siteName;
   final BulkFileDelivery delivery;
   final int previewPageSize;
+
+  /// Tablodaki bir hücre değişince kullanıcı adı önerilerinin sunucudan yenilenmesi için bekleme (art arda düzenlemeler tek istek olur).
+  final Duration proposalDelay;
 
   /// Bu giriş noktasında seçilebilen türler (Kişiler: hepsi bir arada + klasik üçlü; Finans: yalnız devir bakiyesi).
   final List<ImportKind> allowedKinds;
@@ -107,6 +118,7 @@ class BulkImportController extends ChangeNotifier {
   final RetryLock _retry = RetryLock();
 
   bool _disposed = false;
+  Timer? _proposalTimer;
 
   // --- Durum -----------------------------------------------------------------------------------
 
@@ -144,6 +156,17 @@ class BulkImportController extends ChangeNotifier {
   int blankRows = 0;
   String _rowsDigest = '';
 
+  // Kullanıcı adları (kişi türleri): sistemin seçtiği adlar satır numarasına göre; yönetici seçimi satırın `giris_adi` hücresindedir.
+  Map<int, AccountProposal> accountProposals = const <int, AccountProposal>{};
+  bool proposalsLoading = false;
+  String? proposalsError;
+
+  /// Satırlar öneriler alındıktan sonra değişti (yeni istek bekleniyor / sürüyor).
+  bool proposalsStale = false;
+  int _proposalToken = 0;
+  int _rowsVersion = 0;
+  List<ImportRow>? _previewRows;
+
   // Önizleme.
   ImportPreview? preview;
   bool previewing = false;
@@ -175,8 +198,8 @@ class BulkImportController extends ChangeNotifier {
 
   ImportKindSpec? get kindSpec => kind == null ? null : spec?.of(kind!);
 
-  /// Seçili türün şemadaki sütun anahtarları. `sifre` / `kullanici_adi` yalnız bunları tanımlayan türlerde (kişiler,
-  /// hepsi bir arada) eklenir; sunucu tanımsız anahtarı olan satırı 400 INVALID_BODY ile reddeder (araçlar, devir bakiyesi).
+  /// Seçili türün şemadaki sütun anahtarları. `sifre` yalnız bunu tanımlayan türlerde (kişiler, hepsi bir arada) eklenir;
+  /// sunucu tanımsız anahtarı olan satırı 400 INVALID_BODY ile reddeder (araçlar, devir bakiyesi).
   Set<String> get _kindColumnKeys => <String>{for (final column in kindSpec?.columns ?? const <ImportColumn>[]) column.key};
 
   bool get busy => picking || parsing || previewing || committing || templateBusy;
@@ -200,6 +223,12 @@ class BulkImportController extends ChangeNotifier {
     if (p == null) return 'Önizleme henüz hazır değil.';
     if (previewStale) return 'Önizleme eskidi. Önce «Önizlemeyi Yenile» düğmesine basın.';
     if (retryLocked) return 'Çok sık deneme yapıldı; biraz bekleyin.';
+    if (hasLoginProblems) {
+      return 'Kullanıcı adı sorunu olan satırlar var. Geri dönüp tablodan düzeltin.';
+    }
+    if (p.issues.any((issue) => issue.isError && issue.code.startsWith('LOGIN_NAME_'))) {
+      return 'Kullanıcı adı kabul edilmeyen satırlar var. Geri dönüp tablodan düzeltin.';
+    }
     if (p.totals.ok <= 0) return 'Aktarılacak geçerli satır yok.';
     if (strict && p.totals.error > 0) {
       return 'Hatalı satırlar var ve «hiçbirini aktarma» seçili. Seçeneği kapatın ya da dosyayı düzeltin.';
@@ -208,6 +237,81 @@ class BulkImportController extends ChangeNotifier {
   }
 
   bool get canCommit => commitBlockedReason == null && !committing;
+
+  // --- Kullanıcı adları -------------------------------------------------------------------------
+
+  /// Önizleme tablosunda «Kullanıcı Adı» sütunu var mı (kişi türleri).
+  bool get hasLoginColumn => kind?.createsAccounts == true;
+
+  /// Satır için sunucunun önerisi / durumu (henüz alınmadıysa null).
+  AccountProposal? proposalOf(ImportRow row) => accountProposals[row.n];
+
+  /// Yöneticinin bu satıra yazdığı ad (yoksa null).
+  String? overrideOf(ImportRow row) {
+    final raw = row.cells[kLoginNameKey]?.toString().trim() ?? '';
+    return raw.isEmpty ? null : raw;
+  }
+
+  /// Satırın tabloda gösterilen kullanıcı adı: yönetici seçimi, yoksa sunucu önerisi / mevcut hesabın adı.
+  String? loginNameOf(ImportRow row) {
+    final proposal = proposalOf(row);
+    if (proposal != null && proposal.status != AccountProposalStatus.create) return proposal.loginName;
+    final override = overrideOf(row);
+    // yönetici seçimi sunucunun yapacağı biçimle (küçük harf, Türkçe harfler sadeleşmiş) hemen gösterilir; öneri yenilenince kesinleşir
+    if (override != null) return normalizeTypedLoginName(override).value ?? override;
+    return proposal?.loginName;
+  }
+
+  /// Yönetici bu satırın adını değiştirebilir mi (yeni hesap açılan ve önerisi alınmış satır).
+  bool isLoginEditable(ImportRow row) {
+    final proposal = proposalOf(row);
+    return proposal != null && proposal.status == AccountProposalStatus.create;
+  }
+
+  /// Gönderimi engelleyen kullanıcı adı sorunları: satır numarası -> neden (yönetici seçimi reddedilmiş ya da başka satırla aynı).
+  Map<int, String> get loginProblems {
+    if (!hasLoginColumn) return const <int, String>{};
+    final problems = <int, String>{};
+    final seen = <String, int>{};
+    for (final row in rows) {
+      final proposal = proposalOf(row);
+      if (proposal?.status == AccountProposalStatus.rejected) {
+        problems[row.n] = proposal!.message ?? 'Kullanıcı adı kabul edilmedi.';
+        continue;
+      }
+      final name = loginNameOf(row);
+      if (name == null || proposal == null || proposal.status == AccountProposalStatus.existing) continue;
+      final key = name.toLowerCase();
+      final first = seen[key];
+      if (first != null && overrideOf(row) != null) {
+        problems[row.n] = 'Bu kullanıcı adı dosyada satır $first ile aynı.';
+      } else {
+        seen.putIfAbsent(key, () => row.n);
+      }
+    }
+    return problems;
+  }
+
+  bool get hasLoginProblems => loginProblems.isNotEmpty;
+
+  /// Yazılan adın tarayıcıda hemen verilebilen denetimi: biçim ve (satır [rowN] hariç) dosyadaki diğer adlarla çakışma. Sorun yoksa null.
+  /// Sistemdeki kullanılabilirliği yalnız sunucu bilir: bkz. [checkLoginName].
+  String? localLoginNameProblem(String raw, {required int rowN}) {
+    final typed = normalizeTypedLoginName(raw);
+    if (typed.error != null) return loginNameFormatMessage(typed.error!);
+    final wanted = typed.value!;
+    for (final row in rows) {
+      if (row.n == rowN) continue;
+      final proposal = proposalOf(row);
+      if (proposal == null || proposal.status == AccountProposalStatus.rejected) continue;
+      final other = loginNameOf(row);
+      if (other != null && other.toLowerCase() == wanted) return 'Bu kullanıcı adı dosyada satır ${row.n} ile aynı.';
+    }
+    return null;
+  }
+
+  /// Yazılan adı sunucuda denetler (biçim + her site / şehirdeki kullanılabilirlik).
+  Future<LoginNameCheck> checkLoginName(String raw) => service.checkLoginName(siteCode, raw);
 
   // --- Yaşam döngüsü ----------------------------------------------------------------------------
 
@@ -220,6 +324,8 @@ class BulkImportController extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _proposalTimer?.cancel();
+    ++_proposalToken;
     ++_parseToken;
     ++_previewToken;
     _bytes = null;
@@ -282,6 +388,7 @@ class BulkImportController extends ChangeNotifier {
       commitError = null;
       commitRetryable = false;
     }
+    _resetProposals();
     kind = value;
     // Devirde «hatalı satır varsa aktarma» varsayılan AÇIK (para yazılır).
     if (value.isOpening) strict = true;
@@ -474,6 +581,7 @@ class BulkImportController extends ChangeNotifier {
         sheetChoices = null;
         mapping = outcome.header.mapping;
         mappingError = null;
+        _resetProposals();
         _extractRowsIfReady();
         step = BulkStep.mapping;
     }
@@ -497,6 +605,7 @@ class BulkImportController extends ChangeNotifier {
     mapping = m.assign(key, column);
     mappingError = null;
     rows = const <ImportRow>[];
+    _resetProposals();
     _extractRowsIfReady();
     notifyListeners();
   }
@@ -509,6 +618,11 @@ class BulkImportController extends ChangeNotifier {
     final s = spec;
     if (m == null || p == null || ks == null || s == null || previewing) return;
     if (!m.canProceed(ks)) return;
+    if (hasLoginProblems) {
+      mappingError = 'Kullanıcı adı sorunu olan satırlar var. Tabloda kırmızı işaretli adları düzeltin.';
+      notifyListeners();
+      return;
+    }
     if (rows.isEmpty) {
       try {
         final extracted = extractImportRows(p.table, m, ks, maxRows: s.maxRows);
@@ -525,7 +639,9 @@ class BulkImportController extends ChangeNotifier {
       notifyListeners();
       return;
     }
-    final (digest, bodyBytes) = _digestOf(rows);
+    // Kullanıcı adı önerisi isteği beklemede ya da sürüyorsa önizleme onun yerine geçer (önizleme yanıtı da hesapları taşır).
+    _proposalTimer?.cancel();
+    final (digest, bodyBytes) = _digestOf(_requestRows());
     // Sunucu gövde sınırı (5 MB): aşan istek önizlemede 413 alırdı; gönderilmeden açık ileti ver.
     if (bodyBytes + _bodyOverheadBytes > s.maxBodyBytes) {
       mappingError =
@@ -590,9 +706,20 @@ class BulkImportController extends ChangeNotifier {
       rows = enrichImportRowsWithDefaults(extracted.rows, columnKeys: _kindColumnKeys);
       blankRows = extracted.blankRows;
       mappingError = null;
+      _scheduleProposals(immediate: true);
     } catch (_) {
       // Başlık eşlemesi henüz tamamlanmamış veya eksik olabilir.
     }
+  }
+
+  /// Eski şablondan kalan «Kullanıcı Adı» sütunu bu dosyada var mı (artık kullanılmıyor; sistem adı kendisi verir).
+  bool get fileHasLegacyLoginColumn {
+    final m = mapping;
+    if (!hasLoginColumn || m == null) return false;
+    for (final i in m.ignoredColumns()) {
+      if (kLegacyLoginNameHeaders.contains(foldHeader(m.headers[i]))) return true;
+    }
+    return false;
   }
 
   /// Belirli bir satırdaki hücre değerini günceller.
@@ -604,23 +731,6 @@ class BulkImportController extends ChangeNotifier {
       updatedCells.remove(columnKey);
     } else {
       updatedCells[columnKey] = newValue;
-    }
-
-    if (_kindColumnKeys.contains('kullanici_adi')) {
-      final typedUsername = updatedCells['kullanici_adi']?.toString().trim() ?? '';
-      if (columnKey == 'kullanici_adi' && typedUsername.isNotEmpty) {
-        // yazılan ad, sunucunun kullanacağı kuralla aynı biçime getirilir (tabloda görünen = sunucudaki; çakışmada sunucu `_2` ekler)
-        updatedCells['kullanici_adi'] = generateUsernameFromFullName(typedUsername);
-      } else if (columnKey == 'ad_soyad' && typedUsername.isEmpty && newValue != null && newValue.toString().trim().isNotEmpty) {
-        final existingUsernames = <String>{
-          for (var i = 0; i < rows.length; i++)
-            if (i != rowIndex) ...<String>[?rows[i].cells['kullanici_adi']?.toString().toLowerCase()],
-        };
-        final blok = updatedCells['blok']?.toString().trim() ?? '';
-        final daireNo = updatedCells['daire_no']?.toString().trim() ?? '';
-        final fallback = (blok.isNotEmpty || daireNo.isNotEmpty) ? '${blok}_d$daireNo' : 'kullanici';
-        updatedCells['kullanici_adi'] = generateUsernameFromFullName(newValue.toString(), existing: existingUsernames, fallback: fallback);
-      }
     }
 
     final updatedRow = ImportRow(
@@ -636,6 +746,7 @@ class BulkImportController extends ChangeNotifier {
   /// Satırı tablodan siler.
   void deleteRow(int rowIndex) {
     if (rowIndex < 0 || rowIndex >= rows.length) return;
+    _forgetProposal(rows[rowIndex].n);
     final newRows = List<ImportRow>.from(rows)..removeAt(rowIndex);
     rows = List<ImportRow>.unmodifiable(newRows);
     _onRowsChanged();
@@ -644,23 +755,12 @@ class BulkImportController extends ChangeNotifier {
   /// Yeni satır ekler.
   void addRow({Map<String, Object?>? initialCells}) {
     final nextN = rows.isEmpty ? 1 : (rows.map((r) => r.n).reduce((a, b) => a > b ? a : b) + 1);
+    _forgetProposal(nextN);
     final cells = Map<String, Object?>.from(initialCells ?? const <String, Object?>{});
     final keys = _kindColumnKeys;
     final hasName = (cells['ad_soyad']?.toString().trim() ?? '').isNotEmpty;
     if (hasName && keys.contains('sifre') && (cells['sifre'] == null || cells['sifre'].toString().trim().isEmpty)) {
       cells['sifre'] = '1234';
-    }
-    if (hasName && keys.contains('kullanici_adi')) {
-      final typed = cells['kullanici_adi']?.toString().trim() ?? '';
-      final existingUsernames = rows.map((r) => r.cells['kullanici_adi']?.toString().toLowerCase()).whereType<String>().toSet();
-      if (typed.isEmpty) {
-        final blok = cells['blok']?.toString().trim() ?? '';
-        final daireNo = cells['daire_no']?.toString().trim() ?? '';
-        final fallback = (blok.isNotEmpty || daireNo.isNotEmpty) ? '${blok}_d$daireNo' : 'kullanici';
-        cells['kullanici_adi'] = generateUsernameFromFullName(cells['ad_soyad']!.toString(), existing: existingUsernames, fallback: fallback);
-      } else {
-        cells['kullanici_adi'] = generateUsernameFromFullName(typed, existing: existingUsernames);
-      }
     }
     final newRow = ImportRow(
       n: nextN,
@@ -674,7 +774,98 @@ class BulkImportController extends ChangeNotifier {
   void _onRowsChanged() {
     mappingError = null;
     previewStale = true;
+    _scheduleProposals();
     notifyListeners();
+  }
+
+  // --- Kullanıcı adı önerileri -------------------------------------------------------------------
+
+  /// Silinen / yeniden kullanılan satır numarasının eski önerisi tabloda kalmasın.
+  void _forgetProposal(int n) {
+    if (accountProposals.containsKey(n)) {
+      accountProposals = Map<int, AccountProposal>.of(accountProposals)..remove(n);
+    }
+  }
+
+  void _resetProposals() {
+    _proposalTimer?.cancel();
+    ++_proposalToken;
+    ++_rowsVersion;
+    accountProposals = const <int, AccountProposal>{};
+    proposalsLoading = false;
+    proposalsError = null;
+    proposalsStale = false;
+  }
+
+  /// Sunucuya gidecek satırlar: yeni hesap açılmayacak satırdaki (mevcut hesaba bağlanan, e-postası kullanılamayan ...) eski kullanıcı adı seçimi atılır.
+  List<ImportRow> _requestRows() {
+    if (!hasLoginColumn) return rows;
+    var changed = false;
+    final out = <ImportRow>[];
+    for (final row in rows) {
+      final proposal = accountProposals[row.n];
+      if (row.cells.containsKey(kLoginNameKey) && proposal != null && proposal.status != AccountProposalStatus.create && proposal.status != AccountProposalStatus.rejected) {
+        out.add(ImportRow(n: row.n, cells: Map<String, Object?>.from(row.cells)..remove(kLoginNameKey)));
+        changed = true;
+      } else {
+        out.add(row);
+      }
+    }
+    return changed ? out : rows;
+  }
+
+  /// Satırlar değişti: kullanıcı adı önerileri [proposalDelay] sonra (art arda düzenlemeler tek istek) ya da [immediate] hemen yenilenir.
+  void _scheduleProposals({bool immediate = false}) {
+    if (!hasLoginColumn || _disposed) return;
+    ++_rowsVersion;
+    proposalsStale = true;
+    _proposalTimer?.cancel();
+    if (rows.isEmpty) {
+      proposalsStale = false;
+      return;
+    }
+    if (immediate || proposalDelay == Duration.zero) {
+      unawaited(flushProposals());
+    } else {
+      _proposalTimer = Timer(proposalDelay, () => unawaited(flushProposals()));
+    }
+  }
+
+  Future<void>? _proposalFuture;
+
+  /// Sürmekte olan kullanıcı adı önerisi isteği bitince tamamlanır (yoksa hemen). Testler ve «bekle» davranışları içindir.
+  Future<void> get proposalsSettled => _proposalFuture ?? Future<void>.value();
+
+  /// Kullanıcı adı önerilerini şimdi sunucudan alır (beklemedeki zamanlayıcıyı iptal eder). Hata engellemez: öneriler önizleme adımında yine gelir.
+  Future<void> flushProposals() => _proposalFuture = _flushProposals();
+
+  Future<void> _flushProposals() async {
+    _proposalTimer?.cancel();
+    final k = kind;
+    final s = spec;
+    if (_disposed || k == null || s == null || !k.createsAccounts || rows.isEmpty) return;
+    final version = _rowsVersion;
+    final token = ++_proposalToken;
+    final sendRows = _requestRows();
+    proposalsLoading = true;
+    proposalsError = null;
+    notifyListeners();
+    try {
+      final loaded = await service.previewAccounts(siteCode, kind: k, specVersion: s.specVersion, rows: sendRows);
+      if (token != _proposalToken || _disposed) return;
+      if (version == _rowsVersion) {
+        accountProposals = <int, AccountProposal>{for (final proposal in loaded) proposal.n: proposal};
+        proposalsStale = false;
+      }
+    } catch (e) {
+      if (token != _proposalToken || _disposed) return;
+      proposalsError = _messageOf(e, 'Kullanıcı adları hazırlanamadı. Önizleme adımında yeniden denenir.');
+    } finally {
+      if (token == _proposalToken && !_disposed) {
+        proposalsLoading = false;
+        notifyListeners();
+      }
+    }
   }
 
   // --- 4. Önizleme -----------------------------------------------------------------------------
@@ -685,6 +876,10 @@ class BulkImportController extends ChangeNotifier {
     final s = spec;
     if (k == null || s == null || previewing || committing || rows.isEmpty) return;
     final token = ++_previewToken;
+    // Önizlemede gönderilen satırlar onayda AYNEN gider (kullanıcı adı seçimleri dahil): onay öncesi öneri yenilemeleri gönderimi değiştirmez.
+    final sendRows = _requestRows();
+    _previewRows = sendRows;
+    _proposalTimer?.cancel();
     previewing = true;
     previewError = null;
     notifyListeners();
@@ -693,12 +888,19 @@ class BulkImportController extends ChangeNotifier {
         siteCode,
         kind: k,
         specVersion: s.specVersion,
-        rows: rows,
+        rows: sendRows,
         allowOverwrite: k.supportsOverwrite && allowOverwrite,
         options: _options(k),
       );
       if (token != _previewToken || _disposed) return;
       final before = _staleFrom;
+      if (k.createsAccounts && loaded.accountsProvided) {
+        // önizleme (CRM eşitlemeli, kesin sonuç) tablodaki önerilerin yerini alır
+        ++_proposalToken;
+        accountProposals = <int, AccountProposal>{for (final proposal in loaded.accounts) proposal.n: proposal};
+        proposalsStale = false;
+        proposalsLoading = false;
+      }
       preview = loaded;
       previewStale = false;
       staleNotice = before == null ? null : _staleText(before, loaded);
@@ -799,7 +1001,7 @@ class BulkImportController extends ChangeNotifier {
         siteCode,
         kind: k,
         specVersion: s.specVersion,
-        rows: rows,
+        rows: _previewRows ?? _requestRows(),
         expectedHash: p.previewHash,
         idempotencyKey: key,
         allowOverwrite: k.supportsOverwrite && allowOverwrite,
@@ -817,6 +1019,8 @@ class BulkImportController extends ChangeNotifier {
       parsed = null;
       mapping = null;
       rows = const <ImportRow>[];
+      _previewRows = null;
+      _resetProposals();
       step = BulkStep.result;
     } catch (e) {
       if (_disposed) return;
@@ -876,6 +1080,7 @@ class BulkImportController extends ChangeNotifier {
 
   Map<String, String> get fieldLabels => <String, String>{
     for (final c in kindSpec?.columns ?? const <ImportColumn>[]) c.key: c.label,
+    kLoginNameKey: 'Kullanıcı Adı',
   };
 
   String? reportMessage;
@@ -942,6 +1147,8 @@ class BulkImportController extends ChangeNotifier {
     staleNotice = null;
     rows = const <ImportRow>[];
     mapping = null;
+    _previewRows = null;
+    _resetProposals();
     reportMessage = null;
     reportError = null;
     templateMessage = null;
@@ -973,6 +1180,8 @@ class BulkImportController extends ChangeNotifier {
     mapping = null;
     mappingError = null;
     rows = const <ImportRow>[];
+    _previewRows = null;
+    _resetProposals();
   }
 
   // --- Yardımcılar -----------------------------------------------------------------------------
@@ -985,122 +1194,21 @@ class BulkImportController extends ChangeNotifier {
   }
 }
 
-/// Kullanıcı adı tabanı üst sınırı: sunucudaki LOGIN_NAME_MAX (40) - "_NN" benzersizlik eki payı. Sunucu AYNI sınırı uygular.
-const int kLoginNameBaseMax = 36;
-
-/// Ad soyad veya yazılan metinden kullanıcı adı üretir. Sunucudaki `slugifyLoginName` ile AYNI kural: Türkçe harfler sadeleşir,
-/// küçük harf, [a-z0-9] dışındaki her öbek tek nokta, baş/son nokta atılır, en çok 36 karakter; boşsa yedek (ya da «kullanici»).
-/// [existing] verilirse çakışmada `_2`, `_3` ... eklenir (sunucudaki benzersizleştirmeyle aynı biçim) ve ad kümeye eklenir.
-String generateUsernameFromFullName(
-  String fullName, {
-  Set<String>? existing,
-  String? fallback,
-}) {
-  var s = fullName.trim();
-  if (s.isEmpty) {
-    s = (fallback != null && fallback.trim().isNotEmpty) ? fallback.trim() : 'kullanici';
-  }
-
-  const map = {
-    'ç': 'c', 'Ç': 'c',
-    'ğ': 'g', 'Ğ': 'g',
-    'ı': 'i', 'I': 'i', 'İ': 'i',
-    'ö': 'o', 'Ö': 'o',
-    'ş': 's', 'Ş': 's',
-    'ü': 'u', 'Ü': 'u',
-  };
-  final sb = StringBuffer();
-  for (var i = 0; i < s.length; i++) {
-    final char = s[i];
-    sb.write(map[char] ?? char);
-  }
-
-  var clean = sb.toString().toLowerCase();
-  clean = clean.replaceAll(RegExp(r'[^a-z0-9]+'), '.').replaceAll(RegExp(r'^\.+|\.+$'), '');
-  if (clean.length > kLoginNameBaseMax) {
-    clean = clean.substring(0, kLoginNameBaseMax).replaceAll(RegExp(r'\.+$'), '');
-  }
-
-  if (clean.isEmpty) {
-    clean = 'kullanici';
-  }
-
-  if (existing == null) return clean;
-
-  var candidate = clean;
-  var counter = 2;
-  while (existing.contains(candidate.toLowerCase())) {
-    candidate = '${clean}_$counter';
-    counter++;
-  }
-  existing.add(candidate.toLowerCase());
-  return candidate;
-}
-
-/// Kişi satırlarına başlangıç şifresi (`1234`) ve benzersiz kullanıcı adı ekler. YALNIZ türün tanımladığı sütunlar için
-/// ([columnKeys]): sunucu tanımsız anahtarı olan satırı 400 INVALID_BODY ile reddeder, bu yüzden araç ve devir bakiyesi
-/// satırlarına `sifre` / `kullanici_adi` EKLENMEZ. Ad soyadı olmayan satır (yalnız daire bilgisi ya da hatalı satır) değişmez.
+/// Kişi satırlarına başlangıç şifresi (`1234`) ekler. YALNIZ türün tanımladığı sütunlar için ([columnKeys]): sunucu tanımsız anahtarı olan satırı 400
+/// INVALID_BODY ile reddeder, bu yüzden araç ve devir bakiyesi satırlarına `sifre` EKLENMEZ. Ad soyadı olmayan satır (yalnız daire bilgisi ya da hatalı satır)
+/// değişmez. Kullanıcı adlarını artık SİSTEM verir (sunucu önerir, tabloda `giris_adi` ile değiştirilir); istemci ad üretmez.
 List<ImportRow> enrichImportRowsWithDefaults(List<ImportRow> rawRows, {required Set<String> columnKeys}) {
-  final wantsPassword = columnKeys.contains('sifre');
-  final wantsUsername = columnKeys.contains('kullanici_adi');
-  if (!wantsPassword && !wantsUsername) return rawRows;
+  if (!columnKeys.contains('sifre')) return rawRows;
 
   String textOf(Object? value) => value?.toString().trim() ?? '';
 
-  // Dosyada YAZILMIŞ adlar sunucuyla aynı biçime getirilir ve rezerve edilir (üretilen ad onlarla çakışmaz).
-  final typedByIndex = <int, String>{};
-  final reserved = <String>{};
-  if (wantsUsername) {
-    for (var i = 0; i < rawRows.length; i++) {
-      final cells = rawRows[i].cells;
-      if (textOf(cells['ad_soyad']).isEmpty) continue;
-      final typed = textOf(cells['kullanici_adi']);
-      if (typed.isEmpty) continue;
-      final slug = generateUsernameFromFullName(typed);
-      typedByIndex[i] = slug;
-      reserved.add(slug.toLowerCase());
-    }
-  }
-
-  final taken = <String>{};
   final enriched = <ImportRow>[];
-  for (var i = 0; i < rawRows.length; i++) {
-    final row = rawRows[i];
-    final adSoyad = textOf(row.cells['ad_soyad']);
-    if (adSoyad.isEmpty) {
+  for (final row in rawRows) {
+    if (textOf(row.cells['ad_soyad']).isEmpty || textOf(row.cells['sifre']).isNotEmpty) {
       enriched.add(row);
       continue;
     }
-    final cells = Map<String, Object?>.from(row.cells);
-
-    // 1. Şifre boşsa varsayılan 1234 ata
-    if (wantsPassword && textOf(cells['sifre']).isEmpty) {
-      cells['sifre'] = '1234';
-    }
-
-    // 2. Kullanıcı adı: yazılmışsa sadeleşmiş hali, boşsa ad soyaddan (yoksa blok ve daire no) üretilir; çakışma `_2`, `_3` ...
-    if (wantsUsername) {
-      final typed = typedByIndex[i];
-      String base;
-      if (typed != null) {
-        base = typed;
-      } else {
-        final blok = textOf(cells['blok']);
-        final daireNo = textOf(cells['daire_no']);
-        final fallback = (blok.isNotEmpty || daireNo.isNotEmpty) ? '${blok}_d$daireNo' : 'kullanici';
-        base = generateUsernameFromFullName(adSoyad, fallback: fallback);
-      }
-      var candidate = base;
-      var counter = 2;
-      while (taken.contains(candidate.toLowerCase()) || (typed == null && reserved.contains(candidate.toLowerCase()))) {
-        candidate = '${base}_$counter';
-        counter++;
-      }
-      taken.add(candidate.toLowerCase());
-      cells['kullanici_adi'] = candidate;
-    }
-
-    enriched.add(ImportRow(n: row.n, cells: cells));
+    enriched.add(ImportRow(n: row.n, cells: Map<String, Object?>.from(row.cells)..['sifre'] = '1234'));
   }
   return enriched;
 }
