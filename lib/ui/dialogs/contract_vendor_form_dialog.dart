@@ -15,6 +15,7 @@ import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/helpers/contract_validation.dart';
 import 'package:site_kapi_kontrol/ui/helpers/dialog_guard.dart';
 import 'package:site_kapi_kontrol/ui/helpers/form_validation.dart';
+import 'package:site_kapi_kontrol/ui/helpers/phone_input.dart';
 import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart'
     show crmMessageOf;
 import 'package:site_kapi_kontrol/ui/helpers/retry_lock.dart';
@@ -74,8 +75,9 @@ class _ContractVendorFormDialogState extends State<ContractVendorFormDialog> {
   late final TextEditingController _contact = TextEditingController(
     text: widget.vendor?.contactName ?? '',
   );
+  // Boşsa boş (444 gibi kısa numara da yazılabilsin); numara "+90 XXX XXX XX XX" gruplu, eski serbest kayıt olduğu gibi.
   late final TextEditingController _phone = TextEditingController(
-    text: widget.vendor?.phone ?? '',
+    text: servicePhoneInitial(widget.vendor?.phone),
   );
   late final TextEditingController _email = TextEditingController(
     text: widget.vendor?.email ?? '',
@@ -111,7 +113,7 @@ class _ContractVendorFormDialogState extends State<ContractVendorFormDialog> {
     name: _name.text,
     category: _category,
     contactName: _contact.text,
-    phone: _phone.text,
+    phone: servicePhoneForSave(_phone.text, stored: widget.vendor?.phone) ?? '',
     email: _email.text,
     taxNo: _tax.text,
     note: _note.text,
@@ -314,14 +316,18 @@ class _ContractVendorFormDialogState extends State<ContractVendorFormDialog> {
                 controller: _phone,
                 enabled: !_submitting,
                 keyboardType: TextInputType.phone,
+                inputFormatters: const [ServicePhoneInputFormatter()],
                 autovalidateMode: AutovalidateMode.onUserInteraction,
                 onChanged: (_) => setState(() {}),
                 decoration: const InputDecoration(
                   labelText: 'Telefon (isteğe bağlı)',
-                  hintText: '0212 555 12 34',
+                  hintText: phoneFieldHintAny,
+                  helperText: 'Sabit hat ya da cep: +90 XXX XXX XX XX. 444 gibi kısa numaralar olduğu gibi yazılır.',
+                  helperMaxLines: 3,
                   prefixIcon: Icon(Icons.call_rounded),
                 ),
-                validator: (v) => contractVendorPhoneError(v, max: kVendorPhoneMax),
+                // Dokunulmamış eski kayıt (serbest biçim) kaydetmeyi engellemez.
+                validator: (v) => validateServicePhoneInput(v, stored: widget.vendor?.phone),
               ),
               const SizedBox(height: AppSpace.md),
               TextFormField(

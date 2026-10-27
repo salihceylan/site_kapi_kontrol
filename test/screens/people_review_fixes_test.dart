@@ -150,15 +150,16 @@ void main() {
       expect(_fieldText(t, 'person_phone'), '+90 532 123 45 67');
     });
 
-    testWidgets('11+ hane sessizce kırpılmaz: görünür kalır ve doğrulama hatası verir, sunucuya gitmez', (t) async {
+    testWidgets('11+ hane sessizce kırpılmaz: giriş REDDEDİLİR (alan değişmez), sunucuya yanlış numara gitmez', (t) async {
       final auth = PeopleFakeAuth.seeded();
       await _open(t, (c) => PersonFormDialog.show(c, scope: _scope(auth)));
       await _enter(t, 'person_name', 'Ali Veli');
       await _enter(t, 'person_phone', '+90 53212345678');
-      expect(_fieldText(t, 'person_phone'), '+90 532 123 45 67 8');
+      expect(_fieldText(t, 'person_phone'), '+90 ', reason: '11 hane girişte reddedilir');
+      await _enter(t, 'person_email', 'ali@example.com');
       await _tapLast(t, 'Kaydet');
-      expect(find.text('Telefon +90 ile 10 haneli olmalı (örn. 555 123 45 67).'), findsOneWidget);
-      expect(auth.createPersonCalls, isEmpty);
+      await settleFor(t);
+      expect(auth.createPersonCalls.single['phone'], isNull, reason: 'telefon boş kaldı; kırpılmış yanlış numara kaydolmadı');
     });
   });
 

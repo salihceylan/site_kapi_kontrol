@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/models/team.dart';
+import 'package:site_kapi_kontrol/ui/helpers/phone_input.dart';
 
 /// "Görev ver" penceresi sonucu.
 class DutyChoice {
@@ -39,7 +40,8 @@ class DutyDialog extends StatefulWidget {
 class _DutyDialogState extends State<DutyDialog> {
   late String _duty = widget.current?.duty ?? 'doorman';
   late final TextEditingController _title = TextEditingController(text: widget.current?.title ?? '');
-  late final TextEditingController _phone = TextEditingController(text: widget.current?.publicPhone ?? '');
+  // Boşsa "+90 " hazır; ayrıştırılabilen numara gruplanır, eski serbest kayıt olduğu gibi kalır.
+  late final TextEditingController _phone = TextEditingController(text: phoneFieldInitial(widget.current?.publicPhone));
   late bool _show = widget.current?.showInDirectory ?? true;
   String? _error;
 
@@ -56,12 +58,17 @@ class _DutyDialogState extends State<DutyDialog> {
       setState(() => _error = '"Diğer" görev için unvan yazın (ör. Bahçıvan).');
       return;
     }
-    final phone = _phone.text.trim();
+    final phoneError = validatePhoneInput(_phone.text, stored: widget.current?.publicPhone, mobileOnly: false);
+    if (phoneError != null) {
+      setState(() => _error = phoneError);
+      return;
+    }
+    final phone = phoneForSave(_phone.text, stored: widget.current?.publicPhone);
     Navigator.of(context).pop(
       DutyChoice(
         duty: _duty,
         title: title.isEmpty ? null : title,
-        publicPhone: phone.isEmpty ? null : phone,
+        publicPhone: phone,
         showInDirectory: _show,
       ),
     );
@@ -108,10 +115,12 @@ class _DutyDialogState extends State<DutyDialog> {
             TextField(
               controller: _phone,
               keyboardType: TextInputType.phone,
+              inputFormatters: const [PhoneInputFormatter(mobileOnly: false)],
               decoration: const InputDecoration(
                 labelText: 'Rehberde görünecek telefon (isteğe bağlı)',
-                helperText: 'Sakinlere göstermeden önce kişinin onayını alın.',
-                helperMaxLines: 2,
+                hintText: phoneFieldHintAny,
+                helperText: 'Sabit hat ya da cep: +90 XXX XXX XX XX. Sakinlere göstermeden önce kişinin onayını alın.',
+                helperMaxLines: 3,
               ),
             ),
             if (_error != null) ...[

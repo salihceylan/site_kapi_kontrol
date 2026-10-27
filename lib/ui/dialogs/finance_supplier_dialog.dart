@@ -13,6 +13,7 @@ import 'package:site_kapi_kontrol/ui/helpers/finance_errors.dart';
 import 'package:site_kapi_kontrol/ui/helpers/finance_write_mixin.dart';
 import 'package:site_kapi_kontrol/ui/helpers/form_validation.dart';
 import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart';
+import 'package:site_kapi_kontrol/ui/helpers/phone_input.dart';
 import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
 import 'package:site_kapi_kontrol/ui/helpers/text_length.dart';
 import 'package:site_kapi_kontrol/ui/widgets/crm_parts.dart';
@@ -57,7 +58,8 @@ class _FinanceSupplierFormDialogState extends State<FinanceSupplierFormDialog> w
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   late final TextEditingController _name = TextEditingController(text: widget.supplier?.name ?? '');
   late final TextEditingController _taxId = TextEditingController(text: widget.supplier?.taxId ?? '');
-  late final TextEditingController _phone = TextEditingController(text: widget.supplier?.phone ?? '');
+  // Boşsa boş (444 gibi kısa numara da yazılabilsin); numara "+90 XXX XXX XX XX" gruplu, eski serbest kayıt olduğu gibi.
+  late final TextEditingController _phone = TextEditingController(text: servicePhoneInitial(widget.supplier?.phone));
   late final TextEditingController _note = TextEditingController(text: widget.supplier?.note ?? '');
   late bool _active = widget.supplier?.isActive ?? true;
 
@@ -81,7 +83,8 @@ class _FinanceSupplierFormDialogState extends State<FinanceSupplierFormDialog> w
     }
     final name = _name.text.trim();
     final taxId = _taxId.text.trim();
-    final phone = _phone.text.trim();
+    // Sunucuya "+905321234567" (13 karakter; sunucu sınırı 20) ya da olduğu gibi kısa numara gider.
+    final phone = servicePhoneForSave(_phone.text, stored: widget.supplier?.phone) ?? '';
     final note = _note.text.trim();
     final scope = widget.scope;
     if (_editing) {
@@ -199,11 +202,17 @@ class _FinanceSupplierFormDialogState extends State<FinanceSupplierFormDialog> w
                 controller: _phone,
                 enabled: !submitting,
                 keyboardType: TextInputType.phone,
+                inputFormatters: const [ServicePhoneInputFormatter()],
                 autovalidateMode: AutovalidateMode.onUserInteraction,
-                decoration: const InputDecoration(labelText: 'Telefon (isteğe bağlı)', prefixIcon: Icon(Icons.call_rounded)),
-                validator: (value) => trimmedCodePoints(value ?? '') > FinanceSupplierFormDialog.maxPhoneLength
-                    ? 'Telefon en çok ${FinanceSupplierFormDialog.maxPhoneLength} karakter olabilir.'
-                    : null,
+                decoration: const InputDecoration(
+                  labelText: 'Telefon (isteğe bağlı)',
+                  hintText: phoneFieldHintAny,
+                  helperText: 'Sabit hat ya da cep: +90 XXX XXX XX XX. 444 gibi kısa numaralar olduğu gibi yazılır.',
+                  helperMaxLines: 3,
+                  prefixIcon: Icon(Icons.call_rounded),
+                ),
+                // Dokunulmamış eski kayıt (serbest biçim) kaydetmeyi engellemez.
+                validator: (value) => validateServicePhoneInput(value, stored: widget.supplier?.phone),
               ),
               const SizedBox(height: AppSpace.md),
               TextFormField(

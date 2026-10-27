@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
+import 'package:site_kapi_kontrol/ui/helpers/phone_input.dart';
 import 'package:site_kapi_kontrol/ui/design/app_snack.dart';
 import 'package:site_kapi_kontrol/ui/design/buttons.dart';
 import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
@@ -18,7 +19,7 @@ class SmsLoginPage extends StatefulWidget {
 }
 
 class _SmsLoginPageState extends State<SmsLoginPage> {
-  final _phoneController = TextEditingController();
+  final _phoneController = TextEditingController(text: phoneFieldSeed);
   final _codeController = TextEditingController();
   bool _checking = true;
   bool _enabled = false;
@@ -48,9 +49,14 @@ class _SmsLoginPageState extends State<SmsLoginPage> {
   }
 
   Future<void> _requestCode() async {
-    final phone = _phoneController.text.trim();
-    if (phone.length < 10) {
-      AppSnack.show(context, 'Telefon numaranızı yazın (ör. 0555 123 45 67).', kind: AppSnackKind.error);
+    final phone = phoneToApi(_phoneController.text);
+    if (phone == null) {
+      AppSnack.show(context, 'Telefon numaranızı yazın (ör. +90 555 123 45 67).', kind: AppSnackKind.error);
+      return;
+    }
+    final phoneError = validatePhoneField(_phoneController.text);
+    if (phoneError != null) {
+      AppSnack.show(context, phoneError, kind: AppSnackKind.error);
       return;
     }
     setState(() => _busy = true);
@@ -79,7 +85,7 @@ class _SmsLoginPageState extends State<SmsLoginPage> {
       return;
     }
     setState(() => _busy = true);
-    final error = await widget.authService.loginWithSms(phone: _phoneController.text.trim(), code: code);
+    final error = await widget.authService.loginWithSms(phone: phoneToApi(_phoneController.text) ?? '', code: code);
     if (!mounted) return;
     setState(() => _busy = false);
     if (error != null) {
@@ -116,7 +122,8 @@ class _SmsLoginPageState extends State<SmsLoginPage> {
                     controller: _phoneController,
                     enabled: !_codeSent && !_busy,
                     keyboardType: TextInputType.phone,
-                    decoration: const InputDecoration(labelText: 'Telefon numarası', hintText: '0555 123 45 67'),
+                    inputFormatters: const [PhoneInputFormatter()],
+                    decoration: const InputDecoration(labelText: 'Telefon numarası', hintText: phoneFieldHint),
                   ),
                   const SizedBox(height: AppSpace.md),
                   if (!_codeSent)

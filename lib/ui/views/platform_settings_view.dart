@@ -14,6 +14,7 @@ import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/crm_confirm_dialog.dart';
 import 'package:site_kapi_kontrol/ui/helpers/a11y_announce.dart';
 import 'package:site_kapi_kontrol/ui/helpers/form_validation.dart';
+import 'package:site_kapi_kontrol/ui/helpers/phone_input.dart';
 import 'package:site_kapi_kontrol/ui/helpers/retry_lock.dart';
 import 'package:site_kapi_kontrol/ui/widgets/crm_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
@@ -176,7 +177,7 @@ class PlatformSettingsViewState extends State<PlatformSettingsView> {
     ),
     support: PlatformSupportConfig(
       email: _c['email']!.text,
-      phone: _c['phone']!.text,
+      phone: phoneGroupedForSave(_c['phone']!.text, stored: _baseline?.support.phone),
       hours: _c['hours']!.text,
       webUrl: _c['web_url']!.text,
     ),
@@ -186,7 +187,7 @@ class PlatformSettingsViewState extends State<PlatformSettingsView> {
       mersisNo: _c['mersis_no']!.text,
       kepAddress: _c['kep_address']!.text,
       contactEmail: _c['contact_email']!.text,
-      contactPhone: _c['contact_phone']!.text,
+      contactPhone: phoneGroupedForSave(_c['contact_phone']!.text, stored: _baseline?.legal.contactPhone),
       enforceConsents: _enforceConsents,
     ),
   );
@@ -213,7 +214,8 @@ class PlatformSettingsViewState extends State<PlatformSettingsView> {
     _c['update_url_ios']!.text = config.app.updateUrlIos;
     _c['maintenance_message']!.text = config.app.maintenanceMessage;
     _c['email']!.text = config.support.email;
-    _c['phone']!.text = config.support.phone;
+    // Telefonlar "+90 XXX XXX XX XX" biçiminde gösterilir (boşsa "+90 " hazır; eski serbest kayıt olduğu gibi).
+    _c['phone']!.text = phoneFieldInitial(config.support.phone);
     _c['hours']!.text = config.support.hours;
     _c['web_url']!.text = config.support.webUrl;
     _c['company_name']!.text = config.legal.companyName;
@@ -221,7 +223,7 @@ class PlatformSettingsViewState extends State<PlatformSettingsView> {
     _c['mersis_no']!.text = config.legal.mersisNo;
     _c['kep_address']!.text = config.legal.kepAddress;
     _c['contact_email']!.text = config.legal.contactEmail;
-    _c['contact_phone']!.text = config.legal.contactPhone;
+    _c['contact_phone']!.text = phoneFieldInitial(config.legal.contactPhone);
     for (final controller in _c.values) {
       controller.addListener(_recomputeDirty);
     }
@@ -442,6 +444,7 @@ class PlatformSettingsViewState extends State<PlatformSettingsView> {
     IconData? icon,
     bool last = false,
     String? helper,
+    String? hint,
   }) {
     final multiline = maxLines > 1;
     final serverKey = _serverKey(key);
@@ -468,6 +471,7 @@ class PlatformSettingsViewState extends State<PlatformSettingsView> {
       },
       decoration: InputDecoration(
         labelText: label,
+        hintText: hint,
         helperText: helper,
         helperMaxLines: 3,
         prefixIcon: icon == null ? null : Icon(icon),
@@ -710,7 +714,9 @@ class PlatformSettingsViewState extends State<PlatformSettingsView> {
                   'Destek telefonu',
                   icon: Icons.phone_outlined,
                   keyboardType: TextInputType.phone,
-                  validator: (v) => validatePlatformPhone(v, 'Destek telefonu'),
+                  formatters: const [PhoneInputFormatter(mobileOnly: false)],
+                  hint: phoneFieldHintAny,
+                  validator: (v) => validatePhoneInput(v, stored: _baseline?.support.phone, mobileOnly: false),
                 ),
                 const SizedBox(height: AppSpace.md),
                 _field(
@@ -798,8 +804,10 @@ class PlatformSettingsViewState extends State<PlatformSettingsView> {
                   'İletişim telefonu',
                   icon: Icons.phone_outlined,
                   keyboardType: TextInputType.phone,
+                  formatters: const [PhoneInputFormatter(mobileOnly: false)],
+                  hint: phoneFieldHintAny,
                   last: true,
-                  validator: (v) => validatePlatformPhone(v, 'İletişim telefonu'),
+                  validator: (v) => validatePhoneInput(v, stored: _baseline?.legal.contactPhone, mobileOnly: false),
                 ),
                 const SizedBox(height: AppSpace.sm),
                 SwitchListTile(

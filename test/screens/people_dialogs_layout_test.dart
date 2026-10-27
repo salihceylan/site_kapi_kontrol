@@ -29,6 +29,7 @@ import 'package:site_kapi_kontrol/ui/dialogs/residency_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/vehicle_dialog.dart';
 import 'package:site_kapi_kontrol/ui/helpers/date_input.dart';
 import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
+import 'package:site_kapi_kontrol/ui/helpers/phone_input.dart';
 
 import 'dialog_layout_harness.dart';
 import 'list_fixtures.dart' show tapFinder, tapText;
@@ -672,7 +673,7 @@ void main() {
       expect(_fieldText(t, 'person_phone'), '+90 555 123');
       await _enter(t, 'person_email', 'gecersiz');
       await _tapButton(t, 'Kaydet');
-      expect(find.text('Telefon +90 ile 10 haneli olmalı (örn. 555 123 45 67).'), findsOneWidget);
+      expect(find.text(phoneFormatError), findsOneWidget);
       expect(find.text('Geçerli bir e-posta girin.'), findsOneWidget);
       expect(auth.createPersonCalls, isEmpty);
     });
@@ -805,6 +806,135 @@ void main() {
       await settleFor(t);
       expect(auth.updatePersonCalls.single.fields, <String, Object?>{'note': 'Yeni not'},
           reason: 'kimlik alanları gönderilmez (PERSON_HAS_ACCOUNT)');
+    });
+  });
+
+  group('kişi formu: sitenin yönettiği hesapta ad / telefon düzenlenir, telefon biçimi zorlanır', () {
+    testWidgets('sitenin yönettiği DAHİLİ hesap (identity_editable): ad ve telefon yazılabilir, e-posta da; bilgi bandı; değişenler gider', (t) async {
+      final auth = PeopleFakeAuth.seeded();
+      auth.peopleJson[2] = pplPersonJson(
+        2,
+        'Mehmet Demir',
+        phone: '+905322223344',
+        email: 'mehmet@example.com',
+        account: true,
+        accountKind: 'internal',
+        identityEditable: true,
+        apts: const <PplApt>[(302, 'A Blok - 6', ResidencyRelation.tenant)],
+      );
+      final detail = await auth.getPerson(11, 2);
+      await _open(t, (c) => PersonFormDialog.show(c, scope: _scope(auth), person: detail));
+      expect(_readOnly(t, 'person_name'), isFalse);
+      expect(_readOnly(t, 'person_phone'), isFalse, reason: 'telefon kutusuna yazılabilir');
+      expect(_readOnly(t, 'person_email'), isFalse, reason: 'dahili hesapta iletişim e-postası düzenlenir');
+      expect(find.textContaining('Ad ve telefonu değiştirirseniz kişinin hesabında da güncellenir.'), findsOneWidget);
+      expect(find.textContaining('kendi profilinden değişir'), findsNothing);
+      expect(_fieldText(t, 'person_phone'), '+90 532 222 33 44');
+
+      await _enter(t, 'person_name', 'Mehmet Demir Yeni');
+      await _enter(t, 'person_phone', '5061234567');
+      expect(_fieldText(t, 'person_phone'), '+90 506 123 45 67');
+      await _tapButton(t, 'Kaydet');
+      await settleFor(t);
+      expect(auth.updatePersonCalls.single.fields, <String, Object?>{'full_name': 'Mehmet Demir Yeni', 'phone': '+905061234567'});
+    });
+
+    testWidgets('sitenin yönettiği GERÇEK e-postalı hesap: ad / telefon açık, e-posta (giriş adresi) kilitli; kısa bilgi bandı', (t) async {
+      final auth = PeopleFakeAuth.seeded();
+      auth.peopleJson[2] = pplPersonJson(
+        2,
+        'Mehmet Demir',
+        phone: '+905322223344',
+        email: 'mehmet@example.com',
+        account: true,
+        identityEditable: true,
+        apts: const <PplApt>[(302, 'A Blok - 6', ResidencyRelation.tenant)],
+      );
+      final detail = await auth.getPerson(11, 2);
+      await _open(t, (c) => PersonFormDialog.show(c, scope: _scope(auth), person: detail));
+      expect(_readOnly(t, 'person_name'), isFalse);
+      expect(_readOnly(t, 'person_phone'), isFalse);
+      expect(_readOnly(t, 'person_email'), isTrue);
+      expect(find.textContaining('E-posta kişinin giriş adresidir; kişinin kendi profilinden değişir.'), findsOneWidget);
+
+      await _enter(t, 'person_phone', '5061234567');
+      await _tapButton(t, 'Kaydet');
+      await settleFor(t);
+      expect(auth.updatePersonCalls.single.fields, <String, Object?>{'phone': '+905061234567'}, reason: 'e-posta ve ad gönderilmez');
+    });
+
+    testWidgets('kişinin KENDİ hesabı (identity_editable yok / false): ad, telefon, e-posta salt okunur ve gönderilmez', (t) async {
+      for (final flag in <bool?>[null, false]) {
+        final auth = PeopleFakeAuth.seeded();
+        auth.peopleJson[2] = pplPersonJson(
+          2,
+          'Mehmet Demir',
+          phone: '+905322223344',
+          email: 'mehmet@example.com',
+          account: true,
+          identityEditable: flag,
+          apts: const <PplApt>[(302, 'A Blok - 6', ResidencyRelation.tenant)],
+        );
+        final detail = await auth.getPerson(11, 2);
+        await _open(t, (c) => PersonFormDialog.show(c, scope: _scope(auth), person: detail));
+        expect(_readOnly(t, 'person_name'), isTrue, reason: 'flag=$flag');
+        expect(_readOnly(t, 'person_phone'), isTrue, reason: 'flag=$flag');
+        expect(_readOnly(t, 'person_email'), isTrue, reason: 'flag=$flag');
+        expect(find.textContaining('kişinin kendi profilinden değişir'), findsOneWidget, reason: 'flag=$flag');
+        await _enter(t, 'person_note', 'Yeni not');
+        await _tapButton(t, 'Kaydet');
+        await settleFor(t);
+        expect(auth.updatePersonCalls.single.fields, <String, Object?>{'note': 'Yeni not'}, reason: 'flag=$flag');
+      }
+    });
+
+    testWidgets('telefon biçimi zorlanır: +90 hazır, 5 dışı ilk hane yazılamaz, 10 haneden fazlası yazılamaz, eksik numara kaydettirmez', (t) async {
+      final auth = PeopleFakeAuth.seeded();
+      await _open(t, (c) => PersonFormDialog.show(c, scope: _scope(auth)));
+      expect(find.text(phoneFieldHint), findsOneWidget, reason: 'yer tutucu biçim');
+      await _enter(t, 'person_phone', '2121234567');
+      expect(_fieldText(t, 'person_phone'), '+90 ', reason: 'cep numarası 5 ile başlar');
+      await _enter(t, 'person_phone', '50612345678');
+      expect(_fieldText(t, 'person_phone'), '+90 ', reason: '11 hane reddedilir');
+      await _enter(t, 'person_phone', '506123');
+      await _enter(t, 'person_name', 'Ali Veli');
+      await _tapButton(t, 'Kaydet');
+      await settleFor(t);
+      expect(find.text(phoneFormatError), findsOneWidget, reason: 'eksik numara');
+      expect(auth.createPersonCalls, isEmpty, reason: 'sunucuya gidilmez');
+      await _enter(t, 'person_phone', '5061234567');
+      await _tapButton(t, 'Kaydet');
+      await settleFor(t);
+      expect(find.text(phoneFormatError), findsNothing);
+    });
+
+    testWidgets('eski sabit hat kaydı (hesapsız kişi): dokunulmadıkça hata vermez ve gönderilmez; yalnız ad değişir', (t) async {
+      final auth = PeopleFakeAuth.seeded();
+      auth.peopleJson[1]!['phone'] = '+902121234567';
+      final detail = await auth.getPerson(11, 1);
+      await _open(t, (c) => PersonFormDialog.show(c, scope: _scope(auth), person: detail));
+      expect(_fieldText(t, 'person_phone'), '+90 212 123 45 67', reason: 'eski sabit hat olduğu gibi görünür');
+      await _enter(t, 'person_name', 'Ayşe Yıldız');
+      await _tapButton(t, 'Kaydet');
+      await settleFor(t);
+      expect(find.text(phoneFormatError), findsNothing);
+      expect(auth.updatePersonCalls.single.fields, <String, Object?>{'full_name': 'Ayşe Yıldız'}, reason: 'telefon gönderilmez');
+    });
+
+    testWidgets('eski sabit hat değiştirilirse yeni değer cep kuralına uymalı', (t) async {
+      final auth = PeopleFakeAuth.seeded();
+      auth.peopleJson[1]!['phone'] = '+902121234567';
+      final detail = await auth.getPerson(11, 1);
+      await _open(t, (c) => PersonFormDialog.show(c, scope: _scope(auth), person: detail));
+      await _enter(t, 'person_phone', '+90 212 123 45 6');
+      await _tapButton(t, 'Kaydet');
+      await settleFor(t);
+      expect(find.text(phoneFormatError), findsOneWidget);
+      expect(auth.updatePersonCalls, isEmpty);
+      await _enter(t, 'person_phone', '+90 506 123 45 67');
+      await _tapButton(t, 'Kaydet');
+      await settleFor(t);
+      expect(auth.updatePersonCalls.single.fields, <String, Object?>{'phone': '+905061234567'});
     });
   });
 

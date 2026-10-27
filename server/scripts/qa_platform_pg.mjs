@@ -2136,10 +2136,37 @@ async function sectionPeople() {
     check('H8: eski ekrandan degisen iletisim e-postasi esitlemeden bagimsiz GUNCEL okunur; account_kind internal', mailRead.email === 'eski.ekran@example.com' && mailRead.account_kind === 'internal', mailRead);
     res = await call('PATCH', `${P(S1)}/people/${mailPerson.body.id}`, MGR, { email: 'yeni.eposta@example.com' });
     check('H8: dahili hesapta e-posta CRM\'den DUZENLENIR (apartments.resident_email guncellenir)', res.status === 200 && res.body.email === 'yeni.eposta@example.com' && (await residentOf(aMail)).resident_email === 'yeni.eposta@example.com', res.body);
-    res = await call('PATCH', `${P(S1)}/people/${mailPerson.body.id}`, MGR, { full_name: 'Baska Ad' });
-    check('H8: dahili hesapta ad hala 409 PERSON_HAS_ACCOUNT', res.status === 409 && res.body.code === 'PERSON_HAS_ACCOUNT');
+    // Kimlik duzenleme (2026-10-27): sitenin YONETTIGI hesapta (dahili @ahbu.local daire hesabi) ad/telefon CRM'den degisir ve users'a yazilir; CRM kaydi bos kalir.
+    const mailUserCode = Number((await residentOf(aMail)).resident_user_code);
+    check('K1: dahili sakin hesabi icin kisi karti identity_editable true', (await detailOf(mailPerson.body.id)).identity_editable === true);
+    res = await call('PATCH', `${P(S1)}/people/${mailPerson.body.id}`, MGR, { full_name: 'Baska Ad', phone: '0532 111 22 33' });
+    const mailUser = (await q(`SELECT full_name, phone_number FROM users WHERE user_code = $1`, [mailUserCode])).rows[0];
+    const mailAudit = (await q(`SELECT details FROM audit_log WHERE action = 'person.updated' AND target_id = $1 ORDER BY id DESC LIMIT 1`, [String(mailPerson.body.id)])).rows[0];
+    check('K1: sitenin yonettigi (dahili) hesapta ad/telefon CRM\'den DEGISIR (409 degil), users\'a yazilir, CRM kaydi bos kalir, audit telefon DEGERI saklamaz',
+      res.status === 200 && res.body.full_name === 'Baska Ad' && res.body.phone === '+905321112233' && mailUser.full_name === 'Baska Ad' && mailUser.phone_number === '+905321112233'
+      && (await personRowById(mailPerson.body.id)).full_name === null && (await personRowById(mailPerson.body.id)).phone === null
+      && JSON.stringify(mailAudit?.details ?? {}).includes('5321112233') === false && JSON.stringify(mailAudit?.details ?? {}).includes('Baska Ad'), { body: res.body, mailUser, mailAudit });
+    res = await call('PATCH', `${P(S1)}/people/${mailPerson.body.id}`, MGR, { phone: '' });
+    check('K1: telefon temizlenebilir (users.phone_number NULL)', res.status === 200 && res.body.phone === null && (await q(`SELECT phone_number FROM users WHERE user_code = $1`, [mailUserCode])).rows[0].phone_number === null, res.body);
+    // Baska siteye de bagli hesap sitenin yonettigi hesap DEGILDIR: 409 (kimlik yalniz kendi sitesindeki hesapta)
+    await q(`UPDATE users SET role = 'site_manager' WHERE user_code = $1`, [mailUserCode]);
+    res = await call('PATCH', `${P(S1)}/people/${mailPerson.body.id}`, MGR, { full_name: 'Yonetici Gibi' });
+    check('K1: hesap rolu apartment_owner degilse (yonetici hesabi) ad 409 PERSON_HAS_ACCOUNT ve identity_editable false', res.status === 409 && res.body.code === 'PERSON_HAS_ACCOUNT' && (await detailOf(mailPerson.body.id)).identity_editable === false, res.body);
+    await q(`UPDATE users SET role = 'apartment_owner' WHERE user_code = $1`, [mailUserCode]);
     res = await call('PATCH', `${P(S1)}/people/${link1.body.id}`, MGR, { email: 'x@example.com' });
     check('H8: GERCEK hesapta e-posta 409 PERSON_HAS_ACCOUNT kalir; account_kind registered', res.status === 409 && res.body.code === 'PERSON_HAS_ACCOUNT' && (await detailOf(link1.body.id)).account_kind === 'registered');
+    // K2: kisinin KENDI kaydolup parolasini belirledigi gercek hesap: ad/telefon 409 (kisi kendi profilinden degistirir); yonetimin verdigi parola henuz degismediyse (must_change_password) duzenlenir.
+    const linkUser = Number(link1.body.user_code);
+    res = await call('PATCH', `${P(S1)}/people/${link1.body.id}`, MGR, { phone: '0532 222 33 44' });
+    check('K2: kisinin kendi hesabinda (parolayi kendisi belirlemis) telefon 409 PERSON_HAS_ACCOUNT, identity_editable false, users degismez',
+      res.status === 409 && res.body.code === 'PERSON_HAS_ACCOUNT' && (await detailOf(link1.body.id)).identity_editable === false && (await q(`SELECT phone_number FROM users WHERE user_code = $1`, [linkUser])).rows[0].phone_number === null, res.body);
+    await q(`UPDATE users SET must_change_password = TRUE WHERE user_code = $1`, [linkUser]);
+    res = await call('PATCH', `${P(S1)}/people/${link1.body.id}`, MGR, { phone: '0532 222 33 44' });
+    check('K2: yonetimin verdigi parola henuz degismemis gercek hesapta telefon duzenlenir (users), identity_editable true; e-posta yine 409',
+      res.status === 200 && res.body.phone === '+905322223344' && (await detailOf(link1.body.id)).identity_editable === true && (await q(`SELECT phone_number FROM users WHERE user_code = $1`, [linkUser])).rows[0].phone_number === '+905322223344', res.body);
+    res = await call('PATCH', `${P(S1)}/people/${link1.body.id}`, MGR, { email: 'x@example.com' });
+    check('K2: ayni hesapta e-posta (giris adresi) yine 409', res.status === 409 && res.body.code === 'PERSON_HAS_ACCOUNT', res.body);
+    await q(`UPDATE users SET must_change_password = FALSE, phone_number = NULL WHERE user_code = $1`, [linkUser]);
     const kinds = new Set((await listAll(S1)).items.map((i) => i.account_kind));
     check('H8: liste account_kind alani none/internal/registered', ['none', 'internal', 'registered'].every((k) => kinds.has(k)), [...kinds]);
 
@@ -2465,7 +2492,7 @@ async function sectionPeople() {
     const aT4b = await newApt();
     const t4b = await call('POST', `${P(S1)}/people`, MGR, { full_name: 'T4 Aktif Dahili', email: 't4.aktif@example.com', apartment_id: aT4b });
     res = await call('PATCH', `${P(S1)}/people/${t4b.body.id}`, MGR, { full_name: 'Baska Ad' });
-    check('T4 (kontrol): AKTIF dahili hesapli kisinin adi hala 409 PERSON_HAS_ACCOUNT', res.status === 409 && res.body.code === 'PERSON_HAS_ACCOUNT', res.body);
+    check('T4 (kontrol): AKTIF dahili hesapli kisinin adi sitenin yonettigi hesap oldugundan duzenlenir (users); pasif olandaki gibi hesaptan KOPARILMAZ', res.status === 200 && res.body.full_name === 'Baska Ad' && res.body.has_account === true && (await personRowById(t4b.body.id)).user_code !== null, res.body);
 
     // --- T5: sync LINK pasif hesabi baglamaz (aktif hesap AYNI kosulda baglanir)
     await mkUser(10231, 'T5 Pasif', 't5pasif@example.com');

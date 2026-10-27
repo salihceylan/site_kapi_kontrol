@@ -184,9 +184,16 @@ class PersonDetail extends PersonSummary {
     this.userCode,
     this.credentialsSent,
     this.credentialsEmail,
+    this.identityEditable = false,
   });
 
   final String? note;
+
+  /// Ad ve telefon CRM'den (yönetimce) değiştirilebilir mi (`identity_editable`)? Hesapsız kişide ve SİTENİN YÖNETTİĞİ
+  /// hesapta (yönetimce açılmış sakin hesabı; toplu yüklemeyle açılanlar dahil) true; kişinin kendi kaydolduğu / sahiplendiği
+  /// hesapta false (kişi kendi profilinden değiştirir). Alan yoksa (eski sunucu) false: hesabı olan kişide ad / telefon
+  /// salt okunur kalır. Hesapsız kişi her zaman düzenlenebilir ([PersonSummary.hasAccount] false).
+  final bool identityEditable;
 
   /// Kişi eklenirken boş daireye dahili hesap açıldıysa giriş bilgisi e-postasının gönderilip
   /// gönderilmediği (`credentials_sent`): true gönderildi, false gönderilemedi, null: [credentialsEmail] doluysa
@@ -238,6 +245,7 @@ class PersonDetail extends PersonSummary {
       residencies: residencies,
       vehicles: vehicles,
       userCode: crmIntOrNull(json['user_code']),
+      identityEditable: json['identity_editable'] == true,
     );
   }
 }

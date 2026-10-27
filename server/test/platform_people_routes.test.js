@@ -521,6 +521,7 @@ describe('GET people/:personId: PersonDetail', () => {
       vehicle_count: 1,
       note: 'not',
       created_at: '2026-10-14T08:00:00.000Z',
+      identity_editable: false, // e-postayla kayitli hesap, yonetilebilirlik olcutu yok: kisinin kendi hesabi
       residencies: [
         { id: 31, apartment_id: 9, label: 'A Blok - Daire 2', block_name: 'A Blok', relation: 'owner', is_current: true, move_in_date: '2024-05-01', move_out_date: null },
         { id: 12, apartment_id: 7, label: 'A Blok - Daire 1', block_name: 'A Blok', relation: 'tenant', is_current: false, move_in_date: '2022-01-01', move_out_date: '2024-04-30' },
@@ -528,6 +529,37 @@ describe('GET people/:personId: PersonDetail', () => {
       vehicles: [{ id: 4, plate: '34ABC123', plate_display: '34 ABC 123', note: null, person_id: 5, person_name: 'Ali Veli', apartment_label: 'A Blok - Daire 2', is_active: true }],
       user_code: 30001,
     });
+  });
+
+  it('identity_editable: hesapsiz kisi true; sitenin yonettigi hesap true; kisinin kendi hesabi / baska siteye bagli hesap false (kilitsiz salt okuma, ayni olcutler)', async () => {
+    const managed = { has_account: true, acct_role: 'apartment_owner', acct_email: 'a-blok-2@ahbu.local', acct_must_change_password: false, acct_deleted_at: null, acct_pin_issued: true, acct_is_manager: false, acct_foreign_membership: false, acct_foreign_apartment: false, acct_foreign_person: false };
+    const cases = [
+      [{ has_account: false, account_kind: 'none', user_code: null }, true, 'hesapsiz'],
+      [{ ...managed, account_kind: 'internal' }, true, 'dahili sakin hesabi'],
+      [{ ...managed, account_kind: 'registered', acct_email: 'ali@example.com', acct_pin_issued: false, acct_must_change_password: true }, true, 'yonetimin verdigi parola degismemis'],
+      [{ ...managed, account_kind: 'registered', acct_email: 'ali@example.com', acct_pin_issued: false }, false, 'kisinin kendi parolasi'],
+      [{ ...managed, account_kind: 'internal', acct_foreign_membership: true }, false, 'baska siteye bagli'],
+      [{ ...managed, account_kind: 'internal', acct_role: 'site_manager' }, false, 'yonetici hesabi'],
+    ];
+    for (const [row, expected, label] of cases) {
+      overrides = [];
+      cardOverrides();
+      overrides.unshift([/^SELECT sp\.id, sp\.user_code, sp\.is_active, sp\.note[\s\S]*WHERE sp\.site_code = \$1 AND sp\.id = \$2 LIMIT 1$/, () => ok([personRow(row)])]);
+      const res = await call('GET', `${base()}/people/5`, { user: users.mgrA });
+      assert.equal(res.status, 200, label);
+      assert.equal(res.body.identity_editable, expected, label);
+    }
+  });
+
+  it('kisi karti SQL\'i hesabin yonetilebilirlik olcutlerini ayni sorguda okur (ek sorgu yok, kilit yok)', async () => {
+    cardOverrides();
+    await call('GET', `${base()}/people/5`, { user: users.mgrA });
+    const sql = state.log.find((q) => /WHERE sp\.site_code = \$1 AND sp\.id = \$2 LIMIT 1/.test(q.sql)).sql;
+    for (const column of ['acct_role', 'acct_email', 'acct_must_change_password', 'acct_deleted_at', 'acct_pin_issued', 'acct_is_manager', 'acct_foreign_membership', 'acct_foreign_apartment', 'acct_foreign_person']) {
+      assert.match(sql, new RegExp(`AS ${column}\\b`), column);
+    }
+    assert.doesNotMatch(sql, /FOR UPDATE/);
+    assert.match(sql, /sm\.site_code <> \$1 OR sm\.role <> 'RESIDENT'/, 'site_code $1 parametresine baglanir');
   });
 
   it('kurul uyesi kartı okur ama user_code DONMEZ', async () => {

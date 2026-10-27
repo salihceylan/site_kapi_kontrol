@@ -2,7 +2,8 @@
 //
 // Sözleşme: docs/PLATFORM_KISILER.md.
 //  - Erişim yetkisinin tek kaynağı apartment_memberships kalır; CRM bunun üstünde KAYIT katmanıdır.
-//  - Hesabı olan kişide ad/telefon/e-posta users'tan okunur ve CRM'den değiştirilemez (409 PERSON_HAS_ACCOUNT).
+//  - Hesabı olan kişide ad/telefon/e-posta users'tan okunur. Ad/telefon yalnız SİTENİN YÖNETTİĞİ hesapta (isSiteManagedAccount) CRM'den
+//    değişir ve hesabın kendisine yazılır; kişinin kendi hesabında (kendi kaydolan / sahiplenen) değiştirilemez (409 PERSON_HAS_ACCOUNT).
 //  - Kayıtlar silinmez: taşınan kişi is_current=false/is_active=false olur ve geçmişte kalır; her yazma audit_log'a yazılır.
 //  - Yazma işlemleri site bazlı advisory kilit altında (eşitleme ile aynı anahtar) tek transaction'da yapılır.
 
@@ -105,8 +106,7 @@ export const CONTACT_EMAIL_SQL = `(
   END
 )`;
 
-const PERSON_SELECT = `
-  SELECT
+const PERSON_COLUMNS = `
     sp.id,
     sp.user_code,
     sp.is_active,
@@ -117,8 +117,66 @@ const PERSON_SELECT = `
     ${CONTACT_EMAIL_SQL} AS email,
     ${HAS_ACCOUNT_SQL} AS has_account,
     ${ACCOUNT_KIND_SQL} AS account_kind
+`;
+
+const PERSON_SELECT = `
+  SELECT
+    ${PERSON_COLUMNS}
   ${PERSON_FROM}
 `;
+
+/**
+ * Yönetilebilir hesap ölçütleri (evaluateManagedAccount / isSiteManagedAccount girdisi) — `users u` takma adıyla. `siteParam`: site_code
+ * parametresinin yer tutucusu ("$2"). `prefix`: sütun adı öneki (kişi sorgusunda iletişim e-postası `email` ile çakışmasın diye "acct_").
+ */
+function managedAccountColumns(siteParam, prefix = '') {
+  return `
+    u.role AS ${prefix}role,
+    u.email AS ${prefix}email,
+    u.must_change_password AS ${prefix}must_change_password,
+    u.deleted_at AS ${prefix}deleted_at,
+    EXISTS (SELECT 1 FROM apartments a WHERE a.resident_user_code = u.user_code AND a.resident_pin_issued = TRUE) AS ${prefix}pin_issued,
+    EXISTS (SELECT 1 FROM site_manager_sites s WHERE s.manager_user_code = u.user_code) AS ${prefix}is_manager,
+    EXISTS (
+      SELECT 1 FROM site_memberships sm
+      WHERE sm.user_code = u.user_code AND (sm.site_code <> ${siteParam} OR sm.role <> 'RESIDENT')
+    ) AS ${prefix}foreign_membership,
+    (
+      EXISTS (
+        SELECT 1 FROM apartment_memberships am
+        INNER JOIN apartments xa ON xa.id = am.apartment_id
+        WHERE am.user_code = u.user_code AND xa.site_code <> ${siteParam}
+      )
+      OR EXISTS (SELECT 1 FROM apartments ra WHERE ra.resident_user_code = u.user_code AND ra.site_code <> ${siteParam})
+    ) AS ${prefix}foreign_apartment,
+    EXISTS (SELECT 1 FROM site_people x WHERE x.user_code = u.user_code AND x.site_code <> ${siteParam}) AS ${prefix}foreign_person`;
+}
+
+const ACCOUNT_COLUMN_PREFIX = 'acct_';
+
+/** Kişi kartı sorgusu: PERSON_SELECT + hesabın yönetilebilirlik ölçütleri ($1 = site_code). Kilitsiz; yalnız `identity_editable` hesabı için. */
+const PERSON_DETAIL_SELECT = `
+  SELECT
+    ${PERSON_COLUMNS},
+    ${managedAccountColumns('$1', ACCOUNT_COLUMN_PREFIX)}
+  ${PERSON_FROM}
+`;
+
+/** Kişi kartı satırındaki önekli hesap sütunlarını evaluateManagedAccount biçimine çevirir. */
+function managedAccountOfPersonRow(row) {
+  const pick = (name) => row[`${ACCOUNT_COLUMN_PREFIX}${name}`];
+  return {
+    role: pick('role'),
+    email: pick('email'),
+    must_change_password: pick('must_change_password'),
+    deleted_at: pick('deleted_at'),
+    pin_issued: pick('pin_issued'),
+    is_manager: pick('is_manager'),
+    foreign_membership: pick('foreign_membership'),
+    foreign_apartment: pick('foreign_apartment'),
+    foreign_person: pick('foreign_person'),
+  };
+}
 
 const FALLBACK_PERSON_NAME = 'Silinmiş hesap';
 
@@ -390,9 +448,13 @@ export async function listPeople(siteCode, query = {}, db = pool) {
   };
 }
 
-/** PersonDetail: özet alanları + note, created_at, tüm ilişkiler (geçmiş dahil), araçlar, (yönetici/süper için) user_code. */
+/**
+ * PersonDetail: özet alanları + note, created_at, tüm ilişkiler (geçmiş dahil), araçlar, (yönetici/süper için) user_code ve
+ * identity_editable (ad/telefon CRM'den değişebilir mi: hesapsız kişi VEYA sitenin yönettiği hesap; kilitsiz salt okuma, kesin karar
+ * updatePerson'da kilit altında verilir).
+ */
 export async function loadPersonDetail(db, siteCode, personId, { includeUserCode = false } = {}) {
-  const personResult = await db.query(`${PERSON_SELECT} WHERE sp.site_code = $1 AND sp.id = $2 LIMIT 1`, [siteCode, personId]);
+  const personResult = await db.query(`${PERSON_DETAIL_SELECT} WHERE sp.site_code = $1 AND sp.id = $2 LIMIT 1`, [siteCode, personId]);
   const row = personResult.rows?.[0];
   if (!row) {
     return null;
@@ -418,6 +480,7 @@ export async function loadPersonDetail(db, siteCode, personId, { includeUserCode
     ...buildSummary(row, currentRows, vehicles.length),
     note: row.note ?? null,
     created_at: toIso(row.created_at),
+    identity_editable: row.has_account !== true || isSiteManagedAccount(managedAccountOfPersonRow(row)),
     residencies,
     vehicles,
   };
@@ -1010,10 +1073,14 @@ function pushChange(changes, field, from, to) {
 }
 
 /**
- * PATCH people/:personId. Hesaplı kişide full_name/phone gönderilirse 409 PERSON_HAS_ACCOUNT; e-posta yalnız DAHİLİ (@ahbu.local)
- * daire hesabında düzenlenir (iletişim e-postası apartments.resident_email'e yazılır), gerçek hesapta 409; note ve is_active her zaman.
- * is_active:false -> önce site eşitlenir (henüz yansımamış üyelikler de kapansın), sonra tüm güncel ilişkiler biter ("taşınma"
- * kuralları: hesaplıysa erişim kapanır), araçlar pasifleşir.
+ * PATCH people/:personId. Ad/telefon: hesapsız kişide CRM kaydına, SİTENİN YÖNETTİĞİ hesapta (isSiteManagedAccount: yönetimce açılmış
+ * sakin hesabı; toplu yüklemeyle açılanlar dahil) hesabın kendisine (users.full_name / phone_number) yazılır — kişinin hesabı o ad ve
+ * telefonu zaten buradan okur. Kişinin kendi kaydolduğu / sahiplendiği hesapta full_name/phone gönderilirse 409 PERSON_HAS_ACCOUNT
+ * (kişi kendi profilinden değiştirir). E-posta yalnız DAHİLİ (@ahbu.local) daire hesabında düzenlenir (iletişim e-postası
+ * apartments.resident_email'e yazılır), gerçek hesapta 409; note ve is_active her zaman.
+ * Hesabı yazacak istekte hesap satırı kişi satırından ÖNCE kilitlenir (kilit sırası apartments -> users -> site_people): yönetilebilirlik
+ * kararı (parolayı kişi sahiplendi mi?) yazma anına kadar değişemez. is_active:false -> önce site eşitlenir (henüz yansımamış
+ * üyelikler de kapansın), sonra tüm güncel ilişkiler biter ("taşınma" kuralları: hesaplıysa erişim kapanır), araçlar pasifleşir.
  */
 export async function updatePerson({ siteCode, personId, body = {}, actor, includeUserCode = true }) {
   const id = parsePositiveId(personId);
@@ -1056,6 +1123,22 @@ export async function updatePerson({ siteCode, personId, body = {}, actor, inclu
       // Pasifleştirmeden ÖNCE erişim üyelikleriyle eşitle: yansımamış bir üyelik sonradan kişiyi yeniden etkinleştirmesin.
       await runSyncSteps(client, { siteCode, userCode: null });
     }
+    // Ad/telefon hesabın kendisine yazılabilir mi? Karar için hesap satırı kişi satırından ÖNCE kilitlenir (apartments -> users -> kişi):
+    // kişi bu arada parolayı sahiplenip hesabı "kendisinin" yapamaz. Kişinin hesap kodu kilitsiz okunur; kilitten sonra aynı mı diye
+    // yeniden doğrulanır (identityEditable).
+    let lockedAccount = null;
+    if (has('full_name') || has('phone')) {
+      const linked = await client.query(`SELECT user_code FROM site_people WHERE id = $1 AND site_code = $2`, [id, siteCode]);
+      const linkedUserCode = linked.rows?.[0]?.user_code ?? null;
+      if (linkedUserCode !== null) {
+        if (has('email')) {
+          // Aynı istekte dahili hesabın iletişim e-postası da yazılacaksa apartments satırları da (id sırasıyla) önce kilitlenir.
+          await client.query(`SELECT id FROM apartments WHERE resident_user_code = $1 ORDER BY id FOR UPDATE`, [linkedUserCode]);
+        }
+        const lockedResult = await client.query(`${MANAGED_ACCOUNT_SELECT} FOR UPDATE OF u`, [linkedUserCode, siteCode]);
+        lockedAccount = lockedResult.rows?.[0] ?? null;
+      }
+    }
     const found = await client.query(
       `
         SELECT sp.id, sp.user_code, sp.full_name, sp.phone, sp.email, sp.note, sp.is_active, u.email AS account_email,
@@ -1093,7 +1176,13 @@ export async function updatePerson({ siteCode, personId, body = {}, actor, inclu
     }
     const hasAccount = accountKind !== 'none';
     const isInternalAccount = accountKind === 'internal';
-    if (hasAccount && (has('full_name') || has('phone') || (has('email') && !isInternalAccount))) {
+    // Hesabın kendisine yazma yetkisi: kilitlediğimiz hesap bu kişinin GÜNCEL hesabı VE sitenin yönettiği hesap olmalı.
+    const identityEditable =
+      hasAccount &&
+      lockedAccount !== null &&
+      Number(lockedAccount.user_code) === Number(row.user_code) &&
+      isSiteManagedAccount(lockedAccount);
+    if (hasAccount && (((has('full_name') || has('phone')) && !identityEditable) || (has('email') && !isInternalAccount))) {
       throw PERSON_HAS_ACCOUNT();
     }
 
@@ -1106,7 +1195,30 @@ export async function updatePerson({ siteCode, personId, body = {}, actor, inclu
     };
     // Yalnız DEĞİŞEN alanlar yazılır ve audit'e düşer (değişiklik yoksa UPDATE ve audit yok).
     const changedField = (column, current, next) => (current ?? null) !== (next ?? null) && (setField(column, next), true);
-    if (!hasAccount) {
+    if (identityEditable) {
+      // Sitenin yönettiği hesap: kişinin göreceği ad/telefon users'tan gelir (PERSON_SELECT ile aynı COALESCE/NULLIF), yazım da orayadır.
+      const shown = (accountValue, personValue) => (accountValue === null || accountValue === undefined || accountValue === '' ? personValue ?? null : accountValue);
+      const accountSets = [];
+      const accountValues = [row.user_code];
+      const currentName = shown(row.account_name, row.full_name);
+      if (patch.fullName !== undefined && (currentName ?? null) !== patch.fullName) {
+        accountValues.push(patch.fullName);
+        accountSets.push(`full_name = $${accountValues.length}`);
+        pushChange(changes, 'full_name', currentName, patch.fullName);
+      }
+      const currentPhone = shown(row.account_phone, row.phone);
+      if (patch.phone !== undefined && (currentPhone ?? null) !== (patch.phone ?? null)) {
+        accountValues.push(patch.phone);
+        accountSets.push(`phone_number = $${accountValues.length}`);
+        pushChange(changes, 'phone', currentPhone, patch.phone);
+      }
+      if (accountSets.length > 0) {
+        await client.query(
+          `UPDATE users SET ${accountSets.join(', ')}, updated_at = NOW() WHERE user_code = $1 AND deleted_at IS NULL`,
+          accountValues,
+        );
+      }
+    } else if (!hasAccount) {
       if (patch.fullName !== undefined && changedField('full_name', row.full_name, patch.fullName)) {
         pushChange(changes, 'full_name', row.full_name, patch.fullName);
       }
@@ -1162,9 +1274,10 @@ export async function updatePerson({ siteCode, personId, body = {}, actor, inclu
         }
         throw error;
       }
-      if (changes.length > 0) {
-        await audit(client, actor, 'person.updated', siteCode, 'person', id, { changes });
-      }
+    }
+    // Denetim: yalnız site_people'a değil hesabın kendisine (users) yazılan ad/telefon değişikliği de kaydedilir.
+    if (changes.length > 0) {
+      await audit(client, actor, 'person.updated', siteCode, 'person', id, { changes });
     }
 
     if (nextIsActive === false && row.is_active === true) {
@@ -1502,36 +1615,35 @@ export function evaluateManagedAccount(row, { actorIsSuper = false } = {}) {
 }
 
 /**
+ * Hesabın yönetilebilirlik satırı (evaluateManagedAccount girdisi): $1 = user_code, $2 = site_code. Kilit isteyen çağıran sonuna
+ * `FOR UPDATE OF u` ekler (loadManageableAccount, updatePerson); kişi kartı aynı ölçütleri managedAccountColumns ile kilitsiz okur.
+ */
+const MANAGED_ACCOUNT_SELECT = `
+  SELECT u.user_code, u.login_name,
+         ${managedAccountColumns('$2')}
+  FROM users u
+  WHERE u.user_code = $1 AND u.deleted_at IS NULL
+`;
+
+/**
+ * Ad/telefonu CRM'den (yönetimce) değişebilen hesap mı? Yalnız SİTENİN YÖNETTİĞİ hesap: evaluateManagedAccount'un süper kullanıcı
+ * varsayımıyla izin verdiği hesap (rol apartment_owner, başka siteye/yöneticiliğe bağlı değil, dahili @ahbu.local VEYA yönetimin verdiği
+ * parola henüz değişmemiş). Kendi kaydolan / hesabı sahiplenen kişinin hesabı false döner: o kişi adını ve telefonunu kendi profilinden
+ * değiştirir. Parola sıfırlama yetkisi (süper kullanıcı gerektiren dahili hesap) ad/telefon düzeltmesi için aranmaz.
+ * SAF karar (DB yok).
+ */
+export function isSiteManagedAccount(row) {
+  return evaluateManagedAccount(row, { actorIsSuper: true }) === null;
+}
+
+/**
  * Kişiye bağlı hesabı kilitleyip yönetilebilirliğini denetler (evaluateManagedAccount). Kilit sırası apartments -> users: hesabın sakin
  * göstergesi olduğu daireler ÖNCE (id sırasıyla) kilitlenir.
  * @returns {Promise<object>} hesap satırı (user_code, login_name, email, ...)
  */
 async function loadManageableAccount(client, { siteCode, userCode, actor }) {
   await client.query(`SELECT id FROM apartments WHERE resident_user_code = $1 ORDER BY id FOR UPDATE`, [userCode]);
-  const result = await client.query(
-    `
-      SELECT u.user_code, u.role, u.email, u.login_name, u.must_change_password, u.deleted_at,
-             EXISTS (SELECT 1 FROM apartments a WHERE a.resident_user_code = u.user_code AND a.resident_pin_issued = TRUE) AS pin_issued,
-             EXISTS (SELECT 1 FROM site_manager_sites s WHERE s.manager_user_code = u.user_code) AS is_manager,
-             EXISTS (
-               SELECT 1 FROM site_memberships sm
-               WHERE sm.user_code = u.user_code AND (sm.site_code <> $2 OR sm.role <> 'RESIDENT')
-             ) AS foreign_membership,
-             (
-               EXISTS (
-                 SELECT 1 FROM apartment_memberships am
-                 INNER JOIN apartments xa ON xa.id = am.apartment_id
-                 WHERE am.user_code = u.user_code AND xa.site_code <> $2
-               )
-               OR EXISTS (SELECT 1 FROM apartments ra WHERE ra.resident_user_code = u.user_code AND ra.site_code <> $2)
-             ) AS foreign_apartment,
-             EXISTS (SELECT 1 FROM site_people x WHERE x.user_code = u.user_code AND x.site_code <> $2) AS foreign_person
-      FROM users u
-      WHERE u.user_code = $1 AND u.deleted_at IS NULL
-      FOR UPDATE OF u
-    `,
-    [userCode, siteCode],
-  );
+  const result = await client.query(`${MANAGED_ACCOUNT_SELECT} FOR UPDATE OF u`, [userCode, siteCode]);
   const row = result.rows?.[0] ?? null;
   const verdict = evaluateManagedAccount(row, { actorIsSuper: actor?.role === 'super_user' });
   if (verdict === 'PERSON_ACCOUNT_RESET_NEEDS_SUPER') {

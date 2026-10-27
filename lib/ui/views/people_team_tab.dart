@@ -9,6 +9,7 @@ import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/crm_confirm_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/person_card_dialog.dart';
 import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart' show crmMessageOf;
+import 'package:site_kapi_kontrol/ui/helpers/phone_input.dart';
 import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
 
 /// Kişiler ekranındaki "Kadro" sekmesi: yönetici, kurul ve görevliler, eski ek roller ve faydalı telefonlar.
@@ -97,9 +98,11 @@ class PeopleTeamTabState extends State<PeopleTeamTab> {
 
   Future<void> _editContact([DirectoryContact? current]) async {
     final label = TextEditingController(text: current?.label ?? '');
-    final phone = TextEditingController(text: current?.phone ?? '');
+    // Faydalı telefon: "+90 XXX XXX XX XX" (sabit hat / cep) ya da KISA numara (112, 185, 444 1 234; bkz. isShortServiceNumber).
+    final phone = TextEditingController(text: servicePhoneInitial(current?.phone));
     final note = TextEditingController(text: current?.note ?? '');
     var category = current?.category ?? 'other';
+    String? phoneError;
     final saved = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
@@ -110,7 +113,22 @@ class PeopleTeamTabState extends State<PeopleTeamTab> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 TextField(controller: label, maxLength: 80, decoration: const InputDecoration(labelText: 'Ad (ör. Su arıza)')),
-                TextField(controller: phone, maxLength: 32, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Telefon')),
+                TextField(
+                  controller: phone,
+                  keyboardType: TextInputType.phone,
+                  inputFormatters: const [ServicePhoneInputFormatter()],
+                  onChanged: (_) {
+                    if (phoneError != null) setLocal(() => phoneError = null);
+                  },
+                  decoration: InputDecoration(
+                    labelText: 'Telefon',
+                    hintText: phoneFieldHintAny,
+                    helperText: 'Sabit hat ya da cep: +90 XXX XXX XX XX. Acil ve kısa numaralar (112, 444 1 234) olduğu gibi yazılır.',
+                    helperMaxLines: 3,
+                    errorText: phoneError,
+                    errorMaxLines: 3,
+                  ),
+                ),
                 DropdownButtonFormField<String>(
                   initialValue: category,
                   isExpanded: true,
@@ -127,12 +145,27 @@ class PeopleTeamTabState extends State<PeopleTeamTab> {
           ),
           actions: [
             TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: const Text('Vazgeç')),
-            FilledButton(onPressed: () => Navigator.of(dialogContext).pop(true), child: const Text('Kaydet')),
+            FilledButton(
+              onPressed: () {
+                // Biçim hatası pencere AÇIKKEN gösterilir (kapanıp girilenler kaybolmasın).
+                final error = validateServicePhoneInput(phone.text, stored: current?.phone);
+                if (error != null) {
+                  setLocal(() => phoneError = error);
+                  return;
+                }
+                Navigator.of(dialogContext).pop(true);
+              },
+              child: const Text('Kaydet'),
+            ),
           ],
         ),
       ),
     );
-    final values = (label: label.text.trim(), phone: phone.text.trim(), note: note.text.trim());
+    final values = (
+      label: label.text.trim(),
+      phone: servicePhoneForSave(phone.text, stored: current?.phone) ?? '',
+      note: note.text.trim(),
+    );
     label.dispose();
     phone.dispose();
     note.dispose();

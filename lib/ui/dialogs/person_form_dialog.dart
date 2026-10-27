@@ -26,11 +26,14 @@ import 'package:site_kapi_kontrol/ui/widgets/crm_parts.dart';
 
 /// "Kişi Ekle" ve "Düzenle" penceresi (Platform Faz 2a).
 ///
-/// - Ekleme ([person] null): ad soyad, telefon (+90 hazır, 3-3-2-2), e-posta, isteğe bağlı daire +
-///   ilişki + taşınma (giriş) tarihi, plaka(lar), not ve (daire seçilince) genişletilebilir "Daire bilgileri".
-/// - Düzenleme: yalnız DEĞİŞEN alanlar gönderilir. HESABI OLAN kişide ad / telefon / e-posta salt okunur
-///   görünür (TEK bir bilgilendirme bandı: "kişinin kendi profilinden değişir") ve gönderilmez; plaka, not ve
-///   daire bilgileri düzenlenir. Dahili hesapta (`account_kind: internal`) iletişim e-postası da düzenlenebilir.
+/// - Ekleme ([person] null): ad soyad, telefon (+90 hazır, 5XX XXX XX XX biçimine zorlanır), e-posta, isteğe bağlı
+///   daire + ilişki + taşınma (giriş) tarihi, plaka(lar), not ve (daire seçilince) genişletilebilir "Daire bilgileri".
+/// - Düzenleme: yalnız DEĞİŞEN alanlar gönderilir. Hesabı OLMAYAN kişide ve SİTENİN YÖNETTİĞİ hesapta
+///   ([PersonDetail.identityEditable]: yönetimce / toplu yüklemeyle açılmış sakin hesabı) ad ve telefon düzenlenir;
+///   sunucu hesabın kendisine yazar (kişinin hesabı o adı / telefonu zaten oradan okur). Kişinin KENDİ kaydolduğu /
+///   sahiplendiği hesapta ad / telefon / e-posta salt okunur görünür (TEK bir bilgilendirme bandı: "kişinin kendi
+///   profilinden değişir") ve gönderilmez. Dahili hesapta (`account_kind: internal`) iletişim e-postası da
+///   düzenlenebilir; gerçek hesapta e-posta giriş adresidir, kilitli kalır. Plaka, not ve daire bilgileri her zaman düzenlenir.
 ///
 /// ZORUNLU alanlar etikette "*" ile işaretlidir: ad soyad; telefon ya da e-postadan en az biri (kişinin tüm
 /// ilişkisi "Aile Üyesi" ise ikisi de boş olabilir); daire seçildiyse ilişki (varsayılan seçili gelmez: borcun
@@ -94,11 +97,12 @@ class _PersonFormDialogState extends State<PersonFormDialog> {
     text: widget.person?.fullName ?? '',
   );
   late final TextEditingController _phone = TextEditingController(
-    // Hesabı olan kişinin telefonu salt okunur alanda OLDUĞU GİBİ görünür (yabancı / serbest biçimli
-    // numara bozulmaz, kişi kartıyla aynıdır); boşsa "+90 " öneki de gösterilmez.
+    // Salt okunur alanda (kişinin kendi hesabı) telefon OLDUĞU GİBİ görünür (yabancı / serbest biçimli numara
+    // bozulmaz, kişi kartıyla aynıdır); boşsa "+90 " öneki de gösterilmez. Düzenlenebilir alanda boşsa "+90 " hazır
+    // gelir, ayrıştırılabilen numara gruplanır, ayrıştırılamayan eski kayıt olduğu gibi kalır (dokunulmazsa değişmez).
     text: _identityLocked
         ? formatPhoneDisplay(widget.person?.phone)
-        : formatPhoneField(widget.person?.phone),
+        : phoneFieldInitial(widget.person?.phone),
   );
   late final TextEditingController _email = TextEditingController(
     text: widget.person?.email ?? '',
@@ -155,8 +159,12 @@ class _PersonFormDialogState extends State<PersonFormDialog> {
         (v) => v.isActive,
       );
 
-  /// Hesabı olan kişide ad ve telefon CRM'den değişmez (kişinin kendi profilinden değişir).
-  bool get _identityLocked => widget.person?.hasAccount == true;
+  bool get _hasAccount => widget.person?.hasAccount == true;
+
+  /// Kişinin KENDİ hesabında (kendi kaydolan / sahiplenen) ad ve telefon CRM'den değişmez (kişinin kendi profilinden
+  /// değişir). Hesapsız kişi ve sitenin yönettiği hesap (`identity_editable`) düzenlenir. Alan yoksa (eski sunucu)
+  /// hesabı olan kişi kilitli kalır.
+  bool get _identityLocked => _hasAccount && widget.person?.identityEditable != true;
 
   /// E-posta da kilitlidir; YALNIZ dahili (@ahbu.local) hesapta iletişim e-postası düzenlenebilir
   /// (`account_kind: internal`). Alan yoksa (eski sunucu) hesabı olan kişide e-posta da salt okunurdur.
@@ -170,7 +178,7 @@ class _PersonFormDialogState extends State<PersonFormDialog> {
   /// Telefon ya da e-postadan en az biri zorunlu mu? Kişinin tek ilişkisi "Aile Üyesi" ise (ya da hesaplı kişide,
   /// iletişim bilgisi hesaptan geldiği için) değil.
   bool get _contactRequired {
-    if (_identityLocked) return false;
+    if (_hasAccount) return false;
     if (_editing) {
       final relations = widget.person!.relations;
       final onlyFamily =
@@ -239,7 +247,7 @@ class _PersonFormDialogState extends State<PersonFormDialog> {
 
   /// Telefon alanının altındaki yardım metni.
   static const String phoneHelp =
-      'Telefon yalnız iletişim içindir; giriş telefonla yapılmaz.';
+      'Cep telefonu +90 5XX XXX XX XX biçiminde yazılır. Telefon yalnız iletişim içindir; giriş telefonla yapılmaz.';
 
   /// Telefon / e-posta zorunluluğunu anlatan kısa not (telefon alanının altında).
   static const String contactRule =
@@ -548,17 +556,21 @@ class _PersonFormDialogState extends State<PersonFormDialog> {
     );
   }
 
-  /// Düzenlemede yalnız değişen alanlar (boşaltılan alan `null` gider; sunucu temizler). HESAPLI kişide
+  /// Düzenlemede yalnız değişen alanlar (boşaltılan alan `null` gider; sunucu temizler). Kişinin KENDİ hesabında
   /// `full_name` / `phone` / `email` anahtarları HİÇ gönderilmez (değişmemiş değer dahil: sunucu 409
-  /// PERSON_HAS_ACCOUNT döner); dahili hesapta yalnız `email` serbesttir.
+  /// PERSON_HAS_ACCOUNT döner); sitenin yönettiği hesapta ad / telefon gönderilir (sunucu hesaba yazar), dahili hesapta
+  /// `email` de serbesttir. Telefon alanına DOKUNULMADIYSA (eski sabit hat / serbest biçimli kayıt dahil) hiç
+  /// gönderilmez; değiştiyse `+905061234567` biçiminde gider.
   Map<String, Object?> _changedFields() {
     final initial = widget.person!;
     final fields = <String, Object?>{};
     if (!_identityLocked) {
       final name = _name.text.trim();
       if (name != initial.fullName.trim()) fields['full_name'] = name;
-      final phone = phoneToApi(_phone.text);
-      if (phone != phoneToApi(initial.phone)) fields['phone'] = phone;
+      if (_phone.text.trim() != phoneFieldInitial(initial.phone).trim()) {
+        final phone = phoneForSave(_phone.text, stored: initial.phone);
+        if (phone != phoneToApi(initial.phone)) fields['phone'] = phone;
+      }
     }
     if (!_emailLocked) {
       final email = _email.text.trim().toLowerCase();
@@ -650,6 +662,16 @@ class _PersonFormDialogState extends State<PersonFormDialog> {
                       : 'Bu kişinin hesabı var. Ad, telefon ve e-posta kişinin kendi profilinden değişir.',
                 ),
                 const SizedBox(height: AppSpace.md),
+              ] else if (_hasAccount) ...[
+                // Sitenin yönettiği hesap: ad / telefon buradan değişir ve kişinin hesabına yazılır.
+                InlineNotice(
+                  tone: AppTone.info,
+                  icon: Icons.info_outline_rounded,
+                  message: internal
+                      ? 'Bu kişinin hesabı var. Ad ve telefonu değiştirirseniz kişinin hesabında da güncellenir.'
+                      : 'Bu kişinin hesabı var. Ad ve telefonu değiştirirseniz kişinin hesabında da güncellenir. E-posta kişinin giriş adresidir; kişinin kendi profilinden değişir.',
+                ),
+                const SizedBox(height: AppSpace.md),
               ],
               TextFormField(
                 key: const ValueKey<String>('person_name'),
@@ -688,6 +710,7 @@ class _PersonFormDialogState extends State<PersonFormDialog> {
                       ? 'Telefon *'
                       : 'Telefon (isteğe bağlı)',
                   prefixIcon: const Icon(Icons.phone_rounded),
+                  hintText: _identityLocked ? null : phoneFieldHint,
                   helperText: _identityLocked
                       ? null
                       : (contactRequired
@@ -697,7 +720,10 @@ class _PersonFormDialogState extends State<PersonFormDialog> {
                 ),
                 validator: (value) {
                   if (_identityLocked) return null;
-                  final format = validatePhoneField(value);
+                  // Düzenlemede dokunulmamış eski kayıt (sabit hat / serbest biçim) kaydetmeyi engellemez.
+                  final format = _editing
+                      ? validatePhoneInput(value, stored: widget.person?.phone)
+                      : validatePhoneField(value);
                   if (format != null) return format;
                   if (_contactRequired &&
                       phoneToApi(value) == null &&

@@ -13,6 +13,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:site_kapi_kontrol/models/contract_models.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/services/contract_api.dart';
+import 'package:site_kapi_kontrol/ui/helpers/phone_input.dart';
 import 'package:site_kapi_kontrol/ui/views/contracts_view.dart';
 import 'package:site_kapi_kontrol/ui/widgets/contract_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
@@ -609,15 +610,15 @@ void main() {
       await _tapKey(t, 'contract_vendor_new');
       await settleFor(t, 100);
       await _type(t, 'contract_vendor_form_email', 'gecersiz@');
+      // Harf yazılamaz (giriş reddedilir); 2 hane ne kısa numara (3-7 hane) ne tam numara (+90 + 10 hane): biçim hatası.
       await _type(t, 'contract_vendor_form_phone', 'abc');
+      expect(find.text('abc'), findsNothing, reason: 'harf telefon alanına yazılamaz');
+      await _type(t, 'contract_vendor_form_phone', '12');
       await _tapKey(t, 'contract_vendor_form_send');
       await settleFor(t, 100);
       expect(find.text('Firma adını girin.'), findsOneWidget);
       expect(find.text('Geçerli bir e-posta adresi girin (örn. destek@firma.com).'), findsOneWidget);
-      expect(
-        find.text('Telefonu rakamla girin; yalnız boşluk ve + ( ) - . / kullanılabilir (örn. 0212 555 12 34).'),
-        findsOneWidget,
-      );
+      expect(find.text(phoneFormatErrorAny), findsOneWidget);
       expect(rig.service.createVendorCalls, isEmpty);
 
       await _type(t, 'contract_vendor_form_email', '');

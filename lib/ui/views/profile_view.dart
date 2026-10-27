@@ -5,6 +5,7 @@ import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/helpers/password_policy.dart';
+import 'package:site_kapi_kontrol/ui/helpers/phone_input.dart';
 import 'package:site_kapi_kontrol/ui/widgets/account_privacy_section.dart';
 import 'package:site_kapi_kontrol/ui/widgets/language_picker.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
@@ -99,9 +100,15 @@ class ProfileView extends StatelessWidget {
                   const SizedBox(height: AppSpace.md),
                   TextFormField(
                     controller: phoneController,
+                    keyboardType: TextInputType.phone,
+                    inputFormatters: const [PhoneInputFormatter()],
                     decoration: const InputDecoration(
                       labelText: 'Telefon (opsiyonel)',
+                      hintText: phoneFieldHint,
+                      helperText: 'Cep telefonu: +90 5XX XXX XX XX',
                     ),
+                    // Dokunulmamış eski kayıt (sabit hat / serbest biçim) kaydetmeyi engellemez.
+                    validator: (value) => validatePhoneInput(value, stored: session.phoneNumber),
                   ),
                   // Kimlik alanları ile şifre değiştirme alanları ayrı gruplar.
                   const Divider(height: AppSpace.xl),

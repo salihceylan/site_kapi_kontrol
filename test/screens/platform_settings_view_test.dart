@@ -16,6 +16,8 @@ import 'package:site_kapi_kontrol/ui/views/platform_settings_view.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 
 import 'account_fixtures.dart';
+import 'package:site_kapi_kontrol/ui/helpers/phone_input.dart';
+
 import 'dialog_layout_harness.dart';
 import 'list_fixtures.dart';
 
@@ -286,13 +288,13 @@ void main() {
       await _enter(t, 'update_url_android', 'http://play.google.com');
       await _enter(t, 'update_url_ios', 'apps.apple.com');
       await _enter(t, 'email', 'a@b');
-      await _enter(t, 'phone', '12');
+      await _enter(t, 'phone', '212');
       await _enter(t, 'web_url', 'https://exa mple.com');
       await _enter(t, 'company_name', '[x](http://a)');
       await _enter(t, 'mersis_no', '123');
       await _enter(t, 'kep_address', 'kep');
       await _enter(t, 'contact_email', 'x@y');
-      await _enter(t, 'contact_phone', '1');
+      await _enter(t, 'contact_phone', '2');
       await _tapSave(t);
       await settleFor(t);
 
@@ -303,7 +305,7 @@ void main() {
       expect(find.textContaining('Android güncelleme bağlantısı https:// ile başlayan'), findsOneWidget);
       expect(find.textContaining('iOS güncelleme bağlantısı https:// ile başlayan'), findsOneWidget);
       expect(find.textContaining('Destek e-postası geçerli bir e-posta'), findsOneWidget);
-      expect(find.textContaining('Destek telefonu geçerli bir telefon'), findsOneWidget);
+      expect(find.text(phoneFormatErrorAny), findsNWidgets(2), reason: 'destek + iletişim telefonu eksik hane');
       expect(find.textContaining('Şirket unvanı köşeli parantez'), findsOneWidget);
       expect(find.textContaining('MERSİS numarası 16 haneli'), findsOneWidget);
     });

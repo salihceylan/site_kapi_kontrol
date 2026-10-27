@@ -53,6 +53,10 @@ Map<String, dynamic> pplPersonJson(
 
   /// `internal` (dahili @ahbu.local hesabı), `registered`, `none`; varsayılan hesaba göre.
   String? accountKind,
+
+  /// Sunucunun `identity_editable` alanı (sitenin yönettiği hesapta ad / telefon CRM'den değişir); null: alan hiç gönderilmez
+  /// (eski sunucu; hesabı olan kişi kilitli).
+  bool? identityEditable,
 }) {
   var residencyId = id * 100;
   Map<String, dynamic> residency(PplApt a, {required bool current}) {
@@ -76,6 +80,7 @@ Map<String, dynamic> pplPersonJson(
     'email': email,
     'has_account': account,
     'account_kind': accountKind ?? (account ? 'registered' : 'none'),
+    'identity_editable': ?identityEditable,
     'is_active': active,
     'relations': <String>[for (final a in apts) a.$3.apiValue],
     'apartments': <Map<String, dynamic>>[
@@ -698,12 +703,12 @@ class PeopleFakeAuth extends AuthService with ModuleRequestFixtures {
     final error = writeError;
     if (error != null) throw error;
     final json = peopleJson[personId]!;
-    // Sunucu kuralı: HESAPLI kişide ad / telefon anahtarı hiç bulunmamalı (null dahil); e-posta yalnız
-    // dahili hesapta serbest.
+    // Sunucu kuralı: kişinin KENDİ hesabında ad / telefon anahtarı hiç bulunmamalı (null dahil); sitenin yönettiği hesapta
+    // (identity_editable) serbest. E-posta yalnız dahili hesapta serbest.
     final internal = json['account_kind'] == 'internal';
+    final identityEditable = json['identity_editable'] == true;
     if (json['has_account'] == true &&
-        (fields.containsKey('full_name') ||
-            fields.containsKey('phone') ||
+        (((fields.containsKey('full_name') || fields.containsKey('phone')) && !identityEditable) ||
             (fields.containsKey('email') && !internal))) {
       throw _coded('PERSON_HAS_ACCOUNT', 409);
     }

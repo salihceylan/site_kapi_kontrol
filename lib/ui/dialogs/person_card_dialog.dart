@@ -36,7 +36,8 @@ import 'package:site_kapi_kontrol/ui/widgets/person_roles_panel.dart';
 /// üyesi salt okur (yalnız "Geçmiş" kalır). Her başarılı işlemden sonra kart güncel veriyle yenilenir ve
 /// [onChanged] çağrılır (liste otomatik yenilenir).
 ///
-/// Hesabı olan kişide ad / telefon / e-posta kişinin kendi profilinden değişir ("Düzenle"de salt okunur).
+/// Kişinin KENDİ hesabında (kendi kaydolan / sahiplenen) ad / telefon / e-posta kişinin kendi profilinden değişir
+/// ("Düzenle"de salt okunur); sitenin yönettiği hesapta ([PersonDetail.identityEditable]) ad ve telefon "Düzenle" ile değişir.
 class PersonCardDialog extends StatefulWidget {
   const PersonCardDialog({
     super.key,
@@ -410,10 +411,15 @@ class _PersonCardDialogState extends State<PersonCardDialog> {
                 const SizedBox(height: AppSpace.sm),
                 CrmInfoLine(label: 'Not', value: detail.note!),
               ],
-              if (detail.hasAccount) ...[
+              if (detail.hasAccount && !(detail.identityEditable && !_canWrite)) ...[
                 const SizedBox(height: AppSpace.sm),
                 Text(
-                  detail.isInternalAccount
+                  detail.identityEditable
+                      // Sitenin yönettiği hesap (yalnız yazma yetkisi olan görür): ad / telefon burada değişir.
+                      ? (detail.isInternalAccount
+                            ? 'Ad, telefon ve iletişim e-postası Düzenle ile değiştirilebilir; ad ve telefon kişinin hesabında da güncellenir.'
+                            : 'Ad ve telefon Düzenle ile değiştirilebilir ve kişinin hesabında da güncellenir. E-posta kişinin giriş adresidir; kişinin kendi profilinden değişir.')
+                      : detail.isInternalAccount
                       ? (_canWrite
                             ? 'Ad ve telefon kişinin kendi profilinden değişir. İletişim e-postası Düzenle ile değiştirilebilir.'
                             : 'Ad ve telefon kişinin kendi profilinden değişir.')

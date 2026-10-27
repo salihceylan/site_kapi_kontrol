@@ -47,6 +47,7 @@ import 'package:site_kapi_kontrol/ui/views/bank_lines_view.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/crm_confirm_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/person_account_dialog.dart';
 import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart' show crmMessageOf;
+import 'package:site_kapi_kontrol/ui/helpers/phone_input.dart';
 
 import 'package:site_kapi_kontrol/services/pdf_credentials_service.dart';
 
@@ -648,7 +649,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
     _profilePhoneController = TextEditingController(
 
-      text: session?.phoneNumber ?? '',
+      text: phoneFieldInitial(session?.phoneNumber),
 
     );
 
@@ -5344,11 +5345,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
       email: _profileEmailController.text.trim().toLowerCase(),
 
-      phoneNumber: _profilePhoneController.text.trim().isEmpty
+      phoneNumber: phoneForSave(
 
-          ? null
+        _profilePhoneController.text,
 
-          : _profilePhoneController.text.trim(),
+        stored: widget.authService.session?.phoneNumber,
+
+      ),
 
       password: _profilePasswordController.text.trim().isEmpty
 

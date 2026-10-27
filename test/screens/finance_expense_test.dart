@@ -739,7 +739,7 @@ void main() {
       await f4Tap(t, 'finance_supplier_submit');
       await settleFor(t);
       final write = auth.f4.writes.firstWhere((w) => w['op'] == 'updateSupplier');
-      expect(write['phone'], '05551112233');
+      expect(write['phone'], '+905551112233', reason: 'telefon +90 biçimiyle gider');
       expect(write.containsKey('name'), isFalse);
     });
 

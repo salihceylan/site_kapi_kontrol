@@ -382,7 +382,7 @@ void main() {
     });
   });
 
-  group('telefon girişi (+90, 3-3-2-2)', () {
+  group('telefon girişi (+90, 3-3-2-2, 10 hane, 5 ile başlar)', () {
     test('formatPhoneField: ön ek hazır, haneler 3-3-2-2 gruplanır', () {
       expect(formatPhoneField(null), '+90 ');
       expect(formatPhoneField(''), '+90 ');
@@ -442,7 +442,8 @@ void main() {
         '+90 532 123 45 67 8',
         '+90 5321234567890',
       ]) {
-        expect(validatePhoneField(input), 'Telefon +90 ile 10 haneli olmalı (örn. 555 123 45 67).', reason: input);
+        expect(validatePhoneField(input), phoneFormatError, reason: input);
+        expect(validatePhoneField(input, mobileOnly: false), phoneFormatErrorAny, reason: input);
       }
       // Ülke kodu bir kez soyulduktan sonra kalan hane aynen korunur (kırpılmaz).
       expect(phoneLocalDigits('+90905321234567'), '905321234567');
@@ -511,22 +512,22 @@ void main() {
       expect(v.text, '+90 532 123 45 67');
     });
 
-    test('yapıştırma: öneksiz 11+ hane kırpılmaz, görünür kalır (doğrulama yakalar); 15 haneden fazlası girişte reddedilir', () {
+    test('yapıştırma: 10 haneden fazla giriş REDDEDİLİR (alan değişmez); sonradan en çok 10 hane girilebilir', () {
+      // "+90 " alanına 11 haneli (öneksiz) numara: yutulmaz, kırpılmaz, alan değişmez.
       final v = paste('+90 ', '53212345678');
-      expect(v.text, '+90 532 123 45 67 8');
-      expect(validatePhoneField(v.text), isNotNull);
+      expect(v.text, '+90 ');
 
       const f = PhoneInputFormatter();
-      final full = f.formatEditUpdate(
+      final rejectedPaste = f.formatEditUpdate(
         TextEditingValue.empty,
         const TextEditingValue(text: '+90 532123456789012'),
       );
-      expect(full.text, '+90 532 123 45 67 89012');
-      final rejected = f.formatEditUpdate(
-        full,
-        TextEditingValue(text: '${full.text}9'),
-      );
-      expect(rejected.text, full.text, reason: '16. hane girişte reddedilir');
+      expect(rejectedPaste.text, '', reason: 'eski değer (boş) korunur');
+
+      final full = f.formatEditUpdate(TextEditingValue.empty, const TextEditingValue(text: '5321234567'));
+      expect(full.text, '+90 532 123 45 67');
+      final rejected = f.formatEditUpdate(full, TextEditingValue(text: '${full.text}9'));
+      expect(rejected.text, full.text, reason: '11. hane girişte reddedilir');
     });
 
     test('silme ve imleç: ortadan düzeltmede imleç sona atlamaz', () {
@@ -546,12 +547,12 @@ void main() {
       );
       expect(v.text, '+90 ');
 
-      // Ortaya hane yaz: imleç yazılan haneden hemen sonra kalır.
+      // Ortaya hane yaz: imleç yazılan haneden hemen sonra kalır (10 haneyi aşmayan düzeltme).
       v = f.formatEditUpdate(
-        const TextEditingValue(text: '+90 532 123 45 67', selection: TextSelection.collapsed(offset: 7)),
-        const TextEditingValue(text: '+90 5329 123 45 67', selection: TextSelection.collapsed(offset: 8)),
+        const TextEditingValue(text: '+90 532 123 45 6', selection: TextSelection.collapsed(offset: 7)),
+        const TextEditingValue(text: '+90 5329 123 45 6', selection: TextSelection.collapsed(offset: 8)),
       );
-      expect(v.text, '+90 532 912 34 56 7');
+      expect(v.text, '+90 532 912 34 56');
       expect(v.text.substring(0, v.selection.baseOffset).replaceAll(RegExp(r'\D'), ''), '905329');
 
       // Ortadan hane sil: imleç silinen yerde kalır.
@@ -561,6 +562,247 @@ void main() {
       );
       expect(v.text, '+90 532 234 56 7');
       expect(v.text.substring(0, v.selection.baseOffset).replaceAll(RegExp(r'\D'), ''), '90532');
+    });
+  });
+
+  group('telefon girişi: kişisel alan (cep, 5 ile başlar) kuralları', () {
+    test('doğrulama: tam 10 hane ve ilk hane 5; sabit hat, eksik ve fazla hane tek hata metniyle reddedilir', () {
+      expect(phoneFormatError, 'Telefonu +90 5XX XXX XX XX biçiminde girin (örn. +90 506 123 45 67).');
+      expect(validatePhoneField('+90 506 123 45 67'), isNull);
+      expect(validatePhoneField('0506 123 45 67'), isNull);
+      expect(validatePhoneField(''), isNull);
+      expect(validatePhoneField('+90 '), isNull);
+      for (final bad in const <String>[
+        '+90 212 123 45 67', // sabit hat (cep değil)
+        '+90 406 123 45 67',
+        '+90 106 123 45 67',
+        '+90 506 123 45', // eksik
+        '+90 506', // eksik
+        '+90 506 123 45 678', // fazla
+      ]) {
+        expect(validatePhoneField(bad), phoneFormatError, reason: bad);
+      }
+    });
+
+    test('phoneFieldInitial: boş -> "+90 "; ayrıştırılabilen gruplanır; ayrıştırılamayan eski kayıt olduğu gibi', () {
+      expect(phoneFieldInitial(null), '+90 ');
+      expect(phoneFieldInitial(''), '+90 ');
+      expect(phoneFieldInitial('   '), '+90 ');
+      expect(phoneFieldInitial('+905061234567'), '+90 506 123 45 67');
+      expect(phoneFieldInitial('05061234567'), '+90 506 123 45 67');
+      expect(phoneFieldInitial('0212 555 1'), '0212 555 1');
+      expect(phoneFieldInitial('+44 20 7946 0958'), '+44 20 7946 0958');
+    });
+
+    test('validatePhoneInput: dokunulmamış eski değer (sabit hat / serbest) hata vermez; değiştirilince kural işler', () {
+      expect(validatePhoneInput('+90 212 123 45 67', stored: '+902121234567'), isNull, reason: 'eski sabit hat dokunulmadı');
+      expect(validatePhoneInput('0212 555 1', stored: '0212 555 1'), isNull, reason: 'ayrıştırılamayan eski kayıt');
+      expect(validatePhoneInput('+90 212 123 45 6', stored: '+902121234567'), phoneFormatError, reason: 'değişti: kural işler');
+      expect(validatePhoneInput('+90 506 123 45 67', stored: '+902121234567'), isNull, reason: 'cebe düzeltildi');
+      expect(validatePhoneInput('+90 506 123', stored: null), phoneFormatError);
+      expect(validatePhoneInput('+90 ', stored: null), isNull);
+      expect(validatePhoneInput('', stored: '+902121234567'), isNull, reason: 'temizlemek serbest');
+    });
+
+    test('phoneForSave: dokunulmamışsa kayıtlı değer AYNEN (yeniden yazılmaz), değiştiyse +90XXXXXXXXXX, boşsa null', () {
+      expect(phoneForSave('+90 212 123 45 67', stored: '02121234567'), '02121234567');
+      expect(phoneForSave('0212 555 1', stored: '0212 555 1'), '0212 555 1');
+      expect(phoneForSave('+90 ', stored: null), isNull);
+      expect(phoneForSave('+90 ', stored: ''), isNull);
+      expect(phoneForSave('+90 506 123 45 67', stored: null), '+905061234567');
+      expect(phoneForSave('+90 506 123 45 67', stored: '+905321234567'), '+905061234567');
+      expect(phoneForSave('', stored: '+905321234567'), isNull, reason: 'silinen alan temizler');
+    });
+
+    test('PhoneInputFormatter (cep): ilk hane 5 olmak zorunda; 5 dışı ilk hane ve 11. hane reddedilir', () {
+      const f = PhoneInputFormatter();
+      for (final lead in const <String>['1', '2', '4', '6', '8', '9']) {
+        final v = f.formatEditUpdate(const TextEditingValue(text: '+90 ', selection: TextSelection.collapsed(offset: 4)), TextEditingValue(text: '+90 $lead'));
+        expect(v.text, '+90 ', reason: '$lead ile başlayamaz');
+      }
+      var v = f.formatEditUpdate(TextEditingValue.empty, const TextEditingValue(text: '5'));
+      expect(v.text, '+90 5');
+      // Yazarken 5 ile başlayan alan 5 dışı hane ile BAŞLAYAMAZ ama sonraki haneler serbest.
+      v = f.formatEditUpdate(v, const TextEditingValue(text: '+90 50'));
+      expect(v.text, '+90 50');
+      for (var i = 0; i < 8; i++) {
+        v = f.formatEditUpdate(v, TextEditingValue(text: '${v.text}1'));
+      }
+      expect(v.text, '+90 501 111 11 11');
+      final rejected = f.formatEditUpdate(v, TextEditingValue(text: '${v.text}1'));
+      expect(rejected.text, '+90 501 111 11 11', reason: '11. hane reddedilir');
+      // Boş alana öneksiz 11 haneli yapıştırma reddedilir.
+      final pasted = f.formatEditUpdate(const TextEditingValue(text: '+90 ', selection: TextSelection.collapsed(offset: 4)), const TextEditingValue(text: '+90 50612345678'));
+      expect(pasted.text, '+90 ');
+    });
+
+    test('PhoneInputFormatter (cep): eski sabit hat değeri silinerek / kısaltılarak düzeltilebilir (kilitlenmez)', () {
+      const f = PhoneInputFormatter();
+      var v = f.formatEditUpdate(
+        const TextEditingValue(text: '+90 212 123 45 67', selection: TextSelection.collapsed(offset: 17)),
+        const TextEditingValue(text: '+90 212 123 45 6', selection: TextSelection.collapsed(offset: 16)),
+      );
+      expect(v.text, '+90 212 123 45 6', reason: 'kısaltan giriş kabul');
+      // İlk haneyi silip 5 yazmak: önce "+90 12..." (eski 2 silindi) sonra 5.
+      v = f.formatEditUpdate(
+        const TextEditingValue(text: '+90 212 123 45 6', selection: TextSelection.collapsed(offset: 5)),
+        const TextEditingValue(text: '+90 12 123 45 6', selection: TextSelection.collapsed(offset: 4)),
+      );
+      expect(v.text, '+90 121 234 56');
+      v = f.formatEditUpdate(
+        TextEditingValue(text: v.text, selection: TextSelection.collapsed(offset: 4)),
+        const TextEditingValue(text: '+90 5121 234 56', selection: TextSelection.collapsed(offset: 5)),
+      );
+      expect(v.text, '+90 512 123 45 6');
+    });
+  });
+
+  group('telefon girişi: iş / iletişim alanı (mobileOnly: false, 2-5 ile başlar)', () {
+    test('doğrulama: tam 10 hane, ilk hane 2, 3, 4 ya da 5; kendi hata metni', () {
+      expect(phoneFormatErrorAny, 'Telefonu +90 XXX XXX XX XX biçiminde girin (örn. +90 212 123 45 67).');
+      for (final ok in const <String>['+90 212 123 45 67', '+90 312 123 45 67', '+90 412 123 45 67', '+90 506 123 45 67', '0212 123 45 67', '']) {
+        expect(validatePhoneField(ok, mobileOnly: false), isNull, reason: ok);
+      }
+      for (final bad in const <String>[
+        '+90 112 123 45 67',
+        '+90 612 123 45 67',
+        '+90 812 123 45 67',
+        '+90 212 123 45',
+        '+90 212 123 45 678',
+      ]) {
+        expect(validatePhoneField(bad, mobileOnly: false), phoneFormatErrorAny, reason: bad);
+      }
+      expect(phoneHint(), phoneFieldHint);
+      expect(phoneHint(mobileOnly: false), phoneFieldHintAny);
+      expect(phoneErrorText(mobileOnly: false), phoneFormatErrorAny);
+    });
+
+    test('validatePhoneInput / phoneForSave: eski değer engellemez, sabit hat kaydedilir', () {
+      expect(validatePhoneInput('+90 212 123 45 67', stored: null, mobileOnly: false), isNull);
+      expect(validatePhoneInput('+90 612 123 45 67', stored: '+906121234567', mobileOnly: false), isNull, reason: 'dokunulmamış eski değer');
+      expect(validatePhoneInput('+90 612 123 45 68', stored: '+906121234567', mobileOnly: false), phoneFormatErrorAny);
+      expect(phoneForSave('+90 212 123 45 67', stored: null), '+902121234567');
+    });
+
+    test('PhoneInputFormatter(mobileOnly: false): 2, 3, 4, 5 ile başlar; 1 / 6+ ile başlayamaz; 10 haneden fazlası reddedilir', () {
+      const f = PhoneInputFormatter(mobileOnly: false);
+      for (final lead in const <String>['2', '3', '4', '5']) {
+        final v = f.formatEditUpdate(TextEditingValue.empty, TextEditingValue(text: lead));
+        expect(v.text, '+90 $lead', reason: lead);
+      }
+      for (final lead in const <String>['0', '1', '6', '7', '8', '9']) {
+        final v = f.formatEditUpdate(const TextEditingValue(text: '+90 ', selection: TextSelection.collapsed(offset: 4)), TextEditingValue(text: '+90 $lead'));
+        expect(v.text, '+90 ', reason: '$lead ile başlayamaz');
+      }
+      final pasted = f.formatEditUpdate(const TextEditingValue(text: '+90 ', selection: TextSelection.collapsed(offset: 4)), const TextEditingValue(text: '+90 2121234567'));
+      expect(pasted.text, '+90 212 123 45 67');
+      final tooLong = f.formatEditUpdate(pasted, TextEditingValue(text: '${pasted.text}8'));
+      expect(tooLong.text, pasted.text);
+    });
+
+    test('phoneGroupedForSave: platform telefonları gruplu kaydedilir, dokunulmamış değer aynen', () {
+      expect(phoneGroupedForSave('+90 212 123 45 67', stored: ''), '+90 212 123 45 67');
+      expect(phoneGroupedForSave('0212 123 45 67', stored: null), '+90 212 123 45 67');
+      expect(phoneGroupedForSave('+90 ', stored: ''), '');
+      expect(phoneGroupedForSave('', stored: '+90 212 000 00 00'), '');
+      expect(phoneGroupedForSave('+90 212 000 00 00', stored: '+90 212 000 00 00'), '+90 212 000 00 00');
+      expect(phoneGroupedForSave('+90 212 555 00 00', stored: '0212/555-00.00'), '0212/555-00.00', reason: 'dokunulmamış eski serbest kayıt aynen');
+    });
+  });
+
+  group('telefon girişi: kısa / özel numara istisnası (faydalı telefon, firma, tedarikçi)', () {
+    test('isShortServiceNumber: yalnız rakam / boşluk / tire, 3-7 hane (112, 185, 444 1 234)', () {
+      for (final short in const <String>['112', '185', '155', '444 1 234', '4441234', '444-1-234', '0850 123']) {
+        expect(isShortServiceNumber(short), isTrue, reason: short);
+      }
+      for (final notShort in const <String>['', '  ', '12', '12345678', '+90 112', '+112', 'abc', '112 abc', '444 1 2345', '0212 123 45 67']) {
+        expect(isShortServiceNumber(notShort), isFalse, reason: notShort);
+      }
+      expect(isShortServiceNumber(null), isFalse);
+    });
+
+    test('validateServicePhoneInput: kısa numara olduğu gibi geçer; diğerleri iş / iletişim kuralına (2-5, 10 hane) uyar', () {
+      expect(validateServicePhoneInput(''), isNull);
+      expect(validateServicePhoneInput('112'), isNull);
+      expect(validateServicePhoneInput('444 1 234'), isNull);
+      expect(validateServicePhoneInput('+90 212 123 45 67'), isNull);
+      expect(validateServicePhoneInput('+90 532 123 45 67'), isNull);
+      expect(validateServicePhoneInput('+90 612 123 45 67'), phoneFormatErrorAny);
+      expect(validateServicePhoneInput('+90 212 123'), phoneFormatErrorAny);
+      expect(validateServicePhoneInput('12'), phoneFormatErrorAny, reason: '2 hane: ne kısa numara ne tam numara');
+      expect(validateServicePhoneInput('12345678'), phoneFormatErrorAny);
+      // Dokunulmamış eski serbest kayıt kaydetmeyi engellemez.
+      expect(validateServicePhoneInput('0212 555 1 dahili 4', stored: '0212 555 1 dahili 4'), isNull);
+    });
+
+    test('servicePhoneInitial / servicePhoneForSave', () {
+      expect(servicePhoneInitial(null), '');
+      expect(servicePhoneInitial(''), '');
+      expect(servicePhoneInitial('112'), '112');
+      expect(servicePhoneInitial('+902121234567'), '+90 212 123 45 67');
+      expect(servicePhoneInitial('0212 555 1 dahili 4'), '0212 555 1 dahili 4');
+      expect(servicePhoneForSave('', stored: null), isNull);
+      expect(servicePhoneForSave('  ', stored: '+902121234567'), isNull);
+      expect(servicePhoneForSave('112'), '112');
+      expect(servicePhoneForSave('444  1   234'), '444 1 234');
+      expect(servicePhoneForSave('+90 212 123 45 67'), '+902121234567');
+      expect(servicePhoneForSave('+90 212 123 45 67', stored: '02121234567'), '02121234567', reason: 'dokunulmamış');
+      expect(servicePhoneForSave('0212 555 1 dahili 4', stored: '0212 555 1 dahili 4'), '0212 555 1 dahili 4');
+    });
+
+    test('ServicePhoneInputFormatter: kısa numara serbest yazılır; uzayınca ya da "+" ile +90 biçimine geçer', () {
+      const f = ServicePhoneInputFormatter();
+      var v = TextEditingValue.empty;
+      for (final text in const <String>['1', '11', '112']) {
+        v = f.formatEditUpdate(v, TextEditingValue(text: text, selection: TextSelection.collapsed(offset: text.length)));
+        expect(v.text, text);
+      }
+      // 7 haneye kadar olduğu gibi.
+      v = TextEditingValue.empty;
+      for (final text in const <String>['2', '21', '212', '2121', '21212', '212123', '2121234']) {
+        v = f.formatEditUpdate(v, TextEditingValue(text: text, selection: TextSelection.collapsed(offset: text.length)));
+        expect(v.text, text);
+      }
+      // 8. hane: kısa numara olamaz -> +90 biçimi.
+      v = f.formatEditUpdate(v, const TextEditingValue(text: '21212345', selection: TextSelection.collapsed(offset: 8)));
+      expect(v.text, '+90 212 123 45');
+      v = f.formatEditUpdate(v, TextEditingValue(text: '${v.text}67'));
+      expect(v.text, '+90 212 123 45 67');
+      final tooLong = f.formatEditUpdate(v, TextEditingValue(text: '${v.text}8'));
+      expect(tooLong.text, v.text);
+      // Başında 0 ile yazılan alan kodu da +90'a geçer (0212 1234 ...).
+      var z = TextEditingValue.empty;
+      for (final text in const <String>['0', '02', '021', '0212', '02121', '021212', '0212123', '02121234']) {
+        z = f.formatEditUpdate(z, TextEditingValue(text: text, selection: TextSelection.collapsed(offset: text.length)));
+      }
+      expect(z.text, '+90 212 123 4');
+    });
+
+    test('ServicePhoneInputFormatter: "+" ile başlayan giriş tam biçime girer; yapıştırma; geçersiz karakter ve uygun olmayan ilk hane reddedilir', () {
+      const f = ServicePhoneInputFormatter();
+      var v = f.formatEditUpdate(TextEditingValue.empty, const TextEditingValue(text: '+', selection: TextSelection.collapsed(offset: 1)));
+      expect(v.text, '+90 ');
+      final pasted = f.formatEditUpdate(TextEditingValue.empty, const TextEditingValue(text: '+905321234567', selection: TextSelection.collapsed(offset: 13)));
+      expect(pasted.text, '+90 532 123 45 67');
+      // Kısa numara alanına harf yazılamaz.
+      final letter = f.formatEditUpdate(const TextEditingValue(text: '112', selection: TextSelection.collapsed(offset: 3)), const TextEditingValue(text: '112a', selection: TextSelection.collapsed(offset: 4)));
+      expect(letter.text, '112');
+      // 8. hane uygun olmayan ilk haneyle ("12345678") +90'a geçemez: alan 7 haneli haliyle kalır.
+      final blocked = f.formatEditUpdate(const TextEditingValue(text: '1234567', selection: TextSelection.collapsed(offset: 7)), const TextEditingValue(text: '12345678', selection: TextSelection.collapsed(offset: 8)));
+      expect(blocked.text, '1234567');
+      // +90 biçimli alan silinerek boşaltılınca kısa numara yeniden yazılabilir.
+      v = f.formatEditUpdate(
+        const TextEditingValue(text: '+90 5', selection: TextSelection.collapsed(offset: 5)),
+        const TextEditingValue(text: '+90 ', selection: TextSelection.collapsed(offset: 4)),
+      );
+      expect(v.text, '', reason: 'silerek boşaltma');
+      v = f.formatEditUpdate(
+        const TextEditingValue(text: '+90 ', selection: TextSelection.collapsed(offset: 4)),
+        const TextEditingValue(text: '', selection: TextSelection.collapsed(offset: 0)),
+      );
+      expect(v.text, '');
+      v = f.formatEditUpdate(v, const TextEditingValue(text: '1', selection: TextSelection.collapsed(offset: 1)));
+      expect(v.text, '1');
     });
   });
 
@@ -722,6 +964,21 @@ void main() {
         'account_kind': 'internal',
       });
       expect(detail.isInternalAccount, isTrue, reason: 'ayrıntı da hesap türünü taşır');
+    });
+
+    test('identity_editable: yalnız true ise ad / telefon düzenlenebilir; alan yok / true dışı -> false (eski sunucuda hesaplı kişi kilitli kalır)', () {
+      PersonDetail parse(Object? value, {bool present = true}) => PersonDetail.fromJson(<String, dynamic>{
+        'id': 5,
+        'has_account': true,
+        'account_kind': 'internal',
+        if (present) 'identity_editable': value,
+      });
+      expect(parse(true).identityEditable, isTrue);
+      expect(parse(false).identityEditable, isFalse);
+      expect(parse(null, present: false).identityEditable, isFalse, reason: 'alan yok (eski sunucu)');
+      expect(parse('true').identityEditable, isFalse, reason: 'bool değil');
+      expect(parse(1).identityEditable, isFalse);
+      expect(const PersonDetail(id: 1).identityEditable, isFalse);
     });
 
     test('credentials_sent: true / false / alan yok (null)', () {

@@ -7,6 +7,7 @@ import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/dialog_parts.dart';
 import 'package:site_kapi_kontrol/ui/helpers/password_policy.dart';
+import 'package:site_kapi_kontrol/ui/helpers/phone_input.dart';
 
 class ManagedUserFormResult {
   const ManagedUserFormResult({
@@ -87,8 +88,9 @@ class _ManagedUserDialogState extends State<ManagedUserDialog> {
       text: widget.user?.fullName ?? '',
     );
     _emailController = TextEditingController(text: widget.user?.email ?? '');
+    // Boşsa "+90 " hazır; ayrıştırılabilen numara gruplanır, eski serbest biçimli kayıt olduğu gibi kalır.
     _phoneController = TextEditingController(
-      text: widget.user?.phoneNumber ?? '',
+      text: phoneFieldInitial(widget.user?.phoneNumber),
     );
     _passwordController = TextEditingController();
     _isActive = widget.user?.isActive ?? (widget.role == UserRole.superUser);
@@ -114,7 +116,7 @@ class _ManagedUserDialogState extends State<ManagedUserDialog> {
       ManagedUserFormResult(
         fullName: _fullNameController.text.trim(),
         email: _emailController.text.trim().toLowerCase(),
-        phoneNumber: _phoneController.text.trim(),
+        phoneNumber: phoneForSave(_phoneController.text, stored: widget.user?.phoneNumber) ?? '',
         password: _passwordController.text.trim(),
         isActive: _isActive,
         role: widget.allowRoleSelection ? _selectedRole : null,
@@ -188,17 +190,15 @@ class _ManagedUserDialogState extends State<ManagedUserDialog> {
             TextFormField(
               controller: _phoneController,
               keyboardType: TextInputType.phone,
+              inputFormatters: const [PhoneInputFormatter()],
               decoration: const InputDecoration(
                 labelText: 'Telefon (opsiyonel)',
+                hintText: phoneFieldHint,
+                helperText: 'Cep telefonu: +90 5XX XXX XX XX',
                 prefixIcon: Icon(Icons.phone_rounded),
               ),
-              validator: (value) {
-                final text = (value ?? '').trim();
-                if (text.isEmpty) return null;
-                return RegExp(r'^\+?[0-9()\-\s]{10,20}$').hasMatch(text)
-                    ? null
-                    : 'Geçerli bir telefon numarası girin.';
-              },
+              // Dokunulmamış eski kayıt (sabit hat / serbest biçim) kaydetmeyi engellemez.
+              validator: (value) => validatePhoneInput(value, stored: widget.user?.phoneNumber),
             ),
             if (widget.allowRoleSelection) ...[
               const SizedBox(height: AppSpace.md),

@@ -13,6 +13,7 @@ import {
   addResidency,
   createPerson,
   evaluateManagedAccount,
+  isSiteManagedAccount,
   parsePersonCreateInput,
   provisionPersonAccount,
   provisionResidentAndLinkPerson,
@@ -570,9 +571,18 @@ describe('updatePerson', () => {
   const lock = /^SELECT sp\.id, sp\.user_code, sp\.full_name, sp\.phone, sp\.email, sp\.note, sp\.is_active, u\.email AS account_email, u\.is_active AS account_is_active, u\.full_name AS account_name, u\.phone_number AS account_phone FROM site_people sp LEFT JOIN users u ON u\.user_code = sp\.user_code WHERE sp\.id = \$1 AND sp\.site_code = \$2 FOR UPDATE OF sp$/;
   const accountRow = (extra = {}) => ({ id: '5', user_code: 30001, full_name: null, phone: null, email: null, note: null, is_active: true, account_email: 'ali@example.com', ...extra });
   const accountlessRow = (extra = {}) => ({ id: '5', user_code: null, full_name: 'Ali Veli', phone: '+905551112233', email: null, note: null, is_active: true, account_email: null, ...extra });
+  // Ad/telefon gonderilen istekte: kisinin hesap kodu kilitsiz okunur, sonra hesap satiri (yonetilebilirlik olcutleriyle) kilitlenir.
+  const linked = /^SELECT user_code FROM site_people WHERE id = \$1 AND site_code = \$2$/;
+  const managedLock = /^SELECT u\.user_code, u\.login_name, u\.role AS role, u\.email AS email, u\.must_change_password AS must_change_password, u\.deleted_at AS deleted_at, [\s\S]* FROM users u WHERE u\.user_code = \$1 AND u\.deleted_at IS NULL FOR UPDATE OF u$/;
+  const apartmentsLock = /^SELECT id FROM apartments WHERE resident_user_code = \$1 ORDER BY id FOR UPDATE$/;
+  // Sitenin yonettigi hesap: dahili @ahbu.local daire hesabi (rol apartment_owner, baska baglanti yok).
+  const managedRow = (extra = {}) => ({ user_code: 30001, login_name: null, role: 'apartment_owner', email: 'a-blok-2@ahbu.local', must_change_password: false, deleted_at: null, pin_issued: true, is_manager: false, foreign_membership: false, foreign_apartment: false, foreign_person: false, ...extra });
+  // Kisinin kendi kaydolup parolasini belirledigi gercek hesap: yonetimin parola verdigi isareti yok.
+  const claimedRow = (extra = {}) => managedRow({ email: 'ali@example.com', pin_issued: false, must_change_password: false, ...extra });
+  const linkedTo = (userCode) => [linked, () => ok([{ user_code: userCode }])];
 
   it('GERCEK (e-postayla kayitli) hesapli kisi: full_name/phone/email gonderilirse 409 PERSON_HAS_ACCOUNT (yazma yok); alan ESIT olsa bile', async () => {
-    handlers.push([lock, () => ok([accountRow()])]);
+    handlers.push([lock, () => ok([accountRow()])], linkedTo(30001), [managedLock, () => ok([claimedRow()])]);
     for (const body of [{ full_name: 'Yeni Ad' }, { phone: '0555 111 22 33' }, { email: 'x@example.com' }, { full_name: 'A B', note: 'n' }]) {
       await assert.rejects(
         () => updatePerson({ siteCode: SITE, personId: 5, body, actor }),
@@ -581,10 +591,11 @@ describe('updatePerson', () => {
       );
     }
     assert.equal(has(/^UPDATE site_people/), false);
+    assert.equal(has(/^UPDATE users/), false, 'kisinin kendi hesabina yazma yok');
     assert.equal(has(/^INSERT INTO audit_log/), false);
   });
 
-  it('H8: DAHILI (@ahbu.local) hesapta iletisim e-postasi DUZENLENEBILIR: apartments.resident_email + CRM kopyasi guncellenir; ad/telefon yine 409', async () => {
+  it('H8: DAHILI (@ahbu.local) hesapta iletisim e-postasi DUZENLENEBILIR: apartments.resident_email + CRM kopyasi guncellenir; sitenin yonetmedigi hesapta ad/telefon 409', async () => {
     handlers.push(
       [lock, () => ok([accountRow({ account_email: 'a-blok-2@ahbu.local', email: 'eski@example.com' })])],
       [/^SELECT resident_email FROM apartments WHERE resident_user_code = \$1 AND site_code = \$2 ORDER BY id LIMIT 1$/, () => ok([{ resident_email: 'guncel@example.com' }])],
@@ -598,6 +609,8 @@ describe('updatePerson', () => {
     assert.deepEqual(find(/^UPDATE site_people SET email/).params, ['yeni@example.com', 5, SITE]);
     // gecmise DEGER yazilmaz (KVKK): yalniz degistigi
     assert.deepEqual(auditDetails('person.updated'), { changes: [{ field: 'email', changed: true }] });
+    // Dahili hesap olsa da baska siteye/yoneticiye bagliysa sitenin yonettigi hesap DEGIL: ad/telefon 409.
+    handlers.push(linkedTo(30001), [managedLock, () => ok([managedRow({ foreign_membership: true })])]);
     await assert.rejects(
       () => updatePerson({ siteCode: SITE, personId: 5, body: { full_name: 'Yeni Ad' }, actor }),
       (error) => error.code === 'PERSON_HAS_ACCOUNT',
@@ -625,6 +638,8 @@ describe('updatePerson', () => {
     const DETACH = /^UPDATE site_people SET user_code = NULL, full_name = \$2, phone = \$3, email = \$4, updated_at = NOW\(\) WHERE id = \$1$/;
     handlers.push(
       [lock, () => ok([dead()])],
+      linkedTo(30001),
+      [managedLock, () => ok([managedRow()])],
       [/^SELECT resident_email FROM apartments WHERE resident_user_code = \$1 AND site_code = \$2 ORDER BY id LIMIT 1$/, () => ok([{ resident_email: 'guncel@example.com' }])],
       [DETACH, () => ok()],
       [/^UPDATE site_people SET full_name = \$1, phone = \$2, updated_at = NOW\(\) WHERE id = \$3 AND site_code = \$4$/, () => ok()],
@@ -642,14 +657,14 @@ describe('updatePerson', () => {
     // pasif GERCEK (e-postayla kayitli) hesap hesapsiz SAYILMAZ: hesabin kendisi sahip, 409
     install();
     handlers.length = 0;
-    handlers.push([lock, () => ok([accountRow({ account_email: 'ali@example.com', account_is_active: false })])]);
+    handlers.push([lock, () => ok([accountRow({ account_email: 'ali@example.com', account_is_active: false })])], linkedTo(30001), [managedLock, () => ok([claimedRow()])]);
     await assert.rejects(() => updatePerson({ siteCode: SITE, personId: 5, body: { full_name: 'Yeni Ad' }, actor }), (e) => e.code === 'PERSON_HAS_ACCOUNT');
     assert.equal(has(/^UPDATE site_people SET user_code = NULL/), false);
 
-    // AKTIF dahili hesap hesapli kalir (ad/telefon 409)
+    // AKTIF dahili hesap hesapli kalir (sitenin yonetmedigi ise ad/telefon 409; yonettigi ise users'a yazilir: S-testleri)
     install();
     handlers.length = 0;
-    handlers.push([lock, () => ok([accountRow({ account_email: 'a-blok-2@ahbu.local', account_is_active: true })])]);
+    handlers.push([lock, () => ok([accountRow({ account_email: 'a-blok-2@ahbu.local', account_is_active: true })])], linkedTo(30001), [managedLock, () => ok([managedRow({ is_manager: true })])]);
     await assert.rejects(() => updatePerson({ siteCode: SITE, personId: 5, body: { phone: '0532 111 22 33' }, actor }), (e) => e.code === 'PERSON_HAS_ACCOUNT');
     assert.equal(has(/^UPDATE site_people SET user_code = NULL/), false);
   });
@@ -661,9 +676,98 @@ describe('updatePerson', () => {
     assert.deepEqual(auditDetails('person.updated'), { changes: [{ field: 'note', changed: true }] });
   });
 
+  it('S1: SITENIN YONETTIGI (dahili) hesapta ad/telefon users\'a yazilir (CRM kaydi degil); kilit sirasi hesap kodu -> hesap satiri -> kisi satiri; audit DEGER saklamaz', async () => {
+    handlers.push(
+      linkedTo(30001),
+      [managedLock, () => ok([managedRow()])],
+      [lock, () => ok([accountRow({ account_email: 'a-blok-2@ahbu.local', account_name: 'Ayse Sakin', account_phone: '+905551112233' })])],
+      [/^UPDATE users SET full_name = \$2, phone_number = \$3, updated_at = NOW\(\) WHERE user_code = \$1 AND deleted_at IS NULL$/, () => ok()],
+      ...detailHandlers({ user_code: 30001, has_account: true, account_kind: 'internal' }),
+    );
+    await updatePerson({ siteCode: SITE, personId: 5, body: { full_name: 'Ayse Yeni Sakin', phone: '0532 111 22 33' }, actor });
+    assert.deepEqual(find(/^UPDATE users/).params, [30001, 'Ayse Yeni Sakin', '+905321112233']);
+    assert.deepEqual(find(managedLock).params, [30001, SITE]);
+    assert.ok(indexOfQuery(linked) < indexOfQuery(managedLock) && indexOfQuery(managedLock) < indexOfQuery(lock), 'users kilidi kisi satirindan ONCE');
+    assert.equal(has(/^UPDATE site_people/), false, 'hesapli kisinin CRM kaydina ad/telefon yazilmaz');
+    assert.equal(has(apartmentsLock), false, 'e-posta yoksa apartments gereksiz kilitlenmez');
+    assert.deepEqual(auditDetails('person.updated').changes, [
+      { field: 'full_name', from: 'Ayse Sakin', to: 'Ayse Yeni Sakin' },
+      { field: 'phone', changed: true },
+    ]);
+    const serialized = JSON.stringify(auditDetails('person.updated'));
+    for (const secret of ['5321112233', '5551112233']) {
+      assert.equal(serialized.includes(secret), false, `${secret} gecmise yazilmamali`);
+    }
+  });
+
+  it('S2: yonetimin verdigi parolayi henuz degistirmemis GERCEK e-postali hesap da sitenin yonettigi hesaptir; e-posta yine 409; telefon temizlenebilir (null)', async () => {
+    handlers.push(
+      linkedTo(30001),
+      [managedLock, () => ok([claimedRow({ pin_issued: true })])],
+      [lock, () => ok([accountRow({ account_name: 'Ali Veli', account_phone: '+905551112233' })])],
+      [/^UPDATE users SET phone_number = \$2, updated_at = NOW\(\)/, () => ok()],
+      ...detailHandlers({ user_code: 30001, has_account: true, account_kind: 'registered' }),
+    );
+    await updatePerson({ siteCode: SITE, personId: 5, body: { phone: '' }, actor });
+    assert.deepEqual(find(/^UPDATE users/).params, [30001, null]);
+    assert.deepEqual(auditDetails('person.updated').changes, [{ field: 'phone', changed: true }]);
+    await assert.rejects(
+      () => updatePerson({ siteCode: SITE, personId: 5, body: { email: 'x@example.com' }, actor }),
+      (error) => error.code === 'PERSON_HAS_ACCOUNT',
+    );
+  });
+
+  it('S3: degisiklik yoksa users yazilmaz ve audit olusmaz (gosterilen ad/telefon ile ayni)', async () => {
+    handlers.push(
+      linkedTo(30001),
+      [managedLock, () => ok([managedRow()])],
+      [lock, () => ok([accountRow({ account_email: 'a-blok-2@ahbu.local', account_name: 'Ayse Sakin', account_phone: '+905551112233' })])],
+      ...detailHandlers({ user_code: 30001, has_account: true, account_kind: 'internal' }),
+    );
+    await updatePerson({ siteCode: SITE, personId: 5, body: { full_name: 'Ayse Sakin', phone: '+90 555 111 22 33' }, actor });
+    assert.equal(has(/^UPDATE users/), false);
+    assert.equal(has(/^INSERT INTO audit_log/), false);
+  });
+
+  it('S4: ad/telefonla AYNI istekte dahili hesabin iletisim e-postasi da yaziliyorsa apartments satirlari users kilidinden ONCE kilitlenir (kilit sirasi)', async () => {
+    handlers.push(
+      linkedTo(30001),
+      [apartmentsLock, () => ok([{ id: '9' }])],
+      [managedLock, () => ok([managedRow()])],
+      [lock, () => ok([accountRow({ account_email: 'a-blok-2@ahbu.local', account_name: 'Ayse Sakin', email: 'eski@example.com' })])],
+      [/^SELECT resident_email FROM apartments WHERE resident_user_code = \$1 AND site_code = \$2 ORDER BY id LIMIT 1$/, () => ok([{ resident_email: 'guncel@example.com' }])],
+      [EMAIL_LOOKUP, () => ok()],
+      [/^UPDATE users SET full_name = \$2, updated_at = NOW\(\)/, () => ok()],
+      [/^UPDATE apartments SET resident_email = \$1 WHERE resident_user_code = \$2 AND site_code = \$3$/, () => ok()],
+      [/^UPDATE site_people SET email = \$1, updated_at = NOW\(\) WHERE id = \$2 AND site_code = \$3$/, () => ok()],
+      ...detailHandlers({ user_code: 30001, has_account: true, account_kind: 'internal' }),
+    );
+    await updatePerson({ siteCode: SITE, personId: 5, body: { full_name: 'Ayse Yeni', email: 'yeni@example.com' }, actor });
+    assert.ok(indexOfQuery(apartmentsLock) < indexOfQuery(managedLock), 'apartments -> users kilit sirasi');
+    assert.deepEqual(find(/^UPDATE users/).params, [30001, 'Ayse Yeni']);
+    assert.deepEqual(auditDetails('person.updated').changes, [
+      { field: 'full_name', from: 'Ayse Sakin', to: 'Ayse Yeni' },
+      { field: 'email', changed: true },
+    ]);
+  });
+
+  it('S5: kilitten sonra kisi baska hesaba bagli cikarsa (yaris) yonetilebilirlik KABUL EDILMEZ -> 409, users yazilmaz', async () => {
+    handlers.push(
+      linkedTo(30001),
+      [managedLock, () => ok([managedRow()])],
+      [lock, () => ok([accountRow({ user_code: 30002, account_email: 'a-blok-3@ahbu.local' })])],
+    );
+    await assert.rejects(
+      () => updatePerson({ siteCode: SITE, personId: 5, body: { full_name: 'Yeni Ad' }, actor }),
+      (error) => error.code === 'PERSON_HAS_ACCOUNT',
+    );
+    assert.equal(has(/^UPDATE users/), false);
+  });
+
   it('H11: HESAPSIZ kisi: ad degeri from/to ile, telefon/e-posta/not yalniz changed:true (eski/yeni DEGER saklanmaz); degisiklik yoksa audit yok', async () => {
     handlers.push(
       [lock, () => ok([accountlessRow()])],
+      linkedTo(null),
       [EMAIL_LOOKUP, () => ok()],
       [/^UPDATE site_people SET full_name = \$1, phone = \$2, email = \$3, note = \$4/, () => ok()],
       ...detailHandlers(),
@@ -681,7 +785,7 @@ describe('updatePerson', () => {
     }
     install();
     handlers.length = 0;
-    handlers.push([lock, () => ok([accountlessRow()])], ...detailHandlers());
+    handlers.push([lock, () => ok([accountlessRow()])], linkedTo(null), ...detailHandlers());
     await updatePerson({ siteCode: SITE, personId: 5, body: { full_name: 'Ali Veli' }, actor });
     assert.equal(has(/^INSERT INTO audit_log/), false);
   });
@@ -1044,6 +1148,50 @@ describe('evaluateManagedAccount: yonetimin sifre / kullanici adi degistirebilec
   it('baska siteye ya da role bagli hesap (yoneticilik, RESIDENT disi rol / baska site uyeligi, baska sitede daire / kisi kaydi) ASLA', () => {
     for (const tie of ['is_manager', 'foreign_membership', 'foreign_apartment', 'foreign_person']) {
       assert.equal(evaluateManagedAccount(account({ [tie]: true }), { actorIsSuper: true }), 'PERSON_ACCOUNT_NOT_MANAGEABLE', tie);
+    }
+  });
+});
+
+describe('isSiteManagedAccount: ad/telefonu CRM\'den degisebilen hesap (SAF karar)', () => {
+  const account = (extra = {}) => ({
+    role: 'apartment_owner',
+    email: 'sakin.5.1000000001@ahbu.local',
+    deleted_at: null,
+    must_change_password: false,
+    pin_issued: false,
+    is_manager: false,
+    foreign_membership: false,
+    foreign_apartment: false,
+    foreign_person: false,
+    ...extra,
+  });
+
+  it('dahili sakin hesabi: parolayi kendisi belirlemis olsa bile (super dahil sifirlama yetkisi aranmaz) true', () => {
+    assert.equal(isSiteManagedAccount(account()), true);
+    assert.equal(isSiteManagedAccount(account({ pin_issued: true })), true);
+  });
+
+  it('gercek e-postali hesap yalniz yonetimin verdigi parola degismediyse true; kisinin kendi parolasi false', () => {
+    assert.equal(isSiteManagedAccount(account({ email: 'ali@example.com', must_change_password: true })), true);
+    assert.equal(isSiteManagedAccount(account({ email: 'ali@example.com', pin_issued: true })), true);
+    assert.equal(isSiteManagedAccount(account({ email: 'ali@example.com' })), false);
+  });
+
+  it('yonetici / bireysel / super rolu, silinmis, olmayan hesap ve baska siteye-role baglilar false', () => {
+    for (const role of ['site_manager', 'individual', 'super_user']) {
+      assert.equal(isSiteManagedAccount(account({ role, pin_issued: true })), false, role);
+    }
+    assert.equal(isSiteManagedAccount(account({ deleted_at: new Date() })), false);
+    assert.equal(isSiteManagedAccount(null), false);
+    assert.equal(isSiteManagedAccount(undefined), false);
+    for (const tie of ['is_manager', 'foreign_membership', 'foreign_apartment', 'foreign_person']) {
+      assert.equal(isSiteManagedAccount(account({ [tie]: true, pin_issued: true })), false, tie);
+    }
+  });
+
+  it('evaluateManagedAccount(super) ile birebir ayni karar', () => {
+    for (const extra of [{}, { pin_issued: true }, { email: 'a@b.co' }, { email: 'a@b.co', must_change_password: true }, { is_manager: true }]) {
+      assert.equal(isSiteManagedAccount(account(extra)), evaluateManagedAccount(account(extra), { actorIsSuper: true }) === null);
     }
   });
 });

@@ -6,6 +6,7 @@ import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/dialog_parts.dart';
+import 'package:site_kapi_kontrol/ui/helpers/phone_input.dart';
 
 class ApartmentResidentFormResult {
   const ApartmentResidentFormResult({
@@ -75,8 +76,9 @@ class _ApartmentResidentDialogState extends State<ApartmentResidentDialog> {
     );
     // PIN sunucuda saklanmaz (liste PIN taşımaz): alan her zaman boş açılır; PIN kayıttan sonra bir kez gösterilir.
     _passwordController = TextEditingController();
+    // Boşsa "+90 " hazır; ayrıştırılabilen numara gruplanır, eski serbest biçimli kayıt olduğu gibi kalır.
     _phoneController = TextEditingController(
-      text: widget.apartment.residentPhoneNumber ?? '',
+      text: phoneFieldInitial(widget.apartment.residentPhoneNumber),
     );
     _isActive = widget.apartment.residentIsActive ?? widget.apartment.isActive;
   }
@@ -105,7 +107,7 @@ class _ApartmentResidentDialogState extends State<ApartmentResidentDialog> {
         password: widget.apartment.residentUserCode != null
             ? ''
             : _passwordController.text.trim(),
-        phoneNumber: _phoneController.text.trim(),
+        phoneNumber: phoneForSave(_phoneController.text, stored: widget.apartment.residentPhoneNumber) ?? '',
         isActive: _isActive,
       ),
     );
@@ -227,17 +229,15 @@ class _ApartmentResidentDialogState extends State<ApartmentResidentDialog> {
             TextFormField(
               controller: _phoneController,
               keyboardType: TextInputType.phone,
+              inputFormatters: const [PhoneInputFormatter()],
               decoration: const InputDecoration(
                 labelText: 'Telefon (opsiyonel)',
+                hintText: phoneFieldHint,
+                helperText: 'Cep telefonu: +90 5XX XXX XX XX',
                 prefixIcon: Icon(Icons.phone_rounded),
               ),
-              validator: (value) {
-                final text = (value ?? '').trim();
-                if (text.isEmpty) return null;
-                return RegExp(r'^\+?[0-9()\-\s]{10,20}$').hasMatch(text)
-                    ? null
-                    : 'Geçerli bir telefon numarası girin.';
-              },
+              // Dokunulmamış eski kayıt (sabit hat / serbest biçim) kaydetmeyi engellemez.
+              validator: (value) => validatePhoneInput(value, stored: widget.apartment.residentPhoneNumber),
             ),
             const SizedBox(height: AppSpace.lg),
             DialogToggleTile(

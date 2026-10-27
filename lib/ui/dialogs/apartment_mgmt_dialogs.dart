@@ -9,6 +9,7 @@ import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
 import 'package:site_kapi_kontrol/ui/design/buttons.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/helpers/dialog_guard.dart';
+import 'package:site_kapi_kontrol/ui/helpers/phone_input.dart';
 import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart' show crmMessageOf;
 
 /// Kiracı ya da aile üyesi ekleme penceresi. İki yol: "Yeni kişi" (ad, telefon, e-posta) ya da "Sistemden ara"
@@ -50,7 +51,7 @@ class AddPersonDialog extends StatefulWidget {
 class _AddPersonDialogState extends State<AddPersonDialog> {
   bool _search = false;
   final _name = TextEditingController();
-  final _phone = TextEditingController();
+  final _phone = TextEditingController(text: phoneFieldSeed);
   final _email = TextEditingController();
   final _query = TextEditingController();
   PersonSearchResult? _result;
@@ -114,11 +115,16 @@ class _AddPersonDialogState extends State<AddPersonDialog> {
       setState(() => _error = 'Ad soyad en az 2 karakter olmalı.');
       return;
     }
+    final phoneError = validatePhoneField(_phone.text);
+    if (phoneError != null) {
+      setState(() => _error = phoneError);
+      return;
+    }
     popIfCurrent(
       context,
       AddPersonInput(
         fullName: name,
-        phone: _phone.text.trim(),
+        phone: phoneToApi(_phone.text) ?? '',
         email: _email.text.trim(),
         isMinor: _minor,
       ),
@@ -174,7 +180,8 @@ class _AddPersonDialogState extends State<AddPersonDialog> {
             TextField(
               controller: _phone,
               keyboardType: TextInputType.phone,
-              decoration: const InputDecoration(labelText: 'Telefon (isteğe bağlı)', hintText: '+90 5__ ___ __ __'),
+              inputFormatters: const [PhoneInputFormatter()],
+              decoration: const InputDecoration(labelText: 'Telefon (isteğe bağlı)', hintText: phoneFieldHint, helperText: 'Cep telefonu: +90 5XX XXX XX XX'),
             ),
             const SizedBox(height: AppSpace.sm),
             TextField(
