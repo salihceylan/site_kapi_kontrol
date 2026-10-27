@@ -9,6 +9,7 @@ import 'package:site_kapi_kontrol/services/bulk_file_picker.dart';
 import 'package:site_kapi_kontrol/services/meter_api.dart';
 import 'package:site_kapi_kontrol/services/meter_file_reader.dart';
 import 'package:site_kapi_kontrol/ui/views/meter_field_view.dart';
+import 'package:site_kapi_kontrol/ui/design/action_bar.dart';
 import 'package:site_kapi_kontrol/ui/design/app_snack.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 
@@ -200,9 +201,9 @@ class _MetersTabState extends State<_MetersTab> {
         ]),
         const SizedBox(height: AppSpace.md),
         if (widget.site.canWrite)
-          Wrap(spacing: AppSpace.sm, runSpacing: AppSpace.sm, children: <Widget>[
-            FilledButton.icon(onPressed: _add, icon: const Icon(Icons.add_rounded), label: const Text('Sayaç ekle')),
-            OutlinedButton.icon(onPressed: _openField, icon: const Icon(Icons.photo_camera_rounded), label: const Text('Fotoğrafla oku')),
+          AppActionBar(actions: <AppBarAction>[
+            AppBarAction(label: 'Sayaç ekle', icon: Icons.add_rounded, primary: true, onPressed: _add),
+            AppBarAction(label: 'Fotoğrafla oku', icon: Icons.photo_camera_rounded, onPressed: _openField),
           ]),
         const SizedBox(height: AppSpace.md),
         if (shown.isEmpty) const Text('Henüz sayaç kaydı yok.'),

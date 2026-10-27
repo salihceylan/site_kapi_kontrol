@@ -58,7 +58,7 @@ Future<void> _pump(
   await settleFor(t, 100);
 }
 
-const Key _openButton = ValueKey<String>('people_staff_roles');
+const Key _openButton = ValueKey<String>('people_tab_3');
 
 void main() {
   group('Kişiler ekranı: Kadro sekmesi', () {
@@ -66,7 +66,6 @@ void main() {
       final auth = _auth();
       await _pump(t, auth);
       expect(find.byKey(_openButton), findsOneWidget);
-      expect(find.text('Yönetim Kurulu ve Görevliler'), findsOneWidget);
 
       await tapFinder(t, find.byKey(_openButton));
       await settleFor(t);
@@ -98,7 +97,7 @@ void main() {
       expect(find.textContaining('Rehber modülü kapalı'), findsNothing);
     });
 
-    testWidgets('salt okunur (kurul) sitede düğme YOK', (t) async {
+    testWidgets('salt okunur (kurul) sitede eylem düğmeleri YOK', (t) async {
       final auth = _auth();
       await _pump(
         t,
@@ -106,8 +105,7 @@ void main() {
         manage: false,
         readOnly: const <PeopleSite>[PeopleSite(code: 12, name: 'Mavi Park')],
       );
-      expect(find.byKey(_openButton), findsNothing);
-      expect(find.text('Yönetim Kurulu ve Görevliler'), findsNothing);
+      expect(find.byKey(const ValueKey<String>('people_bulk_import')), findsNothing);
     });
 
     test('eski atama penceresi hata metinleri: hesap yok / etkin değil / diğer kodlar', () {

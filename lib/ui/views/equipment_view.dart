@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/services/equipment_api.dart';
+import 'package:site_kapi_kontrol/ui/design/action_bar.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_snack.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
@@ -548,16 +549,18 @@ class _EquipmentDetailSheetState extends State<EquipmentDetailSheet> {
         if (item.note != null) Text(item.note!),
         const SizedBox(height: AppSpace.md),
         if (canWrite)
-          Wrap(
-            spacing: AppSpace.sm,
-            children: <Widget>[
-              OutlinedButton(onPressed: _addPlan, child: const Text('Plan ekle')),
-              if (kind?.legalMonths != null && !hasLegal) OutlinedButton(onPressed: () => _addPlan(legalKind: kind), child: const Text('Yasal kontrol planı')),
-              OutlinedButton(onPressed: _addLog, child: const Text('Bakım kaydı')),
-              if (widget.site.financeOn) OutlinedButton(onPressed: _linkExpense, child: const Text('Gider bağla')),
-              OutlinedButton(
+          AppActionBar(
+            actions: <AppBarAction>[
+              AppBarAction(label: 'Plan ekle', icon: Icons.event_repeat_rounded, primary: true, onPressed: _addPlan),
+              if (kind?.legalMonths != null && !hasLegal)
+                AppBarAction(label: 'Yasal kontrol planı', icon: Icons.gavel_rounded, tone: AppTone.warning, onPressed: () => _addPlan(legalKind: kind)),
+              AppBarAction(label: 'Bakım kaydı', icon: Icons.build_rounded, onPressed: _addLog),
+              if (widget.site.financeOn) AppBarAction(label: 'Gider bağla', icon: Icons.receipt_long_rounded, tone: AppTone.success, onPressed: _linkExpense),
+              AppBarAction(
+                label: item.isActive ? 'Pasife al' : 'Etkinleştir',
+                icon: item.isActive ? Icons.pause_circle_outline_rounded : Icons.play_circle_outline_rounded,
+                tone: AppTone.neutral,
                 onPressed: () => _act(() => widget.service.update(widget.site.code, item.id, <String, Object?>{'is_active': !item.isActive}), item.isActive ? 'Pasife alındı.' : 'Etkinleştirildi.'),
-                child: Text(item.isActive ? 'Pasife al' : 'Etkinleştir'),
               ),
             ],
           ),
