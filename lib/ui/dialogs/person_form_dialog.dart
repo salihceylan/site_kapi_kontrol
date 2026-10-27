@@ -143,6 +143,13 @@ class _PersonFormDialogState extends State<PersonFormDialog> {
       if (v.plate.isNotEmpty) v.plate: v.id,
   };
 
+  /// Açılışta kişide kayıtlı plakalar (normalize). Türk plakası kuralına UYMAYAN eski kayıtlar da burada: alan bunlara dokunmaz,
+  /// değişmemişlerse kaydı engellemez ve alandan silinmedikçe pasife alınmaz.
+  late final Set<String> _storedPlates = <String>{
+    for (final v in _activeVehicles)
+      if (v.plate.isNotEmpty) v.plate,
+  };
+
   // PERSON_EXISTS yanıtındaki mevcut kişinin numarası (0 / eksik: "Kişiyi Aç" gösterilmez).
   int _existingPersonId = 0;
 
@@ -467,9 +474,12 @@ class _PersonFormDialogState extends State<PersonFormDialog> {
   Future<bool> _syncPlates(int personId, List<String> failures) async {
     final auth = widget.scope.authService;
     final siteCode = widget.scope.siteCode;
+    final parsed = parsePlateList(_plates.text, preserved: _storedPlates);
+    // Ayrıştırılamayan alan (doğrulama zaten engeller; yalnız eski kayıtta 5'ten çok plaka varken DEĞİŞMEMİŞ alan geçer): boş sayılıp
+    // kayıtlı plakaların hepsi pasife alınmasın.
+    if (!parsed.isValid) return true;
     final desired = <String, PlateEntry>{
-      for (final entry in parsePlateList(_plates.text).plates)
-        entry.plate: entry,
+      for (final entry in parsed.plates) entry.plate: entry,
     };
     final addFailed = <String>[];
     final removeFailed = <String>[];
@@ -573,27 +583,13 @@ class _PersonFormDialogState extends State<PersonFormDialog> {
     return fields;
   }
 
-  /// Plaka alanı doğrulaması: en çok 5 plaka, her biri 5-10 harf / rakam (toplu yüklemeyle aynı kural).
-  String? _validatePlates(String? value) {
-    final parsed = parsePlateList(value);
-    if (parsed.formulaLike) {
-      return 'Plaka biçimi geçersiz: =, @, + ya da - ile başlayamaz.';
-    }
-    if (parsed.tooMany) {
-      // Kayıtlı plaka sayısı zaten sınırı aşıyorsa (eski veri) DEĞİŞMEMİŞ alan engellenmez.
-      final unchanged =
-          _editing &&
-          _plates.text.trim() ==
-              _activeVehicles.map((v) => v.displayPlate).join(', ');
-      return unchanged
-          ? null
-          : 'En çok $maxPlatesPerField plaka girilebilir; virgülle ayırın.';
-    }
-    if (parsed.invalid.isNotEmpty) {
-      return 'Plaka biçimi geçersiz: ${parsed.invalid.join(', ')} (5-10 harf / rakam, örn. 34 ABC 123).';
-    }
-    return null;
-  }
+  /// Plaka alanı doğrulaması: en çok 5 plaka, her biri Türk plakası (il kodu 01-81 + 1-3 harf + 2-4 rakam). Kayıtlı eski plakalar ve
+  /// değişmemiş alan engellenmez ([validatePlateList]).
+  String? _validatePlates(String? value) => validatePlateList(
+    value,
+    preserved: _storedPlates,
+    initial: _editing ? _activeVehicles.map((v) => v.displayPlate).join(', ') : null,
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -821,17 +817,16 @@ class _PersonFormDialogState extends State<PersonFormDialog> {
                 key: const ValueKey<String>('person_plates'),
                 controller: _plates,
                 enabled: !_submitting,
-                inputFormatters: const [UpperCaseFormatter()],
+                inputFormatters: [PlateListInputFormatter(preserved: _storedPlates)],
+                textCapitalization: TextCapitalization.characters,
                 autocorrect: false,
                 enableSuggestions: false,
-                maxLength: 120,
                 decoration: const InputDecoration(
                   labelText: 'Plaka (isteğe bağlı)',
                   hintText: '34 ABC 123, 06 XY 789',
                   helperText: 'Birden çok plaka virgülle ayrılır (en çok 5).',
                   helperMaxLines: 2,
                   prefixIcon: Icon(Icons.directions_car_rounded),
-                  counterText: '',
                 ),
                 validator: _validatePlates,
               ),

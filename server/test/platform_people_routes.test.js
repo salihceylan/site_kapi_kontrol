@@ -631,7 +631,16 @@ describe('yazma uclari: girdi dogrulama (400, DB yazmasi yok)', () => {
     const res = await call('POST', `${base()}/vehicles`, { body: { person_id: 5, plate: '34' } });
     assert.equal(res.status, 400);
     assert.equal(res.body.code, 'PLATE_INVALID');
-    assert.equal(res.body.error, 'Plaka biçimi geçersiz.');
+    assert.equal(res.body.error, 'Plaka biçimi geçersiz. Örnek: 34 ABC 123 (il kodu 01-81).');
+  });
+
+  it('POST vehicles: yalniz Turk plakasi (il 01-81 + 1-3 harf + 2-4 rakam); eski gevsek biclimler (5-10 harf / rakam) artik 400 PLATE_INVALID', async () => {
+    // 5-10 harf / rakam kuralini geciyordu, Turk plakasi degil: sorgu calismadan reddedilmeli
+    for (const plate of ['ABC12345', '99 ABC 123', '00 ABC 123', '34 ABCD 123', '34 ABC 12345', '34 ABC 1', '3412345678', '34ABC123456']) {
+      const res = await call('POST', `${base()}/vehicles`, { body: { person_id: 5, plate } });
+      assert.equal(res.status, 400, plate);
+      assert.equal(res.body.code, 'PLATE_INVALID', plate);
+    }
   });
 
   it('PATCH people: is_active boolean olmali; yok kisi 404 PERSON_NOT_FOUND', async () => {

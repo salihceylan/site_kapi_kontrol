@@ -11,7 +11,7 @@ Katalog: `plate_recognition` "Plaka Tanıma", `available`, çekirdek değil, var
 Kamera, 6B'nin belirteçli ucuna gönderir: `POST /camera-events/plate` (`Authorization: Bearer <kamera_id>.<gizli>`), gövde `{ plate, seen_at?, confidence? }`. 6B olayı `plate_events`'e yazar (modül `plate_cameras` AÇIK olmalı; kameralar "Kamera ve Plaka" modülünden kaydedilir). Ardından `plate_recognition` modülü o sitede AÇIKSA karar hesaplanıp `plate_decisions`'a yazılır; karar hatası olayı ve kameranın aldığı yanıtı ETKİLEMEZ. `confidence` 0-1 (ya da yüzde); kamera göndermezse karar yine verilir ama otomatik açma planı `none` kalır.
 
 ## Karar sırası
-1. Plaka biçimi: boşluk / tire / nokta atılır, büyük harf, Türkçe harfler ASCII'ye iner; `34ABC123` biçimi (il kodu 01-81 + 1-3 harf + 2-4 rakam). Geçersiz -> UNKNOWN `invalid_plate`.
+1. Plaka biçimi: boşluk / tire / nokta atılır, büyük harf, Türkçe harfler ASCII'ye iner; `34ABC123` biçimi (il kodu 01-81 + 1-3 harf + 2-4 rakam). Kural tek yerdedir: `server/src/modules/plate_format.js` (`plate_recognition_common` yeniden dışa verir); uygulamada `lib/ui/helpers/plate_input.dart` aynı kuralı uygular ve yazarken "34 ABC 123" biçimler. Geçersiz -> UNKNOWN `invalid_plate`.
 2. Okuma güveni eşiğin altında (varsayılan 0,85; kapıya eşli kameranın ayarındaki eşik) -> UNKNOWN `low_confidence`.
 3. Kara liste -> DENIED `blacklist` (araç listesi ve misafir izninden ÖNCE).
 4. Sitenin AKTİF araç listesinde (araç aktif; bağlı kişi ve daire aktif) -> ALLOWED `vehicle`.

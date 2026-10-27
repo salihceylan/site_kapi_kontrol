@@ -5,6 +5,7 @@ import 'package:site_kapi_kontrol/models/apartment_management.dart';
 import 'package:site_kapi_kontrol/models/apartment_vehicles.dart';
 import 'package:site_kapi_kontrol/models/vehicle_record.dart';
 import 'package:site_kapi_kontrol/services/apartment_management_api.dart';
+import 'package:site_kapi_kontrol/ui/helpers/plate_input.dart' show kPlateInvalidMessage;
 import 'package:site_kapi_kontrol/ui/views/my_apartment_view.dart';
 
 import 'dialog_layout_harness.dart' show settleFor;
@@ -288,11 +289,17 @@ void main() {
 
     await t.tap(find.text('Araç ekle'));
     await settleFor(t);
-    await t.enterText(find.byKey(const ValueKey<String>('apt_vehicle_plate')), '99 zz 1');
+    // Eksik plaka (1 rakam): yazarken kabul edilir, gönderirken sunucu iletisiyle aynı metinle reddedilir.
+    await t.enterText(find.byKey(const ValueKey<String>('apt_vehicle_plate')), '34 a 1');
     await t.tap(find.text('Ekle'));
     await settleFor(t);
-    expect(find.text('Geçerli bir plaka girin. Örnek: 34 ABC 123'), findsOneWidget);
+    expect(find.text(kPlateInvalidMessage), findsOneWidget);
     expect(svc.vehicleCalls, isEmpty);
+
+    // Plakaya götürmeyen giriş (il kodu 99) hiç yazılamaz: alan boş kalır.
+    await t.enterText(find.byKey(const ValueKey<String>('apt_vehicle_plate')), '99 zz 1');
+    final plateEditable = find.descendant(of: find.byKey(const ValueKey<String>('apt_vehicle_plate')), matching: find.byType(EditableText));
+    expect(t.widget<EditableText>(plateEditable).controller.text, '34 A 1', reason: 'reddedilen giriş önceki değeri bozmaz');
 
     await t.enterText(find.byKey(const ValueKey<String>('apt_vehicle_plate')), '34 abc 124');
     await t.tap(find.text('Ekle'));

@@ -8,10 +8,10 @@ import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/large_dialog_parts.dart';
-import 'package:site_kapi_kontrol/ui/dialogs/vehicle_dialog.dart' show UpperCaseFormatter;
 import 'package:site_kapi_kontrol/ui/helpers/dialog_guard.dart';
 import 'package:site_kapi_kontrol/ui/helpers/form_validation.dart';
 import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart' show crmMessageOf;
+import 'package:site_kapi_kontrol/ui/helpers/plate_input.dart';
 import 'package:site_kapi_kontrol/ui/widgets/crm_parts.dart';
 
 class ApartmentVehicleDialog extends StatefulWidget {
@@ -159,18 +159,17 @@ class _ApartmentVehicleDialogState extends State<ApartmentVehicleDialog> {
                   key: const ValueKey<String>('apt_vehicle_plate'),
                   controller: _plate,
                   enabled: !_submitting,
-                  inputFormatters: const [UpperCaseFormatter()],
+                  inputFormatters: const [PlateInputFormatter()],
+                  textCapitalization: TextCapitalization.characters,
                   autocorrect: false,
                   enableSuggestions: false,
-                  maxLength: 20,
                   decoration: const InputDecoration(
                     labelText: 'Plaka',
                     hintText: '34 ABC 123',
                     helperText: 'İl kodu 01-81, 1-3 harf, 2-4 rakam',
                     prefixIcon: Icon(Icons.pin_rounded),
-                    counterText: '',
                   ),
-                  validator: (value) => normalizeTrPlateInput(value) == null ? 'Geçerli bir plaka girin. Örnek: 34 ABC 123' : null,
+                  validator: validatePlate,
                 ),
               const SizedBox(height: AppSpace.md),
               if (widget.owners.length > 1) ...[

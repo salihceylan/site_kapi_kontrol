@@ -482,7 +482,7 @@ void main() {
 
       await _enter(t, 'vehicle_plate', '12');
       await _tapButton(t, 'Ekle');
-      expect(find.text('Plaka biçimi geçersiz.'), findsOneWidget);
+      expect(find.text(kPlateInvalidMessage), findsOneWidget);
       expect(auth.createVehicleCalls, isEmpty);
 
       await _enter(t, 'vehicle_plate', '34 ABC 123');
