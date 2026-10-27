@@ -10,6 +10,7 @@ import {
   readText,
 } from './bulk_import_parsers.js';
 import { LEGACY_IGNORED_KEYS } from './bulk_import_spec.js';
+import { financeRecordsNotice } from './bulk_import_messages.js';
 import { addIssue, buildLocator, cellHasValue, completeRow, finalizePlan, newRowResult } from './bulk_import_plan_common.js';
 
 const KIND = 'apartments';
@@ -24,6 +25,23 @@ const COLUMN_MAP = Object.freeze([
 ]);
 const FINANCE_SENSITIVE = new Set(['land_share_numerator', 'land_share_denominator', 'category', 'responsible_party']);
 const FIELD_OF_COLUMN = Object.fromEntries(COLUMN_MAP.map(([key, column]) => [column, key]));
+
+/**
+ * Mali kaydı (ledger_entries) olan dairelerde mali alan (borç sorumlusu / tip / arsa payı) değişiklikleri: satır başına uyarı DEĞİL, önizlemede TEK özet
+ * (`checks.finance_records`). Engellemez, `preview_hash`'e girmez (yazılan veriyi etkilemez). Yalnız hatasız satırların `au` işlemleri sayılır
+ * (hatalı satırın işlemi zaten boşaltılmıştır); hem daireler hem «Hepsi bir arada» planlayıcısı aynı işlevi kullanır.
+ * @returns {{ apartments: number, message: string } | null}
+ */
+export function financeRecordsCheck({ ops, snapshot }) {
+  const withFinance = new Set(snapshot.apartments.filter((apartment) => apartment.hasFinance).map((apartment) => apartment.id));
+  const touched = new Set();
+  for (const op of ops) {
+    if (op.t === 'au' && withFinance.has(op.aptId) && Object.keys(op.set).some((column) => FINANCE_SENSITIVE.has(column))) {
+      touched.add(op.aptId);
+    }
+  }
+  return touched.size === 0 ? null : { apartments: touched.size, message: financeRecordsNotice(touched.size) };
+}
 
 function currentOf(apartment) {
   return {
@@ -152,9 +170,6 @@ export function planApartments({ rows, snapshot, allowOverwrite }) {
         if (Object.keys(provided).length === 0) {
           addIssue(result, KIND, 'NO_VALUES', null);
         }
-        if (apartment.hasFinance && Object.keys(set).some((column) => FINANCE_SENSITIVE.has(column))) {
-          addIssue(result, KIND, 'FINANCE_RECORDS', null);
-        }
 
         if (Object.keys(set).length > 0) {
           result.ops.push({ t: 'au', aptId: apartment.id, set, changes });
@@ -196,5 +211,6 @@ export function planApartments({ rows, snapshot, allowOverwrite }) {
     }
   }
 
-  return finalizePlan({ kind: KIND, results, counts, checks: { land_share: landShare } });
+  const financeRecords = financeRecordsCheck({ ops: results.flatMap((result) => result.ops), snapshot });
+  return finalizePlan({ kind: KIND, results, counts, checks: { land_share: landShare, finance_records: financeRecords } });
 }

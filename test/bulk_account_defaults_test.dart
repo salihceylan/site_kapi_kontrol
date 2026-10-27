@@ -1,6 +1,6 @@
-// Toplu yükleme: başlangıç şifresi / kullanıcı adı zenginleştirmesi yalnız bu sütunları tanımlayan türlerde,
-// sunucu ile aynı kullanıcı adı kuralı, «hepsi bir arada» yalnız daire satırının korunması, atlanan satır sayısı
-// ve sonuçta nihai kullanıcı adları (Platform Faz 2b).
+// Toplu yükleme: başlangıç şifresi zenginleştirmesi, KULLANICI ADI ataması (şablonda sütun YOK; sistem verir, yönetici tabloda değiştirir),
+// «hepsi bir arada» yalnız daire satırının korunması, atlanan satır sayısı ve sonuçta nihai kullanıcı adları (Platform Faz 2b).
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -9,6 +9,7 @@ import 'package:site_kapi_kontrol/models/bulk_import.dart';
 import 'package:site_kapi_kontrol/services/bulk_api.dart';
 import 'package:site_kapi_kontrol/services/bulk_csv_codec.dart';
 import 'package:site_kapi_kontrol/services/bulk_header_mapper.dart';
+import 'package:site_kapi_kontrol/services/bulk_login_name.dart';
 import 'package:site_kapi_kontrol/ui/views/bulk_import_controller.dart';
 
 import 'bulk_fakes.dart';
@@ -19,7 +20,7 @@ ImportSpec _serverSpec() =>
     ImportSpec.fromJson(jsonDecode(File('test/fixtures/bulk/server_spec.json').readAsStringSync()) as Map<String, dynamic>);
 
 class _Harness {
-  _Harness(String fileName, String csv, {List<ImportKind> kinds = const <ImportKind>[]}) {
+  _Harness(String fileName, String csv, {List<ImportKind> kinds = const <ImportKind>[], Duration proposalDelay = Duration.zero}) {
     api.spec = _serverSpec();
     controller = BulkImportController(
       service: BulkService(authService: auth, api: api),
@@ -29,6 +30,7 @@ class _Harness {
       picker: fakePicker(fileName, utf8Bytes(csv)),
       purgePickerCache: () async {},
       allowedKinds: kinds,
+      proposalDelay: proposalDelay,
     );
   }
 
@@ -37,11 +39,17 @@ class _Harness {
   final FakeDelivery delivery = FakeDelivery();
   late final BulkImportController controller;
 
-  Future<List<ImportRow>> toPreview(ImportKind kind) async {
+  /// Dosyayı okutup eşleme adımına getirir (önizleme istenmez).
+  Future<void> toMapping(ImportKind kind) async {
     await controller.loadSpec();
     controller.selectKind(kind);
     controller.goToFileStep();
     await controller.pickAndParse();
+    await controller.proposalsSettled;
+  }
+
+  Future<List<ImportRow>> toPreview(ImportKind kind) async {
+    await toMapping(kind);
     await controller.confirmMapping();
     return api.previewCalls.last.rows;
   }
@@ -49,9 +57,15 @@ class _Harness {
 
 Set<String> _keys(Iterable<ImportRow> rows) => <String>{for (final row in rows) ...row.cells.keys};
 
+const String _peopleCsv =
+    'Ad Soyad;Blok;Daire No;İlişki\r\n'
+    'Ali Veli;A;1;Malik\r\n'
+    'Ali Veli;A;2;Kiracı\r\n'
+    'Dairesiz Kişi;;;\r\n';
+
 void main() {
   group('enrichImportRowsWithDefaults', () {
-    const person = <String>{'ad_soyad', 'sifre', 'kullanici_adi'};
+    const person = <String>{'ad_soyad', 'sifre'};
     List<ImportRow> rows(List<Map<String, Object?>> cells) => <ImportRow>[
       for (var i = 0; i < cells.length; i++) ImportRow(n: i + 2, cells: cells[i]),
     ];
@@ -69,43 +83,29 @@ void main() {
         final out = enrichImportRowsWithDefaults(input, columnKeys: keys);
         expect(_keys(out), isNot(contains('sifre')));
         expect(_keys(out), isNot(contains('kullanici_adi')));
+        expect(_keys(out), isNot(contains('giris_adi')));
         expect(out.map((r) => r.cells), input.map((r) => r.cells));
       }
     });
 
-    test('kişi türü: boş şifre 1234; ad soyaddan kullanıcı adı; aynı ad _2, _3; ad soyadsız satıra dokunulmaz', () {
+    test('kişi türü: yalnız boş şifre 1234 olur; İSTEMCİ KULLANICI ADI ÜRETMEZ (sistem verir); ad soyadsız satıra dokunulmaz', () {
       final out = enrichImportRowsWithDefaults(
         rows(<Map<String, Object?>>[
           <String, Object?>{'ad_soyad': 'Çağrı Öztürk'},
           <String, Object?>{'ad_soyad': 'Çağrı Öztürk', 'sifre': 'özel'},
-          <String, Object?>{'ad_soyad': 'ÇAĞRI ÖZTÜRK'},
           <String, Object?>{'blok': 'A', 'daire_no': '1'}, // yalnız daire bilgisi: kişi değil
         ]),
         columnKeys: person,
       );
-      expect(out[0].cells['kullanici_adi'], 'cagri.ozturk');
-      expect(out[1].cells['kullanici_adi'], 'cagri.ozturk_2');
-      expect(out[2].cells['kullanici_adi'], 'cagri.ozturk_3');
-      expect(out.map((r) => r.cells['sifre']).take(3), <Object?>['1234', 'özel', '1234']);
-      expect(out[3].cells.containsKey('sifre'), isFalse);
-      expect(out[3].cells.containsKey('kullanici_adi'), isFalse);
+      expect(out.map((r) => r.cells['sifre']).take(2), <Object?>['1234', 'özel']);
+      expect(out[2].cells.containsKey('sifre'), isFalse);
+      expect(_keys(out), isNot(contains('kullanici_adi')));
+      expect(_keys(out), isNot(contains('giris_adi')));
     });
+  });
 
-    test('dosyada yazılmış ad sunucu kuralıyla sadeleşir; üretilen ad yazılmış başka bir adı EZMEZ; tekrarlayan yazılmış ad _2 alır', () {
-      final out = enrichImportRowsWithDefaults(
-        rows(<Map<String, Object?>>[
-          <String, Object?>{'ad_soyad': 'Ali Veli'}, // üretilecek 'ali.veli' ama 3. satırda yazılmış
-          <String, Object?>{'ad_soyad': 'X', 'kullanici_adi': 'Ali.Veli'},
-          <String, Object?>{'ad_soyad': 'Y', 'kullanici_adi': 'ali veli'},
-        ]),
-        columnKeys: person,
-      );
-      expect(out[1].cells['kullanici_adi'], 'ali.veli', reason: 'yazılan ad korunur (sadeleşmiş)');
-      expect(out[0].cells['kullanici_adi'], 'ali.veli_2', reason: 'üretilen ad yazılmış adı ezmez');
-      expect(out[2].cells['kullanici_adi'], 'ali.veli_3', reason: 'aynı adı tekrar yazan sonraki satır eki alır');
-    });
-
-    test('generateUsernameFromFullName sunucudaki slugifyLoginName ile AYNI vektörler', () {
+  group('kullanıcı adı kuralları (sunucu bulk_import_login_names.js ile AYNI vektörler)', () {
+    test('generateUsernameFromFullName == slugifyLoginName; denetleyici dosyasından da içe aktarılabilir (kişi hesabı penceresi)', () {
       expect(generateUsernameFromFullName('Çağrı  Öztürk-Şahin'), 'cagri.ozturk.sahin');
       expect(generateUsernameFromFullName('  İsmail Iğdır '), 'ismail.igdir');
       expect(generateUsernameFromFullName('...'), 'kullanici');
@@ -118,10 +118,24 @@ void main() {
       expect(generateUsernameFromFullName('Ali Veli', existing: taken), 'ali.veli_2');
       expect(taken, containsAll(<String>['ali.veli', 'ali.veli_2']));
     });
+
+    test('normalizeTypedLoginName: kırp, Türkçe sadeleşir, küçük harf, boşluk nokta; _ ve - KORUNUR; 3-40 karakter [a-z0-9._-]', () {
+      expect(normalizeTypedLoginName('  Ahmet Yılmaz_2 '), (value: 'ahmet.yilmaz_2', error: null));
+      expect(normalizeTypedLoginName('ali-veli'), (value: 'ali-veli', error: null));
+      expect(normalizeTypedLoginName('ab').error, LoginNameFormatError.tooShort);
+      expect(normalizeTypedLoginName('a' * 41).error, LoginNameFormatError.tooLong);
+      expect(normalizeTypedLoginName('a' * 40).error, isNull);
+      expect(normalizeTypedLoginName('ali@veli').error, LoginNameFormatError.chars);
+      expect(normalizeTypedLoginName('ali/veli').error, LoginNameFormatError.chars);
+      expect(normalizeTypedLoginName('   ').error, LoginNameFormatError.empty);
+      for (final error in LoginNameFormatError.values) {
+        expect(loginNameFormatMessage(error), isNotEmpty);
+      }
+    });
   });
 
   group('denetleyici: tür başına satır içeriği', () {
-    test('ARAÇLAR: önizleme satırlarında sifre / kullanici_adi YOK (sunucu tanımsız anahtarı 400 ile reddeder)', () async {
+    test('ARAÇLAR: önizleme satırlarında sifre / kullanici_adi / giris_adi YOK ve kullanıcı adı önerisi istenmez', () async {
       final h = _Harness(
         'araclar.csv',
         'Plaka;E-posta;Blok;Daire No\r\n34 ABC 123;a@b.com;A;1\r\n06 XY 789;;A;2\r\n',
@@ -131,6 +145,9 @@ void main() {
       expect(sent, hasLength(2));
       expect(_keys(sent), isNot(contains('sifre')));
       expect(_keys(sent), isNot(contains('kullanici_adi')));
+      expect(_keys(sent), isNot(contains('giris_adi')));
+      expect(h.api.accountsCalls, isEmpty, reason: 'araç yüklemesi hesap açmaz');
+      expect(h.controller.hasLoginColumn, isFalse);
       h.controller.dispose();
     });
 
@@ -144,10 +161,11 @@ void main() {
       expect(sent, hasLength(2));
       expect(_keys(sent), isNot(contains('sifre')));
       expect(_keys(sent), isNot(contains('kullanici_adi')));
+      expect(h.api.accountsCalls, isEmpty);
       h.controller.dispose();
     });
 
-    test('HEPSİ BİR ARADA: kişi satırı şifre + kullanıcı adı alır; yalnız daire bilgisi dolu satır KORUNUR ve kişi anahtarı almaz; boş satır sayılır', () async {
+    test('HEPSİ BİR ARADA: kişi satırı yalnız şifre alır (kullanıcı adı sistemden gelir); yalnız daire bilgisi dolu satır KORUNUR; boş satır sayılır', () async {
       final h = _Harness(
         'hepsi.csv',
         'Blok;Daire No;Kat;Ad Soyad;Telefon\r\n'
@@ -159,27 +177,27 @@ void main() {
       final sent = await h.toPreview(ImportKind.allInOne);
       expect(sent.map((r) => r.n), <int>[2, 3]);
       expect(sent[0].cells.containsKey('sifre'), isFalse);
-      expect(sent[0].cells.containsKey('kullanici_adi'), isFalse);
       expect(sent[0].cells['kat'], '2');
       expect(sent[1].cells['sifre'], '1234');
-      expect(sent[1].cells['kullanici_adi'], 'ali.veli');
+      expect(sent[1].cells.containsKey('kullanici_adi'), isFalse);
+      expect(sent[1].cells.containsKey('giris_adi'), isFalse, reason: 'yönetici değiştirmedikçe istemci ad göndermez');
       expect(h.controller.blankRows, 1, reason: 'atlanan satır sayısı önizlemede gösterilir');
       h.controller.dispose();
     });
 
-    test('hücre düzenleme: yazılan kullanıcı adı sunucu kuralına getirilir; ad soyad girilince boş kullanıcı adı üretilir; araçta eklenmez', () async {
+    test('hücre düzenleme: ad soyad değişince / satır eklenince istemci kullanıcı adı ÜRETMEZ; şifre varsayılanı eklenir; araçta eklenmez', () async {
       final h = _Harness(
         'hepsi.csv',
         'Blok;Daire No;Ad Soyad\r\nA;1;Ali Veli\r\nA;2;Ayşe Kaya\r\n',
         kinds: const <ImportKind>[ImportKind.allInOne],
       );
-      await h.toPreview(ImportKind.allInOne);
-      h.controller.updateCell(1, 'kullanici_adi', 'Ayşe K_aya');
-      expect(h.controller.rows[1].cells['kullanici_adi'], 'ayse.k.aya');
+      await h.toMapping(ImportKind.allInOne);
       h.controller.updateCell(0, 'ad_soyad', 'Ali Yılmaz');
-      expect(h.controller.rows[0].cells['kullanici_adi'], 'ali.veli', reason: 'dolu kullanıcı adı ad değişince değişmez');
+      expect(h.controller.rows[0].cells.containsKey('giris_adi'), isFalse);
+      expect(h.controller.rows[0].cells.containsKey('kullanici_adi'), isFalse);
       h.controller.addRow(initialCells: <String, Object?>{'ad_soyad': 'Ali Veli', 'blok': 'A', 'daire_no': '3'});
-      expect(h.controller.rows.last.cells['kullanici_adi'], 'ali.veli_2');
+      expect(h.controller.rows.last.cells.containsKey('kullanici_adi'), isFalse);
+      expect(h.controller.rows.last.cells.containsKey('giris_adi'), isFalse);
       expect(h.controller.rows.last.cells['sifre'], '1234');
       h.controller.dispose();
 
@@ -189,6 +207,220 @@ void main() {
       expect(v.controller.rows.last.cells.containsKey('sifre'), isFalse);
       expect(v.controller.rows.last.cells.containsKey('kullanici_adi'), isFalse);
       v.controller.dispose();
+    });
+  });
+
+  group('kullanıcı adı önerileri ve düzenleme (tablodaki «Kullanıcı Adı» sütunu)', () {
+    test('dosya okununca sunucudan öneri alınır: aynı adlar dosyada _2 alır; hesap açılmayan satırda öneri yok; ad hücreleri satır sırasıyla', () async {
+      final h = _Harness('kisiler.csv', _peopleCsv, kinds: const <ImportKind>[ImportKind.people]);
+      await h.toMapping(ImportKind.people);
+      final c = h.controller;
+      expect(h.api.accountsCalls, hasLength(1));
+      expect(h.api.accountsCalls.single.kind, ImportKind.people);
+      expect(c.hasLoginColumn, isTrue);
+      expect(c.rows.map(c.loginNameOf), <String?>['ali.veli', 'ali.veli_2', null]);
+      expect(c.isLoginEditable(c.rows[0]), isTrue);
+      expect(c.isLoginEditable(c.rows[2]), isFalse, reason: 'daire yok: hesap açılmaz');
+      expect(c.proposalsLoading, isFalse);
+      expect(c.proposalsStale, isFalse);
+      c.dispose();
+    });
+
+    test('sistemde başka yerde alınmış ad önerilmez (sunucu varyasyon seçer)', () async {
+      final h = _Harness('kisiler.csv', _peopleCsv, kinds: const <ImportKind>[ImportKind.people]);
+      h.api.takenLoginNames.addAll(<String>{'ali.veli', 'ali.veli_2'});
+      await h.toMapping(ImportKind.people);
+      expect(h.controller.rows.map(h.controller.loginNameOf), <String?>['ali.veli_3', 'ali.veli_4', null]);
+      h.controller.dispose();
+    });
+
+    test('yönetici adı değiştirir: giris_adi hücresi satıra yazılır, öneriler yenilenir ve diğer satırlar o adı kullanmaz; önizleme/onay AYNI satırları gönderir', () async {
+      final h = _Harness('kisiler.csv', _peopleCsv, kinds: const <ImportKind>[ImportKind.people]);
+      await h.toMapping(ImportKind.people);
+      final c = h.controller;
+      c.updateCell(1, 'giris_adi', 'Ali.Veli_Ozel');
+      await c.flushProposals();
+      expect(c.rows[1].cells['giris_adi'], 'Ali.Veli_Ozel', reason: 'ham metin saklanır, sunucu normalleştirir');
+      expect(h.api.accountsCalls.last.rows[1].cells['giris_adi'], 'Ali.Veli_Ozel');
+      expect(c.proposalOf(c.rows[1])!.custom, isTrue);
+      expect(c.loginNameOf(c.rows[1]), 'ali.veli_ozel');
+      expect(c.rows.map(c.loginNameOf).first, 'ali.veli');
+
+      await c.confirmMapping();
+      final previewed = h.api.previewCalls.last.rows;
+      expect(previewed[1].cells['giris_adi'], 'Ali.Veli_Ozel');
+      expect(previewed[0].cells.containsKey('giris_adi'), isFalse);
+      await c.commit(acknowledged: true);
+      expect(h.api.commitCalls.single.rows[1].cells['giris_adi'], 'Ali.Veli_Ozel', reason: 'onay, önizlemede gönderilen satırların aynısıdır');
+      c.dispose();
+    });
+
+    test('yönetici «sistem önerisine dön» der (hücre boşaltılır): giris_adi satırdan kalkar', () async {
+      final h = _Harness('kisiler.csv', _peopleCsv, kinds: const <ImportKind>[ImportKind.people]);
+      await h.toMapping(ImportKind.people);
+      h.controller.updateCell(0, 'giris_adi', 'ozel.ad');
+      expect(h.controller.overrideOf(h.controller.rows[0]), 'ozel.ad');
+      h.controller.updateCell(0, 'giris_adi', null);
+      expect(h.controller.rows[0].cells.containsKey('giris_adi'), isFalse);
+      expect(h.controller.overrideOf(h.controller.rows[0]), isNull);
+      h.controller.dispose();
+    });
+
+    test('sunucu seçilen adı REDDEDERSE (sistemde kayıtlı) satır sorunlu sayılır: «Önizlemeyi Hazırla» çalışmaz, neden satırda gösterilir', () async {
+      final h = _Harness('kisiler.csv', _peopleCsv, kinds: const <ImportKind>[ImportKind.people]);
+      await h.toMapping(ImportKind.people);
+      final c = h.controller;
+      h.api.takenLoginNames.add('baskasinin.adi');
+      c.updateCell(0, 'giris_adi', 'baskasinin.adi');
+      await c.flushProposals();
+      expect(c.proposalOf(c.rows[0])!.status, AccountProposalStatus.rejected);
+      expect(c.hasLoginProblems, isTrue);
+      expect(c.loginProblems[c.rows[0].n], contains('sistemde başka bir hesapta kayıtlı'));
+      final callsBefore = h.api.previewCalls.length;
+      await c.confirmMapping();
+      expect(h.api.previewCalls.length, callsBefore, reason: 'sorun giderilmeden önizleme/yükleme istenmez');
+      expect(c.mappingError, contains('Kullanıcı adı sorunu'));
+      expect(c.step, BulkStep.mapping);
+      // düzeltilince devam eder
+      c.updateCell(0, 'giris_adi', null);
+      await c.flushProposals();
+      expect(c.hasLoginProblems, isFalse);
+      await c.confirmMapping();
+      expect(c.step, BulkStep.preview);
+      c.dispose();
+    });
+
+    test('önizlemede sunucu LOGIN_NAME_* satır hatası dönerse onay KAPALI (katı mod kapalı olsa da)', () async {
+      final h = _Harness('kisiler.csv', _peopleCsv, kinds: const <ImportKind>[ImportKind.people]);
+      h.api.previewScript.add(
+        ImportPreview.fromJson(
+          previewJson(
+            ok: 1,
+            error: 1,
+            issues: <Map<String, dynamic>>[
+              <String, dynamic>{'n': 2, 'severity': 'error', 'field': 'giris_adi', 'code': 'LOGIN_NAME_TAKEN', 'message': 'Kullanıcı adı «x.y.z» sistemde başka bir hesapta kayıtlı. Başka bir ad seçin.'},
+            ],
+          ),
+        ),
+      );
+      await h.toPreview(ImportKind.people);
+      final c = h.controller;
+      expect(c.strict, isFalse);
+      expect(c.canCommit, isFalse);
+      expect(c.commitBlockedReason, contains('Kullanıcı adı kabul edilmeyen satırlar'));
+      expect(c.fieldLabels['giris_adi'], 'Kullanıcı Adı', reason: 'sorun listesi alan adını Türkçe gösterir');
+      c.dispose();
+    });
+
+    test('yerel denetim: biçim hatası ve dosyadaki başka satırın adıyla çakışma hemen söylenir (sunucuya gitmeden)', () async {
+      final h = _Harness('kisiler.csv', _peopleCsv, kinds: const <ImportKind>[ImportKind.people]);
+      await h.toMapping(ImportKind.people);
+      final c = h.controller;
+      expect(c.localLoginNameProblem('a@b', rowN: 2), contains('harf, rakam'));
+      expect(c.localLoginNameProblem('ab', rowN: 2), contains('en az 3'));
+      expect(c.localLoginNameProblem('Ali.Veli_2', rowN: 2), contains('satır 3'), reason: 'satır 3 zaten ali.veli_2 adını alıyor');
+      expect(c.localLoginNameProblem('Ali.Veli_2', rowN: 3), isNull, reason: 'kendi adı sorun değil');
+      expect(c.localLoginNameProblem('yeni.ad', rowN: 2), isNull);
+      expect(h.api.checkCalls, isEmpty);
+      final check = await c.checkLoginName('Yeni Ad');
+      expect(check.ok, isTrue);
+      expect(check.loginName, 'yeni.ad');
+      h.api.takenLoginNames.add('dolu.ad');
+      final taken = await c.checkLoginName('dolu.ad');
+      expect([taken.ok, taken.code, taken.suggestion], [false, 'TAKEN', 'dolu.ad_2']);
+      c.dispose();
+    });
+
+    test('mevcut hesaba bağlanan satırda ad SALT OKUNUR; eski kullanıcı adı seçimi isteğe konmaz', () async {
+      final h = _Harness('kisiler.csv', _peopleCsv, kinds: const <ImportKind>[ImportKind.people]);
+      h.api.accountsBuilder = (kind, rows) => <AccountProposal>[
+        const AccountProposal(n: 2, status: AccountProposalStatus.existing, loginName: 'mevcut.hesap'),
+        const AccountProposal(n: 3, status: AccountProposalStatus.create, loginName: 'ali.veli', editable: true),
+      ];
+      await h.toMapping(ImportKind.people);
+      final c = h.controller;
+      expect(c.isLoginEditable(c.rows[0]), isFalse);
+      expect(c.loginNameOf(c.rows[0]), 'mevcut.hesap');
+      c.updateCell(0, 'giris_adi', 'eski.secim'); // satır artık mevcut hesaba bağlanıyor: seçim anlamsız
+      await c.flushProposals();
+      final sentToAccounts = h.api.accountsCalls.last.rows;
+      expect(sentToAccounts[0].cells.containsKey('giris_adi'), isFalse);
+      await c.confirmMapping();
+      expect(h.api.previewCalls.last.rows[0].cells.containsKey('giris_adi'), isFalse);
+      c.dispose();
+    });
+
+    test('satırlar art arda değişirse öneri isteği BEKLETİLİR (tek istek); eski yanıt yenisini ezmez', () async {
+      final h = _Harness('kisiler.csv', _peopleCsv, kinds: const <ImportKind>[ImportKind.people], proposalDelay: const Duration(milliseconds: 40));
+      await h.toMapping(ImportKind.people);
+      final c = h.controller;
+      final before = h.api.accountsCalls.length;
+      c.updateCell(0, 'ad_soyad', 'Ali Yılmaz');
+      c.updateCell(0, 'ad_soyad', 'Ali Yıldız');
+      c.updateCell(1, 'ad_soyad', 'Veli Yıldız');
+      expect(h.api.accountsCalls.length, before, reason: 'bekleme süresi dolmadan istek yok');
+      expect(c.proposalsStale, isTrue);
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+      expect(h.api.accountsCalls.length, before + 1);
+      expect(c.proposalsStale, isFalse);
+      expect(c.rows.map(c.loginNameOf).take(2), <String?>['ali.yildiz', 'veli.yildiz']);
+
+      // yavaş (eski) yanıt, sonradan değişen satırlar için gelirse atılır
+      final gate = Completer<void>();
+      h.api.accountsGate = gate;
+      final slow = c.flushProposals(); // eski satırlarla istek, kapıda bekler
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+      h.api.accountsGate = null;
+      c.updateCell(0, 'ad_soyad', 'Yeni Kisi');
+      await c.flushProposals();
+      expect(c.loginNameOf(c.rows[0]), 'yeni.kisi');
+      gate.complete();
+      await slow;
+      expect(c.loginNameOf(c.rows[0]), 'yeni.kisi', reason: 'geç gelen eski yanıt yenisini ezmez');
+      expect(c.proposalsLoading, isFalse);
+      c.dispose();
+    });
+
+    test('öneri hatası ENGELLEMEZ: tabloda hata gösterilir, «Önizlemeyi Hazırla» yine çalışır ve önizleme adları getirir', () async {
+      final h = _Harness('kisiler.csv', _peopleCsv, kinds: const <ImportKind>[ImportKind.people]);
+      h.api.accountsScript.add(StateError('x'));
+      h.api.previewScript.add(
+        ImportPreview.fromJson(<String, dynamic>{
+          ...previewJson(),
+          'accounts': <Map<String, dynamic>>[
+            <String, dynamic>{'n': 2, 'status': 'new', 'login_name': 'ali.veli', 'editable': true, 'custom': false},
+            <String, dynamic>{'n': 3, 'status': 'new', 'login_name': 'ali.veli_2', 'editable': true, 'custom': false},
+          ],
+        }),
+      );
+      await h.toMapping(ImportKind.people);
+      final c = h.controller;
+      expect(c.proposalsError, isNotNull);
+      expect(c.accountProposals, isEmpty);
+      expect(c.hasLoginProblems, isFalse);
+      await c.confirmMapping();
+      expect(c.step, BulkStep.preview);
+      expect(c.rows.map(c.loginNameOf).take(2), <String?>['ali.veli', 'ali.veli_2'], reason: 'önizleme yanıtı (kesin sonuç) tablodaki önerilerin yerini alır');
+      c.dispose();
+    });
+
+    test('ESKİ dosyadaki «Kullanıcı Adı» sütunu yok sayılır ve yönetici bilgilendirilir; satırlara kullanici_adi girmez', () async {
+      final h = _Harness(
+        'eski.csv',
+        'Ad Soyad;Kullanıcı Adı;Blok;Daire No\r\nAli Veli;eski.ad;A;1\r\n',
+        kinds: const <ImportKind>[ImportKind.people],
+      );
+      final sent = await h.toPreview(ImportKind.people);
+      expect(h.controller.fileHasLegacyLoginColumn, isTrue);
+      expect(_keys(sent), isNot(contains('kullanici_adi')));
+      expect(_keys(sent), isNot(contains('giris_adi')));
+      expect(h.controller.mapping!.ignoredColumns().map((i) => h.controller.mapping!.headers[i]), contains('Kullanıcı Adı'));
+      h.controller.dispose();
+      // sütun yoksa bildirim de yok
+      final clean = _Harness('yeni.csv', _peopleCsv, kinds: const <ImportKind>[ImportKind.people]);
+      await clean.toMapping(ImportKind.people);
+      expect(clean.controller.fileHasLegacyLoginColumn, isFalse);
+      clean.controller.dispose();
     });
   });
 
@@ -209,15 +441,16 @@ void main() {
   });
 
   group('sonuç modeli', () {
-    test('commit yanıtındaki hesaplar okunur: satır no + nihai kullanıcı adı, bağlanan, atlanan neden iletisiyle', () {
+    test('commit yanıtındaki hesaplar okunur: satır no + nihai kullanıcı adı, bağlanan, atlanan neden iletisiyle, yarışta değişen ad', () {
       final json = commitJson();
       (json['result'] as Map<String, dynamic>)['accounts'] = <String, dynamic>{
         'created': 2,
         'linked': 1,
         'skipped': 1,
+        'renamed': 1,
         'items': <Map<String, dynamic>>[
           <String, dynamic>{'n': 2, 'login_name': 'ali.veli', 'status': 'created'},
-          <String, dynamic>{'n': 3, 'login_name': 'ali.veli_2', 'status': 'created'},
+          <String, dynamic>{'n': 3, 'login_name': 'ali.veli_3', 'status': 'created', 'requested_login_name': 'ali.veli_2'},
           <String, dynamic>{'n': 4, 'login_name': 'komsu', 'status': 'linked'},
         ],
         'skipped_items': <Map<String, dynamic>>[
@@ -226,9 +459,10 @@ void main() {
       };
       final result = ImportResult.fromJson(json);
       final accounts = result.accounts!;
-      expect([accounts.created, accounts.linked, accounts.skipped], <int>[2, 1, 1]);
-      expect(accounts.items.map((i) => i.loginName), <String>['ali.veli', 'ali.veli_2', 'komsu']);
+      expect([accounts.created, accounts.linked, accounts.skipped, accounts.renamed], <int>[2, 1, 1, 1]);
+      expect(accounts.items.map((i) => i.loginName), <String>['ali.veli', 'ali.veli_3', 'komsu']);
       expect(accounts.items.map((i) => i.linked), <bool>[false, false, true]);
+      expect(accounts.items.map((i) => i.requestedLoginName), <String?>[null, 'ali.veli_2', null]);
       expect(accounts.items.first.n, 2);
       expect(accounts.skippedItems.single.code, 'EMAIL_IN_USE');
       expect(accounts.isEmpty, isFalse);

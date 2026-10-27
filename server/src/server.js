@@ -23,7 +23,15 @@ import { moduleRouter } from './modules/module_routes.js';
 import { moduleRequestRouter } from './modules/module_request_routes.js';
 import { siteApplicationRouter } from './modules/site_application_routes.js';
 import { peopleRouter } from './modules/people_routes.js';
-import { bulkImportRouter, bulkPreviewGate, bulkCommitGate, BULK_PREVIEW_PATH, BULK_COMMIT_PATH } from './modules/bulk_import_routes.js';
+import {
+  bulkImportRouter,
+  bulkPreviewGate,
+  bulkCommitGate,
+  bulkAccountsGate,
+  BULK_PREVIEW_PATH,
+  BULK_COMMIT_PATH,
+  BULK_ACCOUNTS_PATH,
+} from './modules/bulk_import_routes.js';
 import { announcementRouter } from './modules/announcement_routes.js';
 import { announcementPublicRouter } from './modules/announcement_public_routes.js';
 import { financeRouter } from './modules/finance_routes.js';
@@ -118,6 +126,7 @@ app.post('/public/client-errors', clientErrorBodyParser);
 // genel 1 MB ayristiriciden ONCE baglanir (ayni zincir bulkImportRouter'da da var, ikinci gecis bayrakla atlanir).
 app.post(BULK_PREVIEW_PATH, ...bulkPreviewGate);
 app.post(BULK_COMMIT_PATH, ...bulkCommitGate);
+app.post(BULK_ACCOUNTS_PATH, ...bulkAccountsGate);
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 

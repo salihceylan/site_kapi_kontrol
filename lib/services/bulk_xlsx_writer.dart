@@ -5,6 +5,8 @@
 // - Başlık kalın + dondurulmuş; `telefon / plaka / blok / daire_no` gibi sütunlar metin biçimli (`@`) tanımlanabilir.
 // - Tarih gerçek tarih hücresi (`gg.aa.yyyy`), sayı gerçek sayı, para tamsayı kuruştan yalnız metin aritmetiğiyle.
 // - Sayfa adı ≤ 31 karakter ve `[]:*?/\` içermez; XML'de geçersiz karakterler atılır.
+// - Seçim listesi sütunları (İlişki, Borç Sorumlusu ...) Excel VERİ DOĞRULAMASI (`<dataValidations>`, tür `list`) taşır: hücre açılır listeden seçilir,
+//   listede olmayan değer «durdur» stilinde reddedilir. Öğe sırası OOXML şemasındadır: `sheetData` -> `dataValidations` -> `pageMargins`.
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -22,8 +24,50 @@ class XlsxMoney {
   final Object minor;
 }
 
+/// Excel'in veri doğrulama sınırları (ECMA-376 / Excel): liste sabiti ≤ 255 karakter, başlık ≤ 32, ileti ≤ 255.
+const int kXlsxListLiteralMax = 255;
+const int kXlsxValidationTitleMax = 32;
+const int kXlsxValidationMessageMax = 255;
+
+/// Sütunun veri satırlarına konan açılır liste doğrulaması (CSV'de karşılığı yoktur).
+///
+/// [choices] virgül ve çift tırnak içeremez (Excel liste sabiti virgülle ayrılır) ve birleşik uzunlukları ≤ 255 olmalıdır; aksi hâlde
+/// [ArgumentError] (programlama hatası, şablon üretilemez). [prompt] hücre seçilince görünen ipucu, [error] listede olmayan değer yazılınca görünen
+/// «durdur» iletisidir.
+class XlsxListValidation {
+  XlsxListValidation({
+    required List<String> choices,
+    this.promptTitle,
+    this.prompt,
+    this.errorTitle = 'Geçersiz değer',
+    this.error,
+  }) : choices = List<String>.unmodifiable(choices) {
+    if (choices.isEmpty) throw ArgumentError('Seçim listesi boş olamaz.');
+    for (final choice in choices) {
+      if (choice.trim().isEmpty || choice.contains(',') || choice.contains('"')) {
+        throw ArgumentError('Seçim listesi öğesi boş olamaz ve virgül / çift tırnak içeremez: «$choice».');
+      }
+    }
+    if (choices.join(',').length > kXlsxListLiteralMax) {
+      throw ArgumentError('Seçim listesi Excel sınırını (255 karakter) aşıyor.');
+    }
+    if ((promptTitle?.length ?? 0) > kXlsxValidationTitleMax || (errorTitle?.length ?? 0) > kXlsxValidationTitleMax) {
+      throw ArgumentError('Doğrulama başlığı en çok 32 karakter olabilir.');
+    }
+    if ((prompt?.length ?? 0) > kXlsxValidationMessageMax || (error?.length ?? 0) > kXlsxValidationMessageMax) {
+      throw ArgumentError('Doğrulama iletisi en çok 255 karakter olabilir.');
+    }
+  }
+
+  final List<String> choices;
+  final String? promptTitle;
+  final String? prompt;
+  final String? errorTitle;
+  final String? error;
+}
+
 class XlsxColumn {
-  const XlsxColumn(this.header, {this.format = XlsxFormat.general, this.scale = 2, this.width});
+  const XlsxColumn(this.header, {this.format = XlsxFormat.general, this.scale = 2, this.width, this.listValidation});
 
   final String header;
   final XlsxFormat format;
@@ -33,6 +77,9 @@ class XlsxColumn {
 
   /// Karakter cinsinden genişlik; null ise içerikten kestirilir.
   final double? width;
+
+  /// Veri satırlarına konan açılır liste doğrulaması (yoksa null).
+  final XlsxListValidation? listValidation;
 }
 
 class XlsxSheet {
@@ -41,6 +88,7 @@ class XlsxSheet {
     required this.columns,
     required this.rows,
     this.freezeHeader = true,
+    this.validationLastRow = kXlsxValidationLastRow,
   });
 
   final String name;
@@ -49,7 +97,13 @@ class XlsxSheet {
   /// Hücre değerleri: `String` | `int` | `double` | `DateTime` | ISO tarih metni (tarih sütununda) | [XlsxMoney] | null.
   final List<List<Object?>> rows;
   final bool freezeHeader;
+
+  /// Liste doğrulamasının uzandığı son satır (1 tabanlı). Boş satırlar da kapsanır: yönetici dosyaya satır ekleyince açılır liste hazır olsun.
+  final int validationLastRow;
 }
+
+/// Toplu yükleme üst sınırı 5000 veri satırıdır: başlık + 5000 satır.
+const int kXlsxValidationLastRow = 5001;
 
 class _Styles {
   // Sabit stil dizinleri.
@@ -284,9 +338,37 @@ String _sheetXml(XlsxSheet sheet, _Styles styles, {required bool selected}) {
     out.write('</row>');
   }
   out.write('</sheetData>');
+  out.write(_dataValidationsXml(sheet));
   out.write('<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/>');
   out.write('</worksheet>');
   return out.toString();
+}
+
+/// `<dataValidations>` öğesi (liste doğrulaması olan sütun yoksa boş). Şema sırasında `sheetData`'dan sonra, `pageMargins`'ten önce yazılır.
+String _dataValidationsXml(XlsxSheet sheet) {
+  final lastRow = sheet.validationLastRow > sheet.rows.length + 1 ? sheet.validationLastRow : sheet.rows.length + 1;
+  final items = StringBuffer();
+  var count = 0;
+  for (var c = 0; c < sheet.columns.length; c++) {
+    final validation = sheet.columns[c].listValidation;
+    if (validation == null) continue;
+    final letters = _columnLetters(c);
+    final attrs = StringBuffer('type="list" errorStyle="stop" allowBlank="1" showInputMessage="1" showErrorMessage="1"');
+    void attr(String name, String? value) {
+      if (value != null && value.isNotEmpty) attrs.write(' $name="${escapeXml(value)}"');
+    }
+
+    attr('errorTitle', validation.errorTitle);
+    attr('error', validation.error);
+    attr('promptTitle', validation.promptTitle);
+    attr('prompt', validation.prompt);
+    items.write(
+      '<dataValidation $attrs sqref="${letters}2:$letters$lastRow">'
+      '<formula1>"${escapeXml(validation.choices.join(','))}"</formula1></dataValidation>',
+    );
+    count++;
+  }
+  return count == 0 ? '' : '<dataValidations count="$count">$items</dataValidations>';
 }
 
 double _estimateWidth(XlsxColumn column, List<List<Object?>> rows, int index) {

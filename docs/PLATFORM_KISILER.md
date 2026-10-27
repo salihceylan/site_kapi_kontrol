@@ -126,4 +126,4 @@ Yetki: yazma = yönetici/süper kullanıcı (`hasSiteManagementAccess`); okuma =
 3. **Akıllı Toplu Excel Yükleme Şablonu:**
    - "Şablonu İndir" tıklandığında sitenin mevcut blok ve daireleri hazır doldurulmuş olarak gelir.
    - Sütunlar sadeleştirilmiş; gereksiz alanlar çıkarılmıştır.
-   - Excel taranıp yüklendiğinde sakin ad-soyadından otomatik tekil kullanıcı adı (`kullanici_adi`) ve başlangıç şifresi (`1234`) atanır.
+   - Excel taranıp yüklendiğinde sakin ad-soyadından sistem tarafından tekil kullanıcı adı (sistemde ve dosyada alınmışsa `_2`, `_3` …; şablonda kullanıcı adı sütunu yoktur, yönetici önizleme tablosunda değiştirebilir) ve başlangıç şifresi (`1234`) atanır (bkz. PLATFORM_TOPLU_ISLEMLER.md «Hesap açma»).

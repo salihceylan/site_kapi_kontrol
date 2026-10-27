@@ -14,6 +14,8 @@ import { assertFinanceEnabled } from './finance_access.js';
 import { assertWritableDate } from './finance_4b_guard.js';
 import { requestFingerprint, validateImportBody } from './bulk_import_body.js';
 import { computePlan, collectApartmentIds } from './bulk_import_plan.js';
+import { ACCOUNT_KINDS, attachPlanAccounts, loadTakenOverrides } from './bulk_import_accounts.js';
+import { checkLoginName } from './bulk_import_login_names.js';
 import { loadBlocksAndApartments, loadSnapshot } from './bulk_import_snapshot.js';
 import { KIND_MODULE, SPEC_VERSION, isImportDisabled } from './bulk_import_spec.js';
 import {
@@ -38,8 +40,6 @@ const LOCK_TIMEOUT = '8s';
 const SYNC_KINDS = new Set(['people', 'vehicles', 'all_in_one']);
 const FINANCE_LOCK_KINDS = new Set(['apartments', 'all_in_one', 'opening_balances']);
 const APARTMENT_WRITE_KINDS = new Set(['apartments', 'all_in_one']);
-/** Daire ilişkisi eklenen kişilere kullanıcı hesabı açılan türler (araç yüklemesi hesap açmaz). */
-const ACCOUNT_KINDS = new Set(['people', 'all_in_one']);
 const totalError = (plan, expected) =>
   new PlatformError(409, 'TOTAL_MISMATCH', 'Toplam tutar onaylanan tutarla uyuşmuyor. Önizleme yenilendi, tekrar inceleyin.', {
     totals: plan.totals,
@@ -81,6 +81,31 @@ function mapLockTimeout(error) {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
+// Plan (önizleme, öneri, commit ortak)
+// ---------------------------------------------------------------------------------------------------------------
+
+/** Anlık görüntü + (hesap açan türlerde) dosyada yönetici tarafından seçilmiş kullanıcı adlarından sistemde ZATEN kayıtlı olanlar. */
+async function loadPlanSnapshot(db, siteCode, kind, parsed) {
+  const snapshot = await loadSnapshot(db, siteCode, kind, parsed.options);
+  if (ACCOUNT_KINDS.has(kind)) {
+    snapshot.takenLoginNames = await loadTakenOverrides(db, parsed.rows);
+  }
+  return snapshot;
+}
+
+/**
+ * Planı hesaplar ve (hesap açan türlerde) hesap bölümünü çözümler: yeni hesaplar için kullanıcı adı önerisi (sistemde ve dosyada boşta ilk ad),
+ * mevcut hesaba bağlanacaklar (salt okunur). Çözümlenen adlar `preview_hash`'e katılır; hesap açılmayan yüklemede hash değişmez.
+ */
+async function buildPlan(db, { siteCode, kind, parsed, snapshot, today }) {
+  const plan = computePlan({ kind, rows: parsed.rows, snapshot, allowOverwrite: parsed.allowOverwrite, today, options: parsed.options });
+  if (ACCOUNT_KINDS.has(kind)) {
+    await attachPlanAccounts(db, { siteCode, plan });
+  }
+  return plan;
+}
+
+// ---------------------------------------------------------------------------------------------------------------
 // Önizleme
 // ---------------------------------------------------------------------------------------------------------------
 
@@ -119,6 +144,56 @@ async function syncBeforePreview(siteCode) {
 }
 
 /**
+ * POST imports/:kind/accounts: önizleme tablosundaki «Kullanıcı Adı» sütunu için hesap önerileri (yalnız people / all_in_one). YAZMAZ ve CRM eşitlemesi
+ * YAPMAZ (tabloda sık yenilenir; öneri bilgilendiricidir, kesin sonuç önizleme/commit'tir). Hız sınırı önizlemeden ayrıdır (tablo düzenlemeleri sıktır).
+ * @returns {Promise<{ kind: string, spec_version: number, accounts: object[] }>}
+ */
+export async function previewAccounts({ siteCode, kind, body, env = process.env }) {
+  if (isImportDisabled(env)) throw importDisabled();
+  if (!ACCOUNT_KINDS.has(kind)) {
+    throw new PlatformError(404, 'IMPORT_KIND_NOT_FOUND', 'Bu yükleme türünde hesap açılmaz.');
+  }
+  const parsed = validateImportBody(body, kind, { commit: false, env });
+  if (gauge.previews >= MAX_CONCURRENT_PREVIEWS) throw serverBusy();
+  gauge.previews += 1;
+  try {
+    const client = await pool.connect();
+    let began = false;
+    try {
+      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+      began = true;
+      const exists = await client.query(`SELECT 1 FROM sites WHERE site_code = $1`, [siteCode]);
+      if (!exists.rows[0]) throw siteNotFound();
+      const snapshot = await loadPlanSnapshot(client, siteCode, kind, parsed);
+      const plan = await buildPlan(client, { siteCode, kind, parsed, snapshot, today: todayIso() });
+      await client.query('COMMIT');
+      began = false;
+      return { kind, spec_version: SPEC_VERSION, accounts: plan.view.accounts ?? [] };
+    } catch (error) {
+      if (began) await rollbackQuietly(client);
+      throw error;
+    } finally {
+      client.release();
+    }
+  } finally {
+    gauge.previews -= 1;
+  }
+}
+
+/**
+ * POST imports/login-names/check: yöneticinin tabloya yazdığı kullanıcı adının biçimi ve sistemdeki (her site, her şehir) kullanılabilirliği.
+ * `{ ok, login_name, code, message, suggestion }`. Tek hafif sorgu; yazmaz.
+ */
+export async function checkImportLoginName({ body, env = process.env }) {
+  if (isImportDisabled(env)) throw importDisabled();
+  const raw = body && typeof body === 'object' && !Array.isArray(body) ? body.login_name : undefined;
+  if (typeof raw !== 'string' || Array.from(raw).length > 200) {
+    throw new PlatformError(400, 'INVALID_BODY', 'login_name metin olmalıdır.');
+  }
+  return checkLoginName(pool, raw);
+}
+
+/**
  * POST imports/:kind/preview. YAZMAZ (eşitleme adımı hariç: mevcut üyelikleri CRM'e yansıtan idempotent adım).
  * @returns {Promise<object>} önizleme gövdesi
  */
@@ -141,10 +216,11 @@ export async function previewImport({ siteCode, kind, body, env = process.env })
       began = true;
       const exists = await client.query(`SELECT 1 FROM sites WHERE site_code = $1`, [siteCode]);
       if (!exists.rows[0]) throw siteNotFound();
-      const snapshot = await loadSnapshot(client, siteCode, kind, parsed.options);
+      const snapshot = await loadPlanSnapshot(client, siteCode, kind, parsed);
+      // plan ve hesap çözümlemesi AYNI anlık görüntü işleminde (kullanıcı adı denetimleri kişi verisiyle tutarlı) hesaplanır
+      const plan = await buildPlan(client, { siteCode, kind, parsed, snapshot, today: todayIso() });
       await client.query('COMMIT');
       began = false;
-      const plan = computePlan({ kind, rows: parsed.rows, snapshot, allowOverwrite: parsed.allowOverwrite, today: todayIso(), options: parsed.options });
       return { kind, spec_version: SPEC_VERSION, ...plan.view };
     } catch (error) {
       if (began) await rollbackQuietly(client);
@@ -183,9 +259,11 @@ async function prehashAccounts({ siteCode, kind, parsed }) {
     if (replay.rows[0]) return new Map();
     const client = await pool.connect();
     let snapshot;
+    let plan;
     try {
       await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-      snapshot = await loadSnapshot(client, siteCode, kind, parsed.options);
+      snapshot = await loadPlanSnapshot(client, siteCode, kind, parsed);
+      plan = await buildPlan(client, { siteCode, kind, parsed, snapshot, today: todayIso() });
       await client.query('COMMIT');
     } catch (error) {
       await rollbackQuietly(client);
@@ -193,7 +271,6 @@ async function prehashAccounts({ siteCode, kind, parsed }) {
     } finally {
       client.release();
     }
-    const plan = computePlan({ kind, rows: parsed.rows, snapshot, allowOverwrite: parsed.allowOverwrite, today: todayIso(), options: parsed.options });
     if (plan.previewHash !== parsed.expectedHash || !(plan.counts.account_create > 0)) return new Map();
     return await hashAccountPasswords(collectAccountPasswords(plan.ops));
   } catch (_error) {
@@ -269,9 +346,9 @@ async function commitOnce({ siteCode, kind, parsed, fingerprint, actor, hashes =
     if (kind === 'opening_balances') {
       await assertWritableDate(client, siteCode, parsed.options.cutover_date, 'Devir tarihi');
     }
-    const snapshot = await loadSnapshot(client, siteCode, kind, parsed.options);
+    const snapshot = await loadPlanSnapshot(client, siteCode, kind, parsed);
     const today = todayIso();
-    const plan = computePlan({ kind, rows: parsed.rows, snapshot, allowOverwrite: parsed.allowOverwrite, today, options: parsed.options });
+    const plan = await buildPlan(client, { siteCode, kind, parsed, snapshot, today });
     if (plan.previewHash !== parsed.expectedHash) {
       throw new PlatformError(409, 'PREVIEW_STALE', 'Veriler değişti. Önizleme yenilendi, tekrar inceleyin.', {
         totals: plan.totals,
@@ -345,7 +422,14 @@ async function commitOnce({ siteCode, kind, parsed, fingerprint, actor, hashes =
         audits = audits.concat(written.audits);
         if (ACCOUNT_KINDS.has(kind)) {
           // yalnız BU yüklemede daire ilişkisi eklenen kişilere hesap (kapsam sınırı); sitedeki diğer hesapsız sakinlere dokunulmaz
-          accounts = await provisionImportedResidents(client, { siteCode, runId, accountCandidates: written.accountCandidates, hashes });
+          accounts = await provisionImportedResidents(client, {
+            siteCode,
+            runId,
+            accountCandidates: written.accountCandidates,
+            hashes,
+            // önizlemede gösterilen (hash'e girmiş) kullanıcı adları; yarışta başkası alırsa yazıcı sıradaki boş adı verir ve sonuçta bildirir
+            expected: plan.accounts?.expected ?? new Map(),
+          });
           audits = audits.concat(accounts.audits);
         }
         // Kiracı HER ZAMAN daire admini (kullanıcı kararı 2026-10-26; admin önceliği kiracı > malik > diğerleri): dosyada kiracı eklenen / kiracıya yükseltilen
@@ -367,7 +451,7 @@ async function commitOnce({ siteCode, kind, parsed, fingerprint, actor, hashes =
           ...rows,
           with_warnings: plan.totals.with_warnings,
           ...plan.counts,
-          ...(accounts ? { accounts_created: accounts.created, accounts_linked: accounts.linked, accounts_skipped: accounts.skipped } : {}),
+          ...(accounts ? { accounts_created: accounts.created, accounts_linked: accounts.linked, accounts_skipped: accounts.skipped, accounts_renamed: accounts.renamed } : {}),
         },
         strict: parsed.strict,
         allow_overwrite: parsed.allowOverwrite,
@@ -391,7 +475,7 @@ async function commitOnce({ siteCode, kind, parsed, fingerprint, actor, hashes =
           issues_truncated: plan.view.issues_truncated,
           // açılan / bağlanan hesaplar: satır no + NİHAİ kullanıcı adı (çakışmada sunucu ek koyabilir); atlananlar neden iletisiyle
           ...(accounts
-            ? { accounts: { created: accounts.created, linked: accounts.linked, skipped: accounts.skipped, items: accounts.items, skipped_items: accounts.skipped_items } }
+            ? { accounts: { created: accounts.created, linked: accounts.linked, skipped: accounts.skipped, renamed: accounts.renamed, items: accounts.items, skipped_items: accounts.skipped_items } }
             : {}),
         },
       },

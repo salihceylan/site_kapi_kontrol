@@ -138,6 +138,41 @@ class BulkApi {
     return _parse(response, ImportPreview.fromJson);
   }
 
+  /// `POST imports/:kind/accounts` (YAZMAZ): önizleme tablosundaki «Kullanıcı Adı» sütunu için hesap önerileri. Yalnız kişi türleri.
+  Future<List<AccountProposal>> previewAccounts({
+    required String token,
+    required int siteCode,
+    required ImportKind kind,
+    required int specVersion,
+    required List<ImportRow> rows,
+  }) async {
+    final response = await _send(
+      'POST',
+      _imports(siteCode, '${kind.apiValue}/accounts'),
+      token: token,
+      body: _rowsBody(kind: kind, specVersion: specVersion, rows: rows, allowOverwrite: false),
+      timeout: previewTimeout,
+      timeoutMessage: 'Sunucu yanıt vermedi. Kullanıcı adları hazırlanamadı, tekrar deneyin.',
+    );
+    return _parse(response, (json) {
+      if (json['accounts'] is! List) throw const FormatException('Hesap listesi yok.');
+      return AccountProposal.listFrom(json['accounts']);
+    });
+  }
+
+  /// `POST imports/login-names/check` (YAZMAZ): yöneticinin yazdığı kullanıcı adının biçimi ve sistemdeki (her site, her şehir) kullanılabilirliği.
+  Future<LoginNameCheck> checkLoginName({required String token, required int siteCode, required String loginName}) async {
+    final response = await _send(
+      'POST',
+      _imports(siteCode, 'login-names/check'),
+      token: token,
+      body: <String, dynamic>{'login_name': loginName},
+      timeout: readTimeout,
+      timeoutMessage: 'Sunucu yanıt vermedi. Kullanıcı adı denetlenemedi, tekrar deneyin.',
+    );
+    return _parse(response, LoginNameCheck.fromJson);
+  }
+
   /// `POST imports/:kind/commit` (201 ya da replay 200). Sonuç belirsizse (zaman aşımı / ağ) mesaj "yükleme
   /// tamamlanmış olabilir; aynı işlem anahtarıyla tekrar denemek çift kayıt yaratmaz" der.
   Future<ImportResult> commitImport({
@@ -556,6 +591,18 @@ class BulkService {
       options: options,
     ),
   );
+
+  Future<List<AccountProposal>> previewAccounts(
+    int siteCode, {
+    required ImportKind kind,
+    required int specVersion,
+    required List<ImportRow> rows,
+  }) => _guard(
+    (token) => api.previewAccounts(token: token, siteCode: siteCode, kind: kind, specVersion: specVersion, rows: rows),
+  );
+
+  Future<LoginNameCheck> checkLoginName(int siteCode, String loginName) =>
+      _guard((token) => api.checkLoginName(token: token, siteCode: siteCode, loginName: loginName));
 
   Future<ImportResult> commitImport(
     int siteCode, {

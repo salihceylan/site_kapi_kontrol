@@ -9,8 +9,9 @@
 // kişilerle sınırlıdır (applyPeopleOps `accountCandidates` döner). Her kişi kendi SAVEPOINT'inde işlenir; üyelik kuralı people_service.grantApartmentAccess'indir.
 
 import { hashPassword } from '../security/password_hashing.js';
-import { ensureUniqueLoginName, generateUniqueApartmentLoginName } from '../services/apartment_service.js';
+import { generateUniqueApartmentLoginName } from '../services/apartment_service.js';
 import { generateInternalApartmentEmail } from '../utils/helpers.js';
+import { LOGIN_NAME_BASE_MAX, claimLoginName, normalizeTypedLoginName, slugifyLoginName } from './bulk_import_login_names.js';
 import { PlatformError } from './errors.js';
 import { grantApartmentAccess } from './people_service.js';
 import { siteTiePredicate } from './people_sync_sql.js';
@@ -432,26 +433,12 @@ export async function applyOpeningOps(client, { siteCode, ops, runId, cutoverDat
 
 /** Başlangıç şifresi boşsa verilen değer. Bu değer için TEK özet paylaşılır (aşağıda). */
 export const DEFAULT_ACCOUNT_PASSWORD = '1234';
-/** Kullanıcı adı tabanı üst sınırı: LOGIN_NAME_MAX (40) - "_NN" benzersizlik eki payı. İstemci (generateUsernameFromFullName) AYNI sınırı kullanır. */
-export const LOGIN_NAME_BASE_MAX = 36;
-const HASH_CONCURRENCY = 4;
-
 /**
- * Ad ya da yazılan kullanıcı adından kullanıcı adı tabanı: Türkçe harfler sadeleşir, küçük harf, [a-z0-9] dışındaki her öbek tek nokta, baş/son nokta
- * atılır, en çok 36 karakter. İstemci tarafındaki `generateUsernameFromFullName` ile AYNI kural (tablodaki ad = sunucunun kullanacağı ad; çakışmada
- * sunucu `_2`, `_3` ... ekler ve nihai adı sonuçta döner).
+ * Kullanıcı adı üretim kuralı (slugifyLoginName, benzersizlik varyasyonları, yazım anı yarış güvenliği) `bulk_import_login_names.js` içindedir; önizleme
+ * (öneri) ve yazım AYNI kuralı kullanır. Eski içe aktarmalar bozulmasın diye burada yeniden dışa aktarılır.
  */
-export function slugifyLoginName(fullName, fallback = 'kullanici') {
-  if (!fullName || typeof fullName !== 'string') return fallback;
-  const trMap = {
-    'ç': 'c', 'Ç': 'c', 'ğ': 'g', 'Ğ': 'g', 'ı': 'i', 'I': 'i', 'İ': 'i',
-    'ö': 'o', 'Ö': 'o', 'ş': 's', 'Ş': 's', 'ü': 'u', 'Ü': 'u',
-  };
-  let clean = fullName.replace(/[çÇğĞıIİöÖşŞüÜ]/g, (m) => trMap[m] || m).toLowerCase();
-  clean = clean.replace(/[^a-z0-9]+/g, '.').replace(/^\.+|\.+$/g, '');
-  if (clean.length > LOGIN_NAME_BASE_MAX) clean = clean.slice(0, LOGIN_NAME_BASE_MAX).replace(/\.+$/, '');
-  return clean || fallback;
-}
+export { LOGIN_NAME_BASE_MAX, slugifyLoginName };
+const HASH_CONCURRENCY = 4;
 
 /** Sınırlı eşzamanlılıkla eşleme (sıra korunmaz; her öğe tam bir kez işlenir). */
 async function mapLimit(items, limit, handler) {
@@ -530,7 +517,11 @@ const realEmailOf = (value) => {
   return text !== '' && !text.endsWith('@ahbu.local') ? text : null;
 };
 
-async function provisionOne(client, { siteCode, candidate, person, apartmentInfo, hashFor }) {
+/** Kullanıcı adı çakışması (başka bir işlem aynı adı aldı) -> yeni ad seçilip en çok 5 kez yeniden denenir. */
+const MAX_LOGIN_RETRIES = 5;
+const isLoginNameConflict = (error) => error?.code === '23505' && String(error?.constraint ?? '').includes('login_name');
+
+async function provisionOne(client, { siteCode, candidate, person, apartmentInfo, hashFor, expected = null, reserved = new Map(), skip = new Set() }) {
   const apartments = [...candidate.apartments].sort((a, b) => a.aptId - b.aptId);
   const first = apartmentInfo.get(apartments[0].aptId) ?? {};
   const blockName = first.block_name || 'Blok';
@@ -559,26 +550,39 @@ async function provisionOne(client, { siteCode, candidate, person, apartmentInfo
     }
   }
 
-  // 2. yeni hesap: kullanıcı adı (yazılan ya da addan; sunucuda benzersizleştirilir) + başlangıç şifresi
+  // 2. yeni hesap: kullanıcı adı + başlangıç şifresi. Ad, önizlemede gösterilen (`expected`) addır; veritabanında hâlâ boşsa AYNEN kullanılır. Bu arada başka
+  //    bir işlem aldıysa (yarış) aynı tabandan sıradaki boş ad seçilir ve sonuçta `requested_login_name` ile bildirilir; kopya ad ASLA yazılmaz.
+  let requestedLoginName = null;
   if (userCode === null) {
-    const rawDesired = candidate.loginName || person.full_name || null;
-    const desired = rawDesired ? slugifyLoginName(rawDesired) : null;
-    loginName = desired
-      ? await ensureUniqueLoginName({ db: client, desiredLoginName: desired, siteCode: Number(siteCode) })
-      : await generateUniqueApartmentLoginName({ db: client, blockName, sortOrder: Number(first.sort_order || 1), siteCode: Number(siteCode) });
-    const internalEmail = generateInternalApartmentEmail({ loginName, apartmentId: apartments[0].aptId, siteCode: Number(siteCode) });
+    // yöneticinin seçtiği ad (plan aşamasında doğrulanmıştır; burada savunma amaçlı yeniden normalleştirilir) yoksa Ad Soyad'dan üretilen taban
+    const typed = candidate.loginName ? normalizeTypedLoginName(candidate.loginName) : null;
+    const base = typed && !typed.error ? typed.value : person.full_name ? slugifyLoginName(person.full_name) : null;
+    const preferred = expected?.status === 'new' ? expected.loginName : null;
     const password = typeof candidate.password === 'string' && candidate.password.trim() !== '' ? candidate.password.trim() : DEFAULT_ACCOUNT_PASSWORD;
     const passwordHash = await hashFor(candidate.ref, password);
-    const inserted = await client.query(
-      `
-        INSERT INTO users (full_name, email, login_name, role, is_active, email_verified, approval_status, phone_number, password_hash, must_change_password)
-        VALUES ($1, $2, $3, 'apartment_owner', TRUE, TRUE, 'approved', $4, $5, TRUE)
-        RETURNING user_code
-      `,
-      [person.full_name || `${blockName} Daire ${first.unit_label ?? ''}`.trim(), email ?? internalEmail, loginName, person.phone ?? null, passwordHash],
-    );
+    loginName = base
+      ? await claimLoginName(client, base, { preferred: skip.size === 0 ? preferred : null, reserved, key: candidate.ref, skip })
+      : await generateUniqueApartmentLoginName({ db: client, blockName, sortOrder: Number(first.sort_order || 1), siteCode: Number(siteCode) });
+    if (loginName === null) throw new AccountSkip('ACCOUNT_FAILED');
+    const internalEmail = generateInternalApartmentEmail({ loginName, apartmentId: apartments[0].aptId, siteCode: Number(siteCode) });
+    let inserted;
+    try {
+      inserted = await client.query(
+        `
+          INSERT INTO users (full_name, email, login_name, role, is_active, email_verified, approval_status, phone_number, password_hash, must_change_password)
+          VALUES ($1, $2, $3, 'apartment_owner', TRUE, TRUE, 'approved', $4, $5, TRUE)
+          RETURNING user_code
+        `,
+        [person.full_name || `${blockName} Daire ${first.unit_label ?? ''}`.trim(), email ?? internalEmail, loginName, person.phone ?? null, passwordHash],
+      );
+    } catch (error) {
+      // kullanıcı adı yarışı (idx_users_login_name_unique): çağıran kişi SAVEPOINT'ine döner ve bu ad atlanarak yeniden dener
+      if (isLoginNameConflict(error)) error.conflictLoginName = loginName;
+      throw error;
+    }
     userCode = Number(inserted.rows[0].user_code);
     createdAccount = true;
+    if (preferred && loginName.toLowerCase() !== preferred.toLowerCase()) requestedLoginName = preferred;
   }
 
   // 3. kişiyi hesaba bağla (CRM kuralı: hesaplı kişide ad / telefon / e-posta users'tan okunur; siteTiePredicate bağlama kuralıyla aynı)
@@ -604,7 +608,7 @@ async function provisionOne(client, { siteCode, candidate, person, apartmentInfo
       [apartments.map((entry) => entry.aptId), Number(siteCode), userCode],
     );
   }
-  return { loginName, userCode, status: createdAccount ? 'created' : 'linked' };
+  return { loginName, userCode, status: createdAccount ? 'created' : 'linked', requestedLoginName };
 }
 
 /**
@@ -616,8 +620,8 @@ async function provisionOne(client, { siteCode, candidate, person, apartmentInfo
  * @returns {Promise<{ created: number, linked: number, skipped: number, items: object[], skipped_items: object[], audits: object[] }>}
  *   `items` / `skipped_items` istemciye döner (satır no + NİHAİ kullanıcı adı / atlama nedeni); `audits` yalnız sunucu içindir (kişi verisi yok).
  */
-export async function provisionImportedResidents(client, { siteCode, runId = null, accountCandidates, hashes = new Map() }) {
-  const result = { created: 0, linked: 0, skipped: 0, items: [], skipped_items: [], audits: [] };
+export async function provisionImportedResidents(client, { siteCode, runId = null, accountCandidates, hashes = new Map(), expected = new Map() }) {
+  const result = { created: 0, linked: 0, skipped: 0, renamed: 0, items: [], skipped_items: [], audits: [] };
   const candidates = (accountCandidates ?? []).filter((candidate) => Number.isInteger(candidate.personId) && candidate.apartments.length > 0);
   if (!client || typeof client.query !== 'function' || candidates.length === 0) return result;
 
@@ -664,14 +668,47 @@ export async function provisionImportedResidents(client, { siteCode, runId = nul
     return hashPassword(password);
   };
 
+  // önizlemede başka kişilere gösterilen adlar çalınmaz (yarışta yedek ad seçilirken): küçük harfli ad -> kişi ref'i
+  const reserved = new Map();
+  for (const [ref, entry] of expected) {
+    if (entry?.status === 'new' && typeof entry.loginName === 'string') reserved.set(entry.loginName.toLowerCase(), ref);
+  }
+
   const ordered = candidates.filter((candidate) => people.has(candidate.personId)).sort((a, b) => rankOf(a) - rankOf(b) || a.personId - b.personId);
   for (const candidate of ordered) {
     await client.query('SAVEPOINT import_account');
     try {
-      const outcome = await provisionOne(client, { siteCode, candidate, person: people.get(candidate.personId), apartmentInfo, hashFor });
+      // kullanıcı adı yarışında (23505) kişi SAVEPOINT'ine dönülür ve reddedilen ad atlanarak sıradaki boş adla yeniden denenir (en çok 5 kez)
+      const skip = new Set();
+      let outcome = null;
+      for (let attempt = 0; outcome === null; attempt += 1) {
+        try {
+          outcome = await provisionOne(client, {
+            siteCode,
+            candidate,
+            person: people.get(candidate.personId),
+            apartmentInfo,
+            hashFor,
+            expected: expected.get(candidate.ref) ?? null,
+            reserved,
+            skip,
+          });
+        } catch (error) {
+          if (!(isLoginNameConflict(error) && error.conflictLoginName && attempt < MAX_LOGIN_RETRIES)) throw error;
+          await client.query('ROLLBACK TO SAVEPOINT import_account');
+          skip.add(error.conflictLoginName.toLowerCase());
+        }
+      }
       await client.query('RELEASE SAVEPOINT import_account');
       result[outcome.status] += 1;
-      result.items.push({ n: candidate.n, login_name: outcome.loginName, status: outcome.status });
+      if (outcome.requestedLoginName) result.renamed += 1;
+      result.items.push({
+        n: candidate.n,
+        login_name: outcome.loginName,
+        status: outcome.status,
+        // önizlemede gösterilen ad yazım anında başkasına geçtiyse (yarış) istenen ad
+        ...(outcome.requestedLoginName ? { requested_login_name: outcome.requestedLoginName } : {}),
+      });
       result.audits.push({
         action: 'person.account_created',
         target_type: 'person',

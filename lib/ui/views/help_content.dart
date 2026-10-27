@@ -175,6 +175,8 @@ abstract final class HelpContent {
     'Geri al',
     'Toplu Yükle',
     'Hepsi bir arada',
+    'İlişki',
+    'Borç Sorumlusu',
     'Dosya Deposu (Google Drive)',
     'Google Drive bağla',
     'Telefonla giriş (SMS)',
@@ -775,7 +777,7 @@ abstract final class HelpContent {
       icon: Icons.upload_file_rounded,
       steps: <String>[
         "“Finans” ekranında “Daireler” sekmesindeki “Devir bakiyesi” düğmesine dokunun, ardından “Excel'den yükle”yi seçin.",
-        'Şablonu indirip her daire için blok, daire no ve tutarı (TL) yazın; kiracının borcu için “Hesap” sütununa Kiracı yazın, boşsa ev sahibi hesabına yazılır.',
+        'Şablonu indirip her daire için blok, daire no ve tutarı (TL) yazın; kiracının borcu için “Hesap” hücresinde açılan listeden Kiracı’yı seçin, boşsa ev sahibi hesabına yazılır.',
         'Önizlemede devir tarihini seçin ve toplamı kontrol edin; onayda tutarları eski kayıtlarla karşılaştırdığınızı işaretleyin.',
         'Yanlış yüklediyseniz aynı pencerede ilgili yüklemenin yanındaki “Geri al”a dokunun; neden yazılır ve ters kayıt eklenir, eski kayıtlar silinmez.',
       ],
@@ -788,6 +790,8 @@ abstract final class HelpContent {
       steps: <String>[
         '“Kişiler” ekranında “Toplu Yükle”ye dokunun ve “Hepsi bir arada”yı seçin.',
         'Şablonda daire bilgisi, sakin adı, ilişki, telefon, e-posta, taşınma tarihi, plaka ve not tek satırdadır; bir dairenin birden çok sakini alt alta yazılır.',
+        '“İlişki” ve “Borç Sorumlusu” hücreleri Excel’de açılır listedir: hücreye dokunup ok işaretiyle listeden seçin, elle yazmayın. CSV dosyasında liste yoktur; aynı sözcükleri yazın.',
+        'Şablonda kullanıcı adı sütunu yoktur. Dosyayı yükleyince kullanıcı adlarını sistem Ad Soyad’dan verir ve tabloda gösterir; başka bir sitede ya da dosyada aynı ad varsa sonuna _2, _3 ekler. İsterseniz hücreye dokunup değiştirebilirsiniz; yazdığınız ad sistemde kullanılmıyorsa kabul edilir.',
         'Aynı dairenin satırlarında daire bilgisi (kat, tip) farklıysa o satır hata olur; tek değer bırakın.',
       ],
     ),

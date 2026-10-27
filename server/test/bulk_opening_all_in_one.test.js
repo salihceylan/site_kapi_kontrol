@@ -220,6 +220,26 @@ describe('planAllInOne', () => {
     assert.equal(buildSpec().kinds.apartments.columns.some((c) => /m2$/.test(c.key)), false);
   });
 
+  it('mali kayıt: «Hepsi bir arada» da satır uyarısı üretmez; mali alan değişen daire sayısı tek özet; hatalı daire sayılmaz', () => {
+    const snapshot = makeSnapshot();
+    snapshot.apartments[0].hasFinance = true; // Daire 1
+    snapshot.apartments[1].hasFinance = true; // Daire 2
+    const result = run([
+      row(1, { blok: 'A', daire_no: '1', sorumlu: 'Kiracı', ad_soyad: 'Ali Yılmaz', iliski: 'Malik' }),
+      row(2, { blok: 'A', daire_no: '1', ad_soyad: 'Ayşe Yılmaz', iliski: 'Aile' }),
+      row(3, { blok: 'A', daire_no: '2', kat: '3', ad_soyad: 'Veli Kaya', iliski: 'Malik' }), // kat mali alan değil
+      row(4, { blok: 'A', daire_no: '3', tip: '2+1', ad_soyad: 'Can Demir', iliski: 'Malik' }), // mali kaydı yok
+    ], snapshot);
+    assert.equal(result.totals.error, 0);
+    assert.equal(result.view.issues.some((issue) => issue.code === 'FINANCE_RECORDS'), false);
+    assert.equal(result.totals.with_warnings, 0);
+    assert.equal(result.view.checks.finance_records.apartments, 1);
+    assert.match(result.view.checks.finance_records.message, /^1 dairenin mali kaydı var;/);
+    // mali alanı değiştiren daire hatalı satır yüzünden düşerse özet de boşalır
+    const failed = run([row(1, { blok: 'A', daire_no: '1', sorumlu: 'Kiracı', ad_soyad: '' + 'x'.repeat(101) })], snapshot);
+    assert.equal(failed.view.checks.finance_records, null);
+  });
+
   it('hesap açılacak kişi sayısı (account_create): yalnız daire ilişkisi eklenen kişiler; dairesiz ve daire-yalnız satırlar sayılmaz', () => {
     const result = run([
       row(1, { blok: 'A', daire_no: '1', kat: '2', ad_soyad: 'Ali Yılmaz', iliski: 'Malik' }),

@@ -2,8 +2,12 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  ACCOUNT_CHOICES,
   BULK_KINDS,
+  LOGIN_NAME_OVERRIDE_KEY,
   MAX_BODY_BYTES,
+  RELATION_CHOICES,
+  RESPONSIBLE_CHOICES,
   MAX_ROWS_LIMIT,
   RELATION_WORDS,
   RESPONSIBLE_WORDS,
@@ -16,6 +20,7 @@ import {
   maxRows,
 } from '../src/modules/bulk_import_spec.js';
 import { foldText } from '../src/modules/people_common.js';
+import { readAccount, readRelation, readResponsible } from '../src/modules/bulk_import_parsers.js';
 import { requestFingerprint, validateImportBody } from '../src/modules/bulk_import_body.js';
 import { ERROR_CODES, MESSAGE_MAX_LENGTH, WARNING_CODES, issueMessage } from '../src/modules/bulk_import_messages.js';
 
@@ -50,7 +55,7 @@ describe('spec', () => {
     const required = (kind) => columnsOf(kind).filter((c) => c.required).map((c) => c.key);
     assert.deepEqual(columnsOf('apartments').map((c) => c.key), ['blok', 'daire_no', 'kat', 'tip', 'arsa_payi_pay', 'arsa_payi_payda', 'sorumlu']);
     assert.deepEqual(required('apartments'), ['blok', 'daire_no']);
-    assert.deepEqual(columnsOf('people').map((c) => c.key), ['ad_soyad', 'kullanici_adi', 'telefon', 'e_posta', 'sifre', 'blok', 'daire_no', 'iliski', 'giris_tarihi', 'plaka', 'not']);
+    assert.deepEqual(columnsOf('people').map((c) => c.key), ['ad_soyad', 'telefon', 'e_posta', 'sifre', 'blok', 'daire_no', 'iliski', 'giris_tarihi', 'plaka', 'not']);
     assert.deepEqual(required('people'), ['ad_soyad']);
     assert.deepEqual(columnsOf('vehicles').map((c) => c.key), ['plaka', 'e_posta', 'blok', 'daire_no', 'ad_soyad', 'not']);
     assert.deepEqual(required('vehicles'), ['plaka']);
@@ -58,6 +63,53 @@ describe('spec', () => {
     assert.equal(labels.arsa_payi_pay, 'Arsa Payı (Pay)');
     assert.equal(labels.arsa_payi_pay, 'Arsa Payı (Pay)');
     assert.equal(labels.sorumlu, 'Borç Sorumlusu');
+  });
+
+  it('KULLANICI ADI sütunu şablondan/spec\'ten KALKTI: hiçbir türün sütununda ve başlık takma adında yok; sistem verir', () => {
+    for (const kind of BULK_KINDS) {
+      assert.equal(columnsOf(kind).some((c) => c.key === 'kullanici_adi' || c.key === LOGIN_NAME_OVERRIDE_KEY), false, kind);
+      const index = headerIndexOf(kind);
+      for (const header of ['Kullanıcı Adı', 'Kullanici Adi', 'Username', 'Giriş Adı', 'Kullanıcı', 'Hesap Adı']) {
+        assert.equal(index.has(foldHeader(header)), false, `${kind}: «${header}» artık hiçbir sütunun adı değil`);
+      }
+    }
+  });
+
+  it('SEÇİM LİSTELERİ: her enum sütunu `choices` taşır (Excel açılır listesi); seçenekler virgül içermez, ayrıştırıcının kabul ettiği sözcüklerdir', () => {
+    const spec = buildSpec({});
+    const enumColumns = [];
+    for (const kind of BULK_KINDS) {
+      for (const column of spec.kinds[kind].columns) {
+        if (column.type === 'enum') enumColumns.push([kind, column]);
+        else assert.equal('choices' in column, false, `${kind}.${column.key} enum değil, seçim listesi olmamalı`);
+      }
+    }
+    assert.deepEqual(enumColumns.map(([kind, column]) => `${kind}.${column.key}`).sort(), [
+      'all_in_one.iliski', 'all_in_one.sorumlu', 'apartments.sorumlu', 'opening_balances.hesap', 'people.iliski',
+    ]);
+    for (const [kind, column] of enumColumns) {
+      assert.ok(Array.isArray(column.choices) && column.choices.length >= 2, `${kind}.${column.key}`);
+      assert.ok(column.choices.every((choice) => !choice.includes(',') && choice.trim() === choice), 'Excel liste sabiti virgülle ayrılır');
+      assert.ok(column.choices.join(',').length <= 255, 'Excel liste sabiti en çok 255 karakter');
+      assert.match(column.hint, /Listeden seçin/, `${kind}.${column.key} ipucu liste kullanımını söyler`);
+    }
+    assert.deepEqual(spec.kinds.people.columns.find((c) => c.key === 'iliski').choices, ['Malik', 'Kiracı', 'Aile Üyesi', 'Sakin']);
+    assert.deepEqual(spec.kinds.apartments.columns.find((c) => c.key === 'sorumlu').choices, ['Malik', 'Kiracı', 'İkisi']);
+    assert.deepEqual(spec.kinds.opening_balances.columns.find((c) => c.key === 'hesap').choices, ['Ev sahibi', 'Kiracı']);
+    assert.deepEqual(spec.kinds.all_in_one.columns.find((c) => c.key === 'iliski').choices, [...RELATION_CHOICES]);
+  });
+
+  it('listedeki HER seçenek doğru kanonik değere çözülür (ayrıştırıcı tam bu etiketleri kabul eder); eski eşanlamlılar da hâlâ kabul edilir', () => {
+    const relation = Object.fromEntries(RELATION_CHOICES.map((label) => [label, readRelation(label).value]));
+    assert.deepEqual(relation, { Malik: 'owner', Kiracı: 'tenant', 'Aile Üyesi': 'family_member', Sakin: 'resident' });
+    const responsible = Object.fromEntries(RESPONSIBLE_CHOICES.map((label) => [label, readResponsible(label).value]));
+    assert.deepEqual(responsible, { Malik: 'owner', Kiracı: 'tenant', İkisi: 'both' });
+    const account = Object.fromEntries(ACCOUNT_CHOICES.map((label) => [label, readAccount(label).value]));
+    assert.deepEqual(account, { 'Ev sahibi': 'owner', Kiracı: 'tenant' });
+    for (const [text, expected] of [['Eş', 'family_member'], ['Çocuk', 'family_member'], ['Aile', 'family_member'], ['Mal sahibi', 'owner'], ['oturan', 'resident'], ['KİRACI', 'tenant']]) {
+      assert.equal(readRelation(text).value, expected, text);
+    }
+    assert.equal(readRelation('Komşu').error, 'RELATION_INVALID');
   });
 
   it('başlık katlaması: aynı katlamış başlık aynı türde İKİ sütuna düşmez; etiketler kendi anahtarına gider', () => {
@@ -94,6 +146,17 @@ describe('spec', () => {
     assert.equal(foldHeader('İLİŞKİ'), 'iliski');
     assert.equal(foldHeader('Ş-Ğ-Ü-Ö-Ç'), 's g u o c');
     assert.equal(foldText('ÇĞİÖŞÜçğıöşü'), 'cgiosucgiosu');
+  });
+
+  it('gövde: eski «kullanici_adi» anahtarı kabul edilir (eski dosya/istemci 400 almaz, planlayıcı yok sayar); `giris_adi` yalnız kişi türlerinde; daire/araçta reddedilir', () => {
+    for (const kind of ['people', 'all_in_one']) {
+      const parsed = validateImportBody(body({ rows: [{ n: 2, cells: { ad_soyad: 'Ali', kullanici_adi: 'eski.ad', giris_adi: 'yeni.ad' } }] }), kind);
+      assert.deepEqual({ ...parsed.rows[0].cells }, { ad_soyad: 'Ali', kullanici_adi: 'eski.ad', giris_adi: 'yeni.ad' });
+    }
+    for (const kind of ['apartments', 'vehicles', 'opening_balances']) {
+      fails(() => validateImportBody(body({ rows: [{ n: 2, cells: { giris_adi: 'x.y.z' } }] }), kind), 400, 'INVALID_BODY');
+      fails(() => validateImportBody(body({ rows: [{ n: 2, cells: { kullanici_adi: 'x.y.z' } }] }), kind), 400, 'INVALID_BODY');
+    }
   });
 
   it('ilişki ve sorumlu sözcükleri spec ile aynı kaynaktan', () => {

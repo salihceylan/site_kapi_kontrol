@@ -1,12 +1,32 @@
+import 'dart:async';
+
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/models/bulk_import.dart';
+import 'package:site_kapi_kontrol/services/bulk_choices.dart';
+import 'package:site_kapi_kontrol/services/bulk_login_name.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/views/bulk_import_controller.dart';
 import 'package:site_kapi_kontrol/services/bulk_template.dart';
 
+/// Tablo sütunu: şablon sütunu ya da sanal «Kullanıcı Adı» sütunu.
+class _TableColumn {
+  const _TableColumn.spec(ImportColumn this.column) : isLogin = false;
+  const _TableColumn.login() : column = null, isLogin = true;
+
+  final ImportColumn? column;
+  final bool isLogin;
+
+  String get label => isLogin ? 'Kullanıcı Adı' : column!.label;
+  bool get required => !isLogin && column!.required;
+}
+
 /// Toplu yükleme sırasında yöneticinin verileri Excel görünümünde doğrudan inceleyebileceği,
 /// hücre hücre düzenleyebileceği, satır ekleyip silebileceği etkileşimli elektronik tablo bileşeni.
+///
+/// - Seçim listesi sütunları (İlişki, Borç Sorumlusu ...) serbest metinle DEĞİL açılır listeyle düzenlenir.
+/// - Kişi türlerinde «Kullanıcı Adı» sütunu sistemin seçtiği adı gösterir; yönetici değiştirebilir, ancak yeni ad sunucudaki denetimi (biçim + tüm
+///   sistemdeki kullanılabilirlik) geçmeden kabul edilmez. Mevcut hesaba bağlanan satırlarda ad salt okunurdur.
 class BulkEditableTable extends StatefulWidget {
   const BulkEditableTable({
     super.key,
@@ -25,6 +45,8 @@ class _BulkEditableTableState extends State<BulkEditableTable> {
   String _searchQuery = '';
   int _page = 0;
   static const int _pageSize = 25;
+
+  BulkImportController get _c => widget.controller;
 
   @override
   void initState() {
@@ -47,22 +69,29 @@ class _BulkEditableTableState extends State<BulkEditableTable> {
     super.dispose();
   }
 
-  List<ImportColumn> _visibleColumns() {
-    final spec = widget.controller.kindSpec;
-    if (spec == null) return const <ImportColumn>[];
-    final rows = widget.controller.rows;
-    return spec.columns.where((col) {
-      if (!kExcludedTemplateKeys.contains(col.key)) return true;
-      // Eğer kaldırılan alanlardan biri satırlardan birinde doluysa göster (geriye dönük uyumluluk)
-      return rows.any((r) {
-        final val = r.cells[col.key];
-        return val != null && val.toString().trim().isNotEmpty;
-      });
-    }).toList();
+  List<_TableColumn> _visibleColumns() {
+    final spec = _c.kindSpec;
+    if (spec == null) return const <_TableColumn>[];
+    final rows = _c.rows;
+    final out = <_TableColumn>[];
+    for (final col in spec.columns) {
+      if (kExcludedTemplateKeys.contains(col.key)) {
+        // Eğer kaldırılan alanlardan biri satırlardan birinde doluysa göster (geriye dönük uyumluluk)
+        final used = rows.any((r) {
+          final val = r.cells[col.key];
+          return val != null && val.toString().trim().isNotEmpty;
+        });
+        if (!used) continue;
+      }
+      out.add(_TableColumn.spec(col));
+      // Kullanıcı adı, Ad Soyad'ın hemen yanında: sistem verir, yönetici değiştirebilir.
+      if (col.key == 'ad_soyad' && _c.hasLoginColumn) out.add(const _TableColumn.login());
+    }
+    return out;
   }
 
   List<int> _filteredRowIndices() {
-    final rows = widget.controller.rows;
+    final rows = _c.rows;
     if (_searchQuery.isEmpty) {
       return List<int>.generate(rows.length, (i) => i);
     }
@@ -81,6 +110,7 @@ class _BulkEditableTableState extends State<BulkEditableTable> {
           break;
         }
       }
+      if (!matchesCell && (_c.loginNameOf(row)?.toLowerCase().contains(_searchQuery) ?? false)) matchesCell = true;
       if (matchesCell) {
         out.add(i);
       }
@@ -93,30 +123,53 @@ class _BulkEditableTableState extends State<BulkEditableTable> {
     required ImportRow row,
     required ImportColumn col,
   }) async {
+    final choices = choicesFor(col);
+    if (choices.isNotEmpty) {
+      // Seçim listesi sütunu: serbest metin DEĞİL, açılır liste.
+      final current = row.cells[col.key]?.toString() ?? '';
+      final selected = await showDialog<String?>(
+        context: context,
+        builder: (_) => _EnumEditDialog(
+          column: col,
+          choices: choices,
+          currentText: current,
+          matched: current.trim().isEmpty ? null : matchChoice(_c.kindSpec, col, current),
+        ),
+      );
+      if (selected != null && mounted) {
+        _c.updateCell(realIndex, col.key, selected);
+      }
+      return;
+    }
     final updated = await showDialog<String?>(
       context: context,
-      builder: (_) => _CellEditDialog(
-        col: col,
-        initialValue: row.cells[col.key]?.toString() ?? '',
-        isDuplicateUsername: (lower) => widget.controller.rows.asMap().entries.any(
-              (entry) =>
-                  entry.key != realIndex &&
-                  entry.value.cells['kullanici_adi']?.toString().trim().toLowerCase() == lower,
-            ),
-      ),
+      builder: (_) => _CellEditDialog(col: col, initialValue: row.cells[col.key]?.toString() ?? ''),
     );
     if (updated != null && mounted) {
-      widget.controller.updateCell(realIndex, col.key, updated);
+      _c.updateCell(realIndex, col.key, updated);
     }
   }
 
+  Future<void> _editLoginName({required int realIndex, required ImportRow row}) async {
+    final result = await showDialog<_LoginNameResult?>(
+      context: context,
+      builder: (_) => _LoginNameDialog(controller: _c, row: row),
+    );
+    if (result == null || !mounted) return;
+    _c.updateCell(realIndex, kLoginNameKey, result.reset ? null : result.value);
+  }
+
   Future<void> _addNewRow() async {
+    final cols = <ImportColumn>[
+      for (final col in _visibleColumns())
+        if (!col.isLogin) col.column!,
+    ];
     final values = await showDialog<Map<String, String>?>(
       context: context,
-      builder: (_) => _AddRowDialog(cols: _visibleColumns()),
+      builder: (_) => _AddRowDialog(cols: cols),
     );
     if (values != null && mounted) {
-      widget.controller.addRow(initialCells: values);
+      _c.addRow(initialCells: values);
     }
   }
 
@@ -124,7 +177,7 @@ class _BulkEditableTableState extends State<BulkEditableTable> {
   Widget build(BuildContext context) {
     final p = context.palette;
     final th = Theme.of(context).textTheme;
-    final allRows = widget.controller.rows;
+    final allRows = _c.rows;
     final cols = _visibleColumns();
 
     if (allRows.isEmpty) {
@@ -157,6 +210,7 @@ class _BulkEditableTableState extends State<BulkEditableTable> {
     final startIdx = effectivePage * _pageSize;
     final endIdx = (startIdx + _pageSize) > totalCount ? totalCount : (startIdx + _pageSize);
     final pageIndices = totalCount == 0 ? const <int>[] : filteredIndices.sublist(startIdx, endIdx);
+    final problems = _c.loginProblems;
 
     return AppCard(
       padding: EdgeInsets.zero,
@@ -247,14 +301,20 @@ class _BulkEditableTableState extends State<BulkEditableTable> {
                 const SizedBox(width: AppSpace.xs),
                 Expanded(
                   child: Text(
-                    'İstediğiniz hücreye dokunarak içeriği doğrudan değiştirebilirsiniz.',
+                    _c.hasLoginColumn
+                        ? 'Hücreye dokunarak değiştirebilirsiniz. İlişki gibi alanlar listeden seçilir; kullanıcı adlarını sistem verir, '
+                              'değiştirirseniz sistemde kullanılmayan bir ad olmalıdır.'
+                        : 'İstediğiniz hücreye dokunarak içeriği doğrudan değiştirebilirsiniz. İlişki gibi alanlar listeden seçilir.',
+                    key: const ValueKey<String>('bulk_table_help'),
                     style: TextStyle(fontSize: 12, color: p.textSecondary, fontWeight: FontWeight.w500),
+                    maxLines: 3,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],
             ),
           ),
+          if (_c.hasLoginColumn) _LoginStatusBar(controller: _c),
           const Divider(height: 1),
 
           // Yatay Kaydırılabilir Excel Görünümlü Tablo (Altta görünür ve sürüklenebilir kaydırma çubuğu)
@@ -306,6 +366,7 @@ class _BulkEditableTableState extends State<BulkEditableTable> {
                     realIdx: realIdx,
                     row: allRows[realIdx],
                     cols: cols,
+                    problem: problems[allRows[realIdx].n],
                   ),
               ],
             ),
@@ -365,7 +426,8 @@ class _BulkEditableTableState extends State<BulkEditableTable> {
     required BuildContext context,
     required int realIdx,
     required ImportRow row,
-    required List<ImportColumn> cols,
+    required List<_TableColumn> cols,
+    String? problem,
   }) {
     final p = context.palette;
     final isEven = realIdx % 2 == 0;
@@ -393,20 +455,131 @@ class _BulkEditableTableState extends State<BulkEditableTable> {
         ),
         // Hücreler
         for (final col in cols)
-          DataCell(
-            _buildCellContent(row: row, col: col, p: p),
-            onTap: () => _editCell(realIndex: realIdx, row: row, col: col),
-          ),
+          if (col.isLogin)
+            DataCell(
+              _buildLoginCell(row: row, problem: problem, p: p),
+              onTap: _c.isLoginEditable(row) ? () => _editLoginName(realIndex: realIdx, row: row) : null,
+            )
+          else
+            DataCell(
+              _buildCellContent(row: row, col: col.column!, p: p),
+              showEditIcon: choicesFor(col.column!).isNotEmpty,
+              onTap: () => _editCell(realIndex: realIdx, row: row, col: col.column!),
+            ),
         // Satır Silme
         DataCell(
           IconButton(
             icon: Icon(Icons.delete_outline_rounded, size: 18, color: AppTone.danger.a),
             tooltip: 'Satırı Sil',
-            onPressed: () => widget.controller.deleteRow(realIdx),
+            onPressed: () => _c.deleteRow(realIdx),
           ),
         ),
       ],
     );
+  }
+
+  /// «Kullanıcı Adı» hücresi: sistemin seçtiği ad (dokununca değiştirilir), mevcut hesabın adı (salt okunur) ya da hesap açılmama nedeni.
+  Widget _buildLoginCell({required ImportRow row, required String? problem, required dynamic p}) {
+    final proposal = _c.proposalOf(row);
+    final name = _c.loginNameOf(row);
+    TextStyle style([Color? color, FontWeight? weight]) => TextStyle(fontSize: 13, color: color ?? p.text, fontWeight: weight);
+
+    if (proposal == null) {
+      if (_c.proposalsLoading) {
+        return Row(
+          key: ValueKey<String>('bulk_login_loading_${row.n}'),
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2)),
+            const SizedBox(width: 6),
+            Text('Hazırlanıyor…', style: style(p.textMuted)),
+          ],
+        );
+      }
+      return Text('-', style: style(p.textMuted));
+    }
+
+    switch (proposal.status) {
+      case AccountProposalStatus.rejected:
+        return Tooltip(
+          message: problem ?? proposal.message ?? 'Kullanıcı adı kabul edilmedi.',
+          child: Row(
+            key: ValueKey<String>('bulk_login_problem_${row.n}'),
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.error_outline_rounded, size: 15, color: AppTone.danger.a),
+              const SizedBox(width: 4),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 240),
+                child: Text(
+                  problem ?? proposal.message ?? 'Kullanıcı adı kabul edilmedi.',
+                  style: style(AppTone.danger.a, FontWeight.w600),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        );
+      case AccountProposalStatus.existing:
+        return Tooltip(
+          message: 'Bu kişi mevcut bir hesaba bağlanır; kullanıcı adı değiştirilemez.',
+          child: Row(
+            key: ValueKey<String>('bulk_login_existing_${row.n}'),
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.lock_outline_rounded, size: 14, color: p.textMuted),
+              const SizedBox(width: 4),
+              Text(name ?? 'Mevcut hesap', style: style(p.textSecondary)),
+            ],
+          ),
+        );
+      case AccountProposalStatus.emailInUse:
+        return Tooltip(
+          message: 'Bu e-posta başka bir hesaba ait; kişi kaydedilir ama hesap açılmaz.',
+          child: Text('Hesap açılmaz', key: ValueKey<String>('bulk_login_none_${row.n}'), style: style(p.textMuted)),
+        );
+      case AccountProposalStatus.shared:
+        return Tooltip(
+          message: 'Aynı kişi dosyada başka satırda da var; tek hesap açılır.',
+          child: Text(
+            proposal.line == null ? 'Aynı hesap' : 'Satır ${proposal.line} ile aynı hesap',
+            key: ValueKey<String>('bulk_login_shared_${row.n}'),
+            style: style(p.textMuted),
+          ),
+        );
+      case AccountProposalStatus.unavailable:
+        return Text('-', style: style(p.textMuted));
+      case AccountProposalStatus.create:
+        final custom = _c.overrideOf(row) != null;
+        final shown = problem != null;
+        return Tooltip(
+          message: shown ? problem : (custom ? 'Sizin seçtiğiniz kullanıcı adı. Değiştirmek için dokunun.' : 'Sistemin seçtiği kullanıcı adı. Değiştirmek için dokunun.'),
+          child: Row(
+            key: ValueKey<String>('bulk_login_name_${row.n}'),
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (shown) ...[
+                Icon(Icons.error_outline_rounded, size: 15, color: AppTone.danger.a),
+                const SizedBox(width: 4),
+              ],
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 240),
+                child: Text(
+                  shown ? problem : (name ?? '-'),
+                  style: style(shown ? AppTone.danger.a : null, custom ? FontWeight.w700 : null),
+                  maxLines: shown ? 2 : 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              if (custom && !shown) ...[
+                const SizedBox(width: 4),
+                Icon(Icons.edit_rounded, size: 12, color: p.textMuted),
+              ],
+            ],
+          ),
+        );
+    }
   }
 
   Widget _buildCellContent({
@@ -457,15 +630,96 @@ class _BulkEditableTableState extends State<BulkEditableTable> {
   }
 }
 
+/// Kullanıcı adı önerilerinin durumu: hazırlanıyor / yenileniyor / hata (yeniden dene) / sorun varsa uyarı. Yüklemeyi yalnız gerçek sorunlar engeller.
+class _LoginStatusBar extends StatelessWidget {
+  const _LoginStatusBar({required this.controller});
+
+  final BulkImportController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    final c = controller;
+    final problems = c.loginProblems;
+    final Widget? body;
+    if (problems.isNotEmpty) {
+      final first = problems.entries.first;
+      body = Row(
+        key: const ValueKey<String>('bulk_login_problems'),
+        children: [
+          Icon(Icons.error_outline_rounded, size: 16, color: AppTone.danger.a),
+          const SizedBox(width: AppSpace.xs),
+          Expanded(
+            child: Text(
+              problems.length == 1
+                  ? 'Satır ${first.key}: ${first.value}'
+                  : '${problems.length} satırda kullanıcı adı sorunu var (ilki satır ${first.key}: ${first.value}). Düzeltmeden devam edilemez.',
+              style: TextStyle(fontSize: 12, color: AppTone.danger.a, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      );
+    } else if (c.proposalsError != null && !c.proposalsLoading) {
+      body = Column(
+        key: const ValueKey<String>('bulk_login_error'),
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.warning_amber_rounded, size: 16, color: Colors.amber.shade800),
+              const SizedBox(width: AppSpace.xs),
+              Expanded(child: Text(c.proposalsError!, style: TextStyle(fontSize: 12, color: p.textSecondary))),
+            ],
+          ),
+          Align(
+            alignment: AlignmentDirectional.centerEnd,
+            child: TextButton(
+              key: const ValueKey<String>('bulk_login_retry'),
+              onPressed: c.flushProposals,
+              child: const Text('Yeniden dene'),
+            ),
+          ),
+        ],
+      );
+    } else if (c.proposalsLoading || c.proposalsStale) {
+      body = Row(
+        key: const ValueKey<String>('bulk_login_loading'),
+        children: [
+          const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
+          const SizedBox(width: AppSpace.xs),
+          Expanded(
+            child: Text(
+              'Kullanıcı adları hazırlanıyor… Sistem, başka sitelerde ve dosyada alınmış adları atlar.',
+              style: TextStyle(fontSize: 12, color: p.textSecondary),
+            ),
+          ),
+        ],
+      );
+    } else {
+      body = null;
+    }
+    if (body == null) return const SizedBox.shrink();
+    return Semantics(
+      container: true,
+      liveRegion: true,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: AppSpace.md, vertical: 6),
+        color: p.surface,
+        child: body,
+      ),
+    );
+  }
+}
+
 /// Hücre düzenleme penceresi. Metin denetleyicisi pencerenin kendi durumundadır ve pencere ağaçtan çıkınca
 /// (kapanış animasyonu bittikten sonra) silinir: çağıran tarafta `showDialog` döner dönmez silmek, kapanış
 /// animasyonu sürerken "TextEditingController was used after being disposed" hatası veriyordu.
 class _CellEditDialog extends StatefulWidget {
-  const _CellEditDialog({required this.col, required this.initialValue, required this.isDuplicateUsername});
+  const _CellEditDialog({required this.col, required this.initialValue});
 
   final ImportColumn col;
   final String initialValue;
-  final bool Function(String lowerUsername) isDuplicateUsername;
 
   @override
   State<_CellEditDialog> createState() => _CellEditDialogState();
@@ -473,25 +727,11 @@ class _CellEditDialog extends StatefulWidget {
 
 class _CellEditDialogState extends State<_CellEditDialog> {
   late final TextEditingController _ctrl = TextEditingController(text: widget.initialValue);
-  String? _fieldError;
 
   @override
   void dispose() {
     _ctrl.dispose();
     super.dispose();
-  }
-
-  void _apply() {
-    final col = widget.col;
-    final text = _ctrl.text.trim();
-    if (col.key == 'kullanici_adi' && text.isNotEmpty) {
-      // Sunucunun kullanacağı biçimle karşılaştır (tabloda görünen ad = yazılanın sadeleşmiş hali)
-      if (widget.isDuplicateUsername(generateUsernameFromFullName(text))) {
-        setState(() => _fieldError = 'Bu kullanıcı adı başka bir satırda zaten var!');
-        return;
-      }
-    }
-    Navigator.of(context).pop(_ctrl.text);
   }
 
   @override
@@ -525,15 +765,9 @@ class _CellEditDialogState extends State<_CellEditDialog> {
             autofocus: true,
             decoration: InputDecoration(
               labelText: col.label,
-              helperText: col.key == 'kullanici_adi'
-                  ? 'Benzersiz kullanıcı adı (örn. ad.soyad)'
-                  : (col.required ? 'Bu alan zorunludur' : 'İsteğe bağlı'),
-              errorText: _fieldError,
+              helperText: col.required ? 'Bu alan zorunludur' : 'İsteğe bağlı',
               border: const OutlineInputBorder(),
             ),
-            onChanged: (_) {
-              if (_fieldError != null) setState(() => _fieldError = null);
-            },
           ),
         ],
       ),
@@ -548,7 +782,341 @@ class _CellEditDialogState extends State<_CellEditDialog> {
             foregroundColor: Colors.white,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           ),
-          onPressed: _apply,
+          onPressed: () => Navigator.of(context).pop(_ctrl.text),
+          child: const Text('Uygula'),
+        ),
+      ],
+    );
+  }
+}
+
+/// Seçim listesi sütunu (İlişki, Borç Sorumlusu, Hesap) düzenleme penceresi: serbest metin YOK, açılır liste. Boş bırakmak isteğe bağlı sütunlarda
+/// ayrı bir seçenektir (boş hücre mevcut değeri silmez; sunucu varsayılanı uygular). İptal null, «Uygula» seçilen etiketi (ya da boş metni) döndürür.
+class _EnumEditDialog extends StatefulWidget {
+  const _EnumEditDialog({required this.column, required this.choices, required this.currentText, required this.matched});
+
+  final ImportColumn column;
+  final List<String> choices;
+
+  /// Dosyadaki ham hücre metni (listede olmayan eski sözcük olabilir: «Eş»).
+  final String currentText;
+
+  /// [currentText]'in listedeki karşılığı (yoksa null).
+  final String? matched;
+
+  @override
+  State<_EnumEditDialog> createState() => _EnumEditDialogState();
+}
+
+class _EnumEditDialogState extends State<_EnumEditDialog> {
+  late String? _selected = widget.matched;
+
+  @override
+  Widget build(BuildContext context) {
+    final col = widget.column;
+    final current = widget.currentText.trim();
+    final unknown = current.isNotEmpty && widget.matched == null;
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: Row(
+        children: [
+          Icon(Icons.arrow_drop_down_circle_outlined, color: AppTone.primary.a, size: 24),
+          const SizedBox(width: AppSpace.sm),
+          Expanded(child: Text('Listeden seçin: ${col.label}', style: const TextStyle(fontSize: 16))),
+        ],
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (unknown)
+            Padding(
+              padding: const EdgeInsets.only(bottom: AppSpace.sm),
+              child: Text(
+                'Dosyadaki değer «$current» listede yok. Listeden bir seçenek seçin ya da «İptal» ile değeri olduğu gibi bırakın.',
+                key: const ValueKey<String>('bulk_enum_unknown'),
+                style: TextStyle(fontSize: 12, color: AppTone.warning.ink(context.palette)),
+              ),
+            ),
+          DropdownButtonFormField<String?>(
+            key: const ValueKey<String>('bulk_enum_dropdown'),
+            initialValue: _selected,
+            isExpanded: true,
+            decoration: InputDecoration(
+              labelText: col.label,
+              helperText: col.required ? 'Bu alan zorunludur' : 'Boş bırakılabilir',
+              border: const OutlineInputBorder(),
+            ),
+            items: [
+              if (!col.required) const DropdownMenuItem<String?>(value: null, child: Text('(Boş bırak)')),
+              for (final choice in widget.choices) DropdownMenuItem<String?>(value: choice, child: Text(choice)),
+            ],
+            onChanged: (value) => setState(() => _selected = value),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(null),
+          child: const Text('İptal'),
+        ),
+        ElevatedButton(
+          key: const ValueKey<String>('bulk_enum_apply'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppTone.primary.a,
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          ),
+          // Zorunlu sütunda seçim şart; isteğe bağlıda boş seçim '' döner (hücre temizlenir).
+          onPressed: (col.required && _selected == null) ? null : () => Navigator.of(context).pop(_selected ?? ''),
+          child: const Text('Uygula'),
+        ),
+      ],
+    );
+  }
+}
+
+/// Kullanıcı adı penceresinin sonucu: yeni (normalleşmiş) ad ya da sistem önerisine dönüş.
+class _LoginNameResult {
+  const _LoginNameResult.value(String this.value) : reset = false;
+  const _LoginNameResult.reset() : value = null, reset = true;
+
+  final String? value;
+  final bool reset;
+}
+
+enum _CheckState { idle, checking, ok, bad, failed }
+
+/// Kullanıcı adı düzenleme penceresi: yazılan ad önce tarayıcıda (biçim + dosyadaki diğer adlar), sonra bekletmeli olarak sunucuda (sistemdeki
+/// kullanılabilirlik) denetlenir; «Uygula» yalnız denetim geçtiğinde açılır. Alınmış adda sunucunun önerdiği boş ad tek dokunuşla alınır.
+class _LoginNameDialog extends StatefulWidget {
+  const _LoginNameDialog({required this.controller, required this.row});
+
+  final BulkImportController controller;
+  final ImportRow row;
+
+  @override
+  State<_LoginNameDialog> createState() => _LoginNameDialogState();
+}
+
+class _LoginNameDialogState extends State<_LoginNameDialog> {
+  late final TextEditingController _ctrl;
+  late final String _initial;
+  Timer? _timer;
+  int _token = 0;
+  _CheckState _state = _CheckState.idle;
+  String? _message;
+  String? _suggestion;
+  String? _normalized;
+
+  BulkImportController get _c => widget.controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _initial = _c.loginNameOf(widget.row) ?? '';
+    _ctrl = TextEditingController(text: _initial);
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    ++_token;
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  bool get _unchanged => _normalizedOf(_ctrl.text) == _normalizedOf(_initial);
+
+  String _normalizedOf(String text) => normalizeTypedLoginName(text).value ?? text.trim().toLowerCase();
+
+  void _onChanged(String text) {
+    _timer?.cancel();
+    final token = ++_token;
+    if (_unchanged) {
+      setState(() {
+        _state = _CheckState.idle;
+        _message = null;
+        _suggestion = null;
+        _normalized = null;
+      });
+      return;
+    }
+    final local = _c.localLoginNameProblem(text, rowN: widget.row.n);
+    if (local != null) {
+      setState(() {
+        _state = _CheckState.bad;
+        _message = local;
+        _suggestion = null;
+        _normalized = null;
+      });
+      return;
+    }
+    setState(() {
+      _state = _CheckState.checking;
+      _message = null;
+      _suggestion = null;
+      _normalized = normalizeTypedLoginName(text).value;
+    });
+    _timer = Timer(const Duration(milliseconds: 450), () => _check(text, token));
+  }
+
+  Future<void> _check(String text, int token) async {
+    try {
+      final result = await _c.checkLoginName(text);
+      if (!mounted || token != _token) return;
+      setState(() {
+        _normalized = result.loginName ?? _normalized;
+        if (result.ok) {
+          // sunucu kabul etse bile dosyadaki başka bir satırla çakışma yerel olarak yeniden denetlenir (arada başka satır değişmiş olabilir)
+          final local = _c.localLoginNameProblem(result.loginName ?? text, rowN: widget.row.n);
+          _state = local == null ? _CheckState.ok : _CheckState.bad;
+          _message = local;
+          _suggestion = null;
+        } else {
+          _state = _CheckState.bad;
+          _message = result.message ?? 'Bu kullanıcı adı kullanılamıyor.';
+          _suggestion = result.suggestion;
+        }
+      });
+    } catch (e) {
+      if (!mounted || token != _token) return;
+      setState(() {
+        _state = _CheckState.failed;
+        _message = 'Kullanıcı adı şu an denetlenemedi. Bağlantıyı kontrol edip tekrar deneyin.';
+        _suggestion = null;
+      });
+    }
+  }
+
+  void _useSuggestion() {
+    final suggestion = _suggestion;
+    if (suggestion == null) return;
+    _ctrl.text = suggestion;
+    _ctrl.selection = TextSelection.collapsed(offset: suggestion.length);
+    _onChanged(suggestion);
+  }
+
+  bool get _canApply => _unchanged || _state == _CheckState.ok;
+
+  void _apply() {
+    if (!_canApply) return;
+    if (_unchanged) {
+      Navigator.of(context).pop(null);
+      return;
+    }
+    Navigator.of(context).pop(_LoginNameResult.value(_normalized ?? _ctrl.text.trim()));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    final hasOverride = _c.overrideOf(widget.row) != null;
+    final Color? stateColor = switch (_state) {
+      _CheckState.ok => AppTone.success.a,
+      _CheckState.bad || _CheckState.failed => AppTone.danger.a,
+      _ => null,
+    };
+    final String? status = switch (_state) {
+      _CheckState.checking => 'Denetleniyor…',
+      _CheckState.ok => 'Kullanılabilir.',
+      _ => _message,
+    };
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: Row(
+        children: [
+          Icon(Icons.badge_outlined, color: AppTone.primary.a, size: 24),
+          const SizedBox(width: AppSpace.sm),
+          const Expanded(child: Text('Kullanıcı Adı', style: TextStyle(fontSize: 16))),
+        ],
+      ),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Satır ${widget.row.n}. Kullanıcı adını sistem Ad Soyad\'dan verdi. Değiştirirseniz ad Türkiye genelinde başka hiçbir hesapta ve '
+              'dosyada kullanılmıyor olmalıdır (3-40 karakter; harf, rakam, nokta, alt çizgi, tire).',
+              style: TextStyle(fontSize: 12, color: p.textSecondary),
+            ),
+            const SizedBox(height: AppSpace.sm),
+            TextField(
+              key: const ValueKey<String>('bulk_login_field'),
+              controller: _ctrl,
+              autofocus: true,
+              autocorrect: false,
+              enableSuggestions: false,
+              textInputAction: TextInputAction.done,
+              onChanged: _onChanged,
+              onSubmitted: (_) => _apply(),
+              decoration: InputDecoration(
+                labelText: 'Kullanıcı adı',
+                border: const OutlineInputBorder(),
+                errorText: _state == _CheckState.bad || _state == _CheckState.failed ? _message : null,
+                errorMaxLines: 3,
+                suffixIcon: _state == _CheckState.checking
+                    ? const Padding(padding: EdgeInsets.all(12), child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)))
+                    : (_state == _CheckState.ok ? Icon(Icons.check_circle_rounded, color: AppTone.success.a) : null),
+              ),
+            ),
+            if (status != null && (_state == _CheckState.checking || _state == _CheckState.ok))
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Semantics(
+                  liveRegion: true,
+                  child: Text(
+                    status,
+                    key: const ValueKey<String>('bulk_login_status'),
+                    style: TextStyle(fontSize: 12, color: stateColor ?? p.textSecondary, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
+            if (_normalized != null && _normalized != _ctrl.text.trim() && _state != _CheckState.bad)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text('Kaydedilecek ad: $_normalized', style: TextStyle(fontSize: 12, color: p.textSecondary)),
+              ),
+            if (_suggestion != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: TextButton.icon(
+                  key: const ValueKey<String>('bulk_login_suggestion'),
+                  onPressed: _useSuggestion,
+                  icon: const Icon(Icons.auto_fix_high_rounded, size: 16),
+                  label: Text('Boştaki ad: $_suggestion'),
+                ),
+              ),
+            if (_state == _CheckState.failed)
+              TextButton.icon(
+                key: const ValueKey<String>('bulk_login_recheck'),
+                onPressed: () => _onChanged(_ctrl.text),
+                icon: const Icon(Icons.refresh_rounded, size: 16),
+                label: const Text('Yeniden denetle'),
+              ),
+          ],
+        ),
+      ),
+      actions: [
+        if (hasOverride)
+          TextButton(
+            key: const ValueKey<String>('bulk_login_reset'),
+            onPressed: () => Navigator.of(context).pop(const _LoginNameResult.reset()),
+            child: const Text('Sistem önerisine dön'),
+          ),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(null),
+          child: const Text('İptal'),
+        ),
+        ElevatedButton(
+          key: const ValueKey<String>('bulk_login_apply'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppTone.primary.a,
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          ),
+          onPressed: _canApply ? _apply : null,
           child: const Text('Uygula'),
         ),
       ],
@@ -557,7 +1125,7 @@ class _CellEditDialogState extends State<_CellEditDialog> {
 }
 
 /// Yeni satır penceresi; sütun başına metin denetleyicileri pencereyle birlikte yaşar ve silinir
-/// (bkz. [_CellEditDialog]). "Ekle" girilen değerleri döndürür, "İptal" null.
+/// (bkz. [_CellEditDialog]). Seçim listesi sütunları açılır listedir. "Ekle" girilen değerleri döndürür, "İptal" null.
 class _AddRowDialog extends StatefulWidget {
   const _AddRowDialog({required this.cols});
 
@@ -569,8 +1137,10 @@ class _AddRowDialog extends StatefulWidget {
 
 class _AddRowDialogState extends State<_AddRowDialog> {
   late final Map<String, TextEditingController> _ctrls = {
-    for (final col in widget.cols) col.key: TextEditingController(),
+    for (final col in widget.cols)
+      if (choicesFor(col).isEmpty) col.key: TextEditingController(),
   };
+  final Map<String, String> _picked = <String, String>{};
 
   @override
   void dispose() {
@@ -602,14 +1172,36 @@ class _AddRowDialogState extends State<_AddRowDialog> {
               for (final col in widget.cols)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 6),
-                  child: TextField(
-                    controller: _ctrls[col.key],
-                    decoration: InputDecoration(
-                      labelText: '${col.label}${col.required ? ' *' : ''}',
-                      isDense: true,
-                      border: const OutlineInputBorder(),
-                    ),
-                  ),
+                  child: choicesFor(col).isNotEmpty
+                      ? DropdownButtonFormField<String?>(
+                          key: ValueKey<String>('bulk_add_enum_${col.key}'),
+                          initialValue: _picked[col.key],
+                          isExpanded: true,
+                          decoration: InputDecoration(
+                            labelText: '${col.label}${col.required ? ' *' : ''}',
+                            isDense: true,
+                            border: const OutlineInputBorder(),
+                          ),
+                          items: [
+                            if (!col.required) const DropdownMenuItem<String?>(value: null, child: Text('(Boş bırak)')),
+                            for (final choice in choicesFor(col)) DropdownMenuItem<String?>(value: choice, child: Text(choice)),
+                          ],
+                          onChanged: (value) => setState(() {
+                            if (value == null) {
+                              _picked.remove(col.key);
+                            } else {
+                              _picked[col.key] = value;
+                            }
+                          }),
+                        )
+                      : TextField(
+                          controller: _ctrls[col.key],
+                          decoration: InputDecoration(
+                            labelText: '${col.label}${col.required ? ' *' : ''}',
+                            isDense: true,
+                            border: const OutlineInputBorder(),
+                          ),
+                        ),
                 ),
             ],
           ),
@@ -629,6 +1221,7 @@ class _AddRowDialogState extends State<_AddRowDialog> {
           onPressed: () => Navigator.of(context).pop(<String, String>{
             for (final entry in _ctrls.entries)
               if (entry.value.text.isNotEmpty) entry.key: entry.value.text,
+            ..._picked,
           }),
           child: const Text('Ekle'),
         ),

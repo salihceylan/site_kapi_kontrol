@@ -70,7 +70,13 @@ function handle(sql, params = []) {
     const row = db.emailUsers[params[0]];
     return ok(row ? [row] : []);
   }
-  if (/^SELECT user_code FROM users WHERE LOWER\(login_name\)/.test(sql)) return ok(db.takenLogins.has(String(params[0]).toLowerCase()) ? [{ user_code: 1 }] : []);
+  // önizleme/commit hesap çözümlemesi: e-postası mevcut hesaba ait mi (toplu) ve aday kullanıcı adlarından hangileri alınmış (toplu)
+  if (/FROM users u WHERE LOWER\(u\.email\) = ANY/.test(sql)) {
+    return ok(params[0].filter((email) => db.emailUsers[email]).map((email) => ({ email, ...db.emailUsers[email] })));
+  }
+  if (/^SELECT LOWER\(login_name\) AS name FROM users WHERE LOWER\(login_name\) = ANY\(\$1::TEXT\[\]\)$/.test(sql)) {
+    return ok(params[0].filter((name) => db.takenLogins.has(String(name).toLowerCase())).map((name) => ({ name })));
+  }
   if (/^INSERT INTO users/.test(sql)) {
     if (db.failInsertFor && db.failInsertFor === params[2]) throw Object.assign(new Error('enjekte'), { code: '23505' });
     db.nextUser += 1;
@@ -133,16 +139,104 @@ describe('commit: hesap açma kapsamı ve yanıt', () => {
     assert.equal(preview.plan.people_create, 3);
   });
 
+  it('önizleme her yeni hesap için sistemin seçtiği kullanıcı adını satır no ile verir (aynı adlar dosyada _2 alır); dairesiz satırda hesap yok', async () => {
+    const preview = await previewImport({ siteCode: SITE, kind: 'people', body: body(PEOPLE_ROWS) });
+    assert.deepEqual(preview.accounts, [
+      { n: 2, status: 'new', login_name: 'ali.veli', editable: true, custom: false },
+      { n: 3, status: 'new', login_name: 'ali.veli_2', editable: true, custom: false },
+    ]);
+  });
+
+  it('sistemde (başka site / şehir) alınmış ad önizlemede atlanır: sıradaki boş varyasyon önerilir', async () => {
+    db.takenLogins = new Set(['ali.veli', 'ali.veli_2']);
+    const preview = await previewImport({ siteCode: SITE, kind: 'people', body: body(PEOPLE_ROWS) });
+    assert.deepEqual(preview.accounts.map((a) => [a.n, a.login_name]), [[2, 'ali.veli_3'], [3, 'ali.veli_4']]);
+  });
+
+  it('ÖNİZLEME HASH\'İ önerilen adlara bağlıdır: ad bu arada başkasına geçerse commit PREVIEW_STALE verir (gösterilmeyen ad yazılmaz)', async () => {
+    const preview = await previewImport({ siteCode: SITE, kind: 'people', body: body(PEOPLE_ROWS) });
+    db.takenLogins.add('ali.veli');
+    await assert.rejects(
+      () => commitImport({ siteCode: SITE, kind: 'people', actor: ACTOR, body: body(PEOPLE_ROWS, { expected_hash: preview.preview_hash, idempotency_key: 'stale-names-0001', acknowledged: true }) }),
+      (error) => error.code === 'PREVIEW_STALE',
+    );
+    assert.equal(db.users.length, 0);
+  });
+
+  it('yönetici seçimi ad (giris_adi): boştaysa aynen önerilir ve üretilen adlar onunla çakışmaz; alınmışsa satır hatası LOGIN_NAME_TAKEN; geçersizse LOGIN_NAME_INVALID', async () => {
+    const rows = [
+      row(2, { ad_soyad: 'Ali Veli', blok: 'A', daire_no: '1', iliski: 'Malik' }),
+      row(3, { ad_soyad: 'Ali Veli', blok: 'A', daire_no: '2', iliski: 'Kiracı', giris_adi: 'Ali.Veli' }), // seçim: 'ali.veli' (normalleşir)
+    ];
+    const preview = await previewImport({ siteCode: SITE, kind: 'people', body: body(rows) });
+    assert.deepEqual(preview.accounts.map((a) => [a.n, a.login_name, a.custom]), [[2, 'ali.veli_2', false], [3, 'ali.veli', true]]);
+
+    db.takenLogins = new Set(['ali.veli']);
+    const taken = await previewImport({ siteCode: SITE, kind: 'people', body: body(rows) });
+    assert.deepEqual(taken.issues.filter((i) => i.n === 3).map((i) => i.code), ['LOGIN_NAME_TAKEN']);
+    assert.equal(taken.totals.error, 1);
+    assert.deepEqual(taken.accounts.map((a) => [a.n, a.status, a.login_name]), [[2, 'new', 'ali.veli_2'], [3, 'rejected', null]]);
+    assert.equal(taken.accounts[1].code, 'LOGIN_NAME_TAKEN');
+    assert.match(taken.accounts[1].message, /sistemde başka bir hesapta kayıtlı/);
+    assert.equal(taken.accounts[1].editable, true);
+
+    const invalid = await previewImport({ siteCode: SITE, kind: 'people', body: body([row(2, { ad_soyad: 'Ali Veli', blok: 'A', daire_no: '1', giris_adi: 'a@b' })]) });
+    assert.deepEqual(invalid.issues.map((i) => i.code), ['LOGIN_NAME_INVALID']);
+  });
+
+  it('dosyada aynı ad iki satıra seçilirse ikinci satır LOGIN_NAME_DUP_IN_FILE hatası alır', async () => {
+    const rows = [
+      row(2, { ad_soyad: 'Ali Veli', blok: 'A', daire_no: '1', giris_adi: 'ortak.ad' }),
+      row(3, { ad_soyad: 'Veli Ali', blok: 'A', daire_no: '2', giris_adi: 'ORTAK.ad' }),
+    ];
+    const preview = await previewImport({ siteCode: SITE, kind: 'people', body: body(rows) });
+    assert.deepEqual(preview.issues.map((i) => [i.n, i.code]), [[3, 'LOGIN_NAME_DUP_IN_FILE']]);
+    assert.match(preview.issues[0].message, /satır 2/);
+  });
+
+  it('ESKİ dosya: kullanici_adi hücresi yok sayılır (400 değil), dosya başına TEK bilgi uyarısı; ad sistemden gelir', async () => {
+    const rows = [
+      row(2, { ad_soyad: 'Ali Veli', blok: 'A', daire_no: '1', kullanici_adi: 'benim.adim' }),
+      row(3, { ad_soyad: 'Veli Ali', blok: 'A', daire_no: '2', kullanici_adi: 'baska.ad' }),
+    ];
+    const preview = await previewImport({ siteCode: SITE, kind: 'people', body: body(rows) });
+    assert.deepEqual(preview.issues.map((i) => [i.n, i.severity, i.code]), [[2, 'warning', 'LOGIN_COLUMN_IGNORED']]);
+    assert.deepEqual(preview.accounts.map((a) => a.login_name), ['ali.veli', 'veli.ali']);
+  });
+
+  it('kullanıcı adı denetim ucu servisi: biçim hatası, alınmış ad (öneri ile) ve boştaki ad', async () => {
+    const { checkImportLoginName } = await import('../src/modules/bulk_import_service.js');
+    db.takenLogins = new Set(['ali.veli', 'ali.veli_2']);
+    assert.deepEqual(await checkImportLoginName({ body: { login_name: 'Ali Veli' } }), {
+      ok: false, login_name: 'ali.veli', code: 'TAKEN', message: 'Bu kullanıcı adı sistemde başka bir hesapta kayıtlı.', suggestion: 'ali.veli_3',
+    });
+    assert.equal((await checkImportLoginName({ body: { login_name: 'yeni.ad' } })).ok, true);
+    assert.equal((await checkImportLoginName({ body: { login_name: 'a@b' } })).code, 'CHARS');
+    assert.equal((await checkImportLoginName({ body: { login_name: 'ab' } })).code, 'TOO_SHORT');
+    await assert.rejects(() => checkImportLoginName({ body: { login_name: 5 } }), (error) => error.code === 'INVALID_BODY');
+  });
+
+  it('hesap önerisi servisi (tablo için): yalnız kişi türleri; yazmaz', async () => {
+    const { previewAccounts } = await import('../src/modules/bulk_import_service.js');
+    const suggested = await previewAccounts({ siteCode: SITE, kind: 'people', body: body(PEOPLE_ROWS) });
+    assert.deepEqual(suggested.accounts.map((a) => [a.n, a.login_name]), [[2, 'ali.veli'], [3, 'ali.veli_2']]);
+    assert.equal(db.log.some((entry) => /^(INSERT|UPDATE|DELETE)/.test(entry.sql)), false);
+    await assert.rejects(() => previewAccounts({ siteCode: SITE, kind: 'vehicles', body: body([row(2, { plaka: '34 ABC 123', e_posta: 'a@b.com' })]) }), (error) => error.code === 'IMPORT_KIND_NOT_FOUND');
+  });
+
   it('yalnız bu yüklemede daire ilişkisi eklenen kişilere hesap açılır; yanıt NİHAİ kullanıcı adlarını satır no ile döner', async () => {
     const { preview, committed } = await previewAndCommit('people', PEOPLE_ROWS);
     assert.equal(committed.status, 201);
     const accounts = committed.body.result.accounts;
     assert.deepEqual([accounts.created, accounts.linked, accounts.skipped], [2, 0, 0]);
-    // Admin önceliği kiracı > malik: aynı çalıştırmada KİRACI (satır 3) önce hesap alır; aynı adlı malik (satır 2) ikinci olur ve _2 eki alır.
+    // Adlar önizlemede satır sırasıyla verilir (satır 2 ali.veli, satır 3 ali.veli_2) ve yazımda AYNEN korunur; admin önceliği (kiracı önce) yalnız işlem
+    // sırasını belirler (sonuç listesi işlem sırasındadır), gösterilen adı değiştirmez.
     assert.deepEqual(accounts.items, [
-      { n: 3, login_name: 'ali.veli', status: 'created' },
-      { n: 2, login_name: 'ali.veli_2', status: 'created' },
+      { n: 3, login_name: 'ali.veli_2', status: 'created' },
+      { n: 2, login_name: 'ali.veli', status: 'created' },
     ]);
+    assert.equal(accounts.renamed, 0);
+    assert.deepEqual(preview.accounts.map((a) => [a.n, a.login_name]), [[2, 'ali.veli'], [3, 'ali.veli_2']], 'önizlemede gösterilen = yazılan');
     assert.equal(db.users.length, 2, 'dairesiz kişiye hesap açılmaz');
     assert.equal(preview.plan.account_create, 2);
     // kilitlenen / hesaplanan kişi kümesi = bu yüklemede oluşan iki kişi (kimlik 300, 301); başka kimse değil
@@ -156,9 +250,9 @@ describe('commit: hesap açma kapsamı ve yanıt', () => {
 
   it('ŞİFRE kişiye aittir: özel şifre kendi satırının hesabına, varsayılan 1234 öbürüne gider (ad aynı olsa da)', async () => {
     await previewAndCommit('people', PEOPLE_ROWS);
-    // özel şifreli satır 2 (malik) kiracıdan sonra işlenir: ali.veli_2; kiracı (satır 3) varsayılan 1234 ile ali.veli
-    const owner = db.users.find((u) => u.login_name === 'ali.veli_2');
-    const tenant = db.users.find((u) => u.login_name === 'ali.veli');
+    // özel şifreli satır 2 (malik): önizlemedeki adı ali.veli; kiracı (satır 3) varsayılan 1234 ile ali.veli_2
+    const owner = db.users.find((u) => u.login_name === 'ali.veli');
+    const tenant = db.users.find((u) => u.login_name === 'ali.veli_2');
     assert.equal(await bcrypt.compare('özel-sifre-1', owner.password_hash), true);
     assert.equal(await bcrypt.compare('1234', tenant.password_hash), true);
     assert.equal(await bcrypt.compare('1234', owner.password_hash), false);
@@ -192,8 +286,8 @@ describe('commit: hesap açma kapsamı ve yanıt', () => {
     assert.equal(committed.status, 201);
     const accounts = committed.body.result.accounts;
     assert.deepEqual([accounts.created, accounts.skipped], [1, 1]);
-    // kiracı (satır 3) önce işlenip ali.veli alır; malik (satır 2) ali.veli_2'de düşer
-    assert.deepEqual(accounts.skipped_items.map((i) => [i.n, i.code]), [[2, 'ACCOUNT_FAILED']]);
+    // kiracı (satır 3) önce işlenir ve önizlemedeki adı ali.veli_2'de (kopya olmayan veri hatası) düşer; malik (satır 2) ali.veli ile açılır
+    assert.deepEqual(accounts.skipped_items.map((i) => [i.n, i.code]), [[3, 'ACCOUNT_FAILED']]);
     assert.match(accounts.skipped_items[0].message, /hesap/i);
     assert.ok(db.log.some((entry) => /^ROLLBACK TO SAVEPOINT/.test(entry.sql)));
     assert.equal(db.log.some((entry) => /^ROLLBACK$/.test(entry.sql)), false, 'transaction geri alınmadı');

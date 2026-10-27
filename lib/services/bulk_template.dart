@@ -4,7 +4,12 @@
 // (`exports/apartments` zarfından), `Açıklama` sayfası sütunları, kuralları, örnekleri ve ilişki
 // sözlüğünü anlatır. CSV: seçilen türün başlık satırı (`;` + BOM); daire, kişi ve araç şablonları ön doludur.
 // Veri sayfalarına ÖRNEK SATIR KONMAZ: yanlışlıkla yüklenmesin diye örnekler yalnız `Açıklama` sayfasındadır.
+//
+// Seçim listesi sütunları (İlişki, Borç Sorumlusu, Hesap) XLSX'te Excel VERİ DOĞRULAMASI taşır (açılır liste; listede olmayan değer reddedilir).
+// CSV'de açılır liste YOKTUR; aynı sözcükler elle yazılır (Açıklama sayfası ve ekrandaki not bunu söyler). «Kullanıcı Adı» sütunu şablonda YOKTUR:
+// kullanıcı adlarını sistem verir, yükleme sonrası önizleme tablosunda gösterilir ve değiştirilebilir.
 import 'package:site_kapi_kontrol/models/bulk_import.dart';
+import 'package:site_kapi_kontrol/services/bulk_choices.dart';
 import 'package:site_kapi_kontrol/services/bulk_csv_codec.dart';
 import 'package:site_kapi_kontrol/services/bulk_export_renderer.dart';
 import 'package:site_kapi_kontrol/services/bulk_formatting.dart';
@@ -22,7 +27,6 @@ const Map<String, String> _examples = <String, String>{
   'arsa_payi_payda': '1000',
   'sorumlu': 'Malik',
   'ad_soyad': 'Ahmet Yılmaz',
-  'kullanici_adi': 'ahmet.yilmaz',
   'telefon': '0 (555) 123 45 67',
   'e_posta': 'ahmet@ornek.com',
   'sifre': '1234',
@@ -101,14 +105,32 @@ XlsxColumn _templateColumn(ImportColumn column) {
   } else {
     format = XlsxFormat.general;
   }
-  return XlsxColumn(templateHeaderLabel(column), format: format, width: _width(column));
+  return XlsxColumn(
+    templateHeaderLabel(column),
+    format: format,
+    width: _width(column),
+    listValidation: _listValidation(column),
+  );
+}
+
+/// Seçim listesi sütunlarının (İlişki, Borç Sorumlusu, Hesap) açılır listesi: giriş ipucu + «durdur» stilinde hata iletisi.
+XlsxListValidation? _listValidation(ImportColumn column) {
+  final choices = choicesFor(column);
+  if (choices.isEmpty) return null;
+  final title = column.label.length > kXlsxValidationTitleMax ? column.label.substring(0, kXlsxValidationTitleMax) : column.label;
+  return XlsxListValidation(
+    choices: choices,
+    promptTitle: title,
+    prompt: 'Açılır listeden seçin: ${choices.join(', ')}.${column.required ? '' : ' Boş bırakılabilir.'}',
+    errorTitle: 'Listeden seçin',
+    error: 'Bu hücreye yalnız listedeki değerler yazılabilir: ${choices.join(', ')}. Hücrenin yanındaki ok işaretine basıp seçin.',
+  );
 }
 
 double _width(ImportColumn column) {
   final base = templateHeaderLabel(column).length + 4;
   final hint = switch (column.key) {
     'ad_soyad' => 24,
-    'kullanici_adi' => 20,
     'e_posta' => 26,
     'plaka' => 24,
     'telefon' => 20,
@@ -164,6 +186,19 @@ Object? _cellFor(ImportColumn column, ExportColumn source, Object? value) {
   return text.isEmpty ? null : text;
 }
 
+/// Açılır liste olan sütunların etiketleri («İlişki ve Borç Sorumlusu»): Açıklama sayfası bunları adıyla anar.
+String _listColumnNames(ImportSpec spec, List<ImportKind> group) {
+  final labels = <String>[];
+  for (final kind in group) {
+    for (final column in spec.of(kind)?.columns ?? const <ImportColumn>[]) {
+      if (choicesFor(column).isNotEmpty && !kExcludedTemplateKeys.contains(column.key) && !labels.contains(column.label)) labels.add(column.label);
+    }
+  }
+  if (labels.isEmpty) return 'seçim';
+  if (labels.length == 1) return '«${labels.first}»';
+  return '${labels.take(labels.length - 1).map((l) => '«$l»').join(', ')} ve «${labels.last}»';
+}
+
 List<List<String>> _explanationRows(ImportSpec spec, {required String siteName, required List<ImportKind> group}) {
   final rows = <List<String>>[
     <String>['Toplu Yükleme Şablonu', '', '', ''],
@@ -193,6 +228,22 @@ List<List<String>> _explanationRows(ImportSpec spec, {required String siteName, 
       '',
       '',
     ],
+    <String>[
+      'Listeden seçin',
+      'Excel dosyasında ${_listColumnNames(spec, group)} hücreleri açılır listedir: hücreye tıklayıp yanındaki ok işaretiyle listeden seçin, elle yazmayın. '
+          'Listede olmayan değer Excel tarafından reddedilir. CSV dosyalarında açılır liste olmaz; orada aynı sözcükleri yazın.',
+      '',
+      '',
+    ],
+    if (group.any((k) => k == ImportKind.people || k == ImportKind.allInOne))
+      <String>[
+        'Kullanıcı adı',
+        'Şablonda Kullanıcı Adı sütunu yoktur. Kullanıcı adlarını sistem Ad Soyad\'dan üretir; Türkiye genelinde başka bir hesapta ya da dosyada aynı ad varsa '
+            'otomatik olarak ad_2, ad_3 ... verir. Dosyayı yükleyince önizleme tablosunda her satırın kullanıcı adını görür, isterseniz değiştirirsiniz '
+            '(yazdığınız ad yalnız sistemde ve dosyada başka hiçbir hesapta yoksa kabul edilir). Eski bir şablondaki Kullanıcı Adı sütunu yok sayılır.',
+        '',
+        '',
+      ],
     <String>['', '', '', ''],
   ];
   for (final kind in group) {
@@ -219,7 +270,7 @@ List<List<String>> _explanationRows(ImportSpec spec, {required String siteName, 
     return rows;
   }
   rows.add(<String>['İlişki sözlüğü', '', '', '']);
-  rows.add(<String>['İlişki', 'Kabul edilen sözcükler', '', '']);
+  rows.add(<String>['İlişki (listedeki seçenek)', 'Eski dosyalarda kabul edilen diğer sözcükler', '', '']);
   final words = spec.of(ImportKind.people)?.relationWords ?? spec.of(ImportKind.allInOne)?.relationWords ?? const <String, List<String>>{};
   final source = words.isEmpty ? _fallbackRelationWords : words;
   for (final entry in source.entries) {
@@ -227,7 +278,7 @@ List<List<String>> _explanationRows(ImportSpec spec, {required String siteName, 
   }
   rows.add(<String>['', '', '', '']);
   rows.add(<String>['Borç sorumlusu sözlüğü', '', '', '']);
-  rows.add(<String>['Borç sorumlusu', 'Kabul edilen sözcükler', '', '']);
+  rows.add(<String>['Borç sorumlusu (listedeki seçenek)', 'Eski dosyalarda kabul edilen diğer sözcükler', '', '']);
   final responsible = spec.of(ImportKind.apartments)?.responsibleWords ?? spec.of(ImportKind.allInOne)?.responsibleWords ?? const <String, List<String>>{};
   for (final entry in (responsible.isEmpty ? _fallbackResponsibleWords : responsible).entries) {
     rows.add(<String>[_responsibleLabels[entry.key] ?? entry.key, entry.value.join(', '), '', '']);
@@ -291,6 +342,8 @@ RenderedFile buildImportTemplate({
         name: k.sheetName,
         columns: <XlsxColumn>[for (final c in activeCols) _templateColumn(c)],
         rows: _prefillsApartments(k) ? _prefilledRows(apartments, s, activeCols) : const <List<Object?>>[],
+        // açılır liste en çok yükleme satırı kadar aşağı uzanır (başlık + maxRows)
+        validationLastRow: spec.maxRows + 1,
       ),
     );
   }

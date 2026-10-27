@@ -175,7 +175,7 @@ export function finalizePlan(plan) {
       issues: kept,
       issues_truncated: truncated,
       samples,
-      checks: plan.checks ?? { land_share: null },
+      checks: plan.checks ?? { land_share: null, finance_records: null },
       preview_hash: previewHash,
     },
     // commit için: satır sonuçları ve yazılacak işlemler (hatalı satırların işlemi yoktur)

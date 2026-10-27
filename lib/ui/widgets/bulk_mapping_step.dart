@@ -40,7 +40,10 @@ class BulkMappingStep extends StatelessWidget {
       return const InlineNotice(message: 'Okunmuş dosya bulunamadı. Geri dönüp dosyayı yeniden seçin.');
     }
     final dataRows = parsed.table.rows.length - mapping.headerRowIndex - 1;
-    final blockers = _blockers(mapping, kindSpec);
+    final blockers = <String>[
+      ..._blockers(mapping, kindSpec),
+      if (c.hasLoginProblems) 'Tabloda kırmızı işaretli kullanıcı adı sorunlarını düzeltin.',
+    ];
     final canProceed = blockers.isEmpty && !c.previewing;
     final ignored = mapping.ignoredColumns();
 
@@ -123,6 +126,16 @@ class BulkMappingStep extends StatelessWidget {
             tone: AppTone.info,
             message:
                 'Yok sayılacak sütunlar: ${_ignoredText(mapping, ignored)}. Bu sütunlardaki veriler yüklenmez.',
+          ),
+          const SizedBox(height: AppSpace.md),
+        ],
+        if (c.fileHasLegacyLoginColumn) ...[
+          const InlineNotice(
+            key: ValueKey<String>('bulk_legacy_login_column'),
+            tone: AppTone.info,
+            message:
+                'Dosyanızdaki «Kullanıcı Adı» sütunu artık kullanılmıyor, yok sayıldı. Kullanıcı adlarını sistem Ad Soyad’dan verir; '
+                'aşağıdaki tabloda her satırın adını görür ve değiştirebilirsiniz.',
           ),
           const SizedBox(height: AppSpace.md),
         ],
