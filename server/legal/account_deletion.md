@@ -1,8 +1,8 @@
 ---
 id: account_deletion
 title: Hesap ve Veri Silme
-version: 2026-10-21
-effective_date: 2026-10-21
+version: 2026-10-27
+effective_date: 2026-10-27
 required_for: []
 complete: false   # köşeli [KARAR/BİLGİ GEREKLİ ...] ve [AVUKAT DOĞRULASIN ...] işaretleri çözülünce bu satır silinir
 ---
@@ -59,6 +59,7 @@ Aşağıdaki durumlarda hesap silinemez; ekran nedenini ve ne yapmanız gerekti�
 - **Gecikme tazminatı, gider, kasa ve banka kayıtları:** gecikme tazminatı hesaplamaları, kasa ve banka hareketleri, giderler ve tedarikçi kayıtları (tedarikçinin adı, varsa vergi veya T.C. kimlik numarası, telefonu ve notu) Site Yönetiminin kayıtlarıdır ve hesabınızı silmenizden etkilenmez; bu kayıtlar değiştirilemez ve silinemez, hatalar ters kayıtla düzeltilir. Bu kayıtların sorumlusu Site Yönetimidir. Saklama süresi: [KARAR/BİLGİ GEREKLİ: gider ve tedarikçi kayıtları için saklama süresi ve tedarikçi kaydının silinmesi veya anonimleştirilmesi]. [AVUKAT DOĞRULASIN: bu kayıtların saklanma yükümlülüğü ve gerçek kişi olan tedarikçinin silme talebi]
 - **Aidat hatırlatma geçmişi:** gönderilmiş bir hatırlatmanın kaydı (hangi kişi için, hangi dairelerle ilgili olarak, ne zaman ve hangi durumda gönderildiği) Site Yönetiminin kaydı olarak, kimliksizleştirilmiş kişi kaydına bağlı kalır; kayıtta e-posta adresiniz bulunmaz. "Verilerimi İndir" dosyasında yalnızca size gönderilen hatırlatmaların geçmişi (tarih, ton, durum) yer alır; e-postanın metni, tutarlar, yönetici notu ve adres özeti yer almaz. Saklama süresi: [KARAR/BİLGİ GEREKLİ: hatırlatma geçmişi için saklama süresi].
 - **Ziyaretçi ve kargo kayıtları:** dairenize gelen ziyaretçi ve kargo kayıtları ile görevli veya yönetici olarak girdiğiniz ya da sonlandırdığınız kayıtlar Site Yönetiminin kaydıdır ve silinmez; kaydeden ve sonlandıran adı "Silinmiş Kullanıcı" olarak görünür. Bu kayıtlar ziyaretçinin adını, kargo firmasını ve yönetimin notunu içerebilir; "Verilerimi İndir" dosyasına girmez. Saklama süresi: [KARAR/BİLGİ GEREKLİ: ziyaretçi ve kargo kayıtları için saklama süresi].
+- **Komşu panosu ve daire kayıtları (adli saklama):** komşu panosunda yazdığınız ilanlar ve yaptığınız şikâyetler, dairenize yazdığınız güvenlik notları, size gönderilen daire bildirimleri, daire bağlantı talepleriniz ve varsa yönetim şirketi üyeliğiniz silinmez; adli veya resmî bir talep hâlinde bilgi verilebilmesi için kimliksizleştirilmiş hesaba bağlı olarak, metinleri değiştirilmeden saklanır. İlan ve notlarda yazan adı "Silinmiş Kullanıcı" olarak görünür. [KARAR/BİLGİ GEREKLİ: bu kayıtların saklama süresi]
 - **Geçiş kartları:** kişi kaydınıza tanımlı geçiş kartları Site Yönetiminin kaydıdır ve hesabınızı silmenizden etkilenmez; kartı iptal etmek Site Yönetimine aittir. "Verilerimi İndir" dosyasında kartlarınız yalnızca etiketi, durumu ve kart numarasının son 4 karakteriyle yer alır.
 - **Toplu yükleme kayıtları:** bir yönetici kişi, daire veya araç listesini Excel ya da CSV dosyasıyla yüklediğinde dosyanın kendisi ve dosyadaki ham satırlar sunucuda saklanmaz; yalnızca doğrulanıp işlenen kayıtlar Site Yönetiminin kişi, ilişki ve araç kayıtlarına girer ve bu kayıtlar yukarıdaki kişi kayıtlarıyla aynı kurallara tabidir. Her yüklemeden yalnızca sayıları ve işlemi yapan hesabı içeren bir çalışma kaydı ile denetim kaydı kalır; denetim kayıtlarında işlemi yapan yöneticinin adı değiştirilmeden saklanır.
 - **Yasal belge onay kayıtları:** hangi belgeyi hangi sürümde ve ne zaman onayladığınız, kimliksizleştirilmiş hesaba bağlı olarak yasal ispat amacıyla [KARAR/BİLGİ GEREKLİ: saklama süresi] boyunca tutulur.

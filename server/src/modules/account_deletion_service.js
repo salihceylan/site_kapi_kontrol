@@ -430,6 +430,8 @@ export async function previewAccountDeletion(authUser, db = pool) {
   }
   if (counts.has_consents === true) {
     willKeep.push('Verdiğiniz yasal onayların kaydı, kimliksizleştirilmiş hesaba bağlı olarak yasal saklama süresince tutulur.');
+    // Adli saklama (kullanıcı kararı 2026-10-27): bu içerikler hesap silmede silinmez; kullanıcıya önceden söylenir (legal/account_deletion.md bölüm 3).
+    willKeep.push('Komşu panosundaki ilan ve şikâyetleriniz, daire güvenlik notlarınız, size gönderilen daire bildirimleri, daire bağlantı talepleriniz ve yönetim şirketi üyeliğiniz adli veya resmî bir talep hâlinde bilgi verilebilmesi için silinmeden saklanır; yazan adı "Silinmiş Kullanıcı" görünür.');
   }
 
   return { can_delete: blockers.length === 0, blockers, will_remove: willRemove, will_keep: willKeep };
