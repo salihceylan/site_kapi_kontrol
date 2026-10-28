@@ -488,7 +488,7 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 
 ## Ek E — Kaynak dosya kapsamı
 
-1022 kaynak dosyanın **240**'i en az bir arıza girişine bağlı, **1**'i yalnız dosya haritasında, **781**'i klavuzda hiç geçmiyor. Bir dosya hiç geçmiyorsa onunla ilgili arızayı `--where` ile arayın.
+1025 kaynak dosyanın **243**'i en az bir arıza girişine bağlı, **1**'i yalnız dosya haritasında, **781**'i klavuzda hiç geçmiyor. Bir dosya hiç geçmiyorsa onunla ilgili arızayı `--where` ile arayın.
 
 | Dosya | Satır | Bağlı girişler | Dosya haritası |
 | --- | --- | --- | --- |
@@ -589,7 +589,7 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [lib/models/management_terms.dart](../lib/models/management_terms.dart) | 266 | — | — |
 | [lib/models/management_type.dart](../lib/models/management_type.dart) | 35 | — | — |
 | [lib/models/meter_field_models.dart](../lib/models/meter_field_models.dart) | 165 | — | — |
-| [lib/models/meter_models.dart](../lib/models/meter_models.dart) | 309 | — | — |
+| [lib/models/meter_models.dart](../lib/models/meter_models.dart) | 310 | — | — |
 | [lib/models/module_request.dart](../lib/models/module_request.dart) | 138 | — | — |
 | [lib/models/neighbor_post.dart](../lib/models/neighbor_post.dart) | 67 | — | — |
 | [lib/models/payment_info.dart](../lib/models/payment_info.dart) | 182 | — | — |
@@ -698,6 +698,7 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [lib/services/mt940_parser.dart](../lib/services/mt940_parser.dart) | 149 | — | — |
 | [lib/services/neighbor_board_api.dart](../lib/services/neighbor_board_api.dart) | 95 | — | — |
 | [lib/services/network_service.dart](../lib/services/network_service.dart) | 121 | [cekirdek-api-adresi-yanlis](ariza-klavuzu/30-uygulama-cekirdek.md#cekirdek-api-adresi-yanlis), [cekirdek-internet-yok-ekrani](ariza-klavuzu/30-uygulama-cekirdek.md#cekirdek-internet-yok-ekrani) | 30-uygulama-cekirdek |
+| [lib/services/panel_return_requests.dart](../lib/services/panel_return_requests.dart) | 30 | [ui-ana-sayfa-dugmesi](ariza-klavuzu/31-uygulama-arayuz.md#ui-ana-sayfa-dugmesi) | — |
 | [lib/services/payment_notice_api.dart](../lib/services/payment_notice_api.dart) | 252 | — | — |
 | [lib/services/payment_notice_file.dart](../lib/services/payment_notice_file.dart) | 77 | — | — |
 | [lib/services/pdf_annual_report_service.dart](../lib/services/pdf_annual_report_service.dart) | 67 | — | — |
@@ -872,6 +873,7 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [lib/ui/helpers/focus_helpers.dart](../lib/ui/helpers/focus_helpers.dart) | 15 | — | — |
 | [lib/ui/helpers/form_validation.dart](../lib/ui/helpers/form_validation.dart) | 84 | — | — |
 | [lib/ui/helpers/fund_text.dart](../lib/ui/helpers/fund_text.dart) | 22 | — | — |
+| [lib/ui/helpers/home_shortcut.dart](../lib/ui/helpers/home_shortcut.dart) | 31 | [ui-ana-sayfa-dugmesi](ariza-klavuzu/31-uygulama-arayuz.md#ui-ana-sayfa-dugmesi) | 31-uygulama-arayuz |
 | [lib/ui/helpers/idempotency.dart](../lib/ui/helpers/idempotency.dart) | 65 | — | — |
 | [lib/ui/helpers/istanbul_time.dart](../lib/ui/helpers/istanbul_time.dart) | 47 | — | — |
 | [lib/ui/helpers/list_export.dart](../lib/ui/helpers/list_export.dart) | 71 | — | — |
@@ -890,7 +892,7 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [lib/ui/helpers/text_length.dart](../lib/ui/helpers/text_length.dart) | 38 | — | — |
 | [lib/ui/helpers/time_input.dart](../lib/ui/helpers/time_input.dart) | 126 | — | — |
 | [lib/ui/helpers/ui_helpers.dart](../lib/ui/helpers/ui_helpers.dart) | 38 | [bilesen-dialog-genisligi](ariza-klavuzu/32-uygulama-bilesenler.md#bilesen-dialog-genisligi), [model-tarih-saat-yanlis](ariza-klavuzu/33-uygulama-modeller.md#model-tarih-saat-yanlis) | 32-uygulama-bilesenler |
-| [lib/ui/pages/home_page.dart](../lib/ui/pages/home_page.dart) | 7518 | [cekirdek-oturum-kendiliginden-dusuyor](ariza-klavuzu/30-uygulama-cekirdek.md#cekirdek-oturum-kendiliginden-dusuyor), [cekirdek-kapi-durumu-cevrimdisi](ariza-klavuzu/30-uygulama-cekirdek.md#cekirdek-kapi-durumu-cevrimdisi), [cekirdek-yasam-dongusu-dinleyici](ariza-klavuzu/30-uygulama-cekirdek.md#cekirdek-yasam-dongusu-dinleyici), [cekirdek-kisayol-gorunmuyor](ariza-klavuzu/30-uygulama-cekirdek.md#cekirdek-kisayol-gorunmuyor), [cekirdek-pdf-gecis-raporu-bos](ariza-klavuzu/30-uygulama-cekirdek.md#cekirdek-pdf-gecis-raporu-bos) +43 | 31-uygulama-arayuz |
+| [lib/ui/pages/home_page.dart](../lib/ui/pages/home_page.dart) | 7564 | [cekirdek-oturum-kendiliginden-dusuyor](ariza-klavuzu/30-uygulama-cekirdek.md#cekirdek-oturum-kendiliginden-dusuyor), [cekirdek-kapi-durumu-cevrimdisi](ariza-klavuzu/30-uygulama-cekirdek.md#cekirdek-kapi-durumu-cevrimdisi), [cekirdek-yasam-dongusu-dinleyici](ariza-klavuzu/30-uygulama-cekirdek.md#cekirdek-yasam-dongusu-dinleyici), [cekirdek-kisayol-gorunmuyor](ariza-klavuzu/30-uygulama-cekirdek.md#cekirdek-kisayol-gorunmuyor), [cekirdek-pdf-gecis-raporu-bos](ariza-klavuzu/30-uygulama-cekirdek.md#cekirdek-pdf-gecis-raporu-bos) +44 | 31-uygulama-arayuz |
 | [lib/ui/pages/login_page.dart](../lib/ui/pages/login_page.dart) | 452 | [ui-giris-hata](ariza-klavuzu/31-uygulama-arayuz.md#ui-giris-hata), [ui-giris-beni-hatirla](ariza-klavuzu/31-uygulama-arayuz.md#ui-giris-beni-hatirla), [ui-sifremi-unuttum](ariza-klavuzu/31-uygulama-arayuz.md#ui-sifremi-unuttum), [ui-oturum-sonu-bildirimi](ariza-klavuzu/31-uygulama-arayuz.md#ui-oturum-sonu-bildirimi), [ui-dogrulama-sonrasi-yonlendirme](ariza-klavuzu/31-uygulama-arayuz.md#ui-dogrulama-sonrasi-yonlendirme) +3 | 31-uygulama-arayuz |
 | [lib/ui/pages/no_internet_page.dart](../lib/ui/pages/no_internet_page.dart) | 89 | [ui-internet-yok](ariza-klavuzu/31-uygulama-arayuz.md#ui-internet-yok) | 31-uygulama-arayuz |
 | [lib/ui/pages/qr_scan_page.dart](../lib/ui/pages/qr_scan_page.dart) | 350 | [ui-qr-tarama-sayfasi](ariza-klavuzu/31-uygulama-arayuz.md#ui-qr-tarama-sayfasi) | 31-uygulama-arayuz |
@@ -908,11 +910,11 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [lib/ui/views/annual_report_view.dart](../lib/ui/views/annual_report_view.dart) | 257 | — | — |
 | [lib/ui/views/app_gate_view.dart](../lib/ui/views/app_gate_view.dart) | 620 | — | — |
 | [lib/ui/views/audit_log_view.dart](../lib/ui/views/audit_log_view.dart) | 432 | — | — |
-| [lib/ui/views/bank_import_view.dart](../lib/ui/views/bank_import_view.dart) | 445 | — | — |
-| [lib/ui/views/bank_lines_view.dart](../lib/ui/views/bank_lines_view.dart) | 217 | — | — |
+| [lib/ui/views/bank_import_view.dart](../lib/ui/views/bank_import_view.dart) | 447 | — | — |
+| [lib/ui/views/bank_lines_view.dart](../lib/ui/views/bank_lines_view.dart) | 219 | — | — |
 | [lib/ui/views/bluetooth_wifi_view.dart](../lib/ui/views/bluetooth_wifi_view.dart) | 71 | [ui-wifi-kurulum](ariza-klavuzu/31-uygulama-arayuz.md#ui-wifi-kurulum) | 31-uygulama-arayuz |
 | [lib/ui/views/brand_theme_view.dart](../lib/ui/views/brand_theme_view.dart) | 379 | — | — |
-| [lib/ui/views/budget_view.dart](../lib/ui/views/budget_view.dart) | 582 | — | — |
+| [lib/ui/views/budget_view.dart](../lib/ui/views/budget_view.dart) | 587 | — | — |
 | [lib/ui/views/bulk_import_controller.dart](../lib/ui/views/bulk_import_controller.dart) | 1215 | — | — |
 | [lib/ui/views/bulk_import_view.dart](../lib/ui/views/bulk_import_view.dart) | 281 | — | — |
 | [lib/ui/views/cctv_view.dart](../lib/ui/views/cctv_view.dart) | 587 | — | — |
@@ -944,8 +946,8 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [lib/ui/views/finance_periods_tab.dart](../lib/ui/views/finance_periods_tab.dart) | 427 | — | — |
 | [lib/ui/views/finance_reminder_card.dart](../lib/ui/views/finance_reminder_card.dart) | 163 | — | — |
 | [lib/ui/views/finance_reports_tab.dart](../lib/ui/views/finance_reports_tab.dart) | 1918 | — | — |
-| [lib/ui/views/finance_view.dart](../lib/ui/views/finance_view.dart) | 816 | — | — |
-| [lib/ui/views/help_content.dart](../lib/ui/views/help_content.dart) | 967 | — | — |
+| [lib/ui/views/finance_view.dart](../lib/ui/views/finance_view.dart) | 817 | — | — |
+| [lib/ui/views/help_content.dart](../lib/ui/views/help_content.dart) | 971 | — | — |
 | [lib/ui/views/help_view.dart](../lib/ui/views/help_view.dart) | 750 | — | — |
 | [lib/ui/views/individual_home_view.dart](../lib/ui/views/individual_home_view.dart) | 1333 | [cekirdek-konum-mesafe-disi](ariza-klavuzu/30-uygulama-cekirdek.md#cekirdek-konum-mesafe-disi), [ui-kapi-ac-basari-tiki](ariza-klavuzu/31-uygulama-arayuz.md#ui-kapi-ac-basari-tiki), [ui-bireysel-ana-ekran-kapilar](ariza-klavuzu/31-uygulama-arayuz.md#ui-bireysel-ana-ekran-kapilar), [ui-qr-konum-hatasi](ariza-klavuzu/31-uygulama-arayuz.md#ui-qr-konum-hatasi), [ui-ekran-qr-oku](ariza-klavuzu/31-uygulama-arayuz.md#ui-ekran-qr-oku) +2 | 31-uygulama-arayuz |
 | [lib/ui/views/join_and_setup_view.dart](../lib/ui/views/join_and_setup_view.dart) | 285 | — | 31-uygulama-arayuz |
@@ -961,7 +963,7 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [lib/ui/views/managed_users_view.dart](../lib/ui/views/managed_users_view.dart) | 135 | [ui-kullanici-diyalogu-kaydet](ariza-klavuzu/31-uygulama-arayuz.md#ui-kullanici-diyalogu-kaydet) | 31-uygulama-arayuz |
 | [lib/ui/views/management_company_view.dart](../lib/ui/views/management_company_view.dart) | 482 | — | — |
 | [lib/ui/views/meter_field_view.dart](../lib/ui/views/meter_field_view.dart) | 446 | — | — |
-| [lib/ui/views/meters_view.dart](../lib/ui/views/meters_view.dart) | 767 | — | — |
+| [lib/ui/views/meters_view.dart](../lib/ui/views/meters_view.dart) | 778 | — | — |
 | [lib/ui/views/module_requests_view.dart](../lib/ui/views/module_requests_view.dart) | 415 | — | — |
 | [lib/ui/views/module_showcase_view.dart](../lib/ui/views/module_showcase_view.dart) | 1206 | — | — |
 | [lib/ui/views/modules_view.dart](../lib/ui/views/modules_view.dart) | 620 | — | — |
@@ -1049,6 +1051,7 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [lib/ui/widgets/finance_settings_controller.dart](../lib/ui/widgets/finance_settings_controller.dart) | 230 | — | — |
 | [lib/ui/widgets/finance_target_picker.dart](../lib/ui/widgets/finance_target_picker.dart) | 437 | — | — |
 | [lib/ui/widgets/hands_free_settings_dialog.dart](../lib/ui/widgets/hands_free_settings_dialog.dart) | 263 | [bilesen-eller-serbest-ayar](ariza-klavuzu/32-uygulama-bilesenler.md#bilesen-eller-serbest-ayar) | 31-uygulama-arayuz |
+| [lib/ui/widgets/home_shortcut_button.dart](../lib/ui/widgets/home_shortcut_button.dart) | 43 | [ui-ana-sayfa-dugmesi](ariza-klavuzu/31-uygulama-arayuz.md#ui-ana-sayfa-dugmesi) | 31-uygulama-arayuz |
 | [lib/ui/widgets/individual_apartment_card.dart](../lib/ui/widgets/individual_apartment_card.dart) | 231 | [bilesen-bireysel-daire-karti](ariza-klavuzu/32-uygulama-bilesenler.md#bilesen-bireysel-daire-karti) | — |
 | [lib/ui/widgets/individual_door_card.dart](../lib/ui/widgets/individual_door_card.dart) | 436 | [ui-bireysel-kapi-karti-dugmeleri](ariza-klavuzu/31-uygulama-arayuz.md#ui-bireysel-kapi-karti-dugmeleri) | 31-uygulama-arayuz |
 | [lib/ui/widgets/join_request_card.dart](../lib/ui/widgets/join_request_card.dart) | 92 | [bilesen-kurulum-secenek-karti](ariza-klavuzu/32-uygulama-bilesenler.md#bilesen-kurulum-secenek-karti) | — |
