@@ -1,7 +1,7 @@
 {
   "baslik": "Platform Faz Kontrol Listesi",
   "aciklama": "SmartKeyPass (kapı kontrol), site ve toplu yaşam yönetim platformunun seçilebilir bir modülü olacak. Bu sayfa işi fazlara böler. Her faz canlıya alındığında maddeleri “Denemeye hazır” olur; siz denersiniz ve “Çalışıyor / Çalışmıyor” diye işaretlersiniz. Henüz yapılmamış maddelerde “Böyle istiyorum / istemiyorum” ile planı şimdiden şekillendirebilirsiniz. İşaretleriniz ve notlarınız kaydedilir, Claude okuyup yanıtlar.",
-  "durum_metni": "Durum: Faz 0, Faz 1, Faz 1.1, Faz 2a, Faz 3a, site başvurusu ve Faz 4a (Aidat ve Finans: tanım, borçlandırma, tahsilat, düzeltme, ay kapatma) canlıda ve denemeye hazır; Aidat ve Finans modülü TEMEL modüldür: her sitede açıktır, talep edilmez ve kapatılamaz. Faz 2b (Excel’den toplu yükleme ve dışa aktarma; F13), Faz 3b-A (Belgeler; F14) ve Faz 4b (makbuz, kasa/banka, gider, raporlar, gecikme tazminatı, borç hatırlatma; F15) ile hesap silme ve veri dosyası güncellemeleri (F16) kodlandı ve test edildi; sunucu ve uygulama sürümü yayınlanınca denenir (maddeler “Denemeye hazır” görünse de sürüm yayınlanmadan uygulamada yoktur). Gecikme tazminatı ve borç hatırlatma, avukatın vereceği hukuk onayı (finance.legal_ok) gelene kadar kapalı kalır: “Hukuk onayı bekleniyor” iletisi denemeye hazırdır, çalışan hali Planlıdır. Telefon bildirimi (Faz 3b-B, Firebase) F3.07’de planlı kalır. Beş yönetim türü ve türe göre terimler (F9), Anket ve Oylama ile Ziyaretçi ve Kargo (F11) canlıdadır; kartlı geçişin sunucu altyapısı hazırdır, uygulama ekranı ve kart okuyucu planlıdır (F10). Banka ve ödeme işleri “Yakında”. Satışa hazırlık paketi (F12: hesabı silme ve veri indirme, yasal metinler, giriş güvenliği, Yardım ve tanıtım turu, Platform Ayarları, bakım ve sürüm kapısı, yedek ve izleme, mağaza hazırlığı): sunucu tarafı canlıdadır; uygulama ve web sürümü yasal metinler tamamlanınca yayınlanacaktır, bu yüzden F12 maddelerini sürüm yayınlandıktan sonra (ya da geliştirici derlemesiyle) deneyin. Dalga 1 (F25–F29: kiracı ve ev sahibi için ayrı hesap, kurallar tablosu ve altın veri seti, sade tasarım, gruplu menü ve sakin alt çubuğu, avukat taslakları ve hesap rehberleri) kodlandı ve bağımsız incelemeden geçti; sürüm yayınlanınca denenir. Gezinme değişti: Profilim, Modüller, Modül Talepleri, Site Başvuruları, cihaz ekranları, Denetim Kaydı, Platform Ayarları ve İstemci Hataları artık sağ üstteki dişlinin açtığı Ayarlar panelindedir; bu yüzden ilgili eski maddeler güncellendi ve “Bugün değişti” işaretlidir. 2026-10-28: Anket ve Oylama, Komşu Panosu, Ekipman ve Bakım, Faaliyet Raporu ve Dosya Deposu da temel modül oldu (her sitede açık, talep gerekmez); Kart Ödemesi Aidat ve Finans’ın, Belgeler Dosya Deposu’nun içine alındı (F38; bu modüllerle ilgili eski maddeler güncellendi ve “Bugün değişti” işaretlidir).",
+  "durum_metni": "Durum: Faz 0, Faz 1, Faz 1.1, Faz 2a, Faz 3a, site başvurusu ve Faz 4a (Aidat ve Finans: tanım, borçlandırma, tahsilat, düzeltme, ay kapatma) canlıda ve denemeye hazır; Aidat ve Finans modülü TEMEL modüldür: her sitede açıktır, talep edilmez ve kapatılamaz. Faz 2b (Excel’den toplu yükleme ve dışa aktarma; F13), Faz 3b-A (Belgeler; F14) ve Faz 4b (makbuz, kasa/banka, gider, raporlar, gecikme tazminatı, borç hatırlatma; F15) ile hesap silme ve veri dosyası güncellemeleri (F16) kodlandı ve test edildi; sunucu ve uygulama sürümü yayınlanınca denenir (maddeler “Denemeye hazır” görünse de sürüm yayınlanmadan uygulamada yoktur). Gecikme tazminatı ve borç hatırlatma, avukatın vereceği hukuk onayı (finance.legal_ok) gelene kadar kapalı kalır: “Hukuk onayı bekleniyor” iletisi denemeye hazırdır, çalışan hali Planlıdır. Telefon bildirimi (Faz 3b-B, Firebase) F3.07’de planlı kalır. Beş yönetim türü ve türe göre terimler (F9), Anket ve Oylama ile Ziyaretçi ve Kargo (F11) canlıdadır; kartlı geçişin sunucu altyapısı hazırdır, uygulama ekranı ve kart okuyucu planlıdır (F10). Banka ve ödeme işleri “Yakında”. Satışa hazırlık paketi (F12: hesabı silme ve veri indirme, yasal metinler, giriş güvenliği, Yardım ve tanıtım turu, Platform Ayarları, bakım ve sürüm kapısı, yedek ve izleme, mağaza hazırlığı): sunucu tarafı canlıdadır; uygulama ve web sürümü yasal metinler tamamlanınca yayınlanacaktır, bu yüzden F12 maddelerini sürüm yayınlandıktan sonra (ya da geliştirici derlemesiyle) deneyin. Dalga 1 (F25–F29: kiracı ve ev sahibi için ayrı hesap, kurallar tablosu ve altın veri seti, sade tasarım, gruplu menü ve sakin alt çubuğu, avukat taslakları ve hesap rehberleri) kodlandı ve bağımsız incelemeden geçti; sürüm yayınlanınca denenir. Gezinme değişti: Profilim, Modüller, Modül Talepleri, Site Başvuruları, cihaz ekranları, Denetim Kaydı, Platform Ayarları ve İstemci Hataları artık sağ üstteki dişlinin açtığı Ayarlar panelindedir; bu yüzden ilgili eski maddeler güncellendi ve “Bugün değişti” işaretlidir. 2026-10-28: Anket ve Oylama, Komşu Panosu, Ekipman ve Bakım, Faaliyet Raporu ve Dosya Deposu da temel modül oldu (her sitede açık, talep gerekmez); Kart Ödemesi Aidat ve Finans’ın, Belgeler Dosya Deposu’nun içine alındı (F38; bu modüllerle ilgili eski maddeler güncellendi ve “Bugün değişti” işaretlidir). 2026-10-29 Dalga D (F39–F43): kompakt menü ve “Tüm işlemler” (F39), sayfa bağlamlı Geri bildirim (F40), bağlam şeridi, “bağlı değil” bildirimi, belirgin Yenile ve onaylı Çıkış (F41), liste/kutucuk anahtarı ve Kolay görünüm (F42), Yöneticiyi ara ve büyük 112 düğmesi (F43) kodlandı ve test edildi; sürüm yayınlanınca denenir.",
   "bolumler": [
     {
       "id": "F0",
@@ -7850,6 +7850,663 @@
           "beklenen": "Ekranda yalnız kamera kartı vardır (kart ödemesi bölümü yoktur); “Ödeme ve Kamera” adlı ekran artık yoktur. Modül kapalı sitede ekran görünmez.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "Süper kullanıcının “Kamera ve Plaka” modülünü sitede açmış olması",
+          "yeni": true,
+          "gelistirme": "hazir"
+        }
+      ]
+    },
+    {
+      "id": "F39",
+      "baslik": "Menü katmanı: kompakt menü, “Tüm işlemler” ve Ana menü düzeni",
+      "durum": "hazir",
+      "ozet": "Yetenek (modül açık mı) ile menü yerleşimi artık ayrı katmandır. Her sitenin çekmecesi ve Panel kartları, yönetim türünün önerdiği “günlük işler” kümesiyle kısalır; kümede olmayan işlem kaybolmaz: çekmecede her zaman “Tüm işlemler” girişi, Panel'de (kutucuk, liste ve Kolay görünümde) kartların sonunda aynı adlı kart vardır. Ekran, görünür tüm işlemleri kategorili ve aramalı listeler; yönetici “Ana menüyü düzenle” ile kümeyi seçer. Temel modüller kapatılamaz, yalnız menüde öne çıkıp çıkmayacakları seçilir. Davranış değişikliği: sürüm yayınlanınca mevcut sitelerin apartman menüsünde yalnızca temel olup önerilmeyen modüller (Anket ve Oylama, Komşu Panosu, Faaliyet Raporu, Ekipman ve Bakım) “Tüm işlemler”e iner; hiçbiri kapanmaz, yönetici “Hepsini göster” ile eski tam menüye döner. Sürüm yayınlanınca denenir (maddeler “Denemeye hazır” görünse de sürüm yayınlanmadan uygulamada yoktur).",
+      "maddeler": [
+        {
+          "id": "F39.01",
+          "baslik": "Kompakt menü: çekmece ve Panel yalnız öne çıkanları gösterir",
+          "adimlar": [
+            "Yalnız temel modüllerin ve kapının açık olduğu bir apartman sitesinin yöneticisiyle giriş yapın.",
+            "Soldaki çekmeceyi açın ve listeye bakın.",
+            "Panel'e dönüp “Modüller” kartlarına bakın."
+          ],
+          "beklenen": "Çekmecede Kişiler, Duyurular, Finans, Dosya Deposu ve Kapılar vardır; Anket ve Oylama, Komşu Panosu, Faaliyet Raporu, Ekipman ve Bakım çekmecede ve Panel kartlarında yoktur. Çekmecede başlıklı bölümlerin ardında (“Yardım ve Destek”in hemen üstünde) “Tüm işlemler” girişi, Panel'de kartların sonunda aynı adlı kart vardır.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Apartman türünde bir TEST sitesi (yalnız temel modüller ve kapı modülü açık); Ana menü düzeni daha önce değiştirilmemiş",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F39.02",
+          "baslik": "Tüm işlemler: kategorili tam liste ve arama",
+          "adimlar": [
+            "Çekmecedeki ya da Panel'deki “Tüm işlemler”e dokunun.",
+            "Listeye bakın: kategorileri ve ana menüdeki satırlardaki işareti inceleyin.",
+            "Arama kutusuna sırayla “anket”, “aidat” ve “komsu” (ş yazmadan) yazın.",
+            "Çıkan bir satıra dokunun."
+          ],
+          "beklenen": "Liste, görünür tüm işlemleri (Panel hariç) Daireler, Borçlar, İletişim, Site hizmetleri ve Ayarlar gibi kategorilerle gösterir; ana menüdekilerde “Ana menüde” işareti vardır. Arama Türkçe harfleri katlar (“komsu” yazınca “Komşu Panosu” çıkar). Satıra dokununca ilgili sayfa açılır ve “Tüm işlemler” ekranı kapanır. Aşağı çekince liste yenilenir.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F39.03",
+          "baslik": "Yönetici: “Ana menüyü düzenle”",
+          "adimlar": [
+            "“Tüm işlemler” ekranında “Ana menüyü düzenle”ye dokunun.",
+            "Anket ve Oylama anahtarını açıp Kaydet'e basın; çekmeceye ve Panel'e bakın.",
+            "Ekrana dönüp “Önerilen düzene dön”e, ardından “Hepsini göster”e basın; her seferinde çekmeceye ve Panel'e bakın."
+          ],
+          "beklenen": "Kaydedince çekmece ve Panel hemen Anket ve Oylama'yı gösterir. “Önerilen düzene dön” eski kısa düzeni, “Hepsini göster” tam menüyü getirir. Hiçbir modül açılıp kapanmaz; yalnız yerleşim değişir.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Apartman türünde bir TEST sitesi",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F39.04",
+          "baslik": "Kaydedilmemiş değişiklik koruması",
+          "adimlar": [
+            "Ana menü düzeni ekranında bir anahtarı değiştirin, kaydetmeyin.",
+            "Geri tuşuna basın; ardından aynı değişikliği yapıp ekranı yenilemeyi ve (çok siteliyse) başka bir site seçmeyi deneyin."
+          ],
+          "beklenen": "Her seferinde “Değişiklikler kaydedilmedi” sorusu çıkar. Vazgeçerseniz ekranda kalırsınız ve yaptığınız değişiklik durur; onaylarsanız değişiklik atılır.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F39.05",
+          "baslik": "Temel modüller kapatılamaz",
+          "adimlar": [
+            "Ana menü düzeni ekranında temel modül satırlarına bakın.",
+            "Bir temel modülü menüden çıkarıp kaydedin.",
+            "Ayarlar panelinden Modüller ekranını açıp aynı modülü kapatmayı deneyin."
+          ],
+          "beklenen": "Temel modül satırlarında “Her sitede açık” etiketi vardır. Menüden çıkarılan temel modül “Tüm işlemler”de durur; Modüller ekranında kapatılamaz (kapatma anahtarı ve “Modül Talep Et” yoktur).",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F39.06",
+          "baslik": "İki siteli yönetici: menü site seçiciyle değişir",
+          "adimlar": [
+            "Çekmecenin en üstündeki site seçiciyle bir siteyi seçin; menüye bakın.",
+            "Diğer siteyi seçip menüye tekrar bakın.",
+            "“Ana menüyü düzenle”de site seçerek her sitenin düzenini açın."
+          ],
+          "beklenen": "Çekmece ve Panel, seçilen sitenin kümesine göre değişir. Ana menü düzeni ekranı seçilen sitenin kayıtlı düzenini yükler; bir sitedeki değişiklik diğer siteyi etkilemez.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "İki ayrı siteyi yöneten bir yönetici hesabı (TEST siteleri)",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F39.07",
+          "baslik": "Daire sakini: kısa çekmece ve eksiksiz Tüm işlemler",
+          "adimlar": [
+            "Daire sakini hesabıyla giriş yapıp çekmeceyi açın.",
+            "“Tüm işlemler”e girip listeye bakın.",
+            "Panel'deki “Kapıyı aç”, “Arıza bildir” ve “Dosya Deposu” hızlı eylemlerine, borç kartına ve alt çubuğa bakın."
+          ],
+          "beklenen": "Çekmece kısalır. “Tüm işlemler” sakin işlemlerinin tamamını (Anketler, Komşu Panosu ve Dosya Deposu dahil) listeler. Hızlı eylemler, borç kartı ve alt çubuk kompakt menüden etkilenmez, eskisi gibi durur.",
+          "rol_notu": "Daire sakini",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F39.08",
+          "baslik": "Gizlenen işin rozeti kaybolmaz",
+          "adimlar": [
+            "Ana menüde olmayan bir işte okunmamış ya da bekleyen kayıt oluşturun (örneğin bir sakin için okunmamış anket, ya da yönetici için bekleyen talep).",
+            "“Tüm işlemler” girişine ve Panel'deki “Tüm işlemler” kartına bakın."
+          ],
+          "beklenen": "Gizlenen işlerin bekleyen sayılarının toplamı “Tüm işlemler” girişinde ve Panel kartında rozet olarak görünür; kompakt menü bir sinyali gizlemez.",
+          "rol_notu": "Site yöneticisi / Daire sakini",
+          "on_kosul": "Ana menüde olmayan bir işte (Talepler, Anketler gibi) bekleyen kayıt",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F39.09",
+          "baslik": "Süper kullanıcı: kompakt menü yok, düzen değiştirilebilir",
+          "adimlar": [
+            "Süper kullanıcıyla giriş yapıp çekmeceye bakın.",
+            "“Tüm işlemler”den “Ana menüyü düzenle”yi açıp bir sitenin düzenini değiştirin ve kaydedin.",
+            "Ayarlar panelinden Denetim Kaydı'nı açın."
+          ],
+          "beklenen": "Süper kullanıcıda menü eskisi gibi tamdır (kompakt küme uygulanmaz) ve “Tüm işlemler” girişi vardır. Denetim kaydında “Ana menü düzeni güncellendi” (önerilene döndürünce “önerilene döndürüldü”) satırı görünür.",
+          "rol_notu": "Süper kullanıcı",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F39.10",
+          "baslik": "Eski ve yeni sürüm uyumu",
+          "adimlar": [
+            "Güncellemeden önceki uygulama sürümüyle (eski APK), yeni sunucuya bağlanıp menüye bakın.",
+            "Yeni uygulama sürümüyle, sunucu henüz güncellenmemişken menüye bakın (yalnız sürüm geçişi sırasında denenebilir)."
+          ],
+          "beklenen": "Eski uygulama yeni sunucuda menüyü eskisi gibi tam gösterir (menü düzeni alanını yok sayar). Yeni uygulama güncellenmemiş sunucuda kompakt menü olmadan tam menüyü gösterir; “Tüm işlemler” girişi yine vardır.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Eski ve yeni uygulama sürümü; ikinci madde yalnız sunucu güncellenmeden önceki kısa pencerede denenebilir",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F39.11",
+          "baslik": "Panel'de liste, kutucuk ve Kolay görünümde “Tüm işlemler”",
+          "adimlar": [
+            "Kompakt menünün bir şeyi gizlediği bir hesapla Panel'in “Modüller” başlığındaki düğmeyle Liste görünümüne geçip sona bakın.",
+            "Kutucuk görünümüne geri dönüp sona bakın.",
+            "Ayarlar panelinden Kolay görünümü açıp Panel'in sonuna bakın; “Tüm işlemler”e dokunun."
+          ],
+          "beklenen": "“Tüm işlemler” kutucuk görünümünde kart, liste görünümünde satır, Kolay görünümde büyük düğme olarak modüllerin sonunda durur; üçünde de aynı rozeti taşır ve dokununca Tüm işlemler ekranı açılır.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Apartman türünde bir TEST sitesi (kompakt menü bir modülü gizliyor)",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F39.12",
+          "baslik": "Dar ekran, en büyük yazı ve koyu tema",
+          "adimlar": [
+            "Telefonun yazı boyutunu en büyüğe alın (mümkünse ekran boyutunu da büyütüp dar genişliğe indirin).",
+            "Çekmeceyi, “Tüm işlemler” ekranını ve “Ana menü düzeni” ekranını açın.",
+            "Aynısını koyu temada tekrarlayın."
+          ],
+          "beklenen": "Üç ekranda da yazılar taşmaz ve kesilmez; satırların dokunma hedefi rahat basılır büyüklüktedir; koyu temada metinler okunur.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        }
+      ]
+    },
+    {
+      "id": "F40",
+      "baslik": "Sayfa bağlamlı Geri bildirim",
+      "durum": "hazir",
+      "ozet": "Çekmecedeki “Geri bildirim” satırı ya da Ayarlar panelindeki “Geri bildirim gönder” ile yazılan geri bildirime hangi ekrandan gönderildiği (ekran adı ve rota) ve site otomatik eklenir; kullanıcı değiştiremez. En çok 4 dosya (dosya başı 5 MB, toplam 20 MB) eklenebilir; fotoğrafların konum bilgisi (EXIF) silinir. Kayıtları site yöneticisi kendi sitesi için, süper kullanıcı tümü için “Gelen geri bildirimler” sayfasında görür; kurul, görevli, sakin ve başka site yöneticisi göremez. Kullanıcı başına saatte 5 geri bildirim sınırı vardır. Sürüm yayınlanınca denenir (maddeler “Denemeye hazır” görünse de sürüm yayınlanmadan uygulamada yoktur).",
+      "maddeler": [
+        {
+          "id": "F40.01",
+          "baslik": "Çekmeceden Geri bildirim formu açılır, ekran bilgisi otomatiktir",
+          "adimlar": [
+            "Yönetici hesabıyla çekmeceyi açın ve “Yardım ve Destek”in altındaki “Geri bildirim”e dokunun.",
+            "Formun üstündeki “Gönderildiği ekran (otomatik eklenir)” kartına bakın; kartı düzenlemeyi deneyin."
+          ],
+          "beklenen": "Form açılır ve üstte “Panel / menu/dashboard / Site: …” gibi ekran adı, rota ve site yazan salt görünür bir kart bulunur; kart düzenlenemez.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F40.02",
+          "baslik": "Başka ekrandan açınca ekran adı değişir",
+          "adimlar": [
+            "Menüden Talepler ekranına geçip çekmeceden “Geri bildirim”i yeniden açın.",
+            "Sağ üstteki dişliyi (Ayarlar) açıp “Geri bildirim gönder”e dokunun."
+          ],
+          "beklenen": "Kartta ekran adı “Talepler”, rota “menu/talepler” olur (sakin modunda rotanın sonunda “:sakin” görünür). Dişliden açılan form da aynı bağlamı taşır.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F40.03",
+          "baslik": "Metin ve fotoğrafla gönderim, sınırlar",
+          "adimlar": [
+            "Metin yazıp 2-3 fotoğraf ekleyerek gönderin.",
+            "Yeni bir formda 4 fotoğraf ekleyip ekleme düğmesine bakın.",
+            "Metni boş bırakıp göndermeyi deneyin."
+          ],
+          "beklenen": "Gönderince “Geri bildiriminiz gönderildi. Teşekkür ederiz.” görünür. 4 fotoğraf eklenince ekleme düğmesi kapanır. Boş metinle gönderme engellenir.",
+          "rol_notu": "Site yöneticisi / Daire sakini",
+          "on_kosul": "Telefonda en az 4 fotoğraf",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F40.04",
+          "baslik": "Zayıf bağlantıda dosya yüklenemezse",
+          "adimlar": [
+            "Fotoğraflı bir geri bildirim yazın; göndermeden önce uçak modunu ya da çok zayıf bağlantıyı açın ve gönderin.",
+            "Çıkan uyarıdaki “Tekrar Dene”ye bağlantı gelince basın."
+          ],
+          "beklenen": "“Geri bildiriminiz alındı; N dosya yüklenemedi” uyarısı çıkar. “Tekrar Dene” yalnız yüklenemeyen dosyaları yükler; tamamlananlar tekrar gönderilmez.",
+          "rol_notu": "Site yöneticisi / Daire sakini",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F40.05",
+          "baslik": "Yönetici: Gelen geri bildirimler",
+          "adimlar": [
+            "Site yöneticisiyle dişli (Ayarlar) panelinden “Gelen geri bildirimler”i açın.",
+            "Bir kaydın gönderenine, rolüne, ekran adına, rotasına ve ek dosyalarına bakın; bir dosyaya dokunun."
+          ],
+          "beklenen": "Yalnız kendi sitenizin kayıtları listelenir. Her kayıtta gönderen adı ve rolü, ekran adı ve rota, metin ve ek dosyalar görünür; dosyaya dokununca açılır.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "En az bir geri bildirim gönderilmiş bir TEST sitesi",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F40.06",
+          "baslik": "Süper kullanıcı hepsini görür; sakin ve kurul görmez",
+          "adimlar": [
+            "Süper kullanıcıyla aynı sayfayı açın.",
+            "Daire sakini ve yönetim kurulu hesaplarıyla dişli panelini açın."
+          ],
+          "beklenen": "Süper kullanıcı tüm sitelerin kayıtlarını (site adıyla; siteye bağlı olmayanlar dahil) görür. Sakin ve kurul hesabının dişli panelinde “Gelen geri bildirimler” yoktur.",
+          "rol_notu": "Süper kullanıcı / Daire sakini / Yönetim kurulu",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F40.07",
+          "baslik": "Sunucuda kayıt ve dosya kontrolü (sahip)",
+          "adimlar": [
+            "Sunucu canlıya alındıktan sonra, acil olmayan bir kontrol olarak sunucuda DOCUMENTS_DIR içindeki feedback_attachments klasörüne bakın.",
+            "Veritabanında feedback_reports tablosundaki son satıra bakın."
+          ],
+          "beklenen": "Gönderilen dosyalar feedback_attachments altında oluşmuştur; feedback_reports satırında screen_name, screen_route ve role alanları doludur. Kayıt metni denetim kaydına yazılmaz.",
+          "rol_notu": "Sahip (sunucu erişimi olan)",
+          "on_kosul": "Sunucu yeni sürümle yayınlanmış olmalı",
+          "yeni": true,
+          "gelistirme": "hazir"
+        }
+      ]
+    },
+    {
+      "id": "F41",
+      "baslik": "Bağlam şeridi, bağlı değil bildirimi, belirgin Yenile ve onaylı Çıkış",
+      "durum": "hazir",
+      "ozet": "Birden çok siteye (ya da birden çok daireye) bağlı kullanıcıda üst çubuğun altında “Site · Daire · Rol” şeridi çıkar; tek site ve tek daireli kullanıcıda çıkmaz. Listelerde boş, hata ve “sunucuya ulaşılamıyor” halleri ayrı bildirimle gösterilir. Üst çubuktaki kırmızı çıkış simgesi kalktı: çıkış çekmecenin dibinde ve her zaman onaylıdır. “Yenile” yuvarlak çerçeveli belirgin düğme oldu. Ana listelerde yenileme sonrası “Son güncelleme SS:dd” yazar. Sürüm yayınlanınca denenir (maddeler “Denemeye hazır” görünse de sürüm yayınlanmadan uygulamada yoktur).",
+      "maddeler": [
+        {
+          "id": "F41.01",
+          "baslik": "Çok siteli yönetici: bağlam şeridi ve site seçimi",
+          "adimlar": [
+            "Birden çok siteyi yöneten yönetici hesabıyla giriş yapın; üst çubuğun hemen altına bakın.",
+            "Şeride dokunup açılan alt sayfadan bir site seçin.",
+            "Şeride yeniden dokunup “Tüm siteler”e dönün."
+          ],
+          "beklenen": "Şerit “Tüm siteler (N) · Yönetici” yazar. Bir site seçilince şerit site adını gösterir; menü ve Panel kartları o siteye daralır (çekmecedeki site seçiciyle aynı davranış). “Tüm siteler”e dönünce kapsam geri açılır.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "İki ya da daha çok siteyi yöneten bir hesap (TEST siteleri)",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F41.02",
+          "baslik": "Tek site ve tek daire: şerit çıkmaz",
+          "adimlar": [
+            "Tek siteye ve tek daireye bağlı bir sakin hesabıyla giriş yapın.",
+            "Üst çubuğun altına bakın."
+          ],
+          "beklenen": "Şerit hiç görünmez; ekran eskisi gibidir.",
+          "rol_notu": "Daire sakini",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F41.03",
+          "baslik": "Çok siteli ya da iki daireli sakin: şerit ve Dairem",
+          "adimlar": [
+            "Birden çok siteye ya da iki daireye bağlı bir sakin hesabıyla giriş yapın; şeride bakın.",
+            "Şeride dokunun.",
+            "Dairem'de bir daire bağını değiştirip Yenile'ye basın ve şeride bakın."
+          ],
+          "beklenen": "Şerit “Site +N site · 2 daire · Sakin” biçimindedir (kurul üyesi ya da görevli bağı olan tek site odaktayken rol “Yönetim Kurulu” / “Görevli” yazar). Dokununca Dairem sayfası açılır. Yenile'den sonra şerit güncellenir.",
+          "rol_notu": "Daire sakini",
+          "on_kosul": "Birden çok siteye ya da iki daireye bağlı bir TEST sakin hesabı",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F41.04",
+          "baslik": "Üst çubukta çıkış simgesi yok, Yenile belirgin",
+          "adimlar": [
+            "Üst çubuğa bakın.",
+            "Yenile düğmesine basın, çalışırken tekrar basmayı deneyin; sonra sayfayı aşağı çekerek yenileyin."
+          ],
+          "beklenen": "Üst çubukta kırmızı çıkış simgesi yoktur. Yenile düğmesi yuvarlak ve çerçevelidir; basınca ortasında dönen gösterge çıkar ve bitince simge geri gelir; sürerken tekrar basılamaz. Aşağı çekerek yenileme de aynı şekilde çalışır.",
+          "rol_notu": "Site yöneticisi / Daire sakini",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F41.05",
+          "baslik": "Çıkış çekmecenin dibinde ve onaylı",
+          "adimlar": [
+            "Çekmeceyi açıp en alttaki “Çıkış Yap”a dokunun.",
+            "Çıkan pencerede önce “Vazgeç”e, sonra pencerenin dışına dokunun.",
+            "Yeniden “Çıkış Yap”a dokunup bu kez onaylayın."
+          ],
+          "beklenen": "“Çıkış yapılsın mı?” penceresi çıkar. “Vazgeç” ve pencere dışına dokunuş çıkış yaptırmaz (çekmece açık kalır); onay oturumu kapatır.",
+          "rol_notu": "Site yöneticisi / Daire sakini",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F41.06",
+          "baslik": "Bağlantı yokken listeler: “bağlı değil” bildirimi ve Tekrar Dene",
+          "adimlar": [
+            "Telefonu uçak moduna alıp Duyurular, Talepler (sakinde Taleplerim), Ziyaretçi ve Kargo, Kişiler ve Belgeler listelerini sırayla açın.",
+            "Bağlantıyı açıp “Tekrar Dene”ye basın.",
+            "Yetkisi olmayan bir ekranı açmayı deneyin (sunucu 403 verirse)."
+          ],
+          "beklenen": "Her listede turuncu, bulut-yok simgeli “Sunucuya … ulaşılamadı” benzeri bir bildirim ve “Tekrar Dene” görünür (kırmızı hata değil). Bağlantı gelince “Tekrar Dene” listeyi yükler. Yetki hatasında bildirim kırmızı hata olarak kalır.",
+          "rol_notu": "Site yöneticisi / Daire sakini",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F41.07",
+          "baslik": "“Son güncelleme” saati ve eski kayıt uyarısı",
+          "adimlar": [
+            "Bu listeleri açıp üstteki küçük yazıya bakın; aşağı çekince saatin ilerlediğini görün.",
+            "Liste doluyken bağlantıyı kesip aşağı çekin.",
+            "Boş bir listede (yeni site) kartı kontrol edin."
+          ],
+          "beklenen": "Listenin üstünde sağda “Son güncelleme SS:dd” yazar. Bağlantı kesilince kayıtlar silinmez; bildirimin altında en son başarılı güncellemenin saati ve “Kayıtlar eski olabilir” uyarısı görünür. Boş listede “Henüz … yok” kartı ve saat görünür.",
+          "rol_notu": "Site yöneticisi / Daire sakini",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F41.08",
+          "baslik": "Dar ekran, en büyük yazı ve koyu tema",
+          "adimlar": [
+            "Yazı boyutunu en büyüğe alıp (çift modlu yönetici hesabı dahil) üst çubuğa, bağlam şeridine, bildirimlere ve çıkış penceresine bakın.",
+            "Koyu temada tekrarlayın."
+          ],
+          "beklenen": "Üst çubuk, şerit, bildirimler ve çıkış penceresi taşmaz ve kesilmez; koyu temada okunur.",
+          "rol_notu": "Site yöneticisi / Daire sakini",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        }
+      ]
+    },
+    {
+      "id": "F42",
+      "baslik": "Görünüm: liste/kutucuk anahtarı ve Kolay görünüm",
+      "durum": "hazir",
+      "ozet": "Üç ekranda liste ↔ kutucuk anahtarı vardır: Panel “Modüller” (varsayılan kutucuk), Kişiler > Daireler ve Kişiler > Kişiler (varsayılan liste); tercih ekran başına cihazda hatırlanır. Ayarlar panelinin en üstündeki “Kolay görünüm” anahtarı yüksek karşıtlıklı renkler, daha büyük düğmeler ve en az 1,3 kat yazı getirir; Panel tek sütunda büyük düğmeye sadeleşir. Kolay görünümde hızlı işlemler satırı yoktur; gerekli girişler (sakin için “Yöneticiyi ara”, kompakt menü bir şeyi gizliyorsa “Tüm işlemler”) büyük düğme olarak modüllerin sonunda durur. Kapı güvenliği ve görünürlük kuralları aynıdır. Sürüm yayınlanınca denenir (maddeler “Denemeye hazır” görünse de sürüm yayınlanmadan uygulamada yoktur).",
+      "maddeler": [
+        {
+          "id": "F42.01",
+          "baslik": "Kolay görünüm anahtarı ve kalıcılığı",
+          "adimlar": [
+            "Sağ üstteki dişliyi (Ayarlar) açın ve en üstteki “Kolay görünüm” anahtarını açın.",
+            "Panel'e bakın; sonra anahtarı kapatın.",
+            "Anahtarı yeniden açıp uygulamayı tamamen kapatıp açın."
+          ],
+          "beklenen": "Açınca yazılar belirgin büyür, renkler daha koyu ve net olur, Panel'de modüller tek sütunda büyük düğme olur. Kapatınca eski görünüm döner. Uygulama yeniden açılınca tercih hatırlanır.",
+          "rol_notu": "Site yöneticisi / Daire sakini",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F42.02",
+          "baslik": "Büyük sistem yazısında ve küçük ekranda",
+          "adimlar": [
+            "Telefonun yazı boyutunu %150-200 yapın.",
+            "Kolay görünümü açıp kapatarak Panel, Kişiler, Finans ve Ayarlar panelinde gezinin."
+          ],
+          "beklenen": "Küçük ekranlı telefonda bile yazılar kesilmez ve taşmaz; düğmeler büyük ve kolay basılır kalır.",
+          "rol_notu": "Site yöneticisi / Daire sakini",
+          "on_kosul": "Küçük ekranlı bir telefon",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F42.03",
+          "baslik": "Koyu temada Kolay görünüm",
+          "adimlar": [
+            "Tema düğmesiyle koyu temaya geçip Kolay görünümü açın.",
+            "Kart kenarlarına ve metinlere bakın."
+          ],
+          "beklenen": "Kart kenarları ve metinler net seçilir (yüksek karşıtlık).",
+          "rol_notu": "Site yöneticisi / Daire sakini",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F42.04",
+          "baslik": "Sakin: borç kartı, Kapılar düğmesi ve Ziyaretçi kodu",
+          "adimlar": [
+            "Sakin hesabıyla Kolay görünümde Panel'e bakın.",
+            "“Kapılar” büyük düğmesine dokunun.",
+            "Ziyaretçi kodu düğmesinin yerine bakın."
+          ],
+          "beklenen": "Borç kartı üstte kalır. “Kapılar” düğmesi Kapılar sayfasını açar ama kapıyı kendiliğinden AÇMAZ. Ziyaretçi kodu (koşulu sağlayan hesapta) Kapılar düğmesinin hemen altında çıkar.",
+          "rol_notu": "Daire sakini",
+          "on_kosul": "Kapı yetkisi olan sakin hesabı",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F42.05",
+          "baslik": "Yönetici ve süper kullanıcı: rozetler ve Hesap ve ayarlar",
+          "adimlar": [
+            "Yönetici ya da süper kullanıcıyla Kolay görünümde Panel'e bakın.",
+            "“Hesap ve ayarlar” altındaki Profilim ve Yardım düğmelerine dokunun."
+          ],
+          "beklenen": "Bekleyen sayısı olan modüller düğmenin altında “3 okunmamış” gibi yazar. Profilim ve Yardım düğmeleri çalışır.",
+          "rol_notu": "Site yöneticisi / Süper kullanıcı",
+          "on_kosul": "Bekleyen kaydı olan modüller (duyuru, talep gibi)",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F42.06",
+          "baslik": "Panel ve Kişiler: liste ↔ kutucuk anahtarı",
+          "adimlar": [
+            "Panel'de “Modüller” başlığının sağındaki düğmeyle Liste ve Kutucuk görünümlerini değiştirin; uygulamayı kapatıp açın.",
+            "Aynısını Kişiler > Daireler ve Kişiler > Kişiler sekmelerinde deneyin."
+          ],
+          "beklenen": "Her seçim hatırlanır; üç ekranın tercihi birbirinden bağımsızdır. Düğmenin simgesi geçilecek görünümü anlatır.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F42.07",
+          "baslik": "Kişiler ve Daireler kutucuk görünümü",
+          "adimlar": [
+            "Kişiler sekmesinde kutucuk görünümüne geçin; bir kutucuğa dokunun.",
+            "Kutucuktaki üç nokta menüsünü ve “Çoklu Seçim”i deneyin.",
+            "Daireler sekmesinde kutucuğa dokunun.",
+            "Yönetim kurulu (salt okunur) hesabıyla aynı ekranları açın."
+          ],
+          "beklenen": "Kutucuğa dokununca kişi kartı (daire kartı) açılır; üç nokta menüsü ve Çoklu Seçim çalışır. Kurul üyesinde yazma menüsü çıkmaz.",
+          "rol_notu": "Site yöneticisi / Yönetim kurulu",
+          "on_kosul": "Kayıtlı kişi ve daire içeren bir TEST sitesi. Bilinen sorun: Kişiler'deki çoklu seçim paneli en dar ekran ve en büyük yazıda taşabilir (ayrı iş olarak izleniyor).",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F42.08",
+          "baslik": "Ekran okuyucu ile Görünüm düğmeleri",
+          "adimlar": [
+            "TalkBack (ya da VoiceOver) açıkken Kolay görünüm anahtarına, liste/kutucuk düğmesine ve Panel'deki büyük düğmelere odaklanın."
+          ],
+          "beklenen": "Kolay görünüm anahtarı açık/kapalı durumunu söyler; liste/kutucuk düğmesi “Kutucuk görünümüne geç” / “Liste görünümüne geç” der; büyük düğmeler başlık ve sayıyı okur.",
+          "rol_notu": "Site yöneticisi / Daire sakini",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F42.09",
+          "baslik": "Hesap silindikten sonra görünüm tercihleri",
+          "adimlar": [
+            "Bir TEST hesabında Kolay görünümü ve bir liste/kutucuk tercihini değiştirin.",
+            "Aynı hesabı Ayarlar'dan silin; aynı telefonda yeni bir hesapla giriş yapın."
+          ],
+          "beklenen": "Görünüm tercihleri bu cihazda korunur (kişisel veri değildir, hesapla birlikte silinmez).",
+          "rol_notu": "Daire sakini",
+          "on_kosul": "Silinebilecek bir TEST hesabı",
+          "yeni": true,
+          "gelistirme": "hazir"
+        }
+      ]
+    },
+    {
+      "id": "F43",
+      "baslik": "Dokun-ara: Yöneticiyi ara ve büyük 112 düğmesi",
+      "durum": "hazir",
+      "ozet": "Sakinin Panel'indeki hızlı işlemlerin sonuna sunucu yanıtı gelince “Yöneticiyi ara” kutusu eklenir: dokununca telefon uygulaması yöneticinin profil telefonuyla açılır (arama kendiliğinden başlamaz). Telefon kayıtlı değilse kutu görünür kalır ve nedenini söyler. Dairem > Güvenlik ve destek bölümünün başında büyük bir 112 düğmesi vardır. Cihaz aramayı açamazsa kuru mod: büyük numara ve “Numarayı kopyala” gösterilir. Yönetici profilindeki telefon, sitesine bağlı sakin, kurul üyesi ve görevlilere “Yöneticiyi ara” kutusunda görünür; yönetici Panel'inde ve Profilim'de bu açıkça yazılır. Kolay görünümde hızlı işlemler satırı olmadığı için aynı iş modüllerin sonunda büyük bir “Yöneticiyi ara” düğmesidir. Sürüm yayınlanınca denenir (maddeler “Denemeye hazır” görünse de sürüm yayınlanmadan uygulamada yoktur).",
+      "maddeler": [
+        {
+          "id": "F43.01",
+          "baslik": "Sunucu güncellenmeden önce yeni uygulama: kutu çıkmaz, başka şey bozulmaz",
+          "adimlar": [
+            "Yeni uygulama sürümüyle, sunucu henüz güncellenmemişken sakin hesabıyla Panel'i açın (yalnız sürüm geçişi sırasında denenebilir)."
+          ],
+          "beklenen": "“Yöneticiyi ara” kutusu çıkmaz (sunucu ucu yoktur; kutu sessizce gizlenir) ve Panel'in geri kalanı eskisi gibi çalışır.",
+          "rol_notu": "Daire sakini",
+          "on_kosul": "Yalnız sunucu güncellenmeden önceki kısa pencerede denenebilir",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F43.02",
+          "baslik": "Sakin: Yöneticiyi ara kutusu telefon uygulamasını açar",
+          "adimlar": [
+            "Sakin hesabıyla Panel > Hızlı işlemler'e bakın.",
+            "Yöneticinin profilinde telefon varken “Yöneticiyi ara”ya dokunun."
+          ],
+          "beklenen": "Hızlı işlemlerin en sonunda “Yöneticiyi ara” ve yönetici adı görünür. Dokununca telefon uygulaması yöneticinin numarasıyla AÇILIR; arama kendiliğinden başlamaz.",
+          "rol_notu": "Daire sakini",
+          "on_kosul": "Profilinde telefonu yazılı bir site yöneticisi olan TEST sitesi",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F43.03",
+          "baslik": "Yönetici telefonu kayıtlı değilse",
+          "adimlar": [
+            "Yöneticinin telefonunu Profilim'den silin.",
+            "Sakin Panel'ini aşağı çekip yenileyin ve kutuya dokunun.",
+            "Yönetici hesabıyla Panel'e bakın; ardından Profilim'e telefon yazıp Panel'i yenileyin."
+          ],
+          "beklenen": "Kutu “Telefon kayıtlı değil” yazar; dokununca yöneticinin henüz telefon eklemediğini söyleyen mesaj çıkar ve hiçbir şey aranmaz. Yönetici Panel'inde “Telefon numaranızı ekleyin” ipucu ve “Profilim'e git” düğmesi görünür; telefon yazılınca ipucu kalkar ve sakinde kutu yine aramaya döner.",
+          "rol_notu": "Daire sakini / Site yöneticisi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F43.04",
+          "baslik": "Yönetici Profilim: numaranın kimlere görüneceği yazar",
+          "adimlar": [
+            "Site yöneticisiyle Profilim > Telefon alanının altındaki yazıya bakın.",
+            "Aynı alana sakin ve süper kullanıcı hesaplarıyla bakın."
+          ],
+          "beklenen": "Yöneticide numaranın sitedeki sakinlere, kurul üyelerine ve görevlilere “Yöneticiyi ara” kutusunda görüneceği yazar. Sakin ve süper kullanıcıda bu yazı yoktur.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F43.05",
+          "baslik": "Dairem'de büyük 112 düğmesi",
+          "adimlar": [
+            "Sakin hesabıyla Dairem > Güvenlik ve destek bölümünü açın.",
+            "Büyük 112 düğmesine dokunun."
+          ],
+          "beklenen": "Bölümün başında mercan renkli büyük bir “112 Acil Çağrı Merkezi'ni ara” düğmesi görünür. Dokununca arama ekranı 112 yazılı olarak açılır (arama kendiliğinden başlamaz).",
+          "rol_notu": "Daire sakini",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F43.06",
+          "baslik": "Arama yapamayan cihazda kuru mod",
+          "adimlar": [
+            "Arama uygulaması olmayan bir cihazda (tablet, emülatör, masaüstü ya da web) 112 düğmesine dokunun.",
+            "“Numarayı kopyala”ya basıp başka bir uygulamaya yapıştırın.",
+            "Aynısını “Yöneticiyi ara” için deneyin."
+          ],
+          "beklenen": "“Bu cihazdan arama başlatılamadı” kartı, büyük “112” ve “Numarayı kopyala” düğmesi görünür; kopyalayınca panoya 112 yapışır. “Yöneticiyi ara”da aynı kart alt sayfada yönetici numarasıyla çıkar.",
+          "rol_notu": "Daire sakini",
+          "on_kosul": "Arama uygulaması olmayan bir cihaz",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F43.07",
+          "baslik": "Birden çok siteye bağlı sakin",
+          "adimlar": [
+            "Birden çok siteye bağlı bir sakin hesabıyla Panel'deki kutuya bakın ve dokunun."
+          ],
+          "beklenen": "Kutu “2 site” gibi yazar; dokununca alt sayfada siteler listelenir. Telefonu olan sitede “Ara”, olmayan sitede “Telefon kayıtlı değil” görünür.",
+          "rol_notu": "Daire sakini",
+          "on_kosul": "İki siteye bağlı bir TEST sakin hesabı",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F43.08",
+          "baslik": "Kendi sitesinin yöneticisi kendini aramaz",
+          "adimlar": [
+            "Sakin moduna geçmiş bir site yöneticisiyle Panel'in hızlı işlemlerine bakın."
+          ],
+          "beklenen": "Kendi sitesi için “Yöneticiyi ara” kutusu çıkmaz.",
+          "rol_notu": "Site yöneticisi (Sakin Modu)",
+          "on_kosul": "Hem site yöneticisi hem de dairesi olan bir hesap",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F43.09",
+          "baslik": "Kolay görünümde büyük “Yöneticiyi ara” düğmesi",
+          "adimlar": [
+            "Ayarlar panelinden Kolay görünümü açın ve sakin hesabıyla Panel'in modüller bölümüne bakın.",
+            "“Yöneticiyi ara” düğmesine dokunun.",
+            "Yöneticinin telefonunu Profilim'den sildirip Panel'i yenileyin ve düğmeye yeniden dokunun."
+          ],
+          "beklenen": "Kolay görünümde hızlı işlemler satırı yoktur; modüllerin sonunda (varsa “Tüm işlemler”den önce) büyük bir “Yöneticiyi ara” düğmesi çıkar. Dokununca telefon uygulaması yönetici numarasıyla açılır. Telefon kayıtlı değilse düğme görünür kalır, dokununca nedenini söyler ve hiçbir şey aranmaz. Kendi sitesinin yöneticisi olana düğme çıkmaz.",
+          "rol_notu": "Daire sakini",
+          "on_kosul": "Profilinde telefonu yazılı bir site yöneticisi olan TEST sitesi",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F43.10",
+          "baslik": "Dar ekran, en büyük yazı ve ekran okuyucu",
+          "adimlar": [
+            "Küçük ekranlı bir telefonda yazı boyutunu en büyüğe alıp 112 düğmesine, kuru mod kartına, “Yöneticiyi ara” kutusuna ve yönetici ipucuna bakın.",
+            "TalkBack (ya da VoiceOver) ile bu öğelere odaklanın."
+          ],
+          "beklenen": "Hiçbiri taşmaz ya da kesilmez. Ekran okuyucu 112 düğmesini “112 Acil Çağrı Merkezi'ni ara, düğme”, kutuyu “Yöneticiyi ara. <ad>, düğme” diye okur.",
+          "rol_notu": "Daire sakini / Site yöneticisi",
+          "on_kosul": "",
           "yeni": true,
           "gelistirme": "hazir"
         }
