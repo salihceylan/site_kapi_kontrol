@@ -3,7 +3,9 @@
 // Kuyruk üstbilgisi SharedPreferences'ta (JSON), fotoğraflar uygulama belgeler klasöründe `meter_field/` altında dosyadır (web'de dosya yok:
 // web'de yalnız elle giriş, fotoğrafsız). Gönderim sırayla yapılır; ağ/sunucu (5xx, zaman aşımı) hatasında durur ve kalanlar bekler;
 // sunucunun kalıcı reddi (aynı gün farklı değer, sıra dışı, sayaç yok…) kayda `error` olarak yazılır ve görevli düzeltene dek yeniden denenmez.
+// Olağan dışı tüketim uyarısı (`READING_JUMP`) da bu biçimde durur ama ENGEL DEĞİLDİR: görevli "doğru" derse kayıt `confirm_jump` ile gider.
 // Sunucu aynı sayaç+tarih+değeri sessizce kabul ettiği için (replayed) bir yanıtı kaçırıp yeniden göndermek güvenlidir.
+// Kuyruğu okuyup değiştirip yazan her iş sıraya girer (`_apply`): sürmekte olan gönderim turu, araya giren yeni bir okumayı ezip kaybetmez.
 // Değerler, fotoğraflar ve belirteç günlüğe YAZILMAZ.
 import 'dart:async';
 import 'dart:convert';
@@ -95,10 +97,15 @@ class LocalMeterFieldStore implements MeterFieldStore {
 
 /// Gönderim turunun özeti.
 class MeterFlushReport {
-  const MeterFlushReport({this.sent = 0, this.rejected = 0, this.remaining = 0, this.offline = false});
+  const MeterFlushReport({this.sent = 0, this.rejected = 0, this.jumpPending = 0, this.remaining = 0, this.offline = false});
 
   final int sent;
+
+  /// Bu turda sunucunun reddettiği okuma sayısı ([jumpPending] dahil); ekran bununla anında uyarır.
   final int rejected;
+
+  /// [rejected] içinden: olağan dışı tüketim nedeniyle görevlinin ONAYINI bekleyenler (engel değil, onaylayınca gider).
+  final int jumpPending;
 
   /// Hâlâ cihazda bekleyen (reddedilenler dahil).
   final int remaining;
@@ -114,16 +121,31 @@ class MeterFieldQueue {
   final DateTime Function() _now;
   final Random _random;
   bool _flushing = false;
+  Future<void> _tail = Future<void>.value();
+
+  /// Listeyi okuyup [change] ile değiştirip yazar; bu tür işler sırayla çalışır (biri bitmeden öteki başlamaz). Yeni listeyi döner.
+  Future<List<PendingMeterReading>> _apply(List<PendingMeterReading> Function(List<PendingMeterReading> current) change) {
+    final result = _tail.then((_) async {
+      final next = change(await _store.load());
+      await _store.save(next);
+      return next;
+    });
+    _tail = result.then<void>((_) {}, onError: (Object _) {});
+    return result;
+  }
 
   Future<List<PendingMeterReading>> items() => _store.load();
 
   /// Okumayı (ve varsa fotoğrafı) cihaza yazar; her zaman önce kuyruğa girer, ağ sonra denenir.
+  /// [replace]: yeniden çekim (o günün okuması varsa sunucuda değeri değişir). [jumpConfirmed]: görevli olağan dışı tüketimi önceden onayladı.
   Future<PendingMeterReading> enqueue({
     required int siteCode,
     required FieldMeter meter,
     required String date,
     required String value,
     Uint8List? photo,
+    bool replace = false,
+    bool jumpConfirmed = false,
   }) async {
     final id = '${_now().microsecondsSinceEpoch}${_random.nextInt(1 << 20)}';
     final path = photo == null ? null : await _store.writePhoto(id, photo);
@@ -136,24 +158,32 @@ class MeterFieldQueue {
       date: date,
       value: value,
       photoPath: path,
+      replace: replace,
+      jumpConfirmed: jumpConfirmed,
     );
-    final all = await _store.load();
-    await _store.save(<PendingMeterReading>[...all, item]);
+    await _apply((all) => <PendingMeterReading>[...all, item]);
     return item;
   }
 
   Future<void> remove(String id) async {
-    final all = await _store.load();
-    for (final item in all.where((e) => e.id == id && e.photoPath != null)) {
+    final removed = <PendingMeterReading>[];
+    await _apply((all) {
+      removed.addAll(all.where((e) => e.id == id));
+      return <PendingMeterReading>[for (final e in all) if (e.id != id) e];
+    });
+    for (final item in removed.where((e) => e.photoPath != null)) {
       await _store.deletePhoto(item.photoPath!);
     }
-    await _store.save(<PendingMeterReading>[for (final e in all) if (e.id != id) e]);
   }
 
-  /// Reddedilen kaydın değerini düzeltir ve yeniden denemeye açar.
+  /// Reddedilen kaydın değerini düzeltir ve yeniden denemeye açar (yeni değer için önceki sıçrama onayı geçersizdir).
   Future<void> correct(String id, String value) async {
-    final all = await _store.load();
-    await _store.save(<PendingMeterReading>[for (final e in all) e.id == id ? e.copyWith(value: value, clearError: true) : e]);
+    await _apply((all) => <PendingMeterReading>[for (final e in all) e.id == id ? e.copyWith(value: value, clearError: true, jumpConfirmed: false) : e]);
+  }
+
+  /// Olağan dışı tüketim uyarısını görevli onayladı: kayıt `confirm_jump: true` ile yeniden denenmeye açılır.
+  Future<void> confirmJump(String id) async {
+    await _apply((all) => <PendingMeterReading>[for (final e in all) e.id == id ? e.copyWith(jumpConfirmed: true, clearError: true) : e]);
   }
 
   /// Bekleyenleri sırayla gönderir. Eşzamanlı ikinci çağrı boş rapor döner.
@@ -162,34 +192,43 @@ class MeterFieldQueue {
     _flushing = true;
     var sent = 0;
     var rejected = 0;
+    var jumpPending = 0;
     var offline = false;
     try {
-      var all = await _store.load();
-      for (final item in List<PendingMeterReading>.of(all)) {
-        if (item.error != null) continue;
+      for (final queued in await _store.load()) {
+        // Tur sürerken görevli kaydı silmiş / değiştirmiş olabilir: güncel hâline bak.
+        final item = (await _store.load()).where((e) => e.id == queued.id).firstOrNull;
+        if (item == null || item.error != null) continue;
         String? b64;
         if (item.photoPath != null) {
           final bytes = await _store.readPhoto(item.photoPath!);
           if (bytes != null) b64 = base64Encode(bytes);
         }
         try {
-          await service.postFieldReading(item.siteCode, meterId: item.meterId, date: item.date, value: item.value, photoBase64: b64);
+          await service.postFieldReading(
+            item.siteCode,
+            meterId: item.meterId,
+            date: item.date,
+            value: item.value,
+            photoBase64: b64,
+            confirmJump: item.jumpConfirmed,
+            replace: item.replace,
+          );
           if (item.photoPath != null) await _store.deletePhoto(item.photoPath!);
-          all = <PendingMeterReading>[for (final e in all) if (e.id != item.id) e];
+          await _apply((current) => <PendingMeterReading>[for (final e in current) if (e.id != item.id) e]);
           sent++;
         } on ApiException catch (e) {
           if (_isPermanent(e)) {
-            all = <PendingMeterReading>[for (final x in all) x.id == item.id ? x.copyWith(error: e.message) : x];
+            await _apply((current) => <PendingMeterReading>[for (final x in current) x.id == item.id ? x.copyWith(error: e.message, errorCode: e.code) : x]);
             rejected++;
+            if (e.code == kReadingJumpCode) jumpPending++;
           } else {
             offline = true;
             break;
           }
         }
-        await _store.save(all);
       }
-      await _store.save(all);
-      return MeterFlushReport(sent: sent, rejected: rejected, remaining: all.length, offline: offline);
+      return MeterFlushReport(sent: sent, rejected: rejected, jumpPending: jumpPending, remaining: (await _store.load()).length, offline: offline);
     } finally {
       _flushing = false;
     }

@@ -40,6 +40,54 @@ Fotoğraf: istemci uzun kenarı 1280 px, JPEG kalite 70'e küçültür (EXIF/GPS
 
 İstemci: kamera açık kalır, üstte sıradaki daire, metin tanıma telefonda (ML Kit; yalnız Android/iOS, web'de elle giriş), görevli onaylar/düzeltir. Okuma önce cihaz kuyruğuna yazılır (SharedPreferences + belgeler klasöründe fotoğraf), sonra gönderilir; ağ/sunucu hatasında kuyruk durur ve 30 sn'de bir / uygulama öne gelince / okuma sonrası yeniden dener. Sunucunun kalıcı reddi (4xx) kayda yazılır, görevli düzeltene ya da silene dek denenmez.
 
+## Saha akışı ve sıçrama uyarısı (P1-6, P1-7; karar K12)
+
+Görevli akışı: **blok seç → dairelerin çekilen / çekilmeyen listesi → eksikleri sırayla çek → yanlış çekileni listeden seçip yeniden çek**. Olağan dışı tüketim görevliye
+sıradaki daireye geçmeden sorulur; sunucu da aynı kuralı uygular. Yeni alanların hepsi isteğe bağlıdır: eski istemci yeni sunucuyla, yeni istemci eski sunucuyla çalışır.
+
+**Liste** `GET /sites/:siteCode/meter-field/meters?kind=&date=` (`date` YYYY-AA-GG, yoksa İstanbul bugünü) -> `{ items, jump_factor, date }`. Her sayaç eski alanlara ek olarak:
+
+- `block_name`, `unit_label` — blok süzgeci için (eski sunucuda yoksa istemci "Blok - No" etiketinden türetir);
+- `previous_reading { value, date }` — `date`ten ÖNCEKİ son okuma (o güne okuma girilmişse ondan öncekisi: yeniden çekimin tabanı), yoksa null;
+- `jump { median, limit, factor }` — son 3 dönem tüketim tabanı: `median` = ortanca tüketim, `limit` = `median x factor`; yeterli veri yoksa null (cihaz uyarmaz).
+
+**Dönem** = aynı sayacın iki ardışık okuması arası; tüketim = sonraki okuma - önceki okuma. Yeni okumadan önce EN AZ 4 okuma (3 dönem) gerekir; daha azında uyarı YOK. Ortanca tüketim 0 ise
+(üç dönemin en az ikisinde tüketim yok) ölçek bulunamaz: uyarı YOK. Bir dönem tüketimi negatifse (veri tutarsız) uyarı yok. Tüketim `limit`i AŞARSA uyarı (eşitlik uyarmaz).
+Hesap milli (BigInt) tam sayıyla yapılır; kayan nokta yoktur (`metering_jump.js`).
+
+**K (eşik çarpanı)** = kurallar tablosu anahtarı `metering.jump_factor` (`docs/PLATFORM_KURALLAR.md`): varsayılan 5, sınır 2..100, birim kat, sitede değişebilir (site değerini süper kullanıcı
+"Kurallar" ekranından verir; site yöneticisi salt okur). Kural okunamazsa 5 kullanılır (okuma girişi engellenmez). Migration gerekmez.
+
+**Okuma** `POST /sites/:siteCode/meter-field/readings` gövdesine iki isteğe bağlı alan eklenir (`meter_id`, `date`, `value`, `photo_b64?`, `photo_mime?` aynen):
+
+| Alan | Anlam |
+| --- | --- |
+| `confirm_jump` | `false` / `true` (boolean) ise sıçrama denetimi YAPILIR. `false`: eşik aşılırsa **409 `READING_JUMP`** döner ve okuma kaydedilmez; `true`: görevli onayladı, okuma kaydedilir ve onay izi yazılır. Alan YOKSA (eski istemci) denetim yapılmaz, okuma eskisi gibi kaydolur. |
+| `replace` | `true`: **yeniden çekim**. O gün bu sayaç için FARKLI değerli okuma varsa değeri değişir (aynı kayıt, aynı id); yoksa normal eklenir. `replace` olmadan farklı değer 409 `READING_EXISTS` (eski davranış). |
+
+- 409 `READING_JUMP` gövdesi: `{ error, code, jump: { previous_value, consumption, median, limit, factor } }` (değerler 3 ondalıklı metin).
+- Yanıt (200/201) eski alanlara ek olarak: `retaken` (yeniden çekimle değişti), `jump_confirmed` (sıçrama onaylanarak kaydedildi). Aynı sayaç + tarih + AYNI değer yine `replayed: true` (çevrimdışı kuyruk güvenle yeniden dener; uyarı, denetim ve fotoğraf yok).
+- Sıra kuralı sıçrama uyarısından ÖNCE denetlenir (önceki okumadan küçük değer `READING_OUT_OF_ORDER`).
+- Yeniden çekim yalnız **bugünkü ve dünkü** okuma için (409 `RETAKE_WINDOW`; eski okumayı yönetici düzeltir) ve **faturalandırılmamış** dönemde (409 `READING_RETAKE_LOCKED`: okumanın tarihini kapsayan `period_to >=` faturalandırma varsa). Yeniden çekimde sıçrama tabanı, DEĞİŞTİRİLEN okumayı dışarıda bırakır (`reading_date < tarih`).
+- Denetim kaydı (`audit_log`; okunan DEĞER yazılmaz): `metering.reading.added` (yeni), `metering.reading.retaken` (`{ meter_id, source: 'field' }`), `metering.reading.jump_confirmed` (`{ meter_id, factor, ratio_pct }`; `ratio_pct` = tüketimin ortancaya oranı, yüzde: 510 = 5,1 katı). Onay izi, sıçramanın gerçekten saptandığı kayıtta yazılır.
+
+**İstemci** (`MeterFieldView`):
+
+- Birden çok blok varsa üstte blok seçici ("Tümü (okunan/toplam)", "A Blok (3/12)"); sıradaki daire seçili bloktan gelir. Tek blokta seçici çizilmez.
+- Banner'daki **Liste** düğmesi dairelerin durumunu açar: *Sorunlu* (sunucu kabul etmedi / onay bekliyor), *Çekilmeyenler* (çekilmedi / atlandı), *Çekilenler* (gönderildi / gönderilmeyi bekliyor). Satıra dokunmak o daireyi seçer: çekilmemişse sıradaki yerine o okunur, çekilmişse **yeniden çekim** başlar (banner "Yeniden çekim", düğme "Onayla ve değiştir", "Vazgeç" seçimi bırakır). Atlanan daire listeden geri çekilebilir; sıra bitince "Atlananlara dön".
+- Sıçrama: değer girilince, sıradaki daireye GEÇMEDEN, sunucunun gönderdiği tabana göre cihazda kontrol edilir ("Olağan dışı tüketim": tüketim, ortanca, eşik). **Değeri düzelt** kaydetmez; **Doğru, kaydet** kuyruğa `confirm_jump: true` ile alır. Önceki okumadan küçük değer cihazda engellenir. Taban eskiyse / yoksa sunucu yine denetler (`false` gönderilir): 409 `READING_JUMP` alan kayıt kuyrukta **onay bekler** (engel değil; "Bekleyen" listesinde **Doğru, onayla ve gönder** / değeri düzelt / sil), diğer sunucu redleri gibi kırmızı rozetle sayılır.
+- Yeniden çekim ve gönderilmemiş bekleyen kayıt: aynı dairenin bugünkü bekleyen/reddedilmiş kaydı varsa yenisi onun yerine geçer (iki kayıt birbirini ezmez); yeniden çekim kaydı `replace: true` taşır.
+- Reddedilen kayıtlar anında bildirilir (ekranın altında "N okuma sunucuya kabul edilmedi" / "N okuma olağan dışı tüketim nedeniyle onayınızı bekliyor") ve üst çubuktaki Bekleyen düğmesinde kırmızı rozetle görünür.
+- Kuyruğu okuyup değiştirip yazan tüm işler sıraya girer: sürmekte olan gönderim turu, araya giren yeni bir okumayı ezip kaybetmez; tur sürerken silinen kayıt gönderilmez.
+
+**Tarih düzeltmesi:** sunucu saat dilimi Europe/Istanbul olduğundan pg'nin DATE -> yerel gece yarısı `Date` dönüşümü `toISOString()` ile okunduğunda tarihi bir gün geri kaydırıyordu (28 Ekim okuması
+`last_reading.date` olarak 27 Ekim dönerdi; "bugün okundu" tanınmazdı). `metering_service.dateOnly` artık yerel gün/ay/yıl okur; saha listesinin geçmiş sorgusu tarihi `to_char` ile metin alır.
+
+**Denemeler:** DB'siz birim testleri `server/test/metering_jump.test.js` (medyan / eşik, 3 dönemden az veri, K kuralı, sahte havuzla okuma servisi ve liste) ve istemci `test/meter_field_test.dart`,
+`test/screens/meter_field_view_test.dart` (uyarı onay akışı, blok, liste, yeniden çekim, rozet). Gerçek PostgreSQL: `server/scripts/qa_metering_field.mjs` (`ALLOW_DEV_SCRIPTS=1`, kendi geçici sitesini kurup siler).
+
+**Bu sürümde yok:** yönetici elle okuma girişi (`POST .../meters/:id/readings`) ve dosya aktarımı sıçrama denetimi yapmaz (yalnız saha ucu); sıçrama onayını okuma satırında gösteren işaret (onay izi denetim kaydındadır).
+
 ## Yakında
 
 Okunan değerin yönetici tarafından sonradan düzeltilmesinin ayrı kaydı, fotoğraf görüntüleme ekranı, sayaç değişimi (eski sayacı kapatıp yenisini açmak: şimdilik pasife alıp yeni sayaç eklenir), ortak alan sayaçları, süper kullanıcı için site seçmeli sayaç ekranı.

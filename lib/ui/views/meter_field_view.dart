@@ -1,6 +1,11 @@
 // Fotoğrafla sayaç okuma (görevli / yönetici): kamera açık kalır, ekranın üstünde sıradaki daire yazar, değer telefonda metin tanımayla
 // okunur, görevli onaylar ya da düzeltir. Okumalar önce cihaz kuyruğuna yazılır; internet yoksa orada bekler, gelince sunucuya
 // (Drive bağlıysa Drive'a) gönderilir. Web'de kamera yok: yalnız elle giriş. Sözleşme: docs/PLATFORM_SAYAC.md "Fotoğrafla okuma".
+//
+// Saha akışı (P1-6): blok seç -> dairelerin çekilen / çekilmeyen listesi -> eksikleri sırayla çek -> yanlış çekileni listeden seçip
+// YENİDEN ÇEK. Sıçrama uyarısı (P1-7, karar K12): değer son 3 dönem tüketim medyanının eşik katını aşarsa görevli sıradaki daireye
+// geçmeden "emin misiniz?" diye sorulur (engel değil, onaylayıp geçer; onay izi sunucuda tutulur). Sunucunun reddettiği kayıtlar
+// (sıra dışı, olağan dışı tüketim onayı…) üst çubukta kırmızı rozetle görünür. Sözleşme: docs/PLATFORM_SAYAC.md "Saha akışı".
 import 'dart:async';
 import 'dart:typed_data';
 
@@ -13,6 +18,7 @@ import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/services/meter_api.dart';
 import 'package:site_kapi_kontrol/services/meter_field_queue.dart';
 import 'package:site_kapi_kontrol/services/meter_ocr.dart';
+import 'package:site_kapi_kontrol/ui/design/status_dot.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 
 class MeterFieldView extends StatefulWidget {
@@ -43,6 +49,20 @@ class MeterFieldView extends StatefulWidget {
   State<MeterFieldView> createState() => _MeterFieldViewState();
 }
 
+/// Bir dairenin okuma durumu (liste ekranı).
+enum _MeterState { waiting, skipped, queued, needsConfirm, rejected, sent }
+
+class _MeterRow {
+  const _MeterRow({required this.meter, required this.state, required this.detail, required this.retake});
+
+  final FieldMeter meter;
+  final _MeterState state;
+  final String detail;
+
+  /// Bugün okunmuş: listeden seçilince YENİDEN ÇEKİM olur (değer, bugünkü okumanın yerine geçer).
+  final bool retake;
+}
+
 class _MeterFieldViewState extends State<MeterFieldView> with WidgetsBindingObserver {
   late final MeterService _service = widget.service ?? MeterService(authService: widget.authService);
   late final MeterFieldQueue _queue = widget.queue ?? MeterFieldQueue();
@@ -57,6 +77,13 @@ class _MeterFieldViewState extends State<MeterFieldView> with WidgetsBindingObse
   List<FieldMeter> _meters = const <FieldMeter>[];
   final Set<int> _done = <int>{};
   final Set<int> _skipped = <int>{};
+
+  /// Bu oturumda girilen değerler (liste ekranında göstermek için).
+  final Map<int, String> _entered = <int, String>{};
+
+  /// Seçili blok (null: tüm bloklar) ve listeden seçilen daire (null: sıradaki).
+  String? _block;
+  FieldMeter? _picked;
   List<PendingMeterReading> _pending = const <PendingMeterReading>[];
   bool _loading = true;
   String? _loadError;
@@ -73,7 +100,24 @@ class _MeterFieldViewState extends State<MeterFieldView> with WidgetsBindingObse
     return '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
   }
 
-  FieldMeter? get _current => nextFieldMeter(_meters, today: _today, done: _done, skipped: _skipped);
+  /// Bugün okunmuş mu: sunucuda bugünkü okuma var ya da bu oturumda okundu / kuyruğa girdi.
+  bool _isDone(FieldMeter meter) => meter.lastDate == _today || _done.contains(meter.id);
+
+  /// Seçili bloktaki sayaçlar (blok seçili değilse hepsi).
+  List<FieldMeter> get _scoped => _block == null ? _meters : <FieldMeter>[for (final m in _meters) if (m.block == _block) m];
+
+  FieldMeter? get _next => nextFieldMeter(_scoped, today: _today, done: _done, skipped: _skipped);
+
+  /// Şimdi okunacak daire: listeden seçilen, yoksa sıradaki.
+  FieldMeter? get _current => _picked ?? _next;
+
+  PendingMeterReading? _pendingFor(int meterId) {
+    PendingMeterReading? found;
+    for (final item in _pending) {
+      if (item.meterId == meterId && item.siteCode == widget.siteCode) found = item;
+    }
+    return found;
+  }
 
   @override
   void initState() {
@@ -125,8 +169,14 @@ class _MeterFieldViewState extends State<MeterFieldView> with WidgetsBindingObse
       _loadError = null;
     });
     try {
-      final all = await _service.listFieldMeters(widget.siteCode, kind: _kind);
-      if (mounted) setState(() => _meters = all);
+      final all = await _service.listFieldMeters(widget.siteCode, kind: _kind, date: _today);
+      if (mounted) {
+        setState(() {
+          _meters = all;
+          if (_block != null && !fieldBlocks(all).contains(_block)) _block = null;
+          _picked = null;
+        });
+      }
     } on ApiException catch (e) {
       if (mounted) setState(() => _loadError = e.message);
     } finally {
@@ -148,7 +198,44 @@ class _MeterFieldViewState extends State<MeterFieldView> with WidgetsBindingObse
     setState(() {
       _pending = items;
       if (report != null) _offline = report.offline;
-      if (report != null && report.sent > 0) _notice = '${report.sent} okuma gönderildi.';
+      if (report != null) {
+        final parts = <String>[
+          if (report.sent > 0) '${report.sent} okuma gönderildi.',
+          if (report.jumpPending > 0) '${report.jumpPending} okuma olağan dışı tüketim nedeniyle onayınızı bekliyor; Bekleyen listesinden onaylayın ya da düzeltin.',
+          if (report.rejected > report.jumpPending) '${report.rejected - report.jumpPending} okuma sunucuya kabul edilmedi; Bekleyen listesinden düzeltin.',
+        ];
+        if (parts.isNotEmpty) _notice = parts.join(' ');
+      }
+    });
+  }
+
+  void _selectBlock(String? block) {
+    setState(() {
+      _block = block;
+      _picked = null;
+      _shot = null;
+      _recognizedNote = null;
+      _value.clear();
+    });
+  }
+
+  /// Listeden seçilen daire: çekilmediyse sıradaki yerine bu okunur, çekildiyse YENİDEN ÇEKİM başlar.
+  void _pick(FieldMeter meter) {
+    setState(() {
+      _picked = meter;
+      _shot = null;
+      _recognizedNote = null;
+      _value.clear();
+      _notice = null;
+    });
+  }
+
+  void _cancelPick() {
+    setState(() {
+      _picked = null;
+      _shot = null;
+      _recognizedNote = null;
+      _value.clear();
     });
   }
 
@@ -162,7 +249,7 @@ class _MeterFieldViewState extends State<MeterFieldView> with WidgetsBindingObse
       final raw = await file.readAsBytes();
       final small = await shrinkMeterPhotoAsync(raw);
       final text = await _ocr.recognize(file.path);
-      final guess = text == null ? null : pickMeterValue(text, lastValue: meter.lastValue);
+      final guess = text == null ? null : pickMeterValue(text, lastValue: meter.baseValueFor(retake: _isDone(meter)));
       if (!mounted) return;
       setState(() {
         _shot = small;
@@ -176,22 +263,69 @@ class _MeterFieldViewState extends State<MeterFieldView> with WidgetsBindingObse
     }
   }
 
+  /// Olağan dışı tüketim: görevli sıradaki daireye geçmeden önce sorulur. true: "doğru, kaydet"; false / kapatma: değeri düzeltecek.
+  Future<bool?> _askJump(FieldMeter meter, JumpFinding finding) {
+    return showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        key: const ValueKey<String>('jump_dialog'),
+        title: const Text('Olağan dışı tüketim'),
+        content: Text(
+          '${meter.apartmentLabel}: bu okuma, önceki okumaya göre ${formatMilli(finding.consumption)} tüketim gösteriyor. '
+          'Son 3 dönemin ortanca tüketimi ${formatMilli(finding.median)}; uyarı eşiği bunun ${finding.factor} katıdır (${formatMilli(finding.limit)}).\n\n'
+          'Sayaçtaki değeri bir kez daha kontrol edin. Doğruysa kaydedin; onayınız kayıt altına alınır.',
+        ),
+        actions: <Widget>[
+          TextButton(key: const ValueKey<String>('jump_fix'), onPressed: () => Navigator.pop(context, false), child: const Text('Değeri düzelt')),
+          FilledButton(key: const ValueKey<String>('jump_confirm'), onPressed: () => Navigator.pop(context, true), child: const Text('Doğru, kaydet')),
+        ],
+      ),
+    );
+  }
+
   Future<void> _confirm() async {
     final meter = _current;
-    if (meter == null) return;
+    if (meter == null || _busy) return;
     final value = normalizeReadingValue(_value.text);
     if (value == null) {
       setState(() => _notice = 'Değer geçersiz. En çok 3 ondalıklı bir sayı yazın (örn. 1234,5).');
       return;
     }
+    final retake = _isDone(meter);
+    final below = belowPreviousReading(meter, value, retake: retake);
+    if (below != null) {
+      setState(() => _notice = 'Değer önceki okumadan (${formatMeterNumber(below)}) küçük olamaz. Sayaçtaki değeri kontrol edin.');
+      return;
+    }
+    var jumpConfirmed = false;
+    final finding = checkJump(meter, value);
+    if (finding != null) {
+      setState(() => _busy = true);
+      final accepted = await _askJump(meter, finding);
+      if (!mounted) return;
+      if (accepted != true) {
+        setState(() => _busy = false);
+        return;
+      }
+      jumpConfirmed = true;
+    }
     setState(() => _busy = true);
-    await _queue.enqueue(siteCode: widget.siteCode, meter: meter, date: _today, value: value, photo: _shot);
+    // Aynı dairenin bugünkü gönderilmemiş / reddedilmiş kaydı varsa yenisi onun yerine geçer (iki kayıt birbirini ezmesin).
+    for (final old in await _queue.items()) {
+      if (old.siteCode == widget.siteCode && old.meterId == meter.id && old.date == _today) await _queue.remove(old.id);
+    }
+    await _queue.enqueue(siteCode: widget.siteCode, meter: meter, date: _today, value: value, photo: _shot, replace: retake, jumpConfirmed: jumpConfirmed);
     _done.add(meter.id);
+    _skipped.remove(meter.id);
+    _entered[meter.id] = value;
     _value.clear();
+    if (!mounted) return;
     setState(() {
       _shot = null;
       _recognizedNote = null;
-      _notice = 'Kaydedildi (${meter.apartmentLabel}).';
+      _picked = null;
+      _notice = retake ? 'Yeniden çekim kaydedildi (${meter.apartmentLabel}).' : 'Kaydedildi (${meter.apartmentLabel}).';
     });
     await _refreshPending(flush: true);
     if (mounted) setState(() => _busy = false);
@@ -202,6 +336,7 @@ class _MeterFieldViewState extends State<MeterFieldView> with WidgetsBindingObse
     if (meter == null) return;
     setState(() {
       _skipped.add(meter.id);
+      _picked = null;
       _shot = null;
       _value.clear();
       _recognizedNote = null;
@@ -212,24 +347,62 @@ class _MeterFieldViewState extends State<MeterFieldView> with WidgetsBindingObse
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      builder: (context) => _PendingSheet(queue: _queue, onChanged: () => unawaited(_refreshPending())),
+      builder: (context) => _PendingSheet(
+        queue: _queue,
+        onChanged: () => unawaited(_refreshPending()),
+        onConfirmed: () => _refreshPending(flush: true),
+      ),
     );
     if (mounted) unawaited(_refreshPending(flush: true));
+  }
+
+  _MeterRow _rowOf(FieldMeter meter) {
+    final queued = _pendingFor(meter.id);
+    final shown = _entered[meter.id] ?? (meter.lastDate == _today ? meter.lastValue : null);
+    final retake = _isDone(meter);
+    _MeterRow row(_MeterState state, String detail) => _MeterRow(meter: meter, state: state, detail: detail, retake: retake);
+    if (queued != null) {
+      if (queued.needsJumpConfirm) return row(_MeterState.needsConfirm, 'Olağan dışı tüketim: onayınız bekleniyor (${formatMeterNumber(queued.value)})');
+      if (queued.error != null) return row(_MeterState.rejected, 'Sunucu kabul etmedi: ${queued.error}');
+      return row(_MeterState.queued, 'Gönderilmeyi bekliyor (${formatMeterNumber(queued.value)})');
+    }
+    if (retake) return row(_MeterState.sent, shown == null ? 'Çekildi' : 'Çekildi (${formatMeterNumber(shown)})');
+    if (_skipped.contains(meter.id)) return row(_MeterState.skipped, 'Atlandı');
+    final last = meter.lastValue;
+    return row(_MeterState.waiting, last == null ? 'Çekilmedi' : 'Çekilmedi · son okuma ${formatMeterNumber(last)}');
+  }
+
+  Future<void> _showList() async {
+    final rows = <_MeterRow>[for (final m in _scoped) _rowOf(m)];
+    final picked = await showModalBottomSheet<FieldMeter>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => _MeterListSheet(title: _block ?? 'Tüm bloklar', rows: rows),
+    );
+    if (picked != null && mounted) _pick(picked);
   }
 
   @override
   Widget build(BuildContext context) {
     final meter = _current;
-    final total = _meters.length;
-    final read = _meters.where((m) => m.lastDate == _today || _done.contains(m.id)).length;
+    final scoped = _scoped;
+    final total = scoped.length;
+    final read = scoped.where(_isDone).length;
+    final problems = _pending.where((e) => e.error != null).length;
     return Scaffold(
       appBar: AppBar(
         title: const Text('Fotoğrafla sayaç okuma'),
         actions: <Widget>[
           if (_pending.isNotEmpty)
             TextButton.icon(
+              key: const ValueKey<String>('pending_button'),
               onPressed: _showPending,
-              icon: Icon(_offline ? Icons.cloud_off_rounded : Icons.cloud_upload_outlined),
+              icon: Badge(
+                key: const ValueKey<String>('pending_badge'),
+                isLabelVisible: problems > 0,
+                label: Text('$problems'),
+                child: Icon(_offline ? Icons.cloud_off_rounded : Icons.cloud_upload_outlined),
+              ),
               label: Text('Bekleyen: ${_pending.length}'),
             ),
         ],
@@ -255,6 +428,8 @@ class _MeterFieldViewState extends State<MeterFieldView> with WidgetsBindingObse
                               _kind = k;
                               _skipped.clear();
                               _done.clear();
+                              _entered.clear();
+                              _picked = null;
                             });
                             unawaited(_loadMeters());
                           },
@@ -264,9 +439,10 @@ class _MeterFieldViewState extends State<MeterFieldView> with WidgetsBindingObse
             ),
             if (_loading) const LinearProgressIndicator(),
             if (_loadError != null) Padding(padding: const EdgeInsets.all(AppSpace.lg), child: Text(_loadError!)),
-            if (!_loading && _loadError == null && total == 0)
+            if (!_loading && _loadError == null && _meters.isEmpty)
               const Padding(padding: EdgeInsets.all(AppSpace.lg), child: Text('Bu türde etkin sayaç yok. Yönetici önce sayaçları tanımlamalıdır.')),
-            if (total > 0) _nextBanner(context, meter, read, total),
+            if (_meters.isNotEmpty) _blockBar(),
+            if (_meters.isNotEmpty) _nextBanner(context, meter, read, total),
             if (_useCamera) Expanded(child: _cameraArea()) else const Spacer(),
             _confirmPanel(context, meter),
           ],
@@ -275,24 +451,99 @@ class _MeterFieldViewState extends State<MeterFieldView> with WidgetsBindingObse
     );
   }
 
+  /// Blok seçici: birden çok blok varsa "Tümü" + her blok (okunan/toplam).
+  Widget _blockBar() {
+    final blocks = fieldBlocks(_meters);
+    if (blocks.length < 2) return const SizedBox.shrink();
+    String count(List<FieldMeter> list) => '${list.where(_isDone).length}/${list.length}';
+    return SizedBox(
+      height: 52,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: AppSpace.lg, vertical: AppSpace.xs),
+        children: <Widget>[
+          Padding(
+            padding: const EdgeInsets.only(right: AppSpace.sm),
+            child: ChoiceChip(
+              key: const ValueKey<String>('block_chip_all'),
+              label: Text('Tümü (${count(_meters)})'),
+              selected: _block == null,
+              onSelected: _busy ? null : (_) => _selectBlock(null),
+            ),
+          ),
+          for (final block in blocks)
+            Padding(
+              padding: const EdgeInsets.only(right: AppSpace.sm),
+              child: ChoiceChip(
+                key: ValueKey<String>('block_chip_$block'),
+                label: Text('$block (${count(<FieldMeter>[for (final m in _meters) if (m.block == block) m])})'),
+                selected: _block == block,
+                onSelected: _busy ? null : (_) => _selectBlock(block),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget _nextBanner(BuildContext context, FieldMeter? meter, int read, int total) {
     final scheme = Theme.of(context).colorScheme;
+    final retake = meter != null && _isDone(meter);
+    // Yeniden çekim nötr gri (temanın ikincil kabı); renk tohumdan türeyen üçüncül ton değil, sade stilin paletidir.
+    final background = retake ? scheme.secondaryContainer : scheme.primaryContainer;
+    final foreground = retake ? scheme.onSecondaryContainer : scheme.onPrimaryContainer;
+    final skippedHere = _scoped.where((m) => _skipped.contains(m.id) && !_isDone(m)).length;
+    final lastValue = meter?.lastValue;
+    final String headline;
+    final String? subline;
+    if (meter == null) {
+      headline = 'Okunacak daire kalmadı ($read/$total).';
+      subline = skippedHere > 0 ? '$skippedHere daire atlandı.' : null;
+    } else if (retake) {
+      headline = 'Yeniden çekim: ${meter.apartmentLabel}';
+      final shown = _entered[meter.id] ?? lastValue;
+      subline = 'Yeni değer, bugünkü okumanın${shown == null ? '' : ' (${formatMeterNumber(shown)})'} yerine geçer.';
+    } else {
+      headline = 'Sıradaki: ${meter.apartmentLabel}';
+      subline = '${meter.kind.label} sayacı · $read/$total okundu${lastValue == null ? '' : ' · son okuma ${formatMeterNumber(lastValue)}'}';
+    }
     return Container(
       width: double.infinity,
-      color: scheme.primaryContainer,
+      color: background,
       padding: const EdgeInsets.symmetric(horizontal: AppSpace.lg, vertical: AppSpace.md),
-      child: meter == null
-          ? Text('Okunacak daire kalmadı ($read/$total).', style: TextStyle(color: scheme.onPrimaryContainer, fontWeight: FontWeight.w700))
-          : Column(
+      child: Row(
+        children: <Widget>[
+          if (retake) Padding(padding: const EdgeInsets.only(right: AppSpace.md), child: Icon(Icons.replay_rounded, color: foreground)),
+          Expanded(
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                Text('Sıradaki: ${meter.apartmentLabel}', style: Theme.of(context).textTheme.titleLarge?.copyWith(color: scheme.onPrimaryContainer, fontWeight: FontWeight.w800)),
                 Text(
-                  '${meter.kind.label} sayacı · $read/$total okundu${meter.lastValue == null ? '' : ' · son okuma ${meter.lastValue}'}',
-                  style: TextStyle(color: scheme.onPrimaryContainer),
+                  headline,
+                  style: meter == null
+                      ? TextStyle(color: foreground, fontWeight: FontWeight.w700)
+                      : Theme.of(context).textTheme.titleLarge?.copyWith(color: foreground, fontWeight: FontWeight.w800),
                 ),
+                if (subline != null) Text(subline, style: TextStyle(color: foreground)),
               ],
             ),
+          ),
+          if (meter == null && skippedHere > 0)
+            TextButton(
+              key: const ValueKey<String>('back_to_skipped'),
+              style: TextButton.styleFrom(foregroundColor: foreground),
+              onPressed: () => setState(() => _skipped.removeWhere((id) => _scoped.any((m) => m.id == id))),
+              child: const Text('Atlananlara dön'),
+            ),
+          TextButton.icon(
+            key: const ValueKey<String>('meter_list_open'),
+            style: TextButton.styleFrom(foregroundColor: foreground),
+            onPressed: _busy ? null : _showList,
+            icon: const Icon(Icons.format_list_bulleted_rounded),
+            label: Text('Liste ($read/$total)'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -321,6 +572,7 @@ class _MeterFieldViewState extends State<MeterFieldView> with WidgetsBindingObse
   }
 
   Widget _confirmPanel(BuildContext context, FieldMeter? meter) {
+    final retake = meter != null && _isDone(meter);
     return Material(
       elevation: 8,
       child: Padding(
@@ -329,13 +581,14 @@ class _MeterFieldViewState extends State<MeterFieldView> with WidgetsBindingObse
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            if (_notice != null) Padding(padding: const EdgeInsets.only(bottom: AppSpace.sm), child: Text(_notice!, style: Theme.of(context).textTheme.bodySmall)),
+            if (_notice != null) Padding(padding: const EdgeInsets.only(bottom: AppSpace.sm), child: Text(_notice!, key: const ValueKey<String>('field_notice'), style: Theme.of(context).textTheme.bodySmall)),
             if (_recognizedNote != null) Padding(padding: const EdgeInsets.only(bottom: AppSpace.sm), child: Text(_recognizedNote!, style: const TextStyle(fontWeight: FontWeight.w600))),
             Row(
               children: <Widget>[
                 if (_shot != null) Padding(padding: const EdgeInsets.only(right: AppSpace.md), child: ClipRRect(borderRadius: BorderRadius.circular(8), child: Image.memory(_shot!, width: 64, height: 64, fit: BoxFit.cover))),
                 Expanded(
                   child: TextField(
+                    key: const ValueKey<String>('reading_value'),
                     controller: _value,
                     enabled: meter != null && !_busy,
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -350,13 +603,17 @@ class _MeterFieldViewState extends State<MeterFieldView> with WidgetsBindingObse
               children: <Widget>[
                 Expanded(
                   child: FilledButton.icon(
+                    key: const ValueKey<String>('reading_confirm'),
                     onPressed: meter == null || _busy ? null : _confirm,
                     icon: const Icon(Icons.check_rounded),
-                    label: const Text('Onayla ve sonraki'),
+                    label: Text(retake ? 'Onayla ve değiştir' : 'Onayla ve sonraki'),
                   ),
                 ),
                 const SizedBox(width: AppSpace.sm),
-                OutlinedButton(onPressed: meter == null || _busy ? null : _skip, child: const Text('Atla')),
+                if (retake || _picked != null)
+                  OutlinedButton(key: const ValueKey<String>('reading_cancel'), onPressed: meter == null || _busy ? null : _cancelPick, child: const Text('Vazgeç'))
+                else
+                  OutlinedButton(key: const ValueKey<String>('reading_skip'), onPressed: meter == null || _busy ? null : _skip, child: const Text('Atla')),
               ],
             ),
           ],
@@ -366,11 +623,77 @@ class _MeterFieldViewState extends State<MeterFieldView> with WidgetsBindingObse
   }
 }
 
+/// Dairelerin okuma durumu: sorunlu (sunucu kabul etmedi / onay bekliyor), çekilmeyenler, çekilenler. Bir daire seçilince döner
+/// (çekilmemişse o okunur, çekilmişse yeniden çekilir).
+class _MeterListSheet extends StatelessWidget {
+  const _MeterListSheet({required this.title, required this.rows});
+
+  final String title;
+  final List<_MeterRow> rows;
+
+  static AppTone _toneOf(_MeterState state) => switch (state) {
+    _MeterState.sent => AppTone.success,
+    _MeterState.queued || _MeterState.needsConfirm => AppTone.warning,
+    _MeterState.rejected => AppTone.danger,
+    _MeterState.waiting || _MeterState.skipped => AppTone.neutral,
+  };
+
+  List<Widget> _section(BuildContext context, String heading, List<_MeterRow> list) {
+    return <Widget>[
+      Padding(
+        padding: const EdgeInsets.fromLTRB(AppSpace.lg, AppSpace.md, AppSpace.lg, AppSpace.xs),
+        child: Text(heading, style: Theme.of(context).textTheme.labelLarge),
+      ),
+      for (final row in list)
+        ListTile(
+          key: ValueKey<String>('meter_row_${row.meter.id}'),
+          title: Text(row.meter.apartmentLabel),
+          subtitle: Padding(padding: const EdgeInsets.only(top: AppSpace.xs), child: StatusDot(label: row.detail, tone: _toneOf(row.state), maxLines: 3)),
+          trailing: TextButton(
+            key: ValueKey<String>('meter_pick_${row.meter.id}'),
+            onPressed: () => Navigator.of(context).pop(row.meter),
+            child: Text(row.retake ? 'Yeniden çek' : 'Çek'),
+          ),
+          onTap: () => Navigator.of(context).pop(row.meter),
+        ),
+    ];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final problem = <_MeterRow>[for (final r in rows) if (r.state == _MeterState.rejected || r.state == _MeterState.needsConfirm) r];
+    final waiting = <_MeterRow>[for (final r in rows) if (r.state == _MeterState.waiting || r.state == _MeterState.skipped) r];
+    final done = <_MeterRow>[for (final r in rows) if (r.state == _MeterState.queued || r.state == _MeterState.sent) r];
+    return SafeArea(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.8),
+        child: ListView(
+          key: const ValueKey<String>('meter_list'),
+          shrinkWrap: true,
+          children: <Widget>[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(AppSpace.lg, AppSpace.lg, AppSpace.lg, AppSpace.xs),
+              child: Text(title, style: Theme.of(context).textTheme.titleMedium),
+            ),
+            if (rows.isEmpty) const Padding(padding: EdgeInsets.all(AppSpace.lg), child: Text('Bu blokta etkin sayaç yok.')),
+            if (problem.isNotEmpty) ..._section(context, 'Sorunlu (${problem.length})', problem),
+            if (waiting.isNotEmpty) ..._section(context, 'Çekilmeyenler (${waiting.length})', waiting),
+            if (done.isNotEmpty) ..._section(context, 'Çekilenler (${done.length})', done),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _PendingSheet extends StatefulWidget {
-  const _PendingSheet({required this.queue, required this.onChanged});
+  const _PendingSheet({required this.queue, required this.onChanged, required this.onConfirmed});
 
   final MeterFieldQueue queue;
   final VoidCallback onChanged;
+
+  /// Görevli olağan dışı tüketimi onayladı: ekran hemen göndermeyi dener (liste, tur bitince yenilensin diye beklenir).
+  final Future<void> Function() onConfirmed;
 
   @override
   State<_PendingSheet> createState() => _PendingSheetState();
@@ -410,6 +733,13 @@ class _PendingSheetState extends State<_PendingSheet> {
     await _load();
   }
 
+  /// "Doğru": olağan dışı tüketim uyarısı onaylanır; kayıt `confirm_jump` ile gönderilir ve sunucuda onay izi tutulur.
+  Future<void> _confirmJump(PendingMeterReading item) async {
+    await widget.queue.confirmJump(item.id);
+    await widget.onConfirmed();
+    await _load();
+  }
+
   Future<void> _discard(PendingMeterReading item) async {
     await widget.queue.remove(item.id);
     widget.onChanged();
@@ -427,12 +757,20 @@ class _PendingSheetState extends State<_PendingSheet> {
                 const Padding(padding: EdgeInsets.all(AppSpace.lg), child: Text('Cihazda bekleyen okumalar internet gelince kendiliğinden gönderilir.')),
                 for (final item in _items)
                   ListTile(
+                    key: ValueKey<String>('pending_${item.id}'),
                     leading: Icon(item.error == null ? Icons.schedule_rounded : Icons.error_outline_rounded),
-                    title: Text('${item.apartmentLabel} · ${item.kindLabel} · ${item.value}'),
-                    subtitle: Text(item.error ?? '${item.date} · gönderilmeyi bekliyor${item.photoPath == null ? '' : ' (fotoğraflı)'}'),
+                    title: Text('${item.apartmentLabel} · ${item.kindLabel} · ${formatMeterNumber(item.value)}'),
+                    subtitle: Text(
+                      item.needsJumpConfirm
+                          ? '${item.error}\nDeğer doğruysa onaylayın; değilse düzeltin.'
+                          : item.error ?? '${item.date} · gönderilmeyi bekliyor${item.photoPath == null ? '' : ' (fotoğraflı)'}${item.replace ? ' · yeniden çekim' : ''}',
+                    ),
+                    isThreeLine: item.needsJumpConfirm,
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: <Widget>[
+                        if (item.needsJumpConfirm)
+                          IconButton(key: ValueKey<String>('pending_confirm_${item.id}'), tooltip: 'Doğru, onayla ve gönder', icon: const Icon(Icons.task_alt_rounded), onPressed: () => _confirmJump(item)),
                         if (item.error != null) IconButton(tooltip: 'Değeri düzelt', icon: const Icon(Icons.edit_rounded), onPressed: () => _fix(item)),
                         IconButton(tooltip: 'Sil', icon: const Icon(Icons.delete_outline_rounded), onPressed: () => _discard(item)),
                       ],
