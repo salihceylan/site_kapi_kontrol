@@ -125,7 +125,8 @@ export async function sectionSurvey(ctx) {
   const M = (suffix = '', siteCode = site.code) => `/manager/sites/${siteCode}${suffix}`;
   const GOOD = { title: 'Aidat artisi', question: 'Aidat %10 artsin mi?', options: ['Evet', 'Hayir', 'Cekimser'], target: { type: 'site' } };
   const SECRET_TITLE = 'GIZLI-BASLIK-SV-4411';
-  const enableModule = (siteCode) => call('PUT', `/manager/sites/${siteCode}/modules/survey`, SUPER, { enabled: true });
+  // Anket TEMEL modul (Kural 25): acilmaz / kapatilmaz. Kapi site_modules satirina BAKMAZ; dogrudan SQL okuyan sakin yolu satir yoksa ACIK sayar (COALESCE ... TRUE).
+  const toggleModule = (siteCode, enabled) => call('PUT', `/manager/sites/${siteCode}/modules/survey`, SUPER, { enabled, confirm: true });
 
   // ============================================================================================================
   console.log('--- A. sema ---');
@@ -152,10 +153,16 @@ export async function sectionSurvey(ctx) {
 
   // ============================================================================================================
   console.log('--- B. modul kapisi + yetki matrisi ---');
+  // ensureDbSchema (A6) temel modul satirlarini her siteye yazdi; "satir YOK" durumunu da sinamak icin iki sitenin anket satirini siliyoruz.
+  await q(`DELETE FROM site_modules WHERE module_code = 'survey' AND site_code = ANY($1::BIGINT[])`, [[site.code, site2.code]]);
   const offMgr = await call('GET', M('/surveys'), MGR);
   const offRes = await call('GET', `/app/surveys?site_code=${site.code}`, A1);
-  check('B1: modul KAPALI: yonetici 403 MODULE_DISABLED {module: survey}; sakin (site_code ile) 403; site_code\'suz liste bos', offMgr.status === 403 && offMgr.body?.code === 'MODULE_DISABLED' && offMgr.body?.module === 'survey' && offRes.status === 403 && (await call('GET', '/app/surveys', A1)).body?.items?.length === 0, { offMgr: offMgr.body, offRes: offRes.body });
-  check('B2: super modulu acar', (await enableModule(site.code)).status === 200);
+  check('B1: TEMEL modul (Kural 25), site_modules satiri YOKKEN de ACIK: yonetici 200 { items } (MODULE_DISABLED yok); sakin (site_code ile) 200 { items }; site_code\'suz liste 200', offMgr.status === 200 && Array.isArray(offMgr.body?.items) && offRes.status === 200 && Array.isArray(offRes.body?.items) && (await call('GET', '/app/surveys', A1)).status === 200, { offMgr: offMgr.body, offRes: offRes.body });
+  const rowsBeforeToggle = await countOf(`SELECT COUNT(*)::int AS n FROM site_modules WHERE site_code = $1 AND module_code = 'survey'`, [site.code]);
+  const closeTry = await toggleModule(site.code, false);
+  const openTry = await toggleModule(site.code, true);
+  const surveyEntry = (await call('GET', M('/modules'), SUPER)).body?.modules?.find((m) => m.code === 'survey');
+  check('B2: super modulu ne kapatabilir ne acabilir: 400 MODULE_NOT_TOGGLEABLE; satir yazilmaz; modul listesinde survey core + ACIK + toggleable false', closeTry.status === 400 && closeTry.body?.code === 'MODULE_NOT_TOGGLEABLE' && openTry.status === 400 && openTry.body?.code === 'MODULE_NOT_TOGGLEABLE' && (await countOf(`SELECT COUNT(*)::int AS n FROM site_modules WHERE site_code = $1 AND module_code = 'survey'`, [site.code])) === rowsBeforeToggle && surveyEntry?.core === true && surveyEntry.enabled === true && surveyEntry.toggleable === false, { closeTry: closeTry.body, openTry: openTry.body, surveyEntry });
   const matrix = {};
   for (const [label, user] of [['super', SUPER], ['mgr', MGR], ['board', BOARD], ['staff', STAFF], ['resident', A1], ['outsider', OUTSIDER], ['mgr2', MGR2]]) {
     matrix[label] = [(await call('GET', M('/surveys'), user)).status, (await call('POST', M('/surveys'), user, GOOD)).status, (await call('GET', M('/surveys'), user)).body?.code ?? null];
@@ -188,8 +195,8 @@ export async function sectionSurvey(ctx) {
   const patchDraft = await call('PATCH', M(`/surveys/${D}`), MGR, { options: ['Evet', 'Hayir'], target: { type: 'apartments', apartment_ids: [site.apts[0].id, site.apts[1].id] } });
   check('D3: draft her alan: 2 secenek + daire hedefi (labels 2, eligible 3)', patchDraft.status === 200 && patchDraft.body?.options?.length === 2 && patchDraft.body?.target?.labels?.length === 2 && patchDraft.body?.eligible_count === 3, patchDraft.body);
   const delOpen = await call('DELETE', M(`/surveys/${S}`), MGR);
-  // IDOR: ikinci sitede de modul ACIK olmali; yoksa istek modul kapisina (MODULE_DISABLED) takilir ve kaynak yalitimi sinanmaz.
-  check('D4a: super ikinci sitede de modulu acar', (await enableModule(site2.code)).status === 200);
+  // IDOR: ikinci sitede de modul ACIK olmali (temel modul: her sitede acik); yoksa kaynak yalitimi sinanmaz.
+  check('D4a: ikinci sitede de modul ACIK (temel modul): yonetici listesi 200', (await call('GET', M('/surveys', site2.code), MGR2)).status === 200);
   const idor = await call('GET', M(`/surveys/${S}`, site2.code), MGR2);
   check('D4: open anket silinemez 409; baska sitenin yoneticisi kendi sitesi yoluyla 404 SURVEY_NOT_FOUND (IDOR)', delOpen.status === 409 && idor.status === 404 && idor.body?.code === 'SURVEY_NOT_FOUND', { delOpen: delOpen.body, idor: idor.body });
   // D5 (inceleme turu 2; ikinci sitede, ana sitenin sayaclari etkilenmez): kapanis zamani gecmis taslak yayinlanamaz (409 closes_at_passed, satir taslak

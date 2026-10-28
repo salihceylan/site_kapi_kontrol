@@ -188,7 +188,7 @@ app.use(teamRouter);
 app.use(personInviteRouter);
 // Isletme projesi (butce): /manager/sites/:siteCode/budget-projects[/:id[/items|/notify|/revert|/finalize|/comparison]] (modul budget, varsayilan KAPALI).
 app.use(budgetRouter);
-// Site Drive deposu (D1): /manager/sites/:siteCode/drive[...] + /drive/oauth/callback (modul drive_storage, varsayilan KAPALI; yapilandirma yoksa Yakinda).
+// Site Drive deposu (D1): /manager/sites/:siteCode/drive[...] + /drive/oauth/callback (modul drive_storage = Dosya Deposu, TEMEL modul: her sitede acik; yapilandirma yoksa Yakinda).
 app.use(driveRouter);
 // Komsu panosu: /app/neighbor-board[/:id/report|withdraw] + /manager/sites/:siteCode/neighbor-board[/:id/approve|reject|remove] (modul neighbor_board, varsayilan KAPALI).
 app.use(neighborBoardRouter);

@@ -1,15 +1,16 @@
 # Platform — Belgeler (dosya deposu) ve Telefon Bildirimi (Faz 3b) sözleşmesi
 
 > **2026-10-28 DEĞİŞİKLİK (migration 084): Belgeler ayrı modül değildir.** Bu belgede geçen `documents` MODÜL kodu, "Belgeler modülü" ve "`Modüller` kartında `documents`"
-> ifadeleri eski adlandırmadır: Belgeler, Dosya Deposu (`drive_storage`) modülünün parçasıdır (tek modül "Dosya Deposu"; modül kapısı `drive_storage`, kapalıyken
-> 403 `MODULE_DISABLED` `{ module: 'drive_storage' }`). Tablo adları (`documents`, `document_versions`, `announcement_attachments`), uç yolları, kurallar ve davranış DEĞİŞMEDİ;
+> ifadeleri eski adlandırmadır: Belgeler, Dosya Deposu (`drive_storage`) modülünün parçasıdır (tek modül "Dosya Deposu"; modül kapısı `drive_storage`). Dosya Deposu ayrıca
+> TEMEL modüldür (AGENTS.md Kural 25, migration 082): her sitede açıktır, talep edilmez, kapatılamaz; bu belgedeki "modül kapalıyken 403 `MODULE_DISABLED`" ifadeleri
+> savunma amaçlı kod yolunu anlatır ve fiilen tetiklenmez. Tablo adları (`documents`, `document_versions`, `announcement_attachments`), uç yolları, kurallar ve davranış DEĞİŞMEDİ;
 > ayrıntı: `docs/PLATFORM_MODUL_SISTEMI.md` ("Belgeler ayrı modül DEĞİLDİR"). Yeni kod/menü adı: "Dosya Deposu".
 
 Bu belge sunucu (`server/`), uygulama (`lib/`, `android/`, `ios/`) ve operasyon (`deploy/`) için BAĞLAYICIDIR. Öncül belgeler: `docs/PLATFORM_MODUL_SISTEMI.md` (modül kataloğu, `MODULE_DISABLED`, hata biçimi), `docs/PLATFORM_DUYURU.md` (hedefleme, alıcı anlık görüntüsü, e-posta kuyruğu, tercihler, **"Faz 3a inceleme kararları 1–26"**), `docs/PLATFORM_KISILER.md` (kişi/daire/ilişki, kilit sırası), `docs/PLATFORM_FINANS.md` (modül kapısı kalıbı), `docs/PLATFORM_SATISA_HAZIRLIK.md` (**§0 ortak kurallar**, §1.4 yasal belge/rıza, §1.5 veri dışa aktarma, §1.6 hesap silme). Kalıplar (yetki yardımcıları, `PlatformError`, audit, hız sınırı, strict-mock testler, gerçek-PG betiği, iki bağımsız inceleme turu) aynen örnek alınır. Tarih: 2026-10-16.
 
 | Bölüm | Konu | Durum |
 |---|---|---|
-| **A** | Belgeler (Dosya Deposu modülünün parçası, `drive_storage`, varsayılan KAPALI; eski ayrı `documents` modülü 084'te birleşti) + duyuruya belge eki | **Uygulanabilir** — dış girdi gerektirmez. Tek elle adım: VPS dizini + Nginx (bkz. A2) |
+| **A** | Belgeler (Dosya Deposu modülünün parçası, `drive_storage`, TEMEL modül: her sitede açık; eski ayrı `documents` modülü 084'te birleşti) + duyuruya belge eki | **Uygulanabilir** — dış girdi gerektirmez. Tek elle adım: VPS dizini + Nginx (bkz. A2) |
 | **B** | Telefon bildirimi (Firebase FCM) | **BLOKE** — Firebase projesi, `google-services.json`, `GoogleService-Info.plist`, APNs anahtarı, hizmet hesabı JSON'u ve nihai uygulama kimliği kullanıcıdan gelene dek uygulanmaz (bkz. B0). Tasarım şimdiden bağlayıcıdır |
 
 A, B'den bağımsız yayına alınır. B tablolarının hiçbiri 039'da YOKTUR (K1).
@@ -50,7 +51,7 @@ Paylaşılan sıcak dosyalar ve git yasağı: `PLATFORM_SATISA_HAZIRLIK.md` §0 
 ## A1. Modül
 
 Katalogda (ilk sürüm; 084'ten beri bu kayıt kaldırıldı ve `drive_storage` "Dosya Deposu" içine katıldı) yeni kayıt: `code: 'documents'`, `name: 'Belgeler (Dosya Deposu)'`, `description: 'Yönetmelik, tutanak, sözleşme gibi belgelerin yüklenmesi ve sakinlere, kurula ya da yöneticilere dağıtılması.'`, `core: false`, `status: available`, `defaultEnabled: false`. `PLATFORM_MODUL_SISTEMI.md` tablosuna satır eklenir. Süper kullanıcı açar; yönetici "Modül Talep Et" (Faz 1.1 akışı) — satır yoksa KAPALI. **Canlıya almadan önce `site_modules`'ta `documents` için `enabled = TRUE` satırı OLMADIĞI doğrulanır** (Finans notuyla aynı).
-Modül kapatılınca belgeler SİLİNMEZ ve kota sayılmaya devam eder; yönetici uçları 403 `MODULE_DISABLED`, sakin uçları siteyi listeden çıkarır, bilinen kimliğe yapılan indirme 404 `DOCUMENT_NOT_FOUND` (varlık sızmaz). Yeniden açınca her şey geri gelir.
+(Dosya Deposu temel modül olduğundan modül artık kapatılamaz; aşağıdaki kapalı-modül davranışı yalnız savunma amaçlı koddur.) Modül kapatılınca belgeler SİLİNMEZ ve kota sayılmaya devam eder; yönetici uçları 403 `MODULE_DISABLED`, sakin uçları siteyi listeden çıkarır, bilinen kimliğe yapılan indirme 404 `DOCUMENT_NOT_FOUND` (varlık sızmaz). Yeniden açınca her şey geri gelir.
 
 ## A2. Depolama, ortam ve dağıtım
 

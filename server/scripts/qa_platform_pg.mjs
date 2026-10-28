@@ -991,13 +991,18 @@ async function sectionUpgrade() {
   // --- 029/030 varsayilanlari
   const mt = await q(`SELECT management_type, COUNT(*)::int AS n FROM sites GROUP BY management_type`);
   check(`${scenario}: mevcut sitelerin tamami apartment_site`, mt.rows.length === 1 && mt.rows[0].management_type === 'apartment_site');
-  // Aidat ve Finans TEMEL modul (Kural 25, 079): her mevcut siteye YALNIZ 'finance' icin acik site_modules satiri yazilir; baska modul, talep ve audit satiri YAZILMAZ.
+  // TEMEL moduller (Kural 25, 079 + 082): her mevcut siteye katalogdaki SEKIZ temel modulun (people, announcements, finance, survey, neighbor_board, equipment, annual_report,
+  // drive_storage) acik site_modules satiri yazilir; temel olmayan baska modul, talep ve audit satiri YAZILMAZ.
   // 2bf1bd4: door_control katalog varsayilani KAPALI; sahadaki cihazi/atanmis kapisi olan siteler (yalniz S1: AABBCCDDEE01 cihazi + atanmis ana kapi) calismaya devam etsin diye
   // ensureDbSchema onlara ACIK door_control satiri yazar (Kural 2 & 3). Cihazsiz siteler (S2, S3) icin door_control satiri YAZILMAZ (kapali kalir).
-  const legacyModuleRows = (await q(`SELECT site_code::text AS site_code, module_code, enabled FROM site_modules ORDER BY site_code, module_code`)).rows;
-  const expectedModuleRows = [[S1, 'door_control', true], [S1, 'finance', true], [S2, 'finance', true], [S3, 'finance', true]].map(([site, code, enabled]) => ({ site_code: String(site), module_code: code, enabled }));
+  const CORE_MODULE_CODES = ['people', 'announcements', 'finance', 'survey', 'neighbor_board', 'equipment', 'annual_report', 'drive_storage'];
+  const moduleRowOrder = (a, b) => (a.site_code === b.site_code ? (a.module_code < b.module_code ? -1 : a.module_code > b.module_code ? 1 : 0) : Number(a.site_code) - Number(b.site_code));
+  const legacyModuleRows = (await q(`SELECT site_code::text AS site_code, module_code, enabled FROM site_modules`)).rows.sort(moduleRowOrder);
+  const expectedModuleRows = [...[S1, S2, S3].flatMap((site) => CORE_MODULE_CODES.map((code) => [site, code, true])), [S1, 'door_control', true]]
+    .map(([site, code, enabled]) => ({ site_code: String(site), module_code: code, enabled }))
+    .sort(moduleRowOrder);
   const legacyRequestAudit = (await q(`SELECT (SELECT COUNT(*) FROM module_requests)::int AS requests, (SELECT COUNT(*) FROM audit_log)::int AS audits`)).rows[0];
-  check(`${scenario}: eski sitelere site_modules (yalniz temel modul 'finance' + cihazli S1'e door_control)/module_requests/audit satiri YAZILMADI`,
+  check(`${scenario}: eski sitelere site_modules (yalniz 8 temel modul + cihazli S1'e door_control)/module_requests/audit satiri YAZILMADI`,
     same(legacyModuleRows, expectedModuleRows) && legacyRequestAudit.requests === 0 && legacyRequestAudit.audits === 0, { legacyModuleRows, legacyRequestAudit });
   const roleCheck = await q(`SELECT conname, pg_get_constraintdef(oid) AS def FROM pg_constraint WHERE conrelid = 'site_memberships'::regclass AND contype = 'c'`);
   check(`${scenario}: site_memberships rol kisiti tek ve 5 rolu icerir`, roleCheck.rows.length === 1 && /BOARD_MEMBER/.test(roleCheck.rows[0].def) && /STAFF/.test(roleCheck.rows[0].def), roleCheck.rows);
@@ -1228,6 +1233,23 @@ async function sectionPlatform() {
   check('temel modul (finance) acma istegi de 400 MODULE_NOT_TOGGLEABLE (talep/toggle yolu yok)', res.status === 400 && res.body?.code === 'MODULE_NOT_TOGGLEABLE', res.body);
   res = await call('POST', `/manager/sites/${S1}/module-requests`, MGR1, { module_code: 'finance' });
   check('temel modul (finance) icin talep -> 400 MODULE_NOT_TOGGLEABLE (talep edilemez)', res.status === 400 && res.body?.code === 'MODULE_NOT_TOGGLEABLE', res.body);
+  // Kural 25 (2026-10-28): katalogdaki 23 modulun SEKIZI temeldir; hepsi ne kapatilir ne talep edilir; listede core + ACIK + toggleable false.
+  const coreCatalog = (await call('GET', '/app/modules/catalog', RESIDENT)).body?.modules ?? [];
+  const coreCodes = coreCatalog.filter((m) => m.core === true).map((m) => m.code);
+  check('katalog: 23 modul; temel (core) modul kumesi tam olarak 8: people, announcements, finance, survey, neighbor_board, equipment, annual_report, drive_storage; documents ve card_payments katalogda YOK', coreCatalog.length === 23 && same([...coreCodes].sort(), ['announcements', 'annual_report', 'drive_storage', 'equipment', 'finance', 'neighbor_board', 'people', 'survey']) && !coreCatalog.some((m) => m.code === 'documents' || m.code === 'card_payments') && coreCatalog.find((m) => m.code === 'drive_storage')?.name === 'Dosya Deposu', { count: coreCatalog.length, coreCodes });
+  for (const code of coreCodes) {
+    const closeRes = await call('PUT', `/manager/sites/${S1}/modules/${code}`, SUPER, { enabled: false, confirm: true });
+    const requestRes = await call('POST', `/manager/sites/${S1}/module-requests`, MGR1, { module_code: code });
+    const entry = (await call('GET', `/manager/sites/${S1}/modules`, MGR1)).body?.modules?.find((m) => m.code === code);
+    check(`temel modul (${code}): kapatma ve talep 400 MODULE_NOT_TOGGLEABLE; listede core + ACIK + toggleable false + can_toggle false`, closeRes.status === 400 && closeRes.body?.code === 'MODULE_NOT_TOGGLEABLE' && requestRes.status === 400 && requestRes.body?.code === 'MODULE_NOT_TOGGLEABLE' && entry?.core === true && entry.enabled === true && entry.toggleable === false && entry.can_toggle === false, { close: closeRes.body, request: requestRes.body, entry });
+  }
+  // Kataloktan kalkan eski kodlar (eski uygulama surumleri hala gonderebilir): card_payments (-> finance, 083) ve documents (-> drive_storage, 084): 404 / 500 YOK, 400 MODULE_NOT_TOGGLEABLE.
+  for (const retired of ['card_payments', 'documents']) {
+    const closeRes = await call('PUT', `/manager/sites/${S1}/modules/${retired}`, SUPER, { enabled: false, confirm: true });
+    const requestRes = await call('POST', `/manager/sites/${S1}/module-requests`, MGR1, { module_code: retired });
+    const rows = (await q(`SELECT (SELECT COUNT(*)::int FROM site_modules WHERE site_code = $1 AND module_code = $2) AS m, (SELECT COUNT(*)::int FROM module_requests WHERE site_code = $1 AND module_code IN ($2, 'drive_storage')) AS r`, [S1, retired])).rows[0];
+    check(`kataloktan kalkan eski kod (${retired}): kapatma ve talep 400 MODULE_NOT_TOGGLEABLE (404 / 500 yok); satir ve talep yazilmaz`, closeRes.status === 400 && closeRes.body?.code === 'MODULE_NOT_TOGGLEABLE' && requestRes.status === 400 && requestRes.body?.code === 'MODULE_NOT_TOGGLEABLE' && rows.m === 0 && rows.r === 0, { close: closeRes.body, request: requestRes.body, rows });
+  }
   // metering artik "available"; hala yakinda olan bir modul (online_payment) ile MODULE_COMING_SOON kurali sinanir.
   res = await call('PUT', `/manager/sites/${S1}/modules/online_payment`, SUPER, { enabled: true });
   check('yakinda modulu (online_payment) acmak -> MODULE_COMING_SOON', res.body?.code === 'MODULE_COMING_SOON', res.body);

@@ -1253,14 +1253,14 @@ Daire kullanıcısı (Daire Sakini) ana ekranında artık yalnız kapılar ve yu
 
 ## 59. 🧩 Platform Modül Sistemi — Faz 1: Modül Aç/Kapa, Yönetim Türü, Denetim Kaydı, Ek Roller (2026-10-15)
 
-Site ve toplu yaşam yönetim platformunun çekirdeği: her site hangi modüllerin açık olacağını seçer (şimdilik yalnız Geçiş Kontrol (SmartKeyPass) seçilebilir; diğerleri "Yakında…"). Sözleşme: `docs/PLATFORM_MODUL_SISTEMI.md`. Deneme listesi (claude.ai): `tools/deneme_listesi`. Yeni modüller varsayılan KAPALI, Geçiş Kontrol varsayılan AÇIKTIR.
+Site ve toplu yaşam yönetim platformunun çekirdeği: her site hangi modüllerin açık olacağını seçer (şimdilik yalnız Geçiş Kontrol (SmartKeyPass) seçilebilir; diğerleri "Yakında…"). Sözleşme: `docs/PLATFORM_MODUL_SISTEMI.md`. Deneme listesi (claude.ai): `tools/deneme_listesi`. Yeni modüller varsayılan KAPALI, Geçiş Kontrol varsayılan AÇIKTIR. 2026-10-28 güncellemesi: katalogda 23 modül vardır; 8'i TEMEL modüldür (Kişi ve Daire Kayıtları, Duyuru ve Bildirim, Aidat ve Finans, Anket ve Oylama, Komşu Panosu, Ekipman ve Bakım, Faaliyet Raporu, Dosya Deposu): her sitede açıktır, talep edilmez, kapatılamaz (AGENTS.md Kural 25). Kart Ödemesi ve Belgeler ayrı modül değildir (Aidat ve Finans'ın ve Dosya Deposu'nun parçasıdır).
 
 - [ ] **59.1. Eski ve Yeni Uygulama Sürümü: Kapı Açma Değişmez:**
   - **Nasıl Test Edilir:** Güncellemeden önceki uygulama sürümüyle, sonra yeni sürümle giriş yapın; telefondan kapıyı açın, giriş QR kodu üretin, bir misafir bağlantısı oluşturup açın.
   - **Beklenen Sonuç:** Üçü de her iki sürümde eskisi gibi çalışır, hata çıkmaz (Geçiş Kontrol modülü varsayılan olarak AÇIKTIR; mevcut siteler etkilenmez).
 - [ ] **59.2. Modüller Ekranı:**
   - **Nasıl Test Edilir:** Site yöneticisi olarak ve ayrıca süper kullanıcı olarak çekmeceden "Modüller"i açın.
-  - **Beklenen Sonuç:** 8 kart görünür. Süper kullanıcıda "Geçiş Kontrol (SmartKeyPass)" anahtarlıdır; site yöneticisinde ANAHTAR YOKTUR (Açık modül "Tanımlı", kapalı modül "Tanımlı değil" + "Modül Talep Et"). "Kişi ve Daire Kayıtları" ile "Duyuru ve Bildirim" "Her sitede açık"; diğer 5 modül (Aidat ve Finans dahil) "Yakında…" ve anahtarsız/talepsizdir. Çekip yenileme ve yenile düğmesi çalışır.
+  - **Beklenen Sonuç:** 23 kart görünür. Süper kullanıcıda "Geçiş Kontrol (SmartKeyPass)" ve diğer temel olmayan kullanılabilir modüller anahtarlıdır; site yöneticisinde ANAHTAR YOKTUR (Açık modül "Tanımlı", kapalı modül "Tanımlı değil" + "Modül Talep Et"). 8 temel modül ("Kişi ve Daire Kayıtları", "Duyuru ve Bildirim", "Aidat ve Finans", "Anket ve Oylama", "Komşu Panosu", "Ekipman ve Bakım", "Faaliyet Raporu", "Dosya Deposu") "Her sitede açık" yazar; süper kullanıcıda anahtarı, yöneticide "Modül Talep Et" düğmesi yoktur. "Online Tahsilat ve Banka Bağlantısı" ile "HGS Geçişi" "Yakında…" ve anahtarsız/talepsizdir. "Kart Ödemesi" ve "Belgeler" ayrı kart olarak YOKTUR. Çekip yenileme ve yenile düğmesi çalışır.
 - [ ] **59.3. Geçiş Kontrol Modülünü Kapatma ve Açma (süper kullanıcı):**
   - **Nasıl Test Edilir:** Süper kullanıcı olarak Modüller ekranında bir sitenin Geçiş Kontrol anahtarını kapatın, uyarıyı okuyup onaylayın; sonra yeniden açın. Site yöneticisi hesabıyla aynı siteye bakın.
   - **Beklenen Sonuç:** Kapatmadan önce "Telefondan kapı açma, QR ve misafir geçişi durur" uyarısı çıkar; vazgeçilirse hiçbir şey değişmez. Onaylanınca çip "Kapalı" olur. Tek siteli yöneticide "Kayıtlı Cihazlar" ve "Bluetooth ile Wi-Fi Kur" menüleri, Panel'deki "Kapılar" kartı ve çekmecedeki "Kapılar" kaybolur (ayrı bir bilgi kartı çıkmaz; öteki modül kartları durur). Yeniden açınca her şey anında geri gelir. Site yöneticisi kendisi açıp kapatamaz (anahtarı yoktur; API ile denerse 403 "Modülleri yalnızca sistem yöneticisi açıp kapatabilir. Modül talebi gönderebilirsiniz.").
@@ -1479,11 +1479,11 @@ Bireysel kullanıcı site için başvurur; süper kullanıcı onaylayınca site 
 
 ## 63. 💰 Aidat ve Finans — Faz 4a: Tanım, Borçlandırma, Tahsilat, Düzeltme, Ay Kapatma (2026-10-16)
 
-Siteye göre açılıp kapanan finans modülü (varsayılan KAPALI). Para tamsayı kuruş; defter eklemelidir (silme yok, ters kayıt). Sözleşme: `docs/PLATFORM_FINANS.md` (sonundaki kararlar öncelikli). Bu sürümde makbuz, gecikme tazminatı, gider, kasa/banka, raporlar ve borç hatırlatma YOK (Faz 4b); online ödeme ve banka bağlantısı "Yakında…".
+Aidat ve Finans TEMEL modüldür (2026-10-26, AGENTS.md Kural 25): her sitede açıktır, talep edilmez, kapatılamaz. Para tamsayı kuruş; defter eklemelidir (silme yok, ters kayıt). Sözleşme: `docs/PLATFORM_FINANS.md` (sonundaki kararlar öncelikli). Bu sürümde makbuz, gecikme tazminatı, gider, kasa/banka, raporlar ve borç hatırlatma YOK (Faz 4b); online ödeme ve banka bağlantısı "Yakında…".
 
-- [ ] **63.1. Modül Varsayılan KAPALI; Açma ve Talep:**
-  - **Nasıl Test Edilir:** Aidat ve Finans kapalı bir test sitesinde yönetici ve sakin hesabıyla çekmeceye bakın; yöneticiyle Modüller → "Aidat ve Finans" → "Modül Talep Et"; süper kullanıcıyla talebi onaylayın ya da doğrudan açın; yeniden bakın; modülü kapatın.
-  - **Beklenen Sonuç:** Kapalıyken "Finans" ve "Borcum" yoktur ("Modül Talep Et" görünür, yönetici kendi açamaz). Açılınca yöneticide "Finans", alıcısı olan sakinde "Borcum" çıkar; kapatınca kalkar, veriler silinmez. Canlıda mevcut siteler açılışta etkilenmez (varsayılan kapalı).
+- [ ] **63.1. Modül Her Sitede Açık (Temel Modül):**
+  - **Nasıl Test Edilir:** Herhangi bir test sitesinde yönetici ve sakin hesabıyla çekmeceye bakın; yöneticiyle Modüller → "Aidat ve Finans" kartına bakın; süper kullanıcıyla kartı kapatmayı deneyin (ayrıntı: 110).
+  - **Beklenen Sonuç:** Yöneticide "Finans", alıcısı olan sakinde "Borcum" modül açmadan görünür. Modüller ekranında "Aidat ve Finans" kartında "Her sitede açık" yazar; "Modül Talep Et" düğmesi ve kapatma anahtarı yoktur (süper kullanıcıda da).
 - [ ] **63.2. Aidat Tanımı ve Para Girişi:**
   - **Nasıl Test Edilir:** Finans → Tanımlar → Yeni Tanım: "Aylık aidat", aylık, her ayın 15'i, sabit tutar; tutar alanına 1.250,50 yazın; 1,250 ve 12₺50 ve 1,5E3 deneyin; dağıtım yöntemlerini (sabit, eşit pay, daire tipine göre, arsa payı, m²) ve hedefi (tüm site/bloklar/daireler) gezin.
   - **Beklenen Sonuç:** Tutar altında okunuşuyla gösterilir (1.250,50 ₺); 1,250 / 12₺50 / 1,5E3 görünür hata verir, alan sessizce değişmez. Tutarı kimin ödeyeceği tanımda yoktur: dairenin "borç ve bildirimler kime gitsin" ayarına uyar. Borçlandırılmış tanımın tutarı/dağıtımı değişmez.
@@ -1897,13 +1897,13 @@ Site yöneticisi (ve süper kullanıcı) Kişiler ekranındaki "Toplu Yükle" il
 
 ## 73. 📁 Belgeler (Dosya Deposu) — Faz 3b-A: Yükleme, Kitle, Sürüm, Silme ve Duyuru Eki (2026-10-17; 2026-10-28: Belgeler ayrı modül değil, Dosya Deposu modülünün parçası, menü "Dosya Deposu")
 
-"Dosya Deposu" modülü (Belgeler + Google Drive tek modül) varsayılan KAPALIDIR: önce Modüller ekranından açın (yönetici talep eder, süper kullanıcı onaylar ya da doğrudan açar). Yönetici belge yükler, kategori ve kitle seçer (Sakinler: tüm site / bloklar / daireler; Yönetim kurulu; Yalnız yöneticiler), yeni sürüm yükler, düzenler, siler ve geri alır; sakin kitlesindeki kişi belgeyi "Belgeler" ekranından açar. Belge duyuruya eklenebilir (en çok 5, yalnız sakinlere açık belgeler; e-postaya dosya EKLENMEZ). Kabul edilen türler PDF, JPG, PNG, DOCX, XLSX; dosya başına 10 MB, site başına 200 MB varsayılan sınır. Sözleşme: `docs/PLATFORM_BELGELER.md`. Belge içine kişisel veri (T.C. kimlik no, IBAN) koymayın; denemelerde gerçek kişi verisi içermeyen dosyalar kullanın.
+"Dosya Deposu" modülü (Belgeler + Google Drive tek modül) TEMEL modüldür: her sitede açıktır, modül açmak ya da talep etmek gerekmez. Yönetici belge yükler, kategori ve kitle seçer (Sakinler: tüm site / bloklar / daireler; Yönetim kurulu; Yalnız yöneticiler), yeni sürüm yükler, düzenler, siler ve geri alır; sakin kitlesindeki kişi belgeyi "Dosya Deposu" ekranından açar. Belge duyuruya eklenebilir (en çok 5, yalnız sakinlere açık belgeler; e-postaya dosya EKLENMEZ). Kabul edilen türler PDF, JPG, PNG, DOCX, XLSX; dosya başına 10 MB, site başına 200 MB varsayılan sınır. Sözleşme: `docs/PLATFORM_BELGELER.md`. Belge içine kişisel veri (T.C. kimlik no, IBAN) koymayın; denemelerde gerçek kişi verisi içermeyen dosyalar kullanın.
 
-- [ ] **73.1. Modül Kapalıyken Menü Yok; Açınca "Dosya Deposu" Gelir:**
-  - **Nasıl Test Edilir:** Rol: Site yöneticisi / Süper kullanıcı / Daire sakini. Önkoşul: Dosya Deposu modülü KAPALI bir TEST sitesi (yönetici, bir sakin ve süper kullanıcı hesabı). Yönetici ve sakin hesaplarının çekmecesinde "Dosya Deposu" olup olmadığına bakın. Yönetici olarak Modüller → "Dosya Deposu" → "Modül Talep Et"; süper kullanıcıyla talebi onaylayın (ya da doğrudan açın). Yönetici ve sakin hesaplarının çekmecesine yeniden bakın; "Dosya Deposu"nu açın. Süper kullanıcının çekmecesinde "Dosya Deposu"nun modülden bağımsız olarak bulunduğuna bakın.
-  - **Beklenen Sonuç:** Kapalıyken yönetici ve sakinde "Belgeler" yoktur (modül açıkken, çekmecede "Finans"/"Borcum"un, yoksa "Duyurular"ın altında görünür). Açılınca yöneticide "Belgeler" belirir; sakinde de belirir (kitlesinde belge olsun olmasın). "Belgeler" sayfasında başlık "Belgeler" ve açıklama vardır; yöneticide "Belge Yükle" düğmesi, "Belge ara" kutusu, "Kategori" ve "Durum" ("Yayında" / "Silinenler") süzgeçleri görünür. Modül kapatılırsa ekran "Belgeler bu site için kapalı." der ve "Modüller" düğmesi sunar. Görevli ve bireysel kullanıcıda "Belgeler" yoktur.
+- [ ] **73.1. "Dosya Deposu" Her Sitede Vardır (Temel Modül):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi / Süper kullanıcı / Daire sakini. Önkoşul: Herhangi bir TEST sitesi (yönetici, bir sakin ve süper kullanıcı hesabı); modül açmak ya da talep etmek GEREKMEZ. Yönetici ve sakin hesaplarının çekmecesinde "Dosya Deposu"na bakın ve açın. Yönetici olarak Modüller ekranında "Dosya Deposu" kartına bakın. Süper kullanıcının çekmecesinde "Dosya Deposu"nun bulunduğuna bakın.
+  - **Beklenen Sonuç:** Yöneticide ve sakinde çekmecede "Dosya Deposu" hemen görünür (çekmecede "Finans"/"Borcum"un, yoksa "Duyurular"ın altında); sakinde kitlesinde belge olsun olmasın belirir. Yöneticide ekranın üstünde "Belgeler" listesi ("Belge Yükle" düğmesi, "Belge ara" kutusu, "Kategori" ve "Durum" ("Yayında" / "Silinenler") süzgeçleri), altında "Google Drive" bölümü; sakinde "Belgelerim" listesi görünür. Modüller ekranındaki "Dosya Deposu" kartında "Her sitede açık" yazar; "Modül Talep Et" düğmesi ve kapatma anahtarı yoktur. Görevli ve bireysel kullanıcıda "Dosya Deposu" yoktur.
 - [ ] **73.2. Belge Yükleme (PDF) ve İlerleme:**
-  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Önkoşul: Belgeler modülü AÇIK TEST sitesi; gerçek veri içermeyen küçük bir PDF. "Belge Yükle"ye dokunun; formu üstten alta okuyun (uyarı metni, "Dosya Seç", "Başlık", "Kategori", "Kimler görebilir?", "Hedef", "Açıklama (isteğe bağlı)"). PDF'i seçin, başlık yazın, "Yönetmelik" kategorisini, "Sakinler" kitlesini ve "Tüm site" hedefini seçip "Yükle"ye basın. Yükleme sürerken ilerleme çubuğuna bakın; bitince listeye bakın.
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Önkoşul: TEST sitesi (Dosya Deposu her sitede açıktır); gerçek veri içermeyen küçük bir PDF. "Belge Yükle"ye dokunun; formu üstten alta okuyun (uyarı metni, "Dosya Seç", "Başlık", "Kategori", "Kimler görebilir?", "Hedef", "Açıklama (isteğe bağlı)"). PDF'i seçin, başlık yazın, "Yönetmelik" kategorisini, "Sakinler" kitlesini ve "Tüm site" hedefini seçip "Yükle"ye basın. Yükleme sürerken ilerleme çubuğuna bakın; bitince listeye bakın.
   - **Beklenen Sonuç:** Formda "Belgede kişisel veri (T.C. kimlik no, IBAN, telefon, adres) varsa yalnız ilgili kitleye açın; gereksiz veriyi karartın." uyarısı vardır; dosya alanının ipucunda "PDF, JPG, PNG, DOCX veya XLSX" yazar (sunucudan öğrenilmişse "· en çok 10 MB" ve "· kalan alan ..." da eklenir; bilinmeyen sayı gösterilmez). Kategoriler: Yönetmelik, Toplantı Tutanağı / Karar, Sözleşme, Bilgilendirme, Diğer. Kitle seçilmeden "Belgeyi kimlerin görebileceğini seçin." hatası çıkar. Yükleme sırasında "Yükleniyor" ilerlemesi (%, boyut), "Dosya gönderildi, sunucu kaydediyor..." aşaması görünür; bitince "Belge yüklendi." bildirimi çıkar ve belge listede başlık, kategori, "Kitle: Tüm sakinler", dosya adı/boyutu, "v1" ve "0 indirme" ile görünür. Yükleme sırasında "Vazgeç" "Yükleme iptal edilsin mi?" sorar.
 - [ ] **73.3. Dosya Türü, Boyut ve Sahte Uzantı Kuralları:**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. "Belge Yükle"de sırayla seçin: .txt (ya da .exe) dosyası, boş (0 bayt) bir dosya, 10 MB'tan büyük bir PDF, uzantısı .pdf yapılmış sıradan bir metin dosyası.
@@ -1912,7 +1912,7 @@ Site yöneticisi (ve süper kullanıcı) Kişiler ekranındaki "Toplu Yükle" il
   - **Nasıl Test Edilir:** Rol: Site yöneticisi / Daire sakini / Yönetim kurulu. Önkoşul: İki bloklu TEST sitesi: A bloğunda bir sakin, B bloğunda bir sakin, bir yönetim kurulu üyesi. "Belge Yükle"de "Sakinler" kitlesi için "Hedef" olarak "Bloklar"ı seçin; hiçbir blok eklemeden "Yükle"ye basın; sonra "Blok Ekle"yle yalnız A bloğunu seçip yükleyin. Aynı şekilde "Daireler" hedefiyle bir belge yükleyin ("Daire Ekle" ile tek daire); ayrıca "Yönetim kurulu" ve "Yalnız yöneticiler" kitleleriyle birer belge yükleyin. Yönetici listesinde her belgenin "Kitle:" çipine bakın. Sırayla A sakini, B sakini ve yönetim kurulu üyesi hesabıyla "Belgeler"i açın.
   - **Beklenen Sonuç:** Blok/daire hedefinde hiçbir öğe seçilmezse "En az bir blok seçin." / "En az bir daire seçin." hatası çıkar; en çok 500 öğe seçilebilir. Kitle çipleri "Tüm sakinler", "A Blok" (blok adı), daire adı, "Yönetim kurulu", "Yalnız yöneticiler" olarak yazar. A sakini yalnız hedefinde A bloğu/dairesi olan veya "Tüm sakinler" belgeleri görür, B sakini A'ya özel belgeyi GÖRMEZ; "Yönetim kurulu" ve "Yalnız yöneticiler" belgeleri sakinde görünmez. Kurul üyesi "Sakinler" ve "Yönetim kurulu" belgelerini salt okur, "Yalnız yöneticiler" belgesini görmez. Belgeyi yükleyen yönetici hepsini görür. Kitle değişikliği anında geçerlidir.
 - [ ] **73.5. Sakin Görünümü: Arama, Süzgeç ve "Aç / Kaydet":**
-  - **Nasıl Test Edilir:** Rol: Daire sakini. Sakin hesabıyla "Belgeler"i açın; "Belge ara"ya başlık yazın, "Kategori" çiplerini deneyin. Bir belgenin kartındaki "Aç / Kaydet"e dokunun; indirme penceresi bitince telefonun paylaşım menüsünden kaydedin/açın. Yönetici sakin modundayken (hem yönetim hem sakin görünümü olan hesapla) "Yönetim görünümü" ve "Belgelerim" çiplerini deneyin.
+  - **Nasıl Test Edilir:** Rol: Daire sakini. Sakin hesabıyla "Dosya Deposu"nu açın; "Belge ara"ya başlık yazın, "Kategori" çiplerini deneyin. Bir belgenin kartındaki "Aç / Kaydet"e dokunun; indirme penceresi bitince telefonun paylaşım menüsünden kaydedin/açın. Yönetici sakin modundayken (hem yönetim hem sakin görünümü olan hesapla) "Yönetim görünümü" ve "Belgelerim" çiplerini deneyin.
   - **Beklenen Sonuç:** Sayfada "Yönetimin sizinle paylaştığı belgeleri buradan açabilir ya da kaydedebilirsiniz." yazar; boşsa "Henüz belge yok." / arama sonucu yoksa "Bu arama ve süzgeç için belge bulunamadı."; birden çok sitede "Site" seçimi ve "Tüm siteler" vardır. "Aç / Kaydet" "Belge indiriliyor" penceresini (yüzde ve boyut) açar, bitince paylaşım menüsü gelir; kartta başlık, kategori, dosya türü/boyutu ve (yeni sürümde) "Güncellendi" rozeti görünür. İndirme sırasında "Vazgeç" işlemi durdurur; hatada "Belge indirilemedi" ve "Tekrar Dene" çıkar. Hem yönetim hem sakin yetkisi olan hesapta "Yönetim görünümü" ve "Belgelerim" çipleri görünüm değiştirir.
 - [ ] **73.6. Yeni Sürüm Yükleme ve Sürüm Geçmişi:**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi / Daire sakini. Önkoşul: Yüklenmiş ve sakinin gördüğü bir belge. Belge kartına dokunup ayrıntıyı açın; "Yeni Sürüm Yükle"ye dokunun, başka bir PDF seçin, "Sürüm notu (isteğe bağlı)"na "Madde 4 düzeltildi" yazıp "Sürümü Yükle"ye basın. Ayrıntıda "Sürümler" bölümüne bakın; "v1 İndir" ve "v2 İndir"i deneyin. Sakin hesabıyla belgeyi açıp indirin. Yönetici ayrıntısında eski sürüm için "v1 Sil"i deneyin (iki sürüm varken).
@@ -1933,7 +1933,7 @@ Site yöneticisi (ve süper kullanıcı) Kişiler ekranındaki "Toplu Yükle" il
   - **Nasıl Test Edilir:** Rol: Site yöneticisi / Daire sakini. Önkoşul: Yayındaki bir duyuruya ekli belge. O belgeyi "Sil"mek isteyin; çıkan uyarıda önce "Vazgeç", sonra "Yine de Sil"i seçin. Başka bir ekli belgenin kitlesini "Düzenle"den "Yalnız yöneticiler"e çevirip kaydetmeyi deneyin; uyarıda "Yine de Değiştir"i seçin. Sakin hesabıyla ilgili duyurunun eklerine bakın.
   - **Beklenen Sonuç:** Silmede "Belge duyurularda kullanılıyor" penceresi çıkar ("Bu belge N yayındaki duyuruya ekli. Silerseniz duyurularda "kullanılamıyor" görünür ve alıcılar dosyayı indiremez. Yine de silinsin mi?"); "Yine de Sil"den sonra "Belge silindi. Ekli olduğu duyurularda artık kullanılamıyor." çıkar. Kitle sakinlerden çıkarılırken aynı başlıkla "Bu belge N yayındaki duyuruya ekli. Kitleyi sakinlerden çıkarırsanız duyuru alıcıları ekine erişemez; taslak ve zamanlanmış duyurulardan ek çıkarılır. Yine de değiştirilsin mi?" sorulur ("Vazgeç" / "Yine de Değiştir"). Sakinin duyurusunda silinen belgenin eki "Artık kullanılamıyor." rozetiyle görünür ve açılmaz. Düzenleme penceresinde de "Bu belge duyurulara ekli..." bilgi notu vardır.
 - [ ] **73.12. Yönetim Kurulu Üyesi Salt Okur:**
-  - **Nasıl Test Edilir:** Rol: Yönetim kurulu. Yönetim kurulu üyesi hesabıyla "Belgeler"i açın; bir belgeyi açın.
+  - **Nasıl Test Edilir:** Rol: Yönetim kurulu. Yönetim kurulu üyesi hesabıyla "Dosya Deposu"nu açın; bir belgeyi açın.
   - **Beklenen Sonuç:** Sayfada "Yönetim kurulu üyesi olarak belgeleri yalnızca görüntüleyebilirsiniz. Yalnız yöneticilere açık belgeler görünmez." yazar; "Belge Yükle" yoktur; belge ayrıntısında "Aç / Kaydet" vardır, "Yeni Sürüm Yükle", "Düzenle", "Sil" yoktur ve "Yönetim kurulu üyesi olarak belgeyi yalnızca görüntüleyebilirsiniz." notu çıkar.
 - [ ] **73.13. Denetim Kaydında Belge İşlemleri:**
   - **Nasıl Test Edilir:** Rol: Süper kullanıcı. Süper kullanıcıyla "Denetim Kaydı"nı açıp eylem süzgecinden "Belge yüklendi", "Belge sürümü eklendi", "Belge düzenlendi", "Belge silindi", "Belge geri yüklendi", "Belge kalıcı silindi", "Belge sürümü silindi", "Belge duyuruya eklendi", "Belge duyurudan çıkarıldı" seçeneklerini sırayla deneyin.
@@ -2222,14 +2222,14 @@ Cihaz Etiketleyici → "Cihaz testi" sayfasındaki "Genel IP (WAN)" alanı şu a
 
 ## 83. 🗳️ Anket ve Oylama, Ziyaretçi ve Kargo, Yönetim Türü Terimleri ve Kartlı Geçiş Altyapısı — F9/F10/F11 (2026-10-19)
 
-Üç yeni modül ve yönetim türü terimleri: Anket ve Oylama (migration 044, F11.01), Ziyaretçi ve Kargo (migration 045, F11.03), Kartlı Geçiş (migration 046, F10; YALNIZ sunucu kayıt altyapısı, uygulama ekranı ve kart okuyucu YOK). Yeni modüller varsayılan KAPALIDIR: süper kullanıcı siteye açar ya da site yöneticisi "Modüller" ekranından "Modül Talep Et" ile ister. Yönetim türü terimleri (F9) için migration yoktur: beş tür seçilebilir, kelimeler (İş Merkezi: Ofis/Firma, Kooperatif: Hisse/Üye, Alışveriş Merkezi: Mağaza/Kiracı firma) ve "Bu tür için önerilir" işareti türe göre gelir. Ziyaretçi ve kargoda e-posta/telefon bildirimi YOKTUR. Denemeleri bir TEST sitesinde yapın. Sözleşmeler: `docs/PLATFORM_ANKET.md`, `docs/PLATFORM_ZIYARETCI_KARGO.md`, `docs/PLATFORM_GECIS_GENISLEME.md`, `docs/PLATFORM_MODUL_SISTEMI.md` (Yönetim türü terimleri). Faz listesi: F9, F10, F11.
+Üç yeni modül ve yönetim türü terimleri: Anket ve Oylama (migration 044, F11.01), Ziyaretçi ve Kargo (migration 045, F11.03), Kartlı Geçiş (migration 046, F10; YALNIZ sunucu kayıt altyapısı, uygulama ekranı ve kart okuyucu YOK). Ziyaretçi ve Kargo ile Kartlı Geçiş varsayılan KAPALIDIR: süper kullanıcı siteye açar ya da site yöneticisi "Modüller" ekranından "Modül Talep Et" ile ister. Anket ve Oylama ise 2026-10-28'den beri TEMEL modüldür: her sitede açıktır, talep edilmez, kapatılamaz. Yönetim türü terimleri (F9) için migration yoktur: beş tür seçilebilir, kelimeler (İş Merkezi: Ofis/Firma, Kooperatif: Hisse/Üye, Alışveriş Merkezi: Mağaza/Kiracı firma) ve "Bu tür için önerilir" işareti türe göre gelir. Ziyaretçi ve kargoda e-posta/telefon bildirimi YOKTUR. Denemeleri bir TEST sitesinde yapın. Sözleşmeler: `docs/PLATFORM_ANKET.md`, `docs/PLATFORM_ZIYARETCI_KARGO.md`, `docs/PLATFORM_GECIS_GENISLEME.md`, `docs/PLATFORM_MODUL_SISTEMI.md` (Yönetim türü terimleri). Faz listesi: F9, F10, F11.
 
 - [ ] **83.1. Migration 044-046 Uygulandı mı (Operasyon):**
   - **Nasıl Test Edilir:** Rol: Sunucu yöneticisi. VPS'te server klasöründe `node scripts/migrate.js --status` (salt okunur) çalıştırın.
   - **Beklenen Sonuç:** `044_survey`, `045_visitor_log` ve `046_access_cards` uygulanmış görünür; bekleyen migration yoktur (tablolar: `surveys`, `survey_votes`, `visitor_entries`, `access_cards`).
-- [ ] **83.2. Modülleri Siteye Açma ve Menüler:**
-  - **Nasıl Test Edilir:** Rol: Site yöneticisi / Süper kullanıcı. TEST sitesinde site yöneticisi "Modüller" ekranında "Anket ve Oylama" ve "Ziyaretçi ve Kargo" kartlarında "Modül Talep Et"e basar; süper kullanıcı "Modül Talepleri"nden onaylar (ya da "Modüller" ekranından doğrudan açar). Sonra yönetici, görevli (kapıcı/güvenlik), yönetim kurulu üyesi ve daire sakini hesaplarıyla menüye bakın. "Modüller" ekranında "Kartlı Geçiş", "Plaka Tanıma", "HGS Geçişi" ve "Kamera (CCTV) Bağlantısı" kartlarına da bakın.
-  - **Beklenen Sonuç:** Yöneticide "Anket ve Oylama" ve "Ziyaretçi ve Kargo"; kurul üyesinde ikisi salt okunur; görevlide yalnız "Ziyaretçi ve Kargo"; sakinde "Anketler" ve "Ziyaretçilerim" menüsü görünür (sakinin ziyaretçi ekranının adı "Ziyaretçilerim"dir; kurul üyesinde yönetim öğelerinin yanında bu iki sakin öğesi de çıkar, aynı adlı iki öğe olmaz; sakin öğeleri yönetimin açtığı daire hesabında görünür, kendi kaydolmuş bireysel hesapta çıkmaz). Modül kapalıyken bu menüler yoktur. "Kartlı Geçiş" açılabilir ama açılsa da uygulamada yeni ekran çıkmaz (uygulama ekranı ve kart okuyucu henüz yok); Plaka Tanıma, HGS Geçişi ve Kamera (CCTV) Bağlantısı "Yakında…" çipiyle gelir ve açılamaz.
+- [ ] **83.2. Modülleri Siteye Açma (Ziyaretçi ve Kargo) ve Menüler (Anket Hazır Gelir):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi / Süper kullanıcı. TEST sitesinde site yöneticisi "Modüller" ekranında "Anket ve Oylama" kartında "Her sitede açık" yazdığını ve talep düğmesi olmadığını görür; "Ziyaretçi ve Kargo" kartında "Modül Talep Et"e basar, süper kullanıcı "Modül Talepleri"nden onaylar (ya da "Modüller" ekranından doğrudan açar). Sonra yönetici, görevli (kapıcı/güvenlik), yönetim kurulu üyesi ve daire sakini hesaplarıyla menüye bakın. "Modüller" ekranında "Kartlı Geçiş", "Plaka Tanıma", "HGS Geçişi" ve "Kamera (CCTV) Bağlantısı" kartlarına da bakın.
+  - **Beklenen Sonuç:** Yöneticide "Anket ve Oylama" ve "Ziyaretçi ve Kargo"; kurul üyesinde ikisi salt okunur; görevlide yalnız "Ziyaretçi ve Kargo"; sakinde "Anketler" ve "Ziyaretçilerim" menüsü görünür (sakinin ziyaretçi ekranının adı "Ziyaretçilerim"dir; kurul üyesinde yönetim öğelerinin yanında bu iki sakin öğesi de çıkar, aynı adlı iki öğe olmaz; sakin öğeleri yönetimin açtığı daire hesabında görünür, kendi kaydolmuş bireysel hesapta çıkmaz). "Ziyaretçi ve Kargo" kapalıyken onun menüleri yoktur; "Anket ve Oylama" kapatılamaz, menüsü hep vardır. "Kartlı Geçiş" açılabilir ama açılsa da uygulamada yeni ekran çıkmaz (uygulama ekranı ve kart okuyucu henüz yok); Plaka Tanıma, HGS Geçişi ve Kamera (CCTV) Bağlantısı "Yakında…" çipiyle gelir ve açılamaz.
 - [ ] **83.3. Anket Açma ve Yayınlama:**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. "Anket ve Oylama" → "Yeni Anket": başlık, soru ve en az iki seçenek ("Seçenek ekle"); "Hedef kitle" "Tüm site"; isteğe bağlı "Kapanış günü"; "Taslak Kaydet". Taslağı açıp "Yayınla"ya basın ve onaylayın. İkinci bir ankette "Hedef kitle"yi "Bloklar" seçip bir blok ekleyin, "Daire başına tek oy"u açın, "Anonim oylama"yı kapatıp yayınlayın.
   - **Beklenen Sonuç:** Taslak kaydedilir ("Anket taslak olarak kaydedildi.") ve sakinde görünmez. Yayınlanınca "Anket yayınlandı." yazar; yayınlanan anketin sorusu ve seçenekleri değiştirilemez. Liste durum süzgeciyle (Taslak / Açık / Kapalı / Tümü) daralır.
@@ -2597,7 +2597,7 @@ Dalga 1'in beş paketi. Her dairenin iki ayrı hesabı vardır ("Kiracı hesabı
 
 ## 89. Dalga 2-6 temel yapı, A aşaması (2026-10-21)
 
-Dalga 2-6'nın ilk aşaması: çalışan şema, uçlar ve ekranlar. Dışarıdan hesap ya da sözleşme gerektiren kısımlar (Google Drive bilgileri, SMS ve VAPID anahtarları, kart ödemesi sağlayıcıları) ekranda "Yakında…" görünür; yeni modüller (Rehber, İşletme Projesi, Dosya Deposu, Sayaç, Komşu Panosu, Kart Ödemesi, Kamera ve Plaka) varsayılan KAPALIdır, süper kullanıcı açar. Kapı düğmesi ve kapı açma değişmedi. Denemeleri bir TEST sitesinde yapın. Faz listesi: F30–F34. Ayrıntılar: `docs/PLATFORM_FINANS.md`, `docs/PLATFORM_FINANS_4B.md`, `docs/PLATFORM_TOPLU_ISLEMLER.md` ve ilgili `docs/PLATFORM_*.md` belgeleri.
+Dalga 2-6'nın ilk aşaması: çalışan şema, uçlar ve ekranlar. Dışarıdan hesap ya da sözleşme gerektiren kısımlar (Google Drive bilgileri, SMS ve VAPID anahtarları, kart ödemesi sağlayıcıları) ekranda "Yakında…" görünür; yeni modüller (Rehber, İşletme Projesi, Sayaç, Kamera ve Plaka) varsayılan KAPALIdır, süper kullanıcı açar; Dosya Deposu ve Komşu Panosu 2026-10-28'den beri TEMEL modüldür (her sitede açık), Kart Ödemesi ayrı modül değildir (Aidat ve Finans'ın içindedir). Kapı düğmesi ve kapı açma değişmedi. Denemeleri bir TEST sitesinde yapın. Faz listesi: F30–F34. Ayrıntılar: `docs/PLATFORM_FINANS.md`, `docs/PLATFORM_FINANS_4B.md`, `docs/PLATFORM_TOPLU_ISLEMLER.md` ve ilgili `docs/PLATFORM_*.md` belgeleri.
 
 - [ ] **89.1. Yönetici: banka hesabına IBAN girme (F30.01):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. Finans > Kasa sekmesinde bir Banka hesabı açın (yoksa Hesap Ekle ile banka türünde ekleyin). Altındaki 'IBAN ve alıcı adı' düğmesine dokunun. Önce hatalı bir IBAN yazın, sonra geçerli bir TR IBAN ve alıcı adı yazıp onay kutusunu işaretleyip Kaydedin.
@@ -2726,7 +2726,7 @@ Dalga 2-6'nın ilk aşaması: çalışan şema, uçlar ve ekranlar. Dışarıdan
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. Siteye ikinci yönetici davet edin, davet kabul edilsin, sonra Hesabımı Sil sayfasını açın.
   - **Beklenen Sonuç:** Engel çıkmaz.
 - [ ] **89.43. Modülü aç ve menüyü gör (F31.01):**
-  - **Nasıl Test Edilir:** Rol: Süper kullanıcı. Modüller ekranından bir sitede İşletme Projesi (ve Aidat ve Finans) modülünü açın. Yönetici hesabıyla girip menüde Site hizmetleri altında İşletme Projesi öğesine bakın.
+  - **Nasıl Test Edilir:** Rol: Süper kullanıcı. Modüller ekranından bir sitede İşletme Projesi modülünü açın (Aidat ve Finans temel modül olduğu için zaten açıktır). Yönetici hesabıyla girip menüde Site hizmetleri altında İşletme Projesi öğesine bakın.
   - **Beklenen Sonuç:** Menüde İşletme Projesi görünür; modül kapalıyken görünmez.
 - [ ] **89.44. Yeni proje ve kalem girişi (F31.02):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. İşletme Projesi > Yeni proje > yıl yazın, Oluştur. Açılan ekranda birkaç kategoriye yıllık tutar yazıp Kalemleri kaydet'e basın.
@@ -2761,12 +2761,12 @@ Dalga 2-6'nın ilk aşaması: çalışan şema, uçlar ve ekranlar. Dışarıdan
 - [ ] **89.54. Ödeme sonrası tutar (F31.12):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. Bir borçlu hesaba tahsilat girin, listeyi yenileyin.
   - **Beklenen Sonuç:** Ödenen kalemler listeden çıkar veya kalan tutar azalır; toplam yaşlandırma raporuyla tutar.
-- [ ] **89.55. Modülü aç ve Google Drive bölümünü gör (F32.01):**
-  - **Nasıl Test Edilir:** Rol: Süper kullanıcı. Süper kullanıcıyla Modüller ekranında siteyi seçin, 'Dosya Deposu' modülünü açın; menüden 'Dosya Deposu' ekranını açıp belge listesinin altındaki 'Google Drive' bölümüne bakın.
-  - **Beklenen Sonuç:** Modül kapalıyken Modüller ekranında 'Dosya Deposu' kapalı görünür ve 'Dosya Deposu' menüsü yoktur; açınca (Google bilgileri .env'de yoksa) 'Google Drive' bölümünde 'Google Drive bağlantısı Yakında…' görünür.
+- [ ] **89.55. Dosya Deposu hazır gelir ve Google Drive bölümünü gör (F32.01):**
+  - **Nasıl Test Edilir:** Rol: Süper kullanıcı. Süper kullanıcıyla Modüller ekranında siteyi seçip 'Dosya Deposu' kartına bakın (modül açmak gerekmez); menüden 'Dosya Deposu' ekranını açıp belge listesinin altındaki 'Google Drive' bölümüne bakın.
+  - **Beklenen Sonuç:** 'Dosya Deposu' kartında 'Her sitede açık' yazar (anahtar yok); 'Dosya Deposu' menüsü hemen vardır; (Google bilgileri .env'de yoksa) 'Google Drive' bölümünde 'Google Drive bağlantısı Yakında…' görünür.
 - [ ] **89.56. Google Drive bağla (F32.02):**
-  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Sunucu .env'ye DRIVE_CLIENT_ID, DRIVE_CLIENT_SECRET, DRIVE_REDIRECT_URI, DRIVE_TOKEN_KEY (32+ karakter) yazıp yeniden başlatın. Yönetici olarak karttaki 'Google Drive bağla' düğmesine dokunun, Google'da izni onaylayın, uygulamaya dönüp ekranı yenileyin.
-  - **Beklenen Sonuç:** Kartta bağlı hesap e-postası görünür; Drive'da 'SmartKeyPass — Site adı' klasörü oluşur.
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Sunucu .env'ye DRIVE_CLIENT_ID, DRIVE_CLIENT_SECRET, DRIVE_REDIRECT_URI, DRIVE_TOKEN_KEY (32+ karakter) yazıp yeniden başlatın. Yönetici olarak Dosya Deposu ekranındaki 'Google Drive' bölümünde 'Google Drive bağla' düğmesine dokunun, Google'da izni onaylayın, uygulamaya dönüp ekranı yenileyin.
+  - **Beklenen Sonuç:** Google Drive bölümünde bağlı hesap e-postası görünür; Drive'da 'SmartKeyPass — Site adı' klasörü oluşur.
 - [ ] **89.57. Dosya yükleme ve adlandırma (F32.03):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. Bağlıyken POST /manager/sites/{site}/drive/files?kind=gider&mime=application/pdf&block=A&apartment=13&date=2026-10-20 ile bir PDF gönderin (octet-stream); aynısını bir kez daha gönderin.
   - **Beklenen Sonuç:** Drive'da GiderEkim_26 klasöründe AB_D13_201026.pdf, ikincisi AB_D13_201026_2.pdf olur; GET .../files/{id}/content dosyayı geri verir.
@@ -2827,9 +2827,9 @@ Dalga 2-6'nın ilk aşaması: çalışan şema, uçlar ve ekranlar. Dışarıdan
 - [ ] **89.76. Tarayıcı bildirimi (F33.11):**
   - **Nasıl Test Edilir:** Rol: Sakin. Sunucuya VAPID anahtarlarını koyun; web uygulamasında Bildirim Tercihleri'nden Tarayıcı bildirimi'ni açıp izin verin, sonra kargo kaydı girin.
   - **Beklenen Sonuç:** Tarayıcıda 'Kargo geldi' bildirimi görünür; anahtarı kapatınca gelmez. Anahtar yoksa satır Yakında… der.
-- [ ] **89.77. Modülü aç (F33.12):**
-  - **Nasıl Test Edilir:** Rol: Süper kullanıcı. Modüller ekranından bir sitede Komşu Panosu modülünü aç.
-  - **Beklenen Sonuç:** Sitenin yöneticisi ve sakinlerinin menüsünde İletişim grubunda Komşu Panosu görünür; kapalıyken görünmez.
+- [ ] **89.77. Komşu Panosu hazır gelir (F33.12):**
+  - **Nasıl Test Edilir:** Rol: Süper kullanıcı. Modüller ekranından bir sitede Komşu Panosu kartına bak (modül açmak gerekmez).
+  - **Beklenen Sonuç:** Kartta 'Her sitede açık' yazar (anahtar yok); sitenin yöneticisi ve sakinlerinin menüsünde İletişim grubunda Komşu Panosu hemen görünür.
 - [ ] **89.78. İlan yaz (F33.13):**
   - **Nasıl Test Edilir:** Rol: Sakin. Komşu Panosu > Yeni ilan; başlık ve metin yazıp Onaya gönder.
   - **Beklenen Sonuç:** İlan listede Onay bekliyor etiketiyle sadece sende görünür; komşular henüz görmez.
@@ -2878,7 +2878,7 @@ Dalga 2-6'nın ilk aşaması: çalışan şema, uçlar ve ekranlar. Dışarıdan
 
 ## 90. Dalga 2-6 temel yapı, B aşaması (2026-10-21)
 
-Dalga 2-6'nın ikinci aşaması: dekont bildirimi, banka dosyasından tahsilat, ekipman ve bakım, faaliyet raporu, sade dil ve Excel'e aktar, görevli için fotoğrafla sayaç okuma, Phosphor ikonları ve beyaz etiket tema. Yeni modüller (Ekipman ve Bakım, Faaliyet Raporu) varsayılan KAPALIdır, süper kullanıcı açar. Kapı düğmesi ve kapı açma değişmedi. Denemeleri bir TEST sitesinde yapın. Faz listesi: F30, F31, F32, F34 (yeni maddeler).
+Dalga 2-6'nın ikinci aşaması: dekont bildirimi, banka dosyasından tahsilat, ekipman ve bakım, faaliyet raporu, sade dil ve Excel'e aktar, görevli için fotoğrafla sayaç okuma, Phosphor ikonları ve beyaz etiket tema. Ekipman ve Bakım ile Faaliyet Raporu 2026-10-28'den beri TEMEL modüldür: her sitede açıktır, süper kullanıcının açması gerekmez. Kapı düğmesi ve kapı açma değişmedi. Denemeleri bir TEST sitesinde yapın. Faz listesi: F30, F31, F32, F34 (yeni maddeler).
 
 - [ ] **90.1. Dekont gönderme (sakin) (F30.43):**
   - **Nasıl Test Edilir:** Rol: Sakin. Yönetici Finans Ayarları > Ödeme bilgisi'nde dekont yüklemeyi açsın. Sakin olarak Borcum > Öde > Dekont yükle'ye dokunun, bir PDF ya da fotoğraf seçin, tutarı ve tarihi kontrol edip Gönder'e dokunun.
@@ -2917,7 +2917,7 @@ Dalga 2-6'nın ikinci aşaması: dekont bildirimi, banka dosyasından tahsilat, 
   - **Nasıl Test Edilir:** Rol: yönetici. Banka dosyası ekranında 'Geçmiş yüklemeler' altındaki yüklemede 'Geri al' > onay.
   - **Beklenen Sonuç:** O dosyadan işlenen tahsilatlar ters kayıtla iptal olur, makbuzlar iptal edilir, yüklemede 'geri alındı' yazar. Gelir/gider ayrılmış satır varsa önce onları geri almanız istenir.
 - [ ] **90.13. Ekipman ekleme ve yasal kontrol planı (F31.13):**
-  - **Nasıl Test Edilir:** Rol: Site yöneticisi (modül süper kullanıcıca açık). Menüden Ekipman ve Bakım > Ekipman ekle: tür Asansör, ad ve konum yaz, Kaydet. Ekipmana dokun > Yasal kontrol planı > ilk tarihi seç > Kaydet.
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Menüden Ekipman ve Bakım > Ekipman ekle: tür Asansör, ad ve konum yaz, Kaydet. Ekipmana dokun > Yasal kontrol planı > ilk tarihi seç > Kaydet.
   - **Beklenen Sonuç:** Ekipman listede görünür. Ayrıntıda yıllık, (yasal) işaretli plan ve sonraki tarih görünür. Tarih yakınsa Bakım takvimi sekmesinde listelenir.
 - [ ] **90.14. Bakım yapıldı kaydı planı ilerletir (F31.14):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ekipman ayrıntısında plan satırında Yapıldı > bugünün tarihi, firma ve maliyet (örn. 1.250,50) gir > Kaydet.
@@ -2934,9 +2934,9 @@ Dalga 2-6'nın ikinci aşaması: dekont bildirimi, banka dosyasından tahsilat, 
 - [ ] **90.18. Gider kırılımı (F31.18):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi (Finans açık). Ekipman ayrıntısında Gider bağla ile mevcut bir gider numarasını gir. Gider kırılımı sekmesine bak.
   - **Beklenen Sonuç:** Ekipman adının karşısında gider tutarı, altta ekipmana bağlı/bağlanmamış/toplam tutarlar görünür.
-- [ ] **90.19. Modülü aç (F31.19):**
-  - **Nasıl Test Edilir:** Rol: süper kullanıcı / yönetici. Süper kullanıcı olarak Modüller ekranından bir sitede Faaliyet Raporu modülünü aç.
-  - **Beklenen Sonuç:** Site yöneticisinin menüsünde Site hizmetleri altında Faaliyet Raporu görünür.
+- [ ] **90.19. Faaliyet Raporu hazır gelir (F31.19):**
+  - **Nasıl Test Edilir:** Rol: süper kullanıcı / yönetici. Modüller ekranından bir sitede Faaliyet Raporu kartına bak (modül açmak gerekmez).
+  - **Beklenen Sonuç:** Kartta 'Her sitede açık' yazar (anahtar yok); site yöneticisinin menüsünde Site hizmetleri altında Faaliyet Raporu hemen görünür.
 - [ ] **90.20. Taslak otomatik dolar (F31.20):**
   - **Nasıl Test Edilir:** Rol: yönetici. Faaliyet Raporu ekranında geçen yılı seç ve dokuz bölümü tek tek aç.
   - **Beklenen Sonuç:** Genel bilgiler, gelir/gider, tahsilat/borç, işler, sözleşmeler, kararlar, duyurular kayıtlarla uyumlu dolu gelir; kapalı modülün bölümünde 'modül kapalı' yazar.
@@ -3401,7 +3401,7 @@ Dalga 2-6'nın ikinci aşaması: dekont bildirimi, banka dosyasından tahsilat, 
 
 - [ ] **113.1. Yeni Sitede Beş Modül Hazır Gelir:**
   - **Nasıl Test Edilir:** Süper kullanıcıyla yeni bir site oluşturun (ya da bir site başvurusunu onaylayın). O sitenin yöneticisiyle giriş yapıp çekmeceye ve Modüller ekranına bakın.
-  - **Beklenen Sonuç:** Anket ve Oylama, Komşu Panosu, Ekipman ve Bakım, Faaliyet Raporu ve Dosya Deposu (Google Drive) hemen kullanılabilir; Modüller ekranında "Her sitede açık" olarak görünür, "Modül Talep Et" düğmesi ve kapatma anahtarı yoktur.
+  - **Beklenen Sonuç:** Anket ve Oylama, Komşu Panosu, Ekipman ve Bakım, Faaliyet Raporu ve Dosya Deposu hemen kullanılabilir; Modüller ekranında "Her sitede açık" olarak görünür, "Modül Talep Et" düğmesi ve kapatma anahtarı yoktur.
 - [ ] **113.2. Mevcut Sitelerde Beş Modül Açık:**
   - **Nasıl Test Edilir:** Daha önce bu modüllerden bazıları kapalı olan bir sitenin yöneticisi ve sakiniyle giriş yapın.
   - **Beklenen Sonuç:** Yöneticide Anket, Komşu Panosu, Ekipman, Faaliyet Raporu menüleri; sakinde Anket ve Komşu Panosu menüleri görünür. Daha önce bekleyen bu modüllerin talepleri "onaylandı" olarak görünür.
@@ -3409,5 +3409,31 @@ Dalga 2-6'nın ikinci aşaması: dekont bildirimi, banka dosyasından tahsilat, 
   - **Nasıl Test Edilir:** Süper kullanıcıyla Modüller ekranında bu beş modülü kapatmayı deneyin; yöneticiyle bu modüller için talep açmayı deneyin.
   - **Beklenen Sonuç:** Kapatma anahtarı yoktur (ya da "Bu modül kapatılamaz." der); talep "Bu modül her sitede hep açıktır; talep edilemez." ile reddedilir.
 - [ ] **113.4. Dosya Deposu Açık Ama Drive Bağlı Değil:**
-  - **Nasıl Test Edilir:** Google Drive hesabı bağlanmamış bir sitenin yöneticisiyle Modüller ekranında "Dosya Deposu (Google Drive)" kartına bakın.
-  - **Beklenen Sonuç:** Kart "Bu modül sitenizde kapalı" demez; "Google Drive bağla" düğmesi görünür (sunucuda Google bilgileri tanımlı değilse "Google Drive bağlantısı Yakında…" yazar). Bağlantı kurulmadan Drive'a dosya yüklenmez; sayaç fotoğrafı gibi mevcut akışlar sunucuda tutulmaya devam eder.
+  - **Nasıl Test Edilir:** Google Drive hesabı bağlanmamış bir sitenin yöneticisiyle Dosya Deposu ekranının altındaki "Google Drive" bölümüne bakın.
+  - **Beklenen Sonuç:** Bölüm "Bu modül sitenizde kapalı" demez; "Google Drive bağla" düğmesi görünür (sunucuda Google bilgileri tanımlı değilse "Google Drive bağlantısı Yakında…" yazar). Bağlantı kurulmadan Drive'a dosya yüklenmez; sayaç fotoğrafı gibi mevcut akışlar sunucuda tutulmaya devam eder.
+
+## 114. 🧩 Kart Ödemesi Aidat ve Finans'a, Belgeler Dosya Deposu'na Katıldı (2026-10-28, migration 083 ve 084)
+
+Kart Ödemesi ve Belgeler artık ayrı modül değildir: kart ödemesi Aidat ve Finans'ın içindedir, belgeler "Dosya Deposu" modülünün parçasıdır (ikisi de temel modül, her sitede açık). Veriler korunur: kart ödemesi ayarları (komisyon notları) ve belgeler / dosyalar değişmez. Eski uygulama sürümleri eski modül kodlarını gönderirse hata ya da çökme almaz (ilgili menü uygulama güncellenene kadar görünmeyebilir). Denemeleri bir TEST sitesinde yapın. Ayrıntı: `docs/PLATFORM_MODUL_SISTEMI.md`, `docs/PLATFORM_ODEME_KAMERA.md`, `docs/PLATFORM_DRIVE_DEPOLAMA.md`, `docs/PLATFORM_BELGELER.md`.
+
+- [ ] **114.1. Modüller Ekranı: 23 Modül, 8 Temel:**
+  - **Nasıl Test Edilir:** Süper kullanıcı ve site yöneticisi olarak Modüller ekranını açın; "Kart Ödemesi" ve "Belgeler" kartlarını arayın; sekiz temel modülün kartına bakın.
+  - **Beklenen Sonuç:** "Kart Ödemesi" ve "Belgeler" kartı yoktur. "Kişi ve Daire Kayıtları", "Duyuru ve Bildirim", "Aidat ve Finans", "Anket ve Oylama", "Komşu Panosu", "Ekipman ve Bakım", "Faaliyet Raporu" ve "Dosya Deposu" kartlarında "Her sitede açık" yazar; "Modül Talep Et" düğmesi ve kapatma anahtarı yoktur (süper kullanıcıda da). Ayrı bir Google Drive kartı yoktur.
+- [ ] **114.2. Kart Ödemesi Finans Ekranında:**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi ve yönetim kurulu üyesi. Finans ekranında "Kart Ödemesi" düğmesine basın; yöneticiyle komisyon notunu değiştirip kaydedin.
+  - **Beklenen Sonuç:** Pencerede iyzico ve PayTR "Yakında…" etiketiyle görünür; komisyonun ödeyene yansıtıldığı yazar. Yönetici notu düzenleyip kaydeder; yönetim kurulu üyesi aynı pencereyi salt okur görür (kalem simgesi yok). Ayrı modül açmak gerekmez.
+- [ ] **114.3. Kamera ve Plaka Ekranı:**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. "Kamera ve Plaka" modülü açık sitede Site hizmetleri altındaki "Kamera ve Plaka" ekranını açın; modül kapalı sitede menüye bakın.
+  - **Beklenen Sonuç:** Ekranda yalnız kamera kartı vardır (kart ödemesi bölümü yoktur). Modül kapalı sitede ekran menüde görünmez.
+- [ ] **114.4. Dosya Deposu Tek Menü Öğesi:**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi, yönetim kurulu üyesi ve daire sakini. Her birinin çekmecesinde "Belgeler" ve "Dosya Deposu" öğelerini arayın; "Dosya Deposu"nu açın.
+  - **Beklenen Sonuç:** Çekmecede ayrı "Belgeler" öğesi yoktur; tek öğe "Dosya Deposu"dur. Yöneticide belge listesi ve altında "Google Drive" bölümü (bağlantı hazır değilse "Yakında…"); yönetim kurulunda yalnız belge listesi (salt okunur, Drive bölümü yok); sakinde "Belgelerim" listesi görünür.
+- [ ] **114.5. Sakin Alt Çubuğunda "Dosyalar":**
+  - **Nasıl Test Edilir:** Rol: Daire sakini. Telefonu dik tutup alt çubuğa bakın; "Dosyalar" sekmesine dokunun.
+  - **Beklenen Sonuç:** Alt çubukta "Özet", "Duyuru", "Arıza", "Kapı" ve "Dosyalar" sekmeleri vardır; "Dosyalar" Dosya Deposu ekranını açar ve sakine paylaşılan belgeleri gösterir.
+- [ ] **114.6. Yükseltme: Veriler Korunur:**
+  - **Nasıl Test Edilir:** Yükseltmeden önce Belgeler modülü açık ve belgeleri olan, kart ödemesi ayarı (komisyon notu) girilmiş bir siteyi hazır tutun; yükseltmeden sonra yönetici ve sakin hesabıyla bakın.
+  - **Beklenen Sonuç:** Tüm belgeler ve dosyalar yerinde, sakinler aynı belgeleri görür; kart ödemesi komisyon notu aynıdır. Daha önce bekleyen "Belgeler", "Dosya Deposu" ve "Kart Ödemesi" modül talepleri "onaylandı" olarak sonuçlanmıştır; yeni talep açılamaz.
+- [ ] **114.7. Eski Uygulama Sürümü Hata Almaz:**
+  - **Nasıl Test Edilir:** Güncellemeden önceki uygulama sürümüyle yönetici girişi yapıp Modüller ekranını açın; eski sürümün "Belgeler" ya da "Kart Ödemesi" ile ilgili düğmelerini kullanmayı deneyin.
+  - **Beklenen Sonuç:** Uygulama çökmez, sunucu hata (500) döndürmez; eski kodla yapılan açma ya da talep isteği "Bu modül her sitede hep açıktır" türünde bir açıklamayla reddedilir. İlgili menü, uygulama güncellenene kadar görünmeyebilir (kabul edildi).

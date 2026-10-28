@@ -46,7 +46,7 @@ export async function createFixture(url) {
   await makeSite('Cenk Sitesi', [{ name: 'A Blok', count: 5 }, { name: 'B Blok', count: 5 }], mgr, 1000000001);
   await makeSite('Baska Sitesi', [{ name: 'Tek Blok', count: 3 }], other, 1000000002);
   const modules = [
-    'finance', 'documents', 'reservation', 'work_tracking', 'metering', 'survey', 'visitor_log', 'contracts', 'decision_book', 'directory', 'budget', 'neighbor_board',
+    'finance', 'drive_storage', 'reservation', 'work_tracking', 'metering', 'survey', 'visitor_log', 'contracts', 'decision_book', 'directory', 'budget', 'neighbor_board',
     'annual_report', 'equipment', 'plate_cameras',
   ];
   for (const m of modules) await q(`INSERT INTO site_modules (site_code, module_code, enabled) VALUES (1000000001, $1, TRUE)`, [m]);
