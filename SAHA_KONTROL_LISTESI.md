@@ -3514,40 +3514,40 @@ Panel dışındaki ekranlarda, sakin alt çubuğu (Özet sekmesi) yokken, üst �
 
 Yetenek (modül açık mı) ile menü yerleşimi artık ayrı katmandır. Her sitenin çekmecesi ve Panel kartları, yönetim türünün önerdiği “günlük işler” kümesiyle kısalır; kümede olmayan işlem kaybolmaz: çekmecede her zaman “Tüm işlemler” girişi, Panel'de (kutucuk, liste ve Kolay görünümde) kartların sonunda aynı adlı kart vardır. Ekran, görünür tüm işlemleri kategorili ve aramalı listeler; yönetici “Ana menüyü düzenle” ile kümeyi seçer. Temel modüller kapatılamaz, yalnız menüde öne çıkıp çıkmayacakları seçilir. Davranış değişikliği: sürüm yayınlanınca mevcut sitelerin apartman menüsünde yalnızca temel olup önerilmeyen modüller (Anket ve Oylama, Komşu Panosu, Faaliyet Raporu, Ekipman ve Bakım) “Tüm işlemler”e iner; hiçbiri kapanmaz, yönetici “Hepsini göster” ile eski tam menüye döner. Sürüm yayınlanınca denenir (maddeler “Denemeye hazır” görünse de sürüm yayınlanmadan uygulamada yoktur).
 
-- [ ] **116.1. Kompakt menü: çekmece ve Panel yalnız öne çıkanları gösterir (F40.01):**
+- [ ] **117.1. Kompakt menü: çekmece ve Panel yalnız öne çıkanları gösterir (F40.01):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Apartman türünde bir TEST sitesi (yalnız temel modüller ve kapı modülü açık); Ana menü düzeni daha önce değiştirilmemiş. Yalnız temel modüllerin ve kapının açık olduğu bir apartman sitesinin yöneticisiyle giriş yapın. Soldaki çekmeceyi açın ve listeye bakın. Panel'e dönüp “Modüller” kartlarına bakın.
   - **Beklenen Sonuç:** Çekmecede Kişiler, Duyurular, Finans, Dosya Deposu ve Kapılar vardır; Anket ve Oylama, Komşu Panosu, Faaliyet Raporu, Ekipman ve Bakım çekmecede ve Panel kartlarında yoktur. Çekmecede başlıklı bölümlerin ardında (“Yardım ve Destek”in hemen üstünde) “Tüm işlemler” girişi, Panel'de kartların sonunda aynı adlı kart vardır.
-- [ ] **116.2. Tüm işlemler: kategorili tam liste ve arama (F40.02):**
+- [ ] **117.2. Tüm işlemler: kategorili tam liste ve arama (F40.02):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. Çekmecedeki ya da Panel'deki “Tüm işlemler”e dokunun. Listeye bakın: kategorileri ve ana menüdeki satırlardaki işareti inceleyin. Arama kutusuna sırayla “anket”, “aidat” ve “komsu” (ş yazmadan) yazın. Çıkan bir satıra dokunun.
   - **Beklenen Sonuç:** Liste, görünür tüm işlemleri (Panel hariç) Daireler, Borçlar, İletişim, Site hizmetleri ve Ayarlar gibi kategorilerle gösterir; ana menüdekilerde “Ana menüde” işareti vardır. Arama Türkçe harfleri katlar (“komsu” yazınca “Komşu Panosu” çıkar). Satıra dokununca ilgili sayfa açılır ve “Tüm işlemler” ekranı kapanır. Aşağı çekince liste yenilenir.
-- [ ] **116.3. Yönetici: “Ana menüyü düzenle” (F40.03):**
+- [ ] **117.3. Yönetici: “Ana menüyü düzenle” (F40.03):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Apartman türünde bir TEST sitesi. “Tüm işlemler” ekranında “Ana menüyü düzenle”ye dokunun. Anket ve Oylama anahtarını açıp Kaydet'e basın; çekmeceye ve Panel'e bakın. Ekrana dönüp “Önerilen düzene dön”e, ardından “Hepsini göster”e basın; her seferinde çekmeceye ve Panel'e bakın.
   - **Beklenen Sonuç:** Kaydedince çekmece ve Panel hemen Anket ve Oylama'yı gösterir. “Önerilen düzene dön” eski kısa düzeni, “Hepsini göster” tam menüyü getirir. Hiçbir modül açılıp kapanmaz; yalnız yerleşim değişir.
-- [ ] **116.4. Kaydedilmemiş değişiklik koruması (F40.04):**
+- [ ] **117.4. Kaydedilmemiş değişiklik koruması (F40.04):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ana menü düzeni ekranında bir anahtarı değiştirin, kaydetmeyin. Geri tuşuna basın; ardından aynı değişikliği yapıp ekranı yenilemeyi ve (çok siteliyse) başka bir site seçmeyi deneyin.
   - **Beklenen Sonuç:** Her seferinde “Değişiklikler kaydedilmedi” sorusu çıkar. Vazgeçerseniz ekranda kalırsınız ve yaptığınız değişiklik durur; onaylarsanız değişiklik atılır.
-- [ ] **116.5. Temel modüller kapatılamaz (F40.05):**
+- [ ] **117.5. Temel modüller kapatılamaz (F40.05):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ana menü düzeni ekranında temel modül satırlarına bakın. Bir temel modülü menüden çıkarıp kaydedin. Ayarlar panelinden Modüller ekranını açıp aynı modülü kapatmayı deneyin.
   - **Beklenen Sonuç:** Temel modül satırlarında “Her sitede açık” etiketi vardır. Menüden çıkarılan temel modül “Tüm işlemler”de durur; Modüller ekranında kapatılamaz (kapatma anahtarı ve “Modül Talep Et” yoktur).
-- [ ] **116.6. İki siteli yönetici: menü site seçiciyle değişir (F40.06):**
+- [ ] **117.6. İki siteli yönetici: menü site seçiciyle değişir (F40.06):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: İki ayrı siteyi yöneten bir yönetici hesabı (TEST siteleri). Çekmecenin en üstündeki site seçiciyle bir siteyi seçin; menüye bakın. Diğer siteyi seçip menüye tekrar bakın. “Ana menüyü düzenle”de site seçerek her sitenin düzenini açın.
   - **Beklenen Sonuç:** Çekmece ve Panel, seçilen sitenin kümesine göre değişir. Ana menü düzeni ekranı seçilen sitenin kayıtlı düzenini yükler; bir sitedeki değişiklik diğer siteyi etkilemez.
-- [ ] **116.7. Daire sakini: kısa çekmece ve eksiksiz Tüm işlemler (F40.07):**
+- [ ] **117.7. Daire sakini: kısa çekmece ve eksiksiz Tüm işlemler (F40.07):**
   - **Nasıl Test Edilir:** Rol: Daire sakini. Daire sakini hesabıyla giriş yapıp çekmeceyi açın. “Tüm işlemler”e girip listeye bakın. Panel'deki “Kapıyı aç”, “Arıza bildir” ve “Dosya Deposu” hızlı eylemlerine, borç kartına ve alt çubuğa bakın.
   - **Beklenen Sonuç:** Çekmece kısalır. “Tüm işlemler” sakin işlemlerinin tamamını (Anketler, Komşu Panosu ve Dosya Deposu dahil) listeler. Hızlı eylemler, borç kartı ve alt çubuk kompakt menüden etkilenmez, eskisi gibi durur.
-- [ ] **116.8. Gizlenen işin rozeti kaybolmaz (F40.08):**
+- [ ] **117.8. Gizlenen işin rozeti kaybolmaz (F40.08):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi / Daire sakini. Ön koşul: Ana menüde olmayan bir işte (Talepler, Anketler gibi) bekleyen kayıt. Ana menüde olmayan bir işte okunmamış ya da bekleyen kayıt oluşturun (örneğin bir sakin için okunmamış anket, ya da yönetici için bekleyen talep). “Tüm işlemler” girişine ve Panel'deki “Tüm işlemler” kartına bakın.
   - **Beklenen Sonuç:** Gizlenen işlerin bekleyen sayılarının toplamı “Tüm işlemler” girişinde ve Panel kartında rozet olarak görünür; kompakt menü bir sinyali gizlemez.
-- [ ] **116.9. Süper kullanıcı: kompakt menü yok, düzen değiştirilebilir (F40.09):**
+- [ ] **117.9. Süper kullanıcı: kompakt menü yok, düzen değiştirilebilir (F40.09):**
   - **Nasıl Test Edilir:** Rol: Süper kullanıcı. Süper kullanıcıyla giriş yapıp çekmeceye bakın. “Tüm işlemler”den “Ana menüyü düzenle”yi açıp bir sitenin düzenini değiştirin ve kaydedin. Ayarlar panelinden Denetim Kaydı'nı açın.
   - **Beklenen Sonuç:** Süper kullanıcıda menü eskisi gibi tamdır (kompakt küme uygulanmaz) ve “Tüm işlemler” girişi vardır. Denetim kaydında “Ana menü düzeni güncellendi” (önerilene döndürünce “önerilene döndürüldü”) satırı görünür.
-- [ ] **116.10. Eski ve yeni sürüm uyumu (F40.10):**
+- [ ] **117.10. Eski ve yeni sürüm uyumu (F40.10):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Eski ve yeni uygulama sürümü; ikinci madde yalnız sunucu güncellenmeden önceki kısa pencerede denenebilir. Güncellemeden önceki uygulama sürümüyle (eski APK), yeni sunucuya bağlanıp menüye bakın. Yeni uygulama sürümüyle, sunucu henüz güncellenmemişken menüye bakın (yalnız sürüm geçişi sırasında denenebilir).
   - **Beklenen Sonuç:** Eski uygulama yeni sunucuda menüyü eskisi gibi tam gösterir (menü düzeni alanını yok sayar). Yeni uygulama güncellenmemiş sunucuda kompakt menü olmadan tam menüyü gösterir; “Tüm işlemler” girişi yine vardır.
-- [ ] **116.11. Panel'de liste, kutucuk ve Kolay görünümde “Tüm işlemler” (F40.11):**
+- [ ] **117.11. Panel'de liste, kutucuk ve Kolay görünümde “Tüm işlemler” (F40.11):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Apartman türünde bir TEST sitesi (kompakt menü bir modülü gizliyor). Kompakt menünün bir şeyi gizlediği bir hesapla Panel'in “Modüller” başlığındaki düğmeyle Liste görünümüne geçip sona bakın. Kutucuk görünümüne geri dönüp sona bakın. Ayarlar panelinden Kolay görünümü açıp Panel'in sonuna bakın; “Tüm işlemler”e dokunun.
   - **Beklenen Sonuç:** “Tüm işlemler” kutucuk görünümünde kart, liste görünümünde satır, Kolay görünümde büyük düğme olarak modüllerin sonunda durur; üçünde de aynı rozeti taşır ve dokununca Tüm işlemler ekranı açılır.
-- [ ] **116.12. Dar ekran, en büyük yazı ve koyu tema (F40.12):**
+- [ ] **117.12. Dar ekran, en büyük yazı ve koyu tema (F40.12):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. Telefonun yazı boyutunu en büyüğe alın (mümkünse ekran boyutunu da büyütüp dar genişliğe indirin). Çekmeceyi, “Tüm işlemler” ekranını ve “Ana menü düzeni” ekranını açın. Aynısını koyu temada tekrarlayın.
   - **Beklenen Sonuç:** Üç ekranda da yazılar taşmaz ve kesilmez; satırların dokunma hedefi rahat basılır büyüklüktedir; koyu temada metinler okunur.
 
@@ -3555,25 +3555,25 @@ Yetenek (modül açık mı) ile menü yerleşimi artık ayrı katmandır. Her si
 
 Çekmecedeki “Geri bildirim” satırı ya da Ayarlar panelindeki “Geri bildirim gönder” ile yazılan geri bildirime hangi ekrandan gönderildiği (ekran adı ve rota) ve site otomatik eklenir; kullanıcı değiştiremez. En çok 4 dosya (dosya başı 5 MB, toplam 20 MB) eklenebilir; fotoğrafların konum bilgisi (EXIF) silinir. Kayıtları site yöneticisi kendi sitesi için, süper kullanıcı tümü için “Gelen geri bildirimler” sayfasında görür; kurul, görevli, sakin ve başka site yöneticisi göremez. Kullanıcı başına saatte 5 geri bildirim sınırı vardır. Sürüm yayınlanınca denenir (maddeler “Denemeye hazır” görünse de sürüm yayınlanmadan uygulamada yoktur).
 
-- [ ] **117.1. Çekmeceden Geri bildirim formu açılır, ekran bilgisi otomatiktir (F41.01):**
+- [ ] **118.1. Çekmeceden Geri bildirim formu açılır, ekran bilgisi otomatiktir (F41.01):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. Yönetici hesabıyla çekmeceyi açın ve “Yardım ve Destek”in altındaki “Geri bildirim”e dokunun. Formun üstündeki “Gönderildiği ekran (otomatik eklenir)” kartına bakın; kartı düzenlemeyi deneyin.
   - **Beklenen Sonuç:** Form açılır ve üstte “Panel / menu/dashboard / Site: …” gibi ekran adı, rota ve site yazan salt görünür bir kart bulunur; kart düzenlenemez.
-- [ ] **117.2. Başka ekrandan açınca ekran adı değişir (F41.02):**
+- [ ] **118.2. Başka ekrandan açınca ekran adı değişir (F41.02):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. Menüden Talepler ekranına geçip çekmeceden “Geri bildirim”i yeniden açın. Sağ üstteki dişliyi (Ayarlar) açıp “Geri bildirim gönder”e dokunun.
   - **Beklenen Sonuç:** Kartta ekran adı “Talepler”, rota “menu/talepler” olur (sakin modunda rotanın sonunda “:sakin” görünür). Dişliden açılan form da aynı bağlamı taşır.
-- [ ] **117.3. Metin ve fotoğrafla gönderim, sınırlar (F41.03):**
+- [ ] **118.3. Metin ve fotoğrafla gönderim, sınırlar (F41.03):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi / Daire sakini. Ön koşul: Telefonda en az 4 fotoğraf. Metin yazıp 2-3 fotoğraf ekleyerek gönderin. Yeni bir formda 4 fotoğraf ekleyip ekleme düğmesine bakın. Metni boş bırakıp göndermeyi deneyin.
   - **Beklenen Sonuç:** Gönderince “Geri bildiriminiz gönderildi. Teşekkür ederiz.” görünür. 4 fotoğraf eklenince ekleme düğmesi kapanır. Boş metinle gönderme engellenir.
-- [ ] **117.4. Zayıf bağlantıda dosya yüklenemezse (F41.04):**
+- [ ] **118.4. Zayıf bağlantıda dosya yüklenemezse (F41.04):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi / Daire sakini. Fotoğraflı bir geri bildirim yazın; göndermeden önce uçak modunu ya da çok zayıf bağlantıyı açın ve gönderin. Çıkan uyarıdaki “Tekrar Dene”ye bağlantı gelince basın.
   - **Beklenen Sonuç:** “Geri bildiriminiz alındı; N dosya yüklenemedi” uyarısı çıkar. “Tekrar Dene” yalnız yüklenemeyen dosyaları yükler; tamamlananlar tekrar gönderilmez.
-- [ ] **117.5. Yönetici: Gelen geri bildirimler (F41.05):**
+- [ ] **118.5. Yönetici: Gelen geri bildirimler (F41.05):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: En az bir geri bildirim gönderilmiş bir TEST sitesi. Site yöneticisiyle dişli (Ayarlar) panelinden “Gelen geri bildirimler”i açın. Bir kaydın gönderenine, rolüne, ekran adına, rotasına ve ek dosyalarına bakın; bir dosyaya dokunun.
   - **Beklenen Sonuç:** Yalnız kendi sitenizin kayıtları listelenir. Her kayıtta gönderen adı ve rolü, ekran adı ve rota, metin ve ek dosyalar görünür; dosyaya dokununca açılır.
-- [ ] **117.6. Süper kullanıcı hepsini görür; sakin ve kurul görmez (F41.06):**
+- [ ] **118.6. Süper kullanıcı hepsini görür; sakin ve kurul görmez (F41.06):**
   - **Nasıl Test Edilir:** Rol: Süper kullanıcı / Daire sakini / Yönetim kurulu. Süper kullanıcıyla aynı sayfayı açın. Daire sakini ve yönetim kurulu hesaplarıyla dişli panelini açın.
   - **Beklenen Sonuç:** Süper kullanıcı tüm sitelerin kayıtlarını (site adıyla; siteye bağlı olmayanlar dahil) görür. Sakin ve kurul hesabının dişli panelinde “Gelen geri bildirimler” yoktur.
-- [ ] **117.7. Sunucuda kayıt ve dosya kontrolü (sahip) (F41.07):**
+- [ ] **118.7. Sunucuda kayıt ve dosya kontrolü (sahip) (F41.07):**
   - **Nasıl Test Edilir:** Rol: Sahip (sunucu erişimi olan). Ön koşul: Sunucu yeni sürümle yayınlanmış olmalı. Sunucu canlıya alındıktan sonra, acil olmayan bir kontrol olarak sunucuda DOCUMENTS_DIR içindeki feedback_attachments klasörüne bakın. Veritabanında feedback_reports tablosundaki son satıra bakın.
   - **Beklenen Sonuç:** Gönderilen dosyalar feedback_attachments altında oluşmuştur; feedback_reports satırında screen_name, screen_route ve role alanları doludur. Kayıt metni denetim kaydına yazılmaz.
 
@@ -3581,28 +3581,28 @@ Yetenek (modül açık mı) ile menü yerleşimi artık ayrı katmandır. Her si
 
 Birden çok siteye (ya da birden çok daireye) bağlı kullanıcıda üst çubuğun altında “Site · Daire · Rol” şeridi çıkar; tek site ve tek daireli kullanıcıda çıkmaz. Listelerde boş, hata ve “sunucuya ulaşılamıyor” halleri ayrı bildirimle gösterilir. Üst çubuktaki kırmızı çıkış simgesi kalktı: çıkış çekmecenin dibinde ve her zaman onaylıdır. “Yenile” yuvarlak çerçeveli belirgin düğme oldu. Ana listelerde yenileme sonrası “Son güncelleme SS:dd” yazar. Sürüm yayınlanınca denenir (maddeler “Denemeye hazır” görünse de sürüm yayınlanmadan uygulamada yoktur).
 
-- [ ] **118.1. Çok siteli yönetici: bağlam şeridi ve site seçimi (F42.01):**
+- [ ] **119.1. Çok siteli yönetici: bağlam şeridi ve site seçimi (F42.01):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: İki ya da daha çok siteyi yöneten bir hesap (TEST siteleri). Birden çok siteyi yöneten yönetici hesabıyla giriş yapın; üst çubuğun hemen altına bakın. Şeride dokunup açılan alt sayfadan bir site seçin. Şeride yeniden dokunup “Tüm siteler”e dönün.
   - **Beklenen Sonuç:** Şerit “Tüm siteler (N) · Yönetici” yazar. Bir site seçilince şerit site adını gösterir; menü ve Panel kartları o siteye daralır (çekmecedeki site seçiciyle aynı davranış). “Tüm siteler”e dönünce kapsam geri açılır.
-- [ ] **118.2. Tek site ve tek daire: şerit çıkmaz (F42.02):**
+- [ ] **119.2. Tek site ve tek daire: şerit çıkmaz (F42.02):**
   - **Nasıl Test Edilir:** Rol: Daire sakini. Tek siteye ve tek daireye bağlı bir sakin hesabıyla giriş yapın. Üst çubuğun altına bakın.
   - **Beklenen Sonuç:** Şerit hiç görünmez; ekran eskisi gibidir.
-- [ ] **118.3. Çok siteli ya da iki daireli sakin: şerit ve Dairem (F42.03):**
+- [ ] **119.3. Çok siteli ya da iki daireli sakin: şerit ve Dairem (F42.03):**
   - **Nasıl Test Edilir:** Rol: Daire sakini. Ön koşul: Birden çok siteye ya da iki daireye bağlı bir TEST sakin hesabı. Birden çok siteye ya da iki daireye bağlı bir sakin hesabıyla giriş yapın; şeride bakın. Şeride dokunun. Dairem'de bir daire bağını değiştirip Yenile'ye basın ve şeride bakın.
   - **Beklenen Sonuç:** Şerit “Site +N site · 2 daire · Sakin” biçimindedir (kurul üyesi ya da görevli bağı olan tek site odaktayken rol “Yönetim Kurulu” / “Görevli” yazar). Dokununca Dairem sayfası açılır. Yenile'den sonra şerit güncellenir.
-- [ ] **118.4. Üst çubukta çıkış simgesi yok, Yenile belirgin (F42.04):**
+- [ ] **119.4. Üst çubukta çıkış simgesi yok, Yenile belirgin (F42.04):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi / Daire sakini. Üst çubuğa bakın. Yenile düğmesine basın, çalışırken tekrar basmayı deneyin; sonra sayfayı aşağı çekerek yenileyin.
   - **Beklenen Sonuç:** Üst çubukta kırmızı çıkış simgesi yoktur. Yenile düğmesi yuvarlak ve çerçevelidir; basınca ortasında dönen gösterge çıkar ve bitince simge geri gelir; sürerken tekrar basılamaz. Aşağı çekerek yenileme de aynı şekilde çalışır.
-- [ ] **118.5. Çıkış çekmecenin dibinde ve onaylı (F42.05):**
+- [ ] **119.5. Çıkış çekmecenin dibinde ve onaylı (F42.05):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi / Daire sakini. Çekmeceyi açıp en alttaki “Çıkış Yap”a dokunun. Çıkan pencerede önce “Vazgeç”e, sonra pencerenin dışına dokunun. Yeniden “Çıkış Yap”a dokunup bu kez onaylayın.
   - **Beklenen Sonuç:** “Çıkış yapılsın mı?” penceresi çıkar. “Vazgeç” ve pencere dışına dokunuş çıkış yaptırmaz (çekmece açık kalır); onay oturumu kapatır.
-- [ ] **118.6. Bağlantı yokken listeler: “bağlı değil” bildirimi ve Tekrar Dene (F42.06):**
+- [ ] **119.6. Bağlantı yokken listeler: “bağlı değil” bildirimi ve Tekrar Dene (F42.06):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi / Daire sakini. Telefonu uçak moduna alıp Duyurular, Talepler (sakinde Taleplerim), Ziyaretçi ve Kargo, Kişiler ve Belgeler listelerini sırayla açın. Bağlantıyı açıp “Tekrar Dene”ye basın. Yetkisi olmayan bir ekranı açmayı deneyin (sunucu 403 verirse).
   - **Beklenen Sonuç:** Her listede turuncu, bulut-yok simgeli “Sunucuya … ulaşılamadı” benzeri bir bildirim ve “Tekrar Dene” görünür (kırmızı hata değil). Bağlantı gelince “Tekrar Dene” listeyi yükler. Yetki hatasında bildirim kırmızı hata olarak kalır.
-- [ ] **118.7. “Son güncelleme” saati ve eski kayıt uyarısı (F42.07):**
+- [ ] **119.7. “Son güncelleme” saati ve eski kayıt uyarısı (F42.07):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi / Daire sakini. Bu listeleri açıp üstteki küçük yazıya bakın; aşağı çekince saatin ilerlediğini görün. Liste doluyken bağlantıyı kesip aşağı çekin. Boş bir listede (yeni site) kartı kontrol edin.
   - **Beklenen Sonuç:** Listenin üstünde sağda “Son güncelleme SS:dd” yazar. Bağlantı kesilince kayıtlar silinmez; bildirimin altında en son başarılı güncellemenin saati ve “Kayıtlar eski olabilir” uyarısı görünür. Boş listede “Henüz … yok” kartı ve saat görünür.
-- [ ] **118.8. Dar ekran, en büyük yazı ve koyu tema (F42.08):**
+- [ ] **119.8. Dar ekran, en büyük yazı ve koyu tema (F42.08):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi / Daire sakini. Yazı boyutunu en büyüğe alıp (çift modlu yönetici hesabı dahil) üst çubuğa, bağlam şeridine, bildirimlere ve çıkış penceresine bakın. Koyu temada tekrarlayın.
   - **Beklenen Sonuç:** Üst çubuk, şerit, bildirimler ve çıkış penceresi taşmaz ve kesilmez; koyu temada okunur.
 
@@ -3610,31 +3610,31 @@ Birden çok siteye (ya da birden çok daireye) bağlı kullanıcıda üst çubu�
 
 Üç ekranda liste ↔ kutucuk anahtarı vardır: Panel “Modüller” (varsayılan kutucuk), Kişiler > Daireler ve Kişiler > Kişiler (varsayılan liste); tercih ekran başına cihazda hatırlanır. Ayarlar panelinin en üstündeki “Kolay görünüm” anahtarı yüksek karşıtlıklı renkler, daha büyük düğmeler ve en az 1,3 kat yazı getirir; Panel tek sütunda büyük düğmeye sadeleşir. Kolay görünümde hızlı işlemler satırı yoktur; gerekli girişler (sakin için “Yöneticiyi ara”, kompakt menü bir şeyi gizliyorsa “Tüm işlemler”) büyük düğme olarak modüllerin sonunda durur. Kapı güvenliği ve görünürlük kuralları aynıdır. Sürüm yayınlanınca denenir (maddeler “Denemeye hazır” görünse de sürüm yayınlanmadan uygulamada yoktur).
 
-- [ ] **119.1. Kolay görünüm anahtarı ve kalıcılığı (F43.01):**
+- [ ] **120.1. Kolay görünüm anahtarı ve kalıcılığı (F43.01):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi / Daire sakini. Sağ üstteki dişliyi (Ayarlar) açın ve en üstteki “Kolay görünüm” anahtarını açın. Panel'e bakın; sonra anahtarı kapatın. Anahtarı yeniden açıp uygulamayı tamamen kapatıp açın.
   - **Beklenen Sonuç:** Açınca yazılar belirgin büyür, renkler daha koyu ve net olur, Panel'de modüller tek sütunda büyük düğme olur. Kapatınca eski görünüm döner. Uygulama yeniden açılınca tercih hatırlanır.
-- [ ] **119.2. Büyük sistem yazısında ve küçük ekranda (F43.02):**
+- [ ] **120.2. Büyük sistem yazısında ve küçük ekranda (F43.02):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi / Daire sakini. Ön koşul: Küçük ekranlı bir telefon. Telefonun yazı boyutunu %150-200 yapın. Kolay görünümü açıp kapatarak Panel, Kişiler, Finans ve Ayarlar panelinde gezinin.
   - **Beklenen Sonuç:** Küçük ekranlı telefonda bile yazılar kesilmez ve taşmaz; düğmeler büyük ve kolay basılır kalır.
-- [ ] **119.3. Koyu temada Kolay görünüm (F43.03):**
+- [ ] **120.3. Koyu temada Kolay görünüm (F43.03):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi / Daire sakini. Tema düğmesiyle koyu temaya geçip Kolay görünümü açın. Kart kenarlarına ve metinlere bakın.
   - **Beklenen Sonuç:** Kart kenarları ve metinler net seçilir (yüksek karşıtlık).
-- [ ] **119.4. Sakin: borç kartı, Kapılar düğmesi ve Ziyaretçi kodu (F43.04):**
+- [ ] **120.4. Sakin: borç kartı, Kapılar düğmesi ve Ziyaretçi kodu (F43.04):**
   - **Nasıl Test Edilir:** Rol: Daire sakini. Ön koşul: Kapı yetkisi olan sakin hesabı. Sakin hesabıyla Kolay görünümde Panel'e bakın. “Kapılar” büyük düğmesine dokunun. Ziyaretçi kodu düğmesinin yerine bakın.
   - **Beklenen Sonuç:** Borç kartı üstte kalır. “Kapılar” düğmesi Kapılar sayfasını açar ama kapıyı kendiliğinden AÇMAZ. Ziyaretçi kodu (koşulu sağlayan hesapta) Kapılar düğmesinin hemen altında çıkar.
-- [ ] **119.5. Yönetici ve süper kullanıcı: rozetler ve Hesap ve ayarlar (F43.05):**
+- [ ] **120.5. Yönetici ve süper kullanıcı: rozetler ve Hesap ve ayarlar (F43.05):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi / Süper kullanıcı. Ön koşul: Bekleyen kaydı olan modüller (duyuru, talep gibi). Yönetici ya da süper kullanıcıyla Kolay görünümde Panel'e bakın. “Hesap ve ayarlar” altındaki Profilim ve Yardım düğmelerine dokunun.
   - **Beklenen Sonuç:** Bekleyen sayısı olan modüller düğmenin altında “3 okunmamış” gibi yazar. Profilim ve Yardım düğmeleri çalışır.
-- [ ] **119.6. Panel ve Kişiler: liste ↔ kutucuk anahtarı (F43.06):**
+- [ ] **120.6. Panel ve Kişiler: liste ↔ kutucuk anahtarı (F43.06):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. Panel'de “Modüller” başlığının sağındaki düğmeyle Liste ve Kutucuk görünümlerini değiştirin; uygulamayı kapatıp açın. Aynısını Kişiler > Daireler ve Kişiler > Kişiler sekmelerinde deneyin.
   - **Beklenen Sonuç:** Her seçim hatırlanır; üç ekranın tercihi birbirinden bağımsızdır. Düğmenin simgesi geçilecek görünümü anlatır.
-- [ ] **119.7. Kişiler ve Daireler kutucuk görünümü (F43.07):**
+- [ ] **120.7. Kişiler ve Daireler kutucuk görünümü (F43.07):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi / Yönetim kurulu. Ön koşul: Kayıtlı kişi ve daire içeren bir TEST sitesi. Bilinen sorun: Kişiler'deki çoklu seçim paneli en dar ekran ve en büyük yazıda taşabilir (ayrı iş olarak izleniyor). Kişiler sekmesinde kutucuk görünümüne geçin; bir kutucuğa dokunun. Kutucuktaki üç nokta menüsünü ve “Çoklu Seçim”i deneyin. Daireler sekmesinde kutucuğa dokunun. Yönetim kurulu (salt okunur) hesabıyla aynı ekranları açın.
   - **Beklenen Sonuç:** Kutucuğa dokununca kişi kartı (daire kartı) açılır; üç nokta menüsü ve Çoklu Seçim çalışır. Kurul üyesinde yazma menüsü çıkmaz.
-- [ ] **119.8. Ekran okuyucu ile Görünüm düğmeleri (F43.08):**
+- [ ] **120.8. Ekran okuyucu ile Görünüm düğmeleri (F43.08):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi / Daire sakini. TalkBack (ya da VoiceOver) açıkken Kolay görünüm anahtarına, liste/kutucuk düğmesine ve Panel'deki büyük düğmelere odaklanın.
   - **Beklenen Sonuç:** Kolay görünüm anahtarı açık/kapalı durumunu söyler; liste/kutucuk düğmesi “Kutucuk görünümüne geç” / “Liste görünümüne geç” der; büyük düğmeler başlık ve sayıyı okur.
-- [ ] **119.9. Hesap silindikten sonra görünüm tercihleri (F43.09):**
+- [ ] **120.9. Hesap silindikten sonra görünüm tercihleri (F43.09):**
   - **Nasıl Test Edilir:** Rol: Daire sakini. Ön koşul: Silinebilecek bir TEST hesabı. Bir TEST hesabında Kolay görünümü ve bir liste/kutucuk tercihini değiştirin. Aynı hesabı Ayarlar'dan silin; aynı telefonda yeni bir hesapla giriş yapın.
   - **Beklenen Sonuç:** Görünüm tercihleri bu cihazda korunur (kişisel veri değildir, hesapla birlikte silinmez).
 
@@ -3642,34 +3642,34 @@ Birden çok siteye (ya da birden çok daireye) bağlı kullanıcıda üst çubu�
 
 Sakinin Panel'indeki hızlı işlemlerin sonuna sunucu yanıtı gelince “Yöneticiyi ara” kutusu eklenir: dokununca telefon uygulaması yöneticinin profil telefonuyla açılır (arama kendiliğinden başlamaz). Telefon kayıtlı değilse kutu görünür kalır ve nedenini söyler. Dairem > Güvenlik ve destek bölümünün başında büyük bir 112 düğmesi vardır. Cihaz aramayı açamazsa kuru mod: büyük numara ve “Numarayı kopyala” gösterilir. Yönetici profilindeki telefon, sitesine bağlı sakin, kurul üyesi ve görevlilere “Yöneticiyi ara” kutusunda görünür; yönetici Panel'inde ve Profilim'de bu açıkça yazılır. Kolay görünümde hızlı işlemler satırı olmadığı için aynı iş modüllerin sonunda büyük bir “Yöneticiyi ara” düğmesidir. Sürüm yayınlanınca denenir (maddeler “Denemeye hazır” görünse de sürüm yayınlanmadan uygulamada yoktur).
 
-- [ ] **120.1. Sunucu güncellenmeden önce yeni uygulama: kutu çıkmaz, başka şey bozulmaz (F44.01):**
+- [ ] **121.1. Sunucu güncellenmeden önce yeni uygulama: kutu çıkmaz, başka şey bozulmaz (F44.01):**
   - **Nasıl Test Edilir:** Rol: Daire sakini. Ön koşul: Yalnız sunucu güncellenmeden önceki kısa pencerede denenebilir. Yeni uygulama sürümüyle, sunucu henüz güncellenmemişken sakin hesabıyla Panel'i açın (yalnız sürüm geçişi sırasında denenebilir).
   - **Beklenen Sonuç:** “Yöneticiyi ara” kutusu çıkmaz (sunucu ucu yoktur; kutu sessizce gizlenir) ve Panel'in geri kalanı eskisi gibi çalışır.
-- [ ] **120.2. Sakin: Yöneticiyi ara kutusu telefon uygulamasını açar (F44.02):**
+- [ ] **121.2. Sakin: Yöneticiyi ara kutusu telefon uygulamasını açar (F44.02):**
   - **Nasıl Test Edilir:** Rol: Daire sakini. Ön koşul: Profilinde telefonu yazılı bir site yöneticisi olan TEST sitesi. Sakin hesabıyla Panel > Hızlı işlemler'e bakın. Yöneticinin profilinde telefon varken “Yöneticiyi ara”ya dokunun.
   - **Beklenen Sonuç:** Hızlı işlemlerin en sonunda “Yöneticiyi ara” ve yönetici adı görünür. Dokununca telefon uygulaması yöneticinin numarasıyla AÇILIR; arama kendiliğinden başlamaz.
-- [ ] **120.3. Yönetici telefonu kayıtlı değilse (F44.03):**
+- [ ] **121.3. Yönetici telefonu kayıtlı değilse (F44.03):**
   - **Nasıl Test Edilir:** Rol: Daire sakini / Site yöneticisi. Yöneticinin telefonunu Profilim'den silin. Sakin Panel'ini aşağı çekip yenileyin ve kutuya dokunun. Yönetici hesabıyla Panel'e bakın; ardından Profilim'e telefon yazıp Panel'i yenileyin.
   - **Beklenen Sonuç:** Kutu “Telefon kayıtlı değil” yazar; dokununca yöneticinin henüz telefon eklemediğini söyleyen mesaj çıkar ve hiçbir şey aranmaz. Yönetici Panel'inde “Telefon numaranızı ekleyin” ipucu ve “Profilim'e git” düğmesi görünür; telefon yazılınca ipucu kalkar ve sakinde kutu yine aramaya döner.
-- [ ] **120.4. Yönetici Profilim: numaranın kimlere görüneceği yazar (F44.04):**
+- [ ] **121.4. Yönetici Profilim: numaranın kimlere görüneceği yazar (F44.04):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. Site yöneticisiyle Profilim > Telefon alanının altındaki yazıya bakın. Aynı alana sakin ve süper kullanıcı hesaplarıyla bakın.
   - **Beklenen Sonuç:** Yöneticide numaranın sitedeki sakinlere, kurul üyelerine ve görevlilere “Yöneticiyi ara” kutusunda görüneceği yazar. Sakin ve süper kullanıcıda bu yazı yoktur.
-- [ ] **120.5. Dairem'de büyük 112 düğmesi (F44.05):**
+- [ ] **121.5. Dairem'de büyük 112 düğmesi (F44.05):**
   - **Nasıl Test Edilir:** Rol: Daire sakini. Sakin hesabıyla Dairem > Güvenlik ve destek bölümünü açın. Büyük 112 düğmesine dokunun.
   - **Beklenen Sonuç:** Bölümün başında mercan renkli büyük bir “112 Acil Çağrı Merkezi'ni ara” düğmesi görünür. Dokununca arama ekranı 112 yazılı olarak açılır (arama kendiliğinden başlamaz).
-- [ ] **120.6. Arama yapamayan cihazda kuru mod (F44.06):**
+- [ ] **121.6. Arama yapamayan cihazda kuru mod (F44.06):**
   - **Nasıl Test Edilir:** Rol: Daire sakini. Ön koşul: Arama uygulaması olmayan bir cihaz. Arama uygulaması olmayan bir cihazda (tablet, emülatör, masaüstü ya da web) 112 düğmesine dokunun. “Numarayı kopyala”ya basıp başka bir uygulamaya yapıştırın. Aynısını “Yöneticiyi ara” için deneyin.
   - **Beklenen Sonuç:** “Bu cihazdan arama başlatılamadı” kartı, büyük “112” ve “Numarayı kopyala” düğmesi görünür; kopyalayınca panoya 112 yapışır. “Yöneticiyi ara”da aynı kart alt sayfada yönetici numarasıyla çıkar.
-- [ ] **120.7. Birden çok siteye bağlı sakin (F44.07):**
+- [ ] **121.7. Birden çok siteye bağlı sakin (F44.07):**
   - **Nasıl Test Edilir:** Rol: Daire sakini. Ön koşul: İki siteye bağlı bir TEST sakin hesabı. Birden çok siteye bağlı bir sakin hesabıyla Panel'deki kutuya bakın ve dokunun.
   - **Beklenen Sonuç:** Kutu “2 site” gibi yazar; dokununca alt sayfada siteler listelenir. Telefonu olan sitede “Ara”, olmayan sitede “Telefon kayıtlı değil” görünür.
-- [ ] **120.8. Kendi sitesinin yöneticisi kendini aramaz (F44.08):**
+- [ ] **121.8. Kendi sitesinin yöneticisi kendini aramaz (F44.08):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi (Sakin Modu). Ön koşul: Hem site yöneticisi hem de dairesi olan bir hesap. Sakin moduna geçmiş bir site yöneticisiyle Panel'in hızlı işlemlerine bakın.
   - **Beklenen Sonuç:** Kendi sitesi için “Yöneticiyi ara” kutusu çıkmaz.
-- [ ] **120.9. Kolay görünümde büyük “Yöneticiyi ara” düğmesi (F44.09):**
+- [ ] **121.9. Kolay görünümde büyük “Yöneticiyi ara” düğmesi (F44.09):**
   - **Nasıl Test Edilir:** Rol: Daire sakini. Ön koşul: Profilinde telefonu yazılı bir site yöneticisi olan TEST sitesi. Ayarlar panelinden Kolay görünümü açın ve sakin hesabıyla Panel'in modüller bölümüne bakın. “Yöneticiyi ara” düğmesine dokunun. Yöneticinin telefonunu Profilim'den sildirip Panel'i yenileyin ve düğmeye yeniden dokunun.
   - **Beklenen Sonuç:** Kolay görünümde hızlı işlemler satırı yoktur; modüllerin sonunda (varsa “Tüm işlemler”den önce) büyük bir “Yöneticiyi ara” düğmesi çıkar. Dokununca telefon uygulaması yönetici numarasıyla açılır. Telefon kayıtlı değilse düğme görünür kalır, dokununca nedenini söyler ve hiçbir şey aranmaz. Kendi sitesinin yöneticisi olana düğme çıkmaz.
-- [ ] **120.10. Dar ekran, en büyük yazı ve ekran okuyucu (F44.10):**
+- [ ] **121.10. Dar ekran, en büyük yazı ve ekran okuyucu (F44.10):**
   - **Nasıl Test Edilir:** Rol: Daire sakini / Site yöneticisi. Küçük ekranlı bir telefonda yazı boyutunu en büyüğe alıp 112 düğmesine, kuru mod kartına, “Yöneticiyi ara” kutusuna ve yönetici ipucuna bakın. TalkBack (ya da VoiceOver) ile bu öğelere odaklanın.
   - **Beklenen Sonuç:** Hiçbiri taşmaz ya da kesilmez. Ekran okuyucu 112 düğmesini “112 Acil Çağrı Merkezi'ni ara, düğme”, kutuyu “Yöneticiyi ara. <ad>, düğme” diye okur.
 
