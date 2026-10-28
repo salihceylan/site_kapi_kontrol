@@ -20,6 +20,8 @@
 //
 // Kalıcılık: bilerek bellek içi (PM2 tek süreç). Yeniden başlatma sayaçları sıfırlar; dağıtım sıklığında kabul edilen
 // risk. Kalıcı (DB) sayaç, kimliksiz uca her hatalı denemede yazma yükü ekler (kendisi bir hizmet reddi yüzeyi).
+// İSTİSNA (yalnız dar kapsam): 4 haneli ilk PIN hesabı (9000 değer) için POST /auth/login ayrıca KALICI sınıra tabidir
+// (security/attempt_limits.js, auth_attempt_limits, 5 yanlış -> 15 dk, 423 PIN_LOCKED); yalnız var olan PIN hesabına yazılır.
 
 import crypto from 'node:crypto';
 import { isPublicIp, requestIpBucket } from './client_ip.js';

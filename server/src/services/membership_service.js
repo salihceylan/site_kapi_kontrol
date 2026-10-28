@@ -13,6 +13,14 @@ import { managementTerms } from '../modules/management_type_terms.js';
 import { pendingConsentsJson, recordConsents, sanitizeStoredConsents } from '../modules/legal_consent_service.js';
 import { describeErrorForLog } from '../security/log_redact.js';
 import { BCRYPT_COST } from '../security/password_hashing.js';
+import {
+  ATTEMPT_POLICIES,
+  codeLockedError,
+  emailCodeTarget,
+  peekAttemptLock,
+  registerAttemptFailure,
+  resetAttempts,
+} from '../security/attempt_limits.js';
 import { reissueDeviceToken } from '../security/login_device_token.js';
 import { endResidenciesForMemberRemoval } from '../modules/people_records.js';
 import { logResidencyEvent } from '../modules/residency_log.js';
@@ -358,7 +366,9 @@ export async function registerIndividualUser({
  * Güvenlik:
  * - Deneme hakkı ATOMİK alınır (UPDATE ... SET attempt_count = attempt_count + 1 ... RETURNING) ve
  *   karşılaştırmadan ÖNCE sayılır; paralel isteklerle sınır aşılamaz.
- * - Kod başına 5, e-posta başına pencere (30 dk) içinde toplam 10 deneme (yeni kod istemek sayacı sıfırlamaz).
+ * - Kod başına 5 (dolunca kod kullanılamaz, yeni kod istenir), e-posta başına pencere (30 dk) içinde toplam 10 deneme (yeni kod istemek sayacı sıfırlamaz).
+ * - KALICI birikimli sınır (auth_attempt_limits, security/attempt_limits.js): kodlar ARASI 24 saatte 15 yanlış -> 423 VERIFICATION_LOCKED (1 sa; tekrarında 2 sa ... 24 sa).
+ *   Kilit denetimi advisory kilit altında KARŞILAŞTIRMADAN önce; yanlış karşılaştırılan kod sayılır (aynı işlemde COMMIT); doğru kod sayacı sıfırlar.
  * - Kod VERIFICATION_CODE_TTL_MINUTES (30 dk) geçerlidir; yeni kod gönderilince eskileri geçersizdir; doğru kod
  *   tek kullanımlıktır.
  * - Karşılaştırma bcrypt.compare ile yapılır (bcryptjs hash karşılaştırması sabit zamanlıdır).
@@ -384,6 +394,13 @@ export async function verifyIndividualEmailCode({ email, code }) {
     await client.query('BEGIN');
     // Aynı e-posta için doğrulama istekleri sıraya girer (sayaç/pencere kontrolü yarışsız olur).
     await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`email_verify:${cleanEmail}`]);
+
+    // Kalıcı birikimli kilit (kodlar arası): kilitliyken kod karşılaştırılmaz ve deneme hakkı harcanmaz (423; işlem geri alınır).
+    const codeLimitTarget = emailCodeTarget(cleanEmail);
+    const lock = await peekAttemptLock(ATTEMPT_POLICIES.emailCode, codeLimitTarget, client);
+    if (lock.locked) {
+      throw codeLockedError('email', lock.retryAfterSeconds);
+    }
 
     const claim = await client.query(SQL_CLAIM_VERIFICATION_ATTEMPT, [
       cleanEmail,
@@ -415,9 +432,14 @@ export async function verifyIndividualEmailCode({ email, code }) {
     const record = claim.rows[0];
     const isMatch = await bcrypt.compare(cleanCode, record.code_hash);
     if (!isMatch) {
+      // Birikimli sayaç da aynı işlemde yazılır; bu yanlış kilidi koyduysa 423 (aksi halde 400).
+      const failure = await registerAttemptFailure(ATTEMPT_POLICIES.emailCode, codeLimitTarget, client);
       // Artırılan sayaç kalıcı olmalı: ROLLBACK değil COMMIT.
       await client.query('COMMIT');
       committed = true;
+      if (failure.locked) {
+        throw codeLockedError('email', failure.retryAfterSeconds);
+      }
       throw httpError(400, `Girdiğiniz ${VERIFICATION_CODE_DIGITS} haneli kod hatalıdır.`);
     }
 
@@ -428,6 +450,8 @@ export async function verifyIndividualEmailCode({ email, code }) {
     }
     // Aynı e-posta için varsa diğer açık kodları da kapat
     await client.query(SQL_SUPERSEDE_VERIFICATION_CODES, [cleanEmail]);
+    // Doğru kod: birikimli sayaç ve kilit seviyesi sıfırlanır (işlem geri alınırsa sıfırlama da geri alınır).
+    await resetAttempts(ATTEMPT_POLICIES.emailCode, codeLimitTarget, client);
 
     // 1) Bu sürümden önce oluşmuş (doğrulanmamış) hesap varsa doğrulanır (geçiş uyumu).
     let userRes = await client.query(

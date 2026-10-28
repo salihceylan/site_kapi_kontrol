@@ -115,6 +115,7 @@ Hesap silme iki farklı yolla olur ve sonuçları farklıdır: (1) kullanıcın�
 - **Amaç:** kaba kuvvet ve kötüye kullanımı önleme.
 - **Hukuki sebep önerisi:** m.5/2-f.
 - **Saklama:** yalnız bellek; süreç yeniden başlayınca silinir.
+- **Kalıcı (DB) istisna — `auth_attempt_limits` (migration 085):** 4 haneli ilk PIN ile giriş ve e-posta / SMS doğrulama kodları için hatalı deneme sayacı, pencere başlangıcı, kilit bitişi ve kilit seviyesi. Hedef anahtar **SHA-256 özetidir** (e-posta, telefon, kullanıcı kodu ve PIN/parola düz metin saklanmaz; PIN hedefi parola özetini de içerir). **Kaynak:** `server/src/security/attempt_limits.js`; `server/src/modules/auth_attempt_limits_schema.js`; `server/migrations/085_auth_attempt_limits.sql`. **Saklama:** kilidi bitmiş ve 30 gündür dokunulmamış satırlar bakım işiyle silinir (`server/src/services/maintenance_service.js`); doğru PIN / kod satırı hemen siler. **Hesap silmede:** özet anahtarlı olduğundan hesapla doğrudan bağı yoktur; süre sınırıyla silinir.
 
 ### V12 E-posta gönderimi (SMTP)
 - **Gönderimler:** doğrulama kodu, parola sıfırlama bağlantısı, yönetici daveti, daire giriş bilgileri (kullanıcı adı + PIN), katılım başvurusu bildirimi (başvuran adı, e-postası, notu → yöneticiye), modül talebi ve site başvurusu bildirimi (→ süper), site silme kodu (→ süper), duyuru e-postası, hesap silindi bildirimi; 2026-10-17 eki: aidat borç hatırlatma e-postası (→ dairenin sorumlu tarafına; bkz. V71).

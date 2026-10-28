@@ -88,6 +88,8 @@ describe('bekleyen kayıt: kayıt / doğrulama / yeniden gönderme', () => {
     log.push({ via: 'client', sql, params });
     if (sql === 'BEGIN' || sql === 'COMMIT' || sql === 'ROLLBACK') return { rows: [], rowCount: 0 };
     if (sql.startsWith('SELECT pg_advisory_xact_lock')) return { rows: [], rowCount: 1 };
+    // 085 kalici kod deneme siniri (auth_attempt_limits): bu testlerin konusu degil; kilit yok / sayac yazimi bos sonuc.
+    if (sql.includes('auth_attempt_limits')) return { rows: [], rowCount: 0 };
     if (sql.includes('AS seconds_since_last')) return { rows: [state.issueState], rowCount: 1 };
     if (/^UPDATE email_verifications SET is_verified = TRUE WHERE LOWER\(email\)/.test(sql)) {
       return { rows: [], rowCount: 0 };
