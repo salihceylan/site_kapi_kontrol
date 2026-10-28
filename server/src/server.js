@@ -49,6 +49,7 @@ import { clientErrorBodyParser } from './modules/client_error_routes.js';
 import { startClientErrorPurge, stopClientErrorPurge } from './modules/client_error_purge.js';
 import { documentRouter } from './modules/document_routes.js';
 import { workTrackingRouter } from './modules/work_tracking_routes.js';
+import { feedbackRouter } from './modules/feedback_routes.js';
 import { reservationRouter } from './modules/reservation_routes.js';
 import { surveyRouter } from './modules/survey_routes.js';
 import { visitorLogRouter } from './modules/visitor_log_routes.js';
@@ -161,6 +162,8 @@ app.use(financeHomeRouter);
 app.use(documentRouter);
 // Is takibi (ariza, bakim, talep): /manager/sites/:siteCode/work-items[...] + /app/work-items[...] (modul work_tracking, varsayilan KAPALI).
 app.use(workTrackingRouter);
+// Geri bildirim (sayfa baglamli, 103): POST /app/feedback + PUT .../attachments/:attId/content, yonetici /manager/sites/:siteCode/feedback, sahip /admin/feedback (modul kapisi yok; platform ozelligi).
+app.use(feedbackRouter);
 // Rezervasyon ve konsiyerj: /manager/sites/:siteCode/{reservation-areas,reservations,concierge-requests}[...] + /app/{reservation-areas,reservations,concierge-requests}[...] (modul reservation, varsayilan KAPALI).
 app.use(reservationRouter);
 // Anket ve oylama: /manager/sites/:siteCode/surveys[...] + /app/surveys[...] (modul survey, varsayilan KAPALI).

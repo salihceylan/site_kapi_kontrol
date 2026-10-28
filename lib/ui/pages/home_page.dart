@@ -136,6 +136,12 @@ import 'package:site_kapi_kontrol/ui/widgets/yan_menu.dart';
 
 import 'package:site_kapi_kontrol/models/platform_module.dart';
 import 'package:site_kapi_kontrol/models/work_tracking_models.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
+import 'package:site_kapi_kontrol/config/app_config.dart';
+import 'package:site_kapi_kontrol/models/feedback_models.dart';
+import 'package:site_kapi_kontrol/services/feedback_api.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/feedback_dialog.dart';
+import 'package:site_kapi_kontrol/ui/views/feedback_inbox_view.dart';
 import 'package:site_kapi_kontrol/models/reservation_models.dart';
 
 import 'package:site_kapi_kontrol/services/module_access.dart';
@@ -2399,6 +2405,114 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         onOpenProfile: () => _goToMenu(SirketMenuItem.profilim),
       ),
     );
+  }
+
+  /// Geri bildirim servisi (P1-14, K11): ilk kullanımda kurulur (HomePage testleri sahte [AuthService] ile bu servisi hiç kurmaz).
+  late final FeedbackService _feedbackService = FeedbackService(authService: widget.authService);
+
+  /// Geri bildirimin OTOMATİK ekran bağlamı: ekrandaki sayfa adı + rota (`menu/<öğe>`; sakin modunda `:sakin` eki) + site. Site, seçili kapsam
+  /// (site seçici) ya da kullanıcının tek bağlı sitesidir; süper kullanıcıda ve birden çok siteden "Tüm siteler" seçiliyken site yoktur
+  /// (sunucu gönderenin site ilişkisini ayrıca doğrular).
+  FeedbackScreenContext _feedbackContext(UserSession session) {
+    final page = _canAccessMenu(_selectedMenu, session.role) ? _selectedMenu : SirketMenuItem.dashboard;
+    int? siteCode;
+    String? siteName;
+    if (session.role != UserRole.superUser && !_moduleAccess.isSuper && _moduleAccess.isLoaded) {
+      final sites = _moduleAccess.allSites;
+      final scoped = _moduleAccess.scopeSiteCode;
+      final match = scoped != null
+          ? sites.where((s) => s.siteCode == scoped).firstOrNull
+          : (sites.length == 1 ? sites.first : null);
+      siteCode = match?.siteCode;
+      siteName = match?.siteName;
+    }
+    return FeedbackScreenContext(
+      screenName: _titleForMenu(page),
+      screenRoute: 'menu/${page.name}${_isResidentMode ? ':sakin' : ''}',
+      siteCode: siteCode,
+      siteName: (siteName ?? '').trim().isEmpty ? null : siteName!.trim(),
+    );
+  }
+
+  static String? get _feedbackPlatform {
+    if (kIsWeb) return 'web';
+    return switch (defaultTargetPlatform) {
+      TargetPlatform.android => 'android',
+      TargetPlatform.iOS => 'ios',
+      TargetPlatform.windows => 'windows',
+      TargetPlatform.macOS => 'macos',
+      TargetPlatform.linux => 'linux',
+      _ => null,
+    };
+  }
+
+  /// Çekmeceden ya da Ayarlar panelinden "Geri bildirim": panel kapanır, form ekran bağlamıyla açılır; gönderilince kısa bilgi verilir.
+  void _openFeedback() {
+    Navigator.of(context).pop();
+    unawaited(_showFeedbackDialog());
+  }
+
+  Future<void> _showFeedbackDialog() async {
+    final session = widget.authService.session;
+    if (session == null || !mounted) return;
+    final outcome = await FeedbackDialog.show(
+      context,
+      service: _feedbackService,
+      screenContext: _feedbackContext(session),
+      appVersion: '${AppConfig.appVersion}+${AppConfig.buildNumber}',
+      platform: _feedbackPlatform,
+    );
+    if (!mounted || outcome == null) return;
+    _showMessage(
+      outcome.allUploaded
+          ? 'Geri bildiriminiz gönderildi. Teşekkür ederiz.'
+          : 'Geri bildiriminiz gönderildi; ${outcome.failed} dosya yüklenemedi.',
+    );
+  }
+
+  /// Gelen geri bildirimler (yalnız süper kullanıcı ve site yöneticisi; sunucu ayrıca 403 ile korur): süper kullanıcı tüm kayıtları, yönetici
+  /// KENDİ sitesinin kayıtlarını görür. Birden çok sitesi varsa seçili kapsam, yoksa site sorulur.
+  bool _canReadFeedback(UserSession session) {
+    if (session.role == UserRole.superUser) return true;
+    return !_isResidentMode && _managedFeedbackSites().isNotEmpty;
+  }
+
+  List<MySiteModules> _managedFeedbackSites() => <MySiteModules>[
+        for (final site in _moduleAccess.allSites)
+          if (site.role == 'manager') site,
+      ];
+
+  Future<void> _openFeedbackInbox() async {
+    final session = widget.authService.session;
+    if (session == null || !mounted) return;
+    if (session.role == UserRole.superUser) {
+      await FeedbackInboxPage.open(context, service: _feedbackService);
+      return;
+    }
+    final sites = _managedFeedbackSites();
+    if (sites.isEmpty) return;
+    MySiteModules? chosen;
+    final scoped = _moduleAccess.scopeSiteCode;
+    if (sites.length == 1) {
+      chosen = sites.first;
+    } else if (scoped != null) {
+      chosen = sites.where((s) => s.siteCode == scoped).firstOrNull;
+    }
+    chosen ??= await showDialog<MySiteModules>(
+      context: context,
+      builder: (dialogContext) => SimpleDialog(
+        title: const Text('Hangi sitenin geri bildirimleri?'),
+        children: [
+          for (final site in sites)
+            SimpleDialogOption(
+              onPressed: () => Navigator.of(dialogContext).pop(site),
+              child: Text(site.siteName.trim().isEmpty ? 'İsimsiz site' : site.siteName.trim()),
+            ),
+        ],
+      ),
+    );
+    if (chosen == null || !mounted) return;
+    await FeedbackInboxPage.open(context, service: _feedbackService, siteCode: chosen.siteCode);
   }
 
   /// Menü değişiminin TEK korumalı kapısı: çekmece, Yardım'dan "Profilim'e git", acil duyuru şeridi, mod geçişi,
@@ -6089,6 +6203,21 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   /// Ayarlar panelindeki sayfa seçmeyen eylemler: "Masaüstüne Widget Ekle" (yalnız mobilde ve süper kullanıcı dışında;
   /// masaüstünde "gönderildi" mesajı yanıltıcı olurdu). Panel kapanır, sonra istek gönderilir.
   List<YanMenuAction> _settingsExtraActions(UserSession session) => <YanMenuAction>[
+        // P1-14 (K11): her ekrandan erişilebilir geri bildirim; ekran adı ve rota formda otomatik eklenir.
+        YanMenuAction(
+          icon: Icons.rate_review_outlined,
+          title: 'Geri bildirim gönder',
+          onTap: _openFeedback,
+        ),
+        if (_canReadFeedback(session))
+          YanMenuAction(
+            icon: Icons.inbox_outlined,
+            title: 'Gelen geri bildirimler',
+            onTap: () {
+              Navigator.of(context).pop();
+              unawaited(_openFeedbackInbox());
+            },
+          ),
         if (session.role == UserRole.superUser || _isCompanyMember)
           YanMenuAction(
             icon: Icons.apartment_rounded,
@@ -6342,6 +6471,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         },
         onSelect: _selectMenu,
         onOpenHelp: _openHelp,
+        onOpenFeedback: _openFeedback,
         onLogout: () {
           Navigator.pop(context);
           widget.authService.logout();

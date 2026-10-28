@@ -357,6 +357,7 @@ class YanMenu extends StatelessWidget {
     this.badgeNouns = const <SirketMenuItem, String>{},
     this.additionalItems = const <SirketMenuItem>{},
     this.onOpenHelp,
+    this.onOpenFeedback,
     this.siteContext,
   });
 
@@ -397,6 +398,10 @@ class YanMenu extends StatelessWidget {
   /// Verilirse listenin sonunda ("Çıkış Yap"ın üstünde) "Yardım ve Destek" girişi gösterilir (varsayılan
   /// null: menü eskisi gibidir). Giriş bir sayfa seçimi DEĞİL, ayrı bir ekran açar; çağıran çekmeceyi kapatır.
   final VoidCallback? onOpenHelp;
+
+  /// Verilirse "Yardım ve Destek"in hemen altında ("Çıkış Yap"ın üstünde) "Geri bildirim" girişi gösterilir (P1-14, karar K11; varsayılan null: menü
+  /// eskisi gibidir). Giriş bir sayfa seçimi DEĞİL, ekran bağlamı otomatik eklenen bir form açar; çağıran çekmeceyi kapatır.
+  final VoidCallback? onOpenFeedback;
 
   /// Bu yüksekliğin altında (yatay telefon, küçük pencere) başlık, liste ve sürüm satırı TEK
   /// kaydırma alanında akar: sabit başlık + sürüm satırı kısa ekranda listeye yer bırakmaz
@@ -552,6 +557,20 @@ class YanMenu extends StatelessWidget {
             selected: false,
             tone: tone,
             onTap: onOpenHelp!,
+          ),
+        ),
+      );
+    }
+    if (onOpenFeedback != null) {
+      rows.add(
+        entry(
+          const ValueKey<String>('yan_menu_geri_bildirim'),
+          _MenuTile(
+            icon: PhosphorIconsRegular.chatCircleText,
+            title: 'Geri bildirim',
+            selected: false,
+            tone: tone,
+            onTap: onOpenFeedback!,
           ),
         ),
       );

@@ -152,12 +152,18 @@ describe('checksum / normalizasyon', () => {
 });
 
 describe('listMigrations', () => {
-  it('gercek migrations klasoru: ardisik, sirali, tekrarsiz', () => {
+  it('gercek migrations klasoru: sirali, tekrarsiz; 084\'e dek ardisik (085+ paralel dalgalara ayrilmis bloklardan gelir, kullanilmayan numara bos kalabilir)', () => {
     const list = listMigrations(DEFAULT_MIGRATIONS_DIR);
     assert.ok(list.length >= 25);
-    for (let i = 0; i < list.length; i += 1) {
-      assert.equal(list[i].number, i + 1, `numara boslugu: ${list[i].file}`);
-      assert.match(list[i].checksum, /^[0-9a-f]{64}$/);
+    let previous = 0;
+    for (const entry of list) {
+      if (entry.number <= 84) {
+        assert.equal(entry.number, previous + 1, `numara boslugu: ${entry.file}`);
+      } else {
+        assert.ok(entry.number > previous, `numara sirasi: ${entry.file}`);
+      }
+      previous = entry.number;
+      assert.match(entry.checksum, /^[0-9a-f]{64}$/);
     }
   });
 
