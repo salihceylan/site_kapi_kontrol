@@ -29,9 +29,12 @@ test('kod 6 hane ve ozet telefona bagli', () => {
 
 test('web push yapilandirmasi ve abonelik dogrulamasi', () => {
   assert.equal(webPushConfig().enabled, false);
-  const ok = parseSubscription({ endpoint: 'https://push.example.com/abc123456', keys: { p256dh: 'A'.repeat(30), auth: 'B'.repeat(12) } });
+  const keys = { p256dh: 'A'.repeat(30), auth: 'B'.repeat(12) };
+  const ok = parseSubscription({ endpoint: 'https://fcm.googleapis.com/fcm/send/abc123456', keys });
   assert.equal(ok.auth, 'B'.repeat(12));
   assert.throws(() => parseSubscription({ endpoint: 'http://x', keys: {} }));
+  // Izin listesi disindaki https adresi de reddedilir (ayrinti: web_push_endpoint_allowlist.test.js).
+  assert.throws(() => parseSubscription({ endpoint: 'https://push.example.com/abc123456', keys }), { statusCode: 400, code: 'INVALID_BODY' });
 });
 
 test('migration 063 ile sema ayni tablolari olusturur', () => {
