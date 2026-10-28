@@ -216,6 +216,10 @@ import 'package:site_kapi_kontrol/ui/widgets/resident_bottom_bar.dart';
 import 'package:site_kapi_kontrol/services/panel_return_requests.dart';
 import 'package:site_kapi_kontrol/ui/helpers/home_shortcut.dart';
 import 'package:site_kapi_kontrol/ui/widgets/home_shortcut_button.dart';
+// K8 (P1-16): kompakt menü (yetenekten AYRI yerleşim katmanı), "Tüm işlemler" ve "Ana menü düzeni".
+import 'package:site_kapi_kontrol/ui/helpers/menu_layout.dart';
+import 'package:site_kapi_kontrol/ui/views/all_actions_view.dart';
+import 'package:site_kapi_kontrol/ui/views/menu_layout_view.dart';
 
 
 
@@ -993,6 +997,67 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         additionalItems: _extraMenuItems(session.role),
         hiddenItems: _hiddenMenuItems(session.role),
       );
+
+  /// K8 (P1-16) KOMPAKT MENÜ: çekmecede ve Panel vitrininde öne çıkan öğeler. null: kompakt menü yok (süper kullanıcı, modül verisi hiç
+  /// gelmemiş, eski sunucu): her görünür öğe öne çıkar. YETENEĞİ değil yalnız YERLEŞİMİ belirler: görünürlük [_visibleMenuItems]'te,
+  /// erişim [_canAccessMenu]'dadır; kümede olmayan öğe kaybolmaz, "Tüm işlemler"den açılır. Kapsam site seçicidir ([ModuleAccess.result]).
+  Set<SirketMenuItem>? _featuredMenuItems(UserSession session, [List<SirketMenuItem>? visible]) =>
+      featuredMenuItems(visible: visible ?? _visibleMenuItems(session), access: _moduleAccess);
+
+  /// "Ana menü düzeni"ni değiştirebilir mi: yönetim yetkisi (süper kullanıcı, yönetici modundaki site yöneticisi). Sunucu her site için
+  /// yetkiyi ayrıca doğrular.
+  bool _canEditMenuLayout(UserSession session) => _canManagePeople(session.role);
+
+  /// Çekmeceden "Tüm işlemler": çekmece kapanır, ekran yeni sayfa olarak açılır ([_openHelp] gibi).
+  void _openAllActions() {
+    Navigator.of(context).pop();
+    _openAllActionsPage();
+  }
+
+  /// "Tüm işlemler" ekranını açar (çekmece açık değilse de çalışır: Panel vitrinindeki kart ve "Ana menüyü düzenle" dönüşü). Ekran görünür
+  /// TÜM öğeleri listeler (kompakt kümeden bağımsız); modül durumu ya da rozetler değişince liste yenilenir. Öğe seçmek çekmeceden seçmekle
+  /// AYNI gezinmedir ([_openMenuItem]).
+  void _openAllActionsPage() {
+    if (widget.authService.session == null) return;
+    unawaited(
+      AllActionsView.open(
+        context,
+        (_) => AnimatedBuilder(
+          animation: Listenable.merge(<Listenable>[_moduleAccess, _announcements]),
+          builder: (_, _) {
+            final current = widget.authService.session;
+            if (!mounted || current == null) return const SizedBox.shrink();
+            final visible = _visibleMenuItems(current);
+            return AllActionsView(
+              role: current.role,
+              items: visible,
+              featured: _featuredMenuItems(current, visible),
+              badgeCounts: _menuBadgeCounts(current),
+              badgeNouns: _menuBadgeNouns,
+              onOpen: _openMenuItem,
+              onEditMenuLayout: _canEditMenuLayout(current) ? _editMenuLayout : null,
+              // Aşağı çek yenile: modül durumu ve menü düzeni sunucudan yeniden okunur (liste kendiliğinden güncellenir).
+              onRefresh: () async {
+                await _moduleAccess.refresh();
+              },
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  /// "Ana menü düzeni" ekranını açar. Kaydedilince modül verisi hemen yenilenir (çekmece ve Panel yeni düzene geçer).
+  void _editMenuLayout() {
+    unawaited(
+      MenuLayoutView.open(
+        context,
+        authService: widget.authService,
+        initialSiteCode: _moduleAccess.scopeSiteCode,
+        onChanged: () => unawaited(_moduleAccess.refresh()),
+      ),
+    );
+  }
 
   /// Çekmece ve vitrin rozet sayıları (aynı harita): bekleyen modül talebi / site başvurusu (süper kullanıcı),
   /// okunmamış duyuru ve görülmemiş ziyaretçi kaydı (sakin).
@@ -6394,6 +6459,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         },
         // İP-1D / G2: site seçici çekmecenin en üstünde.
         siteContext: _siteContext(session),
+        // K8 (P1-16): kompakt menü (yalnız yerleşim) + her zaman erişilen "Tüm işlemler".
+        featuredItems: _featuredMenuItems(session),
+        onOpenAllActions: _openAllActions,
       ),
       // İP-1D / G2: Ayarlar öğeleri sağ üstteki dişliden açılan panelde (çekmeceyle aynı görünürlük kuralı ve rozetler).
       endDrawer: YanMenuAyarlar(
@@ -6659,6 +6727,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       session: session,
       audience: audience,
       menuItems: _visibleMenuItems(session),
+      // K8: ızgara kompakt menüyle AYNI kümeyi gösterir; öne çıkmayanlar "Tüm işlemler" kartının ardındadır.
+      featuredItems: _featuredMenuItems(session),
+      onOpenAllActions: _openAllActionsPage,
       badgeCounts: _menuBadgeCounts(session),
       badgeNouns: _menuBadgeNouns,
       onOpen: _openMenuItem,

@@ -440,6 +440,9 @@ const Set<String> _drawerOnlyTitles = <String>{
   'Kurye / Misafir Geçiş Linki Oluştur',
   // İP-1D: Ayarlar panelindeki sayfa seçmeyen eylem.
   'Masaüstüne Widget Ekle',
+  // K8 (P1-16): çekmecedeki "Tüm işlemler" girişi sayfa seçmez, ayrı ekran açar (Panel'deki kartı yalnız kompakt menü bir şeyi öne
+  // çıkarmadığında çıkar).
+  'Tüm işlemler',
 };
 
 /// Çekmecedeki başlıklar (sıralı); "Yardım ve Destek" / "Çıkış Yap" dahil.

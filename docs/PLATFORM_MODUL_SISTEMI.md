@@ -245,7 +245,7 @@ Yeni tablo ve migration YOK. Türe göre veri modeli ve modüller AYNI kalır (b
 ### Ekleyici alanlar (mevcut alanlar ve değerleri DEĞİŞMEZ; eski istemciler alanları yok sayar)
 - `mapSiteRow` çıktısı (site nesnesi: `/admin/sites`, `/manager/sites`, site ayrıntısı vb.) → `management_terms`.
 - `POST /membership/setup-site` yanıtındaki `site` → `management_terms`.
-- `GET /app/my-modules` `sites[]` öğeleri → `management_terms`, `recommended_modules` (kod dizisi).
+- `GET /app/my-modules` `sites[]` öğeleri → `management_terms`, `recommended_modules` (kod dizisi). K8 (2026-10-29): ayrıca `menu_layout` (ana menüde öne çıkan modüller; yetenek DEĞİL yerleşim, bkz. `docs/PLATFORM_MENU_KATMANI.md`).
 - `GET /manager/sites/:siteCode/modules` → yanıta `management_terms`; her modül öğesine `recommended` (boolean: modül bu tür için önerilir mi).
 - **Yeni uç** `GET /app/management-types` (authRequired; sabit tablo, veritabanı sorgulanmaz) → `{ "items": [ { "code", "label", "selectable", "terms", "recommended_modules", "summary" } ] }`; 5 tür `MANAGEMENT_TYPES` sırasıyla. Örnek öğe: `{ "code": "business_center", "label": "İş Merkezi", "selectable": true, "terms": { "unit": "Ofis", "unit_plural": "Ofisler", "resident": "Firma", "resident_plural": "Firmalar", "owner": "Mal sahibi", "fee": "Ortak gider", "block": "Kat", "block_plural": "Katlar" }, "recommended_modules": ["work_tracking", "visitor_log", "finance", "drive_storage"], "summary": "İş merkezi yönetimi: ..." }`.
 
