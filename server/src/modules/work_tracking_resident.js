@@ -42,11 +42,12 @@ import {
 } from './work_tracking_common.js';
 import { audit, insertEvent, lockActiveUser, siteLockKey, userLockKey, withWorkTransaction } from './work_tracking_service.js';
 import { listAttachmentsForItem } from './work_attachments_read.js';
+import { assertWorkCategoryUsable } from './work_categories_read.js';
 
 const MODULE_ON = MODULE_ON_SQL;
 
 const RESIDENT_COLUMNS = `
-  w.id, w.site_code, s.name AS site_name, w.category, w.location_type, w.title, w.description, w.status, w.resident_urgent, w.assigned_to,
+  w.id, w.site_code, s.name AS site_name, w.category, wc.label AS category_label, w.location_type, w.title, w.description, w.status, w.resident_urgent, w.assigned_to,
   to_char(w.due_date, 'YYYY-MM-DD') AS due_date, w.created_at, w.updated_at, w.closed_at, w.apartment_id, w.block_id, b.block_name, a.unit_label,
   (w.resident_updated_at > w.requester_seen_at) AS unread,
   ${ATTACHMENT_COUNT_SQL}
@@ -55,6 +56,7 @@ const RESIDENT_COLUMNS = `
 const RESIDENT_FROM = `
   FROM work_items w
   INNER JOIN sites s ON s.site_code = w.site_code AND s.approval_status = 'approved'
+  LEFT JOIN work_categories wc ON wc.site_code = w.site_code AND wc.key = w.category
   LEFT JOIN apartments a ON a.id = w.apartment_id
   LEFT JOIN site_blocks b ON b.id = w.block_id
 `;
@@ -174,6 +176,9 @@ export async function createWorkItem({ actor, body }) {
       }
       blockId = input.blockId;
     }
+
+    // Kategori sitede var ve etkin olmalı (100): satır FOR SHARE ile kilitlenir, aynı anda silinen / pasife alınan kategori bu talep işlemi bitene dek bekler.
+    await assertWorkCategoryUsable(client, siteCode, input.category);
 
     const hourly = await client.query(
       `SELECT COUNT(*)::INTEGER AS n FROM work_items WHERE created_by = $1 AND created_at > NOW() - INTERVAL '1 hour'`,

@@ -79,6 +79,14 @@ List<Map<String, dynamic>> _list(Object? v) => <Map<String, dynamic>>[
 String _pct(Object? bp) => bp is num ? '%${(bp / 100).toStringAsFixed(1).replaceAll('.', ',')}' : '-';
 
 const Map<String, String> _workCategory = <String, String>{'ariza': 'Arıza', 'bakim': 'Bakım', 'sikayet_oneri': 'Şikayet/Öneri', 'diger': 'Diğer'};
+
+/// İş takibi kategori adı: sitedeki ad (`category_label`, 100; sitenin eklediği kategori ve yeniden adlandırma dahil), yoksa
+/// varsayılan ad, yoksa anahtar.
+String _workCategoryLabel(Map<String, dynamic> c) {
+  final label = c['category_label'];
+  if (label is String && label.trim().isNotEmpty) return label.trim();
+  return _workCategory[c['category']] ?? '${c['category']}';
+}
 const Map<String, String> _contractCategory = <String, String>{
   'asansor': 'Asansör',
   'guvenlik': 'Güvenlik',
@@ -129,7 +137,7 @@ List<String> annualReportLines(String key, Map<String, dynamic>? s) {
       final closed = _list(s['closed_items']);
       return <String>[
         'Açılan kayıt: ${_i(s['total'])}, çözülen/kapanan: ${_i(s['done'])}, fotoğraf: ${_i(s['photo_count'])}',
-        for (final c in cats) '${_workCategory[c['category']] ?? c['category']}: ${_i(c['total'])} kayıt, ${_i(c['done'])} tamamlandı',
+        for (final c in cats) '${_workCategoryLabel(c)}: ${_i(c['total'])} kayıt, ${_i(c['done'])} tamamlandı',
         for (final w in closed) '- ${w['title']} (${w['closed_on'] ?? ''}${_i(w['photo_count']) > 0 ? ', ${_i(w['photo_count'])} fotoğraf' : ''})',
       ];
     case 'maintenance':

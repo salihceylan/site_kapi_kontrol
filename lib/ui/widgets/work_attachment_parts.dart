@@ -1246,3 +1246,43 @@ class WorkAttachmentSection extends StatelessWidget {
     );
   }
 }
+
+/// Fotoğraf yeniden kullanım uyarıları (100, P2-6; YALNIZ yönetim görünümü): aynı fotoğraf sitedeki başka bir kayıtta da
+/// kullanılmış ya da bu kayıtta yinelenmiş. Yalnız UYARIDIR: hiçbir işlemi (yükleme, durum, kabul) engellemez, düğme kapatmaz.
+/// Metin sunucudan gelir ve aynen gösterilir; başında hangi fotoğraf olduğu ("Fotoğraf 2:") yazılır. Uyarı yoksa hiçbir şey
+/// çizilmez. Tür yalnız renkle verilmez: uyuşmazlık uyarısı "uyarı" ikonlu, diğerleri "bilgi" ikonlu çizilir.
+class WorkPhotoWarningList extends StatelessWidget {
+  const WorkPhotoWarningList({super.key, required this.warnings, required this.attachments});
+
+  final List<WorkPhotoWarning> warnings;
+
+  /// Ekranda görünen sıra (1'den): uyarının hangi fotoğrafa ait olduğunu söylemek için.
+  final List<WorkAttachment> attachments;
+
+  String _text(WorkPhotoWarning warning) {
+    final index = attachments.indexWhere((a) => a.id == warning.attachmentId);
+    return index < 0 ? warning.message : 'Fotoğraf ${index + 1}: ${warning.message}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (warnings.isEmpty) return const SizedBox.shrink();
+    return Column(
+      key: const ValueKey<String>('work_photo_warnings'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: AppSpace.sm),
+        for (final warning in warnings)
+          Padding(
+            padding: const EdgeInsets.only(bottom: AppSpace.xs),
+            child: InlineNotice(
+              key: ValueKey<String>('work_photo_warning_${warning.code}_${warning.attachmentId}'),
+              tone: warning.isWarning ? AppTone.warning : AppTone.info,
+              icon: warning.isWarning ? Icons.warning_amber_rounded : Icons.info_outline_rounded,
+              message: _text(warning),
+            ),
+          ),
+      ],
+    );
+  }
+}

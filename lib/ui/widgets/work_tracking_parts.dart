@@ -133,7 +133,7 @@ class WorkResidentCard extends StatelessWidget {
     final semantic = StringBuffer('Talep: $title. Durum: ${i.status.label}.');
     if (i.unread) semantic.write(' Yeni güncelleme var.');
     if (i.urgent) semantic.write(' Acil olarak işaretlendi.');
-    semantic.write(' ${i.category.label}. Konum: ${i.locationText}.');
+    semantic.write(' ${i.categoryText}. Konum: ${i.locationText}.');
     if (i.attachmentCount > 0) semantic.write(' ${i.attachmentCount} fotoğraf.');
     if (showSite && site.isNotEmpty) semantic.write(' $site.');
     if (i.createdAt != null) {
@@ -177,7 +177,7 @@ class WorkResidentCard extends StatelessWidget {
                   ),
                   const SizedBox(height: AppSpace.xs),
                   Text(
-                    '${i.category.label} · ${i.locationText}',
+                    '${i.categoryText} · ${i.locationText}',
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: th.bodyMedium?.copyWith(color: p.textSecondary),
@@ -225,7 +225,7 @@ class WorkManagedCard extends StatelessWidget {
       'Talep: $title. Durum: ${i.status.label}. Öncelik: ${i.priority.label}.',
     );
     if (i.residentUrgent) semantic.write(' Sakin acil olarak işaretledi.');
-    semantic.write(' ${i.category.label}. Konum: ${i.locationText}.');
+    semantic.write(' ${i.categoryText}. Konum: ${i.locationText}.');
     if (i.attachmentCount > 0) semantic.write(' ${i.attachmentCount} fotoğraf.');
     if (requester.isNotEmpty) semantic.write(' Açan: $requester.');
     semantic.write(' $assigneeText.');
@@ -273,7 +273,7 @@ class WorkManagedCard extends StatelessWidget {
                   ),
                   const SizedBox(height: AppSpace.xs),
                   Text(
-                    '${i.category.label} · ${i.locationText}',
+                    '${i.categoryText} · ${i.locationText}',
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: th.bodyMedium?.copyWith(color: p.textSecondary),

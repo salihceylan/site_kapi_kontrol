@@ -58,6 +58,7 @@ Map<String, dynamic> wkResident(
   String siteName = 'Gül Sitesi',
   String? dueDate,
   String? apartmentLabel,
+  String? categoryLabel,
 }) {
   final terminal = _terminal(status);
   return <String, dynamic>{
@@ -65,6 +66,7 @@ Map<String, dynamic> wkResident(
     'site_code': site,
     'site_name': siteName,
     'category': category,
+    'category_label': ?categoryLabel,
     'location_type': location,
     'title': title,
     'description': description,
@@ -102,11 +104,13 @@ Map<String, dynamic> wkManaged(
   int site = 11,
   String? dueDate,
   Map<String, dynamic>? equipment,
+  String? categoryLabel,
 }) {
   return <String, dynamic>{
     'id': id,
     'site_code': site,
     'category': category,
+    'category_label': ?categoryLabel,
     'location_type': location,
     'title': title,
     'description': description,
@@ -194,6 +198,48 @@ Map<String, dynamic> wkAttachment(
     'uploaded_by_name': uploadedBy,
     'uploaded_by_me': mine,
     'created_at': at,
+  };
+}
+
+/// Kategori satırı (sunucu `Category` biçimi). [system] true: hazır dört kategoriden biri.
+Map<String, dynamic> wkCategory(
+  int id,
+  String key,
+  String label, {
+  bool system = false,
+  bool active = true,
+  int order = 0,
+  int? itemCount,
+}) {
+  return <String, dynamic>{
+    'id': id,
+    'key': key,
+    'label': label,
+    'is_system': system,
+    'is_active': active,
+    'sort_order': order,
+    'item_count': ?itemCount,
+  };
+}
+
+/// Fotoğraf yeniden kullanım uyarısı (sunucu `PhotoWarning` biçimi).
+Map<String, dynamic> wkPhotoWarning(
+  int attachmentId, {
+  String code = 'photo_reused_other_location',
+  String severity = 'warning',
+  String message =
+      'Bu fotoğraf farklı bir konuma ait başka bir kayıtta da kullanılmış (#45 · B Blok - Daire 5). Konum etiketiyle uyuşmuyor olabilir; fotoğrafı kontrol edin.',
+  List<int> related = const <int>[45],
+}) {
+  return <String, dynamic>{
+    'code': code,
+    'severity': severity,
+    'attachment_id': attachmentId,
+    'message': message,
+    'related_count': related.length,
+    'related': <Map<String, dynamic>>[
+      for (final id in related) <String, dynamic>{'work_item_id': id, 'location_label': 'B Blok - Daire 5', 'same_location': false, 'created_at': '2026-10-20T08:00:00.000Z'},
+    ],
   };
 }
 
@@ -582,7 +628,8 @@ class FakeWorkService extends WorkTrackingService {
       id,
       title: request.title.trim(),
       description: request.description.trim(),
-      category: request.category.apiValue,
+      category: request.categoryApiValue,
+      categoryLabel: categoryRows.where((c) => c['key'] == request.categoryApiValue).map((c) => c['label'] as String).firstOrNull,
       location: request.locationType.apiValue,
       urgent: request.urgent,
       site: request.siteCode,
@@ -771,6 +818,7 @@ class FakeWorkService extends WorkTrackingService {
           ? const <String>[]
           : kWorkTransitions[row['status']] ?? const <String>[],
       'attachments': _managerAttachments(id),
+      'photo_warnings': photoWarnings[id] ?? const <Map<String, dynamic>>[],
     });
   }
 
@@ -1048,6 +1096,11 @@ class FakeWorkService extends WorkTrackingService {
     row['status'] = 'ready';
     attachmentBytes[attachmentId] = builder.takeBytes();
     _attachmentEvent(id, siteCode, 'attachment_added', attachmentId);
+    final warnings = siteCode == null ? null : uploadWarnings[id];
+    if (warnings != null && warnings.isNotEmpty) {
+      // Sunucu gibi: yalnız yönetim yanıtında ve yalnız eşleşme varsa `photo_warnings` eklenir.
+      return WorkAttachment.fromJson(<String, dynamic>{'attachment': row, 'photo_warnings': warnings})!;
+    }
     return WorkAttachment.fromJson(row)!;
   }
 
@@ -1099,6 +1152,124 @@ class FakeWorkService extends WorkTrackingService {
     // Hazır ek silinince herkese açık olay; tamamlanmamış kayıt olaysız kalkar (sunucu gibi).
     if (wasReady) _attachmentEvent(id, siteCode, 'attachment_removed', attachmentId);
   }
+
+  // --- Kategoriler (100) ---
+
+  /// Sitenin kategorileri (sunucu biçimi, sıralı). Varsayılan: dört hazır kategori. Kullanım sayısı [managedRows]'tan.
+  final List<Map<String, dynamic>> categoryRows = <Map<String, dynamic>>[
+    wkCategory(700, 'ariza', 'Arıza', system: true, order: 10),
+    wkCategory(701, 'bakim', 'Bakım', system: true, order: 20),
+    wkCategory(702, 'sikayet_oneri', 'Şikayet / Öneri', system: true, order: 30),
+    wkCategory(703, 'diger', 'Diğer', system: true, order: 40),
+  ];
+
+  /// Kategori çağrıları: `list:<site>`, `mine:<site>`, `create:<ad>`, `update:<id>:<alan>`, `delete:<id>`.
+  final List<String> categoryOps = <String>[];
+  int _nextCategoryId = 800;
+
+  int _categoryUse(String key) => managedRows.where((r) => r['category'] == key).length;
+
+  Map<String, dynamic>? _categoryRow(int id) {
+    for (final row in categoryRows) {
+      if (row['id'] == id) return row;
+    }
+    return null;
+  }
+
+  ApiException _categoryNotFound() => ApiException(
+    'Kategori bulunamadı. Listeyi yenileyip tekrar deneyin.',
+    statusCode: 404,
+    code: 'WORK_CATEGORY_NOT_FOUND',
+  );
+
+  bool _hasOtherActive(int id) => categoryRows.any((c) => c['id'] != id && c['is_active'] == true);
+
+  @override
+  Future<List<WorkCategoryOption>> categories(int siteCode) async {
+    categoryOps.add('list:$siteCode');
+    await _enter('categories');
+    return WorkCategoryOption.listFrom(<Map<String, dynamic>>[
+      for (final c in categoryRows)
+        <String, dynamic>{...c, if (kind == WorkSiteAccess.manager) 'item_count': _categoryUse(c['key'] as String)},
+    ]);
+  }
+
+  @override
+  Future<List<WorkCategoryOption>> myCategories(int siteCode) async {
+    categoryOps.add('mine:$siteCode');
+    await _enter('myCategories');
+    return WorkCategoryOption.listFrom(<Map<String, dynamic>>[
+      for (final c in categoryRows)
+        if (c['is_active'] == true) Map<String, dynamic>.of(c),
+    ]);
+  }
+
+  @override
+  Future<WorkCategoryOption> createCategory(int siteCode, String label) async {
+    final name = label.trim();
+    categoryOps.add('create:$name');
+    await _enter('createCategory');
+    if (categoryRows.any((c) => (c['label'] as String).toLowerCase() == name.toLowerCase())) {
+      throw ApiException('Bu adda bir kategori zaten var.', statusCode: 409, code: 'WORK_CATEGORY_NAME_TAKEN');
+    }
+    final row = wkCategory(_nextCategoryId++, 'k_${name.toLowerCase().replaceAll(' ', '_')}', name, order: (categoryRows.length + 1) * 10);
+    categoryRows.add(row);
+    return WorkCategoryOption.fromJson(<String, dynamic>{...row, 'item_count': 0})!;
+  }
+
+  @override
+  Future<WorkCategoryOption> updateCategory(int siteCode, int id, {String? label, bool? isActive}) async {
+    categoryOps.add('update:$id:${label != null ? 'label=$label' : ''}${isActive != null ? 'active=$isActive' : ''}');
+    await _enter('updateCategory');
+    final row = _categoryRow(id);
+    if (row == null) throw _categoryNotFound();
+    if (label != null) {
+      if (categoryRows.any((c) => c['id'] != id && (c['label'] as String).toLowerCase() == label.trim().toLowerCase())) {
+        throw ApiException('Bu adda bir kategori zaten var.', statusCode: 409, code: 'WORK_CATEGORY_NAME_TAKEN');
+      }
+      row['label'] = label.trim();
+    }
+    if (isActive != null) {
+      if (!isActive && row['is_active'] == true && !_hasOtherActive(id)) {
+        throw ApiException('En az bir kategori açık kalmalıdır.', statusCode: 409, code: 'WORK_CATEGORY_LAST_ACTIVE');
+      }
+      row['is_active'] = isActive;
+    }
+    return WorkCategoryOption.fromJson(<String, dynamic>{...row, 'item_count': _categoryUse(row['key'] as String)})!;
+  }
+
+  @override
+  Future<WorkCategoryDeleteResult> deleteCategory(int siteCode, int id) async {
+    categoryOps.add('delete:$id');
+    await _enter('deleteCategory');
+    final row = _categoryRow(id);
+    if (row == null) throw _categoryNotFound();
+    if (row['is_system'] == true) {
+      throw ApiException('Hazır kategoriler silinemez.', statusCode: 409, code: 'WORK_CATEGORY_SYSTEM');
+    }
+    final used = _categoryUse(row['key'] as String);
+    if (used > 0) {
+      if (row['is_active'] == true && !_hasOtherActive(id)) {
+        throw ApiException('En az bir kategori açık kalmalıdır.', statusCode: 409, code: 'WORK_CATEGORY_LAST_ACTIVE');
+      }
+      row['is_active'] = false;
+      return WorkCategoryDeleteResult.fromJson(<String, dynamic>{
+        'deleted': false,
+        'deactivated': true,
+        'category': <String, dynamic>{...row, 'item_count': used},
+      });
+    }
+    categoryRows.remove(row);
+    return WorkCategoryDeleteResult.fromJson(const <String, dynamic>{'deleted': true});
+  }
+
+  // --- Fotoğraf uyarıları (100) ---
+
+  /// Talep kimliği -> yönetim ayrıntısında dönen `photo_warnings` (sunucu biçimi).
+  final Map<int, List<Map<String, dynamic>>> photoWarnings = <int, List<Map<String, dynamic>>>{};
+
+  /// Talep kimliği -> yükleme tamamlama yanıtındaki `photo_warnings` (yönetim yolu).
+  final Map<int, List<Map<String, dynamic>>> uploadWarnings = <int, List<Map<String, dynamic>>>{};
 
   // --- Rapor ---
 

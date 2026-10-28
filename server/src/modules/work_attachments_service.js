@@ -35,6 +35,7 @@ import {
   parseAttachmentInput,
 } from './work_attachments_common.js';
 import { activeAttachmentSql, itemScopeSql, loadAttachmentRow, loadVisibleAttachment } from './work_attachments_read.js';
+import { loadPhotoWarningsSafe } from './work_photo_checks.js';
 import { uploadAlreadyCompleted, uploadExpired } from './document_common.js';
 import { newStorageKey, removeStoredFile, resolveStorageRoot } from './document_storage.js';
 
@@ -273,7 +274,15 @@ export async function completeAttachmentUpload({ scope, target, actor, sha256 })
     });
     return actorCode;
   });
-  return attachmentResponse(target.attId, userCode, scope);
+  const response = await attachmentResponse(target.attId, userCode, scope);
+  // Fotoğraf yeniden kullanım uyarısı (100, P2-6): yalnız YÖNETİM yanıtında ve yalnız varsa; sakin yanıtında alan hiç yoktur. Yükleme zaten kesinleşmiştir: hesaplanamazsa yanıt bozulmaz.
+  if (scope.kind !== 'resident') {
+    const warnings = await loadPhotoWarningsSafe(pool, { siteCode: target.siteCode, itemId: target.itemId, attachmentId: target.attId, scope });
+    if (warnings.length > 0) {
+      response.photo_warnings = warnings;
+    }
+  }
+  return response;
 }
 
 // --- DELETE .../attachments/:attId ----------------------------------------------------------------------------------
