@@ -54,7 +54,8 @@ function fakeQuery(text, params = []) {
   }
   if (/^SELECT site_code FROM sites WHERE site_code = \$1 LIMIT 1$/.test(sql)) return ok(state.sites.has(Number(params[0])) ? [{ site_code: String(params[0]) }] : []);
   if (/^SELECT enabled FROM site_modules WHERE site_code = \$1 AND module_code = \$2 LIMIT 1$/.test(sql)) {
-    return ok(params[1] === 'survey' ? [{ enabled: state.moduleEnabled }] : []);
+    // Anket temel modüldür (Kural 25): sahte DB yine de gerçek satırı döndürür (moduleEnabled === 'yok' -> satır yok); kapı satıra BAKMAZ.
+    return ok(params[1] === 'survey' && state.moduleEnabled !== 'yok' ? [{ enabled: state.moduleEnabled }] : []);
   }
   // Okuma sorguları (yalnız site_code ile): anket yoksa boş
   if (/^SELECT COUNT\(\*\)::INTEGER AS n FROM surveys s WHERE s\.site_code = \$1/.test(sql)) return ok([{ n: 0 }]);
@@ -197,14 +198,15 @@ describe('yönetim uçları: sıra biçim -> yetki -> site -> modül (yetki matr
     assert.deepEqual([missing.status, missing.body.code], [404, 'SITE_NOT_FOUND']);
   });
 
-  it('modül KAPALI: yetkili herkes 403 MODULE_DISABLED { module: survey }; yetki modülden ÖNCE denetlenir', async () => {
-    state.moduleEnabled = false;
-    for (const user of [users.superUser, users.manager, users.board]) {
-      const res = await call('GET', url(), { user });
-      assert.deepEqual([res.status, res.body.code, res.body.module], [403, 'MODULE_DISABLED', 'survey']);
+  it('anket TEMEL modül (Kural 25): site_modules satırı enabled=false (ya da hiç yok) olsa bile MODULE_DISABLED YOK; rol denetimi aynen sürer', async () => {
+    for (const row of [false, 'yok']) {
+      state.moduleEnabled = row;
+      for (const user of [users.superUser, users.manager, users.board]) {
+        const res = await call('GET', url(), { user });
+        assert.deepEqual([res.status, res.body.code], [200, undefined], `${row}: ${user.full_name}`);
+      }
+      assert.equal((await call('GET', url(), { user: users.outsider })).body.code, 'FORBIDDEN_ROLE');
     }
-    assert.equal((await call('GET', url(), { user: users.outsider })).body.code, 'FORBIDDEN_ROLE');
-    assert.equal((await call('POST', url(), { user: users.manager, body: GOOD })).body.code, 'MODULE_DISABLED');
   });
 
   it('yönetici / süper / kurul listeyi okur: { items, total }; her sorgu site_code taşır', async () => {
@@ -327,10 +329,12 @@ describe('sakin uçları', () => {
     }
   });
 
-  it('liste: site_code verilmiş ve modül kapalıysa 403 MODULE_DISABLED; aksi hâlde { items, next_before_id }; bozuk sorgu 400', async () => {
-    state.moduleEnabled = false;
-    const closed = await call('GET', `/app/surveys?site_code=${SITE}`, { user: users.resident });
-    assert.deepEqual([closed.status, closed.body.code, closed.body.module], [403, 'MODULE_DISABLED', 'survey']);
+  it('liste: site_code verilmiş olsa da satır kapalı/yok ise MODULE_DISABLED YOK (temel modül); { items, next_before_id }; bozuk sorgu 400', async () => {
+    for (const row of [false, 'yok']) {
+      state.moduleEnabled = row;
+      const open = await call('GET', `/app/surveys?site_code=${SITE}`, { user: users.resident });
+      assert.deepEqual([open.status, open.body], [200, { items: [], next_before_id: null }], String(row));
+    }
     state.moduleEnabled = true;
     const list = await call('GET', '/app/surveys', { user: users.resident });
     assert.deepEqual([list.status, list.body], [200, { items: [], next_before_id: null }]);

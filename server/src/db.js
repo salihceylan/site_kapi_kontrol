@@ -44,7 +44,7 @@ import { ensureBankImportSchema } from './modules/bank_import_schema.js';
 import { ensureOAuthSchema } from './modules/oauth_schema.js';
 import { ensureIntegritySchema } from './modules/integrity_schema.js';
 import { ensureFinanceFundsSchema } from './modules/finance_funds_schema.js';
-import { FINANCE_CORE_BACKFILL_SQL } from './modules/finance_core_module.js';
+import { CORE_MODULES_BACKFILL_SQL } from './modules/core_modules.js';
 import { ensureTenantAdminRule } from './modules/apartment_tenant_admin_sql.js';
 
 dotenv.config();
@@ -2028,12 +2028,13 @@ export async function ensureDbSchema() {
       console.error('[DB] door_control backfill hatasi:', e?.message);
     }
 
-    // 079 Aidat ve Finans temel modül (Kural 25): her sitede açık satır + bekleyen finans talepleri sonuçlanır. Hata açılışı durdurmaz.
+    // 079 / 082 temel modüller (Kural 25; Aidat ve Finans, Anket, Komşu Panosu, Ekipman, Faaliyet Raporu, Dosya Deposu ... = catalog.js core): her sitede açık satır
+    // + bekleyen talepleri sonuçlanır (katalogdan türetilir; idempotent). Hata açılışı durdurmaz.
     try {
-      await client.query(FINANCE_CORE_BACKFILL_SQL);
+      await client.query(CORE_MODULES_BACKFILL_SQL);
     } catch (e) {
       // eslint-disable-next-line no-console
-      console.error('[DB] 079 finans temel modul doldurma hatasi:', e?.code || e?.message);
+      console.error('[DB] 079/082 temel modul doldurma hatasi:', e?.code || e?.message);
     }
 
     // 081 Kiraci her zaman daire admini: guncel kiracisi olup admini malik (ya da kiraci olmayan) kalan dairelerde admin kiraciya gecer. Aday yoksa tek okuma. Hata acilisi durdurmaz.

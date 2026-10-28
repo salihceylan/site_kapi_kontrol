@@ -186,7 +186,7 @@ ama alanın bedeli bizde kalır; bu durumda dosya alanı site başına ücretli 
 
 ## 7. D1 uygulaması (2026-10-21)
 
-Modül `drive_storage` ("Dosya Deposu (Google Drive)"), varsayılan KAPALI. Mevcut belge ve iş takibi yüklemeleri DEĞİŞMEDİ (sunucu diskinde sürer);
+Modül `drive_storage` ("Dosya Deposu (Google Drive)"): TEMEL modül (2026-10-28, AGENTS.md Kural 25): `drive_storage` her sitede hep açıktır; talep edilmez, kapatılamaz (`site_modules` satırı kurulumda yazılır, `migrations/082` mevcut siteleri doldurur). Google Drive hesabı ayrıca bağlanır. Mevcut belge ve iş takibi yüklemeleri DEĞİŞMEDİ (sunucu diskinde sürer);
 yeni uçlar kendi yolundadır. Google bilgileri `.env`'de yoksa arayüz ve `POST .../connect` "Google Drive bağlantısı Yakında…" (503 `DRIVE_NOT_CONFIGURED`) der.
 
 **.env:** `DRIVE_CLIENT_ID`, `DRIVE_CLIENT_SECRET`, `DRIVE_REDIRECT_URI` (= `https://<api>/drive/oauth/callback`), `DRIVE_TOKEN_KEY` (en az 32 karakter), isteğe bağlı `DRIVE_PENDING_DIR`.

@@ -23,7 +23,8 @@ import {
 } from './survey_common.js';
 import { TARGET_APARTMENTS_SQL, TOTAL_VOTES_SQL, lockActiveUser, withSurveyTransaction } from './survey_service.js';
 
-const MODULE_ON = `EXISTS (SELECT 1 FROM site_modules smod WHERE smod.site_code = s.site_code AND smod.module_code = '${SURVEY_MODULE}' AND smod.enabled = TRUE)`;
+// Anket temel modüldür (Kural 25): site_modules satırı yoksa açık sayılır (satır varsa enabled değeri; açılıştaki doldurma onu açık yazar).
+const MODULE_ON = `COALESCE((SELECT smod.enabled FROM site_modules smod WHERE smod.site_code = s.site_code AND smod.module_code = '${SURVEY_MODULE}'), TRUE)`;
 
 /** Çağıran (parametre) anketin (takma ad `s`) hedef kitlesinde mi: hedef dairelerden birinde AKTİF üyelik. */
 const eligibleSql = (user) => `EXISTS (SELECT 1 FROM apartment_memberships am WHERE am.user_code = ${user} AND am.is_active = TRUE AND am.apartment_id IN (${TARGET_APARTMENTS_SQL}))`;

@@ -48,12 +48,12 @@ const OPTIONS = ['Evet', 'Hayır', 'Çekimser'];
 const survey = (over = {}) => ({ id: 7, status: 'open', closes_at: null, options: OPTIONS, one_vote_per_apartment: false, anonymous: true, ...over });
 
 describe('katalog girişi', () => {
-  it("survey online_payment'tan hemen sonra: core false, available, varsayılan KAPALI, Türkçe ad", () => {
+  it("survey online_payment'tan hemen sonra: TEMEL modül (Kural 25: core true, available, varsayılan AÇIK), Türkçe ad", () => {
     const definition = getModuleDefinition('survey');
     const codes = MODULE_CATALOG.map((m) => m.code);
     assert.equal(codes.indexOf('survey'), codes.indexOf('online_payment') + 1);
     assert.equal(definition.name, 'Anket ve Oylama');
-    assert.deepEqual([definition.core, definition.status, definition.defaultEnabled], [false, 'available', false]);
+    assert.deepEqual([definition.core, definition.status, definition.defaultEnabled], [true, 'available', true]);
     assert.deepEqual([moduleDisabled().statusCode, moduleDisabled().code, moduleDisabled().extra], [403, 'MODULE_DISABLED', { module: 'survey' }]);
     assert.equal(EXPORT_ROW_LIMITS.survey_votes_cast, 500);
   });

@@ -457,7 +457,7 @@ abstract final class HelpContent {
       title: 'Komşu panosuna nasıl ilan veririm?',
       icon: Icons.forum_rounded,
       steps: <String>[
-        'Menüden “Komşu Panosu” ekranını açın (site yöneticisi modülü açtıysa görünür).',
+        'Menüden “Komşu Panosu” ekranını açın.',
         'Yeni ilan düğmesine dokunup başlık ve metni yazın; ilan yönetici onayına gider.',
         'Onaylanınca komşularınız ilanı görür. Uygunsuz bir ilanı Şikayet et düğmesiyle yöneticiye bildirebilirsiniz.',
       ],
@@ -584,7 +584,7 @@ abstract final class HelpContent {
       title: 'Ekipman, bakım ve teklifleri nasıl takip ederim?',
       icon: Icons.build_circle_rounded,
       steps: <String>[
-        'Menüden “Ekipman ve Bakım” ekranını açın (süper kullanıcı modülü açtıysa görünür). Ekipman ekle ile asansör, interkom, kamera gibi ekipmanları kaydedin.',
+        'Menüden “Ekipman ve Bakım” ekranını açın. Ekipman ekle ile asansör, interkom, kamera gibi ekipmanları kaydedin.',
         'Ekipmana dokunup Plan ekle ile aylık, 3, 6 ya da 12 aylık bakım planı kurun. Asansör gibi yasal kontrolü olan ekipmanda Yasal kontrol planı yıllık hatırlatma tarihi açar.',
         'Bakım yapılınca Yapıldı ya da Bakım kaydı ile tarih, firma ve maliyeti girin; plan bir sonraki tarihe ilerler. Bakım takvimi sekmesi yaklaşan ve geciken bakımları listeler.',
         'Teklifler sekmesinde aynı konudaki teklifleri karşılaştırın (en düşük tutar işaretlenir). Kabul ettiğiniz teklif gider ya da sözleşme olarak kaydedilir. Gider kırılımı sekmesi giderleri ekipman bazında gösterir.',
@@ -669,7 +669,7 @@ abstract final class HelpContent {
         'Finans modülü açılınca menüde “Finans” ekranı (“Daireler”, “Tanımlar” ve “Dönemler” sekmeleri) görünür.',
         'Finans açıkken ana sayfada “Bu ay” bölümü görünür: yazılan, toplanan, geciken daire ve kasa sayıları, beş adımlı aylık döngü ve son hareketler. Ay kapatmak isteğe bağlıdır; “Dönemler” sekmesinden istediğiniz ayı seçince o aya kadar açık aylar birlikte kapanır.',
         'Sitenizde geçerli kuralları (gecikme tazminatı üst sınırı, işletme projesi ve saklama süreleri) aynı ekrandaki “Kurallar” bölümünde “Kuralları Görüntüle” ile görürsünüz; değerleri sistem yöneticisi belirler.',
-        'Sitenin dosyalarını kendi Google Drive hesabında saklamak için “Dosya Deposu (Google Drive)” modülünü açın; aynı ekrandaki “Google Drive bağla” düğmesi Google onayına götürür. Bağlantı henüz hazır değilse Yakında… yazar.',
+        'Sitenin dosyalarını kendi Google Drive hesabında saklamak için “Dosya Deposu (Google Drive)” modülü her sitede açıktır; aynı ekrandaki “Google Drive bağla” düğmesi Google onayına götürür. Bağlantı henüz hazır değilse Yakında… yazar.',
       ],
     ),
     HelpTopic(
@@ -689,7 +689,7 @@ abstract final class HelpContent {
       title: 'Yıllık faaliyet raporunu nasıl hazırlarım?',
       icon: Icons.assignment_rounded,
       steps: <String>[
-        'Faaliyet Raporu modülü açıkken menüden “Faaliyet Raporu” ekranını açıp rapor yılını seçin; dokuz bölüm kayıtlarınızdan otomatik dolar.',
+        'Menüden “Faaliyet Raporu” ekranını açıp rapor yılını seçin; dokuz bölüm kayıtlarınızdan otomatik dolar.',
         'Bir bölümü açıp metni dilediğiniz gibi düzenleyin; “Sistem taslağına dön” bölümü yeniden kayıtlardan doldurur.',
         '“Gelecek yıl tahmini” bölümüne gider artış yüzdesini yazıp “Hesapla”ya basın.',
         '“Taslağı kaydet” düzenlemelerinizi saklar, “PDF” raporu verir.',

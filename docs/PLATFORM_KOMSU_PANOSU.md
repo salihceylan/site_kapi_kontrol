@@ -1,6 +1,6 @@
 # Komşu Panosu (S4)
 
-Modül kodu `neighbor_board`, varsayılan KAPALI (süper açar, yönetici modül talep eder). Migration 064 (`server/migrations/064_neighbor_board.sql`, `neighbor_board_schema.js` ile aynı DDL).
+Modül kodu `neighbor_board`. TEMEL modül (2026-10-28, AGENTS.md Kural 25): `neighbor_board` her sitede hep açıktır; talep edilmez, kapatılamaz (`site_modules` satırı kurulumda yazılır, `migrations/082` mevcut siteleri doldurur). Migration 064 (`server/migrations/064_neighbor_board.sql`, `neighbor_board_schema.js` ile aynı DDL).
 
 ## Tablolar
 - `neighbor_posts`: site_code, author_user_code (kullanıcı silinince NULL), title (3-120), body (3-2000), status, decision_note (en çok 300), decided_by, decided_at.

@@ -67,9 +67,10 @@ describe('equipment girdi dogrulama', () => {
     assert.equal(DEFAULT_KINDS.length, 9);
     assert.equal(DEFAULT_KINDS.find((k) => k.code === 'asansor').legal_months, 12);
   });
-  it('modul katalogda var ve varsayilan KAPALI', () => {
+  it('modul katalogda var ve TEMEL modul (Kural 25): core + varsayilan ACIK', () => {
     const entry = (MODULE_CATALOG ?? []).find((m) => m.code === 'equipment');
     assert.ok(entry);
-    assert.equal(entry.defaultEnabled, false);
+    assert.equal(entry.core, true);
+    assert.equal(entry.defaultEnabled, true);
   });
 });
