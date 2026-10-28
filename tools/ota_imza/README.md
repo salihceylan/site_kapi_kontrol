@@ -180,7 +180,7 @@ Yapılacaklar:
 
 Sağladıkları:
 
-- Sunucu ya da yönetici hesabı ele geçse bile **özel anahtar olmadan** cihazın kabul edeceği paket üretilemez (cihaz geçerli imzasız / yanlış imzalı paketi yazmaz).
+- Firmware yukarıdaki doğrulamayı uyguladığında, sunucu ya da yönetici hesabı ele geçse bile **özel anahtar olmadan** cihazın kabul edeceği paket üretilemez (cihaz imzasız / yanlış imzalı paketi yazmaz). Bu araç yalnızca imzayı üretir ve denetler; cihaz tarafındaki zorunluluk firmware işidir.
 - Hedef, sürüm, boyut ve özet imzaya bağlıdır: başka hedefe, başka sürüm etiketiyle ya da değiştirilmiş içerikle yeniden oynatma reddedilir.
 - Tek bit değişen `.bin`, tek hane değişen imza, değiştirilmiş `.sig` alanı (sürüm, hedef, boyut, özet, `key_id`) ve başka anahtarın imzası **reddedilir** (testlerle sınanır).
 - Özel anahtar yalnızca depo dışı yoldan okunur/yazılır; var olan anahtar ezilmez; hiçbir çıktıda özel anahtar ya da parola görünmez (testlerle sınanır).
@@ -218,6 +218,7 @@ döngüsü ve **bozuk bin / bozuk imza / değiştirilmiş `.sig` / yanlış anah
 | `lib/anahtar.mjs` | Anahtar üretimi/okuma/yazma, genel anahtar biçimleri, **depo-içi koruma** |
 | `lib/imaj.mjs` | İmaj okuma, ESP32 başlık / çip / hedef denetimi, sürüm metni sezgisi |
 | `lib/imza.mjs` | İmzalama ve doğrulama çekirdeği |
+| `lib/dosya.mjs` | Boyut sınırlı küçük dosya okuma (anahtar, imza, manifest): yanlış dosya belleğe alınmadan reddedilir |
 | `lib/hata.mjs` | Hata sınıfları (çıkış kodu eşlemesi), güvenli mesaj biçimlendirme |
 | `.env.example` | Ortam değişkeni **adları** (değer yok) |
 | `test/` | Testler ve açık test vektörleri |
