@@ -5,6 +5,9 @@
 // sunucunun kalıcı reddi (aynı gün farklı değer, sıra dışı, sayaç yok…) kayda `error` olarak yazılır ve görevli düzeltene dek yeniden denenmez.
 // Sunucu aynı sayaç+tarih+değeri sessizce kabul ettiği için (replayed) bir yanıtı kaçırıp yeniden göndermek güvenlidir.
 // Değerler, fotoğraflar ve belirteç günlüğe YAZILMAZ.
+//
+// "Silmeyi biz yapmayız" (karar K6): sunucu okumayı kabul etse bile fotoğrafın telefondaki kopyasını uygulama KENDİLİĞİNDEN SİLMEZ; yalnız kullanıcı isterse
+// ([MeterFieldQueue.deleteKeptPhotos]) ya da bekleyen kaydı kendisi silerse ([MeterFieldQueue.remove]) gider. Sunucu fotoğrafı düşürürse ("none") kopya zaten durur.
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io' show Directory, File;
@@ -27,6 +30,9 @@ abstract class MeterFieldStore {
   Future<String?> writePhoto(String id, Uint8List bytes);
   Future<Uint8List?> readPhoto(String path);
   Future<void> deletePhoto(String path);
+
+  /// Cihazda duran tüm fotoğraf dosyalarının yolları (bekleyenler ve gönderilmiş okumaların kopyaları); dosya desteklenmiyorsa (web) boş.
+  Future<List<String>> listPhotos();
 }
 
 class LocalMeterFieldStore implements MeterFieldStore {
@@ -91,11 +97,22 @@ class LocalMeterFieldStore implements MeterFieldStore {
       // Silinemeyen dosya kuyruğu bozmaz.
     }
   }
+
+  @override
+  Future<List<String>> listPhotos() async {
+    if (kIsWeb) return <String>[];
+    try {
+      final dir = await _dir();
+      return <String>[for (final entry in dir.listSync()) if (entry is File) entry.path];
+    } on Object {
+      return <String>[];
+    }
+  }
 }
 
 /// Gönderim turunun özeti.
 class MeterFlushReport {
-  const MeterFlushReport({this.sent = 0, this.rejected = 0, this.remaining = 0, this.offline = false});
+  const MeterFlushReport({this.sent = 0, this.rejected = 0, this.remaining = 0, this.offline = false, this.keptPhotos = 0, this.photosMissed = 0});
 
   final int sent;
   final int rejected;
@@ -105,6 +122,12 @@ class MeterFlushReport {
 
   /// Ağ/sunucu hatasıyla durdu; sonra yeniden denenir.
   final bool offline;
+
+  /// Bu turda gönderilen okumaların telefonda KALAN fotoğraf kopyası sayısı (uygulama silmez; kullanıcı isterse siler).
+  final int keptPhotos;
+
+  /// Okuma kabul edildi ama sunucu fotoğrafı almadı (sınır / geçersiz / hata): kopya telefonda durur.
+  final int photosMissed;
 }
 
 class MeterFieldQueue {
@@ -142,12 +165,35 @@ class MeterFieldQueue {
     return item;
   }
 
+  /// Bekleyen kaydı KULLANICI siler (Sil düğmesi): kaydın fotoğrafı da onunla gider.
   Future<void> remove(String id) async {
     final all = await _store.load();
     for (final item in all.where((e) => e.id == id && e.photoPath != null)) {
       await _store.deletePhoto(item.photoPath!);
     }
     await _store.save(<PendingMeterReading>[for (final e in all) if (e.id != id) e]);
+  }
+
+  static String _samePath(String path) => path.replaceAll('\\', '/');
+
+  /// Gönderilmiş okumaların telefonda kalan fotoğraf kopyaları: cihazdaki fotoğraflardan hâlâ bekleyen (ya da reddedilmiş) bir kayda ait OLMAYANLAR.
+  Future<List<String>> _keptPhotoPaths() async {
+    final inUse = <String>{for (final item in await _store.load()) if (item.photoPath != null) _samePath(item.photoPath!)};
+    return <String>[for (final path in await _store.listPhotos()) if (!inUse.contains(_samePath(path))) path];
+  }
+
+  /// Telefonda duran, gönderilmiş okuma fotoğrafı kopyası sayısı.
+  Future<int> keptPhotoCount() async => (await _keptPhotoPaths()).length;
+
+  /// Gönderilmiş okumaların telefondaki fotoğraf kopyalarını siler. YALNIZ kullanıcı isteğiyle çağrılır ("Kopyaları sil"); uygulama bunu kendiliğinden yapmaz.
+  /// Bekleyen ya da reddedilmiş kayıtların fotoğrafına dokunmaz. Silinen sayıyı döner.
+  Future<int> deleteKeptPhotos() async {
+    var deleted = 0;
+    for (final path in await _keptPhotoPaths()) {
+      await _store.deletePhoto(path);
+      deleted++;
+    }
+    return deleted;
   }
 
   /// Reddedilen kaydın değerini düzeltir ve yeniden denemeye açar.
@@ -163,6 +209,8 @@ class MeterFieldQueue {
     var sent = 0;
     var rejected = 0;
     var offline = false;
+    var keptPhotos = 0;
+    var photosMissed = 0;
     try {
       var all = await _store.load();
       for (final item in List<PendingMeterReading>.of(all)) {
@@ -173,8 +221,12 @@ class MeterFieldQueue {
           if (bytes != null) b64 = base64Encode(bytes);
         }
         try {
-          await service.postFieldReading(item.siteCode, meterId: item.meterId, date: item.date, value: item.value, photoBase64: b64);
-          if (item.photoPath != null) await _store.deletePhoto(item.photoPath!);
+          final result = await service.postFieldReading(item.siteCode, meterId: item.meterId, date: item.date, value: item.value, photoBase64: b64);
+          // K6: fotoğrafın telefondaki kopyası SİLİNMEZ (sunucu kabul etse bile). Kullanıcı isterse siler (deleteKeptPhotos).
+          if (item.photoPath != null) {
+            keptPhotos++;
+            if (b64 != null && !result.replayed && result.photoStorage == 'none') photosMissed++;
+          }
           all = <PendingMeterReading>[for (final e in all) if (e.id != item.id) e];
           sent++;
         } on ApiException catch (e) {
@@ -189,7 +241,7 @@ class MeterFieldQueue {
         await _store.save(all);
       }
       await _store.save(all);
-      return MeterFlushReport(sent: sent, rejected: rejected, remaining: all.length, offline: offline);
+      return MeterFlushReport(sent: sent, rejected: rejected, remaining: all.length, offline: offline, keptPhotos: keptPhotos, photosMissed: photosMissed);
     } finally {
       _flushing = false;
     }

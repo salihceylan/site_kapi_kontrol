@@ -51,6 +51,16 @@ describe('metering_field (070)', () => {
     assert.equal(folderNameFor('elektrik', date), 'elektrikEkim_26');
   });
 
+  it('P1-11: okuma fotografinin adi OKM-<okuma no> onekini tasir (Drive ve sunucu yedegi ayni kural); Drive kaydi okumaya baglanir', () => {
+    const date = { year: 2026, month: 10, day: 20 };
+    const source = { type: 'meter_reading', id: 77 };
+    assert.equal(fileBaseName({ kind: 'su', block: blockLetter('A Blok'), apartment: unitNumber('Daire 13'), date, source }), 'OKM-77_AB_D13_201026');
+    const routes = readFileSync(path.join(here, '..', 'src', 'modules', 'metering_field_routes.js'), 'utf8');
+    assert.match(routes, /const source = \{ type: 'meter_reading', id: readingId \}/);
+    assert.match(routes, /data: photo\.data,\s*source,/, 'driveService.upload kaynak baglantisini alir');
+    assert.match(routes, /fileBaseName\(\{ kind: driveKind, block, apartment, date: parsed, source \}\)/, 'sunucu tablosundaki ad da onekli');
+  });
+
   it('fotograf dogrulama: tur, boyut, icerik', () => {
     assert.ok(decodePhoto(JPEG.toString('base64'), 'image/jpeg'));
     assert.equal(decodePhoto(JPEG.toString('base64'), 'image/png'), null);

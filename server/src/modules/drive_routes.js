@@ -1,12 +1,14 @@
 // Site Drive deposu (D1) uçları. Sözleşme: docs/PLATFORM_DRIVE_DEPOLAMA.md "D1 uygulaması".
 //
-//   GET    /manager/sites/:siteCode/drive                 durum (bağlı hesap, bekleyen sayısı, yapılandırma var mı)
+//   GET    /manager/sites/:siteCode/drive                 durum (bağlı hesap, bekleyen sayısı, yapılandırma var mı, yönetici uyarıları `warnings`)
 //   POST   /manager/sites/:siteCode/drive/connect         { url } Google onay adresi; yapılandırma yoksa 503 DRIVE_NOT_CONFIGURED ("Yakında…")
-//   DELETE /manager/sites/:siteCode/drive                 bağlantıyı keser (belirteç silinir, Google'da iptal edilir)
-//   GET    /manager/sites/:siteCode/drive/files           son dosyalar
+//   DELETE /manager/sites/:siteCode/drive                 bağlantıyı keser (belirteç silinir, Google'da iptal edilir; bekleyen dosyalar SİLİNMEZ)
+//   GET    /manager/sites/:siteCode/drive/files[?source_type=&source_id=]   son dosyalar (kaynak kayda göre süzülebilir: "bu kaydın belgeleri")
 //   POST   /manager/sites/:siteCode/drive/files?kind=&mime=&date=&block=&apartment=   (gövde: application/octet-stream) -> 201 { file }
+//          Kaynak kayıt bağı (source_type/source_id) HTTP sorgusundan ALINMAZ: doğrulanamayan bir kayda bağ kurulamasın; yalnız sunucu içi çağıranlar verir.
+//          Bekleme alanı doluysa 503 DRIVE_QUEUE_FULL (yeni dosya reddedilir, bekleyenlere dokunulmaz).
 //   GET    /manager/sites/:siteCode/drive/files/:id/content   Drive'dan sunucu üzerinden indirme
-//   POST   /manager/sites/:siteCode/drive/flush           bekleyenleri göndermeyi dener
+//   POST   /manager/sites/:siteCode/drive/flush           bekleyenleri göndermeyi dener (artan bekleme süreleri yok sayılır) -> { sent, waiting, overdue }
 //   GET    /drive/oauth/callback                          Google yönlendirmesi (kimliksiz; tek kullanımlık state ile)
 //
 // Yetki: site yöneticisi / süper kullanıcı (resolveManagedSite); `drive_storage` modülü kapalıysa 403 MODULE_DISABLED; başka site 403 FORBIDDEN_SITE.
@@ -95,11 +97,11 @@ driveRouter.delete(BASE, authRequired, driveWriteLimiter, handler({ context: 'dr
 })));
 
 driveRouter.get(`${BASE}/files`, authRequired, driveReadLimiter, handler({ context: 'drive_files', fallback: 'Dosyalar yüklenemedi.' }, async ({ req, siteCode }) => ({
-  body: await driveService.list(siteCode, req.query.limit),
+  body: await driveService.list(siteCode, req.query.limit, { source_type: req.query.source_type, source_id: req.query.source_id }),
 })));
 
 driveRouter.post(`${BASE}/flush`, authRequired, driveWriteLimiter, handler({ context: 'drive_flush', fallback: 'Bekleyen dosyalar gönderilemedi.' }, async ({ siteCode }) => ({
-  body: await driveService.flushPending(siteCode),
+  body: await driveService.flushPending(siteCode, { force: true }),
 })));
 
 // Yükleme: gövde YALNIZ yetki, modül ve hız sınırından sonra okunur (anonim istek 10 MB okutamaz).
