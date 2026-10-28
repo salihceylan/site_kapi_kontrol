@@ -420,6 +420,36 @@ export function isDeviceOwnedByAuthUser(device, authUser) {
   return byOwnerId || byAssignedCode;
 }
 
+/**
+ * KAPSAM (cihaz keşfi kapısı): cihaz, isteği yapan kullanıcıya "görünür" mü?
+ * Kapsam dışı = cihaz kullanıcının YÖNETMEDİĞİ bir siteye (devices.site_code) ya da kapıya (site_doors.assigned_device_id) bağlı VE
+ * kullanıcı cihazın sahibi değil. Kapsam dışı cihaz çağıran tarafta "bulunamadı" (404) gibi davranmalıdır: varlığı, sahibi
+ * (409) ve atanmışlığı (403) başka siteye sızmaz. Süper kullanıcı (managedSiteCodes === null) sınırsızdır; hiçbir yere bağlı olmayan
+ * envanter cihazı kapsamdadır (sahiplik / atanabilirlik kuralları ayrıca isDeviceAssignableToManagedSite'ta denetlenir).
+ * `device`: site_code, assigned_door_site_code, owner_user_id, assigned_user_code alanlarını taşıyan cihaz satırı.
+ */
+export function isDeviceInManagerScope(device, managedSiteCodes, authUser = null) {
+  if (managedSiteCodes === null) {
+    return true;
+  }
+  if (!device) {
+    return false;
+  }
+  if (authUser && isDeviceOwnedByAuthUser(device, authUser)) {
+    return true;
+  }
+  const managed = managedSiteCodes instanceof Set ? managedSiteCodes : new Set();
+  for (const raw of [device.site_code, device.assigned_door_site_code]) {
+    if (raw === null || raw === undefined) {
+      continue;
+    }
+    if (!managed.has(Number(raw))) {
+      return false;
+    }
+  }
+  return true;
+}
+
 export function isDeviceAssignableToManagedSite(device, managedSiteCodes, targetSiteCode, authUser = null) {
   if (device?.is_defective) {
     return false;
