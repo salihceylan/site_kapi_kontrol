@@ -54,9 +54,15 @@ import {
   resolveToggleTarget,
   sanitizeUserCodeList,
   shouldPromoteToSiteManager,
+  sqlDeviceVisibleToClaimant,
   verificationDenialError,
   verificationIssueError,
 } from './membership_rules.js';
+
+// Cihaz bulunamadığında VE cihaz kullanıcının kapsamı dışında kaldığında (başka sitenin cihazı) AYNI 404 mesajı verilir:
+// iki durum birbirinden ayırt edilemez (cihazın varlığı, sahibi ve kapısı başka siteye sızmaz).
+const DEVICE_NOT_REGISTERED_MESSAGE =
+  'Bu cihaz şirket envanterinde kayıtlı değildir. Lütfen geçerli bir şirket cihazı karekodu okutunuz veya şirket yetkilisiyle iletişime geçiniz.';
 
 const NAME_MAX_LENGTH = 80;
 const PASSWORD_MAX_LENGTH = 128;
@@ -568,6 +574,12 @@ export async function resendIndividualVerificationCode({ email }) {
  * YETKİ (docs/PLATFORM_MODUL_SISTEMI.md "Cihaz ekleme kuralı"): yalnız süper kullanıcı ya da Geçiş Kontrol (door_control) modülü açıkça kapatılmamış
  * (satırı yoksa izin; yeni sitede modül kapalıdır, cihaz kapıya bağlanınca açılır) bir sitenin yöneticisi cihaz ekleyebilir; diğer herkese 403 DEVICE_ADD_FORBIDDEN. Kapı açma / MQTT / mevcut cihaz kayıtları etkilenmez.
  *
+ * KAPSAM (güvenlik): kullanıcının YÖNETMEDİĞİ bir siteye/kapıya bağlı cihaz (sahibi olmasa bile) sahiplenilemez ve "envanterde kayıtlı
+ * değil" ile AYNI 404'ü verir; böylece başka sitenin cihazı devralınamaz, MQTT parolası / yerel kontrol anahtarı alınamaz ve varlığı
+ * sızmaz. Kendi cihazı (owner) ve hiçbir yere bağlı olmayan envanter cihazı kapsamdadır; sahibi olmayan ama başka kullanıcıya ATANMIŞ
+ * (assigned_user_code) cihaz 409 verir ve üzerine yazılmaz. Süper kullanıcı sınırsızdır. Kural hem arama sorgusunda hem atomik UPDATE'te
+ * (SQL_CLAIM_DEVICE_ATOMIC) uygulanır.
+ *
  * ROL DEĞİŞMEZ (ürün kararı, docs/PLATFORM_SITE_BASVURUSU.md): cihaz sahiplenmek kişiyi site yöneticisi YAPMAZ. Eskiden bireysel /
  * daire sahibi kullanıcı sahiplenmede anında site_manager olurdu; artık yönetici olmanın tek yolu site BAŞVURUSU + süper kullanıcı
  * onayıdır (site_applications). Sahiplenen cihaz başvuruda seçilebilir ve onayda 1. kapıya bağlanır. getMyClaimedDevices salt-okunurdur.
@@ -610,26 +622,33 @@ export async function claimDevice({ userCode, deviceInput }) {
       }
     }
 
-    // Cihazı veritabanında ara
+    // Süper kullanıcı kapsam sınırı olmadan çalışır (mevcut davranış); diğer herkes için kapsam aşağıdaki sorgularda SQL'dedir.
+    const isSuper = user.role === 'super_user';
+
+    // Cihazı veritabanında ara — KAPSAMLI: kullanıcının yönetmediği bir siteye/kapıya bağlı (ve kendisinin olmayan) cihaz bu sorguda
+    // HİÇ dönmez; yani "envanterde yok" ile AYNI 404 verilir (başka sitenin cihazının varlığı/sahibi sızmaz, devralınamaz).
     const devRes = await client.query(
-      `SELECT id, device_uid, hardware_type, gate_name, site_code, owner_user_id, claimed_at,
-              is_defective, defective_reason
-       FROM devices
-       WHERE UPPER(device_uid) = $1
-          OR UPPER(device_uid) = $2
-          OR UPPER(REPLACE(REPLACE(device_uid, ':', ''), '-', '')) = $1
+      `SELECT found.id, found.device_uid, found.hardware_type, found.gate_name, found.site_code, found.owner_user_id,
+              found.assigned_user_code, found.claimed_at, found.is_defective, found.defective_reason
+       FROM (
+         SELECT id, device_uid, hardware_type, gate_name, site_code, owner_user_id, assigned_user_code, claimed_at,
+                is_defective, defective_reason
+         FROM devices
+         WHERE UPPER(device_uid) = $1
+            OR UPPER(device_uid) = $2
+            OR UPPER(REPLACE(REPLACE(device_uid, ':', ''), '-', '')) = $1
+       ) found
+       WHERE ${sqlDeviceVisibleToClaimant('found', { userCodeParam: '$3', userIdParam: '$4', superParam: '$5' })}
        LIMIT 1`,
-      [cleanUid, rawInput.toUpperCase()],
+      [cleanUid, rawInput.toUpperCase(), user.user_code, user.id, isSuper],
     );
 
     if (devRes.rowCount === 0) {
-      throw httpError(
-        404,
-        'Bu cihaz şirket envanterinde kayıtlı değildir. Lütfen geçerli bir şirket cihazı karekodu okutunuz veya şirket yetkilisiyle iletişime geçiniz.',
-      );
+      throw httpError(404, DEVICE_NOT_REGISTERED_MESSAGE);
     }
 
-    const deviceRow = devRes.rows[0];
+    // assigned_user_code yalnız burada karar için okunur; istemciye dönen cihaz nesnesinin biçimi DEĞİŞMEZ.
+    const { assigned_user_code: assignedUserCode, ...deviceRow } = devRes.rows[0];
 
     // Cihaz arızalı mı kontrol et
     if (deviceRow.is_defective) {
@@ -666,17 +685,30 @@ export async function claimDevice({ userCode, deviceInput }) {
       };
     }
 
-    // Cihazı bu kullanıcıya ata (Sahiplendir) — yalnızca sahibi YOKSA (atomik koşul)
-    const updateRes = await client.query(SQL_CLAIM_DEVICE_ATOMIC, [user.id, user.user_code, deviceRow.id]);
+    // Sahibi yok ama şirket cihazı başka bir kullanıcıya ATANMIŞ (assigned_user_code): üzerine yazılıp devralınamaz (süper hariç).
+    if (!isSuper && assignedUserCode != null && String(assignedUserCode) !== String(user.user_code)) {
+      throw ownedByOther();
+    }
+
+    // Cihazı bu kullanıcıya ata (Sahiplendir) — yalnızca sahibi YOKSA ve kapsamdaysa (atomik koşul)
+    const updateRes = await client.query(SQL_CLAIM_DEVICE_ATOMIC, [user.id, user.user_code, deviceRow.id, isSuper]);
 
     if (updateRes.rowCount === 0) {
-      // Kontrol ile güncelleme arasında başka bir istek sahiplendi (veya cihaz arızalı işaretlendi).
+      // Kontrol ile güncelleme arasında başka bir istek sahiplendi, cihaz arızalı işaretlendi ya da cihaz başka bir siteye bağlanıp
+      // kapsam dışına çıktı. Kapsam sorgusu burada da uygulanır: kapsam dışı cihazın sahibi/durumu sızmaz.
       const recheck = await client.query(
-        `SELECT owner_user_id, is_defective FROM devices WHERE id = $1 LIMIT 1`,
-        [deviceRow.id],
+        `SELECT owner_user_id, is_defective FROM devices
+         WHERE id = $1
+           AND ${sqlDeviceVisibleToClaimant('devices', { userCodeParam: '$2', userIdParam: '$3', superParam: '$4' })}
+         LIMIT 1`,
+        [deviceRow.id, user.user_code, user.id, isSuper],
       );
       const current = recheck.rows[0];
-      if (current && current.owner_user_id && String(current.owner_user_id) === String(user.id)) {
+      if (!current) {
+        // Silindi ya da artık kapsam dışı: "kayıtlı değil" ile aynı 404.
+        throw httpError(404, DEVICE_NOT_REGISTERED_MESSAGE);
+      }
+      if (current.owner_user_id && String(current.owner_user_id) === String(user.id)) {
         await client.query('COMMIT');
         committed = true;
         return {
