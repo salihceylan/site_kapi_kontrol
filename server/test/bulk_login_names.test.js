@@ -1,7 +1,9 @@
-// Toplu yükleme: kullanıcı adı ataması (DB'siz). Şablonda «Kullanıcı Adı» sütunu yoktur; sistem Ad Soyad'dan üretir, sistemde (her site, her şehir) ya da aynı
-// yüklemede alınmışsa varyasyon dener, yönetici tabloda değiştirebilir. Gerçek PostgreSQL: scripts/qa_bulk_import.mjs (login_names bölümü).
+// Toplu yükleme: kullanıcı adı ataması (DB'siz). Şablonda «Kullanıcı Adı» sütunu yoktur; sistem Ad Soyad'dan üretir, BU SİTEDE ya da aynı yüklemede alınmışsa
+// varyasyon dener, yönetici tabloda değiştirebilir. Önizleme / denetim SİTE kapsamlıdır (başka sitenin adı «boşta» görünür; güvenlik denetimi 2026-10-28), yazım
+// anı (claimLoginName) SİSTEM geneldir. Gerçek PostgreSQL: scripts/qa_bulk_import.mjs (login_names bölümü).
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
   LOGIN_NAME_BASE_MAX,
   MAX_LOGIN_ATTEMPTS,
@@ -12,28 +14,67 @@ import {
   normalizeTypedLoginName,
   resolveLoginNames,
   slugifyLoginName,
+  suggestLoginName,
   takenLoginNames,
 } from '../src/modules/bulk_import_login_names.js';
 import { resolvePlanAccounts, collectOverrideLoginNames } from '../src/modules/bulk_import_accounts.js';
+import { siteVisibleUserSql } from '../src/modules/bulk_import_scope.js';
 import { computePlan } from '../src/modules/bulk_import_plan.js';
 import { validateImportBody } from '../src/modules/bulk_import_body.js';
 
-/** Sahte veritabanı: `LOWER(login_name) = ANY($1)` sorgusu; sorgu sayısını tutar. */
-function fakeDb({ taken = [], emailOwners = {} } = {}) {
-  const names = new Set(taken.map((name) => name.toLowerCase()));
+/** Testlerin kendi sitesi; başka sitenin yöneticisi gibi davranmak için 2 kullanılır. */
+const SITE = 1;
+const OTHER_SITE = 2;
+
+/**
+ * Kapsam koşulu SQL'de YOKSA sahte veritabanı sorguyu REDDEDER (kapsamsız bir sorgu, gerçek veritabanında tüm sistemi sayardı): üç kaynak (kişi kaydı, daire üyeliği,
+ * sakin göstergesi) da aranan siteye ($2) bağlı olmalı.
+ */
+function assertScoped(sql, userExpr) {
+  for (const fragment of [
+    `vis_sp.site_code = $2::BIGINT AND vis_sp.user_code = ${userExpr}`,
+    `vis_am.user_code = ${userExpr} AND vis_a.site_code = $2::BIGINT`,
+    `vis_r.resident_user_code = ${userExpr} AND vis_r.site_code = $2::BIGINT`,
+  ]) {
+    assert.ok(sql.includes(fragment), `KAPSAMSIZ SORGU (sayım açığı): ${fragment} yok -> ${sql.slice(0, 160)}`);
+  }
+}
+
+/**
+ * Sahte veritabanı. `taken`: SITE (1) yöneticisinin GÖREBİLDİĞİ hesapların adları (kendi sitesindeki kişiler); `elsewhere`: yalnız BAŞKA sitelerde kayıtlı adlar;
+ * `emailOwners`: e-posta -> { user_code, login_name, linkable, sites? } (`sites`: bu hesabı görebilen siteler, varsayılan [1]). Üç sorgu biçimi:
+ *   - YAZIM (sistem geneli)  `LOWER(login_name) = ANY($1)`                                  -> taken + elsewhere
+ *   - ÖNİZLEME / DENETİM     `LOWER(u.login_name) = ANY($1) AND (<kapsam>)`, $2 = site       -> yalnız $2 sitesinin gördüğü adlar
+ *   - e-posta sahipleri      `LOWER(u.email) = ANY($1) AND (<kapsam>)`, $2 = site            -> yalnız $2 sitesinin gördüğü hesaplar
+ * Sorgu sayısını / parametreleri tutar (`calls`).
+ */
+function fakeDb({ taken = [], elsewhere = [], emailOwners = {} } = {}) {
+  const visible = new Set(taken.map((name) => name.toLowerCase()));
+  const everywhere = new Set([...taken, ...elsewhere].map((name) => name.toLowerCase()));
   const calls = [];
   return {
-    names,
+    names: everywhere,
     calls,
     async query(text, params = []) {
       const sql = String(text).replace(/\s+/g, ' ').trim();
       calls.push({ sql, params });
       if (/^SELECT LOWER\(login_name\) AS name FROM users WHERE LOWER\(login_name\) = ANY\(\$1::TEXT\[\]\)$/.test(sql)) {
-        const hits = params[0].filter((name) => names.has(name));
+        const hits = params[0].filter((name) => everywhere.has(name));
+        return { rows: hits.map((name) => ({ name })), rowCount: hits.length };
+      }
+      if (/^SELECT LOWER\(u\.login_name\) AS name FROM users u WHERE LOWER\(u\.login_name\) = ANY\(\$1::TEXT\[\]\) AND \(/.test(sql)) {
+        assertScoped(sql, 'u.user_code');
+        const hits = Number(params[1]) === SITE ? params[0].filter((name) => visible.has(name)) : [];
         return { rows: hits.map((name) => ({ name })), rowCount: hits.length };
       }
       if (/FROM users u WHERE LOWER\(u\.email\) = ANY/.test(sql)) {
-        const rows = params[0].filter((email) => emailOwners[email]).map((email) => ({ email, ...emailOwners[email] }));
+        assertScoped(sql, 'u.user_code');
+        const rows = params[0]
+          .filter((email) => emailOwners[email] && (emailOwners[email].sites ?? [SITE]).includes(Number(params[1])))
+          .map((email) => {
+            const { sites: _sites, ...owner } = emailOwners[email];
+            return { email, ...owner };
+          });
         return { rows, rowCount: rows.length };
       }
       return { rows: [], rowCount: 0 };
@@ -86,22 +127,24 @@ describe('loginNameVariant', () => {
   });
 });
 
+const SCOPE = { siteCode: SITE };
+
 describe('resolveLoginNames', () => {
-  it('sistemde alınmış ad atlanır: ilk boş varyasyon (taban, _2, _3 ...)', async () => {
+  it('bu sitede alınmış ad atlanır: ilk boş varyasyon (taban, _2, _3 ...)', async () => {
     const db = fakeDb({ taken: ['ali.veli', 'ali.veli_2', 'ali.veli_3'] });
-    const out = await resolveLoginNames(db, [{ key: 'a', base: 'ali.veli' }]);
+    const out = await resolveLoginNames(db, [{ key: 'a', base: 'ali.veli' }], SCOPE);
     assert.equal(out.get('a'), 'ali.veli_4');
   });
 
   it('aynı yüklemedeki satırlar birbirinin adını almaz (satır sırasıyla): 1. taban, 2. _2, 3. _3', async () => {
     const db = fakeDb();
-    const out = await resolveLoginNames(db, ['a', 'b', 'c'].map((key) => ({ key, base: 'ali.veli' })));
+    const out = await resolveLoginNames(db, ['a', 'b', 'c'].map((key) => ({ key, base: 'ali.veli' })), SCOPE);
     assert.deepEqual([...out.values()], ['ali.veli', 'ali.veli_2', 'ali.veli_3']);
   });
 
   it('küçük/büyük harf farkı çakışmadır (veritabanı LOWER üzerinden tekil)', async () => {
     const db = fakeDb({ taken: ['Ali.Veli'] });
-    const out = await resolveLoginNames(db, [{ key: 'a', base: 'ali.veli' }]);
+    const out = await resolveLoginNames(db, [{ key: 'a', base: 'ali.veli' }], SCOPE);
     assert.equal(out.get('a'), 'ali.veli_2');
   });
 
@@ -111,7 +154,7 @@ describe('resolveLoginNames', () => {
       { key: 'a', base: 'ali.veli' },
       { key: 'b', base: 'ali.veli_2', fixed: true }, // 2. satırda yönetici _2'yi seçti
       { key: 'c', base: 'ali.veli' },
-    ]);
+    ], SCOPE);
     assert.equal(out.get('b'), 'ali.veli_2');
     assert.equal(out.get('a'), 'ali.veli');
     assert.equal(out.get('c'), 'ali.veli_3', '_2 yöneticinin seçimine ayrılı');
@@ -119,31 +162,31 @@ describe('resolveLoginNames', () => {
   });
 
   it('kısa taban (2 karakter) `_2` ile başlar; tabansız adlar için ayrı varyasyonlar', async () => {
-    const out = await resolveLoginNames(fakeDb(), [{ key: 'a', base: 'al' }, { key: 'b', base: 'al' }]);
+    const out = await resolveLoginNames(fakeDb(), [{ key: 'a', base: 'al' }, { key: 'b', base: 'al' }], SCOPE);
     assert.deepEqual([...out.values()], ['al_2', 'al_3']);
   });
 
   it('SORGU SAYISI satır sayısından bağımsız: 5000 farklı ad = en çok 6 sorgu; 5000 aynı ad = sınırlı (geç varyasyonlar toplu sorgulanır)', async () => {
     const distinct = fakeDb();
     const requests = Array.from({ length: 5000 }, (_, i) => ({ key: `r${i}`, base: `kisi.${i}` }));
-    const out = await resolveLoginNames(distinct, requests);
+    const out = await resolveLoginNames(distinct, requests, SCOPE);
     assert.equal(out.size, 5000);
     assert.ok(distinct.calls.length <= 8, `sorgu sayısı ${distinct.calls.length}`);
     assert.ok(distinct.calls.every((call) => call.params[0].length <= 5000), 'sorgu başına en çok 5000 ad');
 
     const same = fakeDb();
-    const sameOut = await resolveLoginNames(same, Array.from({ length: 300 }, (_, i) => ({ key: `r${i}`, base: 'mehmet.yilmaz' })));
+    const sameOut = await resolveLoginNames(same, Array.from({ length: 300 }, (_, i) => ({ key: `r${i}`, base: 'mehmet.yilmaz' })), SCOPE);
     assert.equal(new Set(sameOut.values()).size, 300);
     assert.equal(sameOut.get('r0'), 'mehmet.yilmaz');
     assert.equal(sameOut.get('r299'), 'mehmet.yilmaz_300');
     assert.ok(same.calls.length < 40, `geç varyasyonlar gruplanır: ${same.calls.length} sorgu`);
   });
 
-  it('ÇOK YAYGIN ad: 1000 den fazla alınmış (Türkiye genelinde binlerce «mehmet.yilmaz») olsa da boş ad bulunur; sorgu sayısı yine küçük', async () => {
+  it('ÇOK YAYGIN ad: 1000 den fazla alınmış (bu sitede binlerce «mehmet.yilmaz») olsa da boş ad bulunur; sorgu sayısı yine küçük', async () => {
     const taken = ['mehmet.yilmaz'];
     for (let attempt = 2; attempt <= 2400; attempt += 1) taken.push(loginNameVariant('mehmet.yilmaz', attempt));
     const db = fakeDb({ taken });
-    const out = await resolveLoginNames(db, [{ key: 'a', base: 'mehmet.yilmaz' }, { key: 'b', base: 'mehmet.yilmaz' }]);
+    const out = await resolveLoginNames(db, [{ key: 'a', base: 'mehmet.yilmaz' }, { key: 'b', base: 'mehmet.yilmaz' }], SCOPE);
     assert.equal(out.get('a'), 'mehmet.yilmaz_2401');
     assert.equal(out.get('b'), 'mehmet.yilmaz_2402');
     assert.ok(db.calls.length < 30, `${db.calls.length} sorgu`);
@@ -152,16 +195,66 @@ describe('resolveLoginNames', () => {
   });
 
   it('başka yerden rezerve edilen adlar (reserved) üretilmez; MAX_LOGIN_ATTEMPTS tükenirse null', async () => {
-    const out = await resolveLoginNames(fakeDb(), [{ key: 'a', base: 'ali.veli' }], { reserved: ['ali.veli', 'ALI.VELI_2'] });
+    const out = await resolveLoginNames(fakeDb(), [{ key: 'a', base: 'ali.veli' }], { ...SCOPE, reserved: ['ali.veli', 'ALI.VELI_2'] });
     assert.equal(out.get('a'), 'ali.veli_3');
     const taken = ['ali.veli'];
     for (let attempt = 2; attempt <= MAX_LOGIN_ATTEMPTS; attempt += 1) taken.push(loginNameVariant('ali.veli', attempt));
-    const none = await resolveLoginNames(fakeDb({ taken }), [{ key: 'a', base: 'ali.veli' }]);
+    const none = await resolveLoginNames(fakeDb({ taken }), [{ key: 'a', base: 'ali.veli' }], SCOPE);
     assert.equal(none.get('a'), null);
+  });
+
+  it('SAYIM AÇIĞI KAPALI: başka sitede kayıtlı ad ve varyasyonları «boşta» görünür (taban aynen önerilir); hiç olmayan ad ile AYNI sonuç', async () => {
+    const elsewhere = fakeDb({ elsewhere: ['ali.veli', 'ali.veli_2', 'ali.veli_3'] });
+    const nowhere = fakeDb();
+    const requests = [{ key: 'a', base: 'ali.veli' }, { key: 'b', base: 'ali.veli' }];
+    const seen = await resolveLoginNames(elsewhere, requests, SCOPE);
+    const unseen = await resolveLoginNames(nowhere, requests, SCOPE);
+    assert.deepEqual([...seen], [['a', 'ali.veli'], ['b', 'ali.veli_2']]);
+    assert.deepEqual([...seen], [...unseen], 'başka sitede var / hiç yok: yanıt şekli ve içeriği aynı');
+    // başka sitenin yöneticisi için aynı veritabanı farklı kapsam: o sitenin göremediği ad yine «boşta»
+    const sameDbOtherSite = await resolveLoginNames(fakeDb({ taken: ['ali.veli'] }), [{ key: 'a', base: 'ali.veli' }], { siteCode: OTHER_SITE });
+    assert.equal(sameDbOtherSite.get('a'), 'ali.veli');
+  });
+
+  it('kapsam ZORUNLUDUR: site kodu yoksa / geçersizse TypeError, veritabanına HİÇ gidilmez (kapsamsız sorguya düşmez)', async () => {
+    for (const options of [undefined, {}, { siteCode: null }, { siteCode: 0 }, { siteCode: -3 }, { siteCode: 'x' }, { siteCode: 1.5 }]) {
+      const db = fakeDb({ taken: ['ali.veli'] });
+      await assert.rejects(() => resolveLoginNames(db, [{ key: 'a', base: 'ali.veli' }], options), TypeError);
+      assert.equal(db.calls.length, 0);
+    }
   });
 });
 
-describe('claimLoginName (yazım anı)', () => {
+describe('takenLoginNames (site kapsamı)', () => {
+  it('yalnız istek sahibinin sitesinin görebildiği hesaplar; sorguda kapsam koşulu + site parametresi vardır; büyük/küçük harf duyarsız', async () => {
+    const db = fakeDb({ taken: ['a.b.c'], elsewhere: ['x.y.z'] });
+    const set = await takenLoginNames(db, ['A.B.C', 'a.b.c', 'x.y.z', 'yok.yok'], SCOPE);
+    assert.deepEqual([...set], ['a.b.c'], 'başka sitedeki x.y.z görünmez');
+    assert.equal(db.calls.length, 1);
+    assert.deepEqual(db.calls[0].params, [['a.b.c', 'x.y.z', 'yok.yok'], SITE]);
+    assert.deepEqual([...(await takenLoginNames(db, ['a.b.c'], { siteCode: OTHER_SITE }))], [], 'başka sitenin yöneticisi bu hesabı görmez');
+  });
+
+  it('ÜÇ kaynak da site koşuluna bağlıdır (kişi kaydı, daire üyeliği, sakin göstergesi); yöneticilik / site rolü kapsamda DEĞİL (tek taraflı verilebilir)', () => {
+    const sql = siteVisibleUserSql('u.user_code', '$2::BIGINT').replace(/\s+/g, ' ');
+    assert.match(sql, /FROM site_people vis_sp WHERE vis_sp\.site_code = \$2::BIGINT AND vis_sp\.user_code = u\.user_code/);
+    assert.match(sql, /FROM apartment_memberships vis_am INNER JOIN apartments vis_a ON vis_a\.id = vis_am\.apartment_id WHERE vis_am\.user_code = u\.user_code AND vis_a\.site_code = \$2::BIGINT/);
+    assert.match(sql, /FROM apartments vis_r WHERE vis_r\.resident_user_code = u\.user_code AND vis_r\.site_code = \$2::BIGINT/);
+    assert.equal(/site_manager_sites|site_memberships/.test(sql), false, 'yönetici daveti ile hedef hesap kapsama «çekilemez»');
+    assert.equal(sql.split('EXISTS').length - 1, 3);
+  });
+
+  it('boş liste sorgu yapmaz; kapsamsız çağrı TypeError', async () => {
+    const db = fakeDb();
+    assert.deepEqual([...(await takenLoginNames(db, [], SCOPE))], []);
+    assert.equal(db.calls.length, 0);
+    await assert.rejects(() => takenLoginNames(db, ['a.b.c']), TypeError);
+    await assert.rejects(() => takenLoginNames(db, ['a.b.c'], { siteCode: undefined }), TypeError);
+    assert.equal(db.calls.length, 0);
+  });
+});
+
+describe('claimLoginName (yazım anı, SİSTEM geneli)', () => {
   it('önizlemede gösterilen ad boştaysa aynen verilir', async () => {
     const db = fakeDb({ taken: ['ali.veli'] });
     assert.equal(await claimLoginName(db, 'ali.veli', { preferred: 'ali.veli_2' }), 'ali.veli_2');
@@ -178,25 +271,99 @@ describe('claimLoginName (yazım anı)', () => {
     const out = await claimLoginName(fakeDb(), 'ali.veli', { skip: new Set(['ali.veli']) });
     assert.equal(out, 'ali.veli_2');
   });
+
+  it('BAŞKA SİTEDE alınmış ad da atlanır (veritabanında ad sistem genelinde tekil; kopya ASLA yazılmaz); önizleme gizlediği için fark yazımda çıkar', async () => {
+    const db = fakeDb({ elsewhere: ['ali.veli', 'ali.veli_2'] });
+    // önizleme (site kapsamı) bu adı boşta göstermişti
+    assert.equal((await resolveLoginNames(db, [{ key: 'a', base: 'ali.veli' }], SCOPE)).get('a'), 'ali.veli');
+    // yazım anı sistem genelini görür: gösterilen ad (preferred) alınmış -> sıradaki boş ad
+    assert.equal(await claimLoginName(db, 'ali.veli', { preferred: 'ali.veli' }), 'ali.veli_3');
+    // yazım sorgusu kapsamsız (sistem geneli) olandır: hiçbir çağrı site parametresi taşımaz
+    assert.ok(db.calls.filter((call) => /^SELECT LOWER\(login_name\)/.test(call.sql)).every((call) => call.params.length === 1));
+  });
+});
+
+describe('kapsam koruması (kaynak denetimi: sayım açığı geri gelmesin)', () => {
+  const read = (name) => readFileSync(new URL(`../src/modules/${name}`, import.meta.url), 'utf8');
+
+  it('yöneticiye yanıt üreten modüller (önizleme, öneri, denetim, rota, plan) SİSTEM geneli arama işlevlerini kullanamaz; yalnız yazıcı claimLoginName kullanır', () => {
+    for (const name of ['bulk_import_accounts.js', 'bulk_import_service.js', 'bulk_import_routes.js', 'bulk_import_plan_people.js', 'bulk_import_plan_all_in_one.js', 'bulk_import_plan.js']) {
+      assert.equal(/claimLoginName|takenLoginNamesGlobal/.test(read(name)), false, `${name}: sistem geneli ad araması (sayım açığı)`);
+    }
+    assert.match(read('bulk_import_writer.js'), /claimLoginName/);
+    const loginNames = read('bulk_import_login_names.js');
+    assert.equal((loginNames.match(/FROM users WHERE LOWER\(login_name\)/g) ?? []).length, 1, 'kapsamsız ham users araması tek yerde (takenLoginNamesGlobal) olabilir');
+    assert.equal(/export (async )?function takenLoginNamesGlobal/.test(loginNames), false, 'sistem geneli arama dışarı AÇILMAZ');
+  });
+
+  it('e-posta sahibi sorgusu ve ad sorgusu görünürlük koşuluyla birlikte yazılmıştır (kapsamsız users araması yok)', () => {
+    assert.match(read('bulk_import_accounts.js'), /LOWER\(u\.email\) = ANY\(\$1::TEXT\[\]\)\s+AND \$\{siteVisibleUserSql\('u\.user_code', '\$2::BIGINT'\)\}/);
+    assert.match(read('bulk_import_login_names.js'), /LOWER\(u\.login_name\) = ANY\(\$1::TEXT\[\]\) AND \$\{siteVisibleUserSql\('u\.user_code', '\$2::BIGINT'\)\}/);
+    // yönetici ucu site kodunu servise verir (gövdeden değil, yetkili URL sitesinden)
+    assert.match(read('bulk_import_routes.js'), /checkImportLoginName\(\{ siteCode: req\.bulkAccess\.siteCode, body: req\.body \}\)/);
+  });
+});
+
+describe('suggestLoginName (site kapsamlı öneri)', () => {
+  it('bu sitede alınmış adlar atlanır, başka sitedekiler atlanmaz; kapsam zorunludur', async () => {
+    const db = fakeDb({ taken: ['ali.veli'], elsewhere: ['ali.veli_2'] });
+    assert.equal(await suggestLoginName(db, 'ali.veli', SCOPE), 'ali.veli_2', 'ali.veli_2 başka sitede: öneri bunu sızdırmaz');
+    await assert.rejects(() => suggestLoginName(db, 'ali.veli'), TypeError);
+  });
 });
 
 describe('checkLoginName (tablo düzenlemesi)', () => {
-  it('biçim hatası -> neden; alınmış ad -> TAKEN + öneri; boştaki ad -> ok ve normalleştirilmiş ad', async () => {
+  it('biçim hatası -> neden; bu sitede alınmış ad -> TAKEN + öneri; boştaki ad -> ok ve normalleştirilmiş ad', async () => {
     const db = fakeDb({ taken: ['ali.veli', 'ali.veli_2'] });
-    assert.deepEqual(await checkLoginName(db, 'ab'), { ok: false, login_name: 'ab', code: 'TOO_SHORT', message: loginNameReason('TOO_SHORT'), suggestion: null });
-    assert.equal((await checkLoginName(db, 'a b@')).code, 'CHARS');
-    assert.deepEqual(await checkLoginName(db, 'ALİ Veli'), {
+    assert.deepEqual(await checkLoginName(db, 'ab', SCOPE), { ok: false, login_name: 'ab', code: 'TOO_SHORT', message: loginNameReason('TOO_SHORT'), suggestion: null });
+    assert.equal((await checkLoginName(db, 'a b@', SCOPE)).code, 'CHARS');
+    assert.deepEqual(await checkLoginName(db, 'ALİ Veli', SCOPE), {
       ok: false, login_name: 'ali.veli', code: 'TAKEN', message: loginNameReason('TAKEN'), suggestion: 'ali.veli_3',
     });
-    assert.deepEqual(await checkLoginName(db, 'Yeni Ad'), { ok: true, login_name: 'yeni.ad', code: 'OK', message: null, suggestion: null });
+    assert.deepEqual(await checkLoginName(db, 'Yeni Ad', SCOPE), { ok: true, login_name: 'yeni.ad', code: 'OK', message: null, suggestion: null });
     assert.equal(db.calls.length, 3, 'biçim hatasında veritabanına gidilmez; TAKEN için 2 sorgu (denetim + öneri), boştaki ad için 1');
   });
 
-  it('takenLoginNames: büyük/küçük harf duyarsız, tekilleştirir, parçalara böler', async () => {
-    const db = fakeDb({ taken: ['a.b.c'] });
-    const set = await takenLoginNames(db, ['A.B.C', 'a.b.c', 'x.y.z']);
-    assert.deepEqual([...set], ['a.b.c']);
-    assert.deepEqual(db.calls[0].params[0], ['a.b.c', 'x.y.z']);
+  it('ret nedeni «bu sitede» der (sistem geneli ima etmez)', () => {
+    assert.match(loginNameReason('TAKEN'), /bu sitede/);
+    assert.equal(/sistemde/.test(loginNameReason('TAKEN')), false);
+  });
+
+  it('SAYIM AÇIĞI KAPALI: başka sitede kayıtlı ad «kullanılabilir» döner; hiç olmayan adla BİREBİR AYNI yanıt (yanıt şekli var/yok sızdırmaz), öneri yok', async () => {
+    const elsewhere = fakeDb({ elsewhere: ['ali.veli', 'ayse.demir'] });
+    const nowhere = fakeDb();
+    for (const typed of ['ali.veli', 'Ayşe Demir', 'ali.veli_2']) {
+      const seen = await checkLoginName(elsewhere, typed, SCOPE);
+      const unseen = await checkLoginName(nowhere, typed, SCOPE);
+      assert.equal(seen.ok, true, typed);
+      assert.deepEqual(seen, unseen, `${typed}: başka sitede var / hiç yok -> aynı yanıt`);
+      assert.deepEqual(Object.keys(seen), ['ok', 'login_name', 'code', 'message', 'suggestion']);
+      assert.equal(seen.suggestion, null);
+    }
+    // sorgu sayısı da aynı: yanıt süresinden de var/yok anlaşılmaz (TAKEN yolundaki ek öneri sorgusu yok)
+    assert.equal(elsewhere.calls.length, nowhere.calls.length);
+  });
+
+  it('KENDİ sitesindeki gerçek çakışma yakalanır; başka sitenin yöneticisi aynı adı «kullanılabilir» görür', async () => {
+    const db = fakeDb({ taken: ['ali.veli'], elsewhere: ['mehmet.kaya'] });
+    const own = await checkLoginName(db, 'ali.veli', SCOPE);
+    assert.deepEqual([own.ok, own.code, own.suggestion], [false, 'TAKEN', 'ali.veli_2']);
+    const foreignManager = await checkLoginName(db, 'ali.veli', { siteCode: OTHER_SITE });
+    assert.deepEqual([foreignManager.ok, foreignManager.code, foreignManager.suggestion], [true, 'OK', null]);
+    assert.equal((await checkLoginName(db, 'mehmet.kaya', SCOPE)).ok, true, 'başka sitenin hesabı sayılmaz');
+  });
+
+  it('öneri yalnız site içinde boş olan adı verir (başka sitede alınmış varyasyonlar atlanmaz: sızmaz)', async () => {
+    const db = fakeDb({ taken: ['ali.veli'], elsewhere: ['ali.veli_2', 'ali.veli_3'] });
+    assert.equal((await checkLoginName(db, 'ali.veli', SCOPE)).suggestion, 'ali.veli_2');
+  });
+
+  it('kapsam ZORUNLU: site kodu verilmeden çağrı TypeError (biçim hatasında bile); kapsamsız sorguya düşülmez', async () => {
+    const db = fakeDb({ taken: ['ali.veli'] });
+    await assert.rejects(() => checkLoginName(db, 'ali.veli'), TypeError);
+    await assert.rejects(() => checkLoginName(db, 'ab'), TypeError);
+    await assert.rejects(() => checkLoginName(db, 'ali.veli', { siteCode: 'abc' }), TypeError);
+    assert.equal(db.calls.length, 0);
   });
 });
 
@@ -369,5 +536,94 @@ describe('resolvePlanAccounts', () => {
     assert.notEqual(a.signature, b.signature);
     const none = planOf('people', snapshotWith(), [{ ad_soyad: 'Dairesiz', e_posta: 'x@example.com' }]);
     assert.equal((await resolvePlanAccounts(fakeDb(), { siteCode: 1, plan: none })).signature, '');
+  });
+
+  it('SAYIM AÇIĞI KAPALI (e-posta): BAŞKA sitedeki hesabın e-postası «yeni hesap» görünür; hiç kayıtlı olmayan e-postayla BİREBİR AYNI öğe (email_in_use yok)', async () => {
+    const plan = planOf('people', snapshotWith(), [
+      person({ e_posta: 'baska.site@example.com' }),
+      person({ daire_no: '2', ad_soyad: 'Veli Ali', e_posta: 'baska.yonetici@example.com' }),
+      person({ daire_no: '3', ad_soyad: 'Can Demir', e_posta: 'hic.yok@example.com' }),
+    ]);
+    const elsewhere = fakeDb({
+      emailOwners: {
+        'baska.site@example.com': { user_code: 91, login_name: 'baska.sakin', linkable: false, sites: [OTHER_SITE] },
+        'baska.yonetici@example.com': { user_code: 92, login_name: 'baska.yonetici', linkable: false, sites: [OTHER_SITE] },
+      },
+    });
+    const { items, expected } = await resolvePlanAccounts(elsewhere, { siteCode: SITE, plan });
+    assert.deepEqual(items.map((i) => [i.n, i.status, i.login_name, i.editable, i.custom]), [
+      [2, 'new', 'ali.veli', true, false],
+      [3, 'new', 'veli.ali', true, false],
+      [4, 'new', 'can.demir', true, false],
+    ]);
+    assert.ok(items.every((i) => !('code' in i) && !('message' in i)), 'neden / ileti yok: hiçbir satır «e-posta başka hesapta» demez');
+    assert.equal([...expected.values()].some((e) => e.status === 'email_in_use' || e.status === 'existing'), false);
+
+    // aynı dosya, e-postaların HİÇ kayıtlı olmadığı sistemde: sonuç aynı (var/yok ayırt edilemez)
+    const { items: baseline } = await resolvePlanAccounts(fakeDb(), { siteCode: SITE, plan });
+    assert.deepEqual(items, baseline);
+
+    // sorgu BU sitenin kapsamıyla gitti (site parametresi + kapsam koşulu); başka sitenin kapsamıyla o hesaplar görünür olurdu
+    const call = elsewhere.calls.find((c) => /u\.email/.test(c.sql));
+    assert.equal(call.params[1], SITE);
+    const seenFromOther = await resolvePlanAccounts(elsewhere, { siteCode: OTHER_SITE, plan });
+    assert.deepEqual(seenFromOther.items.slice(0, 2).map((i) => i.status), ['email_in_use', 'email_in_use'], 'kendi sitesindeki gerçek çakışma raporlanır');
+  });
+
+  it('KENDİ sitesindeki gerçek çakışma: bağlanabilir hesap «existing», bağlanamayan «email_in_use»; başka sitedeki e-posta aynı dosyada «new»', async () => {
+    const plan = planOf('people', snapshotWith(), [
+      person({ e_posta: 'komsu@example.com' }),
+      person({ daire_no: '2', ad_soyad: 'Veli Ali', e_posta: 'kendi.yonetici@example.com' }),
+      person({ daire_no: '3', ad_soyad: 'Can Demir', e_posta: 'baska.site@example.com' }),
+    ]);
+    const db = fakeDb({
+      emailOwners: {
+        'komsu@example.com': { user_code: 77, login_name: 'komsu.hesabi', linkable: true },
+        'kendi.yonetici@example.com': { user_code: 55, login_name: 'yonetici', linkable: false },
+        'baska.site@example.com': { user_code: 91, login_name: 'baska.sakin', linkable: false, sites: [OTHER_SITE] },
+      },
+    });
+    const { items } = await resolvePlanAccounts(db, { siteCode: SITE, plan });
+    assert.deepEqual(items.map((i) => [i.n, i.status, i.login_name]), [
+      [2, 'existing', 'komsu.hesabi'],
+      [3, 'email_in_use', null],
+      [4, 'new', 'can.demir'],
+    ]);
+  });
+
+  it('SAYIM AÇIĞI KAPALI (ad): başka sitedeki ad önizlemede taban olarak önerilir; bu sitedeki ad _N alır; kapsamsız çağrı TypeError', async () => {
+    const plan = planOf('people', snapshotWith(), [person(), person({ daire_no: '2', ad_soyad: 'Çağrı Öztürk' })]);
+    const db = fakeDb({ taken: ['cagri.ozturk'], elsewhere: ['ali.veli', 'ali.veli_2'] });
+    const { items } = await resolvePlanAccounts(db, { siteCode: SITE, plan });
+    assert.deepEqual(items.map((i) => [i.n, i.login_name]), [[2, 'ali.veli'], [3, 'cagri.ozturk_2']]);
+    await assert.rejects(() => resolvePlanAccounts(db, { plan }), TypeError);
+  });
+});
+
+describe('loadTakenOverrides (plan: yönetici seçimi adlar)', () => {
+  it('yalnız BU SİTEDE kayıtlı adlar LOGIN_NAME_TAKEN sayılır; başka sitede kayıtlı seçim kabul edilir (sızmaz)', async () => {
+    const { loadTakenOverrides } = await import('../src/modules/bulk_import_accounts.js');
+    const rows = rowsOf('people', [
+      { ad_soyad: 'A B', blok: 'A', daire_no: '1', giris_adi: 'bu.sitede' },
+      { ad_soyad: 'C D', blok: 'A', daire_no: '2', giris_adi: 'baska.sitede' },
+      { ad_soyad: 'E F', blok: 'A', daire_no: '3', giris_adi: 'hic.yok' },
+    ]);
+    const db = fakeDb({ taken: ['bu.sitede'], elsewhere: ['baska.sitede'] });
+    const taken = await loadTakenOverrides(db, SITE, rows);
+    assert.deepEqual([...taken], ['bu.sitede']);
+    assert.equal(db.calls.length, 1);
+    assert.equal(db.calls[0].params[1], SITE);
+    // plan: yalnız bu sitedeki seçim satır hatası olur
+    const plan = planOf('people', snapshotWith({ takenLoginNames: taken }), [
+      { ad_soyad: 'A B', blok: 'A', daire_no: '1', iliski: 'Malik', giris_adi: 'bu.sitede' },
+      { ad_soyad: 'C D', blok: 'A', daire_no: '2', iliski: 'Malik', giris_adi: 'baska.sitede' },
+    ]);
+    assert.deepEqual(codes(plan, 2), ['e:LOGIN_NAME_TAKEN']);
+    assert.deepEqual(codes(plan, 3), []);
+    assert.match(plan.view.issues.find((i) => i.n === 2).message, /bu sitede/);
+    // seçilmiş ad yoksa sorgu yapılmaz
+    const none = fakeDb();
+    assert.equal((await loadTakenOverrides(none, SITE, rowsOf('people', [{ ad_soyad: 'A B' }]))).size, 0);
+    assert.equal(none.calls.length, 0);
   });
 });

@@ -751,14 +751,27 @@ export async function runBulkImportSection(ctx) {
   check('C16f: ayni hesap dosyasi ikinci kez: degisiklik yok, hesap ACILMAZ (atlanan kisilere yeniden denenmez), users sayisi ayni', acAgain.cm?.status === 201 && acAgain.pv.body.plan.account_create === 0 && (acAgain.cm.body.result.accounts?.created ?? 0) === 0
     && (await countOf(`SELECT COUNT(*)::int AS n FROM users`)) === usersBeforeH + 1, acAgain.pv.body.plan);
 
-  // --- C17: KULLANICI ADI ATAMASI (sablonda sutun YOK; sistem verir). Global teklik (baska site / sehir, buyuk-kucuk harf, pasif hesap), dosya ici teklik, yonetici secimi,
-  //     onizleme hash'i adlara baglidir, yazim aninda yaris (23505) -> siradaki bos ad + bildirim, kopya YOK.
+  // --- C17: KULLANICI ADI ATAMASI (sablonda sutun YOK; sistem verir). SITE KAPSAMI (guvenlik denetimi 2026-10-28, authz-modules-1: "her site yoneticisi sistemdeki tum kullanici adi /
+  //     e-postalari sayabiliyordu"): onizleme / oneri / tek ad denetimi YALNIZ bu sitenin yoneticisinin gorebildigi hesaplari sayar (kisi kaydi, daire uyeligi [pasif / eski dahil], sakin
+  //     gostergesi; buyuk-kucuk harf, pasif hesap); BASKA sitedeki ad "yok" gibi davranir. Yazim ani SISTEM geneldir (users.login_name LOWER ile tekil): onizlemede gosterilen ad baska
+  //     sitede alinmissa siradaki bos ad verilir ve sonucta bildirilir. Dosya ici teklik, yonetici secimi, onizleme hash'i bu sitedeki adlara baglidir, yazim aninda yaris (23505) ->
+  //     siradaki bos ad + bildirim, kopya YOK.
   const LN = await mkSite('Kullanici Adi Sitesi', { 'A Blok': 8 });
   await linkManager(LN.code, MGR);
-  const lnTakenA = await mkUser('Ali Veli Baska Sehir', 'apartment_owner');
-  await q(`UPDATE users SET login_name = 'Ali.Veli' WHERE user_code = $1`, [lnTakenA]); // baska sitede, BUYUK/kucuk harf karisik
+  const LF = await mkSite('Yabanci Kullanici Adi Sitesi', { 'A Blok': 4 }); // BASKA site: hesaplari LN yoneticisine gorunmez (ve tersi)
+  await linkManager(LF.code, MGR2);
+  const lnTakenA = await mkUser('Ali Veli Bu Site', 'apartment_owner');
+  await q(`UPDATE users SET login_name = 'Ali.Veli' WHERE user_code = $1`, [lnTakenA]); // BU sitede (A/7 sakini), BUYUK/kucuk harf karisik
+  await member(LN.apt('A', 7).id, lnTakenA, 'APARTMENT_ADMIN');
   const lnTakenB = await mkUser('Pasif Hesap', 'apartment_owner', { active: false });
-  await q(`UPDATE users SET login_name = 'ali.veli_2' WHERE user_code = $1`, [lnTakenB]); // pasif hesabin adi da ayrilidir
+  await q(`UPDATE users SET login_name = 'ali.veli_2' WHERE user_code = $1`, [lnTakenB]); // bu sitenin ESKI sakini (pasif uyelik + pasif hesap): adi yine ayrilidir, yonetici bunu zaten gorur
+  await member(LN.apt('A', 8).id, lnTakenB, 'FAMILY_MEMBER', false);
+  const lnForeign1 = await mkUser('Ali Veli Baska Sitede', 'apartment_owner');
+  await q(`UPDATE users SET login_name = 'ali.veli_3' WHERE user_code = $1`, [lnForeign1]); // BASKA sitede: LN onizlemesi / denetimi bunu GORMEZ
+  await member(LF.apt('A', 1).id, lnForeign1, 'APARTMENT_ADMIN');
+  const lnForeign2 = await mkUser('Yeni Cagri Baska Sitede', 'apartment_owner');
+  await q(`UPDATE users SET login_name = 'yeni.cagri' WHERE user_code = $1`, [lnForeign2]); // BASKA sitede (LF)
+  await member(LF.apt('A', 2).id, lnForeign2, 'APARTMENT_ADMIN');
   const lnRows = [
     { ad_soyad: 'Ali Veli', blok: 'A', daire_no: '1', iliski: 'Malik' }, // n=2
     { ad_soyad: 'Ali Veli', blok: 'A', daire_no: '2', iliski: 'Kiracı' }, // n=3
@@ -768,53 +781,73 @@ export async function runBulkImportSection(ctx) {
   ];
   const lnPv = await previewOf(MGR, LN.code, 'people', lnRows);
   const lnAcc = Object.fromEntries((lnPv.body?.accounts ?? []).map((a) => [a.n, a]));
-  check('C17: onizleme her yeni hesap icin SISTEMIN SECTIGI adi verir: baska sehirdeki "Ali.Veli" (karisik harf) ve pasif hesabin "ali.veli_2" adi atlanir -> ali.veli_3, ali.veli_4; yonetici secimi aynen (cagri.ozturk_2, custom) ve uretilen cagri.ozturk onunla cakismaz; dairesiz satirda hesap yok',
+  check('C17: onizleme her yeni hesap icin SISTEMIN SECTIGI adi verir: BU sitedeki "Ali.Veli" (karisik harf) ve eski sakinin pasif "ali.veli_2" adi atlanir -> ali.veli_3, ali.veli_4 [BASKA sitedeki "ali.veli_3" GORUNMEZ: sayim acigi kapali]; yonetici secimi aynen (cagri.ozturk_2, custom) ve uretilen cagri.ozturk onunla cakismaz; dairesiz satirda hesap yok',
     lnPv.status === 200 && lnAcc[2]?.login_name === 'ali.veli_3' && lnAcc[3]?.login_name === 'ali.veli_4' && lnAcc[4]?.login_name === 'cagri.ozturk' && lnAcc[5]?.login_name === 'cagri.ozturk_2' && lnAcc[5]?.custom === true
     && lnAcc[2]?.status === 'new' && lnAcc[2]?.editable === true && lnAcc[6] === undefined && lnPv.body.issues.length === 0, lnPv.body?.accounts);
+  const usersBeforeAcc = await countOf(`SELECT COUNT(*)::int AS n FROM users`);
   const lnAccounts = await call('POST', `${P(LN.code)}/imports/people/accounts`, MGR, body(lnRows));
   check('C17b: tablo icin hesap onerisi ucu (POST imports/people/accounts) onizlemeyle AYNI adlari verir, yazmaz (users sayisi ayni); arac / daire turunde 404; yetkisiz 403',
-    lnAccounts.status === 200 && same(lnAccounts.body.accounts, lnPv.body.accounts) && (await countOf(`SELECT COUNT(*)::int AS n FROM users WHERE login_name LIKE 'ali.veli_%' OR login_name LIKE 'cagri.%'`)) === 1
+    lnAccounts.status === 200 && same(lnAccounts.body.accounts, lnPv.body.accounts) && (await countOf(`SELECT COUNT(*)::int AS n FROM users`)) === usersBeforeAcc
     && (await call('POST', `${P(LN.code)}/imports/vehicles/accounts`, MGR, body([{ plaka: '34 ABC 123' }]))).status === 404
     && (await call('POST', `${P(LN.code)}/imports/people/accounts`, BOARD, body(lnRows))).status === 403, lnAccounts.body);
   const chkTaken = await call('POST', `${P(LN.code)}/imports/login-names/check`, MGR, { login_name: ' ALI.veli ' });
-  const chkFree = await call('POST', `${P(LN.code)}/imports/login-names/check`, MGR, { login_name: 'Yeni Çağrı' });
+  const chkForeign = await call('POST', `${P(LN.code)}/imports/login-names/check`, MGR, { login_name: 'Yeni Çağrı' }); // yeni.cagri BASKA sitede (LF) kayitli
+  const chkNowhere = await call('POST', `${P(LN.code)}/imports/login-names/check`, MGR, { login_name: 'Hic Yok Boyle' });
   const chkBad = await call('POST', `${P(LN.code)}/imports/login-names/check`, MGR, { login_name: 'a@b' });
   const chkDenied = await call('POST', `${P(LN.code)}/imports/login-names/check`, MGR2, { login_name: 'x.y.z' });
-  check('C17c: tek ad denetimi: alinmis ad (buyuk/kucuk harf duyarsiz) TAKEN + ilk bos ad onerisi; bos ad ok (normallesmis: yeni.cagri); bicim hatasi CHARS; baska sitenin yoneticisi 403',
-    chkTaken.body.code === 'TAKEN' && chkTaken.body.ok === false && chkTaken.body.suggestion === 'ali.veli_3' && chkFree.body.ok === true && chkFree.body.login_name === 'yeni.cagri'
-    && chkBad.body.code === 'CHARS' && chkDenied.status === 403, { chkTaken: chkTaken.body, chkFree: chkFree.body, chkBad: chkBad.body });
+  check('C17c: tek ad denetimi: BU sitede alinmis ad (buyuk/kucuk harf duyarsiz) TAKEN + ilk bos ad onerisi (ali.veli_3 baska sitede kayitli olsa da onerilir: sizmaz); bicim hatasi CHARS; baska sitenin yoneticisi 403',
+    chkTaken.body.code === 'TAKEN' && chkTaken.body.ok === false && chkTaken.body.suggestion === 'ali.veli_3' && chkBad.body.code === 'CHARS' && chkDenied.status === 403, { chkTaken: chkTaken.body, chkBad: chkBad.body });
+  check('C17c2: SAYIM ACIGI KAPALI: BASKA sitede kayitli ad (yeni.cagri, LF) "kullanilabilir" doner ve hic olmayan adla BIREBIR AYNI yanit sekli (oneri yok); LN yoneticisi LF\'nin hesabini goremez',
+    chkForeign.status === 200 && chkForeign.body.ok === true && chkForeign.body.login_name === 'yeni.cagri' && chkForeign.body.code === 'OK' && chkForeign.body.suggestion === null && chkForeign.body.message === null
+    && same(Object.keys(chkForeign.body), Object.keys(chkNowhere.body)) && same({ ...chkForeign.body, login_name: null }, { ...chkNowhere.body, login_name: null }), { chkForeign: chkForeign.body, chkNowhere: chkNowhere.body });
+  const chkMirrorOwn = await call('POST', `${P(LF.code)}/imports/login-names/check`, MGR2, { login_name: 'YENI.cagri' }); // LF'nin KENDI hesabi
+  const chkMirrorForeign = await call('POST', `${P(LF.code)}/imports/login-names/check`, MGR2, { login_name: 'ali.veli' }); // LN'nin hesabi (LF gormez)
+  const chkMirrorHijack = await call('POST', `${P(LN.code)}/imports/login-names/check`, MGR2, { login_name: 'ali.veli', site_code: LF.code }); // govdeye site kodu koymak kapsami degistirmez
+  check('C17c3: ayna: LF yoneticisi icin kendi sitesinin hesabi TAKEN (oneri yeni.cagri_2), LN\'nin hesabi (ali.veli) "kullanilabilir"; baska sitenin yoneticisi LN\'de kapsam degistiremez (403)',
+    chkMirrorOwn.body.code === 'TAKEN' && chkMirrorOwn.body.suggestion === 'yeni.cagri_2' && chkMirrorForeign.body.ok === true && chkMirrorForeign.body.code === 'OK' && chkMirrorHijack.status === 403,
+    { chkMirrorOwn: chkMirrorOwn.body, chkMirrorForeign: chkMirrorForeign.body, hijack: chkMirrorHijack.status });
   const lnTakenRows = [...lnRows, { ad_soyad: 'Veli Kaya', blok: 'A', daire_no: '5', iliski: 'Malik', giris_adi: 'ALI.veli' }, { ad_soyad: 'Can Demir', blok: 'A', daire_no: '6', iliski: 'Malik', giris_adi: 'cagri.ozturk_2' }];
   const lnBad = await previewOf(MGR, LN.code, 'people', lnTakenRows);
   const lnBadAcc = Object.fromEntries(lnBad.body.accounts.map((a) => [a.n, a]));
-  check('C17d: yonetici secimi sistemde kayitliysa satir hatasi LOGIN_NAME_TAKEN (hesap listesinde rejected + neden), dosyada baska satirla ayniysa LOGIN_NAME_DUP_IN_FILE; diger satirlar etkilenmez',
+  check('C17d: yonetici secimi BU sitede kayitliysa satir hatasi LOGIN_NAME_TAKEN (hesap listesinde rejected + neden), dosyada baska satirla ayniysa LOGIN_NAME_DUP_IN_FILE; diger satirlar etkilenmez',
     lnBad.status === 200 && same(issueCodes(lnBad, 7), ['e:LOGIN_NAME_TAKEN']) && same(issueCodes(lnBad, 8), ['e:LOGIN_NAME_DUP_IN_FILE']) && lnBadAcc[7]?.status === 'rejected' && lnBadAcc[7].code === 'LOGIN_NAME_TAKEN'
     && typeof lnBadAcc[7].message === 'string' && lnBad.body.totals.error === 2 && lnBadAcc[2]?.login_name === 'ali.veli_3', lnBad.body.issues);
+  const lnForeignPick = await previewOf(MGR, LN.code, 'people', [{ ad_soyad: 'Baska Sitede Secilen', blok: 'A', daire_no: '5', iliski: 'Malik', giris_adi: 'yeni.cagri' }]);
+  check('C17d2: yonetici secimi BASKA sitede kayitliysa (yeni.cagri, LF) satir hatasi YOK: onizleme secilen adi aynen gosterir (custom) - sistem geneli denetim onayda yapilir, onizleme var/yok sizdirmaz',
+    lnForeignPick.status === 200 && lnForeignPick.body.totals.error === 0 && lnForeignPick.body.accounts[0]?.status === 'new' && lnForeignPick.body.accounts[0].login_name === 'yeni.cagri' && lnForeignPick.body.accounts[0].custom === true
+    && lnForeignPick.body.issues.length === 0, lnForeignPick.body?.accounts);
 
-  // onizleme hash'i adlara bagli: ad bu arada baska sitede alinirsa onay PREVIEW_STALE verir ve HICBIR sey yazilmaz
+  // onizleme hash'i BU sitedeki adlara bagli: ad bu arada BU sitede alinirsa onay PREVIEW_STALE verir ve HICBIR sey yazilmaz
   const usersBeforeLn = await countOf(`SELECT COUNT(*)::int AS n FROM users`);
   const lnRacer = await mkUser('Cagri Rakip', 'apartment_owner');
   await q(`UPDATE users SET login_name = 'cagri.ozturk' WHERE user_code = $1`, [lnRacer]);
+  await member(LN.apt('A', 7).id, lnRacer, 'FAMILY_MEMBER'); // onizlemeden sonra BU sitenin sakini oldu
   const lnStale = await commitRaw(MGR, LN.code, 'people', lnRows, lnPv.body.preview_hash);
-  check('C17e: onizlemeden sonra onerilen ad (cagri.ozturk) baska sitede alinirsa onay 409 PREVIEW_STALE; hicbir kisi / hesap yazilmadi; yeni onizleme cagri.ozturk_3 onerir',
+  check('C17e: onizlemeden sonra onerilen ad (cagri.ozturk) BU sitede alinirsa onay 409 PREVIEW_STALE; hicbir kisi / hesap yazilmadi; yeni onizleme cagri.ozturk_3 onerir',
     lnStale.status === 409 && lnStale.body.code === 'PREVIEW_STALE' && (await countOf(`SELECT COUNT(*)::int AS n FROM users`)) === usersBeforeLn + 1 && (await peopleNamed(LN.code, 'Ali Veli')).length === 0, lnStale.body);
-  const lnRun = await run(MGR, LN.code, 'people', lnRows);
-  const lnItems = Object.fromEntries((lnRun.cm?.body?.result?.accounts?.items ?? []).map((i) => [i.n, i]));
-  check('C17f: onay 201: acilan adlar onizlemede gosterilenlerin AYNISI (ali.veli_3, ali.veli_4, cagri.ozturk_3 [cagri.ozturk alindi], cagri.ozturk_2 [secim]); yarisla degisen ad yok (renamed 0); users.login_name gercekten bu adlar',
-    lnRun.cm?.status === 201 && lnRun.pv.body.accounts.find((a) => a.n === 4)?.login_name === 'cagri.ozturk_3' && lnItems[2]?.login_name === 'ali.veli_3' && lnItems[3]?.login_name === 'ali.veli_4' && lnItems[4]?.login_name === 'cagri.ozturk_3'
-    && lnItems[5]?.login_name === 'cagri.ozturk_2' && lnRun.cm.body.result.accounts.renamed === 0 && lnRun.cm.body.result.accounts.created === 4
-    && same((await q(`SELECT login_name FROM users WHERE login_name IN ('ali.veli_3','ali.veli_4','cagri.ozturk_3','cagri.ozturk_2') ORDER BY 1`)).rows.map((r) => r.login_name), ['ali.veli_3', 'ali.veli_4', 'cagri.ozturk_2', 'cagri.ozturk_3']), lnRun.cm?.body?.result?.accounts);
+  const lnPv2 = await previewOf(MGR, LN.code, 'people', lnRows);
+  const lnForeignRacer = await mkUser('Cagri Rakip Baska Sitede', 'apartment_owner');
+  await q(`UPDATE users SET login_name = 'cagri.ozturk_3' WHERE user_code = $1`, [lnForeignRacer]); // onizlemeden SONRA, BASKA sitede (LF) alindi
+  await member(LF.apt('A', 3).id, lnForeignRacer, 'APARTMENT_ADMIN');
+  const lnCommit = await commitRaw(MGR, LN.code, 'people', lnRows, lnPv2.body.preview_hash);
+  const lnItems = Object.fromEntries((lnCommit.body?.result?.accounts?.items ?? []).map((i) => [i.n, i]));
+  check('C17f: onizleme: ali.veli_3 [LF\'de kayitli, gorunmez], ali.veli_4, cagri.ozturk_3 [cagri.ozturk bu sitede alindi], cagri.ozturk_2 [secim]. Onizlemeden sonra cagri.ozturk_3 BASKA sitede alindi: onay PREVIEW_STALE VERMEZ (201); yazim ani SISTEM geneli denetler: kopya yazilmaz, ali.veli_3 -> ali.veli_5, cagri.ozturk_3 -> cagri.ozturk_4 (requested_login_name ile bildirilir, renamed 2), digerleri onizlemedeki gibi',
+    lnPv2.body.accounts.map((a) => a.login_name).join() === 'ali.veli_3,ali.veli_4,cagri.ozturk_3,cagri.ozturk_2' && lnCommit.status === 201 && lnCommit.body.result.accounts.created === 4 && lnCommit.body.result.accounts.skipped === 0 && lnCommit.body.result.accounts.renamed === 2
+    && lnItems[2]?.login_name === 'ali.veli_5' && lnItems[2].requested_login_name === 'ali.veli_3' && lnItems[3]?.login_name === 'ali.veli_4' && !('requested_login_name' in lnItems[3])
+    && lnItems[4]?.login_name === 'cagri.ozturk_4' && lnItems[4].requested_login_name === 'cagri.ozturk_3' && lnItems[5]?.login_name === 'cagri.ozturk_2' && !('requested_login_name' in lnItems[5])
+    && same((await q(`SELECT login_name FROM users WHERE login_name IN ('ali.veli_5','ali.veli_4','cagri.ozturk_4','cagri.ozturk_2') ORDER BY 1`)).rows.map((r) => r.login_name), ['ali.veli_4', 'ali.veli_5', 'cagri.ozturk_2', 'cagri.ozturk_4']), lnCommit.body?.result?.accounts);
   check('C17g: SISTEMDE kopya kullanici adi YOK (LOWER(login_name) tekil) ve ikinci yukleme yeni hesap / yeni ad uretmez',
     (await countOf(`SELECT COUNT(*)::int AS n FROM (SELECT LOWER(login_name) FROM users WHERE login_name IS NOT NULL GROUP BY 1 HAVING COUNT(*) > 1) d`)) === 0
     && (await run(MGR, LN.code, 'people', lnRows)).pv.body.accounts.filter((a) => a.status === 'new').length === 0);
   const dupShape = await (async () => {
     try {
-      await q(`UPDATE users SET login_name = 'ali.veli_3' WHERE user_code = $1`, [lnRacer]);
+      await q(`UPDATE users SET login_name = 'ali.veli_3' WHERE user_code = $1`, [lnRacer]); // ali.veli_3 baska sitenin hesabinda: veritabani teklik sistem geneli
       return null;
     } catch (error) {
       return { code: error.code, constraint: error.constraint };
     }
   })();
-  check('C17h: gercek PG tekillik hatasi 23505 + constraint = idx_users_login_name_unique (yazici bu seklin ayni oldugunu varsayar: isLoginNameConflict)', dupShape?.code === '23505' && dupShape.constraint === 'idx_users_login_name_unique', dupShape);
+  check('C17h: gercek PG tekillik hatasi 23505 + constraint = idx_users_login_name_unique (yazici bu seklin ayni oldugunu varsayar: isLoginNameConflict); teklik SISTEM geneli: baska sitenin hesabinin adi (ali.veli_3) da alinamaz', dupShape?.code === '23505' && dupShape.constraint === 'idx_users_login_name_unique', dupShape);
 
   // yazim aninda YARIS: gosterilen ad INSERT aninda baska bir islemce alinmis gibi (tetikleyici 23505 firlatir) -> kisi SAVEPOINT'ine donulur, siradaki bos ad, sonuc + requested_login_name
   const LN3 = await mkSite('Kullanici Adi Yaris', { 'A Blok': 4 });
@@ -844,6 +877,54 @@ export async function runBulkImportSection(ctx) {
   check('C17j: gercek PG tekillik: yaris sonrasi hicbir kopya ad yok ve yarisan satirin kisisi dogru hesaba bagli (user_code dolu)',
     (await countOf(`SELECT COUNT(*)::int AS n FROM (SELECT LOWER(login_name) FROM users WHERE login_name IS NOT NULL GROUP BY 1 HAVING COUNT(*) > 1) d`)) === 0
     && (await peopleWhere(LN3.code, `COALESCE(u.full_name, sp.full_name) = 'Yaris Kisi'`)).every((row) => row.user_code !== null));
+
+  // --- C17k / C17l: E-POSTA sayim acigi kapali (gercek PG). /accounts ucu CRM esitlemesi YAPMAZ: bu sitenin baglari yalniz apartment_memberships'te. BASKA sitede / super kullanicida kayitli
+  //     e-posta bilinmeyen e-postayla AYNI ("yeni hesap") gorunur; bu sitenin kendi hesaplari dogru raporlanir (bagli hesap -> existing, bagli yonetici -> email_in_use). Onayda sistem geneli denetim
+  //     (users.email tekil) baska sitenin / super kullanicinin e-postasiyla hesap ACMAZ (EMAIL_IN_USE), kisi yazilir.
+  const LE = await mkSite('E-posta Sayim Sitesi', { 'A Blok': 6 });
+  await linkManager(LE.code, MGR);
+  const foreignMail = 'yabanci.hesap@bulk.qa.example';
+  const mailForeign = await mkUser('Yabanci Hesap', 'apartment_owner', { email: foreignMail });
+  await member(LF.apt('A', 4).id, mailForeign, 'APARTMENT_ADMIN'); // bagi YALNIZ LF'de
+  const superMail = (await q(`SELECT email FROM users WHERE user_code = $1`, [SUPER])).rows[0].email; // super kullanici hicbir siteye bagli degil
+  const ownMgrMail = 'bu.sitenin.yoneticisi@bulk.qa.example';
+  const mailOwnMgr = await mkUser('Bu Sitenin Yoneticisi', 'site_manager', { email: ownMgrMail });
+  await member(LE.apt('A', 6).id, mailOwnMgr, 'APARTMENT_ADMIN'); // yonetici AYNI ZAMANDA bu sitenin sakini
+  const ownResMail = 'bu.sitenin.sakini@bulk.qa.example';
+  const mailOwnRes = await mkUser('Bu Sitenin Sakini', 'apartment_owner', { email: ownResMail });
+  await q(`UPDATE users SET login_name = 'bu.sitenin.sakini' WHERE user_code = $1`, [mailOwnRes]);
+  await member(LE.apt('A', 5).id, mailOwnRes, 'APARTMENT_ADMIN');
+  const mailRows = [
+    { ad_soyad: 'Yabanci Hesap Kisi', e_posta: foreignMail, blok: 'A', daire_no: '1', iliski: 'Malik' }, // n=2: BASKA sitede kayitli
+    { ad_soyad: 'Hic Kayitsiz Kisi', e_posta: 'hic.kayitli.degil@bulk.qa.example', blok: 'A', daire_no: '2', iliski: 'Malik' }, // n=3: hicbir yerde kayitli degil
+    { ad_soyad: 'Super Adli Kisi', e_posta: superMail, blok: 'A', daire_no: '3', iliski: 'Malik' }, // n=4: super kullanici (hicbir siteye bagli degil)
+    { ad_soyad: 'Kendi Yonetici Kisi', e_posta: ownMgrMail, blok: 'A', daire_no: '4', iliski: 'Malik' }, // n=5: BU sitenin sakini olan yonetici (bagi var, baglanamaz)
+    { ad_soyad: 'Kendi Sakin Kisi', e_posta: ownResMail, blok: 'A', daire_no: '4', iliski: 'Aile' }, // n=6: BU sitede bagi olan hesap (baglanabilir)
+  ];
+  const usersBeforeMail = await countOf(`SELECT COUNT(*)::int AS n FROM users`);
+  const mailAcc = await call('POST', `${P(LE.code)}/imports/people/accounts`, MGR, body(mailRows));
+  const mailItems = Object.fromEntries((mailAcc.body?.accounts ?? []).map((a) => [a.n, a]));
+  const shapeOf = (item) => ({ ...item, n: null, login_name: null }); // satir no ve onerilen ad disinda birebir ayni olmali
+  check('C17k: SAYIM ACIGI KAPALI (e-posta): BASKA sitede (n=2) ve super kullanicida (n=4) kayitli e-posta onizlemede hic kayitli olmayan e-postayla (n=3) BIREBIR AYNI sekil: status new, ad onerilir, neden / ileti yok; kendi sitenin yoneticisi (n=5) email_in_use, kendi sitenin baglanabilir hesabi (n=6) existing + hesap adi; yazmaz',
+    mailAcc.status === 200 && mailItems[2]?.status === 'new' && mailItems[2].login_name === 'yabanci.hesap.kisi' && mailItems[3]?.status === 'new' && mailItems[3].login_name === 'hic.kayitsiz.kisi' && mailItems[4]?.status === 'new' && mailItems[4].login_name === 'super.adli.kisi'
+    && same(shapeOf(mailItems[2]), shapeOf(mailItems[3])) && same(shapeOf(mailItems[4]), shapeOf(mailItems[3])) && mailItems[2].editable === true && !('code' in mailItems[2]) && !('message' in mailItems[2])
+    && mailItems[5]?.status === 'email_in_use' && mailItems[5].login_name === null && mailItems[5].editable === false && mailItems[6]?.status === 'existing' && mailItems[6].login_name === 'bu.sitenin.sakini' && mailItems[6].editable === false
+    && (await countOf(`SELECT COUNT(*)::int AS n FROM users`)) === usersBeforeMail, mailAcc.body?.accounts);
+  const mailMirror = await call('POST', `${P(LF.code)}/imports/people/accounts`, MGR2, body(mailRows.slice(0, 1)));
+  check('C17k2: ayna: LF yoneticisi icin ayni e-posta (yabanci.hesap, LF\'de bagli yonetici olmayan hesap) KENDI sitesinin hesabidir -> existing (bagi LF\'de); LN / LE gibi baska sitelerin yoneticileri bunu goremez (n=2 new)',
+    mailMirror.status === 200 && mailMirror.body.accounts[0]?.status === 'existing' && mailItems[2]?.status === 'new', mailMirror.body?.accounts);
+  const mailCommitRows = mailRows.slice(0, 3);
+  const protectedMail = async () => JSON.stringify((await q(`SELECT user_code, email, role, password_hash, must_change_password, is_active, login_name FROM users WHERE user_code = ANY($1::int[]) ORDER BY user_code`, [[mailForeign, SUPER]])).rows);
+  const protectedMailBefore = await protectedMail();
+  const mailForeignMembershipsBefore = JSON.stringify(await membershipsOf([mailForeign]));
+  const mailsBeforeLE = mails.length;
+  const mailRun = await run(MGR, LE.code, 'people', mailCommitRows);
+  const mailRes = mailRun.cm?.body?.result?.accounts;
+  check('C17l: onay (sistem geneli denetim): onizleme uc satirin UCUNU de "yeni hesap" gosterdi; yazim anindaki denetim BASKA sitenin (n=2) ve super kullanicinin (n=4) e-postasiyla hesap ACMAZ (EMAIL_IN_USE, kisi yazilir, hesapsiz); yalniz kayitsiz e-posta hesap alir (users +1); yabanci hesap / super degismedi, yeni uyelik eklenmedi, e-posta gonderilmedi',
+    mailRun.pv.status === 200 && mailRun.pv.body.accounts.length === 3 && mailRun.pv.body.accounts.every((a) => a.status === 'new') && mailRun.cm?.status === 201 && mailRes?.created === 1 && mailRes.linked === 0 && mailRes.skipped === 2
+    && same([...mailRes.skipped_items].sort((a, b) => a.n - b.n).map((i) => [i.n, i.code]), [[2, 'EMAIL_IN_USE'], [4, 'EMAIL_IN_USE']]) && mailRes.items.length === 1 && mailRes.items[0].n === 3 && mailRes.items[0].login_name === 'hic.kayitsiz.kisi'
+    && (await countOf(`SELECT COUNT(*)::int AS n FROM users`)) === usersBeforeMail + 1 && (await protectedMail()) === protectedMailBefore && JSON.stringify(await membershipsOf([mailForeign])) === mailForeignMembershipsBefore
+    && mails.length === mailsBeforeLE && (await personByEmail(LE.code, foreignMail))[0]?.user_code === null && (await personByEmail(LE.code, superMail))[0]?.user_code === null, { accounts: mailRes, preview: mailRun.pv.body?.accounts });
 
   // kapi listeleri AYNI (my-doors)
 
@@ -1162,14 +1243,18 @@ export async function runBulkImportSection(ctx) {
            SELECT 'Dolgu Kullanici ' || g, 'dolgu-user' || g || '@dolgu.qa.example', 'individual', 'x', TRUE, TRUE, 'approved' FROM generate_series(1, 19000) g`);
   await q(`UPDATE users SET login_name = 'dolgu.kisi.' || user_code WHERE email LIKE 'dolgu-user%@dolgu.qa.example'`);
   await q(`ANALYZE users`);
-  const loginSql = `SELECT LOWER(login_name) AS name FROM users WHERE LOWER(login_name) = ANY($1::TEXT[])`;
-  const loginPlan = (await q(`EXPLAIN ${loginSql}`, [['ali.veli', 'ali.veli_2', 'ali.veli_3', 'ali.veli_4', 'ali.veli_5', 'ali.veli_6']])).rows.map((r) => r['QUERY PLAN']).join(' | ');
-  check('F4d: kullanici adi arama sorgusu (LOWER(login_name) = ANY) 19 bin satirli users tablosunda idx_users_login_name_unique kullanir, Seq Scan YOK', /idx_users_login_name_unique/.test(loginPlan) && !/Seq Scan on users/.test(loginPlan), loginPlan);
+  // onizleme / denetim sorgusu SITE kapsamlidir (bulk_import_scope.js): gorunurluk kosulu ad ile ELENMIS az sayida satirda calisir, ad aramasi indeksle yapilir
+  const { siteVisibleUserSql } = await import('../src/modules/bulk_import_scope.js');
+  const loginSql = `SELECT LOWER(u.login_name) AS name FROM users u WHERE LOWER(u.login_name) = ANY($1::TEXT[]) AND ${siteVisibleUserSql('u.user_code', '$2::BIGINT')}`;
+  const loginPlan = (await q(`EXPLAIN ${loginSql}`, [['ali.veli', 'ali.veli_2', 'ali.veli_3', 'ali.veli_4', 'ali.veli_5', 'ali.veli_6'], S.code])).rows.map((r) => r['QUERY PLAN']).join(' | ');
+  check('F4d: kullanici adi arama sorgusu (site kapsamli: LOWER(u.login_name) = ANY + gorunurluk kosulu) 19 bin satirli users tablosunda idx_users_login_name_unique kullanir, users uzerinde Seq Scan YOK', /idx_users_login_name_unique/.test(loginPlan) && !/Seq Scan on users/.test(loginPlan), loginPlan);
+  const globalLoginPlan = (await q(`EXPLAIN SELECT LOWER(login_name) AS name FROM users WHERE LOWER(login_name) = ANY($1::TEXT[])`, [['ali.veli', 'ali.veli_2', 'ali.veli_3', 'ali.veli_4', 'ali.veli_5', 'ali.veli_6']])).rows.map((r) => r['QUERY PLAN']).join(' | ');
+  check('F4d2: yazim ani (sistem geneli) kullanici adi sorgusu da idx_users_login_name_unique kullanir, Seq Scan YOK', /idx_users_login_name_unique/.test(globalLoginPlan) && !/Seq Scan on users/.test(globalLoginPlan), globalLoginPlan);
   const { resolveLoginNames } = await import('../src/modules/bulk_import_login_names.js');
   const manyRequests = Array.from({ length: 5000 }, (_, i) => ({ key: `r${i}`, base: i % 2 === 0 ? 'mehmet.yilmaz' : `kisi.${i}` }));
   const loginSpy = { query: (...args) => { loginSpy.count += 1; return pool.query(...args); }, count: 0 };
   const loginStart = Date.now();
-  const manyNames = await resolveLoginNames(loginSpy, manyRequests);
+  const manyNames = await resolveLoginNames(loginSpy, manyRequests, { siteCode: S.code });
   const loginMs = Date.now() - loginStart;
   check('F4c: 5000 satirlik kullanici adi cozumlemesi (2500 ayni ad = mehmet.yilmaz, _2 ... _2500) gercek PG\'de benzersiz adlar uretir; sorgu sayisi sinirli; sure makul',
     manyNames.size === 5000 && new Set([...manyNames.values()].map((n) => n.toLowerCase())).size === 5000 && manyNames.get('r0') === 'mehmet.yilmaz' && loginSpy.count <= 200 && loginMs < 20000, { queries: loginSpy.count, ms: loginMs });

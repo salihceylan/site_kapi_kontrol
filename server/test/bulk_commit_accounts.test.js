@@ -1,5 +1,6 @@
 // Toplu yükleme commit akışı (DB'siz, bellek içi sahte havuz): hesap açma kapsamı, nihai kullanıcı adlarının yanıtta dönmesi, şifre özetlerinin
-// TRANSACTION ÖNCESİ hesaplanması, kapsam dışı (hesapsız mevcut) sakinlere dokunulmaması. Gerçek PostgreSQL: scripts/qa_platform_pg.mjs bölüm bulk_import.
+// TRANSACTION ÖNCESİ hesaplanması, kapsam dışı (hesapsız mevcut) sakinlere dokunulmaması. Önizleme / denetim SİTE kapsamlıdır (başka sitenin ad / e-postası
+// görünmez, güvenlik denetimi 2026-10-28); yazım anı SİSTEM geneldir. Gerçek PostgreSQL: scripts/qa_platform_pg.mjs bölüm bulk_import.
 import { describe, it, before, after, beforeEach, afterEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import bcrypt from 'bcryptjs';
@@ -22,8 +23,20 @@ const APARTMENTS = ['101', '102', '103'].map((id, i) => ({
 
 let db;
 
+/**
+ * `siteLogins`: SITE yöneticisinin GÖREBİLDİĞİ hesapların kullanıcı adları (önizleme / denetim sorgusu bunları görür);
+ * `takenLogins`: yalnız BAŞKA sitelerde kayıtlı adlar (yazım anındaki sistem geneli sorgu bunları da görür, önizleme görmez);
+ * `emailUsers`: e-posta -> { user_code, login_name, linkable, sites? } (`sites`: hesabı görebilen siteler, varsayılan [SITE]; yazıcının tek e-posta sorgusu sistem geneldir).
+ */
 function freshDb({ existingPeople = [], existingResidencies = [] } = {}) {
-  return { log: [], users: [], audits: [], nextUser: 900, existingPeople, existingResidencies, takenLogins: new Set(), emailUsers: {}, lockedIds: null, failInsertFor: null, peopleRows: new Map() };
+  return { log: [], users: [], audits: [], nextUser: 900, existingPeople, existingResidencies, takenLogins: new Set(), siteLogins: new Set(), emailUsers: {}, lockedIds: null, failInsertFor: null, peopleRows: new Map() };
+}
+
+/** Kapsam koşulu SQL'de yoksa sahte veritabanı sorguyu reddeder (kapsamsız sorgu gerçek veritabanında tüm sistemi sayardı). */
+function assertScopedSql(sql) {
+  for (const fragment of ['vis_sp.site_code = $2::BIGINT', 'vis_a.site_code = $2::BIGINT', 'vis_r.site_code = $2::BIGINT']) {
+    assert.ok(sql.includes(fragment), `KAPSAMSIZ SORGU (sayım açığı): ${fragment} yok -> ${sql.slice(0, 160)}`);
+  }
 }
 
 function handle(sql, params = []) {
@@ -67,20 +80,40 @@ function handle(sql, params = []) {
     return ok(params[0].map((id) => ({ id: String(id), unit_label: `Daire ${id}`, sort_order: 1, block_name: 'A Blok' })));
   }
   if (/FROM users u WHERE LOWER\(u\.email\) = \$1/.test(sql)) {
+    // yazıcının tek e-posta sorgusu: SİSTEM geneli (users.email tekil), kapsam koşulu yok
     const row = db.emailUsers[params[0]];
-    return ok(row ? [row] : []);
+    if (!row) return ok([]);
+    const { sites: _sites, ...owner } = row;
+    return ok([owner]);
   }
-  // önizleme/commit hesap çözümlemesi: e-postası mevcut hesaba ait mi (toplu) ve aday kullanıcı adlarından hangileri alınmış (toplu)
+  // önizleme/commit hesap çözümlemesi: e-postası BU SİTENİN görebildiği bir hesaba ait mi (toplu, site kapsamlı)
   if (/FROM users u WHERE LOWER\(u\.email\) = ANY/.test(sql)) {
-    return ok(params[0].filter((email) => db.emailUsers[email]).map((email) => ({ email, ...db.emailUsers[email] })));
+    assertScopedSql(sql);
+    return ok(
+      params[0]
+        .filter((email) => db.emailUsers[email] && (db.emailUsers[email].sites ?? [SITE]).includes(Number(params[1])))
+        .map((email) => {
+          const { sites: _sites, ...owner } = db.emailUsers[email];
+          return { email, ...owner };
+        }),
+    );
   }
+  // önizleme / denetim: aday kullanıcı adlarından hangileri BU SİTENİN görebildiği hesaplarda alınmış (toplu, site kapsamlı)
+  if (/^SELECT LOWER\(u\.login_name\) AS name FROM users u WHERE LOWER\(u\.login_name\) = ANY\(\$1::TEXT\[\]\) AND \(/.test(sql)) {
+    assertScopedSql(sql);
+    const visible = Number(params[1]) === SITE ? db.siteLogins : new Set();
+    return ok(params[0].filter((name) => visible.has(String(name).toLowerCase())).map((name) => ({ name })));
+  }
+  // yazım anı: SİSTEM geneli (başka sitelerdeki adlar dahil)
   if (/^SELECT LOWER\(login_name\) AS name FROM users WHERE LOWER\(login_name\) = ANY\(\$1::TEXT\[\]\)$/.test(sql)) {
-    return ok(params[0].filter((name) => db.takenLogins.has(String(name).toLowerCase())).map((name) => ({ name })));
+    const everywhere = (name) => db.takenLogins.has(String(name).toLowerCase()) || db.siteLogins.has(String(name).toLowerCase());
+    return ok(params[0].filter(everywhere).map((name) => ({ name })));
   }
   if (/^INSERT INTO users/.test(sql)) {
     if (db.failInsertFor && db.failInsertFor === params[2]) throw Object.assign(new Error('enjekte'), { code: '23505' });
     db.nextUser += 1;
-    db.takenLogins.add(String(params[2]).toLowerCase());
+    // yeni hesap bu sitenin kişisine bağlanır: sonraki önizlemelerde bu sitenin yöneticisi de görür
+    db.siteLogins.add(String(params[2]).toLowerCase());
     db.users.push({ user_code: db.nextUser, login_name: params[2], email: params[1], password_hash: params[4], full_name: params[0] });
     return ok([{ user_code: db.nextUser }]);
   }
@@ -147,15 +180,40 @@ describe('commit: hesap açma kapsamı ve yanıt', () => {
     ]);
   });
 
-  it('sistemde (başka site / şehir) alınmış ad önizlemede atlanır: sıradaki boş varyasyon önerilir', async () => {
-    db.takenLogins = new Set(['ali.veli', 'ali.veli_2']);
+  it('BU SİTEDE alınmış ad önizlemede atlanır: sıradaki boş varyasyon önerilir', async () => {
+    db.siteLogins = new Set(['ali.veli', 'ali.veli_2']);
     const preview = await previewImport({ siteCode: SITE, kind: 'people', body: body(PEOPLE_ROWS) });
     assert.deepEqual(preview.accounts.map((a) => [a.n, a.login_name]), [[2, 'ali.veli_3'], [3, 'ali.veli_4']]);
   });
 
-  it('ÖNİZLEME HASH\'İ önerilen adlara bağlıdır: ad bu arada başkasına geçerse commit PREVIEW_STALE verir (gösterilmeyen ad yazılmaz)', async () => {
+  it('SAYIM AÇIĞI KAPALI: BAŞKA sitede alınmış ad önizlemede GÖRÜNMEZ (taban önerilir); hiç alınmamış ad ile aynı önizleme gövdesi ve aynı hash', async () => {
+    const baseline = await previewImport({ siteCode: SITE, kind: 'people', body: body(PEOPLE_ROWS) });
+    db.takenLogins = new Set(['ali.veli', 'ali.veli_2', 'ali.veli_3']);
     const preview = await previewImport({ siteCode: SITE, kind: 'people', body: body(PEOPLE_ROWS) });
-    db.takenLogins.add('ali.veli');
+    assert.deepEqual(preview.accounts.map((a) => [a.n, a.login_name]), [[2, 'ali.veli'], [3, 'ali.veli_2']]);
+    assert.deepEqual(preview, baseline, 'başka sitenin hesapları önizlemeyi hiçbir alanda değiştirmez');
+    assert.equal(preview.preview_hash, baseline.preview_hash);
+  });
+
+  it('başka sitede alınmış ad ONAYDA sistem geneli denetlenir: kopya YAZILMAZ, sıradaki boş ad verilir ve sonuçta requested_login_name + renamed ile bildirilir (PREVIEW_STALE değil)', async () => {
+    db.takenLogins = new Set(['ali.veli', 'ali.veli_2']); // yalnız başka sitelerde
+    const { preview, committed } = await previewAndCommit('people', PEOPLE_ROWS);
+    assert.deepEqual(preview.accounts.map((a) => [a.n, a.login_name]), [[2, 'ali.veli'], [3, 'ali.veli_2']], 'önizleme başka siteyi görmez');
+    assert.equal(committed.status, 201);
+    const accounts = committed.body.result.accounts;
+    assert.deepEqual([accounts.created, accounts.skipped, accounts.renamed], [2, 0, 2]);
+    const byN = Object.fromEntries(accounts.items.map((i) => [i.n, i]));
+    // kiracı (satır 3) önce işlenir: istenen ali.veli_2 başka sitede alınmış -> ali.veli_3; malik (satır 2): istenen ali.veli alınmış, _2 kardeşe ayrılı, _3 az önce verildi -> ali.veli_4
+    assert.deepEqual([byN[3].login_name, byN[3].requested_login_name], ['ali.veli_3', 'ali.veli_2']);
+    assert.deepEqual([byN[2].login_name, byN[2].requested_login_name], ['ali.veli_4', 'ali.veli']);
+    const written = db.users.map((u) => u.login_name.toLowerCase());
+    assert.equal(new Set(written).size, written.length, 'kopya ad yok');
+    assert.ok(written.every((name) => !db.takenLogins.has(name)), 'başka sitedeki hiçbir ad yazılmadı');
+  });
+
+  it('ÖNİZLEME HASH\'İ önerilen adlara bağlıdır: ad bu arada BU SİTEDE başkasına geçerse commit PREVIEW_STALE verir (gösterilmeyen ad yazılmaz)', async () => {
+    const preview = await previewImport({ siteCode: SITE, kind: 'people', body: body(PEOPLE_ROWS) });
+    db.siteLogins.add('ali.veli');
     await assert.rejects(
       () => commitImport({ siteCode: SITE, kind: 'people', actor: ACTOR, body: body(PEOPLE_ROWS, { expected_hash: preview.preview_hash, idempotency_key: 'stale-names-0001', acknowledged: true }) }),
       (error) => error.code === 'PREVIEW_STALE',
@@ -163,7 +221,7 @@ describe('commit: hesap açma kapsamı ve yanıt', () => {
     assert.equal(db.users.length, 0);
   });
 
-  it('yönetici seçimi ad (giris_adi): boştaysa aynen önerilir ve üretilen adlar onunla çakışmaz; alınmışsa satır hatası LOGIN_NAME_TAKEN; geçersizse LOGIN_NAME_INVALID', async () => {
+  it('yönetici seçimi ad (giris_adi): boştaysa aynen önerilir ve üretilen adlar onunla çakışmaz; bu sitede alınmışsa satır hatası LOGIN_NAME_TAKEN; geçersizse LOGIN_NAME_INVALID', async () => {
     const rows = [
       row(2, { ad_soyad: 'Ali Veli', blok: 'A', daire_no: '1', iliski: 'Malik' }),
       row(3, { ad_soyad: 'Ali Veli', blok: 'A', daire_no: '2', iliski: 'Kiracı', giris_adi: 'Ali.Veli' }), // seçim: 'ali.veli' (normalleşir)
@@ -171,13 +229,19 @@ describe('commit: hesap açma kapsamı ve yanıt', () => {
     const preview = await previewImport({ siteCode: SITE, kind: 'people', body: body(rows) });
     assert.deepEqual(preview.accounts.map((a) => [a.n, a.login_name, a.custom]), [[2, 'ali.veli_2', false], [3, 'ali.veli', true]]);
 
+    // başka sitede kayıtlı seçim REDDEDİLMEZ (sayım açığı kapalı): önizleme boştaki ad gibi davranır
     db.takenLogins = new Set(['ali.veli']);
+    const elsewhere = await previewImport({ siteCode: SITE, kind: 'people', body: body(rows) });
+    assert.deepEqual(elsewhere, preview);
+    db.takenLogins = new Set();
+
+    db.siteLogins = new Set(['ali.veli']);
     const taken = await previewImport({ siteCode: SITE, kind: 'people', body: body(rows) });
     assert.deepEqual(taken.issues.filter((i) => i.n === 3).map((i) => i.code), ['LOGIN_NAME_TAKEN']);
     assert.equal(taken.totals.error, 1);
     assert.deepEqual(taken.accounts.map((a) => [a.n, a.status, a.login_name]), [[2, 'new', 'ali.veli_2'], [3, 'rejected', null]]);
     assert.equal(taken.accounts[1].code, 'LOGIN_NAME_TAKEN');
-    assert.match(taken.accounts[1].message, /sistemde başka bir hesapta kayıtlı/);
+    assert.match(taken.accounts[1].message, /bu sitede başka bir hesapta kayıtlı/);
     assert.equal(taken.accounts[1].editable, true);
 
     const invalid = await previewImport({ siteCode: SITE, kind: 'people', body: body([row(2, { ad_soyad: 'Ali Veli', blok: 'A', daire_no: '1', giris_adi: 'a@b' })]) });
@@ -204,16 +268,66 @@ describe('commit: hesap açma kapsamı ve yanıt', () => {
     assert.deepEqual(preview.accounts.map((a) => a.login_name), ['ali.veli', 'veli.ali']);
   });
 
-  it('kullanıcı adı denetim ucu servisi: biçim hatası, alınmış ad (öneri ile) ve boştaki ad', async () => {
+  it('kullanıcı adı denetim ucu servisi: biçim hatası, BU SİTEDE alınmış ad (öneri ile) ve boştaki ad', async () => {
     const { checkImportLoginName } = await import('../src/modules/bulk_import_service.js');
-    db.takenLogins = new Set(['ali.veli', 'ali.veli_2']);
-    assert.deepEqual(await checkImportLoginName({ body: { login_name: 'Ali Veli' } }), {
-      ok: false, login_name: 'ali.veli', code: 'TAKEN', message: 'Bu kullanıcı adı sistemde başka bir hesapta kayıtlı.', suggestion: 'ali.veli_3',
+    db.siteLogins = new Set(['ali.veli', 'ali.veli_2']);
+    assert.deepEqual(await checkImportLoginName({ siteCode: SITE, body: { login_name: 'Ali Veli' } }), {
+      ok: false, login_name: 'ali.veli', code: 'TAKEN', message: 'Bu kullanıcı adı bu sitede başka bir hesapta kayıtlı.', suggestion: 'ali.veli_3',
     });
-    assert.equal((await checkImportLoginName({ body: { login_name: 'yeni.ad' } })).ok, true);
-    assert.equal((await checkImportLoginName({ body: { login_name: 'a@b' } })).code, 'CHARS');
-    assert.equal((await checkImportLoginName({ body: { login_name: 'ab' } })).code, 'TOO_SHORT');
-    await assert.rejects(() => checkImportLoginName({ body: { login_name: 5 } }), (error) => error.code === 'INVALID_BODY');
+    assert.equal((await checkImportLoginName({ siteCode: SITE, body: { login_name: 'yeni.ad' } })).ok, true);
+    assert.equal((await checkImportLoginName({ siteCode: SITE, body: { login_name: 'a@b' } })).code, 'CHARS');
+    assert.equal((await checkImportLoginName({ siteCode: SITE, body: { login_name: 'ab' } })).code, 'TOO_SHORT');
+    await assert.rejects(() => checkImportLoginName({ siteCode: SITE, body: { login_name: 5 } }), (error) => error.code === 'INVALID_BODY');
+  });
+
+  it('SAYIM AÇIĞI KAPALI (denetim ucu): başka sitede kayıtlı ad «kullanılabilir»; hiç olmayan ad ile birebir aynı yanıt; kendi sitesindeki çakışma yakalanır; site kodu zorunlu', async () => {
+    const { checkImportLoginName } = await import('../src/modules/bulk_import_service.js');
+    db.siteLogins = new Set(['kendi.sitem']);
+    db.takenLogins = new Set(['baska.site']);
+    const elsewhere = await checkImportLoginName({ siteCode: SITE, body: { login_name: 'baska.site' } });
+    const nowhere = await checkImportLoginName({ siteCode: SITE, body: { login_name: 'hic.yok.boyle' } });
+    assert.deepEqual(elsewhere, { ok: true, login_name: 'baska.site', code: 'OK', message: null, suggestion: null });
+    assert.deepEqual({ ...elsewhere, login_name: null }, { ...nowhere, login_name: null }, 'yanıt şekli aynı');
+    assert.equal((await checkImportLoginName({ siteCode: SITE, body: { login_name: 'kendi.sitem' } })).code, 'TAKEN');
+    // başka sitenin yöneticisi için «kendi.sitem» görünmez (kapsam istek sahibinin sitesidir)
+    assert.equal((await checkImportLoginName({ siteCode: SITE + 1, body: { login_name: 'kendi.sitem' } })).ok, true);
+    await assert.rejects(() => checkImportLoginName({ body: { login_name: 'kendi.sitem' } }), TypeError);
+  });
+
+  it('SAYIM AÇIĞI KAPALI (e-posta): başka sitedeki hesabın e-postası önizlemede «yeni hesap»; onayda sistem geneli denetim hesabı AÇMAZ (EMAIL_IN_USE), kişi yazılır, kullanıcı adı harcanmaz', async () => {
+    db.emailUsers = { 'baska.site@example.com': { user_code: 91, login_name: 'baska.sakin', linkable: false, sites: [SITE + 1] } };
+    const rows = [row(2, { ad_soyad: 'Can Demir', blok: 'A', daire_no: '1', iliski: 'Malik', e_posta: 'baska.site@example.com' })];
+    const baselineDb = freshDb();
+    const preview = await previewImport({ siteCode: SITE, kind: 'people', body: body(rows) });
+    assert.deepEqual(preview.accounts, [{ n: 2, status: 'new', login_name: 'can.demir', editable: true, custom: false }]);
+    assert.equal(preview.plan.account_create, 1);
+    // e-posta hiç kayıtlı olmasaydı önizleme AYNI olurdu
+    const saved = db;
+    db = baselineDb;
+    const unknown = await previewImport({ siteCode: SITE, kind: 'people', body: body(rows) });
+    db = saved;
+    assert.deepEqual(preview, unknown);
+
+    const { committed } = await previewAndCommit('people', rows);
+    assert.equal(committed.status, 201);
+    const accounts = committed.body.result.accounts;
+    assert.deepEqual([accounts.created, accounts.linked, accounts.skipped], [0, 0, 1]);
+    assert.deepEqual(accounts.skipped_items.map((item) => [item.n, item.code]), [[2, 'EMAIL_IN_USE']]);
+    assert.equal(db.users.length, 0, 'başka sitenin e-postasıyla hesap AÇILMAZ');
+    assert.equal(committed.body.result.rows.applied, 1, 'kişi kaydı yazıldı');
+  });
+
+  it('KENDİ sitesindeki gerçek e-posta çakışması önizlemede raporlanır: bağlanamayan hesap «email_in_use», bağlanabilir hesap «existing»', async () => {
+    db.emailUsers = {
+      'kendi.yonetici@example.com': { user_code: 55, login_name: 'yonetici', linkable: false },
+      'komsu@example.com': { user_code: 77, login_name: 'komsu.hesabi', linkable: true },
+    };
+    const rows = [
+      row(2, { ad_soyad: 'Veli Ali', blok: 'A', daire_no: '1', iliski: 'Malik', e_posta: 'kendi.yonetici@example.com' }),
+      row(3, { ad_soyad: 'Can Demir', blok: 'A', daire_no: '2', iliski: 'Malik', e_posta: 'komsu@example.com' }),
+    ];
+    const preview = await previewImport({ siteCode: SITE, kind: 'people', body: body(rows) });
+    assert.deepEqual(preview.accounts.map((a) => [a.n, a.status, a.login_name]), [[2, 'email_in_use', null], [3, 'existing', 'komsu.hesabi']]);
   });
 
   it('hesap önerisi servisi (tablo için): yalnız kişi türleri; yazmaz', async () => {

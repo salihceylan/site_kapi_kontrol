@@ -324,11 +324,21 @@ describe('kullanıcı adı uçları (öneri ve tek ad denetimi)', () => {
     assert.equal(unknown.body.code, 'IMPORT_KIND_NOT_FOUND');
   });
 
-  it('tek ad denetimi: boştaki ad ok; alınmış ad TAKEN + öneri; biçim hatası; gövde hatası 400', async () => {
-    overrides.push([/^SELECT LOWER\(login_name\) AS name FROM users WHERE LOWER\(login_name\) = ANY/, (_sql, params) => {
-      const taken = new Set(['ali.veli']);
-      return ok(params[0].filter((name) => taken.has(name)).map((name) => ({ name })));
+  /** İki sitenin hesapları: ali.veli yalnız SITE_1'in, mehmet.kaya yalnız SITE_2'nin görebildiği hesapta kayıtlı. Sorgudaki site parametresi ($2) kaydedilir. */
+  function installScopedLoginNames() {
+    const visibleBySite = new Map([[SITE_1, new Set(['ali.veli'])], [SITE_2, new Set(['mehmet.kaya'])]]);
+    const scopes = [];
+    overrides.push([/^SELECT LOWER\(u\.login_name\) AS name FROM users u WHERE LOWER\(u\.login_name\) = ANY\(\$1::TEXT\[\]\) AND \(/, (sql, params) => {
+      assert.ok(/vis_sp\.site_code = \$2::BIGINT/.test(sql) && /vis_a\.site_code = \$2::BIGINT/.test(sql) && /vis_r\.site_code = \$2::BIGINT/.test(sql), `kapsamsız sorgu: ${sql.slice(0, 120)}`);
+      scopes.push(Number(params[1]));
+      const visible = visibleBySite.get(Number(params[1])) ?? new Set();
+      return ok(params[0].filter((name) => visible.has(name)).map((name) => ({ name })));
     }]);
+    return scopes;
+  }
+
+  it('tek ad denetimi: boştaki ad ok; bu sitede alınmış ad TAKEN + öneri; biçim hatası; gövde hatası 400', async () => {
+    installScopedLoginNames();
     const free = await call('POST', `${base()}/imports/login-names/check`, { body: { login_name: 'Yeni Ad' } });
     assert.deepEqual(free.body, { ok: true, login_name: 'yeni.ad', code: 'OK', message: null, suggestion: null });
     const taken = await call('POST', `${base()}/imports/login-names/check`, { body: { login_name: 'ali.veli' } });
@@ -337,6 +347,73 @@ describe('kullanıcı adı uçları (öneri ve tek ad denetimi)', () => {
     assert.deepEqual([invalid.body.ok, invalid.body.code], [false, 'CHARS']);
     const missing = await call('POST', `${base()}/imports/login-names/check`, { body: {} });
     assert.deepEqual([missing.status, missing.body.code], [400, 'INVALID_BODY']);
+  });
+
+  it('SAYIM AÇIĞI KAPALI: A sitesinin yöneticisi B sitesinde kayıtlı adı sorgulayınca «kullanılabilir» görür (hiç olmayan adla birebir aynı yanıt); kendi sitesindeki çakışma yakalanır', async () => {
+    const scopes = installScopedLoginNames();
+    // A sitesinin yöneticisi (mgrA): B sitesinin hesabı (mehmet.kaya) -> kullanılabilir; kendi sitesinin hesabı (ali.veli) -> TAKEN
+    const foreign = await call('POST', `${base(SITE_1)}/imports/login-names/check`, { user: users.mgrA, body: { login_name: 'mehmet.kaya' } });
+    const nowhere = await call('POST', `${base(SITE_1)}/imports/login-names/check`, { user: users.mgrA, body: { login_name: 'hic.kimse.yok' } });
+    assert.deepEqual(foreign.body, { ok: true, login_name: 'mehmet.kaya', code: 'OK', message: null, suggestion: null });
+    assert.deepEqual({ ...foreign.body, login_name: null }, { ...nowhere.body, login_name: null }, 'var / yok ayırt edilemez');
+    assert.deepEqual([foreign.status, nowhere.status], [200, 200]);
+    const own = await call('POST', `${base(SITE_1)}/imports/login-names/check`, { user: users.mgrA, body: { login_name: 'ali.veli' } });
+    assert.deepEqual([own.body.ok, own.body.code, own.body.suggestion], [false, 'TAKEN', 'ali.veli_2']);
+    // B sitesinin yöneticisi (mgrB) ayna: kendi hesabı TAKEN, A'nın hesabı kullanılabilir
+    const mirrorOwn = await call('POST', `${base(SITE_2)}/imports/login-names/check`, { user: users.mgrB, body: { login_name: 'mehmet.kaya' } });
+    const mirrorForeign = await call('POST', `${base(SITE_2)}/imports/login-names/check`, { user: users.mgrB, body: { login_name: 'ali.veli' } });
+    assert.deepEqual([mirrorOwn.body.code, mirrorForeign.body.code], ['TAKEN', 'OK']);
+    // sorgu kapsamı DAİMA yetkili olunan URL sitesidir (istek gövdesinden / başka siteden alınmaz): A için 4 sorgu (1+1+2), B için 3 sorgu (2+1)
+    assert.deepEqual(scopes, [SITE_1, SITE_1, SITE_1, SITE_1, SITE_2, SITE_2, SITE_2]);
+    // başka sitenin URL'sine yetki yok: kapsam atlatılamaz (403), sorgu hiç çalışmaz (gövdeye site_code koymak da işe yaramaz)
+    const hijack = await call('POST', `${base(SITE_2)}/imports/login-names/check`, { user: users.mgrA, body: { login_name: 'mehmet.kaya', site_code: SITE_1 } });
+    assert.deepEqual([hijack.status, hijack.body.code], [403, 'FORBIDDEN_SITE']);
+    assert.equal(scopes.length, 7);
+  });
+
+  it('SAYIM AÇIĞI KAPALI (öneri ucu + önizleme): başka sitenin e-postası ve kullanıcı adı «yeni hesap / boştaki ad» görünür; kendi sitenin çakışması raporlanır; sorgular istek sitesiyle kapsamlıdır', async () => {
+    const nameScopes = [];
+    const emailScopes = [];
+    const namesBySite = new Map([[SITE_1, new Set(['ali.veli'])], [SITE_2, new Set(['can.demir'])]]);
+    const emailsBySite = new Map([
+      [SITE_1, { 'komsu@example.com': { user_code: 77, login_name: 'komsu.hesabi', linkable: true } }],
+      [SITE_2, { 'baska@example.com': { user_code: 91, login_name: 'baska.sakin', linkable: false } }],
+    ]);
+    overrides.push([/^SELECT LOWER\(u\.login_name\) AS name FROM users u WHERE LOWER\(u\.login_name\) = ANY\(\$1::TEXT\[\]\) AND \(/, (_sql, params) => {
+      nameScopes.push(Number(params[1]));
+      const visible = namesBySite.get(Number(params[1])) ?? new Set();
+      return ok(params[0].filter((name) => visible.has(name)).map((name) => ({ name })));
+    }]);
+    overrides.push([/FROM users u WHERE LOWER\(u\.email\) = ANY/, (_sql, params) => {
+      emailScopes.push(Number(params[1]));
+      const visible = emailsBySite.get(Number(params[1])) ?? {};
+      return ok(params[0].filter((email) => visible[email]).map((email) => ({ email, ...visible[email] })));
+    }]);
+    const rows = [
+      { n: 2, cells: { ad_soyad: 'Ali Veli', blok: 'A', daire_no: '1', iliski: 'Malik' } }, // ali.veli: kendi sitenin hesabı
+      { n: 3, cells: { ad_soyad: 'Can Demir', blok: 'A', daire_no: '2', iliski: 'Malik', e_posta: 'baska@example.com' } }, // ad ve e-posta BAŞKA sitede
+      { n: 4, cells: { ad_soyad: 'Veli Ali', blok: 'A', daire_no: '2', iliski: 'Kiracı', e_posta: 'komsu@example.com' } }, // kendi sitenin bağlanabilir hesabı
+    ];
+    const accounts = await call('POST', `${base(SITE_1)}/imports/people/accounts`, { user: users.mgrA, body: { spec_version: 1, rows } });
+    assert.equal(accounts.status, 200);
+    assert.deepEqual(accounts.body.accounts.map((a) => [a.n, a.status, a.login_name]), [
+      [2, 'new', 'ali.veli_2'], // kendi sitesindeki gerçek çakışma
+      [3, 'new', 'can.demir'], // başka sitede kayıtlı ad ve e-posta: boşta / yeni hesap gibi
+      [4, 'existing', 'komsu.hesabi'],
+    ]);
+    assert.ok(accounts.body.accounts.every((a) => a.status !== 'email_in_use' && !('code' in a)));
+    // önizleme ucu AYNI hesap bölümünü ve aynı hash'i verir
+    const preview = await call('POST', `${base(SITE_1)}/imports/people/preview`, { user: users.mgrA, body: { spec_version: 1, rows } });
+    assert.equal(preview.status, 200);
+    assert.deepEqual(preview.body.accounts, accounts.body.accounts);
+    assert.ok([...nameScopes, ...emailScopes].length > 0 && [...nameScopes, ...emailScopes].every((site) => site === SITE_1), 'tüm var/yok sorguları istek sitesiyle kapsamlı');
+    // aynı dosyayı B sitesinin yöneticisi B'de sorarsa kendi çakışmaları görünür (ayna): can.demir ve baska@ kendisinin
+    const mirror = await call('POST', `${base(SITE_2)}/imports/people/accounts`, { user: users.mgrB, body: { spec_version: 1, rows } });
+    assert.deepEqual(mirror.body.accounts.map((a) => [a.n, a.status, a.login_name]), [
+      [2, 'new', 'ali.veli'],
+      [3, 'email_in_use', null],
+      [4, 'new', 'veli.ali'],
+    ]);
   });
 
   it('hız sınırları ayrıdır: öneri ucu 240/saat/kullanıcı, ad denetimi 600/saat/kullanıcı; önizleme sınırını tüketmez', async () => {
