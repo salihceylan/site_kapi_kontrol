@@ -45,6 +45,9 @@ migrate_working_dir/
 !/server/.env.example
 /server/.env
 /server/firmware/**/*.bin
+# OTA imzasi: sunucuda yuklemeyle uretilen imza (.bin.sig) ve yayin kayitlari (.release.json) imajlarla birlikte yalniz sunucuda durur
+/server/firmware/**/*.bin.sig
+/server/firmware/**/*.release.json
 cihaz_kontrol/firmware_releases/
 *.bin
 
