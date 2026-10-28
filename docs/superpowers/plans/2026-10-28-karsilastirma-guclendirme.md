@@ -10,7 +10,7 @@ Amaç: raporun gösterdiği tüm eksikleri kapatmak, güçsüz yönleri güçlen
 - Paylaşılan dosyalar (home_page.dart, yan_menu.dart, catalog.js): dalga içinde tek işçi dokunur.
 - Deneme maddeleri: kullanıcıya görünen her değişiklik `tools/deneme_listesi/platform.json` + SAHA listesine işlenir (yeni:true).
 - 2026-10-28 hızlandırma (sahibin talimatı: kullanım süresi ~24 saat): A dışındaki tüm dalgalar (G/B/C/D/E) PARALEL başlatıldı. Her dalga kendi dalında biter, main'e SIRALI merge'i ana oturum yapar (dalga iş akışları main'e dokunmaz). Dağıtım 2-3 toplu seferde (örn. A+G, B+C, D+E) — "her iş sonrası dağıtım" kuralının hızlandırılmış uygulaması.
-- Migration numara blokları (paralel çakışmayı önlemek için; kullanılmayan numara boş kalabilir, db.js uygulananı ada göre izler): G 085-086 (gerekmedikçe migration YOK), B 087-094, C 095-101, D 102-103, E 104-107. db.js sıra listesi çakışması numara sırasına göre birleştirilir.
+- Migration numara blokları (paralel çakışmayı önlemek için; kullanılmayan numara boş kalabilir, db.js uygulananı ada göre izler): G 085-086 (gerekmedikçe migration YOK), B 087-094, C 095-101, D 102-103, E 104-107, F 108-109, H 110-112, I 113+ (sıradaki boş). db.js sıra listesi çakışması numara sırasına göre birleştirilir.
 
 ## Dalgalar
 
@@ -61,6 +61,24 @@ Amaç: raporun gösterdiği tüm eksikleri kapatmak, güçsüz yönleri güçlen
 - P2-19 yönetici kendi sitesinin işlem kayıtları; P2-29 Komşu Panosu istemci sınır testleri; P2-31 A-E durum sözlüğü + ekran envanteri; P2-28 README/teknik not bayatlıkları
 - P2-30 `astra/yerel-kabul` → yalnız `tools/yerel/yalitim` seçmeli alınır (satır satır inceleme sonrası)
 
+### Dalga F — OTA imza (sahip onayı 2026-10-28) [BAŞLATILDI 2026-10-28]
+- Ed25519 imza araç zinciri `tools/ota_imza` (özel anahtar repo DIŞI; firmware'e yalnız public key gömülür)
+- Sunucu: yeni OTA paketlerinde imza zorunlu (yüklemede doğrulama + imza meta + sürüm düşürme koruması); mevcut paketler geçiş için sunulabilir kalır
+- Firmware: OTA yazmadan önce imza doğrulama (ilk imzalı sürümden itibaren zorunlu); sahadaki cihazlar için geçiş planı (imzasız→imzalı tek köprü sürüm)
+- Belgeler + SAHA/deneme maddeleri; kart yazma ve saha denemesi kullanıcıda
+- 2 inceleme turu (güvenlik işi). Migration bloğu: 108-109 (gerekirse)
+
+### Dalga H — karar-sonrası kuyruk [tetik: B ve C main'e girince; betik hazır: oturum scratchpad `dalga-h.js`]
+- P2-20 kararı: gider/dekont "kontrol edildi (kim, ne zaman)" izi (rol açılmaz; migration 110)
+- P2-3 dönemsel finans rapor paketi · P2-5 ikinci altın veri seti + örnek site (gerçek PG)
+- P2-8 taşeron formu + P2-12 firmaya yönlendirme (migration 111)
+- P2-13/K15: cihaz-içi ML Kit belge okuma (görüntü/metin ağa çıkmaz; öneri olarak ön-doldurma)
+- VERI_ENVANTERI yeni/birleşen modül V-kayıtları · PLATFORM_YOL_HARITASI'na K1-K18 + sahip kararları (fiyat rakamı ve parola YAZILMAZ)
+
+### Dalga I — P3 ve süpürme [tetik: tüm dalgalar (F, H dahil) main'de; betik hazır: oturum scratchpad `dalga-i.js`]
+- Triyaj: rapor P3 maddeleri + BEKLEYEN_ISLER + yol haritası açıkları + planın koşulu kalkan ertelenenleri; "zaten yapılmış" kod kanıtıyla elenir
+- Karar/dış hesap/avukat/donanım gerektirmeyen HER iş uygulanır; kalanlar gerekçeli tek listede raporlanır
+
 ### Ertelenen / karara veya dış koşula bağlı (gerekçeli)
 - P2-2, P2-17, P2-18 (Drive canlı değil; D2 Drive işi öncesi P1-11 şart) · P2-13 (yalnız cihaz-içi ML Kit; dış AI için avukat görüşü K15) · P2-3 dönemsel rapor paketi, P2-5 ikinci altın veri seti + örnek site, P2-8/12 taşeron formu ve yönlendirme (sıra E sonrası kuyruk).
 
@@ -98,4 +116,5 @@ Amaç: raporun gösterdiği tüm eksikleri kapatmak, güçsüz yönleri güçlen
 - Dalga G/B/C/D/E: 2026-10-28 paralel başlatıldı (hızlandırma).
 - Dalga A inceleme turu (2026-10-28): 15 bulgu işlendi. Düzeltilenler: SAHA 25.4 kapı bildirimi, arıza klavuzu `ui-kapi-ac-basari-tiki`, m² kalıntıları (DEMO_SENARYOSU, SAHA 72.3-72.5, F2.04/F2.11/F13.03-F13.05/F30.57), F28.13/F28.15/F28.17/F28.19 metinleri, İşletme Projesi ayrıntısında "Ana sayfa" için kaydedilmemiş tutar onayı (TASARIM_DILI konum + istisna kuralı), `tools/demo_seed` hedef koruması (`--allow-target`). Bilerek ertelenen: P1-9 ikinci yarısı (Dalga C, P1-8 ile).
 - Dalga A main'e alındı (2026-10-28, merge). Dağıtım: G ile birlikte toplu sefer 1.
+- Sahip (2026-10-28): "karar kalmadıysa yapılacak iş bırakma" → Dalga F başlatıldı; H (tetik: B+C main'de) ve I (tetik: hepsi main'de) betikleri hazır; tanıtım sitesi fiyat ajanı çalışıyor (80 TL birleşik fiyat + Belgeler/Anket dahil).
 - Her dalga bitişinde: bu dosyada işaret + PLATFORM_YOL_HARITASI karar bölümüne K-maddeleri + faz sayfası (uret.py) + karşılaştırma sayfası güncellenir.
