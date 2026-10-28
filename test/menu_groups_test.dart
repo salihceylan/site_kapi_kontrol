@@ -9,6 +9,7 @@ import 'package:site_kapi_kontrol/ui/widgets/yan_menu.dart';
 /// eksikse aşağıdaki "her öğe tabloda" testi düşer.
 const Map<SirketMenuItem, SirketMenuGroup> _expected = <SirketMenuItem, SirketMenuGroup>{
   SirketMenuItem.dashboard: SirketMenuGroup.anaSayfa,
+  SirketMenuItem.acilDurum: SirketMenuGroup.anaSayfa,
   SirketMenuItem.siteler: SirketMenuGroup.daireler,
   SirketMenuItem.daireKullanicilariYonetimi: SirketMenuGroup.daireler,
   SirketMenuItem.kisiler: SirketMenuGroup.daireler,

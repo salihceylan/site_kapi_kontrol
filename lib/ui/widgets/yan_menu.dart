@@ -190,6 +190,11 @@ enum SirketMenuItem {
   /// listesinde YOKTUR; daire sakini ve bireysel sakine (sakin modunda yönetici dahil) [YanMenu.additionalItems] ile eklenir.
   dairem,
 
+  /// Acil durum (P2-24, karar K13): büyük 112 düğmesi, yangın ve asansör arızası hızlı düğmeleri, aramada söylenecek site adresi ve soru listesi;
+  /// arama kanalı yoksa numaralar ve adres kopyalanabilir metin (kuru mod). Modül DEĞİLDİR (çekirdek özellik: kapatılamaz, modül gerektirmez).
+  /// Rol listesinde YOKTUR; süper kullanıcı dışındaki herkese [YanMenu.additionalItems] ile eklenir ("Panel"in, varsa "Kapılar"ın altına).
+  acilDurum,
+
   /// Yeni Site Oluştur: "Site hizmetleri" menüsü altında bireysel, site yöneticisi ve süper kullanıcıların
   /// yeni site oluşturma sürecini başlattığı öğe.
   yeniSite,
@@ -235,7 +240,7 @@ enum SirketMenuGroup {
 /// Giderler'e, faaliyet raporu / icra dökümü Raporlar'a eklenecektir. Talepler ve anketler yönetimle sakin arasındaki
 /// yazışma kanalı olduğundan İletişim'dedir (karar G2'nin "Site hizmetleri" listesinde yoklar).
 SirketMenuGroup menuGroupOf(SirketMenuItem item) => switch (item) {
-      SirketMenuItem.dashboard => SirketMenuGroup.anaSayfa,
+      SirketMenuItem.dashboard || SirketMenuItem.acilDurum => SirketMenuGroup.anaSayfa,
       SirketMenuItem.siteler ||
       SirketMenuItem.daireKullanicilariYonetimi ||
       SirketMenuItem.kisiler ||
@@ -1311,6 +1316,12 @@ List<SirketMenuItem> _withExtras(
     // "Kapılar" her zaman "Panel"in hemen altındadır (kapı paneli bir dokunuş uzakta). Numaralandırmada en sonda
     // olduğundan öteki ek öğelerden SONRA eklenir ve "Panel"in altına, onların önüne girer.
     if (extra == SirketMenuItem.kapilar) anchor = result.indexOf(SirketMenuItem.dashboard);
+    // "Acil durum": "Kapılar"ın (yoksa "Panel"in) hemen altına eklenir; numaralandırmada "Kapılar"dan sonra olduğundan o zaten listededir.
+    // Çekmecede grup eşlemesiyle ([menuGroupOf]) "Ana sayfa" başlığı altında "Panel"in yanında görünür.
+    if (extra == SirketMenuItem.acilDurum) {
+      anchor = result.indexOf(SirketMenuItem.kapilar);
+      if (anchor < 0) anchor = result.indexOf(SirketMenuItem.dashboard);
+    }
     if (anchor < 0) anchor = result.indexOf(SirketMenuItem.siteler);
     if (anchor < 0) anchor = result.indexOf(SirketMenuItem.dashboard);
     result.insert(anchor < 0 ? result.length : anchor + 1, extra);
@@ -1495,6 +1506,8 @@ String _titleForItem(SirketMenuItem item, [UserRole? role]) {
       return 'Kapılar';
     case SirketMenuItem.dairem:
       return 'Dairem';
+    case SirketMenuItem.acilDurum:
+      return 'Acil durum';
     case SirketMenuItem.yeniSite:
       return 'Yeni Site Oluştur';
   }
@@ -1596,6 +1609,8 @@ IconData _iconForItem(SirketMenuItem item) {
       return PhosphorIconsRegular.doorOpen;
     case SirketMenuItem.dairem:
       return PhosphorIconsRegular.house;
+    case SirketMenuItem.acilDurum:
+      return PhosphorIconsRegular.siren;
     case SirketMenuItem.yeniSite:
       return PhosphorIconsRegular.plusCircle;
   }

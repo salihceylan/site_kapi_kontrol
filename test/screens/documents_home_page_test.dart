@@ -246,6 +246,9 @@ void main() {
         expect(titles, contains('Dosya Deposu'));
         expect(titles.indexOf('Dosya Deposu'), titles.indexOf('Duyurular') + 1);
         expectUnderDrawerHeader(t, 'Dosya Deposu', 'Site hizmetleri');
+        // Çekmece uzun: öğe görünür alanın dışında kalabilir (yeni öğeler listeyi uzatır), önce kaydırılır.
+        await t.ensureVisible(_tileTitle('Dosya Deposu'));
+        await t.pump();
         await t.tap(_tileTitle('Dosya Deposu'));
         await t.pump();
         await t.pump(const Duration(milliseconds: 600));
