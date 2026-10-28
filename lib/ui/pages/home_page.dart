@@ -6472,7 +6472,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       page: effectiveMenu,
       residentBarVisible: residentBar != null,
       width: MediaQuery.sizeOf(context).width,
-      // Sağdaki eylemlerin genişliği: yenile + çıkış + dişli (48'er) + [tema 48] + [mod hapı: 44 + 2x4 dış boşluk] + 6 kenar.
+      // Sağdaki eylemlerin genişliği: yenile + çıkış payı + dişli (48'er) + [tema 48] + [mod hapı: 44 + 2x4 dış boşluk] + 6 kenar.
+      // P2-26: çıkış AppBar'dan kalktı ama üç düğmelik pay BİLEREK korunur: "Ana sayfa" eşiği (çift modlu + tema için 348 dp;
+      // TASARIM_DILI ve home_shortcut_test) değişmesin. Payı düşürmek (eşik ~300 dp) ayrı, belgeli bir karardır.
       actionsWidth: 3 * 48 + (hasThemeToggle ? 48 : 0) + (_canToggleDualMode ? 52 : 0) + 6,
     );
 
@@ -6535,11 +6537,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           if (_canToggleDualMode)
             _buildModeToggle(
               context,
-              // Hapın genişlik payı: yanındaki 44-48 dp'lik düğmeler (yenile, çıkış, dişli, [tema], [Ana sayfa]).
-              otherActions: 3 + (hasThemeToggle ? 1 : 0) + (showHome ? 1 : 0),
+              // Hapın genişlik payı: yanındaki 44-52 dp'lik düğmeler (yenile, dişli, [tema], [Ana sayfa]). P2-26: çıkış AppBar'dan
+              // kalktı (çekmecenin dibinde, onaylı), bu yüzden pay iki sabit düğmedir.
+              otherActions: 2 + (hasThemeToggle ? 1 : 0) + (showHome ? 1 : 0),
               homeShown: showHome,
-              // Hapın genişlik payı: yanındaki 44-52 dp'lik düğmeler (yenile, dişli, [tema]).
-              otherActions: 2 + (hasThemeToggle ? 1 : 0),
             ),
           // Aydınlık / karanlık tema geçişi (44 dp, diğer eylem düğmeleriyle aynı boyut ve yoğunluk).
           const ThemeToggleButton(iconSize: 20),
@@ -6636,10 +6637,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         onSelect: _selectMenu,
         onOpenHelp: _openHelp,
         onOpenFeedback: _openFeedback,
-        onLogout: () {
-          Navigator.pop(context);
-          widget.authService.logout();
-        },
         // P2-26: çıkış her zaman onaydan geçer; vazgeçilirse çekmece açık kalır ve oturum kapanmaz.
         onLogout: () => unawaited(_confirmAndLogout()),
         // İP-1D / G2: site seçici çekmecenin en üstünde.
