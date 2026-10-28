@@ -1152,7 +1152,8 @@ export async function sectionWorkTracking(ctx) {
   await ensureOnce();
   const fksAfter = await fkOf();
   const tableCountBefore = await countOf(`SELECT COUNT(*)::int AS n FROM work_items`);
-  check('H2: eksik FK + indeks tamamlanir (8 FK ayni tanimla, indeks geri gelir); veri kaybi yok', same(fksBefore, fksAfter) && fksAfter.length === 8 && Boolean((await q(`SELECT 1 FROM pg_indexes WHERE indexname = 'idx_work_items_site_open'`)).rows[0]) && tableCountBefore > 0, fksAfter.length);
+  // 9 FK: 8 (042 / 047 / ...) + work_items.equipment_id -> equipment_items (096, is kaydi <-> ekipman bagi).
+  check('H2: eksik FK + indeks tamamlanir (9 FK ayni tanimla, indeks geri gelir); veri kaybi yok', same(fksBefore, fksAfter) && fksAfter.length === 9 &&Boolean((await q(`SELECT 1 FROM pg_indexes WHERE indexname = 'idx_work_items_site_open'`)).rows[0]) && tableCountBefore > 0, fksAfter.length);
   const writerPool = new (await import('pg')).default.Pool({ host: process.env.DB_HOST, port: Number(process.env.DB_PORT), user: process.env.DB_USER, password: process.env.DB_PASSWORD || undefined, database: process.env.DB_NAME, max: 8 });
   const wUsers = [];
   for (let i = 0; i < 8; i += 1) wUsers.push(await mkUser(`Yazici ${i}`));
@@ -1197,8 +1198,8 @@ export async function sectionWorkTracking(ctx) {
   await ensureDbSchema();
   await writerPool.end();
   const present = (await q(`SELECT to_regclass('public.work_items') IS NOT NULL AS i, to_regclass('public.work_item_events') IS NOT NULL AS e`)).rows[0];
-  check(`H3 (R11 F1): sert yazici yuku (sites / users / apartments, ters sirali) altinda 6 kez ilk kurulum: DDL hatasi ${ensureErrors} (+ lock_timeout 55P03 tur ${lockTimeouts}, en cok 2 serbest, yuk durunca kurulum tamam), havuz 40P01 ${hooks.deadlocks}, yazici hatalari ${JSON.stringify(stats.errors)}; tablolar + 8 FK kuruldu`,
-    ensureErrors === 0 && lockTimeouts <= 2 && hooks.deadlocks === 0 && present.i && present.e && (await fkOf()).length === 8, { ensureErrors, lockTimeouts, ensureErrorCodes, deadlocks: hooks.deadlocks, stats });
+  check(`H3 (R11 F1): sert yazici yuku (sites / users / apartments, ters sirali) altinda 6 kez ilk kurulum: DDL hatasi ${ensureErrors} (+ lock_timeout 55P03 tur ${lockTimeouts}, en cok 2 serbest, yuk durunca kurulum tamam), havuz 40P01 ${hooks.deadlocks}, yazici hatalari ${JSON.stringify(stats.errors)}; tablolar + 9 FK kuruldu`,
+    ensureErrors === 0 && lockTimeouts <= 2 && hooks.deadlocks === 0 && present.i && present.e && (await fkOf()).length === 9,{ ensureErrors, lockTimeouts, ensureErrorCodes, deadlocks: hooks.deadlocks, stats });
 
   // ============================================================================================================
   console.log('--- I. karisik eszamanli tur ---');
