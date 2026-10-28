@@ -243,7 +243,8 @@ describe('PATCH ekipman bağı (sahte işlem)', () => {
       if (/^(BEGIN|COMMIT|ROLLBACK|SAVEPOINT audit_insert|RELEASE SAVEPOINT audit_insert)$/.test(sql)) return ok();
       if (/^INSERT INTO audit_log/.test(sql)) return ok();
       // getWorkItemDetail (havuz)
-      if (/^SELECT w\.id, w\.site_code, w\.category, .* FROM work_items w LEFT JOIN apartments a/.test(sql)) {
+      // Dalga C birleşimi: etiket-kategori dalı talep sorgusuna `LEFT JOIN work_categories wc ...` (kategori adı) ekledi; ekipman sütunları aynen durur.
+      if (/^SELECT w\.id, w\.site_code, w\.category, .* FROM work_items w (?:LEFT JOIN work_categories wc .* )?LEFT JOIN apartments a/.test(sql)) {
         const eq = state.equipmentId === null ? null : state.equipment.get(state.equipmentId);
         return ok([{ id: '5', site_code: String(SITE), category: 'ariza', location_type: 'ortak_alan', title: 'Kapı', description: 'D', status: state.status, priority: 'normal', resident_urgent: false, created_by: 4001, requester_name: 'Ayşe', equipment_id: eq ? String(eq.id) : null, equipment_name: eq?.name ?? null, equipment_kind: eq?.kind ?? null, equipment_active: eq?.is_active ?? null, created_at: new Date('2026-01-01T00:00:00Z'), updated_at: new Date('2026-01-01T00:00:00Z'), attachment_count: 0 }]);
       }

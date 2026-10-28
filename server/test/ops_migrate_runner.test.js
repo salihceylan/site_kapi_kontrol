@@ -152,12 +152,22 @@ describe('checksum / normalizasyon', () => {
 });
 
 describe('listMigrations', () => {
-  it('gercek migrations klasoru: ardisik, sirali, tekrarsiz', () => {
+  it('gercek migrations klasoru: sirali, tekrarsiz; 084\'e dek ardisik (085+ paralel dalgalara ayrilmis bloklardan gelir, kullanilmayan numara bos kalabilir)', () => {
     const list = listMigrations(DEFAULT_MIGRATIONS_DIR);
     assert.ok(list.length >= 25);
-    for (let i = 0; i < list.length; i += 1) {
-      assert.equal(list[i].number, i + 1, `numara boslugu: ${list[i].file}`);
-      assert.match(list[i].checksum, /^[0-9a-f]{64}$/);
+    // Karsilastirma guclendirme programi (docs/superpowers/plans/2026-10-28-karsilastirma-guclendirme.md): 085+ numaralar paralel
+    // dalgalara bloklar halinde ayrildi (G 085-086, B 087-094, C 095-101, D 102-103, E 104-107, F 108-109, H 110-112, I 113+).
+    // Kullanilmayan numara BOS kalabilir (runner bosluga tolerans gosterir, yalniz tekrari reddeder): 084'e dek zincir kesintisiz,
+    // sonrasi KESIN artan ve tekrarsiz olmalidir. Ust sinir YOK: sonraki dalgalar yeni blok actiginda bu test kirilmaz.
+    let previous = 0;
+    for (const migration of list) {
+      if (migration.number <= 84) {
+        assert.equal(migration.number, previous + 1, `numara boslugu: ${migration.file}`);
+      } else {
+        assert.ok(migration.number > previous, `sirasiz / tekrarlanan numara: ${migration.file}`);
+      }
+      assert.match(migration.checksum, /^[0-9a-f]{64}$/);
+      previous = migration.number;
     }
   });
 
