@@ -243,7 +243,7 @@ KVKK: dosya sunucuya girmez; gövde loglanmaz, çalıştırma kaydı/audit kişi
 
 ## Açık sorular (kullanıcı kararı gerekir)
 
-1. **Çoklu malik (hissedar/eş):** model bir dairede en çok BİR güncel malik tutar; dosyada iki malik varsa ikincisi `RELATION_TAKEN` olur (ikinciyi «aile» yazmak önerilir). Çoklu malik istenirse Faz 2a veri modeli (tekil indeks `uq_apartment_residencies_owner`) ve finans `responsible_party` mantığı değişir.
+1. **Çoklu malik (hissedar/eş):** veri modeli artık bir dairede birden çok malik + TEK hesap muhatabı tutar (migration 104, `docs/PLATFORM_COKLU_MALIK.md`), ANCAK toplu yükleme bilinçli olarak tek malikli kalır: dosyada iki malik varsa (ya da dairede malik varken dosyada başka malik) ikincisi `RELATION_TAKEN` olur. Ek maliklerin Daire kartı > «Malik ekle» ile girilmesi önerilir (hesap muhatabı seçimi orada yapılır; toplu yüklemede muhatap seçeneği yoktur). Finans `responsible_party` mantığı DEĞİŞMEDİ.
 2. **Gerçek kapı numaraları:** sitedeki daire etiketleri hep "Daire 1…N" (blok başına); B Blok'ta fiili numara 21–40 ise dosyadaki `daire_no` eşleşmez. Daire yeniden adlandırma/yapıyı dosyadan kurma (Faz 2c) istenir mi?
 3. **Kişi alanları için güncelleme (ezme) modu:** v1'de yok (telefon değişikliği tekil düzenlemeyle). Excel'de düzeltip toplu güncelleme istenir mi?
 4. **Kurul dışa aktarması:** kurul listeleri okur ama dışa aktaramaz (ölçülülük). Denetçi/kurul için salt okunur dışa aktarma isteniyorsa "yalnız daire listesi" gibi kısıtlı bir izin düşünülebilir.

@@ -187,7 +187,7 @@ Future<ApartmentSummary?> showApartmentPicker(
       titleOf: (a) => a.fullLabel,
       subtitleOf: (a) {
         final parts = <String>[
-          if (a.owner != null) 'Malik: ${crmPersonName(a.owner!.fullName)}',
+          if (a.owner != null) 'Malik: ${crmPersonName(a.owner!.fullName)}${a.ownerCount > 1 ? ' (+${a.ownerCount - 1} malik)' : ''}',
           if (a.tenant != null) 'Kiracı: ${crmPersonName(a.tenant!.fullName)}',
         ];
         return parts.isEmpty ? null : parts.join(' • ');

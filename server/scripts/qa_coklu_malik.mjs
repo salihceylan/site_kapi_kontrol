@@ -781,6 +781,21 @@ async function phaseServices() {
   err = await fail(() => people.updateResidency({ siteCode: site.code, residencyId: a4Tenant.residencyId, body: { relation: 'owner' }, actor }));
   check('eski yol updateResidency (kiraci -> malik) dairede malik varken 409 RELATION_TAKEN', err?.statusCode === 409 && err.code === 'RELATION_TAKEN', `${err?.code}`);
 
+  // --- eski yollar malik YOKKEN calisir ve ilk malik kendiliginden muhatap olur (CRM davranisi degismedi)
+  const legacy = await f.mkSite('QA Eski Yol', 2);
+  const resident = await f.person(legacy.code, { name: 'Eski Yol Sakin', apt: legacy.apts[0], relation: 'resident' });
+  await people.updateResidency({ siteCode: legacy.code, residencyId: resident.residencyId, body: { relation: 'owner' }, actor });
+  const promoted = (await q(`SELECT relation, is_account_holder FROM apartment_residencies WHERE id = $1`, [resident.residencyId])).rows[0];
+  check('eski yol updateResidency (sakin -> malik, dairede malik YOK): basarili ve malik kendiliginden hesap muhatabi', promoted.relation === 'owner' && promoted.is_account_holder === true, canon(promoted));
+  const joiner = await q(`INSERT INTO site_people (site_code, full_name) VALUES ($1, 'Eski Yol Malik 2') RETURNING id`, [legacy.code]);
+  err = await fail(() => people.addResidency({ siteCode: legacy.code, personId: Number(joiner.rows[0].id), body: { apartment_id: legacy.apts[0], relation: 'owner' }, actor }));
+  check('eski yol addResidency: dairede malik varken ikinci malik hala 409 RELATION_TAKEN', err?.code === 'RELATION_TAKEN', `${err?.code}`);
+  await people.endResidency({ siteCode: legacy.code, residencyId: resident.residencyId, body: {}, actor });
+  const afterEnd = await people.addResidency({ siteCode: legacy.code, personId: Number(joiner.rows[0].id), body: { apartment_id: legacy.apts[0], relation: 'owner' }, actor });
+  check('eski yol: malik "Tasindi" olduktan sonra yeni malik eklenir ve muhatap olur', afterEnd !== null && (await holderCount(legacy.apts[0])) === 1);
+  const bad2 = (await q(`SELECT apartment_id FROM apartment_residencies WHERE is_current AND relation = 'owner' GROUP BY apartment_id HAVING COUNT(*) FILTER (WHERE is_account_holder) <> 1`)).rows;
+  check('eski yollar sonrasi da muhatapsiz / cift muhatapli daire yok', bad2.length === 0, canon(bad2));
+
   // --- cikar
   const beforeRemove = await ownersView(a1);
   err = await fail(() => svc.removeApartmentOwner({ siteCode: site.code, apartmentId: a1, residencyId: h1.residencyId, body: {}, actor }));
