@@ -253,7 +253,7 @@ async function loadIssueContext(client, siteCode, apartmentId, accountParty, iss
       INNER JOIN site_people sp ON sp.id = r.person_id AND sp.is_active = TRUE
       LEFT JOIN users u ON u.user_code = sp.user_code
       WHERE r.apartment_id = $1 AND r.is_current = TRUE AND r.relation = $2
-      ORDER BY r.id
+      ORDER BY r.is_account_holder DESC, r.id
       LIMIT 1
     `,
     [apartmentId, relationForPayer(accountParty)],

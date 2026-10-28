@@ -60,7 +60,8 @@ class ApartmentCrmCard extends StatelessWidget {
                 Text(
                   owner == null
                       ? 'Malik: kayıtlı değil'
-                      : 'Malik: ${crmPersonName(owner.fullName)}',
+                      // Çoklu malik (104): gösterilen kişi hesap muhatabıdır; başka malikler varsa sayısı eklenir.
+                      : 'Malik: ${crmPersonName(owner.fullName)}${apartment.ownerCount > 1 ? ' (+${apartment.ownerCount - 1} malik)' : ''}',
                   style: secondary,
                 ),
                 Text(

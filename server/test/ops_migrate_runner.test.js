@@ -152,11 +152,17 @@ describe('checksum / normalizasyon', () => {
 });
 
 describe('listMigrations', () => {
-  it('gercek migrations klasoru: ardisik, sirali, tekrarsiz', () => {
+  it('gercek migrations klasoru: sirali, tekrarsiz; 001..084 ardisik, sonrasinda dalga bloklari icin bosluk olabilir', () => {
     const list = listMigrations(DEFAULT_MIGRATIONS_DIR);
     assert.ok(list.length >= 25);
     for (let i = 0; i < list.length; i += 1) {
-      assert.equal(list[i].number, i + 1, `numara boslugu: ${list[i].file}`);
+      // 084'e kadar ardisik. 085+ paralel dalgalarin numara bloklarindan verilir (docs/superpowers/plans/2026-10-28-karsilastirma-guclendirme.md:
+      // "kullanilmayan numara bos kalabilir"); runner ada gore izler. Numaralar yine KESIN artan ve tekrarsizdir.
+      if (list[i].number <= 84) {
+        assert.equal(list[i].number, i + 1, `numara boslugu: ${list[i].file}`);
+      } else {
+        assert.ok(list[i].number > list[i - 1].number, `sirasiz / tekrar: ${list[i].file}`);
+      }
       assert.match(list[i].checksum, /^[0-9a-f]{64}$/);
     }
   });

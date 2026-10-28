@@ -6,7 +6,7 @@ Modül gerektirmez (çekirdek). Kapı açma kodu (kapı komutları, MQTT, BLE, f
 
 ## Kurallar (kullanıcı kararı + verdiğimiz kararlar)
 
-1. Her dairenin bir MALİKİ vardır (`apartment_residencies.relation = 'owner'`; dairede aynı anda tek güncel malik, mevcut kısmi tekil indeks).
+1. Her dairenin bir MALİKİ (hesap muhatabı) vardır (`apartment_residencies.relation = 'owner'`). **Çoklu malik (migration 104, `docs/PLATFORM_COKLU_MALIK.md`):** dairede birden çok güncel malik kayıtlı olabilir; içlerinden TAM BİRİ hesap muhatabıdır (`is_account_holder`) ve bu belgedeki «malik» yetkileri (kiracı ekleme, vekalet, kişi arama, bağ kesme onayı, imza hakkı) YALNIZ ondadır. Diğer malikler (`my_role: 'co_owner'`) kayıtlıdır ama malik yetkisi taşımaz ve borç görmez. Ek malikler site yöneticisi tarafından Daire kartından eklenir / çıkarılır / muhatap yapılır.
 2. **Daire admini** = dairenin yönetimini yapan kişi. Kiracı yoksa admin MALİKTİR. Malik dairesine KİRACI ekler (yeni kişi ya da sistemden arayıp seçerek).
    **Kiracı HER ZAMAN daire adminidir** (kullanıcı kararı 2026-10-26; bkz. «Kiracı her zaman daire admini»): dairede güncel kiracı varsa admin kiracıdır, malik ve kiracı
    aynı dairede birlikte kayıtlıdır, malik admin kalamaz. Eski «Yönetimi kiracıya devret» kutusu KALKTI (gövdede `delegate_management` gelirse yok sayılır / true kabul edilir).

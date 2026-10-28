@@ -288,7 +288,7 @@ const CAN_SEARCH_SQL = `
       OR EXISTS (
         SELECT 1 FROM apartment_residencies r
         INNER JOIN site_people sp ON sp.id = r.person_id
-        WHERE r.apartment_id = a.id AND r.is_current = TRUE AND r.relation = 'owner' AND sp.user_code = $1
+        WHERE r.apartment_id = a.id AND r.is_current = TRUE AND r.relation = 'owner' AND r.is_account_holder = TRUE AND sp.user_code = $1
       )
     )
   LIMIT 1

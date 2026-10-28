@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/models/apartment_crm.dart';
+import 'package:site_kapi_kontrol/models/residency_relation.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
 import 'package:site_kapi_kontrol/ui/design/app_snack.dart';
@@ -11,6 +12,8 @@ import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/services/apartment_management_api.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/apartment_admin_dialogs.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/apartment_edit_dialog.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/apartment_owner_dialogs.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/crm_confirm_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/history_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/large_dialog_parts.dart';
 import 'package:site_kapi_kontrol/ui/helpers/date_input.dart';
@@ -68,8 +71,11 @@ class _ApartmentCardDialogState extends State<ApartmentCardDialog> {
   String? _error;
   int _token = 0;
 
-  /// Adli kayıt bölümü için tek servis (her yeniden çizimde yeni HTTP istemcisi açılmasın).
+  /// Adli kayıt ve malik yönetimi için tek servis (her yeniden çizimde yeni HTTP istemcisi açılmasın).
   late final ApartmentManagementService _residencyService = ApartmentManagementService(authService: widget.scope.authService);
+
+  /// Malik işlemi sürüyor (çift dokunuşta iki istek gitmesin).
+  bool _ownerBusy = false;
 
   @override
   void initState() {
@@ -157,6 +163,76 @@ class _ApartmentCardDialogState extends State<ApartmentCardDialog> {
       apartmentId: detail.id,
       apartmentLabel: detail.fullLabel,
     );
+  }
+
+  /// Malik ekle (çoklu malik, 104): kayıtlı / yeni kişi. Başarıda kart yenilenir ve liste haberdar edilir.
+  Future<void> _addOwner() async {
+    final detail = _detail;
+    if (detail == null || _ownerBusy) return;
+    final result = await AddOwnerDialog.show(
+      context,
+      scope: widget.scope,
+      service: _residencyService,
+      apartmentId: detail.id,
+      apartmentLabel: detail.fullLabel,
+      hasOwners: detail.owners.isNotEmpty,
+    );
+    if (result == null || !mounted) return;
+    widget.onChanged?.call();
+    AppSnack.show(context, 'Malik eklendi.', kind: AppSnackKind.success);
+    await _load();
+  }
+
+  /// Hesap muhatabını bu malike geçir (onaylı). Borç / ekstre / makbuz / hatırlatma yeni muhataba döner; bakiyeler değişmez.
+  Future<void> _makeHolder(ApartmentOwner owner) async {
+    final detail = _detail;
+    if (detail == null || _ownerBusy || owner.isAccountHolder) return;
+    final ok = await confirmCrmAction(
+      context,
+      title: 'Hesap muhatabını değiştir',
+      message:
+          '${crmPersonName(owner.fullName)} hesap muhatabı olacak. Borç, ekstre, makbuz ve hatırlatmalar bu kişiye döner; '
+          'daire bakiyeleri değişmez. Önceki muhatap malik olarak kayıtlı kalır.',
+      confirmLabel: 'Muhatap yap',
+      icon: Icons.verified_user_rounded,
+      tone: AppTone.primary,
+    );
+    if (!ok || !mounted) return;
+    setState(() => _ownerBusy = true);
+    var succeeded = false;
+    try {
+      await _residencyService.setAccountHolder(widget.scope.siteCode, detail.id, owner.residencyId);
+      succeeded = true;
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = crmMessageOf(e, 'Hesap muhatabı değiştirilemedi. İnternet bağlantınızı kontrol edip tekrar deneyin.');
+        });
+      }
+    }
+    if (!mounted) return;
+    setState(() => _ownerBusy = false);
+    if (!succeeded) return;
+    widget.onChanged?.call();
+    AppSnack.show(context, 'Hesap muhatabı değiştirildi.', kind: AppSnackKind.success);
+    await _load();
+  }
+
+  Future<void> _removeOwner(ApartmentOwner owner) async {
+    final detail = _detail;
+    if (detail == null || _ownerBusy) return;
+    final result = await RemoveOwnerDialog.show(
+      context,
+      scope: widget.scope,
+      service: _residencyService,
+      apartmentId: detail.id,
+      owner: owner,
+      owners: detail.owners,
+    );
+    if (result == null || !mounted) return;
+    widget.onChanged?.call();
+    AppSnack.show(context, 'Malik çıkarıldı.', kind: AppSnackKind.success);
+    await _load();
   }
 
   Future<void> _showHistory() {
@@ -255,7 +331,8 @@ class _ApartmentCardDialogState extends State<ApartmentCardDialog> {
               ),
               const SizedBox(height: AppSpace.md),
               CrmInfoLine(
-                label: 'Malik',
+                // Çoklu malik (104): birden çok malik varsa ilk satır hesap muhatabını gösterir (borç / ekstre / hatırlatma ona gider).
+                label: detail.hasMultipleOwners ? 'Malik (hesap muhatabı)' : 'Malik',
                 value: detail.owner == null
                     ? 'Kayıtlı değil'
                     : crmPersonName(detail.owner!.fullName),
@@ -267,13 +344,29 @@ class _ApartmentCardDialogState extends State<ApartmentCardDialog> {
                     ? 'Kayıtlı değil'
                     : crmPersonName(detail.tenant!.fullName),
               ),
+              if (detail.hasMultipleOwners) ...[
+                const SizedBox(height: AppSpace.md),
+                const InlineNotice(
+                  tone: AppTone.info,
+                  icon: Icons.info_outline_rounded,
+                  message: kAccountHolderExplain,
+                ),
+              ],
               const SizedBox(height: AppSpace.md),
               if (detail.currentResidents.isEmpty)
                 Text('Güncel sakin kaydı yok.', style: secondary),
               for (final resident in detail.currentResidents) ...[
-                _residentRow(context, resident, past: false),
+                _residentRow(context, resident, past: false, detail: detail),
                 const SizedBox(height: AppSpace.sm),
               ],
+              if (widget.scope.canWrite && detail.ownerCount < kApartmentOwnerLimit)
+                PrimaryActionButton(
+                  key: const ValueKey<String>('owner_add_button'),
+                  label: 'Malik ekle',
+                  icon: Icons.person_add_alt_1_rounded,
+                  variant: AppButtonVariant.outline,
+                  onPressed: _ownerBusy ? null : _addOwner,
+                ),
             ],
           ),
         ),
@@ -336,9 +429,17 @@ class _ApartmentCardDialogState extends State<ApartmentCardDialog> {
     BuildContext context,
     ApartmentResident resident, {
     required bool past,
+    ApartmentDetail? detail,
   }) {
     final th = Theme.of(context).textTheme;
     final name = crmPersonName(resident.fullName);
+    // Çoklu malik (104): yalnız birden çok malik varken muhatap rozeti ve (yazma yetkisiyle) malik işlemleri gösterilir.
+    ApartmentOwner? owner;
+    if (!past && detail != null && detail.hasMultipleOwners && resident.relation == ResidencyRelation.owner) {
+      for (final o in detail.owners) {
+        if (o.residencyId == resident.residencyId) owner = o;
+      }
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -349,6 +450,12 @@ class _ApartmentCardDialogState extends State<ApartmentCardDialog> {
           runSpacing: AppSpace.xs,
           children: [
             RelationChip(resident.relation),
+            if (owner != null && owner.isAccountHolder)
+              const StatusChip(
+                label: 'Hesap muhatabı',
+                tone: AppTone.primary,
+                icon: Icons.verified_user_rounded,
+              ),
             InfoChip('Giriş: ${formatCrmDate(resident.moveInDate)}'),
             if (past) InfoChip('Çıkış: ${formatCrmDate(resident.moveOutDate)}'),
             if (resident.hasAccount && !past)
@@ -359,6 +466,23 @@ class _ApartmentCardDialogState extends State<ApartmentCardDialog> {
               ),
           ],
         ),
+        if (owner != null && widget.scope.canWrite)
+          Wrap(
+            spacing: AppSpace.sm,
+            children: [
+              if (!owner.isAccountHolder)
+                TextButton(
+                  key: ValueKey<String>('owner_make_holder_${owner.residencyId}'),
+                  onPressed: _ownerBusy ? null : () => _makeHolder(owner!),
+                  child: const Text('Muhatap yap'),
+                ),
+              TextButton(
+                key: ValueKey<String>('owner_remove_${owner.residencyId}'),
+                onPressed: _ownerBusy ? null : () => _removeOwner(owner!),
+                child: const Text('Maliki çıkar'),
+              ),
+            ],
+          ),
       ],
     );
   }

@@ -63,7 +63,11 @@ export function resolveApartmentRoles(state) {
   const members = (state?.members ?? []).filter((m) => m.is_active !== false);
   const residencies = state?.residencies ?? [];
   const delegation = state?.delegation ?? null;
-  const owner = residencies.find((r) => r.relation === 'owner') ?? null;
+  // Coklu malik (104): dairede birden cok guncel malik olabilir; `owner` her zaman HESAP MUHATABI olan maliktir (bayrak yoksa ilk malik: eski kayit / test girdisi).
+  // Diger malikler `coOwners`'tadir ve malik YETKISI tasimaz (kiraci ekleme, vekalet, kisi arama ... yalniz muhatapta).
+  const owners = residencies.filter((r) => r.relation === 'owner');
+  const owner = owners.find((r) => r.is_account_holder === true) ?? owners[0] ?? null;
+  const coOwners = owners.filter((r) => r !== owner);
   const tenant = residencies.find((r) => r.relation === 'tenant') ?? null;
   const family = residencies.filter((r) => r.relation === 'family_member');
 
@@ -113,8 +117,9 @@ export function resolveApartmentRoles(state) {
 
   let adminKind = 'none';
   if (adminUserCode !== null || adminPersonId !== null) {
-    const isOwnerMatch = (adminUserCode !== null && owner && asCode(owner.user_code) === adminUserCode) ||
-                         (adminPersonId !== null && owner && asCode(owner.person_id) === adminPersonId);
+    // Yonetimi yapan kisi malik TARAFINDA mi: hesap muhatabi ya da diger malik (taraf etiketi; yetki muhatapta kalir).
+    const isOwnerMatch = owners.some((o) => (adminUserCode !== null && asCode(o.user_code) === adminUserCode) ||
+                         (adminPersonId !== null && asCode(o.person_id) === adminPersonId));
     const isTenantMatch = (adminUserCode !== null && tenant && asCode(tenant.user_code) === adminUserCode) ||
                           (adminPersonId !== null && tenant && asCode(tenant.person_id) === adminPersonId);
     if (isOwnerMatch) adminKind = 'owner';
@@ -124,7 +129,7 @@ export function resolveApartmentRoles(state) {
     else if (!owner && !tenant) adminKind = 'owner_derived';
     else adminKind = 'other';
   }
-  return { owner, tenant, family, adminUserCode, adminPersonId, adminSource, adminResidency, adminKind };
+  return { owner, coOwners, tenant, family, adminUserCode, adminPersonId, adminSource, adminResidency, adminKind };
 }
 
 /** Admin (yonetimi yapan) tarafindan gosterilen etiket: 'owner' | 'tenant' | 'other' | 'none'. */
@@ -147,10 +152,13 @@ export function rolesOfUser(roles, userCode, { pendingTenantInvite = false, pend
   const isTenant = Boolean(roles.tenant && asCode(roles.tenant.user_code) === uc && uc !== null);
   const mine = uc === null ? null : (roles.family.find((r) => asCode(r.user_code) === uc) ?? null);
   const isFamily = Boolean(mine) && !isOwner && !isTenant;
+  // Diger malik (coklu malik, 104): kayitli malik ama hesap muhatabi degil; malik yetkisi (kiraci ekleme, vekalet, kisi arama) YOK.
+  const isCoOwner = uc !== null && !isOwner && !isTenant && (roles.coOwners ?? []).some((r) => asCode(r.user_code) === uc);
 
   let myRole = 'resident';
   if (isOwner) myRole = 'owner';
   else if (isTenant) myRole = 'tenant';
+  else if (isCoOwner) myRole = 'co_owner';
   else if (isFamily) myRole = 'family_member';
   else if (!isAdmin && hasMembership) myRole = 'family_member';
 
@@ -165,7 +173,7 @@ export function rolesOfUser(roles, userCode, { pendingTenantInvite = false, pend
     manage_proxy: isOwner && tenantExists,
     search_people: isOwner || isAdmin,
   };
-  return { is_admin: isAdmin, is_owner: isOwner, is_owner_derived: ownerDerived, is_tenant: isTenant, is_family: isFamily, my_role: myRole, can };
+  return { is_admin: isAdmin, is_owner: isOwner, is_owner_derived: ownerDerived, is_co_owner: isCoOwner, is_tenant: isTenant, is_family: isFamily, my_role: myRole, can };
 }
 
 /** Karsilikli bag kesme talebinin karsi tarafi (kullanici kodu); karsi tarafin hesabi yoksa null. */

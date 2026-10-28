@@ -43,6 +43,7 @@ export const APARTMENT_ROW_SELECT_SQL = `
             WHEN 'family_member' THEN 3
             ELSE 4
           END,
+          ar.is_account_holder DESC,
           ar.id ASC
         LIMIT 1
       )
@@ -63,6 +64,7 @@ export const APARTMENT_ROW_SELECT_SQL = `
             WHEN 'family_member' THEN 3
             ELSE 4
           END,
+          ar.is_account_holder DESC,
           ar.id ASC
         LIMIT 1
       )
@@ -83,6 +85,7 @@ export const APARTMENT_ROW_SELECT_SQL = `
             WHEN 'family_member' THEN 3
             ELSE 4
           END,
+          ar.is_account_holder DESC,
           ar.id ASC
         LIMIT 1
       )
