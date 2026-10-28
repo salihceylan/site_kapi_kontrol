@@ -53,19 +53,23 @@ class ManagerCallTile extends StatelessWidget {
 
   static String? _dialableOf(ManagerContact c) => dialableNumber(c.phone);
 
-  String get _subtitle {
+  /// Kutunun alt satırı (Kolay görünümün büyük düğmesi yalnız ekran okuyucu ipucunu kullanır).
+  static String subtitleOf(List<ManagerContact> contacts) {
     if (contacts.length > 1) return '${contacts.length} site';
     final c = contacts.single;
     if (_dialableOf(c) == null) return ManagerCallTexts.noPhone;
     return c.managerName ?? c.siteName;
   }
 
-  String get _hint {
+  /// Ekran okuyucu ipucu: dokununca ne olacağını söyler.
+  static String hintOf(List<ManagerContact> contacts) {
     if (contacts.length > 1) return ManagerCallTexts.hintMany;
     return _dialableOf(contacts.single) == null ? ManagerCallTexts.hintNoPhone : ManagerCallTexts.hintCall;
   }
 
-  Future<void> _onTap(BuildContext context) async {
+  /// Dokunuş: tek site + telefon varsa telefon uygulamasını açar (açılamazsa kuru mod), telefon yoksa nedenini söyler, birden çok
+  /// site varsa site listesini açar. Hem hızlı işlemler kutusu hem Kolay görünümün büyük düğmesi AYNI yoldan geçer.
+  static Future<void> activate(BuildContext context, List<ManagerContact> contacts, {DialLauncher? launcher}) async {
     if (contacts.length > 1) {
       await showManagerCallSheet(context, contacts: contacts, launcher: launcher);
       return;
@@ -86,6 +90,12 @@ class ManagerCallTile extends StatelessWidget {
       dialable: dialable,
     );
   }
+
+  String get _subtitle => subtitleOf(contacts);
+
+  String get _hint => hintOf(contacts);
+
+  Future<void> _onTap(BuildContext context) => activate(context, contacts, launcher: launcher);
 
   @override
   Widget build(BuildContext context) {

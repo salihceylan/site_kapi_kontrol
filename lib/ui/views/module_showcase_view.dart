@@ -308,9 +308,9 @@ class ModuleShowcaseViewState extends State<ModuleShowcaseView> {
 
   /// KOLAY GÖRÜNÜM ana ekranı (P2-25): modüller tek sütunda büyük düğmeler, açıklama yok, giriş animasyonu yok; hesap /
   /// ayar öğeleri ve yardım da aynı büyük düğmelerle altta. Hızlı işlemler yoktur (aynı sayfalar zaten düğmedir); "Ziyaretçi
-  /// kodu" (varsa) Kapılar düğmesinin hemen altındadır. Görünürlük kuralı AYNIDIR: yalnız [model]deki (menü listesinden
-  /// türeyen) öğeler çizilir. Kompakt menü (K8) bir şeyi öne çıkarmıyorsa [allActions] verilir: modüllerin sonuna büyük bir
-  /// "Tüm işlemler" düğmesi eklenir (gizlenen işler kolay görünümde de kaybolmaz).
+  /// kodu" (varsa) Kapılar düğmesinin hemen altındadır; sakin için "Yöneticiyi ara" (varsa) modüllerin sonundadır. Görünürlük
+  /// kuralı AYNIDIR: yalnız [model]deki (menü listesinden türeyen) öğeler çizilir. Kompakt menü (K8) bir şeyi öne çıkarmıyorsa
+  /// [allActions] verilir: en sona büyük bir "Tüm işlemler" düğmesi eklenir (gizlenen işler kolay görünümde de kaybolmaz).
   List<Widget> _buildEasyModules(BuildContext context, ShowcaseModel model, {ShowcaseEntry? allActions}) {
     final guestPass = widget.audience == ShowcaseAudience.resident ? widget.onCreateGuestPass : null;
     final buttons = <Widget>[
@@ -335,6 +335,22 @@ class ModuleShowcaseViewState extends State<ModuleShowcaseView> {
           hint: 'Misafir ve kurye için süreli geçiş linki oluşturur; kapıyı açmaz',
           art: ModuleArtKind.accessCards,
           onTap: guestPass,
+        ),
+      );
+    }
+    // "Yöneticiyi ara" (P2-23): hızlı işlemler Kolay görünümde yoktur; sunucu yanıtı gelince (kendi sitesinin yöneticisi olana ve
+    // veri yokken çizilmez) büyük bir düğme olarak modüllerin sonuna eklenir. Dokunuş hızlı işlemler kutusuyla AYNI yoldan geçer.
+    final callable = _wantsManagers(widget)
+        ? ManagerCallTile.callable(_managers ?? const <ManagerContact>[])
+        : const <ManagerContact>[];
+    if (callable.isNotEmpty) {
+      buttons.add(
+        ShowcaseEasyButton(
+          key: const ValueKey<String>('panel_kolay_yoneticiyiAra'),
+          title: ManagerCallTexts.title,
+          hint: ManagerCallTile.hintOf(callable),
+          icon: Icons.phone_in_talk_rounded,
+          onTap: () => unawaited(ManagerCallTile.activate(context, callable, launcher: widget.dialLauncher)),
         ),
       );
     }
