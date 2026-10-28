@@ -25,8 +25,8 @@ const String _idleSubtitle = 'Başlatmak için dokunun';
 const String _listeningTitle = '🎙️ Sesli Dinleme Aktif';
 const String _listeningHint = 'Dinleniyor... "Kapıyı aç" diyebilirsiniz.';
 const String _processingTitle = '🤖 Komut Algılanıyor...';
-const String _successTitle = '🔓 Kapı Açılıyor!';
-const String _successSubtitle = 'Sesli komut onaylandı, kapı tetikleniyor...';
+const String _successTitle = '🔓 Komut Gönderildi';
+const String _successSubtitle = 'Sesli komut onaylandı, açma komutu gönderildi.';
 const String _errorTitle = '⚠️ Sesli Komut Hatası';
 const String _unknownError = 'Bilinmeyen hata';
 
@@ -325,7 +325,7 @@ void main() {
         _processingTitle.codeUnits,
         '\u{1F916} Komut Algılanıyor...'.codeUnits,
       );
-      expect(_successTitle.codeUnits, '\u{1F513} Kapı Açılıyor!'.codeUnits);
+      expect(_successTitle.codeUnits, '\u{1F513} Komut Gönderildi'.codeUnits);
       expect(
         _errorTitle.codeUnits,
         '\u{26A0}\u{FE0F} Sesli Komut Hatası'.codeUnits,

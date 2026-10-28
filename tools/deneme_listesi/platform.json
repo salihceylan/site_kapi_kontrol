@@ -4787,6 +4787,22 @@
           "on_kosul": "Duyuru ve Bildirim açık.",
           "yeni": false,
           "gelistirme": "hazir"
+        },
+        {
+          "id": "F24.17",
+          "baslik": "Kapı komutu gönderilince \"açıldı\" denmez",
+          "adimlar": [
+            "Panel'den Kapılar'a girin ve yuvarlak düğmeyle kapıyı uzaktan açın; düğmeye ve çıkan bildirime bakın.",
+            "Menüden \"Sesli Kapı Açma\"yı açıp \"kapıyı aç\" deyin; ekrandaki başlığa ve telefonun sesli söylediği cümleye bakın.",
+            "Ekranlı bir kapıda \"Kapı Ekranından QR Oku\" ya da \"Kapıya QR Göster\" ile geçin.",
+            "Android ana ekranındaki kapı widget'ında \"KAPIYI AÇ\"a dokunun.",
+            "Bir kurye / misafir geçiş linkini tarayıcıda açıp düğmeye dokunun."
+          ],
+          "beklenen": "Hiçbir yerde \"Kapı açıldı!\" yazmaz ya da sesle okunmaz. Düğme \"GÖNDERİLDİ\" olur; bildirim \"Kapı açma komutu gönderildi.\" ya da \"<Kapı adı> için açma komutu gönderildi.\" der. Sesli pencerede başlık \"Komut Gönderildi\", telefon \"<Kapı adı> için açma komutu gönderildi.\" der. QR penceresi \"Gönderildi\" ve \"Geçiş onaylandı\" yazar, telefon \"Geçiş onaylandı, açma komutu gönderildi.\" der. Widget \"Komut gönderildi ✅\" gösterir. Misafir sayfasında düğme \"GONDERILDI\", mesaj \"Kapi acma komutu gonderildi.\" olur. Kapının gerçekten açılıp açılmadığını kapının kendisinden görürsünüz: uygulama bunu bilemez (cihaz yanıtı ya da kapı sensörü zinciri ayrı bir iştir).",
+          "rol_notu": "Daire sakini",
+          "on_kosul": "Geçiş Kontrol açık, hesabın en az bir kapısı var; QR ve misafir adımları için kapıda ekran / QR ve misafir geçişi yetkisi.",
+          "yeni": true,
+          "gelistirme": "hazir"
         }
       ]
     },

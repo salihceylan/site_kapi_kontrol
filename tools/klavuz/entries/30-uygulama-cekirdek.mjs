@@ -1668,12 +1668,12 @@ export default {
     {
       id: 'cekirdek-widget-acma-sonuc-mesajlari',
       symptom: 'Ana ekran widget\'ındaki "Aç" düğmesi "Bağlantı hatası", "Yetkiniz yok", "Kapı çevrimdışı", "Konum için uygulamayı açın" ya da "Çok sık deneme, bekleyin" diyor; ya da düğmeye basınca hiçbir şey olmuyor',
-      keywords: ['widget aç', 'bağlantı hatası', 'yetkiniz yok', 'konum için uygulamayı açın', 'çok sık deneme', 'kapı çevrimdışı', 'açıldı', 'home_widget'],
+      keywords: ['widget aç', 'bağlantı hatası', 'yetkiniz yok', 'konum için uygulamayı açın', 'çok sık deneme', 'kapı çevrimdışı', 'komut gönderildi', 'açıldı', 'home_widget'],
       refs: [
         {
           file: 'lib/services/door_widget_service.dart',
           find: 'DoorWidgetOpenOutcome mapDoorOpenResponse(int statusCode, String body) {',
-          note: 'Sunucu durum kodunu widget metnine çevirir: 200/202 Açıldı, 401 Giriş Yapın, 403 (GEOFENCE* konum / REMOTE_OPEN_DISABLED / Yetkiniz yok), 404, 409 çevrimdışı, 429, 5xx',
+          note: 'Sunucu durum kodunu widget metnine çevirir: 200/202 Komut gönderildi, 401 Giriş Yapın, 403 (GEOFENCE* konum / REMOTE_OPEN_DISABLED / Yetkiniz yok), 404, 409 çevrimdışı, 429, 5xx',
         },
         {
           file: 'lib/services/door_widget_service.dart',

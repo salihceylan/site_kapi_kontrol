@@ -100,7 +100,7 @@ class _VoiceControlModalState extends State<VoiceControlModal>
   void _onVoiceStatusChange() {
     if (mounted) _syncPulse();
     final status = widget.voiceService.status;
-    // Onay anı: kapı açılıyor (yalnız durum başarıya GEÇERKEN; aynı durumda tekrar bildirimde değil).
+    // Onay anı: komut gönderildi (yalnız durum başarıya GEÇERKEN; aynı durumda tekrar bildirimde değil).
     if (status == VoiceStatus.success &&
         _lastStatus != VoiceStatus.success &&
         mounted) {
@@ -153,7 +153,7 @@ class _VoiceControlModalState extends State<VoiceControlModal>
       case VoiceStatus.processing:
         return 'Komut İşleniyor...';
       case VoiceStatus.success:
-        return 'Kapı Açıldı!';
+        return 'Komut Gönderildi';
       case VoiceStatus.error:
         return 'İşlem Başarısız';
       case VoiceStatus.initializing:

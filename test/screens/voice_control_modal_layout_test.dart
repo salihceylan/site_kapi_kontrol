@@ -110,12 +110,12 @@ void main() {
   );
 
   testWidgets(
-    'VoiceControlModal: kapı açılıyor (başarı) anında bir kez hafif haptik; sonra kendiliğinden kapanır',
+    'VoiceControlModal: komut gönderildi (başarı) anında bir kez hafif haptik; sonra kendiliğinden kapanır',
     (t) async {
       final haptics = recordHaptics(t);
       final voice = FakeVoiceDoorService(
         startStatus: VoiceStatus.success,
-        startFeedback: 'Ana kapı açılıyor',
+        startFeedback: 'Ana kapı için açma komutu gönderildi.',
       );
       await openDialogAt(
         t,
@@ -125,7 +125,11 @@ void main() {
         scale: 1.0,
         dark: false,
       );
-      expect(find.text('Kapı Açıldı!'), findsOneWidget);
+      // Dürüst dil (P1-15): başarı = komutun sunucuca kabulü; kapının açıldığı iddia edilmez.
+      expect(find.text('Komut Gönderildi'), findsOneWidget);
+      expect(find.text('Ana kapı için açma komutu gönderildi.'), findsOneWidget);
+      expect(find.textContaining('Açıldı'), findsNothing);
+      expect(find.textContaining('açıldı'), findsNothing);
       expect(
         haptics.where((h) => h.contains('lightImpact')),
         hasLength(1),

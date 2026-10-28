@@ -413,7 +413,7 @@ guestPassesRouter.post('/public/guest-pass/:token/open', doorCommandRateLimiter,
       throw pulseError;
     }
 
-    // Kapi acildi; asagidaki kayit islemleri basarisiz olsa da istemciye basari donulur.
+    // Komut yayinlandi; asagidaki kayit islemleri basarisiz olsa da istemciye basari donulur.
     try {
       auditLog('guest_pass_opened', {
         pass_id: Number(pass.id),
@@ -461,7 +461,7 @@ guestPassesRouter.post('/public/guest-pass/:token/open', doorCommandRateLimiter,
 
     return res.status(200).json({
       ok: true,
-      message: `${pass.door_name} aciliyor.`,
+      message: `${pass.door_name} icin kapi acma komutu gonderildi.`,
       door_name: pass.door_name,
       site_name: pass.site_name,
     });

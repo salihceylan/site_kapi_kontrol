@@ -379,10 +379,13 @@ void main() {
 
         expect(auth.openedDoorIds, [1]);
         expect(find.text('GÖNDERİLDİ'), findsOneWidget);
+        // Dürüst dil (P1-15): komut sunucuca kabul edildi; kapının açıldığı/açıldığına dair kanıt yazılmaz.
         expect(
-          find.text('"Ana Giriş Kapısı" kapısı açılıyor...'),
+          find.text('"Ana Giriş Kapısı" için açma komutu gönderildi.'),
           findsOneWidget,
         );
+        expect(find.textContaining('açılıyor'), findsNothing);
+        expect(find.textContaining('açıldı!'), findsNothing);
 
         await t.pump(const Duration(milliseconds: 1500));
         expect(find.text('GÖNDERİLDİ'), findsNothing);

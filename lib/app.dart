@@ -305,11 +305,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       return;
     }
 
-    await _voiceDoorService.speak('${chosen.doorName} açılıyor.');
+    await _voiceDoorService.speak('${chosen.doorName} için açma komutu gönderiliyor.');
     final (status, error) =
         await _authService.openDoor(doorId: chosen.id, door: chosen);
     if (status != null && error == null) {
-      _showFeedback('${chosen.doorName} açma komutu gönderildi.');
+      _showFeedback('${chosen.doorName} için açma komutu gönderildi.');
     } else {
       _showFeedback(error ?? 'Kapı açılamadı.');
     }

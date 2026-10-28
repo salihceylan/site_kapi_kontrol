@@ -30,7 +30,7 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | ${label} dairesinin yönetimi site yöneticisi tarafından size verildi. | [server/src/modules/apartment_mgmt_manager.js:175](../server/src/modules/apartment_mgmt_manager.js#L175) |
 | ${name} env degiskeni eksik. | [server/src/mailer.js:6](../server/src/mailer.js#L6) |
 | ${name}: dosya çok büyük | [server/src/modules/legal_documents.js:222](../server/src/modules/legal_documents.js#L222) |
-| ${pass.door_name} aciliyor. | [server/src/routes/guest_passes_routes.js:464](../server/src/routes/guest_passes_routes.js#L464) |
+| ${pass.door_name} icin kapi acma komutu gonderildi. | [server/src/routes/guest_passes_routes.js:464](../server/src/routes/guest_passes_routes.js#L464) |
 | ${req.full_name} sakini, "${req.block_name \|\| ''} ${req.unit_label}" dairesine ${assignedRole === 'APARTMENT_ADMIN' ? 'Daire Yöneticisi' : 'Aile Üyesi'} olarak başarıyla onaylandı. | [server/src/services/membership_service.js:1389](../server/src/services/membership_service.js#L1389) |
 | ${result.revoked_count} aktif karekod basariyla iptal edildi. | [server/src/routes/manager_routes.js:1117](../server/src/routes/manager_routes.js#L1117) |
 | ${site?.name ?  | [server/src/modules/account_common.js:69](../server/src/modules/account_common.js#L69) |
@@ -616,8 +616,8 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | Kapı adı zorunludur. | [server/src/services/door_service.js:591](../server/src/services/door_service.js#L591) |
 | Kapı bulunamadı. | [server/src/services/membership_service.js:2360](../server/src/services/membership_service.js#L2360) |
 | Kapı yetkisi varsayılan ayarlara döndürüldü. | [server/src/services/membership_service.js:2666](../server/src/services/membership_service.js#L2666) |
+| Kapi acma komutu gonderildi. | [server/src/routes/app_doors_routes.js:408](../server/src/routes/app_doors_routes.js#L408) |
 | Kapi adi zorunludur. | [server/src/routes/manager_routes.js:990](../server/src/routes/manager_routes.js#L990) |
-| Kapi basariyla acildi. | [server/src/routes/app_doors_routes.js:408](../server/src/routes/app_doors_routes.js#L408) |
 | Kapi bulunamadi veya erisim yetkiniz yok. | [server/src/services/qr_access_service.js:31](../server/src/services/qr_access_service.js#L31) |
 | Kapi bulunamadi veya yetkiniz yok. | [server/src/routes/guest_passes_routes.js:67](../server/src/routes/guest_passes_routes.js#L67) |
 | Kapi bulunamadi. | [server/src/routes/admin_routes.js:1495](../server/src/routes/admin_routes.js#L1495) |

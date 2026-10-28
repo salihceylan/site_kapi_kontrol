@@ -405,7 +405,7 @@ appDoorsRouter.post('/app/doors/scan-qr-open', authRequired, doorCommandRateLimi
       door_id: Number(door.id),
       door_name: door.door_name,
       site_name: door.site_name,
-      message: 'Kapi basariyla acildi.',
+      message: 'Kapi acma komutu gonderildi.',
     });
   } catch (error) {
     if (respondKnownError(res, error)) {

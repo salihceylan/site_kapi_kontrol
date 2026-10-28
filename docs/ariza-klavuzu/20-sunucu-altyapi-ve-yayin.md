@@ -80,7 +80,7 @@ Bu bölüm API sürecinin ayağa kalkması (PM2, ortam doğrulaması, /health), 
 - [altyapi-mosquitto-servis-calismiyor](#altyapi-mosquitto-servis-calismiyor) — Mosquitto servisi başlamıyor ("Address already in use" / "Unable to open acl_file") ya da 8883 dışarıdan açılmıyor
 - [altyapi-cihaz-cevrimdisi-gorunuyor](#altyapi-cihaz-cevrimdisi-gorunuyor) — Cihaz çevrimdışı görünüyor (sunucu tarafı: devices.is_online=false / mqtt_connected=false) ama cihaz Wi-Fi'ye bağlı
 - [altyapi-durum-api-yeniden-baslayinca](#altyapi-durum-api-yeniden-baslayinca) — API yeniden başlatılınca (dağıtım sonrası) cihaz durumları kısa süre eski ya da boş görünüyor
-- [altyapi-komut-yayini-roleyi-calistirmiyor](#altyapi-komut-yayini-roleyi-calistirmiyor) — Cihaz komut alıyor ama röle çalışmıyor — sunucu yayın yapıyor mu? (uygulama "açıldı" diyor, kapı açılmıyor)
+- [altyapi-komut-yayini-roleyi-calistirmiyor](#altyapi-komut-yayini-roleyi-calistirmiyor) — Cihaz komut alıyor ama röle çalışmıyor — sunucu yayın yapıyor mu? (uygulama "komut gönderildi" diyor, kapı açılmıyor)
 - [altyapi-qr-sonuc-cihaza-donmuyor](#altyapi-qr-sonuc-cihaza-donmuyor) — Cihaz karekodu okutuyor ama "qr_result" yanıtı gelmiyor (kapı açılmıyor, cihaz zaman aşımına düşüyor)
 - [altyapi-ekran-qr-token-sunucuda](#altyapi-ekran-qr-token-sunucuda) — Ekranlı (WROOM) cihazın ekran QR kodu sunucuda görünmüyor ya da API yeniden başlayınca boşalıyor
 - [altyapi-offline-log-alimi](#altyapi-offline-log-alimi) — Cihazın çevrimdışıyken biriktirdiği kapı kayıtları sunucuya gelmiyor ya da cihaz aynı kayıt paketini tekrar tekrar yolluyor (logs_ack yok)
@@ -1412,7 +1412,7 @@ ssh -p 22667 salihceylan@178.210.161.55 'bash -s' < deploy/remote_verify.sh
 **Bkz.:** [altyapi-cihaz-cevrimdisi-gorunuyor](#altyapi-cihaz-cevrimdisi-gorunuyor), [altyapi-health-mqtt-baglanti-yok](#altyapi-health-mqtt-baglanti-yok)
 
 <a id="altyapi-komut-yayini-roleyi-calistirmiyor"></a>
-### altyapi-komut-yayini-roleyi-calistirmiyor · Cihaz komut alıyor ama röle çalışmıyor — sunucu yayın yapıyor mu? (uygulama "açıldı" diyor, kapı açılmıyor)
+### altyapi-komut-yayini-roleyi-calistirmiyor · Cihaz komut alıyor ama röle çalışmıyor — sunucu yayın yapıyor mu? (uygulama "komut gönderildi" diyor, kapı açılmıyor)
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |

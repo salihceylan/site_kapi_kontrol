@@ -1,6 +1,8 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:site_kapi_kontrol/models/door_record.dart';
+import 'package:site_kapi_kontrol/models/door_runtime_status.dart';
 import 'package:site_kapi_kontrol/services/auth_api.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/services/voice_door_service.dart';
@@ -304,4 +306,90 @@ void main() {
       service.dispose();
     });
   });
+
+  group('VoiceDoorService: komut kabulünde dürüst dil (P1-15)', () {
+    final spoken = <String>[];
+
+    setUp(() {
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+      spoken.clear();
+      // Android'de {text, focus}, öteki platformlarda düz metin gelir.
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(const MethodChannel('flutter_tts'), (call) async {
+        if (call.method == 'speak') {
+          final args = call.arguments;
+          spoken.add(args is Map ? '${args['text']}' : '$args');
+        }
+        return 1;
+      });
+    });
+
+    tearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(const MethodChannel('flutter_tts'), null);
+    });
+
+    test('sunucu komutu kabul edince "açma komutu gönderildi" denir; ekran, ses ve sonuç "açıldı" demez', () async {
+      final auth = _OpenAuth();
+      final service = VoiceDoorService(authService: auth);
+      final door = _door(1, 'Ana Kapı');
+
+      final result = await service.debugProcessVoiceCommand('ana kapıyı aç', candidateDoors: <DoorRecord>[door]);
+
+      expect(auth.opened, <int>[1]);
+      expect(result.success, isTrue);
+      expect(result.matchedDoor?.id, 1);
+      expect(result.feedbackMessage, 'Ana Kapı için açma komutu gönderildi.');
+      expect(service.status, VoiceStatus.success);
+      expect(service.feedbackText, 'Ana Kapı için açma komutu gönderildi.');
+      expect(spoken, contains('Ana Kapı için açma komutu gönderildi.'));
+      for (final text in <String>[result.feedbackMessage, service.feedbackText, ...spoken]) {
+        expect(text.toLowerCase(), isNot(contains('açıldı')), reason: text);
+      }
+      service.dispose();
+    });
+
+    test('sunucu komutu reddederse başarı dili kullanılmaz', () async {
+      final auth = _OpenAuth(error: 'Kapı çevrimdışı.');
+      final service = VoiceDoorService(authService: auth);
+
+      final result = await service.debugProcessVoiceCommand('ana kapıyı aç', candidateDoors: <DoorRecord>[_door(1, 'Ana Kapı')]);
+
+      expect(result.success, isFalse);
+      expect(result.feedbackMessage, 'Kapı çevrimdışı.');
+      expect(service.status, VoiceStatus.error);
+      expect(spoken.where((s) => s.contains('komutu gönderildi')), isEmpty);
+      service.dispose();
+    });
+  });
+}
+
+/// Komutu kabul eden (ya da [error] ile reddeden) sahte oturum; kapı durumunu DEĞİŞTİRMEZ.
+class _OpenAuth extends AuthService {
+  _OpenAuth({this.error}) : super(api: AuthApi(baseUrl: 'http://localhost'));
+
+  final String? error;
+  final List<int> opened = <int>[];
+
+  @override
+  Future<(DoorRuntimeStatus?, String?)> openDoor({required int doorId, DoorRecord? door}) async {
+    opened.add(doorId);
+    if (error != null) return (null, error);
+    return (
+      DoorRuntimeStatus(
+        door: door!,
+        deviceUid: 'ESP_$doorId',
+        mqttBridgeConnected: true,
+        mqttConnected: true,
+        doorLocked: true,
+        firmwareVersion: null,
+        localControlPort: null,
+        localControlToken: null,
+        localControlAvailable: false,
+        lastEvent: null,
+        lastSeenAt: null,
+      ),
+      null,
+    );
+  }
 }

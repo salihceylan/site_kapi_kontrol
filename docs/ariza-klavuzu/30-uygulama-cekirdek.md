@@ -1032,7 +1032,7 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/door_widget_servic
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/services/door_widget_service.dart:150](../../lib/services/door_widget_service.dart#L150) | <code>DoorWidgetOpenOutcome mapDoorOpenResponse(int statusCode, String body) {</code> | Sunucu durum kodunu widget metnine çevirir: 200/202 Açıldı, 401 Giriş Yapın, 403 (GEOFENCE* konum / REMOTE_OPEN_DISABLED / Yetkiniz yok), 404, 409 çevrimdışı, 429, 5xx |
+| [lib/services/door_widget_service.dart:150](../../lib/services/door_widget_service.dart#L150) | <code>DoorWidgetOpenOutcome mapDoorOpenResponse(int statusCode, String body) {</code> | Sunucu durum kodunu widget metnine çevirir: 200/202 Komut gönderildi, 401 Giriş Yapın, 403 (GEOFENCE* konum / REMOTE_OPEN_DISABLED / Yetkiniz yok), 404, 409 çevrimdışı, 429, 5xx |
 | [lib/services/door_widget_service.dart:352](../../lib/services/door_widget_service.dart#L352) | <code>return const DoorWidgetOpenOutcome('Bağlantı hatası ❌');</code> | Her ağ istisnası/zaman aşımı (10 sn) bu metne düşer; is_online DEĞİŞTİRİLMEZ |
 | [lib/services/door_widget_service.dart:103](../../lib/services/door_widget_service.dart#L103) | <code>bool tryBegin(DateTime now) {</code> | Önceki istek sürerken ya da 2 sn içinde ikinci dokunuş SESSİZCE yok sayılır (düğme "tepkisiz" görünür) |
 | [lib/services/door_widget_service.dart:43](../../lib/services/door_widget_service.dart#L43) | <code>DoorWidgetAction? parseDoorWidgetUri(Uri? uri) {</code> | Düğme URI'si katı doğrulanır: yalnız sitekapi://next_door\|prev_door\|open_door_action\|door_offline_action; başka biçim sessizce yok sayılır |

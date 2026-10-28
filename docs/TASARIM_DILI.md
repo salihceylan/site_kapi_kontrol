@@ -195,6 +195,14 @@ Karar G6/G7 gereği görünüşü ve davranışı aynıdır: cilalı yuvarlak (1
 belirteçler (birincil / uyarı / başarı tonları, palet yüzeyleri, `shadow(1)`, `Gloss`, `PressableScale`, ilerleme
 göstergesi teması) bu yüzden değiştirilmez; kilit testi bunları ve pikseli denetler.
 
+**Komut dili (P1-15, dürüst başarı)**: sunucunun komutu kabul etmesi (202) yalnız "komut gönderildi"dir. Cihazın yanıt vermesi ve
+kapının fiziksel olarak açılması ayrı durumlardır; kanıt yoksa "açıldı" yazılmaz ve sesle okunmaz. Başarıda düğme `GÖNDERİLDİ`;
+bildirim "Kapı açma komutu gönderildi." ya da "<Kapı adı> için açma komutu gönderildi."; sesli okuma aynı cümle; sesli pencere ve
+banner "Komut Gönderildi"; QR penceresi "Gönderildi" + "Geçiş onaylandı"; Android widget "Komut gönderildi ✅"; misafir sayfası
+"GONDERILDI" + "Kapi acma komutu gonderildi.". "Açık" / "açıldı" yalnız cihazın kendi bildirdiği durumda geçer (yönetici kartındaki
+"Kapı Durumu", kapı ekranındaki "KAPI ACILDI"). Kaynakta `test/door_command_language_test.dart` ve `server/test/door_command_language.test.js`
+denetler.
+
 ### `Gloss` (`gloss.dart`): yalnız kapı düğmesinin cilası
 Bir yüzeyin ÜSTÜNE dört ince katman bindirir: sol-üst hacim ışığı, alt gölge, kenar ışığı, özel parıltı (daire) ya da
 üst cila (dikdörtgen). Tek `CustomPaint` + `RepaintBoundary`; durağanken yeniden boyanmaz. İsteğe bağlı `sweep` (0→1)
