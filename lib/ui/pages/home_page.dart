@@ -103,6 +103,9 @@ import 'package:site_kapi_kontrol/ui/dialogs/submit_join_request_dialog.dart';
 import 'package:site_kapi_kontrol/ui/views/join_and_setup_view.dart';
 import 'package:site_kapi_kontrol/ui/views/yeni_site_view.dart';
 import 'package:site_kapi_kontrol/ui/widgets/panel_site_creation_card.dart';
+import 'package:site_kapi_kontrol/services/site_setup_progress_store.dart';
+import 'package:site_kapi_kontrol/ui/views/site_setup_wizard_view.dart';
+import 'package:site_kapi_kontrol/ui/widgets/site_setup_resume_card.dart';
 
 import 'package:site_kapi_kontrol/ui/pages/qr_scan_page.dart';
 
@@ -1580,8 +1583,23 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   int? _financeInitialSite;
   int? _financeInitialTab;
 
+  /// Yönetici Panel'inin üst alanı: yarım kalan kurulum hatırlatması (P2-15; kayıt yoksa hiçbir şey çizmez) ve
+  /// yöneticide finans dikkat barı.
   Widget? _attentionBarFor(UserSession session, ShowcaseAudience audience) {
-    if (audience != ShowcaseAudience.admin || session.role == UserRole.superUser) return null;
+    if (audience != ShowcaseAudience.admin) return null;
+    final bar = _financeAttentionBar(session);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SiteSetupResumeCard(userId: session.id, onResume: (siteCode, siteName) => unawaited(_openSetupWizard(siteCode, siteName))),
+        ?bar,
+      ],
+    );
+  }
+
+  Widget? _financeAttentionBar(UserSession session) {
+    if (session.role == UserRole.superUser) return null;
     final sites = _financeSites(session.role).where((s) => s.canWrite).toList(growable: false);
     if (sites.isEmpty) return null;
     return ManagerAttentionBar(
@@ -4705,12 +4723,32 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final role = widget.authService.session?.role;
     if (role == UserRole.siteManager) {
       _goToMenu(SirketMenuItem.dashboard);
+      // P2-15 / P2-16: onaydan sonra ilk girişte kuruluma yönlendirme. Panel'de "Site kurulumunu tamamlayın" kartı açılır
+      // (kayıt cihazda); ileti de sihirbazı doğrudan açan bir eylem taşır.
+      final siteCode = application.siteCode;
+      final userId = widget.authService.session?.id;
+      if (siteCode != null && userId != null) {
+        // Kayıt arka planda açılır: onay iletisi cihaz depolamasını BEKLEMEZ (depolama yavaş / hatalı olsa da ileti çıkar).
+        unawaited(
+          SiteSetupProgressStore.shared
+              .ensure(userId, siteCode, siteName: application.siteName)
+              .catchError((Object _) => false),
+        );
+      }
       AppSnack.show(
         context,
         before == UserRole.siteManager
             ? 'Site başvurunuz onaylandı. Siteniz kuruldu.'
             : 'Site başvurunuz onaylandı. Artık site yöneticisisiniz.',
         kind: AppSnackKind.success,
+        duration: const Duration(seconds: 8),
+        persist: false,
+        action: siteCode == null
+            ? null
+            : SnackBarAction(
+                label: 'Kuruluma başla',
+                onPressed: () => unawaited(_openSetupWizard(siteCode, application.siteName)),
+              ),
       );
     }
   }
@@ -4918,6 +4956,26 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       apartmentId: apartment.id,
       initialLabel: apartment.label,
     );
+  }
+
+  /// Site kurulum sihirbazı (P2-15): adım adım site, kişi, modül ve finans kurulumu. İlerleme cihazda saklanır; Panel'deki
+  /// hatırlatma kartı ve Site Yönetimi'ndeki «Kurulum Sihirbazı» düğmesi kaldığı yerden açar. Sihirbazda kayıtlar
+  /// değiştiyse site listeleri ve modül erişimi yeniden okunur (AGENTS.md kural 7).
+  Future<void> _openSetupWizard(int siteCode, String siteName) async {
+    if (!mounted) return;
+    final outcome = await SiteSetupWizardView.open(
+      context,
+      authService: widget.authService,
+      siteCode: siteCode,
+      siteName: siteName,
+    );
+    if (!mounted || outcome?.changed != true) return;
+    await _loadSites(force: true);
+    unawaited(_moduleAccess.refresh());
+    final current = _selectedSite;
+    if (current != null && current.id == siteCode) {
+      await _selectSite(current);
+    }
   }
 
   Future<void> _openBulkImportFromSites(int siteCode, String siteName) async {
@@ -6923,6 +6981,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           onResetHouseholdPersonPin: _directResetHouseholdPersonPin,
           onOpenApartmentCard: _openApartmentCardFromSites,
           onOpenBulkImport: _openBulkImportFromSites,
+          onOpenSetupWizard: session.role == UserRole.superUser || session.role == UserRole.siteManager
+              ? (siteCode, siteName) => unawaited(_openSetupWizard(siteCode, siteName))
+              : null,
           siteManagersData: _selectedSiteManagersData,
           isLoadingManagers: _isLoadingSiteManagers,
           onInviteSiteManager: _openInviteSiteManagerDialog,
