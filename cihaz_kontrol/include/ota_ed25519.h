@@ -522,7 +522,7 @@ inline bool yKanonikMi(const uint8_t k[32]) {
 }
 
 // dogrula / anahtarGecerliMi calisma alani: YIGIN YERINE BELLEKTE (malloc). ESP32 loop gorevinin yigini 8 KB'tir ve OTA indirmesinin
-// TLS zinciri zaten derindir; ~1,3 KB'lik noktalar/SHA-512 baglami yigina binmesin. Bellek ayrilamazsa dogrulama BASARISIZ sayilir (guvenli taraf).
+// TLS zinciri zaten derindir; ~1,9 KB'lik noktalar/SHA-512 baglami yigina binmesin. Bellek ayrilamazsa dogrulama BASARISIZ sayilir (guvenli taraf).
 struct Alan {
   gf p[4];
   gf q[4];
