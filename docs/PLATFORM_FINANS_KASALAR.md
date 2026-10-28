@@ -109,6 +109,8 @@ Ad sabitleri: `FUND_LABELS` ("İşletme Projesi (Aidat) Hesabı" / "Yatırım ve
 | Sayaç borçlandırma (`metering_billing.js`) | `operating` (satıra yazılır) |
 | Devir bakiyesi yükleme (`bulk_import_writer.applyOpeningOps`; BAŞKA ajanın dosyası, değiştirilmedi) | NULL yazılır; okumada `source_kind = 'opening'` ⇒ `operating` türetilir |
 
+**Fon (capital) hesabına borç yazan iki yol (aylık borçlandırma ve ek borç) bir DAYANAĞA bağlanır** (K2, migration 090): Karar Defteri modülü açık sitede kesinleşmiş karar (`decision_id`), kapalı sitede serbest metin gerekçe (`decision_reason`) zorunludur; sözleşme `docs/PLATFORM_FINANS_KARAR_BAGI.md`.
+
 080 öncesi satırlarda `fund` NULL KALIR (geri doldurma yok) ve OKUMADA `effectiveFund` ile türetilir: kaynak `opening` ⇒ `operating`; gecikme tazminatı ⇒ `operating`; `definition_id` varsa tanımın etkin
 "kim öder" değeri (NULL ise aylık `occupant`, tek seferlik `owner`) ⇒ `operating` / `capital`; aksi `operating`. Tahsilat satırında NULL "kısıtsız" demektir (türetme yok).
 

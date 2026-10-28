@@ -2117,6 +2117,8 @@ class AuthService extends ChangeNotifier {
     String? expectedHash,
     bool skipMissing = false,
     String? idempotencyKey,
+    int? decisionId,
+    String? decisionReason,
   }) {
     return _runAuthorized(
       (token) => api.postFeeRun(
@@ -2130,6 +2132,8 @@ class AuthService extends ChangeNotifier {
         expectedHash: expectedHash,
         skipMissing: skipMissing,
         idempotencyKey: idempotencyKey,
+        decisionId: decisionId,
+        decisionReason: decisionReason,
       ),
     );
   }

@@ -2377,6 +2377,9 @@ class AuthApi {
   /// Borçlandırır: sunucu önizlemeyle aynı hesabı yeniden yapar; toplam / daire sayısı / içerik özeti
   /// ([expectedHash] = önizlemenin `preview_hash`i) uyuşmazsa 409 `PREVIEW_STALE` (hiçbir şey yazılmaz).
   /// [idempotencyKey] yeniden denemede AYNI verilir. [expectedHash] önizleme yanıtında yoksa (eski sunucu) null.
+  ///
+  /// Tahakkuk dayanağı (K2): Fon (demirbaş) hesabı borcunda Karar Defteri açık sitede [decisionId] (kesinleşmiş karar), kapalı sitede
+  /// [decisionReason] (serbest metin gerekçe) ZORUNLUDUR; aksi 400 `DECISION_REQUIRED` / `DECISION_REASON_REQUIRED`.
   Future<FeePostResult> postFeeRun({
     required String token,
     required int siteCode,
@@ -2388,6 +2391,8 @@ class AuthApi {
     String? expectedHash,
     bool skipMissing = false,
     String? idempotencyKey,
+    int? decisionId,
+    String? decisionReason,
   }) async {
     final response = await _authorizedRequest(
       method: 'POST',
@@ -2401,6 +2406,8 @@ class AuthApi {
         'expected_hash': ?expectedHash,
         if (skipMissing) 'skip_missing': true,
         'idempotency_key': ?idempotencyKey,
+        'decision_id': ?decisionId,
+        if (decisionReason != null && decisionReason.trim().isNotEmpty) 'decision_reason': decisionReason.trim(),
       },
     );
     _ensureCreatedOrOk(response);

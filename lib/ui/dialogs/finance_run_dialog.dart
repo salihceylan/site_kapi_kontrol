@@ -6,6 +6,7 @@ import 'package:flutter/services.dart' show MaxLengthEnforcement;
 import 'package:site_kapi_kontrol/models/finance.dart';
 import 'package:site_kapi_kontrol/models/finance_funds.dart';
 import 'package:site_kapi_kontrol/models/vehicle_record.dart' show crmDateParam;
+import 'package:site_kapi_kontrol/services/decision_book_api.dart' show DecisionBookService;
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
 import 'package:site_kapi_kontrol/ui/design/buttons.dart';
@@ -28,6 +29,7 @@ import 'package:site_kapi_kontrol/ui/widgets/finance_4b_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_fund_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart' show filledToneStyle;
+import 'package:site_kapi_kontrol/ui/widgets/run_basis_field.dart';
 
 /// Borçlandırma / ek borç penceresi kapanırken döner.
 class FinanceRunOutcome {
@@ -78,6 +80,7 @@ class FinanceRunDialog extends StatefulWidget {
     required FeeDefinition this.definition,
     this.now,
     this.onRefreshNeeded,
+    this.decisionService,
   });
 
   const FinanceRunDialog.charge({
@@ -85,6 +88,7 @@ class FinanceRunDialog extends StatefulWidget {
     required this.scope,
     this.now,
     this.onRefreshNeeded,
+    this.decisionService,
   }) : definition = null;
 
   final PeopleScope scope;
@@ -93,6 +97,9 @@ class FinanceRunDialog extends StatefulWidget {
   final FeeDefinition? definition;
   final DateTime Function()? now;
   final VoidCallback? onRefreshNeeded;
+
+  /// Tahakkuk dayanağı seçicisinin (Karar Defteri) servisi; verilmezse oturum servisinden kurulur (test düzeneği).
+  final DecisionBookService? decisionService;
 
   static const int maxNameLength = 80;
   static const int pageSize = 50;
@@ -103,6 +110,7 @@ class FinanceRunDialog extends StatefulWidget {
     required FeeDefinition definition,
     DateTime Function()? now,
     VoidCallback? onRefreshNeeded,
+    DecisionBookService? decisionService,
   }) {
     return showDialog<FinanceRunOutcome>(
       context: context,
@@ -112,6 +120,7 @@ class FinanceRunDialog extends StatefulWidget {
         definition: definition,
         now: now,
         onRefreshNeeded: onRefreshNeeded,
+        decisionService: decisionService,
       ),
     );
   }
@@ -121,6 +130,7 @@ class FinanceRunDialog extends StatefulWidget {
     required PeopleScope scope,
     DateTime Function()? now,
     VoidCallback? onRefreshNeeded,
+    DecisionBookService? decisionService,
   }) {
     return showDialog<FinanceRunOutcome>(
       context: context,
@@ -129,6 +139,7 @@ class FinanceRunDialog extends StatefulWidget {
         scope: scope,
         now: now,
         onRefreshNeeded: onRefreshNeeded,
+        decisionService: decisionService,
       ),
     );
   }
@@ -167,6 +178,11 @@ class _FinanceRunDialogState extends State<FinanceRunDialog> {
 
   // Kullanıcının "Yine de ekle" dediği ek borç imzası: o imza için `allow_duplicate` gönderilir.
   String? _dupAllowedSignature;
+
+  // Tahakkuk dayanağı (K2): Fon hesabı borcunda önizleme `decision_requirement` ile Karar Defteri kaydı (modül açık) ya da gerekçe (modül kapalı)
+  // ister. Seçim, önizleme yenilense de korunur; istenen girdi türü değişirse (modül açıldı / kapandı) sıfırlanır.
+  RunBasisValue _basis = const RunBasisValue.empty();
+  RunBasisMode? _basisMode;
 
   // Ek borcun kasası (eski "Kim öder"). Varsayılan Yatırım ve Demirbaş (Fon) Hesabı (malik öder; sunucu varsayılanı) ve
   // seçim HER ZAMAN gövdede gider.
@@ -293,6 +309,12 @@ class _FinanceRunDialogState extends State<FinanceRunDialog> {
       // Eski / yavaş yanıt yeni sonucu ezmez; pencere kapandıysa yok sayılır.
       if (!mounted || token != _previewToken) return;
       final String? shown = staleFrom != null ? _staleNotice(staleFrom, preview) : notice;
+      // Dayanak: istenen girdi türü değiştiyse (Karar Defteri açıldı / kapandı) eski seçim geçersizdir.
+      final newMode = _requirementOf(preview)?.mode;
+      if (newMode != _basisMode) {
+        _basis = const RunBasisValue.empty();
+        _basisMode = newMode;
+      }
       setState(() {
         _preview = preview;
         _inputs = inputs;
@@ -363,12 +385,27 @@ class _FinanceRunDialogState extends State<FinanceRunDialog> {
 
   // --- Onay ------------------------------------------------------------------------------------
 
+  /// Bu önizleme için dayanak GEREKİYORSA gereksinim; gerekmiyorsa (işletme hesabı, eski sunucu) null.
+  static DecisionRequirement? _requirementOf(FeePreview preview) {
+    final requirement = preview.decisionRequirement;
+    if (requirement == null || !requirement.isRequired || requirement.mode == RunBasisMode.none) return null;
+    return requirement;
+  }
+
+  /// Dayanak gerekiyor ve henüz geçerli değilse nedeni; aksi null.
+  String? _basisBlockedReason(FeePreview preview) {
+    final requirement = _requirementOf(preview);
+    if (requirement == null) return null;
+    return RunBasisField.blockedReason(requirement, _basis);
+  }
+
   bool _canConfirm(FeePreview preview) =>
       !_previewStale &&
       !preview.alreadyPosted &&
       !preview.closed &&
       preview.lines.isNotEmpty &&
-      (!preview.hasMissingData || _skipMissing);
+      (!preview.hasMissingData || _skipMissing) &&
+      _basisBlockedReason(preview) == null;
 
   /// Onay düğmesi pasifken nedeni; onaylanabiliyorsa null.
   String? _confirmBlockedReason(FeePreview preview) {
@@ -381,6 +418,8 @@ class _FinanceRunDialogState extends State<FinanceRunDialog> {
     if (preview.hasMissingData && !_skipMissing) {
       return '"Eksik bilgili daireleri atla" seçeneğini işaretleyin ya da eksikleri tamamlayıp önizlemeyi yenileyin.';
     }
+    final basisBlock = _basisBlockedReason(preview);
+    if (basisBlock != null) return basisBlock;
     if (_retry.locked) return 'Çok sık deneme yapıldı; biraz bekleyin.';
     return null;
   }
@@ -425,7 +464,12 @@ class _FinanceRunDialogState extends State<FinanceRunDialog> {
     // "Yine de ekle" ayrı bir amaçtır: farklı imza = farklı anahtar (önceki, kaydedilmiş olabilecek isteğin
     // yeniden oynatılması "yine de ekle" sayılmaz).
     final allowDuplicate = _isCharge && _dupAllowedSignature == inputs.signature;
-    final keySignature = allowDuplicate ? '${inputs.signature}|dup' : inputs.signature;
+    // Tahakkuk dayanağı (K2) isteğin PARÇASIDIR: sunucu aynı anahtar + farklı dayanağı 409 IDEMPOTENCY_CONFLICT sayar; dayanak değişince yeni anahtar alınır.
+    final basisRequired = _requirementOf(preview) != null;
+    final decisionId = basisRequired ? _basis.decisionId : null;
+    final decisionReason = basisRequired ? _basis.reason : null;
+    final basisMarker = basisRequired ? '|basis:${decisionId ?? ''}:${decisionReason ?? ''}' : '';
+    final keySignature = '${allowDuplicate ? '${inputs.signature}|dup' : inputs.signature}$basisMarker';
     final key = _keys.keyFor(keySignature);
     setState(() {
       _submitting = true;
@@ -440,7 +484,9 @@ class _FinanceRunDialogState extends State<FinanceRunDialog> {
       if (inputs.charge != null) {
         result = await auth.postExtraCharge(
           siteCode,
-          inputs.charge!,
+          basisRequired
+              ? inputs.charge!.withBasis(decisionId: decisionId, decisionReason: decisionReason)
+              : inputs.charge!,
           expectedTotalMinor: preview.totalMinor,
           expectedApartmentCount: preview.apartmentCount,
           expectedHash: preview.previewHash,
@@ -459,6 +505,8 @@ class _FinanceRunDialogState extends State<FinanceRunDialog> {
           expectedHash: preview.previewHash,
           skipMissing: _skipMissing,
           idempotencyKey: key,
+          decisionId: decisionId,
+          decisionReason: decisionReason,
         );
       }
       // Yazma tamamlandı: anahtar atılır (form kapanır; aynı içerikle yeni bir açılış yeni anahtar alır).
@@ -505,10 +553,14 @@ class _FinanceRunDialogState extends State<FinanceRunDialog> {
         _needsRefreshOnClose = true;
       }
 
+      // Karar Defteri modülü bu arada açılıp kapandıysa istenen dayanak türü değişmiştir: önizleme yenilenir, yeni gereksinim gösterilir.
       final refresh = hasErrorCode(e, 'PREVIEW_STALE') ||
           hasErrorCode(e, 'PREVIEW_INCOMPLETE') ||
           hasErrorCode(e, 'PERIOD_ALREADY_POSTED') ||
-          hasErrorCode(e, 'PERIOD_CLOSED');
+          hasErrorCode(e, 'PERIOD_CLOSED') ||
+          hasErrorCode(e, 'DECISION_MODULE_OFF') ||
+          hasErrorCode(e, 'DECISION_REQUIRED') ||
+          hasErrorCode(e, 'DECISION_REASON_REQUIRED');
       if (refresh && !limited) {
         // Önizleme eskidi ya da durum değişti: eski önizlemeyle onay KAPANIR, önizleme yeniden alınır.
         final stale = hasErrorCode(e, 'PREVIEW_STALE');
@@ -824,9 +876,11 @@ class _FinanceRunDialogState extends State<FinanceRunDialog> {
     ].join('. ');
     // Zaten borçlandırıldı / kapalı / boş durumlarının kendi bildirimi var; "Onaylamak için" satırı yalnız
     // kullanıcının ELİNDE bir çözüm olan iki durumda yazılır (önizleme eski, eksik veri onayı).
+    final basisBlock = _basisBlockedReason(preview);
+    final basisRequirement = _requirementOf(preview);
     final showBlockedLine = blocked != null &&
         !_previewing &&
-        (_previewStale || (preview.hasMissingData && !_skipMissing));
+        (_previewStale || (preview.hasMissingData && !_skipMissing) || (basisBlock != null && blocked == basisBlock));
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -871,6 +925,23 @@ class _FinanceRunDialogState extends State<FinanceRunDialog> {
             ),
           ),
         ),
+        // Tahakkuk dayanağı (K2): Fon hesabı borcu için Karar Defteri kaydı (modül açık) ya da gerekçe (modül kapalı).
+        // Zaten borçlandırılmış / kapalı dönem / boş listede onay zaten kapalıdır: dayanak alanı çizilmez (karar listesi de yüklenmez).
+        if (basisRequirement != null && !preview.alreadyPosted && !preview.closed && preview.lines.isNotEmpty) ...[
+          const SizedBox(height: AppSpace.md),
+          RunBasisField(
+            key: ValueKey<String>('run_basis_field_${basisRequirement.mode.name}'),
+            authService: widget.scope.authService,
+            siteCode: widget.scope.siteCode,
+            requirement: basisRequirement,
+            service: widget.decisionService,
+            enabled: !_submitting && !_previewing,
+            initial: _basis,
+            onChanged: (value) {
+              if (value != _basis && mounted) setState(() => _basis = value);
+            },
+          ),
+        ],
         if (_previewStale && !_previewing) ...[
           const SizedBox(height: AppSpace.md),
           Align(

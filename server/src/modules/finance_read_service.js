@@ -26,6 +26,7 @@ import {
   redactEntryForResident,
   today,
 } from './finance_common.js';
+import { buildDebtBreakdown } from './finance_debt_breakdown.js';
 import { ENTRY_SELECT } from './finance_ledger_service.js';
 import { allocateFunds, fundSplitOf, fundsBodyOf, loadFundLedger, summarizeFunds, toAllocatorEntry } from './finance_funds.js';
 import { minorToNumber, toBigInt } from './finance_money.js';
@@ -628,6 +629,8 @@ function myFinanceViewBody(rows, view, todayIsoDate) {
     visible_from: result.hiddenCount > 0 ? periodLabel(since) : null,
     offset_note: shownSum !== result.balance,
     recent,
+    // Kalem dökümü (P2-1): ödenmemiş her borç kaleminin kaynağı (dönem, tür, hesap) ve dayanağı (karar no / gerekçe); kalanlar bakiyeyi hesaplayan mahsuptan gelir
+    breakdown: buildDebtBreakdown(own, result.lines, { today: todayIsoDate }),
     // Kasa kirilimi: { operating: { balance_minor, overdue_minor, advance_minor }, capital: {…} } + toplam avans
     ...fundsView,
   };
@@ -688,6 +691,7 @@ export async function getMyFinance(authUser, now = new Date(), db = pool, { ownO
         account_party: own.account_party,
         funds: own.funds,
         advance_minor: own.advance_minor,
+        breakdown: own.breakdown,
         accounts: views,
       };
     }),

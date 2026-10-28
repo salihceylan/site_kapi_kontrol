@@ -14,6 +14,8 @@
 //   K8  gecikme tazminati kasasi (agirlikli kasa) ve iptalinde kasa kopyasi
 //   K9  eszamanli aktarim (tekil anahtar, cift ters) ve karisik yazma turu (40P01 = 0)
 //   K10 makbuz anlik goruntusunde fund_split
+//   K12 Fon tahakkukunun dayanagi (090; docs/PLATFORM_FINANS_KARAR_BAGI.md): Karar Defteri ACIK sitede kesin karar, KAPALI sitede gerekce zorunlu (400 / 404 / 409 yollari, idempotans,
+//       FK / CHECK / append-only, ekstre ve sakin kalem dokumu, denetimde metin yok, karar bagli calistirmasi olan site silme)
 // NOT: dosya ASCII Turkce kullanir; para hesabi tamsayi kurus (BigInt), kayan nokta yok.
 
 export default async function sectionFunds(t) {
@@ -770,6 +772,122 @@ export default async function sectionFunds(t) {
       fsMod.rmSync(dirBefore, { recursive: true, force: true });
       fsMod.rmSync(dirOnly, { recursive: true, force: true });
     }
+  }
+
+  // ============================================================================================================
+  // K12. Fon tahakkukunun dayanagi (090; docs/PLATFORM_FINANS_KARAR_BAGI.md): Karar Defteri ACIK sitede kesin karar, KAPALI sitede gerekce
+  // ============================================================================================================
+  {
+    console.log('--- K12. Fon tahakkukunun dayanagi (Karar Defteri kaydi ya da gerekce, 090) ---');
+    const { ensureFinanceRunDecisionSchema } = await import('../src/modules/finance_run_decision_schema.js');
+    const siteSvc = await import('../src/services/site_service.js');
+    const year = Number(TODAY.slice(0, 4));
+    const D = await mkManaged('K Dayanak Sitesi', { 'S Blok': 3 });
+    const D2 = await mkManaged('K Dayanak Sitesi 2', { 'S Blok': 1 });
+    const [d1] = D.ids;
+    const newDecision = (site, { no, title, visibility = 'sakinler', status = 'kesin' }) =>
+      q(
+        `INSERT INTO board_decisions (site_code, year, decision_no, meeting_type, meeting_date, title, body, vote_result, visibility, status, finalized_at)
+         VALUES ($1, $2, $3, 'yonetim_kurulu', $4, $5, 'Karar metni', 'kabul', $6, $7, ${status === 'kesin' ? 'NOW()' : 'NULL'}) RETURNING id`,
+        [site.code, year, status === 'kesin' ? no : null, TODAY, title, visibility, status],
+      ).then((r) => Number(r.rows[0].id));
+    const finalId = await newDecision(D, { no: 41, title: 'K Dayanak Asansor Karari' });
+    const internalId = await newDecision(D, { no: 42, title: 'K GIZLI BASLIK', visibility: 'yonetim' });
+    const draftId = await newDecision(D, { no: 0, title: 'K Taslak Karar', status: 'taslak' });
+    const foreignId = await newDecision(D2, { no: 1, title: 'K Baska Sitenin Karari' });
+    const kCharge = async (site, extra = {}, keyOverride = null) => {
+      const body = { name: 'K Dayanak Borcu', distribution: 'fixed', amount_minor: 1000, target: { type: 'site' }, ...extra };
+      const pv = await call('POST', `${P(site.code)}/charges/preview`, MGR, body);
+      const idempotencyKey = keyOverride ?? key('dy');
+      const post = await call('POST', `${P(site.code)}/charges`, MGR, { ...body, expected_total_minor: pv.body.total_minor, expected_apartment_count: pv.body.apartment_count, expected_hash: pv.body.preview_hash, idempotency_key: idempotencyKey });
+      return { pv, post, key: idempotencyKey };
+    };
+    const runRow = async (runId) => (await q(`SELECT decision_id::TEXT AS decision_id, decision_reason FROM fee_runs WHERE id = $1`, [runId])).rows[0];
+    const wroteRuns = async (site) => Number((await q(`SELECT COUNT(*)::INT AS n FROM fee_runs WHERE site_code = $1`, [site.code])).rows[0].n);
+
+    const cols = (await q(`SELECT column_name, is_nullable, column_default FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'fee_runs' AND column_name IN ('decision_id', 'decision_reason') ORDER BY column_name`)).rows;
+    const cons = (await q(`SELECT conname, convalidated, pg_get_constraintdef(oid) AS def FROM pg_constraint WHERE conname IN ('fee_runs_decision_fkey', 'chk_fee_runs_decision') ORDER BY conname`)).rows;
+    check(
+      'K12a: fee_runs.decision_id / decision_reason NULL olabilir (varsayilansiz); CHECK dogrulanmis; bilesik FK (site_code, decision_id) -> board_decisions NO ACTION',
+      same(cols.map((c) => [c.column_name, c.is_nullable, c.column_default]), [['decision_id', 'YES', null], ['decision_reason', 'YES', null]]) &&
+        cons.length === 2 && cons.every((c) => c.convalidated === true) && /FOREIGN KEY \(site_code, decision_id\) REFERENCES board_decisions\(site_code, id\)/.test(cons[1].def),
+      { cols, cons },
+    );
+    const ensureClient = await pool.connect();
+    let ensured;
+    try {
+      ensured = await ensureFinanceRunDecisionSchema(ensureClient);
+    } finally {
+      ensureClient.release();
+    }
+    check('K12b: ensureFinanceRunDecisionSchema ikinci kez HICBIR adim uygulamaz (idempotent)', same(ensured, []), ensured);
+
+    // --- Karar Defteri KAPALI (varsayilan): gerekce zorunlu
+    const offNone = await kCharge(D, { name: 'K Dayanak Borcu 1', decision_reason: null });
+    check('K12c: Karar Defteri KAPALI + gerekcesiz Fon borcu: onizleme mode=reason, onay 400 DECISION_REASON_REQUIRED, hicbir sey yazilmaz', offNone.pv.body.decision_requirement?.mode === 'reason' && offNone.post.status === 400 && offNone.post.body.code === 'DECISION_REASON_REQUIRED' && (await wroteRuns(D)) === 0, [offNone.pv.body.decision_requirement, offNone.post.body]);
+    const offDecision = await kCharge(D, { name: 'K Dayanak Borcu 2', decision_id: finalId });
+    check('K12d: Karar Defteri KAPALI iken decision_id gonderilirse 400 DECISION_MODULE_OFF (sessizce yok sayilmaz)', offDecision.post.status === 400 && offDecision.post.body.code === 'DECISION_MODULE_OFF' && (await wroteRuns(D)) === 0, offDecision.post.body);
+    const offReason = await kCharge(D, { name: 'K Dayanak Borcu 3', decision_reason: '  Yonetim kurulunun 14 Ekim tarihli   karari ' });
+    const offRow = offReason.post.status === 201 ? await runRow(offReason.post.body.run.id) : null;
+    check('K12e: Karar Defteri KAPALI + gerekce: 201; gerekce temizlenip saklanir (karar yok); yanitta run.decision.reason', offReason.post.status === 201 && offRow.decision_id === null && offRow.decision_reason === 'Yonetim kurulunun 14 Ekim tarihli karari' && offReason.post.body.run.decision.reason === offRow.decision_reason, [offReason.post.body, offRow]);
+    const tooShort = await kCharge(D, { name: 'K Dayanak Borcu 4', decision_reason: 'ab' });
+    check('K12f: 3 karakterden kisa gerekce 400 INVALID_BODY', tooShort.post.status === 400 && tooShort.post.body.code === 'INVALID_BODY', tooShort.post.body);
+
+    // --- Karar Defteri ACIK: kesin karar zorunlu
+    const enabled = await call('PUT', `/manager/sites/${D.code}/modules/decision_book`, SUPER, { enabled: true });
+    check('K12g: Karar Defteri modulu acildi', enabled.status === 200, enabled.body);
+    const before = await wroteRuns(D);
+    const onNone = await kCharge(D, { name: 'K Dayanak Borcu 5', decision_reason: null });
+    const onReasonOnly = await kCharge(D, { name: 'K Dayanak Borcu 6', decision_reason: 'Sadece gerekce yeterli degil' });
+    check('K12h: Karar Defteri ACIK + kararsiz Fon borcu 400 DECISION_REQUIRED (onizleme mode=decision); yalniz gerekce de 400; hicbir sey yazilmaz', onNone.pv.body.decision_requirement?.mode === 'decision' && onNone.post.status === 400 && onNone.post.body.code === 'DECISION_REQUIRED' && onReasonOnly.post.status === 400 && onReasonOnly.post.body.code === 'DECISION_REQUIRED' && (await wroteRuns(D)) === before, [onNone.post.body, onReasonOnly.post.body]);
+    const onDraft = await kCharge(D, { name: 'K Dayanak Borcu 7', decision_id: draftId });
+    const onForeign = await kCharge(D, { name: 'K Dayanak Borcu 8', decision_id: foreignId });
+    const onMissing = await kCharge(D, { name: 'K Dayanak Borcu 9', decision_id: 987654321 });
+    check('K12i: taslak karar 409 DECISION_NOT_FINAL; baska sitenin karari ve olmayan karar AYNI 404 DECISION_NOT_FOUND (IDOR yok)', onDraft.post.status === 409 && onDraft.post.body.code === 'DECISION_NOT_FINAL' && onForeign.post.status === 404 && onForeign.post.body.code === 'DECISION_NOT_FOUND' && onMissing.post.status === 404 && onMissing.post.body.code === 'DECISION_NOT_FOUND' && (await wroteRuns(D)) === before, [onDraft.post.body, onForeign.post.body, onMissing.post.body]);
+    const onOk = await kCharge(D, { name: 'K Dayanak Borcu 10', decision_id: finalId });
+    const onRow = onOk.post.status === 201 ? await runRow(onOk.post.body.run.id) : null;
+    check('K12j: kesin karar ile 201; fee_runs.decision_id yazilir; yanitta run.decision karar numarasi ve basligi', onOk.post.status === 201 && onRow.decision_id === String(finalId) && onOk.post.body.run.decision.number_label === `${year}/41` && onOk.post.body.run.decision.title === 'K Dayanak Asansor Karari', [onOk.post.body, onRow]);
+    const replay = await kCharge(D, { name: 'K Dayanak Borcu 10', decision_id: finalId }, onOk.key);
+    const conflict = await kCharge(D, { name: 'K Dayanak Borcu 10', decision_id: internalId }, onOk.key);
+    check('K12k: ayni anahtar + ayni dayanak tekrari 200 ayni kayit (dayanagiyla); ayni anahtar + FARKLI karar 409 IDEMPOTENCY_CONFLICT', replay.post.status === 200 && replay.post.body.run.id === onOk.post.body.run.id && replay.post.body.run.decision?.number_label === `${year}/41` && conflict.post.status === 409 && conflict.post.body.code === 'IDEMPOTENCY_CONFLICT', [replay.post.status, conflict.post.status, conflict.post.body.code]);
+    const operatingOk = await kCharge(D, { name: 'K Dayanak Aidat Borcu', fund: 'operating', decision_reason: null });
+    const operatingRow = operatingOk.post.status === 201 ? await runRow(operatingOk.post.body.run.id) : null;
+    check('K12l: Isletme (Aidat) hesabi borcu dayanaksiz yazilir (onizleme mode=none); dayanak kolonlari NULL', operatingOk.pv.body.decision_requirement?.mode === 'none' && operatingOk.post.status === 201 && operatingRow.decision_id === null && operatingRow.decision_reason === null && !('decision' in operatingOk.post.body.run), [operatingOk.pv.body.decision_requirement, operatingOk.post.body.run]);
+
+    // --- veritabani butunlugu
+    const foreignFk = await failCode(`INSERT INTO fee_runs (site_code, definition_id, period, total_minor, apartment_count, decision_id) SELECT site_code, definition_id, (period + INTERVAL '1 month')::DATE, total_minor, apartment_count, $2 FROM fee_runs WHERE id = $1`, [onOk.post.body.run.id, foreignId]);
+    const longReason = await failCode(`INSERT INTO fee_runs (site_code, definition_id, period, total_minor, apartment_count, decision_reason) SELECT site_code, definition_id, (period + INTERVAL '1 month')::DATE, total_minor, apartment_count, repeat('x', 301) FROM fee_runs WHERE id = $1`, [onOk.post.body.run.id]);
+    const updateMsg = await failMessage(`UPDATE fee_runs SET decision_reason = 'degisti' WHERE id = $1`, [onOk.post.body.run.id]);
+    const deleteDecision = await failMessage(`DELETE FROM board_decisions WHERE id = $1`, [finalId]);
+    check('K12m: baska sitenin kararina FK 23503; 301 karakter gerekce 23514; dayanak sonradan DEGISTIRILEMEZ (append-only); baglanti kesin karar silinemez', foreignFk === '23503' && longReason === '23514' && /append-only/.test(updateMsg ?? '') && /immutable/.test(deleteDecision ?? ''), { foreignFk, longReason, updateMsg, deleteDecision });
+
+    // --- ekstre, sakin, denetim
+    const internalOk = await kCharge(D, { name: 'K Dayanak Borcu 11', decision_id: internalId });
+    const owner = await resident(D, d1, 'owner', 'K Dayanak Sakin');
+    const account1 = await account(D, d1, '?account_party=owner');
+    const statement = account1.body.items.filter((e) => e.kind === 'charge' && e.definition_name === 'K Dayanak Borcu 10');
+    check('K12n: yonetici ekstresinde borc satirinda Entry.decision (numara, baslik); dayanaksiz satirda alan yok', account1.status === 200 && statement.length === 1 && statement[0].decision?.number_label === `${year}/41` && statement[0].decision?.title === 'K Dayanak Asansor Karari' && account1.body.items.filter((e) => e.definition_name === 'K Dayanak Aidat Borcu').every((e) => !('decision' in e)), account1.body.items.map((e) => [e.definition_name, e.decision]));
+    const view = await call('GET', '/app/my-finance', owner.user);
+    const items = view.body?.items?.[0]?.breakdown?.items ?? [];
+    const byName = Object.fromEntries(items.map((i) => [i.name, i]));
+    check(
+      'K12o: sakin Borcum kalem dokumu: her odenmemis kalemin kaynagi (donem, tur, hesap) ve dayanagi; yonetim gorunurluklu kararin BASLIGI sizmaz; gerekce gorunur; kalan tutarlar bakiyeye esit',
+      view.status === 200 && byName['K Dayanak Borcu 10']?.decision?.number_label === `${year}/41` && byName['K Dayanak Borcu 10']?.decision?.title === 'K Dayanak Asansor Karari' && byName['K Dayanak Borcu 11']?.decision?.number_label === `${year}/42` && byName['K Dayanak Borcu 11']?.decision?.title === null && byName['K Dayanak Borcu 3']?.decision?.reason === 'Yonetim kurulunun 14 Ekim tarihli karari' && byName['K Dayanak Aidat Borcu']?.fund === 'operating' && byName['K Dayanak Borcu 10']?.fund === 'capital' && byName['K Dayanak Borcu 10']?.type === 'one_time' && items.reduce((sum, i) => sum + i.remaining_minor, 0) === view.body.items[0].balance_minor && !JSON.stringify(view.body).includes('K GIZLI BASLIK') && !/run_decision|"visibility"/.test(JSON.stringify(view.body)),
+      byName,
+    );
+    const auditRows = (await q(`SELECT details FROM audit_log WHERE site_code = $1 AND action = 'finance.charge.posted' ORDER BY id`, [D.code])).rows.map((r) => r.details);
+    check('K12p: denetim kaydinda decision_id ve decision_reason_given var, gerekce METNI yok', auditRows.some((d) => d.decision_id === finalId) && auditRows.some((d) => d.decision_reason_given === true) && !JSON.stringify(auditRows).includes('Yonetim kurulunun'), auditRows);
+    check('K12q: Karar Defteri KAPATILDIKTAN sonra da baglanti okunur (ekstrede karar numarasi kalir)', (await call('PUT', `/manager/sites/${D.code}/modules/decision_book`, SUPER, { enabled: false })).status === 200 && (await account(D, d1, '?account_party=owner')).body.items.some((e) => e.decision?.number_label === `${year}/41`));
+
+    // --- site silme: karar bagli calistirma olan site silinir (NO ACTION FK ayni ifadede iki tabloyu da siler)
+    let deleteError = null;
+    try {
+      await siteSvc.deleteSitePermanently(D.code, { user_code: SUPER, userCode: SUPER, id: SUPER, role: 'super_user', full_name: 'K Super' });
+    } catch (error) {
+      deleteError = error?.message ?? String(error);
+    }
+    const left = (await q(`SELECT (SELECT COUNT(*) FROM fee_runs WHERE site_code = $1)::INT AS runs, (SELECT COUNT(*) FROM board_decisions WHERE site_code = $1)::INT AS decisions`, [D.code])).rows[0];
+    check('K12r: karar bagli calistirmasi olan site deleteSitePermanently ile SILINIR (kararlar ve calistirmalar CASCADE; FK / tetikleyici engellemez); kalinti yok', deleteError === null && left.runs === 0 && left.decisions === 0, { deleteError, left });
   }
 
   const total = hooks.deadlocks - deadlocksAtStart;

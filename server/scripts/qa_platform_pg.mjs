@@ -6870,10 +6870,19 @@ async function startFinanceHttp(pool) {
     }
     return tokens.get(userCode);
   };
+  // Tahakkuk dayanagi (K2, 090): Fon hesabi borcu yazan POST'lar (ek borc `.../finance/charges`, aylik borclandirma `.../definitions/:id/post`) dayanak ister. Bu bolumlerin konusu
+  // dayanak DEGIL: govdede `decision_id` / `decision_reason` hic yoksa (null dahil "var" sayilir) Karar Defteri KAPALI sitelerde gecerli bir gerekce eklenir. Dayanagi sinayan bolum
+  // (run_decision) kendi alanlarini acikca verir.
+  const withRunDecision = (method, urlPath, body) => {
+    if (method !== 'POST' || !body || typeof body !== 'object' || Array.isArray(body)) return body;
+    if (!/\/finance\/(charges|definitions\/\d+\/post)$/.test(urlPath.split('?')[0])) return body;
+    if (body.decision_id !== undefined || body.decision_reason !== undefined) return body;
+    return { ...body, decision_reason: 'QA tahakkuk gerekcesi' };
+  };
   async function call(method, urlPath, userCode, body, rawBody) {
     const headers = { 'content-type': 'application/json' };
     if (userCode !== null) headers.authorization = `Bearer ${await tokenFor(userCode)}`;
-    const response = await fetch(`${base}${urlPath}`, { method, headers, body: rawBody !== undefined ? rawBody : body === undefined ? undefined : JSON.stringify(body) });
+    const response = await fetch(`${base}${urlPath}`, { method, headers, body: rawBody !== undefined ? rawBody : body === undefined ? undefined : JSON.stringify(withRunDecision(method, urlPath, body)) });
     let json = null;
     try {
       json = await response.json();
@@ -7499,7 +7508,7 @@ async function sectionFinance() {
   const dateCheck = (await q(`SELECT COUNT(*)::int AS n FROM ledger_entries WHERE run_id = $1 AND period = $2::date AND entry_date = $2::date AND due_date = $2::date`, [posted1.body.run.id, monthStart(-1)])).rows[0].n;
   check('E6b: kayit tarihi ve vade (due_day 1) donemin ilk gunu; 20 satirin tamami', dateCheck === 20);
   const runAudit = await auditRows(fs1.code, 'finance.run.posted');
-  check('E7: audit finance.run.posted: details YALNIZ { definition_id, period, total_minor, apartment_count, skipped_missing_count } (ad/metin YOK)', runAudit.length === 1 && runAudit[0].target_id === String(posted1.body.run.id) && same(Object.keys(runAudit[0].details).sort(), ['apartment_count', 'definition_id', 'period', 'skipped_missing_count', 'total_minor']) && runAudit[0].details.total_minor === 3000000, runAudit[0]);
+  check('E7: audit finance.run.posted: details YALNIZ { definition_id, period, total_minor, apartment_count, skipped_missing_count } (ad/metin YOK)', runAudit.length === 1 && runAudit[0].target_id === String(posted1.body.run.id) && same(Object.keys(runAudit[0].details).filter((key) => key !== 'decision_reason_given').sort(), ['apartment_count', 'definition_id', 'period', 'skipped_missing_count', 'total_minor']) && runAudit[0].details.total_minor === 3000000, runAudit[0]);
   const again = await call('POST', defUrl(aidat.id, 'post'), MGR, postBodyOf(prev1.body));
   check('E8: AYNI ay ikinci kez borclandirilamaz: 409 PERIOD_ALREADY_POSTED; yeni anahtar da calismaz; hicbir sey yazilmaz', again.status === 409 && again.body.code === 'PERIOD_ALREADY_POSTED' && (await ledgerRows(fs1.code)).length === 20 && (await call('POST', defUrl(aidat.id, 'post'), MGR, postBodyOf(prev1.body, { idempotency_key: key('baska') }))).body.code === 'PERIOD_ALREADY_POSTED');
   const replay = await call('POST', defUrl(aidat.id, 'post'), MGR, postBodyOf(prev1.body, { idempotency_key: posted1.body ? (await q(`SELECT idempotency_key FROM fee_runs WHERE id = $1`, [posted1.body.run.id])).rows[0].idempotency_key : 'x' }));
@@ -8916,7 +8925,7 @@ async function sectionFinance() {
   const leakyAudits = financeAudits.filter((r) => forbidden.test(JSON.stringify(r.details)));
   check('N3: audit details\'te tanim adi, aciklama, neden metni, kisi adi HICBIR satirda yok (yalniz toplam / sayi / donem / alan adi)', leakyAudits.length === 0, leakyAudits.slice(0, 2));
   const allDetailKeys = new Set(financeAudits.flatMap((r) => Object.keys(r.details)));
-  check('N4: audit details anahtarlari beyaz listede', [...allDetailKeys].every((k) => ['kind', 'distribution', 'target_type', 'start_period', 'fields', 'definition_id', 'period', 'total_minor', 'apartment_count', 'skipped_missing_count', 'apartment_id', 'amount_minor', 'method', 'reversed_entry_id', 'reversed_kind', 'reversal_entry_id', 'old_amount_minor', 'new_amount_minor', 'account_id', 'ledger_entry_id', 'reason_code', 'cancelled_receipt_id', 'receipt_cancelled', 'movement_mirrored', 'account_party', 'source_kind', 'from', 'months', 'fund'].includes(k)), [...allDetailKeys]); // 080: fund (kasa kodu: operating / capital); Faz 4b ekleri: hepsi kimlik / kod / bayrak (metin YOK); İP-1A: account_party, source_kind (kod); N4 (sirasiz / cok aylik ay kapatma): from (ilk kapanan ay), months (kapanan ay sayisi)
+  check('N4: audit details anahtarlari beyaz listede', [...allDetailKeys].every((k) => ['kind', 'distribution', 'target_type', 'start_period', 'fields', 'definition_id', 'period', 'total_minor', 'apartment_count', 'skipped_missing_count', 'apartment_id', 'amount_minor', 'method', 'reversed_entry_id', 'reversed_kind', 'reversal_entry_id', 'old_amount_minor', 'new_amount_minor', 'account_id', 'ledger_entry_id', 'reason_code', 'cancelled_receipt_id', 'receipt_cancelled', 'movement_mirrored', 'account_party', 'source_kind', 'from', 'months', 'fund', 'decision_id', 'decision_reason_given'].includes(k)), [...allDetailKeys]); // 090: decision_id (karar kimligi), decision_reason_given (bayrak; gerekce METNI yok); 080: fund (kasa kodu: operating / capital); Faz 4b ekleri: hepsi kimlik / kod / bayrak (metin YOK); İP-1A: account_party, source_kind (kod); N4 (sirasiz / cok aylik ay kapatma): from (ilk kapanan ay), months (kapanan ay sayisi)
 
   // son tutarlilik (tum veritabani)
   const apartmentSites = (await q(`SELECT COUNT(*)::int AS n FROM ledger_entries l JOIN apartments a ON a.id = l.apartment_id WHERE a.site_code <> l.site_code`)).rows[0].n;

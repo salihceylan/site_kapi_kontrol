@@ -119,7 +119,14 @@ export function residentView(input, { since, today, upTo = null, before = null }
   for (const [dueDate, amount] of upcoming) {
     if (nextDue === null || dueDate < nextDue.dueDate) nextDue = { dueDate, amount };
   }
-  return { balance, overdue, nextDue, visibleIds, hiddenCount: poolIds.size - visibleIds.size };
+  // Kalem dökümü (P2-1): kapsam içi ve hâlâ ödenmemiş borç kalemleri (vade, kimlik sırasıyla = mahsup sırası), her biri kalan tutarıyla.
+  // `remaining` bakiyeyi hesaplayan AYNI mahsup sonucudur (ayrı bir hesap yoktur); kalemlerin toplamı bakiye + görünür alacak kalanıdır.
+  const lines = [];
+  allCharges.forEach((c, index) => {
+    if (!inScope(c) || remaining[index] === 0n) return;
+    lines.push({ id: c.id, amount: c.amount, remaining: remaining[index], dueDate: c.dueDate ?? c.entryDate });
+  });
+  return { balance, overdue, nextDue, visibleIds, hiddenCount: poolIds.size - visibleIds.size, lines };
 }
 
 /** ENTRY_SELECT satırı + `anchor` sütunu -> residentView girdisi. */

@@ -17,6 +17,8 @@ function fakeDb(apartments) {
       if (/FROM apartments a INNER JOIN site_blocks b ON b\.id = a\.block_id WHERE a\.site_code = \$1 AND a\.is_active = TRUE/.test(sql)) return ok(apartments);
       if (/FROM fee_runs WHERE site_code = \$1 AND natural_key = \$2/.test(sql)) return ok();
       if (/FROM finance_period_closures WHERE site_code = \$1 AND period >= \$2::DATE/.test(sql)) return ok();
+      // Tahakkuk dayanağı (K2): önizleme yanıtındaki decision_requirement için Karar Defteri modül durumu (kapalı)
+      if (/^SELECT enabled FROM site_modules WHERE site_code = \$1 AND module_code = \$2 LIMIT 1$/.test(sql)) return ok([{ enabled: false }]);
       throw new Error(`BEKLENMEYEN SQL: ${sql.slice(0, 160)}`);
     },
   };

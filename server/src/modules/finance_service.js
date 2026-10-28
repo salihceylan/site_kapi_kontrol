@@ -54,6 +54,7 @@ import { buildDistributionPlan, planHash, redistributesOnSkip } from './finance_
 import { fundOfChargeParty } from './finance_funds.js';
 import { MAX_RUN_TOTAL_MINOR, bigintsToSqlArray, minorToNumber } from './finance_money.js';
 import { accountForCharge, tenantOnDateSql } from './finance_parties.js';
+import { decisionAuditDetails, describeDecisionRequirement, resolveRunDecision } from './finance_run_decision.js';
 import { isPeriodClosed, lockActorRow, recordFinanceAudit, withFinanceTransaction } from './finance_tx.js';
 
 // ---------------------------------------------------------------------------
@@ -236,7 +237,7 @@ async function computePlan(db, siteCode, spec, options) {
  * Önizleme gövdesi (hem tanım hem ek borç için). `preview_hash`: satırlar + eksik veri kümesinin sha256 özeti (post / charges `expected_hash`).
  * `skipped_count` / `redistributed`: eksik verili daireler (skip_missing ile hariç tutulursa) ve paylarının kalanlara yeniden dağıtılıp dağıtılmayacağı.
  */
-function previewBody({ plan, period, definitionId, alreadyPosted, closed, dueDate, distribution, duplicateOfRunId = null }) {
+function previewBody({ plan, period, definitionId, alreadyPosted, closed, dueDate, distribution, duplicateOfRunId = null, decisionRequirement = null }) {
   return {
     period: periodLabel(period),
     definition_id: definitionId,
@@ -266,6 +267,8 @@ function previewBody({ plan, period, definitionId, alreadyPosted, closed, dueDat
     already_posted: alreadyPosted,
     duplicate_of_run_id: duplicateOfRunId,
     closed,
+    // Tahakkuk dayanağı (K2): Fon hesabı borcunda Karar Defteri kaydı (modül açık) ya da gerekçe (modül kapalı) istenir; arayüz buna göre girdi gösterir
+    decision_requirement: decisionRequirement,
   };
 }
 
@@ -435,7 +438,17 @@ export async function previewDefinition({ siteCode, rawId, body, now = new Date(
   const alreadyPosted = await runExists(db, id, shape.kind === 'recurring' ? timing.period : null);
   const closed = await isPeriodClosed(db, siteCode, timing.period);
   const plan = await computePlan(db, siteCode, shape, { lock: false, onDate: timing.entryDate });
-  return previewBody({ plan, period: timing.period, definitionId: id, alreadyPosted, closed, dueDate: timing.dueDate, distribution: shape.distribution });
+  const decisionRequirement = await describeDecisionRequirement(db, siteCode, fundOfChargeParty(shape.chargeParty));
+  return previewBody({
+    plan,
+    period: timing.period,
+    definitionId: id,
+    alreadyPosted,
+    closed,
+    dueDate: timing.dueDate,
+    distribution: shape.distribution,
+    decisionRequirement,
+  });
 }
 
 /** POST charges/preview -> ek borç önizlemesi (YAZMAZ). `duplicate_of_run_id`: son 24 saatte aynı ek borcun çalıştırma kimliği (varsa). */
@@ -456,6 +469,7 @@ export async function previewCharge({ siteCode, body, now = new Date() }, db = p
     dueDate,
     distribution: input.distribution,
     duplicateOfRunId: duplicate ? Number(duplicate.id) : null,
+    decisionRequirement: await describeDecisionRequirement(db, siteCode, fundOfChargeParty(input.chargeParty)),
   });
 }
 
@@ -483,9 +497,12 @@ async function findRunByKey(db, siteCode, key) {
     `
       SELECT
         r.id, r.definition_id, to_char(r.period, 'YYYY-MM-DD') AS period, r.total_minor::text AS total_minor, r.apartment_count,
-        r.skipped_count, r.posted_at, r.request_fingerprint, d.kind AS definition_kind, d.distribution AS definition_distribution
+        r.skipped_count, r.posted_at, r.request_fingerprint, d.kind AS definition_kind, d.distribution AS definition_distribution,
+        r.decision_id AS run_decision_id, r.decision_reason AS run_decision_reason, bd.year AS run_decision_year, bd.decision_no AS run_decision_no,
+        bd.title AS run_decision_title, bd.visibility AS run_decision_visibility
       FROM fee_runs r
       INNER JOIN fee_definitions d ON d.id = r.definition_id
+      LEFT JOIN board_decisions bd ON bd.site_code = r.site_code AND bd.id = r.decision_id
       WHERE r.site_code = $1 AND r.idempotency_key = $2
       LIMIT 1
     `,
@@ -520,18 +537,33 @@ function verifyPlan(plan, { skipMissing, expectedTotal, expectedCount, expectedH
 }
 
 /** Çalıştırma + defter satırları (tek INSERT ... SELECT ... FROM unnest). Çağıran kilidi ve doğrulamaları yapmış olmalıdır. */
-async function writeRun(client, { siteCode, definitionId, definitionName, plan, timing, idempotencyKey, requestFingerprint, naturalKey, actorUserCode, fund }) {
+async function writeRun(client, { siteCode, definitionId, definitionName, plan, timing, idempotencyKey, requestFingerprint, naturalKey, actorUserCode, fund, decision }) {
+  // Tahakkuk dayanağı (K2): Karar Defteri kaydı ve/veya gerekçe, çalıştırma yazılırken konur (fee_runs eklemelidir; sonradan DEĞİŞMEZ)
   const inserted = await client.query(
     `
       INSERT INTO fee_runs (
-        site_code, definition_id, period, total_minor, apartment_count, skipped_count, idempotency_key, request_fingerprint, natural_key, posted_by
+        site_code, definition_id, period, total_minor, apartment_count, skipped_count, idempotency_key, request_fingerprint, natural_key, posted_by,
+        decision_id, decision_reason
       )
-      VALUES ($1, $2, $3::DATE, $4::BIGINT, $5, $6, $7, $8, $9, $10)
+      VALUES ($1, $2, $3::DATE, $4::BIGINT, $5, $6, $7, $8, $9, $10, $11::BIGINT, $12)
       RETURNING ${RUN_RETURNING}
     `,
-    [siteCode, definitionId, timing.period, plan.total.toString(), plan.lines.length, plan.missing.length, idempotencyKey, requestFingerprint, naturalKey, actorUserCode],
+    [
+      siteCode,
+      definitionId,
+      timing.period,
+      plan.total.toString(),
+      plan.lines.length,
+      plan.missing.length,
+      idempotencyKey,
+      requestFingerprint,
+      naturalKey,
+      actorUserCode,
+      decision.decisionId === null ? null : String(decision.decisionId),
+      decision.decisionReason,
+    ],
   );
-  const run = inserted.rows[0];
+  const run = { ...inserted.rows[0], ...(decision.label ?? {}) };
   const lines = [...plan.lines].sort((a, b) => a.apartmentId - b.apartmentId);
   const written = await client.query(
     `
@@ -621,7 +653,14 @@ export async function postDefinition({ siteCode, rawId, body, actor, now = new D
     }
     const shape = shapeOfRow(row);
     const input = parsePostInput(body, shape.kind, now);
-    const fingerprint = postRequestFingerprint({ definitionId: id, period: input.period, dueDate: input.dueDate, skipMissing: input.skipMissing });
+    const fingerprint = postRequestFingerprint({
+      definitionId: id,
+      period: input.period,
+      dueDate: input.dueDate,
+      skipMissing: input.skipMissing,
+      decisionId: input.decisionId,
+      decisionReason: input.decisionReason,
+    });
     // İşlem anahtarı tekrarı EN BAŞTA: ilk istek yazıldıktan sonra tanım pasifleşmiş ya da dönem kapanmış olsa bile yeniden deneme aynı kaydı alır.
     const replay = await replayOrConflict(client, siteCode, input.idempotencyKey, { fingerprint, kind: shape.kind });
     if (replay) {
@@ -640,6 +679,9 @@ export async function postDefinition({ siteCode, rawId, body, actor, now = new D
     if (await runExists(client, id, shape.kind === 'recurring' ? resolved.period : null)) {
       throw periodAlreadyPosted();
     }
+    // Tahakkuk dayanağı (K2): Fon hesabı borcu için Karar Defteri kaydı (modül açık) ya da gerekçe (modül kapalı) ZORUNLU; plan hesaplanmadan önce (hızlı ret)
+    const fund = fundOfChargeParty(shape.chargeParty);
+    const decision = await resolveRunDecision(client, { siteCode, fund, decisionId: input.decisionId, decisionReason: input.decisionReason });
     const plan = await computePlan(client, siteCode, shape, { lock: true, onDate: resolved.entryDate });
     verifyPlan(plan, input);
     await lockActorRow(client, actorInfo);
@@ -653,7 +695,8 @@ export async function postDefinition({ siteCode, rawId, body, actor, now = new D
       requestFingerprint: fingerprint,
       naturalKey: null,
       actorUserCode: actorInfo.userCode,
-      fund: fundOfChargeParty(shape.chargeParty),
+      fund,
+      decision,
     });
     await recordFinanceAudit(client, actor, 'finance.run.posted', siteCode, run.id, {
       definition_id: id,
@@ -661,6 +704,7 @@ export async function postDefinition({ siteCode, rawId, body, actor, now = new D
       total_minor: run.total_minor,
       apartment_count: run.apartment_count,
       skipped_missing_count: plan.missing.length,
+      ...decisionAuditDetails(decision),
     });
     return { replayed: false, run, entries_count: run.apartment_count, ...skipSummary(plan.missing.length, shape.distribution) };
   });
@@ -695,6 +739,9 @@ export async function postCharge({ siteCode, body, actor, now = new Date() }) {
         throw duplicateCharge(Number(duplicate.id), isoOrNull(duplicate.posted_at));
       }
     }
+    // Tahakkuk dayanağı (K2): Fon hesabı borcu için Karar Defteri kaydı (modül açık) ya da gerekçe (modül kapalı) ZORUNLU; plan hesaplanmadan önce (hızlı ret)
+    const fund = fundOfChargeParty(input.chargeParty);
+    const decision = await resolveRunDecision(client, { siteCode, fund, decisionId: input.decisionId, decisionReason: input.decisionReason });
     const plan = await computePlan(client, siteCode, input, { lock: true, onDate: timing.entryDate });
     verifyPlan(plan, input);
     const shape = {
@@ -735,7 +782,8 @@ export async function postCharge({ siteCode, body, actor, now = new Date() }) {
       requestFingerprint: fingerprint,
       naturalKey,
       actorUserCode: actorInfo.userCode,
-      fund: fundOfChargeParty(input.chargeParty),
+      fund,
+      decision,
     });
     await recordFinanceAudit(client, actor, 'finance.charge.posted', siteCode, run.id, {
       definition_id: definitionId,
@@ -744,6 +792,7 @@ export async function postCharge({ siteCode, body, actor, now = new Date() }) {
       total_minor: run.total_minor,
       apartment_count: run.apartment_count,
       skipped_missing_count: plan.missing.length,
+      ...decisionAuditDetails(decision),
     });
     const [definition] = await attachTargetLabels(client, siteCode, [mapDefinitionRow(await loadDefinitionRow(client, siteCode, definitionId))]);
     return { replayed: false, run, entries_count: run.apartment_count, ...skipSummary(plan.missing.length, input.distribution), definition };

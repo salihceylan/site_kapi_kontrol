@@ -152,12 +152,13 @@ describe('checksum / normalizasyon', () => {
 });
 
 describe('listMigrations', () => {
-  it('gercek migrations klasoru: ardisik, sirali, tekrarsiz', () => {
+  it('gercek migrations klasoru: sirali, tekrarsiz; 001..084 ardisik (085 ve sonrasinda paralel dalga numara bloklari yuzunden bosluk olabilir; calistirici bosluga bakmaz, uygulananlari ada gore izler)', () => {
     const list = listMigrations(DEFAULT_MIGRATIONS_DIR);
     assert.ok(list.length >= 25);
     for (let i = 0; i < list.length; i += 1) {
-      assert.equal(list[i].number, i + 1, `numara boslugu: ${list[i].file}`);
       assert.match(list[i].checksum, /^[0-9a-f]{64}$/);
+      if (i > 0) assert.ok(list[i].number > list[i - 1].number, `sira / tekrar: ${list[i - 1].file} ve ${list[i].file}`);
+      if (list[i].number <= 84) assert.equal(list[i].number, i + 1, `numara boslugu: ${list[i].file}`);
     }
   });
 
