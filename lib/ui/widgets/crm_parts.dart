@@ -8,6 +8,7 @@ import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/helpers/a11y_announce.dart';
 import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
+import 'package:site_kapi_kontrol/ui/widgets/state_view.dart';
 
 /// İlişki türünün çip tonu (renk tek başına anlam taşımaz: etiket de yazılır). Belirtilmemiş "Sakin"
 /// nötr kalır.
@@ -126,6 +127,10 @@ class CrmInfoLine extends StatelessWidget {
 ///
 /// Kurallar (önceki incelemelerden): iskelet YALNIZ `loading && items.isEmpty` iken; liste boşken hata
 /// varsa "kayıt yok" yerine hata gösterilir; ilk yükleme bitmeden boş durum çizilmez.
+///
+/// P2-21: boş / hata / bağlı değil üçlüsü [StateView] ile çizilir (görünümü eski [EmptyCard] / [InlineNotice] ile aynıdır);
+/// sunucuya ulaşılamıyorsa ([PagedLoader.errorOffline]) bildirim "bağlı değil" olur. P2-26: [showLastUpdated] açıksa
+/// listenin üstünde "Son güncelleme 14:32" ([PagedLoader.lastLoadedAt]) yazar; seçici / diyalog listelerinde kapalı kalır.
 class CrmListBody<T> extends StatelessWidget {
   const CrmListBody({
     super.key,
@@ -139,6 +144,7 @@ class CrmListBody<T> extends StatelessWidget {
     this.skeletonRows = 3,
     this.hideItemsOnError = false,
     this.emptyAction,
+    this.showLastUpdated = false,
   });
 
   final PagedLoader<T> loader;
@@ -160,33 +166,55 @@ class CrmListBody<T> extends StatelessWidget {
   /// Süzgeçsiz boş durumda kartın içine konan eylem (örn. «Excel'den yükle»); süzgeçli boş sonuçta gösterilmez.
   final Widget? emptyAction;
 
+  /// true: yükleme başarılıysa listenin üstünde "Son güncelleme 14:32" yazar (P2-26).
+  final bool showLastUpdated;
+
   @override
   Widget build(BuildContext context) {
     final items = loader.items;
     final error = loader.error;
+    final stamp = showLastUpdated ? loader.lastLoadedAt : null;
     if (items.isEmpty) {
       if (loader.loading || (error == null && !loader.loadedOnce)) {
         return ListSkeleton(rows: skeletonRows);
       }
       if (error != null) {
-        return InlineNotice(message: error, onRetry: loader.reload);
+        return StateView.failure(message: error, offline: loader.errorOffline, onRetry: loader.reload);
       }
-      return EmptyCard(
+      final empty = StateView.empty(
         icon: emptyIcon,
         title: filtered ? (filteredTitle ?? emptyTitle) : emptyTitle,
         message: emptyMessage,
-        child: filtered ? null : emptyAction,
+        action: filtered ? null : emptyAction,
+      );
+      if (stamp == null) return empty;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          LastUpdatedCaption(at: stamp),
+          const SizedBox(height: AppSpace.xs),
+          empty,
+        ],
       );
     }
     if (hideItemsOnError && error != null) {
-      return InlineNotice(message: error, onRetry: loader.reload);
+      return StateView.failure(message: error, offline: loader.errorOffline, onRetry: loader.reload);
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (error != null) ...[
-          InlineNotice(message: error, onRetry: loader.reload),
+          // Eski kayıtlar ekranda duruyor: bildirimin altında en son başarılı güncellemenin saati yazılır.
+          StateView.failure(
+            message: error,
+            offline: loader.errorOffline,
+            onRetry: loader.reload,
+            lastUpdated: showLastUpdated ? loader.lastLoadedAt : null,
+          ),
           const SizedBox(height: AppSpace.md),
+        ] else if (stamp != null) ...[
+          LastUpdatedCaption(at: stamp),
+          const SizedBox(height: AppSpace.xs),
         ],
         for (final item in items)
           Padding(
@@ -194,7 +222,11 @@ class CrmListBody<T> extends StatelessWidget {
             child: itemBuilder(context, item),
           ),
         if (loader.moreError != null) ...[
-          InlineNotice(message: loader.moreError!, onRetry: loader.loadMore),
+          StateView.failure(
+            message: loader.moreError!,
+            offline: loader.moreErrorOffline,
+            onRetry: loader.loadMore,
+          ),
           const SizedBox(height: AppSpace.md),
         ],
         if (loader.hasMore)

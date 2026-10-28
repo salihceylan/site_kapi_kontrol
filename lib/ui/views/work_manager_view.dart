@@ -429,6 +429,7 @@ class WorkManagerViewState extends State<WorkManagerView> {
             const SizedBox(height: AppSpace.md),
             CursorListBody<WorkManagedItem>(
               loader: _loader,
+              showLastUpdated: true,
               emptyIcon: Icons.assignment_turned_in_rounded,
               emptyTitle: _filtered
                   ? 'Bu süzgeç için talep bulunamadı.'

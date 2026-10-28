@@ -4,7 +4,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:site_kapi_kontrol/models/apartment_management.dart';
 import 'package:site_kapi_kontrol/models/apartment_vehicles.dart';
 import 'package:site_kapi_kontrol/models/vehicle_record.dart';
+import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/services/apartment_management_api.dart';
+import 'package:site_kapi_kontrol/ui/design/app_card.dart' show InlineNotice;
+import 'package:site_kapi_kontrol/ui/design/tokens.dart' show AppTone;
 import 'package:site_kapi_kontrol/ui/helpers/plate_input.dart' show kPlateInvalidMessage;
 import 'package:site_kapi_kontrol/ui/views/my_apartment_view.dart';
 
@@ -20,8 +23,15 @@ class _FakeApt extends ApartmentManagementService {
   String removeMode = 'removed';
   final List<Map<String, Object?>> tenantBodies = <Map<String, Object?>>[];
 
+  /// Doluysa [mine] bunu fırlatır (yükleme hatası senaryoları).
+  Object? failure;
+
   @override
-  Future<MyApartmentsData> mine() async => data;
+  Future<MyApartmentsData> mine() async {
+    final error = failure;
+    if (error != null) throw error;
+    return data;
+  }
 
   ApartmentVehicles vehiclesData = const ApartmentVehicles();
   final List<String> vehicleCalls = <String>[];
@@ -319,5 +329,31 @@ void main() {
     expect(find.text('Notu düzenle'), findsNothing);
     expect(find.text('Aracı çıkar'), findsNothing);
     expect(find.text('Araçları yalnızca daire yöneticisi ekleyip değiştirebilir.'), findsOneWidget);
+  });
+
+  testWidgets('P2-21: yükleme hatası: ağ hatası "bağlı değil" (kehribar bulut-yok), sunucu hatası mercan; Tekrar Dene yeniden yükler',
+      (t) async {
+    const offline = 'Sunucuya bağlanılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin.';
+    final svc = _FakeApt(MyApartmentsData(apartments: <MyApartment>[_apt()], canSearch: true))
+      ..failure = ApiException(offline);
+    await _pump(t, svc);
+    expect(t.widget<InlineNotice>(find.byType(InlineNotice)).tone, AppTone.warning);
+    expect(find.byIcon(Icons.cloud_off_rounded), findsOneWidget);
+    expect(find.text(offline), findsOneWidget);
+    expect(find.text('Bu daireden ayrıl'), findsNothing);
+
+    svc.failure = ApiException('Bu işlem için yetkiniz yok.', statusCode: 403);
+    await t.tap(find.text('Tekrar Dene'));
+    await settleFor(t);
+    expect(t.widget<InlineNotice>(find.byType(InlineNotice)).tone, AppTone.danger);
+    expect(find.byIcon(Icons.cloud_off_rounded), findsNothing);
+    expect(find.text('Bu işlem için yetkiniz yok.'), findsOneWidget);
+
+    svc.failure = null;
+    await t.tap(find.text('Tekrar Dene'));
+    await settleFor(t);
+    expect(find.byType(InlineNotice), findsNothing);
+    expect(find.text('Daire yönetimi: Veli Kaya (malik)'), findsOneWidget);
+    expect(t.takeException(), isNull);
   });
 }

@@ -323,6 +323,7 @@ class DocumentAdminListState extends State<DocumentAdminList> {
         const SizedBox(height: AppSpace.md),
         CrmListBody<DocumentSummary>(
           loader: _loader,
+          showLastUpdated: true,
           emptyIcon: deletedView
               ? Icons.delete_outline_rounded
               : Icons.folder_open_rounded,

@@ -34,6 +34,7 @@ import 'package:site_kapi_kontrol/ui/pages/home_page.dart';
 import 'package:site_kapi_kontrol/ui/pages/login_page.dart';
 import 'package:site_kapi_kontrol/ui/pages/no_internet_page.dart';
 import 'package:site_kapi_kontrol/ui/views/legal_consent_gate.dart';
+import 'package:site_kapi_kontrol/ui/widgets/context_strip.dart' show ContextApartment;
 import 'package:site_kapi_kontrol/ui/widgets/dynamic_qr_pass_modal.dart';
 import 'package:site_kapi_kontrol/ui/widgets/voice_control_modal.dart';
 
@@ -368,6 +369,22 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     }
   }
 
+  /// P2-21 bağlam şeridi için kullanıcının daireleri (`/membership/my-apartments`, onaylı daireler). Okunamazsa hata
+  /// fırlatır: şerit dairesiz çizilir (bilgi amaçlıdır, ekranı bozmaz).
+  Future<List<ContextApartment>> _loadContextApartments() async {
+    final (list, error) = await _authService.getMyApartments();
+    if (list == null) throw StateError(error ?? 'Daireler okunamadı.');
+    return <ContextApartment>[
+      for (final apartment in list)
+        ContextApartment(
+          siteCode: apartment.siteCode,
+          label: apartment.blockName.trim().isEmpty
+              ? apartment.unitLabel
+              : '${apartment.blockName.trim()} / ${apartment.unitLabel}',
+        ),
+    ];
+  }
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
@@ -451,6 +468,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                 voiceDoorService: _voiceDoorService,
                 quickActionsService: _quickActionsService,
                 doorPanelRequests: _doorPanelRequests,
+                loadContextApartments: _loadContextApartments,
               ),
             );
           }

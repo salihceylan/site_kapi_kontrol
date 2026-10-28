@@ -15,8 +15,10 @@ import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/apartment_mgmt_dialogs.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/crm_confirm_dialog.dart';
+import 'package:site_kapi_kontrol/ui/helpers/connectivity_error.dart';
 import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart' show crmMessageOf;
 import 'package:site_kapi_kontrol/ui/views/my_apartment_vehicles.dart';
+import 'package:site_kapi_kontrol/ui/widgets/state_view.dart';
 
 class MyApartmentView extends StatefulWidget {
   const MyApartmentView({super.key, required this.authService, this.service, this.onChanged});
@@ -40,6 +42,9 @@ class MyApartmentViewState extends State<MyApartmentView> {
   bool _loading = true;
   bool _busy = false;
   String? _error;
+
+  /// [_error] sunucuya ULAŞILAMAMASINDAN mı (P2-21: "bağlı değil" ile "hata" ayrı görünür)?
+  bool _errorOffline = false;
   int _token = 0;
 
   @override
@@ -59,6 +64,7 @@ class MyApartmentViewState extends State<MyApartmentView> {
     setState(() {
       _loading = _data == null;
       _error = null;
+      _errorOffline = false;
     });
     try {
       final data = await _service.mine();
@@ -72,6 +78,7 @@ class MyApartmentViewState extends State<MyApartmentView> {
       setState(() {
         _loading = false;
         _error = crmMessageOf(e, 'Daire bilgileri yüklenemedi. İnternet bağlantınızı kontrol edip tekrar deneyin.');
+        _errorOffline = isConnectivityError(e);
       });
     }
   }
@@ -240,12 +247,17 @@ class MyApartmentViewState extends State<MyApartmentView> {
     if (_loading) {
       return Padding(padding: const EdgeInsets.all(AppSpace.lg), child: Text('Daire bilgileri yükleniyor...', style: secondary));
     }
-    if (_error != null && _data == null) return InlineNotice(message: _error!, onRetry: reload);
+    if (_error != null && _data == null) {
+      return StateView.failure(message: _error!, offline: _errorOffline, onRetry: reload);
+    }
     final data = _data ?? const MyApartmentsData();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (_error != null) ...[InlineNotice(message: _error!, onRetry: reload), const SizedBox(height: AppSpace.md)],
+        if (_error != null) ...[
+          StateView.failure(message: _error!, offline: _errorOffline, onRetry: reload),
+          const SizedBox(height: AppSpace.md),
+        ],
         for (final n in data.notices) _noticeCard(n),
         for (final r in data.incoming) _incomingCard(r),
         if (data.apartments.isEmpty)

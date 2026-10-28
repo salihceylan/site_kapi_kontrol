@@ -682,6 +682,7 @@ class PeoplePersonsTabState extends State<PeoplePersonsTab> {
         const SizedBox(height: AppSpace.md),
         CrmListBody<PersonSummary>(
           loader: _loader,
+          showLastUpdated: true,
           emptyIcon: Icons.groups_2_rounded,
           emptyTitle: 'Henüz kişi kaydı yok.',
           emptyMessage: widget.scope.canWrite
