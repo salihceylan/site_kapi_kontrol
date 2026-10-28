@@ -11,6 +11,7 @@ import 'package:site_kapi_kontrol/services/work_tracking_api.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/buttons.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/work_categories_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/work_manager_detail_dialog.dart';
 import 'package:site_kapi_kontrol/ui/helpers/cursor_loader.dart';
 import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart'
@@ -82,6 +83,11 @@ class WorkManagerViewState extends State<WorkManagerView> {
   bool _moduleOff = false;
   String _lastSignature = '';
 
+  /// Sitenin talep kategorileri (pasifler dahil; süzgeç eski talepleri de bulabilsin). null: yüklenmedi / yüklenemedi
+  /// (süzgeç varsayılan dört kategoriyle çalışır; kategori adı ikincil bilgidir, liste bozulmaz).
+  List<WorkCategoryOption>? _categories;
+  int _categoriesToken = 0;
+
   late WorkTrackingService _service =
       widget.service ?? WorkTrackingService(authService: widget.authService);
 
@@ -144,6 +150,7 @@ class WorkManagerViewState extends State<WorkManagerView> {
   @override
   void dispose() {
     ++_sitesToken;
+    ++_categoriesToken;
     _timer?.cancel();
     _search.dispose();
     _loader.dispose();
@@ -208,7 +215,11 @@ class WorkManagerViewState extends State<WorkManagerView> {
         _loadingSites = false;
         _sitesLoadedOnce = true;
         _siteCode = next;
-        if (siteChanged) _counts = const <WorkStatus, int>{};
+        if (siteChanged) {
+          _counts = const <WorkStatus, int>{};
+          _categories = null;
+          _category = null;
+        }
       });
       final current = _site;
       if (current != null && !workReportAllowed(current.access) && _tab == WorkManagerTab.report) {
@@ -219,6 +230,7 @@ class WorkManagerViewState extends State<WorkManagerView> {
       } else if (current != null) {
         unawaited(_loader.reload());
       }
+      if (current != null) unawaited(_loadCategories());
       if (_tab == WorkManagerTab.report) unawaited(_reportKey.currentState?.reload());
     } catch (e) {
       if (!mounted || token != _sitesToken) return;
@@ -230,6 +242,45 @@ class WorkManagerViewState extends State<WorkManagerView> {
         );
       });
     }
+  }
+
+  /// Sitenin kategorilerini çeker. Hata sessizdir: kategori adları ikincil bilgidir (süzgeç varsayılan dört kategoriye
+  /// düşer, liste yine çalışır); eski sitenin yanıtı yeni sitenin ekranına yazılamaz.
+  Future<void> _loadCategories() async {
+    final code = _siteCode;
+    if (code == null) return;
+    final token = ++_categoriesToken;
+    try {
+      final items = await _service.categories(code);
+      if (!mounted || token != _categoriesToken || _siteCode != code) return;
+      setState(() => _categories = items);
+    } catch (_) {
+      if (!mounted || token != _categoriesToken) return;
+      setState(() => _categories = null);
+    }
+  }
+
+  /// Süzgeçteki kategori seçenekleri: sitenin kategorileri (pasifler "(pasif)" ile), yoksa varsayılan dört.
+  List<(String, String)> get _categoryFilterOptions {
+    final items = _categories ?? WorkCategoryOption.defaults;
+    final selected = _category;
+    return <(String, String)>[
+      ('', 'Tüm kategoriler'),
+      for (final c in items) (c.key, c.isActive ? c.label : '${c.label} (pasif)'),
+      // Seçili süzgeç listeden düşmüşse (başka yönetici sildi) seçenek kaybolup açılır liste bozulmasın.
+      if (selected != null && !items.any((c) => c.key == selected)) (selected, selected),
+    ];
+  }
+
+  Future<void> _openCategories(WorkTrackingSite site) async {
+    final changed = await WorkCategoriesDialog.show(context, service: _service, site: site);
+    if (!mounted || !changed) return;
+    await _loadCategories();
+    if (!mounted) return;
+    // Seçili süzgeç silinen bir kategoriyse süzgeç temizlenir; liste yeni adlarla yenilenir.
+    final stillThere = _category == null || (_categories?.any((c) => c.key == _category) ?? true);
+    if (!stillThere) setState(() => _category = null);
+    _resetList();
   }
 
   /// Süzgeç / site değişimi: eski kayıtlar atılır ve liste baştan çekilir.
@@ -272,10 +323,14 @@ class WorkManagerViewState extends State<WorkManagerView> {
       _siteCode = code;
       _counts = const <WorkStatus, int>{};
       _moduleOff = false;
+      // Kategoriler siteye özeldir: eski sitenin kategorisi ve süzgeci yeni siteye taşınmaz.
+      _categories = null;
+      _category = null;
       final next = _site;
       if (next != null && !workReportAllowed(next.access)) _tab = WorkManagerTab.list;
     });
     _resetList();
+    unawaited(_loadCategories());
   }
 
   void _selectTab(WorkManagerTab tab, WorkTrackingSite site) {
@@ -420,7 +475,7 @@ class WorkManagerViewState extends State<WorkManagerView> {
             const SizedBox(height: AppSpace.md),
             SectionHeader(
               title: 'Talepler',
-              trailing: Row(mainAxisSize: MainAxisSize.min, children: <Widget>[ListExportButton(enabled: _loader.items.isNotEmpty, source: localExportSource(label: 'İş talepleri', filenameBase: 'is_talepleri', headers: <String>['No', 'Başlık', 'Kategori', 'Durum', 'Öncelik', 'Konum', 'Talep eden', 'Atanan', 'Açılış', 'Kapanış'], rows: () => <List<Object?>>[for (final w in _loader.items) [w.id, w.title, w.category.label, w.status.label, w.priority.label, w.apartment?.label ?? w.block?.label, w.requester.name, w.assignedTo?.name, exportDate(w.createdAt), exportDate(w.closedAt)]])), IconButton(
+              trailing: Row(mainAxisSize: MainAxisSize.min, children: <Widget>[if (site.access == WorkSiteAccess.manager) IconButton(key: const ValueKey<String>('work_categories_open'), onPressed: () => unawaited(_openCategories(site)), tooltip: 'Kategorileri düzenle', icon: const Icon(Icons.category_rounded)), ListExportButton(enabled: _loader.items.isNotEmpty, source: localExportSource(label: 'İş talepleri', filenameBase: 'is_talepleri', headers: <String>['No', 'Başlık', 'Kategori', 'Durum', 'Öncelik', 'Konum', 'Talep eden', 'Atanan', 'Açılış', 'Kapanış'], rows: () => <List<Object?>>[for (final w in _loader.items) [w.id, w.title, w.categoryText, w.status.label, w.priority.label, w.apartment?.label ?? w.block?.label, w.requester.name, w.assignedTo?.name, exportDate(w.createdAt), exportDate(w.closedAt)]])), IconButton(
                 onPressed: _loader.loading ? null : reload,
                 tooltip: 'Yenile',
                 icon: const Icon(Icons.refresh_rounded),
@@ -536,10 +591,7 @@ class WorkManagerViewState extends State<WorkManagerView> {
             label: 'Kategori',
             icon: Icons.category_rounded,
             value: _category ?? '',
-            options: <(String, String)>[
-              ('', 'Tüm kategoriler'),
-              for (final c in WorkCategory.values) (c.apiValue, c.label),
-            ],
+            options: _categoryFilterOptions,
             onChanged: (v) => _setFilter(() => _category = v.isEmpty ? null : v),
           ),
           const SizedBox(height: AppSpace.md),

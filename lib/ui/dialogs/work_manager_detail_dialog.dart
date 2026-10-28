@@ -510,7 +510,7 @@ class _WorkManagerDetailDialogState extends State<WorkManagerDetailDialog> {
           spacing: AppSpace.xl,
           runSpacing: AppSpace.sm,
           children: [
-            CrmInfoLine(label: 'Kategori', value: i.category.label),
+            CrmInfoLine(label: 'Kategori', value: i.categoryText),
             CrmInfoLine(label: 'Konum', value: i.locationText),
             CrmInfoLine(
               label: 'Talebi açan',
@@ -550,6 +550,8 @@ class _WorkManagerDetailDialogState extends State<WorkManagerDetailDialog> {
           error: _photoError ?? _c.attachmentError,
           showUploader: true,
         ),
+        // Aynı fotoğraf başka kayıtta da kullanılmışsa uyarı (yalnız uyarı; hiçbir işlemi engellemez).
+        WorkPhotoWarningList(warnings: _c.photoWarnings, attachments: _c.attachments),
         if (!widget.site.canWrite) ...[
           const SizedBox(height: AppSpace.md),
           const InlineNotice(

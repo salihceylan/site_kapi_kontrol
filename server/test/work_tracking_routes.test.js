@@ -123,25 +123,30 @@ const url = (suffix = '', site = SITE) => `/manager/sites/${site}/work-items${su
 const GOOD = { site_code: SITE, category: 'ariza', location_type: 'ortak_alan', title: 'Başlık', description: 'Açıklama', idempotency_key: 'abc-12345-xyz' };
 
 describe('rota zinciri ve hız sınırları', () => {
-  it('sözleşmedeki 20 uç vardır (11 + 8 fotoğraf eki + rapor); her biri authRequired ile BAŞLAR, ikinci halka hız sınırlayıcıdır; /assignees ve /report, /:id\'den ÖNCE tanımlıdır', () => {
+  it('sözleşmedeki 25 uç vardır (11 + 8 fotoğraf eki + rapor + 5 kategori); her biri authRequired ile BAŞLAR, ikinci halka hız sınırlayıcıdır; /assignees ve /report, /:id\'den ÖNCE tanımlıdır', () => {
     const routes = ORIGINAL_ROUTES.map((route) => `${route.method.toUpperCase()} ${route.path}`);
     assert.deepEqual([...routes].sort(), [
       'DELETE /app/work-items/:id/attachments/:attId',
+      'DELETE /manager/sites/:siteCode/work-categories/:id',
       'DELETE /manager/sites/:siteCode/work-items/:id/attachments/:attId',
+      'GET /app/work-categories',
       'GET /app/work-items',
       'GET /app/work-items/:id',
       'GET /app/work-items/:id/attachments/:attId/content',
+      'GET /manager/sites/:siteCode/work-categories',
       'GET /manager/sites/:siteCode/work-items',
       'GET /manager/sites/:siteCode/work-items/:id',
       'GET /manager/sites/:siteCode/work-items/:id/attachments/:attId/content',
       'GET /manager/sites/:siteCode/work-items/assignees',
       'GET /manager/sites/:siteCode/work-items/report',
+      'PATCH /manager/sites/:siteCode/work-categories/:id',
       'PATCH /manager/sites/:siteCode/work-items/:id',
       'POST /app/work-items',
       'POST /app/work-items/:id/attachments',
       'POST /app/work-items/:id/cancel',
       'POST /app/work-items/:id/comments',
       'POST /app/work-items/:id/seen',
+      'POST /manager/sites/:siteCode/work-categories',
       'POST /manager/sites/:siteCode/work-items/:id/attachments',
       'POST /manager/sites/:siteCode/work-items/:id/comments',
       'PUT /app/work-items/:id/attachments/:attId/content',
@@ -250,5 +255,55 @@ describe('sakin uçları: doğrulama veritabanına gitmeden döner', () => {
     }
     const badList = await call('GET', '/app/work-items?status=bogus', { user: users.resident });
     assert.deepEqual([badList.status, badList.body.code], [400, 'INVALID_QUERY']);
+  });
+});
+
+describe('kategori uçları (100): yetki ve doğrulama veritabanına gitmeden döner', () => {
+  const catUrl = (suffix = '', site = SITE) => `/manager/sites/${site}/work-categories${suffix}`;
+
+  it('yazma YALNIZ yönetici / süper: görevli 403 FORBIDDEN_ROLE (iş mantığına girmeden), kurul 403, sakin / ilgisiz 403, başka sitenin yöneticisi FORBIDDEN_SITE', async () => {
+    for (const [method, path, body] of [['POST', catUrl(), { label: 'Yeni' }], ['PATCH', catUrl('/5'), { label: 'Yeni' }], ['DELETE', catUrl('/5'), undefined]]) {
+      for (const user of [users.staff, users.board, users.resident, users.outsider]) {
+        const res = await call(method, path, { user, body });
+        assert.deepEqual([res.status, res.body.code], [403, 'FORBIDDEN_ROLE'], `${method} ${user.full_name}`);
+      }
+      const other = await call(method, path, { user: users.otherManager, body });
+      assert.deepEqual([other.status, other.body.code], [403, 'FORBIDDEN_SITE'], method);
+    }
+  });
+
+  it('okuma: sakin / ilgisiz FORBIDDEN_ROLE; modül KAPALI MODULE_DISABLED; geçersiz ?active= 400 INVALID_QUERY; geçersiz site kodu 400', async () => {
+    for (const user of [users.resident, users.outsider]) assert.equal((await call('GET', catUrl(), { user })).body.code, 'FORBIDDEN_ROLE');
+    assert.equal((await call('GET', '/manager/sites/abc/work-categories', { user: users.manager })).body.code, 'INVALID_SITE_CODE');
+    const bad = await call('GET', catUrl('?active=belki'), { user: users.manager });
+    assert.deepEqual([bad.status, bad.body.code], [400, 'INVALID_QUERY']);
+    state.moduleEnabled = false;
+    for (const user of [users.manager, users.staff, users.board]) {
+      const res = await call('GET', catUrl(), { user });
+      assert.deepEqual([res.status, res.body.code, res.body.module], [403, 'MODULE_DISABLED', 'work_tracking']);
+    }
+  });
+
+  it('yönetici doğrulama hataları işlem açmadan: eksik / uzun ad 400 INVALID_BODY, geçersiz kimlik 404 WORK_CATEGORY_NOT_FOUND, değişiklik yok 400', async () => {
+    for (const body of [{}, { label: '' }, { label: 'x'.repeat(61) }, { label: 5 }]) {
+      const res = await call('POST', catUrl(), { user: users.manager, body });
+      assert.deepEqual([res.status, res.body.code], [400, 'INVALID_BODY'], JSON.stringify(body));
+    }
+    const noChange = await call('PATCH', catUrl('/5'), { user: users.manager, body: {} });
+    assert.deepEqual([noChange.status, noChange.body.code], [400, 'INVALID_BODY']);
+    const badState = await call('PATCH', catUrl('/5'), { user: users.manager, body: { is_active: 'evet' } });
+    assert.deepEqual([badState.status, badState.body.code], [400, 'INVALID_BODY']);
+    for (const [method, body] of [['PATCH', { label: 'x' }], ['DELETE', undefined]]) {
+      const res = await call(method, catUrl('/abc'), { user: users.manager, body });
+      assert.deepEqual([res.status, res.body.code], [404, 'WORK_CATEGORY_NOT_FOUND'], method);
+    }
+  });
+
+  it('sakin kategori listesi: site_code yok / geçersiz 400 (veritabanına gitmeden)', async () => {
+    for (const query of ['', '?site_code=abc', '?site_code=0']) {
+      const res = await call('GET', `/app/work-categories${query}`, { user: users.resident });
+      assert.deepEqual([res.status, res.body.code], [400, 'INVALID_BODY'], query);
+    }
+    assert.equal(log.length, 0);
   });
 });

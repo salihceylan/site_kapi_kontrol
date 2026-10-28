@@ -82,7 +82,11 @@ class _WorkItemFormDialogState extends State<WorkItemFormDialog> {
   final TextEditingController _description = TextEditingController();
 
   late int _siteCode = _initialSite();
-  WorkCategory _category = WorkCategory.ariza;
+  /// Seçili kategorinin anahtarı ve sitenin ETKİN kategorileri (100). Liste yüklenemezse varsayılan dört kategoriyle devam
+  /// edilir; gönderimde sunucu kategoriyi yine doğrular (pasif / olmayan kategori reddedilir).
+  String _categoryKey = 'ariza';
+  List<WorkCategoryOption> _categories = WorkCategoryOption.defaults;
+  int _categoriesToken = 0;
   WorkLocationType _location = WorkLocationType.ortakAlan;
   bool _urgent = false;
 
@@ -121,8 +125,33 @@ class _WorkItemFormDialogState extends State<WorkItemFormDialog> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    unawaited(_loadCategories());
+  }
+
+  /// Sitenin etkin kategorilerini çeker. Hata sessizdir (varsayılan dört kategori kalır); seçili kategori listede yoksa
+  /// ilk kategoriye (tercihen "ariza") dönülür.
+  Future<void> _loadCategories() async {
+    final token = ++_categoriesToken;
+    try {
+      final list = await widget.service.myCategories(_siteCode);
+      if (!mounted || token != _categoriesToken || list.isEmpty) return;
+      setState(() {
+        _categories = list;
+        if (!list.any((c) => c.key == _categoryKey)) {
+          _categoryKey = list.any((c) => c.key == 'ariza') ? 'ariza' : list.first.key;
+        }
+      });
+    } catch (_) {
+      // Kategori listesi ikincil: varsayılan dört kategoriyle devam.
+    }
+  }
+
+  @override
   void dispose() {
     ++_apartmentsToken;
+    ++_categoriesToken;
     _upload?.removeListener(_onUploadChanged);
     _upload?.dispose();
     if (_pickedAny) unawaited(widget.picker.release());
@@ -188,8 +217,12 @@ class _WorkItemFormDialogState extends State<WorkItemFormDialog> {
       _apartmentId = null;
       _apartmentsError = null;
       _apartmentFieldError = null;
+      // Kategoriler siteye özeldir: yenisi gelene dek varsayılan dört (seçili anahtar yoksa "ariza").
+      _categories = WorkCategoryOption.defaults;
+      if (!_categories.any((c) => c.key == _categoryKey)) _categoryKey = 'ariza';
     });
     ++_apartmentsToken;
+    unawaited(_loadCategories());
     if (_location == WorkLocationType.daire) unawaited(_loadApartments());
   }
 
@@ -295,7 +328,9 @@ class _WorkItemFormDialogState extends State<WorkItemFormDialog> {
     });
     final request = WorkCreateRequest(
       siteCode: _siteCode,
-      category: _category,
+      category: WorkCategory.fromApi(_categoryKey),
+      // Varsayılan dört kategoride null kalır (gövde eskiyle birebir aynı); sitenin kendi kategorisinde `k_<ad>` gider.
+      categoryKey: WorkCategory.values.any((c) => c.apiValue == _categoryKey) ? null : _categoryKey,
       locationType: _location,
       title: _title.text,
       description: _description.text,
@@ -572,32 +607,36 @@ class _WorkItemFormDialogState extends State<WorkItemFormDialog> {
             ),
             const SizedBox(height: AppSpace.lg),
           ],
-          DropdownButtonFormField<WorkCategory>(
-            key: const ValueKey<String>('work_form_category'),
-            isExpanded: true,
-            initialValue: _category,
-            dropdownColor: p.surface,
-            style: th.bodyMedium?.copyWith(color: p.text),
-            decoration: const InputDecoration(
-              labelText: 'Kategori',
-              prefixIcon: Icon(Icons.category_rounded),
-            ),
-            items: [
-              for (final category in WorkCategory.values)
-                DropdownMenuItem<WorkCategory>(
-                  value: category,
-                  child: Text(
-                    category.label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+          // Liste (site değişince / sunucudan gelince) yenilendiğinde alan baştan kurulsun diye anahtar seçenek kümesini taşır.
+          KeyedSubtree(
+            key: ValueKey<String>('work_form_category_set_${_categories.map((c) => c.key).join(',')}'),
+            child: DropdownButtonFormField<String>(
+              key: const ValueKey<String>('work_form_category'),
+              isExpanded: true,
+              initialValue: _categoryKey,
+              dropdownColor: p.surface,
+              style: th.bodyMedium?.copyWith(color: p.text),
+              decoration: const InputDecoration(
+                labelText: 'Kategori',
+                prefixIcon: Icon(Icons.category_rounded),
+              ),
+              items: [
+                for (final category in _categories)
+                  DropdownMenuItem<String>(
+                    value: category.key,
+                    child: Text(
+                      category.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
-                ),
-            ],
-            onChanged: _submitting
-                ? null
-                : (value) {
-                    if (value != null) setState(() => _category = value);
-                  },
+              ],
+              onChanged: _submitting
+                  ? null
+                  : (value) {
+                      if (value != null) setState(() => _categoryKey = value);
+                    },
+            ),
           ),
           const SizedBox(height: AppSpace.lg),
           Text('Konum', style: th.titleSmall),

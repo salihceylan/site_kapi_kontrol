@@ -7,9 +7,11 @@ import { PlatformError } from './errors.js';
 import { INVISIBLE_RE, IDEMPOTENCY_KEY_PATTERN } from './document_common.js';
 import { DELETED_USER_NAME } from './account_common.js';
 import { apartmentLabel, optionalQueryId, parsePositiveId, parseSearchTerm, toIso } from './people_common.js';
+import { categoryLabelOf, isCategoryKey } from './work_categories_common.js';
 
 export const WORK_TRACKING_MODULE = 'work_tracking';
 
+/** Varsayılan (sistem) kategori anahtarları. Siteler `k_<ad>` anahtarlı kendi kategorilerini de ekleyebilir (100; work_categories_common.js, isCategoryKey). */
 export const CATEGORIES = Object.freeze(['ariza', 'bakim', 'sikayet_oneri', 'diger']);
 export const LOCATIONS = Object.freeze(['ortak_alan', 'daire']);
 export const STATUSES = Object.freeze(['yeni', 'islemde', 'beklemede', 'cozuldu', 'kapandi', 'iptal']);
@@ -194,8 +196,9 @@ export function parseCreateInput(body) {
   if (!isPlainObject(body)) throw invalidField('İstek gövdesi geçersiz.');
   const siteCode = parsePositiveId(body.site_code);
   if (siteCode === null) throw invalidField('Site seçilmelidir.');
-  if (typeof body.category !== 'string' || !CATEGORIES.includes(body.category)) {
-    throw invalidField('Kategori geçersiz (arıza, bakım, şikayet/öneri veya diğer olmalıdır).');
+  // Biçim denetimi burada (saf); anahtarın SİTEDE var ve etkin olması talep açılırken serviste denetlenir (work_categories_read.assertWorkCategoryUsable).
+  if (typeof body.category !== 'string' || !isCategoryKey(body.category)) {
+    throw invalidField('Kategori geçersiz. Listeden bir kategori seçin.');
   }
   if (typeof body.location_type !== 'string' || !LOCATIONS.includes(body.location_type)) {
     throw invalidField('Konum geçersiz (ortak alan veya daire olmalıdır).');
@@ -276,6 +279,13 @@ function parseEnum(value, allowed) {
   return value;
 }
 
+/** ?category= süzgeci: boş -> null; varsayılan anahtar ya da `k_<ad>` biçimi (sitede var olması aranmaz: olmayan anahtar boş liste döndürür). */
+function parseCategoryFilter(value) {
+  if (value === undefined || value === null || String(value).trim() === '') return null;
+  if (typeof value !== 'string' || !isCategoryKey(value)) throw invalidQuery();
+  return value;
+}
+
 /** Yönetici / görevli / kurul listesi sorgusu. status: virgülle ayrılmış durumlar ya da "open". */
 export function parseListQuery(query = {}) {
   let statuses = null;
@@ -304,7 +314,7 @@ export function parseListQuery(query = {}) {
   }
   return {
     statuses,
-    category: parseEnum(query.category, CATEGORIES),
+    category: parseCategoryFilter(query.category),
     priority: parseEnum(query.priority, PRIORITIES),
     assigned,
     q: parseSearchTerm(typeof query.q === 'string' ? query.q : null),
@@ -367,6 +377,7 @@ export function mapManagerItem(row, { kind }) {
     id: num(row.id),
     site_code: num(row.site_code),
     category: row.category,
+    category_label: categoryLabelOf(row.category, row.category_label),
     location_type: row.location_type,
     title: row.title,
     description: row.description,
@@ -391,6 +402,7 @@ export function mapResidentItem(row) {
     site_code: num(row.site_code),
     site_name: row.site_name ?? null,
     category: row.category,
+    category_label: categoryLabelOf(row.category, row.category_label),
     location_type: row.location_type,
     title: row.title,
     description: row.description,

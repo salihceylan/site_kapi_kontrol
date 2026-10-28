@@ -39,6 +39,33 @@ void main() {
     expect(annualReportFinalLines(r, 'works').single, contains('kapalı'));
   });
 
+  test('iş kayıtları bölümü: kategori adı sitedeki addır (category_label, 100); yoksa varsayılan ad, yoksa anahtar', () {
+    final withWorks = <String, dynamic>{
+      ...json,
+      'sections': <String, dynamic>{
+        ...(json['sections'] as Map<String, dynamic>),
+        'works': <String, dynamic>{
+          'available': true,
+          'total': 7,
+          'done': 4,
+          'photo_count': 2,
+          'by_category': <dynamic>[
+            <String, dynamic>{'category': 'ariza', 'category_label': 'Teknik arıza', 'total': 3, 'done': 2},
+            <String, dynamic>{'category': 'bakim', 'total': 1, 'done': 1},
+            <String, dynamic>{'category': 'k_su_kacagi', 'category_label': 'Su kaçağı', 'total': 3, 'done': 1},
+            <String, dynamic>{'category': 'k_eski', 'total': 1, 'done': 0},
+          ],
+          'closed_items': <dynamic>[],
+        },
+      },
+    };
+    final lines = annualReportFinalLines(AnnualReport.fromJson(withWorks), 'works');
+    expect(lines.any((l) => l.startsWith('Teknik arıza: 3 kayıt, 2 tamamlandı')), isTrue, reason: 'yeniden adlandırılmış varsayılan kategori');
+    expect(lines.any((l) => l.startsWith('Bakım: 1 kayıt, 1 tamamlandı')), isTrue, reason: 'eski sunucu: varsayılan ad');
+    expect(lines.any((l) => l.startsWith('Su kaçağı: 3 kayıt, 1 tamamlandı')), isTrue, reason: 'sitenin kategorisi');
+    expect(lines.any((l) => l.startsWith('k_eski: 1 kayıt, 0 tamamlandı')), isTrue, reason: 'adı bilinmeyen anahtar anahtarla');
+  });
+
   test('gelecek yıl artış yüzdesi baz puana çevrilir', () {
     expect(AnnualReportViewState.parseGrowthPercent('12,5'), 1250);
     expect(AnnualReportViewState.parseGrowthPercent('0'), 0);

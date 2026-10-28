@@ -33,6 +33,7 @@ import {
   workItemNotFound,
 } from './work_tracking_common.js';
 import { listAttachmentsForItem } from './work_attachments_read.js';
+import { loadPhotoWarningsSafe } from './work_photo_checks.js';
 
 export const siteLockKey = (siteCode) => `work_items_site:${Number(siteCode)}`;
 /** Kullanıcı başına saatlik talep sınırı SİTELER ARASI sayıldığı için ayrı advisory kilidi (site kilidinden SONRA alınır; ters sıra yok). */
@@ -118,7 +119,7 @@ export async function insertEvent(client, e) {
 // ---------------------------------------------------------------------------
 
 const MANAGER_COLUMNS = `
-  w.id, w.site_code, w.category, w.location_type, w.title, w.description, w.status, w.priority, w.resident_urgent,
+  w.id, w.site_code, w.category, wc.label AS category_label, w.location_type, w.title, w.description, w.status, w.priority, w.resident_urgent,
   to_char(w.due_date, 'YYYY-MM-DD') AS due_date, w.created_at, w.updated_at, w.closed_at,
   w.created_by, w.assigned_to, w.apartment_id, w.block_id, b.block_name, a.unit_label,
   CASE WHEN w.created_by IS NULL OR ru.deleted_at IS NOT NULL THEN NULL ELSE ru.full_name END AS requester_name,
@@ -129,6 +130,7 @@ const MANAGER_COLUMNS = `
 
 const MANAGER_FROM = `
   FROM work_items w
+  LEFT JOIN work_categories wc ON wc.site_code = w.site_code AND wc.key = w.category
   LEFT JOIN apartments a ON a.id = w.apartment_id
   LEFT JOIN site_blocks b ON b.id = w.block_id
   LEFT JOIN users ru ON ru.user_code = w.created_by
@@ -254,11 +256,14 @@ export async function getWorkItemDetail(siteCode, rawId, access, db = pool) {
   const events = await loadEvents(db, siteCode, id, access);
   // Fotoğraf ekleri (047): hazır olanlar + çağıranın kendi tamamlanmamış yüklemeleri.
   const attachments = await listAttachmentsForItem(db, id, access.userCode);
+  // Fotoğraf yeniden kullanım uyarıları (100, P2-6): yalnız uyarı, asla engel; hazır fotoğraf yoksa sorgu gitmez. Hata ayrıntıyı bozmaz (uyarılar boş döner).
+  const photoWarnings = await loadPhotoWarningsSafe(db, { siteCode, itemId: id, scope: access, hasReady: attachments.some((attachment) => attachment.status === 'ready') });
   return {
     item: mapManagerItem(row, { kind: access.kind }),
     events,
     next_statuses: access.kind === 'board' ? [] : [...(STAFF_TRANSITIONS[row.status] ?? [])],
     attachments,
+    photo_warnings: photoWarnings,
   };
 }
 
