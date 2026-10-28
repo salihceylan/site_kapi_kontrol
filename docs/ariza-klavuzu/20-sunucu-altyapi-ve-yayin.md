@@ -958,7 +958,7 @@ ssh -p 22667 salihceylan@178.210.161.55 'docker exec -i site_kapi_kontrol_postgr
 | [server/scripts/_dev_guard.js:5](../../server/scripts/_dev_guard.js#L5) | <code>'Bu gelistirme betigi gercek veritabanina dokunabilir. Bilerek calistirmak icin ALLOW_DEV…</code> | Görülen mesaj |
 | [server/scripts/apply_016.js:1](../../server/scripts/apply_016.js#L1) | <code>import './_dev_guard.js';</code> | Her apply_*/check_*/test_* betiğinin İLK importu bekçidir |
 | [server/scripts/apply_024.js:12](../../server/scripts/apply_024.js#L12) | <code>const sqlPath = path.join(__dirname, '..', 'migrations', '024_device_inventory_and_defect…</code> | apply_* betikleri yalnız 013-024 içindir; 025-028 için betik YOKTUR (migrate.js ya da ensureDbSchema kullanılır) |
-| [server/.env.example:212](../../server/.env.example#L212) | <code># ALLOW_DEV_SCRIPTS=1</code> | Yalnız geliştirmede tanımlanır; üretimde tanımlamayın |
+| [server/.env.example:242](../../server/.env.example#L242) | <code># ALLOW_DEV_SCRIPTS=1</code> | Yalnız geliştirmede tanımlanır; üretimde tanımlamayın |
 
 **Olası nedenler**
 - Bekçi kasıtlı çalışıyor: ALLOW_DEV_SCRIPTS=1 verilmedi
