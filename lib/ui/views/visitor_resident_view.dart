@@ -271,6 +271,7 @@ class VisitorResidentViewState extends State<VisitorResidentView> {
         else
           CursorListBody<VisitorEntry>(
             loader: _loader,
+            showLastUpdated: true,
             emptyIcon: Icons.door_front_door_outlined,
             emptyTitle: _siteFilter != null
                 ? 'Bu sitede kaydınız yok.'

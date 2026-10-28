@@ -367,6 +367,7 @@ class AnnouncementsInboxViewState extends State<AnnouncementsInboxView> {
         ],
         CursorListBody<ResidentAnnouncement>(
           loader: _loader,
+          showLastUpdated: true,
           emptyIcon: Icons.campaign_rounded,
           emptyTitle: 'Henüz duyuru yok.',
           emptyMessage: 'Yönetimin size gönderdiği duyurular burada görünür.',

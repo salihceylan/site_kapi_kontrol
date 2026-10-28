@@ -44,6 +44,8 @@ describe('members: maintenance_service yıkıcı işlem yapmaz', () => {
     const tables = deletes.map((sql) => sql.match(/^DELETE FROM (\w+)/i)[1]).sort();
     assert.deepEqual(tables, [
       'apartment_notices',
+      // 085: 30 gundur dokunulmamis ve kilidi bitmis kalici deneme siniri satirlari (sure dolmus sayac; kilitli satira dokunulmaz).
+      'auth_attempt_limits',
       'device_connectivity_logs',
       'door_access_logs',
       'email_verifications',

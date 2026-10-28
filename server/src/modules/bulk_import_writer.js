@@ -554,7 +554,8 @@ async function provisionOne(client, { siteCode, candidate, person, apartmentInfo
   const blockName = first.block_name || 'Blok';
   const email = realEmailOf(person.email);
 
-  // 1. e-posta bir kullanıcıya aitse: YALNIZ bu sitede zaten bağı olan (siteTiePredicate), aktif, yönetici olmayan hesaba bağlanır
+  // 1. e-posta bir kullanıcıya aitse: YALNIZ bu sitede zaten bağı olan (siteTiePredicate), aktif, yönetici olmayan hesaba bağlanır. Bu arama SİSTEM geneldir (users.email
+  //    tekil): önizleme başka sitenin e-postasını yönetici göremesin diye «yeni hesap» gösterir (bulk_import_scope.js); gerçek çakışma burada EMAIL_IN_USE olarak atlanır.
   let userCode = null;
   let loginName = null;
   let createdAccount = false;
@@ -578,7 +579,8 @@ async function provisionOne(client, { siteCode, candidate, person, apartmentInfo
   }
 
   // 2. yeni hesap: kullanıcı adı + başlangıç şifresi. Ad, önizlemede gösterilen (`expected`) addır; veritabanında hâlâ boşsa AYNEN kullanılır. Bu arada başka
-  //    bir işlem aldıysa (yarış) aynı tabandan sıradaki boş ad seçilir ve sonuçta `requested_login_name` ile bildirilir; kopya ad ASLA yazılmaz.
+  //    bir işlem aldıysa (yarış) YA DA ad başka sitede alınmışsa (önizleme yalnız bu siteyi görür, bulk_import_scope.js; sistem geneli denetim burada) aynı tabandan
+  //    sıradaki boş ad seçilir ve sonuçta `requested_login_name` ile bildirilir; kopya ad ASLA yazılmaz.
   let requestedLoginName = null;
   if (userCode === null) {
     // yöneticinin seçtiği ad (plan aşamasında doğrulanmıştır; burada savunma amaçlı yeniden normalleştirilir) yoksa Ad Soyad'dan üretilen taban

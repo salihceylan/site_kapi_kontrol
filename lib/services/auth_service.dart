@@ -23,6 +23,7 @@ import 'package:site_kapi_kontrol/models/legal_document.dart';
 import 'package:site_kapi_kontrol/models/local_door_access.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:site_kapi_kontrol/models/managed_user_page.dart';
+import 'package:site_kapi_kontrol/models/manager_contact.dart';
 import 'package:site_kapi_kontrol/models/management_terms.dart';
 import 'package:site_kapi_kontrol/models/module_request.dart';
 import 'package:site_kapi_kontrol/models/person_record.dart';
@@ -1408,6 +1409,10 @@ class AuthService extends ChangeNotifier {
 
   Future<List<DirectorySite>> getDirectory() =>
       _runAuthorized((token) => api.getDirectory(token: token));
+
+  /// Sakin "Yöneticiyi ara": bağı olunan her sitenin yönetici adı ve telefonu (telefon yoksa null).
+  Future<List<ManagerContact>> getManagerContacts() =>
+      _runAuthorized((token) => api.getManagerContacts(token: token));
 
   Future<List<PendingInvitation>> listMyInvitations() =>
       _runAuthorized((token) => api.listMyInvitations(token: token));

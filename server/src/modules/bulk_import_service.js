@@ -85,18 +85,19 @@ function mapLockTimeout(error) {
 // Plan (önizleme, öneri, commit ortak)
 // ---------------------------------------------------------------------------------------------------------------
 
-/** Anlık görüntü + (hesap açan türlerde) dosyada yönetici tarafından seçilmiş kullanıcı adlarından sistemde ZATEN kayıtlı olanlar. */
+/** Anlık görüntü + (hesap açan türlerde) dosyada yönetici tarafından seçilmiş kullanıcı adlarından BU SİTEDE ZATEN kayıtlı olanlar (başka sitedekiler sayılmaz). */
 async function loadPlanSnapshot(db, siteCode, kind, parsed) {
   const snapshot = await loadSnapshot(db, siteCode, kind, parsed.options);
   if (ACCOUNT_KINDS.has(kind)) {
-    snapshot.takenLoginNames = await loadTakenOverrides(db, parsed.rows);
+    snapshot.takenLoginNames = await loadTakenOverrides(db, siteCode, parsed.rows);
   }
   return snapshot;
 }
 
 /**
- * Planı hesaplar ve (hesap açan türlerde) hesap bölümünü çözümler: yeni hesaplar için kullanıcı adı önerisi (sistemde ve dosyada boşta ilk ad),
+ * Planı hesaplar ve (hesap açan türlerde) hesap bölümünü çözümler: yeni hesaplar için kullanıcı adı önerisi (bu sitede ve dosyada boşta ilk ad),
  * mevcut hesaba bağlanacaklar (salt okunur). Çözümlenen adlar `preview_hash`'e katılır; hesap açılmayan yüklemede hash değişmez.
+ * Var/yok soruları SİTE kapsamlıdır (bulk_import_scope.js): başka sitenin hesabı hakkında hiçbir bilgi önizlemeye girmez.
  */
 async function buildPlan(db, { siteCode, kind, parsed, snapshot, today }) {
   const plan = computePlan({ kind, rows: parsed.rows, snapshot, allowOverwrite: parsed.allowOverwrite, today, options: parsed.options });
@@ -182,16 +183,17 @@ export async function previewAccounts({ siteCode, kind, body, env = process.env 
 }
 
 /**
- * POST imports/login-names/check: yöneticinin tabloya yazdığı kullanıcı adının biçimi ve sistemdeki (her site, her şehir) kullanılabilirliği.
- * `{ ok, login_name, code, message, suggestion }`. Tek hafif sorgu; yazmaz.
+ * POST imports/login-names/check: yöneticinin tabloya yazdığı kullanıcı adının biçimi ve BU SİTEDEKİ kullanılabilirliği. `{ ok, login_name, code, message, suggestion }`.
+ * Tek hafif sorgu; yazmaz. Başka sitede kayıtlı ad «kullanılabilir» döner (sistem geneli var/yok sayımı kapalı, güvenlik denetimi 2026-10-28); kesin ad yazım anında
+ * sistem genelinde verilir ve onay sonucunda bildirilir. [siteCode] ZORUNLU: yöneticinin yetkili olduğu site (eksikse kapsamsız sorgu YAPILMAZ).
  */
-export async function checkImportLoginName({ body, env = process.env }) {
+export async function checkImportLoginName({ siteCode, body, env = process.env }) {
   if (isImportDisabled(env)) throw importDisabled();
   const raw = body && typeof body === 'object' && !Array.isArray(body) ? body.login_name : undefined;
   if (typeof raw !== 'string' || Array.from(raw).length > 200) {
     throw new PlatformError(400, 'INVALID_BODY', 'login_name metin olmalıdır.');
   }
-  return checkLoginName(pool, raw);
+  return checkLoginName(pool, raw, { siteCode });
 }
 
 /**
@@ -440,7 +442,8 @@ async function commitOnce({ siteCode, kind, parsed, fingerprint, actor, hashes =
             runId,
             accountCandidates: written.accountCandidates,
             hashes,
-            // önizlemede gösterilen (hash'e girmiş) kullanıcı adları; yarışta başkası alırsa yazıcı sıradaki boş adı verir ve sonuçta bildirir
+            // önizlemede gösterilen (hash'e girmiş, SİTE kapsamlı) kullanıcı adları; yarışta ya da başka sitede alınmışsa (önizleme yalnız bu siteyi görür) yazıcı
+            // sistem genelinde sıradaki boş adı verir ve sonuçta bildirir
             expected: plan.accounts?.expected ?? new Map(),
           });
           audits = audits.concat(accounts.audits);

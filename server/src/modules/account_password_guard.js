@@ -11,9 +11,9 @@
 // Parola ASLA log'a yazılmaz. Silinmiş hesap için 401 ACCOUNT_DELETED (çift gönderim yarışında kaybeden istek yanıltıcı "parola hatalı" almasın).
 
 import bcrypt from 'bcryptjs';
-import crypto from 'crypto';
 import { pool } from '../db.js';
 import { passwordChangeFailureTracker, passwordChangeThrottleKey } from '../middlewares/login_throttle.js';
+import { getDummyPasswordHash } from '../security/password_hashing.js';
 import {
   accountDeleted,
   currentPasswordInvalid,
@@ -24,14 +24,9 @@ import {
 /** bcrypt yalnızca ilk 72 baytı kullanır; sınırsız uzunluktaki girdiyle CPU harcatılmasın diye üst sınır (parola ilkesi en çok 128). */
 export const MAX_CURRENT_PASSWORD_LENGTH = 1024;
 
-let dummyHash = null;
-// Kullanıcı/hash yokken de bcrypt maliyeti ödenir (yanıt süresinden hesap durumu çıkarılamasın). Tembel üretilir (içe aktarma maliyeti yok).
-function dummyPasswordHash() {
-  if (dummyHash === null) {
-    dummyHash = bcrypt.hashSync(crypto.randomBytes(16).toString('hex'), 10);
-  }
-  return dummyHash;
-}
+// Kullanıcı/hash yokken de bcrypt maliyeti ödenir (yanıt süresinden hesap durumu çıkarılamasın). Sahte özet ASENKRON ve tembel üretilir
+// (içe aktarma maliyeti yok; olay döngüsü kilitlenmez): security/password_hashing.js getDummyPasswordHash (BCRYPT_COST, önbellekli söz).
+const dummyPasswordHash = getDummyPasswordHash;
 
 /** Test / QA için değiştirilebilir bağımlılıklar. */
 export const passwordGuardDeps = {
@@ -79,7 +74,7 @@ export async function verifyCurrentPassword({ userCode, currentPassword }, deps 
   const storedHash = user.password_hash ? String(user.password_hash) : '';
   let matches = false;
   if (typeIsString && password.length <= MAX_CURRENT_PASSWORD_LENGTH) {
-    matches = await deps.compare(password, storedHash || dummyPasswordHash());
+    matches = await deps.compare(password, storedHash || (await dummyPasswordHash()));
   }
   if (!storedHash || !matches) {
     if (reserved.locked) {

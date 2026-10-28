@@ -1,4 +1,5 @@
 import 'package:site_kapi_kontrol/services/api_exception.dart';
+import 'package:site_kapi_kontrol/ui/helpers/connectivity_error.dart';
 
 /// Sunucu hatasının kullanıcıya gösterilecek metni: [ApiException.message] doluysa o, değilse
 /// [fallback].
@@ -32,7 +33,8 @@ class PagedLoader<T> {
     this.errorFallback = 'Liste yüklenemedi. İnternet bağlantınızı kontrol edip tekrar deneyin.',
     this.moreErrorFallback = 'Daha fazla kayıt yüklenemedi. Tekrar deneyin.',
     this.messageOf = crmMessageOf,
-  });
+    DateTime Function()? clock,
+  }) : _clock = clock ?? DateTime.now;
 
   /// `offset`'ten başlayarak en çok `limit` kayıt getirir; süzgeç değerlerini ÇAĞRI ANINDA okur.
   final Future<PagedResult<T>> Function(int offset, int limit) fetch;
@@ -54,12 +56,26 @@ class PagedLoader<T> {
   /// metnini göstermemek için kendi üreticilerini verir.
   final String Function(Object error, String fallback) messageOf;
 
+  /// Şimdiki an (testlerde sabitlenir); [lastLoadedAt] için.
+  final DateTime Function() _clock;
+
   List<T> items = <T>[];
   int total = 0;
   bool loading = false;
   bool loadingMore = false;
   String? error;
   String? moreError;
+
+  /// [error] sunucuya ULAŞILAMAMASINDAN mı (bağlı değil)? Sunucu bir durum koduyla yanıt verdiyse false (hata).
+  /// Ortak durum bileşeni ([StateView]) bununla "bağlı değil" ile "hata"yı ayırır.
+  bool errorOffline = false;
+
+  /// [moreError] için aynı ayrım.
+  bool moreErrorOffline = false;
+
+  /// Son BAŞARILI ilk sayfa yüklemesinin anı ("Son güncelleme 14:32"); hiç yüklenmediyse (ya da [reset] sonrası) null.
+  /// Hata yenilemeyi bozarsa ekrandaki eski kayıtların hangi andan kaldığını gösterir.
+  DateTime? lastLoadedAt;
 
   /// En az bir yükleme başarıyla bitti mi? (false iken "kayıt yok" yerine iskelet/hata gösterilir.)
   bool loadedOnce = false;
@@ -85,8 +101,11 @@ class PagedLoader<T> {
     _loaded = 0;
     _exhausted = false;
     loadedOnce = false;
+    lastLoadedAt = null;
     error = null;
+    errorOffline = false;
     moreError = null;
+    moreErrorOffline = false;
   }
 
   /// İlk sayfayı yeniden çeker; mevcut liste yenileme sürerken ekranda kalır. Sürmekte olan "Daha fazla
@@ -98,7 +117,9 @@ class PagedLoader<T> {
     loading = true;
     loadingMore = false;
     error = null;
+    errorOffline = false;
     moreError = null;
+    moreErrorOffline = false;
     notify();
     try {
       final page = await fetch(0, pageSize);
@@ -109,11 +130,13 @@ class PagedLoader<T> {
       _exhausted = page.items.isEmpty;
       loading = false;
       loadedOnce = true;
+      lastLoadedAt = _clock();
       notify();
     } catch (e) {
       if (_disposed || !isAlive() || token != _token) return;
       loading = false;
       error = messageOf(e, errorFallback);
+      errorOffline = isConnectivityError(e);
       notify();
     }
   }
@@ -123,6 +146,7 @@ class PagedLoader<T> {
     final more = ++_moreToken;
     loadingMore = true;
     moreError = null;
+    moreErrorOffline = false;
     notify();
     try {
       final page = await fetch(_loaded, pageSize);
@@ -142,6 +166,7 @@ class PagedLoader<T> {
       if (_disposed || !isAlive() || more != _moreToken) return;
       loadingMore = false;
       moreError = messageOf(e, moreErrorFallback);
+      moreErrorOffline = isConnectivityError(e);
       notify();
     }
   }

@@ -374,7 +374,7 @@ enum AccountProposalStatus {
   /// Ad üretilemedi (beklenmeyen): hesap açılırken sunucu yedek ad verir.
   unavailable,
 
-  /// Yöneticinin seçtiği ad sunucuca REDDEDİLDİ (geçersiz / sistemde kayıtlı / dosyada tekrar): [AccountProposal.message] nedeni söyler; satır yazılmaz.
+  /// Yöneticinin seçtiği ad sunucuca REDDEDİLDİ (geçersiz / bu sitede kayıtlı / dosyada tekrar): [AccountProposal.message] nedeni söyler; satır yazılmaz.
   rejected;
 
   static AccountProposalStatus parse(Object? value) => switch (value) {
@@ -436,7 +436,7 @@ class AccountProposal {
   final String? message;
 }
 
-/// `POST imports/login-names/check` yanıtı: yöneticinin yazdığı adın biçimi ve sistemdeki kullanılabilirliği.
+/// `POST imports/login-names/check` yanıtı: yöneticinin yazdığı adın biçimi ve bu sitedeki kullanılabilirliği.
 @immutable
 class LoginNameCheck {
   const LoginNameCheck({required this.ok, required this.code, this.loginName, this.message, this.suggestion});

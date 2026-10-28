@@ -1,12 +1,17 @@
 // Toplu yükleme: planın hesap bölümü (kullanıcı adı önerileri). Planlayıcılar saftır; bu modül planın "hesap açılacak satırlar" listesini veritabanına
 // karşı çözer (önizleme, öneri ucu ve commit AYNI işlevi kullanır):
 //   - satırdan yeni hesap açılacak mı, yoksa e-postası mevcut bir hesaba mı ait (o hesaba bağlanır, kullanıcı adı salt okunur) ya da bu e-posta kullanılamaz mı
-//     (yazıcıdaki provisionOne kuralının aynısı);
-//   - yeni hesaplar için Ad Soyad'dan kullanıcı adı (sistemde ve aynı yüklemede boşta olan ilk varyasyon).
-// Çözümlenen adlar `preview_hash`'e girer: ön izlemeden sonra bir ad başkasına geçerse commit PREVIEW_STALE verir ve yönetici yeni adı görür.
+//     (yazıcıdaki provisionOne kuralının aynısı; fark: burada yalnız BU SİTENİN görebildiği hesaplar aranır, aşağıya bakın);
+//   - yeni hesaplar için Ad Soyad'dan kullanıcı adı (bu sitede ve aynı yüklemede boşta olan ilk varyasyon).
+// Çözümlenen adlar `preview_hash`'e girer: ön izlemeden sonra bu sitede bir ad başkasına geçerse commit PREVIEW_STALE verir ve yönetici yeni adı görür.
+//
+// SİTE KAPSAMI (güvenlik denetimi 2026-10-28, authz-modules-1): önizleme / öneri ucu HİÇBİR yanıtta başka sitenin hesabı hakkında var/yok bilgisi vermez. Başka sitede
+// kayıtlı e-posta ya da kullanıcı adı «yok» gibi davranır (yeni hesap, boş ad); aynı sitedeki gerçek çakışma (bağlanabilir hesap → `existing`, bağlanamayan →
+// `email_in_use`, alınmış ad → `_N`) doğru raporlanır. Sistem genelindeki kesin denetim yazım anındadır (bulk_import_writer.js: `EMAIL_IN_USE` atlaması, `renamed`).
 
 import { sha256 } from './bulk_import_body.js';
 import { slugifyLoginName, resolveLoginNames, takenLoginNames, normalizeTypedLoginName } from './bulk_import_login_names.js';
+import { requireScopeSite, siteVisibleUserSql } from './bulk_import_scope.js';
 import { LOGIN_NAME_OVERRIDE_KEY } from './bulk_import_spec.js';
 import { siteTiePredicate } from './people_sync_sql.js';
 
@@ -34,14 +39,21 @@ export function collectOverrideLoginNames(rows) {
   return [...names];
 }
 
-/** Gövde satırlarındaki seçilmiş adlardan sistemde ZATEN kayıtlı olanlar (plan aşaması bunları LOGIN_NAME_TAKEN hatası yapar). Tek sorgu. */
-export async function loadTakenOverrides(db, rows) {
+/**
+ * Gövde satırlarındaki seçilmiş adlardan BU SİTEDE ZATEN kayıtlı olanlar (plan aşaması bunları LOGIN_NAME_TAKEN hatası yapar). Tek sorgu. Başka sitedeki ad burada
+ * «kayıtlı» sayılmaz (sayım açığı kapalı); o ad yazımda sıradaki boş adla değiştirilir ve sonuçta bildirilir.
+ */
+export async function loadTakenOverrides(db, siteCode, rows) {
   const names = collectOverrideLoginNames(rows);
-  return names.length === 0 ? new Set() : takenLoginNames(db, names);
+  return names.length === 0 ? new Set() : takenLoginNames(db, names, { siteCode });
 }
 
-/** E-postası mevcut bir hesaba ait adaylar: küçük harfli e-posta -> { userCode, loginName, linkable }. */
+/**
+ * E-postası BU SİTENİN görebildiği (siteVisibleUserSql) bir hesaba ait adaylar: küçük harfli e-posta -> { userCode, loginName, linkable }. Başka sitedeki / yönetici
+ * hesabındaki e-posta burada HİÇ dönmez: önizleme onu bilinmeyen e-posta gibi (yeni hesap) gösterir; yazım anındaki sistem geneli denetim `EMAIL_IN_USE` ile atlar.
+ */
 async function loadEmailOwners(db, siteCode, emails) {
+  const site = requireScopeSite(siteCode);
   const owners = new Map();
   for (let index = 0; index < emails.length; index += QUERY_CHUNK) {
     const part = emails.slice(index, index + QUERY_CHUNK);
@@ -51,8 +63,9 @@ async function loadEmailOwners(db, siteCode, emails) {
                (u.deleted_at IS NULL AND u.role NOT IN ('super_user', 'site_manager') AND ${siteTiePredicate('u.user_code', '$2::BIGINT')}) AS linkable
         FROM users u
         WHERE LOWER(u.email) = ANY($1::TEXT[])
+          AND ${siteVisibleUserSql('u.user_code', '$2::BIGINT')}
       `,
-      [part, Number(siteCode)],
+      [part, site],
     );
     for (const row of found.rows) {
       if (!owners.has(row.email)) {
@@ -80,7 +93,7 @@ export async function resolvePlanAccounts(db, { siteCode, plan }) {
   for (const result of plan.results) {
     const account = result.account;
     if (result.hasError) {
-      // yöneticinin seçtiği ad reddedildi (geçersiz / sistemde kayıtlı / dosyada tekrar): tabloda satırın hücresinde nedeniyle gösterilir
+      // yöneticinin seçtiği ad reddedildi (geçersiz / bu sitede kayıtlı / dosyada tekrar): tabloda satırın hücresinde nedeniyle gösterilir
       const rejected = result.issues.find((issue) => issue.code.startsWith('LOGIN_NAME_'));
       if (rejected) items.push({ n: result.n, status: 'rejected', login_name: null, editable: true, code: rejected.code, message: rejected.message });
       continue;
@@ -130,7 +143,7 @@ export async function resolvePlanAccounts(db, { siteCode, plan }) {
     requests.push({ key: candidate.ref, base, fixed });
   }
 
-  const resolved = await resolveLoginNames(db, requests);
+  const resolved = await resolveLoginNames(db, requests, { siteCode });
   const candidateByRef = new Map(candidates.map((entry) => [entry.ref, entry]));
   for (const request of requests) {
     const candidate = candidateByRef.get(request.key);

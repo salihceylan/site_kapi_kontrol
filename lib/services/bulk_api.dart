@@ -160,7 +160,7 @@ class BulkApi {
     });
   }
 
-  /// `POST imports/login-names/check` (YAZMAZ): yöneticinin yazdığı kullanıcı adının biçimi ve sistemdeki (her site, her şehir) kullanılabilirliği.
+  /// `POST imports/login-names/check` (YAZMAZ): yöneticinin yazdığı kullanıcı adının biçimi ve BU SİTEDEKİ kullanılabilirliği (başka sitede kayıtlı ad «kullanılabilir» döner; sistem geneli kesin ad onayda verilir).
   Future<LoginNameCheck> checkLoginName({required String token, required int siteCode, required String loginName}) async {
     final response = await _send(
       'POST',

@@ -152,21 +152,22 @@ describe('checksum / normalizasyon', () => {
 });
 
 describe('listMigrations', () => {
-  it('gercek migrations klasoru: sirali, tekrarsiz; 001..084 ardisik (085 ve sonrasinda paralel dalga numara bloklari yuzunden bosluk olabilir; calistirici bosluga bakmaz, uygulananlari ada gore izler)', () => {
+  it('gercek migrations klasoru: sirali, tekrarsiz; 084\'e dek ardisik (085+ paralel dalgalara ayrilmis bloklardan gelir, kullanilmayan numara bos kalabilir)', () => {
     const list = listMigrations(DEFAULT_MIGRATIONS_DIR);
     assert.ok(list.length >= 25);
-    // 084'e kadar numaralar KESINTISIZdir (tarihsel zincir). 085'ten sonra paralel dalgalar numara BLOKLARI ayirir (plan 2026-10-28-karsilastirma-guclendirme.md:
-    // kullanilmayan numara bos kalabilir; migrate.js uygulananı ada gore izler): bosluk serbest, sira ve tekillik zorunlu.
-    const CONTIGUOUS_THROUGH = 84;
+    // Karsilastirma guclendirme programi (docs/superpowers/plans/2026-10-28-karsilastirma-guclendirme.md): 085+ numaralar paralel
+    // dalgalara bloklar halinde ayrildi (G 085-086, B 087-094, C 095-101, D 102-103, E 104-107, F 108-109, H 110-112, I 113+).
+    // Kullanilmayan numara BOS kalabilir (runner bosluga tolerans gosterir, yalniz tekrari reddeder): 084'e dek zincir kesintisiz,
+    // sonrasi KESIN artan ve tekrarsiz olmalidir. Ust sinir YOK: sonraki dalgalar yeni blok actiginda bu test kirilmaz.
     let previous = 0;
-    for (let i = 0; i < list.length; i += 1) {
-      if (list[i].number <= CONTIGUOUS_THROUGH) {
-        assert.equal(list[i].number, previous + 1, `numara boslugu: ${list[i].file}`);
+    for (const migration of list) {
+      if (migration.number <= 84) {
+        assert.equal(migration.number, previous + 1, `numara boslugu: ${migration.file}`);
       } else {
-        assert.ok(list[i].number > previous, `numara siralamasi bozuk: ${list[i].file}`);
+        assert.ok(migration.number > previous, `sirasiz / tekrarlanan numara: ${migration.file}`);
       }
-      previous = list[i].number;
-      assert.match(list[i].checksum, /^[0-9a-f]{64}$/);
+      assert.match(migration.checksum, /^[0-9a-f]{64}$/);
+      previous = migration.number;
     }
   });
 

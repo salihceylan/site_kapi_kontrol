@@ -6,6 +6,7 @@ import {
   authUserDbId,
   getManagedSiteCodes,
   isDeviceAssignableToManagedSite,
+  isDeviceInManagerScope,
   isDeviceOwnedByAuthUser,
 } from './site_service.js';
 import { auditLog } from '../utils/helpers.js';
@@ -185,6 +186,11 @@ export async function updateDoorDeviceAssignment({
     }
     const device = deviceResult.rows[0];
     const managedSiteCodes = await getManagedSiteCodes(authUser);
+    // KAPSAM: yönetilmeyen bir siteye/kapıya bağlı (ve kullanıcının olmayan) cihaz "kayıtlı değil" gibi davranır (404);
+    // başka sitenin cihazının varlığı 403'ten ayırt edilemez.
+    if (!isDeviceInManagerScope(device, managedSiteCodes, authUser)) {
+      throw new Error('DEVICE_NOT_FOUND');
+    }
     const isAssignable = isDeviceAssignableToManagedSite(device, managedSiteCodes, Number(door.site_code), authUser);
     if (!isAssignable) {
       throw new Error('DEVICE_NOT_ASSIGNABLE');
@@ -874,6 +880,16 @@ export async function replaceDoorDevice({ doorId, newDeviceInput, newDeviceId, a
       }
     };
 
+    // KAPSAM (cihaz keşfi kapısı): yönetilmeyen bir siteye/kapıya bağlı ve işlemi yapanın OLMAYAN cihaz "bulunamadı" (404) gibi
+    // davranır; sahipliği (409) ve atanmışlığı (403) başka siteye sızmaz, cihaz ele geçirilemez. Sahiplenme UPDATE'inden ÖNCE çağrılır.
+    // Süper kullanıcıda kapsam sınırsızdır.
+    const assertDeviceInScope = async (device) => {
+      const managedSiteCodes = await getManagedSiteCodes(authUser);
+      if (!isDeviceInManagerScope(device, managedSiteCodes, actor)) {
+        throw doorServiceError('DEVICE_NOT_FOUND', 404);
+      }
+    };
+
     // 2. Yeni cihazı belirle
     const parsedNewDeviceId = newDeviceId === null || newDeviceId === undefined || newDeviceId === ''
       ? null
@@ -899,6 +915,7 @@ export async function replaceDoorDevice({ doorId, newDeviceInput, newDeviceId, a
       if (devRes.rowCount === 0) {
         throw doorServiceError('DEVICE_NOT_FOUND', 404);
       }
+      await assertDeviceInScope(devRes.rows[0]);
       await assertDeviceAssignable(devRes.rows[0]);
       targetDeviceId = devRes.rows[0].id;
       targetDeviceUid = devRes.rows[0].device_uid;
@@ -928,6 +945,7 @@ export async function replaceDoorDevice({ doorId, newDeviceInput, newDeviceId, a
 
       if (findDev.rowCount > 0) {
         const existingDev = findDev.rows[0];
+        await assertDeviceInScope(existingDev);
         const hasOwner = existingDev.owner_user_id != null || existingDev.assigned_user_code != null;
         // Başkasına ait mi? (owner_user_id ↔ users.id, assigned_user_code ↔ user_code; ikisi de kontrol edilir)
         if (hasOwner && authUser?.role !== 'super_user' && !isDeviceOwnedByAuthUser(existingDev, actor)) {

@@ -5,6 +5,7 @@ import 'package:site_kapi_kontrol/services/locale_service.dart';
 import 'package:site_kapi_kontrol/brand/gude_logo_animated.dart';
 import 'package:site_kapi_kontrol/config/app_config.dart';
 import 'package:site_kapi_kontrol/models/user_role.dart';
+import 'package:site_kapi_kontrol/ui/design/easy_view_switch.dart';
 import 'package:site_kapi_kontrol/ui/design/motion_widgets.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 
@@ -357,7 +358,10 @@ class YanMenu extends StatelessWidget {
     this.badgeNouns = const <SirketMenuItem, String>{},
     this.additionalItems = const <SirketMenuItem>{},
     this.onOpenHelp,
+    this.onOpenFeedback,
     this.siteContext,
+    this.featuredItems,
+    this.onOpenAllActions,
   });
 
   final String fullName;
@@ -397,6 +401,20 @@ class YanMenu extends StatelessWidget {
   /// Verilirse listenin sonunda ("Çıkış Yap"ın üstünde) "Yardım ve Destek" girişi gösterilir (varsayılan
   /// null: menü eskisi gibidir). Giriş bir sayfa seçimi DEĞİL, ayrı bir ekran açar; çağıran çekmeceyi kapatır.
   final VoidCallback? onOpenHelp;
+
+  /// K8 (P1-16) KOMPAKT MENÜ: çekmecede öne çıkan öğeler ([visibleItems] içinden). null (varsayılan): kompakt menü yok, her görünür
+  /// öğe çekmecededir (menü eskisi gibidir). Doluysa çekmecede yalnız bunlar (ve Panel) çizilir; kümede olmayan görünür öğe KAYBOLMAZ,
+  /// [onOpenAllActions] ile açılan "Tüm işlemler" ekranında durur. Yalnız YERLEŞİMDİR: görünürlük ([visibleItems], [hiddenItems])
+  /// ve erişim kuralı değişmez. Ayarlar paneli ([YanMenuAyarlar]) bundan etkilenmez.
+  final Set<SirketMenuItem>? featuredItems;
+
+  /// Verilirse başlıklı bölümlerin ardında ("Yardım ve Destek"in üstünde) "Tüm işlemler" girişi çizilir (kompakt menüde olsun olmasın
+  /// HER ZAMAN): görünür bütün işlemlerin kategorili, aramalı tam listesi. Giriş bir sayfa seçimi DEĞİL, ayrı ekran açar; çağıran çekmeceyi kapatır. Girişin rozeti, kompakt
+  /// menüde öne çıkmayan öğelerin bekleyen / okunmamış sayıları toplamıdır (kompakt menü bir sinyali gizlemez).
+  final VoidCallback? onOpenAllActions;
+  /// Verilirse "Yardım ve Destek"in hemen altında ("Çıkış Yap"ın üstünde) "Geri bildirim" girişi gösterilir (P1-14, karar K11; varsayılan null: menü
+  /// eskisi gibidir). Giriş bir sayfa seçimi DEĞİL, ekran bağlamı otomatik eklenen bir form açar; çağıran çekmeceyi kapatır.
+  final VoidCallback? onOpenFeedback;
 
   /// Bu yüksekliğin altında (yatay telefon, küçük pencere) başlık, liste ve sürüm satırı TEK
   /// kaydırma alanında akar: sabit başlık + sürüm satırı kısa ekranda listeye yer bırakmaz
@@ -439,6 +457,43 @@ class YanMenu extends StatelessWidget {
         for (final section in drawerSections(items)) ...section.items,
       ];
 
+  /// K8 KOMPAKT MENÜ: [items] (görünür öğeler) içinden çekmecede öne çıkanlar. [featured] null ise hepsi (kompakt menü yok). "Panel" ve
+  /// Ayarlar grubu (dişli paneli) hiçbir koşulda kümeden düşmez. Bu yalnız YERLEŞİMDİR: kümede olmayan öğe görünür listede
+  /// ([visibleItems]) ve "Tüm işlemler"de durur.
+  static List<SirketMenuItem> compactItems(List<SirketMenuItem> items, Set<SirketMenuItem>? featured) =>
+      featured == null
+          ? items
+          : <SirketMenuItem>[
+              for (final item in items)
+                if (item == SirketMenuItem.dashboard ||
+                    menuGroupOf(item) == SirketMenuGroup.ayarlar ||
+                    featured.contains(item))
+                  item,
+            ];
+
+  /// Kompakt menüde ÖNE ÇIKMAYAN görünür öğeler (yalnız "Tüm işlemler"den erişilenler), menü sırasıyla. "Panel" ve Ayarlar grubu
+  /// (dişli paneli) hiçbir zaman bunlara dahil değildir: onlar kompakt menüden etkilenmez. [featured] null ise boştur.
+  static List<SirketMenuItem> itemsBeyondCompact(List<SirketMenuItem> items, Set<SirketMenuItem>? featured) {
+    if (featured == null) return const <SirketMenuItem>[];
+    return <SirketMenuItem>[
+      for (final item in items)
+        if (item != SirketMenuItem.dashboard &&
+            menuGroupOf(item) != SirketMenuGroup.ayarlar &&
+            !featured.contains(item))
+          item,
+    ];
+  }
+
+  /// [items] öğelerinin rozet sayıları toplamı (0'dan büyükler): kompakt menüde gizlenen işlerin bekleyen sayısı "Tüm işlemler"de görünür.
+  static int badgeTotalOf(Iterable<SirketMenuItem> items, Map<SirketMenuItem, int> badgeCounts) {
+    var total = 0;
+    for (final item in items) {
+      final count = badgeCounts[item] ?? 0;
+      if (count > 0) total += count;
+    }
+    return total;
+  }
+
   /// Sağ üstteki dişliden açılan "Ayarlar" panelinin öğeleri (menü sırasıyla). Çekmece + Ayarlar = görünür öğeler.
   static List<SirketMenuItem> settingsItems(List<SirketMenuItem> items) => <SirketMenuItem>[
         for (final item in items)
@@ -464,7 +519,9 @@ class YanMenu extends StatelessWidget {
       hiddenItems: hiddenItems,
     );
     // İP-1D / G2: öğeler başlıklar altında (boş başlık yok); Ayarlar öğeleri çekmecede değil dişli panelindedir.
-    final sections = drawerSections(items);
+    // K8: kompakt menüde yalnız öne çıkan öğeler çizilir; öne çıkmayanlar "Tüm işlemler"de durur (görünürlük kuralı değişmez).
+    final sections = drawerSections(compactItems(items, featuredItems));
+    final allActionsBadge = badgeTotalOf(itemsBeyondCompact(items, featuredItems), badgeCounts);
     final drawerOrder = <SirketMenuItem>[for (final section in sections) ...section.items];
     // Ek eylemler (kapı komutları) "Kapılar"ın, o çekmecede yoksa "Panel"in hemen altına gelir.
     final extrasAnchor =
@@ -476,6 +533,21 @@ class YanMenu extends StatelessWidget {
     // dahil).
     var entryIndex = 0;
     Widget entry(Key key, Widget child) => StaggeredEntry(key: key, index: entryIndex++, child: child);
+
+    // K8: "Tüm işlemler" girişi başlıklı bölümlerin hemen ardında ("Yardım ve Destek"in üstünde) durur ve kompakt menüde olsun olmasın
+    // HER ZAMAN çizilir ([onOpenAllActions] verilmişse): kompakt menüde listenin kısa olması "geri kalan her şey burada" anlamına gelir,
+    // eski (kompakt olmayan) uzun listede ise mevcut öğelerin yeri değişmez. Rozeti, öne çıkmayan öğelerin sayıları toplamıdır.
+    Widget allActionsTile() => entry(
+          const ValueKey<String>('yan_menu_tum_islemler'),
+          _MenuTile(
+            icon: PhosphorIconsRegular.listChecks,
+            title: 'Tüm işlemler',
+            selected: false,
+            tone: tone,
+            badge: allActionsBadge,
+            onTap: onOpenAllActions!,
+          ),
+        );
 
     // Header Alanı (Rol Temalı Gradient)
     final header = _DrawerHeader(
@@ -542,6 +614,7 @@ class YanMenu extends StatelessWidget {
         }
       }
     }
+    if (onOpenAllActions != null) rows.add(allActionsTile());
     if (onOpenHelp != null) {
       rows.add(
         entry(
@@ -552,6 +625,20 @@ class YanMenu extends StatelessWidget {
             selected: false,
             tone: tone,
             onTap: onOpenHelp!,
+          ),
+        ),
+      );
+    }
+    if (onOpenFeedback != null) {
+      rows.add(
+        entry(
+          const ValueKey<String>('yan_menu_geri_bildirim'),
+          _MenuTile(
+            icon: PhosphorIconsRegular.chatCircleText,
+            title: 'Geri bildirim',
+            selected: false,
+            tone: tone,
+            onTap: onOpenFeedback!,
           ),
         ),
       );
@@ -701,9 +788,15 @@ class YanMenuAyarlar extends StatelessWidget {
       additionalItems: additionalItems,
       hiddenItems: hiddenItems,
     );
+    // P2-25: "Kolay görünüm" anahtarı panelin en üstünde (uygulama kökündeki kapsam varsa; yoksa panel eskisi gibidir).
+    final hasEasySwitch = EasyViewScope.maybeOf(context) != null;
     final list = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (hasEasySwitch) ...[
+          const EasyViewSwitchTile(),
+          if (items.isNotEmpty || extraActions.isNotEmpty) const _MenuDivider(),
+        ],
         for (final (i, item) in items.indexed)
           StaggeredEntry(
             key: ValueKey<SirketMenuItem>(item),
