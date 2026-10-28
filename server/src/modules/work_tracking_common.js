@@ -7,9 +7,11 @@ import { PlatformError } from './errors.js';
 import { INVISIBLE_RE, IDEMPOTENCY_KEY_PATTERN } from './document_common.js';
 import { DELETED_USER_NAME } from './account_common.js';
 import { apartmentLabel, optionalQueryId, parsePositiveId, parseSearchTerm, toIso } from './people_common.js';
+import { categoryLabelOf, isCategoryKey } from './work_categories_common.js';
 
 export const WORK_TRACKING_MODULE = 'work_tracking';
 
+/** Varsayılan (sistem) kategori anahtarları. Siteler `k_<ad>` anahtarlı kendi kategorilerini de ekleyebilir (100; work_categories_common.js, isCategoryKey). */
 export const CATEGORIES = Object.freeze(['ariza', 'bakim', 'sikayet_oneri', 'diger']);
 export const LOCATIONS = Object.freeze(['ortak_alan', 'daire']);
 export const STATUSES = Object.freeze(['yeni', 'islemde', 'beklemede', 'cozuldu', 'kapandi', 'iptal']);
@@ -92,6 +94,8 @@ export const userOpenLimitReached = (limit) =>
 export const invalidField = (message) => new PlatformError(400, 'INVALID_BODY', message);
 export const invalidQuery = () => new PlatformError(400, 'INVALID_QUERY', 'Geçersiz sorgu parametresi.');
 export const invalidAssignee = (message) => new PlatformError(400, 'INVALID_ASSIGNEE', message ?? 'Bu kişiye atama yapılamaz.');
+/** İş kaydına bağlanacak ekipman bu sitede yok ya da pasif (096). */
+export const invalidEquipment = (message) => new PlatformError(400, 'INVALID_EQUIPMENT', message ?? 'Ekipman bu siteye ait değil ya da bulunamadı.');
 export const invalidLocation = (message) => new PlatformError(400, 'INVALID_LOCATION', message ?? 'Daire veya blok bu siteye ait değil.');
 export const accountDeleted = () => new PlatformError(401, 'ACCOUNT_DELETED', 'Bu hesap silinmiş.');
 export const invalidTransition = (from, to) =>
@@ -194,8 +198,9 @@ export function parseCreateInput(body) {
   if (!isPlainObject(body)) throw invalidField('İstek gövdesi geçersiz.');
   const siteCode = parsePositiveId(body.site_code);
   if (siteCode === null) throw invalidField('Site seçilmelidir.');
-  if (typeof body.category !== 'string' || !CATEGORIES.includes(body.category)) {
-    throw invalidField('Kategori geçersiz (arıza, bakım, şikayet/öneri veya diğer olmalıdır).');
+  // Biçim denetimi burada (saf); anahtarın SİTEDE var ve etkin olması talep açılırken serviste denetlenir (work_categories_read.assertWorkCategoryUsable).
+  if (typeof body.category !== 'string' || !isCategoryKey(body.category)) {
+    throw invalidField('Kategori geçersiz. Listeden bir kategori seçin.');
   }
   if (typeof body.location_type !== 'string' || !LOCATIONS.includes(body.location_type)) {
     throw invalidField('Konum geçersiz (ortak alan veya daire olmalıdır).');
@@ -219,7 +224,7 @@ export function parseCreateInput(body) {
   };
 }
 
-/** PATCH gövdesi: en az bir alan. assigned_to: kullanıcı kodu | null | "me". */
+/** PATCH gövdesi: en az bir alan. assigned_to: kullanıcı kodu | null | "me". equipment_id (096): ekipman kimliği | null (bağı kaldırır). */
 export function parsePatchInput(body) {
   if (!isPlainObject(body)) throw invalidField('İstek gövdesi geçersiz.');
   const out = {};
@@ -244,6 +249,15 @@ export function parsePatchInput(body) {
   }
   if ('due_date' in body) {
     out.dueDate = body.due_date === null ? null : normalizeDueDate(body.due_date);
+  }
+  if ('equipment_id' in body) {
+    if (body.equipment_id === null) {
+      out.equipmentId = null;
+    } else {
+      const equipmentId = parsePositiveId(body.equipment_id);
+      if (equipmentId === null) throw invalidField('Ekipman geçersiz.');
+      out.equipmentId = equipmentId;
+    }
   }
   if (Object.keys(out).length === 0) throw invalidField('Değiştirilecek bir alan gönderilmedi.');
   return out;
@@ -276,6 +290,13 @@ function parseEnum(value, allowed) {
   return value;
 }
 
+/** ?category= süzgeci: boş -> null; varsayılan anahtar ya da `k_<ad>` biçimi (sitede var olması aranmaz: olmayan anahtar boş liste döndürür). */
+function parseCategoryFilter(value) {
+  if (value === undefined || value === null || String(value).trim() === '') return null;
+  if (typeof value !== 'string' || !isCategoryKey(value)) throw invalidQuery();
+  return value;
+}
+
 /** Yönetici / görevli / kurul listesi sorgusu. status: virgülle ayrılmış durumlar ya da "open". */
 export function parseListQuery(query = {}) {
   let statuses = null;
@@ -304,7 +325,7 @@ export function parseListQuery(query = {}) {
   }
   return {
     statuses,
-    category: parseEnum(query.category, CATEGORIES),
+    category: parseCategoryFilter(query.category),
     priority: parseEnum(query.priority, PRIORITIES),
     assigned,
     q: parseSearchTerm(typeof query.q === 'string' ? query.q : null),
@@ -367,6 +388,7 @@ export function mapManagerItem(row, { kind }) {
     id: num(row.id),
     site_code: num(row.site_code),
     category: row.category,
+    category_label: categoryLabelOf(row.category, row.category_label),
     location_type: row.location_type,
     title: row.title,
     description: row.description,
@@ -376,6 +398,8 @@ export function mapManagerItem(row, { kind }) {
     ...locationParts(row),
     requester,
     assigned_to: row.assigned_to ? { user_code: num(row.assigned_to), name: row.assignee_name ?? DELETED_USER_NAME } : null,
+    // 096: bağlı ekipman (boş = seçilmemiş). Sakin görünümünde (mapResidentItem) YOKTUR.
+    equipment: row.equipment_id ? { id: num(row.equipment_id), name: row.equipment_name ?? null, kind: row.equipment_kind ?? null, is_active: row.equipment_active !== false } : null,
     due_date: row.due_date ?? null,
     created_at: toIso(row.created_at),
     updated_at: toIso(row.updated_at),
@@ -391,6 +415,7 @@ export function mapResidentItem(row) {
     site_code: num(row.site_code),
     site_name: row.site_name ?? null,
     category: row.category,
+    category_label: categoryLabelOf(row.category, row.category_label),
     location_type: row.location_type,
     title: row.title,
     description: row.description,
@@ -409,8 +434,14 @@ export function mapResidentItem(row) {
   };
 }
 
-/** Olay: yönetici / görevli görünümü ayrıntılı (kim), sakin ve kurul görünümü yalnız "resident | management". */
-export function mapEvent(row, { detailed, labels = new Map() }) {
+/** Silinmiş / okunamayan ekipman için olay etiketi (096). */
+export const DELETED_EQUIPMENT_LABEL = 'Silinmiş ekipman';
+
+/**
+ * Olay: yönetici / görevli görünümü ayrıntılı (kim), sakin ve kurul görünümü yalnız "resident | management".
+ * `labels`: atama olayları için kullanıcı adı haritası; `equipmentLabels` (096): `equipment_changed` olayları için ekipman adı haritası (anahtar: kimlik metni).
+ */
+export function mapEvent(row, { detailed, labels = new Map(), equipmentLabels = new Map() }) {
   const event = {
     id: num(row.id),
     type: row.event_type,
@@ -426,6 +457,10 @@ export function mapEvent(row, { detailed, labels = new Map() }) {
     if (row.event_type === 'assigned') {
       event.from_label = row.from_value ? labels.get(row.from_value) ?? DELETED_USER_NAME : null;
       event.to_label = row.to_value ? labels.get(row.to_value) ?? DELETED_USER_NAME : null;
+    }
+    if (row.event_type === 'equipment_changed') {
+      event.from_label = row.from_value ? equipmentLabels.get(row.from_value) ?? DELETED_EQUIPMENT_LABEL : null;
+      event.to_label = row.to_value ? equipmentLabels.get(row.to_value) ?? DELETED_EQUIPMENT_LABEL : null;
     }
   }
   return event;

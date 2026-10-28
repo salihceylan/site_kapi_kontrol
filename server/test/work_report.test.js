@@ -97,10 +97,10 @@ describe('assembleReport', () => {
     });
     assert.deepEqual(report.totals, { opened: 4, resolved: 2, closed: 1, cancelled: 1, open_now: 2, overdue_now: 1, avg_resolution_hours: 5.3, median_resolution_hours: 4 });
     assert.deepEqual(report.by_category, [
-      { category: 'ariza', opened: 3, resolved: 2 },
-      { category: 'bakim', opened: 1, resolved: 0 },
-      { category: 'sikayet_oneri', opened: 0, resolved: 0 },
-      { category: 'diger', opened: 0, resolved: 0 },
+      { category: 'ariza', category_label: 'Arıza', opened: 3, resolved: 2 },
+      { category: 'bakim', category_label: 'Bakım', opened: 1, resolved: 0 },
+      { category: 'sikayet_oneri', category_label: 'Şikayet / Öneri', opened: 0, resolved: 0 },
+      { category: 'diger', category_label: 'Diğer', opened: 0, resolved: 0 },
     ]);
     assert.deepEqual(report.by_assignee, [
       { user_code: 79, name: 'Ali', open_now: 2, overdue_now: 0, resolved: 0, avg_resolution_hours: null, on_time_rate: null },

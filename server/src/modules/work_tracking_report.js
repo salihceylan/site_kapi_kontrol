@@ -18,6 +18,7 @@ import { pool } from '../db.js';
 import { PlatformError } from './errors.js';
 import { DELETED_USER_NAME } from './account_common.js';
 import { CATEGORIES } from './work_tracking_common.js';
+import { categoryLabelOf } from './work_categories_common.js';
 
 export const REPORT_MAX_DAYS = 366;
 export const REPORT_DEFAULT_DAYS = 30;
@@ -111,13 +112,14 @@ const RESOLUTION_CTE = `
 
 const ITEMS_SQL = `
   WITH ${BOUNDS_CTE}
-  SELECT w.category, GROUPING(w.category) AS is_total,
+  SELECT w.category, MAX(wc.label) AS category_label, GROUPING(w.category) AS is_total,
          COUNT(*) FILTER (WHERE w.created_at >= b.start_ts AND w.created_at < b.end_ts)::INTEGER AS opened,
          COUNT(*) FILTER (WHERE w.status = 'kapandi' AND w.closed_at >= b.start_ts AND w.closed_at < b.end_ts)::INTEGER AS closed,
          COUNT(*) FILTER (WHERE w.status = 'iptal' AND w.closed_at >= b.start_ts AND w.closed_at < b.end_ts)::INTEGER AS cancelled,
          COUNT(*) FILTER (WHERE w.status NOT IN ('cozuldu', 'kapandi', 'iptal'))::INTEGER AS open_now,
          COUNT(*) FILTER (WHERE w.status NOT IN ('cozuldu', 'kapandi', 'iptal') AND w.due_date < b.today)::INTEGER AS overdue_now
   FROM work_items w CROSS JOIN bounds b
+  LEFT JOIN work_categories wc ON wc.site_code = w.site_code AND wc.key = w.category
   WHERE w.site_code = $1
   GROUP BY GROUPING SETS ((w.category), ())
 `;
@@ -174,8 +176,16 @@ export function assembleReport({ from, to, itemRows, resolvedRows, assigneeRows,
     avg_resolution_hours: num(resolvedTotal.resolved) > 0 ? round1(resolvedTotal.avg_hours) : null,
     median_resolution_hours: num(resolvedTotal.resolved) > 0 ? round1(resolvedTotal.median_hours) : null,
   };
-  const byCategory = CATEGORIES.map((category) => ({
+  // Dört varsayılan kategori her zaman sabit sırada (sıfır dolgulu); sitenin eklediği kategoriler (k_<ad>) talebi olanlar kadar, ada göre, sonra. Ad: sitedeki ad
+  // (yeniden adlandırılmış olabilir) -> varsayılan ad -> anahtar. Anahtar rapor süzgeçlerinin kimliğidir ve DEĞİŞMEZ.
+  const categoryRows = itemRows.filter((row) => !isTotal(row) && row.category);
+  const customKeys = [...new Set([...categoryRows, ...resolvedRows.filter((row) => !isTotal(row) && row.category)].map((row) => row.category))].filter(
+    (key) => !CATEGORIES.includes(key),
+  );
+  const labelOf = (key) => categoryLabelOf(key, itemRows.find((row) => !isTotal(row) && row.category === key)?.category_label);
+  const byCategory = [...CATEGORIES, ...customKeys.sort((a, b) => labelOf(a).localeCompare(labelOf(b), 'tr') || a.localeCompare(b))].map((category) => ({
     category,
+    category_label: labelOf(category),
     opened: num(itemRows.find((row) => !isTotal(row) && row.category === category)?.opened),
     resolved: num(resolvedRows.find((row) => !isTotal(row) && row.category === category)?.resolved),
   }));

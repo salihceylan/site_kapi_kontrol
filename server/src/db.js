@@ -20,6 +20,8 @@ import { ensurePaymentNoticesSchema } from './modules/payment_notice_schema.js';
 import { ensureBrandThemeSchema } from './modules/brand_theme_schema.js';
 import { ensureContractsSchema } from './modules/contracts_schema.js';
 import { ensureEquipmentSchema } from './modules/equipment_schema.js';
+import { ensureWorkEquipmentSchema } from './modules/work_equipment_schema.js';
+import { ensureQuoteSchema } from './modules/equipment_quote_schema.js';
 import { ensureCctvSchema } from './modules/cctv_schema.js';
 import { ensureApartmentMgmtSchema } from './modules/apartment_mgmt_schema.js';
 import { ensureResidencyLogSchema } from './modules/residency_log_schema.js';
@@ -37,6 +39,7 @@ import { ensureExpenseNaturesSchema } from './modules/finance_expense_nature_sch
 import { ensureAnnouncementHideSchema } from './modules/announcement_hide_schema.js';
 import { ensureTeamSchema } from './modules/team_schema.js';
 import { ensureDriveSchema } from './modules/drive_schema.js';
+import { ensureDriveSourceSchema } from './modules/drive_source_schema.js';
 import { ensureMeteringFieldSchema } from './modules/metering_field_schema.js';
 import { ensureMeteringSchema } from './modules/metering_schema.js';
 import { ensureManagementCompanySchema } from './modules/management_company_schema.js';
@@ -45,6 +48,7 @@ import { ensureBankImportSchema } from './modules/bank_import_schema.js';
 import { ensureOAuthSchema } from './modules/oauth_schema.js';
 import { ensureIntegritySchema } from './modules/integrity_schema.js';
 import { ensureFinanceFundsSchema } from './modules/finance_funds_schema.js';
+import { ensureWorkCategoriesSchema } from './modules/work_categories_schema.js';
 import { ensureAuthAttemptLimitsSchema } from './modules/auth_attempt_limits_schema.js';
 import { ensureMenuLayoutSchema } from './modules/menu_layout_schema.js';
 import { CORE_MODULES_BACKFILL_SQL } from './modules/core_modules.js';
@@ -1939,6 +1943,11 @@ export async function ensureDbSchema() {
     await ensureContractsSchema(client);
     // 068 (ekipman, bakim ve teklif): dev blokta DEGIL; katalog kontrolu + her adim kendi otomatik onayli ifadesi (equipment_schema.js = migrations/068).
     await ensureEquipmentSchema(client);
+    // 096 (is kaydi <-> ekipman bagi, fotograf once/sonra etiketi): 042 / 047 / 068'den SONRA; katalog kontrolu + her adim kendi otomatik onayli ifadesi (work_equipment_schema.js = migrations/096).
+    await ensureWorkEquipmentSchema(client);
+    // 098 + 099 (teklif karsilastirma alanlari, onayli teklif revizyonu + degismezlik tetikleyicisi): 068'den SONRA; yalniz equipment_quotes'a sutun / kisit / indeks / islev / tetikleyici;
+    // katalog kontrolu + her adim kendi otomatik onayli ifadesi (equipment_quote_schema.js = migrations/098 + 099).
+    await ensureQuoteSchema(client);
     // 050 (karar defteri): dev blokta DEGIL; katalog kontrolu + her adim kendi otomatik onayli ifadesi (decision_book_schema.js = migrations/050).
     await ensureDecisionBookSchema(client);
     // 051 (daire PIN'i duz metin kopyasi silinir): katalog kontrolu + kendi otomatik onayli ALTER'i; aktarim partili ve kilitli satiri atlar
@@ -2013,6 +2022,12 @@ export async function ensureDbSchema() {
     await ensureMenuLayoutSchema(client);
     // 103 (geri bildirim, sayfa baglamli): dev blokta DEGIL; katalog kontrolu + her adim kendi otomatik onayli ifadesi (feedback_schema.js = migrations/103).
     await ensureFeedbackSchema(client);
+    // 097 (Drive dosya kaydi <-> kaynak kayit baglantisi, P1-11): 060'tan (drive_files) SONRA; dev blokta DEGIL; katalog kontrolu + her adim kendi otomatik onayli ifadesi
+    // (drive_source_schema.js = migrations/097). Her sey varsa hicbir ifade / kilit yok; mevcut satirlara dokunmaz (kaynak NULL = baglanmamis).
+    await ensureDriveSourceSchema(client);
+    // 100 (is takibi kategorileri + fotograf yeniden kullanim indeksi): 042 (work_items) ve 047 (work_item_attachments) SONRASI; dev blokta DEGIL; katalog kontrolu + her adim kendi
+    // otomatik onayli ifadesi (work_categories_schema.js = migrations/100). Her sey varsa hicbir ifade / kilit yok; varsayilan dort kategori her site icin ilk kullanimda tohumlanir (veri adimi yok).
+    await ensureWorkCategoriesSchema(client);
 
     // 031 people_v1: mevcut sakinlerin CRM'e tek seferlik aktarimi. Savunmaci: hata sunucunun acilmasini ENGELLEMEZ
     // (kendi transaction'i geri alinir, isaret yazilmaz => sonraki acilista yeniden denenir; okuma anindaki

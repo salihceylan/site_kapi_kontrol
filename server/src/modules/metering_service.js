@@ -32,8 +32,9 @@ const label = (row) => apartmentLabel(row.block_name, row.unit_label);
 /** Site basina okuma/sayac yazma kilidi (islem icinde). */
 export const meteringLockKey = (siteCode) => `metering:${Number(siteCode)}`;
 
-async function inTransaction(siteCode, work) {
-  const client = await pool.connect();
+/** `db`: baglanti havuzu (testlerde sahte). */
+export async function inTransaction(siteCode, work, db = pool) {
+  const client = await db.connect();
   try {
     await client.query('BEGIN');
     await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [meteringLockKey(siteCode)]);
@@ -48,12 +49,23 @@ async function inTransaction(siteCode, work) {
   }
 }
 
-const audit = (client, actor, action, siteCode, targetId, details) =>
+export const audit = (client, actor, action, siteCode, targetId, details) =>
   recordAudit(client, { actor, action, siteCode, targetType: 'metering', targetId: String(targetId), details }, { inTransaction: true });
 
-const dateOnly = (value) => (value instanceof Date ? value.toISOString().slice(0, 10) : value === null || value === undefined ? null : String(value).slice(0, 10));
+/**
+ * DATE sutunu -> 'YYYY-AA-GG'. pg, DATE'i YEREL gece yarisi Date'e cevirir; sunucu saat dilimi Europe/Istanbul oldugundan (db.js) toISOString() UTC'ye cevirip
+ * tarihi bir gun GERI kaydirirdi (okuma 28.10 iken 27.10 gorunurdu, "bugun okundu" taninmazdi). Bu yuzden YEREL gun/ay/yil okunur.
+ */
+export const dateOnly = (value) => {
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return null;
+    const two = (n) => String(n).padStart(2, '0');
+    return `${value.getFullYear()}-${two(value.getMonth() + 1)}-${two(value.getDate())}`;
+  }
+  return value === null || value === undefined ? null : String(value).slice(0, 10);
+};
 
-function mapMeter(row) {
+export function mapMeter(row) {
   return {
     id: Number(row.id),
     kind: row.kind,
@@ -66,7 +78,7 @@ function mapMeter(row) {
   };
 }
 
-const METER_SELECT = `
+export const METER_SELECT = `
   SELECT m.id, m.kind, m.serial_no, m.is_active, m.apartment_id, m.created_at, a.unit_label, b.block_name,
          lr.value::TEXT AS last_value, lr.reading_date AS last_date
   FROM meters m
@@ -172,7 +184,7 @@ export async function listReadings(siteCode, rawMeterId) {
 }
 
 /** Siralama kurali: onceki tarihli okumadan kucuk, sonraki tarihli okumadan buyuk olamaz. */
-async function checkOrder(client, meterId, date, milli) {
+export async function checkOrder(client, meterId, date, milli) {
   const prev = await client.query(
     `SELECT value::TEXT AS value FROM meter_readings WHERE meter_id = $1 AND reading_date < $2::DATE ORDER BY reading_date DESC LIMIT 1`,
     [meterId, date],

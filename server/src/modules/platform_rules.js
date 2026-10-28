@@ -17,6 +17,7 @@ export const RULE_GROUPS = Object.freeze([
   Object.freeze({ code: 'finance', label: 'Finans' }),
   Object.freeze({ code: 'budget', label: 'İşletme projesi (bütçe)' }),
   Object.freeze({ code: 'heat', label: 'Isınma gideri payı' }),
+  Object.freeze({ code: 'metering', label: 'Sayaç okuma' }),
   Object.freeze({ code: 'forecast', label: 'Gelecek yıl tahmini' }),
   Object.freeze({ code: 'retention', label: 'Saklama süreleri' }),
 ]);
@@ -97,6 +98,17 @@ const DEFINITIONS = [
     pair: { key: 'heat.measured_share_pct', sum: 100 },
     legalNote:
       'Karar T2: %70 ölçüm, %30 alan (m²). Isınma gideri paylaştırma yönetmeliğinin (RG 26847) numarası ve oranları mevzuat.gov.tr\'den doğrulanmadı. [AVUKAT DOĞRULASIN]',
+  }),
+  rule('metering.jump_factor', {
+    label: 'Sayaç okuma: sıçrama uyarısı eşiği',
+    description:
+      'Yeni bir okumanın dönem tüketimi, aynı sayacın son 3 dönem tüketiminin ortancasının (medyan) bu katından fazlaysa görevliye "emin misiniz?" uyarısı çıkar. Uyarı engel değildir; onaylanırsa okuma kaydedilir ve onay izi tutulur. Son 3 dönemin verisi yoksa uyarı çıkmaz.',
+    unit: 'times',
+    defaultValue: 5,
+    min: 2,
+    max: 100,
+    siteOverridable: true,
+    legalNote: 'Yasal dayanağı yok; ürün varsayılanıdır (karar K12: son 3 dönem medyanının 5 katı). Site için ayrıca belirlenebilir.',
   }),
   rule('forecast.default_increase_bp', {
     label: 'Gelecek yıl tahmini: varsayılan artış oranı',
@@ -283,7 +295,7 @@ export function resolveRuleFromRows(rule, rows, { siteCode = null, onDate }) {
 
 // --- Yazma doğrulaması (saf) -------------------------------------------------------------------------------------------------------------
 
-const UNIT_WORDS = Object.freeze({ bp: 'baz puan; 100 baz puan = %1', pct: 'yüzde', days: 'gün' });
+const UNIT_WORDS = Object.freeze({ bp: 'baz puan; 100 baz puan = %1', pct: 'yüzde', days: 'gün', times: 'kat' });
 
 const invalid = (code, message) => ({ ok: false, code, message });
 

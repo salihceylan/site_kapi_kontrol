@@ -2,7 +2,8 @@
 //
 // Sözleşme: docs/PLATFORM_IS_TAKIBI.md.
 //  - KİLİT SIRASI (documents ile aynı): sites FOR KEY SHARE -> users (FOR KEY SHARE, `deleted_at IS NULL`: silinmiş hesaba yazma yok) ->
-//    work_items_site:<site> advisory (yalnız talep AÇARKEN: sınır sayımı) -> work_items (FOR UPDATE) -> work_item_events. Nadir 40P01'de işlem TEK SEFER baştan denenir.
+//    work_items_site:<site> advisory (yalnız talep AÇARKEN: sınır sayımı) -> work_items (FOR UPDATE) -> equipment_items (FOR KEY SHARE; yalnız ekipman bağı yazılırken, 096)
+//    -> work_item_events. Nadir 40P01'de işlem TEK SEFER baştan denenir.
 //  - Her sorguda site_code vardır (IDOR yok). STAFF yalnız kendine atanmış VEYA atanmamış talepleri görür (aksi 404 WORK_ITEM_NOT_FOUND, varlık sızmaz).
 //  - Kurul: salt okur, iç (internal) olayları ve sakin telefonunu / kullanıcı kodunu GÖRMEZ.
 //  - Audit `details` yalnız kimlik / durum / sayı taşır: başlık, açıklama, yorum ASLA yazılmaz.
@@ -20,6 +21,7 @@ import {
   forbiddenRole,
   idempotencyConflict,
   invalidAssignee,
+  invalidEquipment,
   invalidTransition,
   itemClosed,
   mapEvent,
@@ -33,6 +35,7 @@ import {
   workItemNotFound,
 } from './work_tracking_common.js';
 import { listAttachmentsForItem } from './work_attachments_read.js';
+import { loadPhotoWarningsSafe } from './work_photo_checks.js';
 
 export const siteLockKey = (siteCode) => `work_items_site:${Number(siteCode)}`;
 /** Kullanıcı başına saatlik talep sınırı SİTELER ARASI sayıldığı için ayrı advisory kilidi (site kilidinden SONRA alınır; ters sıra yok). */
@@ -118,9 +121,10 @@ export async function insertEvent(client, e) {
 // ---------------------------------------------------------------------------
 
 const MANAGER_COLUMNS = `
-  w.id, w.site_code, w.category, w.location_type, w.title, w.description, w.status, w.priority, w.resident_urgent,
+  w.id, w.site_code, w.category, wc.label AS category_label, w.location_type, w.title, w.description, w.status, w.priority, w.resident_urgent,
   to_char(w.due_date, 'YYYY-MM-DD') AS due_date, w.created_at, w.updated_at, w.closed_at,
   w.created_by, w.assigned_to, w.apartment_id, w.block_id, b.block_name, a.unit_label,
+  w.equipment_id, eq.name AS equipment_name, eq.kind AS equipment_kind, eq.is_active AS equipment_active,
   CASE WHEN w.created_by IS NULL OR ru.deleted_at IS NOT NULL THEN NULL ELSE ru.full_name END AS requester_name,
   CASE WHEN ru.deleted_at IS NULL THEN ru.phone_number END AS requester_phone,
   CASE WHEN au.deleted_at IS NOT NULL THEN NULL ELSE au.full_name END AS assignee_name,
@@ -129,10 +133,12 @@ const MANAGER_COLUMNS = `
 
 const MANAGER_FROM = `
   FROM work_items w
+  LEFT JOIN work_categories wc ON wc.site_code = w.site_code AND wc.key = w.category
   LEFT JOIN apartments a ON a.id = w.apartment_id
   LEFT JOIN site_blocks b ON b.id = w.block_id
   LEFT JOIN users ru ON ru.user_code = w.created_by
   LEFT JOIN users au ON au.user_code = w.assigned_to
+  LEFT JOIN equipment_items eq ON eq.id = w.equipment_id AND eq.site_code = w.site_code
 `;
 
 // Görevli kapsamı (staffScope) ve yetim atama kuralı (ASSIGNEE_ACTIVE_SQL) work_tracking_common.js'tedir (fotoğraf ekleri de aynı kapsamı kullanır).
@@ -222,10 +228,15 @@ async function loadEvents(db, siteCode, itemId, { kind }) {
   );
   const rows = (result.rows ?? []).reverse();
   const codes = new Set();
+  const equipmentIds = new Set();
   for (const row of rows) {
     if (row.event_type === 'assigned') {
       if (row.from_value) codes.add(Number(row.from_value));
       if (row.to_value) codes.add(Number(row.to_value));
+    }
+    if (row.event_type === 'equipment_changed') {
+      if (row.from_value) equipmentIds.add(Number(row.from_value));
+      if (row.to_value) equipmentIds.add(Number(row.to_value));
     }
   }
   const labels = new Map();
@@ -238,7 +249,15 @@ async function loadEvents(db, siteCode, itemId, { kind }) {
       if (row.full_name) labels.set(String(row.user_code), row.full_name);
     }
   }
-  return rows.map((row) => mapEvent(row, { detailed, labels }));
+  // 096: ekipman değişikliği olaylarının adları (yalnız bu sitenin ekipmanı; iç olay olduğundan kurul / sakin görünümünde zaten gelmez).
+  const equipmentLabels = new Map();
+  if (detailed && equipmentIds.size > 0) {
+    const names = await db.query(`SELECT id, name FROM equipment_items WHERE id = ANY($1::BIGINT[]) AND site_code = $2`, [[...equipmentIds], siteCode]);
+    for (const row of names.rows ?? []) {
+      if (row.name) equipmentLabels.set(String(row.id), row.name);
+    }
+  }
+  return rows.map((row) => mapEvent(row, { detailed, labels, equipmentLabels }));
 }
 
 /** GET .../work-items/:id -> { item, events, next_statuses, attachments }. Görünmeyen / yok / başka site -> 404 WORK_ITEM_NOT_FOUND. */
@@ -254,11 +273,14 @@ export async function getWorkItemDetail(siteCode, rawId, access, db = pool) {
   const events = await loadEvents(db, siteCode, id, access);
   // Fotoğraf ekleri (047): hazır olanlar + çağıranın kendi tamamlanmamış yüklemeleri.
   const attachments = await listAttachmentsForItem(db, id, access.userCode);
+  // Fotoğraf yeniden kullanım uyarıları (100, P2-6): yalnız uyarı, asla engel; hazır fotoğraf yoksa sorgu gitmez. Hata ayrıntıyı bozmaz (uyarılar boş döner).
+  const photoWarnings = await loadPhotoWarningsSafe(db, { siteCode, itemId: id, scope: access, hasReady: attachments.some((attachment) => attachment.status === 'ready') });
   return {
     item: mapManagerItem(row, { kind: access.kind }),
     events,
     next_statuses: access.kind === 'board' ? [] : [...(STAFF_TRANSITIONS[row.status] ?? [])],
     attachments,
+    photo_warnings: photoWarnings,
   };
 }
 
@@ -326,7 +348,7 @@ export async function updateWorkItem({ siteCode, rawId, actor, access, body }) {
     const userCode = await lockActiveUser(client, actor);
     // Görevli kapsamı (kendine atanmış / atanmamış / yetim atama) kilit sorgusunun İÇİNDE: görünmeyen talep 404.
     const found = await client.query(
-      `SELECT w.id, w.status, w.priority, w.assigned_to, to_char(w.due_date, 'YYYY-MM-DD') AS due_date FROM work_items w
+      `SELECT w.id, w.status, w.priority, w.assigned_to, w.equipment_id, to_char(w.due_date, 'YYYY-MM-DD') AS due_date FROM work_items w
        WHERE w.id = $1 AND w.site_code = $2${access.kind === 'staff' ? ` AND ${staffScope('$3')}` : ''} FOR UPDATE OF w`,
       access.kind === 'staff' ? [id, siteCode, userCode] : [id, siteCode],
     );
@@ -341,6 +363,8 @@ export async function updateWorkItem({ siteCode, rawId, actor, access, body }) {
     if (input.priority !== undefined && input.priority !== row.priority) changes.priority = input.priority;
     if ('assignedTo' in input && nextAssignee !== currentAssignee) changes.assignedTo = nextAssignee;
     if ('dueDate' in input && input.dueDate !== (row.due_date ?? null)) changes.dueDate = input.dueDate;
+    const currentEquipment = row.equipment_id === null || row.equipment_id === undefined ? null : Number(row.equipment_id);
+    if ('equipmentId' in input && input.equipmentId !== currentEquipment) changes.equipmentId = input.equipmentId;
     if (Object.keys(changes).length === 0) {
       return;
     }
@@ -352,6 +376,9 @@ export async function updateWorkItem({ siteCode, rawId, actor, access, body }) {
     }
     if ('assignedTo' in changes) {
       await assertAssignable(client, { siteCode, access, userCode, currentAssignee, target: changes.assignedTo });
+    }
+    if ('equipmentId' in changes && changes.equipmentId !== null) {
+      await assertEquipmentLinkable(client, siteCode, changes.equipmentId);
     }
 
     const sets = ['updated_at = NOW()'];
@@ -371,6 +398,8 @@ export async function updateWorkItem({ siteCode, rawId, actor, access, body }) {
       sets.push(`due_date = ${push(changes.dueDate)}::DATE`);
       sets.push('resident_updated_at = clock_timestamp()');
     }
+    // Ekipman bağı (096) iç bir bilgidir: sakinin "okunmamış" işaretini TETİKLEMEZ (resident_updated_at dokunulmaz).
+    if ('equipmentId' in changes) sets.push(`equipment_id = ${push(changes.equipmentId)}`);
     await client.query(`UPDATE work_items SET ${sets.join(', ')} WHERE id = $1 AND site_code = $2`, params);
 
     const base = { itemId: id, siteCode, actorUserCode: userCode, actorKind: actorKindOf(access.kind) };
@@ -396,8 +425,34 @@ export async function updateWorkItem({ siteCode, rawId, actor, access, body }) {
       await insertEvent(client, { ...base, type: 'due_date_changed', visibility: 'public', from: row.due_date ?? null, to: changes.dueDate });
       await audit(client, actor, 'work_item.updated', siteCode, id, { field: 'due_date' });
     }
+    if ('equipmentId' in changes) {
+      // İç olay (yalnız yönetim görür); değerler ekipman kimliği metnidir (ad okunurken çözülür). Denetim kaydı yalnız kimlik taşır.
+      await insertEvent(client, {
+        ...base,
+        type: 'equipment_changed',
+        visibility: 'internal',
+        from: currentEquipment === null ? null : String(currentEquipment),
+        to: changes.equipmentId === null ? null : String(changes.equipmentId),
+      });
+      await audit(client, actor, 'work_item.updated', siteCode, id, { field: 'equipment', from: currentEquipment, to: changes.equipmentId });
+    }
   });
   return getWorkItemDetail(siteCode, id, access);
+}
+
+/**
+ * Bağlanacak ekipman bu sitenin AKTİF ekipmanı olmalı (aksi 400 INVALID_EQUIPMENT; başka sitenin ekipmanı "yok" gibi yanıtlanır, varlık sızmaz). FOR KEY SHARE: ekipman
+ * satırı bağ yazılırken silinemez / anahtarı değişemez (kilit sırası: ... work_items FOR UPDATE -> equipment_items FOR KEY SHARE -> work_item_events).
+ */
+async function assertEquipmentLinkable(client, siteCode, equipmentId) {
+  const found = await client.query(`SELECT id, is_active FROM equipment_items WHERE id = $1 AND site_code = $2 FOR KEY SHARE`, [equipmentId, siteCode]);
+  const equipment = found.rows?.[0];
+  if (!equipment) {
+    throw invalidEquipment('Ekipman bu siteye ait değil ya da bulunamadı.');
+  }
+  if (equipment.is_active !== true) {
+    throw invalidEquipment('Pasif ekipman seçilemez. Önce Ekipman ve Bakım ekranından etkinleştirin.');
+  }
 }
 
 async function assertAssignable(client, { siteCode, access, userCode, currentAssignee, target }) {

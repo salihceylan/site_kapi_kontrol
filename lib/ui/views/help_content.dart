@@ -593,9 +593,10 @@ abstract final class HelpContent {
         'Menüden “Ekipman ve Bakım” ekranını açın. Ekipman ekle ile asansör, interkom, kamera gibi ekipmanları kaydedin.',
         'Ekipmana dokunup Plan ekle ile aylık, 3, 6 ya da 12 aylık bakım planı kurun. Asansör gibi yasal kontrolü olan ekipmanda Yasal kontrol planı yıllık hatırlatma tarihi açar.',
         'Bakım yapılınca Yapıldı ya da Bakım kaydı ile tarih, firma ve maliyeti girin; plan bir sonraki tarihe ilerler. Bakım takvimi sekmesi yaklaşan ve geciken bakımları listeler.',
-        'Teklifler sekmesinde aynı konudaki teklifleri karşılaştırın (en düşük tutar işaretlenir). Kabul ettiğiniz teklif gider ya da sözleşme olarak kaydedilir. Gider kırılımı sekmesi giderleri ekipman bazında gösterir.',
+        'Teklifler sekmesinde aynı konudaki teklifleri yan yana tabloda karşılaştırın: tutar, KDV esası, geçerlilik, teslim süresi ve kapsam / not. Tutarlar aynı KDV esasındaysa en düşük tutar ve en kısa teslim süresi işaretlenir. Kabul ettiğiniz teklif gider ya da sözleşme olarak kaydedilir. Gider kırılımı sekmesi giderleri ekipman bazında gösterir.',
+        'Henüz karara bağlanmamış (açık) teklifi Düzenle ile yerinde değiştirebilirsiniz. Kabul edilmiş (onaylı) teklif değişmez: Revizyon oluştur ile gerekçesini yazıp yeni sürüm açın; yeni sürüm önceki sürüme bağlanır, sizin onayınızı bekler ve Sürüm geçmişi’nde tüm sürümler görünür. Reddedilirse önceki onay geçerli kalır.',
       ],
-      note: 'Telefon / e-posta ile otomatik hatırlatma ve teklife belge yükleme Yakında…',
+      note: 'Eski onaylı fiyat tarihli fiyattır, bugünün fiyatı sayılmaz. Telefon / e-posta ile otomatik hatırlatma ve teklife belge yükleme Yakında…',
     ),
     HelpTopic(
       id: 'cctv',

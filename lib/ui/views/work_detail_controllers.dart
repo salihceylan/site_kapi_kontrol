@@ -42,6 +42,20 @@ List<WorkAttachment> _mergeAttachments(
 List<WorkAttachment> _withoutAttachment(List<WorkAttachment> attachments, int id) =>
     List<WorkAttachment>.unmodifiable(attachments.where((a) => a.id != id));
 
+/// Yükleme yanıtındaki uyarılar ayrıntıdakilerin yerine geçer (aynı fotoğrafın eski uyarısı atılır); uyarısız yükleme
+/// mevcut listeyi değiştirmez.
+List<WorkPhotoWarning> _mergeWarnings(List<WorkPhotoWarning> warnings, WorkAttachment added) {
+  if (added.photoWarnings.isEmpty) return warnings;
+  return List<WorkPhotoWarning>.unmodifiable(<WorkPhotoWarning>[
+    for (final warning in warnings)
+      if (warning.attachmentId != added.id) warning,
+    ...added.photoWarnings,
+  ]);
+}
+
+List<WorkPhotoWarning> _withoutWarningsOf(List<WorkPhotoWarning> warnings, int attachmentId) =>
+    List<WorkPhotoWarning>.unmodifiable(warnings.where((w) => w.attachmentId != attachmentId));
+
 const String _deleteFallback =
     'Fotoğraf silinemedi. İnternet bağlantınızı kontrol edip tekrar deneyin.';
 
@@ -305,14 +319,22 @@ class WorkManagerDetailController extends ChangeNotifier {
   List<WorkEvent> events = const <WorkEvent>[];
   List<WorkStatus> nextStatuses = const <WorkStatus>[];
   List<WorkAssignee> assignees = const <WorkAssignee>[];
+
+  /// Talebe bağlanabilecek aktif ekipmanlar ("Ekipman" seçicisi; yalnız yazma yetkisinde yüklenir).
+  List<WorkEquipmentRef> equipment = const <WorkEquipmentRef>[];
   List<WorkAttachment> attachments = const <WorkAttachment>[];
+
+  /// Fotoğraf yeniden kullanım uyarıları (yalnız uyarı; sunucudan: ayrıntı + yükleme yanıtı).
+  List<WorkPhotoWarning> photoWarnings = const <WorkPhotoWarning>[];
 
   bool loading = false;
   bool loaded = false;
   bool busy = false;
   bool assigneesLoaded = false;
+  bool equipmentLoaded = false;
   String? loadError;
   String? assigneesError;
+  String? equipmentError;
   String? actionError;
 
   /// Fotoğraf silme hatası (ek bölümünde gösterilir).
@@ -355,6 +377,7 @@ class WorkManagerDetailController extends ChangeNotifier {
     events = detail.events;
     nextStatuses = detail.nextStatuses;
     attachments = detail.attachments;
+    photoWarnings = detail.photoWarnings;
     loadGeneration++;
     loaded = true;
     gone = false;
@@ -380,6 +403,7 @@ class WorkManagerDetailController extends ChangeNotifier {
 
   void addAttachment(WorkAttachment attachment) {
     attachments = _mergeAttachments(attachments, attachment);
+    photoWarnings = _mergeWarnings(photoWarnings, attachment);
     attachmentError = null;
     changed = true;
     notifyListeners();
@@ -400,6 +424,7 @@ class WorkManagerDetailController extends ChangeNotifier {
       );
       if (_disposed) return true;
       attachments = _withoutAttachment(attachments, attachment.id);
+      photoWarnings = _withoutWarningsOf(photoWarnings, attachment.id);
       busy = false;
       changed = true;
       notifyListeners();
@@ -411,6 +436,7 @@ class WorkManagerDetailController extends ChangeNotifier {
       attachmentError = crmMessageOf(e, _deleteFallback);
       if (_attachmentGone(e)) {
         attachments = _withoutAttachment(attachments, attachment.id);
+        photoWarnings = _withoutWarningsOf(photoWarnings, attachment.id);
         changed = true;
         unawaited(load(silent: true));
       } else {
@@ -467,7 +493,28 @@ class WorkManagerDetailController extends ChangeNotifier {
     }
   }
 
-  /// Durum / öncelik / atama / hedef tarih güncellemesi ([fields] yalnız değişenleri taşır). Başarıda true.
+  /// Talebe bağlanabilecek aktif ekipmanları çeker (yalnız yazma yetkisinde). Hata ekranı bozmaz: seçici yalnız
+  /// "Seçilmedi" (ve varsa mevcut ekipman) ile kalır ve "Tekrar Dene" için [equipmentError] dolar.
+  Future<void> loadEquipment() async {
+    if (!canWrite) return;
+    try {
+      final list = await service.equipmentChoices(siteCode);
+      if (_disposed) return;
+      equipment = list;
+      equipmentLoaded = true;
+      equipmentError = null;
+      notifyListeners();
+    } catch (e) {
+      if (_disposed) return;
+      equipmentError = crmMessageOf(
+        e,
+        'Ekipman listesi yüklenemedi. Tekrar deneyin.',
+      );
+      notifyListeners();
+    }
+  }
+
+  /// Durum / öncelik / atama / hedef tarih / ekipman güncellemesi ([fields] yalnız değişenleri taşır). Başarıda true.
   Future<bool> save(Map<String, Object?> fields) async {
     if (busy || fields.isEmpty) return false;
     busy = true;

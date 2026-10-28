@@ -4,7 +4,9 @@
 //            GET   .../work-items/:id                              PATCH .../work-items/:id       (durum / öncelik / atama / hedef tarih)
 //            POST  .../work-items/:id/comments                     (internal | public yorum)
 //            POST  .../work-items/:id/attachments                  PUT / GET .../attachments/:attId/content    DELETE .../attachments/:attId   (fotoğraf ekleri, 047)
-//   Sakin    GET/POST /app/work-items      GET /app/work-items/:id      POST /app/work-items/:id/cancel | /comments | /seen
+//            GET   /manager/sites/:siteCode/work-categories        POST / PATCH /:id / DELETE /:id  (kategoriler, 100; yazma YALNIZ yönetici / süper, kullanılmış kategori silinmez pasife alınır)
+//            GET   .../work-items/:id ve PUT .../content yanıtları yönetim görünümünde `photo_warnings` taşıyabilir (aynı fotoğraf başka kayıtta da var, 100; yalnız uyarı)
+//   Sakin    GET/POST /app/work-items      GET /app/work-items/:id      POST /app/work-items/:id/cancel | /comments | /seen      GET /app/work-categories?site_code= (etkin kategoriler)
 //            POST /app/work-items/:id/attachments      PUT / GET /app/work-items/:id/attachments/:attId/content      DELETE /app/work-items/:id/attachments/:attId
 //
 // Yetki: yönetici / süper / görevli (STAFF: yalnız kendine atanmış veya atanmamış) yazar; BOARD_MEMBER salt okur (iç yorum ve sakin iletişim bilgisi yok; fotoğrafı
@@ -24,6 +26,8 @@ import { createAttachment, deleteAttachment, managerScope, residentScope } from 
 import { receiveAttachmentContent, sendAttachmentContent } from './work_attachments_upload.js';
 import { isClientAborted } from './document_upload.js';
 import { buildWorkReport } from './work_tracking_report.js';
+import { listMyWorkCategories, listWorkCategories } from './work_categories_read.js';
+import { createWorkCategory, deleteWorkCategory, updateWorkCategory } from './work_categories_service.js';
 
 export const workTrackingRouter = express.Router();
 
@@ -258,7 +262,67 @@ workTrackingRouter.delete(
   })),
 );
 
+// --- Kategoriler (100) -------------------------------------------------------------------------------------------
+// Okuma: yönetici / süper / görevli / kurul (kurul ve görevli adları görür; kullanım sayısı yalnız yönetici / süper listesinde). Yazma: YALNIZ yönetici / süper (görevli 403).
+// Silme: kullanılmış kategori silinmez, pasife alınır (bkz. work_categories_service.js).
+
+const CATEGORY_BASE = '/manager/sites/:siteCode/work-categories';
+
+/** Kategori yazımı yalnız site yöneticisi / süper kullanıcı içindir (görevli yazma kapısını geçer ama burada 403 alır). */
+function requireCategoryManager(access) {
+  if (!access.canManage) {
+    throw forbiddenRole();
+  }
+}
+
+workTrackingRouter.get(
+  CATEGORY_BASE,
+  authRequired,
+  workItemReadLimiter,
+  managerHandler({ context: 'work_categories_list', fallback: 'Kategoriler yüklenemedi.' }, async ({ req, access }) => ({
+    body: await listWorkCategories(access.siteCode, req.query, { withCount: access.canManage }),
+  })),
+);
+
+workTrackingRouter.post(
+  CATEGORY_BASE,
+  authRequired,
+  workItemWriteLimiter,
+  managerHandler({ context: 'work_categories_create', fallback: 'Kategori kaydedilemedi.', write: true }, async ({ req, access }) => {
+    requireCategoryManager(access);
+    return { status: 201, body: await createWorkCategory({ siteCode: access.siteCode, actor: req.authUser, body: bodyOf(req) }) };
+  }),
+);
+
+workTrackingRouter.patch(
+  `${CATEGORY_BASE}/:id`,
+  authRequired,
+  workItemWriteLimiter,
+  managerHandler({ context: 'work_categories_update', fallback: 'Kategori güncellenemedi.', write: true }, async ({ req, access }) => {
+    requireCategoryManager(access);
+    return { body: await updateWorkCategory({ siteCode: access.siteCode, rawId: req.params.id, actor: req.authUser, body: bodyOf(req) }) };
+  }),
+);
+
+workTrackingRouter.delete(
+  `${CATEGORY_BASE}/:id`,
+  authRequired,
+  workItemWriteLimiter,
+  managerHandler({ context: 'work_categories_delete', fallback: 'Kategori silinemedi.', write: true }, async ({ req, access }) => {
+    requireCategoryManager(access);
+    return { body: await deleteWorkCategory({ siteCode: access.siteCode, rawId: req.params.id, actor: req.authUser }) };
+  }),
+);
+
 // --- Sakin -------------------------------------------------------------------------------------------------------
+
+// Sakin talep formu: sitenin ETKİN kategorileri (site_code zorunlu; o sitede aktif sakin olmalı).
+workTrackingRouter.get(
+  '/app/work-categories',
+  authRequired,
+  workItemReadLimiter,
+  appHandler({ context: 'my_work_categories', fallback: 'Kategoriler yüklenemedi.' }, (req) => listMyWorkCategories(req.authUser, req.query)),
+);
 
 workTrackingRouter.get(
   '/app/work-items',

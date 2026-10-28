@@ -9,6 +9,9 @@ import { newErrorId } from '../middlewares/error_handler.js';
 import { DELETED_USER_NAME } from './account_common.js';
 import { parsePositiveId, toIso } from './people_common.js';
 import { sanitizeFileName } from './document_validation.js';
+import { ATTACHMENT_PHASES } from './work_equipment_schema.js';
+
+export { ATTACHMENT_PHASES };
 
 /** İzinli görüntü türleri (DB CHECK ile aynı küme). */
 export const ATTACHMENT_MIMES = Object.freeze(['image/jpeg', 'image/png', 'image/webp']);
@@ -150,7 +153,20 @@ export function buildAttachmentFileName(rawName, mime) {
   return Array.from(name).length > ATTACHMENT_FILE_NAME_MAX ? Array.from(name).slice(0, ATTACHMENT_FILE_NAME_MAX).join('') : name;
 }
 
-/** POST .../attachments gövdesi { file_name, mime_type, size_bytes } -> { fileName, mimeType, sizeBytes }. */
+/**
+ * İsteğe bağlı "önce / sonra" etiketi (096): yok / null / boş -> null (etiketsiz; eski kayıtlar ve eski istemciler böyle); `before` | `after` dışı -> 400 INVALID_BODY.
+ * @returns {'before'|'after'|null}
+ */
+export function parseAttachmentPhase(value) {
+  if (value === undefined || value === null || value === '') return null;
+  const phase = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  if (!ATTACHMENT_PHASES.includes(phase)) {
+    throw invalidAttachmentField('Fotoğraf etiketi geçersiz (önce ya da sonra olmalıdır).');
+  }
+  return phase;
+}
+
+/** POST .../attachments gövdesi { file_name, mime_type, size_bytes, phase? } -> { fileName, mimeType, sizeBytes, phase? } (`phase` yalnız etiket verildiyse). */
 export function parseAttachmentInput(body) {
   if (!isPlainObject(body)) throw invalidAttachmentField('İstek gövdesi geçersiz.');
   if (typeof body.file_name !== 'string' || body.file_name.trim() === '') throw invalidAttachmentField('Dosya adı zorunludur.');
@@ -160,7 +176,8 @@ export function parseAttachmentInput(body) {
   if (typeof size !== 'number' || !Number.isSafeInteger(size) || size < 0) throw invalidAttachmentField('Dosya boyutu geçersiz.');
   if (size === 0) throw invalidAttachmentField('Boş dosya yüklenemez.');
   if (size > ATTACHMENT_MAX_BYTES) throw attachmentTooLarge();
-  return { fileName: buildAttachmentFileName(body.file_name, mimeType), mimeType, sizeBytes: size };
+  const phase = parseAttachmentPhase(body.phase);
+  return { fileName: buildAttachmentFileName(body.file_name, mimeType), mimeType, sizeBytes: size, ...(phase === null ? {} : { phase }) };
 }
 
 /** :attId yol parametresi -> pozitif tam sayı ya da 404. */
@@ -310,6 +327,8 @@ export function mapAttachment(row, { userCode = null, residentView = false } = {
     mime_type: row.mime_type,
     size_bytes: num(row.size_bytes),
     status: row.status,
+    // 096: "önce / sonra" etiketi; etiketsiz (eski kayıtlar dahil) null.
+    phase: ATTACHMENT_PHASES.includes(row.phase) ? row.phase : null,
     uploaded_by_kind: row.uploaded_by_resident === true ? 'resident' : 'management',
     uploaded_by_name: name,
     uploaded_by_me: mine,

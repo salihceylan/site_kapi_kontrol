@@ -177,7 +177,7 @@ describe('kurallar: yetki matrisi', () => {
 });
 
 describe('kurallar: süper kullanıcı uçları', () => {
-  it('GET /admin/rules: platform görünümü (can_edit, gruplar, 16 kural); ?site_code= site görünümü; geçersiz site_code 400 INVALID_QUERY, yok 404', async () => {
+  it('GET /admin/rules: platform görünümü (can_edit, gruplar, 17 kural); ?site_code= site görünümü; geçersiz site_code 400 INVALID_QUERY, yok 404', async () => {
     const res = await call('GET', '/admin/rules', 'superUser');
     assert.equal(res.status, 200, res.text);
     assert.equal(res.json.can_edit, true);

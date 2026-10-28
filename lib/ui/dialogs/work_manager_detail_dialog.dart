@@ -15,6 +15,8 @@ import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/models/vehicle_record.dart' show crmDateParam;
 import 'package:site_kapi_kontrol/models/work_tracking_models.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
+import 'package:site_kapi_kontrol/services/equipment_api.dart'
+    show equipmentKindLabel;
 import 'package:site_kapi_kontrol/services/work_attachment_picker.dart';
 import 'package:site_kapi_kontrol/services/work_attachment_upload.dart';
 import 'package:site_kapi_kontrol/services/work_tracking_api.dart';
@@ -104,6 +106,12 @@ class _WorkManagerDetailDialogState extends State<WorkManagerDetailDialog> {
   WorkStatus? _status;
   late WorkPriority _priority;
   int _assignee = 0;
+
+  /// Seçili ekipman (0 = seçilmedi).
+  int _equipment = 0;
+
+  /// Eklenecek fotoğraflara yazılacak "önce / sonra" etiketi (null = etiketsiz).
+  WorkAttachmentPhase? _phase;
   bool _internal = true;
   bool _synced = false;
   int _epoch = 0;
@@ -135,6 +143,7 @@ class _WorkManagerDetailDialogState extends State<WorkManagerDetailDialog> {
     unawaited(_c.load());
     if (widget.site.canWrite && !widget.item.status.isTerminal) {
       unawaited(_c.loadAssignees());
+      unawaited(_c.loadEquipment());
     }
   }
 
@@ -172,6 +181,7 @@ class _WorkManagerDetailDialogState extends State<WorkManagerDetailDialog> {
     _status = null;
     _priority = item.priority;
     _assignee = item.assignedTo?.userCode ?? 0;
+    _equipment = item.equipment?.id ?? 0;
     _due.text = formatDateField(item.dueDate);
     ++_epoch;
   }
@@ -203,6 +213,33 @@ class _WorkManagerDetailDialogState extends State<WorkManagerDetailDialog> {
     return options;
   }
 
+  /// "Asansör A (Asansör)" gibi seçenek / bilgi metni; pasif ekipman "(pasif)" ile belirtilir.
+  String _equipmentText(WorkEquipmentRef equipment) {
+    final kind = equipment.kind.trim().isEmpty
+        ? ''
+        : ' (${equipmentKindLabel(equipment.kind)})';
+    return '${equipment.label}$kind${equipment.isActive ? '' : ' - pasif'}';
+  }
+
+  /// "Ekipman seçilmedi" seçeneği (kimlik 0).
+  static const WorkEquipmentRef _noEquipment = WorkEquipmentRef(
+    id: 0,
+    name: 'Seçilmedi',
+  );
+
+  /// Ekipman seçenekleri (ilki "Seçilmedi"): aktif ekipmanlar + (listede yoksa / pasifse) talebin MEVCUT ekipmanı, böylece
+  /// mevcut bağ seçicide görünür ve istemeden kaybolmaz.
+  List<WorkEquipmentRef> get _equipmentOptions {
+    final options = <WorkEquipmentRef>[_noEquipment, ..._c.equipment];
+    final current = _c.item.equipment;
+    if (current != null && !options.any((e) => e.id == current.id)) {
+      options.add(current);
+    }
+    return options;
+  }
+
+  bool _hasEquipmentOption(int id) => _equipmentOptions.any((e) => e.id == id);
+
   Map<String, Object?> _changedFields() {
     final item = _c.item;
     final fields = <String, Object?>{};
@@ -216,6 +253,10 @@ class _WorkManagerDetailDialogState extends State<WorkManagerDetailDialog> {
     final assignee = _assigneeOptions.containsKey(_assignee) ? _assignee : 0;
     if (assignee != (item.assignedTo?.userCode ?? 0)) {
       fields['assigned_to'] = assignee == 0 ? null : assignee;
+    }
+    final equipment = _hasEquipmentOption(_equipment) ? _equipment : 0;
+    if (equipment != (item.equipment?.id ?? 0)) {
+      fields['equipment_id'] = equipment == 0 ? null : equipment;
     }
     final typed = _due.text.trim();
     final parsed = parseDateField(typed);
@@ -326,6 +367,8 @@ class _WorkManagerDetailDialogState extends State<WorkManagerDetailDialog> {
     });
     if (valid.isEmpty) return;
     _upload.reset();
+    // Seçili "önce / sonra" etiketi bu turda açılacak ek kayıtlarına yazılır.
+    _upload.photoPhase = _phase;
     await _upload.run(valid, onUploaded: _c.addAttachment);
     if (!mounted) return;
     _afterUpload(notes);
@@ -510,7 +553,7 @@ class _WorkManagerDetailDialogState extends State<WorkManagerDetailDialog> {
           spacing: AppSpace.xl,
           runSpacing: AppSpace.sm,
           children: [
-            CrmInfoLine(label: 'Kategori', value: i.category.label),
+            CrmInfoLine(label: 'Kategori', value: i.categoryText),
             CrmInfoLine(label: 'Konum', value: i.locationText),
             CrmInfoLine(
               label: 'Talebi açan',
@@ -532,6 +575,8 @@ class _WorkManagerDetailDialogState extends State<WorkManagerDetailDialog> {
                     ? 'İsimsiz kişi'
                     : i.assignedTo!.name,
               ),
+            if (i.equipment != null)
+              CrmInfoLine(label: 'Ekipman', value: _equipmentText(i.equipment!)),
             if (due != null) CrmInfoLine(label: 'Hedef tarih', value: due),
           ],
         ),
@@ -549,7 +594,15 @@ class _WorkManagerDetailDialogState extends State<WorkManagerDetailDialog> {
           preparing: _preparing,
           error: _photoError ?? _c.attachmentError,
           showUploader: true,
+          // "Önce / sonra" etiketi yalnız ekleme yetkisi olanda (kurul ve kapanmış talepte yok).
+          addHeader: WorkPhaseChooser(
+            keyPrefix: 'work_manage_phase',
+            selected: _phase,
+            onChanged: _busy ? null : (value) => setState(() => _phase = value),
+          ),
         ),
+        // Aynı fotoğraf başka kayıtta da kullanılmışsa uyarı (yalnız uyarı; hiçbir işlemi engellemez).
+        WorkPhotoWarningList(warnings: _c.photoWarnings, attachments: _c.attachments),
         if (!widget.site.canWrite) ...[
           const SizedBox(height: AppSpace.md),
           const InlineNotice(
@@ -605,6 +658,11 @@ class _WorkManagerDetailDialogState extends State<WorkManagerDetailDialog> {
     final selectedAssignee = assigneeOptions.containsKey(_assignee)
         ? _assignee
         : 0;
+    final equipmentOptions = _equipmentOptions;
+    final selectedEquipment = equipmentOptions.firstWhere(
+      (e) => e.id == _equipment,
+      orElse: () => _noEquipment,
+    );
     final changed = _changedFields().isNotEmpty;
     return Form(
       key: _formKey,
@@ -710,6 +768,51 @@ class _WorkManagerDetailDialogState extends State<WorkManagerDetailDialog> {
             const SizedBox(height: AppSpace.xs),
             Text(
               'Atanabilir kişiler yükleniyor...',
+              style: th.bodySmall?.copyWith(color: p.textSecondary),
+            ),
+          ],
+          const SizedBox(height: AppSpace.lg),
+          DropdownButtonFormField<WorkEquipmentRef>(
+            key: ValueKey<String>(
+              'work_manage_equipment_${_epoch}_${equipmentOptions.length}',
+            ),
+            isExpanded: true,
+            initialValue: selectedEquipment,
+            dropdownColor: p.surface,
+            style: th.bodyMedium?.copyWith(color: p.text),
+            decoration: const InputDecoration(
+              labelText: 'Ekipman (isteğe bağlı)',
+              prefixIcon: Icon(Icons.build_circle_outlined),
+              helperText:
+                  'Arızanın ya da bakımın ilgili olduğu ekipmanı seçin; ekipmanın servis geçmişinde görünür.',
+              helperMaxLines: 2,
+            ),
+            items: [
+              for (final option in equipmentOptions)
+                DropdownMenuItem<WorkEquipmentRef>(
+                  value: option,
+                  child: Text(
+                    option.id == 0 ? option.label : _equipmentText(option),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+            ],
+            onChanged: _c.busy
+                ? null
+                : (value) => setState(() => _equipment = value?.id ?? 0),
+          ),
+          if (_c.equipmentError != null) ...[
+            const SizedBox(height: AppSpace.sm),
+            InlineNotice(
+              key: const ValueKey<String>('work_manage_equipment_error'),
+              message: _c.equipmentError!,
+              onRetry: _c.loadEquipment,
+            ),
+          ] else if (!_c.equipmentLoaded) ...[
+            const SizedBox(height: AppSpace.xs),
+            Text(
+              'Ekipmanlar yükleniyor...',
               style: th.bodySmall?.copyWith(color: p.textSecondary),
             ),
           ],

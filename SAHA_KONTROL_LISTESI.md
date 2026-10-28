@@ -3672,3 +3672,117 @@ Sakinin Panel'indeki hızlı işlemlerin sonuna sunucu yanıtı gelince “Yöne
 - [ ] **120.10. Dar ekran, en büyük yazı ve ekran okuyucu (F44.10):**
   - **Nasıl Test Edilir:** Rol: Daire sakini / Site yöneticisi. Küçük ekranlı bir telefonda yazı boyutunu en büyüğe alıp 112 düğmesine, kuru mod kartına, “Yöneticiyi ara” kutusuna ve yönetici ipucuna bakın. TalkBack (ya da VoiceOver) ile bu öğelere odaklanın.
   - **Beklenen Sonuç:** Hiçbiri taşmaz ya da kesilmez. Ekran okuyucu 112 düğmesini “112 Acil Çağrı Merkezi'ni ara, düğme”, kutuyu “Yöneticiyi ara. <ad>, düğme” diye okur.
+## 122. 📟 Sayaç Saha Akışı: Blok Seçimi, Çekilenler Listesi, Yeniden Çekim ve Olağan Dışı Tüketim Uyarısı (2026-10-29, karşılaştırma raporu P1-6, P1-7, K12)
+
+“Fotoğrafla sayaç okuma” ekranı: blok seç, dairelerin çekilen / çekilmeyen listesini gör, eksikleri sırayla çek, yanlış çekileni listeden seçip YENİDEN ÇEK. Değer son 3 dönem tüketim ortancasının eşik katını (varsayılan 5; siteye özel ayarlanır) aşarsa görevli sıradaki daireye geçmeden sorulur (engel değil, onaylayınca kaydedilir, onay izi tutulur). Ayrıca sunucudaki tarih kayması düzeltildi: bugün okunan daire artık “Çekildi” görünür ve yönetici ekranındaki okuma tarihi girilen günle aynıdır. Sayaç Okuma modülü açık bir sitede denenir.
+
+- [ ] **117.1. Blok seçici (F45.01):**
+  - **Nasıl Test Edilir:** Rol: Görevli / Site yöneticisi. Ön koşul: Sayaç Okuma modülü açık, en az iki bloklu ve sayaçları tanımlı bir TEST sitesi. Görevli (STAFF) hesabıyla “Fotoğrafla sayaç okuma” ekranını açın (birden çok bloklu site). Üstteki blok seçicilerine bakın; bir blok seçin. Tek bloklu bir sitede aynı ekranı açın.
+  - **Beklenen Sonuç:** Üstte “Tümü (0/N)” ve her blok için “A Blok (0/12)” gibi seçiciler görünür; blok seçilince “Sıradaki” daire o bloktan gelir ve okunan/toplam sayısı blok başına güncellenir. Tek bloklu sitede seçici çizilmez.
+- [ ] **117.2. Liste ekranı ve bugünün okuması (F45.02):**
+  - **Nasıl Test Edilir:** Rol: Görevli, Site yöneticisi. Üstteki bantta “Liste (okunan/toplam)” düğmesine basın. Bir daireyi okuyun, uygulamayı kapatıp yeniden açın ve listeye tekrar bakın. Yönetici hesabıyla Sayaçlar sekmesinde o okumanın tarihine bakın.
+  - **Beklenen Sonuç:** Sorunlu, Çekilmeyenler ve Çekilenler bölümleri ve her dairenin durumu görünür (Çekilmedi · son okuma …, Atlandı, Gönderilmeyi bekliyor, Çekildi (değer)). Bugün okunan daire uygulama yeniden açılınca da “Çekildi” görünür; yönetici ekranındaki okuma tarihi girilen günle aynıdır (önceden bir gün geri görünürdü).
+- [ ] **117.3. Yeniden çekim, atlama ve vazgeçme (F45.03):**
+  - **Nasıl Test Edilir:** Rol: Görevli, Site yöneticisi. Listeden bugün çekilmiş bir daireyi “Yeniden çek” ile seçin; üstteki bandın “Yeniden çekim: …” (gri, ok simgeli) olduğunu ve düğmenin “Onayla ve değiştir” yazdığını doğrulayın. Önce bugünkü okumadan önceki okumadan küçük bir değer, sonra geçerli yeni bir değer yazıp onaylayın. Yönetici ekranında aynı günün okumasına bakın. Bir daireyi “Atla” ile atlayıp listede “Atlandı” görünen daireyi seçerek geri çekin; bir seçimi “Vazgeç” ile bırakın; sıra bitince “Atlananlara dön”e basın.
+  - **Beklenen Sonuç:** Önceki okumadan küçük değer engellenir (taban, bugünkü okuma değil ondan önceki okumadır). Geçerli değerde yönetici ekranındaki aynı günlük okuma yeni değere döner, ikinci satır oluşmaz. “Vazgeç” seçimi bırakır; atlanan daire listede “Atlandı” görünür ve oradan çekilebilir; sıra bitince “Atlananlara dön” çıkar.
+- [ ] **117.4. Olağan dışı tüketim uyarısı (F45.04):**
+  - **Nasıl Test Edilir:** Rol: Görevli, Site yöneticisi. Ön koşul: En az 4 okuması olan bir sayaç (son okuma 130, son 3 dönem tüketimi yaklaşık 9, 11, 10). Son okuması 130 olan ve son 3 dönem tüketimi yaklaşık 10 olan bir sayaçta 181 yazıp onaylayın (tüketim 51; eşik 5 kat = 50). Açılan pencerede önce “Değeri düzelt”e, sonra yine onaylayıp “Doğru, kaydet”e basın. Aynı sayaçta 180 (tam eşik) yazın; ayrıca 3 okumalı ya da hiç okuması olmayan bir sayaçta büyük bir değer yazın.
+  - **Beklenen Sonuç:** 181'de sıradaki daireye geçmeden “Olağan dışı tüketim” penceresi (tüketim, ortanca ve eşik rakamlarıyla) çıkar. “Değeri düzelt” hiçbir şey kaydetmez ve yazdığınız değer ekranda kalır; “Doğru, kaydet” kaydeder. 180'de (eşitlikte) uyarı çıkmaz. 3 okumadan az verisi olan ya da hiç okuması olmayan sayaçta uyarı çıkmaz.
+- [ ] **117.5. Sıçrama onayının denetim izi (F45.05):**
+  - **Nasıl Test Edilir:** Rol: Süper kullanıcı / Site yöneticisi. F45.04'te “Doğru, kaydet” ile kaydettiğiniz okumanın ardından süper kullanıcı / yönetici işlem kayıtlarına (ya da veritabanında denetim kaydına) bakın.
+  - **Beklenen Sonuç:** “metering.reading.jump_confirmed” kaydı vardır (sayaç no, eşik katı ve oran yüzdesi). Okunan değerin kendisi denetim kaydında yazmaz.
+- [ ] **117.6. Sunucunun uyardığı okuma Bekleyen listesinde onay bekler (F45.06):**
+  - **Nasıl Test Edilir:** Rol: Görevli, Süper kullanıcı. Ön koşul: Sayaç tabanı hazır bir sayaç (F45.04); süper kullanıcı hesabı. Saha ekranı açıkken (telefon eşiği 5 kat bilir) süper kullanıcıyla siteye özel eşiği 3 kata düşürün (F45.07). Aynı sayaçta 161 yazın (tüketim 31; telefon uyarmaz, sunucu uyarır). Üst çubuktaki kırmızı rozetli “Bekleyen” düğmesine basın; sırasıyla “Doğru, onayla ve gönder”, “Değeri düzelt” ve “Sil”i farklı kayıtlarda deneyin. Başka bir sayaçta önceki okumadan küçük bir değeri sunucuya göndererek reddedilen kaydı da bakın.
+  - **Beklenen Sonuç:** Okuma Bekleyen listesinde “onay bekliyor” olarak kalır; üst çubukta kırmızı rozet ve ekranın altında bildirim görünür. “Doğru, onayla ve gönder” ile gider, “Değeri düzelt” ve “Sil” de çalışır. Sunucunun reddettiği diğer kayıtlar (ör. önceki okumadan küçük değer) da kırmızı rozetle görünür.
+- [ ] **117.7. Siteye özel eşik ayarı (K katsayısı) (F45.07):**
+  - **Nasıl Test Edilir:** Rol: Süper kullanıcı, Site yöneticisi. Ön koşul: Süper kullanıcı hesabı. Süper kullanıcıyla Modüller > Kurallar > ilgili sitenin kuralları > “Sayaç okuma” grubunda “Sayaç okuma: sıçrama uyarısı eşiği” kuralına bakın. Siteye özel 3 kat verip kaydedin; saha ekranını yenileyip (en geç 30 sn) 130 → 161 yazın. Site yöneticisi hesabıyla aynı kurala bakın.
+  - **Beklenen Sonuç:** Kural varsayılan 5 kat gösterilir, sınır 2–100 kattır. Siteye özel 3 kat verilince ekran yenilendikten sonra 161 uyarı verir. Site yöneticisinde kural salt okunurdur (düzenleyemez); değeri yalnız süper kullanıcı verir.
+- [ ] **117.8. Çevrimdışı okuma, yeniden çekim ve hızlı ikinci okuma (F45.08):**
+  - **Nasıl Test Edilir:** Rol: Görevli. Ön koşul: Android telefon. Uçak modunda bir daireyi okuyun, ardından aynı daireyi listeden yeniden çekin. İnterneti açın. Yavaş bir ağda bir daireyi gönderirken hemen ikinci daireyi okuyun.
+  - **Beklenen Sonuç:** Bekleyen listesinde o daire için tek kayıt kalır (“yeniden çekim” etiketli); internet gelince gider. Gönderim sürerken girilen ikinci okuma kaybolmaz.
+
+## 123. 🗂️ Dosya Silme Kuralı: Silmeyi Biz Yapmayız, Drive Bekleme Uyarısı ve Dosya Adında Kayıt Kimliği (2026-10-29, P1-8, P1-11, K6)
+
+Drive bekleme kuyruğunda 7 gün sonra otomatik silme kalktı: bekleyen dosya bekler, 7 gün yalnız “uzun süredir bekliyor” uyarı eşiğidir. Kota dolunca YENİ yükleme reddedilir, mevcut dosyalara dokunulmaz. Sunucudaki geçici dosya yalnız Drive teyidinden sonra silinir. Sayaç fotoğrafının telefondaki kopyası kendiliğinden silinmez. Dosya adı kaynak kayıt kimliğini taşır (ör. OKM-123_AB_D13_291026.jpg) ve Drive kaydı kaynak kayda bağlanır.
+
+- [ ] **118.1. Telefondaki fotoğraf kopyası kendiliğinden silinmez (F45.09):**
+  - **Nasıl Test Edilir:** Rol: Görevli. Ön koşul: Android telefon (kamera); Sayaç Okuma modülü açık. Drive bağlı değilken fotoğraflı bir sayaç okuması gönderin. Üst çubuktaki “Telefondaki fotoğraf kopyaları” simgesine dokunun ve önce “Kalsın”a basın. Simgeye yeniden dokunup bu kez “Kopyaları sil”e basın.
+  - **Beklenen Sonuç:** Ekranda “1 okuma gönderildi. Fotoğrafların telefonunuzdaki kopyası silinmedi; isterseniz siz silebilirsiniz.” notu çıkar ve simge görünür. “Kalsın” hiçbir şeyi silmez; “Kopyaları sil” yalnız o zaman siler, “… fotoğraf kopyası telefondan silindi.” der ve simge kaybolur. Sunucu fotoğrafı almadıysa not “okumanın fotoğrafı sunucuya ulaşmadı; kopyası telefonunuzda duruyor” olur.
+- [ ] **118.2. Bekleyen kaydın fotoğrafına dokunulmaz (F45.10):**
+  - **Nasıl Test Edilir:** Rol: Görevli. Ön koşul: Android telefon. İnternet kapalıyken fotoğraflı bir okuma alın. Gönderilmiş başka okumaların kopyaları varsa “Kopyaları sil” deyin. Bekleyen listesinden o kaydı Sil ile atın.
+  - **Beklenen Sonuç:** “Kopyaları sil” bekleyen ya da reddedilen okumanın fotoğrafına dokunmaz. Kaydı siz Sil derseniz fotoğrafı da onunla gider.
+- [ ] **118.3. Dosya adında kayıt kimliği (F45.11):**
+  - **Nasıl Test Edilir:** Rol: Görevli, Site yöneticisi. Ön koşul: Drive bağlı bir site (ve bağlı olmayan bir site). Drive bağlıyken fotoğraflı bir sayaç okuması gönderip Drive'daki dosya adına bakın. Drive bağlı değilken gönderilen okumada yönetici ekranından fotoğrafı indirip adına bakın.
+  - **Beklenen Sonuç:** Drive'da ayın klasöründe dosya adı OKM-<okuma no>_AB_D13_<ggaayy>.jpg biçimindedir. Drive bağlı değilse sunucudaki fotoğrafın indirme adı aynı kimliği taşır.
+- [ ] **118.4. Drive'a gidemeyen dosya silinmez, yöneticiye uyarı gösterilir (F45.12):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Drive bağlı bir TEST sitesi (Google hesabı sizde). Yönetici: Dosya Deposu > Google Drive kartı. Google hesabından Drive erişimini kaldırın ve bir PDF yükleyin. Kartta “Bekleyen” sayısına ve sarı uyarıya bakın. Google Drive'ı yeniden bağlayın ya da “Bekleyenleri şimdi gönder”e basın.
+  - **Beklenen Sonuç:** Dosya bekleyen olarak kabul edilir ve SİLİNMEZ: kartta “Bekleyen: 1” ve sarı “1 dosya Drive'a gönderilmeyi bekliyor” uyarısı görünür. Drive bağlanınca ya da “Bekleyenleri şimdi gönder” ile dosya Drive'a gider ve uyarı kaybolur. 7 günü geçen dosya silinmez, “uzun süredir bekliyor” uyarısı alır.
+- [ ] **118.5. Bekleme alanı dolunca yeni yükleme reddedilir (QA) (F45.13):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi (teknik doğrulama). Ön koşul: Kapalı devre TEST ortamı; canlıda denenmez. (Test ortamında) Drive kopukken bekleyen dosyaların toplamını 100 MB'a yaklaştırıp yeni bir dosya yükleyin.
+  - **Beklenen Sonuç:** Yeni yükleme 503 DRIVE_QUEUE_FULL ile reddedilir (yönetiminize bildirin); mevcut bekleyen dosyalar ve geçici dosyalar yerinde kalır. Kartta “Bekleme alanı doldu” uyarısı çıkar, denetim kaydında drive.queue_full görünür. Drive ayaktaysa aynı yükleme doğrudan Drive'a gider.
+- [ ] **118.6. Kayda bağlı dosya süzgeci (QA / API) (F45.14):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi (teknik doğrulama). Ön koşul: Drive bağlı TEST sitesi; fotoğraflı bir okuma. (API) GET .../drive/files?source_type=meter_reading&source_id=<okuma no> çağrısı yapın; geçersiz tür ya da numara ile de deneyin.
+  - **Beklenen Sonuç:** Yalnız o okumanın dosyaları döner. Geçersiz tür ya da numara 400 INVALID_SOURCE verir.
+
+## 124. 🔧 İş Kaydı ↔ Ekipman Bağı, Önce / Sonra Fotoğraf Etiketi ve Servis Geçmişi (2026-10-29, P1-10, P2-7, migration 096)
+
+Yönetim, bir talebe sitenin ekipman listesinden isteğe bağlı ekipman bağlayabilir; ekipman kartında “Servis geçmişi (iş kayıtları)” görünür. Talebe fotoğraf eklerken Önce / Sonra etiketi seçilebilir. Bağı yalnız yönetim kurar; sakin formunda ekipman alanı yoktur. İş Takibi ve Ekipman ve Bakım modülleri açık sitede denenir.
+
+- [ ] **119.1. Talebe ekipman bağlama ve kaldırma (F45.15):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi, Daire sakini. Ön koşul: İş Takibi ve Ekipman ve Bakım açık, en az bir ekipmanı olan TEST sitesi. Yönetici: Talepler > bir talebi açın > “Talebi yönet” bölümünde “Ekipman (isteğe bağlı)” listesinden bir ekipman seçip “Değişiklikleri Kaydet”e basın. Aynı talepte ekipmanı “Seçilmedi” yapıp kaydedin. Kapanmış ya da iptal edilmiş bir talebi açın. Sakin hesabıyla aynı talebe bakın.
+  - **Beklenen Sonuç:** Bilgi satırında “Ekipman: …”, Geçmiş'te “Ekipman: Seçilmedi → …” ve liste kartında “Ekipman: …” çipi görünür; sakin ekranında ekipman görünmez. Kaldırınca Geçmiş'te “Ekipman: … → Seçilmedi”. Kapanmış / iptal talepte ekipman seçici hiç görünmez.
+- [ ] **119.2. Ekipman kartında servis geçmişi (F45.16):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi, Kurul üyesi. Ön koşul: Bir ekipmana bağlı birkaç iş; İş Takibi kapalı ikinci bir site. Ekipman ve Bakım > bir ekipmanın kartı > en alttaki “Servis geçmişi (iş kayıtları)” bölümüne bakın. 30'dan fazla bağlı iş varsa “Daha fazla göster”e basın. İş Takibi modülü KAPALI bir sitede ekipman kartını açın.
+  - **Beklenen Sonuç:** Bağlı işler görünür: “Toplam n iş kaydı · m açık”, durum / kategori / tarih, çözülmüş işlerde “Çözüm: tarih”, fotoğraf özeti (“Önce 1 · Sonra 2 · 3 fotoğraf”) ve “İş #n”. İş Takibi kapalı sitede “İş Takibi bu sitede kapalı…” bilgisi çıkar ve kart bozulmaz.
+- [ ] **119.3. Önce / Sonra fotoğraf etiketi (F45.17):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi, Daire sakini. Ön koşul: F45.15 ile ekipman bağlı talep. Bir talepte “Fotoğraf etiketi” seçicisinden Önce'yi seçip fotoğraf ekleyin; sonra Sonra'yı seçip bir fotoğraf daha, ardından etiket seçmeden bir fotoğraf ekleyin. Fotoğrafa dokunun; altındaki yazıya bakın. Sakin hesabıyla aynı talebe bakın. Fotoğrafların bağlı olduğu ekipmanın servis geçmişine bakın.
+  - **Beklenen Sonuç:** Şeritte “Önce · ad” / “Sonra · ad”, Geçmiş'te “Fotoğraf eklendi (Önce)” görünür; fotoğrafa dokununca altta “Talep #n · Fotoğraf #m” yazar. Etiketsiz ve eski fotoğraflar eskisi gibi etiketsiz görünür. Sakin etiket seçemez ama etiketli fotoğrafın altında “Önce” / “Sonra” yazar. Ekipman servis geçmişinde ilgili işin satırında Önce / Sonra sayıları görünür.
+- [ ] **119.4. Pasif ekipman, görevli ve kurul (F45.18):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi, Görevli, Kurul üyesi. Ön koşul: F45.15'teki test sitesi; görevli ve kurul hesabı. Bir ekipmanı pasife alın; talepte ekipman listesine bakın; önceden o ekipmana bağlı bir talebi açın ve kaydedin. Görevli hesabıyla ekipmanın servis geçmişine bakın. Kurul hesabıyla geçmişe ve bir talebe bakın.
+  - **Beklenen Sonuç:** Pasif ekipman yeni bağ için listede görünmez; önceden bağlı talepte “<ad> (tür) - pasif” görünür ve kaydedince bağ kaybolmaz. Görevli geçmişte yalnız kendine atanmış ya da atanmamış işleri görür. Kurul geçmişi görür ama ekipman / etiket seçici yoktur.
+
+## 125. 📑 Teklif Karşılaştırma ve Onaylı Teklif Revizyonu (2026-10-29, P2-9, P2-10, K14, migration 098 ve 099)
+
+Aynı konudaki teklifler yan yana karşılaştırılır (tutar, KDV esası, geçerlilik, teslim süresi, kapsam). Kabul edilmiş (onaylı) teklif yerinde değişmez: değişiklik “Revizyon oluştur” ile yeni sürüm olur, önceki sürüme bağlanır ve yeniden yönetici kararı bekler. Ekipman ve Bakım modülü açık sitede denenir.
+
+- [ ] **120.1. Karşılaştırma tablosu ve KDV esası (F45.19):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Ekipman ve Bakım açık TEST sitesi. Ekipman ve Bakım > Teklifler > Teklif ekle: aynı konuda iki teklif girin (A: 5.000 TL, KDV hariç, 30 gün; B: 4.500 TL, KDV hariç, 10 gün, kapsam notu yazın). Aynı konuya üçüncü bir teklifi “KDV dahil” olarak girin.
+  - **Beklenen Sonuç:** Konu başlığının altında “Karşılaştırma” tablosu çıkar (dar ekranda yatay kayar); B'de “En düşük” ve “En hızlı” görünür. Üçüncü teklif KDV dahil olunca tablonun üstünde “Tutarlar farklı KDV esaslarında” uyarısı çıkar ve hiçbir teklifte “En düşük” işareti kalmaz.
+- [ ] **120.2. Açık teklifi yerinde düzenle (F45.20):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: F45.19'daki teklifler. Karara bağlanmamış (açık) bir teklifte Düzenle'ye basıp tutarı ve teslim süresini değiştirin. Geçerlilik süresi dolmuş açık bir teklifi açın.
+  - **Beklenen Sonuç:** Kart güncellenir. Süresi dolmuş açık teklifte “Kabul et” yoktur, ama “Düzenle” (geçerlilik tarihini uzatmak için) ve “Reddet” vardır.
+- [ ] **120.3. Kabul edilen teklif kilitlenir, değişiklik yeni sürümdür (F45.21):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Finans ve Sözleşmeler modülleri açık TEST sitesi. Bir teklifi sözleşme olarak Kabul edin ve kartına bakın. “Revizyon oluştur”a basıp gerekçe yazmadan Kaydet'e basın. Gerekçe ve yeni tutarla yeniden kaydedin; Sözleşmeler ekranında ilk sözleşmeye bakın.
+  - **Beklenen Sonuç:** Kartta “Onay tarihi … güncel fiyat sayılmaz” yazısı ve “Revizyon oluştur” düğmesi vardır; Düzenle / Reddet / Kabul et yoktur. Gerekçesiz kayıt uyarı verir. Gerekçeyle kaydedince kartta “Sürüm 2”, “Revizyon: onay bekliyor” ve “Onaylı sürüm (1. sürüm): … sözleşme olarak kayıtlı” görünür; ilk sözleşme değişmeden kalır.
+- [ ] **120.4. Sürüm geçmişi (F45.22):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi, Kurul üyesi. Ön koşul: F45.21 sonrası. Revizyonlu teklifte “Sürüm geçmişi”ne basın.
+  - **Beklenen Sonuç:** 1. ve 2. sürüm eskiden yeniye listelenir; her satırda “Önceki sürüme göre: +X TL” farkı, gerekçe, “Geçerli onaylı sürüm” ve “En son sürüm” işaretleri görünür.
+- [ ] **120.5. Revizyonu kabul etmek ve reddetmek (F45.23):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: F45.21 sonrası. Revizyonu Kabul edin; “Önceki sürüm zaten kayıtlı” uyarısında önce Vazgeç'e, sonra yeniden kabul edip Devam et'e basın. Başka bir revizyonu Reddet'le sonuçlandırın.
+  - **Beklenen Sonuç:** Vazgeç hiçbir kayıt oluşturmaz. Devam et AYRI bir sözleşme açar (başlıkta “(revizyon 2)”); ilk sözleşme olduğu gibi kalır (çift sayım olmaz). Revizyon reddedilince onaylı 1. sürüm geçerli kalır; kartta “Revizyon reddedildi” ve yeniden “Revizyon oluştur” çıkar.
+- [ ] **120.6. Yetki ve eski uygulama sürümü (F45.24):**
+  - **Nasıl Test Edilir:** Rol: Kurul üyesi, Görevli, Site yöneticisi. Ön koşul: Eski bir uygulama sürümü (isteğe bağlı). Kurul üyesi ve görevli hesabıyla Teklifler'e bakın. Eski uygulama sürümüyle yeni sunucuya karşı bir teklif ekleyin, kabul edin ve reddedin.
+  - **Beklenen Sonuç:** Kurul ve görevlide hiçbir yazma düğmesi yoktur; yalnız (varsa) “Sürüm geçmişi” görünür. Eski sürümde teklif ekleme, kabul ve ret çalışır; önceki sürümü zaten kayıtlı bir revizyonu eski sürümde kabul etmek sunucu mesajıyla reddedilir (uygulamayı güncelleyin).
+
+## 126. 🏷️ Yönetilebilir Talep Kategorileri ve Aynı Fotoğraf Uyarısı (2026-10-29, P2-6, P2-11, migration 100)
+
+Her sitenin iş takibi kategorileri artık site yöneticisi tarafından eklenir, yeniden adlandırılır, pasife alınır ve kullanılmamışsa silinir. Dört hazır kategori (Arıza, Bakım, Şikayet / Öneri, Diğer) silinmez. Kullanılmış kategori silinmez, pasife alınır. Ayrıca bir talepteki fotoğraf aynı sitede başka bir talepte de varsa yönetime UYARI gösterilir (engel değildir; yalnız birebir aynı dosya yakalanır). İş Takibi açık sitede denenir.
+
+- [ ] **121.1. Kategori düzenleme yetkisi (F45.25):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi, Görevli, Kurul üyesi. Ön koşul: İş Takibi açık TEST sitesi. Site yöneticisiyle Talepler ekranında kategori simgeli “Kategorileri düzenle” düğmesine bakın. Görevli ve yönetim kurulu hesaplarıyla aynı ekrana bakın.
+  - **Beklenen Sonuç:** Düğme yalnız yönetici / süper kullanıcıda görünür; görevli ve yönetim kurulunda hiç yoktur.
+- [ ] **121.2. Kategori ekleme, ad benzersizliği ve sakin formu (F45.26):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi, Daire sakini. Ön koşul: İş Takibi açık TEST sitesi; sakin hesabı. Kategorileri düzenle > “Su kaçağı” ekleyin (listede “Kullanılmadı” etiketi görünür). Aynı adı farklı yazımlarla (“SU KAÇAĞI”, “su kaçağı”) ve hazır bir adı (“Arıza”, “ariza”) eklemeyi deneyin. Sakin hesabıyla Yeni Talep formunda Kategori listesine bakıp “Su kaçağı” ile talep gönderin. Yönetim Talepler listesinde ve kategori süzgecinde talebi bulun.
+  - **Beklenen Sonuç:** Aynı ad (büyük / küçük harf ve Türkçe karakter farkıyla) “Bu adda bir kategori zaten var.” diye reddedilir. Sakin formunda “Su kaçağı” seçilebilir; talep kartında “Su kaçağı · Ortak alan” yazar; yönetim listesinde ve süzgecinde de “Su kaçağı” görünür.
+- [ ] **121.3. Kullanılmış kategori silinmez, pasife alınır (F45.27):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi, Daire sakini. Ön koşul: F45.26 sonrası. “Su kaçağı” (artık 1 talepte kullanılmış) için çöp kutusu simgesine basıp “Kategori pasife alınsın mı?” onayını verin. Sakin formuna, eski talebe ve yönetim süzgecine bakın. Göz simgesiyle kategoriyi yeniden etkinleştirin.
+  - **Beklenen Sonuç:** Onaydan sonra “Pasif” etiketi gelir ve kategori listede KALIR. Sakin formunda artık görünmez; eski talep kategorisini ve adını korur; yönetim süzgecinde “Su kaçağı (pasif)” olarak görünür. Yeniden etkinleştirince sakin formuna geri döner.
+- [ ] **121.4. Kullanılmamış kategoriyi silme, hazır kategori kuralları ve son etkin kategori (F45.28):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: F45.26 sonrası. Hiç kullanılmamış özel bir kategoriyi silin. Hazır kategorilerde (Arıza, Bakım, Şikayet / Öneri, Diğer) silme simgesi arayın; “Arıza”yı “Teknik arıza” olarak yeniden adlandırın. Kategorileri tek tek pasife alıp SON etkin olanı da pasife almayı deneyin. Boş ya da 60 karakterden uzun bir ad girin.
+  - **Beklenen Sonuç:** Kullanılmamış kategori onaydan sonra tamamen gider. Hazır kategorilerde silme simgesi yoktur; yeniden adlandırma çalışır ve talep kartları, performans raporu ve faaliyet raporu yeni adı gösterir. Son etkin kategori pasife alınamaz (“En az bir kategori açık kalmalıdır…” hatası). Boş / uzun ad alan hatası verir.
+- [ ] **121.5. Aynı fotoğraf başka kayıtta uyarısı (F45.29):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi, Görevli. Ön koşul: İş Takibi açık TEST sitesi; telefondan fotoğraf yükleme. Telefondan aynı dosyayı farklı konumlu iki talebe yükleyin (ör. A Blok Daire 1 ve B Blok Daire 5); ikinci talebin yönetici ayrıntısına bakın. Aynı fotoğrafı aynı konumlu iki talebe yükleyin. Aynı fotoğrafı aynı talebe iki kez ekleyin.
+  - **Beklenen Sonuç:** Farklı konumda sarı “Fotoğraf N: Bu fotoğraf farklı bir konuma ait başka bir kayıtta da kullanılmış (#… · … Blok - Daire …)” uyarısı çıkar; yükleme, kaydetme ve silme düğmeleri etkilenmez. Aynı konumda mavi bilgi, aynı talebe ikinci eklemede yalnız SONRAKİ kopyada “Aynı fotoğraf bu kayıtta birden fazla kez eklenmiş.” bilgisi görünür. Yeniden sıkıştırılmış / kırpılmış fotoğraf eşleşmez (yalnız birebir aynı dosya yakalanır).
+- [ ] **121.6. Fotoğraf uyarısının gizliliği (F45.30):**
+  - **Nasıl Test Edilir:** Rol: Daire sakini, Görevli, Kurul üyesi. Ön koşul: F45.29 sonrası; görevli ve kurul hesabı. Sakin hesabıyla F45.29'daki talebin ayrıntısına bakın. Görevli hesabıyla kendisine atanmamış (kapsam dışı) bir kayıtla eşleşen talebin ayrıntısına bakın. Yönetim kurulu hesabıyla aynı talebe bakın.
+  - **Beklenen Sonuç:** Sakin ayrıntısında hiçbir fotoğraf uyarısı yoktur. Görevli kapsam dışı eşleşmeyi “#numara / konum” olmadan yalnızca sayı olarak görür. Kurul uyarıyı görür ama düğme görmez.
