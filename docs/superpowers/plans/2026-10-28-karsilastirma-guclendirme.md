@@ -9,6 +9,8 @@ Amaç: raporun gösterdiği tüm eksikleri kapatmak, güçsüz yönleri güçlen
 - Migration numarası: depodaki en büyük + 1'den devam (084 sonrası 085+). Finans kasa tasarımındaki 085-090 rezervi bu kurala göre kayar; `finans-kasa/TASARIM.md` uygulanırken numaralar yeniden verilir.
 - Paylaşılan dosyalar (home_page.dart, yan_menu.dart, catalog.js): dalga içinde tek işçi dokunur.
 - Deneme maddeleri: kullanıcıya görünen her değişiklik `tools/deneme_listesi/platform.json` + SAHA listesine işlenir (yeni:true).
+- 2026-10-28 hızlandırma (sahibin talimatı: kullanım süresi ~24 saat): A dışındaki tüm dalgalar (G/B/C/D/E) PARALEL başlatıldı. Her dalga kendi dalında biter, main'e SIRALI merge'i ana oturum yapar (dalga iş akışları main'e dokunmaz). Dağıtım 2-3 toplu seferde (örn. A+G, B+C, D+E) — "her iş sonrası dağıtım" kuralının hızlandırılmış uygulaması.
+- Migration numara blokları (paralel çakışmayı önlemek için; kullanılmayan numara boş kalabilir, db.js uygulananı ada göre izler): G 085-086 (gerekmedikçe migration YOK), B 087-094, C 095-101, D 102-103, E 104-107. db.js sıra listesi çakışması numara sırasına göre birleştirilir.
 
 ## Dalgalar
 
@@ -83,4 +85,5 @@ Amaç: raporun gösterdiği tüm eksikleri kapatmak, güçsüz yönleri güçlen
 
 ## Durum izleme
 - Dalga A: 2026-10-28 başladı.
+- Dalga G/B/C/D/E: 2026-10-28 paralel başlatıldı (hızlandırma).
 - Her dalga bitişinde: bu dosyada işaret + PLATFORM_YOL_HARITASI karar bölümüne K-maddeleri + faz sayfası (uret.py) + karşılaştırma sayfası güncellenir.
