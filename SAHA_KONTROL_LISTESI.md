@@ -3396,3 +3396,18 @@ Dalga 2-6'nın ikinci aşaması: dekont bildirimi, banka dosyasından tahsilat, 
 - [ ] **112.7. Makbuzda Kasalara Dağılım:**
   - **Nasıl Test Edilir:** Yeni kasalı bir tahsilatın makbuzunu açın; eski (migration öncesi) bir makbuzu da açın.
   - **Beklenen Sonuç:** Yeni makbuzda "Kasalara dağılım: Aidat Hesabı ..., Fon Hesabı ..., avans ..." satırı vardır; eski makbuzda bu satır yoktur.
+
+## 113. 🧱 Diğer Temel Modüller: Anket, Komşu Panosu, Ekipman, Faaliyet Raporu, Dosya Deposu (2026-10-28, AGENTS.md Kural 25, migration 082)
+
+- [ ] **113.1. Yeni Sitede Beş Modül Hazır Gelir:**
+  - **Nasıl Test Edilir:** Süper kullanıcıyla yeni bir site oluşturun (ya da bir site başvurusunu onaylayın). O sitenin yöneticisiyle giriş yapıp çekmeceye ve Modüller ekranına bakın.
+  - **Beklenen Sonuç:** Anket ve Oylama, Komşu Panosu, Ekipman ve Bakım, Faaliyet Raporu ve Dosya Deposu (Google Drive) hemen kullanılabilir; Modüller ekranında "Her sitede açık" olarak görünür, "Modül Talep Et" düğmesi ve kapatma anahtarı yoktur.
+- [ ] **113.2. Mevcut Sitelerde Beş Modül Açık:**
+  - **Nasıl Test Edilir:** Daha önce bu modüllerden bazıları kapalı olan bir sitenin yöneticisi ve sakiniyle giriş yapın.
+  - **Beklenen Sonuç:** Yöneticide Anket, Komşu Panosu, Ekipman, Faaliyet Raporu menüleri; sakinde Anket ve Komşu Panosu menüleri görünür. Daha önce bekleyen bu modüllerin talepleri "onaylandı" olarak görünür.
+- [ ] **113.3. Beş Modül Kapatılamaz ve Talep Edilemez:**
+  - **Nasıl Test Edilir:** Süper kullanıcıyla Modüller ekranında bu beş modülü kapatmayı deneyin; yöneticiyle bu modüller için talep açmayı deneyin.
+  - **Beklenen Sonuç:** Kapatma anahtarı yoktur (ya da "Bu modül kapatılamaz." der); talep "Bu modül her sitede hep açıktır; talep edilemez." ile reddedilir.
+- [ ] **113.4. Dosya Deposu Açık Ama Drive Bağlı Değil:**
+  - **Nasıl Test Edilir:** Google Drive hesabı bağlanmamış bir sitenin yöneticisiyle Modüller ekranında "Dosya Deposu (Google Drive)" kartına bakın.
+  - **Beklenen Sonuç:** Kart "Bu modül sitenizde kapalı" demez; "Google Drive bağla" düğmesi görünür (sunucuda Google bilgileri tanımlı değilse "Google Drive bağlantısı Yakında…" yazar). Bağlantı kurulmadan Drive'a dosya yüklenmez; sayaç fotoğrafı gibi mevcut akışlar sunucuda tutulmaya devam eder.

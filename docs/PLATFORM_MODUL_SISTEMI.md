@@ -9,7 +9,10 @@ Sunucu ve Flutter uygulaması bu belgeye göre yazılır. Deneme listesi: `tools
 1. **Geriye dönük uyum:** Modül satırı olmayan site, katalogdaki varsayılana göre davranır. `door_control` varsayılanı AÇIK; bu yüzden mevcut siteler, mevcut
    uygulamalar ve cihazlar hiçbir değişiklik görmez. Yeni modüller varsayılan KAPALI/"yakında".
 2. **Yönetim türü:** `sites.management_type` (varsayılan `apartment_site`). Beş türün hepsi seçilebilir (311ed6d); türe göre arayüz terimleri ve önerilen modüller F9 bölümündedir.
-3. **Çekirdek modüller** (`people`, `announcements`) her sitede hep açıktır. Ekranları Faz 2/3'te geldi: `people` Faz 2a'dan, `announcements` Faz 3a'dan beri `status: available`.
+3. **Çekirdek (temel) modüller** her sitede hep açıktır, talep edilmez, kapatılamaz (AGENTS.md Kural 25): `people`, `announcements`, `finance`, `survey`, `neighbor_board`, `equipment`, `annual_report`, `drive_storage`.
+   `people` Faz 2a'dan, `announcements` Faz 3a'dan beri `status: available`. `finance` 2026-10-26'dan, diğer beşi 2026-10-28'den beri temeldir. Kart ödemesi artık ayrı modül değil, Aidat ve Finans'ın parçasıdır;
+   Belgeler artık ayrı modül değil, Dosya Deposu'nun parçasıdır. `site_modules` satırı katalogdaki `core` bayrağından türetilir (`server/src/modules/core_modules.js`): yeni sitede kurulumla aynı işlemde açık yazılır,
+   mevcut sitelere açılışta (`ensureDbSchema`) ve `migrations/079`, `082` ile doldurulur; bekleyen modül talepleri "onaylandı" olarak sonuçlanır.
 4. **Denetim kaydı** (`audit_log`) yalnız eklenir; API'de güncelleme/silme yoktur, bakım servisi temizlemez.
 5. **Ek roller:** `BOARD_MEMBER` (Yönetim Kurulu / Denetçi) ve `STAFF` (Görevli), `site_memberships.role` değerleridir. Kullanıcının genel rolü (`users.role`) DEĞİŞMEZ.
    Site yöneticisi isterse atar; atamazsa bu rollerin işi site yöneticisinde kalır. `requireSiteManager`/`hasSiteManagementAccess` bu rolleri YÖNETİCİ saymaz.
@@ -24,6 +27,11 @@ Sunucu ve Flutter uygulaması bu belgeye göre yazılır. Deneme listesi: `tools
 | `announcements` | Duyuru ve Bildirim | evet | `available` (Faz 3a) | — (hep açık) |
 | `finance` | Aidat ve Finans | evet (2026-10-26, AGENTS.md Kural 25) | `available` (Faz 4a) | — (hep açık; kurulumda satırı yazılır, talep edilmez) |
 | `documents` | Belgeler (Dosya Deposu) | hayır | `available` (Faz 3b-A) | KAPALI |
+| `survey` | Anket ve Oylama | evet (2026-10-28, Kural 25) | `available` | — (hep açık; kurulumda satırı yazılır, talep edilmez) |
+| `neighbor_board` | Komşu Panosu | evet (2026-10-28, Kural 25) | `available` | — (hep açık) |
+| `equipment` | Ekipman ve Bakım | evet (2026-10-28, Kural 25) | `available` | — (hep açık) |
+| `annual_report` | Faaliyet Raporu | evet (2026-10-28, Kural 25) | `available` | — (hep açık) |
+| `drive_storage` | Dosya Deposu (Google Drive) | evet (2026-10-28, Kural 25) | `available` | — (hep açık; Google Drive hesabı ayrıca bağlanır) |
 | `reservation` | Rezervasyon ve Konsiyerj | hayır | `coming_soon` | KAPALI |
 | `work_tracking` | İş Takibi | hayır | `available` (bkz. PLATFORM_IS_TAKIBI.md) | KAPALI |
 | `metering` | Sayaç Okuma ve Faturalandırma | hayır | `coming_soon` | KAPALI |
@@ -42,7 +50,7 @@ Açıklamalar (Türkçe, kısa) katalogda tutulur. `toggleable = !core && status
 - `site_modules(site_code BIGINT REFERENCES sites(site_code) ON DELETE CASCADE, module_code TEXT, enabled BOOLEAN NOT NULL, updated_by INTEGER NULL REFERENCES users(user_code) ON DELETE SET NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY(site_code, module_code))`.
 - `audit_log(id BIGSERIAL PK, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), actor_user_code INTEGER NULL REFERENCES users(user_code) ON DELETE SET NULL, actor_name TEXT, actor_role TEXT, action TEXT NOT NULL, site_code BIGINT NULL (FK YOK), target_type TEXT, target_id TEXT, details JSONB NOT NULL DEFAULT '{}')`; indeksler `(site_code, id DESC)`, `(id DESC)`.
 - `site_memberships.role` CHECK genişler: `SITE_OWNER, SITE_ADMIN, RESIDENT, BOARD_MEMBER, STAFF` (users.role'daki DROP+ADD CONSTRAINT / DO bloğu örneği gibi).
-- Eski sitelere satır yazılmaz (varsayılan yeter).
+- Eski sitelere satır yazılmaz (varsayılan yeter); tek istisna temel modüllerdir: onların açık satırı `core_modules.js` ile kurulumda yazılır ve mevcut sitelere açılışta / `079`, `082` ile doldurulur.
 
 ## Sunucu uçları
 

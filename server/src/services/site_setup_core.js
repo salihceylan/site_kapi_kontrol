@@ -20,7 +20,7 @@
 
 import { managementTypeLabel } from '../modules/management_types.js';
 import { applyTrialToNewSubscription } from '../modules/management_company_service.js';
-import { SQL_ENABLE_FINANCE_FOR_SITE } from '../modules/finance_core_module.js';
+import { enableCoreModulesForSite } from '../modules/core_modules.js';
 import { SITE_NAME_UNIQUE_INDEXES, siteNameTakenMessage } from '../utils/validators.js';
 
 export const PLAN_MANUAL_APPROVAL = 'manual_approval';
@@ -290,8 +290,8 @@ export async function createSiteWithStructure(
     );
   }
 
-  // Aidat ve Finans temel modül (Kural 25): kurulumda açık tanımlanır, talep gerekmez.
-  await client.query(SQL_ENABLE_FINANCE_FOR_SITE, [siteCode]);
+  // Temel modüller (Kural 25: Aidat ve Finans, Anket, Komşu Panosu, Ekipman, Faaliyet Raporu, Dosya Deposu ...): kurulumda açık tanımlanır, talep gerekmez.
+  await enableCoreModulesForSite(client, siteCode);
 
   // 8. Abonelik satırı (her yeni site): başvuru onayında source 'manual_approval' + application_id, anlık yolda source 'admin'
   await client.query(

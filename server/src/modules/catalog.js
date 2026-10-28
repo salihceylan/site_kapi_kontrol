@@ -6,7 +6,9 @@
 //    satırın `enabled` değeri, yoksa katalogdaki varsayılan (`defaultEnabled`).
 //  - Satırı olmayan site katalog varsayılanına göre davranır (door_control varsayılanı 2bf1bd4'ten beri KAPALI;
 //    cihaz kapıya bağlanınca açılır).
-//  - Aidat ve Finans TEMEL modüldür (AGENTS.md Kural 25): talep gerekmeden her sitede açık, kapatılamaz.
+//  - TEMEL modüller (AGENTS.md Kural 25; core: true): Kişi ve Daire Kayıtları, Duyuru ve Bildirim, Aidat ve Finans, Anket ve Oylama, Komşu Panosu,
+//    Ekipman ve Bakım, Faaliyet Raporu, Dosya Deposu (Google Drive). Talep gerekmeden her sitede açık, kapatılamaz; site_modules satırı
+//    core_modules.js ile kurulumda yazılır / açılışta doldurulur.
 
 export const MODULE_STATUS_AVAILABLE = 'available';
 export const MODULE_STATUS_COMING_SOON = 'coming_soon';
@@ -101,9 +103,10 @@ export const MODULE_CATALOG = Object.freeze([
     code: 'survey',
     name: 'Anket ve Oylama',
     description: 'Sakinlere anket ve oylama açma; sonuçların takibi.',
-    core: false,
+    // Temel modül (Kural 25): site kurulumunda açık tanımlanır, talep edilmez, kapatılamaz.
+    core: true,
     status: MODULE_STATUS_AVAILABLE,
-    defaultEnabled: false,
+    defaultEnabled: true,
   }),
   defineModule({
     code: 'visitor_log',
@@ -173,25 +176,28 @@ export const MODULE_CATALOG = Object.freeze([
     code: 'drive_storage',
     name: 'Dosya Deposu (Google Drive)',
     description: 'Sitenin dosyalarının sitenin kendi Google Drive hesabında saklanması.',
-    core: false,
+    // Temel modül (Kural 25): site kurulumunda açık tanımlanır, talep edilmez, kapatılamaz.
+    core: true,
     status: MODULE_STATUS_AVAILABLE,
-    defaultEnabled: false,
+    defaultEnabled: true,
   }),
   defineModule({
     code: 'neighbor_board',
     name: 'Komşu Panosu',
     description: 'Sakinlerin ilan yazdığı, yöneticinin onayladığı site panosu.',
-    core: false,
+    // Temel modül (Kural 25): site kurulumunda açık tanımlanır, talep edilmez, kapatılamaz.
+    core: true,
     status: MODULE_STATUS_AVAILABLE,
-    defaultEnabled: false,
+    defaultEnabled: true,
   }),
   defineModule({
     code: 'annual_report',
     name: 'Faaliyet Raporu',
     description: 'Yıllık faaliyet raporu taslağı kayıtlardan hazırlanır, düzenlenir ve PDF alınır.',
-    core: false,
+    // Temel modül (Kural 25): site kurulumunda açık tanımlanır, talep edilmez, kapatılamaz.
+    core: true,
     status: MODULE_STATUS_AVAILABLE,
-    defaultEnabled: false,
+    defaultEnabled: true,
   }),
   defineModule({
     code: 'plate_recognition',
@@ -221,9 +227,10 @@ export const MODULE_CATALOG = Object.freeze([
     code: 'equipment',
     name: 'Ekipman ve Bakım',
     description: 'Ekipman envanteri, bakım planı ve kaydı, yasal kontrol hatırlatması ve teklif karşılaştırma.',
-    core: false,
+    // Temel modül (Kural 25): site kurulumunda açık tanımlanır, talep edilmez, kapatılamaz.
+    core: true,
     status: MODULE_STATUS_AVAILABLE,
-    defaultEnabled: false,
+    defaultEnabled: true,
   }),
 ]);
 

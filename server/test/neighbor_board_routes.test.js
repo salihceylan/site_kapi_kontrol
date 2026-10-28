@@ -23,10 +23,10 @@ describe('komsu panosu girdi kurallari', () => {
     assert.equal(shortName(null), 'Silinmiş Kullanıcı');
   });
 
-  it('modul katalogda varsayilan KAPALI', () => {
+  it('modul katalogda TEMEL modul (Kural 25): core + varsayilan ACIK', () => {
     const mod = MODULE_CATALOG.find((m) => m.code === 'neighbor_board');
     assert.ok(mod);
-    assert.equal(mod.defaultEnabled, false);
-    assert.equal(mod.core, false);
+    assert.equal(mod.defaultEnabled, true);
+    assert.equal(mod.core, true);
   });
 });

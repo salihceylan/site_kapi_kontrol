@@ -552,7 +552,7 @@ describe('GET /manager/sites/:siteCode/modules: yetki matrisi', () => {
         ['work_tracking', true, true],
         ['metering', true, true],
         ['online_payment', false, false],
-        ['survey', true, true],
+        ['survey', false, false], // Kural 25: temel modül
         ['visitor_log', true, true],
         ['card_access', true, true],
         ['card_payments', true, true],
@@ -561,13 +561,13 @@ describe('GET /manager/sites/:siteCode/modules: yetki matrisi', () => {
         ['decision_book', true, true],
         ['directory', true, true],
         ['budget', true, true],
-        ['drive_storage', true, true],
-        ['neighbor_board', true, true],
-        ['annual_report', true, true],
+        ['drive_storage', false, false], // Kural 25: temel modül
+        ['neighbor_board', false, false], // Kural 25: temel modül
+        ['annual_report', false, false], // Kural 25: temel modül
         ['plate_recognition', true, true],
         ['hgs_access', false, false],
         ['cctv_link', true, true],
-        ['equipment', true, true],
+        ['equipment', false, false], // Kural 25: temel modül
       ],
     );
     // bekleyen talep: yalnizca o sitenin o modulu 'pending' olur; baska site / sonuclanmis talep etkilemez
@@ -798,8 +798,8 @@ describe('PUT modul: onay zorunlulugu ve denetim kaydi', () => {
     assert.equal(noBody.status, 400);
   });
 
-  it('core modul (people/announcements/finance) 400 MODULE_NOT_TOGGLEABLE (acma ve kapatma)', async () => {
-    for (const code of ['people', 'announcements', 'finance']) {
+  it('core modul (people/announcements/finance/survey/drive_storage/neighbor_board/annual_report/equipment) 400 MODULE_NOT_TOGGLEABLE (acma ve kapatma)', async () => {
+    for (const code of ['people', 'announcements', 'finance', 'survey', 'drive_storage', 'neighbor_board', 'annual_report', 'equipment']) {
       for (const enabled of [true, false]) {
         const res = await call('PUT', moduleUrl(SITE_1, code), { user: users.superUser, body: { enabled, confirm: true } });
         assert.equal(res.status, 400, `${code} ${enabled}`);

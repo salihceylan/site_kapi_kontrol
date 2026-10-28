@@ -1,4 +1,4 @@
-# Faaliyet Raporu (R2) - modul `annual_report` (varsayilan KAPALI)
+# Faaliyet Raporu (R2) - modul `annual_report` (TEMEL modul, Kural 25: her sitede acik, talep edilmez, kapatilamaz)
 
 Yonetici bir yil secer; sistem dokuz bolumu kayitlardan doldurur, yonetici her bolumu duzenler, taslak saklanir, PDF alinir.
 

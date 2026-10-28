@@ -515,12 +515,12 @@ describe('POST module-requests', () => {
     assert.ok(console.error.mock.calls.some((c) => String(c.arguments[0]).includes('[module_request]')));
   });
 
-  it('baska hata kodlari: bilinmeyen modul 404, core (finance dahil) 400, yakinda 409, zaten acik 409', async () => {
+  it('baska hata kodlari: bilinmeyen modul 404, core (finance, anket, dosya deposu, komsu panosu, faaliyet raporu, ekipman dahil) 400, yakinda 409, zaten acik 409', async () => {
     const unknown = await post({ module_code: 'nope' });
     assert.equal(unknown.status, 404);
     assert.equal(unknown.body.code, 'MODULE_NOT_FOUND');
 
-    for (const code of ['people', 'announcements', 'finance']) {
+    for (const code of ['people', 'announcements', 'finance', 'survey', 'drive_storage', 'neighbor_board', 'annual_report', 'equipment']) {
       const core = await post({ module_code: code });
       assert.equal(core.status, 400, code);
       assert.equal(core.body.code, 'MODULE_NOT_TOGGLEABLE');

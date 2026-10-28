@@ -65,7 +65,7 @@ describe('platform katalog: sozlesme tablosu', () => {
       work_tracking: [false, 'available'], // Is Takibi: kullanilabilir (varsayilan KAPALI; super acar, yonetici modul talep eder)
       metering: [false, 'available'],
       online_payment: [false, 'coming_soon'],
-      survey: [false, 'available'], // Anket ve Oylama: kullanilabilir (varsayilan KAPALI; super acar, yonetici modul talep eder)
+      survey: [true, 'available'], // Kural 25 (2026-10-28): Anket ve Oylama TEMEL modul (hep acik; talep edilmez, kapatilamaz)
       visitor_log: [false, 'available'], // Ziyaretci ve Kargo (F11.03): kullanilabilir (varsayilan KAPALI; super acar, yonetici modul talep eder)
       card_access: [false, 'available'], // F10: Kartli Gecis kullanilabilir (varsayilan KAPALI; super acar, yonetici modul talep eder)
       contracts: [false, 'available'], // Firma ve Sozlesme Takibi: kullanilabilir (varsayilan KAPALI; super acar, yonetici modul talep eder)
@@ -74,13 +74,13 @@ describe('platform katalog: sozlesme tablosu', () => {
       decision_book: [false, 'available'], // Karar Defteri: kullanilabilir (varsayilan KAPALI; super acar, yonetici modul talep eder)
       directory: [false, 'available'], // Rehber: kullanilabilir (varsayilan KAPALI; yonetim kadrosu ve faydali telefonlar)
       budget: [false, 'available'], // Isletme Projesi (F7): kullanilabilir (varsayilan KAPALI)
-      drive_storage: [false, 'available'], // Dosya Deposu (Google Drive, D1): varsayilan KAPALI
-      neighbor_board: [false, 'available'], // Komsu Panosu: kullanilabilir (varsayilan KAPALI)
-      annual_report: [false, 'available'], // Faaliyet Raporu (R2): varsayilan KAPALI
+      drive_storage: [true, 'available'], // Kural 25 (2026-10-28): Dosya Deposu (Google Drive, D1) TEMEL modul
+      neighbor_board: [true, 'available'], // Kural 25 (2026-10-28): Komsu Panosu TEMEL modul
+      annual_report: [true, 'available'], // Kural 25 (2026-10-28): Faaliyet Raporu (R2) TEMEL modul
       plate_recognition: [false, 'available'], // Plaka Tanima (073): kullanilabilir, varsayilan KAPALI; kapi acmaz (would_open)
       hgs_access: [false, 'coming_soon'],
       cctv_link: [false, 'available'], // Kamera (CCTV) Baglantisi (072): kullanilabilir, varsayilan KAPALI
-      equipment: [false, 'available'], // Ekipman ve Bakim (068): kullanilabilir, varsayilan KAPALI
+      equipment: [true, 'available'], // Kural 25 (2026-10-28): Ekipman ve Bakim (068) TEMEL modul
     });
     assert.equal(def('door_control').name, 'Geçiş Kontrol (SmartKeyPass)');
     assert.equal(def('people').name, 'Kişi ve Daire Kayıtları');
@@ -111,11 +111,30 @@ describe('platform katalog: sozlesme tablosu', () => {
     }
   });
 
-  it('toggleable = !core && status === available (door_control, documents, rezervasyon, is takibi, anket, ziyaretci, kartli gecis, sozlesmeler, karar defteri; finance temel modul oldugu icin YOK)', () => {
+  it('TEMEL (core) moduller (Kural 25): people, announcements, finance, survey, drive_storage, neighbor_board, annual_report, equipment; hepsi available + varsayilan ACIK', () => {
+    const core = MODULE_CATALOG.filter((m) => m.core);
     assert.deepEqual(
-      MODULE_CATALOG.filter(isToggleable).map((m) => m.code),
-      ['door_control',  'documents',  'reservation',  'work_tracking',  'metering',  'survey',  'visitor_log',  'card_access',  'card_payments',  'plate_cameras',  'contracts',  'decision_book',  'directory',  'budget',  'drive_storage',  'neighbor_board',  'annual_report',  'plate_recognition',  'cctv_link',  'equipment'],
+      core.map((m) => m.code),
+      ['people', 'announcements', 'finance', 'survey', 'drive_storage', 'neighbor_board', 'annual_report', 'equipment'],
     );
+    for (const m of core) {
+      assert.equal(m.status, 'available', m.code);
+      assert.equal(m.defaultEnabled, true, m.code);
+      assert.equal(isToggleable(m), false, m.code);
+      assert.equal(computeModuleEnabled(m, undefined), true, m.code);
+      assert.equal(computeModuleEnabled(m, { enabled: false }), true, m.code);
+    }
+  });
+
+  it('toggleable = !core && status === available (temel moduller YOK; liste sozlesme tablosundan turetilir)', () => {
+    const table = Object.fromEntries(MODULE_CATALOG.map((m) => [m.code, [m.core, m.status]]));
+    const expected = Object.entries(table)
+      .filter(([, [core, status]]) => core === false && status === 'available')
+      .map(([code]) => code);
+    assert.deepEqual(MODULE_CATALOG.filter(isToggleable).map((m) => m.code), expected);
+    for (const code of ['finance', 'survey', 'drive_storage', 'neighbor_board', 'annual_report', 'equipment']) {
+      assert.equal(expected.includes(code), false, `${code} temel modul: toggleable olamaz`);
+    }
     assert.equal(isToggleable(null), false);
   });
 
