@@ -82,8 +82,8 @@ describe('CANLI görünürlük SQL parçası', () => {
     assert.ok(!/FROM apartment_residencies/.test(visible));
   });
 
-  it('modül kapısı: katalog varsayılanı KAPALI olduğundan yalnız enabled = TRUE satırı AÇIK sayılır', () => {
-    assert.match(norm(MODULE_ENABLED_SQL('d')), /^EXISTS \(SELECT 1 FROM site_modules smod WHERE smod\.site_code = d\.site_code AND smod\.module_code = 'documents' AND smod\.enabled = TRUE\)$/);
+  it('modül kapısı: Dosya Deposu TEMEL modül (Kural 25) olduğundan site_modules satırı yoksa AÇIK sayılır (satır varsa enabled değeri)', () => {
+    assert.match(norm(MODULE_ENABLED_SQL('d')), /^COALESCE\(\(SELECT smod\.enabled FROM site_modules smod WHERE smod\.site_code = d\.site_code AND smod\.module_code = 'drive_storage'\), TRUE\)$/);
   });
 });
 
@@ -99,7 +99,7 @@ describe('GET /app/documents', () => {
       "d.status = 'active' AND d.audience = 'residents'",
       "INNER JOIN sites s ON s.site_code = d.site_code AND s.approval_status = 'approved'",
       "INNER JOIN document_versions cv ON cv.document_id = d.id AND cv.version_no = d.current_version_no AND cv.status = 'ready'",
-      'smod.module_code = \'documents\' AND smod.enabled = TRUE',
+      "smod.module_code = 'drive_storage'), TRUE)",
       'ORDER BY d.id DESC',
     ]) {
       assert.ok(query.sql.includes(fragment), fragment);
@@ -179,7 +179,7 @@ describe('ayrıntı ve indirme çözümleme', () => {
       'INNER JOIN announcement_recipients r ON r.announcement_id = a.id',
       'INNER JOIN site_people sp ON sp.id = r.person_id AND sp.user_code = $1',
       "INNER JOIN documents d ON d.id = aa.document_id AND d.site_code = a.site_code AND d.status = 'active' AND d.audience = 'residents'",
-      "smod.module_code = 'documents' AND smod.enabled = TRUE",
+      "smod.module_code = 'drive_storage'), TRUE)",
       // R16 P2-5: taşınan / pasifleştirilen sakin eski duyurunun eki üzerinden belgeyi indiremez (doğrudan indirmedeki my_apts / aktif ilişki koşuluyla AYNI parça, hedef koşulu YOK)
       'WITH my_apts AS MATERIALIZED (',
       'WHERE sp.user_code = $1 AND sp.is_active = TRUE',

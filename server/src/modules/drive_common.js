@@ -30,7 +30,7 @@ export function driveNotConfigured() {
 }
 
 export function moduleDisabled() {
-  return new PlatformError(403, 'MODULE_DISABLED', 'Dosya Deposu (Google Drive) modülü bu sitede kapalı.', { module: DRIVE_MODULE });
+  return new PlatformError(403, 'MODULE_DISABLED', 'Dosya Deposu modülü bu sitede kapalı.', { module: DRIVE_MODULE });
 }
 
 // --- Yenileme belirteci şifreleme (AES-256-GCM; anahtar DRIVE_TOKEN_KEY'den sha256) ---

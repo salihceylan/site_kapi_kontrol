@@ -6,14 +6,14 @@ import 'package:site_kapi_kontrol/ui/widgets/yan_menu.dart';
 // görünür öğe listesinden (YanMenu.visibleItems) türetilir; görünürlük kuralı burada KOPYALANMAZ: menüde olmayan
 // (kapalı / yetkisiz) öğenin sekmesi olamaz ("fail-closed").
 
-/// Alt çubuğun sekmeleri, karar G3 sırasıyla: Özet · Duyuru · Arıza · Kapı · Belgeler. Her sekme bir menü öğesidir;
+/// Alt çubuğun sekmeleri, karar G3 sırasıyla: Özet · Duyuru · Arıza · Kapı · Dosyalar (Dosya Deposu; 5 sekme dar ekrana sığsın diye kısa etiket). Her sekme bir menü öğesidir;
 /// sekmeye dokunmak çekmecede o öğeyi seçmekle AYNI gezinmedir. Özet = Panel (modül vitrini, borç kartı üstte).
 enum ResidentTab {
   ozet(SirketMenuItem.dashboard, 'Özet', PhosphorIconsRegular.squaresFour, PhosphorIconsRegular.squaresFour),
   duyuru(SirketMenuItem.duyurular, 'Duyuru', PhosphorIconsRegular.megaphone, PhosphorIconsRegular.megaphone),
   ariza(SirketMenuItem.taleplerim, 'Arıza', PhosphorIconsRegular.wrench, PhosphorIconsRegular.wrench),
   kapi(SirketMenuItem.kapilar, 'Kapı', PhosphorIconsRegular.doorOpen, PhosphorIconsRegular.doorOpen),
-  belgeler(SirketMenuItem.belgeler, 'Belgeler', PhosphorIconsRegular.folder, PhosphorIconsRegular.folder);
+  belgeler(SirketMenuItem.belgeler, 'Dosyalar', PhosphorIconsRegular.folder, PhosphorIconsRegular.folder);
 
   const ResidentTab(this.item, this.label, this.icon, this.selectedIcon);
 

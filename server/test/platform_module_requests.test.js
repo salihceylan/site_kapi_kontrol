@@ -540,6 +540,24 @@ describe('POST module-requests', () => {
     assert.equal(notifications.length, 0);
   });
 
+  it('eski uygulamalar `documents` (Belgeler, 084\'te Dosya Deposu ile birlesti) talep ederse Dosya Deposu\'na cevrilir; o TEMEL modul oldugu icin 400 MODULE_NOT_TOGGLEABLE: 500/404 yok; talep/audit/bildirim yok', async () => {
+    const res = await post({ module_code: 'documents', note: 'Belgeler için.' });
+    assert.equal(res.status, 400, JSON.stringify(res.body));
+    assert.equal(res.body.code, 'MODULE_NOT_TOGGLEABLE');
+    assert.notEqual(res.body.code, 'MODULE_NOT_FOUND', 'eski kod artik bilinmeyen modul degil');
+    assert.equal(state.requests.length, 0, 'eski kodlu talep satiri ASLA yazilmaz');
+    assert.equal(state.audit.length, 0);
+    assert.equal(notifications.length, 0);
+  });
+
+  it('eski kodlu GECMIS talep (module_code documents) listede Dosya Deposu adiyla gorunur; module_code oldugu gibi kalir', async () => {
+    seedRequest({ module_code: 'documents', status: 'approved' });
+    const res = await call('GET', requestsUrl(), { user: users.mgrA });
+    assert.equal(res.status, 200);
+    assert.equal(res.body.items[0].module_code, 'documents');
+    assert.equal(res.body.items[0].module_name, 'Dosya Deposu');
+  });
+
   it('finance temel modul (Kural 25): yonetici talep EDEMEZ (400 MODULE_NOT_TOGGLEABLE, "talep edilemez"); talep/audit/bildirim yok', async () => {
     const res = await post({ module_code: 'finance', note: 'Aidat takibi için.' });
     assert.equal(res.status, 400, JSON.stringify(res.body));

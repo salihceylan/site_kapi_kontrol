@@ -17,7 +17,6 @@ import 'package:site_kapi_kontrol/ui/dialogs/module_request_dialog.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/module_card.dart';
 import 'package:site_kapi_kontrol/ui/widgets/module_request_card.dart';
-import 'package:site_kapi_kontrol/ui/widgets/drive_storage_card.dart';
 import 'package:site_kapi_kontrol/ui/widgets/platform_rules_entry_card.dart';
 import 'package:site_kapi_kontrol/ui/widgets/staff_roles_section.dart';
 import 'package:site_kapi_kontrol/ui/widgets/team_redirect_card.dart';
@@ -460,9 +459,6 @@ class ModulesViewState extends State<ModulesView> {
             siteCode: code,
             siteName: _sites.where((s) => s.id == code).firstOrNull?.name,
           ),
-          // Dosya Deposu (Google Drive, D1): seçili sitenin Drive bağlantısı.
-          const SizedBox(height: AppSpace.xl),
-          DriveStorageCard(authService: widget.authService, siteCode: code),
         ],
       );
     }

@@ -11,6 +11,8 @@
 //    core_modules.js ile kurulumda yazılır / açılışta doldurulur.
 //  - Kart Ödemesi (eski `card_payments`) ayrı modül DEĞİLDİR: Aidat ve Finans'ın parçasıdır (kapıları `finance` denetler); eski kod
 //    `retiredModuleNotice` ile yanıtlanır (migrations/083).
+//  - Belgeler (eski `documents`) ayrı modül DEĞİLDİR: Dosya Deposu'nun (`drive_storage`) parçasıdır (belge uçları ve ekranları onun kapısındadır);
+//    eski kod `canonicalModuleCode` ile çevrilir (migrations/084).
 
 export const MODULE_STATUS_AVAILABLE = 'available';
 export const MODULE_STATUS_COMING_SOON = 'coming_soon';
@@ -60,14 +62,6 @@ export const MODULE_CATALOG = Object.freeze([
     core: true,
     status: MODULE_STATUS_AVAILABLE,
     defaultEnabled: true,
-  }),
-  defineModule({
-    code: 'documents',
-    name: 'Belgeler (Dosya Deposu)',
-    description: 'Yönetmelik, tutanak, sözleşme gibi belgelerin yüklenmesi ve sakinlere, kurula ya da yöneticilere dağıtılması.',
-    core: false,
-    status: MODULE_STATUS_AVAILABLE,
-    defaultEnabled: false,
   }),
   defineModule({
     code: 'reservation',
@@ -168,8 +162,9 @@ export const MODULE_CATALOG = Object.freeze([
   }),
   defineModule({
     code: 'drive_storage',
-    name: 'Dosya Deposu (Google Drive)',
-    description: 'Sitenin dosyalarının sitenin kendi Google Drive hesabında saklanması.',
+    name: 'Dosya Deposu',
+    // Belgeler (yönetmelik, tutanak, sözleşme; sakinlere/kurula/yöneticilere dağıtım) 084'te bu modüle katıldı; ayrı `documents` modülü yoktur.
+    description: 'Yönetmelik, tutanak, sözleşme gibi belgelerin yüklenip dağıtılması; dosyaların sitenin Google Drive alanında saklanması.',
     // Temel modül (Kural 25): site kurulumunda açık tanımlanır, talep edilmez, kapatılamaz.
     core: true,
     status: MODULE_STATUS_AVAILABLE,
@@ -229,6 +224,21 @@ export const MODULE_CATALOG = Object.freeze([
 ]);
 
 export const MODULE_CODES = Object.freeze(MODULE_CATALOG.map((definition) => definition.code));
+
+/**
+ * Katalogdan KALDIRILMIŞ eski modül kodları -> güncel kod. `documents` (Belgeler) 084'te `drive_storage` (Dosya Deposu) ile birleşti.
+ * Eski uygulama sürümleri hâlâ `documents` kodunu gönderebilir (modül talebi, aç/kapa): bu kod Dosya Deposu'na çevrilir, 404 ya da 500 dönmez.
+ * Katalogda ayrı modül olarak ASLA görünmez; yalnız kod çevirisi ve eski kodlu geçmiş kayıtların (talep, denetim) adı için kullanılır.
+ */
+export const LEGACY_MODULE_ALIASES = Object.freeze({ documents: 'drive_storage' });
+
+/** Eski modül kodunu güncel koda çevirir; tanınmayan ya da metin olmayan değer olduğu gibi döner. */
+export function canonicalModuleCode(code) {
+  if (typeof code !== 'string') {
+    return code;
+  }
+  return Object.hasOwn(LEGACY_MODULE_ALIASES, code) ? LEGACY_MODULE_ALIASES[code] : code;
+}
 
 // Map: "__proto__" / "constructor" gibi anahtarlar katalog araması için zararsızdır.
 const DEFINITIONS_BY_CODE = new Map(MODULE_CATALOG.map((definition) => [definition.code, definition]));

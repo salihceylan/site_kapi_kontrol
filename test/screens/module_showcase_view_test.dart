@@ -346,7 +346,7 @@ void main() {
       expect(
         t.getSemantics(_card(SirketMenuItem.belgeler)),
         isSemantics(
-          label: 'Belgeler',
+          label: 'Dosya Deposu',
           hint: showcaseDescription(SirketMenuItem.belgeler),
           isButton: true,
           hasTapAction: true,

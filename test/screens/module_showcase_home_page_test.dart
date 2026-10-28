@@ -601,7 +601,7 @@ void main() {
       final auth = _ShowcaseAuth(UserRole.siteManager);
       final access = await _access(
         () => <MySiteModules>[
-          _my('manager', modules: {'announcements': true, 'finance': true, 'work_tracking': true, 'documents': false}),
+          _my('manager', modules: {'announcements': true, 'finance': true, 'work_tracking': true, 'drive_storage': false}),
         ],
       );
       await _pumpHome(t, auth, access: access);
@@ -640,7 +640,7 @@ void main() {
       final auth = _ShowcaseAuth(UserRole.apartmentOwner);
       final access = await _access(
         () => <MySiteModules>[
-          _my('resident', modules: {'announcements': true, 'finance': true, 'documents': true, 'work_tracking': true}),
+          _my('resident', modules: {'announcements': true, 'finance': true, 'drive_storage': true, 'work_tracking': true}),
         ],
       );
       await _pumpHome(t, auth, access: access);
@@ -740,7 +740,7 @@ void main() {
             (t) async {
           final auth = _ShowcaseAuth(UserRole.apartmentOwner, doors: const <DoorRecord>[]);
           final access = await _access(
-            () => <MySiteModules>[_my(role, doorOpen: doorOpen, doorAccess: false, modules: {'documents': true})],
+            () => <MySiteModules>[_my(role, doorOpen: doorOpen, doorAccess: false, modules: {'drive_storage': true})],
           );
           await _pumpHome(t, auth, access: access);
           expect(find.byType(ModuleShowcaseView), findsOneWidget);
@@ -780,7 +780,7 @@ void main() {
       var documents = false;
       final access = await _access(
         () => <MySiteModules>[
-          _my('resident', modules: {'announcements': true, 'finance': finance, 'documents': documents}),
+          _my('resident', modules: {'announcements': true, 'finance': finance, 'drive_storage': documents}),
         ],
       );
       await _pumpHome(t, auth, access: access);
@@ -791,7 +791,7 @@ void main() {
       expect(find.byKey(const ValueKey<String>('panel_hero_selam')), findsOneWidget);
       await _openDrawer(t);
       expect(_drawerTitles(t), isNot(contains('Borcum')));
-      expect(_drawerTitles(t), isNot(contains('Belgeler')));
+      expect(_drawerTitles(t), isNot(contains('Dosya Deposu')));
       await _closeDrawer(t);
 
       // Yönetici modülleri açar: kartlar canlı gelir.
@@ -838,7 +838,7 @@ void main() {
     const table = <(String, SirketMenuItem, SirketMenuItem?, bool)>[
       // (kod, yönetici kartı, sakin kartı, sakinde hızlı işlem var mı)
       ('finance', SirketMenuItem.finans, SirketMenuItem.borcum, false),
-      ('documents', SirketMenuItem.belgeler, SirketMenuItem.belgeler, true),
+      ('drive_storage', SirketMenuItem.belgeler, SirketMenuItem.belgeler, true),
       ('work_tracking', SirketMenuItem.talepler, SirketMenuItem.taleplerim, true),
       ('reservation', SirketMenuItem.rezervasyonlar, SirketMenuItem.rezervasyon, false),
       ('survey', SirketMenuItem.anketler, SirketMenuItem.anket, false),
@@ -928,7 +928,7 @@ void main() {
       final auth = _ShowcaseAuth(UserRole.apartmentOwner);
       final access = await _access(
         () => <MySiteModules>[
-          _my('resident', doorOpen: false, modules: {'announcements': true, 'work_tracking': true, 'documents': true}),
+          _my('resident', doorOpen: false, modules: {'announcements': true, 'work_tracking': true, 'drive_storage': true}),
         ],
       );
       await _pumpHome(t, auth, access: access);
@@ -969,7 +969,7 @@ void main() {
       (
         'daire sakini',
         UserRole.apartmentOwner,
-        () => <MySiteModules>[_my('resident', modules: {'finance': true, 'documents': true, 'work_tracking': true})],
+        () => <MySiteModules>[_my('resident', modules: {'finance': true, 'drive_storage': true, 'work_tracking': true})],
         false,
         'resident_door_open_button',
       ),
@@ -1309,7 +1309,7 @@ void main() {
       final auth = _ShowcaseAuth(UserRole.siteManager);
       final access = await _access(
         () => <MySiteModules>[
-          _my('manager', modules: {'announcements': true, 'finance': true, 'work_tracking': true, 'documents': true}),
+          _my('manager', modules: {'announcements': true, 'finance': true, 'work_tracking': true, 'drive_storage': true}),
         ],
       );
       await _pumpHome(t, auth, access: access, width: 400, height: 520);
@@ -1571,7 +1571,7 @@ void main() {
       final auth = _ShowcaseAuth(UserRole.apartmentOwner, doors: const <DoorRecord>[]);
       final access = await _access(
         () => <MySiteModules>[
-          _my('board_member', doorAccess: false, modules: {'work_tracking': true, 'visitor_log': true, 'documents': true}),
+          _my('board_member', doorAccess: false, modules: {'work_tracking': true, 'visitor_log': true, 'drive_storage': true}),
         ],
       );
       await _pumpHome(t, auth, access: access);
@@ -1983,7 +1983,7 @@ void main() {
           ],
         );
     List<MySiteModules> residentSites() => <MySiteModules>[
-          _my('resident', modules: {'announcements': true, 'finance': true, 'documents': true, 'work_tracking': true}),
+          _my('resident', modules: {'announcements': true, 'finance': true, 'drive_storage': true, 'work_tracking': true}),
         ];
     // (etiket, rol, my-modules, süper mi, borç özeti: null = ağ hatası, hero selamlamadır)
     final roles = <(String, UserRole, List<MySiteModules> Function(), bool, Future<MyFinance> Function()?)>[
@@ -1998,7 +1998,7 @@ void main() {
         'site yöneticisi',
         UserRole.siteManager,
         () => <MySiteModules>[
-          _my('manager', modules: {'announcements': true, 'finance': true, 'work_tracking': true, 'documents': true}),
+          _my('manager', modules: {'announcements': true, 'finance': true, 'work_tracking': true, 'drive_storage': true}),
         ],
         false,
         null,
@@ -2066,7 +2066,7 @@ void main() {
       final auth = _ShowcaseAuth(UserRole.apartmentOwner, finance: () async => throw StateError('ağ'));
       final access = await _access(
         () => <MySiteModules>[
-          _my('resident', modules: {'work_tracking': true, 'visitor_log': true, 'documents': true}),
+          _my('resident', modules: {'work_tracking': true, 'visitor_log': true, 'drive_storage': true}),
         ],
       );
       await _pumpHome(t, auth, access: access, width: 320, height: 640, scale: 2.0);

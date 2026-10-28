@@ -3,14 +3,17 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   DOOR_CONTROL_DISABLE_WARNING,
+  LEGACY_MODULE_ALIASES,
   MODULE_CATALOG,
   MODULE_CODES,
+  canonicalModuleCode,
   computeEnabledMap,
   computeModuleEnabled,
   computeSiteModuleList,
   getModuleDefinition,
   isToggleable,
   publicCatalog,
+  retiredModuleNotice,
 } from '../src/modules/catalog.js';
 import {
   DEFAULT_MANAGEMENT_TYPE,
@@ -26,13 +29,12 @@ import { managementTerms } from '../src/modules/management_type_terms.js';
 const def = (code) => getModuleDefinition(code);
 
 describe('platform katalog: sozlesme tablosu', () => {
-  it('24 modul, sozlesmedeki sirayla ve alanlarla', () => {
+  it('23 modul, sozlesmedeki sirayla ve alanlarla (Kart Odemesi Aidat ve Finans a, Belgeler Dosya Deposu na katildi: 083, 084)', () => {
     assert.deepEqual(MODULE_CODES, [
       'door_control',
       'people',
       'announcements',
       'finance',
-      'documents',
       'reservation',
       'work_tracking',
       'metering',
@@ -59,7 +61,6 @@ describe('platform katalog: sozlesme tablosu', () => {
       people: [true, 'available'], // Faz 2a: Kişi ve Daire Kayıtları çekirdek + kullanılabilir (hep açık)
       announcements: [true, 'available'], // Faz 3a: Duyuru ve Bildirim çekirdek + kullanılabilir (hep açık)
       finance: [true, 'available'], // Kural 25 (2026-10-26): Aidat ve Finans TEMEL modül (hep açık; talep edilmez, kapatılamaz)
-      documents: [false, 'available'], // Faz 3b-A: Belgeler (Dosya Deposu) kullanilabilir (varsayilan KAPALI; super acar, yonetici modul talep eder)
       reservation: [false, 'available'], // Rezervasyon ve Konsiyerj: kullanilabilir (varsayilan KAPALI; super acar, yonetici modul talep eder)
       work_tracking: [false, 'available'], // Is Takibi: kullanilabilir (varsayilan KAPALI; super acar, yonetici modul talep eder)
       metering: [false, 'available'],
@@ -72,7 +73,7 @@ describe('platform katalog: sozlesme tablosu', () => {
       decision_book: [false, 'available'], // Karar Defteri: kullanilabilir (varsayilan KAPALI; super acar, yonetici modul talep eder)
       directory: [false, 'available'], // Rehber: kullanilabilir (varsayilan KAPALI; yonetim kadrosu ve faydali telefonlar)
       budget: [false, 'available'], // Isletme Projesi (F7): kullanilabilir (varsayilan KAPALI)
-      drive_storage: [true, 'available'], // Kural 25 (2026-10-28): Dosya Deposu (Google Drive, D1) TEMEL modul
+      drive_storage: [true, 'available'], // Kural 25 (2026-10-28): Dosya Deposu TEMEL modul (Belgeler, Faz 3b-A + Google Drive, D1 tek modul)
       neighbor_board: [true, 'available'], // Kural 25 (2026-10-28): Komsu Panosu TEMEL modul
       annual_report: [true, 'available'], // Kural 25 (2026-10-28): Faaliyet Raporu (R2) TEMEL modul
       plate_recognition: [false, 'available'], // Plaka Tanima (073): kullanilabilir, varsayilan KAPALI; kapi acmaz (would_open)
@@ -95,7 +96,7 @@ describe('platform katalog: sozlesme tablosu', () => {
 
   it('publicCatalog yalnizca { code, name, description, core, status } alanlarini dondurur', () => {
     const catalog = publicCatalog();
-    assert.equal(catalog.length, 24);
+    assert.equal(catalog.length, 23);
     for (const entry of catalog) {
       assert.deepEqual(Object.keys(entry), ['code', 'name', 'description', 'core', 'status']);
     }
@@ -133,7 +134,43 @@ describe('platform katalog: sozlesme tablosu', () => {
     for (const code of ['finance', 'survey', 'drive_storage', 'neighbor_board', 'annual_report', 'equipment']) {
       assert.equal(expected.includes(code), false, `${code} temel modul: toggleable olamaz`);
     }
+    assert.deepEqual(expected, [
+      'door_control',
+      'reservation',
+      'work_tracking',
+      'metering',
+      'visitor_log',
+      'card_access',
+      'plate_cameras',
+      'contracts',
+      'decision_book',
+      'directory',
+      'budget',
+      'plate_recognition',
+      'cctv_link',
+    ]);
     assert.equal(isToggleable(null), false);
+  });
+
+  it('kataloktan kaldirilan kodlar (card_payments -> finance, documents -> drive_storage): katalogda yok, eski kod aciklamasi / kod cevirisi var', () => {
+    for (const retired of ['card_payments', 'documents']) {
+      assert.equal(MODULE_CODES.includes(retired), false, retired);
+      assert.equal(getModuleDefinition(retired), null, retired);
+      assert.equal(publicCatalog().some((m) => m.code === retired), false, retired);
+      assert.equal(Object.hasOwn(computeEnabledMap([]), retired), false, retired);
+    }
+    // Kart Odemesi: kod cevrilmez, 400 MODULE_NOT_TOGGLEABLE aciklamasi verilir (retiredModuleNotice), Aidat ve Finans a yonlendirir
+    assert.match(retiredModuleNotice('card_payments'), /Aidat ve Finans/);
+    assert.equal(canonicalModuleCode('card_payments'), 'card_payments');
+    // Belgeler: kod Dosya Deposu na cevrilir, o da temel modul oldugu icin sonuc yine MODULE_NOT_TOGGLEABLE
+    assert.deepEqual({ ...LEGACY_MODULE_ALIASES }, { documents: 'drive_storage' });
+    assert.equal(canonicalModuleCode('documents'), 'drive_storage');
+    assert.equal(getModuleDefinition(canonicalModuleCode('documents')).core, true);
+    assert.equal(retiredModuleNotice('documents'), null);
+    // yaşayan kodlar ve tuhaf degerler icin aciklama yok
+    for (const value of ['finance', 'drive_storage', '__proto__', 'constructor', 'nope', '', null, undefined, 5]) {
+      assert.equal(retiredModuleNotice(value), null, String(value));
+    }
   });
 
   it('onay metni sozlesmedekiyle birebir ayni', () => {
@@ -233,7 +270,7 @@ describe('platform katalog: enabled hesabi', () => {
     const list = computeSiteModuleList([
       { module_code: 'door_control', enabled: false, updated_at: when, updated_by_name: 'Ali Veli' },
     ]);
-    assert.equal(list.length, 24);
+    assert.equal(list.length, 23);
     const door = list.find((m) => m.code === 'door_control');
     assert.deepEqual(door, {
       code: 'door_control',

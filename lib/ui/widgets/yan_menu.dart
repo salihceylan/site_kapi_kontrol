@@ -76,7 +76,7 @@ enum SirketMenuItem {
   /// olan sakine [YanMenu.additionalItems] ile eklenir.
   borcum,
 
-  /// Platform Faz 3b-A: Belgeler (dosya deposu). Rol listesinde YOKTUR; `documents` modülü AÇIK olan sitenin
+  /// Dosya Deposu (Belgeler + Google Drive bağlantısı; Faz 3b-A + D1, tek menü öğesi). Rol listesinde YOKTUR; `drive_storage` modülü AÇIK olan sitenin
   /// yöneticisine / süper kullanıcıya / kurul üyesine (salt okunur) ve kitlesinde belge olabilecek sakine
   /// [YanMenu.additionalItems] ile eklenir ("Finans" / "Borcum"un, yoksa "Duyurular"ın altına). Modül kapalıyken
   /// ya da modül verisi yokken eklenmez. Görevli (STAFF) için yoktur.
@@ -1446,7 +1446,7 @@ String _titleForItem(SirketMenuItem item, [UserRole? role]) {
     case SirketMenuItem.borcum:
       return 'Borcum';
     case SirketMenuItem.belgeler:
-      return 'Belgeler';
+      return 'Dosya Deposu';
     case SirketMenuItem.talepler:
       return 'Talepler';
     case SirketMenuItem.taleplerim:

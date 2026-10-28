@@ -174,7 +174,7 @@ class ManagementTypeInfo {
     PlatformModuleCodes.people: 'Kişi ve Daire Kayıtları',
     PlatformModuleCodes.announcements: 'Duyuru ve Bildirim',
     PlatformModuleCodes.finance: 'Aidat ve Finans',
-    PlatformModuleCodes.documents: 'Belgeler',
+    PlatformModuleCodes.driveStorage: 'Dosya Deposu',
     PlatformModuleCodes.reservation: 'Rezervasyon ve Konsiyerj',
     PlatformModuleCodes.workTracking: 'İş Takibi',
     PlatformModuleCodes.metering: 'Sayaç Okuma',
@@ -212,7 +212,7 @@ class ManagementTypeInfo {
           type: type,
           label: type.label,
           terms: ManagementTerms.forType(type),
-          recommendedModules: const <String>['door_control', 'finance', 'documents', 'announcements'],
+          recommendedModules: const <String>['door_control', 'finance', 'drive_storage', 'announcements'],
           summary: 'Apartman ve siteler için: daireler, sakinler, bloklar ve aidat takibi.',
         );
       case ManagementType.residence:
@@ -235,7 +235,7 @@ class ManagementTypeInfo {
           type: type,
           label: type.label,
           terms: ManagementTerms.forType(type),
-          recommendedModules: const <String>['work_tracking', 'visitor_log', 'finance', 'documents'],
+          recommendedModules: const <String>['work_tracking', 'visitor_log', 'finance', 'drive_storage'],
           summary:
               'İş merkezleri için: ofisler ve firmalar; ortak gider, iş ve ziyaretçi takibi öne çıkar.',
         );
@@ -244,7 +244,7 @@ class ManagementTypeInfo {
           type: type,
           label: type.label,
           terms: ManagementTerms.forType(type),
-          recommendedModules: const <String>['finance', 'documents', 'announcements', 'survey'],
+          recommendedModules: const <String>['finance', 'drive_storage', 'announcements', 'survey'],
           summary: 'Kooperatifler için: hisseler ve üyeler; üye aidatı, belgeler ve duyurular öne çıkar.',
         );
       case ManagementType.shoppingMall:
@@ -252,7 +252,7 @@ class ManagementTypeInfo {
           type: type,
           label: type.label,
           terms: ManagementTerms.forType(type),
-          recommendedModules: const <String>['finance', 'work_tracking', 'visitor_log', 'documents'],
+          recommendedModules: const <String>['finance', 'work_tracking', 'visitor_log', 'drive_storage'],
           summary:
               'Alışveriş merkezleri için: mağazalar ve kiracı firmalar; ortak gider ve iş takibi öne çıkar.',
         );

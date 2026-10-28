@@ -85,7 +85,7 @@ void main() {
         dark: dark,
       );
       expect(find.text('Belge bulunamadı.'), findsOneWidget);
-      expect(find.text('Belgeler'), findsOneWidget);
+      expect(find.text('Dosya Deposu'), findsOneWidget);
     });
 
     listMatrix('yalnız yönetim: seçici yok', (t, w, h, s, dark) async {

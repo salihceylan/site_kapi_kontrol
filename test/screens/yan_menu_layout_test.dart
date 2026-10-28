@@ -831,7 +831,7 @@ void main() {
           'Anket ve Oylama',
           'Site hizmetleri',
           'Kapılar',
-          'Belgeler',
+          'Dosya Deposu',
           'Rezervasyonlar',
           'Ziyaretçi ve Kargo',
           'Sözleşmeler',

@@ -30,7 +30,7 @@ yerleri değişince bu belgedeki adımlar da güncellenir (bölüm 6).
 
 1. Süper kullanıcı bir demo sitesi kurar (ör. "Örnek Sitesi"; 2 blok, 24 daire). Daire künyesine m² ve arsa payı girilir.
 2. Kişiler **Toplu Yükle** ile uydurma adlarla doldurulur (malik, kiracı; birkaç araç).
-3. Modüller ekranından demo sitesinde şu modüller açılır: Aidat ve Finans, Belgeler (Dosya Deposu), İş Takibi, Rezervasyon ve
+3. Modüller ekranından demo sitesinde şu modüller açılır: Aidat ve Finans, Dosya Deposu (Belgeler + Google Drive), İş Takibi, Rezervasyon ve
    Konsiyerj, Ziyaretçi ve Kargo, Firma ve Sözleşme Takibi, Karar Defteri. (Kişi ve Daire Kayıtları ile Duyuru ve Bildirim her sitede
    zaten açıktır.) **Anket ve Oylama kapalı bırakılır:** süper kullanıcı bölümünde canlı açılacak; demodan sonra yeniden kapatılır.
 4. Üç demo hesabı: **yönetici**, **sakin (kiracı)** ve **süper kullanıcı**. Sakin hesabı bir daireye bağlı olmalı; taşınma tarihi

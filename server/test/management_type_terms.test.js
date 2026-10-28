@@ -67,11 +67,11 @@ describe('F9 terimler: sozlesme tablosu', () => {
 
 describe('F9 onerilen moduller', () => {
   it('sozlesmedeki listeler ve sira', () => {
-    assert.deepEqual(recommendedModules('apartment_site'), ['door_control', 'finance', 'documents', 'announcements']);
+    assert.deepEqual(recommendedModules('apartment_site'), ['door_control', 'finance', 'drive_storage', 'announcements']);
     assert.deepEqual(recommendedModules('residence'), ['reservation', 'visitor_log', 'work_tracking', 'door_control', 'finance']);
-    assert.deepEqual(recommendedModules('business_center'), ['work_tracking', 'visitor_log', 'finance', 'documents']);
-    assert.deepEqual(recommendedModules('cooperative'), ['finance', 'documents', 'announcements', 'survey']);
-    assert.deepEqual(recommendedModules('shopping_mall'), ['finance', 'work_tracking', 'visitor_log', 'documents']);
+    assert.deepEqual(recommendedModules('business_center'), ['work_tracking', 'visitor_log', 'finance', 'drive_storage']);
+    assert.deepEqual(recommendedModules('cooperative'), ['finance', 'drive_storage', 'announcements', 'survey']);
+    assert.deepEqual(recommendedModules('shopping_mall'), ['finance', 'work_tracking', 'visitor_log', 'drive_storage']);
   });
 
   it('onerilen kodlarin hepsi katalogda vardir (survey, visitor_log katalogda; bilinmeyen kod olsaydi oldugu gibi donerdi)', () => {

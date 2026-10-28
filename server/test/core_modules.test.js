@@ -138,6 +138,12 @@ describe('temel modüller (Kural 25): site kurulumu ve açılış', () => {
       assert.match(rule, /card_payments/, `${file}: kart ödemesi notu`);
       assert.match(rule, /documents/, `${file}: belgeler notu`);
       assert.match(rule, /core_modules\.js/, `${file}: genel yardımcı`);
+      // Kart Ödemesi (083): finansın parçası; kodu kataloğa geri koyma; kapı finance; eski kod retiredModuleNotice ile 400
+      const cardRule = "Kart Ödemesi (`card_payments`) ayrı modül değildir; Aidat ve Finans'ın (`finance`, temel modül) parçasıdır (migrations/083): `card_payments` kodunu kataloğa geri koyma, kart ödemesi uçlarının kapısı `finance`'tır, eski kod `retiredModuleNotice` ile 400 `MODULE_NOT_TOGGLEABLE` döner.";
+      assert.equal(rule.split(cardRule).length - 1, 1, `${file}: kart ödemesi kuralı tam bir kez (tekrarsız)`);
+      // Belgeler (084): Dosya Deposu'nun parçası; documents kodu kapı olarak kullanılmaz; yeni özellik ayrı modül açmaz; kod yalnız canonicalModuleCode ile çevrilir
+      const documentsRule = "Belgeler ayrı modül değildir; belge uçları ve ekranları Dosya Deposu (`drive_storage`) modülünün parçasıdır. Modül kapısı olarak `documents` kodu kullanılmaz (`DOCUMENTS_MODULE = 'drive_storage'`); yeni dosya/belge özelliği ayrı modül açmaz, Dosya Deposu'na eklenir. Eski `documents` kodu yalnız `canonicalModuleCode` ile çevrilir.";
+      assert.equal(rule.split(documentsRule).length - 1, 1, `${file}: belgeler kuralı tam bir kez (tekrarsız)`);
     }
   });
 });

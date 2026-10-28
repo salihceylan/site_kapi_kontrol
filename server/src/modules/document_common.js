@@ -7,7 +7,8 @@ import { PlatformError } from './errors.js';
 import { parseTargetInput } from './announcement_common.js';
 import { parsePositiveId, toIso } from './people_common.js';
 
-export const DOCUMENTS_MODULE = 'documents';
+// Belgeler ayrı modül değildir: 084'ten beri Dosya Deposu (`drive_storage`) modülünün parçasıdır (kapı: drive_common.DRIVE_MODULE ile aynı kod).
+export const DOCUMENTS_MODULE = 'drive_storage';
 
 export const CATEGORIES = Object.freeze(['regulation', 'minutes', 'contract', 'notice', 'other']);
 export const AUDIENCES = Object.freeze(['residents', 'board', 'managers']);
@@ -87,7 +88,7 @@ export const documentNotFound = () => new PlatformError(404, 'DOCUMENT_NOT_FOUND
 export const versionNotFound = () => new PlatformError(404, 'DOCUMENT_VERSION_NOT_FOUND', 'Belge sürümü bulunamadı.');
 export const siteNotFound = () => new PlatformError(404, 'SITE_NOT_FOUND', 'Site bulunamadı.');
 export const moduleDisabled = () =>
-  new PlatformError(403, 'MODULE_DISABLED', 'Belgeler modülü kapalı.', { module: DOCUMENTS_MODULE });
+  new PlatformError(403, 'MODULE_DISABLED', 'Dosya Deposu modülü kapalı.', { module: DOCUMENTS_MODULE });
 export const invalidField = (message) => new PlatformError(400, 'INVALID_BODY', message);
 export const invalidQuery = () => new PlatformError(400, 'INVALID_QUERY', 'Geçersiz sorgu parametresi.');
 export const invalidState = (message) =>

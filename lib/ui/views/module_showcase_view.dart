@@ -368,7 +368,7 @@ class ModuleShowcaseViewState extends State<ModuleShowcaseView> {
         ModuleArtKind.workTracking,
       ),
       (SirketMenuItem.ziyaretcilerim, 'Ziyaretçi ve kargo', 'Ziyaretçilerim sayfasını açar', ModuleArtKind.visitor),
-      (SirketMenuItem.belgeler, 'Belgeler', 'Belgeler sayfasını açar', ModuleArtKind.documents),
+      (SirketMenuItem.belgeler, 'Dosya Deposu', 'Dosya Deposu sayfasını açar', ModuleArtKind.documents),
     ];
     final allowed = widget.quickActionItems;
     final guestPass = widget.onCreateGuestPass;

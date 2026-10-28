@@ -11,12 +11,14 @@ import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart';
 import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
 import 'package:site_kapi_kontrol/ui/views/document_admin_list.dart';
+import 'package:site_kapi_kontrol/ui/widgets/drive_storage_card.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 
-/// Yönetici "Belgeler" ekranı (Platform Faz 3b-A, `documents` modülü): site seçici + [DocumentAdminList].
+/// Yönetici "Dosya Deposu" ekranının gövdesi (Platform Faz 3b-A + D1, tek modül `drive_storage`): site seçici + Belgeler listesi
+/// ([DocumentAdminList]) + (yazma yetkisi varsa) sitenin Google Drive bağlantısı ([DriveStorageCard]).
 ///
 /// - [manageAllSites] true (süper kullanıcı): tüm onaylı siteler listelenir ve yazma yetkisi vardır.
-/// - [sites]: açıkça verilen siteler (`GET /app/my-modules`: `documents` modülü AÇIK olan yönetilen siteler
+/// - [sites]: açıkça verilen siteler (`GET /app/my-modules`: `drive_storage` modülü AÇIK olan yönetilen siteler
 ///   yazma, kurul üyesi olunan siteler salt okunur). Menü kapısı ve site listesi HomePage'dedir; sunucu yine de
 ///   her çağrıda yetkiyi ve modül durumunu doğrular (403 `FORBIDDEN_ROLE` / `MODULE_DISABLED`).
 /// - Kurul üyesi (canWrite false) SALT OKUR: hiçbir yazma düğmesi çizilmez, "yalnızca görüntüleyebilirsiniz" notu
@@ -206,7 +208,7 @@ class DocumentAdminViewState extends State<DocumentAdminView> {
         icon: Icons.apartment_rounded,
         title: 'Kayıtlı site bulunamadı.',
         message:
-            'Belgeler modülü açık bir siteye bağlı olduğunuzda burada görünür.',
+            'Dosya Deposu modülü açık bir siteye bağlı olduğunuzda burada görünür.',
       );
     }
     return _buildSite(context, site);
@@ -289,6 +291,15 @@ class DocumentAdminViewState extends State<DocumentAdminView> {
           sharer: widget.sharer,
           onOpenModules: widget.onOpenModules,
         ),
+        // Google Drive bağlantısı Belgeler ile aynı modülün parçasıdır: yalnız yönetim (yazma) yetkisinde; kurul üyesi görmez.
+        if (site.canWrite) ...[
+          const SizedBox(height: AppSpace.xl),
+          DriveStorageCard(
+            key: ValueKey<String>('documents_drive_${site.code}'),
+            authService: widget.authService,
+            siteCode: site.code,
+          ),
+        ],
       ],
     );
   }

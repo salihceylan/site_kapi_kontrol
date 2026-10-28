@@ -81,7 +81,7 @@ void main() {
       },
       onSelect: selected.add,
     );
-    expect(titles.indexOf('Talepler'), titles.indexOf('Belgeler') + 1);
+    expect(titles.indexOf('Talepler'), titles.indexOf('Dosya Deposu') + 1);
     expect(titles.indexOf('Taleplerim'), titles.indexOf('Talepler') + 1);
     _expectUnderHeader(t, 'Talepler', 'İletişim');
     _expectUnderHeader(t, 'Taleplerim', 'İletişim');

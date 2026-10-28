@@ -27,7 +27,8 @@ function fakeClient({ existing = [], docs = [], moduleEnabled = true } = {}) {
       const sql = norm(text);
       log.push({ sql, params });
       if (/^SELECT document_id FROM announcement_attachments WHERE announcement_id = \$1 ORDER BY position, document_id$/.test(sql)) return ok(existing.map((id) => ({ document_id: String(id) })));
-      if (/^SELECT enabled FROM site_modules WHERE site_code = \$1 AND module_code = \$2 LIMIT 1$/.test(sql)) return ok([{ enabled: moduleEnabled }]);
+      // Dosya Deposu temel modüldür (Kural 25): sahte DB gerçek satırı döndürür (moduleEnabled === null -> satır yok); kapı satıra BAKMAZ.
+      if (/^SELECT enabled FROM site_modules WHERE site_code = \$1 AND module_code = \$2 LIMIT 1$/.test(sql)) return ok(moduleEnabled === null ? [] : [{ enabled: moduleEnabled }]);
       if (/^SELECT id, site_code, status, audience FROM documents WHERE id = ANY\(\$1::BIGINT\[\]\) ORDER BY id FOR KEY SHARE$/.test(sql)) {
         const wanted = new Set(params[0].map(Number));
         return ok(docs.filter((doc) => wanted.has(Number(doc.id))));
@@ -89,10 +90,12 @@ describe('ek listesini değiştirme', () => {
     assert.equal(await code(run(missing, [9])), '409:ATTACHMENT_NOT_ALLOWED');
   });
 
-  it('modül KAPALIYSA yeni ek 403 MODULE_DISABLED (belge tablosu okunmaz)', async () => {
-    const client = fakeClient({ docs: [goodDoc(9)], moduleEnabled: false });
-    assert.equal(await code(run(client, [9])), '403:MODULE_DISABLED');
-    assert.ok(!client.log.some((entry) => /FROM documents/.test(entry.sql)));
+  it('Dosya Deposu TEMEL modül (Kural 25): site_modules satırı enabled=false (ya da hiç yok) olsa bile yeni ek MODULE_DISABLED ile reddedilmez', async () => {
+    for (const moduleEnabled of [false, null]) {
+      const client = fakeClient({ docs: [goodDoc(9)], moduleEnabled });
+      assert.deepEqual(await run(client, [9]), { attached: 1, detached: 0 }, String(moduleEnabled));
+      assert.ok(client.log.some((entry) => /FROM site_modules/.test(entry.sql)), 'kapı yine de sorgulanır (katalog core ise satır yok sayılır)');
+    }
   });
 
   it('kaldırma: eksik olanlar DELETE edilir ve document.detached yazılır; zaten ekli (artık geçersiz olsa bile) belge yeniden doğrulanmaz; değişiklik yoksa YAZMA yok', async () => {
@@ -132,7 +135,7 @@ describe('okuma yardımcıları', () => {
     const map = await loadAttachments(db, [41, 'x', -2, 41]);
     assert.deepEqual(captured.params, [[41, 41]]);
     assert.match(captured.sql, /INNER JOIN announcements a ON a\.id = aa\.announcement_id INNER JOIN documents d ON d\.id = aa\.document_id AND d\.site_code = a\.site_code/);
-    assert.match(captured.sql, /d\.status = 'active' AND d\.audience = 'residents' AND cv\.version_no IS NOT NULL AND EXISTS \(SELECT 1 FROM site_modules smod/);
+    assert.match(captured.sql, /d\.status = 'active' AND d\.audience = 'residents' AND cv\.version_no IS NOT NULL AND COALESCE\(\(SELECT smod\.enabled FROM site_modules smod/);
     assert.match(captured.sql, /ORDER BY aa\.announcement_id, aa\.position, aa\.document_id$/);
     assert.deepEqual(map.get(41), [
       { document_id: 9, title: 'Yönetmelik', file_name: 'y.pdf', mime_type: 'application/pdf', size_bytes: 2048, available: true },

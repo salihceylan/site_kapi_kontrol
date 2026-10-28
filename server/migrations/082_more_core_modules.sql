@@ -15,5 +15,5 @@ SET status = 'approved',
     decided_at = NOW(),
     decided_by_name = 'Sistem',
     decision_note = c.name || ' temel modül oldu; her sitede açık.'
-FROM (VALUES ('survey', 'Anket ve Oylama'), ('drive_storage', 'Dosya Deposu (Google Drive)'), ('neighbor_board', 'Komşu Panosu'), ('annual_report', 'Faaliyet Raporu'), ('equipment', 'Ekipman ve Bakım')) AS c(code, name)
+FROM (VALUES ('survey', 'Anket ve Oylama'), ('drive_storage', 'Dosya Deposu'), ('neighbor_board', 'Komşu Panosu'), ('annual_report', 'Faaliyet Raporu'), ('equipment', 'Ekipman ve Bakım')) AS c(code, name)
 WHERE module_requests.module_code = c.code AND module_requests.status = 'pending';

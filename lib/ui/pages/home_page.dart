@@ -1061,19 +1061,19 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   bool _canAccessDairem(UserRole role) =>
       role == UserRole.apartmentOwner || role == UserRole.individual || (role == UserRole.siteManager && _isResidentMode);
 
-  // --- Belgeler (Faz 3b-A) ---
+  // --- Dosya Deposu: Belgeler (Faz 3b-A) + Google Drive (D1) tek modül (`drive_storage`) ---
 
-  /// Belgeler ekranının YÖNETİM görünümündeki siteler: `documents` modülü AÇIK olan yönetilen siteler (yazma;
+  /// Dosya Deposu ekranının YÖNETİM görünümündeki siteler: `drive_storage` modülü AÇIK olan yönetilen siteler (yazma;
   /// yalnız yönetici modunda) ve kurul üyesi olunan siteler (salt okunur). Süper kullanıcıda boştur (ekran tüm
   /// siteleri çeker). FAIL-OPEN YOK: modül verisi hiç gelmediyse hiçbir site yoktur ve menü AÇILMAZ; sitede
-  /// `documents` kodu yoksa modül KAPALI sayılır (katalog varsayılanı). Sunucu her çağrıda yetkiyi ve modül
+  /// `drive_storage` kodu yoksa modül KAPALI sayılır (katalog varsayılanı). Sunucu her çağrıda yetkiyi ve modül
   /// durumunu yine doğrular.
   List<PeopleSite> _documentManageSites(UserRole role) {
     if (role == UserRole.superUser || !_moduleAccess.isFiltering) return const <PeopleSite>[];
     final canManage = _canManagePeople(role);
     return <PeopleSite>[
       for (final site in _moduleAccess.result!.sites)
-        if (site.isEnabled(PlatformModuleCodes.documents))
+        if (site.isEnabled(PlatformModuleCodes.driveStorage))
           if (site.role == 'manager' && canManage)
             PeopleSite(code: site.siteCode, name: site.siteName, canWrite: true)
           else if (site.isBoardMember)
@@ -1081,7 +1081,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     ];
   }
 
-  /// Belgeler ekranının SAKİN görünümündeki siteler: alıcısı olabilecek ve `documents` modülü AÇIK siteler.
+  /// Dosya Deposu ekranının SAKİN görünümündeki siteler (paylaşılan belgeler): alıcısı olabilecek ve `drive_storage` modülü AÇIK siteler.
   /// Yalnız daire sakini ve sakin modundaki yönetici için; süper kullanıcı, bireysel kullanıcı ve yalnız-görevli
   /// bağ için boş. Modül verisi yokken (fail-open) boştur.
   List<PeopleSite> _documentResidentSites(UserRole role) {
@@ -1097,12 +1097,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
     return <PeopleSite>[
       for (final site in _moduleAccess.result!.sites)
-        if (_isRecipientSite(site) && site.isEnabled(PlatformModuleCodes.documents))
+        if (_isRecipientSite(site) && site.isEnabled(PlatformModuleCodes.driveStorage))
           PeopleSite(code: site.siteCode, name: site.siteName),
     ];
   }
 
-  /// "Belgeler" menüsü: süper kullanıcı ya da `documents` modülü açık bir sitede yönetici / kurul üyesi / sakin.
+  /// "Dosya Deposu" menüsü: süper kullanıcı ya da `drive_storage` modülü açık bir sitede yönetici / kurul üyesi / sakin.
   /// Görevli (STAFF) ve bireysel kullanıcı için yoktur.
   bool _canAccessDocuments(UserRole role) =>
       role == UserRole.superUser ||
@@ -2010,7 +2010,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       return _hasFinanceInbox(role);
     }
 
-    // Belgeler: `documents` modülü açık siteye bağlı yönetici, kurul (salt okunur) ya da sakin; modül kapalıyken
+    // Dosya Deposu (Belgeler + Drive): `drive_storage` modülü açık siteye bağlı yönetici, kurul (salt okunur) ya da sakin; modül kapalıyken
     // ya da modül verisi yokken erişim YOKTUR.
     if (item == SirketMenuItem.belgeler) {
       return _canAccessDocuments(role);
@@ -2221,7 +2221,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         return 'Borcum';
 
       case SirketMenuItem.belgeler:
-        return 'Belgeler';
+        return 'Dosya Deposu';
 
       case SirketMenuItem.talepler:
         return 'Talepler';

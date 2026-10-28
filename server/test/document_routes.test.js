@@ -77,7 +77,8 @@ function access(sql, params) {
     return ok(state.sites.has(Number(params[0])) ? [{ site_code: String(params[0]) }] : []);
   }
   if (/^SELECT enabled FROM site_modules WHERE site_code = \$1 AND module_code = \$2 LIMIT 1$/.test(sql)) {
-    return ok(params[1] === 'documents' && state.moduleEnabled ? [{ enabled: true }] : params[1] === 'documents' ? [{ enabled: false }] : []);
+    // Dosya Deposu temel modüldür (Kural 25): sahte DB gerçek satırı döndürür (moduleEnabled === 'yok' -> satır yok); kapı satıra BAKMAZ.
+    return ok(params[1] === 'drive_storage' && state.moduleEnabled !== 'yok' ? [{ enabled: state.moduleEnabled === true }] : []);
   }
   return null;
 }
@@ -264,25 +265,19 @@ describe('GET documents: yetki matrisi ve modül kapısı', () => {
     assert.equal(other.body.code, 'FORBIDDEN_SITE');
   });
 
-  it('modül KAPALI: tüm yönetici uçları 403 MODULE_DISABLED { module: documents } (okuma ve yazma, kurul dahil); veri sorgusu çalışmaz', async () => {
-    state.moduleEnabled = false;
-    for (const [method, url, body] of [
-      ['GET', docUrl(), undefined],
-      ['GET', docUrl('/5'), undefined],
-      ['POST', docUrl(), { title: 'x' }],
-      ['PATCH', docUrl('/5'), { title: 'y' }],
-      ['DELETE', docUrl('/5'), {}],
-      ['GET', docUrl('/5/download'), undefined],
-    ]) {
+  it('Dosya Deposu TEMEL modül (Kural 25): site_modules satırı enabled=false (ya da hiç yok) olsa bile yönetici uçları MODULE_DISABLED vermez; rol denetimi aynen sürer', async () => {
+    emptyList();
+    for (const row of [false, 'yok']) {
+      state.moduleEnabled = row;
       for (const user of [users.mgrA, users.superUser, users.board]) {
-        if (user === users.board && method !== 'GET') continue;
-        const res = await call(method, url, { user, body });
-        assert.equal(res.status, 403, `${method} ${url} ${user.full_name}`);
-        assert.equal(res.body.code, 'MODULE_DISABLED');
-        assert.equal(res.body.module, 'documents');
+        const res = await call('GET', docUrl(), { user });
+        assert.equal(res.status, 200, `${row}: ${user.full_name}`);
+        assert.notEqual(res.body.code, 'MODULE_DISABLED');
       }
+      const staff = await call('GET', docUrl(), { user: users.staff });
+      assert.equal(staff.status, 403, String(row));
+      assert.equal(staff.body.code, 'FORBIDDEN_ROLE', String(row));
     }
-    assert.ok(!log.some((entry) => /FROM documents/.test(entry.sql)), 'kapalı modülde belge tablosuna hiç sorgu gitmez');
   });
 
   it('kurul yazamaz (POST/PATCH/DELETE/PUT/restore/purge 403 FORBIDDEN_ROLE); geçersiz site kodu 400; olmayan site 404', async () => {

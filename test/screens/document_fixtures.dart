@@ -9,6 +9,8 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart' show MockClient;
 import 'package:site_kapi_kontrol/models/document_models.dart';
 import 'package:site_kapi_kontrol/models/document_upload_models.dart';
 import 'package:site_kapi_kontrol/models/user_role.dart';
@@ -16,12 +18,30 @@ import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/services/document_api.dart';
 import 'package:site_kapi_kontrol/services/document_download.dart';
 import 'package:site_kapi_kontrol/services/document_picker.dart';
+import 'package:site_kapi_kontrol/ui/widgets/drive_storage_card.dart';
 
 import 'people_fixtures.dart';
 
+/// Dosya Deposu ekranının "Google Drive" bölümü (Belgeler ile aynı modül) gerçek ağa çıkmasın: "Google Drive bağlantısı Yakında…"
+/// durumu (hata bildirimi yok). Belge ekranı testlerinin sahte kimlik doğrulaması bunu kurar.
+void stubDriveStorageForTests() {
+  DriveStorageCard.debugApi = DriveStorageApi(
+    baseUrl: 'http://localhost',
+    client: MockClient(
+      (request) async => http.Response(
+        '{"configured":false,"connected":false,"status":"disconnected"}',
+        200,
+        headers: const <String, String>{'content-type': 'application/json'},
+      ),
+    ),
+  );
+}
+
 /// Sahte kimlik doğrulama (kişi / daire / blok uçları PeopleFakeAuth'tan gelir).
 class DocumentFakeAuth extends PeopleFakeAuth {
-  DocumentFakeAuth({super.role, super.sites, super.blocks});
+  DocumentFakeAuth({super.role, super.sites, super.blocks}) {
+    stubDriveStorageForTests();
+  }
 }
 
 /// Bellekteki bir sürüm.

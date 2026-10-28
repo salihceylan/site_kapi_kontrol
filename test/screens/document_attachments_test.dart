@@ -351,7 +351,7 @@ void main() {
         await settleFor(t);
         expect(value, isEmpty);
         expect(
-          find.textContaining('İsterseniz Belgeler modülündeki'),
+          find.textContaining('İsterseniz Dosya Deposundaki'),
           findsOneWidget,
         );
         expect(find.textContaining('tüm alıcılarına açılır'), findsNothing);

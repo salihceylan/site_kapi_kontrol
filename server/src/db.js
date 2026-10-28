@@ -47,6 +47,7 @@ import { ensureFinanceFundsSchema } from './modules/finance_funds_schema.js';
 import { CORE_MODULES_BACKFILL_SQL } from './modules/core_modules.js';
 import { CARD_PAYMENTS_INTO_FINANCE_SQL } from './modules/card_payments_into_finance.js';
 import { ensureTenantAdminRule } from './modules/apartment_tenant_admin_sql.js';
+import { DOCUMENTS_INTO_DRIVE_SQL } from './modules/documents_into_drive.js';
 
 dotenv.config();
 
@@ -2052,6 +2053,14 @@ export async function ensureDbSchema() {
     } catch (e) {
       // eslint-disable-next-line no-console
       console.error('[DB] 083 kart odemesi finansa katma hatasi:', e?.code || e?.message);
+    }
+
+    // 084 Belgeler ayri modul degil, Dosya Deposu'nun parcasi: Belgeler acik sitelerde Dosya Deposu acilir, bekleyen Belgeler talepleri sonuclanir, eski `documents` satirlari silinir. Belge verisine dokunmaz. Hata acilisi durdurmaz.
+    try {
+      await client.query(DOCUMENTS_INTO_DRIVE_SQL);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('[DB] 084 belgeler-dosya deposu birlestirme hatasi:', e?.code || e?.message);
     }
   } finally {
     client.release();

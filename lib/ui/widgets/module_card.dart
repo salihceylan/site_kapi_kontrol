@@ -59,7 +59,7 @@ IconData moduleIconOf(String code) {
       return Icons.campaign_rounded;
     case PlatformModuleCodes.finance:
       return Icons.account_balance_wallet_rounded;
-    case PlatformModuleCodes.documents:
+    case PlatformModuleCodes.driveStorage:
       return Icons.folder_rounded;
     case PlatformModuleCodes.reservation:
       return Icons.event_available_rounded;

@@ -125,7 +125,7 @@ describe('hata kodları (sözleşme A9)', () => {
       assert.equal(error.code, errorCode, name);
       assert.ok(error.message.length > 8 && error.message.length < 140, `${name}: ${error.message}`);
     }
-    assert.equal(common.moduleDisabled().extra.module, 'documents');
+    assert.equal(common.moduleDisabled().extra.module, 'drive_storage');
   });
 
   it('DOCUMENT_ACTIVE_CONTENT mesajı NEDENE göre doğrudur (R16 P2-1): gömülü nesne "betik, makro" diye anılmaz; extra.reason makine okunur', () => {
