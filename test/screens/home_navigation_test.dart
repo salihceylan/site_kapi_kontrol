@@ -307,10 +307,11 @@ void main() {
       final gear = t.getRect(_gear);
       expect(gear.width, greaterThanOrEqualTo(44));
       expect(gear.height, greaterThanOrEqualTo(44));
-      for (final tooltip in <String>['Yenile', 'Çıkış Yap']) {
+      for (final tooltip in <String>['Yenile']) {
         expect(t.getRect(_inAppBar(find.byTooltip(tooltip))).right, lessThanOrEqualTo(gear.left + 0.01),
             reason: 'dişli sağ üstte (en sağda)');
       }
+      expect(_inAppBar(find.byTooltip('Çıkış Yap')), findsNothing, reason: 'P2-26: çıkış AppBar\'da değil');
 
       await _openDrawer(t);
       for (final item in <SirketMenuItem>[SirketMenuItem.profilim, SirketMenuItem.moduller, SirketMenuItem.kayitliCihazlar]) {

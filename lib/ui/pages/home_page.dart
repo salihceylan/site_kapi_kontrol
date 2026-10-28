@@ -212,6 +212,11 @@ import 'package:site_kapi_kontrol/ui/views/module_showcase_view.dart';
 // İP-1D: gruplu menü, Ayarlar paneli ve sakin alt çubuğu.
 import 'package:site_kapi_kontrol/ui/helpers/resident_tabs.dart';
 import 'package:site_kapi_kontrol/ui/widgets/resident_bottom_bar.dart';
+// P2-21 / P2-26: bağlam şeridi, belirgin "Yenile", onaylı çıkış.
+import 'package:site_kapi_kontrol/ui/dialogs/logout_confirm_dialog.dart';
+import 'package:site_kapi_kontrol/ui/helpers/refresh_status.dart';
+import 'package:site_kapi_kontrol/ui/widgets/context_strip.dart';
+import 'package:site_kapi_kontrol/ui/widgets/refresh_action_button.dart';
 
 
 
@@ -232,6 +237,8 @@ class HomePage extends StatefulWidget {
     this.announcementNotifier,
 
     this.doorPanelRequests,
+
+    this.loadContextApartments,
 
   });
 
@@ -267,6 +274,10 @@ class HomePage extends StatefulWidget {
   /// kullanıcının kapı erişimi yoksa vitrinde kalınır.
   final DoorPanelRequests? doorPanelRequests;
 
+  /// P2-21 bağlam şeridi için kullanıcının daireleri (sakin / bireysel kitle; ilk açılışta ve her yenilemede okunur).
+  /// Verilmezse şeritte daire parçası çıkmaz (testler); uygulama kökü ([MyApp]) gerçek servisi bağlar.
+  final Future<List<ContextApartment>> Function()? loadContextApartments;
+
 
 
   @override
@@ -280,6 +291,9 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   SirketMenuItem _selectedMenu = SirketMenuItem.dashboard;
+
+  // P2-26: genel yenilemenin durumu ("Yenile" düğmesi ve aşağı çekme ortak çalışır); P2-21 bağlam şeridi bununla tazelenir.
+  final RefreshStatus _refreshStatus = RefreshStatus();
 
   // Platform modül sistemi (Faz 1): menü/panel süzgeci. Girişten sonra, genel yenilemede ve kısa
   // aralıklı (AdaptivePoller) `getMyModules` ile tazelenir; hata/ilk yüklemede her şey açık sayılır.
@@ -726,6 +740,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _disposeModuleAccess();
 
     _doorPanelRevision.dispose();
+
+    _refreshStatus.dispose();
 
     _profileFullNameController.dispose();
 
@@ -5786,6 +5802,19 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
+  /// P2-26: çekmecenin dibindeki "Çıkış Yap": onay penceresi açılır; onaylanırsa çekmece kapanır ve oturum kapatılır,
+  /// vazgeçilirse hiçbir şey olmaz (çekmece açık kalır).
+  Future<void> _confirmAndLogout() async {
+    final confirmed = await confirmLogout(context);
+    if (!confirmed || !mounted) return;
+    if (_startDrawerOpen) Navigator.pop(context);
+    unawaited(widget.authService.logout());
+  }
+
+  /// P2-26: genel yenileme ("Yenile" düğmesi ve aşağı çekme ortak yolu). Sürerken ikinci tur başlamaz, düğme meşgul
+  /// görünür; başarıyla bitince bağlam şeridi dairelerini tazeler. Asıl iş [_handleGlobalRefresh].
+  Future<void> _refreshAll() => _refreshStatus.run(_handleGlobalRefresh);
+
   Future<void> _handleGlobalRefresh() async {
     final session = widget.authService.session;
     if (session == null) return;
@@ -6075,6 +6104,32 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (site != null && _selectedSite?.id != siteCode) unawaited(_selectSite(site));
   }
 
+  /// P2-21: ekranın üstündeki bağlam şeridi (hangi site + daire + rol). YALNIZ birden çok siteye / daireye bağlı
+  /// kullanıcıda çıkar (tek site + tek dairede karışacak bir şey yoktur); süper kullanıcıda ve modül verisi gelmeden
+  /// çıkmaz. Dokununca: yönetici kitlesinde site seçici (çekmecedekiyle aynı kapsam), sakin kitlesinde "Dairem".
+  Widget _contextStripSlot(UserSession session) {
+    if (session.role == UserRole.superUser || _moduleAccess.isSuper || !_moduleAccess.isLoaded) {
+      return const SizedBox.shrink();
+    }
+    final audience = _audienceFor(session);
+    final isAdmin = audience == ShowcaseAudience.admin;
+    return ContextStripHost(
+      userId: session.id,
+      audience: audience,
+      sites: <ContextSite>[
+        for (final site in _moduleAccess.allSites)
+          ContextSite(code: site.siteCode, name: site.siteName, role: site.role),
+      ],
+      scopeSiteCode: _moduleAccess.scopeSiteCode,
+      loadApartments: widget.loadContextApartments,
+      refresh: _refreshStatus,
+      onPickSite: isAdmin ? _selectScopeSite : null,
+      onOpenApartments: !isAdmin && _canAccessMenu(SirketMenuItem.dairem, session.role)
+          ? () => _goToMenu(SirketMenuItem.dairem)
+          : null,
+    );
+  }
+
   Future<void> _loadCompanyMembership() async {
     final role = widget.authService.session?.role;
     if (role == null || role == UserRole.apartmentOwner) return;
@@ -6241,20 +6296,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           if (_canToggleDualMode)
             _buildModeToggle(
               context,
-              // Hapın genişlik payı: yanındaki 44-48 dp'lik düğmeler (yenile, çıkış, dişli, [tema]).
-              otherActions: 3 + (hasThemeToggle ? 1 : 0),
+              // Hapın genişlik payı: yanındaki 44-52 dp'lik düğmeler (yenile, dişli, [tema]).
+              otherActions: 2 + (hasThemeToggle ? 1 : 0),
             ),
           // Aydınlık / karanlık tema geçişi (44 dp, diğer eylem düğmeleriyle aynı boyut ve yoğunluk).
           const ThemeToggleButton(iconSize: 20),
-          _appBarAction(
-            tooltip: 'Yenile',
-            icon: const Icon(Icons.refresh_rounded, size: 20),
-            onPressed: _handleGlobalRefresh,
-          ),
-          _appBarAction(
-            tooltip: 'Çıkış Yap',
-            icon: Icon(Icons.logout_rounded, color: AppTone.danger.ink(palette), size: 20),
-            onPressed: () => widget.authService.logout(),
+          // P2-26: belirgin "Yenile" (yuvarlak, çerçeveli; sürerken ilerleme). "Çıkış Yap" AppBar'da DEĞİL: menünün dibinde
+          // ve onaylı (yanlışlıkla çıkış olmasın).
+          RefreshActionButton(
+            status: _refreshStatus,
+            onPressed: () => unawaited(_refreshAll()),
           ),
           // İP-1D / G2: Ayarlar sağ üstte dişli; sağdan açılan Ayarlar panelini (endDrawer) açar.
           Builder(
@@ -6342,10 +6393,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         },
         onSelect: _selectMenu,
         onOpenHelp: _openHelp,
-        onLogout: () {
-          Navigator.pop(context);
-          widget.authService.logout();
-        },
+        // P2-26: çıkış her zaman onaydan geçer; vazgeçilirse çekmece açık kalır ve oturum kapanmaz.
+        onLogout: () => unawaited(_confirmAndLogout()),
         // İP-1D / G2: site seçici çekmecenin en üstünde.
         siteContext: _siteContext(session),
       ),
@@ -6384,6 +6433,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            _contextStripSlot(session),
             SafeArea(bottom: false, child: _urgentBannerSlot(session)),
             Expanded(
               child: DecoratedBox(
@@ -6423,7 +6473,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       builder: (context, constraints) {
         final horizontalPadding = constraints.maxWidth < 600 ? 16.0 : 20.0;
         return RefreshIndicator(
-          onRefresh: _handleGlobalRefresh,
+          onRefresh: _refreshAll,
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
             padding: EdgeInsets.fromLTRB(horizontalPadding, 10.0, horizontalPadding, 56.0),

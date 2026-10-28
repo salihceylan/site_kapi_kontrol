@@ -297,6 +297,7 @@ class DocumentResidentViewState extends State<DocumentResidentView> {
         const SizedBox(height: AppSpace.md),
         CursorListBody<ResidentDocument>(
           loader: _loader,
+          showLastUpdated: true,
           emptyIcon: Icons.folder_open_rounded,
           emptyTitle: _filtered
               ? 'Bu arama ve süzgeç için belge bulunamadı.'

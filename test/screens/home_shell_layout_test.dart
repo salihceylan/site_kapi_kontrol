@@ -350,14 +350,15 @@ void _expectAppBarFits(
 
   // Eylem düğmeleri: >= 44 dp ve ekranın içinde; menü düğmesiyle (48 dp) çakışmaz. İP-1D: dişli (Ayarlar) en sağda;
   // "Masaüstüne Widget Ekle" artık Ayarlar panelindedir (ayrı test), AppBar'da hiç yoktur.
+  // P2-26: "Çıkış Yap" AppBar'dan kalktı (menünün dibinde, onaylı); belirgin "Yenile" yerinde durur.
   final icons = <IconData>[
     Icons.refresh_rounded,
-    Icons.logout_rounded,
     Icons.settings_rounded,
     // Tema düğmesi, geçilecek temayı gösterir: aydınlıkta ay, karanlıkta güneş.
     if (themeToggle) dark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
   ];
   expect(_inAppBar(find.byIcon(Icons.widgets_outlined)), findsNothing, reason: 'widget düğmesi Ayarlar panelinde');
+  expect(_inAppBar(find.byIcon(Icons.logout_rounded)), findsNothing, reason: 'çıkış AppBar\'da değil (yanlışlıkla çıkış olmasın)');
   final gear = tester.getRect(_inAppBar(find.widgetWithIcon(IconButton, Icons.settings_rounded)));
   for (final icon in icons) {
     if (icon == Icons.settings_rounded) continue;
@@ -443,7 +444,7 @@ void main() {
   ];
 
   group(
-    'AppBar taşmaz (Panel = modül vitrini): boyut x yazı ölçeği x tema (çift modlu site yöneticisi: hap + yenile + çıkış + dişli)',
+    'AppBar taşmaz (Panel = modül vitrini): boyut x yazı ölçeği x tema (çift modlu site yöneticisi: hap + yenile + dişli)',
     () {
       for (final c in appBarCells) {
         for (final dark in const <bool>[false, true]) {
@@ -666,7 +667,6 @@ void main() {
           );
           for (final icon in <IconData>[
             Icons.refresh_rounded,
-            Icons.logout_rounded,
             Icons.settings_rounded,
           ]) {
             final r = tester.getRect(
@@ -705,12 +705,12 @@ void main() {
     );
 
     testWidgets(
-      'eylem düğmeleri çalışır: Yenile ve Çıkış Yap araç ipuçlarını korur; widget eylemi dişlideki Ayarlar panelinde',
+      'eylem düğmeleri çalışır: Yenile araç ipucunu korur, Çıkış Yap AppBar\'da yok (menünün dibinde, onaylı); widget eylemi dişlideki Ayarlar panelinde',
       (tester) async {
         final auth = _ShellAuth();
         await _pumpShell(tester, auth, width: 360, scale: 1.5);
         expect(_inAppBar(find.byTooltip('Yenile')), findsOneWidget);
-        expect(_inAppBar(find.byTooltip('Çıkış Yap')), findsOneWidget);
+        expect(_inAppBar(find.byTooltip('Çıkış Yap')), findsNothing);
         expect(_inAppBar(find.byTooltip('Ayarlar')), findsOneWidget);
         expect(_inAppBar(find.byTooltip('Masaüstüne Widget Ekle')), findsNothing);
         await _openSettings(tester);

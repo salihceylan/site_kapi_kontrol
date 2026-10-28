@@ -489,6 +489,7 @@ class VisitorManagerViewState extends State<VisitorManagerView> {
           const SizedBox(height: AppSpace.md),
           CrmListBody<VisitorEntry>(
             loader: _loader,
+            showLastUpdated: true,
             emptyIcon: Icons.door_front_door_outlined,
             emptyTitle: _emptyTitle,
             filtered: _filtered,

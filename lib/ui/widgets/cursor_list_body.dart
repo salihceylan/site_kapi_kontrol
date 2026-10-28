@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/buttons.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/helpers/cursor_loader.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
+import 'package:site_kapi_kontrol/ui/widgets/state_view.dart';
 
 /// İmleçli sayfalı liste gövdesi ([CursorLoader]): iskelet / hata + "Tekrar Dene" / boş durum / kartlar +
 /// "Daha fazla yükle". [CrmListBody] ile aynı kurallar: iskelet YALNIZ `loading && items.isEmpty` iken;
 /// liste boşken hata varsa "kayıt yok" yerine hata gösterilir; ilk yükleme bitmeden boş durum çizilmez.
+///
+/// P2-21: boş / hata / bağlı değil üçlüsü [StateView] ile çizilir; sunucuya ulaşılamıyorsa ([CursorLoader.errorOffline])
+/// bildirim "bağlı değil" olur. P2-26: [showLastUpdated] açıksa listenin üstünde "Son güncelleme 14:32" yazar.
 class CursorListBody<T> extends StatelessWidget {
   const CursorListBody({
     super.key,
@@ -17,6 +20,7 @@ class CursorListBody<T> extends StatelessWidget {
     required this.emptyTitle,
     this.emptyMessage,
     this.skeletonRows = 3,
+    this.showLastUpdated = false,
   });
 
   final CursorLoader<T> loader;
@@ -26,25 +30,47 @@ class CursorListBody<T> extends StatelessWidget {
   final String? emptyMessage;
   final int skeletonRows;
 
+  /// true: yükleme başarılıysa listenin üstünde "Son güncelleme 14:32" yazar (P2-26).
+  final bool showLastUpdated;
+
   @override
   Widget build(BuildContext context) {
     final items = loader.items;
     final error = loader.error;
+    final stamp = showLastUpdated ? loader.lastLoadedAt : null;
     if (items.isEmpty) {
       if (loader.loading || (error == null && !loader.loadedOnce)) {
         return ListSkeleton(rows: skeletonRows);
       }
       if (error != null) {
-        return InlineNotice(message: error, onRetry: loader.reload);
+        return StateView.failure(message: error, offline: loader.errorOffline, onRetry: loader.reload);
       }
-      return EmptyCard(icon: emptyIcon, title: emptyTitle, message: emptyMessage);
+      final empty = StateView.empty(icon: emptyIcon, title: emptyTitle, message: emptyMessage);
+      if (stamp == null) return empty;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          LastUpdatedCaption(at: stamp),
+          const SizedBox(height: AppSpace.xs),
+          empty,
+        ],
+      );
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (error != null) ...[
-          InlineNotice(message: error, onRetry: loader.reload),
+          // Eski kayıtlar ekranda duruyor: bildirimin altında en son başarılı güncellemenin saati yazılır.
+          StateView.failure(
+            message: error,
+            offline: loader.errorOffline,
+            onRetry: loader.reload,
+            lastUpdated: showLastUpdated ? loader.lastLoadedAt : null,
+          ),
           const SizedBox(height: AppSpace.md),
+        ] else if (stamp != null) ...[
+          LastUpdatedCaption(at: stamp),
+          const SizedBox(height: AppSpace.xs),
         ],
         for (final item in items)
           Padding(
@@ -52,7 +78,11 @@ class CursorListBody<T> extends StatelessWidget {
             child: itemBuilder(context, item),
           ),
         if (loader.moreError != null) ...[
-          InlineNotice(message: loader.moreError!, onRetry: loader.loadMore),
+          StateView.failure(
+            message: loader.moreError!,
+            offline: loader.moreErrorOffline,
+            onRetry: loader.loadMore,
+          ),
           const SizedBox(height: AppSpace.md),
         ],
         if (loader.hasMore)

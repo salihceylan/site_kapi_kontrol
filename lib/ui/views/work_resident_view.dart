@@ -332,6 +332,7 @@ class WorkResidentViewState extends State<WorkResidentView> {
         else
           CursorListBody<WorkResidentItem>(
             loader: _loader,
+            showLastUpdated: true,
             emptyIcon: Icons.assignment_turned_in_rounded,
             emptyTitle: _emptyTitle,
             emptyMessage: _filtered

@@ -1,3 +1,4 @@
+import 'package:site_kapi_kontrol/ui/helpers/connectivity_error.dart';
 import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart' show crmMessageOf;
 
 /// Bir imleç sayfası: kayıtlar + sonraki sayfanın `before_id`'si (son sayfada null).
@@ -21,7 +22,8 @@ class CursorLoader<T> {
     this.errorFallback = 'Liste yüklenemedi. İnternet bağlantınızı kontrol edip tekrar deneyin.',
     this.moreErrorFallback = 'Daha fazla kayıt yüklenemedi. Tekrar deneyin.',
     this.messageOf = crmMessageOf,
-  });
+    DateTime Function()? clock,
+  }) : _clock = clock ?? DateTime.now;
 
   /// `beforeId` imlecinden (null: ilk sayfa) sayfa getirir; süzgeç değerlerini ÇAĞRI ANINDA okur.
   final Future<CursorPage<T>> Function(int? beforeId) fetch;
@@ -41,11 +43,23 @@ class CursorLoader<T> {
   /// Hatadan kullanıcı metni üretir (varsayılan [crmMessageOf]); mali ekranlar teknik metni göstermez.
   final String Function(Object error, String fallback) messageOf;
 
+  /// Şimdiki an (testlerde sabitlenir); [lastLoadedAt] için.
+  final DateTime Function() _clock;
+
   List<T> items = <T>[];
   bool loading = false;
   bool loadingMore = false;
   String? error;
   String? moreError;
+
+  /// [error] sunucuya ULAŞILAMAMASINDAN mı (bağlı değil)? Sunucu bir durum koduyla yanıt verdiyse false (hata).
+  bool errorOffline = false;
+
+  /// [moreError] için aynı ayrım.
+  bool moreErrorOffline = false;
+
+  /// Son BAŞARILI ilk sayfa yüklemesinin anı ("Son güncelleme 14:32"); hiç yüklenmediyse (ya da [reset] sonrası) null.
+  DateTime? lastLoadedAt;
 
   /// En az bir yükleme başarıyla bitti mi? (false iken "kayıt yok" yerine iskelet/hata gösterilir.)
   bool loadedOnce = false;
@@ -63,8 +77,11 @@ class CursorLoader<T> {
     items = <T>[];
     _next = null;
     loadedOnce = false;
+    lastLoadedAt = null;
     error = null;
+    errorOffline = false;
     moreError = null;
+    moreErrorOffline = false;
   }
 
   /// İlk sayfayı yeniden çeker; mevcut liste yenileme sürerken ekranda kalır. Sürmekte olan "Daha fazla
@@ -76,7 +93,9 @@ class CursorLoader<T> {
     loading = true;
     loadingMore = false;
     error = null;
+    errorOffline = false;
     moreError = null;
+    moreErrorOffline = false;
     notify();
     try {
       final page = await fetch(null);
@@ -85,11 +104,13 @@ class CursorLoader<T> {
       _next = page.items.isEmpty ? null : page.next;
       loading = false;
       loadedOnce = true;
+      lastLoadedAt = _clock();
       notify();
     } catch (e) {
       if (_disposed || !isAlive() || token != _token) return;
       loading = false;
       error = messageOf(e, errorFallback);
+      errorOffline = isConnectivityError(e);
       notify();
     }
   }
@@ -100,6 +121,7 @@ class CursorLoader<T> {
     final more = ++_moreToken;
     loadingMore = true;
     moreError = null;
+    moreErrorOffline = false;
     notify();
     try {
       final page = await fetch(cursor);
@@ -116,6 +138,7 @@ class CursorLoader<T> {
       if (_disposed || !isAlive() || more != _moreToken) return;
       loadingMore = false;
       moreError = messageOf(e, moreErrorFallback);
+      moreErrorOffline = isConnectivityError(e);
       notify();
     }
   }
