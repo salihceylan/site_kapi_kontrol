@@ -398,6 +398,7 @@ abstract final class HelpContent {
     icon: Icons.menu_rounded,
     steps: <String>[
       'Ekranın altındaki çubukta “Özet”, “Duyuru”, “Arıza”, “Kapı” ve “Dosyalar” sekmeleri vardır (“Dosyalar”, menüdeki “Dosya Deposu” ekranını açar). “Özet” girişte açılan “Panel” ekranıdır; sitenizde kapalı olan ya da size açık olmayan sekme görünmez, kapı yetkiniz yoksa “Kapı” sekmesi çıkmaz. İkiden az sekme kalırsa ya da telefon yatay tutulurken çubuk görünmez; ekranlara menüden ulaşırsınız.',
+      'Alt çubuk görünmediğinde (ikiden az sekme ya da yatay telefon) bir ekrandayken menü düğmesinin yanında “Ana sayfa” düğmesi çıkar; dokununca “Panel” ekranına dönersiniz. Çubuk varken bu işi “Özet” sekmesi görür.',
       'Sol üstteki menü düğmesi menüyü açar: ekranlar “Ana sayfa”, “Daireler”, “Borçlar”, “İletişim” ve “Site hizmetleri” gibi başlıklar altında toplanır. Size açık ekranı olmayan başlık görünmez; menünün en üstünde bağlı olduğunuz site yazar.',
       'Sağ üstteki “Ayarlar” düğmesi (dişli) “Profilim” ve “Eller Serbest & Kestirmeler” gibi hesap ve ayar ekranlarını açar.',
       'Geri tuşu bir sekmeden ya da ekrandan “Özet” sekmesine döner; “Özet” sekmesindeyken uygulamadan çıkar.',
@@ -410,6 +411,7 @@ abstract final class HelpContent {
     icon: Icons.menu_rounded,
     steps: <String>[
       'Sol üstteki menü düğmesi menüyü açar: ekranlar “Ana sayfa”, “Daireler” ve “Site hizmetleri” gibi başlıklar altında toplanır; size açık ekranı olmayan başlık görünmez.',
+      'Bir ekrandayken menü düğmesinin yanındaki “Ana sayfa” düğmesi sizi tek dokunuşla “Panel” ekranına götürür.',
       'Sağ üstteki “Ayarlar” düğmesi (dişli) “Profilim” gibi hesap ve ayar ekranlarını açar.',
     ],
   );
@@ -420,6 +422,7 @@ abstract final class HelpContent {
     icon: Icons.menu_rounded,
     steps: <String>[
       'Sol üstteki menü düğmesi menüyü açar: ekranlar “Ana sayfa”, “Daireler”, “Borçlar”, “İletişim” ve “Site hizmetleri” gibi başlıklar altında toplanır; yetkinize açık ekranı olmayan başlık görünmez (“Tahsilat”, “Giderler” ve “Raporlar” başlıklarında henüz ekran yoktur).',
+      'Bir ekrandayken menü düğmesinin yanındaki “Ana sayfa” düğmesi sizi tek dokunuşla “Panel” ekranına götürür. Çok dar telefonlarda düğme yer bulamazsa menüden “Panel”i seçin ya da geri tuşuna basın.',
       'Birden çok siteniz varsa menünün en üstündeki site satırına dokunup bir site seçin: menü ve Panel o sitenin açık modülleriyle sınırlanır. “Tüm siteler” seçimi hepsini geri getirir.',
       'Sağ üstteki “Ayarlar” düğmesi (dişli) “Profilim”, “Modüller”, “Kayıtlı Cihazlar” ve “Bluetooth ile Wi-Fi Kur” gibi ayar ekranlarını açar.',
     ],
@@ -431,6 +434,7 @@ abstract final class HelpContent {
     icon: Icons.menu_rounded,
     steps: <String>[
       'Sol üstteki menü düğmesi menüyü açar: ekranlar “Ana sayfa”, “Daireler”, “Borçlar”, “İletişim” ve “Site hizmetleri” gibi başlıklar altında toplanır.',
+      'Bir ekrandayken menü düğmesinin yanındaki “Ana sayfa” düğmesi sizi tek dokunuşla “Panel” ekranına götürür. Çok dar telefonlarda düğme yer bulamazsa menüden “Panel”i seçin ya da geri tuşuna basın.',
       'Sağ üstteki “Ayarlar” düğmesi (dişli) kullanıcı yönetimi, “Modüller”, “Modül Talepleri”, “Site Başvuruları”, cihaz ekranları, “Denetim Kaydı”, “Platform Ayarları” ve “İstemci Hataları” ekranlarını açar.',
       'Bekleyen modül talebi ve site başvurusu sayıları “Ayarlar” düğmesinde ve ilgili ekranın yanında rozetle görünür.',
     ],
@@ -720,7 +724,7 @@ abstract final class HelpContent {
         'Faturalandır sekmesinde tür, yöntem (birim fiyat, fatura tutarı ya da ısı için ölçüm + alan payı) ve iki tarihi seçip Önizle deyin; tutarlar uygunsa Borçlandır ile her dairenin oturanının hesabına borç yazılır.',
       ],
       note:
-          'Okunan değeri sayaçla karşılaştırmadan onaylamayın; fotoğraf Drive bağlıysa Drive a, değilse sunucuya kaydedilir. Webde kamera yok, değer elle yazılır. Yanlış borç Finans ekranından ters kayıtla düzeltilir.',
+          'Okunan değeri sayaçla karşılaştırmadan onaylamayın; fotoğraf Drive bağlıysa Drive’a, değilse sunucuya kaydedilir. Web’de kamera yok, değer elle yazılır. Yanlış borç Finans ekranından ters kayıtla düzeltilir.',
     ),
     HelpTopic(
       id: 'management_company',

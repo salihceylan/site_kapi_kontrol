@@ -867,7 +867,8 @@ void main() {
     testWidgets('site yoksa metin "Finans" sözcüğünü tekrarlamaz', (t) async {
       final auth = FinanceFakeAuth.seeded();
       await _pump(t, auth, sites: const <PeopleSite>[]);
-      expect(find.text('Aidat ve Finans modülü açık bir siteye bağlı olduğunuzda burada görünür.'), findsOneWidget);
+      expect(find.text('Bir siteye bağlı olduğunuzda aidat, borç ve tahsilatlar burada görünür.'), findsOneWidget);
+      expect(find.textContaining('modül'), findsNothing, reason: 'Aidat ve Finans temel modüldür; "modülü açık bir site" şartı kalmadı');
       expect(find.textContaining('Finans, Aidat ve Finans'), findsNothing);
     });
   });

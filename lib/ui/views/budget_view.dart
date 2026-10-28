@@ -7,14 +7,17 @@ import 'package:site_kapi_kontrol/models/expense_models.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/services/budget_api.dart';
+import 'package:site_kapi_kontrol/services/panel_return_requests.dart';
 import 'package:site_kapi_kontrol/services/pdf_budget_service.dart';
 import 'package:site_kapi_kontrol/services/pdf_decision_service.dart' show DecisionPdfOutcome;
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_snack.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/crm_confirm_dialog.dart';
 import 'package:site_kapi_kontrol/ui/helpers/date_input.dart' show formatDateField;
 import 'package:site_kapi_kontrol/ui/helpers/money.dart';
 import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart' show crmMessageOf;
+import 'package:site_kapi_kontrol/ui/widgets/home_shortcut_button.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 
 String _isoDay(DateTime d) =>
@@ -352,6 +355,9 @@ class _BudgetDetailPageState extends State<BudgetDetailPage> {
   BudgetComparison? _comparison;
   List<ExpenseCategory> _categories = const <ExpenseCategory>[];
   final Map<int, TextEditingController> _amounts = <int, TextEditingController>{};
+
+  /// Kutulara sunucudan yazılan (kayıtlı) tutar metinleri: kutudaki yazı bundan farklıysa kaydedilmemiş değişiklik vardır.
+  final Map<int, String> _savedTexts = <int, String>{};
   String? _error;
   bool _busy = false;
 
@@ -394,15 +400,46 @@ class _BudgetDetailPageState extends State<BudgetDetailPage> {
       c.dispose();
     }
     _amounts.clear();
+    _savedTexts.clear();
     for (final c in categories) {
       final minor = byId[c.id];
-      _amounts[c.id] = TextEditingController(text: minor == null ? '' : (minor / 100).toStringAsFixed(2).replaceAll('.', ','));
+      final text = minor == null ? '' : (minor / 100).toStringAsFixed(2).replaceAll('.', ',');
+      _savedTexts[c.id] = text;
+      _amounts[c.id] = TextEditingController(text: text);
     }
     setState(() {
       _detail = detail;
       _categories = categories;
       _comparison = comparison;
     });
+  }
+
+  /// Taslakta yazılıp "Kalemleri kaydet" ile henüz kaydedilmemiş kalem tutarı var mı. Tutar kutuları yalnız yazma yetkili taslakta vardır;
+  /// tebliğ / kesin ya da salt okur görünümde kaybedilecek bir şey yoktur.
+  bool get _hasUnsavedAmounts {
+    final project = _detail?.project;
+    if (project == null || project.status != BudgetStatus.taslak || !widget.site.canWrite) return false;
+    return _amounts.entries.any((entry) => entry.value.text.trim() != (_savedTexts[entry.key] ?? ''));
+  }
+
+  /// Üst çubuktaki "Ana sayfa": açık ekranların hepsini kapatıp Panel'e döner. `popUntil` sayfanın kendi korumasını atladığından
+  /// kaydedilmemiş kalem tutarı varken önce sorar ("Düzenlemeye Dön" güvenli taraftır); kaydetme / geçiş sürerken bekler.
+  Future<void> _goHome() async {
+    if (_busy) return;
+    if (_hasUnsavedAmounts) {
+      final discard = await confirmCrmAction(
+        context,
+        title: 'Kaydedilmemiş değişiklikler',
+        message: 'Kalem tutarlarında kaydedilmemiş değişiklikleriniz var. Ana sayfaya dönerseniz bu değişiklikler kaybolur.',
+        confirmLabel: 'Değişiklikleri Sil',
+        cancelLabel: 'Düzenlemeye Dön',
+        icon: Icons.edit_off_rounded,
+        tone: AppTone.warning,
+      );
+      if (!discard) return;
+    }
+    if (!mounted) return;
+    PanelReturnRequests.returnToPanel(context);
   }
 
   Future<void> _run(Future<void> Function() action) async {
@@ -484,7 +521,12 @@ class _BudgetDetailPageState extends State<BudgetDetailPage> {
     final detail = _detail;
     final project = detail?.project;
     return Scaffold(
-      appBar: AppBar(title: Text(project == null ? 'İşletme projesi' : '${project.year} - ${project.title}')),
+      // Proje ayrıntısı (İşletme Projesi > proje): üst çubukta tek dokunuşla ana sayfa (P1-13). Taslakta kalem tutarı kutuları (form) vardır:
+      // düğme kendi onayını verir (`_goHome`), kaydedilmemiş tutarı sormadan atmaz.
+      appBar: AppBar(
+        title: Text(project == null ? 'İşletme projesi' : '${project.year} - ${project.title}'),
+        actions: <Widget>[HomeShortcutButton(onPressed: () => unawaited(_goHome()))],
+      ),
       body: _error != null
           ? Padding(padding: const EdgeInsets.all(AppSpace.lg), child: _Notice(message: _error!, onRetry: _load))
           : project == null
@@ -537,7 +579,7 @@ class _BudgetDetailPageState extends State<BudgetDetailPage> {
       const Text('Kalemler (yıllık, ₺)', style: TextStyle(fontWeight: FontWeight.w700)),
       const SizedBox(height: AppSpace.sm),
       if (draft && canWrite) ...<Widget>[
-        if (_categories.isEmpty) Text('Gider kategorisi bulunamadı (Aidat ve Finans modülü açık olmalı).', style: small),
+        if (_categories.isEmpty) Text('Gider kategorisi bulunamadı. Finans ekranında Giderler sekmesindeki “Kategori ve Tedarikçiler” düğmesinden kategori ekleyin.', key: const ValueKey<String>('budget_no_categories'), style: small),
         for (final c in _categories)
           Padding(
             padding: const EdgeInsets.only(bottom: AppSpace.sm),

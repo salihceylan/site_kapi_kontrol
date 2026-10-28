@@ -601,10 +601,10 @@
           "adimlar": [
             "Daireler ekranından bir daire açın."
           ],
-          "beklenen": "Blok, kat, daire no, m², arsa payı, daire tipi/kategorisi, güncel malik ve kiracı, geçmiş sakinler görünür. Arsa payı ve tip bilgisi aidat dağıtımında kullanılır.",
+          "beklenen": "Blok, kat, daire no, arsa payı, daire tipi/kategorisi, güncel malik ve kiracı, geçmiş sakinler görünür. Arsa payı ve tip bilgisi aidat dağıtımında kullanılır.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
-          "yeni": false,
+          "yeni": true,
           "gelistirme": "hazir"
         },
         {
@@ -690,13 +690,13 @@
           "id": "F2.11",
           "baslik": "Değişiklik geçmişi",
           "adimlar": [
-            "Bir kişinin adını, ilişkisini ya da bir dairenin m² bilgisini değiştirin; ayrıca telefonunu da değiştirin.",
+            "Bir kişinin adını, ilişkisini ya da bir dairenin katını değiştirin; ayrıca telefonunu da değiştirin.",
             "Kartın “Geçmiş” bölümünü açın."
           ],
-          "beklenen": "Kim, ne zaman, neyi değiştirdi satırı görünür. Ad, ilişki ve m² gibi alanlarda eski ve yeni değer yazar. Telefon, e-posta ve not değiştiğinde yalnız “Telefon güncellendi” yazar (kişisel veri geçmişte saklanmaz). Sistemin kendi yaptığı değişiklikler “Sistem tarafından” diye görünür. Kayıt silinemez.",
+          "beklenen": "Kim, ne zaman, neyi değiştirdi satırı görünür. Ad, ilişki ve kat gibi alanlarda eski ve yeni değer yazar. Telefon, e-posta ve not değiştiğinde yalnız “Telefon güncellendi” yazar (kişisel veri geçmişte saklanmaz). Sistemin kendi yaptığı değişiklikler “Sistem tarafından” diye görünür. Kayıt silinemez.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
-          "yeni": false,
+          "yeni": true,
           "gelistirme": "hazir"
         },
         {
@@ -1043,9 +1043,9 @@
           "adimlar": [
             "Finans menüsünden “Tanımlar” sekmesini açın.",
             "“Yeni Tanım”: ad (ör. Aylık aidat), tür (aylık), dağıtım yöntemi, tutar, her ayın kaçında vade, başlangıç ayı, hedef (tüm site / bloklar / daireler).",
-            "Dağıtım yöntemlerini deneyin: daire başı sabit tutar, eşit pay (toplam bölünür), daire tipine göre (her tip için ayrı tutar), arsa payına göre, m²'ye göre (brüt/net)."
+            "Dağıtım yöntemlerini deneyin: daire başı sabit tutar, eşit pay (toplam bölünür), daire tipine göre (her tip için ayrı tutar), arsa payına göre. Yöntem listesine ve forma bakın."
           ],
-          "beklenen": "Tanım kaydedilir ve listede görünür. Tutar kutusunun altında girdiğiniz tutar okunuşuyla gösterilir (ör. 1.250,50 ₺); virgülden sonra en çok 2 hane, “1,250” gibi belirsiz giriş reddedilir. Tutarı kimin ödeyeceği tanımda değil, dairenin “borç ve bildirimler kime gitsin” ayarında (Kişi ve Daire Kayıtları → daire düzenle) belirlenir. Borçlandırılmış bir tanımın tutarı ve dağıtımı değiştirilemez (kilitli panelde açıklanır); yalnız ad, bitiş, vade günü ve etkin/pasif değişir.",
+          "beklenen": "Dağıtım yöntemi olarak yalnız “Sabit tutar”, “Eşit bölüş”, “Kategoriye göre” ve “Arsa payına göre” vardır; “Metrekareye göre” seçeneği ve “Metrekare türü / Brüt m² / Net m²” alanı yoktur (m² 2026-10-25'te kaldırıldı). Tanım kaydedilir ve listede görünür. Tutar kutusunun altında girdiğiniz tutar okunuşuyla gösterilir (ör. 1.250,50 ₺); virgülden sonra en çok 2 hane, “1,250” gibi belirsiz giriş reddedilir. Tutarı kimin ödeyeceği tanımda değil, dairenin “borç ve bildirimler kime gitsin” ayarında (Kişi ve Daire Kayıtları → daire düzenle) belirlenir. Borçlandırılmış bir tanımın tutarı ve dağıtımı değiştirilemez (kilitli panelde açıklanır); yalnız ad, bitiş, vade günü ve etkin/pasif değişir.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "Bir test sitesi (Aidat ve Finans temel modüldür: her sitede açık)",
           "yeni": true,
@@ -2422,10 +2422,10 @@
             "\"Daireler\", \"Kişiler\" ve \"Araçlar\" kartlarını sırayla seçin.",
             "\"Şablonu indir (Excel)\"e dokunup dosyayı açın; sonra \"Şablonu indir (CSV)\"ye dokunun."
           ],
-          "beklenen": "Adım göstergesi \"Adım 1 / 5 · Tür\" der (adımlar: Tür, Dosya, Sütunlar, Önizleme, Sonuç); üstte site adı ve daire/blok özet çipi vardır. Metin: \"Excel (.xlsx) veya CSV dosyasıyla toplu yükleme yapın. Önerilen sıra: Daireler, Kişiler, Araçlar; hepsi isteğe bağlıdır.\" Her kartta açıklama ve \"Önerilen sıra\" çipi vardır (Daireler: \"Var olan dairelerin kat, tip, m², arsa payı ve borç sorumlusu bilgilerini doldurur. Yeni daire eklemez.\"; Kişiler: \"Kişileri, daire ilişkilerini ve araç plakalarını ekler. Hesap açmaz, e-posta göndermez.\"). Excel şablonu (toplu_yukleme_sablonu.xlsx) üç veri sayfası ve bir \"Açıklama\" sayfası içerir; seçtiğiniz türün sayfası ilk sıradadır. \"Daireler\" sayfası sitenizin MEVCUT blok ve daire numaralarıyla (ve kayıtlı kat/tip/m² değerleriyle) önceden doludur (liste alınamazsa \"Mevcut daire numaraları alınamadığı için daire sayfası boş hazırlandı.\" notu çıkar); \"Kişiler\" ve \"Araçlar\" sayfaları yalnız başlık satırıdır (veri sayfalarında örnek kayıt YOKTUR); \"Açıklama\" sayfasında sütun, zorunluluk, kural ve örnek değerler yazar. CSV şablonu yalnız seçili türün dosyasıdır (başlık satırı; Daireler için mevcut dairelerle dolu), adı toplu_yukleme_sablonu_daireler.csv / _kisiler.csv / _araclar.csv biçimindedir (noktalı virgül ayraçlı, UTF-8). Mobilde paylaşım sayfası, masaüstü/web'de kaydet penceresi açılır ve \"Şablon hazır: <dosya adı>\" yazar.",
+          "beklenen": "Adım göstergesi \"Adım 1 / 5 · Tür\" der (adımlar: Tür, Dosya, Sütunlar, Önizleme, Sonuç); üstte site adı ve daire/blok özet çipi vardır. Metin: \"Excel (.xlsx) veya CSV dosyasıyla toplu yükleme yapın. Önerilen sıra: Daireler, Kişiler, Araçlar; hepsi isteğe bağlıdır.\" Her kartta açıklama ve \"Önerilen sıra\" çipi vardır (Daireler: \"Var olan dairelerin kat, tip, arsa payı ve borç sorumlusu bilgilerini doldurur. Yeni daire eklemez.\"; Kişiler: \"Kişileri, daire ilişkilerini ve araç plakalarını ekler. Hesap açmaz, e-posta göndermez.\"). Excel şablonu (toplu_yukleme_sablonu.xlsx) üç veri sayfası ve bir \"Açıklama\" sayfası içerir; seçtiğiniz türün sayfası ilk sıradadır. \"Daireler\" sayfası sitenizin MEVCUT blok ve daire numaralarıyla (ve kayıtlı kat, tip ve borç sorumlusu değerleriyle) önceden doludur (liste alınamazsa \"Mevcut daire numaraları alınamadığı için daire sayfası boş hazırlandı.\" notu çıkar); \"Kişiler\" ve \"Araçlar\" sayfaları yalnız başlık satırıdır (veri sayfalarında örnek kayıt YOKTUR); \"Açıklama\" sayfasında sütun, zorunluluk, kural ve örnek değerler yazar. CSV şablonu yalnız seçili türün dosyasıdır (başlık satırı; Daireler için mevcut dairelerle dolu), adı toplu_yukleme_sablonu_daireler.csv / _kisiler.csv / _araclar.csv biçimindedir (noktalı virgül ayraçlı, UTF-8). Mobilde paylaşım sayfası, masaüstü/web'de kaydet penceresi açılır ve \"Şablon hazır: <dosya adı>\" yazar.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
-          "yeni": false,
+          "yeni": true,
           "gelistirme": "hazir"
         },
         {
@@ -2437,10 +2437,10 @@
             "Önizlemeyi okuyun; \"Aktar (N satır)\"a dokunun; onay penceresinde \"Onayla ve Aktar\"a basın.",
             "Sonuç ekranına bakıp \"Dairelere git\"e dokunun."
           ],
-          "beklenen": "Dosya adı ve boyutu ile \"N satır okundu.\" yazar. Önizleme hiçbir kaydı değiştirmez (\"Önizleme hiçbir kaydı değiştirmez. Aşağıdaki özeti ve sorunlu satırları inceleyip aktarın.\"); çipler \"Güncellenecek\", \"Değişmeyecek\", \"Hatalı\", \"Uyarılı\"dır. Arsa payı doluysa \"Arsa payı toplamı: 1000/1000 ✓\" ya da \"987/1000: eksik olabilir\" (fazlaysa \"fazla olabilir\") görünür; bu kontrol sitedeki TÜM dairelerin güncel payını toplar ve engellemez. Onay penceresi \"Yüklemeyi onaylayın\": \"N satır aktarılacak. Bu işlem toplu geri alınamaz; yanlış yüklenen kayıtlar tek tek düzeltilir.\" Sonuç: \"Daireler yüklemesi tamamlandı.\" ve \"Uygulanan: N\", \"Değişmeyen: N\", \"Atlanan: N\" çipleri; \"Dairelere git\" \"Daireler\" sekmesini açar ve yüklediğiniz kat/tip/m²/arsa payı değerleri dairelerde görünür.",
+          "beklenen": "Dosya adı ve boyutu ile \"N satır okundu.\" yazar. Önizleme hiçbir kaydı değiştirmez (\"Önizleme hiçbir kaydı değiştirmez. Aşağıdaki özeti ve sorunlu satırları inceleyip aktarın.\"); çipler \"Güncellenecek\", \"Değişmeyecek\", \"Hatalı\", \"Uyarılı\"dır. Arsa payı doluysa \"Arsa payı toplamı: 1000/1000 ✓\" ya da \"987/1000: eksik olabilir\" (fazlaysa \"fazla olabilir\") görünür; bu kontrol sitedeki TÜM dairelerin güncel payını toplar ve engellemez. Onay penceresi \"Yüklemeyi onaylayın\": \"N satır aktarılacak. Bu işlem toplu geri alınamaz; yanlış yüklenen kayıtlar tek tek düzeltilir.\" Sonuç: \"Daireler yüklemesi tamamlandı.\" ve \"Uygulanan: N\", \"Değişmeyen: N\", \"Atlanan: N\" çipleri; \"Dairelere git\" \"Daireler\" sekmesini açar ve yüklediğiniz kat/tip/arsa payı değerleri dairelerde görünür.",
           "rol_notu": "Site yöneticisi",
-          "on_kosul": "Şablonun \"Daireler\" sayfasında 2-3 dairenin Kat, Tip, Brüt m², Net m², Arsa Payı (Pay), Arsa Payı (Payda) ve Borç Sorumlusu hücreleri doldurulup dosya kaydedilmiş",
-          "yeni": false,
+          "on_kosul": "Şablonun \"Daireler\" sayfasında 2-3 dairenin Kat, Tip ve Borç Sorumlusu hücreleri doldurulup dosya kaydedilmiş (Brüt/Net m² sütunları kaldırıldı; eski bir dosyada dolu gelirse yok sayılır ve önizlemede uyarı çıkar. Arsa Payı sütunları şablonda gösterilmez, dosyaya kendiniz eklerseniz okunur)",
+          "yeni": true,
           "gelistirme": "hazir"
         },
         {
@@ -2450,10 +2450,10 @@
             "Dosyayı aynı akışla seçip önizlemeye kadar gelin; sorunlu satırlar listesine bakın.",
             "\"Dolu alanların üzerine yaz\" anahtarını açın; önizlemenin yenilenmesini bekleyin ve \"Aktar\"a basıp onay penceresine bakın."
           ],
-          "beklenen": "Anahtar kapalıyken farklı hücreler korunur; uyarılarda \"<Alan> korundu: dolu alanın üzerine yazılmadı.\" yazar ve açıklama \"Kapalıyken yalnız boş alanlar doldurulur; farklı olan değerler korunur.\" Anahtar açılınca \"N alanın üzerine yazılacak.\" görünür ve onay penceresi \"N alanın mevcut değerinin üzerine yazılacak.\" der. Mali kaydı (borç/tahsilat) olan bir dairenin m², arsa payı, tip ya da sorumlu bilgisi değişiyorsa uyarı çıkar: \"Bu dairenin mali kaydı var; yeni değerler yalnız sonraki borçlandırmayı etkiler.\"",
+          "beklenen": "Anahtar kapalıyken farklı hücreler korunur; uyarılarda \"<Alan> korundu: dolu alanın üzerine yazılmadı.\" yazar ve açıklama \"Kapalıyken yalnız boş alanlar doldurulur; farklı olan değerler korunur.\" Anahtar açılınca \"N alanın üzerine yazılacak.\" görünür ve onay penceresi \"N alanın mevcut değerinin üzerine yazılacak.\" der. Mali kaydı (borç/tahsilat) olan bir dairenin arsa payı, tip ya da sorumlu bilgisi değişiyorsa önizlemede tek bir bilgi satırı çıkar (yüklemeyi engellemez): \"N dairenin mali kaydı var; Borç Sorumlusu / Tip / Arsa Payı değişiklikleri mevcut borçları değiştirmez, yalnız sonraki borçlandırmadan itibaren geçerlidir.\"",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "Bir önceki madde yapılmış; dosyada aynı dairelerin bazı hücreleri FARKLI değerlerle değiştirilmiş",
-          "yeni": false,
+          "yeni": true,
           "gelistirme": "hazir"
         },
         {
@@ -4787,6 +4787,22 @@
           "on_kosul": "Duyuru ve Bildirim açık.",
           "yeni": false,
           "gelistirme": "hazir"
+        },
+        {
+          "id": "F24.17",
+          "baslik": "Kapı komutu gönderilince \"açıldı\" denmez",
+          "adimlar": [
+            "Panel'den Kapılar'a girin ve yuvarlak düğmeyle kapıyı uzaktan açın; düğmeye ve çıkan bildirime bakın.",
+            "Menüden \"Sesli Kapı Açma\"yı açıp \"kapıyı aç\" deyin; ekrandaki başlığa ve telefonun sesli söylediği cümleye bakın.",
+            "Ekranlı bir kapıda \"Kapı Ekranından QR Oku\" ya da \"Kapıya QR Göster\" ile geçin.",
+            "Android ana ekranındaki kapı widget'ında \"KAPIYI AÇ\"a dokunun.",
+            "Bir kurye / misafir geçiş linkini tarayıcıda açıp düğmeye dokunun."
+          ],
+          "beklenen": "Hiçbir yerde \"Kapı açıldı!\" yazmaz ya da sesle okunmaz. Düğme \"GÖNDERİLDİ\" olur; bildirim \"Kapı açma komutu gönderildi.\" ya da \"<Kapı adı> için açma komutu gönderildi.\" der. Sesli pencerede başlık \"Komut Gönderildi\", telefon \"<Kapı adı> için açma komutu gönderildi.\" der. QR penceresi \"Gönderildi\" ve \"Geçiş onaylandı\" yazar, telefon \"Geçiş onaylandı, açma komutu gönderildi.\" der. Widget \"Komut gönderildi ✅\" gösterir. Misafir sayfasında düğme \"GONDERILDI\", mesaj \"Kapi acma komutu gonderildi.\" olur. Kapının gerçekten açılıp açılmadığını kapının kendisinden görürsünüz: uygulama bunu bilemez (cihaz yanıtı ya da kapı sensörü zinciri ayrı bir iştir).",
+          "rol_notu": "Daire sakini",
+          "on_kosul": "Geçiş Kontrol açık, hesabın en az bir kapısı var; QR ve misafir adımları için kapıda ekran / QR ve misafir geçişi yetkisi.",
+          "yeni": true,
+          "gelistirme": "hazir"
         }
       ]
     },
@@ -5298,7 +5314,7 @@
       "id": "F28",
       "baslik": "Gruplu menü, Ayarlar paneli ve sakin alt çubuğu",
       "durum": "hazir",
-      "ozet": "Menü başlıklar altında toplandı (Ana sayfa, Daireler, Borçlar, Tahsilat, Giderler, İletişim, Raporlar, Site hizmetleri); ekranı olmayan başlık görünmez. Profilim, Modüller, cihaz ekranları, Modül Talepleri, Site Başvuruları, Denetim Kaydı, Platform Ayarları ve İstemci Hataları artık sağ üstteki dişlinin açtığı Ayarlar panelindedir. Birden çok sitesi olan yönetici menünün en üstünden site seçer; daire sakininin ekranının altında Özet · Duyuru · Arıza · Kapı · Dosyalar çubuğu vardır.",
+      "ozet": "Menü başlıklar altında toplandı (Ana sayfa, Daireler, Borçlar, Tahsilat, Giderler, İletişim, Raporlar, Site hizmetleri); ekranı olmayan başlık görünmez. Profilim, Modüller, cihaz ekranları, Modül Talepleri, Site Başvuruları, Denetim Kaydı, Platform Ayarları ve İstemci Hataları artık sağ üstteki dişlinin açtığı Ayarlar panelindedir. Birden çok sitesi olan yönetici menünün en üstünden site seçer; daire sakininin ekranının altında Özet · Duyuru · Arıza · Kapı · Dosyalar çubuğu vardır. Panel dışındaki ekranlarda, sakin alt çubuğu yokken, üst çubukta menü düğmesinin yanında Panel'e döndüren “Ana sayfa” düğmesi görünür.",
       "maddeler": [
         {
           "id": "F28.01",
@@ -5468,10 +5484,10 @@
             "Menünün altındaki \"Yardım ve Destek\"i açın ve konulara bakın; bunu sakin, yönetici ve süper kullanıcıyla ayrı ayrı yapın.",
             "İlk kez giriş yapan bir sakin hesabıyla tanıtım turunu izleyin."
           ],
-          "beklenen": "Yardımda \"Menü, alt çubuk ve ayarlar nerede?\" (sakin), \"Menü, site seçici ve ayarlar nerede?\" (yönetici) ya da \"Menü ve ayarlar nerede?\" konusu vardır. Profilim, Modüller ve cihaz ekranları için sağ üstteki \"Ayarlar\" düğmesi (dişli) yolu yazar. Sakin konusunda çubuğun ikiden az sekmede ve telefon yatayken görünmediği yazar. Yönetici konusunda \"Tahsilat\", \"Giderler\" ve \"Raporlar\" başlıklarında henüz ekran olmadığı yazar. Sakin turunda Özet ve Kapı sekmelerinden, alt çubuktan ve Ayarlar düğmesinden söz edilir.",
+          "beklenen": "Yardımda \"Menü, alt çubuk ve ayarlar nerede?\" (sakin), \"Menü, site seçici ve ayarlar nerede?\" (yönetici) ya da \"Menü ve ayarlar nerede?\" konusu vardır. Profilim, Modüller ve cihaz ekranları için sağ üstteki \"Ayarlar\" düğmesi (dişli) yolu yazar. Sakin konusunda çubuğun ikiden az sekmede ve telefon yatayken görünmediği yazar. Yönetici konusunda \"Tahsilat\", \"Giderler\" ve \"Raporlar\" başlıklarında henüz ekran olmadığı yazar. Sakin turunda Özet ve Kapı sekmelerinden, alt çubuktan ve Ayarlar düğmesinden söz edilir. Dört konuda da “Ana sayfa” düğmesi anlatılır: sakin konusunda düğmenin alt çubuk görünmediğinde (ikiden az sekme ya da yatay telefon) menü düğmesinin yanında çıktığı ve çubuk varken bu işi “Özet” sekmesinin gördüğü; yönetici ve süper kullanıcı konularında düğmenin tek dokunuşla “Panel” ekranına götürdüğü ve çok dar telefonlarda yer bulamazsa menüden “Panel”i seçmek ya da geri tuşuna basmak gerektiği; bireysel konuda düğmenin tek dokunuşla “Panel” ekranına götürdüğü yazar.",
           "rol_notu": "Daire sakini, site yöneticisi, süper kullanıcı",
           "on_kosul": "Tur için turu daha önce görmemiş bir sakin hesabı",
-          "yeni": false,
+          "yeni": true,
           "gelistirme": "hazir"
         },
         {
@@ -5486,6 +5502,80 @@
           "rol_notu": "Site yöneticisi + süper kullanıcı",
           "on_kosul": "",
           "yeni": false,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F28.15",
+          "baslik": "Yöneticide iç ekrandan tek dokunuşla ana sayfa",
+          "adimlar": [
+            "Yönetici hesabıyla girin; Panel'de üst çubuğa bakın.",
+            "Kapılar kartına dokunun; sonra sağ üstteki dişliden (Ayarlar) \"Profilim\"i açın.",
+            "Menü düğmesinin hemen yanındaki \"Ana sayfa\" düğmesine dokunun.",
+            "Panel'de üst çubuktaki \"Sakin Modu\" düğmesine bakın; Profilim'i yeniden açıp aynı düğmeye orada bakın ve dokunun.",
+            "Profilim açıkken telefonun geri tuşuna basın; Panel'deyken bir kez daha basın."
+          ],
+          "beklenen": "Panel'de menü düğmesinin yanında ek düğme yoktur. Kapılar ve Profilim ekranlarında menü düğmesinin hemen yanında dört kare simgeli \"Ana sayfa\" düğmesi görünür (basılı tutunca ipucu çıkar). Dokununca Panel açılır ve düğme kaybolur; kapı açılmaz. Üst çubuktaki \"Sakin Modu\" düğmesi Panel'de geniş ekranlı telefonda yazıyla etiketlidir (dar telefonda ya da büyük yazı boyutunda yalnız ikon görünür); iç ekranda \"Ana sayfa\" düğmesi varken dik tutulan telefonda yalnız ikon görünür (yazı iki düğme grubunun arasına sığmaz) ve dokununca yine mod değişir; Panel'e dönünce etiket geri gelir. Telefonun geri tuşu iç ekrandan yine Panel'e döner, Panel'de uygulamadan çıkar.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Normal genişlikte bir telefon ve varsayılan yazı boyutu (dar ekran ve büyük yazı için F28.19)",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F28.16",
+          "baslik": "Sakin alt çubuğu varken ikinci düğme yok, alt çubuk yokken düğme var",
+          "adimlar": [
+            "Telefonu dik tutup daire sakini hesabıyla Duyuru sekmesini açın; üst çubuğa bakın, sonra \"Özet\" sekmesine dokunun.",
+            "Telefonu yatay çevirin (alt çubuk gizlenir) ve menüden Duyurular'ı açın.",
+            "Yalnız görevli bağı olan bir hesapla (alt çubuk hiç çıkmaz) menüden Talepler'i açın."
+          ],
+          "beklenen": "Alt çubuk varken üst çubukta \"Ana sayfa\" düğmesi yoktur; \"Özet\" Panel'e döndürür. Telefon yatayken ve görevli hesabında alt çubuk olmadığından menü düğmesinin yanında \"Ana sayfa\" düğmesi çıkar ve Panel'e döndürür.",
+          "rol_notu": "Daire sakini; yalnız görevli bağı olan hesap",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F28.17",
+          "baslik": "Derin ekranlardan ana sayfa",
+          "adimlar": [
+            "Aidat ve Finans'ta Kasa sekmesinde bir hesabın \"Banka dosyası yükle\" düğmesine basın; açılan \"Banka dosyası\" ekranının üst çubuğuna bakın.",
+            "Eşleşmeyen satır varsa \"N banka satırı sizi bekliyor\" kartıyla \"Banka Ödemeleri ve Daire Onayları\"na geçin ve sağ üstteki \"Ana sayfa\" düğmesine dokunun.",
+            "Aynısını menüdeki \"İşletme Projesi\"nde bir projeye dokunarak açtığınız ayrıntı ekranında deneyin.",
+            "Taslak bir İşletme Projesi'nin ayrıntı ekranında bir kalem tutarı yazın ve kaydetmeden \"Ana sayfa\"ya dokunun; önce \"Düzenlemeye Dön\"ü seçin, sonra düğmeye yeniden dokunup \"Değişiklikleri Sil\"i seçin.",
+            "Bir de ekranın kendi geri okuna ve telefonun geri tuşuna basın."
+          ],
+          "beklenen": "\"Ana sayfa\" düğmesi açık ekranların hepsini kapatır ve doğrudan Panel'i açar (Finans'a dönmez). Taslak projede kaydedilmemiş bir tutar varken düğme önce \"Kaydedilmemiş değişiklikler\" penceresini açar: \"Düzenlemeye Dön\" yazdığınız tutarı korur, \"Değişiklikleri Sil\" Panel'i açar (tutar kaydedilmez); tutar yazılmamışsa ya da \"Kalemleri kaydet\" ile kaydedilmişse pencere çıkmadan Panel açılır. Ekranın kendi geri oku ve geri tuşu yine bir adım geri götürür.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Banka hesabı tanımlı bir TEST sitesi; İşletme Projesi modülü açık, gider kategorisi tanımlı bir site ve taslak durumunda bir proje (kalem tutarı kutuları yalnız taslakta, yazma yetkisiyle çıkar)",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F28.18",
+          "baslik": "Platform Ayarları'nda kaydedilmemiş değişiklik varken ana sayfa",
+          "adimlar": [
+            "Ayarlar panelinden \"Platform Ayarları\"nı açın ve bir alanı değiştirin (kaydetmeyin).",
+            "Üst çubuktaki \"Ana sayfa\" düğmesine dokunun; \"Düzenlemeye Dön\"ü seçin.",
+            "Düğmeye yeniden dokunun ve \"Değişiklikleri Sil\"i seçin."
+          ],
+          "beklenen": "\"Kaydedilmemiş değişiklikler\" penceresi çıkar. \"Düzenlemeye Dön\" ekranda bırakır, yazdıklarınız durur. \"Değişiklikleri Sil\" Panel'i açar; hiçbir şey kaydedilmemiştir.",
+          "rol_notu": "Süper kullanıcı",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F28.19",
+          "baslik": "Dar telefon, büyük yazı ve ekran okuyucu",
+          "adimlar": [
+            "Telefon ayarlarında yazı boyutunu ve ekran (görüntü) boyutunu en büyüğe alın.",
+            "İç bir ekranda (örneğin Profilim) üst çubuğa bakın.",
+            "Ekran boyutunu normale döndürüp ekran okuyucuyu (TalkBack) açın ve \"Ana sayfa\" düğmesine odaklanın."
+          ],
+          "beklenen": "Üst çubukta düğmeler üst üste binmez, kesilmez. En dar durumda (üst çubukta \"Sakin Modu\" ve tema düğmeleri de varsa) \"Ana sayfa\" düğmesi yer bulamazsa hiç çıkmaz; Panel'e menüden ya da geri tuşuyla dönülür. Düğme çıkıyorsa ekran okuyucu onu \"Ana sayfa, düğme\" diye okur.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Üst çubukta \"Sakin Modu\" ve tema düğmeleri görünen bir hesap (site yöneticisi); düğmenin hiç çıkmaması yalnız en dar ekranda görülür.",
+          "yeni": true,
           "gelistirme": "hazir"
         }
       ]
@@ -6353,14 +6443,14 @@
             "Yalnız ad yazıp 'Kaydet'e basın (telefon ve e-posta boş), sonra bir telefon ya da e-posta ekleyin.",
             "Daire alanından bir daire seçin: İlişki alanı boş ('Seçin') gelir, Taşınma (giriş) tarihi bugünün tarihiyle dolu gelir. İlişki seçmeden 'Kaydet'e basın, sonra tarihi silip yeniden deneyin. İlişkiyi 'Aile Üyesi' yapınca telefon ve e-posta '*' işaretinin kalktığını ve boş bırakılabildiğini görün.",
             "Plaka alanına iki plaka yazın (örn. '34 abc 123, 06 XY 789'), altıncı bir plaka eklemeyi ve '12' gibi kısa bir plaka yazmayı deneyin.",
-            "'Daire bilgileri' bölümünü açın: Kat, Tip (kategori), Brüt ve Net m², Arsa payı (pay / payda) ve Borç sorumlusu (Malik / Kiracı / İkisi) dairenin kayıtlı değerleriyle dolu gelir. Birkaçını değiştirip kişiyi kaydedin; Daireler sekmesinde o dairenin kartını açıp değerleri doğrulayın.",
+            "'Daire bilgileri' bölümünü açın: Kat, Tip (kategori), Arsa payı (pay / payda) ve Borç sorumlusu (Malik / Kiracı / İkisi) dairenin kayıtlı değerleriyle dolu gelir. Birkaçını değiştirip kişiyi kaydedin; Daireler sekmesinde o dairenin kartını açıp değerleri doğrulayın.",
             "Kaydedilen kişinin kartını açın: araçlar listesinde iki plakayı, daire satırında 'Daire Bilgileri' düğmesini görün (düğme salt okunur kartı açar). Kişiyi 'Düzenle'ye alıp plaka alanından birini silin, yenisini ekleyin ve kaydedin; kartta eski plaka kalkar, yenisi görünür.",
             "Bir plakayı sitede başka bir kişide kayıtlı olan plakayla ekleyin; yönetim kurulu hesabıyla Kişi Ekle / Düzenle düğmelerinin ve 'Daire bilgileri' bölümünün görünmediğine bakın."
           ],
           "beklenen": "Zorunlu alanlar '*' ile işaretlidir; eksik alanın altında Türkçe hata çıkar ve kayıt gönderilmez (ad, telefon ya da e-postadan en az biri, daire seçildiyse ilişki ve taşınma tarihi). İlişki 'Aile Üyesi' ise telefon ve e-posta boş geçilebilir. Plaka, not ve 'Daire bilgileri' bölümünün tümü isteğe bağlıdır; en çok 5 plaka virgülle girilir, geçersiz plaka alanın altında bildirilir. Kayıt adım adım yapılır: kişi, sonra değişen daire bilgileri, sonra plakalar. Bir adım düşerse pencere açık kalır ve hangi adımın başarısız olduğu yazılır (örn. 'Kişi kaydedildi, plaka eklenemedi: 34 ABC 123 (...)'); Kaydet'e yeniden basınca yalnız kalan adımlar denenir, kişi ikinci kez oluşmaz. Düzenlemede mevcut plakalar alanda görünür; eklenen yeni araç olur, çıkarılan pasife alınır. Değişmeyen daire bilgisi sunucuya gönderilmez. Yönetim kurulu bu pencereleri göremez; kişi kartındaki 'Daire Bilgileri' düğmesi onlarda da salt okunur kartı açar.",
           "rol_notu": "Site yöneticisi (yazma); yönetim kurulu yalnız okur",
           "on_kosul": "Sitede en az bir daire kayıtlı olmalı; plaka denemesi için başka bir kişide kayıtlı bir plaka olmalı.",
-          "yeni": false,
+          "yeni": true,
           "gelistirme": "hazir"
         },
         {
@@ -6869,12 +6959,13 @@
           "adimlar": [
             "Okuma aktar sekmesinde türü Su seçip okuma tarihini girin.",
             "İlk sütunu seri no ya da 'A Blok - 5' gibi daire kodu, ikinci sütunu değer olan bir CSV ya da Excel dosyası seçin (içinde bir yanlış kod olsun).",
-            "Kontrol et'e, sonra Aktar'a basın."
+            "Kontrol et'e, sonra Aktar'a basın.",
+            "Sayfanın en altındaki metne bakın."
           ],
-          "beklenen": "Kontrol et, aktarılacak ve sorunlu satır sayısını ve yanlış kodun nedenini gösterir. Aktar yalnız hatasız satırları yazar; aynı dosya tekrar yüklenince satırlar 'zaten kayıtlı' sayılır, çift kayıt olmaz.",
+          "beklenen": "Kontrol et, aktarılacak ve sorunlu satır sayısını ve yanlış kodun nedenini gösterir. Aktar yalnız hatasız satırları yazar; aynı dosya tekrar yüklenince satırlar 'zaten kayıtlı' sayılır, çift kayıt olmaz. En altta 'Fotoğrafla okumak için Sayaçlar sekmesindeki “Fotoğrafla oku” düğmesini kullanın.' yazar ('Fotoğrafla okuma: Yakında…' yazmaz; fotoğrafla okuma çalışır, bkz. F32.12). Kurul üyesi hesabında bu metin yoktur.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
-          "yeni": false,
+          "yeni": true,
           "gelistirme": "hazir"
         },
         {
@@ -6894,13 +6985,13 @@
           "id": "F32.10",
           "baslik": "Isı payı dağıtımı",
           "adimlar": [
-            "Isı sayaçları olan daireler için Faturalandır'da tür Isı, yöntem 'Isı payı' seçin, toplam gideri girip Önizle'ye basın.",
-            "Bir dairenin m² bilgisini boş bırakıp 'eksik daireleri atla' kapalıyken Borçlandır'ı deneyin."
+            "Isı sayaçları olan daireler için Faturalandır'da tür Isı, yöntem 'Isı payı (ölçüm + alan payı)' seçin, toplam gideri girip Önizle'ye basın.",
+            "Bir dairenin arsa payını boş bırakıp önizlemeyi yeniden alın."
           ],
-          "beklenen": "Gider %70 tüketime, %30 daire m²'sine göre paylaşılır ve toplam girilen tutara eşittir. m²'si boş daire eksik listesinde 'alanı girilmemiş' diye görünür ve atla seçilmeden borçlandırma yapılamaz.",
+          "beklenen": "Yöntem adı 'Isı payı (ölçüm + alan payı)' yazar; ekranda hiçbir yerde m² geçmez (daire m²'si 2026-10-25'te kaldırıldı). Gider %70 tüketime, %30 alan payına göre paylaşılır ve toplam girilen tutara eşittir. Alan payı, katılan dairelerin hepsinde arsa payı tanımlıysa arsa payına, bir daire bile eksikse herkese eşit dağıtılır; arsa payı eksikliği dairenin 'eksik' listesine girmez (eksik listesi yalnız sayaç okuması eksikse dolar). Ayrıntılı kontrol: SAHA listesi 109.6.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
-          "yeni": false,
+          "yeni": true,
           "gelistirme": "hazir"
         },
         {

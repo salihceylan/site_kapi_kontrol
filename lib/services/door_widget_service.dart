@@ -24,7 +24,7 @@ const Duration kDoorWidgetMinOpenInterval = Duration(seconds: 2);
 /// Widget açma isteğinin ağ zaman aşımı.
 const Duration kDoorWidgetOpenTimeout = Duration(seconds: 10);
 
-/// Widget'ın geçici durum metnini (Açıldı/Hata...) normale döndürme gecikmesi.
+/// Widget'ın geçici durum metnini (Komut gönderildi/Hata...) normale döndürme gecikmesi.
 /// Testlerde kısaltılabilsin diye değiştirilebilir.
 @visibleForTesting
 Duration doorWidgetStatusRevertDelay = const Duration(seconds: 3);
@@ -149,7 +149,7 @@ class DoorWidgetOpenOutcome {
 @visibleForTesting
 DoorWidgetOpenOutcome mapDoorOpenResponse(int statusCode, String body) {
   if (statusCode == 200 || statusCode == 202) {
-    return const DoorWidgetOpenOutcome('Açıldı! ✅');
+    return const DoorWidgetOpenOutcome('Komut gönderildi ✅');
   }
   String? code;
   try {

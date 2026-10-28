@@ -19,6 +19,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { applyDbEnv, describeTarget, importFromServer, loadServerRequire, newPgClient, parseArgs, resolveServerDir } from './lib/env.mjs';
 import { loadContext } from './lib/context.mjs';
+import { requireDemoTarget } from './lib/target_guard.mjs';
 import { REGISTRY_TABLE, ensureRegistry } from './lib/registry.mjs';
 import { formatPlate, generatePlate, normalizePlateText, plateProblems } from './lib/tr_plate.mjs';
 import { pickCar } from './lib/vehicle_catalog.mjs';
@@ -31,6 +32,8 @@ if (!url) {
   console.error('DATABASE_URL (ya da --database-url) gerekli.');
   process.exit(2);
 }
+// Hedef korumasi (P1-19): yalniz yerel (loopback + izinli ad) ya da --allow-target <ad> ile onaylanmis veritabani; aksi halde cikis 2.
+requireDemoTarget(url, args);
 const siteQuery = String(args.site ?? 'Cenk');
 const serverDir = resolveServerDir(args);
 const serverRequire = loadServerRequire(serverDir);

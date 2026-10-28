@@ -223,8 +223,8 @@ const GUEST_PAGE_SCRIPT = `
               var data = {};
               try { data = await res.json(); } catch (e) { data = {}; }
               if (res.ok) {
-                setButton('\\u2705', 'ACILDI');
-                setMessage('success', 'Kapi acildi, gecebilirsiniz!');
+                setButton('\\u2705', 'GONDERILDI');
+                setMessage('success', 'Kapi acma komutu gonderildi.');
                 setTimeout(function () {
                   if (singleUse) {
                     btn.disabled = true;

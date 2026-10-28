@@ -1378,8 +1378,8 @@ export default {
     },
     {
       id: 'altyapi-komut-yayini-roleyi-calistirmiyor',
-      symptom: 'Cihaz komut alıyor ama röle çalışmıyor — sunucu yayın yapıyor mu? (uygulama "açıldı" diyor, kapı açılmıyor)',
-      keywords: ['röle', 'pulse', 'komut yayını', 'cmd', 'MQTT_BRIDGE_NOT_CONNECTED', 'DEVICE_OFFLINE', 'publish', 'qos', 'kapı açılmıyor'],
+      symptom: 'Cihaz komut alıyor ama röle çalışmıyor — sunucu yayın yapıyor mu? (uygulama "komut gönderildi" diyor, kapı açılmıyor)',
+      keywords: ['röle', 'pulse', 'komut yayını', 'cmd', 'MQTT_BRIDGE_NOT_CONNECTED', 'DEVICE_OFFLINE', 'publish', 'qos', 'kapı açılmıyor', 'komut gönderildi'],
       refs: [
         { file: 'server/src/mqtt_bridge.js', find: 'export async function publishDoorPulse({',
           note: 'Kapı açma komutunu device/<UID>/cmd konusuna yayınlar (qos 1, retain yok)' },

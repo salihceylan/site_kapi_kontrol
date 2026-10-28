@@ -238,7 +238,7 @@ class _DynamicQrPassModalState extends State<DynamicQrPassModal>
     _stopQrPolling();
     final poller = AdaptivePoller(
       interval: const Duration(milliseconds: 800),
-      // Karekodun ömrü ~30 sn: daha uzun bir geri çekilme, bağlantı dönünce "kapı açıldı"
+      // Karekodun ömrü ~30 sn: daha uzun bir geri çekilme, bağlantı dönünce "geçiş onaylandı"
       // bilgisini karekod süresinden sonra getirirdi.
       maxDelay: const Duration(seconds: 5),
       isActive: _isAppResumed,
@@ -298,7 +298,7 @@ class _DynamicQrPassModalState extends State<DynamicQrPassModal>
       // Onay anı: hafif haptik (yalnız sunum geri bildirimi; akış mantığı değişmedi).
       HapticFeedback.lightImpact();
       _successAnimController.forward(from: 0.0);
-      _speak('Kapı açıldı, geçebilirsiniz.');
+      _speak('Geçiş onaylandı, açma komutu gönderildi.');
 
       // 3 saniye sonra otomatik pencereyi kapat
       Future.delayed(const Duration(milliseconds: 3200), () {
@@ -568,7 +568,7 @@ class _DynamicQrPassModalState extends State<DynamicQrPassModal>
           ),
           const SizedBox(height: AppSpace.md),
           Text(
-            'Kapı Açıldı!',
+            'Gönderildi',
             textAlign: TextAlign.center,
             style: th.titleLarge?.copyWith(color: ink),
           ),

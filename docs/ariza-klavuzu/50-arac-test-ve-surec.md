@@ -676,7 +676,7 @@ flutter test test/local_door_service_v2_test.dart
 | --- | --- | --- |
 | [cihaz_kontrol/host_test/README.md:9](../../cihaz_kontrol/host_test/README.md#L9) | <code>&#124; `t_core.cpp` &#124; `yerel_kontrol_cekirdek.h`: HMAC bilinen-cevap vektörleri, Node `crypto`…</code> | Test tablosu: hangi başlık hangi test dosyasıyla, kaç doğrulama |
 | [cihaz_kontrol/host_test/run_all.py:29](../../cihaz_kontrol/host_test/run_all.py#L29) | <code>TESTS = [</code> | Koşucunun test listesi (t_core, t_udp, t_pin, t_gm60, t_mqtt WROOM + C3) |
-| [SAHA_KONTROL_LISTESI.md:1028](../../SAHA_KONTROL_LISTESI.md#L1028) | <code>## 51. 🔌 Firmware — ESP32-C3, ESP32-WROOM ve Ekran Yazılımı (F1, F2A1, F2A2, F2B)</code> | Donanımdaki gerçek davranış host testleriyle doğrulanmış SAYILMAZ; saha adımları burada (ve 42-52) |
+| [SAHA_KONTROL_LISTESI.md:1037](../../SAHA_KONTROL_LISTESI.md#L1037) | <code>## 51. 🔌 Firmware — ESP32-C3, ESP32-WROOM ve Ekran Yazılımı (F1, F2A1, F2A2, F2B)</code> | Donanımdaki gerçek davranış host testleriyle doğrulanmış SAYILMAZ; saha adımları burada (ve 42-52) |
 | [docs/codebase/TESTING.md:12](../../docs/codebase/TESTING.md#L12) | <code>- Firmware: host tests in `cihaz_kontrol/host_test/` (719 checks: local control v2 core, …</code> | Firmware test kapsamı ve CI dışında olduğu notu |
 
 **Olası nedenler**
@@ -768,7 +768,7 @@ cd server && npm test
 | [server/test/ops_migration_chain.test.js:25](../../server/test/ops_migration_chain.test.js#L25) | <code>it('her ALTER TABLE, aynı veya önceki bir migration\'da oluşturulmuş tabloyu hedefler', (…</code> | Her ALTER TABLE aynı veya önceki migration'da oluşturulmuş bir tabloyu hedeflemeli (IF EXISTS olmadıkça) |
 | [server/test/ops_migration_chain.test.js:20](../../server/test/ops_migration_chain.test.js#L20) | <code>assert.ok(files.length &gt;= 27, `beklenenden az migration: ${files.length}`);</code> | En az 27 migration; numaralar tekrarlanamaz (NNN_ad.sql) |
 | [server/test/ops_migrate_runner.test.js:1](../../server/test/ops_migrate_runner.test.js#L1) | <code>// scripts/migrate.js birim testleri.</code> | Migration koşucusu sahte DB istemcisiyle test edilir (gerçek DB'ye bağlanmaz) |
-| [SAHA_KONTROL_LISTESI.md:921](../../SAHA_KONTROL_LISTESI.md#L921) | <code>- [ ] **47.6.** VPS: `node scripts/migrate.js --status` (salt okunur) → schema_migrations…</code> | Canlıda migrate.js --status / --baseline / --apply adımları (saha doğrulaması) |
+| [SAHA_KONTROL_LISTESI.md:929](../../SAHA_KONTROL_LISTESI.md#L929) | <code>- [ ] **47.6.** VPS: `node scripts/migrate.js --status` (salt okunur) → schema_migrations…</code> | Canlıda migrate.js --status / --baseline / --apply adımları (saha doğrulaması) |
 
 **Olası nedenler**
 - Yeni migration, yalnızca src/db.js'te oluşan bir tabloyu ALTER ediyor (boş veritabanında docker initdb ve migrate.js bu satırda düşer)
@@ -859,7 +859,7 @@ flutter test test/screens/login_layout_test.dart
 | --- | --- | --- |
 | [test/design/app_snack_test.dart:516](../../test/design/app_snack_test.dart#L516) | <code>// Not: flutter test'in Ahem yazı tipinde her harf 1 em genişliğindedir (gerçek yazı tipl…</code> | Ahem: her harf 1 em genişlikte (gerçek yazı tiplerinin ~2 katı); matris bilerek kötü durumu sınar |
 | [test/screens/login_layout_test.dart:10](../../test/screens/login_layout_test.dart#L10) | <code>// Not: widget testleri Ahem yazı tipiyle çalışır (her harf 1 em genişliğinde): satır sar…</code> | Geçen taşma testi gerçek yazı tipinde de geçer; satır sarma testte gerçek cihazdan serttir |
-| [test/screens/home_shell_layout_test.dart:848](../../test/screens/home_shell_layout_test.dart#L848) | <code>// 400 dp x1,3: test yazı tipinde (Ahem: harf = punto) uzun etiket sığmaz; gerçek yazı ti…</code> | 400 dp x1.3'te uzun etiket testte sığmaz, gerçek yazı tipinde sığar (iddia buna göre yazılmış) |
+| [test/screens/home_shell_layout_test.dart:856](../../test/screens/home_shell_layout_test.dart#L856) | <code>// 400 dp x1,3: test yazı tipinde (Ahem: harf = punto) uzun etiket sığmaz; gerçek yazı ti…</code> | 400 dp x1.3'te uzun etiket testte sığmaz, gerçek yazı tipinde sığar (iddia buna göre yazılmış) |
 | [test/design/app_dialog_test.dart:454](../../test/design/app_dialog_test.dart#L454) | <code>// Test yazı tipi (Ahem) gerçek yazı tipinden ~2 kat geniştir: 320 x 2,0'da yalnız üst sı…</code> | 320 x 2.0'da yalnız üst sınır sınanır |
 | [test/voice_live_banner_test.dart:594](../../test/voice_live_banner_test.dart#L594) | <code>// Ahem'de her harf 1 em: gerçek yazı tiplerinden ~2 kat geniş; yalnız taşma/hata olmamas…</code> | Yalnız taşma/hata olmaması sınanır |
 
@@ -885,7 +885,7 @@ flutter test test/screens/login_layout_test.dart
 | [test/theme_service_test.dart:1](../../test/theme_service_test.dart#L1) | <code>// Tema tercihi: sistem (varsayılan) / aydınlık / karanlık; cihazda saklanır (SharedPrefe…</code> | Tema tercihi (sistem/aydınlık/karanlık) ve kalıcılığı |
 | [test/design/theme_toggle_button_test.dart:44](../../test/design/theme_toggle_button_test.dart#L44) | <code>testWidgets('kapsam yoksa düğme hiç görünmez (mevcut ekranlar değişmez)', (t) async {</code> | Ay/güneş geçiş düğmesi testleri (dosyada group yok; her senaryo ayrı testWidgets: kapsamsız görünmez, ikon/ipucu, kalıcılık, sistem modu, 44 dp, 320 dp x 2,0 taşma) |
 | [docs/codebase/CONCERNS.md:54](../../docs/codebase/CONCERNS.md#L54) | <code>&#124; `lib/ui/design/` (tokens, palette, components) &#124; A palette or token change restyles ~60…</code> | Palet/token değişikliği ~60 ekranı etkiler: değişiklik öncesi ve sonrası test/design + test/screens çalıştırılmalı |
-| [SAHA_KONTROL_LISTESI.md:1146](../../SAHA_KONTROL_LISTESI.md#L1146) | <code>## 55. 🌗 Aydınlık / Karanlık Tema Geçiş Düğmesi (2026-10-02)</code> | Tema geçiş düğmesinin saha adımları |
+| [SAHA_KONTROL_LISTESI.md:1155](../../SAHA_KONTROL_LISTESI.md#L1155) | <code>## 55. 🌗 Aydınlık / Karanlık Tema Geçiş Düğmesi (2026-10-02)</code> | Tema geçiş düğmesinin saha adımları |
 
 **Olası nedenler**
 - Palet/token (lib/styles, lib/ui/design/tokens.dart) değişti: bir metin-zemin çifti 4.5:1 altına düştü
@@ -918,7 +918,7 @@ flutter test test/theme_service_test.dart
 | [test/clock_rebuild_scope_test.dart:1](../../test/clock_rebuild_scope_test.dart#L1) | <code>// FAZ 5 / P-d: DigitalClockWidget'ın saniyelik güncellemesi yalnız saat metnini yeniden …</code> | Saniyelik güncelleme yalnız saat metnini yeniden kurar |
 | [test/qr_modal_polling_test.dart:1](../../test/qr_modal_polling_test.dart#L1) | <code>// FAZ 5 / P-c, P-d: DynamicQrPassModal durum yoklaması (800 ms) yaşam döngüsü ve geri sa…</code> | QR modalı yoklama yaşam döngüsü ve geri sayım halkası kapsamı |
 | [test/home_scroll_paint_test.dart:2](../../test/home_scroll_paint_test.dart#L2) | <code>// (RepaintBoundary) yoksa her kaydırma karesinde yüzlerce kartın tümü baştan boyanır.</code> | Uzun sayfada kaydırma: sınır yoksa her karede yüzlerce kart baştan boyanır |
-| [SAHA_KONTROL_LISTESI.md:1102](../../SAHA_KONTROL_LISTESI.md#L1102) | <code>- [ ] **52.16.** Sunucu erişim günlüğünden yoklama trafiği: Kapılar sayfası (kapı kartı) …</code> | Sunucu erişim günlüğünde yoklama trafiğinin saha doğrulaması |
+| [SAHA_KONTROL_LISTESI.md:1111](../../SAHA_KONTROL_LISTESI.md#L1111) | <code>- [ ] **52.16.** Sunucu erişim günlüğünden yoklama trafiği: Kapılar sayfası (kapı kartı) …</code> | Sunucu erişim günlüğünde yoklama trafiğinin saha doğrulaması |
 
 **Olası nedenler**
 - Geniş kapsamlı setState / üst widget güncellemesi yeni eklendi (yalnız ilgili alt ağaç yeniden kurulmalı)
@@ -975,7 +975,7 @@ flutter test test/home_polling_test.dart test/adaptive_poller_test.dart test/clo
 | [integration_test/tool/make_defines.mjs:30](../../integration_test/tool/make_defines.mjs#L30) | <code>console.error('Hata: --e2e &lt;E2E harness dizini&gt; (veya E2E_DIR) gerekli.');</code> | dart_defines.json üreticisi; seed.json gerekir (repoya yazılmaz, sır içerir) |
 | [integration_test/support/e2e_driver.dart:5](../../integration_test/support/e2e_driver.dart#L5) | <code>// Calistirma (proje kokunden; ayni anda YALNIZ BIR `flutter test -d windows`):</code> | Çalıştırma komutu ve kuralı: aynı anda tek `flutter test -d windows` |
 | [test/e2e_harness_collector_test.dart:1](../../test/e2e_harness_collector_test.dart#L1) | <code>// E2E altyapisinin (integration_test/support) hata toplayicisini dogrular: "0 tasma" son…</code> | "0 taşma" sonucunun yanlış negatif olmadığını gerçek taşma yakalayarak kanıtlar |
-| [BEKLEYEN_ISLER.md:122](../../BEKLEYEN_ISLER.md#L122) | <code>**Faz 4 – Emülatörlerde uçtan uca test, menü gezme ve düzeltme döngüsü** (**İPTAL EDİLDİ …</code> | Faz 4 İPTAL edildi: E2E yürüyüşü kullanıcı tarafından yapılır; kısmi sonuçlar ve bilinen ortam sorunu burada |
+| [BEKLEYEN_ISLER.md:134](../../BEKLEYEN_ISLER.md#L134) | <code>**Faz 4 – Emülatörlerde uçtan uca test, menü gezme ve düzeltme döngüsü** (**İPTAL EDİLDİ …</code> | Faz 4 İPTAL edildi: E2E yürüyüşü kullanıcı tarafından yapılır; kısmi sonuçlar ve bilinen ortam sorunu burada |
 | [docs/codebase/TESTING.md:8](../../docs/codebase/TESTING.md#L8) | <code>- Flutter integration tests: `integration_test` (dev dependency) under `integration_test/…</code> | Bu testler flutter test/CI kapsamında DEĞİL |
 
 **Olası nedenler**
@@ -1009,7 +1009,7 @@ flutter test integration_test/walk_super_user_test.dart -d windows --dart-define
 | [test_driver/perf_driver.dart:28](../../test_driver/perf_driver.dart#L28) | <code>final out = Platform.environment['PERF_OUT'] ?? 'build${Platform.pathSeparator}perf';</code> | Çıktı dizini: PERF_OUT ortam değişkeni (yoksa build/perf); dosya perf_frames.json |
 | [test_driver/perf_driver.dart:25](../../test_driver/perf_driver.dart#L25) | <code>print('PERF~ sürücü: perf_frames verisi gelmedi (test hata verdi mi?).');</code> | Test hata verdiyse sürücüye özet gelmez |
 | [test/perf_frame_stats_test.dart:1](../../test/perf_frame_stats_test.dart#L1) | <code>// FAZ 5 / P: kare süresi ölçüm düzeneğinin (integration_test/support/perf_frames.dart) ö…</code> | Ölçüm düzeneğinin yüzdelik/jank hesabının birim testi |
-| [SAHA_KONTROL_LISTESI.md:1106](../../SAHA_KONTROL_LISTESI.md#L1106) | <code>- [ ] **52.20.** (Geliştirici) Windows profil kare ölçümü: `flutter drive --profile -d wi…</code> | Komut, taban/faz5 karşılaştırması ve hedefler |
+| [SAHA_KONTROL_LISTESI.md:1115](../../SAHA_KONTROL_LISTESI.md#L1115) | <code>- [ ] **52.20.** (Geliştirici) Windows profil kare ölçümü: `flutter drive --profile -d wi…</code> | Komut, taban/faz5 karşılaştırması ve hedefler |
 
 **Olası nedenler**
 - Yerel API/E2E kullanıcıları hazır değil ya da pencere simge durumunda
@@ -1155,7 +1155,7 @@ node --test "tools/klavuz/*.test.mjs"
 | [.github/workflows/ci.yml:84](../../.github/workflows/ci.yml#L84) | <code>- name: Run gitleaks</code> | Tam geçmiş taranır: eski ifşa olmuş sırlar kırmızıya neden olur |
 | [.github/workflows/ci.yml:91](../../.github/workflows/ci.yml#L91) | <code>GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}</code> | Kuruluma (organization) ait depolarda lisans secret'ı gerekir |
 | [.github/workflows/ci.yml:4](../../.github/workflows/ci.yml#L4) | <code># NOT: Bu dosyada DEPLOY YOKTUR (canli dagitim kullanici karari; AGENTS.md kural 8 elle y…</code> | CI canlıya dağıtım yapmaz (AGENTS.md kural 8 elle yürütülür) |
-| [SAHA_KONTROL_LISTESI.md:923](../../SAHA_KONTROL_LISTESI.md#L923) | <code>- [ ] **47.8.** GitHub: PR'da Actions "Server", "Flutter", "Secret scan" çalışır (gitleak…</code> | gitleaks geçmişteki parola yüzünden kırmızı çıkabilir; parolayı döndürme notu |
+| [SAHA_KONTROL_LISTESI.md:931](../../SAHA_KONTROL_LISTESI.md#L931) | <code>- [ ] **47.8.** GitHub: PR'da Actions "Server", "Flutter", "Secret scan" çalışır (gitleak…</code> | gitleaks geçmişteki parola yüzünden kırmızı çıkabilir; parolayı döndürme notu |
 | [docs/codebase/CONCERNS.md:9](../../docs/codebase/CONCERNS.md#L9) | <code>&#124; high &#124; Production credentials were exposed in the past (repository history, firmware bi…</code> | Geçmişte ifşa olan üretim sırları riski (döndürme ve geçmiş temizliği kullanıcı kararı) |
 
 **Olası nedenler**
@@ -1210,10 +1210,10 @@ flutter test
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
 | [AGENTS.md:25](../../AGENTS.md#L25) | <code>5. **Saha Kontrol Listesini Güncel Tut:**</code> | Kural: yeni özellik kodlanıp tamamlanınca "- [ ]" adımı; nasıl test edileceği ve beklenen sonuç net yazılır |
-| [SAHA_KONTROL_LISTESI.md:1146](../../SAHA_KONTROL_LISTESI.md#L1146) | <code>## 55. 🌗 Aydınlık / Karanlık Tema Geçiş Düğmesi (2026-10-02)</code> | Örnek bölüm: başlık "## NN. emoji Konu (tarih)"; en yeni bölüm dosyanın SONUNDA |
-| [SAHA_KONTROL_LISTESI.md:1148](../../SAHA_KONTROL_LISTESI.md#L1148) | <code>- [ ] **55.1. Giriş Ekranında Tema Geçişi:**</code> | Madde biçimi: "- [ ] **NN.M. Başlık:**" + alt satırlarda "**Nasıl Test Edilir:**" ve "**Beklenen Sonuç:**" |
+| [SAHA_KONTROL_LISTESI.md:1155](../../SAHA_KONTROL_LISTESI.md#L1155) | <code>## 55. 🌗 Aydınlık / Karanlık Tema Geçiş Düğmesi (2026-10-02)</code> | Örnek bölüm: başlık "## NN. emoji Konu (tarih)"; en yeni bölüm dosyanın SONUNDA |
+| [SAHA_KONTROL_LISTESI.md:1157](../../SAHA_KONTROL_LISTESI.md#L1157) | <code>- [ ] **55.1. Giriş Ekranında Tema Geçişi:**</code> | Madde biçimi: "- [ ] **NN.M. Başlık:**" + alt satırlarda "**Nasıl Test Edilir:**" ve "**Beklenen Sonuç:**" |
 | [SAHA_KONTROL_LISTESI.md:6](../../SAHA_KONTROL_LISTESI.md#L6) | <code>&gt; ℹ️ **Not:** Talep ettiğiniz her yeni özellik tamamlandığında bu listeye otomatik olarak…</code> | Listenin başındaki söz: her yeni özellik buraya yeni adım olarak eklenir |
-| [SAHA_KONTROL_LISTESI.md:921](../../SAHA_KONTROL_LISTESI.md#L921) | <code>- [ ] **47.6.** VPS: `node scripts/migrate.js --status` (salt okunur) → schema_migrations…</code> | Klavuz girişleri bu tür madde numaralarına (ör. 47.6, 52.16) find ile bağlıdır: mevcut numaraları yeniden numaralamayın |
+| [SAHA_KONTROL_LISTESI.md:929](../../SAHA_KONTROL_LISTESI.md#L929) | <code>- [ ] **47.6.** VPS: `node scripts/migrate.js --status` (salt okunur) → schema_migrations…</code> | Klavuz girişleri bu tür madde numaralarına (ör. 47.6, 52.16) find ile bağlıdır: mevcut numaraları yeniden numaralamayın |
 
 **Olası nedenler**
 - Yeni özellik için madde eklenmedi (kural 5 unutuldu)
@@ -1302,11 +1302,11 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 300 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [BEKLEYEN_ISLER.md:88](../../BEKLEYEN_ISLER.md#L88) | <code>## 6. 🛠️ Kod İnceleme Düzeltme Planı (2026-10-01)</code> | Kod inceleme planı: Faz 0-6 ve her fazın durumu ([x] yapıldı / [ ] bekliyor) |
-| [BEKLEYEN_ISLER.md:122](../../BEKLEYEN_ISLER.md#L122) | <code>**Faz 4 – Emülatörlerde uçtan uca test, menü gezme ve düzeltme döngüsü** (**İPTAL EDİLDİ …</code> | Faz 4 (emülatörde uçtan uca gezme) İPTAL: denemeleri kullanıcı yapar; kısmi sonuçlar ve ortam sorunu yazılı |
-| [BEKLEYEN_ISLER.md:133](../../BEKLEYEN_ISLER.md#L133) | <code>**Faz 6 – Canlıya dağıtım (AGENTS.md kural 8)**</code> | Canlıya dağıtım durumu: 2026-10-01 sunucu dağıtımı, COMPANY_API_KEY, APK/firmware dağıtımının kullanıcı kararı olduğu |
-| [BEKLEYEN_ISLER.md:139](../../BEKLEYEN_ISLER.md#L139) | <code>**Ertelenen düşük öncelikli işler (ajan raporlarından)**</code> | Bilinen ve bilerek ertelenen eksikler (çift kayıt, bellek içi hız sınırı, BLE bonding, MQTT bloklama vb.) |
-| [BEKLEYEN_ISLER.md:147](../../BEKLEYEN_ISLER.md#L147) | <code>**Bilinçli olarak bu turun dışında (kullanıcı kararı veya ayrı iş gerektirir)**</code> | Kullanıcı kararı gerektirenler: parola döndürme/git geçmişi temizliği, OTA kod imzalama, release imzası, canlı .env değerleri |
+| [BEKLEYEN_ISLER.md:100](../../BEKLEYEN_ISLER.md#L100) | <code>## 6. 🛠️ Kod İnceleme Düzeltme Planı (2026-10-01)</code> | Kod inceleme planı: Faz 0-6 ve her fazın durumu ([x] yapıldı / [ ] bekliyor) |
+| [BEKLEYEN_ISLER.md:134](../../BEKLEYEN_ISLER.md#L134) | <code>**Faz 4 – Emülatörlerde uçtan uca test, menü gezme ve düzeltme döngüsü** (**İPTAL EDİLDİ …</code> | Faz 4 (emülatörde uçtan uca gezme) İPTAL: denemeleri kullanıcı yapar; kısmi sonuçlar ve ortam sorunu yazılı |
+| [BEKLEYEN_ISLER.md:145](../../BEKLEYEN_ISLER.md#L145) | <code>**Faz 6 – Canlıya dağıtım (AGENTS.md kural 8)**</code> | Canlıya dağıtım durumu: 2026-10-01 sunucu dağıtımı, COMPANY_API_KEY, APK/firmware dağıtımının kullanıcı kararı olduğu |
+| [BEKLEYEN_ISLER.md:151](../../BEKLEYEN_ISLER.md#L151) | <code>**Ertelenen düşük öncelikli işler (ajan raporlarından)**</code> | Bilinen ve bilerek ertelenen eksikler (çift kayıt, bellek içi hız sınırı, BLE bonding, MQTT bloklama vb.) |
+| [BEKLEYEN_ISLER.md:159](../../BEKLEYEN_ISLER.md#L159) | <code>**Bilinçli olarak bu turun dışında (kullanıcı kararı veya ayrı iş gerektirir)**</code> | Kullanıcı kararı gerektirenler: parola döndürme/git geçmişi temizliği, OTA kod imzalama, release imzası, canlı .env değerleri |
 | [BEKLEYEN_ISLER.md:10](../../BEKLEYEN_ISLER.md#L10) | <code>## 1. 🔌 Donanım &amp; Firmware (ESP32)</code> | WROOM röle kartı pin doğrulaması ve sahadaki C3 3.0.3 takibi (açık maddeler) |
 
 **Olası nedenler**
@@ -1462,7 +1462,7 @@ python cihaz_dene/app.py
 | [android/app/build.gradle.kts:35](../../android/app/build.gradle.kts#L35) | <code>sourceCompatibility = JavaVersion.VERSION_17</code> | Uygulama kodu Java 17 hedefler (derleyici JDK'si 17 veya üstü olmalı) |
 | [android/app/build.gradle.kts:84](../../android/app/build.gradle.kts#L84) | <code>signingConfig = signingConfigs.getByName("debug")</code> | android/key.properties yoksa release derleme DEBUG anahtarıyla imzalanır (uyarı basılır; mağazaya yüklenemez) |
 | [android/app/build.gradle.kts:44](../../android/app/build.gradle.kts#L44) | <code>applicationId = "tr.com.gudeteknoloji.siteyonetim"</code> | Kalıcı uygulama kimliği (mağaza kaydından sonra değiştirilemez; iOS paket kimliğiyle aynıdır) |
-| [SAHA_KONTROL_LISTESI.md:1115](../../SAHA_KONTROL_LISTESI.md#L1115) | <code>- [ ] **53.2. Android Gradle JDK 21 Uyumluluğu:**</code> | Doğrulama adımı: gradle.properties'teki Android Studio JDK ile hatasız derleme |
+| [SAHA_KONTROL_LISTESI.md:1124](../../SAHA_KONTROL_LISTESI.md#L1124) | <code>- [ ] **53.2. Android Gradle JDK 21 Uyumluluğu:**</code> | Doğrulama adımı: gradle.properties'teki Android Studio JDK ile hatasız derleme |
 
 **Olası nedenler**
 - Android Studio farklı yola kurulu ya da jbr klasörü yok: org.gradle.java.home yolunu bu makineye göre düzeltin (yalnız yerel; depodaki değer geliştirici makinesindir)

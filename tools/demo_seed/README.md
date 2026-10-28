@@ -15,6 +15,7 @@ DEGISMEZ; arac uygulamanin kendi servislerini ve tablo kisitlarini kullanir. Her
 | `cleanup.mjs` | `--list`, `--batch <id> --yes`: kayitli satirlari siler (SUPERUSER gerekir), diskteki belge dosyalarini siler, degistirilen satirlari eski haline getirir; arac batch'i varken tohum / yeniden yapilandirma batch'ini, yeniden yapilandirma batch'i varken tohum batch'ini reddeder (`--force`) |
 | `make_pdf.py` | `--creds creds.json --out hesaplar.pdf` : A4 PDF (yonetim kadrosu + gorevliler + daire daire sakinler; yeniden yapilandirilmis JSON'da Malik / Daire admini (sari satir) / aile uyeleri). `pip install reportlab` |
 | `run_remote.sh` | Sunucuda: pg_dump yedegi -> yedekten gecici DB -> tohum + cleanup provasi -> `--prod` ile canli |
+| `lib/target_guard.mjs` | HEDEF KORUMASI (asagida): dort arac da baslarken `DATABASE_URL` hedefini dogrular; yerel (loopback + izinli ad) degilse `--allow-target <ad>` ister |
 | `restructure_families.mjs` | Tohumlanmis sitenin dairelerini YENI DAIRE YONETIMI modeline gore duzenler (asagidaki bolum): `--prev-creds`, `--creds-out`, `--dry-run`, `--seed`, `--force`, `--ensure-composition` (her haneye en az 1 cocuk + 1 yasli ekler) |
 | `run_remote_restructure.sh` | Sunucuda: yedek -> gecici DB provasi (yeniden yapilandirma + cleanup, icerik ozeti karsilastirmasi) -> `--prod` ile canli; `--force`, `--extra "<bayraklar>"` / `EXTRA_ARGS` ile `restructure_families.mjs`'e ek bayrak iletir |
 =======
@@ -42,12 +43,12 @@ ssh <sunucu> 'bash ~/demo_seed/run_remote.sh --prod --skip-rehearsal --creds-out
 scp <sunucu>:~/demo_seed/out/creds.json out/ && python make_pdf.py --creds out/creds.json --out out/demo_hesaplar.pdf
 ssh <sunucu> 'shred -u ~/demo_seed/out/creds.json'
 
-# Geri alma (deneme bitince)
+# Geri alma (deneme bitince); yerel izin listesi disindaki (ornegin canli) veritabaninda her komuta --allow-target <veritabani adi> eklenir (Hedef korumasi)
 DATABASE_URL=postgres://... node cleanup.mjs --list
 DATABASE_URL=postgres://... node cleanup.mjs --batch demo-YYYYMMDDHHMMSS --yes
 ```
 
-Elle (herhangi bir PostgreSQL): `DATABASE_URL=postgres://kullanici:parola@host:5432/db node seed.mjs --site Cenk --creds-out out/creds.json`.
+Elle (yerel PostgreSQL; hedef kurallari icin «Hedef korumasi» bolumune bakin): `DATABASE_URL=postgres://kullanici:parola@127.0.0.1:5432/site_kapi_yerel node seed.mjs --site Cenk --creds-out out/creds.json`.
 `server/` dizininde `npm ci` yapilmis olmali (arac `pg`, `bcryptjs` ve servis modullerini oradan yukler; `--server-dir` ile degistirilebilir). `server/.env` varsa
 yuklenir (mevcut ortam degiskenlerini ezmez): `FINANCE_RECEIPT_SECRET` (makbuz), `JWT_SECRET` (kamera parolasi sifreleme), `DOCUMENTS_DIR` (belge deposu) buradan gelir.
 
@@ -57,7 +58,7 @@ yuklenir (mevcut ortam degiskenlerini ezmez): `FINANCE_RECEIPT_SECRET` (makbuz),
   tasinma tarihleri farkli (yari daire 2019-2022'den beri, kalani 2023-2026), yeni tasinan malik dairelerde onceki malik pasif kayit. Her kisinin KENDI hesabi (kullanici adi `ad.soyad`, sifre 12 karakter
   karisabilen harfler yok, bcrypt = uygulamanin `hashPassword`'u). Yonetim kurulu (baskan, 2 uye, denetci; farkli dairelerden `BOARD_MEMBER`), 3 gorevli (`STAFF`: kapici, teknik, danisma), 0-2 arac/daire, rehber (12 telefon).
   Mevcut site yoneticisi KORUNUR, dokunulmaz.
-* **Finans (en onemli)**: iki hesap (Kasa + sahte IBAN'li banka), 46 ay aylik aidat (m2'ye gore daire basina farkli; 2023 ~1.500, 2024 ~2.400, 2025 ~3.500, 2026 ~4.800 TL), ek borc taksitleri (asansor 2, dis cephe 4),
+* **Finans (en onemli)**: iki hesap (Kasa + sahte IBAN'li banka), 46 ay aylik aidat (arsa payina gore daire basina farkli; 2023 ~1.500, 2024 ~2.400, 2025 ~3.500, 2026 ~4.800 TL), ek borc taksitleri (asansor 2, dis cephe 4),
   tahsilat deseni (zamaninda odeyenler, surekli 30/60 gun gecikenler, 2 kronik gecikmeli daire, ceyreklik pesin odeyen), nakit/havale/cek, malik/kiraci hesabi, her tahsilat icin makbuz, ~575 gider (14 kategori, 13 tedarikci,
   rutin/beklenmedik, mevsimsel dogalgaz/elektrik/su, 11 beklenmedik ariza), kasa<->banka aktarimlari, 6 mutabakat (banka faizi/ucreti duzeltmeli), 2 bekleyen dekont bildirimi, 4 eslesmemis banka satiri, ay kapatma (2026-08'e kadar).
   Yillik gelir ~ gider (+-%10): tahsilat toplamina gore gider olceklenir (oranlar 2023 0,97 / 2024 1,03 / 2025 0,96 / 2026 0,95).
@@ -164,11 +165,21 @@ Her adim yalniz o site icin ACIK modulde calisir (`site_modules` + `catalog.js`)
 `finance`, `metering`, `budget`, `announcements` (cekirdek), `neighbor_board`, `drive_storage` (Dosya Deposu: belgeler adimi; `documents` modulu yoktur), `work_tracking`, `reservation`, `visitor_log`, `contracts`, `decision_book`, `survey`, `equipment`, `directory`, `annual_report`, `finance` (kart odemesi ayarlari) + `plate_cameras` (devices; `card_payments` modulu yoktur: kart odemesi Aidat ve Finans icindedir).
 KAPSAM DISI (dokunulmaz): kapilar, kayitli cihazlar, "Daireye Katil", kartli gecis, misafir gecisi, PIN, plaka tanima ve CCTV. Google Drive baglantisi (OAuth gerekir) ve "yakinda" moduller (`online_payment`, `hgs_access`, `cctv_link`, `plate_recognition`) atlanir.
 
+## Hedef korumasi
+
+Dort arac da (`seed.mjs`, `cleanup.mjs`, `restructure_families.mjs`, `add_vehicles.mjs`) baslarken `DATABASE_URL` hedefini `lib/target_guard.mjs` ile dogrular; izinli degilse HICBIR sey yapmadan cikis kodu 2 ile durur (parola yazilmaz). Amac: sahte veri yanlislikla canli ya da baska bir veritabanina yazilmasin (karsilastirma programi P1-19).
+
+* **Yerel kip (varsayilan):** sunucu geri donus adresi (`127.0.0.1`, `localhost`, `::1`) VE veritabani adi izin listesinde: `site_kapi_yerel`, `site_kapi_yerel_test` ya da yerel test / prova adlari (`demo_seed_*`, `demo_restr_*`, `demo_veh_*`; yerel testler `demo_seed_test`, `demo_restr_test`, `demo_veh_test` kullanir).
+* **Acik izin:** baska her hedef (canli, uzak, baska ad) YALNIZ `--allow-target <veritabani adi>` ile acilir; ad hedefteki adla AYNEN ayni olmalidir (adsiz ya da yanlis bayrak reddedilir). `run_remote*.sh` betikleri provada gecici veritabani adini, `--prod` yolunda canli veritabani adini bu bayrakla kendisi verir; elle calistiran adi bilerek yazar. Acik izinde tek uyari satiri yazilir.
+* **Geri alma da korunur:** canli veritabaninda `DATABASE_URL=<canli-url> node cleanup.mjs --batch <id> --yes --allow-target <canli veritabani adi>`.
+* **Test:** `cd server && node --test test/demo_seed_target_guard.test.js` (saf birim testleri + dort aracin ve uc betigin korumayi kullandigini denetleyen kaynak testi; veritabani gerekmez).
+
 ## Etiketleme ve geri alma
 
 * `seed.mjs` baslarken **gecici** `AFTER INSERT` yakalama tetikleyicilerini (`zz_demo_seed_capture`) tum public tablolara kurar, oturumda `demo_seed.batch` ayari doluyken eklenen HER satiri
   (uygulama servislerinin ve tetikleyicilerin urettigi satirlar dahil) `demo_seed_registry(batch_id, table_name, row_id, op, before_image, created_at)` tablosuna yazar; bitince tetikleyicileri kaldirir.
-* Mevcut satirlarda yapilan degisiklikler (dairelerin m2/kat/arsa payi/kategori/sorumlu taraf, `resident_user_code`) `op='update'` + `before_image` ile saklanir; cleanup eski haline getirir.
+* Mevcut satirlarda yapilan degisiklikler (dairelerin kat/arsa payi/kategori/sorumlu taraf, `resident_user_code`) `op='update'` + `before_image` ile saklanir; cleanup eski haline getirir.
+  Eski (migration 078 ONCESI) bir batch'in `before_image`'inda sonradan dusurulen sutunlar (`apartments.gross_area_m2` / `net_area_m2`) bulunabilir: tabloda artik olmadiklari icin geri yuklenmez (m2 geri eklenmez), `cleanup.mjs` bunlari atlar, kalan alanlari geri yukler ve sonda `(atlandi: sutun artik yok, geri yuklenmedi) ...` satirinda listeler.
 * `cleanup.mjs` tek transaction'da `SET LOCAL session_replication_role = replica` ile (yalniz eklemeli tablolar: `ledger_entries`, makbuzlar, `audit_log`, `board_decisions` vb.) YALNIZ kayitli satirlari siler,
   belge dosyalarini (`@file`) diskten kaldirir. Sequence degerleri geri alinmaz (zararsiz). Koruma: sitede demo batch ya da finans/defter/guncel sakin kaydi varsa tohum DURUR (`--force` ile asilir).
 
@@ -184,5 +195,5 @@ sozlesme hatirlatma zamanlayicisi icin onceden "gonderildi" satirlari yazilir (y
 * Dekont bildirimi ve banka satirlari dogrudan SQL ile yazilir (servis dosya/PDF ayristirma ister); `file_required=false`, dosya yok.
 * Belge deposu: dosyalar `DOCUMENTS_DIR`'e (ya da `~/kapi-documents`) tohumu calistiran OS kullanicisi olarak yazilir; PM2 kullanicisi ayniysa uygulama okur, degilse izinleri ayarlayin.
 * `--force` mevcut gercek sakin/finans kaydi olan sitede kullanilirsa daire basina "tam 1 amir" kurali bozulabilir. Onerilmez.
-* Aidat 'm2' dagitimiyla (brut alan) yazilir; yillik zam yeni yillik tanimla yapilir. Gecikme tazminati ve borc hatirlatma KAPALI birakilir (hukuk onayi bayragi).
+* Aidat ve ek borclar ARSA PAYINA gore (`land_share`) yazilir; daire alani (m2) sistemde tutulmaz (migration 078 `gross_area_m2` / `net_area_m2` sutunlarini kalici dusurdu): arac bu sutunlari ne okur ne yazar, `area` dagitimi da kullanmaz (sunucu 400 `AREA_DISTRIBUTION_REMOVED` verir). Arsa paylari (1000 uzerinden) dairelerin goreli buyuklugune (oda tipine gore, yalniz bellekte; veritabanina yazilmaz) oranli uretilir, sitede zaten arsa payi varsa KORUNUR; yillik zam yeni yillik tanimla yapilir. Gecikme tazminati ve borc hatirlatma KAPALI birakilir (hukuk onayi bayragi).
 * Yerel testte cleanup, `session_replication_role` nedeniyle FK eylemlerini calistirmaz: her satir acikca kayitli oldugundan sorun olmaz; baska bir surecin tohumlanan satirlara sonradan bagladigi kayitlar cleanup'ta yetim kalabilir.

@@ -20,7 +20,7 @@ export async function seedDecisions(ctx) {
       list.push({ title: `${m.year} yılı işletme projesinin onaylanması`, body: `${m.year} yılı gider bütçesi (işletme projesi) görüşülmüş ve sunulan haliyle kabul edilmiştir.`, vote: 'kabul', f: 9, a: 1 });
       list.push({ title: `${m.year} yılı aylık aidat tutarının belirlenmesi`, body: `Artan gider kalemleri dikkate alınarak ${m.year} yılı için daire başına ortalama aylık aidat tutarı ${dueYear[m.year] ?? 5000} TL olarak belirlenmiştir. Ödeme günü her ayın 10'udur.`, vote: 'kabul', f: 8, a: 2 });
       if (m.year % 2 === 1) list.push({ title: 'Yönetim kurulu ve denetçi seçimi', body: 'Yönetim kurulu başkanı, iki üye ve denetçi gizli oyla seçilmiş; seçilen kişilere görev süresi boyunca yetki verilmiştir.', vote: 'kabul', f: 10, a: 0 });
-      if (m.year === 2024) list.push({ title: 'Asansör modernizasyonu için katkı payı', body: 'Her iki asansörün kumanda ve kabin yenilemesi için toplam bedelin arsa payı yerine brüt alana göre dağıtılarak mal sahiplerinden tahsiline karar verilmiştir.', vote: 'kabul', f: 8, a: 2 });
+      if (m.year === 2024) list.push({ title: 'Asansör modernizasyonu için katkı payı', body: 'Her iki asansörün kumanda ve kabin yenilemesi için toplam bedelin arsa payına göre dağıtılarak mal sahiplerinden tahsiline karar verilmiştir.', vote: 'kabul', f: 8, a: 2 });
       if (m.year === 2025) list.push({ title: 'Dış cephe boya ve onarım işi', body: 'Dış cephe boya ve onarım işinin ihale usulüyle yaptırılmasına, bedelin mal sahiplerinden katkı payı olarak tahsil edilmesine karar verilmiştir.', vote: 'kabul', f: 9, a: 1 });
     } else {
       const pool = [

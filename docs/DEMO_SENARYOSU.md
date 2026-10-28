@@ -28,7 +28,7 @@ yerleri değişince bu belgedeki adımlar da güncellenir (bölüm 6).
 
 ### 2.1 Bir kez (demo sitesi)
 
-1. Süper kullanıcı bir demo sitesi kurar (ör. "Örnek Sitesi"; 2 blok, 24 daire). Daire künyesine m² ve arsa payı girilir.
+1. Süper kullanıcı bir demo sitesi kurar (ör. "Örnek Sitesi"; 2 blok, 24 daire). Daire künyesine kat, tip ve arsa payı girilir.
 2. Kişiler **Toplu Yükle** ile uydurma adlarla doldurulur (malik, kiracı; birkaç araç).
 3. Modüller ekranından demo sitesinde şu seçmeli modüller açılır: İş Takibi, Rezervasyon ve Konsiyerj, Firma ve Sözleşme Takibi, Karar
    Defteri. (Temel modüller her sitede zaten açıktır, kapatılamaz ve talep edilmez; kartlarında "Her sitede açık" yazar: Kişi ve Daire
@@ -62,7 +62,7 @@ yerleri değişince bu belgedeki adımlar da güncellenir (bölüm 6).
 ### 1:00-6:00 Yönetici (5 dakika)
 
 1. Giriş: **Panel** açılır; yöneticiye tanımlı modüller kartlar hâlinde dizili.
-2. **Kişiler → Daireler:** bir dairenin künyesi (m², arsa payı), maliki ve kiracısı.
+2. **Kişiler → Daireler:** bir dairenin künyesi (kat, tip, arsa payı), maliki ve kiracısı.
 3. **Finans → Tanımlar:** aylık aidat tanımı; **Borçlandır** ile yeni ayın borcu (önizleme, sonra "Onayla ve Borçlandır"). Dağıtımın
    arsa payına göre bölündüğü önizlemede görünür.
 4. **Tahsilat Ekle:** bir daireye ödeme girilir; makbuz kendiliğinden düzenlenir (numara MK-yıl-sıra); **Makbuzlar**dan makbuz açılır.

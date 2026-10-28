@@ -20,7 +20,8 @@
 #   (once --prod'suz calistirip proyi gorun; ayni bayraklarla gecici DB'de de uygulanir ve cleanup provasi yapilir)
 #
 # .env dosyasi source EDILMEZ: DATABASE_URL node + dotenv ile okunur (parola ekrana yazilmaz). E-posta GONDERILMEZ (davet / bildirim yazilmaz).
-# Geri alma: node cleanup.mjs --batch <demo-restructure-...> --yes   (seed batch'inden ONCE; SUPERUSER gerekir).
+# Geri alma: node cleanup.mjs --batch <demo-restructure-...> --yes --allow-target <canli veritabani adi>   (seed batch'inden ONCE; SUPERUSER gerekir).
+# Hedef korumasi: araclar yalniz yerel (loopback + izinli ad) ya da --allow-target <ad> ile onaylanmis veritabanina yazar; bu betik provada $RDB, canlida $DB_NAME icin kendisi verir.
 set -uo pipefail
 
 SITE="Cenk"
@@ -110,7 +111,7 @@ if [ "$SKIP_REH" = 0 ]; then
   REH_URL="$(mk_url "$RDB")"
   digest "$RDB" > "$BK/digest_before.txt"
   echo "[3/4] PROVA: yeniden yapilandirma gecici veritabaninda"
-  (cd "$APP_DIR" && DATABASE_URL="$REH_URL" node "$SEED_DIR/restructure_families.mjs" --server-dir "$APP_DIR" --site "$SITE" --prev-creds "$PREV" --creds-out "$OUT/creds_restructure_rehearsal_$STAMP.json" $EXTRA) | tee "$BK/rehearsal_restructure.log" | tail -n 40
+  (cd "$APP_DIR" && DATABASE_URL="$REH_URL" node "$SEED_DIR/restructure_families.mjs" --server-dir "$APP_DIR" --allow-target "$RDB" --site "$SITE" --prev-creds "$PREV" --creds-out "$OUT/creds_restructure_rehearsal_$STAMP.json" $EXTRA) | tee "$BK/rehearsal_restructure.log" | tail -n 40
   RC=${PIPESTATUS[0]}
   [ "$RC" = 0 ] || { echo "HATA: prova basarisiz (cikis $RC). Canliya GECILMEZ."; exit 5; }
   BATCH="$(grep -o 'batch=demo-restructure-[0-9]*' "$BK/rehearsal_restructure.log" | head -n 1 | cut -d= -f2)"
@@ -119,7 +120,7 @@ if [ "$SKIP_REH" = 0 ]; then
   echo "   --- kayitli satirlar (tablo, islem) ---"
   $PSQL -d "$RDB" -Atc "SELECT table_name || ' ' || op || ' ' || count(*) FROM demo_seed_registry WHERE batch_id = '$BATCH' GROUP BY 1, 2 ORDER BY count(*) DESC LIMIT 14"
   echo "   --- cleanup provasi ---"
-  (cd "$APP_DIR" && DATABASE_URL="$REH_URL" node "$SEED_DIR/cleanup.mjs" --server-dir "$APP_DIR" --batch "$BATCH" --yes) | tail -n 8
+  (cd "$APP_DIR" && DATABASE_URL="$REH_URL" node "$SEED_DIR/cleanup.mjs" --server-dir "$APP_DIR" --allow-target "$RDB" --batch "$BATCH" --yes) | tail -n 8
   digest "$RDB" > "$BK/digest_after_cleanup.txt"
   if diff -q "$BK/digest_before.txt" "$BK/digest_after_cleanup.txt" >/dev/null; then
     echo "   cleanup SONRASI kisi/bag tablolari (icerik ozeti) ve tum tablo satir sayilari yedekle AYNI: OK"
@@ -132,13 +133,13 @@ fi
 # --- 4) canli -----------------------------------------------------------------------------------------------------------------------------------
 if [ "$PROD" = 1 ]; then
   echo "[4/4] CANLI: yeniden yapilandirma $DB_NAME veritabaninda (yedek: $BK/db_before_restructure.dump)"
-  (cd "$APP_DIR" && DATABASE_URL="$PROD_URL" node "$SEED_DIR/restructure_families.mjs" --server-dir "$APP_DIR" --site "$SITE" --prev-creds "$PREV" --creds-out "$CREDS_OUT" $EXTRA) | tee "$BK/prod_restructure.log" | tail -n 45
+  (cd "$APP_DIR" && DATABASE_URL="$PROD_URL" node "$SEED_DIR/restructure_families.mjs" --server-dir "$APP_DIR" --allow-target "$DB_NAME" --site "$SITE" --prev-creds "$PREV" --creds-out "$CREDS_OUT" $EXTRA) | tee "$BK/prod_restructure.log" | tail -n 45
   RC=${PIPESTATUS[0]}
   BATCH_PROD="$(grep -o 'batch=demo-restructure-[0-9]*' "$BK/prod_restructure.log" | head -n 1 | cut -d= -f2)"
   echo "   canli batch: $BATCH_PROD   cikis kodu: $RC"
   echo "   kimlik bilgileri: $CREDS_OUT (chmod 600). PDF icin: python3 $SEED_DIR/make_pdf.py --creds $CREDS_OUT --out $OUT/demo_hesaplar.pdf   (reportlab gerekir; yoksa dosyayi yerel makineye alip orada uretin)"
   echo "   KAPAT: kimlik dosyasini kopyaladiktan sonra sunucudan silin (shred -u $CREDS_OUT $PREV)."
-  echo "   GERI ALMA: (cd $APP_DIR && DATABASE_URL=<canli-url> node $SEED_DIR/cleanup.mjs --server-dir $APP_DIR --batch $BATCH_PROD --yes)"
+  echo "   GERI ALMA: (cd $APP_DIR && DATABASE_URL=<canli-url> node $SEED_DIR/cleanup.mjs --server-dir $APP_DIR --batch $BATCH_PROD --yes --allow-target $DB_NAME)"
   exit "$RC"
 else
   echo "[4/4] --prod verilmedi: canliya yazilmadi. Prova basarili ise: bash run_remote_restructure.sh --prev-creds $PREV --prod --skip-rehearsal"

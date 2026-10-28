@@ -15,7 +15,7 @@ Amaç: raporun gösterdiği tüm eksikleri kapatmak, güçsüz yönleri güçlen
 ## Dalgalar
 
 ### Dalga A — küçük P1'ler (karar gerektirmez) [BU OTURUMDA BAŞLADI]
-- P1-9 saha ekranlarındaki bayat etiketler (+ P1-5'in "m²" etiket kısmı)
+- P1-9 saha ekranlarındaki bayat etiketler (+ P1-5'in "m²" etiket kısmı) — YALNIZ etiket yarısı yapıldı; raporun P1-9 ikinci yarısı (saha ekranında fotoğrafın nereye gittiğini gösteren Drive / sunucu / hiçbiri satırı) bilerek Dalga C'de P1-8 ile yapılır (aşağıya bkz.)
 - P1-13 görünür "Ana sayfa" düğmesi
 - P1-15 kapı dili: "açıldı!" → "komut gönderildi" (cihaz yanıtı zinciri ayrı iş, bu dalgada yalnız metin/akış dili)
 - P1-17 server/.env.example eksik 8 SMS/NetGSM/Web Push ayar adı
@@ -45,6 +45,7 @@ Amaç: raporun gösterdiği tüm eksikleri kapatmak, güçsüz yönleri güçlen
 - P1-10 iş kaydı ↔ ekipman bağı (önce/sonra fotoğraf, servis geçmişi)
 - P1-11 dosya adında kayıt kimliği + Drive kaydının kaynak kayda bağı
 - P1-8 silme kuralı (K6): Drive kuyruğunda otomatik silme kalkar (bekliyor + yönetici uyarısı + kota dolunca yeni yükleme reddi); telefon fotoğraf kopyası kabulde otomatik silinmez
+  - **+ P1-9 ikinci yarısı (Dalga A'dan devredildi): saha ekranında "fotoğraf nereye gitti" satırı** (Drive / sunucu / hiçbiri). Neden burada: satır, sunucu yanıtındaki `photo.storage` değerinin istemcide okunmasını gerektirir (bugün `meter_field_queue.dart` `postFieldReading` sonucunu okumuyor; `FieldReadingResult.photoStorage` hazır) ve bu, P1-8'in "fotoğraf ulaşmadı" rozetiyle AYNI veridir. Tek başına eklenmez: P1-8'in "telefon kopyası yalnız `storage` drive / server dönünce silinir" kuralı olmadan satır, fotoğraf telefondan zaten silindikten sonra kaybı bildirirdi (bugün `meter_field_queue.dart` kabulde kopyayı siliyor). Sahadaki görevli yönetici ucunu (`GET /manager/sites/:siteCode/drive`) okuyamaz: bağlantı durumu önceden değil, gönderim sonucundan ya da sayaç saha uçlarına eklenecek bir ipucundan gelmelidir. Dalga C P1-6/P1-7 ile `meter_field_view.dart`'ı zaten yeniden kurar; satır aynı değişiklikte eklenir (ayrı parça bırakmak iki kez dokunmak olurdu).
 - P2-6 fotoğraf daire etiketi uyuşmazlık uyarısı; P2-7 kayıt ↔ dosya kimliği izi; P2-9 onaylı kayıt kilidi/revizyon (K14: yeni sürüm + önceki bağ); P2-10 teklif karşılaştırma alanları; P2-11 yönetilebilir kategoriler
 
 ### Dalga D — arayüz
@@ -86,4 +87,6 @@ Amaç: raporun gösterdiği tüm eksikleri kapatmak, güçsüz yönleri güçlen
 ## Durum izleme
 - Dalga A: 2026-10-28 başladı.
 - Dalga G/B/C/D/E: 2026-10-28 paralel başlatıldı (hızlandırma).
+- Dalga A inceleme turu (2026-10-28): 15 bulgu işlendi. Düzeltilenler: SAHA 25.4 kapı bildirimi, arıza klavuzu `ui-kapi-ac-basari-tiki`, m² kalıntıları (DEMO_SENARYOSU, SAHA 72.3-72.5, F2.04/F2.11/F13.03-F13.05/F30.57), F28.13/F28.15/F28.17/F28.19 metinleri, İşletme Projesi ayrıntısında "Ana sayfa" için kaydedilmemiş tutar onayı (TASARIM_DILI konum + istisna kuralı), `tools/demo_seed` hedef koruması (`--allow-target`). Bilerek ertelenen: P1-9 ikinci yarısı (Dalga C, P1-8 ile).
+- Dalga A main'e alındı (2026-10-28, merge). Dağıtım: G ile birlikte toplu sefer 1.
 - Her dalga bitişinde: bu dosyada işaret + PLATFORM_YOL_HARITASI karar bölümüne K-maddeleri + faz sayfası (uret.py) + karşılaştırma sayfası güncellenir.

@@ -94,7 +94,7 @@ function logInserts(calls) {
 }
 
 describe('verifyQrTokenAndOpenDoor - pulse sonucuna bagli log ve token iadesi', () => {
-  it('pulse gonderilemezse: PULSE_FAILED, token geri verilir, "acildi" logu YAZILMAZ', async () => {
+  it('pulse gonderilemezse: PULSE_FAILED, token geri verilir, basarili gecis logu YAZILMAZ', async () => {
     quiet();
     // mqtt koprusu baslatilmadi => publishDoorPulse MQTT_BRIDGE_NOT_CONNECTED firlatir
     const calls = installFakePool();
@@ -109,7 +109,7 @@ describe('verifyQrTokenAndOpenDoor - pulse sonucuna bagli log ve token iadesi', 
     const inserts = logInserts(calls);
     assert.equal(inserts.length, 1);
     assert.match(inserts[0].params[4], /Komutu Gönderilemedi/);
-    // duz kullanici adiyla "acildi" kaydi olmamali
+    // duz kullanici adiyla basarili gecis kaydi olmamali
     assert.equal(inserts.some((c) => c.params[4] === 'Ayse Yilmaz'), false);
   });
 
