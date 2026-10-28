@@ -7,9 +7,16 @@ import { PlatformError } from './errors.js';
 export const DRIVE_MODULE = 'drive_storage';
 export const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
 export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
-/** Bağlantı kopukken site başına bekleme alanı sınırları. */
+/**
+ * Bağlantı kopukken site başına bekleme alanı sınırı. Alan dolunca YENİ yükleme reddedilir (503 DRIVE_QUEUE_FULL); bekleyen / kayıtlı hiçbir dosyaya dokunulmaz.
+ * "Silmeyi biz yapmayız" (karar K6): bekleyen dosya SÜRE DOLDU DİYE SİLİNMEZ; Drive'a ulaşana kadar bekler.
+ */
 export const PENDING_MAX_BYTES = 100 * 1024 * 1024;
-export const PENDING_MAX_DAYS = 7;
+/** Bu süreyi aşan bekleyen dosya silinmez; yönetici durumunda "uzun süredir bekliyor" uyarısı çıkar (eski 7 gün SİLME kuralının yerine). */
+export const PENDING_WARN_DAYS = 7;
+/** Bekleme alanı doluluk uyarı eşikleri (yüzde): "dolmak üzere" ve "doldu". */
+export const PENDING_NEAR_FULL_PERCENT = 80;
+export const PENDING_FULL_PERCENT = 95;
 export const OAUTH_STATE_MINUTES = 10;
 
 /** Yapılandırma .env'den: DRIVE_CLIENT_ID, DRIVE_CLIENT_SECRET, DRIVE_REDIRECT_URI, DRIVE_TOKEN_KEY (en az 32 karakter). */
@@ -129,15 +136,95 @@ export function cleanLabel(raw) {
 }
 
 /**
- * Dosya adının uzantısız gövdesi. Daire varsa AB_D13_201026 (A blok, daire 13, 20.10.2026: blok harfi + "B", "D" + daire no, gün-ay-yıl 2 hane);
- * daire yoksa tür ön ekiyle <Ön ek>_<ggaayy>. `serial` > 1 ise çakışmayı ayırmak için _2, _3 eklenir.
+ * Kaynak kayıt türü -> dosya adı ön eki (P1-11). Dosya `<ÖN EK>-<kayıt no>_<ad>` adıyla kaydedilir (örn. `IS-123_AB_D13_201026.pdf`) ve
+ * `drive_files.source_type / source_id` aynı kayda bağlanır: belge hem adından hem kayıttan açılır. Kayıt no, kaydın kendi numarasıdır (doldurma yok).
+ * Tür kimlikleri küçük harf + alt çizgidir (DB CHECK ile aynı kural); yeni tür eklemek için buraya satır eklemek yeter.
  */
-export function fileBaseName({ kind, block, apartment, date, serial = 1 }) {
+export const DRIVE_SOURCE_TYPES = Object.freeze({
+  work_item: 'IS', // iş takibi kaydı
+  meter_reading: 'OKM', // sayaç okuması
+  expense: 'GDR', // gider
+  payment_notice: 'DKN', // dekont bildirimi
+  contract: 'SZL', // sözleşme
+  quote: 'TKL', // teklif
+  document: 'BLG', // belge
+  equipment: 'EKP', // ekipman
+});
+
+const SOURCE_ID_PATTERN = /^[1-9]\d{0,14}$/;
+
+/**
+ * { type, id } -> doğrulanmış { type, id: Number }. Kaynak verilmediyse (undefined / null) null döner.
+ * Bilinmeyen tür ya da pozitif tam sayı olmayan numara 400 INVALID_SOURCE (kaynak bağı yalnız sunucu içi çağıranlardan ve sorgu süzgecinden gelir).
+ */
+export function parseDriveSource(raw) {
+  if (raw === undefined || raw === null) return null;
+  const type = String(raw.type ?? '');
+  const idText = typeof raw.id === 'number' ? String(raw.id) : String(raw.id ?? '');
+  if (!Object.hasOwn(DRIVE_SOURCE_TYPES, type) || !SOURCE_ID_PATTERN.test(idText)) {
+    throw new PlatformError(400, 'INVALID_SOURCE', 'Kaynak kayıt geçersiz.');
+  }
+  return { type, id: Number(idText) };
+}
+
+/** "IS-123_" gibi dosya adı öneki; kaynak yoksa ''. */
+export function sourcePrefix(source) {
+  const parsed = parseDriveSource(source);
+  return parsed ? `${DRIVE_SOURCE_TYPES[parsed.type]}-${parsed.id}_` : '';
+}
+
+/**
+ * Dosya adının uzantısız gövdesi. Daire varsa AB_D13_201026 (A blok, daire 13, 20.10.2026: blok harfi + "B", "D" + daire no, gün-ay-yıl 2 hane);
+ * daire yoksa tür ön ekiyle <Ön ek>_<ggaayy>. `source` ({ type, id }) verilirse başına kayıt kimliği gelir: IS-123_AB_D13_201026.
+ * `serial` > 1 ise çakışmayı ayırmak için _2, _3 eklenir.
+ */
+export function fileBaseName({ kind, block, apartment, date, serial = 1, source = null }) {
   const stamp = `${String(date.day).padStart(2, '0')}${String(date.month).padStart(2, '0')}${String(date.year % 100).padStart(2, '0')}`;
   const blockLabel = cleanLabel(block);
   const aptLabel = cleanLabel(apartment);
   const head = aptLabel ? `${blockLabel ? `${blockLabel}B_` : ''}D${aptLabel}` : DRIVE_KINDS[kind];
-  return `${head}_${stamp}${serial > 1 ? `_${serial}` : ''}`;
+  return `${sourcePrefix(source)}${head}_${stamp}${serial > 1 ? `_${serial}` : ''}`;
+}
+
+/**
+ * Drive'ın yükleme yanıtı "teyit" sayılır mı? Dosya kimliği zorunlu; Drive boyut bildiriyorsa gönderilen boyutla aynı olmalı.
+ * Sunucudaki geçici dosya YALNIZ teyitten SONRA silinir (K6): teyitsiz yanıtta dosya beklemede kalır ve yeniden denenir.
+ */
+export function driveConfirmed(sent, byteLength) {
+  if (!sent || typeof sent.id !== 'string' || sent.id === '') return false;
+  return !Number.isFinite(sent.size) || sent.size === byteLength;
+}
+
+/**
+ * Bekleme alanı durumundan yöneticiye gösterilecek uyarılar: [{ code, message }]. Hiçbir uyarı dosya silmez; hepsi "bekliyor" bilgisidir.
+ * `overdueCount`: PENDING_WARN_DAYS'i aşmış bekleyen dosya sayısı.
+ */
+export function queueWarnings({ pendingCount = 0, pendingBytes = 0, overdueCount = 0 } = {}) {
+  const out = [];
+  const percent = Math.floor((Number(pendingBytes) * 100) / PENDING_MAX_BYTES);
+  if (percent >= PENDING_FULL_PERCENT) {
+    out.push({
+      code: 'DRIVE_QUEUE_FULL',
+      message: `Bekleme alanı doldu (%${Math.min(percent, 100)}). Drive'a gönderilemeyen dosyalar silinmez; alan boşalana kadar yeni dosya kabul edilmez. Drive bağlantısını yenileyip bekleyenleri gönderin.`,
+    });
+  } else if (percent >= PENDING_NEAR_FULL_PERCENT) {
+    out.push({
+      code: 'DRIVE_QUEUE_NEARLY_FULL',
+      message: `Bekleme alanı %${percent} doldu. Dolarsa yeni dosya kabul edilmez; mevcut dosyalar silinmez.`,
+    });
+  }
+  if (overdueCount > 0) {
+    out.push({
+      code: 'DRIVE_FILES_OVERDUE',
+      message: `${overdueCount} dosya ${PENDING_WARN_DAYS} günden uzun süredir Drive'a gönderilemedi. Dosyalar silinmedi; Drive bağlantısı düzelince gönderilir.`,
+    });
+  } else if (pendingCount > 0) {
+    out.push({
+      code: 'DRIVE_FILES_WAITING',
+      message: `${pendingCount} dosya Drive'a gönderilmeyi bekliyor. Silinmez; bağlantı sağlanınca gönderilir.`,
+    });
+  }
+  return out;
 }
 
 /** Sunucu tarafında ilk baytlardan tür tahmini (istemcinin bildirdiği türe güvenilmez). */

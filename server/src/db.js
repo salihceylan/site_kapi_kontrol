@@ -37,6 +37,7 @@ import { ensureExpenseNaturesSchema } from './modules/finance_expense_nature_sch
 import { ensureAnnouncementHideSchema } from './modules/announcement_hide_schema.js';
 import { ensureTeamSchema } from './modules/team_schema.js';
 import { ensureDriveSchema } from './modules/drive_schema.js';
+import { ensureDriveSourceSchema } from './modules/drive_source_schema.js';
 import { ensureMeteringFieldSchema } from './modules/metering_field_schema.js';
 import { ensureMeteringSchema } from './modules/metering_schema.js';
 import { ensureManagementCompanySchema } from './modules/management_company_schema.js';
@@ -2005,6 +2006,9 @@ export async function ensureDbSchema() {
     // 080 (iki kasa: Isletme / Yatirim ve Demirbas Fon): 040 (expense_categories, expenses, trg_finance_immutable) ve ledger_entries SONRASI; dev blokta DEGIL; katalog kontrolu
     // + her adim kendi otomatik onayli ifadesi (finance_funds_schema.js = migrations/080). Her sey varsa hicbir ifade / kilit yok; sistem kategorisi "Yatirim ve demirbas" veri adimidir.
     await ensureFinanceFundsSchema(client);
+    // 097 (Drive dosya kaydi <-> kaynak kayit baglantisi, P1-11): 060'tan (drive_files) SONRA; dev blokta DEGIL; katalog kontrolu + her adim kendi otomatik onayli ifadesi
+    // (drive_source_schema.js = migrations/097). Her sey varsa hicbir ifade / kilit yok; mevcut satirlara dokunmaz (kaynak NULL = baglanmamis).
+    await ensureDriveSourceSchema(client);
 
     // 031 people_v1: mevcut sakinlerin CRM'e tek seferlik aktarimi. Savunmaci: hata sunucunun acilmasini ENGELLEMEZ
     // (kendi transaction'i geri alinir, isaret yazilmaz => sonraki acilista yeniden denenir; okuma anindaki

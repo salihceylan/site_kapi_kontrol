@@ -27,6 +27,8 @@ class _MemoryStore implements MeterFieldStore {
   Future<Uint8List?> readPhoto(String path) async => photos[path];
   @override
   Future<void> deletePhoto(String path) async => photos.remove(path);
+  @override
+  Future<List<String>> listPhotos() async => photos.keys.toList();
 }
 
 class _FakeService implements MeterService {
@@ -100,7 +102,7 @@ void main() {
   });
 
   group('kuyruk', () {
-    test('internet yokken okuma ve fotoğraf cihazda kalır, gelince gider ve temizlenir', () async {
+    test('internet yokken okuma ve fotoğraf cihazda kalır, gelince okuma gider; fotoğrafın telefondaki kopyası SİLİNMEZ (K6)', () async {
       final store = _MemoryStore();
       final queue = MeterFieldQueue(store: store);
       await queue.enqueue(siteCode: 7, meter: meter(1, 'A - 1'), date: '2026-10-21', value: '12.5', photo: Uint8List.fromList(<int>[1, 2, 3]));
@@ -122,7 +124,59 @@ void main() {
       expect(online.sent, 2);
       expect(online.remaining, 0);
       expect(sentPhoto, isNotNull);
+      expect(store.photos, hasLength(1), reason: 'sunucu kabul etse de telefondaki fotoğraf kopyası kendiliğinden silinmez');
+      expect(online.keptPhotos, 1);
+      expect(online.photosMissed, 0);
+      expect(await queue.keptPhotoCount(), 1);
+      // Yalnız kullanıcı isterse silinir.
+      expect(await queue.deleteKeptPhotos(), 1);
       expect(store.photos, isEmpty);
+      expect(await queue.keptPhotoCount(), 0);
+    });
+
+    test('kopyaları silme bekleyen ve reddedilen kayıtların fotoğrafına DOKUNMAZ', () async {
+      final store = _MemoryStore();
+      final queue = MeterFieldQueue(store: store);
+      final sentItem = await queue.enqueue(siteCode: 7, meter: meter(1, 'A - 1'), date: '2026-10-21', value: '5', photo: Uint8List.fromList(<int>[1]));
+      final rejectedItem = await queue.enqueue(siteCode: 7, meter: meter(2, 'A - 2'), date: '2026-10-21', value: '6', photo: Uint8List.fromList(<int>[2]));
+      final waitingItem = await queue.enqueue(siteCode: 7, meter: meter(3, 'A - 3'), date: '2026-10-21', value: '7', photo: Uint8List.fromList(<int>[3]));
+      final service = _FakeService((id, _) async {
+        if (id == 2) throw ApiException('Okuma, önceki okumadan küçük olamaz.', statusCode: 409, code: 'READING_OUT_OF_ORDER');
+        if (id == 3) throw ApiException('Sunucuya bağlanılamadı.');
+        return ok;
+      });
+      final report = await queue.flush(service);
+      expect((report.sent, report.rejected, report.offline, report.keptPhotos), (1, 1, true, 1));
+      expect(await queue.keptPhotoCount(), 1, reason: 'yalnız gönderilen okumanın kopyası "kalan kopya" sayılır');
+      expect(await queue.deleteKeptPhotos(), 1);
+      expect(store.photos.keys, unorderedEquals(<String>[rejectedItem.photoPath!, waitingItem.photoPath!]));
+      expect(store.photos.containsKey(sentItem.photoPath), isFalse);
+      // Bekleyeni kullanıcı kendisi silerse fotoğrafı da gider (kullanıcı eylemi).
+      await queue.remove(waitingItem.id);
+      expect(store.photos.keys, <String>[rejectedItem.photoPath!]);
+    });
+
+    test('sunucu fotoğrafı almadıysa ("none") bildirilir ve kopya telefonda durur; tekrar gönderimde (replayed) uyarı çıkmaz', () async {
+      final store = _MemoryStore();
+      final queue = MeterFieldQueue(store: store);
+      await queue.enqueue(siteCode: 7, meter: meter(1, 'A - 1'), date: '2026-10-21', value: '5', photo: Uint8List.fromList(<int>[1]));
+      final dropped = await queue.flush(_FakeService((_, _) async => const FieldReadingResult(replayed: false, photoStorage: 'none')));
+      expect((dropped.sent, dropped.photosMissed, dropped.keptPhotos), (1, 1, 1));
+      expect(store.photos, hasLength(1));
+
+      await queue.enqueue(siteCode: 7, meter: meter(2, 'A - 2'), date: '2026-10-21', value: '6', photo: Uint8List.fromList(<int>[2]));
+      final replayed = await queue.flush(_FakeService((_, _) async => const FieldReadingResult(replayed: true, photoStorage: 'none')));
+      expect((replayed.sent, replayed.photosMissed, replayed.keptPhotos), (1, 0, 1));
+    });
+
+    test('fotoğrafsız okumada kalan kopya yok', () async {
+      final store = _MemoryStore();
+      final queue = MeterFieldQueue(store: store);
+      await queue.enqueue(siteCode: 7, meter: meter(1, 'A - 1'), date: '2026-10-21', value: '5');
+      final report = await queue.flush(_FakeService((_, _) async => ok));
+      expect((report.sent, report.keptPhotos, report.photosMissed), (1, 0, 0));
+      expect(await queue.keptPhotoCount(), 0);
+      expect(await queue.deleteKeptPhotos(), 0);
     });
 
     test('sunucunun kalıcı reddi kayda yazılır, kalanlar gider; düzeltilince yeniden denenir', () async {

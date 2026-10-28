@@ -91,6 +91,9 @@ class _MeterFieldViewState extends State<MeterFieldView> with WidgetsBindingObse
   bool _offline = false;
   String? _notice;
 
+  /// Gönderilmiş okumaların telefonda KALAN fotoğraf kopyası sayısı (uygulama silmez; kullanıcı "Kopyaları sil" ile siler).
+  int _keptCopies = 0;
+
   // Çekilen fotoğraf ve tanınan değer (onay bekler).
   Uint8List? _shot;
   String? _recognizedNote;
@@ -194,13 +197,15 @@ class _MeterFieldViewState extends State<MeterFieldView> with WidgetsBindingObse
       }
     }
     final items = await _queue.items();
+    final kept = await _queue.keptPhotoCount();
     if (!mounted) return;
     setState(() {
       _pending = items;
+      _keptCopies = kept;
       if (report != null) _offline = report.offline;
       if (report != null) {
         final parts = <String>[
-          if (report.sent > 0) '${report.sent} okuma gönderildi.',
+          if (report.sent > 0) _sentNotice(report),
           if (report.jumpPending > 0) '${report.jumpPending} okuma olağan dışı tüketim nedeniyle onayınızı bekliyor; Bekleyen listesinden onaylayın ya da düzeltin.',
           if (report.rejected > report.jumpPending) '${report.rejected - report.jumpPending} okuma sunucuya kabul edilmedi; Bekleyen listesinden düzeltin.',
         ];
@@ -237,6 +242,40 @@ class _MeterFieldViewState extends State<MeterFieldView> with WidgetsBindingObse
       _recognizedNote = null;
       _value.clear();
     });
+  }
+
+  /// Gönderim sonrası bilgi: fotoğrafın telefondaki kopyası SİLİNMEZ; isterse kullanıcı siler. Sunucu fotoğrafı almadıysa bu da söylenir.
+  static String _sentNotice(MeterFlushReport report) {
+    final text = StringBuffer('${report.sent} okuma gönderildi.');
+    if (report.photosMissed > 0) {
+      text.write(' ${report.photosMissed} okumanın fotoğrafı sunucuya ulaşmadı; kopyası telefonunuzda duruyor.');
+    } else if (report.keptPhotos > 0) {
+      text.write(' Fotoğrafların telefonunuzdaki kopyası silinmedi; isterseniz siz silebilirsiniz.');
+    }
+    return text.toString();
+  }
+
+  /// Telefonda duran, gönderilmiş fotoğraf kopyaları: uygulama bunları KENDİLİĞİNDEN silmez; kullanıcı isterse burada siler.
+  Future<void> _showKeptCopies() async {
+    final delete = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Telefondaki fotoğraf kopyaları'),
+        content: Text(
+          'Gönderilmiş okumaların $_keptCopies fotoğrafı telefonunuzda duruyor. Uygulama bunları kendiliğinden silmez; yer açmak isterseniz siz silebilirsiniz. '
+          'Sunucudaki kayıtlar etkilenmez.',
+        ),
+        actions: <Widget>[
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Kalsın')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Kopyaları sil')),
+        ],
+      ),
+    );
+    if (delete != true) return;
+    final removed = await _queue.deleteKeptPhotos();
+    if (!mounted) return;
+    setState(() => _notice = '$removed fotoğraf kopyası telefondan silindi.');
+    await _refreshPending();
   }
 
   Future<void> _capture() async {
@@ -393,6 +432,13 @@ class _MeterFieldViewState extends State<MeterFieldView> with WidgetsBindingObse
       appBar: AppBar(
         title: const Text('Fotoğrafla sayaç okuma'),
         actions: <Widget>[
+          if (_keptCopies > 0)
+            IconButton(
+              key: const ValueKey<String>('meter_kept_copies'),
+              tooltip: 'Telefondaki fotoğraf kopyaları ($_keptCopies)',
+              icon: const Icon(Icons.photo_library_outlined),
+              onPressed: _showKeptCopies,
+            ),
           if (_pending.isNotEmpty)
             TextButton.icon(
               key: const ValueKey<String>('pending_button'),
@@ -754,7 +800,10 @@ class _PendingSheetState extends State<_PendingSheet> {
           : ListView(
               shrinkWrap: true,
               children: <Widget>[
-                const Padding(padding: EdgeInsets.all(AppSpace.lg), child: Text('Cihazda bekleyen okumalar internet gelince kendiliğinden gönderilir.')),
+                const Padding(
+                  padding: EdgeInsets.all(AppSpace.lg),
+                  child: Text('Cihazda bekleyen okumalar internet gelince kendiliğinden gönderilir. Gönderilen okumaların fotoğraf kopyaları telefonunuzdan kendiliğinden silinmez.'),
+                ),
                 for (final item in _items)
                   ListTile(
                     key: ValueKey<String>('pending_${item.id}'),
