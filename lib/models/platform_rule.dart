@@ -9,7 +9,7 @@ import 'package:flutter/foundation.dart';
 enum PlatformRuleType { integer, boolean }
 
 /// Tam sayı kuralın birimi.
-enum PlatformRuleUnit { basisPoints, percent, days, none }
+enum PlatformRuleUnit { basisPoints, percent, days, times, none }
 
 /// Değerin geldiği yer: siteye özel değer, platform değeri ya da koddaki varsayılan.
 enum PlatformRuleSource { site, platform, fallback }
@@ -35,6 +35,7 @@ PlatformRuleUnit _unitOf(Object? raw) => switch (raw) {
   'bp' => PlatformRuleUnit.basisPoints,
   'pct' => PlatformRuleUnit.percent,
   'days' => PlatformRuleUnit.days,
+  'times' => PlatformRuleUnit.times,
   _ => PlatformRuleUnit.none,
 };
 
@@ -312,6 +313,7 @@ String _formatInteger(PlatformRule rule, int value) => switch (rule.unit) {
   PlatformRuleUnit.basisPoints => formatBasisPoints(value),
   PlatformRuleUnit.percent => '%$value',
   PlatformRuleUnit.days => value >= 365 && value % 365 == 0 ? '${_grouped(value)} gün (${value ~/ 365} yıl)' : '${_grouped(value)} gün',
+  PlatformRuleUnit.times => '${_grouped(value)} kat',
   PlatformRuleUnit.none => _grouped(value),
 };
 
@@ -333,6 +335,7 @@ String formatRuleRange(PlatformRule rule) {
     PlatformRuleUnit.basisPoints => '${formatBasisPoints(min)} ile ${formatBasisPoints(max)} arasında',
     PlatformRuleUnit.percent => '%$min ile %$max arasında',
     PlatformRuleUnit.days => '${_grouped(min)} ile ${_grouped(max)} gün arasında',
+    PlatformRuleUnit.times => '${_grouped(min)} ile ${_grouped(max)} kat arasında',
     PlatformRuleUnit.none => '${_grouped(min)} ile ${_grouped(max)} arasında',
   };
 }
@@ -371,6 +374,7 @@ int? parseRuleInput(PlatformRule rule, String text) {
       if (value.startsWith('%')) value = value.substring(1).trim();
       return _integerInput.hasMatch(value) ? int.parse(value) : null;
     case PlatformRuleUnit.days:
+    case PlatformRuleUnit.times:
     case PlatformRuleUnit.none:
       final compact = value.replaceAll('.', '').replaceAll(' ', '');
       return _integerInput.hasMatch(compact) ? int.parse(compact) : null;
@@ -386,6 +390,7 @@ String? validateRuleInput(PlatformRule rule, String? text) {
     return switch (rule.unit) {
       PlatformRuleUnit.basisPoints => 'Oranı yüzde olarak girin (örn. 4,50).',
       PlatformRuleUnit.percent => 'Yüzdeyi tam sayı olarak girin.',
+      PlatformRuleUnit.times => 'Kat sayısını tam sayı olarak girin.',
       _ => 'Gün sayısını tam sayı olarak girin.',
     };
   }
@@ -412,6 +417,7 @@ const Map<String, String> kPlatformRuleLabels = <String, String>{
   'budget.objection_days': 'İşletme projesine itiraz süresi',
   'heat.measured_share_pct': 'Isınma gideri: ölçüme göre pay',
   'heat.area_share_pct': 'Isınma gideri: alan payı',
+  'metering.jump_factor': 'Sayaç okuma: sıçrama uyarısı eşiği',
   'forecast.default_increase_bp': 'Gelecek yıl tahmini: varsayılan artış oranı',
   'retention.finance_days': 'Mali kayıtlar',
   'retention.contact_after_moveout_days': 'Taşınan kişinin iletişim bilgileri',

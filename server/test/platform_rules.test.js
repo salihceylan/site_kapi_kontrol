@@ -38,7 +38,7 @@ const row = (value, validFrom, { site = null, inherit = false, id = ++nextRowId 
 });
 
 describe('kayıt defteri (sözleşme 2.2)', () => {
-  it('16 anahtar, sözleşmedeki sırayla ve varsayılanlarla', () => {
+  it('17 anahtar, sözleşmedeki sırayla ve varsayılanlarla', () => {
     assert.deepEqual(
       RULE_KEYS.map((key) => [key, RULES[key].defaultValue]),
       [
@@ -47,6 +47,7 @@ describe('kayıt defteri (sözleşme 2.2)', () => {
         ['budget.objection_days', 7],
         ['heat.measured_share_pct', 70],
         ['heat.area_share_pct', 30],
+        ['metering.jump_factor', 5],
         ['forecast.default_increase_bp', 0],
         ['retention.finance_days', 3650],
         ['retention.contact_after_moveout_days', 365],
@@ -64,7 +65,7 @@ describe('kayıt defteri (sözleşme 2.2)', () => {
 
   it('her kural: grup, Türkçe ad ve açıklama, tür, birim, sınırlar (varsayılan sınır içinde), mevzuat notu alanı; nesneler donmuş', () => {
     const groups = new Set(RULE_GROUPS.map((group) => group.code));
-    assert.deepEqual([...groups], ['finance', 'budget', 'heat', 'forecast', 'retention']);
+    assert.deepEqual([...groups], ['finance', 'budget', 'heat', 'metering', 'forecast', 'retention']);
     for (const key of RULE_KEYS) {
       const rule = RULES[key];
       assert.equal(rule.key, key);
@@ -79,7 +80,7 @@ describe('kayıt defteri (sözleşme 2.2)', () => {
       assert.equal(typeof rule.editable, 'boolean');
       assert.equal(typeof rule.nullable, 'boolean');
       if (rule.type === 'int') {
-        assert.ok(['bp', 'pct', 'days'].includes(rule.unit), key);
+        assert.ok(['bp', 'pct', 'days', 'times'].includes(rule.unit), key);
         assert.ok(Number.isInteger(rule.min) && Number.isInteger(rule.max) && rule.min <= rule.max, `${key}: sınır`);
         if (rule.defaultValue === null) {
           assert.equal(rule.nullable, true, `${key}: null varsayılan yalnız süresiz kuralda`);
@@ -114,8 +115,8 @@ describe('kayıt defteri (sözleşme 2.2)', () => {
     assert.match(rule.legalNote, /AVUKAT DOĞRULASIN/);
   });
 
-  it('sitede değişebilen tek kural tahmin artışı; ısı payları çift (toplam 100); karar defteri süresiz (null); otomatik silme kilitli ve kapalı', () => {
-    assert.deepEqual(RULE_KEYS.filter((key) => RULES[key].siteOverridable), ['forecast.default_increase_bp']);
+  it('sitede değişebilen kurallar sayaç sıçrama eşiği ve tahmin artışı; ısı payları çift (toplam 100); karar defteri süresiz (null); otomatik silme kilitli ve kapalı', () => {
+    assert.deepEqual(RULE_KEYS.filter((key) => RULES[key].siteOverridable), ['metering.jump_factor', 'forecast.default_increase_bp']);
     assert.deepEqual(RULES['heat.measured_share_pct'].pair, { key: 'heat.area_share_pct', sum: 100 });
     assert.deepEqual(RULES['heat.area_share_pct'].pair, { key: 'heat.measured_share_pct', sum: 100 });
     assert.equal(RULES['heat.measured_share_pct'].defaultValue + RULES['heat.area_share_pct'].defaultValue, 100);

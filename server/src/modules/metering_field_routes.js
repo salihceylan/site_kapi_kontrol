@@ -1,7 +1,8 @@
 // Sayac okuma saha uclari (gorevli fotografla okur). Sozlesme: docs/PLATFORM_SAYAC.md "Fotografla okuma".
 //
-//   GET  /sites/:siteCode/meter-field/meters?kind=             etkin sayaclar (daire sirasiyla) { items }
-//   POST /sites/:siteCode/meter-field/readings                 { meter_id, date, value, photo_b64?, photo_mime? } -> { reading, replayed, photo }
+//   GET  /sites/:siteCode/meter-field/meters?kind=&date=       etkin sayaclar (daire sirasiyla) { items, jump_factor, date }; her sayac: blok, onceki okuma, sicrama tabani
+//   POST /sites/:siteCode/meter-field/readings                 { meter_id, date, value, photo_b64?, photo_mime?, confirm_jump?, replace? } -> { reading, replayed, retaken, jump_confirmed, photo }
+//                                                              409 READING_JUMP (olagan disi tuketim; confirm_jump:true ile onaylanir), replace:true = yeniden cekim
 //   GET  /sites/:siteCode/meter-field/photos/:id/content       sunucuda tutulan fotograf (yonetici / gorevli)
 //
 // Yetki: yonetici / super + o sitenin etkin STAFF'i; kurul uyesi, sakin ve ilgisiz 403 FORBIDDEN_ROLE; `metering` modulu kapaliysa 403 MODULE_DISABLED.
@@ -17,7 +18,7 @@ import { driveService } from './drive_service.js';
 import { isModuleEnabled } from './module_service.js';
 import { METERING_MODULE, moduleDisabled } from './metering_common.js';
 import { meteringReadLimiter, meteringWriteLimiter } from './metering_routes.js';
-import { addReading, listMeters } from './metering_service.js';
+import { addFieldReading, listFieldMeters } from './metering_field_service.js';
 import { FORBIDDEN_ROLE_BODY, SITE_NOT_FOUND_BODY, getPeopleAccessKind } from './people_access.js';
 import { respondError } from './route_helpers.js';
 import { parseId } from '../utils/ids.js';
@@ -135,7 +136,7 @@ meteringFieldRouter.get(
   authRequired,
   meteringReadLimiter,
   guarded({ context: 'meter_field_meters', fallback: 'Sayaçlar yüklenemedi.' }, async ({ req, access }) => ({
-    body: await listMeters(access.siteCode, { kind: req.query.kind, active: '1' }),
+    body: await listFieldMeters(access.siteCode, { kind: req.query.kind, date: req.query.date }),
   })),
 );
 
@@ -145,11 +146,11 @@ meteringFieldRouter.post(
   meteringWriteLimiter,
   guarded({ context: 'meter_field_reading', fallback: 'Okuma kaydedilemedi.' }, async ({ req, access }) => {
     const body = req.body && typeof req.body === 'object' ? req.body : {};
-    const result = await addReading({
+    const result = await addFieldReading({
       siteCode: access.siteCode,
       rawMeterId: body.meter_id,
       actor: req.authUser,
-      body: { date: body.date, value: body.value },
+      body: { date: body.date, value: body.value, confirm_jump: body.confirm_jump, replace: body.replace },
     });
     let photo = { storage: 'none' };
     if (!result.replayed && body.photo_b64) {
