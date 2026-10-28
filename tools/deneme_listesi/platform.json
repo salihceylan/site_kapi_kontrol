@@ -5314,7 +5314,7 @@
       "id": "F28",
       "baslik": "Gruplu menü, Ayarlar paneli ve sakin alt çubuğu",
       "durum": "hazir",
-      "ozet": "Menü başlıklar altında toplandı (Ana sayfa, Daireler, Borçlar, Tahsilat, Giderler, İletişim, Raporlar, Site hizmetleri); ekranı olmayan başlık görünmez. Profilim, Modüller, cihaz ekranları, Modül Talepleri, Site Başvuruları, Denetim Kaydı, Platform Ayarları ve İstemci Hataları artık sağ üstteki dişlinin açtığı Ayarlar panelindedir. Birden çok sitesi olan yönetici menünün en üstünden site seçer; daire sakininin ekranının altında Özet · Duyuru · Arıza · Kapı · Dosyalar çubuğu vardır.",
+      "ozet": "Menü başlıklar altında toplandı (Ana sayfa, Daireler, Borçlar, Tahsilat, Giderler, İletişim, Raporlar, Site hizmetleri); ekranı olmayan başlık görünmez. Profilim, Modüller, cihaz ekranları, Modül Talepleri, Site Başvuruları, Denetim Kaydı, Platform Ayarları ve İstemci Hataları artık sağ üstteki dişlinin açtığı Ayarlar panelindedir. Birden çok sitesi olan yönetici menünün en üstünden site seçer; daire sakininin ekranının altında Özet · Duyuru · Arıza · Kapı · Dosyalar çubuğu vardır. Panel dışındaki ekranlarda, sakin alt çubuğu yokken, üst çubukta menü düğmesinin yanında Panel'e döndüren “Ana sayfa” düğmesi görünür.",
       "maddeler": [
         {
           "id": "F28.01",
