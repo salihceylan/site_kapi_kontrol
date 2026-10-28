@@ -5,8 +5,8 @@ GERCEK firmware basliklari (cihaz_kontrol/include/*.h) sahte donanim katmani (st
 calistirilir; her test "SONUC: N dogrulama gecti, M basarisiz" satiri yazar. Ayrinti: README.md
 
 Calistirma:
-  python run_all.py                 hepsi (t_core, t_udp, t_pin, t_gm60, t_mqtt WROOM + C3)
-  python run_all.py --new-vectors   t_core icin HMAC vektorlerini yeniden uret (varsayilan: yoksa uretilir)
+  python run_all.py                 hepsi (t_core, t_udp, t_pin, t_gm60, t_imza, t_mqtt WROOM + C3)
+  python run_all.py --new-vectors   t_core icin HMAC vektorlerini ve t_imza icin Ed25519 vektorlerini yeniden uret (varsayilan: yoksa uretilir)
   python run_all.py --fuzz          ek olarak AddressSanitizer'li rastgele olay/fuzz testi (uzun surer)
 Ortam degiskeni VCVARS: vcvars64.bat yolu (varsayilan Visual Studio 18 Community).
 Cikis kodu: tum dogrulamalar gectiyse 0, aksi halde 1.
@@ -31,8 +31,9 @@ TESTS = [
     ('t_udp     (yerel_kapi_kontrol.h: UDP/HTTP uctan uca)', 't_udp.cpp', 't_udp.exe', WROOM, True, True),
     ('t_pin     (admin_pin.h: zayif PIN, kilit zamani)', 't_pin.cpp', 't_pin.exe', WROOM, False, True),
     ('t_gm60    (gm60_scanner.h: QR korumalari)', 't_gm60.cpp', 't_gm60.exe', WROOM, False, True),
-    ('t_mqtt WROOM (mqtt_baglanti.h + ota_guncelleme.h + ota_is_kimligi.h)', 't_mqtt.cpp', 't_mqtt_wroom.exe', WROOM, True, True),
-    ('t_mqtt C3    (mqtt_baglanti.h + ota_guncelleme.h + ota_is_kimligi.h)', 't_mqtt.cpp', 't_mqtt_c3.exe', C3, True, True),
+    ('t_imza    (ota_ed25519.h + ota_imza.h: Ed25519/SHA-512, OpenSSL capraz, imza yuku, zayif anahtar)', 't_imza.cpp', 't_imza.exe', '', False, True),
+    ('t_mqtt WROOM (mqtt_baglanti.h + ota_guncelleme.h + ota_is_kimligi.h + OTA imza akisi)', 't_mqtt.cpp', 't_mqtt_wroom.exe', WROOM, True, True),
+    ('t_mqtt C3    (mqtt_baglanti.h + ota_guncelleme.h + ota_is_kimligi.h + OTA imza akisi)', 't_mqtt.cpp', 't_mqtt_c3.exe', C3, True, True),
 ]
 FUZZ = ('t_fuzz    (rastgele olay dizileri, AddressSanitizer)', 't_fuzz.cpp', 't_fuzz.exe', WROOM + ' /Zi /fsanitize=address', True, True)
 
@@ -72,6 +73,9 @@ def main():
         print('UYARI: ArduinoJson bulunamadi (%s). Once `pio run -e lolin_c3_mini` ile cihaz_kontrol derlenmeli.' % ARDUINOJSON)
     if '--new-vectors' in args or not os.path.exists(os.path.join(HERE, 'vectors.txt')):
         subprocess.run(['node', 'gen_vectors.mjs'], cwd=HERE, check=True)
+    # t_imza: Node crypto (OpenSSL) ile Ed25519/SHA-512/OTA yuku vektorleri (her uretimde rastgele TEST anahtarlari; git'e girmez)
+    if '--new-vectors' in args or not os.path.exists(os.path.join(HERE, 'imza_vectors.txt')):
+        subprocess.run(['node', 'gen_imza_vectors.mjs'], cwd=HERE, check=True)
 
     tests = list(TESTS)
     if '--fuzz' in args:

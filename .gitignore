@@ -93,6 +93,7 @@ ekran_yazilimi/firmware_releases/**/*.bin
 /cihaz_kontrol/host_test/*.pdb
 /cihaz_kontrol/host_test/*.ilk
 /cihaz_kontrol/host_test/vectors.txt
+/cihaz_kontrol/host_test/imza_vectors.txt
 /cihaz_kontrol/host_test/_calistir_*.bat
 
 # Firebase (push, Faz 3b-B). Depo herkese acik: istemci yapilandirmalari elle yerlestirilir (bkz. *.example),
