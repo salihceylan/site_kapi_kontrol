@@ -1,6 +1,9 @@
 // Ekipman, bakim ve teklif is mantigi. Sozlesme: docs/PLATFORM_EKIPMAN.md.
 // Para tamsayi kurus. Bakim kaydi yalniz eklemelidir (duzeltme yeni kayitla). Gider satiri degismez: ekipman baglantisi yan tablodadir (equipment_expense_links).
 // Tahsilat/defter yazilmaz; kabul edilen teklif gidere ya da sozlesmeye YALNIZ createExpense / createContract ile donusur.
+// Teklifler (098 + 099): karsilastirma alanlari (teslim suresi, kapsam / not, KDV esasi) ve K14 revizyon modeli: kabul edilmis (onayli) teklif yerinde DEGISMEZ
+// (veritabani tetikleyicisi de reddeder); degisiklik, onceki surume baglanan YENI SURUM satiri olusturur (previous_id, revision_no, revision_reason).
+// Onaysiz (acik) teklif yerinde duzenlenir; her duzenleme denetim kaydina eski / yeni tutarla yazilir.
 
 import { pool } from '../db.js';
 import { PlatformError } from './errors.js';
@@ -23,9 +26,11 @@ export const DEFAULT_KINDS = Object.freeze([
   { code: 'havuz', name: 'Havuz' },
 ]);
 export const INTERVALS = Object.freeze([1, 3, 6, 12]);
-export const LIMITS = Object.freeze({ items: 1000, plansPerItem: 30, quotes: 3000 });
+export const LIMITS = Object.freeze({ items: 1000, plansPerItem: 30, quotes: 3000, revisionsPerQuote: 50 });
 export const MAX_BODY_BYTES = 16384;
 const MAX_KURUS = 1_000_000_000_000;
+export const MAX_DELIVERY_DAYS = 1095;
+export const QUOTE_NOTE_MAX = 500;
 
 const invalid = (field, message) => new PlatformError(400, 'INVALID_FIELD', message, { field });
 const notFound = (what = 'Kayıt') => new PlatformError(404, 'NOT_FOUND', `${what} bulunamadı ya da erişiminiz yok.`);
@@ -87,6 +92,23 @@ function id(value, field, label, { required = false } = {}) {
 function bool(value, field, label) {
   if (value === undefined) return undefined;
   if (typeof value !== 'boolean') throw invalid(field, `${label} true/false olmalı.`);
+  return value;
+}
+
+/** Teslim suresi (gun): tam sayi 0..1095; bos / null = belirtilmedi. */
+export function deliveryDays(value, field = 'delivery_days') {
+  if (value === undefined || value === null || value === '') return null;
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0 || value > MAX_DELIVERY_DAYS) {
+    throw invalid(field, `Teslim süresi 0 ile ${MAX_DELIVERY_DAYS} gün arasında tam sayı olmalı.`);
+  }
+  return value;
+}
+
+/** KDV esasi: true = KDV dahil, false = KDV haric, null = belirtilmedi; undefined = alan gonderilmedi. */
+export function vatFlag(value, field = 'vat_included') {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  if (typeof value !== 'boolean') throw invalid(field, 'KDV durumu dahil, hariç ya da boş olmalı.');
   return value;
 }
 
@@ -456,10 +478,13 @@ export async function equipmentBreakdown(siteCode, query = {}, db = pool) {
 
 // --- Teklifler ------------------------------------------------------------------------------------------------------
 
-const QUOTE_COLS = `q.id, q.topic, q.vendor_name, q.amount_kurus, to_char(q.valid_until, 'YYYY-MM-DD') AS valid_until, q.document_note, q.equipment_id, q.status, q.accepted_as, q.expense_id, q.contract_id, q.decided_at, q.created_at`;
+const QUOTE_COLS = `q.id, q.topic, q.vendor_name, q.amount_kurus, to_char(q.valid_until, 'YYYY-MM-DD') AS valid_until, q.document_note, q.equipment_id, q.status, q.accepted_as, q.expense_id, q.contract_id, q.decided_at, q.created_at,
+  q.delivery_days, q.note, q.vat_included, q.revision_no, q.previous_id, q.revision_reason`;
 
-function mapQuote(r, today) {
-  const validUntil = r.valid_until;
+const nullableNumber = (v) => (v === null || v === undefined ? null : Number(v));
+
+export function mapQuote(r, today) {
+  const validUntil = r.valid_until ?? null;
   return {
     id: Number(r.id),
     topic: r.topic,
@@ -467,15 +492,117 @@ function mapQuote(r, today) {
     amount_kurus: Number(r.amount_kurus),
     valid_until: validUntil,
     expired: r.status === 'open' && validUntil !== null && validUntil < today,
-    document_note: r.document_note,
-    equipment_id: r.equipment_id === null ? null : Number(r.equipment_id),
+    document_note: r.document_note ?? null,
+    equipment_id: nullableNumber(r.equipment_id),
     status: r.status,
-    accepted_as: r.accepted_as,
-    expense_id: r.expense_id === null ? null : Number(r.expense_id),
-    contract_id: r.contract_id === null ? null : Number(r.contract_id),
-    decided_at: r.decided_at,
+    accepted_as: r.accepted_as ?? null,
+    expense_id: nullableNumber(r.expense_id),
+    contract_id: nullableNumber(r.contract_id),
+    decided_at: r.decided_at ?? null,
     created_at: r.created_at,
+    delivery_days: nullableNumber(r.delivery_days),
+    note: r.note ?? null,
+    vat_included: r.vat_included === null || r.vat_included === undefined ? null : r.vat_included === true,
+    revision_no: r.revision_no === null || r.revision_no === undefined ? 1 : Number(r.revision_no),
+    previous_id: nullableNumber(r.previous_id),
+    revision_reason: r.revision_reason ?? null,
   };
+}
+
+/**
+ * Teklifin degisebilen alanlari (tutar, gecerlilik, teslim suresi, kapsam / not, KDV esasi, belge notu). partial=false (olusturma): tutar zorunlu, gonderilmeyen
+ * alanlar `undefined` kalir. partial=true (duzenleme / revizyon): yalniz gonderilen alanlar doner; null / "" = temizle (tutar temizlenemez).
+ */
+export function parseQuoteFields(body, { partial = false } = {}) {
+  const b = bodyOf(body);
+  const out = {};
+  const has = (key) => b[key] !== undefined;
+  if (!partial || has('amount_kurus')) out.amount_kurus = kurus(b.amount_kurus, 'amount_kurus', 'Tutar', { required: true, min: 1 });
+  if (has('valid_until')) out.valid_until = isoDate(b.valid_until, 'valid_until', 'Geçerlilik tarihi');
+  if (has('delivery_days')) out.delivery_days = deliveryDays(b.delivery_days);
+  if (has('note')) out.note = text(b.note, 'note', 'Kapsam / not', QUOTE_NOTE_MAX);
+  if (has('vat_included')) out.vat_included = vatFlag(b.vat_included);
+  if (has('document_note')) out.document_note = text(b.document_note, 'document_note', 'Belge notu', 300);
+  return out;
+}
+
+/** Karsilastirmaya giren alanlarin karsilastirma anahtarlari: eski / yeni deger farki (null ve undefined ayni sayilmaz: undefined = gonderilmedi). */
+const COMPARE_KEYS = Object.freeze(['amount_kurus', 'valid_until', 'delivery_days', 'note', 'vat_included', 'document_note']);
+
+function changedKeys(patch, current) {
+  return COMPARE_KEYS.filter((k) => patch[k] !== undefined && patch[k] !== current[k]);
+}
+
+const approvedRef = (q) => ({
+  id: q.id,
+  revision_no: q.revision_no,
+  amount_kurus: q.amount_kurus,
+  decided_at: q.decided_at,
+  accepted_as: q.accepted_as,
+  expense_id: q.expense_id,
+  contract_id: q.contract_id,
+});
+
+/**
+ * Surum zincirlerinden yalniz EN SON surumleri (baslari) dondurur: bir teklifin halefi varsa o satir listede gorunmez, gecmis `quoteHistory` ile okunur.
+ * Her basa eklenir: version_count, approved_version (basin kendisi onayli degilse zincirdeki en yakin ONAYLI onceki surum; yoksa null), editable (acik teklif yerinde
+ * duzenlenir), revisable (onayli son surum ya da onayli bir surumden turemis reddedilmis revizyon yeni surum alabilir).
+ */
+export function buildQuoteHeads(items) {
+  const byId = new Map(items.map((q) => [q.id, q]));
+  const hasSuccessor = new Set();
+  for (const q of items) if (q.previous_id !== null) hasSuccessor.add(q.previous_id);
+  return items
+    .filter((q) => !hasSuccessor.has(q.id))
+    .map((head) => {
+      let approved = null;
+      if (head.status !== 'accepted') {
+        let cur = head.previous_id === null ? undefined : byId.get(head.previous_id);
+        for (let guard = 0; cur && guard < 100; guard += 1) {
+          if (cur.status === 'accepted') {
+            approved = cur;
+            break;
+          }
+          cur = cur.previous_id === null ? undefined : byId.get(cur.previous_id);
+        }
+      }
+      return {
+        ...head,
+        version_count: head.revision_no,
+        has_history: head.revision_no > 1,
+        approved_version: approved ? approvedRef(approved) : null,
+        editable: head.status === 'open',
+        revisable: head.status === 'accepted' || (head.status === 'rejected' && head.revision_no > 1 && approved !== null),
+      };
+    });
+}
+
+const vatBasis = (q) => (q.vat_included === null ? 'unspecified' : q.vat_included ? 'included' : 'excluded');
+
+/**
+ * Karsilastirma isaretleri (yalniz ayni konudaki ACIK, suresi dolmamis, ilk surum teklifler; bekleyen revizyon rakip degil degisikliktir):
+ *  - lowest: en dusuk tutar. Konudaki teklifler FARKLI KDV esasindaysa (dahil / haric / belirtilmedi karisik) tutarlar kiyaslanamaz: hicbiri isaretlenmez, basis_mixed = true.
+ *  - fastest: en kisa teslim suresi (en az iki tekliften teslim suresi girilmisse).
+ */
+export function markComparison(items) {
+  const groups = new Map();
+  for (const q of items) {
+    if (q.status !== 'open' || q.expired || q.revision_no > 1) continue;
+    const key = q.topic.toLowerCase();
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(q);
+  }
+  const marks = new Map();
+  for (const list of groups.values()) {
+    const mixed = new Set(list.map(vatBasis)).size > 1;
+    const min = Math.min(...list.map((q) => q.amount_kurus));
+    const withDelivery = list.filter((q) => q.delivery_days !== null);
+    const fastestDays = withDelivery.length >= 2 ? Math.min(...withDelivery.map((q) => q.delivery_days)) : null;
+    for (const q of list) {
+      marks.set(q.id, { lowest: !mixed && q.amount_kurus === min, fastest: fastestDays !== null && q.delivery_days === fastestDays, basis_mixed: mixed });
+    }
+  }
+  return items.map((q) => ({ ...q, lowest: false, fastest: false, basis_mixed: false, ...(marks.get(q.id) ?? {}) }));
 }
 
 export async function listQuotes(siteCode, query = {}) {
@@ -483,37 +610,41 @@ export async function listQuotes(siteCode, query = {}) {
   const topic = typeof query.topic === 'string' && query.topic.trim() !== '' ? clean(query.topic).slice(0, 160) : null;
   const r = await pool.query(
     `SELECT ${QUOTE_COLS} FROM equipment_quotes q
-      WHERE q.site_code = $1 AND ($2::TEXT IS NULL OR q.status = $2) AND ($3::TEXT IS NULL OR lower(q.topic) = lower($3))
-      ORDER BY lower(q.topic), q.amount_kurus, q.id LIMIT 500`,
-    [siteCode, status, topic],
+      WHERE q.site_code = $1 AND ($2::TEXT IS NULL OR lower(q.topic) = lower($2))
+      ORDER BY lower(q.topic), q.amount_kurus, q.id LIMIT 2000`,
+    [siteCode, topic],
   );
   const today = todayIstanbul();
-  const items = r.rows.map((x) => mapQuote(x, today));
-  // Karsilastirma: ayni konudaki acik ve suresi dolmamis tekliflerden en dusuk tutar isaretlenir.
-  const lowest = new Map();
-  for (const q of items) {
-    if (q.status !== 'open' || q.expired) continue;
-    const key = q.topic.toLowerCase();
-    if (!lowest.has(key) || q.amount_kurus < lowest.get(key)) lowest.set(key, q.amount_kurus);
-  }
-  return { items: items.map((q) => ({ ...q, lowest: q.status === 'open' && !q.expired && lowest.get(q.topic.toLowerCase()) === q.amount_kurus })) };
+  // Surum zincirleri: listede yalniz en son surumler gorunur (onceki surumler `quotes/:id/history`); durum suzgeci son surume uygulanir.
+  const heads = markComparison(buildQuoteHeads(r.rows.map((x) => mapQuote(x, today))));
+  return { items: (status === null ? heads : heads.filter((q) => q.status === status)).slice(0, 500) };
 }
 
 export async function createQuote({ siteCode, actor, access, body }) {
   const b = bodyOf(body);
   const topic = text(b.topic, 'topic', 'Konu', 160, { required: true });
   const vendorName = text(b.vendor_name, 'vendor_name', 'Firma', 120, { required: true });
-  const amount = kurus(b.amount_kurus, 'amount_kurus', 'Tutar', { required: true, min: 1 });
-  const validUntil = isoDate(b.valid_until, 'valid_until', 'Geçerlilik tarihi');
-  const doc = text(b.document_note, 'document_note', 'Belge notu', 300);
+  const fields = parseQuoteFields(b);
   const equipmentId = id(b.equipment_id, 'equipment_id', 'Ekipman');
   if (equipmentId !== null) await loadItem(siteCode, equipmentId);
   const count = await pool.query(`SELECT COUNT(*)::INTEGER AS n FROM equipment_quotes WHERE site_code = $1`, [siteCode]);
   if (Number(count.rows[0].n) >= LIMITS.quotes) throw new PlatformError(409, 'LIMIT_REACHED', 'Bir sitede en fazla 3000 teklif kaydedilebilir.', { limit: LIMITS.quotes });
   const r = await pool.query(
-    `INSERT INTO equipment_quotes (site_code, topic, vendor_name, amount_kurus, valid_until, document_note, equipment_id, created_by)
-     VALUES ($1, $2, $3, $4, $5::DATE, $6, $7, $8) RETURNING id`,
-    [siteCode, topic, vendorName, amount, validUntil, doc, equipmentId, userOf(access)],
+    `INSERT INTO equipment_quotes (site_code, topic, vendor_name, amount_kurus, valid_until, document_note, equipment_id, created_by, delivery_days, note, vat_included)
+     VALUES ($1, $2, $3, $4, $5::DATE, $6, $7, $8, $9, $10, $11) RETURNING id`,
+    [
+      siteCode,
+      topic,
+      vendorName,
+      fields.amount_kurus,
+      fields.valid_until ?? null,
+      fields.document_note ?? null,
+      equipmentId,
+      userOf(access),
+      fields.delivery_days ?? null,
+      fields.note ?? null,
+      fields.vat_included ?? null,
+    ],
   );
   const quoteId = Number(r.rows[0].id);
   await audit(actor, 'quote.created', siteCode, 'equipment_quote', quoteId, { topic });
@@ -524,6 +655,187 @@ async function loadQuote(siteCode, quoteId) {
   const r = await pool.query(`SELECT ${QUOTE_COLS} FROM equipment_quotes q WHERE q.id = $1 AND q.site_code = $2`, [quoteId, siteCode]);
   if (!r.rows[0]) throw notFound('Teklif');
   return mapQuote(r.rows[0], todayIstanbul());
+}
+
+const quoteLocked = (status) =>
+  new PlatformError(409, 'QUOTE_LOCKED', 'Karara bağlanmış teklif düzenlenemez. Onaylı teklifte değişiklik için revizyon oluşturun.', { status });
+
+/** Denetim ayrintisi: degisen alan adlari + (tutar degistiyse) eski / yeni tutar. Serbest metin (kapsam, gerekce, not) gunluge YAZILMAZ. */
+function changeDetails(keys, before, after) {
+  const details = { fields: keys };
+  if (keys.includes('amount_kurus')) {
+    details.amount_before = before.amount_kurus;
+    details.amount_after = after.amount_kurus;
+  }
+  return details;
+}
+
+/**
+ * Onaysiz (acik) teklifi YERINDE duzenler (PATCH quotes/:id). Karara baglanmis (kabul / red) teklif duzenlenemez: 409 QUOTE_LOCKED; onayli teklifte degisiklik
+ * `reviseQuote` ile yeni surum olarak yapilir. Bekleyen revizyonda konu, firma ve ekipman degismez (surum zinciri tutarli kalir). Degisiklik yoksa yazilmaz.
+ */
+export async function updateQuote({ siteCode, rawId, actor, body }) {
+  const quoteId = id(rawId, 'id', 'Teklif', { required: true });
+  const b = bodyOf(body);
+  const patch = parseQuoteFields(b, { partial: true });
+  if (b.topic !== undefined) patch.topic = text(b.topic, 'topic', 'Konu', 160, { required: true });
+  if (b.vendor_name !== undefined) patch.vendor_name = text(b.vendor_name, 'vendor_name', 'Firma', 120, { required: true });
+  if (b.equipment_id !== undefined) patch.equipment_id = id(b.equipment_id, 'equipment_id', 'Ekipman');
+  const current = await loadQuote(siteCode, quoteId);
+  if (current.status !== 'open') throw quoteLocked(current.status);
+  const keys = [...COMPARE_KEYS, 'topic', 'vendor_name', 'equipment_id'].filter((k) => patch[k] !== undefined && patch[k] !== current[k]);
+  if (current.revision_no > 1 && keys.some((k) => k === 'topic' || k === 'vendor_name' || k === 'equipment_id')) {
+    throw invalid('topic', 'Revizyonda konu, firma ve ekipman değişmez.');
+  }
+  if (keys.includes('equipment_id') && patch.equipment_id !== null) await loadItem(siteCode, patch.equipment_id);
+  if (keys.length === 0) return { quote: current };
+  const sets = keys.map((k, i) => `${k} = $${i + 3}${k === 'valid_until' ? '::DATE' : ''}`).join(', ');
+  const r = await pool.query(`UPDATE equipment_quotes SET ${sets} WHERE id = $1 AND site_code = $2 AND status = 'open' RETURNING id`, [quoteId, siteCode, ...keys.map((k) => patch[k])]);
+  if (!r.rows[0]) {
+    // Aradan biri kabul / red etti: guncel durumu okuyup kilitli yanit ver.
+    const latest = await loadQuote(siteCode, quoteId);
+    throw quoteLocked(latest.status);
+  }
+  await audit(actor, 'quote.updated', siteCode, 'equipment_quote', quoteId, changeDetails(keys, current, patch));
+  return { quote: await loadQuote(siteCode, quoteId) };
+}
+
+/**
+ * K14: onayli teklifte degisiklik = YENI SURUM (POST quotes/:id/revise). Onayli satir DEGISMEZ; yeni satir `previous_id` ile bir onceki surume baglanir, `revision_no`
+ * artar, gerekce (`reason`, zorunlu) saklanir. Konu, firma ve ekipman onceki surumden kopyalanir; gonderilmeyen alanlar da kopyalanir. Yeni surum ACIKTIR:
+ * kabul / red icin yeniden yonetici karari gerekir; reddedilirse onceki onay gecerli kalir. Revize edilebilir olanlar: onayli son surum ve onayli bir surumden
+ * turemis reddedilmis son revizyon. Sunucu: site basina advisory kilit + FOR UPDATE + benzersiz `previous_id` dizini => es zamanli cift revizyon 409 QUOTE_NOT_LATEST.
+ */
+export async function reviseQuote({ siteCode, rawId, actor, access, body }) {
+  const baseId = id(rawId, 'id', 'Teklif', { required: true });
+  const b = bodyOf(body);
+  const reason = text(b.reason, 'reason', 'Değişiklik gerekçesi', 300, { required: true });
+  if (reason.length < 3) throw invalid('reason', 'Değişiklik gerekçesi en az 3 karakter olmalı.');
+  const patch = parseQuoteFields(b, { partial: true });
+  const client = await pool.connect();
+  let newId;
+  let base;
+  let keys;
+  try {
+    await client.query('BEGIN');
+    await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`equipment_quotes:${siteCode}`]);
+    const found = await client.query(`SELECT ${QUOTE_COLS} FROM equipment_quotes q WHERE q.id = $1 AND q.site_code = $2 FOR UPDATE`, [baseId, siteCode]);
+    if (!found.rows[0]) throw notFound('Teklif');
+    base = mapQuote(found.rows[0], todayIstanbul());
+    const successor = await client.query(`SELECT id FROM equipment_quotes WHERE previous_id = $1 AND site_code = $2 LIMIT 1`, [baseId, siteCode]);
+    if (successor.rows[0]) {
+      throw new PlatformError(409, 'QUOTE_NOT_LATEST', 'Bu teklifin daha yeni bir sürümü var; en son sürümü revize edin.', { latest_hint_id: Number(successor.rows[0].id) });
+    }
+    if (base.status === 'open') {
+      throw new PlatformError(409, 'QUOTE_NOT_REVISABLE', 'Onaylanmamış teklif doğrudan düzenlenir; revizyon yalnız onaylı tekliflerde açılır.', { status: base.status });
+    }
+    if (base.status === 'rejected' && base.revision_no === 1) {
+      throw new PlatformError(409, 'QUOTE_NOT_REVISABLE', 'Reddedilmiş teklif revize edilemez; yeni teklif ekleyin.', { status: base.status });
+    }
+    if (base.revision_no >= LIMITS.revisionsPerQuote) {
+      throw new PlatformError(409, 'LIMIT_REACHED', `Bir teklif en fazla ${LIMITS.revisionsPerQuote} sürüm alabilir.`, { limit: LIMITS.revisionsPerQuote });
+    }
+    keys = changedKeys(patch, base);
+    if (keys.length === 0) throw new PlatformError(400, 'NO_CHANGE', 'Revizyon için en az bir alan değişmeli.');
+    const count = await client.query(`SELECT COUNT(*)::INTEGER AS n FROM equipment_quotes WHERE site_code = $1`, [siteCode]);
+    if (Number(count.rows[0].n) >= LIMITS.quotes) throw new PlatformError(409, 'LIMIT_REACHED', 'Bir sitede en fazla 3000 teklif kaydedilebilir.', { limit: LIMITS.quotes });
+    const pick = (key) => (patch[key] !== undefined ? patch[key] : base[key]);
+    const ins = await client.query(
+      `INSERT INTO equipment_quotes (site_code, topic, vendor_name, amount_kurus, valid_until, document_note, equipment_id, delivery_days, note, vat_included, revision_no, previous_id, revision_reason, created_by)
+       VALUES ($1, $2, $3, $4, $5::DATE, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING id`,
+      [
+        siteCode,
+        base.topic,
+        base.vendor_name,
+        pick('amount_kurus'),
+        pick('valid_until'),
+        pick('document_note'),
+        base.equipment_id,
+        pick('delivery_days'),
+        pick('note'),
+        pick('vat_included'),
+        base.revision_no + 1,
+        base.id,
+        reason,
+        userOf(access),
+      ],
+    );
+    newId = Number(ins.rows[0].id);
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    if (error?.code === '23505') {
+      throw new PlatformError(409, 'QUOTE_NOT_LATEST', 'Bu teklifin daha yeni bir sürümü var; en son sürümü revize edin.');
+    }
+    throw error;
+  } finally {
+    client.release();
+  }
+  await audit(actor, 'quote.revised', siteCode, 'equipment_quote', newId, {
+    ...changeDetails(keys, base, { amount_kurus: patch.amount_kurus ?? base.amount_kurus }),
+    from_id: base.id,
+    revision_no: base.revision_no + 1,
+  });
+  return { quote: await loadQuote(siteCode, newId) };
+}
+
+/** Bir teklifin tum surumleri (eskiden yeniye) — zincirdeki herhangi bir surumun kimligiyle sorulur; sakin ve ilgisiz kullanicilar rotada zaten elenir. */
+export async function quoteHistory(siteCode, rawId) {
+  const quoteId = id(rawId, 'id', 'Teklif', { required: true });
+  const r = await pool.query(
+    `WITH RECURSIVE up AS (
+       SELECT id, previous_id, 1 AS depth FROM equipment_quotes WHERE id = $1 AND site_code = $2
+       UNION ALL
+       SELECT p.id, p.previous_id, up.depth + 1 FROM equipment_quotes p INNER JOIN up ON p.id = up.previous_id WHERE p.site_code = $2 AND up.depth < 100
+     ), down AS (
+       SELECT id, 1 AS depth FROM equipment_quotes WHERE id = $1 AND site_code = $2
+       UNION ALL
+       SELECT n.id, down.depth + 1 FROM equipment_quotes n INNER JOIN down ON n.previous_id = down.id WHERE n.site_code = $2 AND down.depth < 100
+     )
+     SELECT ${QUOTE_COLS} FROM equipment_quotes q
+      WHERE q.site_code = $2 AND q.id IN (SELECT id FROM up UNION SELECT id FROM down)
+      ORDER BY q.revision_no, q.id`,
+    [quoteId, siteCode],
+  );
+  if (r.rows.length === 0) throw notFound('Teklif');
+  const today = todayIstanbul();
+  const items = r.rows.map((x) => mapQuote(x, today));
+  const latest = items[items.length - 1];
+  const approved = [...items].reverse().find((q) => q.status === 'accepted') ?? null;
+  return { items, latest_id: latest.id, approved_id: approved ? approved.id : null };
+}
+
+/**
+ * Revizyon kabulunden once: zincirde kabul edilip gider / sozlesmeye donusmus bir onceki surum varsa, yeni surumun kabulu AYRI bir kayit uretir (cift sayim riski).
+ * Yonetici bunu `acknowledge_previous: true` ile bilerek onaylamadikca 409 PREVIOUS_VERSION_RECORDED doner; onceki kayit bu islemde DEGISTIRILMEZ.
+ */
+async function assertPreviousRecordAcknowledged(siteCode, quote, body) {
+  const r = await pool.query(
+    `WITH RECURSIVE anc AS (
+       SELECT id, previous_id, status, expense_id, contract_id, revision_no, 1 AS depth FROM equipment_quotes WHERE id = $1 AND site_code = $2
+       UNION ALL
+       SELECT p.id, p.previous_id, p.status, p.expense_id, p.contract_id, p.revision_no, anc.depth + 1
+         FROM equipment_quotes p INNER JOIN anc ON p.id = anc.previous_id WHERE p.site_code = $2 AND anc.depth < 100
+     )
+     SELECT id, revision_no, expense_id, contract_id FROM anc
+      WHERE id <> $1 AND status = 'accepted' AND (expense_id IS NOT NULL OR contract_id IS NOT NULL)
+      ORDER BY revision_no DESC LIMIT 1`,
+    [quote.id, siteCode],
+  );
+  const previous = r.rows[0];
+  if (!previous || body.acknowledge_previous === true) return;
+  const kind = previous.expense_id !== null && previous.expense_id !== undefined ? 'gider' : 'sözleşme';
+  throw new PlatformError(
+    409,
+    'PREVIOUS_VERSION_RECORDED',
+    `Önceki sürüm (${Number(previous.revision_no)}. sürüm) zaten ${kind} olarak kaydedilmiş. Bu sürümü de kabul ederseniz ayrı bir kayıt oluşur; önceki kaydı gerekirse ilgili bölümden siz iptal edin ya da feshedin.`,
+    {
+      previous_quote_id: Number(previous.id),
+      previous_revision_no: Number(previous.revision_no),
+      previous_expense_id: nullableNumber(previous.expense_id),
+      previous_contract_id: nullableNumber(previous.contract_id),
+    },
+  );
 }
 
 export async function rejectQuote({ siteCode, rawId, actor }) {
@@ -552,15 +864,32 @@ export async function acceptQuote({ siteCode, rawId, actor, access, body }) {
   const quote = await loadQuote(siteCode, quoteId);
   if (quote.status !== 'open') throw new PlatformError(409, 'QUOTE_NOT_OPEN', 'Teklif zaten karara bağlanmış.');
   if (quote.expired) throw new PlatformError(409, 'QUOTE_EXPIRED', 'Teklifin geçerlilik süresi dolmuş.');
+  if (quote.revision_no > 1) await assertPreviousRecordAcknowledged(siteCode, quote, b);
   const targetModule = as === 'expense' ? 'finance' : 'contracts';
   if (!(await isModuleEnabled(siteCode, targetModule))) {
     throw new PlatformError(403, 'MODULE_DISABLED', as === 'expense' ? 'Finans modülü kapalı.' : 'Firma ve Sözleşme Takibi modülü kapalı.', { module: targetModule });
   }
+  // Atomik "claim": gider / sozlesme KABUL ANINDA kilitlenen satirdan okunan degerlerle olusur (arada yerinde duzenleme olsa bile tutarsizlik olmaz);
+  // gecerlilik de ayni ifadede denetlenir.
   const claim = await pool.query(
-    `UPDATE equipment_quotes SET status = 'accepted', accepted_as = $3, decided_at = NOW() WHERE id = $1 AND site_code = $2 AND status = 'open' RETURNING id`,
-    [quoteId, siteCode, as],
+    `UPDATE equipment_quotes SET status = 'accepted', accepted_as = $3, decided_at = NOW()
+      WHERE id = $1 AND site_code = $2 AND status = 'open' AND (valid_until IS NULL OR valid_until >= $4::DATE)
+      RETURNING topic, vendor_name, amount_kurus, equipment_id, revision_no`,
+    [quoteId, siteCode, as, todayIstanbul()],
   );
-  if (!claim.rows[0]) throw new PlatformError(409, 'QUOTE_NOT_OPEN', 'Teklif zaten karara bağlanmış.');
+  if (!claim.rows[0]) {
+    const latest = await loadQuote(siteCode, quoteId);
+    if (latest.status === 'open' && latest.expired) throw new PlatformError(409, 'QUOTE_EXPIRED', 'Teklifin geçerlilik süresi dolmuş.');
+    throw new PlatformError(409, 'QUOTE_NOT_OPEN', 'Teklif zaten karara bağlanmış.');
+  }
+  const accepted = {
+    topic: claim.rows[0].topic,
+    vendor_name: claim.rows[0].vendor_name,
+    amount_kurus: Number(claim.rows[0].amount_kurus),
+    equipment_id: nullableNumber(claim.rows[0].equipment_id),
+    revision_no: claim.rows[0].revision_no === null || claim.rows[0].revision_no === undefined ? 1 : Number(claim.rows[0].revision_no),
+  };
+  const revisionSuffix = accepted.revision_no > 1 ? ` (revizyon ${accepted.revision_no})` : '';
   try {
     let expenseId = null;
     let contractId = null;
@@ -573,8 +902,8 @@ export async function acceptQuote({ siteCode, rawId, actor, access, body }) {
           category_id: e.category_id,
           supplier_id: e.supplier_id,
           account_id: e.account_id,
-          description: `Teklif: ${quote.topic} - ${quote.vendor_name}`.slice(0, 200),
-          amount_minor: quote.amount_kurus,
+          description: `Teklif: ${accepted.topic} - ${accepted.vendor_name}${revisionSuffix}`.slice(0, 200),
+          amount_minor: accepted.amount_kurus,
           expense_date: e.expense_date ?? todayIstanbul(),
           document_kind: e.document_kind,
           document_no: e.document_no,
@@ -582,11 +911,11 @@ export async function acceptQuote({ siteCode, rawId, actor, access, body }) {
         },
       });
       expenseId = Number(created.expense.id);
-      if (quote.equipment_id !== null) {
+      if (accepted.equipment_id !== null) {
         const client = await pool.connect();
         try {
           await client.query('BEGIN');
-          await linkExpenseTx(client, siteCode, quote.equipment_id, expenseId, userOf(access));
+          await linkExpenseTx(client, siteCode, accepted.equipment_id, expenseId, userOf(access));
           await client.query('COMMIT');
         } catch (error) {
           await client.query('ROLLBACK').catch(() => {});
@@ -603,13 +932,13 @@ export async function acceptQuote({ siteCode, rawId, actor, access, body }) {
         access: { canWrite: true, userCode: access.userCode },
         body: {
           vendor_id: c.vendor_id,
-          title: c.title ?? `${quote.topic} (${quote.vendor_name})`.slice(0, 160),
+          title: c.title ?? `${accepted.topic} (${accepted.vendor_name})${revisionSuffix}`.slice(0, 160),
           start_date: c.start_date,
           end_date: c.end_date,
           period: c.period,
           auto_renew: c.auto_renew,
           note: c.note,
-          amount: kurusToAmount(quote.amount_kurus),
+          amount: kurusToAmount(accepted.amount_kurus),
         },
       });
       contractId = Number(created.contract.id);
@@ -617,9 +946,14 @@ export async function acceptQuote({ siteCode, rawId, actor, access, body }) {
     await pool.query(`UPDATE equipment_quotes SET expense_id = $3, contract_id = $4 WHERE id = $1 AND site_code = $2`, [quoteId, siteCode, expenseId, contractId]);
     await pool.query(
       `UPDATE equipment_quotes SET status = 'rejected', decided_at = NOW() WHERE site_code = $1 AND status = 'open' AND id <> $2 AND lower(topic) = lower($3)`,
-      [siteCode, quoteId, quote.topic],
+      [siteCode, quoteId, accepted.topic],
     );
-    await audit(actor, 'quote.accepted', siteCode, 'equipment_quote', quoteId, { as, expense_id: expenseId, contract_id: contractId });
+    await audit(actor, 'quote.accepted', siteCode, 'equipment_quote', quoteId, {
+      as,
+      expense_id: expenseId,
+      contract_id: contractId,
+      ...(accepted.revision_no > 1 ? { revision_no: accepted.revision_no, acknowledged_previous: b.acknowledge_previous === true } : {}),
+    });
   } catch (error) {
     await pool.query(`UPDATE equipment_quotes SET status = 'open', accepted_as = NULL, decided_at = NULL WHERE id = $1 AND site_code = $2 AND expense_id IS NULL AND contract_id IS NULL`, [quoteId, siteCode]).catch(() => {});
     throw error;

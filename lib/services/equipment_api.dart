@@ -182,6 +182,35 @@ class EquipmentDetail {
   final List<int> expenseIds;
 }
 
+/// Bir teklif zincirindeki ONAYLI sürümün özeti (liste yanıtında, en son sürüm onaylı değilse).
+class QuoteVersionRef {
+  const QuoteVersionRef({required this.id, required this.revisionNo, required this.amountKurus, this.decidedAt, this.acceptedAs, this.expenseId, this.contractId});
+
+  factory QuoteVersionRef.fromJson(Map<String, dynamic> j) => QuoteVersionRef(
+    id: _i(j['id']),
+    revisionNo: _i(j['revision_no']) == 0 ? 1 : _i(j['revision_no']),
+    amountKurus: _i(j['amount_kurus']),
+    decidedAt: _s(j['decided_at']),
+    acceptedAs: _s(j['accepted_as']),
+    expenseId: (j['expense_id'] as num?)?.toInt(),
+    contractId: (j['contract_id'] as num?)?.toInt(),
+  );
+
+  final int id;
+  final int revisionNo;
+  final int amountKurus;
+  final String? decidedAt;
+  final String? acceptedAs;
+  final int? expenseId;
+  final int? contractId;
+
+  /// Bu sürüm gider ya da sözleşmeye dönüşmüş mü (yeni sürümün kabulünde çift kayıt uyarısı için).
+  bool get hasRecord => expenseId != null || contractId != null;
+
+  /// "gider" / "sözleşme" (kayıt yoksa null).
+  String? get recordLabel => expenseId != null ? 'gider' : (contractId != null ? 'sözleşme' : null);
+}
+
 class EquipmentQuote {
   const EquipmentQuote({
     required this.id,
@@ -195,21 +224,57 @@ class EquipmentQuote {
     this.acceptedAs,
     this.lowest = false,
     this.equipmentId,
+    this.deliveryDays,
+    this.note,
+    this.vatIncluded,
+    this.fastest = false,
+    this.basisMixed = false,
+    this.revisionNo = 1,
+    this.previousId,
+    this.revisionReason,
+    this.versionCount = 1,
+    this.approvedVersion,
+    this.editable = false,
+    this.revisable = false,
+    this.expenseId,
+    this.contractId,
+    this.decidedAt,
   });
 
-  factory EquipmentQuote.fromJson(Map<String, dynamic> j) => EquipmentQuote(
-    id: _i(j['id']),
-    topic: '${j['topic'] ?? ''}',
-    vendorName: '${j['vendor_name'] ?? ''}',
-    amountKurus: _i(j['amount_kurus']),
-    status: '${j['status'] ?? 'open'}',
-    validUntil: _s(j['valid_until']),
-    expired: j['expired'] == true,
-    documentNote: _s(j['document_note']),
-    acceptedAs: _s(j['accepted_as']),
-    lowest: j['lowest'] == true,
-    equipmentId: (j['equipment_id'] as num?)?.toInt(),
-  );
+  factory EquipmentQuote.fromJson(Map<String, dynamic> j) {
+    final status = '${j['status'] ?? 'open'}';
+    final approved = j['approved_version'];
+    final revisionNo = _i(j['revision_no']) == 0 ? 1 : _i(j['revision_no']);
+    return EquipmentQuote(
+      id: _i(j['id']),
+      topic: '${j['topic'] ?? ''}',
+      vendorName: '${j['vendor_name'] ?? ''}',
+      amountKurus: _i(j['amount_kurus']),
+      status: status,
+      validUntil: _s(j['valid_until']),
+      expired: j['expired'] == true,
+      documentNote: _s(j['document_note']),
+      acceptedAs: _s(j['accepted_as']),
+      lowest: j['lowest'] == true,
+      equipmentId: (j['equipment_id'] as num?)?.toInt(),
+      deliveryDays: (j['delivery_days'] as num?)?.toInt(),
+      note: _s(j['note']),
+      vatIncluded: j['vat_included'] is bool ? j['vat_included'] as bool : null,
+      fastest: j['fastest'] == true,
+      basisMixed: j['basis_mixed'] == true,
+      revisionNo: revisionNo,
+      previousId: (j['previous_id'] as num?)?.toInt(),
+      revisionReason: _s(j['revision_reason']),
+      versionCount: _i(j['version_count']) == 0 ? revisionNo : _i(j['version_count']),
+      approvedVersion: approved is Map ? QuoteVersionRef.fromJson(Map<String, dynamic>.from(approved)) : null,
+      // Eski sunucu bu bayrakları göndermez: açık teklif yine düzenlenebilir, revizyon yok.
+      editable: j['editable'] is bool ? j['editable'] as bool : status == 'open',
+      revisable: j['revisable'] == true,
+      expenseId: (j['expense_id'] as num?)?.toInt(),
+      contractId: (j['contract_id'] as num?)?.toInt(),
+      decidedAt: _s(j['decided_at']),
+    );
+  }
 
   final int id;
   final String topic;
@@ -222,6 +287,64 @@ class EquipmentQuote {
   final String? acceptedAs;
   final bool lowest;
   final int? equipmentId;
+
+  /// Teslim süresi (gün); girilmediyse null.
+  final int? deliveryDays;
+
+  /// Kapsam / not (en çok 500 karakter).
+  final String? note;
+
+  /// KDV esası: true dahil, false hariç, null belirtilmedi.
+  final bool? vatIncluded;
+
+  /// Aynı konuda en kısa teslim süresi (en az iki tekliften süre girilmişse).
+  final bool fastest;
+
+  /// Aynı konudaki teklifler farklı KDV esasında: tutarlar kıyaslanamaz, "en düşük" işaretlenmez.
+  final bool basisMixed;
+
+  /// Sürüm numarası (1 = ilk sürüm) ve önceki sürüme bağ (K14 revizyon modeli).
+  final int revisionNo;
+  final int? previousId;
+  final String? revisionReason;
+  final int versionCount;
+
+  /// Son sürüm onaylı değilse zincirdeki en yakın onaylı sürüm.
+  final QuoteVersionRef? approvedVersion;
+
+  /// Açık teklif yerinde düzenlenir; onaylı teklif için [revisable] ile yeni sürüm açılır.
+  final bool editable;
+  final bool revisable;
+  final int? expenseId;
+  final int? contractId;
+  final String? decidedAt;
+
+  bool get isRevision => revisionNo > 1;
+
+  bool get hasHistory => revisionNo > 1;
+
+  /// "KDV dahil" / "KDV hariç" / "KDV belirtilmedi".
+  String get vatLabel => vatIncluded == null ? 'KDV belirtilmedi' : (vatIncluded! ? 'KDV dahil' : 'KDV hariç');
+
+  /// "14 gün" (girilmediyse null).
+  String? get deliveryLabel => deliveryDays == null ? null : '$deliveryDays gün';
+}
+
+/// Bir teklifin tüm sürümleri (eskiden yeniye) ve en son / onaylı sürümün kimliği.
+class QuoteHistory {
+  const QuoteHistory({required this.items, required this.latestId, this.approvedId});
+
+  factory QuoteHistory.fromJson(Map<String, dynamic> j) => QuoteHistory(
+    items: <EquipmentQuote>[
+      for (final r in (j['items'] as List? ?? const [])) if (r is Map) EquipmentQuote.fromJson(Map<String, dynamic>.from(r)),
+    ],
+    latestId: _i(j['latest_id']),
+    approvedId: (j['approved_id'] as num?)?.toInt(),
+  );
+
+  final List<EquipmentQuote> items;
+  final int latestId;
+  final int? approvedId;
 }
 
 /// Açılır listede seçilecek { id, ad } (kategori, hesap, firma).
@@ -332,6 +455,16 @@ class EquipmentApi {
 
   Future<void> acceptQuote(String token, int site, int id, Map<String, Object?> body) async => _send('POST', _p(site, 'quotes/$id/accept'), token, body: body);
 
+  /// Açık teklifi yerinde düzenler (onaylı teklif 409 QUOTE_LOCKED: revizyon kullanın).
+  Future<void> updateQuote(String token, int site, int id, Map<String, Object?> body) async => _send('PATCH', _p(site, 'quotes/$id'), token, body: body);
+
+  /// Onaylı teklifte değişiklik = yeni sürüm (K14): `reason` zorunlu, önceki sürüm değişmez.
+  Future<void> reviseQuote(String token, int site, int id, Map<String, Object?> body) async =>
+      _send('POST', _p(site, 'quotes/$id/revise'), token, body: body, ok: const {201});
+
+  /// Teklifin tüm sürümleri (eskiden yeniye).
+  Future<QuoteHistory> quoteHistory(String token, int site, int id) async => QuoteHistory.fromJson(await _send('GET', _p(site, 'quotes/$id/history'), token));
+
   Future<Map<String, dynamic>> _send(
     String method,
     String path,
@@ -381,6 +514,14 @@ class EquipmentApi {
         return 'Teklifin geçerlilik süresi dolmuş.';
       case 'QUOTE_NOT_OPEN':
         return 'Teklif zaten karara bağlanmış.';
+      case 'QUOTE_LOCKED':
+        return 'Karara bağlanmış teklif düzenlenemez. Onaylı teklifte değişiklik için revizyon oluşturun.';
+      case 'QUOTE_NOT_LATEST':
+        return 'Bu teklifin daha yeni bir sürümü var. Listeyi yenileyip en son sürümle devam edin.';
+      case 'QUOTE_NOT_REVISABLE':
+        return 'Bu teklif için revizyon açılamaz.';
+      case 'NO_CHANGE':
+        return 'Revizyon için en az bir alan değişmeli.';
     }
     if (serverText is String && serverText.trim().isNotEmpty && (status == 400 || status == 409)) {
       return AuthApi.sanitizeServerMessage(serverText.trim()) ?? 'İşlem başarısız ($status)';
@@ -428,4 +569,7 @@ class EquipmentService {
   Future<void> createQuote(int site, Map<String, Object?> body) => _guard((t) => api.createQuote(t, site, body));
   Future<void> rejectQuote(int site, int id) => _guard((t) => api.rejectQuote(t, site, id));
   Future<void> acceptQuote(int site, int id, Map<String, Object?> body) => _guard((t) => api.acceptQuote(t, site, id, body));
+  Future<void> updateQuote(int site, int id, Map<String, Object?> body) => _guard((t) => api.updateQuote(t, site, id, body));
+  Future<void> reviseQuote(int site, int id, Map<String, Object?> body) => _guard((t) => api.reviseQuote(t, site, id, body));
+  Future<QuoteHistory> quoteHistory(int site, int id) => _guard((t) => api.quoteHistory(t, site, id));
 }
