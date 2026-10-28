@@ -1,6 +1,6 @@
 # Sayaç Okuma ve Faturalandırma (`metering`, migration 061)
 
-Modül varsayılan KAPALI; yönetici modül talep eder, süper kullanıcı açar. Sakine açık uç yoktur. Borçlandırma ayrıca `finance` modülünü ister.
+Modül varsayılan KAPALI; yönetici modül talep eder, süper kullanıcı açar. Sakine açık uç yoktur. Borçlandırma ayrıca `finance` modülünü ister; Aidat ve Finans temel modül olduğundan (079) her sitede açıktır, ekranda "modül açık olmalı" diye şart gösterilmez.
 
 ## Tablolar (hepsi ekleyici; defter şemasına dokunulmaz)
 

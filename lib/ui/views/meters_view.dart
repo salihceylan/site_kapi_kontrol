@@ -25,7 +25,8 @@ String _newKey() {
 }
 
 /// Yönetim "Sayaçlar" ekranı (`metering` modülü): Sayaçlar | Okuma aktar | Faturalandır. Yönetici yazar, kurul üyesi salt okur
-/// (yazma düğmeleri çizilmez). Fotoğrafla okuma bu sürümde yok ("Yakında…").
+/// (yazma düğmeleri çizilmez). Fotoğrafla okuma çalışır: yönetici "Sayaçlar" sekmesindeki "Fotoğrafla oku" düğmesinden, görevli
+/// (STAFF) doğrudan açılan saha ekranından yapar ([MeterFieldView]).
 /// [MetersViewState.reload] sayfa kabuğunun aşağı çekip yenilemesinden çağrılır.
 class MetersView extends StatefulWidget {
   const MetersView({
@@ -536,8 +537,11 @@ class _ImportTabState extends State<_ImportTab> {
           for (final row in checked.rows.where((r) => r.isError).take(50)) ListTile(dense: true, contentPadding: EdgeInsets.zero, leading: const Icon(Icons.error_outline_rounded), title: Text('Satır ${row.n}: ${row.code}'), subtitle: Text(MeterImportRow.reasonText(row.reason))),
           if (checked.okCount > 0) FilledButton(onPressed: _busy ? null : () => _run(dryRun: false), child: Text('${checked.okCount} okumayı aktar')),
         ],
-        const SizedBox(height: AppSpace.xl),
-        const Text('Fotoğrafla okuma: Yakında…'),
+        // Fotoğrafla okuma çalışır; "Sayaçlar" sekmesindeki düğme yalnız yazma yetkisi olana çizildiği için ipucu da onadır.
+        if (widget.site.canWrite) ...<Widget>[
+          const SizedBox(height: AppSpace.xl),
+          const Text('Fotoğrafla okumak için Sayaçlar sekmesindeki “Fotoğrafla oku” düğmesini kullanın.', key: ValueKey<String>('meters_import_photo_hint')),
+        ],
       ],
     );
   }
@@ -698,12 +702,15 @@ class _BillingTabState extends State<_BillingTab> {
       children: <Widget>[
         if (!widget.site.canWrite) const Text('Faturalandırmayı yalnızca site yöneticisi yapabilir.'),
         if (widget.site.canWrite) ...<Widget>[
-          const Text('İki okuma tarihi arasındaki tüketim hesaplanır. Başlangıç tarihinde (ya da öncesinde) ve bitiş tarihinde (ya da öncesinde) okuma olmalıdır. Borçlandırma için "Aidat ve Finans" modülü de açık olmalıdır.'),
+          const Text('İki okuma tarihi arasındaki tüketim hesaplanır. Başlangıç tarihinde (ya da öncesinde) ve bitiş tarihinde (ya da öncesinde) okuma olmalıdır. Borçlandırdığınızda tutarlar, Aidat ve Finans’taki daire hesaplarına borç olarak yazılır.', key: ValueKey<String>('meters_billing_intro')),
           const SizedBox(height: AppSpace.md),
           DropdownButtonFormField<MeterKind>(
             initialValue: _kind,
+            isExpanded: true,
             decoration: const InputDecoration(labelText: 'Sayaç türü'),
-            items: <DropdownMenuItem<MeterKind>>[for (final k in MeterKind.values) DropdownMenuItem<MeterKind>(value: k, child: Text(k.label))],
+            items: <DropdownMenuItem<MeterKind>>[
+              for (final k in MeterKind.values) DropdownMenuItem<MeterKind>(value: k, child: Text(k.label, maxLines: 1, overflow: TextOverflow.ellipsis)),
+            ],
             onChanged: _busy ? null : (v) => setState(() {
               _kind = v ?? _kind;
               if (!_methods.contains(_method)) _method = MeterMethod.unitPrice;
@@ -712,8 +719,12 @@ class _BillingTabState extends State<_BillingTab> {
           ),
           DropdownButtonFormField<MeterMethod>(
             initialValue: _method,
+            // "Isı payı (ölçüm + alan payı)" dar ekranda ve büyük yazıda sığmaz: yöntem adı tek satırda kısalır (taşma yok).
+            isExpanded: true,
             decoration: const InputDecoration(labelText: 'Dağıtım yöntemi'),
-            items: <DropdownMenuItem<MeterMethod>>[for (final m in _methods) DropdownMenuItem<MeterMethod>(value: m, child: Text(m.label))],
+            items: <DropdownMenuItem<MeterMethod>>[
+              for (final m in _methods) DropdownMenuItem<MeterMethod>(value: m, child: Text(m.label, maxLines: 1, overflow: TextOverflow.ellipsis)),
+            ],
             onChanged: _busy ? null : (v) => setState(() {
               _method = v ?? _method;
               _dirty();

@@ -720,7 +720,7 @@ abstract final class HelpContent {
         'Faturalandır sekmesinde tür, yöntem (birim fiyat, fatura tutarı ya da ısı için ölçüm + alan payı) ve iki tarihi seçip Önizle deyin; tutarlar uygunsa Borçlandır ile her dairenin oturanının hesabına borç yazılır.',
       ],
       note:
-          'Okunan değeri sayaçla karşılaştırmadan onaylamayın; fotoğraf Drive bağlıysa Drive a, değilse sunucuya kaydedilir. Webde kamera yok, değer elle yazılır. Yanlış borç Finans ekranından ters kayıtla düzeltilir.',
+          'Okunan değeri sayaçla karşılaştırmadan onaylamayın; fotoğraf Drive bağlıysa Drive’a, değilse sunucuya kaydedilir. Web’de kamera yok, değer elle yazılır. Yanlış borç Finans ekranından ters kayıtla düzeltilir.',
     ),
     HelpTopic(
       id: 'management_company',

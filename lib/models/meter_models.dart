@@ -22,11 +22,12 @@ enum MeterKind {
   }
 }
 
-/// Dağıtım yöntemleri (`method`).
+/// Dağıtım yöntemleri (`method`). Isı payının "alan payı" kısmı m² değildir (m² 078'de kaldırıldı): katılan dairelerin
+/// hepsinde arsa payı tanımlıysa arsa payına, değilse eşit dağıtılır (`docs/PLATFORM_SAYAC.md`).
 enum MeterMethod {
   unitPrice('unit_price', 'Birim fiyat'),
   invoice('invoice', 'Fatura tutarı'),
-  heat('heat', 'Isı payı (ölçüm + m²)');
+  heat('heat', 'Isı payı (ölçüm + alan payı)');
 
   const MeterMethod(this.api, this.label);
 
