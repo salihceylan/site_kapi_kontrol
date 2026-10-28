@@ -21,6 +21,7 @@ import { ensureContractsSchema } from './modules/contracts_schema.js';
 import { ensureEquipmentSchema } from './modules/equipment_schema.js';
 import { ensureCctvSchema } from './modules/cctv_schema.js';
 import { ensureApartmentMgmtSchema } from './modules/apartment_mgmt_schema.js';
+import { ensureApartmentOwnersSchema } from './modules/apartment_owners_schema.js';
 import { ensureResidencyLogSchema } from './modules/residency_log_schema.js';
 import { ensureDecisionBookSchema } from './modules/decision_book_schema.js';
 import { ensureBudgetSchema } from './modules/budget_schema.js';
@@ -1990,6 +1991,9 @@ export async function ensureDbSchema() {
     await ensureDeferred('074 daire sahipligi', () => ensureApartmentMgmtSchema(client));
     // 075 (daire sakini ADLI KAYDI: yalniz-ekleme apartment_residency_log + users silme kayit tetikleyicisi): sites / users / apartment_residencies'ten SONRA; katalog kontrolu (residency_log_schema.js = migrations/075).
     await ensureResidencyLogSchema(client);
+    // 104 (coklu malik: tum malikler kayitli + TEK hesap muhatabi): apartment_residencies'ten SONRA; eksik nesne yoksa yalniz katalog okuma, varsa TEK transaction
+    // (apartment_owners_schema.js = migrations/104). Mevcut tek malik muhatap olarak isaretlenir; eski tekil malik indeksi AYNI ADLA muhatap indeksine cevrilir.
+    await ensureApartmentOwnersSchema(client);
     // 076 (Google ve Apple / iCloud OAuth kimlik baglantilari): katalog kontrolu (oauth_schema.js = migrations/076).
     await ensureOAuthSchema(client);
     // 077 (butunluk sertlestirme): site_name_key() islevi + site adi tekillik indeksleri (uq_sites_name_key, uq_site_applications_pending_name_key;

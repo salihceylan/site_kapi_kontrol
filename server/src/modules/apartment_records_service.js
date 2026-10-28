@@ -69,6 +69,7 @@ async function loadResidents(db, apartmentIds, { currentOnly }) {
         r.apartment_id,
         r.person_id,
         r.relation,
+        r.is_account_holder,
         r.is_current,
         r.move_in_date,
         r.move_out_date,
@@ -102,11 +103,21 @@ function personRef(row) {
   return row ? { person_id: Number(row.person_id), full_name: row.full_name ?? FALLBACK_PERSON_NAME } : null;
 }
 
+/**
+ * Dairenin guncel malikleri, HESAP MUHATABI ilk sirada (coklu malik, 104). Muhatap bayragi olmayan eski satir / test girdisi: kayit sirasi.
+ * `owner` alani (eski istemci uyumu) her zaman muhataptir.
+ */
+export function ownersOf(current) {
+  const owners = (current ?? []).filter((r) => r.relation === 'owner');
+  return [...owners.filter((r) => r.is_account_holder === true), ...owners.filter((r) => r.is_account_holder !== true)];
+}
+
 function buildSummary(row, residents) {
   const current = (residents ?? []).filter((r) => r.is_current === true);
   return {
     ...mapApartmentBase(row),
-    owner: personRef(current.find((r) => r.relation === 'owner')),
+    owner: personRef(ownersOf(current)[0]),
+    owner_count: ownersOf(current).length,
     tenant: personRef(current.find((r) => r.relation === 'tenant')),
     resident_count: current.length,
   };
@@ -121,7 +132,23 @@ function mapResident(row, { past = false } = {}) {
     move_in_date: dateToIso(row.move_in_date),
     has_account: row.has_account === true,
   };
+  // Coklu malik (104): malik satirinda hesap muhatabi isareti (diger iliskilerde alan yok; eski istemci yok sayar).
+  if (!past && row.relation === 'owner' && typeof row.is_account_holder === 'boolean') {
+    base.is_account_holder = row.is_account_holder;
+  }
   return past ? { ...base, move_out_date: dateToIso(row.move_out_date) } : base;
+}
+
+/** Dairenin guncel malikleri (muhatap basta): { residency_id, person_id, full_name, has_account, is_account_holder, move_in_date }. */
+export function mapOwners(current) {
+  return ownersOf(current).map((r) => ({
+    residency_id: Number(r.residency_id ?? r.id),
+    person_id: Number(r.person_id),
+    full_name: r.full_name ?? FALLBACK_PERSON_NAME,
+    has_account: r.has_account === true,
+    is_account_holder: r.is_account_holder === true,
+    move_in_date: dateToIso(r.move_in_date),
+  }));
 }
 
 /** GET apartments sorgu parametreleri (doğrulanmış). */
@@ -202,6 +229,8 @@ export async function loadApartmentDetail(db, siteCode, apartmentId) {
   const residents = (await loadResidents(db, [apartmentId], { currentOnly: false })).get(apartmentId) ?? [];
   return {
     ...buildSummary(row, residents),
+    // Coklu malik (104): tum guncel malikler, hesap muhatabi basta. `owner` (yukarida) muhataptir; eski istemci yalniz onu bilir.
+    owners: mapOwners(residents.filter((r) => r.is_current === true)),
     current_residents: sortedByRelation(residents.filter((r) => r.is_current === true)).map((r) => mapResident(r)),
     past_residents: residents.filter((r) => r.is_current !== true).map((r) => mapResident(r, { past: true })),
   };

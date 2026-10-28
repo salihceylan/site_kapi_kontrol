@@ -296,7 +296,7 @@ async function exportApartments(siteCode, f) {
         INNER JOIN site_people sp ON sp.id = r.person_id
         LEFT JOIN users u ON u.user_code = sp.user_code
         WHERE r.apartment_id = ANY($1::BIGINT[]) AND r.is_current = TRUE
-        ORDER BY r.id
+        ORDER BY r.is_account_holder DESC, r.id
       `,
       [ids],
     );
