@@ -27,8 +27,8 @@ class _TableColumn {
 /// hücre hücre düzenleyebileceği, satır ekleyip silebileceği etkileşimli elektronik tablo bileşeni.
 ///
 /// - Seçim listesi sütunları (İlişki, Borç Sorumlusu ...) serbest metinle DEĞİL açılır listeyle düzenlenir.
-/// - Kişi türlerinde «Kullanıcı Adı» sütunu sistemin seçtiği adı gösterir; yönetici değiştirebilir, ancak yeni ad sunucudaki denetimi (biçim + tüm
-///   sistemdeki kullanılabilirlik) geçmeden kabul edilmez. Mevcut hesaba bağlanan satırlarda ad salt okunurdur.
+/// - Kişi türlerinde «Kullanıcı Adı» sütunu sistemin seçtiği adı gösterir; yönetici değiştirebilir, ancak yeni ad sunucudaki denetimi (biçim + bu
+///   sitedeki kullanılabilirlik) geçmeden kabul edilmez. Mevcut hesaba bağlanan satırlarda ad salt okunurdur.
 class BulkEditableTable extends StatefulWidget {
   const BulkEditableTable({
     super.key,
@@ -898,7 +898,7 @@ class _LoginNameResult {
 
 enum _CheckState { idle, checking, ok, bad, failed }
 
-/// Kullanıcı adı düzenleme penceresi: yazılan ad önce tarayıcıda (biçim + dosyadaki diğer adlar), sonra bekletmeli olarak sunucuda (sistemdeki
+/// Kullanıcı adı düzenleme penceresi: yazılan ad önce tarayıcıda (biçim + dosyadaki diğer adlar), sonra bekletmeli olarak sunucuda (bu sitedeki
 /// kullanılabilirlik) denetlenir; «Uygula» yalnız denetim geçtiğinde açılır. Alınmış adda sunucunun önerdiği boş ad tek dokunuşla alınır.
 class _LoginNameDialog extends StatefulWidget {
   const _LoginNameDialog({required this.controller, required this.row});

@@ -7857,12 +7857,208 @@
     },
     {
       "id": "F39",
+      "baslik": "Güvenlik güçlendirme: cihaz sahiplenme kapsamı, toplu yükleme sayımı, ilk PIN sınırı, kod doğrulama kilidi, tarayıcı bildirimi",
+      "durum": "hazir",
+      "ozet": "2026-10-28 güvenlik denetiminin yüksek bulguları kapatıldı (Dalga G). Bir sitenin yöneticisi başka sitenin kapısındaki cihazı sahiplenemez, değiştirme ya da kapıya atama ile de alamaz; cihaz yokmuş gibi yanıt alır. Toplu Yükleme önizlemesi başka sitelerdeki kullanıcı adı ve e-postaları saymaz. Yönetimin verdiği 4 haneli ilk PIN 5 yanlışta 15 dakika kilitlenir (kilit sunucu yeniden başlasa da sürer). E-posta ve SMS doğrulama kodları kodlar arası birikimli kilit alır. Tarayıcı bildirimi yalnız tanınan bildirim servislerine kaydolur. Şifre denetimi artık sunucuyu yavaşlatmaz. Bunlar sunucu değişiklikleridir: sunucu sürümü dağıtılınca denenir (maddeler «Denemeye hazır» görünse de dağıtılmadan etkisi yoktur); uygulama sürümü gerekmez.",
+      "maddeler": [
+        {
+          "id": "F39.01",
+          "baslik": "Başka sitenin cihazı sahiplenilemez",
+          "adimlar": [
+            "A sitesinin yöneticisi olarak girin; Cihaz Ekle (karekod ya da seri no ile) ekranını açın.",
+            "B sitesinin bir kapısına takılı cihazın kimliğini (UID) ya da karekodunu girin.",
+            "Aynı ekranda hiç var olmayan uydurma bir cihaz kimliği girin ve iki iletiyi karşılaştırın.",
+            "B sitesinin yöneticisiyle girip cihaz listesine ve kapıya bakın."
+          ],
+          "beklenen": "Birinci ve üçüncü adımda aynı «Bu cihaz şirket envanterinde kayıtlı değildir» iletisi gelir (iletiden cihazın başka bir sitede olduğu ya da sahibi anlaşılmaz). B sitesinin cihaz listesi ve kapısı değişmemiştir; A hesabına cihaz tanımlanmaz.",
+          "rol_notu": "Site yöneticisi (iki ayrı site)",
+          "on_kosul": "İki ayrı TEST sitesi (A ve B) ve her birinin yöneticisi; B sitesinin bir kapısına cihaz takılı (sahibi olsun ya da olmasın)",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F39.02",
+          "baslik": "Kendi sitenizdeki ve serbest cihazlar sahiplenilir; süper kullanıcı sınırsızdır",
+          "adimlar": [
+            "A yöneticisi olarak, kendi sitenizin kapısına takılı ama sahibinin hesabı silinmiş (sahipsiz) bir cihazın kimliğini girip sahiplenin.",
+            "Henüz hiçbir yere bağlı olmayan, envanterdeki yeni bir cihazı sahiplenin.",
+            "Sahiplendiğiniz cihazın kimliğini ikinci kez girin.",
+            "Süper kullanıcı hesabıyla, başka bir sitenin kapısındaki sahipsiz bir cihazı sahiplenin."
+          ],
+          "beklenen": "İlk iki adım başarılıdır ve cihaz hesabınızın listesinde görünür. Üçüncü adımda «Bu cihaz zaten hesabınıza tanımlı» denir. Dördüncü adım da çalışır (süper kullanıcının kapsamı sınırsızdır).",
+          "rol_notu": "Site yöneticisi / Süper kullanıcı",
+          "on_kosul": "Kendi sitenizin kapısında sahipsiz bir cihaz ve envanterde bağlanmamış bir cihaz; süper kullanıcı hesabı",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F39.03",
+          "baslik": "Başka yöneticiye atanmış cihaz devralınamaz",
+          "adimlar": [
+            "Süper kullanıcıyla, henüz sahiplenilmemiş bir şirket cihazını bir yöneticiye atayın (cihaz atama).",
+            "Başka bir site yöneticisi hesabıyla bu cihazı sahiplenmeyi deneyin.",
+            "Atanan yönetici hesabıyla aynı cihazı sahiplenin."
+          ],
+          "beklenen": "İkinci adımda «başka bir kullanıcı hesabı tarafından sahiplenilmiş» türünden bir ret iletisi gelir ve cihazın ataması değişmez; üçüncü adımda atanan yönetici cihazı sahiplenir.",
+          "rol_notu": "Süper kullanıcı / Site yöneticisi",
+          "on_kosul": "Sahiplenilmemiş bir şirket cihazı ve iki yönetici hesabı",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F39.04",
+          "baslik": "Cihazı değiştirme ve kapıya cihaz atama başka siteye uzanamaz",
+          "adimlar": [
+            "A yöneticisi olarak kendi sitenizin bir kapısında Cihaz Yönetimi'ni açın; Arızalı Cihazı Değiştir (QR / Seri No) ile B sitesindeki bir cihazın kimliğini girin.",
+            "Aynı Cihaz Yönetimi ekranında «Cihaz Unique ID (UID)» alanına B sitesinin cihazını yazıp Cihazı Ata'ya basın.",
+            "Aynı kapıyı kendi cihazınız ya da envanterdeki serbest bir cihazla değiştirin.",
+            "Süper kullanıcıyla herhangi bir sitenin kapısında cihaz değiştirin."
+          ],
+          "beklenen": "Birinci ve ikinci adımda cihaz bulunamadı iletisi gelir (örneğin «Seçilen yeni cihaz bulunamadı»); B sitesinin cihazı ve kapısı değişmez. Üçüncü adım normal çalışır ve kapı yetkileri korunur. Dördüncü adım süper kullanıcıda sınırsız çalışır.",
+          "rol_notu": "Site yöneticisi / Süper kullanıcı",
+          "on_kosul": "İki ayrı TEST sitesi; A sitesinde kapısı olan yönetici; B sitesinde takılı bir cihaz",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F39.05",
+          "baslik": "Toplu Yükleme: kullanıcı adı denetimi yalnız kendi sitenizi görür",
+          "adimlar": [
+            "B sitesinde kayıtlı bir sakinin kullanıcı adını not edin.",
+            "A sitesinin yöneticisiyle Toplu Yükleme > Kişiler önizlemesinde bir satırın «Kullanıcı Adı» hücresine bu adı yazın ve denetleyin.",
+            "Aynı hücreye A sitesinin KENDİ sakininin kullanıcı adını yazın."
+          ],
+          "beklenen": "İkinci adımda «kayıtlı» uyarısı ve «Boştaki ad» önerisi çıkmaz, «Uygula» açıktır. Üçüncü adımda «Bu kullanıcı adı bu sitede başka bir hesapta kayıtlı.» uyarısı ve site içi «Boştaki ad: …_2» önerisi görünür, «Uygula» kapalı kalır.",
+          "rol_notu": "Site yöneticisi (iki ayrı site)",
+          "on_kosul": "İki ayrı TEST sitesi; her ikisinde de kayıtlı sakin hesabı",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F39.06",
+          "baslik": "Toplu Yükleme: başka sitedeki e-posta «yeni hesap» görünür, hesap açılmaz",
+          "adimlar": [
+            "B sitesindeki bir sakinin e-postasını, A sitesine yüklenecek bir kişi satırına yazın (dosyada hesabı açılacak başka kişiler de olsun).",
+            "Önizlemeye bakın, sonra aktarın ve sonuç ekranını okuyun.",
+            "Aynı sitedeki bağlanamayan bir hesabın e-postasını (örneğin o sitenin sakin olarak da bağlı yöneticisininki) bir satıra koyup önizleyin.",
+            "Aynı sitedeki bağlanabilir bir hesabın e-postasını bir satıra koyup önizleyin."
+          ],
+          "beklenen": "İlk satır önizlemede sıradan «yeni hesap» gibi görünür («e-posta başka bir hesaba ait» uyarısı çıkmaz). Aktar sonrası sonuç ekranında o kişi için «hesabı açılmadı» bildirimi çıkar, kişi hesapsız kayıtlıdır, dosyadaki diğer kişilerin hesapları açılır. Üçüncü adımda «e-posta başka bir hesaba ait; kişi kaydedilir ama hesap açılmaz» uyarısı sürer; dördüncü adımda mevcut hesaba bağlanma (salt okunur ad) sürer.",
+          "rol_notu": "Site yöneticisi (iki ayrı site)",
+          "on_kosul": "İki ayrı TEST sitesi; A sitesinde dört satırlık küçük bir kişi dosyası",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F39.07",
+          "baslik": "Toplu Yükleme: ad başka sitede alınmışsa aktarımda sıradaki boş ad verilir",
+          "adimlar": [
+            "B sitesinde ahmet.yilmaz kullanıcı adlı bir hesap olsun. A sitesine «Ahmet Yılmaz» kişisini (hesap adı otomatik üretilecek) Toplu Yükleme ile önizleyin ve gösterilen adı not edin.",
+            "Aktar'a basın ve sonuç ekranını okuyun.",
+            "Yeni bir önizleme yapın; Aktar'a basmadan önce AYNI sitede önizlemede önerilen adı alan yeni bir sakin hesabı açın, sonra Aktar'a basın.",
+            "Aynı denemeyi bu kez o adı BAŞKA bir sitede açarak yapın."
+          ],
+          "beklenen": "Önizleme taban adı (ahmet.yilmaz) gösterir. Aktar sonrası sonuç ekranı nihai adı (örneğin ahmet.yilmaz_2), «önizlemedeki ... bu arada alındı» notunu ve «önizlemede gösterilen kullanıcı adı ... başka bir hesaba verildi» uyarısını gösterir; sakinlere sonuç listesindeki adlar iletilir. Üçüncü adımda aynı sitede ad alındığı için Aktar «Veriler değişti» der ve önizleme yenilenir. Dördüncü adımda bu uyarı çıkmaz; ad sonuç ekranında sıradaki boş adla değişir.",
+          "rol_notu": "Site yöneticisi (iki ayrı site)",
+          "on_kosul": "İki ayrı TEST sitesi; B sitesinde ahmet.yilmaz hesabı",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F39.08",
+          "baslik": "İlk PIN: 5 yanlış denemede 15 dakika kilit",
+          "adimlar": [
+            "Yönetimin verdiği ilk PIN'i henüz değiştirilmemiş bir daire hesabı seçin (4 haneli PIN ile giriş).",
+            "Farklı cihaz ya da ağlardan (örneğin telefon ve bilgisayar) toplam 5 kez yanlış PIN ile giriş deneyin.",
+            "Kilitliyken doğru PIN'i girin.",
+            "15 dakika sonra doğru PIN ile girin."
+          ],
+          "beklenen": "Beşinci yanlışta «Bu hesap için çok fazla hatalı PIN denemesi yapıldı ... giriş geçici olarak kilitlendi» iletisi (15 dakika) gelir; kilitliyken doğru PIN de kabul edilmez. Süre dolunca doğru PIN ile giriş olur ve zorunlu şifre değiştirme ekranı açılır. Kilit sunucu yeniden başlatılsa da sürer.",
+          "rol_notu": "Daire sakini (ilk PIN ile)",
+          "on_kosul": "İlk PIN'i değiştirilmemiş bir TEST daire hesabı ve doğru PIN'i bilen biri",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F39.09",
+          "baslik": "İlk PIN kilidi: PIN yenileme açar, doğru PIN sayacı sıfırlar, normal hesap etkilenmez",
+          "adimlar": [
+            "Kilitli daire hesabı için yönetici olarak «PIN yenile» yapın ve yeni PIN ile girin.",
+            "Başka bir ilk-PIN hesabında 4 yanlış ve ardından doğru PIN girin; çıkış yapıp yine 4 yanlış PIN deneyin, sonra bir yanlış daha deneyin.",
+            "PIN'i değiştirilmiş normal bir hesapta ve var olmayan bir kullanıcı adında 5'ten fazla yanlış parola deneyin."
+          ],
+          "beklenen": "Yeni PIN hemen çalışır. 4 yanlış ve 1 doğru PIN'de giriş olur; sonraki ilk 4 yanlış kilitlemez, beşinci yanlış kilitler. Normal hesapta ve olmayan adda PIN kilidi iletisi görünmez; her zamanki «hatalı» ya da «çok fazla deneme» davranışı aynıdır.",
+          "rol_notu": "Daire sakini / Site yöneticisi",
+          "on_kosul": "İlk PIN'li iki TEST daire hesabı ve PIN'i değiştirilmiş bir hesap",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F39.10",
+          "baslik": "E-posta doğrulama kodu: kodlar arası 15 yanlışta 1 saat kilit",
+          "adimlar": [
+            "Yeni bir hesap kaydı başlatın (e-posta doğrulama kodu istenen) ve aynı e-posta için üç ayrı kod isteyin.",
+            "Her kodda 5, toplam 15 yanlış kod girin.",
+            "Kilitliyken doğru kodu girin; 1 saat sonra yeni kod isteyip doğru kodu girin.",
+            "Ayrı bir kayıtta doğru kodu 30 dakika içinde girin.",
+            "Google ya da iCloud ile girişte e-posta kodu ekranında (uygulama ve web) aynı kilidi tetikleyin."
+          ],
+          "beklenen": "İlk 5 yanlışta her kodda eskisi gibi «yeni bir kod isteyiniz» iletisi gelir. 15. yanlışta «Çok fazla hatalı doğrulama kodu denemesi yapıldı ... kod doğrulama geçici olarak kapatıldı» iletisi (1 saat) gelir ve doğru kod da kabul edilmez; 1 saat sonra yeni kodla doğrulama çalışır. Normal akışta doğru kod 30 dakika içinde kabul edilir. Google/iCloud ekranında kilit iletisi okunur biçimde gösterilir.",
+          "rol_notu": "Bireysel kullanıcı (yeni kayıt)",
+          "on_kosul": "Gerçek bir e-posta kutusu; zaman alan madde (kilit 1 saat sürer)",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F39.11",
+          "baslik": "SMS giriş kodu: kodlar arası 15 yanlışta kilit",
+          "adimlar": [
+            "SMS girişi açıksa bir telefon numarası için üç kod isteyin.",
+            "Toplam 15 yanlış kod girin.",
+            "SMS girişi kapalıyken SMS ile girişi deneyin."
+          ],
+          "beklenen": "15. yanlışta SMS kodu kilidi iletisi gelir ve doğru kod da bir süre kabul edilmez. SMS kapalıyken eski «SMS girişi kullanılamıyor» davranışı değişmeden sürer.",
+          "rol_notu": "Herhangi bir kullanıcı",
+          "on_kosul": "Sunucuda SMS (NetGSM) açık olmalı; açık değilse yalnız üçüncü adım denenir",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F39.12",
+          "baslik": "Tarayıcı bildirimi tanınan servislerle kaydolur",
+          "adimlar": [
+            "Chrome, Firefox, Edge (Windows) ve Safari (iPhone) tarayıcılarının her birinde web uygulamasında Bildirim Tercihleri'nden «Tarayıcı bildirimi»ni açın.",
+            "Site yöneticisi olarak bir dairenin adına kargo kaydı girin."
+          ],
+          "beklenen": "Hiçbirinde «Bildirim kaydedilemedi, tekrar deneyin.» çıkmaz. Kargo kaydından sonra sakinin tarayıcısına «Kargo geldi» bildirimi düşer. Bir tarayıcıda kayıt reddedilirse tarayıcı adını bildirin (bildirim servisi izin listesine eklenir).",
+          "rol_notu": "Daire sakini / Site yöneticisi",
+          "on_kosul": "Sunucuda tarayıcı bildirimi anahtarları (WEB_PUSH_VAPID_*) tanımlı olmalı; açık değilse madde atlanır",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F39.13",
+          "baslik": "E-posta ve yükleme akışları aynen çalışır (paket güncellemesi)",
+          "adimlar": [
+            "Şifre sıfırlama e-postası, e-posta doğrulama kodu ve bir duyuru e-postası gönderin.",
+            "Toplu Yükleme'de büyük (birkaç MB) bir dosya, bir banka ekstresi PDF'i ve bir belge yükleyin."
+          ],
+          "beklenen": "E-postalar normal ulaşır; üç yükleme de eskisi gibi çalışır (e-posta ve istek gövdesi paketleri yamalı sürüme çıkarıldı).",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "E-posta gönderimi açık bir TEST sitesi",
+          "yeni": true,
+          "gelistirme": "hazir"
+        }
+      ]
+    },
+    {
+      "id": "F40",
       "baslik": "Dalga C: saha paketleri (sayaç saha akışı, dosya silme kuralı, iş–ekipman bağı, teklif revizyonu, kategoriler)",
       "durum": "hazir",
       "ozet": "Sayaç okuma saha akışı (blok seçimi, çekilenler listesi, yeniden çekim, olağan dışı tüketim uyarısı ve site eşiği), “silmeyi biz yapmayız” dosya kuralı (Drive bekleme kuyruğunda otomatik silme kalktı, telefondaki fotoğraf kopyası kendiliğinden silinmez, dosya adında kayıt kimliği), iş kaydı ↔ ekipman bağı ve önce/sonra fotoğraf etiketi, onaylı teklifin değişmezliği + revizyon + teklif karşılaştırma, yönetilebilir talep kategorileri ve aynı fotoğrafın başka kayıtta kullanıldığı uyarısı. Sürüm yayınlanınca denenir (maddeler “Denemeye hazır” görünse de sürüm yayınlanmadan uygulamada yoktur).",
       "maddeler": [
         {
-          "id": "F39.01",
+          "id": "F40.01",
           "baslik": "Blok seçici",
           "adimlar": [
             "Görevli (STAFF) hesabıyla “Fotoğrafla sayaç okuma” ekranını açın (birden çok bloklu site).",
@@ -7876,7 +8072,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F39.02",
+          "id": "F40.02",
           "baslik": "Liste ekranı ve bugünün okuması",
           "adimlar": [
             "Üstteki bantta “Liste (okunan/toplam)” düğmesine basın.",
@@ -7890,7 +8086,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F39.03",
+          "id": "F40.03",
           "baslik": "Yeniden çekim, atlama ve vazgeçme",
           "adimlar": [
             "Listeden bugün çekilmiş bir daireyi “Yeniden çek” ile seçin; üstteki bandın “Yeniden çekim: …” (gri, ok simgeli) olduğunu ve düğmenin “Onayla ve değiştir” yazdığını doğrulayın.",
@@ -7905,7 +8101,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F39.04",
+          "id": "F40.04",
           "baslik": "Olağan dışı tüketim uyarısı",
           "adimlar": [
             "Son okuması 130 olan ve son 3 dönem tüketimi yaklaşık 10 olan bir sayaçta 181 yazıp onaylayın (tüketim 51; eşik 5 kat = 50).",
@@ -7919,10 +8115,10 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F39.05",
+          "id": "F40.05",
           "baslik": "Sıçrama onayının denetim izi",
           "adimlar": [
-            "F39.04'te “Doğru, kaydet” ile kaydettiğiniz okumanın ardından süper kullanıcı / yönetici işlem kayıtlarına (ya da veritabanında denetim kaydına) bakın."
+            "F40.04'te “Doğru, kaydet” ile kaydettiğiniz okumanın ardından süper kullanıcı / yönetici işlem kayıtlarına (ya da veritabanında denetim kaydına) bakın."
           ],
           "beklenen": "“metering.reading.jump_confirmed” kaydı vardır (sayaç no, eşik katı ve oran yüzdesi). Okunan değerin kendisi denetim kaydında yazmaz.",
           "rol_notu": "Süper kullanıcı / Site yöneticisi",
@@ -7931,22 +8127,22 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F39.06",
+          "id": "F40.06",
           "baslik": "Sunucunun uyardığı okuma Bekleyen listesinde onay bekler",
           "adimlar": [
-            "Saha ekranı açıkken (telefon eşiği 5 kat bilir) süper kullanıcıyla siteye özel eşiği 3 kata düşürün (F39.07).",
+            "Saha ekranı açıkken (telefon eşiği 5 kat bilir) süper kullanıcıyla siteye özel eşiği 3 kata düşürün (F40.07).",
             "Aynı sayaçta 161 yazın (tüketim 31; telefon uyarmaz, sunucu uyarır).",
             "Üst çubuktaki kırmızı rozetli “Bekleyen” düğmesine basın; sırasıyla “Doğru, onayla ve gönder”, “Değeri düzelt” ve “Sil”i farklı kayıtlarda deneyin.",
             "Başka bir sayaçta önceki okumadan küçük bir değeri sunucuya göndererek reddedilen kaydı da bakın."
           ],
           "beklenen": "Okuma Bekleyen listesinde “onay bekliyor” olarak kalır; üst çubukta kırmızı rozet ve ekranın altında bildirim görünür. “Doğru, onayla ve gönder” ile gider, “Değeri düzelt” ve “Sil” de çalışır. Sunucunun reddettiği diğer kayıtlar (ör. önceki okumadan küçük değer) da kırmızı rozetle görünür.",
           "rol_notu": "Görevli, Süper kullanıcı",
-          "on_kosul": "Sayaç tabanı hazır bir sayaç (F39.04); süper kullanıcı hesabı",
+          "on_kosul": "Sayaç tabanı hazır bir sayaç (F40.04); süper kullanıcı hesabı",
           "yeni": true,
           "gelistirme": "hazir"
         },
         {
-          "id": "F39.07",
+          "id": "F40.07",
           "baslik": "Siteye özel eşik ayarı (K katsayısı)",
           "adimlar": [
             "Süper kullanıcıyla Modüller > Kurallar > ilgili sitenin kuralları > “Sayaç okuma” grubunda “Sayaç okuma: sıçrama uyarısı eşiği” kuralına bakın.",
@@ -7960,7 +8156,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F39.08",
+          "id": "F40.08",
           "baslik": "Çevrimdışı okuma, yeniden çekim ve hızlı ikinci okuma",
           "adimlar": [
             "Uçak modunda bir daireyi okuyun, ardından aynı daireyi listeden yeniden çekin.",
@@ -7974,7 +8170,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F39.09",
+          "id": "F40.09",
           "baslik": "Telefondaki fotoğraf kopyası kendiliğinden silinmez",
           "adimlar": [
             "Drive bağlı değilken fotoğraflı bir sayaç okuması gönderin.",
@@ -7988,7 +8184,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F39.10",
+          "id": "F40.10",
           "baslik": "Bekleyen kaydın fotoğrafına dokunulmaz",
           "adimlar": [
             "İnternet kapalıyken fotoğraflı bir okuma alın.",
@@ -8002,7 +8198,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F39.11",
+          "id": "F40.11",
           "baslik": "Dosya adında kayıt kimliği",
           "adimlar": [
             "Drive bağlıyken fotoğraflı bir sayaç okuması gönderip Drive'daki dosya adına bakın.",
@@ -8015,7 +8211,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F39.12",
+          "id": "F40.12",
           "baslik": "Drive'a gidemeyen dosya silinmez, yöneticiye uyarı gösterilir",
           "adimlar": [
             "Yönetici: Dosya Deposu > Google Drive kartı. Google hesabından Drive erişimini kaldırın ve bir PDF yükleyin.",
@@ -8029,7 +8225,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F39.13",
+          "id": "F40.13",
           "baslik": "Bekleme alanı dolunca yeni yükleme reddedilir (QA)",
           "adimlar": [
             "(Test ortamında) Drive kopukken bekleyen dosyaların toplamını 100 MB'a yaklaştırıp yeni bir dosya yükleyin."
@@ -8041,7 +8237,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F39.14",
+          "id": "F40.14",
           "baslik": "Kayda bağlı dosya süzgeci (QA / API)",
           "adimlar": [
             "(API) GET .../drive/files?source_type=meter_reading&source_id=<okuma no> çağrısı yapın; geçersiz tür ya da numara ile de deneyin."
@@ -8053,7 +8249,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F39.15",
+          "id": "F40.15",
           "baslik": "Talebe ekipman bağlama ve kaldırma",
           "adimlar": [
             "Yönetici: Talepler > bir talebi açın > “Talebi yönet” bölümünde “Ekipman (isteğe bağlı)” listesinden bir ekipman seçip “Değişiklikleri Kaydet”e basın.",
@@ -8068,7 +8264,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F39.16",
+          "id": "F40.16",
           "baslik": "Ekipman kartında servis geçmişi",
           "adimlar": [
             "Ekipman ve Bakım > bir ekipmanın kartı > en alttaki “Servis geçmişi (iş kayıtları)” bölümüne bakın.",
@@ -8082,7 +8278,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F39.17",
+          "id": "F40.17",
           "baslik": "Önce / Sonra fotoğraf etiketi",
           "adimlar": [
             "Bir talepte “Fotoğraf etiketi” seçicisinden Önce'yi seçip fotoğraf ekleyin; sonra Sonra'yı seçip bir fotoğraf daha, ardından etiket seçmeden bir fotoğraf ekleyin.",
@@ -8092,12 +8288,12 @@
           ],
           "beklenen": "Şeritte “Önce · ad” / “Sonra · ad”, Geçmiş'te “Fotoğraf eklendi (Önce)” görünür; fotoğrafa dokununca altta “Talep #n · Fotoğraf #m” yazar. Etiketsiz ve eski fotoğraflar eskisi gibi etiketsiz görünür. Sakin etiket seçemez ama etiketli fotoğrafın altında “Önce” / “Sonra” yazar. Ekipman servis geçmişinde ilgili işin satırında Önce / Sonra sayıları görünür.",
           "rol_notu": "Site yöneticisi, Daire sakini",
-          "on_kosul": "F39.15 ile ekipman bağlı talep",
+          "on_kosul": "F40.15 ile ekipman bağlı talep",
           "yeni": true,
           "gelistirme": "hazir"
         },
         {
-          "id": "F39.18",
+          "id": "F40.18",
           "baslik": "Pasif ekipman, görevli ve kurul",
           "adimlar": [
             "Bir ekipmanı pasife alın; talepte ekipman listesine bakın; önceden o ekipmana bağlı bir talebi açın ve kaydedin.",
@@ -8106,12 +8302,12 @@
           ],
           "beklenen": "Pasif ekipman yeni bağ için listede görünmez; önceden bağlı talepte “<ad> (tür) - pasif” görünür ve kaydedince bağ kaybolmaz. Görevli geçmişte yalnız kendine atanmış ya da atanmamış işleri görür. Kurul geçmişi görür ama ekipman / etiket seçici yoktur.",
           "rol_notu": "Site yöneticisi, Görevli, Kurul üyesi",
-          "on_kosul": "F39.15'teki test sitesi; görevli ve kurul hesabı",
+          "on_kosul": "F40.15'teki test sitesi; görevli ve kurul hesabı",
           "yeni": true,
           "gelistirme": "hazir"
         },
         {
-          "id": "F39.19",
+          "id": "F40.19",
           "baslik": "Karşılaştırma tablosu ve KDV esası",
           "adimlar": [
             "Ekipman ve Bakım > Teklifler > Teklif ekle: aynı konuda iki teklif girin (A: 5.000 TL, KDV hariç, 30 gün; B: 4.500 TL, KDV hariç, 10 gün, kapsam notu yazın).",
@@ -8124,7 +8320,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F39.20",
+          "id": "F40.20",
           "baslik": "Açık teklifi yerinde düzenle",
           "adimlar": [
             "Karara bağlanmamış (açık) bir teklifte Düzenle'ye basıp tutarı ve teslim süresini değiştirin.",
@@ -8132,12 +8328,12 @@
           ],
           "beklenen": "Kart güncellenir. Süresi dolmuş açık teklifte “Kabul et” yoktur, ama “Düzenle” (geçerlilik tarihini uzatmak için) ve “Reddet” vardır.",
           "rol_notu": "Site yöneticisi",
-          "on_kosul": "F39.19'daki teklifler",
+          "on_kosul": "F40.19'daki teklifler",
           "yeni": true,
           "gelistirme": "hazir"
         },
         {
-          "id": "F39.21",
+          "id": "F40.21",
           "baslik": "Kabul edilen teklif kilitlenir, değişiklik yeni sürümdür",
           "adimlar": [
             "Bir teklifi sözleşme olarak Kabul edin ve kartına bakın.",
@@ -8151,19 +8347,19 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F39.22",
+          "id": "F40.22",
           "baslik": "Sürüm geçmişi",
           "adimlar": [
             "Revizyonlu teklifte “Sürüm geçmişi”ne basın."
           ],
           "beklenen": "1. ve 2. sürüm eskiden yeniye listelenir; her satırda “Önceki sürüme göre: +X TL” farkı, gerekçe, “Geçerli onaylı sürüm” ve “En son sürüm” işaretleri görünür.",
           "rol_notu": "Site yöneticisi, Kurul üyesi",
-          "on_kosul": "F39.21 sonrası",
+          "on_kosul": "F40.21 sonrası",
           "yeni": true,
           "gelistirme": "hazir"
         },
         {
-          "id": "F39.23",
+          "id": "F40.23",
           "baslik": "Revizyonu kabul etmek ve reddetmek",
           "adimlar": [
             "Revizyonu Kabul edin; “Önceki sürüm zaten kayıtlı” uyarısında önce Vazgeç'e, sonra yeniden kabul edip Devam et'e basın.",
@@ -8171,12 +8367,12 @@
           ],
           "beklenen": "Vazgeç hiçbir kayıt oluşturmaz. Devam et AYRI bir sözleşme açar (başlıkta “(revizyon 2)”); ilk sözleşme olduğu gibi kalır (çift sayım olmaz). Revizyon reddedilince onaylı 1. sürüm geçerli kalır; kartta “Revizyon reddedildi” ve yeniden “Revizyon oluştur” çıkar.",
           "rol_notu": "Site yöneticisi",
-          "on_kosul": "F39.21 sonrası",
+          "on_kosul": "F40.21 sonrası",
           "yeni": true,
           "gelistirme": "hazir"
         },
         {
-          "id": "F39.24",
+          "id": "F40.24",
           "baslik": "Yetki ve eski uygulama sürümü",
           "adimlar": [
             "Kurul üyesi ve görevli hesabıyla Teklifler'e bakın.",
@@ -8189,7 +8385,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F39.25",
+          "id": "F40.25",
           "baslik": "Kategori düzenleme yetkisi",
           "adimlar": [
             "Site yöneticisiyle Talepler ekranında kategori simgeli “Kategorileri düzenle” düğmesine bakın.",
@@ -8202,7 +8398,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F39.26",
+          "id": "F40.26",
           "baslik": "Kategori ekleme, ad benzersizliği ve sakin formu",
           "adimlar": [
             "Kategorileri düzenle > “Su kaçağı” ekleyin (listede “Kullanılmadı” etiketi görünür).",
@@ -8217,7 +8413,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F39.27",
+          "id": "F40.27",
           "baslik": "Kullanılmış kategori silinmez, pasife alınır",
           "adimlar": [
             "“Su kaçağı” (artık 1 talepte kullanılmış) için çöp kutusu simgesine basıp “Kategori pasife alınsın mı?” onayını verin.",
@@ -8226,12 +8422,12 @@
           ],
           "beklenen": "Onaydan sonra “Pasif” etiketi gelir ve kategori listede KALIR. Sakin formunda artık görünmez; eski talep kategorisini ve adını korur; yönetim süzgecinde “Su kaçağı (pasif)” olarak görünür. Yeniden etkinleştirince sakin formuna geri döner.",
           "rol_notu": "Site yöneticisi, Daire sakini",
-          "on_kosul": "F39.26 sonrası",
+          "on_kosul": "F40.26 sonrası",
           "yeni": true,
           "gelistirme": "hazir"
         },
         {
-          "id": "F39.28",
+          "id": "F40.28",
           "baslik": "Kullanılmamış kategoriyi silme, hazır kategori kuralları ve son etkin kategori",
           "adimlar": [
             "Hiç kullanılmamış özel bir kategoriyi silin.",
@@ -8241,12 +8437,12 @@
           ],
           "beklenen": "Kullanılmamış kategori onaydan sonra tamamen gider. Hazır kategorilerde silme simgesi yoktur; yeniden adlandırma çalışır ve talep kartları, performans raporu ve faaliyet raporu yeni adı gösterir. Son etkin kategori pasife alınamaz (“En az bir kategori açık kalmalıdır…” hatası). Boş / uzun ad alan hatası verir.",
           "rol_notu": "Site yöneticisi",
-          "on_kosul": "F39.26 sonrası",
+          "on_kosul": "F40.26 sonrası",
           "yeni": true,
           "gelistirme": "hazir"
         },
         {
-          "id": "F39.29",
+          "id": "F40.29",
           "baslik": "Aynı fotoğraf başka kayıtta uyarısı",
           "adimlar": [
             "Telefondan aynı dosyayı farklı konumlu iki talebe yükleyin (ör. A Blok Daire 1 ve B Blok Daire 5); ikinci talebin yönetici ayrıntısına bakın.",
@@ -8260,16 +8456,16 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F39.30",
+          "id": "F40.30",
           "baslik": "Fotoğraf uyarısının gizliliği",
           "adimlar": [
-            "Sakin hesabıyla F39.29'daki talebin ayrıntısına bakın.",
+            "Sakin hesabıyla F40.29'daki talebin ayrıntısına bakın.",
             "Görevli hesabıyla kendisine atanmamış (kapsam dışı) bir kayıtla eşleşen talebin ayrıntısına bakın.",
             "Yönetim kurulu hesabıyla aynı talebe bakın."
           ],
           "beklenen": "Sakin ayrıntısında hiçbir fotoğraf uyarısı yoktur. Görevli kapsam dışı eşleşmeyi “#numara / konum” olmadan yalnızca sayı olarak görür. Kurul uyarıyı görür ama düğme görmez.",
           "rol_notu": "Daire sakini, Görevli, Kurul üyesi",
-          "on_kosul": "F39.29 sonrası; görevli ve kurul hesabı",
+          "on_kosul": "F40.29 sonrası; görevli ve kurul hesabı",
           "yeni": true,
           "gelistirme": "hazir"
         }

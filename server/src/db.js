@@ -48,6 +48,7 @@ import { ensureOAuthSchema } from './modules/oauth_schema.js';
 import { ensureIntegritySchema } from './modules/integrity_schema.js';
 import { ensureFinanceFundsSchema } from './modules/finance_funds_schema.js';
 import { ensureWorkCategoriesSchema } from './modules/work_categories_schema.js';
+import { ensureAuthAttemptLimitsSchema } from './modules/auth_attempt_limits_schema.js';
 import { CORE_MODULES_BACKFILL_SQL } from './modules/core_modules.js';
 import { CARD_PAYMENTS_INTO_FINANCE_SQL } from './modules/card_payments_into_finance.js';
 import { ensureTenantAdminRule } from './modules/apartment_tenant_admin_sql.js';
@@ -2011,6 +2012,9 @@ export async function ensureDbSchema() {
     // 080 (iki kasa: Isletme / Yatirim ve Demirbas Fon): 040 (expense_categories, expenses, trg_finance_immutable) ve ledger_entries SONRASI; dev blokta DEGIL; katalog kontrolu
     // + her adim kendi otomatik onayli ifadesi (finance_funds_schema.js = migrations/080). Her sey varsa hicbir ifade / kilit yok; sistem kategorisi "Yatirim ve demirbas" veri adimidir.
     await ensureFinanceFundsSchema(client);
+    // 085 (kalici deneme sinirlari: 4 haneli ilk PIN girisi, e-posta / SMS dogrulama kodu): dev blokta DEGIL; tek katalog sorgusu, tablo varsa hicbir ifade / kilit yok
+    // (auth_attempt_limits_schema.js = migrations/085). Yeni, FK'siz tablo: baska hicbir semaya bagimli degil.
+    await ensureAuthAttemptLimitsSchema(client);
     // 097 (Drive dosya kaydi <-> kaynak kayit baglantisi, P1-11): 060'tan (drive_files) SONRA; dev blokta DEGIL; katalog kontrolu + her adim kendi otomatik onayli ifadesi
     // (drive_source_schema.js = migrations/097). Her sey varsa hicbir ifade / kilit yok; mevcut satirlara dokunmaz (kaynak NULL = baglanmamis).
     await ensureDriveSourceSchema(client);

@@ -273,8 +273,58 @@ export const SQL_VERIFICATION_ISSUE_STATE = `
 // ---------------------------------------------------------------------------
 
 /**
+ * Kullanıcının (users.user_code = userCodeParam) YÖNETTİĞİ sitelerin kodları: site_manager_sites + aktif SITE_OWNER / SITE_ADMIN
+ * üyelikleri. site_service.getManagedSiteCodes ile AYNI küme (SQL tarafı). Takma adlar (scope_*) dış sorguyla çakışmaz.
+ * `userCodeParam`: sorgudaki yer tutucu metni (ör. '$2'); kullanıcı girdisi ASLA doğrudan buraya konmaz.
+ */
+export function sqlManagedSiteCodes(userCodeParam) {
+  return `SELECT scope_sms.site_code FROM site_manager_sites scope_sms WHERE scope_sms.manager_user_code = ${userCodeParam}
+      UNION
+      SELECT scope_sm.site_code FROM site_memberships scope_sm
+      WHERE scope_sm.user_code = ${userCodeParam} AND scope_sm.role IN ('SITE_OWNER', 'SITE_ADMIN') AND scope_sm.is_active = TRUE`;
+}
+
+/**
+ * KAPSAM (WHERE parçası): "cihaz, kullanıcının YÖNETMEDİĞİ bir siteye bağlı mı?" Bağlılık iki yerden okunur: devices.site_code ve
+ * site_doors.assigned_device_id (kapıya takılı cihaz). `device` = sorgudaki cihaz tablosu / takma adı (ör. 'devices').
+ * Hiçbir yere bağlı olmayan (envanterdeki) cihaz için FALSE döner.
+ */
+export function sqlDeviceDeployedOutsideManagedSites(device, userCodeParam) {
+  const managed = sqlManagedSiteCodes(userCodeParam);
+  // NOT EXISTS (NOT IN değil): yönetilen-site kümesinde NULL çıksa bile kapsam KAPALI kalır; NOT IN, NULL varlığında "bilinmeyen"
+  // döner ve kapsam dışı cihazı kapsam içi gösterirdi (güvenlik koşulunda açık kalan yön).
+  return `(
+      (${device}.site_code IS NOT NULL
+        AND NOT EXISTS (SELECT 1 FROM (${managed}) scope_m1 WHERE scope_m1.site_code = ${device}.site_code))
+      OR EXISTS (
+        SELECT 1 FROM site_doors scope_door
+        WHERE scope_door.assigned_device_id = ${device}.id
+          AND NOT EXISTS (SELECT 1 FROM (${managed}) scope_m2 WHERE scope_m2.site_code = scope_door.site_code)
+      )
+    )`;
+}
+
+/**
+ * KAPSAM (WHERE parçası): cihaz, sahiplenme isteğini yapan kullanıcıya GÖRÜNÜR mü? Süper kullanıcı sınırsızdır; cihazın sahibi
+ * kendi cihazını her zaman görür; diğer herkes için cihaz kendi yönetmediği bir siteye/kapıya bağlı OLMAMALIDIR. Kapsam dışı cihaz
+ * "kayıtlı değil" (404) gibi davranmalıdır: varlığı, sahibi ve kapısı başka siteye sızmaz.
+ * Yer tutucular: userCodeParam = users.user_code (INTEGER), userIdParam = users.id (BIGINT), superParam = süper mi (BOOLEAN).
+ */
+export function sqlDeviceVisibleToClaimant(device, { userCodeParam, userIdParam, superParam }) {
+  return `(
+    ${superParam}::BOOLEAN = TRUE
+    OR ${device}.owner_user_id = ${userIdParam}
+    OR NOT ${sqlDeviceDeployedOutsideManagedSites(device, userCodeParam)}
+  )`;
+}
+
+/**
  * Atomik sahiplenme: yalnızca sahibi olmayan (ve arızalı işaretli olmayan) cihaz bu koşulla güncellenir.
- * 0 satır dönerse başka biri sahiplenmiştir (409) — kontrol ile güncelleme arasında yarış olamaz.
+ * 0 satır dönerse başka biri sahiplenmiştir (409) ya da cihaz kapsam dışına çıkmıştır (404) — kontrol ile güncelleme arasında yarış olamaz.
+ *
+ * KAPSAM (cihaz kullanıcının yönetmediği bir siteye/kapıya bağlıysa sahiplenilemez; başka sitenin cihazı devralınamaz) ve
+ * ATAMA (assigned_user_code başka kullanıcıya aitse üzerine yazılamaz) koşulları da AYNI ifadededir. $4 = süper kullanıcı mı
+ * (süper sınırsızdır; mevcut davranış korunur).
  */
 export const SQL_CLAIM_DEVICE_ATOMIC = `
   UPDATE devices
@@ -282,6 +332,13 @@ export const SQL_CLAIM_DEVICE_ATOMIC = `
   WHERE id = $3
     AND owner_user_id IS NULL
     AND COALESCE(is_defective, FALSE) = FALSE
+    AND (
+      $4::BOOLEAN = TRUE
+      OR (
+        (assigned_user_code IS NULL OR assigned_user_code = $2)
+        AND NOT ${sqlDeviceDeployedOutsideManagedSites('devices', '$2')}
+      )
+    )
   RETURNING id, device_uid, hardware_type, gate_name, site_code, owner_user_id, claimed_at, is_defective
 `;
 

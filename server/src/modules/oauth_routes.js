@@ -55,9 +55,16 @@ function handler({ context, fallback }, run) {
       return res.status(200).json(await run(req));
     } catch (error) {
       if (error?.expose && Number.isInteger(error?.statusCode)) {
+        // Kalıcı kod deneme kilidi (423 VERIFICATION_LOCKED): kalan süre gövdede ve Retry-After başlığında (başka ek alan sızmaz).
+        const retryAfter = Math.ceil(Number(error.extra?.retry_after_seconds));
+        const hasRetryAfter = Number.isFinite(retryAfter) && retryAfter > 0;
+        if (hasRetryAfter) {
+          res.setHeader('Retry-After', String(retryAfter));
+        }
         return res.status(error.statusCode).json({
           error: error.message,
           ...(error.code ? { code: error.code } : {}),
+          ...(hasRetryAfter ? { retry_after_seconds: retryAfter } : {}),
         });
       }
       return respondError(res, context, error, fallback);
