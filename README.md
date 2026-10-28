@@ -1,6 +1,6 @@
 # site_kapi_kontrol
 
-Site / apartman kapi kontrol ekosistemi: Flutter istemci (Android, iOS, Windows, web), Node.js API, PostgreSQL, MQTT koprusu ve ESP32 firmware.
+"Site ve Toplu Yasam Yonetim Sistemi" (uygulamanin gorunen adi; kapi kontrol urunu SmartKeyPass bir moduldur) ekosistemi: Flutter istemci (Android, iOS, Windows, web), Node.js API, PostgreSQL, MQTT koprusu ve ESP32 firmware.
 
 ## Dokumanlar
 
@@ -13,6 +13,10 @@ Site / apartman kapi kontrol ekosistemi: Flutter istemci (Android, iOS, Windows,
 - Saha / surum dogrulama adimlari: `SAHA_KONTROL_LISTESI.md`
 - Bekleyen isler ve yol haritasi: `BEKLEYEN_ISLER.md`
 - Kod tabani ozeti: `docs/codebase/`
+- Rol, durum ve terim sozlugu (A-E): `docs/DURUM_SOZLUGU.md`
+- Istemci ekran envanteri (ad, yol, rol): `docs/EKRAN_ENVANTERI.md`
+- Platform modulleri ve sozlesmeleri: `docs/PLATFORM_*.md` (modul sistemi: `docs/PLATFORM_MODUL_SISTEMI.md`, yol haritasi: `docs/PLATFORM_YOL_HARITASI.md`)
+- Arayuz tasarim dili: `docs/TASARIM_DILI.md`
 - QR / firmware araci: `company_qr_tool/README.md`
 - Yerel kontrol protokolu (v2): `docs/YEREL_KONTROL_V2.md`
 - Canli dagitim betikleri (yedek, hazirlik, etkinlestirme, geri alma): `deploy/README.md`
@@ -20,16 +24,21 @@ Site / apartman kapi kontrol ekosistemi: Flutter istemci (Android, iOS, Windows,
 
 ## Roller
 
+Hesap rolleri (`users.role`; tek Flutter istemci dort rolu de karsilar):
+
 - Super User (`super_user`)
 - Apartman Site Yoneticisi (`site_manager`) - birden fazla siteyi yonetebilir
 - Daire Sahibi / Sakin (`apartment_owner`)
-- Bireysel Kullanici (`individual`) - kendi kaydolur, cihaz sahiplenir, site kurar veya bir siteye katilir
+- Bireysel Kullanici (`individual`) - kendi kaydolur (6 haneli e-posta kodu), site kurmak icin basvurur (super user onaylar) veya bir siteye / daireye katilir; cihaz ekleme yalnizca super user ve site yoneticisindedir
+
+Bir sitedeki baglar (yonetim kurulu / denetci `BOARD_MEMBER`, gorevli `STAFF`, daire yoneticisi / aile uyesi ...) hesap rolunden ayridir; bkz. `docs/DURUM_SOZLUGU.md`.
 
 ## Mimari
 
 - Flutter istemci: `lib/main.dart`, `lib/app.dart`; tasarim sistemi `lib/ui/design/`
-- API server (Node.js, Express 4, ESM): `server/src/server.js` (`routes/`, `services/`, `middlewares/`, `config/`, `utils/`)
-- Veritabani: PostgreSQL (Docker); sema `server/migrations/` (001-027) + `server/scripts/migrate.js`
+- API server (Node.js, Express 4, ESM): `server/src/server.js` (`routes/`, `services/`, `middlewares/`, `config/`, `utils/`, platform ozellikleri `modules/`)
+- Veritabani: PostgreSQL (Docker); sema `server/migrations/` (ardisik numarali `NNN_*.sql`; 2026-10-28 itibariyla 001-084) + `server/scripts/migrate.js`
+- Platform modulleri: 23 modul, 8'i cekirdek (her sitede acik); katalog `server/src/modules/catalog.js`, aciklama `docs/PLATFORM_MODUL_SISTEMI.md`
 - MQTT koprusu: `server/src/mqtt_bridge.js`; broker ACL uretimi: `server/src/mqtt_acl_sync.js`
 - Firmware: `cihaz_kontrol/` (ESP32-C3 ve ESP32-WROOM), `ekran_yazilimi/` (WROOM'a bagli dokunmatik ekran)
 - Sirket araci: `company_qr_tool/` (Python / Tk)
@@ -45,6 +54,8 @@ Bos veri dizininde `server/migrations/*.sql` dosyalari otomatik uygulanir. Mevcu
 `cd server && node scripts/migrate.js --status` ile durumu gorun (ayrintilar `sunucu_kurulum.txt`).
 
 ## 2) API Sunucusunu Calistir
+
+Node.js >= 20.19 gerekir (`server/package.json` `engines`; CI ve `.nvmrc` Node 24 kullanir).
 
 ```bash
 cd server
@@ -86,11 +97,12 @@ OTA yayini ve surum kurallari: `OTA_KURULUM.txt`.
 - `POST /auth/login` - Body: `email` (veya giris adi), `password`
 - `POST /auth/register-individual`, `POST /auth/verify-code`, `POST /auth/resend-code` (6 haneli e-posta kodu)
 - `POST /auth/forgot-password`, `POST /auth/reset-password`
+- `POST /auth/register`, `POST /auth/site-manager/*`: kapatildi (410); site yoneticisi kaydi yoktur, bireysel kayit + site basvurusu kullanilir
 - `GET /me`, `PATCH /me` (parola degisiminde `current_password` zorunlu)
-- Kapi, site, cihaz, uyelik, misafir gecisi ve yonetim uclari: `server/src/routes/`
+- Kapi, site, cihaz, uyelik, misafir gecisi ve yonetim uclari: `server/src/routes/`; platform modullerinin (finans, duyuru, is takibi ...) uclari: `server/src/modules/*_routes.js`
 - Cihaz firmware / OTA: `GET /firmware/:target/manifest.json`
 
-Basarili login cevabi:
+Basarili login cevabi (kisaltilmis):
 
 ```json
 {
@@ -103,3 +115,6 @@ Basarili login cevabi:
   }
 }
 ```
+
+Gercek `user` nesnesi ayrica `login_name`, `is_active`, `email_verified`, `approval_status`, `phone_number`, `created_at` ve
+`must_change_password` alanlarini tasir; yanita istege bagli `device_token` da eklenebilir (`server/src/routes/auth_routes.js`, `mapUserRow`).

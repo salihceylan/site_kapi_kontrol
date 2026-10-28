@@ -5,7 +5,7 @@
 ### 1) Architectural Style
 
 - Primary style: multi-component repository with a layer-oriented Flutter client, a modular Express API (routes -> services -> PostgreSQL), an MQTT bridge, PlatformIO firmware for two door-controller boards plus a display board, and a Python Windows helper.
-- Why this classification: Flutter source is split into `models`, `services`, `styles`, `ui`; the API is split into `routes/` (HTTP), `services/` (business rules and SQL), `middlewares/`, `config/` and `utils/`; `server/src/server.js` only wires them together; firmware and QR tool are separate top-level components.
+- Why this classification: Flutter source is split into `models`, `services`, `styles`, `ui`; the API is split into `routes/` (core HTTP: auth, admin, manager, membership, doors, firmware), `services/` (core business rules and SQL), `modules/` (platform features such as finance, announcements, work tracking, reservations; each with its own `*_routes.js` / `*_service.js` / `*_schema.js`, gated by the module catalog `modules/catalog.js`), `middlewares/`, `config/`, `security/` and `utils/`; `server/src/server.js` only wires them together; firmware and QR tool are separate top-level components.
 - Primary constraints: role-based access (`super_user`, `site_manager`, `apartment_owner`, `individual`), one central door-open policy (`server/src/services/door_access_policy.js`), PostgreSQL-backed state, JWT-protected API routes, MQTT over TLS for device commands/events, local-network (UDP) door control protected by challenge-bound HMAC-SHA256 signatures keyed by the per-device token (protocol v2, `docs/YEREL_KONTROL_V2.md`), and ESP32 device provisioning (BLE) and OTA.
 
 ### 2) System Flow
@@ -29,10 +29,10 @@ Device (ESP32) <-> MQTT broker (TLS) <-> server/src/mqtt_bridge.js -> PostgreSQL
 |-----------------|------|--------------|----------|
 | Flutter app shell | Service initialization, deep links, quick actions, page selection | Route SQL or schema mutation | `lib/app.dart`, `lib/services/deep_link_service.dart` |
 | Flutter services | Auth state, REST transport, network checks, local (UDP, v2 signed) door control, widget/voice integration, geofence location, BLE provisioning, adaptive polling (`adaptive_poller.dart`) and isolate offloading of heavy work (`background_work.dart`: PDF, JSON >= 64 KB) | Visual layout details | `lib/services/auth_service.dart`, `lib/services/auth_api.dart`, `lib/services/local_door_service.dart`, `lib/services/adaptive_poller.dart`, `lib/services/background_work.dart` |
-| Flutter UI | Role-based screens, dialogs, QR scan, provisioning flows | Backend persistence rules | `lib/ui/pages/home_page.dart`, `lib/ui/views/`, `lib/ui/dialogs/` |
-| Flutter design system ("Cilali Safir") | Design tokens (`AppPalette` theme extension, `AppTone`, `AppMotion`, `AppSpace`, `AppRadius`), page transitions, shared components (`AppCard`, `StatusChip`, `AppDialog`, `DoorOpenButton`, `CountdownRing`, `SkeletonBox`, `EmptyState`, `AppSnack`, `PrimaryActionButton`) | Screen business logic, API calls | `lib/ui/design/`, `lib/ui/widgets/list_parts.dart`, `lib/styles/` |
-| API routes | HTTP endpoints, input parsing, auth/rate-limit middleware | SQL | `server/src/routes/` |
-| API services | Business rules and SQL (doors, sites, membership, devices, QR, geofence, maintenance) | HTTP response formatting | `server/src/services/` |
+| Flutter UI | Role-based screens, dialogs, QR scan, provisioning flows (single shell `HomePage`; screen list per role in `docs/EKRAN_ENVANTERI.md`, roles/statuses in `docs/DURUM_SOZLUGU.md`) | Backend persistence rules | `lib/ui/pages/home_page.dart`, `lib/ui/widgets/yan_menu.dart`, `lib/ui/views/`, `lib/ui/dialogs/` |
+| Flutter design system ("Sade", `docs/TASARIM_DILI.md`; the earlier "Cilali Safir" gloss/shadow style is gone from page content) | Design tokens (`AppPalette` theme extension, `AppTone`, `AppMotion`, `AppSpace`, `AppRadius`), page transitions, shared components (`AppCard`, `StatusChip`, `AppDialog`, `DoorOpenButton`, `CountdownRing`, `SkeletonBox`, `EmptyState`, `AppSnack`, `PrimaryActionButton`) | Screen business logic, API calls | `lib/ui/design/`, `lib/ui/widgets/list_parts.dart`, `lib/styles/` |
+| API routes | HTTP endpoints, input parsing, auth/rate-limit middleware | SQL | `server/src/routes/`, `server/src/modules/*_routes.js` |
+| API services | Business rules and SQL (doors, sites, membership, devices, QR, geofence, maintenance; platform modules in `modules/*_service.js`) | HTTP response formatting | `server/src/services/`, `server/src/modules/` |
 | MQTT bridge | Device topics, pulse commands, offline-log ingestion, hardware-type self-healing | HTTP routing | `server/src/mqtt_bridge.js`, `server/src/mqtt_acl_sync.js` |
 | DB module/migrations | PostgreSQL pool (timeouts), additive schema repair, migration files | HTTP response formatting | `server/src/db.js`, `server/migrations/` |
 | Mailer | SMTP transport and email templates | User creation logic | `server/src/mailer.js` |
@@ -58,7 +58,7 @@ Device (ESP32) <-> MQTT broker (TLS) <-> server/src/mqtt_bridge.js -> PostgreSQL
 
 ### 5) Known Architectural Risks
 
-- `lib/ui/pages/home_page.dart` (~4,400 lines) and `lib/services/auth_service.dart` / `auth_api.dart` (~2,800 / ~2,500 lines) own many workflows; extract by feature when touching them (`individual_home_view.dart` was already split into `individual_door_card.dart` / `individual_apartment_card.dart`).
+- `lib/ui/pages/home_page.dart` (~7,500 lines) and `lib/services/auth_service.dart` / `auth_api.dart` (~4,300 / ~4,900 lines) own many workflows; extract by feature when touching them (`individual_home_view.dart` was already split into `individual_door_card.dart` / `individual_apartment_card.dart`).
 - Rate limiters and login lock-out are in-memory (a PM2 cluster would need a shared store).
 - Local door control (UDP, protocol v2) is unencrypted on the LAN, but the token never leaves the devices and every command is signed over a single-use challenge (rotates every 10 s); a LAN attacker can only relay a request within its own challenge and the 3 s duplicate window (`docs/YEREL_KONTROL_V2.md`).
 - Firmware has been verified by builds, host tests (`cihaz_kontrol/host_test/`, 719 checks) and a device simulator only, not on hardware (see `SAHA_KONTROL_LISTESI.md` sections 42-52).

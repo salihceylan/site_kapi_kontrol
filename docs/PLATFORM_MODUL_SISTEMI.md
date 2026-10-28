@@ -6,8 +6,9 @@ Sunucu ve Flutter uygulaması bu belgeye göre yazılır. Deneme listesi: `tools
 
 ## Temel kararlar
 
-1. **Geriye dönük uyum:** Modül satırı olmayan site, katalogdaki varsayılana göre davranır. `door_control` varsayılanı AÇIK; bu yüzden mevcut siteler, mevcut
-   uygulamalar ve cihazlar hiçbir değişiklik görmez. Yeni modüller varsayılan KAPALI/"yakında".
+1. **Geriye dönük uyum:** Modül satırı olmayan site, katalogdaki varsayılana göre davranır. `door_control` varsayılanı ilk sürümde AÇIKTI (mevcut siteler, mevcut
+   uygulamalar ve cihazlar değişiklik görmesin diye); 2bf1bd4'ten (2026-10-23) beri KAPALIdır ve cihaz bir kapıya bağlanınca açılır (`catalog.js` `defaultEnabled: false`).
+   Çekirdek olmayan öteki modüller varsayılan KAPALI ya da "yakında"dır.
 2. **Yönetim türü:** `sites.management_type` (varsayılan `apartment_site`). Beş türün hepsi seçilebilir (311ed6d); türe göre arayüz terimleri ve önerilen modüller F9 bölümündedir.
 3. **Çekirdek (temel) modüller** her sitede hep açıktır, talep edilmez, kapatılamaz (AGENTS.md Kural 25): `people`, `announcements`, `finance`, `survey`, `neighbor_board`, `equipment`, `annual_report`, `drive_storage`.
    `people` Faz 2a'dan, `announcements` Faz 3a'dan beri `status: available`. `finance` 2026-10-26'dan, diğer beşi 2026-10-28'den beri temeldir. Kart ödemesi artık ayrı modül değil, Aidat ve Finans'ın parçasıdır;
@@ -32,14 +33,14 @@ Sunucu ve Flutter uygulaması bu belgeye göre yazılır. Deneme listesi: `tools
 | `equipment` | Ekipman ve Bakım | evet (2026-10-28, Kural 25) | `available` | — (hep açık) |
 | `annual_report` | Faaliyet Raporu | evet (2026-10-28, Kural 25) | `available` | — (hep açık) |
 | `drive_storage` | Dosya Deposu (Belgeler + Google Drive) | evet (2026-10-28, Kural 25) | `available` (Faz 3b-A + D1; 084'te birleşti) | — (hep açık; Google Drive hesabı ayrıca bağlanır) |
-| `reservation` | Rezervasyon ve Konsiyerj | hayır | `coming_soon` | KAPALI |
+| `reservation` | Rezervasyon ve Konsiyerj | hayır | `available` (ilk sürümde `coming_soon`; bkz. PLATFORM_REZERVASYON.md) | KAPALI |
 | `work_tracking` | İş Takibi | hayır | `available` (bkz. PLATFORM_IS_TAKIBI.md) | KAPALI |
-| `metering` | Sayaç Okuma ve Faturalandırma | hayır | `coming_soon` | KAPALI |
+| `metering` | Sayaç Okuma ve Faturalandırma | hayır | `available` (ilk sürümde `coming_soon`; bkz. PLATFORM_SAYAC.md) | KAPALI |
 | `online_payment` | Online Tahsilat ve Banka Bağlantısı | hayır | `coming_soon` | KAPALI |
 | `contracts` | Firma ve Sözleşme Takibi | hayır | `available` (bkz. PLATFORM_SOZLESMELER.md) | KAPALI |
 | `decision_book` | Karar Defteri | hayır | `available` | KAPALI |
 
-Tam ve güncel liste `catalog.js` içindedir; bu tablo yalnız örnek satırları ve ilk sürüm durumlarını gösterir.
+Tam ve güncel liste `catalog.js` içindedir (23 modül; hepsi `docs/DURUM_SOZLUGU.md` Bölüm E1'de); bu tablo yalnız örnek satırları gösterir.
 
 **Belgeler ayrı modül DEĞİLDİR (2026-10-28, migration 084).** Eski `documents` ("Belgeler (Dosya Deposu)") modülü katalogdan kaldırıldı; yönetmelik / tutanak / sözleşme
 yükleme ve dağıtma (`docs/PLATFORM_BELGELER.md` Bölüm A) ile sitenin Google Drive bağlantısı (`docs/PLATFORM_DRIVE_DEPOLAMA.md`) TEK modülde, `drive_storage` ("Dosya Deposu"), toplandı.
