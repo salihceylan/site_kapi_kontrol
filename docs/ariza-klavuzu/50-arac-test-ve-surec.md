@@ -284,7 +284,7 @@ ssh-keygen -R "[178.210.161.55]:22667"
 | [server/src/routes/company_routes.js:326](../../server/src/routes/company_routes.js#L326) | <code>return res.status(400).json({ error: 'device_uid 12 haneli hex (0-9, A-F) olmalidir.' });</code> | Sunucu UID'yi 12 haneli büyük harf hex ister (":" ve "-" ayırıcıları tolere edilir) |
 | [server/src/routes/company_routes.js:110](../../server/src/routes/company_routes.js#L110) | <code>export function resolveCompanyHardwareType(body) {</code> | hardware_type/hardware_target/chip alanlarından türü çıkarır; çıkaramazsa null |
 | [server/src/routes/company_routes.js:127](../../server/src/routes/company_routes.js#L127) | <code>const DEFAULT_COMPANY_HARDWARE_TYPE = 'esp32_c3';</code> | Tür belirlenemezse varsayılan esp32_c3 yazılır; cihaz MQTT bildirimi sonradan düzeltir |
-| [server/src/server.js:122](../../server/src/server.js#L122) | <code>app.post('/api/company/labeled-devices', companyAccessLimiter, requireCompanyAccess, expr…</code> | Bu uca özel 5 MB JSON limiti (QR PNG base64); hız sınırı yetkiden ÖNCE çalışır |
+| [server/src/server.js:124](../../server/src/server.js#L124) | <code>app.post('/api/company/labeled-devices', companyAccessLimiter, requireCompanyAccess, expr…</code> | Bu uca özel 5 MB JSON limiti (QR PNG base64); hız sınırı yetkiden ÖNCE çalışır |
 
 **Olası nedenler**
 - UID 12 haneli değil (ör. eski firmware farklı uzunlukta UID bildiriyor) → 400
@@ -946,7 +946,7 @@ flutter test test/home_polling_test.dart test/adaptive_poller_test.dart test/clo
 | --- | --- | --- |
 | [test/widget_test.dart:8](../../test/widget_test.dart#L8) | <code>SharedPreferences.setMockInitialValues(&lt;String, Object&gt;{});</code> | Her uygulama kökü testi SharedPreferences'ı sahte değerle başlatır |
 | [test/widget_test.dart:9](../../test/widget_test.dart#L9) | <code>FlutterSecureStorage.setMockInitialValues(&lt;String, String&gt;{});</code> | Güvenli depo da sahtelenir (oturum anahtarı) |
-| [lib/app.dart:41](../../lib/app.dart#L41) | <code>const MyApp({super.key, this.networkCheckEnabled = true, this.themeService});</code> | MyApp(networkCheckEnabled: false) ağ sağlık yoklamasını kapatır; testlerde verilmezse gerçek ağa çıkılır |
+| [lib/app.dart:49](../../lib/app.dart#L49) | <code>this.networkCheckEnabled = true,</code> | MyApp(networkCheckEnabled: false) ağ sağlık yoklamasını kapatır; testlerde verilmezse gerçek ağa çıkılır |
 | [test/screens/dialog_layout_harness.dart:50](../../test/screens/dialog_layout_harness.dart#L50) | <code>/// girişi (~450 ms) bitene kadar ilerletilir. `pumpAndSettle` KULLANILMAZ: yüklenirken d…</code> | Yüklenirken dönen göstergeler bitmeyen animasyondur: sabit süreli pump kullanılır |
 | [test/screens/login_layout_test.dart:33](../../test/screens/login_layout_test.dart#L33) | <code>class _FakeAuth extends AuthService {</code> | Ağa çıkmayan sahte kimlik servisi örneği |
 | [integration_test/support/e2e_driver.dart:15](../../integration_test/support/e2e_driver.dart#L15) | <code>//  - pumpAndSettle KULLANMAZ (uygulamada 3 sn'lik yoklamalar var): sabit aralikli pump d…</code> | Uygulamada 3 sn'lik yoklamalar olduğundan yürüyüş düzeneği de sabit aralıklı pump döngüsü kullanır |

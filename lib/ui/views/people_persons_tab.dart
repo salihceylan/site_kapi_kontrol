@@ -4,10 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/models/bulk_import.dart' show BulkExportFilters;
 import 'package:site_kapi_kontrol/models/person_record.dart';
 import 'package:site_kapi_kontrol/models/residency_relation.dart';
+import 'package:site_kapi_kontrol/services/view_mode_service.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_snack.dart';
 import 'package:site_kapi_kontrol/ui/design/buttons.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+import 'package:site_kapi_kontrol/ui/design/view_mode_toggle.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/crm_confirm_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/person_account_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/person_card_dialog.dart';
@@ -539,6 +541,8 @@ class PeoplePersonsTabState extends State<PeoplePersonsTab> {
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
+              // Liste ↔ kutucuk anahtarı (P2-22): uygulama kökündeki kapsam yoksa çizilmez.
+              ?ViewModeToggle.maybe(context, ViewScreen.persons),
               if (widget.scope.canWrite && _loader.items.isNotEmpty)
                 IconButton(
                   onPressed: () {
@@ -682,6 +686,7 @@ class PeoplePersonsTabState extends State<PeoplePersonsTab> {
         const SizedBox(height: AppSpace.md),
         CrmListBody<PersonSummary>(
           loader: _loader,
+          showLastUpdated: true,
           emptyIcon: Icons.groups_2_rounded,
           emptyTitle: 'Henüz kişi kaydı yok.',
           emptyMessage: widget.scope.canWrite
@@ -693,6 +698,36 @@ class PeoplePersonsTabState extends State<PeoplePersonsTab> {
               ? BulkEmptyImportAction(onImport: widget.onImportRequested!)
               : null,
           itemBuilder: (context, person) => PersonCard(
+            person: person,
+            onTap: () => _open(person),
+            isSelectionMode: _selectionMode,
+            isSelected: _selectedIds.contains(person.id),
+            onSelectChanged: (selected) {
+              setState(() {
+                if (selected == true) {
+                  _selectedIds.add(person.id);
+                } else {
+                  _selectedIds.remove(person.id);
+                }
+              });
+            },
+            onEdit: widget.scope.canWrite ? () => _editPerson(person) : null,
+            onPasswordReset: widget.scope.canWrite && person.hasAccount
+                ? () => _sendPasswordReset(person)
+                : null,
+            onInvite: widget.scope.canWrite &&
+                    !person.hasAccount &&
+                    person.email != null &&
+                    person.email!.isNotEmpty
+                ? () => _sendInvite(person)
+                : null,
+            onToggleActive: widget.scope.canWrite ? () => _toggleActive(person) : null,
+            onProvisionAccount: widget.scope.canWrite ? () => _openAccountDialog(person) : null,
+            onDirectResetPin: widget.scope.canWrite && person.hasAccount ? () => _directResetPin(person) : null,
+          ),
+          // Kutucuk kipi: kompakt kutucuk; dokunma, çoklu seçim ve işlem menüsü kartla aynı.
+          viewMode: ViewModeScope.modeOf(context, ViewScreen.persons),
+          tileBuilder: (context, person) => PersonCrmTile(
             person: person,
             onTap: () => _open(person),
             isSelectionMode: _selectionMode,

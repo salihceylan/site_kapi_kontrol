@@ -2065,7 +2065,7 @@ export default {
         },
         {
           file: 'lib/styles/app_theme.dart',
-          find: 'static ThemeData dark() {',
+          find: 'static ThemeData dark([AppPalette palette = AppPalette.dark]) {',
           note: 'Koyu tema üretimi: renk/kontrast sorunları (okunmayan metin) burada ve AppPalette\'te aranır',
         },
       ],
@@ -2787,8 +2787,8 @@ export default {
         },
         {
           file: 'lib/main.dart',
-          find: 'child: MyApp(themeService: themeService),',
-          note: 'Başlatma sırası: binding + çökme raporlama kancaları -> yön kilidi -> tema yükleme -> açılış kapısı (AppGate: bakım/zorunlu güncelleme) -> uygulama',
+          find: 'child: MyApp(',
+          note: 'Başlatma sırası: binding + çökme raporlama kancaları -> yön kilidi -> tema, Kolay görünüm ve liste/kutucuk tercihlerinin yüklenmesi -> açılış kapısı (AppGate: bakım/zorunlu güncelleme) -> uygulama',
         },
         {
           file: 'lib/app.dart',

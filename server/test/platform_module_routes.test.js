@@ -74,6 +74,9 @@ function makeState() {
       makeUser(30008, 'Leman Link', 'leman@example.com', { role: 'site_manager' }),
     ],
     siteModules: new Map(),
+    // K8: kaydedilmis kompakt menu kumeleri ({ site_code, compact_modules }) ve okuma hatasi benzetimi
+    menuLayouts: [],
+    failMenuLayoutRead: false,
     audit: [],
     auditSeq: 0,
     myLinks: [],
@@ -226,6 +229,13 @@ function handle(sql, params, tx) {
   if (/^SELECT site_code, module_code, enabled FROM site_modules WHERE site_code = ANY\(\$1::BIGINT\[\]\)$/.test(sql)) {
     const wanted = new Set(params[0].map(Number));
     return ok([...state.siteModules.values()].filter((row) => wanted.has(row.site_code)));
+  }
+  if (/^SELECT site_code, compact_modules FROM site_menu_layouts WHERE site_code = ANY\(\$1::BIGINT\[\]\)$/.test(sql)) {
+    if (state.failMenuLayoutRead) {
+      throw Object.assign(new Error('SECRET_DB_DETAIL menu_layout'), { code: '42P01' });
+    }
+    const wanted = new Set(params[0].map(Number));
+    return ok(state.menuLayouts.filter((row) => wanted.has(row.site_code)));
   }
 
   // --- yerel kontrol anahtari donmesi (local_token_service -> device_service) ---
@@ -1703,7 +1713,7 @@ describe('GET /app/my-modules', () => {
     );
     for (const site of res.body.sites) {
       assert.equal(typeof site.door_access, 'boolean');
-      // F9 (ekleyici): management_terms ve recommended_modules sona eklendi
+      // F9 (ekleyici): management_terms ve recommended_modules sona eklendi; K8 (ekleyici): menu_layout (kompakt menu kumesi) en sonda
       assert.deepEqual(Object.keys(site), [
         'site_code',
         'site_name',
@@ -1713,6 +1723,7 @@ describe('GET /app/my-modules', () => {
         'modules',
         'management_terms',
         'recommended_modules',
+        'menu_layout',
       ]);
     }
   });
@@ -1732,6 +1743,80 @@ describe('GET /app/my-modules', () => {
         ['B', true, false],
       ],
     );
+  });
+
+  describe('menu_layout (K8, P1-16): kompakt menu kumesi YETENEKTEN ayri katman', () => {
+    const link = (siteCode, name, type = 'apartment_site') => ({
+      site_code: String(siteCode),
+      site_name: name,
+      management_type: type,
+      rank: 4,
+      door_access: true,
+    });
+    const enable = (siteCode, code) =>
+      state.siteModules.set(`${siteCode}:${code}`, { site_code: siteCode, module_code: code, enabled: true });
+
+    it('kayit yoksa kume yonetim turu onerilerinden TURETILIR (gunluk isler + onerilenler + isteyerek acilanlar, katalog sirasiyla)', async () => {
+      state.myLinks = [link(SITE_1, 'Gul')];
+      enable(SITE_1, 'door_control');
+      const res = await call('GET', '/app/my-modules', { user: users.resident });
+      assert.equal(res.status, 200);
+      assert.deepEqual(res.body.sites[0].menu_layout, {
+        compact_modules: ['door_control', 'people', 'announcements', 'finance', 'drive_storage'],
+        customized: false,
+      });
+      // Her sitede acik temel modullerden onerilmeyenler (anket, komsu panosu, faaliyet raporu, ekipman) varsayilan kumede YOK ama ACIK.
+      for (const code of ['survey', 'neighbor_board', 'annual_report', 'equipment']) {
+        assert.equal(res.body.sites[0].modules[code], true, `${code} yetenegi acik kalir`);
+        assert.ok(!res.body.sites[0].menu_layout.compact_modules.includes(code), `${code} varsayilan kumede degil`);
+      }
+    });
+
+    it('isteyerek acilan (temel olmayan) modul varsayilan kumeye girer; kapali oneri girmez', async () => {
+      state.myLinks = [link(SITE_1, 'Is Merkezi', 'business_center')];
+      enable(SITE_1, 'work_tracking'); // onerilen + acik
+      enable(SITE_1, 'contracts'); // onerilmeyen ama isteyerek acilmis
+      // visitor_log onerilir ama KAPALI: kumede olmaz
+      const res = await call('GET', '/app/my-modules', { user: users.resident });
+      assert.deepEqual(res.body.sites[0].menu_layout.compact_modules, [
+        'people',
+        'announcements',
+        'finance',
+        'work_tracking',
+        'contracts',
+        'drive_storage',
+      ]);
+    });
+
+    it('kayitli kume aynen doner (customized: true); temel moduller kumede olmasa da modules haritasinda ACIK kalir', async () => {
+      state.myLinks = [link(SITE_1, 'Gul'), link(SITE_2, 'Lale')];
+      state.menuLayouts = [{ site_code: SITE_1, compact_modules: ['finance', 'survey', 'bilinmeyen_kod'] }];
+      const res = await call('GET', '/app/my-modules', { user: users.resident });
+      const [first, second] = res.body.sites;
+      assert.deepEqual(first.menu_layout, { compact_modules: ['finance', 'survey'], customized: true }, 'katalogda olmayan kod atilir');
+      assert.equal(second.menu_layout.customized, false, 'kaydi olmayan site varsayilani kullanir');
+      // Yetenek katmani degismez: kumede olmayan temel moduller de acik.
+      for (const code of ['people', 'announcements', 'drive_storage', 'neighbor_board', 'annual_report', 'equipment', 'finance', 'survey']) {
+        assert.equal(first.modules[code], true, `${code} acik`);
+      }
+    });
+
+    it('bos kume gecerli bir secimdir (yalniz sabit ogeler kalir)', async () => {
+      state.myLinks = [link(SITE_1, 'Gul')];
+      state.menuLayouts = [{ site_code: SITE_1, compact_modules: [] }];
+      const res = await call('GET', '/app/my-modules', { user: users.resident });
+      assert.deepEqual(res.body.sites[0].menu_layout, { compact_modules: [], customized: true });
+    });
+
+    it('yerlesim okuma hatasi my-modules yanitini BOZMAZ (varsayilan kume, 200, ayrinti sizmaz)', async () => {
+      state.myLinks = [link(SITE_1, 'Gul')];
+      state.failMenuLayoutRead = true;
+      const res = await call('GET', '/app/my-modules', { user: users.resident });
+      assert.equal(res.status, 200);
+      assert.equal(res.body.sites[0].menu_layout.customized, false);
+      assert.ok(res.body.sites[0].menu_layout.compact_modules.includes('people'));
+      assert.ok(!JSON.stringify(res.body).includes('SECRET_DB_DETAIL'));
+    });
   });
 
   describe('baglanti sorgusu (MY_SITES_SQL) kapi erisim mantigi', () => {

@@ -298,7 +298,7 @@ List<String> _capturePlatform(WidgetTester t) {
 void main() {
   group('görünürlük kuralı (showsHomeShortcut)', () {
     test('Panel\'de yok; iç ekranda yalnız sakin alt çubuğu yokken ve sağdaki eylemlerle sığıyorsa var', () {
-      const actions = 250.0; // yenile + çıkış + dişli + tema + mod hapı + kenar (çift modlu hesap, tema düğmesiyle)
+      const actions = 250.0; // yenile + çıkış payı (P2-26: çıkış artık çekmecede, pay korunur) + dişli + tema + mod hapı + kenar
       final edge = homeShortcutLeadingWidth + actions + homeShortcutSlack; // 348 dp
       for (final item in SirketMenuItem.values) {
         for (final bar in const <bool>[false, true]) {
@@ -559,7 +559,7 @@ void main() {
             final homeShown = c.width >= k.minWidth;
             expect(_home, homeShown ? findsOneWidget : findsNothing, reason: 'Ana sayfa ${homeShown ? 'sığar' : 'sığmaz'}');
 
-            // Soldan sağa: menü, [Ana sayfa], [hap], [tema], yenile, çıkış, dişli. Hiçbiri öbürüne binmez, hepsi ekranın içinde.
+            // Soldan sağa: menü, [Ana sayfa], [hap], [tema], yenile, dişli. Hiçbiri öbürüne binmez, hepsi ekranın içinde.
             // Hap: 400 dp altında, 1,3x üstü yazıda ve Ana sayfa varken 480 dp altında yalnız ikon (Tooltip), değilse etiketli.
             final pillFinder = c.width < 400 || c.scale > 1.3 || (homeShown && c.width < 480)
                 ? _inAppBar(find.byTooltip('Sakin Modu'))
@@ -570,9 +570,10 @@ void main() {
               if (k.pill) ('hap', pillFinder),
               if (k.theme) ('tema', _inAppBar(find.widgetWithIcon(IconButton, dark ? Icons.light_mode_rounded : Icons.dark_mode_rounded))),
               ('yenile', _inAppBar(find.widgetWithIcon(IconButton, Icons.refresh_rounded))),
-              ('çıkış', _inAppBar(find.widgetWithIcon(IconButton, Icons.logout_rounded))),
               ('dişli', _inAppBar(find.widgetWithIcon(IconButton, Icons.settings_rounded))),
             ];
+            // P2-26 (Dalga D birleşimi): "Çıkış Yap" AppBar'dan kalktı (çekmecenin dibinde, onaylı); üst çubukta çıkış simgesi yoktur.
+            expect(_inAppBar(find.byIcon(Icons.logout_rounded)), findsNothing, reason: 'çıkış AppBar\'da değil');
             Rect? previous;
             String? previousName;
             for (final (name, finder) in ordered) {

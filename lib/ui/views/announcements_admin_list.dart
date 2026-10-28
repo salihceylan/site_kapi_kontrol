@@ -222,6 +222,7 @@ class AnnouncementsAdminListState extends State<AnnouncementsAdminList> {
         const SizedBox(height: AppSpace.md),
         CrmListBody<AnnouncementSummary>(
           loader: _loader,
+          showLastUpdated: true,
           emptyIcon: Icons.campaign_rounded,
           emptyTitle: 'Henüz duyuru yok.',
           emptyMessage: widget.scope.canWrite

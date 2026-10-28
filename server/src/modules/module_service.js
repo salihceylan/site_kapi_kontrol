@@ -21,6 +21,8 @@ import { actorFromAuthUser, recordAudit } from './audit_service.js';
 import { PlatformError } from './errors.js';
 import { managementTypeLabel, normalizeManagementType } from './management_types.js';
 import { isRecommendedModule, managementTerms, recommendedModules } from './management_type_terms.js';
+import { publicMenuLayout, resolveMenuLayout } from './menu_layout_common.js';
+import { loadStoredMenuLayoutsSafe } from './menu_layout_service.js';
 
 function toPositiveInt(value) {
   const parsed = Number(value);
@@ -410,21 +412,33 @@ export async function listMySiteModules(authUser, db = pool) {
     }
     rowsBySite.get(key).push(row);
   }
+  // K8 (P1-16): menü yerleşimi (kompakt menü kümesi) YETENEKTEN ayrı katmandır; yalnız menüde öne çıkacakları söyler, modül durumunu değiştirmez.
+  // Okuma hatası bu uca yansımaz (varsayılan türetilmiş küme kullanılır).
+  const storedLayouts = await loadStoredMenuLayoutsSafe(siteCodes, db);
 
   return {
     scope: 'sites',
     sites: siteRows.map((row) => {
       const siteCode = Number(row.site_code);
+      const modules = computeEnabledMap(rowsByModuleCode(rowsBySite.get(siteCode) ?? []));
       return {
         site_code: siteCode,
         site_name: row.site_name,
         management_type: normalizeManagementType(row.management_type),
         role: ROLE_BY_RANK[Number(row.rank)] ?? 'resident',
         door_access: row.door_access === true,
-        modules: computeEnabledMap(rowsByModuleCode(rowsBySite.get(siteCode) ?? [])),
+        modules,
         // F9 (ekleyici): türe özgü terimler ve önerilen modül kodları (katalogda olmayan kod olduğu gibi döner).
         management_terms: managementTerms(row.management_type),
         recommended_modules: recommendedModules(row.management_type),
+        // K8 (ekleyici): ana menüde öne çıkan modüller. Eski istemci alanı yok sayar (tüm menü gösterilir).
+        menu_layout: publicMenuLayout(
+          resolveMenuLayout({
+            managementType: normalizeManagementType(row.management_type),
+            enabled: modules,
+            stored: storedLayouts.get(siteCode) ?? null,
+          }),
+        ),
       };
     }),
   };

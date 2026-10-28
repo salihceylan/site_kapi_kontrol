@@ -640,7 +640,7 @@ describe('depolama alt ağacı ilkelleri (belgelerle AYNI anahtar / traversal ku
   });
 
   it('pathForKey(subtree): work_attachments/<site>/<uuid>; varsayılan sites; bilinmeyen alt ağaç ve kötü anahtar reddedilir', () => {
-    assert.deepEqual([...STORAGE_SUBTREES], ['sites', 'work_attachments']);
+    assert.deepEqual([...STORAGE_SUBTREES], ['sites', 'work_attachments', 'feedback_attachments']);
     assert.equal(ATTACHMENT_SUBTREE, 'work_attachments');
     assert.equal(pathForKey(base, KEY, ATTACHMENT_SUBTREE), path.join(base, 'work_attachments', '1000000001', '123e4567-e89b-42d3-a456-426614174000'));
     assert.equal(pathForKey(base, KEY), path.join(base, 'sites', '1000000001', '123e4567-e89b-42d3-a456-426614174000'));

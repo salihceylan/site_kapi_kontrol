@@ -2,25 +2,35 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/models/finance.dart';
+import 'package:site_kapi_kontrol/models/manager_contact.dart';
 import 'package:site_kapi_kontrol/models/site_application.dart';
 import 'package:site_kapi_kontrol/models/user_session.dart';
+import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/services/site_application_tracker.dart';
+import 'package:site_kapi_kontrol/services/view_mode_service.dart';
+import 'package:site_kapi_kontrol/styles/easy_view_theme.dart';
+import 'package:site_kapi_kontrol/ui/design/easy_view_switch.dart';
 import 'package:site_kapi_kontrol/ui/design/module_art.dart';
 import 'package:site_kapi_kontrol/ui/design/motion_widgets.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+import 'package:site_kapi_kontrol/ui/design/view_mode_toggle.dart';
 import 'package:site_kapi_kontrol/ui/helpers/date_input.dart';
+import 'package:site_kapi_kontrol/ui/helpers/dial_call.dart';
 import 'package:site_kapi_kontrol/ui/helpers/finance_errors.dart';
 import 'package:site_kapi_kontrol/ui/helpers/module_showcase.dart';
 import 'package:site_kapi_kontrol/ui/helpers/money.dart';
 import 'package:site_kapi_kontrol/ui/helpers/site_application_flow.dart';
+import 'package:site_kapi_kontrol/ui/widgets/manager_call_tile.dart';
+import 'package:site_kapi_kontrol/ui/widgets/showcase_layouts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/site_application_status_card.dart';
 import 'package:site_kapi_kontrol/ui/widgets/yan_menu.dart';
 
 // Vitrin renkleri tek kaynaktan ([AppShowcaseColors], tokens.dart): açık temada işverenin renk tablosu (zemin #F8FAFC,
 // kart #FFFFFF + #E2E8F0 çerçeve, metin #475569, odak #0F172A, durum noktaları), koyu temada palet. Düz hex yazılmaz.
-Color _cardColor(AppPalette p) => p.isDark ? p.surface : AppShowcaseColors.card;
-Color _cardBorder(AppPalette p) => p.isDark ? p.border : AppShowcaseColors.cardBorder;
-Color _bodyInk(AppPalette p) => p.isDark ? p.textSecondary : AppShowcaseColors.text;
+// Kolay görünümün yüksek karşıtlık paletinde de palet renkleri kullanılır (showcase_layouts.dart).
+Color _cardColor(AppPalette p) => showcaseCardColor(p);
+Color _cardBorder(AppPalette p) => showcaseCardBorder(p);
+Color _bodyInk(AppPalette p) => showcaseBodyInk(p);
 
 /// Panel: MODÜL VİTRİNİ. Girişten sonra herkesi karşılayan ekran; kapı paneli artık "Kapılar" kartının arkasındadır.
 ///
@@ -62,6 +72,11 @@ class ModuleShowcaseView extends StatefulWidget {
     this.onCreateGuestPass,
     this.onPay,
     this.attentionBar,
+    this.featuredItems,
+    this.onOpenAllActions,
+    this.fetchManagerContacts,
+    this.dialLauncher,
+    this.managerPhoneMissing = false,
   }) : assert(applications == null || onReapply != null, 'başvuru kartı için onReapply gerekir');
 
   final UserSession session;
@@ -69,6 +84,16 @@ class ModuleShowcaseView extends StatefulWidget {
 
   /// Yan menünün hesapladığı öğe listesi (`YanMenu.visibleItems`).
   final List<SirketMenuItem> menuItems;
+
+  /// K8 KOMPAKT MENÜ: Modüller ızgarasında öne çıkan öğeler ([menuItems] içinden; çekmeceyle AYNI küme). null (varsayılan): kompakt menü
+  /// yok, her öğenin kartı çizilir. Doluysa ızgarada yalnız bunlar vardır; öne çıkmayan görünür öğe KAYBOLMAZ, [onOpenAllActions] ile
+  /// açılan "Tüm işlemler"dedir. Yalnız YERLEŞİMDİR: borç özeti, hızlı işlemler, dikkat barı ve "Hesap ve ayarlar" satırı tam
+  /// [menuItems] ile çalışmaya devam eder (kompakt menü bir sinyali ya da hızlı eylemi gizlemez).
+  final Set<SirketMenuItem>? featuredItems;
+
+  /// Verilirse ve kompakt menü bir şeyi öne çıkarmıyorsa ızgaranın sonunda "Tüm işlemler" kartı çıkar (kartın rozeti, öne çıkmayan öğelerin
+  /// bekleyen / okunmamış sayıları toplamıdır).
+  final VoidCallback? onOpenAllActions;
 
   /// Karta dokunuldu: çekmecede [SirketMenuItem] seçmekle aynı gezinme.
   final ValueChanged<SirketMenuItem> onOpen;
@@ -121,6 +146,18 @@ class ModuleShowcaseView extends StatefulWidget {
   /// açıkken verilir. Eski "Bu ay" paneli kaldırıldı (2026-10-21).
   final Widget? attentionBar;
 
+  /// Sakin "Yöneticiyi ara" kaynağı (`GET /app/manager-contact`, "dokun-ara" P2-23). Yalnız sakin vitrininde çağrılır; veri
+  /// gelince hızlı işlemlerin SONUNA "Yöneticiyi ara" kutusu eklenir (kendi sitesinin yöneticisi olana çizilmez). Hata ya da
+  /// eski sunucu (404) kutuyu sessizce gizler, ASLA "numara yok" demez; eldeki bilgi geçici hatada korunur. null: kutu yok.
+  final Future<List<ManagerContact>> Function()? fetchManagerContacts;
+
+  /// "Yöneticiyi ara" telefon uygulaması açıcısı (varsayılan `url_launcher`; testlerde sahte).
+  final DialLauncher? dialLauncher;
+
+  /// Yönetici vitrininde "Telefon numaranızı ekleyin" ipucunu gösterir: site yöneticisinin profilinde telefon yoksa sakinler
+  /// onu arayamaz. Yalnız [ShowcaseAudience.admin] kitlesinde çizilir.
+  final bool managerPhoneMissing;
+
   /// Vitrin gösterilirken sayfa kabının (ana sayfada kaydırılan gövdenin kabı) zemini: açık temada DÜZ #F8FAFC
   /// ([AppShowcaseColors.background], işverenin "ana zemin"i), koyu temada null (koyu zemin olduğu gibi kalır).
   ///
@@ -128,8 +165,12 @@ class ModuleShowcaseView extends StatefulWidget {
   /// acil duyuru şeridini örterdi. Kap şeridin ALTINDAN ekranın altına kadar uzanır ve kaydırılmaz; vitrinin altında
   /// gösterilen bölümler (Geçiş Kontrol kapalı bireyselde ana ekran) de aynı düz zemindedir. Uygulamanın genel zemini
   /// (gradyan + ışıma) DEĞİŞMEZ; gradyanın alt tonu kart çerçevesiyle (#E2E8F0) aynı olduğundan vitrinde kullanılmaz.
-  static Color? pageBackgroundOf(BuildContext context) =>
-      context.palette.isDark ? null : AppShowcaseColors.background;
+  static Color? pageBackgroundOf(BuildContext context) {
+    final p = context.palette;
+    if (p.isDark) return null;
+    // Kolay görünümün yüksek karşıtlık paleti saf beyaz zemin kullanır (uygulama zemini ile aynı).
+    return isEasyPalette(p) ? p.background : AppShowcaseColors.background;
+  }
 
   @override
   State<ModuleShowcaseView> createState() => ModuleShowcaseViewState();
@@ -140,21 +181,40 @@ class ModuleShowcaseViewState extends State<ModuleShowcaseView> {
   bool _loadFailed = false;
   int _token = 0;
 
+  // "Yöneticiyi ara" (P2-23): null = henüz alınamadı / hata (kutu çizilmez). Eski sunucuda (404) özellik yok sayılır.
+  List<ManagerContact>? _managers;
+  int _managersToken = 0;
+
   bool _wantsDebt(ModuleShowcaseView w) =>
       w.audience == ShowcaseAudience.resident &&
       w.fetchMyFinance != null &&
       w.menuItems.contains(SirketMenuItem.borcum);
 
+  bool _wantsManagers(ModuleShowcaseView w) =>
+      w.audience == ShowcaseAudience.resident && w.fetchManagerContacts != null;
+
   @override
   void initState() {
     super.initState();
-    if (_wantsDebt(widget)) unawaited(reload());
+    // reload() yönetici iletişimini de okur; borç özeti istenmiyorsa yalnız o okunur.
+    if (_wantsDebt(widget)) {
+      unawaited(reload());
+    } else if (_wantsManagers(widget)) {
+      unawaited(_reloadManagers());
+    }
     unawaited(widget.applications?.ensureLoaded());
   }
 
   @override
   void didUpdateWidget(ModuleShowcaseView oldWidget) {
     super.didUpdateWidget(oldWidget);
+    final wantsManagers = _wantsManagers(widget);
+    if (wantsManagers && !_wantsManagers(oldWidget)) {
+      unawaited(_reloadManagers());
+    } else if (!wantsManagers && _wantsManagers(oldWidget)) {
+      ++_managersToken;
+      _managers = null;
+    }
     final wants = _wantsDebt(widget);
     if (wants && !_wantsDebt(oldWidget)) {
       // Borcum menüye yeni girdi (modül açıldı / veri geldi): özet okunur.
@@ -191,11 +251,30 @@ class ModuleShowcaseViewState extends State<ModuleShowcaseView> {
   @override
   void dispose() {
     ++_token;
+    ++_managersToken;
     super.dispose();
+  }
+
+  /// Yönetici iletişimini okur ("Yöneticiyi ara" kutusu). Eski / geç yanıt yenisini ezmez. Hata: eldeki bilgi korunur, hiç
+  /// yoksa kutu çizilmez; 404 (eski sunucuda uç yok) özelliği kapatır. Hiçbir durumda "numara yok" denmez (o yalnız sunucu
+  /// "telefon kayıtlı değil" derse söylenir).
+  Future<void> _reloadManagers() async {
+    final fetch = widget.fetchManagerContacts;
+    if (fetch == null || !_wantsManagers(widget)) return;
+    final token = ++_managersToken;
+    try {
+      final data = await fetch();
+      if (!mounted || token != _managersToken) return;
+      setState(() => _managers = data);
+    } catch (e) {
+      if (!mounted || token != _managersToken) return;
+      if (e is ApiException && e.statusCode == 404) setState(() => _managers = null);
+    }
   }
 
   /// Borç özetini yeniden okur (sayfa kabuğunun "aşağı çek yenile"sinden de çağrılır). Eski / geç yanıt yenisini ezmez.
   Future<void> reload() async {
+    unawaited(_reloadManagers());
     final fetch = widget.fetchMyFinance;
     if (fetch == null || !_wantsDebt(widget)) return;
     final token = ++_token;
@@ -218,19 +297,140 @@ class ModuleShowcaseViewState extends State<ModuleShowcaseView> {
 
   void _open(SirketMenuItem item) => widget.onOpen(item);
 
+  /// "Modüller" başlığı; liste ↔ kutucuk anahtarı varsa (uygulama kökündeki [ViewModeScope]) sağında durur. Kapsam yoksa
+  /// yalnız başlıktır (eski görünüm birebir aynı).
+  Widget _modulesHeader(BuildContext context) {
+    const title = _SectionTitle(key: ValueKey<String>('panel_vitrin_baslik'), text: 'Modüller');
+    final toggle = ViewModeToggle.maybe(context, ViewScreen.modules);
+    if (toggle == null) return title;
+    return Row(children: [const Expanded(child: title), toggle]);
+  }
+
+  /// KOLAY GÖRÜNÜM ana ekranı (P2-25): modüller tek sütunda büyük düğmeler, açıklama yok, giriş animasyonu yok; hesap /
+  /// ayar öğeleri ve yardım da aynı büyük düğmelerle altta. Hızlı işlemler yoktur (aynı sayfalar zaten düğmedir); "Ziyaretçi
+  /// kodu" (varsa) Kapılar düğmesinin hemen altındadır; sakin için "Yöneticiyi ara" (varsa) modüllerin sonundadır. Görünürlük
+  /// kuralı AYNIDIR: yalnız [model]deki (menü listesinden türeyen) öğeler çizilir. Kompakt menü (K8) bir şeyi öne çıkarmıyorsa
+  /// [allActions] verilir: en sona büyük bir "Tüm işlemler" düğmesi eklenir (gizlenen işler kolay görünümde de kaybolmaz).
+  List<Widget> _buildEasyModules(BuildContext context, ShowcaseModel model, {ShowcaseEntry? allActions}) {
+    final guestPass = widget.audience == ShowcaseAudience.resident ? widget.onCreateGuestPass : null;
+    final buttons = <Widget>[
+      for (final entry in model.grid)
+        ShowcaseEasyButton(
+          key: ValueKey<String>('panel_kolay_${entry.item.name}'),
+          title: entry.title,
+          hint: entry.description,
+          art: entry.art,
+          badge: entry.badge,
+          badgeNoun: entry.badgeNoun,
+          onTap: () => _open(entry.item),
+        ),
+    ];
+    if (guestPass != null) {
+      final afterDoors = model.grid.isNotEmpty && model.grid.first.item == SirketMenuItem.kapilar ? 1 : 0;
+      buttons.insert(
+        afterDoors,
+        ShowcaseEasyButton(
+          key: const ValueKey<String>('panel_kolay_ziyaretciKodu'),
+          title: 'Ziyaretçi kodu',
+          hint: 'Misafir ve kurye için süreli geçiş linki oluşturur; kapıyı açmaz',
+          art: ModuleArtKind.accessCards,
+          onTap: guestPass,
+        ),
+      );
+    }
+    // "Yöneticiyi ara" (P2-23): hızlı işlemler Kolay görünümde yoktur; sunucu yanıtı gelince (kendi sitesinin yöneticisi olana ve
+    // veri yokken çizilmez) büyük bir düğme olarak modüllerin sonuna eklenir. Dokunuş hızlı işlemler kutusuyla AYNI yoldan geçer.
+    final callable = _wantsManagers(widget)
+        ? ManagerCallTile.callable(_managers ?? const <ManagerContact>[])
+        : const <ManagerContact>[];
+    if (callable.isNotEmpty) {
+      buttons.add(
+        ShowcaseEasyButton(
+          key: const ValueKey<String>('panel_kolay_yoneticiyiAra'),
+          title: ManagerCallTexts.title,
+          hint: ManagerCallTile.hintOf(callable),
+          icon: Icons.phone_in_talk_rounded,
+          onTap: () => unawaited(ManagerCallTile.activate(context, callable, launcher: widget.dialLauncher)),
+        ),
+      );
+    }
+    final openAllActions = widget.onOpenAllActions;
+    if (allActions != null && openAllActions != null) {
+      buttons.add(
+        ShowcaseEasyButton(
+          key: const ValueKey<String>('panel_kolay_tumIslemler'),
+          title: allActions.title,
+          hint: allActions.description,
+          art: allActions.art,
+          badge: allActions.badge,
+          badgeNoun: allActions.badgeNoun,
+          onTap: openAllActions,
+        ),
+      );
+    }
+    final secondary = <Widget>[
+      for (final entry in model.secondary)
+        ShowcaseEasyButton(
+          key: ValueKey<String>('panel_kolay_${entry.item.name}'),
+          title: entry.title,
+          hint: entry.description,
+          icon: YanMenu.iconFor(entry.item),
+          badge: entry.badge,
+          badgeNoun: entry.badgeNoun,
+          onTap: () => _open(entry.item),
+        ),
+      if (widget.onOpenHelp != null)
+        ShowcaseEasyButton(
+          key: const ValueKey<String>('panel_kolay_yardim'),
+          title: 'Yardım ve Destek',
+          icon: Icons.help_outline_rounded,
+          onTap: widget.onOpenHelp!,
+        ),
+    ];
+    Widget stack(Key key, List<Widget> items) => Column(
+      key: key,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var i = 0; i < items.length; i++) ...[
+          if (i > 0) const SizedBox(height: AppSpace.md),
+          items[i],
+        ],
+      ],
+    );
+    return <Widget>[
+      if (buttons.isNotEmpty) ...[
+        const _SectionTitle(key: ValueKey<String>('panel_vitrin_baslik'), text: 'Modüller'),
+        const SizedBox(height: AppSpace.md),
+        stack(const ValueKey<String>('panel_vitrin_kolay'), buttons),
+      ],
+      if (secondary.isNotEmpty) ...[
+        const SizedBox(height: AppSpace.xl),
+        const _SectionTitle(text: 'Hesap ve ayarlar'),
+        const SizedBox(height: AppSpace.md),
+        stack(const ValueKey<String>('panel_vitrin_kolay_ikincil'), secondary),
+      ],
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     final role = widget.session.role;
+    // K8: ızgara kompakt menüdeki (öne çıkan) öğelerden kurulur; öne çıkmayanlar "Tüm işlemler" kartının ardındadır.
     final model = buildShowcaseModel(
-      menuItems: widget.menuItems,
+      menuItems: YanMenu.compactItems(widget.menuItems, widget.featuredItems),
       role: role,
       badgeCounts: widget.badgeCounts,
       badgeNouns: widget.badgeNouns,
     );
+    final beyondCompact = YanMenu.itemsBeyondCompact(widget.menuItems, widget.featuredItems);
+    final showAllActions = widget.onOpenAllActions != null && beyondCompact.isNotEmpty;
     final audience = widget.audience;
     final focus = audience == ShowcaseAudience.admin
         ? buildFocusEntries(menuItems: widget.menuItems, badgeCounts: widget.badgeCounts)
         : const <ShowcaseFocusEntry>[];
+    // Kolay görünüm (P2-25): sade ana ekran, büyük düğmeler. Liste / kutucuk anahtarı (P2-22): "Modüller" bölümü.
+    final easy = EasyViewScope.isEnabled(context);
+    final modulesMode = ViewModeScope.modeOf(context, ViewScreen.modules);
 
     final children = <Widget>[
       if (widget.applications != null)
@@ -246,31 +446,76 @@ class ModuleShowcaseViewState extends State<ModuleShowcaseView> {
         const SizedBox(height: AppSpace.lg),
       ],
       if (audience == ShowcaseAudience.admin && widget.attentionBar != null) widget.attentionBar!,
+      // Site yöneticisinin profilinde telefon yoksa sakinler onu arayamaz: ipucu (Profilim menüde yoksa düğmesiz).
+      if (audience == ShowcaseAudience.admin && widget.managerPhoneMissing)
+        ManagerPhoneHint(
+          onOpenProfile: widget.menuItems.contains(SirketMenuItem.profilim) ? () => _open(SirketMenuItem.profilim) : null,
+        ),
       if (audience == ShowcaseAudience.resident) ...[
         if (widget.aboveHero != null) widget.aboveHero!,
         _buildHero(context),
         const SizedBox(height: AppSpace.lg),
         if (widget.belowHero != null) widget.belowHero!,
-        _buildQuickActions(context),
+        // Kolay görünümde hızlı işlemler yoktur: aynı sayfalara büyük düğmelerle (aşağıda) gidilir.
+        if (!easy) _buildQuickActions(context),
       ],
-      if (model.grid.isNotEmpty) ...[
-        _SectionTitle(
-          key: const ValueKey<String>('panel_vitrin_baslik'),
-          text: 'Modüller',
-        ),
+      if (easy)
+        ..._buildEasyModules(
+          context,
+          model,
+          allActions: showAllActions ? _allActionsEntry(beyondCompact) : null,
+        )
+      else if (model.grid.isNotEmpty || showAllActions) ...[
+        _modulesHeader(context),
         const SizedBox(height: AppSpace.md),
-        _ShowcaseGrid(
-          key: const ValueKey<String>('panel_vitrin_izgara'),
-          children: [
-            for (final (index, entry) in model.grid.indexed)
-              StaggeredEntry(
-                index: index,
-                child: _ModuleTile(entry: entry, onTap: () => _open(entry.item)),
-              ),
-          ],
-        ),
+        if (modulesMode == ListViewMode.tiles)
+          _ShowcaseGrid(
+            key: const ValueKey<String>('panel_vitrin_izgara'),
+            children: [
+              for (final (index, entry) in model.grid.indexed)
+                StaggeredEntry(
+                  index: index,
+                  child: _ModuleTile(entry: entry, onTap: () => _open(entry.item)),
+                ),
+              if (showAllActions)
+                StaggeredEntry(
+                  index: model.grid.length,
+                  child: _ModuleTile(
+                    tileKey: const ValueKey<String>('panel_kart_tumIslemler'),
+                    entry: _allActionsEntry(beyondCompact),
+                    onTap: widget.onOpenAllActions!,
+                  ),
+                ),
+            ],
+          )
+        else
+          Column(
+            key: const ValueKey<String>('panel_vitrin_liste'),
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (final (index, entry) in model.grid.indexed)
+                StaggeredEntry(
+                  index: index,
+                  child: Padding(
+                    padding: EdgeInsets.only(
+                      bottom: index == model.grid.length - 1 && !showAllActions ? 0 : AppSpace.sm,
+                    ),
+                    child: ShowcaseModuleRow(
+                      key: ValueKey<String>('panel_kart_${entry.item.name}'),
+                      title: entry.title,
+                      description: entry.description,
+                      art: entry.art,
+                      badge: entry.badge,
+                      semanticLabel: entry.semanticLabel,
+                      onTap: () => _open(entry.item),
+                    ),
+                  ),
+                ),
+              if (showAllActions) _allActionsRow(_allActionsEntry(beyondCompact), model.grid.length),
+            ],
+          ),
       ],
-      if (model.secondary.isNotEmpty || widget.onOpenHelp != null) ...[
+      if (!easy && (model.secondary.isNotEmpty || widget.onOpenHelp != null)) ...[
         const SizedBox(height: AppSpace.xl),
         const _SectionTitle(text: 'Hesap ve ayarlar'),
         const SizedBox(height: AppSpace.sm),
@@ -306,6 +551,30 @@ class ModuleShowcaseViewState extends State<ModuleShowcaseView> {
       children: children,
     );
   }
+
+  /// "Tüm işlemler" kartı: kompakt menüde öne çıkmayan [beyondCompact] işlerin sayısını söyler; rozeti onların bekleyen / okunmamış
+  /// sayıları toplamıdır (kompakt menü bir sinyali gizlemez). Kartın `item`ı yalnız tür gereğidir; dokunma [ModuleShowcaseView.onOpenAllActions]'ı çağırır.
+  ShowcaseEntry _allActionsEntry(List<SirketMenuItem> beyondCompact) => ShowcaseEntry(
+        item: SirketMenuItem.dashboard,
+        title: 'Tüm işlemler',
+        description: 'Ana menüde olmayan ${beyondCompact.length} işlem dahil tüm işlemler',
+        art: ModuleArtKind.modules,
+        badge: YanMenu.badgeTotalOf(beyondCompact, widget.badgeCounts),
+      );
+
+  /// Liste kipinde ("Modüller" liste ↔ kutucuk anahtarı) "Tüm işlemler" satırı: kutucuk kipindeki kartla aynı anahtar ve aynı davranış.
+  Widget _allActionsRow(ShowcaseEntry entry, int index) => StaggeredEntry(
+        index: index,
+        child: ShowcaseModuleRow(
+          key: const ValueKey<String>('panel_kart_tumIslemler'),
+          title: entry.title,
+          description: entry.description,
+          art: entry.art,
+          badge: entry.badge,
+          semanticLabel: entry.semanticLabel,
+          onTap: widget.onOpenAllActions!,
+        ),
+      );
 
   /// Hero "Öde": tek borçlu daire varsa Öde sayfası, birden çoksa daire seçimi için Borcum.
   void _payFromHero() {
@@ -372,6 +641,11 @@ class ModuleShowcaseViewState extends State<ModuleShowcaseView> {
     ];
     final allowed = widget.quickActionItems;
     final guestPass = widget.onCreateGuestPass;
+    // "Yöneticiyi ara" (P2-23): sunucu yanıtı gelince, öteki kutuların yerini kaydırmamak için SONA eklenir. Kendi sitesinin
+    // yöneticisi olana ve veri yokken (yükleniyor / hata / eski sunucu) çizilmez.
+    final callable = _wantsManagers(widget)
+        ? ManagerCallTile.callable(_managers ?? const <ManagerContact>[])
+        : const <ManagerContact>[];
     final tiles = <Widget>[
       for (final (item, title, hint, art) in defs) ...[
         if (widget.menuItems.contains(item) && (allowed == null || allowed.contains(item)))
@@ -392,6 +666,7 @@ class ModuleShowcaseViewState extends State<ModuleShowcaseView> {
             onTap: guestPass,
           ),
       ],
+      if (callable.isNotEmpty) ManagerCallTile(contacts: callable, launcher: widget.dialLauncher),
     ];
     if (tiles.isEmpty) return const SizedBox.shrink();
     return Padding(
@@ -480,10 +755,13 @@ ShapeBorder _cardShape(AppPalette p) => RoundedRectangleBorder(
 
 /// Modül kartı: görsel + başlık + açıklama + rozet. Tek erişilebilir düğme (etiket = başlık + rozet).
 class _ModuleTile extends StatelessWidget {
-  const _ModuleTile({required this.entry, required this.onTap});
+  const _ModuleTile({required this.entry, required this.onTap, this.tileKey});
 
   final ShowcaseEntry entry;
   final VoidCallback onTap;
+
+  /// Verilmezse kart anahtarı `panel_kart_<öğe>` olur ("Tüm işlemler" kartı kendi anahtarını verir).
+  final Key? tileKey;
 
   @override
   Widget build(BuildContext context) {
@@ -497,7 +775,7 @@ class _ModuleTile extends StatelessWidget {
       onTap: onTap,
       excludeSemantics: true,
       child: Material(
-        key: ValueKey<String>('panel_kart_${entry.item.name}'),
+        key: tileKey ?? ValueKey<String>('panel_kart_${entry.item.name}'),
         color: _cardColor(p),
         shape: _cardShape(p),
         clipBehavior: Clip.antiAlias,

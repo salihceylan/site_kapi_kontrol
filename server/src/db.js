@@ -9,6 +9,7 @@ import { ensureFinance4bSchema } from './modules/finance_4b_schema.js';
 import { ensureDocumentsSchema } from './modules/document_schema.js';
 import { ensureWorkTrackingSchema } from './modules/work_tracking_schema.js';
 import { ensureWorkAttachmentsSchema } from './modules/work_attachments_schema.js';
+import { ensureFeedbackSchema } from './modules/feedback_schema.js';
 import { ensureReservationSchema } from './modules/reservation_schema.js';
 import { ensureSurveySchema } from './modules/survey_schema.js';
 import { ensureVisitorLogSchema } from './modules/visitor_log_schema.js';
@@ -45,6 +46,7 @@ import { ensureOAuthSchema } from './modules/oauth_schema.js';
 import { ensureIntegritySchema } from './modules/integrity_schema.js';
 import { ensureFinanceFundsSchema } from './modules/finance_funds_schema.js';
 import { ensureAuthAttemptLimitsSchema } from './modules/auth_attempt_limits_schema.js';
+import { ensureMenuLayoutSchema } from './modules/menu_layout_schema.js';
 import { CORE_MODULES_BACKFILL_SQL } from './modules/core_modules.js';
 import { CARD_PAYMENTS_INTO_FINANCE_SQL } from './modules/card_payments_into_finance.js';
 import { ensureTenantAdminRule } from './modules/apartment_tenant_admin_sql.js';
@@ -2006,6 +2008,11 @@ export async function ensureDbSchema() {
     // 085 (kalici deneme sinirlari: 4 haneli ilk PIN girisi, e-posta / SMS dogrulama kodu): dev blokta DEGIL; tek katalog sorgusu, tablo varsa hicbir ifade / kilit yok
     // (auth_attempt_limits_schema.js = migrations/085). Yeni, FK'siz tablo: baska hicbir semaya bagimli degil.
     await ensureAuthAttemptLimitsSchema(client);
+    // 102 (site menu yerlesimi, K8 / P1-16: kompakt menu kumesi): sites / users'tan SONRA; dev blokta DEGIL; tablo varsa hicbir ifade / kilit yok (menu_layout_schema.js = migrations/102).
+    // Yetenek (site_modules) ile menu yerlesimi ayri katmandir: bu tablo hicbir modulu acmaz ya da kapatmaz.
+    await ensureMenuLayoutSchema(client);
+    // 103 (geri bildirim, sayfa baglamli): dev blokta DEGIL; katalog kontrolu + her adim kendi otomatik onayli ifadesi (feedback_schema.js = migrations/103).
+    await ensureFeedbackSchema(client);
 
     // 031 people_v1: mevcut sakinlerin CRM'e tek seferlik aktarimi. Savunmaci: hata sunucunun acilmasini ENGELLEMEZ
     // (kendi transaction'i geri alinir, isaret yazilmaz => sonraki acilista yeniden denenir; okuma anindaki

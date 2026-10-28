@@ -2,12 +2,15 @@ import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/models/residency_relation.dart';
 import 'package:site_kapi_kontrol/models/vehicle_record.dart' show crmFormatNumber;
+import 'package:site_kapi_kontrol/services/view_mode_service.dart' show ListViewMode;
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/buttons.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/helpers/a11y_announce.dart';
 import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
+import 'package:site_kapi_kontrol/ui/widgets/state_view.dart';
+import 'package:site_kapi_kontrol/ui/widgets/tile_grid.dart';
 
 /// İlişki türünün çip tonu (renk tek başına anlam taşımaz: etiket de yazılır). Belirtilmemiş "Sakin"
 /// nötr kalır.
@@ -126,6 +129,10 @@ class CrmInfoLine extends StatelessWidget {
 ///
 /// Kurallar (önceki incelemelerden): iskelet YALNIZ `loading && items.isEmpty` iken; liste boşken hata
 /// varsa "kayıt yok" yerine hata gösterilir; ilk yükleme bitmeden boş durum çizilmez.
+///
+/// P2-21: boş / hata / bağlı değil üçlüsü [StateView] ile çizilir (görünümü eski [EmptyCard] / [InlineNotice] ile aynıdır);
+/// sunucuya ulaşılamıyorsa ([PagedLoader.errorOffline]) bildirim "bağlı değil" olur. P2-26: [showLastUpdated] açıksa
+/// listenin üstünde "Son güncelleme 14:32" ([PagedLoader.lastLoadedAt]) yazar; seçici / diyalog listelerinde kapalı kalır.
 class CrmListBody<T> extends StatelessWidget {
   const CrmListBody({
     super.key,
@@ -139,10 +146,21 @@ class CrmListBody<T> extends StatelessWidget {
     this.skeletonRows = 3,
     this.hideItemsOnError = false,
     this.emptyAction,
+    this.showLastUpdated = false,
+    this.viewMode = ListViewMode.list,
+    this.tileBuilder,
   });
 
   final PagedLoader<T> loader;
   final Widget Function(BuildContext context, T item) itemBuilder;
+
+  /// Liste ↔ kutucuk anahtarı (P2-22): [ListViewMode.tiles] ve [tileBuilder] verilmişse kayıtlar yan yana kutucuklarla
+  /// ([TileGrid]) çizilir; aksi hâlde (varsayılan) alt alta [itemBuilder] kartlarıyla. İskelet, hata, boş durum ve
+  /// "Daha fazla yükle" iki kipte de aynıdır.
+  final ListViewMode viewMode;
+
+  /// Kutucuk kipinde bir kaydın kompakt kartı. null ise [viewMode] yok sayılır (liste).
+  final Widget Function(BuildContext context, T item)? tileBuilder;
   final IconData emptyIcon;
   final String emptyTitle;
   final String? emptyMessage;
@@ -160,41 +178,76 @@ class CrmListBody<T> extends StatelessWidget {
   /// Süzgeçsiz boş durumda kartın içine konan eylem (örn. «Excel'den yükle»); süzgeçli boş sonuçta gösterilmez.
   final Widget? emptyAction;
 
+  /// true: yükleme başarılıysa listenin üstünde "Son güncelleme 14:32" yazar (P2-26).
+  final bool showLastUpdated;
+
   @override
   Widget build(BuildContext context) {
     final items = loader.items;
     final error = loader.error;
+    final stamp = showLastUpdated ? loader.lastLoadedAt : null;
     if (items.isEmpty) {
       if (loader.loading || (error == null && !loader.loadedOnce)) {
         return ListSkeleton(rows: skeletonRows);
       }
       if (error != null) {
-        return InlineNotice(message: error, onRetry: loader.reload);
+        return StateView.failure(message: error, offline: loader.errorOffline, onRetry: loader.reload);
       }
-      return EmptyCard(
+      final empty = StateView.empty(
         icon: emptyIcon,
         title: filtered ? (filteredTitle ?? emptyTitle) : emptyTitle,
         message: emptyMessage,
-        child: filtered ? null : emptyAction,
+        action: filtered ? null : emptyAction,
+      );
+      if (stamp == null) return empty;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          LastUpdatedCaption(at: stamp),
+          const SizedBox(height: AppSpace.xs),
+          empty,
+        ],
       );
     }
     if (hideItemsOnError && error != null) {
-      return InlineNotice(message: error, onRetry: loader.reload);
+      return StateView.failure(message: error, offline: loader.errorOffline, onRetry: loader.reload);
     }
+    final tile = tileBuilder;
+    final useTiles = viewMode == ListViewMode.tiles && tile != null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (error != null) ...[
-          InlineNotice(message: error, onRetry: loader.reload),
-          const SizedBox(height: AppSpace.md),
-        ],
-        for (final item in items)
-          Padding(
-            padding: const EdgeInsets.only(bottom: AppSpace.md),
-            child: itemBuilder(context, item),
+          // Eski kayıtlar ekranda duruyor: bildirimin altında en son başarılı güncellemenin saati yazılır.
+          StateView.failure(
+            message: error,
+            offline: loader.errorOffline,
+            onRetry: loader.reload,
+            lastUpdated: showLastUpdated ? loader.lastLoadedAt : null,
           ),
+          const SizedBox(height: AppSpace.md),
+        ] else if (stamp != null) ...[
+          LastUpdatedCaption(at: stamp),
+          const SizedBox(height: AppSpace.xs),
+        ],
+        if (useTiles) ...[
+          TileGrid(
+            key: const ValueKey<String>('crm_kutucuk_izgara'),
+            children: [for (final item in items) tile(context, item)],
+          ),
+          const SizedBox(height: AppSpace.md),
+        ] else
+          for (final item in items)
+            Padding(
+              padding: const EdgeInsets.only(bottom: AppSpace.md),
+              child: itemBuilder(context, item),
+            ),
         if (loader.moreError != null) ...[
-          InlineNotice(message: loader.moreError!, onRetry: loader.loadMore),
+          StateView.failure(
+            message: loader.moreError!,
+            offline: loader.moreErrorOffline,
+            onRetry: loader.loadMore,
+          ),
           const SizedBox(height: AppSpace.md),
         ],
         if (loader.hasMore)

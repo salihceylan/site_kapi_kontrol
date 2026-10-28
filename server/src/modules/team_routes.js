@@ -8,6 +8,7 @@
 //   DELETE /manager/sites/:siteCode/people/:personId/invitation       (iptal)
 //   POST   /manager/sites/:siteCode/directory/contacts                PATCH/DELETE .../contacts/:id        (modül `directory` açık olmalı)
 //   GET    /app/directory                                             sakin rehberi (bağı olduğu ve `directory` açık siteler)
+//   GET    /app/manager-contact                                       sakin "Yöneticiyi ara": bağı olduğu her site için { site_code, site_name, manager_name, manager_phone, is_self } (Rehber modülünden bağımsız)
 //
 // Yetki (people_access.js): yazma = yönetici/süper; okuma = yönetici/süper + BOARD_MEMBER (kurul e-posta, user_code, erişim durumu ve eski rolleri GÖRMEZ);
 // STAFF/sakin 403 FORBIDDEN_ROLE; başka site 403 FORBIDDEN_SITE. Sakin ucu yalnız kimlik doğrulaması ister, kapsamı sunucuda hesaplanır.
@@ -27,6 +28,7 @@ import {
   deleteContact,
   endDuty,
   getResidentDirectory,
+  getResidentManagerContacts,
   getTeam,
   parseDutyInput,
   setDuty,
@@ -187,5 +189,14 @@ teamRouter.get('/app/directory', authRequired, readLimiter, async (req, res) => 
     return res.json(await getResidentDirectory(req.authUser));
   } catch (error) {
     return respondError(res, 'directory_get', error, 'Rehber yüklenemedi.');
+  }
+});
+
+teamRouter.get('/app/manager-contact', authRequired, readLimiter, async (req, res) => {
+  try {
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json(await getResidentManagerContacts(req.authUser));
+  } catch (error) {
+    return respondError(res, 'manager_contact_get', error, 'Yönetici bilgisi yüklenemedi.');
   }
 });

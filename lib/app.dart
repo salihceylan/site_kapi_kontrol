@@ -17,34 +17,53 @@ import 'package:site_kapi_kontrol/services/deep_link_service.dart';
 import 'package:site_kapi_kontrol/services/door_module_gate.dart';
 import 'package:site_kapi_kontrol/services/door_panel_requests.dart';
 import 'package:site_kapi_kontrol/services/door_widget_service.dart';
+import 'package:site_kapi_kontrol/services/easy_view_service.dart';
 import 'package:site_kapi_kontrol/services/local_door_service.dart';
 import 'package:site_kapi_kontrol/services/network_service.dart';
 import 'package:site_kapi_kontrol/services/quick_actions_service.dart';
 import 'package:site_kapi_kontrol/services/theme_service.dart';
+import 'package:site_kapi_kontrol/services/view_mode_service.dart';
 import 'package:site_kapi_kontrol/services/voice_door_service.dart';
 import 'package:site_kapi_kontrol/styles/app_decorations.dart';
 import 'package:site_kapi_kontrol/styles/app_theme.dart';
+import 'package:site_kapi_kontrol/styles/easy_view_theme.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
+import 'package:site_kapi_kontrol/ui/design/easy_view_switch.dart';
 import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
 import 'package:site_kapi_kontrol/ui/design/login_hero.dart';
 import 'package:site_kapi_kontrol/ui/design/theme_toggle_button.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+import 'package:site_kapi_kontrol/ui/design/view_mode_toggle.dart';
 import 'package:site_kapi_kontrol/ui/pages/home_page.dart';
 import 'package:site_kapi_kontrol/ui/pages/login_page.dart';
 import 'package:site_kapi_kontrol/ui/pages/no_internet_page.dart';
 import 'package:site_kapi_kontrol/ui/views/legal_consent_gate.dart';
+import 'package:site_kapi_kontrol/ui/widgets/context_strip.dart' show ContextApartment;
 import 'package:site_kapi_kontrol/ui/widgets/dynamic_qr_pass_modal.dart';
 import 'package:site_kapi_kontrol/ui/widgets/voice_control_modal.dart';
 
 class MyApp extends StatefulWidget {
-  const MyApp({super.key, this.networkCheckEnabled = true, this.themeService});
+  const MyApp({
+    super.key,
+    this.networkCheckEnabled = true,
+    this.themeService,
+    this.easyViewService,
+    this.viewModeService,
+  });
 
   final bool networkCheckEnabled;
 
   /// Önceden yüklenmiş tema servisi (lib/main.dart): ilk kare doğru temayla açılır, yanıp sönme olmaz.
   /// Verilmezse uygulama kendisi oluşturur ve kayıtlı tercihi arka planda yükler (testler).
   final ThemeService? themeService;
+
+  /// Önceden yüklenmiş "Kolay görünüm" servisi (lib/main.dart): ilk kare doğru yazı boyutu ve karşıtlıkla açılır.
+  /// Verilmezse uygulama kendisi oluşturur ve kayıtlı tercihi arka planda yükler (testler).
+  final EasyViewService? easyViewService;
+
+  /// Önceden yüklenmiş liste / kutucuk tercihleri (lib/main.dart). Verilmezse uygulama kendisi oluşturur ve yükler.
+  final ViewModeService? viewModeService;
 
   @override
   State<MyApp> createState() => _MyAppState();
@@ -62,6 +81,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   final BrandThemeController _brandTheme = BrandThemeController();
   late final bool _ownsThemeService;
   final LocaleService _localeService = LocaleService();
+  // Kolay görünüm (büyük yazı + yüksek karşıtlık + sade ana ekran) ve liste / kutucuk tercihleri: cihaz görünümü ayarları.
+  late final EasyViewService _easyViewService;
+  late final bool _ownsEasyViewService;
+  late final ViewModeService _viewModeService;
+  late final bool _ownsViewModeService;
 
   /// Tek örnek: AuthService'in kullandığı örnekle aynıdır; yaşam döngüsü
   /// (pause/resume) bu asıl örneğe uygulanır.
@@ -82,6 +106,16 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     _themeService = widget.themeService ?? ThemeService();
     if (_ownsThemeService) {
       unawaited(_themeService.load());
+    }
+    _ownsEasyViewService = widget.easyViewService == null;
+    _easyViewService = widget.easyViewService ?? EasyViewService();
+    if (_ownsEasyViewService) {
+      unawaited(_easyViewService.load());
+    }
+    _ownsViewModeService = widget.viewModeService == null;
+    _viewModeService = widget.viewModeService ?? ViewModeService();
+    if (_ownsViewModeService) {
+      unawaited(_viewModeService.load());
     }
     unawaited(_localeService.load());
     _authService = AuthService(api: AuthApi(baseUrl: apiBaseUrl));
@@ -368,6 +402,22 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     }
   }
 
+  /// P2-21 bağlam şeridi için kullanıcının daireleri (`/membership/my-apartments`, onaylı daireler). Okunamazsa hata
+  /// fırlatır: şerit dairesiz çizilir (bilgi amaçlıdır, ekranı bozmaz).
+  Future<List<ContextApartment>> _loadContextApartments() async {
+    final (list, error) = await _authService.getMyApartments();
+    if (list == null) throw StateError(error ?? 'Daireler okunamadı.');
+    return <ContextApartment>[
+      for (final apartment in list)
+        ContextApartment(
+          siteCode: apartment.siteCode,
+          label: apartment.blockName.trim().isEmpty
+              ? apartment.unitLabel
+              : '${apartment.blockName.trim()} / ${apartment.unitLabel}',
+        ),
+    ];
+  }
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
@@ -383,22 +433,36 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     if (_ownsThemeService) {
       _themeService.dispose();
     }
+    if (_ownsEasyViewService) {
+      _easyViewService.dispose();
+    }
+    if (_ownsViewModeService) {
+      _viewModeService.dispose();
+    }
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     // ThemeScope MaterialApp'ın ÜSTÜNDE: itilen sayfalar ve diyaloglar da tema düğmesine erişir. Tema modu
-    // değişince yalnız MaterialApp yeniden kurulur (varsayılan: sistem teması, eski davranış).
+    // değişince yalnız MaterialApp yeniden kurulur (varsayılan: sistem teması, eski davranış). Kolay görünüm de tema
+    // düzeyindedir (yüksek karşıtlık teması + en az 1,3x yazı): açılıp kapanınca yalnız MaterialApp yeniden kurulur.
+    // Liste / kutucuk tercihi MaterialApp'ı yeniden kurmaz; yalnız ona bağlı ekranlar güncellenir.
     return LocaleScope(
       service: _localeService,
       child: ThemeScope(
         service: _themeService,
-        child: BrandThemeScope(
-          controller: _brandTheme,
-          child: AnimatedBuilder(
-            animation: Listenable.merge([_themeService, _localeService, _brandTheme]),
-            builder: (context, _) => _buildMaterialApp(),
+        child: EasyViewScope(
+          service: _easyViewService,
+          child: ViewModeScope(
+            service: _viewModeService,
+            child: BrandThemeScope(
+              controller: _brandTheme,
+              child: AnimatedBuilder(
+                animation: Listenable.merge([_themeService, _localeService, _brandTheme, _easyViewService]),
+                builder: (context, _) => _buildMaterialApp(),
+              ),
+            ),
           ),
         ),
       ),
@@ -406,12 +470,14 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   }
 
   Widget _buildMaterialApp() {
+    final easy = _easyViewService.enabled;
     return MaterialApp(
       navigatorKey: _navigatorKey,
       title: _brandTheme.theme?.displayName ?? AppConfig.appName,
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.light(_brandTheme.theme?.lightPalette() ?? AppPalette.light),
-      darkTheme: AppTheme.dark(),
+      // Kolay görünümde beyaz etiket paleti yerine yüksek karşıtlık paleti kullanılır (okunabilirlik markadan önce gelir).
+      theme: easy ? easyViewLightTheme : AppTheme.light(_brandTheme.theme?.lightPalette() ?? AppPalette.light),
+      darkTheme: easy ? easyViewDarkTheme : AppTheme.dark(),
       themeMode: _themeService.mode,
       locale: _localeService.locale,
       supportedLocales: AppLocalizations.supportedLocales,
@@ -422,9 +488,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         GlobalCupertinoLocalizations.delegate,
       ],
       builder: (context, child) {
-        // Metin ölçeği en çok 2,0 (taşma testleri bu sınırda biter). Sayfa zemini DÜZ palet zeminidir (sade stil,
+        // Metin ölçeği en çok 2,0 (taşma testleri bu sınırda biter); kolay görünümde en az 1,3 (cihazın yazı boyutu daha
+        // büyükse o geçerli). Sayfa zemini DÜZ palet zeminidir (sade stil,
         // karar G6: açıkta #F8FAFC, koyuda #0F172A); üstünde ışıma yoktur. Statik: kararlı durumda yeniden boyanmaz.
         return MediaQuery.withClampedTextScaling(
+          minScaleFactor: easy ? EasyViewService.minTextScale : 0.0,
           maxScaleFactor: 2.0,
           child: DecoratedBox(
             decoration: AppDecorations.pageBackground(context),
@@ -451,6 +519,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                 voiceDoorService: _voiceDoorService,
                 quickActionsService: _quickActionsService,
                 doorPanelRequests: _doorPanelRequests,
+                loadContextApartments: _loadContextApartments,
               ),
             );
           }

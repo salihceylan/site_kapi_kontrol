@@ -136,6 +136,12 @@ import 'package:site_kapi_kontrol/ui/widgets/yan_menu.dart';
 
 import 'package:site_kapi_kontrol/models/platform_module.dart';
 import 'package:site_kapi_kontrol/models/work_tracking_models.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
+import 'package:site_kapi_kontrol/config/app_config.dart';
+import 'package:site_kapi_kontrol/models/feedback_models.dart';
+import 'package:site_kapi_kontrol/services/feedback_api.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/feedback_dialog.dart';
+import 'package:site_kapi_kontrol/ui/views/feedback_inbox_view.dart';
 import 'package:site_kapi_kontrol/models/reservation_models.dart';
 
 import 'package:site_kapi_kontrol/services/module_access.dart';
@@ -216,6 +222,15 @@ import 'package:site_kapi_kontrol/ui/widgets/resident_bottom_bar.dart';
 import 'package:site_kapi_kontrol/services/panel_return_requests.dart';
 import 'package:site_kapi_kontrol/ui/helpers/home_shortcut.dart';
 import 'package:site_kapi_kontrol/ui/widgets/home_shortcut_button.dart';
+// K8 (P1-16): kompakt menü (yetenekten AYRI yerleşim katmanı), "Tüm işlemler" ve "Ana menü düzeni".
+import 'package:site_kapi_kontrol/ui/helpers/menu_layout.dart';
+import 'package:site_kapi_kontrol/ui/views/all_actions_view.dart';
+import 'package:site_kapi_kontrol/ui/views/menu_layout_view.dart';
+// P2-21 / P2-26: bağlam şeridi, belirgin "Yenile", onaylı çıkış.
+import 'package:site_kapi_kontrol/ui/dialogs/logout_confirm_dialog.dart';
+import 'package:site_kapi_kontrol/ui/helpers/refresh_status.dart';
+import 'package:site_kapi_kontrol/ui/widgets/context_strip.dart';
+import 'package:site_kapi_kontrol/ui/widgets/refresh_action_button.dart';
 
 
 
@@ -236,6 +251,8 @@ class HomePage extends StatefulWidget {
     this.announcementNotifier,
 
     this.doorPanelRequests,
+
+    this.loadContextApartments,
 
   });
 
@@ -271,6 +288,10 @@ class HomePage extends StatefulWidget {
   /// kullanıcının kapı erişimi yoksa vitrinde kalınır.
   final DoorPanelRequests? doorPanelRequests;
 
+  /// P2-21 bağlam şeridi için kullanıcının daireleri (sakin / bireysel kitle; ilk açılışta ve her yenilemede okunur).
+  /// Verilmezse şeritte daire parçası çıkmaz (testler); uygulama kökü ([MyApp]) gerçek servisi bağlar.
+  final Future<List<ContextApartment>> Function()? loadContextApartments;
+
 
 
   @override
@@ -284,6 +305,9 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   SirketMenuItem _selectedMenu = SirketMenuItem.dashboard;
+
+  // P2-26: genel yenilemenin durumu ("Yenile" düğmesi ve aşağı çekme ortak çalışır); P2-21 bağlam şeridi bununla tazelenir.
+  final RefreshStatus _refreshStatus = RefreshStatus();
 
   // Platform modül sistemi (Faz 1): menü/panel süzgeci. Girişten sonra, genel yenilemede ve kısa
   // aralıklı (AdaptivePoller) `getMyModules` ile tazelenir; hata/ilk yüklemede her şey açık sayılır.
@@ -736,6 +760,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
     _doorPanelRevision.dispose();
 
+    _refreshStatus.dispose();
+
     _profileFullNameController.dispose();
 
     _profileEmailController.dispose();
@@ -993,6 +1019,67 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         additionalItems: _extraMenuItems(session.role),
         hiddenItems: _hiddenMenuItems(session.role),
       );
+
+  /// K8 (P1-16) KOMPAKT MENÜ: çekmecede ve Panel vitrininde öne çıkan öğeler. null: kompakt menü yok (süper kullanıcı, modül verisi hiç
+  /// gelmemiş, eski sunucu): her görünür öğe öne çıkar. YETENEĞİ değil yalnız YERLEŞİMİ belirler: görünürlük [_visibleMenuItems]'te,
+  /// erişim [_canAccessMenu]'dadır; kümede olmayan öğe kaybolmaz, "Tüm işlemler"den açılır. Kapsam site seçicidir ([ModuleAccess.result]).
+  Set<SirketMenuItem>? _featuredMenuItems(UserSession session, [List<SirketMenuItem>? visible]) =>
+      featuredMenuItems(visible: visible ?? _visibleMenuItems(session), access: _moduleAccess);
+
+  /// "Ana menü düzeni"ni değiştirebilir mi: yönetim yetkisi (süper kullanıcı, yönetici modundaki site yöneticisi). Sunucu her site için
+  /// yetkiyi ayrıca doğrular.
+  bool _canEditMenuLayout(UserSession session) => _canManagePeople(session.role);
+
+  /// Çekmeceden "Tüm işlemler": çekmece kapanır, ekran yeni sayfa olarak açılır ([_openHelp] gibi).
+  void _openAllActions() {
+    Navigator.of(context).pop();
+    _openAllActionsPage();
+  }
+
+  /// "Tüm işlemler" ekranını açar (çekmece açık değilse de çalışır: Panel vitrinindeki kart ve "Ana menüyü düzenle" dönüşü). Ekran görünür
+  /// TÜM öğeleri listeler (kompakt kümeden bağımsız); modül durumu ya da rozetler değişince liste yenilenir. Öğe seçmek çekmeceden seçmekle
+  /// AYNI gezinmedir ([_openMenuItem]).
+  void _openAllActionsPage() {
+    if (widget.authService.session == null) return;
+    unawaited(
+      AllActionsView.open(
+        context,
+        (_) => AnimatedBuilder(
+          animation: Listenable.merge(<Listenable>[_moduleAccess, _announcements]),
+          builder: (_, _) {
+            final current = widget.authService.session;
+            if (!mounted || current == null) return const SizedBox.shrink();
+            final visible = _visibleMenuItems(current);
+            return AllActionsView(
+              role: current.role,
+              items: visible,
+              featured: _featuredMenuItems(current, visible),
+              badgeCounts: _menuBadgeCounts(current),
+              badgeNouns: _menuBadgeNouns,
+              onOpen: _openMenuItem,
+              onEditMenuLayout: _canEditMenuLayout(current) ? _editMenuLayout : null,
+              // Aşağı çek yenile: modül durumu ve menü düzeni sunucudan yeniden okunur (liste kendiliğinden güncellenir).
+              onRefresh: () async {
+                await _moduleAccess.refresh();
+              },
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  /// "Ana menü düzeni" ekranını açar. Kaydedilince modül verisi hemen yenilenir (çekmece ve Panel yeni düzene geçer).
+  void _editMenuLayout() {
+    unawaited(
+      MenuLayoutView.open(
+        context,
+        authService: widget.authService,
+        initialSiteCode: _moduleAccess.scopeSiteCode,
+        onChanged: () => unawaited(_moduleAccess.refresh()),
+      ),
+    );
+  }
 
   /// Çekmece ve vitrin rozet sayıları (aynı harita): bekleyen modül talebi / site başvurusu (süper kullanıcı),
   /// okunmamış duyuru ve görülmemiş ziyaretçi kaydı (sakin).
@@ -2408,6 +2495,114 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         onOpenProfile: () => _goToMenu(SirketMenuItem.profilim),
       ),
     );
+  }
+
+  /// Geri bildirim servisi (P1-14, K11): ilk kullanımda kurulur (HomePage testleri sahte [AuthService] ile bu servisi hiç kurmaz).
+  late final FeedbackService _feedbackService = FeedbackService(authService: widget.authService);
+
+  /// Geri bildirimin OTOMATİK ekran bağlamı: ekrandaki sayfa adı + rota (`menu/<öğe>`; sakin modunda `:sakin` eki) + site. Site, seçili kapsam
+  /// (site seçici) ya da kullanıcının tek bağlı sitesidir; süper kullanıcıda ve birden çok siteden "Tüm siteler" seçiliyken site yoktur
+  /// (sunucu gönderenin site ilişkisini ayrıca doğrular).
+  FeedbackScreenContext _feedbackContext(UserSession session) {
+    final page = _canAccessMenu(_selectedMenu, session.role) ? _selectedMenu : SirketMenuItem.dashboard;
+    int? siteCode;
+    String? siteName;
+    if (session.role != UserRole.superUser && !_moduleAccess.isSuper && _moduleAccess.isLoaded) {
+      final sites = _moduleAccess.allSites;
+      final scoped = _moduleAccess.scopeSiteCode;
+      final match = scoped != null
+          ? sites.where((s) => s.siteCode == scoped).firstOrNull
+          : (sites.length == 1 ? sites.first : null);
+      siteCode = match?.siteCode;
+      siteName = match?.siteName;
+    }
+    return FeedbackScreenContext(
+      screenName: _titleForMenu(page),
+      screenRoute: 'menu/${page.name}${_isResidentMode ? ':sakin' : ''}',
+      siteCode: siteCode,
+      siteName: (siteName ?? '').trim().isEmpty ? null : siteName!.trim(),
+    );
+  }
+
+  static String? get _feedbackPlatform {
+    if (kIsWeb) return 'web';
+    return switch (defaultTargetPlatform) {
+      TargetPlatform.android => 'android',
+      TargetPlatform.iOS => 'ios',
+      TargetPlatform.windows => 'windows',
+      TargetPlatform.macOS => 'macos',
+      TargetPlatform.linux => 'linux',
+      _ => null,
+    };
+  }
+
+  /// Çekmeceden ya da Ayarlar panelinden "Geri bildirim": panel kapanır, form ekran bağlamıyla açılır; gönderilince kısa bilgi verilir.
+  void _openFeedback() {
+    Navigator.of(context).pop();
+    unawaited(_showFeedbackDialog());
+  }
+
+  Future<void> _showFeedbackDialog() async {
+    final session = widget.authService.session;
+    if (session == null || !mounted) return;
+    final outcome = await FeedbackDialog.show(
+      context,
+      service: _feedbackService,
+      screenContext: _feedbackContext(session),
+      appVersion: '${AppConfig.appVersion}+${AppConfig.buildNumber}',
+      platform: _feedbackPlatform,
+    );
+    if (!mounted || outcome == null) return;
+    _showMessage(
+      outcome.allUploaded
+          ? 'Geri bildiriminiz gönderildi. Teşekkür ederiz.'
+          : 'Geri bildiriminiz gönderildi; ${outcome.failed} dosya yüklenemedi.',
+    );
+  }
+
+  /// Gelen geri bildirimler (yalnız süper kullanıcı ve site yöneticisi; sunucu ayrıca 403 ile korur): süper kullanıcı tüm kayıtları, yönetici
+  /// KENDİ sitesinin kayıtlarını görür. Birden çok sitesi varsa seçili kapsam, yoksa site sorulur.
+  bool _canReadFeedback(UserSession session) {
+    if (session.role == UserRole.superUser) return true;
+    return !_isResidentMode && _managedFeedbackSites().isNotEmpty;
+  }
+
+  List<MySiteModules> _managedFeedbackSites() => <MySiteModules>[
+        for (final site in _moduleAccess.allSites)
+          if (site.role == 'manager') site,
+      ];
+
+  Future<void> _openFeedbackInbox() async {
+    final session = widget.authService.session;
+    if (session == null || !mounted) return;
+    if (session.role == UserRole.superUser) {
+      await FeedbackInboxPage.open(context, service: _feedbackService);
+      return;
+    }
+    final sites = _managedFeedbackSites();
+    if (sites.isEmpty) return;
+    MySiteModules? chosen;
+    final scoped = _moduleAccess.scopeSiteCode;
+    if (sites.length == 1) {
+      chosen = sites.first;
+    } else if (scoped != null) {
+      chosen = sites.where((s) => s.siteCode == scoped).firstOrNull;
+    }
+    chosen ??= await showDialog<MySiteModules>(
+      context: context,
+      builder: (dialogContext) => SimpleDialog(
+        title: const Text('Hangi sitenin geri bildirimleri?'),
+        children: [
+          for (final site in sites)
+            SimpleDialogOption(
+              onPressed: () => Navigator.of(dialogContext).pop(site),
+              child: Text(site.siteName.trim().isEmpty ? 'İsimsiz site' : site.siteName.trim()),
+            ),
+        ],
+      ),
+    );
+    if (chosen == null || !mounted) return;
+    await FeedbackInboxPage.open(context, service: _feedbackService, siteCode: chosen.siteCode);
   }
 
   /// Menü değişiminin TEK korumalı kapısı: çekmece, Yardım'dan "Profilim'e git", acil duyuru şeridi, mod geçişi,
@@ -5806,6 +6001,19 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
+  /// P2-26: çekmecenin dibindeki "Çıkış Yap": onay penceresi açılır; onaylanırsa çekmece kapanır ve oturum kapatılır,
+  /// vazgeçilirse hiçbir şey olmaz (çekmece açık kalır).
+  Future<void> _confirmAndLogout() async {
+    final confirmed = await confirmLogout(context);
+    if (!confirmed || !mounted) return;
+    if (_startDrawerOpen) Navigator.pop(context);
+    unawaited(widget.authService.logout());
+  }
+
+  /// P2-26: genel yenileme ("Yenile" düğmesi ve aşağı çekme ortak yolu). Sürerken ikinci tur başlamaz, düğme meşgul
+  /// görünür; başarıyla bitince bağlam şeridi dairelerini tazeler. Asıl iş [_handleGlobalRefresh].
+  Future<void> _refreshAll() => _refreshStatus.run(_handleGlobalRefresh);
+
   Future<void> _handleGlobalRefresh() async {
     final session = widget.authService.session;
     if (session == null) return;
@@ -6097,6 +6305,32 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (site != null && _selectedSite?.id != siteCode) unawaited(_selectSite(site));
   }
 
+  /// P2-21: ekranın üstündeki bağlam şeridi (hangi site + daire + rol). YALNIZ birden çok siteye / daireye bağlı
+  /// kullanıcıda çıkar (tek site + tek dairede karışacak bir şey yoktur); süper kullanıcıda ve modül verisi gelmeden
+  /// çıkmaz. Dokununca: yönetici kitlesinde site seçici (çekmecedekiyle aynı kapsam), sakin kitlesinde "Dairem".
+  Widget _contextStripSlot(UserSession session) {
+    if (session.role == UserRole.superUser || _moduleAccess.isSuper || !_moduleAccess.isLoaded) {
+      return const SizedBox.shrink();
+    }
+    final audience = _audienceFor(session);
+    final isAdmin = audience == ShowcaseAudience.admin;
+    return ContextStripHost(
+      userId: session.id,
+      audience: audience,
+      sites: <ContextSite>[
+        for (final site in _moduleAccess.allSites)
+          ContextSite(code: site.siteCode, name: site.siteName, role: site.role),
+      ],
+      scopeSiteCode: _moduleAccess.scopeSiteCode,
+      loadApartments: widget.loadContextApartments,
+      refresh: _refreshStatus,
+      onPickSite: isAdmin ? _selectScopeSite : null,
+      onOpenApartments: !isAdmin && _canAccessMenu(SirketMenuItem.dairem, session.role)
+          ? () => _goToMenu(SirketMenuItem.dairem)
+          : null,
+    );
+  }
+
   Future<void> _loadCompanyMembership() async {
     final role = widget.authService.session?.role;
     if (role == null || role == UserRole.apartmentOwner) return;
@@ -6111,6 +6345,21 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   /// Ayarlar panelindeki sayfa seçmeyen eylemler: "Masaüstüne Widget Ekle" (yalnız mobilde ve süper kullanıcı dışında;
   /// masaüstünde "gönderildi" mesajı yanıltıcı olurdu). Panel kapanır, sonra istek gönderilir.
   List<YanMenuAction> _settingsExtraActions(UserSession session) => <YanMenuAction>[
+        // P1-14 (K11): her ekrandan erişilebilir geri bildirim; ekran adı ve rota formda otomatik eklenir.
+        YanMenuAction(
+          icon: Icons.rate_review_outlined,
+          title: 'Geri bildirim gönder',
+          onTap: _openFeedback,
+        ),
+        if (_canReadFeedback(session))
+          YanMenuAction(
+            icon: Icons.inbox_outlined,
+            title: 'Gelen geri bildirimler',
+            onTap: () {
+              Navigator.of(context).pop();
+              unawaited(_openFeedbackInbox());
+            },
+          ),
         if (session.role == UserRole.superUser || _isCompanyMember)
           YanMenuAction(
             icon: Icons.apartment_rounded,
@@ -6223,7 +6472,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       page: effectiveMenu,
       residentBarVisible: residentBar != null,
       width: MediaQuery.sizeOf(context).width,
-      // Sağdaki eylemlerin genişliği: yenile + çıkış + dişli (48'er) + [tema 48] + [mod hapı: 44 + 2x4 dış boşluk] + 6 kenar.
+      // Sağdaki eylemlerin genişliği: yenile + çıkış payı + dişli (48'er) + [tema 48] + [mod hapı: 44 + 2x4 dış boşluk] + 6 kenar.
+      // P2-26: çıkış AppBar'dan kalktı ama üç düğmelik pay BİLEREK korunur: "Ana sayfa" eşiği (çift modlu + tema için 348 dp;
+      // TASARIM_DILI ve home_shortcut_test) değişmesin. Payı düşürmek (eşik ~300 dp) ayrı, belgeli bir karardır.
       actionsWidth: 3 * 48 + (hasThemeToggle ? 48 : 0) + (_canToggleDualMode ? 52 : 0) + 6,
     );
 
@@ -6286,21 +6537,18 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           if (_canToggleDualMode)
             _buildModeToggle(
               context,
-              // Hapın genişlik payı: yanındaki 44-48 dp'lik düğmeler (yenile, çıkış, dişli, [tema], [Ana sayfa]).
-              otherActions: 3 + (hasThemeToggle ? 1 : 0) + (showHome ? 1 : 0),
+              // Hapın genişlik payı: yanındaki 44-52 dp'lik düğmeler (yenile, dişli, [tema], [Ana sayfa]). P2-26: çıkış AppBar'dan
+              // kalktı (çekmecenin dibinde, onaylı), bu yüzden pay iki sabit düğmedir.
+              otherActions: 2 + (hasThemeToggle ? 1 : 0) + (showHome ? 1 : 0),
               homeShown: showHome,
             ),
           // Aydınlık / karanlık tema geçişi (44 dp, diğer eylem düğmeleriyle aynı boyut ve yoğunluk).
           const ThemeToggleButton(iconSize: 20),
-          _appBarAction(
-            tooltip: 'Yenile',
-            icon: const Icon(Icons.refresh_rounded, size: 20),
-            onPressed: _handleGlobalRefresh,
-          ),
-          _appBarAction(
-            tooltip: 'Çıkış Yap',
-            icon: Icon(Icons.logout_rounded, color: AppTone.danger.ink(palette), size: 20),
-            onPressed: () => widget.authService.logout(),
+          // P2-26: belirgin "Yenile" (yuvarlak, çerçeveli; sürerken ilerleme). "Çıkış Yap" AppBar'da DEĞİL: menünün dibinde
+          // ve onaylı (yanlışlıkla çıkış olmasın).
+          RefreshActionButton(
+            status: _refreshStatus,
+            onPressed: () => unawaited(_refreshAll()),
           ),
           // İP-1D / G2: Ayarlar sağ üstte dişli; sağdan açılan Ayarlar panelini (endDrawer) açar.
           Builder(
@@ -6388,12 +6636,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         },
         onSelect: _selectMenu,
         onOpenHelp: _openHelp,
-        onLogout: () {
-          Navigator.pop(context);
-          widget.authService.logout();
-        },
+        onOpenFeedback: _openFeedback,
+        // P2-26: çıkış her zaman onaydan geçer; vazgeçilirse çekmece açık kalır ve oturum kapanmaz.
+        onLogout: () => unawaited(_confirmAndLogout()),
         // İP-1D / G2: site seçici çekmecenin en üstünde.
         siteContext: _siteContext(session),
+        // K8 (P1-16): kompakt menü (yalnız yerleşim) + her zaman erişilen "Tüm işlemler".
+        featuredItems: _featuredMenuItems(session),
+        onOpenAllActions: _openAllActions,
       ),
       // İP-1D / G2: Ayarlar öğeleri sağ üstteki dişliden açılan panelde (çekmeceyle aynı görünürlük kuralı ve rozetler).
       endDrawer: YanMenuAyarlar(
@@ -6430,6 +6680,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            _contextStripSlot(session),
             SafeArea(bottom: false, child: _urgentBannerSlot(session)),
             Expanded(
               child: DecoratedBox(
@@ -6469,7 +6720,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       builder: (context, constraints) {
         final horizontalPadding = constraints.maxWidth < 600 ? 16.0 : 20.0;
         return RefreshIndicator(
-          onRefresh: _handleGlobalRefresh,
+          onRefresh: _refreshAll,
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
             padding: EdgeInsets.fromLTRB(horizontalPadding, 10.0, horizontalPadding, 56.0),
@@ -6659,6 +6910,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       session: session,
       audience: audience,
       menuItems: _visibleMenuItems(session),
+      // K8: ızgara kompakt menüyle AYNI kümeyi gösterir; öne çıkmayanlar "Tüm işlemler" kartının ardındadır.
+      featuredItems: _featuredMenuItems(session),
+      onOpenAllActions: _openAllActionsPage,
       badgeCounts: _menuBadgeCounts(session),
       badgeNouns: _menuBadgeNouns,
       onOpen: _openMenuItem,
@@ -6699,6 +6953,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       quickActionItems: resident ? _quickActionItems() : null,
       onCreateGuestPass: resident ? _guestPassAction(session) : null,
       attentionBar: _attentionBarFor(session, audience),
+      // Dokun-ara (P2-23): sakinde "Yöneticiyi ara" kutusu; profilinde telefonu olmayan site yöneticisinde "telefon ekleyin" ipucu.
+      fetchManagerContacts: resident ? widget.authService.getManagerContacts : null,
+      managerPhoneMissing:
+          audience == ShowcaseAudience.admin &&
+          session.role == UserRole.siteManager &&
+          (session.phoneNumber ?? '').trim().isEmpty,
     );
     if (!embedIndividualHome) return showcase;
     return Column(

@@ -22,6 +22,7 @@ import { SITE_DIR_PATTERN, UUID_PATTERN, checkStorage, isInside, purgeQuarantine
 import { sweepStaleNoticeUploads } from './payment_notice_upload.js';
 import { ensureStorageIdentity, loadKnownKeys, orphanGuardTripped, siteDirGuardTripped, siteHasRecords } from './document_integrity.js';
 import { ATTACHMENT_SUBTREE, ATTACHMENT_UPLOAD_TTL_MINUTES, attachmentLimits } from './work_attachments_common.js';
+import { cleanStaleFeedbackUploads } from './feedback_maintenance.js';
 
 /** "DOCS" (0x444F4353): süreçler arası tek çalışan için session advisory kilidinin birinci anahtarı; ikincisi 1. */
 export const MAINTENANCE_LOCK = Object.freeze([0x444f4353, 1]);
@@ -49,6 +50,7 @@ const emptySummary = () => ({
   attachment_orphans: 0,
   attachment_site_dirs: 0,
   notice_stale_uploads: 0, // dekont bildirimi (066): bayat `uploading` satır + dosyası
+  feedback_stale_uploads: 0, // geri bildirim ekleri (103): bayat `uploading` satır + dosyası
   errors: 0,
 });
 
@@ -508,6 +510,7 @@ export async function runDocumentsMaintenanceOnce({ now = Date.now(), env = proc
       if (storage.ok) {
         await safe(summary, 'stale_uploads', () => cleanStaleUploads(storage.root, limits, summary, client));
         await safe(summary, 'attachment_stale_uploads', () => cleanStaleAttachmentUploads(storage.root, summary, client));
+        await safe(summary, 'feedback_stale_uploads', () => cleanStaleFeedbackUploads(storage.root, summary, client));
         await safe(summary, 'notice_stale_uploads', async () => {
           summary.notice_stale_uploads += await sweepStaleNoticeUploads(client);
         });

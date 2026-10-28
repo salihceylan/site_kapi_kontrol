@@ -19,6 +19,7 @@ import 'package:site_kapi_kontrol/models/finance_home.dart';
 import 'package:site_kapi_kontrol/models/guest_pass.dart';
 import 'package:site_kapi_kontrol/models/managed_user_account.dart';
 import 'package:site_kapi_kontrol/models/managed_user_page.dart';
+import 'package:site_kapi_kontrol/models/manager_contact.dart';
 import 'package:site_kapi_kontrol/models/management_terms.dart';
 import 'package:site_kapi_kontrol/models/management_type.dart';
 import 'package:site_kapi_kontrol/models/apartment_crm.dart';
@@ -1174,6 +1175,13 @@ class AuthApi {
           .map(DirectorySite.fromJson)
           .toList(),
     );
+  }
+
+  /// Sakin "Yöneticiyi ara": bağı olunan her sitenin yönetici adı ve profil telefonu (`GET /app/manager-contact`). Eski
+  /// sunucuda uç yoktur (404): çağıran bunu "özellik yok" sayar.
+  Future<List<ManagerContact>> getManagerContacts({required String token}) async {
+    final payload = await _teamJson('GET', '/app/manager-contact', token, 200);
+    return _parsePayload('Yönetici bilgisi', () => ManagerContact.listFromJson(payload));
   }
 
   Future<List<PendingInvitation>> listMyInvitations({required String token}) async {

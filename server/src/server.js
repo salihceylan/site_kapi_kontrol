@@ -20,6 +20,7 @@ import { guestPassesRouter } from './routes/guest_passes_routes.js';
 import { doorLogRouter } from './routes/door_log_routes.js';
 import { membershipRouter } from './routes/membership_routes.js';
 import { moduleRouter } from './modules/module_routes.js';
+import { menuLayoutRouter } from './modules/menu_layout_routes.js';
 import { moduleRequestRouter } from './modules/module_request_routes.js';
 import { siteApplicationRouter } from './modules/site_application_routes.js';
 import { peopleRouter } from './modules/people_routes.js';
@@ -49,6 +50,7 @@ import { clientErrorBodyParser } from './modules/client_error_routes.js';
 import { startClientErrorPurge, stopClientErrorPurge } from './modules/client_error_purge.js';
 import { documentRouter } from './modules/document_routes.js';
 import { workTrackingRouter } from './modules/work_tracking_routes.js';
+import { feedbackRouter } from './modules/feedback_routes.js';
 import { reservationRouter } from './modules/reservation_routes.js';
 import { surveyRouter } from './modules/survey_routes.js';
 import { visitorLogRouter } from './modules/visitor_log_routes.js';
@@ -141,6 +143,8 @@ app.use(guestPassesRouter);
 app.use(doorLogRouter);
 app.use(membershipRouter);
 app.use(moduleRouter);
+// Site menu yerlesimi (K8): /manager/sites/:siteCode/menu-layout (kompakt menu kumesi; modul acip kapatmaz, yetenekten ayri katman).
+app.use(menuLayoutRouter);
 app.use(moduleRequestRouter);
 app.use(siteApplicationRouter);
 app.use(peopleRouter);
@@ -161,6 +165,8 @@ app.use(financeHomeRouter);
 app.use(documentRouter);
 // Is takibi (ariza, bakim, talep): /manager/sites/:siteCode/work-items[...] + /app/work-items[...] (modul work_tracking, varsayilan KAPALI).
 app.use(workTrackingRouter);
+// Geri bildirim (sayfa baglamli, 103): POST /app/feedback + PUT .../attachments/:attId/content, yonetici /manager/sites/:siteCode/feedback, sahip /admin/feedback (modul kapisi yok; platform ozelligi).
+app.use(feedbackRouter);
 // Rezervasyon ve konsiyerj: /manager/sites/:siteCode/{reservation-areas,reservations,concierge-requests}[...] + /app/{reservation-areas,reservations,concierge-requests}[...] (modul reservation, varsayilan KAPALI).
 app.use(reservationRouter);
 // Anket ve oylama: /manager/sites/:siteCode/surveys[...] + /app/surveys[...] (modul survey, varsayilan KAPALI).
