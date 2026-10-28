@@ -402,6 +402,14 @@ void main() {
       expect(page.nextBeforeId, 8);
     });
 
+    test('alacak iadesi hareketi (088) tanınır: çıkış, etiket "Alacak iadesi"', () {
+      final m = AccountMovement.fromJson(<String, dynamic>{'id': 2, 'kind': 'refund', 'amount_minor': -150000, 'label': 'Alacak iadesi: A Blok - Daire 3'});
+      expect(m.kind, MovementKind.refund);
+      expect(m.kind.label, 'Alacak iadesi');
+      expect(m.amountMinor, -150000);
+      expect(m.isReversal, isFalse);
+    });
+
     test('bilinmeyen hareket türü genel etikete düşer', () {
       final m = AccountMovement.fromJson(<String, dynamic>{'id': 1, 'kind': 'yeni_tur', 'amount_minor': 5});
       expect(m.kind, MovementKind.unknown);

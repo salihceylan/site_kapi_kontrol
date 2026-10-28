@@ -365,6 +365,8 @@ class MovementTile extends StatelessWidget {
         return (AppTone.neutral, Icons.flag_rounded);
       case MovementKind.reversal:
         return (AppTone.warning, Icons.undo_rounded);
+      case MovementKind.refund:
+        return (AppTone.danger, Icons.assignment_return_rounded);
       case MovementKind.unknown:
         return (AppTone.neutral, Icons.help_outline_rounded);
     }

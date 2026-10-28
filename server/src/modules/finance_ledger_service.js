@@ -47,6 +47,7 @@ import {
   resolvePaymentAccount,
 } from './finance_accounts.js';
 import { loadPaymentFundSplit } from './finance_funds.js';
+import { MANAGED_SOURCE_KINDS, entryManagedByFlow, hasApprovedRefund, refundBlocksPaymentChange } from './finance_refund_guard.js';
 import { minorToNumber } from './finance_money.js';
 import { loadAccountBalance, postPayment } from './finance_parties.js';
 import { activeReceiptRef, cancelActiveReceiptForEntry } from './finance_receipts.js';
@@ -303,8 +304,15 @@ export async function reverseEntry({ siteCode, rawId, body, actor, now = new Dat
     if (original.kind === 'reversal') {
       throw entryNotReversible();
     }
+    if (MANAGED_SOURCE_KINDS.includes(original.source_kind)) {
+      // alacak iadesi / borç devri satırı: yalnız kendi akışından geri alınır (hesap hareketi, makbuz, devir kaydı birlikte)
+      throw entryManagedByFlow();
+    }
     if (await isReversed(client, id)) {
       throw entryAlreadyReversed();
+    }
+    if (original.kind === 'payment' && (await hasApprovedRefund(client, { siteCode, apartmentId, accountParty: entryAccountParty(original) }))) {
+      throw refundBlocksPaymentChange();
     }
     const openPeriod = await resolveOpenPeriod(client, siteCode, now);
     let receiptCancelled = false;
@@ -403,6 +411,9 @@ export async function correctPayment({ siteCode, rawId, body, actor, now = new D
     }
     if (await isReversed(client, id)) {
       throw entryAlreadyReversed();
+    }
+    if (await hasApprovedRefund(client, { siteCode, apartmentId, accountParty: entryAccountParty(original) })) {
+      throw refundBlocksPaymentChange();
     }
     const newPeriod = periodOfDate(input.entryDate);
     if (await isPeriodClosed(client, siteCode, newPeriod)) {

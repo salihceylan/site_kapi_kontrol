@@ -517,6 +517,33 @@ async function notify(client, state, userCodes, kind, message, exceptUserCode = 
   });
 }
 
+/** Kiracı hesabının ödenmemiş borcu (kuruş, BigInt); finans modülü / tabloları okunamazsa 0n. Kiracı çıkışını ASLA bozmaz (SAVEPOINT). */
+async function tenantDebtMinorSafe(client, siteCode, apartmentId) {
+  try {
+    await client.query('SAVEPOINT tenant_debt_read');
+    const { tenantDebtMinor } = await import('./finance_exit_notice.js');
+    const debt = await tenantDebtMinor(client, { siteCode, apartmentId });
+    await client.query('RELEASE SAVEPOINT tenant_debt_read');
+    return debt;
+  } catch (_error) {
+    await client.query('ROLLBACK TO SAVEPOINT tenant_debt_read').catch(() => {});
+    return 0n;
+  }
+}
+
+/** Çıkış sonrası malike giden genel bildirim: borçluysa tutarı da söyler (finance_exit_notice.exitDoneMessage). */
+async function exitDoneText(label, debtMinor) {
+  if (debtMinor <= 0n) {
+    return `Kiracı ${label} dairesinden ayrıldı. Daire yönetimi size döndü.`;
+  }
+  try {
+    const { exitDoneMessage } = await import('./finance_exit_notice.js');
+    return exitDoneMessage(label, debtMinor);
+  } catch (_error) {
+    return `Kiracı ${label} dairesinden ayrıldı. Daire yönetimi size döndü.`;
+  }
+}
+
 /** GET /app/apartments/:id  (tek daire karti; ilgisiz kullanici 404) */
 export async function readApartmentItem(authUser, rawApartmentId) {
   const uc = userCodeOf(authUser);
@@ -1006,9 +1033,11 @@ export async function exitTenancy({ authUser, apartmentId }) {
     if (!me.is_tenant) {
       throw forbidden('Çıkış yalnızca dairenin kiracısı içindir.');
     }
+    // Çıkıştan sonraki genel bildirim metni borçlu / borçsuz ayrılır (K1 / P1-1): kiracı hesabındaki ödenmemiş borç çıkıştan önce okunur (çıkış bakiyeyi değiştirmez).
+    const debtMinor = await tenantDebtMinorSafe(client, site, state.apartment.id);
     closed = await endTenancy(client, authUser, state, 'tenant_exit');
     await audit(client, authUser, 'apartment_mgmt.tenant_exit', state, { tenant_person_id: state.roles.tenant.person_id });
-    await notify(client, state, [state.roles.owner?.user_code], 'tenant_exit', `Kiracı ${aptLabel(state.apartment)} dairesinden ayrıldı. Daire yönetimi size döndü.`);
+    await notify(client, state, [state.roles.owner?.user_code], 'tenant_exit', await exitDoneText(aptLabel(state.apartment), debtMinor));
   });
   await afterAccessClosed(siteCode, closed, 'apartment_mgmt_tenant_exit');
   return { ok: true };

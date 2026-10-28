@@ -409,3 +409,65 @@ tazminat tutara katılmışsa faiz üstüne faiz riski vardır [AVUKAT DOĞRULAS
 Eski tasarım notu (tarihî):
 
 `GET /manager/sites/:siteCode/finance/home?month=YYYY-AA` (varsayılan bu ay, İstanbul; yetki: finans okuma; modül kapalı 403 `MODULE_DISABLED`; no-store; tek REPEATABLE READ READ ONLY işlem). Gövde: `month`, `numbers` (`charged_minor` devir ve tazminat hariç, `late_fee_minor`, `collected_minor`, `collection_rate_bp` null olabilir, `overdue_apartment_count` hesap bazlı vadesi geçen, `apartment_count`, `cash_total_minor` hesap yoksa null, `cash_account_count`), `steps` (charge, notify, match, expense, report; durum done/partial/todo/setup/unavailable), `attention` (kayıt defteri `server/src/modules/attention_registry.js`: modül `registerAttentionSource({key, module, run(db, siteCode) -> {count, total_minor?}|null})` ile satır ekler; bugün `unassigned_payments`), `recent` (son 3 ayda tahsilat, tahsilat iptali, gider, gider iptali; en yeni 5; kişi adı ve açıklama yok). "Rapor al" adımı: gelir-gider ve kurul özeti rapor uçları yönetici/süper için `finance.report.viewed {report, from, to}` audit satırı yazar; finans dışa aktarma (`export`) da sayılır. Gecikme tazminatının "kapalı ay" şartı değişmedi. İstemci: `ManagerMonthPanel` (yalnız yönetici kitlesi, yazma yetkili ve finans açık site; hata "Bu ayın özeti alınamadı." + Tekrar dene).
+
+## Kiracı borcunun malike devri (K1 / P1-1, 2026-10-28; migration 089)
+
+Sahip sözü: «Kiracı ödemezse daire borçlu olduğu için mal sahibi öder» ve «Kiracı çıkmadan önce borcu varsa mal sahibi bilgilendirilir». Hesap modeli (ev sahibi / kiracı ayrı hesap) **bozulmaz**;
+devir yazılımın kendiliğinden verdiği bir karar DEĞİLDİR: **açık, yönetici onaylı, izli ve geri alınabilir** bir eylemdir.
+
+**Devredilebilir kalem:** kiracı hesabında M1 mahsubu (`finance_m1.m1Remainders`: ödemeler vadesi en eski borçtan başlayarak düşer) sonrasında kalanı > 0 olan, **vadesi bugün ve öncesi** olan,
+**gecikme tazminatı ve alacak iadesi OLMAYAN** `charge`. Gecikme tazminatı kalemleri devredilmez (kiracıda kalır; önizlemede ayrı listelenir). Planlama SAFTIR: `finance_liability_plan.js`.
+
+**Defter (eklemeli, kalem bazlı ters kayıt).** Her devredilen kalem D (tutar A, kalan R) için, hepsi `source_kind='liability_transfer'`, `source_id` = devir kaydı:
+- kiracı hesabında D'nin TERSİ (`reversal`, asılın tersi; DB tetikleyicileri aynalamayı / hesabı / kasayı zorlar);
+- D kısmen ödenmişse (R < A) kiracı hesabında ödenen kısım (A − R) için AYNI vadeyle YENİ borç (kiracının ödemesi o kısmı kapatmaya devam eder);
+- malik hesabında R tutarında YENİ borç (aynı ad, aynı vade, **aynı kasa**: Fon borcu Fon borcu olarak devredilir; kasa AÇIK yazılır; `run_id` ve tanım bağı yoktur).
+Net: kiracı −R, malik +R, iki hesabın toplamı DEĞİŞMEZ. Satırlar açık dönemde ve bugünün tarihiyle yazılır (kapalı dönemde de çalışır; vade korunur). Tahakkuk raporlarında (`charged`) devir satırları
+sayılmaz (net 0); raporlar `COALESCE(source_kind,'') NOT IN ('opening','refund','liability_transfer')` ile süzer.
+
+**İz:** tablo `finance_liability_transfers` (kim / ne zaman / kaç kalem / toplam / neden + önizleme özeti; değişmez; geri alma YENİ satırdır, `reverses_transfer_id`, yönler yer değiştirir); denetim kaydı
+`finance.liability_transfer.created|reversed` (tutar / kalem sayısı / daire / dönem; **neden metni ASLA**); malike uygulama içi bildirim. Devir ekstrede açık etiketlidir
+(`source_kind`: `liability_transfer`; açıklama «Kiracı hesabından devreden borç» / «Devir sonrası kalan borç (ödenmiş kısım)» / «Devir geri alındı: borç kiracı hesabına döndü»).
+
+**Uçlar** (`/manager/sites/:siteCode/finance/…`; yazma = yönetici / süper, okuma = + kurul adsız, görevli / sakin 403, başka site 403):
+| Uç | Açıklama |
+|---|---|
+| `GET apartments/:id/liability-transfer/preview` | `{ has_owner, can_transfer, items[{entry_id, name, due_date, original_minor, remaining_minor, paid_minor, fund}], excluded_late_fee[], item_count, total_minor, preview_hash, tenant_balance_minor, owner_balance_minor }`. Yazmaz. |
+| `POST apartments/:id/liability-transfer` | `{ expected_total_minor, expected_hash, reason, idempotency_key }` -> 201 `{ transfer, tenant_balance_minor, owner_balance_minor }`. Tutar / özet değiştiyse 409 `LIABILITY_TRANSFER_CHANGED`; malik kaydı yoksa 409 `NO_OWNER`; kalem yoksa 409 `NOTHING_TO_TRANSFER`; aynı anahtar = aynı kayıt (200), farklı gövde 409 `IDEMPOTENCY_CONFLICT`. |
+| `GET apartments/:id/liability-transfers` | devirler ve geri almalar (`reversible`: geri alınabilir mi). |
+| `POST liability-transfers/:id/reverse` | `{ reason, idempotency_key }`. Malik hesabındaki devir borçları ve kiracıdaki «ödenmiş kısım» borçları TERS çevrilir, kiracıya her kalemin TAM tutarı yeniden yazılır (ters kaydın tersi olmadığı için); bakiyeler devirden önceki değerlere döner, satırlar KALIR. Bir devrin tek geri alması (409 `LIABILITY_TRANSFER_ALREADY_REVERSED`); geri alma kaydı geri alınamaz (409 `LIABILITY_TRANSFER_NOT_REVERSIBLE`); **devirden sonra malik hesabına ödeme girildiyse 409 `LIABILITY_TRANSFER_OWNER_PAID`.** |
+Genel «kaydı iptal et» ucu (`entries/:id/reverse`) devir / iade satırını reddeder (409 `ENTRY_MANAGED_BY_FLOW`).
+
+**Çıkış öncesi malik bildirimi (S4).** Kiracılık biterken (kiracı «çıkış», «Daireden ayrıl», yönetici «Taşındı»; hepsi `people_service.closeResidency`) kiracı hesabında ödenmemiş borç varsa, çıkış TAMAMLANMADAN
+önce malik(ler)e uygulama içi bildirim gider (`finance_exit_notice.js`; tutar + «kiracının hesabında kalır; site yönetimi onaylarsa hesabınıza devredilebilir»). Çıkış **ENGELLENMEZ**, bildirim hatası çıkışı bozmaz
+(SAVEPOINT). Çıkıştan sonraki genel malik bildirimi borçlu / borçsuz ayrılır. Yöneticiye dikkat kaydı: `tenant_debt_pending_transfer` (kiracısı ayrılmış, kiracı hesabı borçlu daire sayısı + toplam).
+
+Metin ve hukuki zemin: **avukat onayı bekler** (`docs/yasal/AVUKAT_KONTROL_LISTESI.md` madde 42).
+
+## Alacak iadesi (K4 / P1-4, 2026-10-28; migration 088)
+
+Sahip sözü: «Fazla ödeme yapan isterse parasını geri alır; almazsa gelecek borcundan düşer». **Fazla ödeme VARSAYILAN olarak ALACAK kalır** (mevcut M1 / mahsup davranışı DEĞİŞMEDİ). İade **isteğe bağlı** ve **yönetici onaylıdır**.
+
+**Akış.** Sakin «Fazla ödememi iade et» (tutar ≤ alacak) ya da yönetici sakin adına talep açar (`requested`) → yönetici ödeme hesabını (kasa / banka) seçip **onaylar** ya da gerekçeyle **reddeder**; sakin onaydan önce
+**geri çekebilir** (`cancelled`). Onayda TEK işlemde: (1) defterde avansı tüketen `charge` (`source_kind='refund'`, `source_id` = iade, kasa YOK), (2) seçilen hesaptan ÇIKIŞ hareketi
+(`account_movements.kind='refund'`, negatif; nakit hesapta bakiye yetmiyorsa 409 `CASH_INSUFFICIENT`), (3) iade makbuzu `IA-yıl-sıra` (boşluksuz sayaç `finance_refund_counters`, değişmez anlık görüntü +
+doğrulama kodu; tahsilat makbuzu `MK` dizisinden AYRI), (4) denetim kaydı `finance.refund.approved` (tutar / hesap / makbuz no; not ve ret nedeni ASLA), (5) sakine bildirim. Yanlış onay **geri alınır**
+(ters kayıt + ayna hareket; makbuz iptal sayılır; `finance.refund.reversed`).
+
+**Kurallar.** Tutar onayda daire kilidi altında `max(0, −hesap bakiyesi)` ile sınanır (409 `REFUND_EXCEEDS_CREDIT`); talep anında bekleyen talepler de düşülür (en çok 5 bekleyen). Tutar onayda değiştirilemez. İade tarihi
+HER ZAMAN bugündür; ayı kapalıysa 409 `PERIOD_CLOSED`. Sakin yalnız KENDİ hesabı için talep açar (başka daire 404). Hesapta onaylı iade varken o hesabın **ödemesi iptal / düzeltilemez** (409
+`REFUND_BLOCKS_PAYMENT_CHANGE`; önce iade geri alınır). Durum makinesi DB tetikleyicisiyle de korunur (çekirdek sütunlar değişmez; onay için hareket ve defter satırı DB'de doğrulanır; silinemez).
+
+**Kasa (fon) değişmezi.** `allocateFunds`'a isteğe bağlı `refund` bayrağı eklendi (`toAllocatorEntry`: `source_kind='refund'` olan `charge`): iade YALNIZ avansı tüketir (önce genel avans, sonra kasa kısıtlı avanslar),
+hiçbir kasaya tahsilat YAZMAZ; ödemenin dağılımına `refunded` eklenir (yalnız iade varken; iadesiz girdide çıktı birebir aynıdır — rastgele özellik testi). İşletme + Fon + avans = hesapların toplamı **korunur**: iade fiziksel
+hesabı VE avansı eşit azaltır.
+
+**Raporlar.** İade tahakkuk (`charged`) sayılmaz; gelir-gider ve özetlerde iade **net tahsilatı düşürür** (`collected` = ödemeler − iadeler); «Kasa durumu»nda iade hareketi **Giderler (çıkış) sütunundadır**
+(gider raporu — `expenses` tablosu — iadeyi içermez). Hesap hareket listesinde etiket «Alacak iadesi: {daire}».
+
+**Uçlar.** Sakin: `POST /app/my-finance/refund-requests` `{ apartment_id, amount_minor, note?, idempotency_key }`, `GET …`, `POST …/:id/cancel`. Yönetici (`/manager/sites/:siteCode/finance/refunds`; yazma = yönetici / süper,
+okuma = + kurul adsız, görevli / sakin 403): `GET` (süzgeç `status`, `apartment_id`, `before_id`), `GET /:id`, `POST` (sakin adına talep: + `account_party`), `POST /:id/approve { pay_account_id, idempotency_key }`,
+`POST /:id/reject { reason, idempotency_key }`, `POST /:id/reverse { reason, idempotency_key }`. Dikkat kaydı: `refund_requests` (bekleyen talep sayısı + toplamı). Makbuz PDF'i istemcide üretilir (sunucu anlık görüntü + kod verir).
+
+**Doğrulama.** Birim: `finance_funds_refund.test.js` (allocateFunds + rastgele özellik), `finance_liability_plan.test.js`, `finance_refunds.test.js`, `finance_*_schema.test.js`, `finance_devir_iade_routes.test.js` (yetki matrisi).
+Gerçek PostgreSQL: `server/scripts/qa_finance_devir_iade.mjs` (devir / geri alma, iade talep → onay → makbuz → geri alma, kasa değişmezi, yarışlar, DB korumaları; 70 kontrol).

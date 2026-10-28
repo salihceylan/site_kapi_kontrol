@@ -363,8 +363,8 @@ export async function getSummary(siteCode, now = new Date(), db = pool) {
       ),
       period_sums AS (
         SELECT
-          COALESCE(SUM(amount_minor) FILTER (WHERE kind = 'charge' OR (kind = 'reversal' AND amount_minor < 0)), 0) AS charged,
-          COALESCE(-SUM(amount_minor) FILTER (WHERE kind = 'payment' OR (kind = 'reversal' AND amount_minor > 0)), 0) AS collected
+          COALESCE(SUM(amount_minor) FILTER (WHERE COALESCE(source_kind, '') NOT IN ('refund', 'liability_transfer') AND (kind = 'charge' OR (kind = 'reversal' AND amount_minor < 0))), 0) AS charged,
+          COALESCE(-SUM(amount_minor) FILTER (WHERE kind = 'payment' OR (kind = 'reversal' AND amount_minor > 0)), 0) - COALESCE(SUM(amount_minor) FILTER (WHERE source_kind = 'refund'), 0) AS collected
         FROM ledger_entries
         WHERE site_code = $1 AND period = $2::DATE
       )
