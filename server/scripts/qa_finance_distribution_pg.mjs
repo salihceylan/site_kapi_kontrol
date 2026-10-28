@@ -26,6 +26,8 @@ if (process.env.QA_CONFIRM_DISPOSABLE_DB !== 'yes') {
   process.exit(3);
 }
 process.env.JWT_SECRET ||= 'qa-integration-secret-0123456789abcdef-0123456789';
+// K2 (090): Fon hesabina borc yazan tahakkuk (ek borc / aylik tanim borclandirma) dayanak ister; bu betigin konusu dayanak DEGIL: Karar Defteri KAPALI sitelerde serbest metin gerekce yeter.
+const DECISION_REASON = 'QA tahakkuk gerekcesi';
 console.error = () => {};
 
 const { pool, ensureDbSchema } = await import('../src/db.js');
@@ -170,13 +172,13 @@ const S1 = await mkSite('QA Dagitim Sitesi', 6, { lands: [[1, 10], [2, 10], [3, 
   ok('kisi sayisi onizlemesi gercek SQL ile: gecmis sakin sayilmaz, kayitsiz daire eksik veri, pay toplami birebir, kurus artiklari en buyuk kalana');
 
   await rejects(
-    () => postCharge({ siteCode: S1.code, body: { ...body, expected_total_minor: preview.total_minor, expected_apartment_count: preview.apartment_count, expected_hash: preview.preview_hash, idempotency_key: key('inc') }, actor: MANAGER }),
+    () => postCharge({ siteCode: S1.code, body: { ...body, decision_reason: DECISION_REASON, expected_total_minor: preview.total_minor, expected_apartment_count: preview.apartment_count, expected_hash: preview.preview_hash, idempotency_key: key('inc') }, actor: MANAGER }),
     'PREVIEW_INCOMPLETE',
     'eksik veri onaysiz',
   );
   const posted = await postCharge({
     siteCode: S1.code,
-    body: { ...body, skip_missing: true, expected_total_minor: preview.total_minor, expected_apartment_count: preview.apartment_count, expected_hash: preview.preview_hash, idempotency_key: key('skip') },
+    body: { ...body, decision_reason: DECISION_REASON, skip_missing: true, expected_total_minor: preview.total_minor, expected_apartment_count: preview.apartment_count, expected_hash: preview.preview_hash, idempotency_key: key('skip') },
     actor: MANAGER,
   });
   assert.equal(posted.skipped_count, 1);
@@ -209,7 +211,7 @@ const S1 = await mkSite('QA Dagitim Sitesi', 6, { lands: [[1, 10], [2, 10], [3, 
   const defPost = await postDefinition({
     siteCode: S1.code,
     rawId: String(definition.id),
-    body: { period: PERIOD.slice(0, 7), skip_missing: true, expected_total_minor: defPreview.total_minor, expected_apartment_count: defPreview.apartment_count, expected_hash: defPreview.preview_hash, idempotency_key: key('def') },
+    body: { period: PERIOD.slice(0, 7), decision_reason: DECISION_REASON, skip_missing: true, expected_total_minor: defPreview.total_minor, expected_apartment_count: defPreview.apartment_count, expected_hash: defPreview.preview_hash, idempotency_key: key('def') },
     actor: MANAGER,
   });
   assert.equal(defPost.skipped_count, 1);
@@ -350,7 +352,7 @@ const S3 = await mkSite('QA Devir Sitesi', 4);
   const chargePreview = await previewCharge({ siteCode: S3.code, body: chargeBody, now: new Date() });
   await postCharge({
     siteCode: S3.code,
-    body: { ...chargeBody, expected_total_minor: chargePreview.total_minor, expected_apartment_count: chargePreview.apartment_count, expected_hash: chargePreview.preview_hash, idempotency_key: key('aidat') },
+    body: { ...chargeBody, decision_reason: DECISION_REASON, expected_total_minor: chargePreview.total_minor, expected_apartment_count: chargePreview.apartment_count, expected_hash: chargePreview.preview_hash, idempotency_key: key('aidat') },
     actor: MANAGER,
   });
   const balance = Number((await one(`SELECT COALESCE(SUM(amount_minor), 0)::TEXT AS s FROM ledger_entries WHERE site_code = $1 AND apartment_id = $2`, [S3.code, c2])).s);

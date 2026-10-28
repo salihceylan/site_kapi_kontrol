@@ -691,13 +691,13 @@ export default async function sectionFunds(t) {
     const reversalsOf = async (id) => Number((await q(`SELECT COUNT(*) AS n FROM ledger_entries WHERE site_code = $1 AND reverses_entry_id = $2`, [FS.code, id])).rows[0].n);
     const corrNoFund = await call('POST', `${P(FS.code)}/entries/${legacyId}/correct`, MGR, { amount_minor: 20000, entry_date: TODAY, method: 'cash', account_id: accountId, idempotency_key: key('k12a'), __strict: true });
     check(
-      'K12a: kisitsiz asil tahsilatin duzeltmesi, ters kayit sonrasi iki tur (Aidat + Fon) acik kalirsa 400 FUND_CHOICE_REQUIRED; islem TAMAMEN geri alinir (ters kayit da yok, asil tahsilat duruyor)',
+      'K3k: kisitsiz asil tahsilatin duzeltmesi, ters kayit sonrasi iki tur (Aidat + Fon) acik kalirsa 400 FUND_CHOICE_REQUIRED; islem TAMAMEN geri alinir (ters kayit da yok, asil tahsilat duruyor)',
       corrNoFund.status === 400 && corrNoFund.body.code === 'FUND_CHOICE_REQUIRED' && corrNoFund.body.fund_choice?.choice_required === true && (await reversalsOf(legacyId)) === 0,
       corrNoFund.body,
     );
     const corrFund = await call('POST', `${P(FS.code)}/entries/${legacyId}/correct`, MGR, { amount_minor: 20000, entry_date: TODAY, method: 'cash', account_id: accountId, fund: 'capital', idempotency_key: key('k12b') });
     check(
-      'K12b: hesap secilince (fund=capital) duzeltme yazilir: yeni tahsilat Fon kisitli, ters kayit asilin kisitini (kisitsiz) tasir; fund_split capital 20000',
+      'K3l: hesap secilince (fund=capital) duzeltme yazilir: yeni tahsilat Fon kisitli, ters kayit asilin kisitini (kisitsiz) tasir; fund_split capital 20000',
       corrFund.status === 201 && corrFund.body.entry?.fund === 'capital' && corrFund.body.reversal?.fund === null && corrFund.body.fund_split?.capital_minor === 20000 && (await reversalsOf(legacyId)) === 1,
       corrFund.body,
     );
