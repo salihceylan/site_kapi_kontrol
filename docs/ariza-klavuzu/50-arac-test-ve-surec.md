@@ -394,8 +394,8 @@ pio run -d cihaz_kontrol -e esp32_relay_wroom
 | [company_qr_tool/app.py:2228](../../company_qr_tool/app.py#L2228) | <code># Otomatik versiyon senkronizasyonu: ota_guncelleme.h dosyasini guncelle</code> | "Derle" düğmesi derlemeden ÖNCE başlığı günceller |
 | [company_qr_tool/app.py:961](../../company_qr_tool/app.py#L961) | <code>def read_firmware_source_version(env: str &#124; None = None) -&gt; str &#124; None:</code> | Sürüm kutusunun başlangıç değeri başlıktan okunur (yoksa son sürüm + 1) |
 | [company_qr_tool/app.py:278](../../company_qr_tool/app.py#L278) | <code>OTA_VERSION_C3_RE = re.compile(r'OTA_VERSION_C3\[\]\s*=\s*"(\d+\.\d+\.\d+)"')</code> | Başlıkta aranan desen: OTA_VERSION_C3[] = "x.y.z" |
-| [cihaz_kontrol/include/ota_guncelleme.h:27](../../cihaz_kontrol/include/ota_guncelleme.h#L27) | <code>inline constexpr char OTA_VERSION_C3[] = "4.3.3";</code> | Araç bu satırı değiştirir; C3 hedef sürümü |
-| [cihaz_kontrol/include/ota_guncelleme.h:28](../../cihaz_kontrol/include/ota_guncelleme.h#L28) | <code>inline constexpr char OTA_VERSION_WROOM[] = "5.2.2";</code> | WROOM hedef sürümü (hedefler birbirinden bağımsız: AGENTS.md kural 4) |
+| [cihaz_kontrol/include/ota_guncelleme.h:32](../../cihaz_kontrol/include/ota_guncelleme.h#L32) | <code>inline constexpr char OTA_VERSION_C3[] = "4.4.0";</code> | Araç bu satırı değiştirir; C3 hedef sürümü |
+| [cihaz_kontrol/include/ota_guncelleme.h:33](../../cihaz_kontrol/include/ota_guncelleme.h#L33) | <code>inline constexpr char OTA_VERSION_WROOM[] = "5.3.0";</code> | WROOM hedef sürümü (hedefler birbirinden bağımsız: AGENTS.md kural 4) |
 
 **Olası nedenler**
 - Şirket aracında "Derle" veya "Sürüm oluştur" kullanıldı: başlık seçilen sürüme eşitlenir (tasarım gereği)
@@ -1043,10 +1043,10 @@ flutter drive --profile -d windows --driver=test_driver/perf_driver.dart --targe
 | --- | --- | --- |
 | [cihaz_kontrol/host_test/run_all.py:22](../../cihaz_kontrol/host_test/run_all.py#L22) | <code>VCVARS = os.environ.get(</code> | vcvars64.bat yolu (varsayılan Visual Studio 18 Community); farklıysa VCVARS ortam değişkeni verilir |
 | [cihaz_kontrol/host_test/run_all.py:21](../../cihaz_kontrol/host_test/run_all.py#L21) | <code>ARDUINOJSON = os.path.normpath(os.path.join(HERE, '..', '.pio', 'libdeps', 'lolin_c3_mini…</code> | ArduinoJson cihaz_kontrol/.pio/libdeps/lolin_c3_mini altında aranır (önce bir kez pio run gerekir) |
-| [cihaz_kontrol/host_test/run_all.py:72](../../cihaz_kontrol/host_test/run_all.py#L72) | <code>print('UYARI: ArduinoJson bulunamadi (%s). Once `pio run -e lolin_c3_mini` ile cihaz_kont…</code> | Uyarı metni ve çözüm: pio run -e lolin_c3_mini |
-| [cihaz_kontrol/host_test/run_all.py:74](../../cihaz_kontrol/host_test/run_all.py#L74) | <code>subprocess.run(['node', 'gen_vectors.mjs'], cwd=HERE, check=True)</code> | t_core için rastgele HMAC vektörleri Node ile üretilir (Node gerekir) |
-| [cihaz_kontrol/host_test/run_all.py:98](../../cihaz_kontrol/host_test/run_all.py#L98) | <code>print('%-78s CALISMADI / DERLENMEDI (cikis=%d)' % (ad, r.returncode))</code> | Derleme/çalıştırma hatası çıktısı; test mantık hatasında "FAIL" satırları ve basarisiz sayısı basılır |
-| [cihaz_kontrol/host_test/README.md:19](../../cihaz_kontrol/host_test/README.md#L19) | <code>## Gereksinimler</code> | Windows + Visual Studio, Python 3, Node.js, PlatformIO ile bir kez derlenmiş cihaz_kontrol |
+| [cihaz_kontrol/host_test/run_all.py:73](../../cihaz_kontrol/host_test/run_all.py#L73) | <code>print('UYARI: ArduinoJson bulunamadi (%s). Once `pio run -e lolin_c3_mini` ile cihaz_kont…</code> | Uyarı metni ve çözüm: pio run -e lolin_c3_mini |
+| [cihaz_kontrol/host_test/run_all.py:75](../../cihaz_kontrol/host_test/run_all.py#L75) | <code>subprocess.run(['node', 'gen_vectors.mjs'], cwd=HERE, check=True)</code> | t_core için rastgele HMAC vektörleri Node ile üretilir (Node gerekir) |
+| [cihaz_kontrol/host_test/run_all.py:102](../../cihaz_kontrol/host_test/run_all.py#L102) | <code>print('%-78s CALISMADI / DERLENMEDI (cikis=%d)' % (ad, r.returncode))</code> | Derleme/çalıştırma hatası çıktısı; test mantık hatasında "FAIL" satırları ve basarisiz sayısı basılır |
+| [cihaz_kontrol/host_test/README.md:20](../../cihaz_kontrol/host_test/README.md#L20) | <code>## Gereksinimler</code> | Windows + Visual Studio, Python 3, Node.js, PlatformIO ile bir kez derlenmiş cihaz_kontrol |
 
 **Olası nedenler**
 - Visual Studio kurulu değil ya da yolu farklı (VCVARS)
