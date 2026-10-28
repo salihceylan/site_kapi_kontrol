@@ -8,6 +8,8 @@
 //      (eski bakiyeler, ters kayitla), cift geri alma, geri alma kaydinin tersi, devirden sonra malik odemesi -> geri alinamaz, genel "kaydi iptal et" ucu devir satirini reddeder
 //   I  iade: talep (alacak siniri, bekleyen talepler, baska daire 404), onay (defter + hesap hareketi + makbuz IA-yil-sira + durum TEK islem), kasa degismezi
 //      (Isletme + Fon + avans = hesaplar toplami), nakit yetersiz, ret (gerekce sakine gorunur), geri alma, iade varken odeme iptali engeli, cift onay yarisi, raporlarda tahakkuk degismez
+//   K17 gecikmede de oneri: kiraci OTURUYOR ama vadesi gecmis, odenmemis borc varsa daire "devredilebilir" adaylar listesinde ve yonetici dikkat satirinda (tenant_debt_overdue_transfer);
+//      devirden sonra listeden duser, geri almada geri gelir; kiraci ayrilmissa reason=exited (gecikme satirina sayilmaz); malik kaydi olmayan daire can_transfer=false
 // Her kontrol `check(ad, kosul, ayrinti)`; en sonda ozet ve cikis kodu (0 = hepsi gecti).
 
 const SERVER = new URL('..', import.meta.url).href;
@@ -142,6 +144,18 @@ console.log('--- D. kiraci borcunun malike devri (089) ---');
   check('D1: onizleme: vadesi gecmis ve odenmemis 2 kalem, toplam 1500 (kismi odenmis kalem 500; gelecek vadeli kalem dahil degil)', preview.item_count === 2 && preview.total_minor === 1500 && preview.items[0].remaining_minor === 500 && preview.items[0].paid_minor === 500 && preview.items[1].remaining_minor === 1000, preview);
   check('D1b: onizleme malik kaydini ve can_transfer bilgisini verir; yazmaz', preview.has_owner === true && preview.can_transfer === true && (await balance(site, apt, 'tenant')) === tenantBefore);
 
+  // K17: kiraci HALA OTURUYOR, vadesi gecmis 1500 odenmemis borc var -> devir yalniz cikista degil gecikmede de yoneticiye onerilir
+  const k17a = await liability.listTransferCandidates(site.code);
+  const k17Item = k17a.items.find((i) => i.apartment_id === apt);
+  check('K17a: kiraci OTURAN dairede vadesi gecmis borc adaylarda: reason=overdue, tenant_present, malik var, can_transfer; 2 kalem / 1500; en eski devredilebilir vade -30 gun (1. kalem tamamen odendi)',
+    Boolean(k17Item) && k17Item.reason === 'overdue' && k17Item.tenant_present === true && k17Item.has_owner === true && k17Item.can_transfer === true && k17Item.item_count === 2 && k17Item.total_minor === 1500 && k17Item.oldest_due_date === ago(30),
+    k17Item);
+  check('K17a2: aday listesi onizlemeyle ayni tutar ve kalem sayisini verir; hicbir satir yazmaz', k17Item?.total_minor === preview.total_minor && k17Item?.item_count === preview.item_count && (await balance(site, apt, 'tenant')) === tenantBefore);
+  const k17Att = await liability.tenantDebtOverdueAttention(pool, site.code);
+  check('K17b: yonetici dikkat satiri (tenant_debt_overdue_transfer) bu daireyi sayar: count 1, toplam 1500', k17Att.count === 1 && k17Att.total_minor === 1500, k17Att);
+  const k17Keys = (await load('src/modules/attention_registry.js')).attentionSourceKeys();
+  check('K17b2: dikkat kaynaklari kayitli (gecikme ve cikis iki ayri satir)', k17Keys.includes('tenant_debt_overdue_transfer') && k17Keys.includes('tenant_debt_pending_transfer'), k17Keys);
+
   const transferKey = key('devir');
   const body = { expected_total_minor: preview.total_minor, expected_hash: preview.preview_hash, reason: 'Kiraci tasindi, borc odenmedi', idempotency_key: transferKey };
   const out = await liability.createLiabilityTransfer({ siteCode: site.code, rawApartmentId: apt, body, actor: MANAGER });
@@ -149,6 +163,8 @@ console.log('--- D. kiraci borcunun malike devri (089) ---');
   const ownerAfter = await balance(site, apt, 'owner');
   check('D2: devir: kiraci hesabi tam devredilen tutar kadar duser, malik hesabi AYNI tutar kadar artar', tenantBefore - tenantAfter === 1500 && ownerAfter - ownerBefore === 1500, { tenantBefore, tenantAfter, ownerBefore, ownerAfter });
   check('D2b: iki hesabin toplami degismez', tenantBefore + ownerBefore === tenantAfter + ownerAfter);
+  const k17c = await liability.listTransferCandidates(site.code);
+  check('K17c: devirden sonra daire adaylardan duser; dikkat satiri 0', !k17c.items.some((i) => i.apartment_id === apt) && (await liability.tenantDebtOverdueAttention(pool, site.code)).count === 0, k17c);
   check('D2c: yanit bakiyeleri veritabaniyla ayni, kayit 201 (replayed=false)', out.replayed === false && out.tenant_balance_minor === tenantAfter && out.owner_balance_minor === ownerAfter && out.transfer.kind === 'transfer' && out.transfer.total_minor === 1500 && out.transfer.item_count === 2);
 
   const written = (await q(`SELECT l.id, l.kind, ${accountPartySql('l')} AS party, l.amount_minor::TEXT AS amount, l.reverses_entry_id, l.fund FROM ledger_entries l WHERE l.site_code = $1 AND l.source_kind = 'liability_transfer' AND l.source_id = $2 ORDER BY l.id`, [site.code, out.transfer.id])).rows;
@@ -193,6 +209,8 @@ console.log('--- D. kiraci borcunun malike devri (089) ---');
   check('D9e: geri alma kaydi tekrar geri alinamaz (409)', rev3?.status === 409 && rev3.code === 'LIABILITY_TRANSFER_NOT_REVERSIBLE', rev3);
   const alloc3 = await allocatorBalanced(site, apt, 'tenant');
   check('D9f: geri alma sonrasi allocateFunds degismezi', alloc3.ok);
+  const k17d = await liability.listTransferCandidates(site.code);
+  check('K17d: geri almadan sonra daire yeniden aday (overdue, 1500) ve dikkat satirinda', k17d.items.some((i) => i.apartment_id === apt && i.reason === 'overdue' && i.total_minor === 1500) && (await liability.tenantDebtOverdueAttention(pool, site.code)).count === 1, k17d);
 
   // yeniden devir (kalemler geri geldi) -> malik odemesi -> geri alinamaz
   const preview2 = await liability.previewLiabilityTransfer(site.code, apt);
@@ -210,6 +228,28 @@ console.log('--- D. kiraci borcunun malike devri (089) ---');
   check('D12: malik kaydi olmayan dairede 409 NO_OWNER', noOwner?.status === 409 && noOwner.code === 'NO_OWNER', noOwner);
   const other = await fails(() => liability.previewLiabilityTransfer(site.code + 999, apt));
   check('D12b: baska sitenin dairesi icin onizleme 404', other?.status === 404, other);
+
+  // K17 ek senaryolar: kiraci AYRILDI (exited) ve malik kaydi olmayan daire
+  const aptExit = site.ids[2];
+  await addResident(site, aptExit, 'owner', await mkUser('QA Malik 3', 'apartment_owner'));
+  const exitTenantPerson = await addResident(site, aptExit, 'tenant', await mkUser('QA Kiraci 3', 'apartment_owner'));
+  await insertLedger(site, aptExit, { amount: 800, entryDate: ago(40), dueDate: ago(10) });
+  await insertLedger(site, aptNoOwner, { amount: 300, entryDate: ago(20), dueDate: ago(3) });
+  const k17e = await liability.listTransferCandidates(site.code);
+  const exitItem = k17e.items.find((i) => i.apartment_id === aptExit);
+  const noOwnerItem = k17e.items.find((i) => i.apartment_id === aptNoOwner);
+  check('K17e: oturan kiracili ikinci daire overdue; malik kaydi olmayan daire LISTELENIR ama can_transfer=false (has_owner=false)',
+    exitItem?.reason === 'overdue' && exitItem.total_minor === 800 && noOwnerItem?.reason === 'overdue' && noOwnerItem.has_owner === false && noOwnerItem.can_transfer === false, { exitItem, noOwnerItem });
+  const k17Att2 = await liability.tenantDebtOverdueAttention(pool, site.code);
+  check('K17f: dikkat satiri malikisiz daireyi SAYMAZ: ikinci devrin dairesi (malik odemesi var, kalem kalmadi) ve aptExit = 800', k17Att2.count === 1 && k17Att2.total_minor === 800, k17Att2);
+  await q(`UPDATE apartment_residencies SET is_current = FALSE, move_out_date = $2 WHERE person_id = $1 AND relation = 'tenant'`, [exitTenantPerson, TODAY]);
+  const k17g = await liability.listTransferCandidates(site.code);
+  const exitedItem = k17g.items.find((i) => i.apartment_id === aptExit);
+  check('K17g: kiraci ayrilinca ayni daire reason=exited, tenant_present=false (hala devredilebilir); gecikme dikkat satirina sayilmaz (cikis satiri ayri kaynak)',
+    exitedItem?.reason === 'exited' && exitedItem.tenant_present === false && exitedItem.can_transfer === true && (await liability.tenantDebtOverdueAttention(pool, site.code)).count === 0,
+    exitedItem);
+  const exitPreview = await liability.previewLiabilityTransfer(site.code, aptExit);
+  check('K17h: ayrilmis kiracinin borcu icin de onizleme/devir ayni desende (800, can_transfer)', exitPreview.total_minor === 800 && exitPreview.can_transfer === true, exitPreview);
 }
 
 // =====================================================================================================================================
