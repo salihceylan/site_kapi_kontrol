@@ -20,6 +20,7 @@ import { guestPassesRouter } from './routes/guest_passes_routes.js';
 import { doorLogRouter } from './routes/door_log_routes.js';
 import { membershipRouter } from './routes/membership_routes.js';
 import { moduleRouter } from './modules/module_routes.js';
+import { menuLayoutRouter } from './modules/menu_layout_routes.js';
 import { moduleRequestRouter } from './modules/module_request_routes.js';
 import { siteApplicationRouter } from './modules/site_application_routes.js';
 import { peopleRouter } from './modules/people_routes.js';
@@ -141,6 +142,8 @@ app.use(guestPassesRouter);
 app.use(doorLogRouter);
 app.use(membershipRouter);
 app.use(moduleRouter);
+// Site menu yerlesimi (K8): /manager/sites/:siteCode/menu-layout (kompakt menu kumesi; modul acip kapatmaz, yetenekten ayri katman).
+app.use(menuLayoutRouter);
 app.use(moduleRequestRouter);
 app.use(siteApplicationRouter);
 app.use(peopleRouter);

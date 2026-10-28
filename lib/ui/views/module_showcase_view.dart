@@ -62,6 +62,8 @@ class ModuleShowcaseView extends StatefulWidget {
     this.onCreateGuestPass,
     this.onPay,
     this.attentionBar,
+    this.featuredItems,
+    this.onOpenAllActions,
   }) : assert(applications == null || onReapply != null, 'başvuru kartı için onReapply gerekir');
 
   final UserSession session;
@@ -69,6 +71,16 @@ class ModuleShowcaseView extends StatefulWidget {
 
   /// Yan menünün hesapladığı öğe listesi (`YanMenu.visibleItems`).
   final List<SirketMenuItem> menuItems;
+
+  /// K8 KOMPAKT MENÜ: Modüller ızgarasında öne çıkan öğeler ([menuItems] içinden; çekmeceyle AYNI küme). null (varsayılan): kompakt menü
+  /// yok, her öğenin kartı çizilir. Doluysa ızgarada yalnız bunlar vardır; öne çıkmayan görünür öğe KAYBOLMAZ, [onOpenAllActions] ile
+  /// açılan "Tüm işlemler"dedir. Yalnız YERLEŞİMDİR: borç özeti, hızlı işlemler, dikkat barı ve "Hesap ve ayarlar" satırı tam
+  /// [menuItems] ile çalışmaya devam eder (kompakt menü bir sinyali ya da hızlı eylemi gizlemez).
+  final Set<SirketMenuItem>? featuredItems;
+
+  /// Verilirse ve kompakt menü bir şeyi öne çıkarmıyorsa ızgaranın sonunda "Tüm işlemler" kartı çıkar (kartın rozeti, öne çıkmayan öğelerin
+  /// bekleyen / okunmamış sayıları toplamıdır).
+  final VoidCallback? onOpenAllActions;
 
   /// Karta dokunuldu: çekmecede [SirketMenuItem] seçmekle aynı gezinme.
   final ValueChanged<SirketMenuItem> onOpen;
@@ -221,12 +233,15 @@ class ModuleShowcaseViewState extends State<ModuleShowcaseView> {
   @override
   Widget build(BuildContext context) {
     final role = widget.session.role;
+    // K8: ızgara kompakt menüdeki (öne çıkan) öğelerden kurulur; öne çıkmayanlar "Tüm işlemler" kartının ardındadır.
     final model = buildShowcaseModel(
-      menuItems: widget.menuItems,
+      menuItems: YanMenu.compactItems(widget.menuItems, widget.featuredItems),
       role: role,
       badgeCounts: widget.badgeCounts,
       badgeNouns: widget.badgeNouns,
     );
+    final beyondCompact = YanMenu.itemsBeyondCompact(widget.menuItems, widget.featuredItems);
+    final showAllActions = widget.onOpenAllActions != null && beyondCompact.isNotEmpty;
     final audience = widget.audience;
     final focus = audience == ShowcaseAudience.admin
         ? buildFocusEntries(menuItems: widget.menuItems, badgeCounts: widget.badgeCounts)
@@ -253,7 +268,7 @@ class ModuleShowcaseViewState extends State<ModuleShowcaseView> {
         if (widget.belowHero != null) widget.belowHero!,
         _buildQuickActions(context),
       ],
-      if (model.grid.isNotEmpty) ...[
+      if (model.grid.isNotEmpty || showAllActions) ...[
         _SectionTitle(
           key: const ValueKey<String>('panel_vitrin_baslik'),
           text: 'Modüller',
@@ -266,6 +281,15 @@ class ModuleShowcaseViewState extends State<ModuleShowcaseView> {
               StaggeredEntry(
                 index: index,
                 child: _ModuleTile(entry: entry, onTap: () => _open(entry.item)),
+              ),
+            if (showAllActions)
+              StaggeredEntry(
+                index: model.grid.length,
+                child: _ModuleTile(
+                  tileKey: const ValueKey<String>('panel_kart_tumIslemler'),
+                  entry: _allActionsEntry(beyondCompact),
+                  onTap: widget.onOpenAllActions!,
+                ),
               ),
           ],
         ),
@@ -306,6 +330,16 @@ class ModuleShowcaseViewState extends State<ModuleShowcaseView> {
       children: children,
     );
   }
+
+  /// "Tüm işlemler" kartı: kompakt menüde öne çıkmayan [beyondCompact] işlerin sayısını söyler; rozeti onların bekleyen / okunmamış
+  /// sayıları toplamıdır (kompakt menü bir sinyali gizlemez). Kartın `item`ı yalnız tür gereğidir; dokunma [ModuleShowcaseView.onOpenAllActions]'ı çağırır.
+  ShowcaseEntry _allActionsEntry(List<SirketMenuItem> beyondCompact) => ShowcaseEntry(
+        item: SirketMenuItem.dashboard,
+        title: 'Tüm işlemler',
+        description: 'Ana menüde olmayan ${beyondCompact.length} işlem dahil tüm işlemler',
+        art: ModuleArtKind.modules,
+        badge: YanMenu.badgeTotalOf(beyondCompact, widget.badgeCounts),
+      );
 
   /// Hero "Öde": tek borçlu daire varsa Öde sayfası, birden çoksa daire seçimi için Borcum.
   void _payFromHero() {
@@ -480,10 +514,13 @@ ShapeBorder _cardShape(AppPalette p) => RoundedRectangleBorder(
 
 /// Modül kartı: görsel + başlık + açıklama + rozet. Tek erişilebilir düğme (etiket = başlık + rozet).
 class _ModuleTile extends StatelessWidget {
-  const _ModuleTile({required this.entry, required this.onTap});
+  const _ModuleTile({required this.entry, required this.onTap, this.tileKey});
 
   final ShowcaseEntry entry;
   final VoidCallback onTap;
+
+  /// Verilmezse kart anahtarı `panel_kart_<öğe>` olur ("Tüm işlemler" kartı kendi anahtarını verir).
+  final Key? tileKey;
 
   @override
   Widget build(BuildContext context) {
@@ -497,7 +534,7 @@ class _ModuleTile extends StatelessWidget {
       onTap: onTap,
       excludeSemantics: true,
       child: Material(
-        key: ValueKey<String>('panel_kart_${entry.item.name}'),
+        key: tileKey ?? ValueKey<String>('panel_kart_${entry.item.name}'),
         color: _cardColor(p),
         shape: _cardShape(p),
         clipBehavior: Clip.antiAlias,

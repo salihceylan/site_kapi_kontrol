@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:site_kapi_kontrol/models/management_type.dart';
 import 'package:site_kapi_kontrol/models/management_terms.dart';
+import 'package:site_kapi_kontrol/models/menu_layout.dart';
 
 /// Katalogdaki modül kodları (sunucuda sabit: `server/src/modules/catalog.js`).
 abstract final class PlatformModuleCodes {
@@ -263,11 +264,17 @@ class MySiteModules {
     this.doorAccess = true,
     this.managementTerms = ManagementTerms.defaults,
     this.recommendedModules = const <String>[],
+    this.menuLayout,
   });
 
   final int siteCode;
   final String siteName;
   final ManagementType managementType;
+
+  /// Ana menüde (çekmece + Panel vitrini) öne çıkan modüller (`menu_layout`, K8). YETENEKTEN ayrı katmandır: [modules] hangi
+  /// modülün AÇIK olduğunu söyler, bu alan yalnız menüde nelerin öne çıktığını (kalanlar "Tüm işlemler"de). Eski sunucuda alan
+  /// yoktur (null): menü kısaltılmaz, her açık modül öne çıkar.
+  final SiteMenuLayout? menuLayout;
 
   /// `manager`, `resident`, `board_member` ya da `staff`.
   final String role;
@@ -315,9 +322,11 @@ class MySiteModules {
               (json['recommended_modules'] as List).whereType<String>(),
             )
           : const <String>[],
+      menuLayout: SiteMenuLayout.tryParse(json['menu_layout']),
     );
   }
 
+  // menuLayout eşitliğe dahildir: yönetici kompakt menüyü değiştirince [ModuleAccess] bunu "değişti" görür ve menü hemen yenilenir.
   @override
   bool operator ==(Object other) =>
       other is MySiteModules &&
@@ -326,6 +335,7 @@ class MySiteModules {
       other.managementType == managementType &&
       other.role == role &&
       other.doorAccess == doorAccess &&
+      other.menuLayout == menuLayout &&
       mapEquals(other.modules, modules);
 
   @override
@@ -335,6 +345,7 @@ class MySiteModules {
         managementType,
         role,
         doorAccess,
+        menuLayout,
         Object.hashAllUnordered(
           modules.entries.map((e) => Object.hash(e.key, e.value)),
         ),

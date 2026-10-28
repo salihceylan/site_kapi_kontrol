@@ -95,6 +95,11 @@ class AuditLogEntry {
         return 'Modül açıldı';
       case 'module.disabled':
         return 'Modül kapatıldı';
+      // K8 (P1-16): ana menü yerleşimi (kompakt menü kümesi); modül açıp kapatmaz, yetenek katmanı değişmez.
+      case 'menu_layout.updated':
+        return 'Ana menü düzeni güncellendi';
+      case 'menu_layout.reset':
+        return 'Ana menü düzeni önerilene döndürüldü';
       case 'staff_role.assigned':
         return 'Ek rol atandı';
       case 'staff_role.removed':
@@ -200,6 +205,9 @@ class AuditLogEntry {
       case 'platform_rule':
         // Kurallar tablosu (G11): hedef kural anahtarıdır; ham anahtar yerine kuralın adı ve kapsamı gösterilir.
         return platformRuleTargetLabel(targetId, details);
+      case 'menu_layout':
+        // Hedef site kodudur (site ayrıca ilgili sütunda görünür); ham kod yerine ne olduğu yazılır.
+        return 'Ana menü düzeni';
       default:
         final id = targetId;
         return id == null || id.isEmpty ? null : id;
