@@ -8,7 +8,7 @@ Kardeş belge: `docs/DURUM_SOZLUGU.md` (rol, durum ve terim sözlüğü).
 
 İstemcide `routes:` tablosu, `onGenerateRoute` ya da `pushNamed` **yoktur** (`grep` ile doğrulandı). Ekranlara iki yoldan gidilir:
 
-1. **Menü anahtarı.** Oturum açıkken tek kabuk vardır (`HomePage`). Kabuğun gövdesi `SirketMenuItem` (48 değer, `lib/ui/widgets/yan_menu.dart`)
+1. **Menü anahtarı.** Oturum açıkken tek kabuk vardır (`HomePage`). Kabuğun gövdesi `SirketMenuItem` (50 değer, `lib/ui/widgets/yan_menu.dart`)
    değerine göre değişir. Kullanıcı öğeyi soldaki **çekmeceden** (8 başlık) ya da sağ üstteki **dişliden açılan Ayarlar panelinden** seçer;
    Panel'deki (modül vitrini) kart da aynı seçimi yapar. Bu belgede "Rota (anahtar)" sütunu bu değerdir (testler ve kod bu adı kullanır).
 2. **İtilen tam ekran sayfalar** (`MaterialPageRoute`): giriş öncesi sayfalar, QR tarayıcı, içe aktarma, yardım vb. (Bölüm 4).
@@ -59,6 +59,7 @@ Sütunlar: **Ekran** (çekmece/panelde görünen ad) · **Rota (anahtar)** (`Sir
 | Ekran | Rota (anahtar) | Sınıf | Modül | Kim görür / not |
 | --- | --- | --- | --- | --- |
 | Panel | `dashboard` | `ModuleShowcaseView` (`HomePage._buildShowcase`) | — | Herkes. Modül vitrinidir; kartlar çekmecenin görünür öğelerinden türer. Üç kitle: **yönetici** (üstte dikkat barı), **sakin** ("Güncel borcunuz" kartı + hızlı işlemler), **bireysel** (yalnız kart ızgarası + site başvurusu durumu). Kapı paneli artık Panel değil "Kapılar"dadır. |
+| Acil durum | `acilDurum` | `EmergencyView` (`lib/ui/views/emergency_view.dart`) | — (modül DEĞİL; çekirdek özellik) | Süper dışında herkes (modül verisi gelmese de görünür). Büyük "112'yi ara", Yangın ve Asansör arızası hızlı düğmeleri, aramada söylenecek site adı/adres; arama kanalı yoksa (masaüstü, web, telefonsuz tablet) kuru mod: numara ve adres kopyalanır, ekran "arandı" demez. Asansör bakım firmasını yalnız yönetici modundaki site yöneticisi ekler/düzenler (`site_emergency_info`, migration 107). Ayrıntı: `docs/PLATFORM_ACIL_DURUM.md`. |
 
 ### 3.2 Çekmece: Daireler
 
@@ -131,6 +132,7 @@ Not: **Tahsilat**, **Giderler** ve **Raporlar** çekmece başlıkları tanımlı
 | Şirket Cihaz Envanteri / Kayıtlı Cihazlar | `kayitliCihazlar` | `CompanyDevicesView` | `door_control` | Süper ("Şirket Cihaz Envanteri"); Yönetici ve yönetici moduna geçebilen hesap ("Kayıtlı Cihazlar"). Geçiş Kontrol kapalıyken gizlenir. |
 | Bluetooth ile Wi-Fi Kur | `bluetoothWifiKur` | `BluetoothWifiView` (→ `WifiProvisionPage`) | `door_control` | Süper, Yönetici, yönetici moduna geçebilen hesap. Geçiş Kontrol kapalıyken gizlenir. |
 | Denetim Kaydı | `denetimKaydi` | `AuditLogView` | — | Yalnız Süper. |
+| İşlem Kayıtları | `islemKayitlari` | `SiteAuditLogView` (`lib/ui/views/site_audit_log_view.dart`) | — (çekirdek; modül gerekmez) | Yalnız yönetici modundaki site yöneticisi (yönettiği en az bir site bilinmeli); Modüller'in altında. Kurul, görevli, sakin ve Süper görmez (Süper'in tüm siteleri gören ekranı Denetim Kaydı'dır). Ayrıntı: `docs/PLATFORM_ISLEM_KAYITLARI.md`. |
 | Platform Ayarları | `platformAyarlari` | `PlatformSettingsView` | — | Yalnız Süper (uygulama sürümü/bakım, destek iletişimi, şirket ve yasal bilgiler). |
 | İstemci Hataları | `istemciHatalari` | `ClientErrorsView` | — | Yalnız Süper. |
 | Yönetim Firması *(panel eylemi)* | — | `ManagementCompanyScreen` (içinde "Marka teması" → `BrandThemeScreen`) | — | Süper ya da bir yönetim firması üyesi. |
@@ -199,5 +201,5 @@ her sekme çekmecede görünür olan öğeye bağlıdır, en az iki sekme yoksa 
 | Açılış sırası | `lib/main.dart`, `lib/app.dart`, `lib/ui/views/app_gate_view.dart` |
 | Bağ rolü ve modül durumu (sunucu) | `server/src/modules/module_service.js` (`/app/my-modules`), `server/src/modules/catalog.js` |
 
-Sayılar (kodla sayıldı): `SirketMenuItem` 48 değer; bunların 2'si menüden erişilemez (Bölüm 3.7), 1'i sayfa değil iletişim kutusudur
+Sayılar (kodla sayıldı): `SirketMenuItem` 50 değer; bunların 2'si menüden erişilemez (Bölüm 3.7), 1'i sayfa değil iletişim kutusudur
 (`ellerSerbest`).

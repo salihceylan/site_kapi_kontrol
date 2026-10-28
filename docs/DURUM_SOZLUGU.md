@@ -83,6 +83,7 @@ Kısıt: `server/migrations/058_team_and_invitations.sql`. Etiketler: `lib/model
 | --- | --- | --- |
 | Daire üyeliği (`apartment_memberships.role`) | `APARTMENT_ADMIN` → Daire Yöneticisi ("daire admini"; dairede güncel kiracı varsa kural gereği kiracıdır, migration 081) · `FAMILY_MEMBER` → Aile Üyesi | `016_membership_v2_schema.sql`, `lib/models/audit_log.dart` |
 | Daire ilişkisi (`apartment_residencies.relation`) | `owner` → Malik · `tenant` → Kiracı · `family_member` → Aile üyesi · `resident` → Sakin | `031_people_and_apartments.sql`, `lib/models/residency_relation.dart` |
+| Hesap muhatabı (`apartment_residencies.is_account_holder`; çoklu malik, K7) | `true` → dairenin borç/tahakkuk/Borcum/hatırlatma muhatabı olan TEK malik (dairede tam biri) · `false` → ortak malik (kayıtlı; malik yetkisi ve borç görünümü yok; Dairem'de `my_role = co_owner`) | `104_apartment_multi_owner.sql`, `docs/PLATFORM_COKLU_MALIK.md` |
 | Borç muhatabı (`apartments.responsible_party`) | `owner` → Malik · `tenant` → Kiracı · `both` → İkisi | `031_people_and_apartments.sql`, `ResponsibleParty` |
 | Hesap tarafı (`account_party`; dekont, sayaç, defter) | `owner` → Ev sahibi hesabı · `tenant` → Kiracı hesabı | `066_payment_notices.sql`, `lib/models/finance.dart` (`AccountParty`) |
 | Borçlanan taraf (`ChargeParty`) | `occupant` → Dairede oturan · `owner` → Ev sahibi | `lib/models/finance.dart` |
