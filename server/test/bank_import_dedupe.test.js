@@ -38,6 +38,10 @@ function install() {
       [/SELECT l\.id FROM ledger_entries l/, () => ok([])],
       [/FROM finance_period_closures/, () => ok([])],
       [/FROM bank_imports WHERE account_id = \$1 AND file_sha256/, () => ok([])],
+      // K3: güçlü eşleşmede hesap (İşletme / Fon) seçimi denetimi — borçsuz daire (ayrıntılı testler: bank_import_review_each.test.js)
+      [/LEFT JOIN fee_definitions fd ON fd\.id = l\.definition_id WHERE l\.site_code = \$1 AND \(\$2::BIGINT\[\] IS NULL/, () => ok([])],
+      [/FROM ledger_entries l WHERE l\.site_code = \$1 AND l\.apartment_id = \$2 ORDER BY l\.id/, () => ok([])],
+      [/SELECT a\.responsible_party, EXISTS/, () => ok([{ responsible_party: 'both', has_tenant: false }])],
     ];
     for (const [pattern, fn] of handlers) {
       if (pattern.test(sql)) return fn(sql, params);

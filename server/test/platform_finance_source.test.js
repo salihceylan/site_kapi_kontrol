@@ -79,6 +79,8 @@ describe('finans kaynakları: para hesabında kayan nokta YOK', () => {
       'finance_expense_nature_schema.js',
       'finance_expenses.js',
       'finance_export_tables.js',
+      'finance_fund_choice.js',
+      'finance_fund_choice_routes.js',
       'finance_funds.js',
       'finance_funds_routes.js',
       'finance_funds_schema.js',

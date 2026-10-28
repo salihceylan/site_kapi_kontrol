@@ -1077,6 +1077,56 @@ class FakeFinance4bApi extends Finance4bApi {
     );
   }
 
+  // --- Hesap (İşletme / Fon) seçimi (K3) ------------------------------------------------------
+  final List<Map<String, Object?>> fundChoiceCalls = <Map<String, Object?>>[];
+
+  /// Daire kimliği -> `GET payments/fund-choice` yanıtı (sunucu biçimi, bkz. [fundChoiceBody]). Yoksa borçsuz yanıt.
+  final Map<int, Map<String, dynamic>> fundChoiceBodies = <int, Map<String, dynamic>>{};
+
+  /// Sunucunun KAYIT anında gördüğü durum (GET'in söylediğinden farklıysa: bayat bilgi). Yoksa [fundChoiceBodies] geçerli.
+  final Map<int, Map<String, dynamic>> serverFundChoice = <int, Map<String, dynamic>>{};
+
+  /// Düzeltme (asıl kayıt hâlâ defterde, okunan durum yanıltır): doluysa `fund` verilmeyen düzeltme 400 FUND_CHOICE_REQUIRED alır.
+  Map<String, dynamic>? correctionFundChoice;
+  Object? fundChoiceError;
+  F4Gate? fundChoiceGate;
+
+  /// Sunucu `GET payments/fund-choice` yanıtı: [operating] / [capital] açık borç (kuruş). İkisi de > 0 ise seçim zorunlu; yalnız biri > 0 ise öneri o.
+  static Map<String, dynamic> fundChoiceBody({int operating = 0, int capital = 0, String party = 'owner', Map<String, dynamic>? proposal}) => <String, dynamic>{
+    'apartment_id': 0,
+    'account_party': party,
+    'open': <String, dynamic>{'operating_minor': operating, 'capital_minor': capital},
+    'advance_minor': 0,
+    'choice_required': operating > 0 && capital > 0,
+    'suggested_fund': operating > 0 && capital == 0 ? 'operating' : (capital > 0 && operating == 0 ? 'capital' : null),
+    'proposal': proposal,
+  };
+
+  @override
+  Future<FundChoiceInfo> getFundChoice({
+    required String token,
+    required int siteCode,
+    required int apartmentId,
+    AccountParty? accountParty,
+    int? amountMinor,
+    DateTime? paidOn,
+  }) async {
+    await _enter('getFundChoice');
+    fundChoiceCalls.add(<String, Object?>{'apartment_id': apartmentId, 'account_party': accountParty?.apiValue, 'amount_minor': amountMinor});
+    await fundChoiceGate?.future;
+    final error = fundChoiceError;
+    if (error != null) throw error;
+    return FundChoiceInfo.tryParse(fundChoiceBodies[apartmentId] ?? fundChoiceBody())!;
+  }
+
+  /// Sunucunun K3 kuralı: hesap (fund) verilmediyse ve iki türün de açık borcu varsa 400 FUND_CHOICE_REQUIRED.
+  void _enforceFundChoice(int apartmentId, FinanceFund? fund) {
+    final body = serverFundChoice[apartmentId] ?? fundChoiceBodies[apartmentId];
+    if (fund == null && body != null && body['choice_required'] == true) {
+      throw f4Coded('FUND_CHOICE_REQUIRED', 400, payload: <String, dynamic>{'fund_choice': body});
+    }
+  }
+
   // --- Hesap seçimli tahsilat ---------------------------------------------------------------
   final List<Map<String, Object?>> paymentCalls = <Map<String, Object?>>[];
   Object? paymentError;
@@ -1123,6 +1173,9 @@ class FakeFinance4bApi extends Finance4bApi {
       final account = _account(accountId);
       if (account == null) throw f4Coded('ACCOUNT_NOT_FOUND', 404);
       if (account['is_active'] != true) throw f4Coded('ACCOUNT_INACTIVE', 409);
+    }
+    _enforceFundChoice(apartmentId, fund);
+    if (accountId != null) {
       _addMovement(accountId, 'collection', amountMinor, _iso(entryDate), label: 'A Blok - 5');
     }
     final result = LedgerWriteResult.fromJson(<String, dynamic>{
@@ -1174,6 +1227,10 @@ class FakeFinance4bApi extends Finance4bApi {
     await paymentGate?.future;
     final error = paymentError;
     if (error != null) throw error;
+    final required = correctionFundChoice;
+    if (fund == null && required != null && required['choice_required'] == true) {
+      throw f4Coded('FUND_CHOICE_REQUIRED', 400, payload: <String, dynamic>{'fund_choice': required});
+    }
     return LedgerWriteResult.fromJson(<String, dynamic>{
       'entry': <String, dynamic>{
         'id': 9500 + correctPaymentCalls.length,

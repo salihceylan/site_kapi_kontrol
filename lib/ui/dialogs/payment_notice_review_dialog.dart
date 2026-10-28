@@ -6,6 +6,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/models/cash_models.dart';
+import 'package:site_kapi_kontrol/models/finance.dart' show AccountParty;
+import 'package:site_kapi_kontrol/models/finance_funds.dart';
 import 'package:site_kapi_kontrol/models/payment_notice.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/services/payment_notice_api.dart';
@@ -16,6 +18,7 @@ import 'package:site_kapi_kontrol/ui/helpers/finance_4b_access.dart';
 import 'package:site_kapi_kontrol/ui/helpers/finance_errors.dart';
 import 'package:site_kapi_kontrol/ui/helpers/money.dart';
 import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
+import 'package:site_kapi_kontrol/ui/widgets/finance_fund_choice_panel.dart';
 import 'package:site_kapi_kontrol/ui/widgets/receipt_file_preview.dart';
 
 /// Etkin kasa / banka hesapları (hata sessiz: liste boş kalır ve sunucu varsayılanı kullanır).
@@ -29,13 +32,16 @@ Future<List<CashAccount>> loadNoticeAccounts(PeopleScope scope) async {
 }
 
 class PaymentNoticeReviewDialog extends StatefulWidget {
-  const PaymentNoticeReviewDialog({super.key, required this.scope, required this.noticeId, this.accountsLoader = loadNoticeAccounts});
+  const PaymentNoticeReviewDialog({super.key, required this.scope, required this.noticeId, this.accountsLoader = loadNoticeAccounts, this.fundChoiceLoader});
 
   final PeopleScope scope;
   final int noticeId;
 
   /// Kasa / banka hesapları yükleyicisi (testlerde sahte verilir).
   final Future<List<CashAccount>> Function(PeopleScope scope) accountsLoader;
+
+  /// K3: İşletme / Fon hesabı bilgisi yükleyicisi (testlerde sahte verilir); null ise `GET payments/fund-choice`.
+  final Future<FundChoiceInfo> Function({required int apartmentId, AccountParty? accountParty, int? amountMinor, DateTime? paidOn})? fundChoiceLoader;
 
   /// Karar verildiyse (onay / bağla / iptal) true.
   static Future<bool?> show(BuildContext context, PeopleScope scope, int noticeId) =>
@@ -54,6 +60,12 @@ class _PaymentNoticeReviewDialogState extends State<PaymentNoticeReviewDialog> {
   int? _accountId;
   bool _bookInOpen = false;
   bool _periodClosed = false;
+  // K3: tahsilatın gireceği İşletme / Fon hesabı. İki türün de açık borcu varsa seçim ZORUNLU; tek türde önerilen hesap seçili gelir.
+  FinanceFund? _fund;
+  FundChoiceState _fundState = const FundChoiceState();
+  FundChoiceInfo? _forcedFundInfo;
+  bool _fundRequiredByServer = false;
+  String? _fundError;
   bool _rejecting = false;
   String _reason = 'not_received';
   final _rejectNote = TextEditingController();
@@ -109,24 +121,57 @@ class _PaymentNoticeReviewDialogState extends State<PaymentNoticeReviewDialog> {
         _error = financeMessageOf(e, fallback);
         if (e is ApiException && e.code == 'NOTICE_PERIOD_CLOSED') _periodClosed = true;
         if (e is ApiException && e.code == 'NOTICE_WARNINGS_UNACKNOWLEDGED') unawaited(_load());
+        // K3: iki türün de açık borcu var ve hesap seçilmedi (bilgi bayattı): sunucunun yetkili durumu panele işlenir, seçim istenir.
+        if (e is ApiException && e.code == 'FUND_CHOICE_REQUIRED') {
+          _forcedFundInfo = FundChoiceInfo.tryParse(e.payload?['fund_choice']);
+          _fundRequiredByServer = true;
+          _fundError = _fundMissingMessage;
+        }
       });
     }
   }
 
-  Future<void> _approve() => _run(
-    () => _service.run(
-      (api, token) => api.approve(
-        token: token,
-        siteCode: widget.scope.siteCode,
-        id: widget.noticeId,
-        accountId: _accountId,
-        accountParty: _party,
-        bookInOpenPeriod: _bookInOpen,
-        acknowledged: _acknowledged.toList(),
+  static const String _fundPendingMessage = 'İşletme / Fon hesabı bilgisi yükleniyor; birkaç saniye sonra yeniden deneyin.';
+  static const String _fundMissingMessage = 'Ödemenin işleneceği İşletme / Fon hesabını seçin.';
+
+  bool get _fundRequired => (_forcedFundInfo ?? _fundState.info)?.choiceRequired == true || _fundRequiredByServer;
+
+  /// Daire hesabı değişti: önceki hesabın bilgisi / sunucu yanıtı geçmez.
+  void _resetFundContext() {
+    _forcedFundInfo = null;
+    _fundRequiredByServer = false;
+    _fundError = null;
+  }
+
+  Future<void> _approve() {
+    // K3: bilgi yüklenirken gönderilmez (önerilen hesap seçili gelmeden onay kısıtsız giderdi); iki türlü borçta seçim olmadan gönderilmez.
+    if (_fundState.loading) {
+      setState(() => _error = _fundPendingMessage);
+      return Future<void>.value();
+    }
+    if (_fundRequired && _fund == null) {
+      setState(() {
+        _error = null;
+        _fundError = _fundMissingMessage;
+      });
+      return Future<void>.value();
+    }
+    return _run(
+      () => _service.run(
+        (api, token) => api.approve(
+          token: token,
+          siteCode: widget.scope.siteCode,
+          id: widget.noticeId,
+          accountId: _accountId,
+          accountParty: _party,
+          fund: _fund,
+          bookInOpenPeriod: _bookInOpen,
+          acknowledged: _acknowledged.toList(),
+        ),
       ),
-    ),
-    'Onaylanamadı. İnternet bağlantınızı kontrol edip tekrar deneyin.',
-  );
+      'Onaylanamadı. İnternet bağlantınızı kontrol edip tekrar deneyin.',
+    );
+  }
 
   Future<void> _reject() => _run(
     () => _service.run(
@@ -291,7 +336,12 @@ class _PaymentNoticeReviewDialogState extends State<PaymentNoticeReviewDialog> {
             initialValue: _party,
             decoration: const InputDecoration(labelText: 'Hangi hesaptan düşsün'),
             items: const [DropdownMenuItem(value: 'owner', child: Text('Ev sahibi hesabı')), DropdownMenuItem(value: 'tenant', child: Text('Kiracı hesabı'))],
-            onChanged: _busy ? null : (v) => setState(() => _party = v),
+            onChanged: _busy
+                ? null
+                : (v) => setState(() {
+                    if (_party != v) _resetFundContext();
+                    _party = v;
+                  }),
           ),
           if (_party != n.accountParty)
             Padding(
@@ -312,6 +362,28 @@ class _PaymentNoticeReviewDialogState extends State<PaymentNoticeReviewDialog> {
               onChanged: _busy ? null : (v) => setState(() => _accountId = v),
             ),
           ],
+          const SizedBox(height: AppSpace.sm),
+          FundChoicePanel(
+            key: const ValueKey<String>('notice_fund'),
+            scope: widget.scope,
+            apartmentId: n.apartmentId,
+            accountParty: AccountParty.tryParse(_party),
+            amountMinor: n.amountMinor,
+            paidOn: n.paidOn,
+            selected: _fund,
+            enabled: !_busy,
+            loader: widget.fundChoiceLoader,
+            forcedInfo: _forcedFundInfo,
+            errorText: _fundError,
+            keyPrefix: 'notice_fund',
+            onChanged: (value) => setState(() {
+              _fund = value;
+              _fundError = null;
+            }),
+            onStateChanged: (state) {
+              if (mounted && state != _fundState) setState(() => _fundState = state);
+            },
+          ),
           if (_periodClosed)
             CheckboxListTile(
               key: const ValueKey<String>('notice_book_open'),

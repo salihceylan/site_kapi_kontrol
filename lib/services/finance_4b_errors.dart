@@ -50,6 +50,10 @@ String? finance4bErrorMessage(
       return 'Bu hesap pasif; pasif hesaba yeni hareket yazılamaz.';
     case 'ACCOUNT_REQUIRED':
       return 'Bu sitede kasa ya da banka hesabı tanımlı; tahsilat için bir hesap seçin.';
+    // K3: iki türün de (İşletme / Fon) açık borcu olan hesapta ödemenin hangisine işleneceğini yönetici seçer (sunucu metniyle aynı).
+    case 'FUND_CHOICE_REQUIRED':
+      return 'Bu hesapta hem İşletme Projesi (Aidat) Hesabı hem de Yatırım ve Demirbaş (Fon) Hesabı için açık borç var. '
+          'Ödemenin hangisine işleneceğini siz seçin; yazılım kendiliğinden atamaz.';
     case 'ACCOUNT_LIMIT':
       return 'En çok 20 hesap tanımlanabilir.';
     case 'ACCOUNT_NAME_TAKEN':

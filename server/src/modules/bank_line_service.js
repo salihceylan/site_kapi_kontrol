@@ -5,6 +5,7 @@ import { actorFromAuthUser } from './audit_service.js';
 import { PlatformError } from './errors.js';
 import { createExpense, voidExpense } from './finance_expenses.js';
 import { createAdjustment, createTransfer, voidTransfer } from './finance_accounts.js';
+import { parseFundField } from './finance_funds.js';
 import { postPayment } from './finance_parties.js';
 import { recordFinanceAudit, withFinanceTransaction } from './finance_tx.js';
 import { apartmentLabel } from './people_common.js';
@@ -94,8 +95,25 @@ const partyOf = (value) => {
   return value;
 };
 
-/** Tek satırı daireye işler (mevcut tahsilat varsa ona bağlar). Çağıran finans işlemi içindedir; satır kilitlidir. */
-async function settleToApartment(client, { siteCode, line, apartmentId, party, saveIban, actor, now }) {
+/**
+ * K3 (P1-3): satır onayında yönetici İşletme / Fon hesabını seçebilir. `fund_choices` = [{ line_id, fund }] (en çok 200); toplu onayda seçim HER satır için ayrıdır
+ * (tek bir seçim bütün satırlara uygulanmaz). İki türün de açık borcu olan dairede seçim yoksa o satır 400 FUND_CHOICE_REQUIRED ile işlenmez (`failed` listesinde kalır).
+ */
+function parseFundChoices(raw) {
+  const map = new Map();
+  if (raw === undefined || raw === null) return map;
+  if (!Array.isArray(raw) || raw.length > 200) throw invalid('Hesap seçimi listesi geçersiz.');
+  for (const item of raw) {
+    const lineId = num(item?.line_id);
+    const fund = parseFundField(item?.fund);
+    if (!Number.isSafeInteger(lineId) || lineId <= 0 || fund === null) throw invalid('Hesap seçimi geçersiz.');
+    map.set(lineId, fund);
+  }
+  return map;
+}
+
+/** Tek satırı daireye işler (mevcut tahsilat varsa ona bağlar). Çağıran finans işlemi içindedir; satır kilitlidir. `fund`: K3 hesap (İşletme / Fon) seçimi (yoksa null). */
+async function settleToApartment(client, { siteCode, line, apartmentId, party, saveIban, actor, now, fund = null }) {
   if (!['unmatched', 'suggested'].includes(line.status) || num(line.amount_minor) <= 0) throw lineNotOpen();
   await assertApartment(client, siteCode, apartmentId);
   const amount = num(line.amount_minor);
@@ -117,6 +135,7 @@ async function settleToApartment(client, { siteCode, line, apartmentId, party, s
       idempotencyKey: `bl:${line.id}`,
       actor,
       cashAccountId: num(line.account_id),
+      fund,
       now,
     });
     entryId = res.entryId;
@@ -135,7 +154,7 @@ async function settleToApartment(client, { siteCode, line, apartmentId, party, s
       [siteCode, iban, apartmentId, party, num(line.import_id)],
     );
   }
-  await recordFinanceAudit(client, actor, 'finance.bank_line.assigned', siteCode, line.id, { apartment_id: apartmentId, status, save_iban: Boolean(saveIban && iban) });
+  await recordFinanceAudit(client, actor, 'finance.bank_line.assigned', siteCode, line.id, { apartment_id: apartmentId, status, save_iban: Boolean(saveIban && iban), fund });
   return status;
 }
 
@@ -143,9 +162,10 @@ export async function assignLine({ siteCode, rawId, body, actor, now = new Date(
   const id = idOf(rawId);
   const apartmentId = idOf(body?.apartment_id, () => invalid('Daire seçimi geçersiz.'));
   const party = partyOf(body?.account_party);
+  const fund = parseFundField(body?.fund);
   return withFinanceTransaction(siteCode, async (client) => {
     const line = await loadLine(client, siteCode, id, { lock: true });
-    const status = await settleToApartment(client, { siteCode, line, apartmentId, party, saveIban: body?.save_iban === true, actor, now });
+    const status = await settleToApartment(client, { siteCode, line, apartmentId, party, saveIban: body?.save_iban === true, actor, now, fund });
     return { line: lineDto(await loadLine(client, siteCode, id)), status };
   });
 }
@@ -155,6 +175,7 @@ export async function confirmLines({ siteCode, body, actor, now = new Date() }) 
   const ids = Array.isArray(body?.line_ids) ? [...new Set(body.line_ids.map(num))] : [];
   if (ids.length === 0 || ids.length > 200 || ids.some((x) => !Number.isSafeInteger(x) || x <= 0)) throw invalid('Satır listesi geçersiz (en çok 200).');
   ids.sort((a, b) => a - b);
+  const fundChoices = parseFundChoices(body?.fund_choices);
   return withFinanceTransaction(siteCode, async (client) => {
     const done = [];
     const failed = [];
@@ -163,7 +184,16 @@ export async function confirmLines({ siteCode, body, actor, now = new Date() }) 
       try {
         const line = await loadLine(client, siteCode, id, { lock: true });
         if (line.status !== 'suggested' || line.suggested_apartment_id === null) throw lineNotOpen();
-        await settleToApartment(client, { siteCode, line, apartmentId: num(line.suggested_apartment_id), party: line.suggested_party, saveIban: false, actor, now });
+        await settleToApartment(client, {
+          siteCode,
+          line,
+          apartmentId: num(line.suggested_apartment_id),
+          party: line.suggested_party,
+          saveIban: false,
+          actor,
+          now,
+          fund: fundChoices.get(id) ?? null,
+        });
         await client.query('RELEASE SAVEPOINT bl_confirm');
         done.push(id);
       } catch (error) {

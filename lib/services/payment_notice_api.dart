@@ -10,6 +10,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show ValueNotifier, visibleForTesting;
 import 'package:http/http.dart' as http;
+import 'package:site_kapi_kontrol/models/finance_funds.dart' show FinanceFund;
 import 'package:site_kapi_kontrol/models/payment_notice.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/services/auth_api.dart';
@@ -84,6 +85,7 @@ class PaymentNoticeApi {
     required int id,
     int? accountId,
     String? accountParty,
+    FinanceFund? fund,
     bool bookInOpenPeriod = false,
     List<String> acknowledged = const <String>[],
   }) => _send(
@@ -93,6 +95,8 @@ class PaymentNoticeApi {
     body: <String, dynamic>{
       'account_id': ?accountId,
       'account_party': ?accountParty,
+      // K3: tahsilatın gireceği İşletme / Fon hesabı. İki türlü borçta ZORUNLU (yoksa 400 FUND_CHOICE_REQUIRED); tek türde önerilen hesap.
+      'fund': ?fund?.apiValue,
       'book_in_open_period': bookInOpenPeriod,
       'acknowledged': acknowledged,
     },

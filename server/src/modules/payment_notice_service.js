@@ -419,6 +419,7 @@ export async function approveNotice({ siteCode, rawId, body, actor, now = new Da
       sourceId: id,
       idempotencyKey: `pn:${id}`,
       cashAccountId: accountId,
+      fund: input.fund,
       actor,
       now,
     });
@@ -432,6 +433,7 @@ export async function approveNotice({ siteCode, rawId, body, actor, now = new Da
       entry_id: posted.entryId,
       account_party: party,
       party_changed: party !== row.account_party,
+      fund: input.fund,
       acknowledged: warnings.filter((w) => w.level === 'strong').length,
       booked_in_open_period: paidOn !== row.paid_on,
     });

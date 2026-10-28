@@ -2,6 +2,7 @@
 
 import { PlatformError } from './errors.js';
 import { METHODS, assertNotTooOld, invalidBody, normalizeFreeText, parseAccountParty, parseIdempotencyKey, parseIsoDate, requireMinor, today } from './finance_common.js';
+import { parseFundField } from './finance_funds.js';
 import { parseTrIban } from './finance_iban.js';
 import { parsePositiveId } from './people_common.js';
 import { foldText } from './people_common.js';
@@ -129,6 +130,9 @@ export function parseApproveInput(body) {
   return {
     accountId,
     accountParty: parseAccountParty(input.account_party),
+    // K3: tahsilatın gireceği İşletme / Fon hesabı. Daire hesabında iki türün de açık borcu varsa ZORUNLUDUR (yoksa 400 FUND_CHOICE_REQUIRED);
+    // tek tür borçta istemci önerilen hesabı seçili gönderir; verilmezse kısıtsız kayıt (eski istemci).
+    fund: parseFundField(input.fund),
     bookInOpenPeriod: input.book_in_open_period === true,
     acknowledged,
   };

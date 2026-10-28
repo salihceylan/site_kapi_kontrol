@@ -20,6 +20,7 @@ Yönetici / süper (kurul ve görevli 403) `/manager/sites/:siteCode/finance/pay
 - `POST /bulk-approve | /bulk-reject {ids}` (en çok 50; her öğe ayrı işlem; yanıt `{results}`)
 
 ## Kurallar
+- **Hesap (İşletme / Fon) seçimi (K3, 2026-10-28):** onay gövdesinde isteğe bağlı `fund` (`operating` | `capital`). Dairenin ilgili hesabında İKİ türün de açık borcu varsa `fund` ZORUNLUDUR (yoksa 400 `FUND_CHOICE_REQUIRED`; bildirim `pending` kalır, tahsilat yazılmaz); tek türde önerilen hesap seçili gönderilir; borçsuzda seçilmeyebilir. Toplu onayda iki türlü bildirim `FUND_CHOICE_REQUIRED` koduyla başarısız olur, tek tek incelenir. Ayrıntı: `PLATFORM_FINANS_KASALAR.md` §3.1.
 - **Onay** tek işlemde `finance_parties.postPayment` (kaynak `payment_notice`, anahtar `pn:<id>`, tarih = dekont tarihi) + makbuz + denetim. Eşzamanlı/tekrar onay tek defter satırı üretir (`pn:<id>` idempotans + `FOR UPDATE`). Hesap (kasa/banka): gövdeden, yoksa havalede 2A `resident_account_id`; nakit/çekte etkin hesap varsa seçilmelidir (`ACCOUNT_REQUIRED`).
 - **Ay kapalıysa** 409 `NOTICE_PERIOD_CLOSED`; `book_in_open_period` ile bugünün tarihine yazılır, dekont tarihi açıklamada kalır.
 - **Uyarılar** (hesaplanır, onayda yeniden): `REFERENCE_OTHER_APARTMENT`, `SAME_FILE_OTHER_NOTICE`, `POSSIBLE_DUPLICATE` = *önemli* (her biri `acknowledged` ile işaretlenmeden 409 `NOTICE_WARNINGS_UNACKNOWLEDGED`; toplu onay bu öğeleri atlar); `NAME_MISMATCH`, `OVERPAYMENT`, `OLD_DATE` = bilgi. Çözüm: "Bağla" (mevcut tahsilata, yeni satır yazılmaz).
