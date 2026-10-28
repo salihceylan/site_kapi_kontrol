@@ -62,12 +62,8 @@ test('m² (Kural 15): deneme listesi, saha listesi ve demo senaryosu m² giriş 
   assert.deepEqual(offenders, [], 'm² yalnız "kaldırıldı / yoktur" gibi olumsuz bağlamda anılabilir (daire kartında, formlarda ve şablonda m² alanı yoktur)');
 });
 
-test('m² (Kural 15): Toplu Yükle dairesi için listeler uygulamadaki gerçek metni ve gerçek sütunları söyler', () => {
-  // lib/ui/widgets/bulk_kind_step.dart (Daireler kartı açıklaması) ve lib/services/bulk_template.dart (kExcludedTemplateKeys: m² ve arsa payı sütunları şablonda yok).
-  const cardText = 'kat, tip, arsa payı ve borç sorumlusu bilgilerini doldurur';
-  assert.ok(read('lib/ui/widgets/bulk_kind_step.dart').includes(cardText), 'kart metni kodda değişmiş: listeleri de güncelleyin');
-  assert.ok(items.get('F13.03').beklenen.includes(cardText), 'F13.03 kart metni');
-  assert.ok(sahaItem('72.3').includes(cardText), 'SAHA 72.3 kart metni');
+test('m² (Kural 15): Toplu Yükle şablonunda m² ve arsa payı sütunları gizlidir; listeler bunları doldurtmaz, mali kayıt satırı sunucudaki gerçek metindir', () => {
+  // lib/services/bulk_template.dart (kExcludedTemplateKeys: m² ve arsa payı sütunları şablonda yok).
   const template = read('lib/services/bulk_template.dart');
   for (const key of ['brut_m2', 'net_m2', 'arsa_payi_pay', 'arsa_payi_payda']) assert.ok(template.includes(`'${key}'`), `${key} şablondan gizli sütun olarak kodda durmalı`);
   // F13.04 önkoşulu şablonda bulunmayan sütunları doldurtmaz.
