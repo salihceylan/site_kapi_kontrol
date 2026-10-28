@@ -22,6 +22,8 @@ function fakeDb(apartments) {
       if (/FROM apartments a INNER JOIN site_blocks b ON b\.id = a\.block_id WHERE a\.site_code = \$1 AND a\.is_active = TRUE/.test(sql)) return ok(apartments);
       if (/FROM fee_runs WHERE site_code = \$1 AND natural_key = \$2/.test(sql)) return ok();
       if (/FROM finance_period_closures WHERE site_code = \$1 AND period >= \$2::DATE/.test(sql)) return ok();
+      // K2 (090): önizleme tahakkuk dayanağı gereksinimini (Karar Defteri açık mı) okur; bu testlerin konusu değil: modül kapalı -> serbest metin gerekçe modu.
+      if (/^SELECT enabled FROM site_modules WHERE site_code = \$1 AND module_code = \$2 LIMIT 1$/.test(sql)) return ok([{ enabled: false }]);
       throw new Error(`BEKLENMEYEN SQL: ${sql.slice(0, 160)}`);
     },
   };

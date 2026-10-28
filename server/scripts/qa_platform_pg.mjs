@@ -6870,7 +6870,6 @@ async function startFinanceHttp(pool) {
     }
     return tokens.get(userCode);
   };
-  async function callOnce(method, urlPath, userCode, body, rawBody) {
   // Tahakkuk dayanagi (K2, 090): Fon hesabi borcu yazan POST'lar (ek borc `.../finance/charges`, aylik borclandirma `.../definitions/:id/post`) dayanak ister. Bu bolumlerin konusu
   // dayanak DEGIL: govdede `decision_id` / `decision_reason` hic yoksa (null dahil "var" sayilir) Karar Defteri KAPALI sitelerde gecerli bir gerekce eklenir. Dayanagi sinayan bolum
   // (run_decision) kendi alanlarini acikca verir.
@@ -6880,7 +6879,7 @@ async function startFinanceHttp(pool) {
     if (body.decision_id !== undefined || body.decision_reason !== undefined) return body;
     return { ...body, decision_reason: 'QA tahakkuk gerekcesi' };
   };
-  async function call(method, urlPath, userCode, body, rawBody) {
+  async function callOnce(method, urlPath, userCode, body, rawBody) {
     const headers = { 'content-type': 'application/json' };
     if (userCode !== null) headers.authorization = `Bearer ${await tokenFor(userCode)}`;
     const response = await fetch(`${base}${urlPath}`, { method, headers, body: rawBody !== undefined ? rawBody : body === undefined ? undefined : JSON.stringify(withRunDecision(method, urlPath, body)) });
