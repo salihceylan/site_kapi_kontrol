@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/models/user_session.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
@@ -102,10 +103,16 @@ class ProfileView extends StatelessWidget {
                     controller: phoneController,
                     keyboardType: TextInputType.phone,
                     inputFormatters: const [PhoneInputFormatter()],
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Telefon (opsiyonel)',
                       hintText: phoneFieldHint,
-                      helperText: 'Cep telefonu: +90 5XX XXX XX XX',
+                      // Site yöneticisinin numarası sakinlerin "Yöneticiyi ara" kutusunda görünür (dokun-ara, P2-23): kime
+                      // görüneceği, yazılırken açıkça söylenir.
+                      helperText: session.role == UserRole.siteManager
+                          ? 'Cep telefonu: +90 5XX XXX XX XX. Bu numara sitenizdeki sakinlere, kurul üyelerine ve görevlilere '
+                                '"Yöneticiyi ara" kutusunda görünür.'
+                          : 'Cep telefonu: +90 5XX XXX XX XX',
+                      helperMaxLines: 4,
                     ),
                     // Dokunulmamış eski kayıt (sabit hat / serbest biçim) kaydetmeyi engellemez.
                     validator: (value) => validatePhoneInput(value, stored: session.phoneNumber),

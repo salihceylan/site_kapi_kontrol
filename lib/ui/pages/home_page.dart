@@ -6956,6 +6956,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       quickActionItems: resident ? _quickActionItems() : null,
       onCreateGuestPass: resident ? _guestPassAction(session) : null,
       attentionBar: _attentionBarFor(session, audience),
+      // Dokun-ara (P2-23): sakinde "Yöneticiyi ara" kutusu; profilinde telefonu olmayan site yöneticisinde "telefon ekleyin" ipucu.
+      fetchManagerContacts: resident ? widget.authService.getManagerContacts : null,
+      managerPhoneMissing:
+          audience == ShowcaseAudience.admin &&
+          session.role == UserRole.siteManager &&
+          (session.phoneNumber ?? '').trim().isEmpty,
     );
     if (!embedIndividualHome) return showcase;
     return Column(

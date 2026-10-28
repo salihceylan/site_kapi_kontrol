@@ -292,7 +292,7 @@ abstract final class HelpContent {
     icon: Icons.shield_outlined,
     steps: <String>[
       '“Dairem” ekranında dairenizin kartında “Güvenlik ve destek” bölümünü açın.',
-      'Acil tehlikede 112’yi arayın. ALO 183 Sosyal Destek Hattı, KADES uygulaması ve ŞÖNİM destek verir.',
+      'Acil tehlikede bölümün başındaki kırmızı 112 düğmesine dokunun; telefon uygulaması 112 yazılı açılır (aramayı siz başlatırsınız). Cihazınız aramayı açamazsa numara ekranda görünür ve kopyalanabilir. ALO 183 Sosyal Destek Hattı, KADES uygulaması ve ŞÖNİM destek verir.',
       'İsterseniz “Site yönetimine gizli talep gönder” ile durumunuzu yalnızca site yöneticisine iletin; daire yöneticisi, malik ve diğer üyeler görmez ve haberdar edilmez.',
       'Uzaklaştırma ya da koruma kararınız varsa belgeyi site yönetimine bildirin; site yöneticisi gerekirse kişinin kapı erişimini askıya alabilir.',
     ],
@@ -363,6 +363,7 @@ abstract final class HelpContent {
     steps: <String>[
       'Girişte açılan “Panel” ekranı modül vitrinidir: sitenizde size açık her modül bir kart olarak dizilir; karta dokununca o ekran açılır.',
       'Kapıyı açmak için “Kapılar” kartına dokunun; kapı düğmesi “Kapılar” ekranındadır.',
+      'Sitenizin yöneticisi telefon numarasını eklediyse hızlı işlemlerin sonundaki Yöneticiyi ara kutusuna dokunarak telefon uygulamasını yönetici numarasıyla açabilirsiniz; numara kayıtlı değilse kutu bunu söyler.',
       'Kapalı ya da size açık olmayan bir modülün kartı ne “Panel” ekranında ne menüde görünür.',
     ],
   );

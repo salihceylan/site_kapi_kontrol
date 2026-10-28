@@ -2,8 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/models/finance.dart';
+import 'package:site_kapi_kontrol/models/manager_contact.dart';
 import 'package:site_kapi_kontrol/models/site_application.dart';
 import 'package:site_kapi_kontrol/models/user_session.dart';
+import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/services/site_application_tracker.dart';
 import 'package:site_kapi_kontrol/services/view_mode_service.dart';
 import 'package:site_kapi_kontrol/styles/easy_view_theme.dart';
@@ -13,10 +15,12 @@ import 'package:site_kapi_kontrol/ui/design/motion_widgets.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/design/view_mode_toggle.dart';
 import 'package:site_kapi_kontrol/ui/helpers/date_input.dart';
+import 'package:site_kapi_kontrol/ui/helpers/dial_call.dart';
 import 'package:site_kapi_kontrol/ui/helpers/finance_errors.dart';
 import 'package:site_kapi_kontrol/ui/helpers/module_showcase.dart';
 import 'package:site_kapi_kontrol/ui/helpers/money.dart';
 import 'package:site_kapi_kontrol/ui/helpers/site_application_flow.dart';
+import 'package:site_kapi_kontrol/ui/widgets/manager_call_tile.dart';
 import 'package:site_kapi_kontrol/ui/widgets/showcase_layouts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/site_application_status_card.dart';
 import 'package:site_kapi_kontrol/ui/widgets/yan_menu.dart';
@@ -70,6 +74,9 @@ class ModuleShowcaseView extends StatefulWidget {
     this.attentionBar,
     this.featuredItems,
     this.onOpenAllActions,
+    this.fetchManagerContacts,
+    this.dialLauncher,
+    this.managerPhoneMissing = false,
   }) : assert(applications == null || onReapply != null, 'başvuru kartı için onReapply gerekir');
 
   final UserSession session;
@@ -139,6 +146,18 @@ class ModuleShowcaseView extends StatefulWidget {
   /// açıkken verilir. Eski "Bu ay" paneli kaldırıldı (2026-10-21).
   final Widget? attentionBar;
 
+  /// Sakin "Yöneticiyi ara" kaynağı (`GET /app/manager-contact`, "dokun-ara" P2-23). Yalnız sakin vitrininde çağrılır; veri
+  /// gelince hızlı işlemlerin SONUNA "Yöneticiyi ara" kutusu eklenir (kendi sitesinin yöneticisi olana çizilmez). Hata ya da
+  /// eski sunucu (404) kutuyu sessizce gizler, ASLA "numara yok" demez; eldeki bilgi geçici hatada korunur. null: kutu yok.
+  final Future<List<ManagerContact>> Function()? fetchManagerContacts;
+
+  /// "Yöneticiyi ara" telefon uygulaması açıcısı (varsayılan `url_launcher`; testlerde sahte).
+  final DialLauncher? dialLauncher;
+
+  /// Yönetici vitrininde "Telefon numaranızı ekleyin" ipucunu gösterir: site yöneticisinin profilinde telefon yoksa sakinler
+  /// onu arayamaz. Yalnız [ShowcaseAudience.admin] kitlesinde çizilir.
+  final bool managerPhoneMissing;
+
   /// Vitrin gösterilirken sayfa kabının (ana sayfada kaydırılan gövdenin kabı) zemini: açık temada DÜZ #F8FAFC
   /// ([AppShowcaseColors.background], işverenin "ana zemin"i), koyu temada null (koyu zemin olduğu gibi kalır).
   ///
@@ -162,21 +181,40 @@ class ModuleShowcaseViewState extends State<ModuleShowcaseView> {
   bool _loadFailed = false;
   int _token = 0;
 
+  // "Yöneticiyi ara" (P2-23): null = henüz alınamadı / hata (kutu çizilmez). Eski sunucuda (404) özellik yok sayılır.
+  List<ManagerContact>? _managers;
+  int _managersToken = 0;
+
   bool _wantsDebt(ModuleShowcaseView w) =>
       w.audience == ShowcaseAudience.resident &&
       w.fetchMyFinance != null &&
       w.menuItems.contains(SirketMenuItem.borcum);
 
+  bool _wantsManagers(ModuleShowcaseView w) =>
+      w.audience == ShowcaseAudience.resident && w.fetchManagerContacts != null;
+
   @override
   void initState() {
     super.initState();
-    if (_wantsDebt(widget)) unawaited(reload());
+    // reload() yönetici iletişimini de okur; borç özeti istenmiyorsa yalnız o okunur.
+    if (_wantsDebt(widget)) {
+      unawaited(reload());
+    } else if (_wantsManagers(widget)) {
+      unawaited(_reloadManagers());
+    }
     unawaited(widget.applications?.ensureLoaded());
   }
 
   @override
   void didUpdateWidget(ModuleShowcaseView oldWidget) {
     super.didUpdateWidget(oldWidget);
+    final wantsManagers = _wantsManagers(widget);
+    if (wantsManagers && !_wantsManagers(oldWidget)) {
+      unawaited(_reloadManagers());
+    } else if (!wantsManagers && _wantsManagers(oldWidget)) {
+      ++_managersToken;
+      _managers = null;
+    }
     final wants = _wantsDebt(widget);
     if (wants && !_wantsDebt(oldWidget)) {
       // Borcum menüye yeni girdi (modül açıldı / veri geldi): özet okunur.
@@ -213,11 +251,30 @@ class ModuleShowcaseViewState extends State<ModuleShowcaseView> {
   @override
   void dispose() {
     ++_token;
+    ++_managersToken;
     super.dispose();
+  }
+
+  /// Yönetici iletişimini okur ("Yöneticiyi ara" kutusu). Eski / geç yanıt yenisini ezmez. Hata: eldeki bilgi korunur, hiç
+  /// yoksa kutu çizilmez; 404 (eski sunucuda uç yok) özelliği kapatır. Hiçbir durumda "numara yok" denmez (o yalnız sunucu
+  /// "telefon kayıtlı değil" derse söylenir).
+  Future<void> _reloadManagers() async {
+    final fetch = widget.fetchManagerContacts;
+    if (fetch == null || !_wantsManagers(widget)) return;
+    final token = ++_managersToken;
+    try {
+      final data = await fetch();
+      if (!mounted || token != _managersToken) return;
+      setState(() => _managers = data);
+    } catch (e) {
+      if (!mounted || token != _managersToken) return;
+      if (e is ApiException && e.statusCode == 404) setState(() => _managers = null);
+    }
   }
 
   /// Borç özetini yeniden okur (sayfa kabuğunun "aşağı çek yenile"sinden de çağrılır). Eski / geç yanıt yenisini ezmez.
   Future<void> reload() async {
+    unawaited(_reloadManagers());
     final fetch = widget.fetchMyFinance;
     if (fetch == null || !_wantsDebt(widget)) return;
     final token = ++_token;
@@ -373,6 +430,11 @@ class ModuleShowcaseViewState extends State<ModuleShowcaseView> {
         const SizedBox(height: AppSpace.lg),
       ],
       if (audience == ShowcaseAudience.admin && widget.attentionBar != null) widget.attentionBar!,
+      // Site yöneticisinin profilinde telefon yoksa sakinler onu arayamaz: ipucu (Profilim menüde yoksa düğmesiz).
+      if (audience == ShowcaseAudience.admin && widget.managerPhoneMissing)
+        ManagerPhoneHint(
+          onOpenProfile: widget.menuItems.contains(SirketMenuItem.profilim) ? () => _open(SirketMenuItem.profilim) : null,
+        ),
       if (audience == ShowcaseAudience.resident) ...[
         if (widget.aboveHero != null) widget.aboveHero!,
         _buildHero(context),
@@ -563,6 +625,11 @@ class ModuleShowcaseViewState extends State<ModuleShowcaseView> {
     ];
     final allowed = widget.quickActionItems;
     final guestPass = widget.onCreateGuestPass;
+    // "Yöneticiyi ara" (P2-23): sunucu yanıtı gelince, öteki kutuların yerini kaydırmamak için SONA eklenir. Kendi sitesinin
+    // yöneticisi olana ve veri yokken (yükleniyor / hata / eski sunucu) çizilmez.
+    final callable = _wantsManagers(widget)
+        ? ManagerCallTile.callable(_managers ?? const <ManagerContact>[])
+        : const <ManagerContact>[];
     final tiles = <Widget>[
       for (final (item, title, hint, art) in defs) ...[
         if (widget.menuItems.contains(item) && (allowed == null || allowed.contains(item)))
@@ -583,6 +650,7 @@ class ModuleShowcaseViewState extends State<ModuleShowcaseView> {
             onTap: guestPass,
           ),
       ],
+      if (callable.isNotEmpty) ManagerCallTile(contacts: callable, launcher: widget.dialLauncher),
     ];
     if (tiles.isEmpty) return const SizedBox.shrink();
     return Padding(

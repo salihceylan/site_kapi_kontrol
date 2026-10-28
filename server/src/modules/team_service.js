@@ -440,3 +440,88 @@ export async function getResidentDirectory(authUser) {
   }
   return { sites };
 }
+
+/**
+ * Profildeki telefonu `tel:` için sade biçime getirir ("0532 123 45 67" -> "05321234567", "+90 (532) 123-45-67" -> "+905321234567").
+ * Yalnız rakam, boşluk, ( ) - . ve baştaki + kabul edilir (harf, * ve # reddedilir: USSD / özel kod çevirtmez); 7-15 hane dışı null.
+ */
+export function dialablePhone(value) {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!/^\+?[0-9()\-\s.]+$/.test(trimmed)) return null;
+  const digits = trimmed.replace(/\D/g, '');
+  if (digits.length < 7 || digits.length > 15) return null;
+  return trimmed.startsWith('+') ? `+${digits}` : digits;
+}
+
+/** Sakinin bağı olduğu siteler: getResidentDirectory ile AYNI kapsam (daire üyeliği, kurul / görevli üyeliği). */
+const RESIDENT_SITES_SQL = `
+  SELECT s.site_code, s.name AS site_name
+  FROM sites s
+  WHERE s.site_code IN (
+    SELECT a.site_code FROM apartment_memberships am INNER JOIN apartments a ON a.id = am.apartment_id
+    WHERE am.user_code = $1 AND am.is_active = TRUE AND a.is_active = TRUE
+    UNION
+    SELECT m.site_code FROM site_memberships m WHERE m.user_code = $1 AND m.is_active = TRUE AND m.role IN ('BOARD_MEMBER', 'STAFF')
+  )
+  ORDER BY s.name
+`;
+
+/**
+ * GET /app/manager-contact (sakin "Yöneticiyi ara"): çağıranın bağı olduğu her site için
+ * { site_code, site_name, manager_name, manager_phone, is_self }.
+ *
+ * Telefon, yöneticinin PROFİLİNE yazdığı numaradır (users.phone_number); yalnız o siteyle bağı olan, oturum açmış çağırana döner
+ * (no-store). Site birden çok yöneticiye sahipse telefonu kayıtlı İLK yönetici (atanma sırasıyla) seçilir; hiçbirinin telefonu yoksa
+ * `manager_phone` null'dır (istemci "numara kayıtlı değil" der; asla uydurma numara yok). Çağıran o sitenin yöneticisiyse `is_self` true
+ * olur ve numara döndürülmez (kendini aramaz). E-posta, kullanıcı kodu ve başka kişisel alan ASLA dönmez. Rehber modülünden BAĞIMSIZDIR.
+ */
+export async function getResidentManagerContacts(authUser) {
+  const userCode = actorFromAuthUser(authUser).userCode;
+  if (userCode === null) return { sites: [] };
+  const sitesRes = await pool.query(RESIDENT_SITES_SQL, [userCode]);
+  const siteRows = sitesRes.rows ?? [];
+  if (siteRows.length === 0) return { sites: [] };
+  const codes = siteRows.map((row) => Number(row.site_code));
+  const managersRes = await pool.query(
+    `
+      SELECT m.site_code, u.user_code, u.full_name, u.phone_number
+      FROM (
+        SELECT site_code, manager_user_code AS user_code, created_at
+        FROM site_manager_sites WHERE site_code = ANY($1::bigint[])
+        UNION ALL
+        SELECT site_code, user_code, created_at
+        FROM site_memberships
+        WHERE site_code = ANY($1::bigint[]) AND role IN ('SITE_OWNER', 'SITE_ADMIN') AND is_active = TRUE
+      ) m
+      INNER JOIN users u ON u.user_code = m.user_code
+      WHERE u.deleted_at IS NULL AND u.is_active = TRUE
+      ORDER BY m.site_code, m.created_at, u.user_code
+    `,
+    [codes],
+  );
+  const bySite = new Map();
+  for (const row of managersRes.rows ?? []) {
+    const key = Number(row.site_code);
+    const list = bySite.get(key) ?? [];
+    if (!list.some((entry) => Number(entry.user_code) === Number(row.user_code))) list.push(row);
+    bySite.set(key, list);
+  }
+  const sites = siteRows.map((site) => {
+    const code = Number(site.site_code);
+    const managers = bySite.get(code) ?? [];
+    const base = { site_code: code, site_name: site.site_name ?? null };
+    if (managers.some((entry) => Number(entry.user_code) === userCode)) {
+      return { ...base, manager_name: null, manager_phone: null, is_self: true };
+    }
+    const withPhone = managers.find((entry) => dialablePhone(entry.phone_number) !== null);
+    const chosen = withPhone ?? managers[0] ?? null;
+    return {
+      ...base,
+      manager_name: chosen?.full_name ?? null,
+      manager_phone: withPhone ? dialablePhone(withPhone.phone_number) : null,
+      is_self: false,
+    };
+  });
+  return { sites };
+}

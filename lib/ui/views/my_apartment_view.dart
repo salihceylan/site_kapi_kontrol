@@ -16,12 +16,14 @@ import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/apartment_mgmt_dialogs.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/crm_confirm_dialog.dart';
 import 'package:site_kapi_kontrol/ui/helpers/connectivity_error.dart';
+import 'package:site_kapi_kontrol/ui/helpers/dial_call.dart';
 import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart' show crmMessageOf;
 import 'package:site_kapi_kontrol/ui/views/my_apartment_vehicles.dart';
+import 'package:site_kapi_kontrol/ui/widgets/emergency_call_button.dart';
 import 'package:site_kapi_kontrol/ui/widgets/state_view.dart';
 
 class MyApartmentView extends StatefulWidget {
-  const MyApartmentView({super.key, required this.authService, this.service, this.onChanged});
+  const MyApartmentView({super.key, required this.authService, this.service, this.onChanged, this.dialLauncher});
 
   final AuthService authService;
 
@@ -30,6 +32,9 @@ class MyApartmentView extends StatefulWidget {
 
   /// Bağlar değişti (ayrılma, çıkış, kabul): çağıran modül / kapı verisini tazeleyebilir.
   final VoidCallback? onChanged;
+
+  /// "Güvenlik ve destek" bölümündeki büyük 112 düğmesinin telefon uygulaması açıcısı (varsayılan `url_launcher`; testlerde sahte).
+  final DialLauncher? dialLauncher;
 
   @override
   State<MyApartmentView> createState() => MyApartmentViewState();
@@ -525,7 +530,9 @@ class MyApartmentViewState extends State<MyApartmentView> {
         children: [
           Text('Acil tehlikede 112\'yi arayın.', style: th.titleSmall),
           const SizedBox(height: AppSpace.sm),
-          const _HelplineLine(name: '112 Acil Çağrı Merkezi', detail: 'Acil tehlike durumunda'),
+          // Büyük 112 düğmesi (dokun-ara, P2-23): telefon uygulamasını 112 yazılı açar; açılamazsa numara + kopyala (kuru mod).
+          EmergencyCallButton(launcher: widget.dialLauncher),
+          const SizedBox(height: AppSpace.md),
           const _HelplineLine(name: 'ALO 183 Sosyal Destek Hattı', detail: 'Ücretsiz, 7 gün 24 saat destek ve yönlendirme'),
           const _HelplineLine(name: 'KADES uygulaması', detail: 'Emniyetin Kadın Acil Destek uygulaması'),
           const _HelplineLine(name: 'ŞÖNİM', detail: 'Şiddet Önleme ve İzleme Merkezi: danışmanlık ve barınma desteği'),
