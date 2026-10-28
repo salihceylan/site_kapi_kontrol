@@ -62,7 +62,16 @@ Amaç: raporun gösterdiği tüm eksikleri kapatmak, güçsüz yönleri güçlen
 - P2-30 `astra/yerel-kabul` → yalnız `tools/yerel/yalitim` seçmeli alınır (satır satır inceleme sonrası)
 
 ### Ertelenen / karara veya dış koşula bağlı (gerekçeli)
-- P2-2, P2-17, P2-18 (Drive canlı değil; D2 Drive işi öncesi P1-11 şart) · P2-13 (yalnız cihaz-içi ML Kit; dış AI için avukat görüşü K15) · P2-20 muhasebeci rolü (rol kararı sahibde) · P2-3 dönemsel rapor paketi, P2-5 ikinci altın veri seti + örnek site, P2-8/12 taşeron formu ve yönlendirme (sıra E sonrası kuyruk) · OTA imza, VPS parolası/geçmiş temizliği, depo görünürlüğü (sahip kararı) · A7 AHBU/Ev Otomasyonu tanıtımı (sahip kararı).
+- P2-2, P2-17, P2-18 (Drive canlı değil; D2 Drive işi öncesi P1-11 şart) · P2-13 (yalnız cihaz-içi ML Kit; dış AI için avukat görüşü K15) · P2-3 dönemsel rapor paketi, P2-5 ikinci altın veri seti + örnek site, P2-8/12 taşeron formu ve yönlendirme (sıra E sonrası kuyruk).
+
+### Sahip kararları (2026-10-28, soruldu ve seçildi)
+- VPS parolası / depo görünürlüğü / geçmiş temizliği: "ŞİMDİLİK DOKUNMA" — risk kabul edildi; "satışa hazır" aşamasında hukuk bayrağıyla birlikte yeniden sorulacak.
+- Tanıtım sitesi fiyat çelişkisi: Belgeler + Anket "pakete dahil" gösterilecek, ayrı fiyat (Belgeler 5 TL) kalkar; ana fiyat değişmez. → Bu oturumda ayrı ajanla uygulanıyor (g:/site/gudeteknoloji_com_tr).
+- OTA imzalama: ONAYLANDI → dalgalar bitince "Dalga F — OTA imza" (firmware imza + cihaz doğrulaması + sunucuda imzasız paket reddi + sahadaki cihazlar için geçiş planı).
+- P2-20 muhasebeci rolü: ROL YOK; bunun yerine gider/dekont belgesine "kontrol edildi (kim, ne zaman)" alanı — Dalga B merge SONRASI küçük iş (finans dosya çakışması bitince).
+- K9 Hesap/Kasa: Hesap kesin. · K17: ayar kalır + "kiracı vermezse malik öder" kuralı (yukarıda).
+- A7 AHBU: AHBU ayrı marka olarak KALIR — Ev Otomasyonu tanıtımına iş çıkmaz, madde kapandı.
+- iOS: şimdilik Android+Web; Apple Developer hesabı açılınca iOS tek paket halinde yapılır.
 
 ## Kararlar (sahibin "standarda göre karar ver" kalıcı talimatıyla; rapor önerileri esas)
 - K1 (P1-1): Hesap modeli korunur; "malike devret" açık, yönetici onaylı, izli ve geri alınabilir eylem + kiracı çıkışı öncesi malike borç bildirimi. Bildirim/devir metinleri AVUKAT_KONTROL_LISTESI'ne eklenir.
@@ -73,7 +82,7 @@ Amaç: raporun gösterdiği tüm eksikleri kapatmak, güçsüz yönleri güçlen
 - K6 (P1-8): "Silmeyi biz yapmayız": otomatik silme kaldırılır; bekleyen dosya + yönetici uyarısı; kota dolunca yeni yükleme reddi. Sunucu geçici dosyası yalnız Drive teyidi SONRASI silinir (C-28); kullanıcı cihaz kopyası asla otomatik silinmez.
 - K7 (P1-12): Çoklu malik "tüm malikler kayıtlı + tek hesap muhatabı" modeliyle.
 - K8 (P1-16): Yetenek (çekirdek, her sitede açık) ↔ menü yerleşimi (site başına kompakt küme + "Tüm işlemler") ayrılır; kompakt kümenin varsayılanı yönetim türü önerilerinden türetilir. Fiyat/paket etkisi sahibin kararı olarak açık kalır.
-- K9: "Kasa" sözcüğü değil mevcut "Hesap" adları korunur (İşletme / Fon); nihai ad sahibin teyidine açık.
+- K9 — SAHİP TEYİDİ (2026-10-28): "Hesap" adları kesinleşti (İşletme / Fon); "Kasa" terimine geçilmeyecek.
 - K10 (P2-27): Deneme erişimi 72 saat, demo siteye kilitli, deneme verisinde işlem serbest.
 - K11 (P1-14): Geri bildirim eki 4 dosya, dosya başı 5 MB, toplam 20 MB; gönderen ekran bağlamı otomatik eklenir.
 - K12 (P1-7): Sıçrama eşiği site ayarı; varsayılan son 3 dönem medyanının 5 katı.
@@ -81,7 +90,7 @@ Amaç: raporun gösterdiği tüm eksikleri kapatmak, güçsüz yönleri güçlen
 - K14 (P2-9): Revizyon modeli: yeni sürüm + önceki sürüme bağ (zeyilname yerine).
 - K15 (P2-13): Belge okuma yalnız cihaz-içi (ML Kit); dış yapay zekâya gönderim avukat görüşü olmadan yapılmaz (KVKK m.9).
 - K16 (C-21): Alacaklı devir bakiyesi Dalga B'de desteklenir (OPENING_CREDIT_UNSUPPORTED kalkar; altın veri setine senaryo eklenir).
-- K17 (C-24): Daire bazında "borç muhatabı = Malik/Kiracı/İkisi" ayarı KALIR (canlı davranış + F2.05 deneme maddesi bunu belgeliyor; kaldırmak davranış kırar). Sahibin "kiracı varsa kiracı öder" sözüyle çelişki görülürse tek commit'le kaldırılabilir — teyide açık.
+- K17 (C-24) — SAHİP TEYİDİ + EK (2026-10-28): Ayar KALIR (Malik/Kiracı/İkisi). Sahibin eki: "Borç mutlaka tahsil edilir; kiracı vermezse mal sahibi öder." Uygulama: geciken kiracı borcu için malike devir YALNIZ çıkışta değil, gecikmede de yönetici önüne açıkça önerilir (K1'in onaylı/izli/geri alınabilir deseniyle). Dalga B b2 (fin/devir-iade) kapsamı; birleştirme/incelemede bu kural denetlenecek, eksikse tamamlanacak.
 - K18 (C-25): Ay ortası GİRİŞTE ayın tamamının malike yazılması mevcut davranış olarak korunur; bilgi notu faz sayfasına.
 
 ## Durum izleme
