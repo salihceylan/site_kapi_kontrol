@@ -7,9 +7,10 @@ import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_snack.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 
-/// Yönetim "Ödeme ve Kamera" ekranı (`card_payments` ve `plate_cameras` modülleri).
+/// Yönetim "Kamera ve Plaka" ekranı (`plate_cameras` modülü).
 ///
-/// - Kart ödemesi: iyzico ve PayTR "Yakında…" (kapalı); yalnız komisyon bilgi notu kaydedilir (komisyon ödeyene yansır).
+/// Kart ödemesi artık burada DEĞİLDİR: Aidat ve Finans'ın parçasıdır ve Finans ekranındaki "Kart Ödemesi" düğmesinden açılır.
+///
 /// - Kamera ve plaka: cihaz kaydı (marka, IP, kimlik bilgisi sunucuda şifreli), olay belirteci (bir kez gösterilir), plaka
 ///   kayıtları. Plaka yalnız araç listesiyle karşılaştırılıp KAYDEDİLİR; kapı açma / otomatik geçiş "Yakında…".
 /// - [DeviceIntegrationsViewState.reload] sayfa kabuğunun aşağı çekip yenilemesinden çağrılır.
@@ -29,7 +30,6 @@ class DeviceIntegrationsViewState extends State<DeviceIntegrationsView> {
   DeviceSite? _site;
   bool _loading = true;
   String? _error;
-  PaymentOverview? _payments;
   List<CameraDevice> _cameras = const <CameraDevice>[];
   List<PlateEventRow> _events = const <PlateEventRow>[];
 
@@ -48,12 +48,10 @@ class DeviceIntegrationsViewState extends State<DeviceIntegrationsView> {
     }
     if (mounted) setState(() => _loading = true);
     try {
-      final payments = site.paymentsOn ? await _service.payments(site.code) : null;
-      final cameras = site.camerasOn ? await _service.cameras(site.code) : const <CameraDevice>[];
-      final events = site.camerasOn ? await _service.plateEvents(site.code) : const <PlateEventRow>[];
+      final cameras = await _service.cameras(site.code);
+      final events = await _service.plateEvents(site.code);
       if (!mounted || _site != site) return;
       setState(() {
-        _payments = payments;
         _cameras = cameras;
         _events = events;
         _error = null;
@@ -78,30 +76,6 @@ class DeviceIntegrationsViewState extends State<DeviceIntegrationsView> {
     } on ApiException catch (e) {
       if (mounted) AppSnack.show(context, e.message, kind: AppSnackKind.error);
     }
-  }
-
-  Future<void> _editCommission(PaymentProviderInfo provider) async {
-    final site = _site!;
-    final controller = TextEditingController(text: provider.commissionInfo ?? '');
-    final saved = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('${provider.name} komisyon bilgisi'),
-        content: TextField(
-          controller: controller,
-          maxLength: 300,
-          maxLines: 3,
-          decoration: const InputDecoration(labelText: 'Not (isteğe bağlı)', helperText: 'Komisyon ödemeyi yapana yansıtılır.'),
-        ),
-        actions: <Widget>[
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Vazgeç')),
-          FilledButton(onPressed: () => Navigator.pop(context, controller.text), child: const Text('Kaydet')),
-        ],
-      ),
-    );
-    controller.dispose();
-    if (saved == null) return;
-    await _run(() async => _service.saveCommissionInfo(site.code, provider.code, saved), 'Bilgi kaydedildi.');
   }
 
   Future<void> _addCamera() async {
@@ -203,30 +177,6 @@ class DeviceIntegrationsViewState extends State<DeviceIntegrationsView> {
     );
   }
 
-  Widget _paymentsCard(BuildContext context, DeviceSite site) {
-    final overview = _payments;
-    return AppCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Text('Kart Ödemesi', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: AppSpace.xs),
-          Text(overview?.notice ?? 'Kart ödeme komisyonu ödemeyi yapana yansıtılır.'),
-          const SizedBox(height: AppSpace.sm),
-          for (final p in overview?.providers ?? const <PaymentProviderInfo>[])
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: Row(children: <Widget>[Text(p.name), const SizedBox(width: 8), _soon(context)]),
-              subtitle: Text((p.commissionInfo ?? '').isEmpty ? 'Komisyon notu yok' : p.commissionInfo!),
-              trailing: site.canWrite ? IconButton(tooltip: 'Komisyon notunu düzenle', icon: const Icon(Icons.edit_rounded), onPressed: () => _editCommission(p)) : null,
-            ),
-          const SizedBox(height: AppSpace.xs),
-          const Text('Kartla ödeme henüz açık değil; sağlayıcı sözleşmesi tamamlanınca etkinleşecek.'),
-        ],
-      ),
-    );
-  }
-
   Widget _camerasCard(BuildContext context, DeviceSite site) {
     return AppCard(
       child: Column(
@@ -294,7 +244,7 @@ class DeviceIntegrationsViewState extends State<DeviceIntegrationsView> {
     return ListView(shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), 
       padding: const EdgeInsets.all(AppSpace.lg),
       children: <Widget>[
-        Text('Ödeme ve Kamera', style: Theme.of(context).textTheme.headlineSmall),
+        Text('Kamera ve Plaka', style: Theme.of(context).textTheme.headlineSmall),
         const SizedBox(height: AppSpace.md),
         if (widget.sites.length > 1)
           DropdownButtonFormField<DeviceSite>(
@@ -314,9 +264,7 @@ class DeviceIntegrationsViewState extends State<DeviceIntegrationsView> {
         else if (_error != null)
           AppCard(child: Text(_error!))
         else ...<Widget>[
-          if (site.paymentsOn) _paymentsCard(context, site),
-          if (site.paymentsOn && site.camerasOn) const SizedBox(height: AppSpace.md),
-          if (site.camerasOn) _camerasCard(context, site),
+          _camerasCard(context, site),
         ],
       ],
     );

@@ -31,9 +31,11 @@ Sunucu ve Flutter uygulaması bu belgeye göre yazılır. Deneme listesi: `tools
 | `contracts` | Firma ve Sözleşme Takibi | hayır | `available` (bkz. PLATFORM_SOZLESMELER.md) | KAPALI |
 | `decision_book` | Karar Defteri | hayır | `available` | KAPALI |
 
-Tam ve güncel liste (17 modül, sırasıyla) `catalog.js` içindedir; bu tablo yalnız örnek satırları ve ilk sürüm durumlarını gösterir.
+Tam ve güncel liste `catalog.js` içindedir; bu tablo yalnız örnek satırları ve ilk sürüm durumlarını gösterir.
 
 Açıklamalar (Türkçe, kısa) katalogda tutulur. `toggleable = !core && status === 'available'`.
+
+**Kart Ödemesi ayrı modül değildir (2026-10-28):** eski `card_payments` modülü kataloktan KALDIRILDI; kart ödemesi (sağlayıcı arayüzü: iyzico, PayTR "Yakında…") Aidat ve Finans'ın (`finance`, temel modül) parçasıdır. Kart ödemesi uçlarının (`/manager/sites/:siteCode/card-payments[/:provider]`) kapısı `finance` modülüdür, yani her sitede açıktır; uç yolları ve veri tablosu (`payment_provider_settings`) DEĞİŞMEDİ. Uygulamada ayrı modül kartı ya da menü öğesi yoktur: Finans ekranındaki **Kart Ödemesi** düğmesi (yönetici düzenler, kurul salt okur) komisyon notu penceresini açar. Migration `083_card_payments_into_finance.sql` (aynı metin `finance_core_module.js` `CARD_PAYMENTS_INTO_FINANCE_SQL`, açılışta `ensureDbSchema` de uygular; idempotent): `site_modules` içindeki `card_payments` satırlarını siler, bekleyen `card_payments` modül taleplerini "onaylandı" olarak sonuçlandırır (karar notu "Kart Ödemesi, Aidat ve Finans modülünün içine alındı; her sitede açık."); kart ödemesi AYARLARI, geçmiş talepler ve `audit_log` kayıtları KALIR. Eski uygulama sürümü `card_payments` kodunu talep eder ya da açıp kapatmaya çalışırsa sunucu 404/500 değil, temel modüllerle aynı sözleşmeyle **400 `MODULE_NOT_TOGGLEABLE`** ve açıklayıcı metin döner (`catalog.js` `retiredModuleNotice`); katalogda ve `modules` haritalarında bu kod artık yoktur, eski uygulama kart ödemesi bölümünü göremez ama hata da almaz (uygulamayı güncelleyince Finans ekranından erişir).
 `enabled` hesabı: `status !== 'available'` → `false`; `core` → `true`; aksi halde `site_modules` satırı varsa `enabled`, yoksa varsayılan.
 
 ## Veritabanı (migrations/029_platform_modules.sql + db.js'te aynı DDL)

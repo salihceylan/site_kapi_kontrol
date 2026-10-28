@@ -554,6 +554,16 @@ describe('POST module-requests', () => {
     assert.equal(notifications.length, 0);
   });
 
+  it('kataloktan kaldirilan card_payments (Aidat ve Finans a katildi): eski uygulama talebi 404/500 degil 400 MODULE_NOT_TOGGLEABLE + aciklama alir; talep/audit/bildirim yok', async () => {
+    const res = await post({ module_code: 'card_payments', note: 'Kartla ödeme için.' });
+    assert.equal(res.status, 400, JSON.stringify(res.body));
+    assert.equal(res.body.code, 'MODULE_NOT_TOGGLEABLE');
+    assert.match(res.body.error, /Aidat ve Finans/);
+    assert.equal(state.requests.length, 0);
+    assert.equal(state.audit.length, 0);
+    assert.equal(notifications.length, 0);
+  });
+
   it('gecersiz govde 400 INVALID_BODY: module_code eksik/metin degil, not metin degil veya 500 karakterden uzun', async () => {
     for (const body of [{}, { module_code: '' }, { module_code: '   ' }, { module_code: 5 }, { module_code: null }, { note: 'x' }]) {
       const res = await post(body);

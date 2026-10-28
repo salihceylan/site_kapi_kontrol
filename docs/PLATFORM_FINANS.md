@@ -115,6 +115,7 @@ Yeni bağımlılık YOK. Para girişi/gösterimi: ortak yardımcı (`lib/ui/help
 2. **Sakin — "Borcum" (çekmece; yalnız alıcısı olabilecek ve modülü açık sitelerde):** toplam borç/alacak, vadesi gelen tutar, sıradaki vade, hareketler; çok daireli kullanıcıda daire seçici/kartlar; boş durum "Borcunuz yok" yalnız gerçekten sıfırken (hata asla "borç yok" demez).
 3. **Kurul:** yalnız okuma (yazma düğmeleri/menüsü yok, "yalnızca görüntüleyebilirsiniz" notu).
 4. **Temel modül (2026-10-26):** Finans/Borcum menüsü her sitede görünür; Modüller ekranında "Aidat ve Finans" kartı temel modül olarak hep açıktır, talep düğmesi yoktur.
+   **Kart Ödemesi Finans'ın içindedir (2026-10-28):** eski ayrı `card_payments` modülü kaldırıldı; Finans ekranındaki **Kart Ödemesi** düğmesi (yönetici düzenler, kurul salt okur) iyzico / PayTR "Yakında…" listesini ve komisyon notunu gösterir. Online tahsilat hâlâ YOKTUR (tahsilat yapılmaz; yalnız komisyon bilgi notu saklanır). Uçlar (`GET /manager/sites/:siteCode/card-payments`, `PUT .../card-payments/:provider`) ve `payment_provider_settings` tablosu aynı kalır; kapısı `finance` temel modülüdür (bkz. `docs/PLATFORM_MODUL_SISTEMI.md`, migration 083, `docs/PLATFORM_ODEME_KAMERA.md`).
 5. **Hata kodları** Türkçe eşlenir: `MODULE_DISABLED`, `PREVIEW_STALE`, `PREVIEW_INCOMPLETE`, `PERIOD_ALREADY_POSTED`, `PERIOD_CLOSED`, `PERIOD_NOT_CLOSABLE`, `DEFINITION_INACTIVE`, `ENTRY_ALREADY_REVERSED`, `ENTRY_NOT_REVERSIBLE`, `APARTMENT_HAS_FINANCE`, `INVALID_BODY`.
 6. Süper denetim ekranı: yeni eylem etiketleri/süzgeçleri.
 

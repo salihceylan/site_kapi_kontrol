@@ -479,10 +479,10 @@ describe('platform rotalari: kimlik zinciri', () => {
 });
 
 describe('GET /app/modules/catalog', () => {
-  it('kimligi dogrulanmis herkese 25 modullu katalog doner', async () => {
+  it('kimligi dogrulanmis herkese 24 modullu katalog doner', async () => {
     const res = await call('GET', '/app/modules/catalog', { user: users.resident });
     assert.equal(res.status, 200);
-    assert.equal(res.body.modules.length, 25);
+    assert.equal(res.body.modules.length, 24);
     assert.deepEqual(Object.keys(res.body.modules[0]), ['code', 'name', 'description', 'core', 'status']);
     assert.equal(res.body.modules[0].code, 'door_control');
     assert.equal(res.body.modules[1].core, true);
@@ -501,7 +501,7 @@ describe('GET /manager/sites/:siteCode/modules: yetki matrisi', () => {
     assert.equal(res.body.site_name, 'Gül Sitesi');
     assert.equal(res.body.management_type, 'apartment_site');
     assert.equal(res.body.management_type_label, 'Apartman ve Site');
-    assert.equal(res.body.modules.length, 25);
+    assert.equal(res.body.modules.length, 24);
     assert.deepEqual(doorOf(res.body), {
       code: 'door_control',
       name: 'Geçiş Kontrol (SmartKeyPass)',
@@ -555,7 +555,6 @@ describe('GET /manager/sites/:siteCode/modules: yetki matrisi', () => {
         ['survey', true, true],
         ['visitor_log', true, true],
         ['card_access', true, true],
-        ['card_payments', true, true],
         ['plate_cameras', true, true],
         ['contracts', true, true],
         ['decision_book', true, true],
@@ -806,6 +805,20 @@ describe('PUT modul: onay zorunlulugu ve denetim kaydi', () => {
         assert.equal(res.body.code, 'MODULE_NOT_TOGGLEABLE');
       }
     }
+  });
+
+  it('kataloktan kaldirilan card_payments (Aidat ve Finans a katildi): eski uygulama 404/500 degil 400 MODULE_NOT_TOGGLEABLE + aciklama alir; satir yazilmaz, audit yok', async () => {
+    for (const body of [{ enabled: true }, { enabled: false }, { enabled: false, confirm: true }, {}]) {
+      const res = await call('PUT', moduleUrl(SITE_1, 'card_payments'), { user: users.superUser, body });
+      assert.equal(res.status, 400, JSON.stringify(body));
+      assert.equal(res.body.code, 'MODULE_NOT_TOGGLEABLE');
+      assert.match(res.body.error, /Aidat ve Finans/);
+    }
+    assert.equal(state.siteModules.has(`${SITE_1}:card_payments`), false);
+    assert.equal(state.audit.length, 0);
+    // modul listesinde de yok
+    const list = await call('GET', `/manager/sites/${SITE_1}/modules`, { user: users.superUser });
+    assert.equal(list.body.modules.some((m) => m.code === 'card_payments'), false);
   });
 
   it('yakinda modul ACILAMAZ 409 MODULE_COMING_SOON; kapatmak 200 (degisiklik yok, audit yok)', async () => {
@@ -1610,7 +1623,6 @@ describe('GET /app/my-modules', () => {
         'survey',
         'visitor_log',
         'card_access',
-        'card_payments',
         'plate_cameras',
         'contracts',
         'decision_book',
@@ -1780,7 +1792,7 @@ describe('F9: yonetim turu terimleri', () => {
     // mevcut alanlar degismez
     assert.equal(res.body.management_type, 'apartment_site');
     assert.equal(res.body.management_type_label, 'Apartman ve Site');
-    assert.equal(res.body.modules.length, 25);
+    assert.equal(res.body.modules.length, 24);
     assert.equal(typeof doorOf(res.body).can_toggle, 'boolean');
   });
 
@@ -1793,7 +1805,7 @@ describe('F9: yonetim turu terimleri', () => {
     assert.equal(res.body.management_terms.unit, 'Ofis');
     assert.equal(res.body.management_terms.resident_plural, 'Firmalar');
     assert.equal(res.body.management_terms.fee, 'Ortak gider');
-    assert.equal(res.body.modules.length, 25);
+    assert.equal(res.body.modules.length, 24);
     assert.deepEqual(
       res.body.modules.filter((m) => m.recommended).map((m) => m.code).sort(),
       ['documents', 'finance', 'visitor_log', 'work_tracking'],

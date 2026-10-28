@@ -1318,21 +1318,18 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     ];
   }
 
-  /// "Ödeme ve Kamera" ekranındaki siteler: `card_payments` ya da `plate_cameras` modülü AÇIK siteler; yönetici yazar, kurul
+  /// "Kamera ve Plaka" ekranındaki siteler: `plate_cameras` modülü AÇIK siteler; yönetici yazar, kurul
   /// üyesi salt okur. FAIL-OPEN YOK: modül verisi yoksa ya da süper kullanıcıda (modül süzgeci yok) liste boştur.
   List<DeviceSite> _deviceIntegrationSites(UserRole role) {
     if (role == UserRole.superUser || !_moduleAccess.isFiltering) return const <DeviceSite>[];
     final canManage = _canManagePeople(role);
     return <DeviceSite>[
       for (final site in _moduleAccess.result!.sites)
-        if ((site.isEnabled(PlatformModuleCodes.cardPayments) || site.isEnabled(PlatformModuleCodes.plateCameras)) &&
-            ((site.role == 'manager' && canManage) || site.isBoardMember))
+        if (site.isEnabled(PlatformModuleCodes.plateCameras) && ((site.role == 'manager' && canManage) || site.isBoardMember))
           DeviceSite(
             code: site.siteCode,
             name: site.siteName,
             canWrite: site.role == 'manager' && canManage,
-            paymentsOn: site.isEnabled(PlatformModuleCodes.cardPayments),
-            camerasOn: site.isEnabled(PlatformModuleCodes.plateCameras),
           ),
     ];
   }
@@ -2271,7 +2268,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         // Sakinde ekranın içindeki başlık "Misafir plakası"dır; menü adı herkeste aynıdır.
         return 'Plaka Tanıma';
       case SirketMenuItem.odemeKamera:
-        return 'Ödeme ve Kamera';
+        return 'Kamera ve Plaka';
       case SirketMenuItem.kameraCctv:
         return 'Kamera (CCTV)';
       case SirketMenuItem.ekipmanBakim:

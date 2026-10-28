@@ -118,6 +118,8 @@ void main() {
       await _pump(t, auth, sites: _board);
       expect(find.byKey(const ValueKey<String>('finance_open_settings')), findsNothing);
       expect(find.byKey(const ValueKey<String>('finance_reminder_send')), findsNothing);
+      // Kart Ödemesi Aidat ve Finans'ın parçası: kurul üyesi de (salt okur) görür.
+      expect(find.byKey(const ValueKey<String>('finance_open_card_payments')), findsOneWidget);
       await _tab(t, 3);
       expect(find.text('Nakit Kasa'), findsOneWidget);
       expect(find.byKey(const ValueKey<String>('finance_cash_add')), findsNothing);
@@ -135,6 +137,19 @@ void main() {
       await key.currentState!.reload();
       await settleFor(t);
       expect(auth.f4.callCount('getSettings'), greaterThan(before));
+    });
+  });
+
+  group('Kart Ödemesi (Aidat ve Finans içinde)', () {
+    testWidgets('yönetici Finans ekranından Kart Ödemesi penceresini açar ve kapatır (ayrı modül gerekmez)', (t) async {
+      final auth = _auth();
+      await _pump(t, auth);
+      await f4Tap(t, 'finance_open_card_payments');
+      await settleFor(t);
+      expect(find.byKey(const ValueKey<String>('finance_card_payments_close')), findsOneWidget);
+      await f4Tap(t, 'finance_card_payments_close');
+      await settleFor(t);
+      expect(find.byKey(const ValueKey<String>('finance_card_payments_close')), findsNothing);
     });
   });
 

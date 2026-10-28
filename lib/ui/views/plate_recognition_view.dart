@@ -424,7 +424,7 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
     if (settings == null) return const <Widget>[];
     return <Widget>[
       _note('Kapı açma: Yakında… Otomatik açma açık kapıda izinli okumalar şimdilik yalnız "açılırdı" diye kaydedilir; kapıya komut gönderilmez.'),
-      _note('Kameralar "Ödeme ve Kamera" ekranından eklenir; burada kameranın hangi kapıya baktığını eşlersiniz. Kamera okuma güvenini (confidence) göndermiyorsa otomatik açma yapılmaz.'),
+      _note('Kameralar "Kamera ve Plaka" ekranından eklenir; burada kameranın hangi kapıya baktığını eşlersiniz. Kamera okuma güvenini (confidence) göndermiyorsa otomatik açma yapılmaz.'),
       if (settings.doors.isEmpty) _empty('Bu sitede tanımlı kapı yok.'),
       for (final door in settings.doors)
         _GateCard(

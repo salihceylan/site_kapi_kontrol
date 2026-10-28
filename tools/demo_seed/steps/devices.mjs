@@ -1,4 +1,4 @@
-// Odeme ve Kamera (moduller: card_payments, plate_cameras): odeme saglayici bilgisi (sahte/kapali), kamera cihazlari, ~100 plaka olayi.
+// Odeme ve Kamera (kart odemesi: Aidat ve Finans temel modulu "finance"; kamera: plate_cameras modulu): odeme saglayici bilgisi (sahte/kapali), kamera cihazlari, ~100 plaka olayi.
 // Gercek sir/anahtar YAZILMAZ: kamera parolasi acik sahte bir metindir ve uygulamanin kendi islemiyle sifrelenir; yerel IP'ler ozel aralikta.
 
 import { addDays } from '../lib/util.mjs';
@@ -10,7 +10,7 @@ export async function seedDevices(ctx) {
   const out = { providers: 0, cameras: 0, plateEvents: 0, skipped: [] };
   const mod = await ctx.importServer('src/modules/device_integrations_service.js');
 
-  if (ctx.enabled.card_payments) {
+  if (ctx.enabled.finance) {
     for (const provider of ['iyzico', 'paytr']) {
       await mod.savePaymentProviderInfo({
         siteCode, provider, userCode: manager.user_code,
@@ -19,7 +19,7 @@ export async function seedDevices(ctx) {
       out.providers += 1;
     }
   } else {
-    out.skipped.push('card_payments kapali');
+    out.skipped.push('finance kapali');
   }
 
   if (ctx.enabled.plate_cameras) {

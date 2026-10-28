@@ -9,7 +9,7 @@
 //   GET  /manager/sites/:siteCode/plate-events                     plaka kayıtları (?limit=&before_id=)
 //   POST /camera-events/plate                                      kamera olayı (Authorization: Bearer <id>.<gizli> ya da X-Camera-Token); kapı AÇMAZ
 //
-// Yetki: yönetici / süper yazar; kurul üyesi salt okur; diğerleri 403. İlgili modül (card_payments / plate_cameras) kapalıysa 403 MODULE_DISABLED.
+// Yetki: yönetici / süper yazar; kurul üyesi salt okur; diğerleri 403. Kart ödemesi uçlarının kapısı Aidat ve Finans (temel modül; her sitede açık), kamera uçlarınınki plate_cameras modülüdür; kapalıysa 403 MODULE_DISABLED.
 
 import express from 'express';
 import { authRequired } from '../middlewares/auth_middleware.js';
@@ -39,7 +39,7 @@ import {
 
 export const deviceIntegrationsRouter = express.Router();
 
-const MODULE_NAMES = { [CARD_PAYMENTS_MODULE]: 'Kart Ödemesi', [PLATE_CAMERAS_MODULE]: 'Kamera ve Plaka' };
+const MODULE_NAMES = { [CARD_PAYMENTS_MODULE]: 'Aidat ve Finans', [PLATE_CAMERAS_MODULE]: 'Kamera ve Plaka' };
 
 const writeLimiter = createRuleLimiter({
   rules: [

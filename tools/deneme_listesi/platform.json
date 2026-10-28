@@ -7216,9 +7216,9 @@
           "id": "F34.01",
           "baslik": "Modülleri aç",
           "adimlar": [
-            "Modüller ekranından bir sitede 'Kart Ödemesi' ve 'Kamera ve Plaka' modüllerini aç."
+            "Modüller ekranından bir sitede 'Kamera ve Plaka' modülünü aç. ('Kart Ödemesi' artık ayrı modül değildir; Aidat ve Finans'ın içindedir.)"
           ],
-          "beklenen": "İki modül listede görünür ve açılır; varsayılan kapalıydı.",
+          "beklenen": "'Kamera ve Plaka' listede görünür ve açılır; varsayılan kapalıydı. Listede ayrıca 'Kart Ödemesi' modülü YOKTUR.",
           "rol_notu": "Süper kullanıcı",
           "on_kosul": "",
           "yeni": false,
@@ -7226,11 +7226,11 @@
         },
         {
           "id": "F34.02",
-          "baslik": "Ödeme ve Kamera menüsü",
+          "baslik": "Kart Ödemesi penceresi ve Kamera ve Plaka menüsü",
           "adimlar": [
-            "Modülleri açık sitede giriş yap, Site hizmetleri altında 'Ödeme ve Kamera' ekranını aç."
+            "Finans ekranında 'Kart Ödemesi' düğmesine bas (ayrı modül açmak gerekmez). Sonra, 'Kamera ve Plaka' modülü açık sitede Site hizmetleri altında 'Kamera ve Plaka' ekranını aç."
           ],
-          "beklenen": "Kart Ödemesi kartında iyzico ve PayTR 'Yakında…' etiketiyle görünür; komisyonun ödeyene yansıtıldığı yazar.",
+          "beklenen": "Kart Ödemesi penceresinde iyzico ve PayTR 'Yakında…' etiketiyle görünür; komisyonun ödeyene yansıtıldığı yazar. Yönetim kurulu üyesi aynı pencereyi salt okur görür (kalem simgesi yok). 'Kamera ve Plaka' ekranında yalnız kamera kartı vardır.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
           "yeni": false,

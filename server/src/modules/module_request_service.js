@@ -10,7 +10,7 @@
 import { pool } from '../db.js';
 import { sendModuleRequestNotificationEmail } from '../mailer.js';
 import { actorFromAuthUser, clampAuditLimit, recordAudit } from './audit_service.js';
-import { computeModuleEnabled, getModuleDefinition, MODULE_STATUS_COMING_SOON } from './catalog.js';
+import { computeModuleEnabled, getModuleDefinition, MODULE_STATUS_COMING_SOON, retiredModuleNotice } from './catalog.js';
 import { PlatformError } from './errors.js';
 import { moduleLockKey } from './module_service.js';
 
@@ -189,6 +189,11 @@ export async function createModuleRequest({ siteCode, moduleCode, note, actor })
   const code = moduleCode.trim();
   const definition = getModuleDefinition(code);
   if (!definition) {
+    // Kataloktan kaldırılmış kod (ör. card_payments -> Aidat ve Finans'a katıldı): eski uygulama 404 yerine açıklayıcı 400 alır.
+    const retired = retiredModuleNotice(code);
+    if (retired) {
+      throw new PlatformError(400, 'MODULE_NOT_TOGGLEABLE', retired);
+    }
     throw new PlatformError(404, 'MODULE_NOT_FOUND', 'Modül bulunamadı.');
   }
   if (definition.core) {

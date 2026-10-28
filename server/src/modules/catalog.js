@@ -7,6 +7,7 @@
 //  - Satırı olmayan site katalog varsayılanına göre davranır (door_control varsayılanı 2bf1bd4'ten beri KAPALI;
 //    cihaz kapıya bağlanınca açılır).
 //  - Aidat ve Finans TEMEL modüldür (AGENTS.md Kural 25): talep gerekmeden her sitede açık, kapatılamaz.
+//    Kart Ödemesi (eski `card_payments`) ayrı modül DEĞİLDİR: Aidat ve Finans'ın parçasıdır (kapıları `finance` denetler).
 
 export const MODULE_STATUS_AVAILABLE = 'available';
 export const MODULE_STATUS_COMING_SOON = 'coming_soon';
@@ -122,14 +123,6 @@ export const MODULE_CATALOG = Object.freeze([
     defaultEnabled: false,
   }),
   defineModule({
-    code: 'card_payments',
-    name: 'Kart Ödemesi',
-    description: 'Kartla aidat ödemesi için sağlayıcı arayüzü (iyzico, PayTR). Yakında.',
-    core: false,
-    status: MODULE_STATUS_AVAILABLE,
-    defaultEnabled: false,
-  }),
-  defineModule({
     code: 'plate_cameras',
     name: 'Kamera ve Plaka',
     description: 'Plaka tanıyan kameralardan gelen olayların araç listesiyle karşılaştırılıp kaydı. Kapı açmaz.',
@@ -238,6 +231,22 @@ export function getModuleDefinition(code) {
     return null;
   }
   return DEFINITIONS_BY_CODE.get(code) ?? null;
+}
+
+// Kataloktan KALDIRILMIŞ modül kodları -> açıklama. Kullanıcıya dönük ad/ayrıntı sabittir (kullanıcı girdisi yansıtılmaz).
+// `card_payments` (Kart Ödemesi) 2026-10-28'de Aidat ve Finans'ın (temel modül) içine alındı: ayrı modül değildir, her sitede hep açıktır.
+// Eski uygulama sürümleri hâlâ bu kodu talep edebilir ya da açıp kapatmaya çalışabilir; bilinmeyen modül gibi 404 değil,
+// temel modüllerle AYNI sözleşmeyle (400 MODULE_NOT_TOGGLEABLE + açıklayıcı metin) yanıtlanır.
+const RETIRED_MODULE_NOTICES = new Map([
+  ['card_payments', 'Kart Ödemesi artık Aidat ve Finans modülünün içindedir; her sitede hep açıktır, ayrıca açılıp kapatılamaz ya da talep edilemez.'],
+]);
+
+/** Kataloktan kaldırılmış modül kodu için açıklama metni; kaldırılmış değilse (ya da metin olmayan değerse) null. */
+export function retiredModuleNotice(code) {
+  if (typeof code !== 'string') {
+    return null;
+  }
+  return RETIRED_MODULE_NOTICES.get(code) ?? null;
 }
 
 export function isToggleable(definition) {

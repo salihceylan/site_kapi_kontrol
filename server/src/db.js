@@ -44,7 +44,7 @@ import { ensureBankImportSchema } from './modules/bank_import_schema.js';
 import { ensureOAuthSchema } from './modules/oauth_schema.js';
 import { ensureIntegritySchema } from './modules/integrity_schema.js';
 import { ensureFinanceFundsSchema } from './modules/finance_funds_schema.js';
-import { FINANCE_CORE_BACKFILL_SQL } from './modules/finance_core_module.js';
+import { CARD_PAYMENTS_INTO_FINANCE_SQL, FINANCE_CORE_BACKFILL_SQL } from './modules/finance_core_module.js';
 import { ensureTenantAdminRule } from './modules/apartment_tenant_admin_sql.js';
 
 dotenv.config();
@@ -2042,6 +2042,14 @@ export async function ensureDbSchema() {
     } catch (e) {
       // eslint-disable-next-line no-console
       console.error('[DB] 081 kiraci admin kurali hatasi:', e?.code || e?.message);
+    }
+
+    // 083 Kart Odemesi (card_payments) Aidat ve Finans'in icine alindi: modul acik/kapali satirlari silinir, bekleyen talepler sonuclanir; kart odemesi AYARLARI (payment_provider_settings) korunur. Hata acilisi durdurmaz.
+    try {
+      await client.query(CARD_PAYMENTS_INTO_FINANCE_SQL);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('[DB] 083 kart odemesi finansa katma hatasi:', e?.code || e?.message);
     }
   } finally {
     client.release();
