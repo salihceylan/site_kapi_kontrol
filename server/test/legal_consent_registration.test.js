@@ -77,6 +77,8 @@ async function handle(via, text, params = []) {
   log.push({ via, sql, params });
   if (/^(BEGIN|COMMIT|ROLLBACK)$/.test(sql)) return { rows: [], rowCount: 0 };
   if (sql.startsWith('SELECT pg_advisory_xact_lock')) return { rows: [], rowCount: 1 };
+  // 085 kalici kod deneme siniri (auth_attempt_limits): bu testlerin konusu degil; kilit yok / sayac yazimi bos sonuc.
+  if (sql.includes('auth_attempt_limits')) return { rows: [], rowCount: 0 };
   if (/FROM platform_settings WHERE key = ANY/.test(sql)) return { rows: settingsRows(), rowCount: 1 };
   if (/^SELECT user_code, email, email_verified, role FROM users/.test(sql)) {
     return { rows: state.existingUser ? [state.existingUser] : [], rowCount: state.existingUser ? 1 : 0 };
