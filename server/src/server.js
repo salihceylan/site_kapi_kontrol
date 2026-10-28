@@ -60,6 +60,7 @@ import { equipmentRouter } from './modules/equipment_routes.js';
 import { cctvRouter } from './modules/cctv_routes.js';
 import { apartmentMgmtRouter } from './modules/apartment_mgmt_routes.js';
 import { residencyLogRouter } from './modules/residency_log_routes.js';
+import { siteAuditLogRouter } from './modules/site_audit_log_routes.js';
 import { meteringRouter } from './modules/metering_routes.js';
 import { meteringFieldRouter } from './modules/metering_field_routes.js';
 import { startContractReminders, stopContractReminders } from './modules/contracts_reminders.js';
@@ -205,6 +206,8 @@ app.use(cctvRouter);
 app.use(apartmentMgmtRouter);
 // Daire sakini ADLI KAYDI (075): /manager/sites/:siteCode/{apartments/:id/residency-log,residency-log/export} (yalniz site yoneticisi / super; cekirdek).
 app.use(residencyLogRouter);
+// Site yoneticisinin islem kayitlari (P2-19): /manager/sites/:siteCode/audit-log (yalniz o sitenin yoneticisi / super; cekirdek; yalniz okur).
+app.use(siteAuditLogRouter);
 // Telefon bildirimi (Faz 3b-B): /app/push/devices[/:installId], /app/push/test, /admin/push/status (tercihler /app/notification-preferences'ta).
 app.use(pushRouter);
 // SMS ile giris + tarayici bildirimi (063): /auth/sms/*, /app/web-push/* (SMS / VAPID anahtari yoksa kapali).

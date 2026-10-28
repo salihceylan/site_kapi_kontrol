@@ -111,6 +111,7 @@ Gövde `{ "enabled": true|false, "confirm": true|false }`. Yanıt: GET ile aynı
 ```
 `limit` 1–200 (varsayılan 50), `id DESC`; sonraki sayfa `before_id=<next_before_id>`; son sayfada `next_before_id: null`.
 İsteğe bağlı `action` süzgeci (tam eşleşme: `module.enabled`, `module.disabled`, `staff_role.assigned`, `staff_role.removed`).
+Site yöneticisinin kendi sitesi için SİTE KAPSAMLI, kişisel veri asgari "İşlem kayıtları" ucu (`GET /manager/sites/:siteCode/audit-log`) ayrıdır: `PLATFORM_ISLEM_KAYITLARI.md`.
 
 ### Ek roller (requireSiteManager + hasSiteManagementAccess)
 - `GET /manager/sites/:siteCode/staff-roles` → `{ "items": [ { "user_code", "full_name", "email", "role": "BOARD_MEMBER|STAFF", "created_at" } ] }` (yalnız aktif üyelikler).

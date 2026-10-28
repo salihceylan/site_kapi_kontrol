@@ -147,6 +147,7 @@ import 'package:site_kapi_kontrol/ui/helpers/device_add_gate.dart';
 import 'package:site_kapi_kontrol/ui/helpers/module_menu.dart';
 
 import 'package:site_kapi_kontrol/ui/views/audit_log_view.dart';
+import 'package:site_kapi_kontrol/ui/views/site_audit_log_view.dart';
 import 'package:site_kapi_kontrol/ui/views/client_errors_view.dart';
 import 'package:site_kapi_kontrol/ui/views/help_view.dart';
 import 'package:site_kapi_kontrol/ui/views/platform_settings_view.dart';
@@ -358,6 +359,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   // yeniden kurulur (başka durumlarda takipçi yalnız kendi görünümlerini tazeler).
   String _applicationsSignature = '';
   final GlobalKey<AuditLogViewState> _auditLogViewKey = GlobalKey<AuditLogViewState>();
+  final GlobalKey<SiteAuditLogViewState> _siteAuditLogKey = GlobalKey<SiteAuditLogViewState>();
   final GlobalKey<PlatformSettingsViewState> _platformSettingsKey =
       GlobalKey<PlatformSettingsViewState>();
   final GlobalKey<ClientErrorsViewState> _clientErrorsKey = GlobalKey<ClientErrorsViewState>();
@@ -1032,6 +1034,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           PeopleSite(code: site.siteCode, name: site.siteName),
       ];
 
+  /// "İşlem Kayıtları" siteleri (P2-19): yöneticisi olunan siteler (yalnız yönetici modundaki site yöneticisi). Modül gerektirmez
+  /// (çekirdek). Süper kullanıcıda boştur (tüm siteleri "Denetim Kaydı" ekranından görür). FAIL-OPEN YOK: modül verisi yoksa liste
+  /// boştur; sunucu yetkiyi her çağrıda yine denetler (yalnız o sitenin yöneticisi; kurul / görevli / sakin 403).
+  List<PeopleSite> _siteAuditLogSites(UserRole role) {
+    if (role == UserRole.superUser || !_moduleAccess.isFiltering || !_canManagePeople(role)) return const <PeopleSite>[];
+    return <PeopleSite>[
+      for (final site in _moduleAccess.result!.sites)
+        if (site.role == 'manager') PeopleSite(code: site.siteCode, name: site.siteName, canWrite: true),
+    ];
+  }
+
   /// Kişiler ekranına erişim: yönetim yetkisi ya da en az bir sitede kurul üyeliği. Görevli (STAFF) ve
   /// sıradan sakin erişemez.
   bool _canAccessPeople(UserRole role) =>
@@ -1066,6 +1079,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         if (_deviceIntegrationSites(role).isNotEmpty) SirketMenuItem.odemeKamera,
         if (_cctvSites(role).isNotEmpty) SirketMenuItem.kameraCctv,
         if (_equipmentSites(role).isNotEmpty) SirketMenuItem.ekipmanBakim,
+        if (_siteAuditLogSites(role).isNotEmpty) SirketMenuItem.islemKayitlari,
         if (_canAccessVisitorManage(role)) SirketMenuItem.ziyaretciKayitlari,
         if (_visitorResidentSites(role).isNotEmpty) SirketMenuItem.ziyaretcilerim,
         if (_canAccessContracts(role)) SirketMenuItem.sozlesmeler,
@@ -2113,6 +2127,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (item == SirketMenuItem.ekipmanBakim) {
       return _equipmentSites(role).isNotEmpty;
     }
+    // İşlem Kayıtları: yalnız yönetici modundaki site yöneticisi (yönettiği en az bir site bilinmeli); süper kullanıcı kullanmaz.
+    if (item == SirketMenuItem.islemKayitlari) {
+      return _siteAuditLogSites(role).isNotEmpty;
+    }
 
     // Ziyaretçi ve Kargo: `visitor_log` modülü açık siteye bağlı yönetici / görevli / kurul (yönetim ekranı) ya da
     // sakin; modül kapalıyken ya da modül verisi yokken erişim YOKTUR.
@@ -2241,6 +2259,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
       case SirketMenuItem.denetimKaydi:
         return 'Denetim Kaydı';
+
+      case SirketMenuItem.islemKayitlari:
+        return 'İşlem Kayıtları';
 
       case SirketMenuItem.modulTalepleri:
         return 'Modül Talepleri';
@@ -5944,6 +5965,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       case SirketMenuItem.denetimKaydi:
         await _auditLogViewKey.currentState?.reload();
         break;
+      case SirketMenuItem.islemKayitlari:
+        await _siteAuditLogKey.currentState?.reload();
+        break;
       case SirketMenuItem.platformAyarlari:
         await _platformSettingsKey.currentState?.reload();
         break;
@@ -7204,6 +7228,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         return AuditLogView(
           key: _auditLogViewKey,
           authService: widget.authService,
+        );
+
+      case SirketMenuItem.islemKayitlari:
+        return SiteAuditLogView(
+          key: _siteAuditLogKey,
+          authService: widget.authService,
+          sites: _siteAuditLogSites(session.role),
         );
 
       case SirketMenuItem.platformAyarlari:
