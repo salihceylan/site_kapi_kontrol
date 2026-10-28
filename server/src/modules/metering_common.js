@@ -9,6 +9,12 @@ export const METERING_MODULE = 'metering';
 export const KINDS = Object.freeze(['water', 'electricity', 'heat', 'hot_water']);
 export const METHODS = Object.freeze(['unit_price', 'invoice', 'heat']);
 export const SOURCES = Object.freeze(['manual', 'file']);
+/**
+ * Isi payinin "alan payi" kisminin dagitim tabani (karar K5): YONETIM secer, KOD secmez. Ilki varsayilandir (esit). m2 yok (daire alani tutulmuyor, migration 078);
+ * arsa payi ve kisi sayisi VERISI olan sitede secilebilir, veri eksikse daire eksik veri sayilir (sessiz esit paya dusulmez).
+ */
+export const AREA_SHARE_BASES = Object.freeze(['equal', 'land_share', 'person_count']);
+export const DEFAULT_AREA_SHARE_BASIS = 'equal';
 export const KIND_LABELS = Object.freeze({ water: 'Su', electricity: 'Elektrik', heat: 'Isı', hot_water: 'Sıcak su' });
 
 export const SERIAL_MAX = 40;
@@ -36,6 +42,17 @@ export const readingLocked = () => new PlatformError(409, 'READING_LOCKED', 'Bu 
 export const noConsumption = () => new PlatformError(409, 'NO_CONSUMPTION', 'Seçilen aralıkta dağıtılacak tüketim yok (tüm farklar sıfır).');
 export const incompleteReadings = (missing) =>
   new PlatformError(409, 'READINGS_INCOMPLETE', 'Bazı dairelerin sayaç okuması eksik. Eksikleri tamamlayın ya da atlayarak devam edin.', { missing_count: missing });
+/** Seçilen alan payı tabanı için bazı dairelerin verisi (arsa payı / kişi sayısı) eksik. Sessizce eşit paya düşülmez (K5). */
+export const incompleteAreaBasis = (missing) =>
+  new PlatformError(
+    409,
+    'AREA_BASIS_INCOMPLETE',
+    'Seçilen alan payı tabanı için bazı dairelerin verisi eksik (arsa payı ya da kişi sayısı). Eksikleri tamamlayın, tabanı değiştirin ya da bu daireleri atlayarak devam edin.',
+    { missing_count: missing },
+  );
+/** Seçilen alan payı tabanında dağıtılacak pay yok (tüm arsa payları 0). */
+export const areaBasisUnusable = () =>
+  new PlatformError(409, 'AREA_BASIS_UNUSABLE', 'Seçilen alan payı tabanında dağıtılacak pay yok (tüm arsa payları 0). Başka bir taban seçin.');
 export const nothingToPost = () => new PlatformError(409, 'NOTHING_TO_POST', 'Borçlandırılacak daire yok.');
 export const billingOverlap = () =>
   new PlatformError(409, 'BILLING_OVERLAP', 'Bu tür için seçilen tarih aralığı daha önce faturalandırılmış bir aralıkla çakışıyor.');
@@ -50,6 +67,21 @@ export const objectOf = (body) => (body && typeof body === 'object' && !Array.is
 export function parseKind(value, { required = true } = {}) {
   if ((value === undefined || value === null || value === '') && !required) return null;
   if (!KINDS.includes(value)) throw invalid('Sayaç türü geçersiz (su, elektrik, ısı, sıcak su).', 'kind');
+  return value;
+}
+
+/**
+ * Isi payi alan payi tabani (`area_basis`): isi payi yonteminde yoksa varsayilan 'equal'; baska yontemde anlamsizdir (null; verilirse 400).
+ * Bilinmeyen deger 400 (sessizce esit paya dusurulmez).
+ */
+export function parseAreaBasis(value, method) {
+  const given = value !== undefined && value !== null && value !== '';
+  if (method !== 'heat') {
+    if (given) throw invalid('Alan payı tabanı yalnız ısı payı yönteminde seçilir.', 'area_basis');
+    return null;
+  }
+  if (!given) return DEFAULT_AREA_SHARE_BASIS;
+  if (!AREA_SHARE_BASES.includes(value)) throw invalid('Alan payı tabanı geçersiz (eşit, arsa payı, kişi sayısı).', 'area_basis');
   return value;
 }
 

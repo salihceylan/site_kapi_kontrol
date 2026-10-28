@@ -27,6 +27,7 @@ import {
   latestClosedPeriod,
   mapEntryRow,
   minEntryDate,
+  openingEntryNotCorrectable,
   parseCorrectInput,
   parsePaymentInput,
   parsePeriod,
@@ -400,6 +401,10 @@ export async function correctPayment({ siteCode, rawId, body, actor, now = new D
     }
     if (original.kind !== 'payment') {
       throw entryNotCorrectable();
+    }
+    // Devir alacağı (K16; source_kind 'opening') tahsilat gibi düzeltilemez: yeni bir nakit / havale tahsilatına dönüşürdü. Çıkış: kaydı iptal edin (ters kayıt) ya da devir yüklemesini geri alın.
+    if (original.source_kind === 'opening') {
+      throw openingEntryNotCorrectable();
     }
     if (await isReversed(client, id)) {
       throw entryAlreadyReversed();

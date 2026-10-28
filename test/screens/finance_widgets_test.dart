@@ -10,7 +10,7 @@ import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart' show InlineNotice;
 import 'package:site_kapi_kontrol/ui/helpers/form_validation.dart';
 import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart' show crmMessageOf;
-import 'package:site_kapi_kontrol/ui/widgets/finance_parts.dart' show FinanceGroupTitle;
+import 'package:site_kapi_kontrol/ui/widgets/finance_parts.dart' show FeePreviewLineTile, FinanceGroupTitle, LedgerEntryTile;
 import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/ui/helpers/finance_errors.dart';
 import 'package:site_kapi_kontrol/ui/helpers/idempotency.dart';
@@ -271,6 +271,34 @@ void main() {
       expect(key.currentState!.read(), isNull);
     });
 
+    testWidgets('K5: taban verilmezse varsayılan EŞİT seçili gelir; seçenekler eşit, sabit, kategori, arsa payı, kişi sayısı (m² yok); kişi sayısı toplam tutar ister', (t) async {
+      final auth = FinanceFakeAuth.seeded();
+      final key = GlobalKey<FeeSpecFormState>();
+      await pumpList(t, Form(child: FeeSpecForm(key: key, scope: _scope(auth))), width: 400, height: 3000, scale: 1.0, dark: false);
+      await settleFor(t);
+      expect(FeeSpecForm.distributions, <FeeDistribution>[
+        FeeDistribution.equal,
+        FeeDistribution.fixed,
+        FeeDistribution.category,
+        FeeDistribution.landShare,
+        FeeDistribution.personCount,
+      ]);
+      for (final value in FeeSpecForm.distributions) {
+        final chip = t.widget<ChoiceChip>(find.byKey(ValueKey<String>('fee_spec_dist_${value.apiValue}')));
+        expect(chip.selected, value == FeeDistribution.equal, reason: value.apiValue);
+      }
+      expect(find.byKey(const ValueKey<String>('fee_spec_dist_area')), findsNothing);
+      await t.enterText(find.byKey(const ValueKey<String>('fee_spec_amount')), '1.000');
+      await t.pump();
+      expect(key.currentState!.read()!.distribution, FeeDistribution.equal);
+      await t.tap(find.byKey(const ValueKey<String>('fee_spec_dist_person_count')));
+      await t.pump();
+      final spec = key.currentState!.read()!;
+      expect(spec.distribution, FeeDistribution.personCount);
+      expect(spec.amountMinor, 100000, reason: 'kişi sayısında tutar TOPLAMDIR (kuruş)');
+      expect(find.text('Toplam tutar'), findsOneWidget);
+    });
+
     testWidgets('kategori: başlangıç haritası satırlara dökülür, read() haritayı kuruş olarak verir', (t) async {
       final auth = FinanceFakeAuth.seeded();
       final key = await pumpSpec(
@@ -309,7 +337,8 @@ void main() {
       expect(find.byKey(const ValueKey<String>('fee_spec_dist_area')), findsNothing);
       expect(find.byKey(const ValueKey<String>('fee_spec_area_net')), findsNothing);
       final spec = key.currentState!.read()!;
-      expect(spec.distribution, FeeDistribution.fixed);
+      // eski m² yöntemi (m² kaldırıldı) varsayılan tabana (EŞİT, K5) düşer; kullanıcı yine açıkça seçer
+      expect(spec.distribution, FeeDistribution.equal);
       expect(spec.areaBasis, isNull);
     });
 
@@ -324,6 +353,72 @@ void main() {
         scale: 2.0,
       );
       expect(t.takeException(), isNull);
+    });
+  });
+
+  group('LedgerEntryTile: devir alacağı (K16) ve önizleme satırı taban değeri (K5)', () {
+    Map<String, dynamic> entryJson({String kind = 'payment', int amount = -50000, Map<String, dynamic> extra = const <String, dynamic>{}}) => <String, dynamic>{
+      'id': 41,
+      'kind': kind,
+      'amount_minor': amount,
+      'period': '2026-10',
+      'entry_date': '2026-10-01',
+      'due_date': null,
+      'payer_party': 'owner',
+      'created_at': '2026-10-01T09:00:00.000Z',
+      ...extra,
+    };
+
+    testWidgets('devir alacağı: "Devir alacağı" çipi var, "Havale / EFT" çipi YOK (düzeltme / makbuz eylemini ekstre penceresi sunmaz: LedgerEntry.canCorrect)', (t) async {
+      await pumpList(
+        t,
+        LedgerEntryTile(
+          entry: LedgerEntry.fromJson(entryJson(extra: <String, dynamic>{'source_kind': 'opening', 'method': 'transfer', 'definition_name': 'Devir alacağı'})),
+        ),
+        width: 400,
+        height: 800,
+        scale: 1.0,
+        dark: false,
+      );
+      await settleFor(t);
+      expect(find.text('Devir alacağı'), findsWidgets);
+      expect(find.text('Havale / EFT'), findsNothing, reason: 'devir alacağı gerçek bir havale değildir');
+      expect(find.text('Tahsilat'), findsOneWidget);
+    });
+
+    testWidgets('gerçek havale tahsilatı: "Havale / EFT" çipi korunur', (t) async {
+      await pumpList(
+        t,
+        LedgerEntryTile(entry: LedgerEntry.fromJson(entryJson(extra: <String, dynamic>{'source_kind': 'manual', 'method': 'transfer'}))),
+        width: 400,
+        height: 800,
+        scale: 1.0,
+        dark: false,
+      );
+      await settleFor(t);
+      expect(find.text('Havale / EFT'), findsOneWidget);
+      expect(find.text('Devir alacağı'), findsNothing);
+    });
+
+    testWidgets('önizleme satırı: kişi sayısı "N kişi", arsa payı "Arsa payı a/b" olarak hesabın yanında görünür; eşit tabanda yalnız hesap', (t) async {
+      Future<void> pumpLine(Map<String, dynamic> json) => pumpList(
+        t,
+        FeePreviewLineTile(line: FeePreviewLine.fromJson(json)),
+        width: 400,
+        height: 300,
+        scale: 1.0,
+        dark: false,
+      );
+      await pumpLine(<String, dynamic>{'apartment_id': 1, 'label': 'D-1', 'block_name': 'A Blok', 'amount_minor': 33333, 'account_party': 'owner', 'basis_value': 4});
+      await settleFor(t);
+      expect(find.textContaining('4 kişi'), findsOneWidget);
+      await pumpLine(<String, dynamic>{'apartment_id': 1, 'label': 'D-1', 'block_name': 'A Blok', 'amount_minor': 3000, 'account_party': 'owner', 'basis_value': '35/1000'});
+      await settleFor(t);
+      expect(find.textContaining('Arsa payı 35/1000'), findsOneWidget);
+      await pumpLine(<String, dynamic>{'apartment_id': 1, 'label': 'D-1', 'block_name': 'A Blok', 'amount_minor': 16666, 'account_party': 'owner'});
+      await settleFor(t);
+      expect(find.textContaining('kişi'), findsNothing);
+      expect(find.textContaining('Arsa payı'), findsNothing);
     });
   });
 

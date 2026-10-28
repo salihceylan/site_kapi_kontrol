@@ -452,7 +452,7 @@
       "Bakiye",
       "Tutar TL"
      ],
-     "hint": "Devreden borç, TL: 1.250,50 ya da 1250,5. Eksi (alacak) desteklenmez."
+     "hint": "Devreden borç, TL: 1.250,50 ya da 1250,5. Daire ALACAKLIYSA eksi işaretle yazın: -500,00 (devir alacağı)."
     },
     {
      "key": "vade",
@@ -464,7 +464,7 @@
       "Vade Tarihi",
       "Son Ödeme Tarihi"
      ],
-     "hint": "GG.AA.YYYY. Boşsa devir tarihi."
+     "hint": "GG.AA.YYYY. Boşsa devir tarihi. Alacaklı (eksi) satırda vade kullanılmaz."
     },
     {
      "key": "aciklama",

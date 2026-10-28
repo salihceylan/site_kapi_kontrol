@@ -288,16 +288,20 @@ KVKK: dosya sunucuya girmez; gövde loglanmaz, çalıştırma kaydı/audit kişi
   geçerlidir. Kilit sırası: bulk_import -> people_sync -> finance_post -> apartments (FOR NO KEY UPDATE) -> users.
 - **`opening_balances`** (F4): sütunlar `blok*`, `daire_no*`, `hesap` (Ev sahibi/Malik/Mal sahibi/Kiracı; boş = ev sahibi), `tutar*` (TL; `1.250,50`, `1250.5`,
   `₺`, `TL`; kuruşa metin aritmetiğiyle), `vade` (boş = devir tarihi), `aciklama` (<= 200). Gövdede `options.cutover_date` (bugün ya da önce, en çok 5 yıl geri,
-  ayı açık) ve commit'te `options.expected_total_minor` zorunludur; ikisi de parmak izine, devir tarihi `preview_hash`'e girer. Toplam uyuşmazsa 409
-  `TOTAL_MISMATCH`. KVKK onayı yerine istemcide tutar onayı kutusu vardır.
-- Satır kuralları: eksi tutar `OPENING_CREDIT_UNSUPPORTED` (v1'de alacaklı devir yok), 0 -> `OPENING_ZERO` uyarısı (atlanır), aynı daire+hesap dosyada ikinci kez
-  `DUPLICATE_IN_FILE`; etkin devir varsa aynı tutar/vade/açıklama «değişiklik yok», farklıysa `OPENING_EXISTS`; kiracı hesabı ama güncel kiracı yok `NO_TENANT`
+  ayı açık) ve commit'te `options.expected_total_minor` (BORÇ toplamı) zorunludur; ikisi de parmak izine, devir tarihi `preview_hash`'e girer. Alacaklı devir
+  (K16, 2026-10-29) varsa alacak toplamı AYRI onaylanır: `options.expected_credit_total_minor` (büyüklük; verilmezse 0). Biri uyuşmazsa 409
+  `TOTAL_MISMATCH` ve hiçbir şey yazılmaz. KVKK onayı yerine istemcide tutar onayı kutusu vardır.
+- Satır kuralları: **eksi tutar ALACAKLI devirdir** (`-500,00` ya da `(500,00)`; `OPENING_CREDIT_UNSUPPORTED` KALDIRILDI), alacakta `vade` yok sayılır (`OPENING_CREDIT_DUE_IGNORED`
+  uyarısı), 0 -> `OPENING_ZERO` uyarısı (atlanır), aynı daire+hesap dosyada ikinci kez
+  `DUPLICATE_IN_FILE`; etkin devir (borç ya da alacak) varsa aynı tutar/vade/açıklama «değişiklik yok», farklıysa (borç↔alacak dahil) `OPENING_EXISTS`; kiracı hesabı ama güncel kiracı yok `NO_TENANT`
   uyarısı; devirden başka mali kayıt `OPENING_LEDGER_EXISTS` uyarısı; pasif daire `APARTMENT_INACTIVE`; kapalı ay `PERIOD_CLOSED`.
-- Yazım: satır başına bir `charge` (`source_kind='opening'`, `source_id` = çalıştırma, `definition_name='Devir bakiyesi'`, `payer_party = account_party` = hesap,
-  `period` = devir ayı). Audit `finance.opening.imported`. Gelir-gider `charged` toplamı devri saymaz (`source_kind IS DISTINCT FROM 'opening'`).
+- Yazım: borç satırı başına bir `charge` (`source_kind='opening'`, `source_id` = çalıştırma, `definition_name='Devir bakiyesi'`, `payer_party = account_party` = hesap,
+  `period` = devir ayı); alacak satırı başına bir `payment` (negatif tutar, vadesiz, `definition_name='Devir alacağı'`, `method='transfer'` yalnız şema zorunluluğu, aynı kaynak izi). Audit `finance.opening.imported`
+  (`credit_rows`, `credit_total_minor` dahil). Gelir-gider `charged` toplamı devri saymaz (`source_kind IS DISTINCT FROM 'opening'`); `collected` toplamı da devir alacağını saymaz. Ayrıntı: `docs/PLATFORM_FINANS.md` «Alacaklı devir».
+  Önizleme sayıları: `opening_add` (borç + alacak kaydı), `total_minor` (borç), `opening_credit_add`, `credit_total_minor` (alacak, büyüklük).
 - Geri alma ve liste uçları: `docs/PLATFORM_FINANS.md` «Devir bakiyesi». Şablonlar tür grubuna göre ayrı dosyadır (klasik üçlü / hepsi bir arada / devir),
   mevcut dairelerle ön doludur.
-- Yakında: `opening_minor` rapor alanı, «Bu ay yazılan» devir ayrımı, alacaklı (eksi) devir, `HOLDER_AFTER_DUE` uyarısı.
+- Yakında: `opening_minor` rapor alanı, «Bu ay yazılan» devir ayrımı, `HOLDER_AFTER_DUE` uyarısı. (Alacaklı devir K16 ile eklendi.)
 
 ## Liste arama ve Excel'e aktarma, sade finans dili (paket 3E)
 

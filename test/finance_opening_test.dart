@@ -137,7 +137,90 @@ void main() {
       });
       expect(detail.entriesToReverse, 2);
       expect(detail.apartmentsWithLaterPayments, 1);
+      expect(detail.creditEntriesToReverse, 0, reason: 'eski sunucu / alacaksız yükleme');
+      expect(detail.creditTotalMinor, 0);
+      expect(detail.run.creditEntryCount, 0);
       expect(() => OpeningRevertPreview.fromJson(<String, dynamic>{}), throwsFormatException);
+    });
+
+    test('K16 alacaklı devir: yükleme ve geri alma önizlemesi alacak sayısı / toplamını (büyüklük) taşır', () {
+      final run = OpeningRun.fromJson(<String, dynamic>{
+        'id': 8,
+        'created_at': '2026-10-21T10:00:00.000Z',
+        'cutover_date': '2026-10-01',
+        'entry_count': 4,
+        'total_minor': 155050,
+        'credit_entry_count': 2,
+        'credit_total_minor': 57525,
+        'reverted': false,
+      });
+      expect(run.entryCount, 4);
+      expect(run.totalMinor, 155050, reason: 'borç toplamı');
+      expect(run.creditEntryCount, 2);
+      expect(run.creditTotalMinor, 57525);
+      final detail = OpeningRevertPreview.fromJson(<String, dynamic>{
+        'run': <String, dynamic>{'id': 8, 'entry_count': 4, 'total_minor': 155050, 'credit_entry_count': 2, 'credit_total_minor': 57525},
+        'revert': <String, dynamic>{
+          'entries_to_reverse': 4,
+          'total_minor': 155050,
+          'credit_entries_to_reverse': 2,
+          'credit_total_minor': 57525,
+          'individually_cancelled': 0,
+          'apartments_with_later_payments': 0,
+          'late_fee_entries_after': 0,
+        },
+      });
+      expect(detail.entriesToReverse, 4, reason: 'borç + alacak');
+      expect(detail.totalMinor, 155050);
+      expect(detail.creditEntriesToReverse, 2);
+      expect(detail.creditTotalMinor, 57525);
+    });
+  });
+
+  group('K16 alacaklı devir: onay toplamları ayrı', () {
+    test('önizlemede alacak varsa onay hem borç hem alacak toplamını gönderir; alacak yoksa yalnız borç toplamı', () async {
+      Future<Map<String, Object?>?> commitOptions(Map<String, dynamic> plan) async {
+        final auth = FakeBulkAuth();
+        final api = FakeBulkApi()..spec = _specWithNewKinds();
+        api.previewBuilder = (kind, rows, allowOverwrite) => ImportPreview.fromJson(previewJson(kind: kind.apiValue, rows: rows.length, plan: plan));
+        final c = BulkImportController(
+          service: BulkService(authService: auth, api: api),
+          siteCode: 12,
+          parseRunner: inlineParse,
+          picker: fakePicker('devir.csv', Uint8List.fromList(utf8Bytes('Blok;Daire No;Tutar\r\nA;1;1.250,50\r\nA;2;-575,25\r\n'))),
+          allowedKinds: kOpeningImportKinds,
+        );
+        await c.loadSpec();
+        c.selectKind(ImportKind.openingBalances);
+        c.setCutoverDate('2026-10-01');
+        c.goToFileStep();
+        await c.pickAndParse();
+        await c.confirmMapping();
+        await c.commit(acknowledged: true);
+        final options = api.lastCommitOptions;
+        c.dispose();
+        return options;
+      }
+
+      expect(
+        await commitOptions(<String, dynamic>{'opening_add': 2, 'total_minor': 125050, 'opening_credit_add': 1, 'credit_total_minor': 57525}),
+        <String, Object?>{'cutover_date': '2026-10-01', 'expected_total_minor': 125050, 'expected_credit_total_minor': 57525},
+      );
+      expect(
+        await commitOptions(<String, dynamic>{'opening_add': 1, 'total_minor': 125050}),
+        <String, Object?>{'cutover_date': '2026-10-01', 'expected_total_minor': 125050},
+        reason: 'alacak yoksa eski gövde biçimi korunur',
+      );
+    });
+
+    test('önizleme planı etiketi: alacaklı kayıt sayısı gösterilir', () {
+      final preview = ImportPreview.fromJson(
+        previewJson(kind: 'opening_balances', plan: <String, dynamic>{'opening_add': 3, 'total_minor': 100, 'opening_credit_add': 1, 'credit_total_minor': 500}),
+      );
+      final labels = preview.planStats().map((stat) => stat.label).toList();
+      expect(labels, contains('Yazılacak devir kaydı'));
+      expect(labels, contains('Bunlardan alacaklı (devir alacağı) kayıt'));
+      expect(preview.planStats().where((stat) => stat.label.startsWith('Bunlardan')).single.count, 1);
     });
   });
 }

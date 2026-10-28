@@ -164,6 +164,7 @@ String definitionAmountText(FeeDefinition d) {
       return d.amountMinor == null ? 'Tutar okunamadı' : 'Daire başı ${formatMinor(d.amountMinor!)}';
     case FeeDistribution.equal:
     case FeeDistribution.landShare:
+    case FeeDistribution.personCount:
     case FeeDistribution.area:
       return d.amountMinor == null ? 'Tutar okunamadı' : 'Toplam ${formatMinor(d.amountMinor!)}';
     case FeeDistribution.unknown:
@@ -547,7 +548,11 @@ class LedgerEntryTile extends StatelessWidget {
     final receipt = e.receipt;
     if (receipt != null) semantic.write(' Makbuz ${receipt.number}${receipt.isCancelled ? ', iptal edildi' : ''}.');
     if (title.isNotEmpty) semantic.write(' $title.');
-    if (e.method != null) semantic.write(' ${e.method!.label}.');
+    if (e.isOpeningCredit) {
+      semantic.write(' Devir alacağı.');
+    } else if (e.method != null) {
+      semantic.write(' ${e.method!.label}.');
+    }
     if (reversesText != null) semantic.write(' ${spokenMoneyText(reversesText)}.');
     if (reversedByText != null) semantic.write(' ${spokenMoneyText(reversedByText)}.');
     if (reason != null) semantic.write(' Neden: $reason.');
@@ -575,7 +580,11 @@ class LedgerEntryTile extends StatelessWidget {
                           tone: AppTone.neutral,
                           icon: Icons.block_rounded,
                         ),
-                      if (e.method != null) DialogMetaPill(e.method!.label),
+                      // Devir alacağı gerçek bir havale / nakit tahsilatı DEĞİLDİR: yöntem çipi yerine "Devir alacağı" (kaynak izi opening)
+                      if (e.isOpeningCredit)
+                        const DialogMetaPill('Devir alacağı', tone: AppTone.info, icon: Icons.history_rounded)
+                      else if (e.method != null)
+                        DialogMetaPill(e.method!.label),
                       if (e.isLateFee)
                         const DialogMetaPill('Gecikme tazminatı', tone: AppTone.warning, icon: Icons.gavel_rounded),
                       if (entryFund != null)
@@ -873,9 +882,13 @@ class FeePreviewLineTile extends StatelessWidget {
     final title = financeApartmentTitle(line.blockName, line.label);
     // İP-1A: sunucu borcun yazılacağı hesabı verdiyse o yazılır ("Kiracı hesabı"); eski sunucuda "kim öder" etiketi.
     final who = line.accountParty?.label ?? payerPartyLabel(line.payerParty);
+    // Dağıtım tabanının daire için değeri (arsa payı kesri ya da kişi sayısı): tutarların NEDEN farklı olduğu görünür (karar K5). Eşit / sabit / kategoride yok.
+    final basis = line.basisValue;
+    final basisText = basis == null ? null : (basis.contains('/') ? 'Arsa payı $basis' : '$basis kişi');
+    final subtitle = basisText == null ? who : '$who · $basisText';
     return Semantics(
       container: true,
-      label: '$title. $who. ${moneySemanticLabel(line.amountMinor)}.',
+      label: '$title. $subtitle. ${moneySemanticLabel(line.amountMinor)}.',
       child: ExcludeSemantics(
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: AppSpace.xs),
@@ -891,7 +904,7 @@ class FeePreviewLineTile extends StatelessWidget {
                 children: [
                   Text(title, style: th.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
                   Text(
-                    who,
+                    subtitle,
                     style: th.bodySmall?.copyWith(color: p.textSecondary),
                   ),
                 ],

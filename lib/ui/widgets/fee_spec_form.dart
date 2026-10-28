@@ -49,8 +49,8 @@ class _CategoryRow {
   }
 }
 
-/// Aidat / ek borç dağıtım alanları (Platform Faz 4a): dağıtım yöntemi seçici (eşit / sabit / kategori /
-/// arsa payı / m²), m² türü, tutar, kategori haritası düzenleyicisi ve hedef seçici.
+/// Aidat / ek borç dağıtım alanları (Platform Faz 4a): dağıtım yöntemi seçici (eşit [varsayılan] / sabit / kategori /
+/// arsa payı / kişi sayısı), tutar, kategori haritası düzenleyicisi ve hedef seçici.
 ///
 /// - Tutar alanının adı yönteme uyar: sabit "Daire başı tutar", diğerleri "Toplam tutar"; kategori yönteminde
 ///   tutar yerine kategori haritası (kategori adı + daire başı tutar) düzenlenir.
@@ -61,7 +61,7 @@ class FeeSpecForm extends StatefulWidget {
   const FeeSpecForm({
     super.key,
     required this.scope,
-    this.initialDistribution = FeeDistribution.fixed,
+    this.initialDistribution = FeeDistribution.equal,
     this.initialAreaBasis = AreaBasis.gross,
     this.initialAmountMinor,
     this.initialCategoryAmounts = const <String, int>{},
@@ -83,12 +83,14 @@ class FeeSpecForm extends StatefulWidget {
   final VoidCallback? onChanged;
   final String keyPrefix;
 
-  /// Seçilebilir yöntemler (sıra ekrandaki sıradır).
+  /// Seçilebilir yöntemler (sıra ekrandaki sıradır). Dağıtım tabanını YÖNETİM seçer, varsayılan EŞİT (karar K5); kod taban seçmez.
+  /// m² yoktur: daire alanı sistemde tutulmuyor. Kişi sayısı, Kişiler ekranındaki güncel kişi kayıtlarından gelir.
   static const List<FeeDistribution> distributions = <FeeDistribution>[
-    FeeDistribution.fixed,
     FeeDistribution.equal,
+    FeeDistribution.fixed,
     FeeDistribution.category,
     FeeDistribution.landShare,
+    FeeDistribution.personCount,
   ];
 
   static const int maxCategories = 30;
@@ -99,8 +101,9 @@ class FeeSpecForm extends StatefulWidget {
 }
 
 class FeeSpecFormState extends State<FeeSpecForm> {
+  // Bilinmeyen ya da eski m² yöntemi (m² kaldırıldı) varsayılan tabana (EŞİT) düşer; kullanıcı yine açıkça seçer.
   late FeeDistribution _distribution = (widget.initialDistribution == FeeDistribution.unknown || widget.initialDistribution == FeeDistribution.area)
-      ? FeeDistribution.fixed
+      ? FeeDistribution.equal
       : widget.initialDistribution;
   late final TextEditingController _amount = TextEditingController(
     text: widget.initialAmountMinor == null

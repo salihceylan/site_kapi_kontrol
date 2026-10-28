@@ -124,11 +124,11 @@ String _text(WidgetTester t, String key) => t.widget<TextField>(find.descendant(
 
 void main() {
   group('tanım formu: taşma matrisi', () {
-    layoutMatrix('Yeni Tanım: varsayılan (aylık, sabit tutar)', (t, w, h, s, dark) async {
+    layoutMatrix('Yeni Tanım: varsayılan (aylık, eşit bölüş — K5 varsayılan taban)', (t, w, h, s, dark) async {
       final auth = FinanceFakeAuth.seeded();
       await _openForm(t, auth, width: w, height: h, scale: s, dark: dark);
       expect(find.text('Yeni Tanım'), findsWidgets);
-      for (final label in const ['Tanım adı', 'Tür', 'Aylık vade günü', 'Başlangıç dönemi', 'Dağıtım yöntemi', 'Daire başı tutar', 'Hedef']) {
+      for (final label in const ['Tanım adı', 'Tür', 'Aylık vade günü', 'Başlangıç dönemi', 'Dağıtım yöntemi', 'Toplam tutar', 'Hedef']) {
         await scrollTo(t, find.text(label).first);
         expect(find.text(label), findsWidgets, reason: label);
       }
@@ -181,6 +181,8 @@ void main() {
       await t.pump();
       await t.pump(const Duration(milliseconds: 450));
       await tapFinder(t, find.text("Her ayın 15'i").last);
+      // K5: varsayılan taban EŞİT; sabit tutar yönetimin AÇIK seçimidir
+      await _tapKey(t, 'def_spec_dist_fixed');
       await _enter(t, 'def_spec_amount', '1.250,50');
       expect(find.text('Girilen tutar: 1.250,50 ₺'), findsOneWidget);
       await _save(t);
@@ -277,16 +279,39 @@ void main() {
       expect(body['amount_minor'], 1200000);
     });
 
-    testWidgets('yönteme göre tutar etiketi: sabit "Daire başı tutar", eşit "Toplam tutar"; açıklama metni değişir', (t) async {
+    testWidgets('yönteme göre tutar etiketi: varsayılan EŞİT "Toplam tutar" (K5), sabit "Daire başı tutar"; açıklama metni değişir', (t) async {
       final auth = FinanceFakeAuth.seeded();
       await _openForm(t, auth);
-      expect(find.text('Daire başı tutar'), findsOneWidget);
-      expect(find.text('Her daireye aynı (daire başı) tutar yazılır.'), findsOneWidget);
-      await _tapKey(t, 'def_spec_dist_equal');
+      // K5: dağıtım tabanını yönetim seçer, varsayılan EŞİT; m² yok, kişi sayısı seçilebilir
       expect(find.text('Toplam tutar'), findsOneWidget);
       expect(find.text('Toplam tutar, hedefteki tüm dairelere eşit bölünür.'), findsOneWidget);
+      expect(t.widget<ChoiceChip>(find.byKey(const ValueKey<String>('def_spec_dist_equal'))).selected, isTrue);
+      for (final key in const ['def_spec_dist_fixed', 'def_spec_dist_category', 'def_spec_dist_land_share', 'def_spec_dist_person_count']) {
+        expect(t.widget<ChoiceChip>(find.byKey(ValueKey<String>(key))).selected, isFalse, reason: key);
+      }
+      expect(find.byKey(const ValueKey<String>('def_spec_dist_area')), findsNothing);
+      await _tapKey(t, 'def_spec_dist_fixed');
+      expect(find.text('Daire başı tutar'), findsOneWidget);
+      expect(find.text('Her daireye aynı (daire başı) tutar yazılır.'), findsOneWidget);
       await _tapKey(t, 'def_spec_dist_land_share');
       expect(find.text('Toplam tutar, dairelerin arsa paylarına göre bölünür.'), findsOneWidget);
+      await _tapKey(t, 'def_spec_dist_person_count');
+      expect(find.text('Toplam tutar'), findsOneWidget);
+      expect(find.textContaining('güncel kişi sayısına göre bölünür'), findsOneWidget);
+    });
+
+    testWidgets('kişi sayısı: gövde distribution=person_count + toplam tutar KURUŞ; kategori tutarı / alan esası gitmez', (t) async {
+      final auth = FinanceFakeAuth.seeded();
+      await _openForm(t, auth);
+      await _enter(t, 'finance_definition_name', 'Su payı');
+      await _tapKey(t, 'def_spec_dist_person_count');
+      await _enter(t, 'def_spec_amount', '4.500');
+      await _save(t);
+      final body = auth.definitionCreateCalls.single;
+      expect(body['distribution'], 'person_count');
+      expect(body['amount_minor'], 450000);
+      expect(body.containsKey('category_amounts'), isFalse);
+      expect(body.containsKey('area_basis'), isFalse);
     });
 
     testWidgets('boş gönderim: özet + alan hataları, sunucuya gidilmez, pencere açık', (t) async {

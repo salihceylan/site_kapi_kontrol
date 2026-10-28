@@ -378,7 +378,7 @@ export async function computeIncomeExpense(db, siteCode, months) {
       SELECT to_char(period, 'YYYY-MM-DD') AS period,
         COALESCE(SUM(amount_minor) FILTER (WHERE late_fee_run_id IS NULL AND source_kind IS DISTINCT FROM 'opening' AND (kind = 'charge' OR (kind = 'reversal' AND amount_minor < 0))), 0)::TEXT AS charged,
         COALESCE(SUM(amount_minor) FILTER (WHERE late_fee_run_id IS NOT NULL AND (kind = 'charge' OR (kind = 'reversal' AND amount_minor < 0))), 0)::TEXT AS late_fee,
-        COALESCE(-SUM(amount_minor) FILTER (WHERE kind = 'payment' OR (kind = 'reversal' AND amount_minor > 0)), 0)::TEXT AS collected
+        COALESCE(-SUM(amount_minor) FILTER (WHERE source_kind IS DISTINCT FROM 'opening' AND (kind = 'payment' OR (kind = 'reversal' AND amount_minor > 0))), 0)::TEXT AS collected
       FROM ledger_entries WHERE site_code = $1 AND period BETWEEN $2::DATE AND $3::DATE GROUP BY period
     `,
     [siteCode, first, last],
@@ -515,6 +515,7 @@ export async function computeCashPosition(db, siteCode, asOf) {
       SELECT COUNT(*)::INTEGER AS n, COALESCE(SUM(-l.amount_minor), 0)::TEXT AS total
       FROM ledger_entries l
       WHERE l.site_code = $1 AND l.kind = 'payment' AND $3::DATE IS NOT NULL AND l.period >= date_trunc('month', $3::DATE)::DATE AND l.entry_date >= $3::DATE AND l.entry_date <= $2::DATE
+        AND l.source_kind IS DISTINCT FROM 'opening'
         AND NOT EXISTS (SELECT 1 FROM ledger_entries rv WHERE rv.reverses_entry_id = l.id)
         AND NOT EXISTS (SELECT 1 FROM account_movements m WHERE m.kind = 'collection' AND m.ledger_entry_id = l.id)
     `,

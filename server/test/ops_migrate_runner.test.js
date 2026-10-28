@@ -155,8 +155,17 @@ describe('listMigrations', () => {
   it('gercek migrations klasoru: ardisik, sirali, tekrarsiz', () => {
     const list = listMigrations(DEFAULT_MIGRATIONS_DIR);
     assert.ok(list.length >= 25);
+    // 084'e kadar numaralar KESINTISIZdir (tarihsel zincir). 085'ten sonra paralel dalgalar numara BLOKLARI ayirir (plan 2026-10-28-karsilastirma-guclendirme.md:
+    // kullanilmayan numara bos kalabilir; migrate.js uygulananı ada gore izler): bosluk serbest, sira ve tekillik zorunlu.
+    const CONTIGUOUS_THROUGH = 84;
+    let previous = 0;
     for (let i = 0; i < list.length; i += 1) {
-      assert.equal(list[i].number, i + 1, `numara boslugu: ${list[i].file}`);
+      if (list[i].number <= CONTIGUOUS_THROUGH) {
+        assert.equal(list[i].number, previous + 1, `numara boslugu: ${list[i].file}`);
+      } else {
+        assert.ok(list[i].number > previous, `numara siralamasi bozuk: ${list[i].file}`);
+      }
+      previous = list[i].number;
       assert.match(list[i].checksum, /^[0-9a-f]{64}$/);
     }
   });

@@ -183,6 +183,64 @@ export const DISTRIBUTION_CASES = Object.freeze([
 ]);
 
 // ------------------------------------------------------------------------------------------------------------------------------------------
+// K5 (P1-5): dağıtım tabanını YÖNETİM seçer, varsayılan EŞİT; kod formül seçmez. m² tabanı sistemde yoktur (078); kişi sayısı tabanı Kişiler ekranındaki güncel kişi
+// kayıtlarından gelir. Aşağıdaki değerler de ELLE hesaplandı (kod çalıştırılarak üretilmedi; bağımsız doğrulama: scratchpad verify_hand.mjs saf BigInt).
+// ------------------------------------------------------------------------------------------------------------------------------------------
+
+/**
+ * Daire başına GÜNCEL kişi sayısı (apartment_residencies.is_current). Dükkânlarda kişi kaydı yok (0 -> "kişi sayısı tanımsız", eksik veri).
+ * Toplam: A-3..A-7 = 4+3+4+2+5 = 18; A-8..A-12 = 3+4+2+1+4 = 14; B-1..B-4 = 1+2+1+2 = 6; B-5..B-8 = 3+3+2+4 = 12; B-9..B-12 = 2+3+3+1 = 9 -> 59 kişi, 22 daire.
+ */
+export const PERSON_COUNTS = Object.freeze({
+  'A-1': 0, 'A-2': 0, 'A-3': 4, 'A-4': 3, 'A-5': 4, 'A-6': 2, 'A-7': 5, 'A-8': 3, 'A-9': 4, 'A-10': 2, 'A-11': 1, 'A-12': 4,
+  'B-1': 1, 'B-2': 2, 'B-3': 1, 'B-4': 2, 'B-5': 3, 'B-6': 3, 'B-7': 2, 'B-8': 4, 'B-9': 2, 'B-10': 3, 'B-11': 3, 'B-12': 1,
+});
+
+/** Altın site + kişi sayısı (dağıtım kodunun beklediği `personCount` alanı). */
+export const GOLDEN_SITE_WITH_PEOPLE = Object.freeze(GOLDEN_SITE.map((apt) => Object.freeze({ ...apt, personCount: PERSON_COUNTS[apt.label] })));
+
+export const PERSON_COUNT_CASES = Object.freeze([
+  // D7 KİŞİ SAYISI: ortak gider 10.000,00 TL (T = 1.000.000), W = 59 kişi. A-1 ve A-2 (dükkân, kişi kaydı yok) EKSİK VERİ: dağıtıma girmez; payları kalanlara dağılır.
+  //   pay = taban(T x k / 59); T x k mod 59 kalan. Her kişi 1.000.000 / 59 = 16.949,15 kuruş:
+  //   k  T x k       taban    kalan (T x k mod 59)  daireler
+  //   1  1.000.000   16.949    9                     A-11, B-1, B-3, B-12
+  //   2  2.000.000   33.898   18                     A-6, A-10, B-2, B-4, B-7, B-9
+  //   3  3.000.000   50.847   27                     A-4, A-8, B-5, B-6, B-10, B-11
+  //   4  4.000.000   67.796   36                     A-3, A-5, A-9, A-12, B-8
+  //   5  5.000.000   84.745   45                     A-7
+  //   Σ taban = 4 x 16.949 + 6 x 33.898 + 6 x 50.847 + 5 x 67.796 + 84.745 = 67.796 + 203.388 + 305.082 + 338.980 + 84.745 = 999.991 -> artan 9 kuruş.
+  //   Sıra: 45 (A-7) -> 1; 36 (5 daire) -> 5 (toplam 6); 27 grubundan kimliği küçük 3 daire (A-4 kimlik 4, A-8 kimlik 8, B-5 kimlik 17) -> 3 (toplam 9).
+  //   B-6 (18), B-10 (22), B-11 (23) bu turda almaz. Kontrol: 67.796 + 203.388 + (3 x 50.848 + 3 x 50.847) + 5 x 67.797 + 84.746 = 1.000.000.
+  {
+    name: 'D7 kişi sayısı (10.000,00 TL; 59 kişi; dükkânlar kişi kaydı olmadığından eksik veri; 9 kuruş fark)',
+    definition: { distribution: 'person_count', amountMinor: 1000000 },
+    expectedMissing: ['A-1', 'A-2'],
+    expected: {
+      'A-3': 67797, 'A-4': 50848, 'A-5': 67797, 'A-6': 33898, 'A-7': 84746, 'A-8': 50848, 'A-9': 67797, 'A-10': 33898, 'A-11': 16949, 'A-12': 67797,
+      'B-1': 16949, 'B-2': 33898, 'B-3': 16949, 'B-4': 33898, 'B-5': 50848, 'B-6': 50847, 'B-7': 33898, 'B-8': 67797, 'B-9': 33898, 'B-10': 50847, 'B-11': 50847, 'B-12': 16949,
+    },
+    // satır başına gösterilen taban değeri (kişi sayısı)
+    expectedBasis: { 'A-3': 4, 'A-7': 5, 'A-11': 1, 'B-12': 1 },
+  },
+]);
+
+/**
+ * EŞİT dağıtımda kuruş farkı artıkları: DETERMİNİSTİK (kalanlar eşit olduğundan kimliği küçük daireler önce alır) ve toplam tutara BİREBİR eşittir.
+ * `apartments`: hedef daire etiketleri (null = 24 dairenin hepsi); `expected`: yalnız tutarı > 0 olan satırlar; `zeroAmountCount`: tutar payı 0 kalan daire sayısı.
+ */
+export const EQUAL_REMAINDER_CASES = Object.freeze([
+  // D8 yalnız 7 kuruş / 24 daire: taban 0, her dairenin kalanı 7 (hepsi eşit) -> artan 7 kuruşu kimliği küçük 7 daire (A-1..A-7) birer kuruş alır; 17 daireye 0 (satır yazılmaz).
+  { name: 'D8 eşit (7 kuruş / 24 daire: A-1..A-7 birer kuruş, 17 daire 0)', amountMinor: 7, apartments: null, expected: Object.fromEntries(A(1, 7).map((l) => [l, 1])), zeroAmountCount: 17 },
+  // D9 yalnız A Blok (12 daire), T = 1.000.000: taban 83.333 (12 x 83.333 = 999.996) -> artan 4 kuruş: A-1..A-4 = 83.334; A-5..A-12 = 83.333. Kontrol: 4 x 83.334 + 8 x 83.333 = 333.336 + 666.664.
+  { name: 'D9 eşit, yalnız A Blok (10.000,00 TL / 12; 4 kuruş fark A-1..A-4)', amountMinor: 1000000, apartments: A(1, 12), expected: { ...each(A(1, 4), 83334), ...each(A(5, 12), 83333) }, zeroAmountCount: 0 },
+  // D10 T = 8.500.001 / 24: taban 354.166 (24 x 354.166 = 8.499.984) -> artan 17 kuruş: A-1..A-12 ve B-1..B-5 (kimlik 1..17) = 354.167; B-6..B-12 = 354.166.
+  //   Kontrol: 17 x 354.167 + 7 x 354.166 = 6.020.839 + 2.479.162 = 8.500.001.
+  { name: 'D10 eşit (85.000,01 TL / 24; 17 kuruş fark kimliği küçük 17 daireye)', amountMinor: 8500001, apartments: null, expected: { ...each([...A(1, 12), ...B(1, 5)], 354167), ...each(B(6, 12), 354166) }, zeroAmountCount: 0 },
+  // D11 1 kuruş / 24 daire: yalnız A-1 1 kuruş alır (toplam tutara birebir), diğer 23 daire 0.
+  { name: 'D11 eşit (1 kuruş / 24 daire: yalnız A-1)', amountMinor: 1, apartments: null, expected: { 'A-1': 1 }, zeroAmountCount: 23 },
+]);
+
+// ------------------------------------------------------------------------------------------------------------------------------------------
 // GECİKME TAZMİNATI (docs/PLATFORM_FINANS_4B.md Ö2): hesaplanan ay P'nin her günü d için L(d) = vadesi + ek gün geçmiş (eşik < d), tazminat OLMAYAN
 // kalemlerin M1 kalanı. S = Σ L(d) (kuruş x gün). fee = taban((2 x S x R + 10.000 x D) / (20.000 x D)) (yarım yukarı); R = 500 baz puan (aylık %5),
 // D = 30 (daily_30) ya da ayın gün sayısı (daily_actual). Ödeme günü gecikme sayılmaz (ödeme o gün tabandan düşer); vade günü de sayılmaz.
@@ -334,6 +392,100 @@ export const MAHSUP_CASES = Object.freeze([
     expected: { remaining: { 601: 0, 602: 22166 }, order: [601, 602], credit: 0 },
   },
 ]);
+
+// ------------------------------------------------------------------------------------------------------------------------------------------
+// ALACAKLI DEVİR (K16, P2-4; docs/PLATFORM_FINANS.md "Alacaklı devir"): devir tarihinde dairenin hesabına bir ALACAK yazılır (defterde `payment`, source_kind 'opening',
+// vadesiz; bkz. bulk_import_writer.applyOpeningOps). Alacak, sonraki borçlara MAHSUP mantığıyla (M1: vadesi en eski borçtan) düşer — fazla ödemeyle AYNI yoldur; artan alacak
+// kalır. Beklenen değerler ELLE hesaplandı. Eşit dağıtım tutarları D1'den (A-1..B-4 = 354.167, B-5..B-12 = 354.166).
+// ------------------------------------------------------------------------------------------------------------------------------------------
+
+export const OPENING_CREDIT_MAHSUP_CASES = Object.freeze([
+  // OC1 (A-6, D1 payı 354.167): devir alacağı 500,00 TL (50.000). Ekim ve Kasım aidatı (vade 05.10 ve 05.11).
+  //   Vade sırası: Ekim, Kasım. Birikimli: 354.167; 708.334. Ödeme (alacak) 50.000:
+  //   Ekim:  354.167 - 50.000 = 304.167 -> min(354.167, 304.167) = 304.167
+  //   Kasım: 708.334 - 50.000 = 658.334 -> min(354.167, 658.334) = 354.167. Açık 658.334 = bakiye (708.334 - 50.000); alacak 0.
+  {
+    name: 'OC1 alacaklı devir 500,00 TL + eşit aidat: alacak vadesi en eski aidattan düşer',
+    apartment: 'A-6',
+    credit: 50000,
+    charges: [
+      { id: 801, amount: 354167, entry: '2026-10-01', due: '2026-10-05' },
+      { id: 802, amount: 354167, entry: '2026-11-01', due: '2026-11-05' },
+    ],
+    expected: { order: [801, 802], remaining: { 801: 304167, 802: 354167 }, credit: 0, balance: 658334 },
+  },
+  // OC2 (B-12, D1 payı 354.166): devir alacağı 8.000,00 TL (800.000) iki aidattan (354.166 x 2 = 708.332) büyük: ikisi de kapanır, artan 800.000 - 708.332 = 91.668 ALACAK kalır.
+  //   Ekim: 354.166 - 800.000 < 0 -> 0; Kasım: 708.332 - 800.000 < 0 -> 0. Bakiye = 708.332 - 800.000 = -91.668.
+  {
+    name: 'OC2 alacaklı devir 8.000,00 TL > iki aidat: ikisi kapanır, artan alacak kalır',
+    apartment: 'B-12',
+    credit: 800000,
+    charges: [
+      { id: 811, amount: 354166, entry: '2026-10-01', due: '2026-10-05' },
+      { id: 812, amount: 354166, entry: '2026-11-01', due: '2026-11-05' },
+    ],
+    expected: { order: [811, 812], remaining: { 811: 0, 812: 0 }, credit: 91668, balance: -91668 },
+  },
+  // OC3 (A-7, D5 payı 125.000): alacak tam aidat tutarında (125.000): Ekim aidatı tam kapanır, Kasım aidatı tam açık kalır; alacak 0.
+  {
+    name: 'OC3 alacak tam bir aidata eşit: o aidat kapanır, sonrakine dokunmaz',
+    apartment: 'A-7',
+    credit: 125000,
+    charges: [
+      { id: 821, amount: 125000, entry: '2026-10-01', due: '2026-10-05' },
+      { id: 822, amount: 125000, entry: '2026-11-01', due: '2026-11-05' },
+    ],
+    expected: { order: [821, 822], remaining: { 821: 0, 822: 125000 }, credit: 0, balance: 125000 },
+  },
+]);
+
+/**
+ * OC4 İKİ HESAP (B-3, kimlik 15; sorumlu kiracı, kiracı var): devir alacağı EV SAHİBİ hesabında 500,00 TL (50.000); kiracı hesabında Ekim aidatı 750,00 TL (75.000; D5 1+1; vade 05.10).
+ *   Mahsup HESAP BAZINDADIR (İP-1A): ev sahibinin alacağı kiracının borcunu kapatmaz. Kiracı hesabı: 75.000 - 0 = 75.000 açık, alacak 0. Ev sahibi hesabı: borç yok, alacak 50.000.
+ *   KARŞILAŞTIRMA (tek hesap): 75.000 - 50.000 = 25.000 açık, alacak 0 (yanlış: kiracının borcu ev sahibinin alacağıyla kapanırdı).
+ */
+export const OPENING_CREDIT_TWO_ACCOUNT_CASE = Object.freeze({
+  name: 'OC4 ev sahibinin devir alacağı kiracı hesabının borcunu KAPATMAZ (mahsup hesap bazında)',
+  apartment: 'B-3',
+  credits: { owner: 50000, tenant: 0 },
+  charges: [{ id: 831, amount: 75000, entry: '2026-10-01', due: '2026-10-05', account: 'tenant' }],
+  expected: {
+    owner: { order: [], remaining: {}, credit: 50000 },
+    tenant: { order: [831], remaining: { 831: 75000 }, credit: 0 },
+  },
+  mixed: { order: [831], remaining: { 831: 25000 }, credit: 0 },
+});
+
+/**
+ * OC5 GECİKME TAZMİNATI (A-6; D5 payı 125.000): Ekim aidatı 1.250,00 TL (vade 05.10) ve devir alacağı 500,00 TL (01.10'da `payment`). P = Ekim 2026 (31 gün), ek gün 0, oran 500 bp.
+ *   Alacak 01.10'dan itibaren borçtan düşer: 06-31 Ekim (26 gün) gecikmiş kalan L = 125.000 - 50.000 = 75.000 -> S = 26 x 75.000 = 1.950.000.
+ *   daily_30: (2 x 1.950.000 x 500 + 10.000 x 30) / (20.000 x 30) = 1.950.300.000 / 600.000 = 3.250,5 -> 3.250 (32,50 TL)
+ *   ALACAKSIZ KARŞILAŞTIRMA: S = 26 x 125.000 = 3.250.000 -> (2 x 3.250.000 x 500 + 300.000) / 600.000 = 3.250.300.000 / 600.000 = 5.417,17 -> 5.417 (alacak tazminatı 2.167 kuruş azaltır).
+ */
+export const OPENING_CREDIT_LATE_FEE_CASE = Object.freeze({
+  name: 'OC5 devir alacağı gecikme tazminatı tabanını düşürür (06-31 Ekim 75.000 x 26 gün)',
+  apartment: 'A-6',
+  period: '2026-10',
+  graceDays: 0,
+  rows: [
+    { id: 841, kind: 'charge', amount: 125000, entry: '2026-10-01', due: '2026-10-05' },
+    { id: 842, kind: 'payment', amount: -50000, entry: '2026-10-01', opening: true },
+  ],
+  expected: { daily_30: { base: 1950000, fee: 3250 }, peak: 75000, breakdown: [{ from: '2026-10-06', to: '2026-10-31', overdue: 75000 }] },
+  withoutCredit: { daily_30: { base: 3250000, fee: 5417 } },
+});
+
+/**
+ * OC6 SİTE DÜZEYİ: D1 eşit aidat (8.500.000) 24 daireye yazıldı; yalnız A-6 (50.000) ve B-12 (800.000) devir alacağı var. Her dairenin bakiyesi = aidat payı - devir alacağı:
+ *   A-6: 354.167 - 50.000 = 304.167 (borçlu); B-12: 354.166 - 800.000 = -445.834 (ALACAKLI); diğer 22 daire payının tamamı borç.
+ *   Borçlu daire toplamı: (8.500.000 - 354.167 - 354.166) + 304.167 = 7.791.667 + 304.167 = 8.095.834; alacak toplamı: 445.834;
+ *   net bakiye = 8.095.834 - 445.834 = 7.650.000 = 8.500.000 - 850.000 (aidat toplamı - devir alacakları).
+ */
+export const OPENING_CREDIT_SITE_CASE = Object.freeze({
+  name: 'OC6 eşit aidat + devir alacağı: site toplamları (borç 8.095.834, alacak 445.834, net 7.650.000)',
+  credits: { 'A-6': 50000, 'B-12': 800000 },
+  expected: { 'A-6': 304167, 'B-12': -445834, debtTotal: 8095834, creditTotal: 445834, net: 7650000 },
+});
 
 // ------------------------------------------------------------------------------------------------------------------------------------------
 // İKİ HESAP (İP-1A, karar G12; docs/PLATFORM_FINANS.md "İki hesap" ve "Altın veri seti"): her dairenin Ev sahibi (owner) ve Kiracı (tenant)

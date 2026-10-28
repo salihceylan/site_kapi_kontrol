@@ -546,6 +546,8 @@ String _entryTitle(LedgerEntry e) {
     case LedgerKind.charge:
       return e.definitionName ?? 'Borç';
     case LedgerKind.payment:
+      // Devir alacağı (K16) gerçek bir havale / nakit tahsilatı değildir
+      if (e.isOpeningCredit) return 'Devir alacağı';
       return e.method == null ? 'Tahsilat' : 'Tahsilat (${e.method!.label})';
     case LedgerKind.reversal:
       return 'Ters kayıt';

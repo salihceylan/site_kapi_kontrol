@@ -245,7 +245,8 @@ export async function buildExportEnvelope(siteCode, kind, query = {}, now = new 
           item.description ?? '',
           item.period,
           item.due_date ?? null,
-          item.method ? METHOD_LABEL[item.method] ?? item.method : '',
+          // Devir alacağı (K16; payment + source_kind 'opening') gerçek bir havale değildir: yöntem sütununda «Devir alacağı»
+          item.kind === 'payment' && item.source_kind === 'opening' ? 'Devir alacağı' : item.method ? METHOD_LABEL[item.method] ?? item.method : '',
           item.receipt?.number ?? '',
           item.amount_minor,
           item.running_balance_minor,

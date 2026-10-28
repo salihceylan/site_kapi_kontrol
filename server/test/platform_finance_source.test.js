@@ -71,6 +71,8 @@ describe('finans kaynakları: para hesabında kayan nokta YOK', () => {
       'finance_charts.js',
       'finance_common.js',
       'finance_distribution.js',
+      'finance_distribution_basis.js',
+      'finance_distribution_schema.js',
       'finance_documents_adapter.js',
       'finance_enforcement.js',
       'finance_expense_analysis.js',

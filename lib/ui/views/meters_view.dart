@@ -558,6 +558,8 @@ class _BillingTab extends StatefulWidget {
 class _BillingTabState extends State<_BillingTab> {
   MeterKind _kind = MeterKind.water;
   MeterMethod _method = MeterMethod.unitPrice;
+  // Isı payının alan payı tabanı (karar K5): yönetim seçer, varsayılan EŞİT; kod arsa payına / kişi sayısına kendiliğinden geçmez.
+  HeatAreaBasis _areaBasis = HeatAreaBasis.equal;
   DateTime? _from;
   DateTime? _to;
   final TextEditingController _amount = TextEditingController();
@@ -614,6 +616,7 @@ class _BillingTabState extends State<_BillingTab> {
       'period_from': _iso(_from!),
       'period_to': _iso(_to!),
       if (_method == MeterMethod.unitPrice) 'unit_price_minor': minor else 'total_minor': minor,
+      if (_method == MeterMethod.heat) 'area_basis': _areaBasis.api,
       'skip_missing': _skipMissing,
     };
   }
@@ -732,8 +735,21 @@ class _BillingTabState extends State<_BillingTab> {
             onChanged: (_) => setState(_dirty),
             decoration: InputDecoration(labelText: _method == MeterMethod.unitPrice ? 'Birim fiyat (TL / birim)' : _method == MeterMethod.invoice ? 'Fatura tutarı (TL)' : 'Toplam ısınma gideri (TL)'),
           ),
-          if (_method == MeterMethod.heat) const Padding(padding: EdgeInsets.only(top: AppSpace.xs), child: Text('Gider; ölçüme göre ve alan payıyla (hepsinde arsa payı tanımlıysa arsa payına, değilse eşit), platform kuralındaki oranla (varsayılan %70 / %30) paylaştırılır.')),
-          SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Okuması eksik daireleri atla'), value: _skipMissing, onChanged: _busy ? null : (v) => setState(() {
+          if (_method == MeterMethod.heat) ...<Widget>[
+            const Padding(padding: EdgeInsets.only(top: AppSpace.xs), child: Text('Gider; ölçüme göre ve alan payıyla, platform kuralındaki oranla (varsayılan %70 / %30) paylaştırılır. Alan payının dağıtım tabanını siz seçersiniz.')),
+            DropdownButtonFormField<HeatAreaBasis>(
+              key: const ValueKey<String>('billing_area_basis'),
+              initialValue: _areaBasis,
+              decoration: const InputDecoration(labelText: 'Alan payı tabanı'),
+              items: <DropdownMenuItem<HeatAreaBasis>>[for (final b in HeatAreaBasis.values) DropdownMenuItem<HeatAreaBasis>(value: b, child: Text(b.label))],
+              onChanged: _busy ? null : (v) => setState(() {
+                _areaBasis = v ?? _areaBasis;
+                _dirty();
+              }),
+            ),
+            Padding(padding: const EdgeInsets.only(top: AppSpace.xs), child: Text(_areaBasis.help, key: const ValueKey<String>('billing_area_basis_help'))),
+          ],
+          SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Verisi eksik daireleri atla'), subtitle: const Text('Okuması ya da seçilen alan payı tabanının verisi (arsa payı, kişi sayısı) eksik daire bu faturalandırmaya hiç dahil edilmez; payı kalan dairelere dağılır.'), value: _skipMissing, onChanged: _busy ? null : (v) => setState(() {
             _skipMissing = v;
             _dirty();
           })),
@@ -743,6 +759,7 @@ class _BillingTabState extends State<_BillingTab> {
         if (preview != null) ...<Widget>[
           const SizedBox(height: AppSpace.md),
           Text('${preview.apartmentCount} daire · toplam ${formatMinorTl(preview.totalMinor)}', style: Theme.of(context).textTheme.titleMedium),
+          if (preview.areaBasis != null) Text('Alan payı tabanı: ${preview.areaBasis!.label}', key: const ValueKey<String>('billing_preview_area_basis')),
           if (preview.missing.isNotEmpty) ...<Widget>[
             const SizedBox(height: AppSpace.sm),
             Text('Eksik olan ${preview.missing.length} daire:', style: TextStyle(color: error)),

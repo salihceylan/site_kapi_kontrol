@@ -70,6 +70,18 @@ describe('spec ve gövde', () => {
     assert.throws(() => validateImportBody(aio, 'all_in_one', { commit: true }), { code: 'ACK_REQUIRED' });
     assert.equal(validateImportBody({ ...aio, acknowledged: true, allow_overwrite: true }, 'all_in_one', { commit: true }).allowOverwrite, true);
   });
+  it('K16 alacak toplamı onayı: options.expected_credit_total_minor isteğe bağlı (yoksa 0), negatif / ondalık / metin reddedilir; önizlemede istenmez', () => {
+    const rows = [row(1, { blok: 'A', daire_no: '1', tutar: '-100' })];
+    const base = { spec_version: 1, rows, expected_hash: 'a'.repeat(64), idempotency_key: 'abcdefgh1' };
+    const parse = (options) => validateImportBody({ ...base, options }, 'opening_balances', { commit: true }).options;
+    assert.equal(parse({ cutover_date: TODAY, expected_total_minor: 0 }).expected_credit_total_minor, 0);
+    assert.equal(parse({ cutover_date: TODAY, expected_total_minor: 0, expected_credit_total_minor: 57525 }).expected_credit_total_minor, 57525);
+    for (const bad of [-1, 1.5, '100', true]) {
+      assert.throws(() => parse({ cutover_date: TODAY, expected_total_minor: 0, expected_credit_total_minor: bad }), { code: 'INVALID_BODY' }, String(bad));
+    }
+    const preview = validateImportBody({ spec_version: 1, rows, options: { cutover_date: TODAY } }, 'opening_balances').options;
+    assert.deepEqual(preview, { cutover_date: TODAY });
+  });
   it('parmak izi seçenekleri kapsar', () => {
     const rows = [row(1, { blok: 'A', daire_no: '1' })];
     const a = requestFingerprint({ kind: 'opening_balances', rows, options: { cutover_date: '2026-10-01' } });
@@ -93,7 +105,7 @@ describe('planOpening', () => {
     assert.equal(result.ops[1].account, 'tenant');
     assert.equal(result.ops[1].due, '2026-09-15');
   });
-  it('eksi tutar, sıfır, tekrar ve kiracısız uyarısı', () => {
+  it('sıfır atlanır; tekrar ve kiracısız uyarısı; eksi tutar artık hata DEĞİL (alacaklı devir, K16)', () => {
     const result = plan([
       row(1, { blok: 'A', daire_no: '1', tutar: '-50' }),
       row(2, { blok: 'A', daire_no: '2', tutar: '0' }),
@@ -102,11 +114,52 @@ describe('planOpening', () => {
       row(5, { blok: 'A', daire_no: '3', hesap: 'Kiracı', tutar: '20' }),
     ]);
     const codes = result.view.issues.map((i) => `${i.n}:${i.code}`);
-    assert.ok(codes.includes('1:OPENING_CREDIT_UNSUPPORTED'));
+    assert.ok(!codes.some((code) => code.endsWith('OPENING_CREDIT_UNSUPPORTED')), 'alacaklı devir artık reddedilmez');
+    assert.ok(!codes.some((code) => code.startsWith('1:')), 'satır 1 (alacaklı) sorunsuz');
     assert.ok(codes.includes('2:OPENING_ZERO'));
     assert.ok(codes.includes('4:DUPLICATE_IN_FILE'));
     assert.ok(codes.includes('5:NO_TENANT'));
-    assert.equal(result.counts.total_minor, 3000);
+    // borç: satır 3 (10 TL) + satır 5 (20 TL kiracı hesabı; NO_TENANT yalnız uyarı); satır 4 yinelenen (hata); 50 TL ALACAK ayrı sayılır
+    assert.equal(result.counts.total_minor, 3000, 'borç toplamı yalnız borçlar');
+    assert.equal(result.counts.credit_total_minor, 5000, 'alacak toplamı ayrı (büyüklük)');
+    assert.equal(result.counts.opening_credit_add, 1);
+  });
+  it('K16 alacaklı devir: eksi tutar işaretli op olur (vade yok), sayılar borç / alacak ayrı; vade verilirse yok sayılır (uyarı)', () => {
+    const result = plan([
+      row(1, { blok: 'A', daire_no: '1', tutar: '1.250,50' }),
+      row(2, { blok: 'A', daire_no: '2', tutar: '-500,00', aciklama: 'Peşin ödeme' }),
+      row(3, { blok: 'A', daire_no: '3', hesap: 'Ev sahibi', tutar: '(75,25)', vade: '15.09.2026' }),
+    ]);
+    assert.equal(result.totals.error, 0);
+    assert.deepEqual(result.ops[0], { t: 'ob', aptId: 101, account: 'owner', minor: 125050, due: '2026-10-01', desc: null });
+    assert.deepEqual(result.ops[1], { t: 'ob', aptId: 102, account: 'owner', minor: -50000, due: null, desc: 'Peşin ödeme' });
+    assert.deepEqual(result.ops[2], { t: 'ob', aptId: 103, account: 'owner', minor: -7525, due: null, desc: null });
+    assert.equal(result.counts.opening_add, 3, 'yazılacak kayıt = borç + alacak');
+    assert.equal(result.counts.total_minor, 125050, 'onay toplamı yalnız BORÇ');
+    assert.equal(result.counts.opening_credit_add, 2);
+    assert.equal(result.counts.credit_total_minor, 57525, 'alacak toplamı = 500,00 + 75,25');
+    assert.deepEqual(result.view.issues.map((i) => `${i.n}:${i.code}:${i.severity}`), ['3:OPENING_CREDIT_DUE_IGNORED:warning']);
+    assert.equal(result.view.samples.find((s) => s.n === 2).summary, 'A Blok - Daire 2: 500,00 TL alacak (ev sahibi)');
+  });
+  it('K16 etkin devir (alacak dahil): aynı alacak "değişiklik yok", farklı alacak ya da borç<->alacak çakışması OPENING_EXISTS', () => {
+    const snapshot = makeSnapshot();
+    snapshot.opening.existing.set('101:owner', { minor: -50000, due: null, desc: null });
+    const same = plan([row(1, { blok: 'A', daire_no: '1', tutar: '-500' })], snapshot);
+    assert.equal(same.totals.unchanged, 1);
+    assert.equal(same.ops.length, 0);
+    const otherAmount = plan([row(1, { blok: 'A', daire_no: '1', tutar: '-501' })], snapshot);
+    assert.equal(otherAmount.view.issues[0].code, 'OPENING_EXISTS');
+    const asDebt = plan([row(1, { blok: 'A', daire_no: '1', tutar: '500' })], snapshot);
+    assert.equal(asDebt.view.issues[0].code, 'OPENING_EXISTS', 'aynı büyüklükte borç, mevcut alacakla aynı sayılmaz');
+    // vade sütunu doldurulsa da alacağın "değişiklik yok" karşılaştırması bozulmaz (vade yok sayılır)
+    const withDue = plan([row(1, { blok: 'A', daire_no: '1', tutar: '-500', vade: '15.09.2026' })], snapshot);
+    assert.equal(withDue.totals.unchanged, 1);
+  });
+  it('K16 alacak ile borç aynı dosyada: önizleme özeti işareti kapsar (alacak <-> borç özeti farklıdır)', () => {
+    const credit = plan([row(1, { blok: 'A', daire_no: '1', tutar: '-100' })]);
+    const debt = plan([row(1, { blok: 'A', daire_no: '1', tutar: '100' })]);
+    assert.notEqual(credit.previewHash, debt.previewHash);
+    assert.equal(plan([row(1, { blok: 'A', daire_no: '1', tutar: '-100' })]).previewHash, credit.previewHash);
   });
   it('etkin devir: aynı değer değişiklik yok, farklı değer hata', () => {
     const snapshot = makeSnapshot();

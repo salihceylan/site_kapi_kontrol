@@ -23,7 +23,8 @@ export const KINDS = Object.freeze(['recurring', 'one_time']);
 // 'area' (m²) yalnız ESKİ tanım satırları için listede kalır (DB CHECK ve okuma uyumu): m² sistemden kaldırıldı, daire alanı tutulmuyor; yeni tanım /
 // ek borç / dağıtım değişikliğinde 400 AREA_DISTRIBUTION_REMOVED ile reddedilir (parseDefinitionCore, parseDefinitionPatch). Mevcut 'area' tanımı
 // önizleme / borçlandırmada 409 AREA_DISTRIBUTION_REMOVED verir; tanım pasifleştirilebilir ya da (borçlandırılmamışsa) başka yönteme çevrilebilir.
-export const DISTRIBUTIONS = Object.freeze(['fixed', 'equal', 'category', 'land_share', 'area']);
+// 'person_count' (kişi sayısına göre; migration 091): ağırlık = dairedeki güncel kişi sayısı. Taban YÖNETİMİN açık seçimidir (K5; varsayılan 'equal', finance_distribution.DEFAULT_DISTRIBUTION).
+export const DISTRIBUTIONS = Object.freeze(['fixed', 'equal', 'category', 'land_share', 'area', 'person_count']);
 export const AREA_BASES = Object.freeze(['gross', 'net']);
 export const AREA_DISTRIBUTION_REMOVED = 'AREA_DISTRIBUTION_REMOVED';
 export const TARGET_TYPES = Object.freeze(['site', 'blocks', 'apartments']);
@@ -118,6 +119,9 @@ export const entryNotReversible = () =>
   new PlatformError(409, 'ENTRY_NOT_REVERSIBLE', 'Ters kayıt tekrar iptal edilemez.');
 export const entryNotCorrectable = () =>
   new PlatformError(409, 'ENTRY_NOT_CORRECTABLE', 'Yalnızca tahsilat düzeltilebilir; borç için kaydı iptal edin.');
+/** Devir alacağı (K16; source_kind 'opening') tahsilat gibi düzeltilemez (yeni bir nakit / havale tahsilatına dönüşürdü). Aynı kod, açık ileti. */
+export const openingEntryNotCorrectable = () =>
+  new PlatformError(409, 'ENTRY_NOT_CORRECTABLE', 'Devir alacağı düzeltilemez; kaydı iptal edin ya da devir yüklemesini geri alıp yeniden yükleyin.');
 export const nothingToPost = () =>
   new PlatformError(409, 'NOTHING_TO_POST', 'Borçlandırılacak daire bulunamadı.');
 export const idempotencyConflict = () =>

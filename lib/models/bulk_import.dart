@@ -581,6 +581,7 @@ const Map<String, String> kImportPlanLabels = <String, String>{
   'overwritten_cells': 'Üzerine yazılacak alan',
   'cells_kept': 'Farklı olduğu için korunan alan',
   'opening_add': 'Yazılacak devir kaydı',
+  'opening_credit_add': 'Bunlardan alacaklı (devir alacağı) kayıt',
   'opening_unchanged': 'Zaten yüklü devir kaydı',
   'opening_zero': 'Tutarı 0 olduğu için atlanan',
 };

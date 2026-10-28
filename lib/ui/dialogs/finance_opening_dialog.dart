@@ -119,7 +119,7 @@ class _FinanceOpeningDialogState extends State<FinanceOpeningDialog> {
       setState(() => _revertError = 'Geri alma nedenini yazın.');
       return;
     }
-    final signature = 'rev|${detail.run.id}|${detail.entriesToReverse}|${detail.totalMinor}|$reason';
+    final signature = 'rev|${detail.run.id}|${detail.entriesToReverse}|${detail.totalMinor}|${detail.creditTotalMinor}|$reason';
     final key = _keys.keyFor(signature);
     setState(() {
       _busy = true;
@@ -133,6 +133,7 @@ class _FinanceOpeningDialogState extends State<FinanceOpeningDialog> {
         idempotencyKey: key,
         expectedCount: detail.entriesToReverse,
         expectedTotalMinor: detail.totalMinor,
+        expectedCreditTotalMinor: detail.creditTotalMinor,
       );
       _keys.clear(signature);
       widget.onChanged();
@@ -194,8 +195,12 @@ class _FinanceOpeningDialogState extends State<FinanceOpeningDialog> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
-          '${detail.entriesToReverse} kayıt için toplam ${formatMinor(detail.totalMinor)} tutarında ters kayıt '
-          'yazılacak. Eski kayıtlar silinmez.',
+          detail.creditEntriesToReverse > 0
+              // Alacaklı devir (K16): borç ve alacak ayrı yazılır
+              ? '${detail.entriesToReverse} kayıt için ters kayıt yazılacak: ${formatMinor(detail.totalMinor)} devir borcu ve '
+                    '${formatMinor(detail.creditTotalMinor)} devir alacağı (${detail.creditEntriesToReverse} kayıt). Eski kayıtlar silinmez.'
+              : '${detail.entriesToReverse} kayıt için toplam ${formatMinor(detail.totalMinor)} tutarında ters kayıt '
+                    'yazılacak. Eski kayıtlar silinmez.',
           key: const ValueKey<String>('opening_revert_summary'),
           style: th.bodyMedium,
         ),
@@ -273,7 +278,11 @@ class _FinanceOpeningDialogState extends State<FinanceOpeningDialog> {
                   ListTile(
                     key: ValueKey<String>('opening_run_${run.id}'),
                     contentPadding: EdgeInsets.zero,
-                    title: Text('${formatMinor(run.totalMinor)} · ${run.entryCount} kayıt'),
+                    title: Text(
+                      run.creditEntryCount > 0
+                          ? '${formatMinor(run.totalMinor)} borç · ${formatMinor(run.creditTotalMinor)} alacak · ${run.entryCount} kayıt'
+                          : '${formatMinor(run.totalMinor)} · ${run.entryCount} kayıt',
+                    ),
                     subtitle: Text(
                       'Devir tarihi ${_dateText(run.cutoverDate)}${run.reverted ? ' · Geri alındı' : ''}',
                     ),

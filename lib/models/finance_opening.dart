@@ -13,6 +13,8 @@ class OpeningRun {
     required this.entryCount,
     required this.totalMinor,
     required this.reverted,
+    this.creditEntryCount = 0,
+    this.creditTotalMinor = 0,
   });
 
   factory OpeningRun.fromJson(Map<String, dynamic> json) => OpeningRun(
@@ -22,14 +24,24 @@ class OpeningRun {
     entryCount: _int(json['entry_count']),
     totalMinor: _int(json['total_minor']),
     reverted: json['reverted'] == true,
+    creditEntryCount: _int(json['credit_entry_count']),
+    creditTotalMinor: _int(json['credit_total_minor']),
   );
 
   final int id;
   final DateTime? createdAt;
   final String? cutoverDate;
+
+  /// Yazılan devir kaydı sayısı (borç + alacak).
   final int entryCount;
+
+  /// BORÇ toplamı (kuruş).
   final int totalMinor;
   final bool reverted;
+
+  /// Alacaklı devir (K16): alacak kayıt sayısı ve alacak toplamı (büyüklük, kuruş); eski sunucuda ve alacaksız yüklemede 0.
+  final int creditEntryCount;
+  final int creditTotalMinor;
 }
 
 /// Geri alma önizlemesi (`GET finance/opening-balances/:runId`).
@@ -42,6 +54,8 @@ class OpeningRevertPreview {
     required this.individuallyCancelled,
     required this.apartmentsWithLaterPayments,
     required this.lateFeeEntriesAfter,
+    this.creditEntriesToReverse = 0,
+    this.creditTotalMinor = 0,
   });
 
   factory OpeningRevertPreview.fromJson(Map<String, dynamic> json) {
@@ -55,13 +69,23 @@ class OpeningRevertPreview {
       individuallyCancelled: _int(revert['individually_cancelled']),
       apartmentsWithLaterPayments: _int(revert['apartments_with_later_payments']),
       lateFeeEntriesAfter: _int(revert['late_fee_entries_after']),
+      creditEntriesToReverse: _int(revert['credit_entries_to_reverse']),
+      creditTotalMinor: _int(revert['credit_total_minor']),
     );
   }
 
   final OpeningRun run;
+
+  /// Ters kaydı yazılacak kayıt sayısı (borç + alacak).
   final int entriesToReverse;
+
+  /// Ters kaydı yazılacak BORÇ toplamı (kuruş).
   final int totalMinor;
   final int individuallyCancelled;
   final int apartmentsWithLaterPayments;
   final int lateFeeEntriesAfter;
+
+  /// Alacaklı devir (K16): ters kaydı yazılacak alacak kayıtları ve alacak toplamı (büyüklük); `entriesToReverse` bunları da içerir.
+  final int creditEntriesToReverse;
+  final int creditTotalMinor;
 }

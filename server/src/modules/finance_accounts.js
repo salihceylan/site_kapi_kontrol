@@ -179,6 +179,7 @@ export async function mirrorCollectionForEntry(client, { siteCode, entryId, open
  */
 const UNASSIGNED_WHERE = `
   l.site_code = $1 AND l.kind = 'payment' AND l.period >= $2::DATE AND l.entry_date >= $3::DATE
+  AND l.source_kind IS DISTINCT FROM 'opening'
   AND NOT EXISTS (SELECT 1 FROM ledger_entries rv WHERE rv.reverses_entry_id = l.id)
   AND NOT EXISTS (SELECT 1 FROM account_movements m WHERE m.kind = 'collection' AND m.ledger_entry_id = l.id)
 `;

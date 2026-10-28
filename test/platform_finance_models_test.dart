@@ -436,6 +436,33 @@ void main() {
       expect(LedgerEntry.fromJson(_entry(kind: 'zzz')).canReverse, isFalse);
     });
 
+    test('K16 devir alacağı: tahsilat türünde ama kaynak izi opening; iptal edilir, DÜZELTİLMEZ; gerçek tahsilat etkilenmez', () {
+      final credit = LedgerEntry.fromJson(
+        _entry(kind: 'payment', amount: -50000, extra: <String, dynamic>{'source_kind': 'opening', 'method': 'transfer', 'definition_name': 'Devir alacağı'}),
+      );
+      expect(credit.isOpeningCredit, isTrue);
+      expect(credit.canReverse, isTrue, reason: 'tek tek iptal edilebilir (ters kayıt)');
+      expect(credit.canCorrect, isFalse, reason: 'yeni bir nakit / havale tahsilatına dönüşürdü');
+      final manual = LedgerEntry.fromJson(_entry(kind: 'payment', amount: -50000, extra: <String, dynamic>{'source_kind': 'manual', 'method': 'cash'}));
+      expect(manual.isOpeningCredit, isFalse);
+      expect(manual.canCorrect, isTrue);
+      final openingDebt = LedgerEntry.fromJson(_entry(extra: <String, dynamic>{'source_kind': 'opening', 'definition_name': 'Devir bakiyesi'}));
+      expect(openingDebt.isOpeningCredit, isFalse, reason: 'devir BORCU alacak değildir');
+    });
+
+    test('K5 önizleme satırı taban değeri (arsa payı kesri / kişi sayısı); eşit / eski sunucuda null; eksik veri nedeni Türkçe', () {
+      final byPeople = FeePreviewLine.fromJson(<String, dynamic>{'apartment_id': 3, 'label': 'A-3', 'amount_minor': 33333, 'basis_value': 4});
+      expect(byPeople.basisValue, '4');
+      final byShare = FeePreviewLine.fromJson(<String, dynamic>{'apartment_id': 3, 'label': 'A-3', 'amount_minor': 3000, 'basis_value': '35/1000'});
+      expect(byShare.basisValue, '35/1000');
+      expect(FeePreviewLine.fromJson(<String, dynamic>{'apartment_id': 3, 'amount_minor': 1, 'basis_value': null}).basisValue, isNull);
+      expect(FeePreviewLine.fromJson(<String, dynamic>{'apartment_id': 3, 'amount_minor': 1}).basisValue, isNull);
+      expect(financeMissingReason('', code: 'person_count_missing'), 'Dairede kayıtlı güncel kişi yok (kişi sayısı tanımsız).');
+      expect(FeeDistribution.fromApi('person_count'), FeeDistribution.personCount);
+      expect(FeeDistribution.personCount.needsAmount, isTrue);
+      expect(FeeDistribution.personCount.amountIsPerApartment, isFalse, reason: 'kişi sayısında tutar TOPLAMDIR');
+    });
+
     test('tutar okunamazsa FormatException (sessiz 0 YOK)', () {
       expect(() => LedgerEntry.fromJson(_entry(amount: null)), throwsFormatException);
       expect(() => LedgerEntry.fromJson(_entry(amount: 'iki yüz')), throwsFormatException);
