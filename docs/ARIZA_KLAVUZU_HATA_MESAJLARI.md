@@ -2,52 +2,52 @@
 
 > Kullanıcıya/istemciye görünen metinleri üretildikleri `dosya:satır` ile eşler. `Ctrl+F` ile ekranda gördüğünüz mesajın bir parçasını arayın. Koddan otomatik üretilir: `node tools/klavuz/build.mjs`. Ana sayfa: [ARIZA_KLAVUZU.md](ARIZA_KLAVUZU.md) · [İndeks](ARIZA_KLAVUZU_INDEKS.md).
 
-## Sunucu mesajları (866)
+## Sunucu mesajları (867)
 
 Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`). Uygulama bu metinleri HTTP yanıt gövdesinde (`error` alanı) alır.
 
 | Mesaj | Dosya:satır |
 | --- | --- |
-| "${bName}" blok adı birden fazla kez kullanılmış. Blok adları benzersiz olmalıdır. | [server/src/services/membership_rules.js:506](../server/src/services/membership_rules.js#L506) |
-| "${site.name}" sitesi, ${createdBlocks.length} blok ve ${totalApartmentCount} daire ile başarıyla kuruldu! | [server/src/services/membership_service.js:896](../server/src/services/membership_service.js#L896) |
-| "${siteName}" sitesi ${apt.block_name \|\| ''} ${apt.unit_label} için katılım başvurunuz başarıyla oluşturuldu. Site yöneticisinin onayı bekleniyor. | [server/src/services/membership_service.js:1103](../server/src/services/membership_service.js#L1103) |
+| "${bName}" blok adı birden fazla kez kullanılmış. Blok adları benzersiz olmalıdır. | [server/src/services/membership_rules.js:563](../server/src/services/membership_rules.js#L563) |
+| "${site.name}" sitesi, ${createdBlocks.length} blok ve ${totalApartmentCount} daire ile başarıyla kuruldu! | [server/src/services/membership_service.js:952](../server/src/services/membership_service.js#L952) |
+| "${siteName}" sitesi ${apt.block_name \|\| ''} ${apt.unit_label} için katılım başvurunuz başarıyla oluşturuldu. Site yöneticisinin onayı bekleniyor. | [server/src/services/membership_service.js:1159](../server/src/services/membership_service.js#L1159) |
 | <Türkçe mesaj> | [server/src/modules/account_common.js:4](../server/src/modules/account_common.js#L4) |
 | <Türkçe mesaj> | [server/src/modules/module_request_routes.js:9](../server/src/modules/module_request_routes.js#L9) |
 | <Türkçe mesaj> | [server/src/modules/module_routes.js:15](../server/src/modules/module_routes.js#L15) |
 | <Türkçe mesaj> | [server/src/modules/site_application_routes.js:14](../server/src/modules/site_application_routes.js#L14) |
 | ${apartmentLabel(state.apartment.block_name, state.apartment.unit_label)} dairesinin maliki size ${scope === 'toplanti_imza' ? 'toplantı imzası' : 'kurul üyeliği'} için vekalet verdi (${window.valid_until} tarihine kada… | [server/src/modules/apartment_mgmt_proxy.js:69](../server/src/modules/apartment_mgmt_proxy.js#L69) |
-| ${cleanEmail} adresine ${VERIFICATION_CODE_DIGITS} haneli doğrulama kodu gönderildi. | [server/src/modules/oauth_login.js:895](../server/src/modules/oauth_login.js#L895) |
+| ${cleanEmail} adresine ${VERIFICATION_CODE_DIGITS} haneli doğrulama kodu gönderildi. | [server/src/modules/oauth_login.js:903](../server/src/modules/oauth_login.js#L903) |
 | ${debt?.site_name ?  | [server/src/modules/account_common.js:85](../server/src/modules/account_common.js#L85) |
 | ${deviceUid} kodlu cihaz ve karekodu basariyla silindi. | [server/src/routes/company_routes.js:464](../server/src/routes/company_routes.js#L464) |
 | ${field.body} alani true/false olmalidir. | [server/src/utils/site_rules.js:312](../server/src/utils/site_rules.js#L312) |
-| ${fieldName} alanı true/false olmalıdır. | [server/src/services/membership_service.js:1879](../server/src/services/membership_service.js#L1879) |
+| ${fieldName} alanı true/false olmalıdır. | [server/src/services/membership_service.js:1935](../server/src/services/membership_service.js#L1935) |
 | ${fileName}: front-matter (--- ... ---) bulunamadı | [server/src/modules/legal_documents.js:143](../server/src/modules/legal_documents.js#L143) |
 | ${fileName}: geçersiz id | [server/src/modules/legal_documents.js:149](../server/src/modules/legal_documents.js#L149) |
 | ${fileName}: geçersiz version | [server/src/modules/legal_documents.js:157](../server/src/modules/legal_documents.js#L157) |
 | ${fileName}: title zorunlu (en çok 200 karakter) | [server/src/modules/legal_documents.js:153](../server/src/modules/legal_documents.js#L153) |
-| ${label} ${min} ile ${max} arasında bir tamsayı olmalıdır. | [server/src/services/membership_rules.js:458](../server/src/services/membership_rules.js#L458) |
+| ${label} ${min} ile ${max} arasında bir tamsayı olmalıdır. | [server/src/services/membership_rules.js:515](../server/src/services/membership_rules.js#L515) |
 | ${label} dairesinin yönetimi site yöneticisi tarafından ${next.name} kişisine verildi. Dairede kalmaya devam ediyorsunuz. | [server/src/modules/apartment_mgmt_manager.js:184](../server/src/modules/apartment_mgmt_manager.js#L184) |
 | ${label} dairesinin yönetimi site yöneticisi tarafından size verildi. | [server/src/modules/apartment_mgmt_manager.js:175](../server/src/modules/apartment_mgmt_manager.js#L175) |
 | ${name} env degiskeni eksik. | [server/src/mailer.js:6](../server/src/mailer.js#L6) |
 | ${name}: dosya çok büyük | [server/src/modules/legal_documents.js:222](../server/src/modules/legal_documents.js#L222) |
 | ${pass.door_name} icin kapi acma komutu gonderildi. | [server/src/routes/guest_passes_routes.js:464](../server/src/routes/guest_passes_routes.js#L464) |
-| ${req.full_name} sakini, "${req.block_name \|\| ''} ${req.unit_label}" dairesine ${assignedRole === 'APARTMENT_ADMIN' ? 'Daire Yöneticisi' : 'Aile Üyesi'} olarak başarıyla onaylandı. | [server/src/services/membership_service.js:1389](../server/src/services/membership_service.js#L1389) |
+| ${req.full_name} sakini, "${req.block_name \|\| ''} ${req.unit_label}" dairesine ${assignedRole === 'APARTMENT_ADMIN' ? 'Daire Yöneticisi' : 'Aile Üyesi'} olarak başarıyla onaylandı. | [server/src/services/membership_service.js:1445](../server/src/services/membership_service.js#L1445) |
 | ${result.revoked_count} aktif karekod basariyla iptal edildi. | [server/src/routes/manager_routes.js:1117](../server/src/routes/manager_routes.js#L1117) |
 | ${site?.name ?  | [server/src/modules/account_common.js:69](../server/src/modules/account_common.js#L69) |
-| ${targetUserCodes.length} sakin için kapı yetkisi ${actionText}. | [server/src/services/membership_service.js:2825](../server/src/services/membership_service.js#L2825) |
+| ${targetUserCodes.length} sakin için kapı yetkisi ${actionText}. | [server/src/services/membership_service.js:2881](../server/src/services/membership_service.js#L2881) |
 | Abonelik talebiniz onay bekliyor. | [server/src/middlewares/auth_middleware.js:118](../server/src/middlewares/auth_middleware.js#L118) |
-| Abonelik talebiniz onay bekliyor. | [server/src/routes/auth_routes.js:832](../server/src/routes/auth_routes.js#L832) |
+| Abonelik talebiniz onay bekliyor. | [server/src/routes/auth_routes.js:883](../server/src/routes/auth_routes.js#L883) |
 | Abonelik talebiniz reddedildi. | [server/src/middlewares/auth_middleware.js:121](../server/src/middlewares/auth_middleware.js#L121) |
-| Abonelik talebiniz reddedildi. | [server/src/routes/auth_routes.js:835](../server/src/routes/auth_routes.js#L835) |
+| Abonelik talebiniz reddedildi. | [server/src/routes/auth_routes.js:886](../server/src/routes/auth_routes.js#L886) |
 | action approve veya reject olmali. | [server/src/routes/admin_routes.js:770](../server/src/routes/admin_routes.js#L770) |
 | action approve veya reject olmali. | [server/src/routes/admin_routes.js:954](../server/src/routes/admin_routes.js#L954) |
-| Ad ve soyad alanları zorunludur. | [server/src/services/membership_service.js:263](../server/src/services/membership_service.js#L263) |
-| Ad ve soyad en fazla ${NAME_MAX_LENGTH} karakter olabilir. | [server/src/services/membership_service.js:266](../server/src/services/membership_service.js#L266) |
+| Ad ve soyad alanları zorunludur. | [server/src/services/membership_service.js:277](../server/src/services/membership_service.js#L277) |
+| Ad ve soyad en fazla ${NAME_MAX_LENGTH} karakter olabilir. | [server/src/services/membership_service.js:280](../server/src/services/membership_service.js#L280) |
 | adli kayit: gecersiz neden kodu | [server/src/modules/residency_log.js:184](../server/src/modules/residency_log.js#L184) |
 | adli kayit: gecersiz olay turu ${String(event.eventType)} | [server/src/modules/residency_log.js:181](../server/src/modules/residency_log.js#L181) |
 | adli kayit: gecersiz toplu olay | [server/src/modules/residency_log.js:249](../server/src/modules/residency_log.js#L249) |
 | adli kayit: siteCode ya da apartmentId zorunlu | [server/src/modules/residency_log.js:178](../server/src/modules/residency_log.js#L178) |
-| Aile Reisi (Daire Yöneticisi) başarıyla değiştirildi. | [server/src/services/membership_service.js:2334](../server/src/services/membership_service.js#L2334) |
+| Aile Reisi (Daire Yöneticisi) başarıyla değiştirildi. | [server/src/services/membership_service.js:2390](../server/src/services/membership_service.js#L2390) |
 | Aktif bir doğrulama kodu bulunamadı. Lütfen yeni kod talep ediniz. | [server/src/services/membership_rules.js:68](../server/src/services/membership_rules.js#L68) |
 | ANNOUNCEMENT_EMAIL_SECRET veya JWT_SECRET tanimli degil. | [server/src/modules/announcement_email_security.js:45](../server/src/modules/announcement_email_security.js#L45) |
 | app_version geçersiz. | [server/src/modules/client_error_service.js:114](../server/src/modules/client_error_service.js#L114) |
@@ -60,45 +60,45 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | Başvuru bulunamadı. | [server/src/modules/site_application_common.js:25](../server/src/modules/site_application_common.js#L25) |
 | beklenmeyen hata | [server/src/modules/drive_service.js:351](../server/src/modules/drive_service.js#L351) |
 | Bekleyen abonelik talebi bulunamadi. | [server/src/routes/admin_routes.js:812](../server/src/routes/admin_routes.js#L812) |
-| Bekleyen kayıt bulunamadı. Lütfen yeniden kayıt olunuz. | [server/src/services/membership_service.js:436](../server/src/services/membership_service.js#L436) |
+| Bekleyen kayıt bulunamadı. Lütfen yeniden kayıt olunuz. | [server/src/services/membership_service.js:466](../server/src/services/membership_service.js#L466) |
 | Bekleyen site talebi bulunamadi. | [server/src/routes/admin_routes.js:960](../server/src/routes/admin_routes.js#L960) |
 | Belge bulunamadı. | [server/src/modules/legal_routes.js:53](../server/src/modules/legal_routes.js#L53) |
 | belge deposu okunabilir akis dondurmedi | [server/src/modules/finance_documents_adapter.js:177](../server/src/modules/finance_documents_adapter.js#L177) |
-| Belirtilen cihaz hesabınıza ait değil. | [server/src/services/membership_service.js:856](../server/src/services/membership_service.js#L856) |
-| Belirtilen cihaz zaten başka bir kapıya atanmış. | [server/src/services/membership_service.js:871](../server/src/services/membership_service.js#L871) |
-| Belirtilen cihaz zaten başka bir sitede kullanımda. | [server/src/services/membership_service.js:863](../server/src/services/membership_service.js#L863) |
+| Belirtilen cihaz hesabınıza ait değil. | [server/src/services/membership_service.js:912](../server/src/services/membership_service.js#L912) |
+| Belirtilen cihaz zaten başka bir kapıya atanmış. | [server/src/services/membership_service.js:927](../server/src/services/membership_service.js#L927) |
+| Belirtilen cihaz zaten başka bir sitede kullanımda. | [server/src/services/membership_service.js:919](../server/src/services/membership_service.js#L919) |
 | Bilinmeyen toplu yükleme türü. | [server/src/modules/bulk_import_plan.js:27](../server/src/modules/bulk_import_plan.js#L27) |
 | Bir sorun oluştu. Uygulamadan yeniden deneyin. | [server/src/modules/drive_routes.js:163](../server/src/modules/drive_routes.js#L163) |
 | Bitiş tarihi başlangıçtan önce olamaz. | [server/src/modules/apartment_mgmt_rules.js:250](../server/src/modules/apartment_mgmt_rules.js#L250) |
 | Bitiş tarihi geçersiz. | [server/src/modules/apartment_mgmt_rules.js:249](../server/src/modules/apartment_mgmt_rules.js#L249) |
 | borçlandırma satır sayısı uyuşmuyor (${written.rowCount} / ${lines.length}) | [server/src/modules/finance_service.js:564](../server/src/modules/finance_service.js#L564) |
-| Bos olmayan bloklar varken blok sayisi azaltilamaz. | [server/src/services/site_service.js:1304](../server/src/services/site_service.js#L1304) |
+| Bos olmayan bloklar varken blok sayisi azaltilamaz. | [server/src/services/site_service.js:1334](../server/src/services/site_service.js#L1334) |
 | Boylam -180 ile 180 arasinda olmalidir. | [server/src/utils/site_rules.js:337](../server/src/utils/site_rules.js#L337) |
 | Bu adda bir site zaten mevcut. Her sitenin adı benzersiz olmalıdır. | [server/src/utils/validators.js:432](../server/src/utils/validators.js#L432) |
 | Bu adda onay bekleyen bir site başvurusu zaten bulunmaktadır. Lütfen farklı bir site adı belirleyin. | [server/src/utils/validators.js:436](../server/src/utils/validators.js#L436) |
 | Bu cihaz arizali olarak isaretlenmis. | [server/src/utils/site_rules.js:488](../server/src/utils/site_rules.js#L488) |
 | Bu cihaz baska bir kullanici hesabi tarafindan sahiplenilmis. | [server/src/utils/site_rules.js:486](../server/src/utils/site_rules.js#L486) |
 | Bu cihaz icin log gonderme yetkiniz yok. | [server/src/routes/door_log_routes.js:248](../server/src/routes/door_log_routes.js#L248) |
-| Bu cihaz şirket envanterinde arızalı olarak işaretlenmiştir. Lütfen şirket yetkilisiyle iletişime geçiniz. | [server/src/services/membership_service.js:691](../server/src/services/membership_service.js#L691) |
+| Bu cihaz şirket envanterinde arızalı olarak işaretlenmiştir. Lütfen şirket yetkilisiyle iletişime geçiniz. | [server/src/services/membership_service.js:747](../server/src/services/membership_service.js#L747) |
 | Bu cihaz yonettiginiz siteye atanamaz. | [server/src/routes/admin_routes.js:1501](../server/src/routes/admin_routes.js#L1501) |
 | Bu cihaz yonettiginiz siteye atanamaz. | [server/src/utils/site_rules.js:483](../server/src/utils/site_rules.js#L483) |
-| Bu cihaz zaten hesabınıza tanımlı. | [server/src/services/membership_service.js:664](../server/src/services/membership_service.js#L664) |
-| Bu cihaz zaten hesabınıza tanımlı. | [server/src/services/membership_service.js:686](../server/src/services/membership_service.js#L686) |
+| Bu cihaz zaten hesabınıza tanımlı. | [server/src/services/membership_service.js:707](../server/src/services/membership_service.js#L707) |
+| Bu cihaz zaten hesabınıza tanımlı. | [server/src/services/membership_service.js:742](../server/src/services/membership_service.js#L742) |
 | Bu cihazin unique id kayitli. | [server/src/utils/validators.js:462](../server/src/utils/validators.js#L462) |
 | Bu daireyi yonetme yetkiniz yok. | [server/src/routes/manager_routes.js:704](../server/src/routes/manager_routes.js#L704) |
 | Bu daireyi yonetme yetkiniz yok. | [server/src/routes/manager_routes.js:766](../server/src/routes/manager_routes.js#L766) |
 | Bu daireyi yonetme yetkiniz yok. | [server/src/routes/manager_routes.js:796](../server/src/routes/manager_routes.js#L796) |
 | Bu daireyi yonetme yetkiniz yok. | [server/src/routes/manager_routes.js:830](../server/src/routes/manager_routes.js#L830) |
-| Bu daireyi yönetme yetkiniz bulunmamaktadır. | [server/src/services/membership_service.js:1608](../server/src/services/membership_service.js#L1608) |
-| Bu daireyi yönetme yetkiniz bulunmamaktadır. | [server/src/services/membership_service.js:1648](../server/src/services/membership_service.js#L1648) |
-| Bu doğrulama kodu zaten kullanılmış. Lütfen yeni kod talep ediniz. | [server/src/modules/oauth_login.js:970](../server/src/modules/oauth_login.js#L970) |
-| Bu doğrulama kodu zaten kullanılmış. Lütfen yeni kod talep ediniz. | [server/src/services/membership_service.js:421](../server/src/services/membership_service.js#L421) |
+| Bu daireyi yönetme yetkiniz bulunmamaktadır. | [server/src/services/membership_service.js:1664](../server/src/services/membership_service.js#L1664) |
+| Bu daireyi yönetme yetkiniz bulunmamaktadır. | [server/src/services/membership_service.js:1704](../server/src/services/membership_service.js#L1704) |
+| Bu doğrulama kodu zaten kullanılmış. Lütfen yeni kod talep ediniz. | [server/src/modules/oauth_login.js:990](../server/src/modules/oauth_login.js#L990) |
+| Bu doğrulama kodu zaten kullanılmış. Lütfen yeni kod talep ediniz. | [server/src/services/membership_service.js:449](../server/src/services/membership_service.js#L449) |
 | Bu e-posta adresi için çok fazla kod istendi. Lütfen daha sonra tekrar deneyiniz. | [server/src/services/membership_rules.js:117](../server/src/services/membership_rules.js#L117) |
-| Bu e-posta adresine ait hesap artık bulunmuyor. | [server/src/services/site_service.js:2273](../server/src/services/site_service.js#L2273) |
-| Bu e-posta adresiyle zaten kayıtlı ve doğrulanmış bir hesap bulunmaktadır. | [server/src/services/membership_service.js:280](../server/src/services/membership_service.js#L280) |
-| Bu e-posta adresiyle zaten kayıtlı ve doğrulanmış bir hesap bulunmaktadır. | [server/src/services/membership_service.js:450](../server/src/services/membership_service.js#L450) |
-| Bu e-posta baska bir rol icin kayitli. | [server/src/routes/auth_routes.js:643](../server/src/routes/auth_routes.js#L643) |
-| Bu e-posta ile onaylanmis bir hesap zaten var. Giris yapin. | [server/src/routes/auth_routes.js:648](../server/src/routes/auth_routes.js#L648) |
+| Bu e-posta adresine ait hesap artık bulunmuyor. | [server/src/services/site_service.js:2303](../server/src/services/site_service.js#L2303) |
+| Bu e-posta adresiyle zaten kayıtlı ve doğrulanmış bir hesap bulunmaktadır. | [server/src/services/membership_service.js:294](../server/src/services/membership_service.js#L294) |
+| Bu e-posta adresiyle zaten kayıtlı ve doğrulanmış bir hesap bulunmaktadır. | [server/src/services/membership_service.js:480](../server/src/services/membership_service.js#L480) |
+| Bu e-posta baska bir rol icin kayitli. | [server/src/routes/auth_routes.js:658](../server/src/routes/auth_routes.js#L658) |
+| Bu e-posta ile onaylanmis bir hesap zaten var. Giris yapin. | [server/src/routes/auth_routes.js:663](../server/src/routes/auth_routes.js#L663) |
 | Bu e-posta zaten kayitli. | [server/src/utils/validators.js:405](../server/src/utils/validators.js#L405) |
 | Bu gecis linki iptal edilmis. | [server/src/utils/guest_pass_utils.js:122](../server/src/utils/guest_pass_utils.js#L122) |
 | Bu gecis linkinin suresi dolmus. | [server/src/utils/guest_pass_utils.js:123](../server/src/utils/guest_pass_utils.js#L123) |
@@ -109,21 +109,21 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | Bu hesap kullanıcının isteğiyle silinmiş (kimliksizleştirilmiş); kayıtları yasal saklama için korunur ve kalıcı silinemez. | [server/src/routes/admin_routes.js:564](../server/src/routes/admin_routes.js#L564) |
 | Bu hesap kullanıcının isteğiyle silinmiş (kimliksizleştirilmiş); kayıtları yasal saklama için korunur ve kalıcı silinemez. | [server/src/routes/admin_routes.js:660](../server/src/routes/admin_routes.js#L660) |
 | Bu hesap silinmis. | [server/src/middlewares/auth_middleware.js:99](../server/src/middlewares/auth_middleware.js#L99) |
-| Bu hesap silinmis. | [server/src/modules/oauth_login.js:634](../server/src/modules/oauth_login.js#L634) |
-| Bu hesap silinmis. | [server/src/routes/auth_routes.js:971](../server/src/routes/auth_routes.js#L971) |
-| Bu hesap silinmis. | [server/src/services/membership_service.js:2085](../server/src/services/membership_service.js#L2085) |
+| Bu hesap silinmis. | [server/src/modules/oauth_login.js:642](../server/src/modules/oauth_login.js#L642) |
+| Bu hesap silinmis. | [server/src/routes/auth_routes.js:1022](../server/src/routes/auth_routes.js#L1022) |
+| Bu hesap silinmis. | [server/src/services/membership_service.js:2141](../server/src/services/membership_service.js#L2141) |
 | Bu hesap silinmis. | [server/src/services/site_setup_core.js:209](../server/src/services/site_setup_core.js#L209) |
 | Bu islem icin site yoneticisi yetkisi gerekir. | [server/src/middlewares/auth_middleware.js:171](../server/src/middlewares/auth_middleware.js#L171) |
 | Bu islem icin super user yetkisi gerekir. | [server/src/middlewares/auth_middleware.js:142](../server/src/middlewares/auth_middleware.js#L142) |
-| Bu işlem için yetkiniz bulunmamaktadır. | [server/src/services/site_service.js:1898](../server/src/services/site_service.js#L1898) |
+| Bu işlem için yetkiniz bulunmamaktadır. | [server/src/services/site_service.js:1928](../server/src/services/site_service.js#L1928) |
 | Bu işlem için yetkiniz yok. | [server/src/modules/people_access.js:13](../server/src/modules/people_access.js#L13) |
-| Bu işlem şu anda yapılamıyor. Site yönetimine başvurun. | [server/src/services/membership_service.js:1766](../server/src/services/membership_service.js#L1766) |
-| Bu işlem yalnızca Süper Kullanıcı yetkisiyle gerçekleştirilebilir. | [server/src/services/site_service.js:1950](../server/src/services/site_service.js#L1950) |
-| Bu işlem yalnızca Süper Kullanıcı yetkisiyle gerçekleştirilebilir. | [server/src/services/site_service.js:2032](../server/src/services/site_service.js#L2032) |
+| Bu işlem şu anda yapılamıyor. Site yönetimine başvurun. | [server/src/services/membership_service.js:1822](../server/src/services/membership_service.js#L1822) |
+| Bu işlem yalnızca Süper Kullanıcı yetkisiyle gerçekleştirilebilir. | [server/src/services/site_service.js:1980](../server/src/services/site_service.js#L1980) |
+| Bu işlem yalnızca Süper Kullanıcı yetkisiyle gerçekleştirilebilir. | [server/src/services/site_service.js:2062](../server/src/services/site_service.js#L2062) |
 | Bu kapıda dinamik karekod geçerlidir. Lütfen cihaz ekranındaki güncel karekodu okutun. | [server/src/routes/app_doors_routes.js:320](../server/src/routes/app_doors_routes.js#L320) |
 | Bu kapıda fiziksel bir QR kod okuyucu bulunmamaktadır. | [server/src/services/qr_access_service.js:43](../server/src/services/qr_access_service.js#L43) |
-| Bu kapının yetkilerini yönetme yetkiniz bulunmamaktadır. | [server/src/services/membership_service.js:2370](../server/src/services/membership_service.js#L2370) |
-| Bu kapının yetkilerini yönetme yetkiniz bulunmamaktadır. | [server/src/services/membership_service.js:2391](../server/src/services/membership_service.js#L2391) |
+| Bu kapının yetkilerini yönetme yetkiniz bulunmamaktadır. | [server/src/services/membership_service.js:2426](../server/src/services/membership_service.js#L2426) |
+| Bu kapının yetkilerini yönetme yetkiniz bulunmamaktadır. | [server/src/services/membership_service.js:2447](../server/src/services/membership_service.js#L2447) |
 | Bu kapiya cihaz atanmamis. | [server/src/routes/app_doors_routes.js:136](../server/src/routes/app_doors_routes.js#L136) |
 | Bu kapiya cihaz atanmamis. | [server/src/routes/app_doors_routes.js:177](../server/src/routes/app_doors_routes.js#L177) |
 | Bu kapiya cihaz atanmamis. | [server/src/routes/app_doors_routes.js:300](../server/src/routes/app_doors_routes.js#L300) |
@@ -136,22 +136,22 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | Bu kapiyi yonetme yetkiniz yok. | [server/src/routes/manager_routes.js:1045](../server/src/routes/manager_routes.js#L1045) |
 | Bu kapiyi yonetme yetkiniz yok. | [server/src/routes/manager_routes.js:1105](../server/src/routes/manager_routes.js#L1105) |
 | Bu karekod daha once kullanildi. Lutfen cihaz ekraninda yenilenen guncel karekodu okutun. | [server/src/routes/app_doors_routes.js:337](../server/src/routes/app_doors_routes.js#L337) |
-| Bu kimlik sağlayıcısıyla giriş şu anda kapalı (sunucu yapılandırması eksik). | [server/src/modules/oauth_login.js:218](../server/src/modules/oauth_login.js#L218) |
+| Bu kimlik sağlayıcısıyla giriş şu anda kapalı (sunucu yapılandırması eksik). | [server/src/modules/oauth_login.js:226](../server/src/modules/oauth_login.js#L226) |
 | Bu kişide kurul veya görevli rolü yok. | [server/src/modules/module_routes.js:200](../server/src/modules/module_routes.js#L200) |
-| Bu kullanıcı zaten bu sitenin yöneticisidir. | [server/src/services/site_service.js:2284](../server/src/services/site_service.js#L2284) |
-| Bu kullanıcı zaten daire yöneticisidir. | [server/src/services/membership_service.js:2298](../server/src/services/membership_service.js#L2298) |
-| Bu kullanıcı zaten dairenin Aile Reisidir (Daire Yöneticisi). | [server/src/services/membership_service.js:2308](../server/src/services/membership_service.js#L2308) |
+| Bu kullanıcı zaten bu sitenin yöneticisidir. | [server/src/services/site_service.js:2314](../server/src/services/site_service.js#L2314) |
+| Bu kullanıcı zaten daire yöneticisidir. | [server/src/services/membership_service.js:2354](../server/src/services/membership_service.js#L2354) |
+| Bu kullanıcı zaten dairenin Aile Reisidir (Daire Yöneticisi). | [server/src/services/membership_service.js:2364](../server/src/services/membership_service.js#L2364) |
 | Bu kullanici adi zaten kayitli. | [server/src/utils/validators.js:408](../server/src/utils/validators.js#L408) |
-| Bu modül site için kapalı. | [server/src/modules/bulk_import_routes.js:96](../server/src/modules/bulk_import_routes.js#L96) |
-| Bu silme doğrulama kodu artık geçerli değil. Lütfen yeni bir kod isteyiniz. | [server/src/services/site_service.js:2129](../server/src/services/site_service.js#L2129) |
-| Bu silme talebini yalnızca ilgili sitenin yöneticisi onaylayabilir. | [server/src/services/site_service.js:1873](../server/src/services/site_service.js#L1873) |
-| Bu silme talebini yalnızca Süper Kullanıcı onaylayabilir. | [server/src/services/site_service.js:1863](../server/src/services/site_service.js#L1863) |
-| Bu site için bekleyen bir silme onayı bulunmamaktadır. | [server/src/services/site_service.js:1880](../server/src/services/site_service.js#L1880) |
-| Bu site için bekleyen bir silme talebi bulunmuyor. | [server/src/services/site_service.js:1915](../server/src/services/site_service.js#L1915) |
-| Bu site için talep edilmiş aktif bir silme doğrulama kodu bulunmuyor. | [server/src/services/site_service.js:2076](../server/src/services/site_service.js#L2076) |
-| Bu site için zaten onay bekleyen bir katılım başvurunuz bulunmaktadır. | [server/src/services/membership_service.js:1036](../server/src/services/membership_service.js#L1036) |
+| Bu modül site için kapalı. | [server/src/modules/bulk_import_routes.js:97](../server/src/modules/bulk_import_routes.js#L97) |
+| Bu silme doğrulama kodu artık geçerli değil. Lütfen yeni bir kod isteyiniz. | [server/src/services/site_service.js:2159](../server/src/services/site_service.js#L2159) |
+| Bu silme talebini yalnızca ilgili sitenin yöneticisi onaylayabilir. | [server/src/services/site_service.js:1903](../server/src/services/site_service.js#L1903) |
+| Bu silme talebini yalnızca Süper Kullanıcı onaylayabilir. | [server/src/services/site_service.js:1893](../server/src/services/site_service.js#L1893) |
+| Bu site için bekleyen bir silme onayı bulunmamaktadır. | [server/src/services/site_service.js:1910](../server/src/services/site_service.js#L1910) |
+| Bu site için bekleyen bir silme talebi bulunmuyor. | [server/src/services/site_service.js:1945](../server/src/services/site_service.js#L1945) |
+| Bu site için talep edilmiş aktif bir silme doğrulama kodu bulunmuyor. | [server/src/services/site_service.js:2106](../server/src/services/site_service.js#L2106) |
+| Bu site için zaten onay bekleyen bir katılım başvurunuz bulunmaktadır. | [server/src/services/membership_service.js:1092](../server/src/services/membership_service.js#L1092) |
 | Bu site katılım QR kodu geçersiz veya iptal edilmiş. | [server/src/routes/membership_routes.js:150](../server/src/routes/membership_routes.js#L150) |
-| Bu site katılım QR kodu geçersiz veya iptal edilmiş. | [server/src/services/membership_service.js:990](../server/src/services/membership_service.js#L990) |
+| Bu site katılım QR kodu geçersiz veya iptal edilmiş. | [server/src/services/membership_service.js:1046](../server/src/services/membership_service.js#L1046) |
 | Bu site üzerinde yönetim yetkiniz bulunmuyor. | [server/src/modules/people_access.js:15](../server/src/modules/people_access.js#L15) |
 | Bu site üzerinde yönetim yetkiniz bulunmuyor. | [server/src/modules/route_helpers.js:44](../server/src/modules/route_helpers.js#L44) |
 | Bu site üzerinde yönetim yetkiniz bulunmuyor. | [server/src/routes/manager_routes.js:1338](../server/src/routes/manager_routes.js#L1338) |
@@ -165,30 +165,30 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | Bu sitede misafir/kurye gecis kodu olusturma kapalidir. | [server/src/routes/guest_passes_routes.js:79](../server/src/routes/guest_passes_routes.js#L79) |
 | Bu sitede yerel ag uzerinden kapi acma yetkisi kapalidir. | [server/src/services/door_access_policy.js:131](../server/src/services/door_access_policy.js#L131) |
 | Bu sitenin cihazlarini gorme yetkiniz yok. | [server/src/routes/manager_routes.js:1137](../server/src/routes/manager_routes.js#L1137) |
-| Bu sitenin katılım taleplerini görme yetkiniz bulunmamaktadır. | [server/src/services/membership_service.js:1193](../server/src/services/membership_service.js#L1193) |
+| Bu sitenin katılım taleplerini görme yetkiniz bulunmamaktadır. | [server/src/services/membership_service.js:1249](../server/src/services/membership_service.js#L1249) |
 | Bu sitenin loglarini gorme yetkiniz yok. | [server/src/routes/door_log_routes.js:136](../server/src/routes/door_log_routes.js#L136) |
-| Bu sitenin sakinlerini görüntüleme yetkiniz bulunmamaktadır. | [server/src/services/membership_service.js:2856](../server/src/services/membership_service.js#L2856) |
-| Bu sitenin sakinlerini görüntüleme yetkiniz bulunmamaktadır. | [server/src/services/membership_service.js:2877](../server/src/services/membership_service.js#L2877) |
+| Bu sitenin sakinlerini görüntüleme yetkiniz bulunmamaktadır. | [server/src/services/membership_service.js:2912](../server/src/services/membership_service.js#L2912) |
+| Bu sitenin sakinlerini görüntüleme yetkiniz bulunmamaktadır. | [server/src/services/membership_service.js:2933](../server/src/services/membership_service.js#L2933) |
 | Bu siteye kapi ekleme yetkiniz yok. | [server/src/routes/manager_routes.js:999](../server/src/routes/manager_routes.js#L999) |
-| Bu siteyi silme yetkiniz bulunmamaktadır. | [server/src/services/site_service.js:1710](../server/src/services/site_service.js#L1710) |
+| Bu siteyi silme yetkiniz bulunmamaktadır. | [server/src/services/site_service.js:1740](../server/src/services/site_service.js#L1740) |
 | Bu siteyi yonetme yetkiniz yok. | [server/src/routes/manager_routes.js:234](../server/src/routes/manager_routes.js#L234) |
 | Bu siteyi yonetme yetkiniz yok. | [server/src/routes/manager_routes.js:402](../server/src/routes/manager_routes.js#L402) |
 | Bu siteyi yonetme yetkiniz yok. | [server/src/routes/manager_routes.js:535](../server/src/routes/manager_routes.js#L535) |
 | Bu siteyi yonetme yetkiniz yok. | [server/src/routes/manager_routes.js:557](../server/src/routes/manager_routes.js#L557) |
 | Bu siteyi yonetme yetkiniz yok. | [server/src/routes/manager_routes.js:582](../server/src/routes/manager_routes.js#L582) |
 | Bu siteyi yonetme yetkiniz yok. | [server/src/routes/manager_routes.js:1181](../server/src/routes/manager_routes.js#L1181) |
-| Bu şifre sıfırlama bağlantısı geçersiz veya daha önce kullanılmış. | [server/src/routes/auth_routes.js:418](../server/src/routes/auth_routes.js#L418) |
-| Bu şifre sıfırlama bağlantısı geçersiz veya daha önce kullanılmış. | [server/src/routes/auth_routes.js:436](../server/src/routes/auth_routes.js#L436) |
-| Bu şifre sıfırlama bağlantısının süresi dolmuş (30 dakika). Lütfen mobil uygulamadan yeni bir bağlantı talep ediniz. | [server/src/routes/auth_routes.js:445](../server/src/routes/auth_routes.js#L445) |
-| Bu talebi onaylama yetkiniz bulunmamaktadır. | [server/src/services/membership_service.js:1300](../server/src/services/membership_service.js#L1300) |
-| Bu talebi reddetme yetkiniz bulunmamaktadır. | [server/src/services/membership_service.js:1433](../server/src/services/membership_service.js#L1433) |
-| Bu talep zaten "${req.status}" durumunda, tekrar işlem yapılamaz. | [server/src/services/membership_service.js:1306](../server/src/services/membership_service.js#L1306) |
-| Bu talep zaten "${req.status}" durumunda, tekrar işlem yapılamaz. | [server/src/services/membership_service.js:1439](../server/src/services/membership_service.js#L1439) |
+| Bu şifre sıfırlama bağlantısı geçersiz veya daha önce kullanılmış. | [server/src/routes/auth_routes.js:433](../server/src/routes/auth_routes.js#L433) |
+| Bu şifre sıfırlama bağlantısı geçersiz veya daha önce kullanılmış. | [server/src/routes/auth_routes.js:451](../server/src/routes/auth_routes.js#L451) |
+| Bu şifre sıfırlama bağlantısının süresi dolmuş (30 dakika). Lütfen mobil uygulamadan yeni bir bağlantı talep ediniz. | [server/src/routes/auth_routes.js:460](../server/src/routes/auth_routes.js#L460) |
+| Bu talebi onaylama yetkiniz bulunmamaktadır. | [server/src/services/membership_service.js:1356](../server/src/services/membership_service.js#L1356) |
+| Bu talebi reddetme yetkiniz bulunmamaktadır. | [server/src/services/membership_service.js:1489](../server/src/services/membership_service.js#L1489) |
+| Bu talep zaten "${req.status}" durumunda, tekrar işlem yapılamaz. | [server/src/services/membership_service.js:1362](../server/src/services/membership_service.js#L1362) |
+| Bu talep zaten "${req.status}" durumunda, tekrar işlem yapılamaz. | [server/src/services/membership_service.js:1495](../server/src/services/membership_service.js#L1495) |
 | Bu tek kullanimlik gecis linki daha once kullanilmis. | [server/src/utils/guest_pass_utils.js:124](../server/src/utils/guest_pass_utils.js#L124) |
 | Cihaz (${device.device_uid}) başarıyla şirket envanterine kaydedildi. | [server/src/routes/admin_routes.js:1763](../server/src/routes/admin_routes.js#L1763) |
 | Cihaz (${normalizedUid}) zaten şirket veritabanında kayıtlı. | [server/src/services/device_service.js:904](../server/src/services/device_service.js#L904) |
 | Cihaz (${updated.device_uid}) sahipliği sıfırlandı ve şirket stokuna geri döndürüldü. | [server/src/routes/admin_routes.js:1828](../server/src/routes/admin_routes.js#L1828) |
-| Cihaz atamasi olan kapilar varken kapi sayisi azaltilamaz. | [server/src/services/site_service.js:1286](../server/src/services/site_service.js#L1286) |
+| Cihaz atamasi olan kapilar varken kapi sayisi azaltilamaz. | [server/src/services/site_service.js:1316](../server/src/services/site_service.js#L1316) |
 | Cihaz basariyla degistirildi. Kapi yetkileri ve ayarlari aynen korundu. | [server/src/routes/manager_routes.js:970](../server/src/routes/manager_routes.js#L970) |
 | Cihaz bulunamadı. | [server/src/services/device_service.js:972](../server/src/services/device_service.js#L972) |
 | Cihaz bulunamadı. | [server/src/services/device_service.js:1011](../server/src/services/device_service.js#L1011) |
@@ -205,9 +205,9 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | Cihaz ekranindaki guncel karekod henuz alinamadi. Birkac saniye sonra tekrar deneyin. | [server/src/routes/app_doors_routes.js:328](../server/src/routes/app_doors_routes.js#L328) |
 | Cihaz kaydedildi ama MQTT broker senkronu basarisiz. | [server/src/routes/admin_routes.js:1770](../server/src/routes/admin_routes.js#L1770) |
 | Cihaz online gorunmuyor. | [server/src/routes/app_doors_routes.js:69](../server/src/routes/app_doors_routes.js#L69) |
-| Cihaz QR kodu veya seri numarası boş olamaz. | [server/src/services/membership_rules.js:331](../server/src/services/membership_rules.js#L331) |
-| Cihaz QR kodu veya seri numarası çok uzun. | [server/src/services/membership_rules.js:334](../server/src/services/membership_rules.js#L334) |
-| Cihaz sahiplenmek için önce e-posta adresinizi doğrulamanız gerekmektedir. | [server/src/services/membership_service.js:599](../server/src/services/membership_service.js#L599) |
+| Cihaz QR kodu veya seri numarası boş olamaz. | [server/src/services/membership_rules.js:388](../server/src/services/membership_rules.js#L388) |
+| Cihaz QR kodu veya seri numarası çok uzun. | [server/src/services/membership_rules.js:391](../server/src/services/membership_rules.js#L391) |
+| Cihaz sahiplenmek için önce e-posta adresinizi doğrulamanız gerekmektedir. | [server/src/services/membership_service.js:635](../server/src/services/membership_service.js#L635) |
 | Cihaz silindi ama MQTT broker senkronu basarisiz. | [server/src/routes/admin_routes.js:1712](../server/src/routes/admin_routes.js#L1712) |
 | Cihaz silindi ama MQTT broker senkronu basarisiz. | [server/src/routes/manager_routes.js:1241](../server/src/routes/manager_routes.js#L1241) |
 | Cihaz silinemedi. | [server/src/routes/admin_routes.js:1716](../server/src/routes/admin_routes.js#L1716) |
@@ -268,8 +268,8 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | Çok fazla fotoğraf yükleme denemesi. Biraz sonra tekrar deneyin. | [server/src/modules/work_tracking_routes.js:56](../server/src/modules/work_tracking_routes.js#L56) |
 | Çok fazla görüntü isteği. Biraz sonra tekrar deneyin. | [server/src/modules/cctv_routes.js:54](../server/src/modules/cctv_routes.js#L54) |
 | Çok fazla hatalı deneme yapıldı. Güvenliğiniz için lütfen yeni bir kod isteyiniz. | [server/src/services/membership_rules.js:70](../server/src/services/membership_rules.js#L70) |
-| Çok fazla hatalı doğrulama denemesi yapıldı. Kod iptal edildi; lütfen daha sonra yeni bir kod isteyiniz. | [server/src/services/site_service.js:2110](../server/src/services/site_service.js#L2110) |
-| Çok fazla hatalı giriş denemesi. Lütfen ${wait} sonra tekrar deneyin ya da "Şifremi unuttum" ile şifrenizi sıfırlayın. | [server/src/routes/auth_routes.js:731](../server/src/routes/auth_routes.js#L731) |
+| Çok fazla hatalı doğrulama denemesi yapıldı. Kod iptal edildi; lütfen daha sonra yeni bir kod isteyiniz. | [server/src/services/site_service.js:2140](../server/src/services/site_service.js#L2140) |
+| Çok fazla hatalı giriş denemesi. Lütfen ${wait} sonra tekrar deneyin ya da "Şifremi unuttum" ile şifrenizi sıfırlayın. | [server/src/routes/auth_routes.js:750](../server/src/routes/auth_routes.js#L750) |
 | Çok fazla hatırlatma gönderimi. Biraz sonra tekrar deneyin. | [server/src/modules/finance_4b_routes.js:369](../server/src/modules/finance_4b_routes.js#L369) |
 | Çok fazla hesap işlemi isteği. Biraz sonra tekrar deneyin. | [server/src/modules/account_routes.js:34](../server/src/modules/account_routes.js#L34) |
 | Çok fazla hesap raporu isteği. Biraz sonra tekrar deneyin. | [server/src/modules/finance_funds_routes.js:26](../server/src/modules/finance_funds_routes.js#L26) |
@@ -345,8 +345,8 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | Çok fazla sosyal giriş denemesi. Lütfen biraz sonra tekrar deneyin. | [server/src/modules/oauth_routes.js:29](../server/src/modules/oauth_routes.js#L29) |
 | Çok fazla ziyaretçi / kargo işlemi. Biraz sonra tekrar deneyin. | [server/src/modules/visitor_log_routes.js:29](../server/src/modules/visitor_log_routes.js#L29) |
 | Daire bilgileri e-posta ile gonderilemedi. | [server/src/routes/admin_routes.js:1469](../server/src/routes/admin_routes.js#L1469) |
-| Daire bulunamadı. | [server/src/services/membership_service.js:1598](../server/src/services/membership_service.js#L1598) |
-| Daire bulunamadı. | [server/src/services/membership_service.js:2144](../server/src/services/membership_service.js#L2144) |
+| Daire bulunamadı. | [server/src/services/membership_service.js:1654](../server/src/services/membership_service.js#L1654) |
+| Daire bulunamadı. | [server/src/services/membership_service.js:2200](../server/src/services/membership_service.js#L2200) |
 | Daire bulunamadi. | [server/src/routes/admin_routes.js:1384](../server/src/routes/admin_routes.js#L1384) |
 | Daire bulunamadi. | [server/src/routes/admin_routes.js:1409](../server/src/routes/admin_routes.js#L1409) |
 | Daire bulunamadi. | [server/src/routes/admin_routes.js:1439](../server/src/routes/admin_routes.js#L1439) |
@@ -364,16 +364,16 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | Daire sakini sifirlanamadi. | [server/src/routes/admin_routes.js:1441](../server/src/routes/admin_routes.js#L1441) |
 | Daire sakini sifirlandi. | [server/src/routes/admin_routes.js:1436](../server/src/routes/admin_routes.js#L1436) |
 | Daire sakini sifirlandi. | [server/src/routes/manager_routes.js:774](../server/src/routes/manager_routes.js#L774) |
-| Daire sakininin şifresi başarıyla güncellendi. | [server/src/services/membership_service.js:2216](../server/src/services/membership_service.js#L2216) |
-| Daire yöneticisi kendi durumunu pasife alamaz. | [server/src/services/membership_service.js:1895](../server/src/services/membership_service.js#L1895) |
-| Daire yöneticisi kendi kendisini daireden çıkaramaz. | [server/src/services/membership_service.js:1800](../server/src/services/membership_service.js#L1800) |
+| Daire sakininin şifresi başarıyla güncellendi. | [server/src/services/membership_service.js:2272](../server/src/services/membership_service.js#L2272) |
+| Daire yöneticisi kendi durumunu pasife alamaz. | [server/src/services/membership_service.js:1951](../server/src/services/membership_service.js#L1951) |
+| Daire yöneticisi kendi kendisini daireden çıkaramaz. | [server/src/services/membership_service.js:1856](../server/src/services/membership_service.js#L1856) |
 | Davet bağlantısı gönderildi. | [server/src/modules/people_bulk_service.js:102](../server/src/modules/people_bulk_service.js#L102) |
 | depolama yolu kok disina cikiyor | [server/src/modules/document_storage.js:152](../server/src/modules/document_storage.js#L152) |
 | desteklenmeyen alan türü. | [server/src/modules/platform_config_service.js:179](../server/src/modules/platform_config_service.js#L179) |
 | Desteklenmeyen karakter kumesi. | [server/src/middlewares/error_handler.js:30](../server/src/middlewares/error_handler.js#L30) |
-| Desteklenmeyen kimlik sağlayıcısı. | [server/src/modules/oauth_login.js:389](../server/src/modules/oauth_login.js#L389) |
+| Desteklenmeyen kimlik sağlayıcısı. | [server/src/modules/oauth_login.js:397](../server/src/modules/oauth_login.js#L397) |
 | Desteklenmeyen kodlama. | [server/src/middlewares/error_handler.js:29](../server/src/middlewares/error_handler.js#L29) |
-| Desteklenmeyen veya eksik imzalama algoritması. | [server/src/modules/oauth_login.js:170](../server/src/modules/oauth_login.js#L170) |
+| Desteklenmeyen veya eksik imzalama algoritması. | [server/src/modules/oauth_login.js:178](../server/src/modules/oauth_login.js#L178) |
 | Devam etmeden once yeni bir sifre belirlemelisiniz. | [server/src/middlewares/auth_middleware.js:126](../server/src/middlewares/auth_middleware.js#L126) |
 | device_uid 12 haneli hex (0-9, A-F) olmalidir. | [server/src/routes/company_routes.js:326](../server/src/routes/company_routes.js#L326) |
 | device_uid 12 haneli hex (0-9, A-F) olmalidir. | [server/src/routes/company_routes.js:415](../server/src/routes/company_routes.js#L415) |
@@ -383,29 +383,29 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | device_uid zorunludur. | [server/src/routes/company_routes.js:411](../server/src/routes/company_routes.js#L411) |
 | dizin kimligi ile veritabani kimligi FARKLI; hangisinin dogru oldugunu elle belirleyin | [server/src/modules/document_integrity.js:224](../server/src/modules/document_integrity.js#L224) |
 | dizindeki kimlik dosyasi bozuk; elle silip yeniden deneyin | [server/src/modules/document_integrity.js:221](../server/src/modules/document_integrity.js#L221) |
-| Dogrulama kodu tekrar e-posta adresinize gonderildi. | [server/src/routes/auth_routes.js:665](../server/src/routes/auth_routes.js#L665) |
+| Dogrulama kodu tekrar e-posta adresinize gonderildi. | [server/src/routes/auth_routes.js:680](../server/src/routes/auth_routes.js#L680) |
 | Doğrulama isteği şu an işlenemiyor. Lütfen biraz sonra tekrar deneyiniz. | [server/src/services/membership_rules.js:77](../server/src/services/membership_rules.js#L77) |
-| Doğrulama kodu ${VERIFICATION_CODE_DIGITS} haneli sayı olmalıdır. | [server/src/modules/oauth_login.js:924](../server/src/modules/oauth_login.js#L924) |
-| Doğrulama kodu ${VERIFICATION_CODE_DIGITS} haneli sayı olmalıdır. | [server/src/services/membership_service.js:371](../server/src/services/membership_service.js#L371) |
-| Dosya çok büyük. Bir seferde en çok ${BODY_SIZE_LABEL} gönderilebilir. | [server/src/modules/bulk_import_routes.js:118](../server/src/modules/bulk_import_routes.js#L118) |
+| Doğrulama kodu ${VERIFICATION_CODE_DIGITS} haneli sayı olmalıdır. | [server/src/modules/oauth_login.js:932](../server/src/modules/oauth_login.js#L932) |
+| Doğrulama kodu ${VERIFICATION_CODE_DIGITS} haneli sayı olmalıdır. | [server/src/services/membership_service.js:387](../server/src/services/membership_service.js#L387) |
+| Dosya çok büyük. Bir seferde en çok ${BODY_SIZE_LABEL} gönderilebilir. | [server/src/modules/bulk_import_routes.js:119](../server/src/modules/bulk_import_routes.js#L119) |
 | DRIVE_TOKEN_KEY en az 32 karakter olmali | [server/src/modules/drive_common.js:40](../server/src/modules/drive_common.js#L40) |
-| E-posta adresi gereklidir. | [server/src/routes/auth_routes.js:107](../server/src/routes/auth_routes.js#L107) |
-| E-posta adresi gereklidir. | [server/src/services/membership_service.js:525](../server/src/services/membership_service.js#L525) |
+| E-posta adresi gereklidir. | [server/src/routes/auth_routes.js:122](../server/src/routes/auth_routes.js#L122) |
+| E-posta adresi gereklidir. | [server/src/services/membership_service.js:555](../server/src/services/membership_service.js#L555) |
 | E-posta adresi güvenlik nedeniyle değiştirilemez. | [server/src/routes/admin_routes.js:457](../server/src/routes/admin_routes.js#L457) |
-| E-posta adresi güvenlik nedeniyle değiştirilemez. | [server/src/routes/auth_routes.js:924](../server/src/routes/auth_routes.js#L924) |
-| E-posta adresiniz başarıyla doğrulandı. Hesabınız aktif! | [server/src/services/membership_service.js:508](../server/src/services/membership_service.js#L508) |
+| E-posta adresi güvenlik nedeniyle değiştirilemez. | [server/src/routes/auth_routes.js:975](../server/src/routes/auth_routes.js#L975) |
+| E-posta adresiniz başarıyla doğrulandı. Hesabınız aktif! | [server/src/services/membership_service.js:538](../server/src/services/membership_service.js#L538) |
 | E-posta adresiniz dogrulanmadi. | [server/src/middlewares/auth_middleware.js:115](../server/src/middlewares/auth_middleware.js#L115) |
-| E-posta adresiniz dogrulanmadi. | [server/src/routes/auth_routes.js:829](../server/src/routes/auth_routes.js#L829) |
-| E-posta ve doğrulama kodu zorunludur. | [server/src/services/membership_service.js:365](../server/src/services/membership_service.js#L365) |
-| E-posta zaten dogrulanmis. Abonelik talebiniz onay bekliyor. | [server/src/routes/auth_routes.js:652](../server/src/routes/auth_routes.js#L652) |
-| email ve password zorunlu. | [server/src/routes/auth_routes.js:746](../server/src/routes/auth_routes.js#L746) |
+| E-posta adresiniz dogrulanmadi. | [server/src/routes/auth_routes.js:880](../server/src/routes/auth_routes.js#L880) |
+| E-posta ve doğrulama kodu zorunludur. | [server/src/services/membership_service.js:381](../server/src/services/membership_service.js#L381) |
+| E-posta zaten dogrulanmis. Abonelik talebiniz onay bekliyor. | [server/src/routes/auth_routes.js:667](../server/src/routes/auth_routes.js#L667) |
+| email ve password zorunlu. | [server/src/routes/auth_routes.js:773](../server/src/routes/auth_routes.js#L773) |
 | email_verified alani true/false olmali. | [server/src/routes/admin_routes.js:408](../server/src/routes/admin_routes.js#L408) |
 | En az bir giris yontemi (Mobil Uygulama veya QR Kod) acik olmalidir. | [server/src/routes/admin_routes.js:1207](../server/src/routes/admin_routes.js#L1207) |
 | En az bir giris yontemi (Mobil Uygulama veya QR Kod) acik olmalidir. | [server/src/utils/site_rules.js:421](../server/src/utils/site_rules.js#L421) |
 | En az bir temel modül kodu gerekir. | [server/src/modules/core_modules.js:55](../server/src/modules/core_modules.js#L55) |
 | en fazla ${max} karakter olabilir. | [server/src/modules/platform_config_service.js:101](../server/src/modules/platform_config_service.js#L101) |
-| En fazla ${SITE_LIMITS.maxBlocks} blok tanımlanabilir. | [server/src/services/membership_rules.js:496](../server/src/services/membership_rules.js#L496) |
-| En fazla ${SITE_LIMITS.maxDoors} kapı tanımlanabilir. | [server/src/services/membership_rules.js:527](../server/src/services/membership_rules.js#L527) |
+| En fazla ${SITE_LIMITS.maxBlocks} blok tanımlanabilir. | [server/src/services/membership_rules.js:553](../server/src/services/membership_rules.js#L553) |
+| En fazla ${SITE_LIMITS.maxDoors} kapı tanımlanabilir. | [server/src/services/membership_rules.js:584](../server/src/services/membership_rules.js#L584) |
 | en fazla ${spec.max} karakter olabilir. | [server/src/modules/platform_config_service.js:171](../server/src/modules/platform_config_service.js#L171) |
 | Enlem -90 ile 90 arasinda olmalidir. | [server/src/utils/site_rules.js:331](../server/src/utils/site_rules.js#L331) |
 | Etiketli cihazlar okunamadi. | [server/src/routes/company_routes.js:308](../server/src/routes/company_routes.js#L308) |
@@ -438,6 +438,7 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | Gecersiz daire ID. | [server/src/routes/manager_routes.js:757](../server/src/routes/manager_routes.js#L757) |
 | Gecersiz daire ID. | [server/src/routes/manager_routes.js:787](../server/src/routes/manager_routes.js#L787) |
 | Gecersiz daire ID. | [server/src/routes/manager_routes.js:820](../server/src/routes/manager_routes.js#L820) |
+| Gecersiz deneme siniri ilkesi: ${scope} | [server/src/security/attempt_limits.js:41](../server/src/security/attempt_limits.js#L41) |
 | gecersiz depolama alt agaci | [server/src/modules/document_storage.js:36](../server/src/modules/document_storage.js#L36) |
 | gecersiz depolama anahtari | [server/src/modules/document_storage.js:147](../server/src/modules/document_storage.js#L147) |
 | Gecersiz dosya adi. | [server/src/routes/company_routes.js:280](../server/src/routes/company_routes.js#L280) |
@@ -473,7 +474,7 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | Gecersiz parametreler. | [server/src/services/qr_access_service.js:24](../server/src/services/qr_access_service.js#L24) |
 | Gecersiz rol. | [server/src/routes/admin_routes.js:225](../server/src/routes/admin_routes.js#L225) |
 | Gecersiz rol. | [server/src/routes/admin_routes.js:405](../server/src/routes/admin_routes.js#L405) |
-| Gecersiz rol. | [server/src/routes/auth_routes.js:749](../server/src/routes/auth_routes.js#L749) |
+| Gecersiz rol. | [server/src/routes/auth_routes.js:776](../server/src/routes/auth_routes.js#L776) |
 | gecersiz site kodu (depolama anahtari) | [server/src/modules/document_storage.js:139](../server/src/modules/document_storage.js#L139) |
 | gecersiz site kodu (dizin) | [server/src/modules/document_storage.js:164](../server/src/modules/document_storage.js#L164) |
 | Gecersiz site kodu. | [server/src/routes/admin_routes.js:951](../server/src/routes/admin_routes.js#L951) |
@@ -503,45 +504,45 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | Gecis iptal edildi. | [server/src/routes/guest_passes_routes.js:214](../server/src/routes/guest_passes_routes.js#L214) |
 | geçerli bir bağlantı değil. | [server/src/modules/platform_config_service.js:114](../server/src/modules/platform_config_service.js#L114) |
 | Geçerli bir Cihaz Unique ID (UID) giriniz (12 haneli onaltılık, örn. D4C771A172E0). | [server/src/services/device_service.js:889](../server/src/services/device_service.js#L889) |
-| Geçerli bir daire seçiniz. | [server/src/services/membership_service.js:940](../server/src/services/membership_service.js#L940) |
-| Geçerli bir e-posta adresi gereklidir. | [server/src/services/site_service.js:2221](../server/src/services/site_service.js#L2221) |
-| Geçerli bir e-posta adresi giriniz. | [server/src/modules/oauth_login.js:921](../server/src/modules/oauth_login.js#L921) |
-| Geçerli bir e-posta adresi giriniz. | [server/src/routes/auth_routes.js:376](../server/src/routes/auth_routes.js#L376) |
-| Geçerli bir e-posta adresi giriniz. | [server/src/services/membership_service.js:269](../server/src/services/membership_service.js#L269) |
-| Geçerli bir e-posta adresi giriniz. | [server/src/services/membership_service.js:368](../server/src/services/membership_service.js#L368) |
-| Geçerli bir e-posta adresi giriniz. | [server/src/services/membership_service.js:528](../server/src/services/membership_service.js#L528) |
+| Geçerli bir daire seçiniz. | [server/src/services/membership_service.js:996](../server/src/services/membership_service.js#L996) |
+| Geçerli bir e-posta adresi gereklidir. | [server/src/services/site_service.js:2251](../server/src/services/site_service.js#L2251) |
+| Geçerli bir e-posta adresi giriniz. | [server/src/modules/oauth_login.js:929](../server/src/modules/oauth_login.js#L929) |
+| Geçerli bir e-posta adresi giriniz. | [server/src/routes/auth_routes.js:391](../server/src/routes/auth_routes.js#L391) |
+| Geçerli bir e-posta adresi giriniz. | [server/src/services/membership_service.js:283](../server/src/services/membership_service.js#L283) |
+| Geçerli bir e-posta adresi giriniz. | [server/src/services/membership_service.js:384](../server/src/services/membership_service.js#L384) |
+| Geçerli bir e-posta adresi giriniz. | [server/src/services/membership_service.js:558](../server/src/services/membership_service.js#L558) |
 | geçerli bir e-posta adresi olmalıdır. | [server/src/modules/platform_config_service.js:156](../server/src/modules/platform_config_service.js#L156) |
 | geçerli bir https:// bağlantısı olmalıdır (kullanıcı adı / parola içeremez). | [server/src/modules/platform_config_service.js:117](../server/src/modules/platform_config_service.js#L117) |
 | geçerli bir telefon numarası olmalıdır (örn. +90 212 000 00 00). | [server/src/modules/platform_config_service.js:161](../server/src/modules/platform_config_service.js#L161) |
-| Geçersiz blok kimliği. | [server/src/services/membership_service.js:2732](../server/src/services/membership_service.js#L2732) |
-| Geçersiz blok seçimi. | [server/src/services/membership_service.js:945](../server/src/services/membership_service.js#L945) |
+| Geçersiz blok kimliği. | [server/src/services/membership_service.js:2788](../server/src/services/membership_service.js#L2788) |
+| Geçersiz blok seçimi. | [server/src/services/membership_service.js:1001](../server/src/services/membership_service.js#L1001) |
 | Geçersiz cihaz ID. | [server/src/services/device_service.js:949](../server/src/services/device_service.js#L949) |
 | Geçersiz cihaz ID. | [server/src/services/device_service.js:995](../server/src/services/device_service.js#L995) |
-| Geçersiz daire kimliği. | [server/src/services/membership_service.js:1588](../server/src/services/membership_service.js#L1588) |
-| Geçersiz daire kimliği. | [server/src/services/membership_service.js:2110](../server/src/services/membership_service.js#L2110) |
-| Geçersiz daire kimliği. | [server/src/services/membership_service.js:2723](../server/src/services/membership_service.js#L2723) |
+| Geçersiz daire kimliği. | [server/src/services/membership_service.js:1644](../server/src/services/membership_service.js#L1644) |
+| Geçersiz daire kimliği. | [server/src/services/membership_service.js:2166](../server/src/services/membership_service.js#L2166) |
+| Geçersiz daire kimliği. | [server/src/services/membership_service.js:2779](../server/src/services/membership_service.js#L2779) |
 | Geçersiz istek gövdesi. | [server/src/modules/client_error_routes.js:35](../server/src/modules/client_error_routes.js#L35) |
 | Geçersiz kapı ID. | [server/src/routes/membership_routes.js:337](../server/src/routes/membership_routes.js#L337) |
 | Geçersiz kapı ID. | [server/src/routes/membership_routes.js:357](../server/src/routes/membership_routes.js#L357) |
 | Geçersiz kapı ID. | [server/src/routes/membership_routes.js:385](../server/src/routes/membership_routes.js#L385) |
-| Geçersiz kapı kimliği. | [server/src/services/membership_service.js:2348](../server/src/services/membership_service.js#L2348) |
-| Geçersiz katılım tokeni. | [server/src/services/membership_service.js:931](../server/src/services/membership_service.js#L931) |
-| Geçersiz kimlik doğrulama belirteci. | [server/src/modules/oauth_login.js:145](../server/src/modules/oauth_login.js#L145) |
-| Geçersiz kimlik doğrulama sağlayıcısı. | [server/src/modules/oauth_login.js:758](../server/src/modules/oauth_login.js#L758) |
-| Geçersiz kimlik doğrulama sağlayıcısı. | [server/src/modules/oauth_login.js:800](../server/src/modules/oauth_login.js#L800) |
-| Geçersiz kimlik doğrulama sağlayıcısı. | [server/src/modules/oauth_login.js:915](../server/src/modules/oauth_login.js#L915) |
-| Geçersiz kimlik doğrulama sağlayıcısı. | [server/src/modules/oauth_login.js:1018](../server/src/modules/oauth_login.js#L1018) |
-| Geçersiz kullanıcı kimliği. | [server/src/services/membership_service.js:1753](../server/src/services/membership_service.js#L1753) |
-| Geçersiz kullanıcı kodu. | [server/src/services/membership_service.js:1496](../server/src/services/membership_service.js#L1496) |
-| Geçersiz kullanıcı kodu. | [server/src/services/membership_service.js:2582](../server/src/services/membership_service.js#L2582) |
+| Geçersiz kapı kimliği. | [server/src/services/membership_service.js:2404](../server/src/services/membership_service.js#L2404) |
+| Geçersiz katılım tokeni. | [server/src/services/membership_service.js:987](../server/src/services/membership_service.js#L987) |
+| Geçersiz kimlik doğrulama belirteci. | [server/src/modules/oauth_login.js:153](../server/src/modules/oauth_login.js#L153) |
+| Geçersiz kimlik doğrulama sağlayıcısı. | [server/src/modules/oauth_login.js:766](../server/src/modules/oauth_login.js#L766) |
+| Geçersiz kimlik doğrulama sağlayıcısı. | [server/src/modules/oauth_login.js:808](../server/src/modules/oauth_login.js#L808) |
+| Geçersiz kimlik doğrulama sağlayıcısı. | [server/src/modules/oauth_login.js:923](../server/src/modules/oauth_login.js#L923) |
+| Geçersiz kimlik doğrulama sağlayıcısı. | [server/src/modules/oauth_login.js:1040](../server/src/modules/oauth_login.js#L1040) |
+| Geçersiz kullanıcı kimliği. | [server/src/services/membership_service.js:1809](../server/src/services/membership_service.js#L1809) |
+| Geçersiz kullanıcı kodu. | [server/src/services/membership_service.js:1552](../server/src/services/membership_service.js#L1552) |
+| Geçersiz kullanıcı kodu. | [server/src/services/membership_service.js:2638](../server/src/services/membership_service.js#L2638) |
 | Geçersiz parametreler. | [server/src/routes/manager_routes.js:1387](../server/src/routes/manager_routes.js#L1387) |
 | Geçersiz parametreler. | [server/src/routes/manager_routes.js:1414](../server/src/routes/manager_routes.js#L1414) |
-| Geçersiz parametreler. | [server/src/services/site_service.js:2458](../server/src/services/site_service.js#L2458) |
+| Geçersiz parametreler. | [server/src/services/site_service.js:2488](../server/src/services/site_service.js#L2488) |
 | Geçersiz site ID. | [server/src/routes/manager_routes.js:1263](../server/src/routes/manager_routes.js#L1263) |
 | Geçersiz site ID. | [server/src/routes/membership_routes.js:412](../server/src/routes/membership_routes.js#L412) |
 | Geçersiz site katılım kodu. | [server/src/routes/membership_routes.js:153](../server/src/routes/membership_routes.js#L153) |
-| Geçersiz site kimliği. | [server/src/services/membership_service.js:1178](../server/src/services/membership_service.js#L1178) |
-| Geçersiz site kimliği. | [server/src/services/membership_service.js:2835](../server/src/services/membership_service.js#L2835) |
+| Geçersiz site kimliği. | [server/src/services/membership_service.js:1234](../server/src/services/membership_service.js#L1234) |
+| Geçersiz site kimliği. | [server/src/services/membership_service.js:2891](../server/src/services/membership_service.js#L2891) |
 | Geçersiz site kodu. | [server/src/modules/card_access_access.js:23](../server/src/modules/card_access_access.js#L23) |
 | Geçersiz site kodu. | [server/src/modules/cctv_routes.js:64](../server/src/modules/cctv_routes.js#L64) |
 | Geçersiz site kodu. | [server/src/modules/contracts_access.js:42](../server/src/modules/contracts_access.js#L42) |
@@ -559,63 +560,63 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | Geçersiz site kodu. | [server/src/modules/work_tracking_access.js:42](../server/src/modules/work_tracking_access.js#L42) |
 | Geçersiz site kodu. | [server/src/routes/manager_routes.js:1333](../server/src/routes/manager_routes.js#L1333) |
 | Geçersiz site kodu. | [server/src/routes/manager_routes.js:1356](../server/src/routes/manager_routes.js#L1356) |
-| Geçersiz site kodu. | [server/src/services/site_service.js:1702](../server/src/services/site_service.js#L1702) |
-| Geçersiz site kodu. | [server/src/services/site_service.js:1844](../server/src/services/site_service.js#L1844) |
-| Geçersiz site kodu. | [server/src/services/site_service.js:1891](../server/src/services/site_service.js#L1891) |
-| Geçersiz site kodu. | [server/src/services/site_service.js:1957](../server/src/services/site_service.js#L1957) |
-| Geçersiz site kodu. | [server/src/services/site_service.js:2039](../server/src/services/site_service.js#L2039) |
+| Geçersiz site kodu. | [server/src/services/site_service.js:1732](../server/src/services/site_service.js#L1732) |
+| Geçersiz site kodu. | [server/src/services/site_service.js:1874](../server/src/services/site_service.js#L1874) |
+| Geçersiz site kodu. | [server/src/services/site_service.js:1921](../server/src/services/site_service.js#L1921) |
+| Geçersiz site kodu. | [server/src/services/site_service.js:1987](../server/src/services/site_service.js#L1987) |
+| Geçersiz site kodu. | [server/src/services/site_service.js:2069](../server/src/services/site_service.js#L2069) |
 | Geçersiz sorgu parametresi. | [server/src/modules/module_request_routes.js:126](../server/src/modules/module_request_routes.js#L126) |
 | Geçersiz sorgu parametresi. | [server/src/modules/module_routes.js:236](../server/src/modules/module_routes.js#L236) |
-| Geçersiz şifre sıfırlama bağlantısı. Lütfen e-postanızdaki bağlantıyı kontrol ediniz. | [server/src/routes/auth_routes.js:412](../server/src/routes/auth_routes.js#L412) |
+| Geçersiz şifre sıfırlama bağlantısı. Lütfen e-postanızdaki bağlantıyı kontrol ediniz. | [server/src/routes/auth_routes.js:427](../server/src/routes/auth_routes.js#L427) |
 | Geçersiz şifreli değer. | [server/src/modules/device_integrations_service.js:49](../server/src/modules/device_integrations_service.js#L49) |
 | Geçersiz talep ID. | [server/src/routes/manager_routes.js:1285](../server/src/routes/manager_routes.js#L1285) |
 | Geçersiz talep ID. | [server/src/routes/manager_routes.js:1306](../server/src/routes/manager_routes.js#L1306) |
-| Geçersiz talep kimliği. | [server/src/services/membership_service.js:1262](../server/src/services/membership_service.js#L1262) |
-| Geçersiz talep kimliği. | [server/src/services/membership_service.js:1406](../server/src/services/membership_service.js#L1406) |
+| Geçersiz talep kimliği. | [server/src/services/membership_service.js:1318](../server/src/services/membership_service.js#L1318) |
+| Geçersiz talep kimliği. | [server/src/services/membership_service.js:1462](../server/src/services/membership_service.js#L1462) |
 | gider hareketi bulunamadi | [server/src/modules/finance_expenses.js:647](../server/src/modules/finance_expenses.js#L647) |
-| Girdiğiniz ${VERIFICATION_CODE_DIGITS} haneli kod hatalıdır. | [server/src/modules/oauth_login.js:965](../server/src/modules/oauth_login.js#L965) |
-| Girdiğiniz ${VERIFICATION_CODE_DIGITS} haneli kod hatalıdır. | [server/src/services/membership_service.js:415](../server/src/services/membership_service.js#L415) |
-| Girdiğiniz silme doğrulama kodu hatalı. | [server/src/services/site_service.js:2114](../server/src/services/site_service.js#L2114) |
-| Giris bilgileri hatali. | [server/src/routes/auth_routes.js:819](../server/src/routes/auth_routes.js#L819) |
-| Giris islemi basarisiz. | [server/src/routes/auth_routes.js:851](../server/src/routes/auth_routes.js#L851) |
+| Girdiğiniz ${VERIFICATION_CODE_DIGITS} haneli kod hatalıdır. | [server/src/modules/oauth_login.js:985](../server/src/modules/oauth_login.js#L985) |
+| Girdiğiniz ${VERIFICATION_CODE_DIGITS} haneli kod hatalıdır. | [server/src/services/membership_service.js:443](../server/src/services/membership_service.js#L443) |
+| Girdiğiniz silme doğrulama kodu hatalı. | [server/src/services/site_service.js:2144](../server/src/services/site_service.js#L2144) |
+| Giris bilgileri hatali. | [server/src/routes/auth_routes.js:866](../server/src/routes/auth_routes.js#L866) |
+| Giris islemi basarisiz. | [server/src/routes/auth_routes.js:902](../server/src/routes/auth_routes.js#L902) |
 | Giris yontemi yetkilendirmesi (Uygulama/QR) yalnizca super user tarafindan yapilabilir. | [server/src/utils/site_rules.js:398](../server/src/utils/site_rules.js#L398) |
-| Giriş doğrulama değeri (nonce) geçersiz. | [server/src/modules/oauth_login.js:716](../server/src/modules/oauth_login.js#L716) |
-| Google kimlik doğrulama belirteci geçersiz veya süresi dolmuş. | [server/src/modules/oauth_login.js:258](../server/src/modules/oauth_login.js#L258) |
+| Giriş doğrulama değeri (nonce) geçersiz. | [server/src/modules/oauth_login.js:724](../server/src/modules/oauth_login.js#L724) |
+| Google kimlik doğrulama belirteci geçersiz veya süresi dolmuş. | [server/src/modules/oauth_login.js:266](../server/src/modules/oauth_login.js#L266) |
 | Gövde bir nesne olmalıdır. | [server/src/modules/client_error_service.js:106](../server/src/modules/client_error_service.js#L106) |
 | Guncellenecek alan gonderilmedi. | [server/src/routes/admin_routes.js:446](../server/src/routes/admin_routes.js#L446) |
 | Guncellenecek alan gonderilmedi. | [server/src/routes/admin_routes.js:1062](../server/src/routes/admin_routes.js#L1062) |
-| Guncellenecek alan gonderilmedi. | [server/src/routes/auth_routes.js:919](../server/src/routes/auth_routes.js#L919) |
+| Guncellenecek alan gonderilmedi. | [server/src/routes/auth_routes.js:970](../server/src/routes/auth_routes.js#L970) |
 | Guncellenecek alan gonderilmedi. | [server/src/routes/manager_routes.js:397](../server/src/routes/manager_routes.js#L397) |
-| Güncellenecek alan bulunamadı. | [server/src/services/door_service.js:690](../server/src/services/door_service.js#L690) |
+| Güncellenecek alan bulunamadı. | [server/src/services/door_service.js:696](../server/src/services/door_service.js#L696) |
 | Günlük test bildirimi sınırına ulaşıldı. Yarın tekrar deneyin. | [server/src/modules/push_routes.js:50](../server/src/modules/push_routes.js#L50) |
 | Güvenlik kuralı: Daire sakinlerinin şifresi yöneticiler tarafından değiştirilemez. Kullanıcılar kendi şifrelerini hesaplarına giriş yaparak profil bölümünden değiştirmelidir. | [server/src/routes/admin_routes.js:465](../server/src/routes/admin_routes.js#L465) |
 | hardware_type esp32_c3 veya esp32_wroom olmali. | [server/src/routes/admin_routes.js:1656](../server/src/routes/admin_routes.js#L1656) |
-| Hesabınız doğrulandı. Bu pencereyi kapatıp uygulamaya dönebilirsiniz. | [server/src/modules/oauth_routes.js:234](../server/src/modules/oauth_routes.js#L234) |
-| Hesabınız henüz yönetici tarafından onaylanmamıştır. | [server/src/modules/oauth_login.js:610](../server/src/modules/oauth_login.js#L610) |
-| Hesabiniz pasif durumda. Yonetici ile iletisime gecin. | [server/src/modules/oauth_login.js:616](../server/src/modules/oauth_login.js#L616) |
+| Hesabınız doğrulandı. Bu pencereyi kapatıp uygulamaya dönebilirsiniz. | [server/src/modules/oauth_routes.js:241](../server/src/modules/oauth_routes.js#L241) |
+| Hesabınız henüz yönetici tarafından onaylanmamıştır. | [server/src/modules/oauth_login.js:618](../server/src/modules/oauth_login.js#L618) |
+| Hesabiniz pasif durumda. Yonetici ile iletisime gecin. | [server/src/modules/oauth_login.js:624](../server/src/modules/oauth_login.js#L624) |
 | Hesap aktif degil. | [server/src/middlewares/auth_middleware.js:112](../server/src/middlewares/auth_middleware.js#L112) |
-| Hesap aktif degil. | [server/src/routes/auth_routes.js:838](../server/src/routes/auth_routes.js#L838) |
+| Hesap aktif degil. | [server/src/routes/auth_routes.js:889](../server/src/routes/auth_routes.js#L889) |
 | Islem basarisiz. | [server/src/utils/guest_pass_utils.js:242](../server/src/utils/guest_pass_utils.js#L242) |
 | Istek govdesi cok buyuk. | [server/src/middlewares/error_handler.js:24](../server/src/middlewares/error_handler.js#L24) |
 | Istek govdesi cok buyuk. | [server/src/routes/door_log_routes.js:223](../server/src/routes/door_log_routes.js#L223) |
 | Istek yarida kesildi. | [server/src/middlewares/error_handler.js:27](../server/src/middlewares/error_handler.js#L27) |
 | İlişik kesildi (pasife alındı). | [server/src/modules/people_bulk_service.js:123](../server/src/modules/people_bulk_service.js#L123) |
 | install_id geçerli bir UUID olmalıdır. | [server/src/modules/client_error_service.js:110](../server/src/modules/client_error_service.js#L110) |
-| İptal edilecek bekleyen davet bulunamadı. | [server/src/services/site_service.js:2618](../server/src/services/site_service.js#L2618) |
+| İptal edilecek bekleyen davet bulunamadı. | [server/src/services/site_service.js:2648](../server/src/services/site_service.js#L2648) |
 | is_active alani true/false olmali. | [server/src/routes/admin_routes.js:514](../server/src/routes/admin_routes.js#L514) |
 | is_active alani true/false olmali. | [server/src/routes/admin_routes.js:1337](../server/src/routes/admin_routes.js#L1337) |
 | is_active alani true/false olmali. | [server/src/routes/manager_routes.js:1036](../server/src/routes/manager_routes.js#L1036) |
 | is_defective alani true/false olmali. | [server/src/routes/admin_routes.js:1789](../server/src/routes/admin_routes.js#L1789) |
 | İstek gövdesi geçersiz. | [server/src/modules/bank_import_routes.js:55](../server/src/modules/bank_import_routes.js#L55) |
-| İstek gövdesi geçersiz. | [server/src/modules/bulk_import_routes.js:120](../server/src/modules/bulk_import_routes.js#L120) |
+| İstek gövdesi geçersiz. | [server/src/modules/bulk_import_routes.js:121](../server/src/modules/bulk_import_routes.js#L121) |
 | istemci baglantisi kesildi | [server/src/modules/document_upload.js:50](../server/src/modules/document_upload.js#L50) |
-| İşlem sırasında bir hata oluştu. Lütfen daha sonra tekrar deneyiniz. | [server/src/routes/auth_routes.js:458](../server/src/routes/auth_routes.js#L458) |
+| İşlem sırasında bir hata oluştu. Lütfen daha sonra tekrar deneyiniz. | [server/src/routes/auth_routes.js:473](../server/src/routes/auth_routes.js#L473) |
 | JWT_SECRET tanımlı değil | [server/src/modules/apartment_mgmt_service.js:93](../server/src/modules/apartment_mgmt_service.js#L93) |
 | Kamera parolası şifrelemesi için CAMERA_SECRET_KEY ya da JWT_SECRET gerekli. | [server/src/modules/device_integrations_service.js:36](../server/src/modules/device_integrations_service.js#L36) |
-| Kapı adı boş olamaz. | [server/src/services/door_service.js:665](../server/src/services/door_service.js#L665) |
-| Kapı adı zorunludur. | [server/src/services/door_service.js:591](../server/src/services/door_service.js#L591) |
-| Kapı bulunamadı. | [server/src/services/membership_service.js:2360](../server/src/services/membership_service.js#L2360) |
-| Kapı yetkisi varsayılan ayarlara döndürüldü. | [server/src/services/membership_service.js:2666](../server/src/services/membership_service.js#L2666) |
+| Kapı adı boş olamaz. | [server/src/services/door_service.js:671](../server/src/services/door_service.js#L671) |
+| Kapı adı zorunludur. | [server/src/services/door_service.js:597](../server/src/services/door_service.js#L597) |
+| Kapı bulunamadı. | [server/src/services/membership_service.js:2416](../server/src/services/membership_service.js#L2416) |
+| Kapı yetkisi varsayılan ayarlara döndürüldü. | [server/src/services/membership_service.js:2722](../server/src/services/membership_service.js#L2722) |
 | Kapi acma komutu gonderildi. | [server/src/routes/app_doors_routes.js:408](../server/src/routes/app_doors_routes.js#L408) |
 | Kapi adi zorunludur. | [server/src/routes/manager_routes.js:990](../server/src/routes/manager_routes.js#L990) |
 | Kapi bulunamadi veya erisim yetkiniz yok. | [server/src/services/qr_access_service.js:31](../server/src/services/qr_access_service.js#L31) |
@@ -641,81 +642,81 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | Karekod talebi çok sık yapıldı. Lütfen birkaç saniye bekleyip tekrar deneyiniz. | [server/src/middlewares/rate_limiters.js:196](../server/src/middlewares/rate_limiters.js#L196) |
 | Karekodun süresi dolmuş. Lütfen cihaz ekranında yenilenen güncel karekodu okutun. | [server/src/routes/app_doors_routes.js:342](../server/src/routes/app_doors_routes.js#L342) |
 | Karekodun süresi dolmuş. Lütfen cihaz ekranında yenilenen güncel karekodu okutun. | [server/src/routes/app_doors_routes.js:363](../server/src/routes/app_doors_routes.js#L363) |
-| Katılım başvurusu reddedildi. | [server/src/services/membership_service.js:1480](../server/src/services/membership_service.js#L1480) |
-| Katılım talebi bulunamadı. | [server/src/services/membership_service.js:1284](../server/src/services/membership_service.js#L1284) |
-| Katılım talebi bulunamadı. | [server/src/services/membership_service.js:1417](../server/src/services/membership_service.js#L1417) |
-| Kaydınız reddedilmiştir. | [server/src/modules/oauth_login.js:613](../server/src/modules/oauth_login.js#L613) |
-| Kayit olusturuldu. E-posta adresinize gonderilen 6 haneli kodu girin. | [server/src/routes/auth_routes.js:693](../server/src/routes/auth_routes.js#L693) |
+| Katılım başvurusu reddedildi. | [server/src/services/membership_service.js:1536](../server/src/services/membership_service.js#L1536) |
+| Katılım talebi bulunamadı. | [server/src/services/membership_service.js:1340](../server/src/services/membership_service.js#L1340) |
+| Katılım talebi bulunamadı. | [server/src/services/membership_service.js:1473](../server/src/services/membership_service.js#L1473) |
+| Kaydınız reddedilmiştir. | [server/src/modules/oauth_login.js:621](../server/src/modules/oauth_login.js#L621) |
+| Kayit olusturuldu. E-posta adresinize gonderilen 6 haneli kodu girin. | [server/src/routes/auth_routes.js:708](../server/src/routes/auth_routes.js#L708) |
 | Kendi hesabinizi pasif yapamazsiniz. | [server/src/routes/admin_routes.js:450](../server/src/routes/admin_routes.js#L450) |
 | Kendi hesabinizi pasif yapamazsiniz. | [server/src/routes/admin_routes.js:517](../server/src/routes/admin_routes.js#L517) |
 | Kendi hesabinizi silemezsiniz. | [server/src/routes/admin_routes.js:555](../server/src/routes/admin_routes.js#L555) |
 | Kendi şifrenizi Profilim ekranından mevcut şifrenizle değiştirin. | [server/src/routes/admin_routes.js:416](../server/src/routes/admin_routes.js#L416) |
-| Kimlik doğrulama anahtarları geçersiz. | [server/src/modules/oauth_login.js:116](../server/src/modules/oauth_login.js#L116) |
-| Kimlik doğrulama belirteci biçimi geçersiz. | [server/src/modules/oauth_login.js:149](../server/src/modules/oauth_login.js#L149) |
-| Kimlik doğrulama belirteci bu oturum için üretilmemiş (nonce eşleşmiyor). | [server/src/modules/oauth_login.js:770](../server/src/modules/oauth_login.js#L770) |
-| Kimlik doğrulama belirteci çözümlenemedi. | [server/src/modules/oauth_login.js:157](../server/src/modules/oauth_login.js#L157) |
-| Kimlik doğrulama belirteci imzası geçersiz. | [server/src/modules/oauth_login.js:196](../server/src/modules/oauth_login.js#L196) |
-| Kimlik doğrulama belirteci zaman damgası geçersiz. | [server/src/modules/oauth_login.js:207](../server/src/modules/oauth_login.js#L207) |
-| Kimlik doğrulama belirtecinin süresi dolmuş. | [server/src/modules/oauth_login.js:202](../server/src/modules/oauth_login.js#L202) |
-| Kimlik doğrulama belirtecinin süresi dolmuş. | [server/src/modules/oauth_login.js:302](../server/src/modules/oauth_login.js#L302) |
-| Kimlik doğrulama belirtecinin süresi dolmuş. | [server/src/modules/oauth_login.js:323](../server/src/modules/oauth_login.js#L323) |
-| Kimlik doğrulama hedef istemcisi (aud) eşleşmiyor. | [server/src/modules/oauth_login.js:221](../server/src/modules/oauth_login.js#L221) |
-| Kimlik doğrulama hedef istemcisi (aud) eşleşmiyor. | [server/src/modules/oauth_login.js:298](../server/src/modules/oauth_login.js#L298) |
-| Kimlik doğrulama hedef istemcisi (aud) eşleşmiyor. | [server/src/modules/oauth_login.js:315](../server/src/modules/oauth_login.js#L315) |
-| Kimlik doğrulama imzası doğrulanamadı (anahtar bulunamadı). | [server/src/modules/oauth_login.js:185](../server/src/modules/oauth_login.js#L185) |
-| Kimlik doğrulama kullanıcı tanımlayıcısı (sub) geçersiz. | [server/src/modules/oauth_login.js:231](../server/src/modules/oauth_login.js#L231) |
-| Kimlik doğrulama kullanıcı tanımlayıcısı alınamadı. | [server/src/modules/oauth_login.js:452](../server/src/modules/oauth_login.js#L452) |
-| Kimlik doğrulama sağlayıcısı (iss) geçersiz. | [server/src/modules/oauth_login.js:213](../server/src/modules/oauth_login.js#L213) |
-| Kimlik doğrulama sağlayıcısı (iss) geçersiz. | [server/src/modules/oauth_login.js:295](../server/src/modules/oauth_login.js#L295) |
-| Kimlik doğrulama sağlayıcısına şu anda ulaşılamıyor. | [server/src/modules/oauth_login.js:112](../server/src/modules/oauth_login.js#L112) |
-| Kimlik doğrulama sağlayıcısına şu anda ulaşılamıyor. | [server/src/modules/oauth_login.js:182](../server/src/modules/oauth_login.js#L182) |
-| Kimlik doğrulama sağlayıcısına şu anda ulaşılamıyor. | [server/src/modules/oauth_login.js:254](../server/src/modules/oauth_login.js#L254) |
+| Kimlik doğrulama anahtarları geçersiz. | [server/src/modules/oauth_login.js:124](../server/src/modules/oauth_login.js#L124) |
+| Kimlik doğrulama belirteci biçimi geçersiz. | [server/src/modules/oauth_login.js:157](../server/src/modules/oauth_login.js#L157) |
+| Kimlik doğrulama belirteci bu oturum için üretilmemiş (nonce eşleşmiyor). | [server/src/modules/oauth_login.js:778](../server/src/modules/oauth_login.js#L778) |
+| Kimlik doğrulama belirteci çözümlenemedi. | [server/src/modules/oauth_login.js:165](../server/src/modules/oauth_login.js#L165) |
+| Kimlik doğrulama belirteci imzası geçersiz. | [server/src/modules/oauth_login.js:204](../server/src/modules/oauth_login.js#L204) |
+| Kimlik doğrulama belirteci zaman damgası geçersiz. | [server/src/modules/oauth_login.js:215](../server/src/modules/oauth_login.js#L215) |
+| Kimlik doğrulama belirtecinin süresi dolmuş. | [server/src/modules/oauth_login.js:210](../server/src/modules/oauth_login.js#L210) |
+| Kimlik doğrulama belirtecinin süresi dolmuş. | [server/src/modules/oauth_login.js:310](../server/src/modules/oauth_login.js#L310) |
+| Kimlik doğrulama belirtecinin süresi dolmuş. | [server/src/modules/oauth_login.js:331](../server/src/modules/oauth_login.js#L331) |
+| Kimlik doğrulama hedef istemcisi (aud) eşleşmiyor. | [server/src/modules/oauth_login.js:229](../server/src/modules/oauth_login.js#L229) |
+| Kimlik doğrulama hedef istemcisi (aud) eşleşmiyor. | [server/src/modules/oauth_login.js:306](../server/src/modules/oauth_login.js#L306) |
+| Kimlik doğrulama hedef istemcisi (aud) eşleşmiyor. | [server/src/modules/oauth_login.js:323](../server/src/modules/oauth_login.js#L323) |
+| Kimlik doğrulama imzası doğrulanamadı (anahtar bulunamadı). | [server/src/modules/oauth_login.js:193](../server/src/modules/oauth_login.js#L193) |
+| Kimlik doğrulama kullanıcı tanımlayıcısı (sub) geçersiz. | [server/src/modules/oauth_login.js:239](../server/src/modules/oauth_login.js#L239) |
+| Kimlik doğrulama kullanıcı tanımlayıcısı alınamadı. | [server/src/modules/oauth_login.js:460](../server/src/modules/oauth_login.js#L460) |
+| Kimlik doğrulama sağlayıcısı (iss) geçersiz. | [server/src/modules/oauth_login.js:221](../server/src/modules/oauth_login.js#L221) |
+| Kimlik doğrulama sağlayıcısı (iss) geçersiz. | [server/src/modules/oauth_login.js:303](../server/src/modules/oauth_login.js#L303) |
+| Kimlik doğrulama sağlayıcısına şu anda ulaşılamıyor. | [server/src/modules/oauth_login.js:120](../server/src/modules/oauth_login.js#L120) |
+| Kimlik doğrulama sağlayıcısına şu anda ulaşılamıyor. | [server/src/modules/oauth_login.js:190](../server/src/modules/oauth_login.js#L190) |
+| Kimlik doğrulama sağlayıcısına şu anda ulaşılamıyor. | [server/src/modules/oauth_login.js:262](../server/src/modules/oauth_login.js#L262) |
 | Konum dogrulamasi acikken gecerli bir enlem ve boylam (site merkezi) zorunludur. | [server/src/utils/site_rules.js:468](../server/src/utils/site_rules.js#L468) |
 | Konum yaricapi ${GEOFENCE_RADIUS_MIN} ile ${GEOFENCE_RADIUS_MAX} metre arasinda olmalidir. | [server/src/utils/site_rules.js:348](../server/src/utils/site_rules.js#L348) |
 | köşeli parantez, < >, ters eğik çizgi, ters tırnak veya ** içeremez ve #, -, +, *, > ile başlayamaz. | [server/src/modules/platform_config_service.js:174](../server/src/modules/platform_config_service.js#L174) |
-| Kullanıcı bu dairede kayıtlı değil. | [server/src/services/membership_rules.js:383](../server/src/services/membership_rules.js#L383) |
-| Kullanıcı bu dairede kayıtlı değil. | [server/src/services/membership_service.js:1825](../server/src/services/membership_service.js#L1825) |
-| Kullanıcı bu dairede kayıtlı değil. | [server/src/services/membership_service.js:1928](../server/src/services/membership_service.js#L1928) |
-| Kullanıcı bu dairede kayıtlı değil. | [server/src/services/membership_service.js:2039](../server/src/services/membership_service.js#L2039) |
-| Kullanıcı bu dairede kayıtlı değil. | [server/src/services/membership_service.js:2300](../server/src/services/membership_service.js#L2300) |
-| Kullanıcı bu daireye ait değil. | [server/src/services/membership_service.js:2156](../server/src/services/membership_service.js#L2156) |
+| Kullanıcı bu dairede kayıtlı değil. | [server/src/services/membership_rules.js:440](../server/src/services/membership_rules.js#L440) |
+| Kullanıcı bu dairede kayıtlı değil. | [server/src/services/membership_service.js:1881](../server/src/services/membership_service.js#L1881) |
+| Kullanıcı bu dairede kayıtlı değil. | [server/src/services/membership_service.js:1984](../server/src/services/membership_service.js#L1984) |
+| Kullanıcı bu dairede kayıtlı değil. | [server/src/services/membership_service.js:2095](../server/src/services/membership_service.js#L2095) |
+| Kullanıcı bu dairede kayıtlı değil. | [server/src/services/membership_service.js:2356](../server/src/services/membership_service.js#L2356) |
+| Kullanıcı bu daireye ait değil. | [server/src/services/membership_service.js:2212](../server/src/services/membership_service.js#L2212) |
 | Kullanıcı bu sitenin yöneticisi değil. | [server/src/utils/site_rules.js:178](../server/src/utils/site_rules.js#L178) |
-| Kullanıcı bulunamadı. | [server/src/services/membership_service.js:595](../server/src/services/membership_service.js#L595) |
-| Kullanıcı bulunamadı. | [server/src/services/membership_service.js:2632](../server/src/services/membership_service.js#L2632) |
-| Kullanıcı hesabı bulunamadı. | [server/src/services/membership_service.js:828](../server/src/services/membership_service.js#L828) |
-| Kullanıcı hesabı bulunamadı. | [server/src/services/membership_service.js:973](../server/src/services/membership_service.js#L973) |
-| Kullanıcı hesabı bulunamadı. | [server/src/services/membership_service.js:2195](../server/src/services/membership_service.js#L2195) |
+| Kullanıcı bulunamadı. | [server/src/services/membership_service.js:631](../server/src/services/membership_service.js#L631) |
+| Kullanıcı bulunamadı. | [server/src/services/membership_service.js:2688](../server/src/services/membership_service.js#L2688) |
+| Kullanıcı hesabı bulunamadı. | [server/src/services/membership_service.js:884](../server/src/services/membership_service.js#L884) |
+| Kullanıcı hesabı bulunamadı. | [server/src/services/membership_service.js:1029](../server/src/services/membership_service.js#L1029) |
+| Kullanıcı hesabı bulunamadı. | [server/src/services/membership_service.js:2251](../server/src/services/membership_service.js#L2251) |
 | Kullanıcı kodu (userCode) zorunludur. | [server/src/routes/membership_routes.js:361](../server/src/routes/membership_routes.js#L361) |
-| Kullanıcı oturumu gereklidir. | [server/src/services/membership_service.js:578](../server/src/services/membership_service.js#L578) |
-| Kullanıcı oturumu gereklidir. | [server/src/services/membership_service.js:795](../server/src/services/membership_service.js#L795) |
-| Kullanıcı oturumu gereklidir. | [server/src/services/membership_service.js:936](../server/src/services/membership_service.js#L936) |
-| Kullanıcı oturumu gereklidir. | [server/src/services/membership_service.js:1122](../server/src/services/membership_service.js#L1122) |
-| Kullanıcı site yöneticiliğinden çıkarıldı. | [server/src/services/site_service.js:2591](../server/src/services/site_service.js#L2591) |
+| Kullanıcı oturumu gereklidir. | [server/src/services/membership_service.js:614](../server/src/services/membership_service.js#L614) |
+| Kullanıcı oturumu gereklidir. | [server/src/services/membership_service.js:851](../server/src/services/membership_service.js#L851) |
+| Kullanıcı oturumu gereklidir. | [server/src/services/membership_service.js:992](../server/src/services/membership_service.js#L992) |
+| Kullanıcı oturumu gereklidir. | [server/src/services/membership_service.js:1178](../server/src/services/membership_service.js#L1178) |
+| Kullanıcı site yöneticiliğinden çıkarıldı. | [server/src/services/site_service.js:2621](../server/src/services/site_service.js#L2621) |
 | Kullanici adi veya PIN hazir degil. | [server/src/routes/admin_routes.js:1463](../server/src/routes/admin_routes.js#L1463) |
 | Kullanici adi veya PIN hazir degil. | [server/src/routes/manager_routes.js:806](../server/src/routes/manager_routes.js#L806) |
 | Kullanici bulunamadi. | [server/src/middlewares/auth_middleware.js:86](../server/src/middlewares/auth_middleware.js#L86) |
 | Kullanici bulunamadi. | [server/src/routes/admin_routes.js:187](../server/src/routes/admin_routes.js#L187) |
 | Kullanici bulunamadi. | [server/src/routes/admin_routes.js:664](../server/src/routes/admin_routes.js#L664) |
-| Kullanici bulunamadi. | [server/src/routes/auth_routes.js:973](../server/src/routes/auth_routes.js#L973) |
+| Kullanici bulunamadi. | [server/src/routes/auth_routes.js:1024](../server/src/routes/auth_routes.js#L1024) |
 | Kullanici ID bulunamadi. | [server/src/routes/admin_routes.js:1662](../server/src/routes/admin_routes.js#L1662) |
 | Kullanici ID bulunamadi. | [server/src/routes/admin_routes.js:1739](../server/src/routes/admin_routes.js#L1739) |
 | Kullanici ID sayisal olmali. | [server/src/routes/admin_routes.js:1641](../server/src/routes/admin_routes.js#L1641) |
 | Kullanici kodu olusturulurken cakisma oldu, tekrar deneyin. | [server/src/utils/validators.js:413](../server/src/utils/validators.js#L413) |
-| Kullanici rolu ile secilen rol uyusmuyor. | [server/src/routes/auth_routes.js:826](../server/src/routes/auth_routes.js#L826) |
+| Kullanici rolu ile secilen rol uyusmuyor. | [server/src/routes/auth_routes.js:877](../server/src/routes/auth_routes.js#L877) |
 | Kullanici silinemedi. | [server/src/routes/admin_routes.js:693](../server/src/routes/admin_routes.js#L693) |
 | Log senkronizasyonu basarisiz. | [server/src/routes/door_log_routes.js:267](../server/src/routes/door_log_routes.js#L267) |
 | logs bir dizi olmali. | [server/src/routes/door_log_routes.js:232](../server/src/routes/door_log_routes.js#L232) |
 | Lutfen yeni cihazin QR kodunu, seri numarasini veya cihaz ID'sini belirtin. | [server/src/routes/manager_routes.js:947](../server/src/routes/manager_routes.js#L947) |
 | Lutfen yeni cihazin QR kodunu, seri numarasini veya cihaz ID'sini belirtin. | [server/src/utils/site_rules.js:491](../server/src/utils/site_rules.js#L491) |
-| Lütfen 6 haneli doğrulama kodunu eksiksiz giriniz. | [server/src/services/site_service.js:2058](../server/src/services/site_service.js#L2058) |
+| Lütfen 6 haneli doğrulama kodunu eksiksiz giriniz. | [server/src/services/site_service.js:2088](../server/src/services/site_service.js#L2088) |
 | Lütfen 6 haneli silme doğrulama kodunu giriniz. | [server/src/routes/admin_routes.js:1312](../server/src/routes/admin_routes.js#L1312) |
 | Mail gonderimi icin daire sakini e-postasi gerekli. | [server/src/routes/admin_routes.js:1460](../server/src/routes/admin_routes.js#L1460) |
 | Mail gonderimi icin daire sakini e-postasi gerekli. | [server/src/routes/manager_routes.js:803](../server/src/routes/manager_routes.js#L803) |
 | MERSİS numarası 16 haneli olmalıdır. | [server/src/modules/platform_config_service.js:165](../server/src/modules/platform_config_service.js#L165) |
 | message ya da stack gereklidir. | [server/src/modules/client_error_service.js:119](../server/src/modules/client_error_service.js#L119) |
 | metin olmalıdır. | [server/src/modules/platform_config_service.js:140](../server/src/modules/platform_config_service.js#L140) |
-| Mevcut şifre hatalı. | [server/src/services/membership_service.js:2169](../server/src/services/membership_service.js#L2169) |
-| Mevcut şifre zorunludur. | [server/src/services/membership_service.js:2135](../server/src/services/membership_service.js#L2135) |
+| Mevcut şifre hatalı. | [server/src/services/membership_service.js:2225](../server/src/services/membership_service.js#L2225) |
+| Mevcut şifre zorunludur. | [server/src/services/membership_service.js:2191](../server/src/services/membership_service.js#L2191) |
 | Mevcut yonetici kodu veya yeni yonetici bilgilerinden yalnizca biri gonderilmeli. | [server/src/routes/admin_routes.js:888](../server/src/routes/admin_routes.js#L888) |
 | Modülleri yalnızca sistem yöneticisi açıp kapatabilir. Modül talebi gönderebilirsiniz. | [server/src/modules/module_routes.js:38](../server/src/modules/module_routes.js#L38) |
 | MQTT ACL senkronu zaman asimina ugradi (${timeoutMs} ms). | [server/src/mqtt_acl_sync.js:208](../server/src/mqtt_acl_sync.js#L208) |
@@ -727,10 +728,10 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | MQTT_SYNC_COMMAND tanimli degil. | [server/src/mqtt_acl_sync.js:169](../server/src/mqtt_acl_sync.js#L169) |
 | MQTT_SYNC_COMMAND/MQTT_SYNC_ARGS gecersiz karakter iceriyor. | [server/src/mqtt_acl_sync.js:182](../server/src/mqtt_acl_sync.js#L182) |
 | OTA komutu gonderilemedi. | [server/src/routes/admin_routes.js:1618](../server/src/routes/admin_routes.js#L1618) |
-| Oturum bulunamadı veya süresi doldu. | [server/src/modules/oauth_login.js:1139](../server/src/modules/oauth_login.js#L1139) |
+| Oturum bulunamadı veya süresi doldu. | [server/src/modules/oauth_login.js:1161](../server/src/modules/oauth_login.js#L1161) |
 | Oturum gecersiz. Lutfen tekrar giris yapin. | [server/src/middlewares/auth_middleware.js:106](../server/src/middlewares/auth_middleware.js#L106) |
-| Oturum süresi dolmuş veya geçersiz. Lütfen uygulamadan tekrar deneyin. | [server/src/modules/oauth_login.js:1092](../server/src/modules/oauth_login.js#L1092) |
-| Parolayi degistirmek icin mevcut parolanizi girmelisiniz. | [server/src/routes/auth_routes.js:930](../server/src/routes/auth_routes.js#L930) |
+| Oturum süresi dolmuş veya geçersiz. Lütfen uygulamadan tekrar deneyin. | [server/src/modules/oauth_login.js:1114](../server/src/modules/oauth_login.js#L1114) |
+| Parolayi degistirmek icin mevcut parolanizi girmelisiniz. | [server/src/routes/auth_routes.js:981](../server/src/routes/auth_routes.js#L981) |
 | PDF çok büyük. En çok 5 MB yüklenebilir. | [server/src/modules/bank_import_routes.js:54](../server/src/modules/bank_import_routes.js#L54) |
 | platform_rules: bilinmeyen kural ${String(key).slice(0, 80)} | [server/src/modules/platform_rules.js:385](../server/src/modules/platform_rules.js#L385) |
 | platform_rules: denetim kaydı yazılamadı | [server/src/modules/platform_rules_service.js:361](../server/src/modules/platform_rules_service.js#L361) |
@@ -740,9 +741,9 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | Rapor çok büyük. | [server/src/modules/client_error_routes.js:34](../server/src/modules/client_error_routes.js#L34) |
 | require_geofence alani true/false olmalidir. | [server/src/utils/site_rules.js:325](../server/src/utils/site_rules.js#L325) |
 | Route bulunamadi. | [server/src/middlewares/error_handler.js:116](../server/src/middlewares/error_handler.js#L116) |
-| Sağlayıcıdan gelen e-posta adresi geçersiz. | [server/src/modules/oauth_login.js:460](../server/src/modules/oauth_login.js#L460) |
-| Sakin daireden başarıyla silindi. | [server/src/services/membership_service.js:2079](../server/src/services/membership_service.js#L2079) |
-| Sakini kalıcı olarak silme yetkisi yalnızca site yöneticilerine aittir. | [server/src/services/membership_service.js:2017](../server/src/services/membership_service.js#L2017) |
+| Sağlayıcıdan gelen e-posta adresi geçersiz. | [server/src/modules/oauth_login.js:468](../server/src/modules/oauth_login.js#L468) |
+| Sakin daireden başarıyla silindi. | [server/src/services/membership_service.js:2135](../server/src/services/membership_service.js#L2135) |
+| Sakini kalıcı olarak silme yetkisi yalnızca site yöneticilerine aittir. | [server/src/services/membership_service.js:2073](../server/src/services/membership_service.js#L2073) |
 | sayac borc satir sayisi uyusmuyor (${written.rowCount} / ${lines.length}) | [server/src/modules/metering_billing.js:273](../server/src/modules/metering_billing.js#L273) |
 | Sayisal alanlar gecersiz. | [server/src/routes/admin_routes.js:881](../server/src/routes/admin_routes.js#L881) |
 | Sayisal alanlar gecersiz. | [server/src/routes/admin_routes.js:1045](../server/src/routes/admin_routes.js#L1045) |
@@ -751,30 +752,30 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | Secilen blok bu siteye ait degil. | [server/src/routes/manager_routes.js:1002](../server/src/routes/manager_routes.js#L1002) |
 | Secilen blok bu siteye ait degil. | [server/src/routes/manager_routes.js:1048](../server/src/routes/manager_routes.js#L1048) |
 | Secilen yeni cihaz bulunamadi. | [server/src/routes/manager_routes.js:974](../server/src/routes/manager_routes.js#L974) |
-| Seçilen alanda aktif sakin bulunamadı. | [server/src/services/membership_service.js:2746](../server/src/services/membership_service.js#L2746) |
-| Seçilen daire belirtilen bloğa ait değil. | [server/src/services/membership_service.js:1012](../server/src/services/membership_service.js#L1012) |
-| Seçilen daire bulunamadı veya bu siteye ait değil. | [server/src/services/membership_service.js:1008](../server/src/services/membership_service.js#L1008) |
+| Seçilen alanda aktif sakin bulunamadı. | [server/src/services/membership_service.js:2802](../server/src/services/membership_service.js#L2802) |
+| Seçilen daire belirtilen bloğa ait değil. | [server/src/services/membership_service.js:1068](../server/src/services/membership_service.js#L1068) |
+| Seçilen daire bulunamadı veya bu siteye ait değil. | [server/src/services/membership_service.js:1064](../server/src/services/membership_service.js#L1064) |
 | SERVER_SKIP_START=1 production ortaminda YOK SAYILDI (yalniz testler icindir; .env dosyasindan kaldirin). Sunucu normal baslatiliyor. | [server/src/config/env.js:358](../server/src/config/env.js#L358) |
-| Sıfırlama anahtarı (token) eksik. | [server/src/routes/auth_routes.js:470](../server/src/routes/auth_routes.js#L470) |
+| Sıfırlama anahtarı (token) eksik. | [server/src/routes/auth_routes.js:485](../server/src/routes/auth_routes.js#L485) |
 | Sifre 4 haneli sayisal olmali. | [server/src/services/apartment_service.js:296](../server/src/services/apartment_service.js#L296) |
-| Sifre en fazla ${MAX_PASSWORD_LENGTH} karakter olabilir. | [server/src/routes/auth_routes.js:909](../server/src/routes/auth_routes.js#L909) |
+| Sifre en fazla ${MAX_PASSWORD_LENGTH} karakter olabilir. | [server/src/routes/auth_routes.js:960](../server/src/routes/auth_routes.js#L960) |
 | sifreli belirtec biçimi geçersiz | [server/src/modules/drive_common.js:55](../server/src/modules/drive_common.js#L55) |
-| Silme doğrulama kodu e-posta adresinize (${maskedEmail}) gönderildi. | [server/src/services/site_service.js:2013](../server/src/services/site_service.js#L2013) |
-| Silme doğrulama kodunun 10 dakikalık süresi dolmuş. Lütfen yeni bir kod isteyiniz. | [server/src/services/site_service.js:2082](../server/src/services/site_service.js#L2082) |
-| Site adı en fazla ${SETUP_NAME_MAX} karakter olabilir. | [server/src/services/membership_rules.js:487](../server/src/services/membership_rules.js#L487) |
-| Site adı zorunludur. | [server/src/services/membership_rules.js:484](../server/src/services/membership_rules.js#L484) |
+| Silme doğrulama kodu e-posta adresinize (${maskedEmail}) gönderildi. | [server/src/services/site_service.js:2043](../server/src/services/site_service.js#L2043) |
+| Silme doğrulama kodunun 10 dakikalık süresi dolmuş. Lütfen yeni bir kod isteyiniz. | [server/src/services/site_service.js:2112](../server/src/services/site_service.js#L2112) |
+| Site adı en fazla ${SETUP_NAME_MAX} karakter olabilir. | [server/src/services/membership_rules.js:544](../server/src/services/membership_rules.js#L544) |
+| Site adı zorunludur. | [server/src/services/membership_rules.js:541](../server/src/services/membership_rules.js#L541) |
 | Site adi en az 2 karakter olmali. | [server/src/routes/admin_routes.js:1048](../server/src/routes/admin_routes.js#L1048) |
 | Site bulunamadı. | [server/src/modules/people_access.js:18](../server/src/modules/people_access.js#L18) |
 | Site bulunamadı. | [server/src/modules/route_helpers.js:15](../server/src/modules/route_helpers.js#L15) |
-| Site bulunamadı. | [server/src/services/membership_service.js:2846](../server/src/services/membership_service.js#L2846) |
-| Site bulunamadı. | [server/src/services/site_service.js:1622](../server/src/services/site_service.js#L1622) |
-| Site bulunamadı. | [server/src/services/site_service.js:1661](../server/src/services/site_service.js#L1661) |
-| Site bulunamadı. | [server/src/services/site_service.js:1721](../server/src/services/site_service.js#L1721) |
-| Site bulunamadı. | [server/src/services/site_service.js:1855](../server/src/services/site_service.js#L1855) |
-| Site bulunamadı. | [server/src/services/site_service.js:1908](../server/src/services/site_service.js#L1908) |
-| Site bulunamadı. | [server/src/services/site_service.js:1967](../server/src/services/site_service.js#L1967) |
-| Site bulunamadı. | [server/src/services/site_service.js:2069](../server/src/services/site_service.js#L2069) |
-| Site bulunamadı. | [server/src/services/site_service.js:2228](../server/src/services/site_service.js#L2228) |
+| Site bulunamadı. | [server/src/services/membership_service.js:2902](../server/src/services/membership_service.js#L2902) |
+| Site bulunamadı. | [server/src/services/site_service.js:1652](../server/src/services/site_service.js#L1652) |
+| Site bulunamadı. | [server/src/services/site_service.js:1691](../server/src/services/site_service.js#L1691) |
+| Site bulunamadı. | [server/src/services/site_service.js:1751](../server/src/services/site_service.js#L1751) |
+| Site bulunamadı. | [server/src/services/site_service.js:1885](../server/src/services/site_service.js#L1885) |
+| Site bulunamadı. | [server/src/services/site_service.js:1938](../server/src/services/site_service.js#L1938) |
+| Site bulunamadı. | [server/src/services/site_service.js:1997](../server/src/services/site_service.js#L1997) |
+| Site bulunamadı. | [server/src/services/site_service.js:2099](../server/src/services/site_service.js#L2099) |
+| Site bulunamadı. | [server/src/services/site_service.js:2258](../server/src/services/site_service.js#L2258) |
 | Site bulunamadi. | [server/src/routes/admin_routes.js:1068](../server/src/routes/admin_routes.js#L1068) |
 | Site bulunamadi. | [server/src/routes/admin_routes.js:1201](../server/src/routes/admin_routes.js#L1201) |
 | Site bulunamadi. | [server/src/routes/admin_routes.js:1235](../server/src/routes/admin_routes.js#L1235) |
@@ -791,26 +792,26 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | Site kaydini yalnizca super user guncelleyebilir. | [server/src/routes/manager_routes.js:359](../server/src/routes/manager_routes.js#L359) |
 | Site kaydini yalnizca super user olusturabilir. | [server/src/routes/manager_routes.js:298](../server/src/routes/manager_routes.js#L298) |
 | Site kodu olusturulurken cakisma oldu. | [server/src/utils/validators.js:442](../server/src/utils/validators.js#L442) |
-| Site kurmak için başvuru yapmalısınız. | [server/src/services/membership_service.js:752](../server/src/services/membership_service.js#L752) |
-| Site silme talebi başarıyla iptal edildi / reddedildi. | [server/src/services/site_service.js:1941](../server/src/services/site_service.js#L1941) |
-| Site silme talebi oluşturuldu. Site yöneticisinin onayı gerekmektedir. | [server/src/services/site_service.js:1788](../server/src/services/site_service.js#L1788) |
-| Site silme talebi oluşturuldu. Süper kullanıcının onayı gerekmektedir. | [server/src/services/site_service.js:1834](../server/src/services/site_service.js#L1834) |
-| Site silme talebi zaten oluşturulmuş; Site Yöneticisinin onayı bekleniyor. | [server/src/services/site_service.js:1759](../server/src/services/site_service.js#L1759) |
-| Site silme talebi zaten oluşturulmuş; Süper Kullanıcının onayı bekleniyor. | [server/src/services/site_service.js:1805](../server/src/services/site_service.js#L1805) |
+| Site kurmak için başvuru yapmalısınız. | [server/src/services/membership_service.js:808](../server/src/services/membership_service.js#L808) |
+| Site silme talebi başarıyla iptal edildi / reddedildi. | [server/src/services/site_service.js:1971](../server/src/services/site_service.js#L1971) |
+| Site silme talebi oluşturuldu. Site yöneticisinin onayı gerekmektedir. | [server/src/services/site_service.js:1818](../server/src/services/site_service.js#L1818) |
+| Site silme talebi oluşturuldu. Süper kullanıcının onayı gerekmektedir. | [server/src/services/site_service.js:1864](../server/src/services/site_service.js#L1864) |
+| Site silme talebi zaten oluşturulmuş; Site Yöneticisinin onayı bekleniyor. | [server/src/services/site_service.js:1789](../server/src/services/site_service.js#L1789) |
+| Site silme talebi zaten oluşturulmuş; Süper Kullanıcının onayı bekleniyor. | [server/src/services/site_service.js:1835](../server/src/services/site_service.js#L1835) |
 | Site sirket tarafindan onaylanmadan cihaza kapi atayamazsiniz. | [server/src/routes/manager_routes.js:874](../server/src/routes/manager_routes.js#L874) |
 | Site sirket tarafindan onaylanmadan cihaza kapi atayamazsiniz. | [server/src/routes/manager_routes.js:1184](../server/src/routes/manager_routes.js#L1184) |
 | Site talebi baska bir islemle zaten sonuclandirildi. | [server/src/routes/admin_routes.js:1005](../server/src/routes/admin_routes.js#L1005) |
-| Site ve bağlı tüm kayıtlar başarıyla silindi. | [server/src/services/site_service.js:1693](../server/src/services/site_service.js#L1693) |
+| Site ve bağlı tüm kayıtlar başarıyla silindi. | [server/src/services/site_service.js:1723](../server/src/services/site_service.js#L1723) |
 | Site yoneticisi bilgileri gecersiz. | [server/src/utils/helpers.js:604](../server/src/utils/helpers.js#L604) |
 | Site yoneticisi bilgileri gecersiz. | [server/src/utils/validators.js:235](../server/src/utils/validators.js#L235) |
 | Site yoneticisi bulunamadi. | [server/src/routes/admin_routes.js:911](../server/src/routes/admin_routes.js#L911) |
 | Site yoneticisi bulunamadi. | [server/src/routes/admin_routes.js:1083](../server/src/routes/admin_routes.js#L1083) |
-| Site yoneticisi kaydi yalnizca super user tarafindan yapilir. | [server/src/routes/auth_routes.js:604](../server/src/routes/auth_routes.js#L604) |
-| Site yoneticisi onay akisi kapatildi. | [server/src/routes/auth_routes.js:706](../server/src/routes/auth_routes.js#L706) |
-| Site yoneticisi onay akisi kapatildi. | [server/src/routes/auth_routes.js:713](../server/src/routes/auth_routes.js#L713) |
+| Site yoneticisi kaydi yalnizca super user tarafindan yapilir. | [server/src/routes/auth_routes.js:619](../server/src/routes/auth_routes.js#L619) |
+| Site yoneticisi onay akisi kapatildi. | [server/src/routes/auth_routes.js:721](../server/src/routes/auth_routes.js#L721) |
+| Site yoneticisi onay akisi kapatildi. | [server/src/routes/auth_routes.js:728](../server/src/routes/auth_routes.js#L728) |
 | Sitenin en az 1 aktif yöneticisi bulunmalıdır. Son yönetici çıkarılamaz. | [server/src/utils/site_rules.js:187](../server/src/utils/site_rules.js#L187) |
 | Sitenin kurucu yöneticisi (Site Sahibi) yalnızca Süper Kullanıcı tarafından çıkarılabilir. | [server/src/utils/site_rules.js:195](../server/src/utils/site_rules.js#L195) |
-| Siteye katılım başvurusu yapabilmek için e-posta adresinizi doğrulamanız gerekmektedir. | [server/src/services/membership_service.js:977](../server/src/services/membership_service.js#L977) |
+| Siteye katılım başvurusu yapabilmek için e-posta adresinizi doğrulamanız gerekmektedir. | [server/src/services/membership_service.js:1033](../server/src/services/membership_service.js#L1033) |
 | SMTP_FROM veya SMTP_USER env degiskeni eksik. | [server/src/mailer.js:97](../server/src/mailer.js#L97) |
 | SMTP_FROM veya SMTP_USER env degiskeni eksik. | [server/src/mailer.js:141](../server/src/mailer.js#L141) |
 | SMTP_FROM veya SMTP_USER env degiskeni eksik. | [server/src/mailer.js:173](../server/src/mailer.js#L173) |
@@ -827,21 +828,21 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | SMTP_FROM veya SMTP_USER env degiskeni eksik. | [server/src/mailer.js:766](../server/src/mailer.js#L766) |
 | SMTP_FROM veya SMTP_USER env degiskeni eksik. | [server/src/mailer.js:798](../server/src/mailer.js#L798) |
 | Süper kullanıcı hesabı bu ekrandan silinemez. Hesabın kaldırılması için başka bir süper kullanıcıyla iletişime geçin. | [server/src/modules/account_common.js:63](../server/src/modules/account_common.js#L63) |
-| Süper kullanıcı hesabına kayıtlı bir e-posta adresi bulunamadı. | [server/src/services/site_service.js:1979](../server/src/services/site_service.js#L1979) |
+| Süper kullanıcı hesabına kayıtlı bir e-posta adresi bulunamadı. | [server/src/services/site_service.js:2009](../server/src/services/site_service.js#L2009) |
 | sürüm major.minor.patch biçiminde olmalıdır (örn. 1.2.0). | [server/src/modules/platform_config_service.js:150](../server/src/modules/platform_config_service.js#L150) |
-| Şifre en az 4 karakter uzunluğunda olmalıdır. | [server/src/services/membership_service.js:2126](../server/src/services/membership_service.js#L2126) |
-| Şifre en az 6 karakter olmalıdır. | [server/src/services/membership_service.js:272](../server/src/services/membership_service.js#L272) |
-| Şifre en fazla ${PASSWORD_MAX_LENGTH} karakter olabilir. | [server/src/services/membership_service.js:275](../server/src/services/membership_service.js#L275) |
-| Şifre en fazla ${PASSWORD_MAX_LENGTH} karakter olabilir. | [server/src/services/membership_service.js:2129](../server/src/services/membership_service.js#L2129) |
-| Şifre güncellenemedi. Lütfen daha sonra tekrar deneyiniz. | [server/src/routes/auth_routes.js:554](../server/src/routes/auth_routes.js#L554) |
+| Şifre en az 4 karakter uzunluğunda olmalıdır. | [server/src/services/membership_service.js:2182](../server/src/services/membership_service.js#L2182) |
+| Şifre en az 6 karakter olmalıdır. | [server/src/services/membership_service.js:286](../server/src/services/membership_service.js#L286) |
+| Şifre en fazla ${PASSWORD_MAX_LENGTH} karakter olabilir. | [server/src/services/membership_service.js:289](../server/src/services/membership_service.js#L289) |
+| Şifre en fazla ${PASSWORD_MAX_LENGTH} karakter olabilir. | [server/src/services/membership_service.js:2185](../server/src/services/membership_service.js#L2185) |
+| Şifre güncellenemedi. Lütfen daha sonra tekrar deneyiniz. | [server/src/routes/auth_routes.js:569](../server/src/routes/auth_routes.js#L569) |
 | Şifre sıfırlama bağlantısı e-posta adresine gönderildi. | [server/src/modules/people_bulk_service.js:68](../server/src/modules/people_bulk_service.js#L68) |
-| Şifre sıfırlama bağlantısı geçersiz veya daha önce kullanılmış. | [server/src/routes/auth_routes.js:477](../server/src/routes/auth_routes.js#L477) |
 | Şifre sıfırlama bağlantısı geçersiz veya daha önce kullanılmış. | [server/src/routes/auth_routes.js:492](../server/src/routes/auth_routes.js#L492) |
-| Şifre sıfırlama bağlantısı geçersiz veya daha önce kullanılmış. | [server/src/routes/auth_routes.js:524](../server/src/routes/auth_routes.js#L524) |
+| Şifre sıfırlama bağlantısı geçersiz veya daha önce kullanılmış. | [server/src/routes/auth_routes.js:507](../server/src/routes/auth_routes.js#L507) |
+| Şifre sıfırlama bağlantısı geçersiz veya daha önce kullanılmış. | [server/src/routes/auth_routes.js:539](../server/src/routes/auth_routes.js#L539) |
 | Şifre sıfırlama bağlantısı gönderildi. | [server/src/modules/people_bulk_service.js:98](../server/src/modules/people_bulk_service.js#L98) |
 | Şifre sıfırlama bağlantısı gönderildi. | [server/src/modules/people_bulk_service.js:115](../server/src/modules/people_bulk_service.js#L115) |
-| Şifre sıfırlama bağlantısının süresi dolmuş. Lütfen yeni bir talepte bulunun. | [server/src/routes/auth_routes.js:498](../server/src/routes/auth_routes.js#L498) |
-| Şifreniz başarıyla güncellendi. Yeni şifrenizle giriş yapabilirsiniz. | [server/src/routes/auth_routes.js:549](../server/src/routes/auth_routes.js#L549) |
+| Şifre sıfırlama bağlantısının süresi dolmuş. Lütfen yeni bir talepte bulunun. | [server/src/routes/auth_routes.js:513](../server/src/routes/auth_routes.js#L513) |
+| Şifreniz başarıyla güncellendi. Yeni şifrenizle giriş yapabilirsiniz. | [server/src/routes/auth_routes.js:564](../server/src/routes/auth_routes.js#L564) |
 | Talep bulunamadı. | [server/src/modules/module_request_routes.js:40](../server/src/modules/module_request_routes.js#L40) |
 | tazminat satir sayisi uyusmuyor (${written.rowCount} / ${lines.length}) | [server/src/modules/finance_late_fee.js:594](../server/src/modules/finance_late_fee.js#L594) |
 | Tek istekte en fazla ${MAX_DEVICE_LOG_BATCH} kayit gonderilebilir. | [server/src/routes/door_log_routes.js:237](../server/src/routes/door_log_routes.js#L237) |
@@ -850,30 +851,30 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | Token bulunamadı. | [server/src/services/qr_access_service.js:470](../server/src/services/qr_access_service.js#L470) |
 | Token parametresi zorunludur. | [server/src/routes/app_doors_routes.js:535](../server/src/routes/app_doors_routes.js#L535) |
 | Token zorunludur. | [server/src/services/qr_access_service.js:437](../server/src/services/qr_access_service.js#L437) |
-| Toplam daire sayısı en fazla ${SITE_LIMITS.maxApartments} olabilir. | [server/src/services/membership_rules.js:520](../server/src/services/membership_rules.js#L520) |
+| Toplam daire sayısı en fazla ${SITE_LIMITS.maxApartments} olabilir. | [server/src/services/membership_rules.js:577](../server/src/services/membership_rules.js#L577) |
 | toplu eşleme satır sayısı uyuşmuyor | [server/src/modules/finance_accounts.js:963](../server/src/modules/finance_accounts.js#L963) |
-| Toplu işlemler geçici olarak kapalı. | [server/src/modules/bulk_import_routes.js:89](../server/src/modules/bulk_import_routes.js#L89) |
-| Toplu yetkilendirme için blok, daire veya kullanıcı listesi belirtilmelidir. | [server/src/services/membership_service.js:2739](../server/src/services/membership_service.js#L2739) |
+| Toplu işlemler geçici olarak kapalı. | [server/src/modules/bulk_import_routes.js:90](../server/src/modules/bulk_import_routes.js#L90) |
+| Toplu yetkilendirme için blok, daire veya kullanıcı listesi belirtilmelidir. | [server/src/services/membership_service.js:2795](../server/src/services/membership_service.js#L2795) |
 | true veya false olmalıdır. | [server/src/modules/platform_config_service.js:132](../server/src/modules/platform_config_service.js#L132) |
 | Uygulamaya davet bağlantısı gönderildi. | [server/src/modules/people_bulk_service.js:118](../server/src/modules/people_bulk_service.js#L118) |
-| Üye daireden başarıyla çıkarıldı. | [server/src/services/membership_service.js:1864](../server/src/services/membership_service.js#L1864) |
+| Üye daireden başarıyla çıkarıldı. | [server/src/services/membership_service.js:1920](../server/src/services/membership_service.js#L1920) |
 | Vekalet en fazla bir yıl geçerli olabilir. | [server/src/modules/apartment_mgmt_rules.js:251](../server/src/modules/apartment_mgmt_rules.js#L251) |
-| Veritabanı sağlık bilgisi alınamadı. | [server/src/services/maintenance_service.js:224](../server/src/services/maintenance_service.js#L224) |
-| Veritabanı temizliği başarısız oldu. | [server/src/services/maintenance_service.js:110](../server/src/services/maintenance_service.js#L110) |
+| Veritabanı sağlık bilgisi alınamadı. | [server/src/services/maintenance_service.js:228](../server/src/services/maintenance_service.js#L228) |
+| Veritabanı temizliği başarısız oldu. | [server/src/services/maintenance_service.js:114](../server/src/services/maintenance_service.js#L114) |
 | Veritabani saglik bilgisi alinamadi. | [server/src/routes/admin_routes.js:1844](../server/src/routes/admin_routes.js#L1844) |
 | Veritabani temizligi sirasinda hata olustu. | [server/src/routes/admin_routes.js:1859](../server/src/routes/admin_routes.js#L1859) |
 | yalnızca https:// ile başlayan bağlantı kabul edilir. | [server/src/modules/platform_config_service.js:104](../server/src/modules/platform_config_service.js#L104) |
 | Yeni kod istemek için lütfen ${seconds} saniye bekleyiniz. | [server/src/services/membership_rules.js:114](../server/src/services/membership_rules.js#L114) |
-| Yeni kullanici kaydi yalnizca super user tarafindan yapilir. | [server/src/routes/auth_routes.js:561](../server/src/routes/auth_routes.js#L561) |
-| Yeni şifre mevcut şifrenizle aynı olamaz. | [server/src/routes/auth_routes.js:938](../server/src/routes/auth_routes.js#L938) |
+| Yeni kullanici kaydi yalnizca super user tarafindan yapilir. | [server/src/routes/auth_routes.js:576](../server/src/routes/auth_routes.js#L576) |
+| Yeni şifre mevcut şifrenizle aynı olamaz. | [server/src/routes/auth_routes.js:989](../server/src/routes/auth_routes.js#L989) |
 | Yetkisiz erisim. | [server/src/middlewares/auth_middleware.js:36](../server/src/middlewares/auth_middleware.js#L36) |
 | Yetkisiz erisim. | [server/src/middlewares/company_auth.js:43](../server/src/middlewares/company_auth.js#L43) |
 | Yetkisiz erisim. | [server/src/routes/admin_routes.js:552](../server/src/routes/admin_routes.js#L552) |
-| Yetkisiz erisim. | [server/src/routes/auth_routes.js:866](../server/src/routes/auth_routes.js#L866) |
+| Yetkisiz erisim. | [server/src/routes/auth_routes.js:917](../server/src/routes/auth_routes.js#L917) |
 | Yetkisiz erisim. | [server/src/routes/manager_routes.js:303](../server/src/routes/manager_routes.js#L303) |
-| Yönetici daveti iptal edildi. | [server/src/services/site_service.js:2645](../server/src/services/site_service.js#L2645) |
-| Yükleme türü bulunamadı. | [server/src/modules/bulk_import_routes.js:92](../server/src/modules/bulk_import_routes.js#L92) |
-| Zaten bu dairenin aktif bir sakinisisiniz (${existingMemberRes.rows[0].role}). | [server/src/services/membership_service.js:1027](../server/src/services/membership_service.js#L1027) |
+| Yönetici daveti iptal edildi. | [server/src/services/site_service.js:2675](../server/src/services/site_service.js#L2675) |
+| Yükleme türü bulunamadı. | [server/src/modules/bulk_import_routes.js:93](../server/src/modules/bulk_import_routes.js#L93) |
+| Zaten bu dairenin aktif bir sakinisisiniz (${existingMemberRes.rows[0].role}). | [server/src/services/membership_service.js:1083](../server/src/services/membership_service.js#L1083) |
 
 ## Uygulama (Flutter) mesajları (532)
 

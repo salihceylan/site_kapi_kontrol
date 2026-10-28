@@ -195,7 +195,7 @@ export function issueMessage(code, ctx = {}) {
       text = `Kullanıcı adı geçersiz: «${value}». 3-40 karakter; yalnız harf, rakam, nokta, alt çizgi ve tire kullanın.`;
       break;
     case 'LOGIN_NAME_TAKEN':
-      text = `Kullanıcı adı «${value}» sistemde başka bir hesapta kayıtlı. Başka bir ad seçin.`;
+      text = `Kullanıcı adı «${value}» bu sitede başka bir hesapta kayıtlı. Başka bir ad seçin.`;
       break;
     case 'LOGIN_NAME_DUP_IN_FILE':
       text = `Kullanıcı adı «${value}» dosyada satır ${ctx.line} ile aynı. Farklı bir ad seçin.`;

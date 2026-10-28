@@ -4,6 +4,14 @@ import { pool } from '../db.js';
 import { signAccessToken } from '../jwt.js';
 import { sendIndividualVerificationEmail } from '../mailer.js';
 import { BCRYPT_COST } from '../security/password_hashing.js';
+import {
+  ATTEMPT_POLICIES,
+  codeLockedError,
+  emailCodeTarget,
+  peekAttemptLock,
+  registerAttemptFailure,
+  resetAttempts,
+} from '../security/attempt_limits.js';
 import { reissueDeviceToken } from '../security/login_device_token.js';
 import { mapUserRow, normalizeEmail } from '../utils/helpers.js';
 import { isValidEmail } from '../utils/validators.js';
@@ -930,6 +938,13 @@ export async function verifyOAuthEmailCode({
     await client.query('BEGIN');
     await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`email_verify:${cleanEmail}`]);
 
+    // Kalıcı birikimli kilit (kodlar arası; /auth/verify-code ile AYNI sayaç ve kod havuzu): kilitliyken kod karşılaştırılmaz (423; işlem geri alınır).
+    const codeLimitTarget = emailCodeTarget(cleanEmail);
+    const lock = await peekAttemptLock(ATTEMPT_POLICIES.emailCode, codeLimitTarget, client);
+    if (lock.locked) {
+      throw codeLockedError('email', lock.retryAfterSeconds);
+    }
+
     const claim = await client.query(SQL_CLAIM_VERIFICATION_ATTEMPT, [
       cleanEmail,
       VERIFICATION_CODE_TTL_MINUTES,
@@ -960,8 +975,13 @@ export async function verifyOAuthEmailCode({
     const record = claim.rows[0];
     const isMatch = await bcrypt.compare(cleanCode, record.code_hash);
     if (!isMatch) {
+      // Birikimli sayaç da aynı işlemde yazılır; bu yanlış kilidi koyduysa 423 (aksi halde 400).
+      const failure = await registerAttemptFailure(ATTEMPT_POLICIES.emailCode, codeLimitTarget, client);
       await client.query('COMMIT');
       committed = true;
+      if (failure.locked) {
+        throw codeLockedError('email', failure.retryAfterSeconds);
+      }
       throw httpError(400, `Girdiğiniz ${VERIFICATION_CODE_DIGITS} haneli kod hatalıdır.`);
     }
 
@@ -970,6 +990,8 @@ export async function verifyOAuthEmailCode({
       throw httpError(400, 'Bu doğrulama kodu zaten kullanılmış. Lütfen yeni kod talep ediniz.');
     }
     await client.query(SQL_SUPERSEDE_VERIFICATION_CODES, [cleanEmail]);
+    // Doğru kod: birikimli sayaç ve kilit seviyesi sıfırlanır.
+    await resetAttempts(ATTEMPT_POLICIES.emailCode, codeLimitTarget, client);
     await client.query('COMMIT');
     committed = true;
   } catch (err) {

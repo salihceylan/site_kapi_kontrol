@@ -64,7 +64,7 @@ export default {
         { file: 'server/src/routes/auth_routes.js', find: "authRouter.post('/auth/login'", note: 'Giriş ucu: kimlik (e-posta ya da kullanıcı adı) ve parola alır' },
         { file: 'server/src/routes/auth_routes.js', find: 'req.body?.email ?? req.body?.login ?? req.body?.identifier', note: 'Kimlik küçük harfe çevrilir; alan adı email, login ya da identifier olabilir' },
         { file: 'server/src/routes/auth_routes.js', find: 'WHERE LOWER(email) = LOWER($1) OR LOWER(login_name) = LOWER($1)', note: 'Kullanıcı e-posta VEYA login_name ile bulunur (daire sakinleri login_name ile girer)' },
-        { file: 'server/src/routes/auth_routes.js', find: 'const compared = await bcrypt.compare(candidate, usableHash ? storedHash : DUMMY_PASSWORD_HASH);', note: 'bcrypt karşılaştırması; kullanıcı yoksa ya da saklı özet bcrypt biçiminde değilse (silinmiş hesap, boş özet) sahte özetle karşılaştırılır (süre sızmasın)' },
+        { file: 'server/src/routes/auth_routes.js', find: 'const compared = await bcrypt.compare(candidate, usableHash ? storedHash : await getDummyPasswordHash());', note: 'bcrypt karşılaştırması (eşzamansız, olay döngüsünü kilitlemez); kullanıcı yoksa ya da saklı özet bcrypt biçiminde değilse (silinmiş hesap, boş özet) sahte özetle karşılaştırılır (süre sızmasın)' },
         { file: 'server/src/routes/auth_routes.js', find: "error: 'Giris bilgileri hatali.'", note: '401 yanıtının üretildiği satır (yanlış parola ve olmayan hesap AYNI yanıtı alır)' },
       ],
       causes: [

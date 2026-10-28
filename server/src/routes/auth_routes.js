@@ -9,7 +9,14 @@ import { newErrorId, respondWithServiceError } from '../middlewares/error_handle
 import { clearAccountLocks, loginGuard } from '../middlewares/login_throttle.js';
 import { buildLoginAttempt, isBcryptHash, issueLoginDeviceToken, readLoginDevice } from '../security/login_guard.js';
 import { PASSWORD_MAX_LENGTH, rejectWeakPassword } from '../security/password_policy.js';
-import { BCRYPT_COST } from '../security/password_hashing.js';
+import { BCRYPT_COST, getDummyPasswordHash } from '../security/password_hashing.js';
+import {
+  ATTEMPT_POLICIES,
+  apartmentPinTarget,
+  pinLockedBody,
+  registerAttemptFailure,
+  resetAttempts,
+} from '../security/attempt_limits.js';
 import { readDeviceToken, reissueDeviceToken } from '../security/login_device_token.js';
 import {
   forgotPasswordLimiter,
@@ -88,6 +95,14 @@ authRouter.post('/auth/verify-code', verifyCodeLimiter, async (req, res) => {
     const result = await verifyIndividualEmailCode({ email, code });
     return res.status(200).json(result);
   } catch (error) {
+    // Kalıcı kod deneme kilidi (423 VERIFICATION_LOCKED): kalan süre gövdede ve Retry-After başlığında.
+    if (isPlatformError(error)) {
+      const retryAfter = Number(error.extra?.retry_after_seconds);
+      if (Number.isFinite(retryAfter) && retryAfter > 0) {
+        res.set('Retry-After', String(Math.ceil(retryAfter)));
+      }
+      return res.status(error.statusCode).json({ error: error.message, code: error.code, ...(error.extra ?? {}) });
+    }
     return respondWithServiceError(res, error, {
       fallbackMessage: 'Doğrulama işlemi başarısız.',
       logLabel: 'verify-code',
@@ -716,7 +731,11 @@ authRouter.post('/auth/site-manager/resend-code', async (req, res) => {
 
 // Kullanıcı bulunamadığında da bcrypt maliyeti ödenir (yanıt süresinden kullanıcı varlığı çıkarılamasın). Maliyet, yeni
 // parola özetleriyle AYNI sabittir (BCRYPT_COST): var olan ve olmayan hesapta karşılaştırma süresi eşittir.
-const DUMMY_PASSWORD_HASH = bcrypt.hashSync(crypto.randomBytes(16).toString('hex'), BCRYPT_COST);
+// Sahte özet ASENKRON üretilir (eski bcrypt.hashSync içe aktarmada olay döngüsünü ~100 ms kilitlerdi) ve ilk girişten önce hazır olsun diye
+// içe aktarmada başlatılır; hazır değilse giriş onu bekler (security/password_hashing.js getDummyPasswordHash, önbellekli söz).
+getDummyPasswordHash().catch(() => {
+  // Üretim hatası burada yutulur (işlenmeyen ret olmasın); önbellek boşalır ve ilk girişte yeniden denenir.
+});
 const MAX_IDENTIFIER_LENGTH = 254;
 // Girişte karşılaştırılan parola üst sınırı (bcrypt yalnız ilk 72 baytı kullanır; sınırsız girdiyle CPU harcatılmasın).
 const MAX_LOGIN_PASSWORD_LENGTH = 1024;
@@ -732,6 +751,14 @@ function respondLoginLocked(res, retryAfterSeconds) {
     code: 'LOGIN_LOCKED',
     retry_after_seconds: retryAfterSeconds,
   });
+}
+
+// 4 haneli ilk PIN hesabının KALICI (DB) kilidi: 423 PIN_LOCKED. Giriş koruması bellek içidir (yeniden başlatmada sıfırlanır); bu kilit
+// auth_attempt_limits tablosundadır (security/attempt_limits.js, migrations/085). Var olan hesabı ele vermemek için yalnızca 5. yanlışta / kilitliyken görünür.
+function respondPinLocked(res, retryAfterSeconds) {
+  const body = pinLockedBody(retryAfterSeconds);
+  res.setHeader('Retry-After', String(body.retry_after_seconds));
+  return res.status(423).json(body);
 }
 
 // POST /auth/login
@@ -769,7 +796,10 @@ authRouter.post('/auth/login', loginRateLimiter, async (req, res) => {
         password_hash,
         (COALESCE(users.must_change_password, FALSE) OR EXISTS (
           SELECT 1 FROM apartments a WHERE a.resident_user_code = users.user_code AND a.resident_pin_issued = TRUE
-        )) AS must_change_password
+        )) AS must_change_password,
+        EXISTS (
+          SELECT 1 FROM apartments a WHERE a.resident_user_code = users.user_code AND a.resident_pin_issued = TRUE
+        ) AS pin_issued
       FROM users
       WHERE LOWER(email) = LOWER($1) OR LOWER(login_name) = LOWER($1)
       ORDER BY (LOWER(email) = LOWER($1)) DESC, user_code ASC
@@ -809,16 +839,37 @@ authRouter.post('/auth/login', loginRateLimiter, async (req, res) => {
     const storedHash = row?.password_hash ? String(row.password_hash) : '';
     const usableHash = isBcryptHash(storedHash);
     const candidate = password.length > MAX_LOGIN_PASSWORD_LENGTH ? password.slice(0, MAX_LOGIN_PASSWORD_LENGTH) : password;
-    const compared = await bcrypt.compare(candidate, usableHash ? storedHash : DUMMY_PASSWORD_HASH);
+    // 4 haneli ilk PIN (yönetimin verdiği, henüz değiştirilmemiş daire PIN'i; 9000 değer): KALICI deneme sınırı. Hata hakkı karşılaştırmadan ÖNCE
+    // ve atomik ayrılır (paralel N istek N tahmin yapamaz); 5 yanlış -> 15 dk kilit (423), kilitliyken parola karşılaştırılmaz, doğru parola
+    // sayacı sıfırlar. Yalnız var olan PIN hesabı izlenir (olmayan / PIN'siz hesapta DB yazması yok: kimliksiz uçta yazma yükü açılmaz).
+    const pinTarget = row?.pin_issued === true && usableHash ? apartmentPinTarget(row.id, storedHash) : null;
+    let pinClaim = null;
+    if (pinTarget) {
+      pinClaim = await registerAttemptFailure(ATTEMPT_POLICIES.apartmentPin, pinTarget);
+      if (pinClaim.blocked) {
+        // Kilitliyken gelen deneme de başarısız sayılır: bellek içi rezervasyon kesinleşir (geçici kilit gerçeğe döner), parola karşılaştırılmaz.
+        loginGuard.commitFailure(reservation);
+        return respondPinLocked(res, pinClaim.retryAfterSeconds);
+      }
+    }
+    const compared = await bcrypt.compare(candidate, usableHash ? storedHash : await getDummyPasswordHash());
     const isPasswordMatch = Boolean(row) && usableHash && compared && password.length <= MAX_LOGIN_PASSWORD_LENGTH;
     if (!isPasswordMatch) {
       const failure = loginGuard.commitFailure(reservation);
+      if (pinClaim?.locked) {
+        // Bu yanlış deneme DB kilidini koydu (5. hata): PIN kilidi bilgisi bellek içi 429'dan önceliklidir.
+        return respondPinLocked(res, pinClaim.retryAfterSeconds);
+      }
       if (failure.locked) {
         return respondLoginLocked(res, failure.retryAfterSeconds);
       }
       return res.status(401).json({ error: 'Giris bilgileri hatali.' });
     }
     loginGuard.recordSuccess(attempt, reservation);
+    if (pinTarget) {
+      // Doğru PIN: sayaç ve kilit seviyesi sıfırlanır (rezerve edilen hak iade; 5. denemede doğruysa onun koyduğu kilit de kalkar).
+      await resetAttempts(ATTEMPT_POLICIES.apartmentPin, pinTarget);
+    }
 
     if (role && row.role !== role) {
       return res

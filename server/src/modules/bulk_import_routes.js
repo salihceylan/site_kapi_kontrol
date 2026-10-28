@@ -4,7 +4,7 @@
 //   POST  /manager/sites/:siteCode/imports/:kind/preview      (yazmaz)
 //   POST  /manager/sites/:siteCode/imports/:kind/commit
 //   POST  /manager/sites/:siteCode/imports/:kind/accounts     (yazmaz; önizleme tablosundaki kullanıcı adı önerileri, yalnız people / all_in_one)
-//   POST  /manager/sites/:siteCode/imports/login-names/check  (yazmaz; yöneticinin yazdığı tek kullanıcı adının biçimi + sistemdeki kullanılabilirliği)
+//   POST  /manager/sites/:siteCode/imports/login-names/check  (yazmaz; yöneticinin yazdığı tek kullanıcı adının biçimi + BU SİTEDEKİ kullanılabilirliği)
 //   GET   /manager/sites/:siteCode/exports/:kind
 //
 // Yetki: yalnız site yöneticisi / süper kullanıcı (people_access: resolvePeopleAccess write:true). Kurul, görevli, sakin 403 FORBIDDEN_ROLE; başka sitenin
@@ -43,7 +43,8 @@ export const importSpecLimiter = limiter(1200, 12000, 'Çok fazla istek. Biraz s
 export const importPreviewLimiter = limiter(30, 120, 'Çok fazla önizleme isteği. Biraz sonra tekrar deneyin.');
 export const importCommitLimiter = limiter(10, 60, 'Çok fazla yükleme isteği. Biraz sonra tekrar deneyin.');
 // Kullanıcı adı önerisi ve tek ad denetimi tablo düzenlemelerinde sık çağrılır (istemci bekletmeli çağırır): önizlemeden AYRI, daha geniş sınır.
-// Sistem genelinde ad var/yok sorusu olduğundan sınırsız bırakılmaz (yalnız site yöneticisi/süper kullanıcı erişir).
+// Ad / e-posta var/yok sorusu yalnız BU SİTENİN hesaplarını kapsar (bulk_import_scope.js; sistem geneli sayım açığı kapatıldı), yine de sınırsız bırakılmaz
+// (yalnız site yöneticisi/süper kullanıcı erişir).
 export const importAccountsLimiter = limiter(240, 1200, 'Çok fazla kullanıcı adı isteği. Biraz sonra tekrar deneyin.');
 export const loginNameCheckLimiter = limiter(600, 3000, 'Çok fazla kullanıcı adı denetimi. Biraz sonra tekrar deneyin.');
 export const exportLimiter = limiter(30, 300, 'Çok fazla dışa aktarma isteği. Biraz sonra tekrar deneyin.');
@@ -210,7 +211,8 @@ bulkImportRouter.post(
   accessStep({ needsKind: false }),
   async (req, res) => {
     try {
-      const body = await checkImportLoginName({ body: req.body });
+      // kapsam: yöneticinin yetkili olduğu site (accessStep → req.bulkAccess); başka sitelerin adları denetime/öneriye girmez
+      const body = await checkImportLoginName({ siteCode: req.bulkAccess.siteCode, body: req.body });
       noStore(res);
       return res.status(200).json(body);
     } catch (error) {

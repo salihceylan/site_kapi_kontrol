@@ -4,6 +4,14 @@ import crypto from 'node:crypto';
 import { pool } from '../db.js';
 import { signAccessToken } from '../jwt.js';
 import { mapUserRow } from '../utils/helpers.js';
+import {
+  ATTEMPT_POLICIES,
+  codeLockedError,
+  peekAttemptLock,
+  registerAttemptFailure,
+  resetAttempts,
+  smsCodeTarget,
+} from '../security/attempt_limits.js';
 import { PlatformError } from './errors.js';
 import { normalizePersonPhone } from './people_common.js';
 import { smsHooks } from './sms_provider.js';
@@ -79,7 +87,11 @@ export async function verifySmsCode(rawPhone, rawCode, db = pool) {
   const phone = normalizePersonPhone(rawPhone);
   const code = String(rawCode ?? '').trim();
   if (!phone || !/^\d{6}$/.test(code)) throw badCode();
-  // Deneme hakki once ayrilir (yaris guvenli); en yeni acik kod uzerinde.
+  // Kalici birikimli kilit (kodlar arasi, telefon basina; auth_attempt_limits): kilitliyken kod karsilastirilmaz ve deneme hakki harcanmaz (423).
+  const limitTarget = smsCodeTarget(phone);
+  const lock = await peekAttemptLock(ATTEMPT_POLICIES.smsCode, limitTarget, db);
+  if (lock.locked) throw codeLockedError('sms', lock.retryAfterSeconds);
+  // Deneme hakki once ayrilir (yaris guvenli); en yeni acik kod uzerinde. Kod basina 5 yanlis -> kod kullanilamaz, yeni kod istenir.
   const claimed = await db.query(
     `UPDATE sms_login_codes SET attempts = attempts + 1
      WHERE id = (SELECT id FROM sms_login_codes WHERE phone = $1 AND consumed_at IS NULL AND expires_at > NOW() AND attempts < $2
@@ -88,9 +100,19 @@ export async function verifySmsCode(rawPhone, rawCode, db = pool) {
     [phone, MAX_ATTEMPTS],
   );
   const row = claimed.rows?.[0];
-  if (!row || row.user_code === null || !safeEqual(row.code_hash, hashCode(phone, code))) throw badCode();
+  if (!row || row.user_code === null || !safeEqual(row.code_hash, hashCode(phone, code))) {
+    // Yalniz GERCEKTEN karsilastirilan (acik kod bulunan) yanlis deneme birikimli sayaca yazilir: kod istemeden gonderilen bos denemeler
+    // baskasinin SMS girisini kilitleyemez. Kilidi koyan yanlis 423 alir (kayitli / kayitsiz telefon ayni davranir: kullanici varligi sizmaz).
+    if (row) {
+      const failure = await registerAttemptFailure(ATTEMPT_POLICIES.smsCode, limitTarget, db);
+      if (failure.locked) throw codeLockedError('sms', failure.retryAfterSeconds);
+    }
+    throw badCode();
+  }
   const used = await db.query(`UPDATE sms_login_codes SET consumed_at = NOW() WHERE id = $1 AND consumed_at IS NULL RETURNING id`, [row.id]);
   if (!used.rows?.length) throw badCode();
+  // Dogru kod: birikimli sayac ve kilit seviyesi sifirlanir.
+  await resetAttempts(ATTEMPT_POLICIES.smsCode, limitTarget, db);
   // deleted_at IS NULL: kimliksizleştirilmiş (silinmiş) hesaba SMS ile oturum açılmaz. must_change_password: yönetimin verdiği geçici parola / PIN
   // henüz değişmediyse bayrak oturum yanıtına girer (POST /auth/login, OAuth ve auth_middleware ile AYNI tanım: bayrak VEYA dairede "PIN verildi").
   const userRes = await db.query(
