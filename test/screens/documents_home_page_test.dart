@@ -31,12 +31,15 @@ import 'package:site_kapi_kontrol/ui/widgets/document_parts.dart';
 
 import 'dialog_layout_harness.dart' show settleFor;
 import 'list_fixtures.dart' show fxDoors, tapFinder;
+import 'document_fixtures.dart' show stubDriveStorageForTests;
 import 'people_fixtures.dart';
 import '../support/menu_nav.dart';
 
 /// HomePage için sahte servis: ana kabuğun ihtiyaç duyduğu uçlar boş döner.
 class _HomeAuth extends PeopleFakeAuth {
-  _HomeAuth({super.role});
+  _HomeAuth({super.role}) {
+    stubDriveStorageForTests();
+  }
 
   @override
   Future<void> refreshSession({bool force = false}) async {}
@@ -95,7 +98,7 @@ class _DocServer {
       return json(403, <String, dynamic>{
         'error': 'Bu özellik şu an kapalı.',
         'code': 'MODULE_DISABLED',
-        'module': 'documents',
+        'module': 'drive_storage',
       });
     }
     if (request.url.path.startsWith('/app/documents')) {
@@ -132,7 +135,7 @@ MySiteModules _my(
   role: role,
   modules: <String, bool>{
     'door_control': true,
-    'documents': documents,
+    'drive_storage': documents,
     'finance': finance,
   },
   doorAccess: !(role == 'staff' || role == 'board_member'),
@@ -240,10 +243,10 @@ void main() {
         await _pumpHome(t, auth, access: access);
         await _openDrawer(t);
         final titles = _drawerTitles(t);
-        expect(titles, contains('Belgeler'));
-        expect(titles.indexOf('Belgeler'), titles.indexOf('Duyurular') + 1);
-        expectUnderDrawerHeader(t, 'Belgeler', 'Site hizmetleri');
-        await t.tap(_tileTitle('Belgeler'));
+        expect(titles, contains('Dosya Deposu'));
+        expect(titles.indexOf('Dosya Deposu'), titles.indexOf('Duyurular') + 1);
+        expectUnderDrawerHeader(t, 'Dosya Deposu', 'Site hizmetleri');
+        await t.tap(_tileTitle('Dosya Deposu'));
         await t.pump();
         await t.pump(const Duration(milliseconds: 600));
         await settleFor(t);
@@ -251,7 +254,7 @@ void main() {
         expect(find.byType(DocumentsView), findsOneWidget);
         expect(find.byType(DocumentAdminView), findsOneWidget);
         expect(find.byType(DocumentResidentView), findsNothing);
-        expect(_inAppBar(find.text('Belgeler')), findsOneWidget);
+        expect(_inAppBar(find.text('Dosya Deposu')), findsOneWidget);
         final view = t.widget<DocumentsView>(find.byType(DocumentsView));
         expect(view.manageAllSites, isFalse);
         expect(view.manageSites, <PeopleSite>[
@@ -278,7 +281,7 @@ void main() {
       await _pumpHome(t, auth, access: access);
       await _openDrawer(t);
       final titles = _drawerTitles(t);
-      expect(titles.indexOf('Belgeler'), titles.indexOf('Finans') + 1);
+      expect(titles.indexOf('Dosya Deposu'), titles.indexOf('Finans') + 1);
       await _disposeHome(t);
     });
 
@@ -291,7 +294,7 @@ void main() {
       );
       await _pumpHome(t, auth, access: access);
       await _openDrawer(t);
-      expect(_tileTitle('Belgeler'), findsNothing);
+      expect(_tileTitle('Dosya Deposu'), findsNothing);
       expect(_server.paths, isEmpty);
       await _disposeHome(t);
     });
@@ -310,7 +313,7 @@ void main() {
             access: ModuleAccess(fetch: () async => throw StateError('ağ yok')),
           );
           await _openDrawer(t);
-          expect(_tileTitle('Belgeler'), findsNothing, reason: '$role');
+          expect(_tileTitle('Dosya Deposu'), findsNothing, reason: '$role');
           await _disposeHome(t);
         }
       },
@@ -328,7 +331,7 @@ void main() {
         addTearDown(access.dispose);
         await _pumpHome(t, auth, access: access);
         await _openDrawer(t);
-        expect(_tileTitle('Belgeler'), findsNothing);
+        expect(_tileTitle('Dosya Deposu'), findsNothing);
         Navigator.of(t.element(find.byType(Drawer))).pop();
         await t.pump();
         await t.pump(const Duration(milliseconds: 450));
@@ -337,7 +340,7 @@ void main() {
         await t.pump();
         await t.pump(const Duration(milliseconds: 400));
         await _openDrawer(t);
-        expect(_tileTitle('Belgeler'), findsOneWidget);
+        expect(_tileTitle('Dosya Deposu'), findsOneWidget);
         await _disposeHome(t);
       },
     );
@@ -350,7 +353,7 @@ void main() {
           () => <MySiteModules>[_my('board_member')],
         );
         await _pumpHome(t, auth, access: access);
-        await _tapMenu(t, 'Belgeler');
+        await _tapMenu(t, 'Dosya Deposu');
         expect(find.byType(DocumentsView), findsOneWidget);
         final view = t.widget<DocumentsView>(find.byType(DocumentsView));
         expect(view.manageSites, <PeopleSite>[
@@ -378,7 +381,7 @@ void main() {
       );
       await _pumpHome(t, auth, access: access);
       await _openDrawer(t);
-      expect(_tileTitle('Belgeler'), findsNothing);
+      expect(_tileTitle('Dosya Deposu'), findsNothing);
       await _disposeHome(t);
     });
 
@@ -392,7 +395,7 @@ void main() {
         access: await _access(() => <MySiteModules>[_my('staff')]),
       );
       await _openDrawer(t);
-      expect(_tileTitle('Belgeler'), findsNothing);
+      expect(_tileTitle('Dosya Deposu'), findsNothing);
       await _disposeHome(t);
 
       final individual = _HomeAuth(role: UserRole.individual);
@@ -402,7 +405,7 @@ void main() {
         access: await _access(() => const <MySiteModules>[]),
       );
       await _openDrawer(t);
-      expect(_tileTitle('Belgeler'), findsNothing);
+      expect(_tileTitle('Dosya Deposu'), findsNothing);
       await _disposeHome(t);
     });
 
@@ -415,7 +418,7 @@ void main() {
         superUser: true,
       );
       await _pumpHome(t, auth, access: access);
-      await _tapMenu(t, 'Belgeler');
+      await _tapMenu(t, 'Dosya Deposu');
       expect(find.byType(DocumentsView), findsOneWidget);
       final view = t.widget<DocumentsView>(find.byType(DocumentsView));
       expect(view.manageAllSites, isTrue);
@@ -438,7 +441,7 @@ void main() {
           superUser: true,
         );
         await _pumpHome(t, auth, access: access);
-        await _tapMenu(t, 'Belgeler');
+        await _tapMenu(t, 'Dosya Deposu');
         expect(
           find.byKey(const ValueKey<String>('documents_module_off')),
           findsOneWidget,
@@ -462,7 +465,7 @@ void main() {
           () => <MySiteModules>[_my('manager', documents: on)],
         );
         await _pumpHome(t, auth, access: access);
-        await _tapMenu(t, 'Belgeler');
+        await _tapMenu(t, 'Dosya Deposu');
         expect(find.byType(DocumentsView), findsOneWidget);
         on = false;
         await access.refresh();
@@ -470,7 +473,7 @@ void main() {
         await t.pump(const Duration(milliseconds: 600));
         expect(find.byType(DocumentsView), findsNothing);
         await _openDrawer(t);
-        expect(_tileTitle('Belgeler'), findsNothing);
+        expect(_tileTitle('Dosya Deposu'), findsNothing);
         await _disposeHome(t);
       },
     );
@@ -484,7 +487,7 @@ void main() {
           ..doors = fxDoors();
         final access = await _access(() => <MySiteModules>[_my('resident')]);
         await _pumpHome(t, auth, access: access);
-        await _tapMenu(t, 'Belgeler');
+        await _tapMenu(t, 'Dosya Deposu');
         expect(find.byType(DocumentsView), findsOneWidget);
         expect(find.byType(DocumentResidentView), findsOneWidget);
         expect(find.byType(DocumentAdminView), findsNothing);
@@ -513,7 +516,7 @@ void main() {
       );
       await _pumpHome(t, auth, access: access);
       await _openDrawer(t);
-      expect(_tileTitle('Belgeler'), findsNothing);
+      expect(_tileTitle('Dosya Deposu'), findsNothing);
       await _disposeHome(t);
     });
 
@@ -528,7 +531,7 @@ void main() {
         ],
       );
       await _pumpHome(t, auth, access: access);
-      await _tapMenu(t, 'Belgeler');
+      await _tapMenu(t, 'Dosya Deposu');
       final view = t.widget<DocumentsView>(find.byType(DocumentsView));
       expect(view.residentSites, <PeopleSite>[
         const PeopleSite(code: 12, name: 'Mavi Park'),
@@ -542,13 +545,13 @@ void main() {
         final auth = _HomeAuth();
         final access = await _access(() => <MySiteModules>[_my('manager')]);
         await _pumpHome(t, auth, access: access);
-        await _tapMenu(t, 'Belgeler');
+        await _tapMenu(t, 'Dosya Deposu');
         expect(find.byType(DocumentAdminView), findsOneWidget);
         await _openDrawer(t);
         await t.tap(find.text('Sakin Moduna Geç'));
         await t.pump();
         await t.pump(const Duration(milliseconds: 600));
-        await _tapMenu(t, 'Belgeler');
+        await _tapMenu(t, 'Dosya Deposu');
         expect(
           find.byType(DocumentResidentView),
           findsOneWidget,
@@ -563,7 +566,7 @@ void main() {
       final auth = _HomeAuth(role: UserRole.apartmentOwner);
       final access = await _access(() => <MySiteModules>[_my('resident')]);
       await _pumpHome(t, auth, access: access);
-      await _tapMenu(t, 'Belgeler');
+      await _tapMenu(t, 'Dosya Deposu');
       final calls = _server.paths.where((p) => p == '/app/documents').length;
       await t.state<DocumentsViewState>(find.byType(DocumentsView)).reload();
       await settleFor(t);

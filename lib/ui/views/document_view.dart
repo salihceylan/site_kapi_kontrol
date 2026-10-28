@@ -11,7 +11,7 @@ import 'package:site_kapi_kontrol/ui/views/document_admin_view.dart';
 import 'package:site_kapi_kontrol/ui/views/document_resident_view.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 
-/// "Belgeler" ekranı (Platform Faz 3b-A, `documents` modülü). Kullanıcının rolüne göre iki görünüm barındırır:
+/// "Dosya Deposu" ekranı (Platform Faz 3b-A + D1; Belgeler ve Google Drive TEK modülde: `drive_storage`). Kullanıcının rolüne göre iki görünüm barındırır:
 ///
 /// - **Yönetim** ([manageAllSites] / [manageSites] / [readOnlySites]): yönetici / süper kullanıcı: yükleme,
 ///   sürüm, düzenleme, silme, çöp kutusu; kurul üyesi aynı listeyi SALT OKUR.
@@ -142,15 +142,15 @@ class DocumentsViewState extends State<DocumentsView> {
     final description = switch (mode) {
       _Mode.manage =>
         'Yönetmelik, toplantı tutanağı ve sözleşme gibi belgeleri yükleyin; sakinlere, kurula ya da yalnız '
-            'yöneticilere açın.',
+            'yöneticilere açın. Sitenin dosyalarını kendi Google Drive hesabınızda saklamak için en alttaki Google Drive bölümünü kullanın.',
       _Mode.resident =>
         'Yönetimin sizinle paylaştığı belgeleri buradan açabilir ya da kaydedebilirsiniz.',
-      null => 'Sitenizin belgeleri burada görünür.',
+      null => 'Sitenizin belgeleri ve dosyaları burada görünür.',
     };
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const PageHeaderCard(title: 'Belgeler', icon: Icons.folder_rounded),
+        const PageHeaderCard(title: 'Dosya Deposu', icon: Icons.folder_rounded),
         const SizedBox(height: AppSpace.sm),
         Text(description, style: th.bodyMedium),
         const SizedBox(height: AppSpace.lg),

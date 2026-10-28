@@ -133,7 +133,7 @@ Future<void> _drawerAction(E2eScreenContext c, String label, String shotName) as
   }
 }
 
-/// Alt cubuk (IP-1D / G3): Ozet · Duyuru · Arıza · Kapı · Belgeler sekmeleri gorunur ogelerden turer. Her sekme kendi
+/// Alt cubuk (IP-1D / G3): Ozet · Duyuru · Arıza · Kapı · Dosyalar (Dosya Deposu) sekmeleri gorunur ogelerden turer. Her sekme kendi
 /// sayfasini acar (AppBar basligi), geri tusu Ozet'e (Panel) dondurur. Kapi sekmesi kapiyi ACMAZ, Kapılar sayfasini
 /// acar. Cubuk yoksa (iki sekmeden az) bulgu yazilmaz, yalniz not dusulur.
 Future<void> residentBottomBarTour(E2eScreenContext c) async {
@@ -151,7 +151,7 @@ Future<void> residentBottomBarTour(E2eScreenContext c) async {
     'duyuru': 'Duyurular',
     'ariza': 'Taleplerim',
     'kapi': 'Kapılar',
-    'belgeler': 'Belgeler',
+    'belgeler': 'Dosya Deposu',
   };
   for (final (key, label) in tabs) {
     final title = titles[key];

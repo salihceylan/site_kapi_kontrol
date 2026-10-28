@@ -58,14 +58,6 @@ export const MODULE_CATALOG = Object.freeze([
     defaultEnabled: true,
   }),
   defineModule({
-    code: 'documents',
-    name: 'Belgeler (Dosya Deposu)',
-    description: 'Yönetmelik, tutanak, sözleşme gibi belgelerin yüklenmesi ve sakinlere, kurula ya da yöneticilere dağıtılması.',
-    core: false,
-    status: MODULE_STATUS_AVAILABLE,
-    defaultEnabled: false,
-  }),
-  defineModule({
     code: 'reservation',
     name: 'Rezervasyon ve Konsiyerj',
     description: 'Ortak alan rezervasyonu ve konsiyerj talepleri.',
@@ -171,8 +163,9 @@ export const MODULE_CATALOG = Object.freeze([
   }),
   defineModule({
     code: 'drive_storage',
-    name: 'Dosya Deposu (Google Drive)',
-    description: 'Sitenin dosyalarının sitenin kendi Google Drive hesabında saklanması.',
+    name: 'Dosya Deposu',
+    // Belgeler (yönetmelik, tutanak, sözleşme; sakinlere/kurula/yöneticilere dağıtım) 084'te bu modüle katıldı; ayrı `documents` modülü yoktur.
+    description: 'Yönetmelik, tutanak, sözleşme gibi belgelerin yüklenip dağıtılması; dosyaların sitenin Google Drive alanında saklanması.',
     core: false,
     status: MODULE_STATUS_AVAILABLE,
     defaultEnabled: false,
@@ -228,6 +221,21 @@ export const MODULE_CATALOG = Object.freeze([
 ]);
 
 export const MODULE_CODES = Object.freeze(MODULE_CATALOG.map((definition) => definition.code));
+
+/**
+ * Katalogdan KALDIRILMIŞ eski modül kodları -> güncel kod. `documents` (Belgeler) 084'te `drive_storage` (Dosya Deposu) ile birleşti.
+ * Eski uygulama sürümleri hâlâ `documents` kodunu gönderebilir (modül talebi, aç/kapa): bu kod Dosya Deposu'na çevrilir, 404 ya da 500 dönmez.
+ * Katalogda ayrı modül olarak ASLA görünmez; yalnız kod çevirisi ve eski kodlu geçmiş kayıtların (talep, denetim) adı için kullanılır.
+ */
+export const LEGACY_MODULE_ALIASES = Object.freeze({ documents: 'drive_storage' });
+
+/** Eski modül kodunu güncel koda çevirir; tanınmayan ya da metin olmayan değer olduğu gibi döner. */
+export function canonicalModuleCode(code) {
+  if (typeof code !== 'string') {
+    return code;
+  }
+  return Object.hasOwn(LEGACY_MODULE_ALIASES, code) ? LEGACY_MODULE_ALIASES[code] : code;
+}
 
 // Map: "__proto__" / "constructor" gibi anahtarlar katalog araması için zararsızdır.
 const DEFINITIONS_BY_CODE = new Map(MODULE_CATALOG.map((definition) => [definition.code, definition]));

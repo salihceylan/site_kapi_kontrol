@@ -1126,7 +1126,7 @@ List<(String, String)> bottomTabsOnScreen() {
     ('duyuru', 'Duyuru'),
     ('ariza', 'Arıza'),
     ('kapi', 'Kapı'),
-    ('belgeler', 'Belgeler'),
+    ('belgeler', 'Dosyalar'),
   ];
   return <(String, String)>[
     for (final tab in all)

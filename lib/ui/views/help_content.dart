@@ -115,7 +115,7 @@ abstract final class HelpContent {
     'Site hizmetleri',
     'Ayarlar',
     'Masaüstüne Widget Ekle',
-    'Belgeler',
+    'Dosya Deposu',
     'Taleplerim',
     'Rehber',
   };
@@ -177,7 +177,6 @@ abstract final class HelpContent {
     'Hepsi bir arada',
     'İlişki',
     'Borç Sorumlusu',
-    'Dosya Deposu (Google Drive)',
     'Google Drive bağla',
     'Telefonla giriş (SMS)',
     'Yakında…',
@@ -251,6 +250,7 @@ abstract final class HelpContent {
     'Duyuru',
     'Arıza',
     'Kapı',
+    'Dosyalar',
     'Tüm siteler',
   };
 
@@ -397,7 +397,7 @@ abstract final class HelpContent {
     title: 'Menü, alt çubuk ve ayarlar nerede?',
     icon: Icons.menu_rounded,
     steps: <String>[
-      'Ekranın altındaki çubukta “Özet”, “Duyuru”, “Arıza”, “Kapı” ve “Belgeler” sekmeleri vardır. “Özet” girişte açılan “Panel” ekranıdır; sitenizde kapalı olan ya da size açık olmayan sekme görünmez, kapı yetkiniz yoksa “Kapı” sekmesi çıkmaz. İkiden az sekme kalırsa ya da telefon yatay tutulurken çubuk görünmez; ekranlara menüden ulaşırsınız.',
+      'Ekranın altındaki çubukta “Özet”, “Duyuru”, “Arıza”, “Kapı” ve “Dosyalar” sekmeleri vardır (“Dosyalar”, menüdeki “Dosya Deposu” ekranını açar). “Özet” girişte açılan “Panel” ekranıdır; sitenizde kapalı olan ya da size açık olmayan sekme görünmez, kapı yetkiniz yoksa “Kapı” sekmesi çıkmaz. İkiden az sekme kalırsa ya da telefon yatay tutulurken çubuk görünmez; ekranlara menüden ulaşırsınız.',
       'Sol üstteki menü düğmesi menüyü açar: ekranlar “Ana sayfa”, “Daireler”, “Borçlar”, “İletişim” ve “Site hizmetleri” gibi başlıklar altında toplanır. Size açık ekranı olmayan başlık görünmez; menünün en üstünde bağlı olduğunuz site yazar.',
       'Sağ üstteki “Ayarlar” düğmesi (dişli) “Profilim” ve “Eller Serbest & Kestirmeler” gibi hesap ve ayar ekranlarını açar.',
       'Geri tuşu bir sekmeden ya da ekrandan “Özet” sekmesine döner; “Özet” sekmesindeyken uygulamadan çıkar.',
@@ -669,7 +669,7 @@ abstract final class HelpContent {
         'Finans modülü açılınca menüde “Finans” ekranı (“Daireler”, “Tanımlar” ve “Dönemler” sekmeleri) görünür.',
         'Finans açıkken ana sayfada “Bu ay” bölümü görünür: yazılan, toplanan, geciken daire ve kasa sayıları, beş adımlı aylık döngü ve son hareketler. Ay kapatmak isteğe bağlıdır; “Dönemler” sekmesinden istediğiniz ayı seçince o aya kadar açık aylar birlikte kapanır.',
         'Sitenizde geçerli kuralları (gecikme tazminatı üst sınırı, işletme projesi ve saklama süreleri) aynı ekrandaki “Kurallar” bölümünde “Kuralları Görüntüle” ile görürsünüz; değerleri sistem yöneticisi belirler.',
-        'Sitenin dosyalarını kendi Google Drive hesabında saklamak için “Dosya Deposu (Google Drive)” modülünü açın; aynı ekrandaki “Google Drive bağla” düğmesi Google onayına götürür. Bağlantı henüz hazır değilse Yakında… yazar.',
+        'Belgeler (yönetmelik, tutanak, sözleşme) ve sitenin Google Drive bağlantısı tek modüldedir: “Dosya Deposu” modülünü açın; menüde “Dosya Deposu” ekranı görünür. Sitenin dosyalarını kendi Google Drive hesabında saklamak için o ekranın altındaki “Google Drive bağla” düğmesi Google onayına götürür. Bağlantı henüz hazır değilse Yakında… yazar.',
       ],
     ),
     HelpTopic(

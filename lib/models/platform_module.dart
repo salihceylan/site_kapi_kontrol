@@ -9,8 +9,6 @@ abstract final class PlatformModuleCodes {
   static const String announcements = 'announcements';
   static const String finance = 'finance';
 
-  /// Belgeler (dosya deposu; Faz 3b-A). Varsayılan KAPALI.
-  static const String documents = 'documents';
   static const String reservation = 'reservation';
   static const String workTracking = 'work_tracking';
   static const String metering = 'metering';
@@ -33,7 +31,8 @@ abstract final class PlatformModuleCodes {
 
   /// İşletme Projesi (bütçe). Varsayılan KAPALI.
   static const String budget = 'budget';
-  /// Dosya Deposu (Google Drive, D1). Varsayılan KAPALI.
+  /// Dosya Deposu: Belgeler (yönetmelik, tutanak, sözleşme; Faz 3b-A) + sitenin Google Drive bağlantısı (D1) TEK modül.
+  /// Eski `documents` (Belgeler) kodu 084'te buna katıldı; ayrı Belgeler modülü yoktur. Varsayılan KAPALI.
   static const String driveStorage = 'drive_storage';
   /// Komşu Panosu (sakin ilanları, yönetici onayı). Varsayılan KAPALI.
   static const String neighborBoard = 'neighbor_board';

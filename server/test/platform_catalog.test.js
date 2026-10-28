@@ -26,13 +26,12 @@ import { managementTerms } from '../src/modules/management_type_terms.js';
 const def = (code) => getModuleDefinition(code);
 
 describe('platform katalog: sozlesme tablosu', () => {
-  it('25 modul, sozlesmedeki sirayla ve alanlarla', () => {
+  it('24 modul, sozlesmedeki sirayla ve alanlarla (Belgeler ayri modul degil: Dosya Deposu ile birlesti, 084)', () => {
     assert.deepEqual(MODULE_CODES, [
       'door_control',
       'people',
       'announcements',
       'finance',
-      'documents',
       'reservation',
       'work_tracking',
       'metering',
@@ -60,7 +59,6 @@ describe('platform katalog: sozlesme tablosu', () => {
       people: [true, 'available'], // Faz 2a: Kişi ve Daire Kayıtları çekirdek + kullanılabilir (hep açık)
       announcements: [true, 'available'], // Faz 3a: Duyuru ve Bildirim çekirdek + kullanılabilir (hep açık)
       finance: [true, 'available'], // Kural 25 (2026-10-26): Aidat ve Finans TEMEL modül (hep açık; talep edilmez, kapatılamaz)
-      documents: [false, 'available'], // Faz 3b-A: Belgeler (Dosya Deposu) kullanilabilir (varsayilan KAPALI; super acar, yonetici modul talep eder)
       reservation: [false, 'available'], // Rezervasyon ve Konsiyerj: kullanilabilir (varsayilan KAPALI; super acar, yonetici modul talep eder)
       work_tracking: [false, 'available'], // Is Takibi: kullanilabilir (varsayilan KAPALI; super acar, yonetici modul talep eder)
       metering: [false, 'available'],
@@ -74,7 +72,7 @@ describe('platform katalog: sozlesme tablosu', () => {
       decision_book: [false, 'available'], // Karar Defteri: kullanilabilir (varsayilan KAPALI; super acar, yonetici modul talep eder)
       directory: [false, 'available'], // Rehber: kullanilabilir (varsayilan KAPALI; yonetim kadrosu ve faydali telefonlar)
       budget: [false, 'available'], // Isletme Projesi (F7): kullanilabilir (varsayilan KAPALI)
-      drive_storage: [false, 'available'], // Dosya Deposu (Google Drive, D1): varsayilan KAPALI
+      drive_storage: [false, 'available'], // Dosya Deposu: Belgeler (Faz 3b-A) + Google Drive (D1) tek modul; varsayilan KAPALI
       neighbor_board: [false, 'available'], // Komsu Panosu: kullanilabilir (varsayilan KAPALI)
       annual_report: [false, 'available'], // Faaliyet Raporu (R2): varsayilan KAPALI
       plate_recognition: [false, 'available'], // Plaka Tanima (073): kullanilabilir, varsayilan KAPALI; kapi acmaz (would_open)
@@ -97,7 +95,7 @@ describe('platform katalog: sozlesme tablosu', () => {
 
   it('publicCatalog yalnizca { code, name, description, core, status } alanlarini dondurur', () => {
     const catalog = publicCatalog();
-    assert.equal(catalog.length, 25);
+    assert.equal(catalog.length, 24);
     for (const entry of catalog) {
       assert.deepEqual(Object.keys(entry), ['code', 'name', 'description', 'core', 'status']);
     }
@@ -111,10 +109,10 @@ describe('platform katalog: sozlesme tablosu', () => {
     }
   });
 
-  it('toggleable = !core && status === available (door_control, documents, rezervasyon, is takibi, anket, ziyaretci, kartli gecis, sozlesmeler, karar defteri; finance temel modul oldugu icin YOK)', () => {
+  it('toggleable = !core && status === available (door_control, dosya deposu, rezervasyon, is takibi, anket, ziyaretci, kartli gecis, sozlesmeler, karar defteri; finance temel modul oldugu icin YOK)', () => {
     assert.deepEqual(
       MODULE_CATALOG.filter(isToggleable).map((m) => m.code),
-      ['door_control',  'documents',  'reservation',  'work_tracking',  'metering',  'survey',  'visitor_log',  'card_access',  'card_payments',  'plate_cameras',  'contracts',  'decision_book',  'directory',  'budget',  'drive_storage',  'neighbor_board',  'annual_report',  'plate_recognition',  'cctv_link',  'equipment'],
+      ['door_control',  'reservation',  'work_tracking',  'metering',  'survey',  'visitor_log',  'card_access',  'card_payments',  'plate_cameras',  'contracts',  'decision_book',  'directory',  'budget',  'drive_storage',  'neighbor_board',  'annual_report',  'plate_recognition',  'cctv_link',  'equipment'],
     );
     assert.equal(isToggleable(null), false);
   });
@@ -216,7 +214,7 @@ describe('platform katalog: enabled hesabi', () => {
     const list = computeSiteModuleList([
       { module_code: 'door_control', enabled: false, updated_at: when, updated_by_name: 'Ali Veli' },
     ]);
-    assert.equal(list.length, 25);
+    assert.equal(list.length, 24);
     const door = list.find((m) => m.code === 'door_control');
     assert.deepEqual(door, {
       code: 'door_control',

@@ -101,7 +101,7 @@ MySiteModules _my(String role, {bool work = true, bool documents = false, int co
   modules: <String, bool>{
     'door_control': true,
     'work_tracking': work,
-    'documents': documents,
+    'drive_storage': documents,
   },
   doorAccess: !(role == 'staff' || role == 'board_member'),
 );
@@ -213,7 +213,7 @@ void main() {
       await _pumpHome(t, auth, access: access);
       await _openDrawer(t);
       final titles = _drawerTitles(t);
-      expect(titles.indexOf('Talepler'), titles.indexOf('Belgeler') + 1);
+      expect(titles.indexOf('Talepler'), titles.indexOf('Dosya Deposu') + 1);
       await _disposeHome(t);
     });
 

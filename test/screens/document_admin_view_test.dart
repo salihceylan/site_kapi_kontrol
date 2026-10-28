@@ -78,6 +78,28 @@ Future<void> _debounce(WidgetTester t) async {
 }
 
 void main() {
+  // Belgeler ve Google Drive TEK modül (Dosya Deposu, drive_storage): yönetim ekranında belge listesinin altında Drive bölümü.
+  group('Dosya Deposu: Google Drive bölümü', () {
+    testWidgets('yazma yetkisi olan yönetimde belge listesiyle birlikte görünür ("Yakında…" bağlı değilken)', (t) async {
+      final auth = DocumentFakeAuth();
+      final service = seededDocuments(auth);
+      await _pump(t, auth, service);
+      expect(find.byType(DocumentAdminCard), findsNWidgets(3));
+      expect(find.byKey(const ValueKey<String>('drive_storage_card')), findsOneWidget);
+      expect(find.text('Google Drive'), findsOneWidget);
+      expect(find.text('Google Drive bağlantısı Yakında…'), findsOneWidget);
+      expect(t.takeException(), isNull);
+    });
+
+    testWidgets('kurul üyesi (salt okunur) Drive bölümünü görmez', (t) async {
+      final auth = DocumentFakeAuth();
+      final service = seededDocuments(auth);
+      await _pump(t, auth, service, sites: _boardSite);
+      expect(find.byType(DocumentAdminCard), findsWidgets);
+      expect(find.byKey(const ValueKey<String>('drive_storage_card')), findsNothing);
+    });
+  });
+
   group('yatay telefon (640x360 x2,0)', () {
     for (final dark in const <bool>[false, true]) {
       testWidgets(
@@ -265,7 +287,7 @@ void main() {
         find.byKey(const ValueKey<String>('documents_module_off')),
         findsOneWidget,
       );
-      expect(find.text('Belgeler bu site için kapalı.'), findsOneWidget);
+      expect(find.text('Dosya Deposu bu site için kapalı.'), findsOneWidget);
       expect(find.text('Henüz belge yok.'), findsNothing);
       await tapFinder(
         t,

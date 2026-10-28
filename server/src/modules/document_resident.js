@@ -75,7 +75,7 @@ export function userInDocumentSiteSql(d = 'd', user = '$1') {
 
 /** `documents` modülü bu belgenin sitesinde AÇIK mı (katalog varsayılanı KAPALI: satır yoksa kapalı). */
 export const MODULE_ENABLED_SQL = (d = 'd') =>
-  `EXISTS (SELECT 1 FROM site_modules smod WHERE smod.site_code = ${d}.site_code AND smod.module_code = 'documents' AND smod.enabled = TRUE)`;
+  `EXISTS (SELECT 1 FROM site_modules smod WHERE smod.site_code = ${d}.site_code AND smod.module_code = 'drive_storage' AND smod.enabled = TRUE)`;
 
 const RESIDENT_FROM = `
   FROM documents d

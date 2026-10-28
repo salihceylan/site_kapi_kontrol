@@ -104,7 +104,7 @@ MySiteModules _my(String role, {bool reservation = true, bool work = false, bool
         'door_control': true,
         'reservation': reservation,
         'work_tracking': work,
-        'documents': documents,
+        'drive_storage': documents,
       },
       doorAccess: !(role == 'staff' || role == 'board_member'),
     );

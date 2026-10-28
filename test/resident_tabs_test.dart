@@ -19,7 +19,7 @@ const List<SirketMenuItem> _all = <SirketMenuItem>[
 
 void main() {
   test('sekmeler ve etiketler karar G3 sırasıyla; her sekme bir menü öğesidir', () {
-    expect(ResidentTab.values.map((t) => t.label).toList(), <String>['Özet', 'Duyuru', 'Arıza', 'Kapı', 'Belgeler']);
+    expect(ResidentTab.values.map((t) => t.label).toList(), <String>['Özet', 'Duyuru', 'Arıza', 'Kapı', 'Dosyalar']);
     expect(ResidentTab.values.map((t) => t.item).toList(), <SirketMenuItem>[
       SirketMenuItem.dashboard,
       SirketMenuItem.duyurular,

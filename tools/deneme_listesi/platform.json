@@ -2559,20 +2559,20 @@
       "id": "F14",
       "baslik": "Belgeler (dosya deposu)",
       "durum": "hazir",
-      "ozet": "Yönetim, yönetmelik, toplantı tutanağı, sözleşme gibi belgeleri yükler; kimlerin göreceğini seçer (tüm sakinler, yönetim kurulu, yalnız yöneticiler; sakinler için tüm site, seçili bloklar ya da daireler). Sakinler belgeyi \"Belgeler\" ekranından açar/kaydeder. Belgeler duyuruya eklenebilir. Modül varsayılan KAPALIDIR: önce Modüller ekranından açın. Aynı konular SAHA_KONTROL_LISTESI.md 73. bölümündedir. Canlıdadır; denenebilir.",
+      "ozet": "Yönetim, yönetmelik, toplantı tutanağı, sözleşme gibi belgeleri yükler; kimlerin göreceğini seçer (tüm sakinler, yönetim kurulu, yalnız yöneticiler; sakinler için tüm site, seçili bloklar ya da daireler). Sakinler belgeyi \"Dosya Deposu\" ekranından açar/kaydeder. Belgeler duyuruya eklenebilir. Modül varsayılan KAPALIDIR: önce Modüller ekranından açın. Aynı konular SAHA_KONTROL_LISTESI.md 73. bölümündedir. Canlıdadır; denenebilir.",
       "maddeler": [
         {
           "id": "F14.01",
-          "baslik": "Modül Kapalıyken Menü Yok; Açınca \"Belgeler\" Gelir",
+          "baslik": "Modül Kapalıyken Menü Yok; Açınca \"Dosya Deposu\" Gelir",
           "adimlar": [
-            "Yönetici ve sakin hesaplarının menüsünde \"Belgeler\" olup olmadığına bakın.",
-            "Yönetici olarak sağ üstteki dişliden (Ayarlar) \"Modüller\" → \"Belgeler (Dosya Deposu)\" → \"Modül Talep Et\"; süper kullanıcıyla talebi onaylayın (ya da doğrudan açın).",
-            "Yönetici ve sakin hesaplarının menüsüne ve sakinin alt çubuğuna yeniden bakın; \"Belgeler\"i açın.",
-            "Süper kullanıcının menüsünde \"Belgeler\"in modülden bağımsız olarak bulunduğuna bakın."
+            "Yönetici ve sakin hesaplarının menüsünde \"Dosya Deposu\" olup olmadığına bakın.",
+            "Yönetici olarak sağ üstteki dişliden (Ayarlar) \"Modüller\" → \"Dosya Deposu\" → \"Modül Talep Et\"; süper kullanıcıyla talebi onaylayın (ya da doğrudan açın).",
+            "Yönetici ve sakin hesaplarının menüsüne ve sakinin alt çubuğuna yeniden bakın; \"Dosya Deposu\"nu açın.",
+            "Süper kullanıcının menüsünde \"Dosya Deposu\"nun modülden bağımsız olarak bulunduğuna bakın."
           ],
-          "beklenen": "Kapalıyken yönetici ve sakinde \"Belgeler\" yoktur. Modül açılınca menüde \"Site hizmetleri\" başlığı altında \"Belgeler\" belirir (yöneticide ve sakinde; sakinde kitlesinde belge olsun olmasın); sakinin alt çubuğunda da \"Belgeler\" sekmesi çıkar. \"Belgeler\" sayfasında başlık \"Belgeler\" ve açıklama vardır; yöneticide \"Belge Yükle\" düğmesi, \"Belge ara\" kutusu, \"Kategori\" ve \"Durum\" (\"Yayında\" / \"Silinenler\") süzgeçleri görünür. Modül kapatılırsa ekran \"Belgeler bu site için kapalı.\" der ve \"Modüller\" düğmesi sunar. Görevli ve bireysel kullanıcıda \"Belgeler\" yoktur.",
+          "beklenen": "Kapalıyken yönetici ve sakinde \"Dosya Deposu\" yoktur. Modül açılınca menüde \"Site hizmetleri\" başlığı altında \"Dosya Deposu\" belirir (yöneticide ve sakinde; sakinde kitlesinde belge olsun olmasın); sakinin alt çubuğunda da \"Dosyalar\" sekmesi çıkar. \"Dosya Deposu\" sayfasında başlık \"Dosya Deposu\" ve açıklama vardır; yöneticide \"Belge Yükle\" düğmesi, \"Belge ara\" kutusu, \"Kategori\" ve \"Durum\" (\"Yayında\" / \"Silinenler\") süzgeçleri görünür ve listenin altında \"Google Drive\" bölümü yer alır (bağlantı hazır değilse \"Google Drive bağlantısı Yakında…\"). Modül kapatılırsa ekran \"Dosya Deposu bu site için kapalı.\" der ve \"Modüller\" düğmesi sunar. Görevli ve bireysel kullanıcıda \"Dosya Deposu\" yoktur. Belgeler ayrı bir modül değildir; Modüller ekranında yalnız \"Dosya Deposu\" vardır.",
           "rol_notu": "Site yöneticisi / Süper kullanıcı / Daire sakini",
-          "on_kosul": "Belgeler modülü KAPALI bir TEST sitesi (yönetici, bir sakin ve süper kullanıcı hesabı)",
+          "on_kosul": "Dosya Deposu modülü KAPALI bir TEST sitesi (yönetici, bir sakin ve süper kullanıcı hesabı)",
           "yeni": false,
           "gelistirme": "hazir"
         },
@@ -6778,11 +6778,11 @@
       "maddeler": [
         {
           "id": "F32.01",
-          "baslik": "Modülü aç ve kartı gör",
+          "baslik": "Modülü aç ve Google Drive bölümünü gör",
           "adimlar": [
-            "Süper kullanıcıyla Modüller ekranında siteyi seçin, 'Dosya Deposu (Google Drive)' modülünü açın, sayfanın altındaki karta bakın."
+            "Süper kullanıcıyla Modüller ekranında siteyi seçin, 'Dosya Deposu' modülünü açın; menüden 'Dosya Deposu' ekranını açıp belge listesinin altındaki 'Google Drive' bölümüne bakın."
           ],
-          "beklenen": "Modül kapalıyken kartta 'bu modül kapalı' yazar; açınca (Google bilgileri .env'de yoksa) 'Google Drive bağlantısı Yakında…' görünür.",
+          "beklenen": "Modül kapalıyken Modüller ekranında 'Dosya Deposu' kapalı görünür ve 'Dosya Deposu' menüsü yoktur; açınca (Google bilgileri .env'de yoksa) 'Google Drive' bölümünde 'Google Drive bağlantısı Yakında…' görünür.",
           "rol_notu": "Süper kullanıcı",
           "on_kosul": "",
           "yeni": false,

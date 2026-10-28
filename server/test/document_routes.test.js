@@ -77,7 +77,7 @@ function access(sql, params) {
     return ok(state.sites.has(Number(params[0])) ? [{ site_code: String(params[0]) }] : []);
   }
   if (/^SELECT enabled FROM site_modules WHERE site_code = \$1 AND module_code = \$2 LIMIT 1$/.test(sql)) {
-    return ok(params[1] === 'documents' && state.moduleEnabled ? [{ enabled: true }] : params[1] === 'documents' ? [{ enabled: false }] : []);
+    return ok(params[1] === 'drive_storage' && state.moduleEnabled ? [{ enabled: true }] : params[1] === 'drive_storage' ? [{ enabled: false }] : []);
   }
   return null;
 }
@@ -279,7 +279,7 @@ describe('GET documents: yetki matrisi ve modül kapısı', () => {
         const res = await call(method, url, { user, body });
         assert.equal(res.status, 403, `${method} ${url} ${user.full_name}`);
         assert.equal(res.body.code, 'MODULE_DISABLED');
-        assert.equal(res.body.module, 'documents');
+        assert.equal(res.body.module, 'drive_storage');
       }
     }
     assert.ok(!log.some((entry) => /FROM documents/.test(entry.sql)), 'kapalı modülde belge tablosuna hiç sorgu gitmez');

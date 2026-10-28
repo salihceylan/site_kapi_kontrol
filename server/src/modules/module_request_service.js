@@ -10,7 +10,7 @@
 import { pool } from '../db.js';
 import { sendModuleRequestNotificationEmail } from '../mailer.js';
 import { actorFromAuthUser, clampAuditLimit, recordAudit } from './audit_service.js';
-import { computeModuleEnabled, getModuleDefinition, MODULE_STATUS_COMING_SOON } from './catalog.js';
+import { canonicalModuleCode, computeModuleEnabled, getModuleDefinition, MODULE_STATUS_COMING_SOON } from './catalog.js';
 import { PlatformError } from './errors.js';
 import { moduleLockKey } from './module_service.js';
 
@@ -50,7 +50,8 @@ function toPositiveInt(value, max = Number.MAX_SAFE_INTEGER) {
 
 /** `request` nesnesi: sözleşmedeki alanlar (ve yalnız onlar). */
 export function mapModuleRequestRow(row) {
-  const definition = getModuleDefinition(row.module_code);
+  // Eski kodlu geçmiş talepler (ör. `documents`, 084'te Dosya Deposu'na katıldı) güncel modülün adıyla gösterilir; `module_code` olduğu gibi kalır.
+  const definition = getModuleDefinition(canonicalModuleCode(row.module_code));
   return {
     id: Number(row.id),
     site_code: Number(row.site_code),
@@ -186,7 +187,8 @@ export async function createModuleRequest({ siteCode, moduleCode, note, actor })
     throw new PlatformError(400, 'INVALID_BODY', 'module_code zorunludur.');
   }
   const noteText = normalizeRequestNote(note);
-  const code = moduleCode.trim();
+  // Eski uygulamalar `documents` (Belgeler) gönderebilir: Dosya Deposu talebine çevrilir (084).
+  const code = canonicalModuleCode(moduleCode.trim());
   const definition = getModuleDefinition(code);
   if (!definition) {
     throw new PlatformError(404, 'MODULE_NOT_FOUND', 'Modül bulunamadı.');

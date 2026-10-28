@@ -9,6 +9,7 @@ import { authRequired, requireSiteManager, requireSuperUser } from '../src/middl
 import { MODULE_REQUEST_EMAIL_SUBJECT } from '../src/mailer.js';
 import { moduleRequestHooks, notifySuperUsersOfRequest, normalizeRequestNote } from '../src/modules/module_request_service.js';
 import { moduleLockKey } from '../src/modules/module_service.js';
+import { getModuleDefinition } from '../src/modules/catalog.js';
 import { moduleRequestLimiter, moduleRequestRouter } from '../src/modules/module_request_routes.js';
 
 const SITE_1 = 1000000001;
@@ -538,6 +539,30 @@ describe('POST module-requests', () => {
     assert.equal(state.requests.length, 0);
     assert.equal(state.audit.length, 0);
     assert.equal(notifications.length, 0);
+  });
+
+  it('eski uygulamalar `documents` (Belgeler, 084\'te Dosya Deposu ile birlesti) talep ederse Dosya Deposu talebi olur: 500/404 yok; modul adi Dosya Deposu', async () => {
+    const res = await post({ module_code: 'documents', note: 'Belgeler için.' });
+    assert.notEqual(res.status, 500);
+    assert.notEqual(res.body.code, 'MODULE_NOT_FOUND', 'eski kod artik bilinmeyen modul degil');
+    if (getModuleDefinition('drive_storage').core) {
+      assert.equal(res.status, 400);
+      assert.equal(res.body.code, 'MODULE_NOT_TOGGLEABLE');
+      assert.equal(state.requests.length, 0);
+    } else {
+      assert.equal(res.status, 201, JSON.stringify(res.body));
+      assert.equal(res.body.request.module_code, 'drive_storage');
+      assert.equal(res.body.request.module_name, 'Dosya Deposu');
+      assert.equal(state.requests[0].module_code, 'drive_storage', 'eski kodlu talep satiri ASLA yazilmaz');
+    }
+  });
+
+  it('eski kodlu GECMIS talep (module_code documents) listede Dosya Deposu adiyla gorunur; module_code oldugu gibi kalir', async () => {
+    seedRequest({ module_code: 'documents', status: 'approved' });
+    const res = await call('GET', requestsUrl(), { user: users.mgrA });
+    assert.equal(res.status, 200);
+    assert.equal(res.body.items[0].module_code, 'documents');
+    assert.equal(res.body.items[0].module_name, 'Dosya Deposu');
   });
 
   it('finance temel modul (Kural 25): yonetici talep EDEMEZ (400 MODULE_NOT_TOGGLEABLE, "talep edilemez"); talep/audit/bildirim yok', async () => {

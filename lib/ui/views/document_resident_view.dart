@@ -14,7 +14,7 @@ import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
 import 'package:site_kapi_kontrol/ui/widgets/cursor_list_body.dart';
 import 'package:site_kapi_kontrol/ui/widgets/document_parts.dart';
 
-/// Sakin "Belgeler" ekranı (Platform Faz 3b-A): yalnız KENDİ kitlesinde olduğu, `documents` modülü açık
+/// Sakin "Dosya Deposu" ekranı (Platform Faz 3b-A; Belgelerim): yalnız KENDİ kitlesinde olduğu, `drive_storage` modülü açık
 /// sitelerdeki belgeler. Kategori süzgeci, arama, imleçli sayfalama (`before_id`), "Güncellendi" çipi ve
 /// "Aç / Kaydet" (geçici dosyaya akışla indirip paylaşım menüsüne verir).
 ///

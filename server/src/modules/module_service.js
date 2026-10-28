@@ -7,6 +7,7 @@ import { pool } from '../db.js';
 import { rotateTokensForSite } from '../services/local_token_service.js';
 import {
   DOOR_CONTROL_MODULE,
+  canonicalModuleCode,
   computeEnabledMap,
   computeModuleEnabled,
   computeSiteModuleList,
@@ -123,7 +124,9 @@ export async function isModuleEnabled(siteCode, moduleCode, db = pool) {
  *
  * @returns {Promise<{ changed: boolean }>}
  */
-export async function setSiteModuleEnabled({ siteCode, moduleCode, enabled, confirm = false, actor }) {
+export async function setSiteModuleEnabled({ siteCode, moduleCode: requestedModuleCode, enabled, confirm = false, actor }) {
+  // Eski uygulamalar `documents` (Belgeler) gönderebilir: Dosya Deposu'na çevrilir (084).
+  const moduleCode = canonicalModuleCode(requestedModuleCode);
   const definition = getModuleDefinition(moduleCode);
   if (!definition) {
     throw new PlatformError(404, 'MODULE_NOT_FOUND', 'Modül bulunamadı.');
