@@ -25,6 +25,7 @@ import 'package:site_kapi_kontrol/ui/helpers/finance_4b_access.dart';
 import 'package:site_kapi_kontrol/ui/helpers/money.dart';
 import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
 import 'package:site_kapi_kontrol/ui/views/bank_lines_view.dart';
+import 'package:site_kapi_kontrol/ui/widgets/home_shortcut_button.dart';
 
 BankFile _readIsolate(({Uint8List bytes, String name}) a) => readBankFile(a.bytes, a.name);
 
@@ -356,7 +357,8 @@ class _BankImportViewState extends State<BankImportView> {
   Widget build(BuildContext context) {
     final th = Theme.of(context).textTheme;
     return Scaffold(
-      appBar: AppBar(title: const Text('Banka dosyası')),
+      // Derin ekran (Finans > Kasa > Banka dosyası yükle > Banka satırları): üst çubukta tek dokunuşla ana sayfa (P1-13).
+      appBar: AppBar(title: const Text('Banka dosyası'), actions: const <Widget>[HomeShortcutButton()]),
       body: RefreshIndicator(
         onRefresh: _loadAll,
         child: ListView(

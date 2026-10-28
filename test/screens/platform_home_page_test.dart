@@ -26,6 +26,7 @@ import 'package:site_kapi_kontrol/styles/app_theme.dart';
 import 'package:site_kapi_kontrol/ui/pages/home_page.dart';
 import 'package:site_kapi_kontrol/ui/views/audit_log_view.dart';
 import 'package:site_kapi_kontrol/ui/views/client_errors_view.dart';
+import 'package:site_kapi_kontrol/ui/views/module_showcase_view.dart';
 import 'package:site_kapi_kontrol/ui/views/platform_settings_view.dart';
 import 'package:site_kapi_kontrol/ui/widgets/account_privacy_section.dart';
 
@@ -151,6 +152,14 @@ Future<void> _tapMenu(WidgetTester t, String label) async {
 }
 
 Finder _inAppBar(Finder f) => find.descendant(of: find.byType(AppBar), matching: f);
+
+/// Üst çubuktaki mod hapı (dokunulacak InkWell; [label] "Sakin Modu" ya da "Yönetici Paneli"). P1-13: iç ekranda "Ana
+/// sayfa" düğmesi varken 480 dp altında yalnız ikondur (etiket yok, ipucu [label]); Panel'de ve geniş ekranda etiketlidir.
+Finder _modePill([String label = 'Sakin Modu']) {
+  final labeled = _inAppBar(find.text(label));
+  if (labeled.evaluate().isNotEmpty) return find.ancestor(of: labeled, matching: find.byType(InkWell)).first;
+  return find.descendant(of: _inAppBar(find.byTooltip(label)), matching: find.byType(InkWell));
+}
 
 Finder _tile(String title) => find.descendant(of: find.byType(Drawer), matching: find.text(title));
 
@@ -290,6 +299,37 @@ void main() {
       await _disposeHome(t);
     });
 
+    // P1-13: üst çubuktaki "Ana sayfa" düğmesi de menü kapısından geçer (kaydedilmemiş değişiklik sessizce atılmaz).
+    testWidgets('üst çubuktaki "Ana sayfa" düğmesi de korumadan geçer: Düzenlemeye Dön ekranda bırakır, Değişiklikleri Sil Panel\'e döndürür',
+        (t) async {
+      final auth = _HomeAuth();
+      await openSettingsAndEdit(t, auth);
+      final home = _inAppBar(find.byTooltip('Ana sayfa'));
+      expect(home, findsOneWidget, reason: 'iç ekranda (Platform Ayarları) düğme var');
+
+      await t.tap(home);
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 600));
+      expect(find.text('Kaydedilmemiş değişiklikler'), findsOneWidget);
+      expect(find.byType(ModuleShowcaseView), findsNothing, reason: 'onay gelene dek Panel açılmaz');
+      await t.tap(find.descendant(of: find.byType(AlertDialog), matching: find.text('Düzenlemeye Dön')));
+      await settleFor(t);
+      expect(find.byType(PlatformSettingsView), findsOneWidget, reason: 'Düzenlemeye Dön yerinde bırakır');
+      expect(home, findsOneWidget);
+
+      await t.tap(home);
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 600));
+      await t.tap(find.descendant(of: find.byType(AlertDialog), matching: find.text('Değişiklikleri Sil')));
+      await settleFor(t);
+      await t.pump(const Duration(milliseconds: 600));
+      expect(find.byType(ModuleShowcaseView), findsOneWidget, reason: 'Panel (ana sayfa)');
+      expect(find.byType(PlatformSettingsView), findsNothing);
+      expect(home, findsNothing, reason: 'Panel\'de düğme yok');
+      expect(_api.putPatches, isEmpty, reason: 'hiçbir şey sunucuya gitmedi');
+      await _disposeHome(t);
+    });
+
     /// Çekmeceden Yardım ve Destek'i açar, "Profilim ekranına git" düğmesine basar (menüyü programatik değiştirir).
     Future<void> helpToProfile(WidgetTester t) async {
       await _openDrawer(t);
@@ -342,7 +382,7 @@ void main() {
       final auth = _HomeAuth();
       await openSettingsAndEdit(t, auth);
 
-      final pill = find.descendant(of: find.byType(AppBar), matching: find.text('Sakin Modu'));
+      final pill = _modePill();
       expect(pill, findsOneWidget);
       await t.tap(pill);
       await t.pump();
@@ -360,7 +400,7 @@ void main() {
       await t.tap(find.descendant(of: find.byType(AlertDialog), matching: find.text('Değişiklikleri Sil')));
       await settleFor(t);
       await t.pump(const Duration(milliseconds: 600));
-      expect(find.descendant(of: find.byType(AppBar), matching: find.text('Yönetici Paneli')), findsOneWidget, reason: 'mod değişti');
+      expect(_modePill('Yönetici Paneli'), findsOneWidget, reason: 'mod değişti');
       await _disposeHome(t);
     });
 
@@ -371,7 +411,7 @@ void main() {
       final auth = _HomeAuth();
       await openSettingsAndEdit(t, auth);
 
-      final pill = find.descendant(of: find.byType(AppBar), matching: find.text('Sakin Modu'));
+      final pill = _modePill();
       final node = t.getSemantics(pill);
       final owner = node.owner!; // düğümü yöneten anlamsal sahip (çoklu görünümde de doğru)
       owner.performAction(node.id, SemanticsAction.tap);
@@ -384,7 +424,7 @@ void main() {
       await settleFor(t);
       await t.pump(const Duration(milliseconds: 600));
       expect(find.byType(AlertDialog), findsNothing);
-      expect(find.descendant(of: find.byType(AppBar), matching: find.text('Yönetici Paneli')), findsOneWidget,
+      expect(_modePill('Yönetici Paneli'), findsOneWidget,
           reason: 'bir kez çevrildi (iki kez çevrilseydi "Sakin Modu" kalırdı)');
       handle.dispose();
       await _disposeHome(t);
@@ -393,7 +433,7 @@ void main() {
     testWidgets('yeniden-giriş sıfırlanır: Düzenlemeye Dön sonrası kapı yeniden açılır', (t) async {
       final auth = _HomeAuth();
       await openSettingsAndEdit(t, auth);
-      final pill = find.descendant(of: find.byType(AppBar), matching: find.text('Sakin Modu'));
+      final pill = _modePill();
       for (var i = 0; i < 2; i++) {
         await t.tap(pill);
         await t.pump();
@@ -402,7 +442,7 @@ void main() {
         await t.tap(find.descendant(of: find.byType(AlertDialog), matching: find.text('Düzenlemeye Dön')));
         await settleFor(t);
       }
-      expect(find.descendant(of: find.byType(AppBar), matching: find.text('Sakin Modu')), findsOneWidget);
+      expect(_modePill(), findsOneWidget);
       await _disposeHome(t);
     });
 
@@ -425,11 +465,11 @@ void main() {
       final auth = _HomeAuth();
       await _pumpHome(t, auth);
       await _tapMenu(t, 'Platform Ayarları');
-      await t.tap(find.descendant(of: find.byType(AppBar), matching: find.text('Sakin Modu')));
+      await t.tap(_modePill());
       await t.pump();
       await t.pump(const Duration(milliseconds: 600));
       expect(find.byType(AlertDialog), findsNothing);
-      expect(find.descendant(of: find.byType(AppBar), matching: find.text('Yönetici Paneli')), findsOneWidget);
+      expect(_modePill('Yönetici Paneli'), findsOneWidget);
       await _disposeHome(t);
     });
 

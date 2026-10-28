@@ -212,6 +212,10 @@ import 'package:site_kapi_kontrol/ui/views/module_showcase_view.dart';
 // İP-1D: gruplu menü, Ayarlar paneli ve sakin alt çubuğu.
 import 'package:site_kapi_kontrol/ui/helpers/resident_tabs.dart';
 import 'package:site_kapi_kontrol/ui/widgets/resident_bottom_bar.dart';
+// P1-13: iç ekranlardan tek dokunuşla ana sayfa ("Ana sayfa" düğmesi) ve derin ekranlardan Panel'e dönüş isteği.
+import 'package:site_kapi_kontrol/services/panel_return_requests.dart';
+import 'package:site_kapi_kontrol/ui/helpers/home_shortcut.dart';
+import 'package:site_kapi_kontrol/ui/widgets/home_shortcut_button.dart';
 
 
 
@@ -683,6 +687,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     widget.doorPanelRequests?.addListener(_onDoorPanelRequested);
     if (widget.doorPanelRequests?.isPending ?? false) _onDoorPanelRequested();
 
+    // Derin ekranlardaki "Ana sayfa" düğmesi (P1-13): ekranlar kapanınca Panel seçilir.
+    PanelReturnRequests.instance.addListener(_onPanelReturnRequested);
+
   }
 
 
@@ -706,6 +713,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
 
     widget.doorPanelRequests?.removeListener(_onDoorPanelRequested);
+
+    PanelReturnRequests.instance.removeListener(_onPanelReturnRequested);
 
     _doorEntryGuardTimer?.cancel();
 
@@ -2513,6 +2522,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   /// Kapı isteğine karar için modül verisi bekleniyor mu: süper kullanıcı değil, veri hiç gelmedi ve ilk yükleme bitmedi.
   bool get _awaitsModuleDecision =>
       !_moduleAccess.isSuper && !_moduleAccess.isLoaded && !_moduleFirstLoadDone;
+
+  /// Derin (yeni sayfa olarak açılan) bir ekrandaki "Ana sayfa" düğmesi Panel'e dönüş istedi ([PanelReturnRequests]).
+  /// Ekranlar kapanırken değil bir sonraki karede, çekmeceden "Panel"i seçmekle AYNI korumalı yoldan geçilir: Platform
+  /// Ayarları'nda kaydedilmemiş değişiklik varsa onay, kapanmış bir ekranın üstünde değil burada sorulur.
+  void _onPanelReturnRequested() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || widget.authService.session == null) return;
+      _openMenuItem(SirketMenuItem.dashboard);
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
 
   /// "Sakin Modu / Yönetici Paneli" geçişi (AppBar hapı ve çekmece): yönetici paneline dönüşte menü Panel'e alınır.
   void _toggleResidentMode() {
@@ -5972,14 +5992,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   /// AppBar'daki "Sakin Modu / Yönetici Paneli" hapı (çift modlu roller): dokunma hedefi en az 44 dp.
   /// Dar ekranda (< 400 dp) ya da büyük yazıda (> 1.3x) yalnız ikon gösterilir (etiket Tooltip + Semantics
   /// ile korunur); etiketli hâl, kalan genişliği aşarsa üç nokta ile kısalır (taşma yok).
-  /// [otherActions]: hapın yanındaki 48 dp'lik düğme sayısı (genişlik payı hesabı için).
-  Widget _buildModeToggle(BuildContext context, {required int otherActions}) {
+  /// [otherActions]: hapın yanındaki 48 dp'lik düğme sayısı (genişlik payı hesabı için; varsa "Ana sayfa" düğmesi de
+  /// sayılır). [homeShown]: menü düğmesinin yanında "Ana sayfa" düğmesi var ([showsHomeShortcut]); 480 dp'den dar ekranda
+  /// hap yalnız ikon olur (etiket iki düğme grubunun arasına sığmaz, "Sakin Mo…" diye kesilirdi).
+  Widget _buildModeToggle(BuildContext context, {required int otherActions, bool homeShown = false}) {
     final p = context.palette;
     final tone = _isResidentMode ? AppTone.primary : AppTone.success;
     final ink = tone.ink(p);
     final label = _isResidentMode ? 'Yönetici Paneli' : 'Sakin Modu';
     final width = MediaQuery.sizeOf(context).width;
-    final iconOnly = width < 400 || MediaQuery.textScalerOf(context).scale(1) > 1.3;
+    final iconOnly = width < 400 || MediaQuery.textScalerOf(context).scale(1) > 1.3 || (homeShown && width < 480);
     // Hapa ayrılabilecek en büyük genişlik: ekran - menü düğmesi (48) - öteki eylemler (48'er) - boşluklar.
     final maxWidth = (width - 48 - otherActions * 48 - 6 - 16).clamp(44.0, double.infinity).toDouble();
 
@@ -6193,6 +6215,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     // öteki sayfalarda ve koyu temada kap boyanmaz (uygulama zemini görünür).
     final bodyBackground =
         effectiveMenu == SirketMenuItem.dashboard ? ModuleShowcaseView.pageBackgroundOf(context) : null;
+    // P1-13: sakin alt çubuğu çiziliyorsa Panel'e dönüş onun "Özet" sekmesidir (ikinci bir yol üretilmez). Çubuk yokken
+    // (yönetici, süper kullanıcı, bireysel, ikiden az sekmeli sakin hesabı, yatay telefon) iç ekranlarda menü düğmesinin
+    // yanında "Ana sayfa" düğmesi durur.
+    final residentBar = _residentBottomBar(session, effectiveMenu);
+    final showHome = showsHomeShortcut(
+      page: effectiveMenu,
+      residentBarVisible: residentBar != null,
+      width: MediaQuery.sizeOf(context).width,
+      // Sağdaki eylemlerin genişliği: yenile + çıkış + dişli (48'er) + [tema 48] + [mod hapı: 44 + 2x4 dış boşluk] + 6 kenar.
+      actionsWidth: 3 * 48 + (hasThemeToggle ? 48 : 0) + (_canToggleDualMode ? 52 : 0) + 6,
+    );
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -6200,7 +6233,19 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       onEndDrawerChanged: _onEndDrawerChanged,
       appBar: AppBar(
         titleSpacing: 0,
-        leadingWidth: 48,
+        // Menü düğmesi 48 dp; iç ekranlarda yanına "Ana sayfa" düğmesi gelir (toplam 96). Ana sayfa düğmesi varken menü
+        // düğmesi de açıkça kurulur (AppBar'ın kendiliğinden eklediği düğmeyle aynı: DrawerButton).
+        leadingWidth: showHome ? homeShortcutLeadingWidth : 48,
+        leading: showHome
+            ? Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const DrawerButton(),
+                  // Çekmeceden "Panel"i seçmekle aynı korumalı gezinme (Platform Ayarları onayı dahil).
+                  HomeShortcutButton(onPressed: () => _openMenuItem(SirketMenuItem.dashboard)),
+                ],
+              )
+            : null,
         title: null,
         elevation: 0,
         // Kaydırınca başlık bandı M3 yüzey tonuyla griye dönmesin (tema ile de aynı değer).
@@ -6241,8 +6286,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           if (_canToggleDualMode)
             _buildModeToggle(
               context,
-              // Hapın genişlik payı: yanındaki 44-48 dp'lik düğmeler (yenile, çıkış, dişli, [tema]).
-              otherActions: 3 + (hasThemeToggle ? 1 : 0),
+              // Hapın genişlik payı: yanındaki 44-48 dp'lik düğmeler (yenile, çıkış, dişli, [tema], [Ana sayfa]).
+              otherActions: 3 + (hasThemeToggle ? 1 : 0) + (showHome ? 1 : 0),
+              homeShown: showHome,
             ),
           // Aydınlık / karanlık tema geçişi (44 dp, diğer eylem düğmeleriyle aynı boyut ve yoğunluk).
           const ThemeToggleButton(iconSize: 20),
@@ -6363,7 +6409,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         onSelect: _selectMenu,
       ),
       // İP-1D / G3: sakin alt çubuğu (Özet · Duyuru · Arıza · Kapı · Dosyalar; iki sekmeden azsa yok).
-      bottomNavigationBar: _residentBottomBar(session, effectiveMenu),
+      bottomNavigationBar: residentBar,
       // Geri tuşu: bir modül sayfasındayken Panel vitrinine döner (uygulamadan çıkmaz); vitrindeyken eskisi gibi çıkar.
       // Çekmece AÇIKKEN geri tuşu önce çekmeceyi kapatır, sayfa değişmez: PopScope rota yerel geçmişinden ÖNCE
       // değerlendirildiği için ([ModalRoute.popDisposition]) çekmece açıkken pop'a izin verilir; pop'u çekmecenin

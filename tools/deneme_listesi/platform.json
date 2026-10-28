@@ -5487,6 +5487,77 @@
           "on_kosul": "",
           "yeni": false,
           "gelistirme": "hazir"
+        },
+        {
+          "id": "F28.15",
+          "baslik": "Yöneticide iç ekrandan tek dokunuşla ana sayfa",
+          "adimlar": [
+            "Yönetici hesabıyla girin; Panel'de üst çubuğa bakın.",
+            "Kapılar kartına dokunun; sonra sağ üstteki dişliden (Ayarlar) \"Profilim\"i açın.",
+            "Menü düğmesinin hemen yanındaki \"Ana sayfa\" düğmesine dokunun."
+          ],
+          "beklenen": "Panel'de menü düğmesinin yanında ek düğme yoktur. Kapılar ve Profilim ekranlarında menü düğmesinin hemen yanında dört kare simgeli \"Ana sayfa\" düğmesi görünür (basılı tutunca ipucu çıkar). Dokununca Panel açılır ve düğme kaybolur; kapı açılmaz. Telefonun geri tuşu iç ekrandan yine Panel'e döner, Panel'de uygulamadan çıkar. Üst çubuktaki \"Sakin Modu\" hapı Panel'de 400 dp ve üstü telefonda etiketlidir; iç ekranda (Ana sayfa düğmesi varken) 480 dp altında yalnız ikon görünür, dokununca yine mod değişir.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Ekran genişliği 360 dp ve üstü bir telefon",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F28.16",
+          "baslik": "Sakin alt çubuğu varken ikinci düğme yok, alt çubuk yokken düğme var",
+          "adimlar": [
+            "Telefonu dik tutup daire sakini hesabıyla Duyuru sekmesini açın; üst çubuğa bakın, sonra \"Özet\" sekmesine dokunun.",
+            "Telefonu yatay çevirin (alt çubuk gizlenir) ve menüden Duyurular'ı açın.",
+            "Yalnız görevli bağı olan bir hesapla (alt çubuk hiç çıkmaz) menüden Talepler'i açın."
+          ],
+          "beklenen": "Alt çubuk varken üst çubukta \"Ana sayfa\" düğmesi yoktur; \"Özet\" Panel'e döndürür. Telefon yatayken ve görevli hesabında alt çubuk olmadığından menü düğmesinin yanında \"Ana sayfa\" düğmesi çıkar ve Panel'e döndürür.",
+          "rol_notu": "Daire sakini; yalnız görevli bağı olan hesap",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F28.17",
+          "baslik": "Derin ekranlardan ana sayfa",
+          "adimlar": [
+            "Aidat ve Finans'ta Kasa sekmesinde bir hesabın \"Banka dosyası yükle\" düğmesine basın; açılan \"Banka dosyası\" ekranının üst çubuğuna bakın.",
+            "Eşleşmeyen satır varsa \"N banka satırı sizi bekliyor\" kartıyla \"Banka Ödemeleri ve Daire Onayları\"na geçin ve sağ üstteki \"Ana sayfa\" düğmesine dokunun.",
+            "Aynısını menüdeki \"İşletme Projesi\"nde bir projeye dokunarak açtığınız ayrıntı ekranında deneyin.",
+            "Bir de ekranın kendi geri okuna ve telefonun geri tuşuna basın."
+          ],
+          "beklenen": "\"Ana sayfa\" düğmesi açık ekranların hepsini kapatır ve doğrudan Panel'i açar (Finans'a dönmez). Ekranın kendi geri oku ve geri tuşu yine bir adım geri götürür.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Banka hesabı tanımlı bir TEST sitesi; İşletme Projesi modülü açık bir site",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F28.18",
+          "baslik": "Platform Ayarları'nda kaydedilmemiş değişiklik varken ana sayfa",
+          "adimlar": [
+            "Ayarlar panelinden \"Platform Ayarları\"nı açın ve bir alanı değiştirin (kaydetmeyin).",
+            "Üst çubuktaki \"Ana sayfa\" düğmesine dokunun; \"Düzenlemeye Dön\"ü seçin.",
+            "Düğmeye yeniden dokunun ve \"Değişiklikleri Sil\"i seçin."
+          ],
+          "beklenen": "\"Kaydedilmemiş değişiklikler\" penceresi çıkar. \"Düzenlemeye Dön\" ekranda bırakır, yazdıklarınız durur. \"Değişiklikleri Sil\" Panel'i açar; hiçbir şey kaydedilmemiştir.",
+          "rol_notu": "Süper kullanıcı",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F28.19",
+          "baslik": "Dar telefon, büyük yazı ve ekran okuyucu",
+          "adimlar": [
+            "Telefonun yazı boyutunu en büyüğe alın; mümkünse ekran boyutunu \"büyük\"e çevirip ekran genişliğini 360 dp altına indirin.",
+            "İç bir ekranda üst çubuğa bakın.",
+            "Ekran okuyucuyu (TalkBack) açıp \"Ana sayfa\" düğmesine odaklanın."
+          ],
+          "beklenen": "Üst çubukta düğmeler üst üste binmez, kesilmez. En dar telefonlarda (çift modlu hesap, tema düğmesiyle yaklaşık 348 dp altı) \"Ana sayfa\" düğmesi yer bulamazsa hiç çıkmaz; Panel'e menüden ya da geri tuşuyla dönülür. Ekran okuyucu düğmeyi \"Ana sayfa, düğme\" diye okur.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
         }
       ]
     },

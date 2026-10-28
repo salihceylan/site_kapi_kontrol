@@ -15,6 +15,7 @@ import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/helpers/date_input.dart' show formatDateField;
 import 'package:site_kapi_kontrol/ui/helpers/money.dart';
 import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart' show crmMessageOf;
+import 'package:site_kapi_kontrol/ui/widgets/home_shortcut_button.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 
 String _isoDay(DateTime d) =>
@@ -484,7 +485,11 @@ class _BudgetDetailPageState extends State<BudgetDetailPage> {
     final detail = _detail;
     final project = detail?.project;
     return Scaffold(
-      appBar: AppBar(title: Text(project == null ? 'İşletme projesi' : '${project.year} - ${project.title}')),
+      // Proje ayrıntısı (İşletme Projesi > proje): üst çubukta tek dokunuşla ana sayfa (P1-13).
+      appBar: AppBar(
+        title: Text(project == null ? 'İşletme projesi' : '${project.year} - ${project.title}'),
+        actions: const <Widget>[HomeShortcutButton()],
+      ),
       body: _error != null
           ? Padding(padding: const EdgeInsets.all(AppSpace.lg), child: _Notice(message: _error!, onRetry: _load))
           : project == null

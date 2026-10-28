@@ -12,6 +12,7 @@ import 'package:site_kapi_kontrol/ui/dialogs/bank_line_assign_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/bank_line_classify_dialog.dart';
 import 'package:site_kapi_kontrol/ui/helpers/money.dart';
 import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
+import 'package:site_kapi_kontrol/ui/widgets/home_shortcut_button.dart';
 
 class BankLinesView extends StatefulWidget {
   const BankLinesView({super.key, required this.scope});
@@ -173,7 +174,8 @@ class _BankLinesViewState extends State<BankLinesView> {
   Widget build(BuildContext context) {
     final canConfirmAll = !_done && widget.scope.canWrite && _lines.any((l) => l.status == 'suggested' && l.apartmentId != null);
     return Scaffold(
-      appBar: AppBar(title: const Text('Banka Ödemeleri ve Daire Onayları')),
+      // En derin ekran (Panel > Finans > Kasa > Banka dosyası > buradayız): üst çubukta tek dokunuşla ana sayfa (P1-13).
+      appBar: AppBar(title: const Text('Banka Ödemeleri ve Daire Onayları'), actions: const <Widget>[HomeShortcutButton()]),
       body: RefreshIndicator(
         onRefresh: _load,
         child: ListView(
