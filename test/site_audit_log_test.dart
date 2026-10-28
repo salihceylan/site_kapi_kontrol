@@ -174,7 +174,6 @@ void main() {
           return e;
         }
         fail('hata bekleniyordu');
-        throw StateError('ulaşılmaz');
       }
 
       var e = await errorOf(403, <String, dynamic>{'error': 'x', 'code': 'FORBIDDEN_ROLE'});

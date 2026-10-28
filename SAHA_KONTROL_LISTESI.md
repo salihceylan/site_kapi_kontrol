@@ -3466,3 +3466,217 @@ Panel dışındaki ekranlarda, sakin alt çubuğu (Özet sekmesi) yokken, üst �
 - [ ] **115.5. Dar telefon, büyük yazı ve ekran okuyucu (F28.19):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi (üst çubukta "Sakin Modu" ve tema düğmeleri görünen hesap; düğmenin hiç çıkmaması yalnız en dar ekranda görülür). Telefon ayarlarında yazı boyutunu ve ekran (görüntü) boyutunu en büyüğe alın. İç bir ekranda (örneğin Profilim) üst çubuğa bakın. Ekran boyutunu normale döndürüp ekran okuyucuyu (TalkBack) açın ve düğmeye odaklanın.
   - **Beklenen Sonuç:** Üst çubukta düğmeler üst üste binmez, kesilmez. En dar durumda (üst çubukta "Sakin Modu" ve tema düğmeleri de varsa) "Ana sayfa" düğmesi yer bulamazsa hiç çıkmaz; Panel'e menüden ya da geri tuşuyla dönülür. Düğme çıkıyorsa ekran okuyucu onu "Ana sayfa, düğme" diye okur.
+
+## 120. 👨‍👩‍👧 Çoklu Malik: Tüm Malikler Kayıtlı, Tek Hesap Muhatabı (2026-10-29, karşılaştırma raporu P1-12, karar K7, migration 104)
+
+Bir dairede birden çok malik (eş, kardeş, mirasçı) kayıtlı olabilir; TAM BİRİ “hesap muhatabı”dır. Borç, tahakkuk, tahsilat, Borcum ekranı ve hatırlatmalar yalnız muhataba bağlıdır; diğer malikler “ortak malik” olarak kayıtlıdır (malik yetkisi ve borç görünümü yoktur). Daire kartında malik ekleme, muhatap değiştirme ve malik çıkarma eylemleri yalnız site yöneticisindedir. Veritabanı yükseltmesi (migration 104) mevcut tek maliki kayıpsız muhatap yapar; borç ve bakiye hesapları değişmez. Sürüm yayınlanınca denenir (maddeler “Denemeye hazır” görünse de sürüm yayınlanmadan uygulamada yoktur). Faz sayfasında bölüm F50 olarak da yer alır.
+
+- [ ] **120.1. Daireye ikinci malik ekleme (yeni kişi) (F50.01):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Tek malikli bir TEST dairesi. Kişiler > Daireler bölümünden bir daire kartını açın. “Malik ekle” > “Yeni kişi” seçin, yalnız ad soyad yazıp Ekle'ye basın.
+  - **Beklenen Sonuç:** Kartta iki malik görünür. İlk malikte “Hesap muhatabı” rozeti, “Malik (hesap muhatabı)” satırı ve açıklama bandı çıkar.
+- [ ] **120.2. Ekleme sırasında hesap muhatabını başka malike verme (F50.02):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Borcu olan bir TEST dairesi. “Malik ekle” penceresinde “Kayıtlı kişi” ile başka bir kişiyi seçin ve “Hesap muhatabı olsun” anahtarını açın. Aidat ve Finans > Bakiyeler'de o dairenin bakiyesine bakın.
+  - **Beklenen Sonuç:** Rozet yeni kişiye geçer. Dairenin bakiyesi DEĞİŞMEZ; yalnız Malik adı yeni muhatap olur.
+- [ ] **120.3. “Muhatap yap” (F50.03):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi / Daire sakini. Ön koşul: İki malikli daire; iki malikin de hesabı olsun. Muhatap olmayan malikte “Muhatap yap”a basın, onay penceresini onaylayın. Eski ve yeni muhatabın hesabıyla sırayla girip Borcum ve Dairem ekranlarına bakın.
+  - **Beklenen Sonuç:** Rozet taşınır. Eski muhatabın Borcum ekranı boşalır, yenisininki dolar. Dairem'de eski muhatap “Ortak malik” rolünde görünür ve hiçbir yönetim düğmesi yoktur.
+- [ ] **120.4. Maliki çıkarma kuralları (F50.04):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: 1, 2 ve 3+ malikli TEST daireleri. Muhatap olmayan maliki “Maliki çıkar” ile çıkarın. 3+ malikli dairede muhatabı çıkarmayı deneyin; 2 malikli dairede de deneyin. Tek malikli dairede “Maliki çıkar”ı deneyin.
+  - **Beklenen Sonuç:** Muhatap olmayan malik doğrudan çıkar (“Taşındı”). 3+ malikte muhatabı çıkarırken “Yeni hesap muhatabı” seçmeden Çıkar düğmesi basmaz. 2 malikte “Hesap muhatabı X olacak” bilgisi çıkar. Dairenin TEK maliki çıkarılamaz (kişi kartından Taşındı kullanılır).
+- [ ] **120.5. Kurul üyesi ve listeler (F50.05):**
+  - **Nasıl Test Edilir:** Rol: Yönetim kurulu üyesi. Ön koşul: Çoklu maliklı daire. Kurul üyesi hesabıyla aynı daire kartını açın. Daire listesine ve daire seçiciye bakın.
+  - **Beklenen Sonuç:** Rozet ve açıklama görünür; Malik ekle / Muhatap yap / Maliki çıkar düğmeleri YOKTUR. Listede ve seçicide “Malik: Ayşe Y. (+1 malik)” gibi yazar.
+- [ ] **120.6. Daire geçmişi (F50.06):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Daire geçmişi ekranını açın. Muhatap malike “Taşındı” işleyin.
+  - **Beklenen Sonuç:** “Malik eklendi”, “Malik çıkarıldı” ve “Hesap muhatabı değişti” satırları görünür. Muhatap Taşındı olunca otomatik devirde Sistem kaydı düşer.
+- [ ] **120.7. Toplu yükleme ve ilişki ekleme tek malikli kalır (F50.07):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Maliki olan bir daire. Toplu yükleme dosyasında aynı daireye ikinci bir malik yazın ve yükleyin. Kişi kartından “ilişki ekle” ile aynı daireye ikinci malik eklemeyi deneyin.
+  - **Beklenen Sonuç:** İkisi de “bu dairede zaten malik var” (409) verir. Bu bilinçlidir: ek malikler yalnız Daire kartındaki “Malik ekle”den eklenir.
+- [ ] **120.8. Hatırlatma ve makbuz muhataba gider (F50.08):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Borçlu, çoklu maliklı daire. Borç hatırlatması önizlemesini açın. Aynı daire için bir tahsilat girip makbuza bakın.
+  - **Beklenen Sonuç:** Hatırlatma alıcısı yalnız hesap muhatabıdır. Makbuzda ödeyen adı muhataptır.
+- [ ] **120.9. Yükseltme sonrası mevcut daireler (F50.09):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi / Daire sakini. Ön koşul: Yükseltme öncesi tek malikli, borçlu bir daire. Sürüm yükseltildikten sonra bu dairenin kartına, bakiyesine ve malikin Borcum ekranına bakın.
+  - **Beklenen Sonuç:** Malik “Hesap muhatabı” rozetiyle görünür; bakiye, borç kalemleri ve Borcum ekranı yükseltme öncesiyle aynıdır.
+
+## 121. 🧭 Site Kurulum Sihirbazı ve Listelerde “Excel'den Yükle” Kısayolu (2026-10-29, karşılaştırma raporu P2-15 ve P2-16)
+
+Yeni onaylanmış site için altı adımlı Site Kurulum Sihirbazı (Site bilgileri, Bloklar, Daireler, Kişiler, Modüller, Finans açılışı): mevcut ekranları adım adım açar, dönünce durumu sunucudan okur; yarım kalırsa kalınan adımdan sürer (kalınan adım ve “atlandı” bilgisi cihazda saklanır). Kişiler, Daireler ve Araçlar listelerinde “Excel'den yükle” kısayolu da eklendi. Yalnız istemci değişti (sunucu dağıtımı gerekmez; web ve APK yeniden derlenir). Site bilgisi ve blok düzenleme sunucuda yalnız süper kullanıcıya açıktır; site yöneticisinde bu iki adım salt gösterimdir. Sürüm yayınlanınca denenir (maddeler “Denemeye hazır” görünse de sürüm yayınlanmadan uygulamada yoktur). Faz sayfasında bölüm F51 olarak da yer alır.
+
+- [ ] **121.1. Onaydan sonra sihirbaza yönlendirme (F51.01):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Yeni onaylanmış bir TEST sitesi. Yeni onaylanan sitenin yöneticisiyle giriş yapın. Onay iletisindeki “Kuruluma başla”ya ve Panel'deki kuruluma ait karta bakın.
+  - **Beklenen Sonuç:** Panel'de “Site kurulumunu tamamlayın” kartı görünür. “Kuruluma başla” sihirbazı “Adım 4 / 6 · Kişiler” adımından açar; ilk üç adım “Tamam” görünür.
+- [ ] **121.2. Kişiler adımı: Excel'den yükleme (F51.02):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Kişiler adımında “Excel'den yükle”ye basın. Şablonu doldurup yükleyin ve sihirbaza dönün. “Kişileri tek tek ekle”ye basın.
+  - **Beklenen Sonuç:** Toplu Yükle sihirbazı “Hepsi bir arada” seçili açılır. Dönünce adım “Tamam” olur ve “N kişi kayıtlı” yazar. “Kişileri tek tek ekle” Kişiler ekranını Kişiler sekmesinde açar.
+- [ ] **121.3. Yarım bırakma ve kaldığı yerden devam (F51.03):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Sihirbazı ortada X ile kapatın (bir adımı “Atla” ile geçmiş olun). Panel'deki karta bakıp “Kuruluma devam et”e basın. “Şimdilik gizle”ye basın; sonra Site Yönetimi > “Kurulum Sihirbazı”nı açın.
+  - **Beklenen Sonuç:** “Site kurulumunuz yarım kaldı · N / 6 adım tamam” kartı çıkar; devam kaldığınız adımdan açılır; atladığınız adım “Atlandı” görünür. “Şimdilik gizle” kartı kaldırır, sihirbaz Site Yönetimi'nden yine açılır.
+- [ ] **121.4. Modüller adımı (F51.04):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi / Süper kullanıcı. Modüller adımına gelin; “Modülleri seç / talep et”e basın. Bir modül talep edip dönün. Aynısını süper kullanıcıyla deneyin.
+  - **Beklenen Sonuç:** Temel modüller “Her sitede açık” yazar. Modüller ekranı bu site seçili açılır; talep sayısı adımda görünür. Süper kullanıcıda düğme “Modülleri seç” olur ve modül doğrudan açılıp kapanır.
+- [ ] **121.5. Finans adımı (F51.05):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. “Aidat tanımı ekle”yi kaydedin. “Devir bakiyesi yükle” ve “Finans ekranını aç”a basın. İş merkezi türündeki bir sitede etiketlere bakın.
+  - **Beklenen Sonuç:** Tanım kaydedilince adım “Tamam” olur. Devir penceresi açılır; Finans ekranı Tanımlar sekmesinde açılır. İş merkezi türünde etiket “Ortak gider tanımı ekle” olur.
+- [ ] **121.6. Yetki: kim düzenleyebilir, kim görür (F51.06):**
+  - **Nasıl Test Edilir:** Rol: Süper kullanıcı / Site yöneticisi / Daire sakini / Kurul üyesi. Süper kullanıcıyla Site bilgileri ve Bloklar adımlarındaki düzenleme düğmelerini kullanın. Site yöneticisiyle aynı adımlara bakın. Daire sakini ve kurul üyesiyle sihirbazı arayın.
+  - **Beklenen Sonuç:** Süper kullanıcıda düzenleme düğmeleri çalışır. Site yöneticisinde düğmeler yoktur, “yalnızca sistem yöneticisi değiştirir” notu görünür. Sakin ve kurul üyesi sihirbazı hiçbir yerde görmez.
+- [ ] **121.7. “Excel'den yükle” liste kısayolları (F51.07):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi / Kurul üyesi. Kişiler ekranında Kişiler, Daireler ve Araçlar sekmelerindeki “Excel'den yükle” düğmesine basın. Boş bir Kişiler listesine bakın. Kurul üyesiyle aynı sekmelere bakın.
+  - **Beklenen Sonuç:** Kişiler ve Daireler Toplu Yükle'yi “Hepsi bir arada”, Araçlar “Araçlar” türüyle açar. Boş Kişiler listesinde yalnız boş durum kartındaki düğme görünür. Kurul üyesi bu düğmeleri görmez.
+- [ ] **121.8. Dar ekran, büyük yazı ve ekran okuyucu (F51.08):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Yazı boyutunu en büyüğe alıp sihirbazın altı adımına, özetine ve Panel kartına bakın (açık ve koyu tema). Ekran okuyucuyu açıp adım değiştirin.
+  - **Beklenen Sonuç:** Hiçbir ekranda taşma ya da kesilme olmaz. Ekran okuyucu adım değişince “Adım N / 6 · ...” başlığını okur.
+- [ ] **121.9. Hesap değişince kurulum kartı (F51.09):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: İki farklı yönetici hesabı. Kurulumu yarım bırakmış hesaptan çıkış yapın (ya da hesabı silin). Başka bir hesapla girip Panel'e bakın.
+  - **Beklenen Sonuç:** Kurulum kayıtları cihazdan silindiği için Panel'de eski hesabın kurulum kartı çıkmaz.
+
+## 122. 🚨 Acil Durum Akışı: 112, Yangın ve Asansör Arızası, Kuru Mod (2026-10-29, karşılaştırma raporu P2-24, karar K13, migration 107)
+
+Çekmecede “Ana sayfa” başlığı altında “Acil durum” ekranı: büyük “112'yi ara”, ayrı Yangın ve Asansör arızası hızlı düğmeleri, çağrı merkezinin soracakları ve aramada söylenecek site adı ile adres. Arama kanalı olmayan cihazda (masaüstü, web, telefonsuz tablet) KURU MOD çalışır: numaralar ve adres kopyalanabilir metindir ve uygulama hiçbir yerde “arandı” demez (telefon uygulaması yalnız açılır, aramayı kullanıcı başlatır). Asansör bakım firması adı ve telefonu site ayarı olarak yöneticide kaydedilir (migration 107). Çekirdek özelliktir: modül değildir, süper kullanıcı dışında herkeste görünür. Sunucu dağıtımı gerekir. Sürüm yayınlanınca denenir (maddeler “Denemeye hazır” görünse de sürüm yayınlanmadan uygulamada yoktur). Faz sayfasında bölüm F52 olarak da yer alır.
+
+- [ ] **122.1. 112 düğmesi (telefon) (F52.01):**
+  - **Nasıl Test Edilir:** Rol: Daire sakini. Ön koşul: Android telefon. Çekmece > Ana sayfa > “Acil durum” > büyük “112'yi ara”ya basın.
+  - **Beklenen Sonuç:** Telefon uygulaması 112 hazır olarak açılır; aramayı orada başlatırsınız. Ekranda “arandı” gibi bir durum YAZMAZ.
+- [ ] **122.2. Kuru mod (arama kanalı yok) (F52.02):**
+  - **Nasıl Test Edilir:** Rol: Daire sakini. Ön koşul: Windows masaüstü, tarayıcı ya da telefonsuz tablet. Acil durum ekranını açın. Yangın ve Asansör arızası kartlarına bakın; “Bilgileri kopyala”ya basın.
+  - **Beklenen Sonuç:** Sarı “Bu cihazdan arama başlatılamıyor” şeridi görünür; 112 yerine büyük numara ve “Numarayı kopyala” çıkar. Panoya numara, adres ve sorular kopyalanır.
+- [ ] **122.3. Yangın düğmesi (F52.03):**
+  - **Nasıl Test Edilir:** Rol: Daire sakini / Site yöneticisi. Ön koşul: Adresi kayıtlı ve kayıtsız iki site. “Yangın”a basın.
+  - **Beklenen Sonuç:** “Yangın var.” cümlesi, site adı ve adres (Site Yönetimi'ndeki kayıtla aynı), 5 soru ve güvenlik yönlendirmesi görünür. Adres kayıtlı değilse yöneticide “Site Yönetimi'nden ekleyin”, sakinde “kendiniz söyleyin” yazar.
+- [ ] **122.4. Birden çok siteli kullanıcı (F52.04):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi / Daire sakini. Ön koşul: İki ayrı sitede üyeliği olan hesap. “Hangi site için?” seçicisiyle siteyi değiştirin. Çekmecedeki site seçiciyle bir site seçip Acil durum'u açın.
+  - **Beklenen Sonuç:** Adres ve bakım firması seçilen siteye göre değişir; önceki sitenin izi kalmaz. Acil durum, çekmecede seçili siteyle açılır.
+- [ ] **122.5. Asansör bakım firması ekleme, düzenleme, kaldırma (F52.05):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi / Daire sakini. Ön koşul: Aynı sitenin yöneticisi ve sakini. Yöneticiyle Acil durum > Asansör arızası > “Bakım firmasını ekle” (ad ve telefon, örnek 444 1 234) ile kaydedin; düzenleyin; kaldırın. Aynı sitenin sakin hesabıyla Asansör arızası'na bakın; sakin moduna geçip yöneticide düzenleme düğmesini arayın.
+  - **Beklenen Sonuç:** Kayıttan sonra firma kartı çıkar; sakin hesabında “Bakım firmasını ara” görünür. Sakin modunda düzenleme düğmesi yoktur.
+- [ ] **122.6. Bakım firması kayıtlı değilken (F52.06):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi / Daire sakini / Kurul üyesi / Görevli. Ön koşul: Firması kayıtsız site. Her rolle Asansör arızası'nı açın.
+  - **Beklenen Sonuç:** Yönetici “Ekleyin” ipucunu ve ekleme düğmesini; sakin, kurul ve görevli “Site yönetiminden isteyin” ipucunu görür. Her ikisinde 112 kartı vardır.
+- [ ] **122.7. İnternet yokken (F52.07):**
+  - **Nasıl Test Edilir:** Rol: Daire sakini. Ön koşul: Uçak modu açık telefon. Uçak modunda Acil durum'u açın; sonra interneti açıp “Tekrar Dene”ye basın.
+  - **Beklenen Sonuç:** Sayfa açılır ve 112 çalışır; site adresi için “alınamadı” + “Tekrar Dene” çıkar. İnternet gelince adres dolar.
+- [ ] **122.8. Denetim kaydı, vitrin ve yardım (F52.08):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Bakım firmasını kaydedin; Denetim Kaydı'na (süper kullanıcı) ve İşlem Kayıtları'na bakın. Panel vitrinine ve Yardım ve Destek'e bakın.
+  - **Beklenen Sonuç:** “Acil durum bilgisi güncellendi” satırı görünür (telefon numarası yazılmaz). Vitrinde “Acil durum” kartı, Yardım'da “Acil durumda ne yapmalıyım?” konusu vardır.
+
+## 123. 🎟️ Tek Kullanımlık Deneme Erişim Kodu: 72 Saat, Demo Siteye Kilitli (2026-10-29, karşılaştırma raporu P2-27, karar K10, migration 106)
+
+Tanıtım denemesi için tek kullanımlık kod: kodla açılan oturum 72 saat sürer ve YALNIZ işaretli demo siteye kilitlidir (başka sitelere, parola/e-posta değiştirmeye, dış e-posta veya SMS gönderen ve donanıma dokunan işlemlere kapalıdır; demo sitenin kendi verisinde işlem serbesttir). Kod sunucuda `node scripts/trial_code.mjs` ile üretilir ve ekranda BİR KEZ görünür; sahip için uygulama ekranı yoktur. Gerçek bir müşteri sitesi ASLA demo olarak işaretlenmemelidir. Sunucu dağıtımı gerekir. Sürüm yayınlanınca denenir (maddeler “Denemeye hazır” görünse de sürüm yayınlanmadan uygulamada yoktur). Faz sayfasında bölüm F53 olarak da yer alır.
+
+- [ ] **123.1. Demo site işaretleme ve kod üretme (sunucu) (F53.01):**
+  - **Nasıl Test Edilir:** Rol: Sahip (sunucu). Ön koşul: Sunucuya erişim; yedekli bir TEST/DEMO sitesi. Sunucuda server klasöründe `node scripts/trial_code.mjs demo <DEMO_SITE_KODU> --yes` ile demo siteyi işaretleyin. `node scripts/trial_code.mjs create --days 7 --note "Aday A" --yes` ile kod üretin; sonra `status` ve `list` çalıştırın.
+  - **Beklenen Sonuç:** Kod ekranda yalnız bir kez görünür. `status` ve `list` kodu göstermez, yalnız son 4 karakterini gösterir.
+- [ ] **123.2. Kodla giriş (F53.02):**
+  - **Nasıl Test Edilir:** Rol: Aday (deneme). Ön koşul: Üretilmiş kod. Giriş ekranında “Deneme kodum var”a basın; kodu küçük harfle ve tiresiz yazın; “Giriş Yap”a basın.
+  - **Beklenen Sonuç:** Kod otomatik büyük harfe ve tireli biçime gelir. Ana sayfa açılır; ekranın ÜSTÜNDE “Deneme - 72 saat kaldı” şeridi görünür. Siteler listesinde YALNIZ demo site vardır.
+- [ ] **123.3. Tek kullanım ve yanlış kod (F53.03):**
+  - **Nasıl Test Edilir:** Rol: Aday (deneme). Aynı kodu ikinci kez girin (çıkış yapıp ya da başka cihazdan). Uydurma bir kod girin; ardından 11 yanlış kodu art arda deneyin.
+  - **Beklenen Sonuç:** İkinci kullanımda “Bu deneme kodu daha önce kullanılmış...” mesajı çıkar. Yanlış kodda “Deneme kodu geçersiz”. 11 yanlışta “Çok fazla deneme kodu girişi...” (hız sınırı) çıkar.
+- [ ] **123.4. Demo sitede serbest işlem (F53.04):**
+  - **Nasıl Test Edilir:** Rol: Aday (deneme). Deneme hesabıyla demo sitede duyuru yayımlayın, tahsilat/borç girin, kişi ekleyin, anket açın, belge yükleyin.
+  - **Beklenen Sonuç:** Hepsi çalışır.
+- [ ] **123.5. Kısıtlı işlemler kapalı (F53.05):**
+  - **Nasıl Test Edilir:** Rol: Aday (deneme). Profil'de parola/e-posta değiştirmeyi ve hesap silmeyi deneyin. Yeni site ekleme/başvuru, yönetici davet etme, kapı/cihaz/kamera ekleme, kişiye davet veya şifre sıfırlama, borç hatırlatma gönderme ve toplu yükleme onayını deneyin.
+  - **Beklenen Sonuç:** Hepsi “Bu işlem deneme hesabında kullanılamaz.” der ve hiçbir şey değişmez.
+- [ ] **123.6. Süre dolumu (F53.06):**
+  - **Nasıl Test Edilir:** Rol: Sahip (sunucu) / Aday. Ön koşul: Açık bir deneme oturumu. Sunucuda ilgili kodun session_expires_at değerini geçmişe çekin (UPDATE trial_access_codes SET session_expires_at = NOW() - interval '1 minute' WHERE id = ...). Uygulamada herhangi bir işlem yapın ya da yenileyin.
+  - **Beklenen Sonuç:** Giriş ekranına dönülür ve “Deneme süreniz doldu...” görünür. Şerit 30 sn'de bir yenilenir; son saatte dakika gösterir.
+- [ ] **123.7. Kod iptali (F53.07):**
+  - **Nasıl Test Edilir:** Rol: Sahip (sunucu) / Aday. Ön koşul: Açık bir deneme oturumu. `node scripts/trial_code.mjs revoke <KOD_NO> --yes` çalıştırın. Açık oturumda bir işlem yapın; iptal edilen kodla yeniden girmeyi deneyin.
+  - **Beklenen Sonuç:** Açık oturum bir sonraki istekte “Deneme erişiminiz sonlandırıldı.” ile kapanır; iptal edilmiş kodla giriş “iptal edilmiş” der.
+- [ ] **123.8. Normal girişler etkilenmez (F53.08):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi / Daire sakini. Normal kullanıcı adı/parola, SMS ve sosyal girişle girin; eski uygulama sürümüyle de girmeyi deneyin.
+  - **Beklenen Sonuç:** Giriş çalışır, üstte deneme şeridi YOKTUR.
+- [ ] **123.9. Dar ekran ve koyu tema (F53.09):**
+  - **Nasıl Test Edilir:** Rol: Aday (deneme). En dar telefon ekranında ve en büyük yazı boyutunda giriş ekranına, kod penceresine (uzun hata mesajıyla) ve üst şeride bakın; koyu temayı deneyin.
+  - **Beklenen Sonuç:** Hiçbir yerde taşma olmaz; koyu temada şerit okunaklıdır.
+
+## 124. 📜 Yönetici İşlem Kayıtları: Kendi Sitenizde Kim, Ne Zaman, Ne Yaptı (2026-10-29, karşılaştırma raporu P2-19)
+
+Site yöneticisi, Ayarlar panelinde Modüller'in altındaki “İşlem Kayıtları” ekranında kendi sitesinde yapılan işlemleri görür: işlem türü ve dönem süzgeci, “Daha fazla yükle”, İstanbul saati. Yalnız o sitenin yöneticisi okur; kayıtlar değiştirilemez; parola, telefon, e-posta ve kullanıcı kodu görünmez; sakinin gizli güvenlik talebi ve adli kayıt listede yoktur. Sunucu dağıtımı gerekir (yeni uç). Sürüm yayınlanınca denenir (maddeler “Denemeye hazır” görünse de sürüm yayınlanmadan uygulamada yoktur). Faz sayfasında bölüm F54 olarak da yer alır.
+
+- [ ] **124.1. Menüde kim görür (F54.01):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi / Daire sakini / Kurul üyesi / Görevli / Süper kullanıcı. Site yöneticisi hesabıyla sağ üstteki dişliden Ayarlar panelini açın; “İşlem Kayıtları”nı arayın. Aynısını sakin, kurul üyesi, görevli, bireysel, sakin moduna geçmiş yönetici ve süper kullanıcıyla yapın.
+  - **Beklenen Sonuç:** Yönetici modundaki site yöneticisinde Modüller'in altında görünür; diğerlerinde görünmez.
+- [ ] **124.2. Yeni işlemler listede (F54.02):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Kendi sitenizde birkaç işlem yapın (modül talebi, duyuru yayınla, kişi ekle, tahsilat gir, talep aç). İşlem Kayıtları'nı yenileyin; 50'den fazla kayıt varsa “Daha fazla yükle”ye basın.
+  - **Beklenen Sonuç:** Yeni kayıtlar en üstte, doğru başlık, kim ve İstanbul saatiyle görünür; “Daha fazla yükle” eski kayıtları getirir.
+- [ ] **124.3. İşlem türü ve dönem süzgeçleri (F54.03):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. İşlem türü listesinden “Aidat ve finans”ı seçin; “Tümü”ne dönün. Bugün, Son 7 gün, Son 30 gün çiplerini deneyin; Özel aralıkta GG.AA.YYYY yazın, bir tarihi boş bırakın, ters aralık ve 31.02 yazın.
+  - **Beklenen Sonuç:** Yalnız finans satırları gelir; “Tümü” süzgeci kaldırır. Dönem çipleri çalışır. Ters aralık ve geçersiz tarih hata verir, istek atmaz.
+- [ ] **124.4. Siteler arası ayrım ve yetki (F54.04):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: İki siteli yönetici; sakin hesabı. Site seçiciyi değiştirin. Sakin hesabının belirteciyle GET /manager/sites/<site_kodu>/audit-log çağrısı yapın; başka sitenin yöneticisiyle de çağırın.
+  - **Beklenen Sonuç:** Diğer sitenin kaydı asla görünmez. Sakin ve başka site yöneticisi 403 alır.
+- [ ] **124.5. Kişisel veri ve gizli kayıtlar (F54.05):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Süper kullanıcının yaptığı bir işlem; silinmiş bir hesap. Süper kullanıcının bir işleminin (örneğin modül açma) yönetici ekranındaki adına bakın. Silinmiş bir hesabın eski işlemlerine, kayıt ayrıntılarına ve sakinin güvenlik talebine bakın.
+  - **Beklenen Sonuç:** “Sistem yöneticisi” ve “Silinmiş Kullanıcı” yazar. Kayıtlarda e-posta, telefon, parola ve kullanıcı kodu bulunmaz; güvenlik talebi ve adli kayıt satırları listede olmaz.
+- [ ] **124.6. Dar ekran, büyük yazı, koyu tema (F54.06):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. En dar telefon ekranında ve en büyük yazı boyutunda, açık ve koyu temada listeye, süzgeçlere ve boş/hata durumlarına bakın.
+  - **Beklenen Sonuç:** Taşma olmaz; yükleniyor, boş ve hata durumları anlaşılırdır.
+- [ ] **124.7. Çoklu malik ve acil durum işlemleri (F54.07):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: F50 ve F52 maddelerini yapmış olmak. Daireye malik ekleyin / muhatap değiştirin / maliki çıkarın; asansör bakım firmasını kaydedin. İşlem Kayıtları'na bakın.
+  - **Beklenen Sonuç:** “Daireye malik eklendi”, “Daire hesap muhatabı değişti”, “Daireden malik çıkarıldı” ve “Acil durum bilgisi güncellendi” satırları Türkçe başlıkla görünür.
+
+## 125. 🏘️ Komşu Panosu İstemci Sınır Davranışları (2026-10-29, karşılaştırma raporu P2-29)
+
+Yalnız test eklendi, ürün kodu değişmedi: Komşu Panosu için uzun metin/taşma, boş durum, yetkisiz kullanıcı, çok kayıt, ağ hatası ve Türkçe karakter sınırları otomatik testle sabitlendi (170 test). Aşağıdaki maddeler aynı sınırları elle de doğrulatır. BİLİNEN SORUN: klavye açıkken “Şikayet et / Reddet / Kaldır” ve “Yeni ilan” pencereleri yatay ya da büyük yazıda taşabilir (testte kayıtlı, düzeltme ayrı iş); bu madde sonucu bildirmeniz içindir. Sürüm yayınlanınca denenir (maddeler “Denemeye hazır” görünse de sürüm yayınlanmadan uygulamada yoktur). Faz sayfasında bölüm F55 olarak da yer alır.
+
+- [ ] **125.1. Uzun metin ve taşma (F55.01):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi / Daire sakini. Ön koşul: Dar ekranlı telefon, en büyük yazı boyutu. 120 karakterlik boşluksuz bir başlık ve 2000 karakterlik metinle ilan açın, yönetici onayıyla yayınlayın.
+  - **Beklenen Sonuç:** Kartta yatay taşma / sarı-siyah şerit olmaz; metin alt satırlara bölünür.
+- [ ] **125.2. Karakter sınırları (F55.02):**
+  - **Nasıl Test Edilir:** Rol: Daire sakini / Site yöneticisi. Yeni ilan penceresinde başlığa 120+, metne 2000+ karakter yapıştırın. Şikayet gerekçesinde 200, ret/kaldır gerekçesinde 300 karakteri aşmayı ve boş gerekçeyle Gönder'e basmayı deneyin.
+  - **Beklenen Sonuç:** Sayaç 120/120 ve 2000/2000'de durur, fazlası eklenmez. Gerekçeler 200 ve 300 karakterde durur; boş gerekçeyle Gönder pencereyi kapatmaz.
+- [ ] **125.3. Ağ hatası (F55.03):**
+  - **Nasıl Test Edilir:** Rol: Daire sakini. Uçak modunda Komşu Panosu'nu açın; uçak modunu kapatıp sayfayı aşağı çekerek yenileyin.
+  - **Beklenen Sonuç:** “Sunucuya bağlanılamadı...” çıkar (“Henüz ilan yok.” ÇIKMAZ). İnternet gelince liste yüklenir.
+- [ ] **125.4. Yetkiye göre düğmeler (F55.04):**
+  - **Nasıl Test Edilir:** Rol: Daire sakini / Site yöneticisi. Ön koşul: Biri yönetici biri sakin olduğu iki siteli hesap. Sakin hesabında Onayla / Reddet / Kaldır düğmelerini ve durum sekmelerini arayın. Yönetici hesabında Yeni ilan / Şikayet et / Geri çek düğmelerini arayın; çoklu sitede site değiştirin.
+  - **Beklenen Sonuç:** Sakinde yönetim düğmeleri ve durum sekmeleri yoktur; yöneticide yazma/şikayet/geri çekme düğmeleri yoktur. Denetimler seçili siteye göre değişir.
+- [ ] **125.5. Menüde kim görür (F55.05):**
+  - **Nasıl Test Edilir:** Rol: Görevli / Süper kullanıcı / Bireysel / Kurul üyesi. Kapı erişimi olmayan görevli, süper kullanıcı ve bireysel hesapla yan menüye bakın; kurul üyesi ve kapı erişimli görevliyle de bakın.
+  - **Beklenen Sonuç:** İlk üçünde “Komşu Panosu” yoktur; kurul üyesi ve kapı erişimli görevli sakin gibi görür.
+- [ ] **125.6. Türkçe karakterler (F55.06):**
+  - **Nasıl Test Edilir:** Rol: Daire sakini / Site yöneticisi. I i ğ Ğ ş Ş ç Ç ö Ö ü Ü, tırnak ve satır sonu içeren bir ilan yazın; sakin ve yönetici ekranlarında karşılaştırın.
+  - **Beklenen Sonuç:** İki ekranda da aynı görünür; tarih gg.aa.yyyy biçimindedir.
+- [ ] **125.7. Çok kayıt (F55.07):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Demo veriyle 100+ ilan. Sayfayı sonuna kadar kaydırın; kartların üstünden sürükleyin.
+  - **Beklenen Sonuç:** Son ilana ve “Yakında: telefon bildirimi, fotoğraf ve yorum.” notuna ulaşılır; kartların üstünden sürükleyince sayfa kayar.
+- [ ] **125.8. BİLİNEN SORUN: klavye açıkken pencereler (sonucu bildirin) (F55.08):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi / Daire sakini. Ön koşul: Yatay telefon, büyük yazı. Telefonu yatay çevirip klavyeyi açarak “Şikayet et”, “Reddet”, “Kaldır” ve “Yeni ilan” pencerelerini deneyin (özellikle büyük yazı boyutunda). Onayla ya da Onaya gönder düğmesine hızlı iki kez dokunun.
+  - **Beklenen Sonuç:** Taşma / sarı-siyah şerit görülürse testte kayıtlı sorunla aynıdır (düzeltilecek). Hızlı çift dokunuşta ikinci istek “İlan bu işlem için uygun durumda değil.” uyarısı verebilir (bilinen davranış).
+
+## 126. 📚 Durum Sözlüğü, Ekran Envanteri ve Düzeltilen Teknik Notlar (2026-10-29, karşılaştırma raporu P2-31 ve P2-28)
+
+docs/DURUM_SOZLUGU.md (rol ve bağ, hesap-üyelik-başvuru, kapı-cihaz-geçiş, finans-para ve modül/iş akışı durumlarının etiketleri) ve docs/EKRAN_ENVANTERI.md (48 menü öğesi: rota, ekran sınıfı, modül, kim görür) yazıldı; README ve teknik notlardaki bayat bilgiler koda göre düzeltildi. Ürün kodu değişmedi. Belge ile uygulama arasında sapma bulursanız belge ya da kod düzeltilir. Faz sayfasında bölüm F56 olarak da yer alır.
+
+- [ ] **126.1. Ekran envanteri ile menü karşılaştırması (F56.01):**
+  - **Nasıl Test Edilir:** Rol: Kurul üyesi / Görevli (ve diğer roller). Ön koşul: docs/EKRAN_ENVANTERI.md Bölüm 3. Bir rolle (örneğin kurul üyesi ya da görevli) uygulamaya girip çekmecedeki öğeleri belgedeki “Kim görür” sütunuyla karşılaştırın.
+  - **Beklenen Sonuç:** Çekmecedeki öğeler belgeyle aynıdır; sapma varsa belge ya da kod düzeltilmelidir.
+- [ ] **126.2. Durum etiketleri sözlükle aynı (F56.02):**
+  - **Nasıl Test Edilir:** Rol: Daire sakini / Site yöneticisi. Ön koşul: docs/DURUM_SOZLUGU.md D3. Sakin hesabından bir dekont bildirimi gönderin; yöneticide onaylayın ve iptal edin.
+  - **Beklenen Sonuç:** “İnceleniyor / Onaylandı / İptal edildi” etiketleri sözlükteki gibi görünür.
+- [ ] **126.3. README hızlı başlangıç (F56.03):**
+  - **Nasıl Test Edilir:** Rol: Geliştirici. Ön koşul: Temiz bir klasör; Docker ve Node kurulu. README'deki Hızlı başlangıç sırasını izleyin: docker compose up -d postgres, cd server, npm ci, npm run dev, flutter run --dart-define=API_BASE_URL=http://localhost:8080.
+  - **Beklenen Sonuç:** Sunucu 8080'de açılır; /health {ok, database, mqtt} döndürür.
+- [ ] **126.4. Kestirmeler ekranı iletişim kutusu (F56.04):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Çekmecede “Eller Serbest & Kestirmeler”e dokunun.
+  - **Beklenen Sonuç:** Sayfa değişmez; sesli kapı açma ayar penceresi açılır (envanterde sayfa değil iletişim kutusu olarak yazılıdır).
+
+## 127. 🧪 Yerel Yalıtım Aracı: Sunucuyu Yalnız Bu Bilgisayarda ve Temiz Ortamla Çalıştırma (2026-10-29, karşılaştırma raporu P2-30)
+
+Geliştirici aracı `tools/yerel/yalitim`: sunucuyu yalnız 127.0.0.1'de, temiz ortamla başlatır; dışarıya TCP/DNS/UDP bağlantısı ve alt süreç açılmasını engeller ve kayda geçirir; isteğe bağlı olarak Chrome/Edge'i yeni profille, yalnız yerel proxy arkasında açar. Kaza korumasıdır, güvenlik sınırı DEĞİLDİR (yerel eklentiler ve dosya sistemi kısıtlanmaz). Uygulamayı ve sunucu koduna dokunmaz; yeniden derleme gerekmez. Faz sayfasında bölüm F57 olarak da yer alır.
+
+- [ ] **127.1. Kuru çalıştırma (F57.01):**
+  - **Nasıl Test Edilir:** Rol: Geliştirici. Ön koşul: Depo kökü; Python 3.9+, Node. Depo kökünde `python tools/yerel/yalitim/calistir.py --dry-run --no-browser` çalıştırın.
+  - **Beklenen Sonuç:** `KURU_CALISMA_TAMAM` ve Node/profil/yol satırları görünür; `tools/yerel/runs` klasörü OLUŞMAZ.
+- [ ] **127.2. Tarayıcılı kip (F57.02):**
+  - **Nasıl Test Edilir:** Rol: Geliştirici. Ön koşul: server/node_modules kurulu; yerel PG, MQTT ve SMTP uçları açık. `python tools/yerel/yalitim/calistir.py --port 8081 --url http://127.0.0.1:8081/health` çalıştırın. Açılan tarayıcıda adres çubuğuna http://example.invalid/ yazın; sonra Ctrl+C ile durdurun.
+  - **Beklenen Sonuç:** Yeni profilli Chrome/Edge açılır. Dış adres açılmaz; koşu dizinindeki engellenen.jsonl'e yalnız `browser-proxy` kanalı ve hedef özeti düşer. Ctrl+C tarayıcıyı ve Node'u kapatır.
+- [ ] **127.3. Yerel uçlar yokken başlangıç hatası (F57.03):**
+  - **Nasıl Test Edilir:** Rol: Geliştirici. Yerel veritabanı/MQTT/SMTP uçları kapalıyken aracı çalıştırın; hazırlık zaman aşımında `node-stderr.log` içeriğine bakın.
+  - **Beklenen Sonuç:** Araç bu uçları kurmaz; sunucunun başlangıç hatası günlükte görünür.
+- [ ] **127.4. Banka PDF içe aktarımı bu kipte çalışmaz (F57.04):**
+  - **Nasıl Test Edilir:** Rol: Geliştirici. Bu kipte Banka ekstresi PDF yüklemeyi deneyin; aynı akışı yalıtımsız ortamda tekrarlayın.
+  - **Beklenen Sonuç:** Kasıtlı olarak çalışmaz (worker_threads engelli); yalıtımsız ortamda çalışır.

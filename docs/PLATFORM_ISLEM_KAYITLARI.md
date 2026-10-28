@@ -73,7 +73,7 @@ Yanıt: `{ items: [...], next_before_id: <sayı|null> }`, `id DESC`. Öğe:
 | `announcements` | Duyurular | `announcement.` |
 | `documents` | Dosya deposu | `document.`, `drive.` |
 | `services` | Site hizmetleri | `work_item.`, `reservation.`, `reservation_area.`, `concierge.`, `survey.`, `visitor_entry.`, `board_decision.`, `contract.`, `contract_vendor.`, `equipment.`, `quote.`, `cctv.`, `annual_report.`, `neighbor_board.` |
-| `settings` | Site ayarları | `site.`, `brand_theme.`, `management_company.`, `platform_rule.` |
+| `settings` | Site ayarları | `site.`, `brand_theme.`, `management_company.`, `platform_rule.`, `emergency.` |
 
 ## 5. İstemci
 

@@ -59,7 +59,7 @@ export const SITE_AUDIT_CATEGORIES = Object.freeze([
   Object.freeze({
     key: 'settings',
     label: 'Site ayarları',
-    prefixes: Object.freeze(['site.', 'brand_theme.', 'management_company.', 'platform_rule.']),
+    prefixes: Object.freeze(['site.', 'brand_theme.', 'management_company.', 'platform_rule.', 'emergency.']),
     actions: Object.freeze([]),
   }),
 ]);
@@ -149,6 +149,9 @@ export const SITE_AUDIT_LABELS = Object.freeze({
   'apartment.resident_set': 'Daire hesabı tanımlandı',
   'apartment.resident_cleared': 'Daire hesabı sıfırlandı',
   'apartment.admin_tenant_enforced': 'Daire yöneticisi kuralı uygulandı',
+  'apartment.owner_added': 'Daireye malik eklendi',
+  'apartment.owner_removed': 'Daireden malik çıkarıldı',
+  'apartment.account_holder_changed': 'Daire hesap muhatabı değişti',
   'apartment_mgmt.tenant_added': 'Kiracı eklendi',
   'apartment_mgmt.tenant_invited': 'Kiracı davet edildi',
   'apartment_mgmt.tenant_invite_accepted': 'Kiracı daveti kabul edildi',
@@ -340,6 +343,7 @@ export const SITE_AUDIT_LABELS = Object.freeze({
   'management_company.member_added': 'Yönetim firmasına üye eklendi',
   'management_company.member_removed': 'Yönetim firmasından üye çıkarıldı',
   'platform_rule.updated': 'Kural değeri güncellendi',
+  'emergency.info_updated': 'Acil durum bilgisi güncellendi',
 });
 
 /** `people.bulk_*` ailesi (eylem adı istekten gelir): tek başlık. */
