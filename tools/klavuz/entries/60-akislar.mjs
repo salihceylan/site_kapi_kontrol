@@ -79,7 +79,7 @@ export default {
         },
         {
           file: 'server/src/routes/auth_routes.js',
-          find: 'const compared = await bcrypt.compare(candidate, usableHash ? storedHash : DUMMY_PASSWORD_HASH);',
+          find: 'const compared = await bcrypt.compare(candidate, usableHash ? storedHash : await getDummyPasswordHash());',
           note: 'Adım 7 — sunucu (parola): kullanıcı bulunmasa ya da saklı özet kullanılamaz olsa da tek bcrypt karşılaştırması yapılır (zaman ölçümüyle hesap taraması engellenir). Uyuşmazsa commitFailure + 401 "Giris bilgileri hatali." (eşik dolduysa 429 LOGIN_LOCKED).',
         },
         {

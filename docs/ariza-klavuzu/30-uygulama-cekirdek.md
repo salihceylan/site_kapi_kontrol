@@ -1549,7 +1549,7 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/pdf_background_tes
 | --- | --- | --- |
 | [lib/services/auth_service.dart:764](../../lib/services/auth_service.dart#L764) | <code>Future&lt;String?&gt; forgotPassword({required String email}) async {</code> | Başarıda null döner (başarı mesajı arayüzde); ApiException mesajı ya da genel "Sunucuya bağlanılamadı..." döner |
 | [lib/services/auth_api.dart:177](../../lib/services/auth_api.dart#L177) | <code>final uri = Uri.parse('$baseUrl/auth/forgot-password');</code> | POST /auth/forgot-password; yalnız 200 beklenir |
-| [server/src/routes/auth_routes.js:372](../../server/src/routes/auth_routes.js#L372) | <code>authRouter.post('/auth/forgot-password', forgotPasswordLimiter, async (req, res) =&gt; {</code> | Sunucu hesap yoksa/pasifse/e-posta gönderimi başarısızsa da AYNI 200 yanıtını döner (istemci farkı göremez); işlem arka planda yürür |
+| [server/src/routes/auth_routes.js:387](../../server/src/routes/auth_routes.js#L387) | <code>authRouter.post('/auth/forgot-password', forgotPasswordLimiter, async (req, res) =&gt; {</code> | Sunucu hesap yoksa/pasifse/e-posta gönderimi başarısızsa da AYNI 200 yanıtını döner (istemci farkı göremez); işlem arka planda yürür |
 
 **Olası nedenler**
 - E-posta adresi sistemde kayıtlı değil ya da hesap pasif: sunucu bilerek aynı başarı yanıtını verir, e-posta gönderilmez
