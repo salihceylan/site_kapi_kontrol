@@ -76,6 +76,8 @@ import { startDocumentsMaintenance, stopDocumentsMaintenance } from './modules/d
 import { pushRouter } from './modules/push_routes.js';
 import { notifyChannelsRouter } from './modules/notify_channels_routes.js';
 import { oauthRouter } from './modules/oauth_routes.js';
+import { trialAccessRouter } from './modules/trial_access_routes.js';
+import { closeExpiredTrialAccounts } from './modules/trial_access_service.js';
 import { startPushWorker, stopPushWorker } from './modules/push_worker.js';
 
 import { buildCorsAllowlist, createCorsOptionsDelegate } from './config/cors.js';
@@ -209,6 +211,8 @@ app.use(pushRouter);
 app.use(notifyChannelsRouter);
 // Google ve Apple (iCloud) sosyal giris / kayit (076): /auth/oauth/status, /auth/oauth/google, /auth/oauth/apple.
 app.use(oauthRouter);
+// Deneme erisim kodu (P2-27 / K10): POST /auth/trial-access (kodla 72 saatlik, demo siteye kilitli oturum) + /manager/sites/:siteCode/trial-access[/demo|/codes[/:id]] (sahip / demo site yoneticisi).
+app.use(trialAccessRouter);
 // Hesap silme (kimliksizlestirme) ve kisisel veri disa aktarma: /me/account-deletion[/preview], /me/data-export (yalniz kendi hesabi).
 app.use(accountRouter);
 // Platform hizmetleri: yasal belgeler (/public/legal-documents, /legal/:id, /me/consents), /public/app-config, /public/client-errors, /admin/platform-config.
@@ -320,6 +324,8 @@ async function shutdown(signal) {
 function runCleanupSafely() {
   return Promise.resolve()
     .then(() => runDatabaseCleanup())
+    // Suresi dolan / iptal edilen deneme erisim kodu hesaplari kapatilir (kullanici pasif, demo site yonetici bagi silinir); ayri adim: bakim servisinin dar kapsamina girmez.
+    .then(() => closeExpiredTrialAccounts())
     .catch((error) => {
       // eslint-disable-next-line no-console
       console.error('[Bakim] Temizlik hatasi:', error?.code || error?.message);

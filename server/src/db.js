@@ -46,6 +46,7 @@ import { ensureOAuthSchema } from './modules/oauth_schema.js';
 import { ensureIntegritySchema } from './modules/integrity_schema.js';
 import { ensureFinanceFundsSchema } from './modules/finance_funds_schema.js';
 import { ensureEmergencySchema } from './modules/emergency_schema.js';
+import { ensureTrialAccessSchema } from './modules/trial_access_schema.js';
 import { CORE_MODULES_BACKFILL_SQL } from './modules/core_modules.js';
 import { CARD_PAYMENTS_INTO_FINANCE_SQL } from './modules/card_payments_into_finance.js';
 import { ensureTenantAdminRule } from './modules/apartment_tenant_admin_sql.js';
@@ -2009,6 +2010,9 @@ export async function ensureDbSchema() {
     await ensureFinanceFundsSchema(client);
     // 107 (acil durum akisi: site basina asansor bakim firmasi): sites'tan SONRA; dev blokta DEGIL; tablo varsa hicbir ifade gonderilmez (emergency_schema.js = migrations/107).
     await ensureEmergencySchema(client);
+    // 106 (deneme erisim kodu, P2-27 / K10): sites ve users'tan SONRA; dev blokta DEGIL; tablo varsa hicbir ifade / kilit yok, yoksa her adim kendi otomatik onayli ifadesi
+    // (trial_access_schema.js = migrations/106). Mevcut tablolara ALTER yok.
+    await ensureTrialAccessSchema(client);
 
     // 031 people_v1: mevcut sakinlerin CRM'e tek seferlik aktarimi. Savunmaci: hata sunucunun acilmasini ENGELLEMEZ
     // (kendi transaction'i geri alinir, isaret yazilmaz => sonraki acilista yeniden denenir; okuma anindaki

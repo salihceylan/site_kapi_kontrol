@@ -270,7 +270,8 @@ class AuthService extends ChangeNotifier {
         a.fullName != b.fullName ||
         a.email != b.email ||
         a.loginName != b.loginName ||
-        a.phoneNumber != b.phoneNumber;
+        a.phoneNumber != b.phoneNumber ||
+        a.trialExpiresAt != b.trialExpiresAt;
   }
 
   Future<String?> login({
@@ -477,6 +478,22 @@ class AuthService extends ChangeNotifier {
       return (status: 'error', error: e.message);
     } catch (_) {
       return (status: 'pending', error: null);
+    }
+  }
+
+  /// Deneme erişim kodu (P2-27, karar K10) ile giriş: tek kullanımlık kod, 72 saatlik, YALNIZ demo siteye kilitli oturum.
+  /// Oturum `trialExpiresAt` taşır (üstte "Deneme - X saat kaldı" şeridi). Hata mesajı ya da null (başarı).
+  Future<String?> loginWithTrialCode({required String code}) async {
+    try {
+      _session = await api.redeemTrialCode(code: code);
+      _lastSessionCheckAt = DateTime.now();
+      await _persist();
+      _notifySafely();
+      return null;
+    } on ApiException catch (e) {
+      return e.message;
+    } catch (_) {
+      return 'Sunucuya baglanilamadi.';
     }
   }
 
