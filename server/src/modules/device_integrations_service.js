@@ -9,7 +9,9 @@ import { pool } from '../db.js';
 import { PlatformError } from './errors.js';
 import { normalizePlate } from './people_common.js';
 
-export const CARD_PAYMENTS_MODULE = 'card_payments';
+// Kart ödemesi (sağlayıcı arayüzü) AYRI modül değildir: Aidat ve Finans'ın (temel modül, her sitede açık) parçasıdır; kapısı `finance` modülüdür.
+// Eski `card_payments` modül kodu kataloktan kaldırıldı (migrations/083); uçların yolları (`/card-payments`) ve veri tablosu (payment_provider_settings) aynı kalır.
+export const CARD_PAYMENTS_MODULE = 'finance';
 export const PLATE_CAMERAS_MODULE = 'plate_cameras';
 
 export const PAYMENT_PROVIDERS = Object.freeze([

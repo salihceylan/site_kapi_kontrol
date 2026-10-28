@@ -13,6 +13,7 @@ import {
   getModuleDefinition,
   isToggleable,
   MODULE_STATUS_COMING_SOON,
+  retiredModuleNotice,
   rowsByModuleCode,
 } from './catalog.js';
 import { actorFromAuthUser, recordAudit } from './audit_service.js';
@@ -126,6 +127,11 @@ export async function isModuleEnabled(siteCode, moduleCode, db = pool) {
 export async function setSiteModuleEnabled({ siteCode, moduleCode, enabled, confirm = false, actor }) {
   const definition = getModuleDefinition(moduleCode);
   if (!definition) {
+    // Kataloktan kaldırılmış kod (ör. card_payments -> Aidat ve Finans'a katıldı): eski uygulama 404 yerine açıklayıcı 400 alır.
+    const retired = retiredModuleNotice(moduleCode);
+    if (retired) {
+      throw new PlatformError(400, 'MODULE_NOT_TOGGLEABLE', retired);
+    }
     throw new PlatformError(404, 'MODULE_NOT_FOUND', 'Modül bulunamadı.');
   }
   if (typeof enabled !== 'boolean') {

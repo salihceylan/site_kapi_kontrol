@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 import { DEFAULT_MIGRATIONS_DIR } from '../scripts/migrate.js';
 import { DEVICE_INTEGRATIONS_DDL, DEVICE_INTEGRATIONS_DDL_ORDER, ensureDeviceIntegrationsSchema } from '../src/modules/device_integrations_schema.js';
 import {
+  CARD_PAYMENTS_MODULE,
   decryptSecret,
   encryptSecret,
   mapCamera,
@@ -14,7 +15,7 @@ import {
   recordPlateEvent,
   tokenMatches,
 } from '../src/modules/device_integrations_service.js';
-import { getModuleDefinition } from '../src/modules/catalog.js';
+import { computeModuleEnabled, getModuleDefinition, retiredModuleNotice } from '../src/modules/catalog.js';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 
@@ -57,12 +58,23 @@ describe('065 migration <-> şema', () => {
 });
 
 describe('katalog', () => {
-  it('iki modül varsayılan KAPALI, çekirdek değil', () => {
-    for (const code of ['card_payments', 'plate_cameras']) {
-      const def = getModuleDefinition(code);
-      assert.equal(def.core, false);
-      assert.equal(def.defaultEnabled, false);
-    }
+  it('kamera ve plaka modülü varsayılan KAPALI, çekirdek değil', () => {
+    const def = getModuleDefinition('plate_cameras');
+    assert.equal(def.core, false);
+    assert.equal(def.defaultEnabled, false);
+  });
+
+  it('kart ödemesi AYRI modül değildir: katalogda card_payments yok, kapısı Aidat ve Finans (temel modül, her sitede açık)', () => {
+    assert.equal(getModuleDefinition('card_payments'), null);
+    assert.equal(CARD_PAYMENTS_MODULE, 'finance');
+    const finance = getModuleDefinition(CARD_PAYMENTS_MODULE);
+    assert.equal(finance.core, true);
+    assert.equal(computeModuleEnabled(finance, undefined), true);
+    assert.equal(computeModuleEnabled(finance, { enabled: false }), true);
+    assert.match(retiredModuleNotice('card_payments'), /Aidat ve Finans/);
+    assert.equal(retiredModuleNotice('plate_cameras'), null);
+    assert.equal(retiredModuleNotice('__proto__'), null);
+    assert.equal(retiredModuleNotice(null), null);
   });
 });
 

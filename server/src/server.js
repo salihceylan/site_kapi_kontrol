@@ -169,7 +169,7 @@ app.use(surveyRouter);
 app.use(visitorLogRouter);
 // Kartli gecis (F10): /manager/sites/:siteCode/access-cards[...] + /app/access-cards (modul card_access, varsayilan KAPALI).
 app.use(cardAccessRouter);
-// Kart odemesi saglayici arayuzu (F6) + kamera/plaka baglastiricilari (T8): modul card_payments / plate_cameras, varsayilan KAPALI.
+// Kart odemesi saglayici arayuzu (F6; kapisi Aidat ve Finans temel modulu, her sitede acik) + kamera/plaka baglastiricilari (T8; modul plate_cameras, varsayilan KAPALI).
 app.use(deviceIntegrationsRouter);
 // Plaka tanima (073): /manager/sites/:siteCode/plate-recognition/... + /app/plate-permits (modul plate_recognition, varsayilan KAPALI; kapi acmaz).
 app.use(plateRecognitionRouter);

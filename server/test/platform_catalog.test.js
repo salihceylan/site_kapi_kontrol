@@ -26,7 +26,7 @@ import { managementTerms } from '../src/modules/management_type_terms.js';
 const def = (code) => getModuleDefinition(code);
 
 describe('platform katalog: sozlesme tablosu', () => {
-  it('25 modul, sozlesmedeki sirayla ve alanlarla', () => {
+  it('24 modul, sozlesmedeki sirayla ve alanlarla', () => {
     assert.deepEqual(MODULE_CODES, [
       'door_control',
       'people',
@@ -40,7 +40,6 @@ describe('platform katalog: sozlesme tablosu', () => {
       'survey',
       'visitor_log',
       'card_access',
-      'card_payments',
       'plate_cameras',
       'contracts',
       'decision_book',
@@ -69,7 +68,6 @@ describe('platform katalog: sozlesme tablosu', () => {
       visitor_log: [false, 'available'], // Ziyaretci ve Kargo (F11.03): kullanilabilir (varsayilan KAPALI; super acar, yonetici modul talep eder)
       card_access: [false, 'available'], // F10: Kartli Gecis kullanilabilir (varsayilan KAPALI; super acar, yonetici modul talep eder)
       contracts: [false, 'available'], // Firma ve Sozlesme Takibi: kullanilabilir (varsayilan KAPALI; super acar, yonetici modul talep eder)
-      card_payments: [false, 'available'], // F6: Kart Odemesi arayuzu (varsayilan KAPALI; saglayicilar "Yakinda")
       plate_cameras: [false, 'available'], // T8: Kamera ve Plaka (varsayilan KAPALI; kapi acmaz)
       decision_book: [false, 'available'], // Karar Defteri: kullanilabilir (varsayilan KAPALI; super acar, yonetici modul talep eder)
       directory: [false, 'available'], // Rehber: kullanilabilir (varsayilan KAPALI; yonetim kadrosu ve faydali telefonlar)
@@ -97,7 +95,7 @@ describe('platform katalog: sozlesme tablosu', () => {
 
   it('publicCatalog yalnizca { code, name, description, core, status } alanlarini dondurur', () => {
     const catalog = publicCatalog();
-    assert.equal(catalog.length, 25);
+    assert.equal(catalog.length, 24);
     for (const entry of catalog) {
       assert.deepEqual(Object.keys(entry), ['code', 'name', 'description', 'core', 'status']);
     }
@@ -235,7 +233,7 @@ describe('platform katalog: enabled hesabi', () => {
     const list = computeSiteModuleList([
       { module_code: 'door_control', enabled: false, updated_at: when, updated_by_name: 'Ali Veli' },
     ]);
-    assert.equal(list.length, 25);
+    assert.equal(list.length, 24);
     const door = list.find((m) => m.code === 'door_control');
     assert.deepEqual(door, {
       code: 'door_control',

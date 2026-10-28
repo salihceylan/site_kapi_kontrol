@@ -160,7 +160,7 @@ const Map<SirketMenuItem, String> _descriptions = <SirketMenuItem, String>{
   SirketMenuItem.komsuPanosu: 'Komşu ilanları ve onay',
   SirketMenuItem.faaliyetRaporu: 'Yıllık rapor taslağı ve PDF',
   SirketMenuItem.plakaTanima: 'Araç plakası kayıtları ve misafir plakası',
-  SirketMenuItem.odemeKamera: 'Kart ödemesi ve plaka kameraları',
+  SirketMenuItem.odemeKamera: 'Plaka tanıyan kameralar',
   SirketMenuItem.kameraCctv: 'Kapı olaylarını kamera kayıtlarıyla eşleştirin',
   SirketMenuItem.ekipmanBakim: 'Ekipman, bakım planı ve teklifler',
   SirketMenuItem.siteler: 'Site, blok, daire ve kapılar',

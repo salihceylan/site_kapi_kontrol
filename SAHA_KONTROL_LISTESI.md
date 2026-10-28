@@ -2846,11 +2846,11 @@ Dalga 2-6'nın ilk aşaması: çalışan şema, uçlar ve ekranlar. Dışarıdan
   - **Nasıl Test Edilir:** Rol: Sakin. Kendi bekleyen ya da yayındaki ilanında Geri çek.
   - **Beklenen Sonuç:** İlan listeden kalkar (Geri çekildi), komşular artık görmez.
 - [ ] **89.83. Modülleri aç (F34.01):**
-  - **Nasıl Test Edilir:** Rol: Süper kullanıcı. Modüller ekranından bir sitede 'Kart Ödemesi' ve 'Kamera ve Plaka' modüllerini aç.
-  - **Beklenen Sonuç:** İki modül listede görünür ve açılır; varsayılan kapalıydı.
-- [ ] **89.84. Ödeme ve Kamera menüsü (F34.02):**
-  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Modülleri açık sitede giriş yap, Site hizmetleri altında 'Ödeme ve Kamera' ekranını aç.
-  - **Beklenen Sonuç:** Kart Ödemesi kartında iyzico ve PayTR 'Yakında…' etiketiyle görünür; komisyonun ödeyene yansıtıldığı yazar.
+  - **Nasıl Test Edilir:** Rol: Süper kullanıcı. Modüller ekranından bir sitede 'Kamera ve Plaka' modülünü aç. ('Kart Ödemesi' artık ayrı modül değildir; Aidat ve Finans'ın içindedir.)
+  - **Beklenen Sonuç:** 'Kamera ve Plaka' listede görünür ve açılır; varsayılan kapalıydı. Listede ayrıca 'Kart Ödemesi' modülü YOKTUR.
+- [ ] **89.84. Kart Ödemesi penceresi ve Kamera ve Plaka menüsü (F34.02):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Finans ekranında 'Kart Ödemesi' düğmesine bas (ayrı modül açmak gerekmez). Sonra, 'Kamera ve Plaka' modülü açık sitede Site hizmetleri altında 'Kamera ve Plaka' ekranını aç.
+  - **Beklenen Sonuç:** Kart Ödemesi penceresinde iyzico ve PayTR 'Yakında…' etiketiyle görünür; komisyonun ödeyene yansıtıldığı yazar. Yönetim kurulu üyesi aynı pencereyi salt okur görür (kalem simgesi yok). 'Kamera ve Plaka' ekranında yalnız kamera kartı vardır.
 - [ ] **89.85. Komisyon notu (F34.03):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. iyzico satırındaki kalem simgesine bas, bir not yaz, Kaydet.
   - **Beklenen Sonuç:** 'Bilgi kaydedildi.' çıkar, not satırda görünür.
