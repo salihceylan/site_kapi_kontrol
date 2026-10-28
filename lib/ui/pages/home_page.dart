@@ -182,6 +182,7 @@ import 'package:site_kapi_kontrol/models/budget_models.dart';
 import 'package:site_kapi_kontrol/ui/views/decision_manager_view.dart';
 import 'package:site_kapi_kontrol/ui/views/decision_resident_view.dart';
 import 'package:site_kapi_kontrol/ui/views/directory_view.dart';
+import 'package:site_kapi_kontrol/ui/views/emergency_view.dart';
 import 'package:site_kapi_kontrol/ui/widgets/pending_invitations_card.dart';
 import 'package:site_kapi_kontrol/ui/views/neighbor_board_view.dart';
 import 'package:site_kapi_kontrol/ui/views/annual_report_view.dart';
@@ -377,6 +378,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final GlobalKey<DecisionManagerViewState> _decisionManagerKey = GlobalKey<DecisionManagerViewState>();
   final GlobalKey<DecisionResidentViewState> _decisionResidentKey = GlobalKey<DecisionResidentViewState>();
   final GlobalKey<DirectoryViewState> _directoryKey = GlobalKey<DirectoryViewState>();
+  final GlobalKey<EmergencyViewState> _emergencyKey = GlobalKey<EmergencyViewState>();
   final GlobalKey<MyApartmentViewState> _myApartmentKey = GlobalKey<MyApartmentViewState>();
   final GlobalKey<BudgetViewState> _budgetKey = GlobalKey<BudgetViewState>();
   final GlobalKey<NeighborBoardViewState> _neighborBoardKey = GlobalKey<NeighborBoardViewState>();
@@ -1042,6 +1044,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         // kapısı yokken [_hiddenMenuItems] gizler.
         SirketMenuItem.kapilar,
         if (_canAccessDairem(role)) SirketMenuItem.dairem,
+        if (_canAccessEmergency(role)) SirketMenuItem.acilDurum,
         if (_moduleAccess.boardMemberSites.isNotEmpty) SirketMenuItem.kisiler,
         if (_canAccessAnnouncements(role)) SirketMenuItem.duyurular,
         if (_canAccessFinance(role)) SirketMenuItem.finans,
@@ -1072,6 +1075,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   /// Dairem: daire sakini, bireysel sakin ve sakin modundaki yönetici (modül gerektirmez). Ekran, bağlı daire yoksa bunu açıkça söyler.
   bool _canAccessDairem(UserRole role) =>
       role == UserRole.apartmentOwner || role == UserRole.individual || (role == UserRole.siteManager && _isResidentMode);
+
+  /// Acil durum (P2-24): modül değil, çekirdek özelliktir; süper kullanıcı dışında herkeste ve modül verisi gelmese de açıktır (acil durumda
+  /// menü ağ ya da modül durumuna bağlı olmaz). Ekran siteyi/adresi kendi uç noktasından alır.
+  bool _canAccessEmergency(UserRole role) => role != UserRole.superUser;
 
   // --- Dosya Deposu: Belgeler (Faz 3b-A) + Google Drive (D1) tek modül (`drive_storage`) ---
 
@@ -2081,6 +2088,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (item == SirketMenuItem.dairem) {
       return _canAccessDairem(role);
     }
+    if (item == SirketMenuItem.acilDurum) {
+      return _canAccessEmergency(role);
+    }
     // İşletme Projesi: `budget` modülü açık siteye bağlı yönetici / kurul; sakin ve görevli için yok.
     if (item == SirketMenuItem.isletmeProjesi) {
       return _canAccessBudget(role);
@@ -2319,6 +2329,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
       case SirketMenuItem.dairem:
         return 'Dairem';
+
+      case SirketMenuItem.acilDurum:
+        return 'Acil durum';
 
       case SirketMenuItem.yeniSite:
         return 'Yeni Site Oluştur';
@@ -5953,6 +5966,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         await _directoryKey.currentState?.reload();
       case SirketMenuItem.dairem:
         await _myApartmentKey.currentState?.reload();
+      case SirketMenuItem.acilDurum:
+        await _emergencyKey.currentState?.reload();
       case SirketMenuItem.isletmeProjesi:
         await _budgetKey.currentState?.reload();
       case SirketMenuItem.komsuPanosu:
@@ -7253,6 +7268,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           key: _myApartmentKey,
           authService: widget.authService,
           onChanged: () => unawaited(_moduleAccess.refresh()),
+        );
+
+      case SirketMenuItem.acilDurum:
+        return EmergencyView(
+          key: _emergencyKey,
+          authService: widget.authService,
+          // Çekmecedeki site seçici bir siteyi seçtiyse acil durum bilgisi o siteyle açılır (adres doğru siteden).
+          preferredSiteCode: _moduleAccess.scopeSiteCode,
+          // Asansör bakım firmasını yalnız yönetici modundaki site yöneticisi düzenler (sakin modunda düzenleme yok).
+          allowEdit: _canManagePeople(session.role),
         );
 
       case SirketMenuItem.komsuPanosu:

@@ -71,6 +71,7 @@ import { driveRouter } from './modules/drive_routes.js';
 import { neighborBoardRouter } from './modules/neighbor_board_routes.js';
 import { paymentNoticeRouter } from './modules/payment_notice_routes.js';
 import { annualReportRouter } from './modules/annual_report_routes.js';
+import { emergencyRouter } from './modules/emergency_routes.js';
 import { startDocumentsMaintenance, stopDocumentsMaintenance } from './modules/document_maintenance.js';
 import { pushRouter } from './modules/push_routes.js';
 import { notifyChannelsRouter } from './modules/notify_channels_routes.js';
@@ -194,6 +195,8 @@ app.use(driveRouter);
 app.use(neighborBoardRouter);
 // Faaliyet raporu: /manager/sites/:siteCode/annual-report (modul annual_report, varsayilan KAPALI).
 app.use(annualReportRouter);
+// Acil durum akisi (107): /app/emergency + /manager/sites/:siteCode/emergency (asansor bakim firmasi). Cekirdek ozellik: modul kapisi yok.
+app.use(emergencyRouter);
 // Kamera (CCTV) baglantisi: /manager/sites/:siteCode/cctv/{cameras,events,clip-link}[...] (modul cctv_link, varsayilan KAPALI; sakin ucu yok).
 app.use(cctvRouter);
 // Daire sahipligi ve yonetimi (074): /app/apartments/{mine,people-search,requests/:id/*,:id/{tenant,family,exit,proxies,...}} + /manager/sites/:siteCode/signing-roster (cekirdek; modul gerektirmez).

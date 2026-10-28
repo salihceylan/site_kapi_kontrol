@@ -76,6 +76,7 @@ abstract final class HelpContent {
     'Plaka Tanıma',
     'Kapılar',
     'Dairem',
+    'Acil durum',
     'Profilim',
     'Eller Serbest & Kestirmeler',
     'Kullanıcı Yönetimi',
@@ -252,6 +253,11 @@ abstract final class HelpContent {
     'Kapı',
     'Dosyalar',
     'Tüm siteler',
+    // Acil durum (P2-24): hızlı düğmeler ve kopyalama / bakım firması düğmeleri.
+    'Yangın',
+    'Asansör arızası',
+    'Numarayı kopyala',
+    'Bakım firmasını ekle',
   };
 
   // --- Konular ----------------------------------------------------------------------------------
@@ -297,6 +303,20 @@ abstract final class HelpContent {
       'Uzaklaştırma ya da koruma kararınız varsa belgeyi site yönetimine bildirin; site yöneticisi gerekirse kişinin kapı erişimini askıya alabilir.',
     ],
     note: 'Uygulama polisin ya da mahkemenin yerine geçmez. Sistem iddiayı doğrulayamaz ve otomatik kilitleme yapmaz; kararı site yöneticisi verir.',
+  );
+
+  /// Acil durum (P2-24): 112, yangın ve asansör arızası; arama kanalı yoksa numaralar ve adres kopyalanabilir metin olarak verilir.
+  static const HelpTopic _emergency = HelpTopic(
+    id: 'emergency',
+    title: 'Acil durumda ne yapmalıyım?',
+    icon: Icons.emergency_rounded,
+    steps: <String>[
+      'Çekmecede “Ana sayfa” başlığı altındaki “Acil durum” ekranını açın. Tehlikedeyseniz büyük 112 düğmesine dokunun; telefon uygulaması numara hazır olarak açılır.',
+      'Yangın için “Yangın”a, asansör arızası için “Asansör arızası”na dokunun: aranacak numara, çağrı merkezinin soracakları ve aramada söyleyeceğiniz site adresi görünür.',
+      'Asansörde mahsur kalan varsa önce sitenin asansör bakım firmasını arayın; kişi tehlikedeyse ya da sağlık sorunu varsa 112’yi arayın.',
+      'Bu cihazdan arama başlatılamıyorsa ekran bunu söyler; numarayı ve adresi “Numarayı kopyala” ile alıp başka bir telefondan arayabilirsiniz.',
+    ],
+    note: 'Telefon uygulaması açılınca aramayı sizin başlatmanız gerekir; uygulama aramanın yapıldığını göstermez. Site yöneticisi, asansör bakım firmasını “Asansör arızası” bölümünde “Bakım firmasını ekle” ile kaydeder; kayıtlı değilse yönetimden isteyin.',
   );
 
   /// Site yöneticisi: eski sakin / adli kayıt (sakin yardımına EKLENMEZ; kayıt sakinlere gösterilmez).
@@ -444,6 +464,7 @@ abstract final class HelpContent {
     _apartmentManagement,
     _myVehicles,
     _apartmentSafety,
+    _emergency,
     HelpTopic(
       id: 'payment_notice_resident',
       title: 'Ödememi nasıl bildiririm (dekont)?',
@@ -542,6 +563,7 @@ abstract final class HelpContent {
     _apartmentManagement,
     _myVehicles,
     _apartmentSafety,
+    _emergency,
     _panelIndividual,
     _navigationIndividual,
     HelpTopic(
@@ -609,6 +631,7 @@ abstract final class HelpContent {
     ),
     _panelAdmin,
     _navigationManager,
+    _emergency,
     HelpTopic(
       id: 'manage_site',
       title: 'Sitemi, bloklarımı ve kapılarımı nasıl yönetirim?',
