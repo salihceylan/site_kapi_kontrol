@@ -111,6 +111,7 @@ void main() {
         SirketMenuItem.ellerSerbest,
         SirketMenuItem.bluetoothWifiKur,
         SirketMenuItem.denetimKaydi,
+        SirketMenuItem.islemKayitlari,
         SirketMenuItem.platformAyarlari,
         SirketMenuItem.istemciHatalari,
       });

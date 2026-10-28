@@ -49,6 +49,7 @@ const Set<SirketMenuItem> showcaseSecondaryItems = <SirketMenuItem>{
   SirketMenuItem.ellerSerbest,
   SirketMenuItem.bluetoothWifiKur,
   SirketMenuItem.denetimKaydi,
+  SirketMenuItem.islemKayitlari,
   SirketMenuItem.platformAyarlari,
   SirketMenuItem.istemciHatalari,
 };
@@ -125,6 +126,7 @@ const Map<SirketMenuItem, ModuleArtKind> _artKinds = <SirketMenuItem, ModuleArtK
   SirketMenuItem.siteYoneticileriYonetimi: ModuleArtKind.users,
   SirketMenuItem.daireKullanicilariYonetimi: ModuleArtKind.people,
   SirketMenuItem.denetimKaydi: ModuleArtKind.reports,
+  SirketMenuItem.islemKayitlari: ModuleArtKind.reports,
   SirketMenuItem.istemciHatalari: ModuleArtKind.reports,
   SirketMenuItem.platformAyarlari: ModuleArtKind.settings,
   SirketMenuItem.ellerSerbest: ModuleArtKind.settings,
@@ -179,6 +181,7 @@ const Map<SirketMenuItem, String> _descriptions = <SirketMenuItem, String>{
   SirketMenuItem.siteYoneticileriYonetimi: 'Site yöneticisi hesapları',
   SirketMenuItem.daireKullanicilariYonetimi: 'Daire sakinleri ve hesapları',
   SirketMenuItem.denetimKaydi: 'Yönetici işlem kayıtları',
+  SirketMenuItem.islemKayitlari: 'Sitenizde kim, ne zaman, ne yaptı',
   SirketMenuItem.platformAyarlari: 'Sürüm, destek ve yasal bilgiler',
   SirketMenuItem.istemciHatalari: 'Uygulama hata raporları',
   SirketMenuItem.ellerSerbest: 'Eller serbest ve kestirmeler',

@@ -54,6 +54,7 @@ const Map<SirketMenuItem, SirketMenuGroup> _expected = <SirketMenuItem, SirketMe
   SirketMenuItem.modulTalepleri: SirketMenuGroup.ayarlar,
   SirketMenuItem.siteBasvurulari: SirketMenuGroup.ayarlar,
   SirketMenuItem.denetimKaydi: SirketMenuGroup.ayarlar,
+  SirketMenuItem.islemKayitlari: SirketMenuGroup.ayarlar,
   SirketMenuItem.platformAyarlari: SirketMenuGroup.ayarlar,
   SirketMenuItem.istemciHatalari: SirketMenuGroup.ayarlar,
 };
@@ -118,6 +119,7 @@ void main() {
         SirketMenuItem.kayitliCihazlar,
         SirketMenuItem.cihazEkle,
         SirketMenuItem.denetimKaydi,
+        SirketMenuItem.islemKayitlari,
         SirketMenuItem.istemciHatalari,
       ]) {
         expect(menuGroupOf(item), SirketMenuGroup.ayarlar, reason: item.name);

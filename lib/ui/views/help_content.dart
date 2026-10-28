@@ -91,6 +91,7 @@ abstract final class HelpContent {
     'Modüller',
     'Modül Talepleri',
     'Denetim Kaydı',
+    'İşlem Kayıtları',
     'Kişiler',
     'Duyurular',
     'Site Başvuruları',
@@ -122,6 +123,10 @@ abstract final class HelpContent {
 
   /// Menü dışı ekran içi etiketler (düğme, bölüm, sekme adları; kodda aynen geçer).
   static const Set<String> knownScreenLabels = <String>{
+    // İşlem Kayıtları (site yöneticisi; lib/ui/views/site_audit_log_view.dart ve sunucu sunumu)
+    'Daha fazla yükle',
+    'Sistem yöneticisi',
+    'Silinmiş Kullanıcı',
     // Dairem (daire sahipliği ve yönetimi, güvenlik ve destek)
     'Kiracı ekle',
     'Sistemden ara',
@@ -591,6 +596,17 @@ abstract final class HelpContent {
         'Teklifler sekmesinde aynı konudaki teklifleri karşılaştırın (en düşük tutar işaretlenir). Kabul ettiğiniz teklif gider ya da sözleşme olarak kaydedilir. Gider kırılımı sekmesi giderleri ekipman bazında gösterir.',
       ],
       note: 'Telefon / e-posta ile otomatik hatırlatma ve teklife belge yükleme Yakında…',
+    ),
+    HelpTopic(
+      id: 'site_audit_log',
+      title: 'Sitemde kim ne yaptı, nereden görürüm?',
+      icon: Icons.history_rounded,
+      steps: <String>[
+        'Sağ üstteki dişliden Ayarlar panelini açıp “İşlem Kayıtları”na dokunun. Sitenizde yapılan yönetim işlemleri yeniden eskiye listelenir: ne yapıldı, kim yaptı, ne zaman.',
+        'İşlem türü listesinden yalnız bir türü (örneğin Aidat ve finans) seçin. Dönem çipleriyle bugünü, son 7 ya da 30 günü seçin; özel aralıkta tarihleri GG.AA.YYYY yazın, tarihlerden biri boş olabilir.',
+        'Daha eski kayıtlar için “Daha fazla yükle”ye dokunun.',
+      ],
+      note: 'Kayıtlar değiştirilemez. Parola, telefon ve e-posta kayıtta yer almaz; sistem yöneticisinin işlemleri “Sistem yöneticisi”, silinmiş hesapların işlemleri “Silinmiş Kullanıcı” olarak görünür.',
     ),
     HelpTopic(
       id: 'cctv',

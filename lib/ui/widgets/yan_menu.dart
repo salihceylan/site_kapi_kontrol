@@ -47,6 +47,12 @@ enum SirketMenuItem {
   /// Platform modül sistemi: denetim kaydı (yalnız süper kullanıcı).
   denetimKaydi,
 
+  /// Site yöneticisinin "İşlem Kayıtları" ekranı (P2-19): kendi sitesinde yapılan işlemlerin değiştirilemez listesi (kim,
+  /// ne zaman, ne yaptı; tarih ve işlem türü süzgeci). Modül gerektirmez (çekirdek). Rol listesinde YOKTUR; yöneticisi olunan en az
+  /// bir site bilindiğinde yönetici modundaki site yöneticisine [YanMenu.additionalItems] ile eklenir ("Modüller"in altına, Ayarlar
+  /// panelinde). Tüm siteleri gören süper kullanıcı ekranı [denetimKaydi]'dır.
+  islemKayitlari,
+
   /// Platform modül sistemi Faz 1.1: site yöneticilerinin modül talepleri (yalnız süper kullanıcı;
   /// bekleyen sayısı rozetle gösterilir).
   modulTalepleri,
@@ -282,6 +288,7 @@ SirketMenuGroup menuGroupOf(SirketMenuItem item) => switch (item) {
       SirketMenuItem.bluetoothWifiKur ||
       SirketMenuItem.moduller ||
       SirketMenuItem.denetimKaydi ||
+      SirketMenuItem.islemKayitlari ||
       SirketMenuItem.modulTalepleri ||
       SirketMenuItem.siteBasvurulari ||
       SirketMenuItem.platformAyarlari ||
@@ -1308,6 +1315,8 @@ List<SirketMenuItem> _withExtras(
         if (anchor >= 0) break;
       }
     }
+    // "İşlem Kayıtları" (yönetici, çekirdek): "Modüller"in hemen altına (Ayarlar panelinde Modüller'in ardından).
+    if (extra == SirketMenuItem.islemKayitlari) anchor = result.indexOf(SirketMenuItem.moduller);
     // "Kapılar" her zaman "Panel"in hemen altındadır (kapı paneli bir dokunuş uzakta). Numaralandırmada en sonda
     // olduğundan öteki ek öğelerden SONRA eklenir ve "Panel"in altına, onların önüne girer.
     if (extra == SirketMenuItem.kapilar) anchor = result.indexOf(SirketMenuItem.dashboard);
@@ -1433,6 +1442,8 @@ String _titleForItem(SirketMenuItem item, [UserRole? role]) {
       return 'Modüller';
     case SirketMenuItem.denetimKaydi:
       return 'Denetim Kaydı';
+    case SirketMenuItem.islemKayitlari:
+      return 'İşlem Kayıtları';
     case SirketMenuItem.modulTalepleri:
       return 'Modül Talepleri';
     case SirketMenuItem.kisiler:
@@ -1534,6 +1545,8 @@ IconData _iconForItem(SirketMenuItem item) {
       return PhosphorIconsRegular.puzzlePiece;
     case SirketMenuItem.denetimKaydi:
       return PhosphorIconsRegular.clipboardText;
+    case SirketMenuItem.islemKayitlari:
+      return PhosphorIconsRegular.clockCounterClockwise;
     case SirketMenuItem.modulTalepleri:
       return PhosphorIconsRegular.tray;
     case SirketMenuItem.kisiler:
