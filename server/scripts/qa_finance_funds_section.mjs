@@ -284,7 +284,7 @@ export default async function sectionFunds(t) {
   // ============================================================================================================
   // K3 (P1-3, 2026-10-28): yazilim odemeyi kendiliginden bir hesaba ATAMAZ. A1 ve A3'te Aidat + Fon borcu BIRLIKTE acik: kisitsiz tahsilat reddedilir, yonetici hesabi secer.
   const paymentCount = async (aptId) => Number((await q(`SELECT COUNT(*) AS n FROM ledger_entries WHERE site_code = $1 AND apartment_id = $2 AND kind = 'payment'`, [FS.code, aptId])).rows[0].n);
-  const noChoice = await payment(FS, A1, 150000, { account_id: accountId, entry_date: ago(12) });
+  const noChoice = await payment(FS, A1, 150000, { account_id: accountId, entry_date: ago(12), __strict: true }); // ham yanit: QA yardimcisi yeniden denemez
   check(
     'K3a0: A1 (Aidat 100000 + Fon 50000 birlikte acik) kisitsiz 150000 => 400 FUND_CHOICE_REQUIRED; fund_choice acik borclari tasir (secim zorunlu, oneri yok); HICBIR satir yazilmadi',
     noChoice.status === 400 && noChoice.body.code === 'FUND_CHOICE_REQUIRED' && same(noChoice.body.fund_choice?.open, { operating_minor: 100000, capital_minor: 50000 }) &&
@@ -687,7 +687,7 @@ export default async function sectionFunds(t) {
       [FS.code, accountId, legacyId, MGR],
     );
     const reversalsOf = async (id) => Number((await q(`SELECT COUNT(*) AS n FROM ledger_entries WHERE site_code = $1 AND reverses_entry_id = $2`, [FS.code, id])).rows[0].n);
-    const corrNoFund = await call('POST', `${P(FS.code)}/entries/${legacyId}/correct`, MGR, { amount_minor: 20000, entry_date: TODAY, method: 'cash', account_id: accountId, idempotency_key: key('k12a') });
+    const corrNoFund = await call('POST', `${P(FS.code)}/entries/${legacyId}/correct`, MGR, { amount_minor: 20000, entry_date: TODAY, method: 'cash', account_id: accountId, idempotency_key: key('k12a'), __strict: true });
     check(
       'K12a: kisitsiz asil tahsilatin duzeltmesi, ters kayit sonrasi iki tur (Aidat + Fon) acik kalirsa 400 FUND_CHOICE_REQUIRED; islem TAMAMEN geri alinir (ters kayit da yok, asil tahsilat duruyor)',
       corrNoFund.status === 400 && corrNoFund.body.code === 'FUND_CHOICE_REQUIRED' && corrNoFund.body.fund_choice?.choice_required === true && (await reversalsOf(legacyId)) === 0,

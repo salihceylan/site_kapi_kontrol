@@ -339,7 +339,7 @@ async function startHttp(pool) {
     }
     return tokens.get(userCode);
   };
-  async function call(method, urlPath, userCode, body, rawBody) {
+  async function callOnce(method, urlPath, userCode, body, rawBody) {
     const headers = { 'content-type': 'application/json' };
     if (userCode !== null) headers.authorization = `Bearer ${await tokenFor(userCode)}`;
     let response;
@@ -355,6 +355,18 @@ async function startHttp(pool) {
       // govdesiz yanit
     }
     return { status: response.status, body: json, headers: response.headers };
+  }
+  // K3 (P1-3): eski senaryolar KISITSIZ tahsilat yazar; iki turlu (Isletme + Fon) borclu hesapta sunucu 400 FUND_CHOICE_REQUIRED der (yazilim hesabi atamaz).
+  // Bu yardimci (YALNIZ test duzenegi; uretim kodu degil) o yanita BIR kez Isletme Hesabi secimiyle yeniden dener; senaryolarin asil konusu tahsilat hesabi
+  // secimi degildir. K3'u sinayan kontroller ham yaniti `__strict: true` ile gorur (alan gonderilmeden once atilir).
+  async function call(method, urlPath, userCode, body, rawBody) {
+    const strict = body !== null && typeof body === 'object' && body.__strict === true;
+    const payload = strict ? Object.fromEntries(Object.entries(body).filter(([k]) => k !== '__strict')) : body;
+    const first = await callOnce(method, urlPath, userCode, payload, rawBody);
+    const retryable =
+      !strict && rawBody === undefined && method === 'POST' && /\/finance\/(payments|entries\/\d+\/correct)$/.test(urlPath) && payload && typeof payload === 'object' && payload.fund === undefined &&
+      first.status === 400 && first.body?.code === 'FUND_CHOICE_REQUIRED';
+    return retryable ? callOnce(method, urlPath, userCode, { ...payload, fund: 'operating' }, rawBody) : first;
   }
   async function callRaw(method, urlPath, userCode, buffer, headers = {}) {
     const h = { ...headers };
