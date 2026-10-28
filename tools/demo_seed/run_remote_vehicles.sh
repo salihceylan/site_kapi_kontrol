@@ -13,7 +13,8 @@
 #
 # Idempotent: zaten aktif araci olan daireye dokunulmaz; ikinci calistirma bir sey eklemez.
 # .env dosyasi source EDILMEZ: DATABASE_URL node + dotenv ile okunur (parola ekrana yazilmaz). E-posta / bildirim GONDERILMEZ (yalniz vehicles + demo_seed_registry).
-# Geri alma: node cleanup.mjs --batch <demo-vehicles-...> --yes   (tohum / yeniden yapilandirma batch'inden ONCE; SUPERUSER gerekir).
+# Geri alma: node cleanup.mjs --batch <demo-vehicles-...> --yes --allow-target <canli veritabani adi>   (tohum / yeniden yapilandirma batch'inden ONCE; SUPERUSER gerekir).
+# Hedef korumasi: araclar yalniz yerel (loopback + izinli ad) ya da --allow-target <ad> ile onaylanmis veritabanina yazar; bu betik provada $RDB, canlida $DB_NAME icin kendisi verir.
 set -uo pipefail
 
 SITE="Cenk"
@@ -93,14 +94,14 @@ if [ "$SKIP_REH" = 0 ]; then
   REH_URL="$(mk_url "$RDB")"
   digest "$RDB" > "$BK/digest_before.txt"
   echo "[3/4] PROVA: arac ekleme gecici veritabaninda"
-  (cd "$APP_DIR" && DATABASE_URL="$REH_URL" node "$SEED_DIR/add_vehicles.mjs" --server-dir "$APP_DIR" --site "$SITE" --report-out "$OUT/vehicles-report-rehearsal-$STAMP.json" $EXTRA) | tee "$BK/rehearsal_vehicles.log" | tail -n 40
+  (cd "$APP_DIR" && DATABASE_URL="$REH_URL" node "$SEED_DIR/add_vehicles.mjs" --server-dir "$APP_DIR" --allow-target "$RDB" --site "$SITE" --report-out "$OUT/vehicles-report-rehearsal-$STAMP.json" $EXTRA) | tee "$BK/rehearsal_vehicles.log" | tail -n 40
   RC=${PIPESTATUS[0]}
   [ "$RC" = 0 ] || { echo "HATA: prova basarisiz (cikis $RC). Canliya GECILMEZ."; exit 5; }
   BATCH="$(grep -o 'batch=demo-vehicles-[0-9]*' "$BK/rehearsal_vehicles.log" | head -n 1 | cut -d= -f2)"
   if grep -q "TAMAM:" "$BK/rehearsal_vehicles.log"; then
     echo "   prova batch: $BATCH"
     echo "   --- cleanup provasi ---"
-    (cd "$APP_DIR" && DATABASE_URL="$REH_URL" node "$SEED_DIR/cleanup.mjs" --server-dir "$APP_DIR" --batch "$BATCH" --yes) | tail -n 6
+    (cd "$APP_DIR" && DATABASE_URL="$REH_URL" node "$SEED_DIR/cleanup.mjs" --server-dir "$APP_DIR" --allow-target "$RDB" --batch "$BATCH" --yes) | tail -n 6
     digest "$RDB" > "$BK/digest_after_cleanup.txt"
     if diff -q "$BK/digest_before.txt" "$BK/digest_after_cleanup.txt" >/dev/null; then
       echo "   cleanup SONRASI vehicles icerigi ve tum tablo satir sayilari yedekle AYNI: OK"
@@ -117,13 +118,13 @@ fi
 if [ "$PROD" = 1 ]; then
   REPORT="$OUT/vehicles-report-$STAMP.json"
   echo "[4/4] CANLI: arac ekleme $DB_NAME veritabaninda (yedek: $BK/db_before_vehicles.dump)"
-  (cd "$APP_DIR" && DATABASE_URL="$PROD_URL" node "$SEED_DIR/add_vehicles.mjs" --server-dir "$APP_DIR" --site "$SITE" --report-out "$REPORT" $EXTRA) | tee "$BK/prod_vehicles.log" | tail -n 45
+  (cd "$APP_DIR" && DATABASE_URL="$PROD_URL" node "$SEED_DIR/add_vehicles.mjs" --server-dir "$APP_DIR" --allow-target "$DB_NAME" --site "$SITE" --report-out "$REPORT" $EXTRA) | tee "$BK/prod_vehicles.log" | tail -n 45
   RC=${PIPESTATUS[0]}
   BATCH_PROD="$(grep -o 'batch=demo-vehicles-[0-9]*' "$BK/prod_vehicles.log" | head -n 1 | cut -d= -f2)"
   echo "   canli batch: $BATCH_PROD   cikis kodu: $RC"
   echo "   rapor (sifre/kimlik YOK): $REPORT"
   echo "   YEREL MAKINEDE plaka onizlemesi (PNG): scp <sunucu>:$REPORT out/ && python make_plate_previews.py --report out/$(basename "$REPORT")   (pip install pillow)"
-  echo "   GERI ALMA: (cd $APP_DIR && DATABASE_URL=<canli-url> node $SEED_DIR/cleanup.mjs --server-dir $APP_DIR --batch $BATCH_PROD --yes)"
+  echo "   GERI ALMA: (cd $APP_DIR && DATABASE_URL=<canli-url> node $SEED_DIR/cleanup.mjs --server-dir $APP_DIR --batch $BATCH_PROD --yes --allow-target $DB_NAME)"
   exit "$RC"
 else
   echo "[4/4] --prod verilmedi: canliya yazilmadi. Prova basarili ise: bash run_remote_vehicles.sh --prod --skip-rehearsal"

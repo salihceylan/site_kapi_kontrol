@@ -15,6 +15,7 @@ DEGISMEZ; arac uygulamanin kendi servislerini ve tablo kisitlarini kullanir. Her
 | `cleanup.mjs` | `--list`, `--batch <id> --yes`: kayitli satirlari siler (SUPERUSER gerekir), diskteki belge dosyalarini siler, degistirilen satirlari eski haline getirir; arac batch'i varken tohum / yeniden yapilandirma batch'ini, yeniden yapilandirma batch'i varken tohum batch'ini reddeder (`--force`) |
 | `make_pdf.py` | `--creds creds.json --out hesaplar.pdf` : A4 PDF (yonetim kadrosu + gorevliler + daire daire sakinler; yeniden yapilandirilmis JSON'da Malik / Daire admini (sari satir) / aile uyeleri). `pip install reportlab` |
 | `run_remote.sh` | Sunucuda: pg_dump yedegi -> yedekten gecici DB -> tohum + cleanup provasi -> `--prod` ile canli |
+| `lib/target_guard.mjs` | HEDEF KORUMASI (asagida): dort arac da baslarken `DATABASE_URL` hedefini dogrular; yerel (loopback + izinli ad) degilse `--allow-target <ad>` ister |
 | `restructure_families.mjs` | Tohumlanmis sitenin dairelerini YENI DAIRE YONETIMI modeline gore duzenler (asagidaki bolum): `--prev-creds`, `--creds-out`, `--dry-run`, `--seed`, `--force`, `--ensure-composition` (her haneye en az 1 cocuk + 1 yasli ekler) |
 | `run_remote_restructure.sh` | Sunucuda: yedek -> gecici DB provasi (yeniden yapilandirma + cleanup, icerik ozeti karsilastirmasi) -> `--prod` ile canli; `--force`, `--extra "<bayraklar>"` / `EXTRA_ARGS` ile `restructure_families.mjs`'e ek bayrak iletir |
 =======
@@ -42,12 +43,12 @@ ssh <sunucu> 'bash ~/demo_seed/run_remote.sh --prod --skip-rehearsal --creds-out
 scp <sunucu>:~/demo_seed/out/creds.json out/ && python make_pdf.py --creds out/creds.json --out out/demo_hesaplar.pdf
 ssh <sunucu> 'shred -u ~/demo_seed/out/creds.json'
 
-# Geri alma (deneme bitince)
+# Geri alma (deneme bitince); yerel izin listesi disindaki (ornegin canli) veritabaninda her komuta --allow-target <veritabani adi> eklenir (Hedef korumasi)
 DATABASE_URL=postgres://... node cleanup.mjs --list
 DATABASE_URL=postgres://... node cleanup.mjs --batch demo-YYYYMMDDHHMMSS --yes
 ```
 
-Elle (herhangi bir PostgreSQL): `DATABASE_URL=postgres://kullanici:parola@host:5432/db node seed.mjs --site Cenk --creds-out out/creds.json`.
+Elle (yerel PostgreSQL; hedef kurallari icin «Hedef korumasi» bolumune bakin): `DATABASE_URL=postgres://kullanici:parola@127.0.0.1:5432/site_kapi_yerel node seed.mjs --site Cenk --creds-out out/creds.json`.
 `server/` dizininde `npm ci` yapilmis olmali (arac `pg`, `bcryptjs` ve servis modullerini oradan yukler; `--server-dir` ile degistirilebilir). `server/.env` varsa
 yuklenir (mevcut ortam degiskenlerini ezmez): `FINANCE_RECEIPT_SECRET` (makbuz), `JWT_SECRET` (kamera parolasi sifreleme), `DOCUMENTS_DIR` (belge deposu) buradan gelir.
 
@@ -163,6 +164,15 @@ DATABASE_URL=postgres://... node cleanup.mjs --batch demo-vehicles-YYYYMMDDHHMMS
 Her adim yalniz o site icin ACIK modulde calisir (`site_modules` + `catalog.js`); kapali modul ATLANIR ve rapora yazilir (modul ASLA acilmaz):
 `finance`, `metering`, `budget`, `announcements` (cekirdek), `neighbor_board`, `drive_storage` (Dosya Deposu: belgeler adimi; `documents` modulu yoktur), `work_tracking`, `reservation`, `visitor_log`, `contracts`, `decision_book`, `survey`, `equipment`, `directory`, `annual_report`, `finance` (kart odemesi ayarlari) + `plate_cameras` (devices; `card_payments` modulu yoktur: kart odemesi Aidat ve Finans icindedir).
 KAPSAM DISI (dokunulmaz): kapilar, kayitli cihazlar, "Daireye Katil", kartli gecis, misafir gecisi, PIN, plaka tanima ve CCTV. Google Drive baglantisi (OAuth gerekir) ve "yakinda" moduller (`online_payment`, `hgs_access`, `cctv_link`, `plate_recognition`) atlanir.
+
+## Hedef korumasi
+
+Dort arac da (`seed.mjs`, `cleanup.mjs`, `restructure_families.mjs`, `add_vehicles.mjs`) baslarken `DATABASE_URL` hedefini `lib/target_guard.mjs` ile dogrular; izinli degilse HICBIR sey yapmadan cikis kodu 2 ile durur (parola yazilmaz). Amac: sahte veri yanlislikla canli ya da baska bir veritabanina yazilmasin (karsilastirma programi P1-19).
+
+* **Yerel kip (varsayilan):** sunucu geri donus adresi (`127.0.0.1`, `localhost`, `::1`) VE veritabani adi izin listesinde: `site_kapi_yerel`, `site_kapi_yerel_test` ya da yerel test / prova adlari (`demo_seed_*`, `demo_restr_*`, `demo_veh_*`; yerel testler `demo_seed_test`, `demo_restr_test`, `demo_veh_test` kullanir).
+* **Acik izin:** baska her hedef (canli, uzak, baska ad) YALNIZ `--allow-target <veritabani adi>` ile acilir; ad hedefteki adla AYNEN ayni olmalidir (adsiz ya da yanlis bayrak reddedilir). `run_remote*.sh` betikleri provada gecici veritabani adini, `--prod` yolunda canli veritabani adini bu bayrakla kendisi verir; elle calistiran adi bilerek yazar. Acik izinde tek uyari satiri yazilir.
+* **Geri alma da korunur:** canli veritabaninda `DATABASE_URL=<canli-url> node cleanup.mjs --batch <id> --yes --allow-target <canli veritabani adi>`.
+* **Test:** `cd server && node --test test/demo_seed_target_guard.test.js` (saf birim testleri + dort aracin ve uc betigin korumayi kullandigini denetleyen kaynak testi; veritabani gerekmez).
 
 ## Etiketleme ve geri alma
 

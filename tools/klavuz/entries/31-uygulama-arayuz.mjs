@@ -231,13 +231,16 @@ export default {
           note: 'Derin (yeni sayfa olarak açılan) ekranlarda: açık ekranların hepsini kapatır ve ana kabuğa Panel\'i seçtirir' },
         { file: 'lib/ui/pages/home_page.dart', find: 'void _onPanelReturnRequested() {',
           note: 'Ana kabuk derin ekrandan gelen isteği bir sonraki karede uygular (kapanmış ekranın üstünde onay penceresi açılmasın)' },
+        { file: 'lib/ui/views/budget_view.dart', find: 'Future<void> _goHome() async {',
+          note: 'İşletme Projesi ayrıntısı form taşır: kaydedilmemiş kalem tutarı varken "Kaydedilmemiş değişiklikler" onayı sorar, sonra aynı Panel dönüşünü çağırır' },
       ],
       causes: [
         'Panel\'de düğme yok: bilerek; zaten ana sayfadasınız',
         'Sakin alt çubuğu çiziliyor: "Özet" sekmesi aynı işi görür, üst çubukta ikinci bir yol çizilmez (çubuk ikiden az sekme ya da pencere yüksekliği 480 dp altı yüzünden yoksa düğme çıkar)',
         'En dar telefonlarda (çift modlu hesap + tema düğmesiyle 348 dp altı) düğme sağdaki eylemlerle üst üste bineceği için çizilmez: sağdaki eylemlerin genişliği `actionsWidth` ile HomePage.build içinde hesaplanır',
         'Mod hapı 480 dp altında yalnız ikon olur: etiket iki düğme grubunun arasına sığmaz',
-        'Derin ekranda düğme yok: o ekranın üst çubuğunun `actions` listesine `HomeShortcutButton()` konmamış; kaydedilmemiş veri koruması (`PopScope`) olan ekranlara bilerek konmaz (`popUntil` korumayı atlar)',
+        'Derin ekranda düğme yok: o ekranın üst çubuğunun `actions` listesine `HomeShortcutButton()` konmamış; kaydedilmemiş veri koruması (`PopScope`) olan ya da form taşıyan ekranlara varsayılan düğme bilerek konmaz (`popUntil` korumayı atlar); tek istisna kendi onayını `onPressed` ile veren İşletme Projesi ayrıntısıdır',
+        'İşletme Projesi ayrıntısında düğmeye basınca "Kaydedilmemiş değişiklikler" penceresi çıkıyor: hata değil; taslakta yazılıp "Kalemleri kaydet" ile kaydedilmemiş tutar var (`_hasUnsavedAmounts`). "Düzenlemeye Dön" ekranda bırakır, "Değişiklikleri Sil" Panel\'e döner',
         'Derin ekrandan basınca Panel yerine önceki modül sayfası açık kaldı: `PanelReturnRequests` dinleyicisi HomePage.initState içinde eklenmemiş ya da dispose\'ta erken kaldırılmış',
       ],
       checks: [
@@ -248,7 +251,7 @@ export default {
       commands: [
         'C:\\Users\\fingonancalime\\SDK\\flutter\\bin\\flutter.bat test test/screens/home_shortcut_test.dart',
       ],
-      tests: ['test/screens/home_shortcut_test.dart', 'test/screens/home_shell_layout_test.dart'],
+      tests: ['test/screens/home_shortcut_test.dart', 'test/screens/home_shell_layout_test.dart', 'test/screens/budget_detail_home_shortcut_test.dart'],
       related: ['ui-sakin-alt-cubuk', 'ui-ust-cubuk-tasma', 'ui-mod-hapi'],
     },
     {
@@ -408,7 +411,7 @@ export default {
         'Hareket azaltma açıkken morph/titreme yok ama tik yine gösterilir',
       ],
       checks: [
-        'Dokununca snackbar\'da "Kapı açma komutu gönderildi." (yönetici) veya "kapısı açılıyor..." (bireysel) çıkıyor mu',
+        'Dokununca snackbar\'da "Kapı açma komutu gönderildi." (yönetici) veya "Ana Kapı" için açma komutu gönderildi. (bireysel; kapı adı değişir) çıkıyor mu; "açıldı" yazması beklenmez (komut kabulü kapının açıldığını kanıtlamaz)',
         'Spinner sonsuza kadar sürüyorsa ağ isteği takılmıştır: günlükte /door/open isteğini arayın (sunucu bölümü)',
         'Testte: flutter test test/design/door_open_button_test.dart',
       ],

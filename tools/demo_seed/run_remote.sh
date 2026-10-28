@@ -11,7 +11,8 @@
 #   --skip-rehearsal  prova adimini atlar (yalniz yedek + canli; ONERILMEZ)
 #
 # .env dosyasi source EDILMEZ: DATABASE_URL node + dotenv ile okunur (parola ekrana yazilmaz).
-# Geri alma: node cleanup.mjs --batch <id> --yes   (DATABASE_URL ayni bicimde; SUPERUSER gerekir)
+# Geri alma: node cleanup.mjs --batch <id> --yes --allow-target <canli veritabani adi>   (DATABASE_URL ayni bicimde; SUPERUSER gerekir)
+# Hedef korumasi: araclar yalniz yerel (loopback + izinli ad) ya da --allow-target <ad> ile onaylanmis veritabanina yazar; bu betik provada $RDB, canlida $DB_NAME icin kendisi verir.
 set -uo pipefail
 
 SITE="Cenk"
@@ -89,7 +90,7 @@ if [ "$SKIP_REH" = 0 ]; then
   REH_URL="$(mk_url "$RDB")"
   counts "$RDB" > "$BK/counts_before.txt"
   echo "[3/4] PROVA: tohum gecici veritabaninda"
-  (cd "$APP_DIR" && DATABASE_URL="$REH_URL" node "$SEED_DIR/seed.mjs" --server-dir "$APP_DIR" --site "$SITE" --creds-out "$OUT/creds_rehearsal_$STAMP.json" $EXTRA) | tee "$BK/rehearsal_seed.log" | tail -n 40
+  (cd "$APP_DIR" && DATABASE_URL="$REH_URL" node "$SEED_DIR/seed.mjs" --server-dir "$APP_DIR" --allow-target "$RDB" --site "$SITE" --creds-out "$OUT/creds_rehearsal_$STAMP.json" $EXTRA) | tee "$BK/rehearsal_seed.log" | tail -n 40
   SEED_RC=${PIPESTATUS[0]}
   [ "$SEED_RC" = 0 ] || { echo "HATA: prova tohumu basarisiz (cikis $SEED_RC). Canliya GECILMEZ."; exit 5; }
   BATCH="$(grep -o 'batch=demo-[0-9]*' "$BK/rehearsal_seed.log" | head -n 1 | cut -d= -f2)"
@@ -97,7 +98,7 @@ if [ "$SKIP_REH" = 0 ]; then
   echo "   --- kayitli satirlar (tablo bazinda ilk 12) ---"
   $PSQL -d "$RDB" -Atc "SELECT table_name || ' ' || count(*) FROM demo_seed_registry WHERE batch_id = '$BATCH' AND op = 'insert' GROUP BY 1 ORDER BY count(*) DESC LIMIT 12"
   echo "   --- cleanup provasi ---"
-  (cd "$APP_DIR" && DATABASE_URL="$REH_URL" node "$SEED_DIR/cleanup.mjs" --server-dir "$APP_DIR" --batch "$BATCH" --yes) | tail -n 8
+  (cd "$APP_DIR" && DATABASE_URL="$REH_URL" node "$SEED_DIR/cleanup.mjs" --server-dir "$APP_DIR" --allow-target "$RDB" --batch "$BATCH" --yes) | tail -n 8
   counts "$RDB" > "$BK/counts_after_cleanup.txt"
   if diff -q "$BK/counts_before.txt" "$BK/counts_after_cleanup.txt" >/dev/null; then
     echo "   cleanup SONRASI tum tablolar yedekle AYNI sayida satir: OK"
@@ -110,13 +111,13 @@ fi
 # --- 4) canli -----------------------------------------------------------------------------------------------------------------------------------
 if [ "$PROD" = 1 ]; then
   echo "[4/4] CANLI: tohum $DB_NAME veritabaninda (yedek: $BK/db_before_demo.dump)"
-  (cd "$APP_DIR" && DATABASE_URL="$PROD_URL" node "$SEED_DIR/seed.mjs" --server-dir "$APP_DIR" --site "$SITE" --creds-out "$CREDS_OUT" $EXTRA) | tee "$BK/prod_seed.log" | tail -n 45
+  (cd "$APP_DIR" && DATABASE_URL="$PROD_URL" node "$SEED_DIR/seed.mjs" --server-dir "$APP_DIR" --allow-target "$DB_NAME" --site "$SITE" --creds-out "$CREDS_OUT" $EXTRA) | tee "$BK/prod_seed.log" | tail -n 45
   RC=${PIPESTATUS[0]}
   BATCH_PROD="$(grep -o 'batch=demo-[0-9]*' "$BK/prod_seed.log" | head -n 1 | cut -d= -f2)"
   echo "   canli batch: $BATCH_PROD   cikis kodu: $RC"
   echo "   kimlik bilgileri: $CREDS_OUT (chmod 600). PDF icin: python3 $SEED_DIR/make_pdf.py --creds $CREDS_OUT --out $OUT/demo_hesaplar.pdf   (reportlab gerekir; yoksa dosyayi yerel makineye alip orada uretin)"
   echo "   KAPAT: kimlik dosyasini kopyaladiktan sonra sunucudan silin (shred -u $CREDS_OUT)."
-  echo "   GERI ALMA: (cd $APP_DIR && DATABASE_URL=<canli-url> node $SEED_DIR/cleanup.mjs --server-dir $APP_DIR --batch $BATCH_PROD --yes)"
+  echo "   GERI ALMA: (cd $APP_DIR && DATABASE_URL=<canli-url> node $SEED_DIR/cleanup.mjs --server-dir $APP_DIR --batch $BATCH_PROD --yes --allow-target $DB_NAME)"
   exit "$RC"
 else
   echo "[4/4] --prod verilmedi: canliya yazilmadi. Prova basarili ise: bash run_remote.sh --prod --skip-rehearsal"

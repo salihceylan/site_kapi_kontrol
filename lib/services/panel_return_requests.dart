@@ -11,7 +11,7 @@ import 'package:flutter/widgets.dart';
 ///
 /// İstek BEKLETİLMEZ: o anda kabuk dinlemiyorsa (örneğin oturum kapanmışsa) hiçbir şey olmaz. Servis hiçbir ekranı
 /// kendiliğinden kapatmaz; yalnız [returnToPanel] çağrısı kapatır ve kaydedilmemiş veri taşıyan formlara (sihirbaz,
-/// düzenleme) düğme konmaz.
+/// düzenleme) varsayılan düğme konmaz (konursa ekran [returnToPanel]'den ÖNCE kendi onayını verir: İşletme Projesi ayrıntısı).
 class PanelReturnRequests extends ChangeNotifier {
   PanelReturnRequests._();
 

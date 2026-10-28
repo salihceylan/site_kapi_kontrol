@@ -51,6 +51,8 @@ Ekran kablosu çapraz bağlanır: WROOM GPIO 32 (RX) ← ekran kartı GPIO 21 (T
 - [x] **Karanlık Mod (Dark Theme) Kontrast ve Arayüz Düzeltmeleri:**
   - `ListTile background color or ink splashes may be invisible` framework uyarısı `yan_menu.dart` içerisinde `ListTile` bileşeni `Material` ile sarılarak çözüldü.
   - Karanlık modda silik kalan metinler (`AppColors.textMutedLight` -> Slate-300 `#CBD5E1`), dialog arka planları, tersine dönmüş renk koşulları (`login_page`, `yan_menu`, `admin_door_status_card`, `hands_free_settings_dialog`, `site_security_policy_dialog`) düzeltilerek yüksek kontrast ve net okunabilirlik sağlandı.
+- [ ] **Sayaç saha ekranında "fotoğraf nereye gitti" satırı (karşılaştırma raporu P1-9 ikinci yarısı; Dalga C'de P1-8 ile birlikte):**
+  - Saha ekranı (`meter_field_view.dart`) fotoğrafın Drive'a mı, sunucuya mı gittiğini ya da hiç gitmediğini göstermiyor. Satır, sunucu yanıtındaki `photo.storage` değerinin istemcide okunmasını gerektirir (P1-8'in "fotoğraf ulaşmadı" rozetiyle aynı veri); görevli Drive durumunu okuyamaz, bu yüzden bilgi gönderim sonucundan gelir. Dalga A'da yalnız etiket yarısı yapıldı. Plan: `docs/superpowers/plans/2026-10-28-karsilastirma-guclendirme.md` (Dalga C).
 
 ### 2.2 Kullanıcı & Yönetici Uygulaması (`ahbu`)
 - [x] **Daire Sakini (`individual` / `resident`) Self-Service Kayıt ve Aktivasyon Akışı:**

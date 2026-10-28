@@ -13,6 +13,7 @@
 import fs from 'node:fs';
 import { applyDbEnv, describeTarget, loadServerRequire, newPgClient, parseArgs, resolveServerDir } from './lib/env.mjs';
 import { REGISTRY_TABLE, primaryKeys } from './lib/registry.mjs';
+import { requireDemoTarget } from './lib/target_guard.mjs';
 
 const args = parseArgs(process.argv.slice(2));
 const url = args['database-url'] || process.env.DATABASE_URL;
@@ -20,6 +21,8 @@ if (!url) {
   console.error('DATABASE_URL (ya da --database-url) gerekli.');
   process.exit(2);
 }
+// Hedef korumasi (P1-19): yalniz yerel (loopback + izinli ad) ya da --allow-target <ad> ile onaylanmis veritabani; aksi halde cikis 2.
+requireDemoTarget(url, args);
 applyDbEnv(url);
 const serverRequire = loadServerRequire(resolveServerDir(args));
 const client = newPgClient(serverRequire, url);

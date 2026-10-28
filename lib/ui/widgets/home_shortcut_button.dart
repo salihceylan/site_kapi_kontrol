@@ -9,7 +9,8 @@ import 'package:site_kapi_kontrol/services/panel_return_requests.dart';
 ///   Orada [onPressed] verilir ve çekmeceden "Panel"i seçmekle aynı korumalı gezinme çalışır.
 /// - Derin (yeni sayfa olarak açılan) ekranlarda üst çubuğun `actions` listesine konur; [onPressed] verilmezse
 ///   [PanelReturnRequests.returnToPanel] açık ekranların hepsini kapatıp kabuğa Panel'i seçtirir. Kaydedilmemiş veri taşıyan
-///   formlara (sihirbaz, düzenleme) konmaz: kapanış onay sormadan tüm ekranları atar.
+///   formlara (sihirbaz, düzenleme) varsayılan düğme konmaz: kapanış onay sormadan tüm ekranları atar. Tek istisna kendi onayını
+///   [onPressed] ile veren ekrandır (İşletme Projesi ayrıntısı: kaydedilmemiş kalem tutarı varken önce sorar, sonra aynı yolu çağırır).
 ///
 /// Dokunma hedefi 44 dp; ekran okuyucu ve ipucu adı "Ana sayfa". Simge Panel'in menüdeki ve alt çubuktaki ("Özet") simgesidir:
 /// aynı hedef, aynı simge; ev simgesi üst çubuktaki "Sakin Modu" hapına ayrılmıştır, ikisi karışmaz.
@@ -22,7 +23,8 @@ class HomeShortcutButton extends StatelessWidget {
   /// Panel'in simgesi (çekmecedeki "Panel" ve sakin alt çubuğundaki "Özet" ile aynı).
   static const IconData icon = PhosphorIconsRegular.squaresFour;
 
-  /// Dokununca yapılacak iş; verilmezse derin ekran davranışı ([PanelReturnRequests.returnToPanel]).
+  /// Dokununca yapılacak iş; verilmezse derin ekran davranışı ([PanelReturnRequests.returnToPanel]). Form taşıyan derin ekran
+  /// kaydedilmemiş veriyi burada sorar.
   final VoidCallback? onPressed;
 
   @override

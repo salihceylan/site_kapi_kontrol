@@ -488,7 +488,7 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 
 ## Ek E — Kaynak dosya kapsamı
 
-1025 kaynak dosyanın **243**'i en az bir arıza girişine bağlı, **1**'i yalnız dosya haritasında, **781**'i klavuzda hiç geçmiyor. Bir dosya hiç geçmiyorsa onunla ilgili arızayı `--where` ile arayın.
+1025 kaynak dosyanın **244**'i en az bir arıza girişine bağlı, **1**'i yalnız dosya haritasında, **780**'i klavuzda hiç geçmiyor. Bir dosya hiç geçmiyorsa onunla ilgili arızayı `--where` ile arayın.
 
 | Dosya | Satır | Bağlı girişler | Dosya haritası |
 | --- | --- | --- | --- |
@@ -914,7 +914,7 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [lib/ui/views/bank_lines_view.dart](../lib/ui/views/bank_lines_view.dart) | 219 | — | — |
 | [lib/ui/views/bluetooth_wifi_view.dart](../lib/ui/views/bluetooth_wifi_view.dart) | 71 | [ui-wifi-kurulum](ariza-klavuzu/31-uygulama-arayuz.md#ui-wifi-kurulum) | 31-uygulama-arayuz |
 | [lib/ui/views/brand_theme_view.dart](../lib/ui/views/brand_theme_view.dart) | 379 | — | — |
-| [lib/ui/views/budget_view.dart](../lib/ui/views/budget_view.dart) | 587 | — | — |
+| [lib/ui/views/budget_view.dart](../lib/ui/views/budget_view.dart) | 624 | [ui-ana-sayfa-dugmesi](ariza-klavuzu/31-uygulama-arayuz.md#ui-ana-sayfa-dugmesi) | — |
 | [lib/ui/views/bulk_import_controller.dart](../lib/ui/views/bulk_import_controller.dart) | 1215 | — | — |
 | [lib/ui/views/bulk_import_view.dart](../lib/ui/views/bulk_import_view.dart) | 281 | — | — |
 | [lib/ui/views/cctv_view.dart](../lib/ui/views/cctv_view.dart) | 587 | — | — |
@@ -1051,7 +1051,7 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [lib/ui/widgets/finance_settings_controller.dart](../lib/ui/widgets/finance_settings_controller.dart) | 230 | — | — |
 | [lib/ui/widgets/finance_target_picker.dart](../lib/ui/widgets/finance_target_picker.dart) | 437 | — | — |
 | [lib/ui/widgets/hands_free_settings_dialog.dart](../lib/ui/widgets/hands_free_settings_dialog.dart) | 263 | [bilesen-eller-serbest-ayar](ariza-klavuzu/32-uygulama-bilesenler.md#bilesen-eller-serbest-ayar) | 31-uygulama-arayuz |
-| [lib/ui/widgets/home_shortcut_button.dart](../lib/ui/widgets/home_shortcut_button.dart) | 43 | [ui-ana-sayfa-dugmesi](ariza-klavuzu/31-uygulama-arayuz.md#ui-ana-sayfa-dugmesi) | 31-uygulama-arayuz |
+| [lib/ui/widgets/home_shortcut_button.dart](../lib/ui/widgets/home_shortcut_button.dart) | 45 | [ui-ana-sayfa-dugmesi](ariza-klavuzu/31-uygulama-arayuz.md#ui-ana-sayfa-dugmesi) | 31-uygulama-arayuz |
 | [lib/ui/widgets/individual_apartment_card.dart](../lib/ui/widgets/individual_apartment_card.dart) | 231 | [bilesen-bireysel-daire-karti](ariza-klavuzu/32-uygulama-bilesenler.md#bilesen-bireysel-daire-karti) | — |
 | [lib/ui/widgets/individual_door_card.dart](../lib/ui/widgets/individual_door_card.dart) | 436 | [ui-bireysel-kapi-karti-dugmeleri](ariza-klavuzu/31-uygulama-arayuz.md#ui-bireysel-kapi-karti-dugmeleri) | 31-uygulama-arayuz |
 | [lib/ui/widgets/join_request_card.dart](../lib/ui/widgets/join_request_card.dart) | 92 | [bilesen-kurulum-secenek-karti](ariza-klavuzu/32-uygulama-bilesenler.md#bilesen-kurulum-secenek-karti) | — |

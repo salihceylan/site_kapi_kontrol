@@ -975,7 +975,7 @@ flutter test test/home_polling_test.dart test/adaptive_poller_test.dart test/clo
 | [integration_test/tool/make_defines.mjs:30](../../integration_test/tool/make_defines.mjs#L30) | <code>console.error('Hata: --e2e &lt;E2E harness dizini&gt; (veya E2E_DIR) gerekli.');</code> | dart_defines.json üreticisi; seed.json gerekir (repoya yazılmaz, sır içerir) |
 | [integration_test/support/e2e_driver.dart:5](../../integration_test/support/e2e_driver.dart#L5) | <code>// Calistirma (proje kokunden; ayni anda YALNIZ BIR `flutter test -d windows`):</code> | Çalıştırma komutu ve kuralı: aynı anda tek `flutter test -d windows` |
 | [test/e2e_harness_collector_test.dart:1](../../test/e2e_harness_collector_test.dart#L1) | <code>// E2E altyapisinin (integration_test/support) hata toplayicisini dogrular: "0 tasma" son…</code> | "0 taşma" sonucunun yanlış negatif olmadığını gerçek taşma yakalayarak kanıtlar |
-| [BEKLEYEN_ISLER.md:132](../../BEKLEYEN_ISLER.md#L132) | <code>**Faz 4 – Emülatörlerde uçtan uca test, menü gezme ve düzeltme döngüsü** (**İPTAL EDİLDİ …</code> | Faz 4 İPTAL edildi: E2E yürüyüşü kullanıcı tarafından yapılır; kısmi sonuçlar ve bilinen ortam sorunu burada |
+| [BEKLEYEN_ISLER.md:134](../../BEKLEYEN_ISLER.md#L134) | <code>**Faz 4 – Emülatörlerde uçtan uca test, menü gezme ve düzeltme döngüsü** (**İPTAL EDİLDİ …</code> | Faz 4 İPTAL edildi: E2E yürüyüşü kullanıcı tarafından yapılır; kısmi sonuçlar ve bilinen ortam sorunu burada |
 | [docs/codebase/TESTING.md:8](../../docs/codebase/TESTING.md#L8) | <code>- Flutter integration tests: `integration_test` (dev dependency) under `integration_test/…</code> | Bu testler flutter test/CI kapsamında DEĞİL |
 
 **Olası nedenler**
@@ -1302,11 +1302,11 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 300 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [BEKLEYEN_ISLER.md:98](../../BEKLEYEN_ISLER.md#L98) | <code>## 6. 🛠️ Kod İnceleme Düzeltme Planı (2026-10-01)</code> | Kod inceleme planı: Faz 0-6 ve her fazın durumu ([x] yapıldı / [ ] bekliyor) |
-| [BEKLEYEN_ISLER.md:132](../../BEKLEYEN_ISLER.md#L132) | <code>**Faz 4 – Emülatörlerde uçtan uca test, menü gezme ve düzeltme döngüsü** (**İPTAL EDİLDİ …</code> | Faz 4 (emülatörde uçtan uca gezme) İPTAL: denemeleri kullanıcı yapar; kısmi sonuçlar ve ortam sorunu yazılı |
-| [BEKLEYEN_ISLER.md:143](../../BEKLEYEN_ISLER.md#L143) | <code>**Faz 6 – Canlıya dağıtım (AGENTS.md kural 8)**</code> | Canlıya dağıtım durumu: 2026-10-01 sunucu dağıtımı, COMPANY_API_KEY, APK/firmware dağıtımının kullanıcı kararı olduğu |
-| [BEKLEYEN_ISLER.md:149](../../BEKLEYEN_ISLER.md#L149) | <code>**Ertelenen düşük öncelikli işler (ajan raporlarından)**</code> | Bilinen ve bilerek ertelenen eksikler (çift kayıt, bellek içi hız sınırı, BLE bonding, MQTT bloklama vb.) |
-| [BEKLEYEN_ISLER.md:157](../../BEKLEYEN_ISLER.md#L157) | <code>**Bilinçli olarak bu turun dışında (kullanıcı kararı veya ayrı iş gerektirir)**</code> | Kullanıcı kararı gerektirenler: parola döndürme/git geçmişi temizliği, OTA kod imzalama, release imzası, canlı .env değerleri |
+| [BEKLEYEN_ISLER.md:100](../../BEKLEYEN_ISLER.md#L100) | <code>## 6. 🛠️ Kod İnceleme Düzeltme Planı (2026-10-01)</code> | Kod inceleme planı: Faz 0-6 ve her fazın durumu ([x] yapıldı / [ ] bekliyor) |
+| [BEKLEYEN_ISLER.md:134](../../BEKLEYEN_ISLER.md#L134) | <code>**Faz 4 – Emülatörlerde uçtan uca test, menü gezme ve düzeltme döngüsü** (**İPTAL EDİLDİ …</code> | Faz 4 (emülatörde uçtan uca gezme) İPTAL: denemeleri kullanıcı yapar; kısmi sonuçlar ve ortam sorunu yazılı |
+| [BEKLEYEN_ISLER.md:145](../../BEKLEYEN_ISLER.md#L145) | <code>**Faz 6 – Canlıya dağıtım (AGENTS.md kural 8)**</code> | Canlıya dağıtım durumu: 2026-10-01 sunucu dağıtımı, COMPANY_API_KEY, APK/firmware dağıtımının kullanıcı kararı olduğu |
+| [BEKLEYEN_ISLER.md:151](../../BEKLEYEN_ISLER.md#L151) | <code>**Ertelenen düşük öncelikli işler (ajan raporlarından)**</code> | Bilinen ve bilerek ertelenen eksikler (çift kayıt, bellek içi hız sınırı, BLE bonding, MQTT bloklama vb.) |
+| [BEKLEYEN_ISLER.md:159](../../BEKLEYEN_ISLER.md#L159) | <code>**Bilinçli olarak bu turun dışında (kullanıcı kararı veya ayrı iş gerektirir)**</code> | Kullanıcı kararı gerektirenler: parola döndürme/git geçmişi temizliği, OTA kod imzalama, release imzası, canlı .env değerleri |
 | [BEKLEYEN_ISLER.md:10](../../BEKLEYEN_ISLER.md#L10) | <code>## 1. 🔌 Donanım &amp; Firmware (ESP32)</code> | WROOM röle kartı pin doğrulaması ve sahadaki C3 3.0.3 takibi (açık maddeler) |
 
 **Olası nedenler**

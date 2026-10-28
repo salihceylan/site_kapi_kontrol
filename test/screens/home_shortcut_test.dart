@@ -731,17 +731,26 @@ void main() {
     // Dosya içeriği CRLF ya da LF olabilir (Windows çalışma ağacı); desenler satır sonundan bağımsızdır.
     String source(String path) => File(path).readAsStringSync();
 
-    test('derin finans / bütçe ekranlarının üst çubuğunda HomeShortcutButton var', () {
+    test('derin finans ekranlarının (banka dosyası / banka satırları) üst çubuğunda HomeShortcutButton var', () {
       for (final path in const <String>[
         'lib/ui/views/bank_import_view.dart',
         'lib/ui/views/bank_lines_view.dart',
-        'lib/ui/views/budget_view.dart',
       ]) {
         final text = source(path);
         expect(text, contains("package:site_kapi_kontrol/ui/widgets/home_shortcut_button.dart"), reason: path);
         expect(RegExp(r'appBar:\s*AppBar\([\s\S]*?actions:\s*const\s*<Widget>\[\s*HomeShortcutButton\(\)\s*\]').hasMatch(text), isTrue,
             reason: '$path: AppBar actions içinde HomeShortcutButton');
       }
+    });
+
+    test('İşletme Projesi ayrıntısı form taşır: düğme kendi onayını verir (varsayılan HomeShortcutButton() değil)', () {
+      final text = source('lib/ui/views/budget_view.dart');
+      expect(text, contains("package:site_kapi_kontrol/ui/widgets/home_shortcut_button.dart"));
+      expect(text, contains('HomeShortcutButton(onPressed: () => unawaited(_goHome()))'));
+      expect(text, isNot(contains('HomeShortcutButton()')),
+          reason: 'varsayılan düğme popUntil ile yazılmış kalem tutarını sormadan atardı (docs/TASARIM_DILI.md)');
+      expect(text, contains('Future<void> _goHome() async'));
+      expect(text, contains('_hasUnsavedAmounts'));
     });
 
     test('yardım: her grubun "navigation" konusu “Ana sayfa” düğmesini anlatır', () {
