@@ -9,6 +9,7 @@ import { ensureFinance4bSchema } from './modules/finance_4b_schema.js';
 import { ensureDocumentsSchema } from './modules/document_schema.js';
 import { ensureWorkTrackingSchema } from './modules/work_tracking_schema.js';
 import { ensureWorkAttachmentsSchema } from './modules/work_attachments_schema.js';
+import { ensureFeedbackSchema } from './modules/feedback_schema.js';
 import { ensureReservationSchema } from './modules/reservation_schema.js';
 import { ensureSurveySchema } from './modules/survey_schema.js';
 import { ensureVisitorLogSchema } from './modules/visitor_log_schema.js';
@@ -2006,6 +2007,8 @@ export async function ensureDbSchema() {
     // 102 (site menu yerlesimi, K8 / P1-16: kompakt menu kumesi): sites / users'tan SONRA; dev blokta DEGIL; tablo varsa hicbir ifade / kilit yok (menu_layout_schema.js = migrations/102).
     // Yetenek (site_modules) ile menu yerlesimi ayri katmandir: bu tablo hicbir modulu acmaz ya da kapatmaz.
     await ensureMenuLayoutSchema(client);
+    // 103 (geri bildirim, sayfa baglamli): dev blokta DEGIL; katalog kontrolu + her adim kendi otomatik onayli ifadesi (feedback_schema.js = migrations/103).
+    await ensureFeedbackSchema(client);
 
     // 031 people_v1: mevcut sakinlerin CRM'e tek seferlik aktarimi. Savunmaci: hata sunucunun acilmasini ENGELLEMEZ
     // (kendi transaction'i geri alinir, isaret yazilmaz => sonraki acilista yeniden denenir; okuma anindaki

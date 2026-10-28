@@ -431,6 +431,10 @@ const Set<String> _drawerOnlyTitles = <String>{
   'Panel',
   'Yönetim Firması',
   'Yardım ve Destek',
+  // P1-14 (K11): çekmecedeki "Geri bildirim" ve Ayarlar panelindeki sayfa seçmeyen geri bildirim eylemleri.
+  'Geri bildirim',
+  'Geri bildirim gönder',
+  'Gelen geri bildirimler',
   'Çıkış Yap',
   'Sakin Moduna Geç',
   'Yönetici Paneline Geç',

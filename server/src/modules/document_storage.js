@@ -29,7 +29,7 @@ const SITE_DIR_PATTERN = /^\d{10}$/;
  * Kök altındaki alt ağaçlar: `sites` (belgeler; varsayılan) ve `work_attachments` (iş takibi fotoğrafları, 047). Aynı anahtar biçimi (<site>/<uuid>), aynı
  * güvenlik kuralları; ağaç ayrımı tablo düzeyindedir (belge yetim süpürmesi yalnız `sites/`e, ek süpürmesi yalnız `work_attachments/`a bakar).
  */
-export const STORAGE_SUBTREES = Object.freeze(['sites', 'work_attachments']);
+export const STORAGE_SUBTREES = Object.freeze(['sites', 'work_attachments', 'feedback_attachments']);
 
 function subtreeDir(root, subtree) {
   if (!STORAGE_SUBTREES.includes(subtree)) {
