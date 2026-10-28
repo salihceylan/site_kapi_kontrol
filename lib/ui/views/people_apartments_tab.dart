@@ -10,6 +10,7 @@ import 'package:site_kapi_kontrol/ui/dialogs/apartment_card_dialog.dart';
 import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart';
 import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
 import 'package:site_kapi_kontrol/ui/widgets/apartment_crm_card.dart';
+import 'package:site_kapi_kontrol/ui/widgets/bulk_entry_buttons.dart' show BulkListImportButton;
 import 'package:site_kapi_kontrol/ui/widgets/crm_parts.dart';
 
 /// "Daireler" sekmesi (Platform Faz 2a): arama + blok süzgeci, sayfalı daire listesi ve daire kartı.
@@ -22,10 +23,15 @@ class PeopleApartmentsTab extends StatefulWidget {
     super.key,
     required this.scope,
     required this.onDataChanged,
+    this.onImportRequested,
   });
 
   final PeopleScope scope;
   final VoidCallback onDataChanged;
+
+  /// «Excel'den yükle» kısayolu (P2-16; yalnız yazma yetkisi olanda): mevcut «Toplu Yükle» sihirbazını açar.
+  /// null ise düğme çizilmez.
+  final VoidCallback? onImportRequested;
 
   @override
   State<PeopleApartmentsTab> createState() => PeopleApartmentsTabState();
@@ -141,6 +147,15 @@ class PeopleApartmentsTabState extends State<PeopleApartmentsTab> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (widget.scope.canWrite && widget.onImportRequested != null) ...[
+          BulkListImportButton(
+            buttonKey: const ValueKey<String>('apartments_list_excel_import'),
+            onImport: widget.onImportRequested!,
+            hint:
+                '${widget.scope.terms.unitPlural} ve kişi bilgilerini Excel ya da CSV dosyasından toplu yüklemek için sihirbazı açar.',
+          ),
+          const SizedBox(height: AppSpace.md),
+        ],
         AppCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,

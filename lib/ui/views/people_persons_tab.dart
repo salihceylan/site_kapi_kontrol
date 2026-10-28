@@ -14,7 +14,7 @@ import 'package:site_kapi_kontrol/ui/dialogs/person_card_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/person_form_dialog.dart';
 import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart';
 import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
-import 'package:site_kapi_kontrol/ui/widgets/bulk_entry_buttons.dart' show BulkEmptyImportAction;
+import 'package:site_kapi_kontrol/ui/widgets/bulk_entry_buttons.dart' show BulkEmptyImportAction, BulkListImportButton;
 import 'package:site_kapi_kontrol/ui/widgets/crm_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/person_card.dart';
 
@@ -32,7 +32,8 @@ class PeoplePersonsTab extends StatefulWidget {
   final PeopleScope scope;
   final VoidCallback onDataChanged;
 
-  /// Boş listede «Excel'den yükle» eylemini gösterir (yalnız yazma yetkisi olanda); null ise gösterilmez.
+  /// «Excel'den yükle» kısayolu (yalnız yazma yetkisi olanda): boş listede kartın içinde, dolu / süzgeçli listede
+  /// «Kişi Ekle»nin altında bir düğme olarak gösterilir (P2-16); null ise gösterilmez.
   final VoidCallback? onImportRequested;
 
   @override
@@ -432,6 +433,17 @@ class PeoplePersonsTabState extends State<PeoplePersonsTab> {
             onPressed: _add,
           ),
           const SizedBox(height: AppSpace.md),
+          // «Excel'den yükle» kısayolu (P2-16). Boş ve süzgeçsiz listede aynı eylem boş durum kartının içindedir
+          // (yönlendirici metinle); iki düğme üst üste gelmesin diye o durumda üstteki gizlenir.
+          if (widget.onImportRequested != null &&
+              (_loader.items.isNotEmpty || _filtered || _loader.error != null)) ...[
+            BulkListImportButton(
+              buttonKey: const ValueKey<String>('persons_list_excel_import'),
+              onImport: widget.onImportRequested!,
+              hint: 'Kişileri ve daire bilgilerini Excel ya da CSV dosyasından toplu yüklemek için sihirbazı açar.',
+            ),
+            const SizedBox(height: AppSpace.md),
+          ],
         ],
         AppCard(
           child: Column(

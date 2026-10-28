@@ -70,6 +70,7 @@ class SitesView extends StatelessWidget {
     this.onResetHouseholdPersonPin,
     this.onOpenApartmentCard,
     this.onOpenBulkImport,
+    this.onOpenSetupWizard,
     this.isSuperUser = false,
     this.onApproveDeleteSite,
     this.onRejectDeleteSite,
@@ -138,6 +139,9 @@ class SitesView extends StatelessWidget {
   /// "Daire kartı" penceresi (daire adminini değiştir, kapı erişimi askısı, adli kayıt, geçmiş).
   final Future<void> Function(ApartmentRecord apartment)? onOpenApartmentCard;
   final void Function(int siteCode, String siteName)? onOpenBulkImport;
+
+  /// «Kurulum Sihirbazı» (P2-15): seçili sitenin adım adım kurulumunu açar / sürdürür. null ise düğme çizilmez.
+  final void Function(int siteCode, String siteName)? onOpenSetupWizard;
 
   @override
   Widget build(BuildContext context) {
@@ -317,6 +321,14 @@ class SitesView extends StatelessWidget {
             spacing: AppSpace.sm,
             runSpacing: AppSpace.sm,
             children: [
+              if (onOpenSetupWizard != null && site.isApproved)
+                OutlinedButton.icon(
+                  key: const ValueKey<String>('sites_setup_wizard'),
+                  onPressed: () => onOpenSetupWizard!(site.id, site.name),
+                  style: tonalActionStyle(context),
+                  icon: const Icon(Icons.checklist_rtl_rounded),
+                  label: const Text('Kurulum Sihirbazı'),
+                ),
               if (canManageSites)
                 OutlinedButton.icon(
                   onPressed: () => onEditSite(site),
