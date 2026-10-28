@@ -1043,9 +1043,9 @@
           "adimlar": [
             "Finans menüsünden “Tanımlar” sekmesini açın.",
             "“Yeni Tanım”: ad (ör. Aylık aidat), tür (aylık), dağıtım yöntemi, tutar, her ayın kaçında vade, başlangıç ayı, hedef (tüm site / bloklar / daireler).",
-            "Dağıtım yöntemlerini deneyin: daire başı sabit tutar, eşit pay (toplam bölünür), daire tipine göre (her tip için ayrı tutar), arsa payına göre, m²'ye göre (brüt/net)."
+            "Dağıtım yöntemlerini deneyin: daire başı sabit tutar, eşit pay (toplam bölünür), daire tipine göre (her tip için ayrı tutar), arsa payına göre. Yöntem listesine ve forma bakın."
           ],
-          "beklenen": "Tanım kaydedilir ve listede görünür. Tutar kutusunun altında girdiğiniz tutar okunuşuyla gösterilir (ör. 1.250,50 ₺); virgülden sonra en çok 2 hane, “1,250” gibi belirsiz giriş reddedilir. Tutarı kimin ödeyeceği tanımda değil, dairenin “borç ve bildirimler kime gitsin” ayarında (Kişi ve Daire Kayıtları → daire düzenle) belirlenir. Borçlandırılmış bir tanımın tutarı ve dağıtımı değiştirilemez (kilitli panelde açıklanır); yalnız ad, bitiş, vade günü ve etkin/pasif değişir.",
+          "beklenen": "Dağıtım yöntemi olarak yalnız “Sabit tutar”, “Eşit bölüş”, “Kategoriye göre” ve “Arsa payına göre” vardır; “Metrekareye göre” seçeneği ve “Metrekare türü / Brüt m² / Net m²” alanı yoktur (m² 2026-10-25'te kaldırıldı). Tanım kaydedilir ve listede görünür. Tutar kutusunun altında girdiğiniz tutar okunuşuyla gösterilir (ör. 1.250,50 ₺); virgülden sonra en çok 2 hane, “1,250” gibi belirsiz giriş reddedilir. Tutarı kimin ödeyeceği tanımda değil, dairenin “borç ve bildirimler kime gitsin” ayarında (Kişi ve Daire Kayıtları → daire düzenle) belirlenir. Borçlandırılmış bir tanımın tutarı ve dağıtımı değiştirilemez (kilitli panelde açıklanır); yalnız ad, bitiş, vade günü ve etkin/pasif değişir.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "Bir test sitesi (Aidat ve Finans temel modüldür: her sitede açık)",
           "yeni": true,
@@ -6869,12 +6869,13 @@
           "adimlar": [
             "Okuma aktar sekmesinde türü Su seçip okuma tarihini girin.",
             "İlk sütunu seri no ya da 'A Blok - 5' gibi daire kodu, ikinci sütunu değer olan bir CSV ya da Excel dosyası seçin (içinde bir yanlış kod olsun).",
-            "Kontrol et'e, sonra Aktar'a basın."
+            "Kontrol et'e, sonra Aktar'a basın.",
+            "Sayfanın en altındaki metne bakın."
           ],
-          "beklenen": "Kontrol et, aktarılacak ve sorunlu satır sayısını ve yanlış kodun nedenini gösterir. Aktar yalnız hatasız satırları yazar; aynı dosya tekrar yüklenince satırlar 'zaten kayıtlı' sayılır, çift kayıt olmaz.",
+          "beklenen": "Kontrol et, aktarılacak ve sorunlu satır sayısını ve yanlış kodun nedenini gösterir. Aktar yalnız hatasız satırları yazar; aynı dosya tekrar yüklenince satırlar 'zaten kayıtlı' sayılır, çift kayıt olmaz. En altta 'Fotoğrafla okumak için Sayaçlar sekmesindeki “Fotoğrafla oku” düğmesini kullanın.' yazar ('Fotoğrafla okuma: Yakında…' yazmaz; fotoğrafla okuma çalışır, bkz. F32.12). Kurul üyesi hesabında bu metin yoktur.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
-          "yeni": false,
+          "yeni": true,
           "gelistirme": "hazir"
         },
         {
@@ -6894,13 +6895,13 @@
           "id": "F32.10",
           "baslik": "Isı payı dağıtımı",
           "adimlar": [
-            "Isı sayaçları olan daireler için Faturalandır'da tür Isı, yöntem 'Isı payı' seçin, toplam gideri girip Önizle'ye basın.",
-            "Bir dairenin m² bilgisini boş bırakıp 'eksik daireleri atla' kapalıyken Borçlandır'ı deneyin."
+            "Isı sayaçları olan daireler için Faturalandır'da tür Isı, yöntem 'Isı payı (ölçüm + alan payı)' seçin, toplam gideri girip Önizle'ye basın.",
+            "Bir dairenin arsa payını boş bırakıp önizlemeyi yeniden alın."
           ],
-          "beklenen": "Gider %70 tüketime, %30 daire m²'sine göre paylaşılır ve toplam girilen tutara eşittir. m²'si boş daire eksik listesinde 'alanı girilmemiş' diye görünür ve atla seçilmeden borçlandırma yapılamaz.",
+          "beklenen": "Yöntem adı 'Isı payı (ölçüm + alan payı)' yazar; ekranda hiçbir yerde m² geçmez (daire m²'si 2026-10-25'te kaldırıldı). Gider %70 tüketime, %30 alan payına göre paylaşılır ve toplam girilen tutara eşittir. Alan payı, katılan dairelerin hepsinde arsa payı tanımlıysa arsa payına, bir daire bile eksikse herkese eşit dağıtılır; arsa payı eksikliği dairenin 'eksik' listesine girmez (eksik listesi yalnız sayaç okuması eksikse dolar). Ayrıntılı kontrol: SAHA listesi 109.6.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
-          "yeni": false,
+          "yeni": true,
           "gelistirme": "hazir"
         },
         {

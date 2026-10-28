@@ -537,7 +537,7 @@ class _BudgetDetailPageState extends State<BudgetDetailPage> {
       const Text('Kalemler (yıllık, ₺)', style: TextStyle(fontWeight: FontWeight.w700)),
       const SizedBox(height: AppSpace.sm),
       if (draft && canWrite) ...<Widget>[
-        if (_categories.isEmpty) Text('Gider kategorisi bulunamadı (Aidat ve Finans modülü açık olmalı).', style: small),
+        if (_categories.isEmpty) Text('Gider kategorisi bulunamadı. Finans ekranında Giderler sekmesindeki “Kategori ve Tedarikçiler” düğmesinden kategori ekleyin.', key: const ValueKey<String>('budget_no_categories'), style: small),
         for (final c in _categories)
           Padding(
             padding: const EdgeInsets.only(bottom: AppSpace.sm),

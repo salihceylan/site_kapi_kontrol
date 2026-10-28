@@ -1485,7 +1485,7 @@ Aidat ve Finans TEMEL modüldür (2026-10-26, AGENTS.md Kural 25): her sitede a�
   - **Nasıl Test Edilir:** Herhangi bir test sitesinde yönetici ve sakin hesabıyla çekmeceye bakın; yöneticiyle Modüller → "Aidat ve Finans" kartına bakın; süper kullanıcıyla kartı kapatmayı deneyin (ayrıntı: 110).
   - **Beklenen Sonuç:** Yöneticide "Finans", alıcısı olan sakinde "Borcum" modül açmadan görünür. Modüller ekranında "Aidat ve Finans" kartında "Her sitede açık" yazar; "Modül Talep Et" düğmesi ve kapatma anahtarı yoktur (süper kullanıcıda da).
 - [ ] **63.2. Aidat Tanımı ve Para Girişi:**
-  - **Nasıl Test Edilir:** Finans → Tanımlar → Yeni Tanım: "Aylık aidat", aylık, her ayın 15'i, sabit tutar; tutar alanına 1.250,50 yazın; 1,250 ve 12₺50 ve 1,5E3 deneyin; dağıtım yöntemlerini (sabit, eşit pay, daire tipine göre, arsa payı, m²) ve hedefi (tüm site/bloklar/daireler) gezin.
+  - **Nasıl Test Edilir:** Finans → Tanımlar → Yeni Tanım: "Aylık aidat", aylık, her ayın 15'i, sabit tutar; tutar alanına 1.250,50 yazın; 1,250 ve 12₺50 ve 1,5E3 deneyin; dağıtım yöntemlerini (sabit, eşit pay, daire tipine göre, arsa payı; “Metrekareye göre” seçeneği yoktur, bkz. 107) ve hedefi (tüm site/bloklar/daireler) gezin.
   - **Beklenen Sonuç:** Tutar altında okunuşuyla gösterilir (1.250,50 ₺); 1,250 / 12₺50 / 1,5E3 görünür hata verir, alan sessizce değişmez. Tutarı kimin ödeyeceği tanımda yoktur: dairenin "borç ve bildirimler kime gitsin" ayarına uyar. Borçlandırılmış tanımın tutarı/dağıtımı değişmez.
 - [ ] **63.3. Önizlemeli Borçlandırma:**
   - **Nasıl Test Edilir:** Aylık tanımda "Borçlandır" → dönem seç → önizleme listesi → "Onayla ve Borçlandır"; sonra Daireler'e bakın; aynı dönemi tekrar önizleyin.
@@ -2784,13 +2784,13 @@ Dalga 2-6'nın ilk aşaması: çalışan şema, uçlar ve ekranlar. Dışarıdan
   - **Beklenen Sonuç:** İlk iki okuma kaydedilir. 90 değeri önceki okumadan küçük olduğu için reddedilir; gelecek tarih kabul edilmez.
 - [ ] **89.62. Dosyadan okuma aktarma (F32.08):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. Okuma aktar sekmesinde türü Su seçip okuma tarihini girin. İlk sütunu seri no ya da 'A Blok - 5' gibi daire kodu, ikinci sütunu değer olan bir CSV ya da Excel dosyası seçin (içinde bir yanlış kod olsun). Kontrol et'e, sonra Aktar'a basın.
-  - **Beklenen Sonuç:** Kontrol et, aktarılacak ve sorunlu satır sayısını ve yanlış kodun nedenini gösterir. Aktar yalnız hatasız satırları yazar; aynı dosya tekrar yüklenince satırlar 'zaten kayıtlı' sayılır, çift kayıt olmaz.
+  - **Beklenen Sonuç:** Kontrol et, aktarılacak ve sorunlu satır sayısını ve yanlış kodun nedenini gösterir. Aktar yalnız hatasız satırları yazar; aynı dosya tekrar yüklenince satırlar 'zaten kayıtlı' sayılır, çift kayıt olmaz. Sayfanın en altında 'Fotoğrafla okumak için Sayaçlar sekmesindeki “Fotoğrafla oku” düğmesini kullanın.' yazar ('Fotoğrafla okuma: Yakında…' yazmaz; fotoğrafla okuma çalışır, bkz. 90.30); kurul üyesi hesabında bu metin yoktur.
 - [ ] **89.63. Birim fiyatla faturalandırma (F32.09):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. Faturalandır sekmesinde Su, Birim fiyat, başlangıç 31 Ağustos, bitiş 30 Eylül seçip birim fiyatı 45,50 girin; Önizle'ye basın, sonra Borçlandır'a basıp onaylayın. Finans ekranından o dairenin borcuna bakın.
   - **Beklenen Sonuç:** Önizlemede her dairenin tüketimi ve tutarı (tüketim x 45,50) ve toplam görünür. Onayla borç oturanın hesabına (kiracı varsa kiracı) yazılır. Aynı aralık tekrar faturalandırılmak istenirse 'çakışıyor' uyarısı gelir; eksik okumalı daire varsa uyarıyla listelenir.
 - [ ] **89.64. Isı payı dağıtımı (F32.10):**
-  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Isı sayaçları olan daireler için Faturalandır'da tür Isı, yöntem 'Isı payı' seçin, toplam gideri girip Önizle'ye basın. Bir dairenin arsa payını boş bırakıp önizlemeyi yeniden alın. (Ayrıntılı kontrol: 109.6.)
-  - **Beklenen Sonuç:** Gider %70 tüketime, %30 alan payına göre paylaşılır ve toplam girilen tutara eşittir. Alan payı, katılan dairelerin hepsinde arsa payı tanımlıysa arsa payına, bir daire bile eksikse herkese eşit dağıtılır; arsa payı eksikliği dairenin 'eksik' listesine girmez.
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Isı sayaçları olan daireler için Faturalandır'da tür Isı, yöntem 'Isı payı (ölçüm + alan payı)' seçin, toplam gideri girip Önizle'ye basın. Bir dairenin arsa payını boş bırakıp önizlemeyi yeniden alın. (Ayrıntılı kontrol: 109.6.)
+  - **Beklenen Sonuç:** Yöntem adında ve ekranda m² geçmez. Gider %70 tüketime, %30 alan payına göre paylaşılır ve toplam girilen tutara eşittir. Alan payı, katılan dairelerin hepsinde arsa payı tanımlıysa arsa payına, bir daire bile eksikse herkese eşit dağıtılır; arsa payı eksikliği dairenin 'eksik' listesine girmez.
 - [ ] **89.65. Kurul üyesi salt okuma (F32.11):**
   - **Nasıl Test Edilir:** Rol: Kurul üyesi. Kurul üyesi olarak Sayaçlar'ı açın; sakin ya da görevli hesabında menüye bakın.
   - **Beklenen Sonuç:** Kurul üyesi sayaç ve geçmiş faturalandırmaları görür ama ekle/sil/aktar/borçlandır düğmesi yoktur. Sakin ve görevli menüde Sayaçlar'ı görmez.

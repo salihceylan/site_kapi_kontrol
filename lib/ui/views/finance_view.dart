@@ -75,7 +75,8 @@ class FinanceView extends StatefulWidget {
   /// Modül kapalı bilgisinde "Modüller" düğmesi (yalnız modülü açabilen / talep edebilen kullanıcıya verilir).
   final VoidCallback? onOpenModules;
 
-  /// Gider belgesi (fatura / fiş) eki: Belgeler modülü açıkken sağlanır; null ise gider formunda ek alanı GİZLİDİR.
+  /// Gider belgesi (fatura / fiş) eki: dosya seçici bağlandığında sağlanır (ana sayfada henüz bağlı değil); null ise gider
+  /// formunda ek alanı GİZLİDİR. (Belgeler ayrı modül değildir: 084'ten beri Dosya Deposu'nun parçasıdır.)
   final ExpenseAttachmentSource? expenseAttachmentSource;
 
   /// Şimdiki zaman (testler içindir).
@@ -526,7 +527,7 @@ class FinanceViewState extends State<FinanceView> {
         content = const EmptyCard(
           icon: Icons.apartment_rounded,
           title: 'Kayıtlı site bulunamadı.',
-          message: 'Aidat ve Finans modülü açık bir siteye bağlı olduğunuzda burada görünür.',
+          message: 'Bir siteye bağlı olduğunuzda aidat, borç ve tahsilatlar burada görünür.',
         );
       }
     } else {
