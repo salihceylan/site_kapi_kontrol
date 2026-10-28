@@ -2,12 +2,14 @@ import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/models/residency_relation.dart';
 import 'package:site_kapi_kontrol/models/vehicle_record.dart' show crmFormatNumber;
+import 'package:site_kapi_kontrol/services/view_mode_service.dart' show ListViewMode;
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/buttons.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/helpers/a11y_announce.dart';
 import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
+import 'package:site_kapi_kontrol/ui/widgets/tile_grid.dart';
 
 /// İlişki türünün çip tonu (renk tek başına anlam taşımaz: etiket de yazılır). Belirtilmemiş "Sakin"
 /// nötr kalır.
@@ -139,10 +141,20 @@ class CrmListBody<T> extends StatelessWidget {
     this.skeletonRows = 3,
     this.hideItemsOnError = false,
     this.emptyAction,
+    this.viewMode = ListViewMode.list,
+    this.tileBuilder,
   });
 
   final PagedLoader<T> loader;
   final Widget Function(BuildContext context, T item) itemBuilder;
+
+  /// Liste ↔ kutucuk anahtarı (P2-22): [ListViewMode.tiles] ve [tileBuilder] verilmişse kayıtlar yan yana kutucuklarla
+  /// ([TileGrid]) çizilir; aksi hâlde (varsayılan) alt alta [itemBuilder] kartlarıyla. İskelet, hata, boş durum ve
+  /// "Daha fazla yükle" iki kipte de aynıdır.
+  final ListViewMode viewMode;
+
+  /// Kutucuk kipinde bir kaydın kompakt kartı. null ise [viewMode] yok sayılır (liste).
+  final Widget Function(BuildContext context, T item)? tileBuilder;
   final IconData emptyIcon;
   final String emptyTitle;
   final String? emptyMessage;
@@ -181,6 +193,8 @@ class CrmListBody<T> extends StatelessWidget {
     if (hideItemsOnError && error != null) {
       return InlineNotice(message: error, onRetry: loader.reload);
     }
+    final tile = tileBuilder;
+    final useTiles = viewMode == ListViewMode.tiles && tile != null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -188,11 +202,18 @@ class CrmListBody<T> extends StatelessWidget {
           InlineNotice(message: error, onRetry: loader.reload),
           const SizedBox(height: AppSpace.md),
         ],
-        for (final item in items)
-          Padding(
-            padding: const EdgeInsets.only(bottom: AppSpace.md),
-            child: itemBuilder(context, item),
+        if (useTiles) ...[
+          TileGrid(
+            key: const ValueKey<String>('crm_kutucuk_izgara'),
+            children: [for (final item in items) tile(context, item)],
           ),
+          const SizedBox(height: AppSpace.md),
+        ] else
+          for (final item in items)
+            Padding(
+              padding: const EdgeInsets.only(bottom: AppSpace.md),
+              child: itemBuilder(context, item),
+            ),
         if (loader.moreError != null) ...[
           InlineNotice(message: loader.moreError!, onRetry: loader.loadMore),
           const SizedBox(height: AppSpace.md),

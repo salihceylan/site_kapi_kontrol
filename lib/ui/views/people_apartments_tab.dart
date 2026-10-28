@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/models/apartment_crm.dart';
 import 'package:site_kapi_kontrol/models/bulk_import.dart' show BulkExportFilters;
 import 'package:site_kapi_kontrol/models/site_block_record.dart';
+import 'package:site_kapi_kontrol/services/view_mode_service.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+import 'package:site_kapi_kontrol/ui/design/view_mode_toggle.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/apartment_card_dialog.dart';
 import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart';
 import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
@@ -134,6 +136,18 @@ class PeopleApartmentsTabState extends State<PeopleApartmentsTab> {
     );
   }
 
+  /// Başlık satırı eylemleri: liste ↔ kutucuk anahtarı (uygulama kökündeki kapsam varsa) + yenile.
+  Widget _headerActions(BuildContext context) {
+    final refresh = IconButton(
+      onPressed: _loader.loading ? null : reload,
+      tooltip: 'Yenile',
+      icon: const Icon(Icons.refresh_rounded),
+    );
+    final toggle = ViewModeToggle.maybe(context, ViewScreen.apartments);
+    if (toggle == null) return refresh;
+    return Row(mainAxisSize: MainAxisSize.min, children: [toggle, refresh]);
+  }
+
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
@@ -217,11 +231,7 @@ class PeopleApartmentsTabState extends State<PeopleApartmentsTab> {
         SectionHeader(
           title: widget.scope.terms.unitPlural,
           count: _loader.loadedOnce ? _loader.total : null,
-          trailing: IconButton(
-            onPressed: _loader.loading ? null : reload,
-            tooltip: 'Yenile',
-            icon: const Icon(Icons.refresh_rounded),
-          ),
+          trailing: _headerActions(context),
         ),
         const SizedBox(height: AppSpace.md),
         CrmListBody<ApartmentSummary>(
@@ -232,6 +242,10 @@ class PeopleApartmentsTabState extends State<PeopleApartmentsTab> {
           filtered: _query.isNotEmpty || _blockId != null,
           itemBuilder: (context, apartment) =>
               ApartmentCrmCard(apartment: apartment, onTap: () => _open(apartment)),
+          // Liste ↔ kutucuk anahtarı (P2-22): kapsam yoksa liste (eski görünüm).
+          viewMode: ViewModeScope.modeOf(context, ViewScreen.apartments),
+          tileBuilder: (context, apartment) =>
+              ApartmentCrmTile(apartment: apartment, onTap: () => _open(apartment)),
         ),
       ],
     );
