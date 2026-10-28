@@ -374,7 +374,8 @@ describe('finans: borçlandırma / ek borç / tahsilat gövdeleri', () => {
   it('post: beklenen toplam / daire sayısı / önizleme özeti (expected_hash) ZORUNLU; skip_missing boolean; anahtar isteğe bağlı', () => {
     const hash = 'a'.repeat(64);
     const ok = parsePostInput({ period: '2026-10', expected_total_minor: 3000000, expected_apartment_count: 20, expected_hash: hash, skip_missing: true, idempotency_key: 'k-1' }, 'recurring', NOW);
-    assert.deepEqual(ok, { period: '2026-10-01', dueDate: null, expectedTotal: 3000000, expectedCount: 20, expectedHash: hash, skipMissing: true, idempotencyKey: 'k-1' });
+    // Tahakkuk dayanağı (K2): gövdede yoksa null (zorunluluk serviste, modül durumuyla birlikte denetlenir)
+    assert.deepEqual(ok, { period: '2026-10-01', dueDate: null, expectedTotal: 3000000, expectedCount: 20, expectedHash: hash, skipMissing: true, idempotencyKey: 'k-1', decisionId: null, decisionReason: null });
     assert.equal(parsePostInput({ period: '2026-10', expected_total_minor: 0, expected_apartment_count: 0, expected_hash: hash }, 'recurring', NOW).skipMissing, false);
     const base = { period: '2026-10', expected_total_minor: 100, expected_apartment_count: 1, expected_hash: hash };
     for (const bad of [

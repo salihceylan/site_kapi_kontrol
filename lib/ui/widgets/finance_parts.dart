@@ -551,6 +551,9 @@ class LedgerEntryTile extends StatelessWidget {
     if (reversesText != null) semantic.write(' ${spokenMoneyText(reversesText)}.');
     if (reversedByText != null) semantic.write(' ${spokenMoneyText(reversedByText)}.');
     if (reason != null) semantic.write(' Neden: $reason.');
+    // Tahakkuk dayanağı (K2): borcun yazıldığı çalıştırmanın karar kaydı / gerekçesi
+    final basis = e.kind == LedgerKind.charge ? e.decision : null;
+    if (basis != null) semantic.write(' Dayanak: ${basis.summary}.');
 
     return DialogPanel(
       key: ValueKey<String>('ledger_entry_${e.id}'),
@@ -617,6 +620,12 @@ class LedgerEntryTile extends StatelessWidget {
                   if (reversesText != null) Text(reversesText, style: secondary),
                   if (reversedByText != null) Text(reversedByText, style: secondary),
                   if (reason != null) Text('Neden: $reason', style: secondary),
+                  if (basis != null)
+                    Text(
+                      'Dayanak: ${basis.summary}',
+                      key: ValueKey<String>('ledger_basis_${e.id}'),
+                      style: secondary,
+                    ),
                   if (e.payerParty != null) Text(payerPartyLabel(e.payerParty!), style: secondary),
                   if (split != null)
                     Text(

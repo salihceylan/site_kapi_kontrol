@@ -46,6 +46,7 @@ import { ensureIntegritySchema } from './modules/integrity_schema.js';
 import { ensureFinanceFundsSchema } from './modules/finance_funds_schema.js';
 import { ensureFinanceRefundsSchema } from './modules/finance_refunds_schema.js';
 import { ensureFinanceLiabilitySchema } from './modules/finance_liability_schema.js';
+import { ensureFinanceRunDecisionSchema } from './modules/finance_run_decision_schema.js';
 import { CORE_MODULES_BACKFILL_SQL } from './modules/core_modules.js';
 import { CARD_PAYMENTS_INTO_FINANCE_SQL } from './modules/card_payments_into_finance.js';
 import { ensureTenantAdminRule } from './modules/apartment_tenant_admin_sql.js';
@@ -2010,6 +2011,9 @@ export async function ensureDbSchema() {
     // 089 (kiraci borcunun malike devri, K1): 088'den SONRA (ledger_entries.source_kind 'liability_transfer' kabulu); dev blokta DEGIL; katalog kontrolu
     // + her adim kendi otomatik onayli ifadesi (finance_liability_schema.js = migrations/089).
     await ensureFinanceLiabilitySchema(client);
+    // 090 (demirbas / fon tahakkukunun dayanagi: Karar Defteri kaydi ya da gerekce): 034 (fee_runs) ve 050 (board_decisions) SONRASI; dev blokta DEGIL; katalog kontrolu + her adim kendi otomatik onayli
+    // ifadesi (finance_run_decision_schema.js = migrations/090). Her sey varsa hicbir ifade / kilit yok. Geri doldurma yok (eski calistirmalar dayanaksiz kalir).
+    await ensureFinanceRunDecisionSchema(client);
 
     // 031 people_v1: mevcut sakinlerin CRM'e tek seferlik aktarimi. Savunmaci: hata sunucunun acilmasini ENGELLEMEZ
     // (kendi transaction'i geri alinir, isaret yazilmaz => sonraki acilista yeniden denenir; okuma anindaki

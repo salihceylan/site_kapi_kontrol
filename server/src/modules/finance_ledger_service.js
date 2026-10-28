@@ -66,10 +66,14 @@ export const ENTRY_SELECT = `
     l.description, l.method, l.payer_party, l.definition_name, l.reverses_entry_id, rv.id AS reversed_by_entry_id,
     l.reversal_reason, u.full_name AS created_by_name, l.created_at, l.definition_id, l.run_id, l.idempotency_key, l.late_fee_run_id,
     rc.id AS receipt_id, rc.receipt_year, rc.receipt_no, rc.cancel_year AS receipt_cancel_year, rc.cancel_no AS receipt_cancel_no,
-    l.account_party, l.source_kind, l.source_id, l.fund, fd.charge_party AS def_charge_party, fd.kind AS def_kind
+    l.account_party, l.source_kind, l.source_id, l.fund, fd.charge_party AS def_charge_party, fd.kind AS def_kind,
+    fr.decision_id AS run_decision_id, fr.decision_reason AS run_decision_reason, bd.year AS run_decision_year, bd.decision_no AS run_decision_no,
+    bd.title AS run_decision_title, bd.visibility AS run_decision_visibility
   FROM ledger_entries l
   LEFT JOIN ledger_entries rv ON rv.reverses_entry_id = l.id
   LEFT JOIN fee_definitions fd ON fd.id = l.definition_id
+  LEFT JOIN fee_runs fr ON fr.id = l.run_id
+  LEFT JOIN board_decisions bd ON bd.site_code = fr.site_code AND bd.id = fr.decision_id
   LEFT JOIN users u ON u.user_code = l.created_by
   LEFT JOIN LATERAL (
     SELECT r.id, r.receipt_year, r.receipt_no, c.receipt_year AS cancel_year, c.receipt_no AS cancel_no
