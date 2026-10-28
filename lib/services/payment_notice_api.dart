@@ -203,6 +203,9 @@ class PaymentNoticeApi {
         return 'Dekontun tarihi kapalı bir döneme düşüyor. "Açık döneme yaz" seçeneğiyle bugünün tarihine işleyebilirsiniz.';
       case 'ACCOUNT_REQUIRED':
         return 'Tahsilatın gireceği kasa ya da banka hesabını seçin.';
+      // K3: iki türün de (İşletme / Fon) açık borcu olan dairede ödemenin hesabını yönetici seçer; toplu onay bunları atlar.
+      case 'FUND_CHOICE_REQUIRED':
+        return 'Dairede İşletme ve Fon borcu birlikte açık; dekontu tek tek inceleyip ödemenin işleneceği hesabı seçin.';
       case 'NOTICE_PDF_ACTIVE_CONTENT':
         return 'Bu PDF kabul edilemedi. Dekontun ekran görüntüsünü yüklemeyi deneyin.';
       case 'MODULE_DISABLED':

@@ -273,7 +273,8 @@ export default async function sectionFunds(t) {
   await postDefinition(FS, aidatDef.body.id, ym(-1));
   await postDefinition(FS, fonDef.body.id, ym(-1));
   // 080 oncesi surum gibi: A4 hesap acilmadan ONCE (hesap acilis tarihinden eski) 7777 tahsilat; kasaya dahil edilmez (eslenmemis / acilisa dahil)
-  const p0 = await payment(FS, A4, 7777, { entry_date: ago(90) });
+  // K3 (P1-3): A4'te Aidat + Fon borcu BIRLIKTE acik; kisitsiz tahsilat reddedilirdi => yonetici hesabi secer (Aidat Hesabi). Dagitim sonucu degismez.
+  const p0 = await payment(FS, A4, 7777, { entry_date: ago(90), fund: 'operating' });
   const cash = await call('POST', `${P(FS.code)}/accounts`, MGR, { name: 'K Ana Kasa', kind: 'cash', opening_balance_minor: 1000000, opening_date: ago(60), idempotency_key: key('acc') });
   const accountId = cash.body?.account?.id;
   check('K3-hazirlik: A4 icin hesap oncesi tahsilat 201, hesap acildi (acilis 10.000,00 TL)', p0.status === 201 && cash.status === 201 && accountId > 0, { p0: p0.status, cash: cash.status });
@@ -281,20 +282,49 @@ export default async function sectionFunds(t) {
   // ============================================================================================================
   // K3. tahsilat dagitimi
   // ============================================================================================================
-  const pay1 = await payment(FS, A1, 150000, { account_id: accountId, entry_date: ago(12) });
+  // K3 (P1-3, 2026-10-28): yazilim odemeyi kendiliginden bir hesaba ATAMAZ. A1 ve A3'te Aidat + Fon borcu BIRLIKTE acik: kisitsiz tahsilat reddedilir, yonetici hesabi secer.
+  const paymentCount = async (aptId) => Number((await q(`SELECT COUNT(*) AS n FROM ledger_entries WHERE site_code = $1 AND apartment_id = $2 AND kind = 'payment'`, [FS.code, aptId])).rows[0].n);
+  const noChoice = await payment(FS, A1, 150000, { account_id: accountId, entry_date: ago(12) });
   check(
-    'K3a: A1 otomatik 150000 => en eski vade (esitlikte kimlik): aidat 100000 (operating) + fon 50000 (capital); yanitta fund_split; entry.fund null (kisitsiz)',
-    pay1.status === 201 && same(pay1.body.fund_split, { operating_minor: 100000, capital_minor: 50000, advance_minor: 0 }) && pay1.body.entry.fund === null,
-    pay1.body,
+    'K3a0: A1 (Aidat 100000 + Fon 50000 birlikte acik) kisitsiz 150000 => 400 FUND_CHOICE_REQUIRED; fund_choice acik borclari tasir (secim zorunlu, oneri yok); HICBIR satir yazilmadi',
+    noChoice.status === 400 && noChoice.body.code === 'FUND_CHOICE_REQUIRED' && same(noChoice.body.fund_choice?.open, { operating_minor: 100000, capital_minor: 50000 }) &&
+      noChoice.body.fund_choice?.choice_required === true && noChoice.body.fund_choice?.suggested_fund === null && (await paymentCount(A1)) === 0,
+    noChoice.body,
   );
+  const choicePath = `${P(FS.code)}/payments/fund-choice?apartment_id=${A1}&account_party=owner&amount_minor=150000`;
+  const choiceGet = await call('GET', choicePath, MGR);
+  const choiceDenied = [];
+  for (const user of [STAFF, RESIDENT, OUTSIDER, BOARD]) choiceDenied.push((await call('GET', choicePath, user)).status);
+  check(
+    'K3a1: GET payments/fund-choice: zorunlu + acik borclar + otomatik dagitim onerisi YALNIZ bilgi (100000 + 50000; hicbir satir yazilmaz); gorevli / sakin / ilgisiz / kurul 403',
+    choiceGet.status === 200 && choiceGet.body.choice_required === true && same(choiceGet.body.open, { operating_minor: 100000, capital_minor: 50000 }) &&
+      same(choiceGet.body.proposal, { operating_minor: 100000, capital_minor: 50000, advance_minor: 0 }) && choiceGet.body.suggested_fund === null && (await paymentCount(A1)) === 0 && choiceDenied.every((s) => s === 403),
+    { get: choiceGet.body, denied: choiceDenied },
+  );
+  const pay1a = await payment(FS, A1, 100000, { account_id: accountId, entry_date: ago(12), fund: 'operating' });
+  // Aidat borcu kapandi: artik TEK tur (Fon) borc acik => kisitsiz kabul edilir (oneriyi istemci secili gonderir; sunucu kisit ATAMAZ => entry.fund null)
+  const pay1 = await payment(FS, A1, 50000, { account_id: accountId, entry_date: ago(12) });
+  check(
+    'K3a: A1: once Aidat Hesabi secimiyle 100000 (fund_split operating 100000; entry.fund=operating), sonra tek tur (Fon) borc kaldigi icin kisitsiz 50000 kabul => capital 50000; entry.fund null',
+    pay1a.status === 201 && same(pay1a.body.fund_split, { operating_minor: 100000, capital_minor: 0, advance_minor: 0 }) && pay1a.body.entry.fund === 'operating' &&
+      pay1.status === 201 && same(pay1.body.fund_split, { operating_minor: 0, capital_minor: 50000, advance_minor: 0 }) && pay1.body.entry.fund === null,
+    [pay1a.body, pay1.body],
+  );
+  const afterChoice = await call('GET', choicePath.replace('&amount_minor=150000', ''), MGR);
+  check('K3a2: A1 odemelerden sonra acik borc yok: secim zorunlu degil, oneri yok', afterChoice.status === 200 && afterChoice.body.choice_required === false && afterChoice.body.suggested_fund === null && same(afterChoice.body.open, { operating_minor: 0, capital_minor: 0 }), afterChoice.body);
   const pay2 = await payment(FS, A2, 30000, { account_id: accountId, entry_date: ago(8), account_party: 'owner', fund: 'capital' });
   check(
     'K3b: A2 (malik hesabi) KISITLI 30000 (fund=capital) => yalniz fon borcuna; entry.fund=capital; fund_split capital 30000',
     pay2.status === 201 && same(pay2.body.fund_split, { operating_minor: 0, capital_minor: 30000, advance_minor: 0 }) && pay2.body.entry.fund === 'capital' && pay2.body.entry.account_party === 'owner',
     pay2.body,
   );
-  const pay3 = await payment(FS, A3, 170000, { account_id: accountId, entry_date: ago(10) });
-  check('K3c: A3 170000 => 100000 + 50000 + AVANS 20000', pay3.status === 201 && same(pay3.body.fund_split, { operating_minor: 100000, capital_minor: 50000, advance_minor: 20000 }), pay3.body.fund_split);
+  const pay3a = await payment(FS, A3, 100000, { account_id: accountId, entry_date: ago(10), fund: 'operating' });
+  const pay3 = await payment(FS, A3, 70000, { account_id: accountId, entry_date: ago(10) }); // Aidat kapandi: tek tur (Fon) kaldi => kisitsiz kabul
+  check(
+    'K3c: A3: Aidat Hesabi secimiyle 100000, sonra (tek tur Fon borcu kaldi) kisitsiz 70000 => Fon 50000 + AVANS 20000 (genel avans)',
+    pay3a.status === 201 && pay3.status === 201 && same(pay3a.body.fund_split, { operating_minor: 100000, capital_minor: 0, advance_minor: 0 }) && same(pay3.body.fund_split, { operating_minor: 0, capital_minor: 50000, advance_minor: 20000 }),
+    [pay3a.body.fund_split, pay3.body.fund_split],
+  );
   const a2Restricted = await payment(FS, A2, 40000, { account_id: accountId, entry_date: ago(7), account_party: 'owner', fund: 'operating' });
   check('K3d: kisit, kisitin kasasinda borc yokken (malik hesabinda yalniz fon borcu var) tamami AVANS (operating kisitli)', a2Restricted.status === 201 && same(a2Restricted.body.fund_split, { operating_minor: 0, capital_minor: 0, advance_minor: 40000 }), a2Restricted.body.fund_split);
   const a2Rev = await call('POST', `${P(FS.code)}/entries/${a2Restricted.body.entry.id}/reverse`, MGR, { reason: 'deneme', idempotency_key: key('rev') });
@@ -346,11 +376,12 @@ export default async function sectionFunds(t) {
   }
   check('K4a: ekstre kasa kirilimi (hesap suzgecli) kahine ve SQL bakiyesine birebir: acik borc(op) + acik borc(fon) - avans = hesap bakiyesi (5 hesap)', consistent, details);
   const a3 = await account(FS, A3);
-  const a3Payment = a3.body.items.find((e) => e.kind === 'payment');
+  const a3Chosen = a3.body.items.find((e) => e.kind === 'payment' && e.fund === 'operating');
+  const a3Auto = a3.body.items.find((e) => e.kind === 'payment' && e.fund === null);
   check(
-    'K4b: A3 ekstresi: funds capital/operating 0, advance_minor 20000; odeme satirinda fund_split ve fund (kisitsiz null); borc satirlari kendi kasasiyla',
+    'K4b: A3 ekstresi: funds capital/operating 0, advance_minor 20000; odeme satirlarinda fund_split ve fund (secilen operating; kisitsiz null); borc satirlari kendi kasasiyla',
     a3.status === 200 && a3.body.advance_minor === 20000 && a3.body.funds.operating.balance_minor === 0 && a3.body.funds.capital.balance_minor === 0 &&
-      same(a3Payment.fund_split, { operating_minor: 100000, capital_minor: 50000, advance_minor: 20000 }) && a3Payment.fund === null &&
+      same(a3Chosen?.fund_split, { operating_minor: 100000, capital_minor: 0, advance_minor: 0 }) && same(a3Auto?.fund_split, { operating_minor: 0, capital_minor: 50000, advance_minor: 20000 }) &&
       a3.body.items.filter((e) => e.kind === 'charge').map((e) => e.fund).sort().join(',') === 'capital,operating',
     a3.body.items,
   );
@@ -630,13 +661,46 @@ export default async function sectionFunds(t) {
     const receipt = receiptId ? await call('GET', `${P(FS.code)}/receipts/${receiptId}`, MGR) : null;
     const cancelledSource = await call('POST', `${P(FS.code)}/receipts/${receiptId}/cancel`, MGR, { reason_code: 'issued_in_error', idempotency_key: key('rc') });
     check(
-      'K10a: tahsilat makbuzunun anlik goruntusu verildigi andaki fund_split tasir (operating 100000 + capital 50000); iptal makbuzu ayni bilgiyi kopyalar',
-      receipt?.status === 200 && sameSplit(receipt.body.snapshot.fund_split, { operating_minor: 100000, capital_minor: 50000, advance_minor: 0 }) && (cancelledSource.status === 201 || cancelledSource.status === 200) &&
-        sameSplit(cancelledSource.body.cancellation?.snapshot?.fund_split, { operating_minor: 100000, capital_minor: 50000, advance_minor: 0 }),
+      'K10a: tahsilat makbuzunun anlik goruntusu verildigi andaki fund_split tasir (kisitsiz 50000 => capital 50000); iptal makbuzu ayni bilgiyi kopyalar',
+      receipt?.status === 200 && sameSplit(receipt.body.snapshot.fund_split, { operating_minor: 0, capital_minor: 50000, advance_minor: 0 }) && (cancelledSource.status === 201 || cancelledSource.status === 200) &&
+        sameSplit(cancelledSource.body.cancellation?.snapshot?.fund_split, { operating_minor: 0, capital_minor: 50000, advance_minor: 0 }),
       { receipt: receipt?.body?.snapshot, cancellation: cancelledSource.body?.cancellation?.snapshot },
     );
     const total = Number((await q(`SELECT COUNT(*) AS n FROM receipts WHERE site_code = $1 AND snapshot ? 'fund_split'`, [FS.code])).rows[0].n);
     check('K10b: yeni makbuzlarin hepsinde fund_split var', total >= 2, total);
+  }
+
+  // ============================================================================================================
+  // K12. K3: tahsilat DUZELTME de hesap secimine tabidir (ters kayit AYNI islemde; iki tur acikken kisitsiz yeni tahsilat YAZILMAZ, ters kayit da kalmaz)
+  // ============================================================================================================
+  {
+    // K3 oncesi surumde yazilabilen KISITSIZ bir tahsilat (A4'te Aidat + Fon birlikte acik) dogrudan SQL ile eklenir; hesap hareketi de eslenir.
+    const inserted = await q(
+      `INSERT INTO ledger_entries (site_code, apartment_id, kind, amount_minor, period, entry_date, payer_party, method, idempotency_key, created_by, account_party, source_kind, fund)
+       VALUES ($1, $2, 'payment', -20000, date_trunc('month', CURRENT_DATE)::DATE, CURRENT_DATE, 'both', 'cash', $3, $4, 'owner', 'manual', NULL) RETURNING id`,
+      [FS.code, A4, key('k12legacy'), MGR],
+    );
+    const legacyId = Number(inserted.rows[0].id);
+    await q(
+      `INSERT INTO account_movements (site_code, account_id, kind, amount_minor, movement_date, period, ledger_entry_id, created_by)
+       VALUES ($1, $2, 'collection', 20000, CURRENT_DATE, date_trunc('month', CURRENT_DATE)::DATE, $3, $4)`,
+      [FS.code, accountId, legacyId, MGR],
+    );
+    const reversalsOf = async (id) => Number((await q(`SELECT COUNT(*) AS n FROM ledger_entries WHERE site_code = $1 AND reverses_entry_id = $2`, [FS.code, id])).rows[0].n);
+    const corrNoFund = await call('POST', `${P(FS.code)}/entries/${legacyId}/correct`, MGR, { amount_minor: 20000, entry_date: TODAY, method: 'cash', account_id: accountId, idempotency_key: key('k12a') });
+    check(
+      'K12a: kisitsiz asil tahsilatin duzeltmesi, ters kayit sonrasi iki tur (Aidat + Fon) acik kalirsa 400 FUND_CHOICE_REQUIRED; islem TAMAMEN geri alinir (ters kayit da yok, asil tahsilat duruyor)',
+      corrNoFund.status === 400 && corrNoFund.body.code === 'FUND_CHOICE_REQUIRED' && corrNoFund.body.fund_choice?.choice_required === true && (await reversalsOf(legacyId)) === 0,
+      corrNoFund.body,
+    );
+    const corrFund = await call('POST', `${P(FS.code)}/entries/${legacyId}/correct`, MGR, { amount_minor: 20000, entry_date: TODAY, method: 'cash', account_id: accountId, fund: 'capital', idempotency_key: key('k12b') });
+    check(
+      'K12b: hesap secilince (fund=capital) duzeltme yazilir: yeni tahsilat Fon kisitli, ters kayit asilin kisitini (kisitsiz) tasir; fund_split capital 20000',
+      corrFund.status === 201 && corrFund.body.entry?.fund === 'capital' && corrFund.body.reversal?.fund === null && corrFund.body.fund_split?.capital_minor === 20000 && (await reversalsOf(legacyId)) === 1,
+      corrFund.body,
+    );
+    // temizlik: A4'te yalniz 7777 + acik borc kalsin
+    if (corrFund.body.entry?.id) await call('POST', `${P(FS.code)}/entries/${corrFund.body.entry.id}/reverse`, MGR, { reason: 'temizlik', idempotency_key: key('k12c') });
   }
 
   // ============================================================================================================

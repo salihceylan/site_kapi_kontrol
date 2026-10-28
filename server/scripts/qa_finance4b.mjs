@@ -306,10 +306,11 @@ async function startHttp(pool) {
   const { financeRouter } = await import('../src/modules/finance_routes.js');
   const { finance4bRouter } = await import('../src/modules/finance_4b_routes.js');
   const { financeFundsRouter } = await import('../src/modules/finance_funds_routes.js');
+  const { financeFundChoiceRouter } = await import('../src/modules/finance_fund_choice_routes.js'); // K3: GET payments/fund-choice
   const { moduleRouter } = await import('../src/modules/module_routes.js');
   const { adminRouter } = await import('../src/routes/admin_routes.js');
   const keep = new Set([requireSiteManager, requireSuperUser]);
-  for (const router of [financeRouter, finance4bRouter, financeFundsRouter, moduleRouter, adminRouter]) {
+  for (const router of [financeRouter, finance4bRouter, financeFundsRouter, financeFundChoiceRouter, moduleRouter, adminRouter]) {
     for (const layer of router.stack) {
       if (!layer.route) continue;
       const stack = layer.route.stack;
@@ -323,6 +324,7 @@ async function startHttp(pool) {
   app.use(financeRouter);
   app.use(finance4bRouter);
   app.use(financeFundsRouter);
+  app.use(financeFundChoiceRouter);
   app.use(moduleRouter);
   app.use(adminRouter);
   const server = await new Promise((resolve) => {

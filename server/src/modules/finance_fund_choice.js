@@ -83,7 +83,7 @@ export async function loadFundChoice(db, { siteCode, apartmentId, accountParty, 
 }
 
 /**
- * Tahsilat hesap (kasa) kısıtı OLMADAN yazılırken çağrılır (finance_parties.postPayment): iki türün de açık borcu varsa 400 FUND_CHOICE_REQUIRED fırlatır.
+ * Tahsilat hesap (İşletme / Fon) kısıtı OLMADAN yazılırken çağrılır (finance_parties.postPayment): iki türün de açık borcu varsa 400 FUND_CHOICE_REQUIRED fırlatır.
  * Kısıt verilmişse çağrılmaz (yönetici seçimini yapmıştır). Okuma, çağıranın finans işlemi içindedir: tüm finans yazmaları `finance_post` kilidiyle sıralıdır.
  */
 export async function assertFundChoice(db, { siteCode, apartmentId, accountParty }) {
