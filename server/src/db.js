@@ -20,6 +20,7 @@ import { ensureBrandThemeSchema } from './modules/brand_theme_schema.js';
 import { ensureContractsSchema } from './modules/contracts_schema.js';
 import { ensureEquipmentSchema } from './modules/equipment_schema.js';
 import { ensureWorkEquipmentSchema } from './modules/work_equipment_schema.js';
+import { ensureQuoteSchema } from './modules/equipment_quote_schema.js';
 import { ensureCctvSchema } from './modules/cctv_schema.js';
 import { ensureApartmentMgmtSchema } from './modules/apartment_mgmt_schema.js';
 import { ensureResidencyLogSchema } from './modules/residency_log_schema.js';
@@ -1940,6 +1941,9 @@ export async function ensureDbSchema() {
     await ensureEquipmentSchema(client);
     // 096 (is kaydi <-> ekipman bagi, fotograf once/sonra etiketi): 042 / 047 / 068'den SONRA; katalog kontrolu + her adim kendi otomatik onayli ifadesi (work_equipment_schema.js = migrations/096).
     await ensureWorkEquipmentSchema(client);
+    // 098 + 099 (teklif karsilastirma alanlari, onayli teklif revizyonu + degismezlik tetikleyicisi): 068'den SONRA; yalniz equipment_quotes'a sutun / kisit / indeks / islev / tetikleyici;
+    // katalog kontrolu + her adim kendi otomatik onayli ifadesi (equipment_quote_schema.js = migrations/098 + 099).
+    await ensureQuoteSchema(client);
     // 050 (karar defteri): dev blokta DEGIL; katalog kontrolu + her adim kendi otomatik onayli ifadesi (decision_book_schema.js = migrations/050).
     await ensureDecisionBookSchema(client);
     // 051 (daire PIN'i duz metin kopyasi silinir): katalog kontrolu + kendi otomatik onayli ALTER'i; aktarim partili ve kilitli satiri atlar

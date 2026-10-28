@@ -7,10 +7,13 @@ import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_snack.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/helpers/istanbul_time.dart';
+import 'package:site_kapi_kontrol/ui/views/equipment_quotes_panel.dart';
 
 /// Yönetim "Ekipman ve Bakım" ekranı (`equipment` modülü): Ekipman | Bakım takvimi | Teklifler | Gider kırılımı.
 ///
 /// - Yönetici yazar; kurul üyesi ve görevli salt okur. Bakım kaydı yalnız eklenir.
+/// - Teklifler: aynı konudaki teklifler yan yana karşılaştırılır (tutar, KDV esası, geçerlilik, teslim süresi, kapsam / not). Açık teklif yerinde
+///   düzenlenir; ONAYLI teklif değişmez, "Revizyon oluştur" yeni sürüm açar (önceki sürüme bağlı, sürüm geçmişi görülür) — bkz. [EquipmentQuotesPanel].
 /// - Hatırlatma bildirimi (telefon / e-posta) ve teklife belge yükleme "Yakında…"; şimdilik yaklaşan bakımlar burada listelenir.
 /// - [EquipmentViewState.reload] sayfa kabuğunun aşağı çekip yenilemesinden çağrılır.
 class EquipmentView extends StatefulWidget {
@@ -112,13 +115,44 @@ class EquipmentViewState extends State<EquipmentView> {
     if (mounted) await reload();
   }
 
+  /// Karşılaştırma alanları (teklif ekle / düzenle / revizyon formlarında ortak). [from] verilirse mevcut değerler başlangıç değeridir.
+  List<FormField2> _quoteCompareFields({EquipmentQuote? from}) => <FormField2>[
+    FormField2.date('valid_until', 'Geçerlilik tarihi', initial: from?.validUntil ?? ''),
+    FormField2.number('delivery_days', 'Teslim süresi (gün)', initial: from?.deliveryDays?.toString() ?? ''),
+    FormField2.choice(
+      'vat',
+      'Tutarın KDV esası (karşılaştırma için)',
+      const <(String, String)>[('', 'Belirtilmedi'), ('1', 'KDV dahil'), ('0', 'KDV hariç')],
+      initial: from?.vatIncluded == null ? '' : (from!.vatIncluded! ? '1' : '0'),
+    ),
+    FormField2.text('note', 'Kapsam / not (örn. kontrol + parça, garanti)', max: 500, lines: 3, initial: from?.note ?? ''),
+  ];
+
+  /// Form değerlerini sunucu gövdesine çevirir: boş alan = temizle (null). Geçersiz teslim süresinde uyarı gösterip null döner.
+  Map<String, Object?>? _compareBody(Map<String, String> v) {
+    final rawDays = (v['delivery_days'] ?? '').trim();
+    final days = rawDays.isEmpty ? null : int.tryParse(rawDays);
+    if (rawDays.isNotEmpty && (days == null || days < 0 || days > 1095)) {
+      AppSnack.show(context, 'Teslim süresi 0 ile 1095 gün arasında tam sayı olmalı.', kind: AppSnackKind.error);
+      return null;
+    }
+    String? orNull(String? s) => (s ?? '').trim().isEmpty ? null : s!.trim();
+    return <String, Object?>{
+      'valid_until': orNull(v['valid_until']),
+      'delivery_days': days,
+      'vat_included': switch (v['vat']) { '1' => true, '0' => false, _ => null },
+      'note': orNull(v['note']),
+      if (v.containsKey('document_note')) 'document_note': orNull(v['document_note']),
+    };
+  }
+
   Future<void> _addQuote() async {
     final site = _site!;
     final v = await askForm(context, 'Teklif ekle', <FormField2>[
       const FormField2.text('topic', 'Konu (aynı konudaki teklifler karşılaştırılır)', required: true, max: 160),
       const FormField2.text('vendor_name', 'Firma', required: true, max: 120),
       const FormField2.money('amount', 'Tutar (TL)', required: true),
-      const FormField2.date('valid_until', 'Geçerlilik tarihi'),
+      ..._quoteCompareFields(),
       const FormField2.text('document_note', 'Belge notu (belge yükleme Yakında…)', max: 300),
       FormField2.choice('equipment_id', 'İlgili ekipman', <(String, String)>[('', 'Yok'), for (final i in _items) ('${i.id}', i.name)], initial: ''),
     ]);
@@ -129,18 +163,84 @@ class EquipmentViewState extends State<EquipmentView> {
       AppSnack.show(context, 'Tutar geçersiz.', kind: AppSnackKind.error);
       return;
     }
+    final compare = _compareBody(v);
+    if (compare == null) return;
     await _run(
       () => _service.createQuote(site.code, <String, Object?>{
         'topic': v['topic'],
         'vendor_name': v['vendor_name'],
         'amount_kurus': kurus,
-        if ((v['valid_until'] ?? '').isNotEmpty) 'valid_until': v['valid_until'],
-        if ((v['document_note'] ?? '').isNotEmpty) 'document_note': v['document_note'],
+        for (final e in compare.entries) if (e.value != null) e.key: e.value,
         if ((v['equipment_id'] ?? '').isNotEmpty) 'equipment_id': int.parse(v['equipment_id']!),
       }),
       'Teklif kaydedildi.',
     );
   }
+
+  /// Açık teklifi yerinde düzenler (onaysız kayıt kilitli değildir; her değişiklik denetim kaydına eski / yeni tutarla yazılır).
+  Future<void> _editQuote(EquipmentQuote q) async {
+    final site = _site!;
+    final v = await askForm(context, q.isRevision ? 'Revizyonu düzenle (${q.revisionNo}. sürüm)' : 'Teklifi düzenle', <FormField2>[
+      FormField2.money('amount', 'Tutar (TL)', required: true, initial: kurusToInput(q.amountKurus)),
+      ..._quoteCompareFields(from: q),
+      FormField2.text('document_note', 'Belge notu', max: 300, initial: q.documentNote ?? ''),
+    ]);
+    if (v == null) return;
+    final kurus = parseKurus(v['amount'] ?? '');
+    if (!mounted) return;
+    if (kurus == null || kurus <= 0) {
+      AppSnack.show(context, 'Tutar geçersiz.', kind: AppSnackKind.error);
+      return;
+    }
+    final compare = _compareBody(v);
+    if (compare == null) return;
+    await _run(() => _service.updateQuote(site.code, q.id, <String, Object?>{'amount_kurus': kurus, ...compare}), 'Teklif güncellendi.');
+  }
+
+  /// K14: ONAYLI teklif yerinde değişmez; değişiklik, önceki sürüme bağlanan yeni sürümdür (gerekçe zorunlu). Yeni sürüm yeniden onayınızı bekler.
+  Future<void> _reviseQuote(EquipmentQuote q) async {
+    final site = _site!;
+    final v = await askForm(context, 'Revizyon oluştur (${q.revisionNo + 1}. sürüm)', <FormField2>[
+      const FormField2.text('reason', 'Değişiklik gerekçesi (örn. ek parça ihtiyacı)', required: true, max: 300, lines: 2),
+      FormField2.money('amount', 'Yeni tutar (TL)', required: true, initial: kurusToInput(q.amountKurus)),
+      ..._quoteCompareFields(from: q),
+      FormField2.text('document_note', 'Belge notu', max: 300, initial: q.documentNote ?? ''),
+    ]);
+    if (v == null) return;
+    final reason = (v['reason'] ?? '').trim();
+    final kurus = parseKurus(v['amount'] ?? '');
+    if (!mounted) return;
+    if (reason.length < 3) {
+      AppSnack.show(context, 'Değişiklik gerekçesi en az 3 karakter olmalı.', kind: AppSnackKind.error);
+      return;
+    }
+    if (kurus == null || kurus <= 0) {
+      AppSnack.show(context, 'Tutar geçersiz.', kind: AppSnackKind.error);
+      return;
+    }
+    final compare = _compareBody(v);
+    if (compare == null) return;
+    final current = <String, Object?>{
+      'valid_until': q.validUntil,
+      'delivery_days': q.deliveryDays,
+      'vat_included': q.vatIncluded,
+      'note': q.note,
+      'document_note': q.documentNote,
+    };
+    // Yalnız değişen alanlar gönderilir; hiçbiri değişmediyse sunucuya gitmeden uyarılır.
+    final body = <String, Object?>{
+      'reason': reason,
+      if (kurus != q.amountKurus) 'amount_kurus': kurus,
+      for (final e in compare.entries) if (e.value != current[e.key]) e.key: e.value,
+    };
+    if (body.length == 1) {
+      AppSnack.show(context, 'Revizyon için en az bir alanı değiştirin.', kind: AppSnackKind.error);
+      return;
+    }
+    await _run(() => _service.reviseQuote(site.code, q.id, body), 'Revizyon kaydedildi. Yeni sürüm onayınızı bekliyor; önceki onay geçerli kalır.');
+  }
+
+  Future<void> _openHistory(EquipmentQuote q) => QuoteHistorySheet.show(context, service: _service, site: _site!, quote: q);
 
   Future<void> _accept(EquipmentQuote q) async {
     final site = _site!;
@@ -149,6 +249,28 @@ class EquipmentViewState extends State<EquipmentView> {
       AppSnack.show(context, 'Kabul için Finans ya da Sözleşmeler modülü açık olmalı.', kind: AppSnackKind.error);
       widget.onOpenModules?.call();
       return;
+    }
+    // Revizyon kabulü: onceki surum gider / sozlesmeye donusmusse yeni kabul AYRI bir kayit uretir; bilincli onay alinir (cift sayim uyarisi).
+    var acknowledgePrevious = false;
+    final previous = q.approvedVersion;
+    if (q.isRevision && previous != null && previous.hasRecord) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Önceki sürüm zaten kayıtlı'),
+          content: Text(
+            'Önceki sürüm (${previous.revisionNo}. sürüm, ${formatKurus(previous.amountKurus)}) ${previous.recordLabel} olarak kaydedilmiş '
+            '(#${previous.expenseId ?? previous.contractId}). Bu sürümü de kabul ederseniz AYRI bir kayıt oluşur; önceki kaydı gerekirse '
+            'Finans ya da Sözleşmeler bölümünden siz iptal edin ya da feshedin. Devam edilsin mi?',
+          ),
+          actions: <Widget>[
+            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Vazgeç')),
+            FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Devam et')),
+          ],
+        ),
+      );
+      if (ok != true || !mounted) return;
+      acknowledgePrevious = true;
     }
     final pick = await askForm(context, 'Teklifi kabul et', <FormField2>[FormField2.choice('as', '${q.vendorName} - ${formatKurus(q.amountKurus)}', options, initial: options.first.$1)]);
     if (pick == null) return;
@@ -201,7 +323,9 @@ class EquipmentViewState extends State<EquipmentView> {
       if (mounted) AppSnack.show(context, e.message, kind: AppSnackKind.error);
       return;
     }
-    await _run(() => _service.acceptQuote(site.code, q.id, body), 'Teklif kabul edildi.');
+    if (acknowledgePrevious) body = <String, Object?>{...body, 'acknowledge_previous': true};
+    final accepted = body;
+    await _run(() => _service.acceptQuote(site.code, q.id, accepted), 'Teklif kabul edildi.');
   }
 
   Future<void> _reject(EquipmentQuote q) async {
@@ -289,61 +413,15 @@ class EquipmentViewState extends State<EquipmentView> {
     );
   }
 
-  Widget _quotesTab(EquipmentSite site) {
-    if (_quotes.isEmpty) return const AppCard(child: Text('Henüz teklif yok. Aynı konuda birden çok teklif girerseniz en düşük tutar işaretlenir.'));
-    final topics = <String>[];
-    for (final q in _quotes) {
-      if (!topics.contains(q.topic)) topics.add(q.topic);
-    }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        for (final topic in topics) ...<Widget>[
-          Padding(padding: const EdgeInsets.symmetric(vertical: AppSpace.sm), child: Text(topic, style: Theme.of(context).textTheme.titleMedium)),
-          for (final q in _quotes.where((x) => x.topic == topic))
-            Padding(
-              padding: const EdgeInsets.only(bottom: AppSpace.sm),
-              child: AppCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Row(
-                      children: <Widget>[
-                        Expanded(child: Text(q.vendorName, style: Theme.of(context).textTheme.titleSmall)),
-                        Text(formatKurus(q.amountKurus), style: Theme.of(context).textTheme.titleSmall),
-                      ],
-                    ),
-                    Wrap(
-                      spacing: AppSpace.sm,
-                      children: <Widget>[
-                        if (q.lowest) const Chip(label: Text('En düşük')),
-                        Chip(label: Text(_statusLabel(q))),
-                        if (q.validUntil != null) Chip(label: Text('Geçerlilik: ${trDate(q.validUntil!)}')),
-                      ],
-                    ),
-                    if (q.documentNote != null) Text('Belge: ${q.documentNote}'),
-                    if (site.canWrite && q.status == 'open' && !q.expired)
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: <Widget>[
-                          TextButton(onPressed: () => _reject(q), child: const Text('Reddet')),
-                          FilledButton(onPressed: () => _accept(q), child: const Text('Kabul et')),
-                        ],
-                      ),
-                  ],
-                ),
-              ),
-            ),
-        ],
-      ],
-    );
-  }
-
-  String _statusLabel(EquipmentQuote q) {
-    if (q.status == 'accepted') return q.acceptedAs == 'contract' ? 'Kabul: sözleşme' : 'Kabul: gider';
-    if (q.status == 'rejected') return 'Reddedildi';
-    return q.expired ? 'Süresi doldu' : 'Açık';
-  }
+  Widget _quotesTab(EquipmentSite site) => EquipmentQuotesPanel(
+    quotes: _quotes,
+    canWrite: site.canWrite,
+    onAccept: _accept,
+    onReject: _reject,
+    onEdit: _editQuote,
+    onRevise: _reviseQuote,
+    onHistory: _openHistory,
+  );
 
   Widget _breakdownTab(EquipmentSite site) {
     final b = _breakdown;
@@ -689,9 +767,9 @@ enum FormFieldType { text, number, money, date, choice }
 /// [askForm] alan tanımı.
 class FormField2 {
   const FormField2.text(this.key, this.label, {this.required = false, this.max = 200, this.lines = 1, this.initial = ''}) : type = FormFieldType.text, options = const <(String, String)>[];
-  const FormField2.number(this.key, this.label, {this.required = false}) : type = FormFieldType.number, max = 16, lines = 1, initial = '', options = const <(String, String)>[];
-  const FormField2.money(this.key, this.label, {this.required = false}) : type = FormFieldType.money, max = 20, lines = 1, initial = '', options = const <(String, String)>[];
-  const FormField2.date(this.key, this.label, {this.required = false}) : type = FormFieldType.date, max = 10, lines = 1, initial = '', options = const <(String, String)>[];
+  const FormField2.number(this.key, this.label, {this.required = false, this.initial = ''}) : type = FormFieldType.number, max = 16, lines = 1, options = const <(String, String)>[];
+  const FormField2.money(this.key, this.label, {this.required = false, this.initial = ''}) : type = FormFieldType.money, max = 20, lines = 1, options = const <(String, String)>[];
+  const FormField2.date(this.key, this.label, {this.required = false, this.initial = ''}) : type = FormFieldType.date, max = 10, lines = 1, options = const <(String, String)>[];
   const FormField2.choice(this.key, this.label, this.options, {this.initial = ''}) : type = FormFieldType.choice, required = false, max = 0, lines = 1;
 
   final String key;

@@ -10,7 +10,11 @@
 //   POST  equipment/:id/plans   PATCH equipment/plans/:planId
 //   POST  equipment/:id/logs                      bakim kaydi (yalniz ekleme; planli ise sonraki tarih ilerler)
 //   POST  equipment/:id/expense-links   DELETE equipment/:id/expense-links/:expenseId
-//   GET   quotes?status&topic   POST quotes   POST quotes/:id/reject   POST quotes/:id/accept { as: expense|contract, expense|contract }
+//   GET   quotes?status&topic   POST quotes   POST quotes/:id/reject   POST quotes/:id/accept { as: expense|contract, expense|contract, acknowledge_previous? }
+//   GET   quotes/:id/history                      teklifin tum surumleri (eskiden yeniye; K14)
+//   PATCH quotes/:id                              ACIK teklifi yerinde duzenle (karara baglanmis teklif 409 QUOTE_LOCKED)
+//   POST  quotes/:id/revise { reason, ...alanlar }  ONAYLI teklifte degisiklik = yeni surum (201 { quote }); onceki surum degismez
+//   Liste yalniz EN SON surumleri doner (karsilastirma alanlari: delivery_days, note, vat_included; lowest / fastest / basis_mixed isaretleri).
 //
 // Yetki: yonetici / super yazar; kurul ve gorevli salt okur; sakin ve ilgisiz 403 FORBIDDEN_ROLE; baska site 403 FORBIDDEN_SITE; `equipment` modulu kapaliysa
 // 403 MODULE_DISABLED. Sakine acik uc YOK. Sozlesme: docs/PLATFORM_EKIPMAN.md. Hata govdesi { error, code }.
@@ -129,6 +133,12 @@ write('delete', '/equipment/:id/expense-links/:expenseId', 'equipment_unlink', '
 
 read('/quotes', 'quotes_list', 'Teklifler yüklenemedi.', ({ siteCode, req }) => svc.listQuotes(siteCode, req.query));
 write('post', '/quotes', 'quotes_create', 'Teklif kaydedilemedi.', ({ siteCode, actor, access, req }) => svc.createQuote({ siteCode, actor, access, body: bodyOf(req) }), 201);
+read('/quotes/:id/history', 'quotes_history', 'Sürüm geçmişi yüklenemedi.', ({ siteCode, req }) => svc.quoteHistory(siteCode, req.params.id));
+write('patch', '/quotes/:id', 'quotes_update', 'Teklif güncellenemedi.', ({ siteCode, actor, req }) => svc.updateQuote({ siteCode, rawId: req.params.id, actor, body: bodyOf(req) }));
+write('post', '/quotes/:id/revise', 'quotes_revise', 'Revizyon kaydedilemedi.', ({ siteCode, actor, access, req }) =>
+  svc.reviseQuote({ siteCode, rawId: req.params.id, actor, access, body: bodyOf(req) }),
+  201,
+);
 write('post', '/quotes/:id/reject', 'quotes_reject', 'Teklif reddedilemedi.', ({ siteCode, actor, req }) => svc.rejectQuote({ siteCode, rawId: req.params.id, actor }));
 write('post', '/quotes/:id/accept', 'quotes_accept', 'Teklif kabul edilemedi.', ({ siteCode, actor, access, req }) =>
   svc.acceptQuote({ siteCode, rawId: req.params.id, actor, access, body: bodyOf(req) }),
