@@ -1,6 +1,12 @@
 // Ana makine testi: GERCEK mqtt_baglanti.h + ota_guncelleme.h + ota_is_kimligi.h + gm60_scanner.h + admin_pin.h + role_kontrol.h.
 // Ag (PubSubClient / HTTPClient / Update / TLS) sahte; saat sahte; JSON gercek (ArduinoJson). Kapsam: D (ota_job_id), B (MQTT admin PIN),
-// C (qr_result red dali), E (surumler). Hem WROOM (-DBOARD_ESP32_WROOM_RELAY) hem C3 derlemesi ile calistirilir.
+// C (qr_result red dali), E (surumler), S (OTA IMZA: Ed25519 dogrulama, imzasiz/bozuk paket reddi, izinli surum dusurme, kopru).
+// Hem WROOM (-DBOARD_ESP32_WROOM_RELAY) hem C3 derlemesi ile calistirilir.
+// OTA imzasi: gomulu anahtar (ota_public_key.h) yerine CALISMA ZAMANINDA etiketten turetilen TEST anahtari kullanilir
+// (ota_imza.h, OTA_IMZA_TEST_ANAHTARI) - TEST ANAHTARI, uretimde kullanilmaz; depoda gizli anahtar yoktur.
+#ifndef OTA_IMZA_TEST_ANAHTARI
+#define OTA_IMZA_TEST_ANAHTARI
+#endif
 #include <Arduino.h>
 #include <ArduinoJson.h>
 #include <Preferences.h>
@@ -9,6 +15,7 @@
 #include <WiFiClientSecure.h>
 
 #include "mbedtls_stub_impl.h"
+#include "ed25519_test_imzalayici.h"
 
 #define WIFI_BAGLANTI_H     // agir basliklar etkisiz; ihtiyac duyulan semboller asagida
 #define OFFLINE_LOG_H
@@ -109,22 +116,61 @@ static std::vector<Olay> ota_kos(const std::string& cmd, int adim = 250) {
   return olaylar(mark);
 }
 
+// ---- OTA IMZA yardimcilari (TEST anahtari: calisma zamaninda etiketten turetilir, uretimde kullanilmaz) -----------------------------
+static ed_test::Anahtar g_yayinci;     // cihaza gomulu sayilan dogru anahtar
+static ed_test::Anahtar g_saldirgan;   // sunucuyu ele geciren saldirganin kendi anahtari
+static std::string fw_sig_url() { return fw_url() + ".sig"; }
+static void test_anahtarini_kur(const uint8_t anahtar[32]) { memcpy(gOtaImzaTestAnahtari, anahtar, 32); gOtaImzaAnahtarDurumu = OTA_ANAHTAR_BILINMIYOR; }
+// Ek manifest alanlari: {"a":1,...} govdesinin sonuna ekler
+static std::string manifest_ek(const std::string& json, const std::string& ekAlanlar) { return json.substr(0, json.size() - 1) + "," + ekAlanlar + "}"; }
+static std::string hexyaz(const std::string& ham) { std::string r; char b[3]; for (unsigned char c : ham) { snprintf(b, sizeof(b), "%02x", c); r += b; } return r; }
+static std::string b64yaz(const std::string& ham) {
+  static const char B[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  std::string r;
+  size_t i = 0;
+  for (; i + 2 < ham.size(); i += 3) {
+    const uint32_t v = (static_cast<unsigned char>(ham[i]) << 16) | (static_cast<unsigned char>(ham[i + 1]) << 8) | static_cast<unsigned char>(ham[i + 2]);
+    r += B[(v >> 18) & 63]; r += B[(v >> 12) & 63]; r += B[(v >> 6) & 63]; r += B[v & 63];
+  }
+  if (i + 1 == ham.size()) {
+    const uint32_t v = static_cast<unsigned char>(ham[i]) << 16;
+    r += B[(v >> 18) & 63]; r += B[(v >> 12) & 63]; r += "==";
+  }
+  return r;
+}
+// (hedef, surum, govde [, rollback_max]) icin ham 64 baytlik Ed25519 imzasi - imzalayan tarafin yaptigi is
+static std::string imza_ham(const ed_test::Anahtar& k, const std::string& hedef, const std::string& surum, const std::string& govde, const char* rollbackMax = nullptr) {
+  char yuk[OTA_IMZA_YUK_MAX];
+  const std::string sha = hexsha(govde);
+  const size_t n = otaImzaYukuOlustur(yuk, sizeof(yuk), hedef.c_str(), surum.c_str(), static_cast<uint32_t>(govde.size()), sha.c_str(), rollbackMax);
+  uint8_t imza[64] = {0};
+  if (n > 0) ed_test::imzala(k.tohum, reinterpret_cast<const uint8_t*>(yuk), n, imza);
+  return std::string(reinterpret_cast<const char*>(imza), 64);
+}
+// paketin yanina ".sig" dosyasini koyar (sunucu simulasyonu)
+static void imza_kur(const std::string& surum, const std::string& govde, const char* rollbackMax = nullptr, const std::string& hedef = OTA_TARGET) {
+  g_http_routes[fw_sig_url()] = FakeRoute{200, imza_ham(g_yayinci, hedef, surum, govde, rollbackMax), -1};
+}
+
 int main() {
   g_fake_ms = 1000000;
   g_local_token = "tok";
+  g_yayinci = ed_test::anahtarCifti("t_mqtt/yayinci");
+  g_saldirgan = ed_test::anahtarCifti("t_mqtt/saldirgan");
+  test_anahtarini_kur(g_yayinci.genel);
 
   // ------------------------------------------------------------------------------------------------ E surumler
-  { printf("E sürümler (OTA_VERSION_C3 4.3.3, OTA_VERSION_WROOM 5.2.2: SmartKeyPass adi)\n");
-    CHECK(std::string(OTA_VERSION_C3) == "4.3.3", "OTA_VERSION_C3 = 4.3.3");
-    CHECK(std::string(OTA_VERSION_WROOM) == "5.2.2", "OTA_VERSION_WROOM = 5.2.2");
+  { printf("E sürümler (OTA_VERSION_C3 4.4.0, OTA_VERSION_WROOM 5.3.0: OTA imza dogrulamasi / kopru surumu)\n");
+    CHECK(std::string(OTA_VERSION_C3) == "4.4.0", "OTA_VERSION_C3 = 4.4.0");
+    CHECK(std::string(OTA_VERSION_WROOM) == "5.3.0", "OTA_VERSION_WROOM = 5.3.0");
 #if defined(BOARD_ESP32_WROOM_RELAY)
-    CHECK(std::string(OTA_CURRENT_VERSION) == "5.2.2" && std::string(OTA_TARGET) == "esp32-wroom", "WROOM derlemesi: 5.2.2 / esp32-wroom");
+    CHECK(std::string(OTA_CURRENT_VERSION) == "5.3.0" && std::string(OTA_TARGET) == "esp32-wroom", "WROOM derlemesi: 5.3.0 / esp32-wroom");
 #else
-    CHECK(std::string(OTA_CURRENT_VERSION) == "4.3.3" && std::string(OTA_TARGET) == "esp32-c3", "C3 derlemesi: 4.3.3 / esp32-c3");
+    CHECK(std::string(OTA_CURRENT_VERSION) == "4.4.0" && std::string(OTA_TARGET) == "esp32-c3", "C3 derlemesi: 4.4.0 / esp32-c3");
 #endif
-    // Onceki surumler (AHBU adli 4.3.1 / 5.2.0 ve ara surum 4.3.2 / 5.2.1): SmartKeyPass yuklenen kart OTA ile eski ada
-    // geri DONMEZ (artan-surum kurali).
-    CHECK(otaSurumKarsilastir(String(OTA_VERSION_C3), String("4.3.2")) > 0 && otaSurumKarsilastir(String(OTA_VERSION_WROOM), String("5.2.1")) > 0, "yeni surumler eskilerden BUYUK (OTA artan-surum kurali)");
+    // Onceki surumler (AHBU adli 4.3.1 / 5.2.0, ara surumler 4.3.2 / 5.2.1, SmartKeyPass adli 4.3.3 / 5.2.2): kopru surum bunlardan
+    // BUYUK olmali (artan-surum kurali: imza bilmeyen sahadaki cihazlar bu surume OTA ile gecebilir).
+    CHECK(otaSurumKarsilastir(String(OTA_VERSION_C3), String("4.3.3")) > 0 && otaSurumKarsilastir(String(OTA_VERSION_WROOM), String("5.2.2")) > 0, "yeni surumler sahadaki SmartKeyPass surumlerinden BUYUK (OTA artan-surum kurali)");
   }
 
   // ------------------------------------------------------------------------------------------------ acilis: gercek mqttSetup/otaSetup/baglanma
@@ -226,6 +272,7 @@ int main() {
 
   { printf("D2.A tam OTA basarisi (ota_job_id=23): TUM ota_* olaylari (ota_success dahil) is kimligiyle gider; sonra temizlenir\n");
     manifest_kur(manifest_json(true, "9.0.0", fw_sha, fw_url()));
+    imza_kur("9.0.0", fw_govde);   // OTA imzasi artik zorunlu: paketin yaninda gecerli .sig
     Update.written = 0; client.published.clear();
     const auto ov = ota_kos("{\"action\":\"ota_check\",\"retry\":true,\"ota_job_id\":23,\"requested_by\":\"admin\",\"requested_at\":\"2026-10-01T10:00:00.000Z\"}");
     printf("  olaylar: %s\n", adlar(ov).c_str());
@@ -256,6 +303,7 @@ int main() {
 
   { printf("D2.B hash uyusmazligi: ota_failed kimlikle gider (kimlik yoksa alan eklenmez)\n");
     manifest_kur(manifest_json(true, "9.1.0", std::string(64, 'a'), fw_url()));
+    imza_kur("9.1.0", fw_govde);   // imza hazir: akis sha256 denetimine kadar ilerlesin
     client.published.clear(); Update.aborts = 0;
     const auto ov = ota_kos("{\"action\":\"ota_check\",\"retry\":true,\"ota_job_id\":24}");
     printf("  olaylar: %s\n", adlar(ov).c_str());
@@ -282,6 +330,7 @@ int main() {
     CHECK(!otaIsKimligiVarMi(), "manifest hatasi sonrasi temizlendi");
     // akis kopmasi
     manifest_kur(manifest_json(true, "9.2.0", fw_sha, fw_url()));
+    imza_kur("9.2.0", fw_govde);
     g_http_routes[fw_url()] = FakeRoute{200, fw_govde, 20000};
     client.published.clear();
     ov = ota_kos("{\"action\":\"ota_check\",\"retry\":true,\"ota_job_id\":27}");
@@ -347,6 +396,290 @@ int main() {
     for (int i = 0; i < 200 && !basladi; i++) { loop_once(1000); { const auto ovh = olaylar(); if (bul(ovh, "ota_check_started")) basladi = g_fake_ms - t0; } }
     CHECKF(basladi > 0 && basladi <= 121000, "kontrol jitter sonrasi basladi (%u ms)", basladi);
     { const auto ovh = olaylar(); const Olay st = bulK(ovh, "ota_check_started"); CHECK(st.event == "ota_check_started" && st.job == "77", "ota_check_started kimlikli"); }
+  }
+
+  // ------------------------------------------------------------------------------------------------ S OTA IMZA (Ed25519)
+  { printf("S OTA IMZA: imzasiz / bozuk / baska surum-hedef-paket icin imzali paket REDDEDILIR; yalniz dogru imza kurar; izinli surum dusurme; kopru\n");
+    int is = 300;
+    const std::string S_VER = "9.20.0";
+    const std::string mfOk = manifest_json(true, S_VER, fw_sha, fw_url());
+    const std::string DIGER_HEDEF = std::string(OTA_TARGET) == "esp32-c3" ? "esp32-wroom" : "esp32-c3";
+    g_http_routes[fw_url()] = FakeRoute{200, fw_govde, -1};
+
+    auto yeni = [&]() { yeniden_acilis(); Update.written = 0; Update.ends = 0; Update.aborts = 0; g_http_requests.clear(); client.published.clear(); };
+    auto istendi = [&](const std::string& url) { for (const auto& u : g_http_requests) if (u == url) return true; return false; };
+    auto sayac = [&]() -> std::string { auto& m = g_nvs["ota_cfg"]; auto it = m.find("try_cnt"); return it == m.end() ? std::string("") : it->second; };
+    auto kos = [&](const std::string& manifest) { manifest_kur(manifest); yeni(); return ota_kos("{\"action\":\"ota_check\",\"retry\":true,\"ota_job_id\":" + std::to_string(++is) + "}"); };
+    // Reddedilen kurulum: ota_failed + neden; boot bolumu DEGISMEDI (Update.end hic cagrilmadi); yeniden baslatma yok
+    auto red = [&](const std::vector<Olay>& ov, const char* neden, const char* ad) {
+      const Olay* f = bul(ov, "ota_failed");
+      CHECKF(f != nullptr && f->detail.find(neden) != std::string::npos, "%s: ota_failed '%s' (olaylar: %s)", ad, neden, adlar(ov).c_str());
+      CHECKF(bul(ov, "ota_success") == nullptr && !g_restart_requested && Update.ends == 0, "%s: KURULMADI (ota_success yok, yeniden baslatma yok, Update.end cagrilmadi)", ad);
+      CHECKF(f != nullptr && f->jobVar, "%s: ota_failed ota_job_id tasir", ad);
+    };
+    auto basari = [&](const std::vector<Olay>& ov, const char* surum, const char* ad) {
+      const Olay* s = bul(ov, "ota_success");
+      CHECKF(s != nullptr && s->detail == surum && g_restart_requested && Update.ends == 1 && Update.written == fw_govde.size(), "%s: KURULDU (ota_success %s, Update.end 1, yeniden baslatma) olaylar: %s", ad, surum, adlar(ov).c_str());
+      CHECKF(bul(ov, "ota_failed") == nullptr, "%s: ota_failed yok", ad);
+    };
+    auto guncel = [&](const std::vector<Olay>& ov, const char* ad) {
+      CHECKF(bul(ov, "ota_up_to_date") != nullptr && bul(ov, "ota_failed") == nullptr && bul(ov, "ota_success") == nullptr, "%s: ota_up_to_date (kurulum yok) olaylar: %s", ad, adlar(ov).c_str());
+      CHECKF(!g_restart_requested && Update.ends == 0 && Update.written == 0, "%s: flash'a dokunulmadi", ad);
+      CHECKF(!istendi(fw_url()) && !istendi(fw_sig_url()), "%s: ne paket ne imza istendi", ad);
+    };
+    const std::string cur = OTA_CURRENT_VERSION;
+
+    { printf("S1 gecerli imza: manifest -> .sig -> paket sirasi; imza dogrulaninca Update.end + ota_success\n");
+      imza_kur(S_VER, fw_govde);
+      const auto ov = kos(mfOk);
+      basari(ov, S_VER.c_str(), "S1");
+      int iM = -1, iS = -1, iF = -1;
+      for (size_t i = 0; i < g_http_requests.size(); i++) {
+        const std::string& u = g_http_requests[i];
+        if (u.find(OTA_MANIFEST_URL) == 0) iM = static_cast<int>(i); else if (u == fw_sig_url()) iS = static_cast<int>(i); else if (u == fw_url()) iF = static_cast<int>(i);
+      }
+      CHECK(iM >= 0 && iS > iM && iF > iS, "sira: manifest, imza dosyasi, paket (imza yoksa paket hic indirilmez)");
+      bool yetenek = false;
+      for (const auto& u : g_http_requests) if (u.find(OTA_MANIFEST_URL) == 0 && u.find("imza=ed25519-v1") != std::string::npos && u.find("current_version=") != std::string::npos && u.find("uid=") != std::string::npos) yetenek = true;
+      CHECK(yetenek, "manifest istegi imza yetenegini bildirir (&imza=ed25519-v1): sunucu kopru mantigi icin");
+      CHECK(g_nvs["ota_cfg"]["last_status"] == "guncelleme tamam", "durum: guncelleme tamam");
+    }
+
+    { printf("S2 IMZASIZ PAKET (kopru guvencesi): sunucuda .sig yok (404) -> paket INDIRILMEZ, kurulmaz; hak yanar (kalici)\n");
+      g_http_routes[fw_sig_url()] = FakeRoute{404, "yok", -1};
+      const auto ov = kos(mfOk);
+      red(ov, "imza: dosya yok", "S2 404");
+      CHECK(istendi(fw_sig_url()) && !istendi(fw_url()), "S2: paket HIC indirilmedi (imza once alinir)");
+      CHECK(Update.written == 0 && Update.aborts == 0, "S2: OTA bolumune hicbir sey yazilmadi");
+      CHECK(sayac() == "1", "S2: kalici red deneme hakkini yakti (1)");
+      CHECK(g_nvs["ota_cfg"]["last_status"].find("imza: dosya yok") != std::string::npos, "S2: durum NVS'e yazildi");
+      g_http_routes[fw_sig_url()] = FakeRoute{403, "yasak", -1};
+      red(kos(mfOk), "imza: dosya yok", "S2 403");
+      g_http_routes[fw_sig_url()] = FakeRoute{410, "gone", -1};
+      red(kos(mfOk), "imza: dosya yok", "S2 410");
+      // KOPRU / zorunluluk: imzayi kapatmaya calisan HICBIR manifest alani ya da MQTT komutu alani cihazda etkili degildir
+      g_http_routes[fw_sig_url()] = FakeRoute{404, "yok", -1};
+      red(kos(manifest_ek(mfOk, "\"force\":true,\"signed\":false,\"sig_required\":false,\"require_signature\":false,\"unsigned_ok\":true,\"imza_zorunlu\":false,\"verify\":false,\"md5\":\"\"")),
+          "imza: dosya yok", "S2 imzayi kapatmaya calisan manifest alanlari");
+      CHECK(!istendi(fw_url()), "S2: bu alanlarla da paket indirilmedi");
+      manifest_kur(mfOk); yeni();
+      const auto ovk = ota_kos("{\"action\":\"ota_check\",\"retry\":true,\"ota_job_id\":399,\"allow_unsigned\":true,\"skip_signature\":true,\"signature_required\":false,\"force\":true}");
+      red(ovk, "imza: dosya yok", "S2 imzayi kapatmaya calisan MQTT komut alanlari");
+      CHECK(!istendi(fw_url()), "S2: MQTT komutuyla da paket indirilmedi");
+    }
+
+    { printf("S3 gecici ag/sunucu hatasi (imza dosyasi 503 / baglanti yok): kurulmaz ama deneme hakki YANMAZ\n");
+      g_http_routes[fw_sig_url()] = FakeRoute{503, "bakimda", -1};
+      auto ov = kos(mfOk);
+      red(ov, "imza: dosya alinamadi (http 503)", "S3 503");
+      CHECK(!istendi(fw_url()) && sayac() == "0", "S3: paket indirilmedi; hak iade edildi (0)");
+      g_http_routes.erase(fw_sig_url());   // rota yok -> baglanti hatasi (-1)
+      ov = kos(mfOk);
+      red(ov, "imza: dosya alinamadi (http -1)", "S3 baglanti yok");
+      CHECK(!istendi(fw_url()) && sayac() == "0", "S3: baglanti yokken de hak yanmadi");
+    }
+
+    { printf("S4 bozuk imza: paket indirilir ama Update.end ASLA cagrilmaz (iptal), ota_failed 'imza: dogrulama basarisiz'\n");
+      std::string s = imza_ham(g_yayinci, OTA_TARGET, S_VER, fw_govde);
+      s[5] ^= 1;
+      g_http_routes[fw_sig_url()] = FakeRoute{200, s, -1};
+      const auto ov = kos(mfOk);
+      red(ov, "imza: dogrulama basarisiz", "S4");
+      CHECK(Update.written == fw_govde.size() && Update.aborts == 1, "S4: paket yazildi ve imza hatasinda IPTAL edildi (abort=1)");
+      CHECK(sayac() == "1", "S4: imza hatasi hakki yakar");
+      CHECK(Serial.hist_has("OTA GUVENLIK: paket imzasi dogrulanamadi"), "S4: Turkce guvenlik gunlugu seriye yazildi");
+      size_t maxLen = 0; for (const auto& o : ov) maxLen = std::max(maxLen, o.payload.size());
+      CHECKF(maxLen + T_EVT.size() + 7 <= client.bufSize, "S4: olay yuku tampona sigdi (%zu bayt)", maxLen);
+    }
+
+    { printf("S5 saldirgan senaryolari: gecerli imzali ama BASKA surum / paket / hedef / anahtar icin imza, yetkisiz rollback_max, bos imza\n");
+      struct V { const char* ad; std::string sig; };
+      const std::vector<V> v = {
+        {"baska surum icin imza (9.20.1)", imza_ham(g_yayinci, OTA_TARGET, "9.20.1", fw_govde)},
+        {"ESKI surum icin gecerli imza yeniden sunuldu (9.0.0)", imza_ham(g_yayinci, OTA_TARGET, "9.0.0", fw_govde)},
+        {"baska paket govdesi icin imza", imza_ham(g_yayinci, OTA_TARGET, S_VER, fw_govde + "x")},
+        {"BASKA DONANIM HEDEFI icin gecerli imza", imza_ham(g_yayinci, DIGER_HEDEF, S_VER, fw_govde)},
+        {"saldirganin KENDI anahtariyla imza", imza_ham(g_saldirgan, OTA_TARGET, S_VER, fw_govde)},
+        {"yetkisiz rollback_max iceren imza (yukseltmede)", imza_ham(g_yayinci, OTA_TARGET, S_VER, fw_govde, "99.0.0")},
+        {"tum-sifir imza", std::string(64, '\0')},
+        {"tum-0xFF imza", std::string(64, '\xff')},
+      };
+      for (const auto& x : v) {
+        g_http_routes[fw_sig_url()] = FakeRoute{200, x.sig, -1};
+        red(kos(mfOk), "imza: dogrulama basarisiz", x.ad);
+      }
+    }
+
+    { printf("S6 manifeste gomulu imza (hex / base64): .sig dosyasi gerekmez; bozuk gomulu imza paket indirmeden reddedilir\n");
+      g_http_routes.erase(fw_sig_url());
+      const std::string ham = imza_ham(g_yayinci, OTA_TARGET, S_VER, fw_govde);
+      auto ov = kos(manifest_ek(mfOk, "\"signature\":\"" + hexyaz(ham) + "\""));
+      basari(ov, S_VER.c_str(), "S6 hex");
+      CHECK(!istendi(fw_sig_url()), "S6: gomulu imza varken .sig istenmedi");
+      ov = kos(manifest_ek(mfOk, "\"signature\":\"" + b64yaz(ham) + "\""));
+      basari(ov, S_VER.c_str(), "S6 base64");
+      ov = kos(manifest_ek(mfOk, "\"signature\":\"zzzz-bozuk\""));
+      red(ov, "imza: bicim gecersiz (manifest signature)", "S6 bozuk gomulu");
+      CHECK(!istendi(fw_url()), "S6: bozuk gomulu imzada paket indirilmedi");
+      ov = kos(manifest_ek(mfOk, "\"signature\":\"" + hexyaz(imza_ham(g_saldirgan, OTA_TARGET, S_VER, fw_govde)) + "\""));
+      red(ov, "imza: dogrulama basarisiz", "S6 saldirgan gomulu imza");
+    }
+
+    { printf("S7 imza dosyasi adresi: sig_url / signature_url, hex+CRLF ve base64 dosya bicimleri, baska sunucu REDDI, asiri buyuk dosya\n");
+      const std::string ham = imza_ham(g_yayinci, OTA_TARGET, S_VER, fw_govde);
+      const std::string ozel = std::string("https://api.gudeteknoloji.com.tr/firmware/") + OTA_TARGET + "/imza-9.20.0.sig";
+      g_http_routes.erase(fw_sig_url());
+      g_http_routes[ozel] = FakeRoute{200, hexyaz(ham) + "\r\n", -1};
+      auto ov = kos(manifest_ek(mfOk, "\"sig_url\":\"" + ozel + "\""));
+      basari(ov, S_VER.c_str(), "S7 sig_url (hex+CRLF)");
+      CHECK(istendi(ozel) && !istendi(fw_sig_url()), "S7: sig_url kullanildi, varsayilan adres istenmedi");
+      g_http_routes[ozel] = FakeRoute{200, b64yaz(ham) + "\n", -1};
+      ov = kos(manifest_ek(mfOk, "\"signature_url\":\"" + ozel + "\""));
+      basari(ov, S_VER.c_str(), "S7 signature_url (base64)");
+      g_http_routes[fw_sig_url()] = FakeRoute{200, ham, -1};   // varsayilan: ham 64 bayt
+      ov = kos(mfOk);
+      basari(ov, S_VER.c_str(), "S7 varsayilan .sig (ham 64 bayt)");
+      ov = kos(manifest_ek(mfOk, "\"sig_url\":\"https://evil.example.com/firmware/imza.sig\""));
+      red(ov, "imza: adres reddedildi", "S7 baska sunucu");
+      CHECK(!istendi("https://evil.example.com/firmware/imza.sig") && !istendi(fw_url()), "S7: baska sunucuya baglanilmadi, paket indirilmedi");
+      ov = kos(manifest_ek(mfOk, "\"sig_url\":\"http://api.gudeteknoloji.com.tr/x.sig\""));
+      red(ov, "imza: adres reddedildi", "S7 http (TLS'siz) adres");
+      g_http_routes[fw_sig_url()] = FakeRoute{200, std::string(600, 'a'), -1};
+      ov = kos(mfOk);
+      red(ov, "imza: dosya cok buyuk", "S7 600 baytlik imza dosyasi");
+      CHECK(!istendi(fw_url()), "S7: asiri buyuk imza dosyasinda paket indirilmedi");
+      g_http_routes[fw_sig_url()] = FakeRoute{200, std::string(70, 'a'), -1};
+      ov = kos(mfOk);
+      red(ov, "imza: bicim gecersiz", "S7 70 baytlik cop imza dosyasi");
+      // paket adresi sorgu iceriyorsa varsayilan imza adresi TURETILMEZ; sig_url ile verilebilir
+      const std::string mfSorgu = manifest_json(true, S_VER, fw_sha, fw_url() + "?x=1");
+      ov = kos(mfSorgu);
+      red(ov, "imza: adres turetilemedi", "S7 sorgulu paket adresi");
+      g_http_routes[fw_sig_url()] = FakeRoute{200, ham, -1};
+      ov = kos(manifest_ek(mfSorgu, "\"sig_url\":\"" + fw_sig_url() + "\""));
+      basari(ov, S_VER.c_str(), "S7 sorgulu adres + sig_url");
+    }
+
+    { printf("S8 manifest surum alani imza yukune uygun degilse (satir ekleme) indirme baslamaz\n");
+      imza_kur(S_VER, fw_govde);
+      const char* kotu[] = {"9.20.0\\nsize=1", "9.20.0 ", "9.20.0\\t", "9.20.0/../x", "1234567890123456789012345.9"};
+      for (const char* k : kotu) {
+        const auto ov = kos(manifest_json(true, k, fw_sha, fw_url()));
+        red(ov, "imza: manifest surum alani gecersiz", k);
+        CHECKF(!istendi(fw_url()) && !istendi(fw_sig_url()), "S8 (%s): hicbir indirme yok", k);
+      }
+    }
+
+    { printf("S9 IMZA ANAHTARI HAZIR DEGIL (yer tutucu / tum-sifir): hicbir paket kurulmaz, ne imza ne paket indirilir, hak yanmaz\n");
+      imza_kur(S_VER, fw_govde);
+      test_anahtarini_kur(ed_test::YER_TUTUCU_DUZ);
+      auto ov = kos(mfOk);
+      red(ov, "imza: anahtar yerlestirilmemis", "S9 yer tutucu");
+      CHECK(!istendi(fw_url()) && !istendi(fw_sig_url()) && Update.written == 0, "S9: yer tutucu anahtarla HICBIR indirme yapilmadi");
+      CHECK(sayac() == "", "S9: deneme hakki yakilmadi");
+      uint8_t sifir[32] = {0};
+      test_anahtarini_kur(sifir);
+      ov = kos(mfOk);
+      red(ov, "imza: anahtar yerlestirilmemis", "S9 tum-sifir anahtar");
+      uint8_t kimlik[32] = {1};   // y=1: kimlik noktasi (kucuk mertebeli) - sahte imza uretmeyi kolaylastirir
+      test_anahtarini_kur(kimlik);
+      g_http_routes[fw_sig_url()] = FakeRoute{200, std::string("\x01") + std::string(63, '\0'), -1};   // R=kimlik, S=0
+      ov = kos(mfOk);
+      red(ov, "imza: anahtar yerlestirilmemis", "S9 kucuk mertebeli anahtar + sahte imza");
+      CHECK(!istendi(fw_url()), "S9: zayif anahtarla sahte imza paket indirtmedi");
+      test_anahtarini_kur(g_yayinci.genel);
+      imza_kur(S_VER, fw_govde);
+      basari(kos(mfOk), S_VER.c_str(), "S9 anahtar duzelince kurar");
+    }
+
+    { printf("S10 IZINLI SURUM DUSURME: yalniz allow_downgrade + imzali rollback_max + kapsam; esit surum ve sunucunun tek basina verdigi izin etkisiz\n");
+      const std::string eski = "1.0.0", eskiRb = "1.5.0";
+      g_http_routes[fw_url()] = FakeRoute{200, fw_govde, -1};
+      const std::string mfEski = manifest_json(true, eski, fw_sha, fw_url());
+      const std::string izin = "\"allow_downgrade\":true";
+      // izin yok -> mevcut davranis: guncel sayilir, kurulmaz
+      guncel(kos(mfEski), "S10 izin yok (eski surum)");
+      // izin var ama imza rollback_max icermiyor -> indirilir, imzada reddedilir
+      imza_kur(eski, fw_govde);
+      auto ov = kos(manifest_ek(mfEski, izin));
+      red(ov, "imza: dogrulama basarisiz", "S10 izin var, imza rollback_max'siz");
+      CHECK(Update.written == fw_govde.size() && Update.aborts == 1, "S10: sunucunun izni tek basina yetmedi, paket iptal edildi");
+      // izin + imzali rollback_max = cihazin surumu -> kurulur
+      imza_kur(eski, fw_govde, cur.c_str());
+      ov = kos(manifest_ek(mfEski, izin));
+      basari(ov, eski.c_str(), "S10 izin + imzali rollback_max");
+      // alias
+      ov = kos(manifest_ek(mfEski, "\"downgrade_allowed\":true"));
+      basari(ov, eski.c_str(), "S10 downgrade_allowed takma adi");
+      // rollback_max kapsami cihazin surumunu icermiyorsa: bu cihaz icin guncelleme yok
+      imza_kur(eski, fw_govde, eskiRb.c_str());
+      guncel(kos(manifest_ek(mfEski, izin + ",\"rollback_max\":\"" + eskiRb + "\"")), "S10 rollback_max cihazin surumunun altinda");
+      // genis kapsam: manifest ve imza ayni rollback_max
+      imza_kur(eski, fw_govde, "99.0.0");
+      ov = kos(manifest_ek(mfEski, izin + ",\"rollback_max\":\"99.0.0\""));
+      basari(ov, eski.c_str(), "S10 genis kapsam (manifest = imza)");
+      // KAPSAM GENISLETME saldirisi: imza dar (cihazin surumu), manifest genis diyor
+      imza_kur(eski, fw_govde, cur.c_str());
+      ov = kos(manifest_ek(mfEski, izin + ",\"rollback_max\":\"99.0.0\""));
+      red(ov, "imza: dogrulama basarisiz", "S10 kapsam genisletme saldirisi");
+      // gecersiz rollback_max (satir ekleme)
+      ov = kos(manifest_ek(mfEski, izin + ",\"rollback_max\":\"9.9\\nx=1\""));
+      guncel(ov, "S10 gecersiz rollback_max");
+      // izin dize ("true") ya da sayi (1) ise sayilmaz
+      guncel(kos(manifest_ek(mfEski, "\"allow_downgrade\":\"true\"")), "S10 izin dize");
+      guncel(kos(manifest_ek(mfEski, "\"allow_downgrade\":1")), "S10 izin sayi");
+      // ESIT surum: izin olsa da kurulmaz
+      guncel(kos(manifest_ek(manifest_json(true, cur, fw_sha, fw_url()), izin)), "S10 esit surum + izin");
+      // YUKSELTME + izin: normal yukseltme; imza rollback_max ICERMEMELI
+      imza_kur(S_VER, fw_govde);
+      basari(kos(manifest_ek(mfOk, izin)), S_VER.c_str(), "S10 yukseltme + izin (imza rollback'siz)");
+      imza_kur(S_VER, fw_govde, cur.c_str());
+      red(kos(manifest_ek(mfOk, izin)), "imza: dogrulama basarisiz", "S10 yukseltmede rollback_max'li imza reddedilir");
+    }
+
+    { printf("S11 deneme siniri: ayni surum icin 3 imza hatasindan sonra cihaz 4. kez INDIRMEZ (retry olmadan)\n");
+      std::string kotu = imza_ham(g_yayinci, OTA_TARGET, S_VER, fw_govde);
+      kotu[0] ^= 1;
+      g_http_routes[fw_sig_url()] = FakeRoute{200, kotu, -1};
+      manifest_kur(mfOk);
+      otaDenemeSayacinaSifirla();
+      int indirme = 0;
+      for (int k = 0; k < 4; k++) {
+        yeni();
+        const auto ov = ota_kos("{\"action\":\"ota_check\",\"ota_job_id\":" + std::to_string(++is) + "}");
+        if (istendi(fw_url())) indirme++;
+        if (k < 3) CHECKF(bul(ov, "ota_failed") && bul(ov, "ota_failed")->detail.find("imza: dogrulama basarisiz") != std::string::npos, "S11: deneme %d imza hatasi", k + 1);
+        else CHECKF(bul(ov, "ota_failed") && bul(ov, "ota_failed")->detail.find("deneme siniri asildi") != std::string::npos && !istendi(fw_sig_url()), "S11: 4. denemede sinir asildi, imza/paket istenmedi (olaylar: %s)", adlar(ov).c_str());
+      }
+      CHECKF(indirme == 3, "S11: toplam 3 indirme (%d)", indirme);
+      CHECK(Update.ends == 0 && !g_restart_requested, "S11: hicbirinde kurulum yok");
+    }
+
+    { printf("S12 acilis gunlugu: anahtar parmak izi / yer tutucu uyarisi; ozel anahtar (tohum) hicbir gunluge yazilmaz\n");
+      uint8_t ozet[32];
+      refcrypto::sha256(g_yayinci.genel, 32, ozet);
+      char hex[17];
+      for (int i = 0; i < 8; i++) snprintf(&hex[i * 2], 3, "%02x", ozet[i]);
+      Serial.clear();
+      otaSetup();
+      CHECK(Serial.has("OTA imza anahtari: HAZIR") && Serial.has(std::string("parmak izi ") + hex), "S12: HAZIR + parmak izi (SHA-256 ilk 8 bayt) seriye yazildi");
+      test_anahtarini_kur(ed_test::YER_TUTUCU_DUZ);
+      Serial.clear();
+      otaSetup();
+      CHECK(Serial.has("OTA imza anahtari: YER TUTUCU") && Serial.has("OTA ile guncelleme KAPALI"), "S12: yer tutucu uyarisi");
+      uint8_t sifir[32] = {0};
+      test_anahtarini_kur(sifir);
+      Serial.clear();
+      otaSetup();
+      CHECK(Serial.has("OTA imza anahtari: GECERSIZ"), "S12: gecersiz anahtar uyarisi");
+      test_anahtarini_kur(g_yayinci.genel);
+      otaSetup();
+      bool sizinti = Serial.hist_has(hexyaz(std::string(reinterpret_cast<const char*>(g_yayinci.tohum), 32)));
+      for (size_t i = 0; i < client.published.size(); i++) if (client.published[i].payload.find(hexyaz(std::string(reinterpret_cast<const char*>(g_yayinci.tohum), 32))) != std::string::npos) sizinti = true;
+      CHECK(!sizinti, "S12: ozel anahtar (tohum) seriye ve MQTT yayinlarina HIC yazilmadi");
+    }
+    test_anahtarini_kur(g_yayinci.genel);
+    yeniden_acilis();
   }
 
 #if defined(BOARD_ESP32_WROOM_RELAY)
