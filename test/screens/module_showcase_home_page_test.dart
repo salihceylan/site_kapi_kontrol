@@ -1267,7 +1267,8 @@ void main() {
       await _tapCard(t, SirketMenuItem.moduller);
       expect(_inAppBar(find.text('Modüller')), findsOneWidget);
 
-      await t.tap(_inAppBar(find.text('Sakin Modu')));
+      // P1-13: iç ekranda ("Ana sayfa" düğmesi varken, 480 dp altında) mod hapı yalnız ikondur; ipucu "Sakin Modu".
+      await t.tap(_inAppBar(find.byTooltip('Sakin Modu')));
       await t.pump();
       await t.pump(const Duration(milliseconds: 600));
       expect(find.byType(ModuleShowcaseView), findsOneWidget);

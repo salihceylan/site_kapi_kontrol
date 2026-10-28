@@ -316,8 +316,15 @@ void _expectAppBarFits(
   String title = 'Panel',
   bool themeToggle = false,
   bool dark = false,
+  // P1-13: iç ekranda (alt çubuk yok) menü düğmesinin yanında "Ana sayfa" düğmesi var; 480 dp'den dar ekranda hap yalnız ikon.
+  bool homeShown = false,
 }) {
   expect(tester.takeException(), isNull, reason: 'RenderFlex taşması yok');
+  expect(
+    _inAppBar(find.byTooltip('Ana sayfa')),
+    homeShown ? findsOneWidget : findsNothing,
+    reason: homeShown ? 'iç ekranda Ana sayfa düğmesi var' : 'Panel\'de Ana sayfa düğmesi yok',
+  );
 
   final bar = tester.getRect(find.byType(AppBar));
   final toolbar = tester.getRect(_inAppBar(find.byType(NavigationToolbar)));
@@ -392,7 +399,7 @@ void _expectAppBarFits(
     expect(_inAppBar(find.text(label)), findsNothing);
     return;
   }
-  final iconOnly = _expectedIconOnly(width, scale);
+  final iconOnly = _expectedIconOnly(width, scale) || (homeShown && width < 480);
   final pill = _pillOf(label, iconOnly: iconOnly);
   expect(pill, findsOneWidget, reason: 'hap ($label, iconOnly=$iconOnly)');
   if (iconOnly) {
@@ -500,6 +507,7 @@ void main() {
                 scale: c.scale,
                 dual: true,
                 title: 'Kapılar',
+                homeShown: true,
               );
               await _disposeShell(tester);
             },
