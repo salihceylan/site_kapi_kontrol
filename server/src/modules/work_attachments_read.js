@@ -11,7 +11,7 @@ import { parsePositiveId } from './people_common.js';
 
 // uploaded_by_resident: yükleyen talebi AÇAN kişi mi (uploaded_by_kind 'resident' | 'management'; WA-SEC-1). Talep satırı alt sorguyla okunur (birincil anahtar).
 export const ATTACHMENT_COLUMNS = `
-  a.id, a.work_item_id, a.site_code, a.uploaded_by, a.file_name, a.mime_type, a.size_bytes, a.sha256, a.status, a.storage_key, a.created_at, a.ready_at,
+  a.id, a.work_item_id, a.site_code, a.uploaded_by, a.file_name, a.mime_type, a.size_bytes, a.sha256, a.status, a.phase, a.storage_key, a.created_at, a.ready_at,
   CASE WHEN a.uploaded_by IS NULL OR u.deleted_at IS NOT NULL THEN NULL ELSE u.full_name END AS uploaded_by_name,
   COALESCE(a.uploaded_by IS NOT NULL AND a.uploaded_by = (SELECT wc.created_by FROM work_items wc WHERE wc.id = a.work_item_id), FALSE) AS uploaded_by_resident
 `;

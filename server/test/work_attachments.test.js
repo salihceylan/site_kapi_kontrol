@@ -297,7 +297,7 @@ describe('girdi doğrulama, içerik imzası, eşleyiciler', () => {
   it('mapAttachment: uploaded_by_kind (yükleyen talebi açan mı), uploaded_by_me, silinmiş yükleyen "Silinmiş Kullanıcı", sayılar / tarihler; silme önizleme notu birebir', () => {
     const row = { id: '7', work_item_id: '5', file_name: 'a.jpg', mime_type: 'image/jpeg', size_bytes: '1234', status: 'ready', uploaded_by: 12, uploaded_by_name: 'Ada', uploaded_by_resident: true, created_at: new Date('2026-01-01T00:00:00Z'), ready_at: new Date('2026-01-01T00:01:00Z') };
     const mine = mapAttachment(row, { userCode: 12 });
-    assert.deepEqual(mine, { id: 7, work_item_id: 5, file_name: 'a.jpg', mime_type: 'image/jpeg', size_bytes: 1234, status: 'ready', uploaded_by_kind: 'resident', uploaded_by_name: 'Ada', uploaded_by_me: true, created_at: '2026-01-01T00:00:00.000Z', ready_at: '2026-01-01T00:01:00.000Z' });
+    assert.deepEqual(mine, { id: 7, work_item_id: 5, file_name: 'a.jpg', mime_type: 'image/jpeg', size_bytes: 1234, status: 'ready', phase: null, uploaded_by_kind: 'resident', uploaded_by_name: 'Ada', uploaded_by_me: true, created_at: '2026-01-01T00:00:00.000Z', ready_at: '2026-01-01T00:01:00.000Z' });
     assert.equal(mapAttachment(row, { userCode: 13 }).uploaded_by_me, false);
     assert.equal(mapAttachment({ ...row, uploaded_by_resident: false }, { userCode: 12 }).uploaded_by_kind, 'management');
     assert.equal(mapAttachment({ ...row, uploaded_by_resident: null }, { userCode: 12 }).uploaded_by_kind, 'management', 'bilinmiyorsa yönetim');
