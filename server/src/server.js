@@ -14,6 +14,7 @@ import { firmwareRouter } from './routes/firmware_routes.js';
 import { companyRouter, companyAccessLimiter } from './routes/company_routes.js';
 import { authRouter } from './routes/auth_routes.js';
 import { adminRouter } from './routes/admin_routes.js';
+import { firmwareAdminRouter } from './routes/firmware_admin_routes.js';
 import { managerRouter } from './routes/manager_routes.js';
 import { appDoorsRouter } from './routes/app_doors_routes.js';
 import { guestPassesRouter } from './routes/guest_passes_routes.js';
@@ -79,6 +80,7 @@ import { startPushWorker, stopPushWorker } from './modules/push_worker.js';
 
 import { buildCorsAllowlist, createCorsOptionsDelegate } from './config/cors.js';
 import { resolveServerStart, validateEnv } from './config/env.js';
+import { loadOtaPublicKey, resolveServeUnsigned } from './services/ota_signature.js';
 import { createTrustProxyMonitor, resolveTrustProxy } from './security/trust_proxy.js';
 import { installProcessHandlers } from './config/process_handlers.js';
 import { requireCompanyAccess } from './middlewares/company_auth.js';
@@ -135,6 +137,8 @@ app.use(firmwareRouter);
 app.use(companyRouter);
 app.use(authRouter);
 app.use(adminRouter);
+// OTA firmware yayini (imzali paket yukleme + yayin listesi): /admin/firmware/:target/releases (yalniz super kullanici; imza zorunlu).
+app.use(firmwareAdminRouter);
 app.use(managerRouter);
 app.use(appDoorsRouter);
 app.use(guestPassesRouter);
@@ -260,6 +264,11 @@ function checkEnvOrExit() {
     console.warn(`[CORS] Gecersiz origin girdisi yok sayildi: ${entry}`);
   }
   console.log(`[CORS] Izinli origin sayisi: ${corsAllowlist.size}`);
+  // OTA imzasi: yuklenen genel anahtarin kimligi (sir degil; imzalama aracinin bastigi kimlikle karsilastirmak icin). Deger YAZILMAZ.
+  const otaKey = loadOtaPublicKey(process.env);
+  console.log(otaKey.ok
+    ? `[OTA] Imza dogrulama anahtari yuklendi (kimlik: ${otaKey.keys.map((item) => item.keyId).join(', ')}); imzasiz manifest sunumu: ${resolveServeUnsigned(process.env).value ? 'ACIK (gecis)' : 'KAPALI'}.`
+    : '[OTA] Imza dogrulama anahtari yok/kullanilamiyor: imzali firmware yukleme ucu kapali.');
   if (errors.length > 0) {
     for (const message of errors) {
       console.error(`[ENV] HATA: ${message}`);
