@@ -7856,13 +7856,13 @@
       ]
     },
     {
-      "id": "F39",
+      "id": "F40",
       "baslik": "Menü katmanı: kompakt menü, “Tüm işlemler” ve Ana menü düzeni",
       "durum": "hazir",
       "ozet": "Yetenek (modül açık mı) ile menü yerleşimi artık ayrı katmandır. Her sitenin çekmecesi ve Panel kartları, yönetim türünün önerdiği “günlük işler” kümesiyle kısalır; kümede olmayan işlem kaybolmaz: çekmecede her zaman “Tüm işlemler” girişi, Panel'de (kutucuk, liste ve Kolay görünümde) kartların sonunda aynı adlı kart vardır. Ekran, görünür tüm işlemleri kategorili ve aramalı listeler; yönetici “Ana menüyü düzenle” ile kümeyi seçer. Temel modüller kapatılamaz, yalnız menüde öne çıkıp çıkmayacakları seçilir. Davranış değişikliği: sürüm yayınlanınca mevcut sitelerin apartman menüsünde yalnızca temel olup önerilmeyen modüller (Anket ve Oylama, Komşu Panosu, Faaliyet Raporu, Ekipman ve Bakım) “Tüm işlemler”e iner; hiçbiri kapanmaz, yönetici “Hepsini göster” ile eski tam menüye döner. Sürüm yayınlanınca denenir (maddeler “Denemeye hazır” görünse de sürüm yayınlanmadan uygulamada yoktur).",
       "maddeler": [
         {
-          "id": "F39.01",
+          "id": "F40.01",
           "baslik": "Kompakt menü: çekmece ve Panel yalnız öne çıkanları gösterir",
           "adimlar": [
             "Yalnız temel modüllerin ve kapının açık olduğu bir apartman sitesinin yöneticisiyle giriş yapın.",
@@ -7876,7 +7876,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F39.02",
+          "id": "F40.02",
           "baslik": "Tüm işlemler: kategorili tam liste ve arama",
           "adimlar": [
             "Çekmecedeki ya da Panel'deki “Tüm işlemler”e dokunun.",
@@ -7891,7 +7891,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F39.03",
+          "id": "F40.03",
           "baslik": "Yönetici: “Ana menüyü düzenle”",
           "adimlar": [
             "“Tüm işlemler” ekranında “Ana menüyü düzenle”ye dokunun.",
@@ -7905,7 +7905,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F39.04",
+          "id": "F40.04",
           "baslik": "Kaydedilmemiş değişiklik koruması",
           "adimlar": [
             "Ana menü düzeni ekranında bir anahtarı değiştirin, kaydetmeyin.",
@@ -7918,7 +7918,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F39.05",
+          "id": "F40.05",
           "baslik": "Temel modüller kapatılamaz",
           "adimlar": [
             "Ana menü düzeni ekranında temel modül satırlarına bakın.",
@@ -7932,7 +7932,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F39.06",
+          "id": "F40.06",
           "baslik": "İki siteli yönetici: menü site seçiciyle değişir",
           "adimlar": [
             "Çekmecenin en üstündeki site seçiciyle bir siteyi seçin; menüye bakın.",
@@ -7946,7 +7946,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F39.07",
+          "id": "F40.07",
           "baslik": "Daire sakini: kısa çekmece ve eksiksiz Tüm işlemler",
           "adimlar": [
             "Daire sakini hesabıyla giriş yapıp çekmeceyi açın.",
@@ -7960,7 +7960,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F39.08",
+          "id": "F40.08",
           "baslik": "Gizlenen işin rozeti kaybolmaz",
           "adimlar": [
             "Ana menüde olmayan bir işte okunmamış ya da bekleyen kayıt oluşturun (örneğin bir sakin için okunmamış anket, ya da yönetici için bekleyen talep).",
@@ -7973,7 +7973,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F39.09",
+          "id": "F40.09",
           "baslik": "Süper kullanıcı: kompakt menü yok, düzen değiştirilebilir",
           "adimlar": [
             "Süper kullanıcıyla giriş yapıp çekmeceye bakın.",
@@ -7987,7 +7987,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F39.10",
+          "id": "F40.10",
           "baslik": "Eski ve yeni sürüm uyumu",
           "adimlar": [
             "Güncellemeden önceki uygulama sürümüyle (eski APK), yeni sunucuya bağlanıp menüye bakın.",
@@ -8000,7 +8000,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F39.11",
+          "id": "F40.11",
           "baslik": "Panel'de liste, kutucuk ve Kolay görünümde “Tüm işlemler”",
           "adimlar": [
             "Kompakt menünün bir şeyi gizlediği bir hesapla Panel'in “Modüller” başlığındaki düğmeyle Liste görünümüne geçip sona bakın.",
@@ -8014,7 +8014,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F39.12",
+          "id": "F40.12",
           "baslik": "Dar ekran, en büyük yazı ve koyu tema",
           "adimlar": [
             "Telefonun yazı boyutunu en büyüğe alın (mümkünse ekran boyutunu da büyütüp dar genişliğe indirin).",
@@ -8030,13 +8030,13 @@
       ]
     },
     {
-      "id": "F40",
+      "id": "F41",
       "baslik": "Sayfa bağlamlı Geri bildirim",
       "durum": "hazir",
       "ozet": "Çekmecedeki “Geri bildirim” satırı ya da Ayarlar panelindeki “Geri bildirim gönder” ile yazılan geri bildirime hangi ekrandan gönderildiği (ekran adı ve rota) ve site otomatik eklenir; kullanıcı değiştiremez. En çok 4 dosya (dosya başı 5 MB, toplam 20 MB) eklenebilir; fotoğrafların konum bilgisi (EXIF) silinir. Kayıtları site yöneticisi kendi sitesi için, süper kullanıcı tümü için “Gelen geri bildirimler” sayfasında görür; kurul, görevli, sakin ve başka site yöneticisi göremez. Kullanıcı başına saatte 5 geri bildirim sınırı vardır. Sürüm yayınlanınca denenir (maddeler “Denemeye hazır” görünse de sürüm yayınlanmadan uygulamada yoktur).",
       "maddeler": [
         {
-          "id": "F40.01",
+          "id": "F41.01",
           "baslik": "Çekmeceden Geri bildirim formu açılır, ekran bilgisi otomatiktir",
           "adimlar": [
             "Yönetici hesabıyla çekmeceyi açın ve “Yardım ve Destek”in altındaki “Geri bildirim”e dokunun.",
@@ -8049,7 +8049,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F40.02",
+          "id": "F41.02",
           "baslik": "Başka ekrandan açınca ekran adı değişir",
           "adimlar": [
             "Menüden Talepler ekranına geçip çekmeceden “Geri bildirim”i yeniden açın.",
@@ -8062,7 +8062,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F40.03",
+          "id": "F41.03",
           "baslik": "Metin ve fotoğrafla gönderim, sınırlar",
           "adimlar": [
             "Metin yazıp 2-3 fotoğraf ekleyerek gönderin.",
@@ -8076,7 +8076,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F40.04",
+          "id": "F41.04",
           "baslik": "Zayıf bağlantıda dosya yüklenemezse",
           "adimlar": [
             "Fotoğraflı bir geri bildirim yazın; göndermeden önce uçak modunu ya da çok zayıf bağlantıyı açın ve gönderin.",
@@ -8089,7 +8089,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F40.05",
+          "id": "F41.05",
           "baslik": "Yönetici: Gelen geri bildirimler",
           "adimlar": [
             "Site yöneticisiyle dişli (Ayarlar) panelinden “Gelen geri bildirimler”i açın.",
@@ -8102,7 +8102,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F40.06",
+          "id": "F41.06",
           "baslik": "Süper kullanıcı hepsini görür; sakin ve kurul görmez",
           "adimlar": [
             "Süper kullanıcıyla aynı sayfayı açın.",
@@ -8115,7 +8115,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F40.07",
+          "id": "F41.07",
           "baslik": "Sunucuda kayıt ve dosya kontrolü (sahip)",
           "adimlar": [
             "Sunucu canlıya alındıktan sonra, acil olmayan bir kontrol olarak sunucuda DOCUMENTS_DIR içindeki feedback_attachments klasörüne bakın.",
@@ -8130,13 +8130,13 @@
       ]
     },
     {
-      "id": "F41",
+      "id": "F42",
       "baslik": "Bağlam şeridi, bağlı değil bildirimi, belirgin Yenile ve onaylı Çıkış",
       "durum": "hazir",
       "ozet": "Birden çok siteye (ya da birden çok daireye) bağlı kullanıcıda üst çubuğun altında “Site · Daire · Rol” şeridi çıkar; tek site ve tek daireli kullanıcıda çıkmaz. Listelerde boş, hata ve “sunucuya ulaşılamıyor” halleri ayrı bildirimle gösterilir. Üst çubuktaki kırmızı çıkış simgesi kalktı: çıkış çekmecenin dibinde ve her zaman onaylıdır. “Yenile” yuvarlak çerçeveli belirgin düğme oldu. Ana listelerde yenileme sonrası “Son güncelleme SS:dd” yazar. Sürüm yayınlanınca denenir (maddeler “Denemeye hazır” görünse de sürüm yayınlanmadan uygulamada yoktur).",
       "maddeler": [
         {
-          "id": "F41.01",
+          "id": "F42.01",
           "baslik": "Çok siteli yönetici: bağlam şeridi ve site seçimi",
           "adimlar": [
             "Birden çok siteyi yöneten yönetici hesabıyla giriş yapın; üst çubuğun hemen altına bakın.",
@@ -8150,7 +8150,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F41.02",
+          "id": "F42.02",
           "baslik": "Tek site ve tek daire: şerit çıkmaz",
           "adimlar": [
             "Tek siteye ve tek daireye bağlı bir sakin hesabıyla giriş yapın.",
@@ -8163,7 +8163,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F41.03",
+          "id": "F42.03",
           "baslik": "Çok siteli ya da iki daireli sakin: şerit ve Dairem",
           "adimlar": [
             "Birden çok siteye ya da iki daireye bağlı bir sakin hesabıyla giriş yapın; şeride bakın.",
@@ -8177,7 +8177,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F41.04",
+          "id": "F42.04",
           "baslik": "Üst çubukta çıkış simgesi yok, Yenile belirgin",
           "adimlar": [
             "Üst çubuğa bakın.",
@@ -8190,7 +8190,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F41.05",
+          "id": "F42.05",
           "baslik": "Çıkış çekmecenin dibinde ve onaylı",
           "adimlar": [
             "Çekmeceyi açıp en alttaki “Çıkış Yap”a dokunun.",
@@ -8204,7 +8204,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F41.06",
+          "id": "F42.06",
           "baslik": "Bağlantı yokken listeler: “bağlı değil” bildirimi ve Tekrar Dene",
           "adimlar": [
             "Telefonu uçak moduna alıp Duyurular, Talepler (sakinde Taleplerim), Ziyaretçi ve Kargo, Kişiler ve Belgeler listelerini sırayla açın.",
@@ -8218,7 +8218,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F41.07",
+          "id": "F42.07",
           "baslik": "“Son güncelleme” saati ve eski kayıt uyarısı",
           "adimlar": [
             "Bu listeleri açıp üstteki küçük yazıya bakın; aşağı çekince saatin ilerlediğini görün.",
@@ -8232,7 +8232,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F41.08",
+          "id": "F42.08",
           "baslik": "Dar ekran, en büyük yazı ve koyu tema",
           "adimlar": [
             "Yazı boyutunu en büyüğe alıp (çift modlu yönetici hesabı dahil) üst çubuğa, bağlam şeridine, bildirimlere ve çıkış penceresine bakın.",
@@ -8247,13 +8247,13 @@
       ]
     },
     {
-      "id": "F42",
+      "id": "F43",
       "baslik": "Görünüm: liste/kutucuk anahtarı ve Kolay görünüm",
       "durum": "hazir",
       "ozet": "Üç ekranda liste ↔ kutucuk anahtarı vardır: Panel “Modüller” (varsayılan kutucuk), Kişiler > Daireler ve Kişiler > Kişiler (varsayılan liste); tercih ekran başına cihazda hatırlanır. Ayarlar panelinin en üstündeki “Kolay görünüm” anahtarı yüksek karşıtlıklı renkler, daha büyük düğmeler ve en az 1,3 kat yazı getirir; Panel tek sütunda büyük düğmeye sadeleşir. Kolay görünümde hızlı işlemler satırı yoktur; gerekli girişler (sakin için “Yöneticiyi ara”, kompakt menü bir şeyi gizliyorsa “Tüm işlemler”) büyük düğme olarak modüllerin sonunda durur. Kapı güvenliği ve görünürlük kuralları aynıdır. Sürüm yayınlanınca denenir (maddeler “Denemeye hazır” görünse de sürüm yayınlanmadan uygulamada yoktur).",
       "maddeler": [
         {
-          "id": "F42.01",
+          "id": "F43.01",
           "baslik": "Kolay görünüm anahtarı ve kalıcılığı",
           "adimlar": [
             "Sağ üstteki dişliyi (Ayarlar) açın ve en üstteki “Kolay görünüm” anahtarını açın.",
@@ -8267,7 +8267,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F42.02",
+          "id": "F43.02",
           "baslik": "Büyük sistem yazısında ve küçük ekranda",
           "adimlar": [
             "Telefonun yazı boyutunu %150-200 yapın.",
@@ -8280,7 +8280,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F42.03",
+          "id": "F43.03",
           "baslik": "Koyu temada Kolay görünüm",
           "adimlar": [
             "Tema düğmesiyle koyu temaya geçip Kolay görünümü açın.",
@@ -8293,7 +8293,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F42.04",
+          "id": "F43.04",
           "baslik": "Sakin: borç kartı, Kapılar düğmesi ve Ziyaretçi kodu",
           "adimlar": [
             "Sakin hesabıyla Kolay görünümde Panel'e bakın.",
@@ -8307,7 +8307,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F42.05",
+          "id": "F43.05",
           "baslik": "Yönetici ve süper kullanıcı: rozetler ve Hesap ve ayarlar",
           "adimlar": [
             "Yönetici ya da süper kullanıcıyla Kolay görünümde Panel'e bakın.",
@@ -8320,7 +8320,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F42.06",
+          "id": "F43.06",
           "baslik": "Panel ve Kişiler: liste ↔ kutucuk anahtarı",
           "adimlar": [
             "Panel'de “Modüller” başlığının sağındaki düğmeyle Liste ve Kutucuk görünümlerini değiştirin; uygulamayı kapatıp açın.",
@@ -8333,7 +8333,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F42.07",
+          "id": "F43.07",
           "baslik": "Kişiler ve Daireler kutucuk görünümü",
           "adimlar": [
             "Kişiler sekmesinde kutucuk görünümüne geçin; bir kutucuğa dokunun.",
@@ -8348,7 +8348,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F42.08",
+          "id": "F43.08",
           "baslik": "Ekran okuyucu ile Görünüm düğmeleri",
           "adimlar": [
             "TalkBack (ya da VoiceOver) açıkken Kolay görünüm anahtarına, liste/kutucuk düğmesine ve Panel'deki büyük düğmelere odaklanın."
@@ -8360,7 +8360,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F42.09",
+          "id": "F43.09",
           "baslik": "Hesap silindikten sonra görünüm tercihleri",
           "adimlar": [
             "Bir TEST hesabında Kolay görünümü ve bir liste/kutucuk tercihini değiştirin.",
@@ -8375,13 +8375,13 @@
       ]
     },
     {
-      "id": "F43",
+      "id": "F44",
       "baslik": "Dokun-ara: Yöneticiyi ara ve büyük 112 düğmesi",
       "durum": "hazir",
       "ozet": "Sakinin Panel'indeki hızlı işlemlerin sonuna sunucu yanıtı gelince “Yöneticiyi ara” kutusu eklenir: dokununca telefon uygulaması yöneticinin profil telefonuyla açılır (arama kendiliğinden başlamaz). Telefon kayıtlı değilse kutu görünür kalır ve nedenini söyler. Dairem > Güvenlik ve destek bölümünün başında büyük bir 112 düğmesi vardır. Cihaz aramayı açamazsa kuru mod: büyük numara ve “Numarayı kopyala” gösterilir. Yönetici profilindeki telefon, sitesine bağlı sakin, kurul üyesi ve görevlilere “Yöneticiyi ara” kutusunda görünür; yönetici Panel'inde ve Profilim'de bu açıkça yazılır. Kolay görünümde hızlı işlemler satırı olmadığı için aynı iş modüllerin sonunda büyük bir “Yöneticiyi ara” düğmesidir. Sürüm yayınlanınca denenir (maddeler “Denemeye hazır” görünse de sürüm yayınlanmadan uygulamada yoktur).",
       "maddeler": [
         {
-          "id": "F43.01",
+          "id": "F44.01",
           "baslik": "Sunucu güncellenmeden önce yeni uygulama: kutu çıkmaz, başka şey bozulmaz",
           "adimlar": [
             "Yeni uygulama sürümüyle, sunucu henüz güncellenmemişken sakin hesabıyla Panel'i açın (yalnız sürüm geçişi sırasında denenebilir)."
@@ -8393,7 +8393,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F43.02",
+          "id": "F44.02",
           "baslik": "Sakin: Yöneticiyi ara kutusu telefon uygulamasını açar",
           "adimlar": [
             "Sakin hesabıyla Panel > Hızlı işlemler'e bakın.",
@@ -8406,7 +8406,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F43.03",
+          "id": "F44.03",
           "baslik": "Yönetici telefonu kayıtlı değilse",
           "adimlar": [
             "Yöneticinin telefonunu Profilim'den silin.",
@@ -8420,7 +8420,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F43.04",
+          "id": "F44.04",
           "baslik": "Yönetici Profilim: numaranın kimlere görüneceği yazar",
           "adimlar": [
             "Site yöneticisiyle Profilim > Telefon alanının altındaki yazıya bakın.",
@@ -8433,7 +8433,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F43.05",
+          "id": "F44.05",
           "baslik": "Dairem'de büyük 112 düğmesi",
           "adimlar": [
             "Sakin hesabıyla Dairem > Güvenlik ve destek bölümünü açın.",
@@ -8446,7 +8446,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F43.06",
+          "id": "F44.06",
           "baslik": "Arama yapamayan cihazda kuru mod",
           "adimlar": [
             "Arama uygulaması olmayan bir cihazda (tablet, emülatör, masaüstü ya da web) 112 düğmesine dokunun.",
@@ -8460,7 +8460,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F43.07",
+          "id": "F44.07",
           "baslik": "Birden çok siteye bağlı sakin",
           "adimlar": [
             "Birden çok siteye bağlı bir sakin hesabıyla Panel'deki kutuya bakın ve dokunun."
@@ -8472,7 +8472,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F43.08",
+          "id": "F44.08",
           "baslik": "Kendi sitesinin yöneticisi kendini aramaz",
           "adimlar": [
             "Sakin moduna geçmiş bir site yöneticisiyle Panel'in hızlı işlemlerine bakın."
@@ -8484,7 +8484,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F43.09",
+          "id": "F44.09",
           "baslik": "Kolay görünümde büyük “Yöneticiyi ara” düğmesi",
           "adimlar": [
             "Ayarlar panelinden Kolay görünümü açın ve sakin hesabıyla Panel'in modüller bölümüne bakın.",
@@ -8498,7 +8498,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F43.10",
+          "id": "F44.10",
           "baslik": "Dar ekran, en büyük yazı ve ekran okuyucu",
           "adimlar": [
             "Küçük ekranlı bir telefonda yazı boyutunu en büyüğe alıp 112 düğmesine, kuru mod kartına, “Yöneticiyi ara” kutusuna ve yönetici ipucuna bakın.",
