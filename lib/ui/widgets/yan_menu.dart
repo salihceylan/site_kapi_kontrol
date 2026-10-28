@@ -5,6 +5,7 @@ import 'package:site_kapi_kontrol/services/locale_service.dart';
 import 'package:site_kapi_kontrol/brand/gude_logo_animated.dart';
 import 'package:site_kapi_kontrol/config/app_config.dart';
 import 'package:site_kapi_kontrol/models/user_role.dart';
+import 'package:site_kapi_kontrol/ui/design/easy_view_switch.dart';
 import 'package:site_kapi_kontrol/ui/design/motion_widgets.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 
@@ -787,9 +788,15 @@ class YanMenuAyarlar extends StatelessWidget {
       additionalItems: additionalItems,
       hiddenItems: hiddenItems,
     );
+    // P2-25: "Kolay görünüm" anahtarı panelin en üstünde (uygulama kökündeki kapsam varsa; yoksa panel eskisi gibidir).
+    final hasEasySwitch = EasyViewScope.maybeOf(context) != null;
     final list = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (hasEasySwitch) ...[
+          const EasyViewSwitchTile(),
+          if (items.isNotEmpty || extraActions.isNotEmpty) const _MenuDivider(),
+        ],
         for (final (i, item) in items.indexed)
           StaggeredEntry(
             key: ValueKey<SirketMenuItem>(item),

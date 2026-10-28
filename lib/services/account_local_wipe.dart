@@ -4,7 +4,8 @@
 // bu sınıf geri kalanını siler:
 // - güvenli depolama (oturum kopyası, yerel kapı erişim önbelleği, varsa diğer her anahtar),
 // - SharedPreferences: "beni hatırla" (kayıtlı giriş adı = e-posta), sesli komut ayarı ve uygulamanın diğer tüm
-//   anahtarları. TEMA tercihi korunur: hesaba bağlı olmayan, yalnız cihaz görünümü ayarıdır,
+//   anahtarları. TEMA tercihi korunur (aynı nedenle "Kolay görünüm" ve liste / kutucuk tercihleri de): hesaba bağlı
+//   olmayan, yalnız cihaz görünümü ayarıdır,
 // - ana ekran kısayolları (kapı adı taşır),
 // - diskte kalmış kişisel veri dışa aktarma geçici dosyaları (hesap dışa aktarma, toplu yükleme dışa aktarma /
 //   şablon / hata raporu, belge indirme kopyaları) ve eklentilerin önbellek kopyaları (share_plus, file_picker),
@@ -27,9 +28,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:site_kapi_kontrol/services/account_export_share.dart';
 import 'package:site_kapi_kontrol/services/bulk_file_delivery.dart';
 import 'package:site_kapi_kontrol/services/document_file_share.dart';
+import 'package:site_kapi_kontrol/services/easy_view_service.dart';
 import 'package:site_kapi_kontrol/services/local_cache_purge.dart';
 import 'package:site_kapi_kontrol/services/quick_actions_service.dart';
 import 'package:site_kapi_kontrol/services/theme_service.dart';
+import 'package:site_kapi_kontrol/services/view_mode_service.dart';
 
 /// Temizlik sonucu: başarısız adımların adları (boşsa hepsi tamam).
 class LocalWipeReport {
@@ -45,7 +48,11 @@ class LocalDataWiper {
     FlutterSecureStorage? secureStorage,
     Future<SharedPreferences> Function()? preferences,
     Future<void> Function()? clearShortcuts,
-    Set<String> keepPreferenceKeys = const <String>{ThemeService.storageKey},
+    Set<String> keepPreferenceKeys = const <String>{
+      ThemeService.storageKey,
+      EasyViewService.storageKey,
+      ...ViewModeKeys.all,
+    },
     Directory? exportTempRoot,
     Future<void> Function()? purgeCaches,
   }) : _exportTempRoot = exportTempRoot,

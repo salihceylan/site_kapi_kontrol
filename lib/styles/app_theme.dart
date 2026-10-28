@@ -258,8 +258,10 @@ class AppTheme {
     );
   }
 
-  static ThemeData dark() {
-    const p = AppPalette.dark;
+  /// Koyu tema. [palette] yalnız kolay görünümün yüksek karşıtlık paleti içindir (`lib/styles/easy_view_theme.dart`);
+  /// verilmezse değer olarak eskisiyle aynıdır.
+  static ThemeData dark([AppPalette palette = AppPalette.dark]) {
+    final p = palette;
     final colorScheme = ColorScheme.fromSeed(
       // Açık temayla aynı tohum (gece kömürü): türeyen kap renkleri aynı mavi-gri ailede kalır.
       seedColor: AppPalette.light.action,
@@ -279,7 +281,7 @@ class AppTheme {
       brightness: Brightness.dark,
       colorScheme: colorScheme,
       scaffoldBackgroundColor: Colors.transparent,
-      extensions: const <ThemeExtension<dynamic>>[AppPalette.dark],
+      extensions: <ThemeExtension<dynamic>>[p],
       // Masaüstünde de 48 dp isabet alanı ve standart yoğunluk (compact isabeti küçültür).
       visualDensity: VisualDensity.standard,
       materialTapTargetSize: MaterialTapTargetSize.padded,

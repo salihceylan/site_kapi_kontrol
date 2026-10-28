@@ -5,22 +5,28 @@ import 'package:site_kapi_kontrol/models/finance.dart';
 import 'package:site_kapi_kontrol/models/site_application.dart';
 import 'package:site_kapi_kontrol/models/user_session.dart';
 import 'package:site_kapi_kontrol/services/site_application_tracker.dart';
+import 'package:site_kapi_kontrol/services/view_mode_service.dart';
+import 'package:site_kapi_kontrol/styles/easy_view_theme.dart';
+import 'package:site_kapi_kontrol/ui/design/easy_view_switch.dart';
 import 'package:site_kapi_kontrol/ui/design/module_art.dart';
 import 'package:site_kapi_kontrol/ui/design/motion_widgets.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+import 'package:site_kapi_kontrol/ui/design/view_mode_toggle.dart';
 import 'package:site_kapi_kontrol/ui/helpers/date_input.dart';
 import 'package:site_kapi_kontrol/ui/helpers/finance_errors.dart';
 import 'package:site_kapi_kontrol/ui/helpers/module_showcase.dart';
 import 'package:site_kapi_kontrol/ui/helpers/money.dart';
 import 'package:site_kapi_kontrol/ui/helpers/site_application_flow.dart';
+import 'package:site_kapi_kontrol/ui/widgets/showcase_layouts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/site_application_status_card.dart';
 import 'package:site_kapi_kontrol/ui/widgets/yan_menu.dart';
 
 // Vitrin renkleri tek kaynaktan ([AppShowcaseColors], tokens.dart): açık temada işverenin renk tablosu (zemin #F8FAFC,
 // kart #FFFFFF + #E2E8F0 çerçeve, metin #475569, odak #0F172A, durum noktaları), koyu temada palet. Düz hex yazılmaz.
-Color _cardColor(AppPalette p) => p.isDark ? p.surface : AppShowcaseColors.card;
-Color _cardBorder(AppPalette p) => p.isDark ? p.border : AppShowcaseColors.cardBorder;
-Color _bodyInk(AppPalette p) => p.isDark ? p.textSecondary : AppShowcaseColors.text;
+// Kolay görünümün yüksek karşıtlık paletinde de palet renkleri kullanılır (showcase_layouts.dart).
+Color _cardColor(AppPalette p) => showcaseCardColor(p);
+Color _cardBorder(AppPalette p) => showcaseCardBorder(p);
+Color _bodyInk(AppPalette p) => showcaseBodyInk(p);
 
 /// Panel: MODÜL VİTRİNİ. Girişten sonra herkesi karşılayan ekran; kapı paneli artık "Kapılar" kartının arkasındadır.
 ///
@@ -140,8 +146,12 @@ class ModuleShowcaseView extends StatefulWidget {
   /// acil duyuru şeridini örterdi. Kap şeridin ALTINDAN ekranın altına kadar uzanır ve kaydırılmaz; vitrinin altında
   /// gösterilen bölümler (Geçiş Kontrol kapalı bireyselde ana ekran) de aynı düz zemindedir. Uygulamanın genel zemini
   /// (gradyan + ışıma) DEĞİŞMEZ; gradyanın alt tonu kart çerçevesiyle (#E2E8F0) aynı olduğundan vitrinde kullanılmaz.
-  static Color? pageBackgroundOf(BuildContext context) =>
-      context.palette.isDark ? null : AppShowcaseColors.background;
+  static Color? pageBackgroundOf(BuildContext context) {
+    final p = context.palette;
+    if (p.isDark) return null;
+    // Kolay görünümün yüksek karşıtlık paleti saf beyaz zemin kullanır (uygulama zemini ile aynı).
+    return isEasyPalette(p) ? p.background : AppShowcaseColors.background;
+  }
 
   @override
   State<ModuleShowcaseView> createState() => ModuleShowcaseViewState();
@@ -230,6 +240,105 @@ class ModuleShowcaseViewState extends State<ModuleShowcaseView> {
 
   void _open(SirketMenuItem item) => widget.onOpen(item);
 
+  /// "Modüller" başlığı; liste ↔ kutucuk anahtarı varsa (uygulama kökündeki [ViewModeScope]) sağında durur. Kapsam yoksa
+  /// yalnız başlıktır (eski görünüm birebir aynı).
+  Widget _modulesHeader(BuildContext context) {
+    const title = _SectionTitle(key: ValueKey<String>('panel_vitrin_baslik'), text: 'Modüller');
+    final toggle = ViewModeToggle.maybe(context, ViewScreen.modules);
+    if (toggle == null) return title;
+    return Row(children: [const Expanded(child: title), toggle]);
+  }
+
+  /// KOLAY GÖRÜNÜM ana ekranı (P2-25): modüller tek sütunda büyük düğmeler, açıklama yok, giriş animasyonu yok; hesap /
+  /// ayar öğeleri ve yardım da aynı büyük düğmelerle altta. Hızlı işlemler yoktur (aynı sayfalar zaten düğmedir); "Ziyaretçi
+  /// kodu" (varsa) Kapılar düğmesinin hemen altındadır. Görünürlük kuralı AYNIDIR: yalnız [model]deki (menü listesinden
+  /// türeyen) öğeler çizilir. Kompakt menü (K8) bir şeyi öne çıkarmıyorsa [allActions] verilir: modüllerin sonuna büyük bir
+  /// "Tüm işlemler" düğmesi eklenir (gizlenen işler kolay görünümde de kaybolmaz).
+  List<Widget> _buildEasyModules(BuildContext context, ShowcaseModel model, {ShowcaseEntry? allActions}) {
+    final guestPass = widget.audience == ShowcaseAudience.resident ? widget.onCreateGuestPass : null;
+    final buttons = <Widget>[
+      for (final entry in model.grid)
+        ShowcaseEasyButton(
+          key: ValueKey<String>('panel_kolay_${entry.item.name}'),
+          title: entry.title,
+          hint: entry.description,
+          art: entry.art,
+          badge: entry.badge,
+          badgeNoun: entry.badgeNoun,
+          onTap: () => _open(entry.item),
+        ),
+    ];
+    if (guestPass != null) {
+      final afterDoors = model.grid.isNotEmpty && model.grid.first.item == SirketMenuItem.kapilar ? 1 : 0;
+      buttons.insert(
+        afterDoors,
+        ShowcaseEasyButton(
+          key: const ValueKey<String>('panel_kolay_ziyaretciKodu'),
+          title: 'Ziyaretçi kodu',
+          hint: 'Misafir ve kurye için süreli geçiş linki oluşturur; kapıyı açmaz',
+          art: ModuleArtKind.accessCards,
+          onTap: guestPass,
+        ),
+      );
+    }
+    final openAllActions = widget.onOpenAllActions;
+    if (allActions != null && openAllActions != null) {
+      buttons.add(
+        ShowcaseEasyButton(
+          key: const ValueKey<String>('panel_kolay_tumIslemler'),
+          title: allActions.title,
+          hint: allActions.description,
+          art: allActions.art,
+          badge: allActions.badge,
+          badgeNoun: allActions.badgeNoun,
+          onTap: openAllActions,
+        ),
+      );
+    }
+    final secondary = <Widget>[
+      for (final entry in model.secondary)
+        ShowcaseEasyButton(
+          key: ValueKey<String>('panel_kolay_${entry.item.name}'),
+          title: entry.title,
+          hint: entry.description,
+          icon: YanMenu.iconFor(entry.item),
+          badge: entry.badge,
+          badgeNoun: entry.badgeNoun,
+          onTap: () => _open(entry.item),
+        ),
+      if (widget.onOpenHelp != null)
+        ShowcaseEasyButton(
+          key: const ValueKey<String>('panel_kolay_yardim'),
+          title: 'Yardım ve Destek',
+          icon: Icons.help_outline_rounded,
+          onTap: widget.onOpenHelp!,
+        ),
+    ];
+    Widget stack(Key key, List<Widget> items) => Column(
+      key: key,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var i = 0; i < items.length; i++) ...[
+          if (i > 0) const SizedBox(height: AppSpace.md),
+          items[i],
+        ],
+      ],
+    );
+    return <Widget>[
+      if (buttons.isNotEmpty) ...[
+        const _SectionTitle(key: ValueKey<String>('panel_vitrin_baslik'), text: 'Modüller'),
+        const SizedBox(height: AppSpace.md),
+        stack(const ValueKey<String>('panel_vitrin_kolay'), buttons),
+      ],
+      if (secondary.isNotEmpty) ...[
+        const SizedBox(height: AppSpace.xl),
+        const _SectionTitle(text: 'Hesap ve ayarlar'),
+        const SizedBox(height: AppSpace.md),
+        stack(const ValueKey<String>('panel_vitrin_kolay_ikincil'), secondary),
+      ],
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     final role = widget.session.role;
@@ -246,6 +355,9 @@ class ModuleShowcaseViewState extends State<ModuleShowcaseView> {
     final focus = audience == ShowcaseAudience.admin
         ? buildFocusEntries(menuItems: widget.menuItems, badgeCounts: widget.badgeCounts)
         : const <ShowcaseFocusEntry>[];
+    // Kolay görünüm (P2-25): sade ana ekran, büyük düğmeler. Liste / kutucuk anahtarı (P2-22): "Modüller" bölümü.
+    final easy = EasyViewScope.isEnabled(context);
+    final modulesMode = ViewModeScope.modeOf(context, ViewScreen.modules);
 
     final children = <Widget>[
       if (widget.applications != null)
@@ -266,35 +378,66 @@ class ModuleShowcaseViewState extends State<ModuleShowcaseView> {
         _buildHero(context),
         const SizedBox(height: AppSpace.lg),
         if (widget.belowHero != null) widget.belowHero!,
-        _buildQuickActions(context),
+        // Kolay görünümde hızlı işlemler yoktur: aynı sayfalara büyük düğmelerle (aşağıda) gidilir.
+        if (!easy) _buildQuickActions(context),
       ],
-      if (model.grid.isNotEmpty || showAllActions) ...[
-        _SectionTitle(
-          key: const ValueKey<String>('panel_vitrin_baslik'),
-          text: 'Modüller',
-        ),
+      if (easy)
+        ..._buildEasyModules(
+          context,
+          model,
+          allActions: showAllActions ? _allActionsEntry(beyondCompact) : null,
+        )
+      else if (model.grid.isNotEmpty || showAllActions) ...[
+        _modulesHeader(context),
         const SizedBox(height: AppSpace.md),
-        _ShowcaseGrid(
-          key: const ValueKey<String>('panel_vitrin_izgara'),
-          children: [
-            for (final (index, entry) in model.grid.indexed)
-              StaggeredEntry(
-                index: index,
-                child: _ModuleTile(entry: entry, onTap: () => _open(entry.item)),
-              ),
-            if (showAllActions)
-              StaggeredEntry(
-                index: model.grid.length,
-                child: _ModuleTile(
-                  tileKey: const ValueKey<String>('panel_kart_tumIslemler'),
-                  entry: _allActionsEntry(beyondCompact),
-                  onTap: widget.onOpenAllActions!,
+        if (modulesMode == ListViewMode.tiles)
+          _ShowcaseGrid(
+            key: const ValueKey<String>('panel_vitrin_izgara'),
+            children: [
+              for (final (index, entry) in model.grid.indexed)
+                StaggeredEntry(
+                  index: index,
+                  child: _ModuleTile(entry: entry, onTap: () => _open(entry.item)),
                 ),
-              ),
-          ],
-        ),
+              if (showAllActions)
+                StaggeredEntry(
+                  index: model.grid.length,
+                  child: _ModuleTile(
+                    tileKey: const ValueKey<String>('panel_kart_tumIslemler'),
+                    entry: _allActionsEntry(beyondCompact),
+                    onTap: widget.onOpenAllActions!,
+                  ),
+                ),
+            ],
+          )
+        else
+          Column(
+            key: const ValueKey<String>('panel_vitrin_liste'),
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (final (index, entry) in model.grid.indexed)
+                StaggeredEntry(
+                  index: index,
+                  child: Padding(
+                    padding: EdgeInsets.only(
+                      bottom: index == model.grid.length - 1 && !showAllActions ? 0 : AppSpace.sm,
+                    ),
+                    child: ShowcaseModuleRow(
+                      key: ValueKey<String>('panel_kart_${entry.item.name}'),
+                      title: entry.title,
+                      description: entry.description,
+                      art: entry.art,
+                      badge: entry.badge,
+                      semanticLabel: entry.semanticLabel,
+                      onTap: () => _open(entry.item),
+                    ),
+                  ),
+                ),
+              if (showAllActions) _allActionsRow(_allActionsEntry(beyondCompact), model.grid.length),
+            ],
+          ),
       ],
-      if (model.secondary.isNotEmpty || widget.onOpenHelp != null) ...[
+      if (!easy && (model.secondary.isNotEmpty || widget.onOpenHelp != null)) ...[
         const SizedBox(height: AppSpace.xl),
         const _SectionTitle(text: 'Hesap ve ayarlar'),
         const SizedBox(height: AppSpace.sm),
@@ -339,6 +482,20 @@ class ModuleShowcaseViewState extends State<ModuleShowcaseView> {
         description: 'Ana menüde olmayan ${beyondCompact.length} işlem dahil tüm işlemler',
         art: ModuleArtKind.modules,
         badge: YanMenu.badgeTotalOf(beyondCompact, widget.badgeCounts),
+      );
+
+  /// Liste kipinde ("Modüller" liste ↔ kutucuk anahtarı) "Tüm işlemler" satırı: kutucuk kipindeki kartla aynı anahtar ve aynı davranış.
+  Widget _allActionsRow(ShowcaseEntry entry, int index) => StaggeredEntry(
+        index: index,
+        child: ShowcaseModuleRow(
+          key: const ValueKey<String>('panel_kart_tumIslemler'),
+          title: entry.title,
+          description: entry.description,
+          art: entry.art,
+          badge: entry.badge,
+          semanticLabel: entry.semanticLabel,
+          onTap: widget.onOpenAllActions!,
+        ),
       );
 
   /// Hero "Öde": tek borçlu daire varsa Öde sayfası, birden çoksa daire seçimi için Borcum.
