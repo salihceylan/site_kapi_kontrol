@@ -479,6 +479,7 @@ sayılmaz (net 0); raporlar `COALESCE(source_kind,'') NOT IN ('opening','refund'
 **Uçlar** (`/manager/sites/:siteCode/finance/…`; yazma = yönetici / süper, okuma = + kurul adsız, görevli / sakin 403, başka site 403):
 | Uç | Açıklama |
 |---|---|
+| `GET liability-transfer/candidates` | **K17 (gecikmede öneri).** `{ items[{apartment_id, unit_label, block_name, reason: 'overdue'|'exited', tenant_present, has_owner, can_transfer, item_count, total_minor, oldest_due_date}], count, total_minor, truncated }` (en çok 500 daire; büyük tutar önce; kişi adı yok). Yazmaz. |
 | `GET apartments/:id/liability-transfer/preview` | `{ has_owner, can_transfer, items[{entry_id, name, due_date, original_minor, remaining_minor, paid_minor, fund}], excluded_late_fee[], item_count, total_minor, preview_hash, tenant_balance_minor, owner_balance_minor }`. Yazmaz. |
 | `POST apartments/:id/liability-transfer` | `{ expected_total_minor, expected_hash, reason, idempotency_key }` -> 201 `{ transfer, tenant_balance_minor, owner_balance_minor }`. Tutar / özet değiştiyse 409 `LIABILITY_TRANSFER_CHANGED`; malik kaydı yoksa 409 `NO_OWNER`; kalem yoksa 409 `NOTHING_TO_TRANSFER`; aynı anahtar = aynı kayıt (200), farklı gövde 409 `IDEMPOTENCY_CONFLICT`. |
 | `GET apartments/:id/liability-transfers` | devirler ve geri almalar (`reversible`: geri alınabilir mi). |
@@ -488,6 +489,12 @@ Genel «kaydı iptal et» ucu (`entries/:id/reverse`) devir / iade satırını r
 **Çıkış öncesi malik bildirimi (S4).** Kiracılık biterken (kiracı «çıkış», «Daireden ayrıl», yönetici «Taşındı»; hepsi `people_service.closeResidency`) kiracı hesabında ödenmemiş borç varsa, çıkış TAMAMLANMADAN
 önce malik(ler)e uygulama içi bildirim gider (`finance_exit_notice.js`; tutar + «kiracının hesabında kalır; site yönetimi onaylarsa hesabınıza devredilebilir»). Çıkış **ENGELLENMEZ**, bildirim hatası çıkışı bozmaz
 (SAVEPOINT). Çıkıştan sonraki genel malik bildirimi borçlu / borçsuz ayrılır. Yöneticiye dikkat kaydı: `tenant_debt_pending_transfer` (kiracısı ayrılmış, kiracı hesabı borçlu daire sayısı + toplam).
+
+**Gecikmede de öneri (K17, 2026-10-29).** Sahibin eki: «Borç mutlaka tahsil edilir; kiracı vermezse mal sahibi öder.» Devir yalnız kiracı ÇIKIŞINDA değil GECİKMEDE de yönetici önüne açıkça önerilir; yazma yine aynı desendedir
+(önizleme + onay + neden + iz + geri alma; yazılım kendiliğinden devretmez). Aday = kiracı hesabında `planLiabilityTransfer`in devredilebilir saydığı en az bir kalemi olan daire (`GET liability-transfer/candidates`):
+`reason='overdue'` kiracı hâlâ oturuyorsa (borç gecikmiş), `reason='exited'` güncel kiracı yoksa; `can_transfer` dairede güncel malik kaydı varsa (yoksa daire listelenir, devredilemez: önce malik kaydı eklenir).
+Yönetici dikkat kaydı (`attention_registry`): `tenant_debt_overdue_transfer` = kiracısı OTURAN + devredilebilir gecikmiş borcu olan + malik kaydı bulunan daire sayısı ve toplamı; çıkış satırı
+`tenant_debt_pending_transfer` ayrı kalır. İstemci etiketi / «Borcu malike devret» penceresi henüz yok (sunucu hazır; arayüz sonraki iş).
 
 Metin ve hukuki zemin: **avukat onayı bekler** (`docs/yasal/AVUKAT_KONTROL_LISTESI.md` madde 42).
 

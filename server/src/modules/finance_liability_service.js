@@ -89,12 +89,28 @@ export function parseTransferReverseInput(body) {
 
 const ACCOUNT_L = accountPartySql('l');
 
+/** Defter satırı (kiracı hesabı) -> planlama girdisi (pg metin BIGINT -> BigInt; kasa etkin kasa). */
+const mapTenantLedgerRow = (row) => ({
+  id: Number(row.id),
+  kind: row.kind,
+  amount: toBigInt(row.amount_minor),
+  entryDate: row.entry_date,
+  dueDate: row.due_date ?? null,
+  reversesId: row.reverses_entry_id === null || row.reverses_entry_id === undefined ? null : Number(row.reverses_entry_id),
+  lateFeeRunId: row.late_fee_run_id === null || row.late_fee_run_id === undefined ? null : Number(row.late_fee_run_id),
+  sourceKind: row.source_kind ?? null,
+  definitionName: row.definition_name ?? null,
+  fund: row.kind === 'charge' ? effectiveFund(row) : null,
+});
+
+const TENANT_LEDGER_COLUMNS = `l.id, l.kind, l.amount_minor::TEXT AS amount_minor, to_char(l.entry_date, 'YYYY-MM-DD') AS entry_date, to_char(l.due_date, 'YYYY-MM-DD') AS due_date,
+             l.reverses_entry_id, l.late_fee_run_id, l.source_kind, l.definition_name, l.definition_id, l.fund, fd.charge_party AS def_charge_party, fd.kind AS def_kind`;
+
 /** Kiracı hesabının TÜM defter satırları -> planlama girdisi (pg metin BIGINT -> BigInt; kasa etkin kasa). */
 export async function loadTenantLedger(db, siteCode, apartmentId) {
   const result = await db.query(
     `
-      SELECT l.id, l.kind, l.amount_minor::TEXT AS amount_minor, to_char(l.entry_date, 'YYYY-MM-DD') AS entry_date, to_char(l.due_date, 'YYYY-MM-DD') AS due_date,
-             l.reverses_entry_id, l.late_fee_run_id, l.source_kind, l.definition_name, l.definition_id, l.fund, fd.charge_party AS def_charge_party, fd.kind AS def_kind
+      SELECT ${TENANT_LEDGER_COLUMNS}
       FROM ledger_entries l
       LEFT JOIN fee_definitions fd ON fd.id = l.definition_id
       WHERE l.site_code = $1 AND l.apartment_id = $2 AND ${ACCOUNT_L} = 'tenant'
@@ -102,18 +118,33 @@ export async function loadTenantLedger(db, siteCode, apartmentId) {
     `,
     [siteCode, apartmentId],
   );
-  return (result.rows ?? []).map((row) => ({
-    id: Number(row.id),
-    kind: row.kind,
-    amount: toBigInt(row.amount_minor),
-    entryDate: row.entry_date,
-    dueDate: row.due_date ?? null,
-    reversesId: row.reverses_entry_id === null || row.reverses_entry_id === undefined ? null : Number(row.reverses_entry_id),
-    lateFeeRunId: row.late_fee_run_id === null || row.late_fee_run_id === undefined ? null : Number(row.late_fee_run_id),
-    sourceKind: row.source_kind ?? null,
-    definitionName: row.definition_name ?? null,
-    fund: row.kind === 'charge' ? effectiveFund(row) : null,
-  }));
+  return (result.rows ?? []).map(mapTenantLedgerRow);
+}
+
+/** Birden çok dairenin kiracı hesabı satırları (tek sorgu): Map<apartment_id (sayı), satırlar (id sırasıyla)>. Aday listesi (K17) kullanır. */
+export async function loadTenantLedgers(db, siteCode, apartmentIds) {
+  const byApartment = new Map();
+  if (apartmentIds.length === 0) {
+    return byApartment;
+  }
+  const result = await db.query(
+    `
+      SELECT l.apartment_id, ${TENANT_LEDGER_COLUMNS}
+      FROM ledger_entries l
+      LEFT JOIN fee_definitions fd ON fd.id = l.definition_id
+      WHERE l.site_code = $1 AND l.apartment_id = ANY($2::BIGINT[]) AND ${ACCOUNT_L} = 'tenant'
+      ORDER BY l.apartment_id, l.id
+    `,
+    [siteCode, apartmentIds],
+  );
+  for (const row of result.rows ?? []) {
+    const id = Number(row.apartment_id);
+    if (!byApartment.has(id)) {
+      byApartment.set(id, []);
+    }
+    byApartment.get(id).push(mapTenantLedgerRow(row));
+  }
+  return byApartment;
 }
 
 /** Dairede güncel, etkin bir MALİK kaydı var mı. */
@@ -597,3 +628,78 @@ export async function tenantDebtPendingAttention(db, siteCode) {
 }
 
 registerAttentionSource({ key: 'tenant_debt_pending_transfer', module: 'finance', run: (db, siteCode) => tenantDebtPendingAttention(db, siteCode) });
+
+// --- K17: GECİKMEDE de öneri — kiracı hesabında devredilebilir (vadesi gelmiş, ödenmemiş) borcu olan daireler --------------------------------------------------------------------
+
+/** Aday listesinde en çok bu kadar daire değerlendirilir (aşılırsa `truncated: true`). */
+export const CANDIDATE_LIMIT = 500;
+
+/**
+ * GET liability-transfer/candidates -> { items, count, total_minor, truncated } (salt okunur; hiçbir şey yazmaz).
+ * Karar K17: "Borç mutlaka tahsil edilir; kiracı vermezse mal sahibi öder." Devir yalnız kiracı ÇIKIŞINDA değil GECİKMEDE de yönetici önüne açıkça önerilir; yazma yine
+ * önizleme + onay + neden + geri alma desenindedir (K1). Aday = kiracı hesabında planLiabilityTransfer'in devredilebilir saydığı en az bir kalemi (vadesi bugün ve öncesi,
+ * ödenmemiş, gecikme tazminatı değil) olan daire. `reason`: 'overdue' (güncel kiracı oturuyor, borç gecikmiş) | 'exited' (güncel kiracı yok). `can_transfer`: dairede güncel,
+ * etkin bir malik kaydı var (yoksa daire yine listelenir ama devredilemez: önce malik kaydı eklenmeli). Sıra: büyük tutar önce.
+ */
+export async function listTransferCandidates(siteCode, now = new Date(), db = pool) {
+  const todayIso = today(now);
+  const found = await db.query(
+    `
+      SELECT t.apartment_id, a.unit_label, b.block_name, ${currentTenantSql('a')} AS tenant_present,
+             EXISTS (
+               SELECT 1 FROM apartment_residencies r
+               INNER JOIN site_people sp ON sp.id = r.person_id AND sp.site_code = $1 AND sp.is_active = TRUE
+               WHERE r.apartment_id = a.id AND r.relation = 'owner' AND r.is_current = TRUE
+             ) AS has_owner
+      FROM (
+        SELECT l.apartment_id
+        FROM ledger_entries l
+        WHERE l.site_code = $1 AND ${ACCOUNT_L} = 'tenant'
+        GROUP BY l.apartment_id
+        HAVING SUM(l.amount_minor) > 0
+      ) t
+      INNER JOIN apartments a ON a.id = t.apartment_id AND a.site_code = $1
+      INNER JOIN site_blocks b ON b.id = a.block_id
+      ORDER BY b.sort_order, a.sort_order, a.id
+      LIMIT ${CANDIDATE_LIMIT + 1}
+    `,
+    [siteCode],
+  );
+  const rows = found.rows ?? [];
+  const truncated = rows.length > CANDIDATE_LIMIT;
+  const apartments = rows.slice(0, CANDIDATE_LIMIT);
+  const ledgers = await loadTenantLedgers(db, siteCode, apartments.map((row) => Number(row.apartment_id)));
+  const items = [];
+  for (const row of apartments) {
+    const apartmentId = Number(row.apartment_id);
+    const plan = planLiabilityTransfer(ledgers.get(apartmentId) ?? [], { today: todayIso });
+    if (plan.items.length === 0) {
+      continue;
+    }
+    const tenantPresent = row.tenant_present === true;
+    const hasOwner = row.has_owner === true;
+    items.push({
+      apartment_id: apartmentId,
+      unit_label: row.unit_label ?? null,
+      block_name: row.block_name ?? null,
+      reason: tenantPresent ? 'overdue' : 'exited',
+      tenant_present: tenantPresent,
+      has_owner: hasOwner,
+      can_transfer: hasOwner && plan.items.length <= MAX_TRANSFER_ITEMS,
+      item_count: plan.items.length,
+      total_minor: minorToNumber(plan.totalMinor),
+      oldest_due_date: plan.items.reduce((oldest, item) => (item.dueDate < oldest ? item.dueDate : oldest), plan.items[0].dueDate),
+    });
+  }
+  items.sort((a, b) => b.total_minor - a.total_minor || a.apartment_id - b.apartment_id);
+  return { items, count: items.length, total_minor: items.reduce((sum, item) => sum + item.total_minor, 0), truncated };
+}
+
+/** Kiracısı OTURAN, kiracı hesabında devredilebilir gecikmiş borcu olan ve malik kaydı bulunan daire sayısı + toplam (kuruş): yöneticiye "malike devredebilirsiniz" önerisi. */
+export async function tenantDebtOverdueAttention(db, siteCode, now = new Date()) {
+  const result = await listTransferCandidates(siteCode, now, db);
+  const actionable = result.items.filter((item) => item.reason === 'overdue' && item.can_transfer);
+  return { count: actionable.length, total_minor: actionable.reduce((sum, item) => sum + item.total_minor, 0) };
+}
+
+registerAttentionSource({ key: 'tenant_debt_overdue_transfer', module: 'finance', run: (db, siteCode) => tenantDebtOverdueAttention(db, siteCode) });

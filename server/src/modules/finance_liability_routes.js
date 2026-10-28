@@ -1,5 +1,6 @@
 // Kiracı borcunun malike devri uçları (ayrı router; server.js `app.use(financeLiabilityRouter)`). Sözleşme: docs/PLATFORM_FINANS.md "Kiracı borcunun malike devri".
 //
+//   Öneri      GET   /manager/sites/:siteCode/finance/liability-transfer/candidates                              devredilebilir gecikmiş kiracı borcu olan daireler (K17: gecikmede de öneri)
 //   Önizleme   GET   /manager/sites/:siteCode/finance/apartments/:apartmentId/liability-transfer/preview   kalemler, tazminat istisnası, toplam, önizleme özeti
 //   Devir      POST  /manager/sites/:siteCode/finance/apartments/:apartmentId/liability-transfer           { expected_total_minor, expected_hash, reason, idempotency_key }
 //   Geçmiş     GET   /manager/sites/:siteCode/finance/apartments/:apartmentId/liability-transfers          devirler ve geri almalar
@@ -10,12 +11,22 @@
 
 import express from 'express';
 import { authRequired } from '../middlewares/auth_middleware.js';
-import { createLiabilityTransfer, listLiabilityTransfers, previewLiabilityTransfer, reverseLiabilityTransfer } from './finance_liability_service.js';
+import { createLiabilityTransfer, listLiabilityTransfers, listTransferCandidates, previewLiabilityTransfer, reverseLiabilityTransfer } from './finance_liability_service.js';
 import { BASE, bodyOf, financeReadLimiter, financeWriteLimiter, managerHandler } from './finance_routes.js';
 
 export const financeLiabilityRouter = express.Router();
 
 const APARTMENT = `${BASE}/apartments/:apartmentId`;
+
+// K17: salt okunur öneri listesi (daire etiketi + tutar; kişi adı YOK). Yetki önizlemeyle aynı: yönetici / süper + kurul okur.
+financeLiabilityRouter.get(
+  `${BASE}/liability-transfer/candidates`,
+  authRequired,
+  financeReadLimiter,
+  managerHandler({ context: 'finance_liability_candidates', fallback: 'Devir önerileri yüklenemedi.' }, async ({ access }) => ({
+    body: await listTransferCandidates(access.siteCode),
+  })),
+);
 
 financeLiabilityRouter.get(
   `${APARTMENT}/liability-transfer/preview`,

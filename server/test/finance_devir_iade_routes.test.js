@@ -153,6 +153,7 @@ const B = (site = SITE_1) => `/manager/sites/${site}/finance`;
 
 // Sözleşmedeki yönetici uçları; her satır [yöntem, yol, tür]. Tür: read (kurul okur), write (yalnız yönetici / süper).
 const ROUTES = [
+  ['GET', '/liability-transfer/candidates', 'read'],
   ['GET', '/apartments/1/liability-transfer/preview', 'read'],
   ['POST', '/apartments/1/liability-transfer', 'write'],
   ['GET', '/apartments/1/liability-transfers', 'read'],
