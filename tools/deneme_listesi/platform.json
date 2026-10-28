@@ -1043,9 +1043,9 @@
           "adimlar": [
             "Finans menüsünden “Tanımlar” sekmesini açın.",
             "“Yeni Tanım”: ad (ör. Aylık aidat), tür (aylık), dağıtım yöntemi, tutar, her ayın kaçında vade, başlangıç ayı, hedef (tüm site / bloklar / daireler).",
-            "Dağıtım yöntemlerini deneyin: daire başı sabit tutar, eşit pay (toplam bölünür), daire tipine göre (her tip için ayrı tutar), arsa payına göre. Yöntem listesine ve forma bakın."
+            "Dağıtım yöntemlerini deneyin: eşit pay (toplam bölünür; ön seçili gelir), daire başı sabit tutar, daire tipine göre (her tip için ayrı tutar), arsa payına göre, kişi sayısına göre. Yöntem listesine ve forma bakın."
           ],
-          "beklenen": "Dağıtım yöntemi olarak yalnız “Sabit tutar”, “Eşit bölüş”, “Kategoriye göre” ve “Arsa payına göre” vardır; “Metrekareye göre” seçeneği ve “Metrekare türü / Brüt m² / Net m²” alanı yoktur (m² 2026-10-25'te kaldırıldı). Tanım kaydedilir ve listede görünür. Tutar kutusunun altında girdiğiniz tutar okunuşuyla gösterilir (ör. 1.250,50 ₺); virgülden sonra en çok 2 hane, “1,250” gibi belirsiz giriş reddedilir. Tutarı kimin ödeyeceği tanımda değil, dairenin “borç ve bildirimler kime gitsin” ayarında (Kişi ve Daire Kayıtları → daire düzenle) belirlenir. Borçlandırılmış bir tanımın tutarı ve dağıtımı değiştirilemez (kilitli panelde açıklanır); yalnız ad, bitiş, vade günü ve etkin/pasif değişir.",
+          "beklenen": "Dağıtım yöntemi olarak “Eşit bölüş” (ön seçili gelir; yazılım taban seçmez), “Sabit tutar”, “Kategoriye göre”, “Arsa payına göre” ve “Kişi sayısına göre” vardır; “Metrekareye göre” seçeneği ve “Metrekare türü / Brüt m² / Net m²” alanı yoktur (m² 2026-10-25'te kaldırıldı). Tanım kaydedilir ve listede görünür. Tutar kutusunun altında girdiğiniz tutar okunuşuyla gösterilir (ör. 1.250,50 ₺); virgülden sonra en çok 2 hane, “1,250” gibi belirsiz giriş reddedilir. Tutarı kimin ödeyeceği tanımda değil, dairenin “borç ve bildirimler kime gitsin” ayarında (Kişi ve Daire Kayıtları → daire düzenle) belirlenir. Borçlandırılmış bir tanımın tutarı ve dağıtımı değiştirilemez (kilitli panelde açıklanır); yalnız ad, bitiş, vade günü ve etkin/pasif değişir.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "Bir test sitesi (Aidat ve Finans temel modüldür: her sitede açık)",
           "yeni": true,
@@ -1072,10 +1072,10 @@
             "“Ek Borç Ekle”ye dokunun.",
             "Ad (ör. Asansör bakımı), toplam tutar ve hedef (tüm site, blok, seçili daireler) girin."
           ],
-          "beklenen": "Tutar seçilen dağıtım yöntemine göre daireler arasında paylaşılır (önizleme + onay) ve her dairenin hesabına ayrı satır olarak düşer. Aynı ek borcu kısa sürede tekrar kaydetmeye çalışırsanız “aynı ek borç kısa süre önce kaydedilmiş görünüyor” uyarısı çıkar; bilerek “Yine de ekle” diyebilirsiniz.",
+          "beklenen": "Tutar seçilen dağıtım yöntemine göre daireler arasında paylaşılır (önizleme + onay) ve her dairenin hesabına ayrı satır olarak düşer. Ek borç Yatırım ve Demirbaş (Fon) Hesabı’na yazılıyorsa önizlemede “Borcun dayanağı” (Karar Defteri kararı ya da gerekçe) istenir; Aidat Hesabı’na yazılırsa istenmez (bkz. F47). Aynı ek borcu kısa sürede tekrar kaydetmeye çalışırsanız “aynı ek borç kısa süre önce kaydedilmiş görünüyor” uyarısı çıkar; bilerek “Yine de ekle” diyebilirsiniz.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
-          "yeni": false,
+          "yeni": true,
           "gelistirme": "hazir"
         },
         {
@@ -5830,12 +5830,12 @@
           "id": "F30.09",
           "baslik": "Kiracı hesabına devir, eksi ve sıfır tutar",
           "adimlar": [
-            "Dosyada bir satırın Hesap sütununa Kiracı yazın; bir satıra -50, bir satıra 0 yazın; önizlemeye bakın."
+            "Dosyada bir satırın Hesap sütununa Kiracı yazın; bir satıra -50, bir satıra 0 yazın; önizlemeye bakın (eksi tutar alacaklı devirdir, bkz. F49)."
           ],
-          "beklenen": "Kiracı satırında dairede kiracı yoksa uyarı çıkar. Eksi tutar hatalıdır (alacaklı devir desteklenmez). Sıfır tutar uyarıyla atlanır. 'Hatalı satır varsa aktarma' varsayılan açıktır.",
+          "beklenen": "Kiracı satırında dairede kiracı yoksa uyarı çıkar. Eksi tutar artık hata değildir: alacaklı devir olarak kabul edilir ve önizlemede “alacaklı kayıt” sayısı görünür (bkz. F49). Sıfır tutar uyarıyla atlanır. 'Hatalı satır varsa aktarma' varsayılan açıktır.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
-          "yeni": false,
+          "yeni": true,
           "gelistirme": "hazir"
         },
         {
@@ -6986,9 +6986,9 @@
           "baslik": "Isı payı dağıtımı",
           "adimlar": [
             "Isı sayaçları olan daireler için Faturalandır'da tür Isı, yöntem 'Isı payı (ölçüm + alan payı)' seçin, toplam gideri girip Önizle'ye basın.",
-            "Bir dairenin arsa payını boş bırakıp önizlemeyi yeniden alın."
+            "“Alan payı tabanı” seçicisinden Arsa payını seçip bir dairenin arsa payını boş bırakın ve önizlemeyi yeniden alın (taban seçilmezse alan payı eşit dağıtılır)."
           ],
-          "beklenen": "Yöntem adı 'Isı payı (ölçüm + alan payı)' yazar; ekranda hiçbir yerde m² geçmez (daire m²'si 2026-10-25'te kaldırıldı). Gider %70 tüketime, %30 alan payına göre paylaşılır ve toplam girilen tutara eşittir. Alan payı, katılan dairelerin hepsinde arsa payı tanımlıysa arsa payına, bir daire bile eksikse herkese eşit dağıtılır; arsa payı eksikliği dairenin 'eksik' listesine girmez (eksik listesi yalnız sayaç okuması eksikse dolar). Ayrıntılı kontrol: SAHA listesi 109.6.",
+          "beklenen": "Yöntem adı 'Isı payı (ölçüm + alan payı)' yazar; ekranda hiçbir yerde m² geçmez (daire m²'si 2026-10-25'te kaldırıldı). Gider %70 tüketime, %30 alan payına göre paylaşılır ve toplam girilen tutara eşittir. Alan payı, “Alan payı tabanı” seçicisindeki seçime göre dağıtılır: Eşit (varsayılan; arsa payı tanımlı olsa bile kod arsa payına geçmez), Arsa payı ya da Kişi sayısı. Seçilen tabanın verisi eksik daire sessizce eşit paya düşürülmez; “eksik” listesine girer ve “Verisi eksik daireleri atla” işaretlenmedikçe Borçlandır reddedilir (bkz. F48). Ayrıntılı kontrol: SAHA listesi 109.6.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
           "yeni": true,
@@ -8705,6 +8705,428 @@
           "on_kosul": "",
           "yeni": true,
           "gelistirme": "hazir"
+        }
+      ]
+    },
+    {
+      "id": "F45",
+      "baslik": "Ödemenin İşletme / Fon hesabını yönetici seçer",
+      "durum": "hazir",
+      "ozet": "Yazılım bir ödemeyi kendiliğinden İşletme (Aidat) ya da Fon hesabına atamaz. Tahsilat, tahsilat düzeltme, dekont onayı ve banka satırı işlenirken dairenin hesabında hem Aidat hem Fon borcu açıksa hangisine işleneceğini yönetici seçer; tek türde borçta öneri seçili gelir; borç yoksa genel avans. Bölümün adı “İşletme / Fon hesabı”dır (“kasa” denmez). Sunucu ve uygulama birlikte yayınlanır; eski uygulama sürümünde dekont onayı ve “Daireye işle” pencerelerinde hesap seçici yoktur, iki türlü borçlu dairede bu işlemler Türkçe uyarıyla reddedilir (o durumda elle “Tahsilat Ekle” kullanılır).",
+      "maddeler": [
+        {
+          "id": "F45.01",
+          "baslik": "Tahsilat Ekle: tek türde borç varsa önerilen hesap seçili gelir",
+          "adimlar": [
+            "Yalnız Aidat (aylık aidat) borcu açık olan bir dairenin ekstresinden ya da Finans ekranındaki “Tahsilat Ekle”den o daireyi seçin.",
+            "“İşletme / Fon hesabı” bölümüne bakın; tutarı yazıp kaydedin.",
+            "İsterseniz bir kez de bölümde hesabı değiştirerek kaydedin."
+          ],
+          "beklenen": "Bölümde “Otomatik” seçeneği yoktur; borcu açık olan hesap (Aidat Hesabı) seçili gelir ve altında “Açık borç yalnız Aidat Hesabı için; bu hesap seçili geldi, isterseniz değiştirebilirsiniz.” yazar. Kayıttan sonra makbuzda ve ekstrede tutarın dağılımı seçilen hesapla görünür.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Yalnız Aidat Hesabı borcu açık (Fon borcu olmayan) bir daire",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.02",
+          "baslik": "Tahsilat Ekle: iki türde borç varsa hesabı yönetici seçer",
+          "adimlar": [
+            "Hem aidat hem Fon (demirbaş / ek borç) borcu açık olan bir ev sahibi hesabında “Tahsilat Ekle”yi açın.",
+            "“İşletme / Fon hesabı” bölümündeki uyarıya bakın; hesap seçmeden “Kaydet”e basmayı deneyin.",
+            "Bir hesap seçip kaydedin; kaydetmeden önce tutarı yazdıkça bölümün altındaki “Bilgi” satırına bakın."
+          ],
+          "beklenen": "Uyarı kutusu “Bu daire hesabında hem Aidat Hesabı (…) hem Fon Hesabı (…) için açık borç var. Ödemenin hangisine işleneceğini siz seçin; yazılım kendiliğinden atamaz.” der; hiçbir hesap seçili gelmez ve “Otomatik” seçeneği yoktur. Seçmeden kaydedince “Ödemenin işleneceği İşletme / Fon hesabını seçin.” çıkar ve hiçbir kayıt oluşmaz. Hesabı seçince kayıt yazılır. “Bilgi: otomatik dağıtım en eski borçtan başlayarak … olurdu. Tutarı iki hesaba bölmek için iki ayrı tahsilat girin.” satırı yalnız bilgi verir, seçiminizi değiştirmez.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Aynı ev sahibi hesabında hem Aidat Hesabı hem Fon Hesabı borcu açık bir daire (Fon borcu için F47.01 gibi bir ek borç yazılabilir)",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.03",
+          "baslik": "Tahsilat Ekle: açık borç yoksa genel avans",
+          "adimlar": [
+            "Açık borcu olmayan bir dairede “Tahsilat Ekle”yi açın.",
+            "“İşletme / Fon hesabı” bölümüne bakın; hesap seçmeden tutarı yazıp kaydedin."
+          ],
+          "beklenen": "“Hesap seçmeden (genel avans)” seçili gelir; seçim zorunlu değildir ve altında “Açık borç yok. Hesap seçmezseniz tutar genel avans olarak kalır ve sonraki borca mahsup edilir.” yazar. Kayıt yazılır; ekstrede alacak (avans) görünür.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Açık borcu olmayan bir daire",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.04",
+          "baslik": "Daire hesabını (ev sahibi / kiracı) değiştirince bölüm yenilenir",
+          "adimlar": [
+            "Kiracısı olan ve her iki hesabında borç bulunan bir dairede “Tahsilat Ekle”yi açın.",
+            "“Daire hesabı”nı Ev sahibi hesabı ile Kiracı hesabı arasında değiştirirken “İşletme / Fon hesabı” bölümüne bakın."
+          ],
+          "beklenen": "Bölüm her değişimde seçilen daire hesabının açık borçlarına göre yeniden yüklenir: kiracı hesabında genellikle yalnız Aidat borcu olduğundan Aidat Hesabı seçili gelir; ev sahibi hesabında iki tür borç açıksa seçim zorunludur.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Kiracısı olan, iki hesabında da borç bulunan bir daire",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.05",
+          "baslik": "Tahsilatı Düzelt: ters kayıttan sonra iki tür borç açık kalırsa hesap seçilir",
+          "adimlar": [
+            "Hesap kısıtı olmadan girilmiş bir tahsilatı, ev sahibi hesabında Aidat ve Fon borcu birlikte açıkken “Düzelt”in.",
+            "Hesap seçmeden kaydetmeyi deneyin; sonra hesabı seçip kaydedin."
+          ],
+          "beklenen": "Hesap seçilmediyse düzeltme reddedilir ve hiçbir şey değişmez (ters kayıt yazılmaz, asıl tahsilat durur); bölüm “zorunlu” kipe geçer. Hesabı seçince düzeltme tek işlemde yazılır: eski tahsilat ters çevrilir, yeni tahsilat seçilen hesaba işlenir.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Hesap kısıtsız girilmiş bir tahsilatı olan ve düzeltme anında iki tür borcu açık kalan ev sahibi hesabı",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.06",
+          "baslik": "Dekont inceleme ve toplu onay: hesap seçimi",
+          "adimlar": [
+            "Sakin hesabıyla bir dekont bildirin; yönetici olarak Finans > Dekontlar sekmesinden bildirimi açın (“Nasıl işlensin?”).",
+            "Dairenin hesabında iki tür borç açıksa hesap seçmeden “Onayla”ya basın; tek tür borçta bölüme bakın.",
+            "İçlerinde iki türlü borçlu bir dairenin dekontu da bulunan birkaç dekontu seçip toplu onaylayın."
+          ],
+          "beklenen": "Pencerede aynı “İşletme / Fon hesabı” bölümü vardır. İki türde borçta seçmeden “Onayla” çalışmaz (“Ödemenin işleneceği İşletme / Fon hesabını seçin.”); tek türde öneri seçili gelir. Toplu onayda iki türlü borçlu dairenin dekontu atlanır ve sonuç listesinde “Dairede İşletme ve Fon borcu birlikte açık; dekontu tek tek inceleyip ödemenin işleneceği hesabı seçin.” yazar; öteki dekontlar onaylanır.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Sakinlerden gelmiş bekleyen dekontlar (en az biri iki türlü borçlu daireden)",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.07",
+          "baslik": "Banka Ödemeleri: Daireye işle ve Onayla",
+          "adimlar": [
+            "Finans ekranındaki “banka satırı sizi bekliyor” kartından Banka Ödemeleri’ni açın.",
+            "İki türlü (Aidat + Fon) borcu açık bir daireye “Daireye işle” ile bir satır atamayı deneyin: önce hesap seçmeden “İşle”ye basın, sonra hesabı seçerek işleyin.",
+            "Dairesi önerilmiş satırlarda “Onayla” düğmesine ve “Önerilen dairelerin hepsini onayla”ya bakın."
+          ],
+          "beklenen": "İki türlü borçlu dairede hesap seçilmeden “İşle” çalışmaz; seçimle işlenir. İki türlü borçlu dairenin önerilen satırında düğme “Hesabı seçerek onayla” olur. “Önerilen dairelerin hepsini onayla” bu satırları dışarıda bırakır ve “N satır hesap (İşletme / Fon) seçimi gerektiriyor; tek tek onaylayın.” der.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Eşleşmemiş ya da dairesi önerilmiş banka satırları (en az biri iki türlü borçlu daireye)",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.08",
+          "baslik": "Banka dosyası yükleme: iki türlü borçlu daireye kendiliğinden işlenmez",
+          "adimlar": [
+            "İki türlü (Aidat + Fon) borcu açık bir daire için IBAN’ı daha önce kaydedilmiş, güçlü eşleşen bir satır içeren banka dosyasını yükleyin.",
+            "Önizleme özetine ve yükleme sonrası Banka Ödemeleri listesine bakın."
+          ],
+          "beklenen": "O satır yüklemede kendiliğinden işlenmez; önizleme özetinde dairenin İşletme ve Fon borcunun birlikte açık olduğunu söyleyen bir uyarı çıkar ve satır, hesabı sizin seçmeniz için Banka Ödemeleri’nde bekler. Tek türlü borçlu daireye güçlü eşleşen satırlar eskisi gibi otomatik işlenir.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Bir banka hesabı, kayıtlı IBAN’lı bir daire ve o daireye uyan satırlı bir ekstre dosyası",
+          "yeni": true,
+          "gelistirme": "hazir"
+        }
+      ]
+    },
+    {
+      "id": "F46",
+      "baslik": "Banka dosyasında güçlü eşleşmeleri tek tek gözden geçir",
+      "durum": "hazir",
+      "ozet": "Banka dosyası yüklerken “Güçlü eşleşmeleri de tek tek gözden geçir” kutusu işaretlenirse tanınan satırlar da kendiliğinden işlenmez; Banka Ödemeleri ekranındaki “Tek tek gözden geçir” akışında sırayla Onayla ya da Atla denir. Kutu varsayılan olarak kapalıdır; kapalıyken yükleme eskisi gibi çalışır.",
+      "maddeler": [
+        {
+          "id": "F46.01",
+          "baslik": "Yükleme: “Güçlü eşleşmeleri de tek tek gözden geçir” kutusu",
+          "adimlar": [
+            "Finans > Kasa sekmesinde bir banka hesabının altından “Banka dosyası yükle”yi açın ve IBAN’ı daha önce kaydedilmiş (güçlü eşleşen) satırlar içeren bir dosya seçin.",
+            "Özet ekranında “Güçlü eşleşmeleri de tek tek gözden geçir” kutusuna bakın, işaretleyip yüklemeyi tamamlayın.",
+            "Kutuyu işaretlemeden başka bir dosyayı yükleyip karşılaştırın."
+          ],
+          "beklenen": "Kutu varsayılan olarak işaretsizdir. İşaretliyken özet “Tanınan N satır (X ₺) kendiliğinden işlenmeyecek; tek tek onayınızı bekleyecek” der ve hiçbir tahsilat yazılmaz; tanınan satırlar önerilen daireyle Banka Ödemeleri’nde “Güçlü eşleşme: tek tek gözden geçirmeniz istendi; kontrol edip onaylayın.” notuyla bekler. İşaretsizken yükleme eskisi gibi tanınan satırları kendiliğinden işler.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Banka hesabı ve IBAN’ı kayıtlı bir daire",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F46.02",
+          "baslik": "Banka Ödemeleri: “Tek tek gözden geçir” akışı",
+          "adimlar": [
+            "F46.01’deki yüklemeden sonra Banka Ödemeleri ekranında “Tek tek gözden geçir” düğmesine dokunun.",
+            "İlk satırda Onayla, ikinci satırda Atla’yı seçin; akışı bitirin.",
+            "İki türlü (Aidat + Fon) borçlu daireye ait bir satır varsa o satırda hesap seçimine bakın."
+          ],
+          "beklenen": "Satırlar sırayla gelir; her satırda daire, tutar ve açıklama görünür, “Onayla” tahsilatı yazar, “Atla” satırı bekleyenlerde bırakır. İki türlü borçlu dairede hesap seçilmeden onay çalışmaz. Akış sonunda özet “X satır işlendi, Y satır atlandı (beklemeye devam eder).” der.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "F46.01 ile yüklenmiş, onay bekleyen güçlü eşleşmeli satırlar",
+          "yeni": true,
+          "gelistirme": "hazir"
+        }
+      ]
+    },
+    {
+      "id": "F47",
+      "baslik": "Fon borcunun dayanağı ve sakin “Borç kalemleri”",
+      "durum": "hazir",
+      "ozet": "Yatırım ve Demirbaş (Fon) Hesabı’na borç yazan iki yol (Ek Borç Ekle ve aylık tanımı Borçlandır) artık dayanaksız yazılamaz: Karar Defteri açık sitede kesinleşmiş bir karar, kapalı sitede kısa bir gerekçe istenir. Dayanak ekstrede ve sakinin Borcum ekranındaki “Borç kalemleri” dökümünde görünür. Aidat (İşletme) hesabı borçlarında dayanak sorulmaz. Eski uygulama sürümüyle Fon borcu yazmak Türkçe uyarıyla reddedilir (web ve uygulama birlikte güncellenir).",
+      "maddeler": [
+        {
+          "id": "F47.01",
+          "baslik": "Karar Defteri kapalı sitede Fon borcuna gerekçe",
+          "adimlar": [
+            "Karar Defteri modülü kapalı bir sitede Finans > Daireler ekranından “Ek Borç Ekle”yi açın (hesap varsayılan olarak Yatırım ve Demirbaş (Fon) Hesabı gelir); ad ve tutar girip “Önizle”ye basın.",
+            "“Borcun dayanağı” kutusu boşken “Onayla ve Borçlandır” düğmesine bakın; sonra “Yönetim kurulunun 14.10.2026 tarihli ve 6 sayılı kararı” gibi bir gerekçe yazın."
+          ],
+          "beklenen": "Önizlemede “Borcun dayanağı” kutusu çıkar; gerekçe boşken (ya da 3 karakterden kısayken) “Onayla ve Borçlandır” kapalıdır ve “Onaylamak için: Borcun dayanağını (gerekçe) yazın.” satırı nedeni söyler. Gerekçe yazılınca düğme açılır ve borç yazılır. Kutunun altında gerekçenin sakinlerin Borcum ekranında görüneceği uyarısı vardır.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Karar Defteri modülü kapalı bir site",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F47.02",
+          "baslik": "Karar Defteri açık sitede kesinleşmiş karar seçilir",
+          "adimlar": [
+            "Karar Defteri açık bir sitede aynı akışı izleyin (Ek Borç Ekle, Fon hesabı); “Borcun dayanağı” kararlar listesine bakın.",
+            "Karar seçmeden onaylamayı deneyin; sonra bir karar seçin."
+          ],
+          "beklenen": "Yalnız kesinleşmiş kararlar “2026/4 • Başlık • 12.10.2026” biçiminde listelenir (taslak karar listede yoktur). Karar seçilmeden onay kapalıdır (“Dayanak olarak Karar Defteri’nden bir karar seçin.”); seçilince borç yazılır. Hiç kesinleşmiş karar yoksa “Seçilebilecek kesinleşmiş karar yok…” uyarısı çıkar ve onay kapalı kalır.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Karar Defteri açık, en az bir kesinleşmiş ve bir taslak kararı olan site",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F47.03",
+          "baslik": "Aylık tanımı Borçlandır: Fon dayanak ister, Aidat sormaz",
+          "adimlar": [
+            "Tanımlar sekmesinde malik öder (Fon Hesabı) bir aylık tanımı “Borçlandır”ın; dönemi seçip “Önizle”ye basın.",
+            "Dairede oturan öder (Aidat Hesabı) bir aylık tanım için aynısını yapın."
+          ],
+          "beklenen": "Fon Hesabı’na yazılan tanımda “Borcun dayanağı” alanı çıkar ve her ay için yeniden istenir (önceki ayın seçimi önerilmez). Aidat Hesabı’na yazılan tanımda dayanak sorulmaz; borçlandırma eskisi gibi çalışır.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Biri Fon, biri Aidat hesabına yazan iki aylık tanım",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F47.04",
+          "baslik": "Ekstrede “Dayanak” satırı",
+          "adimlar": [
+            "Dayanaklı bir Fon borcundan sonra o dairenin ekstresini açın; aidat ve tahsilat satırlarına da bakın.",
+            "Kurul üyesi hesabıyla aynı ekstreye bakın."
+          ],
+          "beklenen": "Fon borcu satırında “Dayanak: Karar 2026/4 • Başlık” (ya da “Dayanak: Gerekçe: …”) satırı görünür; aidat ve tahsilat satırlarında görünmez. Kurul üyesi aynı satırları salt okunur görür.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "F47.01 ya da F47.02 ile yazılmış bir Fon borcu",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F47.05",
+          "baslik": "Sakin Borcum: “Borç kalemleri” dökümü",
+          "adimlar": [
+            "Borcu olan bir sakin hesabıyla Borcum ekranını açın ve “Borç kalemleri (N)” düğmesine dokunun.",
+            "Kısmi ödeme girilmiş bir dairede kalemlerin kalan tutarlarına bakın."
+          ],
+          "beklenen": "Her ödenmemiş kalemde kaynağı (örn. “Ekim 2026 • Ek borç • Fon Hesabı”), Tutar / Ödenen / Kalan, “Vade: …” ya da “Vadesi geçti: …” ve varsa “Dayanak: …” görünür. Ödemeler vadesi en eski borçtan başlayarak mahsup edilir; örneğin 1.000 TL’lik en eski kalemde 70 TL ödeme varsa kalan 930 TL’dir. Kalanların toplamı borç bakiyesine eşittir.",
+          "rol_notu": "Daire sakini",
+          "on_kosul": "Borcu olan bir sakin hesabı (en az bir kalemde kısmi ödeme)",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F47.06",
+          "baslik": "Sakin gizliliği: karar başlığı yönetime özelse sızmaz",
+          "adimlar": [
+            "Karar Defteri’nde bir kararı “Yalnız yönetim” görünürlüğüyle kaydedip bir Fon borcuna bağlayın; sakin hesabıyla “Borç kalemleri”ne bakın.",
+            "Aynı kararı “Sakinlere açık” yapıp yeniden bakın."
+          ],
+          "beklenen": "Yalnız yönetim kararında sakin yalnızca karar numarasını (örn. “Karar 2026/6”) görür, başlığı görmez. Karar sakinlere açık yapılınca başlık da görünür.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Karar Defteri açık site; bir sakin hesabı",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F47.07",
+          "baslik": "Önizleme sonrası modül değişirse; aynı ek borcun tekrarı",
+          "adimlar": [
+            "Ek borç önizlemesini açık tutun; başka bir oturumdan süper kullanıcıyla Karar Defteri modülünü açıp kapatın, sonra onaylayın.",
+            "Aynı Fon ek borcunu kısa süre içinde ikinci kez yazmayı deneyin."
+          ],
+          "beklenen": "Modül değiştiyse pencere hata vermez; önizlemeyi yeniler ve yeni gereken girdiyi (karar seçici ↔ gerekçe) ister, eski seçim sıfırlanır. İkinci yazımda “aynı ek borç daha önce kaydedilmiş” uyarısı ve “Yine de ekle” akışı eskisi gibi çalışır; dayanak yeniden istenir.",
+          "rol_notu": "Site yöneticisi ve süper kullanıcı",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        }
+      ]
+    },
+    {
+      "id": "F48",
+      "baslik": "Dağıtım tabanını yönetim seçer: eşit varsayılan, kişi sayısı, ısı payı alan tabanı",
+      "durum": "hazir",
+      "ozet": "Aidat, ek borç ve ısı payında dağıtım tabanını yazılım değil yönetim seçer; varsayılan EŞİT’tir. Yeni “Kişi sayısına göre” tabanı dairedeki güncel kişi kayıtlarından hesaplanır. Seçilen tabanın verisi eksik daire sessizce eşit paya düşürülmez, eksik veri olarak listelenir. “Metrekareye göre” seçeneği yoktur. Isı payının alan payı kısmı da aynı tabanlarla (Eşit / Arsa payı / Kişi sayısı) hesaplanır; eskiden otomatik arsa payına geçilirdi, artık geçilmez.",
+      "maddeler": [
+        {
+          "id": "F48.01",
+          "baslik": "Yeni Tanım: dağıtım yöntemi sırası, varsayılanı ve kişi sayısı",
+          "adimlar": [
+            "Finans > Tanımlar > “Yeni Tanım”ı açın; “Dağıtım yöntemi” seçicisine bakın.",
+            "“Kişi sayısına göre”yi seçip bir toplam tutar girin ve “Önizle”ye basın; en az bir dairede hiç kişi kaydı olmasın."
+          ],
+          "beklenen": "Yöntem “Eşit bölüş” ön seçili gelir; seçenekler sırayla Eşit bölüş, Sabit tutar, Kategoriye göre, Arsa payına göre ve Kişi sayısına göre’dir; “Metrekareye göre” seçeneği yoktur. Kişi sayısında kişi kaydı olmayan daire “eksik veri” (“Dairede kayıtlı güncel kişi yok”) olarak listelenir, eşit paya düşürülmez; satırlarda “N kişi” görünür. “Eksikleri atla” ile devam edilirse toplam tutarın tamamı kalan dairelere dağılır.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "En az bir dairede kayıtlı güncel kişi olmayan bir site",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F48.02",
+          "baslik": "Ek borçta kişi sayısı / eşit / arsa payı karşılaştırması ve kuruş artıkları",
+          "adimlar": [
+            "Ek Borç Ekle formunda aynı toplam tutarı önce “Eşit bölüş”, sonra “Kişi sayısına göre” ve “Arsa payına göre” seçerek önizleyin (kaydetmeyin).",
+            "Daire sayısına tam bölünmeyen kuruşlu bir tutarla (örn. 10.000,03 TL) “Eşit bölüş” önizlemesine bakın."
+          ],
+          "beklenen": "Üç yöntemde dairelere düşen tutarlar farklıdır ama her önizlemede toplam girilen tutara kuruşu kuruşuna eşittir. Bölünemeyen kuruşlar kimliği küçük (listede üstteki) dairelere gider.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Kişi kayıtları ve arsa payları kısmen dolu, birden çok daireli site",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F48.03",
+          "baslik": "Isı payı: “Alan payı tabanı” seçicisi",
+          "adimlar": [
+            "Sayaç > Faturalandır’da tür Isı, yöntem “Isı payı” seçin; “Alan payı tabanı” seçicisine bakın.",
+            "Arsa payı tanımlı bir sitede taban seçmeden önizleyin.",
+            "Tabanı “Arsa payı” yapıp bir dairenin arsa payını boş bırakın; önizleyin, sonra “Borçlandır”a basmayı deneyin.",
+            "Tabanı “Kişi sayısı” yapıp kişi kaydı olmayan bir daireyle önizleyin."
+          ],
+          "beklenen": "Seçici Eşit (varsayılan), Arsa payı ve Kişi sayısı seçeneklerini verir. Taban seçilmediğinde arsa payı tanımlı olsa bile alan payı EŞİT dağıtılır. Arsa payı seçilip bir dairede arsa payı yoksa o daire “arsa payı tanımlı değil” diye eksik listelenir ve “Verisi eksik daireleri atla” kapalıyken Borçlandır reddedilir (sessiz eşit paya düşme yoktur). Atlanan daire faturalandırmaya hiç dahil edilmez. Satır toplamı girilen gider tutarına eşittir; ekranda hiçbir yerde m² geçmez.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Isı sayaçlı birkaç daire ve bir dönem okumaları",
+          "yeni": true,
+          "gelistirme": "hazir"
+        }
+      ]
+    },
+    {
+      "id": "F49",
+      "baslik": "Alacaklı devir bakiyesi",
+      "durum": "hazir",
+      "ozet": "Devir bakiyesi dosyasındaki eksi tutar artık hata değil, ALACAKLI devirdir: dairenin hesabına devir alacağı olarak yazılır ve sonraki borçlara en eski vadeden başlayarak mahsup edilir. Devir alacağı tahsilat sayılmaz (gelir-gider raporu ve ana sayfa tahsilat toplamları artmaz), makbuz kesilmez ve tahsilat düzeltmesi yapılamaz; ekstrede “Devir alacağı” etiketini taşır. Eski uygulama sürümü alacaklı dosyayı onaylayamaz (güvenli taraf); web ve uygulama birlikte güncellenir.",
+      "maddeler": [
+        {
+          "id": "F49.01",
+          "baslik": "Excel’den devir: eksi tutar alacaklı devirdir",
+          "adimlar": [
+            "Finans > Daireler > Devir bakiyesi > “Excel’den yükle”: şablondaki notu okuyun; bir daireye -500,00 (eksi), bir başkasına pozitif tutar yazın, alacaklı satırın vade hücresini de doldurun.",
+            "Önizlemeye ve onay penceresine bakın."
+          ],
+          "beklenen": "Eksi tutar hata değildir; önizlemede “alacaklı kayıt” sayısı görünür ve vade hücresi dolu alacaklı satırda “vade yok sayıldı” uyarısı çıkar. Onay penceresi devir BORCU ve devir ALACAĞI toplamlarını ayrı yazar (“Toplam … devir borcu ve … devir alacağı …”).",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Devir bakiyesi henüz yüklenmemiş birkaç daire",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F49.02",
+          "baslik": "Ekstrede “Devir alacağı” etiketi",
+          "adimlar": [
+            "F49.01’deki yüklemeyi onaylayın; alacaklı dairenin ekstresini açın.",
+            "Alacak satırına dokunun."
+          ],
+          "beklenen": "Satır “Tahsilat” türündedir ama yöntem rozeti yerine “Devir alacağı” rozetini taşır (Havale / EFT rozeti yoktur). “Makbuz Düzenle” ve “Düzelt” düğmeleri yoktur; “İptal Et” vardır.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "F49.01 ile yüklenmiş alacaklı devir",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F49.03",
+          "baslik": "Alacaklı devirden sonra aidat: mahsup ve raporlar",
+          "adimlar": [
+            "Devir alacağı 500 TL olan dairede 1.250 TL aidat borçlandırın.",
+            "Alacağı aidattan büyük olan bir dairede aynısını yapın.",
+            "Yönetici ana sayfasında ve gelir-gider raporunda “Tahsilat” toplamına bakın.",
+            "Ev sahibi hesabına yazılan bir devir alacağının kiracı hesabının borcunu kapatıp kapatmadığına bakın."
+          ],
+          "beklenen": "Bakiye 750 TL olur; Borcum ve ekstrede kalan 750 TL’dir. Alacak aidattan fazlaysa artan alacak kalır. “Tahsilat” toplamları devir alacağı kadar ARTMAZ. Ev sahibi hesabındaki devir alacağı kiracı hesabının borcunu KAPATMAZ (mahsup hesap bazlıdır).",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "F49.01 ile yüklenmiş alacaklı devirler",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F49.04",
+          "baslik": "Devir yüklemesini geri alma (borç ve alacak birlikte)",
+          "adimlar": [
+            "Alacaklı kayıtlar da içeren bir devir yüklemesinin yanındaki “Geri al”a dokunun; nedeni yazıp onaylayın.",
+            "Yüklemeden sonra bir daireye gerçek tahsilat girilmişse aynı pencerede uyarıya bakın."
+          ],
+          "beklenen": "Pencere ters kayıt sayısını devir borcu ve devir alacağı olarak ayrı yazar. Onaydan sonra borç ve alacak birlikte terslenir, ikinci geri alma reddedilir. “Sonradan tahsilat” uyarısı yalnız GERÇEK tahsilatlar için çıkar (devir alacağı saymaz).",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "F49.01 ile yüklenmiş alacaklı devir",
+          "yeni": true,
+          "gelistirme": "hazir"
+        }
+      ]
+    },
+    {
+      "id": "F50",
+      "baslik": "Kiracı borcunun malike devri, gecikmede öneri ve alacak iadesi (sunucu hazır, ekranlar sonraki iş)",
+      "durum": "yapiliyor",
+      "ozet": "Sunucu tarafı hazır ve gerçek PostgreSQL’de sınandı; yönetici ve sakin ekranları henüz yok (sonraki iş), bu yüzden aşağıdaki maddelerin çoğu “Yakında…” durumundadır. Kiracı borcunun malike devri açık, yönetici onaylı, izli ve geri alınabilir bir eylemdir; borç mutlaka tahsil edilir, kiracı vermezse mal sahibi öder: devir yalnız çıkışta değil gecikmede de yönetici önüne önerilir. Fazla ödeme varsayılan olarak alacak kalır; iade isteğe bağlı ve yönetici onaylıdır. Kiracı çıkışında malike giden bildirim şimdiden denenebilir. Devir ve bildirim metinlerinin hukuki zemini avukat onayı bekler.",
+      "maddeler": [
+        {
+          "id": "F50.01",
+          "baslik": "Kiracı çıkışında malike borç bildirimi",
+          "adimlar": [
+            "Hesabında ödenmemiş borç olan bir kiracı için “Daireden ayrıl” (ya da yönetici olarak “Taşındı”) işlemini yapın.",
+            "Aynı işlemi borcu olmayan bir kiracıyla yapın.",
+            "Ev sahibi hesabıyla uygulamadaki bildirimlere bakın."
+          ],
+          "beklenen": "Çıkış ENGELLENMEZ. Borçlu kiracı çıkarken ev sahibine, çıkış tamamlanmadan önce tutarı ve “kiracının hesabında kalır; site yönetimi onaylarsa hesabınıza devredilebilir” bilgisini içeren bir bildirim gider; çıkış sonrasındaki genel bildirim borçlu / borçsuz ayrılır. Borcu olmayan kiracı için bu bildirim gitmez.",
+          "rol_notu": "Site yöneticisi ve ev sahibi",
+          "on_kosul": "Hem malik hem kiracısı olan bir daire; kiracı hesabında ödenmemiş borç",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F50.02",
+          "baslik": "Borcu malike devret: önizleme, devir, geri alma",
+          "adimlar": [
+            "Kiracı hesabında 1.000’er TL’lik üç aidatı olan ve 1.500 TL ödenmiş bir dairede “Borcu malike devret”i açın (yönetici ekranı yakında).",
+            "Önizlemeyi okuyup nedeni yazarak devri onaylayın; sonra devri geri alın."
+          ],
+          "beklenen": "Önizlemede vadesi geçmiş, ödenmemiş kalemler ve toplamı (1.500 TL; kısmen ödenmiş kalem için kalan 500 TL) görünür; gecikme tazminatı ve vadesi gelmemiş kalem devredilmez. Onayla malikin borcu tutar kadar artar, kiracınınki aynı tutar azalır, iki hesabın toplamı aynı kalır; malike bildirim gider; ekstrede “Kiracı hesabından devreden borç” satırı görünür. Geri alma bakiyeleri devir öncesine döndürür (satırlar silinmez); devirden sonra malik hesabına ödeme girildiyse geri alınamaz. Malik kaydı olmayan dairede devir yapılamaz. Yazma yalnız yönetici ve süper kullanıcıdadır; kurul yalnız okur.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Hem malik hem kiracısı olan, kiracı hesabında vadesi geçmiş borç bulunan daire",
+          "yeni": true,
+          "gelistirme": "yakinda"
+        },
+        {
+          "id": "F50.03",
+          "baslik": "Gecikmede de malike devir önerisi",
+          "adimlar": [
+            "Kiracısı oturan, vadesi geçmiş ödenmemiş borcu olan ve malik kaydı bulunan bir dairede yönetici ana sayfasındaki dikkat satırlarına bakın (satır etiketi ve devir penceresi yakında)."
+          ],
+          "beklenen": "Borç mutlaka tahsil edilir; kiracı vermezse mal sahibi öder: gecikmiş kiracı borcu için malike devir yalnız çıkışta değil gecikmede de yönetici önüne önerilir. Sunucuda “devredilebilir daireler” listesi ve yönetici dikkat satırı hazırdır; devir yine önizleme, onay ve neden ile yapılır ve geri alınabilir. Ekranda şimdilik genel bir “bekleyen iş” satırı görünebilir.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Kiracısı oturan, vadesi geçmiş borcu olan ve malik kaydı bulunan daire",
+          "yeni": true,
+          "gelistirme": "yakinda"
+        },
+        {
+          "id": "F50.04",
+          "baslik": "Alacak iadesi: talep, onay, ret, geri alma",
+          "adimlar": [
+            "3.000 TL borca 5.000 TL ödenmiş bir dairede sakin “Fazla ödememi iade et” ile 1.500 TL iade istesin; 2.500 TL (alacaktan fazla) istemeyi de deneyin (sakin ekranı yakında).",
+            "Yönetici ödeme hesabını seçip onaylasın; nakit hesapta bakiye yetmiyorsa deneyin; bir talebi gerekçeyle reddedin; onaylı bir iadeyi geri alın; onaylı iade varken o ödemeyi iptal etmeyi deneyin (yönetici ekranı yakında)."
+          ],
+          "beklenen": "Alacaktan fazlası istenemez; başka dairenin hesabına talep açılamaz. Onayda daire alacağı 2.000 TL’den 500 TL’ye iner, seçilen hesaptan 1.500 TL çıkış görünür, IA-yıl-sıra numaralı iade makbuzu oluşur; Aidat + Fon + avans toplamı hesapların toplamına eşit kalır. Nakit hesapta bakiye yetmezse “yeterli nakit yok” uyarısı çıkar. Reddedilince gerekçe sakine görünür. İade geri alınınca alacak ve hesap bakiyesi geri gelir, makbuz iptal sayılır. Onaylı iade varken o ödemeyi iptal etmek “önce iadeyi geri alın” diye reddedilir.",
+          "rol_notu": "Daire sakini ve site yöneticisi",
+          "on_kosul": "Fazla ödemesi (alacağı) olan bir daire; en az bir kasa ya da banka hesabı",
+          "yeni": true,
+          "gelistirme": "yakinda"
         }
       ]
     }
