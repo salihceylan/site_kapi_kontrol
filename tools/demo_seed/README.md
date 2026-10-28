@@ -57,7 +57,7 @@ yuklenir (mevcut ortam degiskenlerini ezmez): `FINANCE_RECEIPT_SECRET` (makbuz),
   tasinma tarihleri farkli (yari daire 2019-2022'den beri, kalani 2023-2026), yeni tasinan malik dairelerde onceki malik pasif kayit. Her kisinin KENDI hesabi (kullanici adi `ad.soyad`, sifre 12 karakter
   karisabilen harfler yok, bcrypt = uygulamanin `hashPassword`'u). Yonetim kurulu (baskan, 2 uye, denetci; farkli dairelerden `BOARD_MEMBER`), 3 gorevli (`STAFF`: kapici, teknik, danisma), 0-2 arac/daire, rehber (12 telefon).
   Mevcut site yoneticisi KORUNUR, dokunulmaz.
-* **Finans (en onemli)**: iki hesap (Kasa + sahte IBAN'li banka), 46 ay aylik aidat (m2'ye gore daire basina farkli; 2023 ~1.500, 2024 ~2.400, 2025 ~3.500, 2026 ~4.800 TL), ek borc taksitleri (asansor 2, dis cephe 4),
+* **Finans (en onemli)**: iki hesap (Kasa + sahte IBAN'li banka), 46 ay aylik aidat (arsa payina gore daire basina farkli; 2023 ~1.500, 2024 ~2.400, 2025 ~3.500, 2026 ~4.800 TL), ek borc taksitleri (asansor 2, dis cephe 4),
   tahsilat deseni (zamaninda odeyenler, surekli 30/60 gun gecikenler, 2 kronik gecikmeli daire, ceyreklik pesin odeyen), nakit/havale/cek, malik/kiraci hesabi, her tahsilat icin makbuz, ~575 gider (14 kategori, 13 tedarikci,
   rutin/beklenmedik, mevsimsel dogalgaz/elektrik/su, 11 beklenmedik ariza), kasa<->banka aktarimlari, 6 mutabakat (banka faizi/ucreti duzeltmeli), 2 bekleyen dekont bildirimi, 4 eslesmemis banka satiri, ay kapatma (2026-08'e kadar).
   Yillik gelir ~ gider (+-%10): tahsilat toplamina gore gider olceklenir (oranlar 2023 0,97 / 2024 1,03 / 2025 0,96 / 2026 0,95).
@@ -168,7 +168,8 @@ KAPSAM DISI (dokunulmaz): kapilar, kayitli cihazlar, "Daireye Katil", kartli gec
 
 * `seed.mjs` baslarken **gecici** `AFTER INSERT` yakalama tetikleyicilerini (`zz_demo_seed_capture`) tum public tablolara kurar, oturumda `demo_seed.batch` ayari doluyken eklenen HER satiri
   (uygulama servislerinin ve tetikleyicilerin urettigi satirlar dahil) `demo_seed_registry(batch_id, table_name, row_id, op, before_image, created_at)` tablosuna yazar; bitince tetikleyicileri kaldirir.
-* Mevcut satirlarda yapilan degisiklikler (dairelerin m2/kat/arsa payi/kategori/sorumlu taraf, `resident_user_code`) `op='update'` + `before_image` ile saklanir; cleanup eski haline getirir.
+* Mevcut satirlarda yapilan degisiklikler (dairelerin kat/arsa payi/kategori/sorumlu taraf, `resident_user_code`) `op='update'` + `before_image` ile saklanir; cleanup eski haline getirir.
+  Eski (migration 078 ONCESI) bir batch'in `before_image`'inda sonradan dusurulen sutunlar (`apartments.gross_area_m2` / `net_area_m2`) bulunabilir: tabloda artik olmadiklari icin geri yuklenmez (m2 geri eklenmez), `cleanup.mjs` bunlari atlar, kalan alanlari geri yukler ve sonda `(atlandi: sutun artik yok, geri yuklenmedi) ...` satirinda listeler.
 * `cleanup.mjs` tek transaction'da `SET LOCAL session_replication_role = replica` ile (yalniz eklemeli tablolar: `ledger_entries`, makbuzlar, `audit_log`, `board_decisions` vb.) YALNIZ kayitli satirlari siler,
   belge dosyalarini (`@file`) diskten kaldirir. Sequence degerleri geri alinmaz (zararsiz). Koruma: sitede demo batch ya da finans/defter/guncel sakin kaydi varsa tohum DURUR (`--force` ile asilir).
 
@@ -184,5 +185,5 @@ sozlesme hatirlatma zamanlayicisi icin onceden "gonderildi" satirlari yazilir (y
 * Dekont bildirimi ve banka satirlari dogrudan SQL ile yazilir (servis dosya/PDF ayristirma ister); `file_required=false`, dosya yok.
 * Belge deposu: dosyalar `DOCUMENTS_DIR`'e (ya da `~/kapi-documents`) tohumu calistiran OS kullanicisi olarak yazilir; PM2 kullanicisi ayniysa uygulama okur, degilse izinleri ayarlayin.
 * `--force` mevcut gercek sakin/finans kaydi olan sitede kullanilirsa daire basina "tam 1 amir" kurali bozulabilir. Onerilmez.
-* Aidat 'm2' dagitimiyla (brut alan) yazilir; yillik zam yeni yillik tanimla yapilir. Gecikme tazminati ve borc hatirlatma KAPALI birakilir (hukuk onayi bayragi).
+* Aidat ve ek borclar ARSA PAYINA gore (`land_share`) yazilir; daire alani (m2) sistemde tutulmaz (migration 078 `gross_area_m2` / `net_area_m2` sutunlarini kalici dusurdu): arac bu sutunlari ne okur ne yazar, `area` dagitimi da kullanmaz (sunucu 400 `AREA_DISTRIBUTION_REMOVED` verir). Arsa paylari (1000 uzerinden) dairelerin goreli buyuklugune (oda tipine gore, yalniz bellekte; veritabanina yazilmaz) oranli uretilir, sitede zaten arsa payi varsa KORUNUR; yillik zam yeni yillik tanimla yapilir. Gecikme tazminati ve borc hatirlatma KAPALI birakilir (hukuk onayi bayragi).
 * Yerel testte cleanup, `session_replication_role` nedeniyle FK eylemlerini calistirmaz: her satir acikca kayitli oldugundan sorun olmaz; baska bir surecin tohumlanan satirlara sonradan bagladigi kayitlar cleanup'ta yetim kalabilir.

@@ -20,34 +20,35 @@ export async function seedPeople(ctx) {
   const credentials = [];
   const plates = new Set();
 
-  // --- daire ozellikleri (m2, kat, arsa payi, kategori) ----------------------------------------------------------------
+  // --- daire ozellikleri (kat, arsa payi, kategori) ----------------------------------------------------------------------
+  // Daire alani (m2) sistemde TUTULMAZ (migration 078 sutunlari kalici dusurdu): ne okunur ne yazilir. Arsa payini ve isi
+  // tuketimini gercekci dagitmak icin oda tipine gore dairenin GORELI buyuklugu (birimsiz agirlik; 100 puan = kalorimetre
+  // tablosundaki referans daire) uretilir; yalniz bellekte (apt.sizeWeight) kalir, veritabanina YAZILMAZ.
   const kinds = apartments.map((_, i) => ['2+1', '3+1', '3+1', '4+1', '3+1', '2+1', '3+1', '4+1', '2+1', '3+1'][i % 10]);
-  const grossOf = { '2+1': [88, 96], '3+1': [112, 128], '4+1': [142, 156] };
-  const shares = apartments.map((apt, i) => (apt.gross ? apt.gross : Math.round(rng.float(...grossOf[kinds[i]]))));
-  const totalGross = shares.reduce((s, v) => s + v, 0);
+  const sizeRangeOf = { '2+1': [88, 96], '3+1': [112, 128], '4+1': [142, 156] };
+  const sizeWeights = apartments.map((_, i) => Math.round(rng.float(...sizeRangeOf[kinds[i]])));
+  const totalSizeWeight = sizeWeights.reduce((s, v) => s + v, 0);
   let usedShare = 0;
   const perBlockCounter = new Map();
   for (const [i, apt] of apartments.entries()) {
     const n = (perBlockCounter.get(apt.blockId) ?? 0) + 1;
     perBlockCounter.set(apt.blockId, n);
-    const gross = shares[i];
-    const net = apt.net ?? Math.round(gross * 0.86 * 100) / 100;
-    const num = i === apartments.length - 1 ? 1000 - usedShare : Math.round((gross / totalGross) * 1000);
+    const sizeWeight = sizeWeights[i];
+    // Arsa payi (1000 uzerinden) dairenin goreli buyuklugune oranli; son daire kalani alir (toplam tam 1000). Aidat ve ek borclar bu paya gore dagitilir.
+    const num = i === apartments.length - 1 ? 1000 - usedShare : Math.round((sizeWeight / totalSizeWeight) * 1000);
     usedShare += num;
     const update = {
       floor: apt.floor ?? ((n - 1) % 5) + 1,
-      gross,
-      net,
       shareNum: apt.shareNum ?? num,
       shareDen: apt.shareDen ?? 1000,
       category: apt.category ?? kinds[i],
     };
     await trackUpdate({ query: q }, batchId, 'apartments', 'id = $1', [apt.id]);
     await q(
-      `UPDATE apartments SET floor = $2, gross_area_m2 = $3, net_area_m2 = $4, land_share_numerator = $5, land_share_denominator = $6, category = $7 WHERE id = $1`,
-      [apt.id, update.floor, update.gross, update.net, update.shareNum, update.shareDen, update.category],
+      `UPDATE apartments SET floor = $2, land_share_numerator = $3, land_share_denominator = $4, category = $5 WHERE id = $1`,
+      [apt.id, update.floor, update.shareNum, update.shareDen, update.category],
     );
-    Object.assign(apt, { floor: update.floor, gross: update.gross, net: update.net, shareNum: update.shareNum, shareDen: update.shareDen, category: update.category });
+    Object.assign(apt, { floor: update.floor, sizeWeight, shareNum: update.shareNum, shareDen: update.shareDen, category: update.category });
   }
 
   // --- hane senaryolari -------------------------------------------------------------------------------------------------

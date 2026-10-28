@@ -148,6 +148,22 @@ const rec = (await q(`SELECT COUNT(*)::INT AS n FROM receipts WHERE site_code = 
 const closures = (await q(`SELECT to_char(MAX(period),'YYYY-MM') AS p FROM finance_period_closures WHERE site_code = $1`, [siteCode])).rows[0].p;
 check('makbuzlar uretildi, ay kapatma 2026-08', rec > 400 && closures === '2026-08', `makbuz=${rec} kapali=${closures}`);
 
+// (3b) daire alani (m2) sistemde YOK (migration 078): arac sutunlari geri eklemez, m2 dagitimi kullanmaz; aidat ARSA PAYINA gore
+const areaColumns = (await q(`SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'apartments' AND column_name IN ('gross_area_m2', 'net_area_m2')`)).rows.map((r) => r.column_name);
+check('apartments m2 sutunlari YOK (078; tohum geri eklemedi)', areaColumns.length === 0, areaColumns.join(','));
+const shareRows = (await q(`SELECT id, land_share_numerator AS num, land_share_denominator AS den FROM apartments WHERE site_code = $1 ORDER BY id`, [siteCode])).rows.map((r) => ({ id: Number(r.id), num: Number(r.num), den: Number(r.den) }));
+check('arsa paylari 1000 uzerinden, hepsi > 0, toplami tam 1000', shareRows.length === 10 && shareRows.every((r) => r.den === 1000 && r.num > 0) && shareRows.reduce((s, r) => s + r.num, 0) === 1000, shareRows.map((r) => r.num).join(','));
+const distRows = (await q(`SELECT distribution, COUNT(*)::INT AS n, COUNT(area_basis)::INT AS with_basis FROM fee_definitions WHERE site_code = $1 GROUP BY distribution`, [siteCode])).rows;
+check('aidat tanimlari ve ek borclar yalniz arsa payi dagitimli (m2/alan esasi yok)', distRows.length === 1 && distRows[0].distribution === 'land_share' && distRows[0].n === 10 && distRows[0].with_basis === 0, JSON.stringify(distRows));
+const dueRows = (await q(`SELECT apartment_id, amount_minor::BIGINT AS amount_minor FROM ledger_entries WHERE site_code = $1 AND kind = 'charge' AND definition_name = 'Aylık Aidat 2026' AND period = '2026-01-01'::DATE`, [siteCode])).rows.map((r) => ({ id: Number(r.apartment_id), amount: Number(r.amount_minor) }));
+const dueTotal = dueRows.reduce((s, r) => s + r.amount, 0);
+check('ocak 2026 aidati: 10 daire, toplam tam 48.000 TL (kurus), daire basina farkli', dueRows.length === 10 && dueTotal === 4800000 && new Set(dueRows.map((r) => r.amount)).size > 1, `daire=${dueRows.length} toplam=${dueTotal} farkli=${new Set(dueRows.map((r) => r.amount)).size}`);
+const shareById = new Map(shareRows.map((r) => [r.id, r.num]));
+const offShare = dueRows.filter((r) => Math.abs(r.amount * 1000 - dueTotal * (shareById.get(r.id) ?? -1)) >= 1000);
+check('her dairenin aidati arsa payi orani (en fazla 1 kurus yuvarlama)', dueRows.length === 10 && offShare.length === 0, offShare.map((r) => `${r.id}:${r.amount}`).join(','));
+const areaWording = (await q(`SELECT COUNT(*)::INT AS n FROM board_decisions WHERE body ILIKE '%brüt alan%' OR body ILIKE '%metrekare%' OR body ILIKE '%m²%'`)).rows[0].n;
+check('karar defteri metinlerinde m2 / brut alan dagitimi yok', areaWording === 0, String(areaWording));
+
 // (4) e-posta kuyrugu
 const queueChecks = [
   ['announcement_recipients bekleyen e-posta', `SELECT COUNT(*)::INT AS n FROM announcement_recipients WHERE email_status IN ('pending','sent','failed') OR email IS NOT NULL`],
@@ -223,6 +239,11 @@ try {
   check('PDF metin okuma', false, error.message);
 }
 
+// (7) eski (078 ONCESI) batch simulasyonu: o donemde kaydedilen apartments before_image'lari artik olmayan m2 anahtarlarini (gross_area_m2 /
+// net_area_m2) tasir. cleanup bu anahtarlari ATLAMALI (sutun yok; m2 geri gelmez) ve geri kalan alanlari yine geri yuklemeli.
+const legacyImages = await q(`UPDATE demo_seed_registry SET before_image = before_image || '{"gross_area_m2": 118, "net_area_m2": 101.48}'::jsonb WHERE batch_id = $1 AND table_name = 'apartments' AND op = 'update'`, [batchId]);
+check('eski batch simulasyonu: 10 apartments before_image kaydina m2 anahtarlari eklendi', legacyImages.rowCount === 10, String(legacyImages.rowCount));
+
 // --- 4) cleanup ----------------------------------------------------------------------------------------------------------------------------
 await client.end();
 await dbMod.pool.end().catch(() => {});
@@ -230,9 +251,19 @@ const afterSeed = await tableCounts(url);
 const cleanup = run('node', ['cleanup.mjs', '--batch', batchId, '--yes'], { DATABASE_URL: url });
 console.log(cleanup.stdout.split('\n').slice(0, 12).join('\n'));
 check('cleanup calisti', cleanup.status === 0, cleanup.status === 0 ? '' : cleanup.stderr.slice(-300));
+check(
+  'cleanup eski m2 anahtarlarini atladi (sutun yok) ve 10 daireyi geri yukledi',
+  cleanup.status === 0 && /geri yuklenen: 10/.test(cleanup.stdout) && /apartments\.gross_area_m2/.test(cleanup.stdout) && /apartments\.net_area_m2/.test(cleanup.stdout),
+  cleanup.stdout.split('\n').filter((l) => /geri yuklenen|atlandi/.test(l)).join(' | '),
+);
 const afterClean = await tableCounts(url);
 const diffs = Object.keys(baseline).filter((t) => baseline[t] !== afterClean[t]).map((t) => `${t}:${baseline[t]}->${afterClean[t]}`);
 check('cleanup sonrasi tum tablolar fixture haline dondu', diffs.length === 0, diffs.slice(0, 12).join(', '));
+const after = new pg.Client({ host: '127.0.0.1', port, user: 'postgres', database: dbName });
+await after.connect();
+const dirtyApartments = (await after.query(`SELECT COUNT(*)::INT AS n FROM apartments WHERE site_code = $1 AND (floor IS NOT NULL OR land_share_numerator IS NOT NULL OR land_share_denominator IS NOT NULL OR category IS NOT NULL)`, [siteCode])).rows[0].n;
+await after.end();
+check('cleanup daire alanlarini (kat / arsa payi / kategori) fixture haline dondurdu', dirtyApartments === 0, String(dirtyApartments));
 const grew = Object.keys(afterSeed).filter((t) => afterSeed[t] !== baseline[t]).length;
 check('tohum cok tabloya yazdi', grew >= 40, `${grew} tablo degisti`);
 const leftFiles = fs.existsSync(seedEnv.DOCUMENTS_DIR) ? fs.readdirSync(path.join(seedEnv.DOCUMENTS_DIR), { recursive: true }).filter((f) => !fs.statSync(path.join(seedEnv.DOCUMENTS_DIR, f)).isDirectory()) : [];
