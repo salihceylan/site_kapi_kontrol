@@ -35,6 +35,7 @@ import 'package:site_kapi_kontrol/ui/pages/login_page.dart';
 import 'package:site_kapi_kontrol/ui/pages/no_internet_page.dart';
 import 'package:site_kapi_kontrol/ui/views/legal_consent_gate.dart';
 import 'package:site_kapi_kontrol/ui/widgets/dynamic_qr_pass_modal.dart';
+import 'package:site_kapi_kontrol/ui/widgets/trial_banner.dart';
 import 'package:site_kapi_kontrol/ui/widgets/voice_control_modal.dart';
 
 class MyApp extends StatefulWidget {
@@ -428,7 +429,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           maxScaleFactor: 2.0,
           child: DecoratedBox(
             decoration: AppDecorations.pageBackground(context),
-            child: child,
+            // Deneme erişim kodu oturumunda (P2-27) üstte "Deneme - X saat kaldı" şeridi; normal oturumda şerit yoktur.
+            child: TrialBannerFrame(
+              authService: _authService,
+              child: child ?? const SizedBox.shrink(),
+            ),
           ),
         );
       },

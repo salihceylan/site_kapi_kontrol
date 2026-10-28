@@ -175,6 +175,15 @@ export function normalizeBlockApartmentCounts(raw) {
   return counts;
 }
 
+function trialUserFields(trial) {
+  const expires = trial?.expiresAt == null ? null : new Date(trial.expiresAt);
+  return {
+    is_trial: true,
+    trial_expires_at: expires && !Number.isNaN(expires.getTime()) ? expires.toISOString() : null,
+    trial_site_code: Number.isSafeInteger(Number(trial?.siteCode)) ? Number(trial.siteCode) : null,
+  };
+}
+
 export function mapUserRow(row) {
   return {
     id: row.id,
@@ -188,6 +197,8 @@ export function mapUserRow(row) {
     phone_number: row.phone_number,
     created_at: row.created_at,
     must_change_password: Boolean(row.must_change_password),
+    // Deneme erisim kodu oturumu (P2-27): yalniz deneme hesabinda; istemci "Deneme - X saat kaldi" seridini bundan cizer. Digerlerinde alan YOK.
+    ...(row.trial ? trialUserFields(row.trial) : {}),
   };
 }
 
