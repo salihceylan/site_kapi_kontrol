@@ -296,7 +296,12 @@ async function phaseUpgrade(how) {
   setDbEnv(process.env.QA_DB);
   await createDb(process.env.QA_DB);
   console.log(`  eski (001..084) sema kuruluyor (${how})...`);
-  runMigrate(legacyMigrationsDir());
+  const legacyDir = legacyMigrationsDir();
+  try {
+    runMigrate(legacyDir);
+  } finally {
+    fs.rmSync(legacyDir, { recursive: true, force: true });
+  }
   let oldDb = null;
   if (OLD_SRC) {
     // Canli durum: migration zinciri + ESKI surumun acilis semasi (ensureDbSchema her acilista calisir).
