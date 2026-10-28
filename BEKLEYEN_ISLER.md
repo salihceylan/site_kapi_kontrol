@@ -1,6 +1,6 @@
 # 📌 SmartKeyPass & SİTE KAPI KONTROL - BEKLEYEN İŞLER VE YOL HARİTASI (ROADMAP)
 
-**Son Güncelleme:** 2026-10-01  
+**Son Güncelleme:** 2026-10-01 (1.1 pin eşlemesi ve "Bilinçli olarak bu turun dışında" bölümündeki parola/.env durumu 2026-10-28'de güncellendi; diğer bölümler 2026-10-01 durumundadır)  
 **Proje:** Site Kapı Kontrol Ekosistemi (`site_kapi_kontrol`, `ahbu`, `cihaz_kontrol`, `company_qr_tool`)
 
 Bu dosya; daha önce konuşulan, planlanan, geliştirme sürecinde bekleyen veya sahada test edilecek tüm teknik işleri tek bir merkezi noktada takip etmek için oluşturulmuştur.
@@ -10,11 +10,21 @@ Bu dosya; daha önce konuşulan, planlanan, geliştirme sürecinde bekleyen veya
 ## 1. 🔌 Donanım & Firmware (ESP32)
 
 ### 1.1 Yeni Donanım Desteği (ESP32-WROOM-32E Röle Kartı)
-- [ ] **Kart Ulaştığında Pin Doğrulaması:**
-  - AliExpress üzerinden tedarik edilen ESP32-WROOM-32E röle modülü fiziki olarak geldiğinde:
-    - Röle tetik pini (varsayılan: `GPIO 16` veya `GPIO 23`) test edilecek ve `cihaz_kontrol/include/role_kontrol.h` içerisinde kesinleştirilecek.
-    - Wi-Fi durum ve hata LED pinleri (varsayılan: `GPIO 2`) kart üzerinde doğrulanacak.
-    - GM60 barkod/QR okuyucu UART2 bağlantı pinleri (`GPIO 18 RX`, `GPIO 17 TX`) yeni kart ile test edilecek.
+- [ ] **Pin eşlemesi ve kart kabulü (ESP32-WROOM-32E röle kartı) - cihaz/saha kabulü:**
+  - Kart geldi ve yüklendi (SAHA 7.3, kayıt tarihi 2026-09-13). Pinler artık "varsayılan" değildir: firmware kaynağında sabittir (aşağıdaki tablo). Güncel firmware ile kartta doğrulama açıktır.
+  - Kartta röle ve durum LED'i (SAHA 10.3), GM60 UART2 (SAHA 8.1), ekran UART'ı (SAHA 8.2) ve tümleşik akış (SAHA 29.2) gözle ya da ölçüyle doğrulanır. İlgili SAHA kutuları işaretlenince bu kutu da kapanır.
+  - [x] **Kod/test kanıtı:** Tablodaki her değer `cihaz_kontrol/include/` başlıklarından alınmıştır. `server/test/hardware_pin_docs.test.js` bu belgeyi ve `SAHA_KONTROL_LISTESI.md` donanım maddelerini kaynakla karşılaştırır. Kaynakta GM60 pinleri röle pininden ayrıdır: GPIO 16 röledir, GM60 oraya BAĞLANAMAZ. Bu kanıt kartı sınamaz.
+
+| Sinyal | ESP32-WROOM-32E röle kartı | ESP32-C3 Süper Mini | Kaynak |
+| --- | --- | --- | --- |
+| Röle (kapı kilidi) | GPIO 16 (opto-yalıtımlı, aktif HIGH, 1,5 sn) | GPIO 10 (aktif HIGH, 1,5 sn) | `role_kontrol.h` |
+| Durum LED'i | GPIO 23 (Power / indirme modu LED'i, aktif HIGH) | GPIO 2 (aktif HIGH) | `device_konfig.h` |
+| GM60 okuyucu RX / TX | GPIO 25 / GPIO 26 (UART2, 9600 baud) | GPIO 20 / GPIO 21 (UART1, 9600 baud) | `device_konfig.h`, `gm60_scanner.h` |
+| Ekran UART RX / TX | GPIO 32 / GPIO 33 (UART1, 115200 baud) | kullanılmaz | `display_uart.h` |
+| Wi-Fi sıfırlama düğmesi | GPIO 0 (3 sn basılı tutulur) | GPIO 0 (3 sn basılı tutulur) | `device_konfig.h` |
+
+Ekran kablosu çapraz bağlanır: WROOM GPIO 32 (RX) ← ekran kartı GPIO 21 (TX); WROOM GPIO 33 (TX) → ekran kartı GPIO 20 (RX) (`ekran_yazilimi/include/config.h`).
+
 - [x] **PlatformIO Çoklu Mimari Desteği:**
   - `cihaz_kontrol/platformio.ini` dosyasında hem `[env:lolin_c3_mini]` hem de `[env:esp32_relay_wroom]` hedefleri tanımlandı.
 - [x] **Modüler ve İzole OTA Mimarisi:**
@@ -132,7 +142,7 @@ Kapsamlı kod incelemesi (sunucu, Flutter, ESP32 firmware, ekran yazılımı, al
 
 **Faz 6 – Canlıya dağıtım (AGENTS.md kural 8)**
 - [x] **Sunucu (API) 2026-10-01 canlıya alındı** (`deploy/` betikleriyle): uzak yedek (`~/backups/kapi_<TS>/`: kod+.env+data, `pg_dump`, mosquitto acl/passwd) → hazırlık (paket sha256 doğrulandı, `node --check`, aşamalı `npm ci --omit=dev`; nodemailer 9.0.5 → 10.0.13) → etkinleştirme (PM2 `kapi-api` yeniden başlatıldı) → `/health` ok (DB + MQTT bağlı), `ensureDbSchema` ekleyici şema (users.updated_at, door_access_logs.client_log_id + tekil indeks, geofence varsayılanı 100) uygulandı, MQTT ACL'ye `logs` konuları eklendi (`kapi-mqtt-sync`), 3 cihazın `hardware_type` değeri cihaz bildirimine göre düzeldi (2 cihaz esp32_c3, 1 cihaz esp32_wroom).
-- [x] Canlı `.env`: yeni kod için `COMPANY_API_KEY` tanımlandı (48 karakter) ve aynı değer `company_qr_tool/.env` dosyasına (gitignore'da) yazıldı; şirket aracı bu anahtarla çalışır. `JWT_SECRET` (20 karakter), `JWT_EXPIRES_IN=365d` ve `NODE_ENV` DEĞİŞTİRİLMEDİ (kullanıcı kararı; sunucu yalnız uyarı yazar).
+- [x] Canlı `.env`: yeni kod için `COMPANY_API_KEY` tanımlandı (48 karakter) ve aynı değer `company_qr_tool/.env` dosyasına (gitignore'da) yazıldı; şirket aracı bu anahtarla çalışır. `JWT_SECRET` (20 karakter), `JWT_EXPIRES_IN=365d` ve `NODE_ENV` DEĞİŞTİRİLMEDİ (kullanıcı kararı; sunucu yalnız uyarı yazar). **Sonradan değişti (2026-10-16):** `NODE_ENV=production`, `JWT_EXPIRES_IN=30d` ve JWT sırrı döndürmesi uygulandı; ayrıntı aşağıda "Canlı parola ve sır döndürme" maddesindedir.
 - [x] Faz 5 sunucuda değişiklik yapmadı (istemci tarafı); Faz 4 iptal olduğundan ek sunucu dağıtımı gerekmedi. Sonraki sunucu değişikliğinde aynı `deploy/` betikleriyle yeniden dağıtılır.
 - [ ] Uygulama (APK) ve firmware dağıtımı kullanıcı kararıdır (uygulama yeni sürüm kurulana kadar eski istemciler 6 haneli doğrulama kodunu giremeyebilir; yerel kontrol v2 için firmware + APK birlikte güncellenmelidir).
 
@@ -145,9 +155,12 @@ Kapsamlı kod incelemesi (sunucu, Flutter, ESP32 firmware, ekran yazılımı, al
 - Kapı geçiş kayıtlarında cihaz saati yoksa (epoch=0) kayıtlar saat gelince düzeltilir.
 
 **Bilinçli olarak bu turun dışında (kullanıcı kararı veya ayrı iş gerektirir)**
-- Canlı parolaların (VPS SSH, MQTT, DB, SMTP) değiştirilmesi ve git geçmişinin temizlenmesi (`git filter-repo`); commit/push. **Not:** bir VPS parolası sohbette düz metin paylaşıldı ve depo geçmişinde/firmware ikililerinde de bulundu; ACİLEN DÖNDÜRÜLMELİ (parola bu dosyaya yazılmaz).
+- **Canlı parola ve sır döndürme (durum 2026-10-28; depodaki kod ve belgelerle doğrulandı, canlı sunucunun `.env` dosyası bu denetimde okunmadı):**
+  - [x] **JWT imzalama sırrı döndürüldü** (2026-10-16, kullanıcı onayıyla `deploy/remote_deploy.sh envset`; davranış testleri `server/test/security_jwt.test.js`). Yeni sır 64 karakterdir; eskisi `JWT_SECRET_PREVIOUS` olarak yalnız DOĞRULAMA için 30 gün (≈ 2026-11-15) geçerlidir. **Yapılacak:** süre dolunca `.env` içindeki `JWT_SECRET_PREVIOUS` ve `JWT_SECRET_PREVIOUS_UNTIL` satırlarını silin; silinmezse sunucu her açılışta "gecmiste" uyarısı yazar (`server/src/config/env.js`).
+  - [ ] **VPS SSH/sudo parolası, MQTT `api_bridge` parolası, veritabanı parolası ve SMTP parolası: döndürüldüğüne dair depoda hiçbir kayıt yoktur; AÇIK sayın.** Bir VPS parolası sohbette düz metin paylaşıldı ve depo geçmişinde/firmware ikililerinde de bulundu; ACİLEN DÖNDÜRÜLMELİ (parola bu dosyaya yazılmaz). Adımlar: `MQTT_kurulum.txt` bölüm b), c), d) ve SAHA 44.12. Her biri döndürüldükçe buraya ve ilgili SAHA maddesine işleyin.
+  - [ ] **Git geçmişinin temizlenmesi (`git filter-repo`), `firmware_releases/` klasörünün izlemeden çıkarılması (2026-10-28'de 174 dosya hâlâ izleniyor) ve deponun görünürlüğü: sahibin kararı bekliyor** (`docs/superpowers/plans/2026-10-28-karsilastirma-guclendirme.md`). Geçmişi temizlemek parolaları döndürmenin yerine geçmez.
 - OTA firmware **kod imzalama** (anahtar yönetimi gerekir); bu turda SHA256 doğrulama + artan sürüm + rollback yapılır.
 - Sunucudan cihaz başına yönetici PIN'i üretimi ve arayüzü; BLE provisioning eşleştirmesi (donanım/RAM etkisi ölçülerek).
 - `firmware_releases/` klasörünün git izlemesinden çıkarılması, kök dizindeki artık dosyaların temizlenmesi, release imzası/applicationId (mağaza kararı).
-- Canlı `.env` değerleri (`JWT_EXPIRES_IN=365d` → öneri 30d, `NODE_ENV=production`, `COMPANY_API_KEY`, `CORS_ORIGINS`).
+- Canlı `.env` değerleri: `NODE_ENV=production` ve `JWT_EXPIRES_IN=30d` (ayrıca `LISTEN_HOST=127.0.0.1`, `TRUST_PROXY=loopback,cloudflare`) 2026-10-16'da `envset` aşamasıyla uygulandı; `COMPANY_API_KEY` 2026-10-01'de tanımlandı (Faz 6). Canlıda teyit: `deploy/remote_verify.sh` 8080 dinleme adresini (127.0.0.1 beklenir) ve `[ENV]` uyarılarını yazar. Açık: `CORS_ORIGINS` canlı değeri depodan doğrulanamaz; sunucuda gözden geçirin (`sunucu_kurulum.txt`).
 

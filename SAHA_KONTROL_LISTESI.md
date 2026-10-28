@@ -4,6 +4,8 @@ Bu kontrol listesi; son bir hafta içerisinde geliştirilen, düzeltilen ve saha
 Sahada veya uygulamada test ettikçe ilgili kutucukları `- [x]` olarak işaretleyebilirsiniz.
 
 > ℹ️ **Not:** Talep ettiğiniz her yeni özellik tamamlandığında bu listeye otomatik olarak yeni bir kontrol adımı olarak eklenecektir.
+>
+> 🔎 **Kanıt türü (donanım maddeleri):** Pin, kablolama ya da röle davranışı içeren donanım maddelerinde (7.3, 8.1, 8.2, 8.3, 8.5, 10.3, 29.1, 29.2) iki ayrı kutu vardır. **Üstteki kutu cihaz/saha kabulüdür:** gerçek kartta gözle ya da ölçüyle yaptığınız doğrulamadır ve maddeyi yalnız o kapatır. **İçteki "Kod/test kanıtı" kutusu** kaynak kod, derleme ve ana makine testiyle gösterilebilen kısımdır; geliştirici işaretler. Kod/test kanıtı işaretli olsa bile üstteki kutu boşsa madde KAPANMAMIŞTIR: kod kanıtı saha kabulü değildir. Kanıt satırı olmayan donanım maddeleri (örneğin bölüm 51) yalnız cihaz/saha kabulüdür. Bu ayrım yeni madde numarası açmaz. Pin eşlemesinin tek kaynağı `cihaz_kontrol/include/` başlıklarıdır; tablo `BEKLEYEN_ISLER.md` bölüm 1.1'dedir.
 
 ---
 
@@ -132,7 +134,8 @@ Sahada veya uygulamada test ettikçe ilgili kutucukları `- [x]` olarak işaretl
   - **Beklenen Sonuç:** Her donanım hedefi yalnızca kendi derleme dosyasını ve sürümünü sunmalı; cihazların birbirinin yazılımını indirmesi engellenmiş olmalı.
 - [x] **7.3. ESP32-WROOM-32E Kartı Fiziki Doğrulaması:**
   - **Nasıl Test Edilir:** CH340 üzerinden USB ile bağlanıp `esp32_relay_wroom` ortamından derlenip yüklendi.
-  - **Beklenen Sonuç:** Cihaz başarıyla boot etti (UID: `00861A0D5020`, Hardware: `esp32-wroom`, Sürüm: `1.0.0`), GPIO 23 rölesi tetiklendi ve LittleFS loglama tamponu doğrulandı.
+  - **Beklenen Sonuç:** Cihaz başarıyla boot etti (UID: `00861A0D5020`, Hardware: `esp32-wroom`, Sürüm: `1.0.0`), röle tetiklendi ve LittleFS loglama tamponu doğrulandı. Düzeltme (2026-10-28): bu kayıt önceden röle pini olarak GPIO 23'ü yazıyordu; firmware kaynağına göre röle GPIO 16'dır, GPIO 23 durum LED'idir. Bu kutu ilk kartın sürüm 1.0.0 kabulüdür; güncel firmware ile pin kabulü 8.1 ve 10.3'tedir.
+  - [x] **Kod/test kanıtı:** WROOM röle pini GPIO 16 (`role_kontrol.h`, `ROLE_PIN`), durum LED'i GPIO 23 (`device_konfig.h`, `WIFI_STATUS_LED_PIN`). Pin tablosu: `BEKLEYEN_ISLER.md` bölüm 1.1. Bu satır kartı sınamaz.
 
 ---
 
@@ -142,23 +145,25 @@ Sahada veya uygulamada test ettikçe ilgili kutucukları `- [x]` olarak işaretl
 
 ## 8. GM60 ve Display UART Entegrasyonu (ESP32-WROOM)
 
-- [ ] **8.1. GM60 Pin 16/17 UART2 Okuma:**
-  - **Nasıl Test Edilir:** GM60 TX -> WROOM GPIO16 (RX), GM60 RX -> WROOM GPIO17 (TX) bağlayın. Barkod/QR okutun.
 - [ ] **8.1. GM60 Pin 25/26 UART2 Okuma:**
-  - **Nasıl Test Edilir:** GM60 Sarı kablosunu (TXD) -> WROOM GPIO25 (RX2), GM60 Yeşil kablosunu (RXD) -> WROOM GPIO26 (TX2), Kırmızı kablosunu -> 5V/VIN, Siyah kablosunu -> GND bağlayın. Barkod/QR okutun.
-  - **Beklenen Sonuç:** Seri monitörde `GM60 QR Okundu: <data>` görünmeli, geçerli QR ise röle tetiklenmeli ve ekrana `QR_OK|<data>` ile `DOOR_OPENED` gönderilmeli.
+  - **Nasıl Test Edilir:** GM60 Sarı kablosunu (TXD) -> WROOM GPIO25 (RX2), GM60 Yeşil kablosunu (RXD) -> WROOM GPIO26 (TX2), Kırmızı kablosunu -> 5V/VIN, Siyah kablosunu -> GND bağlayın. GPIO16 röle çıkışıdır; GM60'ı oraya bağlamayın. Barkod/QR okutun.
+  - **Beklenen Sonuç:** Seri monitörde `[GM60] QR okundu, uzunluk: N` görünmeli (QR içeriği güvenlik nedeniyle yazdırılmaz). Sunucu onaylarsa (`[MQTT QR Sonuc] Izin: ONAYLANDI`) röle (GPIO 16) tetiklenmeli ve ekrana `DOOR_OPENED` gönderilmeli; reddederse ekrana `QR_DENIED` gönderilmeli.
+  - [x] **Kod/test kanıtı:** WROOM'da GM60 UART2 kullanır: RX=GPIO 25, TX=GPIO 26, 9600 baud (`device_konfig.h`; `gm60_scanner.h`: `GM60Serial(2)`, `gm60Setup()`). GPIO 16 röleye ayrılmıştır (`role_kontrol.h`). QR okuma korumaları (5 sn debounce, aynı token 8 sn, sunucu yanıtı 10 sn, 512 B sınırı) ana makine testi `cihaz_kontrol/host_test/t_gm60.cpp` ile sınanır (44 doğrulama, 2026-10-02); bu test pinleri ve kablolamayı sınamaz. Eski "Pin 16/17" maddesi 2026-10-28'de silindi: GM60'ı röle pinine bağlatıyordu.
 - [ ] **8.2. Display UART Başlatma:**
   - **Nasıl Test Edilir:** ESP32-WROOM'u açın, seri monitörü (`115200 baud`) izleyin.
   - **Beklenen Sonuç:** Boot sırasında `[DISPLAY] UART1 initialized (RX=32, TX=33)` ve `[DISPLAY] TX: READY` görünmeli.
-- [ ] **8.3. Ekrandan Buton Komutu ile Röle Tetikleme (BTN_OPEN):**
-  - **Nasıl Test Edilir:** Ekran kartından UART üzerinden `BTN_OPEN\n` gönderin (veya ekrandaki "KAPIYI AÇ" butonuna basın).
-  - **Beklenen Sonuç:** WROOM seri monitörde `[DISPLAY] Kapi acma butonu alindi -> Role tetikleniyor` görünmeli ve röle çekmeli; röle süresi bitince ekrana `DOOR_CLOSED` bildirilmeli.
+  - [x] **Kod/test kanıtı:** Ekran UART'ı UART1'dir: RX=GPIO 32, TX=GPIO 33, 115200 baud (`display_uart.h`); açılış satırı `display_uart.cpp` içinde bu sabitlerden yazdırılır. Kablo çaprazdır: WROOM GPIO 32 (RX) <- ekran kartı GPIO 21 (TX), WROOM GPIO 33 (TX) -> ekran kartı GPIO 20 (RX) (`ekran_yazilimi/include/config.h`). Bu satır kartı sınamaz.
+- [ ] **8.3. Ekrandan PIN'siz Buton Komutu Röleyi Tetiklememeli (BTN_OPEN):**
+  - **Nasıl Test Edilir:** Ekran kartından UART üzerinden PIN'siz `BTN_OPEN\n` gönderin.
+  - **Beklenen Sonuç:** Röle ÇEKMEZ ve kapı açılmaz. WROOM seri monitörde `[DISPLAY] UYARI: Yetkisiz ekran kapi acma komutu guvenlik nedeniyle engellendi` görünür. Kapı ekrandan yalnız doğru yönetici PIN'iyle (`ADMIN_OPEN|<PIN>`) açılır; bu akış 51.10-51.13'tedir.
+  - [x] **Kod/test kanıtı:** `display_uart.cpp` `handleDisplayCommand()`: `BTN_OPEN` ve `DOOR_OPEN` komutları engellenir; PIN'li `ADMIN_OPEN|<PIN>` komutu `systemAdminKapiAc()` ile röleyi tetikler. Protokol notu: `display_protocol.h` (`CMD_BTN_OPEN`: ana MCU yetkisiz sayar). PIN kuralları (zayıf PIN listesi, kilitleme zamanı) ana makine testi `t_pin.cpp` ile sınanır (78 doğrulama, 2026-10-02); ekran UART akışının kendisi donanımsız sınanmamıştır. Eski madde "BTN_OPEN röleyi çeker" diyordu; 2026-10-28'de firmware'e göre düzeltildi.
 - [ ] **8.4. Wi-Fi ve MQTT Durum Senkronizasyonu:**
   - **Nasıl Test Edilir:** WROOM Wi-Fi'a bağlandığında veya koptuğunda.
   - **Beklenen Sonuç:** WROOM tarafından ekrana otomatik `WIFI_CONNECTED` / `WIFI_DISCONNECTED` ve `MQTT_CONNECTED` satırları aktarılmalı.
-- [ ] **8.5. İlk Açılış Donanım Self-Testi (Röle Çek-Bırak + GM60 Flaş/Bip):**
+- [ ] **8.5. İlk Açılış Donanım Self-Testi (yalnız GM60 Flaş/Bip; Röle Tıklamaz):**
   - **Nasıl Test Edilir:** Cihazı yeniden başlatın (veya USB'yi takın).
-  - **Beklenen Sonuç:** Açılışta 120 ms süreli röle mekanik çek-bırak sesi duyulmalı, ardından GM60 kamera ışıkları 300 ms yanıp sönmeli, buzzer bip sesi vermelidir. Seri ekranda `[TEST 1/2] Role mekanik test ediliyor... [OK]`, `[TEST 2/2] GM60 Kamera test ediliyor... [OK / YANIT ALINDI]`, `[SELF-TEST] Donanim hazir.` yazmalıdır.
+  - **Beklenen Sonuç:** Açılışta röle tıklamaz (kapı/röle istenmeden tetiklenmemeli; açılış röle testi bilerek kaldırıldı, bkz. 51.3). GM60 kamera ışığı kısa süre (yaklaşık 0,3-0,5 sn) yanıp söner ve buzzer bip sesi verir. Seri ekranda `DONANIM SELF-TEST BASLATILIYOR` ve `[TEST 1/1] GM60 Kamera test ediliyor (Isik/Bip/Yanit)... OK (Kamera bagli, isik yakildi ve ses verildi)` yazmalıdır; kamera yanıt vermezse `UYARI (Kamera yanit vermedi - baglanti/pinleri kontrol edin)` yazar.
+  - [x] **Kod/test kanıtı:** `main.cpp` `setup()`: `roleSetup()` röle pinini en başta pasife çeker; açılış self-testinde yalnız `gm60SelfTest(false)` çalışır, röle çek-bırak testi kaldırılmıştır (kaynak yorumu: açılışta kapı/röle istenmeden tetiklenmemeli). GM60 testi: ışık aç, en çok 250 ms yanıt bekle, 250 ms bekle, ışık kapat, bip (`gm60_scanner.h`). Bu satır kartı sınamaz. Eski madde açılışta röle tıklamasını bekliyordu; 2026-10-28'de firmware'e göre düzeltildi.
 - [ ] **8.6. Seri Monitör ve SmartKeyPass Cihaz Deneme Arayüzünde Kamera Bağlantı Durumu:**
   - **Nasıl Test Edilir:** Cihazın `--- ESP32 SISTEM BILGISI ---` çıktısını veya SmartKeyPass Cihaz Deneme aracındaki "Kamera / QR Okuyucu" alanını kontrol edin.
   - **Beklenen Sonuç:** Kamera bağlıysa `Kamera / QR Okuyucu: Bagli (Hazir)`, bağlı değilse veya yanıt yoksa `Bagli Degil` olarak görünmeli ve anlık güncellenmelidir.
@@ -204,7 +209,8 @@ Sahada veya uygulamada test ettikçe ilgili kutucukları `- [x]` olarak işaretl
   - **Beklenen Sonuç:** Yükleme 460800 baud hızında başlatılmalı, pySerial `Write timeout` hatası vermeden firmware yazımı %100 tamamlanmalı ve başarı mesajı görüntülenmelidir.
 - [ ] **10.3. ESP32-WROOM Röle Kartı GPIO16 ve Durum LED (GPIO23) Doğrulaması:**
   - **Nasıl Test Edilir:** v3.0.5 yüklendikten sonra "SmartKeyPass Cihaz Deneme" ekranında COM7'ye bağlanın, "Role Pulse", "Role Pin HIGH" ve "Role Pin LOW" butonlarına basın.
-  - **Beklenen Sonuç:** GPIO 16 üzerinden röle mekanik "tık" sesiyle tetiklenmeli; GPIO 23 üzerindeki LED ise cihaz açılışında 4 kez flaş yapıp sistem canlılık göstergesi olarak açık kalmalıdır.
+  - **Beklenen Sonuç:** GPIO 16 üzerinden röle mekanik "tık" sesiyle tetiklenmeli; GPIO 23 üzerindeki LED ise cihaz açılışında 2 kez yanıp sönmeli, sonra Wi-Fi bağlıyken sürekli yanmalıdır (Wi-Fi bağlı değilken yanıp söner: kayıtlı Wi-Fi varsa yaklaşık 0,7 sn, yoksa yaklaşık 0,15 sn aralıkla).
+  - [x] **Kod/test kanıtı:** Röle GPIO 16, aktif HIGH, 1,5 sn (`role_kontrol.h`: `ROLE_PIN`, `ROLE_ACTIVE_LOW`, `ROLE_SURE_MS`); durum LED'i GPIO 23, aktif HIGH (`device_konfig.h`). Açılıştaki 2 yanıp sönme `main.cpp` `setup()` içindedir; Wi-Fi durumuna göre yanma/yanıp sönme `wifi_baglanti.h` `wifiUpdateLed()` içindedir. Bu satır kartı sınamaz. Eski madde açılışta "4 kez flaş" yazıyordu; 2026-10-28'de firmware'e göre düzeltildi.
 - [ ] **10.4. OTA Sonrası Otomatik Wi-Fi RF Temiz Başlatma & Yeniden Bağlanma:**
   - **Nasıl Test Edilir:** Cihaza OTA üzerinden güncelleme gönderin. Güncelleme tamamlanıp cihaz kendi kendine yeniden başladığında seri logu ve ağ durumunu izleyin (cihaza fiziksel olarak dokunmayın).
   - **Beklenen Sonuç:** Cihaz fişi çekilip takılmaya gerek kalmadan, yazılımsal resetin ardından 5-10 saniye içinde Wi-Fi ağına ve MQTT sunucusuna otomatik olarak bağlanmalı ve IP almalıdır.
@@ -579,9 +585,11 @@ Sahada veya uygulamada test ettikçe ilgili kutucukları `- [x]` olarak işaretl
 - [ ] **29.1. ESP32-C3 Süper Mini Donanım & Röle Bütünlüğü (Kural 3):**
   - **Nasıl Test Edilir:** Sahada aktif çalışan ESP32-C3 cihazını açın; hem mobil uygulamadan "Kapıyı Aç" butonuna basın hem de MQTT üzerinden tetikleme yapın.
   - **Beklenen Sonuç:** ESP32-C3 cihazı GPIO 10 üzerinden 1.5s röle pulse üretmeli, GPIO 2 durum LED'i çalışmalı, MQTT bağlantısı kopmamalı ve cihaz işlevleri hiçbir kesintiye uğramamalıdır.
+  - [x] **Kod/test kanıtı:** C3 tanımları: röle GPIO 10 (`role_kontrol.h`), durum LED'i GPIO 2, GM60 UART1 RX 20 / TX 21 (`device_konfig.h`). Pin tablosu: `BEKLEYEN_ISLER.md` bölüm 1.1. C3 derlemesiyle koşan ana makine testleri (`host_test`, `t_mqtt.cpp`) donanımsızdır; sahadaki cihazı sınamaz.
 - [ ] **29.2. ESP32-WROOM-32E Röle Kartı ve GM60 Entegrasyon Bütünlüğü (Kural 4):**
   - **Nasıl Test Edilir:** ESP32-WROOM cihazı üzerindeki GM60 okuyucusuna dinamik QR kodu okutun.
   - **Beklenen Sonuç:** GM60 UART2 (RX: 25, TX: 26) üzerinden okunan QR anında doğrulanmalı; GPIO 16 röle tetiklenmeli, GPIO 23 durum göstergesi stabil kalmalı ve peş peşe tetikleme debounce (5s) devrede olmalıdır.
+  - [x] **Kod/test kanıtı:** WROOM pinleri: GM60 RX 25 / TX 26, röle 16, durum LED'i 23 (`device_konfig.h`, `role_kontrol.h`). 5 sn debounce `gm60_scanner.h` içindedir ve ana makine testi `t_gm60.cpp` ile sınanır. Bu satır kartı sınamaz.
 - [ ] **29.3. Bluetooth ile Wi-Fi Kurulumu (BLE Provisioning) Doğrulaması:**
   - **Nasıl Test Edilir:** Mobil uygulamada "Bluetooth ile Wi-Fi Kur" ekranına girin; cihazı taratıp Wi-Fi ağ bilgilerini gönderin.
   - **Beklenen Sonuç:** BLE tarama ve kimlik aktarımı başarıyla tamamlanmalı; cihaz yeni Wi-Fi bilgilerini alıp ağa bağlanmalıdır.
@@ -1639,7 +1647,7 @@ Yeni, değişen ve sıfırlanan şifre en az 8, en çok 128 karakter (UTF-8'de e
   - **Beklenen Sonuç:** A'da oturum sürer. B giriş ekranına döner ve "Şifreniz değiştirildiği için oturumunuz sonlandırıldı. Lütfen yeniden giriş yapın." gösterir. B'de eski şifre girmez, yeni şifre girer. Parola sürümü (pv) artık zorunludur: bu değişiklikten önce açılmış eski belirteçler de bir kez yeniden giriş ister.
 - [ ] **66.10. (Operasyon) Oturum Süresi ve Gizli Anahtar Ayarları:**
   - **Nasıl Test Edilir:** Sunucuda `pm2 logs kapi-api --lines 200 --nostream` çıktısında son yeniden başlatmadaki "[ENV] UYARI:" satırlarına bakın (değer değil yalnız uyarı metni). `server/.env` içinde `JWT_EXPIRES_IN` ve `JWT_SECRET` uzunluğu kararını verin (değerleri sohbete/depoya yazmayın).
-  - **Beklenen Sonuç:** `JWT_EXPIRES_IN` 90 günden uzunsa (canlıda 365d idi) "JWT_EXPIRES_IN ust siniri asiyor; tokenlar 90 gune kirpilarak uretiliyor. Oneri: JWT_EXPIRES_IN=30d." uyarısı çıkar; öneri 30d. `JWT_SECRET` 32 karakterden kısaysa "JWT_SECRET N karakter; en az 32 karakter onerilir..." uyarısı çıkar (sunucu yine açılır); döndürmek için yeni ≥64 karakterlik sır `JWT_SECRET`'a, eskisi `JWT_SECRET_PREVIOUS` + `JWT_SECRET_PREVIOUS_UNTIL`'e yazılır (tüm oturumlar düşebilir; kullanıcılara duyurun). Kararlar `BEKLEYEN_ISLER.md` içinde sizde bekliyor.
+  - **Beklenen Sonuç:** `JWT_EXPIRES_IN` 90 günden uzunsa (canlıda 365d idi) "JWT_EXPIRES_IN ust siniri asiyor; tokenlar 90 gune kirpilarak uretiliyor. Oneri: JWT_EXPIRES_IN=30d." uyarısı çıkar; öneri 30d. `JWT_SECRET` 32 karakterden kısaysa "JWT_SECRET N karakter; en az 32 karakter onerilir..." uyarısı çıkar (sunucu yine açılır); döndürmek için yeni ≥64 karakterlik sır `JWT_SECRET`'a, eskisi `JWT_SECRET_PREVIOUS` + `JWT_SECRET_PREVIOUS_UNTIL`'e yazılır (tüm oturumlar düşebilir; kullanıcılara duyurun). Güncel durum: bu ayarlar 2026-10-16'da `deploy/remote_deploy.sh envset` ile canlıya uygulandı; kalan işler `BEKLEYEN_ISLER.md` "Canlı parola ve sır döndürme" maddesindedir.
 - [ ] **66.11. (Geliştirici) Giriş Güvenliği Sunucu ve Uygulama Doğrulaması:**
   - **Nasıl Test Edilir:** server klasöründe `node --test test/security_password_policy.test.js test/security_login_guard.test.js test/security_weak_password_routes.test.js test/security_jwt.test.js` çalıştırın. Proje kökünde `flutter test test/password_policy_test.dart` çalıştırın.
   - **Beklenen Sonuç:** Testler yeşil. Eşikler: çift (hesap × cihaz/IP) 5 hata/15 dk → 15, 30, 60 dk, en çok 2 sa; hesap geneli 20 hata/60 dk → 15 dk (en çok 4 sa); kaynak (IP) geneli 30 hata/15 dk → 15 dk (en çok 2 sa); istemci IP'si çözülemezse (Cloudflare kenarı/genel olmayan adres) IP geneli katman uygulanmaz. Güvenilir cihaz belirteci (`device_token`, 180 gün, parola sürümüne bağlı) hesap ve IP geneli kilitlerden muaf tutar ama o cihazın kendi çift kilidinden DEĞİL; parola değişince/sıfırlanınca belirteç muafiyet vermez ve bir sonraki başarılı girişte yenisi verilir. Parola ilkesi girişte uygulanmaz.
