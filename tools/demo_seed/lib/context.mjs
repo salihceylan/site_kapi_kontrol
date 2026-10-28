@@ -20,7 +20,7 @@ export async function loadContext({ q, serverDir, siteQuery }) {
   }));
   const apartments = (
     await q(
-      `SELECT a.id, a.block_id, a.unit_label, a.sort_order, a.floor, a.gross_area_m2, a.net_area_m2, a.land_share_numerator, a.land_share_denominator,
+      `SELECT a.id, a.block_id, a.unit_label, a.sort_order, a.floor, a.land_share_numerator, a.land_share_denominator,
               a.category, a.responsible_party, a.is_active, b.block_name, b.sort_order AS block_order
        FROM apartments a INNER JOIN site_blocks b ON b.id = a.block_id
        WHERE a.site_code = $1 AND a.is_active = TRUE ORDER BY b.sort_order, a.sort_order`,
@@ -34,8 +34,6 @@ export async function loadContext({ q, serverDir, siteQuery }) {
     label: `${a.block_name} - ${a.unit_label}`,
     index,
     floor: a.floor === null ? null : Number(a.floor),
-    gross: a.gross_area_m2 === null ? null : Number(a.gross_area_m2),
-    net: a.net_area_m2 === null ? null : Number(a.net_area_m2),
     shareNum: a.land_share_numerator === null ? null : Number(a.land_share_numerator),
     shareDen: a.land_share_denominator === null ? null : Number(a.land_share_denominator),
     category: a.category,

@@ -33,6 +33,8 @@ export async function seedFinance(ctx) {
 
   // ---- 1) aidat tanimlari ve borclandirma (2023-01 .. bu ay) ---------------------------------------------------------------------
   // Hesap acilmadan once borclandirma yapilabilir (hesap yalniz tahsilat/gider icin zorunlu).
+  // Dagitim ARSA PAYINA gore ('land_share'): m2 dagitimi kaldirildi (sunucu 'area' icin 400 AREA_DISTRIBUTION_REMOVED verir); arsa paylari
+  // people adiminda dairelerin goreli buyuklugune oranli yazilir, boylece daire basina aidat yine farkli ve toplam tam tutardir.
   const defs = {};
   for (const y of [2023, 2024, 2025, 2026]) {
     const created = await svc.finance_service.createDefinition({
@@ -41,8 +43,7 @@ export async function seedFinance(ctx) {
       body: {
         name: `Aylık Aidat ${y}`,
         kind: 'recurring',
-        distribution: 'area',
-        area_basis: 'gross',
+        distribution: 'land_share',
         amount_minor: dues[y],
         due_day: 10,
         start_period: `${y}-01-01`,
@@ -81,8 +82,7 @@ export async function seedFinance(ctx) {
     const body = {
       name: extra.name,
       amount_minor: Math.round(dues[y] * extra.mult),
-      distribution: 'area',
-      area_basis: 'gross',
+      distribution: 'land_share',
       target: { type: 'site' },
       due_date: extra.due,
       charge_party: 'owner',

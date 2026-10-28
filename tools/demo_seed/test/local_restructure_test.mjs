@@ -195,7 +195,8 @@ check('yeni uyelikler yalniz FAMILY_MEMBER (malik / admin disi)', newMem.every((
 
 // degisen tablolar yalniz izinli kumede
 const postCounts = await tableCounts(url);
-const allowed = new Set(['users', 'notification_preferences', 'site_people', 'apartment_residencies', 'apartment_memberships', 'site_memberships', 'apartment_admin_delegations', 'apartments']);
+// apartment_residency_log: migration 075 adli kayit; admin tasima (applyApartmentPrimaryAdmin) 'admin_changed' satiri yazar (cleanup siler).
+const allowed = new Set(['users', 'notification_preferences', 'site_people', 'apartment_residencies', 'apartment_memberships', 'site_memberships', 'apartment_admin_delegations', 'apartments', 'apartment_residency_log']);
 const changedTables = Object.keys(preCounts).filter((t) => preCounts[t] !== postCounts[t]);
 check('yalniz kisi / bag tablolarina satir eklendi', changedTables.every((t) => allowed.has(t)), changedTables.join(','));
 

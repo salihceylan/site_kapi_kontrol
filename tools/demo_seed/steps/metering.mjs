@@ -6,7 +6,7 @@ import { addDays, addMonths, clampDay, daysInMonth, monthsBetween, noonIstanbul,
 
 const UNIT_PRICE_KURUS = { 2023: 1850, 2024: 2900, 2025: 4200, 2026: 5600 };
 const WATER_SEASON = [0.95, 0.92, 0.95, 1.0, 1.05, 1.12, 1.18, 1.18, 1.08, 1.0, 0.96, 0.95];
-const HEAT_KWH = [1500, 1300, 900, 380, 110, 30, 25, 25, 70, 380, 900, 1400]; // 100 m2 daire icin aylik kalorimetre
+const HEAT_KWH = [1500, 1300, 900, 380, 110, 30, 25, 25, 70, 380, 900, 1400]; // 100 puanlik (goreli buyukluk agirligi) referans daire icin aylik kalorimetre
 
 const lastDay = (ym) => clampDay(ym, daysInMonth(ym));
 
@@ -51,7 +51,7 @@ export async function seedMetering(ctx) {
           const a = anomaly.get(m.apt.id);
           if (a && ym >= a.from && ym <= a.to) usage *= a.mult;
         } else {
-          usage = HEAT_KWH[mi] * ((m.apt.gross ?? 100) / 100) * rng.float(0.85, 1.15);
+          usage = HEAT_KWH[mi] * ((m.apt.sizeWeight ?? 100) / 100) * rng.float(0.85, 1.15); // buyuk daire daha cok isi harcar (sizeWeight: people adimi, kayit edilmez)
         }
         cumulative += usage;
       }

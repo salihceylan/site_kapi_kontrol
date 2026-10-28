@@ -83,6 +83,15 @@ try {
 
   const deleted = new Map();
   const restored = new Map();
+  const skippedColumns = new Set();
+  const liveColumnCache = new Map();
+  const liveColumns = async (table) => {
+    if (!liveColumnCache.has(table)) {
+      const res = await q(`SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = $1`, [table]);
+      liveColumnCache.set(table, new Set(res.rows.map((r) => r.column_name)));
+    }
+    return liveColumnCache.get(table);
+  };
   let files = 0;
   // replica modunda FK/tetikleyici yoktur: sira sonucu etkilemez; yine de tablolar "en son eklenenden once" (ters sira) islenir.
   const groups = new Map();
@@ -118,9 +127,13 @@ try {
     }
     const keyExpr = cols.map((c) => `"${c}"::text`).join(` || '|' || `);
     if (head.op === 'update') {
+      // before_image tablo satirinin TUM sutunlarini tutar; o gunden sonra DUSURULEN sutunlar (ornegin 078 oncesi batch'lerde apartments.gross_area_m2 /
+      // net_area_m2) tabloda artik yoktur: geri yuklenemez (m2 sistemde yok, geri eklenmez) -> atlanir, geri kalan alanlar yine geri yuklenir.
+      const live = await liveColumns(head.table_name);
       for (const r of group) {
         const image = r.before_image;
-        const setCols = Object.keys(image).filter((k) => !cols.includes(k));
+        for (const k of Object.keys(image)) if (!live.has(k)) skippedColumns.add(`${head.table_name}.${k}`);
+        const setCols = Object.keys(image).filter((k) => !cols.includes(k) && live.has(k));
         if (setCols.length === 0) continue;
         const setSql = setCols.map((c) => `"${c}" = rec."${c}"`).join(', ');
         const res = await q(
@@ -142,6 +155,7 @@ try {
   console.log(`Silinen satir: ${sumDeleted}  geri yuklenen: ${[...restored.values()].reduce((s, v) => s + v, 0)}  dosya: ${files}`);
   for (const [table, n] of [...deleted.entries()].sort((a, b) => b[1] - a[1])) console.log(`  ${table.padEnd(34)} ${n}`);
   for (const [table, n] of restored) console.log(`  (geri yuklendi) ${table} ${n}`);
+  if (skippedColumns.size > 0) console.log(`  (atlandi: sutun artik yok, geri yuklenmedi) ${[...skippedColumns].sort().join(', ')}`);
 } catch (error) {
   try {
     await q('ROLLBACK');
