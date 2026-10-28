@@ -6,6 +6,7 @@ import 'package:site_kapi_kontrol/models/cash_models.dart';
 import 'package:site_kapi_kontrol/models/finance.dart';
 import 'package:site_kapi_kontrol/models/finance_funds.dart';
 import 'package:site_kapi_kontrol/models/vehicle_record.dart' show crmDateParam;
+import 'package:site_kapi_kontrol/services/api_exception.dart' show ApiException;
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
@@ -29,7 +30,7 @@ import 'package:site_kapi_kontrol/ui/helpers/text_length.dart';
 import 'package:site_kapi_kontrol/ui/widgets/crm_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_4b_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_account_parts.dart';
-import 'package:site_kapi_kontrol/ui/widgets/finance_fund_parts.dart';
+import 'package:site_kapi_kontrol/ui/widgets/finance_fund_choice_panel.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/money_field.dart';
 
@@ -67,11 +68,14 @@ class FinancePaymentOutcome {
 ///   sürerken kayıt gönderilmez (seçim sonradan çıkıp işlem anahtarını değiştirmesin; çift tahsilat koruması).
 ///   Düzeltmede seçim eski tahsilatın hesabıyla başlar; değiştirilirse yeni tahsilat diğer hesaba yazılır (ters kayıt eski
 ///   hesapta kalır).
-/// - İki kasa: "Kasa" seçimi — Otomatik (en eski vade önce) / İşletme Projesi (Aidat) Hesabı / Yatırım ve Demirbaş (Fon)
-///   Hesabı. Otomatik seçilirse gövdede `fund` yoktur; bir kasa seçilirse tahsilat YALNIZ o kasanın borçlarına uygulanır
-///   (artanı o kasanın avansıdır). Kayıttan sonra sunucunun `fund_split` yanıtı ("Aidat Hesabı ..., Fon Hesabı ..., avans ...")
-///   iletiye eklenir. Düzeltmede seçim asıl tahsilatın kısıtıyla başlar; asıl kayıt kısıtlıysa "Otomatik" sunulmaz (sunucu
-///   asıl kısıtı kaldıramaz), kasa DEĞİŞTİRİLMEZSE gövdede `fund` gönderilmez (sunucu asıl kısıtı korur).
+/// - İşletme / Fon hesabı (K3, P1-3): yazılım ödemeyi kendiliğinden atamaz ([FundChoicePanel]). Daire hesabında İKİ türün de (İşletme
+///   Projesi (Aidat) Hesabı + Yatırım ve Demirbaş (Fon) Hesabı) açık borcu varsa seçim ZORUNLUDUR (seçilmeden kayıt gönderilmez; sunucu da
+///   400 FUND_CHOICE_REQUIRED ile reddeder); yalnız bir türün borcu varsa o hesap seçili gelir (değiştirilebilir); borç yoksa seçim isteğe
+///   bağlıdır (seçilmezse gövdede `fund` yoktur, tutar genel avans olur). Seçilen hesapta tahsilat YALNIZ o hesabın borçlarına uygulanır
+///   (artanı o hesabın avansıdır). Kayıttan sonra sunucunun `fund_split` yanıtı ("Aidat Hesabı ..., Fon Hesabı ..., avans ...") iletiye
+///   eklenir. Düzeltmede seçim asıl tahsilatın kısıtıyla başlar; asıl kayıt kısıtlıysa "Otomatik" sunulmaz (sunucu asıl kısıtı kaldıramaz),
+///   hesap DEĞİŞTİRİLMEZSE gövdede `fund` gönderilmez (sunucu asıl kısıtı korur); sunucu iki türlü borç nedeniyle seçim isterse panel zorunlu
+///   kipe geçer.
 class FinancePaymentDialog extends StatefulWidget {
   const FinancePaymentDialog({
     super.key,
@@ -83,9 +87,13 @@ class FinancePaymentDialog extends StatefulWidget {
     this.onRefreshNeeded,
     this.accountParty,
     this.accountChoice,
+    this.fundChoiceLoader,
   });
 
   final PeopleScope scope;
+
+  /// K3: İşletme / Fon hesabı bilgisi yükleyicisi (testlerde sahte verilir); null ise `GET payments/fund-choice`.
+  final Future<FundChoiceInfo> Function({required int apartmentId, AccountParty? accountParty, int? amountMinor, DateTime? paidOn})? fundChoiceLoader;
 
   /// Önceden seçili daire (ekstreden açılınca); null ise daire seçici gösterilir.
   final int? apartmentId;
@@ -118,6 +126,7 @@ class FinancePaymentDialog extends StatefulWidget {
     VoidCallback? onRefreshNeeded,
     AccountParty? accountParty,
     bool? accountChoice,
+    Future<FundChoiceInfo> Function({required int apartmentId, AccountParty? accountParty, int? amountMinor, DateTime? paidOn})? fundChoiceLoader,
   }) {
     return showDialog<FinancePaymentOutcome>(
       context: context,
@@ -131,6 +140,7 @@ class FinancePaymentDialog extends StatefulWidget {
         onRefreshNeeded: onRefreshNeeded,
         accountParty: accountParty,
         accountChoice: accountChoice,
+        fundChoiceLoader: fundChoiceLoader,
       ),
     );
   }
@@ -188,8 +198,15 @@ class _FinancePaymentDialogState extends State<FinancePaymentDialog> with Financ
   String? _partyError;
   int _partyToken = 0;
 
-  // İki kasa: null = Otomatik (en eski vade önce). Düzeltmede asıl tahsilatın kısıtıyla başlar.
+  // İşletme / Fon hesabı (K3): yazılım ödemeyi kendiliğinden atamaz. İki türün de açık borcu varsa seçim ZORUNLU; tek türde önerilen hesap seçili gelir;
+  // borçsuzda null = seçilmedi (genel avans). Düzeltmede asıl tahsilatın kısıtıyla başlar.
   late FinanceFund? _fund = widget.correcting?.fund;
+  final GlobalKey _fundKey = GlobalKey();
+  final FocusNode _fundFocus = FocusNode(skipTraversal: true, canRequestFocus: false);
+  FundChoiceState _fundState = const FundChoiceState();
+  FundChoiceInfo? _forcedFundInfo; // sunucunun 400 FUND_CHOICE_REQUIRED yanıtı (yetkili durum)
+  bool _fundRequiredByServer = false;
+  String? _fundError;
 
   bool _submitting = false;
   bool _picking = false;
@@ -245,11 +262,24 @@ class _FinancePaymentDialogState extends State<FinancePaymentDialog> with Financ
   }
 
   static const String _partyPendingMessage = 'Daire hesapları yükleniyor; birkaç saniye sonra yeniden deneyin.';
+  static const String _fundPendingMessage = 'İşletme / Fon hesabı bilgisi yükleniyor; birkaç saniye sonra yeniden deneyin.';
+  static const String _fundMissingMessage = 'Ödemenin işleneceği İşletme / Fon hesabını seçin.';
+
+  /// İki türün de açık borcu var (sunucu bilgisi ya da 400 yanıtı): seçim zorunlu.
+  bool get _fundRequired => (_forcedFundInfo ?? _fundState.info)?.choiceRequired == true || _fundRequiredByServer;
+
+  /// Daire ya da daire hesabı değişti: önceki hesabın bilgisi / sunucu yanıtı geçmez.
+  void _resetFundContext() {
+    _forcedFundInfo = null;
+    _fundRequiredByServer = false;
+    _fundError = null;
+  }
 
   @override
   void dispose() {
     ++_cashToken;
     ++_partyToken;
+    _fundFocus.dispose();
     _partyFocus.dispose();
     _accountFocus.dispose();
     _retry.dispose();
@@ -379,6 +409,7 @@ class _FinancePaymentDialogState extends State<FinancePaymentDialog> with Financ
           _party = null;
           _partyChoice = false;
           _partyError = null;
+          _resetFundContext();
         }
       });
       if (changed) unawaited(_probeParties(picked.id));
@@ -422,13 +453,15 @@ class _FinancePaymentDialogState extends State<FinancePaymentDialog> with Financ
   bool _validateChoices() {
     final accountMissing = _accountRequired && _accountId == null;
     final partyMissing = _partyChoice && _party == null;
+    final fundMissing = _fundRequired && _fund == null;
     setState(() {
       _apartmentError = _apartment == null ? 'Daire seçin.' : null;
       _methodError = _method == null ? 'Tahsilat yöntemini seçin.' : null;
       _accountError = accountMissing ? 'Tahsilatın gireceği hesabı seçin.' : null;
       _partyError = partyMissing ? 'Tahsilatın yazılacağı daire hesabını seçin.' : null;
+      _fundError = fundMissing ? _fundMissingMessage : null;
     });
-    return _apartment != null && _method != null && !accountMissing && !partyMissing;
+    return _apartment != null && _method != null && !accountMissing && !partyMissing && !fundMissing;
   }
 
   bool _showAndFocus(GlobalKey key, FocusNode focus) {
@@ -445,7 +478,8 @@ class _FinancePaymentDialogState extends State<FinancePaymentDialog> with Financ
     if (_partyError != null && _showAndFocus(_partyKey, _partyFocus)) return;
     if (revealFirstInvalidField(formContext)) return;
     if (_methodError != null && _showAndFocus(_methodKey, _methodFocus)) return;
-    if (_accountError != null) _showAndFocus(_accountKey, _accountFocus);
+    if (_accountError != null && _showAndFocus(_accountKey, _accountFocus)) return;
+    if (_fundError != null) _showAndFocus(_fundKey, _fundFocus);
   }
 
   Future<void> _submit() async {
@@ -454,6 +488,11 @@ class _FinancePaymentDialogState extends State<FinancePaymentDialog> with Financ
     // anahtarı) değişir: sonucu belirsiz kalan ilk denemeden sonra yeniden gönderim yeni anahtarla İKİNCİ tahsilatı yazabilirdi.
     if (_partyLoading) {
       setState(() => _error = _partyPendingMessage);
+      return;
+    }
+    // K3: İşletme / Fon hesabı bilgisi yüklenirken gönderilmez (önerilen hesap seçili gelmeden kayıt kısıtsız giderdi).
+    if (_fundState.loading) {
+      setState(() => _error = _fundPendingMessage);
       return;
     }
     final fieldsOk = validateForm(
@@ -586,6 +625,16 @@ class _FinancePaymentDialogState extends State<FinancePaymentDialog> with Financ
       if (hasErrorCode(e, 'IDEMPOTENCY_CONFLICT')) {
         _keys.clear(signature);
         _needsRefreshOnClose = true;
+      }
+      // K3: iki türün de açık borcu var ve hesap seçilmedi (bilgi bayattı ya da düzeltme yolu): sunucunun yetkili durumu panele işlenir, seçim istenir.
+      if (hasErrorCode(e, 'FUND_CHOICE_REQUIRED') && mounted) {
+        final payload = (e as ApiException).payload;
+        final forced = FundChoiceInfo.tryParse(payload?['fund_choice']);
+        setState(() {
+          _forcedFundInfo = forced;
+          _fundRequiredByServer = true;
+          _fundError = _fundMissingMessage;
+        });
       }
       // Sunucu hesap istiyor ama liste henüz yüklenmemişti / pasif hesap seçilmişti: hesaplar yeniden okunur.
       if (hasErrorCode(e, 'ACCOUNT_REQUIRED') || hasErrorCode(e, 'ACCOUNT_INACTIVE')) {
@@ -728,6 +777,7 @@ class _FinancePaymentDialogState extends State<FinancePaymentDialog> with Financ
                       onSelected: (value) => setState(() {
                         if (value == null) return;
                         markDirty();
+                        if (_party != value) _resetFundContext();
                         _party = value;
                         _partyError = null;
                       }),
@@ -856,26 +906,48 @@ class _FinancePaymentDialogState extends State<FinancePaymentDialog> with Financ
     );
   }
 
-  /// İki kasa seçimi. Düzeltmede asıl tahsilat kısıtlıysa "Otomatik" sunulmaz (sunucu asıl kısıtı kaldıramaz).
+  /// İşletme / Fon hesabı seçimi (K3): yazılım ödemeyi kendiliğinden atamaz. Yeni tahsilatta durum sunucudan okunur (iki türlü borçta seçim
+  /// zorunlu, tek türde öneri seçili gelir); tutar yazıldıkça otomatik dağıtım önerisi (yalnız bilgi) tazelenir. Düzeltmede asıl kayıt hâlâ
+  /// defterde olduğundan sunucu bilgisi okunmaz: asıl tahsilat kısıtlıysa "Otomatik" sunulmaz (sunucu asıl kısıtı kaldıramaz); sunucu iki türlü
+  /// borç nedeniyle seçim isterse (400) panel zorunlu kipe geçer.
   Widget _buildFundSection() {
     final restricted = _correcting && widget.correcting!.fund != null;
-    return FundChoice(
-      key: const ValueKey<String>('finance_payment_fund'),
-      title: 'Kasa',
-      selected: _fund,
-      enabled: !_submitting,
-      allowAuto: !restricted,
-      keyPrefix: 'finance_payment_fund',
-      noteFor: (_) => 'yalnız bu hesabın borçlarına uygulanır; fazlası avans olur',
-      footer: _correcting
-          ? (restricted
-                ? 'Asıl tahsilat yalnız ${widget.correcting!.fund!.shortLabel} borçlarına uygulanmıştı; kasayı değiştirmezseniz aynı kısıt korunur.'
-                : 'Seçmezseniz düzeltilen tahsilat da otomatik dağıtılır.')
-          : 'Seçmezseniz tahsilat otomatik dağıtılır. Kayıttan sonra kasalara dağılım gösterilir.',
-      onSelected: (value) => setState(() {
-        markDirty();
-        _fund = value;
-      }),
+    return KeyedSubtree(
+      key: _fundKey,
+      child: Focus(
+        focusNode: _fundFocus,
+        child: ValueListenableBuilder<TextEditingValue>(
+          valueListenable: _amount,
+          builder: (context, _, _) => FundChoicePanel(
+            key: const ValueKey<String>('finance_payment_fund'),
+            scope: widget.scope,
+            apartmentId: _apartment?.id,
+            accountParty: _partyChoice ? _party : null,
+            amountMinor: parseMoney(_amount.text).minor,
+            selected: _fund,
+            enabled: !_submitting,
+            load: !_correcting,
+            loader: widget.fundChoiceLoader,
+            forcedInfo: _forcedFundInfo,
+            legacyAllowAuto: !restricted,
+            legacyFooter: _correcting
+                ? (restricted
+                      ? 'Asıl tahsilat yalnız ${widget.correcting!.fund!.shortLabel} borçlarına uygulanmıştı; hesabı değiştirmezseniz aynı kısıt korunur.'
+                      : 'Seçmezseniz düzeltilen tahsilat otomatik dağıtılır; iki hesapta da açık borç varsa seçim istenir.')
+                : null,
+            keyPrefix: 'finance_payment_fund',
+            errorText: _fundError,
+            onChanged: (value) => setState(() {
+              markDirty();
+              _fund = value;
+              _fundError = null;
+            }),
+            onStateChanged: (state) {
+              if (mounted && state != _fundState) setState(() => _fundState = state);
+            },
+          ),
+        ),
+      ),
     );
   }
 

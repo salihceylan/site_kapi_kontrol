@@ -44,6 +44,21 @@ Bu belge sunucu (`server/`) ve uygulama (`lib/`) için BAĞLAYICIDIR. Öncül be
 - Bu kural daire ekstresinde kasa bazında açık borç, sakinin "Borcum" ekranında kasa kırılımı ve kasa bakiyelerinin TEK kaynağıdır (tek saf
   işlev; birim testleriyle sabitlenir).
 
+### 3.1 Hesap (İşletme / Fon) seçimi: yazılım ödemeyi kendiliğinden atamaz (K3, 2026-10-28; sahip kararı, karşılaştırma raporu P1-3)
+
+- **Kural.** Tahsilatın hangi hesaba (İşletme Projesi (Aidat) Hesabı / Yatırım ve Demirbaş (Fon) Hesabı) gireceğini yönetici belirler. Bir daire hesabında (daire + ev sahibi / kiracı hesabı) `allocateFunds` sonucundaki AÇIK borca göre:
+  - **İki türün de açık borcu varsa seçim ZORUNLUDUR.** `fund` verilmeyen tahsilat 400 `FUND_CHOICE_REQUIRED` ile reddedilir (hiçbir satır yazılmaz); hata gövdesi `fund_choice` ek alanıyla açık borçları taşır.
+  - **Yalnız bir türün açık borcu varsa** önerilen hesap formda SEÇİLİ gelir (yönetici değiştirebilir). Sunucu kendiliğinden kısıt atamaz: kısıt, istemci seçili gönderirse yazılır; gönderilmezse (eski istemci) kısıtsız kalır (zaten tek türe uygulanır).
+  - **Açık borç yoksa** seçim zorunlu değildir; tutar genel avans olur ve sonradan yazılan borca eskisi gibi mahsup edilir.
+  Dağıtım ikinci yerde hesaplanmaz: açık borçlar `allocateFunds` sonucundan okunur (`finance_fund_choice.js`). Borç düzeyindeki "en eski vade önce" mahsup kuralı DEĞİŞMEZ.
+- **Uygulandığı yollar** (hepsi tek giriş noktası `finance_parties.postPayment` içinde denetlenir; idempotent tekrar denetimden geçmez):
+  elle tahsilat (`POST payments`); tahsilat düzeltmesi (`entries/:id/correct`: yeni tahsilat ters kayıttan SONRA denetlenir, asıl kayıt kısıtlıysa kısıt korunur); dekont onayı (`payment-notices/:id/approve` gövdesinde `fund`; toplu onayda iki türlü satır `FUND_CHOICE_REQUIRED` koduyla tek tek başarısız olur);
+  banka satırı "Daireye işle" (`bank-lines/:id/assign` gövdesinde `fund`) ve onay (`bank-lines/confirm` gövdesinde SATIR BAŞINA `fund_choices: [{ line_id, fund }]`; seçim gereken satır `failed` listesinde kalır, bir satırın seçimi başkasına uygulanmaz);
+  banka dosyası yüklemesi (iki türlü borçlu daireye eşleşen güçlü satır OTOMATİK işlenmez: önizlemede `check` + `FUND_CHOICE_REQUIRED` uyarısı ve `summary.fund_choice` sayısı, kayıtta `suggested` + satır notu `FUND_CHOICE_REQUIRED`).
+- **Uç.** `GET …/finance/payments/fund-choice?apartment_id=&account_party=&amount_minor=&paid_on=` (yazma yetkisi; kurul / görevli / sakin 403; yazmaz) → `{ apartment_id, account_party, open: { operating_minor, capital_minor }, advance_minor, choice_required, suggested_fund, proposal }`. `account_party` verilmezse tahsilat hesabı `postPayment` ile aynı kuralla çözülür. `proposal` (yalnız `amount_minor` verilmişse) otomatik dağıtımın NE yapacağını yalnız BİLGİ olarak gösterir.
+- **Arayüz.** Tahsilat, dekont inceleme, "Daireye işle" ve "Tek tek gözden geçir" pencereleri aynı parçayı kullanır (`FundChoicePanel`, başlık "İşletme / Fon hesabı"): iki türde "Otomatik" yoktur ve seçim yapılmadan kayıt GÖNDERİLMEZ; tek türde öneri seçili gelir; borçsuzda "Hesap seçmeden (genel avans)". Tahsilat düzeltmede asıl kayıt hâlâ defterde olduğundan durum okunmaz; sunucu 400 verirse panel zorunlu kipe geçer.
+- **Bölme yok.** Tutarı iki hesaba bölmek için iki ayrı tahsilat girilir (ayrı makbuz); bölünmüş tahsilat ve karar defteri bağlantısı bu sürümde yoktur.
+
 ## 4. Gider ve kasa bakiyesi
 
 - `expense_categories.fund` (varsayılan `operating`); her siteye sistem kategorisi **"Yatırım ve demirbaş"** (`capital`) eklenir (idempotent).
@@ -73,7 +88,7 @@ Bu belge sunucu (`server/`) ve uygulama (`lib/`) için BAĞLAYICIDIR. Öncül be
 
 - Tanım formu: "Kim öder" yerine **"Kasa"** seçimi: "İşletme Projesi (Aidat) Hesabı — dairede oturan öder (kiracı varsa kiracı)" ve
   "Yatırım ve Demirbaş (Fon) Hesabı — malik öder". Listelerde kasa etiketi.
-- Tahsilat formu: "Kasa" (Otomatik — en eski vade önce / İşletme / Fon). Kaydedince dağıtım gösterilir.
+- Tahsilat formu: "İşletme / Fon hesabı" seçimi (K3, §3.1): iki türlü borçta zorunlu, tek türde önerilen hesap seçili, borçsuzda isteğe bağlı. Kaydedince dağılım gösterilir.
 - Gider formu ve kategori yönetimi: "Kasa".
 - Finans > Kasa sekmesinin üstünde iki kasa kartı (bakiye, dönem tahsilatı, gideri, aktarımlar) + avans satırı + "Kasalar arası aktarım";
   altında mevcut nakit / banka hesapları listesi.

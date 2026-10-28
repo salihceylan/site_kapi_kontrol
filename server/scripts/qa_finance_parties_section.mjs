@@ -1044,7 +1044,8 @@ export default async function sectionParties(t) {
   const actor = { user_code: MGR, role: 'site_manager' };
   const direct = (over = {}) =>
     withFinanceTransaction(M.code, (client) =>
-      postPayment(client, { siteCode: M.code, apartmentId: A3, accountParty: 'owner', amountMinor: 1500, paidOn: TODAY, method: 'transfer', description: null, sourceKind: 'bank_line', sourceId: 7001, idempotencyKey: 'p-bank-7001', actor, ...over }),
+      // K3 (P1-3): A3 ev sahibi hesabinda Aidat + Fon borcu birlikte acik olabilir; kisitsiz kayit reddedilirdi => hesap secimi (Isletme) acikca verilir
+      postPayment(client, { siteCode: M.code, apartmentId: A3, accountParty: 'owner', amountMinor: 1500, paidOn: TODAY, method: 'transfer', description: null, sourceKind: 'bank_line', sourceId: 7001, idempotencyKey: 'p-bank-7001', fund: 'operating', actor, ...over }),
     );
   const first = await direct();
   const again = await direct();

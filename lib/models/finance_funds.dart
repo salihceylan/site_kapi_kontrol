@@ -180,3 +180,71 @@ class FundBreakdown {
   @override
   int get hashCode => Object.hash(operating, capital);
 }
+
+/// Tahsilatın İşletme / Fon hesabı seçim durumu (K3; `GET .../payments/fund-choice` yanıtı ve 400 `FUND_CHOICE_REQUIRED` hata
+/// gövdesindeki `fund_choice`). Yazılım ödemeyi kendiliğinden bir hesaba atamaz:
+/// - İKİ türün de açık borcu varsa [choiceRequired] true'dur ve seçim ZORUNLUDUR (sunucu seçimsiz kaydı 400 ile reddeder);
+/// - yalnız bir türün açık borcu varsa [suggestedFund] o hesaptır (form seçili getirir, yönetici değiştirebilir);
+/// - açık borç yoksa ikisi de yoktur (tutar genel avans olur).
+/// [proposal], tutar verildiyse otomatik dağıtımın NE YAPACAĞINI yalnız bilgi olarak gösterir (hiçbir şey yazılmaz).
+@immutable
+class FundChoiceInfo {
+  const FundChoiceInfo({
+    required this.accountParty,
+    required this.openOperatingMinor,
+    required this.openCapitalMinor,
+    this.advanceMinor = 0,
+    required this.choiceRequired,
+    this.suggestedFund,
+    this.proposal,
+  });
+
+  /// Daire hesabı: `owner` | `tenant` (sunucunun çözdüğü; istekte verilmemişse varsayılan tahsilat hesabı).
+  final String accountParty;
+  final int openOperatingMinor;
+  final int openCapitalMinor;
+
+  /// Toplam avans (kısıtlı + kısıtsız).
+  final int advanceMinor;
+  final bool choiceRequired;
+  final FinanceFund? suggestedFund;
+  final FundSplit? proposal;
+
+  bool get hasOpenDebt => openOperatingMinor > 0 || openCapitalMinor > 0;
+
+  int openOf(FinanceFund fund) => fund == FinanceFund.operating ? openOperatingMinor : openCapitalMinor;
+
+  /// Yanıt gövdesi okunabiliyorsa bilgi; bozuksa null (uydurma 0 yazılmaz).
+  static FundChoiceInfo? tryParse(Object? raw) {
+    if (raw is! Map) return null;
+    final open = raw['open'];
+    if (open is! Map) return null;
+    final operating = fundMinor(open['operating_minor']);
+    final capital = fundMinor(open['capital_minor']);
+    if (operating == null || capital == null || operating < 0 || capital < 0) return null;
+    return FundChoiceInfo(
+      accountParty: raw['account_party'] == 'tenant' ? 'tenant' : 'owner',
+      openOperatingMinor: operating,
+      openCapitalMinor: capital,
+      advanceMinor: fundMinor(raw['advance_minor']) ?? 0,
+      choiceRequired: raw['choice_required'] == true,
+      suggestedFund: FinanceFund.tryParse(raw['suggested_fund']),
+      proposal: FundSplit.tryParse(raw['proposal']),
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is FundChoiceInfo &&
+      other.accountParty == accountParty &&
+      other.openOperatingMinor == openOperatingMinor &&
+      other.openCapitalMinor == openCapitalMinor &&
+      other.advanceMinor == advanceMinor &&
+      other.choiceRequired == choiceRequired &&
+      other.suggestedFund == suggestedFund &&
+      other.proposal == proposal;
+
+  @override
+  int get hashCode =>
+      Object.hash(accountParty, openOperatingMinor, openCapitalMinor, advanceMinor, choiceRequired, suggestedFund, proposal);
+}

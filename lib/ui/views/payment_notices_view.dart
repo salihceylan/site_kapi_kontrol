@@ -140,7 +140,10 @@ class PaymentNoticesViewState extends State<PaymentNoticesView> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text('Toplam ${formatMinor(total)} tahsilat ve makbuz oluşur. Önemli uyarısı olan dekontlar atlanır; onları tek tek inceleyin.'),
+              Text(
+                'Toplam ${formatMinor(total)} tahsilat ve makbuz oluşur. Önemli uyarısı olan dekontlar ile dairesinde İşletme ve Fon borcu birlikte açık olanlar '
+                '(ödemenin hesabını siz seçersiniz) atlanır; onları tek tek inceleyin.',
+              ),
               if (accounts.isNotEmpty) ...[
                 const SizedBox(height: AppSpace.md),
                 DropdownButtonFormField<int?>(

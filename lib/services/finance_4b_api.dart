@@ -1301,6 +1301,34 @@ class Finance4bApi {
     return _parse('Düzeltme', () => LedgerWriteResult.fromJson(r.body));
   }
 
+  /// K3: tahsilatın İşletme / Fon hesabı seçim durumu (`GET payments/fund-choice`). Daire hesabında iki türün de açık borcu varsa
+  /// seçim ZORUNLUDUR; tek türde önerilen hesap seçili gelir. [accountParty] verilmezse sunucu tahsilat hesabını kendi kuralıyla
+  /// seçer (yanıttaki `account_party`). [amountMinor] verilirse otomatik dağıtımın önerisi (`proposal`, yalnız bilgi) da gelir.
+  /// Bu uç yazmaz; yazma yetkisi gerektirir (kurul 403).
+  Future<FundChoiceInfo> getFundChoice({
+    required String token,
+    required int siteCode,
+    required int apartmentId,
+    AccountParty? accountParty,
+    int? amountMinor,
+    DateTime? paidOn,
+  }) async {
+    final r = await _send(
+      'GET',
+      _site(siteCode, 'payments/fund-choice'),
+      token: token,
+      query: <String, String>{
+        'apartment_id': '$apartmentId',
+        if (accountParty != null) 'account_party': accountParty.apiValue,
+        if (amountMinor != null && amountMinor > 0) 'amount_minor': '$amountMinor',
+        if (paidOn != null) 'paid_on': crmDateParam(paidOn),
+      },
+    );
+    final info = FundChoiceInfo.tryParse(r.body);
+    if (info == null) throw ApiException('Hesap bilgisi işlenemedi. Lütfen tekrar deneyin.');
+    return info;
+  }
+
   // --- İki kasa (İşletme Projesi (Aidat) Hesabı / Yatırım ve Demirbaş (Fon) Hesabı) ----------------
 
   /// Kasa özeti: iki kasanın açılış / tahsilat / gider / aktarım / düzeltme / bakiye değerleri + avans. [from] / [to] dönem

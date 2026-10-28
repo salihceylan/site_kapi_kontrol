@@ -7,7 +7,8 @@ import { actorFromAuthUser } from './audit_service.js';
 import { registerAttentionSource } from './attention_registry.js';
 import { PlatformError } from './errors.js';
 import { reverseEntry } from './finance_ledger_service.js';
-import { postPayment } from './finance_parties.js';
+import { defaultPaymentParty, postPayment } from './finance_parties.js';
+import { loadFundChoice } from './finance_fund_choice.js';
 import { periodOfDate, today } from './finance_common.js';
 import { isPeriodClosed, recordFinanceAudit, withFinanceTransaction } from './finance_tx.js';
 import { apartmentLabel } from './people_common.js';
@@ -15,6 +16,8 @@ import { computeFingerprints, computeLegacyFingerprints, matchLine, normalizeIba
 import { buildUnitIndex, periodHintOf } from './bank_match_hints.js';
 import {
   MAX_AUTO_POST,
+  NOTE_FUND_CHOICE,
+  NOTE_REVIEW_EACH,
   accountNotFound,
   alreadyReverted,
   fileAlreadyImported,
@@ -156,6 +159,7 @@ async function analyze(db, siteCode, input, now) {
   );
   const known = new Set((dup.rows ?? []).map((r) => r.fingerprint));
   const closed = new Map();
+  const fundChoice = new Map(); // K3: "daire:hesap" -> iki türün de açık borcu var mı (analiz sırasında defter değişmez)
   const claimed = [];
   const rows = [];
   for (let i = 0; i < input.lines.length; i += 1) {
@@ -208,6 +212,19 @@ async function analyze(db, siteCode, input, now) {
         ambiguousLink = true; // kontrol bölümüne düşer
       }
     }
+    if (match && match.strength === 'strong' && !linkedEntryId && !ambiguousLink) {
+      // K3 (P1-3): yazılım ödemeyi kendiliğinden İşletme / Fon hesabına atamaz. Eşleşen daire hesabında İKİ türün de açık borcu varsa satır OTOMATİK işlenmez
+      // ("kontrol edin"e düşer); yönetici onayda hesabı seçer. Tek tür borçta ya da borçsuzda eskisi gibi işlenir. Gerçek denetim postPayment'tadır.
+      const party = match.party ?? (await defaultPaymentParty(db, { siteCode, apartmentId: match.apartmentId, onDate: line.value_date }));
+      const key = `${match.apartmentId}:${party}`;
+      if (!fundChoice.has(key)) {
+        fundChoice.set(key, (await loadFundChoice(db, { siteCode, apartmentId: match.apartmentId, accountParty: party })).choice.required);
+      }
+      if (fundChoice.get(key)) {
+        warnings.push(NOTE_FUND_CHOICE);
+        ambiguousLink = true;
+      }
+    }
     rows.push({ ...line, fingerprint, match, linkedEntryId, warnings, outcome: outcomeOf({ line, duplicate, match, linkedEntryId, ambiguousLink }) });
   }
   const warnings = [];
@@ -247,7 +264,8 @@ export async function previewImport({ siteCode, body, now = new Date() }) {
   const labels = await labelsOf(pool, siteCode, result.rows.map((r) => r.match?.apartmentId));
   return {
     preview_hash: result.hash,
-    summary: result.summary,
+    // fund_choice (K3): tanınmış olsa da İşletme / Fon hesabı seçimi gerektiği için otomatik işlenmeyip "kontrol edin"e düşen satır sayısı
+    summary: { ...result.summary, fund_choice: result.rows.filter((r) => r.warnings.includes(NOTE_FUND_CHOICE)).length },
     warnings: result.warnings,
     lines: result.rows.map((r) => ({
       n: r.n,
@@ -262,7 +280,11 @@ export async function previewImport({ siteCode, body, now = new Date() }) {
 
 // --- Yükleme ----------------------------------------------------------------------------------------------
 
-const requestFingerprint = (input) => createHash('sha256').update(JSON.stringify([input.accountId, input.file.sha256, input.expectedHash])).digest('hex');
+// C-26: "tek tek gözden geçir" seçeneği parmak izine YALNIZ seçiliyse girer (varsayılan istek eski parmak izini korur; aynı anahtar + farklı seçenek = 409).
+const requestFingerprint = (input) =>
+  createHash('sha256')
+    .update(JSON.stringify(input.reviewEach === true ? [input.accountId, input.file.sha256, input.expectedHash, 'review_each'] : [input.accountId, input.file.sha256, input.expectedHash]))
+    .digest('hex');
 
 function importDto(row) {
   return {
@@ -300,13 +322,26 @@ export async function commitImport({ siteCode, body, actor, now = new Date() }) 
     rows.forEach((r, i) => {
       r.id = num(idRes.rows[i].id);
       r.status = r.outcome === 'check' ? 'suggested' : 'unmatched';
-      r.note = r.warnings.includes('PERIOD_CLOSED') ? 'PERIOD_CLOSED' : r.warnings.includes('POSSIBLE_DUPLICATE_PAYMENT') ? 'POSSIBLE_DUPLICATE_PAYMENT' : null;
+      r.note = r.warnings.includes('PERIOD_CLOSED')
+        ? 'PERIOD_CLOSED'
+        : r.warnings.includes('POSSIBLE_DUPLICATE_PAYMENT')
+          ? 'POSSIBLE_DUPLICATE_PAYMENT'
+          : r.warnings.includes(NOTE_FUND_CHOICE)
+            ? NOTE_FUND_CHOICE
+            : null;
       r.entryId = null;
     });
     // tanınanlar daire sırasıyla işlenir; kayıt başına en çok MAX_AUTO_POST
     const toPost = rows.filter((r) => r.outcome === 'recognized').sort((a, b) => a.match.apartmentId - b.match.apartmentId || a.n - b.n);
     let posted = 0;
     for (const r of toPost) {
+      if (input.reviewEach) {
+        // C-26: "güçlü eşleşmeleri de tek tek gözden geçir" seçildi; hiçbir tahsilat kendiliğinden yazılmaz. Satır önerili daireyle "kontrol edin"e düşer
+        // (Banka Ödemeleri ekranında tek tek ya da toplu onaylanır). Seçilmezse (varsayılan) davranış aynen eskisidir.
+        r.status = 'suggested';
+        r.note = NOTE_REVIEW_EACH;
+        continue;
+      }
       if (posted >= MAX_AUTO_POST) {
         r.status = 'suggested';
         r.note = 'LIMIT';
@@ -364,7 +399,13 @@ export async function commitImport({ siteCode, body, actor, now = new Date() }) 
          r.match?.party ?? null, r.entryId, r.note],
       );
     }
-    await recordFinanceAudit(client, actor, 'finance.bank_import.created', siteCode, importId, { account_id: input.accountId, lines: rows.length, posted, format: input.format });
+    await recordFinanceAudit(client, actor, 'finance.bank_import.created', siteCode, importId, {
+      account_id: input.accountId,
+      lines: rows.length,
+      posted,
+      format: input.format,
+      review_each: input.reviewEach === true,
+    });
     const counts = { posted, linked: rows.filter((r) => r.status === 'linked').length, attention: rows.filter((r) => r.status === 'suggested' || r.status === 'unmatched').length };
     return { status: 201, body: { replayed: false, import: importDto(imp.rows[0]), counts } };
   });

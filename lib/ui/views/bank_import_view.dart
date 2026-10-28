@@ -59,6 +59,9 @@ class _BankImportViewState extends State<BankImportView> {
   int _attention = 0;
   String? _doneText;
 
+  /// C-26: işaretliyse tanınan (güçlü eşleşen) satırlar da yüklemede KENDİLİĞİNDEN işlenmez; "Banka Ödemeleri"nde tek tek onaylanır. Varsayılan kapalı.
+  bool _reviewEach = false;
+
   BankImportService get _svc => BankImportService.of(widget.scope.authService);
   int get _siteCode => widget.scope.siteCode;
 
@@ -103,6 +106,7 @@ class _BankImportViewState extends State<BankImportView> {
     _key = null;
     _error = null;
     _skipped = 0;
+    _reviewEach = false;
   }
 
   Future<PickedBulkFile?> _pick() async {
@@ -208,6 +212,7 @@ class _BankImportViewState extends State<BankImportView> {
           previewHash: preview.hash,
           idempotencyKey: key,
           accountIban: file.mt940?.accountIban ?? _pdf?.accountIban,
+          reviewEach: _reviewEach,
         ),
       );
       if (!mounted) return;
@@ -330,8 +335,19 @@ class _BankImportViewState extends State<BankImportView> {
         children: [
           Text(_file?.name ?? '', style: th.bodySmall),
           const SizedBox(height: AppSpace.sm),
-          row('Tanınan ${s.recognized} satır (${formatMinor(s.recognizedMinor)}) işlenecek', strong: true),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2),
+            child: Text(
+              _reviewEach
+                  ? 'Tanınan ${s.recognized} satır (${formatMinor(s.recognizedMinor)}) kendiliğinden işlenmeyecek; tek tek onayınızı bekleyecek'
+                  : 'Tanınan ${s.recognized} satır (${formatMinor(s.recognizedMinor)}) işlenecek',
+              key: const ValueKey<String>('bank_recognized_row'),
+              style: th.titleSmall,
+            ),
+          ),
           if (s.check > 0) row('Kontrol edin ${s.check} (işlendikten sonra onayınızı bekler)'),
+          if (s.fundChoice > 0)
+            row('${s.fundChoice} satırda dairenin İşletme ve Fon borcu birlikte açık: kendiliğinden işlenmez, onayda ödemenin hesabını siz seçersiniz'),
           if (s.unmatched > 0) row('Tanınmayan ${s.unmatched}'),
           if (s.outgoing > 0) row('Çıkan para ${s.outgoing} (gider/masraf olarak ayrılabilir)'),
           if (s.linkedExisting > 0) row('Zaten işlenmiş ${s.linkedExisting} (mevcut tahsilata bağlanacak, ikinci kez yazılmaz)'),
@@ -342,6 +358,16 @@ class _BankImportViewState extends State<BankImportView> {
             if (_warnings.containsKey(w))
               Padding(padding: const EdgeInsets.only(top: AppSpace.sm), child: Text(_warnings[w]!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
           if (_lines.isNotEmpty) _lineList(p),
+          if (s.recognized > 0)
+            CheckboxListTile(
+              key: const ValueKey<String>('bank_review_each_check'),
+              contentPadding: EdgeInsets.zero,
+              controlAffinity: ListTileControlAffinity.leading,
+              value: _reviewEach,
+              onChanged: _working || blocked ? null : (v) => setState(() => _reviewEach = v == true),
+              title: const Text('Güçlü eşleşmeleri de tek tek gözden geçir'),
+              subtitle: const Text('İşaretlerseniz tanınan satırlar da yükleme sırasında kendiliğinden işlenmez; Banka Ödemeleri ekranında tek tek ya da toplu onaylarsınız.'),
+            ),
           const SizedBox(height: AppSpace.md),
           FilledButton(
             key: const ValueKey<String>('bank_commit'),

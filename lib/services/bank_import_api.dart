@@ -9,6 +9,7 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:http/http.dart' as http;
 import 'package:site_kapi_kontrol/models/bank_import.dart';
+import 'package:site_kapi_kontrol/models/finance_funds.dart' show FinanceFund;
 import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/services/auth_api.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
@@ -34,6 +35,10 @@ String? bankErrorMessage(String? code) {
       return 'Bu tahsilat bağlanamaz (tutar uyuşmuyor, iptal edilmiş ya da başka satıra bağlı).';
     case 'PERIOD_CLOSED':
       return 'Bu tarihin dönemi kapatılmış. Önce dönemi açın.';
+    // K3: iki türün de (İşletme / Fon) açık borcu olan dairede hesabı yönetici seçer; yazılım kendiliğinden atamaz.
+    case 'FUND_CHOICE_REQUIRED':
+      return 'Bu daire hesabında hem İşletme Projesi (Aidat) Hesabı hem de Yatırım ve Demirbaş (Fon) Hesabı için açık borç var. '
+          'Ödemenin hangisine işleneceğini seçerek "Daireye işle" ile onaylayın.';
     case 'MODULE_DISABLED':
       return 'Aidat ve Finans özelliği bu sitede kapalı.';
     case 'IDEMPOTENCY_CONFLICT':
@@ -129,6 +134,7 @@ class BankImportApi {
     required String previewHash,
     required String idempotencyKey,
     String? accountIban,
+    bool reviewEach = false,
   }) async {
     final body = await _send(
       'POST',
@@ -138,6 +144,8 @@ class BankImportApi {
         ..._statementBody(accountId: accountId, file: file, lines: lines, accountIban: accountIban),
         'expected_hash': previewHash,
         'idempotency_key': idempotencyKey,
+        // C-26: güçlü eşleşmeler de otomatik işlenmez, tek tek onaya bırakılır. Seçilmediyse alan HİÇ gönderilmez (eski istekle aynı).
+        if (reviewEach) 'review_each': true,
       },
     );
     return BankCommitResult.fromJson(body);
@@ -164,19 +172,50 @@ class BankImportApi {
     return a is int ? a : 0;
   }
 
-  Future<void> assignLine({required String token, required int siteCode, required int lineId, required int apartmentId, String? party, bool saveIban = false}) async {
+  /// Satırı daireye işler. [fund] (K3): tahsilatın gireceği İşletme / Fon hesabı; dairenin hesabında iki türün de açık borcu varsa ZORUNLUDUR
+  /// (yoksa 400 `FUND_CHOICE_REQUIRED`), tek türde önerilen hesap seçili gönderilir.
+  Future<void> assignLine({
+    required String token,
+    required int siteCode,
+    required int lineId,
+    required int apartmentId,
+    String? party,
+    bool saveIban = false,
+    FinanceFund? fund,
+  }) async {
     await _send(
       'POST',
       '${_base(siteCode)}/bank-lines/$lineId/assign',
       token: token,
-      body: <String, dynamic>{'apartment_id': apartmentId, 'account_party': ?party, 'save_iban': saveIban},
+      body: <String, dynamic>{'apartment_id': apartmentId, 'account_party': ?party, 'save_iban': saveIban, 'fund': ?fund?.apiValue},
     );
   }
 
-  /// Önerilen daireleri toplu onaylar; işlenemeyenlerin sayısını döner.
-  Future<({int done, int failed})> confirmLines({required String token, required int siteCode, required List<int> lineIds}) async {
-    final body = await _send('POST', '${_base(siteCode)}/bank-lines/confirm', token: token, body: <String, dynamic>{'line_ids': lineIds});
-    return (done: (body['done'] as List?)?.length ?? 0, failed: (body['failed'] as List?)?.length ?? 0);
+  /// Önerilen daireleri toplu onaylar. Dönüş: işlenen / işlenemeyen sayısı ve işlenemeyen satırların hata kodu (satır kimliği -> kod; ör.
+  /// `FUND_CHOICE_REQUIRED`: iki türlü borç, hesap seçimi gerekir). [fundChoices] (K3) SATIR BAŞINADIR; tek seçim bütün satırlara uygulanmaz.
+  Future<({int done, int failed, Map<int, String> failedCodes})> confirmLines({
+    required String token,
+    required int siteCode,
+    required List<int> lineIds,
+    Map<int, FinanceFund> fundChoices = const <int, FinanceFund>{},
+  }) async {
+    final body = await _send(
+      'POST',
+      '${_base(siteCode)}/bank-lines/confirm',
+      token: token,
+      body: <String, dynamic>{
+        'line_ids': lineIds,
+        if (fundChoices.isNotEmpty)
+          'fund_choices': <Map<String, dynamic>>[
+            for (final entry in fundChoices.entries) <String, dynamic>{'line_id': entry.key, 'fund': entry.value.apiValue},
+          ],
+      },
+    );
+    final failedCodes = <int, String>{};
+    for (final item in (body['failed'] is List ? body['failed'] as List : const <Object?>[])) {
+      if (item is Map && item['id'] is num && item['code'] is String) failedCodes[(item['id'] as num).toInt()] = item['code'] as String;
+    }
+    return (done: (body['done'] as List?)?.length ?? 0, failed: (body['failed'] as List?)?.length ?? 0, failedCodes: failedCodes);
   }
 
   Future<void> classifyLine({
