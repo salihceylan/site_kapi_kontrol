@@ -54,8 +54,8 @@ abstract final class OnboardingSteps {
             icon: Icons.campaign_rounded,
             title: 'Alt çubuk, duyurular ve borcunuz',
             body:
-                'Alttaki “Duyuru”, “Arıza” ve “Belgeler” sekmeleri duyuruları, arıza taleplerinizi ve site belgelerini '
-                'açar. Sitenizde Finans modülü açıksa “Borcum” ekranından borç ve ödemelerinizi görürsünüz; hesap '
+                'Alttaki “Duyuru”, “Arıza” ve “Dosyalar” sekmeleri duyuruları, arıza taleplerinizi ve site belgelerini '
+                'açar. Menüdeki “Borcum” ekranından borç ve ödemelerinizi görürsünüz; hesap '
                 'ayarlarınız sağ üstteki “Ayarlar” düğmesindedir.',
           ),
           _help,

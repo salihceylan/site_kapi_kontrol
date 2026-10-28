@@ -1265,7 +1265,7 @@ void main() {
       final error = await fail(403, <String, dynamic>{
         'error': 'x',
         'code': 'MODULE_DISABLED',
-        'module': 'documents',
+        'module': 'drive_storage',
       });
       expect(error.message, contains('kapalı'));
       expect(error.code, 'MODULE_DISABLED');

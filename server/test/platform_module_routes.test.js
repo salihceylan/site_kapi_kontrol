@@ -479,10 +479,10 @@ describe('platform rotalari: kimlik zinciri', () => {
 });
 
 describe('GET /app/modules/catalog', () => {
-  it('kimligi dogrulanmis herkese 25 modullu katalog doner', async () => {
+  it('kimligi dogrulanmis herkese 23 modullu katalog doner', async () => {
     const res = await call('GET', '/app/modules/catalog', { user: users.resident });
     assert.equal(res.status, 200);
-    assert.equal(res.body.modules.length, 25);
+    assert.equal(res.body.modules.length, 23);
     assert.deepEqual(Object.keys(res.body.modules[0]), ['code', 'name', 'description', 'core', 'status']);
     assert.equal(res.body.modules[0].code, 'door_control');
     assert.equal(res.body.modules[1].core, true);
@@ -501,7 +501,7 @@ describe('GET /manager/sites/:siteCode/modules: yetki matrisi', () => {
     assert.equal(res.body.site_name, 'Gül Sitesi');
     assert.equal(res.body.management_type, 'apartment_site');
     assert.equal(res.body.management_type_label, 'Apartman ve Site');
-    assert.equal(res.body.modules.length, 25);
+    assert.equal(res.body.modules.length, 23);
     assert.deepEqual(doorOf(res.body), {
       code: 'door_control',
       name: 'Geçiş Kontrol (SmartKeyPass)',
@@ -547,34 +547,32 @@ describe('GET /manager/sites/:siteCode/modules: yetki matrisi', () => {
         ['people', false, false],
         ['announcements', false, false],
         ['finance', false, false], // Kural 25: temel modül, süper kullanıcı bile açıp kapatamaz
-        ['documents', true, true],
         ['reservation', true, true],
         ['work_tracking', true, true],
         ['metering', true, true],
         ['online_payment', false, false],
-        ['survey', true, true],
+        ['survey', false, false], // Kural 25: temel modül
         ['visitor_log', true, true],
         ['card_access', true, true],
-        ['card_payments', true, true],
         ['plate_cameras', true, true],
         ['contracts', true, true],
         ['decision_book', true, true],
         ['directory', true, true],
         ['budget', true, true],
-        ['drive_storage', true, true],
-        ['neighbor_board', true, true],
-        ['annual_report', true, true],
+        ['drive_storage', false, false], // Kural 25: temel modül
+        ['neighbor_board', false, false], // Kural 25: temel modül
+        ['annual_report', false, false], // Kural 25: temel modül
         ['plate_recognition', true, true],
         ['hgs_access', false, false],
         ['cctv_link', true, true],
-        ['equipment', true, true],
+        ['equipment', false, false], // Kural 25: temel modül
       ],
     );
     // bekleyen talep: yalnizca o sitenin o modulu 'pending' olur; baska site / sonuclanmis talep etkilemez
     state.moduleRequests = [
       { site_code: SITE_1, module_code: 'door_control', status: 'pending' },
-      { site_code: SITE_1, module_code: 'documents', status: 'approved' },
-      { site_code: SITE_2, module_code: 'documents', status: 'pending' },
+      { site_code: SITE_1, module_code: 'drive_storage', status: 'approved' },
+      { site_code: SITE_2, module_code: 'drive_storage', status: 'pending' },
     ];
     const asManager = await call('GET', `/manager/sites/${SITE_1}/modules`, { user: users.mgrA });
     assert.deepEqual(
@@ -788,6 +786,25 @@ describe('PUT modul: onay zorunlulugu ve denetim kaydi', () => {
     }
   });
 
+  it('eski uygulamalar `documents` (Belgeler, 084\'te Dosya Deposu ile birlesti) gonderirse drive_storage\'a cevrilir; Dosya Deposu TEMEL modul oldugu icin 400 MODULE_NOT_TOGGLEABLE: 500/404 yok, satir ve denetim yazilmaz', async () => {
+    for (const body of [{ enabled: true }, { enabled: false }, { enabled: false, confirm: true }]) {
+      const res = await call('PUT', moduleUrl(SITE_1, 'documents'), { user: users.superUser, body });
+      assert.equal(res.status, 400, JSON.stringify(body));
+      assert.equal(res.body.code, 'MODULE_NOT_TOGGLEABLE', JSON.stringify(body));
+      assert.notEqual(res.body.code, 'MODULE_NOT_FOUND', 'eski kod artik bilinmeyen modul degil');
+    }
+    assert.equal(state.siteModules.size, 0, 'ne drive_storage ne de eski kodlu satir yazilir');
+    assert.equal(state.audit.length, 0);
+    // modul listesinde ayri Belgeler modulu yok; Dosya Deposu temel modul olarak acik
+    const list = await call('GET', `/manager/sites/${SITE_1}/modules`, { user: users.superUser });
+    assert.equal(list.body.modules.some((m) => m.code === 'documents'), false, 'katalogda ayri Belgeler modulu yok');
+    const drive = list.body.modules.find((m) => m.code === 'drive_storage');
+    assert.equal(drive.name, 'Dosya Deposu');
+    assert.equal(drive.core, true);
+    assert.equal(drive.enabled, true);
+    assert.equal(drive.can_toggle, false);
+  });
+
   it('enabled boolean degilse 400 INVALID_BODY', async () => {
     for (const body of [{}, { enabled: 'true' }, { enabled: 1 }, { enabled: null }, { confirm: true }]) {
       const res = await call('PUT', moduleUrl(), { user: users.superUser, body });
@@ -798,14 +815,28 @@ describe('PUT modul: onay zorunlulugu ve denetim kaydi', () => {
     assert.equal(noBody.status, 400);
   });
 
-  it('core modul (people/announcements/finance) 400 MODULE_NOT_TOGGLEABLE (acma ve kapatma)', async () => {
-    for (const code of ['people', 'announcements', 'finance']) {
+  it('core modul (people/announcements/finance/survey/drive_storage/neighbor_board/annual_report/equipment) 400 MODULE_NOT_TOGGLEABLE (acma ve kapatma)', async () => {
+    for (const code of ['people', 'announcements', 'finance', 'survey', 'drive_storage', 'neighbor_board', 'annual_report', 'equipment']) {
       for (const enabled of [true, false]) {
         const res = await call('PUT', moduleUrl(SITE_1, code), { user: users.superUser, body: { enabled, confirm: true } });
         assert.equal(res.status, 400, `${code} ${enabled}`);
         assert.equal(res.body.code, 'MODULE_NOT_TOGGLEABLE');
       }
     }
+  });
+
+  it('kataloktan kaldirilan card_payments (Aidat ve Finans a katildi): eski uygulama 404/500 degil 400 MODULE_NOT_TOGGLEABLE + aciklama alir; satir yazilmaz, audit yok', async () => {
+    for (const body of [{ enabled: true }, { enabled: false }, { enabled: false, confirm: true }, {}]) {
+      const res = await call('PUT', moduleUrl(SITE_1, 'card_payments'), { user: users.superUser, body });
+      assert.equal(res.status, 400, JSON.stringify(body));
+      assert.equal(res.body.code, 'MODULE_NOT_TOGGLEABLE');
+      assert.match(res.body.error, /Aidat ve Finans/);
+    }
+    assert.equal(state.siteModules.has(`${SITE_1}:card_payments`), false);
+    assert.equal(state.audit.length, 0);
+    // modul listesinde de yok
+    const list = await call('GET', `/manager/sites/${SITE_1}/modules`, { user: users.superUser });
+    assert.equal(list.body.modules.some((m) => m.code === 'card_payments'), false);
   });
 
   it('yakinda modul ACILAMAZ 409 MODULE_COMING_SOON; kapatmak 200 (degisiklik yok, audit yok)', async () => {
@@ -933,7 +964,7 @@ describe('PUT modul: super kullanici modulu DOGRUDAN acarsa bekleyen talep onayl
 
   it('baska modul / baska site / sonuclanmis talepler dokunulmaz', async () => {
     state.moduleRequests = [
-      { id: 1, site_code: SITE_1, module_code: 'documents', status: 'pending' },
+      { id: 1, site_code: SITE_1, module_code: 'drive_storage', status: 'pending' },
       { id: 2, site_code: SITE_2, module_code: 'door_control', status: 'pending' },
       { id: 3, site_code: SITE_1, module_code: 'door_control', status: 'rejected' },
     ];
@@ -1602,7 +1633,6 @@ describe('GET /app/my-modules', () => {
         'people',
         'announcements',
         'finance',
-        'documents',
         'reservation',
         'work_tracking',
         'metering',
@@ -1610,7 +1640,6 @@ describe('GET /app/my-modules', () => {
         'survey',
         'visitor_log',
         'card_access',
-        'card_payments',
         'plate_cameras',
         'contracts',
         'decision_book',
@@ -1775,12 +1804,12 @@ describe('F9: yonetim turu terimleri', () => {
     for (const m of res.body.modules) assert.equal(typeof m.recommended, 'boolean', m.code);
     assert.deepEqual(
       res.body.modules.filter((m) => m.recommended).map((m) => m.code).sort(),
-      ['announcements', 'documents', 'door_control', 'finance'],
+      ['announcements', 'door_control', 'drive_storage', 'finance'],
     );
     // mevcut alanlar degismez
     assert.equal(res.body.management_type, 'apartment_site');
     assert.equal(res.body.management_type_label, 'Apartman ve Site');
-    assert.equal(res.body.modules.length, 25);
+    assert.equal(res.body.modules.length, 23);
     assert.equal(typeof doorOf(res.body).can_toggle, 'boolean');
   });
 
@@ -1793,10 +1822,10 @@ describe('F9: yonetim turu terimleri', () => {
     assert.equal(res.body.management_terms.unit, 'Ofis');
     assert.equal(res.body.management_terms.resident_plural, 'Firmalar');
     assert.equal(res.body.management_terms.fee, 'Ortak gider');
-    assert.equal(res.body.modules.length, 25);
+    assert.equal(res.body.modules.length, 23);
     assert.deepEqual(
       res.body.modules.filter((m) => m.recommended).map((m) => m.code).sort(),
-      ['documents', 'finance', 'visitor_log', 'work_tracking'],
+      ['drive_storage', 'finance', 'visitor_log', 'work_tracking'],
     );
   });
 
@@ -1811,7 +1840,7 @@ describe('F9: yonetim turu terimleri', () => {
     assert.equal(res.body.sites.length, 3);
     const [s1, s2, s3] = res.body.sites;
     assert.deepEqual(s1.management_terms, DEFAULT_TERMS);
-    assert.deepEqual(s1.recommended_modules, ['door_control', 'finance', 'documents', 'announcements']);
+    assert.deepEqual(s1.recommended_modules, ['door_control', 'finance', 'drive_storage', 'announcements']);
     assert.deepEqual(s2.management_terms, DEFAULT_TERMS, 'rezidans terimleri apartman ile ayni');
     assert.deepEqual(s2.recommended_modules, ['reservation', 'visitor_log', 'work_tracking', 'door_control', 'finance']);
     assert.equal(s3.management_type, 'apartment_site', 'bilinmeyen tur varsayilana duser');
@@ -1847,7 +1876,7 @@ describe('F9: yonetim turu terimleri', () => {
     assert.equal(res.body.items[2].terms.unit, 'Ofis');
     assert.equal(res.body.items[3].terms.resident, 'Üye');
     assert.equal(res.body.items[4].terms.unit, 'Mağaza');
-    assert.deepEqual(res.body.items[3].recommended_modules, ['finance', 'documents', 'announcements', 'survey']);
+    assert.deepEqual(res.body.items[3].recommended_modules, ['finance', 'drive_storage', 'announcements', 'survey']);
     assert.equal(state.log.length, 0, 'sabit tablo: veritabani sorgulanmaz');
   });
 

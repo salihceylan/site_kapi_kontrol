@@ -1,4 +1,4 @@
-// Kart ödemesi arayüzü (`card_payments`) ve kamera/plaka bağdaştırıcıları (`plate_cameras`) uçları.
+// Kart ödemesi arayüzü (Aidat ve Finans'ın parçası; eski `card_payments` modülü kaldırıldı) ve kamera/plaka bağdaştırıcıları (`plate_cameras`) uçları.
 //
 // Ödeme sağlayıcıları (iyzico, PayTR) henüz "Yakında…" durumundadır: yalnız komisyon bilgi alanı kaydedilir.
 // Kamera plaka olayları yalnız KAYIT altına alınır; kapı açma / geçiş YOKTUR. Kamera parolası ve olay belirteci günlüğe YAZILMAZ.
@@ -10,21 +10,17 @@ import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/services/auth_api.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
 
-/// Ekrandaki bir site: hangi modüller açık ve yazma yetkisi var mı.
+/// "Kamera ve Plaka" ekranındaki bir site (`plate_cameras` modülü AÇIK) ve yazma yetkisi var mı.
 class DeviceSite {
   const DeviceSite({
     required this.code,
     required this.name,
     this.canWrite = true,
-    this.paymentsOn = false,
-    this.camerasOn = false,
   });
 
   final int code;
   final String name;
   final bool canWrite;
-  final bool paymentsOn;
-  final bool camerasOn;
 
   String get label => name.trim().isEmpty ? 'İsimsiz site' : name.trim();
 }

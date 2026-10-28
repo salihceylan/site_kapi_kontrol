@@ -1,5 +1,5 @@
 // Duyuru formundaki "Belge eki" alanı (docs/PLATFORM_BELGELER.md A12, A13): seçilen belgeler (en çok 5), "Belge
-// Ekle" ve ekleme anı uyarısı. `documents` modülü sitede KAPALIYSA (ya da yetki yoksa) alan hiç çizilmez: açılışta
+// Ekle" ve ekleme anı uyarısı. `drive_storage` (Dosya Deposu) modülü sitede KAPALIYSA (ya da yetki yoksa) alan hiç çizilmez: açılışta
 // bir kez yoklanır (`GET .../documents?limit=1`).
 //
 // Denetimli bileşen: seçimi üst form tutar; bu widget yalnız çizer ve değişiklikleri bildirir.
@@ -127,7 +127,7 @@ class _DocumentAttachmentFieldState extends State<DocumentAttachmentField> {
           const SizedBox(height: AppSpace.sm),
           if (value.isEmpty)
             Text(
-              'İsterseniz Belgeler modülündeki bir belgeyi duyuruya ekleyebilirsiniz (en çok '
+              'İsterseniz Dosya Deposundaki bir belgeyi duyuruya ekleyebilirsiniz (en çok '
               '$kAnnouncementMaxAttachments).',
               style: th.bodySmall?.copyWith(color: p.textSecondary),
             )

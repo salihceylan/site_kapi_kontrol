@@ -10,6 +10,7 @@ import 'package:site_kapi_kontrol/services/payment_notice_api.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/buttons.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/finance_card_payments_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/finance_payment_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/finance_receipt_flow.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/finance_run_dialog.dart';
@@ -31,7 +32,7 @@ import 'package:site_kapi_kontrol/ui/widgets/finance_settings_controller.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 
 /// Yönetici "Finans" ekranı (Platform Faz 4a, `finance` modülü): site seçici, mali özet kartı, eylemler
-/// (Tahsilat Ekle, Ek Borç Ekle, Finans Ayarları) ve sekmeler (Daireler | Tanımlar | Dönemler | Kasa | Giderler |
+/// (Tahsilat Ekle, Ek Borç Ekle, Finans Ayarları, Kart Ödemesi) ve sekmeler (Daireler | Tanımlar | Dönemler | Kasa | Giderler |
 /// Raporlar | Grafikler | Dekontlar). Faz 4b: Daireler sekmesinin üstünde borç hatırlatma kartı, Dönemler sekmesinde gecikme tazminatı bölümü;
 /// tazminat ve hatırlatma yalnız sistem bayrağı (`legal_ok`) VE site ayarı açıkken kullanılır, aksi halde nedenini
 /// açıklayan pasif kart gösterilir.
@@ -460,6 +461,28 @@ class FinanceViewState extends State<FinanceView> {
     }
   }
 
+  /// "Kart Ödemesi": Aidat ve Finans'ın parçası (eskiden ayrı `card_payments` modülüydü); sağlayıcı komisyon bilgisi penceresi.
+  /// Yönetici notu düzenler, kurul üyesi salt okur.
+  Future<void> _openCardPayments(PeopleSite site) async {
+    if (_opening) return;
+    _opening = true;
+    try {
+      await FinanceCardPaymentsDialog.show(context, scope: _scopeOf(site));
+    } finally {
+      _opening = false;
+    }
+  }
+
+  Widget _cardPaymentsButton(PeopleSite site) {
+    return PrimaryActionButton(
+      key: const ValueKey<String>('finance_open_card_payments'),
+      label: 'Kart Ödemesi',
+      icon: Icons.credit_card_rounded,
+      variant: AppButtonVariant.tonal,
+      onPressed: () => _openCardPayments(site),
+    );
+  }
+
   Future<void> _addCharge(PeopleSite site) async {
     if (_opening) return;
     _opening = true;
@@ -609,6 +632,12 @@ class FinanceViewState extends State<FinanceView> {
               variant: AppButtonVariant.tonal,
               onPressed: () => _openSettings(site),
             ),
+            const SizedBox(height: AppSpace.sm),
+            _cardPaymentsButton(site),
+            const SizedBox(height: AppSpace.md),
+          ] else ...[
+            // Kurul üyesi (salt okur): kart ödemesi bilgilerini görüntüler.
+            _cardPaymentsButton(site),
             const SizedBox(height: AppSpace.md),
           ],
           // Sekme çubuğu: ekran okuyucu "sekme" rolünü ve seçili durumu okur.

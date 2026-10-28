@@ -73,9 +73,12 @@ export function userInDocumentSiteSql(d = 'd', user = '$1') {
   )`;
 }
 
-/** `documents` modülü bu belgenin sitesinde AÇIK mı (katalog varsayılanı KAPALI: satır yoksa kapalı). */
+/**
+ * Dosya Deposu (belgeler dahil; `drive_storage`) bu belgenin sitesinde AÇIK mı. TEMEL modül (Kural 25): site_modules satırı yoksa AÇIK sayılır
+ * (satır varsa enabled değeri; kurulumdaki ve açılıştaki doldurma onu açık yazar).
+ */
 export const MODULE_ENABLED_SQL = (d = 'd') =>
-  `EXISTS (SELECT 1 FROM site_modules smod WHERE smod.site_code = ${d}.site_code AND smod.module_code = 'documents' AND smod.enabled = TRUE)`;
+  `COALESCE((SELECT smod.enabled FROM site_modules smod WHERE smod.site_code = ${d}.site_code AND smod.module_code = 'drive_storage'), TRUE)`;
 
 const RESIDENT_FROM = `
   FROM documents d

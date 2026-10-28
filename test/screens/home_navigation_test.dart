@@ -419,7 +419,7 @@ void main() {
       ('site yöneticisi, Geçiş Kontrol kapalı ve modül yok', UserRole.siteManager,
           () => <MySiteModules>[_my('manager', door: false)], false, null, <SirketMenuGroup>[a, d, i, h]),
       ('daire sakini, kapı + Finans + Belgeler + İş Takibi', UserRole.apartmentOwner,
-          () => <MySiteModules>[_my('resident', modules: {'finance': true, 'documents': true, 'work_tracking': true})], false,
+          () => <MySiteModules>[_my('resident', modules: {'finance': true, 'drive_storage': true, 'work_tracking': true})], false,
           null, <SirketMenuGroup>[a, d, b, i, h]),
       ('daire sakini, Geçiş Kontrol kapalı, modül yok', UserRole.apartmentOwner,
           () => <MySiteModules>[_my('resident', door: false)], false, null, <SirketMenuGroup>[a, d, i, h]),
@@ -449,14 +449,14 @@ void main() {
       (
         'daire sakini, kapı + İş Takibi + Belgeler açık: beş sekme',
         UserRole.apartmentOwner,
-        () => <MySiteModules>[_my('resident', modules: {'work_tracking': true, 'documents': true})],
+        () => <MySiteModules>[_my('resident', modules: {'work_tracking': true, 'drive_storage': true})],
         null,
         ResidentTab.values,
       ),
       (
         'daire sakini, Geçiş Kontrol kapalı: Kapı yok (PDF\'teki dört sekme)',
         UserRole.apartmentOwner,
-        () => <MySiteModules>[_my('resident', door: false, modules: {'work_tracking': true, 'documents': true})],
+        () => <MySiteModules>[_my('resident', door: false, modules: {'work_tracking': true, 'drive_storage': true})],
         null,
         <ResidentTab>[ResidentTab.ozet, ResidentTab.duyuru, ResidentTab.ariza, ResidentTab.belgeler],
       ),
@@ -470,7 +470,7 @@ void main() {
       (
         'dairesiz kurul üyesi (kapı yetkisi yok), Belgeler açık: Kapı yok',
         UserRole.apartmentOwner,
-        () => <MySiteModules>[_my('board_member', modules: {'documents': true})],
+        () => <MySiteModules>[_my('board_member', modules: {'drive_storage': true})],
         const <DoorRecord>[],
         <ResidentTab>[ResidentTab.ozet, ResidentTab.duyuru, ResidentTab.belgeler],
       ),
@@ -491,7 +491,7 @@ void main() {
     testWidgets('kısa pencere (yatay telefon, < 480 dp): alt çubuk yok, gezinme çekmeceyle; 480 dp\'de var', (t) async {
       for (final (w, h, bar) in const <(double, double, bool)>[(640, 360, false), (800, 479, false), (800, 480, true)]) {
         final auth = _NavAuth(UserRole.apartmentOwner);
-        final access = await _access(() => <MySiteModules>[_my('resident', modules: {'documents': true})]);
+        final access = await _access(() => <MySiteModules>[_my('resident', modules: {'drive_storage': true})]);
         await _pumpHome(t, auth, access: access, width: w, height: h, scale: 2.0);
         expect(_bar, bar ? findsOneWidget : findsNothing, reason: '${w.toInt()}x${h.toInt()}');
         expect(t.takeException(), isNull);
@@ -552,7 +552,7 @@ void main() {
 
     testWidgets('sakin modundaki yönetici: alt çubuk gelir; yönetici paneline dönünce kalkar', (t) async {
       final auth = _NavAuth(UserRole.siteManager, doors: <DoorRecord>[_door(1)]);
-      final access = await _access(() => <MySiteModules>[_my('manager', modules: {'documents': true})]);
+      final access = await _access(() => <MySiteModules>[_my('manager', modules: {'drive_storage': true})]);
       await _pumpHome(t, auth, access: access, width: 820, height: 1180);
       expect(_bar, findsNothing);
       await t.tap(_inAppBar(find.text('Sakin Modu')));
@@ -572,13 +572,13 @@ void main() {
     testWidgets('sekmeye dokunma o sayfayı açar; geri: sekmeden Özet\'e, Özet\'ten uygulamadan çıkış', (t) async {
       final calls = _capturePlatform(t);
       final auth = _NavAuth(UserRole.apartmentOwner);
-      final access = await _access(() => <MySiteModules>[_my('resident', modules: {'work_tracking': true, 'documents': true})]);
+      final access = await _access(() => <MySiteModules>[_my('resident', modules: {'work_tracking': true, 'drive_storage': true})]);
       await _pumpHome(t, auth, access: access);
 
       for (final (tab, title) in <(ResidentTab, String)>[
         (ResidentTab.duyuru, 'Duyurular'),
         (ResidentTab.ariza, 'Taleplerim'),
-        (ResidentTab.belgeler, 'Belgeler'),
+        (ResidentTab.belgeler, 'Dosya Deposu'),
         (ResidentTab.kapi, 'Kapılar'),
       ]) {
         await t.tap(_tab(tab));
@@ -618,7 +618,7 @@ void main() {
 
     testWidgets('çekmeceden seçilen sekme sayfası çubukta da seçili görünür', (t) async {
       final auth = _NavAuth(UserRole.apartmentOwner);
-      final access = await _access(() => <MySiteModules>[_my('resident', modules: {'documents': true})]);
+      final access = await _access(() => <MySiteModules>[_my('resident', modules: {'drive_storage': true})]);
       await _pumpHome(t, auth, access: access);
       await _openDrawer(t);
       await t.tap(_drawerTile(SirketMenuItem.belgeler));
@@ -631,7 +631,7 @@ void main() {
     testWidgets('modül sonradan kapanınca sekme kalkar; o sekmedeyken Özet\'e düşülür', (t) async {
       var documents = true;
       final auth = _NavAuth(UserRole.apartmentOwner);
-      final access = await _access(() => <MySiteModules>[_my('resident', modules: {'documents': documents})]);
+      final access = await _access(() => <MySiteModules>[_my('resident', modules: {'drive_storage': documents})]);
       await _pumpHome(t, auth, access: access);
       await t.tap(_tab(ResidentTab.belgeler));
       await t.pump();
@@ -761,7 +761,7 @@ void main() {
       final requests = DoorPanelRequests();
       addTearDown(requests.dispose);
       final auth = _NavAuth(UserRole.apartmentOwner);
-      final access = await _access(() => <MySiteModules>[_my('resident', modules: {'documents': true})]);
+      final access = await _access(() => <MySiteModules>[_my('resident', modules: {'drive_storage': true})]);
       await _pumpHome(t, auth, access: access, requests: requests);
       await t.tap(_tab(ResidentTab.belgeler));
       await t.pump();
@@ -783,7 +783,7 @@ void main() {
 
     List<MySiteModules> managerSites() => <MySiteModules>[
           _my('manager', site: 1, modules: {'finance': true}),
-          _my('manager', site: 2, modules: {'documents': true}),
+          _my('manager', site: 2, modules: {'drive_storage': true}),
         ];
 
     Future<void> pick(WidgetTester t, String key) async {
@@ -928,7 +928,7 @@ void main() {
             (t) async {
           final auth = _NavAuth(UserRole.apartmentOwner);
           final access = await _access(
-            () => <MySiteModules>[_my('resident', modules: {'work_tracking': true, 'documents': true, 'finance': true})],
+            () => <MySiteModules>[_my('resident', modules: {'work_tracking': true, 'drive_storage': true, 'finance': true})],
           );
           await _pumpHome(t, auth, access: access, width: w, height: h, scale: s, dark: dark);
           expect(t.takeException(), isNull);

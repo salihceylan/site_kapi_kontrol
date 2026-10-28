@@ -158,7 +158,7 @@ try {
     ctx.finance = financeResult;
 
     for (const [file, moduleCode] of [
-      ['budget', 'budget'], ['announcements', 'announcements'], ['neighbor', 'neighbor_board'], ['documents', 'documents'], ['work', 'work_tracking'],
+      ['budget', 'budget'], ['announcements', 'announcements'], ['neighbor', 'neighbor_board'], ['documents', 'drive_storage'], ['work', 'work_tracking'],
       ['reservation', 'reservation'], ['visitors', 'visitor_log'], ['contracts', 'contracts'], ['decisions', 'decision_book'], ['surveys', 'survey'],
       ['equipment', 'equipment'], ['devices', null], ['annual_report', 'annual_report'],
     ]) {

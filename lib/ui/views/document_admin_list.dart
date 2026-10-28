@@ -350,7 +350,7 @@ class DocumentAdminListState extends State<DocumentAdminList> {
       key: const ValueKey<String>('documents_module_off'),
       icon: Icons.folder_off_rounded,
       tone: AppTone.warning,
-      title: 'Belgeler bu site için kapalı.',
+      title: 'Dosya Deposu bu site için kapalı.',
       message:
           'Modül açılınca yönetmelik, tutanak ve sözleşme gibi belgeler burada görünür.',
       child: widget.onOpenModules == null

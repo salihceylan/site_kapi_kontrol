@@ -45,11 +45,11 @@ export const MANAGEMENT_TYPE_TERMS = Object.freeze({
 
 /** Tür -> önerilen modül kodları (sözleşme sırası; katalogda olmayan kodlar da olduğu gibi durur). */
 export const MANAGEMENT_TYPE_RECOMMENDED_MODULES = Object.freeze({
-  apartment_site: Object.freeze(['door_control', 'finance', 'documents', 'announcements']),
+  apartment_site: Object.freeze(['door_control', 'finance', 'drive_storage', 'announcements']),
   residence: Object.freeze(['reservation', 'visitor_log', 'work_tracking', 'door_control', 'finance']),
-  business_center: Object.freeze(['work_tracking', 'visitor_log', 'finance', 'documents']),
-  cooperative: Object.freeze(['finance', 'documents', 'announcements', 'survey']),
-  shopping_mall: Object.freeze(['finance', 'work_tracking', 'visitor_log', 'documents']),
+  business_center: Object.freeze(['work_tracking', 'visitor_log', 'finance', 'drive_storage']),
+  cooperative: Object.freeze(['finance', 'drive_storage', 'announcements', 'survey']),
+  shopping_mall: Object.freeze(['finance', 'work_tracking', 'visitor_log', 'drive_storage']),
 });
 
 /** Tür -> tek cümlelik Türkçe açıklama (F9 deneme listesi; "Yakında" demez). */

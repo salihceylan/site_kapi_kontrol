@@ -74,7 +74,7 @@ void main() {
           role,
           toggle: role != UserRole.apartmentOwner,
         );
-        expect(titles, isNot(contains('Belgeler')), reason: '$role');
+        expect(titles, isNot(contains('Dosya Deposu')), reason: '$role');
       }
     });
 
@@ -92,9 +92,9 @@ void main() {
           },
           onSelect: selected.add,
         );
-        expect(titles.indexOf('Belgeler'), titles.indexOf('Duyurular') + 1);
-        _expectUnderHeader(t, 'Belgeler', 'Site hizmetleri');
-        await t.tap(find.text('Belgeler'));
+        expect(titles.indexOf('Dosya Deposu'), titles.indexOf('Duyurular') + 1);
+        _expectUnderHeader(t, 'Dosya Deposu', 'Site hizmetleri');
+        await t.tap(find.text('Dosya Deposu'));
         expect(selected, <SirketMenuItem>[SirketMenuItem.belgeler]);
       },
     );
@@ -112,7 +112,7 @@ void main() {
           SirketMenuItem.belgeler,
         },
       );
-      expect(titles.indexOf('Belgeler'), titles.indexOf('Finans') + 1);
+      expect(titles.indexOf('Dosya Deposu'), titles.indexOf('Finans') + 1);
       titles = await _pumpMenu(
         t,
         UserRole.apartmentOwner,
@@ -122,7 +122,7 @@ void main() {
           SirketMenuItem.belgeler,
         },
       );
-      expect(titles.indexOf('Belgeler'), titles.indexOf('Borcum') + 1);
+      expect(titles.indexOf('Dosya Deposu'), titles.indexOf('Borcum') + 1);
     });
 
     testWidgets('yalnız "Kişiler" varsa (süper kullanıcı) onun altında', (
@@ -133,7 +133,7 @@ void main() {
         UserRole.superUser,
         additional: const <SirketMenuItem>{SirketMenuItem.belgeler},
       );
-      expect(titles.indexOf('Belgeler'), titles.indexOf('Kişiler') + 1);
+      expect(titles.indexOf('Dosya Deposu'), titles.indexOf('Kişiler') + 1);
     });
 
     testWidgets('hiçbiri yoksa (sakin) "Panel"in altında', (t) async {
@@ -142,7 +142,7 @@ void main() {
         UserRole.apartmentOwner,
         additional: const <SirketMenuItem>{SirketMenuItem.belgeler},
       );
-      expect(titles.indexOf('Belgeler'), titles.indexOf('Panel') + 1);
+      expect(titles.indexOf('Dosya Deposu'), titles.indexOf('Panel') + 1);
     });
 
     testWidgets('gizlenen (hiddenItems) Belgeler çekmecede çıkmaz', (t) async {
@@ -153,7 +153,7 @@ void main() {
         additional: const <SirketMenuItem>{SirketMenuItem.belgeler},
         hidden: const <SirketMenuItem>{SirketMenuItem.belgeler},
       );
-      expect(titles, isNot(contains('Belgeler')));
+      expect(titles, isNot(contains('Dosya Deposu')));
     });
 
     for (final cell in const <(double, double)>[(320, 2.0), (360, 1.5)]) {
@@ -170,7 +170,7 @@ void main() {
             SirketMenuItem.belgeler,
           },
         );
-        expect(titles, contains('Belgeler'));
+        expect(titles, contains('Dosya Deposu'));
         expect(t.takeException(), isNull);
       });
     }

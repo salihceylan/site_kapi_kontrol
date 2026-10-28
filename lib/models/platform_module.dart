@@ -9,20 +9,18 @@ abstract final class PlatformModuleCodes {
   static const String announcements = 'announcements';
   static const String finance = 'finance';
 
-  /// Belgeler (dosya deposu; Faz 3b-A). Varsayılan KAPALI.
-  static const String documents = 'documents';
   static const String reservation = 'reservation';
   static const String workTracking = 'work_tracking';
   static const String metering = 'metering';
   static const String onlinePayment = 'online_payment';
 
-  /// Anket ve Oylama (F11.01). Varsayılan KAPALI.
+  /// Anket ve Oylama (F11.01). TEMEL modül (Kural 25): her sitede açık.
   static const String survey = 'survey';
   /// Ziyaretçi ve Kargo (kapı kaydı; F11.03). Varsayılan KAPALI.
   static const String visitorLog = 'visitor_log';
   /// Firma ve Sözleşme Takibi. Varsayılan KAPALI.
   static const String contracts = 'contracts';
-  /// Ekipman ve Bakım (envanter, bakım planı / kaydı, teklifler). Varsayılan KAPALI.
+  /// Ekipman ve Bakım (envanter, bakım planı / kaydı, teklifler). TEMEL modül (Kural 25): her sitede açık.
   static const String equipment = 'equipment';
   /// Kamera (CCTV) Bağlantısı (kapı olaylarını kamera kayıtlarına bağlar; video saklanmaz). Varsayılan KAPALI.
   static const String cctvLink = 'cctv_link';
@@ -33,14 +31,13 @@ abstract final class PlatformModuleCodes {
 
   /// İşletme Projesi (bütçe). Varsayılan KAPALI.
   static const String budget = 'budget';
-  /// Dosya Deposu (Google Drive, D1). Varsayılan KAPALI.
+  /// Dosya Deposu: Belgeler (yönetmelik, tutanak, sözleşme; Faz 3b-A) + sitenin Google Drive bağlantısı (D1) TEK modül. TEMEL modül (Kural 25):
+  /// her sitede açık (Google Drive bağlantısı ayrıca kurulur). Eski `documents` (Belgeler) kodu 084'te buna katıldı; ayrı Belgeler modülü yoktur.
   static const String driveStorage = 'drive_storage';
-  /// Komşu Panosu (sakin ilanları, yönetici onayı). Varsayılan KAPALI.
+  /// Komşu Panosu (sakin ilanları, yönetici onayı). TEMEL modül (Kural 25): her sitede açık.
   static const String neighborBoard = 'neighbor_board';
-  /// Faaliyet Raporu (yıllık rapor taslağı, PDF). Varsayılan KAPALI.
+  /// Faaliyet Raporu (yıllık rapor taslağı, PDF). TEMEL modül (Kural 25): her sitede açık.
   static const String annualReport = 'annual_report';
-  /// Kart Ödemesi arayüzü (sağlayıcılar "Yakında…"). Varsayılan KAPALI.
-  static const String cardPayments = 'card_payments';
   /// Kamera ve Plaka (plaka olayı kaydı; kapı açmaz). Varsayılan KAPALI.
   static const String plateCameras = 'plate_cameras';
   /// Plaka Tanıma (misafir plaka izni, kara liste, olay kararları; kapı açma "Yakında…"). Varsayılan KAPALI.

@@ -161,8 +161,8 @@ DATABASE_URL=postgres://... node cleanup.mjs --batch demo-vehicles-YYYYMMDDHHMMS
 ## Modul eslemesi ve atlama
 
 Her adim yalniz o site icin ACIK modulde calisir (`site_modules` + `catalog.js`); kapali modul ATLANIR ve rapora yazilir (modul ASLA acilmaz):
-`finance`, `metering`, `budget`, `announcements` (cekirdek), `neighbor_board`, `documents`, `work_tracking`, `reservation`, `visitor_log`, `contracts`, `decision_book`, `survey`, `equipment`, `directory`, `annual_report`, `card_payments` + `plate_cameras` (devices).
-KAPSAM DISI (dokunulmaz): kapilar, kayitli cihazlar, "Daireye Katil", kartli gecis, misafir gecisi, PIN, plaka tanima ve CCTV. `drive_storage` (Google Drive, OAuth gerekir) ve "yakinda" moduller (`online_payment`, `hgs_access`, `cctv_link`, `plate_recognition`) atlanir.
+`finance`, `metering`, `budget`, `announcements` (cekirdek), `neighbor_board`, `drive_storage` (Dosya Deposu: belgeler adimi; `documents` modulu yoktur), `work_tracking`, `reservation`, `visitor_log`, `contracts`, `decision_book`, `survey`, `equipment`, `directory`, `annual_report`, `finance` (kart odemesi ayarlari) + `plate_cameras` (devices; `card_payments` modulu yoktur: kart odemesi Aidat ve Finans icindedir).
+KAPSAM DISI (dokunulmaz): kapilar, kayitli cihazlar, "Daireye Katil", kartli gecis, misafir gecisi, PIN, plaka tanima ve CCTV. Google Drive baglantisi (OAuth gerekir) ve "yakinda" moduller (`online_payment`, `hgs_access`, `cctv_link`, `plate_recognition`) atlanir.
 
 ## Etiketleme ve geri alma
 

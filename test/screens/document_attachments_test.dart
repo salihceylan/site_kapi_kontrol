@@ -351,7 +351,7 @@ void main() {
         await settleFor(t);
         expect(value, isEmpty);
         expect(
-          find.textContaining('İsterseniz Belgeler modülündeki'),
+          find.textContaining('İsterseniz Dosya Deposundaki'),
           findsOneWidget,
         );
         expect(find.textContaining('tüm alıcılarına açılır'), findsNothing);
@@ -535,6 +535,9 @@ void main() {
         final empty = FakeDocumentService(authService: auth);
         await open(t, empty, auth);
         expect(find.text('Eklenebilecek belge yok.'), findsOneWidget);
+        // Yönerge menüdeki gerçek ekran adını söyler ("Belgeler" ekranı artık yok: Dosya Deposu).
+        expect(find.textContaining('Dosya Deposu ekranından'), findsOneWidget);
+        expect(find.textContaining('Belgeler ekranından'), findsNothing);
       },
     );
 

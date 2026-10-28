@@ -76,7 +76,7 @@ enum SirketMenuItem {
   /// olan sakine [YanMenu.additionalItems] ile eklenir.
   borcum,
 
-  /// Platform Faz 3b-A: Belgeler (dosya deposu). Rol listesinde YOKTUR; `documents` modülü AÇIK olan sitenin
+  /// Dosya Deposu (Belgeler + Google Drive bağlantısı; Faz 3b-A + D1, tek menü öğesi). Rol listesinde YOKTUR; `drive_storage` modülü AÇIK olan sitenin
   /// yöneticisine / süper kullanıcıya / kurul üyesine (salt okunur) ve kitlesinde belge olabilecek sakine
   /// [YanMenu.additionalItems] ile eklenir ("Finans" / "Borcum"un, yoksa "Duyurular"ın altına). Modül kapalıyken
   /// ya da modül verisi yokken eklenmez. Görevli (STAFF) için yoktur.
@@ -84,7 +84,7 @@ enum SirketMenuItem {
 
   /// İş Takibi (arıza, bakım, talep) yönetim ekranı "Talepler". Rol listesinde YOKTUR; `work_tracking` modülü AÇIK
   /// olan sitenin yöneticisine / görevlisine / süper kullanıcıya / kurul üyesine (salt okunur)
-  /// [YanMenu.additionalItems] ile eklenir ("Belgeler"in, yoksa üstteki öğelerin altına). Modül kapalıyken ya da
+  /// [YanMenu.additionalItems] ile eklenir ("Dosya Deposu"nun, yoksa üstteki öğelerin altına). Modül kapalıyken ya da
   /// modül verisi yokken eklenmez.
   talepler,
 
@@ -164,8 +164,9 @@ enum SirketMenuItem {
   /// sakin yalnız kendi dairesi için "Misafir plakası" verir. Rol listesinde YOKTUR; modül AÇIK sitesi olan kullanıcıya
   /// [YanMenu.additionalItems] ile eklenir (Site hizmetleri).
   plakaTanima,
-  /// Ödeme ve Kamera yönetim ekranı. Rol listesinde YOKTUR; `card_payments` ya da `plate_cameras` modülü AÇIK olan sitenin
-  /// yöneticisine / kurul üyesine [YanMenu.additionalItems] ile eklenir. Sakin ve görevli için yoktur.
+  /// Kamera ve Plaka yönetim ekranı (öğe adı eskiden "Ödeme ve Kamera" idi; kart ödemesi Aidat ve Finans'a taşındı, enum adı korundu).
+  /// Rol listesinde YOKTUR; `plate_cameras` modülü AÇIK olan sitenin yöneticisine / kurul üyesine [YanMenu.additionalItems] ile
+  /// eklenir. Sakin ve görevli için yoktur.
   odemeKamera,
 
   /// Kamera (CCTV) (`cctv_link`): kapı olaylarını kamera kayıtlarına bağlar (kayıt sistemi bağlantısı, anlık görüntü). Rol listesinde YOKTUR;
@@ -1090,7 +1091,7 @@ List<SirketMenuItem> _withExtras(
       if (anchor < 0) anchor = result.indexOf(SirketMenuItem.duyurular);
       if (anchor < 0) anchor = result.indexOf(SirketMenuItem.kisiler);
     }
-    // "Belgeler" "Borcum" / "Finans" / "Duyurular" / "Kişiler" sırasıyla ilk bulunanın altına gelir.
+    // "Dosya Deposu" "Borcum" / "Finans" / "Duyurular" / "Kişiler" sırasıyla ilk bulunanın altına gelir.
     if (extra == SirketMenuItem.belgeler) {
       for (final above in const <SirketMenuItem>[
         SirketMenuItem.borcum,
@@ -1102,7 +1103,7 @@ List<SirketMenuItem> _withExtras(
         if (anchor >= 0) break;
       }
     }
-    // "Talepler" / "Taleplerim" "Belgeler" / "Borcum" / "Finans" / "Duyurular" / "Kişiler" sırasıyla ilk bulunanın
+    // "Talepler" / "Taleplerim" "Dosya Deposu" / "Borcum" / "Finans" / "Duyurular" / "Kişiler" sırasıyla ilk bulunanın
     // altına gelir; "Taleplerim" varsa "Talepler"in altına.
     if (extra == SirketMenuItem.talepler || extra == SirketMenuItem.taleplerim) {
       for (final above in <SirketMenuItem>[
@@ -1117,7 +1118,7 @@ List<SirketMenuItem> _withExtras(
         if (anchor >= 0) break;
       }
     }
-    // "Rezervasyonlar" / "Rezervasyon" "Taleplerim" / "Talepler" / "Belgeler" / "Borcum" / "Finans" / "Duyurular" /
+    // "Rezervasyonlar" / "Rezervasyon" "Taleplerim" / "Talepler" / "Dosya Deposu" / "Borcum" / "Finans" / "Duyurular" /
     // "Kişiler" sırasıyla ilk bulunanın altına gelir; "Rezervasyon" varsa "Rezervasyonlar"ın altına.
     if (extra == SirketMenuItem.rezervasyonlar || extra == SirketMenuItem.rezervasyon) {
       for (final above in <SirketMenuItem>[
@@ -1154,7 +1155,7 @@ List<SirketMenuItem> _withExtras(
       }
     }
     // "Ziyaretçi ve Kargo" (yönetim / görevli ve sakin) "Rezervasyon" / "Rezervasyonlar" / "Taleplerim" / "Talepler" /
-    // "Belgeler" / "Borcum" / "Finans" / "Duyurular" / "Kişiler" sırasıyla ilk bulunanın altına gelir; sakin öğesi
+    // "Dosya Deposu" / "Borcum" / "Finans" / "Duyurular" / "Kişiler" sırasıyla ilk bulunanın altına gelir; sakin öğesi
     // varsa yönetim öğesinin altına.
     if (extra == SirketMenuItem.ziyaretciKayitlari || extra == SirketMenuItem.ziyaretcilerim) {
       for (final above in <SirketMenuItem>[
@@ -1232,7 +1233,7 @@ List<SirketMenuItem> _withExtras(
         if (anchor >= 0) break;
       }
     }
-    // "Ödeme ve Kamera": "Karar Defteri" / "Sözleşmeler" / ... / "Kişiler" sırasıyla ilk bulunanın altına.
+    // "Kamera ve Plaka": "Karar Defteri" / "Sözleşmeler" / ... / "Kişiler" sırasıyla ilk bulunanın altına.
     if (extra == SirketMenuItem.odemeKamera) {
       for (final above in const <SirketMenuItem>[
         SirketMenuItem.kararDefteri,
@@ -1250,7 +1251,7 @@ List<SirketMenuItem> _withExtras(
         if (anchor >= 0) break;
       }
     }
-    // "Kamera (CCTV)": "Ödeme ve Kamera" / "Karar Defteri" / ... / "Kişiler" sırasıyla ilk bulunanın altına.
+    // "Kamera (CCTV)": "Kamera ve Plaka" / "Karar Defteri" / ... / "Kişiler" sırasıyla ilk bulunanın altına.
     if (extra == SirketMenuItem.kameraCctv) {
       for (final above in const <SirketMenuItem>[
         SirketMenuItem.odemeKamera,
@@ -1270,7 +1271,7 @@ List<SirketMenuItem> _withExtras(
       }
     }
     // "Plaka Tanıma": "Karar Defteri" / "Sözleşmeler" / ... / "Kişiler" sırasıyla ilk bulunanın altına (numaralandırmada önde olduğundan
-    // "Ödeme ve Kamera" ve "Ekipman ve Bakım" sonradan ekleniyor ve kendi çıpalarının altına giriyor).
+    // "Kamera ve Plaka" ve "Ekipman ve Bakım" sonradan ekleniyor ve kendi çıpalarının altına giriyor).
     if (extra == SirketMenuItem.plakaTanima) {
       for (final above in const <SirketMenuItem>[
         SirketMenuItem.kararDefteri,
@@ -1288,7 +1289,7 @@ List<SirketMenuItem> _withExtras(
         if (anchor >= 0) break;
       }
     }
-    // "Ekipman ve Bakım": "Ödeme ve Kamera" / "Karar Defteri" / "Sözleşmeler" / ... / "Kişiler" sırasıyla ilk bulunanın altına.
+    // "Ekipman ve Bakım": "Kamera ve Plaka" / "Karar Defteri" / "Sözleşmeler" / ... / "Kişiler" sırasıyla ilk bulunanın altına.
     if (extra == SirketMenuItem.ekipmanBakim) {
       for (final above in const <SirketMenuItem>[
         SirketMenuItem.odemeKamera,
@@ -1445,7 +1446,7 @@ String _titleForItem(SirketMenuItem item, [UserRole? role]) {
     case SirketMenuItem.borcum:
       return 'Borcum';
     case SirketMenuItem.belgeler:
-      return 'Belgeler';
+      return 'Dosya Deposu';
     case SirketMenuItem.talepler:
       return 'Talepler';
     case SirketMenuItem.taleplerim:
@@ -1485,7 +1486,7 @@ String _titleForItem(SirketMenuItem item, [UserRole? role]) {
     case SirketMenuItem.plakaTanima:
       return 'Plaka Tanıma';
     case SirketMenuItem.odemeKamera:
-      return 'Ödeme ve Kamera';
+      return 'Kamera ve Plaka';
     case SirketMenuItem.kameraCctv:
       return 'Kamera (CCTV)';
     case SirketMenuItem.ekipmanBakim:

@@ -1074,8 +1074,8 @@ Bu bölüm lib/ui/design (jeton, hareket, kart, düğme, rozet, iskelet, geri sa
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
 | [lib/menu.dart:1](../../lib/menu.dart#L1) | <code>export 'package:site_kapi_kontrol/ui/widgets/yan_menu.dart';</code> | menu.dart tek satırlık yeniden dışa aktarımdır; gerçek kod yan_menu.dart ta |
-| [lib/ui/widgets/yan_menu.dart:1320](../../lib/ui/widgets/yan_menu.dart#L1320) | <code>List&lt;SirketMenuItem&gt; _itemsForRole(</code> | Rol ve mod başına menü öğeleri burada seçilir |
-| [lib/ui/widgets/yan_menu.dart:495](../../lib/ui/widgets/yan_menu.dart#L495) | <code>title: isResidentMode ? context.l10n.menuSwitchToAdmin : context.l10n.menuSwitchToResiden…</code> | Çift rollü kullanıcıda mod değiştirme satırı |
+| [lib/ui/widgets/yan_menu.dart:1321](../../lib/ui/widgets/yan_menu.dart#L1321) | <code>List&lt;SirketMenuItem&gt; _itemsForRole(</code> | Rol ve mod başına menü öğeleri burada seçilir |
+| [lib/ui/widgets/yan_menu.dart:496](../../lib/ui/widgets/yan_menu.dart#L496) | <code>title: isResidentMode ? context.l10n.menuSwitchToAdmin : context.l10n.menuSwitchToResiden…</code> | Çift rollü kullanıcıda mod değiştirme satırı |
 
 **Olası nedenler**
 - _itemsForRole listesinde öğe o rol/mod için yok

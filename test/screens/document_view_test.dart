@@ -85,7 +85,7 @@ void main() {
         dark: dark,
       );
       expect(find.text('Belge bulunamadı.'), findsOneWidget);
-      expect(find.text('Belgeler'), findsOneWidget);
+      expect(find.text('Dosya Deposu'), findsOneWidget);
     });
 
     listMatrix('yalnız yönetim: seçici yok', (t, w, h, s, dark) async {
@@ -103,6 +103,51 @@ void main() {
       expect(find.byType(DocumentAdminView), findsOneWidget);
       expect(_key('documents_mode_manage'), findsNothing);
     });
+
+    testWidgets(
+      'açıklama yetkiye uyar: kurul (salt okur) Drive bölümünü anmaz, yazma yetkisinde anar, karma hesapta uyarır',
+      (t) async {
+        const driveHint = 'Google Drive bölümünü';
+        final auth = DocumentFakeAuth();
+        // Salt okur site (kurul üyesi): Drive bölümü çizilmez, açıklama da ona yönlendirmez.
+        await _pump(
+          t,
+          auth,
+          seededDocuments(auth, board: true),
+          manage: const <PeopleSite>[_read],
+        );
+        expect(find.textContaining(driveHint), findsNothing);
+        expect(find.textContaining('görüntüleyebilirsiniz'), findsWidgets);
+
+        // Yazma yetkisi: açıklama Drive bölümünü anar (koşulsuz).
+        await _pump(
+          t,
+          auth,
+          seededDocuments(auth),
+          manage: const <PeopleSite>[_write],
+        );
+        expect(find.textContaining(driveHint), findsOneWidget);
+        expect(find.textContaining('yazma yetkiniz olan sitelerde'), findsNothing);
+
+        // Karma hesap (bir sitede yazma, diğerinde salt okur): Drive yalnız yazma yetkisi olan sitelerde.
+        await _pump(
+          t,
+          auth,
+          seededDocuments(auth),
+          manage: const <PeopleSite>[
+            _write,
+            PeopleSite(code: 12, name: 'Lale Sitesi'),
+          ],
+        );
+        expect(find.textContaining('yazma yetkiniz olan sitelerde'), findsOneWidget);
+        expect(find.textContaining(driveHint), findsOneWidget);
+
+        // Sistem yöneticisi (tüm siteler): yazma yetkisi.
+        await _pump(t, auth, seededDocuments(auth), all: true);
+        expect(find.textContaining(driveHint), findsOneWidget);
+        expect(find.textContaining('yazma yetkiniz olan sitelerde'), findsNothing);
+      },
+    );
 
     testWidgets(
       'hem yönetim hem sakin: seçici çıkar; varsayılan yönetim; geçiş sakin görünümünü kurar',

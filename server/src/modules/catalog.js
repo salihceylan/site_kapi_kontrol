@@ -6,7 +6,13 @@
 //    satırın `enabled` değeri, yoksa katalogdaki varsayılan (`defaultEnabled`).
 //  - Satırı olmayan site katalog varsayılanına göre davranır (door_control varsayılanı 2bf1bd4'ten beri KAPALI;
 //    cihaz kapıya bağlanınca açılır).
-//  - Aidat ve Finans TEMEL modüldür (AGENTS.md Kural 25): talep gerekmeden her sitede açık, kapatılamaz.
+//  - TEMEL modüller (AGENTS.md Kural 25; core: true): Kişi ve Daire Kayıtları, Duyuru ve Bildirim, Aidat ve Finans, Anket ve Oylama, Komşu Panosu,
+//    Ekipman ve Bakım, Faaliyet Raporu, Dosya Deposu. Talep gerekmeden her sitede açık, kapatılamaz; site_modules satırı
+//    core_modules.js ile kurulumda yazılır / açılışta doldurulur.
+//  - Kart Ödemesi (eski `card_payments`) ayrı modül DEĞİLDİR: Aidat ve Finans'ın parçasıdır (kapıları `finance` denetler); eski kod
+//    `retiredModuleNotice` ile yanıtlanır (migrations/083).
+//  - Belgeler (eski `documents`) ayrı modül DEĞİLDİR: Dosya Deposu'nun (`drive_storage`) parçasıdır (belge uçları ve ekranları onun kapısındadır);
+//    eski kod `canonicalModuleCode` ile çevrilir (migrations/084).
 
 export const MODULE_STATUS_AVAILABLE = 'available';
 export const MODULE_STATUS_COMING_SOON = 'coming_soon';
@@ -58,14 +64,6 @@ export const MODULE_CATALOG = Object.freeze([
     defaultEnabled: true,
   }),
   defineModule({
-    code: 'documents',
-    name: 'Belgeler (Dosya Deposu)',
-    description: 'Yönetmelik, tutanak, sözleşme gibi belgelerin yüklenmesi ve sakinlere, kurula ya da yöneticilere dağıtılması.',
-    core: false,
-    status: MODULE_STATUS_AVAILABLE,
-    defaultEnabled: false,
-  }),
-  defineModule({
     code: 'reservation',
     name: 'Rezervasyon ve Konsiyerj',
     description: 'Ortak alan rezervasyonu ve konsiyerj talepleri.',
@@ -101,9 +99,10 @@ export const MODULE_CATALOG = Object.freeze([
     code: 'survey',
     name: 'Anket ve Oylama',
     description: 'Sakinlere anket ve oylama açma; sonuçların takibi.',
-    core: false,
+    // Temel modül (Kural 25): site kurulumunda açık tanımlanır, talep edilmez, kapatılamaz.
+    core: true,
     status: MODULE_STATUS_AVAILABLE,
-    defaultEnabled: false,
+    defaultEnabled: true,
   }),
   defineModule({
     code: 'visitor_log',
@@ -117,14 +116,6 @@ export const MODULE_CATALOG = Object.freeze([
     code: 'card_access',
     name: 'Kartlı Geçiş',
     description: 'Sakinlere kart tanımlama ve kartla kapı geçişi; kart iptali ve kayıt listesi.',
-    core: false,
-    status: MODULE_STATUS_AVAILABLE,
-    defaultEnabled: false,
-  }),
-  defineModule({
-    code: 'card_payments',
-    name: 'Kart Ödemesi',
-    description: 'Kartla aidat ödemesi için sağlayıcı arayüzü (iyzico, PayTR). Yakında.',
     core: false,
     status: MODULE_STATUS_AVAILABLE,
     defaultEnabled: false,
@@ -171,27 +162,31 @@ export const MODULE_CATALOG = Object.freeze([
   }),
   defineModule({
     code: 'drive_storage',
-    name: 'Dosya Deposu (Google Drive)',
-    description: 'Sitenin dosyalarının sitenin kendi Google Drive hesabında saklanması.',
-    core: false,
+    name: 'Dosya Deposu',
+    // Belgeler (yönetmelik, tutanak, sözleşme; sakinlere/kurula/yöneticilere dağıtım) 084'te bu modüle katıldı; ayrı `documents` modülü yoktur.
+    description: 'Yönetmelik, tutanak, sözleşme gibi belgelerin yüklenip dağıtılması; dosyaların sitenin Google Drive alanında saklanması.',
+    // Temel modül (Kural 25): site kurulumunda açık tanımlanır, talep edilmez, kapatılamaz.
+    core: true,
     status: MODULE_STATUS_AVAILABLE,
-    defaultEnabled: false,
+    defaultEnabled: true,
   }),
   defineModule({
     code: 'neighbor_board',
     name: 'Komşu Panosu',
     description: 'Sakinlerin ilan yazdığı, yöneticinin onayladığı site panosu.',
-    core: false,
+    // Temel modül (Kural 25): site kurulumunda açık tanımlanır, talep edilmez, kapatılamaz.
+    core: true,
     status: MODULE_STATUS_AVAILABLE,
-    defaultEnabled: false,
+    defaultEnabled: true,
   }),
   defineModule({
     code: 'annual_report',
     name: 'Faaliyet Raporu',
     description: 'Yıllık faaliyet raporu taslağı kayıtlardan hazırlanır, düzenlenir ve PDF alınır.',
-    core: false,
+    // Temel modül (Kural 25): site kurulumunda açık tanımlanır, talep edilmez, kapatılamaz.
+    core: true,
     status: MODULE_STATUS_AVAILABLE,
-    defaultEnabled: false,
+    defaultEnabled: true,
   }),
   defineModule({
     code: 'plate_recognition',
@@ -221,13 +216,29 @@ export const MODULE_CATALOG = Object.freeze([
     code: 'equipment',
     name: 'Ekipman ve Bakım',
     description: 'Ekipman envanteri, bakım planı ve kaydı, yasal kontrol hatırlatması ve teklif karşılaştırma.',
-    core: false,
+    // Temel modül (Kural 25): site kurulumunda açık tanımlanır, talep edilmez, kapatılamaz.
+    core: true,
     status: MODULE_STATUS_AVAILABLE,
-    defaultEnabled: false,
+    defaultEnabled: true,
   }),
 ]);
 
 export const MODULE_CODES = Object.freeze(MODULE_CATALOG.map((definition) => definition.code));
+
+/**
+ * Katalogdan KALDIRILMIŞ eski modül kodları -> güncel kod. `documents` (Belgeler) 084'te `drive_storage` (Dosya Deposu) ile birleşti.
+ * Eski uygulama sürümleri hâlâ `documents` kodunu gönderebilir (modül talebi, aç/kapa): bu kod Dosya Deposu'na çevrilir, 404 ya da 500 dönmez.
+ * Katalogda ayrı modül olarak ASLA görünmez; yalnız kod çevirisi ve eski kodlu geçmiş kayıtların (talep, denetim) adı için kullanılır.
+ */
+export const LEGACY_MODULE_ALIASES = Object.freeze({ documents: 'drive_storage' });
+
+/** Eski modül kodunu güncel koda çevirir; tanınmayan ya da metin olmayan değer olduğu gibi döner. */
+export function canonicalModuleCode(code) {
+  if (typeof code !== 'string') {
+    return code;
+  }
+  return Object.hasOwn(LEGACY_MODULE_ALIASES, code) ? LEGACY_MODULE_ALIASES[code] : code;
+}
 
 // Map: "__proto__" / "constructor" gibi anahtarlar katalog araması için zararsızdır.
 const DEFINITIONS_BY_CODE = new Map(MODULE_CATALOG.map((definition) => [definition.code, definition]));
@@ -238,6 +249,34 @@ export function getModuleDefinition(code) {
     return null;
   }
   return DEFINITIONS_BY_CODE.get(code) ?? null;
+}
+
+// Kataloktan KALDIRILMIŞ modül kodları -> açıklama. Kullanıcıya dönük ad/ayrıntı sabittir (kullanıcı girdisi yansıtılmaz).
+// `card_payments` (Kart Ödemesi) 2026-10-28'de Aidat ve Finans'ın (temel modül) içine alındı: ayrı modül değildir, her sitede hep açıktır.
+// Eski uygulama sürümleri hâlâ bu kodu talep edebilir ya da açıp kapatmaya çalışabilir; bilinmeyen modül gibi 404 değil,
+// temel modüllerle AYNI sözleşmeyle (400 MODULE_NOT_TOGGLEABLE + açıklayıcı metin) yanıtlanır.
+const RETIRED_MODULE_NOTICES = new Map([
+  ['card_payments', 'Kart Ödemesi artık Aidat ve Finans modülünün içindedir; her sitede hep açıktır, ayrıca açılıp kapatılamaz ya da talep edilemez.'],
+]);
+
+/** Kataloktan kaldırılmış modül kodu için açıklama metni; kaldırılmış değilse (ya da metin olmayan değerse) null. */
+export function retiredModuleNotice(code) {
+  if (typeof code !== 'string') {
+    return null;
+  }
+  return RETIRED_MODULE_NOTICES.get(code) ?? null;
+}
+
+// Kataloktan KALDIRILMIŞ ve başka bir koda ÇEVRİLMEYEN modül kodları -> eski kodlu GEÇMİŞ kayıtlarda (modül talebi) gösterilen ad.
+// `documents` burada yoktur: `canonicalModuleCode` ile güncel modülün (Dosya Deposu) adına çevrilir. Yalnız görünen ad içindir.
+const RETIRED_MODULE_NAMES = new Map([['card_payments', 'Kart Ödemesi (Aidat ve Finans)']]);
+
+/** Kataloktan kaldırılmış modül kodunun geçmiş kayıtlarda gösterilen adı; kaldırılmış değilse (ya da metin olmayan değerse) null. */
+export function retiredModuleName(code) {
+  if (typeof code !== 'string') {
+    return null;
+  }
+  return RETIRED_MODULE_NAMES.get(code) ?? null;
 }
 
 export function isToggleable(definition) {

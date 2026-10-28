@@ -9,7 +9,11 @@ Sunucu ve Flutter uygulaması bu belgeye göre yazılır. Deneme listesi: `tools
 1. **Geriye dönük uyum:** Modül satırı olmayan site, katalogdaki varsayılana göre davranır. `door_control` varsayılanı AÇIK; bu yüzden mevcut siteler, mevcut
    uygulamalar ve cihazlar hiçbir değişiklik görmez. Yeni modüller varsayılan KAPALI/"yakında".
 2. **Yönetim türü:** `sites.management_type` (varsayılan `apartment_site`). Beş türün hepsi seçilebilir (311ed6d); türe göre arayüz terimleri ve önerilen modüller F9 bölümündedir.
-3. **Çekirdek modüller** (`people`, `announcements`) her sitede hep açıktır. Ekranları Faz 2/3'te geldi: `people` Faz 2a'dan, `announcements` Faz 3a'dan beri `status: available`.
+3. **Çekirdek (temel) modüller** her sitede hep açıktır, talep edilmez, kapatılamaz (AGENTS.md Kural 25): `people`, `announcements`, `finance`, `survey`, `neighbor_board`, `equipment`, `annual_report`, `drive_storage`.
+   `people` Faz 2a'dan, `announcements` Faz 3a'dan beri `status: available`. `finance` 2026-10-26'dan, diğer beşi 2026-10-28'den beri temeldir. Kart ödemesi artık ayrı modül değil, Aidat ve Finans'ın parçasıdır;
+   Belgeler artık ayrı modül değil, Dosya Deposu'nun parçasıdır. `site_modules` satırı katalogdaki `core` bayrağından türetilir (`server/src/modules/core_modules.js`): yeni sitede kurulumla aynı işlemde açık yazılır,
+   mevcut sitelere açılışta (`ensureDbSchema`) ve `migrations/079`, `082` ile doldurulur; bekleyen modül talepleri "onaylandı" olarak sonuçlanır. Katalog 23 modüldür (Kart Ödemesi ve Belgeler kataloktan çıktı:
+   `migrations/083`, `084`; ayrıntı aşağıdaki iki not).
 4. **Denetim kaydı** (`audit_log`) yalnız eklenir; API'de güncelleme/silme yoktur, bakım servisi temizlemez.
 5. **Ek roller:** `BOARD_MEMBER` (Yönetim Kurulu / Denetçi) ve `STAFF` (Görevli), `site_memberships.role` değerleridir. Kullanıcının genel rolü (`users.role`) DEĞİŞMEZ.
    Site yöneticisi isterse atar; atamazsa bu rollerin işi site yöneticisinde kalır. `requireSiteManager`/`hasSiteManagementAccess` bu rolleri YÖNETİCİ saymaz.
@@ -23,7 +27,11 @@ Sunucu ve Flutter uygulaması bu belgeye göre yazılır. Deneme listesi: `tools
 | `people` | Kişi ve Daire Kayıtları | evet | `available` (Faz 2a) | — (hep açık) |
 | `announcements` | Duyuru ve Bildirim | evet | `available` (Faz 3a) | — (hep açık) |
 | `finance` | Aidat ve Finans | evet (2026-10-26, AGENTS.md Kural 25) | `available` (Faz 4a) | — (hep açık; kurulumda satırı yazılır, talep edilmez) |
-| `documents` | Belgeler (Dosya Deposu) | hayır | `available` (Faz 3b-A) | KAPALI |
+| `survey` | Anket ve Oylama | evet (2026-10-28, Kural 25) | `available` | — (hep açık; kurulumda satırı yazılır, talep edilmez) |
+| `neighbor_board` | Komşu Panosu | evet (2026-10-28, Kural 25) | `available` | — (hep açık) |
+| `equipment` | Ekipman ve Bakım | evet (2026-10-28, Kural 25) | `available` | — (hep açık) |
+| `annual_report` | Faaliyet Raporu | evet (2026-10-28, Kural 25) | `available` | — (hep açık) |
+| `drive_storage` | Dosya Deposu (Belgeler + Google Drive) | evet (2026-10-28, Kural 25) | `available` (Faz 3b-A + D1; 084'te birleşti) | — (hep açık; Google Drive hesabı ayrıca bağlanır) |
 | `reservation` | Rezervasyon ve Konsiyerj | hayır | `coming_soon` | KAPALI |
 | `work_tracking` | İş Takibi | hayır | `available` (bkz. PLATFORM_IS_TAKIBI.md) | KAPALI |
 | `metering` | Sayaç Okuma ve Faturalandırma | hayır | `coming_soon` | KAPALI |
@@ -31,9 +39,18 @@ Sunucu ve Flutter uygulaması bu belgeye göre yazılır. Deneme listesi: `tools
 | `contracts` | Firma ve Sözleşme Takibi | hayır | `available` (bkz. PLATFORM_SOZLESMELER.md) | KAPALI |
 | `decision_book` | Karar Defteri | hayır | `available` | KAPALI |
 
-Tam ve güncel liste (17 modül, sırasıyla) `catalog.js` içindedir; bu tablo yalnız örnek satırları ve ilk sürüm durumlarını gösterir.
+Tam ve güncel liste `catalog.js` içindedir; bu tablo yalnız örnek satırları ve ilk sürüm durumlarını gösterir.
+
+**Belgeler ayrı modül DEĞİLDİR (2026-10-28, migration 084).** Eski `documents` ("Belgeler (Dosya Deposu)") modülü katalogdan kaldırıldı; yönetmelik / tutanak / sözleşme
+yükleme ve dağıtma (`docs/PLATFORM_BELGELER.md` Bölüm A) ile sitenin Google Drive bağlantısı (`docs/PLATFORM_DRIVE_DEPOLAMA.md`) TEK modülde, `drive_storage` ("Dosya Deposu"), toplandı.
+- Belge uçlarının yolları DEĞİŞMEDİ (`/manager/sites/:siteCode/documents…`, `/app/documents…`); modül kapısı artık `drive_storage`. Dosya Deposu TEMEL modül olduğundan (Kural 25) kapı her sitede açıktır: `isModuleEnabled` katalogdan karar verir (`site_modules` satırı kapalı yazılsa da açık sayılır), sakin listesi/indirmesinin doğrudan SQL kapısı satır yoksa açık sayar (`COALESCE(..., TRUE)`); `MODULE_DISABLED` `{ module: 'drive_storage' }` yanıtı kod yolu olarak durur ama tetiklenmez.
+- Belge verisi (tablolar `documents`, `document_versions`, `announcement_attachments` ve diskteki dosyalar) DEĞİŞMEDİ; migration 084 yalnız modül satırlarını ve bekleyen talepleri birleştirir (idempotent; `server/src/modules/documents_into_drive.js`, `ensureDbSchema` her açılışta uygular): Belgeler AÇIK olan sitede Dosya Deposu açılır, bekleyen `documents` talebi Dosya Deposu açıksa "onaylandı", değilse Dosya Deposu talebine çevrilir (o site için zaten bekleyen Dosya Deposu talebi varsa "iptal"). Eski `documents` site_modules satırları SİLİNMEZ: katalogda olmadıkları için `rowsByModuleCode` onları yok sayar, ama dağıtım sağlık denetimi başarısız olursa `deploy/remote_deploy.sh` yalnız KODU geri alır (veritabanını almaz) ve önceki sürüm Belgeler'in açık/kapalı bilgisini bu satırlardan okur. Sonuçlanmış eski talepler ve denetim kayıtları (`target_id = 'documents'`) olduğu gibi kalır.
+- Eski uygulama sürümleri `documents` kodunu göndermeye devam edebilir: `PUT …/modules/documents` ve `POST …/module-requests { module_code: "documents" }` `catalog.js` `canonicalModuleCode` ile `drive_storage`'a çevrilir; Dosya Deposu temel modül olduğundan sonuç 400 `MODULE_NOT_TOGGLEABLE` olur (404/500 yok; satır, talep ya da denetim kaydı yazılmaz). `GET /app/modules/catalog`, `GET …/modules` ve `GET /app/my-modules` artık `documents` anahtarı taşımaz; eski uygulamada "Belgeler" menüsü, uygulama güncellenene kadar görünmez.
+- Arayüz: tek menü öğesi "Dosya Deposu" (`SirketMenuItem.belgeler` iç adı korunur): üstte yükleme/dağıtım yapılan **Belgeler** listesi (yönetici/kurul) ya da sakinin **Belgelerim** listesi, yönetim görünümünün altında **Google Drive** bölümü (yazma yetkisi olanda; bağlantı henüz hazır değilse "Yakında…"). Daire sakini alt çubuğundaki sekme "Dosyalar" (dar ekran). Modüller ekranından ayrı Drive kartı kaldırıldı.
 
 Açıklamalar (Türkçe, kısa) katalogda tutulur. `toggleable = !core && status === 'available'`.
+
+**Kart Ödemesi ayrı modül değildir (2026-10-28):** eski `card_payments` modülü kataloktan KALDIRILDI; kart ödemesi (sağlayıcı arayüzü: iyzico, PayTR "Yakında…") Aidat ve Finans'ın (`finance`, temel modül) parçasıdır. Kart ödemesi uçlarının (`/manager/sites/:siteCode/card-payments[/:provider]`) kapısı `finance` modülüdür, yani her sitede açıktır; uç yolları ve veri tablosu (`payment_provider_settings`) DEĞİŞMEDİ. Uygulamada ayrı modül kartı ya da menü öğesi yoktur: Finans ekranındaki **Kart Ödemesi** düğmesi (yönetici düzenler, kurul salt okur) komisyon notu penceresini açar. Migration `083_card_payments_into_finance.sql` (aynı metin `card_payments_into_finance.js` `CARD_PAYMENTS_INTO_FINANCE_SQL`, açılışta `ensureDbSchema` de uygular; idempotent): bekleyen `card_payments` modül taleplerini "onaylandı" olarak sonuçlandırır (karar notu "Kart Ödemesi, Aidat ve Finans modülünün içine alındı; her sitede açık."); kart ödemesi AYARLARI, geçmiş talepler, `audit_log` kayıtları ve eski `card_payments` `site_modules` satırları KALIR (katalog satırları yok sayar; dağıtım otomatik geri alınırsa kod geri gelir, veritabanı gelmez ve önceki sürüm Kart Ödemesi'nin açık/kapalı bilgisini bu satırlardan okur). Geçmiş `card_payments` talepleri listelerde "Kart Ödemesi (Aidat ve Finans)" adıyla görünür (`catalog.js` `retiredModuleName`). Eski uygulama sürümü `card_payments` kodunu talep eder ya da açıp kapatmaya çalışırsa sunucu 404/500 değil, temel modüllerle aynı sözleşmeyle **400 `MODULE_NOT_TOGGLEABLE`** ve açıklayıcı metin döner (`catalog.js` `retiredModuleNotice`); katalogda ve `modules` haritalarında bu kod artık yoktur, eski uygulama kart ödemesi bölümünü göremez ama hata da almaz (uygulamayı güncelleyince Finans ekranından erişir).
 `enabled` hesabı: `status !== 'available'` → `false`; `core` → `true`; aksi halde `site_modules` satırı varsa `enabled`, yoksa varsayılan.
 
 ## Veritabanı (migrations/029_platform_modules.sql + db.js'te aynı DDL)
@@ -42,7 +59,7 @@ Açıklamalar (Türkçe, kısa) katalogda tutulur. `toggleable = !core && status
 - `site_modules(site_code BIGINT REFERENCES sites(site_code) ON DELETE CASCADE, module_code TEXT, enabled BOOLEAN NOT NULL, updated_by INTEGER NULL REFERENCES users(user_code) ON DELETE SET NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY(site_code, module_code))`.
 - `audit_log(id BIGSERIAL PK, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), actor_user_code INTEGER NULL REFERENCES users(user_code) ON DELETE SET NULL, actor_name TEXT, actor_role TEXT, action TEXT NOT NULL, site_code BIGINT NULL (FK YOK), target_type TEXT, target_id TEXT, details JSONB NOT NULL DEFAULT '{}')`; indeksler `(site_code, id DESC)`, `(id DESC)`.
 - `site_memberships.role` CHECK genişler: `SITE_OWNER, SITE_ADMIN, RESIDENT, BOARD_MEMBER, STAFF` (users.role'daki DROP+ADD CONSTRAINT / DO bloğu örneği gibi).
-- Eski sitelere satır yazılmaz (varsayılan yeter).
+- Eski sitelere satır yazılmaz (varsayılan yeter); tek istisna temel modüllerdir: onların açık satırı `core_modules.js` ile kurulumda yazılır ve mevcut sitelere açılışta / `079`, `082` ile doldurulur.
 
 ## Sunucu uçları
 
@@ -148,7 +165,7 @@ Görünürlük kuralı DEĞİŞMEDİ ve tek yerdedir: `YanMenu.visibleItems` (ro
 | Giderler | (bugün boş: gider analizi buraya gelecek) |
 | İletişim | Duyurular, Talepler, Taleplerim, Anket ve Oylama, Anketler |
 | Raporlar | (bugün boş: faaliyet raporu, icra dökümü buraya gelecek) |
-| Site hizmetleri | Kapılar, Belgeler, Rezervasyonlar, Rezervasyon, Ziyaretçi ve Kargo, Ziyaretçilerim, Sözleşmeler, Karar Defteri, Kararlar |
+| Site hizmetleri | Kapılar, Dosya Deposu, Rezervasyonlar, Rezervasyon, Ziyaretçi ve Kargo, Ziyaretçilerim, Sözleşmeler, Karar Defteri, Kararlar |
 | Ayarlar (dişli; çekmece başlığı değil) | Profilim, Eller Serbest, Kullanıcı / Süper Kullanıcı / Site Yöneticileri Yönetimi, Modüller, Modül Talepleri, Site Başvuruları, cihaz ekranları, Bluetooth ile Wi-Fi Kur, Denetim Kaydı, Platform Ayarları, İstemci Hataları (+ eski iki talep ekranı) |
 
 - **Çekmece**: yalnız görünür öğesi olan başlıklar, `SirketMenuGroup.drawerGroups` sırasıyla (`YanMenu.drawerSections`); grup içinde menü sırası
@@ -166,7 +183,7 @@ Görünürlük kuralı DEĞİŞMEDİ ve tek yerdedir: `YanMenu.visibleItems` (ro
   sorguları değişmez (kapsam yalnız istemci süzgecidir; yetkiyi sunucu yine doğrular). Kendi site listesini sunucudan çeken ekranlar (Kişiler /
   Duyurular yönetimi, Modüller) kendi seçicisini korur; tüm ekranları kapsayan "etkin site" Y1 (yönetim firması) ile gelecektir.
 - **Sakin alt çubuğu** (`residentTabsFor`, `lib/ui/helpers/resident_tabs.dart`): Özet (Panel) · Duyuru (Duyurular) · Arıza (Taleplerim) · Kapı
-  (Kapılar) · Belgeler (Belgeler). Sekme yalnız öğesi görünürse çizilir; Kapı ayrıca kapı yetkisinin olumlu kanıtını ister (kapı listesi dolu ya da
+  (Kapılar) · Dosyalar (Dosya Deposu). Sekme yalnız öğesi görünürse çizilir; Kapı ayrıca kapı yetkisinin olumlu kanıtını ister (kapı listesi dolu ya da
   modül verisinde `door_access` site; Geçiş Kontrol kapalıysa yok). İki sekmeden azsa ve kısa pencerede (< 480 dp) çubuk yok. Yalnız sakin kitlesinde (`showcaseAudience ==
   resident`). Android widget'ı / kısayol isteği (`DoorPanelRequests`) soğuk açılışta modül verisinin ilk yüklemesini bekler; beklerken kullanıcı
   başka sayfaya geçerse (menü değişiminin tek kapısı `_requestMenuChange`) istek düşer; uygulanınca Kapı sekmesi seçilir.
@@ -215,14 +232,14 @@ Yeni tablo ve migration YOK. Türe göre veri modeli ve modüller AYNI kalır (b
 
 | Tür | unit / unit_plural | resident / resident_plural | owner | fee | block / block_plural | Önerilen modüller |
 |---|---|---|---|---|---|---|
-| `apartment_site` | Daire / Daireler | Sakin / Sakinler | Malik | Aidat | Blok / Bloklar | door_control, finance, documents, announcements |
+| `apartment_site` | Daire / Daireler | Sakin / Sakinler | Malik | Aidat | Blok / Bloklar | door_control, finance, drive_storage, announcements |
 | `residence` | Daire / Daireler | Sakin / Sakinler | Malik | Aidat | Blok / Bloklar | reservation, visitor_log, work_tracking, door_control, finance |
-| `business_center` | Ofis / Ofisler | Firma / Firmalar | Mal sahibi | Ortak gider | Kat / Katlar | work_tracking, visitor_log, finance, documents |
-| `cooperative` | Hisse / Hisseler | Üye / Üyeler | Üye | Üye aidatı | Blok / Bloklar | finance, documents, announcements, survey |
-| `shopping_mall` | Mağaza / Mağazalar | Kiracı firma / Kiracı firmalar | Mal sahibi | Ortak gider | Kat / Katlar | finance, work_tracking, visitor_log, documents |
+| `business_center` | Ofis / Ofisler | Firma / Firmalar | Mal sahibi | Ortak gider | Kat / Katlar | work_tracking, visitor_log, finance, drive_storage |
+| `cooperative` | Hisse / Hisseler | Üye / Üyeler | Üye | Üye aidatı | Blok / Bloklar | finance, drive_storage, announcements, survey |
+| `shopping_mall` | Mağaza / Mağazalar | Kiracı firma / Kiracı firmalar | Mal sahibi | Ortak gider | Kat / Katlar | finance, work_tracking, visitor_log, drive_storage |
 
 - Bilinmeyen/boş tür → `apartment_site` terimleri ve önerileri (varsayılan; `normalizeManagementType` ile aynı kural).
-- Önerilen kodların hepsi artık katalogdadır (`survey`, `visitor_log` dahil); katalogda olmayan bir kod önerilirse OLDUĞU GİBİ döner ve istemci bilmediği kodu atlar. `GET /manager/sites/:siteCode/modules` `modules` dizisi yalnız katalogdaki modülleri (17) içerir; katalog dışı öneri modül listesine eklenmez.
+- Önerilen kodların hepsi artık katalogdadır (`survey`, `visitor_log` dahil); katalogda olmayan bir kod önerilirse OLDUĞU GİBİ döner ve istemci bilmediği kodu atlar. `GET /manager/sites/:siteCode/modules` `modules` dizisi yalnız katalogdaki modülleri (23) içerir; katalog dışı öneri modül listesine eklenmez.
 - Her türün tek cümlelik Türkçe açıklaması `summary` (F9 deneme listesindeki tür açıklamaları; "Yakında" demez).
 
 ### Ekleyici alanlar (mevcut alanlar ve değerleri DEĞİŞMEZ; eski istemciler alanları yok sayar)
@@ -230,7 +247,7 @@ Yeni tablo ve migration YOK. Türe göre veri modeli ve modüller AYNI kalır (b
 - `POST /membership/setup-site` yanıtındaki `site` → `management_terms`.
 - `GET /app/my-modules` `sites[]` öğeleri → `management_terms`, `recommended_modules` (kod dizisi).
 - `GET /manager/sites/:siteCode/modules` → yanıta `management_terms`; her modül öğesine `recommended` (boolean: modül bu tür için önerilir mi).
-- **Yeni uç** `GET /app/management-types` (authRequired; sabit tablo, veritabanı sorgulanmaz) → `{ "items": [ { "code", "label", "selectable", "terms", "recommended_modules", "summary" } ] }`; 5 tür `MANAGEMENT_TYPES` sırasıyla. Örnek öğe: `{ "code": "business_center", "label": "İş Merkezi", "selectable": true, "terms": { "unit": "Ofis", "unit_plural": "Ofisler", "resident": "Firma", "resident_plural": "Firmalar", "owner": "Mal sahibi", "fee": "Ortak gider", "block": "Kat", "block_plural": "Katlar" }, "recommended_modules": ["work_tracking", "visitor_log", "finance", "documents"], "summary": "İş merkezi yönetimi: ..." }`.
+- **Yeni uç** `GET /app/management-types` (authRequired; sabit tablo, veritabanı sorgulanmaz) → `{ "items": [ { "code", "label", "selectable", "terms", "recommended_modules", "summary" } ] }`; 5 tür `MANAGEMENT_TYPES` sırasıyla. Örnek öğe: `{ "code": "business_center", "label": "İş Merkezi", "selectable": true, "terms": { "unit": "Ofis", "unit_plural": "Ofisler", "resident": "Firma", "resident_plural": "Firmalar", "owner": "Mal sahibi", "fee": "Ortak gider", "block": "Kat", "block_plural": "Katlar" }, "recommended_modules": ["work_tracking", "visitor_log", "finance", "drive_storage"], "summary": "İş merkezi yönetimi: ..." }`.
 
 ### Flutter (ayrı iş, aynı sözleşme)
 `lib/models/management_terms.dart` (JSON'dan parse; alan yoksa varsayılan Daire/Sakin/Malik/Aidat/Blok → eski sunucuyla çalışır), `SiteRecord` ve `MySiteModules`'e `managementTerms` (ekleyici), `AuthApi.getManagementTypes()`. Kullanım: Modüller ekranında "Bu tür için önerilir" çipi; `SetupSiteDialog`/`SiteDialog` tür seçicide `summary` ve kısa terim özeti ("Daire → Ofis, Sakin → Firma"); Kişiler ekranı Daireler sekmesi başlığı/boş durum metinleri `terms.unit` ile (yalnız metin; iş mantığı ve API alanları değişmez); site kartı tür çipinde terim özeti ipucu.

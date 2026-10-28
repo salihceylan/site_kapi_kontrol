@@ -87,8 +87,8 @@ class DriveStorageApi {
   }
 }
 
-/// "Dosya Deposu (Google Drive)" kartı (Modüller ekranı, seçili site): bağlı hesap, bekleyen dosya sayısı, bağla / kes.
-/// Modül kapalıysa açıklama gösterir; sunucuda Google bilgileri tanımlı değilse bağlama "Yakında…" der. Mevcut belge yüklemeleri bu aşamada değişmez.
+/// Dosya Deposu ekranının "Google Drive" bölümü (seçili site; Belgeler listesiyle AYNI modül, `drive_storage`): bağlı hesap,
+/// bekleyen dosya sayısı, bağla / kes. Modül kapalıysa açıklama gösterir; sunucuda Google bilgileri tanımlı değilse bağlama "Yakında…" der. Mevcut belge yüklemeleri bu aşamada değişmez.
 class DriveStorageCard extends StatefulWidget {
   const DriveStorageCard({super.key, required this.authService, required this.siteCode, this.api, this.launcher});
 
@@ -212,7 +212,7 @@ class _DriveStorageCardState extends State<DriveStorageCard> {
     if (_loading) {
       body = [Text('Yükleniyor…', style: muted)];
     } else if (_moduleOff) {
-      body = [Text('Bu modül sitenizde kapalı. Yukarıdaki listeden "Dosya Deposu (Google Drive)" modülünü açtığınızda Drive\'ı bağlayabilirsiniz.', style: muted)];
+      body = [Text('Dosya Deposu modülü bu sitede kapalı. Modül açıldığında Google Drive\'ı buradan bağlayabilirsiniz.', style: muted)];
     } else if (_error != null) {
       body = [
         InlineNotice(message: _error!, onRetry: _load),
@@ -252,7 +252,7 @@ class _DriveStorageCardState extends State<DriveStorageCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const SectionHeader(title: 'Dosya Deposu (Google Drive)', icon: Icons.cloud_rounded),
+          const SectionHeader(title: 'Google Drive', icon: Icons.cloud_rounded),
           const SizedBox(height: AppSpace.sm),
           ...body,
         ],

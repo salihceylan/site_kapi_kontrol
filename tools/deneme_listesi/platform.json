@@ -1,7 +1,7 @@
 {
   "baslik": "Platform Faz Kontrol Listesi",
   "aciklama": "SmartKeyPass (kapı kontrol), site ve toplu yaşam yönetim platformunun seçilebilir bir modülü olacak. Bu sayfa işi fazlara böler. Her faz canlıya alındığında maddeleri “Denemeye hazır” olur; siz denersiniz ve “Çalışıyor / Çalışmıyor” diye işaretlersiniz. Henüz yapılmamış maddelerde “Böyle istiyorum / istemiyorum” ile planı şimdiden şekillendirebilirsiniz. İşaretleriniz ve notlarınız kaydedilir, Claude okuyup yanıtlar.",
-  "durum_metni": "Durum: Faz 0, Faz 1, Faz 1.1, Faz 2a, Faz 3a, site başvurusu ve Faz 4a (Aidat ve Finans: tanım, borçlandırma, tahsilat, düzeltme, ay kapatma) canlıda ve denemeye hazır; Aidat ve Finans modülü varsayılan olarak KAPALIDIR, bir test sitesinde süper kullanıcıyla açıp deneyin. Faz 2b (Excel’den toplu yükleme ve dışa aktarma; F13), Faz 3b-A (Belgeler; F14) ve Faz 4b (makbuz, kasa/banka, gider, raporlar, gecikme tazminatı, borç hatırlatma; F15) ile hesap silme ve veri dosyası güncellemeleri (F16) kodlandı ve test edildi; sunucu ve uygulama sürümü yayınlanınca denenir (maddeler “Denemeye hazır” görünse de sürüm yayınlanmadan uygulamada yoktur). Gecikme tazminatı ve borç hatırlatma, avukatın vereceği hukuk onayı (finance.legal_ok) gelene kadar kapalı kalır: “Hukuk onayı bekleniyor” iletisi denemeye hazırdır, çalışan hali Planlıdır. Telefon bildirimi (Faz 3b-B, Firebase) F3.07’de planlı kalır. Beş yönetim türü ve türe göre terimler (F9), Anket ve Oylama ile Ziyaretçi ve Kargo (F11) canlıdadır; kartlı geçişin sunucu altyapısı hazırdır, uygulama ekranı ve kart okuyucu planlıdır (F10). Banka ve ödeme işleri “Yakında”. Satışa hazırlık paketi (F12: hesabı silme ve veri indirme, yasal metinler, giriş güvenliği, Yardım ve tanıtım turu, Platform Ayarları, bakım ve sürüm kapısı, yedek ve izleme, mağaza hazırlığı): sunucu tarafı canlıdadır; uygulama ve web sürümü yasal metinler tamamlanınca yayınlanacaktır, bu yüzden F12 maddelerini sürüm yayınlandıktan sonra (ya da geliştirici derlemesiyle) deneyin. Dalga 1 (F25–F29: kiracı ve ev sahibi için ayrı hesap, kurallar tablosu ve altın veri seti, sade tasarım, gruplu menü ve sakin alt çubuğu, avukat taslakları ve hesap rehberleri) kodlandı ve bağımsız incelemeden geçti; sürüm yayınlanınca denenir. Gezinme değişti: Profilim, Modüller, Modül Talepleri, Site Başvuruları, cihaz ekranları, Denetim Kaydı, Platform Ayarları ve İstemci Hataları artık sağ üstteki dişlinin açtığı Ayarlar panelindedir; bu yüzden ilgili eski maddeler güncellendi ve “Bugün değişti” işaretlidir.",
+  "durum_metni": "Durum: Faz 0, Faz 1, Faz 1.1, Faz 2a, Faz 3a, site başvurusu ve Faz 4a (Aidat ve Finans: tanım, borçlandırma, tahsilat, düzeltme, ay kapatma) canlıda ve denemeye hazır; Aidat ve Finans modülü TEMEL modüldür: her sitede açıktır, talep edilmez ve kapatılamaz. Faz 2b (Excel’den toplu yükleme ve dışa aktarma; F13), Faz 3b-A (Belgeler; F14) ve Faz 4b (makbuz, kasa/banka, gider, raporlar, gecikme tazminatı, borç hatırlatma; F15) ile hesap silme ve veri dosyası güncellemeleri (F16) kodlandı ve test edildi; sunucu ve uygulama sürümü yayınlanınca denenir (maddeler “Denemeye hazır” görünse de sürüm yayınlanmadan uygulamada yoktur). Gecikme tazminatı ve borç hatırlatma, avukatın vereceği hukuk onayı (finance.legal_ok) gelene kadar kapalı kalır: “Hukuk onayı bekleniyor” iletisi denemeye hazırdır, çalışan hali Planlıdır. Telefon bildirimi (Faz 3b-B, Firebase) F3.07’de planlı kalır. Beş yönetim türü ve türe göre terimler (F9), Anket ve Oylama ile Ziyaretçi ve Kargo (F11) canlıdadır; kartlı geçişin sunucu altyapısı hazırdır, uygulama ekranı ve kart okuyucu planlıdır (F10). Banka ve ödeme işleri “Yakında”. Satışa hazırlık paketi (F12: hesabı silme ve veri indirme, yasal metinler, giriş güvenliği, Yardım ve tanıtım turu, Platform Ayarları, bakım ve sürüm kapısı, yedek ve izleme, mağaza hazırlığı): sunucu tarafı canlıdadır; uygulama ve web sürümü yasal metinler tamamlanınca yayınlanacaktır, bu yüzden F12 maddelerini sürüm yayınlandıktan sonra (ya da geliştirici derlemesiyle) deneyin. Dalga 1 (F25–F29: kiracı ve ev sahibi için ayrı hesap, kurallar tablosu ve altın veri seti, sade tasarım, gruplu menü ve sakin alt çubuğu, avukat taslakları ve hesap rehberleri) kodlandı ve bağımsız incelemeden geçti; sürüm yayınlanınca denenir. Gezinme değişti: Profilim, Modüller, Modül Talepleri, Site Başvuruları, cihaz ekranları, Denetim Kaydı, Platform Ayarları ve İstemci Hataları artık sağ üstteki dişlinin açtığı Ayarlar panelindedir; bu yüzden ilgili eski maddeler güncellendi ve “Bugün değişti” işaretlidir. 2026-10-28: Anket ve Oylama, Komşu Panosu, Ekipman ve Bakım, Faaliyet Raporu ve Dosya Deposu da temel modül oldu (her sitede açık, talep gerekmez); Kart Ödemesi Aidat ve Finans’ın, Belgeler Dosya Deposu’nun içine alındı (F38; bu modüllerle ilgili eski maddeler güncellendi ve “Bugün değişti” işaretlidir).",
   "bolumler": [
     {
       "id": "F0",
@@ -82,10 +82,10 @@
             "Güncellemeden sonra site yöneticisi olarak giriş yapın.",
             "Menüyü gezin; sonra sağ üstteki dişliye (Ayarlar) dokunup \"Modüller\"i açın."
           ],
-          "beklenen": "\"Modüller\" menüde değil, sağ üstteki dişlinin açtığı Ayarlar panelindedir (site yöneticisinde ve süper kullanıcıda). Orada Geçiş Kontrol \"Tanımlı\", Kişi ve Daire Kayıtları ile Duyuru ve Bildirim \"Her sitede açık\" görünür; sonradan gelen modüller (Aidat ve Finans, Belgeler, İş Takibi ...) siz talep edip süper kullanıcı açana kadar \"Tanımlı değil\", henüz hazır olmayanlar \"Yakında…\" görünür. Kapalı modülün ekranı ne menüde ne Panel'de vardır; siz bir şeyi açana kadar hiçbir özellik değişmez.",
+          "beklenen": "\"Modüller\" menüde değil, sağ üstteki dişlinin açtığı Ayarlar panelindedir (site yöneticisinde ve süper kullanıcıda). Orada Geçiş Kontrol \"Tanımlı\"; sekiz temel modül (Kişi ve Daire Kayıtları, Duyuru ve Bildirim, Aidat ve Finans, Anket ve Oylama, Komşu Panosu, Ekipman ve Bakım, Faaliyet Raporu, Dosya Deposu) \"Her sitede açık\" görünür; sonradan gelen seçmeli modüller (İş Takibi, Rezervasyon ve Konsiyerj ...) siz talep edip süper kullanıcı açana kadar \"Tanımlı değil\", henüz hazır olmayanlar \"Yakında…\" görünür. Kapalı modülün ekranı ne menüde ne Panel'de vardır; siz bir şeyi açana kadar hiçbir özellik değişmez.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
-          "yeni": false,
+          "yeni": true,
           "gelistirme": "hazir"
         },
         {
@@ -141,10 +141,10 @@
           "adimlar": [
             "Sağ üstteki dişliye (Ayarlar) dokunup \"Modüller\" ekranını açın ve bir site seçin."
           ],
-          "beklenen": "Her modül kartında adı, kısa açıklaması ve durumu yazar. Kişi ve Daire Kayıtları ile Duyuru ve Bildirim \"Her sitede açık\"tır. Sayaç Okuma ve Faturalandırma, Online Tahsilat ve Banka Bağlantısı, Plaka Tanıma, HGS Geçişi ve Kamera (CCTV) Bağlantısı \"Yakında…\" etiketiyle görünür ve açılamaz. Ötekiler (Geçiş Kontrol (SmartKeyPass), Aidat ve Finans, Belgeler (Dosya Deposu), Rezervasyon ve Konsiyerj, İş Takibi, Anket ve Oylama, Ziyaretçi ve Kargo, Kartlı Geçiş, Firma ve Sözleşme Takibi, Karar Defteri) anahtarla \"Açık\" / \"Kapalı\" yapılır.",
+          "beklenen": "Her modül kartında adı, kısa açıklaması ve durumu yazar. Sekiz temel modül (Kişi ve Daire Kayıtları, Duyuru ve Bildirim, Aidat ve Finans, Anket ve Oylama, Komşu Panosu, Ekipman ve Bakım, Faaliyet Raporu, Dosya Deposu) \"Her sitede açık\"tır; anahtarı ve \"Modül Talep Et\" düğmesi yoktur. Online Tahsilat ve Banka Bağlantısı ile HGS Geçişi \"Yakında…\" etiketiyle görünür ve açılamaz. Ötekiler (Geçiş Kontrol (SmartKeyPass), Rezervasyon ve Konsiyerj, İş Takibi, Sayaç Okuma ve Faturalandırma, Ziyaretçi ve Kargo, Kartlı Geçiş, Kamera ve Plaka, Firma ve Sözleşme Takibi, Karar Defteri, Rehber, İşletme Projesi (Bütçe), Plaka Tanıma, Kamera (CCTV) Bağlantısı) anahtarla \"Açık\" / \"Kapalı\" yapılır.",
           "rol_notu": "Süper kullanıcı",
           "on_kosul": "",
-          "yeni": false,
+          "yeni": true,
           "gelistirme": "hazir"
         },
         {
@@ -918,15 +918,15 @@
         },
         {
           "id": "F3.11",
-          "baslik": "Belgeler",
+          "baslik": "Belgeler (Dosya Deposu)",
           "adimlar": [
-            "Yönetici “Belgeler”e bir PDF (ör. yönetim planı) yükler ve kimlerin göreceğini seçer.",
+            "Yönetici “Dosya Deposu”na bir PDF (ör. yönetim planı) yükler ve kimlerin göreceğini seçer.",
             "Sakin hesabıyla belgeyi açın."
           ],
           "beklenen": "Belge, izin verilen kişilerde listelenir ve açılır. İzin verilmeyen kişi belgeyi göremez. Ayrıntılı deneme maddeleri F14 bölümünde.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
-          "yeni": false,
+          "yeni": true,
           "gelistirme": "hazir"
         },
         {
@@ -1035,7 +1035,7 @@
       "id": "F4",
       "baslik": "Aidat ve finans (temel)",
       "durum": "hazir",
-      "ozet": "Aidatın tanımlanması, önizlemeli borçlandırma, ek borç, daire hesabı, elle tahsilat kaydı, düzeltme (silme yok, ters kayıt) ve ay kapatma. Makbuz, gecikme tazminatı, gider kaydı, kasa/banka hesapları, raporlar ve borç hatırlatma bir sonraki adımdadır. Online kart ödemesi ve banka bağlantısı bu fazda YOK, Yakında… (F8). Bu modül siteye göre açılıp kapatılır (varsayılan KAPALI).",
+      "ozet": "Aidatın tanımlanması, önizlemeli borçlandırma, ek borç, daire hesabı, elle tahsilat kaydı, düzeltme (silme yok, ters kayıt) ve ay kapatma. Makbuz, gecikme tazminatı, gider kaydı, kasa/banka hesapları, raporlar ve borç hatırlatma bir sonraki adımdadır. Online kart ödemesi ve banka bağlantısı bu fazda YOK, Yakında… (F8). Bu modül TEMEL modüldür: her sitede açıktır, talep edilmez, kapatılamaz.",
       "maddeler": [
         {
           "id": "F4.01",
@@ -1047,8 +1047,8 @@
           ],
           "beklenen": "Tanım kaydedilir ve listede görünür. Tutar kutusunun altında girdiğiniz tutar okunuşuyla gösterilir (ör. 1.250,50 ₺); virgülden sonra en çok 2 hane, “1,250” gibi belirsiz giriş reddedilir. Tutarı kimin ödeyeceği tanımda değil, dairenin “borç ve bildirimler kime gitsin” ayarında (Kişi ve Daire Kayıtları → daire düzenle) belirlenir. Borçlandırılmış bir tanımın tutarı ve dağıtımı değiştirilemez (kilitli panelde açıklanır); yalnız ad, bitiş, vade günü ve etkin/pasif değişir.",
           "rol_notu": "Site yöneticisi",
-          "on_kosul": "Aidat ve Finans modülü bir test sitesinde AÇIK (süper kullanıcı açar)",
-          "yeni": false,
+          "on_kosul": "Bir test sitesi (Aidat ve Finans temel modüldür: her sitede açık)",
+          "yeni": true,
           "gelistirme": "hazir"
         },
         {
@@ -1231,16 +1231,16 @@
         },
         {
           "id": "F4.16",
-          "baslik": "Modül kapalıyken Finans görünmez; süper açar, yönetici talep eder",
+          "baslik": "Finans her sitede açık (temel modül)",
           "adimlar": [
-            "Aidat ve Finans kapalı bir sitede yönetici ve sakin hesabıyla çekmeceye bakın.",
-            "Yönetici olarak Modüller → “Aidat ve Finans” → “Modül Talep Et”; süper kullanıcı talebi onaylasın (ya da doğrudan açsın).",
-            "Modül açılınca yönetici ve sakin hesaplarında menüye bakın; modülü tekrar kapatın."
+            "Herhangi bir test sitesinde yönetici ve sakin hesabıyla menüye bakın.",
+            "Yöneticiyle Modüller → “Aidat ve Finans” kartına bakın.",
+            "Süper kullanıcıyla aynı karta bakın."
           ],
-          "beklenen": "Kapalıyken “Finans” ve “Borcum” menüleri yoktur. Açılınca yöneticide “Finans”, alıcısı olan sakinde “Borcum” görünür; kapatınca yeniden kalkar, veriler silinmez.",
+          "beklenen": "Yöneticide “Finans”, alıcısı olan sakinde “Borcum” menüsü modül açmadan görünür. Kartta “Her sitede açık” yazar; “Modül Talep Et” düğmesi ve kapatma anahtarı yoktur (süper kullanıcıda da).",
           "rol_notu": "Site yöneticisi / süper kullanıcı",
           "on_kosul": "Bir test sitesi",
-          "yeni": false,
+          "yeni": true,
           "gelistirme": "hazir"
         },
         {
@@ -1802,10 +1802,10 @@
             "Açılan tam ekran turda \"İleri\" ile dört adımı gezin; ikinci adımdan itibaren \"Geri\"yi deneyin; son adımda \"Başla\"ya basın.",
             "Uygulamayı kapatıp aynı hesapla yeniden açın."
           ],
-          "beklenen": "Tur otomatik açılır; her adımda ikon, başlık ve metin vardır. Son adımın başlığı hep \"Yardım her zaman yanınızda\"dır; öncekiler rolü anlatır (bireysel: \"Hoş geldiniz\", \"Daireye katılın\", \"Cihaz ekleyin ya da site kurun\"; sakin: \"Kapınız cebinizde\", \"QR, sesli komut ve misafir geçişi\", \"Alt çubuk, duyurular ve borcunuz\"; site yöneticisi: \"Sitenizi yönetin\", \"Kayıtlar ve duyurular\", \"Panel ve modüller\"; süper kullanıcı: \"Platform yönetimi\", \"Başvurular ve talepler\", \"Cihazlar ve denetim\"). Sakin turu alttaki çubuğu (Özet, Kapı, Duyuru, Arıza, Belgeler) ve sağ üstteki \"Ayarlar\" düğmesini anlatır; yönetici ve süper kullanıcı turu \"Modüller\" ve yönetim ekranlarının \"Ayarlar\" düğmesinde olduğunu söyler. \"Başla\" turu kapatır; aynı hesapta tur bir daha kendiliğinden açılmaz (bu cihazda \"görüldü\" tutulur).",
+          "beklenen": "Tur otomatik açılır; her adımda ikon, başlık ve metin vardır. Son adımın başlığı hep \"Yardım her zaman yanınızda\"dır; öncekiler rolü anlatır (bireysel: \"Hoş geldiniz\", \"Daireye katılın\", \"Cihaz ekleyin ya da site kurun\"; sakin: \"Kapınız cebinizde\", \"QR, sesli komut ve misafir geçişi\", \"Alt çubuk, duyurular ve borcunuz\"; site yöneticisi: \"Sitenizi yönetin\", \"Kayıtlar ve duyurular\", \"Panel ve modüller\"; süper kullanıcı: \"Platform yönetimi\", \"Başvurular ve talepler\", \"Cihazlar ve denetim\"). Sakin turu alttaki çubuğu (Özet, Kapı, Duyuru, Arıza, Dosyalar) ve sağ üstteki \"Ayarlar\" düğmesini anlatır; yönetici ve süper kullanıcı turu \"Modüller\" ve yönetim ekranlarının \"Ayarlar\" düğmesinde olduğunu söyler. \"Başla\" turu kapatır; aynı hesapta tur bir daha kendiliğinden açılmaz (bu cihazda \"görüldü\" tutulur).",
           "rol_notu": "Hepsi",
           "on_kosul": "Turu daha önce görmemiş hesap/cihaz (yeni hesap ya da uygulama verisi temizlenmiş telefon)",
-          "yeni": false,
+          "yeni": true,
           "gelistirme": "hazir"
         },
         {
@@ -2559,21 +2559,20 @@
       "id": "F14",
       "baslik": "Belgeler (dosya deposu)",
       "durum": "hazir",
-      "ozet": "Yönetim, yönetmelik, toplantı tutanağı, sözleşme gibi belgeleri yükler; kimlerin göreceğini seçer (tüm sakinler, yönetim kurulu, yalnız yöneticiler; sakinler için tüm site, seçili bloklar ya da daireler). Sakinler belgeyi \"Belgeler\" ekranından açar/kaydeder. Belgeler duyuruya eklenebilir. Modül varsayılan KAPALIDIR: önce Modüller ekranından açın. Aynı konular SAHA_KONTROL_LISTESI.md 73. bölümündedir. Canlıdadır; denenebilir.",
+      "ozet": "Yönetim, yönetmelik, toplantı tutanağı, sözleşme gibi belgeleri yükler; kimlerin göreceğini seçer (tüm sakinler, yönetim kurulu, yalnız yöneticiler; sakinler için tüm site, seçili bloklar ya da daireler). Sakinler belgeyi \"Dosya Deposu\" ekranından açar/kaydeder. Belgeler duyuruya eklenebilir. Dosya Deposu TEMEL modüldür (Belgeler ve Google Drive tek modül): her sitede açıktır, modül açmak ya da talep etmek gerekmez. Aynı konular SAHA_KONTROL_LISTESI.md 73. bölümündedir. Canlıdadır; denenebilir.",
       "maddeler": [
         {
           "id": "F14.01",
-          "baslik": "Modül Kapalıyken Menü Yok; Açınca \"Belgeler\" Gelir",
+          "baslik": "\"Dosya Deposu\" Her Sitede Vardır (Temel Modül)",
           "adimlar": [
-            "Yönetici ve sakin hesaplarının menüsünde \"Belgeler\" olup olmadığına bakın.",
-            "Yönetici olarak sağ üstteki dişliden (Ayarlar) \"Modüller\" → \"Belgeler (Dosya Deposu)\" → \"Modül Talep Et\"; süper kullanıcıyla talebi onaylayın (ya da doğrudan açın).",
-            "Yönetici ve sakin hesaplarının menüsüne ve sakinin alt çubuğuna yeniden bakın; \"Belgeler\"i açın.",
-            "Süper kullanıcının menüsünde \"Belgeler\"in modülden bağımsız olarak bulunduğuna bakın."
+            "Yönetici ve sakin hesaplarının menüsünde \"Dosya Deposu\"na bakın ve açın; sakinin alt çubuğuna da bakın.",
+            "Yönetici olarak sağ üstteki dişliden (Ayarlar) \"Modüller\" ekranında \"Dosya Deposu\" kartına bakın.",
+            "Süper kullanıcının menüsünde \"Dosya Deposu\"nun bulunduğuna bakın."
           ],
-          "beklenen": "Kapalıyken yönetici ve sakinde \"Belgeler\" yoktur. Modül açılınca menüde \"Site hizmetleri\" başlığı altında \"Belgeler\" belirir (yöneticide ve sakinde; sakinde kitlesinde belge olsun olmasın); sakinin alt çubuğunda da \"Belgeler\" sekmesi çıkar. \"Belgeler\" sayfasında başlık \"Belgeler\" ve açıklama vardır; yöneticide \"Belge Yükle\" düğmesi, \"Belge ara\" kutusu, \"Kategori\" ve \"Durum\" (\"Yayında\" / \"Silinenler\") süzgeçleri görünür. Modül kapatılırsa ekran \"Belgeler bu site için kapalı.\" der ve \"Modüller\" düğmesi sunar. Görevli ve bireysel kullanıcıda \"Belgeler\" yoktur.",
+          "beklenen": "Yönetici ve sakinde modül açmadan menüde \"Site hizmetleri\" başlığı altında \"Dosya Deposu\" görünür (sakinde kitlesinde belge olsun olmasın); sakinin alt çubuğunda \"Dosyalar\" sekmesi çıkar. \"Dosya Deposu\" sayfasında başlık \"Dosya Deposu\" ve açıklama vardır; yöneticide \"Belge Yükle\" düğmesi, \"Belge ara\" kutusu, \"Kategori\" ve \"Durum\" (\"Yayında\" / \"Silinenler\") süzgeçleri görünür ve listenin altında \"Google Drive\" bölümü yer alır (bağlantı hazır değilse \"Google Drive bağlantısı Yakında…\"). Modüller ekranındaki \"Dosya Deposu\" kartında \"Her sitede açık\" yazar; \"Modül Talep Et\" düğmesi ve kapatma anahtarı yoktur. Görevli ve bireysel kullanıcıda \"Dosya Deposu\" yoktur. Belgeler ayrı bir modül değildir; Modüller ekranında yalnız \"Dosya Deposu\" vardır.",
           "rol_notu": "Site yöneticisi / Süper kullanıcı / Daire sakini",
-          "on_kosul": "Belgeler modülü KAPALI bir TEST sitesi (yönetici, bir sakin ve süper kullanıcı hesabı)",
-          "yeni": false,
+          "on_kosul": "Herhangi bir TEST sitesi (yönetici, bir sakin ve süper kullanıcı hesabı)",
+          "yeni": true,
           "gelistirme": "hazir"
         },
         {
@@ -2586,8 +2585,8 @@
           ],
           "beklenen": "Formda \"Belgede kişisel veri (T.C. kimlik no, IBAN, telefon, adres) varsa yalnız ilgili kitleye açın; gereksiz veriyi karartın.\" uyarısı vardır; dosya alanının ipucunda \"PDF, JPG, PNG, DOCX veya XLSX\" yazar (sunucudan öğrenilmişse \"· en çok 10 MB\" ve \"· kalan alan ...\" da eklenir; bilinmeyen sayı gösterilmez). Kategoriler: Yönetmelik, Toplantı Tutanağı / Karar, Sözleşme, Bilgilendirme, Diğer. Kitle seçilmeden \"Belgeyi kimlerin görebileceğini seçin.\" hatası çıkar. Yükleme sırasında \"Yükleniyor\" ilerlemesi (%, boyut), \"Dosya gönderildi, sunucu kaydediyor...\" aşaması görünür; bitince \"Belge yüklendi.\" bildirimi çıkar ve belge listede başlık, kategori, \"Kitle: Tüm sakinler\", dosya adı/boyutu, \"v1\" ve \"0 indirme\" ile görünür. Yükleme sırasında \"Vazgeç\" \"Yükleme iptal edilsin mi?\" sorar.",
           "rol_notu": "Site yöneticisi",
-          "on_kosul": "Belgeler modülü AÇIK TEST sitesi; gerçek veri içermeyen küçük bir PDF",
-          "yeni": false,
+          "on_kosul": "TEST sitesi (Dosya Deposu her sitede açıktır); gerçek veri içermeyen küçük bir PDF",
+          "yeni": true,
           "gelistirme": "hazir"
         },
         {
@@ -2609,26 +2608,26 @@
             "\"Belge Yükle\"de \"Sakinler\" kitlesi için \"Hedef\" olarak \"Bloklar\"ı seçin; hiçbir blok eklemeden \"Yükle\"ye basın; sonra \"Blok Ekle\"yle yalnız A bloğunu seçip yükleyin.",
             "Aynı şekilde \"Daireler\" hedefiyle bir belge yükleyin (\"Daire Ekle\" ile tek daire); ayrıca \"Yönetim kurulu\" ve \"Yalnız yöneticiler\" kitleleriyle birer belge yükleyin.",
             "Yönetici listesinde her belgenin \"Kitle:\" çipine bakın.",
-            "Sırayla A sakini, B sakini ve yönetim kurulu üyesi hesabıyla \"Belgeler\"i açın."
+            "Sırayla A sakini, B sakini ve yönetim kurulu üyesi hesabıyla \"Dosya Deposu\"nu açın."
           ],
           "beklenen": "Blok/daire hedefinde hiçbir öğe seçilmezse \"En az bir blok seçin.\" / \"En az bir daire seçin.\" hatası çıkar; en çok 500 öğe seçilebilir. Kitle çipleri \"Tüm sakinler\", \"A Blok\" (blok adı), daire adı, \"Yönetim kurulu\", \"Yalnız yöneticiler\" olarak yazar. A sakini yalnız hedefinde A bloğu/dairesi olan veya \"Tüm sakinler\" belgeleri görür, B sakini A'ya özel belgeyi GÖRMEZ; \"Yönetim kurulu\" ve \"Yalnız yöneticiler\" belgeleri sakinde görünmez. Kurul üyesi \"Sakinler\" ve \"Yönetim kurulu\" belgelerini salt okur, \"Yalnız yöneticiler\" belgesini görmez. Belgeyi yükleyen yönetici hepsini görür. Kitle değişikliği anında geçerlidir.",
           "rol_notu": "Site yöneticisi / Daire sakini / Yönetim kurulu",
           "on_kosul": "İki bloklu TEST sitesi: A bloğunda bir sakin, B bloğunda bir sakin, bir yönetim kurulu üyesi",
-          "yeni": false,
+          "yeni": true,
           "gelistirme": "hazir"
         },
         {
           "id": "F14.05",
           "baslik": "Sakin Görünümü: Arama, Süzgeç ve \"Aç / Kaydet\"",
           "adimlar": [
-            "Sakin hesabıyla \"Belgeler\"i açın; \"Belge ara\"ya başlık yazın, \"Kategori\" çiplerini deneyin.",
+            "Sakin hesabıyla \"Dosya Deposu\"nu açın; \"Belge ara\"ya başlık yazın, \"Kategori\" çiplerini deneyin.",
             "Bir belgenin kartındaki \"Aç / Kaydet\"e dokunun; indirme penceresi bitince telefonun paylaşım menüsünden kaydedin/açın.",
             "Yönetici sakin modundayken (hem yönetim hem sakin görünümü olan hesapla) \"Yönetim görünümü\" ve \"Belgelerim\" çiplerini deneyin."
           ],
           "beklenen": "Sayfada \"Yönetimin sizinle paylaştığı belgeleri buradan açabilir ya da kaydedebilirsiniz.\" yazar; boşsa \"Henüz belge yok.\" / arama sonucu yoksa \"Bu arama ve süzgeç için belge bulunamadı.\"; birden çok sitede \"Site\" seçimi ve \"Tüm siteler\" vardır. \"Aç / Kaydet\" \"Belge indiriliyor\" penceresini (yüzde ve boyut) açar, bitince paylaşım menüsü gelir; kartta başlık, kategori, dosya türü/boyutu ve (yeni sürümde) \"Güncellendi\" rozeti görünür. İndirme sırasında \"Vazgeç\" işlemi durdurur; hatada \"Belge indirilemedi\" ve \"Tekrar Dene\" çıkar. Hem yönetim hem sakin yetkisi olan hesapta \"Yönetim görünümü\" ve \"Belgelerim\" çipleri görünüm değiştirir.",
           "rol_notu": "Daire sakini",
           "on_kosul": "",
-          "yeni": false,
+          "yeni": true,
           "gelistirme": "hazir"
         },
         {
@@ -2719,12 +2718,12 @@
           "id": "F14.12",
           "baslik": "Yönetim Kurulu Üyesi Salt Okur",
           "adimlar": [
-            "Yönetim kurulu üyesi hesabıyla \"Belgeler\"i açın; bir belgeyi açın."
+            "Yönetim kurulu üyesi hesabıyla \"Dosya Deposu\"nu açın; bir belgeyi açın."
           ],
-          "beklenen": "Sayfada \"Yönetim kurulu üyesi olarak belgeleri yalnızca görüntüleyebilirsiniz. Yalnız yöneticilere açık belgeler görünmez.\" yazar; \"Belge Yükle\" yoktur; belge ayrıntısında \"Aç / Kaydet\" vardır, \"Yeni Sürüm Yükle\", \"Düzenle\", \"Sil\" yoktur ve \"Yönetim kurulu üyesi olarak belgeyi yalnızca görüntüleyebilirsiniz.\" notu çıkar.",
+          "beklenen": "Sayfada \"Yönetim kurulu üyesi olarak belgeleri yalnızca görüntüleyebilirsiniz. Yalnız yöneticilere açık belgeler görünmez.\" yazar; \"Belge Yükle\" yoktur; belge ayrıntısında \"Aç / Kaydet\" vardır, \"Yeni Sürüm Yükle\", \"Düzenle\", \"Sil\" yoktur ve \"Yönetim kurulu üyesi olarak belgeyi yalnızca görüntüleyebilirsiniz.\" notu çıkar. Sayfanın üstündeki açıklama \"Yönetimin yüklediği belgeleri buradan görüntüleyebilirsiniz.\" der ve Google Drive bölümüne yönlendirmez; sayfada \"Google Drive\" bölümü yoktur.",
           "rol_notu": "Yönetim kurulu",
           "on_kosul": "",
-          "yeni": false,
+          "yeni": true,
           "gelistirme": "hazir"
         },
         {
@@ -3376,12 +3375,12 @@
           "baslik": "Hesap Silinince Belge ve Makbuz Kalır",
           "adimlar": [
             "O hesabın \"Hesabımı Sil\" akışını tamamlayın (feda edilebilir hesap!).",
-            "Başka bir yönetici hesabıyla \"Belgeler\"de o belgeyi açıp \"Yükleyen\" satırına ve belgenin açılabilirliğine bakın; dairenin ekstresinde makbuza bakın."
+            "Başka bir yönetici hesabıyla \"Dosya Deposu\"nda o belgeyi açıp \"Yükleyen\" satırına ve belgenin açılabilirliğine bakın; dairenin ekstresinde makbuza bakın."
           ],
           "beklenen": "Belge SİLİNMEZ ve sakinlerce açılmaya devam eder; ayrıntıda yükleyen adı \"Silinmiş Kullanıcı\" görünür. Makbuz ve tahsilat kayıtları ekstrede aynen durur (makbuzdaki ad anonimleştirilmez). Hesapla ilgili bekleyen aidat hatırlatması gönderilmez.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "Silinmesinde sakınca olmayan, başka yöneticisi olan sitede ikinci bir yönetici TEST hesabı; bu hesabın yüklediği bir belge ve düzenlediği/ödediği bir makbuz var",
-          "yeni": false,
+          "yeni": true,
           "gelistirme": "hazir"
         },
         {
@@ -3662,10 +3661,10 @@
           "adimlar": [
             "F9.05/F9.06’daki TEST sitelerinin her birinde \"Modüller\" ekranını açın."
           ],
-          "beklenen": "Türe önerilen modüllerin kartında \"Bu tür için önerilir\" çipi görünür. Apartman ve Site: Geçiş Kontrol, Aidat ve Finans, Belgeler, Duyuru ve Bildirim. Rezidans: Rezervasyon ve Konsiyerj, Ziyaretçi ve Kargo, İş Takibi, Geçiş Kontrol, Aidat ve Finans. İş Merkezi: İş Takibi, Ziyaretçi ve Kargo, Aidat ve Finans, Belgeler. Kooperatif: Aidat ve Finans, Belgeler, Duyuru ve Bildirim, Anket ve Oylama. Alışveriş Merkezi: Aidat ve Finans, İş Takibi, Ziyaretçi ve Kargo, Belgeler. Çip yalnız öneridir: modüller yine kapalı gelir, açma ve talep akışı değişmez.",
+          "beklenen": "Türe önerilen modüllerin kartında \"Bu tür için önerilir\" çipi görünür. Apartman ve Site: Geçiş Kontrol, Aidat ve Finans, Dosya Deposu, Duyuru ve Bildirim. Rezidans: Rezervasyon ve Konsiyerj, Ziyaretçi ve Kargo, İş Takibi, Geçiş Kontrol, Aidat ve Finans. İş Merkezi: İş Takibi, Ziyaretçi ve Kargo, Aidat ve Finans, Dosya Deposu. Kooperatif: Aidat ve Finans, Dosya Deposu, Duyuru ve Bildirim, Anket ve Oylama. Alışveriş Merkezi: Aidat ve Finans, İş Takibi, Ziyaretçi ve Kargo, Dosya Deposu. Çip yalnız öneridir: seçmeli modüller yine kapalı gelir, açma ve talep akışı değişmez; temel modüller (Aidat ve Finans, Duyuru ve Bildirim, Anket ve Oylama, Dosya Deposu) zaten her sitede açıktır.",
           "rol_notu": "Site yöneticisi / Süper kullanıcı",
           "on_kosul": "",
-          "yeni": false,
+          "yeni": true,
           "gelistirme": "hazir"
         },
         {
@@ -3762,7 +3761,7 @@
       "id": "F11",
       "baslik": "Diğer yaşam modülleri",
       "durum": "hazir",
-      "ozet": "Yönetimi kolaylaştıran ek modüller. Anket ve Oylama (F11.01, F11.06) ile Ziyaretçi ve Kargo (F11.03, F11.07) canlıdadır; ikisi de varsayılan KAPALIDIR: süper kullanıcı siteye açar ya da site yöneticisi \"Modüller\" ekranından \"Modül Talep Et\" ile ister, süper onaylar. Ziyaretçi ve kargoda e-posta ve telefon bildirimi bu sürümde YOKTUR (yalnız uygulama içi liste ve rozet). E-genel kurul ve karar defteri, firma ve sözleşme takibi ile yönetici paneli (web) Yakında… Ayrıntı: docs/PLATFORM_ANKET.md, docs/PLATFORM_ZIYARETCI_KARGO.md. Canlıdadır; denenebilir.",
+      "ozet": "Yönetimi kolaylaştıran ek modüller. Anket ve Oylama (F11.01, F11.06) ile Ziyaretçi ve Kargo (F11.03, F11.07) canlıdadır; Anket ve Oylama TEMEL modüldür (2026-10-28): her sitede açıktır, talep gerekmez. Ziyaretçi ve Kargo varsayılan KAPALIDIR: süper kullanıcı siteye açar ya da site yöneticisi \"Modüller\" ekranından \"Modül Talep Et\" ile ister, süper onaylar. Ziyaretçi ve kargoda e-posta ve telefon bildirimi bu sürümde YOKTUR (yalnız uygulama içi liste ve rozet). E-genel kurul ve karar defteri, firma ve sözleşme takibi ile yönetici paneli (web) Yakında… Ayrıntı: docs/PLATFORM_ANKET.md, docs/PLATFORM_ZIYARETCI_KARGO.md. Canlıdadır; denenebilir.",
       "maddeler": [
         {
           "id": "F11.01",
@@ -3775,8 +3774,8 @@
           ],
           "beklenen": "Taslak yalnız yöneticide görünür, sakinde hiç görünmez. Yayınlanınca \"Anket yayınlandı.\" yazar ve anket sakinin \"Açık anketler\" listesine gelir; yayınlanan anketin sorusu ve seçenekleri değiştirilemez. Oy verince \"Oyunuz alındı.\" yazar ve sonuçlar (seçenek başına oy ve yüzde) görünür; oy değiştirilemez, ikinci oy kabul edilmez. Yönetici sonucu her zaman \"Toplam N oy · M kişiden %X katılım\" biçiminde görür. Kapatınca \"Anket kapatıldı.\" yazar, artık oy verilemez ve kapanan anket yeniden açılamaz; sakin sonucu \"Kapanan anketler\"de görür. Kapanış tarihi geçen anket \"Süresi doldu\" görünür ve oy almaz.",
           "rol_notu": "Site yöneticisi / Daire sakini",
-          "on_kosul": "Modül siteye açık olmalı: süper kullanıcı açar ya da site yöneticisi \"Modüller\" ekranından \"Modül Talep Et\" ile ister ve süper kullanıcı onaylar. Denemeleri bir TEST sitesinde yapın.",
-          "yeni": false,
+          "on_kosul": "Anket ve Oylama temel modüldür: her sitede açıktır, modül açmak ya da talep etmek gerekmez. Denemeleri bir TEST sitesinde yapın.",
+          "yeni": true,
           "gelistirme": "hazir"
         },
         {
@@ -3790,8 +3789,8 @@
           ],
           "beklenen": "İlk hesabın oyu alınır; aynı dairedeki ikinci hesap oy veremez ve nedeni yazılır. Seçilmeyen bloktaki sakin anketi hiç görmez. Anonim olmayan ankette yönetici \"Oy verenler\" listesinde kişi, daire ve seçimi görür; anonim ankette kimin ne oy verdiği görünmez. Kurul üyesi anketleri ve sonuçları görür ama yeni anket, yayınla ve kapat düğmeleri yoktur ve \"Yönetim kurulu üyesi olarak anketleri ve sonuçları yalnızca görüntüleyebilirsiniz. Oy verenler görünmez.\" notu çıkar. Görevli hesabında \"Anket ve Oylama\" menüsü yoktur.",
           "rol_notu": "Site yöneticisi / Yönetim kurulu / Daire sakini",
-          "on_kosul": "Modül siteye açık olmalı: süper kullanıcı açar ya da site yöneticisi \"Modüller\" ekranından \"Modül Talep Et\" ile ister ve süper kullanıcı onaylar. Denemeleri bir TEST sitesinde yapın. Seçilen blokta iki sakin hesabı bağlı bir daire ve başka blokta bir sakin hesabı gerekir.",
-          "yeni": false,
+          "on_kosul": "Anket ve Oylama temel modüldür: her sitede açıktır, modül açmak ya da talep etmek gerekmez. Denemeleri bir TEST sitesinde yapın. Seçilen blokta iki sakin hesabı bağlı bir daire ve başka blokta bir sakin hesabı gerekir.",
+          "yeni": true,
           "gelistirme": "hazir"
         },
         {
@@ -4588,13 +4587,13 @@
           "id": "F24.02",
           "baslik": "Yalnız tanımlı modüller görünür",
           "adimlar": [
-            "Süper kullanıcı bir siteye Finans'ı ve Belgeler'i açsın, sonra kapatsın.",
+            "Süper kullanıcı bir siteye seçmeli bir modülü (örneğin İş Takibi ya da Ziyaretçi ve Kargo) açsın, sonra kapatsın; Aidat ve Finans ile Dosya Deposu temel modüldür, anahtarı yoktur (\"Her sitede açık\").",
             "Aynı sitenin yönetici ve sakin hesaplarında Panel'e ve çekmeceye bakın; modül durumu değişince yarım dakika bekleyin ya da Yenile'ye dokunun."
           ],
-          "beklenen": "Açık modülün kartı hem vitrinde hem çekmecede çıkar; kapatınca ikisinden de kalkar. Sakinde \"Finans\" değil \"Borcum\" kartı vardır.",
+          "beklenen": "Açık seçmeli modülün kartı hem vitrinde hem çekmecede çıkar; kapatınca ikisinden de kalkar; temel modüllerin (Aidat ve Finans, Dosya Deposu ...) kartı hep durur. Sakinde \"Finans\" değil \"Borcum\" kartı vardır.",
           "rol_notu": "Süper kullanıcı + site yöneticisi + daire sakini",
           "on_kosul": "",
-          "yeni": false,
+          "yeni": true,
           "gelistirme": "hazir"
         },
         {
@@ -4630,13 +4629,13 @@
           "baslik": "Sakin görünümü: borç kartı ve hızlı işlemler",
           "adimlar": [
             "Borcu olan, borcu olmayan ve fazla ödemiş (alacaklı) sakin hesaplarıyla Panel'e bakın.",
-            "Finans modülü kapalı bir sitenin sakin hesabıyla ve borç bilgisi alınamazken (uçak modu) de bakın.",
+            "Borç bilgisi alınamazken (uçak modu) de bakın.",
             "\"Hızlı işlemler\"i dairesi olan bir sakinle ve dairesi olmayan bir yönetim kurulu üyesiyle karşılaştırın."
           ],
-          "beklenen": "Yalnız ödenecek borç varken üstte KOYU kartta \"Güncel borcunuz\", tutar, varsa \"Vadesi geçen\" ve \"Sıradaki vade\" satırları ile \"Borcum'a git\" görünür; düğme Borcum'u açar. Borç yoksa kart düzdür (açık temada beyaz, gölgesiz, ince çerçeveli): başlık \"Borç durumunuz\", tutar yerine \"Borcunuz yok\" (fazla ödemede \"Alacağınız\" ve tutar) ve yine \"Borcum'a git\". Modül kapalıyken aynı düz kartta \"Merhaba, Ad\" selamlaması çıkar; bilgi alınamazken altında \"Borç bilginiz şu an alınamadı.\" notu vardır; ikisinde de \"Borcunuz yok\" yazmaz. \"Hızlı işlemler\"de yalnız modülü açık olanlar şu sırayla çıkar: Kapıyı aç, Arıza bildir, Ziyaretçi kodu, Ziyaretçi ve kargo (\"Ziyaretçilerim\"i açar), Belgeler. \"Arıza bildir\" ve \"Ziyaretçi ve kargo\" yalnız dairesi olan sitede çıkar: dairesi olmayan kurul üyesinde bu iki kısayol yoktur, \"Taleplerim\" ve \"Ziyaretçilerim\" kartları ise durur.",
+          "beklenen": "Yalnız ödenecek borç varken üstte KOYU kartta \"Güncel borcunuz\", tutar, varsa \"Vadesi geçen\" ve \"Sıradaki vade\" satırları ile \"Borcum'a git\" görünür; düğme Borcum'u açar. Borç yoksa kart düzdür (açık temada beyaz, gölgesiz, ince çerçeveli): başlık \"Borç durumunuz\", tutar yerine \"Borcunuz yok\" (fazla ödemede \"Alacağınız\" ve tutar) ve yine \"Borcum'a git\". Borç bilgisi alınamazken aynı düz kartta \"Merhaba, Ad\" selamlaması ve altında \"Borç bilginiz şu an alınamadı.\" notu çıkar; \"Borcunuz yok\" yazmaz. \"Hızlı işlemler\"de yalnız modülü açık olanlar şu sırayla çıkar: Kapıyı aç, Arıza bildir, Ziyaretçi kodu, Ziyaretçi ve kargo (\"Ziyaretçilerim\"i açar), Dosya Deposu. \"Arıza bildir\" ve \"Ziyaretçi ve kargo\" yalnız dairesi olan sitede çıkar: dairesi olmayan kurul üyesinde bu iki kısayol yoktur, \"Taleplerim\" ve \"Ziyaretçilerim\" kartları ise durur.",
           "rol_notu": "Daire sakini",
           "on_kosul": "Aidat ve Finans açık bir site. Hesap yönetimin açtığı daire hesabı olmalı. Kendi kaydolup siteye bağlanmış (bireysel) hesapta hızlı işlemler bölümü hiç çıkmaz; bu bir hata değildir.",
-          "yeni": false,
+          "yeni": true,
           "gelistirme": "hazir"
         },
         {
@@ -4741,12 +4740,12 @@
           "adimlar": [
             "Panel'de çekmeceyi açıp geri tuşuna basın.",
             "Bir modül sayfasında (ör. Borcum ya da Kapılar) çekmeceyi açıp geri tuşuna basın; ardından geri tuşuna iki kez daha basın.",
-            "Sakin Borcum'dayken süper kullanıcı o sitede Finans'ı kapatsın (yarım dakika bekleyin ya da Yenile'ye dokunun)."
+            "Sakin \"Rezervasyon\" sayfasındayken süper kullanıcı o sitede Rezervasyon ve Konsiyerj modülünü kapatsın (yarım dakika bekleyin ya da Yenile'ye dokunun); Aidat ve Finans temel modül olduğundan kapatılamaz."
           ],
           "beklenen": "Çekmece açıkken geri tuşu yalnız çekmeceyi kapatır. Modül sayfasında sonraki geri Panel vitrinine döner, vitrinde bir sonraki geri uygulamadan çıkar. Açık sayfanın modülü kapanınca ekran kendiliğinden Panel'e döner: başlık \"Panel\" olur ve ilk geri basışı uygulamadan çıkar.",
           "rol_notu": "Herhangi bir hesap (Android geri tuşu)",
-          "on_kosul": "",
-          "yeni": false,
+          "on_kosul": "Rezervasyon ve Konsiyerj modülü açık bir site",
+          "yeni": true,
           "gelistirme": "hazir"
         },
         {
@@ -5243,13 +5242,13 @@
           "id": "F27.09",
           "baslik": "Silme onayı mercan kırmızısı",
           "adimlar": [
-            "Duyurular'da taslak ya da zamanlanmış bir duyuruyu açıp \"Sil\"e dokunun (yayındaki duyuruda \"Sil\" yoktur, \"Geri Çek\" vardır) ya da Belgeler'de bir belgeyi silmeyi başlatın; onay penceresinde durun ve \"Vazgeç\"e basın.",
+            "Duyurular'da taslak ya da zamanlanmış bir duyuruyu açıp \"Sil\"e dokunun (yayındaki duyuruda \"Sil\" yoktur, \"Geri Çek\" vardır) ya da Dosya Deposu'nda bir belgeyi silmeyi başlatın; onay penceresinde durun ve \"Vazgeç\"e basın.",
             "İsterseniz menüden \"Site Yönetimi\"nde bir TEST dairesinin kartındaki \"Sakini Sil\"e dokunun; \"Daire Sakinini Sil / Sıfırla\" penceresinde durup \"İptal\"e basın."
           ],
           "beklenen": "Onay penceresindeki silme düğmesi mercan kırmızısı, üstünde beyaz yazı. Duyuru ve belge onayında başlıktaki ikon kırmızı, ikon kutusu açık gri. \"Vazgeç\" / \"İptal\" koyu yazılı. Ana sayfadaki eski silme onayları (site, sakin, cihaz ve kullanıcı silme) da artık aynı mercan kırmızısı ve beyaz yazılıdır.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
-          "yeni": false,
+          "yeni": true,
           "gelistirme": "hazir"
         },
         {
@@ -5299,7 +5298,7 @@
       "id": "F28",
       "baslik": "Gruplu menü, Ayarlar paneli ve sakin alt çubuğu",
       "durum": "hazir",
-      "ozet": "Menü başlıklar altında toplandı (Ana sayfa, Daireler, Borçlar, Tahsilat, Giderler, İletişim, Raporlar, Site hizmetleri); ekranı olmayan başlık görünmez. Profilim, Modüller, cihaz ekranları, Modül Talepleri, Site Başvuruları, Denetim Kaydı, Platform Ayarları ve İstemci Hataları artık sağ üstteki dişlinin açtığı Ayarlar panelindedir. Birden çok sitesi olan yönetici menünün en üstünden site seçer; daire sakininin ekranının altında Özet · Duyuru · Arıza · Kapı · Belgeler çubuğu vardır.",
+      "ozet": "Menü başlıklar altında toplandı (Ana sayfa, Daireler, Borçlar, Tahsilat, Giderler, İletişim, Raporlar, Site hizmetleri); ekranı olmayan başlık görünmez. Profilim, Modüller, cihaz ekranları, Modül Talepleri, Site Başvuruları, Denetim Kaydı, Platform Ayarları ve İstemci Hataları artık sağ üstteki dişlinin açtığı Ayarlar panelindedir. Birden çok sitesi olan yönetici menünün en üstünden site seçer; daire sakininin ekranının altında Özet · Duyuru · Arıza · Kapı · Dosyalar çubuğu vardır.",
       "maddeler": [
         {
           "id": "F28.01",
@@ -5308,10 +5307,10 @@
             "Site yöneticisi hesabıyla giriş yapın.",
             "Sol üstteki menü düğmesine (üç çizgi) dokunun ve listeyi aşağı kaydırın."
           ],
-          "beklenen": "En üstte site adınız (birden çok siteniz varsa \"Tüm siteler (N)\"), hemen altında \"Sakin Moduna Geç\" satırı görünür. Ekranlar küçük başlıklar altında toplanır: \"Ana sayfa\" (Panel), \"Daireler\" (Site Yönetimi, Kişiler, Daireye Katıl & Cihaz Ekle), \"Borçlar\" (Finans), \"İletişim\" (Duyurular, Talepler, Anket ve Oylama), \"Site hizmetleri\" (Kapılar, Belgeler, Rezervasyonlar, Ziyaretçi ve Kargo, Sözleşmeler, Karar Defteri). Hangi ekranların çıktığı sitenizde açık olan modüllere bağlıdır. Altında ekran olmayan başlık (şimdilik Tahsilat, Giderler, Raporlar) hiç görünmez. Profilim, Modüller, Kayıtlı Cihazlar ve Bluetooth ile Wi-Fi Kur bu menüde yoktur; sağ üstteki dişlidedir.",
+          "beklenen": "En üstte site adınız (birden çok siteniz varsa \"Tüm siteler (N)\"), hemen altında \"Sakin Moduna Geç\" satırı görünür. Ekranlar küçük başlıklar altında toplanır: \"Ana sayfa\" (Panel), \"Daireler\" (Site Yönetimi, Kişiler, Daireye Katıl & Cihaz Ekle), \"Borçlar\" (Finans), \"İletişim\" (Duyurular, Talepler, Anket ve Oylama), \"Site hizmetleri\" (Kapılar, Dosya Deposu, Rezervasyonlar, Ziyaretçi ve Kargo, Sözleşmeler, Karar Defteri). Hangi ekranların çıktığı sitenizde açık olan modüllere bağlıdır. Altında ekran olmayan başlık (şimdilik Tahsilat, Giderler, Raporlar) hiç görünmez. Profilim, Modüller, Kayıtlı Cihazlar ve Bluetooth ile Wi-Fi Kur bu menüde yoktur; sağ üstteki dişlidedir.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
-          "yeni": false,
+          "yeni": true,
           "gelistirme": "hazir"
         },
         {
@@ -5385,27 +5384,27 @@
           "id": "F28.07",
           "baslik": "Sakin alt çubuğu",
           "adimlar": [
-            "İş Takibi (arıza talebi) ve Belgeler modülleri açık, kapı yetkisi olan bir daire sakiniyle giriş yapın.",
-            "Ekranın altına bakın; sırayla Duyuru, Arıza, Kapı, Belgeler ve Özet sekmelerine dokunun.",
+            "İş Takibi (arıza talebi) modülü açık (Dosya Deposu her sitede açıktır), kapı yetkisi olan bir daire sakiniyle giriş yapın.",
+            "Ekranın altına bakın; sırayla Duyuru, Arıza, Kapı, Dosyalar ve Özet sekmelerine dokunun.",
             "Panel'den sekmesi olmayan bir sayfayı (örneğin \"Borcum\" ya da \"Rezervasyon\") açın."
           ],
-          "beklenen": "Altta beş sekme vardır: Özet, Duyuru, Arıza, Kapı, Belgeler. Duyuru duyuruları, Arıza \"Taleplerim\"i, Kapı \"Kapılar\" sayfasını açar (kapıyı kendiliğinden açmaz); Belgeler belgeleri, Özet Panel'i açar. Seçili sekme vurgulanır. Okunmamış duyuru varsa Duyuru sekmesinde sayı rozeti görünür. \"Borcum\" gibi sekmesi olmayan bir sayfadayken Özet seçili görünür.",
+          "beklenen": "Altta beş sekme vardır: Özet, Duyuru, Arıza, Kapı, Dosyalar. Duyuru duyuruları, Arıza \"Taleplerim\"i, Kapı \"Kapılar\" sayfasını açar (kapıyı kendiliğinden açmaz); Dosyalar \"Dosya Deposu\"nu (belgeler) açar, Özet Panel'i açar. Seçili sekme vurgulanır. Okunmamış duyuru varsa Duyuru sekmesinde sayı rozeti görünür. \"Borcum\" gibi sekmesi olmayan bir sayfadayken Özet seçili görünür.",
           "rol_notu": "Daire sakini",
-          "on_kosul": "İş Takibi ve Belgeler modülleri açık, hesabın kapı yetkisi var",
-          "yeni": false,
+          "on_kosul": "İş Takibi modülü açık (Dosya Deposu her sitede açıktır), hesabın kapı yetkisi var",
+          "yeni": true,
           "gelistirme": "hazir"
         },
         {
           "id": "F28.08",
           "baslik": "Kapalı modül ve kapı yetkisi olmayan hesapta sekmeler",
           "adimlar": [
-            "Belgeler modülü kapalı bir sitedeki sakinle alt çubuğa bakın.",
+            "İş Takibi modülü kapalı bir sitedeki sakinle alt çubuğa bakın.",
             "Kapı yetkisi olmayan bir hesapla bakın (örneğin dairesiz kurul üyesi ya da yalnız görevli)."
           ],
-          "beklenen": "Kapalı modülün sekmesi yoktur (Belgeler çıkmaz). Kapı yetkisi olmayan hesapta Kapı sekmesi yoktur. İkiden az sekme kalırsa alt çubuk hiç görünmez; yalnız görevli hesabında çubuk yoktur.",
+          "beklenen": "Kapalı modülün sekmesi yoktur (Arıza çıkmaz); Dosyalar temel modül olduğu için kapanmaz. Kapı yetkisi olmayan hesapta Kapı sekmesi yoktur. İkiden az sekme kalırsa alt çubuk hiç görünmez; yalnız görevli hesabında çubuk yoktur.",
           "rol_notu": "Daire sakini; dairesiz kurul üyesi / görevli",
           "on_kosul": "",
-          "yeni": false,
+          "yeni": true,
           "gelistirme": "hazir"
         },
         {
@@ -5614,14 +5613,14 @@
           "id": "F29.09",
           "baslik": "Demo senaryosu provası (15 dakika)",
           "adimlar": [
-            "docs/DEMO_SENARYOSU.md bölüm 2.1'e göre demo sitesini uydurma verilerle kurun; Anket ve Oylama kapalı kalsın.",
+            "docs/DEMO_SENARYOSU.md bölüm 2.1'e göre demo sitesini uydurma verilerle kurun; Ziyaretçi ve Kargo kapalı kalsın (Anket ve Oylama temel modüldür, kapatılamaz).",
             "Bölüm 2.2'deki kontrol listesini yapın: süper kullanıcı ekranlarında gerçek bekleyen başvuru ya da talep var mı bakın; Denetim Kaydı süzgecini ve Modüller'deki site seçimini demo sitesine alın.",
             "Bölüm 3'teki akışı saat tutarak bir kez baştan sona deneyin."
           ],
-          "beklenen": "Akış 15 dakikayı geçmez ve her adım demo sitesinde çalışır. Süper kullanıcı Anket ve Oylama'yı açınca yöneticinin Panel'inde kart en geç yaklaşık 30 saniyede belirir. Paylaşılan ekranda gerçek bir sitenin kişi adı, telefonu, e-postası ya da adresi görünmez. Çalışmayan adım bölüm 7'deki tabloya yazılır.",
+          "beklenen": "Akış 15 dakikayı geçmez ve her adım demo sitesinde çalışır. Süper kullanıcı Ziyaretçi ve Kargo'yu açınca yöneticinin Panel'inde kart en geç yaklaşık 30 saniyede belirir. Paylaşılan ekranda gerçek bir sitenin kişi adı, telefonu, e-postası ya da adresi görünmez. Çalışmayan adım bölüm 7'deki tabloya yazılır.",
           "rol_notu": "Cenk ve Salih",
           "on_kosul": "",
-          "yeni": false,
+          "yeni": true,
           "gelistirme": "hazir"
         }
       ]
@@ -6414,13 +6413,13 @@
           "id": "F31.01",
           "baslik": "Modülü aç ve menüyü gör",
           "adimlar": [
-            "Modüller ekranından bir sitede İşletme Projesi (ve Aidat ve Finans) modülünü açın.",
+            "Modüller ekranından bir sitede İşletme Projesi modülünü açın (Aidat ve Finans temel modül olduğu için zaten açıktır).",
             "Yönetici hesabıyla girip menüde Site hizmetleri altında İşletme Projesi öğesine bakın."
           ],
           "beklenen": "Menüde İşletme Projesi görünür; modül kapalıyken görünmez.",
           "rol_notu": "Süper kullanıcı",
           "on_kosul": "",
-          "yeni": false,
+          "yeni": true,
           "gelistirme": "hazir"
         },
         {
@@ -6638,14 +6637,14 @@
         },
         {
           "id": "F31.19",
-          "baslik": "Modülü aç",
+          "baslik": "Faaliyet Raporu hazır gelir",
           "adimlar": [
-            "Süper kullanıcı olarak Modüller ekranından bir sitede Faaliyet Raporu modülünü aç."
+            "Modüller ekranından bir sitede Faaliyet Raporu kartına bak (modül açmak gerekmez)."
           ],
-          "beklenen": "Site yöneticisinin menüsünde Site hizmetleri altında Faaliyet Raporu görünür.",
+          "beklenen": "Kartta 'Her sitede açık' yazar (anahtar yok); site yöneticisinin menüsünde Site hizmetleri altında Faaliyet Raporu hemen görünür.",
           "rol_notu": "süper kullanıcı / yönetici",
           "on_kosul": "",
-          "yeni": false,
+          "yeni": true,
           "gelistirme": "hazir"
         },
         {
@@ -6778,14 +6777,14 @@
       "maddeler": [
         {
           "id": "F32.01",
-          "baslik": "Modülü aç ve kartı gör",
+          "baslik": "Dosya Deposu hazır gelir ve Google Drive bölümünü gör",
           "adimlar": [
-            "Süper kullanıcıyla Modüller ekranında siteyi seçin, 'Dosya Deposu (Google Drive)' modülünü açın, sayfanın altındaki karta bakın."
+            "Süper kullanıcıyla Modüller ekranında siteyi seçip 'Dosya Deposu' kartına bakın (modül açmak gerekmez); menüden 'Dosya Deposu' ekranını açıp belge listesinin altındaki 'Google Drive' bölümüne bakın."
           ],
-          "beklenen": "Modül kapalıyken kartta 'bu modül kapalı' yazar; açınca (Google bilgileri .env'de yoksa) 'Google Drive bağlantısı Yakında…' görünür.",
+          "beklenen": "'Dosya Deposu' kartında 'Her sitede açık' yazar (anahtar yok); 'Dosya Deposu' menüsü hemen vardır; (Google bilgileri .env'de yoksa) 'Google Drive' bölümünde 'Google Drive bağlantısı Yakında…' görünür.",
           "rol_notu": "Süper kullanıcı",
           "on_kosul": "",
-          "yeni": false,
+          "yeni": true,
           "gelistirme": "hazir"
         },
         {
@@ -6841,13 +6840,13 @@
           "id": "F32.06",
           "baslik": "Modülü açıp sayaç ekleme",
           "adimlar": [
-            "Süper kullanıcı olarak Modüller'de siteniz için Sayaç Okuma ve Aidat ve Finans modüllerini açın.",
+            "Süper kullanıcı olarak Modüller'de siteniz için Sayaç Okuma modülünü açın (Aidat ve Finans temel modül olduğu için zaten açıktır).",
             "Yönetici olarak menüde Borçlar altındaki Sayaçlar'ı açın, Sayaç ekle ile bir daire, tür Su ve seri numarası girin."
           ],
           "beklenen": "Sayaçlar menüsü görünür; sayaç listede daire adı ve seri numarasıyla çıkar. Aynı seri numarası aynı türde tekrar girilirse 'zaten kayıtlı' uyarısı gelir.",
           "rol_notu": "Süper kullanıcı, sonra site yöneticisi",
           "on_kosul": "",
-          "yeni": false,
+          "yeni": true,
           "gelistirme": "hazir"
         },
         {
@@ -7133,14 +7132,14 @@
         },
         {
           "id": "F33.12",
-          "baslik": "Modülü aç",
+          "baslik": "Komşu Panosu hazır gelir",
           "adimlar": [
-            "Modüller ekranından bir sitede Komşu Panosu modülünü aç."
+            "Modüller ekranından bir sitede Komşu Panosu kartına bak (modül açmak gerekmez)."
           ],
-          "beklenen": "Sitenin yöneticisi ve sakinlerinin menüsünde İletişim grubunda Komşu Panosu görünür; kapalıyken görünmez.",
+          "beklenen": "Kartta 'Her sitede açık' yazar (anahtar yok); sitenin yöneticisi ve sakinlerinin menüsünde İletişim grubunda Komşu Panosu hemen görünür.",
           "rol_notu": "Süper kullanıcı",
           "on_kosul": "",
-          "yeni": false,
+          "yeni": true,
           "gelistirme": "hazir"
         },
         {
@@ -7216,24 +7215,24 @@
           "id": "F34.01",
           "baslik": "Modülleri aç",
           "adimlar": [
-            "Modüller ekranından bir sitede 'Kart Ödemesi' ve 'Kamera ve Plaka' modüllerini aç."
+            "Modüller ekranından bir sitede 'Kamera ve Plaka' modülünü aç. ('Kart Ödemesi' artık ayrı modül değildir; Aidat ve Finans'ın içindedir.)"
           ],
-          "beklenen": "İki modül listede görünür ve açılır; varsayılan kapalıydı.",
+          "beklenen": "'Kamera ve Plaka' listede görünür ve açılır; varsayılan kapalıydı. Listede ayrıca 'Kart Ödemesi' modülü YOKTUR.",
           "rol_notu": "Süper kullanıcı",
           "on_kosul": "",
-          "yeni": false,
+          "yeni": true,
           "gelistirme": "hazir"
         },
         {
           "id": "F34.02",
-          "baslik": "Ödeme ve Kamera menüsü",
+          "baslik": "Kart Ödemesi penceresi ve Kamera ve Plaka menüsü",
           "adimlar": [
-            "Modülleri açık sitede giriş yap, Site hizmetleri altında 'Ödeme ve Kamera' ekranını aç."
+            "Finans ekranında 'Kart Ödemesi' düğmesine bas (ayrı modül açmak gerekmez). Sonra, 'Kamera ve Plaka' modülü açık sitede Site hizmetleri altında 'Kamera ve Plaka' ekranını aç."
           ],
-          "beklenen": "Kart Ödemesi kartında iyzico ve PayTR 'Yakında…' etiketiyle görünür; komisyonun ödeyene yansıtıldığı yazar.",
+          "beklenen": "Kart Ödemesi penceresinde iyzico ve PayTR 'Yakında…' etiketiyle görünür; komisyonun ödeyene yansıtıldığı yazar. Yönetim kurulu üyesi aynı pencereyi salt okur görür (kalem simgesi yok). 'Kamera ve Plaka' ekranında yalnız kamera kartı vardır.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
-          "yeni": false,
+          "yeni": true,
           "gelistirme": "hazir"
         },
         {
@@ -7338,10 +7337,10 @@
           "adimlar": [
             "Uygulamayı açın, sol menüyü açın; sakin hesabıyla alt çubuğa ve Panel kartlarına bakın."
           ],
-          "beklenen": "Menü, alt çubuk (Özet, Duyuru, Arıza, Kapı, Belgeler) ve Panel kartlarında ince çizgili ikonlar görünür, hepsi doğru yerde.",
+          "beklenen": "Menü, alt çubuk (Özet, Duyuru, Arıza, Kapı, Dosyalar) ve Panel kartlarında ince çizgili ikonlar görünür, hepsi doğru yerde.",
           "rol_notu": "Sakin ve yönetici",
           "on_kosul": "",
-          "yeni": false,
+          "yeni": true,
           "gelistirme": "hazir"
         },
         {
@@ -7620,7 +7619,7 @@
           "beklenen": "Araç listede görünür; 'Eklediğiniz plaka, sitede plaka tanıma açıksa yetkili araç sayılır' uyarısı yazar. Site yöneticisinin listesinde 'Ekleyen: Daire yöneticisi (ad)' görünür.",
           "rol_notu": "Daire admini, site yöneticisi",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -7633,7 +7632,7 @@
           "beklenen": "Aile üyesi araçları yalnız görür (ekle, düzenle, çıkar yok). Geçersiz plaka reddedilir. Başka dairedeki plaka 'başka bir kayıtta kullanılıyor; site yönetimiyle görüşün' mesajıyla reddedilir, daire ya da kişi bilgisi verilmez. Daire başına en çok 4 araç (site yöneticisi 8).",
           "rol_notu": "Daire admini, aile üyesi",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -7646,7 +7645,7 @@
           "beklenen": "'Taşındı (çıkış)' satırı görünür: kişi adı, rol (Kiracı), dönem, neden ve işlemi yapan. Telefon ve e-posta yoktur. Yeni kiracı eski kiracıdan hiçbir bilgi görmez.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -7659,7 +7658,7 @@
           "beklenen": "Not zorunludur, boşsa dosya inmez. PDF iner (site, daire, dönemler, gerekçe). Denetim Kaydı'nda 'residency_log.exported' satırı görünür.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -7672,6 +7671,94 @@
           "beklenen": "Kurul kartında adli kayıt bölümü yoktur. Sakin ve yeni kiracı hiçbir adli kayıt görmez.",
           "rol_notu": "Kurul, sakin",
           "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "hazir"
+        }
+      ]
+    },
+    {
+      "id": "F38",
+      "baslik": "Temel modüller: Anket, Komşu Panosu, Ekipman, Faaliyet Raporu, Dosya Deposu; Kart Ödemesi ve Belgeler birleşti",
+      "durum": "hazir",
+      "ozet": "Anket ve Oylama, Komşu Panosu, Ekipman ve Bakım, Faaliyet Raporu ve Dosya Deposu da Aidat ve Finans gibi TEMEL modül oldu: her sitede açık, talep edilmez, kapatılamaz (Modüller ekranında 8 temel modül). Kart Ödemesi artık ayrı modül değil, Aidat ve Finans ekranında bir düğme; Belgeler artık ayrı modül değil, tek menü öğesi \"Dosya Deposu\" (belgeler + Google Drive). Kart ödemesi ayarları ve belgeler korunur. Sürüm yayınlanınca denenir (maddeler “Denemeye hazır” görünse de sürüm yayınlanmadan uygulamada yoktur).",
+      "maddeler": [
+        {
+          "id": "F38.01",
+          "baslik": "Modüller ekranı: 8 temel modül hep açık",
+          "adimlar": [
+            "Süper kullanıcı ve site yöneticisi olarak sağ üstteki dişliden (Ayarlar) Modüller ekranını açın.",
+            "Sekiz temel modülün kartına bakın: Kişi ve Daire Kayıtları, Duyuru ve Bildirim, Aidat ve Finans, Anket ve Oylama, Komşu Panosu, Ekipman ve Bakım, Faaliyet Raporu, Dosya Deposu.",
+            "“Kart Ödemesi” ve “Belgeler” kartı arayın."
+          ],
+          "beklenen": "Sekiz kartta “Her sitede açık” yazar; “Modül Talep Et” düğmesi ve kapatma anahtarı yoktur (süper kullanıcıda da). “Kart Ödemesi” ve “Belgeler” kartı yoktur; ayrı bir Google Drive kartı da yoktur. Toplam 23 kart görünür.",
+          "rol_notu": "Site yöneticisi / Süper kullanıcı",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F38.02",
+          "baslik": "Anket, Komşu Panosu, Ekipman ve Bakım, Faaliyet Raporu: talep etmeden hazır",
+          "adimlar": [
+            "Süper kullanıcıyla yeni bir site oluşturun (ya da bir site başvurusunu onaylayın); o sitenin yöneticisiyle giriş yapın.",
+            "Menüde Anket ve Oylama, Komşu Panosu, Ekipman ve Bakım ve Faaliyet Raporu öğelerini açın.",
+            "Aynı sitenin bir sakin hesabıyla menüye bakın."
+          ],
+          "beklenen": "Yöneticide dört menü de modül açılmadan görünür ve açılır; sakinde “Anketler” ve “Komşu Panosu” görünür. Daha önce bu modüllerden bazıları kapalı olan eski bir sitede de aynıdır; o güne kadar bekleyen modül talepleri “onaylandı” görünür.",
+          "rol_notu": "Site yöneticisi / Daire sakini",
+          "on_kosul": "Süper kullanıcı hesabı; yeni ya da eski bir TEST sitesi",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F38.03",
+          "baslik": "Kart Ödemesi Finans ekranında",
+          "adimlar": [
+            "Site yöneticisiyle Finans ekranında “Kart Ödemesi” düğmesine basın; komisyon notunu değiştirip kaydedin.",
+            "Yönetim kurulu üyesiyle aynı pencereyi açın."
+          ],
+          "beklenen": "Pencerede iyzico ve PayTR “Yakında…” etiketiyle görünür; komisyonun ödeyene yansıtıldığı yazar. Yönetici notu düzenleyip kaydeder; yönetim kurulu üyesi aynı pencereyi salt okur görür (kalem simgesi yok). Ayrı bir modül açmak gerekmez.",
+          "rol_notu": "Site yöneticisi / Yönetim kurulu",
+          "on_kosul": "Yönetim kurulu üyesi tanımlı bir TEST sitesi",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F38.04",
+          "baslik": "Dosya Deposu: belgeler ve Google Drive bölümü",
+          "adimlar": [
+            "Site yöneticisiyle menüden “Dosya Deposu”nu açın; belge listesine ve altındaki “Google Drive” bölümüne bakın; “Tüm sakinler” kitleli bir belge yükleyin.",
+            "Yönetim kurulu üyesiyle “Dosya Deposu”nu açın."
+          ],
+          "beklenen": "Çekmecede ayrı “Belgeler” öğesi yoktur; tek öğe “Dosya Deposu”dur. Yöneticide belge listesi ve altında “Google Drive” bölümü (bağlantı hazır değilse “Google Drive bağlantısı Yakında…”) görünür; yönetim kurulunda yalnız belge listesi (salt okunur, Drive bölümü yok; üstteki açıklama da Drive bölümüne yönlendirmez).",
+          "rol_notu": "Site yöneticisi / Yönetim kurulu",
+          "on_kosul": "Gerçek veri içermeyen küçük bir PDF",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F38.05",
+          "baslik": "Sakin: “Dosyalar” sekmesi ve paylaşılan belgeler",
+          "adimlar": [
+            "F38.04’te yüklediğiniz belgenin sakinlere açık olduğundan emin olun.",
+            "Daire sakini hesabıyla telefonu dik tutup alt çubuktaki “Dosyalar” sekmesine dokunun."
+          ],
+          "beklenen": "Alt çubukta “Özet”, “Duyuru”, “Arıza”, “Kapı” ve “Dosyalar” sekmeleri vardır; “Dosyalar” Dosya Deposu ekranını (yalnız sakin hesabında “Belgeler” listesi; “Belgelerim” yalnızca hem yönetim hem sakin görünümü olan hesapta çip adıdır) açar ve sakine paylaşılan belgeyi gösterir; “Aç / Kaydet” çalışır.",
+          "rol_notu": "Daire sakini",
+          "on_kosul": "F38.04: sakinlere açık en az bir belge",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F38.06",
+          "baslik": "Kamera ve Plaka ekranı",
+          "adimlar": [
+            "“Kamera ve Plaka” modülü açık bir sitede site yöneticisiyle Site hizmetleri altındaki “Kamera ve Plaka” ekranını açın.",
+            "Modülü kapalı bir sitede menüye bakın."
+          ],
+          "beklenen": "Ekranda yalnız kamera kartı vardır (kart ödemesi bölümü yoktur); “Ödeme ve Kamera” adlı ekran artık yoktur. Modül kapalı sitede ekran görünmez.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Süper kullanıcının “Kamera ve Plaka” modülünü sitede açmış olması",
           "yeni": true,
           "gelistirme": "hazir"
         }

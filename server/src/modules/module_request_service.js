@@ -10,7 +10,14 @@
 import { pool } from '../db.js';
 import { sendModuleRequestNotificationEmail } from '../mailer.js';
 import { actorFromAuthUser, clampAuditLimit, recordAudit } from './audit_service.js';
-import { computeModuleEnabled, getModuleDefinition, MODULE_STATUS_COMING_SOON } from './catalog.js';
+import {
+  canonicalModuleCode,
+  computeModuleEnabled,
+  getModuleDefinition,
+  MODULE_STATUS_COMING_SOON,
+  retiredModuleName,
+  retiredModuleNotice,
+} from './catalog.js';
 import { PlatformError } from './errors.js';
 import { moduleLockKey } from './module_service.js';
 
@@ -50,13 +57,16 @@ function toPositiveInt(value, max = Number.MAX_SAFE_INTEGER) {
 
 /** `request` nesnesi: sözleşmedeki alanlar (ve yalnız onlar). */
 export function mapModuleRequestRow(row) {
-  const definition = getModuleDefinition(row.module_code);
+  // Eski kodlu geçmiş talepler güncel modülün adıyla gösterilir; `module_code` olduğu gibi kalır:
+  //  - `documents` (084'te Dosya Deposu'na katıldı) -> canonicalModuleCode ile Dosya Deposu;
+  //  - `card_payments` (083'te Aidat ve Finans'a katıldı, kod çevrilmez) -> retiredModuleName; ikisi de değilse ham kod.
+  const definition = getModuleDefinition(canonicalModuleCode(row.module_code));
   return {
     id: Number(row.id),
     site_code: Number(row.site_code),
     site_name: row.site_name ?? null,
     module_code: row.module_code,
-    module_name: definition ? definition.name : row.module_code,
+    module_name: definition ? definition.name : (retiredModuleName(row.module_code) ?? row.module_code),
     status: row.status,
     note: row.note ?? null,
     requested_by_name: row.requested_by_name ?? null,
@@ -186,9 +196,15 @@ export async function createModuleRequest({ siteCode, moduleCode, note, actor })
     throw new PlatformError(400, 'INVALID_BODY', 'module_code zorunludur.');
   }
   const noteText = normalizeRequestNote(note);
-  const code = moduleCode.trim();
+  // Eski uygulamalar `documents` (Belgeler) gönderebilir: Dosya Deposu talebine çevrilir (084).
+  const code = canonicalModuleCode(moduleCode.trim());
   const definition = getModuleDefinition(code);
   if (!definition) {
+    // Kataloktan kaldırılmış kod (ör. card_payments -> Aidat ve Finans'a katıldı): eski uygulama 404 yerine açıklayıcı 400 alır.
+    const retired = retiredModuleNotice(code);
+    if (retired) {
+      throw new PlatformError(400, 'MODULE_NOT_TOGGLEABLE', retired);
+    }
     throw new PlatformError(404, 'MODULE_NOT_FOUND', 'Modül bulunamadı.');
   }
   if (definition.core) {

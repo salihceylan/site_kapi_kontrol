@@ -146,7 +146,7 @@ void main() {
         expect(info.label, info.type.label);
         expect(info.terms, ManagementTerms.forType(info.type));
       }
-      expect(all[0].recommendedModules, <String>['door_control', 'finance', 'documents', 'announcements']);
+      expect(all[0].recommendedModules, <String>['door_control', 'finance', 'drive_storage', 'announcements']);
       expect(all[1].recommendedModules, <String>[
         'reservation',
         'visitor_log',
@@ -154,22 +154,22 @@ void main() {
         'door_control',
         'finance',
       ]);
-      expect(all[2].recommendedModules, <String>['work_tracking', 'visitor_log', 'finance', 'documents']);
-      expect(all[3].recommendedModules, <String>['finance', 'documents', 'announcements', 'survey']);
-      expect(all[4].recommendedModules, <String>['finance', 'work_tracking', 'visitor_log', 'documents']);
+      expect(all[2].recommendedModules, <String>['work_tracking', 'visitor_log', 'finance', 'drive_storage']);
+      expect(all[3].recommendedModules, <String>['finance', 'drive_storage', 'announcements', 'survey']);
+      expect(all[4].recommendedModules, <String>['finance', 'work_tracking', 'visitor_log', 'drive_storage']);
     });
 
     test('recommendedModuleNames: öneriler adla döner (survey, visitor_log dahil), sıra korunur; bilinmeyen kod atlanır', () {
       final coop = ManagementTypeInfo.builtIn(ManagementType.cooperative);
-      expect(coop.recommendedModuleNames, <String>['Aidat ve Finans', 'Belgeler', 'Duyuru ve Bildirim', 'Anket ve Oylama']);
+      expect(coop.recommendedModuleNames, <String>['Aidat ve Finans', 'Dosya Deposu', 'Duyuru ve Bildirim', 'Anket ve Oylama']);
       final mall = ManagementTypeInfo.builtIn(ManagementType.shoppingMall);
-      expect(mall.recommendedModuleNames, <String>['Aidat ve Finans', 'İş Takibi', 'Ziyaretçi ve Kargo', 'Belgeler']);
+      expect(mall.recommendedModuleNames, <String>['Aidat ve Finans', 'İş Takibi', 'Ziyaretçi ve Kargo', 'Dosya Deposu']);
       final custom = ManagementTypeInfo.fromJson(<String, dynamic>{
         'code': 'shopping_mall',
-        'recommended_modules': <Object>['finance', 'garip_modul', 'documents'],
+        'recommended_modules': <Object>['finance', 'garip_modul', 'drive_storage'],
       });
-      expect(custom.recommendedModules, <String>['finance', 'garip_modul', 'documents']);
-      expect(custom.recommendedModuleNames, <String>['Aidat ve Finans', 'Belgeler']);
+      expect(custom.recommendedModules, <String>['finance', 'garip_modul', 'drive_storage']);
+      expect(custom.recommendedModuleNames, <String>['Aidat ve Finans', 'Dosya Deposu']);
     });
 
     test('fromJson: sunucu öğesi (code, label, selectable, terms, recommended_modules, summary)', () {
@@ -178,13 +178,13 @@ void main() {
         'label': 'AVM',
         'selectable': true,
         'terms': _mallTerms,
-        'recommended_modules': <Object>['finance', 'survey', 7, 'documents'],
+        'recommended_modules': <Object>['finance', 'survey', 7, 'drive_storage'],
         'summary': 'Alışveriş merkezleri için ortak gider ve iş takibi.',
       });
       expect(info.type, ManagementType.shoppingMall);
       expect(info.label, 'AVM');
       expect(info.terms, ManagementTerms.fromJson(_mallTerms));
-      expect(info.recommendedModules, <String>['finance', 'survey', 'documents']);
+      expect(info.recommendedModules, <String>['finance', 'survey', 'drive_storage']);
       expect(info.summary, 'Alışveriş merkezleri için ortak gider ve iş takibi.');
     });
 
@@ -240,10 +240,10 @@ void main() {
         'role': 'board_member',
         'modules': <String, dynamic>{'door_control': true},
         'management_terms': _mallTerms,
-        'recommended_modules': <Object>['finance', 'visitor_log', 3, 'documents'],
+        'recommended_modules': <Object>['finance', 'visitor_log', 3, 'drive_storage'],
       });
       expect(mall.managementTerms.resident, 'Kiracı firma');
-      expect(mall.recommendedModules, <String>['finance', 'visitor_log', 'documents']);
+      expect(mall.recommendedModules, <String>['finance', 'visitor_log', 'drive_storage']);
       expect(mall.isEnabled('door_control'), isTrue);
     });
 

@@ -186,7 +186,7 @@ void main() {
 
       test('sakin: alt çubuğun beş sekmesi, Kapı koşulu ve geri tuşu anlatılır; tur da alt çubuğu anar', () {
         final text = joined(topic(HelpAudience.resident, 'navigation'));
-        for (final tab in const <String>['“Özet”', '“Duyuru”', '“Arıza”', '“Kapı”', '“Belgeler”']) {
+        for (final tab in const <String>['“Özet”', '“Duyuru”', '“Arıza”', '“Kapı”', '“Dosyalar”']) {
           expect(text, contains(tab));
         }
         expect(text, contains('kapı yetkiniz yoksa'));

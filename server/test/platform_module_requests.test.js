@@ -515,12 +515,12 @@ describe('POST module-requests', () => {
     assert.ok(console.error.mock.calls.some((c) => String(c.arguments[0]).includes('[module_request]')));
   });
 
-  it('baska hata kodlari: bilinmeyen modul 404, core (finance dahil) 400, yakinda 409, zaten acik 409', async () => {
+  it('baska hata kodlari: bilinmeyen modul 404, core (finance, anket, dosya deposu, komsu panosu, faaliyet raporu, ekipman dahil) 400, yakinda 409, zaten acik 409', async () => {
     const unknown = await post({ module_code: 'nope' });
     assert.equal(unknown.status, 404);
     assert.equal(unknown.body.code, 'MODULE_NOT_FOUND');
 
-    for (const code of ['people', 'announcements', 'finance']) {
+    for (const code of ['people', 'announcements', 'finance', 'survey', 'drive_storage', 'neighbor_board', 'annual_report', 'equipment']) {
       const core = await post({ module_code: code });
       assert.equal(core.status, 400, code);
       assert.equal(core.body.code, 'MODULE_NOT_TOGGLEABLE');
@@ -540,6 +540,36 @@ describe('POST module-requests', () => {
     assert.equal(notifications.length, 0);
   });
 
+  it('eski uygulamalar `documents` (Belgeler, 084\'te Dosya Deposu ile birlesti) talep ederse Dosya Deposu\'na cevrilir; o TEMEL modul oldugu icin 400 MODULE_NOT_TOGGLEABLE: 500/404 yok; talep/audit/bildirim yok', async () => {
+    const res = await post({ module_code: 'documents', note: 'Belgeler için.' });
+    assert.equal(res.status, 400, JSON.stringify(res.body));
+    assert.equal(res.body.code, 'MODULE_NOT_TOGGLEABLE');
+    assert.notEqual(res.body.code, 'MODULE_NOT_FOUND', 'eski kod artik bilinmeyen modul degil');
+    assert.equal(state.requests.length, 0, 'eski kodlu talep satiri ASLA yazilmaz');
+    assert.equal(state.audit.length, 0);
+    assert.equal(notifications.length, 0);
+  });
+
+  it('eski kodlu GECMIS talep (module_code documents) listede Dosya Deposu adiyla gorunur; module_code oldugu gibi kalir', async () => {
+    seedRequest({ module_code: 'documents', status: 'approved' });
+    const res = await call('GET', requestsUrl(), { user: users.mgrA });
+    assert.equal(res.status, 200);
+    assert.equal(res.body.items[0].module_code, 'documents');
+    assert.equal(res.body.items[0].module_name, 'Dosya Deposu');
+  });
+
+  it('eski kodlu GECMIS talep (module_code card_payments, 083\'te Aidat ve Finans a katildi) ham kodla degil okunur adla listelenir; module_code oldugu gibi kalir', async () => {
+    seedRequest({ module_code: 'card_payments', status: 'approved' });
+    const res = await call('GET', requestsUrl(), { user: users.mgrA });
+    assert.equal(res.status, 200);
+    assert.equal(res.body.items[0].module_code, 'card_payments');
+    assert.equal(res.body.items[0].module_name, 'Kart Ödemesi (Aidat ve Finans)');
+    // katalogda hic olmayan baska bir eski kod ham kodla kalir (uydurma ad yok)
+    seedRequest({ module_code: 'eski_modul', status: 'rejected' });
+    const other = await call('GET', requestsUrl(), { user: users.mgrA });
+    assert.equal(other.body.items.find((item) => item.module_code === 'eski_modul').module_name, 'eski_modul');
+  });
+
   it('finance temel modul (Kural 25): yonetici talep EDEMEZ (400 MODULE_NOT_TOGGLEABLE, "talep edilemez"); talep/audit/bildirim yok', async () => {
     const res = await post({ module_code: 'finance', note: 'Aidat takibi için.' });
     assert.equal(res.status, 400, JSON.stringify(res.body));
@@ -549,6 +579,16 @@ describe('POST module-requests', () => {
     const again = await post({ module_code: 'finance' });
     assert.equal(again.status, 400);
     assert.equal(again.body.code, 'MODULE_NOT_TOGGLEABLE');
+    assert.equal(state.requests.length, 0);
+    assert.equal(state.audit.length, 0);
+    assert.equal(notifications.length, 0);
+  });
+
+  it('kataloktan kaldirilan card_payments (Aidat ve Finans a katildi): eski uygulama talebi 404/500 degil 400 MODULE_NOT_TOGGLEABLE + aciklama alir; talep/audit/bildirim yok', async () => {
+    const res = await post({ module_code: 'card_payments', note: 'Kartla ödeme için.' });
+    assert.equal(res.status, 400, JSON.stringify(res.body));
+    assert.equal(res.body.code, 'MODULE_NOT_TOGGLEABLE');
+    assert.match(res.body.error, /Aidat ve Finans/);
     assert.equal(state.requests.length, 0);
     assert.equal(state.audit.length, 0);
     assert.equal(notifications.length, 0);

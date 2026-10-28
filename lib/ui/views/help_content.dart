@@ -115,7 +115,7 @@ abstract final class HelpContent {
     'Site hizmetleri',
     'Ayarlar',
     'Masaüstüne Widget Ekle',
-    'Belgeler',
+    'Dosya Deposu',
     'Taleplerim',
     'Rehber',
   };
@@ -177,7 +177,6 @@ abstract final class HelpContent {
     'Hepsi bir arada',
     'İlişki',
     'Borç Sorumlusu',
-    'Dosya Deposu (Google Drive)',
     'Google Drive bağla',
     'Telefonla giriş (SMS)',
     'Yakında…',
@@ -251,6 +250,7 @@ abstract final class HelpContent {
     'Duyuru',
     'Arıza',
     'Kapı',
+    'Dosyalar',
     'Tüm siteler',
   };
 
@@ -397,7 +397,7 @@ abstract final class HelpContent {
     title: 'Menü, alt çubuk ve ayarlar nerede?',
     icon: Icons.menu_rounded,
     steps: <String>[
-      'Ekranın altındaki çubukta “Özet”, “Duyuru”, “Arıza”, “Kapı” ve “Belgeler” sekmeleri vardır. “Özet” girişte açılan “Panel” ekranıdır; sitenizde kapalı olan ya da size açık olmayan sekme görünmez, kapı yetkiniz yoksa “Kapı” sekmesi çıkmaz. İkiden az sekme kalırsa ya da telefon yatay tutulurken çubuk görünmez; ekranlara menüden ulaşırsınız.',
+      'Ekranın altındaki çubukta “Özet”, “Duyuru”, “Arıza”, “Kapı” ve “Dosyalar” sekmeleri vardır (“Dosyalar”, menüdeki “Dosya Deposu” ekranını açar). “Özet” girişte açılan “Panel” ekranıdır; sitenizde kapalı olan ya da size açık olmayan sekme görünmez, kapı yetkiniz yoksa “Kapı” sekmesi çıkmaz. İkiden az sekme kalırsa ya da telefon yatay tutulurken çubuk görünmez; ekranlara menüden ulaşırsınız.',
       'Sol üstteki menü düğmesi menüyü açar: ekranlar “Ana sayfa”, “Daireler”, “Borçlar”, “İletişim” ve “Site hizmetleri” gibi başlıklar altında toplanır. Size açık ekranı olmayan başlık görünmez; menünün en üstünde bağlı olduğunuz site yazar.',
       'Sağ üstteki “Ayarlar” düğmesi (dişli) “Profilim” ve “Eller Serbest & Kestirmeler” gibi hesap ve ayar ekranlarını açar.',
       'Geri tuşu bir sekmeden ya da ekrandan “Özet” sekmesine döner; “Özet” sekmesindeyken uygulamadan çıkar.',
@@ -457,7 +457,7 @@ abstract final class HelpContent {
       title: 'Komşu panosuna nasıl ilan veririm?',
       icon: Icons.forum_rounded,
       steps: <String>[
-        'Menüden “Komşu Panosu” ekranını açın (site yöneticisi modülü açtıysa görünür).',
+        'Menüden “Komşu Panosu” ekranını açın.',
         'Yeni ilan düğmesine dokunup başlık ve metni yazın; ilan yönetici onayına gider.',
         'Onaylanınca komşularınız ilanı görür. Uygunsuz bir ilanı Şikayet et düğmesiyle yöneticiye bildirebilirsiniz.',
       ],
@@ -518,7 +518,7 @@ abstract final class HelpContent {
       title: 'Borcumu nasıl görürüm?',
       icon: Icons.receipt_long_rounded,
       steps: <String>[
-        'Sitenizde Finans modülü açıksa menünün “Borçlar” başlığında “Borcum” ekranı görünür.',
+        'Bir daireye sakin olarak bağlıysanız menünün “Borçlar” başlığında “Borcum” ekranı görünür.',
         'Bu ekranda daireniz için yazılan aidat ve diğer borçları ile yapılan ödemeleri görürsünüz.',
         'Her dairenin iki ayrı hesabı vardır: “Ev sahibi hesabı” ve “Kiracı hesabı”. Ekranda yalnız kendi hesabınızın borcu ve '
             'hareketleri görünür; malik ve kiracı borçları birbirine karışmaz.',
@@ -528,7 +528,8 @@ abstract final class HelpContent {
             'kopyalayıp bankanızdan FAST ya da havale yapın. Açıklamaya kodu (örn. GUL-A2-1026) yazarsanız ödemeniz dairenize işlenir. '
             'Kartla ödeme yakında gelecek.',
       ],
-      note: 'Menüde “Borcum” yoksa sitenizde Finans modülü açık değildir.',
+      note:
+          'Menüde “Borcum” yoksa hesabınız bir daireye sakin olarak bağlı değildir ya da bağlantı bilgisi henüz yüklenmedi; yöneticinize danışın.',
     ),
     _residentProfile,
   ];
@@ -584,7 +585,7 @@ abstract final class HelpContent {
       title: 'Ekipman, bakım ve teklifleri nasıl takip ederim?',
       icon: Icons.build_circle_rounded,
       steps: <String>[
-        'Menüden “Ekipman ve Bakım” ekranını açın (süper kullanıcı modülü açtıysa görünür). Ekipman ekle ile asansör, interkom, kamera gibi ekipmanları kaydedin.',
+        'Menüden “Ekipman ve Bakım” ekranını açın. Ekipman ekle ile asansör, interkom, kamera gibi ekipmanları kaydedin.',
         'Ekipmana dokunup Plan ekle ile aylık, 3, 6 ya da 12 aylık bakım planı kurun. Asansör gibi yasal kontrolü olan ekipmanda Yasal kontrol planı yıllık hatırlatma tarihi açar.',
         'Bakım yapılınca Yapıldı ya da Bakım kaydı ile tarih, firma ve maliyeti girin; plan bir sonraki tarihe ilerler. Bakım takvimi sekmesi yaklaşan ve geciken bakımları listeler.',
         'Teklifler sekmesinde aynı konudaki teklifleri karşılaştırın (en düşük tutar işaretlenir). Kabul ettiğiniz teklif gider ya da sözleşme olarak kaydedilir. Gider kırılımı sekmesi giderleri ekipman bazında gösterir.',
@@ -666,10 +667,10 @@ abstract final class HelpContent {
       steps: <String>[
         'Sağ üstteki “Ayarlar” düğmesinden “Modüller” ekranını açın ve siteyi seçin.',
         'Kapalı bir modül için talep gönderin; talebinizi “Modül Taleplerim” bölümünden izleyebilirsiniz.',
-        'Finans modülü açılınca menüde “Finans” ekranı (“Daireler”, “Tanımlar” ve “Dönemler” sekmeleri) görünür.',
-        'Finans açıkken ana sayfada “Bu ay” bölümü görünür: yazılan, toplanan, geciken daire ve kasa sayıları, beş adımlı aylık döngü ve son hareketler. Ay kapatmak isteğe bağlıdır; “Dönemler” sekmesinden istediğiniz ayı seçince o aya kadar açık aylar birlikte kapanır.',
+        'Aidat ve Finans her sitede açıktır (temel modül); menüde “Finans” ekranı (“Daireler”, “Tanımlar” ve “Dönemler” sekmeleri) görünür.',
+        'Ana sayfada “Bu ay” bölümü görünür: yazılan, toplanan, geciken daire ve kasa sayıları, beş adımlı aylık döngü ve son hareketler. Ay kapatmak isteğe bağlıdır; “Dönemler” sekmesinden istediğiniz ayı seçince o aya kadar açık aylar birlikte kapanır.',
         'Sitenizde geçerli kuralları (gecikme tazminatı üst sınırı, işletme projesi ve saklama süreleri) aynı ekrandaki “Kurallar” bölümünde “Kuralları Görüntüle” ile görürsünüz; değerleri sistem yöneticisi belirler.',
-        'Sitenin dosyalarını kendi Google Drive hesabında saklamak için “Dosya Deposu (Google Drive)” modülünü açın; aynı ekrandaki “Google Drive bağla” düğmesi Google onayına götürür. Bağlantı henüz hazır değilse Yakında… yazar.',
+        'Belgeler (yönetmelik, tutanak, sözleşme) ve sitenin Google Drive bağlantısı tek modüldedir: “Dosya Deposu” her sitede açıktır; menüde “Dosya Deposu” ekranı görünür. Sitenin dosyalarını kendi Google Drive hesabında saklamak için o ekranın altındaki “Google Drive bağla” düğmesi Google onayına götürür. Bağlantı henüz hazır değilse Yakında… yazar.',
       ],
     ),
     HelpTopic(
@@ -689,7 +690,7 @@ abstract final class HelpContent {
       title: 'Yıllık faaliyet raporunu nasıl hazırlarım?',
       icon: Icons.assignment_rounded,
       steps: <String>[
-        'Faaliyet Raporu modülü açıkken menüden “Faaliyet Raporu” ekranını açıp rapor yılını seçin; dokuz bölüm kayıtlarınızdan otomatik dolar.',
+        'Menüden “Faaliyet Raporu” ekranını açıp rapor yılını seçin; dokuz bölüm kayıtlarınızdan otomatik dolar.',
         'Bir bölümü açıp metni dilediğiniz gibi düzenleyin; “Sistem taslağına dön” bölümü yeniden kayıtlardan doldurur.',
         '“Gelecek yıl tahmini” bölümüne gider artış yüzdesini yazıp “Hesapla”ya basın.',
         '“Taslağı kaydet” düzenlemelerinizi saklar, “PDF” raporu verir.',
@@ -719,7 +720,7 @@ abstract final class HelpContent {
         'Faturalandır sekmesinde tür, yöntem (birim fiyat, fatura tutarı ya da ısı için ölçüm + alan payı) ve iki tarihi seçip Önizle deyin; tutarlar uygunsa Borçlandır ile her dairenin oturanının hesabına borç yazılır.',
       ],
       note:
-          'Okunan değeri sayaçla karşılaştırmadan onaylamayın; fotoğraf Drive bağlıysa Drive a, değilse sunucuya kaydedilir. Webde kamera yok, değer elle yazılır. Borçlandırma için Aidat ve Finans modülü de açık olmalıdır; yanlış borç Finans ekranından ters kayıtla düzeltilir.',
+          'Okunan değeri sayaçla karşılaştırmadan onaylamayın; fotoğraf Drive bağlıysa Drive a, değilse sunucuya kaydedilir. Webde kamera yok, değer elle yazılır. Yanlış borç Finans ekranından ters kayıtla düzeltilir.',
     ),
     HelpTopic(
       id: 'management_company',

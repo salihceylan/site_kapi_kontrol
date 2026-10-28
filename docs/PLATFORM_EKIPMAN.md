@@ -1,6 +1,6 @@
 # Ekipman, Bakım ve Teklifler (`equipment` modülü)
 
-Migration 068 (`server/migrations/068_equipment.sql` = `server/src/modules/equipment_schema.js`). Modül varsayılan KAPALI; süper kullanıcı açar, yönetici talep eder.
+Migration 068 (`server/migrations/068_equipment.sql` = `server/src/modules/equipment_schema.js`). TEMEL modül (2026-10-28, AGENTS.md Kural 25): `equipment` her sitede hep açıktır; talep edilmez, kapatılamaz (`site_modules` satırı kurulumda yazılır, `migrations/082` mevcut siteleri doldurur).
 
 ## Tablolar (hepsi ekleyici, FK korumalı; site silinince CASCADE)
 

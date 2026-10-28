@@ -1,4 +1,6 @@
 // qa_platform_pg.mjs "documents" bolumu (Belgeler, Faz 3b-A; docs/PLATFORM_BELGELER.md Bolum A). GERCEK PostgreSQL + GERCEK dosya sistemi.
+// 2026-10-28 (084): Belgeler ayri modul degil; modul kapisi Dosya Deposu (`drive_storage`). Dosya Deposu ayrica TEMEL modul (Kural 25, 082): her sitede acik,
+// acilip kapatilamaz (400 MODULE_NOT_TOGGLEABLE), talep edilemez; kapi katalogdaki core bayragina dayanir, dogrudan SQL okuyan sakin yolu satir yoksa ACIK sayar.
 // QA_ONLY=documents ile ayri kosulur (qa_platform_pg.mjs bu dosyayi ice aktarir; ortak yardimcilari `ctx` ile verir). `npm test` ICINDE DEGILDIR.
 //
 // Kapsam: sema (CHECK / indeks / CASCADE / SET NULL, ensureDbSchema idempotans + eksik nesne tamamlama + yazici yuku altinda acilis), yetki matrisi ve modul
@@ -227,7 +229,9 @@ export async function sectionDocuments(ctx) {
   const tmpFiles = async () => (await fsp.readdir(path.join(storageRoot, '_tmp')).catch(() => [])).sort();
   /** Bekleyen (uploading) yuklemeleri 3 saat eskitir: kullanici basina 5 bekleyen siniri bolumler arasinda birikmesin (satirlar bakim isi testlerinde silinir). */
   const expirePending = () => q(`UPDATE document_versions SET created_at = NOW() - INTERVAL '3 hours' WHERE status = 'uploading'`);
-  const enableModule = (siteCode) => call('PUT', `/manager/sites/${siteCode}/modules/documents`, SUPER, { enabled: true });
+  // Dosya Deposu TEMEL modul (Kural 25): kurulum acik satiri yazar (enableCoreModulesForSite); mkSite ham SQL ile kurdugu icin ayni yardimci burada cagrilir.
+  const { enableCoreModulesForSite } = await import('../src/modules/core_modules.js');
+  const enableModule = (siteCode) => enableCoreModulesForSite(pool, siteCode);
 
   // --- gider belgesi (expense_documents, Faz 4b) yardimcilari: ledger tetikleyicileri ve FK'lar YALNIZ bu baglantida session_replication_role = replica ile atlanir
   const withReplica = async (work) => {
@@ -490,8 +494,13 @@ export async function sectionDocuments(ctx) {
   // ============================================================================================================
   console.log('--- B. modul kapisi ve yetki ---');
   const closedRes = await call('GET', base1(), MGR);
-  check('B1: modul VARSAYILAN KAPALI: yonetici 403 MODULE_DISABLED { module: documents }', closedRes.status === 403 && closedRes.body.code === 'MODULE_DISABLED' && closedRes.body.module === 'documents', closedRes.body);
-  check('B2: yonetici modulu kendisi acamaz (403); super acar (200)', (await call('PUT', `/manager/sites/${site.code}/modules/documents`, MGR, { enabled: true })).status === 403 && (await enableModule(site.code)).status === 200 && (await enableModule(site2.code)).status === 200);
+  check('B1: TEMEL modul (Kural 25): site_modules satiri YOKKEN de ACIK; yonetici 200 (MODULE_DISABLED yok)', closedRes.status === 200 && closedRes.body.code === undefined, closedRes.body);
+  const superClose = await call('PUT', `/manager/sites/${site.code}/modules/drive_storage`, SUPER, { enabled: false, confirm: true });
+  const superOpen = await call('PUT', `/manager/sites/${site.code}/modules/drive_storage`, SUPER, { enabled: true });
+  const oldCodeOpen = await call('PUT', `/manager/sites/${site.code}/modules/documents`, SUPER, { enabled: true });
+  check('B2: yonetici modulu kendisi degistiremez (403); super de ne acar ne kapatir: 400 MODULE_NOT_TOGGLEABLE; eski `documents` kodu Dosya Deposu\'na cevrilir ve ayni 400 (404 / 500 yok)', (await call('PUT', `/manager/sites/${site.code}/modules/drive_storage`, MGR, { enabled: true })).status === 403 && superClose.status === 400 && superClose.body.code === 'MODULE_NOT_TOGGLEABLE' && superOpen.status === 400 && superOpen.body.code === 'MODULE_NOT_TOGGLEABLE' && oldCodeOpen.status === 400 && oldCodeOpen.body.code === 'MODULE_NOT_TOGGLEABLE', { superClose: superClose.body, superOpen: superOpen.body, oldCodeOpen: oldCodeOpen.body });
+  await enableModule(site.code);
+  await enableModule(site2.code);
   const matrix = [];
   for (const [label, user, expected] of [['super', SUPER, 200], ['yonetici', MGR, 200], ['kurul', BOARD, 200], ['gorevli', STAFF, 403], ['ilgisiz', OUTSIDER, 403], ['baska site yoneticisi', MGR2, 403]]) {
     matrix.push([label, (await call('GET', base1(), user)).status === expected]);
@@ -889,10 +898,11 @@ export async function sectionDocuments(ctx) {
   const badQuery = await call('GET', '/app/documents?category=yok', R2.user);
   check('G16: gecersiz sorgu 400 INVALID_QUERY', badQuery.status === 400 && badQuery.body.code === 'INVALID_QUERY');
   // modul kapali / site onaysiz / silinmis / pending
-  await q(`UPDATE site_modules SET enabled = FALSE WHERE site_code = $1 AND module_code = 'documents'`, [vis.code]);
-  check('G17: modul KAPALI: sakin listesi bos, ayrinti ve indirme 404; belgeler SILINMEZ', same(await listIds(R2.user), []) && (await call('GET', `/app/documents/${dSite}`, R2.user)).status === 404 && (await call('GET', `/app/documents/${dSite}/download`, R2.user)).status === 404 && (await countOf(`SELECT COUNT(*)::int AS n FROM documents WHERE site_code = $1 AND status = 'active'`, [vis.code])) >= 5 && (await call('GET', vBase(), MGR)).body.code === 'MODULE_DISABLED');
-  await q(`UPDATE site_modules SET enabled = TRUE WHERE site_code = $1 AND module_code = 'documents'`, [vis.code]);
-  check('G17b: modul yeniden acilinca her sey geri gelir', (await listIds(R2.user)).includes(dSite));
+  // Dosya Deposu TEMEL modul: site_modules satiri hic yoksa (kurulum / acilis doldurmasi eksik kalsa bile) sakin belgeleri GORUR; kapi satira degil core bayragina / COALESCE ... TRUE'ya dayanir.
+  await q(`DELETE FROM site_modules WHERE site_code = $1 AND module_code = 'drive_storage'`, [vis.code]);
+  check('G17: TEMEL modul, satir YOK: sakin listesi dolu, ayrinti ve indirme 200; belgeler duruyor; yonetici ucu MODULE_DISABLED vermez', (await listIds(R2.user)).includes(dSite) && (await call('GET', `/app/documents/${dSite}`, R2.user)).status === 200 && (await call('GET', `/app/documents/${dSite}/download`, R2.user)).status === 200 && (await countOf(`SELECT COUNT(*)::int AS n FROM documents WHERE site_code = $1 AND status = 'active'`, [vis.code])) >= 5 && (await call('GET', vBase(), MGR)).status === 200);
+  await enableModule(vis.code);
+  check('G17b: kurulum satiri yeniden yazilinca (enableCoreModulesForSite) her sey ayni kalir; ikinci yazim satiri cogaltmaz', (await listIds(R2.user)).includes(dSite) && (await countOf(`SELECT COUNT(*)::int AS n FROM site_modules WHERE site_code = $1 AND module_code = 'drive_storage'`, [vis.code])) === 1);
   await q(`UPDATE sites SET approval_status = 'pending' WHERE site_code = $1`, [vis.code]);
   check('G18: onaysiz site belgeleri sakine gostermez', same(await listIds(R2.user), []));
   await q(`UPDATE sites SET approval_status = 'approved' WHERE site_code = $1`, [vis.code]);
@@ -1421,10 +1431,10 @@ export async function sectionDocuments(ctx) {
     { manager: managerDetailGone.body?.attachments, resident: residentDetailGone.body?.attachments });
   await call('POST', vBase(`/${attDocA}/restore`), MGR);
   check('K9: belge geri alinca ek yeniden available:true ve indirilebilir', (await call('GET', attUrl, R2.user)).status === 200);
-  await q(`UPDATE site_modules SET enabled = FALSE WHERE site_code = $1 AND module_code = 'documents'`, [vis.code]);
-  const closedDetail = await call('GET', `/app/announcements/${annId}`, R2.user);
-  check('K10: modul kapaliyken ek available:false, indirme 404; duyurunun kendisi etkilenmez', closedDetail.status === 200 && closedDetail.body.attachments[0].available === false && (await call('GET', attUrl, R2.user)).status === 404);
-  await q(`UPDATE site_modules SET enabled = TRUE WHERE site_code = $1 AND module_code = 'documents'`, [vis.code]);
+  await q(`DELETE FROM site_modules WHERE site_code = $1 AND module_code = 'drive_storage'`, [vis.code]);
+  const noRowDetail = await call('GET', `/app/announcements/${annId}`, R2.user);
+  check('K10: TEMEL modul, satir YOK: ek available:true ve indirme 200 (kapi satira bakmaz); duyuru etkilenmez', noRowDetail.status === 200 && noRowDetail.body.attachments[0].available === true && (await call('GET', attUrl, R2.user)).status === 200);
+  await enableModule(vis.code);
   await call('POST', `${aBase}/${annId}/withdraw`, MGR);
   check('K11: geri cekilen duyurunun eki indirilemez (404)', (await call('GET', attUrl, R2.user)).status === 404);
   await call('DELETE', vBase(`/${attDocA}`), MGR, { confirm: true });
