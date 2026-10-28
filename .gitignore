@@ -74,6 +74,8 @@ hatalaar.txt
 *.key
 *.p12
 !/server/.env.example
+# OTA imza araci: ornek ortam dosyasi (yalniz AD, deger yok) izlenir; gercek .env ve ozel anahtarlar *.pem / .env.* ile yok sayilir
+!/tools/ota_imza/.env.example
 
 # Ekran yazilimi surum ikilileri (*.bin genel kurali da kapsar; acik tutuldu)
 ekran_yazilimi/firmware_releases/**/*.bin

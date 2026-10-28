@@ -1,0 +1,32 @@
+{
+  "baslik": "TEST VEKTORLERI - yalniz ACIK veriler (genel anahtar, mesaj, imza). OZEL ANAHTAR YOKTUR (uretimden sonra atildi). URETIMDE KULLANILMAZ.",
+  "format": "KAPI-OTA-IMZA-V1",
+  "genel_anahtar_hex": "040b4068ce86e2849f9e290b3f23a2adf14b6b21ebb4d7f03baaf088524dd24c",
+  "anahtar_kimligi": "33883b77b7f5fdbc",
+  "sentetik_imaj": {
+    "aciklama": "Her vektorun firmware imaji bu formulle yeniden uretilir; cihaz / sunucu testleri ayni baytlari kurup SHA-256 ve imzayi dogrulayabilir.",
+    "formul": "bayt[i] = (i * 31 + 7) mod 256 (i = 0..boyut-1); sonra bayt[0] = 0xE9, bayt[1] = 0x05, bayt[12] = cip_kimligi mod 256, bayt[13] = cip_kimligi div 256"
+  },
+  "vektorler": [
+    {
+      "ad": "esp32-c3",
+      "hedef": "esp32-c3",
+      "cip_kimligi": 5,
+      "surum": "4.3.4",
+      "boyut": 4096,
+      "sha256": "c3789af686a4995a2d1264a0eea34c7cc19524515ab20cbac88b002658be6252",
+      "mesaj": "KAPI-OTA-IMZA-V1\ntarget=esp32-c3\nversion=4.3.4\nsize=4096\nsha256=c3789af686a4995a2d1264a0eea34c7cc19524515ab20cbac88b002658be6252\n",
+      "imza_hex": "71e564c0f321ba8a876f7e115eccea92f256296ee26accd33c8106ad0dff268f2f3d82ea315007d3257d4e5c4f48287276d1f1dffbfc93bef6f1e5b762b03c01"
+    },
+    {
+      "ad": "esp32-wroom",
+      "hedef": "esp32-wroom",
+      "cip_kimligi": 0,
+      "surum": "5.2.3",
+      "boyut": 8192,
+      "sha256": "a4fa27da11d1a94e8b279787179e2b104bf90253d56f640bbe7fc37bb561d618",
+      "mesaj": "KAPI-OTA-IMZA-V1\ntarget=esp32-wroom\nversion=5.2.3\nsize=8192\nsha256=a4fa27da11d1a94e8b279787179e2b104bf90253d56f640bbe7fc37bb561d618\n",
+      "imza_hex": "73fe2d62adbb3aff07037e87af3738744655bad918457a9c7f89e5d5662df86c698adf0ddb6bbfafee352b015c069d223b59e4a6780a9c97eedccc89e0caea0f"
+    }
+  ]
+}
