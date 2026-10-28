@@ -74,7 +74,7 @@ Future<void> residentRemoteTour(E2eScreenContext c) async {
 /// Kapi dugmesine ANAHTARIYLA ('resident_door_open_button') dokunur ve SONUCU dogrular: uzaktan / yerel acmada
 /// "Kapı açma komutu gönderildi" bildirimi, yalniz-QR kapida QR penceresi. Dugme yoksa, hazir degilse ya da sonuc
 /// gorunmezse bulgu yazilir (eskiden metinle aranip vitrindeki "Kapıyı aç" kutusuna da dokunulabiliyor ve sonuc
-/// beklenmeden "kapi acildi" goruntusu aliniyordu).
+/// beklenmeden "kapi acma sonrasi" goruntusu aliniyordu).
 Future<void> residentOpenDoorAndVerify(E2eScreenContext c) async {
   final tester = c.tester;
   final button = find.byKey(const ValueKey<String>('resident_door_open_button'));

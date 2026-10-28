@@ -224,13 +224,22 @@ final List<_State> _states = <_State>[
   ),
 ];
 
+/// Sesli okuma (TTS) kanalına giden `speak` metinleri (Android'de {text, focus}, öteki platformlarda düz metin).
+final List<String> _spoken = <String>[];
+
 void main() {
   setUp(() {
+    _spoken.clear();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(
-          const MethodChannel('flutter_tts'),
-          (call) async => 1,
-        );
+        .setMockMethodCallHandler(const MethodChannel('flutter_tts'), (
+          call,
+        ) async {
+          if (call.method == 'speak') {
+            final args = call.arguments;
+            _spoken.add(args is Map ? '${args['text']}' : '$args');
+          }
+          return 1;
+        });
   });
   tearDown(() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -721,8 +730,17 @@ void main() {
         expect(orb.size, 88);
         expect(orb.glow, isTrue);
         expect(find.text('Geçiş Başarılı'), findsOneWidget);
-        expect(find.text('Kapı Açıldı!'), findsOneWidget);
+        // Dürüst dil (P1-15): sunucu karekodu kabul edip komutu yayınladı; kapının açıldığına dair kanıt yok.
+        expect(find.text('Gönderildi'), findsOneWidget);
         expect(find.text('Geçiş onaylandı'), findsOneWidget);
+        expect(find.textContaining('Açıldı'), findsNothing);
+        expect(find.textContaining('açıldı'), findsNothing);
+        expect(
+          _spoken,
+          contains('Geçiş onaylandı, açma komutu gönderildi.'),
+          reason: 'sesli okuma da kanıtsız "kapı açıldı" dememeli',
+        );
+        expect(_spoken.where((s) => s.contains('açıldı')), isEmpty);
         expect(_headerChip(t).tone, AppTone.success);
         expect(_headerChip(t).pulse, isFalse);
         expect(_ring(t).colorOverride, CountdownRing.successColor);

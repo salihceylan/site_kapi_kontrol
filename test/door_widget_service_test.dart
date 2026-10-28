@@ -255,8 +255,17 @@ void main() {
 
   group('mapDoorOpenResponse', () {
     test('success codes', () {
-      expect(mapDoorOpenResponse(202, '{}').status, 'Açıldı! ✅');
-      expect(mapDoorOpenResponse(200, '').status, 'Açıldı! ✅');
+      expect(mapDoorOpenResponse(202, '{}').status, 'Komut gönderildi ✅');
+      expect(mapDoorOpenResponse(200, '').status, 'Komut gönderildi ✅');
+    });
+
+    test('success text only says the command was sent (no proof the door opened)', () {
+      // P1-15: 202 yalnız sunucunun komutu kabul ettiğini gösterir; fiziksel açılma kanıtı yoktur.
+      for (final code in [200, 202]) {
+        final status = mapDoorOpenResponse(code, '{}').status;
+        expect(status.toLowerCase(), isNot(contains('açıldı')), reason: '$code');
+        expect(status, contains('gönderildi'), reason: '$code');
+      }
     });
 
     test('409 marks the door offline (server-confirmed), other errors do not', () {
@@ -543,7 +552,7 @@ void main() {
       expect(requests.single.method, 'POST');
       expect(requests.single.url.toString(), 'https://api.example.com/app/doors/7/open');
       expect(requests.single.headers['Authorization'], 'Bearer jwt-token');
-      expect(statusHistory, containsAllInOrder(['Açılıyor... ⏳', 'Açıldı! ✅']));
+      expect(statusHistory, containsAllInOrder(['Açılıyor... ⏳', 'Komut gönderildi ✅']));
       // geçici durum normale döner
       expect(store['door_status'], 'Çevrimiçi / Hazır');
     });

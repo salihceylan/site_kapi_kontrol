@@ -46,7 +46,7 @@ class VoiceLiveBanner extends StatelessWidget {
 
 /// Saf görünüm: [status] + metinler -> banner. Servise bağlı değildir.
 ///
-/// Durumlar (ton): dinliyor (success) • komut algılanıyor (primary) • kapı açılıyor (success) •
+/// Durumlar (ton): dinliyor (success) • komut algılanıyor (primary) • komut gönderildi (success) •
 /// hata (danger) • boşta/başlatılıyor (neutral). Eylem düğmesi dinliyorsa [onStop], değilse [onStart]
 /// çağırır.
 ///
@@ -248,8 +248,8 @@ class _VoiceBannerLook {
         return const _VoiceBannerLook(
           AppTone.success,
           Icons.lock_open_rounded,
-          '🔓 Kapı Açılıyor!',
-          'Sesli komut onaylandı, kapı tetikleniyor...',
+          '🔓 Komut Gönderildi',
+          'Sesli komut onaylandı, açma komutu gönderildi.',
         );
       case VoiceStatus.error:
         return _VoiceBannerLook(

@@ -674,11 +674,11 @@ class LocalDoorService {
         debugPrint('[YerelKapi] Canlı beacon önbelleği kullanılıyor -> $effectiveIp');
         final udpOpened = await _directUdpOpen(effectiveIp, access, wifiAddress: wifiAddr);
         if (udpOpened) {
-          debugPrint('[YerelKapi] Canlı önbellek ile açıldı ($effectiveIp)');
+          debugPrint('[YerelKapi] Canlı önbellek ile komut iletildi, cihaz yanıt verdi ($effectiveIp)');
           return LocalDoorOpenResult(
             ok: true,
             ip: effectiveIp,
-            message: 'Kapı yerel ağdan anında açıldı.',
+            message: 'Komut yerel ağdan iletildi, cihaz yanıt verdi.',
           );
         }
       }

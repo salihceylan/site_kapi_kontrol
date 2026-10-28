@@ -78,7 +78,7 @@ Future<void> individualPanelTour(E2eScreenContext c) async {
 }
 
 /// Ilk kapi kartinin dugmesi ('individual_door_open'): kapisi olmayan kullanicida dugme yoktur (atlanir); varsa ve
-/// hazirsa dokunulur ve "... kapısı açılıyor" bildirimi beklenir, gelmezse bulgu yazilir (hata bildirimi eklenir).
+/// hazirsa dokunulur ve "... için açma komutu gönderildi" bildirimi beklenir, gelmezse bulgu yazilir (hata bildirimi eklenir).
 Future<void> _individualOpenDoorAndVerify(E2eScreenContext c) async {
   final tester = c.tester;
   final button = find.descendant(
@@ -99,14 +99,14 @@ Future<void> _individualOpenDoorAndVerify(E2eScreenContext c) async {
     return;
   }
   if (!await tapFinder(tester, button.first, description: 'kapi dugmesi "${door.label}"')) return;
-  if (await pumpUntilFound(tester, findText('kapısı açılıyor'), timeout: _s(10))) {
+  if (await pumpUntilFound(tester, findText('açma komutu gönderildi'), timeout: _s(10))) {
     E2eRuntime.act('kapi acma komutu gonderildi (bildirimle dogrulandi)');
     await c.shot('kapi_acma_sonrasi');
   } else {
     final shown = visibleSnackBarTexts();
     E2eRuntime.collector.note(
       kind: 'expectation',
-      message: 'Kapi acma dogrulanamadi: "kapısı açılıyor" bildirimi gelmedi'
+      message: 'Kapi acma dogrulanamadi: "açma komutu gönderildi" bildirimi gelmedi'
           '${shown.isEmpty ? '' : ' (gorunen: ${shown.join(' | ')})'}',
     );
     await c.shot('kapi_acma_sonucu');

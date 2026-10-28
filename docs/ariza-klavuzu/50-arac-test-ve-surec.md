@@ -676,7 +676,7 @@ flutter test test/local_door_service_v2_test.dart
 | --- | --- | --- |
 | [cihaz_kontrol/host_test/README.md:9](../../cihaz_kontrol/host_test/README.md#L9) | <code>&#124; `t_core.cpp` &#124; `yerel_kontrol_cekirdek.h`: HMAC bilinen-cevap vektörleri, Node `crypto`…</code> | Test tablosu: hangi başlık hangi test dosyasıyla, kaç doğrulama |
 | [cihaz_kontrol/host_test/run_all.py:29](../../cihaz_kontrol/host_test/run_all.py#L29) | <code>TESTS = [</code> | Koşucunun test listesi (t_core, t_udp, t_pin, t_gm60, t_mqtt WROOM + C3) |
-| [SAHA_KONTROL_LISTESI.md:1028](../../SAHA_KONTROL_LISTESI.md#L1028) | <code>## 51. 🔌 Firmware — ESP32-C3, ESP32-WROOM ve Ekran Yazılımı (F1, F2A1, F2A2, F2B)</code> | Donanımdaki gerçek davranış host testleriyle doğrulanmış SAYILMAZ; saha adımları burada (ve 42-52) |
+| [SAHA_KONTROL_LISTESI.md:1029](../../SAHA_KONTROL_LISTESI.md#L1029) | <code>## 51. 🔌 Firmware — ESP32-C3, ESP32-WROOM ve Ekran Yazılımı (F1, F2A1, F2A2, F2B)</code> | Donanımdaki gerçek davranış host testleriyle doğrulanmış SAYILMAZ; saha adımları burada (ve 42-52) |
 | [docs/codebase/TESTING.md:12](../../docs/codebase/TESTING.md#L12) | <code>- Firmware: host tests in `cihaz_kontrol/host_test/` (719 checks: local control v2 core, …</code> | Firmware test kapsamı ve CI dışında olduğu notu |
 
 **Olası nedenler**
@@ -885,7 +885,7 @@ flutter test test/screens/login_layout_test.dart
 | [test/theme_service_test.dart:1](../../test/theme_service_test.dart#L1) | <code>// Tema tercihi: sistem (varsayılan) / aydınlık / karanlık; cihazda saklanır (SharedPrefe…</code> | Tema tercihi (sistem/aydınlık/karanlık) ve kalıcılığı |
 | [test/design/theme_toggle_button_test.dart:44](../../test/design/theme_toggle_button_test.dart#L44) | <code>testWidgets('kapsam yoksa düğme hiç görünmez (mevcut ekranlar değişmez)', (t) async {</code> | Ay/güneş geçiş düğmesi testleri (dosyada group yok; her senaryo ayrı testWidgets: kapsamsız görünmez, ikon/ipucu, kalıcılık, sistem modu, 44 dp, 320 dp x 2,0 taşma) |
 | [docs/codebase/CONCERNS.md:54](../../docs/codebase/CONCERNS.md#L54) | <code>&#124; `lib/ui/design/` (tokens, palette, components) &#124; A palette or token change restyles ~60…</code> | Palet/token değişikliği ~60 ekranı etkiler: değişiklik öncesi ve sonrası test/design + test/screens çalıştırılmalı |
-| [SAHA_KONTROL_LISTESI.md:1146](../../SAHA_KONTROL_LISTESI.md#L1146) | <code>## 55. 🌗 Aydınlık / Karanlık Tema Geçiş Düğmesi (2026-10-02)</code> | Tema geçiş düğmesinin saha adımları |
+| [SAHA_KONTROL_LISTESI.md:1147](../../SAHA_KONTROL_LISTESI.md#L1147) | <code>## 55. 🌗 Aydınlık / Karanlık Tema Geçiş Düğmesi (2026-10-02)</code> | Tema geçiş düğmesinin saha adımları |
 
 **Olası nedenler**
 - Palet/token (lib/styles, lib/ui/design/tokens.dart) değişti: bir metin-zemin çifti 4.5:1 altına düştü
@@ -918,7 +918,7 @@ flutter test test/theme_service_test.dart
 | [test/clock_rebuild_scope_test.dart:1](../../test/clock_rebuild_scope_test.dart#L1) | <code>// FAZ 5 / P-d: DigitalClockWidget'ın saniyelik güncellemesi yalnız saat metnini yeniden …</code> | Saniyelik güncelleme yalnız saat metnini yeniden kurar |
 | [test/qr_modal_polling_test.dart:1](../../test/qr_modal_polling_test.dart#L1) | <code>// FAZ 5 / P-c, P-d: DynamicQrPassModal durum yoklaması (800 ms) yaşam döngüsü ve geri sa…</code> | QR modalı yoklama yaşam döngüsü ve geri sayım halkası kapsamı |
 | [test/home_scroll_paint_test.dart:2](../../test/home_scroll_paint_test.dart#L2) | <code>// (RepaintBoundary) yoksa her kaydırma karesinde yüzlerce kartın tümü baştan boyanır.</code> | Uzun sayfada kaydırma: sınır yoksa her karede yüzlerce kart baştan boyanır |
-| [SAHA_KONTROL_LISTESI.md:1102](../../SAHA_KONTROL_LISTESI.md#L1102) | <code>- [ ] **52.16.** Sunucu erişim günlüğünden yoklama trafiği: Kapılar sayfası (kapı kartı) …</code> | Sunucu erişim günlüğünde yoklama trafiğinin saha doğrulaması |
+| [SAHA_KONTROL_LISTESI.md:1103](../../SAHA_KONTROL_LISTESI.md#L1103) | <code>- [ ] **52.16.** Sunucu erişim günlüğünden yoklama trafiği: Kapılar sayfası (kapı kartı) …</code> | Sunucu erişim günlüğünde yoklama trafiğinin saha doğrulaması |
 
 **Olası nedenler**
 - Geniş kapsamlı setState / üst widget güncellemesi yeni eklendi (yalnız ilgili alt ağaç yeniden kurulmalı)
@@ -1009,7 +1009,7 @@ flutter test integration_test/walk_super_user_test.dart -d windows --dart-define
 | [test_driver/perf_driver.dart:28](../../test_driver/perf_driver.dart#L28) | <code>final out = Platform.environment['PERF_OUT'] ?? 'build${Platform.pathSeparator}perf';</code> | Çıktı dizini: PERF_OUT ortam değişkeni (yoksa build/perf); dosya perf_frames.json |
 | [test_driver/perf_driver.dart:25](../../test_driver/perf_driver.dart#L25) | <code>print('PERF~ sürücü: perf_frames verisi gelmedi (test hata verdi mi?).');</code> | Test hata verdiyse sürücüye özet gelmez |
 | [test/perf_frame_stats_test.dart:1](../../test/perf_frame_stats_test.dart#L1) | <code>// FAZ 5 / P: kare süresi ölçüm düzeneğinin (integration_test/support/perf_frames.dart) ö…</code> | Ölçüm düzeneğinin yüzdelik/jank hesabının birim testi |
-| [SAHA_KONTROL_LISTESI.md:1106](../../SAHA_KONTROL_LISTESI.md#L1106) | <code>- [ ] **52.20.** (Geliştirici) Windows profil kare ölçümü: `flutter drive --profile -d wi…</code> | Komut, taban/faz5 karşılaştırması ve hedefler |
+| [SAHA_KONTROL_LISTESI.md:1107](../../SAHA_KONTROL_LISTESI.md#L1107) | <code>- [ ] **52.20.** (Geliştirici) Windows profil kare ölçümü: `flutter drive --profile -d wi…</code> | Komut, taban/faz5 karşılaştırması ve hedefler |
 
 **Olası nedenler**
 - Yerel API/E2E kullanıcıları hazır değil ya da pencere simge durumunda
@@ -1210,8 +1210,8 @@ flutter test
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
 | [AGENTS.md:25](../../AGENTS.md#L25) | <code>5. **Saha Kontrol Listesini Güncel Tut:**</code> | Kural: yeni özellik kodlanıp tamamlanınca "- [ ]" adımı; nasıl test edileceği ve beklenen sonuç net yazılır |
-| [SAHA_KONTROL_LISTESI.md:1146](../../SAHA_KONTROL_LISTESI.md#L1146) | <code>## 55. 🌗 Aydınlık / Karanlık Tema Geçiş Düğmesi (2026-10-02)</code> | Örnek bölüm: başlık "## NN. emoji Konu (tarih)"; en yeni bölüm dosyanın SONUNDA |
-| [SAHA_KONTROL_LISTESI.md:1148](../../SAHA_KONTROL_LISTESI.md#L1148) | <code>- [ ] **55.1. Giriş Ekranında Tema Geçişi:**</code> | Madde biçimi: "- [ ] **NN.M. Başlık:**" + alt satırlarda "**Nasıl Test Edilir:**" ve "**Beklenen Sonuç:**" |
+| [SAHA_KONTROL_LISTESI.md:1147](../../SAHA_KONTROL_LISTESI.md#L1147) | <code>## 55. 🌗 Aydınlık / Karanlık Tema Geçiş Düğmesi (2026-10-02)</code> | Örnek bölüm: başlık "## NN. emoji Konu (tarih)"; en yeni bölüm dosyanın SONUNDA |
+| [SAHA_KONTROL_LISTESI.md:1149](../../SAHA_KONTROL_LISTESI.md#L1149) | <code>- [ ] **55.1. Giriş Ekranında Tema Geçişi:**</code> | Madde biçimi: "- [ ] **NN.M. Başlık:**" + alt satırlarda "**Nasıl Test Edilir:**" ve "**Beklenen Sonuç:**" |
 | [SAHA_KONTROL_LISTESI.md:6](../../SAHA_KONTROL_LISTESI.md#L6) | <code>&gt; ℹ️ **Not:** Talep ettiğiniz her yeni özellik tamamlandığında bu listeye otomatik olarak…</code> | Listenin başındaki söz: her yeni özellik buraya yeni adım olarak eklenir |
 | [SAHA_KONTROL_LISTESI.md:921](../../SAHA_KONTROL_LISTESI.md#L921) | <code>- [ ] **47.6.** VPS: `node scripts/migrate.js --status` (salt okunur) → schema_migrations…</code> | Klavuz girişleri bu tür madde numaralarına (ör. 47.6, 52.16) find ile bağlıdır: mevcut numaraları yeniden numaralamayın |
 
@@ -1462,7 +1462,7 @@ python cihaz_dene/app.py
 | [android/app/build.gradle.kts:35](../../android/app/build.gradle.kts#L35) | <code>sourceCompatibility = JavaVersion.VERSION_17</code> | Uygulama kodu Java 17 hedefler (derleyici JDK'si 17 veya üstü olmalı) |
 | [android/app/build.gradle.kts:84](../../android/app/build.gradle.kts#L84) | <code>signingConfig = signingConfigs.getByName("debug")</code> | android/key.properties yoksa release derleme DEBUG anahtarıyla imzalanır (uyarı basılır; mağazaya yüklenemez) |
 | [android/app/build.gradle.kts:44](../../android/app/build.gradle.kts#L44) | <code>applicationId = "tr.com.gudeteknoloji.siteyonetim"</code> | Kalıcı uygulama kimliği (mağaza kaydından sonra değiştirilemez; iOS paket kimliğiyle aynıdır) |
-| [SAHA_KONTROL_LISTESI.md:1115](../../SAHA_KONTROL_LISTESI.md#L1115) | <code>- [ ] **53.2. Android Gradle JDK 21 Uyumluluğu:**</code> | Doğrulama adımı: gradle.properties'teki Android Studio JDK ile hatasız derleme |
+| [SAHA_KONTROL_LISTESI.md:1116](../../SAHA_KONTROL_LISTESI.md#L1116) | <code>- [ ] **53.2. Android Gradle JDK 21 Uyumluluğu:**</code> | Doğrulama adımı: gradle.properties'teki Android Studio JDK ile hatasız derleme |
 
 **Olası nedenler**
 - Android Studio farklı yola kurulu ya da jbr klasörü yok: org.gradle.java.home yolunu bu makineye göre düzeltin (yalnız yerel; depodaki değer geliştirici makinesindir)

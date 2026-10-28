@@ -558,10 +558,10 @@ void main() {
         final c = _controller(t, value: 0.5);
         await t.pumpWidget(
           harnessApp(
-            Center(child: _ringWidget(c, child: const Text('Kapı Açıldı!'))),
+            Center(child: _ringWidget(c, child: const Text('Komut gönderildi'))),
           ),
         );
-        expect(find.bySemanticsLabel('Kapı Açıldı!'), findsOneWidget);
+        expect(find.bySemanticsLabel('Komut gönderildi'), findsOneWidget);
         final nodes = t.semantics
             .simulatedAccessibilityTraversal()
             .where((n) => n.getSemanticsData().label.isNotEmpty)

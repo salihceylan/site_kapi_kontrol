@@ -63,11 +63,11 @@ void main() {
       testWidgets('${kind.name}: mesaj, simge ve dolgu (açık + koyu)', (t) async {
         for (final dark in const [false, true]) {
           await pumpAt(t, const SizedBox(), scale: 1.0, dark: dark);
-          AppSnack.show(_ctx(t), 'Kapı açılıyor... 🚪', kind: kind);
+          AppSnack.show(_ctx(t), 'Kapı açma komutu gönderildi. 🚪', kind: kind);
           await _enter(t);
 
           expect(find.byType(SnackBar), findsOneWidget);
-          expect(find.text('Kapı açılıyor... 🚪'), findsOneWidget);
+          expect(find.text('Kapı açma komutu gönderildi. 🚪'), findsOneWidget);
           final icon = t.widget<Icon>(
             find.descendant(
               of: find.byType(SnackBar),
@@ -150,7 +150,7 @@ void main() {
       t,
     ) async {
       await pumpAt(t, const SizedBox(), scale: 1.0);
-      const message = '"Ana Kapı" kapısı açılıyor... ✅ Şifre güncellendi.';
+      const message = '"Ana Kapı" için açma komutu gönderildi. ✅ Şifre güncellendi.';
       AppSnack.show(_ctx(t), message, kind: AppSnackKind.success);
       await _enter(t);
       expect(find.text(message), findsOneWidget);
@@ -650,11 +650,11 @@ void main() {
       (t) async {
         final handle = t.ensureSemantics();
         await pumpAt(t, const SizedBox(), scale: 1.0);
-        AppSnack.show(_ctx(t), 'Kapı açılıyor.', kind: AppSnackKind.success);
+        AppSnack.show(_ctx(t), 'Kapı açma komutu gönderildi.', kind: AppSnackKind.success);
         await _enter(t);
         expect(
-          t.getSemantics(find.text('Kapı açılıyor.')),
-          isSemantics(label: 'Kapı açılıyor.', isLiveRegion: true),
+          t.getSemantics(find.text('Kapı açma komutu gönderildi.')),
+          isSemantics(label: 'Kapı açma komutu gönderildi.', isLiveRegion: true),
         );
         handle.dispose();
       },

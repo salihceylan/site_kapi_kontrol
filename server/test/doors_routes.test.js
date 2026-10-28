@@ -297,6 +297,9 @@ describe('POST /app/doors/scan-qr-open', () => {
     assert.equal(first.status, 200);
     assert.equal(first.body.ok, true);
     assert.equal(fakeClient.pulses().length, 1);
+    // Durust dil (P1-15): sunucu yalniz komutu yayinladi; cihaz yaniti / sensor kaniti olmadan "acildi" denmez.
+    assert.equal(first.body.message, 'Kapi acma komutu gonderildi.');
+    assert.equal(/acildi/i.test(String(first.body.message)), false);
 
     const second = await call('POST', '/app/doors/scan-qr-open', { body: { qr_payload: payload } });
     assert.equal(second.status, 403);
@@ -492,7 +495,7 @@ describe('qr_verify / qr_result korelasyonu (C7) uctan uca', () => {
     assert.equal(result.allowed, true);
     assert.equal(fakeClient.pulses().length, 1);
     const successLog = queries.find((q) => q.sql.startsWith('INSERT INTO door_access_logs'));
-    assert.equal(successLog.params[4], 'Sakin'); // "acildi" logu pulse'tan SONRA, duz adla
+    assert.equal(successLog.params[4], 'Sakin'); // basarili gecis logu pulse'tan SONRA, duz adla
 
     // Bridge mesaj isleyicisi: qr_verify -> qr_result (request_id eko)
     fakeClient.published.length = 0;

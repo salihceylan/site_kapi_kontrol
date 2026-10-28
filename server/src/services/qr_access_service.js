@@ -157,7 +157,7 @@ export async function generateQrTokenForDoor({ authUser, doorId, clientLocation 
  *
  * Sıra: cihaz/kapı -> token durumu (kullanıldı/hükümsüz/süre/aktiflik/kapı eşleşmesi) ->
  *       kullanıcı yetkisi + site politikası (tüketim anında yeniden) -> ATOMİK tüketim ->
- *       röle komutu (pulse) -> "açıldı" logu. Komut gönderilemezse token geri verilir ve
+ *       röle komutu (pulse) -> başarılı geçiş logu. Komut gönderilemezse token geri verilir ve
  *       başarısız olarak loglanır (kullanıcı geçerlilik süresi içinde tekrar okutabilir).
  */
 export async function verifyQrTokenAndOpenDoor({ deviceUid, token }) {
@@ -366,7 +366,7 @@ export async function verifyQrTokenAndOpenDoor({ deviceUid, token }) {
     return { allowed: false, reason: 'ALREADY_USED' };
   }
 
-  // 4. Röleyi tetikle (pulse). "Açıldı" logu YALNIZCA komut başarıyla yayınlanırsa yazılır.
+  // 4. Röleyi tetikle (pulse). Başarılı geçiş logu YALNIZCA komut başarıyla yayınlanırsa yazılır.
   //    assumeOnline: istek cihazın kendisinden geldi (çevrimiçi kanıtlı).
   try {
     await publishDoorPulse({

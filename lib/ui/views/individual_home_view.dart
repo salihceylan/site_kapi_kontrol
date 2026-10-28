@@ -285,7 +285,7 @@ class IndividualHomeViewState extends State<IndividualHomeView>
     } else {
       AppSnack.show(
         context,
-        '"${door.doorName}" kapısı açılıyor...',
+        '"${door.doorName}" için açma komutu gönderildi.',
         kind: AppSnackKind.success,
       );
     }
@@ -407,7 +407,7 @@ class IndividualHomeViewState extends State<IndividualHomeView>
       final doorName = result?['door_name'] ?? door.doorName;
       AppSnack.show(
         context,
-        '✅ "$doorName" kapısı açıldı!',
+        '"$doorName" için açma komutu gönderildi.',
         kind: AppSnackKind.success,
       );
       // Canlı yenileme (Kural 7)

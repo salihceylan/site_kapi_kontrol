@@ -458,14 +458,14 @@ class VoiceDoorService extends ChangeNotifier {
 
       if (status != null && error == null) {
         _status = VoiceStatus.success;
-        _feedbackText = '${matched.doorName} başarıyla açıldı.';
+        _feedbackText = '${matched.doorName} için açma komutu gönderildi.';
         notifyListeners();
-        await speak('${matched.doorName} başarıyla açıldı.');
+        await speak('${matched.doorName} için açma komutu gönderildi.');
         return VoiceDoorResult(
           success: true,
           recognizedText: command,
           matchedDoor: matched,
-          feedbackMessage: '${matched.doorName} açıldı.',
+          feedbackMessage: '${matched.doorName} için açma komutu gönderildi.',
         );
       } else {
         final errorMsg =
@@ -846,4 +846,11 @@ class VoiceDoorService extends ChangeNotifier {
     } catch (_) {}
     super.dispose();
   }
+
+  /// Yalnız test: konuşma motoru olmadan bir komut metnini doğrudan işler (sonuç dilini ve akışı sınamak için).
+  @visibleForTesting
+  Future<VoiceDoorResult> debugProcessVoiceCommand(
+    String command, {
+    List<DoorRecord>? candidateDoors,
+  }) => _processVoiceCommand(command, candidateDoors: candidateDoors);
 }

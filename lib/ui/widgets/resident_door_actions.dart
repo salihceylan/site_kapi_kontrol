@@ -172,11 +172,11 @@ abstract final class ResidentDoorActions {
       final doorName = result?['door_name'] ?? door.doorName;
       AppSnack.show(
         context,
-        '✅ $doorName açıldı! Geçişiniz kaydedildi.',
+        '$doorName için açma komutu gönderildi.',
         kind: AppSnackKind.success,
         duration: const Duration(seconds: 3),
       );
-      // scan-qr-open sunucuda kapıyı zaten açtı ve geçişi kaydetti: ikinci bir "kapı aç" komutu
+      // scan-qr-open sunucuda açma komutunu zaten gönderdi ve geçişi kaydetti: ikinci bir "kapı aç" komutu
       // göndermek çift tetik/çift log üretir. Durum 3 sn'lik yoklamayla yenilenir.
     }
   }
