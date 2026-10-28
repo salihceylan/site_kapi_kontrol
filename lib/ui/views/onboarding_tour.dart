@@ -55,7 +55,7 @@ abstract final class OnboardingSteps {
             title: 'Alt çubuk, duyurular ve borcunuz',
             body:
                 'Alttaki “Duyuru”, “Arıza” ve “Dosyalar” sekmeleri duyuruları, arıza taleplerinizi ve site belgelerini '
-                'açar. Sitenizde Finans modülü açıksa “Borcum” ekranından borç ve ödemelerinizi görürsünüz; hesap '
+                'açar. Menüdeki “Borcum” ekranından borç ve ödemelerinizi görürsünüz; hesap '
                 'ayarlarınız sağ üstteki “Ayarlar” düğmesindedir.',
           ),
           _help,

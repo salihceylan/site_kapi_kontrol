@@ -125,6 +125,19 @@ describe('temel modüller (Kural 25): site kurulumu ve açılış', () => {
     assert.match(script, /for v in [^;]*"\$ok082"/);
   });
 
+  it('dağıtım sonrası doğrulama (remote_verify.sh): temel modül listesi katalogla aynı; her sitede açık olmayan temel modül SORUNLU basılır; eski kodlu satırlar seçmeli listeden ayrı', () => {
+    const script = readRoot('deploy/remote_verify.sh');
+    const listed = script.match(/^CORE_MODULES="([^"]+)"$/m);
+    assert.ok(listed, 'CORE_MODULES listesi bulunamadı');
+    assert.deepEqual(listed[1].split(/\s+/).sort(), [...CORE_MODULE_CODES].sort(), 'betikteki liste catalog.js core:true kümesiyle aynı olmalı');
+    assert.match(script, /for m in \$CORE_MODULES; do/);
+    assert.match(script, /echo "SORUNLU \$m: acik site/);
+    // Seçmeli (bilgi) listesi temel modülleri ve kataloktan kalkan eski kodları (083 / 084 satırları silinmez) dışarıda bırakır.
+    assert.match(script, /module_code not in \(\$core_sql, 'documents', 'card_payments'\)/);
+    // Temel modül eski döngüsü (yalnız documents / finance) geri gelmemeli: documents artık ayrı modül değildir.
+    assert.doesNotMatch(script, /for m in documents finance/);
+  });
+
   it('AGENTS.md ve GEMINI.md Kural 25 tüm temel modülleri sayar; kart ödemesi finansın, belgeler dosya deposunun parçasıdır', () => {
     for (const file of ['AGENTS.md', 'GEMINI.md']) {
       const text = readRoot(file);

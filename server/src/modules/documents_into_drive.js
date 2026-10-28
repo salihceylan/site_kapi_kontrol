@@ -3,7 +3,9 @@
 //  1) Belgeler AÇIK olan her sitede Dosya Deposu açılır (belgelere erişim kesilmez; açan kişi korunur),
 //  2) bekleyen Belgeler talebi: Dosya Deposu o sitede zaten açıksa "onaylandı"; değilse Dosya Deposu talebine çevrilir; o site için zaten bekleyen bir
 //     Dosya Deposu talebi varsa (tekil indeks) "iptal" olarak sonuçlanır. Sonuçlanmış eski talepler (geçmiş) olduğu gibi kalır,
-//  3) `documents` site_modules satırları silinir (katalogda artık yok; yok sayılırlardı).
+//  3) eski `documents` site_modules satırları SİLİNMEZ: katalogda olmadıkları için `rowsByModuleCode` onları yok sayar (zararsızdır). Silinmemeleri bilinçlidir:
+//     dağıtım sağlık denetimi başarısız olursa deploy/remote_deploy.sh yalnız KODU geri alır (veritabanını almaz); önceki sürüm Belgeler'in açık/kapalı bilgisini
+//     bu satırlardan okur, silinmiş olsaydı geri almadan sonra Belgeler (menü, /app/documents, duyuru ekleri) her sitede kapalı kalırdı.
 // Kaynak: migrations/084_documents_into_drive_storage.sql bu metnin aynısıdır; ensureDbSchema her açılışta uygular. Tamamen idempotent: ikinci çalıştırmada
 // hiçbir satır yazılmaz. Sıra bağımsızdır (Dosya Deposu'nu temel modül yapan doldurma önce ya da sonra çalışsa da sonuç tutarlıdır).
 
@@ -40,6 +42,4 @@ SET status = 'cancelled',
     decided_by_name = 'Sistem',
     decision_note = 'Belgeler, Dosya Deposu ile birleşti; bu site için Dosya Deposu talebi zaten bekliyor.'
 WHERE module_code = 'documents' AND status = 'pending';
-
-DELETE FROM site_modules WHERE module_code = 'documents';
 `;

@@ -30,7 +30,7 @@ Ekranda görülen arıza (taşma, güncellenmeyen liste, yanlış menü, tepkisi
 | [lib/ui/views/pending_site_approvals_view.dart](../../lib/ui/views/pending_site_approvals_view.dart) | Site onay talepleri listesi (menüden erişim kapalı) |
 | [lib/ui/views/bluetooth_wifi_view.dart](../../lib/ui/views/bluetooth_wifi_view.dart) | Bluetooth Wi-Fi kurulumunu açan basit giriş kartı |
 | [lib/ui/widgets/yan_menu.dart](../../lib/ui/widgets/yan_menu.dart) | Sol çekmece (Drawer): rol bazlı öğe listesi, 8 başlıklı gruplama (menuGroupOf), üstteki site satırı ve sağ üstteki dişlinin açtığı Ayarlar paneli (YanMenuAyarlar) |
-| [lib/ui/helpers/resident_tabs.dart](../../lib/ui/helpers/resident_tabs.dart) | Sakin alt çubuğunun sekmeleri (Özet, Duyuru, Arıza, Kapı, Belgeler): görünür menü öğelerinden türetilir |
+| [lib/ui/helpers/resident_tabs.dart](../../lib/ui/helpers/resident_tabs.dart) | Sakin alt çubuğunun sekmeleri (Özet, Duyuru, Arıza, Kapı, Dosyalar): görünür menü öğelerinden türetilir |
 | [lib/ui/widgets/resident_bottom_bar.dart](../../lib/ui/widgets/resident_bottom_bar.dart) | Sakin alt çubuğunun çizimi (Material 3 NavigationBar, rozetler, etiket yazı ölçeği sınırı) |
 | [lib/ui/widgets/admin_door_status_card.dart](../../lib/ui/widgets/admin_door_status_card.dart) | Yönetici kapı kontrol kartı: site/kapı seçimi, telemetri, Kapı Aç, QR, geçiş logları |
 | [lib/ui/widgets/resident_door_remote_card.dart](../../lib/ui/widgets/resident_door_remote_card.dart) | Daire sakini kumandası ve ResidentDoorUiState (düğme durumu/etiketi) |
@@ -63,7 +63,7 @@ Ekranda görülen arıza (taşma, güncellenmeyen liste, yanlış menü, tepkisi
 - [ui-ust-cubuk-tasma](#ui-ust-cubuk-tasma) — Ana ekranın üst çubuğunda (AppBar) düğmeler taşıyor, sıkışıyor ya da başlık/alt başlık kırpılıyor
 - [ui-mod-hapi](#ui-mod-hapi) — "Sakin Modu / Yönetici Paneli" hapı görünmüyor ya da dokununca beklenen panele geçmiyor
 - [ui-menu-yanlis-rol](#ui-menu-yanlis-rol) — Çekmece menüsünde yanlış rolün öğeleri görünüyor ya da bir öğe eksik; öğeye dokununca panele düşüyor
-- [ui-sakin-alt-cubuk](#ui-sakin-alt-cubuk) — Sakin ekranının altındaki sekme çubuğu (Özet, Duyuru, Arıza, Kapı, Belgeler) görünmüyor, bir sekme eksik ya da geri tuşu beklenmedik sayfaya dönüyor
+- [ui-sakin-alt-cubuk](#ui-sakin-alt-cubuk) — Sakin ekranının altındaki sekme çubuğu (Özet, Duyuru, Arıza, Kapı, Dosyalar) görünmüyor, bir sekme eksik ya da geri tuşu beklenmedik sayfaya dönüyor
 - [ui-abonelik-site-onay-menude-yok](#ui-abonelik-site-onay-menude-yok) — Abonelik talepleri / Site onay talepleri ekranına menüden ulaşılamıyor
 - [ui-kapi-ac-yonetici](#ui-kapi-ac-yonetici) — Yönetici panelinde "Kapı Aç" düğmesi gri/pasif ("Cihaz Çevrimdışı") ya da dokununca hiçbir şey olmuyor
 - [ui-kapi-ac-sakin](#ui-kapi-ac-sakin) — Daire sakini kumandasında büyük düğme "ÇEVRİMDIŞI", "KAPALI" ya da "UZAKTAN KAPALI" yazıyor; kapı açılmıyor
@@ -209,7 +209,7 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/screens/home_shell
 **Bkz.:** [ui-mod-hapi](#ui-mod-hapi), [ui-abonelik-site-onay-menude-yok](#ui-abonelik-site-onay-menude-yok), [ui-sakin-alt-cubuk](#ui-sakin-alt-cubuk)
 
 <a id="ui-sakin-alt-cubuk"></a>
-### ui-sakin-alt-cubuk · Sakin ekranının altındaki sekme çubuğu (Özet, Duyuru, Arıza, Kapı, Belgeler) görünmüyor, bir sekme eksik ya da geri tuşu beklenmedik sayfaya dönüyor
+### ui-sakin-alt-cubuk · Sakin ekranının altındaki sekme çubuğu (Özet, Duyuru, Arıza, Kapı, Dosyalar) görünmüyor, bir sekme eksik ya da geri tuşu beklenmedik sayfaya dönüyor
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
@@ -227,13 +227,14 @@ C:\Users\fingonancalime\SDK\flutter\bin\flutter.bat test test/screens/home_shell
 - Görünür sekme sayısı ikiden az (ör. modüller kapalı ve kapı yetkisi yok): tek sekmelik çubuk çizilmez
 - Pencere yüksekliği 480 dp altında (telefon yatay): içerik sığsın diye çubuk gizlenir
 - Kapı sekmesi yok: kullanıcının kapı yetkisi yok ya da kapı modülü o sitede kapalı
-- Arıza / Belgeler sekmesi yok: İş Takibi ya da Belgeler modülü kapalı ya da modül verisi yüklenemedi (fail-closed: veri yokken bu sekmeler gösterilmez)
+- Arıza sekmesi yok: İş Takibi modülü o sitede kapalı ya da modül verisi yüklenemedi (fail-closed: veri yokken bu sekmeler gösterilmez)
+- Dosyalar sekmesi yok: modül verisi yüklenemedi (fail-closed) ya da hesap dosya alıcısı değil (yalnız görevli bağı / bireysel kullanıcı); Dosya Deposu temel modüldür, "kapalı" olamaz (Belgeler 084'te onun içine katıldı)
 - Duyuru sekmesi yok: hesap hiçbir sitede duyuru alıcısı değil (yalnız görevli bağı) ya da modül verisi de kapı listesi de henüz gelmedi (veri yokken alıcılık yalnız kapı listesinden anlaşılır)
 - Widget ile açılışta Kapı sekmesi seçili gelmedi: modül verisi gelmeden kullanıcı başka sayfa açtı (istek bilerek düşer) ya da kapı yetkisi yok
 
 **Adım adım kontrol**
 - Hesabın sakin görünümünde (daire sakini ya da Sakin Modundaki yönetici) olduğunu ve pencere yüksekliğini doğrulayın
-- Çekmecede ilgili öğe (Duyurular, Taleplerim, Kapılar, Belgeler) görünüyor mu bakın: sekme yalnız görünür öğeden türer
+- Çekmecede ilgili öğe (Duyurular, Taleplerim, Kapılar, Dosya Deposu) görünüyor mu bakın: sekme yalnız görünür öğeden türer
 - Testi çalıştırın: flutter test test/screens/home_navigation_test.dart
 
 **Komutlar**

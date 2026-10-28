@@ -267,6 +267,18 @@ export function retiredModuleNotice(code) {
   return RETIRED_MODULE_NOTICES.get(code) ?? null;
 }
 
+// Kataloktan KALDIRILMIŞ ve başka bir koda ÇEVRİLMEYEN modül kodları -> eski kodlu GEÇMİŞ kayıtlarda (modül talebi) gösterilen ad.
+// `documents` burada yoktur: `canonicalModuleCode` ile güncel modülün (Dosya Deposu) adına çevrilir. Yalnız görünen ad içindir.
+const RETIRED_MODULE_NAMES = new Map([['card_payments', 'Kart Ödemesi (Aidat ve Finans)']]);
+
+/** Kataloktan kaldırılmış modül kodunun geçmiş kayıtlarda gösterilen adı; kaldırılmış değilse (ya da metin olmayan değerse) null. */
+export function retiredModuleName(code) {
+  if (typeof code !== 'string') {
+    return null;
+  }
+  return RETIRED_MODULE_NAMES.get(code) ?? null;
+}
+
 export function isToggleable(definition) {
   return Boolean(definition) && !definition.core && definition.status === MODULE_STATUS_AVAILABLE;
 }

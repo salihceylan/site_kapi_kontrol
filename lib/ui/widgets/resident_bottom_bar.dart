@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/helpers/resident_tabs.dart';
 
-/// İP-1D / G3: daire sakini alt çubuğu (Material 3 [NavigationBar]): Özet · Duyuru · Arıza · Kapı · Belgeler.
+/// İP-1D / G3: daire sakini alt çubuğu (Material 3 [NavigationBar]): Özet · Duyuru · Arıza · Kapı · Dosyalar.
 ///
 /// - Sekmeler ([tabs]) çağıranın görünür menüsünden türetilir (`residentTabsFor`); burada görünürlük kuralı yoktur.
 /// - [selected] listede yoksa ilk sekme (Özet) işaretlidir. Seçili sekmeye dokunmak da [onSelect]'i çağırır (örn. Özet

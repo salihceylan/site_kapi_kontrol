@@ -558,6 +558,18 @@ describe('POST module-requests', () => {
     assert.equal(res.body.items[0].module_name, 'Dosya Deposu');
   });
 
+  it('eski kodlu GECMIS talep (module_code card_payments, 083\'te Aidat ve Finans a katildi) ham kodla degil okunur adla listelenir; module_code oldugu gibi kalir', async () => {
+    seedRequest({ module_code: 'card_payments', status: 'approved' });
+    const res = await call('GET', requestsUrl(), { user: users.mgrA });
+    assert.equal(res.status, 200);
+    assert.equal(res.body.items[0].module_code, 'card_payments');
+    assert.equal(res.body.items[0].module_name, 'Kart Ödemesi (Aidat ve Finans)');
+    // katalogda hic olmayan baska bir eski kod ham kodla kalir (uydurma ad yok)
+    seedRequest({ module_code: 'eski_modul', status: 'rejected' });
+    const other = await call('GET', requestsUrl(), { user: users.mgrA });
+    assert.equal(other.body.items.find((item) => item.module_code === 'eski_modul').module_name, 'eski_modul');
+  });
+
   it('finance temel modul (Kural 25): yonetici talep EDEMEZ (400 MODULE_NOT_TOGGLEABLE, "talep edilemez"); talep/audit/bildirim yok', async () => {
     const res = await post({ module_code: 'finance', note: 'Aidat takibi için.' });
     assert.equal(res.status, 400, JSON.stringify(res.body));

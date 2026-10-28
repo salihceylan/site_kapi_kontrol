@@ -84,7 +84,7 @@ enum SirketMenuItem {
 
   /// İş Takibi (arıza, bakım, talep) yönetim ekranı "Talepler". Rol listesinde YOKTUR; `work_tracking` modülü AÇIK
   /// olan sitenin yöneticisine / görevlisine / süper kullanıcıya / kurul üyesine (salt okunur)
-  /// [YanMenu.additionalItems] ile eklenir ("Belgeler"in, yoksa üstteki öğelerin altına). Modül kapalıyken ya da
+  /// [YanMenu.additionalItems] ile eklenir ("Dosya Deposu"nun, yoksa üstteki öğelerin altına). Modül kapalıyken ya da
   /// modül verisi yokken eklenmez.
   talepler,
 
@@ -1091,7 +1091,7 @@ List<SirketMenuItem> _withExtras(
       if (anchor < 0) anchor = result.indexOf(SirketMenuItem.duyurular);
       if (anchor < 0) anchor = result.indexOf(SirketMenuItem.kisiler);
     }
-    // "Belgeler" "Borcum" / "Finans" / "Duyurular" / "Kişiler" sırasıyla ilk bulunanın altına gelir.
+    // "Dosya Deposu" "Borcum" / "Finans" / "Duyurular" / "Kişiler" sırasıyla ilk bulunanın altına gelir.
     if (extra == SirketMenuItem.belgeler) {
       for (final above in const <SirketMenuItem>[
         SirketMenuItem.borcum,
@@ -1103,7 +1103,7 @@ List<SirketMenuItem> _withExtras(
         if (anchor >= 0) break;
       }
     }
-    // "Talepler" / "Taleplerim" "Belgeler" / "Borcum" / "Finans" / "Duyurular" / "Kişiler" sırasıyla ilk bulunanın
+    // "Talepler" / "Taleplerim" "Dosya Deposu" / "Borcum" / "Finans" / "Duyurular" / "Kişiler" sırasıyla ilk bulunanın
     // altına gelir; "Taleplerim" varsa "Talepler"in altına.
     if (extra == SirketMenuItem.talepler || extra == SirketMenuItem.taleplerim) {
       for (final above in <SirketMenuItem>[
@@ -1118,7 +1118,7 @@ List<SirketMenuItem> _withExtras(
         if (anchor >= 0) break;
       }
     }
-    // "Rezervasyonlar" / "Rezervasyon" "Taleplerim" / "Talepler" / "Belgeler" / "Borcum" / "Finans" / "Duyurular" /
+    // "Rezervasyonlar" / "Rezervasyon" "Taleplerim" / "Talepler" / "Dosya Deposu" / "Borcum" / "Finans" / "Duyurular" /
     // "Kişiler" sırasıyla ilk bulunanın altına gelir; "Rezervasyon" varsa "Rezervasyonlar"ın altına.
     if (extra == SirketMenuItem.rezervasyonlar || extra == SirketMenuItem.rezervasyon) {
       for (final above in <SirketMenuItem>[
@@ -1155,7 +1155,7 @@ List<SirketMenuItem> _withExtras(
       }
     }
     // "Ziyaretçi ve Kargo" (yönetim / görevli ve sakin) "Rezervasyon" / "Rezervasyonlar" / "Taleplerim" / "Talepler" /
-    // "Belgeler" / "Borcum" / "Finans" / "Duyurular" / "Kişiler" sırasıyla ilk bulunanın altına gelir; sakin öğesi
+    // "Dosya Deposu" / "Borcum" / "Finans" / "Duyurular" / "Kişiler" sırasıyla ilk bulunanın altına gelir; sakin öğesi
     // varsa yönetim öğesinin altına.
     if (extra == SirketMenuItem.ziyaretciKayitlari || extra == SirketMenuItem.ziyaretcilerim) {
       for (final above in <SirketMenuItem>[

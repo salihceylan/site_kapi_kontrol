@@ -48,6 +48,7 @@ class AuditLogEntry {
     'announcements': 'Duyuru ve Bildirim',
     'finance': 'Aidat ve Finans',
     'documents': 'Belgeler (Dosya Deposu)', // eski kayıtlar: Belgeler 084'te Dosya Deposu ile birleşti
+    'card_payments': 'Kart Ödemesi (Aidat ve Finans)', // eski kayıtlar: Kart Ödemesi 083'te Aidat ve Finans'a katıldı
     'drive_storage': 'Dosya Deposu',
     'reservation': 'Rezervasyon ve Konsiyerj',
     'work_tracking': 'İş Takibi',

@@ -4,7 +4,7 @@
 bugün ne yaptığını gerçek ekranlarda göstermek, yeni gelenleri öne çıkarmak, geri bildirimi aynı gün kayda geçirmek.
 
 Ekran adları 2026-10-21'deki uygulamaya göredir. Dalga 1 ile menü başlıklara ayrılır (Ana sayfa, Daireler, Borçlar, Tahsilat, Giderler,
-İletişim, Raporlar, Site hizmetleri; Ayarlar sağ üstte dişli) ve sakinin alt çubuğu gelir (Özet, Duyuru, Arıza, Kapı, Belgeler). Ekran
+İletişim, Raporlar, Site hizmetleri; Ayarlar sağ üstte dişli) ve sakinin alt çubuğu gelir (Özet, Duyuru, Arıza, Kapı, Dosyalar). Ekran
 yerleri değişince bu belgedeki adımlar da güncellenir (bölüm 6).
 
 ## 1. Kurallar
@@ -30,9 +30,11 @@ yerleri değişince bu belgedeki adımlar da güncellenir (bölüm 6).
 
 1. Süper kullanıcı bir demo sitesi kurar (ör. "Örnek Sitesi"; 2 blok, 24 daire). Daire künyesine m² ve arsa payı girilir.
 2. Kişiler **Toplu Yükle** ile uydurma adlarla doldurulur (malik, kiracı; birkaç araç).
-3. Modüller ekranından demo sitesinde şu modüller açılır: Aidat ve Finans, Dosya Deposu (Belgeler + Google Drive), İş Takibi, Rezervasyon ve
-   Konsiyerj, Ziyaretçi ve Kargo, Firma ve Sözleşme Takibi, Karar Defteri. (Kişi ve Daire Kayıtları ile Duyuru ve Bildirim her sitede
-   zaten açıktır.) **Anket ve Oylama kapalı bırakılır:** süper kullanıcı bölümünde canlı açılacak; demodan sonra yeniden kapatılır.
+3. Modüller ekranından demo sitesinde şu seçmeli modüller açılır: İş Takibi, Rezervasyon ve Konsiyerj, Firma ve Sözleşme Takibi, Karar
+   Defteri. (Temel modüller her sitede zaten açıktır, kapatılamaz ve talep edilmez; kartlarında "Her sitede açık" yazar: Kişi ve Daire
+   Kayıtları, Duyuru ve Bildirim, Aidat ve Finans, Anket ve Oylama, Komşu Panosu, Ekipman ve Bakım, Faaliyet Raporu, Dosya Deposu
+   (Belgeler + Google Drive).) **Ziyaretçi ve Kargo kapalı bırakılır:** süper kullanıcı bölümünde canlı açılacak; demodan sonra yeniden
+   kapatılır.
 4. Üç demo hesabı: **yönetici**, **sakin (kiracı)** ve **süper kullanıcı**. Sakin hesabı bir daireye bağlı olmalı; taşınma tarihi
    geçmiş bir ay olsun (Borcum o tarihten itibaren gösterir). İsteğe bağlı dördüncü hesap: demo sitesinde **görevli** (talebi görevliye
    atamayı göstermek için; yoksa yönetici talebi kendisine atar).
@@ -45,7 +47,7 @@ yerleri değişince bu belgedeki adımlar da güncellenir (bölüm 6).
 - [ ] Sunucu ayakta: uygulama açılıyor, giriş yapılıyor.
 - [ ] Üç hesapla giriş denendi (yönetici web'de ya da bilgisayarda, sakin telefonda, süper kullanıcı ikinci tarayıcıda).
 - [ ] Telefon şarjlı, ekranı paylaşılabiliyor; bildirimler sessizde.
-- [ ] Demo sitesinde Anket ve Oylama kapalı (süper kullanıcı bölümünde açılacak).
+- [ ] Demo sitesinde Ziyaretçi ve Kargo kapalı (süper kullanıcı bölümünde açılacak).
 - [ ] Süper kullanıcı ekranlarına bakıldı: Site Başvuruları ve Modül Talepleri'nde gerçek bekleyen kayıt var mı (varsa o adım ekran
       görüntüsüyle anlatılacak); Denetim Kaydı süzgeci ve Modüller site seçimi demo sitesinde.
 - [ ] "Bu iki haftada yeni" listesi hazır (en çok 3 madde; bölüm 4).
@@ -74,13 +76,14 @@ yerleri değişince bu belgedeki adımlar da güncellenir (bölüm 6).
 3. **Duyurular:** yöneticinin az önce yayımladığı duyuru gelmiş.
 4. **Taleplerim → Yeni Talep:** fotoğraflı arıza bildirimi. Ekran yöneticiye geçer: **Talepler**de yeni talep görünür, görevliye
    (demo sitesinde görevli yoksa yöneticinin kendisine) atanır.
-5. Süre kalırsa: **Rezervasyon** ya da **Ziyaretçilerim**.
+5. Süre kalırsa: **Rezervasyon**; süper kullanıcı bölümünde Ziyaretçi ve Kargo açıldıktan sonra **Ziyaretçilerim** de menüde belirir.
 
 ### 10:00-13:00 Süper kullanıcı (3 dakika)
 
 1. **Site Başvuruları** ve **Modül Talepleri:** bekleyen istekler ve onay akışı (yalnız listede gerçek kayıt yoksa canlı; bölüm 1).
-2. **Modüller:** demo sitesinde kapalı duran Anket ve Oylama açılır; yöneticinin Panel'inde kart ve menüde öğe en geç yaklaşık
-   30 saniye içinde (ya da yöneticinin uygulamasına geri dönülünce hemen) belirir.
+2. **Modüller:** demo sitesinde kapalı duran Ziyaretçi ve Kargo açılır; yöneticinin Panel'inde kart ve menüde öğe en geç yaklaşık
+   30 saniye içinde (ya da yöneticinin uygulamasına geri dönülünce hemen) belirir. Temel modüllerde (ör. Anket ve Oylama) açma
+   anahtarı yoktur; kartları "Her sitede açık" der.
 3. **Platform Ayarları:** şirket ve yasal bilgiler (unvan, adres, telefon). Yasal metin sayfası açılır (ör. `/legal/kvkk_notice`):
    KEP ve MERSİS boşken metinde bu satırlar hiç görünmez (ekranda iki alan "isteğe bağlı" yazar); iletişim e-postası girilene kadar
    e-posta yerinde "[……]" görünür; sayfanın üstündeki "taslak" uyarısı avukat onayına kadar her durumda kalır.
@@ -100,7 +103,7 @@ süper kullanıcının 1. adımı atlanır). Her madde için: hangi ekran, hangi
 Dalga 1'den sonra eklenecek gösterim önerileri (dalga canlıya çıktıysa):
 
 - Daire finans kartında **Kiracı hesabı** ve **Ev sahibi hesabı** sekmeleri (G12): iki bakiye karışmaz.
-- Gruplu menü ve sağ üstte dişli (G2); sakinin alt çubuğu: Özet, Duyuru, Arıza, Kapı, Belgeler (G3).
+- Gruplu menü ve sağ üstte dişli (G2); sakinin alt çubuğu: Özet, Duyuru, Arıza, Kapı, Dosyalar (G3).
 - Sade tasarım: beyaz kartlar, koyu ana düğme, durum noktaları (G6, G7).
 - Platform Ayarları'nda kurallar tablosu (G11): ör. aylık %5 üst sınırı, saklama süreleri (`retention.*`).
 

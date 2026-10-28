@@ -56,7 +56,7 @@ describe('Belgeler + Dosya Deposu tek modül (084)', () => {
     assert.ok(migration.endsWith(DOCUMENTS_INTO_DRIVE_SQL), 'migration gövdesi DOCUMENTS_INTO_DRIVE_SQL ile aynı olmalı');
   });
 
-  it('birleştirme SQL: Belgeler açık siteye Dosya Deposu açar, bekleyen talepleri sonuçlandırır, eski satırları siler; belge tablolarına DOKUNMAZ', () => {
+  it('birleştirme SQL: Belgeler açık siteye Dosya Deposu açar, bekleyen talepleri sonuçlandırır; eski `documents` satırlarını SİLMEZ; belge tablolarına DOKUNMAZ', () => {
     const sql = DOCUMENTS_INTO_DRIVE_SQL;
     assert.match(sql, /INSERT INTO site_modules[\s\S]*SELECT d\.site_code, 'drive_storage', TRUE, d\.updated_by, NOW\(\)\s+FROM site_modules d\s+WHERE d\.module_code = 'documents' AND d\.enabled = TRUE/);
     assert.match(sql, /ON CONFLICT \(site_code, module_code\) DO UPDATE SET enabled = TRUE[\s\S]*WHERE site_modules\.enabled IS DISTINCT FROM TRUE;/);
@@ -64,7 +64,10 @@ describe('Belgeler + Dosya Deposu tek modül (084)', () => {
     assert.match(sql, /UPDATE module_requests r\s+SET status = 'approved'[\s\S]*WHERE r\.module_code = 'documents' AND r\.status = 'pending'[\s\S]*m\.module_code = 'drive_storage' AND m\.enabled = TRUE/);
     assert.match(sql, /UPDATE module_requests r\s+SET module_code = 'drive_storage'\s+WHERE r\.module_code = 'documents' AND r\.status = 'pending'\s+AND NOT EXISTS[\s\S]*p\.module_code = 'drive_storage' AND p\.status = 'pending'/);
     assert.match(sql, /UPDATE module_requests\s+SET status = 'cancelled'[\s\S]*WHERE module_code = 'documents' AND status = 'pending';/);
-    assert.match(sql, /DELETE FROM site_modules WHERE module_code = 'documents';\n$/);
+    assert.match(sql, /WHERE module_code = 'documents' AND status = 'pending';\n$/, 'son ifade çift talebi iptal eden güncellemedir');
+    // Eski documents site_modules satırları SİLİNMEZ: dağıtım otomatik geri alınırsa (yalnız kod geri gelir, veritabanı gelmez) önceki sürüm
+    // Belgeler'in açık/kapalı bilgisini bu satırlardan okur; katalog onları zaten yok sayar (rowsByModuleCode).
+    assert.equal(/\bDELETE\b/i.test(sql), false);
     // sonuçlanmış (geçmiş) talepler ve denetim kayıtları silinmez; belge verisi korunur
     assert.equal(/DELETE FROM module_requests/i.test(sql), false);
     assert.equal(/audit_log/i.test(sql), false);
@@ -98,5 +101,10 @@ describe('Belgeler + Dosya Deposu tek modül (084)', () => {
     }
     assert.match(script, /ok052-084=\$all052/);
     assert.match(script, /\[052-084\] varlik kontrolleri/);
+    // eski documents site_modules satırları silinmez: prova önce/sonra sayısının eşitliğini denetler (geri alma uyumu); ok084 "satır YOK" demez
+    assert.match(script, /^before_doc_sm=.*module_code = 'documents'/m);
+    assert.match(script, /^after_doc_sm=.*module_code = 'documents'/m);
+    assert.match(script, /^\[ "\$before_doc_sm" = "\$after_doc_sm" \] \|\| ok084=f$/m);
+    assert.doesNotMatch(script, /^ok084=.*not exists \(select 1 from site_modules/m);
   });
 });

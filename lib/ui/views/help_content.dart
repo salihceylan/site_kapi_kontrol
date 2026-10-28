@@ -518,7 +518,7 @@ abstract final class HelpContent {
       title: 'Borcumu nasıl görürüm?',
       icon: Icons.receipt_long_rounded,
       steps: <String>[
-        'Sitenizde Finans modülü açıksa menünün “Borçlar” başlığında “Borcum” ekranı görünür.',
+        'Bir daireye sakin olarak bağlıysanız menünün “Borçlar” başlığında “Borcum” ekranı görünür.',
         'Bu ekranda daireniz için yazılan aidat ve diğer borçları ile yapılan ödemeleri görürsünüz.',
         'Her dairenin iki ayrı hesabı vardır: “Ev sahibi hesabı” ve “Kiracı hesabı”. Ekranda yalnız kendi hesabınızın borcu ve '
             'hareketleri görünür; malik ve kiracı borçları birbirine karışmaz.',
@@ -528,7 +528,8 @@ abstract final class HelpContent {
             'kopyalayıp bankanızdan FAST ya da havale yapın. Açıklamaya kodu (örn. GUL-A2-1026) yazarsanız ödemeniz dairenize işlenir. '
             'Kartla ödeme yakında gelecek.',
       ],
-      note: 'Menüde “Borcum” yoksa sitenizde Finans modülü açık değildir.',
+      note:
+          'Menüde “Borcum” yoksa hesabınız bir daireye sakin olarak bağlı değildir ya da bağlantı bilgisi henüz yüklenmedi; yöneticinize danışın.',
     ),
     _residentProfile,
   ];
@@ -666,8 +667,8 @@ abstract final class HelpContent {
       steps: <String>[
         'Sağ üstteki “Ayarlar” düğmesinden “Modüller” ekranını açın ve siteyi seçin.',
         'Kapalı bir modül için talep gönderin; talebinizi “Modül Taleplerim” bölümünden izleyebilirsiniz.',
-        'Finans modülü açılınca menüde “Finans” ekranı (“Daireler”, “Tanımlar” ve “Dönemler” sekmeleri) görünür.',
-        'Finans açıkken ana sayfada “Bu ay” bölümü görünür: yazılan, toplanan, geciken daire ve kasa sayıları, beş adımlı aylık döngü ve son hareketler. Ay kapatmak isteğe bağlıdır; “Dönemler” sekmesinden istediğiniz ayı seçince o aya kadar açık aylar birlikte kapanır.',
+        'Aidat ve Finans her sitede açıktır (temel modül); menüde “Finans” ekranı (“Daireler”, “Tanımlar” ve “Dönemler” sekmeleri) görünür.',
+        'Ana sayfada “Bu ay” bölümü görünür: yazılan, toplanan, geciken daire ve kasa sayıları, beş adımlı aylık döngü ve son hareketler. Ay kapatmak isteğe bağlıdır; “Dönemler” sekmesinden istediğiniz ayı seçince o aya kadar açık aylar birlikte kapanır.',
         'Sitenizde geçerli kuralları (gecikme tazminatı üst sınırı, işletme projesi ve saklama süreleri) aynı ekrandaki “Kurallar” bölümünde “Kuralları Görüntüle” ile görürsünüz; değerleri sistem yöneticisi belirler.',
         'Belgeler (yönetmelik, tutanak, sözleşme) ve sitenin Google Drive bağlantısı tek modüldedir: “Dosya Deposu” her sitede açıktır; menüde “Dosya Deposu” ekranı görünür. Sitenin dosyalarını kendi Google Drive hesabında saklamak için o ekranın altındaki “Google Drive bağla” düğmesi Google onayına götürür. Bağlantı henüz hazır değilse Yakında… yazar.',
       ],
@@ -719,7 +720,7 @@ abstract final class HelpContent {
         'Faturalandır sekmesinde tür, yöntem (birim fiyat, fatura tutarı ya da ısı için ölçüm + alan payı) ve iki tarihi seçip Önizle deyin; tutarlar uygunsa Borçlandır ile her dairenin oturanının hesabına borç yazılır.',
       ],
       note:
-          'Okunan değeri sayaçla karşılaştırmadan onaylamayın; fotoğraf Drive bağlıysa Drive a, değilse sunucuya kaydedilir. Webde kamera yok, değer elle yazılır. Borçlandırma için Aidat ve Finans modülü de açık olmalıdır; yanlış borç Finans ekranından ters kayıtla düzeltilir.',
+          'Okunan değeri sayaçla karşılaştırmadan onaylamayın; fotoğraf Drive bağlıysa Drive a, değilse sunucuya kaydedilir. Webde kamera yok, değer elle yazılır. Yanlış borç Finans ekranından ters kayıtla düzeltilir.',
     ),
     HelpTopic(
       id: 'management_company',

@@ -211,7 +211,7 @@ class _DocumentAttachPickerDialogState
             emptyIcon: Icons.folder_open_rounded,
             emptyTitle: 'Eklenebilecek belge yok.',
             emptyMessage:
-                'Belgeler ekranından kitlesi "Sakinler" olan bir belge yükleyin; sonra duyuruya ekleyebilirsiniz.',
+                'Dosya Deposu ekranından kitlesi "Sakinler" olan bir belge yükleyin; sonra duyuruya ekleyebilirsiniz.',
             filteredTitle: 'Bu arama için belge bulunamadı.',
             filtered: _query.isNotEmpty,
             itemBuilder: (context, document) {

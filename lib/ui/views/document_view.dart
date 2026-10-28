@@ -85,6 +85,15 @@ class DocumentsViewState extends State<DocumentsView> {
   bool get _hasManage => widget.manageAllSites || widget.manageSites.isNotEmpty;
   bool get _hasResident => widget.showResident;
 
+  /// En az bir sitede yazma (yönetim) yetkisi var mı. Kurul üyesi siteleri SALT OKURDUR: yükleme düğmesi ve
+  /// Google Drive bölümü yalnız yazma yetkisinde çizilir (DocumentAdminView), açıklama da buna uymalıdır.
+  bool get _canWriteAny =>
+      widget.manageAllSites || widget.manageSites.any((site) => site.canWrite);
+
+  /// Yönetilen TÜM sitelerde yazma yetkisi var mı (karma hesapta Drive bölümü bazı sitelerde görünmez).
+  bool get _canWriteAll =>
+      widget.manageAllSites || widget.manageSites.every((site) => site.canWrite);
+
   /// Gösterilen görünüm: seçilen hâlâ varsa o, yoksa yönetim, yoksa sakin.
   _Mode? get _mode {
     final chosen = _chosen;
@@ -140,9 +149,13 @@ class DocumentsViewState extends State<DocumentsView> {
         );
     }
     final description = switch (mode) {
+      // Kurul üyesi (salt okur): yükleme ve Google Drive bölümü yok; yalnız görüntüler.
+      _Mode.manage when !_canWriteAny =>
+        'Yönetimin yüklediği belgeleri buradan görüntüleyebilirsiniz.',
       _Mode.manage =>
         'Yönetmelik, toplantı tutanağı ve sözleşme gibi belgeleri yükleyin; sakinlere, kurula ya da yalnız '
-            'yöneticilere açın. Sitenin dosyalarını kendi Google Drive hesabınızda saklamak için en alttaki Google Drive bölümünü kullanın.',
+            'yöneticilere açın. Sitenin dosyalarını kendi Google Drive hesabınızda saklamak için '
+            '${_canWriteAll ? '' : 'yazma yetkiniz olan sitelerde '}en alttaki Google Drive bölümünü kullanın.',
       _Mode.resident =>
         'Yönetimin sizinle paylaştığı belgeleri buradan açabilir ya da kaydedebilirsiniz.',
       null => 'Sitenizin belgeleri ve dosyaları burada görünür.',

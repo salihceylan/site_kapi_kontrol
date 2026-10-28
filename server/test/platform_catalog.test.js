@@ -13,6 +13,7 @@ import {
   getModuleDefinition,
   isToggleable,
   publicCatalog,
+  retiredModuleName,
   retiredModuleNotice,
 } from '../src/modules/catalog.js';
 import {
@@ -170,6 +171,12 @@ describe('platform katalog: sozlesme tablosu', () => {
     // yaşayan kodlar ve tuhaf degerler icin aciklama yok
     for (const value of ['finance', 'drive_storage', '__proto__', 'constructor', 'nope', '', null, undefined, 5]) {
       assert.equal(retiredModuleNotice(value), null, String(value));
+    }
+    // eski kodlu GECMIS kayitlarin (modul talebi) gorunen adi: card_payments icin sabit ad, baskasi icin null
+    // (documents canonicalModuleCode ile Dosya Deposu adina cevrilir, burada yok)
+    assert.equal(retiredModuleName('card_payments'), 'Kart Ödemesi (Aidat ve Finans)');
+    for (const value of ['documents', 'finance', 'survey', 'drive_storage', '__proto__', 'constructor', 'nope', '', null, undefined, 5]) {
+      assert.equal(retiredModuleName(value), null, String(value));
     }
   });
 

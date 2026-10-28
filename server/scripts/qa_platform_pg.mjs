@@ -1250,6 +1250,31 @@ async function sectionPlatform() {
     const rows = (await q(`SELECT (SELECT COUNT(*)::int FROM site_modules WHERE site_code = $1 AND module_code = $2) AS m, (SELECT COUNT(*)::int FROM module_requests WHERE site_code = $1 AND module_code IN ($2, 'drive_storage')) AS r`, [S1, retired])).rows[0];
     check(`kataloktan kalkan eski kod (${retired}): kapatma ve talep 400 MODULE_NOT_TOGGLEABLE (404 / 500 yok); satir ve talep yazilmaz`, closeRes.status === 400 && closeRes.body?.code === 'MODULE_NOT_TOGGLEABLE' && requestRes.status === 400 && requestRes.body?.code === 'MODULE_NOT_TOGGLEABLE' && rows.m === 0 && rows.r === 0, { close: closeRes.body, request: requestRes.body, rows });
   }
+  // 083 / 084 geri alma uyumu: eski kodlu (card_payments, documents) site_modules satirlari acilis birlestirmesinden (ensureDbSchema) sonra da KALIR - dagitim otomatik geri
+  // alinirsa (yalniz kod geri gelir, veritabani gelmez) onceki surum acik/kapali bilgisini bu satirlardan okur; katalog onlari yok sayar (listelerde eski kod yok).
+  // Bekleyen eski kodlu talepler sonuclanir, GECMIS talepler okunur adla listelenir (ham kod degil), module_code oldugu gibi kalir.
+  {
+    const { ensureDbSchema } = await import('../src/db.js');
+    const { retiredModuleName } = await import('../src/modules/catalog.js');
+    await q(`INSERT INTO site_modules (site_code, module_code, enabled, updated_at) VALUES ($1, 'documents', TRUE, NOW()), ($1, 'card_payments', FALSE, NOW())`, [S1]);
+    await q(`INSERT INTO module_requests (site_code, module_code, status, requested_by, requested_by_name, note) VALUES ($1, 'card_payments', 'rejected', $2, 'Eski Uygulama', 'eski gecmis'), ($1, 'card_payments', 'pending', $2, 'Eski Uygulama', 'eski bekleyen'), ($1, 'documents', 'pending', $2, 'Eski Uygulama', 'eski bekleyen')`, [S1, MGR1]);
+    await ensureDbSchema();
+    await ensureDbSchema();
+    const legacyRows = (await q(`SELECT module_code, enabled FROM site_modules WHERE site_code = $1 AND module_code IN ('documents', 'card_payments') ORDER BY module_code`, [S1])).rows;
+    check('083/084: eski kodlu site_modules satirlari ensureDbSchema x2 sonrasinda SILINMEZ ve degeri degismez (otomatik geri almada onceki surum okur)', same(legacyRows, [{ module_code: 'card_payments', enabled: false }, { module_code: 'documents', enabled: true }]), legacyRows);
+    const legacyRequests = (await q(`SELECT module_code, status, note FROM module_requests WHERE site_code = $1 AND module_code IN ('documents', 'card_payments', 'drive_storage') ORDER BY id`, [S1])).rows;
+    check('083/084: bekleyen eski kodlu talepler "approved" olur; gecmis (rejected) talep ve not degismez; bekleyen kalmaz', same(legacyRequests.map((r) => `${r.module_code}:${r.status}:${r.note}`), ['card_payments:rejected:eski gecmis', 'card_payments:approved:eski bekleyen', 'documents:approved:eski bekleyen']), legacyRequests);
+    const mgrModules = (await call('GET', `/manager/sites/${S1}/modules`, MGR1)).body?.modules ?? [];
+    const myModules = (await call('GET', '/app/my-modules', MGR1)).body?.sites?.find((s) => s.site_code === S1)?.modules ?? {};
+    check('083/084: eski kodlu satirlar varken modul listeleri 23 katalog modulunu verir, eski kod tasimaz (GET modules, my-modules)', mgrModules.length === 23 && !mgrModules.some((m) => ['documents', 'card_payments'].includes(m.code)) && Object.keys(myModules).length === 23 && !('documents' in myModules) && !('card_payments' in myModules), { n: mgrModules.length, keys: Object.keys(myModules).length });
+    const mgrList = (await call('GET', `/manager/sites/${S1}/module-requests`, MGR1)).body?.items ?? [];
+    const adminList = (await call('GET', '/admin/module-requests?status=all', SUPER)).body?.items ?? [];
+    const nameOf = (items, code, status) => items.find((r) => r.module_code === code && r.status === status && r.site_code === S1)?.module_name;
+    check('083/084: eski kodlu GECMIS talepler okunur adla listelenir (card_payments -> retiredModuleName, documents -> Dosya Deposu); module_code oldugu gibi; yonetici ve super listesi ayni', nameOf(mgrList, 'card_payments', 'approved') === retiredModuleName('card_payments') && nameOf(mgrList, 'card_payments', 'rejected') === retiredModuleName('card_payments') && nameOf(mgrList, 'documents', 'approved') === 'Dosya Deposu' && nameOf(adminList, 'card_payments', 'approved') === retiredModuleName('card_payments') && nameOf(adminList, 'documents', 'approved') === 'Dosya Deposu' && retiredModuleName('card_payments') !== 'card_payments', { mgr: mgrList.map((r) => [r.module_code, r.status, r.module_name]), admin: adminList.filter((r) => r.site_code === S1).map((r) => [r.module_code, r.status, r.module_name]) });
+    // sonraki kontrolleri etkilememesi icin tohumlar temizlenir
+    await q(`DELETE FROM module_requests WHERE site_code = $1 AND requested_by_name = 'Eski Uygulama'`, [S1]);
+    await q(`DELETE FROM site_modules WHERE site_code = $1 AND module_code IN ('documents', 'card_payments')`, [S1]);
+  }
   // metering artik "available"; hala yakinda olan bir modul (online_payment) ile MODULE_COMING_SOON kurali sinanir.
   res = await call('PUT', `/manager/sites/${S1}/modules/online_payment`, SUPER, { enabled: true });
   check('yakinda modulu (online_payment) acmak -> MODULE_COMING_SOON', res.body?.code === 'MODULE_COMING_SOON', res.body);

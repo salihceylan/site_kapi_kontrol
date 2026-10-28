@@ -252,18 +252,18 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | Değişken | İlk kullanımlar |
 | --- | --- |
 | `ALLOW_DEV_SCRIPTS` | [server/scripts/_dev_guard.js:3](../server/scripts/_dev_guard.js#L3) |
-| `ANNOUNCEMENT_EMAIL_MAX_PER_DAY_PER_ADDRESS` | [server/scripts/qa_platform_pg.mjs:2773](../server/scripts/qa_platform_pg.mjs#L2773) |
-| `ANNOUNCEMENT_EMAIL_MAX_PER_DAY_PER_SITE` | [server/scripts/qa_platform_pg.mjs:2770](../server/scripts/qa_platform_pg.mjs#L2770) |
-| `ANNOUNCEMENT_EMAIL_PUBLISH_MAX_PER_HOUR_PER_USER` | [server/scripts/qa_platform_pg.mjs:2777](../server/scripts/qa_platform_pg.mjs#L2777) |
-| `ANNOUNCEMENT_EMAIL_SECRET` | [server/scripts/qa_platform_pg.mjs:5064](../server/scripts/qa_platform_pg.mjs#L5064) |
-| `ANNOUNCEMENT_EMAIL_SECRET_PREVIOUS` | [server/scripts/qa_platform_pg.mjs:5065](../server/scripts/qa_platform_pg.mjs#L5065) |
-| `ANNOUNCEMENT_INBOX_RETENTION_DAYS` | [server/scripts/qa_platform_pg.mjs:4339](../server/scripts/qa_platform_pg.mjs#L4339) |
-| `ANNOUNCEMENT_MAX_PER_DAY_PER_SITE` | [server/scripts/qa_platform_pg.mjs:2775](../server/scripts/qa_platform_pg.mjs#L2775) |
-| `ANNOUNCEMENT_SCHEDULER_DISABLED` | [server/scripts/qa_platform_pg.mjs:2769](../server/scripts/qa_platform_pg.mjs#L2769) |
-| `ANNOUNCEMENT_URGENT_EMAIL_MAX_PER_DAY_PER_SITE` | [server/scripts/qa_platform_pg.mjs:2776](../server/scripts/qa_platform_pg.mjs#L2776) |
+| `ANNOUNCEMENT_EMAIL_MAX_PER_DAY_PER_ADDRESS` | [server/scripts/qa_platform_pg.mjs:2798](../server/scripts/qa_platform_pg.mjs#L2798) |
+| `ANNOUNCEMENT_EMAIL_MAX_PER_DAY_PER_SITE` | [server/scripts/qa_platform_pg.mjs:2795](../server/scripts/qa_platform_pg.mjs#L2795) |
+| `ANNOUNCEMENT_EMAIL_PUBLISH_MAX_PER_HOUR_PER_USER` | [server/scripts/qa_platform_pg.mjs:2802](../server/scripts/qa_platform_pg.mjs#L2802) |
+| `ANNOUNCEMENT_EMAIL_SECRET` | [server/scripts/qa_platform_pg.mjs:5089](../server/scripts/qa_platform_pg.mjs#L5089) |
+| `ANNOUNCEMENT_EMAIL_SECRET_PREVIOUS` | [server/scripts/qa_platform_pg.mjs:5090](../server/scripts/qa_platform_pg.mjs#L5090) |
+| `ANNOUNCEMENT_INBOX_RETENTION_DAYS` | [server/scripts/qa_platform_pg.mjs:4364](../server/scripts/qa_platform_pg.mjs#L4364) |
+| `ANNOUNCEMENT_MAX_PER_DAY_PER_SITE` | [server/scripts/qa_platform_pg.mjs:2800](../server/scripts/qa_platform_pg.mjs#L2800) |
+| `ANNOUNCEMENT_SCHEDULER_DISABLED` | [server/scripts/qa_platform_pg.mjs:2794](../server/scripts/qa_platform_pg.mjs#L2794) |
+| `ANNOUNCEMENT_URGENT_EMAIL_MAX_PER_DAY_PER_SITE` | [server/scripts/qa_platform_pg.mjs:2801](../server/scripts/qa_platform_pg.mjs#L2801) |
 | `BULK_IMPORT_DISABLED` | [server/scripts/qa_bulk_import.mjs:1324](../server/scripts/qa_bulk_import.mjs#L1324) |
 | `CAMERA_SECRET_KEY` | [server/src/modules/device_integrations_service.js:35](../server/src/modules/device_integrations_service.js#L35) |
-| `CLIENT_ERROR_MAX_ROWS` | [server/scripts/qa_platform_pg.mjs:9207](../server/scripts/qa_platform_pg.mjs#L9207) |
+| `CLIENT_ERROR_MAX_ROWS` | [server/scripts/qa_platform_pg.mjs:9232](../server/scripts/qa_platform_pg.mjs#L9232) |
 | `CONCIERGE_MAX_OPEN_PER_SITE` | [server/scripts/qa_reservation_section.mjs:622](../server/scripts/qa_reservation_section.mjs#L622) |
 | `CONCIERGE_MAX_OPEN_PER_USER` | [server/scripts/qa_reservation_section.mjs:611](../server/scripts/qa_reservation_section.mjs#L611) |
 | `CONCIERGE_MAX_PER_USER_PER_HOUR` | [server/scripts/qa_reservation_section.mjs:616](../server/scripts/qa_reservation_section.mjs#L616) |
@@ -284,7 +284,7 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | `FINANCE_REMINDER_MAX_PER_DAY_PER_SITE` | [server/scripts/qa_finance4b_reminders.mjs:288](../server/scripts/qa_finance4b_reminders.mjs#L288) |
 | `FIRMWARE_DIR` | [server/src/routes/firmware_routes.js:25](../server/src/routes/firmware_routes.js#L25) |
 | `JWT_SECRET` | [server/src/jwt.js:31](../server/src/jwt.js#L31)<br>[server/src/modules/apartment_mgmt_service.js:91](../server/src/modules/apartment_mgmt_service.js#L91)<br>[server/src/modules/device_integrations_service.js:35](../server/src/modules/device_integrations_service.js#L35) |
-| `LEGAL_DIR` | [server/scripts/qa_platform_pg.mjs:9206](../server/scripts/qa_platform_pg.mjs#L9206) |
+| `LEGAL_DIR` | [server/scripts/qa_platform_pg.mjs:9231](../server/scripts/qa_platform_pg.mjs#L9231) |
 | `LISTEN_HOST` | [server/src/server.js:351](../server/src/server.js#L351) |
 | `MIGRATE_LOCK_TIMEOUT_MS` | [server/scripts/migrate.js:371](../server/scripts/migrate.js#L371) |
 | `MOSQUITTO_PASSWD_BIN` | [server/scripts/sync_mqtt_acl.js:11](../server/scripts/sync_mqtt_acl.js#L11) |
@@ -307,24 +307,24 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | `PUBLIC_APP_URL` | [server/src/modules/person_invite_service.js:64](../server/src/modules/person_invite_service.js#L64)<br>[server/src/routes/auth_routes.js:356](../server/src/routes/auth_routes.js#L356)<br>[server/src/routes/guest_passes_routes.js:40](../server/src/routes/guest_passes_routes.js#L40) |
 | `PUBLIC_BASE_URL` | [server/src/modules/person_invite_service.js:64](../server/src/modules/person_invite_service.js#L64)<br>[server/src/routes/auth_routes.js:357](../server/src/routes/auth_routes.js#L357)<br>[server/src/routes/guest_passes_routes.js:41](../server/src/routes/guest_passes_routes.js#L41) |
 | `QA_ADMIN_DB` | [server/scripts/qa_finance4b.mjs:162](../server/scripts/qa_finance4b.mjs#L162)<br>[server/scripts/qa_finance4b_upgrade.mjs:75](../server/scripts/qa_finance4b_upgrade.mjs#L75)<br>[server/scripts/qa_finance_funds_section.mjs:653](../server/scripts/qa_finance_funds_section.mjs#L653) |
-| `QA_ANNOUNCEMENT_LOCK_ROUNDS` | [server/scripts/qa_platform_pg.mjs:3780](../server/scripts/qa_platform_pg.mjs#L3780) |
-| `QA_ANNOUNCEMENT_ROUNDS` | [server/scripts/qa_platform_pg.mjs:3193](../server/scripts/qa_platform_pg.mjs#L3193) |
+| `QA_ANNOUNCEMENT_LOCK_ROUNDS` | [server/scripts/qa_platform_pg.mjs:3805](../server/scripts/qa_platform_pg.mjs#L3805) |
+| `QA_ANNOUNCEMENT_ROUNDS` | [server/scripts/qa_platform_pg.mjs:3218](../server/scripts/qa_platform_pg.mjs#L3218) |
 | `QA_CONFIRM_DISPOSABLE_DB` | [server/scripts/qa_finance4b_upgrade.mjs:35](../server/scripts/qa_finance4b_upgrade.mjs#L35)<br>[server/scripts/qa_pending_registration_pg.mjs:21](../server/scripts/qa_pending_registration_pg.mjs#L21)<br>[server/scripts/qa_platform_pg.mjs:160](../server/scripts/qa_platform_pg.mjs#L160) |
 | `QA_DB_PREFIX` | [server/scripts/qa_finance4b_upgrade.mjs:43](../server/scripts/qa_finance4b_upgrade.mjs#L43)<br>[server/scripts/qa_platform_pg.mjs:382](../server/scripts/qa_platform_pg.mjs#L382) |
-| `QA_FINANCE_DIR` | [server/scripts/qa_platform_pg.mjs:9058](../server/scripts/qa_platform_pg.mjs#L9058) |
+| `QA_FINANCE_DIR` | [server/scripts/qa_platform_pg.mjs:9083](../server/scripts/qa_platform_pg.mjs#L9083) |
 | `QA_KEEP_DBS` | [server/scripts/qa_platform_pg.mjs:525](../server/scripts/qa_platform_pg.mjs#L525) |
-| `QA_LOCK_ROUNDS` | [server/scripts/qa_finance4b_locks.mjs:10](../server/scripts/qa_finance4b_locks.mjs#L10)<br>[server/scripts/qa_platform_pg.mjs:1371](../server/scripts/qa_platform_pg.mjs#L1371) |
+| `QA_LOCK_ROUNDS` | [server/scripts/qa_finance4b_locks.mjs:10](../server/scripts/qa_finance4b_locks.mjs#L10)<br>[server/scripts/qa_platform_pg.mjs:1396](../server/scripts/qa_platform_pg.mjs#L1396) |
 | `QA_ONLY` | [server/scripts/qa_platform_pg.mjs:383](../server/scripts/qa_platform_pg.mjs#L383) |
 | `QA_PART` | [server/scripts/qa_finance4b.mjs:283](../server/scripts/qa_finance4b.mjs#L283) |
 | `QA_SCENARIO` | [server/scripts/qa_platform_pg.mjs:576](../server/scripts/qa_platform_pg.mjs#L576) |
 | `QA_SECTION` | [server/scripts/qa_platform_pg.mjs:154](../server/scripts/qa_platform_pg.mjs#L154) |
-| `QA_UPGRADE_TRIALS` | [server/scripts/qa_finance4b_upgrade.mjs:42](../server/scripts/qa_finance4b_upgrade.mjs#L42)<br>[server/scripts/qa_platform_pg.mjs:8927](../server/scripts/qa_platform_pg.mjs#L8927) |
+| `QA_UPGRADE_TRIALS` | [server/scripts/qa_finance4b_upgrade.mjs:42](../server/scripts/qa_finance4b_upgrade.mjs#L42)<br>[server/scripts/qa_platform_pg.mjs:8952](../server/scripts/qa_platform_pg.mjs#L8952) |
 | `RESERVATIONS_MAX_ACTIVE_PER_SITE` | [server/scripts/qa_reservation_section.mjs:420](../server/scripts/qa_reservation_section.mjs#L420) |
 | `RESERVATIONS_MAX_ACTIVE_PER_USER` | [server/scripts/qa_reservation_section.mjs:414](../server/scripts/qa_reservation_section.mjs#L414) |
 | `RESERVATIONS_MAX_PER_USER_PER_HOUR` | [server/scripts/qa_reservation_section.mjs:425](../server/scripts/qa_reservation_section.mjs#L425) |
 | `SMS_CODE_PEPPER` | [server/src/modules/sms_login.js:21](../server/src/modules/sms_login.js#L21) |
 | `SMTP_FROM` | [server/src/mailer.js:95](../server/src/mailer.js#L95) |
-| `SMTP_HOST` | [server/scripts/qa_contracts_section.mjs:516](../server/scripts/qa_contracts_section.mjs#L516)<br>[server/scripts/qa_finance4b_reminders.mjs:113](../server/scripts/qa_finance4b_reminders.mjs#L113)<br>[server/scripts/qa_platform_pg.mjs:3543](../server/scripts/qa_platform_pg.mjs#L3543) |
+| `SMTP_HOST` | [server/scripts/qa_contracts_section.mjs:516](../server/scripts/qa_contracts_section.mjs#L516)<br>[server/scripts/qa_finance4b_reminders.mjs:113](../server/scripts/qa_finance4b_reminders.mjs#L113)<br>[server/scripts/qa_platform_pg.mjs:3568](../server/scripts/qa_platform_pg.mjs#L3568) |
 | `SMTP_PORT` | [server/src/mailer.js:13](../server/src/mailer.js#L13)<br>[server/scripts/qa_platform_pg.mjs:558](../server/scripts/qa_platform_pg.mjs#L558) |
 | `SMTP_USER` | [server/src/mailer.js:95](../server/src/mailer.js#L95) |
 | `TZ` | [server/src/db.js:1](../server/src/db.js#L1)<br>[server/src/mqtt_bridge.js:1](../server/src/mqtt_bridge.js#L1)<br>[server/src/server.js:4](../server/src/server.js#L4) |
@@ -514,8 +514,8 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [company_qr_tool/ui_kit.py](../company_qr_tool/ui_kit.py) | 1549 | — | — |
 | [deploy/remote_audit.sh](../deploy/remote_audit.sh) | 24 | [altyapi-komut-rehberi](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-komut-rehberi), [altyapi-deploy-dogrulama-sonuclari](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-deploy-dogrulama-sonuclari), [altyapi-disk-dolu-yedekler](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-disk-dolu-yedekler) | 20-sunucu-altyapi-ve-yayin |
 | [deploy/remote_deploy.sh](../deploy/remote_deploy.sh) | 170 | [altyapi-geri-alma-ve-yedek](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-geri-alma-ve-yedek), [altyapi-deploy-prepare-basarisiz](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-deploy-prepare-basarisiz), [altyapi-deploy-activate-geri-alma](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-deploy-activate-geri-alma), [altyapi-company-api-key-uretildi](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-company-api-key-uretildi), [altyapi-disk-dolu-yedekler](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-disk-dolu-yedekler) +2 | 20-sunucu-altyapi-ve-yayin |
-| [deploy/remote_rehearse_schema.sh](../deploy/remote_rehearse_schema.sh) | 193 | — | — |
-| [deploy/remote_verify.sh](../deploy/remote_verify.sh) | 104 | [altyapi-komut-rehberi](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-komut-rehberi), [altyapi-deploy-dogrulama-sonuclari](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-deploy-dogrulama-sonuclari), [altyapi-company-api-key-uretildi](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-company-api-key-uretildi) | 20-sunucu-altyapi-ve-yayin |
+| [deploy/remote_rehearse_schema.sh](../deploy/remote_rehearse_schema.sh) | 202 | — | — |
+| [deploy/remote_verify.sh](../deploy/remote_verify.sh) | 114 | [altyapi-komut-rehberi](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-komut-rehberi), [altyapi-deploy-dogrulama-sonuclari](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-deploy-dogrulama-sonuclari), [altyapi-company-api-key-uretildi](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-company-api-key-uretildi) | 20-sunucu-altyapi-ve-yayin |
 | [ekran_yazilimi/include/config.h](../ekran_yazilimi/include/config.h) | 54 | [ekran-siyah-bos](ariza-klavuzu/41-ekran-yazilimi.md#ekran-siyah-bos), [ekran-dokunmatik-yok](ariza-klavuzu/41-ekran-yazilimi.md#ekran-dokunmatik-yok), [ekran-uart-protokol-uyusmazligi](ariza-klavuzu/41-ekran-yazilimi.md#ekran-uart-protokol-uyusmazligi), [ekran-surum-uyusmazligi](ariza-klavuzu/41-ekran-yazilimi.md#ekran-surum-uyusmazligi) | 40-cihaz-yazilimi, 41-ekran-yazilimi |
 | [ekran_yazilimi/include/cst816d_touch.h](../ekran_yazilimi/include/cst816d_touch.h) | 94 | [ekran-dokunmatik-yok](ariza-klavuzu/41-ekran-yazilimi.md#ekran-dokunmatik-yok), [ekran-dokunma-yanlis-koordinat](ariza-klavuzu/41-ekran-yazilimi.md#ekran-dokunma-yanlis-koordinat), [ekran-dokunma-tekrar-tetikleme](ariza-klavuzu/41-ekran-yazilimi.md#ekran-dokunma-tekrar-tetikleme) | 40-cihaz-yazilimi, 41-ekran-yazilimi |
 | [ekran_yazilimi/include/display_protocol.h](../ekran_yazilimi/include/display_protocol.h) | 53 | [ekran-uart-protokol-uyusmazligi](ariza-klavuzu/41-ekran-yazilimi.md#ekran-uart-protokol-uyusmazligi) | 41-ekran-yazilimi |
@@ -552,7 +552,7 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [lib/models/apartment_record.dart](../lib/models/apartment_record.dart) | 84 | [model-tip-hatasi-beklenen-formatta-degil](ariza-klavuzu/33-uygulama-modeller.md#model-tip-hatasi-beklenen-formatta-degil), [model-daire-uyelik-ve-site-yapisi](ariza-klavuzu/33-uygulama-modeller.md#model-daire-uyelik-ve-site-yapisi) | 33-uygulama-modeller |
 | [lib/models/apartment_vehicles.dart](../lib/models/apartment_vehicles.dart) | 60 | — | — |
 | [lib/models/app_config.dart](../lib/models/app_config.dart) | 99 | — | — |
-| [lib/models/audit_log.dart](../lib/models/audit_log.dart) | 366 | — | — |
+| [lib/models/audit_log.dart](../lib/models/audit_log.dart) | 367 | — | — |
 | [lib/models/bank_import.dart](../lib/models/bank_import.dart) | 201 | — | — |
 | [lib/models/budget_models.dart](../lib/models/budget_models.dart) | 170 | — | — |
 | [lib/models/bulk_import.dart](../lib/models/bulk_import.dart) | 1044 | — | — |
@@ -931,7 +931,7 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [lib/ui/views/document_admin_list.dart](../lib/ui/views/document_admin_list.dart) | 379 | — | — |
 | [lib/ui/views/document_admin_view.dart](../lib/ui/views/document_admin_view.dart) | 307 | — | — |
 | [lib/ui/views/document_resident_view.dart](../lib/ui/views/document_resident_view.dart) | 320 | — | — |
-| [lib/ui/views/document_view.dart](../lib/ui/views/document_view.dart) | 185 | — | — |
+| [lib/ui/views/document_view.dart](../lib/ui/views/document_view.dart) | 198 | — | — |
 | [lib/ui/views/equipment_view.dart](../lib/ui/views/equipment_view.dart) | 685 | — | — |
 | [lib/ui/views/finance_balances_tab.dart](../lib/ui/views/finance_balances_tab.dart) | 228 | — | — |
 | [lib/ui/views/finance_cash_tab.dart](../lib/ui/views/finance_cash_tab.dart) | 462 | — | — |
@@ -945,7 +945,7 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [lib/ui/views/finance_reminder_card.dart](../lib/ui/views/finance_reminder_card.dart) | 163 | — | — |
 | [lib/ui/views/finance_reports_tab.dart](../lib/ui/views/finance_reports_tab.dart) | 1918 | — | — |
 | [lib/ui/views/finance_view.dart](../lib/ui/views/finance_view.dart) | 816 | — | — |
-| [lib/ui/views/help_content.dart](../lib/ui/views/help_content.dart) | 966 | — | — |
+| [lib/ui/views/help_content.dart](../lib/ui/views/help_content.dart) | 967 | — | — |
 | [lib/ui/views/help_view.dart](../lib/ui/views/help_view.dart) | 750 | — | — |
 | [lib/ui/views/individual_home_view.dart](../lib/ui/views/individual_home_view.dart) | 1333 | [cekirdek-konum-mesafe-disi](ariza-klavuzu/30-uygulama-cekirdek.md#cekirdek-konum-mesafe-disi), [ui-kapi-ac-basari-tiki](ariza-klavuzu/31-uygulama-arayuz.md#ui-kapi-ac-basari-tiki), [ui-bireysel-ana-ekran-kapilar](ariza-klavuzu/31-uygulama-arayuz.md#ui-bireysel-ana-ekran-kapilar), [ui-qr-konum-hatasi](ariza-klavuzu/31-uygulama-arayuz.md#ui-qr-konum-hatasi), [ui-ekran-qr-oku](ariza-klavuzu/31-uygulama-arayuz.md#ui-ekran-qr-oku) +2 | 31-uygulama-arayuz |
 | [lib/ui/views/join_and_setup_view.dart](../lib/ui/views/join_and_setup_view.dart) | 285 | — | 31-uygulama-arayuz |
@@ -1140,7 +1140,7 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [server/scripts/qa_finance4b_upgrade.mjs](../server/scripts/qa_finance4b_upgrade.mjs) | 445 | — | — |
 | [server/scripts/qa_finance4b.mjs](../server/scripts/qa_finance4b.mjs) | 379 | — | — |
 | [server/scripts/qa_pending_registration_pg.mjs](../server/scripts/qa_pending_registration_pg.mjs) | 276 | [test-gercek-pg-qa](ariza-klavuzu/50-arac-test-ve-surec.md#test-gercek-pg-qa) | 50-arac-test-ve-surec |
-| [server/scripts/qa_platform_pg.mjs](../server/scripts/qa_platform_pg.mjs) | 11930 | — | — |
+| [server/scripts/qa_platform_pg.mjs](../server/scripts/qa_platform_pg.mjs) | 11955 | — | — |
 | [server/scripts/qa_platform_rules_section.mjs](../server/scripts/qa_platform_rules_section.mjs) | 318 | — | — |
 | [server/scripts/qa_push_section.mjs](../server/scripts/qa_push_section.mjs) | 727 | — | — |
 | [server/scripts/qa_reservation_section.mjs](../server/scripts/qa_reservation_section.mjs) | 928 | — | — |
@@ -1247,9 +1247,9 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [server/src/modules/card_access_schema.js](../server/src/modules/card_access_schema.js) | 137 | — | — |
 | [server/src/modules/card_access_service.js](../server/src/modules/card_access_service.js) | 218 | — | — |
 | [server/src/modules/card_access_verify.js](../server/src/modules/card_access_verify.js) | 67 | — | — |
-| [server/src/modules/card_payments_into_finance.js](../server/src/modules/card_payments_into_finance.js) | 17 | — | — |
+| [server/src/modules/card_payments_into_finance.js](../server/src/modules/card_payments_into_finance.js) | 18 | — | — |
 | [server/src/modules/cargo_notify.js](../server/src/modules/cargo_notify.js) | 77 | — | — |
-| [server/src/modules/catalog.js](../server/src/modules/catalog.js) | 362 | — | — |
+| [server/src/modules/catalog.js](../server/src/modules/catalog.js) | 374 | — | — |
 | [server/src/modules/cctv_routes.js](../server/src/modules/cctv_routes.js) | 144 | — | — |
 | [server/src/modules/cctv_schema.js](../server/src/modules/cctv_schema.js) | 113 | — | — |
 | [server/src/modules/cctv_service.js](../server/src/modules/cctv_service.js) | 447 | — | — |
@@ -1366,7 +1366,7 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [server/src/modules/metering_schema.js](../server/src/modules/metering_schema.js) | 184 | — | — |
 | [server/src/modules/metering_service.js](../server/src/modules/metering_service.js) | 346 | — | — |
 | [server/src/modules/module_request_routes.js](../server/src/modules/module_request_routes.js) | 157 | — | — |
-| [server/src/modules/module_request_service.js](../server/src/modules/module_request_service.js) | 535 | — | — |
+| [server/src/modules/module_request_service.js](../server/src/modules/module_request_service.js) | 544 | — | — |
 | [server/src/modules/module_routes.js](../server/src/modules/module_routes.js) | 250 | — | — |
 | [server/src/modules/module_service.js](../server/src/modules/module_service.js) | 432 | — | — |
 | [server/src/modules/neighbor_board_routes.js](../server/src/modules/neighbor_board_routes.js) | 308 | — | — |

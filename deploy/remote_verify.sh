@@ -38,14 +38,24 @@ echo -n "hesap silme kimliksiz (401 beklenir): "; curl -s -m 8 -X POST -H 'Conte
 echo -n "platform-config kimliksiz (401 beklenir): "; curl -s -m 8 -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8080/admin/platform-config
 echo "== yeni tablolar 038-041 (25 beklenir: bulk_import_runs 1 + belgeler 3 + finans 4b 19 + push 2)"
 echo "bulunan: $(q1 "select count(*) from information_schema.tables where table_schema='public' and table_name in ('bulk_import_runs','documents','document_versions','announcement_attachments','finance_settings','late_fee_runs','late_fee_run_lines','receipt_counters','receipts','receipt_print_events','finance_accounts','expense_categories','finance_suppliers','expenses','expense_voids','expense_documents','account_movements','account_transfers','account_reconciliations','finance_reminder_runs','finance_reminder_items','finance_reminder_apartments','finance_reminder_exclusions','push_devices','push_outbox')")"
+# TEMEL modüller (AGENTS.md Kural 25; catalog.js core:true) HER sitede açık olmalıdır: açık olmayan site varsa SORUNLU basılır. Liste
+# catalog.js ile aynı tutulur (server/test/core_modules.test.js denetler); yeni bir modül temel yapılırsa buraya da eklenir.
+CORE_MODULES="people announcements finance survey neighbor_board equipment annual_report drive_storage"
+echo "== site_modules: temel moduller her sitede acik olmali (SORUNLU = acik olmayan site var)"
+total_sites="$(q1 "select count(*) from sites")"
+core_sql=""
+for m in $CORE_MODULES; do
+  core_sql="$core_sql${core_sql:+,}'$m'"
+  n="$(q1 "select count(*) from sites s where exists (select 1 from site_modules m where m.site_code = s.site_code and m.module_code = '$m' and m.enabled)")"
+  if [ -n "$n" ] && [ "$n" = "$total_sites" ]; then echo "OK      $m: $n/$total_sites sitede acik"; else echo "SORUNLU $m: acik site ${n:-?} / toplam site ${total_sites:-?}"; fi
+done
 # Seçmeli modüller varsayılan kapalıdır, ama ilk dağıtımdan sonra site yöneticileri talep ederek açar: açık site sayısı
 # artık bilgidir (eskiden "0 beklenir" SORUNLU basıyordu). Dağıtım öncesi/sonrası sayı değişmemeli: değiştiyse bir
-# migration modülü kendiliğinden açmış olabilir.
+# migration modülü kendiliğinden açmış olabilir. Kataloktan kalkan eski kodlar (documents, card_payments; 083/084) listeden ayrıdır:
+# satırları silinmez, katalog onları yok sayar.
 echo "== site_modules: secmeli modullerin acik site sayisi (bilgi; dagitim oncesi/sonrasi ayni kalmali)"
-for m in documents finance; do
-  n="$(q1 "select count(*) from site_modules where module_code='$m' and enabled")"
-  echo "bilgi   $m: acik site sayisi ${n:-?}"
-done
+echo "bilgi   $(q1 "select coalesce(string_agg(module_code || '=' || n, ' ' order by module_code), 'hicbiri') from (select module_code, count(*) n from site_modules where enabled and module_code not in ($core_sql, 'documents', 'card_payments') group by module_code) t")"
+echo "bilgi   eski kodlu modul satiri (documents, card_payments; katalogda yok, yok sayilir; otomatik geri alma icin korunur): $(q1 "select count(*) from site_modules where module_code in ('documents','card_payments')")"
 echo "== yeni uclar 038-041 kimliksiz (401 beklenir; 5xx OLMAMALI)"
 expect401 "toplu yukleme sablon/spec" GET /manager/sites/1000000001/imports/spec
 expect401 "toplu yukleme onizleme" POST /manager/sites/1000000001/imports/people/preview

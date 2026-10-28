@@ -6362,7 +6362,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         extraActions: _settingsExtraActions(session),
         onSelect: _selectMenu,
       ),
-      // İP-1D / G3: sakin alt çubuğu (Özet · Duyuru · Arıza · Kapı · Belgeler; iki sekmeden azsa yok).
+      // İP-1D / G3: sakin alt çubuğu (Özet · Duyuru · Arıza · Kapı · Dosyalar; iki sekmeden azsa yok).
       bottomNavigationBar: _residentBottomBar(session, effectiveMenu),
       // Geri tuşu: bir modül sayfasındayken Panel vitrinine döner (uygulamadan çıkmaz); vitrindeyken eskisi gibi çıkar.
       // Çekmece AÇIKKEN geri tuşu önce çekmeceyi kapatır, sayfa değişmez: PopScope rota yerel geçmişinden ÖNCE

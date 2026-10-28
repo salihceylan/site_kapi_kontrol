@@ -615,6 +615,15 @@ void main() {
             .targetLabel,
         'Talep #5',
       );
+      // Kataloktan kalkan eski kod (card_payments, 083'te Aidat ve Finans'a katıldı) ham kodla değil okunur adla görünür.
+      expect(
+        AuditLogEntry.fromJson(row(3, 'module_request.approved',
+                targetType: 'module_request',
+                targetId: '8',
+                details: <String, dynamic>{'module_code': 'card_payments'}))
+            .targetLabel,
+        'Kart Ödemesi (Aidat ve Finans) • Talep #8',
+      );
     });
 
     test('bilinmeyen eylem "Diğer işlem" olarak görünür (ham kod gösterilmez, kayıt kaybolmaz); eksik alanlar null', () {

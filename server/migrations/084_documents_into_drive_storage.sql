@@ -1,6 +1,8 @@
 -- 084: Belgeler ayrı modül olmaktan çıktı; Dosya Deposu (drive_storage) modülünün parçası oldu (2026-10-28).
 -- Kaynak: server/src/modules/documents_into_drive.js DOCUMENTS_INTO_DRIVE_SQL (ensureDbSchema aynı metni her açılışta uygular).
--- Belge tabloları (documents, document_versions, announcement_attachments) ve diskteki dosyalar DEĞİŞMEZ; yalnız modül satırları ve bekleyen talepler birleşir.
+-- Belge tabloları (documents, document_versions, announcement_attachments) ve diskteki dosyalar DEĞİŞMEZ; yalnız Dosya Deposu satırları ve bekleyen talepler birleşir.
+-- Eski `documents` site_modules satırları SİLİNMEZ: katalogda olmadıkları için yok sayılırlar; dağıtım otomatik geri alınırsa (kod geri gelir, veritabanı gelmez)
+-- önceki sürüm Belgeler'in açık/kapalı bilgisini bu satırlardan okur.
 -- Idempotent: ikinci çalıştırmada hiçbir satır yazılmaz.
 INSERT INTO site_modules (site_code, module_code, enabled, updated_by, updated_at)
 SELECT d.site_code, 'drive_storage', TRUE, d.updated_by, NOW()
@@ -34,5 +36,3 @@ SET status = 'cancelled',
     decided_by_name = 'Sistem',
     decision_note = 'Belgeler, Dosya Deposu ile birleşti; bu site için Dosya Deposu talebi zaten bekliyor.'
 WHERE module_code = 'documents' AND status = 'pending';
-
-DELETE FROM site_modules WHERE module_code = 'documents';

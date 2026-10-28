@@ -19,15 +19,18 @@ describe('Kart Ödemesi Aidat ve Finans a katıldı (migrations/083)', () => {
     assert.match(db, /try \{\s+await client\.query\(CARD_PAYMENTS_INTO_FINANCE_SQL\);\s+\} catch \(e\) \{/);
   });
 
-  it('yalnız card_payments modül satırlarını siler ve bekleyen talepleri onaylı sonuçlandırır; kart ödemesi AYARLARINA dokunmaz', () => {
+  it('yalnız bekleyen card_payments taleplerini onaylı sonuçlandırır; kart ödemesi AYARLARINA ve eski modül satırlarına dokunmaz', () => {
     assert.match(CARD_PAYMENTS_INTO_FINANCE_SQL, /UPDATE module_requests[\s\S]*SET status = 'approved'[\s\S]*WHERE module_code = 'card_payments' AND status = 'pending';/);
-    assert.match(CARD_PAYMENTS_INTO_FINANCE_SQL, /DELETE FROM site_modules WHERE module_code = 'card_payments';/);
+    // Eski card_payments site_modules satırları SİLİNMEZ: dağıtım otomatik geri alınırsa (yalnız kod geri gelir, veritabanı gelmez) önceki sürüm
+    // Kart Ödemesi'nin açık/kapalı bilgisini bu satırlardan okur; katalog onları zaten yok sayar. Hiçbir DELETE / site_modules yazımı yok.
+    assert.doesNotMatch(CARD_PAYMENTS_INTO_FINANCE_SQL, /\bDELETE\b/i);
+    assert.doesNotMatch(CARD_PAYMENTS_INTO_FINANCE_SQL, /site_modules/);
     // Kullanıcı verisi (sağlayıcı komisyon notları) ve geçmiş kayıtlar korunur: bu tablolara yazan ifade YOK.
     assert.doesNotMatch(CARD_PAYMENTS_INTO_FINANCE_SQL, /payment_provider_settings/);
     assert.doesNotMatch(CARD_PAYMENTS_INTO_FINANCE_SQL, /audit_log/);
-    assert.doesNotMatch(CARD_PAYMENTS_INTO_FINANCE_SQL, /DELETE FROM module_requests/);
-    // Başka modüle sıçramaz: her ifade card_payments ile sınırlıdır.
-    assert.equal((CARD_PAYMENTS_INTO_FINANCE_SQL.match(/module_code = '/g) ?? []).length, 2);
+    assert.doesNotMatch(CARD_PAYMENTS_INTO_FINANCE_SQL, /\b(DROP|TRUNCATE|ALTER)\b/i);
+    // Başka modüle sıçramaz: tek ifade, card_payments ile sınırlı.
+    assert.equal((CARD_PAYMENTS_INTO_FINANCE_SQL.match(/module_code = '/g) ?? []).length, 1);
   });
 
   it('kart ödemesi uçlarının kapısı Aidat ve Finans (finance) modülüdür; kamera uçlarınınki plate_cameras', () => {
@@ -41,5 +44,11 @@ describe('Kart Ödemesi Aidat ve Finans a katıldı (migrations/083)', () => {
     assert.match(script, /^ok083=\$\(q "/m);
     assert.match(script, /ok083=\$ok083/);
     assert.match(script, /for v in [^;]*"\$ok083"/);
+    // eski card_payments site_modules satırları silinmez: prova önce/sonra sayısının eşitliğini denetler (geri alma uyumu)
+    assert.match(script, /^before_cp_sm=.*module_code = 'card_payments'/m);
+    assert.match(script, /^after_cp_sm=.*module_code = 'card_payments'/m);
+    assert.match(script, /^\[ "\$before_cp_sm" = "\$after_cp_sm" \] \|\| ok083=f$/m);
+    // ok083 artık "satır YOK" demez (eski sürüm bu satırları silerdi)
+    assert.doesNotMatch(script, /^ok083=.*not exists \(select 1 from site_modules/m);
   });
 });

@@ -10,7 +10,14 @@
 import { pool } from '../db.js';
 import { sendModuleRequestNotificationEmail } from '../mailer.js';
 import { actorFromAuthUser, clampAuditLimit, recordAudit } from './audit_service.js';
-import { canonicalModuleCode, computeModuleEnabled, getModuleDefinition, MODULE_STATUS_COMING_SOON, retiredModuleNotice } from './catalog.js';
+import {
+  canonicalModuleCode,
+  computeModuleEnabled,
+  getModuleDefinition,
+  MODULE_STATUS_COMING_SOON,
+  retiredModuleName,
+  retiredModuleNotice,
+} from './catalog.js';
 import { PlatformError } from './errors.js';
 import { moduleLockKey } from './module_service.js';
 
@@ -50,14 +57,16 @@ function toPositiveInt(value, max = Number.MAX_SAFE_INTEGER) {
 
 /** `request` nesnesi: sözleşmedeki alanlar (ve yalnız onlar). */
 export function mapModuleRequestRow(row) {
-  // Eski kodlu geçmiş talepler (ör. `documents`, 084'te Dosya Deposu'na katıldı) güncel modülün adıyla gösterilir; `module_code` olduğu gibi kalır.
+  // Eski kodlu geçmiş talepler güncel modülün adıyla gösterilir; `module_code` olduğu gibi kalır:
+  //  - `documents` (084'te Dosya Deposu'na katıldı) -> canonicalModuleCode ile Dosya Deposu;
+  //  - `card_payments` (083'te Aidat ve Finans'a katıldı, kod çevrilmez) -> retiredModuleName; ikisi de değilse ham kod.
   const definition = getModuleDefinition(canonicalModuleCode(row.module_code));
   return {
     id: Number(row.id),
     site_code: Number(row.site_code),
     site_name: row.site_name ?? null,
     module_code: row.module_code,
-    module_name: definition ? definition.name : row.module_code,
+    module_name: definition ? definition.name : (retiredModuleName(row.module_code) ?? row.module_code),
     status: row.status,
     note: row.note ?? null,
     requested_by_name: row.requested_by_name ?? null,

@@ -29,7 +29,7 @@ export default {
     { file: 'lib/ui/views/pending_site_approvals_view.dart', note: 'Site onay talepleri listesi (menüden erişim kapalı)' },
     { file: 'lib/ui/views/bluetooth_wifi_view.dart', note: 'Bluetooth Wi-Fi kurulumunu açan basit giriş kartı' },
     { file: 'lib/ui/widgets/yan_menu.dart', note: 'Sol çekmece (Drawer): rol bazlı öğe listesi, 8 başlıklı gruplama (menuGroupOf), üstteki site satırı ve sağ üstteki dişlinin açtığı Ayarlar paneli (YanMenuAyarlar)' },
-    { file: 'lib/ui/helpers/resident_tabs.dart', note: 'Sakin alt çubuğunun sekmeleri (Özet, Duyuru, Arıza, Kapı, Belgeler): görünür menü öğelerinden türetilir' },
+    { file: 'lib/ui/helpers/resident_tabs.dart', note: 'Sakin alt çubuğunun sekmeleri (Özet, Duyuru, Arıza, Kapı, Dosyalar): görünür menü öğelerinden türetilir' },
     { file: 'lib/ui/widgets/resident_bottom_bar.dart', note: 'Sakin alt çubuğunun çizimi (Material 3 NavigationBar, rozetler, etiket yazı ölçeği sınırı)' },
     { file: 'lib/ui/widgets/admin_door_status_card.dart', note: 'Yönetici kapı kontrol kartı: site/kapı seçimi, telemetri, Kapı Aç, QR, geçiş logları' },
     { file: 'lib/ui/widgets/resident_door_remote_card.dart', note: 'Daire sakini kumandası ve ResidentDoorUiState (düğme durumu/etiketi)' },
@@ -169,8 +169,8 @@ export default {
     },
     {
       id: 'ui-sakin-alt-cubuk',
-      symptom: 'Sakin ekranının altındaki sekme çubuğu (Özet, Duyuru, Arıza, Kapı, Belgeler) görünmüyor, bir sekme eksik ya da geri tuşu beklenmedik sayfaya dönüyor',
-      keywords: ['alt çubuk', 'sekme', 'navigationbar', 'bottom bar', 'özet', 'duyuru', 'arıza', 'kapı sekmesi', 'belgeler', 'geri tuşu', 'widget kısayolu'],
+      symptom: 'Sakin ekranının altındaki sekme çubuğu (Özet, Duyuru, Arıza, Kapı, Dosyalar) görünmüyor, bir sekme eksik ya da geri tuşu beklenmedik sayfaya dönüyor',
+      keywords: ['alt çubuk', 'sekme', 'navigationbar', 'bottom bar', 'özet', 'duyuru', 'arıza', 'kapı sekmesi', 'dosyalar', 'dosya deposu', 'belgeler', 'geri tuşu', 'widget kısayolu'],
       refs: [
         { file: 'lib/ui/helpers/resident_tabs.dart', find: 'List<ResidentTab> residentTabsFor({',
           note: 'Sekmeler çekmecenin görünür öğelerinden türer: kapalı modülün sekmesi yok, Kapı yalnız kapı yetkisiyle' },
@@ -194,13 +194,14 @@ export default {
         'Görünür sekme sayısı ikiden az (ör. modüller kapalı ve kapı yetkisi yok): tek sekmelik çubuk çizilmez',
         'Pencere yüksekliği 480 dp altında (telefon yatay): içerik sığsın diye çubuk gizlenir',
         'Kapı sekmesi yok: kullanıcının kapı yetkisi yok ya da kapı modülü o sitede kapalı',
-        'Arıza / Belgeler sekmesi yok: İş Takibi ya da Belgeler modülü kapalı ya da modül verisi yüklenemedi (fail-closed: veri yokken bu sekmeler gösterilmez)',
+        'Arıza sekmesi yok: İş Takibi modülü o sitede kapalı ya da modül verisi yüklenemedi (fail-closed: veri yokken bu sekmeler gösterilmez)',
+        'Dosyalar sekmesi yok: modül verisi yüklenemedi (fail-closed) ya da hesap dosya alıcısı değil (yalnız görevli bağı / bireysel kullanıcı); Dosya Deposu temel modüldür, "kapalı" olamaz (Belgeler 084\'te onun içine katıldı)',
         'Duyuru sekmesi yok: hesap hiçbir sitede duyuru alıcısı değil (yalnız görevli bağı) ya da modül verisi de kapı listesi de henüz gelmedi (veri yokken alıcılık yalnız kapı listesinden anlaşılır)',
         'Widget ile açılışta Kapı sekmesi seçili gelmedi: modül verisi gelmeden kullanıcı başka sayfa açtı (istek bilerek düşer) ya da kapı yetkisi yok',
       ],
       checks: [
         'Hesabın sakin görünümünde (daire sakini ya da Sakin Modundaki yönetici) olduğunu ve pencere yüksekliğini doğrulayın',
-        'Çekmecede ilgili öğe (Duyurular, Taleplerim, Kapılar, Belgeler) görünüyor mu bakın: sekme yalnız görünür öğeden türer',
+        'Çekmecede ilgili öğe (Duyurular, Taleplerim, Kapılar, Dosya Deposu) görünüyor mu bakın: sekme yalnız görünür öğeden türer',
         'Testi çalıştırın: flutter test test/screens/home_navigation_test.dart',
       ],
       commands: [

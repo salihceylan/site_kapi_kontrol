@@ -293,6 +293,12 @@ Bu belge hukuki görüş değildir; kararlar avukata aittir. Öneriler, ürünü
 - **Önerilen varsayılan:** Mevcut tasarım korunsun; dışa aktarma ekranına "bu dosya kişisel veri içerir, yalnız yetkili kişilerle ve güvenli kanallarla paylaşın" uyarısı eklensin (geliştirme; ekranda var mı kontrol edilmedi); kurul dışa aktarması istenirse yalnız daire listesi gibi kısıtlı kapsam düşünülsün (`PLATFORM_TOPLU_ISLEMLER.md` açık soru 4).
 - **Metinde:** Gizlilik §3.10; KVKK §2, §6; Kullanım Koşulları §5; DPA §2.1, Ek-1.
 
+## 41. Her sitede varsayılan açık temel modüller: anket, komşu panosu, ekipman, faaliyet raporu, dosya deposu (2026-10-28)
+
+- **Soru:** Anket ve Oylama (oy veren hesapla ilişkili oy kayıtları), Komşu Panosu (sakinlerin yazdığı ilanlar ve şikâyet/rapor kayıtları), Ekipman ve Bakım (ekipman, bakım, teklif ve tedarikçi kayıtları), Faaliyet Raporu ve Dosya Deposu (belgeler ve sitenin kendi Google Drive bağlantısı) artık TEMEL modüldür: Aidat ve Finans gibi talep ve açma gerekmeden HER sitede açıktır ve kapatılamaz (AGENTS.md Kural 25). Daha önce site yönetiminin bilinçli açma kararına bağlı olan bu işleme faaliyetleri artık varsayılan olarak sürer. (a) Aydınlatma metinleri (`server/legal/privacy.md`, `kvkk_notice.md`) komşu panosunu, anketleri, ekipman/faaliyet raporunu ve Drive bağlantısını anmıyor; ayrıca `privacy.md` satır 115 "Belgeler modülü sitenizde açıksa ..." koşullu cümlesi eski (Belgeler ayrı modül değil, Dosya Deposu her sitede açık) ve `terms.md` satır 31 "Aidat ve Finans modülü sitede varsayılan olarak kapalıdır" cümlesi 079'dan beri yanlış. (b) Komşu panosu gönderileri sakinlerin serbest metnidir ve diğer sakinlerce görülür (şikâyet/rapor akışı var): içerik sorumluluğu ve moderasyon metne girmeli mi? (c) Anket oylarında oy veren hesap kaydedilir (anonim/açık seçeneğine göre görünürlük değişir): saklama süresi ve aydınlatma. (d) Bu modüllerin envanter kayıtları (V-kayıtları) `docs/yasal/VERI_ENVANTERI.md` içinde henüz yok (ayrı iş; Bölüm G başlangıç notu).
+- **Önerilen varsayılan:** Metne her sitede açık modüllerin kısa bir listesi ve işlenen veri türleri eklensin; `privacy.md:115` ve `terms.md:31` koşullu ifadeleri "her sitede açıktır" biçiminde avukat onayıyla düzeltilsin (metin değişince sürüm yükselir, yeniden onay istenir); envantere komşu ilanı/şikâyeti, anket/oy, ekipman, faaliyet raporu ve Drive bağlantısı için kayıtlar eklensin (geliştirme).
+- **Metinde:** Gizlilik §3 (özellikle §3.9 Belgeler); Kullanım Koşulları §2 (satır 31 aidat cümlesi), §5; KVKK §2; DPA §2.1, Ek-1.
+
 ---
 
 ## Atıf doğrulama durumu

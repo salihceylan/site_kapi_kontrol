@@ -2047,7 +2047,7 @@ export async function ensureDbSchema() {
       console.error('[DB] 079/082 temel modul doldurma hatasi:', e?.code || e?.message);
     }
 
-    // 083 Kart Odemesi (card_payments) Aidat ve Finans'in icine alindi: modul acik/kapali satirlari silinir, bekleyen talepler sonuclanir; kart odemesi AYARLARI (payment_provider_settings) korunur. Hata acilisi durdurmaz.
+    // 083 Kart Odemesi (card_payments) Aidat ve Finans'in icine alindi: bekleyen talepler sonuclanir; kart odemesi AYARLARI (payment_provider_settings) ve eski card_payments site_modules satirlari korunur (katalog yok sayar; otomatik geri almada onceki surum okur). Hata acilisi durdurmaz.
     try {
       await client.query(CARD_PAYMENTS_INTO_FINANCE_SQL);
     } catch (e) {
@@ -2055,7 +2055,7 @@ export async function ensureDbSchema() {
       console.error('[DB] 083 kart odemesi finansa katma hatasi:', e?.code || e?.message);
     }
 
-    // 084 Belgeler ayri modul degil, Dosya Deposu'nun parcasi: Belgeler acik sitelerde Dosya Deposu acilir, bekleyen Belgeler talepleri sonuclanir, eski `documents` satirlari silinir. Belge verisine dokunmaz. Hata acilisi durdurmaz.
+    // 084 Belgeler ayri modul degil, Dosya Deposu'nun parcasi: Belgeler acik sitelerde Dosya Deposu acilir, bekleyen Belgeler talepleri sonuclanir; eski `documents` site_modules satirlari korunur (katalog yok sayar; otomatik geri almada onceki surum okur). Belge verisine dokunmaz. Hata acilisi durdurmaz.
     try {
       await client.query(DOCUMENTS_INTO_DRIVE_SQL);
     } catch (e) {
