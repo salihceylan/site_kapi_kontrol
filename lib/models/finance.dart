@@ -178,6 +178,11 @@ enum FeeDistribution {
     'Arsa payına göre',
     'Toplam tutar, dairelerin arsa paylarına göre bölünür.',
   ),
+  personCount(
+    'person_count',
+    'Kişi sayısına göre',
+    'Toplam tutar, dairelerde kayıtlı güncel kişi sayısına göre bölünür (Kişiler ekranı). Kişi kaydı olmayan daire eksik veri sayılır.',
+  ),
   area('area', 'Metrekareye göre', 'Toplam tutar, dairelerin metrekarelerine göre bölünür.'),
   unknown('', 'Dağıtım bilinmiyor', '');
 
@@ -721,6 +726,7 @@ class FeePreviewLine {
     this.payerParty = ResponsibleParty.both,
     required this.amountMinor,
     this.accountParty,
+    this.basisValue,
   });
 
   final int apartmentId;
@@ -732,6 +738,9 @@ class FeePreviewLine {
   /// Borcun yazılacağı hesap (İP-1A); eski sunucuda null.
   final AccountParty? accountParty;
 
+  /// Dağıtım tabanının daire için değeri (K5): arsa payı kesri ("35/1000") ya da kişi sayısı ("3"); eşit / sabit / kategoride ve eski sunucuda null.
+  final String? basisValue;
+
   factory FeePreviewLine.fromJson(Map<String, dynamic> json) => FeePreviewLine(
     apartmentId: crmInt(json['apartment_id']),
     label: json['label']?.toString() ?? '',
@@ -739,6 +748,7 @@ class FeePreviewLine {
     payerParty: ResponsibleParty.fromApi(json['payer_party']),
     amountMinor: _requiredMinor(json, 'amount_minor'),
     accountParty: AccountParty.tryParse(json['account_party']),
+    basisValue: json['basis_value'] == null ? null : crmText(json['basis_value']?.toString()),
   );
 }
 
@@ -762,7 +772,7 @@ class FeeMissingData {
   /// Sunucudaki neden metni (Türkçe) ya da kod; ekranda [financeMissingReason] ile gösterilir.
   final String reason;
 
-  /// Makine kodu (`land_share_missing`, `area_missing`, `category_missing`, `category_amount_missing`).
+  /// Makine kodu (`land_share_missing`, `person_count_missing`, `area_missing`, `category_missing`, `category_amount_missing`).
   final String reasonCode;
 
   factory FeeMissingData.fromJson(Map<String, dynamic> json) => FeeMissingData(
@@ -781,6 +791,8 @@ String financeMissingReason(String reason, {String code = ''}) {
   switch (code.trim()) {
     case 'land_share_missing':
       return 'Arsa payı tanımlı değil.';
+    case 'person_count_missing':
+      return 'Dairede kayıtlı güncel kişi yok (kişi sayısı tanımsız).';
     case 'area_missing':
       return 'Metrekare bilgisi tanımlı değil.';
     case 'category_missing':
@@ -1051,8 +1063,12 @@ class LedgerEntry {
   /// Yönetici bu kaydı iptal edebilir mi? (Ters kayıt ve zaten iptal edilmiş kayıt iptal edilemez.)
   bool get canReverse => !isReversal && !isReversed && kind != LedgerKind.unknown;
 
-  /// Yalnız tahsilat düzeltilebilir (ters kayıt + yeni tahsilat).
-  bool get canCorrect => canReverse && kind == LedgerKind.payment;
+  /// Devir alacağı (K16; alacaklı devir): önceki dönemden devredilen ALACAK. Defterde tahsilat (`payment`) türündedir ama kaynak izi `opening`dir;
+  /// gerçek bir nakit / havale tahsilatı DEĞİLDİR (makbuz düzenlenmez, düzeltilemez, kasaya eşlenmez).
+  bool get isOpeningCredit => kind == LedgerKind.payment && sourceKind == 'opening';
+
+  /// Yalnız tahsilat düzeltilebilir (ters kayıt + yeni tahsilat); devir alacağı düzeltilemez (iptal edilir ya da devir yüklemesi geri alınır).
+  bool get canCorrect => canReverse && kind == LedgerKind.payment && !isOpeningCredit;
 
   factory LedgerEntry.fromJson(Map<String, dynamic> json) => LedgerEntry(
     id: crmInt(json['id']),

@@ -47,6 +47,7 @@ import { ensureFinanceFundsSchema } from './modules/finance_funds_schema.js';
 import { ensureFinanceRefundsSchema } from './modules/finance_refunds_schema.js';
 import { ensureFinanceLiabilitySchema } from './modules/finance_liability_schema.js';
 import { ensureFinanceRunDecisionSchema } from './modules/finance_run_decision_schema.js';
+import { ensureFeeDistributionSchema } from './modules/finance_distribution_schema.js';
 import { CORE_MODULES_BACKFILL_SQL } from './modules/core_modules.js';
 import { CARD_PAYMENTS_INTO_FINANCE_SQL } from './modules/card_payments_into_finance.js';
 import { ensureTenantAdminRule } from './modules/apartment_tenant_admin_sql.js';
@@ -2014,6 +2015,14 @@ export async function ensureDbSchema() {
     // 090 (demirbas / fon tahakkukunun dayanagi: Karar Defteri kaydi ya da gerekce): 034 (fee_runs) ve 050 (board_decisions) SONRASI; dev blokta DEGIL; katalog kontrolu + her adim kendi otomatik onayli
     // ifadesi (finance_run_decision_schema.js = migrations/090). Her sey varsa hicbir ifade / kilit yok. Geri doldurma yok (eski calistirmalar dayanaksiz kalir).
     await ensureFinanceRunDecisionSchema(client);
+    // 091 (aidat dagitim tabani: 'person_count' = kisi sayisina gore): fee_definitions (034) SONRASI; dev blokta DEGIL; kisit zaten guncelse tek katalog sorgusu, kilit yok
+    // (finance_distribution_schema.js = migrations/091). fee_definitions yoksa hicbir sey yapmaz. Hata acilisi durdurmaz (yalniz 'person_count' tanimi yazilamaz; sonraki acilis yeniden dener).
+    try {
+      await ensureFeeDistributionSchema(client);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('[DB] 091 aidat dagitim tabani (person_count) hatasi:', e?.code || e?.message);
+    }
 
     // 031 people_v1: mevcut sakinlerin CRM'e tek seferlik aktarimi. Savunmaci: hata sunucunun acilmasini ENGELLEMEZ
     // (kendi transaction'i geri alinir, isaret yazilmaz => sonraki acilista yeniden denenir; okuma anindaki

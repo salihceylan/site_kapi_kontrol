@@ -89,7 +89,7 @@ const DEFINITIONS = [
   }),
   rule('heat.area_share_pct', {
     label: 'Isınma gideri: alan payı',
-    description: 'Merkezi ısıtma giderinin ölçüm dışında kalan yüzdesi. Katılan dairelerin hepsinde arsa payı tanımlıysa arsa payına, değilse eşit dağıtılır (daire alanı kullanılmaz). Ölçüme göre payla toplamı 100 olmalıdır.',
+    description: 'Merkezi ısıtma giderinin ölçüm dışında kalan yüzdesi. Bu pay, ısı payı borçlandırılırken yönetimin seçtiği tabana göre dağıtılır (varsayılan eşit; arsa payı ya da kişi sayısı seçilebilir; daire alanı kullanılmaz). Ölçüme göre payla toplamı 100 olmalıdır.',
     unit: 'pct',
     defaultValue: 30,
     min: 0,

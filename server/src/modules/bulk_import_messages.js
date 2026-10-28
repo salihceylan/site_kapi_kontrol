@@ -33,7 +33,6 @@ export const ERROR_CODES = Object.freeze([
   'MONEY_INVALID',
   'MONEY_RANGE',
   'ACCOUNT_INVALID',
-  'OPENING_CREDIT_UNSUPPORTED',
   'OPENING_EXISTS',
   'PERIOD_CLOSED',
   'APARTMENT_INACTIVE',
@@ -59,6 +58,7 @@ export const WARNING_CODES = Object.freeze([
   'OPENING_ZERO',
   'NO_TENANT',
   'OPENING_LEDGER_EXISTS',
+  'OPENING_CREDIT_DUE_IGNORED',
 ]);
 
 /** Hücre değerini iletiye koymak için: tek satır, en çok 40 karakter. */
@@ -218,9 +218,6 @@ export function issueMessage(code, ctx = {}) {
     case 'ACCOUNT_INVALID':
       text = `Hesap anlaşılamadı: «${value}». Listeden seçin: Ev sahibi ya da Kiracı.`;
       break;
-    case 'OPENING_CREDIT_UNSUPPORTED':
-      text = 'Eksi (alacaklı) devir desteklenmiyor. Bu daireyi dosyadan çıkarın.';
-      break;
     case 'OPENING_EXISTS':
       text = 'Bu daire ve hesapta farklı bir devir kaydı var. Önce o yüklemeyi geri alın.';
       break;
@@ -241,6 +238,9 @@ export function issueMessage(code, ctx = {}) {
       break;
     case 'OPENING_LEDGER_EXISTS':
       text = 'Bu dairenin devirden başka mali kaydı var; toplamı kontrol edin.';
+      break;
+    case 'OPENING_CREDIT_DUE_IGNORED':
+      text = 'Alacaklı devirde vade kullanılmaz; vade yok sayıldı.';
       break;
     default:
       text = 'Satır işlenemedi.';

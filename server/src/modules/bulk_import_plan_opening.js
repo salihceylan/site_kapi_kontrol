@@ -1,7 +1,13 @@
 // Toplu yükleme (F4): DEVİR BAKİYESİ planlayıcısı. Saf: DB/ağ bağımsız.
 //
-// Her geçerli satır, dairenin seçilen hesabına (ev sahibi/kiracı) BİR borç (charge) kaydı olur (source_kind='opening'). Eksi (alacak) tutar v1'de yok.
-// Aynı daire + hesapta etkin devir varsa: aynı değerler "değişiklik yok", farklı değerler hata (önce yüklemeyi geri al). Defter yalnız eklemelidir.
+// Her geçerli satır, dairenin seçilen hesabına (ev sahibi/kiracı) BİR defter kaydı olur (source_kind='opening'):
+//   + tutar (borç)   -> `charge` (borç; vadeli),
+//   - tutar (ALACAK) -> `payment` (alacak; vadesiz; method 'transfer' yalnız şema zorunluluğu, kaynak izi 'opening'). K16 (P2-4): alacaklı devir desteklenir; alacak,
+//                       sonraki borçlara mahsup mantığıyla (M1: vadesi en eski borçtan) düşer — bilinen "fazla ödeme" ile aynı yoldur.
+// Op biçimi: `{ t: 'ob', aptId, account, minor, due, desc }`; `minor` İŞARETLİDİR (borç +, alacak -); alacakta `due` null. Yazıcı işarete göre charge / payment yazar.
+// Aynı daire + hesapta etkin devir (borç ya da alacak) varsa: aynı değerler "değişiklik yok", farklı değerler hata (önce yüklemeyi geri al). Defter yalnız eklemelidir.
+// Sayılar: `opening_add` yazılacak kayıt (borç + alacak), `total_minor` BORÇ toplamı (>= 0; onay toplamı), `opening_credit_add` / `credit_total_minor` alacak kaydı ve alacak
+// toplamı (büyüklük, >= 0).
 
 import { readAccount, readDate, readMoney, readText } from './bulk_import_parsers.js';
 import { addIssue, buildLocator, completeRow, finalizePlan, newRowResult } from './bulk_import_plan_common.js';
@@ -22,7 +28,7 @@ export function planOpening({ rows, snapshot, options, today = todayIso() }) {
   const cutover = options.cutover_date;
   const oldest = `${Number(cutover.slice(0, 4)) - MAX_BACK_YEARS}${cutover.slice(4)}`;
   const seen = new Map();
-  const counts = { opening_add: 0, opening_unchanged: 0, opening_zero: 0, total_minor: 0 };
+  const counts = { opening_add: 0, opening_unchanged: 0, opening_zero: 0, total_minor: 0, opening_credit_add: 0, credit_total_minor: 0 };
   const results = [];
 
   for (const row of rows) {
@@ -51,23 +57,30 @@ export function planOpening({ rows, snapshot, options, today = todayIso() }) {
     const party = account.value ?? 'owner';
 
     const money = readMoney(cells.tutar);
+    // İşaretli tutar: borç +, ALACAK - (K16). 0 atlanır.
     let minor = 0;
     if (money.error) issue(money.error, 'tutar', { value: cells.tutar });
     else if (money.value === null) issue('REQUIRED', 'tutar');
     else {
       for (const code of money.warnings ?? []) issue(code, 'tutar', { value: cells.tutar });
-      if (money.value < 0) issue('OPENING_CREDIT_UNSUPPORTED', 'tutar');
-      else minor = money.value;
+      minor = money.value;
     }
+    const isCredit = minor < 0;
 
     const dueRead = readDate(cells.vade, today);
     let due = cutover;
     if (dueRead.error) issue(dueRead.error, 'vade', { value: cells.vade });
     else if (dueRead.value !== null) {
-      due = dueRead.value;
-      if (due < oldest) issue('DATE_RANGE', 'vade', {});
-      else if (due > cutover) issue('FUTURE_DATE', 'vade', { value: due });
+      if (isCredit) {
+        // Alacak vadesizdir (tahsilat gibi devir tarihinde yazılır); verilen vade yok sayılır.
+        issue('OPENING_CREDIT_DUE_IGNORED', 'vade', {});
+      } else {
+        due = dueRead.value;
+        if (due < oldest) issue('DATE_RANGE', 'vade', {});
+        else if (due > cutover) issue('FUTURE_DATE', 'vade', { value: due });
+      }
     }
+    const storedDue = isCredit ? null : due;
 
     const note = readText(cells.aciklama, { max: 200, multiline: false });
     if (note.error) issue(note.error, 'aciklama', { ...note, value: cells.aciklama });
@@ -89,7 +102,7 @@ export function planOpening({ rows, snapshot, options, today = todayIso() }) {
           counts.opening_zero += 1;
           result.action = 'skip';
         } else if (existing) {
-          if (existing.minor === minor && existing.due === due && (existing.desc ?? null) === desc) {
+          if (existing.minor === minor && existing.due === storedDue && (existing.desc ?? null) === desc) {
             counts.opening_unchanged += 1;
             result.action = 'unchanged';
           } else {
@@ -98,11 +111,16 @@ export function planOpening({ rows, snapshot, options, today = todayIso() }) {
         } else {
           if (party === 'tenant' && !info.tenantApts.has(apartment.id)) issue('NO_TENANT', 'hesap');
           if (info.otherLedger.has(apartment.id)) issue('OPENING_LEDGER_EXISTS', null);
-          result.ops.push({ t: 'ob', aptId: apartment.id, account: party, minor, due, desc });
+          result.ops.push({ t: 'ob', aptId: apartment.id, account: party, minor, due: storedDue, desc });
           counts.opening_add += 1;
-          counts.total_minor += minor;
+          if (isCredit) {
+            counts.opening_credit_add += 1;
+            counts.credit_total_minor += -minor;
+          } else {
+            counts.total_minor += minor;
+          }
           result.action = 'add';
-          result.summary = `${locator.labelOfApartment(apartment)}: ${minorText(minor)} (${party === 'tenant' ? 'kiracı' : 'ev sahibi'})`;
+          result.summary = `${locator.labelOfApartment(apartment)}: ${minorText(Math.abs(minor))}${isCredit ? ' alacak' : ''} (${party === 'tenant' ? 'kiracı' : 'ev sahibi'})`;
         }
       }
     }

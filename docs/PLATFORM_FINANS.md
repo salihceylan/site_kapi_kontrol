@@ -4,7 +4,7 @@ Bu belge sunucu (`server/`) ve uygulama (`lib/`) için BAĞLAYICIDIR. Öncül be
 
 ## Kapsam
 
-**Faz 4a (bu belge):** aidat tanımı (4 dağıtım yöntemi), aylık borçlandırma (önizleme + onay), tek seferlik ek borç, daire hesabı (ekstre), sakin "Borcum", elle tahsilat kaydı, düzeltme (silme YOK, ters kayıt), ay kapatma, yönetim kurulu salt okunur, modül açma/kapama.
+**Faz 4a (bu belge):** aidat tanımı (dağıtım yöntemi YÖNETİMİN seçimi: eşit [varsayılan], sabit, kategori, arsa payı, kişi sayısı; m² yok), aylık borçlandırma (önizleme + onay), tek seferlik ek borç, daire hesabı (ekstre), sakin "Borcum", elle tahsilat kaydı, düzeltme (silme YOK, ters kayıt), ay kapatma, yönetim kurulu salt okunur, modül açma/kapama.
 **Faz 4b (sonra):** makbuz PDF (F4.07), gecikme tazminatı (F4.08), gider kaydı + belge fotoğrafı (F4.09; dosya yükleme bağımlılığı), kasa/banka hesapları ve aktarım (F4.10), raporlar + Excel/PDF (F4.11), borç hatırlatma (F4.14). **Online kart ödemesi ve banka bağlantısı YOK ("Yakında…", F8).**
 
 ## İlkeler (para bütünlüğü)
@@ -28,7 +28,17 @@ Bu belge sunucu (`server/`) ve uygulama (`lib/`) için BAĞLAYICIDIR. Öncül be
 
 ## Dağıtım ve yuvarlama
 
-- Dahil edilen daireler: hedefteki (`target_*`) **aktif** daireler. Tutar payları **en büyük kalan** yöntemiyle kuruşa bölünür (toplam payların toplamına BİREBİR eşit olmalı; eşitlikte `apartment_id` küçük olan önce): `equal` (ağırlık 1), `land_share` (ağırlık = `numerator/denominator`, tam sayı aritmetiği: ortak payda ile), `area` (KALDIRILDI 2026-10-25: eski ağırlık = seçili m² × 100; artık hesaplanmaz, aşağıdaki nota bakın). `fixed`: her daireye `amount_minor`. `category`: dairenin `category`'sine karşılık gelen daire başı tutar.
+- **Dağıtım tabanı (K5, P1-5; 2026-10-29):** tahakkuk (aidat tanımı, ek borç / gider payı) ve ısı payının alan payı kısmı AYNI tabanlardan beslenir ve tabanı YÖNETİM açıkça seçer; **varsayılan EŞİT**,
+  **kod formül seçmez** (veri tanımlı diye kendiliğinden arsa payına ya da kişi sayısına geçmez). Seçilebilen tabanlar: `equal` (eşit; varsayılan), `fixed` (daire başı sabit), `category` (kategori başına tutar),
+  `land_share` (arsa payı), `person_count` (kişi sayısı). **m² tabanı YOKTUR** (daire alanı sistemde tutulmuyor, migration 078; alan verisi olmayan taban seçenek olarak sunulmaz).
+  `person_count`: kişi sayısı = `apartment_residencies.is_current` kayıtları (Kişiler ekranı; hesapsız çocuk / yaşlı dahil, taşınmış kişi sayılmaz). Kişi kaydı olmayan (0) daire EŞİT paya DÜŞÜRÜLMEZ: «eksik veri»dir
+  (`missing_data`, `reason_code: person_count_missing`; arsa payı için `land_share_missing`): `commit` 409 `PREVIEW_INCOMPLETE` verir, yönetici veriyi tamamlar ya da `skip_missing` ile atlar (payı kalanlara dağılır; `redistributed: true`).
+  Önizleme satırı `basis_value` taşır (arsa payı kesri ya da kişi sayısı; yalnız gösterim, `preview_hash`'e girmez). DB: `fee_definitions.chk_fee_definitions_distribution` migration 091 ile `person_count` içerir
+  (`src/modules/finance_distribution_schema.js`); API'de `distribution` zorunlu kalır (sunucu varsayılan taban UYDURMAZ), varsayılan seçim arayüzde «Eşit bölüş»tür.
+  **Isı payı** (`POST meter-billings/preview|post`, yalnız `method: 'heat'`): isteğe bağlı `area_basis` = `equal` (varsayılan) | `land_share` | `person_count`; eskiden «hepsinde arsa payı varsa arsa payı, yoksa eşit» kod kuralı KALDIRILDI.
+  Seçilen tabanın verisi eksik daire `missing` listesine `land_share_missing` / `person_count_missing` ile girer (okuması eksik daire gibi); onaysız yazma 409 `AREA_BASIS_INCOMPLETE`, `skip_missing` ile atlanır.
+  Seçilen taban `params.area_basis`, yanıt `area_basis` ve audit'te yazılır; alan payı %0 ise (ölçüm %100) taban önemsizdir. Bkz. `docs/PLATFORM_SAYAC.md`.
+- Dahil edilen daireler: hedefteki (`target_*`) **aktif** daireler. Tutar payları **en büyük kalan** yöntemiyle kuruşa bölünür (toplam payların toplamına BİREBİR eşit olmalı; eşitlikte `apartment_id` küçük olan önce): `equal` (ağırlık 1), `land_share` (ağırlık = `numerator/denominator`, tam sayı aritmetiği: ortak payda ile), `person_count` (K5; ağırlık = dairedeki GÜNCEL kişi sayısı, bkz. aşağıdaki «Dağıtım tabanı»), `area` (KALDIRILDI 2026-10-25: eski ağırlık = seçili m² × 100; artık hesaplanmaz, aşağıdaki nota bakın). `fixed`: her daireye `amount_minor`. `category`: dairenin `category`'sine karşılık gelen daire başı tutar.
 - Eksik veri (arsa payı/kategori tanımsız ya da kategori haritada yok): önizlemede `missing_data` listesi; `commit` bu durumda 409 `PREVIEW_INCOMPLETE` döner (varsayılan), yönetici `skip_missing: true` ile o daireleri hariç tutarak devam edebilir (hariç tutulanlar audit `details`'ında sayı olarak yazılır).
 - **m² (`area`) dağıtımı KALDIRILDI (2026-10-25; `finance_common.js`, `finance_service.js`).** Geçerli dağıtımlar `fixed`, `equal`, `category`, `land_share`. Yeni tanım, ek borç ya da dağıtım değişikliğinde `distribution: 'area'` 400 `AREA_DISTRIBUTION_REMOVED` ile reddedilir; `area_basis` gönderilirse 400 `INVALID_BODY` («Alan esası (m²) kaldırıldı; gönderilmemelidir.»). Mevcut (eski) `area` tanımında önizleme ve borçlandırma 409 `AREA_DISTRIBUTION_REMOVED` verir (daire alanı artık tutulmadığından her daire eksik çıkardı); çıkış: tanımı pasifleştirmek (borçlandırılmadıysa dağıtım yöntemini değiştirmek) ve eşit, arsa payı, sabit tutar ya da kategori dağıtımlı yeni tanım açmak. Eski `area` tanımlarının adı / aktifliği / vade günü güncellenebilir.
 - **Kim öder:** her daire için `payer_party = apartments.responsible_party` (kayıt anındaki değer kopyalanır, sonradan değişse de eski kayıt değişmez). Borç tek daire hesabına yazılır; kimin GÖRECEĞİ `responsible_party`'ye uyar (aşağıda).
@@ -384,6 +394,19 @@ sınanır).
 | İM1 (B-3) | ev sahibi hesabı: çatı payı 81.000 (vade 20.09); kiracı hesabı: Eylül ve Ekim aidatı 75.000'er; kiracı 100.000 ödedi | kiracı hesabı kalanları 0; 50.000; ev sahibi hesabı 81.000. Tek hesapta karışsaydı 0; 56.000 (çatı); 75.000: kiracının 25.000'i ev sahibinin borcuna giderdi |
 | İL2 (B-2; ikinci inceleme) | İL1'in satırları; kurallar tablosunda aylık üst sınır 300 bp, sitenin saklı oranı 500 bp (etkin oran = min = 300) | ev sahibi hesabı S = 2.511.000: daily_30 (1.506.600.000 + 300.000) / 600.000 = 2.511, daily_actual (1.506.600.000 + 310.000) / 620.000 = 2.430 (= 81.000 x %3); kiracı hesabında satır yok |
 
+**K5 / K16 ek senaryoları (2026-10-29; elle hesaplandı, adımlar fikstürde):**
+
+| Senaryo | Girdi | Beklenen |
+| --- | --- | --- |
+| D7 (kişi sayısı) | ortak gider 10.000,00 TL; kişi sayıları `PERSON_COUNTS` (59 kişi, 22 daire); A-1 / A-2 dükkân kişi kaydı yok | A-1 ve A-2 EKSİK VERİ (eşit paya düşmez); kalan 22 daire tutarın tamamını paylaşır: 1 kişi 16.949, 2 kişi 33.898, 3 kişi 50.847 (A-4, A-8, B-5: 50.848), 4 kişi 67.797, 5 kişi 84.746; toplam 1.000.000 |
+| D8-D11 (eşit, kuruş artıkları) | 7 kuruş / 24 daire; yalnız A Blok 10.000,00 TL; 85.000,01 TL / 24; 1 kuruş / 24 | kalanlar eşit olduğundan artan kuruşlar kimliği KÜÇÜK dairelere gider: A-1..A-7 birer kuruş (17 daire 0); A-1..A-4 = 83.334; ilk 17 daire 354.167 (B-6..B-12 354.166); yalnız A-1 1 kuruş. Hepsinde toplam tutara birebir |
+| OC1 (A-6) | devir alacağı 500,00 TL + Ekim / Kasım aidatı 354.167'şer (vade 05.10 / 05.11) | Ekim 304.167, Kasım 354.167 açık; alacak 0; bakiye 658.334 |
+| OC2 (B-12) | devir alacağı 8.000,00 TL + iki aidat 354.166 | ikisi de kapanır; artan 91.668 ALACAK kalır; bakiye -91.668 |
+| OC3 (A-7) | devir alacağı 1.250,00 TL (= bir aidat) | o aidat kapanır, sonrakine dokunmaz |
+| OC4 (B-3) | ev sahibi hesabı alacağı 500,00 TL; kiracı hesabı Ekim aidatı 750,00 TL | kiracı borcu 75.000 AÇIK kalır (mahsup hesap bazında); tek hesapta karışsaydı 25.000 |
+| OC5 (A-6) | Ekim aidatı 1.250,00 TL (vade 05.10) + 01.10 devir alacağı 500,00 TL; Ekim 2026, daily_30 | S = 26 x 75.000 = 1.950.000, tazminat 3.250 (alacaksız 5.417); 20.10'da alacak iptal edilirse S = 2.550.000, tazminat 4.250 |
+| OC6 (site) | D1 eşit aidat + A-6 500,00 ve B-12 8.000,00 TL devir alacağı | A-6 304.167 borçlu, B-12 -445.834 alacaklı; borçlu toplamı 8.095.834, alacak toplamı 445.834, net 7.650.000 |
+
 ## Devir bakiyesi (F4, 2026-10-21)
 
 Eski yazılımdan devreden daire borçları toplu yükleme altyapısıyla yüklenir (`docs/PLATFORM_TOPLU_ISLEMLER.md` «Hepsi bir arada ve devir bakiyesi»).
@@ -399,8 +422,32 @@ Uçlar (`/manager/sites/:siteCode/finance/opening-balances`, yetki: finans yöne
   bugünün tarihiyle `reversal` yazılır (hesap asıl kayıttan); ters kayıtlar da `source_kind='opening'` taşır. Aynı anahtarla tekrar 200; başka anahtarla 409
   `OPENING_ALREADY_REVERTED`; sayı/tutar değiştiyse 409 `OPENING_CHANGED`; başka sitenin yüklemesi 404. Audit `finance.opening.reverted`.
 
-Kurallar: defter yalnız eklemelidir (geri alma ters kayıtladır); alacaklı (eksi) devir yok; gecikme tazminatı açılırsa devir kalemi ana borç gibi işler, eski yazılımdaki
+Kurallar: defter yalnız eklemelidir (geri alma ters kayıtladır); gecikme tazminatı açılırsa devir kalemi ana borç gibi işler, eski yazılımdaki
 tazminat tutara katılmışsa faiz üstüne faiz riski vardır [AVUKAT DOĞRULASIN]. Önceki kiracının borcu kiracı hesabına yazılırsa yeni kiracı görür (NO_TENANT uyarısı azaltır).
+
+### Alacaklı devir (K16, P2-4; 2026-10-29)
+
+Daire önceki yazılımdan ALACAKLI geliyorsa (peşin ödenmiş aidat vb.) dosyada tutar EKSİ yazılır (`-500,00`). `OPENING_CREDIT_UNSUPPORTED` hatası KALKTI.
+
+- **Defter modeli:** alacak, fazla ödemeyle AYNI yoldur: `ledger_entries` satırı `kind='payment'` (tutar negatif), `source_kind='opening'`, `source_id` = yükleme, `due_date` NULL
+  (alacağın vadesi yok), `definition_name='Devir alacağı'`, `account_party` = seçilen hesap, `fund` NULL (kasa kısıtı yok). `method` şemada tahsilat için zorunlu olduğundan `'transfer'` yazılır;
+  bu gerçek bir havale DEĞİLDİR: istemci kaynak izinden (`LedgerEntry.isOpeningCredit`) «Devir alacağı» etiketler. Borçlar (`kind='charge'`) eskisi gibidir. Şema DEĞİŞMEDİ (migration yok).
+- **Mahsup:** alacak, sonraki borçlara M1 ile düşer (`finance_m1.js`: vadesi en eski borçtan başlayarak; mahsup HESAP bazındadır: ev sahibi hesabının devir alacağı kiracı hesabının borcunu kapatmaz);
+  artan alacak kalır; gecikme tazminatı tabanı ve yaşlandırma alacağı da bu mantıkla düşer (hepsi `kind='payment'` toplamını kullanır; kod değişmedi).
+- **Tahsilat DEĞİLDİR (kaynak izi `opening` ile ayrılır):** gelir-gider ve yönetici ana sayfası «tahsilat» toplamlarına (`finance_reports.computeIncomeExpense`, `finance_home`), «son hareketler» listesine,
+  kasaya eşlenmemiş tahsilat denetimine (ay kapatma engeli, `finance_accounts.UNASSIGNED_WHERE`, `cash-position`) ve devir geri alma önizlemesindeki «sonradan tahsilat» sayımına GİRMEZ;
+  makbuz düzenlenmez (409 `RECEIPT_NOT_APPLICABLE`); tahsilat düzeltmesi yapılmaz (409 `ENTRY_NOT_CORRECTABLE`); tek tek iptal (ters kayıt) mümkündür (ters kayıt da `source_kind` taşır).
+  (Mevcut davranış korunur: `finance_read_service` özetindeki ve yönetim şirketi tablosundaki «borçlandırılan / tahsil edilen» dönem toplamları devir kayıtlarını, borç ve alacak olarak, simetrik içerir.)
+- **Yükleme:** satır tutarı işaretlidir (`-` ya da parantez); `0` atlanır. Alacakta `Vade` hücresi yok sayılır (`OPENING_CREDIT_DUE_IGNORED` uyarısı). Aynı daire + hesapta etkin devir (borç ya da alacak) varsa:
+  aynı değer «değişiklik yok», farklı değer ya da borç↔alacak çakışması `OPENING_EXISTS`. Önizleme sayıları: `opening_add` (yazılacak kayıt = borç + alacak), `total_minor` (BORÇ toplamı), `opening_credit_add`,
+  `credit_total_minor` (ALACAK toplamı, büyüklük).
+- **Onay toplamları AYRI:** commit gövdesi `options.expected_total_minor` (borç) + `options.expected_credit_total_minor` (alacak; yoksa 0). Biri uyuşmazsa 409 `TOTAL_MISMATCH` ve hiçbir şey yazılmaz.
+  Alacaklı bir dosyayı eski istemci (alacak toplamını göndermeyen) onaylayamaz: güvenli taraf.
+- **Geri alma:** `ACTIVE_SQL` borç + alacak kayıtlarını birlikte tersler. `GET /:runId` → `revert.credit_entries_to_reverse`, `revert.credit_total_minor` (ve `run.credit_entry_count/credit_total_minor`);
+  `POST /:runId/revert` gövdesi `expected_credit_total_minor` (isteğe bağlı, varsayılan 0); uyuşmazsa 409 `OPENING_CHANGED`. `finance_opening_reverts.reversed_total_minor` BORÇ toplamını tutar (CHECK >= 0 korunur);
+  yanıt ve audit `reversed_credit_total_minor` taşır. Audit `finance.opening.imported` ayrıca `credit_rows` / `credit_total_minor` yazar.
+- **Altın veri seti:** `server/test/fixtures/finance_golden_site.js` OC1-OC6 (alacak + eşit aidat mahsubu, alacağın aidatlardan büyük olduğu durum, hesap bazlı mahsup, gecikme tazminatına etkisi, site toplamları);
+  gerçek PostgreSQL doğrulaması: `server/scripts/qa_finance_distribution_pg.mjs` (S3).
 
 ## Yönetici ana sayfası "Bu ay" (G5) — PANELDEN KALDIRILDI (2026-10-21, kullanıcı isteği)
 

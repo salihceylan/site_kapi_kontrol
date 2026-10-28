@@ -349,7 +349,7 @@ class _FinanceAccountDialogState extends State<FinanceAccountDialog> {
   /// Makbuz düzenlenebilir tahsilat: iptal edilmemiş, ters kayıt olmayan ve AKTİF makbuzu bulunmayan ödeme. Makbuzu
   /// "hatalı düzenlendi" diye iptal edilmiş ödeme için yeni makbuz düzenlenebilir (iptal penceresinin vaadi; sunucu izin verir).
   static bool _canIssueReceipt(LedgerEntry e) =>
-      e.kind == LedgerKind.payment && !e.isReversal && !e.isReversed && (e.receipt == null || e.receipt!.isCancelled);
+      e.kind == LedgerKind.payment && !e.isOpeningCredit && !e.isReversal && !e.isReversed && (e.receipt == null || e.receipt!.isCancelled);
 
   String get _title {
     final header = _header;

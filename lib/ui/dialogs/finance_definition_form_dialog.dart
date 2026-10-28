@@ -462,7 +462,7 @@ class _FinanceDefinitionFormDialogState extends State<FinanceDefinitionFormDialo
                 FeeSpecForm(
                   key: _specKey,
                   scope: widget.scope,
-                  initialDistribution: initial?.distribution ?? FeeDistribution.fixed,
+                  initialDistribution: initial?.distribution ?? FeeDistribution.equal,
                   initialAreaBasis: initial?.areaBasis ?? AreaBasis.gross,
                   initialAmountMinor: initial?.amountMinor,
                   initialCategoryAmounts: initial?.categoryAmounts ?? const <String, int>{},

@@ -51,6 +51,7 @@ import {
   today,
 } from './finance_common.js';
 import { buildDistributionPlan, planHash, redistributesOnSkip } from './finance_distribution.js';
+import { PERSON_COUNT_SQL } from './finance_distribution_basis.js';
 import { fundOfChargeParty } from './finance_funds.js';
 import { MAX_RUN_TOTAL_MINOR, bigintsToSqlArray, minorToNumber } from './finance_money.js';
 import { accountForCharge, tenantOnDateSql } from './finance_parties.js';
@@ -188,13 +189,14 @@ async function assertTargetBelongsToSite(db, siteCode, target) {
  * İki hesap (İP-1A): `onDate` (borç tarihi) verilirse dairenin o gün etkin kiracısı olup olmadığı aynı sorguda okunur ve satırın hesabı
  * (`accountParty`) "kim öder" (`chargeParty`) kuralıyla çözülür (finance_parties.accountForCharge; 3000 daire tek sorgu).
  */
-async function loadTargetApartments(db, siteCode, target, { lock = false, onDate = null, chargeParty = 'occupant' } = {}) {
+async function loadTargetApartments(db, siteCode, target, { lock = false, onDate = null, chargeParty = 'occupant', withPersonCount = false } = {}) {
   const result = await db.query(
     `
       SELECT
         a.id, a.unit_label, b.block_name, b.sort_order AS block_sort, a.sort_order AS apt_sort, a.responsible_party, a.category,
         NULL::BIGINT AS gross_x100, NULL::BIGINT AS net_x100,
         a.land_share_numerator, a.land_share_denominator,
+        ${withPersonCount ? PERSON_COUNT_SQL : 'NULL::INTEGER'} AS person_count,
         ($5::DATE IS NOT NULL AND ${TENANT_ON_CHARGE_DATE}) AS has_tenant
       FROM apartments a
       INNER JOIN site_blocks b ON b.id = a.block_id
@@ -221,12 +223,17 @@ async function loadTargetApartments(db, siteCode, target, { lock = false, onDate
     netX100: row.net_x100 ?? null,
     landNumerator: row.land_share_numerator ?? null,
     landDenominator: row.land_share_denominator ?? null,
+    personCount: row.person_count ?? null,
     ...(onDate === null ? {} : { accountParty: accountForCharge(chargeParty, row.responsible_party, row.has_tenant === true) }),
   }));
 }
 
 async function computePlan(db, siteCode, spec, options) {
-  const apartments = await loadTargetApartments(db, siteCode, spec.target, { ...options, chargeParty: spec.chargeParty ?? 'occupant' });
+  const apartments = await loadTargetApartments(db, siteCode, spec.target, {
+    ...options,
+    chargeParty: spec.chargeParty ?? 'occupant',
+    withPersonCount: spec.distribution === 'person_count',
+  });
   return buildDistributionPlan(
     { distribution: spec.distribution, areaBasis: spec.areaBasis, amountMinor: spec.amountMinor, categoryAmounts: spec.categoryAmounts },
     apartments,
@@ -254,6 +261,8 @@ function previewBody({ plan, period, definitionId, alreadyPosted, closed, dueDat
       // İki hesap (İP-1A): borcun yazılacağı hesap (owner = ev sahibi, tenant = kiracı)
       account_party: line.accountParty ?? null,
       amount_minor: minorToNumber(line.amount),
+      // Dağıtım tabanının daire için değeri (arsa payı kesri ya da kişi sayısı); eşit / sabit / kategoride null. Yalnız gösterim.
+      basis_value: line.basisValue ?? null,
     })),
     missing_data: plan.missing.map((entry) => ({
       apartment_id: entry.apartmentId,

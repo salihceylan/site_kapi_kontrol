@@ -110,7 +110,7 @@ export async function loadSnapshot(db, siteCode, kind, options = null) {
 }
 
 /**
- * Devir bakiyesi bağlamı: etkin (ters kaydı olmayan) devir kayıtları, güncel kiracılı daireler, pasif daireler, devirden başka mali kaydı olan daireler,
+ * Devir bakiyesi bağlamı: etkin (ters kaydı olmayan) devir kayıtları (borç `charge` + alacak `payment`; tutar İŞARETLİ), güncel kiracılı daireler, pasif daireler, devirden başka mali kaydı olan daireler,
  * devir tarihinin ayının kapalı olup olmadığı. Tüm sorgular site_code ile sınırlı.
  */
 async function loadOpeningInfo(db, siteCode, base, options) {
@@ -120,7 +120,7 @@ async function loadOpeningInfo(db, siteCode, base, options) {
       SELECT l.apartment_id, COALESCE(l.account_party, CASE WHEN l.payer_party = 'tenant' THEN 'tenant' ELSE 'owner' END) AS account,
              l.amount_minor, to_char(l.due_date, 'YYYY-MM-DD') AS due, l.description
       FROM ledger_entries l
-      WHERE l.site_code = $1 AND l.source_kind = 'opening' AND l.kind = 'charge'
+      WHERE l.site_code = $1 AND l.source_kind = 'opening' AND l.kind IN ('charge', 'payment')
         AND NOT EXISTS (SELECT 1 FROM ledger_entries r WHERE r.reverses_entry_id = l.id)
     `,
     [siteCode],

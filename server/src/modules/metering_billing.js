@@ -14,19 +14,22 @@ import { occupantAccount, tenantOnDateSql } from './finance_parties.js';
 import { isPeriodClosed, lockActorRow, recordFinanceAudit, withFinanceTransaction } from './finance_tx.js';
 import { apartmentLabel, parsePositiveId } from './people_common.js';
 import { getRule } from './platform_rules.js';
-import { buildMeterPlan, consumptionByApartment, planHash } from './metering_calc.js';
+import { PERSON_COUNT_SQL } from './finance_distribution_basis.js';
+import { areaShareGaps, buildMeterPlan, consumptionByApartment, planHash } from './metering_calc.js';
 import {
   KIND_LABELS,
   METHODS,
   billingNotFound,
   billingOverlap,
   idempotencyConflict,
+  incompleteAreaBasis,
   incompleteReadings,
   invalid,
   milliOf,
   milliText,
   nothingToPost,
   objectOf,
+  parseAreaBasis,
   parseDate,
   parseKey,
   parseKind,
@@ -45,7 +48,9 @@ export function parseBillingInput(body, { commit = false } = {}) {
   const from = parseDate(input.period_from, 'Başlangıç tarihi', 'period_from');
   const to = parseDate(input.period_to, 'Bitiş tarihi', 'period_to');
   if (to <= from) throw invalid('Bitiş tarihi başlangıçtan sonra olmalıdır.', 'period_to');
-  const parsed = { kind, method, from, to, skipMissing: input.skip_missing === true, unitPriceMinor: null, totalMinor: null, dueDate: null };
+  // Alan payı tabanı (K5): yönetimin açık seçimi, varsayılan eşit; yalnız ısı payı yönteminde anlamlı (diğerlerinde null).
+  const areaBasis = parseAreaBasis(input.area_basis, method);
+  const parsed = { kind, method, from, to, areaBasis, skipMissing: input.skip_missing === true, unitPriceMinor: null, totalMinor: null, dueDate: null };
   if (method === 'unit_price') parsed.unitPriceMinor = parseMoney(input.unit_price_minor, 'unit_price_minor', 'Birim fiyat');
   else parsed.totalMinor = parseMoney(input.total_minor, 'total_minor', 'Tutar');
   if (input.due_date !== undefined && input.due_date !== null) parsed.dueDate = parseDate(input.due_date, 'Son ödeme tarihi', 'due_date');
@@ -59,10 +64,13 @@ export function parseBillingInput(body, { commit = false } = {}) {
   return parsed;
 }
 
-const fingerprintOf = (input) =>
-  createHash('sha256')
-    .update(canonicalJson({ ...input, key: undefined, expected: undefined }))
+// Parmak izi: alan payı tabanı yalnız ısı payı isteğinde anlamlıdır (diğerlerinde anahtar HİÇ yazılmaz: K5 öncesi isteklerin parmak izi değişmez).
+const fingerprintOf = (input) => {
+  const { areaBasis, ...rest } = input;
+  return createHash('sha256')
+    .update(canonicalJson({ ...rest, key: undefined, expected: undefined, ...(input.method === 'heat' ? { areaBasis } : {}) }))
     .digest('hex');
+};
 
 /** Plani hesaplar. `lock`: gercek kayit (danisma kilidi zaten alinmis, kural onbellegi atlanir). */
 export async function computeBillingPlan(client, siteCode, input, { entryDate, lock = false } = {}) {
@@ -75,9 +83,13 @@ export async function computeBillingPlan(client, siteCode, input, { entryDate, l
   }
   if (input.method === 'unit_price') params.unit_price_minor = input.unitPriceMinor;
   else params.total_minor = input.totalMinor;
+  // Alan payı tabanı (K5): yönetimin seçimi, varsayılan eşit. Kişi sayısı yalnız seçildiğinde okunur (3000 daireli sitede gereksiz alt sorgu yok).
+  const areaBasis = input.method === 'heat' ? (input.areaBasis ?? 'equal') : null;
+  const needPersonCount = areaBasis === 'person_count' && params.area_pct > 0;
   const result = await client.query(
     `
       SELECT m.id AS meter_id, m.apartment_id, a.responsible_party, a.unit_label, b.block_name, a.land_share_numerator, a.land_share_denominator,
+             ${needPersonCount ? PERSON_COUNT_SQL : 'NULL::INTEGER'} AS person_count,
              ${tenantOnDateSql('a', '$5::DATE')} AS has_tenant,
              (SELECT r.value::TEXT FROM meter_readings r WHERE r.meter_id = m.id AND r.reading_date <= $3::DATE ORDER BY r.reading_date DESC LIMIT 1) AS opening,
              (SELECT to_char(r.reading_date, 'YYYY-MM-DD') FROM meter_readings r WHERE r.meter_id = m.id AND r.reading_date <= $3::DATE ORDER BY r.reading_date DESC LIMIT 1) AS opening_date,
@@ -98,9 +110,10 @@ export async function computeBillingPlan(client, siteCode, input, { entryDate, l
       label: apartmentLabel(row.block_name, row.unit_label),
       responsibleParty: row.responsible_party,
       hasTenant: row.has_tenant === true,
-      // m2 sistemden kaldirildi: isinma gideri alan payi arsa payi (hepsi tanimliysa) ya da esit pay ile dagitilir (metering_calc.areaShareItems).
+      // m2 sistemden kaldirildi: isinma gideri alan payi, YONETIMIN sectigi tabana gore (esit / arsa payi / kisi sayisi) dagitilir (metering_calc.areaShareItems).
       landShareNumerator: row.land_share_numerator ?? null,
       landShareDenominator: row.land_share_denominator ?? null,
+      personCount: row.person_count ?? null,
     });
   }
   const { byApartment, missing: missingMap } = consumptionByApartment(
@@ -112,13 +125,21 @@ export async function computeBillingPlan(client, siteCode, input, { entryDate, l
       closingDate: row.closing_date,
     })),
   );
-  const participants = [...byApartment.keys()].map((id) => ({
+  let participants = [...byApartment.keys()].map((id) => ({
     id,
     landShareNumerator: apartments.get(id).landShareNumerator,
     landShareDenominator: apartments.get(id).landShareDenominator,
+    personCount: apartments.get(id).personCount,
   }));
+  // Seçilen tabanın verisi eksik daireler eşit paya DÜŞÜRÜLMEZ (K5): okuması eksik daire gibi eksik veri sayılır (atla ya da tamamla). Alan payı yoksa (%0) taban önemsizdir.
+  const basisGaps = params.area_pct > 0 ? areaShareGaps(participants, areaBasis ?? 'equal') : [];
+  if (basisGaps.length > 0) {
+    const gapIds = new Set(basisGaps.map((gap) => gap.id));
+    participants = participants.filter((participant) => !gapIds.has(participant.id));
+  }
   const missingList = () => [
     ...[...missingMap].map(([id, reason]) => ({ apartment_id: id, label: apartments.get(id).label, reason })),
+    ...basisGaps.map((gap) => ({ apartment_id: gap.id, label: apartments.get(gap.id).label, reason: gap.reason })),
   ];
   if (participants.length === 0) {
     return { params, lines: [], total: 0n, zeroCount: 0, missing: missingList(), hash: planHash({ kind: input.kind, method: input.method, from: input.from, to: input.to, params, lines: [] }) };
@@ -130,6 +151,7 @@ export async function computeBillingPlan(client, siteCode, input, { entryDate, l
     unitPriceMinor: input.unitPriceMinor,
     totalMinor: input.totalMinor,
     measuredPct,
+    areaBasis: areaBasis ?? undefined,
   });
   const lines = calc.lines.map((line) => {
     const apartment = apartments.get(line.apartmentId);
@@ -141,7 +163,7 @@ export async function computeBillingPlan(client, siteCode, input, { entryDate, l
       accountParty: occupantAccount(apartment.responsibleParty, apartment.hasTenant),
     };
   });
-  // Alan payi tabani (arsa payi / esit) onizleme parametrelerinde gorunur ve plan ozetine girer (tabani degisen plan eski onizlemeyle kaydedilemez).
+  // Alan payi tabani (esit / arsa payi / kisi sayisi; yonetimin secimi) onizleme parametrelerinde gorunur ve plan ozetine girer (tabani degisen plan eski onizlemeyle kaydedilemez).
   if (calc.areaBasis !== null) params.area_basis = calc.areaBasis;
   const missing = missingList();
   return {
@@ -160,6 +182,8 @@ function previewBody(input, plan) {
     method: input.method,
     period_from: input.from,
     period_to: input.to,
+    // Yönetimin seçtiği alan payı tabanı (yalnız ısı payı; diğer yöntemlerde null)
+    area_basis: input.areaBasis ?? null,
     params: plan.params,
     total_minor: minorToNumber(plan.total),
     apartment_count: plan.lines.length,
@@ -228,7 +252,11 @@ export async function postBilling({ siteCode, body, actor, now = new Date() }) {
     ) {
       throw previewStale({ total_minor: minorToNumber(plan.total), apartment_count: plan.lines.length, preview_hash: plan.hash });
     }
-    if (plan.missing.length > 0 && !input.skipMissing) throw incompleteReadings(plan.missing.length);
+    if (plan.missing.length > 0 && !input.skipMissing) {
+      // Okuması eksik daire varsa o hata öncelikli; yalnız seçilen alan payı tabanının verisi eksikse ayrı kod (AREA_BASIS_INCOMPLETE).
+      const basisOnly = plan.missing.every((entry) => entry.reason === 'land_share_missing' || entry.reason === 'person_count_missing');
+      throw basisOnly ? incompleteAreaBasis(plan.missing.length) : incompleteReadings(plan.missing.length);
+    }
     const openPeriod = await resolveOpenPeriod(client, siteCode, now);
     if (await isPeriodClosed(client, siteCode, openPeriod)) throw periodClosed();
     const dueDate = input.dueDate ?? entryDate;
@@ -291,6 +319,7 @@ export async function postBilling({ siteCode, body, actor, now = new Date() }) {
     await recordFinanceAudit(client, actor, 'metering.billing.posted', siteCode, billingId, {
       kind: input.kind,
       method: input.method,
+      area_basis: plan.params.area_basis ?? null,
       total_minor: minorToNumber(plan.total),
       apartment_count: lines.length,
       skipped_missing_count: plan.missing.length,

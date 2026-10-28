@@ -273,7 +273,7 @@ List<List<String>> _explanationRows(ImportSpec spec, {required String siteName, 
     rows.add(<String>['', '', '', '']);
   }
   if (group.contains(ImportKind.openingBalances)) {
-    rows.add(<String>['Devir bakiyesi', 'Tutar TL olarak yazılır (1.250,50). Eksi (alacaklı) tutar desteklenmez. Hesap boşsa ev sahibi hesabına yazılır. Devir tarihini uygulamada seçersiniz.', '', '']);
+    rows.add(<String>['Devir bakiyesi', 'Tutar TL olarak yazılır (1.250,50). Daire ALACAKLIYSA tutarı eksi işaretle yazın (-500,00); alacak vadesiz yazılır ve sonraki borçlardan düşer. Hesap boşsa ev sahibi hesabına yazılır. Devir tarihini uygulamada seçersiniz.', '', '']);
     return rows;
   }
   rows.add(<String>['İlişki sözlüğü', '', '', '']);

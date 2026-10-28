@@ -787,7 +787,7 @@ abstract final class HelpContent {
         'Önizlemede devir tarihini seçin ve toplamı kontrol edin; onayda tutarları eski kayıtlarla karşılaştırdığınızı işaretleyin.',
         'Yanlış yüklediyseniz aynı pencerede ilgili yüklemenin yanındaki “Geri al”a dokunun; neden yazılır ve ters kayıt eklenir, eski kayıtlar silinmez.',
       ],
-      note: 'Eksi (alacaklı) devir desteklenmez. Aynı dosyayı ikinci kez yüklemek bir şey değiştirmez.',
+      note: 'Daire alacaklıysa tutarı eksi işaretle yazın (-500,00): alacak sonraki borçlardan düşer; onayda borç ve alacak toplamı ayrı gösterilir. Aynı dosyayı ikinci kez yüklemek bir şey değiştirmez.',
     ),
     HelpTopic(
       id: 'bulk_all_in_one',
