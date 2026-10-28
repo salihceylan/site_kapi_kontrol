@@ -3467,7 +3467,7 @@ Panel dışındaki ekranlarda, sakin alt çubuğu (Özet sekmesi) yokken, üst �
   - **Nasıl Test Edilir:** Rol: Site yöneticisi (üst çubukta "Sakin Modu" ve tema düğmeleri görünen hesap; düğmenin hiç çıkmaması yalnız en dar ekranda görülür). Telefon ayarlarında yazı boyutunu ve ekran (görüntü) boyutunu en büyüğe alın. İç bir ekranda (örneğin Profilim) üst çubuğa bakın. Ekran boyutunu normale döndürüp ekran okuyucuyu (TalkBack) açın ve düğmeye odaklanın.
   - **Beklenen Sonuç:** Üst çubukta düğmeler üst üste binmez, kesilmez. En dar durumda (üst çubukta "Sakin Modu" ve tema düğmeleri de varsa) "Ana sayfa" düğmesi yer bulamazsa hiç çıkmaz; Panel'e menüden ya da geri tuşuyla dönülür. Düğme çıkıyorsa ekran okuyucu onu "Ana sayfa, düğme" diye okur.
 
-## 120. 👨‍👩‍👧 Çoklu Malik: Tüm Malikler Kayıtlı, Tek Hesap Muhatabı (2026-10-29, karşılaştırma raporu P1-12, karar K7, migration 104)
+## 127. 👨‍👩‍👧 Çoklu Malik: Tüm Malikler Kayıtlı, Tek Hesap Muhatabı (2026-10-29, karşılaştırma raporu P1-12, karar K7, migration 104)
 
 Bir dairede birden çok malik (eş, kardeş, mirasçı) kayıtlı olabilir; TAM BİRİ “hesap muhatabı”dır. Borç, tahakkuk, tahsilat, Borcum ekranı ve hatırlatmalar yalnız muhataba bağlıdır; diğer malikler “ortak malik” olarak kayıtlıdır (malik yetkisi ve borç görünümü yoktur). Daire kartında malik ekleme, muhatap değiştirme ve malik çıkarma eylemleri yalnız site yöneticisindedir. Veritabanı yükseltmesi (migration 104) mevcut tek maliki kayıpsız muhatap yapar; borç ve bakiye hesapları değişmez. Sürüm yayınlanınca denenir (maddeler “Denemeye hazır” görünse de sürüm yayınlanmadan uygulamada yoktur). Faz sayfasında bölüm F50 olarak da yer alır.
 
@@ -3499,7 +3499,7 @@ Bir dairede birden çok malik (eş, kardeş, mirasçı) kayıtlı olabilir; TAM 
   - **Nasıl Test Edilir:** Rol: Site yöneticisi / Daire sakini. Ön koşul: Yükseltme öncesi tek malikli, borçlu bir daire. Sürüm yükseltildikten sonra bu dairenin kartına, bakiyesine ve malikin Borcum ekranına bakın.
   - **Beklenen Sonuç:** Malik “Hesap muhatabı” rozetiyle görünür; bakiye, borç kalemleri ve Borcum ekranı yükseltme öncesiyle aynıdır.
 
-## 121. 🧭 Site Kurulum Sihirbazı ve Listelerde “Excel'den Yükle” Kısayolu (2026-10-29, karşılaştırma raporu P2-15 ve P2-16)
+## 128. 🧭 Site Kurulum Sihirbazı ve Listelerde “Excel'den Yükle” Kısayolu (2026-10-29, karşılaştırma raporu P2-15 ve P2-16)
 
 Yeni onaylanmış site için altı adımlı Site Kurulum Sihirbazı (Site bilgileri, Bloklar, Daireler, Kişiler, Modüller, Finans açılışı): mevcut ekranları adım adım açar, dönünce durumu sunucudan okur; yarım kalırsa kalınan adımdan sürer (kalınan adım ve “atlandı” bilgisi cihazda saklanır). Kişiler, Daireler ve Araçlar listelerinde “Excel'den yükle” kısayolu da eklendi. Yalnız istemci değişti (sunucu dağıtımı gerekmez; web ve APK yeniden derlenir). Site bilgisi ve blok düzenleme sunucuda yalnız süper kullanıcıya açıktır; site yöneticisinde bu iki adım salt gösterimdir. Sürüm yayınlanınca denenir (maddeler “Denemeye hazır” görünse de sürüm yayınlanmadan uygulamada yoktur). Faz sayfasında bölüm F51 olarak da yer alır.
 
@@ -3531,7 +3531,7 @@ Yeni onaylanmış site için altı adımlı Site Kurulum Sihirbazı (Site bilgil
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: İki farklı yönetici hesabı. Kurulumu yarım bırakmış hesaptan çıkış yapın (ya da hesabı silin). Başka bir hesapla girip Panel'e bakın.
   - **Beklenen Sonuç:** Kurulum kayıtları cihazdan silindiği için Panel'de eski hesabın kurulum kartı çıkmaz.
 
-## 122. 🚨 Acil Durum Akışı: 112, Yangın ve Asansör Arızası, Kuru Mod (2026-10-29, karşılaştırma raporu P2-24, karar K13, migration 107)
+## 129. 🚨 Acil Durum Akışı: 112, Yangın ve Asansör Arızası, Kuru Mod (2026-10-29, karşılaştırma raporu P2-24, karar K13, migration 107)
 
 Çekmecede “Ana sayfa” başlığı altında “Acil durum” ekranı: büyük “112'yi ara”, ayrı Yangın ve Asansör arızası hızlı düğmeleri, çağrı merkezinin soracakları ve aramada söylenecek site adı ile adres. Arama kanalı olmayan cihazda (masaüstü, web, telefonsuz tablet) KURU MOD çalışır: numaralar ve adres kopyalanabilir metindir ve uygulama hiçbir yerde “arandı” demez (telefon uygulaması yalnız açılır, aramayı kullanıcı başlatır). Asansör bakım firması adı ve telefonu site ayarı olarak yöneticide kaydedilir (migration 107). Çekirdek özelliktir: modül değildir, süper kullanıcı dışında herkeste görünür. Sunucu dağıtımı gerekir. Sürüm yayınlanınca denenir (maddeler “Denemeye hazır” görünse de sürüm yayınlanmadan uygulamada yoktur). Faz sayfasında bölüm F52 olarak da yer alır.
 
@@ -3560,7 +3560,7 @@ Yeni onaylanmış site için altı adımlı Site Kurulum Sihirbazı (Site bilgil
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. Bakım firmasını kaydedin; Denetim Kaydı'na (süper kullanıcı) ve İşlem Kayıtları'na bakın. Panel vitrinine ve Yardım ve Destek'e bakın.
   - **Beklenen Sonuç:** “Acil durum bilgisi güncellendi” satırı görünür (telefon numarası yazılmaz). Vitrinde “Acil durum” kartı, Yardım'da “Acil durumda ne yapmalıyım?” konusu vardır.
 
-## 123. 🎟️ Tek Kullanımlık Deneme Erişim Kodu: 72 Saat, Demo Siteye Kilitli (2026-10-29, karşılaştırma raporu P2-27, karar K10, migration 106)
+## 130. 🎟️ Tek Kullanımlık Deneme Erişim Kodu: 72 Saat, Demo Siteye Kilitli (2026-10-29, karşılaştırma raporu P2-27, karar K10, migration 106)
 
 Tanıtım denemesi için tek kullanımlık kod: kodla açılan oturum 72 saat sürer ve YALNIZ işaretli demo siteye kilitlidir (başka sitelere, parola/e-posta değiştirmeye, dış e-posta veya SMS gönderen ve donanıma dokunan işlemlere kapalıdır; demo sitenin kendi verisinde işlem serbesttir). Kod sunucuda `node scripts/trial_code.mjs` ile üretilir ve ekranda BİR KEZ görünür; sahip için uygulama ekranı yoktur. Gerçek bir müşteri sitesi ASLA demo olarak işaretlenmemelidir. Sunucu dağıtımı gerekir. Sürüm yayınlanınca denenir (maddeler “Denemeye hazır” görünse de sürüm yayınlanmadan uygulamada yoktur). Faz sayfasında bölüm F53 olarak da yer alır.
 
@@ -3592,7 +3592,7 @@ Tanıtım denemesi için tek kullanımlık kod: kodla açılan oturum 72 saat s�
   - **Nasıl Test Edilir:** Rol: Aday (deneme). En dar telefon ekranında ve en büyük yazı boyutunda giriş ekranına, kod penceresine (uzun hata mesajıyla) ve üst şeride bakın; koyu temayı deneyin.
   - **Beklenen Sonuç:** Hiçbir yerde taşma olmaz; koyu temada şerit okunaklıdır.
 
-## 124. 📜 Yönetici İşlem Kayıtları: Kendi Sitenizde Kim, Ne Zaman, Ne Yaptı (2026-10-29, karşılaştırma raporu P2-19)
+## 131. 📜 Yönetici İşlem Kayıtları: Kendi Sitenizde Kim, Ne Zaman, Ne Yaptı (2026-10-29, karşılaştırma raporu P2-19)
 
 Site yöneticisi, Ayarlar panelinde Modüller'in altındaki “İşlem Kayıtları” ekranında kendi sitesinde yapılan işlemleri görür: işlem türü ve dönem süzgeci, “Daha fazla yükle”, İstanbul saati. Yalnız o sitenin yöneticisi okur; kayıtlar değiştirilemez; parola, telefon, e-posta ve kullanıcı kodu görünmez; sakinin gizli güvenlik talebi ve adli kayıt listede yoktur. Sunucu dağıtımı gerekir (yeni uç). Sürüm yayınlanınca denenir (maddeler “Denemeye hazır” görünse de sürüm yayınlanmadan uygulamada yoktur). Faz sayfasında bölüm F54 olarak da yer alır.
 
@@ -3618,7 +3618,7 @@ Site yöneticisi, Ayarlar panelinde Modüller'in altındaki “İşlem Kayıtlar
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: F50 ve F52 maddelerini yapmış olmak. Daireye malik ekleyin / muhatap değiştirin / maliki çıkarın; asansör bakım firmasını kaydedin. İşlem Kayıtları'na bakın.
   - **Beklenen Sonuç:** “Daireye malik eklendi”, “Daire hesap muhatabı değişti”, “Daireden malik çıkarıldı” ve “Acil durum bilgisi güncellendi” satırları Türkçe başlıkla görünür.
 
-## 125. 🏘️ Komşu Panosu İstemci Sınır Davranışları (2026-10-29, karşılaştırma raporu P2-29)
+## 132. 🏘️ Komşu Panosu İstemci Sınır Davranışları (2026-10-29, karşılaştırma raporu P2-29)
 
 Yalnız test eklendi, ürün kodu değişmedi: Komşu Panosu için uzun metin/taşma, boş durum, yetkisiz kullanıcı, çok kayıt, ağ hatası ve Türkçe karakter sınırları otomatik testle sabitlendi (170 test). Aşağıdaki maddeler aynı sınırları elle de doğrulatır. BİLİNEN SORUN: klavye açıkken “Şikayet et / Reddet / Kaldır” ve “Yeni ilan” pencereleri yatay ya da büyük yazıda taşabilir (testte kayıtlı, düzeltme ayrı iş); bu madde sonucu bildirmeniz içindir. Sürüm yayınlanınca denenir (maddeler “Denemeye hazır” görünse de sürüm yayınlanmadan uygulamada yoktur). Faz sayfasında bölüm F55 olarak da yer alır.
 
@@ -3647,7 +3647,7 @@ Yalnız test eklendi, ürün kodu değişmedi: Komşu Panosu için uzun metin/ta
   - **Nasıl Test Edilir:** Rol: Site yöneticisi / Daire sakini. Ön koşul: Yatay telefon, büyük yazı. Telefonu yatay çevirip klavyeyi açarak “Şikayet et”, “Reddet”, “Kaldır” ve “Yeni ilan” pencerelerini deneyin (özellikle büyük yazı boyutunda). Onayla ya da Onaya gönder düğmesine hızlı iki kez dokunun.
   - **Beklenen Sonuç:** Taşma / sarı-siyah şerit görülürse testte kayıtlı sorunla aynıdır (düzeltilecek). Hızlı çift dokunuşta ikinci istek “İlan bu işlem için uygun durumda değil.” uyarısı verebilir (bilinen davranış).
 
-## 126. 📚 Durum Sözlüğü, Ekran Envanteri ve Düzeltilen Teknik Notlar (2026-10-29, karşılaştırma raporu P2-31 ve P2-28)
+## 133. 📚 Durum Sözlüğü, Ekran Envanteri ve Düzeltilen Teknik Notlar (2026-10-29, karşılaştırma raporu P2-31 ve P2-28)
 
 docs/DURUM_SOZLUGU.md (rol ve bağ, hesap-üyelik-başvuru, kapı-cihaz-geçiş, finans-para ve modül/iş akışı durumlarının etiketleri) ve docs/EKRAN_ENVANTERI.md (48 menü öğesi: rota, ekran sınıfı, modül, kim görür) yazıldı; README ve teknik notlardaki bayat bilgiler koda göre düzeltildi. Ürün kodu değişmedi. Belge ile uygulama arasında sapma bulursanız belge ya da kod düzeltilir. Faz sayfasında bölüm F56 olarak da yer alır.
 
@@ -3664,7 +3664,7 @@ docs/DURUM_SOZLUGU.md (rol ve bağ, hesap-üyelik-başvuru, kapı-cihaz-geçiş,
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. Çekmecede “Eller Serbest & Kestirmeler”e dokunun.
   - **Beklenen Sonuç:** Sayfa değişmez; sesli kapı açma ayar penceresi açılır (envanterde sayfa değil iletişim kutusu olarak yazılıdır).
 
-## 127. 🧪 Yerel Yalıtım Aracı: Sunucuyu Yalnız Bu Bilgisayarda ve Temiz Ortamla Çalıştırma (2026-10-29, karşılaştırma raporu P2-30)
+## 134. 🧪 Yerel Yalıtım Aracı: Sunucuyu Yalnız Bu Bilgisayarda ve Temiz Ortamla Çalıştırma (2026-10-29, karşılaştırma raporu P2-30)
 
 Geliştirici aracı `tools/yerel/yalitim`: sunucuyu yalnız 127.0.0.1'de, temiz ortamla başlatır; dışarıya TCP/DNS/UDP bağlantısı ve alt süreç açılmasını engeller ve kayda geçirir; isteğe bağlı olarak Chrome/Edge'i yeni profille, yalnız yerel proxy arkasında açar. Kaza korumasıdır, güvenlik sınırı DEĞİLDİR (yerel eklentiler ve dosya sistemi kısıtlanmaz). Uygulamayı ve sunucu koduna dokunmaz; yeniden derleme gerekmez. Faz sayfasında bölüm F57 olarak da yer alır.
 
