@@ -6,6 +6,8 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
+import 'package:site_kapi_kontrol/models/document_models.dart' show documentInstant;
+import 'package:site_kapi_kontrol/models/work_tracking_models.dart' show WorkCategory, WorkStatus;
 import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/services/auth_api.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
@@ -182,6 +184,104 @@ class EquipmentDetail {
   final List<int> expenseIds;
 }
 
+/// Ekipmana bağlı bir iş kaydı (servis geçmişi satırı; `GET .../equipment/:id/work-history`). Talebi açanın bilgisi
+/// sunucudan hiç gelmez; fotoğraflar yalnız SAYI olarak gelir (önce / sonra / toplam, hazır olanlar).
+class EquipmentWorkItem {
+  const EquipmentWorkItem({
+    required this.id,
+    this.title = '',
+    this.category = WorkCategory.diger,
+    this.status = WorkStatus.unknown,
+    this.createdAt,
+    this.resolvedAt,
+    this.closedAt,
+    this.attachmentCount = 0,
+    this.beforeCount = 0,
+    this.afterCount = 0,
+  });
+
+  factory EquipmentWorkItem.fromJson(Map<String, dynamic> j) => EquipmentWorkItem(
+    id: _i(j['id']),
+    title: '${j['title'] ?? ''}'.trim(),
+    category: WorkCategory.fromApi(j['category']),
+    status: WorkStatus.fromApi(j['status']),
+    createdAt: documentInstant(j['created_at']),
+    resolvedAt: documentInstant(j['resolved_at']),
+    closedAt: documentInstant(j['closed_at']),
+    attachmentCount: _i(j['attachment_count']),
+    beforeCount: _i(j['before_count']),
+    afterCount: _i(j['after_count']),
+  );
+
+  final int id;
+  final String title;
+  final WorkCategory category;
+  final WorkStatus status;
+  final DateTime? createdAt;
+  final DateTime? resolvedAt;
+  final DateTime? closedAt;
+  final int attachmentCount;
+  final int beforeCount;
+  final int afterCount;
+
+  /// "Önce 1 · Sonra 2 · 3 fotoğraf" gibi fotoğraf özeti; fotoğraf yoksa null.
+  String? get photoSummary {
+    if (attachmentCount <= 0) return null;
+    final parts = <String>[
+      if (beforeCount > 0) 'Önce $beforeCount',
+      if (afterCount > 0) 'Sonra $afterCount',
+      '$attachmentCount fotoğraf',
+    ];
+    return parts.join(' · ');
+  }
+}
+
+/// Ekipmanın servis geçmişi sayfası. [workTrackingEnabled] false: İş Takibi modülü kapalı (liste boş, ekipman kartı yine açılır).
+class EquipmentWorkHistory {
+  const EquipmentWorkHistory({
+    this.workTrackingEnabled = true,
+    this.items = const <EquipmentWorkItem>[],
+    this.nextBeforeId,
+    this.total = 0,
+    this.open = 0,
+  });
+
+  factory EquipmentWorkHistory.fromJson(Map<String, dynamic> j) {
+    final counts = j['counts'];
+    return EquipmentWorkHistory(
+      workTrackingEnabled: j['work_tracking_enabled'] != false,
+      items: <EquipmentWorkItem>[
+        for (final r in (j['items'] as List? ?? const [])) if (r is Map) EquipmentWorkItem.fromJson(Map<String, dynamic>.from(r)),
+      ].where((item) => item.id > 0).toList(growable: false),
+      nextBeforeId: (j['next_before_id'] as num?)?.toInt(),
+      total: counts is Map ? _i(counts['total']) : 0,
+      open: counts is Map ? _i(counts['open']) : 0,
+    );
+  }
+
+  final bool workTrackingEnabled;
+  final List<EquipmentWorkItem> items;
+
+  /// Sonraki sayfanın imleci (`before_id`); son sayfada null.
+  final int? nextBeforeId;
+
+  /// Bu ekipmana bağlı toplam / açık (çözülmemiş) iş sayısı (kapsam içi).
+  final int total;
+  final int open;
+
+  /// Sonraki sayfayı sona ekler (aynı kimlik iki kez girmez); sayaçlar ve imleç yeni sayfadandır.
+  EquipmentWorkHistory append(EquipmentWorkHistory next) {
+    final known = items.map((e) => e.id).toSet();
+    return EquipmentWorkHistory(
+      workTrackingEnabled: next.workTrackingEnabled,
+      items: <EquipmentWorkItem>[...items, ...next.items.where((e) => !known.contains(e.id))],
+      nextBeforeId: next.nextBeforeId,
+      total: next.total,
+      open: next.open,
+    );
+  }
+}
+
 class EquipmentQuote {
   const EquipmentQuote({
     required this.id,
@@ -291,6 +391,12 @@ class EquipmentApi {
     logs: _list(j['logs'], MaintenanceLog.fromJson),
     expenseIds: <int>[for (final e in (j['expense_ids'] as List? ?? const [])) _i(e)],
   );
+
+  /// Servis geçmişi: ekipmana bağlı iş kayıtları (`before_id` imleciyle sayfalı). İş Takibi modülü kapalıysa boş liste gelir.
+  Future<EquipmentWorkHistory> workHistory(String token, int site, int id, {int? beforeId, int limit = 20}) async =>
+      EquipmentWorkHistory.fromJson(
+        await _send('GET', _p(site, 'equipment/$id/work-history'), token, query: <String, String>{'limit': '$limit', if (beforeId != null) 'before_id': '$beforeId'}),
+      );
 
   Future<void> create(String token, int site, Map<String, Object?> body) async => _send('POST', _p(site, 'equipment'), token, body: body, ok: const {201});
 
@@ -414,6 +520,7 @@ class EquipmentService {
 
   Future<List<EquipmentItem>> list(int site) => _guard((t) => api.list(t, site));
   Future<EquipmentDetail> detail(int site, int id) => _guard((t) => api.detail(t, site, id));
+  Future<EquipmentWorkHistory> workHistory(int site, int id, {int? beforeId}) => _guard((t) => api.workHistory(t, site, id, beforeId: beforeId));
   Future<void> create(int site, Map<String, Object?> body) => _guard((t) => api.create(t, site, body));
   Future<void> update(int site, int id, Map<String, Object?> body) => _guard((t) => api.update(t, site, id, body));
   Future<void> addPlan(int site, int id, Map<String, Object?> body) => _guard((t) => api.addPlan(t, site, id, body));

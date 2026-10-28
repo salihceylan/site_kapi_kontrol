@@ -6,6 +6,7 @@ import 'package:site_kapi_kontrol/ui/design/action_bar.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_snack.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+import 'package:site_kapi_kontrol/ui/helpers/istanbul_time.dart';
 
 /// Yönetim "Ekipman ve Bakım" ekranı (`equipment` modülü): Ekipman | Bakım takvimi | Teklifler | Gider kırılımı.
 ///
@@ -454,10 +455,16 @@ class _EquipmentDetailSheetState extends State<EquipmentDetailSheet> {
   EquipmentDetail? _detail;
   String? _error;
 
+  /// Servis geçmişi (ekipmana bağlı iş kayıtları): ayrıntıdan BAĞIMSIZ yüklenir; hatası ekipman kartını bozmaz.
+  EquipmentWorkHistory? _history;
+  String? _historyError;
+  bool _historyLoading = false;
+
   @override
   void initState() {
     super.initState();
     _load();
+    _loadHistory();
   }
 
   Future<void> _load() async {
@@ -467,6 +474,92 @@ class _EquipmentDetailSheetState extends State<EquipmentDetailSheet> {
     } on ApiException catch (e) {
       if (mounted) setState(() => _error = e.message);
     }
+  }
+
+  /// İlk sayfayı ya da ([more]) sonraki sayfayı çeker.
+  Future<void> _loadHistory({bool more = false}) async {
+    if (_historyLoading) return;
+    final current = _history;
+    if (more && (current == null || current.nextBeforeId == null)) return;
+    setState(() {
+      _historyLoading = true;
+      _historyError = null;
+    });
+    try {
+      final page = await widget.service.workHistory(widget.site.code, widget.itemId, beforeId: more ? current!.nextBeforeId : null);
+      if (!mounted) return;
+      setState(() {
+        _history = more && current != null ? current.append(page) : page;
+        _historyLoading = false;
+      });
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _historyError = e.message;
+        _historyLoading = false;
+      });
+    }
+  }
+
+  /// "Servis geçmişi": ekipmana bağlı iş kayıtları (en yeni üstte). İş Takibi kapalıysa nedenini söyler; bağ yoksa nasıl kurulacağını.
+  List<Widget> _historySection(BuildContext context) {
+    final th = Theme.of(context).textTheme;
+    final history = _history;
+    return <Widget>[
+      const SizedBox(height: AppSpace.md),
+      Text('Servis geçmişi (iş kayıtları)', style: th.titleMedium),
+      if (_historyError != null)
+        Padding(
+          padding: const EdgeInsets.only(top: AppSpace.sm),
+          child: InlineNotice(
+            key: const ValueKey<String>('equipment_history_error'),
+            message: _historyError!,
+            // İlk sayfa hiç gelmediyse baştan, sonraki sayfa gelmediyse o sayfayı yeniden dener.
+            onRetry: _historyLoading ? null : () => _loadHistory(more: history != null && history.nextBeforeId != null),
+          ),
+        )
+      else if (history == null)
+        const Padding(padding: EdgeInsets.symmetric(vertical: AppSpace.sm), child: Text('İş kayıtları yükleniyor...', key: ValueKey<String>('equipment_history_loading')))
+      else if (!history.workTrackingEnabled)
+        const Padding(
+          padding: EdgeInsets.only(top: AppSpace.sm),
+          child: InlineNotice(
+            key: ValueKey<String>('equipment_history_off'),
+            tone: AppTone.info,
+            message: 'İş Takibi bu sitede kapalı olduğu için iş kayıtları gösterilemiyor.',
+          ),
+        )
+      else if (history.items.isEmpty)
+        const Text(
+          'Bu ekipmana bağlı iş kaydı yok. Bir talebin ayrıntısındaki "Ekipman" alanından bu ekipmanı seçerek bağlayabilirsiniz.',
+          key: ValueKey<String>('equipment_history_empty'),
+        )
+      else ...<Widget>[
+        Text('Toplam ${history.total} iş kaydı · ${history.open} açık', key: const ValueKey<String>('equipment_history_counts'), style: th.bodySmall),
+        for (final w in history.items)
+          ListTile(
+            key: ValueKey<String>('equipment_history_${w.id}'),
+            contentPadding: EdgeInsets.zero,
+            title: Text(w.title.isEmpty ? 'Başlıksız talep' : w.title, maxLines: 2, overflow: TextOverflow.ellipsis),
+            subtitle: Text(
+              <String>[
+                '${w.status.label} · ${w.category.label} · ${formatIstanbulDate(w.createdAt)}',
+                if (w.resolvedAt != null) 'Çözüm: ${formatIstanbulDate(w.resolvedAt)}',
+                ?w.photoSummary,
+              ].join('\n'),
+              maxLines: 4,
+              overflow: TextOverflow.ellipsis,
+            ),
+            trailing: Text('İş #${w.id}', style: th.bodySmall),
+          ),
+        if (history.nextBeforeId != null)
+          TextButton(
+            key: const ValueKey<String>('equipment_history_more'),
+            onPressed: _historyLoading ? null : () => _loadHistory(more: true),
+            child: Text(_historyLoading ? 'Yükleniyor...' : 'Daha fazla göster'),
+          ),
+      ],
+    ];
   }
 
   Future<void> _act(Future<void> Function() action, String ok) async {
@@ -541,7 +634,8 @@ class _EquipmentDetailSheetState extends State<EquipmentDetailSheet> {
     final kind = equipmentKinds.where((k) => k.code == item.kind).firstOrNull;
     final hasLegal = d.plans.any((p) => p.legal && p.isActive);
     final canWrite = widget.site.canWrite;
-    return ListView(shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), 
+    // Kaydırılabilir olmalı: plan / bakım kaydı / servis geçmişi uzadıkça içerik 0,92 yükseklikli alt sayfaya sığmaz.
+    return ListView(
       padding: const EdgeInsets.fromLTRB(AppSpace.lg, 0, AppSpace.lg, AppSpace.xl),
       children: <Widget>[
         Text(item.name, style: Theme.of(context).textTheme.headlineSmall),
@@ -584,6 +678,7 @@ class _EquipmentDetailSheetState extends State<EquipmentDetailSheet> {
             subtitle: Text('${l.costKurus == null ? '' : formatKurus(l.costKurus!)}${l.note == null ? '' : ' ${l.note}'}'.trim()),
           ),
         if (d.expenseIds.isNotEmpty) Padding(padding: const EdgeInsets.only(top: AppSpace.md), child: Text('Bağlı giderler: ${d.expenseIds.map((e) => '#$e').join(', ')}')),
+        ..._historySection(context),
       ],
     );
   }

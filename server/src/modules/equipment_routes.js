@@ -6,6 +6,7 @@
 //   GET   equipment/due?days=60                   yaklasan / geciken bakimlar (yasal kontroller dahil)
 //   GET   equipment/expense-breakdown?from&to     2E gider kirilimi (YYYY-AA)
 //   GET   equipment/:id    PATCH equipment/:id    ayrinti { equipment, plans, logs, expense_ids } / duzenle ya da pasife al
+//   GET   equipment/:id/work-history?before_id&limit   servis gecmisi: ekipmana bagli is kayitlari (096; work_equipment_history.js)
 //   POST  equipment/:id/plans   PATCH equipment/plans/:planId
 //   POST  equipment/:id/logs                      bakim kaydi (yalniz ekleme; planli ise sonraki tarih ilerler)
 //   POST  equipment/:id/expense-links   DELETE equipment/:id/expense-links/:expenseId
@@ -25,6 +26,7 @@ import { FORBIDDEN_ROLE_BODY, FORBIDDEN_SITE_BODY, SITE_NOT_FOUND_BODY } from '.
 import { isModuleEnabled } from './module_service.js';
 import { HOUR_MS, ipKey, respondError, userKey } from './route_helpers.js';
 import * as svc from './equipment_service.js';
+import { listEquipmentWorkHistory } from './work_equipment_history.js';
 
 export const equipmentRouter = express.Router();
 
@@ -108,6 +110,10 @@ write('patch', '/equipment/plans/:planId', 'equipment_plan_update', 'Plan günce
   svc.updatePlan({ siteCode, rawPlanId: req.params.planId, actor, body: bodyOf(req) }),
 );
 read('/equipment/:id', 'equipment_get', 'Ekipman yüklenemedi.', ({ siteCode, req }) => svc.getEquipment(siteCode, req.params.id));
+// Servis geçmişi (096): ekipmana bağlı iş kayıtları (iş takibi görünürlük kuralları; modül kapalıysa boş liste).
+read('/equipment/:id/work-history', 'equipment_work_history', 'Servis geçmişi yüklenemedi.', ({ siteCode, req, access }) =>
+  listEquipmentWorkHistory({ siteCode, rawEquipmentId: req.params.id, query: req.query, access }),
+);
 write('patch', '/equipment/:id', 'equipment_update', 'Ekipman güncellenemedi.', ({ siteCode, actor, req }) => svc.updateEquipment({ siteCode, rawId: req.params.id, actor, body: bodyOf(req) }));
 write('post', '/equipment/:id/plans', 'equipment_plan_create', 'Plan kaydedilemedi.', ({ siteCode, actor, req }) => svc.createPlan({ siteCode, rawId: req.params.id, actor, body: bodyOf(req) }), 201);
 write('post', '/equipment/:id/logs', 'equipment_log_create', 'Bakım kaydedilemedi.', ({ siteCode, actor, access, req }) =>

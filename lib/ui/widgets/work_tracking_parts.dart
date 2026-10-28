@@ -229,6 +229,7 @@ class WorkManagedCard extends StatelessWidget {
     if (i.attachmentCount > 0) semantic.write(' ${i.attachmentCount} fotoğraf.');
     if (requester.isNotEmpty) semantic.write(' Açan: $requester.');
     semantic.write(' $assigneeText.');
+    if (i.equipment != null) semantic.write(' Ekipman: ${i.equipment!.label}.');
     if (due != null) semantic.write(' Hedef tarih: $due.');
     if (i.updatedAt != null) {
       semantic.write(' Güncelleme: ${_dateTime(i.updatedAt)}.');
@@ -284,6 +285,8 @@ class WorkManagedCard extends StatelessWidget {
                     children: [
                       if (requester.isNotEmpty) InfoChip('Açan: $requester'),
                       InfoChip(assigneeText),
+                      if (i.equipment != null)
+                        InfoChip('Ekipman: ${i.equipment!.label}'),
                       if (due != null) InfoChip('Hedef: $due'),
                       if (i.updatedAt != null)
                         InfoChip(
@@ -327,9 +330,17 @@ String workEventTitle(WorkEvent event) {
     case WorkEventType.comment:
       return event.internal ? 'İç not' : 'Yorum';
     case WorkEventType.attachmentAdded:
-      return 'Fotoğraf eklendi';
+      // Etiket (önce / sonra) `from` alanında gelir; etiketsiz ya da eski olayda yalnız "Fotoğraf eklendi".
+      final phase = WorkAttachmentPhase.fromApi(event.from);
+      return phase == null
+          ? 'Fotoğraf eklendi'
+          : 'Fotoğraf eklendi (${phase.label})';
     case WorkEventType.attachmentRemoved:
       return 'Fotoğraf kaldırıldı';
+    case WorkEventType.equipmentChanged:
+      final from = event.fromLabel ?? 'Seçilmedi';
+      final to = event.toLabel ?? 'Seçilmedi';
+      return 'Ekipman: $from → $to';
     case WorkEventType.unknown:
       return 'Güncelleme';
   }
@@ -345,6 +356,7 @@ IconData _eventIcon(WorkEvent event) => switch (event.type) {
     event.internal ? Icons.lock_outline_rounded : Icons.chat_bubble_outline,
   WorkEventType.attachmentAdded => Icons.add_photo_alternate_outlined,
   WorkEventType.attachmentRemoved => Icons.hide_image_outlined,
+  WorkEventType.equipmentChanged => Icons.build_circle_outlined,
   WorkEventType.unknown => Icons.circle_outlined,
 };
 

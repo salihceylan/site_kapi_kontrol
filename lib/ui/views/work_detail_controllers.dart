@@ -305,14 +305,19 @@ class WorkManagerDetailController extends ChangeNotifier {
   List<WorkEvent> events = const <WorkEvent>[];
   List<WorkStatus> nextStatuses = const <WorkStatus>[];
   List<WorkAssignee> assignees = const <WorkAssignee>[];
+
+  /// Talebe bağlanabilecek aktif ekipmanlar ("Ekipman" seçicisi; yalnız yazma yetkisinde yüklenir).
+  List<WorkEquipmentRef> equipment = const <WorkEquipmentRef>[];
   List<WorkAttachment> attachments = const <WorkAttachment>[];
 
   bool loading = false;
   bool loaded = false;
   bool busy = false;
   bool assigneesLoaded = false;
+  bool equipmentLoaded = false;
   String? loadError;
   String? assigneesError;
+  String? equipmentError;
   String? actionError;
 
   /// Fotoğraf silme hatası (ek bölümünde gösterilir).
@@ -467,7 +472,28 @@ class WorkManagerDetailController extends ChangeNotifier {
     }
   }
 
-  /// Durum / öncelik / atama / hedef tarih güncellemesi ([fields] yalnız değişenleri taşır). Başarıda true.
+  /// Talebe bağlanabilecek aktif ekipmanları çeker (yalnız yazma yetkisinde). Hata ekranı bozmaz: seçici yalnız
+  /// "Seçilmedi" (ve varsa mevcut ekipman) ile kalır ve "Tekrar Dene" için [equipmentError] dolar.
+  Future<void> loadEquipment() async {
+    if (!canWrite) return;
+    try {
+      final list = await service.equipmentChoices(siteCode);
+      if (_disposed) return;
+      equipment = list;
+      equipmentLoaded = true;
+      equipmentError = null;
+      notifyListeners();
+    } catch (e) {
+      if (_disposed) return;
+      equipmentError = crmMessageOf(
+        e,
+        'Ekipman listesi yüklenemedi. Tekrar deneyin.',
+      );
+      notifyListeners();
+    }
+  }
+
+  /// Durum / öncelik / atama / hedef tarih / ekipman güncellemesi ([fields] yalnız değişenleri taşır). Başarıda true.
   Future<bool> save(Map<String, Object?> fields) async {
     if (busy || fields.isEmpty) return false;
     busy = true;

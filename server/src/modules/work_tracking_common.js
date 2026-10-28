@@ -92,6 +92,8 @@ export const userOpenLimitReached = (limit) =>
 export const invalidField = (message) => new PlatformError(400, 'INVALID_BODY', message);
 export const invalidQuery = () => new PlatformError(400, 'INVALID_QUERY', 'Geçersiz sorgu parametresi.');
 export const invalidAssignee = (message) => new PlatformError(400, 'INVALID_ASSIGNEE', message ?? 'Bu kişiye atama yapılamaz.');
+/** İş kaydına bağlanacak ekipman bu sitede yok ya da pasif (096). */
+export const invalidEquipment = (message) => new PlatformError(400, 'INVALID_EQUIPMENT', message ?? 'Ekipman bu siteye ait değil ya da bulunamadı.');
 export const invalidLocation = (message) => new PlatformError(400, 'INVALID_LOCATION', message ?? 'Daire veya blok bu siteye ait değil.');
 export const accountDeleted = () => new PlatformError(401, 'ACCOUNT_DELETED', 'Bu hesap silinmiş.');
 export const invalidTransition = (from, to) =>
@@ -219,7 +221,7 @@ export function parseCreateInput(body) {
   };
 }
 
-/** PATCH gövdesi: en az bir alan. assigned_to: kullanıcı kodu | null | "me". */
+/** PATCH gövdesi: en az bir alan. assigned_to: kullanıcı kodu | null | "me". equipment_id (096): ekipman kimliği | null (bağı kaldırır). */
 export function parsePatchInput(body) {
   if (!isPlainObject(body)) throw invalidField('İstek gövdesi geçersiz.');
   const out = {};
@@ -244,6 +246,15 @@ export function parsePatchInput(body) {
   }
   if ('due_date' in body) {
     out.dueDate = body.due_date === null ? null : normalizeDueDate(body.due_date);
+  }
+  if ('equipment_id' in body) {
+    if (body.equipment_id === null) {
+      out.equipmentId = null;
+    } else {
+      const equipmentId = parsePositiveId(body.equipment_id);
+      if (equipmentId === null) throw invalidField('Ekipman geçersiz.');
+      out.equipmentId = equipmentId;
+    }
   }
   if (Object.keys(out).length === 0) throw invalidField('Değiştirilecek bir alan gönderilmedi.');
   return out;
@@ -376,6 +387,8 @@ export function mapManagerItem(row, { kind }) {
     ...locationParts(row),
     requester,
     assigned_to: row.assigned_to ? { user_code: num(row.assigned_to), name: row.assignee_name ?? DELETED_USER_NAME } : null,
+    // 096: bağlı ekipman (boş = seçilmemiş). Sakin görünümünde (mapResidentItem) YOKTUR.
+    equipment: row.equipment_id ? { id: num(row.equipment_id), name: row.equipment_name ?? null, kind: row.equipment_kind ?? null, is_active: row.equipment_active !== false } : null,
     due_date: row.due_date ?? null,
     created_at: toIso(row.created_at),
     updated_at: toIso(row.updated_at),
@@ -409,8 +422,14 @@ export function mapResidentItem(row) {
   };
 }
 
-/** Olay: yönetici / görevli görünümü ayrıntılı (kim), sakin ve kurul görünümü yalnız "resident | management". */
-export function mapEvent(row, { detailed, labels = new Map() }) {
+/** Silinmiş / okunamayan ekipman için olay etiketi (096). */
+export const DELETED_EQUIPMENT_LABEL = 'Silinmiş ekipman';
+
+/**
+ * Olay: yönetici / görevli görünümü ayrıntılı (kim), sakin ve kurul görünümü yalnız "resident | management".
+ * `labels`: atama olayları için kullanıcı adı haritası; `equipmentLabels` (096): `equipment_changed` olayları için ekipman adı haritası (anahtar: kimlik metni).
+ */
+export function mapEvent(row, { detailed, labels = new Map(), equipmentLabels = new Map() }) {
   const event = {
     id: num(row.id),
     type: row.event_type,
@@ -426,6 +445,10 @@ export function mapEvent(row, { detailed, labels = new Map() }) {
     if (row.event_type === 'assigned') {
       event.from_label = row.from_value ? labels.get(row.from_value) ?? DELETED_USER_NAME : null;
       event.to_label = row.to_value ? labels.get(row.to_value) ?? DELETED_USER_NAME : null;
+    }
+    if (row.event_type === 'equipment_changed') {
+      event.from_label = row.from_value ? equipmentLabels.get(row.from_value) ?? DELETED_EQUIPMENT_LABEL : null;
+      event.to_label = row.to_value ? equipmentLabels.get(row.to_value) ?? DELETED_EQUIPMENT_LABEL : null;
     }
   }
   return event;

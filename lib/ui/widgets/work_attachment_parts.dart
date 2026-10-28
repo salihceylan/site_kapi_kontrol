@@ -177,17 +177,83 @@ String workAttachmentUploader(
   return attachment.uploadedByKind == 'resident' ? 'Sakin' : 'Yönetim';
 }
 
-/// Yükleyen + tarih alt metni ("Ayşe Yılmaz · 19.10.2026 09:00"; sakinde "Yönetim · ..."). Ekranda ve ekran okuyucu
-/// etiketinde AYNI metin kullanılır.
+/// Yükleyen + tarih alt metni ("Ayşe Yılmaz · 19.10.2026 09:00"; sakinde "Yönetim · ..."); etiketli fotoğrafta başa
+/// "Önce" / "Sonra" eklenir. Ekranda ve ekran okuyucu etiketinde AYNI metin kullanılır.
 String workAttachmentCaption(
   WorkAttachment attachment, {
   required bool showUploader,
 }) {
   final parts = <String>[
+    if (attachment.phase != null) attachment.phase!.label,
     workAttachmentUploader(attachment, showUploader: showUploader),
     if (attachment.createdAt != null) formatIstanbulDateTime(attachment.createdAt),
   ];
   return parts.join(' · ');
+}
+
+/// Küçük görselin altındaki kısa etiket: "Önce · Ayşe Yılmaz" (yönetim) / "Önce" (sakin; yükleyen adı gösterilmez).
+/// Etiketsiz fotoğrafta yönetim görünümünde yalnız yükleyen, sakin görünümünde boş.
+String workAttachmentTag(
+  WorkAttachment attachment, {
+  required bool showUploader,
+}) {
+  final parts = <String>[
+    if (attachment.phase != null) attachment.phase!.label,
+    if (showUploader) workAttachmentUploader(attachment, showUploader: true),
+  ];
+  return parts.join(' · ');
+}
+
+/// "Önce / Sonra / Etiketsiz" seçimi (ekleme öncesi): seçilen etiket sonraki yüklemelerdeki fotoğraflara yazılır.
+/// [onChanged] null = kilitli (yükleme sürerken).
+class WorkPhaseChooser extends StatelessWidget {
+  const WorkPhaseChooser({
+    super.key,
+    required this.selected,
+    required this.onChanged,
+    this.keyPrefix = 'work_phase',
+  });
+
+  final WorkAttachmentPhase? selected;
+  final ValueChanged<WorkAttachmentPhase?>? onChanged;
+  final String keyPrefix;
+
+  @override
+  Widget build(BuildContext context) {
+    final th = Theme.of(context).textTheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('Fotoğraf etiketi', style: th.labelLarge),
+        const SizedBox(height: AppSpace.xs),
+        Wrap(
+          spacing: AppSpace.sm,
+          runSpacing: AppSpace.xs,
+          children: [
+            ChoiceChip(
+              key: ValueKey<String>('${keyPrefix}_none'),
+              label: const Text('Etiketsiz'),
+              selected: selected == null,
+              onSelected: onChanged == null ? null : (_) => onChanged!(null),
+            ),
+            for (final phase in WorkAttachmentPhase.values)
+              ChoiceChip(
+                key: ValueKey<String>('${keyPrefix}_${phase.apiValue}'),
+                label: Text(phase.label),
+                selected: selected == phase,
+                onSelected: onChanged == null ? null : (_) => onChanged!(phase),
+              ),
+          ],
+        ),
+        const SizedBox(height: AppSpace.xs),
+        Text(
+          'İşlem öncesi ve sonrası fotoğrafları ayırmak için seçin; sonraki "Fotoğraf Ekle" ile eklenenlere yazılır.',
+          key: ValueKey<String>('${keyPrefix}_hint'),
+          style: th.bodySmall,
+        ),
+      ],
+    );
+  }
 }
 
 /// Bayt nesnesi -> "sunucu sınırını aşan görsel mi" (bir kez ölçülür).
@@ -475,12 +541,12 @@ class WorkAttachmentStrip extends StatelessWidget {
                   inFlight: attachments[i].id == inFlightAttachmentId,
                   onTap: () => onOpen(i),
                 ),
-                if (showUploader)
+                if (workAttachmentTag(attachments[i], showUploader: showUploader).isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: AppSpace.xs),
                     child: ExcludeSemantics(
                       child: Text(
-                        workAttachmentUploader(attachments[i], showUploader: true),
+                        workAttachmentTag(attachments[i], showUploader: showUploader),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: th.bodySmall?.copyWith(color: p.textSecondary),
@@ -731,6 +797,16 @@ class _WorkPhotoViewerState extends State<WorkPhotoViewer> {
                                     maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
                                     style: th.bodySmall,
+                                  ),
+                                // Kayıt <-> dosya kimliği izi: yönetim görünümünde fotoğrafın kaynak talebi ve dosya no'su
+                                // (telefonda / yazışmada "Talep #12 · Fotoğraf #34" diye anılabilsin).
+                                if (widget.showUploader && current.workItemId > 0)
+                                  Text(
+                                    'Talep #${current.workItemId} · Fotoğraf #${current.id}',
+                                    key: const ValueKey<String>('work_photo_viewer_identity'),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: th.bodySmall?.copyWith(color: p.textSecondary),
                                   ),
                               ],
                             ),
@@ -1065,12 +1141,17 @@ class WorkAttachmentSection extends StatelessWidget {
     this.error,
     this.showUploader = false,
     this.preparing = false,
+    this.addHeader,
     this.keyPrefix = 'work_attachment',
   });
 
   final List<WorkAttachment> attachments;
   final WorkAttachmentImageCache cache;
   final void Function(int index) onOpen;
+
+  /// "Fotoğraf Ekle" düğmesinin hemen üstünde gösterilen ek içerik ([canAdd] iken): yönetim ayrıntısında "önce / sonra"
+  /// etiketi seçicisi ([WorkPhaseChooser]).
+  final Widget? addHeader;
 
   /// Ayrıntı yükleniyor ve liste boş: iskelet.
   final bool loading;
@@ -1142,6 +1223,10 @@ class WorkAttachmentSection extends StatelessWidget {
           InlineNotice(key: ValueKey<String>('${keyPrefix}_error'), message: error!),
         ],
         if (canAdd) ...[
+          if (addHeader != null) ...[
+            const SizedBox(height: AppSpace.md),
+            addHeader!,
+          ],
           const SizedBox(height: AppSpace.md),
           PrimaryActionButton(
             key: ValueKey<String>('${keyPrefix}_add'),

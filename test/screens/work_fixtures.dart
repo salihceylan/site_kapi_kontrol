@@ -101,6 +101,7 @@ Map<String, dynamic> wkManaged(
   String? assignedName,
   int site = 11,
   String? dueDate,
+  Map<String, dynamic>? equipment,
 }) {
   return <String, dynamic>{
     'id': id,
@@ -122,6 +123,8 @@ Map<String, dynamic> wkManaged(
     'assigned_to': assignedCode == null
         ? null
         : <String, dynamic>{'user_code': assignedCode, 'name': assignedName},
+    // Bağlı ekipman (096): { id, name, kind, is_active }; bağ yoksa null (eski sunucu yanıtı gibi).
+    'equipment': equipment,
     'due_date': dueDate,
     'created_at': '2026-10-15T09:00:00Z',
     'updated_at': '2026-10-16T10:30:00Z',
@@ -152,8 +155,8 @@ Map<String, dynamic> wkEvent(
     'from': from,
     'to': to,
     'body': body,
-    if (type == 'assigned') 'from_label': fromLabel,
-    if (type == 'assigned') 'to_label': toLabel,
+    if (type == 'assigned' || type == 'equipment_changed') 'from_label': fromLabel,
+    if (type == 'assigned' || type == 'equipment_changed') 'to_label': toLabel,
     'created_at': at,
   };
 }
@@ -176,6 +179,7 @@ Map<String, dynamic> wkAttachment(
   String kind = 'resident',
   bool mine = false,
   String at = '2026-10-15T09:05:00Z',
+  String? phase,
 }) {
   return <String, dynamic>{
     'id': id,
@@ -184,6 +188,8 @@ Map<String, dynamic> wkAttachment(
     'mime_type': mime,
     'size_bytes': size,
     'status': status,
+    // "Önce / sonra" etiketi (096): before | after | null (etiketsiz, eski kayıtlar).
+    'phase': phase,
     'uploaded_by_kind': kind,
     'uploaded_by_name': uploadedBy,
     'uploaded_by_me': mine,
@@ -375,6 +381,13 @@ class FakeWorkService extends WorkTrackingService {
     WorkAssignee(userCode: 9, name: 'Mehmet Usta', role: 'staff'),
   ];
 
+  /// Talebe bağlanabilecek aktif ekipmanlar (096; sunucudaki `GET .../equipment?active=1`).
+  List<WorkEquipmentRef> equipmentList = const <WorkEquipmentRef>[
+    WorkEquipmentRef(id: 5, name: 'Asansör A', kind: 'asansor'),
+    WorkEquipmentRef(id: 6, name: 'Hidrofor', kind: 'hidrofor'),
+  ];
+  int equipmentCalls = 0;
+
   // --- Çağrı kayıtları ---
   final List<({int? site, String status, int? before, int limit})>
   listMineCalls = [];
@@ -424,7 +437,7 @@ class FakeWorkService extends WorkTrackingService {
   /// `user` | `site`: ekleme 409 `ATTACHMENT_QUOTA_EXCEEDED` ile reddedilir.
   String? quotaExceeded;
 
-  final List<({int? site, int id, String name, String mime, int size})>
+  final List<({int? site, int id, String name, String mime, int size, String? phase})>
   createAttachmentCalls = [];
   final List<({int? site, int id, int attId, int size})> uploadAttachmentCalls = [];
   final List<({int? site, int id, int attId})> downloadAttachmentCalls = [];
@@ -826,6 +839,22 @@ class FakeWorkService extends WorkTrackingService {
       list.add(wkEvent(next++, type: 'due_date_changed', actorKind: 'manager', actorName: 'Ben Yönetici', from: row['due_date'] as String?, to: fields['due_date'] as String?));
       row['due_date'] = fields['due_date'];
     }
+    if (fields.containsKey('equipment_id')) {
+      final id = fields['equipment_id'];
+      final target = id == null ? null : equipmentList.where((e) => e.id == id).firstOrNull;
+      if (id != null && target == null) {
+        throw ApiException(
+          'Ekipman bu siteye ait değil ya da bulunamadı.',
+          statusCode: 400,
+          code: 'INVALID_EQUIPMENT',
+        );
+      }
+      final previous = row['equipment'] as Map?;
+      list.add(wkEvent(next++, type: 'equipment_changed', visibility: 'internal', actorKind: 'manager', actorName: 'Ben Yönetici', from: previous == null ? null : '${previous['id']}', to: id == null ? null : '$id', fromLabel: previous?['name'] as String?, toLabel: target?.name));
+      row['equipment'] = target == null
+          ? null
+          : <String, dynamic>{'id': target.id, 'name': target.name, 'kind': target.kind, 'is_active': target.isActive};
+    }
     return _detail(row);
   }
 
@@ -865,6 +894,13 @@ class FakeWorkService extends WorkTrackingService {
     return kind == WorkSiteAccess.staff
         ? <WorkAssignee>[assigneeList.first]
         : assigneeList;
+  }
+
+  @override
+  Future<List<WorkEquipmentRef>> equipmentChoices(int siteCode) async {
+    equipmentCalls++;
+    await _enter('equipmentChoices');
+    return equipmentList;
   }
 
   // --- Fotoğraf ekleri ---
@@ -910,6 +946,7 @@ class FakeWorkService extends WorkTrackingService {
       name: request.fileName,
       mime: request.mimeType,
       size: request.sizeBytes,
+      phase: request.phase?.apiValue,
     ));
     await _enter('createAttachment');
     final row = _workRowFor(siteCode, id);
@@ -968,6 +1005,7 @@ class FakeWorkService extends WorkTrackingService {
       kind: siteCode == null ? 'resident' : 'management',
       mine: true,
       at: '2026-10-19T10:00:00Z',
+      phase: request.phase?.apiValue,
     );
     list.add(attachment);
     return WorkAttachment.fromJson(attachment)!;

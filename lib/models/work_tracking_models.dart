@@ -132,6 +132,59 @@ enum WorkPriority {
   }
 }
 
+/// Talebe bağlı ekipman (yönetim görünümü `equipment`; seçici listesi). Sakin görünümünde YOKTUR. Pasif ekipman
+/// ([isActive] false) yeni talebe bağlanamaz ama mevcut bağda görünür.
+@immutable
+class WorkEquipmentRef {
+  const WorkEquipmentRef({
+    required this.id,
+    this.name = '',
+    this.kind = '',
+    this.isActive = true,
+  });
+
+  final int id;
+  final String name;
+
+  /// Ekipman türü kodu (`asansor`, `kazan` ... ya da serbest metin).
+  final String kind;
+  final bool isActive;
+
+  /// Ekranda gösterilen ad; boşsa "Ekipman".
+  String get label => name.trim().isEmpty ? 'Ekipman' : name.trim();
+
+  static WorkEquipmentRef? fromJson(Object? raw) {
+    final json = _map(raw);
+    if (json == null) return null;
+    final id = crmIntOrNull(json['id']);
+    if (id == null || id <= 0) return null;
+    return WorkEquipmentRef(
+      id: id,
+      name: _text(json['name']),
+      kind: _text(json['kind']),
+      isActive: json['is_active'] != false,
+    );
+  }
+
+  static List<WorkEquipmentRef> listFrom(Object? raw) {
+    if (raw is! List) return const <WorkEquipmentRef>[];
+    return List<WorkEquipmentRef>.unmodifiable(<WorkEquipmentRef>[
+      for (final item in raw) ?WorkEquipmentRef.fromJson(item),
+    ]);
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is WorkEquipmentRef &&
+      other.id == id &&
+      other.name == name &&
+      other.kind == kind &&
+      other.isActive == isActive;
+
+  @override
+  int get hashCode => Object.hash(id, name, kind, isActive);
+}
+
 /// Konumdaki daire / blok (etiketiyle).
 @immutable
 class WorkPlace {
@@ -167,8 +220,9 @@ String workLocationSummary(
   return blockLabel.isEmpty ? 'Ortak alan' : 'Ortak alan · $blockLabel';
 }
 
-/// Olay türü (sunucu `type`). `attachment_added` (to = ek kimliği) ve `attachment_removed` (from = ek kimliği)
-/// herkese açıktır (sakin de görür).
+/// Olay türü (sunucu `type`). `attachment_added` (to = ek kimliği, from = "önce / sonra" etiketi) ve
+/// `attachment_removed` (from = ek kimliği) herkese açıktır (sakin de görür). `equipment_changed` iç olaydır
+/// (yalnız yönetim; from / to = ekipman kimliği, `from_label` / `to_label` = ad).
 enum WorkEventType {
   created('created'),
   statusChanged('status_changed'),
@@ -178,6 +232,7 @@ enum WorkEventType {
   comment('comment'),
   attachmentAdded('attachment_added'),
   attachmentRemoved('attachment_removed'),
+  equipmentChanged('equipment_changed'),
   unknown('');
 
   const WorkEventType(this.apiValue);
@@ -612,6 +667,7 @@ class WorkManagedItem {
     this.block,
     this.requester = const WorkRequester(),
     this.assignedTo,
+    this.equipment,
     this.dueDate,
     this.createdAt,
     this.updatedAt,
@@ -632,6 +688,9 @@ class WorkManagedItem {
   final WorkPlace? block;
   final WorkRequester requester;
   final WorkAssignee? assignedTo;
+
+  /// Bağlı ekipman (`equipment`; eski sunucuda ve bağ yoksa null).
+  final WorkEquipmentRef? equipment;
   final DateTime? dueDate;
   final DateTime? createdAt;
   final DateTime? updatedAt;
@@ -659,6 +718,7 @@ class WorkManagedItem {
       block: WorkPlace.fromJson(json['block'], labelKey: 'name'),
       requester: WorkRequester.fromJson(json['requester']),
       assignedTo: WorkAssignee.fromJson(json['assigned_to']),
+      equipment: WorkEquipmentRef.fromJson(json['equipment']),
       dueDate: crmDate(json['due_date']),
       createdAt: documentInstant(json['created_at']),
       updatedAt: documentInstant(json['updated_at']),
@@ -946,6 +1006,26 @@ enum WorkAttachmentStatus {
   }
 }
 
+/// Fotoğrafın "önce / sonra" etiketi (sunucu `phase`: `before | after`). Etiketsiz fotoğraf (eski kayıtlar dahil) null
+/// ile gösterilir; bilinmeyen değer de etiketsiz sayılır.
+enum WorkAttachmentPhase {
+  before('before', 'Önce'),
+  after('after', 'Sonra');
+
+  const WorkAttachmentPhase(this.apiValue, this.label);
+
+  final String apiValue;
+  final String label;
+
+  static WorkAttachmentPhase? fromApi(Object? value) {
+    final normalized = value?.toString().trim().toLowerCase();
+    for (final phase in values) {
+      if (phase.apiValue == normalized) return phase;
+    }
+    return null;
+  }
+}
+
 /// Talebin fotoğraf eki. Yönetim görünümünde [uploadedByName] gerçek addır; SAKİN görünümünde yalnız kendi eklediği
 /// fotoğrafta gerçek ad, diğerlerinde sunucu "Yönetim" yazar (arayüz yine de adı göstermez: "Siz" / "Yönetim").
 /// [uploadedByMe] silme yetkisinin ekrandaki ipucudur (yetkinin tek kaynağı yine sunucudur).
@@ -958,6 +1038,7 @@ class WorkAttachment {
     this.mimeType = '',
     this.sizeBytes = 0,
     this.status = WorkAttachmentStatus.unknown,
+    this.phase,
     this.uploadedByName,
     this.uploadedByKind = '',
     this.uploadedByMe = false,
@@ -970,6 +1051,9 @@ class WorkAttachment {
   final String mimeType;
   final int sizeBytes;
   final WorkAttachmentStatus status;
+
+  /// "Önce / sonra" etiketi; etiketsiz (eski kayıtlar dahil) null.
+  final WorkAttachmentPhase? phase;
   final String? uploadedByName;
 
   /// `resident` (talebi açan sakin yükledi) | `management` (yönetici / görevli); bilinmiyorsa boş.
@@ -1000,6 +1084,7 @@ class WorkAttachment {
       mimeType: _text(body['mime_type']).toLowerCase(),
       sizeBytes: crmInt(body['size_bytes']),
       status: WorkAttachmentStatus.fromApi(body['status']),
+      phase: WorkAttachmentPhase.fromApi(body['phase']),
       uploadedByName: crmText(body['uploaded_by_name']),
       uploadedByKind: switch (_text(body['uploaded_by_kind']).toLowerCase()) {
         'resident' => 'resident',
@@ -1027,16 +1112,21 @@ class WorkAttachmentCreateRequest {
     required this.fileName,
     required this.mimeType,
     required this.sizeBytes,
+    this.phase,
   });
 
   final String fileName;
   final String mimeType;
   final int sizeBytes;
 
+  /// İsteğe bağlı "önce / sonra" etiketi; null ise gövdeye `phase` hiç konmaz (etiketsiz, eski davranış).
+  final WorkAttachmentPhase? phase;
+
   Map<String, dynamic> toJson() => <String, dynamic>{
     'file_name': fileName.trim(),
     'mime_type': mimeType.trim().toLowerCase(),
     'size_bytes': sizeBytes,
+    if (phase != null) 'phase': phase!.apiValue,
   };
 }
 

@@ -9,7 +9,8 @@
 //    (work_tracking_common.staffScope); kurul hiç yazamaz (rota katmanı 403). Görünmeyen talep 404 WORK_ITEM_NOT_FOUND, yabancı ek 404 WORK_ATTACHMENT_NOT_FOUND.
 //  - Kapalı (kapandi / iptal) talepte ekleme 409 INVALID_STATE; silme yalnız yönetici / süper (görevli / sakin 409). Silme: yükleyen ya da yönetici / süper.
 //  - Dosya, satır işlemi KESİNLEŞTİKTEN sonra silinir (R11 F7 kalıbı): silinemezse günlüğe yalnız kod yazılır, satır gitmiştir, yetim süpürmesi temizler.
-//  - Audit `details` yalnız kimlik / tür / boyut taşır: dosya adı ASLA yazılmaz. Olaylar: attachment_added / attachment_removed (public; sakin de görür).
+//  - Audit `details` yalnız kimlik / tür / boyut / etiket / içerik özeti (sha256) taşır: dosya adı ASLA yazılmaz. Olaylar: attachment_added (from = önce/sonra etiketi, to = ek no) /
+//    attachment_removed (from = ek no) (public; sakin de görür). Etiket (096) yükleme kaydı açılırken verilir; etiketsiz kayıtlar eski kayıtlarla aynıdır.
 
 import { pool } from '../db.js';
 import { parsePositiveId } from './people_common.js';
@@ -162,13 +163,14 @@ export async function createAttachment({ scope, rawId, actor, body }) {
     if (siteUsed + input.sizeBytes > limits.siteQuotaBytes) {
       throw attachmentQuotaExceeded('site', siteUsed, limits.siteQuotaBytes);
     }
+    // 096: "önce / sonra" etiketi yükleme kaydı açılırken verilir (yok = etiketsiz, eski kayıtlarla aynı).
     const inserted = await client.query(
       `
-        INSERT INTO work_item_attachments (work_item_id, site_code, uploaded_by, file_name, mime_type, size_bytes, status, storage_key)
-        VALUES ($1, $2, $3, $4, $5, $6, 'uploading', $7)
+        INSERT INTO work_item_attachments (work_item_id, site_code, uploaded_by, file_name, mime_type, size_bytes, status, storage_key, phase)
+        VALUES ($1, $2, $3, $4, $5, $6, 'uploading', $7, $8)
         RETURNING id
       `,
-      [itemId, siteCode, userCode, input.fileName, input.mimeType, input.sizeBytes, newStorageKey(siteCode)],
+      [itemId, siteCode, userCode, input.fileName, input.mimeType, input.sizeBytes, newStorageKey(siteCode), input.phase ?? null],
     );
     return { attId: Number(inserted.rows[0].id), userCode };
   });
@@ -180,7 +182,7 @@ export async function createAttachment({ scope, rawId, actor, body }) {
 /**
  * PUT ön kontrolü (gövde okunmadan): görünür talep + o talebe ait, `uploading`, BU kullanıcının açtığı kayıt. Hazırsa 409 UPLOAD_ALREADY_COMPLETED; süresi
  * dolmuşsa 410 UPLOAD_EXPIRED; başkasının kaydı 404 (varlık sızmaz).
- * @returns {Promise<{ attId: number, itemId: number, siteCode: number, storageKey: string, sizeBytes: number, mimeType: string, fileName: string }>}
+ * @returns {Promise<{ attId: number, itemId: number, siteCode: number, storageKey: string, sizeBytes: number, mimeType: string, fileName: string, phase: 'before'|'after'|null }>}
  */
 export async function findAttachmentUploadTarget({ scope, rawId, rawAttId, userCode }, db = pool) {
   const itemId = parseItemId(rawId);
@@ -206,6 +208,7 @@ export async function findAttachmentUploadTarget({ scope, rawId, rawAttId, userC
     sizeBytes: Number(row.size_bytes),
     mimeType: row.mime_type,
     fileName: row.file_name,
+    phase: row.phase ?? null,
   };
 }
 
@@ -245,6 +248,7 @@ export async function completeAttachmentUpload({ scope, target, actor, sha256 })
     }
     await client.query(`UPDATE work_item_attachments SET status = 'ready', sha256 = $2, ready_at = NOW() WHERE id = $1`, [row.id, sha256]);
     const management = scope.kind !== 'resident';
+    // Dosya kimliği izi (P2-7): olayda dosya = to (ek no), etiket = from (096; etiketsiz null); kayıt = olayın talebi. Denetim kaydında ayrıca içerik özeti (sha256).
     await insertEvent(client, {
       itemId: target.itemId,
       siteCode: target.siteCode,
@@ -252,6 +256,7 @@ export async function completeAttachmentUpload({ scope, target, actor, sha256 })
       visibility: 'public',
       actorUserCode: actorCode,
       actorKind: actorKindOf(scope),
+      from: target.phase ?? null,
       to: String(row.id),
     });
     await client.query(
@@ -263,6 +268,8 @@ export async function completeAttachmentUpload({ scope, target, actor, sha256 })
       mime_type: row.mime_type,
       size_bytes: Number(row.size_bytes),
       by: management ? 'management' : 'resident',
+      phase: target.phase ?? null,
+      sha256: sha256 ?? null,
     });
     return actorCode;
   });

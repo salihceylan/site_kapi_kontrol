@@ -264,7 +264,7 @@ class WorkTrackingApi {
   }
 
   /// `PATCH .../work-items/:id`: yalnız [fields] içindekiler gönderilir (`status`, `priority`, `assigned_to`
-  /// [user_code | "me" | null], `due_date` ["YYYY-MM-DD" | null]).
+  /// [user_code | "me" | null], `due_date` ["YYYY-MM-DD" | null], `equipment_id` [ekipman kimliği | null]).
   Future<WorkManagedDetail> updateManaged({
     required String token,
     required int siteCode,
@@ -317,6 +317,22 @@ class WorkTrackingApi {
       timeout: _readTimeout,
     );
     return WorkAssignee.listFrom(_object(response)['items']);
+  }
+
+  /// `GET /manager/sites/:siteCode/equipment?active=1`: talebe bağlanabilecek AKTİF ekipmanlar (ekipman uçlarının
+  /// okuma yetkisi: yönetici / görevli / kurul). Pasif ekipman seçiciye girmez.
+  Future<List<WorkEquipmentRef>> equipmentChoices({
+    required String token,
+    required int siteCode,
+  }) async {
+    final response = await _send(
+      'GET',
+      '/manager/sites/$siteCode/equipment',
+      token: token,
+      query: const <String, String>{'active': '1'},
+      timeout: _readTimeout,
+    );
+    return WorkEquipmentRef.listFrom(_object(response)['items']);
   }
 
   WorkManagedDetail _managedDetail(http.Response response) {
@@ -1169,6 +1185,10 @@ class WorkTrackingService {
 
   Future<List<WorkAssignee>> assignees(int siteCode) =>
       _guard((token) => api.assignees(token: token, siteCode: siteCode));
+
+  /// Talebe bağlanabilecek aktif ekipmanlar (ayrıntı penceresindeki "Ekipman" seçicisi).
+  Future<List<WorkEquipmentRef>> equipmentChoices(int siteCode) =>
+      _guard((token) => api.equipmentChoices(token: token, siteCode: siteCode));
 
   // --- Fotoğraf ekleri ([siteCode] null: sakin yolu; dolu: yönetim yolu) ---
 
