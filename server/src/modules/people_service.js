@@ -682,6 +682,17 @@ async function closeResidency(client, { siteCode, residency, userCode, moveOutDa
   );
   const apartment = apartmentLock.rows?.[0] ?? { id: residency.apartment_id, resident_user_code: null, resident_email: null };
 
+  // Kiracı çıkmadan ÖNCE hesabında ödenmemiş borç varsa malike bildirim (K1 / P1-1). Çıkışı ENGELLEMEZ; bildirim hatası çıkışı bozmaz.
+  // Dinamik içe aktarma: finans -> kişi bağımlılığı döngü kurmasın (kiracı olmayan çıkışlarda modül hiç yüklenmez).
+  if (residency.relation === 'tenant') {
+    try {
+      const { notifyOwnerOfTenantDebt } = await import('./finance_exit_notice.js');
+      await notifyOwnerOfTenantDebt(client, { siteCode, apartmentId: residency.apartment_id, actor });
+    } catch (_error) {
+      // bildirim modülü yüklenemese de çıkış sürer
+    }
+  }
+
   const updated = await client.query(
     `
       UPDATE apartment_residencies

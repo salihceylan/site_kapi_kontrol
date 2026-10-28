@@ -86,7 +86,8 @@ describe('insertReversal: kaynak izi kopyalanır', () => {
   it('sözleşme: devir kaynağı raporlarda süzgeçle dışlanır; ters kayıt aynı izi taşıdığı için asılla birlikte dışarıda kalır', () => {
     const reports = readFileSync(new URL('../src/modules/finance_reports.js', import.meta.url), 'utf8');
     const home = readFileSync(new URL('../src/modules/finance_home.js', import.meta.url), 'utf8');
-    assert.match(reports, /source_kind IS DISTINCT FROM 'opening' AND \(kind = 'charge' OR \(kind = 'reversal' AND amount_minor < 0\)\)/);
-    assert.match(home, /COALESCE\(source_kind, ''\) <> 'opening' AND \(kind = 'charge' OR \(kind = 'reversal' AND amount_minor < 0\)\)/);
+    // 088 / 089: alacak iadesi ve borç devri satırları da tahakkuk (borçlandırılan) sayılmaz; ters kayıt aynı izi taşıdığı için asılla birlikte dışarıda kalır
+    assert.match(reports, /COALESCE\(source_kind, ''\) NOT IN \('opening', 'refund', 'liability_transfer'\) AND \(kind = 'charge' OR \(kind = 'reversal' AND amount_minor < 0\)\)/);
+    assert.match(home, /COALESCE\(source_kind, ''\) NOT IN \('opening', 'refund', 'liability_transfer'\) AND \(kind = 'charge' OR \(kind = 'reversal' AND amount_minor < 0\)\)/);
   });
 });

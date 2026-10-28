@@ -87,8 +87,10 @@ export async function loadFundBook(db, siteCode) {
     }
   }
   // aynı tahsilatın aynı gün aynı kasaya olan parçaları tek satırda toplanır
+  // (alacak iadesi olayları kasaya tahsilat DEĞİLDİR: avansı düşürür, aşağıdaki `paidByPayment` yoluyla avans hesabına girer)
   const grouped = new Map();
   for (const event of allocationEvents) {
+    if (event.refund === true) continue;
     const id = `${event.paymentId}|${event.date}|${event.fund}`;
     const current = grouped.get(id);
     if (current) current.amount += event.amount;

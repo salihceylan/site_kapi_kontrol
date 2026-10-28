@@ -1047,6 +1047,9 @@ const BOARD_HIDDEN_KEYS = new Set([
   'added_by_name',
   'removed_by_name',
   'cancelled_by_name',
+  'requested_by_name',
+  'resolved_by_name',
+  'reversed_by_name',
   'cancel_note',
 ]);
 

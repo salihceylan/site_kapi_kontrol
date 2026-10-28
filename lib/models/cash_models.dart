@@ -171,6 +171,8 @@ enum MovementKind {
   transferIn('transfer_in', 'Aktarım (giriş)'),
   adjustment('adjustment', 'Düzeltme'),
   reversal('reversal', 'Ters kayıt'),
+  // Alacak iadesi (088): hesaptan çıkış (negatif). Eski sürümler bu türü genel "Hareket" olarak gösterir (bilinmeyen tür etiketi).
+  refund('refund', 'Alacak iadesi'),
   unknown('', 'Hareket');
 
   const MovementKind(this.apiValue, this.label);

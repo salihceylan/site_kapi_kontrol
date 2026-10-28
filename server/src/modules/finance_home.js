@@ -48,9 +48,9 @@ async function loadNumbers(db, siteCode, period, today) {
   const ledger = await db.query(
     `
       SELECT
-        COALESCE(SUM(amount_minor) FILTER (WHERE late_fee_run_id IS NULL AND COALESCE(source_kind, '') <> 'opening' AND (kind = 'charge' OR (kind = 'reversal' AND amount_minor < 0))), 0)::TEXT AS charged,
+        COALESCE(SUM(amount_minor) FILTER (WHERE late_fee_run_id IS NULL AND COALESCE(source_kind, '') NOT IN ('opening', 'refund', 'liability_transfer') AND (kind = 'charge' OR (kind = 'reversal' AND amount_minor < 0))), 0)::TEXT AS charged,
         COALESCE(SUM(amount_minor) FILTER (WHERE late_fee_run_id IS NOT NULL AND (kind = 'charge' OR (kind = 'reversal' AND amount_minor < 0))), 0)::TEXT AS late_fee,
-        COALESCE(-SUM(amount_minor) FILTER (WHERE kind = 'payment' OR (kind = 'reversal' AND amount_minor > 0)), 0)::TEXT AS collected
+        (COALESCE(-SUM(amount_minor) FILTER (WHERE kind = 'payment' OR (kind = 'reversal' AND amount_minor > 0)), 0) - COALESCE(SUM(amount_minor) FILTER (WHERE source_kind = 'refund'), 0))::TEXT AS collected
       FROM ledger_entries WHERE site_code = $1 AND period = $2::DATE
     `,
     [siteCode, period],
