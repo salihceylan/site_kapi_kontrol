@@ -10,6 +10,7 @@ Amaç: raporun gösterdiği tüm eksikleri kapatmak, güçsüz yönleri güçlen
 - Paylaşılan dosyalar (home_page.dart, yan_menu.dart, catalog.js): dalga içinde tek işçi dokunur.
 - Deneme maddeleri: kullanıcıya görünen her değişiklik `tools/deneme_listesi/platform.json` + SAHA listesine işlenir (yeni:true).
 - 2026-10-28 hızlandırma (sahibin talimatı: kullanım süresi ~24 saat): A dışındaki tüm dalgalar (G/B/C/D/E) PARALEL başlatıldı. Her dalga kendi dalında biter, main'e SIRALI merge'i ana oturum yapar (dalga iş akışları main'e dokunmaz). Dağıtım 2-3 toplu seferde (örn. A+G, B+C, D+E) — "her iş sonrası dağıtım" kuralının hızlandırılmış uygulaması.
+- 2026-10-29 TOKEN KISITI (sahip: haftalik ~%33 kaldi; "asiri inceleme/deneme yok, isi bitirin, denemeleri ben yaparim"): inceleme TEK tur TEK mercek ve yalniz YUKSEK bulgular (G/B/F/H); C/D/E/I incelemesiz; dalga birlestirmelerinde TAM flutter paketi kosulmaz (analyze + degisen alan testleri), tam paket yalniz son dagitimdan once 1 kez ana agacta; isci testleri asgari (1-2 kritik yol). "Para/yetki isinde 2+ inceleme" kurali bu program icin sahip talimatiyla askiya alindi.
 - Migration numara blokları (paralel çakışmayı önlemek için; kullanılmayan numara boş kalabilir, db.js uygulananı ada göre izler): G 085-086 (gerekmedikçe migration YOK), B 087-094, C 095-101, D 102-103, E 104-107, F 108-109, H 110-112, I 113+ (sıradaki boş). db.js sıra listesi çakışması numara sırasına göre birleştirilir.
 
 ## Dalgalar
