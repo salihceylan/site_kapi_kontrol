@@ -6,6 +6,7 @@ import 'package:site_kapi_kontrol/models/cash_models.dart';
 import 'package:site_kapi_kontrol/models/expense_analysis.dart';
 import 'package:site_kapi_kontrol/models/expense_models.dart';
 import 'package:site_kapi_kontrol/models/finance_funds.dart';
+import 'package:site_kapi_kontrol/services/document_text_reader.dart' show DocumentTextReader;
 import 'package:site_kapi_kontrol/services/expense_attachments.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
@@ -27,6 +28,7 @@ import 'package:site_kapi_kontrol/ui/helpers/money.dart';
 import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
 import 'package:site_kapi_kontrol/ui/helpers/text_length.dart';
 import 'package:site_kapi_kontrol/ui/widgets/crm_parts.dart';
+import 'package:site_kapi_kontrol/ui/widgets/document_ocr_suggestions.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_4b_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_fund_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_parts.dart';
@@ -54,6 +56,7 @@ class FinanceExpenseDialog extends StatefulWidget {
     this.attachmentSource,
     this.now,
     this.onRefreshNeeded,
+    this.ocrReader,
   });
 
   final PeopleScope scope;
@@ -61,6 +64,9 @@ class FinanceExpenseDialog extends StatefulWidget {
   final ExpenseAttachmentSource? attachmentSource;
   final DateTime Function()? now;
   final VoidCallback? onRefreshNeeded;
+
+  /// Görselden cihazda metin okuyucu (testlerde sahte); null ise platform varsayılanı (yalnız Android / iOS).
+  final DocumentTextReader? ocrReader;
 
   static const int maxDescriptionLength = 200;
   static const int maxDocumentNoLength = 40;
@@ -819,6 +825,7 @@ class _FinanceExpenseDialogState extends State<FinanceExpenseDialog> with Financ
   Widget _buildAttachments(BuildContext context, bool busy) {
     final th = Theme.of(context).textTheme;
     final p = context.palette;
+    final ocrSource = _ocrSource;
     return Column(
       key: const ValueKey<String>('finance_expense_attachments'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -869,7 +876,33 @@ class _FinanceExpenseDialogState extends State<FinanceExpenseDialog> with Financ
               onPressed: busy ? null : _pickFiles,
             ),
           ),
+        // P2-13: görselden cihazda okuma (son eklenen görsel); yalnız ÖNERİ, kullanıcı dokunmadan alanlara yazılmaz. Desteklenmeyen platformda / PDF'te çizilmez.
+        DocumentOcrSuggestions(
+          keyPrefix: 'finance_expense_ocr',
+          reader: widget.ocrReader,
+          bytes: ocrSource?.bytes,
+          sourceName: _files.length > 1 ? ocrSource?.name : null,
+          enabled: !busy,
+          notBefore: _oldest,
+          notAfter: _today(),
+          onAmount: (minor) {
+            markDirty();
+            setState(() => _amount.text = formatMinor(minor, symbol: false));
+          },
+          onDate: (date) {
+            markDirty();
+            setState(() => _date.text = formatDateField(date));
+          },
+        ),
       ],
     );
+  }
+
+  /// Okunacak görsel: eklenenlerin SON görseli (PDF okunmaz).
+  PickedExpenseFile? get _ocrSource {
+    for (var i = _files.length - 1; i >= 0; i--) {
+      if (isOcrImage(_files[i].bytes)) return _files[i];
+    }
+    return null;
   }
 }

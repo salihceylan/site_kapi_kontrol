@@ -11,6 +11,7 @@ import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/services/finance_payment_api.dart';
 import 'package:site_kapi_kontrol/services/payment_notice_api.dart';
+import 'package:site_kapi_kontrol/services/document_text_reader.dart' show DocumentTextReader;
 import 'package:site_kapi_kontrol/services/payment_notice_file.dart';
 import 'package:site_kapi_kontrol/services/share_inbox.dart';
 import 'package:site_kapi_kontrol/ui/design/buttons.dart';
@@ -19,6 +20,7 @@ import 'package:site_kapi_kontrol/ui/helpers/date_input.dart';
 import 'package:site_kapi_kontrol/ui/helpers/finance_errors.dart';
 import 'package:site_kapi_kontrol/ui/helpers/istanbul_time.dart';
 import 'package:site_kapi_kontrol/ui/helpers/money.dart';
+import 'package:site_kapi_kontrol/ui/widgets/document_ocr_suggestions.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/money_field.dart';
 
@@ -43,6 +45,7 @@ class PaymentNoticeDialog extends StatefulWidget {
     this.shared,
     this.pickFile = pickNoticeFile,
     this.now,
+    this.ocrReader,
   });
 
   final AuthService authService;
@@ -56,6 +59,9 @@ class PaymentNoticeDialog extends StatefulWidget {
   final SharedReceipt? shared;
   final Future<SharedReceipt?> Function() pickFile;
   final DateTime Function()? now;
+
+  /// Görselden cihazda metin okuyucu (testlerde sahte); null ise platform varsayılanı (yalnız Android / iOS).
+  final DocumentTextReader? ocrReader;
 
   /// Daire listesini yükler ve pencereyi açar. Bu sitede bildirim kapalıysa nedenini söyler. Gönderildiyse true.
   static Future<bool?> open(
@@ -275,6 +281,17 @@ class _PaymentNoticeDialogState extends State<PaymentNoticeDialog> {
                     padding: const EdgeInsets.only(top: AppSpace.xs),
                     child: Text(_fileError!, key: const ValueKey<String>('notice_file_error'), style: th.bodySmall?.copyWith(color: AppTone.danger.ink(p))),
                   ),
+                // P2-13: görselden cihazda okuma; yalnız ÖNERİ, kullanıcı dokunmadan alanlara yazılmaz. Desteklenmeyen platformda / PDF'te çizilmez.
+                DocumentOcrSuggestions(
+                  keyPrefix: 'notice_ocr',
+                  reader: widget.ocrReader,
+                  bytes: file?.bytes,
+                  enabled: !_busy,
+                  notBefore: _today().subtract(const Duration(days: 365)),
+                  notAfter: _today(),
+                  onAmount: (minor) => setState(() => _amount.text = formatMinor(minor, symbol: false)),
+                  onDate: (date) => setState(() => _date = date),
+                ),
                 const SizedBox(height: AppSpace.md),
                 MoneyFormField(
                   key: const ValueKey<String>('notice_amount_field'),
