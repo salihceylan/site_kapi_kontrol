@@ -3,6 +3,7 @@ Kimlik: Authorization: Bearer <id>.<gizli>. Uclar: POST claim, GET sync, POST ev
 Yollar ayarlar.json'dadir ve her uc ayri ayri kapatilabilir. Her istek/yanit `schema_version` tasir."""
 from __future__ import annotations
 
+import re
 import socket
 from dataclasses import dataclass
 
@@ -44,19 +45,29 @@ class SunucuIstemcisi:
     def uc_etkin(self, ad: str) -> bool:
         return self.hazir() and bool(self.s["uclar"].get(ad, {}).get("etkin"))
 
-    def _url(self, ad: str) -> str:
-        return self.s["adres"].rstrip("/") + self.s["uclar"][ad]["yol"]
+    def _url(self, ad: str, kimlik=None) -> str:
+        """Yol ayarlardadir; `{id}` yer tutucusu komut / kamera kimligiyle doldurulur (yalniz rakam kabul edilir)."""
+        yol = self.s["uclar"][ad]["yol"]
+        if "{id}" in yol:
+            if not re.fullmatch(r"\d{1,15}", str(kimlik)):
+                raise SunucuHatasi(f"'{ad}' ucu icin kimlik gecersiz", kalici=True)
+            yol = yol.replace("{id}", str(kimlik))
+        return self.s["adres"].rstrip("/") + yol
 
-    def _basliklar(self) -> dict:
-        return {"Authorization": f"Bearer {str(self.s['cihaz_anahtari']).strip()}", "Content-Type": "application/json"}
+    def _basliklar(self, ek: dict | None = None) -> dict:
+        b = {"Authorization": f"Bearer {str(self.s['cihaz_anahtari']).strip()}", "Content-Type": "application/json"}
+        b.update(ek or {})
+        return b
 
-    def _cagir(self, yontem: str, ad: str, **kw) -> Yanit:
+    def _cagir(self, yontem: str, ad: str, kimlik=None, basliklar: dict | None = None, **kw) -> Yanit:
         if not self.uc_etkin(ad):
             raise SunucuHatasi(f"'{ad}' ucu kapali", kalici=True)
         try:
-            r = self.oturum.request(yontem, self._url(ad), headers=self._basliklar(),
+            r = self.oturum.request(yontem, self._url(ad, kimlik), headers=self._basliklar(basliklar),
                                     timeout=float(self.s["zaman_asimi_sn"]),
                                     verify=bool(self.s["tls_dogrula"]), **kw)
+        except SunucuHatasi:
+            raise
         except Exception as e:  # noqa: BLE001 - ag hatalari gecici
             raise SunucuHatasi(f"{type(e).__name__}") from e
         try:
@@ -88,6 +99,23 @@ class SunucuIstemcisi:
 
     def kalp_atisi(self, govde: dict) -> Yanit:
         return self._cagir("POST", "kalp_atisi", json={"schema_version": self.s["schema_version"], **govde})
+
+    def komutlar(self) -> Yanit:
+        """GET commands (v3): bu kenar istemcinin bekleyen komutlarini ATOMIK talep eder (talep edilen komut sunucuda 'running' olur)."""
+        return self._cagir("GET", "komutlar", params={"schema_version": self.s["schema_version"]})
+
+    def komut_sonucu(self, komut_id, govde: dict) -> Yanit:
+        """POST commands/{id}/result (v3): govde {status: done|failed, message?, result?}."""
+        return self._cagir("POST", "komut_sonuc", kimlik=komut_id, json={"schema_version": self.s["schema_version"], **govde})
+
+    def goruntu_gonder(self, kamera_id, jpeg: bytes, yakalama_zamani: str = "", genislik: int = 0, yukseklik: int = 0) -> Yanit:
+        """PUT cameras/{id}/snapshot (v3): ham JPEG govdesi. Yanit {watched, next_seconds}."""
+        b = {"Content-Type": "image/jpeg"}
+        if yakalama_zamani:
+            b["X-Captured-At"] = str(yakalama_zamani)
+        if genislik > 0 and yukseklik > 0:
+            b["X-Frame-Width"], b["X-Frame-Height"] = str(int(genislik)), str(int(yukseklik))
+        return self._cagir("PUT", "goruntu", kimlik=kamera_id, basliklar=b, data=bytes(jpeg))
 
     def sina(self) -> tuple:
         """(basarili, mesaj): adres cozulur + TCP baglanti denenir (kimlik dogrulamasiz, yan etkisiz)."""

@@ -43,7 +43,8 @@ const parsePositive = (raw, what, code) => {
 export async function loadSiteSettings(db, siteCode) {
   const result = await db.query(
     `SELECT guest_rule, heartbeat_warn_seconds, heartbeat_crit_seconds, heartbeat_interval_seconds, sync_interval_seconds,
-            inside_report_hours, inside_timeout_hours, alert_interval_minutes, resident_notify_max_age_minutes
+            inside_report_hours, inside_timeout_hours, alert_interval_minutes, resident_notify_max_age_minutes,
+            command_ttl_seconds, snapshot_interval_seconds, snapshot_idle_interval_seconds, snapshot_keep_minutes
        FROM plate_site_settings WHERE site_code = $1`,
     [siteCode],
   );
@@ -66,12 +67,15 @@ export async function saveSiteSettings({ siteCode, body, authUser }) {
   const actor = actorFromAuthUser(authUser);
   await pool.query(
     `INSERT INTO plate_site_settings (site_code, guest_rule, heartbeat_warn_seconds, heartbeat_crit_seconds, heartbeat_interval_seconds, sync_interval_seconds,
-                                     inside_report_hours, inside_timeout_hours, alert_interval_minutes, resident_notify_max_age_minutes, updated_by, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW())
+                                     inside_report_hours, inside_timeout_hours, alert_interval_minutes, resident_notify_max_age_minutes,
+                                     command_ttl_seconds, snapshot_interval_seconds, snapshot_idle_interval_seconds, snapshot_keep_minutes, updated_by, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW())
      ON CONFLICT (site_code) DO UPDATE SET guest_rule = EXCLUDED.guest_rule, heartbeat_warn_seconds = EXCLUDED.heartbeat_warn_seconds,
        heartbeat_crit_seconds = EXCLUDED.heartbeat_crit_seconds, heartbeat_interval_seconds = EXCLUDED.heartbeat_interval_seconds,
        sync_interval_seconds = EXCLUDED.sync_interval_seconds, inside_report_hours = EXCLUDED.inside_report_hours, inside_timeout_hours = EXCLUDED.inside_timeout_hours,
        alert_interval_minutes = EXCLUDED.alert_interval_minutes, resident_notify_max_age_minutes = EXCLUDED.resident_notify_max_age_minutes,
+       command_ttl_seconds = EXCLUDED.command_ttl_seconds, snapshot_interval_seconds = EXCLUDED.snapshot_interval_seconds,
+       snapshot_idle_interval_seconds = EXCLUDED.snapshot_idle_interval_seconds, snapshot_keep_minutes = EXCLUDED.snapshot_keep_minutes,
        updated_by = EXCLUDED.updated_by, updated_at = NOW()`,
     [
       siteCode,
@@ -84,6 +88,10 @@ export async function saveSiteSettings({ siteCode, body, authUser }) {
       merged.inside_timeout_hours,
       merged.alert_interval_minutes,
       merged.resident_notify_max_age_minutes,
+      merged.command_ttl_seconds,
+      merged.snapshot_interval_seconds,
+      merged.snapshot_idle_interval_seconds,
+      merged.snapshot_keep_minutes,
       actor.userCode,
     ],
   );

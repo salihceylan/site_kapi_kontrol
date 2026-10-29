@@ -24,7 +24,7 @@ def ana(argv=None) -> int:
                         handlers=[logging.FileHandler(gunluk, encoding="utf-8"), logging.StreamHandler()])
     if a.sina or a.servis:
         from .servis import Servis
-        s = Servis(ayar)
+        s = Servis(ayar, ayar_yolu=a.ayar or ayarlar.varsayilan_yol())  # sunucudan inen kamera tanimlari bu dosyaya islenir
         if a.sina:
             for ad, ok, mesaj in s.sina():
                 print(("TAMAM " if ok else "SORUN ") + f"{ad}: {mesaj}")

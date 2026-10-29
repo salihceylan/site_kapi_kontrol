@@ -601,6 +601,8 @@ class _DoorLogsAccordionState extends State<DoorLogsAccordion> {
         return (Icons.bluetooth_rounded, AppTone.info);
       case 'guest_pass':
         return (Icons.qr_code_2_rounded, AppTone.success);
+      case 'plate':
+        return (Icons.directions_car_rounded, AppTone.success);
       case 'screen_qr':
         return (Icons.qr_code_scanner_rounded, AppTone.info);
       case 'qr_scanner':

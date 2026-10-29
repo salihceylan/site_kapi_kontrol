@@ -34,6 +34,14 @@ String? plateActionLabel(String action) {
       return 'Plaka tanıma bağlantısı koptu (kenar PC / kamera)';
     case 'plate.inside_timeout':
       return 'İçeride uzun süre kalan araçlar zaman aşımıyla düşürüldü';
+    case 'plate.camera_created':
+      return 'Plaka kamerası eklendi';
+    case 'plate.camera_updated':
+      return 'Plaka kamerası değişti';
+    case 'plate.camera_probe_requested':
+      return 'Plaka kamerası sınama komutu verildi';
+    case 'plate.discovery_requested':
+      return 'Ağda kamera arama komutu verildi';
   }
   return null;
 }

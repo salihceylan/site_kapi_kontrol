@@ -94,11 +94,12 @@ describe('sozlesme surum 2: kara_liste karari ve yeni site ayari', () => {
   const NOW = Date.parse('2026-10-29T12:00:00Z');
   const base = { event_id: 'evt-0000001', camera_id: 7, plate: '34 abc 123', decision: 'kara_liste', seen_at: '2026-10-29T11:59:00Z' };
 
-  it('kara_liste yalniz surum 2 ile kabul edilir; surum 1 ve surumsuz istek reddedilir; 3 desteklenmez', () => {
-    assert.deepEqual([...SUPPORTED_SCHEMA_VERSIONS], [1, 2]);
+  it('kara_liste yalniz surum 2+ ile kabul edilir; surum 1 ve surumsuz istek reddedilir; 4 desteklenmez', () => {
+    assert.deepEqual([...SUPPORTED_SCHEMA_VERSIONS], [1, 2, 3]);
     assert.equal(parseEdgeEvent({ ...base, schema_version: 2 }, NOW).decision, 'kara_liste');
+    assert.equal(parseEdgeEvent({ ...base, schema_version: 3 }, NOW).decision, 'kara_liste');
     for (const bad of [{ schema_version: 1 }, {}]) assert.throws(() => parseEdgeEvent({ ...base, ...bad }, NOW), (e) => e.statusCode === 400, JSON.stringify(bad));
-    assert.throws(() => parseEdgeEvent({ ...base, schema_version: 3 }, NOW), (e) => e.code === 'UNSUPPORTED_SCHEMA');
+    assert.throws(() => parseEdgeEvent({ ...base, schema_version: 4 }, NOW), (e) => e.code === 'UNSUPPORTED_SCHEMA');
     assert.equal(parseEdgeEvent({ ...base, decision: 'red', schema_version: 1 }, NOW).decision, 'red', 'eski istemci calismaya devam eder');
   });
 
@@ -235,14 +236,22 @@ describe('plate_health_scheduler: tur mantigi', () => {
         return { lost: true, alerted: true };
       },
       expireStalePresence: async () => 4,
+      housekeeping: async () => ({ snapshotsRemoved: 3, commandsExpired: 2 }),
     };
     const originalError = console.error;
     console.error = () => {};
     try {
-      assert.deepEqual(await runPlateHealthTick({ hooks }), { sites: 2, alerted: 1, expired: 4 });
+      assert.deepEqual(await runPlateHealthTick({ hooks }), { sites: 2, alerted: 1, expired: 4, snapshotsRemoved: 3, commandsExpired: 2 });
+      // Eski kanca takimi (housekeeping yok) ve bakim hatasi turu DUSURMEZ.
+      const legacy = { ...hooks };
+      delete legacy.housekeeping;
+      assert.deepEqual(await runPlateHealthTick({ hooks: legacy }), { sites: 2, alerted: 1, expired: 4, snapshotsRemoved: 0, commandsExpired: 0 });
+      const broken = await runPlateHealthTick({ hooks: { ...hooks, housekeeping: async () => { throw new Error('bozuk'); } } });
+      assert.equal(broken.expired, 4);
+      assert.equal(broken.snapshotsRemoved, 0);
     } finally {
       console.error = originalError;
     }
-    assert.deepEqual(checked, [3]);
+    assert.deepEqual(checked, [3, 3, 3]);
   });
 });

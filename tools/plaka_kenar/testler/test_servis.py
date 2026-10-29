@@ -83,7 +83,7 @@ class ServisTesti(unittest.TestCase):
         self.assertEqual(s.depo.arac("34SAK111")["iceride"], 1)
         g = s.kuyruk.bekleyenler()[0]
         self.assertEqual((g["camera_id"], g["plate"], g["decision"], g["direction"], g["reason"]), (7, "34SAK111", "acildi", "giris", "kayitli_arac"))
-        self.assertEqual((g["schema_version"], g["seen_at"][:10], g["confidence"]), (2, "2027-01-15", 0.9))
+        self.assertEqual((g["schema_version"], g["seen_at"][:10], g["confidence"]), (3, "2027-01-15", 0.9))
         self.assertRegex(g["event_id"], r"^[A-Za-z0-9_-]{8,64}$")
         self.assertNotIn("gate_id", g)                                       # kapi sunucu_id'si yok: sunucu kameradan turetir
 
@@ -195,11 +195,11 @@ class IstemciTesti(unittest.TestCase):
         self.assertEqual(yollar, [("POST", "https://api.test/edge/plate/v1/claim"), ("GET", "https://api.test/edge/plate/v1/sync"),
                                   ("POST", "https://api.test/edge/plate/v1/events"), ("POST", "https://api.test/edge/plate/v1/heartbeat")])
         self.assertEqual(o.cagrilar[0][2]["headers"]["Authorization"], f"Bearer {ANAHTAR}")
-        self.assertEqual(o.cagrilar[0][2]["json"], {"schema_version": 2, "app_version": "0.2.0"})
-        self.assertEqual(o.cagrilar[1][2]["params"], {"schema_version": 2, "updated_since": "2026-10-29T12:00:00Z",
+        self.assertEqual(o.cagrilar[0][2]["json"], {"schema_version": 3, "app_version": "0.2.0"})
+        self.assertEqual(o.cagrilar[1][2]["params"], {"schema_version": 3, "updated_since": "2026-10-29T12:00:00Z",
                                                       "vehicles_rev": "v1", "blacklist_rev": "b1"})
         self.assertEqual(o.cagrilar[2][2]["json"]["event_id"], "evt-00000001")          # tek olay govdesi, dizi degil
-        self.assertEqual(o.cagrilar[3][2]["json"]["schema_version"], 2)
+        self.assertEqual(o.cagrilar[3][2]["json"]["schema_version"], 3)
 
     def test_hata_siniflandirmasi_401_403_gecici_diger_4xx_kalici(self):
         for kod, kalici in ((400, True), (404, True), (409, True), (401, False), (403, False), (429, False), (503, False)):

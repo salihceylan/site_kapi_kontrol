@@ -156,7 +156,7 @@ describe('plate_gates_common: girdi ve sozlesme', () => {
   });
 
   it('olay: desteklenmeyen surum -> UNSUPPORTED_SCHEMA (supported listesiyle); gecersiz kimlik/karar/yon/zaman 400', () => {
-    assert.throws(() => parseEdgeEvent({ ...base, schema_version: 3 }, NOW), (e) => e.code === 'UNSUPPORTED_SCHEMA' && e.extra.supported[0] === 1);
+    assert.throws(() => parseEdgeEvent({ ...base, schema_version: 4 }, NOW), (e) => e.code === 'UNSUPPORTED_SCHEMA' && e.extra.supported[0] === 1);
     for (const bad of [{ event_id: 'kisa' }, { decision: 'belki' }, { direction: 'yan' }, { camera_id: 0 }, { plate: 'XX' }, { seen_at: '2020-01-01T00:00:00Z' }, { seen_at: '2026-10-29T13:00:00Z' }]) {
       assert.throws(() => parseEdgeEvent({ ...base, ...bad }, NOW), (e) => e.statusCode === 400, JSON.stringify(bad));
     }

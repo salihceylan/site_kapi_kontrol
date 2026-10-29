@@ -5,7 +5,7 @@
     "adres": "https://SUNUCU-ADRESI",
     "site_kodu": "",
     "cihaz_anahtari": "KENAR-PC-ANAHTARI-ID.48-ONALTILIK",
-    "schema_version": 2,
+    "schema_version": 3,
     "zaman_asimi_sn": 8,
     "tls_dogrula": true,
     "senkron_aralik_sn": 60,
@@ -13,6 +13,9 @@
     "olay_toplu_adet": 50,
     "kalp_atisi_aralik_sn": 90,
     "olay_saklama_gun": 7,
+    "komut_aralik_sn": 5,
+    "komut_sonuc_deneme": 3,
+    "komut_sonuc_bekle_sn": 2.0,
     "uclar": {
       "kayit": {
         "etkin": true,
@@ -29,8 +32,29 @@
       "kalp_atisi": {
         "etkin": true,
         "yol": "/edge/plate/v1/heartbeat"
+      },
+      "komutlar": {
+        "etkin": true,
+        "yol": "/edge/plate/v1/commands"
+      },
+      "komut_sonuc": {
+        "etkin": true,
+        "yol": "/edge/plate/v1/commands/{id}/result"
+      },
+      "goruntu": {
+        "etkin": true,
+        "yol": "/edge/plate/v1/cameras/{id}/snapshot"
       }
     }
+  },
+  "goruntu_gonderim": {
+    "etkin": true,
+    "aralik_sn": 4,
+    "bosta_aralik_sn": 15,
+    "yukseklik": 360,
+    "kalite": 60,
+    "en_cok_bayt": 262144,
+    "hata_bekleme_en_cok_sn": 60
   },
   "kameralar": [
     {

@@ -11,7 +11,7 @@ import tkinter as tk
 from datetime import datetime
 from tkinter import messagebox, ttk
 
-from . import ayarlar, izleme, kesif, yakalama
+from . import ayarlar, gosterim, izleme, kesif, yakalama
 from .servis import Servis
 
 # company_qr_tool/ui_kit.py C sinifindan secilen renkler
@@ -21,9 +21,10 @@ NAVY, PRIMARY, PRIMARY_HOVER = "#283848", "#07787F", "#066A70"
 SUCCESS_SOFT, WARNING_SOFT, DANGER_SOFT = "#DCF5E4", "#FDF0D5", "#FCE8E8"
 WARNING, DANGER, SUCCESS = "#96500A", "#C42B2B", "#12703A"
 
-KARAR_ETIKET = {"acildi": ("Açıldı", SUCCESS_SOFT), "red": ("Red", DANGER_SOFT),
-                "tanimsiz": ("Tanımsız", WARNING_SOFT), "dogrulanmamis": ("Doğrulanmamış", BORDER),
-                "acma_basarisiz": ("Açılamadı", DANGER_SOFT), "kara_liste": ("Kara liste", DANGER_SOFT)}
+# Karar etiketleri gosterim.KARAR_METIN'dedir ("açıldı" yazılmaz: komut kabul edildi != kapı fiziksel açıldı, P1-15).
+KARAR_ETIKET = {"acildi": (gosterim.KARAR_METIN["acildi"], SUCCESS_SOFT), "red": (gosterim.KARAR_METIN["red"], DANGER_SOFT),
+                "tanimsiz": (gosterim.KARAR_METIN["tanimsiz"], WARNING_SOFT), "dogrulanmamis": (gosterim.KARAR_METIN["dogrulanmamis"], BORDER),
+                "acma_basarisiz": (gosterim.KARAR_METIN["acma_basarisiz"], DANGER_SOFT), "kara_liste": (gosterim.KARAR_METIN["kara_liste"], DANGER_SOFT)}
 YON_GOSTER = {"giris": "Giriş", "cikis": "Çıkış", "": "—"}
 YONLENDIRME = ("Başlamak için:  1) 'Ağda kamera ara' ya da 'El ile ekle'   →   2) 'Sına'   →   3) Yön ver (giriş / çıkış)   →   "
                "4) 'Canlı İzleme' sekmesinde tüm kameraları izle.\nSunucu bağlantısı gerekmez; her şey bu bilgisayarda yerel çalışır.")
@@ -345,6 +346,8 @@ class Uygulama(tk.Tk):
         stil_uygula(self)
         self.ayar_yolu = ayar_yolu
         self.ayar = ayarlar.yukle(ayar_yolu)
+        self._satir_kimlik: dict = {}  # tablo satir sirasi -> ayar satir kodu (secili satiri guvenle bulmak icin)
+        self._kamera_surum_gorulen = 0
         self.servis: Servis | None = None
         self.kuyruk: queue.Queue = queue.Queue()
         self.calisiyor = False
@@ -432,9 +435,11 @@ class Uygulama(tk.Tk):
         self.yonlendirme = tk.Label(self.yonlendirme_kap, text=YONLENDIRME, bg=SUCCESS_SOFT, fg=SUCCESS, anchor="w", justify="left",
                                     padx=14, pady=10, font=("Segoe UI", 10), wraplength=1000)
         ttk.Label(f, text="Kameralar (sınırsız satır) — çift yönlü kapıda biri giriş, biri çıkış kamerası olmalı", style="Soluk.TLabel").pack(anchor="w")
-        self.kam_t = self._tablo(f, [("id", "Kod", 80), ("ad", "Ad", 130), ("url", "Adres", 260), ("yon", "Yön", 60),
+        ttk.Label(f, text="“Sunucu” etiketli kameralar yönetici uygulamasından eklenir; burada silinemez / düzenlenemez (uygulamadan değiştirin).",
+                  style="Soluk.TLabel").pack(anchor="w")
+        self.kam_t = self._tablo(f, [("id", "Kod", 70), ("kaynak", "Kaynak", 60), ("ad", "Ad", 120), ("url", "Adres", 240), ("yon", "Yön", 55),
                                      ("mod", "Mod", 50), ("fps", "Kare/sn", 55), ("kapi_id", "Kapı", 80), ("etkin", "Etkin", 50),
-                                     ("uyari", "Uyarı", 280)], 7)
+                                     ("uyari", "Uyarı", 260)], 7)
         self.kam_t.pack(fill="x")
         self._dugmeler(f, [("Ağda kamera ara", lambda: KameraBulDialog(self, ara=True)),
                            ("El ile ekle", lambda: KameraBulDialog(self)),
@@ -456,8 +461,9 @@ class Uygulama(tk.Tk):
     def _olay_sekme(self) -> None:
         f = ttk.Frame(self.defter, padding=12)
         self.defter.add(f, text="Canlı Olaylar")
-        self.olay_t = self._tablo(f, [("z", "Zaman", 80), ("kam", "Kamera", 90), ("yon", "Yön", 60), ("plaka", "Plaka", 120),
-                                      ("karar", "Karar", 110), ("neden", "Neden", 170), ("guven", "Güven", 60)], 22)
+        self.olay_t = self._tablo(f, [("z", "Zaman", 70), ("kam", "Kamera", 80), ("yon", "Yön", 50), ("plaka", "Plaka", 100),
+                                      ("karar", "Karar", 95), ("kimlik", "Daire · kişi", 190), ("kapi", "Kapı durumu", 140),
+                                      ("neden", "Neden", 150), ("guven", "Güven", 50)], 22)
         for kod, (_, renk) in KARAR_ETIKET.items():
             self.olay_t.tag_configure(kod, background=renk)
         self.olay_t.pack(fill="both", expand=True)
@@ -474,7 +480,9 @@ class Uygulama(tk.Tk):
         for t, anahtar, kolonlar, uyarilar in ((self.kam_t, "kameralar", self.kam_t["columns"], uy["kameralar"]),
                                                (self.kapi_t, "kapilar", self.kapi_t["columns"], uy["kapilar"])):
             t.delete(*t.get_children())
-            for i, s in enumerate(self.ayar[anahtar]):
+            satirlar = list(self.ayar[anahtar])  # tek anlik kopya: sunucu kamera birlestirmesi listeyi arka planda degistirebilir
+            self._satir_kimlik[anahtar] = [s.get("id", "") for s in satirlar]
+            for i, s in enumerate(satirlar):
                 uyari = uyarilar.get(s.get("id", ""), "")
                 deger = []
                 for c in kolonlar:
@@ -484,6 +492,8 @@ class Uygulama(tk.Tk):
                         deger.append(maske(str(s.get(c, ""))))
                     elif c == "yon":
                         deger.append(YON_GOSTER.get(s.get(c, ""), s.get(c, "")))
+                    elif c == "kaynak":
+                        deger.append("Sunucu" if gosterim.sunucu_kaynakli(s) else "Yerel")
                     else:
                         deger.append(s.get(c, ""))
                 t.insert("", "end", iid=str(i), values=deger, tags=("uyari",) if uyari else ())
@@ -494,14 +504,30 @@ class Uygulama(tk.Tk):
         if hasattr(self, "canli"):
             self.canli.yenile_kameralar()
 
+    def _secili_satir(self, anahtar: str, tablo):
+        """Tabloda seçili satırın ayar sözlüğü (kimlikle bulunur: sunucu kamera birleştirmesi listeyi arka planda değiştirse de doğru satır)."""
+        sec = tablo.selection()
+        kodlar = self._satir_kimlik.get(anahtar, [])
+        if not sec or int(sec[0]) >= len(kodlar):
+            return None
+        return next((s for s in self.ayar[anahtar] if s.get("id", "") == kodlar[int(sec[0])]), None)
+
+    def _sunucu_satiri_uyar(self) -> None:
+        messagebox.showinfo("Sunucu kamerası", "Bu kamera yönetici uygulamasından eklendi; burada düzenlenemez / silinemez.\n"
+                            "Değiştirmek için uygulamadaki “Kamera ve Plaka” ekranını kullanın. (Yön / bölge ayarı için "
+                            "yerel bir kamera satırı ekleyebilirsiniz.)", parent=self)
+
     def _satir(self, anahtar: str, alanlar: list, duzenle: bool = False) -> None:
         tablo = self.kam_t if anahtar == "kameralar" else self.kapi_t
-        mevcut = None
+        mevcut, asil = None, None
         if duzenle:
-            sec = tablo.selection()
-            if not sec:
+            asil = self._secili_satir(anahtar, tablo)
+            if asil is None:
                 return
-            mevcut = dict(self.ayar[anahtar][int(sec[0])])
+            if anahtar == "kameralar" and gosterim.sunucu_kaynakli(asil):
+                self._sunucu_satiri_uyar()
+                return
+            mevcut = dict(asil)
             if anahtar == "kameralar" and mevcut.get("yon", "") not in ("giris", "cikis"):
                 mevcut["yon"] = ayarlar.siradaki_yon(self.ayar, mevcut.get("kapi_id", ""))  # eski satır: yön seçtirilir
         d = SatirDialog(self, "Satır", alanlar, mevcut or ({"mod": "akis", "fps": 3, "etkin": True, "profil": "oto",
@@ -510,15 +536,24 @@ class Uygulama(tk.Tk):
         if d.sonuc is None or not d.sonuc.get("id"):
             return
         if duzenle:
-            self.ayar[anahtar][int(sec[0])] = d.sonuc
+            liste = self.ayar[anahtar]
+            for i, s in enumerate(liste):
+                if s is asil:
+                    liste[i] = d.sonuc
+                    break
         else:
             self.ayar[anahtar].append(d.sonuc)
         self._tablolari_doldur()
 
     def _sil(self, anahtar: str, tablo) -> None:
-        sec = tablo.selection()
-        if sec and messagebox.askyesno("Sil", "Seçili satır silinsin mi?", parent=self):
-            del self.ayar[anahtar][int(sec[0])]
+        asil = self._secili_satir(anahtar, tablo)
+        if asil is None:
+            return
+        if anahtar == "kameralar" and gosterim.sunucu_kaynakli(asil):
+            self._sunucu_satiri_uyar()
+            return
+        if messagebox.askyesno("Sil", "Seçili satır silinsin mi?", parent=self):
+            self.ayar[anahtar] = [s for s in self.ayar[anahtar] if s is not asil]
             self._tablolari_doldur()
 
     def _formu_ayara_yaz(self) -> None:
@@ -544,7 +579,8 @@ class Uygulama(tk.Tk):
     def _servis_kur(self) -> None:
         if self.servis:
             self.servis.durdur()
-        self.servis = Servis(self.ayar)
+        self.servis = Servis(self.ayar, ayar_yolu=self.ayar_yolu or ayarlar.varsayilan_yol())
+        self._kamera_surum_gorulen = 0
         self.servis.dinleyiciler.append(self.kuyruk.put)
         kal = self.servis.boru.kalibrasyon_modu
         self.afis.configure(
@@ -564,11 +600,11 @@ class Uygulama(tk.Tk):
             self.baslat_dugme.configure(text="Durdur")
 
     def _secili_sina(self) -> None:
-        sec = self.kam_t.selection()
-        if not sec:
+        kam = self._secili_satir("kameralar", self.kam_t)
+        if kam is None:
             messagebox.showinfo("Sına", "Önce tablodan bir kamera seçin.", parent=self)
             return
-        self._sina(self.ayar["kameralar"][int(sec[0])]["id"])
+        self._sina(kam["id"])
 
     def _sina(self, kamera_id: str | None = None) -> None:
         self._formu_ayara_yaz()
@@ -590,10 +626,10 @@ class Uygulama(tk.Tk):
             self.sina_kutu.insert("end", f"{'TAMAM' if ok else 'SORUN'}  {ad}: {mesaj}\n", "ok" if ok else "hata")
 
     def _tetikle(self) -> None:
-        sec = self.kam_t.selection()
-        if not sec:
+        kam = self._secili_satir("kameralar", self.kam_t)
+        if kam is None:
             return
-        kid = self.ayar["kameralar"][int(sec[0])]["id"]
+        kid = kam["id"]
         threading.Thread(target=lambda: self.servis.tetikle(kid), daemon=True).start()
 
     # --- canli seritler ------------------------------------------------------------------
@@ -602,10 +638,8 @@ class Uygulama(tk.Tk):
             while True:
                 o = self.kuyruk.get_nowait()
                 self.canli.olay(o)
-                etiket = KARAR_ETIKET.get(o["karar"], (o["karar"], ""))[0]
                 zaman = datetime.fromisoformat(o["zaman"]).astimezone().strftime("%H:%M:%S")
-                self.olay_t.insert("", 0, tags=(o["karar"],), values=(
-                    zaman, o["kamera_id"], o["yon"], o["plaka"], etiket, o["neden"], f"{o['guven']:.2f}"))
+                self.olay_t.insert("", 0, tags=(o["karar"],), values=gosterim.olay_satiri(o, zaman))
                 for eski in self.olay_t.get_children()[int(self.ayar["arayuz"]["olay_seridi_satir"]):]:
                     self.olay_t.delete(eski)
         except queue.Empty:
@@ -614,6 +648,9 @@ class Uygulama(tk.Tk):
 
     def _durum_yenile(self) -> None:
         if self.servis:
+            if self.servis.kamera_surum != self._kamera_surum_gorulen:  # sunucudan kamera tanimi geldi / degisti: tablolari tazele
+                self._kamera_surum_gorulen = self.servis.kamera_surum
+                self._tablolari_doldur()
             d = self.servis.durum()
             bagli = sum(1 for k in d["kameralar"] if k.get("durum") == "bagli")
             sunucu = (self.servis.son_hata or "sunucu: sorun yok") if ayarlar.sunucu_hazir(self.ayar) else "sunucu: kapalı (isteğe bağlı)"

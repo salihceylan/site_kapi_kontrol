@@ -12,7 +12,7 @@ from tkinter import ttk
 
 import cv2
 
-from . import ayarlar, mozaik, roi as roimod, yakalama
+from . import ayarlar, gosterim, mozaik, roi as roimod, yakalama
 
 try:  # pillow yoksa sekme uyari gosterir, uygulamanin geri kalani calisir
     from PIL import Image, ImageTk
@@ -25,9 +25,9 @@ K_METIN, K_METIN2 = "#E8EEF3", "#93A4B4"
 K_ACCENT, K_YESIL, K_KIRMIZI, K_GRI, K_SARI = "#1FB6BE", "#1E9E5A", "#D13B3B", "#5B6B7A", "#E0A526"
 K_KARO = "#05090D"
 
-ROZETLER = {  # karar kodu -> (etiket, renk)
-    "acildi": ("AÇILDI", K_YESIL), "red": ("RED", K_KIRMIZI), "kara_liste": ("RED", K_KIRMIZI),
-    "acma_basarisiz": ("RED", K_KIRMIZI), "tanimsiz": ("TANIMSIZ", K_GRI), "dogrulanmamis": ("TANIMSIZ", K_GRI)}
+TON_RENK = {"yesil": K_YESIL, "kirmizi": K_KIRMIZI, "gri": K_GRI}
+# karar kodu -> (etiket, renk). Kapi durumu AYRI rozettir (gosterim.kapi_rozeti): "açıldı" yalnız cihaz bildirirse yazılır (P1-15).
+ROZETLER = {kod: (etiket, TON_RENK[ton]) for kod, (etiket, ton) in gosterim.KARAR_ROZET.items()}
 BEKLEME = ("BEKLİYOR", K_PANEL)
 YON_ETIKET = {"giris": ("GİRİŞ", K_YESIL), "cikis": ("ÇIKIŞ", K_SARI)}
 DURUM_METNI = {"koptu": "bağlantı koptu — yeniden bağlanıyor", "bagli": "bağlandı, kare bekleniyor", "bekliyor": "bağlanıyor…",
@@ -48,6 +48,7 @@ class CanliSekme(tk.Frame):
         self.uyg = uyg
         self.secili: str | None = None  # None = mozaik; kamera kodu = tek kamera modu
         self.rozet: dict = {}  # kamera -> (karar, plaka, zaman) son okuma
+        self.ek: dict = {}  # kamera -> (kimlik satiri, kapi_komut) son okuma (v3: "Daire A - 5 · Ali Y." + "Kapı tetiklendi ✓")
         self._onizleme: dict = {}  # kamera -> yalniz-goruntu AkisKaynagi (servis o kamerayi akitmiyorsa)
         self._on_goruntu: dict = {}  # kamera -> (kucultulmus kare, zaman)
         self._on_durum: dict = {}
@@ -110,6 +111,10 @@ class CanliSekme(tk.Frame):
         self.plaka_l.pack(pady=(4, 0))
         self.alt_l = tk.Label(y, text="", bg=K_PANEL, fg=K_METIN2, font=("Segoe UI", 9))
         self.alt_l.pack()
+        self.kimlik_l = tk.Label(y, text="", bg=K_PANEL, fg=K_METIN, font=("Segoe UI Semibold", 10), wraplength=240)
+        self.kimlik_l.pack(pady=(4, 0))
+        self.kapi_l = tk.Label(y, text="", bg=K_PANEL, fg="#FFFFFF", font=("Segoe UI Semibold", 9), padx=8, pady=2)
+        self.kapi_l.pack(pady=(4, 0))
         tk.Label(y, text="Güven", bg=K_PANEL, fg=K_METIN2).pack(anchor="w", padx=14, pady=(16, 2))
         self.guven_c = tk.Canvas(y, height=16, bg=K_BG, highlightthickness=0)
         self.guven_c.pack(fill="x", padx=14)
@@ -251,6 +256,7 @@ class CanliSekme(tk.Frame):
     def olay(self, o: dict) -> None:
         """Uygulama olay kuyrugundan gelen karar olayi (kapi karari)."""
         self.rozet[o["kamera_id"]] = (o["karar"], o.get("plaka", ""), time.time())
+        self.ek[o["kamera_id"]] = (gosterim.kimlik_satiri(o), o.get("kapi_komut", ""))
 
     # --- cizim --------------------------------------------------------------------------------
     def _tik(self) -> None:
@@ -327,7 +333,19 @@ class CanliSekme(tk.Frame):
         karar, plaka, zaman = self.rozet.get(kid, (None, "", 0.0))
         taze = karar is not None and time.time() - zaman <= float(self.uyg.ayar["izleme"]["rozet_sn"])
         etiket, renk = rozet_bilgi(karar) if taze else (("ESKİ", K_GRI) if karar else ("", K_GRI))
-        t.create_rectangle(x, y + h - 26, x + w, y + h, fill=K_BG, outline="")
+        kimlik, kapi_komut = self.ek.get(kid, ("", "")) if taze else ("", "")
+        kapi_r = gosterim.kapi_rozeti(kapi_komut)
+        ek_satir = bool(kimlik or kapi_r)  # v3: plakanin ustunde kimlik ("Daire A - 5 · Ali Y.") + kapi durumu ("Kapı tetiklendi ✓")
+        alt = 26 + (20 if ek_satir else 0)
+        t.create_rectangle(x, y + h - alt, x + w, y + h, fill=K_BG, outline="")
+        if ek_satir:
+            yy, rw = y + h - alt + 10, 140
+            sigar = max(6, int((w - (rw if kapi_r else 0) - 20) / 6))
+            if kimlik:
+                t.create_text(x + 8, yy, text=kimlik[:sigar], anchor="w", fill=K_METIN2, font=("Segoe UI", 9))
+            if kapi_r:
+                t.create_rectangle(x + w - rw - 4, yy - 8, x + w - 4, yy + 8, fill=TON_RENK[kapi_r[1]], outline="")
+                t.create_text(x + w - rw / 2 - 4, yy, text=kapi_r[0], fill="#FFFFFF", font=("Segoe UI Semibold", 8))
         t.create_text(x + 8, y + h - 13, text=plaka or "—", anchor="w", fill=K_METIN if taze else K_METIN2,
                       font=("Consolas", 12, "bold"))
         if etiket:
@@ -407,6 +425,13 @@ class CanliSekme(tk.Frame):
         plaka = (plaka_karar if karar else "") or b.get("konsensus") or b.get("anlik") or "—"
         self.plaka_l.configure(text=plaka)
         self.alt_l.configure(text=(f"anlık: {b['anlik']}" if b.get("anlik") and b.get("konsensus") else ""))
+        kimlik, kapi_komut = self.ek.get(kid, ("", "")) if karar else ("", "")
+        kapi_r = gosterim.kapi_rozeti(kapi_komut)
+        self.kimlik_l.configure(text=kimlik)
+        if kapi_r:
+            self.kapi_l.configure(text=kapi_r[0], bg=TON_RENK[kapi_r[1]])
+        else:
+            self.kapi_l.configure(text="", bg=K_PANEL)
         guven = float(b.get("guven", 0.0))
         self.guven_c.update_idletasks()
         gw = max(1, self.guven_c.winfo_width())

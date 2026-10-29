@@ -7,6 +7,7 @@ import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/empty_state.dart';
 import 'package:site_kapi_kontrol/ui/design/license_plate.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+import 'package:site_kapi_kontrol/ui/widgets/plate_identity_line.dart';
 
 /// Karar rozeti türü (sunucu `decision_kind`; eski kayıtlarda `decision` değerinden türetilir).
 enum LiveDecision { acildi, red, tanimsiz, karaListe }
@@ -244,15 +245,18 @@ class LiveEventCard extends StatelessWidget {
     final plate = LicensePlateBadge.format(event.plate);
     final gate = (event.doorName ?? '').isNotEmpty ? event.doorName! : ((event.deviceName ?? '').isNotEmpty ? event.deviceName! : 'Kapı belirtilmemiş');
     final time = event.seenAt == null ? '' : _clock(event.seenAt!);
+    // P1-15 dürüst dil: karar rozeti "izin verildi" der (kenar komutu verdi); kapının gerçek durumu AYRI rozettedir (Kapı tetiklendi / yanıt vermedi).
     final badgeLabel = switch (decision) {
-      LiveDecision.acildi => 'AÇILDI',
+      LiveDecision.acildi => 'İZİN VERİLDİ',
       LiveDecision.red => 'RED',
       LiveDecision.tanimsiz => 'TANIMSIZ',
       LiveDecision.karaListe => 'KARA LİSTE',
     };
+    final identityText = plateIdentityText(event.identity);
+    final gateSpeech = gateStateSpeech(event.gateState);
     return Semantics(
       container: true,
-      label: 'Plaka $plate, $dirLabel, $badgeLabel, $gate${time.isEmpty ? '' : ', $time'}',
+      label: 'Plaka $plate${identityText == null ? '' : ', $identityText'}, $dirLabel, $badgeLabel${gateSpeech == null ? '' : ', $gateSpeech'}, $gate${time.isEmpty ? '' : ', $time'}',
       child: ExcludeSemantics(
         child: AppCard(
           padding: const EdgeInsets.all(AppSpace.md),
@@ -281,8 +285,10 @@ class LiveEventCard extends StatelessWidget {
                           child: Text(plate, style: theme.titleLarge?.copyWith(fontFamily: 'monospace', fontWeight: FontWeight.w800, letterSpacing: 1.5, color: p.text)),
                         ),
                         _DecisionBadge(decision: decision, label: badgeLabel),
+                        GateStateBadge(state: event.gateState),
                       ],
                     ),
+                    PlateIdentityLine(identity: event.identity, style: theme.bodyMedium),
                     const SizedBox(height: AppSpace.xs),
                     Text('$dirLabel  •  $gate${time.isEmpty ? '' : '  •  $time'}', style: theme.bodySmall?.copyWith(color: p.textSecondary), maxLines: 2, overflow: TextOverflow.ellipsis),
                   ],

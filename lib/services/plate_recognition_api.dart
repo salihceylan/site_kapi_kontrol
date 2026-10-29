@@ -75,6 +75,27 @@ String formatTrPlate(String plate) {
 // --- Modeller --------------------------------------------------------------------------------------------------------
 
 /// Karar: ALLOWED | DENIED | UNKNOWN.
+/// Geçişin kimliği (sözleşme v3, yalnız yazma yetkisi olana gelir): `resident` (kayıtlı araç) | `guest` (misafir izni).
+/// Tanımsız plakada sunucu `identity: null` yollar; satırda yalnız plaka görünür.
+class PlateIdentity {
+  const PlateIdentity({required this.kind, this.apartmentLabel, this.personLabel});
+
+  /// `identity` nesnesi ya da null; bilinmeyen tür (`resident`/`guest` dışı) null döner.
+  static PlateIdentity? tryParse(Object? raw) {
+    if (raw is! Map) return null;
+    final kind = raw['kind'];
+    if (kind != 'resident' && kind != 'guest') return null;
+    String? clean(Object? v) => v is String && v.trim().isNotEmpty ? v.trim() : null;
+    return PlateIdentity(kind: kind as String, apartmentLabel: clean(raw['apartment_label']), personLabel: clean(raw['person_label']));
+  }
+
+  final String kind;
+  final String? apartmentLabel;
+  final String? personLabel;
+
+  bool get isGuest => kind == 'guest';
+}
+
 class PlateDecisionRow {
   const PlateDecisionRow({
     required this.id,
@@ -88,11 +109,15 @@ class PlateDecisionRow {
     required this.doorName,
     this.decisionKind,
     this.direction,
+    this.identity,
+    this.gateState,
   });
 
   factory PlateDecisionRow.fromJson(Map<String, dynamic> json) => PlateDecisionRow(
     decisionKind: json['decision_kind'] as String?,
     direction: json['direction'] as String?,
+    identity: PlateIdentity.tryParse(json['identity']),
+    gateState: (json['gate_state'] == 'triggered' || json['gate_state'] == 'no_response') ? json['gate_state'] as String : null,
     id: (json['id'] as num?)?.toInt() ?? 0,
     plate: '${json['plate'] ?? ''}',
     decision: '${json['decision'] ?? 'UNKNOWN'}',
@@ -119,6 +144,12 @@ class PlateDecisionRow {
 
   /// Geçiş yönü: giris | cikis (eski kayıtlarda null).
   final String? direction;
+
+  /// Kimlik (daire + kişi / misafir); yetkisiz okuyucuda ve tanımsız plakada null.
+  final PlateIdentity? identity;
+
+  /// Karar sonrası kapı durumu: `triggered` (komut KABUL EDİLDİ; fiziksel açılma kanıtı değildir) | `no_response` | null.
+  final String? gateState;
 
   /// Otomatik açma planlanmıştı ama kapı komutu gönderilmedi (bu sürümde kapı açma yok).
   bool get wouldOpen => autoAction == 'would_open';

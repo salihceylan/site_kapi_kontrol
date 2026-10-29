@@ -8,6 +8,7 @@ import { pool } from '../db.js';
 import { isModuleEnabled } from './module_service.js';
 import { PLATE_RECOGNITION_MODULE } from './plate_recognition_common.js';
 import { checkEdgeHealth, expireStalePresence } from './plate_notify.js';
+import { runCamerasHousekeeping } from './plate_cameras_service.js';
 
 export const PLATE_TICK_INTERVAL_MS = 5 * 60 * 1000;
 const FIRST_DELAY_MS = 90 * 1000;
@@ -21,6 +22,8 @@ export const plateHealthHooks = {
   moduleEnabled: (siteCode) => isModuleEnabled(siteCode, PLATE_RECOGNITION_MODULE),
   checkEdgeHealth: (siteCode, nowMs) => checkEdgeHealth(pool, siteCode, nowMs),
   expireStalePresence: () => expireStalePresence(pool),
+  /** Sözleşme sürüm 3 bakımı: saklama süresi geçmiş / pasif kamera kareleri (KVKK), süresi dolan komutlar, eski komut kayıtları. */
+  housekeeping: () => runCamerasHousekeeping(pool),
 };
 
 let timer = null;
@@ -37,9 +40,9 @@ function logFailure(step, error) {
   console.error(`[plate-health] ${step} basarisiz:`, error?.code || error?.message || 'hata');
 }
 
-/** Tek tur. Dönüş: { sites, alerted, expired } (test ve günlük için). */
+/** Tek tur. Dönüş: { sites, alerted, expired, snapshotsRemoved, commandsExpired } (test ve günlük için). */
 export async function runPlateHealthTick({ hooks = plateHealthHooks, nowMs = Date.now() } = {}) {
-  const summary = { sites: 0, alerted: 0, expired: 0 };
+  const summary = { sites: 0, alerted: 0, expired: 0, snapshotsRemoved: 0, commandsExpired: 0 };
   let sites = [];
   try {
     sites = await hooks.listSites();
@@ -61,6 +64,13 @@ export async function runPlateHealthTick({ hooks = plateHealthHooks, nowMs = Dat
     summary.expired = Number(await hooks.expireStalePresence()) || 0;
   } catch (error) {
     logFailure('icerisi zaman asimi', error);
+  }
+  try {
+    const kept = await hooks.housekeeping?.();
+    summary.snapshotsRemoved = Number(kept?.snapshotsRemoved) || 0;
+    summary.commandsExpired = Number(kept?.commandsExpired) || 0;
+  } catch (error) {
+    logFailure('kamera bakimi', error);
   }
   return summary;
 }

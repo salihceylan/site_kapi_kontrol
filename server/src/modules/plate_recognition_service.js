@@ -29,6 +29,8 @@ import {
   planAutoOpen,
 } from './plate_recognition_common.js';
 
+import { gateStateOf, liveIdentity } from './plate_cameras_common.js';
+
 const SYSTEM_ACTOR = Object.freeze({ name: 'Plaka tanıma (sistem)', role: 'system' });
 
 async function audit(db, actor, action, siteCode, targetType, targetId, details) {
@@ -138,13 +140,23 @@ export async function handlePlateEvent({ siteCode, deviceId, eventId, plate, bod
 
 // --- Olay listesi ----------------------------------------------------------------------------------------------------
 
-export async function listDecisions(siteCode, query = {}) {
+/**
+ * `canWrite` (yönetici / süper): satırlara kimlik (daire + kişi "Ali Y.") eklenir; kurul / görevli yalnız plaka, yön, karar, kapı ve kapı durumunu görür.
+ * `gate_state` kişisel veri değildir: triggered (kapı komutu KABUL EDİLDİ; fiziksel açılma kanıtı değildir) | no_response (yanıt yok) | null.
+ */
+export async function listDecisions(siteCode, query = {}, { canWrite = false } = {}) {
   const { limit, beforeId, decision, live, sinceId, sinceAt } = parseListQuery(query);
   const result = await pool.query(
     `SELECT d.id, d.plate, d.decision, d.reason, d.confidence, d.auto_action, d.decided_at, e.seen_at, e.direction, e.decision_kind,
+            e.gate_command, e.identity_kind, ab.block_name, aa.unit_label,
+            COALESCE(NULLIF(BTRIM(pu.full_name), ''), NULLIF(BTRIM(ps.full_name), '')) AS person_name,
             c.name AS device_name, COALESCE(pg.name, g.door_name) AS door_name
        FROM plate_decisions d
        LEFT JOIN plate_events e ON e.id = d.event_id
+       LEFT JOIN apartments aa ON aa.id = e.apartment_id AND aa.site_code = d.site_code
+       LEFT JOIN site_blocks ab ON ab.id = aa.block_id
+       LEFT JOIN site_people ps ON ps.id = e.person_id AND ps.site_code = d.site_code
+       LEFT JOIN users pu ON pu.user_code = ps.user_code
        LEFT JOIN plate_gates pg ON pg.id = e.gate_id AND pg.site_code = d.site_code
        LEFT JOIN camera_devices c ON c.id = d.device_id
        LEFT JOIN site_doors g ON g.id = d.door_id
@@ -168,6 +180,8 @@ export async function listDecisions(siteCode, query = {}) {
       seen_at: iso(row.seen_at ?? row.decided_at),
       device_name: row.device_name ?? null,
       door_name: row.door_name ?? null,
+      identity: liveIdentity({ kind: row.identity_kind, blockName: row.block_name, unitLabel: row.unit_label, fullName: row.person_name }, canWrite),
+      gate_state: gateStateOf({ gateCommand: row.gate_command, decisionKind: row.decision_kind }),
     })),
     next_before_id: result.rows.length > limit ? Number(rows[rows.length - 1].id) : null,
   };

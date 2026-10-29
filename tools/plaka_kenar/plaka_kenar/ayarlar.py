@@ -7,11 +7,14 @@ import json
 import os
 import re
 import sys
+import threading
 from pathlib import Path
 
-SURUM = "0.2.0"
-# Sunucu sozlesmesi (docs/PLATFORM_PLAKA_KENAR_SOZLESMESI.md): 2 = olay karar turu "kara_liste" (A3). Sunucu 1 ve 2'yi kabul eder.
-SCHEMA_VERSION = 2
+SURUM = "0.3.0"
+# Sunucu sozlesmesi (docs/PLATFORM_PLAKA_KENAR_SOZLESMESI.md): 2 = olay karar turu "kara_liste" (A3);
+# 3 = uzaktan komutlar (kesif / sinama), goruntu karolari, sunucu kamera tanimlari, kimlik + kapi komutu alanlari. Sunucu 1, 2 ve 3'u kabul eder.
+SCHEMA_VERSION = 3
+_KAYIT_KILIDI = threading.Lock()  # arayuz Kaydet'i ile servisin sunucu kamera birlestirmesi ayni dosyayi yazar
 
 # Plan 2. bolum: TR plaka regex'i (bicimlendirilmis "34 ABC 123" metnine uygulanir).
 TR_PLAKA_REGEX = r"^(0[1-9]|[1-7][0-9]|8[01])\s?[A-PR-VYZ]{1,3}\s?\d{2,4}$"
@@ -33,13 +36,30 @@ VARSAYILAN: dict = {
         "olay_toplu_adet": 50,
         "kalp_atisi_aralik_sn": 90,
         "olay_saklama_gun": 7,  # kuyruktaki (gonderilmemis dahil) olaylar bu sureden sonra silinir
-        # A1 sozlesmesindeki GERCEK yollar (/edge/plate/v1); tek tek kapatilabilir.
+        "komut_aralik_sn": 5,  # uzaktan komut (kesif / sinama) hizli yoklamasi; kalp atisi yaniti da komut tasir
+        "komut_sonuc_deneme": 3,  # komut sonucu gecici hatada bu kadar kez denenir
+        "komut_sonuc_bekle_sn": 2.0,
+        # A1 sozlesmesindeki GERCEK yollar (/edge/plate/v1); tek tek kapatilabilir. {id}: komut / kamera kimligi.
         "uclar": {
             "kayit": {"etkin": True, "yol": "/edge/plate/v1/claim"},
             "senkron": {"etkin": True, "yol": "/edge/plate/v1/sync"},
             "olay": {"etkin": True, "yol": "/edge/plate/v1/events"},
             "kalp_atisi": {"etkin": True, "yol": "/edge/plate/v1/heartbeat"},
+            "komutlar": {"etkin": True, "yol": "/edge/plate/v1/commands"},
+            "komut_sonuc": {"etkin": True, "yol": "/edge/plate/v1/commands/{id}/result"},
+            "goruntu": {"etkin": True, "yol": "/edge/plate/v1/cameras/{id}/snapshot"},
         },
+    },
+    # Goruntu karolari: etkin her kameradan kucuk JPEG (yalniz SON kare sunucuda tutulur, tarihce yok - KVKK). Aralik SUNUCUDAN gelir
+    # (izleyen varken / yokken); buradaki aralik_sn ALT SINIRDIR. etkin=false: hic gonderilmez.
+    "goruntu_gonderim": {
+        "etkin": True,
+        "aralik_sn": 4,
+        "bosta_aralik_sn": 15,  # sunucu "izleyen yok" der ama aralik vermezse kullanilan geri-dusus
+        "yukseklik": 360,
+        "kalite": 60,
+        "en_cok_bayt": 262144,
+        "hata_bekleme_en_cok_sn": 60,
     },
     # Sinirsiz satir. Ornek: {"id":"giris1","ad":"Giris","url":"rtsp://...","mod":"akis|tetik",
     #   "fps":3,"kapi_id":"kapi1","yon":"giris|cikis|","etkin":true,"roi":[0,0,1,1],
@@ -213,17 +233,34 @@ def yukle(yol: Path | str | None = None) -> dict:
     if p.exists():
         with open(p, "r", encoding="utf-8") as f:
             ek = json.load(f)
-    return derin_birlestir(VARSAYILAN, ek)
+    sonuc = derin_birlestir(VARSAYILAN, ek)
+    # Sozlesme surumu kodun sabitidir, ayar degil: eski surumun kaydettigi dosya yeni alanlari (v3) susturmasin.
+    sonuc["sunucu"]["schema_version"] = max(int(sonuc["sunucu"].get("schema_version") or 0), SCHEMA_VERSION)
+    return sonuc
 
 
 def kaydet(ayar: dict, yol: Path | str | None = None) -> Path:
     p = Path(yol) if yol else varsayilan_yol()
     p.parent.mkdir(parents=True, exist_ok=True)
     gecici = p.with_suffix(".tmp")
-    with open(gecici, "w", encoding="utf-8") as f:
-        json.dump(ayar, f, ensure_ascii=False, indent=2)
-    os.replace(gecici, p)
+    with _KAYIT_KILIDI:
+        with open(gecici, "w", encoding="utf-8") as f:
+            json.dump(ayar, f, ensure_ascii=False, indent=2)
+        os.replace(gecici, p)
     return p
+
+
+def sunucu_kameralarini_yaz(kameralar: list, yol: Path | str | None = None) -> Path:
+    """Sunucudan inen kamera satirlarini (kaynak: "sunucu") dosyaya isler. Dosyadaki baska HER SEY (yerel satirlar, arayuzde henuz
+    kaydedilmemis degisiklikler dahil bellekteki ayar) oldugu gibi kalir: yalniz sunucu-kaynakli satirlar degistirilir."""
+    p = Path(yol) if yol else varsayilan_yol()
+    ham: dict = {}
+    if p.exists():
+        with open(p, "r", encoding="utf-8") as f:
+            ham = json.load(f)
+    yerel = [k for k in ham.get("kameralar", []) if k.get("kaynak") != "sunucu"]
+    ham["kameralar"] = yerel + [copy.deepcopy(k) for k in kameralar if k.get("kaynak") == "sunucu"]
+    return kaydet(ham, p)
 
 
 def _tam_sayi(v) -> bool:
@@ -275,7 +312,28 @@ def dogrula(ayar: dict) -> list[str]:
     for k in ayar.get("kameralar", []):
         if k.get("yon", "") not in ("", "giris", "cikis"):
             u.append(f"Kamera {k.get('id')}: yon 'giris' veya 'cikis' olmali")
+        if k.get("kaynak") == "sunucu" and k.get("etkin", True) and not k.get("kapi_id"):
+            u.append(f"Kamera {k.get('id')} (sunucudan): yerelde sunucu_id'si eslesen kapi yok; goruntu/sinama calisir ama kapi acilmaz "
+                     "(kapi satirina sunucudaki kapi kimligini yazin)")
+    g = ayar.get("goruntu_gonderim", {})
+    if g.get("etkin", True):
+        if not (_sayi(g.get("aralik_sn")) and float(g["aralik_sn"]) >= 1):
+            u.append("goruntu_gonderim.aralik_sn en az 1 olmali")
+        if not (_sayi(g.get("kalite")) and 10 <= float(g["kalite"]) <= 95):
+            u.append("goruntu_gonderim.kalite 10-95 arasi olmali")
+        if not (_sayi(g.get("yukseklik")) and float(g["yukseklik"]) >= 90):
+            u.append("goruntu_gonderim.yukseklik en az 90 olmali")
+        if not (_sayi(g.get("en_cok_bayt")) and float(g["en_cok_bayt"]) > 0):
+            u.append("goruntu_gonderim.en_cok_bayt pozitif olmali")
     return u
+
+
+def _sayi(v) -> bool:
+    try:
+        float(v)
+        return True
+    except (TypeError, ValueError):
+        return False
 
 
 def sunucu_hazir(ayar: dict) -> bool:

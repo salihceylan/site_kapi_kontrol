@@ -182,8 +182,8 @@ describe('plaka geçiş noktaları + kenar istemci: gerçek PostgreSQL', { skip 
     assert.equal((await call('POST', '/edge/plate/v1/claim', { body: {} })).status, 401);
     const claim = await edge('POST', '/claim', { schema_version: 1, app_version: '0.1.0' });
     assert.equal(claim.status, 200, claim.text);
-    assert.equal(claim.json.schema_version, 2);
-    assert.deepEqual(claim.json.supported_schema_versions, [1, 2]);
+    assert.equal(claim.json.schema_version, 3);
+    assert.deepEqual(claim.json.supported_schema_versions, [1, 2, 3]);
     assert.equal(claim.json.intervals.heartbeat_seconds, 60);
     assert.equal((await edge('POST', '/claim', { schema_version: 9 })).json.code, 'UNSUPPORTED_SCHEMA');
     const beat = await edge('POST', '/heartbeat', {
@@ -280,7 +280,7 @@ describe('plaka geçiş noktaları + kenar istemci: gerçek PostgreSQL', { skip 
     assert.equal(created.status, 201, created.text);
     const key = created.json.edge_key;
     const e2 = (method, suffix, body) => edge(method, suffix, body, key);
-    assert.equal((await e2('POST', '/claim', { schema_version: 2 })).json.schema_version, 2);
+    assert.equal((await e2('POST', '/claim', { schema_version: 2 })).json.schema_version, 3);
 
     // Site ayarı: yeni eşikler (zaman aşımı rapor eşiğinden büyük olmalı) ve varsayılanlar
     assert.equal((await mgr('PUT', '/gate-settings', { inside_report_hours: 4, inside_timeout_hours: 3 })).status, 400);
@@ -347,5 +347,192 @@ describe('plaka geçiş noktaları + kenar istemci: gerçek PostgreSQL', { skip 
     assert.equal((await app('GET', `/app/plate-permits?site_code=${ids.site}`)).json.movement_notify, true);
     assert.equal((await notifyResidentMovement(movement)).recipients, 1);
     assert.deepEqual(await notifyResidentMovement({ ...movement, seenAt: new Date(Date.now() - 3 * 3600_000) }), { skipped: 'stale' });
+  });
+
+  it('sözleşme v3 (122): komut kuyruğu (keşif + sınama), şifreli kamera parolası gidiş-dönüş, otomatik açma durumu, görüntü karoları (403/304/KVKK), kimlik + kapı günlüğü', async () => {
+    const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0xff, 0xd9]);
+    const rawFetch = (method, path, { token, edgeKey, headers = {}, body } = {}) =>
+      fetch(`${baseUrl}${path}`, { method, headers: { ...(token ? { authorization: `Bearer ${token}` } : {}), ...(edgeKey ? { authorization: `Bearer ${edgeKey}` } : {}), ...headers }, body });
+    const mgrRaw = (suffix, headers = {}, token = ids.token) => rawFetch('GET', `/manager/sites/${ids.site}/plate-recognition${suffix}`, { token, headers });
+
+    // Site ayari: komut omru / goruntu araliklari / saklama suresi site ayaridir (aralik disi 400, bos aralik < aktif aralik 400)
+    assert.equal((await mgr('PUT', '/gate-settings', { command_ttl_seconds: 30 })).status, 400);
+    assert.equal((await mgr('PUT', '/gate-settings', { snapshot_interval_seconds: 30, snapshot_idle_interval_seconds: 10 })).status, 400);
+    assert.deepEqual(
+      [(await mgr('GET', '/gate-settings')).json.settings].map((s) => [s.command_ttl_seconds, s.snapshot_interval_seconds, s.snapshot_idle_interval_seconds, s.snapshot_keep_minutes])[0],
+      [600, 4, 15, 30],
+    );
+
+    // Iki etkin kenar: komut icin secim zorunlu; birini kaldirinca tek kenar otomatik hedef
+    const pc2 = Number((await q(`SELECT id FROM plate_edge_clients WHERE name = 'Kulübe PC 2'`)).rows[0].id);
+    const pc3 = await mgr('POST', '/edge-clients', { name: 'Kulübe PC 3' });
+    assert.equal(pc3.status, 201, pc3.text);
+    const e3 = (method, suffix, body) => edge(method, suffix, body, pc3.json.edge_key);
+    const needPick = await mgr('POST', '/discovery', {});
+    assert.deepEqual([needPick.status, needPick.json.code, needPick.json.clients.length], [400, 'EDGE_CLIENT_REQUIRED', 2]);
+    assert.equal((await mgr('POST', `/edge-clients/${pc2}/revoke`)).status, 200);
+    assert.equal((await mgr('POST', '/discovery', { edge_client_id: pc2 })).json.code, 'EDGE_CLIENT_NOT_FOUND');
+
+    // Otomatik acma durumu: kenar hic haber vermedi -> cevrimdisi (durust)
+    assert.equal((await mgr('GET', '/cameras')).json.auto_open.reason, 'edge_offline');
+
+    // Ağda kamera ara: kuyruga girer, kenar cevrimdisi oldugu soylenir, ayni komut tekrar acilmaz
+    const started = await mgr('POST', '/discovery', {});
+    assert.equal(started.status, 202, started.text);
+    assert.deepEqual([started.json.command.status, started.json.command.waiting_offline, started.json.reused], ['pending', true, false]);
+    const again = await mgr('POST', '/discovery', {});
+    assert.deepEqual([again.json.reused, again.json.command.id], [true, started.json.command.id]);
+    // Kenar kalp atisiyla alir (ATOMIK: ayni komut ikinci kez verilmez); surum 2 kalp atisi komut ALMAZ
+    const v2beat = await e3('POST', '/heartbeat', { schema_version: 2, cameras: [] });
+    assert.deepEqual(v2beat.json.commands, []);
+    const beat = await e3('POST', '/heartbeat', { schema_version: 3, recognition: { ready: false, note: 'kalibrasyon modu' }, cameras: [{ camera_id: ids.camIn, last_frame_at: ago(3) }] });
+    assert.equal(beat.status, 200, beat.text);
+    assert.deepEqual(beat.json.commands.map((c) => [c.id, c.kind]), [[started.json.command.id, 'discover']]);
+    assert.deepEqual((await e3('GET', '/commands')).json.commands, []);
+    assert.equal((await mgr('GET', '/discovery')).json.command.status, 'running');
+    const result = await e3('POST', `/commands/${started.json.command.id}/result`, {
+      schema_version: 3,
+      status: 'done',
+      result: { devices: [{ ip: '192.168.50.20', ports: [554, 8000], name: 'Hik', model: 'DS-2CD', source: 'onvif+tarama', label: 'ONVIF kamera', rtsp_port: 554 }, { ip: 'gecersiz', ports: [] }], summary: '1 cihaz', onvif_count: 1, scan_count: 1, interfaces: ['192.168.50.5'] },
+    });
+    assert.deepEqual([result.status, result.json.ok, result.json.duplicate], [200, true, false]);
+    assert.equal((await e3('POST', `/commands/${started.json.command.id}/result`, { schema_version: 3, status: 'done', result: {} })).json.duplicate, true, 'idempotent');
+    const latest = (await mgr('GET', '/discovery')).json;
+    assert.equal(latest.command.status, 'done');
+    assert.deepEqual(latest.command.result.devices.map((d) => d.ip), ['192.168.50.20']);
+    assert.equal(latest.edge.online, true);
+    assert.equal((await edge('POST', `/commands/${started.json.command.id}/result`, { schema_version: 3, status: 'done' }, ids.edgeKey)).status, 401, 'iptal edilen anahtar');
+
+    // Otomatik acma: model onaylanmadi -> nedenli; onaylaninca (kapiya bagli etkin kamera var) Etkin
+    assert.equal((await mgr('GET', '/cameras')).json.auto_open.reason, 'model_not_approved');
+    await e3('POST', '/heartbeat', { schema_version: 3, recognition: { ready: true }, cameras: [{ camera_id: ids.camIn, last_frame_at: ago(3) }] });
+    const overview = (await mgr('GET', '/cameras')).json;
+    assert.equal(overview.auto_open.state, 'active');
+    assert.equal(overview.edge.clients[0].recognition_ready, true);
+    assert.equal(overview.cameras.find((c) => c.id === ids.camIn).status.color, 'yesil');
+    assert.equal(overview.cameras.find((c) => c.id === ids.camIn).gate.id, ids.gate);
+
+    // Uygulamadan kamera ekle: parola SIFRELI, yanitta yok; marka sablonuyla RTSP adresi; kapi + yon baglanir; sinama komutu kuyruga girer
+    assert.equal((await mgr('POST', '/cameras', { name: 'Yan Giriş', brand: 'sony', host: '192.168.50.20' })).status, 400);
+    assert.equal((await mgr('POST', '/cameras', { name: 'Yan Giriş', brand: 'hikvision', host: '192.168.50.20', gate_id: 999999 })).json.code, 'GATE_NOT_FOUND');
+    const added = await mgr('POST', '/cameras', { name: 'Yan Giriş', brand: 'hikvision', host: '192.168.50.20', username: 'admin', password: 'Gizli-Parola-1', gate_id: ids.gate, direction: 'giris' });
+    assert.equal(added.status, 201, added.text);
+    const camId = added.json.camera.id;
+    assert.equal(added.json.camera.rtsp_url, 'rtsp://192.168.50.20/Streaming/Channels/101');
+    assert.deepEqual([added.json.camera.has_password, added.json.camera.direction, added.json.camera.gate.id, added.json.camera.probe.status], [true, 'giris', ids.gate, 'pending']);
+    assert.ok(!added.text.includes('Gizli-Parola-1'));
+    const stored = (await q(`SELECT password_enc, probe_status FROM camera_devices WHERE id = $1`, [camId])).rows[0];
+    assert.ok(stored.password_enc.startsWith('v1:') && !stored.password_enc.includes('Gizli'), 'AES-256-GCM sifreli saklanir');
+    assert.equal((await q(`SELECT 1 FROM plate_edge_commands WHERE payload::text LIKE '%Gizli%'`)).rows.length, 0, 'kuyrukta duz parola yok');
+    const probeCmd = (await e3('GET', '/commands')).json.commands[0];
+    assert.deepEqual([probeCmd.id, probeCmd.kind, probeCmd.payload.camera_id, probeCmd.payload.password, probeCmd.payload.username, probeCmd.payload.host], [added.json.probe_command_id, 'probe', camId, 'Gizli-Parola-1', 'admin', '192.168.50.20']);
+    assert.equal((await e3('POST', `/commands/${probeCmd.id}/result`, { schema_version: 3, status: 'done', result: { ok: true, width: 1920, height: 1080 } })).status, 200);
+    const probed = (await mgr('GET', '/cameras')).json.cameras.find((c) => c.id === camId);
+    assert.deepEqual([probed.probe.status, probed.probe.width, probed.probe.height], ['ok', 1920, 1080]);
+    // Uygulama "Yeniden sina": ulasilamayan kamera durust "basarisiz" + mesaj
+    const reprobe = await mgr('POST', `/cameras/${camId}/probe`, {});
+    assert.equal(reprobe.status, 202, reprobe.text);
+    const cmd2 = (await e3('GET', '/commands')).json.commands[0];
+    await e3('POST', `/commands/${cmd2.id}/result`, { schema_version: 3, status: 'done', result: { ok: false, reason: 'baglanti_acilamadi', message: 'RTSP bağlantısı açılamadı' } });
+    const failedProbe = (await mgr('GET', '/cameras')).json.cameras.find((c) => c.id === camId).probe;
+    assert.deepEqual([failedProbe.status, failedProbe.message], ['failed', 'RTSP bağlantısı açılamadı']);
+
+    // Kenar sync: v3 istemci kamera tanimlarini (parola cozulmus) alir; v2 almaz
+    const sync3 = (await e3('GET', '/sync?schema_version=3')).json;
+    const synced = sync3.config.cameras.find((c) => c.camera_id === camId);
+    assert.deepEqual([synced.password, synced.username, synced.rtsp_url, synced.gate_id, synced.direction], ['Gizli-Parola-1', 'admin', 'rtsp://192.168.50.20/Streaming/Channels/101', ids.gate, 'giris']);
+    assert.deepEqual((await e3('GET', '/sync?schema_version=2')).json.config.cameras, []);
+    assert.equal(sync3.config.settings.snapshot_interval_seconds, 4);
+
+    // Parola degisince yeniden sinanir (yeni parola kenara iner); bos metin parolayi siler
+    const changed = await mgr('PUT', `/cameras/${camId}`, { password: 'Yeni-Parola-2' });
+    assert.equal(changed.status, 200, changed.text);
+    assert.ok(changed.json.probe_command_id);
+    assert.equal((await e3('GET', '/commands')).json.commands[0].payload.password, 'Yeni-Parola-2');
+    await mgr('PUT', `/cameras/${camId}`, { password: '' });
+    assert.equal((await q(`SELECT password_enc FROM camera_devices WHERE id = $1`, [camId])).rows[0].password_enc, null);
+    await mgr('PUT', `/cameras/${camId}`, { password: 'Yeni-Parola-2' });
+
+    // Goruntu karolari: yalniz SON kare; izleyen yokken bosta araligi, izleyince kisa aralik; yetkisiz 403; ETag/304; sinirlar
+    const snapPath = `/edge/plate/v1/cameras/${camId}/snapshot`;
+    const put = (buf, headers = {}, key = pc3.json.edge_key, path = snapPath) => rawFetch('PUT', path, { edgeKey: key, headers: { 'content-type': 'image/jpeg', ...headers }, body: buf });
+    assert.equal((await q(`SELECT 1 FROM plate_snapshot_watch WHERE site_code = $1`, [ids.site])).rows.length, 1, 'yonetici ekrani acilinca izleyen isaretlendi');
+    await q(`UPDATE plate_snapshot_watch SET watched_at = NOW() - INTERVAL '10 minutes' WHERE site_code = $1`, [ids.site]);
+    const first = await put(jpeg, { 'x-frame-width': '640', 'x-frame-height': '360', 'x-captured-at': new Date(Date.now() - 2000).toISOString() });
+    assert.equal(first.status, 200, await first.clone().text());
+    assert.deepEqual(await first.json(), { schema_version: 3, ok: true, watched: false, next_seconds: 15 });
+    assert.equal((await put(Buffer.from('<html>'))).status, 400);
+    assert.equal((await put(Buffer.concat([jpeg, Buffer.alloc(300_000, 1)]))).status, 413);
+    assert.equal((await put(jpeg, {}, `${pc3.json.client.id}.${'0'.repeat(48)}`)).status, 401);
+    assert.equal((await put(jpeg, {}, pc3.json.edge_key, `/edge/plate/v1/cameras/${ids.camOther}/snapshot`)).status, 404, 'baska sitenin kamerasi');
+    assert.equal((await rawFetch('PUT', snapPath, { edgeKey: pc3.json.edge_key, headers: { 'content-type': 'application/json' }, body: '{}' })).status, 400, 'JPEG degil');
+    const unprivileged = await q(
+      `INSERT INTO users (full_name, email, role, is_active, email_verified, approval_status, password_hash) VALUES ('Yabancı', 'yabanci-plaka@example.com', 'individual', TRUE, TRUE, 'approved', $1) RETURNING user_code`,
+      [HASH],
+    );
+    const outsiderToken = signAccessToken({ id: unprivileged.rows[0].user_code }, { passwordHash: HASH });
+    for (const suffix of [`/cameras/${camId}/snapshot`, '/cameras', '/discovery']) assert.equal((await mgrRaw(suffix, {}, outsiderToken)).status, 403, suffix);
+    const shot = await mgrRaw(`/cameras/${camId}/snapshot`);
+    assert.equal(shot.status, 200);
+    assert.equal(shot.headers.get('content-type'), 'image/jpeg');
+    assert.equal(shot.headers.get('cache-control'), 'no-store');
+    assert.deepEqual(Buffer.from(await shot.arrayBuffer()), jpeg);
+    assert.equal((await mgrRaw(`/cameras/${camId}/snapshot`, { 'if-none-match': shot.headers.get('etag') })).status, 304);
+    assert.equal((await mgrRaw(`/cameras/${ids.camOther}/snapshot`)).status, 404, 'baska sitenin karesi');
+    const watched = await put(jpeg);
+    assert.deepEqual([(await watched.json()).watched], [true]);
+    const old = await put(Buffer.concat([jpeg, Buffer.from([1, 2, 3])]), { 'x-captured-at': new Date(Date.now() - 300_000).toISOString() });
+    assert.equal(old.status, 200);
+    assert.equal(Number((await q(`SELECT byte_size FROM plate_camera_snapshots WHERE camera_id = $1`, [camId])).rows[0].byte_size), jpeg.length, 'eski kare yeni kareyi EZMEZ');
+    assert.equal(Number((await q(`SELECT COUNT(*) AS n FROM plate_camera_snapshots WHERE camera_id = $1`, [camId])).rows[0].n), 1, 'tarihce yok: kamera basina tek satir');
+
+    // KVKK bakimi: saklama suresi gecen kare silinir; pasif kameranin karesi hemen silinir ve sync'ten cikar
+    const { runCamerasHousekeeping } = await import('../src/modules/plate_cameras_service.js');
+    await q(`UPDATE plate_camera_snapshots SET received_at = NOW() - INTERVAL '2 hours' WHERE camera_id = $1`, [camId]);
+    assert.equal((await mgrRaw(`/cameras/${camId}/snapshot`)).status, 404, 'saklama suresi disinda gosterilmez');
+    assert.equal((await runCamerasHousekeeping(pool)).snapshotsRemoved, 1);
+    await put(jpeg);
+    assert.equal((await mgr('PUT', `/cameras/${camId}`, { is_active: false })).status, 200);
+    assert.equal(Number((await q(`SELECT COUNT(*) AS n FROM plate_camera_snapshots WHERE camera_id = $1`, [camId])).rows[0].n), 0);
+    assert.equal((await put(jpeg)).status, 409);
+    assert.equal((await e3('GET', '/sync?schema_version=3')).json.config.cameras.some((c) => c.camera_id === camId), false);
+    assert.equal((await mgr('POST', `/cameras/${camId}/probe`, {})).json.code, 'CAMERA_INACTIVE');
+
+    // Komut suresi dolumu: bekleyen komut `expired`; sinamasi bekleyen kamera durust "basarisiz"
+    assert.equal((await mgr('PUT', '/gate-settings', { command_ttl_seconds: 60 })).status, 200);
+    const stale = await mgr('POST', '/discovery', {});
+    await q(`UPDATE plate_edge_commands SET created_at = NOW() - INTERVAL '2 hours' WHERE id = $1`, [stale.json.command.id]);
+    assert.equal((await mgr('GET', '/discovery')).json.command.status, 'expired');
+    assert.deepEqual((await e3('GET', '/commands')).json.commands, []);
+    assert.equal((await mgr('PUT', '/gate-settings', { command_ttl_seconds: 600 })).status, 200);
+
+    // Kimlik baglama + kapi komutu + SmartKeyPass kapi gunlugu
+    const person = await q(`INSERT INTO site_people (site_code, full_name) VALUES ($1, 'Ali Yılmaz') RETURNING id`, [ids.site]);
+    await q(`UPDATE vehicles SET person_id = $1 WHERE site_code = $2 AND plate = '34ABC123'`, [person.rows[0].id, ids.site]);
+    const accepted = await e3('POST', '/events', evt(40, { schema_version: 3, direction: 'giris', gate_command: 'accepted', apartment_id: ids.aptA, kind: 'resident' }));
+    assert.equal(accepted.status, 200, accepted.text);
+    const stored1 = (await q(`SELECT apartment_id, person_id, identity_kind, gate_command FROM plate_events WHERE client_event_id = 'evt-pg-000040'`)).rows[0];
+    assert.deepEqual([Number(stored1.apartment_id), Number(stored1.person_id), stored1.identity_kind, stored1.gate_command], [ids.aptA, Number(person.rows[0].id), 'resident', 'accepted']);
+    const doorLogs = async () => (await q(`SELECT door_name, user_name, apartment_label, trigger_type, door_id FROM door_access_logs WHERE site_code = $1 AND trigger_type = 'plate' ORDER BY id`, [ids.site])).rows;
+    let logs = await doorLogs();
+    const logsBefore = logs.length - 1; // onceki testlerdeki surum 1 olaylari da (acildi = komut kabul edildi) "Plaka ile" satiri birakmistir
+    assert.ok(logsBefore >= 0);
+    assert.deepEqual([logs.at(-1).door_name, logs.at(-1).user_name, logs.at(-1).apartment_label], ['Ana Kapı', '34 ABC 123 · Ali Y.', 'A - 1']);
+    assert.equal((await e3('POST', '/events', evt(40, { schema_version: 3, gate_command: 'accepted' }))).json.duplicate, true);
+    const refused = await e3('POST', '/events', evt(41, { schema_version: 3, decision: 'red', direction: 'cikis', gate_command: 'failed', reason: 'cihaz_yanit_vermedi' }));
+    assert.equal(refused.status, 200, refused.text);
+    logs = await doorLogs();
+    assert.equal(logs.length, logsBefore + 1, 'tekrar ve reddedilen komut kapi gunlugune yazilmaz');
+    const feed = (await mgr('GET', '/events?live=1')).json.events;
+    assert.deepEqual(feed[0].gate_state, 'no_response');
+    const okRow = feed.find((e) => e.gate_state === 'triggered' && e.identity);
+    assert.deepEqual(okRow.identity, { kind: 'resident', apartment_label: 'A - 1', person_label: 'Ali Y.' });
+    assert.ok(!JSON.stringify(feed).includes('Yılmaz'), 'tam soyad donmez');
+    const labels = (await e3('GET', '/sync?schema_version=3')).json.vehicles.items.find((v) => v.plate === '34ABC123');
+    assert.deepEqual([labels.apartment_label, labels.person_label], ['A - 1', 'Ali Y.']);
+    const audits = (await q(`SELECT DISTINCT action FROM audit_log WHERE site_code = $1 AND action LIKE 'plate.%'`, [ids.site])).rows.map((r) => r.action);
+    for (const action of ['plate.camera_created', 'plate.camera_updated', 'plate.camera_probe_requested', 'plate.discovery_requested']) assert.ok(audits.includes(action), action);
+    const auditText = JSON.stringify((await q(`SELECT details FROM audit_log WHERE site_code = $1 AND action LIKE 'plate.camera%'`, [ids.site])).rows);
+    assert.ok(!auditText.includes('Parola') && !auditText.includes('Gizli'), 'denetim kaydinda parola yok');
   });
 });
