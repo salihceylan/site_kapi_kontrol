@@ -9,7 +9,7 @@ import tkinter as tk
 from datetime import datetime
 from tkinter import messagebox, ttk
 
-from . import ayarlar
+from . import ayarlar, izleme, kesif
 from .servis import Servis
 
 # company_qr_tool/ui_kit.py C sinifindan secilen renkler
@@ -92,11 +92,121 @@ class SatirDialog(tk.Toplevel):
 KAMERA_ALANLAR = [("id", "Kamera kodu", "str"), ("ad", "Ad", "str"), ("url", "RTSP adresi (kimlik dahil)", "sifre"),
                   ("mod", "Mod", ["akis", "tetik"]), ("fps", "Kare/sn (akış)", "float"),
                   ("kapi_id", "Bağlı kapı kodu", "str"), ("yon", "Yön (boş = kapıdan)", ["", "giris", "cikis"]),
-                  ("sunucu_id", "Sunucudaki kamera kimliği", "str"), ("etkin", "Etkin", "bool")]
+                  ("sunucu_id", "Sunucudaki kamera kimliği", "str"), ("profil", "Görüntü profili", ["oto", "gunduz", "gece"]),
+                  ("etkin", "Etkin", "bool")]
 KAPI_ALANLAR = [("id", "Kapı kodu", "str"), ("ad", "Ad", "str"), ("yon_modu", "Yön modu", ["giris", "cikis", "cift"]),
                 ("skp_uid", "SmartKeyPass cihaz UID", "str"), ("skp_ip", "Cihaz IP (boş = otomatik bul)", "str"),
                 ("skp_token", "Yerel kontrol anahtarı", "sifre"), ("komut", "Komut", ["open", "pulse"]),
                 ("sunucu_id", "Sunucudaki kapı kimliği (isteğe bağlı)", "str")]
+
+
+class KesifDialog(tk.Toplevel):
+    """Ağda ONVIF kamera ara -> seç -> RTSP adresi (ONVIF GetStreamUri, olmazsa şablon önerileri) -> kamera satırı olarak ekle."""
+
+    def __init__(self, uyg):
+        super().__init__(uyg)
+        self.uyg, self.cihazlar = uyg, []
+        self.title("Ağda kamera ara")
+        self.configure(bg=BG, padx=14, pady=12)
+        self.geometry("760x520")
+        self.transient(uyg)
+        ust = ttk.Frame(self)
+        ust.pack(fill="x")
+        self.ara_dugme = ttk.Button(ust, text="Ağda kamera ara", style="Birincil.TButton", command=self._ara)
+        self.ara_dugme.pack(side="left")
+        self.durum = ttk.Label(ust, text="ONVIF keşfi (UDP 239.255.255.250:3702) ile aynı ağdaki kameralar aranır.", style="Soluk.TLabel")
+        self.durum.pack(side="left", padx=12)
+        self.tablo = ttk.Treeview(self, columns=("ip", "ad", "model", "konum"), show="headings", height=9)
+        for k, b, g in (("ip", "IP", 120), ("ad", "Ad", 180), ("model", "Model", 200), ("konum", "Konum / bilgi", 200)):
+            self.tablo.heading(k, text=b)
+            self.tablo.column(k, width=g, anchor="w")
+        self.tablo.pack(fill="x", pady=10)
+        k = ttk.Frame(self)
+        k.pack(fill="x")
+        self.kul, self.par = tk.StringVar(), tk.StringVar()
+        ttk.Label(k, text="Kullanıcı adı").pack(side="left")
+        ttk.Entry(k, textvariable=self.kul, width=16).pack(side="left", padx=(6, 14))
+        ttk.Label(k, text="Parola").pack(side="left")
+        ttk.Entry(k, textvariable=self.par, width=16, show="*").pack(side="left", padx=(6, 14))
+        ttk.Button(k, text="RTSP adresini bul (ONVIF)", command=self._uri_bul).pack(side="left")
+        ttk.Label(self, text="RTSP adresi (ONVIF sonucu ya da yaygın şablonlar; seçin veya düzeltin)", style="Soluk.TLabel").pack(anchor="w", pady=(14, 2))
+        self.url_v = tk.StringVar()
+        self.url_kutu = ttk.Combobox(self, textvariable=self.url_v, width=90)
+        self.url_kutu.pack(fill="x")
+        self.sonuc = ttk.Label(self, text="", style="Soluk.TLabel", wraplength=720)
+        self.sonuc.pack(anchor="w", pady=8)
+        alt = ttk.Frame(self)
+        alt.pack(fill="x", pady=(8, 0))
+        ttk.Button(alt, text="Kapat", command=self.destroy).pack(side="right")
+        ttk.Button(alt, text="Kamera olarak ekle", style="Birincil.TButton", command=self._ekle).pack(side="right", padx=8)
+
+    def _secili(self):
+        sec = self.tablo.selection()
+        return self.cihazlar[int(sec[0])] if sec else None
+
+    def _ara(self) -> None:
+        self.ara_dugme.state(["disabled"])
+        self.durum.configure(text="Aranıyor...")
+        sure = float(self.uyg.ayar["kesif"]["sure_sn"])
+
+        def is_() -> None:
+            try:
+                sonuc = kesif.kesfet(sure)
+            except Exception:  # noqa: BLE001 - ag/arayuz hatasi kesfi dusurmesin
+                sonuc = []
+            self.after(0, lambda: self._bitti(sonuc))
+        threading.Thread(target=is_, daemon=True).start()
+
+    def _bitti(self, sonuc: list) -> None:
+        self.ara_dugme.state(["!disabled"])
+        self.cihazlar = sonuc
+        self.tablo.delete(*self.tablo.get_children())
+        for i, d in enumerate(sonuc):
+            self.tablo.insert("", "end", iid=str(i), values=(d["ip"], d["ad"], d["model"], d["konum"]))
+        if sonuc:
+            self.durum.configure(text=f"{len(sonuc)} kamera bulundu. Birini seçin.")
+            self.tablo.selection_set("0")
+        else:
+            self.durum.configure(text=kesif.YANIT_YOK)
+
+    def _uri_bul(self) -> None:
+        d = self._secili()
+        if not d:
+            self.sonuc.configure(text="Önce listeden bir kamera seçin.")
+            return
+        self.sonuc.configure(text="ONVIF'ten RTSP adresi isteniyor...")
+        ay, kul, par = self.uyg.ayar["kesif"], self.kul.get().strip(), self.par.get()
+
+        def is_() -> None:
+            uri, hata = kesif.stream_uri(d, kul, par, float(ay["zaman_asimi_sn"]))
+            self.after(0, lambda: self._uri_bitti(d, uri, hata, kul, par))
+        threading.Thread(target=is_, daemon=True).start()
+
+    def _uri_bitti(self, d: dict, uri, hata: str, kul: str, par: str) -> None:
+        oneri = kesif.rtsp_oneriler(d["ip"], kul, par, int(self.uyg.ayar["kesif"]["rtsp_port"]))
+        liste = ([uri] if uri else []) + [a for _, a in oneri]
+        self.url_kutu.configure(values=liste)
+        self.url_v.set(liste[0])
+        self.sonuc.configure(text=(
+            "ONVIF adresi bulundu. Eklendikten sonra Genel sekmesindeki 'Sına' ile doğrulayın." if uri else
+            f"ONVIF GetStreamUri alınamadı ({hata}). Listeden yaygın bir şablon seçin ya da düzeltin; 'Sına' ile doğrulayın."))
+
+    def _ekle(self) -> None:
+        url, d = self.url_v.get().strip(), self._secili()
+        if not url:
+            self.sonuc.configure(text="Önce RTSP adresini bulun veya yazın.")
+            return
+        var = {k["id"] for k in self.uyg.ayar["kameralar"]}
+        n = 1
+        while f"kamera{n}" in var:
+            n += 1
+        ad = (d["ad"] or d["model"] or d["ip"]) if d else f"kamera{n}"
+        s = SatirDialog(self, "Yeni kamera (kapı ve yönü atayın)", KAMERA_ALANLAR,
+                        {"id": f"kamera{n}", "ad": ad, "url": url, "mod": "akis", "fps": 3, "etkin": True, "profil": "oto"})
+        if s.sonuc and s.sonuc.get("id"):
+            self.uyg.ayar["kameralar"].append(s.sonuc)
+            self.uyg._tablolari_doldur()
+            self.sonuc.configure(text=f"{s.sonuc['id']} eklendi. Kaydet'e basın, sonra Sına ile doğrulayın.")
 
 
 class Uygulama(tk.Tk):
@@ -118,6 +228,8 @@ class Uygulama(tk.Tk):
         self._genel_sekme()
         self._kamera_sekme()
         self._olay_sekme()
+        self.canli = izleme.CanliSekme(self.defter, self)
+        self.defter.add(self.canli, text="Canlı İzleme")
         self.durum_cubugu = ttk.Label(self, style="Soluk.TLabel", padding=(16, 6))
         self.durum_cubugu.pack(fill="x")
         self._servis_kur()
@@ -174,7 +286,8 @@ class Uygulama(tk.Tk):
         self.kam_t.pack(fill="x")
         self._dugmeler(f, [("Ekle", lambda: self._satir("kameralar", KAMERA_ALANLAR)),
                            ("Düzenle", lambda: self._satir("kameralar", KAMERA_ALANLAR, True)),
-                           ("Sil", lambda: self._sil("kameralar", self.kam_t)), ("Tetikle (tek kare)", self._tetikle)])
+                           ("Sil", lambda: self._sil("kameralar", self.kam_t)), ("Tetikle (tek kare)", self._tetikle),
+                           ("Ağda kamera ara", lambda: KesifDialog(self))])
         ttk.Label(f, text="Kapılar (geçiş noktaları)", style="Soluk.TLabel").pack(anchor="w", pady=(14, 0))
         self.kapi_t = self._tablo(f, [("id", "Kod", 90), ("ad", "Ad", 160), ("yon_modu", "Yön modu", 90),
                                       ("skp_uid", "SmartKeyPass UID", 150), ("skp_ip", "IP", 130)], 6)
@@ -207,6 +320,8 @@ class Uygulama(tk.Tk):
             for i, s in enumerate(self.ayar[anahtar]):
                 deger = [maske(str(s.get(c, ""))) if c == "url" else s.get(c, "") for c in kolonlar]
                 t.insert("", "end", iid=str(i), values=deger)
+        if hasattr(self, "canli"):
+            self.canli.yenile_kameralar()
 
     def _satir(self, anahtar: str, alanlar: list, duzenle: bool = False) -> None:
         tablo = self.kam_t if anahtar == "kameralar" else self.kapi_t
@@ -304,6 +419,7 @@ class Uygulama(tk.Tk):
         try:
             while True:
                 o = self.kuyruk.get_nowait()
+                self.canli.olay(o)
                 etiket = KARAR_ETIKET.get(o["karar"], (o["karar"], ""))[0]
                 zaman = datetime.fromisoformat(o["zaman"]).astimezone().strftime("%H:%M:%S")
                 self.olay_t.insert("", 0, tags=(o["karar"],), values=(
@@ -324,6 +440,7 @@ class Uygulama(tk.Tk):
         self.after(2000, self._durum_yenile)
 
     def _kapat(self) -> None:
+        self.canli.kapat()
         if self.servis:
             self.servis.durdur()
         self.destroy()
