@@ -249,6 +249,8 @@ export const SITE_AUDIT_LABELS = Object.freeze({
   'metering.reading.added': 'Sayaç okuması eklendi',
   'metering.reading.deleted': 'Sayaç okuması silindi',
   'metering.reading.imported': 'Sayaç okumaları yüklendi',
+  'metering.reading.retaken': 'Sayaç okuması yeniden çekildi',
+  'metering.reading.jump_confirmed': 'Sayaç okuması sıçrama onayıyla kaydedildi',
   'metering.billing.posted': 'Sayaç faturalandırıldı',
 
   // Duyurular
@@ -316,6 +318,8 @@ export const SITE_AUDIT_LABELS = Object.freeze({
   'equipment.expense_linked': 'Ekipman bir gidere bağlandı',
   'equipment.expense_unlinked': 'Ekipman-gider bağlantısı kaldırıldı',
   'quote.created': 'Teklif eklendi',
+  'quote.updated': 'Teklif güncellendi',
+  'quote.revised': 'Teklif yeni sürümle değiştirildi',
   'quote.accepted': 'Teklif kabul edildi',
   'quote.rejected': 'Teklif reddedildi',
   'cctv.camera_created': 'Kamera eklendi',

@@ -378,13 +378,18 @@ describe('rota tablosu taraması: gerçek server.js uygulaması', () => {
     siteFirst: [
       '(kök)', 'access-cards', 'announcements', 'annual-report', 'apartments', 'approve-deletion', 'assignable-devices', 'audit-log', 'budget-projects', 'cameras',
       'card-payments', 'cctv', 'concierge-requests', 'contract-vendors', 'contracts', 'decisions', 'directory', 'documents', 'doors', 'drive', 'emergency', 'equipment',
+      // 2026-10-29 karar: feedback / menu-layout / work-categories demo sitenin kendi verisidir, dis etkisi yok -> ACIK (E dalgasindaki audit-log/emergency emsaliyle ayni ilke).
+      'feedback', 'menu-layout', 'work-categories',
       'exports', 'finance', 'history', 'imports', 'invitations', 'join-requests', 'join-token', 'managers', 'meter-apartments', 'meter-billings',
       'meter-readings', 'meters', 'module-requests', 'modules', 'neighbor-board', 'people', 'plate-events', 'plate-recognition', 'quotes',
       'reject-deletion', 'reservation-areas', 'reservations', 'residencies', 'residency-log', 'rules', 'safety-requests', 'security-policy',
       'signing-roster', 'staff-roles', 'structure', 'surveys', 'team', 'trial-access', 'vehicles', 'visitor-entries', 'work-items',
     ],
     app: [
-      'access-cards', 'announcements', 'apartments', 'concierge-requests', 'decisions', 'directory', 'documents', 'doors', 'emergency', 'guest-passes', 'invitations',
+      'access-cards', 'announcements', 'apartments', 'concierge-requests', 'decisions', 'directory', 'documents', 'doors', 'emergency',
+      // 2026-10-29 karar: feedback / manager-contact / work-categories demo site verisi, dis etkisi yok -> ACIK.
+      'feedback', 'manager-contact', 'work-categories',
+      'guest-passes', 'invitations',
       'management-types', 'modules', 'my-doors', 'my-finance', 'my-modules', 'my-records', 'neighbor-board', 'notification-preferences', 'notifications',
       'plate-permits', 'push', 'reservation-areas', 'reservations', 'surveys', 'visitor-entries', 'web-push', 'work-items',
     ],
