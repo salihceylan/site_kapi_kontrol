@@ -357,6 +357,17 @@ class AuthApi {
     return _decodePayload(response);
   }
 
+  /// `POST /auth/trial-access`: deneme erişim kodu (tek kullanımlık, 72 saat, demo siteye kilitli) ile oturum açar.
+  /// Yanıt giriş yanıtıyla aynı biçimdedir (`token`, `user` + `user.trial_expires_at`). Hatalar: 401 `TRIAL_CODE_INVALID` /
+  /// `TRIAL_CODE_USED` / `TRIAL_CODE_EXPIRED` / `TRIAL_CODE_REVOKED`, 429 hız sınırı, 503 `TRIAL_UNAVAILABLE`.
+  Future<UserSession> redeemTrialCode({required String code}) {
+    return _authRequest(
+      path: '/auth/trial-access',
+      body: {'code': code},
+      expectedCode: 200,
+    );
+  }
+
   /// `POST /auth/sms/verify`: kod doğruysa oturum açar.
   Future<UserSession> verifySmsCode({required String phone, required String code}) {
     return _authRequest(
@@ -3682,6 +3693,16 @@ class AuthApi {
           code,
         );
       }
+      // Deneme erişim kodu oturumu (P2-27): 72 saat doldu ya da kod iptal edildi; giriş ekranı nedenini gösterir.
+      if (code == 'TRIAL_EXPIRED') {
+        throw SessionExpiredException(
+          'Deneme süreniz doldu. Devam etmek için bizimle iletişime geçin.',
+          code,
+        );
+      }
+      if (code == 'TRIAL_REVOKED') {
+        throw SessionExpiredException('Deneme erişiminiz sonlandırıldı.', code);
+      }
       throw SessionExpiredException(
         'Oturum süreniz doldu. Lütfen tekrar giriş yapın.',
         code,
@@ -4900,6 +4921,10 @@ class AuthApi {
       isActive: user['is_active'] as bool? ?? fallbackIsActive,
       token: token,
       mustChangePassword: user['must_change_password'] == true,
+      // Deneme erişim kodu oturumu (P2-27): yalnız deneme hesabında dolu; eski sunucuda alan yoktur (null).
+      trialExpiresAt: user['trial_expires_at'] is String
+          ? DateTime.tryParse(user['trial_expires_at'] as String)?.toLocal()
+          : null,
       phoneNumber: user['phone_number'] as String?,
       createdAt: user['created_at'] == null
           ? null

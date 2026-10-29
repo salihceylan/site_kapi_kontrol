@@ -128,7 +128,7 @@ export async function signingRoster({ siteCode, date }) {
     [siteCode],
   )).rows ?? [];
   const residencies = (await pool.query(
-    `SELECT r.apartment_id, r.relation, r.person_id,
+    `SELECT r.apartment_id, r.relation, r.person_id, r.is_account_holder,
             COALESCE(NULLIF(u.full_name, ''), sp.full_name) AS name
      FROM apartment_residencies r
      INNER JOIN site_people sp ON sp.id = r.person_id
@@ -148,6 +148,8 @@ export async function signingRoster({ siteCode, date }) {
 
   const byApartment = new Map();
   for (const r of residencies) {
+    // Coklu malik (104): imza hakki (vekil yoksa) hesap muhatabi olan malikte; diger malikler listeye girmez (daire basina TEK kisi).
+    if (r.relation === 'owner' && r.is_account_holder === false) continue;
     const entry = byApartment.get(Number(r.apartment_id)) ?? {};
     entry[r.relation] = { person_id: Number(r.person_id), name: r.name ?? '' };
     byApartment.set(Number(r.apartment_id), entry);

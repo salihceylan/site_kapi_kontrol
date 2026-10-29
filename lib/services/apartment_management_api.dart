@@ -9,6 +9,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:http/http.dart' as http;
+import 'package:site_kapi_kontrol/models/apartment_crm.dart' show ApartmentOwnersView;
 import 'package:site_kapi_kontrol/models/apartment_household.dart';
 import 'package:site_kapi_kontrol/models/apartment_management.dart';
 import 'package:site_kapi_kontrol/models/apartment_vehicles.dart';
@@ -277,6 +278,71 @@ class ApartmentManagementService {
   Future<ApartmentHousehold> household(int siteCode, int apartmentId) async => ApartmentHousehold.fromJson(
     await _guard((t) => api.call('GET', _mgr(siteCode, 'apartments/$apartmentId/household'), token: t)),
   );
+
+  // --- Çoklu malik (104): tüm malikler kayıtlı + TEK hesap muhatabı. Yazma: site yöneticisi / süper; okuma: kurul da. Mutasyonlar yeniden denenmez. ---
+
+  /// Dairenin güncel malikleri (hesap muhatabı başta).
+  Future<ApartmentOwnersView> apartmentOwners(int siteCode, int apartmentId) async => ApartmentOwnersView.fromJson(
+    await _guard((t) => api.call('GET', _mgr(siteCode, 'apartments/$apartmentId/owners'), token: t)),
+  );
+
+  /// Malik ekler: kayıtlı kişi ([personId]) YA DA yeni kişi ([fullName] + isteğe bağlı telefon / e-posta). [makeAccountHolder]: hesap muhatabı yap.
+  Future<ApartmentOwnersView> addApartmentOwner(
+    int siteCode,
+    int apartmentId, {
+    int? personId,
+    String? fullName,
+    String? phone,
+    String? email,
+    bool makeAccountHolder = false,
+  }) async {
+    assert((personId != null) != (fullName != null), 'person_id ya da yeni kişi (ad soyad) verilmeli');
+    return ApartmentOwnersView.fromJson(
+      await _guard(
+        (t) => api.call(
+          'POST',
+          _mgr(siteCode, 'apartments/$apartmentId/owners'),
+          token: t,
+          body: <String, Object?>{
+            'person_id': ?personId,
+            if (personId == null)
+              'person': <String, Object?>{
+                'full_name': fullName,
+                if ((phone ?? '').isNotEmpty) 'phone': phone,
+                if ((email ?? '').isNotEmpty) 'email': email,
+              },
+            if (makeAccountHolder) 'make_account_holder': true,
+          },
+        ),
+      ),
+    );
+  }
+
+  /// Hesap muhatabını [residencyId] (dairenin başka bir maliki) yapar.
+  Future<ApartmentOwnersView> setAccountHolder(int siteCode, int apartmentId, int residencyId) async => ApartmentOwnersView.fromJson(
+    await _guard(
+      (t) => api.call(
+        'PUT',
+        _mgr(siteCode, 'apartments/$apartmentId/owners/account-holder'),
+        token: t,
+        body: <String, Object?>{'residency_id': residencyId},
+      ),
+    ),
+  );
+
+  /// Maliki çıkarır ("Taşındı"). Çıkarılan hesap muhatabıysa ve ≥2 malik kalıyorsa [newAccountHolderResidencyId] zorunludur
+  /// (sunucu 409 `ACCOUNT_HOLDER_REQUIRED` + `owners` döner).
+  Future<ApartmentOwnersView> removeApartmentOwner(int siteCode, int apartmentId, int residencyId, {int? newAccountHolderResidencyId}) async =>
+      ApartmentOwnersView.fromJson(
+        await _guard(
+          (t) => api.call(
+            'POST',
+            _mgr(siteCode, 'apartments/$apartmentId/owners/$residencyId/remove'),
+            token: t,
+            body: <String, Object?>{'new_account_holder_residency_id': ?newAccountHolderResidencyId},
+          ),
+        ),
+      );
 
   Future<AdminCandidates> adminCandidates(int siteCode, int apartmentId) async => AdminCandidates.fromJson(
     await _guard((t) => api.call('GET', _mgr(siteCode, 'apartments/$apartmentId/admin-candidates'), token: t)),

@@ -264,7 +264,7 @@ export async function loadResidentNames(db, apartmentIds) {
       INNER JOIN site_people sp ON sp.id = r.person_id AND sp.is_active = TRUE
       LEFT JOIN users u ON u.user_code = sp.user_code
       WHERE r.apartment_id = ANY($1::BIGINT[]) AND r.is_current = TRUE AND r.relation IN ('owner', 'tenant')
-      ORDER BY r.apartment_id, r.id
+      ORDER BY r.apartment_id, r.is_account_holder DESC, r.id
     `,
     [apartmentIds],
   );

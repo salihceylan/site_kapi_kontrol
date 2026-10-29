@@ -32,6 +32,8 @@ before_pps=$($PSQL -d "$RDB" -Atc "select count(*) from payment_provider_setting
 # 083 / 084: kataloktan kalkan eski kodlu modul satirlari (card_payments, documents) SILINMEZ (katalog yok sayar; dagitim otomatik geri alinirsa onceki surum bu satirlari okur): once/sonra sayilari esit olmali.
 before_cp_sm=$($PSQL -d "$RDB" -Atc "select count(*) from site_modules where module_code = 'card_payments'" 2>/dev/null); before_cp_sm=${before_cp_sm:-0}
 before_doc_sm=$($PSQL -d "$RDB" -Atc "select count(*) from site_modules where module_code = 'documents'" 2>/dev/null); before_doc_sm=${before_doc_sm:-0}
+# 104 (coklu malik): yukseltme malik satirlarini ne ekler ne siler; once/sonra guncel malik satiri sayisi esit olmali.
+before_owners=$($PSQL -d "$RDB" -Atc "select count(*) from apartment_residencies where is_current and relation = 'owner'" 2>/dev/null); before_owners=${before_owners:-0}
 echo "   once: sites=$before_sites users=$before_users doors=$before_doors site_memberships=$before_sm"
 echo "[3/5] yeni ensureDbSchema (2 kez, ikinci tur no-op olmali)"
 # Sema parmak izi: tum public semasi (kolonlar+varsayilanlar, kisitlar, indeksler, tetikleyiciler, islev govdeleri). Satir SAYILARI dahil degildir.
@@ -181,6 +183,16 @@ ok083=$(q "select not exists (select 1 from module_requests where module_code = 
 # (Belge satiri / surum / ek sayilari 084'ten ONCE ve SONRA ayni olmali: 084 onlara dokunmaz; asagida sayilar bilgi icin yazilir.)
 ok084=$(q "select not exists (select 1 from module_requests where module_code = 'documents' and status = 'pending') and $(tb "'documents','document_versions','announcement_attachments'" 3)")
 [ "$before_doc_sm" = "$after_doc_sm" ] || ok084=f
+# 104 (coklu malik; Dalga E): is_account_holder sutunu, TEK muhatap indeksi (eski indeksle AYNI ad), 2 satir + 3 ertelenmis kisit tetikleyicisi, 3 islev, CHECK;
+# her guncel maliki olan dairede TAM bir muhatap, hicbir dairede 2 muhatap yok; malik satiri sayisi once/sonra esit.
+ok104=$(q "select $(cl "'apartment_residencies.is_account_holder'" 1) and $(ix "'uq_apartment_residencies_owner'" 1) and $(tg "'trg_apartment_residencies_owner_before','trg_apartment_residencies_owner_after','ctrg_apartment_residencies_holder_ins','ctrg_apartment_residencies_holder_upd','ctrg_apartment_residencies_holder_del'" 5) and $(fn "'trg_apartment_residencies_owner_before','trg_apartment_residencies_owner_after','trg_apartment_residencies_holder_check'" 3) and $(ks "'chk_apartment_residencies_holder'" 1) and not exists (select 1 from apartment_residencies r where r.is_current and r.relation = 'owner' and not exists (select 1 from apartment_residencies h where h.apartment_id = r.apartment_id and h.is_current and h.relation = 'owner' and h.is_account_holder)) and not exists (select 1 from apartment_residencies r where r.is_current and r.relation = 'owner' and r.is_account_holder group by r.apartment_id having count(*) > 1)")
+after_owners=$(q "select count(*) from apartment_residencies where is_current and relation = 'owner'")
+[ "$before_owners" = "$after_owners" ] || ok104=f
+# 106 (deneme erisim kodu; Dalga E): tablo + 4 indeks (kod ozeti tekil, kullanan tekil, olusturma, acik oturum) + 4 kisit.
+ok106=$(q "select $(tb "'trial_access_codes'" 1) and $(ix "'uq_trial_access_codes_hash','uq_trial_access_codes_used_by','idx_trial_access_codes_created','idx_trial_access_codes_open'" 4) and $(ks "'uq_trial_access_codes_hash','chk_trial_access_codes_hint','chk_trial_access_codes_note','chk_trial_access_codes_used'" 4)")
+# 107 (acil durum akisi: asansor bakim firmasi; Dalga E): tablo + 2 CHECK.
+ok107=$(q "select $(tb "'site_emergency_info'" 1) and $(ks "'chk_site_emergency_info_firm_name','chk_site_emergency_info_firm_phone'" 2)")
+echo "   [104-107] varlik kontrolleri: ok104=$ok104 (malik satiri once/sonra: $before_owners/$after_owners; muhatapli daire: $(q "select count(*) from apartment_residencies where is_current and relation = 'owner' and is_account_holder")) ok106=$ok106 ok107=$ok107"
 echo "   [052-084] varlik kontrolleri: ok052=$ok052 ok053=$ok053 ok054=$ok054 ok055=$ok055 ok056=$ok056 ok057=$ok057 ok058=$ok058 ok059=$ok059 ok060=$ok060 ok061=$ok061 ok062=$ok062 ok063=$ok063 ok064=$ok064 ok065=$ok065 ok066=$ok066 ok067=$ok067 ok068=$ok068 ok069=$ok069 ok070=$ok070 ok071=$ok071 ok072=$ok072 ok073=$ok073 ok074=$ok074 ok075=$ok075 ok076=$ok076 ok077=$ok077 ok078=$ok078 ok079=$ok079 ok080=$ok080 ok081=$ok081 ok082=$ok082 ok083=$ok083 ok084=$ok084"
 echo "   [077] site_name_key('X'||NBSP||'  I-nokta-ustte'||'ZM'||tab||'Y') = $(q "select site_name_key('X'||chr(160)||'  '||chr(304)||'ZM'||chr(9)||'Y')") ('x izm y' olmali); yeni indeks: $(q "select string_agg(indexname, ',' order by indexname) from pg_indexes where indexname in ('uq_sites_name_key','uq_site_applications_pending_name_key')") (2 olmali); eski indeks kalan: $(q "select count(*) from pg_indexes where indexname in ('idx_sites_unique_name','idx_site_applications_pending_unique_name')") (0 olmali; mukerrer ad varsa yeni kurulamaz ve eski KALIR: acilis gunlugundaki UYARI satirlarina bak)"
 echo "   [077] FK: $(q "select string_agg(conname||'/'||confdeltype::text, ',' order by conname) from pg_constraint where conname in ('user_oauth_identities_user_code_fkey','web_push_subscriptions_user_code_fkey')") (2 olmali, 'c' = CASCADE)"
@@ -191,9 +203,11 @@ echo "   [084] belge verisi (bilgi; 084 dokunmaz): belge=$(q "select count(*) fr
 echo "   [078] apartments m2 sutunlari (brut / net): $(q "select count(*) from information_schema.columns where table_schema='public' and table_name='apartments' and column_name in ('gross_area_m2','net_area_m2')") (0 olmali; 078 kalici dusurur, db.js eklemez)"
 all052=t
 for v in "$ok052" "$ok053" "$ok054" "$ok055" "$ok056" "$ok057" "$ok058" "$ok059" "$ok060" "$ok061" "$ok062" "$ok063" "$ok064" "$ok065" "$ok066" "$ok067" "$ok068" "$ok069" "$ok070" "$ok071" "$ok072" "$ok073" "$ok074" "$ok075" "$ok076" "$ok077" "$ok078" "$ok079" "$ok080" "$ok081" "$ok082" "$ok083" "$ok084"; do [ "$v" = "t" ] || all052=f; done
+all104=t
+for v in "$ok104" "$ok106" "$ok107"; do [ "$v" = "t" ] || all104=f; done
 idem=f; [ -n "$FP1" ] && [ "$FP1" = "$FP2" ] && idem=t
-echo "   ok035=$ok035 ok038=$ok038 ok039=$ok039 ok040=$ok040 ok041=$ok041 ok044=$ok044 ok047=$ok047 ok049=$ok049 ok051=$ok051 ok052-084=$all052 ensure=$ENSURE_OK_ALL idempotent=$idem"
-if [ "$before_sites" = "$after_sites" ] && [ "$before_users" = "$after_users" ] && [ "$before_sm" = "$after_sm" ] && [ "$before_am" = "$after_am" ] && [ "$typed" = "$after_sites" ] && [ "$ok035" = "t" ] && [ "$ok038" = "t" ] && [ "$ok039" = "t" ] && [ "$ok040" = "t" ] && [ "$ok041" = "t" ] && [ "$ok044" = "t" ] && [ "$ok047" = "t" ] && [ "$ok049" = "t" ] && [ "$ok051" = "t" ] && [ "$all052" = "t" ] && [ "$ENSURE_OK_ALL" = "t" ] && [ "$idem" = "t" ]; then
+echo "   ok035=$ok035 ok038=$ok038 ok039=$ok039 ok040=$ok040 ok041=$ok041 ok044=$ok044 ok047=$ok047 ok049=$ok049 ok051=$ok051 ok052-084=$all052 ok104-107=$all104 ensure=$ENSURE_OK_ALL idempotent=$idem"
+if [ "$before_sites" = "$after_sites" ] && [ "$before_users" = "$after_users" ] && [ "$before_sm" = "$after_sm" ] && [ "$before_am" = "$after_am" ] && [ "$typed" = "$after_sites" ] && [ "$ok035" = "t" ] && [ "$ok038" = "t" ] && [ "$ok039" = "t" ] && [ "$ok040" = "t" ] && [ "$ok041" = "t" ] && [ "$ok044" = "t" ] && [ "$ok047" = "t" ] && [ "$ok049" = "t" ] && [ "$ok051" = "t" ] && [ "$all052" = "t" ] && [ "$all104" = "t" ] && [ "$ENSURE_OK_ALL" = "t" ] && [ "$idem" = "t" ]; then
   echo "PROVA_OK"
 else
   echo "PROVA_SORUNLU"

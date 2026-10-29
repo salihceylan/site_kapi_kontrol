@@ -41,12 +41,16 @@ class ModulesView extends StatefulWidget {
     super.key,
     required this.authService,
     this.onModulesChanged,
+    this.initialSiteCode,
   });
 
   final AuthService authService;
 
   /// Bir modül açılıp kapatılınca (başarılı işlem sonrası) çağrılır.
   final VoidCallback? onModulesChanged;
+
+  /// Kurulum sihirbazı gibi dış giriş noktalarından açılan site (listede yoksa ilk site seçilir).
+  final int? initialSiteCode;
 
   @override
   State<ModulesView> createState() => ModulesViewState();
@@ -110,7 +114,9 @@ class ModulesViewState extends State<ModulesView> {
       if (!mounted || token != _sitesToken) return;
       final sites = page.sites.where((s) => s.isApproved).toList(growable: false);
       final keep = _siteCode != null && sites.any((s) => s.id == _siteCode);
-      final next = keep ? _siteCode : (sites.isEmpty ? null : sites.first.id);
+      final wanted = widget.initialSiteCode;
+      final preferred = !keep && wanted != null && sites.any((s) => s.id == wanted);
+      final next = keep ? _siteCode : (preferred ? wanted : (sites.isEmpty ? null : sites.first.id));
       setState(() {
         _sites = sites;
         _loadingSites = false;

@@ -233,6 +233,8 @@ class MyApartment {
 
   String get roleLabel => switch (myRole) {
     'owner' => 'Malik',
+    // Çoklu malik (104): kayıtlı malik ama hesap muhatabı değil (malik yetkisi ve borç görünümü muhatapta).
+    'co_owner' => 'Ortak malik',
     'tenant' => 'Kiracı',
     'family_member' => 'Aile üyesi',
     _ => 'Sakin',

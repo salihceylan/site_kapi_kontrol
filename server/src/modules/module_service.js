@@ -299,7 +299,7 @@ const ROLE_BY_RANK = Object.freeze({ 4: 'manager', 3: 'board_member', 2: 'staff'
 // (askıya alınmış üyeliğin ek izni geçersizdir). BOARD_MEMBER, STAFF ve yalnız site_memberships RESIDENT kaydı kapı
 // erişimi SAĞLAMAZ (door_service bunları kapı yetkisi saymaz): bu bağlar sitenin modüllerini görmeyi sağlar ama
 // istemcinin "kapı menüsü" kararında sayılmamalıdır (başka sitenin yöneticisi STAFF atayıp kapı menüsünü gizletemez).
-const MY_SITES_SQL = `
+export const MY_SITES_SQL = `
   WITH links AS (
     SELECT sms.site_code, 4 AS rank, TRUE AS door_access
     FROM site_manager_sites sms

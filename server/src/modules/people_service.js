@@ -2080,11 +2080,15 @@ export async function provisionResidentAndLinkPerson({ apartmentId, siteCode = n
 }
 
 export {
+  activatePersonRecord,
   afterAccessClosed,
   assertRelationAvailable,
   closeResidency,
+  findPersonByEmail,
   insertResidency,
   loadApartmentForSite,
+  loadResidencyForSite,
+  userHasUsableSiteTie,
   withSiteTransaction,
 };
 

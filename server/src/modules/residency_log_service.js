@@ -42,6 +42,8 @@ export const REASON_LABELS = Object.freeze({
   admin_change: 'Yönetici değişikliği',
   owner_record: 'Malik kaydı',
   owner_default: 'Malik varsayılanı',
+  co_owner_add: 'Ek malik kaydı',
+  account_holder_change: 'Hesap muhatabı değişti',
   legacy: 'Eski kayıt',
 });
 

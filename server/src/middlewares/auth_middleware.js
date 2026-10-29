@@ -1,5 +1,6 @@
 import { pool } from '../db.js';
 import { isPasswordVersionValid, verifyAccessToken } from '../jwt.js';
+import { DEMO_SITE_SETTING_KEY, TRIAL_MESSAGES, evaluateTrialRequest, isTrialAccountEmail } from '../modules/trial_access_common.js';
 
 // jsonwebtoken dogrulama hatalari (gecersiz/suresi dolmus/imza hatali) -> 401.
 // Bunun disindaki hatalar (DB kesintisi, yapilandirma) 401 DEGIL 5xx olmalidir; aksi halde
@@ -74,7 +75,19 @@ export async function authRequired(req, res, next) {
         password_hash,
         (COALESCE(users.must_change_password, FALSE) OR EXISTS (
           SELECT 1 FROM apartments a WHERE a.resident_user_code = users.user_code AND a.resident_pin_issued = TRUE
-        )) AS must_change_password
+        )) AS must_change_password,
+        (
+          SELECT json_build_object(
+            'code_id', tac.id,
+            'site_code', tac.site_code,
+            'expires_at', tac.session_expires_at,
+            'revoked_at', tac.revoked_at,
+            'demo_site_code', (SELECT ps.value->>'site_code' FROM platform_settings ps WHERE ps.key = '${DEMO_SITE_SETTING_KEY}')
+          )
+          FROM trial_access_codes tac
+          WHERE tac.used_by = users.user_code
+          LIMIT 1
+        ) AS trial_context
       FROM users
       WHERE user_code = $1
       LIMIT 1
@@ -104,6 +117,32 @@ export async function authRequired(req, res, next) {
       return res
         .status(401)
         .json({ error: 'Oturum gecersiz. Lutfen tekrar giris yapin.', code: 'TOKEN_REVOKED' });
+    }
+
+    // Deneme erisim kodu oturumu (P2-27 / K10): HER istekte, rol / aktiflik kontrolunden ONCE. Sure doldu / iptal / demo site degisti -> 401 (istemci
+    // oturumu kapatir); demo site DISINA ya da kapali bir uca her istek -> 403 (varsayilan RED; ilke: modules/trial_access_common.js). Deneme olmayan
+    // hesapta trial_context NULL'dir ve hicbir sey degismez.
+    const trialContext = authUser.trial_context ?? null;
+    delete authUser.trial_context;
+    if (trialContext) {
+      const verdict = evaluateTrialRequest({
+        trial: { siteCode: trialContext.site_code, expiresAt: trialContext.expires_at, revokedAt: trialContext.revoked_at },
+        demoSiteCode: trialContext.demo_site_code,
+        method: req.method,
+        path: req.originalUrl ?? req.url,
+      });
+      if (!verdict.ok) {
+        return res.status(verdict.status).json({ error: verdict.message, code: verdict.code });
+      }
+      authUser.trial = {
+        codeId: Number(trialContext.code_id),
+        siteCode: Number(trialContext.site_code),
+        expiresAt: new Date(trialContext.expires_at),
+      };
+    } else if (isTrialAccountEmail(authUser.email)) {
+      // Deneme hesabi (ayrilmis e-posta alan adi) ama kod satiri yok (ör. demo site silindi, kayit CASCADE ile gitti): yetim hesap sıradan bir
+      // site yoneticisi gibi calisamaz; oturum biter.
+      return res.status(401).json({ error: TRIAL_MESSAGES.revoked, code: 'TRIAL_REVOKED' });
     }
 
     authUser.userCode = authUser.user_code;

@@ -49,6 +49,7 @@ const Set<SirketMenuItem> showcaseSecondaryItems = <SirketMenuItem>{
   SirketMenuItem.ellerSerbest,
   SirketMenuItem.bluetoothWifiKur,
   SirketMenuItem.denetimKaydi,
+  SirketMenuItem.islemKayitlari,
   SirketMenuItem.platformAyarlari,
   SirketMenuItem.istemciHatalari,
 };
@@ -80,6 +81,7 @@ const Set<SirketMenuItem> _featureModuleItems = <SirketMenuItem>{
   SirketMenuItem.odemeKamera,
   SirketMenuItem.kameraCctv,
   SirketMenuItem.ekipmanBakim,
+  SirketMenuItem.acilDurum,
 };
 
 const Map<SirketMenuItem, ModuleArtKind> _artKinds = <SirketMenuItem, ModuleArtKind>{
@@ -110,6 +112,7 @@ const Map<SirketMenuItem, ModuleArtKind> _artKinds = <SirketMenuItem, ModuleArtK
   SirketMenuItem.odemeKamera: ModuleArtKind.devices,
   SirketMenuItem.kameraCctv: ModuleArtKind.devices,
   SirketMenuItem.ekipmanBakim: ModuleArtKind.contracts,
+  SirketMenuItem.acilDurum: ModuleArtKind.help,
   SirketMenuItem.siteler: ModuleArtKind.sites,
   SirketMenuItem.siteBasvurulari: ModuleArtKind.sites,
   SirketMenuItem.siteOnayTalepleri: ModuleArtKind.sites,
@@ -125,6 +128,7 @@ const Map<SirketMenuItem, ModuleArtKind> _artKinds = <SirketMenuItem, ModuleArtK
   SirketMenuItem.siteYoneticileriYonetimi: ModuleArtKind.users,
   SirketMenuItem.daireKullanicilariYonetimi: ModuleArtKind.people,
   SirketMenuItem.denetimKaydi: ModuleArtKind.reports,
+  SirketMenuItem.islemKayitlari: ModuleArtKind.reports,
   SirketMenuItem.istemciHatalari: ModuleArtKind.reports,
   SirketMenuItem.platformAyarlari: ModuleArtKind.settings,
   SirketMenuItem.ellerSerbest: ModuleArtKind.settings,
@@ -163,6 +167,7 @@ const Map<SirketMenuItem, String> _descriptions = <SirketMenuItem, String>{
   SirketMenuItem.odemeKamera: 'Plaka tanıyan kameralar',
   SirketMenuItem.kameraCctv: 'Kapı olaylarını kamera kayıtlarıyla eşleştirin',
   SirketMenuItem.ekipmanBakim: 'Ekipman, bakım planı ve teklifler',
+  SirketMenuItem.acilDurum: '112, yangın ve asansör arızası',
   SirketMenuItem.siteler: 'Site, blok, daire ve kapılar',
   SirketMenuItem.siteBasvurulari: 'Site kurma başvuruları',
   SirketMenuItem.siteOnayTalepleri: 'Onay bekleyen siteler',
@@ -179,6 +184,7 @@ const Map<SirketMenuItem, String> _descriptions = <SirketMenuItem, String>{
   SirketMenuItem.siteYoneticileriYonetimi: 'Site yöneticisi hesapları',
   SirketMenuItem.daireKullanicilariYonetimi: 'Daire sakinleri ve hesapları',
   SirketMenuItem.denetimKaydi: 'Yönetici işlem kayıtları',
+  SirketMenuItem.islemKayitlari: 'Sitenizde kim, ne zaman, ne yaptı',
   SirketMenuItem.platformAyarlari: 'Sürüm, destek ve yasal bilgiler',
   SirketMenuItem.istemciHatalari: 'Uygulama hata raporları',
   SirketMenuItem.ellerSerbest: 'Eller serbest ve kestirmeler',

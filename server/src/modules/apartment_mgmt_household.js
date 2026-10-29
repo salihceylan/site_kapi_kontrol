@@ -45,7 +45,7 @@ const MEMBERS_SQL = `
 `;
 
 const RESIDENCIES_SQL = `
-  SELECT r.id, r.person_id, r.relation, r.is_minor,
+  SELECT r.id, r.person_id, r.relation, r.is_account_holder, r.is_minor,
          sp.user_code,
          COALESCE(NULLIF(u.full_name, ''), sp.full_name) AS name,
          COALESCE(NULLIF(u.phone_number, ''), sp.phone) AS phone,
@@ -92,6 +92,7 @@ export function buildHousehold({ residencies = [], members = [], legacyUserCode 
       person_id: asCode(r.person_id),
       user_code: userCode,
       relation: r.relation ?? 'resident',
+      is_account_holder: r.is_account_holder === true,
       name: text(r.name) ?? FALLBACK_NAME,
       phone: text(r.phone),
       is_minor: r.is_minor === true,
@@ -127,6 +128,7 @@ export function buildHousehold({ residencies = [], members = [], legacyUserCode 
   }
   if (adminIdx < 0 && people.length > 0) {
     let candidateIdx = people.findIndex((p) => p.relation === 'tenant');
+    if (candidateIdx < 0) candidateIdx = people.findIndex((p) => p.relation === 'owner' && p.is_account_holder);
     if (candidateIdx < 0) candidateIdx = people.findIndex((p) => p.relation === 'owner');
     if (candidateIdx < 0) candidateIdx = 0;
     adminIdx = candidateIdx;
@@ -138,6 +140,8 @@ export function buildHousehold({ residencies = [], members = [], legacyUserCode 
   const present = (p, isAdmin) => {
     const base = { person_id: p.person_id, name: p.name, relation: p.relation, is_admin: isAdmin };
     if (!detailed) return base;
+    // Coklu malik (104): malik satirinda hesap muhatabi isareti (yalniz tam gorunum; kurulun ad + iliski sozlesmesi degismez; diger iliskilerde alan yok).
+    if (p.relation === 'owner') base.is_account_holder = p.is_account_holder === true;
     return {
       ...base,
       is_minor: p.is_minor,
