@@ -4269,73 +4269,116 @@ Dekont bildir (sakin), Elden makbuz / dekont girişi (yönetici) ve Gider Ekle (
   - **Nasıl Test Edilir:** Rol: Daire sakini. Ön koşul: Android telefon; uçak modu açık. Uçak modunda dekont görselini okutun.
   - **Beklenen Sonuç:** Okuma internet olmadan da çalışır (cihaz içi).
 
-## 147. 📨 Dış Firma İçin Bağımsız Teklif Formu (Tek Kullanımlık Bağlantı) (2026-10-29, karşılaştırma raporu P2-8, migration 113)
+## 147. 🗂️ Google Drive: Aktarım Doğrulaması (SHA-256), Sağlık Göstergesi ve Kota Uyarısı (2026-10-29, karşılaştırma raporu P2-2, P2-17, P2-18, migration 112)
+
+Google Drive aktarımı üç yönden sağlamlaştı. (1) Drive'a giden dosyanın SHA-256 değeri, Drive'ın döndürdüğü değerle karşılaştırılır (hem doğrudan yüklemede hem bekleyen dosya gönderiminde); uyuşmazsa Drive'daki bozuk kopya çöp kutusuna alınır, dosya “kaydedildi” yazılmaz, sunucudaki asıl kopya silinmez ve yeniden denenir (denetim kaydı ve durum uyarısı düşer). Drive sağlama toplamı bildirmezse kimlik ve boyut yeterlidir. (2) Dosya Deposu > Google Drive kartına sağlık göstergesi eklendi: durum rozeti, erişim belirteci durumu, son başarılı aktarım, kuyruk, Google kotası çubuğu ve “Şimdi denetle” düğmesi (eski sunucuda bölüm görünmez). (3) Google kotası site başına 6 saatte bir ve “Şimdi denetle” ile okunur; %90'da ve %100'de uyarı (denetim kaydı + durum uyarısı, saatte bir) düşer. Google “depolama dolu” ile istek sınırı artık ayrıdır; dosya reddedilmez, bekler. Yeni arka plan işi (5 dakikada bir) vakti gelmiş bekleyen dosyaları kendiliğinden gönderir ve izin geri alınmışsa bağlantıyı “koptu” yapıp uyarı düşürür. Sunucuda migration 112 gerekir. Yönetici e-postası yoktur: uyarı durum ekranında ve site denetim kaydındadır. Gerçek Google hesabıyla deneme size kalmıştır.
+
+- [ ] **147.1. Sağlık rozeti ve son başarılı aktarım (F70.01):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Google Drive bağlı bir site; sunucuda migration 112 ve güncel uygulama. Dosya Deposu'na küçük bir PDF yükleyin. Dosya Deposu ekranındaki Google Drive kartına bakın. Drive'da dosyanın klasörde açıldığını kontrol edin.
+  - **Beklenen Sonuç:** Kartta yeşil “Drive bağlantısı sağlıklı” rozeti, “Erişim” satırı ve dolu bir “Son başarılı aktarım” saati görünür; “Kuyruk: boş” yazar. Drive'daki dosya açılır.
+- [ ] **147.2. Şimdi denetle: kota satırı ve çubuğu dolar (F70.02):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: F70.01'deki bağlı Drive hesabı. Kartta “Şimdi denetle” düğmesine dokunun. Kota satırına ve çubuğuna, “Son denetim” saatine bakın.
+  - **Beklenen Sonuç:** Kota satırı ve çubuk dolar (örnek: yüzde ve GB değerleri), “Son denetim” saati güncellenir. Dosya yüklemek ya da başka bir şey değişmez.
+- [ ] **147.3. İzin geri alınınca bağlantı “koptu” olur, yeniden bağlayınca düzelir (F70.03):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Bağlı Drive hesabı; Google hesabına girebilen biri. Bekleyen dosya varsa silinmemesi beklenir. Google hesabında Uygulamalar'dan SmartKeyPass erişimini kaldırın. Uygulamada “Şimdi denetle”ye dokunun. Site denetim kaydına bakın. Google Drive'ı yeniden bağlayın.
+  - **Beklenen Sonuç:** Rozet kırmızı olur ve “Drive bağlantısı koptu; yeniden bağlayın” yazar; denetim kaydında “Google Drive bağlantısı koptu” satırı çıkar. Yeniden bağlayınca rozet düzelir; bekleyen dosyalar silinmeden gönderilir.
+- [ ] **147.4. Bağlantı kesikken yükleme kuyruğa girer, 5 dakika içinde kendiliğinden gider (F70.04):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Bağlı Drive hesabı. Drive bağlantısını kesin ve bir dosya yükleyin (kuyruğa girer). Drive'ı yeniden bağlayın ve yaklaşık 5 dakika bekleyin (ya da “Bekleyenleri şimdi gönder”e dokunun). Kartta “Kuyruk” satırına ve Drive klasörüne bakın.
+  - **Beklenen Sonuç:** Dosya Drive'a gider, kuyruk boşalır; sunucudaki geçici kopya temizlenir. Bekleme sırasında dosya hiçbir zaman silinmez.
+- [ ] **147.5. Kota %90 üstünde sarı uyarı; dosya reddedilmez (F70.05):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Google depolaması %90'ın üstünde dolu bir Drive hesabı (yoksa bu madde atlanır). “Şimdi denetle”ye dokunun. Kartın uyarı kutusuna ve site denetim kaydına bakın. Dosya Deposu'na yeni bir dosya yükleyin.
+  - **Beklenen Sonuç:** Sarı “Google Drive depolama alanı %9x dolu” uyarısı çıkar; denetim kaydında “Google Drive kotası dolmak üzere” satırı olur. Yükleme reddedilmez. Depolama tamamen doluysa dosya “Google Drive depolama alanı dolu” nedeniyle bekler, silinmez.
+- [ ] **147.6. Canlı kayıtta doğrulama yöntemi “sha256” mı (geliştirici kontrolü) (F70.06):**
+  - **Nasıl Test Edilir:** Rol: Geliştirici (sunucuya erişimi olan). Ön koşul: En az bir dosya Drive'a kaydedilmiş canlı sunucu. Sunucu veritabanında şu sorguyu çalıştırın: SELECT verify_method, count(*) FROM drive_files WHERE status='stored' GROUP BY 1;
+  - **Beklenen Sonuç:** Çoğu satır “sha256” çıkmalıdır. Çoğu “size” çıkıyorsa Drive yanıtında sağlama toplamı gelmiyor demektir; bu durumda kimlik ve boyut doğrulaması yapılmıştır, hata değildir ama bildirin. SHA-256 uyuşmazlığı gerçek Drive'da kolay üretilmez; bu yol sahte istemciyle testte doğrulandı.
+
+## 148. 🧹 Küçük Açıklar: Bildirim Gizliliği, Hesap Silme (İade ve Komşu İlanları), Geri Bildirim Eki Yedeği, Deneme Kodu Temizliği (2026-10-29)
+
+Dört küçük açık kapandı (şema değişikliği yok). (1) Bildirim gizliliği: kiracı borcunun malike devri ve kiracı çıkışı bildirimlerinde borç tutarı yalnız hesap muhatabı olan malike gider; diğer maliklere “Dairenizle ilgili bir borç işlemi yapıldı; ayrıntılar hesap muhatabında.” notu gider. (2) Hesap silme: önizleme her zaman “Bekleyen iade talebiniz varsa iptal edilir.” der (talep varsa sayısıyla); silme komşu panosundaki ilanlarınızı da siler ve site denetim kaydına yalnız sayı yazılır (başlık ve ad yok). Başkalarının ilanlarına yaptığınız şikâyetler adli saklama gereği korunur. (3) Sunucu yedeği: geri bildirim ekleri (feedback_attachments) fotoğraf arşivine katıldı. (4) Bakım temizliği: bitmiş deneme erişim kodu satırları 90 gün sonra silinir; kullanılmış ama kapanmamış satıra ve kullanıcı hesabına dokunulmaz. Yasal metindeki [AVUKAT DOĞRULASIN] işaretleri değişmedi.
+
+- [ ] **148.1. Çoklu malikli dairede borç devri bildirimi yalnız muhataba tutar gösterir (F71.01):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi ve iki malik hesabı (biri hesap muhatabı). Ön koşul: Hesap muhatabı olan ve olmayan iki malikli bir daire; kiracıya ait açık borç. Yönetici olarak kiracı borcunu malike devredin (ya da kiracı çıkışı yapın). Muhatap malikin Dairem bildirimlerine bakın. İkinci malikin bildirimlerine bakın.
+  - **Beklenen Sonuç:** Muhatap malikte tutarı gösteren bildirim görünür. İkinci malikte yalnız “Dairenizle ilgili bir borç işlemi yapıldı; ayrıntılar hesap muhatabında.” notu çıkar, tutar görünmez.
+- [ ] **148.2. Hesabı sil önizlemesi: iade talebi ve komşu ilanları satırları (F71.02):**
+  - **Nasıl Test Edilir:** Rol: Daire sakini (deneme hesabı). Ön koşul: Komşu panosunda ilanı ve bekleyen iade talebi olan bir deneme hesabı. Hesap ekranında Hesabı sil'e dokunun; silmeden önizlemeye bakın. Aynı önizlemeye iade talebi ve ilanı olmayan bir hesapla da bakın.
+  - **Beklenen Sonuç:** İlan ve iade talebi olan hesapta “Bekleyen iade talebiniz (N) iptal edilir.” ve “Komşu panosundaki ilanlarınız (N) silinir.” satırları görünür. İade talebi olmayan hesapta da “Bekleyen iade talebiniz varsa iptal edilir.” satırı vardır.
+- [ ] **148.3. Silme sonrası: ilanlar gider, iade talebi iptal olur, denetim kaydı sayı yazar (F71.03):**
+  - **Nasıl Test Edilir:** Rol: Daire sakini ve site yöneticisi (deneme). Ön koşul: F71.02'deki deneme hesabı (gerçek kullanıcı hesabıyla denemeyin). Hesabı silmeyi onaylayın. Yönetici olarak komşu panosuna ve iade taleplerine bakın. Site denetim kaydında “neighbor_board.posts_deleted_account_closed” satırına bakın.
+  - **Beklenen Sonuç:** Hesabın ilanları panoda yoktur; bekleyen iade talebi iptal edilmiştir. Denetim kaydı yalnız sayıyı ve durum dağılımını gösterir, ilan başlığı ya da hesap adı yoktur.
+- [ ] **148.4. Sunucu yedeği geri bildirim eklerini de alır (sunucu) (F71.04):**
+  - **Nasıl Test Edilir:** Rol: Geliştirici (sunucuya erişimi olan). Ön koşul: feedback_attachments altında en az bir dosya olan sunucu. Sunucuda bash ~/ops/backup_db.sh çalıştırın. Log'da adım 8'e ve kapi_work_attachments_* arşivinin listesine bakın.
+  - **Beklenen Sonuç:** Adım 8 tamam der; arşiv listesinde feedback_attachments/ yolları çıkar. Bu klasör sembolik bağlantıysa yedek reddedilir.
+- [ ] **148.5. Bitmiş deneme erişim kodu satırları 90 gün sonra temizlenir (F71.05):**
+  - **Nasıl Test Edilir:** Rol: Süper kullanıcı. Ön koşul: Süresi 90 günden fazla dolmuş (kullanılmamış) bir deneme erişim kodu satırı. Yönetim panelinde Veritabanı temizliğini çalıştırın. Sunucu günlüğüne ve denetim kaydına bakın.
+  - **Beklenen Sonuç:** Günlükte “bitmiş deneme erişim kodu satırı silindi” yazar; denetim kaydında maintenance.trial_access_codes_purged görünür. Kullanılmış ama kapanmamış kodlara ve kullanıcı hesabına dokunulmaz. Silinecek satır yoksa kayıt düşmez.
+
+## 149. 📨 Dış Firma İçin Bağımsız Teklif Formu (Tek Kullanımlık Bağlantı) (2026-10-29, karşılaştırma raporu P2-8, migration 113)
 
 Yönetici, Ekipman ve Bakım > Teklifler’de “Form bağlantısı oluştur” ile dış firma için tek kullanımlık, süreli (1–30 gün, varsayılan 14) bir bağlantı üretir. Firma giriş yapmadan formu doldurur; gelen teklif TASLAK olarak düşer. Yönetici onaylayana kadar teklif, gider ya da sözleşme yazılmaz; onay yalnız AÇIK bir teklif oluşturur, kabul (gider / sözleşme) yine ayrı yönetici kararıdır. Bağlantı yalnız oluşturma anında gösterilir (veritabanında yalnız özeti tutulur). Teklif Pro API’sine bağlı değildir; firmaya bildirim ya da e-posta gitmez, bağlantıyı yönetici iletir. Sunucuda migration 113 gerekir.
 
-- [ ] **147.1. Form bağlantısı oluştur: bağlantı yalnız bir kez görünür (F70.01):**
+- [ ] **149.1. Form bağlantısı oluştur: bağlantı yalnız bir kez görünür (F72.01):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Ekipman ve Bakım açık bir test sitesi; sunucuda migration 113 uygulanmış. Ekipman ve Bakım > Teklifler sekmesini açın. “Form bağlantısı oluştur”a dokunup bir konu yazın ve bağlantıyı üretin. Açılan pencerede bağlantının göründüğünü, Kopyala ve Paylaş’ın çalıştığını görün. Pencereyi kapatıp sayfayı yenileyin.
   - **Beklenen Sonuç:** Bağlantı yalnız oluşturma penceresinde görünür; kapatıp yenileyince bir daha görünmez. “Bekleyen bağlantılar” listesinde yalnız konu ve son geçerlilik tarihi yer alır.
-- [ ] **147.2. Firma formu girişsiz doldurur; aynı bağlantı ikinci kez açılmaz (F70.02):**
+- [ ] **149.2. Firma formu girişsiz doldurur; aynı bağlantı ikinci kez açılmaz (F72.02):**
   - **Nasıl Test Edilir:** Rol: Dış firma yetkilisi (hesapsız). Ön koşul: Üretilmiş, kullanılmamış bir form bağlantısı. Üretilen bağlantıyı telefonda ya da gizli sekmede (giriş yapmadan) açın. Firma adı, irtibat bilgisi ve tutarı (örnek 12.500,00) yazıp gönderin. Aynı bağlantıyı yeniden açın.
   - **Beklenen Sonuç:** Form giriş istemeden açılır; gönderince “Teklifiniz iletildi” çıkar. Aynı bağlantı ikinci kez açılınca “Bağlantı kullanılamıyor” (410) görünür. Küçük ekranda yazılar taşmaz.
-- [ ] **147.3. Gelen teklif taslak olarak görünür; teklif, gider ve sözleşme oluşmaz (F70.03):**
+- [ ] **149.3. Gelen teklif taslak olarak görünür; teklif, gider ve sözleşme oluşmaz (F72.03):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Firmanın gönderdiği bir teklif (bir önceki madde). Uygulamada Teklifler sekmesini yenileyin. “Onay bekleyen taslaklar” altındaki kaydı açın: firma, tutar, KDV, irtibat ve notu görün. Teklifler listesine, Finans’taki giderlere ve Sözleşmeler’e bakın.
   - **Beklenen Sonuç:** Gönderilen teklif yalnız “Onay bekleyen taslaklar” altında görünür. Teklifler listesinde henüz teklif, Finans’ta gider, Sözleşmeler’de kayıt oluşmamıştır.
-- [ ] **147.4. Onayla: açık teklif oluşur; reddet; bağlantıyı iptal et (F70.04):**
+- [ ] **149.4. Onayla: açık teklif oluşur; reddet; bağlantıyı iptal et (F72.04):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: En az iki taslak teklif ve bir bekleyen bağlantı. Bir taslakta “Onayla: açık teklif oluştur”a dokunun; Teklifler listesine ve belge notuna bakın. Finans’ta gider ve Sözleşmeler’de kayıt oluşmadığını doğrulayın. Başka bir taslakta “Reddet”e dokunun. Bekleyen bir bağlantıda “Bağlantıyı iptal et”e dokunup o bağlantıyı açmayı deneyin.
   - **Beklenen Sonuç:** Onayda Açık durumunda yeni bir teklif belirir (irtibat bilgisi belge notunda); gider ya da sözleşme oluşmaz, kabul için mevcut “Kabul et” akışı gerekir. Reddedilen taslak onaya düşmez. İptal edilen bağlantı açılınca 410 görünür.
-- [ ] **147.5. Yetki: salt okur roller işlem yapamaz, sakin göremez (F70.05):**
+- [ ] **149.5. Yetki: salt okur roller işlem yapamaz, sakin göremez (F72.05):**
   - **Nasıl Test Edilir:** Rol: Kurul üyesi, görevli ve daire sakini. Ön koşul: Bekleyen en az bir taslak. Kurul üyesi ya da görevli hesabıyla Teklifler sekmesini açın. Daire sakini hesabıyla bu bölümü açmayı deneyin.
   - **Beklenen Sonuç:** Salt okur rol taslakları görür ama onay, ret, iptal ve bağlantı oluşturma düğmeleri görünmez. Sakin hesabında bu bölüm açılmaz (sunucu uçları 403 verir).
-- [ ] **147.6. Dağıtım: tablo (migration 113) ve firmanın açacağı alan adı (F70.06):**
+- [ ] **149.6. Dağıtım: tablo (migration 113) ve firmanın açacağı alan adı (F72.06):**
   - **Nasıl Test Edilir:** Rol: Dağıtımı yapan (geliştirici). Ön koşul: Sunucu dağıtımı yapılmış. Sunucu dağıtımından sonra equipment_quote_requests tablosunun oluştuğunu doğrulayın (migration 113). Sunucunun PUBLIC_APP_URL (yoksa PUBLIC_BASE_URL) değerinin firmanın açacağı alan adını verdiğini kontrol edin. Bir bağlantı üretip adresin bu alan adıyla başladığına bakın.
   - **Beklenen Sonuç:** Tablo vardır; üretilen bağlantının adresi doğru alan adıyla kurulur.
 
-## 148. 🚪 Kapı Günlüğü: Yerel Açmada Çift Satırın Teke İndirilmesi (2026-10-29, BEKLEYEN_ISLER door-open#1; migration yok)
+## 150. 🚪 Kapı Günlüğü: Yerel Açmada Çift Satırın Teke İndirilmesi (2026-10-29, BEKLEYEN_ISLER door-open#1; migration yok)
 
 Telefon kapıyı yerel ağdan (UDP) açtığında cihaz kendi çevrimdışı kaydını (kullanıcısız “Yerel UDP”), uygulama da kendi bildirimini (kullanıcılı) gönderiyor ve aynı açma günlükte iki satır oluyordu. Artık aynı kapıda 15 saniye içinde tek satır kalır: cihaz satırı korunur, açanın adı ve dairesi o satıra taşınır, uygulamanın ikinci satırı silinir. Eşleşme, hangisinin önce geldiğinden bağımsızdır. Yalnız sunucu değişti, migration yoktur; cihaz saati bilinmeyen (NTP senkronsuz) kayıtlar eşleştirilmez.
 
-- [ ] **148.1. Aynı Wi-Fi’de uygulamadan yerel açma: günlükte tek satır (F71.01):**
+- [ ] **150.1. Aynı Wi-Fi’de uygulamadan yerel açma: günlükte tek satır (F73.01):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Çevrimiçi bir kapı cihazı; telefon aynı Wi-Fi’de; yerel açma etkin; sunucu yeni sürümde. Telefon kapı cihazıyla aynı Wi-Fi’deyken uygulamadan kapıyı açın (yerel açma). 1–2 dakika sonra kapı günlüğüne bakın.
   - **Beklenen Sonuç:** O açma için TEK satır vardır ve açan hesabın adıyla görünür; “Yerel UDP” adlı kullanıcısız ikinci bir satır görünmez.
-- [ ] **148.2. Cihaz çevrimdışıyken yerel açma, bağlantı gelince eşleşir (F71.02):**
+- [ ] **150.2. Cihaz çevrimdışıyken yerel açma, bağlantı gelince eşleşir (F73.02):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Wi-Fi’ye bağlı ama internetsiz bir kapı cihazı (modemde internet çekilebilir). Cihazın Wi-Fi’si var, internet / MQTT yokken uygulamadan yerel açın. Bağlantıyı geri verin ve kapı günlüğüne bakın.
   - **Beklenen Sonuç:** Kayıt yine tek satır ve kullanıcılıdır. Cihazın saati NTP ile senkron değilse eşleşme olmaz ve çift satır kalabilir (bilinen sınır).
-- [ ] **148.3. İki farklı hesap 15 saniye içinde açarsa iki satır kalır (F71.03):**
+- [ ] **150.3. İki farklı hesap 15 saniye içinde açarsa iki satır kalır (F73.03):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Aynı siteye bağlı iki hesap ve çevrimiçi bir kapı. İki farklı hesapla aynı kapıyı 15 saniye içinde yerelden açın. Kapı günlüğüne bakın.
   - **Beklenen Sonuç:** Günlükte iki satır vardır; her biri kendi hesabıyla görünür.
-- [ ] **148.4. Aynı hesap 15 saniye içinde iki kez açarsa (F71.04):**
+- [ ] **150.4. Aynı hesap 15 saniye içinde iki kez açarsa (F73.04):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Çevrimiçi bir kapı cihazı; yerel açma etkin. Aynı hesapla aynı kapıyı 15 saniye içinde iki kez yerelden açın. Kapı günlüğüne bakın.
   - **Beklenen Sonuç:** Tek kullanıcılı satır ve ikinci açma için kullanıcısız “Yerel UDP” satırı kalabilir; bu bilinçli kuraldır (aynı kullanıcı + kapı + zaman penceresi tekilleştirilir).
 
-## 149. 📟 Sayaç Saha Ekranı ve Yardım Metni: Küçük Düzeltmeler (2026-10-29, karşılaştırma raporu P3)
+## 151. 📟 Sayaç Saha Ekranı ve Yardım Metni: Küçük Düzeltmeler (2026-10-29, karşılaştırma raporu P3)
 
 Sayaç saha ekranında kamerası ya da metin tanıması olmayan platformlarda (web, masaüstü) boş kalan alana kısa bir açıklama konuldu: “Bu cihazda fotoğrafla okuma yok; değeri elle yazın.” Telefonda ekran değişmez. Ayrıca Yardım’daki sayaç konusuna, sayaç okuma izninin finans / borçlandırma izni vermediği (görevli Faturalandır ve Finans işlemlerini yapamaz, borçlandırmayı yalnız site yöneticisi yapar) cümlesi eklendi. Yalnız istemci ve belge; sunucu değişmedi.
 
-- [ ] **149.1. Kamera olmayan platformda açıklama görünür (F72.01):**
+- [ ] **151.1. Kamera olmayan platformda açıklama görünür (F74.01):**
   - **Nasıl Test Edilir:** Rol: Sayaç okuyan görevli ya da site yöneticisi. Ön koşul: Web ya da Windows sürümü; etkin sayacı olan bir site. Web (Chrome) ya da Windows sürümünde Sayaç saha ekranını açın. Boş kalan alana ve altındaki “Okunan değer” alanına bakın.
   - **Beklenen Sonuç:** Kamera alanı yerine ortada “Bu cihazda fotoğrafla okuma yok; değeri elle yazın.” açıklaması görünür; “Okunan değer” alanı ve “Onayla ve sonraki” çalışmaya devam eder.
-- [ ] **149.2. Android ve iOS’ta ekran değişmez (F72.02):**
+- [ ] **151.2. Android ve iOS’ta ekran değişmez (F74.02):**
   - **Nasıl Test Edilir:** Rol: Sayaç okuyan görevli ya da site yöneticisi. Ön koşul: Android ya da iOS telefon. Android ya da iOS telefonda Sayaç saha ekranını açın. Kamera iznini verin ve önizlemeye bakın; sonra izni kapatıp ekranı yeniden açın.
   - **Beklenen Sonuç:** Kamera önizlemesi ve çekim düğmesi eskisi gibidir. İzin reddedilirse eski “Kamera izni verilmedi. Değeri elle yazabilirsiniz.” metni çıkar; yeni açıklama çıkmaz.
-- [ ] **149.3. Yardım: “okuma izni finans izni vermez” cümlesi (F72.03):**
+- [ ] **151.3. Yardım: “okuma izni finans izni vermez” cümlesi (F74.03):**
   - **Nasıl Test Edilir:** Rol: Herhangi bir rol. Ön koşul: Yeni uygulama sürümü. Yardım’da “Sayaç okumalarını nasıl girer ve faturalandırırım?” konusunu açın. Not kutusunun sonuna bakın; dar ekranda (yaklaşık 320 px) taşma olup olmadığına bakın.
   - **Beklenen Sonuç:** Not kutusunun sonunda “Sayaç okuma izni finans / borçlandırma izni vermez…” cümlesi görünür ve metin taşmaz.
-- [ ] **149.4. Görevli finansa giremez, yönetici borçlandırabilir (F72.04):**
+- [ ] **151.4. Görevli finansa giremez, yönetici borçlandırabilir (F74.04):**
   - **Nasıl Test Edilir:** Rol: Görevli ve site yöneticisi. Ön koşul: Sayaç okuma yetkisi verilmiş bir görevli hesabı. Görevli hesabıyla Faturalandır / Finans ekranına girmeyi deneyin. Site yöneticisi hesabıyla Borçlandır’ı deneyin.
   - **Beklenen Sonuç:** Görevli yetki hatası alır (yardım cümlesiyle tutarlı); yönetici Borçlandır’ı yapabilir.
 
-## 150. 🛡️ Dağıtım Betikleri: 085–111 Migration Varlık Kontrolleri (geliştirici aracı) (2026-10-29, karşılaştırma raporu P3)
+## 152. 🛡️ Dağıtım Betikleri: 085–111 Migration Varlık Kontrolleri (geliştirici aracı) (2026-10-29, karşılaştırma raporu P3)
 
 Dağıtım prova (remote_rehearse_schema.sh) ve doğrulama (remote_verify.sh) betiklerine 085, 088–091, 096–100, 102, 103, 110 ve 111 numaralı 14 migration için varlık kontrolleri eklendi (tablo, sütun, indeks, kısıt, tetikleyici, işlev). Prova ayrıca 14 tablonun satır sayısı ve süzgeçli sayımlarını yükseltmeden önce ve sonra karşılaştırır; doğrulama canlı veritabanında salt okunur çalışır ve 14 satırlık özet basar. Bu madde yalnız dağıtımı yapana aittir.
 
-- [ ] **150.1. Prova: ok085-111=t ve PROVA_OK (F73.01):**
+- [ ] **152.1. Prova: ok085-111=t ve PROVA_OK (F75.01):**
   - **Nasıl Test Edilir:** Rol: Dağıtımı yapan (geliştirici). Ön koşul: Sonraki sunucu dağıtımı. Sonraki dağıtımda önce bash remote_deploy.sh <TS> prepare, sonra bash remote_rehearse_schema.sh <TS> çalıştırın. Çıktının sonuna bakın.
   - **Beklenen Sonuç:** Son satırda ok085-111=t ve PROVA_OK görünür; “[085-111] veri sayıları” satırı yükseltmeden önce ve sonra AYNI yazar.
-- [ ] **150.2. Doğrulama: 14 satır OK, SEMA_085_111_OK (F73.02):**
+- [ ] **152.2. Doğrulama: 14 satır OK, SEMA_085_111_OK (F75.02):**
   - **Nasıl Test Edilir:** Rol: Dağıtımı yapan (geliştirici). Ön koşul: Sunucu dağıtımı tamamlanmış. Dağıtımdan sonra bash remote_verify.sh çalıştırın. Şema bölümündeki 085–111 satırlarına bakın.
   - **Beklenen Sonuç:** 14 satırın hepsi OK görünür ve son satır SEMA_085_111_OK (14/14) olur.
-- [ ] **150.3. Prova: 091 aidat dağıtım kısıtı satırı 1 olmalı (F73.03):**
+- [ ] **152.3. Prova: 091 aidat dağıtım kısıtı satırı 1 olmalı (F75.03):**
   - **Nasıl Test Edilir:** Rol: Dağıtımı yapan (geliştirici). Ön koşul: Prova çıktısı. Prova çıktısında “[091] aidat dağıtım kısıtı” satırına bakın.
   - **Beklenen Sonuç:** Satır 1 gösterir. 0 görünürse db.js’in sessizce yuttuğu bir 091 hatası vardır; sunucu açılış günlüğünde “[DB] 091” satırına bakın.

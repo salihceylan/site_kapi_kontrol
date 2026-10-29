@@ -9,7 +9,8 @@
 #             kapi_firmware_<TS>.tgz.enc   server/firmware (OTA ikilileri; YALNIZ icerik degisince yeni arsiv, son 5 tutulur)
 #             kapi_documents_<TS>.tgz.enc  belge deposu (DOCUMENTS_DIR/sites; _tmp HARIC; DB dokumunden SONRA; YALNIZ icerik degisince;
 #                                          son 5 tutulur, en yenisi disinda 210 gunden eskiler silinir)
-#             kapi_work_attachments_<TS>.tgz.enc  is takibi fotograf ekleri (DOCUMENTS_DIR/work_attachments; belgelerden AYRI arsiv: kendi boyut
+#             kapi_work_attachments_<TS>.tgz.enc  is takibi fotograf ekleri (DOCUMENTS_DIR/work_attachments) + geri bildirim ekleri
+#                                          (DOCUMENTS_DIR/feedback_attachments) AYNI gorsel-ek arsivinde; belgelerden AYRI arsiv: kendi boyut
 #                                          siniri, ozeti ve tutma adedi; DB dokumunden SONRA; YALNIZ icerik degisince; son 5 tutulur, en yenisi
 #                                          disinda 210 gunden eskiler silinir)
 #   offsite/  kapi_<TS>.sql.gz.enc + config/firmware/belge/fotograf arsivleri (YALNIZ sifreli; offsite_push.sh gonderir)    (7 adet)
@@ -501,7 +502,9 @@ elif ! documents_backup; then
   log "HATA: $REASON"
 fi
 
-# ---- 8. is takibi fotograf ekleri (DOCUMENTS_DIR/work_attachments) arsivi: DB dokumunden SONRA, yalniz icerik degisince ----------
+# ---- 8. is takibi fotograf ekleri (DOCUMENTS_DIR/work_attachments) + geri bildirim ekleri (DOCUMENTS_DIR/feedback_attachments) arsivi: DB dokumunden SONRA, yalniz icerik degisince ----------
+# Kapanis: geri bildirim ekleri (feedback_attachments, 103) de bu arsive girer (ayni gorsel-ek niteligi; ayri arsiv/ayar/offsite degisikligi gerekmez; dosya iceren alt agaclar alinir,
+# ikisi de bossa atlanir). Geri yukleme sonrasi dosyalar <DOCUMENTS_DIR>/feedback_attachments/<site | 1000000000>/<uuid> altina acilir.
 # Belgelerden AYRI arsiv (kendi boyut siniri WORK_ATTACHMENTS_BACKUP_MAX_MB, ozeti, tutma adedi): fotograflar kapanan taleple birlikte kalir; ust sinir
 # uygulamadaki site kotasidir (WORK_ATTACHMENTS_SITE_QUOTA_MB; sakin basina son 30 gun WORK_ATTACHMENTS_USER_QUOTA_MB). <kok>/work_attachments ve
 # <kok>/.instance alinir; _tmp/ HARIC. Dis kopyada (offsite_push.sh) ve Windows'ta da en yeni KEEP_WORK_ATTACHMENTS arsiv tutulur.
@@ -510,10 +513,11 @@ fi
 # Dizin yoksa / bossa (is takibi fotografi hic eklenmediyse) HATA verilmez, atlanir. Arsiv sifrelidir (config/ + offsite/), 600 izinli.
 WA_RESULT="OK"
 work_attachments_backup() {
-  local root dir hash prev listing nfiles sz_mb avail r
-  local -a scope
+  local root dir fdir hash prev listing nfiles nf sz_mb avail r sub
+  local -a scope sizedirs
   root="$(documents_root)"
   dir="$root/work_attachments"
+  fdir="$root/feedback_attachments"
   if [ -L "$root" ]; then
     REASON="belge dizini bir sembolik baglanti ($root): fotograf yedegi alinmadi"
     return 1
@@ -522,16 +526,26 @@ work_attachments_backup() {
     REASON="fotograf dizini bir sembolik baglanti ($dir): yedek alinmadi"
     return 1
   fi
-  if [ ! -d "$dir" ]; then
-    log "   fotograf dizini yok ($dir): atlandi (is takibi fotografi henuz eklenmemis olabilir)"
-    return 0
+  if [ -L "$fdir" ]; then
+    REASON="geri bildirim ek dizini bir sembolik baglanti ($fdir): yedek alinmadi"
+    return 1
   fi
-  nfiles="$(num "$(find "$dir" -type f 2>/dev/null | wc -l)" 0)"
+  # Gorsel-ek agaclari (is takibi fotograflari + geri bildirim ekleri): dosya iceren her alt agac ayni arsive girer.
+  scope=()
+  sizedirs=()
+  nfiles=0
+  for sub in work_attachments feedback_attachments; do
+    [ -d "$root/$sub" ] || continue
+    nf="$(num "$(find "$root/$sub" -type f 2>/dev/null | wc -l)" 0)"
+    [ "$nf" -gt 0 ] || continue
+    scope+=("$sub")
+    sizedirs+=("$root/$sub")
+    nfiles=$((nfiles + nf))
+  done
   if [ "$nfiles" -eq 0 ]; then
-    log "   fotograf dizini bos: atlandi"
+    log "   fotograf / geri bildirim ek dizini yok ya da bos ($dir, $fdir): atlandi (henuz eklenmemis olabilir)"
     return 0
   fi
-  scope=(work_attachments)
   if [ -f "$root/.instance" ] && [ ! -L "$root/.instance" ]; then scope+=(.instance); fi
   hash="$(cd "$root" && find "${scope[@]}" -type f -printf '%p\t%s\t%T@\n' 2>/dev/null | LC_ALL=C sort | sha256sum | cut -d' ' -f1)"
   [ -n "$hash" ] || { REASON="fotograf dizini ozeti hesaplanamadi"; return 1; }
@@ -540,9 +554,9 @@ work_attachments_backup() {
     log "   fotograf dizini degismedi ($nfiles dosya): yeni arsiv yok"
     return 0
   fi
-  sz_mb="$(num "$(du -sm "$dir" 2>/dev/null | cut -f1)" 0)"
+  sz_mb="$(num "$(du -sm -- "${sizedirs[@]}" 2>/dev/null | awk '{s+=$1} END{print s+0}')" 0)"
   if [ "$sz_mb" -gt "$WORK_ATTACHMENTS_BACKUP_MAX_MB" ]; then
-    REASON="fotograf dizini ${sz_mb} MB > sinir ${WORK_ATTACHMENTS_BACKUP_MAX_MB} MB (WORK_ATTACHMENTS_BACKUP_MAX_MB): tam arsiv stratejisi yetersiz; site fotograf kotasini / siniri gozden gecirin ya da artimli yedege gecin"
+    REASON="fotograf + geri bildirim ek dizini ${sz_mb} MB > sinir ${WORK_ATTACHMENTS_BACKUP_MAX_MB} MB (WORK_ATTACHMENTS_BACKUP_MAX_MB): tam arsiv stratejisi yetersiz; site fotograf kotasini / siniri gozden gecirin ya da artimli yedege gecin"
     return 1
   fi
   avail="$(df -P -BM "$CONFIGD" | awk 'NR==2{gsub(/M/,"",$4); print $4}')"

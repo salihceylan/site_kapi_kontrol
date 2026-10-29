@@ -9,6 +9,7 @@ process.env.JWT_SECRET ||= 'test-secret-test-secret-test-secret-123456';
 const refunds = await import('../src/modules/finance_refunds.js');
 const guard = await import('../src/modules/finance_refund_guard.js');
 const exitNotice = await import('../src/modules/finance_exit_notice.js');
+const ownerNotice = await import('../src/modules/apartment_owner_notice.js');
 
 const src = (name) => readFileSync(new URL(`../src/modules/${name}`, import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const bad = (fn, code = 'INVALID_BODY') => assert.throws(fn, (e) => e.statusCode === 400 && e.code === code);
@@ -240,7 +241,8 @@ describe('kiracı çıkışı öncesi malike borç bildirimi (finance_exit_notic
         if (fail && fail.test(sql)) throw Object.assign(new Error('simule'), { code: 'XX000' });
         if (/to_regclass/.test(sql)) return { rows: [{ ok: true }] };
         if (/FROM ledger_entries l WHERE/.test(sql)) return { rows: [{ balance }] };
-        if (/FROM apartment_residencies r INNER JOIN site_people sp/.test(sql)) return { rows: owners.map((user_code) => ({ user_code })) };
+        // sayı = tek malik (muhatap); nesne = { user_code, is_account_holder }
+        if (/FROM apartment_residencies r INNER JOIN site_people sp/.test(sql)) return { rows: owners.map((o) => (typeof o === 'object' ? o : { user_code: o, is_account_holder: true })) };
         return { rows: [], rowCount: 1 };
       },
     };
@@ -254,18 +256,47 @@ describe('kiracı çıkışı öncesi malike borç bildirimi (finance_exit_notic
     }
   });
 
-  it('borç varsa tüm malik(ler)e uygulama içi bildirim: tutar metinde, çıkışı engelleme yok; kiracının hesabı (account_party = tenant) okunur', async () => {
-    const client = fakeClient({ balance: '123456', owners: [5001, 5002] });
+  it('borç varsa hesap muhatabına uygulama içi bildirim: tutar metinde, çıkışı engelleme yok; kiracının hesabı (account_party = tenant) okunur', async () => {
+    const client = fakeClient({ balance: '123456', owners: [5001] });
     const out = await exitNotice.notifyOwnerOfTenantDebt(client, { siteCode: 1, apartmentId: 7 });
-    assert.deepEqual(out, { notified: 2, debt_minor: 123456 });
+    assert.deepEqual(out, { notified: 1, debt_minor: 123456 });
     const notices = client.calls.filter((c) => /INSERT INTO apartment_notices/.test(c.sql));
-    assert.equal(notices.length, 2);
-    assert.deepEqual(notices.map((c) => c.params[2]), [5001, 5002]);
+    assert.equal(notices.length, 1);
+    assert.deepEqual(notices.map((c) => c.params[2]), [5001]);
     assert.equal(notices[0].params[3], 'tenant_exit_debt');
     assert.match(notices[0].params[4], /1\.234,56 ₺ ödenmemiş borcu var/);
     assert.match(notices[0].params[4], /site yönetimi onaylarsa ev sahibi hesabınıza devredilebilir/);
     const read = client.calls.find((c) => /FROM ledger_entries l WHERE/.test(c.sql));
     assert.match(read.sql, /= 'tenant'/);
+  });
+
+  it('bildirim gizliliği (çoklu malik): borç tutarı YALNIZ hesap muhatabına; diğer maliklere tutarsız genel not; muhatabın hesabı yoksa tutar kimseye gitmez', async () => {
+    const note = ownerNotice.OWNER_DEBT_NOTE_FOR_OTHERS;
+    assert.equal(note, 'Dairenizle ilgili bir borç işlemi yapıldı; ayrıntılar hesap muhatabında.');
+    assert.doesNotMatch(note, /\d|₺/);
+    const client = fakeClient({ balance: '123456', owners: [{ user_code: 5002, is_account_holder: false }, { user_code: 5001, is_account_holder: true }, { user_code: 5003, is_account_holder: false }] });
+    const out = await exitNotice.notifyOwnerOfTenantDebt(client, { siteCode: 1, apartmentId: 7 });
+    assert.deepEqual(out, { notified: 3, debt_minor: 123456 });
+    const notices = client.calls.filter((c) => /INSERT INTO apartment_notices/.test(c.sql));
+    const byUser = new Map(notices.map((c) => [c.params[2], c.params[4]]));
+    assert.match(byUser.get(5001), /1\.234,56 ₺ ödenmemiş borcu var/);
+    for (const other of [5002, 5003]) {
+      assert.equal(byUser.get(other), note, `diğer malik ${other}`);
+      assert.doesNotMatch(byUser.get(other), /₺|\d/);
+    }
+    // muhatabın hesabı yok: yalnız hesabı olan diğer malik, yalnız genel not
+    const noHolder = fakeClient({ balance: '123456', owners: [{ user_code: 5002, is_account_holder: false }] });
+    await exitNotice.notifyOwnerOfTenantDebt(noHolder, { siteCode: 1, apartmentId: 7 });
+    const only = noHolder.calls.filter((c) => /INSERT INTO apartment_notices/.test(c.sql));
+    assert.equal(only.length, 1);
+    assert.equal(only[0].params[4], note);
+  });
+
+  it('devir bildirimi (finance_liability_service): aynı gizlilik yardımcısını kullanır; eski "tüm maliklere tutar" sorgusu kalmadı (kaynak sözleşmesi)', () => {
+    const code = src('finance_liability_service.js');
+    assert.match(code, /notifyOwnersWithPrivacy\(client, \{ siteCode, apartmentId, kind: 'liability_transfer', holderMessage: message \}\)/);
+    assert.doesNotMatch(code, /SELECT DISTINCT sp\.user_code/);
+    assert.match(src('finance_exit_notice.js'), /notifyOwnersWithPrivacy\(client, \{/);
   });
 
   it('bildirim hatası çıkışı ASLA bozmaz: hata yutulur, SAVEPOINT geri alınır', async () => {

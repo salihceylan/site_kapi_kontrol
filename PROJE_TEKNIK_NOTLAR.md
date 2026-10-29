@@ -155,7 +155,7 @@ Ana endpoint gruplari (yol on ekleri; tam liste kodda):
 
 ## 6. Veritabani Tasarimi
 
-Sema `server/migrations/` altindaki numarali `NNN_ad.sql` dosyalariyla kurulur (2026-10-29: 001-113, 102 dosya; bazi numaralar bilerek kullanilmadi, bkz. 6.4). Asagidaki uc tablo ilk
+Sema `server/migrations/` altindaki numarali `NNN_ad.sql` dosyalariyla kurulur (2026-10-29: 001-113, 103 dosya; bazi numaralar bilerek kullanilmadi, bkz. 6.4). Asagidaki uc tablo ilk
 sema parcalaridir; platform buyudukce 100'den fazla tablo eklenmistir (finans, duyuru, daire yonetimi, ...). Guncel sema icin migration dosyalarina ve
 `docs/PLATFORM_*.md` belgelerine bakin.
 
@@ -217,8 +217,8 @@ Temel alanlar:
 
 ### 6.4 Migration dosyalari
 
-- Kaynak: `server/migrations/001_init.sql` ... `113_equipment_quote_requests.sql` (2026-10-29: 102 dosya, aralik 001-113).
-- Numara bloklari: 001-085 ardisiktir (037 "ayrilmis" bos bir adimdir; kaldirilmaz, yeniden kullanilmaz). 085'ten sonra paralel gelistirme dalgalari cakismasin diye her ise bir numara blogu ayrildi (ornek: 087-094, 095-101, 108-109); blogun kullanilmayan numaralari bilerek bos birakildi: 086-087, 092-095, 101, 105, 108-109, 112. Calistirici (`scripts/migrate.js`) bosluga tolerans gosterir, yalniz ayni numaranin tekrarini reddeder (`server/test/ops_migrate_runner.test.js`: 084'e dek zincir kesintisiz, sonrasinda numara artan olmali). Bu numaralar sonradan doldurulmaz; yeni migration, `server/migrations/` klasorune bakilarak son numaradan sonraki ilk bos numarayla eklenir ve `server/src/db.js` sema sirasina da islenir.
+- Kaynak: `server/migrations/001_init.sql` ... `113_equipment_quote_requests.sql` (2026-10-29: 103 dosya, aralik 001-113).
+- Numara bloklari: 001-085 ardisiktir (037 "ayrilmis" bos bir adimdir; kaldirilmaz, yeniden kullanilmaz). 085'ten sonra paralel gelistirme dalgalari cakismasin diye her ise bir numara blogu ayrildi (ornek: 087-094, 095-101, 108-109); blogun kullanilmayan numaralari bilerek bos birakildi: 086-087, 092-095, 101, 105, 108-109. Calistirici (`scripts/migrate.js`) bosluga tolerans gosterir, yalniz ayni numaranin tekrarini reddeder (`server/test/ops_migrate_runner.test.js`: 084'e dek zincir kesintisiz, sonrasinda numara artan olmali). Bu numaralar sonradan doldurulmaz; yeni migration, `server/migrations/` klasorune bakilarak son numaradan sonraki ilk bos numarayla eklenir ve `server/src/db.js` sema sirasina da islenir.
 - Takip tablosu `schema_migrations`; calistirici `node scripts/migrate.js --status | --apply | --baseline` (kendiliginden calismaz; ayrinti `sunucu_kurulum.txt`).
 - Bos veri dizininde `docker compose up` ile `server/migrations/*.sql` otomatik uygulanir (`docker-compose.yml`, `initdb.d`).
 

@@ -99,6 +99,8 @@ düşer: önce deneme ilkesine karar verilir, sonra aile listeye eklenir. Kod sa
 **Kalan risk (bilinçli).** Demo sitede duyuru yayımlanırsa ve kişi kaydına gerçek bir e-posta girilirse duyuru e-postası o adrese gider (dış etki). Demo sitedeki
 kişilerin e-postaları `@demo.invalid` olmalıdır (`tools/demo_seed`). Demo verisi adaylarca bozulabilir: demo sitesi periyodik olarak `tools/demo_seed/cleanup.mjs` ile sıfırlanır.
 
+**Saklama (kapanış).** Bitmiş kod satırları bakım temizliğinde (`maintenance_service.js`, günlük rutin) 90 gün sonra SİLİNİR: hiç kullanılmamış ve süresi dolmuş / iptal edilmiş kodlar (süre dolumu ya da iptalden, hangisi önceyse, 90 gün sonra); kullanılmış ve oturumu KAPANMIŞ kodlar (`closed_at` + 90 gün); kullanan hesabı silinmiş (`used_by` boş) ve oturum süresi 90 gündür bitmiş kodlar. Kullanılmış ama henüz kapanmamış satıra dokunulmaz (`closeExpiredTrialAccounts` onu kapatır). `users` satırına (deneme hesabı) dokunulmaz. Silinen sayı işlem izine (`maintenance.trial_access_codes_purged`, yalnız `deleted` ve `retention_days`) yazılır; hiç satır silinmediyse kayıt düşmez.
+
 ## 4. Test
 
 - Birim / uç testleri (hermetik): `cd server && node --test test/trial_access_*.test.js` (PG testi `TRIAL_ACCESS_PG_URL` yoksa atlanır).
