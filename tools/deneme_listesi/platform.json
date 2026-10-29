@@ -1,7 +1,7 @@
 {
   "baslik": "Platform Faz Kontrol Listesi",
   "aciklama": "SmartKeyPass (kapı kontrol), site ve toplu yaşam yönetim platformunun seçilebilir bir modülü olacak. Bu sayfa işi fazlara böler. Her faz canlıya alındığında maddeleri “Denemeye hazır” olur; siz denersiniz ve “Çalışıyor / Çalışmıyor” diye işaretlersiniz. Henüz yapılmamış maddelerde “Böyle istiyorum / istemiyorum” ile planı şimdiden şekillendirebilirsiniz. İşaretleriniz ve notlarınız kaydedilir, Claude okuyup yanıtlar.",
-  "durum_metni": "Durum: Faz 0, Faz 1, Faz 1.1, Faz 2a, Faz 3a, site başvurusu ve Faz 4a (Aidat ve Finans: tanım, borçlandırma, tahsilat, düzeltme, ay kapatma) canlıda ve denemeye hazır; Aidat ve Finans modülü TEMEL modüldür: her sitede açıktır, talep edilmez ve kapatılamaz. Faz 2b (Excel’den toplu yükleme ve dışa aktarma; F13), Faz 3b-A (Belgeler; F14) ve Faz 4b (makbuz, kasa/banka, gider, raporlar, gecikme tazminatı, borç hatırlatma; F15) ile hesap silme ve veri dosyası güncellemeleri (F16) kodlandı ve test edildi; sunucu ve uygulama sürümü yayınlanınca denenir (maddeler “Denemeye hazır” görünse de sürüm yayınlanmadan uygulamada yoktur). Gecikme tazminatı ve borç hatırlatma, avukatın vereceği hukuk onayı (finance.legal_ok) gelene kadar kapalı kalır: “Hukuk onayı bekleniyor” iletisi denemeye hazırdır, çalışan hali Planlıdır. Telefon bildirimi (Faz 3b-B, Firebase) F3.07’de planlı kalır. Beş yönetim türü ve türe göre terimler (F9), Anket ve Oylama ile Ziyaretçi ve Kargo (F11) canlıdadır; kartlı geçişin sunucu altyapısı hazırdır, uygulama ekranı ve kart okuyucu planlıdır (F10). Banka ve ödeme işleri “Yakında”. Satışa hazırlık paketi (F12: hesabı silme ve veri indirme, yasal metinler, giriş güvenliği, Yardım ve tanıtım turu, Platform Ayarları, bakım ve sürüm kapısı, yedek ve izleme, mağaza hazırlığı): sunucu tarafı canlıdadır; uygulama ve web sürümü yasal metinler tamamlanınca yayınlanacaktır, bu yüzden F12 maddelerini sürüm yayınlandıktan sonra (ya da geliştirici derlemesiyle) deneyin. Dalga 1 (F25–F29: kiracı ve ev sahibi için ayrı hesap, kurallar tablosu ve altın veri seti, sade tasarım, gruplu menü ve sakin alt çubuğu, avukat taslakları ve hesap rehberleri) kodlandı ve bağımsız incelemeden geçti; sürüm yayınlanınca denenir. Gezinme değişti: Profilim, Modüller, Modül Talepleri, Site Başvuruları, cihaz ekranları, Denetim Kaydı, Platform Ayarları ve İstemci Hataları artık sağ üstteki dişlinin açtığı Ayarlar panelindedir; bu yüzden ilgili eski maddeler güncellendi ve “Bugün değişti” işaretlidir. 2026-10-28: Anket ve Oylama, Komşu Panosu, Ekipman ve Bakım, Faaliyet Raporu ve Dosya Deposu da temel modül oldu (her sitede açık, talep gerekmez); Kart Ödemesi Aidat ve Finans’ın, Belgeler Dosya Deposu’nun içine alındı (F38; bu modüllerle ilgili eski maddeler güncellendi ve “Bugün değişti” işaretlidir). 2026-10-29 Dalga D (F39–F43): kompakt menü ve “Tüm işlemler” (F39), sayfa bağlamlı Geri bildirim (F40), bağlam şeridi, “bağlı değil” bildirimi, belirgin Yenile ve onaylı Çıkış (F41), liste/kutucuk anahtarı ve Kolay görünüm (F42), Yöneticiyi ara ve büyük 112 düğmesi (F43) kodlandı ve test edildi; sürüm yayınlanınca denenir. 2026-10-29 Dalga F (F58): OTA firmware imzası (imzalama aracı, sunucu yükleme ucu ve cihaz doğrulayıcısı) kodlandı ve test edildi; ÜRETİM anahtarı üretilmedi, hiçbir karta yazılmadı, sunucu dağıtılmadı. Maddeler sırayla ve tamamen sizin işinizdir (anahtar üretimi, köprü sürümün derlenip karta yazılması, imzalama ve canlı yayın); sunucu dağıtımı ve köprü sürüm yazılmadan etkisi yoktur. 2026-10-29 Dalga H: Alacak iadesi ekranları (sakin ve yönetici; F64.04–F64.07), muhasebe kontrol izi (F65), Dönem raporu (F66), ikinci altın veri seti ve örnek site tohumu (F67), İş Takibi’nde firmaya yönlendirme (F68) ve dekont / gider formlarında cihaz içi “Görselden oku” (F69) kodlandı ve test edildi; sunucu (migration 110 ve 111) ve uygulama sürümü yayınlanınca denenir.",
+  "durum_metni": "Durum: Faz 0, Faz 1, Faz 1.1, Faz 2a, Faz 3a, site başvurusu ve Faz 4a (Aidat ve Finans: tanım, borçlandırma, tahsilat, düzeltme, ay kapatma) canlıda ve denemeye hazır; Aidat ve Finans modülü TEMEL modüldür: her sitede açıktır, talep edilmez ve kapatılamaz. Faz 2b (Excel’den toplu yükleme ve dışa aktarma; F13), Faz 3b-A (Belgeler; F14) ve Faz 4b (makbuz, kasa/banka, gider, raporlar, gecikme tazminatı, borç hatırlatma; F15) ile hesap silme ve veri dosyası güncellemeleri (F16) kodlandı ve test edildi; sunucu ve uygulama sürümü yayınlanınca denenir (maddeler “Denemeye hazır” görünse de sürüm yayınlanmadan uygulamada yoktur). Gecikme tazminatı ve borç hatırlatma, avukatın vereceği hukuk onayı (finance.legal_ok) gelene kadar kapalı kalır: “Hukuk onayı bekleniyor” iletisi denemeye hazırdır, çalışan hali Planlıdır. Telefon bildirimi (Faz 3b-B, Firebase) F3.07’de planlı kalır. Beş yönetim türü ve türe göre terimler (F9), Anket ve Oylama ile Ziyaretçi ve Kargo (F11) canlıdadır; kartlı geçişin sunucu altyapısı hazırdır, uygulama ekranı ve kart okuyucu planlıdır (F10). Kartla ödeme ve bankalarla doğrudan bağlantı “Yakında”dır (F8); banka ekstresi dosyasından tahsilat ve ödeme kodu eşleştirmesi hazırdır (F30, F60). Sayaç okuma ve faturalandırma hazırdır (F32, F45); uzaktan okuyan sayaç ve tüketimin sakine bildirilmesi “Yakında”dır (F7). Satışa hazırlık paketi (F12: hesabı silme ve veri indirme, yasal metinler, giriş güvenliği, Yardım ve tanıtım turu, Platform Ayarları, bakım ve sürüm kapısı, yedek ve izleme, mağaza hazırlığı): sunucu tarafı canlıdadır; uygulama ve web sürümü yasal metinler tamamlanınca yayınlanacaktır, bu yüzden F12 maddelerini sürüm yayınlandıktan sonra (ya da geliştirici derlemesiyle) deneyin. Dalga 1 (F25–F29: kiracı ve ev sahibi için ayrı hesap, kurallar tablosu ve altın veri seti, sade tasarım, gruplu menü ve sakin alt çubuğu, avukat taslakları ve hesap rehberleri) kodlandı ve bağımsız incelemeden geçti; sürüm yayınlanınca denenir. Gezinme değişti: Profilim, Modüller, Modül Talepleri, Site Başvuruları, cihaz ekranları, Denetim Kaydı, Platform Ayarları ve İstemci Hataları artık sağ üstteki dişlinin açtığı Ayarlar panelindedir; bu yüzden ilgili eski maddeler güncellendi ve “Bugün değişti” işaretlidir. 2026-10-28: Anket ve Oylama, Komşu Panosu, Ekipman ve Bakım, Faaliyet Raporu ve Dosya Deposu da temel modül oldu (her sitede açık, talep gerekmez); Kart Ödemesi Aidat ve Finans’ın, Belgeler Dosya Deposu’nun içine alındı (F38; bu modüllerle ilgili eski maddeler güncellendi ve “Bugün değişti” işaretlidir). 2026-10-29 Dalga D (F39–F43): kompakt menü ve “Tüm işlemler” (F39), sayfa bağlamlı Geri bildirim (F40), bağlam şeridi, “bağlı değil” bildirimi, belirgin Yenile ve onaylı Çıkış (F41), liste/kutucuk anahtarı ve Kolay görünüm (F42), Yöneticiyi ara ve büyük 112 düğmesi (F43) kodlandı ve test edildi; sürüm yayınlanınca denenir. 2026-10-29 Dalga F (F58): OTA firmware imzası (imzalama aracı, sunucu yükleme ucu ve cihaz doğrulayıcısı) kodlandı ve test edildi; ÜRETİM anahtarı üretilmedi, hiçbir karta yazılmadı, sunucu dağıtılmadı. Maddeler sırayla ve tamamen sizin işinizdir (anahtar üretimi, köprü sürümün derlenip karta yazılması, imzalama ve canlı yayın); sunucu dağıtımı ve köprü sürüm yazılmadan etkisi yoktur. 2026-10-29 Dalga H: Alacak iadesi ekranları (sakin ve yönetici; F64.04–F64.07), muhasebe kontrol izi (F65), Dönem raporu (F66), ikinci altın veri seti ve örnek site tohumu (F67), İş Takibi’nde firmaya yönlendirme (F68) ve dekont / gider formlarında cihaz içi “Görselden oku” (F69) kodlandı ve test edildi; sunucu (migration 110 ve 111) ve uygulama sürümü yayınlanınca denenir. 2026-10-29 Liste düzeni: F7 ve F8’de yapılmış işi hâlâ “Yakında” gösteren tekrar maddeleri (F7.01, F7.02, F8.02, F8.03) kaldırıldı; denemeleri F32, F45, F30 ve F60 bölümlerindedir. Tüketimin sakine bildirilmesi yeni madde F7.04 olarak “Yakında” kaldı.",
   "bolumler": [
     {
       "id": "F0",
@@ -1437,28 +1437,8 @@
       "id": "F7",
       "baslik": "Sayaç okuma ve faturalandırma",
       "durum": "yakinda",
-      "ozet": "Yakında… Su, ısı ve elektrik sayaçlarının okunması, tüketimin dairelere paylaştırılması.",
+      "ozet": "Yakında… Uzaktan okuyan sayaç bağlantısı (cihaz alımı gerektirir) ve faturalandırılan tüketimin sakine ayrıca bildirilmesi. Sayaç tanımı, okuma girişi (elle, dosyadan, telefonda fotoğrafla), tüketimin dairelere paylaştırılması ve borç yazımı HAZIRDIR; bunların deneme maddeleri bu bölümde tekrarlanmaz, \"Dalga 4: Drive ve sayaç\" (F32) ve \"Dalga C: saha paketleri\" (F45) bölümlerindedir.",
       "maddeler": [
-        {
-          "id": "F7.01",
-          "baslik": "Sayaç tanımı ve okuma girişi",
-          "adimlar": [],
-          "beklenen": "Yakında… Önce görevli telefonla okuma girer ya da Excel yükler.",
-          "rol_notu": "",
-          "on_kosul": "",
-          "yeni": false,
-          "gelistirme": "yakinda"
-        },
-        {
-          "id": "F7.02",
-          "baslik": "Tüketim paylaştırma ve fatura",
-          "adimlar": [],
-          "beklenen": "Yakında… Tüketim dairelere dağıtılır, borç olarak hesaplara yazılır ve sakine bildirilir.",
-          "rol_notu": "",
-          "on_kosul": "",
-          "yeni": false,
-          "gelistirme": "yakinda"
-        },
         {
           "id": "F7.03",
           "baslik": "Uzaktan okuyan sayaç bağlantısı",
@@ -1468,6 +1448,16 @@
           "on_kosul": "",
           "yeni": false,
           "gelistirme": "yakinda"
+        },
+        {
+          "id": "F7.04",
+          "baslik": "Faturalandırılan tüketimin sakine bildirilmesi",
+          "adimlar": [],
+          "beklenen": "Yakında… Tüketim borca yazıldığında sakine ayrıca bildirim gider (e-posta ya da SMS). Tüketimin dairelere paylaştırılması ve oturanın hesabına borç yazılması hazırdır (F32.09, F32.10).",
+          "rol_notu": "",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "yakinda"
         }
       ]
     },
@@ -1475,33 +1465,13 @@
       "id": "F8",
       "baslik": "Online tahsilat ve banka bağlantısı",
       "durum": "yakinda",
-      "ozet": "Yakında… Banka ve ödeme işleri ayrı bir fazda yapılacak. Lisanslı kuruluşlarla sözleşme gerektirir.",
+      "ozet": "Yakında… Kartla ödeme ve bankalarla doğrudan bağlantı ayrı bir fazda yapılacak; lisanslı kuruluşlarla sözleşme gerektirir. Banka ekstresi dosyasından tahsilat (Excel, CSV, MT940 ve PDF) ile daireye özel ödeme kodu (referans) eşleştirmesi HAZIRDIR; bunların deneme maddeleri bu bölümde tekrarlanmaz, \"Dalga 2: para akışı...\" (F30) ve \"Banka dosyasında güçlü eşleşmeleri tek tek gözden geçir\" (F60) bölümlerindedir.",
       "maddeler": [
         {
           "id": "F8.01",
           "baslik": "Kredi kartıyla aidat ödemesi",
           "adimlar": [],
           "beklenen": "Yakında… Sakin borcunu uygulamadan kartla öder, makbuz otomatik oluşur.",
-          "rol_notu": "",
-          "on_kosul": "",
-          "yeni": false,
-          "gelistirme": "yakinda"
-        },
-        {
-          "id": "F8.02",
-          "baslik": "Banka ekstresi yükleme ve eşleştirme",
-          "adimlar": [],
-          "beklenen": "Yakında… Ekstre dosyası yüklenir, ödemeler dairelerle otomatik eşleşir.",
-          "rol_notu": "",
-          "on_kosul": "",
-          "yeni": false,
-          "gelistirme": "yakinda"
-        },
-        {
-          "id": "F8.03",
-          "baslik": "Daireye özel ödeme referansı",
-          "adimlar": [],
-          "beklenen": "Yakında… Her daireye özel referansla yapılan havale kendiliğinden eşleşir.",
           "rol_notu": "",
           "on_kosul": "",
           "yeni": false,
