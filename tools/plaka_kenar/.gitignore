@@ -1,0 +1,9 @@
+# Sir iceren yerel ayar (cihaz anahtari, SmartKeyPass yerel kontrol anahtarlari) ASLA depoya girmez
+ayarlar.json
+veri/
+modeller/*.onnx
+sablonlar/
+__pycache__/
+build/
+dist/
+*.spec
