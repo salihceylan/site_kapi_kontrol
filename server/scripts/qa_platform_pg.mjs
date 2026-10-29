@@ -10267,6 +10267,9 @@ async function sectionAccount() {
     // Dalga D (102 menu duzeni, 103 geri bildirim): hesap silme satiri silmez, kimliksizlestirir; FK SET NULL yalniz fiziksel silmede
     'feedback_reports.user_code': 'TOMBSTONE (geri bildirim siteye / platforma aittir; gonderen JOIN ile Silinmis Kullanici)',
     'site_menu_layouts.updated_by': 'TOMBSTONE (menu duzeni siteye aittir; guncelleyen JOIN ile Silinmis Kullanici)',
+    // Dalga E (106 deneme erisim kodu): kod siteye aittir; olusturan / kullanan UPDATE edilmez, FK SET NULL yalniz users satiri fiziksel silinirse; hesap silme satiri silmez (kimliksizlestirir)
+    'trial_access_codes.created_by': 'TOMBSTONE (deneme kodu siteye aittir; olusturan JOIN ile Silinmis Kullanici)',
+    'trial_access_codes.used_by': 'TOMBSTONE (kodu kullanan JOIN ile Silinmis Kullanici)',
     // Butunluk sertlestirme (077): kimlik / abonelik kullaniciya aittir; FK ON DELETE CASCADE (kalici admin silmede birlikte gider), hesap silme (kimliksizlestirme) kodu ayrica siler
     'user_oauth_identities.user_code': 'SIL (FK CASCADE; hesap silme ayrica siler)',
     'web_push_subscriptions.user_code': 'SIL (FK CASCADE; hesap silme ayrica siler)',
