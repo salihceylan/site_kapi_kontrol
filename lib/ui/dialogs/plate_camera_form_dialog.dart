@@ -24,20 +24,32 @@ Future<bool?> showPlateCameraForm(
   required Future<void> Function(PlateCameraDraft draft) onSave,
   PlateCameraRow? editing,
   DiscoveredDevice? prefill,
+  int? initialGateId,
 }) {
   return showDialog<bool>(
     context: context,
-    builder: (context) => PlateCameraFormDialog(overview: overview, onSave: onSave, editing: editing, prefill: prefill),
+    builder: (context) => PlateCameraFormDialog(overview: overview, onSave: onSave, editing: editing, prefill: prefill, initialGateId: initialGateId),
   );
 }
 
+/// Dürüst kayıt mesajı: kenar RTSP'yi sınıyor / kenar çevrimdışı / kenar tanımlı değil.
+String plateCameraSavedMessage(int? probeId, PlateCamerasOverview overview) {
+  if (probeId != null) {
+    return overview.edge.online ? 'Kamera kaydedildi. Kenar PC RTSP\'yi sınıyor.' : 'Kamera kaydedildi. Kenar PC çevrimdışı; bağlanınca RTSP\'yi sınayacak.';
+  }
+  return overview.edge.count == 0 ? 'Kamera kaydedildi. Kenar uygulama tanımlı olmadığı için RTSP sınanmadı.' : 'Kamera kaydedildi.';
+}
+
 class PlateCameraFormDialog extends StatefulWidget {
-  const PlateCameraFormDialog({super.key, required this.overview, required this.onSave, this.editing, this.prefill});
+  const PlateCameraFormDialog({super.key, required this.overview, required this.onSave, this.editing, this.prefill, this.initialGateId});
 
   final PlateCamerasOverview overview;
   final Future<void> Function(PlateCameraDraft draft) onSave;
   final PlateCameraRow? editing;
   final DiscoveredDevice? prefill;
+
+  /// Yeni kamera için ön seçili kapı (kapı satırındaki "Kamera ekle"); düzenlemede yok sayılır. Kapı listede yoksa "Kapı yok" kalır.
+  final int? initialGateId;
 
   @override
   State<PlateCameraFormDialog> createState() => _PlateCameraFormDialogState();
@@ -78,6 +90,8 @@ class _PlateCameraFormDialogState extends State<PlateCameraFormDialog> {
     if (gate != null && widget.overview.gates.any((g) => g.id == gate.id)) {
       _gateId = gate.id;
       _direction = c?.direction ?? 'auto';
+    } else if (c == null && widget.initialGateId != null && widget.overview.gates.any((g) => g.id == widget.initialGateId)) {
+      _gateId = widget.initialGateId;
     }
   }
 

@@ -129,7 +129,7 @@ void main() {
       expect(find.text('Engelli'), findsOneWidget);
       expect(find.text('Bilinmiyor'), findsOneWidget);
       expect(find.textContaining('Araçlar ekranından yönetilir'), findsOneWidget);
-      expect(find.textContaining('kapı açılmadı'), findsOneWidget);
+      expect(find.textContaining('kapı komutu göndermez'), findsOneWidget);
       for (final tab in <String>['Olaylar', 'Misafir izinleri', 'Kara liste', 'Ayarlar']) {
         expect(find.text(tab), findsOneWidget, reason: tab);
       }
