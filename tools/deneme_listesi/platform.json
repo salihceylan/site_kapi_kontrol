@@ -11484,6 +11484,15 @@
           "on_kosul": "Android derleme ortamı",
           "yeni": true,
           "gelistirme": "hazir"
+        },
+        {
+          "id": "F77.06",
+          "baslik": "Süper kullanıcı site kartından Hukuk onayı anahtarı",
+          "adimlar": "Süper kullanıcıyla Siteler ekranında bir site kartını açın; 'Hukuk onayı (gecikme tazminatı/borç hatırlatma)' anahtarını açın (onay penceresi: 'Evet, onay alındı') ve sayfayı yenileyin.",
+          "beklenen": "Anahtar açık kalır, bildirim çıkar; site yöneticisi hesabında bu anahtar hiç görünmez.",
+          "durum": "hazir",
+          "gelistirme": "hazir",
+          "yeni": true
         }
       ]
     },
