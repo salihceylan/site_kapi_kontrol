@@ -18,6 +18,11 @@ export const PENDING_WARN_DAYS = 7;
 export const PENDING_NEAR_FULL_PERCENT = 80;
 export const PENDING_FULL_PERCENT = 95;
 export const OAUTH_STATE_MINUTES = 10;
+/** Google Drive hesap kotası (about.get) uyarı eşiği (yüzde): bu oranda ve üstünde yöneticiye uyarı düşer; %100'de "doldu". */
+export const QUOTA_WARN_PERCENT = 90;
+export const QUOTA_FULL_PERCENT = 100;
+/** Sağlık/kota denetimi sitenin Drive'ına en sık bu aralıkla gider (Google çağrısı az olsun). */
+export const HEALTH_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
 /** Yapılandırma .env'den: DRIVE_CLIENT_ID, DRIVE_CLIENT_SECRET, DRIVE_REDIRECT_URI, DRIVE_TOKEN_KEY (en az 32 karakter). */
 export function driveConfig(env = process.env) {
@@ -193,6 +198,148 @@ export function fileBaseName({ kind, block, apartment, date, serial = 1, source 
 export function driveConfirmed(sent, byteLength) {
   if (!sent || typeof sent.id !== 'string' || sent.id === '') return false;
   return !Number.isFinite(sent.size) || sent.size === byteLength;
+}
+
+/**
+ * Drive'a ulaşan kopyanın doğrulaması (P2-2). Önce teyit (dosya kimliği + boyut), sonra Drive'ın bildirdiği SHA-256 bizim hesapladığımızla karşılaştırılır.
+ * state: 'unconfirmed' (teyit yok) | 'mismatch' (SHA-256 uyuşmadı: Drive'daki kopya bozuk) | 'sha256' (tam doğrulandı) | 'size' (Drive sağlama toplamı bildirmedi; yalnız kimlik + boyut).
+ * Yalnız 'sha256' ve 'size' başarıdır; sunucudaki geçici dosya bunlardan SONRA silinir (K6).
+ */
+export function verifyDriveCopy(sent, expectedSha256, byteLength) {
+  if (!driveConfirmed(sent, byteLength)) return { state: 'unconfirmed' };
+  const reported = typeof sent.sha256 === 'string' ? sent.sha256.trim().toLowerCase() : '';
+  if (!reported) return { state: 'size' };
+  return { state: reported === String(expectedSha256 ?? '').trim().toLowerCase() ? 'sha256' : 'mismatch' };
+}
+
+const DRIVE_ERROR_TEXT = Object.freeze({
+  auth: 'Google Drive erişimi geçersiz; Drive yeniden bağlanmalı.',
+  quota: 'Google Drive depolama alanı dolu; Google hesabında yer açılınca gönderilir.',
+  rate_limit: 'Google istek sınırına takıldı; biraz sonra yeniden denenecek.',
+  not_found: 'Drive klasörü bulunamadı; yeniden oluşturulup denenecek.',
+  integrity: "Drive'a ulaşan kopyanın SHA-256 değeri uyuşmadı; dosya sunucuda bekliyor, yeniden denenecek.",
+  unconfirmed: 'Drive yüklemeyi doğrulamadı; dosya sunucuda bekliyor, yeniden denenecek.',
+  transient: "Google Drive'a ulaşılamadı; yeniden denenecek.",
+});
+
+/** Bekleme satırında yöneticiye gösterilecek Türkçe neden (DriveError.kind -> metin). Bilinmeyen tür "ulaşılamadı" sayılır. */
+export function driveErrorText(kind) {
+  return DRIVE_ERROR_TEXT[kind] ?? DRIVE_ERROR_TEXT.transient;
+}
+
+function formatBytes(bytes) {
+  const n = Number(bytes);
+  if (!Number.isFinite(n) || n < 0) return '-';
+  const gb = n / 1024 ** 3;
+  if (gb >= 1) return `${gb.toFixed(1).replace('.', ',')} GB`;
+  return `${Math.max(1, Math.round(n / 1024 ** 2))} MB`;
+}
+
+/**
+ * Hesap kotasının (about.get storageQuota) değerlendirmesi. checkedAt yoksa 'unknown'; limit yoksa (sınırsız hesap) 'ok' + unlimited.
+ * state: 'unknown' | 'ok' | 'near_full' (>= %90) | 'full' (>= %100). BIGINT sütunlar metin gelebilir: Number'a çevrilir.
+ */
+export function quotaInfo({ limitBytes = null, usedBytes = null, checkedAt = null } = {}) {
+  const used = usedBytes === null || usedBytes === undefined ? null : Number(usedBytes);
+  if (!checkedAt || used === null || !Number.isFinite(used)) {
+    return { state: 'unknown', limit_bytes: null, used_bytes: null, percent: null, unlimited: false, checked_at: null, label: 'Kota henüz denetlenmedi.' };
+  }
+  const limit = limitBytes === null || limitBytes === undefined ? null : Number(limitBytes);
+  if (!limit || !Number.isFinite(limit) || limit <= 0) {
+    return { state: 'ok', limit_bytes: null, used_bytes: used, percent: null, unlimited: true, checked_at: checkedAt, label: `Kullanılan: ${formatBytes(used)} (sınırsız kota).` };
+  }
+  const percent = Math.floor((used * 100) / limit);
+  const state = percent >= QUOTA_FULL_PERCENT ? 'full' : percent >= QUOTA_WARN_PERCENT ? 'near_full' : 'ok';
+  return { state, limit_bytes: limit, used_bytes: used, percent, unlimited: false, checked_at: checkedAt, label: `Google Drive kotası: %${percent} dolu (${formatBytes(used)} / ${formatBytes(limit)}).` };
+}
+
+/**
+ * Kota uyarıları (K6: hiçbiri dosya silmez). `quota`: quotaInfo çıktısı. `quotaBlockedCount`: son denemesi "Google depolama alanı dolu" ile dönen bekleyen dosya sayısı.
+ * "Google kotası dolu" ile "sunucu bekleme alanı dolu" (queueWarnings, DRIVE_QUEUE_*) AYRI kodlardır: yönerge farklıdır (Google hesabında yer aç ↔ bağlantıyı düzelt / bekleyenleri gönder).
+ */
+export function quotaWarnings(quota, { quotaBlockedCount = 0 } = {}) {
+  const out = [];
+  const percent = quota?.percent;
+  if (quota?.state === 'full' || quotaBlockedCount > 0) {
+    out.push({
+      code: 'DRIVE_QUOTA_FULL',
+      message: `Google Drive depolama alanı doldu${Number.isFinite(percent) ? ` (%${Math.min(percent, 100)})` : ''}. Yeni dosyalar Drive'a gönderilemez, sunucuda bekler; hiçbir dosya silinmez. Google hesabında yer açın ya da depolamayı artırın.`,
+    });
+  } else if (quota?.state === 'near_full') {
+    out.push({
+      code: 'DRIVE_QUOTA_NEAR_FULL',
+      message: `Google Drive depolama alanı %${percent} dolu (${formatBytes(quota.used_bytes)} / ${formatBytes(quota.limit_bytes)}). Dolarsa yeni dosyalar Drive'a gönderilemez, sunucuda bekler; hiçbir dosya silinmez. Yer açın ya da depolamayı artırın.`,
+    });
+  }
+  return out;
+}
+
+/** Drive'a ulaşan kopyası doğrulanamayan (SHA-256 uyuşmayan) bekleyen dosyalar için uyarı. Dosya silinmez; sunucudaki asıl kopya yeniden gönderilir. */
+export function integrityWarnings(count) {
+  const n = Number(count) || 0;
+  if (n <= 0) return [];
+  return [
+    {
+      code: 'DRIVE_INTEGRITY_FAILED',
+      message: `${n} dosyanın Drive'a ulaşan kopyası doğrulanamadı (SHA-256 uyuşmadı). Dosya silinmedi; sunucudaki asıl kopya yeniden gönderilecek.`,
+    },
+  ];
+}
+
+/**
+ * Yönetici ekranı için Drive sağlık özeti (P2-17): bağlantı durumu, erişim belirteci, son başarılı aktarım, bekleyen kuyruk, kota.
+ * Saf: DB/ağ bağımsız. `conn` site_drive_connections satırı (ya da null); `queue` { pendingCount, overdueCount, oldestPendingAt, integrityFailedCount, quotaBlockedCount, maxAttempts, lastError }.
+ * state: 'not_configured' | 'disconnected' | 'error' | 'warning' | 'ok'.
+ */
+export function buildDriveHealth({ configured = true, conn = null, now = new Date(), lastTransferAt = null, queue = {}, quota = quotaInfo() } = {}) {
+  const status = conn?.status ?? 'disconnected';
+  const expiresAt = conn?.token_expires_at ?? null;
+  let tokenState = 'none';
+  let tokenLabel = 'Drive bağlı değil.';
+  if (status === 'connected') {
+    const live = expiresAt && new Date(expiresAt).getTime() > now.getTime();
+    tokenState = live ? 'valid' : 'refreshable';
+    tokenLabel = live ? 'Erişim belirteci geçerli.' : 'Erişim belirteci gerektiğinde otomatik yenilenir.';
+  } else if (status === 'error') {
+    tokenState = 'invalid';
+    tokenLabel = 'Google erişimi geçersiz; Drive yeniden bağlanmalı.';
+  }
+  const q = {
+    pending_count: Number(queue.pendingCount) || 0,
+    overdue_count: Number(queue.overdueCount) || 0,
+    oldest_pending_at: queue.oldestPendingAt ?? null,
+    integrity_failed_count: Number(queue.integrityFailedCount) || 0,
+    quota_blocked_count: Number(queue.quotaBlockedCount) || 0,
+    max_attempts: Number(queue.maxAttempts) || 0,
+    last_error: queue.lastError ?? null,
+  };
+  let state;
+  let message;
+  if (!configured) {
+    state = 'not_configured';
+    message = 'Google Drive bağlantısı henüz yapılandırılmadı.';
+  } else if (status === 'disconnected') {
+    state = 'disconnected';
+    message = 'Drive bağlı değil.';
+  } else if (status === 'error') {
+    state = 'error';
+    message = 'Drive bağlantısı koptu; yeniden bağlayın. Bekleyen dosyalar silinmez.';
+  } else if (quota.state === 'full' || quota.state === 'near_full' || q.quota_blocked_count > 0 || q.integrity_failed_count > 0 || q.overdue_count > 0) {
+    state = 'warning';
+    message = 'Drive bağlı; ilgilenmeniz gereken uyarılar var.';
+  } else {
+    state = 'ok';
+    message = q.pending_count > 0 ? `Drive bağlı; ${q.pending_count} dosya gönderilmeyi bekliyor.` : 'Drive bağlantısı sağlıklı.';
+  }
+  return {
+    state,
+    message,
+    connection: { status, account_email: conn?.account_email ?? null, connected_at: conn?.connected_at ?? null, last_error: conn?.last_error ?? null },
+    token: { state: tokenState, label: tokenLabel, expires_at: status === 'connected' ? expiresAt : null, checked_at: conn?.health_checked_at ?? null },
+    last_transfer_at: lastTransferAt,
+    queue: q,
+    quota,
+  };
 }
 
 /**

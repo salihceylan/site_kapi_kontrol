@@ -23,19 +23,24 @@ import {
   OAUTH_STATE_MINUTES,
   PENDING_MAX_BYTES,
   PENDING_WARN_DAYS,
+  buildDriveHealth,
   decryptToken,
   driveConfig,
-  driveConfirmed,
+  driveErrorText,
   driveNotConfigured,
   encryptToken,
   fileBaseName,
   folderNameFor,
   hashState,
+  integrityWarnings,
   mimeMatchesContent,
   newOauthState,
   parseDriveSource,
   parseIsoDate,
   queueWarnings,
+  quotaInfo,
+  quotaWarnings,
+  verifyDriveCopy,
 } from './drive_common.js';
 import { PlatformError } from './errors.js';
 
@@ -44,10 +49,25 @@ const MAX_SERIAL = 50;
 /** Aynı site ve aynı uyarı türü için denetim kaydı en sık bu aralıkla yazılır (kalabalık yüklemede günlüğü doldurmasın). */
 const WARN_AUDIT_INTERVAL_MS = 60 * 60 * 1000;
 
-/** Geçici (bekleme) dosyası gönderilemedi / doğrulanamadı: dosya DURUR, bekleme satırına neden yazılır, yeniden denenir. */
-class PendingFileError extends Error {}
+/**
+ * Geçici (bekleme) dosyası gönderilemedi / doğrulanamadı: dosya DURUR, bekleme satırına neden yazılır, yeniden denenir.
+ * kind: bekleme satırına `error_kind` olarak yazılır ('local' = geçici dosya yok / bozuk, 'transient' = Drive teyit etmedi, 'integrity' = SHA-256 uyuşmadı).
+ */
+class PendingFileError extends Error {
+  constructor(message, kind = 'local') {
+    super(message);
+    this.kind = kind;
+  }
+}
 
 const sha256Of = (data) => crypto.createHash('sha256').update(data).digest('hex');
+
+/** Bir hatanın bekleme satırına yazılacak { kind, text } karşılığı (Türkçe neden; ham Google hatası sızmaz). */
+function reasonOf(error) {
+  if (error instanceof DriveError) return { kind: error.kind, text: driveErrorText(error.kind) };
+  if (error instanceof PendingFileError) return { kind: error.kind, text: error.message };
+  return { kind: 'transient', text: 'beklenmeyen hata' };
+}
 
 function todayParts(now) {
   const d = now();
@@ -91,6 +111,13 @@ export function createDriveService(deps = {}) {
     );
   }
 
+  /** Erişim belirtecinin son geçerlilik zamanı yönetici sağlık göstergesi içindir (P2-17); yazılamazsa asıl iş bozulmaz. */
+  async function rememberTokenExpiry(siteCode, expMs) {
+    await db
+      .query(`UPDATE site_drive_connections SET token_expires_at = $2 WHERE site_code = $1`, [siteCode, new Date(expMs)])
+      .catch(() => {});
+  }
+
   /** Geçerli erişim belirteci; izin kaldırılmışsa bağlantıyı 'error' yapar ve DriveError('auth') fırlatır. */
   async function accessToken(conn) {
     const cached = tokenCache.get(conn.site_code);
@@ -98,11 +125,14 @@ export function createDriveService(deps = {}) {
     if (!conn.refresh_token_enc) throw new DriveError('auth', 'Yenileme belirteci yok.');
     try {
       const refreshed = await getClient().refreshAccess(decryptToken(conn.refresh_token_enc, getConfig().tokenKey));
-      tokenCache.set(conn.site_code, { token: refreshed.accessToken, exp: now().getTime() + refreshed.expiresIn * 1000 });
+      const exp = now().getTime() + refreshed.expiresIn * 1000;
+      tokenCache.set(conn.site_code, { token: refreshed.accessToken, exp });
+      await rememberTokenExpiry(conn.site_code, exp);
       return refreshed.accessToken;
     } catch (error) {
       if (error instanceof DriveError && error.kind === 'auth') {
         await markError(conn.site_code, 'Google erişimi kaldırılmış ya da geçersiz; Drive yeniden bağlanmalı.');
+        await warnManagers(conn.site_code, 'drive.connection_lost', null, {});
       }
       throw error instanceof DriveError ? error : new DriveError('auth', 'Yenileme belirteci çözülemedi.');
     }
@@ -144,21 +174,67 @@ export function createDriveService(deps = {}) {
     await db.query(`UPDATE site_drive_connections SET last_ok_at = NOW(), last_error = NULL WHERE site_code = $1 AND status = 'connected'`, [siteCode]);
   }
 
+  /**
+   * Drive'a gönderilen kopyanın doğrulaması (P2-2): kimlik + boyut teyidi ve Drive'ın bildirdiği SHA-256'nın bizim hesapladığımızla karşılaştırılması.
+   * Yükleme yanıtında sağlama toplamı yoksa üst veriden (files.get) bir kez daha sorulur; alınamazsa kimlik + boyut yeterli sayılır ('size').
+   * SHA-256 UYUŞMAZSA Drive'daki bozuk kopya (yalnız bu çağrının yeni oluşturduğu dosya) ÇÖP KUTUSUNA alınır (kalıcı silme değil, Drive'da geri alınabilir; hata yutulur),
+   * yöneticiye uyarı düşer ve { state: 'mismatch' } döner: çağıran dosyayı sunucuda tutar / kuyruğa geri koyar. Sunucudaki asıl kopya HİÇBİR koşulda silinmez (K6).
+   * Dönüş: { state: 'sha256' | 'size' | 'unconfirmed' | 'mismatch' }.
+   */
+  async function verifySent(conn, sent, sha256, byteLength, actor) {
+    let verdict = verifyDriveCopy(sent, sha256, byteLength);
+    if (verdict.state === 'size') {
+      try {
+        const meta = await getClient().getFileMeta(await accessToken(conn), sent.id);
+        if (meta?.sha256) verdict = verifyDriveCopy({ ...sent, sha256: meta.sha256 }, sha256, byteLength);
+      } catch {
+        // Sağlama toplamı sorulamadı: kimlik + boyut teyidiyle devam edilir.
+      }
+    }
+    if (verdict.state === 'mismatch') {
+      try {
+        await getClient().trashFile(await accessToken(conn), sent.id);
+      } catch {
+        // Çöpe taşınamadıysa da dosya sunucuda duruyor ve yeniden gönderilecek; yönetici uyarısı yine düşer.
+      }
+      await warnManagers(conn.site_code, 'drive.integrity_mismatch', actor, { drive_file_id: sent.id });
+    }
+    return verdict;
+  }
+
   // --- Durum / bağlantı ---
 
   async function getStatus(siteCode) {
     const config = getConfig();
     const conn = await getConnection(siteCode);
-    // Bekleyen dosyalar: sayı, bayt, PENDING_WARN_DAYS'i aşanlar (silinmez, yalnız uyarı) ve en eskisi.
+    // Bekleyen dosyalar: sayı, bayt, PENDING_WARN_DAYS'i aşanlar (silinmez, yalnız uyarı), en eskisi; nedene göre (SHA-256 uyuşmadı / Google kotası dolu) ve en çok deneme.
     const pending = await db.query(
       `SELECT COUNT(*)::int AS n, COALESCE(SUM(f.size_bytes), 0)::bigint AS bytes,
-              COUNT(*) FILTER (WHERE p.expires_at < $2)::int AS overdue, MIN(f.created_at) AS oldest
+              COUNT(*) FILTER (WHERE p.expires_at < $2)::int AS overdue, MIN(f.created_at) AS oldest,
+              COUNT(*) FILTER (WHERE p.error_kind = 'integrity')::int AS integrity, COUNT(*) FILTER (WHERE p.error_kind = 'quota')::int AS quota_blocked,
+              COALESCE(MAX(p.attempts), 0)::int AS max_attempts
          FROM drive_pending_uploads p JOIN drive_files f ON f.id = p.file_id WHERE p.site_code = $1`,
       [siteCode, now()],
     );
     const stored = await db.query(`SELECT COUNT(*)::int AS n FROM drive_files WHERE site_code = $1 AND status = 'stored'`, [siteCode]);
+    const lastTransfer = await db.query(`SELECT MAX(stored_at) AS at FROM drive_files WHERE site_code = $1 AND status = 'stored'`, [siteCode]);
+    const lastQueueError = await db.query(
+      `SELECT last_error FROM drive_pending_uploads WHERE site_code = $1 AND last_error IS NOT NULL ORDER BY next_attempt_at DESC LIMIT 1`,
+      [siteCode],
+    );
     const row = pending.rows[0];
     const pendingBytes = Number(row.bytes);
+    const quota = quotaInfo({ limitBytes: conn?.quota_limit_bytes, usedBytes: conn?.quota_used_bytes, checkedAt: conn?.health_checked_at });
+    const queueHealth = {
+      pendingCount: row.n,
+      overdueCount: row.overdue ?? 0,
+      oldestPendingAt: row.oldest ?? null,
+      integrityFailedCount: row.integrity ?? 0,
+      quotaBlockedCount: row.quota_blocked ?? 0,
+      maxAttempts: row.max_attempts ?? 0,
+      lastError: lastQueueError.rows?.[0]?.last_error ?? null,
+    };
+    const lastTransferAt = lastTransfer.rows?.[0]?.at ?? null;
     return {
       configured: config.configured,
       status: conn?.status ?? 'disconnected',
@@ -173,10 +249,55 @@ export function createDriveService(deps = {}) {
       pending_limit_bytes: PENDING_MAX_BYTES,
       pending_overdue_count: row.overdue ?? 0,
       oldest_pending_at: row.oldest ?? null,
-      // K6: yönetici uyarıları (bekleyen / uzun süredir bekleyen / bekleme alanı dolu). Hiçbiri dosya silmez.
-      warnings: queueWarnings({ pendingCount: row.n, pendingBytes, overdueCount: row.overdue ?? 0 }),
+      last_transfer_at: lastTransferAt,
+      // K6: yönetici uyarıları (bekleyen / uzun süredir bekleyen / sunucu bekleme alanı dolu / Google kotası dolu-dolmak üzere / doğrulama uyuşmadı). Hiçbiri dosya silmez.
+      warnings: [
+        ...queueWarnings({ pendingCount: row.n, pendingBytes, overdueCount: row.overdue ?? 0 }),
+        ...quotaWarnings(quota, { quotaBlockedCount: queueHealth.quotaBlockedCount }),
+        ...integrityWarnings(queueHealth.integrityFailedCount),
+      ],
+      // P2-17: bağlantı / erişim belirteci / son başarılı aktarım / bekleyen kuyruk / kota tek özet (eski istemciler bu alanı yok sayar).
+      health: buildDriveHealth({ configured: config.configured, conn, now: now(), lastTransferAt, queue: queueHealth, quota }),
       kinds: Object.keys(DRIVE_KINDS),
     };
+  }
+
+  /**
+   * Sağlık denetimi (zamanlayıcı ve yeniden bağlanma; P2-17 / P2-18): erişim belirtecini yeniler (izin geri alınmışsa bağlantı 'error' olur ve yöneticiye uyarı düşer),
+   * Google hesap kotasını çeker (about.get) ve %90'ı aşmışsa yöneticiye uyarı düşer. HİÇBİR dosyaya dokunmaz.
+   * Dönüş: { checked, reason?, quota? } (checked false: bağlı değil ya da Google'a ulaşılamadı; bağlantı durumu bozulmaz).
+   */
+  async function checkHealth(siteCode) {
+    const conn = await getConnection(siteCode);
+    if (!conn || conn.status !== 'connected') return { checked: false, reason: conn?.status ?? 'disconnected' };
+    let token;
+    try {
+      token = await accessToken(conn);
+    } catch (error) {
+      // İzin geri alınmışsa accessToken bağlantıyı zaten 'error' yaptı ve yöneticiye uyarı düşürdü; ağ hatasında bağlantı durumu bozulmaz.
+      return { checked: false, reason: error instanceof DriveError && error.kind === 'auth' ? 'auth' : 'unreachable' };
+    }
+    let raw;
+    try {
+      raw = await getClient().aboutQuota(token);
+    } catch (error) {
+      // Yalnız 401 (belirteç ortada geçersizleşti) bağlantıyı bozar; 403 gibi kota okuma reddi yüklemeyi etkilemediğinden kota "bilinmiyor" kalır.
+      if (error instanceof DriveError && error.kind === 'auth' && error.status === 401) {
+        await markError(siteCode, 'Google erişimi kaldırılmış ya da geçersiz; Drive yeniden bağlanmalı.');
+        await warnManagers(siteCode, 'drive.connection_lost', null, {});
+        return { checked: false, reason: 'auth' };
+      }
+      return { checked: false, reason: 'unreachable' };
+    }
+    await db.query(
+      `UPDATE site_drive_connections SET quota_limit_bytes = $2, quota_used_bytes = $3, health_checked_at = NOW() WHERE site_code = $1 AND status = 'connected'`,
+      [siteCode, raw.limit ?? null, raw.usage ?? 0],
+    );
+    const quota = quotaInfo({ limitBytes: raw.limit, usedBytes: raw.usage, checkedAt: now() });
+    const detail = { percent: quota.percent, used_bytes: quota.used_bytes, limit_bytes: quota.limit_bytes };
+    if (quota.state === 'full') await warnManagers(siteCode, 'drive.quota_full', null, detail);
+    else if (quota.state === 'near_full') await warnManagers(siteCode, 'drive.quota_near_full', null, detail);
+    return { checked: true, quota };
   }
 
   async function startConnect(siteCode, actor) {
@@ -228,8 +349,12 @@ export function createDriveService(deps = {}) {
          last_ok_at = NOW(), last_error = NULL, updated_at = NOW()`,
       [siteCode, email, encryptToken(tokens.refreshToken, config.tokenKey), sameAccount ? previous.root_folder_id : null, JSON.stringify(sameAccount ? previous.folder_ids ?? {} : {}), row.user_code],
     );
-    tokenCache.set(siteCode, { token: tokens.accessToken, exp: now().getTime() + tokens.expiresIn * 1000 });
+    const exp = now().getTime() + tokens.expiresIn * 1000;
+    tokenCache.set(siteCode, { token: tokens.accessToken, exp });
+    await rememberTokenExpiry(siteCode, exp);
     await recordAudit(db, { actor: { user_code: row.user_code }, action: 'drive.connected', siteCode, targetType: 'drive', details: { account_email: email } });
+    // Bağlanır bağlanmaz kota bir kez okunur (sağlık göstergesi boş kalmasın); hata bağlantıyı bozmaz.
+    await checkHealth(siteCode).catch(() => {});
     // Yeniden bağlanınca bekleyenler artan bekleme sürelerine takılmadan hemen denenir (hiçbiri süre doldu diye silinmez).
     await flushPending(siteCode, { force: true }).catch(() => {});
     return { siteCode };
@@ -289,7 +414,7 @@ export function createDriveService(deps = {}) {
    * Drive'a gidemeyen yeni dosyayı bekleme alanına alır. Alan doluysa YENİ yükleme reddedilir (K6): yalnız bu isteğin henüz kuyruğa girmemiş satırı geri alınır;
    * bekleyen ve kayıtlı HİÇBİR dosyaya (satır ya da geçici dosya) dokunulmaz; yöneticiye uyarı düşer.
    */
-  async function queue(row, data, actor) {
+  async function queue(row, data, actor, cause = null) {
     const siteCode = Number(row.site_code);
     const used = await db.query(
       `SELECT COALESCE(SUM(f.size_bytes), 0)::bigint AS bytes FROM drive_pending_uploads p JOIN drive_files f ON f.id = p.file_id WHERE p.site_code = $1`,
@@ -301,6 +426,15 @@ export function createDriveService(deps = {}) {
         `DELETE FROM drive_files WHERE id = $1 AND status = 'pending' AND NOT EXISTS (SELECT 1 FROM drive_pending_uploads WHERE file_id = $1)`,
         [row.id],
       );
+      if (cause?.kind === 'quota') {
+        // Neden Google hesabının depolama alanı dolması: "bağlantı kopuk" demek yanıltır; yönerge Google hesabında yer açmaktır (P2-18).
+        await warnManagers(siteCode, 'drive.quota_full', actor, { pending_bytes: usedBytes, limit_bytes: PENDING_MAX_BYTES, rejected_bytes: data.length, queue_full: true });
+        throw new PlatformError(
+          503,
+          'DRIVE_QUOTA_FULL',
+          'Sitenin Google Drive depolama alanı doldu ve sunucudaki bekleme alanı da doldu; yeni dosya kabul edilemiyor. Hiçbir dosya silinmedi. Google hesabında yer açın ya da depolamayı artırın; yönetiminize bildirin.',
+        );
+      }
       await warnManagers(siteCode, 'drive.queue_full', actor, { pending_bytes: usedBytes, limit_bytes: PENDING_MAX_BYTES, rejected_bytes: data.length });
       throw new PlatformError(
         503,
@@ -313,11 +447,14 @@ export function createDriveService(deps = {}) {
     const target = path.join(dir, String(row.id));
     await fsp.writeFile(target, data, { mode: 0o600 });
     // expires_at artık SİLME zamanı değil, "uzun süredir bekliyor" uyarı eşiğidir (K6; sütun eski sürümle uyum için korunur).
-    await db.query(`INSERT INTO drive_pending_uploads (file_id, site_code, storage_path, expires_at) VALUES ($1, $2, $3, $4)`, [
+    // Neden (varsa) satırla birlikte yazılır: yöneticinin ekranı "kuyruk dolu / Google kotası dolu / doğrulama uyuşmadı" ayrımını buradan yapar.
+    await db.query(`INSERT INTO drive_pending_uploads (file_id, site_code, storage_path, expires_at, last_error, error_kind) VALUES ($1, $2, $3, $4, $5, $6)`, [
       row.id,
       siteCode,
       target,
       new Date(now().getTime() + PENDING_WARN_DAYS * DAY_MS),
+      cause?.text ?? null,
+      cause?.kind ?? null,
     ]);
   }
 
@@ -355,9 +492,11 @@ export function createDriveService(deps = {}) {
     try {
       if (conn.status !== 'connected') throw new DriveError('auth', 'bağlantı kopuk');
       const sent = await sendToDrive(conn, row, data);
-      // Teyitsiz yanıt (kimlik yok / boyut tutmuyor) başarı sayılmaz: dosya sunucuda bekler, Drive'a sonra gider.
-      if (!driveConfirmed(sent, data.length)) throw new DriveError('transient', 'Drive yüklemeyi doğrulamadı.');
-      const updated = await db.query(`UPDATE drive_files SET status = 'stored', drive_file_id = $2, stored_at = NOW() WHERE id = $1 RETURNING *`, [row.id, sent.id]);
+      // Teyitsiz yanıt (kimlik yok / boyut tutmuyor) ya da SHA-256 uyuşmazlığı başarı sayılmaz: dosya sunucuda bekler (kuyruğa geri), Drive'a sonra gider (P2-2).
+      const verdict = await verifySent(conn, sent, row.sha256, data.length, actor);
+      if (verdict.state === 'unconfirmed') throw new DriveError('unconfirmed', 'Drive yüklemeyi doğrulamadı.');
+      if (verdict.state === 'mismatch') throw new DriveError('integrity', 'Drive kopyasının SHA-256 değeri uyuşmadı.');
+      const updated = await db.query(`UPDATE drive_files SET status = 'stored', drive_file_id = $2, stored_at = NOW(), verify_method = $3 WHERE id = $1 RETURNING *`, [row.id, sent.id, verdict.state]);
       result = updated.rows[0];
       await touchOk(siteCode);
     } catch (error) {
@@ -365,7 +504,9 @@ export function createDriveService(deps = {}) {
         await db.query(`DELETE FROM drive_files WHERE id = $1`, [row.id]).catch(() => {});
         throw error;
       }
-      await queue(row, data, actor);
+      // Google depolama alanı dolu: dosya reddedilmez, sunucuda bekler; yöneticiye "Google hesabında yer açın" uyarısı düşer.
+      if (error.kind === 'quota') await warnManagers(siteCode, 'drive.quota_full', actor, { queued: true });
+      await queue(row, data, actor, reasonOf(error));
     }
     await recordAudit(db, { actor, action: 'drive.file_uploaded', siteCode, targetType: 'drive_file', targetId: row.id, details: { kind, status: result.status, size_bytes: data.length, ...(link ? { source_type: link.type, source_id: link.id } : {}) } });
     return { file: viewOf(result) };
@@ -388,7 +529,7 @@ export function createDriveService(deps = {}) {
   /**
    * Bekleyenleri göndermeyi dener; { sent, waiting, overdue, expired }. `force`: artan bekleme sürelerini yok sayıp hemen dener (elle gönder, yeniden bağlanma).
    * HİÇBİR dosya süre doldu diye silinmez (K6): gönderilemeyen dosya bekler; `overdue` yalnız "uzun süredir bekliyor" uyarı sayısıdır (`expired` eski istemci uyumu için hep 0).
-   * Geçici dosya YALNIZ Drive teyidinden (driveConfirmed) ve veritabanına 'stored' yazıldıktan SONRA silinir; teyitsiz / hatalı turda dosya durur.
+   * Geçici dosya YALNIZ Drive teyidinden (kimlik + boyut + varsa SHA-256 eşleşmesi) ve veritabanına 'stored' yazıldıktan SONRA silinir; teyitsiz / SHA-256 uyuşmayan / hatalı turda dosya durur.
    */
   async function flushNow(siteCode, { force = false } = {}) {
     const conn = await getConnection(siteCode);
@@ -413,18 +554,26 @@ export function createDriveService(deps = {}) {
         });
         if (item.sha256 && sha256Of(data) !== item.sha256) throw new PendingFileError('Geçici dosyanın bütünlüğü doğrulanamadı.');
         const out = await sendToDrive(conn, { name: item.name, folder_name: item.folder_name, mime_type: item.mime_type }, data);
-        if (!driveConfirmed(out, data.length)) throw new PendingFileError('Drive yüklemeyi doğrulamadı; dosya bekliyor.');
-        await db.query(`UPDATE drive_files SET status = 'stored', drive_file_id = $2, stored_at = NOW() WHERE id = $1`, [item.file_id, out.id]);
+        // Drive'a ulaşan kopya doğrulanır (kimlik + boyut + SHA-256); doğrulanamazsa dosya kuyrukta KALIR (P2-2), geçici dosya silinmez.
+        const verdict = await verifySent(conn, out, item.sha256 || sha256Of(data), data.length, null);
+        if (verdict.state === 'unconfirmed') throw new PendingFileError(driveErrorText('unconfirmed'), 'unconfirmed');
+        if (verdict.state === 'mismatch') throw new PendingFileError(driveErrorText('integrity'), 'integrity');
+        await db.query(`UPDATE drive_files SET status = 'stored', drive_file_id = $2, stored_at = NOW(), verify_method = $3 WHERE id = $1`, [item.file_id, out.id, verdict.state]);
         await db.query(`DELETE FROM drive_pending_uploads WHERE file_id = $1`, [item.file_id]);
         await fsp.unlink(item.storage_path).catch(() => {});
         sent += 1;
       } catch (error) {
         const wait = Math.min(2 ** Math.min(item.attempts, 10), 1440);
+        const reason = reasonOf(error);
         await db.query(
-          `UPDATE drive_pending_uploads SET attempts = attempts + 1, next_attempt_at = $2, last_error = $3 WHERE file_id = $1`,
-          [item.file_id, new Date(now().getTime() + wait * 60_000), error instanceof DriveError || error instanceof PendingFileError ? error.message : 'beklenmeyen hata'],
+          `UPDATE drive_pending_uploads SET attempts = attempts + 1, next_attempt_at = $2, last_error = $3, error_kind = $4 WHERE file_id = $1`,
+          [item.file_id, new Date(now().getTime() + wait * 60_000), reason.text, reason.kind],
         );
-        if (error instanceof DriveError && error.kind === 'auth') break;
+        // Bağlantı geçersiz, Google kotası dolu ya da istek sınırı: aynı nedenle kalan dosyalar da gidemez; boşuna çağrı yapılmaz (hepsi bekler, hiçbiri silinmez).
+        if (error instanceof DriveError && ['auth', 'quota', 'rate_limit'].includes(error.kind)) {
+          if (error.kind === 'quota') await warnManagers(siteCode, 'drive.quota_full', null, { queued: true });
+          break;
+        }
       }
     }
     if (sent > 0) await touchOk(siteCode);
@@ -478,7 +627,7 @@ export function createDriveService(deps = {}) {
     }
   }
 
-  return { getStatus, startConnect, completeConnect, disconnect, upload, list, flushPending, openContent };
+  return { getStatus, checkHealth, startConnect, completeConnect, disconnect, upload, list, flushPending, openContent };
 }
 
 export const driveService = createDriveService();

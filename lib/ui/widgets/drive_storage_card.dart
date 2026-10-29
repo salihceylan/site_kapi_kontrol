@@ -8,7 +8,9 @@ import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_snack.dart';
 import 'package:site_kapi_kontrol/ui/design/buttons.dart';
+import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+import 'package:site_kapi_kontrol/ui/helpers/ui_helpers.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -28,6 +30,68 @@ class DriveStorageWarning {
   }
 }
 
+/// Google hesap kotası özeti (`health.quota`): `state` unknown | ok | near_full (%90+) | full; metin sunucudan Türkçe gelir.
+class DriveQuotaInfo {
+  const DriveQuotaInfo({required this.state, this.percent, this.label = '', this.unlimited = false});
+
+  static DriveQuotaInfo? tryFromJson(Object? raw) {
+    if (raw is! Map) return null;
+    return DriveQuotaInfo(
+      state: raw['state']?.toString() ?? 'unknown',
+      percent: (raw['percent'] as num?)?.toInt(),
+      label: raw['label']?.toString() ?? '',
+      unlimited: raw['unlimited'] == true,
+    );
+  }
+
+  final String state;
+  final int? percent;
+  final String label;
+  final bool unlimited;
+}
+
+/// Drive sağlık özeti (`health`, P2-17): bağlantı durumu (ok | warning | error | disconnected | not_configured), erişim belirteci,
+/// son başarılı aktarım, bekleyen kuyruk ve Google kotası. Eski sunucu bu alanı göndermez: `DriveStorageStatus.health` null kalır.
+class DriveHealth {
+  const DriveHealth({
+    required this.state,
+    required this.message,
+    this.tokenLabel = '',
+    this.lastTransferAt,
+    this.checkedAt,
+    this.pendingCount = 0,
+    this.queueLastError,
+    this.quota,
+  });
+
+  static DriveHealth? tryFromJson(Object? raw) {
+    if (raw is! Map) return null;
+    final message = raw['message']?.toString().trim() ?? '';
+    if (message.isEmpty) return null;
+    final token = raw['token'] is Map ? raw['token'] as Map : const <Object?, Object?>{};
+    final queue = raw['queue'] is Map ? raw['queue'] as Map : const <Object?, Object?>{};
+    return DriveHealth(
+      state: raw['state']?.toString() ?? 'ok',
+      message: message,
+      tokenLabel: token['label']?.toString() ?? '',
+      lastTransferAt: DateTime.tryParse(raw['last_transfer_at']?.toString() ?? ''),
+      checkedAt: DateTime.tryParse(token['checked_at']?.toString() ?? ''),
+      pendingCount: (queue['pending_count'] as num?)?.toInt() ?? 0,
+      queueLastError: queue['last_error']?.toString(),
+      quota: DriveQuotaInfo.tryFromJson(raw['quota']),
+    );
+  }
+
+  final String state;
+  final String message;
+  final String tokenLabel;
+  final DateTime? lastTransferAt;
+  final DateTime? checkedAt;
+  final int pendingCount;
+  final String? queueLastError;
+  final DriveQuotaInfo? quota;
+}
+
 /// Sitenin Google Drive durumu (`GET /manager/sites/:siteCode/drive`).
 class DriveStorageStatus {
   const DriveStorageStatus({
@@ -40,6 +104,7 @@ class DriveStorageStatus {
     this.storedCount = 0,
     this.pendingOverdueCount = 0,
     this.warnings = const <DriveStorageWarning>[],
+    this.health,
   });
 
   factory DriveStorageStatus.fromJson(Map<String, dynamic> json) => DriveStorageStatus(
@@ -55,6 +120,7 @@ class DriveStorageStatus {
     warnings: <DriveStorageWarning>[
       for (final raw in (json['warnings'] as List? ?? const <Object?>[])) ?DriveStorageWarning.tryFromJson(raw),
     ],
+    health: DriveHealth.tryFromJson(json['health']),
   );
 
   final bool configured;
@@ -68,6 +134,9 @@ class DriveStorageStatus {
   /// "Uzun süredir bekliyor" uyarısındaki dosya sayısı (silinmez).
   final int pendingOverdueCount;
   final List<DriveStorageWarning> warnings;
+
+  /// Sağlık özeti (bağlantı / belirteç / son aktarım / kuyruk / kota); eski sunucuda null.
+  final DriveHealth? health;
 }
 
 /// `POST .../drive/flush` sonucu: bu turda gönderilen, hâlâ bekleyen ve uzun süredir bekleyen dosya sayısı.
@@ -131,6 +200,10 @@ class DriveStorageApi {
   /// Bekleyen dosyaları şimdi göndermeyi dener (artan bekleme süreleri yok sayılır). Dosyalar bu işlemle SİLİNMEZ.
   Future<DriveFlushResult> flush(int siteCode, String token) async =>
       DriveFlushResult.fromJson(await _call('POST', siteCode, '/flush', token));
+
+  /// Sağlık denetimini şimdi çalıştırır (belirteç yenileme + kota okuma) ve güncel durumu döner. Hiçbir dosyaya dokunmaz.
+  Future<DriveStorageStatus> healthCheck(int siteCode, String token) async =>
+      DriveStorageStatus.fromJson(await _call('POST', siteCode, '/health-check', token));
 }
 
 /// Dosya Deposu ekranının "Google Drive" bölümü (seçili site; Belgeler listesiyle AYNI modül, `drive_storage`): bağlı hesap,
@@ -273,6 +346,101 @@ class _DriveStorageCardState extends State<DriveStorageCard> {
     }
   }
 
+  /// Sağlık denetimini şimdi çalıştırır (belirteç yenileme + kota okuma); güncel durum kartı yeniler. Hiçbir dosya silinmez.
+  Future<void> _healthCheck() async {
+    final token = _token;
+    if (token == null || _busy) return;
+    final site = widget.siteCode;
+    setState(() => _busy = true);
+    try {
+      final next = await _api.healthCheck(site, token);
+      if (mounted && site == widget.siteCode) setState(() => _status = next);
+    } on ApiException catch (e) {
+      if (mounted) AppSnack.show(context, e.message, kind: AppSnackKind.error);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Sağlık göstergesi (P2-17): durum rozeti, erişim belirteci, son başarılı aktarım, kuyruk, Google kotası (%90'dan itibaren uyarı sunucudan gelir).
+  /// Eski sunucuda `health` yoktur: bölüm hiç görünmez.
+  List<Widget> _healthSection(DriveStorageStatus status) {
+    final health = status.health;
+    if (health == null) return const <Widget>[];
+    final th = Theme.of(context).textTheme;
+    final muted = th.bodySmall?.copyWith(color: context.palette.textSecondary);
+    final tone = switch (health.state) {
+      'ok' => AppTone.success,
+      'warning' => AppTone.warning,
+      'error' => AppTone.danger,
+      _ => AppTone.neutral,
+    };
+    final quota = health.quota;
+    final percent = quota?.percent;
+    return <Widget>[
+      Padding(
+        padding: const EdgeInsets.only(top: AppSpace.md),
+        child: Wrap(children: [StatusChip(key: const ValueKey<String>('drive_health_state'), label: health.message, tone: tone)]),
+      ),
+      if (health.tokenLabel.isNotEmpty)
+        Padding(padding: const EdgeInsets.only(top: AppSpace.xs), child: Text('Erişim: ${health.tokenLabel}', style: muted)),
+      Padding(
+        padding: const EdgeInsets.only(top: AppSpace.xs),
+        child: Text(
+          'Son başarılı aktarım: ${health.lastTransferAt == null ? 'henüz yok' : formatDateTime(health.lastTransferAt)}',
+          key: const ValueKey<String>('drive_health_last_transfer'),
+          style: muted,
+        ),
+      ),
+      Padding(
+        padding: const EdgeInsets.only(top: AppSpace.xs),
+        child: Text(
+          health.pendingCount == 0
+              ? 'Kuyruk: boş'
+              : 'Kuyruk: ${health.pendingCount} dosya bekliyor${health.queueLastError == null ? '' : '. Son neden: ${health.queueLastError}'}',
+          key: const ValueKey<String>('drive_health_queue'),
+          style: muted,
+        ),
+      ),
+      if (quota != null && quota.label.isNotEmpty)
+        Padding(
+          padding: const EdgeInsets.only(top: AppSpace.xs),
+          child: Column(
+            key: const ValueKey<String>('drive_health_quota'),
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(quota.label, style: muted),
+              if (percent != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: AppSpace.xs),
+                  child: LinearProgressIndicator(value: (percent.clamp(0, 100)) / 100, minHeight: 6, semanticsLabel: 'Google Drive kotası'),
+                ),
+            ],
+          ),
+        ),
+      if (health.checkedAt != null)
+        Padding(
+          padding: const EdgeInsets.only(top: AppSpace.xs),
+          child: Text('Son denetim: ${formatDateTime(health.checkedAt)}', style: muted),
+        ),
+      Padding(
+        padding: const EdgeInsets.only(top: AppSpace.sm),
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: PrimaryActionButton(
+            key: const ValueKey<String>('drive_health_check'),
+            label: 'Şimdi denetle',
+            icon: Icons.health_and_safety_outlined,
+            variant: AppButtonVariant.outline,
+            expand: false,
+            loading: _busy,
+            onPressed: _busy ? null : _healthCheck,
+          ),
+        ),
+      ),
+    ];
+  }
+
   /// Sunucunun yönetici uyarıları (bekleyen / uzun süredir bekleyen / bekleme alanı dolu): uyarı tonlu kutular + "Şimdi gönder".
   List<Widget> _pendingNotices(DriveStorageStatus status) => <Widget>[
     for (final warning in status.warnings)
@@ -323,6 +491,7 @@ class _DriveStorageCardState extends State<DriveStorageCard> {
       body = [
         Text('Bağlı hesap: ${status.accountEmail ?? '-'}', style: th.bodyMedium),
         Text('Drive\'a kaydedilen: ${status.storedCount} dosya · Bekleyen: ${status.pendingCount}', style: muted),
+        ..._healthSection(status),
         ..._pendingNotices(status),
         const SizedBox(height: AppSpace.md),
         Align(
@@ -338,6 +507,7 @@ class _DriveStorageCardState extends State<DriveStorageCard> {
               : 'Sitenin dosyaları sitenin kendi Google Drive hesabında saklanır. Bağlamak için site adına açılmış bir Google hesabı kullanın.',
           style: muted,
         ),
+        if (status.status == 'error') ..._healthSection(status),
         ..._pendingNotices(status),
         const SizedBox(height: AppSpace.md),
         Align(
