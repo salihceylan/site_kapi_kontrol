@@ -15,6 +15,7 @@ import {
   localDoorControlForStatus,
   recordDoorAccessLog,
 } from '../services/door_service.js';
+import { recordLocalOpenNotifyLog } from '../services/door_log_service.js';
 import {
   assertDoorOpenAllowed,
   checkScreenQrToken,
@@ -449,7 +450,9 @@ appDoorsRouter.post('/app/doors/:id/local-open-notify', authRequired, doorComman
 
     const apartmentLabel = await apartmentLabelForUser(req.authUser, ['apartment_owner']);
 
-    await recordDoorAccessLog({
+    // Cihaz ayni yerel acmayi kendi offline logu olarak da yazar (local_udp, kullanicisiz); ayni kullanici+kapi icin
+    // 15 sn icinde tek satir kalir (kullanici bilgisi cihaz satirina islenir, ayni bildirim tekrarlanirsa yazilmaz).
+    await recordLocalOpenNotifyLog({
       siteCode: Number(door.site_code),
       doorId: Number(door.id),
       doorName: door.door_name || 'Site Kapisi',
@@ -457,7 +460,6 @@ appDoorsRouter.post('/app/doors/:id/local-open-notify', authRequired, doorComman
       userName: req.authUser.full_name || req.authUser.email,
       userRole: req.authUser.role,
       apartmentLabel,
-      triggerType: 'local_wifi',
       openedAt: new Date(),
       ipAddress: req.ip,
     });
