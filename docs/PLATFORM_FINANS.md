@@ -527,5 +527,16 @@ hesabı VE avansı eşit azaltır.
 okuma = + kurul adsız, görevli / sakin 403): `GET` (süzgeç `status`, `apartment_id`, `before_id`), `GET /:id`, `POST` (sakin adına talep: + `account_party`), `POST /:id/approve { pay_account_id, idempotency_key }`,
 `POST /:id/reject { reason, idempotency_key }`, `POST /:id/reverse { reason, idempotency_key }`. Dikkat kaydı: `refund_requests` (bekleyen talep sayısı + toplamı). Makbuz PDF'i istemcide üretilir (sunucu anlık görüntü + kod verir).
 
+**İstemci (Dalga B ekranları).** Yönetici: Daireler sekmesinde onay bekleyen talep varsa uyarı kartı (sayı + toplam, «İadeleri İncele») ve her durumda «İade talepleri» düğmesi (kurul listeyi açar, eylem görmez);
+dikkat barı `refund_requests` satırı «N iade talebi onayınızı bekliyor, toplam …» + «İadeleri İncele» (pencereyi doğrudan açar). «İade Talepleri» penceresi: süzgeç (Bekleyen / İade edilen / Tümü), «Onayla» (ödeme hesabı
+YÖNETİCİ seçer; nakit hesapta bakiye yetmezse onaydan önce uyarı + sunucu 409), «Reddet» (gerekçe zorunlu, sakine gösterilir), onaylı iadede «Geri Al» (nedenli) ve «Makbuzu Gör» (IA-yıl-sıra, hesap, yöntem, doğrulama kodu; geri
+alınan iadenin makbuzu «İptal edildi»; iade makbuzu şimdilik yalnız ekranda görüntülenir, PDF / yazdır YOK). Sakin: Borcum kartında alacak varsa «Fazla ödememi iade et» (tutar = alacak − bekleyen talepler; sınır sunucuda da sınanır), talep listesi (Onay bekliyor / İade edildi + makbuz /
+Reddedildi + neden / Geri çekildi / İade geri alındı), bekleyen talep için «Talebi Geri Çek». Alacak ve talep yoksa bölüm çizilmez. Dosyalar: `lib/models/finance_refund.dart`, `lib/ui/dialogs/finance_refunds_dialog.dart`,
+`finance_refund_approve_dialog.dart`, `finance_refund_receipt_dialog.dart`, `my_refund_request_dialog.dart`, `lib/ui/widgets/finance_refunds_entry.dart`, `my_refund_section.dart`.
+
+**KVKK bütünlüğü (karar kayıtlı).** Kişisel veri dışa aktarma (`account_export_service`) sakinin KENDİ açtığı iade taleplerini `refund_requests_made` bölümüne koyar (daire, hesap türü, tutar, kendi notu, durum, tarihler, iade makbuzu
+numarası); yönetimin ret gerekçesi, çıkış hesabı, geri alma nedeni ve yönetici adına açılan talepler dışarıda bırakılır (`excluded` açıklar). **Bekleyen iade talebi hesap silmeyi ENGELLEMEZ**: silmede talep `cancelled` olur ve işlem
+izine `finance.refund.cancelled` (`reason: account_deleted`; not YOK) yazılır, silme özetine `refunds_cancelled` eklenir (`account_refund_cleanup.js`); onaylı / reddedilmiş talepler değişmez (defter eklemelidir).
+
 **Doğrulama.** Birim: `finance_funds_refund.test.js` (allocateFunds + rastgele özellik), `finance_liability_plan.test.js`, `finance_refunds.test.js`, `finance_*_schema.test.js`, `finance_devir_iade_routes.test.js` (yetki matrisi).
 Gerçek PostgreSQL: `server/scripts/qa_finance_devir_iade.mjs` (devir / geri alma, iade talep → onay → makbuz → geri alma, kasa değişmezi, yarışlar, DB korumaları; 70 kontrol).

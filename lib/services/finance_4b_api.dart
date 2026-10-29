@@ -26,6 +26,7 @@ import 'package:site_kapi_kontrol/models/finance_4b.dart';
 import 'package:site_kapi_kontrol/models/finance_charts.dart';
 import 'package:site_kapi_kontrol/models/finance_funds.dart';
 import 'package:site_kapi_kontrol/models/finance_liability.dart';
+import 'package:site_kapi_kontrol/models/finance_refund.dart';
 import 'package:site_kapi_kontrol/models/fund_models.dart';
 import 'package:site_kapi_kontrol/models/late_fee_models.dart';
 import 'package:site_kapi_kontrol/models/receipt_models.dart';
@@ -1521,6 +1522,129 @@ class Finance4bApi {
       write: true,
     );
     return _parse('Devir geri alma', () => LiabilityTransferResult.fromJson(r.body, replayed: !r.created));
+  }
+
+  // --- Alacak iadesi (K4) -------------------------------------------------------------------------
+  // Sözleşme: docs/PLATFORM_FINANS.md "Alacak iadesi". Fazla ödeme varsayılan olarak alacak kalır; iade istek + YÖNETİCİ ONAYI ile yapılır.
+
+  /// Sakin: kendi hesabı için iade talebi açar (tutar <= Borcum'da görünen alacak). Aynı [idempotencyKey] + aynı gövde = aynı talep
+  /// (200, `created` false); farklı gövde = 409 `IDEMPOTENCY_CONFLICT`. Alacak yoksa 409 `NO_CREDIT`, tutar fazlaysa 409 `REFUND_EXCEEDS_CREDIT`.
+  Future<RefundRequest> createMyRefundRequest({
+    required String token,
+    required int apartmentId,
+    required int amountMinor,
+    String? note,
+    required String idempotencyKey,
+  }) async {
+    final r = await _send(
+      'POST',
+      '/app/my-finance/refund-requests',
+      token: token,
+      body: <String, dynamic>{
+        'apartment_id': apartmentId,
+        'amount_minor': amountMinor,
+        if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
+        'idempotency_key': idempotencyKey,
+      },
+      write: true,
+    );
+    return _parse('İade talebi', () => RefundRequest.fromJson(_unwrap(r.body, 'refund')));
+  }
+
+  /// Sakin: kendi iade talepleri (yeni -> eski, en çok 50); [apartmentId] verilirse yalnız o daire.
+  Future<List<RefundRequest>> listMyRefundRequests({required String token, int? apartmentId}) async {
+    final r = await _send(
+      'GET',
+      '/app/my-finance/refund-requests',
+      token: token,
+      query: <String, String>{if (apartmentId != null) 'apartment_id': '$apartmentId'},
+    );
+    return _parse('İade talepleri', () => f4List(r.body['items'], RefundRequest.fromJson));
+  }
+
+  /// Sakin: bekleyen talebini geri çeker (onaylanmış / karara bağlanmış talep için 409 `REFUND_NOT_PENDING`).
+  Future<RefundRequest> cancelMyRefundRequest({required String token, required int refundId}) async {
+    final r = await _send('POST', '/app/my-finance/refund-requests/$refundId/cancel', token: token, write: true);
+    return _parse('İade talebi', () => RefundRequest.fromJson(_unwrap(r.body, 'refund')));
+  }
+
+  /// Yönetici / kurul: iade talepleri. [status]: `requested` (varsayılan) | `approved` | `rejected` | `cancelled` | `reversed` | `all`.
+  /// Yanıttaki bekleyen özeti süzgeçten bağımsızdır.
+  Future<RefundPage> listRefunds({
+    required String token,
+    required int siteCode,
+    String status = 'requested',
+    int? apartmentId,
+    int? beforeId,
+    int limit = 50,
+  }) async {
+    final r = await _send(
+      'GET',
+      _site(siteCode, 'refunds'),
+      token: token,
+      query: <String, String>{
+        'status': status,
+        if (apartmentId != null) 'apartment_id': '$apartmentId',
+        if (beforeId != null) 'before_id': '$beforeId',
+        'limit': '$limit',
+      },
+    );
+    return _parse('İade talepleri', () => RefundPage.fromJson(r.body));
+  }
+
+  /// Yönetici: talebi onaylar. TEK işlemde Hesaptan çıkış kaydı + defter + iade makbuzu yazılır; tutar DEĞİŞTİRİLEMEZ. Nakit Hesapta bakiye
+  /// yetmezse 409 `CASH_INSUFFICIENT`, ay kapalıysa 409 `PERIOD_CLOSED`. Aynı [idempotencyKey] = aynı karar (200).
+  Future<RefundRequest> approveRefund({
+    required String token,
+    required int siteCode,
+    required int refundId,
+    required int payAccountId,
+    required String idempotencyKey,
+  }) async {
+    final r = await _send(
+      'POST',
+      _site(siteCode, 'refunds/$refundId/approve'),
+      token: token,
+      body: <String, dynamic>{'pay_account_id': payAccountId, 'idempotency_key': idempotencyKey},
+      write: true,
+    );
+    return _parse('İade onayı', () => RefundRequest.fromJson(_unwrap(r.body, 'refund')));
+  }
+
+  /// Yönetici: talebi gerekçeyle reddeder (gerekçe zorunlu, sakine görünür).
+  Future<RefundRequest> rejectRefund({
+    required String token,
+    required int siteCode,
+    required int refundId,
+    required String reason,
+    required String idempotencyKey,
+  }) async {
+    final r = await _send(
+      'POST',
+      _site(siteCode, 'refunds/$refundId/reject'),
+      token: token,
+      body: <String, dynamic>{'reason': reason.trim(), 'idempotency_key': idempotencyKey},
+      write: true,
+    );
+    return _parse('İade reddi', () => RefundRequest.fromJson(_unwrap(r.body, 'refund')));
+  }
+
+  /// Yönetici: ONAYLI iadeyi geri alır (silinmez: ters kayıt + Hesapta ayna hareket; makbuz iptal sayılır; alacak yeniden oluşur). Gerekçe zorunlu.
+  Future<RefundRequest> reverseRefund({
+    required String token,
+    required int siteCode,
+    required int refundId,
+    required String reason,
+    required String idempotencyKey,
+  }) async {
+    final r = await _send(
+      'POST',
+      _site(siteCode, 'refunds/$refundId/reverse'),
+      token: token,
+      body: <String, dynamic>{'reason': reason.trim(), 'idempotency_key': idempotencyKey},
+      write: true,
+    );
+    return _parse('İade geri alma', () => RefundRequest.fromJson(_unwrap(r.body, 'refund')));
   }
 
   // --- Taşıma katmanı ----------------------------------------------------------------------------

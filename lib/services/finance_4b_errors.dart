@@ -141,6 +141,23 @@ String? finance4bErrorMessage(
       return 'Hatırlatma çalıştırması bulunamadı.';
     case 'REMINDER_RUN_NOT_CANCELLABLE':
       return 'Bu hatırlatma çalıştırması iptal edilemez (zaten iptal edilmiş).';
+    // --- Alacak iadesi (K4) -----------------------------------------------------------------
+    case 'NO_CREDIT':
+      return 'Bu hesapta iade edilecek alacak (fazla ödeme) yok.';
+    case 'REFUND_EXCEEDS_CREDIT':
+      return 'İade tutarı hesaptaki alacaktan (bekleyen talepler dahil) fazla olamaz. Güncel alacağı kontrol edin.';
+    case 'TOO_MANY_PENDING':
+      return 'Bir hesapta en çok 5 bekleyen iade talebi olabilir. Bekleyen taleplerin sonuçlanmasını bekleyin ya da birini geri çekin.';
+    case 'REFUND_NOT_FOUND':
+      return 'İade talebi bulunamadı. Listeyi yenileyip kontrol edin.';
+    case 'REFUND_NOT_PENDING':
+      return 'Bu iade talebi zaten karara bağlanmış ya da geri çekilmiş. Listeyi yenileyip kontrol edin.';
+    case 'REFUND_NOT_APPROVED':
+      return 'Yalnız onaylanmış iade geri alınabilir. Listeyi yenileyip kontrol edin.';
+    case 'CASH_INSUFFICIENT':
+      return 'Seçilen kasada yeterli nakit yok. Başka bir hesap seçin ya da önce kasaya para girişi yapın.';
+    case 'RECEIPT_UNAVAILABLE':
+      return 'İade makbuzu şu anda düzenlenemiyor. Biraz sonra tekrar deneyin.';
     // --- Ayarlar ----------------------------------------------------------------------------
     case 'SETTINGS_STALE':
       return 'Ayarlar başka biri tarafından değiştirilmiş. Güncel ayarlar yüklendi; kontrol edip yeniden kaydedin.';

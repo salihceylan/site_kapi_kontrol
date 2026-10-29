@@ -161,6 +161,55 @@ void main() {
     expect(opened, <(int, int)>[(1, FinanceHomeTab.balances)]);
   });
 
+  testWidgets('K4 refund_requests: "N iade talebi onayınızı bekliyor, toplam ..." + İadeleri İncele; onOpenRefunds çağrılır ve satır yeniden yüklenir; verilmezse Daireler sekmesine gider', (t) async {
+    PeopleSite? openedSite;
+    final opened = <(int, int)>[];
+    var fetches = 0;
+    await t.pumpWidget(_wrap(ManagerAttentionBar(
+      sites: sites,
+      fetch: (_) async {
+        fetches++;
+        return FinanceHome.fromJson(<String, dynamic>{
+          'month': '2026-10',
+          'numbers': <String, dynamic>{},
+          'attention': <Map<String, dynamic>>[
+            <String, dynamic>{'key': 'refund_requests', 'count': 2, 'total_minor': 75000},
+          ],
+        });
+      },
+      onOpenFinance: (s, tab) => opened.add((s, tab)),
+      onOpenRefunds: (site) async => openedSite = site,
+    )));
+    await t.pumpAndSettle();
+    expect(find.textContaining('2 iade talebi onayınızı bekliyor, toplam 750,00 ₺'), findsOneWidget);
+    expect(find.textContaining('bekleyen iş var'), findsNothing, reason: 'genel metin değil, açık etiket');
+    expect(find.text('İadeleri İncele'), findsOneWidget);
+    await t.tap(find.byKey(const ValueKey<String>('month_attention_1_refund_requests')));
+    await t.pumpAndSettle();
+    expect(openedSite?.code, 1);
+    expect(opened, isEmpty, reason: 'doğrudan pencere varken Finans sekmesine gidilmez');
+    expect(fetches, 2, reason: 'pencereden dönünce dikkat satırları yeniden okunur');
+
+    // pencere verilmezse Daireler (iade girişi) sekmesine gider
+    await t.pumpWidget(_wrap(ManagerAttentionBar(
+      key: const ValueKey<String>('no_dialog'),
+      sites: sites,
+      fetch: (_) async => FinanceHome.fromJson(<String, dynamic>{
+        'month': '2026-10',
+        'numbers': <String, dynamic>{},
+        'attention': <Map<String, dynamic>>[
+          <String, dynamic>{'key': 'refund_requests', 'count': 1},
+        ],
+      }),
+      onOpenFinance: (s, tab) => opened.add((s, tab)),
+    )));
+    await t.pumpAndSettle();
+    expect(find.textContaining('1 iade talebi onayınızı bekliyor'), findsOneWidget);
+    expect(find.textContaining('toplam'), findsNothing, reason: 'toplam bilinmiyorsa yazılmaz');
+    await t.tap(find.byKey(const ValueKey<String>('month_attention_1_refund_requests')));
+    expect(opened, <(int, int)>[(1, FinanceHomeTab.balances)]);
+  });
+
   testWidgets('bekleyen iş yokken hiçbir şey çizilmez (boşluk bile yok)', (t) async {
     await t.pumpWidget(_wrap(ManagerAttentionBar(
       sites: sites,
