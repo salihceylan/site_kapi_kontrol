@@ -82,6 +82,7 @@ Demo sitenin **içinde bile** kapalı olanlar (gerekçe: dış etki, kullanıcı
 | `doors`, `assignable-devices`, `cameras`, `cctv`, `plate-recognition`, `plate-events` | donanım; kamera adresine sunucudan istek gider |
 | `drive`, `access-cards`, `card-payments`, `modules` (yazma) | dış hesap bağlama / kart verme / ödeme sağlayıcı ayarı / modül açıp kapama (okuma açık) |
 | `staff-roles` (yazma) | e-postayla **platformdaki herhangi bir hesabı** bulur ("bu e-posta kayıtlı mı") |
+| `quote-requests` (yazma) | dış firma için **kimliksiz, herkese açık** form bağlantısı üretir ve gelen taslağı onaylar (113, P2-8); listeleme açık |
 | `people/bulk-actions`, `people/:id/{invitation,password-reset,account,reset-pin}` | dış e-posta / SMS gönderir, hesap ve kullanıcı kodu üretir |
 | `finance/reminders/send` | borçlulara dış e-posta / SMS |
 | `imports/:kind/{commit,accounts}`, `imports/login-names/*` | hesap üretir (bcrypt, kullanıcı kodu) ve platform genelinde ad / e-posta sorgular (`preview`, `spec`, `exports/*` açık) |
