@@ -19,7 +19,8 @@ Teklif eklemeleri (yalnız `equipment_quotes`; yeni tablo yok, mevcut satırlar 
 `GET equipment/meta`, `GET equipment`, `POST equipment`, `GET|PATCH equipment/:id`, `POST equipment/:id/plans`, `PATCH equipment/plans/:planId`, `POST equipment/:id/logs`,
 `GET equipment/due?days=60` (yaklaşan / geciken bakım ve yasal kontroller), `GET equipment/:id/work-history?before_id&limit` (servis geçmişi: ekipmana bağlı iş kayıtları, migration 096), `POST|DELETE equipment/:id/expense-links[/:expenseId]`,
 `GET equipment/expense-breakdown?from=YYYY-AA&to=YYYY-AA`, `GET|POST quotes`, `POST quotes/:id/reject`, `POST quotes/:id/accept`,
-`PATCH quotes/:id` (açık teklifi yerinde düzenle), `POST quotes/:id/revise` (onaylı teklifte yeni sürüm, 201), `GET quotes/:id/history` (tüm sürümler).
+`PATCH quotes/:id` (açık teklifi yerinde düzenle), `POST quotes/:id/revise` (onaylı teklifte yeni sürüm, 201), `GET quotes/:id/history` (tüm sürümler),
+`GET|POST quote-requests`, `POST quote-requests/:id/revoke|reject|approve` (dış firma teklif formu, migration 113; aşağıda "Firma teklif formu"). Herkese açık iki uç (kimlik yok): `GET /firma-teklif/:token`, `POST /public/quote-forms/:token`.
 
 ## Kurallar
 
@@ -39,6 +40,23 @@ Teklif eklemeleri (yalnız `equipment_quotes`; yeni tablo yok, mevcut satırlar 
   - Eski onaylı fiyat "tarihli fiyattır, güncel fiyat değildir": istemci onaylı teklifte bu etiketi gösterir.
   - Denetim kaydı: `quote.updated`, `quote.revised`, `quote.accepted` yalnız alan adlarını ve (tutar değiştiyse) eski / yeni tutarı (kuruş) taşır; kapsam, not ve gerekçe metni günlüğe YAZILMAZ (gerekçe teklif satırındadır).
 - Para tamsayı kuruştur. Tahsilat / defter yazılmaz.
+
+## Firma teklif formu (113; P2-8 taşeron formu)
+
+Dış firma, uygulamaya girmeden, yöneticinin ilettiği TEK KULLANIMLIK bir bağlantıdan teklif girer. **Teklif Pro API'sine bağlanmaz**; bağımsız bir sayfadır (sunucu üretir, Flutter'dan bağımsız). Firma girişi bir **taslak teklif**tir: yönetici onaylayana kadar `equipment_quotes`'a, gidere ya da sözleşmeye HİÇBİR şey yazılmaz. Davet kalıbıyla (058 `person_invitations`) aynıdır: 32 bayt CSPRNG belirteç, veritabanında YALNIZ SHA-256 özeti, süre, tek kullanım.
+
+- **Tablo** (migration 113, ekleyici; mevcut tablolara dokunmaz): `equipment_quote_requests` — bağlantı + firma girişi + karar tek satırda. Durumlar: `invited` (bağlantı bekliyor) → `draft` (firma gönderdi = taslak teklif) → `approved` | `rejected`; `invited` → `revoked` (yönetici iptal etti). Süre dolumu satırda tutulmaz: `invited` ve `expires_at` geçmişse yanıtta `expired: true`. Belirteç alanı yok, yalnız `token_hash` (64 hex, benzersiz). Silme: site CASCADE; `created_by` / `decided_by` SET NULL (TOMBSTONE); ekipman / oluşan teklif satırı silinirse bağ SET NULL.
+- **Yönetici uçları** (`/manager/sites/:siteCode/...`, yetki teklif uçlarıyla aynı: yönetici / süper yazar, kurul ve görevli salt okur, sakin 403):
+  - `GET quote-requests?status=` → `{ items }` (en yeni üstte, en çok 200). Belirteç ya da özet HİÇBİR yanıtta yoktur.
+  - `POST quote-requests { topic, vendor_hint?, equipment_id?, valid_days? }` → `201 { request, link:{ url, path, expires_at } }`. `valid_days` 1-30 (varsayılan 14). **Bağlantı YALNIZ bu yanıtta döner**, sonradan okunamaz (kaybolursa iptal edip yenisi üretilir). Bir sitede aynı anda en çok 100 bekleyen (süresi dolmamış bağlantı + onay bekleyen taslak) olur: `409 LIMIT_REACHED`.
+  - `POST quote-requests/:id/revoke` (yalnız `invited`; `409 QUOTE_REQUEST_NOT_PENDING`), `POST quote-requests/:id/reject` (yalnız `draft`; `409 QUOTE_REQUEST_NOT_DRAFT`).
+  - `POST quote-requests/:id/approve` → `{ request, quote }`: aynı işlemde (kilitli satırdan) **AÇIK bir teklif** oluşur (firma adı, tutar, geçerlilik, teslim, kapsam / not, KDV esası; `document_note` = "Firma formundan geldi (irtibat: yetkili, telefon)"). Gider / sözleşme OLUŞMAZ: teklifin kabulü (`POST quotes/:id/accept`) ayrı ve yine yönetici kararıdır. Çift onay `409 QUOTE_REQUEST_NOT_DRAFT`. Onaydan sonra düzeltme açık teklifte `PATCH quotes/:id` iledir.
+- **Herkese açık uçlar** (kimlik yok; belirteç yetkidir; hız sınırlı: IP başına saatte 120 sayfa / 20 gönderim, belirteç başına saatte 10 gönderim):
+  - `GET /firma-teklif/:token` → form sayfası (HTML; misafir geçiş sayfasıyla aynı katı CSP: `default-src 'none'`, betik ve stil yalnız nonce, `form-action 'none'`, `frame-ancestors 'none'`; `no-store`, `no-referrer`, `noindex`). Kullanılamayan her bağlantı (bilinmeyen, biçimsiz, kullanılmış, süresi dolmuş, iptal) AYNI `410` bilgi sayfasını alır; nedenler ayırt edilmez.
+  - `POST /public/quote-forms/:token { vendor_name, vendor_contact?, vendor_phone?, amount_kurus, valid_until?, delivery_days?, note?, vat_included? }` → `201 { submitted, topic }`. Önce doğrulama (geçersiz alan `400` ve bağlantıyı TÜKETMEZ), sonra tek atomik `UPDATE invited → draft`: ikinci gönderim `410 QUOTE_FORM_UNUSABLE`. Doğrulama: firma ≤ 120, yetkili ≤ 80, telefon 3-32 (`0-9 + ( ) - .` ve boşluk), tutar kuruş tam sayı ≥ 1, geçerlilik tarihi geçmişte olamaz, teslim 0-1095, not ≤ 500. Gövde en çok 16 KB.
+- **Denetim:** `quote.request_created|submitted|approved|rejected|revoked` (yalnız kimlik / konu / süre; firma girişi metni, telefon ve not günlüğe YAZILMAZ; dış giriş "Dış firma (form bağlantısı)" adıyla görünür). Günlükte belirteçli yollar maskelenir (`/firma-teklif/***`).
+- **Kişisel veri:** yetkili adı ve telefon üçüncü kişinin verisidir (firma çalışanı); yalnız site yönetimi / kurul / görevli görür, tekliften ayrı bir yerde kopyalanmaz. Saklama süresi `VERI_ENVANTERI` V82 satırındadır `[AVUKAT]`.
+- **Uygulama:** Ekipman ve Bakım > Teklifler sekmesinin üstünde "Firma formu (dış firma teklifi)" bölümü: bağlantı oluştur (bir kez gösterilir, kopyala / paylaş), bekleyen bağlantı iptali, gelen taslakları inceleme, "Onayla (açık teklif oluştur)" ve "Reddet".
 
 ## Servis geçmişi (iş kayıtları)
 

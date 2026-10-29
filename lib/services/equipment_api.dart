@@ -447,6 +447,109 @@ class QuoteHistory {
   final int? approvedId;
 }
 
+/// Dış firma teklif formu (113, P2-8): form bağlantısı + firmanın girdiği TASLAK teklif tek kayıt. Bağlantı belirteci bu modelde ASLA yoktur
+/// (yalnız oluşturma yanıtında [QuoteRequestLink] olarak gelir). Taslak, yönetici onaylayana kadar teklif / gider / sözleşme üretmez.
+class QuoteRequest {
+  const QuoteRequest({
+    required this.id,
+    required this.topic,
+    required this.status,
+    this.expired = false,
+    this.vendorHint,
+    this.expiresAt,
+    this.submittedAt,
+    this.vendorName,
+    this.vendorContact,
+    this.vendorPhone,
+    this.amountKurus,
+    this.validUntil,
+    this.deliveryDays,
+    this.note,
+    this.vatIncluded,
+    this.decidedAt,
+    this.quoteId,
+    this.equipmentId,
+  });
+
+  factory QuoteRequest.fromJson(Map<String, dynamic> j) => QuoteRequest(
+    id: _i(j['id']),
+    topic: '${j['topic'] ?? ''}',
+    status: '${j['status'] ?? 'invited'}',
+    expired: j['expired'] == true,
+    vendorHint: _s(j['vendor_hint']),
+    expiresAt: _s(j['expires_at']),
+    submittedAt: _s(j['submitted_at']),
+    vendorName: _s(j['vendor_name']),
+    vendorContact: _s(j['vendor_contact']),
+    vendorPhone: _s(j['vendor_phone']),
+    amountKurus: (j['amount_kurus'] as num?)?.toInt(),
+    validUntil: _s(j['valid_until']),
+    deliveryDays: (j['delivery_days'] as num?)?.toInt(),
+    note: _s(j['note']),
+    vatIncluded: j['vat_included'] is bool ? j['vat_included'] as bool : null,
+    decidedAt: _s(j['decided_at']),
+    quoteId: (j['quote_id'] as num?)?.toInt(),
+    equipmentId: (j['equipment_id'] as num?)?.toInt(),
+  );
+
+  final int id;
+  final String topic;
+
+  /// `invited` bağlantı bekliyor · `draft` taslak teklif (onay bekliyor) · `approved` · `rejected` · `revoked`.
+  final String status;
+
+  /// Bekleyen bağlantının süresi dolmuş (sunucunun okuma anındaki türetilmiş durumu).
+  final bool expired;
+  final String? vendorHint;
+  final String? expiresAt;
+  final String? submittedAt;
+  final String? vendorName;
+  final String? vendorContact;
+  final String? vendorPhone;
+  final int? amountKurus;
+  final String? validUntil;
+  final int? deliveryDays;
+  final String? note;
+
+  /// KDV esası: true dahil, false hariç, null belirtilmedi.
+  final bool? vatIncluded;
+  final String? decidedAt;
+  final int? quoteId;
+  final int? equipmentId;
+
+  /// Firma girişi gelmiş, yönetici kararı bekliyor.
+  bool get isDraft => status == 'draft';
+
+  /// Bağlantı hâlâ kullanılabilir (firma henüz göndermedi).
+  bool get isWaiting => status == 'invited' && !expired;
+
+  String get vatLabel => vatIncluded == null ? 'KDV belirtilmedi' : (vatIncluded! ? 'KDV dahil' : 'KDV hariç');
+
+  String? get deliveryLabel => deliveryDays == null ? null : '$deliveryDays gün';
+}
+
+/// Form bağlantısı: YALNIZ oluşturma yanıtında gelir, sunucu sonradan vermez.
+class QuoteRequestLink {
+  const QuoteRequestLink({required this.url, this.expiresAt});
+
+  factory QuoteRequestLink.fromJson(Map<String, dynamic> j) => QuoteRequestLink(url: '${j['url'] ?? ''}', expiresAt: _s(j['expires_at']));
+
+  final String url;
+  final String? expiresAt;
+}
+
+class QuoteRequestCreated {
+  const QuoteRequestCreated({required this.request, required this.link});
+
+  factory QuoteRequestCreated.fromJson(Map<String, dynamic> j) => QuoteRequestCreated(
+    request: QuoteRequest.fromJson(Map<String, dynamic>.from(j['request'] as Map? ?? const <String, dynamic>{})),
+    link: QuoteRequestLink.fromJson(Map<String, dynamic>.from(j['link'] as Map? ?? const <String, dynamic>{})),
+  );
+
+  final QuoteRequest request;
+  final QuoteRequestLink link;
+}
+
 /// Açılır listede seçilecek { id, ad } (kategori, hesap, firma).
 class PickOption {
   const PickOption(this.id, this.name);
@@ -571,6 +674,23 @@ class EquipmentApi {
   /// Teklifin tüm sürümleri (eskiden yeniye).
   Future<QuoteHistory> quoteHistory(String token, int site, int id) async => QuoteHistory.fromJson(await _send('GET', _p(site, 'quotes/$id/history'), token));
 
+  /// Dış firma form bağlantıları ve firma taslakları (113; belirteç ya da özet dönmez).
+  Future<List<QuoteRequest>> quoteRequests(String token, int site) async =>
+      _list((await _send('GET', _p(site, 'quote-requests'), token))['items'], QuoteRequest.fromJson);
+
+  /// Yeni tek kullanımlık form bağlantısı: bağlantı YALNIZ bu yanıtta döner.
+  Future<QuoteRequestCreated> createQuoteRequest(String token, int site, Map<String, Object?> body) async =>
+      QuoteRequestCreated.fromJson(await _send('POST', _p(site, 'quote-requests'), token, body: body, ok: const {201}));
+
+  /// Kullanılmamış bağlantıyı iptal eder.
+  Future<void> revokeQuoteRequest(String token, int site, int id) async => _send('POST', _p(site, 'quote-requests/$id/revoke'), token, body: const <String, Object?>{});
+
+  /// Firma taslağını reddeder (teklif oluşmaz).
+  Future<void> rejectQuoteRequest(String token, int site, int id) async => _send('POST', _p(site, 'quote-requests/$id/reject'), token, body: const <String, Object?>{});
+
+  /// Firma taslağını onaylar: AÇIK bir teklif oluşur (gider / sözleşme oluşmaz; kabul ayrı karardır).
+  Future<void> approveQuoteRequest(String token, int site, int id) async => _send('POST', _p(site, 'quote-requests/$id/approve'), token, body: const <String, Object?>{});
+
   Future<Map<String, dynamic>> _send(
     String method,
     String path,
@@ -628,6 +748,10 @@ class EquipmentApi {
         return 'Bu teklif için revizyon açılamaz.';
       case 'NO_CHANGE':
         return 'Revizyon için en az bir alan değişmeli.';
+      case 'QUOTE_REQUEST_NOT_PENDING':
+        return 'Bu form bağlantısı artık beklemede değil. Listeyi yenileyin.';
+      case 'QUOTE_REQUEST_NOT_DRAFT':
+        return 'Bu taslak teklif zaten karara bağlanmış. Listeyi yenileyin.';
     }
     if (serverText is String && serverText.trim().isNotEmpty && (status == 400 || status == 409)) {
       return AuthApi.sanitizeServerMessage(serverText.trim()) ?? 'İşlem başarısız ($status)';
@@ -679,4 +803,9 @@ class EquipmentService {
   Future<void> updateQuote(int site, int id, Map<String, Object?> body) => _guard((t) => api.updateQuote(t, site, id, body));
   Future<void> reviseQuote(int site, int id, Map<String, Object?> body) => _guard((t) => api.reviseQuote(t, site, id, body));
   Future<QuoteHistory> quoteHistory(int site, int id) => _guard((t) => api.quoteHistory(t, site, id));
+  Future<List<QuoteRequest>> quoteRequests(int site) => _guard((t) => api.quoteRequests(t, site));
+  Future<QuoteRequestCreated> createQuoteRequest(int site, Map<String, Object?> body) => _guard((t) => api.createQuoteRequest(t, site, body));
+  Future<void> revokeQuoteRequest(int site, int id) => _guard((t) => api.revokeQuoteRequest(t, site, id));
+  Future<void> rejectQuoteRequest(int site, int id) => _guard((t) => api.rejectQuoteRequest(t, site, id));
+  Future<void> approveQuoteRequest(int site, int id) => _guard((t) => api.approveQuoteRequest(t, site, id));
 }

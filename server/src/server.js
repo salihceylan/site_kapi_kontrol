@@ -62,7 +62,7 @@ import { cardAccessRouter } from './modules/card_access_routes.js';
 import { deviceIntegrationsRouter } from './modules/device_integrations_routes.js';
 import { plateRecognitionRouter } from './modules/plate_recognition_routes.js';
 import { contractsRouter } from './modules/contracts_routes.js';
-import { equipmentRouter } from './modules/equipment_routes.js';
+import { equipmentPublicRouter, equipmentRouter } from './modules/equipment_routes.js';
 import { cctvRouter } from './modules/cctv_routes.js';
 import { apartmentMgmtRouter } from './modules/apartment_mgmt_routes.js';
 import { residencyLogRouter } from './modules/residency_log_routes.js';
@@ -203,6 +203,8 @@ app.use(plateRecognitionRouter);
 app.use(contractsRouter);
 // Ekipman, bakim ve teklif: /manager/sites/:siteCode/equipment[...] + /quotes[...] (modul equipment, varsayilan KAPALI; sakin ucu yok).
 app.use(equipmentRouter);
+// Firma teklif formu (113, P2-8): kimlik gerektirmeyen, belirtecli iki uc (sayfa + gonderim); hiz sinirli, katı CSP.
+app.use(equipmentPublicRouter);
 // Sayac okuma ve faturalandirma: /manager/sites/:siteCode/{meter-apartments,meters,meter-readings/import,meter-billings}[...] (modul metering, varsayilan KAPALI; sakin ucu yok).
 app.use(meteringRouter);
 // Sayac saha okuma (gorevli, fotografli): /sites/:siteCode/meter-field/{meters,readings,photos/:id/content} (modul metering).

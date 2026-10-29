@@ -66,9 +66,10 @@ class _NoAuth implements AuthService {
 
 /// Yalnız Teklifler sekmesinin çağırdığı uçları taklit eden sahte hizmet; yazma çağrılarının gövdesini kaydeder.
 class FakeQuotesService implements EquipmentService {
-  FakeQuotesService(this.quotesList, {this.history, this.failRevise});
+  FakeQuotesService(this.quotesList, {this.history, this.failRevise, this.requestsList = const <QuoteRequest>[]});
 
   List<EquipmentQuote> quotesList;
+  List<QuoteRequest> requestsList;
   final QuoteHistory? history;
   final ApiException? failRevise;
   final List<String> calls = <String>[];
@@ -117,6 +118,25 @@ class FakeQuotesService implements EquipmentService {
   }
 
   @override
+  Future<List<QuoteRequest>> quoteRequests(int site) async => requestsList;
+  @override
+  Future<QuoteRequestCreated> createQuoteRequest(int site, Map<String, Object?> body) async {
+    calls.add('request:create');
+    lastBody = body;
+    return QuoteRequestCreated(
+      request: QuoteRequest(id: 9, topic: '${body['topic']}', status: 'invited'),
+      link: const QuoteRequestLink(url: 'https://api.example.test/firma-teklif/abc123', expiresAt: '2026-11-12T10:00:00.000Z'),
+    );
+  }
+
+  @override
+  Future<void> approveQuoteRequest(int site, int id) async => calls.add('request:approve:$id');
+  @override
+  Future<void> rejectQuoteRequest(int site, int id) async => calls.add('request:reject:$id');
+  @override
+  Future<void> revokeQuoteRequest(int site, int id) async => calls.add('request:revoke:$id');
+
+  @override
   Future<(List<PickOption>, List<PickOption>)> financeChoices(int site) async => (<PickOption>[const PickOption(1, 'Bakım')], <PickOption>[const PickOption(2, 'Kasa')]);
   @override
   Future<List<PickOption>> vendors(int site) async => <PickOption>[const PickOption(3, 'Delta A.Ş.')];
@@ -125,8 +145,15 @@ class FakeQuotesService implements EquipmentService {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
-Future<FakeQuotesService> pumpView(WidgetTester t, List<EquipmentQuote> quotes, {bool financeOn = true, bool canWrite = true, ApiException? failRevise}) async {
-  final service = FakeQuotesService(quotes, failRevise: failRevise);
+Future<FakeQuotesService> pumpView(
+  WidgetTester t,
+  List<EquipmentQuote> quotes, {
+  bool financeOn = true,
+  bool canWrite = true,
+  ApiException? failRevise,
+  List<QuoteRequest> requests = const <QuoteRequest>[],
+}) async {
+  final service = FakeQuotesService(quotes, failRevise: failRevise, requestsList: requests);
   await pumpAt(
     t,
     EquipmentView(
@@ -178,6 +205,35 @@ void main() {
   listMatrix('Karışık KDV uyarısı', (t, width, height, scale, dark) async {
     await pumpList(t, panel(sample(mixed: true)), width: width, height: height, scale: scale, dark: dark);
     expect(find.byKey(const ValueKey<String>('quote_compare_mixed')), findsOneWidget);
+  });
+
+  listMatrix('Firma formu bölümü (taslak + bekleyen + kapanan)', (t, width, height, scale, dark) async {
+    final requests = <QuoteRequest>[
+      QuoteRequest.fromJson(<String, dynamic>{
+        'id': 7,
+        'topic': 'Asansör yıllık bakım ve periyodik kontrol hizmeti',
+        'status': 'draft',
+        'vendor_name': 'Yıldız Asansör ve Yürüyen Merdiven Sanayi Ticaret Limited Şirketi',
+        'vendor_contact': 'Ali Usta',
+        'vendor_phone': '0555 000 00 00',
+        'amount_kurus': 1250050,
+        'vat_included': false,
+        'delivery_days': 14,
+        'note': 'Yıllık bakım, parça hariç; acil çağrı 7/24',
+      }),
+      QuoteRequest.fromJson(<String, dynamic>{'id': 8, 'topic': 'Kamera', 'status': 'invited', 'vendor_hint': 'Beta', 'expires_at': '2026-11-12T10:00:00.000Z'}),
+      QuoteRequest.fromJson(<String, dynamic>{'id': 9, 'topic': 'Kapı', 'status': 'approved', 'vendor_name': 'Gama'}),
+    ];
+    await pumpList(
+      t,
+      QuoteRequestsSection(requests: requests, canWrite: true, onCreate: () {}, onRevoke: (_) {}, onApprove: (_) {}, onReject: (_) {}),
+      width: width,
+      height: height,
+      scale: scale,
+      dark: dark,
+    );
+    expect(find.byKey(const ValueKey<String>('quote_draft_7')), findsOneWidget);
+    expect(find.byKey(const ValueKey<String>('quote_waiting_8')), findsOneWidget);
   });
 
   group('karşılaştırma tablosu', () {
@@ -481,6 +537,89 @@ void main() {
       await t.pump(const Duration(milliseconds: 400));
       expect(service.calls, <String>['accept:60']);
       expect(service.lastBody!.containsKey('acknowledge_previous'), isFalse);
+    });
+  });
+
+  group('firma formu bölümü (113, P2-8)', () {
+    QuoteRequest draft() => QuoteRequest.fromJson(<String, dynamic>{
+      'id': 7,
+      'topic': 'Asansör bakımı',
+      'status': 'draft',
+      'vendor_name': 'Yıldız Asansör',
+      'vendor_contact': 'Ali Usta',
+      'vendor_phone': '0555 000 00 00',
+      'amount_kurus': 1250050,
+      'vat_included': false,
+      'valid_until': '2099-12-31',
+      'delivery_days': 14,
+      'note': 'Parça hariç',
+    });
+    QuoteRequest waiting() => QuoteRequest.fromJson(<String, dynamic>{'id': 8, 'topic': 'Kamera', 'status': 'invited', 'vendor_hint': 'Beta', 'expires_at': '2026-11-12T10:00:00.000Z'});
+
+    testWidgets('taslak kartı tutar / KDV / irtibat / notu gösterir; onayla, reddet, iptal geri çağrıları; salt okurda eylem yok', (t) async {
+      final taps = <String>[];
+      Widget section({bool canWrite = true}) => QuoteRequestsSection(
+        requests: <QuoteRequest>[draft(), waiting()],
+        canWrite: canWrite,
+        onCreate: () => taps.add('create'),
+        onRevoke: (r) => taps.add('revoke:${r.id}'),
+        onApprove: (r) => taps.add('approve:${r.id}'),
+        onReject: (r) => taps.add('reject:${r.id}'),
+      );
+      await pumpAt(t, section(), width: 600, height: 1800, scale: 1.0);
+      final card = find.byKey(const ValueKey<String>('quote_draft_7'));
+      expect(find.descendant(of: card, matching: find.text('12.500,50 TL')), findsOneWidget);
+      expect(find.descendant(of: card, matching: find.text('KDV hariç')), findsOneWidget);
+      expect(find.descendant(of: card, matching: find.text('Yetkili: Ali Usta - Telefon: 0555 000 00 00')), findsOneWidget);
+      expect(find.descendant(of: card, matching: find.text('Kapsam / not: Parça hariç')), findsOneWidget);
+      expect(find.text('Taslak teklif: onayınızı bekliyor'), findsOneWidget);
+      expect(find.text('Firmanın göndermesi bekleniyor'), findsOneWidget);
+      expect(find.textContaining('12.11.2026'), findsOneWidget);
+      await t.tap(find.byKey(const ValueKey<String>('quote_request_create')));
+      await t.tap(find.descendant(of: card, matching: find.text('Onayla: açık teklif oluştur')));
+      await t.tap(find.descendant(of: card, matching: find.text('Reddet')));
+      await t.tap(find.text('Bağlantıyı iptal et'));
+      expect(taps, <String>['create', 'approve:7', 'reject:7', 'revoke:8']);
+
+      await pumpAt(t, section(canWrite: false), width: 600, height: 1800, scale: 1.0);
+      for (final label in <String>['Form bağlantısı oluştur', 'Onayla: açık teklif oluştur', 'Reddet', 'Bağlantıyı iptal et']) {
+        expect(find.text(label), findsNothing, reason: label);
+      }
+      expect(find.text('12.500,50 TL'), findsOneWidget, reason: 'salt okur taslağı görür');
+    });
+
+    testWidgets('salt okur ve kayıt yok: bölüm hiç görünmez; yazar için boş durum + bağlantı oluştur düğmesi', (t) async {
+      await pumpAt(t, const QuoteRequestsSection(requests: <QuoteRequest>[], canWrite: false), width: 600, height: 600, scale: 1.0);
+      expect(find.byKey(const ValueKey<String>('quote_requests_section')), findsNothing);
+      await pumpAt(t, QuoteRequestsSection(requests: const <QuoteRequest>[], canWrite: true, onCreate: () {}), width: 600, height: 600, scale: 1.0);
+      expect(find.text('Henüz firma formu yok.'), findsOneWidget);
+      expect(find.text('Form bağlantısı oluştur'), findsOneWidget);
+    });
+
+    testWidgets('ekranda: bağlantı oluştur -> bağlantı penceresi (tek sefer); taslağı onayla -> onay penceresi açık teklif uyarısı verir ve servis çağrılır', (t) async {
+      final service = await pumpView(t, const <EquipmentQuote>[], requests: <QuoteRequest>[draft()]);
+      await t.tap(find.byKey(const ValueKey<String>('quote_request_create')));
+      await t.pump(const Duration(milliseconds: 300));
+      await t.enterText(field('Konu (örn. Asansör bakımı) *'), 'Kapı bakımı');
+      await t.tap(find.text('Kaydet'));
+      await t.pump(const Duration(milliseconds: 400));
+      expect(service.calls, contains('request:create'));
+      expect(service.lastBody!['topic'], 'Kapı bakımı');
+      expect(service.lastBody!['valid_days'], 14);
+      expect(service.lastBody!.containsKey('vendor_hint'), isFalse);
+      expect(find.byKey(const ValueKey<String>('quote_request_link_dialog')), findsOneWidget);
+      expect(find.text('https://api.example.test/firma-teklif/abc123'), findsOneWidget);
+      expect(find.textContaining('yalnızca şimdi gösterilir'), findsOneWidget);
+      await t.tap(find.text('Kapat'));
+      await t.pump(const Duration(milliseconds: 400));
+      expect(find.byKey(const ValueKey<String>('quote_request_link_dialog')), findsNothing);
+
+      await t.tap(find.text('Onayla: açık teklif oluştur'));
+      await t.pump(const Duration(milliseconds: 300));
+      expect(find.textContaining('Gider veya sözleşme oluşmaz'), findsOneWidget);
+      await t.tap(find.widgetWithText(FilledButton, 'Onayla'));
+      await t.pump(const Duration(milliseconds: 400));
+      expect(service.calls, contains('request:approve:7'));
     });
   });
 }

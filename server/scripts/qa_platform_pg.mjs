@@ -10232,6 +10232,8 @@ async function sectionAccount() {
     'equipment_items.created_by': 'TOMBSTONE (demirbas siteye aittir)',
     'equipment_maintenance_logs.created_by': 'TOMBSTONE (bakim kaydi siteye aittir)',
     'equipment_quotes.created_by': 'TOMBSTONE (teklif siteye aittir)',
+    'equipment_quote_requests.created_by': 'TOMBSTONE (firma teklif formu siteye aittir; olusturan JOIN ile Silinmis Kullanici; 113)',
+    'equipment_quote_requests.decided_by': 'TOMBSTONE (karari veren / iptal eden JOIN ile Silinmis Kullanici; 113)',
     'expense_natures.set_by': 'TOMBSTONE (gider niteligini belirleyen JOIN ile Silinmis Kullanici)',
     'expense_check_marks.checked_by': 'TOMBSTONE (kontrol izi siteye aittir; kontrol eden JOIN ile Silinmis Kullanici; 110)',
     'payment_notice_check_marks.checked_by': 'TOMBSTONE (kontrol izi siteye aittir; kontrol eden JOIN ile Silinmis Kullanici; 110)',

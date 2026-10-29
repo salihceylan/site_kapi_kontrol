@@ -5,6 +5,8 @@
 //   hiçbiri "en düşük" işaretlenmez ve tabloda uyarı çıkar.
 // - Onaylı (kabul edilmiş) teklif yerinde değişmez: "Revizyon oluştur" yeni sürüm açar, önceki sürüme bağlanır; "Sürüm geçmişi" tüm sürümleri gösterir.
 //   Eski onaylı fiyat "tarihli fiyat, güncel fiyat değildir" etiketiyle yazılır.
+// - "Firma formu (dış firma teklifi)" bölümü ([QuoteRequestsSection], 113 / P2-8): tek kullanımlık form bağlantısı, firmanın gönderdiği TASLAK teklifler
+//   (onayla = açık teklif oluşur; gider / sözleşme oluşmaz, kabul ayrı karardır) ve bekleyen bağlantılar.
 // - Bu dosya yalnız sunum katmanıdır: eylemler (form, onay, istek) çağıranın geri çağrılarıdır ([EquipmentViewState]).
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
@@ -198,6 +200,202 @@ class QuoteCard extends StatelessWidget {
               if (canWrite && open && !q.expired && onAccept != null) FilledButton(onPressed: () => onAccept!(q), child: const Text('Kabul et')),
             ],
           ),
+        ],
+      ),
+    );
+  }
+}
+
+String quoteRequestStatusLabel(QuoteRequest r) {
+  switch (r.status) {
+    case 'draft':
+      return 'Taslak teklif: onayınızı bekliyor';
+    case 'approved':
+      return 'Onaylandı: açık teklif oluştu';
+    case 'rejected':
+      return 'Reddedildi';
+    case 'revoked':
+      return 'Bağlantı iptal edildi';
+    default:
+      return r.expired ? 'Bağlantının süresi doldu' : 'Firmanın göndermesi bekleniyor';
+  }
+}
+
+AppTone quoteRequestStatusTone(QuoteRequest r) {
+  switch (r.status) {
+    case 'draft':
+      return AppTone.warning;
+    case 'approved':
+      return AppTone.success;
+    case 'rejected':
+      return AppTone.danger;
+    default:
+      return r.expired ? AppTone.danger : AppTone.neutral;
+  }
+}
+
+typedef QuoteRequestAction = void Function(QuoteRequest request);
+
+/// "Firma formu (dış firma teklifi)" bölümü (113, P2-8): tek kullanımlık form bağlantısı oluşturma, bekleyen bağlantılar, firmanın gönderdiği TASLAK teklifler
+/// (onayla = AÇIK teklif oluşur, gider / sözleşme oluşmaz; reddet) ve son kapanan kayıtlar. Yalnız sunum katmanıdır: eylemler çağıranın geri çağrılarıdır.
+/// Bağlantı belirteci bu bölümde ASLA görünmez (yalnız oluşturma anında çağıranın penceresinde gösterilir).
+class QuoteRequestsSection extends StatelessWidget {
+  const QuoteRequestsSection({super.key, required this.requests, required this.canWrite, this.onCreate, this.onRevoke, this.onApprove, this.onReject});
+
+  final List<QuoteRequest> requests;
+  final bool canWrite;
+  final VoidCallback? onCreate;
+  final QuoteRequestAction? onRevoke;
+  final QuoteRequestAction? onApprove;
+  final QuoteRequestAction? onReject;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!canWrite && requests.isEmpty) return const SizedBox.shrink();
+    final th = Theme.of(context).textTheme;
+    final drafts = <QuoteRequest>[for (final r in requests) if (r.isDraft) r];
+    final waiting = <QuoteRequest>[for (final r in requests) if (r.status == 'invited') r];
+    final closed = <QuoteRequest>[for (final r in requests) if (!r.isDraft && r.status != 'invited') r].take(5).toList();
+    Widget heading(String label) => Padding(padding: const EdgeInsets.only(top: AppSpace.md, bottom: AppSpace.xs), child: Text(label, style: th.titleSmall));
+    return Column(
+      key: const ValueKey<String>('quote_requests_section'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Padding(padding: const EdgeInsets.symmetric(vertical: AppSpace.sm), child: Text('Firma formu (dış firma teklifi)', style: th.titleMedium)),
+        const Text('Dış firmaya tek kullanımlık form bağlantısı gönderin. Firmanın girdiği teklif TASLAK olarak gelir; siz onaylamadan teklif, gider ya da sözleşme oluşmaz. Bağlantı yalnızca oluşturulduğu anda gösterilir.'),
+        if (canWrite && onCreate != null)
+          Padding(
+            padding: const EdgeInsets.only(top: AppSpace.sm),
+            child: OutlinedButton.icon(key: const ValueKey<String>('quote_request_create'), onPressed: onCreate, icon: const Icon(Icons.link_rounded), label: const Text('Form bağlantısı oluştur')),
+          ),
+        if (requests.isEmpty) const Padding(padding: EdgeInsets.only(top: AppSpace.sm), child: Text('Henüz firma formu yok.')),
+        if (drafts.isNotEmpty) ...<Widget>[
+          heading('Onay bekleyen taslaklar (${drafts.length})'),
+          for (final r in drafts)
+            Padding(
+              padding: const EdgeInsets.only(bottom: AppSpace.sm),
+              child: _QuoteDraftCard(key: ValueKey<String>('quote_draft_${r.id}'), request: r, canWrite: canWrite, onApprove: onApprove, onReject: onReject),
+            ),
+        ],
+        if (waiting.isNotEmpty) ...<Widget>[
+          heading('Bekleyen bağlantılar'),
+          for (final r in waiting)
+            Padding(
+              padding: const EdgeInsets.only(bottom: AppSpace.sm),
+              child: _QuoteWaitingCard(key: ValueKey<String>('quote_waiting_${r.id}'), request: r, canWrite: canWrite, onRevoke: onRevoke),
+            ),
+        ],
+        if (closed.isNotEmpty) ...<Widget>[
+          heading('Son kapananlar'),
+          for (final r in closed)
+            Padding(
+              padding: const EdgeInsets.only(bottom: AppSpace.xs),
+              child: Wrap(
+                key: ValueKey<String>('quote_closed_${r.id}'),
+                spacing: AppSpace.md,
+                runSpacing: AppSpace.xs,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: <Widget>[
+                  Text(r.vendorName == null ? r.topic : '${r.vendorName} - ${r.topic}'),
+                  StatusDot(label: quoteRequestStatusLabel(r), tone: quoteRequestStatusTone(r), maxLines: 2),
+                ],
+              ),
+            ),
+        ],
+        const SizedBox(height: AppSpace.md),
+      ],
+    );
+  }
+}
+
+/// Firmanın gönderdiği taslak teklif: tutar, KDV, geçerlilik, teslim, irtibat ve not; onayla / reddet.
+class _QuoteDraftCard extends StatelessWidget {
+  const _QuoteDraftCard({super.key, required this.request, required this.canWrite, this.onApprove, this.onReject});
+
+  final QuoteRequest request;
+  final bool canWrite;
+  final QuoteRequestAction? onApprove;
+  final QuoteRequestAction? onReject;
+
+  @override
+  Widget build(BuildContext context) {
+    final r = request;
+    final th = Theme.of(context).textTheme;
+    final contact = <String>[if (r.vendorContact != null) 'Yetkili: ${r.vendorContact}', if (r.vendorPhone != null) 'Telefon: ${r.vendorPhone}'].join(' - ');
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            spacing: AppSpace.sm,
+            runSpacing: AppSpace.xs,
+            children: <Widget>[
+              Text(r.vendorName ?? '-', style: th.titleSmall),
+              Text(r.amountKurus == null ? '-' : formatKurus(r.amountKurus!), style: th.titleSmall),
+            ],
+          ),
+          const SizedBox(height: AppSpace.xs),
+          Text('Konu: ${r.topic}'),
+          const SizedBox(height: AppSpace.xs),
+          StatusDot(label: quoteRequestStatusLabel(r), tone: quoteRequestStatusTone(r), maxLines: 2),
+          const SizedBox(height: AppSpace.sm),
+          Wrap(
+            spacing: AppSpace.sm,
+            runSpacing: AppSpace.xs,
+            children: <Widget>[
+              InfoChip(r.vatLabel),
+              if (r.validUntil != null) InfoChip('Geçerlilik: ${quoteDate(r.validUntil!)}'),
+              if (r.deliveryLabel != null) InfoChip('Teslim: ${r.deliveryLabel}'),
+            ],
+          ),
+          if (contact.isNotEmpty) Padding(padding: const EdgeInsets.only(top: AppSpace.sm), child: Text(contact)),
+          if (r.note != null) Padding(padding: const EdgeInsets.only(top: AppSpace.xs), child: Text('Kapsam / not: ${r.note}')),
+          if (canWrite)
+            Wrap(
+              alignment: WrapAlignment.end,
+              spacing: AppSpace.sm,
+              runSpacing: AppSpace.xs,
+              children: <Widget>[
+                if (onReject != null) TextButton(onPressed: () => onReject!(r), child: const Text('Reddet')),
+                if (onApprove != null) FilledButton(onPressed: () => onApprove!(r), child: const Text('Onayla: açık teklif oluştur')),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Firmanın henüz göndermediği (ya da süresi dolan) bağlantı: konu, beklenen firma, son geçerlilik, iptal.
+class _QuoteWaitingCard extends StatelessWidget {
+  const _QuoteWaitingCard({super.key, required this.request, required this.canWrite, this.onRevoke});
+
+  final QuoteRequest request;
+  final bool canWrite;
+  final QuoteRequestAction? onRevoke;
+
+  @override
+  Widget build(BuildContext context) {
+    final r = request;
+    final th = Theme.of(context).textTheme;
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(r.topic, style: th.titleSmall),
+          if (r.vendorHint != null) Padding(padding: const EdgeInsets.only(top: AppSpace.xs), child: Text('Beklenen firma: ${r.vendorHint}')),
+          const SizedBox(height: AppSpace.xs),
+          Wrap(
+            spacing: AppSpace.md,
+            runSpacing: AppSpace.xs,
+            children: <Widget>[
+              StatusDot(label: quoteRequestStatusLabel(r), tone: quoteRequestStatusTone(r), maxLines: 2),
+              if (r.expiresAt != null) InfoChip('Son geçerlilik: ${quoteDate(r.expiresAt!)}'),
+            ],
+          ),
+          if (canWrite && onRevoke != null)
+            Align(alignment: Alignment.centerRight, child: TextButton(onPressed: () => onRevoke!(r), child: Text(r.expired ? 'Kaydı kapat' : 'Bağlantıyı iptal et'))),
         ],
       ),
     );
