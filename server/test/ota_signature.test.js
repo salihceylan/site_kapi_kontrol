@@ -71,6 +71,16 @@ const TOOL_VECTORS = Object.freeze({
   ],
 });
 
+// Aracin imzali SURUM DUSURME yetkisi vektoru (vektorler.json -> rollback_vektoru; AYRI atilabilir anahtar): mesajin son satiri rollback_max.
+const TOOL_ROLLBACK_VECTOR = Object.freeze({
+  publicKeyHex: '19015e809a5b35c024b0a3c096fd0106982890e9285e5d340d5bf2adccf86712',
+  keyId: '89c6a3714b130272',
+  target: 'esp32-wroom', chipId: 0, version: '5.2.2', rollbackMax: '5.3.0', size: 8192,
+  sha256: 'a4fa27da11d1a94e8b279787179e2b104bf90253d56f640bbe7fc37bb561d618',
+  message: 'KAPI-OTA-IMZA-V1\ntarget=esp32-wroom\nversion=5.2.2\nsize=8192\nsha256=a4fa27da11d1a94e8b279787179e2b104bf90253d56f640bbe7fc37bb561d618\nrollback_max=5.3.0\n',
+  signatureHex: '1152c4a6f87b915b684406244d1ff4ef183cac0a2e29d73c4b9b75fa91adb3bd572a95e5424de09e738ca5b361ca542b991683d94ade2c9952db1d6b63bef105',
+});
+
 function syntheticImage(size, chipId) {
   const image = Buffer.alloc(size);
   for (let i = 0; i < size; i += 1) {
@@ -113,7 +123,22 @@ describe('OTA imza: tools/ota_imza ile birlikte calisabilirlik (bilinen-cevap ve
     assert.equal(verifyOtaSignature({ ...base, version: '4.3.5' }), false);
     assert.equal(verifyOtaSignature({ ...base, size: c3.size + 1 }), false);
     assert.equal(verifyOtaSignature({ ...base, sha256: 'b'.repeat(64) }), false);
-    assert.equal(verifyOtaSignature({ ...base, format: 'SKP-OTA-V1' }), false, 'baska bicim etiketi ayni imzayi dogrulamaz');
+    assert.equal(verifyOtaSignature({ ...base, format: 'SKP-OTA-V1' }), false, 'eski firmware taslagi etiketi (SKP-OTA-V1) KALDIRILDI: tanınmaz');
+    assert.equal(verifyOtaSignature({ ...base, rollbackMax: '4.3.9' }), false, 'rollback_max eklenince ayni imza dogrulanmaz');
+  });
+
+  it('aracin rollback_max vektoru (imzali surum dusurme yetkisi) sunucuda BIREBIR uretilir ve dogrulanir; rollback_max olmadan / farkli degerle dogrulanmaz', () => {
+    const v = TOOL_ROLLBACK_VECTOR;
+    const parsed = parseOtaPublicKey(v.publicKeyHex);
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.keyId, v.keyId);
+    const image = syntheticImage(v.size, v.chipId);
+    assert.equal(crypto.createHash('sha256').update(image).digest('hex'), v.sha256);
+    const fields = { publicKey: parsed.key, target: v.target, version: v.version, size: image.length, sha256: v.sha256, signature: Buffer.from(v.signatureHex, 'hex') };
+    assert.equal(buildOtaSignedMessage({ ...fields, rollbackMax: v.rollbackMax }).toString('ascii'), v.message);
+    assert.equal(verifyOtaSignature({ ...fields, rollbackMax: v.rollbackMax }), true);
+    assert.equal(verifyOtaSignature(fields), false, 'rollback_max satiri olmadan dogrulanmaz');
+    assert.equal(verifyOtaSignature({ ...fields, rollbackMax: '5.3.1' }), false, 'kapsam genisletme dogrulanmaz');
   });
 });
 
@@ -128,20 +153,26 @@ describe('OTA imza: imzalanan metin sozlesmesi', () => {
     assert.equal(message[message.length - 1], 0x0a);
   });
 
-  it('firmware taslagi bicimi SKP-OTA-V1: ayni alanlar; YALNIZ izinli dusurmede son satir rollback_max', () => {
+  it('rollback_max (imzali surum dusurme yetkisi): ayni KAPI-OTA-IMZA-V1 etiketi, YALNIZ verilince son satir; eski taslak etiketi SKP-OTA-V1 tanınmaz', () => {
     assert.equal(
-      buildOtaSignedMessage({ format: 'SKP-OTA-V1', ...FIELDS }).toString('ascii'),
-      `SKP-OTA-V1\ntarget=esp32-c3\nversion=4.3.4\nsize=1794320\nsha256=${SHA}\n`,
+      buildOtaSignedMessage({ ...FIELDS, rollbackMax: '4.4.1' }).toString('ascii'),
+      `KAPI-OTA-IMZA-V1\ntarget=esp32-c3\nversion=4.3.4\nsize=1794320\nsha256=${SHA}\nrollback_max=4.4.1\n`,
     );
-    assert.equal(
-      buildOtaSignedMessage({ format: 'SKP-OTA-V1', ...FIELDS, rollbackMax: '4.4.1' }).toString('ascii'),
-      `SKP-OTA-V1\ntarget=esp32-c3\nversion=4.3.4\nsize=1794320\nsha256=${SHA}\nrollback_max=4.4.1\n`,
-    );
-    // KAPI bicimi rollback_max tasimaz; gecersiz rollback_max reddedilir
-    assert.throws(() => buildOtaSignedMessage({ ...FIELDS, rollbackMax: '4.4.1' }), TypeError);
-    assert.throws(() => buildOtaSignedMessage({ format: 'SKP-OTA-V1', ...FIELDS, rollbackMax: 'v4.4' }), TypeError);
-    assert.throws(() => buildOtaSignedMessage({ format: 'SKP-OTA-V1', ...FIELDS, rollbackMax: '4.4.1\nsha256=x' }), TypeError);
-    assert.deepEqual(Object.keys(OTA_SIGNATURE_FORMATS), ['KAPI-OTA-IMZA-V1', 'SKP-OTA-V1']);
+    for (const absent of [undefined, null, '']) {
+      assert.equal(
+        buildOtaSignedMessage({ ...FIELDS, rollbackMax: absent }).toString('ascii'),
+        `KAPI-OTA-IMZA-V1\ntarget=esp32-c3\nversion=4.3.4\nsize=1794320\nsha256=${SHA}\n`,
+        `rollbackMax=${JSON.stringify(absent)}: satir YOK`,
+      );
+    }
+    // gecersiz rollback_max reddedilir (satir enjeksiyonu dahil)
+    for (const bad of ['v4.4', '4.4', '4.4.1\nsha256=x', '4.4.1 ', '04.4.1', '4.4.1-beta']) {
+      assert.throws(() => buildOtaSignedMessage({ ...FIELDS, rollbackMax: bad }), TypeError, bad);
+    }
+    // TEK bicim: eski firmware taslagi etiketi kaldirildi
+    assert.throws(() => buildOtaSignedMessage({ format: 'SKP-OTA-V1', ...FIELDS }), TypeError);
+    assert.deepEqual(Object.keys(OTA_SIGNATURE_FORMATS), ['KAPI-OTA-IMZA-V1']);
+    assert.equal(OTA_SIGNATURE_FORMATS[OTA_PRIMARY_FORMAT].rollbackMax, true);
   });
 
   it('bicim disi girdi reddedilir (satir sonu enjeksiyonu, buyuk harf, eksik/fazla parca, onek/sonek, bos/tasan boyut, bilinmeyen bicim)', () => {
@@ -223,12 +254,37 @@ describe('OTA imza: .sig dosyasi (tools/ota_imza bicimi)', () => {
     assert.deepEqual(parseOtaSigFile(rendered), { ok: true, sig: sample });
   });
 
-  it('bilinmeyen ek alanlar yok sayilir (ileriye uyum); BOM tolere edilir; SKP bicimi de kabul edilir', () => {
+  it('bilinmeyen ek alanlar yok sayilir (ileriye uyum); BOM tolere edilir; eski SKP-OTA-V1 bicimi KABUL EDILMEZ (tek bicim)', () => {
     const extra = JSON.stringify({ ...sample, signed_at: '2026-10-29', notlar: { x: 1 } });
     assert.deepEqual(parseOtaSigFile(extra), { ok: true, sig: sample });
     assert.deepEqual(parseOtaSigFile(`${String.fromCharCode(0xfeff)}${canonical}`), { ok: true, sig: sample });
-    assert.equal(parseOtaSigFile(JSON.stringify({ ...sample, format: 'SKP-OTA-V1' })).ok, true);
+    assert.deepEqual(parseOtaSigFile(JSON.stringify({ ...sample, format: 'SKP-OTA-V1' })), { ok: false, error: 'unsupported_format' });
     assert.equal(parseOtaSigFile(JSON.stringify({ ...sample, algorithm: 'ed25519' })).sig.algorithm, 'Ed25519', 'algoritma adi normalize edilir');
+  });
+
+  it('rollback_max (istege bagli): sha256 ile key_id arasinda yer alir, yoksa alan HIC yoktur; gecersiz deger reddedilir', () => {
+    const withRollback = { ...sample, rollback_max: '4.4.1' };
+    const order = (object) => Object.keys(object);
+    const rendered = renderOtaSigFile({
+      format: sample.format, target: sample.target, version: sample.version, size: sample.size, sha256: SHA, rollbackMax: '4.4.1', keyId: keys.keyId, signature: Buffer.from(sigHex, 'hex'),
+    });
+    assert.deepEqual(order(JSON.parse(rendered)), ['format', 'algorithm', 'target', 'version', 'size', 'sha256', 'rollback_max', 'key_id', 'signature']);
+    const parsed = parseOtaSigFile(rendered);
+    assert.equal(parsed.ok, true);
+    assert.deepEqual(parsed.sig, { ...withRollback, signature: sigHex });
+    assert.deepEqual(order(parsed.sig), ['format', 'algorithm', 'target', 'version', 'size', 'sha256', 'rollback_max', 'key_id', 'signature']);
+    // yoksa alan yok (bos dize / null render'da da yazilmaz)
+    for (const absent of [undefined, null, '']) {
+      const text = renderOtaSigFile({
+        format: sample.format, target: sample.target, version: sample.version, size: sample.size, sha256: SHA, rollbackMax: absent, keyId: keys.keyId, signature: Buffer.from(sigHex, 'hex'),
+      });
+      assert.equal(text, canonical);
+      assert.equal(Object.hasOwn(parseOtaSigFile(text).sig, 'rollback_max'), false);
+    }
+    // gecersiz rollback_max (null, bos, sayi, v-oneki, 2 parca) alan adini soyleyen hatayla reddedilir
+    for (const bad of [null, '', 5, 'v4.4.1', '4.4', '4.4.1\n', ['4.4.1']]) {
+      assert.deepEqual(parseOtaSigFile(JSON.stringify({ ...sample, rollback_max: bad })), { ok: false, error: 'invalid_rollback_max' }, JSON.stringify(bad));
+    }
   });
 
   it('bozuk .sig sikica reddedilir: hangi alanin bozuk oldugu soylenir', () => {
@@ -480,12 +536,13 @@ describe('OTA imza: dogrulama', () => {
     // guvenilen anahtarlar arasinda olmayan kimlik
     assert.deepEqual(verifyOtaSignatureWithKeys({ keyState, keyId: '0123456789abcdef', signature: signedBySecond, ...FIELDS }), { ok: false, reason: 'key_unknown' });
     assert.deepEqual(verifyOtaSignatureWithKeys({ keyState: { ok: false }, signature: signedBySecond, ...FIELDS }), { ok: false, reason: 'no_keys' });
-    // yalniz belirtilen bicim denenir
-    const skp = sign(keys.privateKey, FIELDS, 'SKP-OTA-V1');
-    assert.equal(verifyOtaSignatureWithKeys({ keyState, signature: skp, ...FIELDS }).format, 'SKP-OTA-V1', 'bicim verilmezse tum kayitli bicimler denenir');
-    assert.equal(verifyOtaSignatureWithKeys({ keyState, formats: ['KAPI-OTA-IMZA-V1'], signature: skp, ...FIELDS }).ok, false);
+    // bicim: tek kayitli bicim var; bilinmeyen bicim hicbir imzayi dogrulamaz
+    const own = sign(keys.privateKey);
+    assert.equal(verifyOtaSignatureWithKeys({ keyState, signature: own, ...FIELDS }).format, 'KAPI-OTA-IMZA-V1', 'bicim verilmezse tum kayitli bicimler denenir');
+    assert.equal(verifyOtaSignatureWithKeys({ keyState, formats: ['KAPI-OTA-IMZA-V1'], signature: own, ...FIELDS }).ok, true);
+    assert.equal(verifyOtaSignatureWithKeys({ keyState, formats: ['SKP-OTA-V1'], signature: own, ...FIELDS }).ok, false, 'eski taslak etiketi tanınmaz');
     // rollback_max imzaya girmisse ayni deger gerekir
-    const rollback = crypto.sign(null, buildOtaSignedMessage({ format: 'SKP-OTA-V1', ...FIELDS, rollbackMax: '4.4.1' }), keys.privateKey);
+    const rollback = crypto.sign(null, buildOtaSignedMessage({ ...FIELDS, rollbackMax: '4.4.1' }), keys.privateKey);
     assert.equal(verifyOtaSignatureWithKeys({ keyState, signature: rollback, ...FIELDS, rollbackMax: '4.4.1' }).ok, true);
     assert.equal(verifyOtaSignatureWithKeys({ keyState, signature: rollback, ...FIELDS, rollbackMax: '4.4.2' }).ok, false);
     assert.equal(verifyOtaSignatureWithKeys({ keyState, signature: rollback, ...FIELDS }).ok, false, 'rollback_max satiri olmadan dogrulanmaz');

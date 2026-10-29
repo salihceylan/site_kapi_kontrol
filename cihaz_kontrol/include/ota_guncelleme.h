@@ -47,10 +47,11 @@ inline constexpr char OTA_MANIFEST_URL[] =
 inline constexpr char OTA_ALLOWED_URL_PREFIX[] = "https://api.gudeteknoloji.com.tr/";
 
 // OTA imzasi (ota_imza.h). Yetenek bildirimi: manifest isteginde `imza=<deger>` gonderilir; sunucu gecis (kopru) mantigini buna gore
-// kurabilir (imza bilmeyen eski cihazlar bu parametreyi gondermez). Imza dosyasi en fazla OTA_IMZA_DOSYA_MAX bayttir (64 bayt ham /
-// 128 hane hex / 88 karakter base64 + bosluk payi); varsayilan adres paket adresi + ".sig".
+// kurabilir (imza bilmeyen eski cihazlar bu parametreyi gondermez). Imza dosyasi en fazla OTA_IMZA_DOSYA_MAX bayttir: aracin urettigi JSON
+// .sig (~450 bayt, rollback_max ile ~480) ya da ciplak imza (64 bayt ham / 128 hane hex / 88 karakter base64 + bosluk payi);
+// varsayilan adres paket adresi + ".sig".
 inline constexpr char OTA_IMZA_YETENEK[] = "ed25519-v1";
-inline constexpr size_t OTA_IMZA_DOSYA_MAX = 256;
+inline constexpr size_t OTA_IMZA_DOSYA_MAX = 1024;
 inline constexpr char OTA_IMZA_DOSYA_EKI[] = ".sig";
 
 inline constexpr char OTA_PREFS_NAMESPACE[] = "ota_cfg";
@@ -510,6 +511,41 @@ class OtaKucukAkis : public Stream {
   void flush() override {}
 };
 
+// Indirilen imza DOSYASINI cozer: (1) aracin .sig JSON'u (KAPI-OTA-IMZA-V1; tools/ota_imza/README.md) ya da (2) CIPLAK imza (64 bayt ham /
+// 128 hane hex / 88 karakter base64). JSON'da yalniz "format" (etiket), "algorithm" (Ed25519) ve "signature" (128 hane hex) okunur;
+// target/version/size/sha256/key_id dosyadan ALINMAZ: cihaz yuku KENDI bildigi degerlerle kurar (imza bunlari zaten baglar, uyusmazlik
+// dogrulamada duser). Bilinmeyen ek alanlar yok sayilir (ileriye uyum). UTF-8 BOM ve bas/son bosluk tolere edilir.
+inline bool otaImzaDosyasiCozumle(const uint8_t* veri, size_t n, uint8_t imza[OTA_IMZA_BOYUT]) {
+  if (veri == nullptr) {
+    return false;
+  }
+  if (n == OTA_IMZA_BOYUT) {  // 64 bayt: ham ikili imza (hicbir JSON dosyasi bu kadar kisa olamaz)
+    return otaImzaCozumle(veri, n, imza);
+  }
+  size_t bas = 0;
+  if (n >= 3 && veri[0] == 0xEF && veri[1] == 0xBB && veri[2] == 0xBF) {
+    bas = 3;
+  }
+  while (bas < n && (veri[bas] == ' ' || veri[bas] == '\t' || veri[bas] == '\r' || veri[bas] == '\n')) {
+    bas += 1;
+  }
+  if (bas >= n || veri[bas] != '{') {
+    return otaImzaCozumle(veri, n, imza);  // JSON degil: ciplak hex / base64
+  }
+  JsonDocument doc;
+  if (deserializeJson(doc, reinterpret_cast<const char*>(veri) + bas, n - bas) != DeserializationError::Ok) {
+    return false;
+  }
+  if (strcmp(doc["format"] | "", OTA_IMZA_YUK_ETIKETI) != 0 || strcmp(doc["algorithm"] | "", OTA_IMZA_ALGORITMA) != 0) {
+    return false;
+  }
+  const char* sig = doc["signature"] | "";
+  if (strlen(sig) != 2 * OTA_IMZA_BOYUT) {  // aracin bicimi: tam 128 hane hex
+    return false;
+  }
+  return otaImzaCozumle(reinterpret_cast<const uint8_t*>(sig), 2 * OTA_IMZA_BOYUT, imza);
+}
+
 // Cihazin imza dogrulamasi icin manifestten aldigi bilgiler (otaCheckAndUpdate doldurur).
 struct OtaImzaIstegi {
   String surum;          // manifest surumu (imza yukune girer)
@@ -566,7 +602,7 @@ inline String otaImzaAl(const OtaImzaIstegi& istek, uint8_t imza[OTA_IMZA_BOYUT]
     agHatasi = true;  // akis kesildi / okuma zaman asimi
     return "imza: dosya okunamadi";
   }
-  if (!otaImzaCozumle(akis.veri, akis.uzunluk, imza)) {
+  if (!otaImzaDosyasiCozumle(akis.veri, akis.uzunluk, imza)) {
     return "imza: bicim gecersiz";
   }
   return "";

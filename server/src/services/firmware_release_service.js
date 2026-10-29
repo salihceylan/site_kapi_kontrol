@@ -117,7 +117,8 @@ const VERSION_HINT = 'Sürüm biçimi geçersiz: X.Y.Z ya da X.Y.Z.W, her parça
  * Yukleme istegi sorgu parametrelerini dogrular. Bilinmeyen parametreler yok sayilir.
  *  version (imza dosyasi verilirse ISTEGE BAGLI ve dosyadakiyle ayni olmali; ciplak imzada zorunlu), notes, allowed_uids (virgullu),
  *  interval_hours (1-168), enabled (varsayilan 1), allow_downgrade (varsayilan 0) + downgrade_reason (allow_downgrade=1 iken ZORUNLU,
- *  10-300 karakter), rollback_max (yalniz allow_downgrade=1 ile; imzalanan `rollback_max=` satirinin degeri).
+ *  10-300 karakter), rollback_max (yalniz allow_downgrade=1 ile; imzalanan `rollback_max=` satirinin degeri; imza `.sig` DOSYASIYSA
+ *  dosyadaki `rollback_max` esas alinir ve sorguda ayrica verilirse ayni olmali).
  */
 export function parseReleaseOptions(query) {
   const q = query && typeof query === 'object' ? query : {};
@@ -404,6 +405,7 @@ function checkSignatureInput({ signatureInput, keyState, target, size, sha256, o
   let signature;
   let formats = null;
   let keyId = '';
+  let rollbackMax = options.rollbackMax ?? null;
   if (signatureInput?.kind === 'sigfile') {
     const sig = signatureInput.sig;
     const actual = { target, version: options.version ?? sig.version, size, sha256 };
@@ -412,6 +414,24 @@ function checkSignatureInput({ signatureInput, keyState, target, size, sha256, o
         throw signatureMismatch(field, actual[field], sig[field]);
       }
     }
+    // Imzali surum dusurme yetkisi (rollback_max) imzanin ICINDEDIR; sorguda ayrica verilirse imzadakiyle birebir ayni olmali.
+    const signedRollback = sig.rollback_max ?? null;
+    if (rollbackMax !== null && rollbackMax !== signedRollback) {
+      throw fail(
+        400,
+        'FIRMWARE_SIGNATURE_MISMATCH',
+        `İmza dosyası bu istekle uyuşmuyor: sürüm düşürme sınırı (rollback_max) imzada ${signedRollback === null ? 'yok' : `"${signedRollback}"`}, istekte "${rollbackMax}".`,
+        { field: 'rollback_max' },
+      );
+    }
+    if (signedRollback !== null && !options.allowDowngrade) {
+      throw fail(
+        400,
+        'FIRMWARE_ROLLBACK_NOT_ALLOWED',
+        'İmza dosyası sürüm düşürme yetkisi (rollback_max) taşıyor; bu paket yalnızca allow_downgrade=1 ve downgrade_reason ile (denetim kaydına yazılarak) yüklenebilir.',
+      );
+    }
+    rollbackMax = signedRollback;
     version = sig.version;
     signature = Buffer.from(sig.signature, 'hex');
     formats = [sig.format];
@@ -425,6 +445,14 @@ function checkSignatureInput({ signatureInput, keyState, target, size, sha256, o
   } else {
     throw fail(400, 'FIRMWARE_SIGNATURE_REQUIRED', 'İmzasız paket yüklenemez: imza (.sig dosyası) zorunludur.');
   }
+  // Surum dusurme yetkisi (rollback_max) paketin surumunden BUYUK olmali; aksi halde hicbir cihaz bu paketle dusurulemez (anlamsiz yetki).
+  if (rollbackMax !== null && compareVersionParts(rollbackMax, version) <= 0) {
+    throw fail(
+      400,
+      'FIRMWARE_ROLLBACK_INVALID',
+      `rollback_max (${rollbackMax}) yüklenen sürümden (${version}) BÜYÜK olmalı; aksi halde hiçbir cihaz bu sürüme düşürülemez.`,
+    );
+  }
 
   const found = verifyOtaSignatureWithKeys({
     keyState,
@@ -435,7 +463,7 @@ function checkSignatureInput({ signatureInput, keyState, target, size, sha256, o
     version,
     size,
     sha256,
-    rollbackMax: options.rollbackMax,
+    rollbackMax,
   });
   if (!found.ok) {
     if (found.reason === 'key_unknown') {
@@ -451,7 +479,7 @@ function checkSignatureInput({ signatureInput, keyState, target, size, sha256, o
       'İmza doğrulanamadı: imza OTA_PUBLIC_KEY ile eşleşmiyor ya da imzalanan hedef/sürüm/boyut/SHA-256 yüklenen paketle birebir aynı değil.',
     );
   }
-  return { version, format: found.format, keyId: found.keyId, signature };
+  return { version, format: found.format, keyId: found.keyId, signature, rollbackMax };
 }
 
 // ---- Yayin --------------------------------------------------------------------------------------
@@ -485,7 +513,7 @@ export async function publishFirmwareRelease({
   assertEspImage(firmware, target);
   const sha256 = sha256Hex(firmware);
   const size = firmware.length;
-  const { version, format, keyId, signature } = checkSignatureInput({ signatureInput, keyState, target, size, sha256, options });
+  const { version, format, keyId, signature, rollbackMax } = checkSignatureInput({ signatureInput, keyState, target, size, sha256, options });
   const names = releaseFileNames(version);
   const signatureHex = signature.toString('hex');
   const dir = path.join(firmwareRoot, target);
@@ -517,6 +545,14 @@ export async function publishFirmwareRelease({
         { live_version: liveVersion, requested_version: version },
       );
     }
+    if (rollbackMax !== null && !isDowngrade) {
+      throw fail(
+        400,
+        'FIRMWARE_ROLLBACK_NOT_DOWNGRADE',
+        `rollback_max (sürüm düşürme yetkisi) yalnızca yayındaki sürümden (${hasLiveVersion ? liveVersion : 'yok'}) DÜŞÜK sürümlü bir yüklemede anlamlıdır; ${version} sürümü bir düşürme değil. Normal yayın için rollback_max içermeyen imza kullanın.`,
+        { live_version: hasLiveVersion ? liveVersion : null, requested_version: version },
+      );
+    }
     if (versionCompare === 0 && String(previous?.sha256 ?? '').toLowerCase() !== sha256) {
       throw fail(
         409,
@@ -542,7 +578,7 @@ export async function publishFirmwareRelease({
       atomicWrite(dir, names.bin, firmware);
     }
     // Imza dosyasi KANONIK bicimde yazilir (tools/ota_imza ile ayni alan sirasi); ciplak imza yuklendiyse ayni bicimde uretilir.
-    atomicWrite(dir, names.sig, renderOtaSigFile({ format, target, version, size, sha256, keyId, signature }));
+    atomicWrite(dir, names.sig, renderOtaSigFile({ format, target, version, size, sha256, rollbackMax, keyId, signature }));
 
     // Yayin kaydi (yan dosya): ayni icerik yeniden yayinlanirsa ilk yukleme bilgisi (zaman/yukleyen) KORUNUR; imza alanlari guncel dogrulanmis imzayla eslenir.
     const metaPath = path.join(dir, names.meta);
@@ -590,7 +626,7 @@ export async function publishFirmwareRelease({
         republish: versionCompare === 0,
         enabled: options.enabled,
         allowed_uids_count: options.allowedUids.length,
-        ...(isDowngrade ? { downgrade: true, reason: options.downgradeReason, rollback_max: options.rollbackMax } : {}),
+        ...(isDowngrade ? { downgrade: true, reason: options.downgradeReason, rollback_max: rollbackMax } : {}),
       },
     };
     const writeAudit = async () => {
@@ -631,7 +667,7 @@ export async function publishFirmwareRelease({
       signature_format: format,
       signature_key_id: keyId,
       signature_file: names.sig,
-      ...(options.rollbackMax ? { rollback_max: options.rollbackMax } : {}),
+      ...(rollbackMax ? { rollback_max: rollbackMax } : {}),
       release: {
         schema: 1,
         size_bytes: size,
@@ -676,7 +712,7 @@ export async function publishFirmwareRelease({
       previous_version: hasLiveVersion ? liveVersion : null,
       republish: versionCompare === 0,
       downgrade: isDowngrade,
-      rollback_max: options.rollbackMax,
+      rollback_max: rollbackMax,
       audited,
       uploaded_at: manifest.release.uploaded_at,
       published_at: nowIso,

@@ -56,12 +56,12 @@ describe('OTA imza: yukleme ucu + cihaz ucu (HTTP)', () => {
     const fields = { target, version, size: image.length, sha256: sha256Of(image) };
     const signature = crypto.sign(null, sigLib.buildOtaSignedMessage({ format, ...fields, rollbackMax }), signKey.privateKey);
     return {
-      format, algorithm: 'Ed25519', ...fields, key_id: sigLib.otaKeyId(signKey.publicKey), signature: signature.toString('hex'), ...override,
+      format, algorithm: 'Ed25519', ...fields, ...(rollbackMax ? { rollback_max: rollbackMax } : {}), key_id: sigLib.otaKeyId(signKey.publicKey), signature: signature.toString('hex'), ...override,
     };
   }
 
   const sigFileText = (sig) => sigLib.renderOtaSigFile({
-    format: sig.format, target: sig.target, version: sig.version, size: sig.size, sha256: sig.sha256, keyId: sig.key_id, signature: sig.signature,
+    format: sig.format, target: sig.target, version: sig.version, size: sig.size, sha256: sig.sha256, rollbackMax: sig.rollback_max, keyId: sig.key_id, signature: sig.signature,
   });
 
   async function withEnv(vars, fn) {
@@ -596,11 +596,15 @@ describe('OTA imza: yukleme ucu + cihaz ucu (HTTP)', () => {
       // gecis penceresi: ikisi de guveniliyorsa (virgulle) eski anahtarin imzasi yine DOGRULANIR (surum dusurme istisnasi geri gelir)
       fs.rmSync(dirOf('esp32-c3'), { recursive: true, force: true });
       await upload({ version: '4.3.5' });
-      await upload({ version: '4.3.4', query: { allow_downgrade: '1', downgrade_reason: 'acil geri donus gerekcesi yeterince uzun' } });
+      await upload({ version: '4.3.4', rollbackMax: '4.3.5', query: { allow_downgrade: '1', downgrade_reason: 'acil geri donus gerekcesi yeterince uzun' } });
+      await withEnv({ OTA_PUBLIC_KEY: nextHex }, async () => {
+        assert.equal((await manifestFor('esp32-c3', '4.3.5')).body.update_available, false, 'yalniz yeni anahtar guveniliyorsa eski anahtarli dusurme ACILMAZ');
+      });
       await withEnv({ OTA_PUBLIC_KEY: `${nextHex},${publicKeyHex}` }, async () => {
         const rollback = await manifestFor('esp32-c3', '4.3.5');
         assert.equal(rollback.body.update_available, true);
         assert.equal(rollback.body.allow_downgrade, true);
+        assert.equal(rollback.body.rollback_max, '4.3.5');
         assert.equal((await upload({ version: '4.4.0', signKey: next })).status, 201, 'yeni anahtar da kabul');
       });
 
@@ -651,7 +655,7 @@ describe('OTA imza: yukleme ucu + cihaz ucu (HTTP)', () => {
       assert.equal(auditEntries.length, 0);
     });
 
-    it('bayrak gerekcesiz kullanilamaz (400); gerekceyle surum dusurme 201, denetim kaydina yazilir ve cihazlara allow_downgrade:true ile sunulur', async () => {
+    it('bayrak gerekcesiz kullanilamaz (400); gerekceyle surum dusurme 201 ve denetim kaydina yazilir; rollback_max tasimayan imza cihaza DUSURME olarak sunulmaz (alttaki cihazlar yukseltir)', async () => {
       await upload({ version: '4.3.5' });
       const noReason = await upload({ version: '4.3.4', query: { allow_downgrade: '1' } });
       assert.equal(noReason.status, 400);
@@ -678,41 +682,85 @@ describe('OTA imza: yukleme ucu + cihaz ucu (HTTP)', () => {
       assert.equal(manifest.downgrade.reason, reason);
       assert.equal(manifest.downgrade.from_version, '4.3.5');
 
-      // cihaz ucu: 4.3.5'teki cihaza geri donus teklifi; 4.3.4 / 4.3.3 cihazlar icin normal davranis
-      const rollback = await manifestFor('esp32-c3', '4.3.5');
-      assert.equal(rollback.body.update_available, true);
-      assert.equal(rollback.body.allow_downgrade, true);
-      assert.equal(rollback.body.rollback_max, undefined, 'imzaya rollback_max girmediyse alan yok');
-      assert.equal(rollback.body.version, '4.3.4');
-      assert.equal(rollback.body.url, `${BASE}/firmware/esp32-c3/firmware-v4.3.4.bin`);
-      assert.match(rollback.body.signature, /^[0-9a-f]{128}$/);
+      // cihaz ucu: imza rollback_max tasimiyor -> cihaz dusurmeyi hicbir zaman kurmaz (yetki imzanin icindedir) -> 4.3.5'teki cihaza TEKLIF EDILMEZ
+      const newer = await manifestFor('esp32-c3', '4.3.5');
+      assert.equal(newer.body.update_available, false);
+      assert.equal(newer.body.allow_downgrade, undefined);
+      assert.equal(newer.body.rollback_max, undefined);
+      assert.equal(newer.body.url, null);
+      assert.match(newer.body.message, /surum dusurme sunulmuyor/);
       const equal = await manifestFor('esp32-c3', '4.3.4');
       assert.equal(equal.body.update_available, false);
+      // 4.3.4'un altindaki cihaz icin bu normal yukseltmedir (4.3.4 canli yayin)
       const older = await manifestFor('esp32-c3', '4.3.3');
       assert.equal(older.body.update_available, true);
       assert.equal(older.body.allow_downgrade, undefined, 'yukseltme downgrade diye isaretlenmez');
+      assert.equal(older.body.version, '4.3.4');
+      assert.equal(older.body.url, `${BASE}/firmware/esp32-c3/firmware-v4.3.4.bin`);
+      assert.match(older.body.signature, /^[0-9a-f]{128}$/);
     });
 
-    it('SKP-OTA-V1 + rollback_max: imzalanan kapsam sorguda verilirse dogrulanir, cihaza allow_downgrade ve rollback_max ile sunulur', async () => {
+    it('KAPI-OTA-IMZA-V1 + rollback_max (imzali surum dusurme yetkisi): yetki .sig dosyasinda tasinir; yalniz dusurme adayi cihaza allow_downgrade + rollback_max ile sunulur', async () => {
       await upload({ version: '4.3.5' });
       const base = { allow_downgrade: '1', downgrade_reason: 'acil geri donus gerekcesi yeterince uzun' };
       const image = fakeImage('esp32-c3', 'rollback-http');
-      const signed = { version: '4.3.4', image, format: 'SKP-OTA-V1', rollbackMax: '4.3.5' };
-      assert.equal((await upload({ ...signed, query: base })).body.code, 'FIRMWARE_SIGNATURE_INVALID', 'rollback_max sorguda yok: imza dogrulanmaz');
-      assert.equal((await upload({ ...signed, query: { ...base, rollback_max: '4.3.9' } })).body.code, 'FIRMWARE_SIGNATURE_INVALID');
-      const ok = await upload({ ...signed, query: { ...base, rollback_max: '4.3.5' } });
+      const signed = { version: '4.3.4', image, rollbackMax: '4.3.5' };
+      assert.equal((await upload({ ...signed })).body.code, 'FIRMWARE_ROLLBACK_NOT_ALLOWED', 'rollback_max tasiyan imza allow_downgrade olmadan yuklenmez');
+      assert.equal((await upload({ ...signed, query: { ...base, rollback_max: '4.3.9' } })).body.code, 'FIRMWARE_SIGNATURE_MISMATCH', 'sorgudaki rollback_max imzadakiyle ayni olmali');
+      assert.equal((await upload({ ...signed, sigOverride: { rollback_max: '4.3.9' }, query: base })).body.code, 'FIRMWARE_SIGNATURE_INVALID', '.sig alani bozulursa imza dogrulanmaz');
+      assert.equal((await upload({ version: '4.3.6', image: fakeImage('esp32-c3', 'rb-up'), rollbackMax: '4.3.9', query: base })).body.code, 'FIRMWARE_ROLLBACK_NOT_DOWNGRADE', 'dusurme olmayan yuklemede rollback_max anlamsiz');
+      assert.equal(readManifest('esp32-c3').version, '4.3.5', 'reddedilen yuklemeler canli yayini degistirmez');
+
+      const ok = await upload({ ...signed, query: base });
       assert.equal(ok.status, 201, JSON.stringify(ok.body));
       assert.equal(ok.body.rollback_max, '4.3.5');
-      assert.equal(ok.body.signature_format, 'SKP-OTA-V1');
+      assert.equal(ok.body.signature_format, 'KAPI-OTA-IMZA-V1');
+      assert.equal(readManifest('esp32-c3').rollback_max, '4.3.5');
 
+      // dusurme adayi (surumu rollback_max ve altinda, yayindan yeni): allow_downgrade + rollback_max ile teklif
       const rollback = await manifestFor('esp32-c3', '4.3.5');
       assert.equal(rollback.body.update_available, true);
       assert.equal(rollback.body.allow_downgrade, true);
       assert.equal(rollback.body.rollback_max, '4.3.5');
-      assert.equal(rollback.body.signature_format, 'SKP-OTA-V1');
-      const upgrade = await manifestFor('esp32-c3', '4.3.3');
-      assert.equal(upgrade.body.allow_downgrade, undefined);
-      assert.equal(upgrade.body.rollback_max, undefined, 'rollback_max yalniz dusurme teklifinde cihaza verilir');
+      assert.equal(rollback.body.version, '4.3.4');
+      assert.equal(rollback.body.signature_format, 'KAPI-OTA-IMZA-V1');
+      assert.match(rollback.body.signature, /^[0-9a-f]{128}$/);
+      // rollback_max'in USTUNDEKI cihaz: kapsam disi, teklif yok
+      const above = await manifestFor('esp32-c3', '4.3.6');
+      assert.equal(above.body.update_available, false);
+      assert.equal(above.body.allow_downgrade, undefined);
+      assert.match(above.body.message, /surum dusurme sunulmuyor/);
+      // yayin surumunun ALTINDAKI cihaz: rollback_max'li imza yalniz dusurme modunda dogrulanir -> yukseltme olarak sunulmaz
+      const below = await manifestFor('esp32-c3', '4.3.3');
+      assert.equal(below.body.update_available, false);
+      assert.equal(below.body.url, null);
+      assert.equal(below.body.allow_downgrade, undefined);
+      assert.match(below.body.message, /yalniz surum dusurme icin imzali/);
+      assert.equal((await manifestFor('esp32-c3', '4.3.4')).body.update_available, false, 'ayni surumdeki cihaz');
+
+      // indirilen .sig dosyasi rollback_max tasir (araca geri okunabilir)
+      const file = await getBytes('/firmware/esp32-c3/firmware-v4.3.4.bin.sig');
+      assert.equal(file.status, 200);
+      assert.equal(sigLib.parseOtaSigFile(file.bytes.toString('utf8')).sig.rollback_max, '4.3.5');
+    });
+
+    it('CIPLAK imza + sorgudaki rollback_max: sorgu imzaya girmisse kabul edilir ve kanonik .sig rollback_max tasir', async () => {
+      await upload({ version: '4.3.5' });
+      const image = fakeImage('esp32-c3', 'rollback-bare-http');
+      const sha256 = sha256Of(image);
+      const bareHex = (rollbackMax) => crypto.sign(
+        null,
+        sigLib.buildOtaSignedMessage({ target: 'esp32-c3', version: '4.3.4', size: image.length, sha256, rollbackMax }),
+        keys.privateKey,
+      ).toString('hex');
+      const base = { allow_downgrade: '1', downgrade_reason: 'acil geri donus gerekcesi yeterince uzun' };
+      assert.equal((await upload({ version: '4.3.4', image, signatureHeader: bareHex(null), query: { ...base, rollback_max: '4.3.5' } })).body.code, 'FIRMWARE_SIGNATURE_INVALID');
+      assert.equal((await upload({ version: '4.3.4', image, signatureHeader: bareHex('4.3.5'), query: base })).body.code, 'FIRMWARE_SIGNATURE_INVALID');
+      const ok = await upload({ version: '4.3.4', image, signatureHeader: bareHex('4.3.5'), query: { ...base, rollback_max: '4.3.5' } });
+      assert.equal(ok.status, 201, JSON.stringify(ok.body));
+      assert.equal(ok.body.rollback_max, '4.3.5');
+      const file = await getBytes('/firmware/esp32-c3/firmware-v4.3.4.bin.sig');
+      assert.equal(sigLib.parseOtaSigFile(file.bytes.toString('utf8')).sig.rollback_max, '4.3.5');
     });
 
     it('surum dusurmede denetim kaydi yazilamazsa 503 ve canli yayin degismez', async () => {
@@ -725,9 +773,10 @@ describe('OTA imza: yukleme ucu + cihaz ucu (HTTP)', () => {
       assert.equal((await manifestFor('esp32-c3', '4.3.5')).body.update_available, false);
     });
 
-    it('sunucu imzayi dogrulayamazsa (anahtar yok) onayli surum dusurme bile cihaza SUNULMAZ', async () => {
+    it('sunucu imzayi dogrulayamazsa (anahtar yok) onayli ve imzali surum dusurme bile cihaza SUNULMAZ', async () => {
       await upload({ version: '4.3.5' });
-      await upload({ version: '4.3.4', query: { allow_downgrade: '1', downgrade_reason: 'acil geri donus gerekcesi yeterince uzun' } });
+      await upload({ version: '4.3.4', rollbackMax: '4.3.5', query: { allow_downgrade: '1', downgrade_reason: 'acil geri donus gerekcesi yeterince uzun' } });
+      assert.equal((await manifestFor('esp32-c3', '4.3.5')).body.allow_downgrade, true, 'anahtar varken teklif edilir');
       await withEnv({ OTA_PUBLIC_KEY: undefined }, async () => {
         const { body } = await manifestFor('esp32-c3', '4.3.5');
         assert.equal(body.update_available, false);
@@ -869,7 +918,7 @@ describe('OTA imza: yukleme ucu + cihaz ucu (HTTP)', () => {
     });
   });
 
-  describe('C2) gecis: CIPLAK .sig dosyasi (firmware taslagi bicimi) ile elle yerlestirme', () => {
+  describe('C2) gecis: CIPLAK .sig dosyasi (hex / ham 64 bayt / base64) ile elle yerlestirme', () => {
     it('bin + ciplak .sig (hex / ham 64 bayt / base64) + manifest: sunucu hedef/surum/boyut/ozeti manifest ve gercek dosyadan kurup dogrular; bozuk imza SUNULMAZ', async () => {
       const bin = fakeImage('esp32-c3', 'ciplak-sig');
       const sha256 = sha256Of(bin);
@@ -879,20 +928,20 @@ describe('OTA imza: yukleme ucu + cihaz ucu (HTTP)', () => {
       fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify({
         enabled: true, target: 'esp32-c3', version: '4.4.1', filename: 'firmware.bin', sha256, usb_required: false, interval_hours: 1,
       }));
-      const signatureFor = (format) => crypto.sign(null, sigLib.buildOtaSignedMessage({ format, target: 'esp32-c3', version: '4.4.1', size: bin.length, sha256 }), keys.privateKey);
+      const signatureFor = () => crypto.sign(null, sigLib.buildOtaSignedMessage({ target: 'esp32-c3', version: '4.4.1', size: bin.length, sha256 }), keys.privateKey);
       const sigPath = path.join(dir, 'firmware.bin.sig');
 
-      for (const [name, content, format] of [
-        ['hex', signatureFor('SKP-OTA-V1').toString('hex'), 'SKP-OTA-V1'],
-        ['hex + satir sonu', `${signatureFor('SKP-OTA-V1').toString('hex')}\n`, 'SKP-OTA-V1'],
-        ['ham 64 bayt', signatureFor('SKP-OTA-V1'), 'SKP-OTA-V1'],
-        ['base64', signatureFor('KAPI-OTA-IMZA-V1').toString('base64'), 'KAPI-OTA-IMZA-V1'],
+      for (const [name, content] of [
+        ['hex', signatureFor().toString('hex')],
+        ['hex + satir sonu', `${signatureFor().toString('hex')}\n`],
+        ['ham 64 bayt', signatureFor()],
+        ['base64', signatureFor().toString('base64')],
       ]) {
         fs.writeFileSync(sigPath, content);
         const { body } = await manifestFor('esp32-c3', '4.4.0');
         assert.equal(body.update_available, true, name);
-        assert.equal(body.signature, signatureFor(format).toString('hex'), `${name}: cihaza hex olarak iletilir`);
-        assert.equal(body.signature_format, format, `${name}: hangi bicimle dogrulandigi bildirilir`);
+        assert.equal(body.signature, signatureFor().toString('hex'), `${name}: cihaza hex olarak iletilir`);
+        assert.equal(body.signature_format, 'KAPI-OTA-IMZA-V1', `${name}: hangi bicimle dogrulandigi bildirilir`);
         assert.equal(body.signature_key_id, sigLib.otaKeyId(keys.publicKey));
         assert.equal(body.signature_url, `${BASE}/firmware/esp32-c3/firmware.bin.sig`);
       }
@@ -903,7 +952,7 @@ describe('OTA imza: yukleme ucu + cihaz ucu (HTTP)', () => {
       for (const [name, content] of Object.entries({
         baskaAnahtar: forged.toString('hex'),
         sifir: '0'.repeat(128),
-        yarimImza: signatureFor('SKP-OTA-V1').toString('hex').slice(0, 100),
+        yarimImza: signatureFor().toString('hex').slice(0, 100),
         metin: 'bu bir imza degil',
         buyukDosya: Buffer.alloc(5000, 7),
       })) {
@@ -913,9 +962,38 @@ describe('OTA imza: yukleme ucu + cihaz ucu (HTTP)', () => {
         assert.equal(body.signature, undefined, name);
       }
       // surum elle degistirilirse imza o surum icin gecerli degildir
-      fs.writeFileSync(sigPath, signatureFor('KAPI-OTA-IMZA-V1').toString('hex'));
+      fs.writeFileSync(sigPath, signatureFor().toString('hex'));
       fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify({ enabled: true, target: 'esp32-c3', version: '4.4.2', filename: 'firmware.bin', sha256 }));
       assert.equal((await manifestFor('esp32-c3', '4.4.0')).body.update_available, false);
+    });
+
+    it('tools/ota_imza `.sig` + rollback_max (ELLE yerlestirme): .sig ve manifestteki rollback_max birebir ayni olmali; yalniz kapsamdaki dusurme adayina sunulur', async () => {
+      const bin = fakeImage('esp32-c3', 'elle-rollback');
+      const sig = sigObject({ target: 'esp32-c3', version: '4.4.0', image: bin, rollbackMax: '4.4.2' });
+      const dir = dirOf('esp32-c3');
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, 'firmware.bin'), bin);
+      fs.writeFileSync(path.join(dir, 'firmware.bin.sig'), sigFileText(sig));
+      const write = (extra) => fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify({
+        enabled: true, target: 'esp32-c3', version: '4.4.0', filename: 'firmware.bin', sha256: sha256Of(bin), usb_required: false, interval_hours: 1,
+        downgrade: { authorized: true, reason: 'elle yerlestirildi' }, ...extra,
+      }));
+
+      write({ rollback_max: '4.4.2' });
+      const offered = await manifestFor('esp32-c3', '4.4.2');
+      assert.equal(offered.body.update_available, true);
+      assert.equal(offered.body.allow_downgrade, true);
+      assert.equal(offered.body.rollback_max, '4.4.2');
+      assert.equal(offered.body.signature, sig.signature);
+      assert.equal((await manifestFor('esp32-c3', '4.4.3')).body.update_available, false, 'kapsam disi (rollback_max ustu)');
+
+      // manifestte rollback_max yok / farkli: .sig ile uyusmaz -> yayin SUNULMAZ
+      for (const extra of [{}, { rollback_max: '4.4.9' }]) {
+        write(extra);
+        const { body } = await manifestFor('esp32-c3', '4.4.2');
+        assert.equal(body.update_available, false, JSON.stringify(extra));
+        assert.equal(body.signature, undefined);
+      }
     });
   });
 

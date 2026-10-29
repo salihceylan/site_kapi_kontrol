@@ -4,7 +4,7 @@
 //
 //   node tools/ota_imza/ota_imza.mjs anahtar-uret --ozel <depo disi yol> [--genel <dosya>]
 //   node tools/ota_imza/ota_imza.mjs genel-anahtar --ozel <yol>
-//   node tools/ota_imza/ota_imza.mjs imzala <firmware.bin> --hedef esp32-c3 --surum 4.3.4 [--ozel <yol>] [--cikti <yol>]
+//   node tools/ota_imza/ota_imza.mjs imzala <firmware.bin> --hedef esp32-c3 --surum 4.3.4 [--rollback-max <surum>] [--ozel <yol>] [--cikti <yol>]
 //   node tools/ota_imza/ota_imza.mjs dogrula <firmware.bin> (--genel <dosya> | --genel-hex <64 hane>) [--sig <yol>] [--manifest <manifest.json>] [--hedef <ad>] [--surum <X.Y.Z>]
 //
 // Cikis kodlari: 0 basarili / dogrulama gecti, 1 islem reddedildi ya da dogrulama GECMEDI, 2 komut satiri hatasi.
@@ -40,8 +40,10 @@ Kullanim:
       Genel anahtar ekrana basilir (PEM, hex, C++ tanimi); --genel verilirse ayrica dosyaya yazilir.
   node tools/ota_imza/ota_imza.mjs genel-anahtar --ozel <yol>
       Ozel anahtardan genel anahtari yeniden uretip basar (firmware'e gomulecek deger).
-  node tools/ota_imza/ota_imza.mjs imzala <firmware.bin> --hedef <${Object.keys(HEDEFLER).join('|')}> --surum <X.Y.Z> [--ozel <yol>] [--cikti <yol>]
+  node tools/ota_imza/ota_imza.mjs imzala <firmware.bin> --hedef <${Object.keys(HEDEFLER).join('|')}> --surum <X.Y.Z> [--rollback-max <X.Y.Z>] [--ozel <yol>] [--cikti <yol>]
       <firmware.bin>.sig (ya da --cikti) dosyasini uretir: hedef, surum, boyut, sha256 ve Ed25519 imzasi.
+      --rollback-max YALNIZ bilincli surum dusurmede kullanilir: imzaya "rollback_max" yetkisini katar (surumu bu degerde ve daha eski olan cihazlar
+      --surum surumune dusurulebilir; deger --surum'den BUYUK olmali). Normal yayinda KULLANMAYIN.
   node tools/ota_imza/ota_imza.mjs dogrula <firmware.bin> (--genel <dosya> | --genel-hex <64 hane hex>) [--sig <yol>] [--manifest <manifest.json>] [--hedef <ad>] [--surum <X.Y.Z>]
       Dosya + imza + genel anahtari denetler; GECTI / GECMEDI yazar. --genel / --genel-hex birden fazla verilebilir (anahtar donusu).
       --manifest verilirse manifest.json'daki version / sha256 / target imzayla birebir ayni mi diye de bakar (yuklemeden once calistirin).
@@ -248,7 +250,7 @@ function genelAnahtar(argv, g) {
 function imzalaKomutu(argv, g) {
   const { values, positionals } = bayraklariAyikla(
     argv,
-    { ozel: { type: 'string' }, hedef: { type: 'string' }, surum: { type: 'string' }, cikti: { type: 'string' } },
+    { ozel: { type: 'string' }, hedef: { type: 'string' }, surum: { type: 'string' }, 'rollback-max': { type: 'string' }, cikti: { type: 'string' } },
     { konumsalAzami: 1 },
   );
   if (positionals.length === 0) {
@@ -262,6 +264,7 @@ function imzalaKomutu(argv, g) {
   }
   const hedef = kullanimOlarak(() => hedefDenetle(values.hedef));
   const surum = kullanimOlarak(() => surumDenetle(values.surum));
+  const rollbackMax = values['rollback-max'] === undefined ? undefined : kullanimOlarak(() => surumDenetle(values['rollback-max'], 'rollback_max'));
   const ozelYol = ozelAnahtarYoluBul({ bayrak: values.ozel, env: g.env, cwd: g.cwd });
   depoDisindaOlmali(ozelYol);
 
@@ -274,7 +277,7 @@ function imzalaKomutu(argv, g) {
     );
   }
   const { key, uyarilar: anahtarUyarilari } = ozelAnahtariOku(ozelYol, { parola: parolaAl(g.env) });
-  const sonuc = imzala({ imajYolu, hedef, surum, ozelAnahtar: key });
+  const sonuc = imzala({ imajYolu, hedef, surum, ozelAnahtar: key, rollbackMax });
   const varOlan = varMi(sigYolu);
   atomikYaz(sigYolu, sonuc.metin);
 
@@ -286,6 +289,7 @@ function imzalaKomutu(argv, g) {
     `  firmware : ${imajYolu} (${sonuc.ozet.boyut} bayt)`,
     `  hedef    : ${hedef}  (imaj kontrolu: ${sonuc.imajKontrolu})`,
     `  surum    : ${surum}`,
+    ...(rollbackMax === undefined ? [] : [`  rollback : ${rollbackMax}  (SURUM DUSURME YETKISI: surumu ${rollbackMax} ve daha eski olan cihazlar ${surum} surumune dusurulebilir)`]),
     `  sha256   : ${sonuc.ozet.sha256}`,
     `  key_id   : ${sonuc.anahtarKimligi}`,
     `  imza     : ${sigYolu}${varOlan ? '  (var olan dosyanin yerine yazildi)' : ''}`,
@@ -293,9 +297,10 @@ function imzalaKomutu(argv, g) {
     'manifest.json icin AYNI degerler (bire bir):',
     `  "target": "${hedef}",`,
     `  "version": "${surum}",`,
+    ...(rollbackMax === undefined ? [] : [`  "rollback_max": "${rollbackMax}",`]),
     `  "sha256": "${sonuc.ozet.sha256}"`,
     '',
-    'Sonraki adim: firmware.bin ve imza dosyasini sunucuya yukleyin; once "dogrula" ile genel anahtarla denetleyin.',
+    'Sonraki adim: firmware.bin ve imza dosyasini sunucuya yukleyin (docs/OTA_IMZA.md); once "dogrula" ile genel anahtarla denetleyin.',
   ].join('\n')}\n`);
   return 0;
 }

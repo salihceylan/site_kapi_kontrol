@@ -2,6 +2,7 @@
 //
 // Guvence: imza, (hedef, surum, boyut, sha256) dortlusunu baglar. Cihaz bu dortluyu KENDI bildigi / hesapladigi degerlerle yeniden kurar
 // (hedef = derleme sabiti OTA_TARGET, boyut ve sha256 = indirdigi baytlardan); yalniz surum ve imza sunucudan gelir.
+// Istege bagli besinci alan `rollback_max` YALNIZ bilincli, sinirli surum dusurme yetkisinde (imzala --rollback-max) imzaya girer.
 
 import crypto from 'node:crypto';
 import { anahtarKimligi, genelHam } from './anahtar.mjs';
@@ -12,24 +13,41 @@ import {
   imzaDosyasiMetni,
   imzaMesajiKur,
   surumDenetle,
+  surumKarsilastir,
 } from './bicim.mjs';
 import { IslemHatasi } from './hata.mjs';
 import { hedefUyumunuDenetle, imajOku, imajdaSurumVarMi } from './imaj.mjs';
 
 /**
  * Imaji imzalar. Imza uretildikten sonra AYNI mesaj genel anahtarla yeniden dogrulanir; gecmezse hata verir (bozuk anahtar / hata).
- * @param {{ imajYolu: string, hedef: string, surum: string, ozelAnahtar: crypto.KeyObject }} girdi
+ * `rollbackMax` (istege bagli): imzali SURUM DUSURME yetkisi; `surum`'den BUYUK olmali (surumu `rollbackMax` ve daha eski olan cihazlar
+ * bu paketin `surum`'une dusurulebilir). Verilmezse imza hicbir dusurmeyi yetkilendirmez (varsayilan, onerilen).
+ * @param {{ imajYolu: string, hedef: string, surum: string, ozelAnahtar: crypto.KeyObject, rollbackMax?: string }} girdi
  * @returns {{ sig: object, metin: string, ozet: { boyut: number, sha256: string }, anahtarKimligi: string, uyarilar: string[], imajKontrolu: string }}
  */
-export function imzala({ imajYolu, hedef, surum, ozelAnahtar }) {
+export function imzala({ imajYolu, hedef, surum, ozelAnahtar, rollbackMax }) {
   hedefDenetle(hedef);
   surumDenetle(surum);
+  if (rollbackMax !== undefined) {
+    surumDenetle(rollbackMax, 'rollback_max');
+    if (surumKarsilastir(rollbackMax, surum) <= 0) {
+      throw new IslemHatasi(
+        `imza URETILMEDI: rollback_max (${rollbackMax}) imzalanan surumden (${surum}) BUYUK olmali; aksi halde hicbir cihaz ${surum} surumune dusurulemez`,
+      );
+    }
+  }
   const imaj = imajOku(imajYolu);
   const uyum = hedefUyumunuDenetle(hedef, imaj.veri);
   if (!uyum.ok) {
     throw new IslemHatasi(`imza URETILMEDI: ${uyum.ayrinti}`);
   }
   const uyarilar = [];
+  if (rollbackMax !== undefined) {
+    uyarilar.push(
+      `BU IMZA SURUM DUSURME YETKISI TASIR: surumu ${rollbackMax} ve daha eski olan cihazlar ${surum} surumune DUSURULEBILIR. `
+        + 'Normal yayin icin --rollback-max KULLANMAYIN; guvenli geri donus genellikle eski kodu DAHA YUKSEK surum numarasiyla yeniden imzalamaktir.',
+    );
+  }
   if (!imajdaSurumVarMi(imaj.veri, surum)) {
     uyarilar.push(
       `surum metni "${surum}" imajin icinde bulunamadi: ota_guncelleme.h'deki OTA_VERSION_* artirilmadan derlenmis ya da baska bir `
@@ -39,7 +57,7 @@ export function imzala({ imajYolu, hedef, surum, ozelAnahtar }) {
 
   const genel = crypto.createPublicKey(ozelAnahtar);
   const kimlik = anahtarKimligi(genelHam(genel));
-  const mesaj = imzaMesajiKur({ hedef, surum, boyut: imaj.boyut, sha256: imaj.sha256 });
+  const mesaj = imzaMesajiKur({ hedef, surum, boyut: imaj.boyut, sha256: imaj.sha256, rollbackMax });
   const imza = crypto.sign(null, mesaj, ozelAnahtar);
   if (imza.length !== 64 || !crypto.verify(null, mesaj, genel, imza)) {
     throw new IslemHatasi('uretilen imza kendi dogrulamasindan gecmedi; imza dosyasi YAZILMADI (anahtar bozuk olabilir)');
@@ -51,6 +69,7 @@ export function imzala({ imajYolu, hedef, surum, ozelAnahtar }) {
     sha256: imaj.sha256,
     anahtarKimligi: kimlik,
     imzaHex: imza.toString('hex'),
+    rollbackMax,
   });
   return {
     sig,
@@ -86,6 +105,15 @@ function manifestiKarsilastir(manifestMetni, sig, ekle) {
   } else {
     ekle('manifest hedefi', manifest.target === sig.target ? 'tamam' : 'hata',
       manifest.target === sig.target ? sig.target : `manifest ${String(manifest.target).slice(0, 40)}, imza ${sig.target} icin`);
+  }
+  // Cihaz, dusurme yetkisinin kapsamini (rollback_max) imzaya KATARAK dogrular ve degeri manifestten alir: ikisi birebir ayni olmali.
+  const manifestRollback = manifest.rollback_max === undefined || manifest.rollback_max === null ? '' : String(manifest.rollback_max);
+  const imzaRollback = sig.rollback_max ?? '';
+  if (manifestRollback !== '' || imzaRollback !== '') {
+    ekle('manifest rollback_max', manifestRollback === imzaRollback ? 'tamam' : 'hata',
+      manifestRollback === imzaRollback
+        ? imzaRollback
+        : `manifest "${manifestRollback || '(yok)'}", imza "${imzaRollback || '(yok)'}" diyor (dusurme yetkisi imzayla birebir ayni olmali)`);
   }
 }
 
@@ -124,6 +152,13 @@ export function dogrula({ imajYolu, sigMetni, genelAnahtarlar, beklenenHedef, be
     return sonuc();
   }
 
+  if (sig.rollback_max !== undefined) {
+    ekle('surum dusurme yetkisi', 'uyari',
+      `imza SURUM DUSURME yetkisi tasir: surumu ${sig.rollback_max} ve daha eski olan cihazlar ${sig.version} surumune dusurulebilir (rollback_max=${sig.rollback_max})`);
+    if (surumKarsilastir(sig.rollback_max, sig.version) <= 0) {
+      ekle('rollback_max', 'uyari', `rollback_max (${sig.rollback_max}) surumden (${sig.version}) buyuk degil: hicbir cihaz dusurulemez (anlamsiz yetki)`);
+    }
+  }
   ekle('boyut', imaj.boyut === sig.size ? 'tamam' : 'hata',
     imaj.boyut === sig.size ? `${imaj.boyut} bayt` : `dosya ${imaj.boyut} bayt, imza dosyasi ${sig.size} bayt diyor (dosya degismis ya da baska surum)`);
   ekle('sha256', imaj.sha256 === sig.sha256 ? 'tamam' : 'hata',
@@ -153,7 +188,7 @@ export function dogrula({ imajYolu, sigMetni, genelAnahtarlar, beklenenHedef, be
     aday ? sig.key_id : `imza ${sig.key_id} kimlikli anahtarla atilmis; verilen genel anahtar(lar): ${genelAnahtarlar.map((anahtar) => anahtar.kimlik).join(', ') || '(yok)'}`);
 
   if (aday) {
-    const mesaj = imzaMesajiKur({ hedef: sig.target, surum: sig.version, boyut: imaj.boyut, sha256: imaj.sha256 });
+    const mesaj = imzaMesajiKur({ hedef: sig.target, surum: sig.version, boyut: imaj.boyut, sha256: imaj.sha256, rollbackMax: sig.rollback_max });
     const gecerli = crypto.verify(null, mesaj, aday.key, Buffer.from(sig.signature, 'hex'));
     ekle('Ed25519 imzasi', gecerli ? 'tamam' : 'hata',
       gecerli ? 'imza gecerli' : 'imza GECERSIZ (imza, bu dosya / hedef / surum icin bu anahtarla atilmamis)');

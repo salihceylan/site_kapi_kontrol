@@ -10,6 +10,7 @@
 //   H  otaImzaDogrula uctan uca: alan alan degisiklik, yanlis anahtar, alan ayirici, hedef capraz, izinli dusurme (rollback_max)
 //   I  Node imzali OTA imza yuku vektorleri (60) - C++ yuk kurucusu ile bagimsiz JS kurucusu BAYT-BAYT ayni olmali
 //   J  teslim edilen ota_public_key.h: yer tutucu ise hicbir imza gecmez (kapali kalir), gercek anahtar ise gecerli nokta
+//   L  IMZALAMA ARACININ (tools/ota_imza) bilinen-cevap vektorleri (2 normal + 1 rollback_max'li): arac ve cihaz AYNI baytlari dogrular
 // Vektor dosyasi: imza_vectors.txt (gen_imza_vectors.mjs; her calistirmada rastgele TEST anahtarlari; git'e girmez).
 #include <stdint.h>
 #include <stdio.h>
@@ -120,7 +121,7 @@ static uint32_t rnd() {
 
 int main() {
   // ---- vektor dosyasi --------------------------------------------------------------------------------------------------------------
-  std::vector<std::vector<std::string>> H, E, O, Mm, K;
+  std::vector<std::vector<std::string>> H, E, O, Mm, K, Tv;
   {
     FILE* f = fopen("imza_vectors.txt", "r");
     if (!f) {
@@ -140,11 +141,12 @@ int main() {
       else if (t[0] == "O") O.push_back(t);
       else if (t[0] == "M") Mm.push_back(t);
       else if (t[0] == "K") K.push_back(t);
+      else if (t[0] == "T") Tv.push_back(t);
     }
     fclose(f);
   }
-  printf("vektorler: H=%zu M=%zu E=%zu O=%zu K=%zu\n", H.size(), Mm.size(), E.size(), O.size(), K.size());
-  CHECK(H.size() >= 30 && Mm.size() == 1 && E.size() == 200 && O.size() == 60 && K.size() >= 350, "vektor dosyasi tam (H>=30, M=1, E=200, O=60, K>=350)");
+  printf("vektorler: H=%zu M=%zu E=%zu O=%zu K=%zu T=%zu\n", H.size(), Mm.size(), E.size(), O.size(), K.size(), Tv.size());
+  CHECK(H.size() >= 30 && Mm.size() == 1 && E.size() == 200 && O.size() == 60 && K.size() >= 350 && Tv.size() == 3, "vektor dosyasi tam (H>=30, M=1, E=200, O=60, K>=350, T=3)");
 
   // ------------------------------------------------------------------------------------------------ A SHA-512
   { printf("A SHA-512: OpenSSL vektorleri (sinir uzunluklari), akisli rastgele parcalama, 1.000.000 x 'a'\n");
@@ -340,10 +342,10 @@ int main() {
     const std::string sha = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
     char tampon[OTA_IMZA_YUK_MAX];
     size_t n = otaImzaYukuOlustur(tampon, sizeof(tampon), "esp32-c3", "4.4.1", 1234567, sha.c_str(), nullptr);
-    const std::string beklenen = "SKP-OTA-V1\ntarget=esp32-c3\nversion=4.4.1\nsize=1234567\nsha256=" + sha + "\n";
+    const std::string beklenen = "KAPI-OTA-IMZA-V1\ntarget=esp32-c3\nversion=4.4.1\nsize=1234567\nsha256=" + sha + "\n";
     CHECK(n == beklenen.size() && std::string(tampon, n) == beklenen, "yuk birebir: etiket, target, version, size, sha256, her satir \\n ile biter");
     n = otaImzaYukuOlustur(tampon, sizeof(tampon), "esp32-wroom", "5.3.0", 4294967295u, sha.c_str(), "5.2.9");
-    const std::string beklenen2 = "SKP-OTA-V1\ntarget=esp32-wroom\nversion=5.3.0\nsize=4294967295\nsha256=" + sha + "\nrollback_max=5.2.9\n";
+    const std::string beklenen2 = "KAPI-OTA-IMZA-V1\ntarget=esp32-wroom\nversion=5.3.0\nsize=4294967295\nsha256=" + sha + "\nrollback_max=5.2.9\n";
     CHECK(n == beklenen2.size() && std::string(tampon, n) == beklenen2, "izinli dusurme: rollback_max satiri sha256'dan SONRA, \\n ile biter");
     n = otaImzaYukuOlustur(tampon, sizeof(tampon), "esp32-c3", "4.4.1", 0, sha.c_str(), "");
     CHECK(n > 0 && std::string(tampon, n).find("rollback_max") == std::string::npos, "bos rollbackMax = satir YOK");
@@ -474,16 +476,16 @@ int main() {
     }
     // etiket (alan ayirici): ayni govdeyi baska etiketle imzala -> RED
     { const std::string govde = std::string("target=esp32-c3\nversion=4.4.1\nsize=1800000\nsha256=") + sha + "\n";
-      for (const char* etiket : {"SKP-OTA-V2\n", "SKP-OTA-V1\n\n", "skp-ota-v1\n", ""}) {
+      for (const char* etiket : {"KAPI-OTA-IMZA-V2\n", "KAPI-OTA-IMZA-V1\n\n", "kapi-ota-imza-v1\n", "SKP-OTA-V1\n", ""}) {
         const std::string yukX = std::string(etiket) + govde;
         Bytes sig(64);
         ed_test::imzala(yayinci.tohum, reinterpret_cast<const uint8_t*>(yukX.data()), yukX.size(), sig.data());
         CHECKF(otaImzaDogrula(sig.data(), yayinci.genel, "esp32-c3", "4.4.1", 1800000, sha.c_str(), nullptr) == OTA_IMZA_GECERSIZ, "farkli etiketle imzalanan yuk RED (etiket=%s)", etiket); }
       // sondaki satir sonu olmadan / CRLF ile imzalanan yuk RED (tek bicimli yuk)
-      std::string eksikLf = std::string("SKP-OTA-V1\n") + govde; eksikLf.pop_back();
+      std::string eksikLf = std::string("KAPI-OTA-IMZA-V1\n") + govde; eksikLf.pop_back();
       Bytes s1(64); ed_test::imzala(yayinci.tohum, reinterpret_cast<const uint8_t*>(eksikLf.data()), eksikLf.size(), s1.data());
       CHECK(otaImzaDogrula(s1.data(), yayinci.genel, "esp32-c3", "4.4.1", 1800000, sha.c_str(), nullptr) == OTA_IMZA_GECERSIZ, "sondaki LF'siz yuk RED");
-      std::string crlf; for (char c : std::string("SKP-OTA-V1\n") + govde) { if (c == '\n') crlf += '\r'; crlf += c; }
+      std::string crlf; for (char c : std::string("KAPI-OTA-IMZA-V1\n") + govde) { if (c == '\n') crlf += '\r'; crlf += c; }
       Bytes s2(64); ed_test::imzala(yayinci.tohum, reinterpret_cast<const uint8_t*>(crlf.data()), crlf.size(), s2.data());
       CHECK(otaImzaDogrula(s2.data(), yayinci.genel, "esp32-c3", "4.4.1", 1800000, sha.c_str(), nullptr) == OTA_IMZA_GECERSIZ, "CRLF'li yuk RED"); }
     // alan gecerliligi
@@ -517,6 +519,40 @@ int main() {
       if (s2 == OTA_IMZA_TAMAM) kotu++;
     }
     CHECKF(ok == 60 && kotu == 0, "60 OTA yuku dogrulandi (ok=%d, kotu=%d; %d tanesi rollback_max'li)", ok, kotu, rb);
+  }
+
+  // ------------------------------------------------------------------------------------------------ L aracin bilinen-cevap vektorleri
+  { printf("L imzalama aracinin (tools/ota_imza) bilinen-cevap vektorleri: cihaz kodu arac imzalarini DOGRULAR, alan degisince / rollback_max uyusmazsa reddeder\n");
+    int tamam = 0, rbVar = 0;
+    for (const auto& t : Tv) {
+      const Bytes pk = hexten(t[1]);
+      const std::string hedef = t[2], surum = t[3], boyutS = t[4], sha = t[5], rollback = t[6];
+      const Bytes sig = hexten(t[7]);
+      const uint32_t boyut = static_cast<uint32_t>(strtoul(boyutS.c_str(), nullptr, 10));
+      const char* r = rollback == "-" ? nullptr : rollback.c_str();
+      if (r) rbVar++;
+      CHECKF(pk.size() == 32 && sig.size() == 64, "(arac vektoru bicimi: %s %s)", hedef.c_str(), surum.c_str());
+      CHECKF(otaImzaAnahtarDurumuHesapla(pk.data()) == OTA_ANAHTAR_HAZIR, "arac vektorunun genel anahtari gecerli nokta (%s %s)", hedef.c_str(), surum.c_str());
+      const OtaImzaSonuc s = otaImzaDogrula(sig.data(), pk.data(), hedef.c_str(), surum.c_str(), boyut, sha.c_str(), r);
+      CHECKF(s == OTA_IMZA_TAMAM, "ARAC imzasi cihaz kodunda DOGRULANDI: %s %s rollback=%s (sonuc %d)", hedef.c_str(), surum.c_str(), rollback.c_str(), static_cast<int>(s));
+      if (s == OTA_IMZA_TAMAM) tamam++;
+      // rollback_max: var olan kaldirilirsa / yoksa eklenirse / degistirilirse imza gecersiz
+      CHECKF(otaImzaDogrula(sig.data(), pk.data(), hedef.c_str(), surum.c_str(), boyut, sha.c_str(), r ? nullptr : "9.9.9") == OTA_IMZA_GECERSIZ, "rollback_max %s imza GECERSIZ (%s %s)", r ? "kaldirilinca" : "eklenince", hedef.c_str(), surum.c_str());
+      if (r) CHECK(otaImzaDogrula(sig.data(), pk.data(), hedef.c_str(), surum.c_str(), boyut, sha.c_str(), "5.3.1") == OTA_IMZA_GECERSIZ, "rollback_max kapsami genisletilince GECERSIZ");
+      // hedef capraz / surum / boyut / ozet degisince
+      const std::string digerHedef = hedef == "esp32-c3" ? "esp32-wroom" : "esp32-c3";
+      CHECK(otaImzaDogrula(sig.data(), pk.data(), digerHedef.c_str(), surum.c_str(), boyut, sha.c_str(), r) == OTA_IMZA_GECERSIZ, "arac imzasi baska HEDEFTE gecersiz");
+      CHECK(otaImzaDogrula(sig.data(), pk.data(), hedef.c_str(), "9.9.9", boyut, sha.c_str(), r) == OTA_IMZA_GECERSIZ, "arac imzasi baska SURUMDE gecersiz");
+      CHECK(otaImzaDogrula(sig.data(), pk.data(), hedef.c_str(), surum.c_str(), boyut + 1, sha.c_str(), r) == OTA_IMZA_GECERSIZ, "arac imzasi baska BOYUTTA gecersiz");
+      std::string sha2 = sha; sha2[0] = (sha2[0] == '0' ? '1' : '0');
+      CHECK(otaImzaDogrula(sig.data(), pk.data(), hedef.c_str(), surum.c_str(), boyut, sha2.c_str(), r) == OTA_IMZA_GECERSIZ, "arac imzasi baska OZETTE gecersiz");
+      // her 9 imza bitinde tek bit bozma
+      for (int bit = 0; bit < 512; bit += 9) {
+        Bytes s2 = sig; s2[bit / 8] ^= static_cast<uint8_t>(1 << (bit % 8));
+        CHECKF(otaImzaDogrula(s2.data(), pk.data(), hedef.c_str(), surum.c_str(), boyut, sha.c_str(), r) == OTA_IMZA_GECERSIZ, "arac imzasinda bozulmus bit %d RED", bit);
+      }
+    }
+    CHECKF(tamam == 3 && rbVar == 1, "3 arac vektoru dogrulandi (1 tanesi rollback_max'li): tamam=%d rollback=%d", tamam, rbVar);
   }
 
   // ------------------------------------------------------------------------------------------------ J teslim edilen anahtar

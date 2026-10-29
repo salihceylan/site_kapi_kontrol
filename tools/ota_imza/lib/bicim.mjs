@@ -10,9 +10,10 @@
 //   version=<surum><LF>
 //   size=<bayt sayisi><LF>
 //   sha256=<64 hane kucuk harf hex><LF>
+//   rollback_max=<surum><LF>      <- YALNIZ imzali, sinirli SURUM DUSURME yetkisinde (imzala --rollback-max); yoksa bu satir HIC olmaz
 //
 // Her alan sabit sirada, ASCII ve LF (0x0A) ile biter; CR, bosluk ve ek satir YOKTUR. Alanlar asagidaki desenlerle kisitlandigi icin
-// satir icine satir/alan sokmak (injection) mumkun degildir.
+// satir icine satir/alan sokmak (injection) mumkun degildir. Cihaz ve sunucu ayni bicimi uygular (tek etiket: KAPI-OTA-IMZA-V1).
 
 import { IslemHatasi, guvenliMetin } from './hata.mjs';
 
@@ -46,11 +47,30 @@ export function hedefDenetle(hedef) {
   return hedef;
 }
 
-export function surumDenetle(surum) {
+export function surumDenetle(surum, ad = 'surum') {
   if (typeof surum !== 'string' || !SURUM_DESENI.test(surum)) {
-    throw new IslemHatasi(`surum gecersiz: ${guvenliMetin(surum)} (beklenen bicim X.Y.Z, ornek 4.3.4; basta sifir olmaz)`);
+    throw new IslemHatasi(`${ad} gecersiz: ${guvenliMetin(surum)} (beklenen bicim X.Y.Z, ornek 4.3.4; basta sifir olmaz)`);
   }
   return surum;
+}
+
+/** Iki GECERLI surumu sayisal karsilastirir: -1 (a < b), 0, 1 (a > b). Eksik 4. parca 0 sayilir. */
+export function surumKarsilastir(a, b) {
+  const parcalar = (surum) => {
+    const dizi = surumDenetle(surum).split('.').map(Number);
+    while (dizi.length < 4) {
+      dizi.push(0);
+    }
+    return dizi;
+  };
+  const x = parcalar(a);
+  const y = parcalar(b);
+  for (let i = 0; i < 4; i += 1) {
+    if (x[i] !== y[i]) {
+      return x[i] < y[i] ? -1 : 1;
+    }
+  }
+  return 0;
 }
 
 export function boyutDenetle(boyut) {
@@ -83,22 +103,27 @@ export function imzaHexDenetle(imza) {
 
 /**
  * Ed25519'un imzaladigi mesaj (bayt dizisi). Alanlar once denetlenir; gecersizse IslemHatasi.
- * @param {{ hedef: string, surum: string, boyut: number, sha256: string }} alanlar
+ * `rollbackMax`: verilirse (yalniz imzali surum dusurme yetkisi) mesajin SON satiri `rollback_max=<surum>` olur; verilmezse satir HIC yoktur.
+ * @param {{ hedef: string, surum: string, boyut: number, sha256: string, rollbackMax?: string }} alanlar
  * @returns {Buffer}
  */
-export function imzaMesajiKur({ hedef, surum, boyut, sha256 }) {
+export function imzaMesajiKur({ hedef, surum, boyut, sha256, rollbackMax }) {
   hedefDenetle(hedef);
   surumDenetle(surum);
   boyutDenetle(boyut);
   sha256Denetle(sha256);
-  return Buffer.from(`${FORMAT}\ntarget=${hedef}\nversion=${surum}\nsize=${boyut}\nsha256=${sha256}\n`, 'ascii');
+  let metin = `${FORMAT}\ntarget=${hedef}\nversion=${surum}\nsize=${boyut}\nsha256=${sha256}\n`;
+  if (rollbackMax !== undefined) {
+    metin += `rollback_max=${surumDenetle(rollbackMax, 'rollback_max')}\n`;
+  }
+  return Buffer.from(metin, 'ascii');
 }
 
 /**
  * <firmware.bin>.sig dosyasinin nesnesi (alan sirasi sabit). `key_id`: genel anahtarin SHA-256'sinin ilk 8 baytinin hex'i (ipucu;
  * imzalanan mesajin parcasi degildir, dogrulayici dogru genel anahtari secsin diye vardir).
  */
-export function imzaDosyasiKur({ hedef, surum, boyut, sha256, anahtarKimligi, imzaHex }) {
+export function imzaDosyasiKur({ hedef, surum, boyut, sha256, anahtarKimligi, imzaHex, rollbackMax }) {
   hedefDenetle(hedef);
   surumDenetle(surum);
   boyutDenetle(boyut);
@@ -112,6 +137,8 @@ export function imzaDosyasiKur({ hedef, surum, boyut, sha256, anahtarKimligi, im
     version: surum,
     size: boyut,
     sha256,
+    // YALNIZ imzali surum dusurme yetkisinde (imzalanan mesajin son satiri); yoksa alan HIC yazilmaz
+    ...(rollbackMax === undefined ? {} : { rollback_max: surumDenetle(rollbackMax, 'rollback_max') }),
     key_id: anahtarKimligi,
     signature: imzaHex,
   };
@@ -125,7 +152,7 @@ export function imzaDosyasiMetni(sig) {
 /**
  * .sig dosya metnini sikica ayristirir. Bilinmeyen EK alanlar yok sayilir (ileriye uyum); bilinen alanlarin her biri denetlenir.
  * @param {string} metin
- * @returns {{ format: string, algorithm: string, target: string, version: string, size: number, sha256: string, key_id: string, signature: string }}
+ * @returns {{ format: string, algorithm: string, target: string, version: string, size: number, sha256: string, rollback_max?: string, key_id: string, signature: string }}
  */
 export function imzaDosyasiAyristir(metin) {
   if (typeof metin !== 'string' || metin.length === 0) {
@@ -155,6 +182,8 @@ export function imzaDosyasiAyristir(metin) {
     ['version', () => surumDenetle(veri.version)],
     ['size', () => boyutDenetle(veri.size)],
     ['sha256', () => sha256Denetle(veri.sha256)],
+    // istege bagli: yalniz imzali surum dusurme yetkisinde bulunur. Varsa gecerli bir surum olmali (null / bos dize / sayi GECERSIZdir).
+    ...(veri.rollback_max === undefined ? [] : [['rollback_max', () => surumDenetle(veri.rollback_max, 'rollback_max')]]),
     ['key_id', () => anahtarKimligiDenetle(veri.key_id)],
     ['signature', () => imzaHexDenetle(veri.signature)],
   ];
@@ -172,6 +201,7 @@ export function imzaDosyasiAyristir(metin) {
     version: veri.version,
     size: veri.size,
     sha256: veri.sha256,
+    ...(veri.rollback_max === undefined ? {} : { rollback_max: veri.rollback_max }),
     key_id: veri.key_id,
     signature: veri.signature,
   };

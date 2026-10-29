@@ -10,8 +10,9 @@
 //  - Imza yalniz dosya baytlarini degil, kim-hangi-surum bilgisini de baglar. Boylece eski ama GECERLI IMZALI bir paketi yeniden
 //    sunarak surum dusurtme (rollback) ve baska donanim hedefinin paketini kurdurma saldirilari imza denetiminde yakalanir.
 //
-// IMZALANAN ILETI (yuk) - ASCII, her satir tek "\n" ile biter (son satir dahil), baska bosluk yok:
-//     SKP-OTA-V1\n
+// IMZALANAN ILETI (yuk) - ASCII, her satir tek "\n" ile biter (son satir dahil), baska bosluk yok. Bicim imzalama araci (tools/ota_imza,
+// BAGLAYICI TANIM: tools/ota_imza/README.md) ve sunucu ile BIREBIR aynidir (tek etiket KAPI-OTA-IMZA-V1; eski taslak etiketi SKP-OTA-V1 KALDIRILDI):
+//     KAPI-OTA-IMZA-V1\n
 //     target=<esp32-c3 | esp32-wroom>\n
 //     version=<surum, ornek 4.4.1>\n
 //     size=<firmware.bin bayt sayisi, ondalik>\n
@@ -20,10 +21,12 @@
 //  `target` cihazin KENDI hedefidir (manifestten degil): C3 icin imzalanmis paket WROOM'da dogrulanmaz.
 //  `size` ve `sha256` cihazin gercekte indirip flash'a yazdigi baytlardan hesaplanir (manifestin iddiasindan degil).
 //  `version` manifestteki surumdur; imzali oldugu icin sunucu surumu sahte gosteremez.
-//  Etiket "SKP-OTA-V1" alan ayiricidir: ayni anahtarla baska amacla atilan imza OTA imzasi sayilmaz.
+//  Etiket "KAPI-OTA-IMZA-V1" alan ayiricidir: ayni anahtarla baska amacla atilan imza OTA imzasi sayilmaz.
 //
-// IMZA DOSYASI (<paket>.sig ya da manifestte `signature`): Ed25519 imzasi, 64 bayt. Uc bicimden biri kabul edilir:
+// CIPLAK IMZA (manifestte `signature`; ayri dosyada da olabilir): Ed25519 imzasi, 64 bayt. Uc bicimden biri kabul edilir:
 //     64 bayt ham ikili | 128 hane hex (bosluk/satir sonu serbest) | 88 karakter base64 (== dolgulu)
+// IMZA DOSYASI (<paket>.sig): aracin urettigi JSON ({format, algorithm, target, version, size, sha256, [rollback_max,] key_id, signature}) ya da
+// yukaridaki ciplak bicimlerden biri. JSON'u ayristirma ota_guncelleme.h'dedir (otaImzaDosyasiCozumle); yalniz format/algorithm/signature okunur.
 //
 // IZINLI SURUM DUSURME: Varsayilan olarak cihaz mevcut surumden DUSUK ya da ESIT surumu kurmaz. Yalniz manifest `allow_downgrade: true`
 // derse VE imzalanan yukte `rollback_max=<surum>` satiri varsa VE cihazin mevcut surumu bu surumden buyuk degilse kurulur.
@@ -39,10 +42,11 @@
 
 inline constexpr size_t OTA_IMZA_BOYUT = ota_ed25519::IMZA_BOYUT;              // 64
 inline constexpr size_t OTA_IMZA_ANAHTAR_BOYUT = ota_ed25519::ANAHTAR_BOYUT;   // 32
-inline constexpr size_t OTA_IMZA_YUK_MAX = 256;                                // yuk tamponu (en uzun gecerli yuk 194 bayt)
+inline constexpr size_t OTA_IMZA_YUK_MAX = 256;                                // yuk tamponu (en uzun gecerli yuk 200 bayt)
 inline constexpr size_t OTA_IMZA_SURUM_MAX = 24;
 inline constexpr size_t OTA_IMZA_HEDEF_MAX = 16;
-inline constexpr char OTA_IMZA_YUK_ETIKETI[] = "SKP-OTA-V1";
+inline constexpr char OTA_IMZA_YUK_ETIKETI[] = "KAPI-OTA-IMZA-V1";
+inline constexpr char OTA_IMZA_ALGORITMA[] = "Ed25519";                       // .sig JSON'undaki "algorithm" degeri
 
 // Gomulu genel anahtar ASCII "OTA-PUBLIC-KEY-NOT-SET-REPLACE!!" ise "anahtar yerlestirilmemis" demektir (ota_public_key.h'in teslim
 // edilen hali). Tanima tablosu KASITLI OLARAK her bayti 0xA5 ile XOR'lanmis tutulur: acik metin 32 bayt ikilide YALNIZ ota_public_key.h

@@ -9,18 +9,23 @@
 //   E <genel anahtar> <ileti|-> <imza> <tohum>                         Ed25519, Node imzali
 //   K <32 bayt hex> <1|0>                                              genel anahtar gecerli mi? (tools/ota_anahtar.mjs BigInt gerceklemesi)
 //   O <genel anahtar> <tohum> <hedef> <surum> <boyut> <sha256> <rollback_max|-> <imza>   OTA imza yuku, Node imzali
+//   T <genel anahtar> <hedef> <surum> <boyut> <sha256> <rollback_max|-> <imza>   IMZALAMA ARACININ bilinen-cevap vektoru
+//                                                                              (tools/ota_imza/test/vektorler.json; ozel anahtar YOK)
 //
-// imzaYuku() ayni zamanda IMZALAYAN taraf icin referans uygulamadir: sirket araci (imzalama) yuku BIREBIR bu bicimde kurmalidir
-// (docs/OTA_IMZA_CIHAZ.md "Imzalanan ileti").
+// IMZALAYAN taraf icin referans uygulama tools/ota_imza/lib/bicim.mjs'tir (BAGLAYICI TANIM: tools/ota_imza/README.md). imzaYuku() bu
+// dosyanin kendi kurucusudur (cihazin "-rc1" gibi esnek surumlerini de denemek icin) ve kati surumlerde ARAC KURUCUSUYLA BAYT-BAYT ayni
+// olmak ZORUNDADIR (aksi halde uretim durur): cihaz, arac ve sunucu ayni baytlari imzalar/dogrular (docs/OTA_IMZA_CIHAZ.md "Imzalanan ileti").
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { imzaMesajiKur } from '../../tools/ota_imza/lib/bicim.mjs';
 import { anahtarDogrula } from '../tools/ota_anahtar.mjs';
 
 const PKCS8_ONEK = Buffer.from('302e020100300506032b657004220420', 'hex');
-const SPKI_ONEK = Buffer.from('302a300506032b6570032100', 'hex');
+const ARAC_VEKTORLERI = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'tools', 'ota_imza', 'test', 'vektorler.json');
+const KATI_SURUM = /^(?:0|[1-9][0-9]{0,3})(?:\.(?:0|[1-9][0-9]{0,3})){2,3}$/;
 
 export function tohumdanAnahtar(tohum) {
   const ozel = crypto.createPrivateKey({ key: Buffer.concat([PKCS8_ONEK, tohum]), format: 'der', type: 'pkcs8' });
@@ -30,11 +35,19 @@ export function tohumdanAnahtar(tohum) {
 
 // OTA imza yuku (cihaz ota_imza.h otaImzaYukuOlustur ile AYNI baytlar): ASCII, her satir "\n" ile biter.
 export function imzaYuku({ target, version, size, sha256, rollbackMax }) {
-  let s = `SKP-OTA-V1\ntarget=${target}\nversion=${version}\nsize=${size}\nsha256=${sha256}\n`;
+  let s = `KAPI-OTA-IMZA-V1\ntarget=${target}\nversion=${version}\nsize=${size}\nsha256=${sha256}\n`;
   if (rollbackMax) {
     s += `rollback_max=${rollbackMax}\n`;
   }
-  return Buffer.from(s, 'utf8');
+  const yuk = Buffer.from(s, 'utf8');
+  // Kati surumlerde imzalama aracinin kurucusuyla BAYT-BAYT ayni olmali (tek bicim; sessiz ayrisma olamaz)
+  if (KATI_SURUM.test(version) && (!rollbackMax || KATI_SURUM.test(rollbackMax))) {
+    const arac = imzaMesajiKur({ hedef: target, surum: version, boyut: size, sha256, rollbackMax: rollbackMax || undefined });
+    if (!arac.equals(yuk)) {
+      throw new Error(`imzaYuku(): arac kurucusuyla (tools/ota_imza/lib/bicim.mjs) ayni degil: ${JSON.stringify(s)}`);
+    }
+  }
+  return yuk;
 }
 
 function hexVeyaTire(b) {
@@ -109,6 +122,14 @@ function uret() {
     const imza = crypto.sign(null, yuk, ozel);
     satirlar.push(`O ${genel.toString('hex')} ${tohum.toString('hex')} ${hedef} ${surum} ${boyut} ${sha256} ${rollbackMax || '-'} ${imza.toString('hex')}`);
   }
+
+  // Imzalama aracinin bilinen-cevap vektorleri (ozel anahtar yok): cihaz kodu bu imzalari gomulu-anahtar mantigiyla DOGRULAMALI
+  const belge = JSON.parse(fs.readFileSync(ARAC_VEKTORLERI, 'utf8'));
+  for (const v of belge.vektorler) {
+    satirlar.push(`T ${belge.genel_anahtar_hex} ${v.hedef} ${v.surum} ${v.boyut} ${v.sha256} - ${v.imza_hex}`);
+  }
+  const r = belge.rollback_vektoru;
+  satirlar.push(`T ${r.genel_anahtar_hex} ${r.hedef} ${r.surum} ${r.boyut} ${r.sha256} ${r.rollback_max} ${r.imza_hex}`);
   return satirlar;
 }
 

@@ -8,12 +8,14 @@
 //                 version=<X.Y.Z veya X.Y.Z.W, her parca 0-9999, basta sifir yok>
 //                 size=<firmware .bin bayt sayisi, ondalik>
 //                 sha256=<firmware .bin SHA-256 ozeti, 64 KUCUK harfli onaltilik>
+//                 rollback_max=<surum>        <- YALNIZ imzali, sinirli SURUM DUSURME yetkisinde (imzala --rollback-max); yoksa bu satir HIC olmaz
 //   Imza; donanim hedefine, surum numarasina, boyuta ve icerik ozetine baglidir: baska hedefe ya da baska surum numarasiyla yeniden
 //   etiketlenen veya icerigi degisen paket dogrulanmaz; eski bir imzali imaj "yeni surum" gibi sunulamaz. Cihaz, indirirken zaten
 //   hesapladigi SHA-256 ve bayt sayisini bu metne koyup tek bir Ed25519 dogrulamasi yapar (1,8 MB'lik imaji bellege almak gerekmez).
-//   Ikinci kayitli bicim "SKP-OTA-V1" (firmware taslagi): ayni alanlar + YALNIZ izinli surum dusurmede son satir `rollback_max=<surum>`.
-//   Birlestirmede tek bicime inilirse OTA_SIGNATURE_FORMATS'tan silinir; imza dosyasi `format` alani hangisini kullandigini soyler.
-//   `.sig` DOSYASI (tools/ota_imza): UTF-8 JSON { format, algorithm, target, version, size, sha256, key_id, signature } (bkz. parseOtaSigFile).
+//   TEK BICIM: etiket yalniz KAPI-OTA-IMZA-V1 (arac, sunucu ve firmware ayni etiketi/mesaji kullanir; eski firmware taslaginin "SKP-OTA-V1" etiketi
+//   KALDIRILDI). Cihaz, dusurme yetkisini manifestteki `rollback_max` ile bildirilen degeri KATARAK dogrular; yetki imzanin icindedir.
+//   `.sig` DOSYASI (tools/ota_imza): UTF-8 JSON { format, algorithm, target, version, size, sha256, [rollback_max,] key_id, signature }
+//   (bkz. parseOtaSigFile; `rollback_max` yalniz dusurme yetkisinde bulunur).
 //   Genel anahtar: sunucuda OTA_PUBLIC_KEY, firmware'de gomulu 32 bayt. `key_id` = ham 32 bayt genel anahtarin SHA-256'sinin ilk 8 baytinin hex'i.
 //   OZEL ANAHTAR sunucuya, depoya, log'a ya da teste GIRMEZ.
 //
@@ -28,10 +30,9 @@ export const OTA_SIG_FILE_MAX_BYTES = 4096;
 /** Imzaya girebilecek en buyuk imaj boyutu (ESP32 flash tavani; yukleme siniri ayrica OTA_MAX_FIRMWARE_BYTES'tir). */
 export const OTA_MAX_IMAGE_BYTES = 16 * 1024 * 1024;
 
-/** Kayitli imza bicimleri: etiket -> secenekler. `rollbackMax`: sonuna `rollback_max=<surum>` satiri eklenebilir mi? */
+/** Kayitli imza bicimleri: etiket -> secenekler. `rollbackMax`: sonuna `rollback_max=<surum>` satiri eklenebilir mi? (TEK bicim) */
 export const OTA_SIGNATURE_FORMATS = Object.freeze({
-  'KAPI-OTA-IMZA-V1': Object.freeze({ rollbackMax: false }),
-  'SKP-OTA-V1': Object.freeze({ rollbackMax: true }),
+  'KAPI-OTA-IMZA-V1': Object.freeze({ rollbackMax: true }),
 });
 export const OTA_PRIMARY_FORMAT = 'KAPI-OTA-IMZA-V1';
 
@@ -290,7 +291,7 @@ const SIG_FILE_FIELDS = Object.freeze([
 
 /**
  * `.sig` dosyasi metnini (tools/ota_imza bicimi) SIKICA ayristirir; bilinmeyen ek alanlar yok sayilir, bilinenlerin her biri denetlenir.
- * @returns {{ ok: true, sig: { format: string, algorithm: string, target: string, version: string, size: number, sha256: string, key_id: string, signature: string } }
+ * @returns {{ ok: true, sig: { format: string, algorithm: string, target: string, version: string, size: number, sha256: string, rollback_max?: string, key_id: string, signature: string } }
  *   | { ok: false, error: string }}  hata: empty | too_large | not_json | not_object | unsupported_format | unsupported_algorithm | invalid_<alan>
  */
 export function parseOtaSigFile(text) {
@@ -320,6 +321,10 @@ export function parseOtaSigFile(text) {
       return { ok: false, error: `invalid_${name}` };
     }
   }
+  // Istege bagli: yalniz imzali surum dusurme yetkisinde bulunur. Varsa gecerli bir surum olmali (null / bos dize / sayi GECERSIZdir).
+  if (data.rollback_max !== undefined && !isStrictOtaVersion(data.rollback_max)) {
+    return { ok: false, error: 'invalid_rollback_max' };
+  }
   return {
     ok: true,
     sig: {
@@ -329,6 +334,7 @@ export function parseOtaSigFile(text) {
       version: data.version,
       size: data.size,
       sha256: data.sha256,
+      ...(data.rollback_max === undefined ? {} : { rollback_max: data.rollback_max }),
       key_id: data.key_id,
       signature: data.signature,
     },
@@ -336,7 +342,7 @@ export function parseOtaSigFile(text) {
 }
 
 /** `.sig` dosyasinin KANONIK metni (tools/ota_imza `imzaDosyasiMetni` ile ayni: sabit alan sirasi, 2 bosluk girinti, sonda LF). */
-export function renderOtaSigFile({ format, target, version, size, sha256, keyId, signature }) {
+export function renderOtaSigFile({ format, target, version, size, sha256, rollbackMax = null, keyId, signature }) {
   return `${JSON.stringify({
     format,
     algorithm: OTA_SIGNATURE_ALGORITHM,
@@ -344,6 +350,7 @@ export function renderOtaSigFile({ format, target, version, size, sha256, keyId,
     version,
     size,
     sha256,
+    ...(rollbackMax ? { rollback_max: rollbackMax } : {}),
     key_id: keyId,
     signature: Buffer.isBuffer(signature) ? signature.toString('hex') : String(signature),
   }, null, 2)}\n`;

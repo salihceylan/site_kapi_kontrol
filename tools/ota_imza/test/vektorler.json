@@ -28,5 +28,19 @@
       "mesaj": "KAPI-OTA-IMZA-V1\ntarget=esp32-wroom\nversion=5.2.3\nsize=8192\nsha256=a4fa27da11d1a94e8b279787179e2b104bf90253d56f640bbe7fc37bb561d618\n",
       "imza_hex": "73fe2d62adbb3aff07037e87af3738744655bad918457a9c7f89e5d5662df86c698adf0ddb6bbfafee352b015c069d223b59e4a6780a9c97eedccc89e0caea0f"
     }
-  ]
+  ],
+  "rollback_vektoru": {
+    "ad": "esp32-wroom-rollback",
+    "aciklama": "Imzali SURUM DUSURME yetkisi: mesajin son satiri rollback_max=<surum>. Yukaridakilerden AYRI, atilabilir bir anahtarla uretildi (kendi genel anahtari var).",
+    "genel_anahtar_hex": "19015e809a5b35c024b0a3c096fd0106982890e9285e5d340d5bf2adccf86712",
+    "anahtar_kimligi": "89c6a3714b130272",
+    "hedef": "esp32-wroom",
+    "cip_kimligi": 0,
+    "surum": "5.2.2",
+    "rollback_max": "5.3.0",
+    "boyut": 8192,
+    "sha256": "a4fa27da11d1a94e8b279787179e2b104bf90253d56f640bbe7fc37bb561d618",
+    "mesaj": "KAPI-OTA-IMZA-V1\ntarget=esp32-wroom\nversion=5.2.2\nsize=8192\nsha256=a4fa27da11d1a94e8b279787179e2b104bf90253d56f640bbe7fc37bb561d618\nrollback_max=5.3.0\n",
+    "imza_hex": "1152c4a6f87b915b684406244d1ff4ef183cac0a2e29d73c4b9b75fa91adb3bd572a95e5424de09e738ca5b361ca542b991683d94ade2c9952db1d6b63bef105"
+  }
 }

@@ -50,7 +50,7 @@ function sigObject(keys, { target, version, firmware, format = 'KAPI-OTA-IMZA-V1
   const fields = { target, version, size: firmware.length, sha256: sha256Of(firmware) };
   const signature = crypto.sign(null, buildOtaSignedMessage({ format, ...fields, rollbackMax }), keys.privateKey);
   return {
-    format, algorithm: 'Ed25519', ...fields, key_id: keys.keyId, signature: signature.toString('hex'), ...override,
+    format, algorithm: 'Ed25519', ...fields, ...(rollbackMax ? { rollback_max: rollbackMax } : {}), key_id: keys.keyId, signature: signature.toString('hex'), ...override,
   };
 }
 
@@ -443,25 +443,86 @@ describe('OTA yayin servisi', () => {
       assert.equal(entry.details.version, '4.3.4');
     });
 
-    it('SKP-OTA-V1 biciminde rollback_max imzaya girmisse: ayni deger sorguda verilirse dogrulanir, manifest rollback_max tasir; verilmezse reddedilir', async () => {
+    const DOWNGRADE_QUERY = { allow_downgrade: '1', downgrade_reason: 'acil geri donus gerekcesi yeterince uzun' };
+
+    it('KAPI-OTA-IMZA-V1 + rollback_max (imzali surum dusurme yetkisi): yetki .sig dosyasinda tasinir; manifest, kanonik .sig ve denetim kaydina yansir', async () => {
       await publish({ version: '4.3.5' });
-      const image = fakeImage('esp32-c3', 'rollback');
-      const signatureInput = { kind: 'sigfile', sig: sigObject(keys, { target: 'esp32-c3', version: '4.3.4', firmware: image, format: 'SKP-OTA-V1', rollbackMax: '4.3.5' }) };
-      const base = { allow_downgrade: '1', downgrade_reason: 'acil geri donus gerekcesi yeterince uzun' };
-
-      await rejects(publish({ version: '4.3.4', firmware: image, signatureInput, query: base }), { status: 400, code: 'FIRMWARE_SIGNATURE_INVALID' });
-      await rejects(publish({ version: '4.3.4', firmware: image, signatureInput, query: { ...base, rollback_max: '4.9.9' } }), { status: 400, code: 'FIRMWARE_SIGNATURE_INVALID' });
-      assert.equal(readManifest('esp32-c3').version, '4.3.5');
-
-      const result = await publish({ version: '4.3.4', firmware: image, signatureInput, query: { ...base, rollback_max: '4.3.5' } });
+      const result = await publish({ version: '4.3.4', rollbackMax: '4.3.5', query: DOWNGRADE_QUERY });
       assert.equal(result.downgrade, true);
       assert.equal(result.rollback_max, '4.3.5');
-      assert.equal(result.signature_format, 'SKP-OTA-V1');
+      assert.equal(result.signature_format, 'KAPI-OTA-IMZA-V1');
       const manifest = readManifest('esp32-c3');
+      assert.equal(manifest.version, '4.3.4');
       assert.equal(manifest.rollback_max, '4.3.5');
-      assert.equal(manifest.signature_format, 'SKP-OTA-V1');
+      assert.equal(manifest.signature_format, 'KAPI-OTA-IMZA-V1');
       assert.equal(manifest.downgrade.authorized, true);
       assert.equal(audit.entries.at(-1).details.rollback_max, '4.3.5');
+
+      // diskteki .sig KANONIK bicimde (tools/ota_imza ile ayni alan sirasi) ve rollback_max tasir; yeniden ayristirilabilir
+      const stored = fs.readFileSync(path.join(dirOf('esp32-c3'), 'firmware-v4.3.4.bin.sig'), 'utf8');
+      assert.deepEqual(Object.keys(JSON.parse(stored)), ['format', 'algorithm', 'target', 'version', 'size', 'sha256', 'rollback_max', 'key_id', 'signature']);
+      const parsed = parseOtaSigFile(stored);
+      assert.equal(parsed.ok, true);
+      assert.equal(parsed.sig.rollback_max, '4.3.5');
+      assert.equal(readOtaSigFile(path.join(dirOf('esp32-c3'), 'firmware-v4.3.4.bin.sig')).sig.rollback_max, '4.3.5');
+    });
+
+    it('rollback_max: sorguda ayrica verilirse imzadakiyle AYNI olmali; imzada yokken sorguda verilirse de reddedilir; imza alani bozulursa dogrulanmaz', async () => {
+      await publish({ version: '4.3.5' });
+      const image = fakeImage('esp32-c3', 'rollback');
+      const signed = { kind: 'sigfile', sig: sigObject(keys, { target: 'esp32-c3', version: '4.3.4', firmware: image, rollbackMax: '4.3.5' }) };
+      await rejects(publish({ version: '4.3.4', firmware: image, signatureInput: signed, query: { ...DOWNGRADE_QUERY, rollback_max: '4.9.9' } }), { status: 400, code: 'FIRMWARE_SIGNATURE_MISMATCH' });
+      const plain = { kind: 'sigfile', sig: sigObject(keys, { target: 'esp32-c3', version: '4.3.4', firmware: image }) };
+      await rejects(publish({ version: '4.3.4', firmware: image, signatureInput: plain, query: { ...DOWNGRADE_QUERY, rollback_max: '4.3.5' } }), { status: 400, code: 'FIRMWARE_SIGNATURE_MISMATCH' });
+      // .sig'deki rollback_max elle degistirilirse (imza o deger icin atilmamis) dogrulanmaz
+      const tampered = { kind: 'sigfile', sig: { ...signed.sig, rollback_max: '4.9.9' } };
+      await rejects(publish({ version: '4.3.4', firmware: image, signatureInput: tampered, query: DOWNGRADE_QUERY }), { status: 400, code: 'FIRMWARE_SIGNATURE_INVALID' });
+      // alan eklenirse / kaldirilirsa da
+      const added = { kind: 'sigfile', sig: { ...plain.sig, rollback_max: '4.3.5' } };
+      await rejects(publish({ version: '4.3.4', firmware: image, signatureInput: added, query: DOWNGRADE_QUERY }), { status: 400, code: 'FIRMWARE_SIGNATURE_INVALID' });
+      const { rollback_max: _atilan, ...removed } = signed.sig;
+      await rejects(publish({ version: '4.3.4', firmware: image, signatureInput: { kind: 'sigfile', sig: removed }, query: DOWNGRADE_QUERY }), { status: 400, code: 'FIRMWARE_SIGNATURE_INVALID' });
+      assert.equal(readManifest('esp32-c3').version, '4.3.5');
+
+      const ok = await publish({ version: '4.3.4', firmware: image, signatureInput: signed, query: { ...DOWNGRADE_QUERY, rollback_max: '4.3.5' } });
+      assert.equal(ok.rollback_max, '4.3.5');
+    });
+
+    it('CIPLAK imza + sorgudaki rollback_max: sorgudaki deger imzaya girmisse dogrulanir (kanonik .sig rollback_max tasir); girmemisse / farkliysa reddedilir', async () => {
+      await publish({ version: '4.3.5' });
+      const image = fakeImage('esp32-c3', 'rollback-bare');
+      const sign = (rollbackMax) => crypto.sign(
+        null,
+        buildOtaSignedMessage({ target: 'esp32-c3', version: '4.3.4', size: image.length, sha256: sha256Of(image), rollbackMax }),
+        keys.privateKey,
+      );
+      const bare = (rollbackMax) => ({ kind: 'bare', signature: sign(rollbackMax) });
+      await rejects(publish({ version: '4.3.4', firmware: image, signatureInput: bare(null), query: { ...DOWNGRADE_QUERY, rollback_max: '4.3.5' } }), { status: 400, code: 'FIRMWARE_SIGNATURE_INVALID' });
+      await rejects(publish({ version: '4.3.4', firmware: image, signatureInput: bare('4.3.5'), query: DOWNGRADE_QUERY }), { status: 400, code: 'FIRMWARE_SIGNATURE_INVALID' });
+      await rejects(publish({ version: '4.3.4', firmware: image, signatureInput: bare('4.3.5'), query: { ...DOWNGRADE_QUERY, rollback_max: '4.9.9' } }), { status: 400, code: 'FIRMWARE_SIGNATURE_INVALID' });
+      const ok = await publish({ version: '4.3.4', firmware: image, signatureInput: bare('4.3.5'), query: { ...DOWNGRADE_QUERY, rollback_max: '4.3.5' } });
+      assert.equal(ok.rollback_max, '4.3.5');
+      assert.equal(parseOtaSigFile(fs.readFileSync(path.join(dirOf('esp32-c3'), 'firmware-v4.3.4.bin.sig'), 'utf8')).sig.rollback_max, '4.3.5');
+    });
+
+    it('rollback_max tasiyan imza allow_downgrade OLMADAN yuklenemez (400 FIRMWARE_ROLLBACK_NOT_ALLOWED); dusurme olmayan yuklemede de anlamsizdir (FIRMWARE_ROLLBACK_NOT_DOWNGRADE)', async () => {
+      await publish({ version: '4.3.5' });
+      const before = fs.readFileSync(path.join(dirOf('esp32-c3'), 'manifest.json'), 'utf8');
+      const filesBefore = listDir('esp32-c3');
+      await rejects(publish({ version: '4.3.4', rollbackMax: '4.3.5' }), { status: 400, code: 'FIRMWARE_ROLLBACK_NOT_ALLOWED' });
+      // canli surumden DUSUK degil (yukseltme): rollback_max anlamsiz
+      await rejects(publish({ version: '4.3.6', rollbackMax: '4.3.9', query: DOWNGRADE_QUERY }), { status: 400, code: 'FIRMWARE_ROLLBACK_NOT_DOWNGRADE' });
+      await rejects(publish({ version: '4.3.5', rollbackMax: '4.3.9', query: DOWNGRADE_QUERY }), { status: 400, code: 'FIRMWARE_ROLLBACK_NOT_DOWNGRADE' });
+      assert.equal(fs.readFileSync(path.join(dirOf('esp32-c3'), 'manifest.json'), 'utf8'), before);
+      assert.deepEqual(listDir('esp32-c3'), filesBefore, 'reddedilen yuklemeler dosya birakmaz');
+    });
+
+    it('rollback_max paket surumunden BUYUK olmali: esit / kucuk deger 400 FIRMWARE_ROLLBACK_INVALID (hicbir cihaz dusurulemez)', async () => {
+      await publish({ version: '4.3.5' });
+      for (const rollbackMax of ['4.3.4', '4.3.3', '4.3.4.0']) {
+        await rejects(publish({ version: '4.3.4', rollbackMax, query: DOWNGRADE_QUERY }), { status: 400, code: 'FIRMWARE_ROLLBACK_INVALID' });
+      }
+      assert.equal(readManifest('esp32-c3').version, '4.3.5');
     });
 
     it('surum dusurmede denetim kaydi yazilamazsa (false ya da hata) islem YAPILMAZ: 503, canli yayin degismez', async () => {

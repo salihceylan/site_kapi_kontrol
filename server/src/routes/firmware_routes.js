@@ -136,8 +136,8 @@ firmwareRouter.get('/health', async (_req, res) => {
 // GET /firmware/:target/manifest.json
 // Yanit sekli sahadaki/yeni firmware ile ayni kalir (enabled, target, update_available, version, force,
 // usb_required, url, sha256, md5, notes, interval_hours, message). IMZALI yayinlarda ek alanlar: signature (128 hane hex, 64 bayt Ed25519),
-// signature_alg, signature_format, signature_key_id, signature_url (<imaj>.bin.sig), ve yalniz yonetici onayli surum dusurmede
-// allow_downgrade:true (+ varsa rollback_max). Imza kaynagi: manifestteki `signature` ya da paketin yanindaki `.sig` dosyasi.
+// signature_alg, signature_format, signature_key_id, signature_url (<imaj>.bin.sig), ve yalniz yonetici onayli + IMZALI surum dusurmede
+// allow_downgrade:true + rollback_max. Imza kaynagi: manifestteki `signature` ya da paketin yanindaki `.sig` dosyasi.
 firmwareRouter.get('/firmware/:target/manifest.json', async (req, res) => {
   const folderTarget = safeFirmwareTarget(req.params.target);
   if (!folderTarget) {
@@ -227,10 +227,16 @@ firmwareRouter.get('/firmware/:target/manifest.json', async (req, res) => {
     });
     const rollbackMax = typeof manifest.rollback_max === 'string' && manifest.rollback_max !== '' ? manifest.rollback_max : null;
     // Surum dusurme korumasi: cihazin bildirdigi surumden DUSUK yayin sunulmaz. Tek istisna: yoneticinin acik "downgrade" yayini
-    // (yukleme ucunda allow_downgrade + gerekce, denetim kaydina yazilir) ve yalniz sunucuda DOGRULANMIS imzali paket icin.
-    const downgradeAuthorized = signaturePolicy.verified && manifest.downgrade?.authorized === true;
+    // (yukleme ucunda allow_downgrade + gerekce, denetim kaydina yazilir), yalniz sunucuda DOGRULANMIS imzali paket icin ve yalniz imza
+    // surum dusurme yetkisi (rollback_max) tasiyorsa: cihaz yetkiyi mesaja KATARAK dogrular, yetkisiz dusurme cihazda hicbir zaman kurulmaz
+    // (bos yere ota_failed uretmesin diye sunulmaz). Kapsam: yalniz surumu rollback_max'tan (dahil) eski/esit cihazlar.
+    const downgradeAuthorized = signaturePolicy.verified && manifest.downgrade?.authorized === true && rollbackMax !== null;
     const olderThanDevice = Boolean(currentVersion) && compareVersionParts(version, currentVersion) < 0;
-    const offersDowngrade = downgradeAuthorized && olderThanDevice;
+    const withinRollbackScope = rollbackMax !== null && Boolean(currentVersion) && compareVersionParts(currentVersion, rollbackMax) <= 0;
+    const offersDowngrade = downgradeAuthorized && olderThanDevice && withinRollbackScope;
+    // rollback_max'li imza yalniz DUSURME modunda dogrulanir (cihaz o satiri yalniz o modda mesaja katar): surumu bu yayinin ALTINDA olan
+    // cihaza normal yukseltme olarak sunulmaz; ona rollback_max icermeyen normal imzali yeni surum yayinlanir.
+    const rollbackOnlyBlocksUpgrade = rollbackMax !== null && Boolean(currentVersion) && compareVersionParts(version, currentVersion) > 0;
 
     const updateAvailable =
       enabled &&
@@ -240,7 +246,7 @@ firmwareRouter.get('/firmware/:target/manifest.json', async (req, res) => {
       version &&
       fileName &&
       signaturePolicy.ok &&
-      (!currentVersion || compareVersionParts(version, currentVersion) > 0 || offersDowngrade);
+      (!currentVersion || (compareVersionParts(version, currentVersion) > 0 && !rollbackOnlyBlocksUpgrade) || offersDowngrade);
 
     let message = '';
     if (targetMismatch) {
@@ -251,6 +257,8 @@ firmwareRouter.get('/firmware/:target/manifest.json', async (req, res) => {
       message = 'Bu surum icin USB ile tam yukleme gerekiyor.';
     } else if (enabled && !signaturePolicy.ok) {
       message = signaturePolicy.message;
+    } else if (enabled && rollbackOnlyBlocksUpgrade) {
+      message = 'Bu yayin yalniz surum dusurme icin imzali; cihaz surumu bunun altinda, normal imzali yeni surum bekleniyor.';
     } else if (enabled && olderThanDevice && !offersDowngrade) {
       message = 'Cihaz surumu yayin surumunden yeni; surum dusurme sunulmuyor.';
     }

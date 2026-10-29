@@ -126,10 +126,12 @@ export function evaluateManifestSignature({
   } else if (sigFileError) {
     return result({ ok: false, code: 'SIGNATURE_MALFORMED', message: 'Paketin .sig dosyasi bozuk; yayin durduruldu.' });
   } else if (sigFile) {
+    const manifestRollback = typeof manifest?.rollback_max === 'string' && manifest.rollback_max !== '' ? manifest.rollback_max : null;
     const mismatch = sigFile.target !== target
       || sigFile.version !== version
       || sigFile.sha256 !== String(manifest?.sha256 ?? '').trim().toLowerCase()
-      || (sizeBytes !== null && sigFile.size !== sizeBytes);
+      || (sizeBytes !== null && sigFile.size !== sizeBytes)
+      || (sigFile.rollback_max ?? null) !== manifestRollback; // dusurme yetkisi imzayla manifestte birebir ayni olmali (cihaz degeri manifestten alir)
     if (mismatch) {
       return result({ ok: false, code: 'SIG_FILE_MISMATCH', message: 'Imza dosyasi manifest/paketle uyusmuyor; yayin durduruldu.' });
     }

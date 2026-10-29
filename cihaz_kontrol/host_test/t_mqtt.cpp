@@ -147,6 +147,14 @@ static std::string imza_ham(const ed_test::Anahtar& k, const std::string& hedef,
   if (n > 0) ed_test::imzala(k.tohum, reinterpret_cast<const uint8_t*>(yuk), n, imza);
   return std::string(reinterpret_cast<const char*>(imza), 64);
 }
+// aracin (tools/ota_imza) .sig JSON'u: sabit alan sirasi, 2 bosluk girinti, sonda LF; rollbackMax verilirse sha256 ile key_id arasina girer
+static std::string imza_json(const std::string& ham, const std::string& hedef, const std::string& surum, const std::string& govde,
+                             const char* rollbackMax = nullptr, const std::string& format = "KAPI-OTA-IMZA-V1", const std::string& alg = "Ed25519") {
+  return "{\n  \"format\": \"" + format + "\",\n  \"algorithm\": \"" + alg + "\",\n  \"target\": \"" + hedef + "\",\n  \"version\": \"" + surum +
+         "\",\n  \"size\": " + std::to_string(govde.size()) + ",\n  \"sha256\": \"" + hexsha(govde) + "\",\n" +
+         (rollbackMax ? std::string("  \"rollback_max\": \"") + rollbackMax + "\",\n" : std::string()) +
+         "  \"key_id\": \"0123456789abcdef\",\n  \"signature\": \"" + hexyaz(ham) + "\"\n}\n";
+}
 // paketin yanina ".sig" dosyasini koyar (sunucu simulasyonu)
 static void imza_kur(const std::string& surum, const std::string& govde, const char* rollbackMax = nullptr, const std::string& hedef = OTA_TARGET) {
   g_http_routes[fw_sig_url()] = FakeRoute{200, imza_ham(g_yayinci, hedef, surum, govde, rollbackMax), -1};
@@ -544,9 +552,9 @@ int main() {
       CHECK(!istendi("https://evil.example.com/firmware/imza.sig") && !istendi(fw_url()), "S7: baska sunucuya baglanilmadi, paket indirilmedi");
       ov = kos(manifest_ek(mfOk, "\"sig_url\":\"http://api.gudeteknoloji.com.tr/x.sig\""));
       red(ov, "imza: adres reddedildi", "S7 http (TLS'siz) adres");
-      g_http_routes[fw_sig_url()] = FakeRoute{200, std::string(600, 'a'), -1};
+      g_http_routes[fw_sig_url()] = FakeRoute{200, std::string(OTA_IMZA_DOSYA_MAX + 100, 'a'), -1};
       ov = kos(mfOk);
-      red(ov, "imza: dosya cok buyuk", "S7 600 baytlik imza dosyasi");
+      red(ov, "imza: dosya cok buyuk", "S7 sinirin ustunde imza dosyasi");
       CHECK(!istendi(fw_url()), "S7: asiri buyuk imza dosyasinda paket indirilmedi");
       g_http_routes[fw_sig_url()] = FakeRoute{200, std::string(70, 'a'), -1};
       ov = kos(mfOk);
@@ -678,6 +686,74 @@ int main() {
       for (size_t i = 0; i < client.published.size(); i++) if (client.published[i].payload.find(hexyaz(std::string(reinterpret_cast<const char*>(g_yayinci.tohum), 32))) != std::string::npos) sizinti = true;
       CHECK(!sizinti, "S12: ozel anahtar (tohum) seriye ve MQTT yayinlarina HIC yazilmadi");
     }
+    { printf("S13 imza dosyasi = aracin .sig JSON'u (KAPI-OTA-IMZA-V1): kabul; yabanci bicim / algoritma, eksik-bozuk alan, yanlis imza, asiri buyuk dosya reddi\n");
+      const std::string ham = imza_ham(g_yayinci, OTA_TARGET, S_VER, fw_govde);
+      auto jsonKur = [&](const std::string& metin) { g_http_routes[fw_sig_url()] = FakeRoute{200, metin, -1}; };
+      const std::string json = imza_json(ham, OTA_TARGET, S_VER, fw_govde);
+      CHECKF(json.size() > 300 && json.size() < OTA_IMZA_DOSYA_MAX, "(aracin .sig dosyasi tamponun icinde: %zu bayt)", json.size());
+      jsonKur(json);
+      basari(kos(mfOk), S_VER.c_str(), "S13 JSON .sig (aracin ciktisi)");
+      CHECK(istendi(fw_sig_url()), "S13: .sig indirildi");
+      // bicim toleransi: BOM, CRLF, tek satir, bas/son bosluk, bilinmeyen ek alanlar, cihazin YOK SAYDIGI JSON rollback_max alani
+      std::string crlf; for (char c : json) { if (c == '\n') crlf += '\r'; crlf += c; }
+      jsonKur(std::string("\xEF\xBB\xBF") + crlf);
+      basari(kos(mfOk), S_VER.c_str(), "S13 BOM + CRLF");
+      jsonKur("  \n" + json + "\n\n");
+      basari(kos(mfOk), S_VER.c_str(), "S13 bas/son bosluk");
+      jsonKur(std::string("{\"format\":\"KAPI-OTA-IMZA-V1\",\"algorithm\":\"Ed25519\",\"signature\":\"") + hexyaz(ham) + "\"}");
+      basari(kos(mfOk), S_VER.c_str(), "S13 yalniz gerekli alanlar, tek satir");
+      jsonKur(std::string("{\"signed_at\":\"2026-10-29\",\"notlar\":{\"x\":[1,2]},\"format\":\"KAPI-OTA-IMZA-V1\",\"algorithm\":\"Ed25519\",\"signature\":\"") + hexyaz(ham) + "\"}");
+      basari(kos(mfOk), S_VER.c_str(), "S13 bilinmeyen ek alanlar yok sayilir");
+      jsonKur(imza_json(ham, OTA_TARGET, S_VER, fw_govde, "99.0.0"));
+      basari(kos(mfOk), S_VER.c_str(), "S13 JSON'daki rollback_max alanini cihaz YOK SAYAR (yetki yalniz imzanin icindedir; yukseltme imzasi 5 satirdir)");
+      // alan degerleri dosyadan ALINMAZ: JSON baska surum/hedef/boyut/ozet diyor ama imza gercek yuk icin gecerli -> kurulur (imza paketi baglar)
+      jsonKur(imza_json(ham, DIGER_HEDEF, "1.2.3", fw_govde + "x"));
+      basari(kos(mfOk), S_VER.c_str(), "S13 JSON'un target/version/size/sha256 alanlari cihazca kullanilmaz (yuk cihazin kendi degerlerinden kurulur)");
+      // reddedilenler
+      const std::vector<std::pair<std::string, std::string>> bicim = {
+        {"yabanci/eski etiket (SKP-OTA-V1)", imza_json(ham, OTA_TARGET, S_VER, fw_govde, nullptr, "SKP-OTA-V1")},
+        {"bilinmeyen etiket", imza_json(ham, OTA_TARGET, S_VER, fw_govde, nullptr, "KAPI-OTA-IMZA-V2")},
+        {"kucuk harfli etiket", imza_json(ham, OTA_TARGET, S_VER, fw_govde, nullptr, "kapi-ota-imza-v1")},
+        {"algoritma RSA", imza_json(ham, OTA_TARGET, S_VER, fw_govde, nullptr, "KAPI-OTA-IMZA-V1", "RSA")},
+        {"algoritma kucuk harf (ed25519)", imza_json(ham, OTA_TARGET, S_VER, fw_govde, nullptr, "KAPI-OTA-IMZA-V1", "ed25519")},
+        {"signature alani yok", "{\"format\":\"KAPI-OTA-IMZA-V1\",\"algorithm\":\"Ed25519\"}"},
+        {"format alani yok", std::string("{\"algorithm\":\"Ed25519\",\"signature\":\"") + hexyaz(ham) + "\"}"},
+        {"signature 126 hane", std::string("{\"format\":\"KAPI-OTA-IMZA-V1\",\"algorithm\":\"Ed25519\",\"signature\":\"") + hexyaz(ham).substr(0, 126) + "\"}"},
+        {"signature 130 hane", std::string("{\"format\":\"KAPI-OTA-IMZA-V1\",\"algorithm\":\"Ed25519\",\"signature\":\"") + hexyaz(ham) + "00\"}"},
+        {"signature hex degil", std::string("{\"format\":\"KAPI-OTA-IMZA-V1\",\"algorithm\":\"Ed25519\",\"signature\":\"") + std::string(128, 'z') + "\"}"},
+        {"signature base64 (88) JSON'da kabul edilmez", std::string("{\"format\":\"KAPI-OTA-IMZA-V1\",\"algorithm\":\"Ed25519\",\"signature\":\"") + b64yaz(ham) + "\"}"},
+        {"signature sayi", "{\"format\":\"KAPI-OTA-IMZA-V1\",\"algorithm\":\"Ed25519\",\"signature\":12345}"},
+        {"kesik JSON", json.substr(0, json.size() / 2)},
+        {"JSON degil ama { ile basliyor", "{ bu bir imza degil"},
+        {"bos nesne", "{}"},
+        {"dizi", "[1,2,3]"},
+      };
+      for (const auto& b : bicim) {
+        jsonKur(b.second);
+        const auto ov = kos(mfOk);
+        red(ov, "imza: bicim gecersiz", ("S13 " + b.first).c_str());
+        CHECKF(!istendi(fw_url()), "S13 %s: bicim hatasinda paket INDIRILMEDI", b.first.c_str());
+      }
+      // bicim gecerli ama imza yanlis: paket indirilir, imzada reddedilir, Update.abort
+      jsonKur(imza_json(imza_ham(g_saldirgan, OTA_TARGET, S_VER, fw_govde), OTA_TARGET, S_VER, fw_govde));
+      red(kos(mfOk), "imza: dogrulama basarisiz", "S13 saldirganin imzasi JSON icinde");
+      CHECK(Update.aborts == 1 && Update.ends == 0, "S13: yanlis imza -> Update.abort, Update.end YOK");
+      jsonKur(imza_json(imza_ham(g_yayinci, OTA_TARGET, "9.20.1", fw_govde), OTA_TARGET, S_VER, fw_govde));
+      red(kos(mfOk), "imza: dogrulama basarisiz", "S13 baska surum icin imza JSON'da dogru surum yazsa da");
+      // asiri buyuk JSON dosyasi
+      jsonKur(json.substr(0, json.size() - 2) + std::string(OTA_IMZA_DOSYA_MAX, ' ') + "\n}\n");
+      red(kos(mfOk), "imza: dosya cok buyuk", "S13 sinirin ustunde JSON");
+      CHECK(!istendi(fw_url()), "S13: asiri buyuk JSON'da paket indirilmedi");
+      // izinli surum dusurme + JSON .sig (rollback_max imzada ve manifestte)
+      { const std::string eski = "1.0.0";
+        const std::string mfEski = manifest_ek(manifest_json(true, eski, fw_sha, fw_url()), "\"allow_downgrade\":true,\"rollback_max\":\"" + cur + "\"");
+        jsonKur(imza_json(imza_ham(g_yayinci, OTA_TARGET, eski, fw_govde, cur.c_str()), OTA_TARGET, eski, fw_govde, cur.c_str()));
+        basari(kos(mfEski), eski.c_str(), "S13 izinli surum dusurme (JSON .sig, rollback_max imzali)");
+        jsonKur(imza_json(imza_ham(g_yayinci, OTA_TARGET, eski, fw_govde), OTA_TARGET, eski, fw_govde));
+        red(kos(mfEski), "imza: dogrulama basarisiz", "S13 dusurme izni var ama JSON'daki imza rollback_max'siz");
+      }
+    }
+
     test_anahtarini_kur(g_yayinci.genel);
     yeniden_acilis();
   }
