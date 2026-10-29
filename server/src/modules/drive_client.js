@@ -11,7 +11,7 @@ const UPLOAD = 'https://www.googleapis.com/upload/drive/v3/files';
 const FOLDER_MIME = 'application/vnd.google-apps.folder';
 const TIMEOUT_MS = 60_000;
 
-/** Drive hatası: kind = 'auth' (izin kaldırıldı / belirteç geçersiz), 'not_found', 'quota', 'transient'. */
+/** Drive hatası: kind = 'auth' (izin kaldırıldı / belirteç geçersiz), 'not_found', 'quota' (Google depolama alanı DOLU), 'rate_limit' (istek sınırı; geçici), 'integrity' (Drive'a ulaşan kopya doğrulanamadı), 'transient'. */
 export class DriveError extends Error {
   constructor(kind, message, status = 0) {
     super(message);
@@ -24,7 +24,9 @@ export class DriveError extends Error {
 function classify(status, bodyText) {
   if (status === 401 || /invalid_grant/.test(bodyText)) return 'auth';
   if (status === 404) return 'not_found';
-  if (status === 403 && /storageQuotaExceeded|quotaExceeded|rateLimitExceeded|userRateLimitExceeded/.test(bodyText)) return 'quota';
+  // Depolama alanı dolu (kalıcı, yer açılana dek sürer) ile istek sınırı (geçici) AYRI nedenlerdir: yöneticiye verilecek yönerge farklıdır.
+  if (status === 403 && /storageQuotaExceeded/.test(bodyText)) return 'quota';
+  if ((status === 403 || status === 429) && /quotaExceeded|rateLimitExceeded|userRateLimitExceeded/.test(bodyText)) return 'rate_limit';
   if (status === 403) return 'auth';
   return 'transient';
 }
@@ -106,18 +108,38 @@ export function createDriveClient({ config, fetchImpl = globalThis.fetch } = {})
       });
       return created.id;
     },
-    /** Tek istekte (multipart) yükler; { id, size } döner. */
+    /** Tek istekte (multipart) yükler; { id, size, sha256 } döner (sha256: Drive'ın hesapladığı SHA-256; yanıtta yoksa null). */
     async uploadFile(accessToken, { name, mimeType, parentId, data }) {
       const boundary = `kapi${Date.now().toString(16)}${Math.random().toString(16).slice(2)}`;
       const meta = JSON.stringify({ name, parents: [parentId] });
       const head = Buffer.from(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${meta}\r\n--${boundary}\r\nContent-Type: ${mimeType}\r\n\r\n`);
       const tail = Buffer.from(`\r\n--${boundary}--`);
-      const body = await json(`${UPLOAD}?uploadType=multipart&fields=id,size`, {
+      const body = await json(`${UPLOAD}?uploadType=multipart&fields=id,size,sha256Checksum`, {
         method: 'POST',
         headers: bearer(accessToken, { 'Content-Type': `multipart/related; boundary=${boundary}` }),
         body: Buffer.concat([head, data, tail]),
       });
-      return { id: body.id, size: Number(body.size) };
+      return { id: body.id, size: Number(body.size), sha256: body.sha256Checksum ? String(body.sha256Checksum).toLowerCase() : null };
+    },
+    /** Dosya üst verisi (yükleme yanıtında sağlama toplamı yoksa doğrulama için): { id, size, sha256, trashed }. */
+    async getFileMeta(accessToken, fileId) {
+      const body = await json(`${API}/files/${encodeURIComponent(fileId)}?fields=id,size,sha256Checksum,trashed`, { headers: bearer(accessToken) });
+      return { id: body.id, size: Number(body.size), sha256: body.sha256Checksum ? String(body.sha256Checksum).toLowerCase() : null, trashed: body.trashed === true };
+    },
+    /** Uygulamanın kendi oluşturduğu dosyayı ÇÖP KUTUSUNA taşır (kalıcı silme değil; Drive'da geri alınabilir). Yalnız doğrulanamayan kopya için kullanılır. */
+    async trashFile(accessToken, fileId) {
+      await json(`${API}/files/${encodeURIComponent(fileId)}?fields=id`, {
+        method: 'PATCH',
+        headers: bearer(accessToken, { 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ trashed: true }),
+      });
+    },
+    /** Hesabın depolama kotası: { limit (bayt; sınırsız hesapta null), usage (bayt) }. */
+    async aboutQuota(accessToken) {
+      const body = await json(`${API}/about?fields=storageQuota(limit,usage)`, { headers: bearer(accessToken) });
+      const quota = body?.storageQuota ?? {};
+      const limit = quota.limit === undefined || quota.limit === null ? null : Number(quota.limit);
+      return { limit: Number.isFinite(limit) && limit > 0 ? limit : null, usage: Number(quota.usage) || 0 };
     },
     /** Dosya içeriği: { body (web ReadableStream), contentLength } ; yoksa DriveError('not_found'). */
     async downloadFile(accessToken, fileId) {
