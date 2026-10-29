@@ -107,9 +107,9 @@ Bu bölüm API sürecinin ayağa kalkması (PM2, ortam doğrulaması, /health), 
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/server.js:369](../../server/src/server.js#L369) | <code>async function startServer() {</code> | Açılış sırası: checkEnvOrExit → ensureDbSchema → startMqttBridge → temizlik → dinleme; ilk başarısız adım süreci düşürür |
-| [server/src/server.js:411](../../server/src/server.js#L411) | <code>console.error('Server startup failed:', error);</code> | Açılışta fırlatılan her hata (DB'ye ulaşılamadı, şema SQL hatası) buraya düşer, ardından process.exit(1) |
-| [server/src/server.js:371](../../server/src/server.js#L371) | <code>checkEnvOrExit();</code> | Ortam doğrulaması DB'den ÖNCE çalışır; JWT_SECRET hatasında DB'ye hiç bağlanılmaz |
+| [server/src/server.js:378](../../server/src/server.js#L378) | <code>async function startServer() {</code> | Açılış sırası: checkEnvOrExit → ensureDbSchema → startMqttBridge → temizlik → dinleme; ilk başarısız adım süreci düşürür |
+| [server/src/server.js:420](../../server/src/server.js#L420) | <code>console.error('Server startup failed:', error);</code> | Açılışta fırlatılan her hata (DB'ye ulaşılamadı, şema SQL hatası) buraya düşer, ardından process.exit(1) |
+| [server/src/server.js:380](../../server/src/server.js#L380) | <code>checkEnvOrExit();</code> | Ortam doğrulaması DB'den ÖNCE çalışır; JWT_SECRET hatasında DB'ye hiç bağlanılmaz |
 | [server/src/config/process_handlers.js:28](../../server/src/config/process_handlers.js#L28) | <code>const onUncaughtException = (error) =&gt; {</code> | Yakalanmamış istisna: günlüğe yazar ve exit(1); PM2 yeniden başlatır |
 | [server/ecosystem.config.cjs:38](../../server/ecosystem.config.cjs#L38) | <code>min_uptime: '15s',</code> | 15 sn dayanmayan çıkışlar "kararsız" sayılır ve yeniden başlatma sayacını artırır |
 | [server/ecosystem.config.cjs:39](../../server/ecosystem.config.cjs#L39) | <code>max_restarts: 30,</code> | Üst üste kararsız yeniden başlatma sınırı; aşılınca PM2 süreci errored bırakır |
@@ -151,7 +151,7 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 100 --nostrea
 | [server/src/config/env.js:68](../../server/src/config/env.js#L68) | <code>'JWT_SECRET tanimli degil veya yer tutucu bir deger. Guclu, rastgele bir secret tanimlayi…</code> | Hata iletisinin üretildiği yer: secret boş ya da yer tutucuysa evaluateJwtSecret ok:false döner |
 | [server/src/config/env.js:46](../../server/src/config/env.js#L46) | <code>export function isPlaceholderSecret(value) {</code> | Hangi değerlerin "yer tutucu" sayıldığı (PLACEHOLDER_EXACT / PLACEHOLDER_PATTERNS: change_this_secret, your-secret, <JWT_SECRET> ...) |
 | [server/src/config/env.js:250](../../server/src/config/env.js#L250) | <code>const jwtCheck = evaluateJwtSecret(env.JWT_SECRET);</code> | validateEnv içinde TEK "errors" kaynağı budur; diğer eksikler yalnız uyarıdır |
-| [server/src/server.js:289](../../server/src/server.js#L289) | <code>function checkEnvOrExit() {</code> | errors doluysa [ENV] HATA yazar ve process.exit(1); uyarılar [ENV] UYARI olarak yazılır |
+| [server/src/server.js:298](../../server/src/server.js#L298) | <code>function checkEnvOrExit() {</code> | errors doluysa [ENV] HATA yazar ve process.exit(1); uyarılar [ENV] UYARI olarak yazılır |
 
 **Olası nedenler**
 - server/.env içinde JWT_SECRET yok ya da boş
@@ -182,7 +182,7 @@ ssh -p 22667 salihceylan@178.210.161.55 'bash -s' < deploy/remote_audit.sh   # s
 | --- | --- | --- |
 | [server/src/config/env.js:72](../../server/src/config/env.js#L72) | <code>if (length &lt; MIN_RECOMMENDED_JWT_SECRET_LENGTH) {</code> | 32 karakterden kısa secret yalnız UYARI üretir (ok:true); sunucu açılır |
 | [server/src/config/env.js:258](../../server/src/config/env.js#L258) | <code>warnings.push('JWT_EXPIRES_IN gecersiz bicimde (ornek: 30d, 12h); varsayilan 30 gun kulla…</code> | JWT_EXPIRES_IN biçimi hatalıysa (30d, 12h gibi olmalı) yalnız uyarı; token üretimi başarısız olabilir |
-| [server/src/server.js:292](../../server/src/server.js#L292) | <code>console.warn(`[ENV] UYARI: ${warning}`);</code> | Tüm uyarıların yazıldığı yer; secret değeri asla yazılmaz (yalnız uzunluk) |
+| [server/src/server.js:301](../../server/src/server.js#L301) | <code>console.warn(`[ENV] UYARI: ${warning}`);</code> | Tüm uyarıların yazıldığı yer; secret değeri asla yazılmaz (yalnız uzunluk) |
 | [deploy/README.md:39](../../deploy/README.md#L39) | <code>- Canlı `JWT_SECRET` (≥32 karakter), `JWT_EXPIRES_IN` ve `NODE_ENV=production` kararları …</code> | Canlıdaki secret/süre/NODE_ENV kararları kullanıcıya aittir; kendiliğinden değiştirilmez |
 
 **Olası nedenler**
@@ -211,7 +211,7 @@ ssh -p 22667 salihceylan@178.210.161.55 'bash -s' < deploy/remote_audit.sh   # s
 | [server/src/config/env.js:326](../../server/src/config/env.js#L326) | <code>warnings.push('COMPANY_API_KEY tanimli degil; /api/company/* yalnizca super_user JWT ile …</code> | Anahtar yoksa /api/company/* yalnız super_user JWT ile çalışır (şirket aracı X-Company-Key kullanamaz) |
 | [server/src/config/env.js:332](../../server/src/config/env.js#L332) | <code>warnings.push('CORS allowlist bos (CORS_ORIGINS/PUBLIC_APP_URL/PUBLIC_BASE_URL); tarayici…</code> | CORS_ORIGINS/PUBLIC_APP_URL/PUBLIC_BASE_URL üçü de boşsa tarayıcı tabanlı cross-origin istekler reddedilir |
 | [server/src/config/env.js:336](../../server/src/config/env.js#L336) | <code>warnings.push('NODE_ENV=production degil (Express gelistirme varsayilanlari aktif); oneri…</code> | NODE_ENV production değilse yalnız uyarı (hata yanıtları ortamdan bağımsız güvenlidir) |
-| [server/src/server.js:295](../../server/src/server.js#L295) | <code>console.warn(`[CORS] Gecersiz origin girdisi yok sayildi: ${entry}`);</code> | CORS_ORIGINS içindeki geçersiz girdi (şema yok, * vb.) sessizce atılmaz; burada loglanır |
+| [server/src/server.js:304](../../server/src/server.js#L304) | <code>console.warn(`[CORS] Gecersiz origin girdisi yok sayildi: ${entry}`);</code> | CORS_ORIGINS içindeki geçersiz girdi (şema yok, * vb.) sessizce atılmaz; burada loglanır |
 
 **Olası nedenler**
 - İlgili anahtar sunucudaki server/.env dosyasında yok/boş
@@ -241,7 +241,7 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 200 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/server.js:106](../../server/src/server.js#L106) | <code>dotenv.config();</code> | .env yalnız süreç AÇILIRKEN okunur; dotenv varsayılanı, süreç ortamında zaten tanımlı değişkenin üzerine YAZMAZ |
+| [server/src/server.js:109](../../server/src/server.js#L109) | <code>dotenv.config();</code> | .env yalnız süreç AÇILIRKEN okunur; dotenv varsayılanı, süreç ortamında zaten tanımlı değişkenin üzerine YAZMAZ |
 | [deploy/README.md:27](../../deploy/README.md#L27) | <code>6. **Etkinleştirme:** `ssh ... "bash /home/salihceylan/kapi_remote_deploy_$TS.sh $TS acti…</code> | Dağıtım sonrası etkinleştirme PM2'yi --update-env ile yeniden başlatır |
 | [server/ecosystem.config.cjs:15](../../server/ecosystem.config.cjs#L15) | <code>// Gizli degerler BURAYA yazilmaz; server/.env dosyasindan dotenv ile okunur</code> | Gizli değerler ecosystem'e değil server/.env'e yazılır; cwd = server/ olduğu için dotenv bulur |
 
@@ -268,9 +268,9 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 restart kapi-api --update-env && sl
 | --- | --- | --- |
 | [server/src/routes/firmware_routes.js:123](../../server/src/routes/firmware_routes.js#L123) | <code>firmwareRouter.get('/health', async (_req, res) =&gt; {</code> | /health uç noktası: DB'ye SELECT 1 atar; başarılıysa ok:true/connected, hata olursa 500 |
 | [server/src/routes/firmware_routes.js:132](../../server/src/routes/firmware_routes.js#L132) | <code>res.status(500).json({ ok: false, database: 'disconnected', mqtt });</code> | catch (_e) hatayı YUTAR: nedeni ne yanıtta ne günlükte görünür; nedeni docker/psql ile arayın |
-| [server/src/db.js:103](../../server/src/db.js#L103) | <code>export async function checkDbConnection() {</code> | Havuzdan bağlantı alıp SELECT 1 çalıştırır; havuz doluysa ya da DB kapalıysa fırlatır |
-| [server/src/db.js:91](../../server/src/db.js#L91) | <code>connectionTimeoutMillis: DB_CONNECT_TIMEOUT_MS,</code> | Bağlantı alma/kurma zaman aşımı (varsayılan 5 sn, DB_CONNECT_TIMEOUT_MS) |
-| [server/src/db.js:78](../../server/src/db.js#L78) | <code>const DB_POOL_MAX = Math.max(2, Number(process.env.DB_POOL_MAX) &#124;&#124; 12);</code> | Havuz üst sınırı 12; hepsi meşgulse yeni istek bağlantı bekler ve zaman aşımına düşer |
+| [server/src/db.js:107](../../server/src/db.js#L107) | <code>export async function checkDbConnection() {</code> | Havuzdan bağlantı alıp SELECT 1 çalıştırır; havuz doluysa ya da DB kapalıysa fırlatır |
+| [server/src/db.js:95](../../server/src/db.js#L95) | <code>connectionTimeoutMillis: DB_CONNECT_TIMEOUT_MS,</code> | Bağlantı alma/kurma zaman aşımı (varsayılan 5 sn, DB_CONNECT_TIMEOUT_MS) |
+| [server/src/db.js:82](../../server/src/db.js#L82) | <code>const DB_POOL_MAX = Math.max(2, Number(process.env.DB_POOL_MAX) &#124;&#124; 12);</code> | Havuz üst sınırı 12; hepsi meşgulse yeni istek bağlantı bekler ve zaman aşımına düşer |
 
 **Olası nedenler**
 - PostgreSQL konteyneri durmuş / unhealthy / yeniden başlıyor
@@ -439,7 +439,7 @@ ssh -p 22667 salihceylan@178.210.161.55 'bash -s' < deploy/remote_audit.sh
 | [sunucu_kurulum.txt:92](../../sunucu_kurulum.txt#L92) | <code>9) NGINX REVERSE PROXY</code> | nginx site dosyası /etc/nginx/sites-available/api.gudeteknoloji.com.tr; hedef 127.0.0.1:8080 (yapılandırma depoda YOK, sunucuda) |
 | [sunucu_kurulum.txt:99](../../sunucu_kurulum.txt#L99) | <code>sudo nginx -t</code> | Yapılandırma testi ve reload: sudo nginx -t; sudo systemctl reload nginx |
 | [sunucu_kurulum.txt:139](../../sunucu_kurulum.txt#L139) | <code>- Guvenlik duvari: 5432 (PostgreSQL) ve 8080 (Node) disariya ACIK olmamali; yalnizca 80/4…</code> | 8080 yalnız nginx'ten erişilmeli; dışarıdan 8080 testi başarısız olması normaldir |
-| [server/src/server.js:117](../../server/src/server.js#L117) | <code>app.set('trust proxy', resolveTrustProxy(process.env).value);</code> | trust proxy varsayılanı "loopback": istemci IP'si yalnız aynı makinedeki nginx'in X-Forwarded-For başlığından alınır; TRUST_PROXY ile değişir (Cloudflare turuncu bulut önündeyse "loopback,cloudflare") |
+| [server/src/server.js:120](../../server/src/server.js#L120) | <code>app.set('trust proxy', resolveTrustProxy(process.env).value);</code> | trust proxy varsayılanı "loopback": istemci IP'si yalnız aynı makinedeki nginx'in X-Forwarded-For başlığından alınır; TRUST_PROXY ile değişir (Cloudflare turuncu bulut önündeyse "loopback,cloudflare") |
 
 **Olası nedenler**
 - kapi-api çalışmıyor/çöküp yeniden başlıyor (nginx 502 verir) → önce altyapi-api-acilmiyor-pm2-dongu
@@ -466,8 +466,8 @@ ssh -p 22667 salihceylan@178.210.161.55 "sudo tail -n 30 /var/log/nginx/error.lo
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/server.js:118](../../server/src/server.js#L118) | <code>const port = Number(process.env.PORT &#124;&#124; 8080);</code> | Dinlenen port: PORT ortam değişkeni, yoksa 8080 (nginx buraya yönlenir) |
-| [server/src/server.js:401](../../server/src/server.js#L401) | <code>httpServer = listenHost ? app.listen(port, listenHost, onListening) : app.listen(port, on…</code> | Dinleme hatası bu çağrıda try/catch ile YAKALANMAZ (sunucuda "error" dinleyicisi yok); Node'un yakalanmamış istisnasına döner. LISTEN_HOST verilmişse (ör. 127.0.0.1: yalnız aynı makinedeki nginx erişir) yalnız o adreste dinlenir |
+| [server/src/server.js:121](../../server/src/server.js#L121) | <code>const port = Number(process.env.PORT &#124;&#124; 8080);</code> | Dinlenen port: PORT ortam değişkeni, yoksa 8080 (nginx buraya yönlenir) |
+| [server/src/server.js:410](../../server/src/server.js#L410) | <code>httpServer = listenHost ? app.listen(port, listenHost, onListening) : app.listen(port, on…</code> | Dinleme hatası bu çağrıda try/catch ile YAKALANMAZ (sunucuda "error" dinleyicisi yok); Node'un yakalanmamış istisnasına döner. LISTEN_HOST verilmişse (ör. 127.0.0.1: yalnız aynı makinedeki nginx erişir) yalnız o adreste dinlenir |
 | [server/src/config/process_handlers.js:28](../../server/src/config/process_handlers.js#L28) | <code>const onUncaughtException = (error) =&gt; {</code> | Bu yüzden günlükte "Server startup failed" değil "[uncaughtException] <id>: Error: listen EADDRINUSE" görünür; exit(1) |
 
 **Olası nedenler**
@@ -496,10 +496,10 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 status"
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/server.js:318](../../server/src/server.js#L318) | <code>async function shutdown(signal) {</code> | Düzgün kapanma: yeni bağlantı almayı bırakır, süren istekleri bitirir, MQTT ve DB havuzunu kapatır |
-| [server/src/server.js:312](../../server/src/server.js#L312) | <code>const SHUTDOWN_GRACE_MS = 8000;</code> | 8 sn içinde bitmezse zorla exit(1) |
-| [server/src/server.js:328](../../server/src/server.js#L328) | <code>console.error('[SHUTDOWN] Sure asildi, zorla cikiliyor.');</code> | Zorla çıkış satırı; uzun süren istek/bağlantı kapanmayı geciktirmiştir |
-| [server/src/server.js:349](../../server/src/server.js#L349) | <code>await stopMqttBridge();</code> | MQTT bağlantısı kapatılır (stopMqttBridge asla fırlatmaz) |
+| [server/src/server.js:327](../../server/src/server.js#L327) | <code>async function shutdown(signal) {</code> | Düzgün kapanma: yeni bağlantı almayı bırakır, süren istekleri bitirir, MQTT ve DB havuzunu kapatır |
+| [server/src/server.js:321](../../server/src/server.js#L321) | <code>const SHUTDOWN_GRACE_MS = 8000;</code> | 8 sn içinde bitmezse zorla exit(1) |
+| [server/src/server.js:337](../../server/src/server.js#L337) | <code>console.error('[SHUTDOWN] Sure asildi, zorla cikiliyor.');</code> | Zorla çıkış satırı; uzun süren istek/bağlantı kapanmayı geciktirmiştir |
+| [server/src/server.js:358](../../server/src/server.js#L358) | <code>await stopMqttBridge();</code> | MQTT bağlantısı kapatılır (stopMqttBridge asla fırlatmaz) |
 | [server/ecosystem.config.cjs:41](../../server/ecosystem.config.cjs#L41) | <code>kill_timeout: 10000,</code> | PM2 SIGKILL'i 10 sn sonra gönderir; bu, 8 sn'lik kapanma süresinden büyük olmalıdır |
 
 **Olası nedenler**
@@ -614,8 +614,8 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 describe kapi-api | grep -E 'script
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/db.js:234](../../server/src/db.js#L234) | <code>'Veritabani semasi kurulu degil ("users" tablosu yok). Bos veritabaninda once `node scrip…</code> | ensureDbSchema ilk iş "users" tablosunu arar; yoksa anlaşılır bir hata fırlatır (ALTER TABLE users patlamasın diye) |
-| [server/src/db.js:227](../../server/src/db.js#L227) | <code>export async function ensureDbSchema() {</code> | Temel tablolar migration'larla gelir; ensureDbSchema yalnız EKLEYİCİ ve IF NOT EXISTS ifadeleri çalıştırır |
+| [server/src/db.js:238](../../server/src/db.js#L238) | <code>'Veritabani semasi kurulu degil ("users" tablosu yok). Bos veritabaninda once `node scrip…</code> | ensureDbSchema ilk iş "users" tablosunu arar; yoksa anlaşılır bir hata fırlatır (ALTER TABLE users patlamasın diye) |
+| [server/src/db.js:231](../../server/src/db.js#L231) | <code>export async function ensureDbSchema() {</code> | Temel tablolar migration'larla gelir; ensureDbSchema yalnız EKLEYİCİ ve IF NOT EXISTS ifadeleri çalıştırır |
 | [server/migrations/001_init.sql:19](../../server/migrations/001_init.sql#L19) | <code>CREATE TABLE IF NOT EXISTS users (</code> | users tablosunun tek tanımı migration 001'dedir (db.js bunu oluşturmaz) |
 | [docker-compose.yml:30](../../docker-compose.yml#L30) | <code>- ./server/migrations:/docker-entrypoint-initdb.d:ro</code> | Migration SQL'leri YALNIZ boş veri dizininde ilk kurulumda otomatik çalışır |
 | [server/scripts/migrate.js:497](../../server/scripts/migrate.js#L497) | <code>async function runApply(opts, env, log, logError, open, ask) {</code> | Boş veritabanına migration uygulayan elle komut (node scripts/migrate.js --apply) |
@@ -649,9 +649,9 @@ ssh -p 22667 salihceylan@178.210.161.55 "cd /var/www/site_kapi_kontrol/server &&
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/db.js:227](../../server/src/db.js#L227) | <code>export async function ensureDbSchema() {</code> | Tablo/kolon/indeks tanımlarının çoğu burada (CREATE TABLE IF NOT EXISTS / ADD COLUMN IF NOT EXISTS); AÇILIŞTA çalışır |
-| [server/src/db.js:1025](../../server/src/db.js#L1025) | <code>CREATE TABLE IF NOT EXISTS pending_registrations (</code> | Örnek (son eklenen): e-posta doğrulama bekleyen kayıt tablosu; migration 028 ile aynı DDL |
-| [server/src/db.js:698](../../server/src/db.js#L698) | <code>CREATE TABLE IF NOT EXISTS ota_update_jobs (</code> | ota_update_jobs / ota_update_job_devices / app_maintenance_runs YALNIZ db.js'te tanımlı (migration'da yok) |
+| [server/src/db.js:231](../../server/src/db.js#L231) | <code>export async function ensureDbSchema() {</code> | Tablo/kolon/indeks tanımlarının çoğu burada (CREATE TABLE IF NOT EXISTS / ADD COLUMN IF NOT EXISTS); AÇILIŞTA çalışır |
+| [server/src/db.js:1029](../../server/src/db.js#L1029) | <code>CREATE TABLE IF NOT EXISTS pending_registrations (</code> | Örnek (son eklenen): e-posta doğrulama bekleyen kayıt tablosu; migration 028 ile aynı DDL |
+| [server/src/db.js:702](../../server/src/db.js#L702) | <code>CREATE TABLE IF NOT EXISTS ota_update_jobs (</code> | ota_update_jobs / ota_update_job_devices / app_maintenance_runs YALNIZ db.js'te tanımlı (migration'da yok) |
 | [server/migrations/001_init.sql:19](../../server/migrations/001_init.sql#L19) | <code>CREATE TABLE IF NOT EXISTS users (</code> | users tablosu YALNIZ migration'da tanımlı; db.js yalnız bu tabloya kolon ekler |
 | [server/scripts/migrate.js:43](../../server/scripts/migrate.js#L43) | <code>export const MIGRATIONS_TABLE = 'schema_migrations';</code> | Migration koşucusunun kendi takip tablosu (uygulama tablosu değildir) |
 
@@ -681,14 +681,14 @@ ssh -p 22667 salihceylan@178.210.161.55 'docker exec -i site_kapi_kontrol_postgr
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/db.js:332](../../server/src/db.js#L332) | <code>CREATE UNIQUE INDEX IF NOT EXISTS idx_users_login_name_unique</code> | login_name (küçük harfe göre) benzersiz indeksi: mevcut veride yinelenen değer varsa oluşturulamaz |
-| [server/src/db.js:547](../../server/src/db.js#L547) | <code>CREATE UNIQUE INDEX IF NOT EXISTS idx_sites_mqtt_site_id_unique</code> | sites.mqtt_site_id benzersiz indeksi (önce NULL satırlar UPDATE ile doldurulur) |
-| [server/src/db.js:544](../../server/src/db.js#L544) | <code>ALTER COLUMN mqtt_site_id SET NOT NULL</code> | NULL kalan satır varsa başarısız olur; öncesindeki UPDATE bunu önlemek içindir |
-| [server/src/db.js:644](../../server/src/db.js#L644) | <code>CREATE UNIQUE INDEX IF NOT EXISTS idx_devices_mqtt_username_unique</code> | devices.mqtt_username benzersiz indeksi (NULL olmayanlar için) |
-| [server/src/db.js:925](../../server/src/db.js#L925) | <code>CREATE UNIQUE INDEX IF NOT EXISTS idx_door_access_logs_client_log</code> | Offline log idempotansı: (device_uid, client_log_id) benzersiz indeksi |
-| [server/src/db.js:915](../../server/src/db.js#L915) | <code>ALTER TABLE door_access_logs ALTER COLUMN site_code TYPE BIGINT;</code> | Her açılışta çalışan tip değişikliği ifadeleri (sütun zaten BIGINT ise yan etkisizdir) |
-| [server/src/db.js:309](../../server/src/db.js#L309) | <code>ELSIF current_def NOT LIKE '%super_user%'</code> | users_role_check yalnız eksikse/eski tanımsa yenilenir; her açılışta DROP/ADD yapılmaz |
-| [server/src/server.js:411](../../server/src/server.js#L411) | <code>console.error('Server startup failed:', error);</code> | Hata burada günlüğe yazılır ve süreç kapanır (PM2 döngüsü başlar) |
+| [server/src/db.js:336](../../server/src/db.js#L336) | <code>CREATE UNIQUE INDEX IF NOT EXISTS idx_users_login_name_unique</code> | login_name (küçük harfe göre) benzersiz indeksi: mevcut veride yinelenen değer varsa oluşturulamaz |
+| [server/src/db.js:551](../../server/src/db.js#L551) | <code>CREATE UNIQUE INDEX IF NOT EXISTS idx_sites_mqtt_site_id_unique</code> | sites.mqtt_site_id benzersiz indeksi (önce NULL satırlar UPDATE ile doldurulur) |
+| [server/src/db.js:548](../../server/src/db.js#L548) | <code>ALTER COLUMN mqtt_site_id SET NOT NULL</code> | NULL kalan satır varsa başarısız olur; öncesindeki UPDATE bunu önlemek içindir |
+| [server/src/db.js:648](../../server/src/db.js#L648) | <code>CREATE UNIQUE INDEX IF NOT EXISTS idx_devices_mqtt_username_unique</code> | devices.mqtt_username benzersiz indeksi (NULL olmayanlar için) |
+| [server/src/db.js:929](../../server/src/db.js#L929) | <code>CREATE UNIQUE INDEX IF NOT EXISTS idx_door_access_logs_client_log</code> | Offline log idempotansı: (device_uid, client_log_id) benzersiz indeksi |
+| [server/src/db.js:919](../../server/src/db.js#L919) | <code>ALTER TABLE door_access_logs ALTER COLUMN site_code TYPE BIGINT;</code> | Her açılışta çalışan tip değişikliği ifadeleri (sütun zaten BIGINT ise yan etkisizdir) |
+| [server/src/db.js:313](../../server/src/db.js#L313) | <code>ELSIF current_def NOT LIKE '%super_user%'</code> | users_role_check yalnız eksikse/eski tanımsa yenilenir; her açılışta DROP/ADD yapılmaz |
+| [server/src/server.js:420](../../server/src/server.js#L420) | <code>console.error('Server startup failed:', error);</code> | Hata burada günlüğe yazılır ve süreç kapanır (PM2 döngüsü başlar) |
 
 **Olası nedenler**
 - Mevcut veride yinelenen değer yüzünden bir UNIQUE indeks oluşturulamıyor (login_name, mqtt_username, e-posta, client_log_id)
@@ -720,12 +720,12 @@ ssh -p 22667 salihceylan@178.210.161.55 'docker exec -i site_kapi_kontrol_postgr
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/db.js:78](../../server/src/db.js#L78) | <code>const DB_POOL_MAX = Math.max(2, Number(process.env.DB_POOL_MAX) &#124;&#124; 12);</code> | Aynı anda en fazla 12 bağlantı (DB_POOL_MAX); hepsi doluysa yenisi bağlantı bekler |
-| [server/src/db.js:92](../../server/src/db.js#L92) | <code>statement_timeout: DB_STATEMENT_TIMEOUT_MS,</code> | Tek sorgunun en uzun süresi 30 sn (DB_STATEMENT_TIMEOUT_MS); kilit beklemeyi de kapsar |
-| [server/src/db.js:93](../../server/src/db.js#L93) | <code>query_timeout: DB_STATEMENT_TIMEOUT_MS + 5000,</code> | İstemci tarafı sorgu zaman aşımı: sunucu iptal etmezse 5 sn sonra istemci bırakır |
-| [server/src/db.js:88](../../server/src/db.js#L88) | <code>options: '-c timezone=Europe/Istanbul -c idle_in_transaction_session_timeout=60000',</code> | Açık unutulan transaction 60 sn sonra SUNUCU tarafında kapatılır (kilit sızıntısını önler) |
-| [server/src/db.js:100](../../server/src/db.js#L100) | <code>console.error('[DB] Bosta bekleyen istemci hatasi:', error?.code &#124;&#124; error?.message);</code> | Boştaki bağlantı koparsa süreç düşmez; yalnız bu satır yazılır |
-| [server/src/db.js:95](../../server/src/db.js#L95) | <code>application_name: 'kapi-api',</code> | pg_stat_activity'de API bağlantılarını ayırt etmek için ad |
+| [server/src/db.js:82](../../server/src/db.js#L82) | <code>const DB_POOL_MAX = Math.max(2, Number(process.env.DB_POOL_MAX) &#124;&#124; 12);</code> | Aynı anda en fazla 12 bağlantı (DB_POOL_MAX); hepsi doluysa yenisi bağlantı bekler |
+| [server/src/db.js:96](../../server/src/db.js#L96) | <code>statement_timeout: DB_STATEMENT_TIMEOUT_MS,</code> | Tek sorgunun en uzun süresi 30 sn (DB_STATEMENT_TIMEOUT_MS); kilit beklemeyi de kapsar |
+| [server/src/db.js:97](../../server/src/db.js#L97) | <code>query_timeout: DB_STATEMENT_TIMEOUT_MS + 5000,</code> | İstemci tarafı sorgu zaman aşımı: sunucu iptal etmezse 5 sn sonra istemci bırakır |
+| [server/src/db.js:92](../../server/src/db.js#L92) | <code>options: '-c timezone=Europe/Istanbul -c idle_in_transaction_session_timeout=60000',</code> | Açık unutulan transaction 60 sn sonra SUNUCU tarafında kapatılır (kilit sızıntısını önler) |
+| [server/src/db.js:104](../../server/src/db.js#L104) | <code>console.error('[DB] Bosta bekleyen istemci hatasi:', error?.code &#124;&#124; error?.message);</code> | Boştaki bağlantı koparsa süreç düşmez; yalnız bu satır yazılır |
+| [server/src/db.js:99](../../server/src/db.js#L99) | <code>application_name: 'kapi-api',</code> | pg_stat_activity'de API bağlantılarını ayırt etmek için ad |
 
 **Olası nedenler**
 - Uzun süren sorgu ya da kilit (başka bir transaction satırı tutuyor) bağlantıları dolduruyor
@@ -755,7 +755,7 @@ ssh -p 22667 salihceylan@178.210.161.55 'docker exec -i site_kapi_kontrol_postgr
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/db.js:83](../../server/src/db.js#L83) | <code>host: process.env.DB_HOST,</code> | Bağlantı bilgileri yalnız ortamdan okunur (DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD) |
+| [server/src/db.js:87](../../server/src/db.js#L87) | <code>host: process.env.DB_HOST,</code> | Bağlantı bilgileri yalnız ortamdan okunur (DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD) |
 | [docker-compose.yml:19](../../docker-compose.yml#L19) | <code>- "127.0.0.1:5432:5432"</code> | Postgres yalnız loopback'e bağlıdır: API aynı makinede olmalı; dışarıdan erişim SSH tüneliyle |
 | [docker-compose.yml:5](../../docker-compose.yml#L5) | <code># NOT: POSTGRES_PASSWORD yalnizca BOS veri dizininde (ilk kurulum) uygulanir.</code> | POSTGRES_PASSWORD sonradan değişse de mevcut veritabanının parolası DEĞİŞMEZ (ALTER USER gerekir) |
 | [server/.env.example:31](../../server/.env.example#L31) | <code>DB_HOST=127.0.0.1</code> | Beklenen canlı DB_HOST; DB_PASSWORD docker-compose POSTGRES_PASSWORD ile aynı olmalı |
@@ -977,9 +977,9 @@ ssh -p 22667 salihceylan@178.210.161.55 'docker exec -i site_kapi_kontrol_postgr
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/server.js:389](../../server/src/server.js#L389) | <code>void runCleanupSafely();</code> | Temizlik her AÇILIŞTA bir kez çalışır (PM2 sık yeniden başlıyorsa sık çalışır) |
-| [server/src/server.js:391](../../server/src/server.js#L391) | <code>setInterval(runCleanupSafely, 24 * 60 * 60 * 1000).unref();</code> | Ardından 24 saatte bir; unref sayesinde süreç kapanmasını engellemez |
-| [server/src/server.js:365](../../server/src/server.js#L365) | <code>console.error('[Bakim] Temizlik hatasi:', error?.code &#124;&#124; error?.message);</code> | Beklenmeyen fırlatma burada yakalanır (süreç düşmez) |
+| [server/src/server.js:398](../../server/src/server.js#L398) | <code>void runCleanupSafely();</code> | Temizlik her AÇILIŞTA bir kez çalışır (PM2 sık yeniden başlıyorsa sık çalışır) |
+| [server/src/server.js:400](../../server/src/server.js#L400) | <code>setInterval(runCleanupSafely, 24 * 60 * 60 * 1000).unref();</code> | Ardından 24 saatte bir; unref sayesinde süreç kapanmasını engellemez |
+| [server/src/server.js:374](../../server/src/server.js#L374) | <code>console.error('[Bakim] Temizlik hatasi:', error?.code &#124;&#124; error?.message);</code> | Beklenmeyen fırlatma burada yakalanır (süreç düşmez) |
 | [server/src/services/maintenance_service.js:140](../../server/src/services/maintenance_service.js#L140) | <code>console.error('[Maintenance Cleanup] Hata:', error);</code> | DB hatası: ayrıntı yalnız günlükte; dönen değerde "Veritabanı temizliği başarısız oldu." genel metni vardır |
 | [server/src/services/maintenance_service.js:122](../../server/src/services/maintenance_service.js#L122) | <code>VALUES ('routine_cleanup', NOW())</code> | Son başarılı temizlik zamanı app_maintenance_runs'a yazılır |
 | [server/src/services/maintenance_service.js:251](../../server/src/services/maintenance_service.js#L251) | <code>isClean: pendingTotal === 0,</code> | Panelin "temiz" durumu yalnız silinebilir kayıt sayısına bağlıdır |
@@ -1522,7 +1522,7 @@ ssh -p 22667 salihceylan@178.210.161.55 "grep -c screen_qr /etc/mosquitto/acl"
 | [server/src/mqtt_bridge.js:676](../../server/src/mqtt_bridge.js#L676) | <code>transientReject = result?.reason === 'DEVICE_NOT_ASSIGNED';</code> | Cihaz henüz siteye/kapıya atanmamışsa ack GÖNDERİLMEZ (cihaz sakladığı kayıtları atanınca yeniden yollar) |
 | [server/src/mqtt_bridge.js:623](../../server/src/mqtt_bridge.js#L623) | <code>function publishLogsAck(normalizedUid, batchId) {</code> | logs_ack, köprü bağlıysa device/<uid>/cmd konusuna yayınlanır |
 | [server/src/services/door_log_service.js:589](../../server/src/services/door_log_service.js#L589) | <code>result.reason = 'DEVICE_NOT_ASSIGNED';</code> | Atanmamış cihaz nedeniyle yazılmayan kayıtlar rejected sayılır |
-| [server/src/db.js:925](../../server/src/db.js#L925) | <code>CREATE UNIQUE INDEX IF NOT EXISTS idx_door_access_logs_client_log</code> | Tekrar gelen aynı (device_uid, client_log_id) kayıtları eklenmez: tekrar yayın güvenlidir (idempotent) |
+| [server/src/db.js:929](../../server/src/db.js#L929) | <code>CREATE UNIQUE INDEX IF NOT EXISTS idx_door_access_logs_client_log</code> | Tekrar gelen aynı (device_uid, client_log_id) kayıtları eklenmez: tekrar yayın güvenlidir (idempotent) |
 | [server/src/mqtt_acl_sync.js:96](../../server/src/mqtt_acl_sync.js#L96) | <code>lines.push(`topic write device/${uid}/logs`);</code> | Cihazın logs konusuna yazabilmesi için ACL'de bu satır gerekir |
 
 **Olası nedenler**
@@ -1952,7 +1952,7 @@ ssh -p 22667 salihceylan@178.210.161.55 'docker exec -i site_kapi_kontrol_postgr
 | [server/scripts/test_doors_qr.js:5](../../server/scripts/test_doors_qr.js#L5) | <code>const cleanUid = '00861A0D5020';</code> | SABİT bir UID için kapı eşleşmesini sorgular (salt-okunur); başka cihaz için dosyada UID değiştirilmeli |
 | [server/scripts/test_query.js:5](../../server/scripts/test_query.js#L5) | <code>const dev = await pool.query("SELECT * FROM devices WHERE device_uid = 'D4C771A172E0'");</code> | SABİT UID/kullanıcı için cihaz, kullanıcı ve üyelik satırlarını basar (salt-okunur); kişisel veri içerir, çıktıyı paylaşmayın |
 | [server/scripts/_dev_guard.js:3](../../server/scripts/_dev_guard.js#L3) | <code>if (process.env.ALLOW_DEV_SCRIPTS !== '1') {</code> | Tümü bekçi arkasında; ALLOW_DEV_SCRIPTS=1 olmadan çıkar |
-| [server/src/db.js:82](../../server/src/db.js#L82) | <code>export const pool = new Pool({</code> | Betikler src/db.js havuzunu kullanır: server/.env'deki DB_* hangisiyse O veritabanına bağlanır (canlı sunucuda çalıştırılırsa CANLI DB) |
+| [server/src/db.js:86](../../server/src/db.js#L86) | <code>export const pool = new Pool({</code> | Betikler src/db.js havuzunu kullanır: server/.env'deki DB_* hangisiyse O veritabanına bağlanır (canlı sunucuda çalıştırılırsa CANLI DB) |
 
 **Olası nedenler**
 - Beklenen: bu betikler geliştirme yardımcılarıdır, sabit UID/kullanıcıya bağlıdır; boş sonuç çoğu zaman o kayıt bu veritabanında yoktur demektir

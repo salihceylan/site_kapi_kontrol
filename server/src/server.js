@@ -62,6 +62,7 @@ import { cardAccessRouter } from './modules/card_access_routes.js';
 import { deviceIntegrationsRouter } from './modules/device_integrations_routes.js';
 import { paymentConnectionRouter } from './modules/payment_connection_routes.js';
 import { plateRecognitionRouter } from './modules/plate_recognition_routes.js';
+import { plateEdgeRouter } from './modules/plate_edge_routes.js';
 import { contractsRouter } from './modules/contracts_routes.js';
 import { equipmentPublicRouter, equipmentRouter } from './modules/equipment_routes.js';
 import { cctvRouter } from './modules/cctv_routes.js';
@@ -204,6 +205,8 @@ app.use(deviceIntegrationsRouter);
 app.use(paymentConnectionRouter);
 // Plaka tanima (073): /manager/sites/:siteCode/plate-recognition/... + /app/plate-permits (modul plate_recognition, varsayilan KAPALI; kapi acmaz).
 app.use(plateRecognitionRouter);
+// Plaka tanima kenar istemcisi (A1; kullanici oturumu yok, kenar istemci anahtari): /edge/plate/v1/{claim,sync,events,heartbeat}. Kapi acmaz; karar kenarda.
+app.use(plateEdgeRouter);
 // Firma ve sozlesme takibi: /manager/sites/:siteCode/contract-vendors[/:id] + /manager/sites/:siteCode/contracts[/summary|/:id] (modul contracts, varsayilan KAPALI; sakin ucu yok).
 app.use(contractsRouter);
 // Ekipman, bakim ve teklif: /manager/sites/:siteCode/equipment[...] + /quotes[...] (modul equipment, varsayilan KAPALI; sakin ucu yok).

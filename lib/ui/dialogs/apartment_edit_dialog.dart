@@ -59,6 +59,7 @@ class ApartmentFieldsDraft {
   final TextEditingController numerator = TextEditingController();
   final TextEditingController denominator = TextEditingController();
   final TextEditingController category = TextEditingController();
+  final TextEditingController parking = TextEditingController();
   ResponsibleParty party = ResponsibleParty.both;
   ApartmentDetail? _initial;
 
@@ -72,6 +73,7 @@ class ApartmentFieldsDraft {
     numerator.text = apartment.landShare?.numerator.toString() ?? '';
     denominator.text = apartment.landShare?.denominator.toString() ?? '';
     category.text = apartment.category ?? '';
+    parking.text = apartment.parkingSlots.toString();
     party = apartment.responsibleParty;
   }
 
@@ -82,6 +84,7 @@ class ApartmentFieldsDraft {
     numerator.clear();
     denominator.clear();
     category.clear();
+    parking.clear();
     party = ResponsibleParty.both;
   }
 
@@ -90,6 +93,7 @@ class ApartmentFieldsDraft {
     numerator.dispose();
     denominator.dispose();
     category.dispose();
+    parking.dispose();
   }
 
   static int? _parseInt(String text) => int.tryParse(text.trim());
@@ -100,6 +104,17 @@ class ApartmentFieldsDraft {
     final parsed = _parseInt(text);
     if (parsed == null || parsed < -20 || parsed > 500) {
       return 'Kat -20 ile 500 arasında bir tam sayı olmalı.';
+    }
+    return null;
+  }
+
+  /// Park yeri sayısı (plaka tanıma misafir kuralı): boş = 0; 0-50 arası tam sayı (sunucuyla aynı sınır).
+  static String? validateParking(String? value) {
+    final text = (value ?? '').trim();
+    if (text.isEmpty) return null;
+    final parsed = _parseInt(text);
+    if (parsed == null || parsed < 0 || parsed > 50) {
+      return 'Park yeri sayısı 0 ile 50 arasında bir tam sayı olmalı.';
     }
     return null;
   }
@@ -153,6 +168,7 @@ class ApartmentFieldsDraft {
   /// Alanların TÜMÜ (form alanı çizilmemiş olsa da): ilk hata iletisi, yoksa null.
   String? validateAll() =>
       validateFloor(floor.text) ??
+      validateParking(parking.text) ??
       validateNumerator(numerator.text) ??
       validateDenominator(denominator.text) ??
       validateLandShare();
@@ -164,6 +180,8 @@ class ApartmentFieldsDraft {
     if (initial == null) return fields;
     final floorValue = floor.text.trim().isEmpty ? null : _parseInt(floor.text);
     if (floorValue != initial.floor) fields['floor'] = floorValue;
+    final parkingValue = parking.text.trim().isEmpty ? 0 : (_parseInt(parking.text) ?? 0);
+    if (parkingValue != initial.parkingSlots) fields['parking_slots'] = parkingValue;
 
 
 
@@ -319,6 +337,19 @@ class _ApartmentEditDialogState extends State<ApartmentEditDialog> {
                   prefixIcon: Icon(Icons.layers_rounded),
                 ),
                 validator: ApartmentFieldsDraft.validateFloor,
+              ),
+              const SizedBox(height: AppSpace.md),
+              TextFormField(
+                key: const ValueKey<String>('apartment_parking'),
+                controller: _draft.parking,
+                enabled: !_submitting,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Park yeri sayısı',
+                  helperText: '0 = misafir araç otomatik kabul edilmez',
+                  prefixIcon: Icon(Icons.local_parking_rounded),
+                ),
+                validator: ApartmentFieldsDraft.validateParking,
               ),
               const SizedBox(height: AppSpace.md),
               _partyField(),

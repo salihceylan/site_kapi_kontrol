@@ -14,6 +14,22 @@ String? plateActionLabel(String action) {
       return 'Plaka kapı ayarı değişti';
     case 'plate.auto_open':
       return 'Plakayla otomatik açma kaydı';
+    case 'plate.gate_created':
+      return 'Plaka geçiş noktası eklendi';
+    case 'plate.gate_updated':
+      return 'Plaka geçiş noktası değişti';
+    case 'plate.gate_deleted':
+      return 'Plaka geçiş noktası silindi';
+    case 'plate.site_settings_changed':
+      return 'Plaka misafir kuralı / durum eşikleri değişti';
+    case 'plate.edge_client_created':
+      return 'Plaka kenar istemcisi eklendi';
+    case 'plate.edge_client_rotated':
+      return 'Plaka kenar istemcisi anahtarı yenilendi';
+    case 'plate.edge_client_revoked':
+      return 'Plaka kenar istemcisi kaldırıldı';
+    case 'plate.inside_cleared':
+      return 'İçerideki araç elle düşürüldü';
   }
   return null;
 }

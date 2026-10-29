@@ -6,6 +6,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
+import 'package:site_kapi_kontrol/models/plate_gates.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/services/auth_api.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
@@ -356,6 +357,45 @@ class PlateRecognitionApi {
     return PlateSettings.fromJson(json);
   }
 
+  // --- Geçiş noktaları (A1) ---
+
+  Future<PlateGatesOverview> gatesOverview(String token, int site) async => PlateGatesOverview.fromJson(await _send('GET', _site(site, 'gates'), token));
+
+  Future<PlateGatesOverview> createGatePoint(String token, int site, GateDraft draft) async =>
+      PlateGatesOverview.fromJson(await _send('POST', _site(site, 'gates'), token, body: draft.toBody(), okStatuses: const <int>{201}));
+
+  Future<PlateGatesOverview> updateGatePoint(String token, int site, int id, GateDraft draft) async =>
+      PlateGatesOverview.fromJson(await _send('PUT', _site(site, 'gates/$id'), token, body: draft.toBody()));
+
+  Future<PlateGatesOverview> deleteGatePoint(String token, int site, int id) async => PlateGatesOverview.fromJson(await _send('DELETE', _site(site, 'gates/$id'), token));
+
+  Future<void> saveGateSettings(String token, int site, {required String guestRule, required int warnSeconds, required int critSeconds}) async {
+    await _send(
+      'PUT',
+      _site(site, 'gate-settings'),
+      token,
+      body: <String, Object?>{'guest_rule': guestRule, 'heartbeat_warn_seconds': warnSeconds, 'heartbeat_crit_seconds': critSeconds},
+    );
+  }
+
+  /// Kenar istemci kaydı: anahtar YALNIZ bu yanıtta döner (sunucuda yalnız özeti saklanır).
+  Future<String> createEdgeClient(String token, int site, String name) async {
+    final json = await _send('POST', _site(site, 'edge-clients'), token, body: <String, Object?>{'name': name.trim()}, okStatuses: const <int>{201});
+    return '${json['edge_key']}';
+  }
+
+  Future<String> rotateEdgeKey(String token, int site, int id) async => '${(await _send('POST', _site(site, 'edge-clients/$id/rotate-key'), token, body: const <String, Object?>{}))['edge_key']}';
+
+  Future<void> revokeEdgeClient(String token, int site, int id) async {
+    await _send('POST', _site(site, 'edge-clients/$id/revoke'), token, body: const <String, Object?>{});
+  }
+
+  Future<PlateInside> inside(String token, int site) async => PlateInside.fromJson(await _send('GET', _site(site, 'inside'), token));
+
+  Future<void> clearInside(String token, int site, int id) async {
+    await _send('POST', _site(site, 'inside/$id/clear'), token, body: const <String, Object?>{});
+  }
+
   Future<PlateResidentOverview> residentOverview(String token, int site) async {
     return PlateResidentOverview.fromJson(await _send('GET', '/app/plate-permits', token, query: <String, String>{'site_code': '$site'}));
   }
@@ -414,6 +454,13 @@ class PlateRecognitionApi {
     'BLACKLIST_EXISTS',
     'BLACKLIST_FULL',
     'CAMERA_ALREADY_MAPPED',
+    'GATE_NAME_TAKEN',
+    'DEVICE_ALREADY_MAPPED',
+    'DEVICE_NOT_FOUND',
+    'CAMERA_NOT_FOUND',
+    'CAMERA_DIRECTION_CONFLICT',
+    'GATE_NOT_FOUND',
+    'EDGE_CLIENT_NOT_FOUND',
     'RISK_CONFIRM_REQUIRED',
     'FORBIDDEN_APARTMENT',
   };
@@ -475,6 +522,17 @@ class PlateRecognitionService {
   }) => _guard(
     (t) => api.saveGate(t, site, doorId, deviceId: deviceId, autoOpen: autoOpen, minConfidence: minConfidence, cooldownSeconds: cooldownSeconds, confirmRisk: confirmRisk),
   );
+  Future<PlateGatesOverview> gatesOverview(int site) => _guard((t) => api.gatesOverview(t, site));
+  Future<PlateGatesOverview> createGatePoint(int site, GateDraft draft) => _guard((t) => api.createGatePoint(t, site, draft));
+  Future<PlateGatesOverview> updateGatePoint(int site, int id, GateDraft draft) => _guard((t) => api.updateGatePoint(t, site, id, draft));
+  Future<PlateGatesOverview> deleteGatePoint(int site, int id) => _guard((t) => api.deleteGatePoint(t, site, id));
+  Future<void> saveGateSettings(int site, {required String guestRule, required int warnSeconds, required int critSeconds}) =>
+      _guard((t) => api.saveGateSettings(t, site, guestRule: guestRule, warnSeconds: warnSeconds, critSeconds: critSeconds));
+  Future<String> createEdgeClient(int site, String name) => _guard((t) => api.createEdgeClient(t, site, name));
+  Future<String> rotateEdgeKey(int site, int id) => _guard((t) => api.rotateEdgeKey(t, site, id));
+  Future<void> revokeEdgeClient(int site, int id) => _guard((t) => api.revokeEdgeClient(t, site, id));
+  Future<PlateInside> inside(int site) => _guard((t) => api.inside(t, site));
+  Future<void> clearInside(int site, int id) => _guard((t) => api.clearInside(t, site, id));
   Future<PlateResidentOverview> residentOverview(int site) => _guard((t) => api.residentOverview(t, site));
   Future<void> residentCreate(int site, PermitDraft draft) => _guard((t) => api.residentCreate(t, site, draft));
   Future<void> residentRevoke(int site, int id) => _guard((t) => api.residentRevoke(t, site, id));

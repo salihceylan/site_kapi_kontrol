@@ -41,6 +41,11 @@ export const REASON_LABELS = Object.freeze({
   vehicle: 'Kayıtlı araç',
   guest_permit: 'Misafir izni var',
   not_registered: 'Kayıtlı değil',
+  // Kenar istemci olayları (A1): karar kenarda verilir, neden kodu istemciden gelir ya da karar türünden türetilir.
+  edge_open: 'Kenar istemci açtı',
+  denied: 'Geçiş reddedildi',
+  no_parking: 'Park yeri tanımlı değil',
+  occupied: 'Park yerleri dolu',
 });
 
 export const invalidField = (message, field = null) => new PlatformError(400, 'INVALID_BODY', message, field ? { field } : null);

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:site_kapi_kontrol/models/plate_gates.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/services/plate_recognition_api.dart';
@@ -12,10 +13,11 @@ import 'package:site_kapi_kontrol/ui/design/status_dot.dart';
 import 'package:site_kapi_kontrol/ui/design/license_plate.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/helpers/plate_input.dart';
+import 'package:site_kapi_kontrol/ui/widgets/plate_gates_panel.dart';
 
 /// "Plaka Tanıma" ekranı (`plate_recognition` modülü, varsayılan KAPALI).
 ///
-/// - Yönetici: Olaylar | Misafir izinleri | Kara liste | Ayarlar sekmeleri; izin verir/iptal eder, kara listeyi ve kapı/kamera ayarlarını yönetir.
+/// - Yönetici: Olaylar | Misafir izinleri | Kara liste | Geçiş noktaları | Ayarlar sekmeleri; izin verir/iptal eder, kara listeyi ve kapı/kamera ayarlarını yönetir.
 /// - Kurul üyesi / görevli: aynı sekmeleri SALT OKUR (hiçbir yazma düğmesi çizilmez).
 /// - Sakin: sade "Misafir plakası" ekranı; yalnız kendi dairesi için 1 gün - 30 gün geçici izin verir ve iptal eder.
 /// - Kapı açma "Yakında…": otomatik açma açık kapıda izinli okumalar yalnız "açılırdı" diye kaydedilir; kapı komutu gönderilmez.
@@ -34,7 +36,7 @@ class PlateRecognitionView extends StatefulWidget {
 
 class PlateRecognitionViewState extends State<PlateRecognitionView> {
   late final PlateRecognitionService _service = widget.service ?? PlateRecognitionService(authService: widget.authService);
-  static const List<String> _tabs = <String>['Olaylar', 'Misafir izinleri', 'Kara liste', 'Ayarlar'];
+  static const List<String> _tabs = <String>['Olaylar', 'Misafir izinleri', 'Kara liste', 'Geçiş noktaları', 'Ayarlar'];
   static const String _kvkkNote =
       'Plaka kişisel veridir; yalnızca site güvenliği amacıyla işlenir ve sakinlerle paylaşılmaz.';
 
@@ -47,6 +49,8 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
   List<PlatePermit> _permits = const <PlatePermit>[];
   List<PlateBlacklistItem> _blacklist = const <PlateBlacklistItem>[];
   PlateSettings? _settings;
+  PlateGatesOverview? _gates;
+  PlateInside? _inside;
   PlateResidentOverview? _resident;
 
   @override
@@ -94,6 +98,14 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
             final rows = await _service.blacklist(site.code);
             if (!_isCurrent(token)) return;
             setState(() => _blacklist = rows);
+          case 3:
+            final gates = await _service.gatesOverview(site.code);
+            final inside = await _service.inside(site.code);
+            if (!_isCurrent(token)) return;
+            setState(() {
+              _gates = gates;
+              _inside = inside;
+            });
           default:
             final data = await _service.settings(site.code);
             if (!_isCurrent(token)) return;
@@ -419,6 +431,22 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
         ),
   ];
 
+  List<Widget> _gatesTab(PlateSite site) {
+    final gates = _gates;
+    final inside = _inside;
+    if (gates == null || inside == null) return const <Widget>[];
+    return <Widget>[
+      PlateGatesPanel(
+        service: _service,
+        siteCode: site.code,
+        canWrite: site.canWrite,
+        overview: gates,
+        inside: inside,
+        onChanged: () => unawaited(reload()),
+      ),
+    ];
+  }
+
   List<Widget> _settingsTab(PlateSite site) {
     final settings = _settings;
     if (settings == null) return const <Widget>[];
@@ -464,6 +492,7 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
         0 => _eventsTab(),
         1 => _permitsTab(site),
         2 => _blacklistTab(site),
+        3 => _gatesTab(site),
         _ => _settingsTab(site),
       },
   ];
