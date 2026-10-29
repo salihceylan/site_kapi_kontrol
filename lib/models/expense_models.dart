@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:site_kapi_kontrol/models/announcement.dart' show announcementInstant;
+import 'package:site_kapi_kontrol/models/check_mark.dart';
 import 'package:site_kapi_kontrol/models/expense_analysis.dart' show ExpenseNature;
 import 'package:site_kapi_kontrol/models/finance.dart';
 import 'package:site_kapi_kontrol/models/finance_4b.dart';
@@ -216,6 +217,7 @@ class Expense {
     this.natureSource,
     this.attachments = const <ExpenseAttachment>[],
     this.fund,
+    this.checkMark,
   });
 
   final int id;
@@ -251,6 +253,9 @@ class Expense {
   /// Yalnız ayrıntı (`GET expenses/:id`) yanıtında dolu.
   final List<ExpenseAttachment> attachments;
 
+  /// "Kontrol edildi (kim, ne zaman)" izi (P2-20); null = kontrolsüz ya da eski sunucu. Kurul okurken ad gelmez.
+  final CheckMark? checkMark;
+
   bool get isVoided => voided != null;
 
   factory Expense.fromJson(Map<String, dynamic> json) {
@@ -279,6 +284,7 @@ class Expense {
       natureSource: f4Text(json['nature_source']),
       attachments: documents,
       fund: FinanceFund.tryParse(json['fund']),
+      checkMark: CheckMark.tryParse(json),
     );
   }
 }

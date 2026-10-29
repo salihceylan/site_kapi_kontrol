@@ -18,6 +18,7 @@ import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:http/http.dart' as http;
 import 'package:site_kapi_kontrol/models/bulk_import.dart' show ExportEnvelope;
 import 'package:site_kapi_kontrol/models/cash_models.dart';
+import 'package:site_kapi_kontrol/models/check_mark.dart';
 import 'package:site_kapi_kontrol/models/expense_analysis.dart';
 import 'package:site_kapi_kontrol/models/enforcement_models.dart';
 import 'package:site_kapi_kontrol/models/expense_models.dart';
@@ -1031,6 +1032,18 @@ class Finance4bApi {
       body: <String, dynamic>{'nature': nature.apiValue},
       write: true,
     );
+  }
+
+  /// Giderin "kontrol edildi (kim, ne zaman)" izini koyar (yalnız yönetici / süper; kurul 403). İz zaten varsa İLK iz döner. İptal edilmiş giderde 409.
+  Future<CheckMark?> setExpenseCheck({required String token, required int siteCode, required int expenseId}) async {
+    final r = await _send('PUT', _site(siteCode, 'expenses/$expenseId/check'), token: token, write: true);
+    return CheckMark.tryParse(r.body);
+  }
+
+  /// Giderin kontrol izini kaldırır (iz yoksa sessizce başarılı). Her zaman null (kontrolsüz) döner.
+  Future<CheckMark?> clearExpenseCheck({required String token, required int siteCode, required int expenseId}) async {
+    await _send('DELETE', _site(siteCode, 'expenses/$expenseId/check'), token: token, write: true);
+    return null;
   }
 
   Future<CashPositionReport> getCashPositionReport({

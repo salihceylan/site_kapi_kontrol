@@ -58,6 +58,7 @@ import { ensureAuthAttemptLimitsSchema } from './modules/auth_attempt_limits_sch
 import { ensureMenuLayoutSchema } from './modules/menu_layout_schema.js';
 import { ensureEmergencySchema } from './modules/emergency_schema.js';
 import { ensureTrialAccessSchema } from './modules/trial_access_schema.js';
+import { ensureCheckMarkSchema } from './modules/check_mark_schema.js';
 import { CORE_MODULES_BACKFILL_SQL } from './modules/core_modules.js';
 import { CARD_PAYMENTS_INTO_FINANCE_SQL } from './modules/card_payments_into_finance.js';
 import { ensureTenantAdminRule } from './modules/apartment_tenant_admin_sql.js';
@@ -2060,6 +2061,9 @@ export async function ensureDbSchema() {
     // 106 (deneme erisim kodu, P2-27 / K10): sites ve users'tan SONRA; dev blokta DEGIL; tablo varsa hicbir ifade / kilit yok, yoksa her adim kendi otomatik onayli ifadesi
     // (trial_access_schema.js = migrations/106). Mevcut tablolara ALTER yok.
     await ensureTrialAccessSchema(client);
+    // 110 (kontrol izi, P2-20: gider ve dekont icin "kontrol edildi (kim, ne zaman)"): expenses (040) ve payment_notices (066) SONRASI; dev blokta DEGIL; katalog kontrolu + her adim
+    // kendi otomatik onayli ifadesi (check_mark_schema.js = migrations/110). Her sey varsa hicbir ifade / kilit yok. Gider ve dekont satirlari DEGISMEZ (yan tablolar).
+    await ensureCheckMarkSchema(client);
 
     // 031 people_v1: mevcut sakinlerin CRM'e tek seferlik aktarimi. Savunmaci: hata sunucunun acilmasini ENGELLEMEZ
     // (kendi transaction'i geri alinir, isaret yazilmaz => sonraki acilista yeniden denenir; okuma anindaki

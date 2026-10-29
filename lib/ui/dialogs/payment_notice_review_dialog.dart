@@ -18,6 +18,7 @@ import 'package:site_kapi_kontrol/ui/helpers/finance_4b_access.dart';
 import 'package:site_kapi_kontrol/ui/helpers/finance_errors.dart';
 import 'package:site_kapi_kontrol/ui/helpers/money.dart';
 import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
+import 'package:site_kapi_kontrol/ui/widgets/check_mark_panel.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_fund_choice_panel.dart';
 import 'package:site_kapi_kontrol/ui/widgets/receipt_file_preview.dart';
 
@@ -412,6 +413,18 @@ class _PaymentNoticeReviewDialogState extends State<PaymentNoticeReviewDialog> {
         if (!n.isPending) ...[
           const SizedBox(height: AppSpace.md),
           Text('Karar: ${n.status.label}${n.rejectReasonCode == null ? '' : ' (${kNoticeRejectReasons[n.rejectReasonCode] ?? ''})'}', style: th.titleSmall),
+        ],
+        // Kontrol izi (P2-20): onay / iptal kararından AYRI muhasebe kontrolü; karar akışını ve bu pencerenin kapanışını etkilemez.
+        if (n.canBeChecked) ...[
+          const SizedBox(height: AppSpace.md),
+          CheckMarkPanel(
+            key: ValueKey<String>('notice_check_${n.id}'),
+            mark: n.checkMark,
+            canWrite: widget.scope.canWrite,
+            hint: 'Onay ya da iptal kararından ayrı, muhasebe kontrolü içindir.',
+            onSet: () => _service.run((api, token) => api.setCheck(token: token, siteCode: widget.scope.siteCode, id: n.id)),
+            onClear: () => _service.run((api, token) => api.clearCheck(token: token, siteCode: widget.scope.siteCode, id: n.id)),
+          ),
         ],
         if (_error != null) ...[
           const SizedBox(height: AppSpace.md),

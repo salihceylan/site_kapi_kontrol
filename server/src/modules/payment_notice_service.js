@@ -6,6 +6,7 @@
 
 import { pool } from '../db.js';
 import { actorFromAuthUser } from './audit_service.js';
+import { attachNoticeCheckMarks } from './check_mark_service.js';
 import { newStorageKey } from './document_storage.js';
 import { apartmentNotFound, moduleDisabled, periodOfDate, today } from './finance_common.js';
 import { accountBalances, accountPartySql, defaultPaymentParty, loadAccountBalance, postPayment } from './finance_parties.js';
@@ -241,7 +242,7 @@ export async function listNotices(siteCode, query = {}) {
   const page = rows.rows.slice(0, 50);
   const counts = await pool.query(`SELECT status, count(*)::INT AS n FROM payment_notices WHERE site_code = $1 AND status <> 'uploading' GROUP BY status`, [siteCode]);
   return {
-    items: page.map(publicNotice),
+    items: await attachNoticeCheckMarks(pool, siteCode, page.map(publicNotice)),
     has_more: rows.rows.length > 50,
     counts: Object.fromEntries(counts.rows.map((r) => [r.status, r.n])),
   };
@@ -341,8 +342,9 @@ export async function getNoticeDetail(siteCode, rawId, { now = new Date() } = {}
     [siteCode, apartmentId],
   );
   const open = row.status === 'pending';
+  const [notice] = await attachNoticeCheckMarks(pool, siteCode, [publicNotice(row)]);
   return {
-    notice: publicNotice(row),
+    notice,
     apartment: {
       id: apartmentId,
       label: apartmentLabel(row.block_name, row.unit_label),
