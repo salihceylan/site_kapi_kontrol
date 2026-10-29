@@ -90,7 +90,7 @@ function handle(sql, params) {
     return ok([{ has_devices: state.optionalTables.push === true, has_outbox: state.optionalTables.push === true }]);
   }
   if (/^SELECT \(to_regclass\('public\.push_devices'\) IS NOT NULL\) AS has_push_devices/.test(sql)) {
-    return ok([{ has_push_devices: state.optionalTables.push === true, has_documents: state.optionalTables.documents === true, has_reminders: state.optionalTables.reminders === true, has_work_items: state.optionalTables.work === true, has_work_item_attachments: state.optionalTables.attachments === true }]);
+    return ok([{ has_push_devices: state.optionalTables.push === true, has_documents: state.optionalTables.documents === true, has_reminders: state.optionalTables.reminders === true, has_work_items: state.optionalTables.work === true, has_work_item_attachments: state.optionalTables.attachments === true, has_refunds: state.optionalTables.refunds === true, has_neighbor_posts: state.optionalTables.neighbor === true }]);
   }
   if (/^SELECT COUNT\(\*\)::INTEGER AS n FROM work_item_attachments WHERE uploaded_by = \$1$/.test(sql)) return ok([{ n: state.optionalCounts.uploadedAttachments ?? 0 }]);
   if (/^SELECT COUNT\(\*\)::INTEGER AS n FROM push_devices WHERE user_code = \$1$/.test(sql)) return ok([{ n: state.optionalCounts.pushDevices ?? 0 }]);
@@ -102,6 +102,10 @@ function handle(sql, params) {
   if (/^SELECT to_regclass\('public\.finance_refunds'\) IS NOT NULL AS present$/.test(sql)) return ok([{ present: state.optionalTables.refunds === true }]);
   if (/^SELECT id, site_code, apartment_id, amount_minor::TEXT AS amount_minor FROM finance_refunds WHERE requested_by = \$1/.test(sql)) return ok(state.pendingRefunds ?? []);
   if (/^UPDATE finance_refunds SET status = 'cancelled'/.test(sql)) return ok([], 1);
+  if (/^SELECT to_regclass\('public\.neighbor_posts'\) IS NOT NULL AS present$/.test(sql)) return ok([{ present: state.optionalTables.neighbor === true }]);
+  if (/^DELETE FROM neighbor_posts WHERE author_user_code = \$1 RETURNING site_code, status$/.test(sql)) return ok(state.neighborPosts ?? []);
+  if (/^SELECT COUNT\(\*\)::INTEGER AS n FROM finance_refunds WHERE requested_by = \$1 AND requested_by_kind = 'resident' AND status = 'requested'$/.test(sql)) return ok([{ n: state.optionalCounts.pendingRefunds ?? 0 }]);
+  if (/^SELECT COUNT\(\*\)::INTEGER AS n FROM neighbor_posts WHERE author_user_code = \$1$/.test(sql)) return ok([{ n: state.optionalCounts.neighborPosts ?? 0 }]);
   if (/^SELECT COUNT\(\*\)::INTEGER AS n FROM finance_reminder_items i /.test(sql)) return ok([{ n: state.optionalCounts.pendingReminders ?? 0 }]);
   if (/^UPDATE finance_reminder_items i SET /.test(sql)) return { rows: (state.reminderRunIds ?? []).map((id) => ({ run_id: String(id) })), rowCount: state.reminderRows };
   if (/^DELETE FROM push_devices WHERE id IN/.test(sql)) return ok([], 2);
@@ -455,6 +459,44 @@ describe('hesap silme: kimliksizleştirme ifadesi', () => {
     result = await performAccountDeletion(12345);
     assert.equal(sqls(/^UPDATE finance_refunds/).length, 0);
     assert.equal('refunds_cancelled' in result.summary, false);
+  });
+
+  it('Komşu panosu (kapanış, KVKK): kullanıcının İLANLARI silinir (yalnız author_user_code = kullanıcı), kullanıcı satırından SONRA; site başına sayı işlem izine (başlık / ad YOK) ve özete yazılır', async () => {
+    state.optionalTables = { neighbor: true };
+    state.neighborPosts = [
+      { site_code: '1000000002', status: 'published' },
+      { site_code: '1000000002', status: 'pending' },
+      { site_code: '1000000001', status: 'removed' },
+    ];
+    const result = await performAccountDeletion(12345);
+    const del = sqls(/^DELETE FROM neighbor_posts/);
+    assert.equal(del.length, 1);
+    assert.deepEqual(del[0].params, [12345]);
+    assert.equal(result.summary.neighbor_posts_deleted, 3);
+    assert.ok(indexOf(/^UPDATE users SET full_name = \$2/) < indexOf(/^DELETE FROM neighbor_posts/), 'kullanıcı satırından SONRA');
+    const audits = log.filter((entry) => /^INSERT INTO audit_log/.test(entry.sql) && entry.params[3] === 'neighbor_board.posts_deleted_account_closed');
+    assert.equal(audits.length, 2, 'site başına bir işlem izi');
+    assert.deepEqual(audits.map((entry) => entry.params[4]), [1000000001, 1000000002]);
+    assert.deepEqual(JSON.parse(audits[1].params[7]), { count: 2, statuses: { published: 1, pending: 1 }, reason: 'account_deleted' });
+    assert.equal(JSON.stringify(audits).includes('Ada'), false);
+    const final = log.find((entry) => /^INSERT INTO audit_log/.test(entry.sql) && entry.params[3] === 'account.deleted');
+    assert.equal(JSON.parse(final.params[7]).neighbor_posts_deleted, 3);
+  });
+
+  it('Komşu panosu: neighbor_posts tablosu yoksa ya da ilan yoksa silme / işlem izi gitmez ve özet anahtarı eklenmez; şikâyetlere dokunulmaz', async () => {
+    state.optionalTables = {};
+    state.neighborPosts = [{ site_code: '1000000002', status: 'published' }];
+    let result = await performAccountDeletion(12345);
+    assert.equal(sqls(/^DELETE FROM neighbor_posts/).length, 0);
+    assert.equal('neighbor_posts_deleted' in result.summary, false);
+    log = [];
+    state = defaultState();
+    state.optionalTables = { neighbor: true };
+    result = await performAccountDeletion(12345);
+    assert.equal(sqls(/^DELETE FROM neighbor_posts/).length, 1);
+    assert.equal(log.some((entry) => entry.params?.[3] === 'neighbor_board.posts_deleted_account_closed'), false);
+    assert.equal('neighbor_posts_deleted' in result.summary, false);
+    assert.equal(sqls(/neighbor_post_reports/).length, 0, 'şikâyet kayıtlarına doğrudan dokunulmaz (adli saklama)');
   });
 
   it('İş Takibi (P2): work_items tablosu yoksa atama sorgusu gitmez ve özet anahtarı eklenmez', async () => {
@@ -921,6 +963,22 @@ describe('hesap silme: önizleme', () => {
     assert.equal(/\d+ (yıl|ay)\b/.test(keep), false, 'saklama süresi uydurulmaz');
     // kişisel veri yok
     assert.equal(JSON.stringify(preview).includes('Ada'), false);
+  });
+
+  it('Kapanış: önizleme "bekleyen iade talebiniz varsa iptal edilir" satırını HER ZAMAN taşır (sayı varsa sayılı); komşu panosu ilanı silinenler arasında, adli saklama satırında YALNIZ şikâyet', async () => {
+    previewHandlers();
+    let preview = await previewAccountDeletion(USER);
+    assert.ok(preview.will_remove.includes('Bekleyen iade talebiniz varsa iptal edilir.'));
+    assert.equal(preview.will_remove.some((line) => /Komşu panosundaki ilanlarınız/.test(line)), false, 'ilan yoksa satır çıkmaz');
+    state.optionalTables = { refunds: true, neighbor: true };
+    state.optionalCounts = { pendingRefunds: 2, neighborPosts: 3 };
+    preview = await previewAccountDeletion(USER);
+    assert.ok(preview.will_remove.includes('Bekleyen iade talebiniz (2) iptal edilir.'));
+    assert.ok(preview.will_remove.includes('Komşu panosundaki ilanlarınız (3) silinir.'));
+    const keep = preview.will_keep.join('\n');
+    assert.match(keep, /Komşu panosundaki şikâyetleriniz, daire güvenlik notlarınız/);
+    assert.equal(/Komşu panosundaki ilan/.test(keep), false, 'ilanlar artık saklananlar arasında değil');
+    assert.equal(log.some((e) => /FOR UPDATE|^UPDATE|^DELETE|^INSERT|advisory/.test(e.sql)), false, 'önizleme yazma yapmaz');
   });
 
   it('R6: sayaç yoksa koşullu satırlar çıkmaz: kapanmış başvuru satırı yalnız closed_applications > 0 iken, bekleyen başvuru / cihaz / onay yalnız karşılığı varken', async () => {

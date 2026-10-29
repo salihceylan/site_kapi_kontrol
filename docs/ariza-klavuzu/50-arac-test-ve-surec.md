@@ -747,7 +747,7 @@ cd server && npm test
 | --- | --- | --- |
 | [server/test/sites_source_guards.test.js:14](../../server/test/sites_source_guards.test.js#L14) | <code>function sliceFunction(source, startMarker) {</code> | Kaynakta işaretçi metni arar; işaretçi (fonksiyon başlığı) değişirse "bulunamadi" ile düşer |
 | [server/test/sites_source_guards.test.js:12](../../server/test/sites_source_guards.test.js#L12) | <code>const read = (relative) =&gt; readFileSync(path.join(srcRoot, relative), 'utf8').replace(/\r…</code> | Testler src/ dosyalarını METİN olarak okur (import etmez) |
-| [server/test/members_maintenance.test.js:98](../../server/test/members_maintenance.test.js#L98) | <code>describe('members: db.js yalnızca additive şema değişikliği içerir', () =&gt; {</code> | db.js yalnızca ekleyici (additive) şema değişikliği içermeli; yıkıcı ifade eklenince düşer |
+| [server/test/members_maintenance.test.js:147](../../server/test/members_maintenance.test.js#L147) | <code>describe('members: db.js yalnızca additive şema değişikliği içerir', () =&gt; {</code> | db.js yalnızca ekleyici (additive) şema değişikliği içermeli; yıkıcı ifade eklenince düşer |
 | [server/test/members_maintenance.test.js:23](../../server/test/members_maintenance.test.js#L23) | <code>describe('members: maintenance_service yıkıcı işlem yapmaz', () =&gt; {</code> | Bakım servisi kullanıcı silmez / tablo düşürmez iddiası |
 
 **Olası nedenler**

@@ -980,9 +980,9 @@ ssh -p 22667 salihceylan@178.210.161.55 'docker exec -i site_kapi_kontrol_postgr
 | [server/src/server.js:383](../../server/src/server.js#L383) | <code>void runCleanupSafely();</code> | Temizlik her AÇILIŞTA bir kez çalışır (PM2 sık yeniden başlıyorsa sık çalışır) |
 | [server/src/server.js:385](../../server/src/server.js#L385) | <code>setInterval(runCleanupSafely, 24 * 60 * 60 * 1000).unref();</code> | Ardından 24 saatte bir; unref sayesinde süreç kapanmasını engellemez |
 | [server/src/server.js:361](../../server/src/server.js#L361) | <code>console.error('[Bakim] Temizlik hatasi:', error?.code &#124;&#124; error?.message);</code> | Beklenmeyen fırlatma burada yakalanır (süreç düşmez) |
-| [server/src/services/maintenance_service.js:113](../../server/src/services/maintenance_service.js#L113) | <code>console.error('[Maintenance Cleanup] Hata:', error);</code> | DB hatası: ayrıntı yalnız günlükte; dönen değerde "Veritabanı temizliği başarısız oldu." genel metni vardır |
-| [server/src/services/maintenance_service.js:95](../../server/src/services/maintenance_service.js#L95) | <code>VALUES ('routine_cleanup', NOW())</code> | Son başarılı temizlik zamanı app_maintenance_runs'a yazılır |
-| [server/src/services/maintenance_service.js:224](../../server/src/services/maintenance_service.js#L224) | <code>isClean: pendingTotal === 0,</code> | Panelin "temiz" durumu yalnız silinebilir kayıt sayısına bağlıdır |
+| [server/src/services/maintenance_service.js:140](../../server/src/services/maintenance_service.js#L140) | <code>console.error('[Maintenance Cleanup] Hata:', error);</code> | DB hatası: ayrıntı yalnız günlükte; dönen değerde "Veritabanı temizliği başarısız oldu." genel metni vardır |
+| [server/src/services/maintenance_service.js:122](../../server/src/services/maintenance_service.js#L122) | <code>VALUES ('routine_cleanup', NOW())</code> | Son başarılı temizlik zamanı app_maintenance_runs'a yazılır |
+| [server/src/services/maintenance_service.js:251](../../server/src/services/maintenance_service.js#L251) | <code>isClean: pendingTotal === 0,</code> | Panelin "temiz" durumu yalnız silinebilir kayıt sayısına bağlıdır |
 
 **Olası nedenler**
 - app_maintenance_runs ya da silinen tablolardan biri yok (şema tamamlanmadı) (altyapi-relation-does-not-exist)
@@ -1013,11 +1013,11 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 300 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/services/maintenance_service.js:82](../../server/src/services/maintenance_service.js#L82) | <code>DELETE FROM door_access_logs</code> | Kapı geçiş logları 30 günden eski silinir (opened_at) |
-| [server/src/services/maintenance_service.js:75](../../server/src/services/maintenance_service.js#L75) | <code>DELETE FROM device_connectivity_logs</code> | Cihaz bağlantı (offline) logları 30 günden eski silinir |
-| [server/src/services/maintenance_service.js:33](../../server/src/services/maintenance_service.js#L33) | <code>DELETE FROM qr_access_tokens</code> | Süresi dolmuş ya da yenisiyle değiştirilmiş (superseded) QR token'lar 1 gün sonra silinir |
-| [server/src/services/maintenance_service.js:41](../../server/src/services/maintenance_service.js#L41) | <code>DELETE FROM email_verifications</code> | E-posta doğrulama kodu kayıtları 2 günden eski silinir |
-| [server/src/services/maintenance_service.js:48](../../server/src/services/maintenance_service.js#L48) | <code>DELETE FROM pending_registrations</code> | Doğrulanmamış bekleyen kayıtlar (hesap DEĞİL) 2 gün sonra silinir; kullanıcı yeniden kayıt olur |
+| [server/src/services/maintenance_service.js:109](../../server/src/services/maintenance_service.js#L109) | <code>DELETE FROM door_access_logs</code> | Kapı geçiş logları 30 günden eski silinir (opened_at) |
+| [server/src/services/maintenance_service.js:102](../../server/src/services/maintenance_service.js#L102) | <code>DELETE FROM device_connectivity_logs</code> | Cihaz bağlantı (offline) logları 30 günden eski silinir |
+| [server/src/services/maintenance_service.js:34](../../server/src/services/maintenance_service.js#L34) | <code>DELETE FROM qr_access_tokens</code> | Süresi dolmuş ya da yenisiyle değiştirilmiş (superseded) QR token'lar 1 gün sonra silinir |
+| [server/src/services/maintenance_service.js:42](../../server/src/services/maintenance_service.js#L42) | <code>DELETE FROM email_verifications</code> | E-posta doğrulama kodu kayıtları 2 günden eski silinir |
+| [server/src/services/maintenance_service.js:49](../../server/src/services/maintenance_service.js#L49) | <code>DELETE FROM pending_registrations</code> | Doğrulanmamış bekleyen kayıtlar (hesap DEĞİL) 2 gün sonra silinir; kullanıcı yeniden kayıt olur |
 
 **Olası nedenler**
 - Beklenen davranış: rutin temizlik yalnız süresi dolmuş token/kod ve eski logları siler; users/üyelik/tablo silmez
