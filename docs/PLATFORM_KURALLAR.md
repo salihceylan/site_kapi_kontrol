@@ -11,7 +11,7 @@ avukat onayına kadar kapalı). Ana plan: `docs/superpowers/plans/2026-10-21-eks
 ## Kurallar
 
 Kayıt defteri: `server/src/modules/platform_rules.js` (`RULES`, sıra = ekrandaki sıra). Birimler: `bp` baz puan (100 bp = %1), `pct` yüzde,
-`days` gün. "Site": sitede değişebilir mi (site değeri verilebilir). "Plan": ileri tarihli değer yazılabilir mi.
+`days` gün, `times` kat. "Site": sitede değişebilir mi (site değeri verilebilir). "Plan": ileri tarihli değer yazılabilir mi.
 
 | Anahtar | Ad | Tür | Varsayılan | Sınır | Site | Plan | Not |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -20,6 +20,7 @@ Kayıt defteri: `server/src/modules/platform_rules.js` (`RULES`, sıra = ekranda
 | `budget.objection_days` | İşletme projesine itiraz süresi | gün | 7 | 1..30 | hayır | evet | KMK m.37, karar F7 |
 | `heat.measured_share_pct` | Isınma gideri: ölçüme göre pay | yüzde | 70 | 0..100 | hayır | evet | çift: alan payıyla toplam 100 (karar T2) |
 | `heat.area_share_pct` | Isınma gideri: alan payı | yüzde | 30 | 0..100 | hayır | evet | çift: ölçüme göre payla toplam 100; alan payının dağıtım tabanını (eşit / arsa payı / kişi sayısı) YÖNETİM ısı payı borçlandırırken seçer, varsayılan eşit; kod taban seçmez, seçilen tabanın verisi eksik daire eksik veri sayılır (m² kaldırıldı; karar K5) |
+| `metering.jump_factor` | Sayaç okuma: sıçrama uyarısı eşiği | kat | 5 | 2..100 | EVET | evet | ürün varsayılanı (karar K12): bir okumanın dönem tüketimi, sayacın son 3 dönem tüketiminin ortancasının bu katını aşarsa görevliye "emin misiniz?" diye sorulur (engel değil; ayrıntı `docs/PLATFORM_SAYAC.md` "Saha akışı ve sıçrama uyarısı") |
 | `forecast.default_increase_bp` | Gelecek yıl tahmini: varsayılan artış oranı | bp | 0 | 0..10000 | EVET | evet | ürün varsayılanı (karar R1) |
 | `retention.finance_days` | Mali kayıtlar | gün | 3650 | 1825..7300 | hayır | evet | TTK m.82, VUK m.253; H2: 10 yıl |
 | `retention.contact_after_moveout_days` | Taşınan kişinin iletişim bilgileri | gün | 365 | 30..3650 | hayır | evet | KVKK m.4/2-d, m.7; H2: açık borç yoksa 1 yıl |

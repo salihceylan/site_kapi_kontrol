@@ -10,6 +10,7 @@ import { isModuleEnabled } from './module_service.js';
 import { computeIncomeExpense, rateBp, withReportSnapshot } from './finance_reports.js';
 import { minorToNumber } from './finance_money.js';
 import { getComparison } from './budget_service.js';
+import { categoryLabelOf } from './work_categories_common.js';
 
 export const ANNUAL_REPORT_MODULE = 'annual_report';
 export const SECTION_KEYS = Object.freeze(['general', 'finance', 'collections', 'works', 'maintenance', 'contracts', 'decisions', 'announcements', 'forecast']);
@@ -130,8 +131,9 @@ async function collectionsSection(db, siteCode, year, summary) {
 
 async function worksSection(db, siteCode, year) {
   const byCat = await db.query(
-    `SELECT category, COUNT(*)::INT AS total, COUNT(*) FILTER (WHERE status IN ('cozuldu', 'kapandi'))::INT AS done
-     FROM work_items WHERE site_code = $1 AND created_at >= $2::DATE AND created_at < ($3::DATE + 1) GROUP BY category ORDER BY category`,
+    `SELECT w.category, MAX(wc.label) AS category_label, COUNT(*)::INT AS total, COUNT(*) FILTER (WHERE w.status IN ('cozuldu', 'kapandi'))::INT AS done
+     FROM work_items w LEFT JOIN work_categories wc ON wc.site_code = w.site_code AND wc.key = w.category
+     WHERE w.site_code = $1 AND w.created_at >= $2::DATE AND w.created_at < ($3::DATE + 1) GROUP BY w.category ORDER BY w.category`,
     [siteCode, yearStart(year), yearEnd(year)],
   );
   const photos = await db.query(
@@ -146,7 +148,7 @@ async function worksSection(db, siteCode, year) {
      ORDER BY w.closed_at DESC, w.id DESC LIMIT ${LIST_LIMIT}`,
     [siteCode, yearStart(year), yearEnd(year)],
   );
-  const cats = (byCat.rows ?? []).map((r) => ({ category: r.category, total: r.total, done: r.done }));
+  const cats = (byCat.rows ?? []).map((r) => ({ category: r.category, category_label: categoryLabelOf(r.category, r.category_label), total: r.total, done: r.done }));
   return {
     available: true,
     total: cats.reduce((s, c) => s + c.total, 0),

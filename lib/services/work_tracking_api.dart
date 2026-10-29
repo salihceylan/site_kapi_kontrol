@@ -264,7 +264,7 @@ class WorkTrackingApi {
   }
 
   /// `PATCH .../work-items/:id`: yalnız [fields] içindekiler gönderilir (`status`, `priority`, `assigned_to`
-  /// [user_code | "me" | null], `due_date` ["YYYY-MM-DD" | null]).
+  /// [user_code | "me" | null], `due_date` ["YYYY-MM-DD" | null], `equipment_id` [ekipman kimliği | null]).
   Future<WorkManagedDetail> updateManaged({
     required String token,
     required int siteCode,
@@ -317,6 +317,22 @@ class WorkTrackingApi {
       timeout: _readTimeout,
     );
     return WorkAssignee.listFrom(_object(response)['items']);
+  }
+
+  /// `GET /manager/sites/:siteCode/equipment?active=1`: talebe bağlanabilecek AKTİF ekipmanlar (ekipman uçlarının
+  /// okuma yetkisi: yönetici / görevli / kurul). Pasif ekipman seçiciye girmez.
+  Future<List<WorkEquipmentRef>> equipmentChoices({
+    required String token,
+    required int siteCode,
+  }) async {
+    final response = await _send(
+      'GET',
+      '/manager/sites/$siteCode/equipment',
+      token: token,
+      query: const <String, String>{'active': '1'},
+      timeout: _readTimeout,
+    );
+    return WorkEquipmentRef.listFrom(_object(response)['items']);
   }
 
   WorkManagedDetail _managedDetail(http.Response response) {
@@ -564,6 +580,102 @@ class WorkTrackingApi {
       okStatuses: const <int>{200, 204},
       attachmentOp: WorkAttachmentOp.delete,
     );
+  }
+
+  // --- Kategoriler (100) ----------------------------------------------------------------------
+
+  static String _categoriesPath(int siteCode, [String tail = '']) =>
+      '/manager/sites/$siteCode/work-categories${tail.isEmpty ? '' : '/$tail'}';
+
+  /// `GET /manager/sites/:siteCode/work-categories` (yönetici / süper / görevli / kurul okur): TÜM kategoriler (pasifler
+  /// dahil; eski talepler pasif kategoriyle durabilir), sıralı. Yönetici / süper listesinde `item_count` gelir.
+  Future<List<WorkCategoryOption>> listCategories({
+    required String token,
+    required int siteCode,
+    bool? active,
+  }) async {
+    final response = await _send(
+      'GET',
+      _categoriesPath(siteCode),
+      token: token,
+      query: <String, String>{if (active != null) 'active': '$active'},
+      timeout: _readTimeout,
+    );
+    return WorkCategoryOption.listFrom(_object(response)['items']);
+  }
+
+  /// `GET /app/work-categories?site_code=` (sakin talep formu): sitenin ETKİN kategorileri.
+  Future<List<WorkCategoryOption>> listMyCategories({
+    required String token,
+    required int siteCode,
+  }) async {
+    final response = await _send(
+      'GET',
+      '/app/work-categories',
+      token: token,
+      query: <String, String>{'site_code': '$siteCode'},
+      timeout: _readTimeout,
+    );
+    return WorkCategoryOption.listFrom(_object(response)['items']);
+  }
+
+  /// `POST .../work-categories` (201, yalnız yönetici / süper): anahtar sunucuda addan üretilir.
+  Future<WorkCategoryOption> createCategory({
+    required String token,
+    required int siteCode,
+    required String label,
+  }) async {
+    final response = await _send(
+      'POST',
+      _categoriesPath(siteCode),
+      token: token,
+      body: <String, dynamic>{'label': label.trim()},
+      timeout: _writeTimeout,
+      okStatuses: const <int>{200, 201},
+    );
+    return _categoryOf(response);
+  }
+
+  /// `PATCH .../work-categories/:id`: yalnız verilen alanlar gönderilir (`label`, `is_active`). Anahtar değişmez.
+  Future<WorkCategoryOption> updateCategory({
+    required String token,
+    required int siteCode,
+    required int id,
+    String? label,
+    bool? isActive,
+  }) async {
+    final response = await _send(
+      'PATCH',
+      _categoriesPath(siteCode, '$id'),
+      token: token,
+      body: <String, dynamic>{
+        'label': ?label?.trim(),
+        'is_active': ?isActive,
+      },
+      timeout: _writeTimeout,
+    );
+    return _categoryOf(response);
+  }
+
+  /// `DELETE .../work-categories/:id`: kullanılmamış özel kategori silinir; KULLANILMIŞ kategori silinmez, pasife alınır.
+  Future<WorkCategoryDeleteResult> deleteCategory({
+    required String token,
+    required int siteCode,
+    required int id,
+  }) async {
+    final response = await _send(
+      'DELETE',
+      _categoriesPath(siteCode, '$id'),
+      token: token,
+      timeout: _writeTimeout,
+    );
+    return WorkCategoryDeleteResult.fromJson(_object(response));
+  }
+
+  WorkCategoryOption _categoryOf(http.Response response) {
+    final category = WorkCategoryOption.fromJson(_object(response));
+    if (category == null) throw _unexpected(response);
+    return category;
   }
 
   // --- Rapor --------------------------------------------------------------------------------
@@ -826,6 +938,16 @@ class WorkTrackingApi {
         return 'Talep bulunamadı ya da erişiminiz yok.';
       case 'SITE_NOT_FOUND':
         return 'Site bulunamadı.';
+      case 'WORK_CATEGORY_NOT_FOUND':
+        return 'Kategori bulunamadı. Listeyi yenileyip tekrar deneyin.';
+      case 'WORK_CATEGORY_NAME_TAKEN':
+        return 'Bu adda bir kategori zaten var.';
+      case 'WORK_CATEGORY_INACTIVE':
+        return 'Bu kategori artık kullanılmıyor. Başka bir kategori seçin.';
+      case 'WORK_CATEGORY_LAST_ACTIVE':
+        return 'En az bir kategori açık kalmalıdır; sakinler talep açarken buradan seçer.';
+      case 'WORK_CATEGORY_SYSTEM':
+        return 'Hazır kategoriler silinemez. Kullanmak istemiyorsanız pasife alabilirsiniz.';
       case 'INVALID_SITE_CODE':
         return 'Site geçersiz. Siteyi yeniden seçin.';
       case 'INVALID_ASSIGNEE':
@@ -1170,6 +1292,10 @@ class WorkTrackingService {
   Future<List<WorkAssignee>> assignees(int siteCode) =>
       _guard((token) => api.assignees(token: token, siteCode: siteCode));
 
+  /// Talebe bağlanabilecek aktif ekipmanlar (ayrıntı penceresindeki "Ekipman" seçicisi).
+  Future<List<WorkEquipmentRef>> equipmentChoices(int siteCode) =>
+      _guard((token) => api.equipmentChoices(token: token, siteCode: siteCode));
+
   // --- Fotoğraf ekleri ([siteCode] null: sakin yolu; dolu: yönetim yolu) ---
 
   Future<WorkAttachment> createAttachment({
@@ -1229,6 +1355,37 @@ class WorkTrackingService {
       attachmentId: attachmentId,
     ),
   );
+
+  // --- Kategoriler (100) ---
+
+  /// Yönetim: sitenin tüm kategorileri (pasifler dahil).
+  Future<List<WorkCategoryOption>> categories(int siteCode) =>
+      _guard((token) => api.listCategories(token: token, siteCode: siteCode));
+
+  /// Sakin talep formu: sitenin etkin kategorileri.
+  Future<List<WorkCategoryOption>> myCategories(int siteCode) =>
+      _guard((token) => api.listMyCategories(token: token, siteCode: siteCode));
+
+  Future<WorkCategoryOption> createCategory(int siteCode, String label) =>
+      _guard((token) => api.createCategory(token: token, siteCode: siteCode, label: label));
+
+  Future<WorkCategoryOption> updateCategory(
+    int siteCode,
+    int id, {
+    String? label,
+    bool? isActive,
+  }) => _guard(
+    (token) => api.updateCategory(
+      token: token,
+      siteCode: siteCode,
+      id: id,
+      label: label,
+      isActive: isActive,
+    ),
+  );
+
+  Future<WorkCategoryDeleteResult> deleteCategory(int siteCode, int id) =>
+      _guard((token) => api.deleteCategory(token: token, siteCode: siteCode, id: id));
 
   // --- Rapor ---
 

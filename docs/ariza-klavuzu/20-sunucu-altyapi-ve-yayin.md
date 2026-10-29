@@ -268,9 +268,9 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 restart kapi-api --update-env && sl
 | --- | --- | --- |
 | [server/src/routes/firmware_routes.js:95](../../server/src/routes/firmware_routes.js#L95) | <code>firmwareRouter.get('/health', async (_req, res) =&gt; {</code> | /health uç noktası: DB'ye SELECT 1 atar; başarılıysa ok:true/connected, hata olursa 500 |
 | [server/src/routes/firmware_routes.js:104](../../server/src/routes/firmware_routes.js#L104) | <code>res.status(500).json({ ok: false, database: 'disconnected', mqtt });</code> | catch (_e) hatayı YUTAR: nedeni ne yanıtta ne günlükte görünür; nedeni docker/psql ile arayın |
-| [server/src/db.js:90](../../server/src/db.js#L90) | <code>export async function checkDbConnection() {</code> | Havuzdan bağlantı alıp SELECT 1 çalıştırır; havuz doluysa ya da DB kapalıysa fırlatır |
-| [server/src/db.js:78](../../server/src/db.js#L78) | <code>connectionTimeoutMillis: DB_CONNECT_TIMEOUT_MS,</code> | Bağlantı alma/kurma zaman aşımı (varsayılan 5 sn, DB_CONNECT_TIMEOUT_MS) |
-| [server/src/db.js:65](../../server/src/db.js#L65) | <code>const DB_POOL_MAX = Math.max(2, Number(process.env.DB_POOL_MAX) &#124;&#124; 12);</code> | Havuz üst sınırı 12; hepsi meşgulse yeni istek bağlantı bekler ve zaman aşımına düşer |
+| [server/src/db.js:94](../../server/src/db.js#L94) | <code>export async function checkDbConnection() {</code> | Havuzdan bağlantı alıp SELECT 1 çalıştırır; havuz doluysa ya da DB kapalıysa fırlatır |
+| [server/src/db.js:82](../../server/src/db.js#L82) | <code>connectionTimeoutMillis: DB_CONNECT_TIMEOUT_MS,</code> | Bağlantı alma/kurma zaman aşımı (varsayılan 5 sn, DB_CONNECT_TIMEOUT_MS) |
+| [server/src/db.js:69](../../server/src/db.js#L69) | <code>const DB_POOL_MAX = Math.max(2, Number(process.env.DB_POOL_MAX) &#124;&#124; 12);</code> | Havuz üst sınırı 12; hepsi meşgulse yeni istek bağlantı bekler ve zaman aşımına düşer |
 
 **Olası nedenler**
 - PostgreSQL konteyneri durmuş / unhealthy / yeniden başlıyor
@@ -614,8 +614,8 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 describe kapi-api | grep -E 'script
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/db.js:221](../../server/src/db.js#L221) | <code>'Veritabani semasi kurulu degil ("users" tablosu yok). Bos veritabaninda once `node scrip…</code> | ensureDbSchema ilk iş "users" tablosunu arar; yoksa anlaşılır bir hata fırlatır (ALTER TABLE users patlamasın diye) |
-| [server/src/db.js:214](../../server/src/db.js#L214) | <code>export async function ensureDbSchema() {</code> | Temel tablolar migration'larla gelir; ensureDbSchema yalnız EKLEYİCİ ve IF NOT EXISTS ifadeleri çalıştırır |
+| [server/src/db.js:225](../../server/src/db.js#L225) | <code>'Veritabani semasi kurulu degil ("users" tablosu yok). Bos veritabaninda once `node scrip…</code> | ensureDbSchema ilk iş "users" tablosunu arar; yoksa anlaşılır bir hata fırlatır (ALTER TABLE users patlamasın diye) |
+| [server/src/db.js:218](../../server/src/db.js#L218) | <code>export async function ensureDbSchema() {</code> | Temel tablolar migration'larla gelir; ensureDbSchema yalnız EKLEYİCİ ve IF NOT EXISTS ifadeleri çalıştırır |
 | [server/migrations/001_init.sql:19](../../server/migrations/001_init.sql#L19) | <code>CREATE TABLE IF NOT EXISTS users (</code> | users tablosunun tek tanımı migration 001'dedir (db.js bunu oluşturmaz) |
 | [docker-compose.yml:30](../../docker-compose.yml#L30) | <code>- ./server/migrations:/docker-entrypoint-initdb.d:ro</code> | Migration SQL'leri YALNIZ boş veri dizininde ilk kurulumda otomatik çalışır |
 | [server/scripts/migrate.js:497](../../server/scripts/migrate.js#L497) | <code>async function runApply(opts, env, log, logError, open, ask) {</code> | Boş veritabanına migration uygulayan elle komut (node scripts/migrate.js --apply) |
@@ -649,9 +649,9 @@ ssh -p 22667 salihceylan@178.210.161.55 "cd /var/www/site_kapi_kontrol/server &&
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/db.js:214](../../server/src/db.js#L214) | <code>export async function ensureDbSchema() {</code> | Tablo/kolon/indeks tanımlarının çoğu burada (CREATE TABLE IF NOT EXISTS / ADD COLUMN IF NOT EXISTS); AÇILIŞTA çalışır |
-| [server/src/db.js:1012](../../server/src/db.js#L1012) | <code>CREATE TABLE IF NOT EXISTS pending_registrations (</code> | Örnek (son eklenen): e-posta doğrulama bekleyen kayıt tablosu; migration 028 ile aynı DDL |
-| [server/src/db.js:685](../../server/src/db.js#L685) | <code>CREATE TABLE IF NOT EXISTS ota_update_jobs (</code> | ota_update_jobs / ota_update_job_devices / app_maintenance_runs YALNIZ db.js'te tanımlı (migration'da yok) |
+| [server/src/db.js:218](../../server/src/db.js#L218) | <code>export async function ensureDbSchema() {</code> | Tablo/kolon/indeks tanımlarının çoğu burada (CREATE TABLE IF NOT EXISTS / ADD COLUMN IF NOT EXISTS); AÇILIŞTA çalışır |
+| [server/src/db.js:1016](../../server/src/db.js#L1016) | <code>CREATE TABLE IF NOT EXISTS pending_registrations (</code> | Örnek (son eklenen): e-posta doğrulama bekleyen kayıt tablosu; migration 028 ile aynı DDL |
+| [server/src/db.js:689](../../server/src/db.js#L689) | <code>CREATE TABLE IF NOT EXISTS ota_update_jobs (</code> | ota_update_jobs / ota_update_job_devices / app_maintenance_runs YALNIZ db.js'te tanımlı (migration'da yok) |
 | [server/migrations/001_init.sql:19](../../server/migrations/001_init.sql#L19) | <code>CREATE TABLE IF NOT EXISTS users (</code> | users tablosu YALNIZ migration'da tanımlı; db.js yalnız bu tabloya kolon ekler |
 | [server/scripts/migrate.js:43](../../server/scripts/migrate.js#L43) | <code>export const MIGRATIONS_TABLE = 'schema_migrations';</code> | Migration koşucusunun kendi takip tablosu (uygulama tablosu değildir) |
 
@@ -681,13 +681,13 @@ ssh -p 22667 salihceylan@178.210.161.55 'docker exec -i site_kapi_kontrol_postgr
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/db.js:319](../../server/src/db.js#L319) | <code>CREATE UNIQUE INDEX IF NOT EXISTS idx_users_login_name_unique</code> | login_name (küçük harfe göre) benzersiz indeksi: mevcut veride yinelenen değer varsa oluşturulamaz |
-| [server/src/db.js:534](../../server/src/db.js#L534) | <code>CREATE UNIQUE INDEX IF NOT EXISTS idx_sites_mqtt_site_id_unique</code> | sites.mqtt_site_id benzersiz indeksi (önce NULL satırlar UPDATE ile doldurulur) |
-| [server/src/db.js:531](../../server/src/db.js#L531) | <code>ALTER COLUMN mqtt_site_id SET NOT NULL</code> | NULL kalan satır varsa başarısız olur; öncesindeki UPDATE bunu önlemek içindir |
-| [server/src/db.js:631](../../server/src/db.js#L631) | <code>CREATE UNIQUE INDEX IF NOT EXISTS idx_devices_mqtt_username_unique</code> | devices.mqtt_username benzersiz indeksi (NULL olmayanlar için) |
-| [server/src/db.js:912](../../server/src/db.js#L912) | <code>CREATE UNIQUE INDEX IF NOT EXISTS idx_door_access_logs_client_log</code> | Offline log idempotansı: (device_uid, client_log_id) benzersiz indeksi |
-| [server/src/db.js:902](../../server/src/db.js#L902) | <code>ALTER TABLE door_access_logs ALTER COLUMN site_code TYPE BIGINT;</code> | Her açılışta çalışan tip değişikliği ifadeleri (sütun zaten BIGINT ise yan etkisizdir) |
-| [server/src/db.js:296](../../server/src/db.js#L296) | <code>ELSIF current_def NOT LIKE '%super_user%'</code> | users_role_check yalnız eksikse/eski tanımsa yenilenir; her açılışta DROP/ADD yapılmaz |
+| [server/src/db.js:323](../../server/src/db.js#L323) | <code>CREATE UNIQUE INDEX IF NOT EXISTS idx_users_login_name_unique</code> | login_name (küçük harfe göre) benzersiz indeksi: mevcut veride yinelenen değer varsa oluşturulamaz |
+| [server/src/db.js:538](../../server/src/db.js#L538) | <code>CREATE UNIQUE INDEX IF NOT EXISTS idx_sites_mqtt_site_id_unique</code> | sites.mqtt_site_id benzersiz indeksi (önce NULL satırlar UPDATE ile doldurulur) |
+| [server/src/db.js:535](../../server/src/db.js#L535) | <code>ALTER COLUMN mqtt_site_id SET NOT NULL</code> | NULL kalan satır varsa başarısız olur; öncesindeki UPDATE bunu önlemek içindir |
+| [server/src/db.js:635](../../server/src/db.js#L635) | <code>CREATE UNIQUE INDEX IF NOT EXISTS idx_devices_mqtt_username_unique</code> | devices.mqtt_username benzersiz indeksi (NULL olmayanlar için) |
+| [server/src/db.js:916](../../server/src/db.js#L916) | <code>CREATE UNIQUE INDEX IF NOT EXISTS idx_door_access_logs_client_log</code> | Offline log idempotansı: (device_uid, client_log_id) benzersiz indeksi |
+| [server/src/db.js:906](../../server/src/db.js#L906) | <code>ALTER TABLE door_access_logs ALTER COLUMN site_code TYPE BIGINT;</code> | Her açılışta çalışan tip değişikliği ifadeleri (sütun zaten BIGINT ise yan etkisizdir) |
+| [server/src/db.js:300](../../server/src/db.js#L300) | <code>ELSIF current_def NOT LIKE '%super_user%'</code> | users_role_check yalnız eksikse/eski tanımsa yenilenir; her açılışta DROP/ADD yapılmaz |
 | [server/src/server.js:381](../../server/src/server.js#L381) | <code>console.error('Server startup failed:', error);</code> | Hata burada günlüğe yazılır ve süreç kapanır (PM2 döngüsü başlar) |
 
 **Olası nedenler**
@@ -720,12 +720,12 @@ ssh -p 22667 salihceylan@178.210.161.55 'docker exec -i site_kapi_kontrol_postgr
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/db.js:65](../../server/src/db.js#L65) | <code>const DB_POOL_MAX = Math.max(2, Number(process.env.DB_POOL_MAX) &#124;&#124; 12);</code> | Aynı anda en fazla 12 bağlantı (DB_POOL_MAX); hepsi doluysa yenisi bağlantı bekler |
-| [server/src/db.js:79](../../server/src/db.js#L79) | <code>statement_timeout: DB_STATEMENT_TIMEOUT_MS,</code> | Tek sorgunun en uzun süresi 30 sn (DB_STATEMENT_TIMEOUT_MS); kilit beklemeyi de kapsar |
-| [server/src/db.js:80](../../server/src/db.js#L80) | <code>query_timeout: DB_STATEMENT_TIMEOUT_MS + 5000,</code> | İstemci tarafı sorgu zaman aşımı: sunucu iptal etmezse 5 sn sonra istemci bırakır |
-| [server/src/db.js:75](../../server/src/db.js#L75) | <code>options: '-c timezone=Europe/Istanbul -c idle_in_transaction_session_timeout=60000',</code> | Açık unutulan transaction 60 sn sonra SUNUCU tarafında kapatılır (kilit sızıntısını önler) |
-| [server/src/db.js:87](../../server/src/db.js#L87) | <code>console.error('[DB] Bosta bekleyen istemci hatasi:', error?.code &#124;&#124; error?.message);</code> | Boştaki bağlantı koparsa süreç düşmez; yalnız bu satır yazılır |
-| [server/src/db.js:82](../../server/src/db.js#L82) | <code>application_name: 'kapi-api',</code> | pg_stat_activity'de API bağlantılarını ayırt etmek için ad |
+| [server/src/db.js:69](../../server/src/db.js#L69) | <code>const DB_POOL_MAX = Math.max(2, Number(process.env.DB_POOL_MAX) &#124;&#124; 12);</code> | Aynı anda en fazla 12 bağlantı (DB_POOL_MAX); hepsi doluysa yenisi bağlantı bekler |
+| [server/src/db.js:83](../../server/src/db.js#L83) | <code>statement_timeout: DB_STATEMENT_TIMEOUT_MS,</code> | Tek sorgunun en uzun süresi 30 sn (DB_STATEMENT_TIMEOUT_MS); kilit beklemeyi de kapsar |
+| [server/src/db.js:84](../../server/src/db.js#L84) | <code>query_timeout: DB_STATEMENT_TIMEOUT_MS + 5000,</code> | İstemci tarafı sorgu zaman aşımı: sunucu iptal etmezse 5 sn sonra istemci bırakır |
+| [server/src/db.js:79](../../server/src/db.js#L79) | <code>options: '-c timezone=Europe/Istanbul -c idle_in_transaction_session_timeout=60000',</code> | Açık unutulan transaction 60 sn sonra SUNUCU tarafında kapatılır (kilit sızıntısını önler) |
+| [server/src/db.js:91](../../server/src/db.js#L91) | <code>console.error('[DB] Bosta bekleyen istemci hatasi:', error?.code &#124;&#124; error?.message);</code> | Boştaki bağlantı koparsa süreç düşmez; yalnız bu satır yazılır |
+| [server/src/db.js:86](../../server/src/db.js#L86) | <code>application_name: 'kapi-api',</code> | pg_stat_activity'de API bağlantılarını ayırt etmek için ad |
 
 **Olası nedenler**
 - Uzun süren sorgu ya da kilit (başka bir transaction satırı tutuyor) bağlantıları dolduruyor
@@ -755,7 +755,7 @@ ssh -p 22667 salihceylan@178.210.161.55 'docker exec -i site_kapi_kontrol_postgr
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/db.js:70](../../server/src/db.js#L70) | <code>host: process.env.DB_HOST,</code> | Bağlantı bilgileri yalnız ortamdan okunur (DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD) |
+| [server/src/db.js:74](../../server/src/db.js#L74) | <code>host: process.env.DB_HOST,</code> | Bağlantı bilgileri yalnız ortamdan okunur (DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD) |
 | [docker-compose.yml:19](../../docker-compose.yml#L19) | <code>- "127.0.0.1:5432:5432"</code> | Postgres yalnız loopback'e bağlıdır: API aynı makinede olmalı; dışarıdan erişim SSH tüneliyle |
 | [docker-compose.yml:5](../../docker-compose.yml#L5) | <code># NOT: POSTGRES_PASSWORD yalnizca BOS veri dizininde (ilk kurulum) uygulanir.</code> | POSTGRES_PASSWORD sonradan değişse de mevcut veritabanının parolası DEĞİŞMEZ (ALTER USER gerekir) |
 | [server/.env.example:31](../../server/.env.example#L31) | <code>DB_HOST=127.0.0.1</code> | Beklenen canlı DB_HOST; DB_PASSWORD docker-compose POSTGRES_PASSWORD ile aynı olmalı |
@@ -1522,7 +1522,7 @@ ssh -p 22667 salihceylan@178.210.161.55 "grep -c screen_qr /etc/mosquitto/acl"
 | [server/src/mqtt_bridge.js:676](../../server/src/mqtt_bridge.js#L676) | <code>transientReject = result?.reason === 'DEVICE_NOT_ASSIGNED';</code> | Cihaz henüz siteye/kapıya atanmamışsa ack GÖNDERİLMEZ (cihaz sakladığı kayıtları atanınca yeniden yollar) |
 | [server/src/mqtt_bridge.js:623](../../server/src/mqtt_bridge.js#L623) | <code>function publishLogsAck(normalizedUid, batchId) {</code> | logs_ack, köprü bağlıysa device/<uid>/cmd konusuna yayınlanır |
 | [server/src/services/door_log_service.js:419](../../server/src/services/door_log_service.js#L419) | <code>result.reason = 'DEVICE_NOT_ASSIGNED';</code> | Atanmamış cihaz nedeniyle yazılmayan kayıtlar rejected sayılır |
-| [server/src/db.js:912](../../server/src/db.js#L912) | <code>CREATE UNIQUE INDEX IF NOT EXISTS idx_door_access_logs_client_log</code> | Tekrar gelen aynı (device_uid, client_log_id) kayıtları eklenmez: tekrar yayın güvenlidir (idempotent) |
+| [server/src/db.js:916](../../server/src/db.js#L916) | <code>CREATE UNIQUE INDEX IF NOT EXISTS idx_door_access_logs_client_log</code> | Tekrar gelen aynı (device_uid, client_log_id) kayıtları eklenmez: tekrar yayın güvenlidir (idempotent) |
 | [server/src/mqtt_acl_sync.js:96](../../server/src/mqtt_acl_sync.js#L96) | <code>lines.push(`topic write device/${uid}/logs`);</code> | Cihazın logs konusuna yazabilmesi için ACL'de bu satır gerekir |
 
 **Olası nedenler**
@@ -1952,7 +1952,7 @@ ssh -p 22667 salihceylan@178.210.161.55 'docker exec -i site_kapi_kontrol_postgr
 | [server/scripts/test_doors_qr.js:5](../../server/scripts/test_doors_qr.js#L5) | <code>const cleanUid = '00861A0D5020';</code> | SABİT bir UID için kapı eşleşmesini sorgular (salt-okunur); başka cihaz için dosyada UID değiştirilmeli |
 | [server/scripts/test_query.js:5](../../server/scripts/test_query.js#L5) | <code>const dev = await pool.query("SELECT * FROM devices WHERE device_uid = 'D4C771A172E0'");</code> | SABİT UID/kullanıcı için cihaz, kullanıcı ve üyelik satırlarını basar (salt-okunur); kişisel veri içerir, çıktıyı paylaşmayın |
 | [server/scripts/_dev_guard.js:3](../../server/scripts/_dev_guard.js#L3) | <code>if (process.env.ALLOW_DEV_SCRIPTS !== '1') {</code> | Tümü bekçi arkasında; ALLOW_DEV_SCRIPTS=1 olmadan çıkar |
-| [server/src/db.js:69](../../server/src/db.js#L69) | <code>export const pool = new Pool({</code> | Betikler src/db.js havuzunu kullanır: server/.env'deki DB_* hangisiyse O veritabanına bağlanır (canlı sunucuda çalıştırılırsa CANLI DB) |
+| [server/src/db.js:73](../../server/src/db.js#L73) | <code>export const pool = new Pool({</code> | Betikler src/db.js havuzunu kullanır: server/.env'deki DB_* hangisiyse O veritabanına bağlanır (canlı sunucuda çalıştırılırsa CANLI DB) |
 
 **Olası nedenler**
 - Beklenen: bu betikler geliştirme yardımcılarıdır, sabit UID/kullanıcıya bağlıdır; boş sonuç çoğu zaman o kayıt bu veritabanında yoktur demektir

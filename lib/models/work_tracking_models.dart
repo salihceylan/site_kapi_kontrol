@@ -55,6 +55,111 @@ enum WorkCategory {
   }
 }
 
+/// Sitenin talep kategorisi (sunucu `work_categories`, 100). [key] DEĞİŞMEZ (varsayılan dört anahtar ya da `k_<ad>`);
+/// [label] site yöneticisinin verdiği addır. [WorkCategory] enum'u yalnız varsayılan dört anahtarı bilir (simge ve
+/// yedek ad); sitenin eklediği kategori eski uygulamada "Diğer" görünür, çökmez.
+@immutable
+class WorkCategoryOption {
+  const WorkCategoryOption({
+    required this.key,
+    required this.label,
+    this.id = 0,
+    this.isSystem = false,
+    this.isActive = true,
+    this.sortOrder = 0,
+    this.itemCount,
+  });
+
+  final int id;
+  final String key;
+  final String label;
+
+  /// Varsayılan (hazır) dört kategoriden biri: silinemez, yalnız adı değişir / pasife alınır.
+  final bool isSystem;
+  final bool isActive;
+  final int sortOrder;
+
+  /// Bu kategoride kaç talep var (yalnız yönetici listesinde); bilinmiyorsa null.
+  final int? itemCount;
+
+  /// Bir talepte kullanılmış: silinmez, pasife alınır.
+  bool get isUsed => (itemCount ?? 0) > 0;
+
+  /// Simge için bilinen varsayılan kategori (özel kategori `diger` gibi çizilir).
+  WorkCategory get legacy => WorkCategory.fromApi(key);
+
+  /// Sunucudan liste gelmediğinde (eski sunucu, ağ hatası) kullanılan varsayılan dört kategori.
+  static final List<WorkCategoryOption> defaults = List<WorkCategoryOption>.unmodifiable(<WorkCategoryOption>[
+    for (final category in WorkCategory.values)
+      WorkCategoryOption(
+        key: category.apiValue,
+        label: category.label,
+        isSystem: true,
+        sortOrder: (category.index + 1) * 10,
+      ),
+  ]);
+
+  static WorkCategoryOption? fromJson(Object? raw) {
+    final json = _map(raw);
+    if (json == null) return null;
+    final body = _map(json['category']) ?? json;
+    final key = _text(body['key']);
+    if (key.isEmpty) return null;
+    final label = _text(body['label']);
+    final known = WorkCategory.values.any((c) => c.apiValue == key);
+    return WorkCategoryOption(
+      id: crmInt(body['id']),
+      key: key,
+      label: label.isNotEmpty ? label : (known ? WorkCategory.fromApi(key).label : key),
+      isSystem: body['is_system'] == true,
+      isActive: body['is_active'] != false,
+      sortOrder: crmInt(body['sort_order']),
+      itemCount: crmIntOrNull(body['item_count']),
+    );
+  }
+
+  /// Bozuk satırlar atılır; sunucu sırası (sort_order, id) korunur.
+  static List<WorkCategoryOption> listFrom(Object? raw) {
+    if (raw is! List) return const <WorkCategoryOption>[];
+    return List<WorkCategoryOption>.unmodifiable(<WorkCategoryOption>[
+      for (final item in raw) ?WorkCategoryOption.fromJson(item),
+    ]);
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is WorkCategoryOption &&
+      other.id == id &&
+      other.key == key &&
+      other.label == label &&
+      other.isSystem == isSystem &&
+      other.isActive == isActive &&
+      other.sortOrder == sortOrder &&
+      other.itemCount == itemCount;
+
+  @override
+  int get hashCode => Object.hash(id, key, label, isSystem, isActive, sortOrder, itemCount);
+}
+
+/// `DELETE .../work-categories/:id` sonucu: kullanılmamış özel kategori silinir; KULLANILMIŞ olan silinmez, pasife alınır.
+@immutable
+class WorkCategoryDeleteResult {
+  const WorkCategoryDeleteResult({required this.deleted, this.category});
+
+  final bool deleted;
+
+  /// Silinmediyse (pasife alındıysa) güncel kategori.
+  final WorkCategoryOption? category;
+
+  bool get deactivated => !deleted;
+
+  factory WorkCategoryDeleteResult.fromJson(Object? raw) {
+    final json = _map(raw) ?? const <String, dynamic>{};
+    final deleted = json['deleted'] == true;
+    return WorkCategoryDeleteResult(deleted: deleted, category: deleted ? null : WorkCategoryOption.fromJson(json['category']));
+  }
+}
+
 /// Konum türü (sunucu `location_type`).
 enum WorkLocationType {
   ortakAlan('ortak_alan', 'Ortak alan'),
@@ -132,6 +237,59 @@ enum WorkPriority {
   }
 }
 
+/// Talebe bağlı ekipman (yönetim görünümü `equipment`; seçici listesi). Sakin görünümünde YOKTUR. Pasif ekipman
+/// ([isActive] false) yeni talebe bağlanamaz ama mevcut bağda görünür.
+@immutable
+class WorkEquipmentRef {
+  const WorkEquipmentRef({
+    required this.id,
+    this.name = '',
+    this.kind = '',
+    this.isActive = true,
+  });
+
+  final int id;
+  final String name;
+
+  /// Ekipman türü kodu (`asansor`, `kazan` ... ya da serbest metin).
+  final String kind;
+  final bool isActive;
+
+  /// Ekranda gösterilen ad; boşsa "Ekipman".
+  String get label => name.trim().isEmpty ? 'Ekipman' : name.trim();
+
+  static WorkEquipmentRef? fromJson(Object? raw) {
+    final json = _map(raw);
+    if (json == null) return null;
+    final id = crmIntOrNull(json['id']);
+    if (id == null || id <= 0) return null;
+    return WorkEquipmentRef(
+      id: id,
+      name: _text(json['name']),
+      kind: _text(json['kind']),
+      isActive: json['is_active'] != false,
+    );
+  }
+
+  static List<WorkEquipmentRef> listFrom(Object? raw) {
+    if (raw is! List) return const <WorkEquipmentRef>[];
+    return List<WorkEquipmentRef>.unmodifiable(<WorkEquipmentRef>[
+      for (final item in raw) ?WorkEquipmentRef.fromJson(item),
+    ]);
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is WorkEquipmentRef &&
+      other.id == id &&
+      other.name == name &&
+      other.kind == kind &&
+      other.isActive == isActive;
+
+  @override
+  int get hashCode => Object.hash(id, name, kind, isActive);
+}
+
 /// Konumdaki daire / blok (etiketiyle).
 @immutable
 class WorkPlace {
@@ -167,8 +325,9 @@ String workLocationSummary(
   return blockLabel.isEmpty ? 'Ortak alan' : 'Ortak alan · $blockLabel';
 }
 
-/// Olay türü (sunucu `type`). `attachment_added` (to = ek kimliği) ve `attachment_removed` (from = ek kimliği)
-/// herkese açıktır (sakin de görür).
+/// Olay türü (sunucu `type`). `attachment_added` (to = ek kimliği, from = "önce / sonra" etiketi) ve
+/// `attachment_removed` (from = ek kimliği) herkese açıktır (sakin de görür). `equipment_changed` iç olaydır
+/// (yalnız yönetim; from / to = ekipman kimliği, `from_label` / `to_label` = ad).
 enum WorkEventType {
   created('created'),
   statusChanged('status_changed'),
@@ -178,6 +337,7 @@ enum WorkEventType {
   comment('comment'),
   attachmentAdded('attachment_added'),
   attachmentRemoved('attachment_removed'),
+  equipmentChanged('equipment_changed'),
   unknown('');
 
   const WorkEventType(this.apiValue);
@@ -266,6 +426,8 @@ class WorkResidentItem {
     this.siteCode = 0,
     this.siteName = '',
     this.category = WorkCategory.diger,
+    this.categoryKey = '',
+    this.categoryLabel = '',
     this.locationType = WorkLocationType.ortakAlan,
     this.title = '',
     this.description = '',
@@ -288,6 +450,15 @@ class WorkResidentItem {
   final int siteCode;
   final String siteName;
   final WorkCategory category;
+
+  /// Sitedeki kategori anahtarı (`category`: varsayılan dört ya da `k_<ad>`); eski sunucuda boş.
+  final String categoryKey;
+
+  /// Sitedeki kategori adı (`category_label`); eski sunucuda boş.
+  final String categoryLabel;
+
+  /// Ekranda gösterilen kategori adı: sunucunun adı, yoksa varsayılan ad (özel kategori eski uygulamada "Diğer").
+  String get categoryText => categoryLabel.trim().isNotEmpty ? categoryLabel.trim() : category.label;
   final WorkLocationType locationType;
   final String title;
   final String description;
@@ -314,6 +485,8 @@ class WorkResidentItem {
     siteCode: siteCode,
     siteName: siteName,
     category: category,
+    categoryKey: categoryKey,
+    categoryLabel: categoryLabel,
     locationType: locationType,
     title: title,
     description: description,
@@ -340,6 +513,8 @@ class WorkResidentItem {
       siteCode: crmInt(json['site_code']),
       siteName: _text(json['site_name']),
       category: WorkCategory.fromApi(json['category']),
+      categoryKey: _text(json['category']),
+      categoryLabel: _text(json['category_label']),
       locationType: WorkLocationType.fromApi(json['location_type']),
       title: _text(json['title']),
       description: _text(json['description']),
@@ -500,10 +675,22 @@ class WorkCreateRequest {
     required this.description,
     this.apartmentId,
     this.urgent = false,
+    this.categoryKey,
   });
 
   final int siteCode;
   final WorkCategory category;
+
+  /// Sitenin kendi eklediği kategorinin anahtarı (`k_<ad>`); doluysa [category] yerine bu gönderilir. Varsayılan dört
+  /// kategoride null kalır (eski gövde birebir aynı).
+  final String? categoryKey;
+
+  /// Gönderilen kategori anahtarı.
+  String get categoryApiValue {
+    final key = categoryKey?.trim();
+    return key == null || key.isEmpty ? category.apiValue : key;
+  }
+
   final WorkLocationType locationType;
   final String title;
   final String description;
@@ -513,7 +700,7 @@ class WorkCreateRequest {
   /// Aynı veri = aynı imza (idempotency anahtarı bu imzaya bağlanır; veri değişince anahtar yenilenir).
   String get signature => <Object?>[
     siteCode,
-    category.apiValue,
+    categoryApiValue,
     locationType.apiValue,
     title.trim(),
     description.trim(),
@@ -523,7 +710,7 @@ class WorkCreateRequest {
 
   Map<String, dynamic> toJson(String idempotencyKey) => <String, dynamic>{
     'site_code': siteCode,
-    'category': category.apiValue,
+    'category': categoryApiValue,
     'location_type': locationType.apiValue,
     'title': title.trim(),
     'description': description.trim(),
@@ -602,6 +789,8 @@ class WorkManagedItem {
     required this.id,
     this.siteCode = 0,
     this.category = WorkCategory.diger,
+    this.categoryKey = '',
+    this.categoryLabel = '',
     this.locationType = WorkLocationType.ortakAlan,
     this.title = '',
     this.description = '',
@@ -612,6 +801,7 @@ class WorkManagedItem {
     this.block,
     this.requester = const WorkRequester(),
     this.assignedTo,
+    this.equipment,
     this.dueDate,
     this.createdAt,
     this.updatedAt,
@@ -622,6 +812,15 @@ class WorkManagedItem {
   final int id;
   final int siteCode;
   final WorkCategory category;
+
+  /// Sitedeki kategori anahtarı (`category`: varsayılan dört ya da `k_<ad>`); eski sunucuda boş.
+  final String categoryKey;
+
+  /// Sitedeki kategori adı (`category_label`); eski sunucuda boş.
+  final String categoryLabel;
+
+  /// Ekranda gösterilen kategori adı: sunucunun adı, yoksa varsayılan ad (özel kategori eski uygulamada "Diğer").
+  String get categoryText => categoryLabel.trim().isNotEmpty ? categoryLabel.trim() : category.label;
   final WorkLocationType locationType;
   final String title;
   final String description;
@@ -632,6 +831,9 @@ class WorkManagedItem {
   final WorkPlace? block;
   final WorkRequester requester;
   final WorkAssignee? assignedTo;
+
+  /// Bağlı ekipman (`equipment`; eski sunucuda ve bağ yoksa null).
+  final WorkEquipmentRef? equipment;
   final DateTime? dueDate;
   final DateTime? createdAt;
   final DateTime? updatedAt;
@@ -649,6 +851,8 @@ class WorkManagedItem {
       id: crmInt(json['id']),
       siteCode: crmInt(json['site_code']),
       category: WorkCategory.fromApi(json['category']),
+      categoryKey: _text(json['category']),
+      categoryLabel: _text(json['category_label']),
       locationType: WorkLocationType.fromApi(json['location_type']),
       title: _text(json['title']),
       description: _text(json['description']),
@@ -659,6 +863,7 @@ class WorkManagedItem {
       block: WorkPlace.fromJson(json['block'], labelKey: 'name'),
       requester: WorkRequester.fromJson(json['requester']),
       assignedTo: WorkAssignee.fromJson(json['assigned_to']),
+      equipment: WorkEquipmentRef.fromJson(json['equipment']),
       dueDate: crmDate(json['due_date']),
       createdAt: documentInstant(json['created_at']),
       updatedAt: documentInstant(json['updated_at']),
@@ -716,6 +921,7 @@ class WorkManagedDetail {
     this.events = const <WorkEvent>[],
     this.nextStatuses = const <WorkStatus>[],
     this.attachments = const <WorkAttachment>[],
+    this.photoWarnings = const <WorkPhotoWarning>[],
   });
 
   final WorkManagedItem item;
@@ -724,6 +930,9 @@ class WorkManagedDetail {
   /// Sunucunun izin verdiği geçişler (kurulda boş). İstemci kendi başına geçiş kuralı üretmez.
   final List<WorkStatus> nextStatuses;
   final List<WorkAttachment> attachments;
+
+  /// Fotoğraf yeniden kullanım uyarıları (`photo_warnings`; eski sunucuda yok = boş). Yalnız uyarıdır.
+  final List<WorkPhotoWarning> photoWarnings;
 
   factory WorkManagedDetail.fromJson(Map<String, dynamic> json) {
     final rawNext = json['next_statuses'];
@@ -739,6 +948,7 @@ class WorkManagedDetail {
       events: WorkEvent.listFrom(json['events']),
       nextStatuses: List<WorkStatus>.unmodifiable(next),
       attachments: attachments,
+      photoWarnings: WorkPhotoWarning.listFrom(json['photo_warnings']),
     );
   }
 }
@@ -927,6 +1137,72 @@ abstract final class WorkAttachmentRules {
   }
 }
 
+/// Fotoğraf uyarısının önemi: `warning` (konum uyuşmuyor olabilir), `info` (bilgi).
+enum WorkPhotoWarningSeverity { warning, info }
+
+/// Yönetimin gördüğü fotoğraf uyarısı (100, P2-6): aynı fotoğraf sitedeki başka bir kayıtta da kullanılmış ya da aynı
+/// kayıtta yinelenmiş. YALNIZ uyarıdır (yükleme / durum / kabul engellenmez); sunucunun Türkçe metni ekranda aynen
+/// gösterilir. Sakin görünümünde bu alan hiç gelmez.
+@immutable
+class WorkPhotoWarning {
+  const WorkPhotoWarning({
+    required this.code,
+    required this.attachmentId,
+    required this.message,
+    this.severity = WorkPhotoWarningSeverity.info,
+    this.relatedCount = 0,
+    this.relatedItemIds = const <int>[],
+  });
+
+  /// `photo_reused_other_location | photo_reused | photo_duplicate_in_item` (bilinmeyen kodlar da gösterilir).
+  final String code;
+  final int attachmentId;
+  final String message;
+  final WorkPhotoWarningSeverity severity;
+
+  /// Eşleşen başka kayıt sayısı (görevli kapsam dışı eşleşmeleri de sayar).
+  final int relatedCount;
+
+  /// Görünür eşleşen kayıtların kimlikleri (en çok 5).
+  final List<int> relatedItemIds;
+
+  bool get isWarning => severity == WorkPhotoWarningSeverity.warning;
+
+  static WorkPhotoWarning? fromJson(Object? raw) {
+    final json = _map(raw);
+    if (json == null) return null;
+    final message = _text(json['message']);
+    final attachmentId = crmIntOrNull(json['attachment_id']);
+    // Gösterilecek metni ya da fotoğrafı olmayan uyarı anlamsızdır.
+    if (message.isEmpty || attachmentId == null || attachmentId <= 0) return null;
+    final related = json['related'];
+    return WorkPhotoWarning(
+      code: _text(json['code']),
+      attachmentId: attachmentId,
+      message: message,
+      severity: _text(json['severity']).toLowerCase() == 'warning'
+          ? WorkPhotoWarningSeverity.warning
+          : WorkPhotoWarningSeverity.info,
+      relatedCount: crmInt(json['related_count']),
+      relatedItemIds: related is List
+          ? List<int>.unmodifiable(<int>[
+              for (final entry in related)
+                if (_map(entry) case final map? when (crmIntOrNull(map['work_item_id']) ?? 0) > 0)
+                  crmIntOrNull(map['work_item_id'])!,
+            ])
+          : const <int>[],
+    );
+  }
+
+  /// Bozuk satırlar atılır; sunucu sırası (fotoğraf kimliği) korunur.
+  static List<WorkPhotoWarning> listFrom(Object? raw) {
+    if (raw is! List) return const <WorkPhotoWarning>[];
+    return List<WorkPhotoWarning>.unmodifiable(<WorkPhotoWarning>[
+      for (final item in raw) ?WorkPhotoWarning.fromJson(item),
+    ]);
+  }
+}
+
 /// Ek durumu (sunucu `status`): `uploading` içerik henüz gelmedi, `ready` görüntülenebilir.
 enum WorkAttachmentStatus {
   uploading('uploading'),
@@ -946,6 +1222,26 @@ enum WorkAttachmentStatus {
   }
 }
 
+/// Fotoğrafın "önce / sonra" etiketi (sunucu `phase`: `before | after`). Etiketsiz fotoğraf (eski kayıtlar dahil) null
+/// ile gösterilir; bilinmeyen değer de etiketsiz sayılır.
+enum WorkAttachmentPhase {
+  before('before', 'Önce'),
+  after('after', 'Sonra');
+
+  const WorkAttachmentPhase(this.apiValue, this.label);
+
+  final String apiValue;
+  final String label;
+
+  static WorkAttachmentPhase? fromApi(Object? value) {
+    final normalized = value?.toString().trim().toLowerCase();
+    for (final phase in values) {
+      if (phase.apiValue == normalized) return phase;
+    }
+    return null;
+  }
+}
+
 /// Talebin fotoğraf eki. Yönetim görünümünde [uploadedByName] gerçek addır; SAKİN görünümünde yalnız kendi eklediği
 /// fotoğrafta gerçek ad, diğerlerinde sunucu "Yönetim" yazar (arayüz yine de adı göstermez: "Siz" / "Yönetim").
 /// [uploadedByMe] silme yetkisinin ekrandaki ipucudur (yetkinin tek kaynağı yine sunucudur).
@@ -958,10 +1254,12 @@ class WorkAttachment {
     this.mimeType = '',
     this.sizeBytes = 0,
     this.status = WorkAttachmentStatus.unknown,
+    this.phase,
     this.uploadedByName,
     this.uploadedByKind = '',
     this.uploadedByMe = false,
     this.createdAt,
+    this.photoWarnings = const <WorkPhotoWarning>[],
   });
 
   final int id;
@@ -970,12 +1268,19 @@ class WorkAttachment {
   final String mimeType;
   final int sizeBytes;
   final WorkAttachmentStatus status;
+
+  /// "Önce / sonra" etiketi; etiketsiz (eski kayıtlar dahil) null.
+  final WorkAttachmentPhase? phase;
   final String? uploadedByName;
 
   /// `resident` (talebi açan sakin yükledi) | `management` (yönetici / görevli); bilinmiyorsa boş.
   final String uploadedByKind;
   final bool uploadedByMe;
   final DateTime? createdAt;
+
+  /// Yükleme tamamlama yanıtındaki uyarılar (`PUT .../content` -> `photo_warnings`; yalnız yönetim, yalnız varsa).
+  /// Liste satırlarında ve sakin yanıtında boştur; ayrıntıdaki uyarılar [WorkManagedDetail.photoWarnings]'tadır.
+  final List<WorkPhotoWarning> photoWarnings;
 
   /// İçerik indirilebilir (yükleme tamamlanmış).
   bool get isReady => status == WorkAttachmentStatus.ready;
@@ -1000,6 +1305,7 @@ class WorkAttachment {
       mimeType: _text(body['mime_type']).toLowerCase(),
       sizeBytes: crmInt(body['size_bytes']),
       status: WorkAttachmentStatus.fromApi(body['status']),
+      phase: WorkAttachmentPhase.fromApi(body['phase']),
       uploadedByName: crmText(body['uploaded_by_name']),
       uploadedByKind: switch (_text(body['uploaded_by_kind']).toLowerCase()) {
         'resident' => 'resident',
@@ -1008,6 +1314,7 @@ class WorkAttachment {
       },
       uploadedByMe: body['uploaded_by_me'] == true,
       createdAt: documentInstant(body['created_at']),
+      photoWarnings: WorkPhotoWarning.listFrom(json['photo_warnings']),
     );
   }
 
@@ -1027,16 +1334,21 @@ class WorkAttachmentCreateRequest {
     required this.fileName,
     required this.mimeType,
     required this.sizeBytes,
+    this.phase,
   });
 
   final String fileName;
   final String mimeType;
   final int sizeBytes;
 
+  /// İsteğe bağlı "önce / sonra" etiketi; null ise gövdeye `phase` hiç konmaz (etiketsiz, eski davranış).
+  final WorkAttachmentPhase? phase;
+
   Map<String, dynamic> toJson() => <String, dynamic>{
     'file_name': fileName.trim(),
     'mime_type': mimeType.trim().toLowerCase(),
     'size_bytes': sizeBytes,
+    if (phase != null) 'phase': phase!.apiValue,
   };
 }
 
@@ -1157,6 +1469,7 @@ class WorkReportCategory {
     this.rawCategory = '',
     this.opened = 0,
     this.resolved = 0,
+    this.serverLabel = '',
   });
 
   final WorkCategory category;
@@ -1166,7 +1479,11 @@ class WorkReportCategory {
   final int opened;
   final int resolved;
 
+  /// Sitedeki kategori adı (`category_label`, 100); eski sunucuda boş.
+  final String serverLabel;
+
   String get label {
+    if (serverLabel.trim().isNotEmpty) return serverLabel.trim();
     final known = WorkCategory.values.any((c) => c.apiValue == rawCategory.toLowerCase());
     if (known || rawCategory.trim().isEmpty) return category.label;
     return rawCategory.trim();
@@ -1181,6 +1498,7 @@ class WorkReportCategory {
       rawCategory: rawCategory,
       opened: crmInt(json['opened']),
       resolved: crmInt(json['resolved']),
+      serverLabel: _text(json['category_label']),
     );
   }
 }

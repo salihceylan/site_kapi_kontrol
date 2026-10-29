@@ -1,11 +1,13 @@
 // Sayac okuma saha uclari (gorevli fotografla okur). Sozlesme: docs/PLATFORM_SAYAC.md "Fotografla okuma".
 //
-//   GET  /sites/:siteCode/meter-field/meters?kind=             etkin sayaclar (daire sirasiyla) { items }
-//   POST /sites/:siteCode/meter-field/readings                 { meter_id, date, value, photo_b64?, photo_mime? } -> { reading, replayed, photo }
+//   GET  /sites/:siteCode/meter-field/meters?kind=&date=       etkin sayaclar (daire sirasiyla) { items, jump_factor, date }; her sayac: blok, onceki okuma, sicrama tabani
+//   POST /sites/:siteCode/meter-field/readings                 { meter_id, date, value, photo_b64?, photo_mime?, confirm_jump?, replace? } -> { reading, replayed, retaken, jump_confirmed, photo }
+//                                                              409 READING_JUMP (olagan disi tuketim; confirm_jump:true ile onaylanir), replace:true = yeniden cekim
 //   GET  /sites/:siteCode/meter-field/photos/:id/content       sunucuda tutulan fotograf (yonetici / gorevli)
 //
 // Yetki: yonetici / super + o sitenin etkin STAFF'i; kurul uyesi, sakin ve ilgisiz 403 FORBIDDEN_ROLE; `metering` modulu kapaliysa 403 MODULE_DISABLED.
-// Fotograf: Drive modulu acik ve bagliysa Drive'a (dosya adi AB_D13_201026), degilse sunucudaki meter_reading_photos tablosuna. Tekrar gonderim (replayed) fotograf eklemez.
+// Fotograf: Drive modulu acik ve bagliysa Drive'a (dosya adi OKM-<okuma no>_AB_D13_201026; Drive kaydi okumaya baglanir), degilse (ya da Drive bekleme alani doluysa)
+// sunucudaki meter_reading_photos tablosuna. Tekrar gonderim (replayed) fotograf eklemez. Sunucu hicbir fotografi kendiliginden silmez; telefondaki kopya da silinmez (K6).
 
 import crypto from 'node:crypto';
 import express from 'express';
@@ -17,7 +19,7 @@ import { driveService } from './drive_service.js';
 import { isModuleEnabled } from './module_service.js';
 import { METERING_MODULE, moduleDisabled } from './metering_common.js';
 import { meteringReadLimiter, meteringWriteLimiter } from './metering_routes.js';
-import { addReading, listMeters } from './metering_service.js';
+import { addFieldReading, listFieldMeters } from './metering_field_service.js';
 import { FORBIDDEN_ROLE_BODY, SITE_NOT_FOUND_BODY, getPeopleAccessKind } from './people_access.js';
 import { respondError } from './route_helpers.js';
 import { parseId } from '../utils/ids.js';
@@ -88,6 +90,9 @@ async function storePhoto({ siteCode, userCode, authUser, meterId, readingId, da
   const driveKind = DRIVE_KIND_OF[row.kind];
   const block = blockLetter(row.block_name);
   const apartment = unitNumber(row.unit_label);
+  // P1-11: dosya adi okuma kimligini tasir (OKM-<okuma no>_AB_D13_201026) ve Drive kaydi bu okumaya baglanir.
+  const source = { type: 'meter_reading', id: readingId };
+  let driveReason = null;
   if (await isModuleEnabled(siteCode, 'drive_storage')) {
     try {
       const out = await driveService.upload({
@@ -95,22 +100,24 @@ async function storePhoto({ siteCode, userCode, authUser, meterId, readingId, da
         actor: actorFromAuthUser(authUser),
         query: { kind: driveKind, date, block, apartment, mime: photo.mime },
         data: photo.data,
+        source,
       });
       return { storage: 'drive', name: out.file.name, folder: out.file.folder, status: out.file.status };
-    } catch {
-      // Drive bagli degil ya da hata verdi: okuma bozulmaz, fotograf sunucuda tutulur.
+    } catch (error) {
+      // Drive bagli degil, bekleme alani dolu (K6: yeni yukleme reddedilir) ya da hata verdi: okuma bozulmaz, fotograf sunucuda tutulur (kaybolmaz).
+      driveReason = typeof error?.code === 'string' ? error.code : 'DRIVE_FAILED';
     }
   }
   const count = await pool.query(`SELECT COUNT(*)::INT AS n FROM meter_reading_photos WHERE site_code = $1`, [siteCode]);
   if (count.rows[0].n >= PHOTOS_PER_SITE) return { storage: 'none', reason: 'PHOTO_LIMIT' };
   const parsed = parseIsoDate(date);
-  const name = `${fileBaseName({ kind: driveKind, block, apartment, date: parsed })}.${DRIVE_MIME_EXTENSIONS[photo.mime]}`;
+  const name = `${fileBaseName({ kind: driveKind, block, apartment, date: parsed, source })}.${DRIVE_MIME_EXTENSIONS[photo.mime]}`;
   await pool.query(
     `INSERT INTO meter_reading_photos (site_code, meter_id, reading_id, name, mime_type, size_bytes, sha256, data, created_by)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
     [siteCode, meterId, readingId, name, photo.mime, photo.data.length, crypto.createHash('sha256').update(photo.data).digest('hex'), photo.data, userCode],
   );
-  return { storage: 'server', name, folder: folderNameFor(driveKind, parsed) };
+  return { storage: 'server', name, folder: folderNameFor(driveKind, parsed), ...(driveReason ? { drive_reason: driveReason } : {}) };
 }
 
 function guarded({ context, fallback }, run) {
@@ -135,7 +142,7 @@ meteringFieldRouter.get(
   authRequired,
   meteringReadLimiter,
   guarded({ context: 'meter_field_meters', fallback: 'Sayaçlar yüklenemedi.' }, async ({ req, access }) => ({
-    body: await listMeters(access.siteCode, { kind: req.query.kind, active: '1' }),
+    body: await listFieldMeters(access.siteCode, { kind: req.query.kind, date: req.query.date }),
   })),
 );
 
@@ -145,11 +152,11 @@ meteringFieldRouter.post(
   meteringWriteLimiter,
   guarded({ context: 'meter_field_reading', fallback: 'Okuma kaydedilemedi.' }, async ({ req, access }) => {
     const body = req.body && typeof req.body === 'object' ? req.body : {};
-    const result = await addReading({
+    const result = await addFieldReading({
       siteCode: access.siteCode,
       rawMeterId: body.meter_id,
       actor: req.authUser,
-      body: { date: body.date, value: body.value },
+      body: { date: body.date, value: body.value, confirm_jump: body.confirm_jump, replace: body.replace },
     });
     let photo = { storage: 'none' };
     if (!result.replayed && body.photo_b64) {

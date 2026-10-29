@@ -100,6 +100,31 @@ void main() {
       expect(formatRuleValue(rule('budget.objection_days'), 'x'), '-');
     });
 
+    test('kat birimi (sayaç sıçrama eşiği, K12): "5 kat", "2 ile 100 kat arasında", giriş tam sayı; denetim kaydı adı', () {
+      final jump = PlatformRule.tryParse(<String, dynamic>{
+        'key': 'metering.jump_factor',
+        'group': 'metering',
+        'label': 'Sayaç okuma: sıçrama uyarısı eşiği',
+        'type': 'int',
+        'unit': 'times',
+        'min': 2,
+        'max': 100,
+        'default': 5,
+        'site_overridable': true,
+        'effective': <String, dynamic>{'value': 5, 'source': 'default'},
+      })!;
+      expect(jump.unit, PlatformRuleUnit.times);
+      expect(jump.siteOverridable, isTrue);
+      expect(formatRuleValue(jump, 5), '5 kat');
+      expect(formatRuleRange(jump), '2 ile 100 kat arasında');
+      expect(parseRuleInput(jump, '8'), 8);
+      expect(parseRuleInput(jump, '8,5'), isNull);
+      expect(validateRuleInput(jump, '8'), isNull);
+      expect(validateRuleInput(jump, '1'), 'Değer 2 ile 100 kat arasında olmalıdır.');
+      expect(validateRuleInput(jump, 'x'), 'Kat sayısını tam sayı olarak girin.');
+      expect(kPlatformRuleLabels['metering.jump_factor'], jump.label);
+    });
+
     test('sınır metni; tarih GG.AA.YYYY; kaynak etiketleri', () {
       expect(formatRuleRange(rule('finance.late_fee.monthly_bp_max')), '%0,00 ile %5,00 arasında');
       expect(formatRuleRange(rule('retention.contact_after_moveout_days')), '30 ile 3.650 gün arasında');

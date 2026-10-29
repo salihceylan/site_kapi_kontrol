@@ -79,7 +79,7 @@ düğmeleri kapalıdır ve "Önce sitenin Google Drive hesabını bağlayın" ya
 1. Dosya sunucuya gelir; bugünkü denetimler (boyut, tür, kota, bütünlük) aynen çalışır.
 2. Fotoğraf ve PDF için küçük önizleme üretilir.
 3. Asıl dosya ve önizlemesi sitenin Drive klasörüne gönderilir; Drive dosya kimlikleri ve SHA-256 kaydedilir.
-4. Drive'daki kopya doğrulanınca sunucudaki geçici kopya silinir. Sunucuda kalıcı dosya kalmaz.
+4. Drive'daki kopya doğrulanınca sunucudaki geçici kopya silinir. Sunucuda kalıcı dosya kalmaz. "Doğrulama" = Drive dosya kimliğini döndürdü ve (bildirdiyse) boyut gönderilenle aynı; doğrulanamazsa dosya sunucuda kalır ve yeniden denenir (K6: geçici dosya yalnız Drive teyidinden SONRA silinir). Kullanıcının kendi cihazındaki kopyayı sistem hiçbir koşulda kendiliğinden silmez.
 
 **Gösterim ve indirme:**
 
@@ -91,8 +91,8 @@ düğmeleri kapalıdır ve "Önce sitenin Google Drive hesabını bağlayın" ya
 
 | Durum | Davranış |
 | --- | --- |
-| Bağlantı koptu ya da Drive doldu | Yükleme kısa süre kabul edilir; dosya sunucuda bekler (site başına küçük bekleme alanı, ör. 100 MB ve en çok 7 gün). Yöneticiye uygulama ve e-posta uyarısı gider. Bağlantı gelince bekleyenler gönderilir. |
-| Bekleme alanı doldu ya da süre aştı | Yükleme açık Türkçe mesajla reddedilir ("Sitenin Drive bağlantısı kopuk; yönetiminize bildirin"). Süresi geçen bekleyenler için yöneticiye son uyarı gider. |
+| Bağlantı koptu ya da Drive doldu | Yükleme kabul edilir; dosya sunucuda bekler (site başına küçük bekleme alanı, ör. 100 MB). Bekleyen dosya **süre doldu diye SİLİNMEZ** (karar K6, "silmeyi biz yapmayız"): Drive'a ulaşana kadar "bekliyor" kalır. Yönetici ekranında uyarı çıkar (bekleyen sayısı; 7 günden uzun bekleyenler için "uzun süredir bekliyor"). Bağlantı gelince bekleyenler gönderilir. |
+| Bekleme alanı doldu | **Yeni** yükleme açık Türkçe mesajla reddedilir (503 `DRIVE_QUEUE_FULL`: "... bekleyen dosyalar silinmedi. Yönetiminize bildirin"); bekleyen ve kayıtlı hiçbir dosyaya dokunulmaz. Yöneticiye uyarı düşer: durum ekranında %80'de "dolmak üzere", %95'te "doldu", denetim kaydında `drive.queue_full` (aynı site için saatte bir). Drive o anda ayaktaysa yükleme yine doğrudan Drive'a gider; kuyruk yalnız kopukken gerekir. |
 | Bağlantı kopukken dosya açılmak istendi | Önbellekteyse açılır; değilse "Sitenin Drive bağlantısı kopuk" yazar. |
 | Dosya Drive'dan silinmiş | "Dosya sitenin Drive'ında bulunamadı" yazar; yöneticiye bildirim gider. Drive içinde taşımak sorun değildir (kimlik değişmez); silmek sorundur. |
 | Doluluk %80 ve %95 | Yöneticiye uyarı (günlük sağlık denetimi). |
@@ -194,7 +194,7 @@ yeni uçlar kendi yolundadır. Google bilgileri `.env`'de yoksa arayüz ve `POST
 **.env:** `DRIVE_CLIENT_ID`, `DRIVE_CLIENT_SECRET`, `DRIVE_REDIRECT_URI` (= `https://<api>/drive/oauth/callback`), `DRIVE_TOKEN_KEY` (en az 32 karakter), isteğe bağlı `DRIVE_PENDING_DIR`.
 Kapsam yalnız `drive.file`. Yenileme belirteci AES-256-GCM ile şifreli saklanır (anahtar `DRIVE_TOKEN_KEY`); anahtar kaybolursa siteler Drive'ı yeniden bağlar.
 
-**Tablolar (migration 060, db.js ile aynı):** `site_drive_connections` (site başına bağlantı: durum, hesap, şifreli belirteç, klasör kimlikleri), `drive_oauth_states`
+**Tablolar (migration 060, db.js ile aynı; 097 `drive_files`'a `source_type` + `source_id` ekler):** `site_drive_connections` (site başına bağlantı: durum, hesap, şifreli belirteç, klasör kimlikleri), `drive_oauth_states`
 (tek kullanımlık, 10 dk), `drive_files` (Drive'a giden ya da bekleyen dosya; `UNIQUE (site_code, folder_name, name)`), `drive_pending_uploads` (bekleme kuyruğu).
 
 **Uçlar** (site yöneticisi / süper; modül kapalıysa 403 `MODULE_DISABLED`; başka site 403): `GET|DELETE /manager/sites/:siteCode/drive` (durum / bağlantıyı kes),
@@ -205,8 +205,20 @@ Kapsam yalnız `drive.file`. Yenileme belirteci AES-256-GCM ile şifreli saklan�
 hepsi sitenin `SmartKeyPass — <Site adı>` klasörü altında. Dosya adı daireliyse `AB_D13_201026` (A blok, daire 13, 20.10.2026), dairesizse `Gider_201026`; aynı ad varsa `_2`, `_3`.
 İçerik türü baytlardan doğrulanır (PDF, JPEG, PNG, WebP, Word, Excel, düz metin).
 
-**Bekleme alanı:** bağlantı koptuysa yükleme kabul edilir, dosya sunucuda `DRIVE_PENDING_DIR` altında bekler (site başına 100 MB, 7 gün); dolunca 503 `DRIVE_QUEUE_FULL`.
-Gönderim `flush` ile ya da yeniden bağlanınca denenir (artan bekleme). Bağlı değilse yükleme 409 `DRIVE_NOT_CONNECTED`.
+**Bekleme alanı ("silmeyi biz yapmayız", karar K6, 2026-10-28):** bağlantı koptuysa yükleme kabul edilir, dosya sunucuda `DRIVE_PENDING_DIR` altında bekler (site başına 100 MB).
+Bekleyen dosya SİLİNMEZ: eski "7 gün sonra sil" kuralı kaldırıldı; `drive_pending_uploads.expires_at` artık silme zamanı değil, 7 günlük **"uzun süredir bekliyor" uyarı eşiğidir**
+(sütun eski sürümle uyum için korunur). Alan dolunca YENİ yükleme 503 `DRIVE_QUEUE_FULL` ile reddedilir, mevcut dosyalara dokunulmaz. Sunucudaki geçici dosya yalnız Drive teyidinden (dosya kimliği + boyut)
+sonra silinir; yarıda kesilmiş turdan kalan "kayıtlı ama satırı duran" dosya tekrar gönderilmez, yalnız kalıntısı temizlenir. Aynı sitenin gönderimleri sırayla çalışır (aynı dosya iki kez gitmez).
+Gönderim `POST .../flush` (elle; artan bekleme süreleri yok sayılır) ile ya da yeniden bağlanınca denenir. Bağlı değilse yükleme 409 `DRIVE_NOT_CONNECTED`.
+`GET .../drive` yanıtı: `pending_count`, `pending_bytes`, `pending_limit_bytes`, `pending_overdue_count`, `oldest_pending_at` ve `warnings[]` (`{code, message}`: `DRIVE_FILES_WAITING`, `DRIVE_FILES_OVERDUE`,
+`DRIVE_QUEUE_NEARLY_FULL`, `DRIVE_QUEUE_FULL`). Uygulamada Dosya Deposu > Google Drive kartı bunları uyarı olarak gösterir ve "Bekleyenleri şimdi gönder" düğmesi sunar. Yönetici e-postası ve günlük sağlık
+denetimi D3'tedir (henüz yok).
+
+**Kaynak kayıt bağı (P1-11, migration 097):** dosya adına kaydın kimliği önek olarak eklenir: `<ÖN EK>-<kayıt no>_<ad>` (örn. `IS-123_AB_D13_201026.pdf`, `GDR-18_Gider_201026.pdf`; çakışma eki sonda: `IS-123_AB_D13_201026_2.pdf`).
+Önekler: `work_item` IS (iş kaydı), `meter_reading` OKM (sayaç okuması), `expense` GDR (gider), `payment_notice` DKN (dekont), `contract` SZL (sözleşme), `quote` TKL (teklif), `document` BLG (belge), `equipment` EKP (ekipman).
+`drive_files.source_type` + `source_id` (ikisi birlikte dolu ya da boş; CHECK) kaydı bağlar; belge hem adından hem kayıttan açılır: `GET .../drive/files?source_type=work_item&source_id=123`. Kaynak bağı HTTP yükleme
+sorgusundan ALINMAZ (doğrulanamayan kayda bağ kurulamasın); yalnız sunucu içi çağıran verir (bugün sayaç okuma fotoğrafı: `OKM-<okuma no>_...`, Drive yoksa/dolu ise sunucudaki `meter_reading_photos.name` da aynı adı taşır).
+Kaynak yoksa ad eskisi gibidir (geriye dönük uyum). İş ekleri, gider ve dekont belgeleri Drive'a taşınınca (D2/D4) kendi türleriyle bu bağı kullanır.
 
 **Henüz yok (D2-D5):** otomatik zamanlayıcı ve günlük sağlık denetimi, önbellek ve önizleme, mevcut dosyaların taşınması, silme/dışa aktarma güncellemeleri, belge ve fotoğraf
 ekranlarının bu depoya bağlanması, bağlantısız yükleme kilidi. Google Cloud projesi ve marka doğrulaması (D0) yapılana dek canlıda "Yakında…" görünür.

@@ -203,7 +203,7 @@ export async function sectionPlatformRules(ctx) {
     const list = await call('GET', '/admin/rules', SUPER);
     check('H1: kimliksiz 401; yonetici / ilgisiz / sakin admin uclarinda 403 (yazma yok); super 200 (15 kural, gruplar, can_edit, no-store)',
       anon.status === 401 && denied.every((r) => r.status === 403) && deniedPut.every((r) => r.status === 403) && rowsBefore === (await countOf(`SELECT COUNT(*)::int AS n FROM platform_rule_values`))
-        && list.status === 200 && same(list.body.items.map((i) => i.key), [...RULE_KEYS]) && list.body.can_edit === true && list.body.groups.length === 5 && list.headers.get('cache-control') === 'no-store',
+        && list.status === 200 && same(list.body.items.map((i) => i.key), [...RULE_KEYS]) && list.body.can_edit === true && list.body.groups.length === 6 && list.headers.get('cache-control') === 'no-store',
       { anon: anon.status, denied: denied.map((r) => r.status), list: list.status });
     const own = await call('GET', `/manager/sites/${siteA}/rules`, MGR);
     const other = await call('GET', `/manager/sites/${siteB}/rules`, MGR);

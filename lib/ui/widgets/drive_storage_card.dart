@@ -12,6 +12,22 @@ import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+/// Sunucunun yönetici uyarısı (`warnings[]`): Drive'a gitmeyi bekleyen / uzun süredir bekleyen dosya, bekleme alanı dolmak üzere / doldu.
+/// Hiçbiri dosya silmez ("silmeyi biz yapmayız", karar K6); metin sunucudan Türkçe gelir.
+class DriveStorageWarning {
+  const DriveStorageWarning({required this.code, required this.message});
+
+  final String code;
+  final String message;
+
+  static DriveStorageWarning? tryFromJson(Object? raw) {
+    if (raw is! Map) return null;
+    final message = raw['message']?.toString().trim() ?? '';
+    if (message.isEmpty) return null;
+    return DriveStorageWarning(code: raw['code']?.toString() ?? '', message: message);
+  }
+}
+
 /// Sitenin Google Drive durumu (`GET /manager/sites/:siteCode/drive`).
 class DriveStorageStatus {
   const DriveStorageStatus({
@@ -22,6 +38,8 @@ class DriveStorageStatus {
     this.lastError,
     this.pendingCount = 0,
     this.storedCount = 0,
+    this.pendingOverdueCount = 0,
+    this.warnings = const <DriveStorageWarning>[],
   });
 
   factory DriveStorageStatus.fromJson(Map<String, dynamic> json) => DriveStorageStatus(
@@ -32,6 +50,11 @@ class DriveStorageStatus {
     lastError: json['last_error']?.toString(),
     pendingCount: (json['pending_count'] as num?)?.toInt() ?? 0,
     storedCount: (json['stored_count'] as num?)?.toInt() ?? 0,
+    pendingOverdueCount: (json['pending_overdue_count'] as num?)?.toInt() ?? 0,
+    // Eski sunucu `warnings` göndermez: liste boş kalır (yeni alanlar isteğe bağlı).
+    warnings: <DriveStorageWarning>[
+      for (final raw in (json['warnings'] as List? ?? const <Object?>[])) ?DriveStorageWarning.tryFromJson(raw),
+    ],
   );
 
   final bool configured;
@@ -41,6 +64,25 @@ class DriveStorageStatus {
   final String? lastError;
   final int pendingCount;
   final int storedCount;
+
+  /// "Uzun süredir bekliyor" uyarısındaki dosya sayısı (silinmez).
+  final int pendingOverdueCount;
+  final List<DriveStorageWarning> warnings;
+}
+
+/// `POST .../drive/flush` sonucu: bu turda gönderilen, hâlâ bekleyen ve uzun süredir bekleyen dosya sayısı.
+class DriveFlushResult {
+  const DriveFlushResult({this.sent = 0, this.waiting = 0, this.overdue = 0});
+
+  factory DriveFlushResult.fromJson(Map<String, dynamic> json) => DriveFlushResult(
+    sent: (json['sent'] as num?)?.toInt() ?? 0,
+    waiting: (json['waiting'] as num?)?.toInt() ?? 0,
+    overdue: (json['overdue'] as num?)?.toInt() ?? 0,
+  );
+
+  final int sent;
+  final int waiting;
+  final int overdue;
 }
 
 /// Drive uçları için ince HTTP katmanı (belirteç günlüğe yazılmaz; yazma ASLA otomatik yeniden denenmez).
@@ -85,6 +127,10 @@ class DriveStorageApi {
   Future<void> disconnect(int siteCode, String token) async {
     await _call('DELETE', siteCode, '', token);
   }
+
+  /// Bekleyen dosyaları şimdi göndermeyi dener (artan bekleme süreleri yok sayılır). Dosyalar bu işlemle SİLİNMEZ.
+  Future<DriveFlushResult> flush(int siteCode, String token) async =>
+      DriveFlushResult.fromJson(await _call('POST', siteCode, '/flush', token));
 }
 
 /// Dosya Deposu ekranının "Google Drive" bölümü (seçili site; Belgeler listesiyle AYNI modül, `drive_storage`): bağlı hesap,
@@ -203,6 +249,58 @@ class _DriveStorageCardState extends State<DriveStorageCard> {
     }
   }
 
+  /// Bekleyen dosyaları şimdi göndermeyi dener. Hiçbir dosya silinmez; gitmeyenler beklemeye devam eder.
+  Future<void> _flush() async {
+    final token = _token;
+    if (token == null || _busy) return;
+    setState(() => _busy = true);
+    try {
+      final result = await _api.flush(widget.siteCode, token);
+      if (mounted) {
+        AppSnack.show(
+          context,
+          result.waiting == 0
+              ? '${result.sent} dosya Drive\'a gönderildi.'
+              : '${result.sent} dosya gönderildi, ${result.waiting} dosya bekliyor. Bekleyen dosyalar silinmez.',
+          kind: result.waiting == 0 ? AppSnackKind.success : AppSnackKind.warning,
+        );
+      }
+      await _load();
+    } on ApiException catch (e) {
+      if (mounted) AppSnack.show(context, e.message, kind: AppSnackKind.error);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Sunucunun yönetici uyarıları (bekleyen / uzun süredir bekleyen / bekleme alanı dolu): uyarı tonlu kutular + "Şimdi gönder".
+  List<Widget> _pendingNotices(DriveStorageStatus status) => <Widget>[
+    for (final warning in status.warnings)
+      Padding(
+        padding: const EdgeInsets.only(top: AppSpace.sm),
+        child: InlineNotice(
+          key: ValueKey<String>('drive_warning_${warning.code}'),
+          message: warning.message,
+          tone: AppTone.warning,
+        ),
+      ),
+    if (status.connected && status.pendingCount > 0)
+      Padding(
+        padding: const EdgeInsets.only(top: AppSpace.sm),
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: PrimaryActionButton(
+            label: 'Bekleyenleri şimdi gönder',
+            icon: Icons.cloud_upload_outlined,
+            variant: AppButtonVariant.outline,
+            expand: false,
+            loading: _busy,
+            onPressed: _busy ? null : _flush,
+          ),
+        ),
+      ),
+  ];
+
   @override
   Widget build(BuildContext context) {
     final th = Theme.of(context).textTheme;
@@ -225,6 +323,7 @@ class _DriveStorageCardState extends State<DriveStorageCard> {
       body = [
         Text('Bağlı hesap: ${status.accountEmail ?? '-'}', style: th.bodyMedium),
         Text('Drive\'a kaydedilen: ${status.storedCount} dosya · Bekleyen: ${status.pendingCount}', style: muted),
+        ..._pendingNotices(status),
         const SizedBox(height: AppSpace.md),
         Align(
           alignment: Alignment.centerLeft,
@@ -239,6 +338,7 @@ class _DriveStorageCardState extends State<DriveStorageCard> {
               : 'Sitenin dosyaları sitenin kendi Google Drive hesabında saklanır. Bağlamak için site adına açılmış bir Google hesabı kullanın.',
           style: muted,
         ),
+        ..._pendingNotices(status),
         const SizedBox(height: AppSpace.md),
         Align(
           alignment: Alignment.centerLeft,

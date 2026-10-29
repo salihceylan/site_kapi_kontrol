@@ -1072,7 +1072,7 @@
             "“Ek Borç Ekle”ye dokunun.",
             "Ad (ör. Asansör bakımı), toplam tutar ve hedef (tüm site, blok, seçili daireler) girin."
           ],
-          "beklenen": "Tutar seçilen dağıtım yöntemine göre daireler arasında paylaşılır (önizleme + onay) ve her dairenin hesabına ayrı satır olarak düşer. Ek borç Yatırım ve Demirbaş (Fon) Hesabı’na yazılıyorsa önizlemede “Borcun dayanağı” (Karar Defteri kararı ya da gerekçe) istenir; Aidat Hesabı’na yazılırsa istenmez (bkz. F47). Aynı ek borcu kısa sürede tekrar kaydetmeye çalışırsanız “aynı ek borç kısa süre önce kaydedilmiş görünüyor” uyarısı çıkar; bilerek “Yine de ekle” diyebilirsiniz.",
+          "beklenen": "Tutar seçilen dağıtım yöntemine göre daireler arasında paylaşılır (önizleme + onay) ve her dairenin hesabına ayrı satır olarak düşer. Ek borç Yatırım ve Demirbaş (Fon) Hesabı’na yazılıyorsa önizlemede “Borcun dayanağı” (Karar Defteri kararı ya da gerekçe) istenir; Aidat Hesabı’na yazılırsa istenmez (bkz. F48). Aynı ek borcu kısa sürede tekrar kaydetmeye çalışırsanız “aynı ek borç kısa süre önce kaydedilmiş görünüyor” uyarısı çıkar; bilerek “Yine de ekle” diyebilirsiniz.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
           "yeni": true,
@@ -5830,9 +5830,9 @@
           "id": "F30.09",
           "baslik": "Kiracı hesabına devir, eksi ve sıfır tutar",
           "adimlar": [
-            "Dosyada bir satırın Hesap sütununa Kiracı yazın; bir satıra -50, bir satıra 0 yazın; önizlemeye bakın (eksi tutar alacaklı devirdir, bkz. F49)."
+            "Dosyada bir satırın Hesap sütununa Kiracı yazın; bir satıra -50, bir satıra 0 yazın; önizlemeye bakın (eksi tutar alacaklı devirdir, bkz. F50)."
           ],
-          "beklenen": "Kiracı satırında dairede kiracı yoksa uyarı çıkar. Eksi tutar artık hata değildir: alacaklı devir olarak kabul edilir ve önizlemede “alacaklı kayıt” sayısı görünür (bkz. F49). Sıfır tutar uyarıyla atlanır. 'Hatalı satır varsa aktarma' varsayılan açıktır.",
+          "beklenen": "Kiracı satırında dairede kiracı yoksa uyarı çıkar. Eksi tutar artık hata değildir: alacaklı devir olarak kabul edilir ve önizlemede “alacaklı kayıt” sayısı görünür (bkz. F50). Sıfır tutar uyarıyla atlanır. 'Hatalı satır varsa aktarma' varsayılan açıktır.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
           "yeni": true,
@@ -6988,7 +6988,7 @@
             "Isı sayaçları olan daireler için Faturalandır'da tür Isı, yöntem 'Isı payı (ölçüm + alan payı)' seçin, toplam gideri girip Önizle'ye basın.",
             "“Alan payı tabanı” seçicisinden Arsa payını seçip bir dairenin arsa payını boş bırakın ve önizlemeyi yeniden alın (taban seçilmezse alan payı eşit dağıtılır)."
           ],
-          "beklenen": "Yöntem adı 'Isı payı (ölçüm + alan payı)' yazar; ekranda hiçbir yerde m² geçmez (daire m²'si 2026-10-25'te kaldırıldı). Gider %70 tüketime, %30 alan payına göre paylaşılır ve toplam girilen tutara eşittir. Alan payı, “Alan payı tabanı” seçicisindeki seçime göre dağıtılır: Eşit (varsayılan; arsa payı tanımlı olsa bile kod arsa payına geçmez), Arsa payı ya da Kişi sayısı. Seçilen tabanın verisi eksik daire sessizce eşit paya düşürülmez; “eksik” listesine girer ve “Verisi eksik daireleri atla” işaretlenmedikçe Borçlandır reddedilir (bkz. F48). Ayrıntılı kontrol: SAHA listesi 109.6.",
+          "beklenen": "Yöntem adı 'Isı payı (ölçüm + alan payı)' yazar; ekranda hiçbir yerde m² geçmez (daire m²'si 2026-10-25'te kaldırıldı). Gider %70 tüketime, %30 alan payına göre paylaşılır ve toplam girilen tutara eşittir. Alan payı, “Alan payı tabanı” seçicisindeki seçime göre dağıtılır: Eşit (varsayılan; arsa payı tanımlı olsa bile kod arsa payına geçmez), Arsa payı ya da Kişi sayısı. Seçilen tabanın verisi eksik daire sessizce eşit paya düşürülmez; “eksik” listesine girer ve “Verisi eksik daireleri atla” işaretlenmedikçe Borçlandır reddedilir (bkz. F49). Ayrıntılı kontrol: SAHA listesi 109.6.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
           "yeni": true,
@@ -8710,12 +8710,432 @@
     },
     {
       "id": "F45",
+      "baslik": "Dalga C: saha paketleri (sayaç saha akışı, dosya silme kuralı, iş–ekipman bağı, teklif revizyonu, kategoriler)",
+      "durum": "hazir",
+      "ozet": "Sayaç okuma saha akışı (blok seçimi, çekilenler listesi, yeniden çekim, olağan dışı tüketim uyarısı ve site eşiği), “silmeyi biz yapmayız” dosya kuralı (Drive bekleme kuyruğunda otomatik silme kalktı, telefondaki fotoğraf kopyası kendiliğinden silinmez, dosya adında kayıt kimliği), iş kaydı ↔ ekipman bağı ve önce/sonra fotoğraf etiketi, onaylı teklifin değişmezliği + revizyon + teklif karşılaştırma, yönetilebilir talep kategorileri ve aynı fotoğrafın başka kayıtta kullanıldığı uyarısı. Sürüm yayınlanınca denenir (maddeler “Denemeye hazır” görünse de sürüm yayınlanmadan uygulamada yoktur).",
+      "maddeler": [
+        {
+          "id": "F45.01",
+          "baslik": "Blok seçici",
+          "adimlar": [
+            "Görevli (STAFF) hesabıyla “Fotoğrafla sayaç okuma” ekranını açın (birden çok bloklu site).",
+            "Üstteki blok seçicilerine bakın; bir blok seçin.",
+            "Tek bloklu bir sitede aynı ekranı açın."
+          ],
+          "beklenen": "Üstte “Tümü (0/N)” ve her blok için “A Blok (0/12)” gibi seçiciler görünür; blok seçilince “Sıradaki” daire o bloktan gelir ve okunan/toplam sayısı blok başına güncellenir. Tek bloklu sitede seçici çizilmez.",
+          "rol_notu": "Görevli / Site yöneticisi",
+          "on_kosul": "Sayaç Okuma modülü açık, en az iki bloklu ve sayaçları tanımlı bir TEST sitesi",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.02",
+          "baslik": "Liste ekranı ve bugünün okuması",
+          "adimlar": [
+            "Üstteki bantta “Liste (okunan/toplam)” düğmesine basın.",
+            "Bir daireyi okuyun, uygulamayı kapatıp yeniden açın ve listeye tekrar bakın.",
+            "Yönetici hesabıyla Sayaçlar sekmesinde o okumanın tarihine bakın."
+          ],
+          "beklenen": "Sorunlu, Çekilmeyenler ve Çekilenler bölümleri ve her dairenin durumu görünür (Çekilmedi · son okuma …, Atlandı, Gönderilmeyi bekliyor, Çekildi (değer)). Bugün okunan daire uygulama yeniden açılınca da “Çekildi” görünür; yönetici ekranındaki okuma tarihi girilen günle aynıdır (önceden bir gün geri görünürdü).",
+          "rol_notu": "Görevli, Site yöneticisi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.03",
+          "baslik": "Yeniden çekim, atlama ve vazgeçme",
+          "adimlar": [
+            "Listeden bugün çekilmiş bir daireyi “Yeniden çek” ile seçin; üstteki bandın “Yeniden çekim: …” (gri, ok simgeli) olduğunu ve düğmenin “Onayla ve değiştir” yazdığını doğrulayın.",
+            "Önce bugünkü okumadan önceki okumadan küçük bir değer, sonra geçerli yeni bir değer yazıp onaylayın.",
+            "Yönetici ekranında aynı günün okumasına bakın.",
+            "Bir daireyi “Atla” ile atlayıp listede “Atlandı” görünen daireyi seçerek geri çekin; bir seçimi “Vazgeç” ile bırakın; sıra bitince “Atlananlara dön”e basın."
+          ],
+          "beklenen": "Önceki okumadan küçük değer engellenir (taban, bugünkü okuma değil ondan önceki okumadır). Geçerli değerde yönetici ekranındaki aynı günlük okuma yeni değere döner, ikinci satır oluşmaz. “Vazgeç” seçimi bırakır; atlanan daire listede “Atlandı” görünür ve oradan çekilebilir; sıra bitince “Atlananlara dön” çıkar.",
+          "rol_notu": "Görevli, Site yöneticisi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.04",
+          "baslik": "Olağan dışı tüketim uyarısı",
+          "adimlar": [
+            "Son okuması 130 olan ve son 3 dönem tüketimi yaklaşık 10 olan bir sayaçta 181 yazıp onaylayın (tüketim 51; eşik 5 kat = 50).",
+            "Açılan pencerede önce “Değeri düzelt”e, sonra yine onaylayıp “Doğru, kaydet”e basın.",
+            "Aynı sayaçta 180 (tam eşik) yazın; ayrıca 3 okumalı ya da hiç okuması olmayan bir sayaçta büyük bir değer yazın."
+          ],
+          "beklenen": "181'de sıradaki daireye geçmeden “Olağan dışı tüketim” penceresi (tüketim, ortanca ve eşik rakamlarıyla) çıkar. “Değeri düzelt” hiçbir şey kaydetmez ve yazdığınız değer ekranda kalır; “Doğru, kaydet” kaydeder. 180'de (eşitlikte) uyarı çıkmaz. 3 okumadan az verisi olan ya da hiç okuması olmayan sayaçta uyarı çıkmaz.",
+          "rol_notu": "Görevli, Site yöneticisi",
+          "on_kosul": "En az 4 okuması olan bir sayaç (son okuma 130, son 3 dönem tüketimi yaklaşık 9, 11, 10)",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.05",
+          "baslik": "Sıçrama onayının denetim izi",
+          "adimlar": [
+            "F45.04'te “Doğru, kaydet” ile kaydettiğiniz okumanın ardından süper kullanıcı / yönetici işlem kayıtlarına (ya da veritabanında denetim kaydına) bakın."
+          ],
+          "beklenen": "“metering.reading.jump_confirmed” kaydı vardır (sayaç no, eşik katı ve oran yüzdesi). Okunan değerin kendisi denetim kaydında yazmaz.",
+          "rol_notu": "Süper kullanıcı / Site yöneticisi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.06",
+          "baslik": "Sunucunun uyardığı okuma Bekleyen listesinde onay bekler",
+          "adimlar": [
+            "Saha ekranı açıkken (telefon eşiği 5 kat bilir) süper kullanıcıyla siteye özel eşiği 3 kata düşürün (F45.07).",
+            "Aynı sayaçta 161 yazın (tüketim 31; telefon uyarmaz, sunucu uyarır).",
+            "Üst çubuktaki kırmızı rozetli “Bekleyen” düğmesine basın; sırasıyla “Doğru, onayla ve gönder”, “Değeri düzelt” ve “Sil”i farklı kayıtlarda deneyin.",
+            "Başka bir sayaçta önceki okumadan küçük bir değeri sunucuya göndererek reddedilen kaydı da bakın."
+          ],
+          "beklenen": "Okuma Bekleyen listesinde “onay bekliyor” olarak kalır; üst çubukta kırmızı rozet ve ekranın altında bildirim görünür. “Doğru, onayla ve gönder” ile gider, “Değeri düzelt” ve “Sil” de çalışır. Sunucunun reddettiği diğer kayıtlar (ör. önceki okumadan küçük değer) da kırmızı rozetle görünür.",
+          "rol_notu": "Görevli, Süper kullanıcı",
+          "on_kosul": "Sayaç tabanı hazır bir sayaç (F45.04); süper kullanıcı hesabı",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.07",
+          "baslik": "Siteye özel eşik ayarı (K katsayısı)",
+          "adimlar": [
+            "Süper kullanıcıyla Modüller > Kurallar > ilgili sitenin kuralları > “Sayaç okuma” grubunda “Sayaç okuma: sıçrama uyarısı eşiği” kuralına bakın.",
+            "Siteye özel 3 kat verip kaydedin; saha ekranını yenileyip (en geç 30 sn) 130 → 161 yazın.",
+            "Site yöneticisi hesabıyla aynı kurala bakın."
+          ],
+          "beklenen": "Kural varsayılan 5 kat gösterilir, sınır 2–100 kattır. Siteye özel 3 kat verilince ekran yenilendikten sonra 161 uyarı verir. Site yöneticisinde kural salt okunurdur (düzenleyemez); değeri yalnız süper kullanıcı verir.",
+          "rol_notu": "Süper kullanıcı, Site yöneticisi",
+          "on_kosul": "Süper kullanıcı hesabı",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.08",
+          "baslik": "Çevrimdışı okuma, yeniden çekim ve hızlı ikinci okuma",
+          "adimlar": [
+            "Uçak modunda bir daireyi okuyun, ardından aynı daireyi listeden yeniden çekin.",
+            "İnterneti açın.",
+            "Yavaş bir ağda bir daireyi gönderirken hemen ikinci daireyi okuyun."
+          ],
+          "beklenen": "Bekleyen listesinde o daire için tek kayıt kalır (“yeniden çekim” etiketli); internet gelince gider. Gönderim sürerken girilen ikinci okuma kaybolmaz.",
+          "rol_notu": "Görevli",
+          "on_kosul": "Android telefon",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.09",
+          "baslik": "Telefondaki fotoğraf kopyası kendiliğinden silinmez",
+          "adimlar": [
+            "Drive bağlı değilken fotoğraflı bir sayaç okuması gönderin.",
+            "Üst çubuktaki “Telefondaki fotoğraf kopyaları” simgesine dokunun ve önce “Kalsın”a basın.",
+            "Simgeye yeniden dokunup bu kez “Kopyaları sil”e basın."
+          ],
+          "beklenen": "Ekranda “1 okuma gönderildi. Fotoğrafların telefonunuzdaki kopyası silinmedi; isterseniz siz silebilirsiniz.” notu çıkar ve simge görünür. “Kalsın” hiçbir şeyi silmez; “Kopyaları sil” yalnız o zaman siler, “… fotoğraf kopyası telefondan silindi.” der ve simge kaybolur. Sunucu fotoğrafı almadıysa not “okumanın fotoğrafı sunucuya ulaşmadı; kopyası telefonunuzda duruyor” olur.",
+          "rol_notu": "Görevli",
+          "on_kosul": "Android telefon (kamera); Sayaç Okuma modülü açık",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.10",
+          "baslik": "Bekleyen kaydın fotoğrafına dokunulmaz",
+          "adimlar": [
+            "İnternet kapalıyken fotoğraflı bir okuma alın.",
+            "Gönderilmiş başka okumaların kopyaları varsa “Kopyaları sil” deyin.",
+            "Bekleyen listesinden o kaydı Sil ile atın."
+          ],
+          "beklenen": "“Kopyaları sil” bekleyen ya da reddedilen okumanın fotoğrafına dokunmaz. Kaydı siz Sil derseniz fotoğrafı da onunla gider.",
+          "rol_notu": "Görevli",
+          "on_kosul": "Android telefon",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.11",
+          "baslik": "Dosya adında kayıt kimliği",
+          "adimlar": [
+            "Drive bağlıyken fotoğraflı bir sayaç okuması gönderip Drive'daki dosya adına bakın.",
+            "Drive bağlı değilken gönderilen okumada yönetici ekranından fotoğrafı indirip adına bakın."
+          ],
+          "beklenen": "Drive'da ayın klasöründe dosya adı OKM-<okuma no>_AB_D13_<ggaayy>.jpg biçimindedir. Drive bağlı değilse sunucudaki fotoğrafın indirme adı aynı kimliği taşır.",
+          "rol_notu": "Görevli, Site yöneticisi",
+          "on_kosul": "Drive bağlı bir site (ve bağlı olmayan bir site)",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.12",
+          "baslik": "Drive'a gidemeyen dosya silinmez, yöneticiye uyarı gösterilir",
+          "adimlar": [
+            "Yönetici: Dosya Deposu > Google Drive kartı. Google hesabından Drive erişimini kaldırın ve bir PDF yükleyin.",
+            "Kartta “Bekleyen” sayısına ve sarı uyarıya bakın.",
+            "Google Drive'ı yeniden bağlayın ya da “Bekleyenleri şimdi gönder”e basın."
+          ],
+          "beklenen": "Dosya bekleyen olarak kabul edilir ve SİLİNMEZ: kartta “Bekleyen: 1” ve sarı “1 dosya Drive'a gönderilmeyi bekliyor” uyarısı görünür. Drive bağlanınca ya da “Bekleyenleri şimdi gönder” ile dosya Drive'a gider ve uyarı kaybolur. 7 günü geçen dosya silinmez, “uzun süredir bekliyor” uyarısı alır.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Drive bağlı bir TEST sitesi (Google hesabı sizde)",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.13",
+          "baslik": "Bekleme alanı dolunca yeni yükleme reddedilir (QA)",
+          "adimlar": [
+            "(Test ortamında) Drive kopukken bekleyen dosyaların toplamını 100 MB'a yaklaştırıp yeni bir dosya yükleyin."
+          ],
+          "beklenen": "Yeni yükleme 503 DRIVE_QUEUE_FULL ile reddedilir (yönetiminize bildirin); mevcut bekleyen dosyalar ve geçici dosyalar yerinde kalır. Kartta “Bekleme alanı doldu” uyarısı çıkar, denetim kaydında drive.queue_full görünür. Drive ayaktaysa aynı yükleme doğrudan Drive'a gider.",
+          "rol_notu": "Site yöneticisi (teknik doğrulama)",
+          "on_kosul": "Kapalı devre TEST ortamı; canlıda denenmez",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.14",
+          "baslik": "Kayda bağlı dosya süzgeci (QA / API)",
+          "adimlar": [
+            "(API) GET .../drive/files?source_type=meter_reading&source_id=<okuma no> çağrısı yapın; geçersiz tür ya da numara ile de deneyin."
+          ],
+          "beklenen": "Yalnız o okumanın dosyaları döner. Geçersiz tür ya da numara 400 INVALID_SOURCE verir.",
+          "rol_notu": "Site yöneticisi (teknik doğrulama)",
+          "on_kosul": "Drive bağlı TEST sitesi; fotoğraflı bir okuma",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.15",
+          "baslik": "Talebe ekipman bağlama ve kaldırma",
+          "adimlar": [
+            "Yönetici: Talepler > bir talebi açın > “Talebi yönet” bölümünde “Ekipman (isteğe bağlı)” listesinden bir ekipman seçip “Değişiklikleri Kaydet”e basın.",
+            "Aynı talepte ekipmanı “Seçilmedi” yapıp kaydedin.",
+            "Kapanmış ya da iptal edilmiş bir talebi açın.",
+            "Sakin hesabıyla aynı talebe bakın."
+          ],
+          "beklenen": "Bilgi satırında “Ekipman: …”, Geçmiş'te “Ekipman: Seçilmedi → …” ve liste kartında “Ekipman: …” çipi görünür; sakin ekranında ekipman görünmez. Kaldırınca Geçmiş'te “Ekipman: … → Seçilmedi”. Kapanmış / iptal talepte ekipman seçici hiç görünmez.",
+          "rol_notu": "Site yöneticisi, Daire sakini",
+          "on_kosul": "İş Takibi ve Ekipman ve Bakım açık, en az bir ekipmanı olan TEST sitesi",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.16",
+          "baslik": "Ekipman kartında servis geçmişi",
+          "adimlar": [
+            "Ekipman ve Bakım > bir ekipmanın kartı > en alttaki “Servis geçmişi (iş kayıtları)” bölümüne bakın.",
+            "30'dan fazla bağlı iş varsa “Daha fazla göster”e basın.",
+            "İş Takibi modülü KAPALI bir sitede ekipman kartını açın."
+          ],
+          "beklenen": "Bağlı işler görünür: “Toplam n iş kaydı · m açık”, durum / kategori / tarih, çözülmüş işlerde “Çözüm: tarih”, fotoğraf özeti (“Önce 1 · Sonra 2 · 3 fotoğraf”) ve “İş #n”. İş Takibi kapalı sitede “İş Takibi bu sitede kapalı…” bilgisi çıkar ve kart bozulmaz.",
+          "rol_notu": "Site yöneticisi, Kurul üyesi",
+          "on_kosul": "Bir ekipmana bağlı birkaç iş; İş Takibi kapalı ikinci bir site",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.17",
+          "baslik": "Önce / Sonra fotoğraf etiketi",
+          "adimlar": [
+            "Bir talepte “Fotoğraf etiketi” seçicisinden Önce'yi seçip fotoğraf ekleyin; sonra Sonra'yı seçip bir fotoğraf daha, ardından etiket seçmeden bir fotoğraf ekleyin.",
+            "Fotoğrafa dokunun; altındaki yazıya bakın.",
+            "Sakin hesabıyla aynı talebe bakın.",
+            "Fotoğrafların bağlı olduğu ekipmanın servis geçmişine bakın."
+          ],
+          "beklenen": "Şeritte “Önce · ad” / “Sonra · ad”, Geçmiş'te “Fotoğraf eklendi (Önce)” görünür; fotoğrafa dokununca altta “Talep #n · Fotoğraf #m” yazar. Etiketsiz ve eski fotoğraflar eskisi gibi etiketsiz görünür. Sakin etiket seçemez ama etiketli fotoğrafın altında “Önce” / “Sonra” yazar. Ekipman servis geçmişinde ilgili işin satırında Önce / Sonra sayıları görünür.",
+          "rol_notu": "Site yöneticisi, Daire sakini",
+          "on_kosul": "F45.15 ile ekipman bağlı talep",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.18",
+          "baslik": "Pasif ekipman, görevli ve kurul",
+          "adimlar": [
+            "Bir ekipmanı pasife alın; talepte ekipman listesine bakın; önceden o ekipmana bağlı bir talebi açın ve kaydedin.",
+            "Görevli hesabıyla ekipmanın servis geçmişine bakın.",
+            "Kurul hesabıyla geçmişe ve bir talebe bakın."
+          ],
+          "beklenen": "Pasif ekipman yeni bağ için listede görünmez; önceden bağlı talepte “<ad> (tür) - pasif” görünür ve kaydedince bağ kaybolmaz. Görevli geçmişte yalnız kendine atanmış ya da atanmamış işleri görür. Kurul geçmişi görür ama ekipman / etiket seçici yoktur.",
+          "rol_notu": "Site yöneticisi, Görevli, Kurul üyesi",
+          "on_kosul": "F45.15'teki test sitesi; görevli ve kurul hesabı",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.19",
+          "baslik": "Karşılaştırma tablosu ve KDV esası",
+          "adimlar": [
+            "Ekipman ve Bakım > Teklifler > Teklif ekle: aynı konuda iki teklif girin (A: 5.000 TL, KDV hariç, 30 gün; B: 4.500 TL, KDV hariç, 10 gün, kapsam notu yazın).",
+            "Aynı konuya üçüncü bir teklifi “KDV dahil” olarak girin."
+          ],
+          "beklenen": "Konu başlığının altında “Karşılaştırma” tablosu çıkar (dar ekranda yatay kayar); B'de “En düşük” ve “En hızlı” görünür. Üçüncü teklif KDV dahil olunca tablonun üstünde “Tutarlar farklı KDV esaslarında” uyarısı çıkar ve hiçbir teklifte “En düşük” işareti kalmaz.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Ekipman ve Bakım açık TEST sitesi",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.20",
+          "baslik": "Açık teklifi yerinde düzenle",
+          "adimlar": [
+            "Karara bağlanmamış (açık) bir teklifte Düzenle'ye basıp tutarı ve teslim süresini değiştirin.",
+            "Geçerlilik süresi dolmuş açık bir teklifi açın."
+          ],
+          "beklenen": "Kart güncellenir. Süresi dolmuş açık teklifte “Kabul et” yoktur, ama “Düzenle” (geçerlilik tarihini uzatmak için) ve “Reddet” vardır.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "F45.19'daki teklifler",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.21",
+          "baslik": "Kabul edilen teklif kilitlenir, değişiklik yeni sürümdür",
+          "adimlar": [
+            "Bir teklifi sözleşme olarak Kabul edin ve kartına bakın.",
+            "“Revizyon oluştur”a basıp gerekçe yazmadan Kaydet'e basın.",
+            "Gerekçe ve yeni tutarla yeniden kaydedin; Sözleşmeler ekranında ilk sözleşmeye bakın."
+          ],
+          "beklenen": "Kartta “Onay tarihi … güncel fiyat sayılmaz” yazısı ve “Revizyon oluştur” düğmesi vardır; Düzenle / Reddet / Kabul et yoktur. Gerekçesiz kayıt uyarı verir. Gerekçeyle kaydedince kartta “Sürüm 2”, “Revizyon: onay bekliyor” ve “Onaylı sürüm (1. sürüm): … sözleşme olarak kayıtlı” görünür; ilk sözleşme değişmeden kalır.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Finans ve Sözleşmeler modülleri açık TEST sitesi",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.22",
+          "baslik": "Sürüm geçmişi",
+          "adimlar": [
+            "Revizyonlu teklifte “Sürüm geçmişi”ne basın."
+          ],
+          "beklenen": "1. ve 2. sürüm eskiden yeniye listelenir; her satırda “Önceki sürüme göre: +X TL” farkı, gerekçe, “Geçerli onaylı sürüm” ve “En son sürüm” işaretleri görünür.",
+          "rol_notu": "Site yöneticisi, Kurul üyesi",
+          "on_kosul": "F45.21 sonrası",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.23",
+          "baslik": "Revizyonu kabul etmek ve reddetmek",
+          "adimlar": [
+            "Revizyonu Kabul edin; “Önceki sürüm zaten kayıtlı” uyarısında önce Vazgeç'e, sonra yeniden kabul edip Devam et'e basın.",
+            "Başka bir revizyonu Reddet'le sonuçlandırın."
+          ],
+          "beklenen": "Vazgeç hiçbir kayıt oluşturmaz. Devam et AYRI bir sözleşme açar (başlıkta “(revizyon 2)”); ilk sözleşme olduğu gibi kalır (çift sayım olmaz). Revizyon reddedilince onaylı 1. sürüm geçerli kalır; kartta “Revizyon reddedildi” ve yeniden “Revizyon oluştur” çıkar.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "F45.21 sonrası",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.24",
+          "baslik": "Yetki ve eski uygulama sürümü",
+          "adimlar": [
+            "Kurul üyesi ve görevli hesabıyla Teklifler'e bakın.",
+            "Eski uygulama sürümüyle yeni sunucuya karşı bir teklif ekleyin, kabul edin ve reddedin."
+          ],
+          "beklenen": "Kurul ve görevlide hiçbir yazma düğmesi yoktur; yalnız (varsa) “Sürüm geçmişi” görünür. Eski sürümde teklif ekleme, kabul ve ret çalışır; önceki sürümü zaten kayıtlı bir revizyonu eski sürümde kabul etmek sunucu mesajıyla reddedilir (uygulamayı güncelleyin).",
+          "rol_notu": "Kurul üyesi, Görevli, Site yöneticisi",
+          "on_kosul": "Eski bir uygulama sürümü (isteğe bağlı)",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.25",
+          "baslik": "Kategori düzenleme yetkisi",
+          "adimlar": [
+            "Site yöneticisiyle Talepler ekranında kategori simgeli “Kategorileri düzenle” düğmesine bakın.",
+            "Görevli ve yönetim kurulu hesaplarıyla aynı ekrana bakın."
+          ],
+          "beklenen": "Düğme yalnız yönetici / süper kullanıcıda görünür; görevli ve yönetim kurulunda hiç yoktur.",
+          "rol_notu": "Site yöneticisi, Görevli, Kurul üyesi",
+          "on_kosul": "İş Takibi açık TEST sitesi",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.26",
+          "baslik": "Kategori ekleme, ad benzersizliği ve sakin formu",
+          "adimlar": [
+            "Kategorileri düzenle > “Su kaçağı” ekleyin (listede “Kullanılmadı” etiketi görünür).",
+            "Aynı adı farklı yazımlarla (“SU KAÇAĞI”, “su kaçağı”) ve hazır bir adı (“Arıza”, “ariza”) eklemeyi deneyin.",
+            "Sakin hesabıyla Yeni Talep formunda Kategori listesine bakıp “Su kaçağı” ile talep gönderin.",
+            "Yönetim Talepler listesinde ve kategori süzgecinde talebi bulun."
+          ],
+          "beklenen": "Aynı ad (büyük / küçük harf ve Türkçe karakter farkıyla) “Bu adda bir kategori zaten var.” diye reddedilir. Sakin formunda “Su kaçağı” seçilebilir; talep kartında “Su kaçağı · Ortak alan” yazar; yönetim listesinde ve süzgecinde de “Su kaçağı” görünür.",
+          "rol_notu": "Site yöneticisi, Daire sakini",
+          "on_kosul": "İş Takibi açık TEST sitesi; sakin hesabı",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.27",
+          "baslik": "Kullanılmış kategori silinmez, pasife alınır",
+          "adimlar": [
+            "“Su kaçağı” (artık 1 talepte kullanılmış) için çöp kutusu simgesine basıp “Kategori pasife alınsın mı?” onayını verin.",
+            "Sakin formuna, eski talebe ve yönetim süzgecine bakın.",
+            "Göz simgesiyle kategoriyi yeniden etkinleştirin."
+          ],
+          "beklenen": "Onaydan sonra “Pasif” etiketi gelir ve kategori listede KALIR. Sakin formunda artık görünmez; eski talep kategorisini ve adını korur; yönetim süzgecinde “Su kaçağı (pasif)” olarak görünür. Yeniden etkinleştirince sakin formuna geri döner.",
+          "rol_notu": "Site yöneticisi, Daire sakini",
+          "on_kosul": "F45.26 sonrası",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.28",
+          "baslik": "Kullanılmamış kategoriyi silme, hazır kategori kuralları ve son etkin kategori",
+          "adimlar": [
+            "Hiç kullanılmamış özel bir kategoriyi silin.",
+            "Hazır kategorilerde (Arıza, Bakım, Şikayet / Öneri, Diğer) silme simgesi arayın; “Arıza”yı “Teknik arıza” olarak yeniden adlandırın.",
+            "Kategorileri tek tek pasife alıp SON etkin olanı da pasife almayı deneyin.",
+            "Boş ya da 60 karakterden uzun bir ad girin."
+          ],
+          "beklenen": "Kullanılmamış kategori onaydan sonra tamamen gider. Hazır kategorilerde silme simgesi yoktur; yeniden adlandırma çalışır ve talep kartları, performans raporu ve faaliyet raporu yeni adı gösterir. Son etkin kategori pasife alınamaz (“En az bir kategori açık kalmalıdır…” hatası). Boş / uzun ad alan hatası verir.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "F45.26 sonrası",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.29",
+          "baslik": "Aynı fotoğraf başka kayıtta uyarısı",
+          "adimlar": [
+            "Telefondan aynı dosyayı farklı konumlu iki talebe yükleyin (ör. A Blok Daire 1 ve B Blok Daire 5); ikinci talebin yönetici ayrıntısına bakın.",
+            "Aynı fotoğrafı aynı konumlu iki talebe yükleyin.",
+            "Aynı fotoğrafı aynı talebe iki kez ekleyin."
+          ],
+          "beklenen": "Farklı konumda sarı “Fotoğraf N: Bu fotoğraf farklı bir konuma ait başka bir kayıtta da kullanılmış (#… · … Blok - Daire …)” uyarısı çıkar; yükleme, kaydetme ve silme düğmeleri etkilenmez. Aynı konumda mavi bilgi, aynı talebe ikinci eklemede yalnız SONRAKİ kopyada “Aynı fotoğraf bu kayıtta birden fazla kez eklenmiş.” bilgisi görünür. Yeniden sıkıştırılmış / kırpılmış fotoğraf eşleşmez (yalnız birebir aynı dosya yakalanır).",
+          "rol_notu": "Site yöneticisi, Görevli",
+          "on_kosul": "İş Takibi açık TEST sitesi; telefondan fotoğraf yükleme",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.30",
+          "baslik": "Fotoğraf uyarısının gizliliği",
+          "adimlar": [
+            "Sakin hesabıyla F45.29'daki talebin ayrıntısına bakın.",
+            "Görevli hesabıyla kendisine atanmamış (kapsam dışı) bir kayıtla eşleşen talebin ayrıntısına bakın.",
+            "Yönetim kurulu hesabıyla aynı talebe bakın."
+          ],
+          "beklenen": "Sakin ayrıntısında hiçbir fotoğraf uyarısı yoktur. Görevli kapsam dışı eşleşmeyi “#numara / konum” olmadan yalnızca sayı olarak görür. Kurul uyarıyı görür ama düğme görmez.",
+          "rol_notu": "Daire sakini, Görevli, Kurul üyesi",
+          "on_kosul": "F45.29 sonrası; görevli ve kurul hesabı",
+          "yeni": true,
+          "gelistirme": "hazir"
+        }
+      ]
+    },
+    {
+      "id": "F46",
       "baslik": "Ödemenin İşletme / Fon hesabını yönetici seçer",
       "durum": "hazir",
       "ozet": "Yazılım bir ödemeyi kendiliğinden İşletme (Aidat) ya da Fon hesabına atamaz. Tahsilat, tahsilat düzeltme, dekont onayı ve banka satırı işlenirken dairenin hesabında hem Aidat hem Fon borcu açıksa hangisine işleneceğini yönetici seçer; tek türde borçta öneri seçili gelir; borç yoksa genel avans. Bölümün adı “İşletme / Fon hesabı”dır (“kasa” denmez). Sunucu ve uygulama birlikte yayınlanır; eski uygulama sürümünde dekont onayı ve “Daireye işle” pencerelerinde hesap seçici yoktur, iki türlü borçlu dairede bu işlemler Türkçe uyarıyla reddedilir (o durumda elle “Tahsilat Ekle” kullanılır).",
       "maddeler": [
         {
-          "id": "F45.01",
+          "id": "F46.01",
           "baslik": "Tahsilat Ekle: tek türde borç varsa önerilen hesap seçili gelir",
           "adimlar": [
             "Yalnız Aidat (aylık aidat) borcu açık olan bir dairenin ekstresinden ya da Finans ekranındaki “Tahsilat Ekle”den o daireyi seçin.",
@@ -8729,7 +9149,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F45.02",
+          "id": "F46.02",
           "baslik": "Tahsilat Ekle: iki türde borç varsa hesabı yönetici seçer",
           "adimlar": [
             "Hem aidat hem Fon (demirbaş / ek borç) borcu açık olan bir ev sahibi hesabında “Tahsilat Ekle”yi açın.",
@@ -8738,12 +9158,12 @@
           ],
           "beklenen": "Uyarı kutusu “Bu daire hesabında hem Aidat Hesabı (…) hem Fon Hesabı (…) için açık borç var. Ödemenin hangisine işleneceğini siz seçin; yazılım kendiliğinden atamaz.” der; hiçbir hesap seçili gelmez ve “Otomatik” seçeneği yoktur. Seçmeden kaydedince “Ödemenin işleneceği İşletme / Fon hesabını seçin.” çıkar ve hiçbir kayıt oluşmaz. Hesabı seçince kayıt yazılır. “Bilgi: otomatik dağıtım en eski borçtan başlayarak … olurdu. Tutarı iki hesaba bölmek için iki ayrı tahsilat girin.” satırı yalnız bilgi verir, seçiminizi değiştirmez.",
           "rol_notu": "Site yöneticisi",
-          "on_kosul": "Aynı ev sahibi hesabında hem Aidat Hesabı hem Fon Hesabı borcu açık bir daire (Fon borcu için F47.01 gibi bir ek borç yazılabilir)",
+          "on_kosul": "Aynı ev sahibi hesabında hem Aidat Hesabı hem Fon Hesabı borcu açık bir daire (Fon borcu için F48.01 gibi bir ek borç yazılabilir)",
           "yeni": true,
           "gelistirme": "hazir"
         },
         {
-          "id": "F45.03",
+          "id": "F46.03",
           "baslik": "Tahsilat Ekle: açık borç yoksa genel avans",
           "adimlar": [
             "Açık borcu olmayan bir dairede “Tahsilat Ekle”yi açın.",
@@ -8756,7 +9176,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F45.04",
+          "id": "F46.04",
           "baslik": "Daire hesabını (ev sahibi / kiracı) değiştirince bölüm yenilenir",
           "adimlar": [
             "Kiracısı olan ve her iki hesabında borç bulunan bir dairede “Tahsilat Ekle”yi açın.",
@@ -8769,7 +9189,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F45.05",
+          "id": "F46.05",
           "baslik": "Tahsilatı Düzelt: ters kayıttan sonra iki tür borç açık kalırsa hesap seçilir",
           "adimlar": [
             "Hesap kısıtı olmadan girilmiş bir tahsilatı, ev sahibi hesabında Aidat ve Fon borcu birlikte açıkken “Düzelt”in.",
@@ -8782,7 +9202,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F45.06",
+          "id": "F46.06",
           "baslik": "Dekont inceleme ve toplu onay: hesap seçimi",
           "adimlar": [
             "Sakin hesabıyla bir dekont bildirin; yönetici olarak Finans > Dekontlar sekmesinden bildirimi açın (“Nasıl işlensin?”).",
@@ -8796,7 +9216,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F45.07",
+          "id": "F46.07",
           "baslik": "Banka Ödemeleri: Daireye işle ve Onayla",
           "adimlar": [
             "Finans ekranındaki “banka satırı sizi bekliyor” kartından Banka Ödemeleri’ni açın.",
@@ -8810,7 +9230,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F45.08",
+          "id": "F46.08",
           "baslik": "Banka dosyası yükleme: iki türlü borçlu daireye kendiliğinden işlenmez",
           "adimlar": [
             "İki türlü (Aidat + Fon) borcu açık bir daire için IBAN’ı daha önce kaydedilmiş, güçlü eşleşen bir satır içeren banka dosyasını yükleyin.",
@@ -8825,13 +9245,13 @@
       ]
     },
     {
-      "id": "F46",
+      "id": "F47",
       "baslik": "Banka dosyasında güçlü eşleşmeleri tek tek gözden geçir",
       "durum": "hazir",
       "ozet": "Banka dosyası yüklerken “Güçlü eşleşmeleri de tek tek gözden geçir” kutusu işaretlenirse tanınan satırlar da kendiliğinden işlenmez; Banka Ödemeleri ekranındaki “Tek tek gözden geçir” akışında sırayla Onayla ya da Atla denir. Kutu varsayılan olarak kapalıdır; kapalıyken yükleme eskisi gibi çalışır.",
       "maddeler": [
         {
-          "id": "F46.01",
+          "id": "F47.01",
           "baslik": "Yükleme: “Güçlü eşleşmeleri de tek tek gözden geçir” kutusu",
           "adimlar": [
             "Finans > Kasa sekmesinde bir banka hesabının altından “Banka dosyası yükle”yi açın ve IBAN’ı daha önce kaydedilmiş (güçlü eşleşen) satırlar içeren bir dosya seçin.",
@@ -8845,29 +9265,29 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F46.02",
+          "id": "F47.02",
           "baslik": "Banka Ödemeleri: “Tek tek gözden geçir” akışı",
           "adimlar": [
-            "F46.01’deki yüklemeden sonra Banka Ödemeleri ekranında “Tek tek gözden geçir” düğmesine dokunun.",
+            "F47.01’deki yüklemeden sonra Banka Ödemeleri ekranında “Tek tek gözden geçir” düğmesine dokunun.",
             "İlk satırda Onayla, ikinci satırda Atla’yı seçin; akışı bitirin.",
             "İki türlü (Aidat + Fon) borçlu daireye ait bir satır varsa o satırda hesap seçimine bakın."
           ],
           "beklenen": "Satırlar sırayla gelir; her satırda daire, tutar ve açıklama görünür, “Onayla” tahsilatı yazar, “Atla” satırı bekleyenlerde bırakır. İki türlü borçlu dairede hesap seçilmeden onay çalışmaz. Akış sonunda özet “X satır işlendi, Y satır atlandı (beklemeye devam eder).” der.",
           "rol_notu": "Site yöneticisi",
-          "on_kosul": "F46.01 ile yüklenmiş, onay bekleyen güçlü eşleşmeli satırlar",
+          "on_kosul": "F47.01 ile yüklenmiş, onay bekleyen güçlü eşleşmeli satırlar",
           "yeni": true,
           "gelistirme": "hazir"
         }
       ]
     },
     {
-      "id": "F47",
+      "id": "F48",
       "baslik": "Fon borcunun dayanağı ve sakin “Borç kalemleri”",
       "durum": "hazir",
       "ozet": "Yatırım ve Demirbaş (Fon) Hesabı’na borç yazan iki yol (Ek Borç Ekle ve aylık tanımı Borçlandır) artık dayanaksız yazılamaz: Karar Defteri açık sitede kesinleşmiş bir karar, kapalı sitede kısa bir gerekçe istenir. Dayanak ekstrede ve sakinin Borcum ekranındaki “Borç kalemleri” dökümünde görünür. Aidat (İşletme) hesabı borçlarında dayanak sorulmaz. Eski uygulama sürümüyle Fon borcu yazmak Türkçe uyarıyla reddedilir (web ve uygulama birlikte güncellenir).",
       "maddeler": [
         {
-          "id": "F47.01",
+          "id": "F48.01",
           "baslik": "Karar Defteri kapalı sitede Fon borcuna gerekçe",
           "adimlar": [
             "Karar Defteri modülü kapalı bir sitede Finans > Daireler ekranından “Ek Borç Ekle”yi açın (hesap varsayılan olarak Yatırım ve Demirbaş (Fon) Hesabı gelir); ad ve tutar girip “Önizle”ye basın.",
@@ -8880,7 +9300,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F47.02",
+          "id": "F48.02",
           "baslik": "Karar Defteri açık sitede kesinleşmiş karar seçilir",
           "adimlar": [
             "Karar Defteri açık bir sitede aynı akışı izleyin (Ek Borç Ekle, Fon hesabı); “Borcun dayanağı” kararlar listesine bakın.",
@@ -8893,7 +9313,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F47.03",
+          "id": "F48.03",
           "baslik": "Aylık tanımı Borçlandır: Fon dayanak ister, Aidat sormaz",
           "adimlar": [
             "Tanımlar sekmesinde malik öder (Fon Hesabı) bir aylık tanımı “Borçlandır”ın; dönemi seçip “Önizle”ye basın.",
@@ -8906,7 +9326,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F47.04",
+          "id": "F48.04",
           "baslik": "Ekstrede “Dayanak” satırı",
           "adimlar": [
             "Dayanaklı bir Fon borcundan sonra o dairenin ekstresini açın; aidat ve tahsilat satırlarına da bakın.",
@@ -8914,12 +9334,12 @@
           ],
           "beklenen": "Fon borcu satırında “Dayanak: Karar 2026/4 • Başlık” (ya da “Dayanak: Gerekçe: …”) satırı görünür; aidat ve tahsilat satırlarında görünmez. Kurul üyesi aynı satırları salt okunur görür.",
           "rol_notu": "Site yöneticisi",
-          "on_kosul": "F47.01 ya da F47.02 ile yazılmış bir Fon borcu",
+          "on_kosul": "F48.01 ya da F48.02 ile yazılmış bir Fon borcu",
           "yeni": true,
           "gelistirme": "hazir"
         },
         {
-          "id": "F47.05",
+          "id": "F48.05",
           "baslik": "Sakin Borcum: “Borç kalemleri” dökümü",
           "adimlar": [
             "Borcu olan bir sakin hesabıyla Borcum ekranını açın ve “Borç kalemleri (N)” düğmesine dokunun.",
@@ -8932,7 +9352,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F47.06",
+          "id": "F48.06",
           "baslik": "Sakin gizliliği: karar başlığı yönetime özelse sızmaz",
           "adimlar": [
             "Karar Defteri’nde bir kararı “Yalnız yönetim” görünürlüğüyle kaydedip bir Fon borcuna bağlayın; sakin hesabıyla “Borç kalemleri”ne bakın.",
@@ -8945,7 +9365,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F47.07",
+          "id": "F48.07",
           "baslik": "Önizleme sonrası modül değişirse; aynı ek borcun tekrarı",
           "adimlar": [
             "Ek borç önizlemesini açık tutun; başka bir oturumdan süper kullanıcıyla Karar Defteri modülünü açıp kapatın, sonra onaylayın.",
@@ -8960,13 +9380,13 @@
       ]
     },
     {
-      "id": "F48",
+      "id": "F49",
       "baslik": "Dağıtım tabanını yönetim seçer: eşit varsayılan, kişi sayısı, ısı payı alan tabanı",
       "durum": "hazir",
       "ozet": "Aidat, ek borç ve ısı payında dağıtım tabanını yazılım değil yönetim seçer; varsayılan EŞİT’tir. Yeni “Kişi sayısına göre” tabanı dairedeki güncel kişi kayıtlarından hesaplanır. Seçilen tabanın verisi eksik daire sessizce eşit paya düşürülmez, eksik veri olarak listelenir. “Metrekareye göre” seçeneği yoktur. Isı payının alan payı kısmı da aynı tabanlarla (Eşit / Arsa payı / Kişi sayısı) hesaplanır; eskiden otomatik arsa payına geçilirdi, artık geçilmez.",
       "maddeler": [
         {
-          "id": "F48.01",
+          "id": "F49.01",
           "baslik": "Yeni Tanım: dağıtım yöntemi sırası, varsayılanı ve kişi sayısı",
           "adimlar": [
             "Finans > Tanımlar > “Yeni Tanım”ı açın; “Dağıtım yöntemi” seçicisine bakın.",
@@ -8979,7 +9399,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F48.02",
+          "id": "F49.02",
           "baslik": "Ek borçta kişi sayısı / eşit / arsa payı karşılaştırması ve kuruş artıkları",
           "adimlar": [
             "Ek Borç Ekle formunda aynı toplam tutarı önce “Eşit bölüş”, sonra “Kişi sayısına göre” ve “Arsa payına göre” seçerek önizleyin (kaydetmeyin).",
@@ -8992,7 +9412,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F48.03",
+          "id": "F49.03",
           "baslik": "Isı payı: “Alan payı tabanı” seçicisi",
           "adimlar": [
             "Sayaç > Faturalandır’da tür Isı, yöntem “Isı payı” seçin; “Alan payı tabanı” seçicisine bakın.",
@@ -9009,13 +9429,13 @@
       ]
     },
     {
-      "id": "F49",
+      "id": "F50",
       "baslik": "Alacaklı devir bakiyesi",
       "durum": "hazir",
       "ozet": "Devir bakiyesi dosyasındaki eksi tutar artık hata değil, ALACAKLI devirdir: dairenin hesabına devir alacağı olarak yazılır ve sonraki borçlara en eski vadeden başlayarak mahsup edilir. Devir alacağı tahsilat sayılmaz (gelir-gider raporu ve ana sayfa tahsilat toplamları artmaz), makbuz kesilmez ve tahsilat düzeltmesi yapılamaz; ekstrede “Devir alacağı” etiketini taşır. Eski uygulama sürümü alacaklı dosyayı onaylayamaz (güvenli taraf); web ve uygulama birlikte güncellenir.",
       "maddeler": [
         {
-          "id": "F49.01",
+          "id": "F50.01",
           "baslik": "Excel’den devir: eksi tutar alacaklı devirdir",
           "adimlar": [
             "Finans > Daireler > Devir bakiyesi > “Excel’den yükle”: şablondaki notu okuyun; bir daireye -500,00 (eksi), bir başkasına pozitif tutar yazın, alacaklı satırın vade hücresini de doldurun.",
@@ -9028,20 +9448,20 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F49.02",
+          "id": "F50.02",
           "baslik": "Ekstrede “Devir alacağı” etiketi",
           "adimlar": [
-            "F49.01’deki yüklemeyi onaylayın; alacaklı dairenin ekstresini açın.",
+            "F50.01’deki yüklemeyi onaylayın; alacaklı dairenin ekstresini açın.",
             "Alacak satırına dokunun."
           ],
           "beklenen": "Satır “Tahsilat” türündedir ama yöntem rozeti yerine “Devir alacağı” rozetini taşır (Havale / EFT rozeti yoktur). “Makbuz Düzenle” ve “Düzelt” düğmeleri yoktur; “İptal Et” vardır.",
           "rol_notu": "Site yöneticisi",
-          "on_kosul": "F49.01 ile yüklenmiş alacaklı devir",
+          "on_kosul": "F50.01 ile yüklenmiş alacaklı devir",
           "yeni": true,
           "gelistirme": "hazir"
         },
         {
-          "id": "F49.03",
+          "id": "F50.03",
           "baslik": "Alacaklı devirden sonra aidat: mahsup ve raporlar",
           "adimlar": [
             "Devir alacağı 500 TL olan dairede 1.250 TL aidat borçlandırın.",
@@ -9051,12 +9471,12 @@
           ],
           "beklenen": "Bakiye 750 TL olur; Borcum ve ekstrede kalan 750 TL’dir. Alacak aidattan fazlaysa artan alacak kalır. “Tahsilat” toplamları devir alacağı kadar ARTMAZ. Ev sahibi hesabındaki devir alacağı kiracı hesabının borcunu KAPATMAZ (mahsup hesap bazlıdır).",
           "rol_notu": "Site yöneticisi",
-          "on_kosul": "F49.01 ile yüklenmiş alacaklı devirler",
+          "on_kosul": "F50.01 ile yüklenmiş alacaklı devirler",
           "yeni": true,
           "gelistirme": "hazir"
         },
         {
-          "id": "F49.04",
+          "id": "F50.04",
           "baslik": "Devir yüklemesini geri alma (borç ve alacak birlikte)",
           "adimlar": [
             "Alacaklı kayıtlar da içeren bir devir yüklemesinin yanındaki “Geri al”a dokunun; nedeni yazıp onaylayın.",
@@ -9064,20 +9484,20 @@
           ],
           "beklenen": "Pencere ters kayıt sayısını devir borcu ve devir alacağı olarak ayrı yazar. Onaydan sonra borç ve alacak birlikte terslenir, ikinci geri alma reddedilir. “Sonradan tahsilat” uyarısı yalnız GERÇEK tahsilatlar için çıkar (devir alacağı saymaz).",
           "rol_notu": "Site yöneticisi",
-          "on_kosul": "F49.01 ile yüklenmiş alacaklı devir",
+          "on_kosul": "F50.01 ile yüklenmiş alacaklı devir",
           "yeni": true,
           "gelistirme": "hazir"
         }
       ]
     },
     {
-      "id": "F50",
+      "id": "F51",
       "baslik": "Kiracı borcunun malike devri, gecikmede öneri ve alacak iadesi (sunucu hazır, ekranlar sonraki iş)",
       "durum": "yapiliyor",
       "ozet": "Sunucu tarafı hazır ve gerçek PostgreSQL’de sınandı; yönetici ve sakin ekranları henüz yok (sonraki iş), bu yüzden aşağıdaki maddelerin çoğu “Yakında…” durumundadır. Kiracı borcunun malike devri açık, yönetici onaylı, izli ve geri alınabilir bir eylemdir; borç mutlaka tahsil edilir, kiracı vermezse mal sahibi öder: devir yalnız çıkışta değil gecikmede de yönetici önüne önerilir. Fazla ödeme varsayılan olarak alacak kalır; iade isteğe bağlı ve yönetici onaylıdır. Kiracı çıkışında malike giden bildirim şimdiden denenebilir. Devir ve bildirim metinlerinin hukuki zemini avukat onayı bekler.",
       "maddeler": [
         {
-          "id": "F50.01",
+          "id": "F51.01",
           "baslik": "Kiracı çıkışında malike borç bildirimi",
           "adimlar": [
             "Hesabında ödenmemiş borç olan bir kiracı için “Daireden ayrıl” (ya da yönetici olarak “Taşındı”) işlemini yapın.",
@@ -9091,7 +9511,7 @@
           "gelistirme": "hazir"
         },
         {
-          "id": "F50.02",
+          "id": "F51.02",
           "baslik": "Borcu malike devret: önizleme, devir, geri alma",
           "adimlar": [
             "Kiracı hesabında 1.000’er TL’lik üç aidatı olan ve 1.500 TL ödenmiş bir dairede “Borcu malike devret”i açın (yönetici ekranı yakında).",
@@ -9104,7 +9524,7 @@
           "gelistirme": "yakinda"
         },
         {
-          "id": "F50.03",
+          "id": "F51.03",
           "baslik": "Gecikmede de malike devir önerisi",
           "adimlar": [
             "Kiracısı oturan, vadesi geçmiş ödenmemiş borcu olan ve malik kaydı bulunan bir dairede yönetici ana sayfasındaki dikkat satırlarına bakın (satır etiketi ve devir penceresi yakında)."
@@ -9116,7 +9536,7 @@
           "gelistirme": "yakinda"
         },
         {
-          "id": "F50.04",
+          "id": "F51.04",
           "baslik": "Alacak iadesi: talep, onay, ret, geri alma",
           "adimlar": [
             "3.000 TL borca 5.000 TL ödenmiş bir dairede sakin “Fazla ödememi iade et” ile 1.500 TL iade istesin; 2.500 TL (alacaktan fazla) istemeyi de deneyin (sakin ekranı yakında).",

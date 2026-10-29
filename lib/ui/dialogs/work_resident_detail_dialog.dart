@@ -419,7 +419,7 @@ class _WorkResidentDetailDialogState extends State<WorkResidentDetailDialog> {
           spacing: AppSpace.xl,
           runSpacing: AppSpace.sm,
           children: [
-            CrmInfoLine(label: 'Kategori', value: i.category.label),
+            CrmInfoLine(label: 'Kategori', value: i.categoryText),
             CrmInfoLine(label: 'Konum', value: i.locationText),
             CrmInfoLine(
               label: 'Açılış',

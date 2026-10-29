@@ -74,11 +74,22 @@ class MeterApi {
 
   // --- Saha okuması (görevli; fotoğraflı) ---
 
-  Future<List<FieldMeter>> listFieldMeters({required String token, required int siteCode, MeterKind? kind}) async => FieldMeter.listFrom(
-    await _call('GET', '/sites/$siteCode/meter-field/meters', token: token, timeout: _readTimeout, query: kind == null ? null : <String, String>{'kind': kind.api}),
+  /// [date] ("2026-10-28"): okuma tarihi; sunucu sıçrama tabanını ve "önceki okuma"yı bu tarihten ÖNCEKİ okumalardan hesaplar (verilmezse sunucu bugünü).
+  Future<List<FieldMeter>> listFieldMeters({required String token, required int siteCode, MeterKind? kind, String? date}) async => FieldMeter.listFrom(
+    await _call(
+      'GET',
+      '/sites/$siteCode/meter-field/meters',
+      token: token,
+      timeout: _readTimeout,
+      query: <String, String>{'kind': ?kind?.api, 'date': ?date},
+    ),
   );
 
   /// Tekrar gönderim güvenlidir (aynı sayaç+tarih+değer sunucuda `replayed`); bu yüzden çevrimdışı kuyruk aynı okumayı yeniden deneyebilir.
+  ///
+  /// [confirmJump] verilirse (YENİ istemci) sunucu olağan dışı tüketimi denetler: `false` iken eşik aşılırsa 409 `READING_JUMP` döner ve
+  /// okuma kaydedilmez; `true` görevlinin onayıdır (kaydedilir, onay izi tutulur). Verilmezse (null) denetim yapılmaz.
+  /// [replace]: yeniden çekim; o gün bu sayaç için okuma varsa değerini değiştirir (yoksa normal ekler).
   Future<FieldReadingResult> postFieldReading({
     required String token,
     required int siteCode,
@@ -86,6 +97,8 @@ class MeterApi {
     required String date,
     required String value,
     String? photoBase64,
+    bool? confirmJump,
+    bool replace = false,
   }) async => FieldReadingResult.fromJson(
     await _call(
       'POST',
@@ -97,6 +110,8 @@ class MeterApi {
         'date': date,
         'value': value,
         if (photoBase64 != null) ...<String, dynamic>{'photo_b64': photoBase64, 'photo_mime': 'image/jpeg'},
+        'confirm_jump': ?confirmJump,
+        if (replace) 'replace': true,
       },
       ok: const <int>{200, 201},
     ),
@@ -208,6 +223,9 @@ class MeterApi {
     'READING_EXISTS' => 'Bu sayaç için bu tarihte farklı bir okuma zaten var.',
     'READING_OUT_OF_ORDER' => serverText ?? 'Okuma, komşu tarihlerdeki okumalarla tutarsız.',
     'READING_LOCKED' => 'Bu okuma faturalandırılmış bir döneme dahil olduğu için silinemez.',
+    'READING_RETAKE_LOCKED' => 'Bu okuma faturalandırılmış bir döneme dahil olduğu için değiştirilemez. Yönetici ile görüşün.',
+    'RETAKE_WINDOW' => 'Yeniden çekim yalnızca bugünkü ve dünkü okumalar için yapılabilir. Eski okumayı yönetici düzeltir.',
+    kReadingJumpCode => serverText ?? 'Olağan dışı tüketim: bu okuma son dönemlerin çok üzerinde. Değeri kontrol edin; doğruysa onaylayın.',
     'PREVIEW_STALE' => 'Okumalar önizlemeden sonra değişti. Önizlemeyi yenileyip tekrar deneyin.',
     'READINGS_INCOMPLETE' => 'Bazı dairelerin okuması eksik. Eksikleri tamamlayın ya da "eksikleri atla" seçeneğini işaretleyin.',
     'AREA_BASIS_INCOMPLETE' =>
@@ -257,9 +275,19 @@ class MeterService {
   Future<List<MeterReading>> listReadings(int siteCode, int meterId) => _guard((t) => api.listReadings(token: t, siteCode: siteCode, meterId: meterId));
   Future<void> addReading(int siteCode, int meterId, {required String date, required String value}) =>
       _guard((t) => api.addReading(token: t, siteCode: siteCode, meterId: meterId, date: date, value: value));
-  Future<List<FieldMeter>> listFieldMeters(int siteCode, {MeterKind? kind}) => _guard((t) => api.listFieldMeters(token: t, siteCode: siteCode, kind: kind));
-  Future<FieldReadingResult> postFieldReading(int siteCode, {required int meterId, required String date, required String value, String? photoBase64}) =>
-      _guard((t) => api.postFieldReading(token: t, siteCode: siteCode, meterId: meterId, date: date, value: value, photoBase64: photoBase64));
+  Future<List<FieldMeter>> listFieldMeters(int siteCode, {MeterKind? kind, String? date}) =>
+      _guard((t) => api.listFieldMeters(token: t, siteCode: siteCode, kind: kind, date: date));
+  Future<FieldReadingResult> postFieldReading(
+    int siteCode, {
+    required int meterId,
+    required String date,
+    required String value,
+    String? photoBase64,
+    bool? confirmJump,
+    bool replace = false,
+  }) => _guard(
+    (t) => api.postFieldReading(token: t, siteCode: siteCode, meterId: meterId, date: date, value: value, photoBase64: photoBase64, confirmJump: confirmJump, replace: replace),
+  );
   Future<void> deleteReading(int siteCode, int meterId, int readingId) =>
       _guard((t) => api.deleteReading(token: t, siteCode: siteCode, meterId: meterId, readingId: readingId));
   Future<MeterImportResult> importReadings(
