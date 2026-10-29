@@ -174,6 +174,18 @@ Tüm tutarlar tamsayı kuruş. Hata gövdesi `{ error, code }` (Türkçe `error`
 `finance_fund_transfers` (eklemeli: genel `trg_finance_immutable('created_by')` + TRUNCATE engeli + ters aktarım ayna tetikleyicisi; `uq_finance_fund_transfers_reverses`, `(site_code, idempotency_key)` tekil; FK'ler ayrı ve katalog korumalı); veri adımı: kategorisi olan her siteye sistem kategorisi.
 Açılış: `ensureFinanceFundsSchema` (db.js, 077/078'den sonra; hiçbir şey eksik değilse yalnız iki SELECT, kilit yok; ön koşul tablo / işlev yoksa hiçbir şey yapmaz).
 
+### 8.4a Dönemsel rapor (aylık / 3 aylık / yıllık; karşılaştırma raporu P2-3)
+
+- `GET …/finance/reports/period?from=YYYY-MM&to=YYYY-MM` (okuma: yönetici, süper, kurul; 120/saat/kullanıcı, rapor yuvası). Varsayılan: bu yılın ocağından bu aya; gelecek `to` bu aya çekilir; en çok 36 ay.
+  Dönem sonu günü = ayın son günü (bu ay için bugün). Tek REPEATABLE READ anlık görüntüde hesaplanır; bölüm hatası BÜTÜN yanıtı hata yapar.
+- Yeni hesap kuralı YOKTUR: Hesap (Aidat / Fon) rakamları `summarizeBook` ile, borçlu özeti `computeAging` ile aynıdır. Her Hesap için `opening_minor`, `collections_minor`, `expenses_minor`,
+  `transfers_in/out_minor`, `adjustments_minor`, `closing_minor`, `change_minor` (= kapanış - açılış = tahsilat - gider + aktarım giriş - çıkış + düzeltme) ve `expense_by_category`.
+  `months[]` aylık tahsilat / gider / net (Hesap bazında ve toplam); toplamları dönem toplamına eşittir. `totals` iki Hesabın toplamı; `reconciliation` (hesap toplamı - (Aidat + Fon + avans)).
+- `debtors`: dönem sonu itibarıyla `debtor_count`, `apartment_count`, `total_overdue_minor`, yaşlandırma kovaları. KİŞİ VERİSİ YOKTUR (ad ve daire etiketi çıkmaz).
+- Dışa aktarma: `GET …/finance/exports/finance_period_report?from=&to=` (yalnız yönetici / süper; uzun biçim: Bölüm / Hesap / Kalem / Dönem / Adet / Tutar; dosyayı istemci üretir).
+- Sınırlar: dağıtım güncel durumdan türetildiği için geçmiş dönem sonunda `reconciliation.difference_minor` sıfırdan farklı olabilir (§8.5); Hesap bazında borçlu kırılımı YOK (yalnız toplam);
+  PDF üretilmedi (ekran + CSV/Excel).
+
 ### 8.5 Bilerek kapsam dışı / bilinen sınırlar
 
 - Kasa bakiyesi eksiye düşerse aktarım ENGELLENMEZ (`negative_balance` işareti; veri eksik olabilir). Aktarım yanıtı bakiye döndürmez (istemci `GET …/funds` ile yeniler).

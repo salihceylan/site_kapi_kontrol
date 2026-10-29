@@ -14,6 +14,7 @@ import { analysisExportRows, computeExpenseAnalysis, parseAnalysisQuery } from '
 import { AGING_BUCKETS } from './finance_m1.js';
 import { computeEnforcement, parseEnforcementAccounts } from './finance_enforcement.js';
 import { exportReceiptRows } from './finance_receipts.js';
+import { PERIOD_EXPORT_COLUMNS, computePeriodReport, parsePeriodQuery, periodExportRows } from './finance_period_report.js';
 import {
   agingForAccount,
   cashTotals,
@@ -42,6 +43,7 @@ export const EXPORT_KINDS = Object.freeze([
   'finance_expense_analysis',
   'finance_expense_forecast',
   'finance_enforcement',
+  'finance_period_report',
 ]);
 
 const col = (key, label, type, scale) => (scale === undefined ? { key, label, type } : { key, label, type, scale });
@@ -310,6 +312,12 @@ export async function buildExportEnvelope(siteCode, kind, query = {}, now = new 
         'Avukat kontrolü gerekir',
       ]);
       return envelope(kind, siteName, now, `icra_listesi_${asOf}`.replace(/-/g, ''), columns, rows);
+    }
+    if (kind === 'finance_period_report') {
+      // Dönemsel rapor paketi: iki Hesap (Aidat / Fon) dönem özeti + gider kalemleri + aylık kırılım + borçlu özeti (kişi verisi yok). Uzun biçim: bölüm / hesap / kalem / dönem / adet / tutar.
+      const filters = parsePeriodQuery(query, now);
+      const report = await computePeriodReport(client, siteCode, filters, now);
+      return envelope(kind, siteName, now, `donem_raporu_${filters.from.slice(0, 7)}_${filters.to.slice(0, 7)}`.replace(/-/g, ''), PERIOD_EXPORT_COLUMNS.map((c) => ({ ...c })), periodExportRows(report));
     }
     if (kind === 'finance_expenses') {
       const items = await exportExpenseRows(siteCode, query, client);

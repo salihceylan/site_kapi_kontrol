@@ -29,6 +29,7 @@ import 'package:site_kapi_kontrol/models/finance_funds.dart';
 import 'package:site_kapi_kontrol/models/finance_liability.dart';
 import 'package:site_kapi_kontrol/models/fund_models.dart';
 import 'package:site_kapi_kontrol/models/late_fee_models.dart';
+import 'package:site_kapi_kontrol/models/period_report_models.dart';
 import 'package:site_kapi_kontrol/models/receipt_models.dart';
 import 'package:site_kapi_kontrol/models/reminder_models.dart';
 import 'package:site_kapi_kontrol/models/report_models.dart';
@@ -1103,6 +1104,24 @@ class Finance4bApi {
       timeout: const Duration(seconds: 40),
     );
     return _parse('Kurul özeti', () => BoardSummaryReport.fromJson(r.body));
+  }
+
+  /// Dönemsel rapor paketi (aylık / 3 aylık / yıllık): iki Hesabın (Aidat / Fon) dönem özeti, gider kalemleri, aylık kırılım ve dönem
+  /// sonu borçlu özeti (kişi verisi yok). Ağır rapor: 503 `REPORT_BUSY` gelirse kullanıcı beklemeye yönlendirilir.
+  Future<PeriodReport> getPeriodReport({
+    required String token,
+    required int siteCode,
+    required FinancePeriod from,
+    required FinancePeriod to,
+  }) async {
+    final r = await _send(
+      'GET',
+      _site(siteCode, 'reports/period'),
+      token: token,
+      query: <String, String>{'from': from.toApi(), 'to': to.toApi()},
+      timeout: const Duration(seconds: 40),
+    );
+    return _parse('Dönem raporu', () => PeriodReport.fromJson(r.body));
   }
 
   /// Dışa aktarma zarfı (`finance_*` kind'ları). Yalnız yönetici / süper kullanıcı; kurul 403 alır.

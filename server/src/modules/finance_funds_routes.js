@@ -15,6 +15,7 @@ import { createRuleLimiter } from '../middlewares/rate_limiters.js';
 import { resolveFinanceAccess } from './finance_access.js';
 import { redactFinanceForBoard } from './finance_common.js';
 import { createFundTransfer, getFundSummary, listFundMovements, listFundTransfers, reverseFundTransfer } from './finance_funds_service.js';
+import { periodReport } from './finance_period_report.js';
 import { BASE, bodyOf, canSeeManagerFields, financeReadLimiter, financeWriteLimiter, managerHandler } from './finance_routes.js';
 import { HOUR_MS, respondError, userKey } from './route_helpers.js';
 
@@ -48,6 +49,8 @@ function fundsReadRoute(path, context, fallback, run) {
 }
 
 fundsReadRoute(`${BASE}/funds`, 'finance_funds_summary', 'Aidat ve Fon hesapları yüklenemedi.', async ({ req, access }) => getFundSummary(access.siteCode, req.query));
+// Dönemsel rapor paketi (aylık / 3 aylık / yıllık): iki Hesap için dönem özeti + gider kalemleri + dönem sonu borçlu özeti (kişi verisi yok). ?from=YYYY-MM&to=YYYY-MM
+fundsReadRoute(`${BASE}/reports/period`, 'finance_period_report', 'Dönem raporu hazırlanamadı.', async ({ req, access }) => periodReport(access.siteCode, req.query));
 fundsReadRoute(`${BASE}/funds/:fund/movements`, 'finance_funds_movements', 'Hesap dökümü yüklenemedi.', async ({ req, access }) =>
   listFundMovements(access.siteCode, req.params.fund, req.query),
 );
