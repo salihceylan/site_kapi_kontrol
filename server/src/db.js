@@ -44,6 +44,7 @@ import { ensureDriveSchema } from './modules/drive_schema.js';
 import { ensureDriveSourceSchema } from './modules/drive_source_schema.js';
 import { ensureDriveHealthSchema } from './modules/drive_health_schema.js';
 import { ensureSiteFreePeriodSchema } from './modules/site_free_period_schema.js';
+import { ensurePaymentConnectionSchema } from './modules/payment_connection_schema.js';
 import { ensureMeteringFieldSchema } from './modules/metering_field_schema.js';
 import { ensureMeteringSchema } from './modules/metering_schema.js';
 import { ensureManagementCompanySchema } from './modules/management_company_schema.js';
@@ -2082,6 +2083,8 @@ export async function ensureDbSchema() {
     // 115 (kampanya "simdi abone olana 2 ay ucretsiz": sites.subscription_started_at + sites.free_until): sites'tan SONRA; dev blokta DEGIL; katalog kontrolu + her adim kendi otomatik onayli
     // ifadesi (site_free_period_schema.js = migrations/115). Her sey varsa hicbir ifade / kilit yok; yalniz ekleyici DATE sutunlari, mevcut sitelere dokunmaz (NULL = kampanyadan once).
     await ensureSiteFreePeriodSchema(client);
+    // 116 (online tahsilat saglayici baglantisi, sirlar sifreli): sites'tan SONRA; dev blokta DEGIL; tablo varsa hicbir ifade yok (payment_connection_schema.js = migrations/116). Mevcut tablolara ALTER yok.
+    await ensurePaymentConnectionSchema(client);
 
     // 031 people_v1: mevcut sakinlerin CRM'e tek seferlik aktarimi. Savunmaci: hata sunucunun acilmasini ENGELLEMEZ
     // (kendi transaction'i geri alinir, isaret yazilmaz => sonraki acilista yeniden denenir; okuma anindaki

@@ -137,9 +137,12 @@ class _PaySheetState extends State<PaySheet> {
 
 /// Sayfanın içeriği (yükleme dışı): saf görünüm, test edilebilir.
 class PayContent extends StatelessWidget {
-  const PayContent({super.key, required this.info, required this.amountMinor, this.accountLabel, this.onUploadReceipt, this.now, this.copy});
+  const PayContent({super.key, required this.info, required this.amountMinor, this.accountLabel, this.onUploadReceipt, this.onOnlinePay, this.now, this.copy});
 
   final PaymentInfoItem? info;
+
+  /// "Online Öde" eylemi (ödeme başlatma sağlayıcı sürücüsüyle birlikte bağlanır; bu sürümde kimse vermez ve düğme zaten görünmez).
+  final VoidCallback? onOnlinePay;
   final int amountMinor;
   final String? accountLabel;
   final VoidCallback? onUploadReceipt;
@@ -226,6 +229,17 @@ class PayContent extends StatelessWidget {
           Text('FAST veya havale ile komisyonsuz ödeyebilirsiniz.', style: th.bodySmall?.copyWith(color: p.textSecondary)),
         ],
         const SizedBox(height: AppSpace.lg),
+        // Online Öde: YALNIZ sunucu "bağlantı canlı + sınanmış + sürücü etkin" derse çizilir; aksi halde hiçbir şey (yanıltıcı metin) eklenmez.
+        if (item != null && item.onlinePaymentAvailable) ...[
+          FilledButton.icon(
+            key: const ValueKey<String>('pay_online'),
+            style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
+            onPressed: onOnlinePay,
+            icon: const Icon(Icons.lock_rounded),
+            label: const Text('Online Öde'),
+          ),
+          const SizedBox(height: AppSpace.sm),
+        ],
         if (configured && onUploadReceipt != null) ...[
           OutlinedButton.icon(
             key: const ValueKey<String>('pay_upload_receipt'),

@@ -40,6 +40,108 @@ class PaymentOverview {
   final List<PaymentProviderInfo> providers;
 }
 
+/// Online tahsilat sağlayıcı alanı (sunucudaki tanımdan; sır değeri HİÇBİR zaman gelmez).
+class CollectionField {
+  const CollectionField({required this.key, required this.label, required this.secret, required this.required, this.hint});
+
+  final String key;
+  final String label;
+  final bool secret;
+  final bool required;
+  final String? hint;
+}
+
+class CollectionProvider {
+  const CollectionProvider({required this.code, required this.name, required this.driverActive, required this.fields});
+
+  final String code;
+  final String name;
+  final bool driverActive;
+  final List<CollectionField> fields;
+}
+
+/// Bağlantı durumu: `none` (yok), `not_ready` (sanal POS hazır değil), `configured_test`, `configured_live`.
+class OnlineCollectionState {
+  const OnlineCollectionState({
+    required this.status,
+    this.provider,
+    this.mode,
+    this.values = const <String, String>{},
+    this.secretsSet = const <String, bool>{},
+    this.complete = false,
+    this.driverActive = false,
+    this.lastTestStatus,
+    this.lastTestMessage,
+    this.providers = const <CollectionProvider>[],
+  });
+
+  factory OnlineCollectionState.fromJson(Map<String, dynamic> json) {
+    final test = json['last_test'] is Map ? Map<String, dynamic>.from(json['last_test'] as Map) : null;
+    return OnlineCollectionState(
+      status: '${json['status'] ?? 'none'}',
+      provider: json['provider'] as String?,
+      mode: json['mode'] as String?,
+      values: <String, String>{
+        if (json['values'] is Map) for (final e in (json['values'] as Map).entries) '${e.key}': '${e.value}',
+      },
+      secretsSet: <String, bool>{
+        if (json['secrets_set'] is Map) for (final e in (json['secrets_set'] as Map).entries) '${e.key}': e.value == true,
+      },
+      complete: json['complete'] == true,
+      driverActive: json['driver_active'] == true,
+      lastTestStatus: test?['status'] as String?,
+      lastTestMessage: test?['message'] as String?,
+      providers: <CollectionProvider>[
+        for (final raw in (json['providers'] as List? ?? const []))
+          if (raw is Map)
+            CollectionProvider(
+              code: '${raw['code']}',
+              name: '${raw['name']}',
+              driverActive: raw['driver_active'] == true,
+              fields: <CollectionField>[
+                for (final f in (raw['fields'] as List? ?? const []))
+                  if (f is Map)
+                    CollectionField(
+                      key: '${f['key']}',
+                      label: '${f['label']}',
+                      secret: f['secret'] == true,
+                      required: f['required'] == true,
+                      hint: f['hint'] as String?,
+                    ),
+              ],
+            ),
+      ],
+    );
+  }
+
+  final String status;
+  final String? provider;
+  final String? mode;
+  final Map<String, String> values;
+  final Map<String, bool> secretsSet;
+  final bool complete;
+  final bool driverActive;
+  final String? lastTestStatus;
+  final String? lastTestMessage;
+  final List<CollectionProvider> providers;
+
+  CollectionProvider? get current {
+    for (final p in providers) {
+      if (p.code == provider) return p;
+    }
+    return null;
+  }
+}
+
+/// "Bağlantıyı sına" sonucu. [ok] yalnız sağlayıcı gerçekten doğruladıysa true'dur.
+class CollectionTestResult {
+  const CollectionTestResult({required this.ok, required this.message, required this.state});
+
+  final bool ok;
+  final String message;
+  final OnlineCollectionState state;
+}
+
 class CameraDevice {
   const CameraDevice({
     required this.id,
@@ -128,6 +230,42 @@ class DeviceIntegrationsApi {
   Future<PaymentOverview> saveCommissionInfo(String token, int siteCode, String provider, String info) async {
     final json = await _send('PUT', _site(siteCode, 'card-payments/$provider'), token, body: <String, Object?>{'commission_info': info.trim()});
     return _overview(json);
+  }
+
+  Future<OnlineCollectionState> onlineCollection(String token, int siteCode) async {
+    final json = await _send('GET', _site(siteCode, 'payment-provider'), token);
+    return OnlineCollectionState.fromJson(Map<String, dynamic>.from(json['state'] as Map));
+  }
+
+  /// [values]: sır alanı boş bırakılırsa sunucu mevcut sırrı korur.
+  Future<OnlineCollectionState> saveOnlineCollection(
+    String token,
+    int siteCode, {
+    required String provider,
+    required String mode,
+    required Map<String, String> values,
+  }) async {
+    final json = await _send(
+      'PUT',
+      _site(siteCode, 'payment-provider'),
+      token,
+      body: <String, Object?>{'provider': provider, 'mode': mode, 'values': values},
+    );
+    return OnlineCollectionState.fromJson(Map<String, dynamic>.from(json['state'] as Map));
+  }
+
+  Future<CollectionTestResult> testOnlineCollection(String token, int siteCode) async {
+    final json = await _send('POST', _site(siteCode, 'payment-provider/test'), token, body: const <String, Object?>{});
+    final result = Map<String, dynamic>.from(json['result'] as Map);
+    return CollectionTestResult(
+      ok: result['ok'] == true,
+      message: '${result['message'] ?? ''}',
+      state: OnlineCollectionState.fromJson(Map<String, dynamic>.from(json['state'] as Map)),
+    );
+  }
+
+  Future<void> removeOnlineCollection(String token, int siteCode) async {
+    await _send('DELETE', _site(siteCode, 'payment-provider'), token);
   }
 
   Future<List<CameraDevice>> cameras(String token, int siteCode) async {
@@ -231,6 +369,8 @@ class DeviceIntegrationsApi {
     switch (code) {
       case 'MODULE_DISABLED':
         return 'Bu modül bu site için kapalı.';
+      case 'PAYMENT_NOT_CONFIGURED':
+        return 'Online tahsilat bu sunucuda henüz etkinleştirilmedi. Sistem yöneticisi sunucu ayarını tamamlayınca burada kurulum yapabilirsiniz.';
       case 'FORBIDDEN_ROLE':
         return 'Bu işlem için yetkiniz yok.';
       case 'FORBIDDEN_SITE':
@@ -269,6 +409,11 @@ class DeviceIntegrationsService {
 
   Future<PaymentOverview> payments(int site) => _guard((t) => api.payments(t, site));
   Future<PaymentOverview> saveCommissionInfo(int site, String provider, String info) => _guard((t) => api.saveCommissionInfo(t, site, provider, info));
+  Future<OnlineCollectionState> onlineCollection(int site) => _guard((t) => api.onlineCollection(t, site));
+  Future<OnlineCollectionState> saveOnlineCollection(int site, {required String provider, required String mode, required Map<String, String> values}) =>
+      _guard((t) => api.saveOnlineCollection(t, site, provider: provider, mode: mode, values: values));
+  Future<CollectionTestResult> testOnlineCollection(int site) => _guard((t) => api.testOnlineCollection(t, site));
+  Future<void> removeOnlineCollection(int site) => _guard((t) => api.removeOnlineCollection(t, site));
   Future<List<CameraDevice>> cameras(int site) => _guard((t) => api.cameras(t, site));
   Future<List<PlateEventRow>> plateEvents(int site) => _guard((t) => api.plateEvents(t, site));
   Future<CameraCreated> createCamera(

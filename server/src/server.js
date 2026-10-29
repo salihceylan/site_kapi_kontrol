@@ -60,6 +60,7 @@ import { surveyRouter } from './modules/survey_routes.js';
 import { visitorLogRouter } from './modules/visitor_log_routes.js';
 import { cardAccessRouter } from './modules/card_access_routes.js';
 import { deviceIntegrationsRouter } from './modules/device_integrations_routes.js';
+import { paymentConnectionRouter } from './modules/payment_connection_routes.js';
 import { plateRecognitionRouter } from './modules/plate_recognition_routes.js';
 import { contractsRouter } from './modules/contracts_routes.js';
 import { equipmentPublicRouter, equipmentRouter } from './modules/equipment_routes.js';
@@ -198,6 +199,8 @@ app.use(visitorLogRouter);
 app.use(cardAccessRouter);
 // Kart odemesi saglayici arayuzu (F6; kapisi Aidat ve Finans temel modulu, her sitede acik) + kamera/plaka baglastiricilari (T8; modul plate_cameras, varsayilan KAPALI).
 app.use(deviceIntegrationsRouter);
+// Online tahsilat saglayici baglantisi (116; yonetici yazar, kurul okur; sirlar sifreli, PAYMENT_SECRET_KEY yoksa 503 PAYMENT_NOT_CONFIGURED).
+app.use(paymentConnectionRouter);
 // Plaka tanima (073): /manager/sites/:siteCode/plate-recognition/... + /app/plate-permits (modul plate_recognition, varsayilan KAPALI; kapi acmaz).
 app.use(plateRecognitionRouter);
 // Firma ve sozlesme takibi: /manager/sites/:siteCode/contract-vendors[/:id] + /manager/sites/:siteCode/contracts[/summary|/:id] (modul contracts, varsayilan KAPALI; sakin ucu yok).
