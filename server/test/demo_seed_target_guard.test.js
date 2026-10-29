@@ -1,6 +1,6 @@
 // Demo tohum araclarinin hedef korumasi (karsilastirma programi P1-19, 2026-10-28).
 //
-// tools/demo_seed/{seed,cleanup,restructure_families,add_vehicles}.mjs SAHTE veri yazar ve siler. Elle calistirilan bir arac yanlislikla canli
+// tools/demo_seed/{seed,cleanup,restructure_families,add_vehicles,golden_site}.mjs SAHTE veri yazar ve siler. Elle calistirilan bir arac yanlislikla canli
 // (ya da baska) bir veritabanina yazmasin diye hedef, baglanmadan ONCE dogrulanir: yalniz yerel (geri donus sunucusu + izinli veritabani adi)
 // ya da `--allow-target <veritabani adi>` ile AYNEN onaylanmis hedef. DB'ye baglanmaz: saf kosullar ve kaynak taramasi.
 import test from 'node:test';
@@ -140,8 +140,8 @@ test('yardimcilar: loopback adlari ve yerel veritabani adi kurali', () => {
   }
 });
 
-test('dort arac hedefi baglanmadan ONCE dogrular (kaynak taramasi)', () => {
-  for (const tool of ['seed.mjs', 'cleanup.mjs', 'restructure_families.mjs', 'add_vehicles.mjs']) {
+test('bes arac hedefi baglanmadan ONCE dogrular (kaynak taramasi; golden_site.mjs altin veri seti 2 ornek sitesi dahil)', () => {
+  for (const tool of ['seed.mjs', 'cleanup.mjs', 'restructure_families.mjs', 'add_vehicles.mjs', 'golden_site.mjs']) {
     const text = read(`tools/demo_seed/${tool}`);
     assert.ok(text.includes("import { requireDemoTarget } from './lib/target_guard.mjs';"), `${tool}: koruma import edilmemis`);
     const guardAt = text.indexOf('requireDemoTarget(url, args);');

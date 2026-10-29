@@ -52,7 +52,9 @@ try {
   }
   // Arac batch'i (add_vehicles.mjs) tohum / yeniden yapilandirma kisilerine baglanir: o batch'ler arac batch'inden ONCE geri alinirsa yetim arac kalir.
   const isVehicleBatch = batch.startsWith('demo-vehicles-');
-  if (!isVehicleBatch && !args.force) {
+  // Bagimsiz batch'ler (golden_site.mjs: kendi yeni sitesini kurar; tohum / yeniden yapilandirma / arac kisilerine baglanmaz): sira kurali uygulanmaz.
+  const isIndependentBatch = batch.startsWith('demo-golden2-');
+  if (!isVehicleBatch && !isIndependentBatch && !args.force) {
     const vehicles = await q(`SELECT DISTINCT batch_id FROM ${REGISTRY_TABLE} WHERE batch_id LIKE 'demo-vehicles-%' ORDER BY 1`);
     if (vehicles.rowCount > 0) {
       console.error(`DURDURULDU: ${vehicles.rows.map((r) => r.batch_id).join(', ')} arac batch'i hala kayitli. Once onu geri alin (cleanup.mjs --batch <o batch> --yes), sonra bunu. Bilerek devam etmek icin --force.`);
@@ -60,7 +62,7 @@ try {
     }
   }
   // Yeniden yapilandirma batch'i (restructure_families.mjs) tohum kisilerine baglanir: tohum batch'i ondan ONCE geri alinirsa yetim kayit kalir.
-  if (!batch.startsWith('demo-restructure-') && !isVehicleBatch && !args.force) {
+  if (!batch.startsWith('demo-restructure-') && !isVehicleBatch && !isIndependentBatch && !args.force) {
     const later = await q(`SELECT DISTINCT batch_id FROM ${REGISTRY_TABLE} WHERE batch_id LIKE 'demo-restructure-%' ORDER BY 1`);
     if (later.rowCount > 0) {
       console.error(`DURDURULDU: ${later.rows.map((r) => r.batch_id).join(', ')} yeniden yapilandirma batch'i hala kayitli. Once onu geri alin (cleanup.mjs --batch <o batch> --yes), sonra tohum batch'ini. Bilerek devam etmek icin --force.`);
