@@ -1,6 +1,7 @@
 import { pool } from '../db.js';
 import { ensureTenantAdminRule } from '../modules/apartment_tenant_admin_sql.js';
 import { purgeStaleAttemptLimits } from '../security/attempt_limits.js';
+import { recordAudit } from '../modules/audit_service.js';
 
 /**
  * Veritabanı Otomatik Yaşam Döngüsü ve Çöp Temizliği Servisi
@@ -61,6 +62,32 @@ export async function runDatabaseCleanup(db = pool) {
 
     // 3d2. Kalici deneme sinirlari (085): 30 gundur dokunulmamis VE kilidi bitmis satirlar silinir (kilitli satira dokunulmaz); stats alani eklenmez (sozlesme sabit).
     await purgeStaleAttemptLimits(db);
+
+    // 3d3. Deneme erisim kodlari (106): bitmis kod satirlari 90 gun sonra silinir (kod ozeti/ipucu gereksiz yere saklanmasin). Silinen satirlar YALNIZ:
+    //  - hic kullanilmamis ve suresi dolmus / iptal edilmis (hangisi once ise ondan 90 gun sonra),
+    //  - kullanilmis ve oturumu KAPANMIS (closed_at, 90 gun once) ya da kullanan hesap silinmis (used_by NULL) ve oturum suresi 90 gundur bitmis.
+    //  Kullanilmis ama henuz kapanmamis satira dokunulmaz (closeExpiredTrialAccounts onu used_by uzerinden kapatir). users satirina dokunulmaz.
+    //  Silinen sayi islem izine (recordAudit, YALNIZ ekleme) yazilir; tablo yoksa/hata olursa temizligin geri kalani durmaz; stats alani eklenmez (sozlesme sabit).
+    try {
+      const delTrial = await db.query(`
+        DELETE FROM trial_access_codes
+        WHERE (used_at IS NULL AND LEAST(expires_at, COALESCE(revoked_at, expires_at)) < NOW() - INTERVAL '90 days')
+           OR (used_at IS NOT NULL AND closed_at IS NOT NULL AND closed_at < NOW() - INTERVAL '90 days')
+           OR (used_at IS NOT NULL AND used_by IS NULL AND closed_at IS NULL AND session_expires_at < NOW() - INTERVAL '90 days')
+      `);
+      const trialPurged = Number(delTrial.rowCount || 0);
+      if (trialPurged > 0) {
+        await recordAudit(db, {
+          actor: null,
+          action: 'maintenance.trial_access_codes_purged',
+          targetType: 'trial_access_code',
+          details: { deleted: trialPurged, retention_days: 90 },
+        });
+        console.log(`[Maintenance Cleanup]: ${trialPurged} bitmis deneme erisim kodu satiri silindi (90 gun).`);
+      }
+    } catch (error) {
+      console.error('[Maintenance Cleanup] deneme kodu temizligi atlandi:', error?.code || 'hata');
+    }
 
     // 3e. Kiraci her zaman daire admini (081): acilista da calisan kural, yasayan sistemde sapmayi (kiraci hesabi sonradan e-postayla baglandi, pasife alinan
     // uyelik yeniden acildi vb.) en gec 24 saatte kapatir. Aday yoksa YALNIZ bir okuma; hata temizligi durdurmaz.

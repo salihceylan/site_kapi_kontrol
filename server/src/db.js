@@ -42,6 +42,7 @@ import { ensureAnnouncementHideSchema } from './modules/announcement_hide_schema
 import { ensureTeamSchema } from './modules/team_schema.js';
 import { ensureDriveSchema } from './modules/drive_schema.js';
 import { ensureDriveSourceSchema } from './modules/drive_source_schema.js';
+import { ensureDriveHealthSchema } from './modules/drive_health_schema.js';
 import { ensureMeteringFieldSchema } from './modules/metering_field_schema.js';
 import { ensureMeteringSchema } from './modules/metering_schema.js';
 import { ensureManagementCompanySchema } from './modules/management_company_schema.js';
@@ -2056,6 +2057,9 @@ export async function ensureDbSchema() {
     // 097 (Drive dosya kaydi <-> kaynak kayit baglantisi, P1-11): 060'tan (drive_files) SONRA; dev blokta DEGIL; katalog kontrolu + her adim kendi otomatik onayli ifadesi
     // (drive_source_schema.js = migrations/097). Her sey varsa hicbir ifade / kilit yok; mevcut satirlara dokunmaz (kaynak NULL = baglanmamis).
     await ensureDriveSourceSchema(client);
+    // 112 (Drive saglik gostergesi + kota izleme + aktarim dogrulamasi, P2-2 / P2-17 / P2-18): 060'tan (site_drive_connections, drive_files, drive_pending_uploads) SONRA; dev blokta DEGIL; katalog kontrolu + her adim
+    // kendi otomatik onayli ifadesi (drive_health_schema.js = migrations/112). Her sey varsa hicbir ifade / kilit yok; yalniz ekleyici sutunlar, mevcut satirlara dokunmaz.
+    await ensureDriveHealthSchema(client);
     // 100 (is takibi kategorileri + fotograf yeniden kullanim indeksi): 042 (work_items) ve 047 (work_item_attachments) SONRASI; dev blokta DEGIL; katalog kontrolu + her adim kendi
     // otomatik onayli ifadesi (work_categories_schema.js = migrations/100). Her sey varsa hicbir ifade / kilit yok; varsayilan dort kategori her site icin ilk kullanimda tohumlanir (veri adimi yok).
     await ensureWorkCategoriesSchema(client);

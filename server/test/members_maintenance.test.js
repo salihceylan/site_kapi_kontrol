@@ -51,6 +51,8 @@ describe('members: maintenance_service yıkıcı işlem yapmaz', () => {
       'email_verifications',
       'pending_registrations',
       'qr_access_tokens',
+      // 106 (kapanis): bitmis deneme erisim kodu satirlari 90 gun sonra; kullanilmis ama kapanmamis satira dokunulmaz.
+      'trial_access_codes',
     ]);
     // her DELETE zaman koşulu taşır (koşulsuz toplu silme yok)
     for (const sql of deletes) {
@@ -76,6 +78,53 @@ describe('members: maintenance_service yıkıcı işlem yapmaz', () => {
     assert.equal(result.stats.dummyUsersCleaned, 0);
     assert.equal(result.stats.orphanedMembershipsCleaned, 0);
     assert.equal(result.totalCleaned, 3 * 5);
+  });
+
+  it('deneme erişim kodu: 90 gün koşulu, açık oturuma dokunmaz, silinen sayı işlem izine yazılır, stats sözleşmesi aynı', async () => {
+    const calls = [];
+    const db = {
+      async query(text, params) {
+        const sql = String(text).replace(/\s+/g, ' ').trim();
+        calls.push({ sql, params });
+        return { rowCount: /^DELETE FROM trial_access_codes/i.test(sql) ? 4 : 3, rows: [] };
+      },
+    };
+    const result = await runDatabaseCleanup(db);
+    assert.equal(result.success, true);
+    const del = calls.find((c) => /^DELETE FROM trial_access_codes/i.test(c.sql));
+    assert.ok(del, 'trial_access_codes silme sorgusu var');
+    assert.match(del.sql, /INTERVAL '90 days'/);
+    assert.doesNotMatch(del.sql, /INTERVAL '(?!90 days)/);
+    // kullanilmis ve KAPANMAMIS (used_by dolu) satir hicbir dalda silinmez: used_at IS NOT NULL dallari closed_at ya da used_by NULL sart kosar
+    assert.match(del.sql, /used_at IS NOT NULL AND closed_at IS NOT NULL AND closed_at < NOW\(\) - INTERVAL '90 days'/);
+    assert.match(del.sql, /used_at IS NOT NULL AND used_by IS NULL AND closed_at IS NULL AND session_expires_at < NOW\(\) - INTERVAL '90 days'/);
+    assert.match(del.sql, /used_at IS NULL AND LEAST\(expires_at, COALESCE\(revoked_at, expires_at\)\) < NOW\(\) - INTERVAL '90 days'/);
+    // islem izi sayiyla
+    const audit = calls.find((c) => /INSERT INTO audit_log/i.test(c.sql));
+    assert.ok(audit, 'audit_log kaydi yazildi');
+    assert.equal(audit.params[3], 'maintenance.trial_access_codes_purged');
+    assert.deepEqual(JSON.parse(audit.params[7]), { deleted: 4, retention_days: 90 });
+    assert.equal('trialAccessCodesCleaned' in result.stats, false);
+  });
+
+  it('deneme erişim kodu silinmediyse (0 satır) işlem izi yazılmaz; tablo hatası temizliği durdurmaz', async () => {
+    const calls = [];
+    const db = {
+      async query(text) {
+        const sql = String(text).replace(/\s+/g, ' ').trim();
+        calls.push(sql);
+        if (/trial_access_codes/.test(sql)) {
+          const err = new Error('relation missing');
+          err.code = '42P01';
+          throw err;
+        }
+        return { rowCount: 1, rows: [] };
+      },
+    };
+    const result = await runDatabaseCleanup(db);
+    assert.equal(result.success, true);
+    assert.equal(calls.some((sql) => /INSERT INTO audit_log/i.test(sql)), false);
+    assert.ok(calls.some((sql) => /app_maintenance_runs/.test(sql)), 'temizlik sonuna kadar calisti');
   });
 
   it('bekleyen kayıt (hesap DEĞİL) 2 gün sonra silinir; users tablosuna dokunulmaz', async () => {

@@ -752,7 +752,7 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 300 --nostrea
 | [server/src/services/membership_service.js:466](../../server/src/services/membership_service.js#L466) | <code>throw httpError(404, 'Bekleyen kayıt bulunamadı. Lütfen yeniden kayıt olunuz.');</code> | Kod doğru ama bekleyen kayıt silinmiş: işlem geri alınır (kod tüketilmez) |
 | [server/src/services/membership_rules.js:171](../../server/src/services/membership_rules.js#L171) | <code>export const SQL_TAKE_PENDING_REGISTRATION = `</code> | Bekleyen kayıt DELETE ... RETURNING ile atomik alınır |
 | [server/src/services/membership_rules.js:29](../../server/src/services/membership_rules.js#L29) | <code>export const VERIFICATION_CODE_TTL_MINUTES = 30;</code> | Kod 30 dk geçerli; süre dolunca aktif kod bulunamaz |
-| [server/src/services/maintenance_service.js:48](../../server/src/services/maintenance_service.js#L48) | <code>DELETE FROM pending_registrations</code> | Bakım: 2 günden eski bekleyen kayıtlar silinir (hesap silmez) |
+| [server/src/services/maintenance_service.js:49](../../server/src/services/maintenance_service.js#L49) | <code>DELETE FROM pending_registrations</code> | Bakım: 2 günden eski bekleyen kayıtlar silinir (hesap silmez) |
 
 **Olası nedenler**
 - Kod 30 dakikadan eski (aktif kod yok): yeniden kod istenmeli
@@ -1408,7 +1408,7 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 300 --nostrea
 | [server/src/services/door_service.js:71](../../server/src/services/door_service.js#L71) | <code>export async function recordDoorAccessLog({</code> | Günlük yazımı: hata YUTULUR (false döner), kapı yine açılmış olur |
 | [server/src/services/door_service.js:120](../../server/src/services/door_service.js#L120) | <code>auditLog('door_access_log_write_failed', {</code> | Yazım hatasında denetim satırı |
 | [server/src/routes/app_doors_routes.js:236](../../server/src/routes/app_doors_routes.js#L236) | <code>console.error('Kapi gecis logu DB kayit hatasi:', err.message);</code> | Açma ucu günlüğü arka planda yazar; hata yalnız burada görünür |
-| [server/src/services/maintenance_service.js:82](../../server/src/services/maintenance_service.js#L82) | <code>DELETE FROM door_access_logs</code> | Günlük bakım 30 günden eski geçiş kayıtlarını siler |
+| [server/src/services/maintenance_service.js:109](../../server/src/services/maintenance_service.js#L109) | <code>DELETE FROM door_access_logs</code> | Günlük bakım 30 günden eski geçiş kayıtlarını siler |
 
 **Olası nedenler**
 - Günlük yazımı DB hatasıyla başarısız oldu (kapı açma etkilenmez; yalnız günlük kaybolur)

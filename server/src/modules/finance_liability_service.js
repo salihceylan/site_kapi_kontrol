@@ -11,7 +11,7 @@
 
 import { pool } from '../db.js';
 import { actorFromAuthUser } from './audit_service.js';
-import { notifyApartmentUsers } from './apartment_mgmt_core.js';
+import { notifyOwnersWithPrivacy } from './apartment_owner_notice.js';
 import { registerAttentionSource } from './attention_registry.js';
 import { PlatformError } from './errors.js';
 import { formatMinor, objectOf } from './finance_4b_common.js';
@@ -457,19 +457,13 @@ async function insertChargesLike(client, { siteCode, apartmentId, transferId, op
   return result.rows.length;
 }
 
-/** Malik(ler)e uygulama içi bildirim (best-effort: hata devri bozmaz; notifyApartmentUsers kendi SAVEPOINT'ini kullanır). */
+/**
+ * Malik(ler)e uygulama içi bildirim (best-effort: hata devri bozmaz; notifyApartmentUsers kendi SAVEPOINT'ini kullanır).
+ * Bildirim gizliliği (kapanış): borç TUTARI yalnız hesap muhatabına gider; diğer maliklere tutarsız genel not gider (apartment_owner_notice.js).
+ */
 async function notifyOwners(client, siteCode, apartmentId, message) {
   try {
-    const owners = await client.query(
-      `
-        SELECT DISTINCT sp.user_code
-        FROM apartment_residencies r
-        INNER JOIN site_people sp ON sp.id = r.person_id AND sp.is_active = TRUE AND sp.user_code IS NOT NULL
-        WHERE r.apartment_id = $1 AND r.relation = 'owner' AND r.is_current = TRUE
-      `,
-      [apartmentId],
-    );
-    await notifyApartmentUsers(client, { siteCode, apartmentId, userCodes: (owners.rows ?? []).map((row) => Number(row.user_code)), kind: 'liability_transfer', message });
+    await notifyOwnersWithPrivacy(client, { siteCode, apartmentId, kind: 'liability_transfer', holderMessage: message });
   } catch (_error) {
     // bildirim yazılamaması devri / geri almayı bozmaz
   }

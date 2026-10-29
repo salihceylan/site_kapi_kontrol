@@ -1,6 +1,7 @@
 // Site Drive deposu (D1) uçları. Sözleşme: docs/PLATFORM_DRIVE_DEPOLAMA.md "D1 uygulaması".
 //
-//   GET    /manager/sites/:siteCode/drive                 durum (bağlı hesap, bekleyen sayısı, yapılandırma var mı, yönetici uyarıları `warnings`)
+//   GET    /manager/sites/:siteCode/drive                 durum (bağlı hesap, bekleyen sayısı, yapılandırma var mı, yönetici uyarıları `warnings`, sağlık özeti `health`: bağlantı / belirteç / son aktarım / kuyruk / kota)
+//   POST   /manager/sites/:siteCode/drive/health-check   sağlık denetimini şimdi çalıştırır (belirteç yenileme + kota okuma) ve güncel durumu döner
 //   POST   /manager/sites/:siteCode/drive/connect         { url } Google onay adresi; yapılandırma yoksa 503 DRIVE_NOT_CONFIGURED ("Yakında…")
 //   DELETE /manager/sites/:siteCode/drive                 bağlantıyı keser (belirteç silinir, Google'da iptal edilir; bekleyen dosyalar SİLİNMEZ)
 //   GET    /manager/sites/:siteCode/drive/files[?source_type=&source_id=]   son dosyalar (kaynak kayda göre süzülebilir: "bu kaydın belgeleri")
@@ -99,6 +100,11 @@ driveRouter.delete(BASE, authRequired, driveWriteLimiter, handler({ context: 'dr
 driveRouter.get(`${BASE}/files`, authRequired, driveReadLimiter, handler({ context: 'drive_files', fallback: 'Dosyalar yüklenemedi.' }, async ({ req, siteCode }) => ({
   body: await driveService.list(siteCode, req.query.limit, { source_type: req.query.source_type, source_id: req.query.source_id }),
 })));
+
+driveRouter.post(`${BASE}/health-check`, authRequired, driveWriteLimiter, handler({ context: 'drive_health_check', fallback: 'Drive sağlık denetimi yapılamadı.' }, async ({ siteCode }) => {
+  await driveService.checkHealth(siteCode);
+  return { body: await driveService.getStatus(siteCode) };
+}));
 
 driveRouter.post(`${BASE}/flush`, authRequired, driveWriteLimiter, handler({ context: 'drive_flush', fallback: 'Bekleyen dosyalar gönderilemedi.' }, async ({ siteCode }) => ({
   body: await driveService.flushPending(siteCode, { force: true }),

@@ -287,6 +287,12 @@ export const SITE_AUDIT_LABELS = Object.freeze({
   'drive.connected': 'Google Drive bağlandı',
   'drive.disconnected': 'Google Drive bağlantısı kesildi',
   'drive.file_uploaded': 'Drive deposuna dosya yüklendi',
+  'drive.queue_full': 'Drive bekleme alanı doldu',
+  'drive.pending_overdue': "Drive'a gönderilemeyen dosyalar uzun süredir bekliyor",
+  'drive.integrity_mismatch': "Drive'a ulaşan dosyanın doğrulaması uyuşmadı",
+  'drive.quota_near_full': 'Google Drive kotası dolmak üzere',
+  'drive.quota_full': 'Google Drive kotası doldu',
+  'drive.connection_lost': 'Google Drive bağlantısı koptu',
 
   // Site hizmetleri
   'work_item.created': 'Talep açıldı',

@@ -4268,3 +4268,46 @@ Dekont bildir (sakin), Elden makbuz / dekont girişi (yönetici) ve Gider Ekle (
 - [ ] **146.6. Uçak modunda da okur (F69.06):**
   - **Nasıl Test Edilir:** Rol: Daire sakini. Ön koşul: Android telefon; uçak modu açık. Uçak modunda dekont görselini okutun.
   - **Beklenen Sonuç:** Okuma internet olmadan da çalışır (cihaz içi).
+
+## 147. 🗂️ Google Drive: Aktarım Doğrulaması (SHA-256), Sağlık Göstergesi ve Kota Uyarısı (2026-10-29, karşılaştırma raporu P2-2, P2-17, P2-18, migration 112)
+
+Google Drive aktarımı üç yönden sağlamlaştı. (1) Drive'a giden dosyanın SHA-256 değeri, Drive'ın döndürdüğü değerle karşılaştırılır (hem doğrudan yüklemede hem bekleyen dosya gönderiminde); uyuşmazsa Drive'daki bozuk kopya çöp kutusuna alınır, dosya “kaydedildi” yazılmaz, sunucudaki asıl kopya silinmez ve yeniden denenir (denetim kaydı ve durum uyarısı düşer). Drive sağlama toplamı bildirmezse kimlik ve boyut yeterlidir. (2) Dosya Deposu > Google Drive kartına sağlık göstergesi eklendi: durum rozeti, erişim belirteci durumu, son başarılı aktarım, kuyruk, Google kotası çubuğu ve “Şimdi denetle” düğmesi (eski sunucuda bölüm görünmez). (3) Google kotası site başına 6 saatte bir ve “Şimdi denetle” ile okunur; %90'da ve %100'de uyarı (denetim kaydı + durum uyarısı, saatte bir) düşer. Google “depolama dolu” ile istek sınırı artık ayrıdır; dosya reddedilmez, bekler. Yeni arka plan işi (5 dakikada bir) vakti gelmiş bekleyen dosyaları kendiliğinden gönderir ve izin geri alınmışsa bağlantıyı “koptu” yapıp uyarı düşürür. Sunucuda migration 112 gerekir. Yönetici e-postası yoktur: uyarı durum ekranında ve site denetim kaydındadır. Gerçek Google hesabıyla deneme size kalmıştır.
+
+- [ ] **147.1. Sağlık rozeti ve son başarılı aktarım (F70.01):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Google Drive bağlı bir site; sunucuda migration 112 ve güncel uygulama. Dosya Deposu'na küçük bir PDF yükleyin. Dosya Deposu ekranındaki Google Drive kartına bakın. Drive'da dosyanın klasörde açıldığını kontrol edin.
+  - **Beklenen Sonuç:** Kartta yeşil “Drive bağlantısı sağlıklı” rozeti, “Erişim” satırı ve dolu bir “Son başarılı aktarım” saati görünür; “Kuyruk: boş” yazar. Drive'daki dosya açılır.
+- [ ] **147.2. Şimdi denetle: kota satırı ve çubuğu dolar (F70.02):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: F70.01'deki bağlı Drive hesabı. Kartta “Şimdi denetle” düğmesine dokunun. Kota satırına ve çubuğuna, “Son denetim” saatine bakın.
+  - **Beklenen Sonuç:** Kota satırı ve çubuk dolar (örnek: yüzde ve GB değerleri), “Son denetim” saati güncellenir. Dosya yüklemek ya da başka bir şey değişmez.
+- [ ] **147.3. İzin geri alınınca bağlantı “koptu” olur, yeniden bağlayınca düzelir (F70.03):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Bağlı Drive hesabı; Google hesabına girebilen biri. Bekleyen dosya varsa silinmemesi beklenir. Google hesabında Uygulamalar'dan SmartKeyPass erişimini kaldırın. Uygulamada “Şimdi denetle”ye dokunun. Site denetim kaydına bakın. Google Drive'ı yeniden bağlayın.
+  - **Beklenen Sonuç:** Rozet kırmızı olur ve “Drive bağlantısı koptu; yeniden bağlayın” yazar; denetim kaydında “Google Drive bağlantısı koptu” satırı çıkar. Yeniden bağlayınca rozet düzelir; bekleyen dosyalar silinmeden gönderilir.
+- [ ] **147.4. Bağlantı kesikken yükleme kuyruğa girer, 5 dakika içinde kendiliğinden gider (F70.04):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Bağlı Drive hesabı. Drive bağlantısını kesin ve bir dosya yükleyin (kuyruğa girer). Drive'ı yeniden bağlayın ve yaklaşık 5 dakika bekleyin (ya da “Bekleyenleri şimdi gönder”e dokunun). Kartta “Kuyruk” satırına ve Drive klasörüne bakın.
+  - **Beklenen Sonuç:** Dosya Drive'a gider, kuyruk boşalır; sunucudaki geçici kopya temizlenir. Bekleme sırasında dosya hiçbir zaman silinmez.
+- [ ] **147.5. Kota %90 üstünde sarı uyarı; dosya reddedilmez (F70.05):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Google depolaması %90'ın üstünde dolu bir Drive hesabı (yoksa bu madde atlanır). “Şimdi denetle”ye dokunun. Kartın uyarı kutusuna ve site denetim kaydına bakın. Dosya Deposu'na yeni bir dosya yükleyin.
+  - **Beklenen Sonuç:** Sarı “Google Drive depolama alanı %9x dolu” uyarısı çıkar; denetim kaydında “Google Drive kotası dolmak üzere” satırı olur. Yükleme reddedilmez. Depolama tamamen doluysa dosya “Google Drive depolama alanı dolu” nedeniyle bekler, silinmez.
+- [ ] **147.6. Canlı kayıtta doğrulama yöntemi “sha256” mı (geliştirici kontrolü) (F70.06):**
+  - **Nasıl Test Edilir:** Rol: Geliştirici (sunucuya erişimi olan). Ön koşul: En az bir dosya Drive'a kaydedilmiş canlı sunucu. Sunucu veritabanında şu sorguyu çalıştırın: SELECT verify_method, count(*) FROM drive_files WHERE status='stored' GROUP BY 1;
+  - **Beklenen Sonuç:** Çoğu satır “sha256” çıkmalıdır. Çoğu “size” çıkıyorsa Drive yanıtında sağlama toplamı gelmiyor demektir; bu durumda kimlik ve boyut doğrulaması yapılmıştır, hata değildir ama bildirin. SHA-256 uyuşmazlığı gerçek Drive'da kolay üretilmez; bu yol sahte istemciyle testte doğrulandı.
+
+## 148. 🧹 Küçük Açıklar: Bildirim Gizliliği, Hesap Silme (İade ve Komşu İlanları), Geri Bildirim Eki Yedeği, Deneme Kodu Temizliği (2026-10-29)
+
+Dört küçük açık kapandı (şema değişikliği yok). (1) Bildirim gizliliği: kiracı borcunun malike devri ve kiracı çıkışı bildirimlerinde borç tutarı yalnız hesap muhatabı olan malike gider; diğer maliklere “Dairenizle ilgili bir borç işlemi yapıldı; ayrıntılar hesap muhatabında.” notu gider. (2) Hesap silme: önizleme her zaman “Bekleyen iade talebiniz varsa iptal edilir.” der (talep varsa sayısıyla); silme komşu panosundaki ilanlarınızı da siler ve site denetim kaydına yalnız sayı yazılır (başlık ve ad yok). Başkalarının ilanlarına yaptığınız şikâyetler adli saklama gereği korunur. (3) Sunucu yedeği: geri bildirim ekleri (feedback_attachments) fotoğraf arşivine katıldı. (4) Bakım temizliği: bitmiş deneme erişim kodu satırları 90 gün sonra silinir; kullanılmış ama kapanmamış satıra ve kullanıcı hesabına dokunulmaz. Yasal metindeki [AVUKAT DOĞRULASIN] işaretleri değişmedi.
+
+- [ ] **148.1. Çoklu malikli dairede borç devri bildirimi yalnız muhataba tutar gösterir (F71.01):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi ve iki malik hesabı (biri hesap muhatabı). Ön koşul: Hesap muhatabı olan ve olmayan iki malikli bir daire; kiracıya ait açık borç. Yönetici olarak kiracı borcunu malike devredin (ya da kiracı çıkışı yapın). Muhatap malikin Dairem bildirimlerine bakın. İkinci malikin bildirimlerine bakın.
+  - **Beklenen Sonuç:** Muhatap malikte tutarı gösteren bildirim görünür. İkinci malikte yalnız “Dairenizle ilgili bir borç işlemi yapıldı; ayrıntılar hesap muhatabında.” notu çıkar, tutar görünmez.
+- [ ] **148.2. Hesabı sil önizlemesi: iade talebi ve komşu ilanları satırları (F71.02):**
+  - **Nasıl Test Edilir:** Rol: Daire sakini (deneme hesabı). Ön koşul: Komşu panosunda ilanı ve bekleyen iade talebi olan bir deneme hesabı. Hesap ekranında Hesabı sil'e dokunun; silmeden önizlemeye bakın. Aynı önizlemeye iade talebi ve ilanı olmayan bir hesapla da bakın.
+  - **Beklenen Sonuç:** İlan ve iade talebi olan hesapta “Bekleyen iade talebiniz (N) iptal edilir.” ve “Komşu panosundaki ilanlarınız (N) silinir.” satırları görünür. İade talebi olmayan hesapta da “Bekleyen iade talebiniz varsa iptal edilir.” satırı vardır.
+- [ ] **148.3. Silme sonrası: ilanlar gider, iade talebi iptal olur, denetim kaydı sayı yazar (F71.03):**
+  - **Nasıl Test Edilir:** Rol: Daire sakini ve site yöneticisi (deneme). Ön koşul: F71.02'deki deneme hesabı (gerçek kullanıcı hesabıyla denemeyin). Hesabı silmeyi onaylayın. Yönetici olarak komşu panosuna ve iade taleplerine bakın. Site denetim kaydında “neighbor_board.posts_deleted_account_closed” satırına bakın.
+  - **Beklenen Sonuç:** Hesabın ilanları panoda yoktur; bekleyen iade talebi iptal edilmiştir. Denetim kaydı yalnız sayıyı ve durum dağılımını gösterir, ilan başlığı ya da hesap adı yoktur.
+- [ ] **148.4. Sunucu yedeği geri bildirim eklerini de alır (sunucu) (F71.04):**
+  - **Nasıl Test Edilir:** Rol: Geliştirici (sunucuya erişimi olan). Ön koşul: feedback_attachments altında en az bir dosya olan sunucu. Sunucuda bash ~/ops/backup_db.sh çalıştırın. Log'da adım 8'e ve kapi_work_attachments_* arşivinin listesine bakın.
+  - **Beklenen Sonuç:** Adım 8 tamam der; arşiv listesinde feedback_attachments/ yolları çıkar. Bu klasör sembolik bağlantıysa yedek reddedilir.
+- [ ] **148.5. Bitmiş deneme erişim kodu satırları 90 gün sonra temizlenir (F71.05):**
+  - **Nasıl Test Edilir:** Rol: Süper kullanıcı. Ön koşul: Süresi 90 günden fazla dolmuş (kullanılmamış) bir deneme erişim kodu satırı. Yönetim panelinde Veritabanı temizliğini çalıştırın. Sunucu günlüğüne ve denetim kaydına bakın.
+  - **Beklenen Sonuç:** Günlükte “bitmiş deneme erişim kodu satırı silindi” yazar; denetim kaydında maintenance.trial_access_codes_purged görünür. Kullanılmış ama kapanmamış kodlara ve kullanıcı hesabına dokunulmaz. Silinecek satır yoksa kayıt düşmez.
