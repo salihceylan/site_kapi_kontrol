@@ -21,7 +21,7 @@ WARNING, DANGER, SUCCESS = "#96500A", "#C42B2B", "#12703A"
 
 KARAR_ETIKET = {"acildi": ("Açıldı", SUCCESS_SOFT), "red": ("Red", DANGER_SOFT),
                 "tanimsiz": ("Tanımsız", WARNING_SOFT), "dogrulanmamis": ("Doğrulanmamış", BORDER),
-                "acma_basarisiz": ("Açılamadı", DANGER_SOFT)}
+                "acma_basarisiz": ("Açılamadı", DANGER_SOFT), "kara_liste": ("Kara liste", DANGER_SOFT)}
 
 
 def maske(url: str) -> str:
@@ -92,10 +92,11 @@ class SatirDialog(tk.Toplevel):
 KAMERA_ALANLAR = [("id", "Kamera kodu", "str"), ("ad", "Ad", "str"), ("url", "RTSP adresi (kimlik dahil)", "sifre"),
                   ("mod", "Mod", ["akis", "tetik"]), ("fps", "Kare/sn (akış)", "float"),
                   ("kapi_id", "Bağlı kapı kodu", "str"), ("yon", "Yön (boş = kapıdan)", ["", "giris", "cikis"]),
-                  ("etkin", "Etkin", "bool")]
+                  ("sunucu_id", "Sunucudaki kamera kimliği", "str"), ("etkin", "Etkin", "bool")]
 KAPI_ALANLAR = [("id", "Kapı kodu", "str"), ("ad", "Ad", "str"), ("yon_modu", "Yön modu", ["giris", "cikis", "cift"]),
                 ("skp_uid", "SmartKeyPass cihaz UID", "str"), ("skp_ip", "Cihaz IP (boş = otomatik bul)", "str"),
-                ("skp_token", "Yerel kontrol anahtarı", "sifre"), ("komut", "Komut", ["open", "pulse"])]
+                ("skp_token", "Yerel kontrol anahtarı", "sifre"), ("komut", "Komut", ["open", "pulse"]),
+                ("sunucu_id", "Sunucudaki kapı kimliği (isteğe bağlı)", "str")]
 
 
 class Uygulama(tk.Tk):
@@ -136,8 +137,8 @@ class Uygulama(tk.Tk):
             "tgun": tk.StringVar(value=str(k["tanimsiz_kare_gun"]))}
         satirlar = [("Sunucuya bağlan", ttk.Checkbutton(f, variable=self.v["etkin"])),
                     ("Sunucu adresi", ttk.Entry(f, textvariable=self.v["adres"], width=48)),
-                    ("Site kodu", ttk.Entry(f, textvariable=self.v["site_kodu"], width=28)),
-                    ("Cihaz anahtarı", ttk.Entry(f, textvariable=self.v["cihaz_anahtari"], width=48, show="*")),
+                    ("Site adı (isteğe bağlı)", ttk.Entry(f, textvariable=self.v["site_kodu"], width=28)),
+                    ("Kenar PC anahtarı", ttk.Entry(f, textvariable=self.v["cihaz_anahtari"], width=48, show="*")),
                     ("Misafir kuralı", ttk.Combobox(f, textvariable=self.v["misafir"], state="readonly", width=28,
                                                     values=["tum_yerler_bos", "en_az_bir_yer_bos"])),
                     ("Tanımsız araç karesini sakla", ttk.Checkbutton(f, variable=self.v["tkare"])),

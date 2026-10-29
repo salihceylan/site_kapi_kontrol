@@ -5,11 +5,13 @@ from __future__ import annotations
 import copy
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
-SURUM = "0.1.0"
-SCHEMA_VERSION = 1
+SURUM = "0.2.0"
+# Sunucu sozlesmesi (docs/PLATFORM_PLAKA_KENAR_SOZLESMESI.md): 2 = olay karar turu "kara_liste" (A3). Sunucu 1 ve 2'yi kabul eder.
+SCHEMA_VERSION = 2
 
 # Plan 2. bolum: TR plaka regex'i (bicimlendirilmis "34 ABC 123" metnine uygulanir).
 TR_PLAKA_REGEX = r"^(0[1-9]|[1-7][0-9]|8[01])\s?[A-PR-VYZ]{1,3}\s?\d{2,4}$"
@@ -21,10 +23,8 @@ VARSAYILAN: dict = {
     "sunucu": {
         "etkin": False,
         "adres": "",
-        "site_kodu": "",
-        "cihaz_anahtari": "",
-        "site_baslik": "X-Site-Kodu",
-        "anahtar_baslik": "X-Cihaz-Anahtari",
+        "site_kodu": "",  # yalniz gosterim icin; kimlik ve kapsam cihaz anahtaridir (anahtar hangi siteye bagliysa o)
+        "cihaz_anahtari": "",  # yonetici ekraninda uretilen "<id>.<48 onaltilik>" (Authorization: Bearer)
         "schema_version": SCHEMA_VERSION,
         "zaman_asimi_sn": 8,
         "tls_dogrula": True,
@@ -32,21 +32,21 @@ VARSAYILAN: dict = {
         "olay_gonderim_aralik_sn": 5,
         "olay_toplu_adet": 50,
         "kalp_atisi_aralik_sn": 90,
-        "olay_saklama_gun": 7,
-        "dogrulanmamis_olay_gonder": False,
-        # A1 ile uzlasilacak taslak yollar; sunucu hazir degilse tek tek kapatilabilir.
+        "olay_saklama_gun": 7,  # kuyruktaki (gonderilmemis dahil) olaylar bu sureden sonra silinir
+        # A1 sozlesmesindeki GERCEK yollar (/edge/plate/v1); tek tek kapatilabilir.
         "uclar": {
-            "kayit": {"etkin": True, "yol": "/edge/sites/{site_kodu}/register"},
-            "senkron": {"etkin": True, "yol": "/edge/sites/{site_kodu}/sync"},
-            "olay": {"etkin": True, "yol": "/edge/sites/{site_kodu}/events"},
-            "kalp_atisi": {"etkin": True, "yol": "/edge/sites/{site_kodu}/heartbeat"},
+            "kayit": {"etkin": True, "yol": "/edge/plate/v1/claim"},
+            "senkron": {"etkin": True, "yol": "/edge/plate/v1/sync"},
+            "olay": {"etkin": True, "yol": "/edge/plate/v1/events"},
+            "kalp_atisi": {"etkin": True, "yol": "/edge/plate/v1/heartbeat"},
         },
     },
     # Sinirsiz satir. Ornek: {"id":"giris1","ad":"Giris","url":"rtsp://...","mod":"akis|tetik",
-    #   "fps":3,"kapi_id":"kapi1","yon":"giris|cikis|","etkin":true,"roi":[0,0,1,1]}
+    #   "fps":3,"kapi_id":"kapi1","yon":"giris|cikis|","etkin":true,"roi":[0,0,1,1],
+    #   "sunucu_id":7}   <- sunucudaki kamera kimligi (yonetici ekrani: Gecis noktalari); olay ve kalp atisi bununla gider
     "kameralar": [],
     # Ornek: {"id":"kapi1","ad":"Ana kapi","yon_modu":"giris|cikis|cift","skp_uid":"240AC4E2E001",
-    #   "skp_ip":"","skp_token":"","komut":"open"}
+    #   "skp_ip":"","skp_token":"","komut":"open","sunucu_id":1}   (sunucu_id isteğe bagli: bos ise sunucu kapiyi kamera baglantisindan turetir)
     "kapilar": [],
     "yakalama": {
         "rtsp_tasima": "tcp",
@@ -98,7 +98,11 @@ VARSAYILAN: dict = {
     "dogrulama": {"teyit_kare": 2, "teyit_pencere_sn": 4.0, "tekillestirme_sn": 5.0},
     "karar": {
         # tum_yerler_bos | en_az_bir_yer_bos  (plan 5, soru 3)
+        # Sunucudan gelen site ayari (config.settings.guest_rule) ilk senkrondan sonra BUNU ezer; yerel deger yalniz ilk senkrona kadar geri-dusustur.
         "misafir_kurali": "tum_yerler_bos",
+        # Kara listedeki plaka ASLA acilmaz (giris). Cikis icin de varsayilan kapali; true: kara listedeki aracin CIKISINA izin verilir
+        # (iceride kalan araci hapsetmemek icin yonetici karariyla; kapali iken guvenlik gorevlisi elle acar).
+        "kara_liste_cikis_acilir": False,
         "tanimsiz_kare_sakla": False,
         "tanimsiz_kare_gun": 7,
         "tanimsiz_kare_dizini": "veri/tanimsiz",
@@ -162,6 +166,13 @@ def kaydet(ayar: dict, yol: Path | str | None = None) -> Path:
     return p
 
 
+def _tam_sayi(v) -> bool:
+    try:
+        return int(v) > 0
+    except (TypeError, ValueError):
+        return False
+
+
 def dogrula(ayar: dict) -> list[str]:
     """Insan-okur uyarilar dondurur (bos liste = sorun yok)."""
     u: list[str] = []
@@ -179,8 +190,14 @@ def dogrula(ayar: dict) -> list[str]:
         if k.get("mod", "akis") not in ("akis", "tetik"):
             u.append(f"Kamera {kid}: mod 'akis' veya 'tetik' olmali")
     s = ayar.get("sunucu", {})
-    if s.get("etkin") and not (s.get("adres") and s.get("site_kodu") and s.get("cihaz_anahtari")):
-        u.append("Sunucu etkin ama adres/site_kodu/cihaz_anahtari eksik")
+    if s.get("etkin") and not (s.get("adres") and s.get("cihaz_anahtari")):
+        u.append("Sunucu etkin ama adres/cihaz_anahtari eksik")
+    if s.get("etkin") and s.get("cihaz_anahtari") and not re.fullmatch(r"\d{1,15}\.[a-f0-9]{48}", str(s["cihaz_anahtari"]).strip()):
+        u.append("Cihaz anahtari '<id>.<48 onaltilik>' biciminde olmali")
+    if s.get("etkin"):
+        for k in ayar.get("kameralar", []):
+            if k.get("etkin", True) and not _tam_sayi(k.get("sunucu_id")):
+                u.append(f"Kamera {k.get('id')}: 'sunucu_id' (sunucudaki kamera kimligi) bos; olaylari sunucuya gonderilemez")
     if ayar.get("karar", {}).get("misafir_kurali") not in ("tum_yerler_bos", "en_az_bir_yer_bos"):
         u.append("karar.misafir_kurali gecersiz")
     return u

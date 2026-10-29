@@ -101,6 +101,39 @@ void main() {
       expect(find.byTooltip('Kenar istemci işlemleri'), findsNothing);
     });
 
+    testWidgets('A3: çıkışı görülmeyen girişler bölümü eşik ve saatleri sunucu verisinden gösterir; denetim başlıkları var', (tester) async {
+      final inside = PlateInside.fromJson(<String, dynamic>{
+        'total': 1,
+        'items': <dynamic>[
+          <String, dynamic>{'id': 6, 'plate': '34 OLD 111', 'kind': 'guest', 'inside_hours': 5},
+        ],
+        'apartments': <dynamic>[],
+        'overdue': <String, dynamic>{
+          'after_hours': 3,
+          'timeout_hours': 8,
+          'items': <dynamic>[
+            <String, dynamic>{'id': 6, 'plate': '34 OLD 111', 'kind': 'guest', 'inside_hours': 5},
+          ],
+        },
+      });
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: PlateGatesPanel(service: _FakeService(), siteCode: 1, canWrite: false, overview: _overview(), inside: inside, onChanged: () {}),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(find.textContaining('Çıkışı görülmeyen girişler (1 araç, 3 saatten uzun)'), findsOneWidget);
+      expect(find.textContaining('5 saattir içeride'), findsOneWidget);
+      expect(find.textContaining('8 saati aşınca'), findsOneWidget);
+      expect(plateActionLabel('plate.edge_disconnected'), isNotNull);
+      expect(plateActionLabel('plate.inside_timeout'), isNotNull);
+    });
+
     testWidgets('kapı penceresi: ad + kamera seçimi GateDraft gövdesi üretir (çift yönde kamera yönüyle)', (tester) async {
       GateDraft? result;
       await tester.pumpWidget(

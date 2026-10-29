@@ -85,6 +85,7 @@ import { annualReportRouter } from './modules/annual_report_routes.js';
 import { emergencyRouter } from './modules/emergency_routes.js';
 import { startDocumentsMaintenance, stopDocumentsMaintenance } from './modules/document_maintenance.js';
 import { startDriveHealth, stopDriveHealth } from './modules/drive_health_scheduler.js';
+import { startPlateHealth, stopPlateHealth } from './modules/plate_health_scheduler.js';
 import { pushRouter } from './modules/push_routes.js';
 import { notifyChannelsRouter } from './modules/notify_channels_routes.js';
 import { oauthRouter } from './modules/oauth_routes.js';
@@ -353,6 +354,7 @@ async function shutdown(signal) {
     await stopClientErrorPurge();
     await stopDocumentsMaintenance();
     await stopDriveHealth();
+    await stopPlateHealth();
     await stopContractReminders();
     await stopPushWorker();
     await stopMqttBridge();
@@ -393,6 +395,8 @@ async function startServer() {
     startDocumentsMaintenance();
     // Drive arka plan isi: bekleyen dosyalari gonderme (SHA-256 dogrulamali) + saglik/kota denetimi (%90 uyari); 5 dk tik, DRIVE_HEALTH_DISABLED=1 ile kapali, Drive yapilandirilmamissa bos.
     startDriveHealth();
+    // Plaka tanima arka plan isi (A3): kenar PC / kamera kopukluk uyarisi (site ayari esigi, saatte en cok 1) + "iceride" zaman asimi bakimi; 5 dk tik, PLATE_HEALTH_DISABLED=1 ile kapali.
+    startPlateHealth();
     // Sozlesme hatirlatmalari (gunluk, 09:00 sonrasi; tek calisan advisory kilidi; site yoneticilerine e-posta). SMTP yoksa / CONTRACT_REMINDERS_DISABLED=1 ile kapali.
     startContractReminders();
     void runCleanupSafely();

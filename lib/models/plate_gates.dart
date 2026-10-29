@@ -144,10 +144,21 @@ class EdgeClientRow {
   final DateTime? claimedAt;
 }
 
-/// Site ayarı: misafir kuralı ve kalp atışı eşikleri (saniye).
+/// Site ayarı: misafir kuralı, kalp atışı eşikleri (saniye) ve A3 eşikleri (içeride raporu / zaman aşımı saat, uyarı sıklığı ve sakin bildirimi yaşı dakika).
+/// Hiçbir değer istemcide sabit değildir: hepsi sunucudaki site ayarıdır (varsayılanlar yalnız alan eksikken geri-düşüştür).
 @immutable
 class GateSettings {
-  const GateSettings({required this.guestRule, required this.warnSeconds, required this.critSeconds, required this.heartbeatSeconds, required this.syncSeconds});
+  const GateSettings({
+    required this.guestRule,
+    required this.warnSeconds,
+    required this.critSeconds,
+    required this.heartbeatSeconds,
+    required this.syncSeconds,
+    this.insideReportHours = 12,
+    this.insideTimeoutHours = 24,
+    this.alertIntervalMinutes = 60,
+    this.notifyMaxAgeMinutes = 15,
+  });
 
   factory GateSettings.fromJson(Map<String, dynamic> m) => GateSettings(
     guestRule: _str(m['guest_rule']) ?? 'tum_bos',
@@ -155,6 +166,10 @@ class GateSettings {
     critSeconds: _int(m['heartbeat_crit_seconds'], 600),
     heartbeatSeconds: _int(m['heartbeat_interval_seconds'], 60),
     syncSeconds: _int(m['sync_interval_seconds'], 120),
+    insideReportHours: _int(m['inside_report_hours'], 12),
+    insideTimeoutHours: _int(m['inside_timeout_hours'], 24),
+    alertIntervalMinutes: _int(m['alert_interval_minutes'], 60),
+    notifyMaxAgeMinutes: _int(m['resident_notify_max_age_minutes'], 15),
   );
 
   final String guestRule;
@@ -162,6 +177,10 @@ class GateSettings {
   final int critSeconds;
   final int heartbeatSeconds;
   final int syncSeconds;
+  final int insideReportHours;
+  final int insideTimeoutHours;
+  final int alertIntervalMinutes;
+  final int notifyMaxAgeMinutes;
 }
 
 @immutable
@@ -231,7 +250,7 @@ bool gateCameraDirectionFits(String mode, String direction) => mode == 'cift' ||
 
 @immutable
 class InsideItem {
-  const InsideItem({required this.id, required this.plate, required this.kind, this.apartmentLabel, this.sinceAt, this.gateName});
+  const InsideItem({required this.id, required this.plate, required this.kind, this.apartmentLabel, this.sinceAt, this.gateName, this.insideHours});
 
   factory InsideItem.fromJson(Map<String, dynamic> m) => InsideItem(
     id: _int(m['id']),
@@ -240,6 +259,7 @@ class InsideItem {
     apartmentLabel: _str(m['apartment_label']),
     sinceAt: _date(m['since_at']),
     gateName: _str(m['gate_name']),
+    insideHours: _intOrNull(m['inside_hours']),
   );
 
   final int id;
@@ -248,6 +268,9 @@ class InsideItem {
   final String? apartmentLabel;
   final DateTime? sinceAt;
   final String? gateName;
+
+  /// Sunucunun hesapladığı "kaç saattir içeride" (tam saat).
+  final int? insideHours;
 
   String get kindLabel => switch (kind) {
     'guest' => 'Misafir',
@@ -285,15 +308,26 @@ class InsideApartment {
 
 @immutable
 class PlateInside {
-  const PlateInside({required this.total, required this.items, required this.apartments});
+  const PlateInside({required this.total, required this.items, required this.apartments, this.overdue = const <InsideItem>[], this.overdueAfterHours = 12, this.timeoutHours = 24});
 
-  factory PlateInside.fromJson(Map<String, dynamic> m) => PlateInside(
-    total: _int(m['total']),
-    items: <InsideItem>[for (final i in _maps(m['items'])) InsideItem.fromJson(i)],
-    apartments: <InsideApartment>[for (final a in _maps(m['apartments'])) InsideApartment.fromJson(a)],
-  );
+  factory PlateInside.fromJson(Map<String, dynamic> m) {
+    final overdue = _map(m['overdue']);
+    return PlateInside(
+      total: _int(m['total']),
+      items: <InsideItem>[for (final i in _maps(m['items'])) InsideItem.fromJson(i)],
+      apartments: <InsideApartment>[for (final a in _maps(m['apartments'])) InsideApartment.fromJson(a)],
+      overdue: <InsideItem>[for (final i in _maps(overdue['items'])) InsideItem.fromJson(i)],
+      overdueAfterHours: _int(overdue['after_hours'], 12),
+      timeoutHours: _int(overdue['timeout_hours'], 24),
+    );
+  }
 
   final int total;
   final List<InsideItem> items;
   final List<InsideApartment> apartments;
+
+  /// "Çıkışı görülmeyen girişler": içeride `overdueAfterHours` saatten uzun kalanlar (eşik site ayarı; `timeoutHours` dolunca otomatik düşer).
+  final List<InsideItem> overdue;
+  final int overdueAfterHours;
+  final int timeoutHours;
 }

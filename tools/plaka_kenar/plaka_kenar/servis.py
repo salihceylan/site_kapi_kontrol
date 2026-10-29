@@ -4,7 +4,7 @@ Gunluge plaka disinda kisisel veri yazilmaz."""
 from __future__ import annotations
 
 import logging
-import socket
+import re
 import threading
 import time
 import uuid
@@ -19,6 +19,24 @@ from .sunucu import SunucuHatasi, SunucuIstemcisi
 
 log = logging.getLogger("plaka_kenar")
 
+# Yerel karar sonucu -> sunucu sozlesmesi karar turu (docs/PLATFORM_PLAKA_KENAR_SOZLESMESI.md). None: sunucuya GITMEZ.
+# 'dogrulanmamis' (kalibrasyon) sozlesmede yoktur ve cikis seridinde "tanimsiz" gibi iceri-disari durumunu bozabilir: asla gonderilmez.
+SUNUCU_KARARI = {"acildi": "acildi", "red": "red", "tanimsiz": "tanimsiz", "kara_liste": "kara_liste",
+                 "acma_basarisiz": "red", "dogrulanmamis": None}
+_NEDEN_RE = re.compile(r"^[a-z0-9_]{1,40}$")
+
+
+def _tam_sayi(v):
+    try:
+        n = int(v)
+    except (TypeError, ValueError):
+        return None
+    return n if n > 0 else None
+
+
+def _iso(epoch: float) -> str:
+    return datetime.fromtimestamp(epoch, timezone.utc).isoformat()
+
 
 class Servis:
     def __init__(self, ayar: dict | None = None, taban: Path | None = None, boru=None, kapi_surucu=None,
@@ -28,7 +46,9 @@ class Servis:
         v = self.ayar["veri"]
         self.depo = depo or kararmod.IzinDeposu(ayarmod.yol_coz(v["izin_db"], taban))
         self.kuyruk = kuyruk or OlayKuyrugu(ayarmod.yol_coz(v["olay_db"], taban))
-        self.motor = kararmod.KararMotoru(self.depo, self.ayar["karar"]["misafir_kurali"])
+        self.motor = kararmod.KararMotoru(self.depo, self.ayar["karar"]["misafir_kurali"],
+                                          self.ayar["karar"].get("kara_liste_cikis_acilir", False))
+        self.motor.sunucu_kuralini_al()  # onceki senkrondan kalan site ayari (varsa) yerel ayari ezer
         self.boru = boru or borumod.Boru(self.ayar, taban)
         self.kapi_surucu = kapi_surucu or kapimod.olustur(self.ayar)
         self.sunucu = sunucu or SunucuIstemcisi(self.ayar["sunucu"])
@@ -40,6 +60,7 @@ class Servis:
         self._kayitli = False
         self._arka = None
         self.son_hata = ""
+        self._uyarilan: set = set()
 
     # --- yardimcilar ---------------------------------------------------------------
     def kapilar(self) -> dict:
@@ -79,17 +100,17 @@ class Servis:
                     self.depo.iceride_ayarla(okuma.kanonik, karar.yon == "giris")
                 else:
                     sonuc, neden = "acma_basarisiz", r.neden or "bilinmeyen"
-        olay = {
+        olay = {  # yerel (arayuz olay seridi); sunucuya giden govde sunucu_olayi()
             "schema_version": self.ayar["sunucu"]["schema_version"], "event_id": uuid.uuid4().hex,
-            "zaman": datetime.fromtimestamp(okuma.zaman, timezone.utc).isoformat(),
-            "site_kodu": self.ayar["sunucu"]["site_kodu"], "kamera_id": okuma.kamera_id,
+            "zaman": _iso(okuma.zaman), "kamera_id": okuma.kamera_id,
             "kapi_id": kam.get("kapi_id", ""), "yon": karar.yon, "plaka": okuma.plaka,
             "guven": round(okuma.guven, 3), "karar": sonuc, "neden": neden,
             "dogrulanmis": okuma.dogrulanmis, "arac_tur": karar.arac_tur, "kaynak": okuma.kaynak,
         }
-        s = self.ayar["sunucu"]
-        if self.sunucu.uc_etkin("olay") and (okuma.dogrulanmis or s["dogrulanmamis_olay_gonder"]):
-            self.kuyruk.ekle(olay)
+        if self.sunucu.uc_etkin("olay"):
+            govde = self.sunucu_olayi(olay, okuma, kam, kapi)
+            if govde is not None:
+                self.kuyruk.ekle(govde)
         log.info("okuma kamera=%s plaka=%s karar=%s neden=%s", okuma.kamera_id, okuma.plaka, sonuc, neden)
         k = self.ayar["karar"]
         if sonuc == "tanimsiz" and k["tanimsiz_kare_sakla"] and kare is not None:
@@ -98,6 +119,32 @@ class Servis:
             self._kare_yaz(k["kalibrasyon_dizini"], olay["zaman"], okuma.kamera_id, okuma.plaka_goruntu, ".png")
         self._bildir(olay)
         return olay
+
+    def sunucu_olayi(self, olay: dict, okuma, kam: dict, kapi: dict | None) -> dict | None:
+        """POST events govdesi (sozlesme): event_id olay basina SABIT (kuyruktan yeniden gonderimde ayni kimlik).
+        Gonderilemeyecek olay (dogrulanmamis okuma / sunucu_id'siz kamera) None doner."""
+        decision = SUNUCU_KARARI.get(olay["karar"])
+        camera_id = _tam_sayi(kam.get("sunucu_id"))
+        if decision is None:
+            return None
+        if camera_id is None:
+            if kam["id"] not in self._uyarilan:
+                self._uyarilan.add(kam["id"])
+                log.warning("kamera %s: 'sunucu_id' tanimsiz, olaylari sunucuya gonderilemez", kam["id"])
+            return None
+        govde = {"schema_version": self.ayar["sunucu"]["schema_version"], "event_id": olay["event_id"],
+                 "camera_id": camera_id, "plate": okuma.kanonik, "decision": decision, "seen_at": olay["zaman"],
+                 "direction": olay["yon"] if olay["yon"] in ("giris", "cikis") else None,
+                 "confidence": max(0.0, min(1.0, float(olay["guven"])))}
+        gate_id = _tam_sayi(kapi.get("sunucu_id")) if kapi else None
+        if gate_id is not None:
+            govde["gate_id"] = gate_id
+        neden = str(olay["neden"] or "").lower()
+        if _NEDEN_RE.match(neden):
+            govde["reason"] = neden
+        elif olay["karar"] == "acma_basarisiz":
+            govde["reason"] = "acma_basarisiz"
+        return {k: v for k, v in govde.items() if v is not None}
 
     def _kare_yaz(self, dizin: str, zaman: str, kamera: str, goruntu, uzanti: str) -> None:
         try:
@@ -203,42 +250,75 @@ class Servis:
             log.warning("sunucu %s: %s", ad, e)
             return None
 
+    def _araliklar(self, aralik: dict | None) -> None:
+        """Sunucudaki site ayari (claim/heartbeat `intervals`, sync `config.settings`) bellekteki aralik ayarini ezer."""
+        s = self.ayar["sunucu"]
+        for anahtar, ayar_adi in (("heartbeat_seconds", "kalp_atisi_aralik_sn"), ("heartbeat_interval_seconds", "kalp_atisi_aralik_sn"),
+                                  ("sync_seconds", "senkron_aralik_sn"), ("sync_interval_seconds", "senkron_aralik_sn")):
+            n = _tam_sayi((aralik or {}).get(anahtar))
+            if n is not None:
+                s[ayar_adi] = n
+
     def senkronla(self) -> int:
+        """claim (bir kez) -> kuyrugu bosalt -> GET sync (delta). Gonderilmemis yerel olay varken sunucunun "iceride" gorunumu
+        uygulanmaz (yerel iyimser durumu geri almasin); bolum rev'leri ve kara liste her durumda uygulanir."""
         if not self._kayitli:
-            r = self._dene("kayit", lambda: self.sunucu.kayit({
-                "istemci_surum": ayarmod.SURUM, "bilgisayar": socket.gethostname(),
-                "kameralar": [{"id": k["id"], "ad": k.get("ad", ""), "kapi_id": k.get("kapi_id", "")}
-                              for k in self.ayar["kameralar"]],
-                "kapilar": [{"id": k["id"], "ad": k.get("ad", ""), "yon_modu": k.get("yon_modu", "cift"),
-                             "skp_uid": k.get("skp_uid", "")} for k in self.ayar["kapilar"]]}))
+            r = self._dene("kayit", lambda: self.sunucu.kayit(ayarmod.SURUM))
+            if r is not None:
+                self._araliklar(r.govde.get("intervals"))
             self._kayitli = r is not None or not self.sunucu.uc_etkin("kayit")
-        toplam = 0
-        for _ in range(20):  # sayfali delta
-            r = self._dene("senkron", lambda: self.sunucu.senkron(self.depo.imlec()))
-            if r is None:
-                break
-            toplam += self.depo.delta_uygula(r.govde)
-            if not r.govde.get("devam"):
-                break
-        return toplam
+        self.olay_gonder()
+        bekleyen = self.kuyruk.sayim()["bekleyen"] > 0
+        r = self._dene("senkron", lambda: self.sunucu.senkron(self.depo.imlec(), self.depo.revler()))
+        if r is None:
+            return 0
+        n = self.depo.delta_uygula(r.govde, iceride_uygula=not bekleyen)
+        self.motor.sunucu_kuralini_al()
+        self._araliklar((r.govde.get("config") or {}).get("settings"))
+        return n
 
     def olay_gonder(self) -> int:
+        """Kuyruktaki olaylari TEK TEK gonderir (sozlesme: POST events tek olay). Ag/5xx/401/403: kalanlar sonraki tura kalir;
+        kalici 4xx: o olay 'hatali' isaretlenir ve digerlerine devam edilir."""
         liste = self.kuyruk.bekleyenler(int(self.ayar["sunucu"]["olay_toplu_adet"]))
         if not liste or not self.sunucu.uc_etkin("olay"):
             return 0
-        idler = [o["event_id"] for o in liste]
-        try:
-            self.sunucu.olaylar(liste)
-        except SunucuHatasi as e:
-            self.son_hata = f"olay: {e}"
-            self.kuyruk.basarisiz(idler, kalici=e.kalici)
-            return 0
-        self.kuyruk.gonderildi(idler)
-        self.son_hata = ""
-        return len(idler)
+        gonderilen = 0
+        for o in liste:
+            try:
+                self.sunucu.olay(o)
+            except SunucuHatasi as e:
+                self.son_hata = f"olay: {e}"
+                self.kuyruk.basarisiz([o["event_id"]], kalici=e.kalici)
+                if e.kalici:
+                    continue
+                break
+            self.kuyruk.gonderildi([o["event_id"]])
+            gonderilen += 1
+        if gonderilen:
+            self.son_hata = ""
+        return gonderilen
+
+    def kalp_atisi_govdesi(self) -> dict:
+        """POST heartbeat govdesi: kamera basina son kare / son okuma (sunucu_id'si olan kameralar)."""
+        kameralar = []
+        for k in self.ayar["kameralar"]:
+            cid = _tam_sayi(k.get("sunucu_id"))
+            if cid is None or not k.get("etkin", True):
+                continue
+            d = self.kam_durum.get(k["id"], {})
+            item = {"camera_id": cid}
+            if d.get("son_kare"):
+                item["last_frame_at"] = _iso(d["son_kare"])
+            if d.get("son_okuma"):
+                item["last_read_at"] = _iso(d["son_okuma"])
+            kameralar.append(item)
+        return {"app_version": ayarmod.SURUM, "queue_depth": self.kuyruk.sayim()["bekleyen"], "cameras": kameralar}
 
     def kalp_atisi(self) -> None:
-        self._dene("kalp_atisi", lambda: self.sunucu.kalp_atisi(self.durum()))
+        r = self._dene("kalp_atisi", lambda: self.sunucu.kalp_atisi(self.kalp_atisi_govdesi()))
+        if r is not None:
+            self._araliklar(r.govde.get("intervals"))
 
     def durum(self) -> dict:
         return {

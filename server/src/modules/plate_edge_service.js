@@ -13,6 +13,7 @@ import { PlatformError } from './errors.js';
 import { isModuleEnabled } from './module_service.js';
 import { PLATE_RECOGNITION_MODULE, iso, moduleDisabled, notFound } from './plate_recognition_common.js';
 import { loadGateConfig, loadSiteSettings } from './plate_gates_service.js';
+import { notifyResidentMovement } from './plate_notify.js';
 import {
   DECISION_TO_LEGACY,
   PLATE_GATES_SCHEMA_VERSION,
@@ -175,7 +176,7 @@ export async function recordEdgeEvent(client, body) {
       declared: event.direction,
       inside: existing?.inside === true,
     });
-    const vehicle = (await db.query(`SELECT id, apartment_id FROM vehicles WHERE site_code = $1 AND plate = $2 AND is_active LIMIT 1`, [siteCode, event.plate])).rows[0] ?? null;
+    const vehicle = (await db.query(`SELECT id, apartment_id, person_id FROM vehicles WHERE site_code = $1 AND plate = $2 AND is_active LIMIT 1`, [siteCode, event.plate])).rows[0] ?? null;
     const permit = vehicle
       ? null
       : (
@@ -196,7 +197,7 @@ export async function recordEdgeEvent(client, body) {
     }
     const eventId = Number(inserted.rows[0].id);
     const reason =
-      event.reason ?? (event.decision === 'acildi' ? (vehicle ? 'vehicle' : permit ? 'guest_permit' : 'edge_open') : event.decision === 'red' ? 'denied' : 'not_registered');
+      event.reason ?? (event.decision === 'acildi' ? (vehicle ? 'vehicle' : permit ? 'guest_permit' : 'edge_open') : event.decision === 'red' ? 'denied' : event.decision === 'kara_liste' ? 'blacklist' : 'not_registered');
     // Mevcut "Olaylar" akışı (plate_decisions) kenar olaylarını da gösterir.
     await db.query(
       `INSERT INTO plate_decisions (site_code, event_id, device_id, door_id, plate, confidence, decision, reason, vehicle_id, permit_id, auto_action, decided_at)
@@ -204,7 +205,9 @@ export async function recordEdgeEvent(client, body) {
       [siteCode, eventId, event.cameraId, gate?.door_id ?? null, event.plate, event.confidence, DECISION_TO_LEGACY[event.decision], reason, vehicle?.id ?? null, permit?.id ?? null, event.seenAt],
     );
     const transition = presenceTransition({ direction, decision: event.decision });
-    let inside = existing?.inside === true;
+    const wasInside = existing?.inside === true;
+    let inside = wasInside;
+    let changed = false;
     if (transition === 'enter') {
       const kind = vehicle ? 'resident' : permit ? 'guest' : 'other';
       const applied = await db.query(
@@ -215,17 +218,25 @@ export async function recordEdgeEvent(client, body) {
          WHERE plate_presence.since_at <= EXCLUDED.since_at RETURNING id`,
         [siteCode, event.plate, vehicle?.apartment_id ?? permit?.apartment_id ?? null, kind, gateId, event.seenAt, eventId],
       );
-      if (applied.rows[0]) inside = true;
+      if (applied.rows[0]) {
+        inside = true;
+        changed = !wasInside;
+      }
     } else if (transition === 'leave' && existing) {
       const applied = await db.query(
         `UPDATE plate_presence SET inside = FALSE, since_at = $3, gate_id = $4, last_event_id = $5, updated_at = NOW()
           WHERE site_code = $1 AND plate = $2 AND since_at <= $3 RETURNING id`,
         [siteCode, event.plate, event.seenAt, gateId, eventId],
       );
-      if (applied.rows[0]) inside = false;
+      if (applied.rows[0]) {
+        inside = false;
+        changed = wasInside;
+      }
     }
     await db.query(`UPDATE camera_devices SET last_event_at = NOW() WHERE id = $1`, [event.cameraId]);
     await db.query('COMMIT');
+    // Sakin bildirimi (A3): yalnız KAYITLI aracın içeride durumu gerçekten değiştiyse; en iyi çaba, yanıtı geciktirmez, hata olayı bozmaz.
+    if (changed && vehicle && event.decision === 'acildi') void notifyResidentMovement({ siteCode, vehicle, direction, seenAt: event.seenAt });
     return { ...envelope(), ok: true, duplicate: false, event_id: eventId, direction, inside };
   } catch (error) {
     await db.query('ROLLBACK').catch(() => {});

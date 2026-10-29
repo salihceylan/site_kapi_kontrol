@@ -1,13 +1,17 @@
 """Yerel izin listesi (SQLite, sunucudan delta senkron) + karar motoru.
 
+Senkron verisi A1 sozlesmesindendir (GET /edge/plate/v1/sync): vehicles / guest_permits / blacklist bolumleri
+(`rev` ile "degismedi" denetimi), apartments (park yeri + iceride sayisi) ve presence (iceride farki).
+
 Kural ozeti (plan 5):
 - dogrulanmamis okuma (kalibrasyon modu)  -> ASLA acma
 - listede olmayan plaka                   -> 'tanimsiz' (acilmaz; mevcut SmartKeyPass yollari geri-dusus)
-- kara liste / suresi dolmus izin (giris) -> 'red'
+- kara liste                              -> 'kara_liste': ASLA acma (ayar `kara_liste_cikis_acilir` acik degilse CIKIS dahil)
+- suresi dolmus / henuz baslamamis izin   -> 'red' (giris)
 - sakin araci                             -> 'ac'
 - misafir araci (giris)                   -> park kurali: park_yeri>=1 VE (tum_yerler_bos: iceride==0 |
                                              en_az_bir_yer_bos: iceride<park_yeri)
-- CIKIS: listede bilinen her plaka cikabilir (kara liste/sure dolmasi iceri hapsetmez)
+- CIKIS: listede bilinen plaka cikabilir (izin suresi dolmasi iceri hapsetmez); kara liste yukaridaki kurala tabidir
 """
 from __future__ import annotations
 
@@ -19,13 +23,17 @@ from datetime import datetime
 from pathlib import Path
 
 _SEMA = """
-CREATE TABLE IF NOT EXISTS araclar(
-  plaka TEXT PRIMARY KEY, daire_id TEXT, tur TEXT NOT NULL DEFAULT 'sakin',
-  gecerli_bitis REAL, kara_liste INTEGER NOT NULL DEFAULT 0, iceride INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS s_arac(plaka TEXT PRIMARY KEY, daire_id TEXT);
+CREATE TABLE IF NOT EXISTS s_izin(plaka TEXT PRIMARY KEY, daire_id TEXT, baslangic REAL, bitis REAL);
+CREATE TABLE IF NOT EXISTS s_kara(plaka TEXT PRIMARY KEY);
+CREATE TABLE IF NOT EXISTS s_iceride(plaka TEXT PRIMARY KEY, daire_id TEXT, tur TEXT, zaman REAL);
 CREATE TABLE IF NOT EXISTS daireler(
   daire_id TEXT PRIMARY KEY, park_yeri INTEGER NOT NULL DEFAULT 0, iceride INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS meta(k TEXT PRIMARY KEY, v TEXT);
 """
+
+# Sunucu misafir kurali -> kenar ayar adi (docs sozlesmesi: tum_bos | en_az_bir_bos).
+KURAL_ESLEME = {"tum_bos": "tum_yerler_bos", "en_az_bir_bos": "en_az_bir_yer_bos"}
 
 
 def _epoch(v):
@@ -34,6 +42,14 @@ def _epoch(v):
     if isinstance(v, (int, float)):
         return float(v)
     return datetime.fromisoformat(str(v).replace("Z", "+00:00")).timestamp()
+
+
+def _kanonik(plaka) -> str:
+    return "".join(ch for ch in str(plaka).upper() if ch.isalnum())
+
+
+def _id(v):
+    return None if v is None else str(v)
 
 
 class IzinDeposu:
@@ -47,40 +63,98 @@ class IzinDeposu:
             self.db.executescript(_SEMA)
 
     # --- senkron -------------------------------------------------------------------
-    def imlec(self) -> str:
+    def _meta(self, k: str, varsayilan: str = "") -> str:
         with self.kilit:
-            r = self.db.execute("SELECT v FROM meta WHERE k='imlec'").fetchone()
-        return r["v"] if r else ""
+            r = self.db.execute("SELECT v FROM meta WHERE k=?", (k,)).fetchone()
+        return r["v"] if r else varsayilan
 
-    def delta_uygula(self, cevap: dict) -> int:
-        """cevap: {"imlec", "araclar":[{plaka,daire_id,tur,gecerli_bitis,kara_liste,iceride,silindi}],
-        "daireler":[{daire_id,park_yeri,iceride}]}  (schema_version 1; A1 ile uzlasilacak)."""
+    def imlec(self) -> str:
+        """Sonraki senkronun `updated_since` degeri (onceki basarili yanittaki server_time); bos = tam senkron."""
+        return self._meta("server_time")
+
+    def revler(self) -> dict:
+        return {ad: self._meta(f"rev_{ad}") for ad in ("vehicles", "permits", "blacklist")}
+
+    def sunucu_kurali(self) -> str:
+        """Sunucudaki site ayari (kenar ayar adiyla) ya da bos."""
+        return self._meta("misafir_kurali")
+
+    def delta_uygula(self, cevap: dict, iceride_uygula: bool = True) -> int:
+        """GET sync yaniti. Her bolum {rev, items} ya da {rev, unchanged:true} (unchanged: yerel kopya gecerli).
+        iceride_uygula=False: yerel gonderilmemis olaylar varken sunucunun "iceride" gorunumu (apartments/presence) UYGULANMAZ ve
+        imlec ilerletilmez (sonraki senkron ayni farki yeniden ister). Doner: yazilan oge sayisi."""
         n = 0
         with self.kilit, self.db:
-            for a in cevap.get("araclar", []):
-                plaka = "".join(ch for ch in str(a["plaka"]).upper() if ch.isalnum())
-                if a.get("silindi"):
-                    self.db.execute("DELETE FROM araclar WHERE plaka=?", (plaka,))
-                else:
-                    self.db.execute(
-                        "INSERT OR REPLACE INTO araclar(plaka,daire_id,tur,gecerli_bitis,kara_liste,iceride) "
-                        "VALUES(?,?,?,?,?,?)",
-                        (plaka, a.get("daire_id"), a.get("tur", "sakin"), _epoch(a.get("gecerli_bitis")),
-                         int(bool(a.get("kara_liste"))), int(bool(a.get("iceride")))))
-                n += 1
-            for d in cevap.get("daireler", []):
-                self.db.execute("INSERT OR REPLACE INTO daireler(daire_id,park_yeri,iceride) VALUES(?,?,?)",
-                                (d["daire_id"], int(d.get("park_yeri", 0)), int(d.get("iceride", 0))))
-                n += 1
-            if cevap.get("imlec") is not None:
-                self.db.execute("INSERT OR REPLACE INTO meta(k,v) VALUES('imlec',?)", (str(cevap["imlec"]),))
+            kural = ((cevap.get("config") or {}).get("settings") or {}).get("guest_rule")
+            if kural in KURAL_ESLEME:
+                self._yaz_meta("misafir_kurali", KURAL_ESLEME[kural])
+            v = cevap.get("vehicles") or {}
+            if "items" in v:
+                self.db.execute("DELETE FROM s_arac")
+                self.db.executemany("INSERT OR REPLACE INTO s_arac(plaka,daire_id) VALUES(?,?)",
+                                    [(_kanonik(x["plate"]), _id(x.get("apartment_id"))) for x in v["items"]])
+                n += len(v["items"])
+                self._yaz_meta("rev_vehicles", v.get("rev", ""))
+            p = cevap.get("guest_permits") or {}
+            if "items" in p:
+                self.db.execute("DELETE FROM s_izin")
+                for x in p["items"]:  # ayni plakaya birden cok izin: en gec biten kazanir
+                    plaka, bitis = _kanonik(x["plate"]), _epoch(x.get("valid_until"))
+                    eski = self.db.execute("SELECT bitis FROM s_izin WHERE plaka=?", (plaka,)).fetchone()
+                    if eski is None or (bitis or 0) > (eski["bitis"] or 0):
+                        self.db.execute("INSERT OR REPLACE INTO s_izin(plaka,daire_id,baslangic,bitis) VALUES(?,?,?,?)",
+                                        (plaka, _id(x.get("apartment_id")), _epoch(x.get("valid_from")), bitis))
+                n += len(p["items"])
+                self._yaz_meta("rev_permits", p.get("rev", ""))
+            b = cevap.get("blacklist") or {}
+            if "items" in b:
+                self.db.execute("DELETE FROM s_kara")
+                self.db.executemany("INSERT OR REPLACE INTO s_kara(plaka) VALUES(?)", [(_kanonik(x["plate"]),) for x in b["items"]])
+                n += len(b["items"])
+                self._yaz_meta("rev_blacklist", b.get("rev", ""))
+            if iceride_uygula:
+                if "apartments" in cevap:
+                    self.db.execute("DELETE FROM daireler")
+                    self.db.executemany("INSERT OR REPLACE INTO daireler(daire_id,park_yeri,iceride) VALUES(?,?,?)",
+                                        [(str(d["id"]), int(d.get("parking_slots", 0)), int(d.get("inside_count", 0)))
+                                         for d in cevap["apartments"]])
+                    n += len(cevap["apartments"])
+                pr = cevap.get("presence")
+                if pr is not None:
+                    if pr.get("full"):
+                        self.db.execute("DELETE FROM s_iceride")
+                    for x in pr.get("items", []):
+                        plaka = _kanonik(x["plate"])
+                        if x.get("inside"):
+                            self.db.execute("INSERT OR REPLACE INTO s_iceride(plaka,daire_id,tur,zaman) VALUES(?,?,?,?)",
+                                            (plaka, _id(x.get("apartment_id")), x.get("kind", "other"), _epoch(x.get("since_at"))))
+                        else:
+                            self.db.execute("DELETE FROM s_iceride WHERE plaka=?", (plaka,))
+                        n += 1
+                if cevap.get("server_time"):
+                    self._yaz_meta("server_time", str(cevap["server_time"]))
         return n
+
+    def _yaz_meta(self, k: str, v) -> None:
+        self.db.execute("INSERT OR REPLACE INTO meta(k,v) VALUES(?,?)", (k, str(v)))
 
     # --- sorgu / yerel durum ----------------------------------------------------------
     def arac(self, plaka: str):
+        """Birlesik kayit {plaka, daire_id, tur: sakin|misafir|kara, gecerli_baslangic, gecerli_bitis, kara_liste, iceride}
+        ya da listelerin hicbirinde yoksa None. Sakin kaydi misafir iznine ustundur (sunucu da once araca bakar)."""
         with self.kilit:
-            r = self.db.execute("SELECT * FROM araclar WHERE plaka=?", (plaka,)).fetchone()
-        return dict(r) if r else None
+            a = self.db.execute("SELECT daire_id FROM s_arac WHERE plaka=?", (plaka,)).fetchone()
+            i = self.db.execute("SELECT daire_id,baslangic,bitis FROM s_izin WHERE plaka=?", (plaka,)).fetchone()
+            k = self.db.execute("SELECT 1 FROM s_kara WHERE plaka=?", (plaka,)).fetchone()
+            c = self.db.execute("SELECT 1 FROM s_iceride WHERE plaka=?", (plaka,)).fetchone()
+        if a is None and i is None and k is None:
+            return None
+        sakin = a is not None
+        return {"plaka": plaka, "daire_id": a["daire_id"] if sakin else (i["daire_id"] if i else None),
+                "tur": "sakin" if sakin else ("misafir" if i else "kara"),
+                "gecerli_baslangic": None if sakin or not i else i["baslangic"],
+                "gecerli_bitis": None if sakin or not i else i["bitis"],
+                "kara_liste": int(k is not None), "iceride": int(c is not None)}
 
     def daire(self, daire_id):
         with self.kilit:
@@ -89,26 +163,33 @@ class IzinDeposu:
 
     def iceride_ayarla(self, plaka: str, iceride: bool) -> None:
         """Acma basarili olunca yerel durumu iyimser gunceller (cevrimdisi ikinci misafiri de dogru keser);
-        sunucu bir sonraki delta'da gercek degeri getirir."""
+        sunucu bir sonraki senkronda gercek degeri getirir (gonderilmemis olay yokken)."""
         with self.kilit, self.db:
             a = self.arac(plaka)
-            if not a or bool(a["iceride"]) == iceride:
+            if not a or a["tur"] == "kara" or bool(a["iceride"]) == iceride:
                 return
-            self.db.execute("UPDATE araclar SET iceride=? WHERE plaka=?", (int(iceride), plaka))
+            if iceride:
+                self.db.execute("INSERT OR REPLACE INTO s_iceride(plaka,daire_id,tur,zaman) VALUES(?,?,?,?)",
+                                (plaka, a["daire_id"], "resident" if a["tur"] == "sakin" else "guest", time.time()))
+            else:
+                self.db.execute("DELETE FROM s_iceride WHERE plaka=?", (plaka,))
             if a["daire_id"]:
                 self.db.execute(
-                    "UPDATE daireler SET iceride=MAX(0, iceride+?) WHERE daire_id=?",
-                    (1 if iceride else -1, a["daire_id"]))
+                    "INSERT INTO daireler(daire_id,park_yeri,iceride) VALUES(?,0,?) "
+                    "ON CONFLICT(daire_id) DO UPDATE SET iceride=MAX(0, iceride+?)",
+                    (a["daire_id"], 1 if iceride else 0, 1 if iceride else -1))
 
     def sayilar(self) -> dict:
         with self.kilit:
-            return {"arac": self.db.execute("SELECT COUNT(*) FROM araclar").fetchone()[0],
+            return {"arac": self.db.execute("SELECT COUNT(*) FROM s_arac").fetchone()[0],
+                    "izin": self.db.execute("SELECT COUNT(*) FROM s_izin").fetchone()[0],
+                    "kara_liste": self.db.execute("SELECT COUNT(*) FROM s_kara").fetchone()[0],
                     "daire": self.db.execute("SELECT COUNT(*) FROM daireler").fetchone()[0]}
 
 
 @dataclass
 class Karar:
-    sonuc: str  # ac | red | tanimsiz | dogrulanmamis
+    sonuc: str  # ac | red | kara_liste | tanimsiz | dogrulanmamis
     neden: str = ""
     yon: str = "giris"
     daire_id: str | None = None
@@ -120,10 +201,16 @@ class Karar:
 
 
 class KararMotoru:
-    def __init__(self, depo: IzinDeposu, misafir_kurali: str = "tum_yerler_bos"):
+    def __init__(self, depo: IzinDeposu, misafir_kurali: str = "tum_yerler_bos", kara_liste_cikis_acilir: bool = False):
         if misafir_kurali not in ("tum_yerler_bos", "en_az_bir_yer_bos"):
             raise ValueError("misafir_kurali gecersiz")
-        self.depo, self.kural = depo, misafir_kurali
+        self.depo, self.kural, self.kara_cikis = depo, misafir_kurali, bool(kara_liste_cikis_acilir)
+
+    def sunucu_kuralini_al(self) -> None:
+        """Sunucudaki site ayari (senkronla gelir) yerel ayari ezer."""
+        k = self.depo.sunucu_kurali()
+        if k in KURAL_ESLEME.values():
+            self.kural = k
 
     def yon_bul(self, kapi_yon_modu: str, kamera_yon: str, arac) -> str:
         if kamera_yon in ("giris", "cikis"):
@@ -141,15 +228,17 @@ class KararMotoru:
             return Karar("dogrulanmamis", "kalibrasyon_modu", yon)
         if not arac:
             return Karar("tanimsiz", "listede_yok", yon)
+        if arac["kara_liste"] and not (yon == "cikis" and self.kara_cikis):
+            return Karar("kara_liste", "kara_liste", yon, arac["daire_id"], arac["tur"])
         k = Karar("ac", "", yon, arac["daire_id"], arac["tur"])
         if yon == "cikis":
             k.neden = "cikis"
             return k
-        if arac["kara_liste"]:
-            return Karar("red", "kara_liste", yon, arac["daire_id"], arac["tur"])
-        if arac["gecerli_bitis"] is not None and arac["gecerli_bitis"] < simdi:
-            return Karar("red", "izin_suresi_doldu", yon, arac["daire_id"], arac["tur"])
         if arac["tur"] == "misafir":
+            if arac["gecerli_baslangic"] is not None and arac["gecerli_baslangic"] > simdi:
+                return Karar("red", "izin_henuz_baslamadi", yon, arac["daire_id"], "misafir")
+            if arac["gecerli_bitis"] is not None and arac["gecerli_bitis"] < simdi:
+                return Karar("red", "izin_suresi_doldu", yon, arac["daire_id"], "misafir")
             d = self.depo.daire(arac["daire_id"])
             if d["park_yeri"] < 1:
                 return Karar("red", "misafir_park_yeri_yok", yon, arac["daire_id"], "misafir")

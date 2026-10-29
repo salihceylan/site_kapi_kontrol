@@ -9,7 +9,7 @@ import { DEFAULT_MIGRATIONS_DIR, findUnsafeStatements } from '../scripts/migrate
 import { PLATE_GATES_DDL, PLATE_GATES_DDL_ORDER, ensurePlateGatesSchema, plateGatesTuning } from '../src/modules/plate_gates_schema.js';
 import {
   CAMERA_DIRECTIONS,
-  DECISION_KINDS,
+  DECISION_KINDS_V1,
   DEFAULT_SITE_SETTINGS,
   DIRECTION_MODES,
   GUEST_RULES,
@@ -57,7 +57,7 @@ describe('plate_gates_schema (120)', () => {
     const sql = normalize(MIGRATION);
     assert.ok(sql.includes(`direction_mode IN (${listOf(DIRECTION_MODES)})`));
     assert.ok(sql.includes(`CHECK (direction IN (${listOf(CAMERA_DIRECTIONS)}))`));
-    assert.ok(sql.includes(`decision_kind IN (${listOf(DECISION_KINDS)})`));
+    assert.ok(sql.includes(`decision_kind IN (${listOf(DECISION_KINDS_V1)})`));
     assert.ok(sql.includes(`guest_rule IN (${listOf(GUEST_RULES)})`));
     assert.ok(sql.includes(`kind IN (${listOf(PRESENCE_KINDS)})`));
     assert.ok(sql.includes(`guest_rule TEXT NOT NULL DEFAULT '${DEFAULT_SITE_SETTINGS.guest_rule}'`));
@@ -156,7 +156,7 @@ describe('plate_gates_common: girdi ve sozlesme', () => {
   });
 
   it('olay: desteklenmeyen surum -> UNSUPPORTED_SCHEMA (supported listesiyle); gecersiz kimlik/karar/yon/zaman 400', () => {
-    assert.throws(() => parseEdgeEvent({ ...base, schema_version: 2 }, NOW), (e) => e.code === 'UNSUPPORTED_SCHEMA' && e.extra.supported[0] === 1);
+    assert.throws(() => parseEdgeEvent({ ...base, schema_version: 3 }, NOW), (e) => e.code === 'UNSUPPORTED_SCHEMA' && e.extra.supported[0] === 1);
     for (const bad of [{ event_id: 'kisa' }, { decision: 'belki' }, { direction: 'yan' }, { camera_id: 0 }, { plate: 'XX' }, { seen_at: '2020-01-01T00:00:00Z' }, { seen_at: '2026-10-29T13:00:00Z' }]) {
       assert.throws(() => parseEdgeEvent({ ...base, ...bad }, NOW), (e) => e.statusCode === 400, JSON.stringify(bad));
     }

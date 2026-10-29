@@ -18,12 +18,13 @@ CREATE INDEX IF NOT EXISTS ix_olay_durum ON olaylar(durum, sonraki);
 
 
 class OlayKuyrugu:
-    def __init__(self, yol: Path | str = ":memory:", azami_deneme: int = 20):
+    def __init__(self, yol: Path | str = ":memory:", azami_deneme: int | None = None):
+        # azami_deneme None: gecici hatalar (ag kesintisi, 5xx, 401/403) olayi ASLA oldurmez; yalniz kalici 4xx ya da saklama suresi (temizle) oldurur.
         if yol != ":memory:":
             Path(yol).parent.mkdir(parents=True, exist_ok=True)
         self.db = sqlite3.connect(str(yol), check_same_thread=False)
         self.kilit = threading.RLock()
-        self.azami = azami_deneme
+        self.azami = azami_deneme if azami_deneme else 2_000_000_000
         with self.kilit:
             self.db.executescript(_SEMA)
 
@@ -56,10 +57,11 @@ class OlayKuyrugu:
                     (simdi, int(kalici), self.azami, i))
 
     def temizle(self, gun: float, simdi: float | None = None) -> int:
-        """Gonderilmis/olu olaylari saklama suresinden sonra siler (KVKK: olay saklama suresi ayardan)."""
+        """Saklama suresini (gun) asan olaylari siler (KVKK: olay saklama suresi ayardan). Gonderilmemis eski olaylar da
+        silinir: sunucu 30 gunden eski olayi zaten reddeder ve kalici olarak bekleyen kayit kuyrugu sismesin."""
         simdi = time.time() if simdi is None else simdi
         with self.kilit, self.db:
-            return self.db.execute("DELETE FROM olaylar WHERE durum>0 AND olusma<?", (simdi - gun * 86400,)).rowcount
+            return self.db.execute("DELETE FROM olaylar WHERE olusma<?", (simdi - gun * 86400,)).rowcount
 
     def sayim(self) -> dict:
         with self.kilit:

@@ -174,6 +174,10 @@ class _PlateGatesPanelState extends State<PlateGatesPanel> {
     final s = _o.settings;
     final warn = TextEditingController(text: '${s.warnSeconds}');
     final crit = TextEditingController(text: '${s.critSeconds}');
+    final report = TextEditingController(text: '${s.insideReportHours}');
+    final timeout = TextEditingController(text: '${s.insideTimeoutHours}');
+    final alertEvery = TextEditingController(text: '${s.alertIntervalMinutes}');
+    final notifyAge = TextEditingController(text: '${s.notifyMaxAgeMinutes}');
     var rule = s.guestRule;
     final go = await showDialog<bool>(
       context: context,
@@ -193,6 +197,10 @@ class _PlateGatesPanelState extends State<PlateGatesPanel> {
                 ),
                 TextField(controller: warn, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Sarı uyarı eşiği (sn)')),
                 TextField(controller: crit, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Kırmızı (koptu) eşiği (sn)')),
+                TextField(controller: report, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'İçeride raporu eşiği (saat)')),
+                TextField(controller: timeout, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'İçeride zaman aşımı (saat, otomatik düşer)')),
+                TextField(controller: alertEvery, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Kopukluk uyarısı en sık (dakika)')),
+                TextField(controller: notifyAge, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Sakin bildirimi için en eski olay (dakika)')),
               ],
             ),
           ),
@@ -203,15 +211,28 @@ class _PlateGatesPanelState extends State<PlateGatesPanel> {
         ),
       ),
     );
-    final values = (int.tryParse(warn.text.trim()), int.tryParse(crit.text.trim()));
-    warn.dispose();
-    crit.dispose();
+    final values = <int?>[for (final c in <TextEditingController>[warn, crit, report, timeout, alertEvery, notifyAge]) int.tryParse(c.text.trim())];
+    for (final c in <TextEditingController>[warn, crit, report, timeout, alertEvery, notifyAge]) {
+      c.dispose();
+    }
     if (go != true) return;
-    if (values.$1 == null || values.$2 == null) {
-      if (mounted) AppSnack.show(context, 'Eşikler tam sayı (saniye) olmalı.', kind: AppSnackKind.error);
+    if (values.any((v) => v == null)) {
+      if (mounted) AppSnack.show(context, 'Eşikler tam sayı olmalı.', kind: AppSnackKind.error);
       return;
     }
-    await _run(() => widget.service.saveGateSettings(widget.siteCode, guestRule: rule, warnSeconds: values.$1!, critSeconds: values.$2!), 'Ayarlar kaydedildi.');
+    await _run(
+      () => widget.service.saveGateSettings(
+        widget.siteCode,
+        guestRule: rule,
+        warnSeconds: values[0]!,
+        critSeconds: values[1]!,
+        insideReportHours: values[2]!,
+        insideTimeoutHours: values[3]!,
+        alertIntervalMinutes: values[4]!,
+        notifyMaxAgeMinutes: values[5]!,
+      ),
+      'Ayarlar kaydedildi.',
+    );
   }
 
   Widget _note(String text) => Padding(
@@ -357,6 +378,10 @@ class _PlateGatesPanelState extends State<PlateGatesPanel> {
             children: <Widget>[
               Text('Misafir araç kabulü: ${o.guestRules[o.settings.guestRule] ?? o.settings.guestRule}'),
               Text('Durum eşikleri: ${o.settings.warnSeconds} sn sonra sarı, ${o.settings.critSeconds} sn sonra kırmızı', style: Theme.of(context).textTheme.bodySmall),
+              Text(
+                'İçeride: ${o.settings.insideReportHours} saatten uzunsa rapora girer, ${o.settings.insideTimeoutHours} saatte otomatik düşer  •  Kopukluk uyarısı en sık ${o.settings.alertIntervalMinutes} dakikada bir',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
             ],
           ),
         ),
@@ -370,6 +395,26 @@ class _PlateGatesPanelState extends State<PlateGatesPanel> {
             subtitle: Text('Park yeri ${a.parkingSlots}  •  içeride ${a.insideCount}'),
             trailing: StatusDot(label: a.guestLabel, tone: a.guestAllowed ? AppTone.success : AppTone.neutral, maxLines: 2),
           ),
+        if (widget.inside.overdue.isNotEmpty) ...<Widget>[
+          _section('Çıkışı görülmeyen girişler (${widget.inside.overdue.length} araç, ${widget.inside.overdueAfterHours} saatten uzun)'),
+          _note('Çıkış kamerası aracı görmediyse kayıt burada kalır; ${widget.inside.timeoutHours} saati aşınca kendiliğinden düşer.'),
+          for (final item in widget.inside.overdue)
+            ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.schedule_rounded),
+              title: Text(item.plate),
+              subtitle: Text(
+                <String>[
+                  if (item.insideHours != null) '${item.insideHours} saattir içeride',
+                  item.kindLabel,
+                  if (item.apartmentLabel != null) item.apartmentLabel!,
+                  if (item.sinceAt != null) _fmt(item.sinceAt!),
+                ].join('  •  '),
+              ),
+            ),
+          _section('Tüm içeridekiler'),
+        ],
         for (final item in widget.inside.items)
           ListTile(
             dense: true,
