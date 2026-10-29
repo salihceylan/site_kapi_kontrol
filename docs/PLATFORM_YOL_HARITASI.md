@@ -108,7 +108,8 @@ Büyüklük: **S** bir gün içinde · **M** birkaç gün · **L** bir haftadan 
 
 2026-10-21'den beri kararların, uygulama sırasının ve dışarıdan gerekenlerin güncel hâli aşağıdaki eksik listesinin sonunda:
 "Karar kaydı (2026-10-21)", "Uygulama sırası (2026-10-21)" ve "Dışarıdan gerekenler". Önceki "Sizden gerekenler" ve
-"Önerilen sıra" listeleri bu kayıtla kapandı.
+"Önerilen sıra" listeleri bu kayıtla kapandı. Karşılaştırma programının kararları (K1-K18) ve sahip kararları aynı bölümde
+"Karar kaydı (2026-10-28)" başlığındadır.
 
 ## Eksik listesi — işveren belgeleri ve Apsiyon karşılaştırması (2026-10-20)
 
@@ -345,6 +346,54 @@ tablolardaki "Karar ya da bilgi" sütunu tarihçe olarak kaldı; geçerli olan b
 | G10, G14, R3 | Ekranda "tahakkuk, mutabakat, cari" yerine yöneticinin dili ("borç yazma", "banka / kasa kontrolü"); her listede arama ve Excel'e aktar; rapor adları PDF'teki gibi (Aylık özet, Yıllık hesap, Daire ekstresi, İcra dökümü). | Yol Haritası PDF |
 | G15 | İki haftada bir yapılacak canlı demo için demo senaryosu belgesi hazırlanır. | komutlar talimat 5 |
 | Z1–Z8 | Bu turda yapılmaz: işveren belgelerinde istenmedi (Apsiyon'a özgü ek hizmetler). | Kapsam |
+
+### Karar kaydı (2026-10-28)
+
+Kaynak: Astra karşılaştırma raporu (5 mercek, 113 satır → 19 P1 / 31 P2 / 28 karar) ve bunun uygulama programı
+`docs/superpowers/plans/2026-10-28-karsilastirma-guclendirme.md`. Rapor önerileri esas alındı; sahibin "standarda göre karar ver"
+kalıcı talimatıyla ekip karar verdi, sahibin açıkça teyit ettiği ya da eklediği yerler aşağıda "Sahip kararları" tablosunda ayrıdır.
+Hukuki sonuç doğurabilecek maddelerin metin onayı avukattadır: `docs/yasal/AVUKAT_KONTROL_LISTESI.md` madde 42 (devir ve bildirim
+metinleri, iade makbuzu) ve madde 43 (fon borcu dayanağı, alacaklı devir, dağıtım tabanı, gecikmede devir önerisi).
+
+**Numaralama uyarısı.** Bu bölümdeki K1-K18 yalnız 2026-10-28 programına aittir. Yukarıdaki "Zaten karşılanan istekler" tablosunda
+da K1-K15 diye eski bir numaralama vardır (2026-10-20 eksik listesi); ikisi karıştırılmasın. Kodda ve belgelerde bu programın
+kararları "(K3, 2026-10-28)" biçiminde tarihle anılır.
+
+| Kod | Karar (özet) | Rapor maddesi | Uygulama ve kod kanıtı |
+| --- | --- | --- | --- |
+| K1 | Hesap modeli korunur. "Malike devret" açık, yönetici onaylı, izli ve geri alınabilir bir eylemdir; kiracı çıkışından önce malike borç bildirimi gider (çıkışı engellemez). Gecikme tazminatı devredilmez. Bildirim ve devir metinleri avukat listesindedir. | P1-1 | Dalga B, main'de. `finance_exit_notice.js`, `finance_liability_plan.js`, `finance_liability_service.js`; migration 089; `PLATFORM_FINANS.md` "Kiracı borcunun malike devri". Avukat listesi madde 42. |
+| K2 | Karar Defteri modülü açık sitede Fon (demirbaş / yatırım) borcu yazarken kesinleşmiş karara bağlanmak zorundadır; modül kapalı sitede 3-300 karakterlik gerekçe zorunludur. Karar numarası ve gerekçe sakinin "Borcum" kaleminde görünür. | P1-2, P2-1 | Dalga B. `finance_run_decision.js`, `finance_debt_breakdown.js`; migration 090; `PLATFORM_FINANS_KARAR_BAGI.md`. Avukat listesi madde 43(a). |
+| K3 | Yazılım ödemeyi kendiliğinden bir hesaba atamaz. Tek tür borçta önerilen hesap seçili gelir (değiştirilebilir); iki tür borçta seçim zorunludur. Dekont onayı ve banka içe aktarma dahil tüm tahsilat yollarına uygulanır. | P1-3 | Dalga B. `PLATFORM_FINANS_KASALAR.md` 3.1; `PLATFORM_FINANS_DEKONT.md` (`fund`, `FUND_CHOICE_REQUIRED`). |
+| K4 | Fazla ödeme varsayılan olarak alacak kalır, sonraki borçtan düşer. İade yönetici onaylıdır; çıkış kaydı, iz ve iade makbuzu (tahsilat makbuzundan ayrı numara dizisi) yazılır. | P1-4 | Dalga B. `finance_refunds.js`; migration 088. Avukat listesi madde 42(e). |
+| K5 | Dağıtım ve ısı payı tabanını yönetim seçer, varsayılan EŞİT; kod kendiliğinden formül seçmez. Isı payında %70/%30 oranının mevzuat dayanağı avukat listesinde teyit bekler. | P1-5 | Dalga B. `finance_distribution_basis.js`; migration 091. Avukat listesi madde 43(c). |
+| K6 | "Silmeyi biz yapmayız": Drive kuyruğunda otomatik silme kalkar. Bekleyen dosya kalır, yöneticiye uyarı gider, kota dolunca yeni yükleme reddedilir. Sunucudaki geçici dosya yalnız Drive teyidinden SONRA silinir; kullanıcının cihazındaki kopya hiçbir koşulda kendiliğinden silinmez. | P1-8 | Dalga C, main'de. `PLATFORM_DRIVE_DEPOLAMA.md`. |
+| K7 | Çoklu malik: tüm malikler kayıtlıdır, hesap muhatabı tektir. | P1-12 | Dalga E, main'de. Migration 104; `PLATFORM_COKLU_MALIK.md`. |
+| K8 | Yetenek (çekirdek, her sitede açık) ile menü yerleşimi ayrılır: site başına kompakt menü ve "Tüm işlemler" ekranı; kompakt kümenin varsayılanı yönetim türünden türetilir. Hiçbir yetenek kapanmaz. Fiyat ve paket etkisi sahibin kararı olarak açık kalır. | P1-16 | Dalga D, main'de. Migration 102; `menu_layout_*.js`; `PLATFORM_MENU_KATMANI.md`. |
+| K9 | "Hesap" adları kesindir (İşletme Hesabı / Fon Hesabı); "Kasa" terimine geçilmez. Sahibin teyidi. | P1-3 yanında | Ekran ve belge dili; `docs/TASARIM_DILI.md`. |
+| K10 | Deneme erişimi tek kullanımlık kodla, 72 saat, demo siteye kilitli; deneme verisinde işlem serbesttir. | P2-27 | Dalga E, main'de. `trial_access_common.js` (`TRIAL_SESSION_HOURS`); migration 106; `PLATFORM_DENEME_ERISIMI.md`. |
+| K11 | Sayfa bağlamlı geri bildirim eki: en çok 4 dosya, dosya başı 5 MB, toplam 20 MB; gönderen ekran bağlamı otomatik eklenir. | P1-14 | Dalga D. `feedback_common.js`; migration 103; `PLATFORM_GERI_BILDIRIM.md`. |
+| K12 | Sayaç sıçrama eşiği site ayarıdır; varsayılan son 3 dönem tüketim ortancasının 5 katı. Uyarıdır, engel değildir. | P1-7 | Dalga C. `metering_jump.js` (`metering.jump_factor`); `PLATFORM_KURALLAR.md`, `PLATFORM_SAYAC.md`. |
+| K13 | Acil numara 112; arama kanalı bağlanana dek kuru mod; yangın ve asansör arızası ayrı hızlı düğme. | P2-24 | Dalga E. `emergency_*.js`; migration 107; `PLATFORM_ACIL_DURUM.md`. |
+| K14 | Onaylı kayıt kilitlenir; değişiklik yeni sürüm ve önceki sürüme bağ olarak yapılır (zeyilname yerine). | P2-9 | Dalga C. Migration 099; `PLATFORM_EKIPMAN.md`. |
+| K15 | Belge okuma yalnız cihaz-içi (ML Kit) olur; görüntü ve metin ağa çıkmaz, sonuç öneri olarak ön-doldurulur. Dış yapay zekâya gönderim avukat görüşü olmadan yapılmaz (KVKK m.9). | P2-13 | İlke geçerli; belge okuma işi Dalga H'de bekliyor (bu kayıt yazılırken kodu yok). |
+| K16 | Alacaklı devir bakiyesi desteklenir (eski "desteklenmiyor" hatası kalkar); devir alacağı sonraki borçlara mahsup edilir, tahsilat sayılmaz, makbuz kesilmez. Altın veri setine senaryo eklenir. | P2-4 (C-21) | Dalga B. `finance_opening.js`, `bulk_import_*`. Avukat listesi madde 43(b). |
+| K17 | Kiracı borcu yönetim aşamasında "Malik / Kiracı / İkisi" ayarı KALIR. Sahibin eki: "Borç mutlaka tahsil edilir; kiracı vermezse mal sahibi öder." Geciken kiracı borcunun malike devri yalnız çıkışta değil gecikmede de yöneticiye önerilir (K1'in onaylı, izli, geri alınabilir deseniyle). Avukat onayına kadar öneri yalnız yöneticiye görünür, malike otomatik bildirim gitmez. | P1-1 ek (C-24) | Dalga B. `finance_liability_service.js` `listTransferCandidates`; `PLATFORM_FINANS.md` "Gecikmede de öneri". Avukat listesi madde 43(d). |
+| K18 | Ay ortası girişte ayın tamamının malike yazılması mevcut davranış olarak korunur. | C-25 | Kod değişikliği yok; yöneticiye bilgi notu faz sayfasına taşınacak (henüz yazılmadı). |
+
+#### Sahip kararları (2026-10-28)
+
+Sahip bu turda soruldu ve seçti; aşağıdakiler "standarda göre" verilen kararlardan ayrı tutulur.
+
+| Konu | Karar | Durum |
+| --- | --- | --- |
+| VPS (sunucu) erişim güvenliği | Şimdilik ertelendi; risk sahibince kabul edildi. "Satışa hazır" aşamasında hukuk bayrağıyla birlikte yeniden sorulacak. | Bekliyor |
+| Tanıtım sitesi fiyat çelişkisi | Tanıtım sitesi ürünle eşitlendi. Fiyat rakamları bu depoya yazılmaz; kaynak sahibin depo dışı fiyat referansıdır. | Yapıldı (tanıtım sitesi deposunda) |
+| OTA imzalama | ONAYLANDI. Ed25519 imza: özel anahtar depo DIŞINDA, firmware'e yalnız genel anahtar gömülür; sunucu yeni paketlerde imzayı zorunlu tutar; sahadaki cihazlar için tek köprü sürümle geçiş. Anahtar üretimi ve karta yazma kullanıcıdadır. | Dalga F, main'de; `docs/OTA_IMZA.md`, `docs/OTA_IMZA_CIHAZ.md` |
+| Muhasebeci rolü (P2-20) | Rol AÇILMAZ. Bunun yerine gider ve dekont belgesinde "kontrol edildi (kim, ne zaman)" izi tutulur. | Dalga H'de bekliyor (migration 110) |
+| "Hesap" terimi (K9) | İşletme Hesabı / Fon Hesabı; "Kasa" kullanılmaz. | Kesin |
+| Kiracı vermezse malik öder (K17) | Ayar kalır; gecikmede de malike devir önerilir (yukarıda K17). | Dalga B |
+| AHBU | AHBU ayrı marka olarak KALIR; Ev Otomasyonu tanıtımına iş çıkmaz, madde kapandı. | Kapandı |
+| iOS | Şimdilik Android + Web. Apple Developer hesabı açılınca iOS tek paket halinde yapılır. | Dış koşula bağlı |
 
 ### Faz Kontrol Listesi notlarından gelen işler (2026-10-21)
 
