@@ -307,10 +307,10 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 300 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/middlewares/auth_middleware.js:35](../../server/src/middlewares/auth_middleware.js#L35) | <code>if (!header.startsWith('Bearer ')) {</code> | Authorization: Bearer başlığı yoksa 401 "Yetkisiz erisim." |
-| [server/src/middlewares/auth_middleware.js:7](../../server/src/middlewares/auth_middleware.js#L7) | <code>function isTokenVerificationError(error) {</code> | Yalnızca imza/süre/biçim hataları 401 sayılır; DB/yapılandırma hatası 5xx olur |
-| [server/src/middlewares/auth_middleware.js:45](../../server/src/middlewares/auth_middleware.js#L45) | <code>return res.status(401).json({ error: 'Gecersiz veya suresi dolmus token.' });</code> | 401 yanıtının üretildiği satır |
-| [server/src/jwt.js:113](../../server/src/jwt.js#L113) | <code>export function verifyAccessToken(token) {</code> | HS256 doğrulaması; JWT_SECRET ile imzalanmış olmalı |
+| [server/src/middlewares/auth_middleware.js:36](../../server/src/middlewares/auth_middleware.js#L36) | <code>if (!header.startsWith('Bearer ')) {</code> | Authorization: Bearer başlığı yoksa 401 "Yetkisiz erisim." |
+| [server/src/middlewares/auth_middleware.js:8](../../server/src/middlewares/auth_middleware.js#L8) | <code>function isTokenVerificationError(error) {</code> | Yalnızca imza/süre/biçim hataları 401 sayılır; DB/yapılandırma hatası 5xx olur |
+| [server/src/middlewares/auth_middleware.js:46](../../server/src/middlewares/auth_middleware.js#L46) | <code>return res.status(401).json({ error: 'Gecersiz veya suresi dolmus token.' });</code> | 401 yanıtının üretildiği satır |
+| [server/src/jwt.js:123](../../server/src/jwt.js#L123) | <code>export function verifyAccessToken(token) {</code> | HS256 doğrulaması; JWT_SECRET ile imzalanmış olmalı |
 | [server/src/jwt.js:19](../../server/src/jwt.js#L19) | <code>export const DEFAULT_JWT_EXPIRES_IN = '30d';</code> | Token ömrü varsayılan 30 gün (JWT_EXPIRES_IN ile değişir) |
 | [server/src/jwt.js:30](../../server/src/jwt.js#L30) | <code>function getJwtSecret() {</code> | JWT_SECRET boş/yer tutucuysa hata fırlatır (imzalama/doğrulama 500 olur) |
 
@@ -343,8 +343,8 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 200 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/middlewares/auth_middleware.js:103](../../server/src/middlewares/auth_middleware.js#L103) | <code>if (!isPasswordVersionValid(claims, passwordHash)) {</code> | Token'daki pv claim'i güncel parola özetiyle uyuşmuyorsa reddedilir |
-| [server/src/middlewares/auth_middleware.js:106](../../server/src/middlewares/auth_middleware.js#L106) | <code>.json({ error: 'Oturum gecersiz. Lutfen tekrar giris yapin.', code: 'TOKEN_REVOKED' });</code> | 401 gövdesindeki code alanı (istemci bunu görünce çıkış yapar) |
+| [server/src/middlewares/auth_middleware.js:116](../../server/src/middlewares/auth_middleware.js#L116) | <code>if (!isPasswordVersionValid(claims, passwordHash)) {</code> | Token'daki pv claim'i güncel parola özetiyle uyuşmuyorsa reddedilir |
+| [server/src/middlewares/auth_middleware.js:119](../../server/src/middlewares/auth_middleware.js#L119) | <code>.json({ error: 'Oturum gecersiz. Lutfen tekrar giris yapin.', code: 'TOKEN_REVOKED' });</code> | 401 gövdesindeki code alanı (istemci bunu görünce çıkış yapar) |
 | [server/src/jwt.js:49](../../server/src/jwt.js#L49) | <code>export function passwordVersionOf(passwordHash) {</code> | pv = parola özetinden türetilen kısa geri çevrilemez parmak izi |
 | [server/src/jwt.js:62](../../server/src/jwt.js#L62) | <code>export function isPasswordVersionValid(claims, passwordHash) {</code> | pv claim'i olmayan eski tokenlar süresi dolana dek geçerli kalır |
 | [server/src/routes/auth_routes.js:526](../../server/src/routes/auth_routes.js#L526) | <code>password_reset_token_hash = NULL,</code> | Şifre sıfırlama parola özetini değiştirir -> o hesabın tüm pv'li tokenları düşer |
@@ -368,9 +368,9 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 200 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/middlewares/auth_middleware.js:53](../../server/src/middlewares/auth_middleware.js#L53) | <code>return res.status(401).json({ error: 'Gecersiz token.' });</code> | Token sub alanı geçerli bir pozitif tamsayı değilse 401 |
-| [server/src/middlewares/auth_middleware.js:57](../../server/src/middlewares/auth_middleware.js#L57) | <code>// Rol / aktiflik / onay durumu HER istekte DB'den TAZE okunur (token'daki role guvenilme…</code> | Rol/aktiflik her istekte users tablosundan okunur; token'daki rol önemsizdir |
-| [server/src/middlewares/auth_middleware.js:86](../../server/src/middlewares/auth_middleware.js#L86) | <code>return res.status(401).json({ error: 'Kullanici bulunamadi.' });</code> | users satırı yoksa 401 |
+| [server/src/middlewares/auth_middleware.js:54](../../server/src/middlewares/auth_middleware.js#L54) | <code>return res.status(401).json({ error: 'Gecersiz token.' });</code> | Token sub alanı geçerli bir pozitif tamsayı değilse 401 |
+| [server/src/middlewares/auth_middleware.js:58](../../server/src/middlewares/auth_middleware.js#L58) | <code>// Rol / aktiflik / onay durumu HER istekte DB'den TAZE okunur (token'daki role guvenilme…</code> | Rol/aktiflik her istekte users tablosundan okunur; token'daki rol önemsizdir |
+| [server/src/middlewares/auth_middleware.js:99](../../server/src/middlewares/auth_middleware.js#L99) | <code>return res.status(401).json({ error: 'Kullanici bulunamadi.' });</code> | users satırı yoksa 401 |
 | [server/src/routes/admin_routes.js:544](../../server/src/routes/admin_routes.js#L544) | <code>adminRouter.delete('/admin/users/:id', authRequired, requireSuperUser, async (req, res) =…</code> | Süper kullanıcının hesabı sildiği uç; silinen kullanıcının token'ı artık 401 alır |
 
 **Olası nedenler**
@@ -390,8 +390,8 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 200 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/middlewares/auth_middleware.js:112](../../server/src/middlewares/auth_middleware.js#L112) | <code>return res.status(403).json({ error: 'Hesap aktif degil.' });</code> | authRequired her istekte is_active kontrol eder (token geçerli olsa da) |
-| [server/src/middlewares/auth_middleware.js:115](../../server/src/middlewares/auth_middleware.js#L115) | <code>return res.status(403).json({ error: 'E-posta adresiniz dogrulanmadi.' });</code> | email_verified = FALSE ise tüm korumalı uçlar 403 |
+| [server/src/middlewares/auth_middleware.js:151](../../server/src/middlewares/auth_middleware.js#L151) | <code>return res.status(403).json({ error: 'Hesap aktif degil.' });</code> | authRequired her istekte is_active kontrol eder (token geçerli olsa da) |
+| [server/src/middlewares/auth_middleware.js:154](../../server/src/middlewares/auth_middleware.js#L154) | <code>return res.status(403).json({ error: 'E-posta adresiniz dogrulanmadi.' });</code> | email_verified = FALSE ise tüm korumalı uçlar 403 |
 | [server/src/routes/auth_routes.js:1027](../../server/src/routes/auth_routes.js#L1027) | <code>await rotateLocalControlTokensForUserAccess(userCode, 'user_deactivated');</code> | Kullanıcı kendini pasif yapınca cihazların yerel kontrol tokenı döndürülür |
 | [server/src/routes/admin_routes.js:517](../../server/src/routes/admin_routes.js#L517) | <code>return res.status(400).json({ error: 'Kendi hesabinizi pasif yapamazsiniz.' });</code> | Aktivasyon ucunda süper kullanıcı kendi hesabını pasif yapamaz (ilk eşleşme PATCH /admin/users/:id içindedir) |
 
@@ -413,8 +413,8 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 200 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/middlewares/auth_middleware.js:7](../../server/src/middlewares/auth_middleware.js#L7) | <code>function isTokenVerificationError(error) {</code> | DB kesintisi/yapılandırma hatası token hatası sayılmaz -> 401 değil next(error) -> 500 |
-| [server/src/middlewares/auth_middleware.js:58](../../server/src/middlewares/auth_middleware.js#L58) | <code>const result = await pool.query(</code> | Her istekte users sorgusu: veritabanı yoksa tüm korumalı uçlar hata verir |
+| [server/src/middlewares/auth_middleware.js:8](../../server/src/middlewares/auth_middleware.js#L8) | <code>function isTokenVerificationError(error) {</code> | DB kesintisi/yapılandırma hatası token hatası sayılmaz -> 401 değil next(error) -> 500 |
+| [server/src/middlewares/auth_middleware.js:59](../../server/src/middlewares/auth_middleware.js#L59) | <code>const result = await pool.query(</code> | Her istekte users sorgusu: veritabanı yoksa tüm korumalı uçlar hata verir |
 | [server/src/middlewares/error_handler.js:119](../../server/src/middlewares/error_handler.js#L119) | <code>export function createErrorHandler({ logger = console } = {}) {</code> | Global hata yakalayıcı: 5xx'te genel mesaj + errorId, ayrıntı yalnız günlükte |
 | [server/src/routes/firmware_routes.js:95](../../server/src/routes/firmware_routes.js#L95) | <code>firmwareRouter.get('/health', async (_req, res) =&gt; {</code> | /health veritabanı bağlantısını denetler (kopuksa 500 database: disconnected) |
 
@@ -445,8 +445,8 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 100 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/middlewares/auth_middleware.js:138](../../server/src/middlewares/auth_middleware.js#L138) | <code>export function requireSuperUser(req, res, next) {</code> | Rol DB'den taze okunan req.authUser.role === super_user olmalı |
-| [server/src/middlewares/auth_middleware.js:142](../../server/src/middlewares/auth_middleware.js#L142) | <code>.json({ error: 'Bu islem icin super user yetkisi gerekir.' });</code> | 403 yanıtı |
+| [server/src/middlewares/auth_middleware.js:177](../../server/src/middlewares/auth_middleware.js#L177) | <code>export function requireSuperUser(req, res, next) {</code> | Rol DB'den taze okunan req.authUser.role === super_user olmalı |
+| [server/src/middlewares/auth_middleware.js:181](../../server/src/middlewares/auth_middleware.js#L181) | <code>.json({ error: 'Bu islem icin super user yetkisi gerekir.' });</code> | 403 yanıtı |
 | [server/src/routes/admin_routes.js:219](../../server/src/routes/admin_routes.js#L219) | <code>adminRouter.get('/admin/users', authRequired, requireSuperUser, async (req, res) =&gt; {</code> | /admin/* uçlarının tamamı authRequired + requireSuperUser kullanır (örnek: kullanıcı listesi) |
 
 **Olası nedenler**
@@ -466,8 +466,8 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 100 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/middlewares/auth_middleware.js:147](../../server/src/middlewares/auth_middleware.js#L147) | <code>export async function requireSiteManager(req, res, next) {</code> | Geçiş: rol site_manager/super_user VEYA site_manager_sites kaydı VEYA aktif SITE_OWNER/SITE_ADMIN üyeliği |
-| [server/src/middlewares/auth_middleware.js:171](../../server/src/middlewares/auth_middleware.js#L171) | <code>.json({ error: 'Bu islem icin site yoneticisi yetkisi gerekir.' });</code> | Hiçbiri yoksa 403 |
+| [server/src/middlewares/auth_middleware.js:186](../../server/src/middlewares/auth_middleware.js#L186) | <code>export async function requireSiteManager(req, res, next) {</code> | Geçiş: rol site_manager/super_user VEYA site_manager_sites kaydı VEYA aktif SITE_OWNER/SITE_ADMIN üyeliği |
+| [server/src/middlewares/auth_middleware.js:210](../../server/src/middlewares/auth_middleware.js#L210) | <code>.json({ error: 'Bu islem icin site yoneticisi yetkisi gerekir.' });</code> | Hiçbiri yoksa 403 |
 | [server/src/services/site_service.js:325](../../server/src/services/site_service.js#L325) | <code>export async function hasSiteManagementAccess(authUser, siteCode) {</code> | Belirli bir site için yetki: super_user, site_manager_sites ya da SITE_OWNER/SITE_ADMIN üyeliği |
 | [server/src/routes/manager_routes.js:234](../../server/src/routes/manager_routes.js#L234) | <code>return res.status(403).json({ error: 'Bu siteyi yonetme yetkiniz yok.' });</code> | Site bazlı yetki yoksa uçlar bu mesajla 403 döner |
 
@@ -1709,9 +1709,9 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 500 --nostrea
 | --- | --- | --- |
 | [server/src/routes/manager_routes.js:784](../../server/src/routes/manager_routes.js#L784) | <code>managerRouter.post('/manager/apartments/:id/send-credentials', authRequired, requireSiteM…</code> | Yönetici ucu; hata eşlemesi (400/500) burada |
 | [server/src/routes/admin_routes.js:1446](../../server/src/routes/admin_routes.js#L1446) | <code>adminRouter.post('/admin/apartments/:id/send-credentials', authRequired, requireSuperUser…</code> | Süper kullanıcı eşdeğeri |
-| [server/src/services/apartment_service.js:478](../../server/src/services/apartment_service.js#L478) | <code>export async function sendApartmentCredentials(apartmentId, { pinCode = null } = {}) {</code> | e-posta, kullanıcı adı ve PIN'in üçü de dolu olmalı |
-| [server/src/services/apartment_service.js:484](../../server/src/services/apartment_service.js#L484) | <code>throw new Error('APARTMENT_EMAIL_REQUIRED');</code> | Dairede resident_email boş (e-posta alanı kaydedilmemiş) |
-| [server/src/services/apartment_service.js:487](../../server/src/services/apartment_service.js#L487) | <code>throw new Error('APARTMENT_CREDENTIALS_NOT_READY');</code> | login_name boş (sakin hesabı oluşturulmamış). Migration 051: PIN saklanmadığı için eski uç PIN verilmezse 409 APARTMENT_PIN_NOT_STORED döner; yeni PIN reset-pin ile verilir |
+| [server/src/services/apartment_service.js:481](../../server/src/services/apartment_service.js#L481) | <code>export async function sendApartmentCredentials(apartmentId, { pinCode = null } = {}) {</code> | e-posta, kullanıcı adı ve PIN'in üçü de dolu olmalı |
+| [server/src/services/apartment_service.js:487](../../server/src/services/apartment_service.js#L487) | <code>throw new Error('APARTMENT_EMAIL_REQUIRED');</code> | Dairede resident_email boş (e-posta alanı kaydedilmemiş) |
+| [server/src/services/apartment_service.js:490](../../server/src/services/apartment_service.js#L490) | <code>throw new Error('APARTMENT_CREDENTIALS_NOT_READY');</code> | login_name boş (sakin hesabı oluşturulmamış). Migration 051: PIN saklanmadığı için eski uç PIN verilmezse 409 APARTMENT_PIN_NOT_STORED döner; yeni PIN reset-pin ile verilir |
 | [server/src/mailer.js:163](../../server/src/mailer.js#L163) | <code>export async function sendApartmentCredentialsEmail({</code> | SMTP gönderimi; başarısızlık 500 + error_id ile döner |
 
 **Olası nedenler**
@@ -1741,10 +1741,10 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 500 --nostrea
 | [server/src/routes/manager_routes.js:685](../../server/src/routes/manager_routes.js#L685) | <code>managerRouter.patch('/manager/apartments/:id/resident', authRequired, requireSiteManager,…</code> | Sakin kaydetme: yetki (hasSiteManagementAccess) + doğrulama + provisionApartmentResident |
 | [server/src/routes/manager_routes.js:754](../../server/src/routes/manager_routes.js#L754) | <code>managerRouter.delete('/manager/apartments/:id/resident', authRequired, requireSiteManager…</code> | Sakin sıfırlama ucu |
 | [server/src/utils/validators.js:267](../../server/src/utils/validators.js#L267) | <code>export function validateApartmentResidentInput({</code> | Ad >= 3, parola 4 haneli sayı, e-posta ve telefon biçimi |
-| [server/src/services/apartment_service.js:298](../../server/src/services/apartment_service.js#L298) | <code>passwordError.code = 'APARTMENT_PASSWORD_REQUIRED';</code> | YENİ sakin için 4 haneli sayısal şifre zorunlu; mevcut sakin düzenlemede boş şifre "değiştirme" sayılır |
-| [server/src/services/apartment_service.js:118](../../server/src/services/apartment_service.js#L118) | <code>export async function ensureUniqueLoginName({</code> | login_name çakışırsa _2, _3... eklenir; 100 denemede bulunamazsa APARTMENT_LOGIN_GENERATION_FAILED (500) |
-| [server/src/services/apartment_service.js:341](../../server/src/services/apartment_service.js#L341) | <code>const isInternalAccount = existingUserRes.rowCount &gt; 0 &amp;&amp; existingEmail.endsWith('@ahbu.l…</code> | Ad/e-posta/kullanıcı adı yalnız dahili hesapta güncellenir; üyelikle gelen gerçek kullanıcı ezilmez |
-| [server/src/services/apartment_service.js:388](../../server/src/services/apartment_service.js#L388) | <code>export async function resetApartmentResident(apartmentId, db = pool) {</code> | Sıfırlama: yalnız @ahbu.local hesabı SİLİNİR; gerçek kullanıcı hesabı silinmez, yalnız daire bağı kaldırılır |
+| [server/src/services/apartment_service.js:301](../../server/src/services/apartment_service.js#L301) | <code>passwordError.code = 'APARTMENT_PASSWORD_REQUIRED';</code> | YENİ sakin için 4 haneli sayısal şifre zorunlu; mevcut sakin düzenlemede boş şifre "değiştirme" sayılır |
+| [server/src/services/apartment_service.js:121](../../server/src/services/apartment_service.js#L121) | <code>export async function ensureUniqueLoginName({</code> | login_name çakışırsa _2, _3... eklenir; 100 denemede bulunamazsa APARTMENT_LOGIN_GENERATION_FAILED (500) |
+| [server/src/services/apartment_service.js:344](../../server/src/services/apartment_service.js#L344) | <code>const isInternalAccount = existingUserRes.rowCount &gt; 0 &amp;&amp; existingEmail.endsWith('@ahbu.l…</code> | Ad/e-posta/kullanıcı adı yalnız dahili hesapta güncellenir; üyelikle gelen gerçek kullanıcı ezilmez |
+| [server/src/services/apartment_service.js:391](../../server/src/services/apartment_service.js#L391) | <code>export async function resetApartmentResident(apartmentId, db = pool) {</code> | Sıfırlama: yalnız @ahbu.local hesabı SİLİNİR; gerçek kullanıcı hesabı silinmez, yalnız daire bağı kaldırılır |
 
 **Olası nedenler**
 - Yeni sakinde şifre 4 haneli rakam değil (400, code APARTMENT_PASSWORD_REQUIRED)

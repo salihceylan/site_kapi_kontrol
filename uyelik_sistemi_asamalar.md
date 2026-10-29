@@ -19,19 +19,22 @@
 ---
 
 ### [ÜYELİK SİSTEMİ AŞAMA 2] — Bireysel Kullanıcı Kaydı & 4 Haneli E-posta Doğrulama
-* **Kapsam:** Self-service kayıt ekranı (Ad, Soyad, E-posta, Şifre, Şifre Tekrar). Kayıt sonrası e-postaya 4 haneli sayısal kod (örn: `4837`) gönderimi ve doğrulama arayüzü. E-posta doğrulanmadan siteye katılma veya cihaz sahiplenme engeli.
-* **Test & Doğrulama:** Uygulamadan yeni bir hesap açılır; gelen 4 haneli kod girilerek hesap onaylanır.
+* **Kapsam:** Self-service kayıt ekranı (Ad, Soyad, E-posta, Şifre, Şifre Tekrar). Kayıt sonrası e-postaya 6 haneli sayısal kod (örn: `483712`) gönderimi ve doğrulama arayüzü. E-posta doğrulanmadan siteye katılma veya cihaz sahiplenme engeli.
+* **Güncel not (2026-10-28):** İlk sürüm 4 haneli koddu; kod 6 haneliye geçti (`VERIFICATION_CODE_DIGITS = 6`, 30 dk geçerli; `server/src/services/membership_rules.js`). Geçiş için 4 haneli biçim hâlâ kabul edilir. Doğrulanana kadar `users` satırı açılmaz (bekleyen kayıt; bkz. `docs/EPOSTA_DOGRULAMA.md`).
+* **Test & Doğrulama:** Uygulamadan yeni bir hesap açılır; gelen 6 haneli kod girilerek hesap onaylanır.
 
 ---
 
 ### [ÜYELİK SİSTEMİ AŞAMA 3] — Kutu QR Kodu ile Cihaz Sahiplenme (Device Claiming)
 * **Kapsam:** Doğrulanmış kullanıcının ana ekranındaki `Cihaz Ekle` butonu. Cihaz ambalaj kutusundaki `device_id` QR kodunu okutarak cihazı kendi hesabına bağlama akışı.
+* **Güncel not (2026-10-28):** Cihaz ekleme (kutu QR / seri no ile sahiplenme) artık yalnızca `super_user` ve `site_manager` içindir; sakin, bireysel kullanıcı, kurul ve görevli cihaz ekleyemez (sunucu 403 `DEVICE_ADD_FORBIDDEN`, istemci `lib/ui/helpers/device_add_gate.dart`).
 * **Test & Doğrulama:** ESP32 cihazının kutu QR'ı veya UID'si kamera ile okutularak cihaz kullanıcı hesabıyla başarıyla ilişkilendirilir.
 
 ---
 
 ### [ÜYELİK SİSTEMİ AŞAMA 4] — Dinamik Site, Blok ve Daire Yönetimi
 * **Kapsam:** Cihazı ekleyen kişinin otomatik `Site Sahibi (SITE_OWNER)` olması; site adı belirleme, dinamik blok ekleme (A Blok, B Blok...), blokların altına daireleri oluşturma ve düzenleme arayüzü.
+* **Güncel not (2026-10-28):** Bireysel ve daire hesapları için anlık site kurulumu kapatıldı: site kurmak için başvuru yapılır, süper kullanıcı onaylayınca site kurulur ve başvuran `site_manager` olur (409 `APPLICATION_REQUIRED`; bkz. `docs/PLATFORM_SITE_BASVURUSU.md`). Anlık kurulum yalnız `site_manager` ve `super_user` içindir; cihaz şartı yoktur.
 * **Test & Doğrulama:** Uygulama içinden yeni bir site kurulur; bloklar ve daireler arayüzden oluşturulup listelenir.
 
 ---

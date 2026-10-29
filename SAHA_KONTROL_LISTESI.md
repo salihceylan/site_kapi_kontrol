@@ -2634,7 +2634,7 @@ Dalga 2-6'nın ilk aşaması: çalışan şema, uçlar ve ekranlar. Dışarıdan
   - **Beklenen Sonuç:** Aynı dosyada satırlar 'değişiklik yok' sayılır ve yeni kayıt yazılmaz. Tutarı değişen satır 'farklı bir devir kaydı var, önce geri alın' hatası verir.
 - [ ] **89.9. Kiracı hesabına devir, eksi ve sıfır tutar (F30.09):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. Dosyada bir satırın Hesap sütununa Kiracı yazın; bir satıra -50, bir satıra 0 yazın; önizlemeye bakın.
-  - **Beklenen Sonuç:** Kiracı satırında dairede kiracı yoksa uyarı çıkar. Eksi tutar artık hata değildir: alacaklı devir olarak kabul edilir ve önizlemede "alacaklı kayıt" sayısı görünür (bkz. 131). Sıfır tutar uyarıyla atlanır. 'Hatalı satır varsa aktarma' varsayılan açıktır.
+  - **Beklenen Sonuç:** Kiracı satırında dairede kiracı yoksa uyarı çıkar. Eksi tutar artık hata değildir: alacaklı devir olarak kabul edilir ve önizlemede "alacaklı kayıt" sayısı görünür (bkz. 139). Sıfır tutar uyarıyla atlanır. 'Hatalı satır varsa aktarma' varsayılan açıktır.
 - [ ] **89.10. Devir yüklemesini geri alma (F30.10):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. Finans > Daireler > Devir bakiyesi penceresinde bir yüklemenin yanındaki Geri al'a dokunun. Neden yazıp onaylayın.
   - **Beklenen Sonuç:** Kaç kayıt ve ne kadar tutarda ters kayıt yazılacağı gösterilir (devirden sonra tahsilat varsa uyarı çıkar). Onaydan sonra bakiyeler eski hâline döner, yükleme 'Geri alındı' görünür. İkinci kez geri alınamaz.
@@ -2799,7 +2799,7 @@ Dalga 2-6'nın ilk aşaması: çalışan şema, uçlar ve ekranlar. Dışarıdan
   - **Beklenen Sonuç:** Önizlemede her dairenin tüketimi ve tutarı (tüketim x 45,50) ve toplam görünür. Onayla borç oturanın hesabına (kiracı varsa kiracı) yazılır. Aynı aralık tekrar faturalandırılmak istenirse 'çakışıyor' uyarısı gelir; eksik okumalı daire varsa uyarıyla listelenir.
 - [ ] **89.64. Isı payı dağıtımı (F32.10):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. Isı sayaçları olan daireler için Faturalandır'da tür Isı, yöntem 'Isı payı (ölçüm + alan payı)' seçin, toplam gideri girip Önizle'ye basın. Bir dairenin arsa payını boş bırakıp önizlemeyi yeniden alın. (Ayrıntılı kontrol: 109.6.)
-  - **Beklenen Sonuç:** Yöntem adında ve ekranda m² geçmez. Gider %70 tüketime, %30 alan payına göre paylaşılır ve toplam girilen tutara eşittir. Alan payı "Alan payı tabanı" seçicisindeki seçime göre dağıtılır: Eşit (varsayılan; arsa payı tanımlı olsa bile arsa payına geçilmez), Arsa payı ya da Kişi sayısı. Seçilen tabanın verisi eksik daire eşit paya düşürülmez, 'eksik' listesine girer (bkz. 130.3).
+  - **Beklenen Sonuç:** Yöntem adında ve ekranda m² geçmez. Gider %70 tüketime, %30 alan payına göre paylaşılır ve toplam girilen tutara eşittir. Alan payı "Alan payı tabanı" seçicisindeki seçime göre dağıtılır: Eşit (varsayılan; arsa payı tanımlı olsa bile arsa payına geçilmez), Arsa payı ya da Kişi sayısı. Seçilen tabanın verisi eksik daire eşit paya düşürülmez, 'eksik' listesine girer (bkz. 138.3).
 - [ ] **89.65. Kurul üyesi salt okuma (F32.11):**
   - **Nasıl Test Edilir:** Rol: Kurul üyesi. Kurul üyesi olarak Sayaçlar'ı açın; sakin ya da görevli hesabında menüye bakın.
   - **Beklenen Sonuç:** Kurul üyesi sayaç ve geçmiş faturalandırmaları görür ama ekle/sil/aktar/borçlandır düğmesi yoktur. Sakin ve görevli menüde Sayaçlar'ı görmez.
@@ -3271,7 +3271,7 @@ Dalga 2-6'nın ikinci aşaması: dekont bildirimi, banka dosyasından tahsilat, 
 
 - [ ] **107.1. Aidat / Borç Tanımında Metrekare Dağıtım Seçeneğinin Bulunmaması:**
   - **Nasıl Test Edilir:** Finans / Aidat Tanımları sayfasına gidin ve "Yeni Tanım Ekle" butonuna tıklayın. Dağıtım yöntemi seçeneklerini inceleyin.
-  - **Beklenen Sonuç:** Dağıtım yöntemleri arasında "Metrekareye göre" seçeneği KESİNLİKLE YER ALMAMALIDIR. Yalnızca "Eşit" (ön seçili), "Sabit tutar", "Kategoriye göre", "Arsa payına göre" ve "Kişi sayısına göre" seçenekleri bulunmalıdır (2026-10-29: Kişi sayısı eklendi, bkz. 130).
+  - **Beklenen Sonuç:** Dağıtım yöntemleri arasında "Metrekareye göre" seçeneği KESİNLİKLE YER ALMAMALIDIR. Yalnızca "Eşit" (ön seçili), "Sabit tutar", "Kategoriye göre", "Arsa payına göre" ve "Kişi sayısına göre" seçenekleri bulunmalıdır (2026-10-29: Kişi sayısı eklendi, bkz. 138).
 - [ ] **107.2. Formda Metrekare Türü (Brüt m² / Net m²) Alanının Görünmemesi:**
   - **Nasıl Test Edilir:** Yeni Aidat Tanımı veya Düzenleme formundaki tüm alanları inceleyin.
   - **Beklenen Sonuç:** Formda hiçbir yerde "Metrekare türü", "Brüt m²", "Net m²" seçim veya giriş alanı yer almamalı; form hatasız şekilde kaydedilebilmelidir.
@@ -3323,7 +3323,7 @@ Dalga 2-6'nın ikinci aşaması: dekont bildirimi, banka dosyasından tahsilat, 
   - **Beklenen Sonuç:** Her iki hesapta da sunucu hatası çıkmaz; "Dekont gönderildi. Yönetim inceleyince borcunuzdan düşer." görünür, Borcum kartında "İnceleniyor: ..." satırı belirir. Yönetici Finans > Dekontlar sekmesinde bildirimi doğru daire ve hesap (ev sahibi/kiracı) bilgisiyle görür; ikinci bildirimde "olası çift ödeme" uyarısı (onay öncesi işaretlenmesi gereken uyarı) çıkar.
 - [ ] **109.6. Isınma Faturalandırma Önizlemesi (Alan Payı):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. Isı sayaçlı 3-4 dairede aynı dönem için eşit tüketimli okumalar girin. Faturalandır'da tür Isı, yöntem "Isı payı" seçip toplam gideri girin ve Önizle'ye basın. Sonra tüm bu dairelerin arsa payını (Kişiler > Daireler > Düzenle > Gelişmiş bilgiler; farklı paylar, aynı payda, örn. /1000) girip yeniden önizleyin; ardından birinin arsa payını silip tekrar önizleyin.
-  - **Beklenen Sonuç:** Taban seçilmezse (varsayılan Eşit) arsa payı tanımlı olsa bile %30'luk alan payı herkese eşit bölünür. "Alan payı tabanı" Arsa payı seçilince alan payı arsa payına orantılı olur (daireler arası tutarlar farklılaşır); arsa payı eksik daire "arsa payı tanımlı değil" diye eksik listesine girer ve "Verisi eksik daireleri atla" işaretlenmedikçe Borçlandır reddedilir (sessiz eşit paya düşme yoktur). Satır toplamı girilen gider tutarına birebir eşittir (bkz. 130.3).
+  - **Beklenen Sonuç:** Taban seçilmezse (varsayılan Eşit) arsa payı tanımlı olsa bile %30'luk alan payı herkese eşit bölünür. "Alan payı tabanı" Arsa payı seçilince alan payı arsa payına orantılı olur (daireler arası tutarlar farklılaşır); arsa payı eksik daire "arsa payı tanımlı değil" diye eksik listesine girer ve "Verisi eksik daireleri atla" işaretlenmedikçe Borçlandır reddedilir (sessiz eşit paya düşme yoktur). Satır toplamı girilen gider tutarına birebir eşittir (bkz. 138.3).
 - [ ] **109.7. Banka Ekstresini Aynı Dosyayı İki Biçimde Yükleme:**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. Finans > Kasa > banka hesabı > "Banka dosyası yükle" ile bir ekstreyi (banka referans numaralı satırlar içeren) önce PDF, sonra aynı ekstrenin XLSX/CSV biçimiyle yükleyin; ilk yüklemedeki satırları "Banka Ödemeleri ve Daire Onayları"ndan onaylamış olun. Birebir aynı dosyayı bir kez daha yüklemeyi de deneyin.
   - **Beklenen Sonuç:** Aynı dosya "Bu dosya bu hesaba daha önce yüklenmiş." der. İkinci biçimde referanslı satırlar yinelenen sayılır, yeni satır ya da ikinci tahsilat oluşmaz. Yine de "yeni" görünüp aynı daire, hesap, tutar ve tarihte başka bir banka satırının tahsilatıyla çakışan satır otomatik tahsil EDİLMEZ; onay ekranında "Aynı tutar ve tarihte başka bir banka satırının tahsilatı var; çift tahsilat olmasın diye kontrol edin." uyarısıyla bekler (gerçekten iki ayrı havale ise yönetici onaylar).
@@ -3388,7 +3388,7 @@ Dalga 2-6'nın ikinci aşaması: dekont bildirimi, banka dosyasından tahsilat, 
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. Finans > Tanımlar > "Yeni Tanım"ı açın (dar ekranda ve büyük yazıda da bakın). Aylık / Tek seferlik arasında geçiş yapın. Sonra Finans > Daireler (bakiyeler) ekranından "Ek Borç Ekle"yi açın; önizleyip yazın. Borçlandırılmış bir tanımı "Düzenle" ile açın.
   - **Beklenen Sonuç:** "Kim öder" yoktur; "Kasa" altında iki satır görünür: "İşletme Projesi (Aidat) Hesabı — dairede oturan öder (kiracı varsa kiracı)" ve "Yatırım ve Demirbaş (Fon) Hesabı — malik öder". Aylık tanımda Aidat Hesabı, tek seferlikte ve ek borçta Fon Hesabı önseçilidir. Tanım kartında "Kasa: ..." satırı yazar. Borçlandırılmış tanımda kasa değişir ve "yalnız sonraki borçlandırmalara uygulanır" notu görünür. Taşma olmaz.
 - [ ] **112.2. Tahsilatta "Kasa" Alanı ve Dağılımın Gösterilmesi:**
-  - **Nasıl Test Edilir:** Hem aidat (Aidat Hesabı) hem de katkı payı (Fon Hesabı) borcu olan bir dairenin ekstresinden "Tahsilat Ekle"yi açın. Önce "Aidat Hesabı", sonra "Yatırım ve Demirbaş (Fon) Hesabı" seçerek ayrı ayrı tahsilat kaydedin (2026-10-29: iki türde borç varsa "Otomatik" yoktur, seçim zorunludur; bkz. 127). Bir tahsilatı "Düzelt"in.
+  - **Nasıl Test Edilir:** Hem aidat (Aidat Hesabı) hem de katkı payı (Fon Hesabı) borcu olan bir dairenin ekstresinden "Tahsilat Ekle"yi açın. Önce "Aidat Hesabı", sonra "Yatırım ve Demirbaş (Fon) Hesabı" seçerek ayrı ayrı tahsilat kaydedin (2026-10-29: iki türde borç varsa "Otomatik" yoktur, seçim zorunludur; bkz. 135). Bir tahsilatı "Düzelt"in.
   - **Beklenen Sonuç:** "İşletme / Fon hesabı" bölümünde iki tür borç açıksa yalnız iki seçenek vardır (Aidat Hesabı / Fon Hesabı) ve biri seçilmeden kayıt yazılmaz; tek tür borçta borçlu hesap seçili gelir, borç yoksa "Hesap seçmeden (genel avans)" seçilidir. Kayıttan sonra iletide "Dağıtım: Aidat Hesabı ... ₺, Fon Hesabı ... ₺, avans ... ₺" yazar. Ekstrede kısıtlı tahsilat "Yalnız Fon Hesabı" rozetiyle ve dağılım satırıyla görünür. Kısıtlı bir tahsilatı düzeltirken "Otomatik" sunulmaz ve kasa değiştirilmezse asıl kısıt korunur.
 - [ ] **112.3. Gider Formunda ve Kategorilerde "Kasa":**
   - **Nasıl Test Edilir:** Finans > Giderler > "Gider Ekle"de "Yatırım ve demirbaş" kategorisini seçin, sonra "Elektrik" gibi bir kategoriye geçin; kasaya dokunduktan sonra kategori değiştirin. "Kategori ve Tedarikçiler" penceresinde yeni kategori eklerken Fon Hesabı'nı seçin; hazır kategoriyi ve daha önce gideri olan bir kategoriyi düzenleyip kasayı değiştirmeyi deneyin.
@@ -3786,117 +3786,330 @@ Her sitenin iş takibi kategorileri artık site yöneticisi tarafından eklenir,
 - [ ] **126.6. Fotoğraf uyarısının gizliliği (F45.30):**
   - **Nasıl Test Edilir:** Rol: Daire sakini, Görevli, Kurul üyesi. Ön koşul: F45.29 sonrası; görevli ve kurul hesabı. Sakin hesabıyla F45.29'daki talebin ayrıntısına bakın. Görevli hesabıyla kendisine atanmamış (kapsam dışı) bir kayıtla eşleşen talebin ayrıntısına bakın. Yönetim kurulu hesabıyla aynı talebe bakın.
   - **Beklenen Sonuç:** Sakin ayrıntısında hiçbir fotoğraf uyarısı yoktur. Görevli kapsam dışı eşleşmeyi “#numara / konum” olmadan yalnızca sayı olarak görür. Kurul uyarıyı görür ama düğme görmez.
+## 127. 👨‍👩‍👧 Çoklu Malik: Tüm Malikler Kayıtlı, Tek Hesap Muhatabı (2026-10-29, karşılaştırma raporu P1-12, karar K7, migration 104)
 
-## 127. 💳 Ödemenin İşletme / Fon Hesabını Yönetici Seçer (2026-10-29, karşılaştırma raporu P1-3, karar K3)
+Bir dairede birden çok malik (eş, kardeş, mirasçı) kayıtlı olabilir; TAM BİRİ “hesap muhatabı”dır. Borç, tahakkuk, tahsilat, Borcum ekranı ve hatırlatmalar yalnız muhataba bağlıdır; diğer malikler “ortak malik” olarak kayıtlıdır (malik yetkisi ve borç görünümü yoktur). Daire kartında malik ekleme, muhatap değiştirme ve malik çıkarma eylemleri yalnız site yöneticisindedir. Veritabanı yükseltmesi (migration 104) mevcut tek maliki kayıpsız muhatap yapar; borç ve bakiye hesapları değişmez. Sürüm yayınlanınca denenir (maddeler “Denemeye hazır” görünse de sürüm yayınlanmadan uygulamada yoktur). Faz sayfasında bölüm F50 olarak da yer alır.
+
+- [ ] **127.1. Daireye ikinci malik ekleme (yeni kişi) (F50.01):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Tek malikli bir TEST dairesi. Kişiler > Daireler bölümünden bir daire kartını açın. “Malik ekle” > “Yeni kişi” seçin, yalnız ad soyad yazıp Ekle'ye basın.
+  - **Beklenen Sonuç:** Kartta iki malik görünür. İlk malikte “Hesap muhatabı” rozeti, “Malik (hesap muhatabı)” satırı ve açıklama bandı çıkar.
+- [ ] **127.2. Ekleme sırasında hesap muhatabını başka malike verme (F50.02):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Borcu olan bir TEST dairesi. “Malik ekle” penceresinde “Kayıtlı kişi” ile başka bir kişiyi seçin ve “Hesap muhatabı olsun” anahtarını açın. Aidat ve Finans > Bakiyeler'de o dairenin bakiyesine bakın.
+  - **Beklenen Sonuç:** Rozet yeni kişiye geçer. Dairenin bakiyesi DEĞİŞMEZ; yalnız Malik adı yeni muhatap olur.
+- [ ] **127.3. “Muhatap yap” (F50.03):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi / Daire sakini. Ön koşul: İki malikli daire; iki malikin de hesabı olsun. Muhatap olmayan malikte “Muhatap yap”a basın, onay penceresini onaylayın. Eski ve yeni muhatabın hesabıyla sırayla girip Borcum ve Dairem ekranlarına bakın.
+  - **Beklenen Sonuç:** Rozet taşınır. Eski muhatabın Borcum ekranı boşalır, yenisininki dolar. Dairem'de eski muhatap “Ortak malik” rolünde görünür ve hiçbir yönetim düğmesi yoktur.
+- [ ] **127.4. Maliki çıkarma kuralları (F50.04):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: 1, 2 ve 3+ malikli TEST daireleri. Muhatap olmayan maliki “Maliki çıkar” ile çıkarın. 3+ malikli dairede muhatabı çıkarmayı deneyin; 2 malikli dairede de deneyin. Tek malikli dairede “Maliki çıkar”ı deneyin.
+  - **Beklenen Sonuç:** Muhatap olmayan malik doğrudan çıkar (“Taşındı”). 3+ malikte muhatabı çıkarırken “Yeni hesap muhatabı” seçmeden Çıkar düğmesi basmaz. 2 malikte “Hesap muhatabı X olacak” bilgisi çıkar. Dairenin TEK maliki çıkarılamaz (kişi kartından Taşındı kullanılır).
+- [ ] **127.5. Kurul üyesi ve listeler (F50.05):**
+  - **Nasıl Test Edilir:** Rol: Yönetim kurulu üyesi. Ön koşul: Çoklu maliklı daire. Kurul üyesi hesabıyla aynı daire kartını açın. Daire listesine ve daire seçiciye bakın.
+  - **Beklenen Sonuç:** Rozet ve açıklama görünür; Malik ekle / Muhatap yap / Maliki çıkar düğmeleri YOKTUR. Listede ve seçicide “Malik: Ayşe Y. (+1 malik)” gibi yazar.
+- [ ] **127.6. Daire geçmişi (F50.06):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Daire geçmişi ekranını açın. Muhatap malike “Taşındı” işleyin.
+  - **Beklenen Sonuç:** “Malik eklendi”, “Malik çıkarıldı” ve “Hesap muhatabı değişti” satırları görünür. Muhatap Taşındı olunca otomatik devirde Sistem kaydı düşer.
+- [ ] **127.7. Toplu yükleme ve ilişki ekleme tek malikli kalır (F50.07):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Maliki olan bir daire. Toplu yükleme dosyasında aynı daireye ikinci bir malik yazın ve yükleyin. Kişi kartından “ilişki ekle” ile aynı daireye ikinci malik eklemeyi deneyin.
+  - **Beklenen Sonuç:** İkisi de “bu dairede zaten malik var” (409) verir. Bu bilinçlidir: ek malikler yalnız Daire kartındaki “Malik ekle”den eklenir.
+- [ ] **127.8. Hatırlatma ve makbuz muhataba gider (F50.08):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Borçlu, çoklu maliklı daire. Borç hatırlatması önizlemesini açın. Aynı daire için bir tahsilat girip makbuza bakın.
+  - **Beklenen Sonuç:** Hatırlatma alıcısı yalnız hesap muhatabıdır. Makbuzda ödeyen adı muhataptır.
+- [ ] **127.9. Yükseltme sonrası mevcut daireler (F50.09):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi / Daire sakini. Ön koşul: Yükseltme öncesi tek malikli, borçlu bir daire. Sürüm yükseltildikten sonra bu dairenin kartına, bakiyesine ve malikin Borcum ekranına bakın.
+  - **Beklenen Sonuç:** Malik “Hesap muhatabı” rozetiyle görünür; bakiye, borç kalemleri ve Borcum ekranı yükseltme öncesiyle aynıdır.
+
+## 128. 🧭 Site Kurulum Sihirbazı ve Listelerde “Excel'den Yükle” Kısayolu (2026-10-29, karşılaştırma raporu P2-15 ve P2-16)
+
+Yeni onaylanmış site için altı adımlı Site Kurulum Sihirbazı (Site bilgileri, Bloklar, Daireler, Kişiler, Modüller, Finans açılışı): mevcut ekranları adım adım açar, dönünce durumu sunucudan okur; yarım kalırsa kalınan adımdan sürer (kalınan adım ve “atlandı” bilgisi cihazda saklanır). Kişiler, Daireler ve Araçlar listelerinde “Excel'den yükle” kısayolu da eklendi. Yalnız istemci değişti (sunucu dağıtımı gerekmez; web ve APK yeniden derlenir). Site bilgisi ve blok düzenleme sunucuda yalnız süper kullanıcıya açıktır; site yöneticisinde bu iki adım salt gösterimdir. Sürüm yayınlanınca denenir (maddeler “Denemeye hazır” görünse de sürüm yayınlanmadan uygulamada yoktur). Faz sayfasında bölüm F51 olarak da yer alır.
+
+- [ ] **128.1. Onaydan sonra sihirbaza yönlendirme (F51.01):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Yeni onaylanmış bir TEST sitesi. Yeni onaylanan sitenin yöneticisiyle giriş yapın. Onay iletisindeki “Kuruluma başla”ya ve Panel'deki kuruluma ait karta bakın.
+  - **Beklenen Sonuç:** Panel'de “Site kurulumunu tamamlayın” kartı görünür. “Kuruluma başla” sihirbazı “Adım 4 / 6 · Kişiler” adımından açar; ilk üç adım “Tamam” görünür.
+- [ ] **128.2. Kişiler adımı: Excel'den yükleme (F51.02):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Kişiler adımında “Excel'den yükle”ye basın. Şablonu doldurup yükleyin ve sihirbaza dönün. “Kişileri tek tek ekle”ye basın.
+  - **Beklenen Sonuç:** Toplu Yükle sihirbazı “Hepsi bir arada” seçili açılır. Dönünce adım “Tamam” olur ve “N kişi kayıtlı” yazar. “Kişileri tek tek ekle” Kişiler ekranını Kişiler sekmesinde açar.
+- [ ] **128.3. Yarım bırakma ve kaldığı yerden devam (F51.03):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Sihirbazı ortada X ile kapatın (bir adımı “Atla” ile geçmiş olun). Panel'deki karta bakıp “Kuruluma devam et”e basın. “Şimdilik gizle”ye basın; sonra Site Yönetimi > “Kurulum Sihirbazı”nı açın.
+  - **Beklenen Sonuç:** “Site kurulumunuz yarım kaldı · N / 6 adım tamam” kartı çıkar; devam kaldığınız adımdan açılır; atladığınız adım “Atlandı” görünür. “Şimdilik gizle” kartı kaldırır, sihirbaz Site Yönetimi'nden yine açılır.
+- [ ] **128.4. Modüller adımı (F51.04):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi / Süper kullanıcı. Modüller adımına gelin; “Modülleri seç / talep et”e basın. Bir modül talep edip dönün. Aynısını süper kullanıcıyla deneyin.
+  - **Beklenen Sonuç:** Temel modüller “Her sitede açık” yazar. Modüller ekranı bu site seçili açılır; talep sayısı adımda görünür. Süper kullanıcıda düğme “Modülleri seç” olur ve modül doğrudan açılıp kapanır.
+- [ ] **128.5. Finans adımı (F51.05):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. “Aidat tanımı ekle”yi kaydedin. “Devir bakiyesi yükle” ve “Finans ekranını aç”a basın. İş merkezi türündeki bir sitede etiketlere bakın.
+  - **Beklenen Sonuç:** Tanım kaydedilince adım “Tamam” olur. Devir penceresi açılır; Finans ekranı Tanımlar sekmesinde açılır. İş merkezi türünde etiket “Ortak gider tanımı ekle” olur.
+- [ ] **128.6. Yetki: kim düzenleyebilir, kim görür (F51.06):**
+  - **Nasıl Test Edilir:** Rol: Süper kullanıcı / Site yöneticisi / Daire sakini / Kurul üyesi. Süper kullanıcıyla Site bilgileri ve Bloklar adımlarındaki düzenleme düğmelerini kullanın. Site yöneticisiyle aynı adımlara bakın. Daire sakini ve kurul üyesiyle sihirbazı arayın.
+  - **Beklenen Sonuç:** Süper kullanıcıda düzenleme düğmeleri çalışır. Site yöneticisinde düğmeler yoktur, “yalnızca sistem yöneticisi değiştirir” notu görünür. Sakin ve kurul üyesi sihirbazı hiçbir yerde görmez.
+- [ ] **128.7. “Excel'den yükle” liste kısayolları (F51.07):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi / Kurul üyesi. Kişiler ekranında Kişiler, Daireler ve Araçlar sekmelerindeki “Excel'den yükle” düğmesine basın. Boş bir Kişiler listesine bakın. Kurul üyesiyle aynı sekmelere bakın.
+  - **Beklenen Sonuç:** Kişiler ve Daireler Toplu Yükle'yi “Hepsi bir arada”, Araçlar “Araçlar” türüyle açar. Boş Kişiler listesinde yalnız boş durum kartındaki düğme görünür. Kurul üyesi bu düğmeleri görmez.
+- [ ] **128.8. Dar ekran, büyük yazı ve ekran okuyucu (F51.08):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Yazı boyutunu en büyüğe alıp sihirbazın altı adımına, özetine ve Panel kartına bakın (açık ve koyu tema). Ekran okuyucuyu açıp adım değiştirin.
+  - **Beklenen Sonuç:** Hiçbir ekranda taşma ya da kesilme olmaz. Ekran okuyucu adım değişince “Adım N / 6 · ...” başlığını okur.
+- [ ] **128.9. Hesap değişince kurulum kartı (F51.09):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: İki farklı yönetici hesabı. Kurulumu yarım bırakmış hesaptan çıkış yapın (ya da hesabı silin). Başka bir hesapla girip Panel'e bakın.
+  - **Beklenen Sonuç:** Kurulum kayıtları cihazdan silindiği için Panel'de eski hesabın kurulum kartı çıkmaz.
+
+## 129. 🚨 Acil Durum Akışı: 112, Yangın ve Asansör Arızası, Kuru Mod (2026-10-29, karşılaştırma raporu P2-24, karar K13, migration 107)
+
+Çekmecede “Ana sayfa” başlığı altında “Acil durum” ekranı: büyük “112'yi ara”, ayrı Yangın ve Asansör arızası hızlı düğmeleri, çağrı merkezinin soracakları ve aramada söylenecek site adı ile adres. Arama kanalı olmayan cihazda (masaüstü, web, telefonsuz tablet) KURU MOD çalışır: numaralar ve adres kopyalanabilir metindir ve uygulama hiçbir yerde “arandı” demez (telefon uygulaması yalnız açılır, aramayı kullanıcı başlatır). Asansör bakım firması adı ve telefonu site ayarı olarak yöneticide kaydedilir (migration 107). Çekirdek özelliktir: modül değildir, süper kullanıcı dışında herkeste görünür. Sunucu dağıtımı gerekir. Sürüm yayınlanınca denenir (maddeler “Denemeye hazır” görünse de sürüm yayınlanmadan uygulamada yoktur). Faz sayfasında bölüm F52 olarak da yer alır.
+
+- [ ] **129.1. 112 düğmesi (telefon) (F52.01):**
+  - **Nasıl Test Edilir:** Rol: Daire sakini. Ön koşul: Android telefon. Çekmece > Ana sayfa > “Acil durum” > büyük “112'yi ara”ya basın.
+  - **Beklenen Sonuç:** Telefon uygulaması 112 hazır olarak açılır; aramayı orada başlatırsınız. Ekranda “arandı” gibi bir durum YAZMAZ.
+- [ ] **129.2. Kuru mod (arama kanalı yok) (F52.02):**
+  - **Nasıl Test Edilir:** Rol: Daire sakini. Ön koşul: Windows masaüstü, tarayıcı ya da telefonsuz tablet. Acil durum ekranını açın. Yangın ve Asansör arızası kartlarına bakın; “Bilgileri kopyala”ya basın.
+  - **Beklenen Sonuç:** Sarı “Bu cihazdan arama başlatılamıyor” şeridi görünür; 112 yerine büyük numara ve “Numarayı kopyala” çıkar. Panoya numara, adres ve sorular kopyalanır.
+- [ ] **129.3. Yangın düğmesi (F52.03):**
+  - **Nasıl Test Edilir:** Rol: Daire sakini / Site yöneticisi. Ön koşul: Adresi kayıtlı ve kayıtsız iki site. “Yangın”a basın.
+  - **Beklenen Sonuç:** “Yangın var.” cümlesi, site adı ve adres (Site Yönetimi'ndeki kayıtla aynı), 5 soru ve güvenlik yönlendirmesi görünür. Adres kayıtlı değilse yöneticide “Site Yönetimi'nden ekleyin”, sakinde “kendiniz söyleyin” yazar.
+- [ ] **129.4. Birden çok siteli kullanıcı (F52.04):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi / Daire sakini. Ön koşul: İki ayrı sitede üyeliği olan hesap. “Hangi site için?” seçicisiyle siteyi değiştirin. Çekmecedeki site seçiciyle bir site seçip Acil durum'u açın.
+  - **Beklenen Sonuç:** Adres ve bakım firması seçilen siteye göre değişir; önceki sitenin izi kalmaz. Acil durum, çekmecede seçili siteyle açılır.
+- [ ] **129.5. Asansör bakım firması ekleme, düzenleme, kaldırma (F52.05):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi / Daire sakini. Ön koşul: Aynı sitenin yöneticisi ve sakini. Yöneticiyle Acil durum > Asansör arızası > “Bakım firmasını ekle” (ad ve telefon, örnek 444 1 234) ile kaydedin; düzenleyin; kaldırın. Aynı sitenin sakin hesabıyla Asansör arızası'na bakın; sakin moduna geçip yöneticide düzenleme düğmesini arayın.
+  - **Beklenen Sonuç:** Kayıttan sonra firma kartı çıkar; sakin hesabında “Bakım firmasını ara” görünür. Sakin modunda düzenleme düğmesi yoktur.
+- [ ] **129.6. Bakım firması kayıtlı değilken (F52.06):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi / Daire sakini / Kurul üyesi / Görevli. Ön koşul: Firması kayıtsız site. Her rolle Asansör arızası'nı açın.
+  - **Beklenen Sonuç:** Yönetici “Ekleyin” ipucunu ve ekleme düğmesini; sakin, kurul ve görevli “Site yönetiminden isteyin” ipucunu görür. Her ikisinde 112 kartı vardır.
+- [ ] **129.7. İnternet yokken (F52.07):**
+  - **Nasıl Test Edilir:** Rol: Daire sakini. Ön koşul: Uçak modu açık telefon. Uçak modunda Acil durum'u açın; sonra interneti açıp “Tekrar Dene”ye basın.
+  - **Beklenen Sonuç:** Sayfa açılır ve 112 çalışır; site adresi için “alınamadı” + “Tekrar Dene” çıkar. İnternet gelince adres dolar.
+- [ ] **129.8. Denetim kaydı, vitrin ve yardım (F52.08):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Bakım firmasını kaydedin; Denetim Kaydı'na (süper kullanıcı) ve İşlem Kayıtları'na bakın. Panel vitrinine ve Yardım ve Destek'e bakın.
+  - **Beklenen Sonuç:** “Acil durum bilgisi güncellendi” satırı görünür (telefon numarası yazılmaz). Vitrinde “Acil durum” kartı, Yardım'da “Acil durumda ne yapmalıyım?” konusu vardır.
+
+## 130. 🎟️ Tek Kullanımlık Deneme Erişim Kodu: 72 Saat, Demo Siteye Kilitli (2026-10-29, karşılaştırma raporu P2-27, karar K10, migration 106)
+
+Tanıtım denemesi için tek kullanımlık kod: kodla açılan oturum 72 saat sürer ve YALNIZ işaretli demo siteye kilitlidir (başka sitelere, parola/e-posta değiştirmeye, dış e-posta veya SMS gönderen ve donanıma dokunan işlemlere kapalıdır; demo sitenin kendi verisinde işlem serbesttir). Kod sunucuda `node scripts/trial_code.mjs` ile üretilir ve ekranda BİR KEZ görünür; sahip için uygulama ekranı yoktur. Gerçek bir müşteri sitesi ASLA demo olarak işaretlenmemelidir. Sunucu dağıtımı gerekir. Sürüm yayınlanınca denenir (maddeler “Denemeye hazır” görünse de sürüm yayınlanmadan uygulamada yoktur). Faz sayfasında bölüm F53 olarak da yer alır.
+
+- [ ] **130.1. Demo site işaretleme ve kod üretme (sunucu) (F53.01):**
+  - **Nasıl Test Edilir:** Rol: Sahip (sunucu). Ön koşul: Sunucuya erişim; yedekli bir TEST/DEMO sitesi. Sunucuda server klasöründe `node scripts/trial_code.mjs demo <DEMO_SITE_KODU> --yes` ile demo siteyi işaretleyin. `node scripts/trial_code.mjs create --days 7 --note "Aday A" --yes` ile kod üretin; sonra `status` ve `list` çalıştırın.
+  - **Beklenen Sonuç:** Kod ekranda yalnız bir kez görünür. `status` ve `list` kodu göstermez, yalnız son 4 karakterini gösterir.
+- [ ] **130.2. Kodla giriş (F53.02):**
+  - **Nasıl Test Edilir:** Rol: Aday (deneme). Ön koşul: Üretilmiş kod. Giriş ekranında “Deneme kodum var”a basın; kodu küçük harfle ve tiresiz yazın; “Giriş Yap”a basın.
+  - **Beklenen Sonuç:** Kod otomatik büyük harfe ve tireli biçime gelir. Ana sayfa açılır; ekranın ÜSTÜNDE “Deneme - 72 saat kaldı” şeridi görünür. Siteler listesinde YALNIZ demo site vardır.
+- [ ] **130.3. Tek kullanım ve yanlış kod (F53.03):**
+  - **Nasıl Test Edilir:** Rol: Aday (deneme). Aynı kodu ikinci kez girin (çıkış yapıp ya da başka cihazdan). Uydurma bir kod girin; ardından 11 yanlış kodu art arda deneyin.
+  - **Beklenen Sonuç:** İkinci kullanımda “Bu deneme kodu daha önce kullanılmış...” mesajı çıkar. Yanlış kodda “Deneme kodu geçersiz”. 11 yanlışta “Çok fazla deneme kodu girişi...” (hız sınırı) çıkar.
+- [ ] **130.4. Demo sitede serbest işlem (F53.04):**
+  - **Nasıl Test Edilir:** Rol: Aday (deneme). Deneme hesabıyla demo sitede duyuru yayımlayın, tahsilat/borç girin, kişi ekleyin, anket açın, belge yükleyin.
+  - **Beklenen Sonuç:** Hepsi çalışır.
+- [ ] **130.5. Kısıtlı işlemler kapalı (F53.05):**
+  - **Nasıl Test Edilir:** Rol: Aday (deneme). Profil'de parola/e-posta değiştirmeyi ve hesap silmeyi deneyin. Yeni site ekleme/başvuru, yönetici davet etme, kapı/cihaz/kamera ekleme, kişiye davet veya şifre sıfırlama, borç hatırlatma gönderme ve toplu yükleme onayını deneyin.
+  - **Beklenen Sonuç:** Hepsi “Bu işlem deneme hesabında kullanılamaz.” der ve hiçbir şey değişmez.
+- [ ] **130.6. Süre dolumu (F53.06):**
+  - **Nasıl Test Edilir:** Rol: Sahip (sunucu) / Aday. Ön koşul: Açık bir deneme oturumu. Sunucuda ilgili kodun session_expires_at değerini geçmişe çekin (UPDATE trial_access_codes SET session_expires_at = NOW() - interval '1 minute' WHERE id = ...). Uygulamada herhangi bir işlem yapın ya da yenileyin.
+  - **Beklenen Sonuç:** Giriş ekranına dönülür ve “Deneme süreniz doldu...” görünür. Şerit 30 sn'de bir yenilenir; son saatte dakika gösterir.
+- [ ] **130.7. Kod iptali (F53.07):**
+  - **Nasıl Test Edilir:** Rol: Sahip (sunucu) / Aday. Ön koşul: Açık bir deneme oturumu. `node scripts/trial_code.mjs revoke <KOD_NO> --yes` çalıştırın. Açık oturumda bir işlem yapın; iptal edilen kodla yeniden girmeyi deneyin.
+  - **Beklenen Sonuç:** Açık oturum bir sonraki istekte “Deneme erişiminiz sonlandırıldı.” ile kapanır; iptal edilmiş kodla giriş “iptal edilmiş” der.
+- [ ] **130.8. Normal girişler etkilenmez (F53.08):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi / Daire sakini. Normal kullanıcı adı/parola, SMS ve sosyal girişle girin; eski uygulama sürümüyle de girmeyi deneyin.
+  - **Beklenen Sonuç:** Giriş çalışır, üstte deneme şeridi YOKTUR.
+- [ ] **130.9. Dar ekran ve koyu tema (F53.09):**
+  - **Nasıl Test Edilir:** Rol: Aday (deneme). En dar telefon ekranında ve en büyük yazı boyutunda giriş ekranına, kod penceresine (uzun hata mesajıyla) ve üst şeride bakın; koyu temayı deneyin.
+  - **Beklenen Sonuç:** Hiçbir yerde taşma olmaz; koyu temada şerit okunaklıdır.
+
+## 131. 📜 Yönetici İşlem Kayıtları: Kendi Sitenizde Kim, Ne Zaman, Ne Yaptı (2026-10-29, karşılaştırma raporu P2-19)
+
+Site yöneticisi, Ayarlar panelinde Modüller'in altındaki “İşlem Kayıtları” ekranında kendi sitesinde yapılan işlemleri görür: işlem türü ve dönem süzgeci, “Daha fazla yükle”, İstanbul saati. Yalnız o sitenin yöneticisi okur; kayıtlar değiştirilemez; parola, telefon, e-posta ve kullanıcı kodu görünmez; sakinin gizli güvenlik talebi ve adli kayıt listede yoktur. Sunucu dağıtımı gerekir (yeni uç). Sürüm yayınlanınca denenir (maddeler “Denemeye hazır” görünse de sürüm yayınlanmadan uygulamada yoktur). Faz sayfasında bölüm F54 olarak da yer alır.
+
+- [ ] **131.1. Menüde kim görür (F54.01):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi / Daire sakini / Kurul üyesi / Görevli / Süper kullanıcı. Site yöneticisi hesabıyla sağ üstteki dişliden Ayarlar panelini açın; “İşlem Kayıtları”nı arayın. Aynısını sakin, kurul üyesi, görevli, bireysel, sakin moduna geçmiş yönetici ve süper kullanıcıyla yapın.
+  - **Beklenen Sonuç:** Yönetici modundaki site yöneticisinde Modüller'in altında görünür; diğerlerinde görünmez.
+- [ ] **131.2. Yeni işlemler listede (F54.02):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Kendi sitenizde birkaç işlem yapın (modül talebi, duyuru yayınla, kişi ekle, tahsilat gir, talep aç). İşlem Kayıtları'nı yenileyin; 50'den fazla kayıt varsa “Daha fazla yükle”ye basın.
+  - **Beklenen Sonuç:** Yeni kayıtlar en üstte, doğru başlık, kim ve İstanbul saatiyle görünür; “Daha fazla yükle” eski kayıtları getirir.
+- [ ] **131.3. İşlem türü ve dönem süzgeçleri (F54.03):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. İşlem türü listesinden “Aidat ve finans”ı seçin; “Tümü”ne dönün. Bugün, Son 7 gün, Son 30 gün çiplerini deneyin; Özel aralıkta GG.AA.YYYY yazın, bir tarihi boş bırakın, ters aralık ve 31.02 yazın.
+  - **Beklenen Sonuç:** Yalnız finans satırları gelir; “Tümü” süzgeci kaldırır. Dönem çipleri çalışır. Ters aralık ve geçersiz tarih hata verir, istek atmaz.
+- [ ] **131.4. Siteler arası ayrım ve yetki (F54.04):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: İki siteli yönetici; sakin hesabı. Site seçiciyi değiştirin. Sakin hesabının belirteciyle GET /manager/sites/<site_kodu>/audit-log çağrısı yapın; başka sitenin yöneticisiyle de çağırın.
+  - **Beklenen Sonuç:** Diğer sitenin kaydı asla görünmez. Sakin ve başka site yöneticisi 403 alır.
+- [ ] **131.5. Kişisel veri ve gizli kayıtlar (F54.05):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Süper kullanıcının yaptığı bir işlem; silinmiş bir hesap. Süper kullanıcının bir işleminin (örneğin modül açma) yönetici ekranındaki adına bakın. Silinmiş bir hesabın eski işlemlerine, kayıt ayrıntılarına ve sakinin güvenlik talebine bakın.
+  - **Beklenen Sonuç:** “Sistem yöneticisi” ve “Silinmiş Kullanıcı” yazar. Kayıtlarda e-posta, telefon, parola ve kullanıcı kodu bulunmaz; güvenlik talebi ve adli kayıt satırları listede olmaz.
+- [ ] **131.6. Dar ekran, büyük yazı, koyu tema (F54.06):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. En dar telefon ekranında ve en büyük yazı boyutunda, açık ve koyu temada listeye, süzgeçlere ve boş/hata durumlarına bakın.
+  - **Beklenen Sonuç:** Taşma olmaz; yükleniyor, boş ve hata durumları anlaşılırdır.
+- [ ] **131.7. Çoklu malik ve acil durum işlemleri (F54.07):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: F50 ve F52 maddelerini yapmış olmak. Daireye malik ekleyin / muhatap değiştirin / maliki çıkarın; asansör bakım firmasını kaydedin. İşlem Kayıtları'na bakın.
+  - **Beklenen Sonuç:** “Daireye malik eklendi”, “Daire hesap muhatabı değişti”, “Daireden malik çıkarıldı” ve “Acil durum bilgisi güncellendi” satırları Türkçe başlıkla görünür.
+
+## 132. 🏘️ Komşu Panosu İstemci Sınır Davranışları (2026-10-29, karşılaştırma raporu P2-29)
+
+Yalnız test eklendi, ürün kodu değişmedi: Komşu Panosu için uzun metin/taşma, boş durum, yetkisiz kullanıcı, çok kayıt, ağ hatası ve Türkçe karakter sınırları otomatik testle sabitlendi (170 test). Aşağıdaki maddeler aynı sınırları elle de doğrulatır. BİLİNEN SORUN: klavye açıkken “Şikayet et / Reddet / Kaldır” ve “Yeni ilan” pencereleri yatay ya da büyük yazıda taşabilir (testte kayıtlı, düzeltme ayrı iş); bu madde sonucu bildirmeniz içindir. Sürüm yayınlanınca denenir (maddeler “Denemeye hazır” görünse de sürüm yayınlanmadan uygulamada yoktur). Faz sayfasında bölüm F55 olarak da yer alır.
+
+- [ ] **132.1. Uzun metin ve taşma (F55.01):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi / Daire sakini. Ön koşul: Dar ekranlı telefon, en büyük yazı boyutu. 120 karakterlik boşluksuz bir başlık ve 2000 karakterlik metinle ilan açın, yönetici onayıyla yayınlayın.
+  - **Beklenen Sonuç:** Kartta yatay taşma / sarı-siyah şerit olmaz; metin alt satırlara bölünür.
+- [ ] **132.2. Karakter sınırları (F55.02):**
+  - **Nasıl Test Edilir:** Rol: Daire sakini / Site yöneticisi. Yeni ilan penceresinde başlığa 120+, metne 2000+ karakter yapıştırın. Şikayet gerekçesinde 200, ret/kaldır gerekçesinde 300 karakteri aşmayı ve boş gerekçeyle Gönder'e basmayı deneyin.
+  - **Beklenen Sonuç:** Sayaç 120/120 ve 2000/2000'de durur, fazlası eklenmez. Gerekçeler 200 ve 300 karakterde durur; boş gerekçeyle Gönder pencereyi kapatmaz.
+- [ ] **132.3. Ağ hatası (F55.03):**
+  - **Nasıl Test Edilir:** Rol: Daire sakini. Uçak modunda Komşu Panosu'nu açın; uçak modunu kapatıp sayfayı aşağı çekerek yenileyin.
+  - **Beklenen Sonuç:** “Sunucuya bağlanılamadı...” çıkar (“Henüz ilan yok.” ÇIKMAZ). İnternet gelince liste yüklenir.
+- [ ] **132.4. Yetkiye göre düğmeler (F55.04):**
+  - **Nasıl Test Edilir:** Rol: Daire sakini / Site yöneticisi. Ön koşul: Biri yönetici biri sakin olduğu iki siteli hesap. Sakin hesabında Onayla / Reddet / Kaldır düğmelerini ve durum sekmelerini arayın. Yönetici hesabında Yeni ilan / Şikayet et / Geri çek düğmelerini arayın; çoklu sitede site değiştirin.
+  - **Beklenen Sonuç:** Sakinde yönetim düğmeleri ve durum sekmeleri yoktur; yöneticide yazma/şikayet/geri çekme düğmeleri yoktur. Denetimler seçili siteye göre değişir.
+- [ ] **132.5. Menüde kim görür (F55.05):**
+  - **Nasıl Test Edilir:** Rol: Görevli / Süper kullanıcı / Bireysel / Kurul üyesi. Kapı erişimi olmayan görevli, süper kullanıcı ve bireysel hesapla yan menüye bakın; kurul üyesi ve kapı erişimli görevliyle de bakın.
+  - **Beklenen Sonuç:** İlk üçünde “Komşu Panosu” yoktur; kurul üyesi ve kapı erişimli görevli sakin gibi görür.
+- [ ] **132.6. Türkçe karakterler (F55.06):**
+  - **Nasıl Test Edilir:** Rol: Daire sakini / Site yöneticisi. I i ğ Ğ ş Ş ç Ç ö Ö ü Ü, tırnak ve satır sonu içeren bir ilan yazın; sakin ve yönetici ekranlarında karşılaştırın.
+  - **Beklenen Sonuç:** İki ekranda da aynı görünür; tarih gg.aa.yyyy biçimindedir.
+- [ ] **132.7. Çok kayıt (F55.07):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Demo veriyle 100+ ilan. Sayfayı sonuna kadar kaydırın; kartların üstünden sürükleyin.
+  - **Beklenen Sonuç:** Son ilana ve “Yakında: telefon bildirimi, fotoğraf ve yorum.” notuna ulaşılır; kartların üstünden sürükleyince sayfa kayar.
+- [ ] **132.8. BİLİNEN SORUN: klavye açıkken pencereler (sonucu bildirin) (F55.08):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi / Daire sakini. Ön koşul: Yatay telefon, büyük yazı. Telefonu yatay çevirip klavyeyi açarak “Şikayet et”, “Reddet”, “Kaldır” ve “Yeni ilan” pencerelerini deneyin (özellikle büyük yazı boyutunda). Onayla ya da Onaya gönder düğmesine hızlı iki kez dokunun.
+  - **Beklenen Sonuç:** Taşma / sarı-siyah şerit görülürse testte kayıtlı sorunla aynıdır (düzeltilecek). Hızlı çift dokunuşta ikinci istek “İlan bu işlem için uygun durumda değil.” uyarısı verebilir (bilinen davranış).
+
+## 133. 📚 Durum Sözlüğü, Ekran Envanteri ve Düzeltilen Teknik Notlar (2026-10-29, karşılaştırma raporu P2-31 ve P2-28)
+
+docs/DURUM_SOZLUGU.md (rol ve bağ, hesap-üyelik-başvuru, kapı-cihaz-geçiş, finans-para ve modül/iş akışı durumlarının etiketleri) ve docs/EKRAN_ENVANTERI.md (48 menü öğesi: rota, ekran sınıfı, modül, kim görür) yazıldı; README ve teknik notlardaki bayat bilgiler koda göre düzeltildi. Ürün kodu değişmedi. Belge ile uygulama arasında sapma bulursanız belge ya da kod düzeltilir. Faz sayfasında bölüm F56 olarak da yer alır.
+
+- [ ] **133.1. Ekran envanteri ile menü karşılaştırması (F56.01):**
+  - **Nasıl Test Edilir:** Rol: Kurul üyesi / Görevli (ve diğer roller). Ön koşul: docs/EKRAN_ENVANTERI.md Bölüm 3. Bir rolle (örneğin kurul üyesi ya da görevli) uygulamaya girip çekmecedeki öğeleri belgedeki “Kim görür” sütunuyla karşılaştırın.
+  - **Beklenen Sonuç:** Çekmecedeki öğeler belgeyle aynıdır; sapma varsa belge ya da kod düzeltilmelidir.
+- [ ] **133.2. Durum etiketleri sözlükle aynı (F56.02):**
+  - **Nasıl Test Edilir:** Rol: Daire sakini / Site yöneticisi. Ön koşul: docs/DURUM_SOZLUGU.md D3. Sakin hesabından bir dekont bildirimi gönderin; yöneticide onaylayın ve iptal edin.
+  - **Beklenen Sonuç:** “İnceleniyor / Onaylandı / İptal edildi” etiketleri sözlükteki gibi görünür.
+- [ ] **133.3. README hızlı başlangıç (F56.03):**
+  - **Nasıl Test Edilir:** Rol: Geliştirici. Ön koşul: Temiz bir klasör; Docker ve Node kurulu. README'deki Hızlı başlangıç sırasını izleyin: docker compose up -d postgres, cd server, npm ci, npm run dev, flutter run --dart-define=API_BASE_URL=http://localhost:8080.
+  - **Beklenen Sonuç:** Sunucu 8080'de açılır; /health {ok, database, mqtt} döndürür.
+- [ ] **133.4. Kestirmeler ekranı iletişim kutusu (F56.04):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Çekmecede “Eller Serbest & Kestirmeler”e dokunun.
+  - **Beklenen Sonuç:** Sayfa değişmez; sesli kapı açma ayar penceresi açılır (envanterde sayfa değil iletişim kutusu olarak yazılıdır).
+
+## 134. 🧪 Yerel Yalıtım Aracı: Sunucuyu Yalnız Bu Bilgisayarda ve Temiz Ortamla Çalıştırma (2026-10-29, karşılaştırma raporu P2-30)
+
+Geliştirici aracı `tools/yerel/yalitim`: sunucuyu yalnız 127.0.0.1'de, temiz ortamla başlatır; dışarıya TCP/DNS/UDP bağlantısı ve alt süreç açılmasını engeller ve kayda geçirir; isteğe bağlı olarak Chrome/Edge'i yeni profille, yalnız yerel proxy arkasında açar. Kaza korumasıdır, güvenlik sınırı DEĞİLDİR (yerel eklentiler ve dosya sistemi kısıtlanmaz). Uygulamayı ve sunucu koduna dokunmaz; yeniden derleme gerekmez. Faz sayfasında bölüm F57 olarak da yer alır.
+
+- [ ] **134.1. Kuru çalıştırma (F57.01):**
+  - **Nasıl Test Edilir:** Rol: Geliştirici. Ön koşul: Depo kökü; Python 3.9+, Node. Depo kökünde `python tools/yerel/yalitim/calistir.py --dry-run --no-browser` çalıştırın.
+  - **Beklenen Sonuç:** `KURU_CALISMA_TAMAM` ve Node/profil/yol satırları görünür; `tools/yerel/runs` klasörü OLUŞMAZ.
+- [ ] **134.2. Tarayıcılı kip (F57.02):**
+  - **Nasıl Test Edilir:** Rol: Geliştirici. Ön koşul: server/node_modules kurulu; yerel PG, MQTT ve SMTP uçları açık. `python tools/yerel/yalitim/calistir.py --port 8081 --url http://127.0.0.1:8081/health` çalıştırın. Açılan tarayıcıda adres çubuğuna http://example.invalid/ yazın; sonra Ctrl+C ile durdurun.
+  - **Beklenen Sonuç:** Yeni profilli Chrome/Edge açılır. Dış adres açılmaz; koşu dizinindeki engellenen.jsonl'e yalnız `browser-proxy` kanalı ve hedef özeti düşer. Ctrl+C tarayıcıyı ve Node'u kapatır.
+- [ ] **134.3. Yerel uçlar yokken başlangıç hatası (F57.03):**
+  - **Nasıl Test Edilir:** Rol: Geliştirici. Yerel veritabanı/MQTT/SMTP uçları kapalıyken aracı çalıştırın; hazırlık zaman aşımında `node-stderr.log` içeriğine bakın.
+  - **Beklenen Sonuç:** Araç bu uçları kurmaz; sunucunun başlangıç hatası günlükte görünür.
+- [ ] **134.4. Banka PDF içe aktarımı bu kipte çalışmaz (F57.04):**
+  - **Nasıl Test Edilir:** Rol: Geliştirici. Bu kipte Banka ekstresi PDF yüklemeyi deneyin; aynı akışı yalıtımsız ortamda tekrarlayın.
+  - **Beklenen Sonuç:** Kasıtlı olarak çalışmaz (worker_threads engelli); yalıtımsız ortamda çalışır.
+
+## 135. 💳 Ödemenin İşletme / Fon Hesabını Yönetici Seçer (2026-10-29, karşılaştırma raporu P1-3, karar K3)
 
 Yazılım bir ödemeyi kendiliğinden İşletme (Aidat) ya da Fon hesabına atamaz. Tahsilat, tahsilat düzeltme, dekont onayı ve banka satırı işlenirken dairenin hesabında hem Aidat hem Fon borcu açıksa hangisine işleneceğini yönetici seçer; tek türde borçta öneri seçili gelir; borç yoksa genel avans. Bölümün adı “İşletme / Fon hesabı”dır (“kasa” denmez). Sunucu ve uygulama birlikte yayınlanır; eski uygulama sürümünde dekont onayı ve “Daireye işle” pencerelerinde hesap seçici yoktur, iki türlü borçlu dairede bu işlemler Türkçe uyarıyla reddedilir (o durumda elle “Tahsilat Ekle” kullanılır).
 
-- [ ] **127.1. Tahsilat Ekle: tek türde borç varsa önerilen hesap seçili gelir (F46.01):**
+- [ ] **135.1. Tahsilat Ekle: tek türde borç varsa önerilen hesap seçili gelir (F58.01):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Yalnız Aidat Hesabı borcu açık (Fon borcu olmayan) bir daire. Yalnız Aidat (aylık aidat) borcu açık olan bir dairenin ekstresinden ya da Finans ekranındaki “Tahsilat Ekle”den o daireyi seçin. “İşletme / Fon hesabı” bölümüne bakın; tutarı yazıp kaydedin. İsterseniz bir kez de bölümde hesabı değiştirerek kaydedin.
   - **Beklenen Sonuç:** Bölümde “Otomatik” seçeneği yoktur; borcu açık olan hesap (Aidat Hesabı) seçili gelir ve altında “Açık borç yalnız Aidat Hesabı için; bu hesap seçili geldi, isterseniz değiştirebilirsiniz.” yazar. Kayıttan sonra makbuzda ve ekstrede tutarın dağılımı seçilen hesapla görünür.
-- [ ] **127.2. Tahsilat Ekle: iki türde borç varsa hesabı yönetici seçer (F46.02):**
-  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Aynı ev sahibi hesabında hem Aidat Hesabı hem Fon Hesabı borcu açık bir daire (Fon borcu için F48.01 gibi bir ek borç yazılabilir). Hem aidat hem Fon (demirbaş / ek borç) borcu açık olan bir ev sahibi hesabında “Tahsilat Ekle”yi açın. “İşletme / Fon hesabı” bölümündeki uyarıya bakın; hesap seçmeden “Kaydet”e basmayı deneyin. Bir hesap seçip kaydedin; kaydetmeden önce tutarı yazdıkça bölümün altındaki “Bilgi” satırına bakın.
+- [ ] **135.2. Tahsilat Ekle: iki türde borç varsa hesabı yönetici seçer (F58.02):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Aynı ev sahibi hesabında hem Aidat Hesabı hem Fon Hesabı borcu açık bir daire (Fon borcu için F60.01 gibi bir ek borç yazılabilir). Hem aidat hem Fon (demirbaş / ek borç) borcu açık olan bir ev sahibi hesabında “Tahsilat Ekle”yi açın. “İşletme / Fon hesabı” bölümündeki uyarıya bakın; hesap seçmeden “Kaydet”e basmayı deneyin. Bir hesap seçip kaydedin; kaydetmeden önce tutarı yazdıkça bölümün altındaki “Bilgi” satırına bakın.
   - **Beklenen Sonuç:** Uyarı kutusu “Bu daire hesabında hem Aidat Hesabı (…) hem Fon Hesabı (…) için açık borç var. Ödemenin hangisine işleneceğini siz seçin; yazılım kendiliğinden atamaz.” der; hiçbir hesap seçili gelmez ve “Otomatik” seçeneği yoktur. Seçmeden kaydedince “Ödemenin işleneceği İşletme / Fon hesabını seçin.” çıkar ve hiçbir kayıt oluşmaz. Hesabı seçince kayıt yazılır. “Bilgi: otomatik dağıtım en eski borçtan başlayarak … olurdu. Tutarı iki hesaba bölmek için iki ayrı tahsilat girin.” satırı yalnız bilgi verir, seçiminizi değiştirmez.
-- [ ] **127.3. Tahsilat Ekle: açık borç yoksa genel avans (F46.03):**
+- [ ] **135.3. Tahsilat Ekle: açık borç yoksa genel avans (F58.03):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Açık borcu olmayan bir daire. Açık borcu olmayan bir dairede “Tahsilat Ekle”yi açın. “İşletme / Fon hesabı” bölümüne bakın; hesap seçmeden tutarı yazıp kaydedin.
   - **Beklenen Sonuç:** “Hesap seçmeden (genel avans)” seçili gelir; seçim zorunlu değildir ve altında “Açık borç yok. Hesap seçmezseniz tutar genel avans olarak kalır ve sonraki borca mahsup edilir.” yazar. Kayıt yazılır; ekstrede alacak (avans) görünür.
-- [ ] **127.4. Daire hesabını (ev sahibi / kiracı) değiştirince bölüm yenilenir (F46.04):**
+- [ ] **135.4. Daire hesabını (ev sahibi / kiracı) değiştirince bölüm yenilenir (F58.04):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Kiracısı olan, iki hesabında da borç bulunan bir daire. Kiracısı olan ve her iki hesabında borç bulunan bir dairede “Tahsilat Ekle”yi açın. “Daire hesabı”nı Ev sahibi hesabı ile Kiracı hesabı arasında değiştirirken “İşletme / Fon hesabı” bölümüne bakın.
   - **Beklenen Sonuç:** Bölüm her değişimde seçilen daire hesabının açık borçlarına göre yeniden yüklenir: kiracı hesabında genellikle yalnız Aidat borcu olduğundan Aidat Hesabı seçili gelir; ev sahibi hesabında iki tür borç açıksa seçim zorunludur.
-- [ ] **127.5. Tahsilatı Düzelt: ters kayıttan sonra iki tür borç açık kalırsa hesap seçilir (F46.05):**
+- [ ] **135.5. Tahsilatı Düzelt: ters kayıttan sonra iki tür borç açık kalırsa hesap seçilir (F58.05):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Hesap kısıtsız girilmiş bir tahsilatı olan ve düzeltme anında iki tür borcu açık kalan ev sahibi hesabı. Hesap kısıtı olmadan girilmiş bir tahsilatı, ev sahibi hesabında Aidat ve Fon borcu birlikte açıkken “Düzelt”in. Hesap seçmeden kaydetmeyi deneyin; sonra hesabı seçip kaydedin.
   - **Beklenen Sonuç:** Hesap seçilmediyse düzeltme reddedilir ve hiçbir şey değişmez (ters kayıt yazılmaz, asıl tahsilat durur); bölüm “zorunlu” kipe geçer. Hesabı seçince düzeltme tek işlemde yazılır: eski tahsilat ters çevrilir, yeni tahsilat seçilen hesaba işlenir.
-- [ ] **127.6. Dekont inceleme ve toplu onay: hesap seçimi (F46.06):**
+- [ ] **135.6. Dekont inceleme ve toplu onay: hesap seçimi (F58.06):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Sakinlerden gelmiş bekleyen dekontlar (en az biri iki türlü borçlu daireden). Sakin hesabıyla bir dekont bildirin; yönetici olarak Finans > Dekontlar sekmesinden bildirimi açın (“Nasıl işlensin?”). Dairenin hesabında iki tür borç açıksa hesap seçmeden “Onayla”ya basın; tek tür borçta bölüme bakın. İçlerinde iki türlü borçlu bir dairenin dekontu da bulunan birkaç dekontu seçip toplu onaylayın.
   - **Beklenen Sonuç:** Pencerede aynı “İşletme / Fon hesabı” bölümü vardır. İki türde borçta seçmeden “Onayla” çalışmaz (“Ödemenin işleneceği İşletme / Fon hesabını seçin.”); tek türde öneri seçili gelir. Toplu onayda iki türlü borçlu dairenin dekontu atlanır ve sonuç listesinde “Dairede İşletme ve Fon borcu birlikte açık; dekontu tek tek inceleyip ödemenin işleneceği hesabı seçin.” yazar; öteki dekontlar onaylanır.
-- [ ] **127.7. Banka Ödemeleri: Daireye işle ve Onayla (F46.07):**
+- [ ] **135.7. Banka Ödemeleri: Daireye işle ve Onayla (F58.07):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Eşleşmemiş ya da dairesi önerilmiş banka satırları (en az biri iki türlü borçlu daireye). Finans ekranındaki “banka satırı sizi bekliyor” kartından Banka Ödemeleri’ni açın. İki türlü (Aidat + Fon) borcu açık bir daireye “Daireye işle” ile bir satır atamayı deneyin: önce hesap seçmeden “İşle”ye basın, sonra hesabı seçerek işleyin. Dairesi önerilmiş satırlarda “Onayla” düğmesine ve “Önerilen dairelerin hepsini onayla”ya bakın.
   - **Beklenen Sonuç:** İki türlü borçlu dairede hesap seçilmeden “İşle” çalışmaz; seçimle işlenir. İki türlü borçlu dairenin önerilen satırında düğme “Hesabı seçerek onayla” olur. “Önerilen dairelerin hepsini onayla” bu satırları dışarıda bırakır ve “N satır hesap (İşletme / Fon) seçimi gerektiriyor; tek tek onaylayın.” der.
-- [ ] **127.8. Banka dosyası yükleme: iki türlü borçlu daireye kendiliğinden işlenmez (F46.08):**
+- [ ] **135.8. Banka dosyası yükleme: iki türlü borçlu daireye kendiliğinden işlenmez (F58.08):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Bir banka hesabı, kayıtlı IBAN’lı bir daire ve o daireye uyan satırlı bir ekstre dosyası. İki türlü (Aidat + Fon) borcu açık bir daire için IBAN’ı daha önce kaydedilmiş, güçlü eşleşen bir satır içeren banka dosyasını yükleyin. Önizleme özetine ve yükleme sonrası Banka Ödemeleri listesine bakın.
   - **Beklenen Sonuç:** O satır yüklemede kendiliğinden işlenmez; önizleme özetinde dairenin İşletme ve Fon borcunun birlikte açık olduğunu söyleyen bir uyarı çıkar ve satır, hesabı sizin seçmeniz için Banka Ödemeleri’nde bekler. Tek türlü borçlu daireye güçlü eşleşen satırlar eskisi gibi otomatik işlenir.
 
-## 128. 🔎 Banka Dosyasında Güçlü Eşleşmeleri Tek Tek Gözden Geçir (2026-10-29, karşılaştırma raporu C-26)
+## 136. 🔎 Banka Dosyasında Güçlü Eşleşmeleri Tek Tek Gözden Geçir (2026-10-29, karşılaştırma raporu C-26)
 
 Banka dosyası yüklerken “Güçlü eşleşmeleri de tek tek gözden geçir” kutusu işaretlenirse tanınan satırlar da kendiliğinden işlenmez; Banka Ödemeleri ekranındaki “Tek tek gözden geçir” akışında sırayla Onayla ya da Atla denir. Kutu varsayılan olarak kapalıdır; kapalıyken yükleme eskisi gibi çalışır.
 
-- [ ] **128.1. Yükleme: “Güçlü eşleşmeleri de tek tek gözden geçir” kutusu (F47.01):**
+- [ ] **136.1. Yükleme: “Güçlü eşleşmeleri de tek tek gözden geçir” kutusu (F59.01):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Banka hesabı ve IBAN’ı kayıtlı bir daire. Finans > Kasa sekmesinde bir banka hesabının altından “Banka dosyası yükle”yi açın ve IBAN’ı daha önce kaydedilmiş (güçlü eşleşen) satırlar içeren bir dosya seçin. Özet ekranında “Güçlü eşleşmeleri de tek tek gözden geçir” kutusuna bakın, işaretleyip yüklemeyi tamamlayın. Kutuyu işaretlemeden başka bir dosyayı yükleyip karşılaştırın.
   - **Beklenen Sonuç:** Kutu varsayılan olarak işaretsizdir. İşaretliyken özet “Tanınan N satır (X ₺) kendiliğinden işlenmeyecek; tek tek onayınızı bekleyecek” der ve hiçbir tahsilat yazılmaz; tanınan satırlar önerilen daireyle Banka Ödemeleri’nde “Güçlü eşleşme: tek tek gözden geçirmeniz istendi; kontrol edip onaylayın.” notuyla bekler. İşaretsizken yükleme eskisi gibi tanınan satırları kendiliğinden işler.
-- [ ] **128.2. Banka Ödemeleri: “Tek tek gözden geçir” akışı (F47.02):**
-  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: F47.01 ile yüklenmiş, onay bekleyen güçlü eşleşmeli satırlar. F47.01’deki yüklemeden sonra Banka Ödemeleri ekranında “Tek tek gözden geçir” düğmesine dokunun. İlk satırda Onayla, ikinci satırda Atla’yı seçin; akışı bitirin. İki türlü (Aidat + Fon) borçlu daireye ait bir satır varsa o satırda hesap seçimine bakın.
+- [ ] **136.2. Banka Ödemeleri: “Tek tek gözden geçir” akışı (F59.02):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: F59.01 ile yüklenmiş, onay bekleyen güçlü eşleşmeli satırlar. F59.01’deki yüklemeden sonra Banka Ödemeleri ekranında “Tek tek gözden geçir” düğmesine dokunun. İlk satırda Onayla, ikinci satırda Atla’yı seçin; akışı bitirin. İki türlü (Aidat + Fon) borçlu daireye ait bir satır varsa o satırda hesap seçimine bakın.
   - **Beklenen Sonuç:** Satırlar sırayla gelir; her satırda daire, tutar ve açıklama görünür, “Onayla” tahsilatı yazar, “Atla” satırı bekleyenlerde bırakır. İki türlü borçlu dairede hesap seçilmeden onay çalışmaz. Akış sonunda özet “X satır işlendi, Y satır atlandı (beklemeye devam eder).” der.
 
-## 129. ⚖️ Fon Borcunun Dayanağı (Karar Defteri ya da Gerekçe) ve Sakin “Borç Kalemleri” Dökümü (2026-10-29, karşılaştırma raporu P1-2, P2-1, karar K2, migration 090)
+## 137. ⚖️ Fon Borcunun Dayanağı (Karar Defteri ya da Gerekçe) ve Sakin “Borç Kalemleri” Dökümü (2026-10-29, karşılaştırma raporu P1-2, P2-1, karar K2, migration 090)
 
 Yatırım ve Demirbaş (Fon) Hesabı’na borç yazan iki yol (Ek Borç Ekle ve aylık tanımı Borçlandır) artık dayanaksız yazılamaz: Karar Defteri açık sitede kesinleşmiş bir karar, kapalı sitede kısa bir gerekçe istenir. Dayanak ekstrede ve sakinin Borcum ekranındaki “Borç kalemleri” dökümünde görünür. Aidat (İşletme) hesabı borçlarında dayanak sorulmaz. Eski uygulama sürümüyle Fon borcu yazmak Türkçe uyarıyla reddedilir (web ve uygulama birlikte güncellenir).
 
-- [ ] **129.1. Karar Defteri kapalı sitede Fon borcuna gerekçe (F48.01):**
+- [ ] **137.1. Karar Defteri kapalı sitede Fon borcuna gerekçe (F60.01):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Karar Defteri modülü kapalı bir site. Karar Defteri modülü kapalı bir sitede Finans > Daireler ekranından “Ek Borç Ekle”yi açın (hesap varsayılan olarak Yatırım ve Demirbaş (Fon) Hesabı gelir); ad ve tutar girip “Önizle”ye basın. “Borcun dayanağı” kutusu boşken “Onayla ve Borçlandır” düğmesine bakın; sonra “Yönetim kurulunun 14.10.2026 tarihli ve 6 sayılı kararı” gibi bir gerekçe yazın.
   - **Beklenen Sonuç:** Önizlemede “Borcun dayanağı” kutusu çıkar; gerekçe boşken (ya da 3 karakterden kısayken) “Onayla ve Borçlandır” kapalıdır ve “Onaylamak için: Borcun dayanağını (gerekçe) yazın.” satırı nedeni söyler. Gerekçe yazılınca düğme açılır ve borç yazılır. Kutunun altında gerekçenin sakinlerin Borcum ekranında görüneceği uyarısı vardır.
-- [ ] **129.2. Karar Defteri açık sitede kesinleşmiş karar seçilir (F48.02):**
+- [ ] **137.2. Karar Defteri açık sitede kesinleşmiş karar seçilir (F60.02):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Karar Defteri açık, en az bir kesinleşmiş ve bir taslak kararı olan site. Karar Defteri açık bir sitede aynı akışı izleyin (Ek Borç Ekle, Fon hesabı); “Borcun dayanağı” kararlar listesine bakın. Karar seçmeden onaylamayı deneyin; sonra bir karar seçin.
   - **Beklenen Sonuç:** Yalnız kesinleşmiş kararlar “2026/4 • Başlık • 12.10.2026” biçiminde listelenir (taslak karar listede yoktur). Karar seçilmeden onay kapalıdır (“Dayanak olarak Karar Defteri’nden bir karar seçin.”); seçilince borç yazılır. Hiç kesinleşmiş karar yoksa “Seçilebilecek kesinleşmiş karar yok…” uyarısı çıkar ve onay kapalı kalır.
-- [ ] **129.3. Aylık tanımı Borçlandır: Fon dayanak ister, Aidat sormaz (F48.03):**
+- [ ] **137.3. Aylık tanımı Borçlandır: Fon dayanak ister, Aidat sormaz (F60.03):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Biri Fon, biri Aidat hesabına yazan iki aylık tanım. Tanımlar sekmesinde malik öder (Fon Hesabı) bir aylık tanımı “Borçlandır”ın; dönemi seçip “Önizle”ye basın. Dairede oturan öder (Aidat Hesabı) bir aylık tanım için aynısını yapın.
   - **Beklenen Sonuç:** Fon Hesabı’na yazılan tanımda “Borcun dayanağı” alanı çıkar ve her ay için yeniden istenir (önceki ayın seçimi önerilmez). Aidat Hesabı’na yazılan tanımda dayanak sorulmaz; borçlandırma eskisi gibi çalışır.
-- [ ] **129.4. Ekstrede “Dayanak” satırı (F48.04):**
-  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: F48.01 ya da F48.02 ile yazılmış bir Fon borcu. Dayanaklı bir Fon borcundan sonra o dairenin ekstresini açın; aidat ve tahsilat satırlarına da bakın. Kurul üyesi hesabıyla aynı ekstreye bakın.
+- [ ] **137.4. Ekstrede “Dayanak” satırı (F60.04):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: F60.01 ya da F60.02 ile yazılmış bir Fon borcu. Dayanaklı bir Fon borcundan sonra o dairenin ekstresini açın; aidat ve tahsilat satırlarına da bakın. Kurul üyesi hesabıyla aynı ekstreye bakın.
   - **Beklenen Sonuç:** Fon borcu satırında “Dayanak: Karar 2026/4 • Başlık” (ya da “Dayanak: Gerekçe: …”) satırı görünür; aidat ve tahsilat satırlarında görünmez. Kurul üyesi aynı satırları salt okunur görür.
-- [ ] **129.5. Sakin Borcum: “Borç kalemleri” dökümü (F48.05):**
+- [ ] **137.5. Sakin Borcum: “Borç kalemleri” dökümü (F60.05):**
   - **Nasıl Test Edilir:** Rol: Daire sakini. Ön koşul: Borcu olan bir sakin hesabı (en az bir kalemde kısmi ödeme). Borcu olan bir sakin hesabıyla Borcum ekranını açın ve “Borç kalemleri (N)” düğmesine dokunun. Kısmi ödeme girilmiş bir dairede kalemlerin kalan tutarlarına bakın.
   - **Beklenen Sonuç:** Her ödenmemiş kalemde kaynağı (örn. “Ekim 2026 • Ek borç • Fon Hesabı”), Tutar / Ödenen / Kalan, “Vade: …” ya da “Vadesi geçti: …” ve varsa “Dayanak: …” görünür. Ödemeler vadesi en eski borçtan başlayarak mahsup edilir; örneğin 1.000 TL’lik en eski kalemde 70 TL ödeme varsa kalan 930 TL’dir. Kalanların toplamı borç bakiyesine eşittir.
-- [ ] **129.6. Sakin gizliliği: karar başlığı yönetime özelse sızmaz (F48.06):**
+- [ ] **137.6. Sakin gizliliği: karar başlığı yönetime özelse sızmaz (F60.06):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Karar Defteri açık site; bir sakin hesabı. Karar Defteri’nde bir kararı “Yalnız yönetim” görünürlüğüyle kaydedip bir Fon borcuna bağlayın; sakin hesabıyla “Borç kalemleri”ne bakın. Aynı kararı “Sakinlere açık” yapıp yeniden bakın.
   - **Beklenen Sonuç:** Yalnız yönetim kararında sakin yalnızca karar numarasını (örn. “Karar 2026/6”) görür, başlığı görmez. Karar sakinlere açık yapılınca başlık da görünür.
-- [ ] **129.7. Önizleme sonrası modül değişirse; aynı ek borcun tekrarı (F48.07):**
+- [ ] **137.7. Önizleme sonrası modül değişirse; aynı ek borcun tekrarı (F60.07):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi ve süper kullanıcı. Ek borç önizlemesini açık tutun; başka bir oturumdan süper kullanıcıyla Karar Defteri modülünü açıp kapatın, sonra onaylayın. Aynı Fon ek borcunu kısa süre içinde ikinci kez yazmayı deneyin.
   - **Beklenen Sonuç:** Modül değiştiyse pencere hata vermez; önizlemeyi yeniler ve yeni gereken girdiyi (karar seçici ↔ gerekçe) ister, eski seçim sıfırlanır. İkinci yazımda “aynı ek borç daha önce kaydedilmiş” uyarısı ve “Yine de ekle” akışı eskisi gibi çalışır; dayanak yeniden istenir.
 
-## 130. 📐 Dağıtım Tabanını Yönetim Seçer: Eşit Varsayılan, Kişi Sayısı ve Isı Payı Alan Tabanı (2026-10-29, karşılaştırma raporu P1-5, karar K5, migration 091)
+## 138. 📐 Dağıtım Tabanını Yönetim Seçer: Eşit Varsayılan, Kişi Sayısı ve Isı Payı Alan Tabanı (2026-10-29, karşılaştırma raporu P1-5, karar K5, migration 091)
 
 Aidat, ek borç ve ısı payında dağıtım tabanını yazılım değil yönetim seçer; varsayılan EŞİT’tir. Yeni “Kişi sayısına göre” tabanı dairedeki güncel kişi kayıtlarından hesaplanır. Seçilen tabanın verisi eksik daire sessizce eşit paya düşürülmez, eksik veri olarak listelenir. “Metrekareye göre” seçeneği yoktur. Isı payının alan payı kısmı da aynı tabanlarla (Eşit / Arsa payı / Kişi sayısı) hesaplanır; eskiden otomatik arsa payına geçilirdi, artık geçilmez.
 
-- [ ] **130.1. Yeni Tanım: dağıtım yöntemi sırası, varsayılanı ve kişi sayısı (F49.01):**
+- [ ] **138.1. Yeni Tanım: dağıtım yöntemi sırası, varsayılanı ve kişi sayısı (F61.01):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: En az bir dairede kayıtlı güncel kişi olmayan bir site. Finans > Tanımlar > “Yeni Tanım”ı açın; “Dağıtım yöntemi” seçicisine bakın. “Kişi sayısına göre”yi seçip bir toplam tutar girin ve “Önizle”ye basın; en az bir dairede hiç kişi kaydı olmasın.
   - **Beklenen Sonuç:** Yöntem “Eşit bölüş” ön seçili gelir; seçenekler sırayla Eşit bölüş, Sabit tutar, Kategoriye göre, Arsa payına göre ve Kişi sayısına göre’dir; “Metrekareye göre” seçeneği yoktur. Kişi sayısında kişi kaydı olmayan daire “eksik veri” (“Dairede kayıtlı güncel kişi yok”) olarak listelenir, eşit paya düşürülmez; satırlarda “N kişi” görünür. “Eksikleri atla” ile devam edilirse toplam tutarın tamamı kalan dairelere dağılır.
-- [ ] **130.2. Ek borçta kişi sayısı / eşit / arsa payı karşılaştırması ve kuruş artıkları (F49.02):**
+- [ ] **138.2. Ek borçta kişi sayısı / eşit / arsa payı karşılaştırması ve kuruş artıkları (F61.02):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Kişi kayıtları ve arsa payları kısmen dolu, birden çok daireli site. Ek Borç Ekle formunda aynı toplam tutarı önce “Eşit bölüş”, sonra “Kişi sayısına göre” ve “Arsa payına göre” seçerek önizleyin (kaydetmeyin). Daire sayısına tam bölünmeyen kuruşlu bir tutarla (örn. 10.000,03 TL) “Eşit bölüş” önizlemesine bakın.
   - **Beklenen Sonuç:** Üç yöntemde dairelere düşen tutarlar farklıdır ama her önizlemede toplam girilen tutara kuruşu kuruşuna eşittir. Bölünemeyen kuruşlar kimliği küçük (listede üstteki) dairelere gider.
-- [ ] **130.3. Isı payı: “Alan payı tabanı” seçicisi (F49.03):**
+- [ ] **138.3. Isı payı: “Alan payı tabanı” seçicisi (F61.03):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Isı sayaçlı birkaç daire ve bir dönem okumaları. Sayaç > Faturalandır’da tür Isı, yöntem “Isı payı” seçin; “Alan payı tabanı” seçicisine bakın. Arsa payı tanımlı bir sitede taban seçmeden önizleyin. Tabanı “Arsa payı” yapıp bir dairenin arsa payını boş bırakın; önizleyin, sonra “Borçlandır”a basmayı deneyin. Tabanı “Kişi sayısı” yapıp kişi kaydı olmayan bir daireyle önizleyin.
   - **Beklenen Sonuç:** Seçici Eşit (varsayılan), Arsa payı ve Kişi sayısı seçeneklerini verir. Taban seçilmediğinde arsa payı tanımlı olsa bile alan payı EŞİT dağıtılır. Arsa payı seçilip bir dairede arsa payı yoksa o daire “arsa payı tanımlı değil” diye eksik listelenir ve “Verisi eksik daireleri atla” kapalıyken Borçlandır reddedilir (sessiz eşit paya düşme yoktur). Atlanan daire faturalandırmaya hiç dahil edilmez. Satır toplamı girilen gider tutarına eşittir; ekranda hiçbir yerde m² geçmez.
 
-## 131. 💰 Alacaklı Devir Bakiyesi: Eksi Tutar Devir Alacağıdır (2026-10-29, karşılaştırma raporu P2-4, karar K16)
+## 139. 💰 Alacaklı Devir Bakiyesi: Eksi Tutar Devir Alacağıdır (2026-10-29, karşılaştırma raporu P2-4, karar K16)
 
 Devir bakiyesi dosyasındaki eksi tutar artık hata değil, ALACAKLI devirdir: dairenin hesabına devir alacağı olarak yazılır ve sonraki borçlara en eski vadeden başlayarak mahsup edilir. Devir alacağı tahsilat sayılmaz (gelir-gider raporu ve ana sayfa tahsilat toplamları artmaz), makbuz kesilmez ve tahsilat düzeltmesi yapılamaz; ekstrede “Devir alacağı” etiketini taşır. Eski uygulama sürümü alacaklı dosyayı onaylayamaz (güvenli taraf); web ve uygulama birlikte güncellenir.
 
-- [ ] **131.1. Excel’den devir: eksi tutar alacaklı devirdir (F50.01):**
+- [ ] **139.1. Excel’den devir: eksi tutar alacaklı devirdir (F62.01):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Devir bakiyesi henüz yüklenmemiş birkaç daire. Finans > Daireler > Devir bakiyesi > “Excel’den yükle”: şablondaki notu okuyun; bir daireye -500,00 (eksi), bir başkasına pozitif tutar yazın, alacaklı satırın vade hücresini de doldurun. Önizlemeye ve onay penceresine bakın.
   - **Beklenen Sonuç:** Eksi tutar hata değildir; önizlemede “alacaklı kayıt” sayısı görünür ve vade hücresi dolu alacaklı satırda “vade yok sayıldı” uyarısı çıkar. Onay penceresi devir BORCU ve devir ALACAĞI toplamlarını ayrı yazar (“Toplam … devir borcu ve … devir alacağı …”).
-- [ ] **131.2. Ekstrede “Devir alacağı” etiketi (F50.02):**
-  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: F50.01 ile yüklenmiş alacaklı devir. F50.01’deki yüklemeyi onaylayın; alacaklı dairenin ekstresini açın. Alacak satırına dokunun.
+- [ ] **139.2. Ekstrede “Devir alacağı” etiketi (F62.02):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: F62.01 ile yüklenmiş alacaklı devir. F62.01’deki yüklemeyi onaylayın; alacaklı dairenin ekstresini açın. Alacak satırına dokunun.
   - **Beklenen Sonuç:** Satır “Tahsilat” türündedir ama yöntem rozeti yerine “Devir alacağı” rozetini taşır (Havale / EFT rozeti yoktur). “Makbuz Düzenle” ve “Düzelt” düğmeleri yoktur; “İptal Et” vardır.
-- [ ] **131.3. Alacaklı devirden sonra aidat: mahsup ve raporlar (F50.03):**
-  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: F50.01 ile yüklenmiş alacaklı devirler. Devir alacağı 500 TL olan dairede 1.250 TL aidat borçlandırın. Alacağı aidattan büyük olan bir dairede aynısını yapın. Yönetici ana sayfasında ve gelir-gider raporunda “Tahsilat” toplamına bakın. Ev sahibi hesabına yazılan bir devir alacağının kiracı hesabının borcunu kapatıp kapatmadığına bakın.
+- [ ] **139.3. Alacaklı devirden sonra aidat: mahsup ve raporlar (F62.03):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: F62.01 ile yüklenmiş alacaklı devirler. Devir alacağı 500 TL olan dairede 1.250 TL aidat borçlandırın. Alacağı aidattan büyük olan bir dairede aynısını yapın. Yönetici ana sayfasında ve gelir-gider raporunda “Tahsilat” toplamına bakın. Ev sahibi hesabına yazılan bir devir alacağının kiracı hesabının borcunu kapatıp kapatmadığına bakın.
   - **Beklenen Sonuç:** Bakiye 750 TL olur; Borcum ve ekstrede kalan 750 TL’dir. Alacak aidattan fazlaysa artan alacak kalır. “Tahsilat” toplamları devir alacağı kadar ARTMAZ. Ev sahibi hesabındaki devir alacağı kiracı hesabının borcunu KAPATMAZ (mahsup hesap bazlıdır).
-- [ ] **131.4. Devir yüklemesini geri alma (borç ve alacak birlikte) (F50.04):**
-  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: F50.01 ile yüklenmiş alacaklı devir. Alacaklı kayıtlar da içeren bir devir yüklemesinin yanındaki “Geri al”a dokunun; nedeni yazıp onaylayın. Yüklemeden sonra bir daireye gerçek tahsilat girilmişse aynı pencerede uyarıya bakın.
+- [ ] **139.4. Devir yüklemesini geri alma (borç ve alacak birlikte) (F62.04):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: F62.01 ile yüklenmiş alacaklı devir. Alacaklı kayıtlar da içeren bir devir yüklemesinin yanındaki “Geri al”a dokunun; nedeni yazıp onaylayın. Yüklemeden sonra bir daireye gerçek tahsilat girilmişse aynı pencerede uyarıya bakın.
   - **Beklenen Sonuç:** Pencere ters kayıt sayısını devir borcu ve devir alacağı olarak ayrı yazar. Onaydan sonra borç ve alacak birlikte terslenir, ikinci geri alma reddedilir. “Sonradan tahsilat” uyarısı yalnız GERÇEK tahsilatlar için çıkar (devir alacağı saymaz).
 
-## 132. 🏘️ Kiracı Borcunun Malike Devri, Gecikmede Öneri ve Alacak İadesi (2026-10-29, karşılaştırma raporu P1-1, P1-4, kararlar K1, K4, K17, migration 088 ve 089)
+## 140. 🏘️ Kiracı Borcunun Malike Devri, Gecikmede Öneri ve Alacak İadesi (2026-10-29, karşılaştırma raporu P1-1, P1-4, kararlar K1, K4, K17, migration 088 ve 089)
 
 Sunucu tarafı hazır ve gerçek PostgreSQL’de sınandı; yönetici ve sakin ekranları henüz yok (sonraki iş), bu yüzden aşağıdaki maddelerin çoğu “Yakında…” durumundadır. Kiracı borcunun malike devri açık, yönetici onaylı, izli ve geri alınabilir bir eylemdir; borç mutlaka tahsil edilir, kiracı vermezse mal sahibi öder: devir yalnız çıkışta değil gecikmede de yönetici önüne önerilir. Fazla ödeme varsayılan olarak alacak kalır; iade isteğe bağlı ve yönetici onaylıdır. Kiracı çıkışında malike giden bildirim şimdiden denenebilir. Devir ve bildirim metinlerinin hukuki zemini avukat onayı bekler.
 
-- [ ] **132.1. Kiracı çıkışında malike borç bildirimi (F51.01):**
+- [ ] **140.1. Kiracı çıkışında malike borç bildirimi (F63.01):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi ve ev sahibi. Ön koşul: Hem malik hem kiracısı olan bir daire; kiracı hesabında ödenmemiş borç. Hesabında ödenmemiş borç olan bir kiracı için “Daireden ayrıl” (ya da yönetici olarak “Taşındı”) işlemini yapın. Aynı işlemi borcu olmayan bir kiracıyla yapın. Ev sahibi hesabıyla uygulamadaki bildirimlere bakın.
   - **Beklenen Sonuç:** Çıkış ENGELLENMEZ. Borçlu kiracı çıkarken ev sahibine, çıkış tamamlanmadan önce tutarı ve “kiracının hesabında kalır; site yönetimi onaylarsa hesabınıza devredilebilir” bilgisini içeren bir bildirim gider; çıkış sonrasındaki genel bildirim borçlu / borçsuz ayrılır. Borcu olmayan kiracı için bu bildirim gitmez.
-- [ ] **132.2. Borcu malike devret: önizleme, devir, geri alma (F51.02) (ekran yakında; şimdilik denenmez):**
+- [ ] **140.2. Borcu malike devret: önizleme, devir, geri alma (F63.02) (ekran yakında; şimdilik denenmez):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Hem malik hem kiracısı olan, kiracı hesabında vadesi geçmiş borç bulunan daire. Kiracı hesabında 1.000’er TL’lik üç aidatı olan ve 1.500 TL ödenmiş bir dairede “Borcu malike devret”i açın (yönetici ekranı yakında). Önizlemeyi okuyup nedeni yazarak devri onaylayın; sonra devri geri alın.
   - **Beklenen Sonuç:** Önizlemede vadesi geçmiş, ödenmemiş kalemler ve toplamı (1.500 TL; kısmen ödenmiş kalem için kalan 500 TL) görünür; gecikme tazminatı ve vadesi gelmemiş kalem devredilmez. Onayla malikin borcu tutar kadar artar, kiracınınki aynı tutar azalır, iki hesabın toplamı aynı kalır; malike bildirim gider; ekstrede “Kiracı hesabından devreden borç” satırı görünür. Geri alma bakiyeleri devir öncesine döndürür (satırlar silinmez); devirden sonra malik hesabına ödeme girildiyse geri alınamaz. Malik kaydı olmayan dairede devir yapılamaz. Yazma yalnız yönetici ve süper kullanıcıdadır; kurul yalnız okur.
-- [ ] **132.3. Gecikmede de malike devir önerisi (F51.03) (ekran yakında; şimdilik denenmez):**
+- [ ] **140.3. Gecikmede de malike devir önerisi (F63.03) (ekran yakında; şimdilik denenmez):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Kiracısı oturan, vadesi geçmiş borcu olan ve malik kaydı bulunan daire. Kiracısı oturan, vadesi geçmiş ödenmemiş borcu olan ve malik kaydı bulunan bir dairede yönetici ana sayfasındaki dikkat satırlarına bakın (satır etiketi ve devir penceresi yakında).
   - **Beklenen Sonuç:** Borç mutlaka tahsil edilir; kiracı vermezse mal sahibi öder: gecikmiş kiracı borcu için malike devir yalnız çıkışta değil gecikmede de yönetici önüne önerilir. Sunucuda “devredilebilir daireler” listesi ve yönetici dikkat satırı hazırdır; devir yine önizleme, onay ve neden ile yapılır ve geri alınabilir. Ekranda şimdilik genel bir “bekleyen iş” satırı görünebilir.
-- [ ] **132.4. Alacak iadesi: talep, onay, ret, geri alma (F51.04) (ekran yakında; şimdilik denenmez):**
+- [ ] **140.4. Alacak iadesi: talep, onay, ret, geri alma (F63.04) (ekran yakında; şimdilik denenmez):**
   - **Nasıl Test Edilir:** Rol: Daire sakini ve site yöneticisi. Ön koşul: Fazla ödemesi (alacağı) olan bir daire; en az bir kasa ya da banka hesabı. 3.000 TL borca 5.000 TL ödenmiş bir dairede sakin “Fazla ödememi iade et” ile 1.500 TL iade istesin; 2.500 TL (alacaktan fazla) istemeyi de deneyin (sakin ekranı yakında). Yönetici ödeme hesabını seçip onaylasın; nakit hesapta bakiye yetmiyorsa deneyin; bir talebi gerekçeyle reddedin; onaylı bir iadeyi geri alın; onaylı iade varken o ödemeyi iptal etmeyi deneyin (yönetici ekranı yakında).
   - **Beklenen Sonuç:** Alacaktan fazlası istenemez; başka dairenin hesabına talep açılamaz. Onayda daire alacağı 2.000 TL’den 500 TL’ye iner, seçilen hesaptan 1.500 TL çıkış görünür, IA-yıl-sıra numaralı iade makbuzu oluşur; Aidat + Fon + avans toplamı hesapların toplamına eşit kalır. Nakit hesapta bakiye yetmezse “yeterli nakit yok” uyarısı çıkar. Reddedilince gerekçe sakine görünür. İade geri alınınca alacak ve hesap bakiyesi geri gelir, makbuz iptal sayılır. Onaylı iade varken o ödemeyi iptal etmek “önce iadeyi geri alın” diye reddedilir.

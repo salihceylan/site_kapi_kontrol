@@ -31,6 +31,8 @@ export const RESIDENCY_REASON_CODES = Object.freeze([
   'admin_change',
   'owner_record',
   'owner_default',
+  'co_owner_add',
+  'account_holder_change',
 ]);
 
 const REASON_RE = /^[a-z][a-z0-9_]{1,39}$/;

@@ -75,8 +75,18 @@ export function isPasswordVersionValid(claims, passwordHash) {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
+function effectiveExpiresSeconds(requested) {
+  const configured = resolveJwtExpiresSeconds(process.env);
+  const short = Number(requested);
+  if (requested === undefined || requested === null || !Number.isFinite(short) || short <= 0) {
+    return configured;
+  }
+  return Math.min(Math.max(1, Math.floor(short)), configured);
+}
+
 /**
  * @param user  { id, ... }  (yalnizca id kullanilir; email/role tokena yazilmaz)
+ * @param options.expiresInSeconds  istege bagli KISA omur (deneme oturumu: 72 saat); yapilandirilmis omru ASLA uzatmaz (kucuk olan secilir)
  * @param options.passwordHash  pv claim'i icin guncel parola hash'i (yoksa user.password_hash,
  *                              o da yoksa token pv'siz uretilir; pv zorunluyken boyle bir token dogrulamada reddedilir)
  */
@@ -91,7 +101,7 @@ export function signAccessToken(user, options = {}) {
   }
   return jwt.sign(payload, getJwtSecret(), {
     algorithm: JWT_ALGORITHM,
-    expiresIn: resolveJwtExpiresSeconds(process.env),
+    expiresIn: effectiveExpiresSeconds(options?.expiresInSeconds),
   });
 }
 

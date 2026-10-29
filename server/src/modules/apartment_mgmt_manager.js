@@ -38,6 +38,7 @@ function candidatesOf(state) {
       user_code: userCode,
       name: r.name ?? 'Sakin',
       relation: r.relation ?? 'resident',
+      is_account_holder: r.is_account_holder === true,
       is_admin: isAdmin,
     });
   }
@@ -61,7 +62,8 @@ function candidatesOf(state) {
   // Eger hicbiri is_admin olmadiysa ve aday varsa: ilk adayi admin say
   if (candidates.length > 0 && !candidates.some((c) => c.is_admin)) {
     const tenant = candidates.find((c) => c.relation === 'tenant');
-    const owner = candidates.find((c) => c.relation === 'owner');
+    // Coklu malik (104): varsayilan olarak hesap muhatabi olan malik; yoksa ilk malik.
+    const owner = candidates.find((c) => c.relation === 'owner' && c.is_account_holder === true) ?? candidates.find((c) => c.relation === 'owner');
     const target = tenant ?? owner ?? candidates[0];
     target.is_admin = true;
   }

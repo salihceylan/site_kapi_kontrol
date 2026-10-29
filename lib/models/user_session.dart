@@ -12,6 +12,7 @@ class UserSession {
     this.mustChangePassword = false,
     this.phoneNumber,
     this.createdAt,
+    this.trialExpiresAt,
   });
 
   final int id;
@@ -25,6 +26,13 @@ class UserSession {
   final String? phoneNumber;
   final DateTime? createdAt;
 
+  /// Deneme erişim kodu oturumunun bitiş anı (P2-27, karar K10: 72 saat, demo siteye kilitli). Yalnız deneme hesabında
+  /// dolu; sunucu `trial_expires_at` alanını giriş yanıtında ve `/me`'de verir. null = normal oturum.
+  final DateTime? trialExpiresAt;
+
+  /// Bu oturum deneme erişim kodu ile açılmış mı?
+  bool get isTrial => trialExpiresAt != null;
+
   UserSession copyWith({
     int? id,
     String? fullName,
@@ -36,6 +44,7 @@ class UserSession {
     bool? mustChangePassword,
     String? phoneNumber,
     DateTime? createdAt,
+    DateTime? trialExpiresAt,
   }) {
     return UserSession(
       id: id ?? this.id,
@@ -48,6 +57,7 @@ class UserSession {
       mustChangePassword: mustChangePassword ?? this.mustChangePassword,
       phoneNumber: phoneNumber ?? this.phoneNumber,
       createdAt: createdAt ?? this.createdAt,
+      trialExpiresAt: trialExpiresAt ?? this.trialExpiresAt,
     );
   }
 
@@ -63,11 +73,13 @@ class UserSession {
       'must_change_password': mustChangePassword,
       'phone_number': phoneNumber,
       'created_at': createdAt?.toIso8601String(),
+      if (trialExpiresAt != null) 'trial_expires_at': trialExpiresAt!.toUtc().toIso8601String(),
     };
   }
 
   factory UserSession.fromJson(Map<String, dynamic> json) {
     final createdAtRaw = json['created_at'] as String?;
+    final trialRaw = json['trial_expires_at'];
     return UserSession(
       id: json['id'] as int,
       fullName: json['full_name'] as String,
@@ -81,6 +93,9 @@ class UserSession {
       createdAt: createdAtRaw == null || createdAtRaw.isEmpty
           ? null
           : DateTime.tryParse(createdAtRaw),
+      trialExpiresAt: trialRaw is String && trialRaw.isNotEmpty
+          ? DateTime.tryParse(trialRaw)?.toLocal()
+          : null,
     );
   }
 }

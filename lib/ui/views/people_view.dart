@@ -41,12 +41,20 @@ class PeopleView extends StatefulWidget {
     this.manageSites = true,
     this.readOnlySites = const <PeopleSite>[],
     this.onDataChanged,
+    this.initialSiteCode,
+    this.initialTab,
   });
 
   final AuthService authService;
   final bool manageSites;
   final List<PeopleSite> readOnlySites;
   final VoidCallback? onDataChanged;
+
+  /// Kurulum sihirbazı gibi dış giriş noktalarından açılan site (listede yoksa ilk site seçilir).
+  final int? initialSiteCode;
+
+  /// Açılışta seçili sekme (0 Kişiler, 1 Daireler, 2 Araçlar, 3 Kadro); aralık dışıysa ilk sekme.
+  final int? initialTab;
 
   @override
   State<PeopleView> createState() => PeopleViewState();
@@ -71,6 +79,9 @@ class PeopleViewState extends State<PeopleView> {
   final Set<int> _visited = <int>{0};
   final Set<int> _dirty = <int>{};
 
+  // Dış giriş noktasından (kurulum sihirbazı) istenen sekme: ilk site seçiminde bir kez uygulanır.
+  int? _pendingTab;
+
   // Site değişince yenilenir: eski sitenin sekme durumları (ve uçuştaki yanıtları) atılır.
   GlobalKey<PeoplePersonsTabState> _personsKey = GlobalKey<PeoplePersonsTabState>();
   GlobalKey<PeopleApartmentsTabState> _apartmentsKey =
@@ -81,6 +92,8 @@ class PeopleViewState extends State<PeopleView> {
   @override
   void initState() {
     super.initState();
+    final tab = widget.initialTab;
+    _pendingTab = tab != null && tab >= 0 && tab < _tabs.length ? tab : null;
     unawaited(reload());
   }
 
@@ -164,7 +177,9 @@ class PeopleViewState extends State<PeopleView> {
       }
       if (!mounted || token != _sitesToken) return;
       final keep = _siteCode != null && merged.any((s) => s.code == _siteCode);
-      final next = keep ? _siteCode : (merged.isEmpty ? null : merged.first.code);
+      final wanted = widget.initialSiteCode;
+      final preferred = !keep && wanted != null && merged.any((s) => s.code == wanted);
+      final next = keep ? _siteCode : (preferred ? wanted : (merged.isEmpty ? null : merged.first.code));
       final siteChanged = next != _siteCode;
       final previous = _site;
       setState(() {
@@ -198,10 +213,11 @@ class PeopleViewState extends State<PeopleView> {
 
   void _resetTabs(int? siteCode) {
     _siteCode = siteCode;
-    _tab = 0;
+    _tab = _pendingTab ?? 0;
+    _pendingTab = null;
     _visited
       ..clear()
-      ..add(0);
+      ..add(_tab);
     _dirty.clear();
     _personsKey = GlobalKey<PeoplePersonsTabState>();
     _apartmentsKey = GlobalKey<PeopleApartmentsTabState>();
@@ -455,12 +471,18 @@ class PeopleViewState extends State<PeopleView> {
           key: _apartmentsKey,
           scope: scope,
           onDataChanged: changed,
+          onImportRequested: scope.canWrite
+              ? () => unawaited(_openBulkImport(scope, kind: ImportKind.allInOne))
+              : null,
         );
       case 2:
         return PeopleVehiclesTab(
           key: _vehiclesKey,
           scope: scope,
           onDataChanged: changed,
+          onImportRequested: scope.canWrite
+              ? () => unawaited(_openBulkImport(scope, kind: ImportKind.vehicles))
+              : null,
         );
       default:
         return PeopleTeamTab(

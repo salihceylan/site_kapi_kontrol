@@ -9,7 +9,7 @@ Her ajan yalnızca kendi sahiplik listesindeki dosyalara yazar; API şekilleri b
 1. Çalışma dizini `G:\site\site_kapi_kontrol`. **Aynı ağaçta başka ajanlar eşzamanlı çalışıyor.** Yalnızca sahip olduğunuz dosyaları değiştirin.
 2. **Paylaşılan sıcak dosyalar** (yalnız küçük, sabitlenmiş `Edit` çağrılarıyla; düzenlemeden hemen önce yeniden `Read` edin; asla yeniden yazma/biçimlendirme/sıra değiştirme yapmayın):
    `server/src/db.js`, `server/src/server.js`, `server/src/modules/catalog.js`, `server/scripts/qa_platform_pg.mjs`,
-   `server/src/routes/auth_routes.js`, `lib/ui/views/home_page.dart`, `lib/ui/widgets/yan_menu.dart`, `lib/main.dart`,
+   `server/src/routes/auth_routes.js`, `lib/ui/pages/home_page.dart`, `lib/ui/widgets/yan_menu.dart`, `lib/main.dart`,
    `lib/ui/views/profile_view.dart`, `pubspec.yaml` (bağımlılıklar zaten eklendi: `url_launcher`, `package_info_plus`; başka bağımlılık eklemeyin).
 3. **Git yazma komutları YASAK**: `git add/commit/push/stash/checkout/reset/clean/rm/restore` çalıştırmayın. Commit'i koordinatör atar. `git status/diff/log/show` serbest.
 4. Kendi oluşturmadığınız dosyayı silmeyin. `flutter clean` ve ağaç genelinde biçimlendirme (`dart format .`) YASAK; yalnızca kendi dosyalarınızı biçimlendirin.

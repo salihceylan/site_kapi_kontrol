@@ -65,6 +65,7 @@ import { equipmentRouter } from './modules/equipment_routes.js';
 import { cctvRouter } from './modules/cctv_routes.js';
 import { apartmentMgmtRouter } from './modules/apartment_mgmt_routes.js';
 import { residencyLogRouter } from './modules/residency_log_routes.js';
+import { siteAuditLogRouter } from './modules/site_audit_log_routes.js';
 import { meteringRouter } from './modules/metering_routes.js';
 import { meteringFieldRouter } from './modules/metering_field_routes.js';
 import { startContractReminders, stopContractReminders } from './modules/contracts_reminders.js';
@@ -76,10 +77,13 @@ import { driveRouter } from './modules/drive_routes.js';
 import { neighborBoardRouter } from './modules/neighbor_board_routes.js';
 import { paymentNoticeRouter } from './modules/payment_notice_routes.js';
 import { annualReportRouter } from './modules/annual_report_routes.js';
+import { emergencyRouter } from './modules/emergency_routes.js';
 import { startDocumentsMaintenance, stopDocumentsMaintenance } from './modules/document_maintenance.js';
 import { pushRouter } from './modules/push_routes.js';
 import { notifyChannelsRouter } from './modules/notify_channels_routes.js';
 import { oauthRouter } from './modules/oauth_routes.js';
+import { trialAccessRouter } from './modules/trial_access_routes.js';
+import { closeExpiredTrialAccounts } from './modules/trial_access_service.js';
 import { startPushWorker, stopPushWorker } from './modules/push_worker.js';
 
 import { buildCorsAllowlist, createCorsOptionsDelegate } from './config/cors.js';
@@ -209,18 +213,24 @@ app.use(driveRouter);
 app.use(neighborBoardRouter);
 // Faaliyet raporu: /manager/sites/:siteCode/annual-report (modul annual_report, varsayilan KAPALI).
 app.use(annualReportRouter);
+// Acil durum akisi (107): /app/emergency + /manager/sites/:siteCode/emergency (asansor bakim firmasi). Cekirdek ozellik: modul kapisi yok.
+app.use(emergencyRouter);
 // Kamera (CCTV) baglantisi: /manager/sites/:siteCode/cctv/{cameras,events,clip-link}[...] (modul cctv_link, varsayilan KAPALI; sakin ucu yok).
 app.use(cctvRouter);
 // Daire sahipligi ve yonetimi (074): /app/apartments/{mine,people-search,requests/:id/*,:id/{tenant,family,exit,proxies,...}} + /manager/sites/:siteCode/signing-roster (cekirdek; modul gerektirmez).
 app.use(apartmentMgmtRouter);
 // Daire sakini ADLI KAYDI (075): /manager/sites/:siteCode/{apartments/:id/residency-log,residency-log/export} (yalniz site yoneticisi / super; cekirdek).
 app.use(residencyLogRouter);
+// Site yoneticisinin islem kayitlari (P2-19): /manager/sites/:siteCode/audit-log (yalniz o sitenin yoneticisi / super; cekirdek; yalniz okur).
+app.use(siteAuditLogRouter);
 // Telefon bildirimi (Faz 3b-B): /app/push/devices[/:installId], /app/push/test, /admin/push/status (tercihler /app/notification-preferences'ta).
 app.use(pushRouter);
 // SMS ile giris + tarayici bildirimi (063): /auth/sms/*, /app/web-push/* (SMS / VAPID anahtari yoksa kapali).
 app.use(notifyChannelsRouter);
 // Google ve Apple (iCloud) sosyal giris / kayit (076): /auth/oauth/status, /auth/oauth/google, /auth/oauth/apple.
 app.use(oauthRouter);
+// Deneme erisim kodu (P2-27 / K10): POST /auth/trial-access (kodla 72 saatlik, demo siteye kilitli oturum) + /manager/sites/:siteCode/trial-access[/demo|/codes[/:id]] (sahip / demo site yoneticisi).
+app.use(trialAccessRouter);
 // Hesap silme (kimliksizlestirme) ve kisisel veri disa aktarma: /me/account-deletion[/preview], /me/data-export (yalniz kendi hesabi).
 app.use(accountRouter);
 // Platform hizmetleri: yasal belgeler (/public/legal-documents, /legal/:id, /me/consents), /public/app-config, /public/client-errors, /admin/platform-config.
@@ -332,6 +342,8 @@ async function shutdown(signal) {
 function runCleanupSafely() {
   return Promise.resolve()
     .then(() => runDatabaseCleanup())
+    // Suresi dolan / iptal edilen deneme erisim kodu hesaplari kapatilir (kullanici pasif, demo site yonetici bagi silinir); ayri adim: bakim servisinin dar kapsamina girmez.
+    .then(() => closeExpiredTrialAccounts())
     .catch((error) => {
       // eslint-disable-next-line no-console
       console.error('[Bakim] Temizlik hatasi:', error?.code || error?.message);

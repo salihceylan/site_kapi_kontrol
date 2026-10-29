@@ -12,6 +12,7 @@ import 'package:site_kapi_kontrol/ui/design/buttons.dart';
 import 'package:site_kapi_kontrol/ui/design/login_hero.dart';
 import 'package:site_kapi_kontrol/ui/design/theme_toggle_button.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+import 'package:site_kapi_kontrol/ui/helpers/trial_code_input.dart';
 import 'package:site_kapi_kontrol/ui/pages/register_individual_page.dart';
 import 'package:site_kapi_kontrol/ui/pages/sms_login_page.dart';
 import 'package:site_kapi_kontrol/ui/views/legal_footer_links.dart';
@@ -135,6 +136,109 @@ class _LoginPageState extends State<LoginPage> {
         await _saveCredentials(identifier);
       }
     }
+  }
+
+  /// "Deneme kodum var": tek kullanımlık deneme erişim kodu ile 72 saatlik, yalnız demo siteye kilitli oturum açar.
+  /// Başarıda kök ekran kendiliğinden ana sayfaya geçer (üstte "Deneme - X saat kaldı" şeridi); diyalog burada kapatılır.
+  Future<void> _showTrialCodeDialog() async {
+    final codeController = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+    bool isSubmitting = false;
+    String? dialogError;
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final p = context.palette;
+            Future<void> submit() async {
+              if (!formKey.currentState!.validate()) return;
+              setDialogState(() {
+                isSubmitting = true;
+                dialogError = null;
+              });
+              final error = await widget.authService.loginWithTrialCode(
+                code: codeController.text.trim(),
+              );
+              if (!ctx.mounted) return;
+              if (error != null) {
+                setDialogState(() {
+                  isSubmitting = false;
+                  dialogError = error;
+                });
+                return;
+              }
+              HapticFeedback.lightImpact();
+              Navigator.of(ctx).pop();
+            }
+
+            return AppDialog(
+              title: 'Deneme Kodu ile Giriş',
+              icon: Icons.vpn_key_outlined,
+              actions: [
+                TextButton(
+                  onPressed: isSubmitting ? null : () => Navigator.of(ctx).pop(),
+                  style: TextButton.styleFrom(foregroundColor: p.textSecondary),
+                  child: const Text('İptal'),
+                ),
+                ElevatedButton(
+                  onPressed: isSubmitting ? null : submit,
+                  child: isSubmitting
+                      ? SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: p.textSecondary),
+                        )
+                      : const Text('Giriş Yap'),
+                ),
+              ],
+              child: Form(
+                key: formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      'Size verilen tek kullanımlık deneme kodunu girin. Kod, 72 saat boyunca yalnızca demo sitede çalışan bir deneme hesabı açar; gerçek site verilerine erişilmez.',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                    const SizedBox(height: AppSpace.lg),
+                    if (dialogError != null) ...[
+                      InlineNotice(message: dialogError!),
+                      const SizedBox(height: AppSpace.md),
+                    ],
+                    TextFormField(
+                      controller: codeController,
+                      autofocus: true,
+                      autocorrect: false,
+                      enableSuggestions: false,
+                      textCapitalization: TextCapitalization.characters,
+                      keyboardType: TextInputType.visiblePassword,
+                      inputFormatters: const [TrialCodeInputFormatter()],
+                      onFieldSubmitted: (_) {
+                        if (!isSubmitting) submit();
+                      },
+                      decoration: const InputDecoration(
+                        labelText: 'Deneme kodu',
+                        hintText: 'XXXX-XXXX-XXXX',
+                        prefixIcon: Icon(Icons.vpn_key_outlined),
+                      ),
+                      validator: (value) {
+                        if (!isCompleteTrialCode(value ?? '')) {
+                          return 'Kod 12 karakterdir (XXXX-XXXX-XXXX).';
+                        }
+                        return null;
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   Future<void> _showForgotPasswordDialog() async {
@@ -390,6 +494,12 @@ class _LoginPageState extends State<LoginPage> {
                               ),
                         icon: const Icon(Icons.sms_outlined, size: 18),
                         label: const Text('Telefonla giriş (SMS)'),
+                      ),
+                      // Deneme erişim kodu (P2-27, K10): tek kullanımlık kod, 72 saat, yalnız demo site.
+                      TextButton.icon(
+                        onPressed: _isLoading ? null : _showTrialCodeDialog,
+                        icon: const Icon(Icons.vpn_key_outlined, size: 18),
+                        label: const Text('Deneme kodum var'),
                       ),
                       const SizedBox(height: AppSpace.md),
                       SocialAuthButtons(

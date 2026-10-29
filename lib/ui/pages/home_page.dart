@@ -103,6 +103,9 @@ import 'package:site_kapi_kontrol/ui/dialogs/submit_join_request_dialog.dart';
 import 'package:site_kapi_kontrol/ui/views/join_and_setup_view.dart';
 import 'package:site_kapi_kontrol/ui/views/yeni_site_view.dart';
 import 'package:site_kapi_kontrol/ui/widgets/panel_site_creation_card.dart';
+import 'package:site_kapi_kontrol/services/site_setup_progress_store.dart';
+import 'package:site_kapi_kontrol/ui/views/site_setup_wizard_view.dart';
+import 'package:site_kapi_kontrol/ui/widgets/site_setup_resume_card.dart';
 
 import 'package:site_kapi_kontrol/ui/pages/qr_scan_page.dart';
 
@@ -150,6 +153,7 @@ import 'package:site_kapi_kontrol/ui/helpers/device_add_gate.dart';
 import 'package:site_kapi_kontrol/ui/helpers/module_menu.dart';
 
 import 'package:site_kapi_kontrol/ui/views/audit_log_view.dart';
+import 'package:site_kapi_kontrol/ui/views/site_audit_log_view.dart';
 import 'package:site_kapi_kontrol/ui/views/client_errors_view.dart';
 import 'package:site_kapi_kontrol/ui/views/help_view.dart';
 import 'package:site_kapi_kontrol/ui/views/platform_settings_view.dart';
@@ -185,6 +189,7 @@ import 'package:site_kapi_kontrol/models/budget_models.dart';
 import 'package:site_kapi_kontrol/ui/views/decision_manager_view.dart';
 import 'package:site_kapi_kontrol/ui/views/decision_resident_view.dart';
 import 'package:site_kapi_kontrol/ui/views/directory_view.dart';
+import 'package:site_kapi_kontrol/ui/views/emergency_view.dart';
 import 'package:site_kapi_kontrol/ui/widgets/pending_invitations_card.dart';
 import 'package:site_kapi_kontrol/ui/views/neighbor_board_view.dart';
 import 'package:site_kapi_kontrol/ui/views/annual_report_view.dart';
@@ -378,6 +383,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   // yeniden kurulur (başka durumlarda takipçi yalnız kendi görünümlerini tazeler).
   String _applicationsSignature = '';
   final GlobalKey<AuditLogViewState> _auditLogViewKey = GlobalKey<AuditLogViewState>();
+  final GlobalKey<SiteAuditLogViewState> _siteAuditLogKey = GlobalKey<SiteAuditLogViewState>();
   final GlobalKey<PlatformSettingsViewState> _platformSettingsKey =
       GlobalKey<PlatformSettingsViewState>();
   final GlobalKey<ClientErrorsViewState> _clientErrorsKey = GlobalKey<ClientErrorsViewState>();
@@ -398,6 +404,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final GlobalKey<DecisionManagerViewState> _decisionManagerKey = GlobalKey<DecisionManagerViewState>();
   final GlobalKey<DecisionResidentViewState> _decisionResidentKey = GlobalKey<DecisionResidentViewState>();
   final GlobalKey<DirectoryViewState> _directoryKey = GlobalKey<DirectoryViewState>();
+  final GlobalKey<EmergencyViewState> _emergencyKey = GlobalKey<EmergencyViewState>();
   final GlobalKey<MyApartmentViewState> _myApartmentKey = GlobalKey<MyApartmentViewState>();
   final GlobalKey<BudgetViewState> _budgetKey = GlobalKey<BudgetViewState>();
   final GlobalKey<NeighborBoardViewState> _neighborBoardKey = GlobalKey<NeighborBoardViewState>();
@@ -1114,6 +1121,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           PeopleSite(code: site.siteCode, name: site.siteName),
       ];
 
+  /// "İşlem Kayıtları" siteleri (P2-19): yöneticisi olunan siteler (yalnız yönetici modundaki site yöneticisi). Modül gerektirmez
+  /// (çekirdek). Süper kullanıcıda boştur (tüm siteleri "Denetim Kaydı" ekranından görür). FAIL-OPEN YOK: modül verisi yoksa liste
+  /// boştur; sunucu yetkiyi her çağrıda yine denetler (yalnız o sitenin yöneticisi; kurul / görevli / sakin 403).
+  List<PeopleSite> _siteAuditLogSites(UserRole role) {
+    if (role == UserRole.superUser || !_moduleAccess.isFiltering || !_canManagePeople(role)) return const <PeopleSite>[];
+    return <PeopleSite>[
+      for (final site in _moduleAccess.result!.sites)
+        if (site.role == 'manager') PeopleSite(code: site.siteCode, name: site.siteName, canWrite: true),
+    ];
+  }
+
   /// Kişiler ekranına erişim: yönetim yetkisi ya da en az bir sitede kurul üyeliği. Görevli (STAFF) ve
   /// sıradan sakin erişemez.
   bool _canAccessPeople(UserRole role) =>
@@ -1126,6 +1144,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         // kapısı yokken [_hiddenMenuItems] gizler.
         SirketMenuItem.kapilar,
         if (_canAccessDairem(role)) SirketMenuItem.dairem,
+        if (_canAccessEmergency(role)) SirketMenuItem.acilDurum,
         if (_moduleAccess.boardMemberSites.isNotEmpty) SirketMenuItem.kisiler,
         if (_canAccessAnnouncements(role)) SirketMenuItem.duyurular,
         if (_canAccessFinance(role)) SirketMenuItem.finans,
@@ -1147,6 +1166,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         if (_deviceIntegrationSites(role).isNotEmpty) SirketMenuItem.odemeKamera,
         if (_cctvSites(role).isNotEmpty) SirketMenuItem.kameraCctv,
         if (_equipmentSites(role).isNotEmpty) SirketMenuItem.ekipmanBakim,
+        if (_siteAuditLogSites(role).isNotEmpty) SirketMenuItem.islemKayitlari,
         if (_canAccessVisitorManage(role)) SirketMenuItem.ziyaretciKayitlari,
         if (_visitorResidentSites(role).isNotEmpty) SirketMenuItem.ziyaretcilerim,
         if (_canAccessContracts(role)) SirketMenuItem.sozlesmeler,
@@ -1156,6 +1176,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   /// Dairem: daire sakini, bireysel sakin ve sakin modundaki yönetici (modül gerektirmez). Ekran, bağlı daire yoksa bunu açıkça söyler.
   bool _canAccessDairem(UserRole role) =>
       role == UserRole.apartmentOwner || role == UserRole.individual || (role == UserRole.siteManager && _isResidentMode);
+
+  /// Acil durum (P2-24): modül değil, çekirdek özelliktir; süper kullanıcı dışında herkeste ve modül verisi gelmese de açıktır (acil durumda
+  /// menü ağ ya da modül durumuna bağlı olmaz). Ekran siteyi/adresi kendi uç noktasından alır.
+  bool _canAccessEmergency(UserRole role) => role != UserRole.superUser;
 
   // --- Dosya Deposu: Belgeler (Faz 3b-A) + Google Drive (D1) tek modül (`drive_storage`) ---
 
@@ -1676,8 +1700,23 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   int? _financeInitialSite;
   int? _financeInitialTab;
 
+  /// Yönetici Panel'inin üst alanı: yarım kalan kurulum hatırlatması (P2-15; kayıt yoksa hiçbir şey çizmez) ve
+  /// yöneticide finans dikkat barı.
   Widget? _attentionBarFor(UserSession session, ShowcaseAudience audience) {
-    if (audience != ShowcaseAudience.admin || session.role == UserRole.superUser) return null;
+    if (audience != ShowcaseAudience.admin) return null;
+    final bar = _financeAttentionBar(session);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SiteSetupResumeCard(userId: session.id, onResume: (siteCode, siteName) => unawaited(_openSetupWizard(siteCode, siteName))),
+        ?bar,
+      ],
+    );
+  }
+
+  Widget? _financeAttentionBar(UserSession session) {
+    if (session.role == UserRole.superUser) return null;
     final sites = _financeSites(session.role).where((s) => s.canWrite).toList(growable: false);
     if (sites.isEmpty) return null;
     return ManagerAttentionBar(
@@ -2150,6 +2189,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (item == SirketMenuItem.dairem) {
       return _canAccessDairem(role);
     }
+    if (item == SirketMenuItem.acilDurum) {
+      return _canAccessEmergency(role);
+    }
     // İşletme Projesi: `budget` modülü açık siteye bağlı yönetici / kurul; sakin ve görevli için yok.
     if (item == SirketMenuItem.isletmeProjesi) {
       return _canAccessBudget(role);
@@ -2171,6 +2213,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
     if (item == SirketMenuItem.ekipmanBakim) {
       return _equipmentSites(role).isNotEmpty;
+    }
+    // İşlem Kayıtları: yalnız yönetici modundaki site yöneticisi (yönettiği en az bir site bilinmeli); süper kullanıcı kullanmaz.
+    if (item == SirketMenuItem.islemKayitlari) {
+      return _siteAuditLogSites(role).isNotEmpty;
     }
 
     // Ziyaretçi ve Kargo: `visitor_log` modülü açık siteye bağlı yönetici / görevli / kurul (yönetim ekranı) ya da
@@ -2301,6 +2347,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       case SirketMenuItem.denetimKaydi:
         return 'Denetim Kaydı';
 
+      case SirketMenuItem.islemKayitlari:
+        return 'İşlem Kayıtları';
+
       case SirketMenuItem.modulTalepleri:
         return 'Modül Talepleri';
 
@@ -2388,6 +2437,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
       case SirketMenuItem.dairem:
         return 'Dairem';
+
+      case SirketMenuItem.acilDurum:
+        return 'Acil durum';
 
       case SirketMenuItem.yeniSite:
         return 'Yeni Site Oluştur';
@@ -4920,12 +4972,32 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final role = widget.authService.session?.role;
     if (role == UserRole.siteManager) {
       _goToMenu(SirketMenuItem.dashboard);
+      // P2-15 / P2-16: onaydan sonra ilk girişte kuruluma yönlendirme. Panel'de "Site kurulumunu tamamlayın" kartı açılır
+      // (kayıt cihazda); ileti de sihirbazı doğrudan açan bir eylem taşır.
+      final siteCode = application.siteCode;
+      final userId = widget.authService.session?.id;
+      if (siteCode != null && userId != null) {
+        // Kayıt arka planda açılır: onay iletisi cihaz depolamasını BEKLEMEZ (depolama yavaş / hatalı olsa da ileti çıkar).
+        unawaited(
+          SiteSetupProgressStore.shared
+              .ensure(userId, siteCode, siteName: application.siteName)
+              .catchError((Object _) => false),
+        );
+      }
       AppSnack.show(
         context,
         before == UserRole.siteManager
             ? 'Site başvurunuz onaylandı. Siteniz kuruldu.'
             : 'Site başvurunuz onaylandı. Artık site yöneticisisiniz.',
         kind: AppSnackKind.success,
+        duration: const Duration(seconds: 8),
+        persist: false,
+        action: siteCode == null
+            ? null
+            : SnackBarAction(
+                label: 'Kuruluma başla',
+                onPressed: () => unawaited(_openSetupWizard(siteCode, application.siteName)),
+              ),
       );
     }
   }
@@ -5133,6 +5205,26 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       apartmentId: apartment.id,
       initialLabel: apartment.label,
     );
+  }
+
+  /// Site kurulum sihirbazı (P2-15): adım adım site, kişi, modül ve finans kurulumu. İlerleme cihazda saklanır; Panel'deki
+  /// hatırlatma kartı ve Site Yönetimi'ndeki «Kurulum Sihirbazı» düğmesi kaldığı yerden açar. Sihirbazda kayıtlar
+  /// değiştiyse site listeleri ve modül erişimi yeniden okunur (AGENTS.md kural 7).
+  Future<void> _openSetupWizard(int siteCode, String siteName) async {
+    if (!mounted) return;
+    final outcome = await SiteSetupWizardView.open(
+      context,
+      authService: widget.authService,
+      siteCode: siteCode,
+      siteName: siteName,
+    );
+    if (!mounted || outcome?.changed != true) return;
+    await _loadSites(force: true);
+    unawaited(_moduleAccess.refresh());
+    final current = _selectedSite;
+    if (current != null && current.id == siteCode) {
+      await _selectSite(current);
+    }
   }
 
   Future<void> _openBulkImportFromSites(int siteCode, String siteName) async {
@@ -6081,6 +6173,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       case SirketMenuItem.denetimKaydi:
         await _auditLogViewKey.currentState?.reload();
         break;
+      case SirketMenuItem.islemKayitlari:
+        await _siteAuditLogKey.currentState?.reload();
+        break;
       case SirketMenuItem.platformAyarlari:
         await _platformSettingsKey.currentState?.reload();
         break;
@@ -6103,6 +6198,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         await _directoryKey.currentState?.reload();
       case SirketMenuItem.dairem:
         await _myApartmentKey.currentState?.reload();
+      case SirketMenuItem.acilDurum:
+        await _emergencyKey.currentState?.reload();
       case SirketMenuItem.isletmeProjesi:
         await _budgetKey.currentState?.reload();
       case SirketMenuItem.komsuPanosu:
@@ -7229,6 +7326,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           onResetHouseholdPersonPin: _directResetHouseholdPersonPin,
           onOpenApartmentCard: _openApartmentCardFromSites,
           onOpenBulkImport: _openBulkImportFromSites,
+          onOpenSetupWizard: session.role == UserRole.superUser || session.role == UserRole.siteManager
+              ? (siteCode, siteName) => unawaited(_openSetupWizard(siteCode, siteName))
+              : null,
           siteManagersData: _selectedSiteManagersData,
           isLoadingManagers: _isLoadingSiteManagers,
           onInviteSiteManager: _openInviteSiteManagerDialog,
@@ -7390,6 +7490,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           authService: widget.authService,
         );
 
+      case SirketMenuItem.islemKayitlari:
+        return SiteAuditLogView(
+          key: _siteAuditLogKey,
+          authService: widget.authService,
+          sites: _siteAuditLogSites(session.role),
+        );
+
       case SirketMenuItem.platformAyarlari:
         return PlatformSettingsView(
           key: _platformSettingsKey,
@@ -7452,6 +7559,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           key: _myApartmentKey,
           authService: widget.authService,
           onChanged: () => unawaited(_moduleAccess.refresh()),
+        );
+
+      case SirketMenuItem.acilDurum:
+        return EmergencyView(
+          key: _emergencyKey,
+          authService: widget.authService,
+          // Çekmecedeki site seçici bir siteyi seçtiyse acil durum bilgisi o siteyle açılır (adres doğru siteden).
+          preferredSiteCode: _moduleAccess.scopeSiteCode,
+          // Asansör bakım firmasını yalnız yönetici modundaki site yöneticisi düzenler (sakin modunda düzenleme yok).
+          allowEdit: _canManagePeople(session.role),
         );
 
       case SirketMenuItem.komsuPanosu:

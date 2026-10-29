@@ -24,6 +24,7 @@ import { ensureWorkEquipmentSchema } from './modules/work_equipment_schema.js';
 import { ensureQuoteSchema } from './modules/equipment_quote_schema.js';
 import { ensureCctvSchema } from './modules/cctv_schema.js';
 import { ensureApartmentMgmtSchema } from './modules/apartment_mgmt_schema.js';
+import { ensureApartmentOwnersSchema } from './modules/apartment_owners_schema.js';
 import { ensureResidencyLogSchema } from './modules/residency_log_schema.js';
 import { ensureDecisionBookSchema } from './modules/decision_book_schema.js';
 import { ensureBudgetSchema } from './modules/budget_schema.js';
@@ -55,6 +56,8 @@ import { ensureFeeDistributionSchema } from './modules/finance_distribution_sche
 import { ensureWorkCategoriesSchema } from './modules/work_categories_schema.js';
 import { ensureAuthAttemptLimitsSchema } from './modules/auth_attempt_limits_schema.js';
 import { ensureMenuLayoutSchema } from './modules/menu_layout_schema.js';
+import { ensureEmergencySchema } from './modules/emergency_schema.js';
+import { ensureTrialAccessSchema } from './modules/trial_access_schema.js';
 import { CORE_MODULES_BACKFILL_SQL } from './modules/core_modules.js';
 import { CARD_PAYMENTS_INTO_FINANCE_SQL } from './modules/card_payments_into_finance.js';
 import { ensureTenantAdminRule } from './modules/apartment_tenant_admin_sql.js';
@@ -2006,6 +2009,9 @@ export async function ensureDbSchema() {
     await ensureDeferred('074 daire sahipligi', () => ensureApartmentMgmtSchema(client));
     // 075 (daire sakini ADLI KAYDI: yalniz-ekleme apartment_residency_log + users silme kayit tetikleyicisi): sites / users / apartment_residencies'ten SONRA; katalog kontrolu (residency_log_schema.js = migrations/075).
     await ensureResidencyLogSchema(client);
+    // 104 (coklu malik: tum malikler kayitli + TEK hesap muhatabi): apartment_residencies'ten SONRA; eksik nesne yoksa yalniz katalog okuma, varsa TEK transaction
+    // (apartment_owners_schema.js = migrations/104). Mevcut tek malik muhatap olarak isaretlenir; eski tekil malik indeksi AYNI ADLA muhatap indeksine cevrilir.
+    await ensureApartmentOwnersSchema(client);
     // 076 (Google ve Apple / iCloud OAuth kimlik baglantilari): katalog kontrolu (oauth_schema.js = migrations/076).
     await ensureOAuthSchema(client);
     // 077 (butunluk sertlestirme): site_name_key() islevi + site adi tekillik indeksleri (uq_sites_name_key, uq_site_applications_pending_name_key;
@@ -2049,6 +2055,11 @@ export async function ensureDbSchema() {
     // 100 (is takibi kategorileri + fotograf yeniden kullanim indeksi): 042 (work_items) ve 047 (work_item_attachments) SONRASI; dev blokta DEGIL; katalog kontrolu + her adim kendi
     // otomatik onayli ifadesi (work_categories_schema.js = migrations/100). Her sey varsa hicbir ifade / kilit yok; varsayilan dort kategori her site icin ilk kullanimda tohumlanir (veri adimi yok).
     await ensureWorkCategoriesSchema(client);
+    // 107 (acil durum akisi: site basina asansor bakim firmasi): sites'tan SONRA; dev blokta DEGIL; tablo varsa hicbir ifade gonderilmez (emergency_schema.js = migrations/107).
+    await ensureEmergencySchema(client);
+    // 106 (deneme erisim kodu, P2-27 / K10): sites ve users'tan SONRA; dev blokta DEGIL; tablo varsa hicbir ifade / kilit yok, yoksa her adim kendi otomatik onayli ifadesi
+    // (trial_access_schema.js = migrations/106). Mevcut tablolara ALTER yok.
+    await ensureTrialAccessSchema(client);
 
     // 031 people_v1: mevcut sakinlerin CRM'e tek seferlik aktarimi. Savunmaci: hata sunucunun acilmasini ENGELLEMEZ
     // (kendi transaction'i geri alinir, isaret yazilmaz => sonraki acilista yeniden denenir; okuma anindaki

@@ -284,7 +284,7 @@ ssh-keygen -R "[178.210.161.55]:22667"
 | [server/src/routes/company_routes.js:326](../../server/src/routes/company_routes.js#L326) | <code>return res.status(400).json({ error: 'device_uid 12 haneli hex (0-9, A-F) olmalidir.' });</code> | Sunucu UID'yi 12 haneli büyük harf hex ister (":" ve "-" ayırıcıları tolere edilir) |
 | [server/src/routes/company_routes.js:110](../../server/src/routes/company_routes.js#L110) | <code>export function resolveCompanyHardwareType(body) {</code> | hardware_type/hardware_target/chip alanlarından türü çıkarır; çıkaramazsa null |
 | [server/src/routes/company_routes.js:127](../../server/src/routes/company_routes.js#L127) | <code>const DEFAULT_COMPANY_HARDWARE_TYPE = 'esp32_c3';</code> | Tür belirlenemezse varsayılan esp32_c3 yazılır; cihaz MQTT bildirimi sonradan düzeltir |
-| [server/src/server.js:127](../../server/src/server.js#L127) | <code>app.post('/api/company/labeled-devices', companyAccessLimiter, requireCompanyAccess, expr…</code> | Bu uca özel 5 MB JSON limiti (QR PNG base64); hız sınırı yetkiden ÖNCE çalışır |
+| [server/src/server.js:131](../../server/src/server.js#L131) | <code>app.post('/api/company/labeled-devices', companyAccessLimiter, requireCompanyAccess, expr…</code> | Bu uca özel 5 MB JSON limiti (QR PNG base64); hız sınırı yetkiden ÖNCE çalışır |
 
 **Olası nedenler**
 - UID 12 haneli değil (ör. eski firmware farklı uzunlukta UID bildiriyor) → 400
@@ -946,7 +946,7 @@ flutter test test/home_polling_test.dart test/adaptive_poller_test.dart test/clo
 | --- | --- | --- |
 | [test/widget_test.dart:8](../../test/widget_test.dart#L8) | <code>SharedPreferences.setMockInitialValues(&lt;String, Object&gt;{});</code> | Her uygulama kökü testi SharedPreferences'ı sahte değerle başlatır |
 | [test/widget_test.dart:9](../../test/widget_test.dart#L9) | <code>FlutterSecureStorage.setMockInitialValues(&lt;String, String&gt;{});</code> | Güvenli depo da sahtelenir (oturum anahtarı) |
-| [lib/app.dart:49](../../lib/app.dart#L49) | <code>this.networkCheckEnabled = true,</code> | MyApp(networkCheckEnabled: false) ağ sağlık yoklamasını kapatır; testlerde verilmezse gerçek ağa çıkılır |
+| [lib/app.dart:50](../../lib/app.dart#L50) | <code>this.networkCheckEnabled = true,</code> | MyApp(networkCheckEnabled: false) ağ sağlık yoklamasını kapatır; testlerde verilmezse gerçek ağa çıkılır |
 | [test/screens/dialog_layout_harness.dart:50](../../test/screens/dialog_layout_harness.dart#L50) | <code>/// girişi (~450 ms) bitene kadar ilerletilir. `pumpAndSettle` KULLANILMAZ: yüklenirken d…</code> | Yüklenirken dönen göstergeler bitmeyen animasyondur: sabit süreli pump kullanılır |
 | [test/screens/login_layout_test.dart:33](../../test/screens/login_layout_test.dart#L33) | <code>class _FakeAuth extends AuthService {</code> | Ağa çıkmayan sahte kimlik servisi örneği |
 | [integration_test/support/e2e_driver.dart:15](../../integration_test/support/e2e_driver.dart#L15) | <code>//  - pumpAndSettle KULLANMAZ (uygulamada 3 sn'lik yoklamalar var): sabit aralikli pump d…</code> | Uygulamada 3 sn'lik yoklamalar olduğundan yürüyüş düzeneği de sabit aralıklı pump döngüsü kullanır |
@@ -1331,7 +1331,7 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 300 --nostrea
 | [deploy/remote_deploy.sh:58](../../deploy/remote_deploy.sh#L58) | <code>activate() {</code> | Canlıya alır: kodu yerleştirir, node_modules değiştirir, pm2 restart kapi-api --update-env, /health bekler |
 | [deploy/remote_deploy.sh:93](../../deploy/remote_deploy.sh#L93) | <code>echo "SAGLIK KONTROLU BASARISIZ"</code> | Sağlık gelmezse günlükten son 40 satırı basar ve otomatik rollback çalıştırır (çıkış 4) |
 | [deploy/remote_deploy.sh:59](../../deploy/remote_deploy.sh#L59) | <code>[ -d "$STAGE/node_modules" ] &#124;&#124; { echo "HATA: hazirlik (prepare) yapilmamis"; exit 2; }</code> | activate, prepare yapılmadan çalışmaz (çıkış 2) |
-| [PROJE_TEKNIK_NOTLAR.md:514](../../PROJE_TEKNIK_NOTLAR.md#L514) | <code>## 15. Sunucuda Guncelleme Sirasi</code> | Eski/kısa anlatım (git pull + pm2 restart); yedekli ve sağlık denetimli güncel yol deploy/README.md'dedir |
+| [PROJE_TEKNIK_NOTLAR.md:460](../../PROJE_TEKNIK_NOTLAR.md#L460) | <code>## 15. Sunucuda Guncelleme Sirasi</code> | Eski/kısa anlatım (git pull + pm2 restart); yedekli ve sağlık denetimli güncel yol deploy/README.md'dedir |
 
 **Olası nedenler**
 - Değişiklik yalnız yerelde kaldı (kural 8 uygulanmadı); canlıda eski kod çalışıyor
@@ -1516,11 +1516,11 @@ flutter pub get
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [PROJE_TEKNIK_NOTLAR.md:483](../../PROJE_TEKNIK_NOTLAR.md#L483) | <code>## 14. Build ve Test Notlari</code> | Build/test komutları ve test sayısı (örn. "2357 test"): sayı zamanla eskir |
-| [PROJE_TEKNIK_NOTLAR.md:514](../../PROJE_TEKNIK_NOTLAR.md#L514) | <code>## 15. Sunucuda Guncelleme Sirasi</code> | Kısa anlatım: git pull + npm install + pm2 restart; yedekli/denetimli güncel yol deploy/README.md |
-| [PROJE_TEKNIK_NOTLAR.md:393](../../PROJE_TEKNIK_NOTLAR.md#L393) | <code>### 11.2 company_qr_tool</code> | Şirket aracının amacı ve firmware çıktı klasörleri (derleme .pio/build, sürüm firmware_releases) |
-| [PROJE_TEKNIK_NOTLAR.md:320](../../PROJE_TEKNIK_NOTLAR.md#L320) | <code>## 9. E-Posta Dogrulama</code> | E-posta doğrulama özeti; ayrıntı ve güncel parametreler docs/EPOSTA_DOGRULAMA.md'dedir |
-| [PROJE_TEKNIK_NOTLAR.md:549](../../PROJE_TEKNIK_NOTLAR.md#L549) | <code>## 17. Acik Tasarim Kararlari / Sonraki Adimlar</code> | Açık kararlar; güncel yapılacaklar için BEKLEYEN_ISLER.md |
+| [PROJE_TEKNIK_NOTLAR.md:435](../../PROJE_TEKNIK_NOTLAR.md#L435) | <code>## 14. Build ve Test Notlari</code> | Build/test komutları; test sayısı bu dosyada tutulmaz (sayı için komut çıktısına bakın) |
+| [PROJE_TEKNIK_NOTLAR.md:460](../../PROJE_TEKNIK_NOTLAR.md#L460) | <code>## 15. Sunucuda Guncelleme Sirasi</code> | Canlı dağıtım git pull ile DEĞİL deploy/ betikleriyle yapılır (yedek, aşamalı hazırlık, otomatik geri alma); ayrıntı deploy/README.md |
+| [PROJE_TEKNIK_NOTLAR.md:345](../../PROJE_TEKNIK_NOTLAR.md#L345) | <code>### 11.2 company_qr_tool</code> | Şirket aracının amacı ve firmware çıktı klasörleri (derleme .pio/build, sürüm firmware_releases) |
+| [PROJE_TEKNIK_NOTLAR.md:278](../../PROJE_TEKNIK_NOTLAR.md#L278) | <code>## 9. E-Posta Dogrulama</code> | E-posta doğrulama özeti; ayrıntı ve güncel parametreler docs/EPOSTA_DOGRULAMA.md'dedir |
+| [PROJE_TEKNIK_NOTLAR.md:491](../../PROJE_TEKNIK_NOTLAR.md#L491) | <code>## 17. Acik Isler ve Karar Kaydi</code> | Açık işler ve karar kaydı; güncel yapılacaklar için BEKLEYEN_ISLER.md, ürün kararları için docs/PLATFORM_YOL_HARITASI.md |
 | [deploy/README.md:31](../../deploy/README.md#L31) | <code>## Geri alma</code> | Canlı dağıtım için doğru kaynak: yedek + sağlık denetimi + otomatik geri alma |
 
 **Olası nedenler**
@@ -1539,7 +1539,7 @@ flutter pub get
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
 | [docs/codebase/ARCHITECTURE.md:26](../../docs/codebase/ARCHITECTURE.md#L26) | <code>### 3) Layer/Module Responsibilities</code> | Katman/modül sorumlulukları ve sistem akışı |
-| [docs/codebase/STRUCTURE.md:33](../../docs/codebase/STRUCTURE.md#L33) | <code>### 3) Module Boundaries</code> | Dizin haritası, giriş noktaları, modül sınırları |
+| [docs/codebase/STRUCTURE.md:34](../../docs/codebase/STRUCTURE.md#L34) | <code>### 3) Module Boundaries</code> | Dizin haritası, giriş noktaları, modül sınırları |
 | [docs/codebase/CONCERNS.md:5](../../docs/codebase/CONCERNS.md#L5) | <code>### 1) Top Risks (Prioritized)</code> | Öncelikli riskler (ifşa olmuş sırlar, firmware donanımda çalıştırılmadı, .env zayıflığı, bellek içi sınırlayıcılar) |
 | [docs/codebase/INTEGRATIONS.md:5](../../docs/codebase/INTEGRATIONS.md#L5) | <code>### 1) Integration Inventory</code> | PostgreSQL, Express API, SMTP, MQTT: amaç, kimlik doğrulama modeli, kanıt dosyaları |
 | [docs/codebase/TESTING.md:43](../../docs/codebase/TESTING.md#L43) | <code>### 3) Test Scope Matrix</code> | Hangi alan hangi testle korunuyor (kapsam matrisi) |

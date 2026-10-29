@@ -70,7 +70,7 @@ Sunucu JSON'u uygulamada lib/models içindeki fromJson ile modele çevrilir. Lis
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/services/auth_api.dart:4231](../../lib/services/auth_api.dart#L4231) | <code>T _parsePayload&lt;T&gt;(String label, T Function() parser) {</code> | Yalnız bu sarmalayıcıdan geçen uçlarda fromJson sırasındaki FormatException "<etiket> verisi islenemedi.", TypeError "<etiket> verisi beklenen formatta degil." iletisine çevrilir |
+| [lib/services/auth_api.dart:4252](../../lib/services/auth_api.dart#L4252) | <code>T _parsePayload&lt;T&gt;(String label, T Function() parser) {</code> | Yalnız bu sarmalayıcıdan geçen uçlarda fromJson sırasındaki FormatException "<etiket> verisi islenemedi.", TypeError "<etiket> verisi beklenen formatta degil." iletisine çevrilir |
 | [lib/models/site_structure_record.dart:19](../../lib/models/site_structure_record.dart#L19) | <code>factory SiteStructureRecord.fromJson(Map&lt;String, dynamic&gt; json) {</code> | Zorunlu alt nesne: json['site'] yoksa ya da nesne değilse TypeError, tüm yapı yüklenmez |
 | [lib/models/door_record.dart:178](../../lib/models/door_record.dart#L178) | <code>factory DoorRecord.fromJson(Map&lt;String, dynamic&gt; json) {</code> | id ve site_code "as int" (null/string gelirse TypeError); diğer alanlar varsayılanlı/boş olabilir ama yanlış tipte gelirse (örn. "as int?" alanına metin) yine TypeError |
 | [lib/models/apartment_record.dart:56](../../lib/models/apartment_record.dart#L56) | <code>factory ApartmentRecord.fromJson(Map&lt;String, dynamic&gt; json) {</code> | id, site_code, block_id "as int": biri string ya da null gelirse hata |
@@ -101,7 +101,7 @@ Sunucu JSON'u uygulamada lib/models içindeki fromJson ile modele çevrilir. Lis
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
 | [lib/models/user_role.dart:12](../../lib/models/user_role.dart#L12) | <code>static UserRole fromApi(String value) {</code> | Bilinmeyen/yazımı farklı rol değeri sessizce apartmentOwner olur (orElse) |
-| [lib/models/user_session.dart:76](../../lib/models/user_session.dart#L76) | <code>role: UserRole.fromApi(json['role'] as String),</code> | Oturum rolü sunucu "role" alanından gelir; alan null ise TypeError |
+| [lib/models/user_session.dart:88](../../lib/models/user_session.dart#L88) | <code>role: UserRole.fromApi(json['role'] as String),</code> | Oturum rolü sunucu "role" alanından gelir; alan null ise TypeError |
 | [lib/models/managed_user_account.dart:60](../../lib/models/managed_user_account.dart#L60) | <code>role: UserRole.fromApi(json['role'] as String),</code> | Liste satırı rolü aynı eşlemeyle çözülür |
 
 **Olası nedenler**
@@ -121,8 +121,8 @@ Sunucu JSON'u uygulamada lib/models içindeki fromJson ile modele çevrilir. Lis
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/models/user_session.dart:69](../../lib/models/user_session.dart#L69) | <code>factory UserSession.fromJson(Map&lt;String, dynamic&gt; json) {</code> | id (int), full_name, email, token zorunlu String/int; is_active yoksa true, created_at boş/bozuksa null |
-| [lib/models/user_session.dart:54](../../lib/models/user_session.dart#L54) | <code>Map&lt;String, dynamic&gt; toJson() {</code> | Yerele yazılan biçim; alan adları fromJson ile aynı olmalı |
+| [lib/models/user_session.dart:80](../../lib/models/user_session.dart#L80) | <code>factory UserSession.fromJson(Map&lt;String, dynamic&gt; json) {</code> | id (int), full_name, email, token zorunlu String/int; is_active yoksa true, created_at boş/bozuksa null |
+| [lib/models/user_session.dart:64](../../lib/models/user_session.dart#L64) | <code>Map&lt;String, dynamic&gt; toJson() {</code> | Yerele yazılan biçim; alan adları fromJson ile aynı olmalı |
 | [lib/services/auth_service.dart:155](../../lib/services/auth_service.dart#L155) | <code>_session = UserSession.fromJson(data);</code> | Açılışta güvenli depodaki oturum JSON'u burada UserSession'a çevrilir; fromJson hata verirse catch saklı oturumu sessizce siler (giriş ekranı) |
 
 **Olası nedenler**
@@ -172,10 +172,10 @@ Sunucu JSON'u uygulamada lib/models içindeki fromJson ile modele çevrilir. Lis
 | [lib/models/device_page.dart:16](../../lib/models/device_page.dart#L16) | <code>int get totalPages {</code> | Aynı formül; yönetici ucunda pageSize=devices.length verilir (liste boşsa total 0 olduğundan 1 sayfa döner) |
 | [lib/models/managed_user_page.dart:30](../../lib/models/managed_user_page.dart#L30) | <code>int get totalPages {</code> | Kullanıcı listesi toplam sayfa hesabı |
 | [lib/models/subscription_request_page.dart:16](../../lib/models/subscription_request_page.dart#L16) | <code>int get totalPages {</code> | Abonelik talebi toplam sayfa hesabı |
-| [lib/services/auth_api.dart:594](../../lib/services/auth_api.dart#L594) | <code>return SitePage(</code> | Sunucu total/page/page_size yoksa 0 / istenen sayfa / istenen boyut kullanılır |
-| [lib/services/auth_api.dart:440](../../lib/services/auth_api.dart#L440) | <code>return ManagedUserPage(</code> | Kullanıcı sayfası aynı varsayılanlarla kurulur; liste anahtarı "users" |
-| [lib/services/auth_api.dart:3330](../../lib/services/auth_api.dart#L3330) | <code>return SubscriptionRequestPage(</code> | Liste anahtarı "requests" |
-| [lib/services/auth_api.dart:3039](../../lib/services/auth_api.dart#L3039) | <code>return DevicePage(</code> | Site yöneticisi rolünün /manager/devices ucunda sayfalama yok: total=devices.length, page=1, pageSize=devices.length |
+| [lib/services/auth_api.dart:605](../../lib/services/auth_api.dart#L605) | <code>return SitePage(</code> | Sunucu total/page/page_size yoksa 0 / istenen sayfa / istenen boyut kullanılır |
+| [lib/services/auth_api.dart:451](../../lib/services/auth_api.dart#L451) | <code>return ManagedUserPage(</code> | Kullanıcı sayfası aynı varsayılanlarla kurulur; liste anahtarı "users" |
+| [lib/services/auth_api.dart:3341](../../lib/services/auth_api.dart#L3341) | <code>return SubscriptionRequestPage(</code> | Liste anahtarı "requests" |
+| [lib/services/auth_api.dart:3050](../../lib/services/auth_api.dart#L3050) | <code>return DevicePage(</code> | Site yöneticisi rolünün /manager/devices ucunda sayfalama yok: total=devices.length, page=1, pageSize=devices.length |
 
 **Olası nedenler**
 - Sunucu liste anahtarını değiştirdi (sites/users/devices/requests); "?? []" yüzünden hata yerine boş liste görünür
@@ -260,7 +260,7 @@ Sunucu JSON'u uygulamada lib/models içindeki fromJson ile modele çevrilir. Lis
 | [lib/models/site_residents_tree_record.dart:153](../../lib/models/site_residents_tree_record.dart#L153) | <code>factory SiteResidentBlock.fromJson(Map&lt;String, dynamic&gt; json) {</code> | blocks[].apartments listesi; sayaçlar sunucudan okunur, listeden hesaplanmaz |
 | [lib/models/site_residents_tree_record.dart:120](../../lib/models/site_residents_tree_record.dart#L120) | <code>factory SiteResidentApartment.fromJson(Map&lt;String, dynamic&gt; json) {</code> | apartments[].residents (PIN alanı YOK, migration 051); daire boşluğu residents.isEmpty ile belirlenir |
 | [lib/models/site_residents_tree_record.dart:25](../../lib/models/site_residents_tree_record.dart#L25) | <code>factory SiteResidentsTreeSite.fromJson(Map&lt;String, dynamic&gt; json) {</code> | Site özeti sayaçları (total_blocks, total_apartments, empty_apartments_count) |
-| [lib/services/auth_service.dart:4039](../../lib/services/auth_service.dart#L4039) | <code>return (SiteResidentsTreeData.fromJson(json), null);</code> | Ağaç yanıtı doğrudan fromJson ile çevrilir (_parsePayload yok); ayrıştırma hatası catch ile "Sakin listesi yüklenemedi." iletisine döner |
+| [lib/services/auth_service.dart:4056](../../lib/services/auth_service.dart#L4056) | <code>return (SiteResidentsTreeData.fromJson(json), null);</code> | Ağaç yanıtı doğrudan fromJson ile çevrilir (_parsePayload yok); ayrıştırma hatası catch ile "Sakin listesi yüklenemedi." iletisine döner |
 
 **Olası nedenler**
 - Sunucu anahtar adları (blocks, apartments, residents) değişti; "?? const []" boş ağaç üretir
@@ -427,7 +427,7 @@ Sunucu JSON'u uygulamada lib/models içindeki fromJson ile modele çevrilir. Lis
 | [lib/models/door_permission_record.dart:89](../../lib/models/door_permission_record.dart#L89) | <code>factory DoorResidentPermission.fromJson(Map&lt;String, dynamic&gt; json) {</code> | has_access (bool) yoksa eski can_open; override iç nesnesi ya da override_* alanları |
 | [lib/models/door_permission_record.dart:128](../../lib/models/door_permission_record.dart#L128) | <code>String get statusLabel {</code> | access_source değerine göre durum yazısı |
 | [lib/models/door_permission_record.dart:202](../../lib/models/door_permission_record.dart#L202) | <code>String get label {</code> | Daire başlığı: "Daire" öneki yoksa eklenir |
-| [lib/services/auth_service.dart:3962](../../lib/services/auth_service.dart#L3962) | <code>return (DoorPermissionsData.fromJson(json), null);</code> | İzin yanıtı doğrudan fromJson ile çevrilir (_parsePayload yok); ayrıştırma hatası catch ile "Kapı yetkileri alınamadı." iletisine döner |
+| [lib/services/auth_service.dart:3979](../../lib/services/auth_service.dart#L3979) | <code>return (DoorPermissionsData.fromJson(json), null);</code> | İzin yanıtı doğrudan fromJson ile çevrilir (_parsePayload yok); ayrıştırma hatası catch ile "Kapı yetkileri alınamadı." iletisine döner |
 
 **Olası nedenler**
 - Sunucu eski/yeni anahtar adını değiştirdi (has_access/can_open, role/member_role, unit_label/door_number)
@@ -450,7 +450,7 @@ Sunucu JSON'u uygulamada lib/models içindeki fromJson ile modele çevrilir. Lis
 | [lib/models/local_door_access.dart:25](../../lib/models/local_door_access.dart#L25) | <code>bool isUsableAt(DateTime now) {</code> | Cihaz kimliği + token dolu ve 24 saat içinde güncellenmiş olmalı; gelecek damga (-5 dk ötesi) güvenilmez |
 | [lib/models/local_door_access.dart:18](../../lib/models/local_door_access.dart#L18) | <code>static const Duration cacheValidity = Duration(hours: 24);</code> | Önbellek geçerliliği 24 saat |
 | [lib/models/local_door_access.dart:49](../../lib/models/local_door_access.dart#L49) | <code>factory LocalDoorAccess.fromJson(Map&lt;String, dynamic&gt; json) {</code> | port yoksa 8765, ip boşsa null, updated_at bozuksa 1970 (kullanılamaz) |
-| [lib/services/auth_service.dart:3616](../../lib/services/auth_service.dart#L3616) | <code>final access = LocalDoorAccess.fromJson(value);</code> | Açılışta saklı kayıtlar okunur; isUsable olmayanlar (24 saatten eski, token/uid boş) önbelleğe alınmaz, JSON bozuksa tüm önbellek anahtarı silinir |
+| [lib/services/auth_service.dart:3633](../../lib/services/auth_service.dart#L3633) | <code>final access = LocalDoorAccess.fromJson(value);</code> | Açılışta saklı kayıtlar okunur; isUsable olmayanlar (24 saatten eski, token/uid boş) önbelleğe alınmaz, JSON bozuksa tüm önbellek anahtarı silinir |
 
 **Olası nedenler**
 - Token boş: yerel kontrol kapalı sayılır (güvenlik gereği)
@@ -498,7 +498,7 @@ Sunucu JSON'u uygulamada lib/models içindeki fromJson ile modele çevrilir. Lis
 | [lib/models/site_manager_record.dart:37](../../lib/models/site_manager_record.dart#L37) | <code>String get roleLabel =&gt; isOwner ? 'Kurucu Yönetici' : 'Site Yöneticisi';</code> | is_owner true ise "Kurucu Yönetici", değilse "Site Yöneticisi" |
 | [lib/models/site_manager_record.dart:63](../../lib/models/site_manager_record.dart#L63) | <code>factory SiteManagerInvitationRecord.fromJson(Map&lt;String, dynamic&gt; json) {</code> | id, site_code, invited_by_user_code zorunlu sayı; status yoksa PENDING |
 | [lib/models/site_manager_record.dart:91](../../lib/models/site_manager_record.dart#L91) | <code>factory SiteManagersData.fromJson(Map&lt;String, dynamic&gt; json) {</code> | managers ve invitations anahtarları; yoksa boş liste |
-| [lib/services/auth_api.dart:4803](../../lib/services/auth_api.dart#L4803) | <code>return SiteManagersData.fromJson(data);</code> | Yanıt doğrudan SiteManagersData.fromJson ile çevrilir (_parsePayload yok); auth_service.getSiteManagers hatada sessizce null döner |
+| [lib/services/auth_api.dart:4824](../../lib/services/auth_api.dart#L4824) | <code>return SiteManagersData.fromJson(data);</code> | Yanıt doğrudan SiteManagersData.fromJson ile çevrilir (_parsePayload yok); auth_service.getSiteManagers hatada sessizce null döner |
 
 **Olası nedenler**
 - is_owner alanı eksik: kurucu yönetici sıradan yönetici görünür
@@ -542,7 +542,7 @@ Sunucu JSON'u uygulamada lib/models içindeki fromJson ile modele çevrilir. Lis
 | [lib/models/apartment_record.dart:56](../../lib/models/apartment_record.dart#L56) | <code>factory ApartmentRecord.fromJson(Map&lt;String, dynamic&gt; json) {</code> | Yönetici görünümünde daire + tek sakin alanları (resident_*); "as int" zorunlu kimlikler |
 | [lib/models/site_block_record.dart:16](../../lib/models/site_block_record.dart#L16) | <code>factory SiteBlockRecord.fromJson(Map&lt;String, dynamic&gt; json) {</code> | Blok: id ve site_code "as int" zorunlu; sort_order yoksa 0 |
 | [lib/models/site_structure_record.dart:22](../../lib/models/site_structure_record.dart#L22) | <code>blocks: (json['blocks'] as List&lt;dynamic&gt;? ?? const &lt;dynamic&gt;[])</code> | blocks/apartments/doors anahtarları yoksa boş liste; yalnız site zorunlu |
-| [lib/services/auth_api.dart:4627](../../lib/services/auth_api.dart#L4627) | <code>return list.map((item) =&gt; MyApartmentRecord.fromJson(item as Map&lt;String, dynamic&gt;)).toLis…</code> | Dairelerim yanıtının liste çevrimi (_parsePayload yok; öğe nesne değilse ham TypeError) |
+| [lib/services/auth_api.dart:4648](../../lib/services/auth_api.dart#L4648) | <code>return list.map((item) =&gt; MyApartmentRecord.fromJson(item as Map&lt;String, dynamic&gt;)).toLis…</code> | Dairelerim yanıtının liste çevrimi (_parsePayload yok; öğe nesne değilse ham TypeError) |
 
 **Olası nedenler**
 - Sunucu anahtar biçimini (snake/camel) değiştirdi: modelde ikisi de okunur ama üçüncü bir ad boş bırakır

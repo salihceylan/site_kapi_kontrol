@@ -11,6 +11,7 @@ import 'package:site_kapi_kontrol/ui/dialogs/crm_confirm_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/vehicle_dialog.dart';
 import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart';
 import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
+import 'package:site_kapi_kontrol/ui/widgets/bulk_entry_buttons.dart' show BulkListImportButton;
 import 'package:site_kapi_kontrol/ui/widgets/crm_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/vehicle_card.dart';
 
@@ -22,10 +23,15 @@ class PeopleVehiclesTab extends StatefulWidget {
     super.key,
     required this.scope,
     required this.onDataChanged,
+    this.onImportRequested,
   });
 
   final PeopleScope scope;
   final VoidCallback onDataChanged;
+
+  /// «Excel'den yükle» kısayolu (P2-16; yalnız yazma yetkisi olanda): «Toplu Yükle» sihirbazını «Araçlar» türüyle
+  /// açar. null ise düğme çizilmez.
+  final VoidCallback? onImportRequested;
 
   @override
   State<PeopleVehiclesTab> createState() => PeopleVehiclesTabState();
@@ -154,6 +160,14 @@ class PeopleVehiclesTabState extends State<PeopleVehiclesTab> {
             onPressed: _add,
           ),
           const SizedBox(height: AppSpace.md),
+          if (widget.onImportRequested != null) ...[
+            BulkListImportButton(
+              buttonKey: const ValueKey<String>('vehicles_list_excel_import'),
+              onImport: widget.onImportRequested!,
+              hint: 'Araç plakalarını Excel ya da CSV dosyasından toplu yüklemek için sihirbazı açar.',
+            ),
+            const SizedBox(height: AppSpace.md),
+          ],
         ],
         AppCard(
           child: TextField(

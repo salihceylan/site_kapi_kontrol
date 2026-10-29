@@ -196,6 +196,7 @@ export async function loadRecipientRows(db, siteCode, apartmentIds) {
       WHERE sp.site_code = $1 AND sp.is_active = TRUE AND rr.apartment_id = ANY($2::BIGINT[])
         AND (u.user_code IS NULL OR u.deleted_at IS NULL)
         AND rr.relation <> 'family_member'
+        AND (rr.relation <> 'owner' OR rr.is_account_holder = TRUE)
       ORDER BY sp.id, rr.apartment_id
     `,
     [siteCode, apartmentIds],

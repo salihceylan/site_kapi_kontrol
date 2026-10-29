@@ -20,6 +20,13 @@ String? peopleActionLabel(String action) {
       return 'Taşındı';
     case 'apartment.updated':
       return 'Daire bilgisi güncellendi';
+    // Çoklu malik (104): tüm malikler kayıtlı + tek hesap muhatabı.
+    case 'apartment.owner_added':
+      return 'Malik eklendi';
+    case 'apartment.owner_removed':
+      return 'Malik çıkarıldı';
+    case 'apartment.account_holder_changed':
+      return 'Hesap muhatabı değişti';
     case 'vehicle.added':
       return 'Araç eklendi';
     case 'vehicle.removed':

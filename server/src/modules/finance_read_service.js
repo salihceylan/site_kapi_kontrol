@@ -59,7 +59,7 @@ const OWNER_NAME_LATERAL = (alias, relation) => `
     INNER JOIN site_people sp ON sp.id = r.person_id AND sp.is_active = TRUE
     LEFT JOIN users u ON u.user_code = sp.user_code
     WHERE r.apartment_id = f.apartment_id AND r.is_current = TRUE AND r.relation = '${relation}'
-    ORDER BY r.id
+    ORDER BY r.is_account_holder DESC, r.id
     LIMIT 1
   ) ${alias} ON TRUE
 `;
@@ -503,6 +503,7 @@ export async function loadVisibleAccounts(db, userCode) {
       INNER JOIN sites s ON s.site_code = a.site_code AND s.approval_status = 'approved'
       WHERE sp.user_code = $1 AND sp.is_active = TRUE
         AND r.relation <> 'family_member'
+        AND (r.relation <> 'owner' OR r.is_account_holder = TRUE)
       ORDER BY s.name, b.sort_order, a.sort_order, a.id
     `,
     [userCode],

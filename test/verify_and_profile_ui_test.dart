@@ -207,7 +207,9 @@ void main() {
       await tester.enterText(fields.at(1), 'parola123');
       // Giriş başlığı artık platform adı (daha uzun, sarar): düğme ilk ekranın altına inebilir.
       await tester.ensureVisible(find.text('Giriş Yap'));
-      await tester.pump();
+      // Sayfa uzadıkça (ör. "Deneme kodum var" düğmesi) alan yazarken başlayan kaydırma animasyonu sürer ve kaydırılabilir alan
+      // işaretçileri yok sayar: dokunmadan önce animasyonun bitmesi beklenir.
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Giriş Yap'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));

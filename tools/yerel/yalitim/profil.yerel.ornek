@@ -1,0 +1,32 @@
+# Yalnız yerel, sentetik yalıtım profili (tools/yerel/yalitim/calistir.py). Gerçek sır veya sağlayıcı yok.
+# Biçim: satır başına KEY=VALUE. Yalnız profil.py içindeki ALLOWED anahtarları kabul edilir; aynı anahtar
+# iki kez yazılamaz. Buraya parola, anahtar veya gerçek sunucu adresi YAZILMAZ (dosya depoya girer).
+NODE_ENV=development
+HOST=127.0.0.1
+LISTEN_HOST=127.0.0.1
+PORT=8080
+DB_HOST=127.0.0.1
+DB_PORT=5432
+DB_NAME=kapi_yerel_yalitim
+DB_USER=kapi_yerel
+DB_PASSWORD=
+MQTT_HOST=127.0.0.1
+MQTT_PORT=1883
+MQTT_USERNAME=
+MQTT_PASSWORD=
+SMTP_HOST=127.0.0.1
+SMTP_PORT=1025
+SMTP_USER=
+SMTP_PASSWORD=
+# JWT anahtarı çalıştırıcı tarafından yalnız bellekte üretilir; sabit değer yazılmaz.
+JWT_SECRET=
+# Dış SMS ve Web Push sağlayıcıları kapalı kalır (SMS_PROVIDER boş olmak zorundadır).
+SMS_PROVIDER=
+NETGSM_USERCODE=
+NETGSM_PASSWORD=
+NETGSM_HEADER=
+SMS_CODE_PEPPER=
+WEB_PUSH_VAPID_PUBLIC=
+WEB_PUSH_VAPID_PRIVATE=
+# Yalnızca ayrılmış .invalid alan adı (profil.py başka bir değeri reddeder).
+WEB_PUSH_SUBJECT=mailto:yerel@example.invalid

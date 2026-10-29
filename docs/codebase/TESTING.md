@@ -10,13 +10,13 @@
 - Backend test framework: Node.js built-in test runner (`node --test`, script `npm test` in `server/package.json`); most tests use fakes/stubs and do not need a database. Some SQL paths were additionally verified against a real PostgreSQL inside a rolled-back transaction during development.
 - Backend lint: ESLint (`npm run lint` -> `eslint src`, `npm run lint:all` -> `eslint .`).
 - Firmware: host tests in `cihaz_kontrol/host_test/` (719 checks: local control v2 core, UDP/HTTP, admin PIN, GM60, MQTT/OTA for WROOM and C3; real firmware headers + stubs, MSVC, not in CI); PlatformIO builds; behavior on hardware is checked by the field steps in `SAHA_KONTROL_LISTESI.md`.
-- CI: `.github/workflows/ci.yml` (server lint + test, Flutter analyze + test, gitleaks secret scan; it has no firmware build and no deploy step) and `.github/workflows/ios-simulator.yml`.
+- CI: `.github/workflows/ci.yml` (server lint + test, Flutter analyze + test, gitleaks secret scan; it has no firmware build and no deploy step). Other workflows: `.github/workflows/ios-build.yml` (manual iOS Simulator build for Appetize, `workflow_dispatch` only) and `.github/workflows/uptime.yml` (external health monitor, every 30 minutes).
 - Commands:
 
 ```bash
 # Flutter
 flutter analyze
-flutter test            # 2357 tests (last full run: all passed)
+flutter test            # all unit/widget tests under test/ (count not tracked in this file)
 
 # Backend (Node >= 20.19)
 cd server
@@ -37,7 +37,7 @@ pio run -e esp32c3_display         # ekran firmware
 ### 2) Test Layout
 
 - Flutter: root `test/`, files end with `_test.dart` (for example `auth_service_session_test.dart`, `door_widget_service_test.dart`, `fix_fx2_widgets_test.dart`, `local_door_service_v2_test.dart`). `test/design/` covers the design system (contrast >= 4.5:1, overflow matrix 320/360/412/820 x 1.0/1.5/2.0 x light/dark, reduce-motion, semantics); `test/screens/` runs every screen/dialog at 320x640 x 2.0 and 360x640 x 1.5 for overflow (AGENTS.md rule 6); `test/support/rebuild_probe.dart` counts widget rebuilds for performance regression tests (`home_polling_test`, `clock_rebuild_scope_test`, ...).
-- Backend: `server/test/*.test.js`; file name prefix groups the area (`core_*` auth/middleware/mailer/startup, `devices_*` device and firmware, `doors_*` door policy/QR/geofence/MQTT, `members_*` membership, `sites_*` sites and guest passes, `ops_*` migrations/CI guards, `fix_*` contract-audit regression tests).
+- Backend: `server/test/*.test.js`; file name prefix groups the area (`core_*` auth/middleware/mailer/startup, `devices_*` device and firmware, `doors_*` door policy/QR/geofence/MQTT, `members_*` membership, `sites_*` sites and guest passes, `ops_*` migrations/CI guards, `fix_*` contract-audit regression tests; feature areas: `platform_*` module system and platform services, `finance_*` / `finance4b_*` / `bank_*` finance, `account_*` account deletion and export, `document_*` / `drive_*` documents and Drive storage, `bulk_*` bulk import, `push_*` push notifications, `security_*`, `apartment_*`, `work_*`, `reservation_*`, `legal_*`, ...).
 - Setup files and where they run: no shared global setup; each test file builds its own fakes.
 
 ### 3) Test Scope Matrix

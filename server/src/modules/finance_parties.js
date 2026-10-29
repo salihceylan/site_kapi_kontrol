@@ -212,7 +212,7 @@ export async function resolveChargeParty(client, { siteCode, apartmentId, charge
 export async function resolvePersonParty(client, { siteCode, apartmentId, userCode }) {
   const result = await client.query(
     `
-      SELECT r.relation, ${currentTenantSql('a')} AS has_tenant
+      SELECT r.relation, r.is_account_holder, ${currentTenantSql('a')} AS has_tenant
       FROM site_people sp
       INNER JOIN apartment_residencies r ON r.person_id = sp.id AND r.is_current = TRUE
       INNER JOIN apartments a ON a.id = r.apartment_id AND a.site_code = sp.site_code
@@ -222,6 +222,10 @@ export async function resolvePersonParty(client, { siteCode, apartmentId, userCo
     [apartmentId, siteCode, userCode],
   );
   const row = result.rows?.[0];
+  // Coklu malik (104): ev sahibi hesabinin muhatabi YALNIZ hesap muhatabi olan maliktir; diger malikler borc hesabi gormez / yonlendirilmez.
+  if (row && row.relation === 'owner' && row.is_account_holder === false) {
+    return null;
+  }
   return row ? partyOfRelation(row.relation, row.has_tenant === true) : null;
 }
 
