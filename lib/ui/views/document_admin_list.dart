@@ -37,7 +37,12 @@ class DocumentAdminList extends StatefulWidget {
     this.picker = const FilePickerDocumentPicker(),
     this.sharer,
     this.onOpenModules,
+    this.driveConnected,
   });
+
+  /// Sitenin Google Drive bağlantısı (Drive kartından): false ise "Belge Yükle" pasiftir (dosyalar yalnız Drive'a yüklenir);
+  /// null = henüz bilinmiyor (düğme açık; sunucu 409 DRIVE_REQUIRED ile korur).
+  final bool? driveConnected;
 
   final PeopleScope scope;
   final DocumentService service;
@@ -171,6 +176,10 @@ class DocumentAdminListState extends State<DocumentAdminList> {
 
   Future<void> _open(DocumentSummary document) async {
     if (_opening) return;
+    if (document.currentVersion?.isTransferring ?? false) {
+      AppSnack.show(context, 'Dosya Drive\'a aktarılıyor; aktarım bitince açılabilir.', kind: AppSnackKind.warning);
+      return;
+    }
     _opening = true;
     String? message;
     try {
@@ -202,7 +211,7 @@ class DocumentAdminListState extends State<DocumentAdminList> {
     if (_moduleOff) return _buildModuleOff(context);
     final canWrite = widget.scope.canWrite;
     final deletedView = _status == 'deleted';
-    final usage = _usage;
+    final driveOff = widget.driveConnected == false;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -211,11 +220,18 @@ class DocumentAdminListState extends State<DocumentAdminList> {
             key: const ValueKey<String>('document_create'),
             label: 'Belge Yükle',
             icon: Icons.upload_file_rounded,
-            onPressed: _upload,
+            onPressed: driveOff ? null : _upload,
           ),
           const SizedBox(height: AppSpace.md),
-          if (usage != null && usage.hasQuota) ...[
-            AppCard(child: DocumentUsageBar(usage: usage)),
+          if (driveOff) ...[
+            const InlineNotice(
+              key: ValueKey<String>('documents_drive_required_note'),
+              tone: AppTone.info,
+              icon: Icons.cloud_off_rounded,
+              message:
+                  'Dosya yüklemek için önce Google Drive\'ı bağlayın. Belgeler sitenizin Drive\'ında saklanır; '
+                  'yukarıdaki Google Drive kartından bağlantıyı kurabilirsiniz.',
+            ),
             const SizedBox(height: AppSpace.md),
           ],
         ],

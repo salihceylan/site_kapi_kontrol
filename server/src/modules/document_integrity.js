@@ -145,7 +145,7 @@ async function attachmentsTableExists(db) {
  */
 async function dbMatchesDisk(db, root) {
   const keys = [];
-  const versions = await db.query(`SELECT storage_key FROM document_versions WHERE status = 'ready' ORDER BY id DESC LIMIT ${SAMPLE_SIZE}`);
+  const versions = await db.query(`SELECT storage_key FROM document_versions WHERE status = 'ready' AND server_copy = TRUE ORDER BY id DESC LIMIT ${SAMPLE_SIZE}`);
   for (const row of versions.rows ?? []) keys.push(['sites', row.storage_key]);
   if (await expenseTableExists(db)) {
     const expenses = await db.query(`SELECT storage_key FROM expense_documents WHERE status = 'ready' ORDER BY id DESC LIMIT ${SAMPLE_SIZE}`);

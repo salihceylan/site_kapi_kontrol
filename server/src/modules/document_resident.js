@@ -84,12 +84,14 @@ const RESIDENT_FROM = `
   FROM documents d
   INNER JOIN sites s ON s.site_code = d.site_code AND s.approval_status = 'approved'
   INNER JOIN document_versions cv ON cv.document_id = d.id AND cv.version_no = d.current_version_no AND cv.status = 'ready'
+  LEFT JOIN drive_files df ON df.id = cv.drive_file_id AND df.site_code = d.site_code
 `;
 
 const RESIDENT_COLUMNS = `
   d.id, d.site_code, s.name AS site_name, d.title, d.category, d.description, d.updated_at,
   cv.display_name AS cv_display_name, cv.mime_type AS cv_mime_type, cv.size_bytes AS cv_size_bytes,
-  cv.version_no AS cv_version_no, cv.completed_at AS cv_completed_at
+  cv.version_no AS cv_version_no, cv.completed_at AS cv_completed_at,
+  cv.server_copy AS cv_server_copy, df.status AS cv_drive_status
 `;
 
 const residentWhere = (userParam = '$1') =>
@@ -198,7 +200,8 @@ export async function resolveResidentDownload(authUser, rawId, db = pool) {
   const result = await db.query(
     `
       WITH ${myApartmentsCte('$1')}
-      SELECT d.id, cv.id AS version_id, cv.version_no, cv.storage_key, cv.size_bytes, cv.display_name, cv.mime_type
+      SELECT d.id, d.site_code, cv.id AS version_id, cv.version_no, cv.storage_key, cv.size_bytes, cv.display_name, cv.mime_type,
+             cv.server_copy, cv.drive_file_id, df.status AS drive_status
       ${RESIDENT_FROM}
       WHERE d.id = $2 AND ${residentWhere('$1')}
       LIMIT 1
@@ -224,7 +227,8 @@ export async function resolveAnnouncementAttachmentDownload(authUser, rawAnnounc
   const result = await db.query(
     `
       WITH ${myApartmentsCte('$1')}
-      SELECT d.id, cv.id AS version_id, cv.version_no, cv.storage_key, cv.size_bytes, cv.display_name, cv.mime_type
+      SELECT d.id, d.site_code, cv.id AS version_id, cv.version_no, cv.storage_key, cv.size_bytes, cv.display_name, cv.mime_type,
+             cv.server_copy, cv.drive_file_id, df.status AS drive_status
       FROM announcement_attachments aa
       INNER JOIN announcements a ON a.id = aa.announcement_id AND a.status = 'published'
       INNER JOIN sites s ON s.site_code = a.site_code AND s.approval_status = 'approved'
@@ -232,6 +236,7 @@ export async function resolveAnnouncementAttachmentDownload(authUser, rawAnnounc
       INNER JOIN site_people sp ON sp.id = r.person_id AND sp.user_code = $1
       INNER JOIN documents d ON d.id = aa.document_id AND d.site_code = a.site_code AND d.status = 'active' AND d.audience = 'residents'
       INNER JOIN document_versions cv ON cv.document_id = d.id AND cv.version_no = d.current_version_no AND cv.status = 'ready'
+      LEFT JOIN drive_files df ON df.id = cv.drive_file_id AND df.site_code = d.site_code
       WHERE aa.announcement_id = $2 AND aa.document_id = $3 AND ${MODULE_ENABLED_SQL('d')} AND ${userInDocumentSiteSql('d', '$1')}
       LIMIT 1
     `,
@@ -245,6 +250,10 @@ function downloadRow(row) {
     throw documentNotFound();
   }
   return {
+    siteCode: Number(row.site_code),
+    serverCopy: row.server_copy !== false,
+    driveFileId: row.drive_file_id === null || row.drive_file_id === undefined ? null : Number(row.drive_file_id),
+    driveStatus: row.drive_status ?? null,
     documentId: Number(row.id),
     versionId: Number(row.version_id),
     versionNo: Number(row.version_no),

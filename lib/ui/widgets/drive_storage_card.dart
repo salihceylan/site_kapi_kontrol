@@ -209,7 +209,10 @@ class DriveStorageApi {
 /// Dosya Deposu ekranının "Google Drive" bölümü (seçili site; Belgeler listesiyle AYNI modül, `drive_storage`): bağlı hesap,
 /// bekleyen dosya sayısı, bağla / kes. Modül kapalıysa açıklama gösterir; sunucuda Google bilgileri tanımlı değilse bağlama "Yakında…" der. Mevcut belge yüklemeleri bu aşamada değişmez.
 class DriveStorageCard extends StatefulWidget {
-  const DriveStorageCard({super.key, required this.authService, required this.siteCode, this.api, this.launcher});
+  const DriveStorageCard({super.key, required this.authService, required this.siteCode, this.api, this.launcher, this.onConnectedChanged});
+
+  /// Durum her yüklendiğinde bildirilir: true = bağlı, false = bağlı değil, null = bilinmiyor (hata / modül kapalı). Belge yükleme düğmesi buna bağlıdır.
+  final ValueChanged<bool?>? onConnectedChanged;
 
   final AuthService authService;
   final int siteCode;
@@ -263,6 +266,7 @@ class _DriveStorageCardState extends State<DriveStorageCard> {
         _status = next;
         _loading = false;
       });
+      widget.onConnectedChanged?.call(next.connected);
     } on ApiException catch (e) {
       if (!mounted || site != widget.siteCode) return;
       setState(() {
@@ -271,6 +275,7 @@ class _DriveStorageCardState extends State<DriveStorageCard> {
         _moduleOff = e.code == 'MODULE_DISABLED';
         _error = _moduleOff ? null : e.message;
       });
+      widget.onConnectedChanged?.call(null);
     }
   }
 

@@ -5,8 +5,10 @@
 // Cache-Control: private, no-store, Pragma: no-cache, Referrer-Policy: no-referrer, Cross-Origin-Resource-Policy: same-site. `Range` YOK SAYILIR (tam 200).
 // Dosya sunucuda ayrıştırılmaz. HEAD gövdesizdir. İstemci koparsa akış yok edilir.
 
+import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { PlatformError } from './errors.js';
+import { driveService } from './drive_service.js';
 import { newErrorId } from '../middlewares/error_handler.js';
 import { downloadBusy } from './document_common.js';
 import { openStoredFile } from './document_storage.js';
@@ -107,6 +109,54 @@ export async function sendDocument(req, res, { root, version, limit, onMissing, 
     if (handle) {
       await handle.close().catch(() => {});
     }
+  }
+}
+
+/**
+ * Drive'da TEYİTLİ dosyayı sunucu üzerinden akıtır (yetki rota katmanında verilmiştir). Dosya Drive'da ÖZEL kalır: webViewLink / paylaşım bağlantısı YOKTUR,
+ * sunucu sitenin kendi belirteciyle çekip akıtır. Başlıklar sendDocument ile aynıdır (Content-Disposition HEP attachment). Hata başlıktan ÖNCE PlatformError olarak fırlar.
+ * @param {{ siteCode: number, version: { driveFileId: number, sizeBytes: number, displayName: string, mimeType: string }, limit: number, slots?: { active: number }, driveSvc?: object }} options
+ */
+export async function sendDriveDocument(req, res, { siteCode, version, limit, slots = documentSlots, driveSvc = driveService }) {
+  if (slots.active >= limit) {
+    res.setHeader('Retry-After', '5');
+    const error = downloadBusy();
+    return res.status(error.statusCode).json({ error: error.message, code: error.code });
+  }
+  slots.active += 1;
+  try {
+    const file = await driveSvc.openContent(siteCode, version.driveFileId);
+    res.status(200);
+    res.setHeader('Content-Type', version.mimeType);
+    res.setHeader('Content-Length', String(file.size_bytes ?? version.sizeBytes));
+    res.setHeader('Content-Disposition', contentDisposition(version.displayName, 'attachment'));
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    res.setHeader('Cross-Origin-Resource-Policy', 'same-site');
+    res.removeHeader('ETag');
+    res.removeHeader('Last-Modified');
+    if (req.method === 'HEAD') {
+      try {
+        await file.stream?.cancel?.();
+      } catch (_error) {
+        // akış zaten kapalı
+      }
+      return res.end();
+    }
+    if (file.buffer) {
+      return res.end(file.buffer);
+    }
+    try {
+      await pipeline(Readable.fromWeb(file.stream), res);
+    } catch (_error) {
+      res.destroy(); // istemci koptu ya da Drive okuma hatası: başlık gönderildiği için yanıt değiştirilemez
+    }
+    return undefined;
+  } finally {
+    slots.active -= 1;
   }
 }
 

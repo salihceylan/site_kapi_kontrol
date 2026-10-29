@@ -136,10 +136,12 @@ class DocumentAdminCard extends StatelessWidget {
       semantic.write(' Güncelleme: ${_dateOf(d.updatedAt)}.');
     }
 
+    final transferring = version?.isTransferring ?? false;
     return AppCard(
       padding: listCardPadding(context),
-      onTap: onTap,
-      semanticLabel: semantic.toString(),
+      // Drive'a aktarımı süren belge tıklanamaz (yalnız Drive'a kaydı teyit edilmiş dosyalar açılır).
+      onTap: transferring ? null : onTap,
+      semanticLabel: transferring ? '$semantic Drive\'a aktarılıyor, henüz açılamaz.' : semantic.toString(),
       child: ExcludeSemantics(
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -158,6 +160,7 @@ class DocumentAdminCard extends StatelessWidget {
                     runSpacing: AppSpace.xs,
                     children: [
                       DocumentCategoryChip(d.category),
+                      if (transferring) InfoChip('Drive\'a aktarılıyor'),
                       if (d.isDeleted)
                         DocumentDeletedChip(daysUntilPurge: d.daysUntilPurge),
                     ],
@@ -268,6 +271,7 @@ class DocumentResidentCard extends StatelessWidget {
                           runSpacing: AppSpace.xs,
                           children: [
                             DocumentCategoryChip(d.category),
+                            if (d.isTransferring) InfoChip('Drive\'a aktarılıyor'),
                             if (d.isUpdated) const DocumentUpdatedChip(),
                           ],
                         ),
@@ -314,7 +318,8 @@ class DocumentResidentCard extends StatelessWidget {
             icon: Icons.open_in_new_rounded,
             variant: AppButtonVariant.tonal,
             loading: busy,
-            onPressed: busy ? null : onOpen,
+            // Aktarım süren belge açılamaz (Drive'a kaydı teyit edilince açılır).
+            onPressed: busy || d.isTransferring ? null : onOpen,
           ),
         ],
       ),

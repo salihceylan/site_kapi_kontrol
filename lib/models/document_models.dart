@@ -215,6 +215,7 @@ class DocumentCurrentVersion {
     this.mimeType = '',
     this.sizeBytes = 0,
     this.completedAt,
+    this.storage = 'server',
   });
 
   final int versionNo;
@@ -222,6 +223,13 @@ class DocumentCurrentVersion {
   final String mimeType;
   final int sizeBytes;
   final DateTime? completedAt;
+
+  /// Dosyanın saklandığı yer: `drive` (Drive'da TEYİTLİ), `server` (eski sunucu kopyası, okunur) ya da `transferring`
+  /// (Drive'a aktarılıyor, AÇILAMAZ). Eski sunucu bu alanı göndermez: `server` sayılır.
+  final String storage;
+
+  /// Drive'a aktarımı süren dosya: tıklanamaz.
+  bool get isTransferring => storage == 'transferring';
 
   DocumentFileKind get kind => DocumentFileKind.fromMime(mimeType, fileName);
 
@@ -236,6 +244,7 @@ class DocumentCurrentVersion {
       mimeType: _text(json['mime_type']),
       sizeBytes: crmInt(json['size_bytes']),
       completedAt: documentInstant(json['completed_at']),
+      storage: _text(json['storage']).isEmpty ? 'server' : _text(json['storage']),
     );
   }
 }
@@ -603,7 +612,8 @@ class DocumentDetail extends DocumentSummary {
   }
 }
 
-/// Site belge kullanımı (kota çubuğu).
+/// Site belge kullanımı. Depolama kotası YOKTUR (dosyalar sitenin Google Drive'ındadır): yalnız belge sayısı / üst sınırı.
+/// `usedBytes` / `quotaBytes` yalnız eski sunucu yanıtları için okunur; yeni sunucu göndermez (çubuk çizilmez).
 @immutable
 class DocumentUsage {
   const DocumentUsage({
@@ -695,7 +705,14 @@ class ResidentDocument {
     this.versionNo = 1,
     this.isUpdated = false,
     this.updatedAt,
+    this.storage = 'server',
   });
+
+  /// `drive` | `server` | `transferring` (bkz. [DocumentCurrentVersion.storage]).
+  final String storage;
+
+  /// Drive'a aktarımı süren belge: açılamaz.
+  bool get isTransferring => storage == 'transferring';
 
   final int id;
   final int siteCode;
@@ -733,6 +750,7 @@ class ResidentDocument {
           ? json['is_updated'] as bool
           : versionNo > 1,
       updatedAt: documentInstant(json['updated_at']),
+      storage: _text(json['storage']).isEmpty ? 'server' : _text(json['storage']),
     );
   }
 }

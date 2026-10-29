@@ -125,7 +125,7 @@ describe('GET /app/documents', () => {
   it('öğe alanları sözleşmedeki gibi (sakin): description, file_name, is_updated, updated_at = güncel sürüm tamamlanma zamanı', async () => {
     handlers.push([/^WITH my_apts AS MATERIALIZED/, ok([row(9, { cv_version_no: 3 })])]);
     const { items } = await listMyDocuments(USER, {});
-    assert.deepEqual(Object.keys(items[0]), ['id', 'site_code', 'site_name', 'title', 'category', 'description', 'file_name', 'mime_type', 'size_bytes', 'version_no', 'is_updated', 'updated_at']);
+    assert.deepEqual(Object.keys(items[0]), ['id', 'site_code', 'site_name', 'title', 'category', 'description', 'file_name', 'mime_type', 'size_bytes', 'storage', 'version_no', 'is_updated', 'updated_at']);
     assert.equal(items[0].is_updated, true);
     assert.equal(items[0].updated_at, '2026-10-17T10:00:00.000Z');
     assert.equal(items[0].size_bytes, 2048);
@@ -158,9 +158,9 @@ describe('ayrıntı ve indirme çözümleme', () => {
   });
 
   it('indirme çözümleme: görünürlük SQL\'i + güncel sürüm; alanlar depolama anahtarı / boyut / ad / MIME', async () => {
-    handlers.push([/^WITH my_apts AS MATERIALIZED/, ok([{ id: '55', version_id: '700', version_no: 2, storage_key: '1000000001/123e4567-e89b-42d3-a456-426614174000', size_bytes: '99', display_name: 'a.pdf', mime_type: 'application/pdf' }])]);
+    handlers.push([/^WITH my_apts AS MATERIALIZED/, ok([{ id: '55', site_code: '1000000001', version_id: '700', version_no: 2, storage_key: '1000000001/123e4567-e89b-42d3-a456-426614174000', size_bytes: '99', display_name: 'a.pdf', mime_type: 'application/pdf' }])]);
     const target = await resolveResidentDownload(USER, '55');
-    assert.deepEqual(target, { documentId: 55, versionId: 700, versionNo: 2, storageKey: '1000000001/123e4567-e89b-42d3-a456-426614174000', sizeBytes: 99, displayName: 'a.pdf', mimeType: 'application/pdf' });
+    assert.deepEqual(target, { siteCode: 1000000001, serverCopy: true, driveFileId: null, driveStatus: null, documentId: 55, versionId: 700, versionNo: 2, storageKey: '1000000001/123e4567-e89b-42d3-a456-426614174000', sizeBytes: 99, displayName: 'a.pdf', mimeType: 'application/pdf' });
     const query = log.find((entry) => /^WITH my_apts/.test(entry.sql));
     assert.match(query.sql, /d\.status = 'active' AND d\.audience = 'residents'/);
     handlers = [[/^WITH my_apts AS MATERIALIZED/, ok()]];
@@ -168,7 +168,7 @@ describe('ayrıntı ve indirme çözümleme', () => {
   });
 
   it('duyuru eki indirme: ALICI olma (published duyuru + onaylı site + alıcı kişi = çağıran) + ekli + belge active + modül açık; belge active + kitlesi residents (hedef daire / blok BAKILMAZ) + çağıranın o sitede hâlâ AKTİF ilişkisi (R16 P2-5)', async () => {
-    handlers.push([/^WITH my_apts AS MATERIALIZED .* SELECT d\.id, cv\.id AS version_id/, ok([{ id: '9', version_id: '700', version_no: 1, storage_key: '1000000001/123e4567-e89b-42d3-a456-426614174000', size_bytes: '10', display_name: 'ek.pdf', mime_type: 'application/pdf' }])]);
+    handlers.push([/^WITH my_apts AS MATERIALIZED .* SELECT d\.id, d\.site_code, cv\.id AS version_id/, ok([{ id: '9', version_id: '700', version_no: 1, storage_key: '1000000001/123e4567-e89b-42d3-a456-426614174000', size_bytes: '10', display_name: 'ek.pdf', mime_type: 'application/pdf' }])]);
     const target = await resolveAnnouncementAttachmentDownload(USER, '41', '9');
     assert.equal(target.documentId, 9);
     const query = log[0];
@@ -189,7 +189,7 @@ describe('ayrıntı ve indirme çözümleme', () => {
       assert.ok(query.sql.includes(fragment), fragment);
     }
     assert.ok(!/target_type|target_block_ids/.test(query.sql), 'belgenin hedef daire / blok listesine bakılmaz (sözleşme A12); kitle residents olmalıdır (R9 F1)');
-    handlers = [[/^WITH my_apts AS MATERIALIZED .* SELECT d\.id, cv\.id AS version_id/, ok()]];
+    handlers = [[/^WITH my_apts AS MATERIALIZED .* SELECT d\.id, d\.site_code, cv\.id AS version_id/, ok()]];
     await assert.rejects(resolveAnnouncementAttachmentDownload(USER, '41', '9'), { code: 'DOCUMENT_NOT_FOUND' });
     await assert.rejects(resolveAnnouncementAttachmentDownload(USER, 'abc', '9'), { code: 'DOCUMENT_NOT_FOUND' });
     await assert.rejects(resolveAnnouncementAttachmentDownload(USER, '41', '0'), { code: 'DOCUMENT_NOT_FOUND' });

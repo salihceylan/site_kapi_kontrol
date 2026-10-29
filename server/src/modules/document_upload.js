@@ -21,20 +21,20 @@ import {
   uploadInProgress,
   versionNotFound,
 } from './document_common.js';
-import { assertHeadAcceptable, validateStoredFile } from './document_validation.js';
+import { KIND_INFO, assertHeadAcceptable, validateStoredFile } from './document_validation.js';
 import {
   UploadInspector,
   checkStorage,
   commitTempFile,
-  ensureSiteDir,
   freeBytes,
   fsyncFile,
-  pathForKey,
-  removeStoredFile,
   removeTempFile,
   tmpFilePath,
 } from './document_storage.js';
-import { completeUpload, findUploadTarget, loadSummary, parseDocumentId, parseVersionNo } from './document_service.js';
+import { completeUpload, findUploadTarget, parseDocumentId, parseVersionNo } from './document_service.js';
+import { actorFromAuthUser } from './audit_service.js';
+import { driveService } from './drive_service.js';
+import { driveRequired } from './document_drive.js';
 import { pool } from '../db.js';
 
 let activeUploads = 0;
@@ -192,7 +192,6 @@ export async function receiveUpload(req, context) {
       throw sizeMismatch();
     }
 
-    await ensureSiteDir(storage.root, siteCode);
     tmp = tmpFilePath(storage.root);
     const inspector = new UploadInspector({
       declaredSize: target.declaredSize,
@@ -218,27 +217,27 @@ export async function receiveUpload(req, context) {
       await handle.close();
     }
 
-    const finalKey = target.storageKey;
-    const final = pathForKey(storage.root, finalKey);
+    // YALNIZ-DRIVE modeli: doğrulanmış geçici dosya SHA-256 doğrulamalı Drive aktarımına (driveService.upload: teyitliyse 'stored', Drive'a ulaşılamıyorsa kendi
+    // kalıcı kuyruğunda 'pending') verilir; sunucu diskinde son kopya TUTULMAZ. Geçici dosya Drive'ın kabulünden (stored ya da kuyruğa alındı) SONRA silinir (K6:
+    // teyitsiz silme yok; kuyruktaki kopya Drive'a teyitle gidene dek korunur). Aktarım hatasında sürüm `uploading` kalır, geçici dosya silinir, istemci yeniden dener.
+    let driveFile;
     try {
-      await commitUploadedFile({ tmp, final, versionId: target.versionId, key: finalKey });
+      const data = await fsp.readFile(tmp);
+      const out = await driveService.upload({
+        siteCode,
+        actor: actorFromAuthUser(actor),
+        query: { kind: 'belge', mime: KIND_INFO[kind].mime },
+        data,
+        source: { type: 'document', id: target.documentId },
+      });
+      driveFile = out.file;
     } catch (error) {
-      if (error?.code === 'UPLOAD_ALREADY_COMPLETED' && !error.extra?.document) {
-        // son dosyaya DOKUNULMADI; istemciye güncel belge verilir (findUploadTarget yolundaki yanıtla aynı biçim)
-        const document = await loadSummary(pool, siteCode, target.documentId, limits).catch(() => null);
-        if (document) error.extra = { document };
-      }
-      throw error;
+      throw error?.code === 'DRIVE_NOT_CONNECTED' ? driveRequired() : error;
     }
+    await removeTempFile(tmp);
     tmp = null;
-
-    try {
-      return await completeUpload({ siteCode, target, actor, size: bytes, sha256, kind, limits });
-    } catch (error) {
-      // DB adımı başarısız: son dosya yalnız sürüm `ready` DEĞİLSE silinir (belirsiz sonuçta dosya korunur; bakım işi süpürür).
-      await dropFinalIfNotReady(target.versionId, storage.root, finalKey);
-      throw error;
-    }
+    // DB adımı başarısız olursa Drive kopyası yetim kalır (silinmez, K6); istemci yeniden denediğinde yeni bir Drive dosyası (_2 ekli ad) oluşur.
+    return completeUpload({ siteCode, target, actor, size: bytes, sha256, kind, limits, driveFileId: driveFile.id });
   } finally {
     if (tmp) await removeTempFile(tmp);
     inFlight.delete(flightKey);
@@ -246,15 +245,4 @@ export async function receiveUpload(req, context) {
   }
 }
 
-async function dropFinalIfNotReady(versionId, root, key) {
-  try {
-    const state = await pool.query(`SELECT status, storage_key FROM document_versions WHERE id = $1`, [versionId]);
-    const row = state.rows?.[0];
-    if (row && row.status === 'ready' && row.storage_key === key) {
-      return;
-    }
-    await removeStoredFile(root, key);
-  } catch (_error) {
-    // DB'ye ulaşılamıyor: dosya korunur (sürüm uploading kalır; 2 saat sonra bakım işi satırı ve dosyayı siler)
-  }
-}
+// (dropFinalIfNotReady kaldırıldı: yalnız-Drive modelinde sunucuda son dosya yoktur.)

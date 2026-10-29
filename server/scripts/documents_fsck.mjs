@@ -52,7 +52,7 @@ const SOURCES = [
   {
     name: 'versions',
     sql: `SELECT v.id, v.document_id, v.version_no, v.status, v.storage_key, v.size_bytes, v.sha256, v.created_at
-          FROM document_versions v WHERE v.id > $1 ORDER BY v.id LIMIT $2`,
+          FROM document_versions v WHERE v.id > $1 AND v.server_copy = TRUE ORDER BY v.id LIMIT $2`,
     ref: (row) => ({ document_id: Number(row.document_id), version_no: Number(row.version_no), storage_key: row.storage_key }),
   },
   {

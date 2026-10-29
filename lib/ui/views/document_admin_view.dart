@@ -16,7 +16,7 @@ import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 
 /// Yönetici "Dosya Deposu" ekranının gövdesi (Platform Faz 3b-A + D1, tek modül `drive_storage`): site seçici + (yazma
 /// yetkisi varsa) sitenin Google Drive bağlantısı ([DriveStorageCard], ÜSTTE) + Belgeler listesi ([DocumentAdminList];
-/// sunucu depolama kotası çubuğu Drive kartının ALTINDA).
+/// kota çubuğu YOK: dosyalar yalnız Drive'dadır, Drive bağlı değilse yükleme pasiftir).
 ///
 /// - [manageAllSites] true (süper kullanıcı): tüm onaylı siteler listelenir ve yazma yetkisi vardır.
 /// - [sites]: açıkça verilen siteler (`GET /app/my-modules`: `drive_storage` modülü AÇIK olan yönetilen siteler
@@ -60,6 +60,9 @@ class DocumentAdminViewState extends State<DocumentAdminView> {
   bool _sitesLoadedOnce = false;
   String? _sitesError;
   int _sitesToken = 0;
+
+  /// Seçili sitenin Google Drive bağlantısı (Drive kartı bildirir): false iken "Belge Yükle" pasiftir; null = bilinmiyor.
+  bool? _driveConnected;
 
   late DocumentService _service =
       widget.service ?? DocumentService(authService: widget.authService);
@@ -285,12 +288,16 @@ class DocumentAdminViewState extends State<DocumentAdminView> {
           const SizedBox(height: AppSpace.md),
         ],
         // Google Drive bağlantısı Belgeler ile aynı modülün parçasıdır: yalnız yönetim (yazma) yetkisinde; kurul üyesi görmez.
-        // Görünüş sırası: Drive kartı ÜSTTE; sunucu depolama kotası ("42 MB / 200 MB" çubuğu) ve belge listesi ALTTA.
+        // Görünüş sırası: Drive kartı ÜSTTE, belge listesi ALTTA. Sunucu depolama kotası YOKTUR: dosyalar yalnız sitenin Drive'ındadır;
+        // Drive bağlı değilse "Belge Yükle" pasiftir.
         if (site.canWrite) ...[
           DriveStorageCard(
             key: ValueKey<String>('documents_drive_${site.code}'),
             authService: widget.authService,
             siteCode: site.code,
+            onConnectedChanged: (connected) {
+              if (mounted && connected != _driveConnected) setState(() => _driveConnected = connected);
+            },
           ),
           const SizedBox(height: AppSpace.xl),
         ],
@@ -301,6 +308,7 @@ class DocumentAdminViewState extends State<DocumentAdminView> {
           picker: widget.picker,
           sharer: widget.sharer,
           onOpenModules: widget.onOpenModules,
+          driveConnected: site.canWrite ? _driveConnected : null,
         ),
       ],
     );

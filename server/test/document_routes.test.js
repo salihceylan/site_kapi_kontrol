@@ -93,6 +93,7 @@ function installFakeDb() {
     const a = access(sql, params ?? []);
     if (a) return a;
     if (/^(BEGIN|COMMIT|ROLLBACK)$/.test(sql) || /^SELECT pg_advisory_xact_lock/.test(sql) || /^(SAVEPOINT|RELEASE SAVEPOINT|ROLLBACK TO SAVEPOINT) /.test(sql) || /^INSERT INTO audit_log/.test(sql)) return ok();
+    if (/^SELECT status FROM site_drive_connections WHERE site_code = \$1$/.test(sql)) return ok([{ status: 'connected' }]); // yalnız-Drive kapısı: Drive bağlı
     if (/^SELECT site_code FROM sites WHERE site_code = \$1 FOR KEY SHARE$/.test(sql)) return ok([{ site_code: String(params[0]) }]);
     if (/^SELECT user_code FROM users WHERE user_code = \$1 AND deleted_at IS NULL FOR KEY SHARE$/.test(sql)) return ok([{ user_code: params[0] }]);
     throw new Error(`BEKLENMEYEN SQL (sahte DB katı): ${sql.slice(0, 240)}`);
@@ -244,7 +245,7 @@ describe('GET documents: yetki matrisi ve modül kapısı', () => {
     handlers.push(
       [/^SELECT COUNT\(\*\)::INTEGER AS total FROM documents d/, ok([{ total: 0 }])],
       [/^SELECT d\.id, d\.title, d\.category/, ok()],
-      [/^SELECT \(SELECT COALESCE\(SUM\(size_bytes\), 0\)::BIGINT FROM document_versions/, ok([{ used_bytes: '1048576', document_count: 3 }])],
+      [/^SELECT \(SELECT COUNT\(\*\)::INTEGER FROM documents WHERE site_code = \$1\) AS document_count/, ok([{ document_count: 3 }])],
     );
   };
 
@@ -253,7 +254,7 @@ describe('GET documents: yetki matrisi ve modül kapısı', () => {
     for (const user of [users.superUser, users.mgrA, users.board]) {
       const res = await call('GET', docUrl(), { user });
       assert.equal(res.status, 200, user.full_name);
-      assert.deepEqual(res.body, { items: [], total: 0, usage: { used_bytes: 1048576, quota_bytes: 209715200, document_count: 3, document_limit: 2000 } });
+      assert.deepEqual(res.body, { items: [], total: 0, usage: { document_count: 3, document_limit: 2000 } });
     }
     for (const user of [users.staff, users.resident, users.outsider]) {
       const res = await call('GET', docUrl(), { user });
@@ -346,7 +347,7 @@ describe('POST documents: doğrulama ve kilit sırası', () => {
     const created = new Date('2026-10-17T10:00:00.000Z');
     handlers.push(
       [/^SELECT id FROM documents WHERE site_code = \$1 AND created_by = \$2 AND idempotency_key = \$3 LIMIT 1$/, ok()],
-      [/^SELECT \(SELECT COALESCE\(SUM\(size_bytes\), 0\)::BIGINT FROM document_versions/, ok([{ used_bytes: '0', document_count: 0 }])],
+      [/^SELECT \(SELECT COUNT\(\*\)::INTEGER FROM documents WHERE site_code = \$1\) AS document_count/, ok([{ document_count: 0 }])],
       [/^SELECT COUNT\(\*\)::INTEGER AS n FROM document_versions WHERE uploaded_by = \$1 AND status = 'uploading'/, ok([{ n: 0 }])],
       [/^INSERT INTO documents \(/, ok([{ id: '77' }])],
       [/^INSERT INTO document_versions \(/, ok()],
@@ -400,24 +401,27 @@ describe('POST documents: doğrulama ve kilit sırası', () => {
   it('kota aşımı 409 DOCUMENT_QUOTA_EXCEEDED (kullanılan / kota MB); belge sayısı sınırı 409 DOCUMENT_LIMIT; bekleyen sınırı 409 UPLOAD_PENDING_LIMIT', async () => {
     handlers.push(
       [/^SELECT id FROM documents WHERE site_code = \$1 AND created_by = \$2 AND idempotency_key = \$3 LIMIT 1$/, ok()],
-      [/^SELECT \(SELECT COALESCE\(SUM\(size_bytes\), 0\)::BIGINT FROM document_versions/, () => ok([{ used_bytes: state.used, document_count: state.count }])],
+      [/^SELECT \(SELECT COUNT\(\*\)::INTEGER FROM documents WHERE site_code = \$1\) AS document_count/, () => ok([{ document_count: state.count }])],
       [/^SELECT COUNT\(\*\)::INTEGER AS n FROM document_versions WHERE uploaded_by = \$1 AND status = 'uploading'/, () => ok([{ n: state.pending }])],
     );
-    state.used = String(209715200 - 500);
-    state.count = 5;
-    state.pending = 0;
-    let res = await call('POST', docUrl(), { user: users.mgrA, body: body({ file: { name: 'a.pdf', size: 501 } }) });
-    assert.deepEqual([res.status, res.body.code], [409, 'DOCUMENT_QUOTA_EXCEEDED']);
-    assert.match(res.body.error, /200 MB \/ 200 MB|199,\d MB|200 MB/);
-    assert.equal(res.body.quota_bytes, 209715200);
-    state.used = '0';
+    // depolama kotası YOK (yalnız-Drive): kota aşımı denemesi yok; yalnız belge sayısı ve bekleyen sınırı
     state.count = 2000;
-    res = await call('POST', docUrl(), { user: users.mgrA, body: body() });
+    let res = await call('POST', docUrl(), { user: users.mgrA, body: body() });
     assert.deepEqual([res.status, res.body.code], [409, 'DOCUMENT_LIMIT']);
     state.count = 1;
     state.pending = 5;
     res = await call('POST', docUrl(), { user: users.mgrA, body: body() });
     assert.deepEqual([res.status, res.body.code], [409, 'UPLOAD_PENDING_LIMIT']);
+    assert.ok(!log.some((entry) => /INSERT INTO documents/.test(entry.sql)));
+  });
+
+  it('yalnız-Drive: Drive bağlı DEĞİLSE yükleme (POST belge ve PUT içerik) 409 DRIVE_REQUIRED + Türkçe ileti; belge satırı yazılmaz', async () => {
+    handlers.push([/^SELECT status FROM site_drive_connections WHERE site_code = \$1$/, ok([{ status: 'disconnected' }])]);
+    let res = await call('POST', docUrl(), { user: users.mgrA, body: body() });
+    assert.deepEqual([res.status, res.body.code], [409, 'DRIVE_REQUIRED']);
+    assert.match(res.body.error, /önce Google Drive/);
+    res = await call('POST', docUrl('/77/versions'), { user: users.mgrA, body: body() });
+    assert.deepEqual([res.status, res.body.code], [409, 'DRIVE_REQUIRED']);
     assert.ok(!log.some((entry) => /INSERT INTO documents/.test(entry.sql)));
   });
 

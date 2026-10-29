@@ -37,7 +37,8 @@ import {
   updateDocument,
 } from './document_service.js';
 import { bumpDownloadCount, getMyDocument, listMyDocuments, resolveAnnouncementAttachmentDownload, resolveResidentDownload } from './document_resident.js';
-import { fileMissingError, sendDocument } from './document_download.js';
+import { fileMissingError, sendDocument, sendDriveDocument } from './document_download.js';
+import { assertDriveConnected, documentTransferring } from './document_drive.js';
 import { checkStorage, freeBytes } from './document_storage.js';
 import { isClientAborted, receiveUpload } from './document_upload.js';
 
@@ -137,8 +138,13 @@ const userLabel = (req) => actorFromAuthUser(req.authUser).userCode ?? 0;
 async function streamDownload(req, res, { version, context, countDownload }) {
   const limits = documentLimits();
   try {
-    const storage = await checkStorage();
-    if (!storage.ok) {
+    // Yalnız-Drive modeli: sunucu kopyası yoksa dosya Drive'dadır (yalnız TEYİTLİYSE akıtılır; aktarılıyorsa 409 DOCUMENT_TRANSFERRING).
+    const fromDrive = version.serverCopy === false;
+    if (fromDrive && version.driveStatus !== 'stored') {
+      throw documentTransferring();
+    }
+    const storage = fromDrive ? null : await checkStorage();
+    if (storage && !storage.ok) {
       throw storageNotConfigured();
     }
     // [documents] download doc=<id> v=<no> user=<kod>: kimlik/numara, dosya adı YOK
@@ -146,6 +152,10 @@ async function streamDownload(req, res, { version, context, countDownload }) {
     console.log(`[documents] download doc=${version.documentId} v=${version.versionNo} user=${userLabel(req)}`);
     if (countDownload && req.method !== 'HEAD') {
       bumpDownloadCount(version.documentId);
+    }
+    if (fromDrive) {
+      await sendDriveDocument(req, res, { siteCode: version.siteCode, version, limit: limits.downloadConcurrency });
+      return undefined;
     }
     await sendDocument(req, res, {
       root: storage.root,
@@ -192,6 +202,7 @@ documentRouter.post(
   documentWriteLimiter,
   managerHandler({ context: 'documents_create', fallback: 'Belge kaydedilemedi.', write: true }, async ({ req, access, limits }) => {
     const body = bodyOf(req);
+    await assertDriveConnected(access.siteCode); // yalnız-Drive modeli: Drive bağlı değilse yükleme kapalı (409 DRIVE_REQUIRED)
     await assertStorageUsable(limits, Number.isSafeInteger(body?.file?.size) ? body.file.size : 0);
     return { status: 201, body: await createDocument({ siteCode: access.siteCode, actor: req.authUser, body, limits }) };
   }),
@@ -248,6 +259,7 @@ documentRouter.post(
   documentWriteLimiter,
   managerHandler({ context: 'documents_add_version', fallback: 'Yeni sürüm kaydedilemedi.', write: true }, async ({ req, access, limits }) => {
     const body = bodyOf(req);
+    await assertDriveConnected(access.siteCode);
     await assertStorageUsable(limits, Number.isSafeInteger(body?.file?.size) ? body.file.size : 0);
     return { status: 201, body: await addVersion({ siteCode: access.siteCode, rawId: req.params.id, actor: req.authUser, body, limits }) };
   }),
@@ -281,6 +293,7 @@ documentRouter.put(`${BASE}/:id/versions/:no/content`, authRequired, documentUpl
     if (!access) {
       return undefined;
     }
+    await assertDriveConnected(access.siteCode);
     const result = await receiveUpload(req, {
       siteCode: access.siteCode,
       rawId: req.params.id,

@@ -305,7 +305,7 @@ describe('sürümler', () => {
   it('yeni sürüm: belge active olmalı (409); sürüm üst sınırı 20 (409 DOCUMENT_VERSION_LIMIT); kota (409); bekleyen sürüm varsa YENİLENİR (aynı numara, yeni anahtar, eski dosya silinir)', async () => {
     const body = { file: { name: 'sürüm.pdf', size: 1000 } };
     const capacity = [
-      [/^SELECT \(SELECT COALESCE\(SUM\(size_bytes\), 0\)::BIGINT FROM document_versions/, () => ok([{ used_bytes: '0', document_count: 1 }])],
+      [/^SELECT \(SELECT COUNT\(\*\)::INTEGER FROM documents WHERE site_code = \$1\) AS document_count/, () => ok([{ document_count: 1 }])],
       [/^SELECT COUNT\(\*\)::INTEGER AS n FROM document_versions WHERE uploaded_by = \$1 AND status = 'uploading'/, ok([{ n: 0 }])],
     ];
     handlers.push([/^SELECT id, status FROM documents WHERE id = \$1 AND site_code = \$2 FOR UPDATE$/, ok([{ id: '77', status: 'pending' }])]);
@@ -319,14 +319,7 @@ describe('sürümler', () => {
     ];
     assert.equal(await code(addVersion({ siteCode: SITE, rawId: '77', actor: ACTOR, body, limits })), '409:DOCUMENT_VERSION_LIMIT');
 
-    handlers = [
-      [/^SELECT id, status FROM documents WHERE id = \$1 AND site_code = \$2 FOR UPDATE$/, ok([{ id: '77', status: 'active' }])],
-      [/^SELECT id, version_no, storage_key FROM document_versions WHERE document_id = \$1 AND status = 'uploading'/, ok()],
-      [/^SELECT COUNT\(\*\)::INTEGER AS n FROM document_versions WHERE document_id = \$1$/, ok([{ n: 2 }])],
-      [/^SELECT \(SELECT COALESCE\(SUM\(size_bytes\), 0\)::BIGINT FROM document_versions/, ok([{ used_bytes: String(209715200 - 500), document_count: 1 }])],
-    ];
-    assert.equal(await code(addVersion({ siteCode: SITE, rawId: '77', actor: ACTOR, body, limits })), '409:DOCUMENT_QUOTA_EXCEEDED');
-
+    // (depolama kotası denetimi kalktı: yalnız-Drive modeli)
     // bekleyen sürüm yenileme: 20 sürüm dolu olsa bile bekleyeni yenilemek yeni satır eklemez
     await writeStored(KEY_2, 'eski bekleyen');
     const created = new Date('2026-10-17T10:00:00.000Z');
