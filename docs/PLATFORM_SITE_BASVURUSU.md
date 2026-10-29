@@ -83,3 +83,11 @@ Yeni bağımlılık YOK. Kalıplar: Modül talebi ekranı (`module_requests_view
     - `POST /api/sites` uç noktası yalnızca `SUPER_USER` rolüne açıktır. Diğer roller doğrudan site oluşturmaya çalışırsa 403 Forbidden alır.
     - Rezidans dahil her mülk tipi için site oluşturma süreci `POST /api/site-applications` başvuru onay mekanizmasına tabidir.
     - Başvuru süper kullanıcının onayına düşer, incelenir ve süper kullanıcı tarafından onaylandığında site oluşturulup yönetici yetkileri atanır.
+
+## Kampanya: "şimdi abone olana 2 ay ücretsiz" (migration `114_site_free_period.sql`; sahip kararı 2026-10-29)
+
+- `sites.subscription_started_at` ve `sites.free_until` (ikisi `DATE`, NULL serbest). `free_until` ücretsiz dönemin SON günüdür (o gün dahil ücretsiz). Mevcut sitelere dokunulmaz (NULL = kampanyadan önce).
+- Başvuru ONAYLANIRKEN (`approveSiteApplication`, aynı transaction, kurulum çekirdeğinden sonra) yalnız iki alan da boşsa: `subscription_started_at = bugün`, `free_until = bugün + 2 ay` (Europe/Istanbul takvimi; ay sonuna PG kuralıyla kırpılır). Anlık kurulum çekirdeği (`createSiteWithStructure`) DEĞİŞMEZ.
+- Süper kullanıcı `PATCH /admin/sites/:id` ile `subscription_started_at` / `free_until` değerini `"YYYY-MM-DD"` (ya da `null` = temizle) olarak düzenler; bitiş başlangıçtan önce olamaz (400). Yalnız bu alanlar gönderilirse yapı/ad işlemine girilmez. Audit `site.updated` details yalnız alan adlarını taşır.
+- Site yanıtları (`mapSiteRow`, ekleyici): `subscription_started_at`, `free_until`, `free_period_state` (`none` | `active` | `ended`; İstanbul gününe göre, son gün `active`), `free_period_days_left` (yalnız `active`; son gün = 0).
+- Bu alanlar bir İŞARETTİR: özellik kilitlemez, ödeme/fiyat tutmaz. Süper kullanıcı site kartı başlığında rozet (sürüyorsa yeşil "Ücretsiz dönem: GG.AA.YYYY tarihine kadar", bittiyse gri "Ücretsiz dönem bitti"); site yöneticisi kartında küçük bilgi satırı.

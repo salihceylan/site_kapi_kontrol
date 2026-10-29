@@ -40,6 +40,7 @@ import {
 import { createUser, updateUserByCode, userExists } from '../services/user_service.js';
 import { rejectWeakPassword } from '../security/password_policy.js';
 import { resolveManagementTypeInput } from '../modules/management_types.js';
+import { freePeriodOrderError, parseFreePeriodBody } from '../modules/site_free_period.js';
 import { provisionResidentAndLinkPerson } from '../modules/people_service.js';
 import {
   listSitesForAuthUser,
@@ -49,6 +50,7 @@ import {
   siteManagerExists,
   createSiteWithStructure,
   updateSiteByCode,
+  updateSiteFreePeriod,
   upsertSiteManagerLink,
   getSiteStructure,
   requestSiteDeletion,
@@ -1034,6 +1036,12 @@ adminRouter.patch('/admin/sites/:id', authRequired, requireSuperUser, async (req
   );
   const doorCount = normalizeOptionalInteger(req.body.door_count);
   const managerUserCode = normalizeOptionalInteger(req.body.manager_user_code);
+  // Kampanya (114): abonelik baslangici + ucretsiz donem sonu ("YYYY-MM-DD" | null = temizle | yok = dokunma).
+  const freePeriod = parseFreePeriodBody(req.body);
+  if (freePeriod.error) {
+    return res.status(400).json({ error: freePeriod.error });
+  }
+  const { subscriptionStartedAt, freeUntil } = freePeriod.value;
 
   if (
     Number.isNaN(blockCount) ||
@@ -1057,7 +1065,9 @@ adminRouter.patch('/admin/sites/:id', authRequired, requireSuperUser, async (req
     apartmentCount === undefined &&
     blockApartmentCounts === undefined &&
     doorCount === undefined &&
-    managerUserCode === undefined
+    managerUserCode === undefined &&
+    subscriptionStartedAt === undefined &&
+    freeUntil === undefined
   ) {
     return res.status(400).json({ error: 'Guncellenecek alan gonderilmedi.' });
   }
@@ -1081,6 +1091,15 @@ adminRouter.patch('/admin/sites/:id', authRequired, requireSuperUser, async (req
 
     if (managerUserCode != null && !(await siteManagerExists(managerUserCode))) {
       return res.status(404).json({ error: 'Site yoneticisi bulunamadi.' });
+    }
+
+    // Kampanya tarihleri: gonderilmeyen alan mevcut degerle birlestirilip sira denetlenir (bitis, baslangictan once olamaz).
+    const freePeriodError = freePeriodOrderError(
+      subscriptionStartedAt === undefined ? existing.subscription_started_at : subscriptionStartedAt,
+      freeUntil === undefined ? existing.free_until : freeUntil,
+    );
+    if (freePeriodError) {
+      return res.status(400).json({ error: freePeriodError });
     }
 
     if (
@@ -1144,6 +1163,10 @@ adminRouter.patch('/admin/sites/:id', authRequired, requireSuperUser, async (req
       });
     }
 
+    if (subscriptionStartedAt !== undefined || freeUntil !== undefined) {
+      await updateSiteFreePeriod({ siteCode, subscriptionStartedAt, freeUntil });
+    }
+
     const changedFields = Object.entries({
       name,
       address,
@@ -1153,6 +1176,8 @@ adminRouter.patch('/admin/sites/:id', authRequired, requireSuperUser, async (req
       apartment_count: apartmentCount,
       block_apartment_counts: blockApartmentCounts,
       door_count: doorCount,
+      subscription_started_at: subscriptionStartedAt,
+      free_until: freeUntil,
     })
       .filter(([, value]) => value !== undefined)
       .map(([field]) => field);

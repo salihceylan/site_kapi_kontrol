@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { managementTypeLabel, normalizeManagementType } from '../modules/management_types.js';
 import { managementTerms } from '../modules/management_type_terms.js';
+import { freePeriodFields } from '../modules/site_free_period.js';
 import { isReservedEmail } from './reserved_email.js';
 
 export const validRoles = new Set(['super_user', 'site_manager', 'apartment_owner', 'individual']);
@@ -248,6 +249,8 @@ export function mapSiteRow(row) {
     management_type_label: managementTypeLabel(row.management_type),
     // F9 (ekleyici): türe özgü terimler (Daire/Ofis/Mağaza...); eski istemciler alanı yok sayar.
     management_terms: managementTerms(row.management_type),
+    // Kampanya "şimdi abone olana 2 ay ücretsiz" (114, ekleyici): subscription_started_at, free_until, free_period_state ('none' | 'active' | 'ended'), free_period_days_left.
+    ...freePeriodFields(row),
     created_at: row.created_at,
   };
 }
