@@ -13,7 +13,12 @@ import 'list_fixtures.dart' show listMatrix, pumpList, tapFinder;
 import 'people_fixtures.dart' show PeopleFakeAuth;
 
 class _FakeMeterService extends MeterService {
-  _FakeMeterService({required super.authService}) : super(api: MeterApi(baseUrl: 'http://localhost'));
+  _FakeMeterService({required super.authService, this.tariffs = const <MeterTariff>[]}) : super(api: MeterApi(baseUrl: 'http://localhost'));
+
+  final List<MeterTariff> tariffs;
+
+  @override
+  Future<List<MeterTariff>> listTariffs(int siteCode) async => tariffs;
 
   @override
   Future<List<Meter>> listMeters(int siteCode, {MeterKind? kind}) async => const <Meter>[];
@@ -32,13 +37,14 @@ Future<void> _open(
   double height = 2400,
   double scale = 1.0,
   bool dark = false,
+  List<MeterTariff> tariffs = const <MeterTariff>[],
 }) async {
   final auth = PeopleFakeAuth();
   await pumpList(
     t,
     MetersView(
       authService: auth,
-      service: _FakeMeterService(authService: auth),
+      service: _FakeMeterService(authService: auth, tariffs: tariffs),
       sites: <MeterSite>[MeterSite(code: 11, name: 'Gül Sitesi', canWrite: canWrite)],
     ),
     width: width,
@@ -117,6 +123,30 @@ void main() {
 
       expect(find.byKey(const ValueKey<String>('meters_import_photo_hint')), findsNothing);
       expect(find.textContaining('Yakında'), findsNothing);
+    });
+  });
+
+  group('Faturalandır sekmesi: tarife', () {
+    testWidgets('hiç tarife yokken "Önce tarife girin" kurulum yönlendirmesi + Tarife gir düğmesi çıkar; Önizle kapalı; fiyat alanı yok', (t) async {
+      await _open(t, canWrite: true);
+      await _goToTab(t, 'Faturalandır');
+
+      expect(find.byKey(const ValueKey<String>('billing_tariff_setup')), findsOneWidget);
+      expect(find.text('Önce tarife girin'), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('billing_setup_tariff')), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('billing_price_from_tariff')), findsNothing);
+      expect(find.widgetWithText(TextField, 'Birim fiyat (TL / birim)'), findsNothing, reason: 'birim fiyat elle girilmez, tarifeden gelir');
+      expect(t.widget<FilledButton>(find.widgetWithText(FilledButton, 'Önizle')).onPressed, isNull, reason: 'tarifesiz birim fiyat önizlenemez');
+    });
+
+    testWidgets('tarife varken yönlendirme çıkmaz; fiyatın tarifeden alındığı yazar ve Önizle açıktır', (t) async {
+      await _open(t, canWrite: true, tariffs: const <MeterTariff>[MeterTariff(id: 1, kind: MeterKind.water, unitPriceMinor: 4550, validFrom: '2026-01-01')]);
+      await _goToTab(t, 'Faturalandır');
+
+      expect(find.byKey(const ValueKey<String>('billing_tariff_setup')), findsNothing);
+      expect(find.byKey(const ValueKey<String>('billing_price_from_tariff')), findsOneWidget);
+      expect(find.textContaining('Su: 45,50 ₺ / birim'), findsOneWidget);
+      expect(t.widget<FilledButton>(find.widgetWithText(FilledButton, 'Önizle')).onPressed, isNotNull);
     });
   });
 

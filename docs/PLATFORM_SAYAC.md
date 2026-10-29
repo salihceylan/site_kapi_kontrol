@@ -40,6 +40,14 @@ Fotoğraf: istemci uzun kenarı 1280 px, JPEG kalite 70'e küçültür (EXIF/GPS
 
 İstemci: kamera açık kalır, üstte sıradaki daire, metin tanıma telefonda (ML Kit; yalnız Android/iOS, web'de elle giriş), görevli onaylar/düzeltir. Okuma önce cihaz kuyruğuna yazılır (SharedPreferences + belgeler klasöründe fotoğraf), sonra gönderilir; ağ/sunucu hatasında kuyruk durur ve 30 sn'de bir / uygulama öne gelince / okuma sonrası yeniden dener. Sunucunun kalıcı reddi (4xx) kayda yazılır, görevli düzeltene ya da silene dek denenmez. **"Silmeyi biz yapmayız" (K6):** sunucu okumayı kabul etse bile fotoğrafın telefondaki kopyası uygulama tarafından kendiliğinden SİLİNMEZ; ekran bunu söyler ("kopyası silinmedi, isterseniz siz silebilirsiniz") ve kopyaları yalnız kullanıcı isterse ("Telefondaki fotoğraf kopyaları" > "Kopyaları sil") siler; bekleyen kaydı kullanıcı kendisi silerse fotoğrafı da gider. Sunucu fotoğrafı almadıysa (`photo.storage = none`) ekran "fotoğrafı sunucuya ulaşmadı; kopyası telefonunuzda duruyor" der. Drive bekleme alanı doluysa fotoğraf sunucudaki `meter_reading_photos` tablosuna düşer (yanıtta `photo.drive_reason`).
 
+## Tarife (migration 116, `meter_tariffs`)
+
+Sayaç türü başına, geçerlilik tarihli birim fiyat (kuruş / birim, `BIGINT`; float yok). Aralık yarı açıktır: `[valid_from, valid_to)`; türde tek açık (`valid_to` boş) tarife olur.
+
+- `GET /manager/sites/:siteCode/meter-tariffs` -> `{ items }` (tür, `valid_from` azalan; kurul salt okur). `POST` `{ kind, unit_price_minor, valid_from }` -> 201 `{ tariff }` (yalnız yönetici / süper). Yeni tarife türdeki açık tarifeyi kendi `valid_from` tarihinde kapatır; başlangıcı son tarifenin başlangıcından sonra olmalıdır (aksi 409 `TARIFF_OUT_OF_ORDER`). Tarife değiştirilmez / silinmez; düzeltme = yeni tarife. Denetim: `metering.tariff.created`.
+- `unit_price` yönteminde `unit_price_minor` artık isteğe bağlıdır: verilmezse DÖNEM SONUNDA (`period_to`) geçerli tarifeden okunur, tarife yoksa 409 `TARIFF_MISSING` (ekran: «Önce tarife girin» + Tarife gir düğmesi). Açıkça verilen fiyat eskisi gibi geçerlidir. Fiyat ve tarife no (`params.unit_price_minor`, `tariff_id`, `tariff_valid_from`) plan özetine girer: önizleme ile kayıt arasında tarife değişirse 409 `PREVIEW_STALE`; kayıtlı faturalandırmanın fiyatı `params` içinde dondurulur, sonradan girilen tarife geçmişi etkilemez.
+- Önizleme yanıtında `tariff` (`id`, `unit_price_minor`, `valid_from`, `mid_period`) döner; `mid_period` = tarife dönem İÇİNDE başladı, dönemin tamamı o fiyatla hesaplandı (ekranda uyarı; dönemi tarife tarihinde ikiye bölüp ayrı faturalandırmak yöneticiye bırakılır). Isı payı ve fatura yöntemlerinde toplam tutarı yönetici girer; tarife yalnız `unit_price` içindir.
+
 ## Saha akışı ve sıçrama uyarısı (P1-6, P1-7; karar K12)
 
 Görevli akışı: **blok seç → dairelerin çekilen / çekilmeyen listesi → eksikleri sırayla çek → yanlış çekileni listeden seçip yeniden çek**. Olağan dışı tüketim görevliye

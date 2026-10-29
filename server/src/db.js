@@ -46,6 +46,7 @@ import { ensureDriveHealthSchema } from './modules/drive_health_schema.js';
 import { ensureSiteFreePeriodSchema } from './modules/site_free_period_schema.js';
 import { ensureMeteringFieldSchema } from './modules/metering_field_schema.js';
 import { ensureMeteringSchema } from './modules/metering_schema.js';
+import { ensureMeterTariffSchema } from './modules/metering_tariff_schema.js';
 import { ensureManagementCompanySchema } from './modules/management_company_schema.js';
 import { ensureNotifyChannelsSchema } from './modules/notify_channels_schema.js';
 import { ensureBankImportSchema } from './modules/bank_import_schema.js';
@@ -1993,6 +1994,8 @@ export async function ensureDbSchema() {
     await ensureDriveSchema(client);
     // 061 (sayac okuma ve faturalandirma): dev blokta DEGIL; katalog kontrolu + her adim kendi otomatik onayli ifadesi (metering_schema.js = migrations/061).
     await ensureMeteringSchema(client);
+    // 116 (sayac tarifesi): 061'den sonra; idempotent (metering_tariff_schema.js = migrations/116).
+    await ensureMeterTariffSchema(client);
     // 062 (yonetim firmasi Y1/Y2, deneme suresi): katalog kontrolu; management_company_schema.js = migrations/062.
     await ensureDeferred('062 yonetim firmasi', () => ensureManagementCompanySchema(client));
     // 063 (SMS giris kodlari, web push, kargo bildirim kaydi): notify_channels_schema.js = migrations/063.
