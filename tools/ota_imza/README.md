@@ -30,8 +30,9 @@ node tools/ota_imza/ota_imza.mjs imzala cihaz_kontrol/.pio/build/lolin_c3_mini/f
 # 4) Yüklemeden ÖNCE genel anahtarla doğrula (manifest ile imzanın uyuştuğunu da denetler).
 node tools/ota_imza/ota_imza.mjs dogrula cihaz_kontrol/.pio/build/lolin_c3_mini/firmware.bin --genel genel_anahtar.pem --manifest manifest.json
 
-# 5) Sunucuya yükle: firmware.bin + firmware.bin.sig ve manifest.json -> server/firmware/<hedef>/ (ayrıntı: OTA_KURULUM.txt)
-#    İki donanım hedefinin dosyaları ASLA karışmaz (esp32-c3 <-> esp32-wroom).
+# 5) Sunucuya yükle: POST /admin/firmware/<hedef>/releases (yalnız süper kullanıcı; gövde firmware.bin, başlık X-Ota-Signature = firmware.bin.sig'in base64'ü).
+#    Sunucu imzayı OTA_PUBLIC_KEY ile doğrular, dosyaları kendisi yazar, manifest.json'u EN SON değiştirir; elle klasöre kopyalamayın (doğrulamayı atlar).
+#    Komut örneği (PowerShell), hata kodları ve geçiş planı: docs/OTA_IMZA.md bölüm 4. İki donanım hedefinin dosyaları ASLA karışmaz (esp32-c3 <-> esp32-wroom).
 ```
 
 Her komutun sonunda çıkış kodu: `0` başarılı / **GEÇTİ**, `1` reddedildi / **GEÇMEDİ**, `2` komut satırı hatası.
@@ -44,7 +45,7 @@ Ortam dosyası ile: `node --env-file=tools/ota_imza/.env tools/ota_imza/ota_imza
 | --- | --- |
 | `anahtar-uret --ozel <yol> [--genel <dosya>]` | Yeni Ed25519 çifti üretir. Özel anahtar PKCS#8 PEM olarak **yeni** bir dosyaya yazılır (0600; var olan dosyanın üzerine **asla** yazılmaz). Genel anahtar ekrana (PEM, hex, `key_id`, C++ tanımı) basılır; `--genel` verilirse ayrıca PEM dosyasına yazılır. Yazılan anahtar diskten geri okunup deneme imzasıyla sınanır; sınanamazsa dosya silinir. |
 | `genel-anahtar --ozel <yol>` | Özel anahtardan genel anahtarı yeniden üretip basar (firmware'e gömülecek değeri kaybettiyseniz). |
-| `imzala <firmware.bin> --hedef <esp32-c3\|esp32-wroom> --surum <X.Y.Z> [--ozel <yol>] [--cikti <yol>]` | `<firmware.bin>.sig` (ya da `--cikti`) dosyasını üretir. Üretilen imza hemen genel anahtarla yeniden doğrulanır; geçmezse dosya **yazılmaz**. |
+| `imzala <firmware.bin> --hedef <esp32-c3\|esp32-wroom> --surum <X.Y.Z> [--rollback-max <X.Y.Z>] [--ozel <yol>] [--cikti <yol>]` | `<firmware.bin>.sig` (ya da `--cikti`) dosyasını üretir. Üretilen imza hemen genel anahtarla yeniden doğrulanır; geçmezse dosya **yazılmaz**. `--rollback-max` YALNIZ bilinçli, sınırlı sürüm düşürmede kullanılır (aşağıda); normal yayında KULLANMAYIN. |
 | `dogrula <firmware.bin> (--genel <dosya> \| --genel-hex <64 hane>) [--sig <yol>] [--manifest <manifest.json>] [--hedef <ad>] [--surum <X.Y.Z>]` | Dosya + imza + genel anahtarı denetler, her kontrolü `[TAMAM]` / `[HATA ]` / `[UYARI]` olarak yazar, sonda `SONUC: GECTI` ya da `GECMEDI` der. `--genel` / `--genel-hex` birden fazla verilebilir (anahtar dönüşü). |
 | `yardim` | Kısa kullanım. |
 
@@ -55,7 +56,7 @@ Ortam dosyası ile: `node --env-file=tools/ota_imza/.env tools/ota_imza/ota_imza
 
 İmzalamadan önce araç şunları **zorunlu** denetler (biri başarısızsa imza dosyası üretilmez):
 
-- `--hedef` bilinen bir hedef olmalı (`esp32-c3`, `esp32-wroom`); `--surum` `X.Y.Z` (ya da `X.Y.Z.W`) biçiminde, başında sıfır olmadan.
+- `--hedef` bilinen bir hedef olmalı (`esp32-c3`, `esp32-wroom`); `--surum` `X.Y.Z` (ya da `X.Y.Z.W`) biçiminde, başında sıfır olmadan. `--rollback-max` verilirse aynı biçimde ve `--surum`'dan **büyük** olmalı (aksi halde hiçbir cihaz düşürülemez; imza üretilmez).
 - Dosya gerçek bir ESP32 uygulama imajı olmalı (ilk bayt `0xE9`, segment sayısı 1–16) ve **derlendiği çip `--hedef` ile uyuşmalı**
   (imaj başlığındaki `chip_id`: ESP32/WROOM-32E `0x0000`, ESP32-C3 `0x0005`). C3 imajını yanlışlıkla `esp32-wroom` diye imzalamak mümkün değildir.
 - Dosya boş olamaz ve 16 MiB'ı aşamaz.
@@ -88,6 +89,7 @@ target=<hedef><LF>
 version=<sürüm><LF>
 size=<bayt sayısı><LF>
 sha256=<64 hane küçük harfli hex><LF>
+rollback_max=<sürüm><LF>          <- YALNIZ imzalı, sınırlı sürüm düşürme yetkisinde (imzala --rollback-max); yoksa bu satır HİÇ olmaz
 ```
 
 | Alan | Kural |
@@ -96,12 +98,20 @@ sha256=<64 hane küçük harfli hex><LF>
 | `version` | `X.Y.Z` ya da `X.Y.Z.W`, her parça 0–9999, **başında sıfır yok** (`4.3.4` evet; `v4.3.4`, `4.03.4`, `4.3`, `4.3.4-beta` hayır). Manifestteki `version` ile **harfi harfine** aynı olmalı. |
 | `size` | İmajın bayt sayısı, ondalık, işaretsiz, başında sıfır/boşluk yok (1 – 16 777 216). |
 | `sha256` | İmajın tamamının SHA-256 özeti, **küçük harfli** hex, 64 hane. |
+| `rollback_max` | **İsteğe bağlı**, son satır: `version` biçiminde bir sürüm, `version`'dan büyük. Varsa imza bir **sürüm düşürme yetkisi** taşır: cihazın sürümü `rollback_max`'a kadar (dahil) olan cihazlar bu paketi, sürümleri `version`'dan yüksek olsa da kurabilir (cihaz kuralı: manifestte `allow_downgrade: true` + aynı `rollback_max`). Yoksa satır hiç bulunmaz ve imza hiçbir düşürmeyi yetkilendirmez (varsayılan). |
 
 Mesajda CR, fazladan boşluk, ek satır yoktur; son satır da LF ile biter. Alanlar yukarıdaki desenlerle kısıtlı olduğu için satır/alan enjeksiyonu mümkün değildir.
-Örnek (değerler yer tutucu): `KAPI-OTA-IMZA-V1\ntarget=esp32-c3\nversion=4.3.4\nsize=1234567\nsha256=<64 hane>\n`.
+Örnek (değerler yer tutucu): `KAPI-OTA-IMZA-V1\ntarget=esp32-c3\nversion=4.3.4\nsize=1234567\nsha256=<64 hane>\n`; düşürme yetkisiyle: sonuna `rollback_max=4.3.9\n` eklenir.
+**Tek etiket:** `KAPI-OTA-IMZA-V1`. Cihaz yazılımı taslağında geçen eski `SKP-OTA-V1` etiketi KALDIRILDI; araç, sunucu ve cihaz yalnız bunu bilir.
 
 İmza şu dörtlüyü birbirine bağlar: **hedef** (bir C3 paketi WROOM'a yazılamaz), **sürüm** (eski bir imzalı imaj yeni sürüm numarasıyla yayınlanamaz),
-**boyut** ve **içerik özeti**. Ed25519 deterministiktir: aynı anahtar + aynı mesaj her zaman aynı imzayı verir.
+**boyut** ve **içerik özeti** (düşürme yetkisinde ayrıca **`rollback_max`**). Ed25519 deterministiktir: aynı anahtar + aynı mesaj her zaman aynı imzayı verir.
+
+**Sürüm düşürme yetkisi (`--rollback-max`) neden imzanın İÇİNDE?** Varsayılan olarak cihaz yalnız ARTAN sürümü kurar. Bilinçli bir düşürme gerekirse yetki sunucuda ya da manifestte değil
+imzada durur: ele geçirilmiş bir sunucu "izin var" dese de imzalanmamış bir düşürmeyi yaptıramaz ve sahibin imzaladığı izin `rollback_max` ile sınırlıdır. Cihaz `rollback_max` satırını
+yükü YALNIZ düşürme modunda (manifest sürümü cihazınkinden eski + `allow_downgrade: true`) kurar; yükseltmede 5 satırlı yükü kurar. Bu yüzden `rollback_max`'lı imza yalnız düşürme için
+doğrulanır (sürümü paketin altındaki cihaz bu paketi yükseltme olarak kuramaz; sunucu ona sunmaz). Güvenli ve basit geri dönüş genellikle ESKİ KODU DAHA YÜKSEK SÜRÜM NUMARASIYLA yeniden
+derleyip normal imzalamaktır; `--rollback-max` yalnız bunun mümkün olmadığı durumlar içindir. İmzalı düşürme paketi süresizdir, bu yüzden `rollback_max` olabildiğince dar seçilmelidir.
 
 ### `.sig` dosyası
 
@@ -118,35 +128,39 @@ Mesajda CR, fazladan boşluk, ek satır yoktur; son satır da LF ile biter. Alan
 }
 ```
 
+Düşürme yetkili imzada `"rollback_max": "<sürüm>"` alanı `sha256` ile `key_id` arasına eklenir (yoksa alan hiç yazılmaz).
 - Alan adları `manifest.json` ile uyumlu İngilizcedir (`version`, `sha256`, `target`); "sürüm / özet / imza" = `version` / `sha256` / `signature`.
 - `key_id` = ham 32 baytlık genel anahtarın SHA-256'sının **ilk 8 baytının hex'i**. Yalnızca bir **ipucudur** (anahtar dönüşünde doğru genel anahtarı seçmek için); imzalanan mesajın parçası değildir ve güvenlik kararı vermez.
 - UTF-8, 2 boşluk girinti, sonda LF. Bilinmeyen ek alanlar yok sayılır (ileriye uyum); bilinen alanların her biri sıkı denetlenir (küçük harf, uzunluk, tür).
-- Sunucu imzayı cihaza manifestte `signature` alanı olarak da iletebilir; değeri `.sig` içindeki `signature` ile **aynıdır** (128 hane hex).
+- Sunucu imzayı cihaza manifestte `signature` alanı olarak da iletir; değeri `.sig` içindeki `signature` ile **aynıdır** (128 hane hex) ve cihaz öncelikle onu kullanır. `.sig` dosyasını sunucu da
+  `GET /firmware/<hedef>/<imaj>.bin.sig` ile sunar; cihaz (manifestte `signature` yoksa) bu JSON'dan yalnız `format` / `algorithm` / `signature` alanlarını okur ve yükü kendi değerlerinden kurar.
 
 ### Cihaz (firmware) için doğrulama adımları
 
 Cihaz mesajı **kendi bildiği / hesapladığı** değerlerle yeniden kurar; sunucudan yalnızca `version` ve `signature` gelir:
 
 1. `T` = derleme sabiti `OTA_TARGET` (manifesttekine **güvenilmez**), `N` = indirilen gerçek bayt sayısı, `H` = indirme sırasında akışlı hesaplanan SHA-256 (küçük harfli hex), `V` = manifestin `version` dizesi (aynen).
-2. `M = "KAPI-OTA-IMZA-V1\ntarget=" + T + "\nversion=" + V + "\nsize=" + N + "\nsha256=" + H + "\n"`
+2. `M = "KAPI-OTA-IMZA-V1\ntarget=" + T + "\nversion=" + V + "\nsize=" + N + "\nsha256=" + H + "\n"` (YALNIZ izinli düşürme modunda sonuna `"rollback_max=" + R + "\n"` eklenir; `R` = manifestin `rollback_max` değeri)
 3. `signature` 128 hanelik hex'ten 64 bayta çevrilir; yanlış uzunluk/karakter = **red**.
 4. `Ed25519_doğrula(imza, M, GÖMÜLÜ_GENEL_ANAHTAR)` doğruysa devam; değilse `Update.abort()`, `ota_failed` olayı, boot bölümü **değişmez**.
 5. Bu doğrulama **`Update.end()` çağrılmadan ÖNCE** yapılmalıdır (şu anki `sha256 uyusmuyor` kontrolüyle aynı yer): boot bölümü, imza geçmeden asla değişmemeli.
-6. Mevcut kurallar aynen kalır: sürüm yalnızca artar (`V > OTA_CURRENT_VERSION`), indirme adresi izinli sunucuya aittir, hedef uyuşmalıdır.
+6. Mevcut kurallar aynen kalır: sürüm yalnızca artar (`V > OTA_CURRENT_VERSION`; tek istisna imzalı `rollback_max` yetkisiyle düşürme), indirme adresi izinli sunucuya aittir, hedef uyuşmalıdır.
 
-Genel anahtar firmware'e `anahtar-uret` / `genel-anahtar` çıktısındaki C++ tanımıyla gömülür (`OTA_IMZA_GENEL_ANAHTAR[32]`). Anahtar dönüşü için **iki genel anahtar**
-(birincil + çevrimdışı saklanan yedek) gömmek ve `key_id` ile eşleştirmek önerilir (aşağıya bakın). Cihaz tarafında mbedTLS Ed25519 imza doğrulaması sunmaz; küçük, denetlenmiş bir
-Ed25519 kütüphanesi (ör. Monocypher / libsodium) gerekir ve uygulama `test/vektorler.json` ile sınanmalıdır.
+Genel anahtar firmware'e `cihaz_kontrol/tools/ota_anahtar.mjs yaz <genel_anahtar.pem>` ile (ya da `anahtar-uret` / `genel-anahtar` çıktısındaki C++ tanımıyla) gömülür (`OTA_IMZA_GENEL_ANAHTAR[32]`);
+yayın öncesi `ota_anahtar.mjs kontrol <firmware.bin> <genel_anahtar.pem>` yer tutucunun kalmadığını denetler. Cihazda TEK anahtar yuvası vardır (iki anahtarlı tasarım uygulanmadı; anahtar dönüşü aşağıda).
+Cihaz tarafında mbedTLS Ed25519 imza doğrulaması sunmaz; cihaz kodu gömülü bir TweetNaCl uyarlaması kullanır (`docs/OTA_IMZA_CIHAZ.md`) ve bu aracın `test/vektorler.json` dosyasındaki bilinen-cevap vektörlerini
+(`rollback_vektoru` dahil) her ana makine testinde doğrular.
 
 ### Sunucu için
 
-Yüklemede aynı doğrulama yapılır: `.sig` ayrıştırılır (sıkı), `sha256` / `size` yüklenen dosyadan **yeniden hesaplanır**, `key_id` kayıtlı genel anahtarla eşleşmeli,
-mesaj yukarıdaki gibi kurulup Node `crypto.verify(null, mesaj, genelAnahtar, imza)` ile doğrulanır. Manifestteki `version` / `sha256` / `target`, `.sig` ile birebir aynı olmalıdır
-(`dogrula --manifest` bu denetimi yapar). Sunucuda yalnızca **genel** anahtar bulunur.
+Yüklemede aynı doğrulama yapılır (`server/src/services/ota_signature.js`, `firmware_release_service.js`): `.sig` ayrıştırılır (sıkı), `sha256` / `size` yüklenen dosyadan **yeniden hesaplanır**, `key_id` kayıtlı genel
+anahtarla eşleşmeli, mesaj yukarıdaki gibi kurulup Node `crypto.verify(null, mesaj, genelAnahtar, imza)` ile doğrulanır; sunucu `.sig`'i KANONİK biçimde (bu aracın ürettiğiyle bayt-bayt aynı) diske yazar. Manifestteki
+`version` / `sha256` / `target` (ve varsa `rollback_max`), `.sig` ile birebir aynı olmalıdır (`dogrula --manifest` bu denetimi yapar). Sunucuda yalnızca **genel** anahtar bulunur.
 
 ### Test vektörleri (`test/vektorler.json`)
 
-Yalnızca **açık** veri içerir: genel anahtar, mesaj, imza (özel anahtar yoktur; vektörler atılabilir bir anahtarla üretilip anahtar atıldı; dosya "URETIMDE KULLANILMAZ" başlığı taşır).
+Yalnızca **açık** veri içerir: genel anahtar, mesaj, imza (özel anahtar yoktur; vektörler atılabilir anahtarlarla üretilip anahtarlar atıldı; dosya "URETIMDE KULLANILMAZ" başlığı taşır).
+`vektorler` iki normal vektördür (her hedef için bir); `rollback_vektoru` ayrı bir atılabilir anahtarla üretilmiş, `rollback_max` satırlı tek vektördür.
 Her vektörün imajı `bayt[i] = (i * 31 + 7) mod 256` formülüyle (sonra `bayt[0]=0xE9`, `bayt[1]=0x05`, `bayt[12..13]=chip_id`) yeniden üretilebilir; firmware ve sunucu testleri
 SHA-256'yı hesaplayıp mesajı kurar ve imzayı doğrulayarak kendi uygulamalarını bu araçla çapraz sınar.
 
@@ -188,6 +202,7 @@ Sağladıkları:
 Kapsam dışı / bilinen sınırlar:
 
 - **Eski ama geçerli imzalı** bir sürüm, kendisinden daha eski bir cihaza yeniden sunulabilir (cihaz yalnızca `V > mevcut` kuralını uygular). Güvenlik açığı olan bir sürümün imzası geçerli kalır; çare cihazları güncel tutmak ya da anahtarı döndürmektir.
+- **`--rollback-max` imzalı düşürme paketi süresizdir:** sahibin attığı imza geçerli kaldığı sürece, sürümü `rollback_max`'a kadar olan her cihaza (sunucuyu ele geçiren biri tarafından) yeniden sunulabilir. `rollback_max` düşürme gerektiren en yeni sürüm olarak DAR seçilmeli, düşürmeden sonra filo hızla üstüne yükseltilmeli; mümkünse hiç kullanılmamalıdır.
 - İmza **kaynağı** kanıtlar, **kalitesini** değil: hatalı ama imzalı firmware yine yüklenir (rollback ve sağlık kontrolü ayrıca çalışır).
 - Aracın ESP32 başlık denetimi bir kolaylık/çapraz kontroldür, güvenlik sınırı değildir; güvenlik sınırı cihazdaki imza doğrulamasıdır.
 - Ed25519'un kuantum sonrası güvenliği yoktur (burada gerçekçi bir tehdit değildir).
@@ -195,8 +210,8 @@ Kapsam dışı / bilinen sınırlar:
 ## Geçiş notu (sahadaki cihazlar)
 
 Bugünkü sahadaki sürümler imzayı doğrulamaz (yalnızca `sha256`). Plan (`docs/superpowers/plans/2026-10-28-karsilastirma-guclendirme.md`, Dalga F): imza doğrulamayı **ilk kez** içeren sürüm
-(köprü sürüm) da bu araçla imzalanıp yayınlanır; eski cihazlar `signature` alanını yok sayarak onu yine sha256 ile yazar, köprü sürümü çalışan cihazlar ise bundan sonra imzasız paketi reddeder.
-Köprü sürümü cihaza ulaşmadan **imza zorunlu hale getirilmemeli**; ayrıntılar firmware ve sunucu belgelerindedir. Kart yazma ve saha denemesi kullanıcıdadır.
+(köprü sürüm: ESP32-C3 4.4.0, ESP32-WROOM 5.3.0) da bu araçla imzalanıp yayınlanır; eski cihazlar `signature` alanını yok sayarak onu yine sha256 ile yazar, köprü sürümü çalışan cihazlar ise bundan sonra imzasız paketi reddeder.
+Köprü sürümü cihaza ulaşmadan **imza zorunlu hale getirilmemeli** (sunucuda `OTA_SERVE_UNSIGNED=0` en son adımdır); ayrıntılar `docs/OTA_IMZA.md` ve `docs/OTA_IMZA_CIHAZ.md` belgelerindedir. Kart yazma ve saha denemesi kullanıcıdadır.
 
 ## Testler
 
@@ -206,7 +221,8 @@ node --test "tools/ota_imza/test/*.test.mjs"        # Node 22+ (glob); Node 20.x
 
 Testler anahtarı **çalışma anında, geçici klasörde** üretir ve bitince siler; depoda sabit özel anahtar, PEM ya da tohum yoktur
 (`vektorler.json` yalnızca açık veri taşır). Kapsam: format ve katı ayrıştırma (`bicim`), anahtar üretimi ve depo-içi koruma (`anahtar`), üret → imzala → doğrula
-döngüsü ve **bozuk bin / bozuk imza / değiştirilmiş `.sig` / yanlış anahtar / yeniden oynatma reddi** (`dongu`), bilinen-cevap vektörleri (`vektor`), imaj başlığı ve hedef uyumu (`imaj`),
+döngüsü ve **bozuk bin / bozuk imza / değiştirilmiş `.sig` / yanlış anahtar / yeniden oynatma reddi** (`dongu`), bilinen-cevap vektörleri (`vektor`), imzalı sürüm düşürme yetkisi (`rollback`: mesaj, `.sig`, komut satırı,
+manifest çapraz kontrolü ve `rollback_vektoru`), imaj başlığı ve hedef uyumu (`imaj`),
 çıktılarda özel anahtar/parola sızıntısı ve depoda anahtar bulunmaması (`sizinti`), gerçek sürüm arşivi imajlarıyla gerçeklik denetimi (`gercek_imaj`).
 
 ## Dosyalar
@@ -221,4 +237,4 @@ döngüsü ve **bozuk bin / bozuk imza / değiştirilmiş `.sig` / yanlış anah
 | `lib/dosya.mjs` | Boyut sınırlı küçük dosya okuma (anahtar, imza, manifest): yanlış dosya belleğe alınmadan reddedilir |
 | `lib/hata.mjs` | Hata sınıfları (çıkış kodu eşlemesi), güvenli mesaj biçimlendirme |
 | `.env.example` | Ortam değişkeni **adları** (değer yok) |
-| `test/` | Testler ve açık test vektörleri |
+| `test/` | Testler (`bicim`, `anahtar`, `dongu`, `vektor`, `rollback`, `imaj`, `sizinti`, `gercek_imaj`) ve açık test vektörleri (`vektorler.json`) |
