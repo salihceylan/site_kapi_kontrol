@@ -1334,7 +1334,7 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 300 --nostrea
 | [deploy/remote_deploy.sh:58](../../deploy/remote_deploy.sh#L58) | <code>activate() {</code> | Canlıya alır: kodu yerleştirir, node_modules değiştirir, pm2 restart kapi-api --update-env, /health bekler |
 | [deploy/remote_deploy.sh:93](../../deploy/remote_deploy.sh#L93) | <code>echo "SAGLIK KONTROLU BASARISIZ"</code> | Sağlık gelmezse günlükten son 40 satırı basar ve otomatik rollback çalıştırır (çıkış 4) |
 | [deploy/remote_deploy.sh:59](../../deploy/remote_deploy.sh#L59) | <code>[ -d "$STAGE/node_modules" ] &#124;&#124; { echo "HATA: hazirlik (prepare) yapilmamis"; exit 2; }</code> | activate, prepare yapılmadan çalışmaz (çıkış 2) |
-| [PROJE_TEKNIK_NOTLAR.md:460](../../PROJE_TEKNIK_NOTLAR.md#L460) | <code>## 15. Sunucuda Guncelleme Sirasi</code> | Eski/kısa anlatım (git pull + pm2 restart); yedekli ve sağlık denetimli güncel yol deploy/README.md'dedir |
+| [PROJE_TEKNIK_NOTLAR.md:461](../../PROJE_TEKNIK_NOTLAR.md#L461) | <code>## 15. Sunucuda Guncelleme Sirasi</code> | Eski/kısa anlatım (git pull + pm2 restart); yedekli ve sağlık denetimli güncel yol deploy/README.md'dedir |
 
 **Olası nedenler**
 - Değişiklik yalnız yerelde kaldı (kural 8 uygulanmadı); canlıda eski kod çalışıyor
@@ -1519,11 +1519,11 @@ flutter pub get
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [PROJE_TEKNIK_NOTLAR.md:435](../../PROJE_TEKNIK_NOTLAR.md#L435) | <code>## 14. Build ve Test Notlari</code> | Build/test komutları; test sayısı bu dosyada tutulmaz (sayı için komut çıktısına bakın) |
-| [PROJE_TEKNIK_NOTLAR.md:460](../../PROJE_TEKNIK_NOTLAR.md#L460) | <code>## 15. Sunucuda Guncelleme Sirasi</code> | Canlı dağıtım git pull ile DEĞİL deploy/ betikleriyle yapılır (yedek, aşamalı hazırlık, otomatik geri alma); ayrıntı deploy/README.md |
-| [PROJE_TEKNIK_NOTLAR.md:345](../../PROJE_TEKNIK_NOTLAR.md#L345) | <code>### 11.2 company_qr_tool</code> | Şirket aracının amacı ve firmware çıktı klasörleri (derleme .pio/build, sürüm firmware_releases) |
-| [PROJE_TEKNIK_NOTLAR.md:278](../../PROJE_TEKNIK_NOTLAR.md#L278) | <code>## 9. E-Posta Dogrulama</code> | E-posta doğrulama özeti; ayrıntı ve güncel parametreler docs/EPOSTA_DOGRULAMA.md'dedir |
-| [PROJE_TEKNIK_NOTLAR.md:491](../../PROJE_TEKNIK_NOTLAR.md#L491) | <code>## 17. Acik Isler ve Karar Kaydi</code> | Açık işler ve karar kaydı; güncel yapılacaklar için BEKLEYEN_ISLER.md, ürün kararları için docs/PLATFORM_YOL_HARITASI.md |
+| [PROJE_TEKNIK_NOTLAR.md:436](../../PROJE_TEKNIK_NOTLAR.md#L436) | <code>## 14. Build ve Test Notlari</code> | Build/test komutları; test sayısı bu dosyada tutulmaz (sayı için komut çıktısına bakın) |
+| [PROJE_TEKNIK_NOTLAR.md:461](../../PROJE_TEKNIK_NOTLAR.md#L461) | <code>## 15. Sunucuda Guncelleme Sirasi</code> | Canlı dağıtım git pull ile DEĞİL deploy/ betikleriyle yapılır (yedek, aşamalı hazırlık, otomatik geri alma); ayrıntı deploy/README.md |
+| [PROJE_TEKNIK_NOTLAR.md:346](../../PROJE_TEKNIK_NOTLAR.md#L346) | <code>### 11.2 company_qr_tool</code> | Şirket aracının amacı ve firmware çıktı klasörleri (derleme .pio/build, sürüm firmware_releases) |
+| [PROJE_TEKNIK_NOTLAR.md:279](../../PROJE_TEKNIK_NOTLAR.md#L279) | <code>## 9. E-Posta Dogrulama</code> | E-posta doğrulama özeti; ayrıntı ve güncel parametreler docs/EPOSTA_DOGRULAMA.md'dedir |
+| [PROJE_TEKNIK_NOTLAR.md:492](../../PROJE_TEKNIK_NOTLAR.md#L492) | <code>## 17. Acik Isler ve Karar Kaydi</code> | Açık işler ve karar kaydı; güncel yapılacaklar için BEKLEYEN_ISLER.md, ürün kararları için docs/PLATFORM_YOL_HARITASI.md |
 | [deploy/README.md:31](../../deploy/README.md#L31) | <code>## Geri alma</code> | Canlı dağıtım için doğru kaynak: yedek + sağlık denetimi + otomatik geri alma |
 
 **Olası nedenler**

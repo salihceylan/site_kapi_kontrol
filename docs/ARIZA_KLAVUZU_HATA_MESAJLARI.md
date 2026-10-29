@@ -2,7 +2,7 @@
 
 > Kullanıcıya/istemciye görünen metinleri üretildikleri `dosya:satır` ile eşler. `Ctrl+F` ile ekranda gördüğünüz mesajın bir parçasını arayın. Koddan otomatik üretilir: `node tools/klavuz/build.mjs`. Ana sayfa: [ARIZA_KLAVUZU.md](ARIZA_KLAVUZU.md) · [İndeks](ARIZA_KLAVUZU_INDEKS.md).
 
-## Sunucu mesajları (897)
+## Sunucu mesajları (901)
 
 Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`). Uygulama bu metinleri HTTP yanıt gövdesinde (`error` alanı) alır.
 
@@ -76,6 +76,7 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | Belirtilen cihaz zaten başka bir sitede kullanımda. | [server/src/services/membership_service.js:919](../server/src/services/membership_service.js#L919) |
 | Bilinmeyen kontrol izi türü: ${kind} | [server/src/modules/check_mark_service.js:68](../server/src/modules/check_mark_service.js#L68) |
 | Bilinmeyen toplu yükleme türü. | [server/src/modules/bulk_import_plan.js:27](../server/src/modules/bulk_import_plan.js#L27) |
+| Bir sorun oluştu. Biraz sonra tekrar deneyin. Referans: ${errorId} | [server/src/modules/equipment_routes.js:206](../server/src/modules/equipment_routes.js#L206) |
 | Bir sorun oluştu. Uygulamadan yeniden deneyin. | [server/src/modules/drive_routes.js:165](../server/src/modules/drive_routes.js#L165) |
 | Bitiş tarihi başlangıçtan önce olamaz. | [server/src/modules/apartment_mgmt_rules.js:258](../server/src/modules/apartment_mgmt_rules.js#L258) |
 | Bitiş tarihi geçersiz. | [server/src/modules/apartment_mgmt_rules.js:257](../server/src/modules/apartment_mgmt_rules.js#L257) |
@@ -129,22 +130,22 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | Bu işlem şu anda yapılamıyor. Site yönetimine başvurun. | [server/src/services/membership_service.js:1822](../server/src/services/membership_service.js#L1822) |
 | Bu işlem yalnızca Süper Kullanıcı yetkisiyle gerçekleştirilebilir. | [server/src/services/site_service.js:1980](../server/src/services/site_service.js#L1980) |
 | Bu işlem yalnızca Süper Kullanıcı yetkisiyle gerçekleştirilebilir. | [server/src/services/site_service.js:2062](../server/src/services/site_service.js#L2062) |
-| Bu kapıda dinamik karekod geçerlidir. Lütfen cihaz ekranındaki güncel karekodu okutun. | [server/src/routes/app_doors_routes.js:320](../server/src/routes/app_doors_routes.js#L320) |
+| Bu kapıda dinamik karekod geçerlidir. Lütfen cihaz ekranındaki güncel karekodu okutun. | [server/src/routes/app_doors_routes.js:321](../server/src/routes/app_doors_routes.js#L321) |
 | Bu kapıda fiziksel bir QR kod okuyucu bulunmamaktadır. | [server/src/services/qr_access_service.js:43](../server/src/services/qr_access_service.js#L43) |
 | Bu kapının yetkilerini yönetme yetkiniz bulunmamaktadır. | [server/src/services/membership_service.js:2426](../server/src/services/membership_service.js#L2426) |
 | Bu kapının yetkilerini yönetme yetkiniz bulunmamaktadır. | [server/src/services/membership_service.js:2447](../server/src/services/membership_service.js#L2447) |
-| Bu kapiya cihaz atanmamis. | [server/src/routes/app_doors_routes.js:136](../server/src/routes/app_doors_routes.js#L136) |
-| Bu kapiya cihaz atanmamis. | [server/src/routes/app_doors_routes.js:177](../server/src/routes/app_doors_routes.js#L177) |
-| Bu kapiya cihaz atanmamis. | [server/src/routes/app_doors_routes.js:300](../server/src/routes/app_doors_routes.js#L300) |
+| Bu kapiya cihaz atanmamis. | [server/src/routes/app_doors_routes.js:137](../server/src/routes/app_doors_routes.js#L137) |
+| Bu kapiya cihaz atanmamis. | [server/src/routes/app_doors_routes.js:178](../server/src/routes/app_doors_routes.js#L178) |
+| Bu kapiya cihaz atanmamis. | [server/src/routes/app_doors_routes.js:301](../server/src/routes/app_doors_routes.js#L301) |
 | Bu kapiya cihaz atanmamis. | [server/src/routes/guest_passes_routes.js:287](../server/src/routes/guest_passes_routes.js#L287) |
-| Bu kapiya gecis yetkiniz bulunmuyor. | [server/src/routes/app_doors_routes.js:295](../server/src/routes/app_doors_routes.js#L295) |
+| Bu kapiya gecis yetkiniz bulunmuyor. | [server/src/routes/app_doors_routes.js:296](../server/src/routes/app_doors_routes.js#L296) |
 | Bu kapiyi silme yetkiniz yok. | [server/src/routes/manager_routes.js:1078](../server/src/routes/manager_routes.js#L1078) |
 | Bu kapiyi yonetme yetkiniz yok. | [server/src/routes/manager_routes.js:871](../server/src/routes/manager_routes.js#L871) |
 | Bu kapiyi yonetme yetkiniz yok. | [server/src/routes/manager_routes.js:913](../server/src/routes/manager_routes.js#L913) |
 | Bu kapiyi yonetme yetkiniz yok. | [server/src/routes/manager_routes.js:956](../server/src/routes/manager_routes.js#L956) |
 | Bu kapiyi yonetme yetkiniz yok. | [server/src/routes/manager_routes.js:1045](../server/src/routes/manager_routes.js#L1045) |
 | Bu kapiyi yonetme yetkiniz yok. | [server/src/routes/manager_routes.js:1105](../server/src/routes/manager_routes.js#L1105) |
-| Bu karekod daha once kullanildi. Lutfen cihaz ekraninda yenilenen guncel karekodu okutun. | [server/src/routes/app_doors_routes.js:337](../server/src/routes/app_doors_routes.js#L337) |
+| Bu karekod daha once kullanildi. Lutfen cihaz ekraninda yenilenen guncel karekodu okutun. | [server/src/routes/app_doors_routes.js:338](../server/src/routes/app_doors_routes.js#L338) |
 | Bu kimlik sağlayıcısıyla giriş şu anda kapalı (sunucu yapılandırması eksik). | [server/src/modules/oauth_login.js:226](../server/src/modules/oauth_login.js#L226) |
 | Bu kişide kurul veya görevli rolü yok. | [server/src/modules/module_routes.js:200](../server/src/modules/module_routes.js#L200) |
 | Bu kullanıcı zaten bu sitenin yöneticisidir. | [server/src/services/site_service.js:2314](../server/src/services/site_service.js#L2314) |
@@ -211,9 +212,9 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | Cihaz dogrulamasi gecici olarak yapilamadi. | [server/src/routes/firmware_routes.js:157](../server/src/routes/firmware_routes.js#L157) |
 | Cihaz donanimi bu firmware hedefiyle uyusmuyor. | [server/src/routes/firmware_routes.js:174](../server/src/routes/firmware_routes.js#L174) |
 | Cihaz durumu okunamadi; biraz sonra tekrar deneyin. | [server/src/routes/company_routes.js:490](../server/src/routes/company_routes.js#L490) |
-| Cihaz ekranindaki guncel karekod henuz alinamadi. Birkac saniye sonra tekrar deneyin. | [server/src/routes/app_doors_routes.js:328](../server/src/routes/app_doors_routes.js#L328) |
+| Cihaz ekranindaki guncel karekod henuz alinamadi. Birkac saniye sonra tekrar deneyin. | [server/src/routes/app_doors_routes.js:329](../server/src/routes/app_doors_routes.js#L329) |
 | Cihaz kaydedildi ama MQTT broker senkronu basarisiz. | [server/src/routes/admin_routes.js:1770](../server/src/routes/admin_routes.js#L1770) |
-| Cihaz online gorunmuyor. | [server/src/routes/app_doors_routes.js:69](../server/src/routes/app_doors_routes.js#L69) |
+| Cihaz online gorunmuyor. | [server/src/routes/app_doors_routes.js:70](../server/src/routes/app_doors_routes.js#L70) |
 | Cihaz QR kodu veya seri numarası boş olamaz. | [server/src/services/membership_rules.js:388](../server/src/services/membership_rules.js#L388) |
 | Cihaz QR kodu veya seri numarası çok uzun. | [server/src/services/membership_rules.js:391](../server/src/services/membership_rules.js#L391) |
 | Cihaz sahiplenmek için önce e-posta adresinizi doğrulamanız gerekmektedir. | [server/src/services/membership_service.js:635](../server/src/services/membership_service.js#L635) |
@@ -264,6 +265,7 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | Çok fazla değişiklik. Biraz sonra tekrar deneyin. | [server/src/modules/management_company_routes.js:54](../server/src/modules/management_company_routes.js#L54) |
 | Çok fazla deneme kodu girişi. Biraz sonra tekrar deneyin. | [server/src/modules/trial_access_routes.js:29](../server/src/modules/trial_access_routes.js#L29) |
 | Çok fazla deneme kodu işlemi. Biraz sonra tekrar deneyin. | [server/src/modules/trial_access_routes.js:38](../server/src/modules/trial_access_routes.js#L38) |
+| Çok fazla deneme. Biraz sonra tekrar deneyin. | [server/src/modules/equipment_routes.js:192](../server/src/modules/equipment_routes.js#L192) |
 | Çok fazla deneme. Biraz sonra tekrar deneyin. | [server/src/modules/notify_channels_routes.js:24](../server/src/modules/notify_channels_routes.js#L24) |
 | Çok fazla dışa aktarma isteği. Biraz sonra tekrar deneyin. | [server/src/modules/finance_4b_routes.js:431](../server/src/modules/finance_4b_routes.js#L431) |
 | Çok fazla doğrulama isteği. Biraz sonra tekrar deneyin. | [server/src/modules/finance_4b_routes.js:80](../server/src/modules/finance_4b_routes.js#L80) |
@@ -274,7 +276,7 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | Çok fazla döküm istendi. Biraz sonra tekrar deneyin. | [server/src/modules/residency_log_routes.js:33](../server/src/modules/residency_log_routes.js#L33) |
 | Çok fazla Drive işlemi. Biraz sonra tekrar deneyin. | [server/src/modules/drive_routes.js:43](../server/src/modules/drive_routes.js#L43) |
 | Çok fazla duyuru işlemi. Biraz sonra tekrar deneyin. | [server/src/modules/announcement_routes.js:61](../server/src/modules/announcement_routes.js#L61) |
-| Çok fazla ekipman işlemi. Biraz sonra tekrar deneyin. | [server/src/modules/equipment_routes.js:42](../server/src/modules/equipment_routes.js#L42) |
+| Çok fazla ekipman işlemi. Biraz sonra tekrar deneyin. | [server/src/modules/equipment_routes.js:50](../server/src/modules/equipment_routes.js#L50) |
 | Çok fazla faaliyet raporu işlemi. Biraz sonra tekrar deneyin. | [server/src/modules/annual_report_routes.js:23](../server/src/modules/annual_report_routes.js#L23) |
 | Çok fazla finans işlemi. Biraz sonra tekrar deneyin. | [server/src/modules/finance_routes.js:50](../server/src/modules/finance_routes.js#L50) |
 | Çok fazla firma / sözleşme işlemi. Biraz sonra tekrar deneyin. | [server/src/modules/contracts_routes.js:40](../server/src/modules/contracts_routes.js#L40) |
@@ -307,7 +309,8 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | Çok fazla istek. Biraz sonra tekrar deneyin. | [server/src/modules/drive_routes.js:34](../server/src/modules/drive_routes.js#L34) |
 | Çok fazla istek. Biraz sonra tekrar deneyin. | [server/src/modules/drive_routes.js:49](../server/src/modules/drive_routes.js#L49) |
 | Çok fazla istek. Biraz sonra tekrar deneyin. | [server/src/modules/emergency_routes.js:22](../server/src/modules/emergency_routes.js#L22) |
-| Çok fazla istek. Biraz sonra tekrar deneyin. | [server/src/modules/equipment_routes.js:51](../server/src/modules/equipment_routes.js#L51) |
+| Çok fazla istek. Biraz sonra tekrar deneyin. | [server/src/modules/equipment_routes.js:59](../server/src/modules/equipment_routes.js#L59) |
+| Çok fazla istek. Biraz sonra tekrar deneyin. | [server/src/modules/equipment_routes.js:183](../server/src/modules/equipment_routes.js#L183) |
 | Çok fazla istek. Biraz sonra tekrar deneyin. | [server/src/modules/feedback_routes.js:51](../server/src/modules/feedback_routes.js#L51) |
 | Çok fazla istek. Biraz sonra tekrar deneyin. | [server/src/modules/finance_routes.js:60](../server/src/modules/finance_routes.js#L60) |
 | Çok fazla istek. Biraz sonra tekrar deneyin. | [server/src/modules/finance_routes.js:70](../server/src/modules/finance_routes.js#L70) |
@@ -484,8 +487,8 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | Gecersiz kapi ID. | [server/src/routes/manager_routes.js:1023](../server/src/routes/manager_routes.js#L1023) |
 | Gecersiz kapi ID. | [server/src/routes/manager_routes.js:1069](../server/src/routes/manager_routes.js#L1069) |
 | Gecersiz kapi ID. | [server/src/routes/manager_routes.js:1096](../server/src/routes/manager_routes.js#L1096) |
-| Gecersiz kapi id. | [server/src/routes/app_doors_routes.js:40](../server/src/routes/app_doors_routes.js#L40) |
-| Gecersiz karekod verisi. | [server/src/routes/app_doors_routes.js:266](../server/src/routes/app_doors_routes.js#L266) |
+| Gecersiz kapi id. | [server/src/routes/app_doors_routes.js:41](../server/src/routes/app_doors_routes.js#L41) |
+| Gecersiz karekod verisi. | [server/src/routes/app_doors_routes.js:267](../server/src/routes/app_doors_routes.js#L267) |
 | gecersiz klasor girdisi | [server/src/modules/drive_common.js:122](../server/src/modules/drive_common.js#L122) |
 | Gecersiz kullanici kodu. | [server/src/routes/admin_routes.js:384](../server/src/routes/admin_routes.js#L384) |
 | Gecersiz kullanici kodu. | [server/src/routes/admin_routes.js:509](../server/src/routes/admin_routes.js#L509) |
@@ -570,7 +573,7 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | Geçersiz site kodu. | [server/src/modules/contracts_access.js:42](../server/src/modules/contracts_access.js#L42) |
 | Geçersiz site kodu. | [server/src/modules/decision_book_access.js:24](../server/src/modules/decision_book_access.js#L24) |
 | Geçersiz site kodu. | [server/src/modules/device_integrations_routes.js:80](../server/src/modules/device_integrations_routes.js#L80) |
-| Geçersiz site kodu. | [server/src/modules/equipment_routes.js:61](../server/src/modules/equipment_routes.js#L61) |
+| Geçersiz site kodu. | [server/src/modules/equipment_routes.js:69](../server/src/modules/equipment_routes.js#L69) |
 | Geçersiz site kodu. | [server/src/modules/metering_field_routes.js:46](../server/src/modules/metering_field_routes.js#L46) |
 | Geçersiz site kodu. | [server/src/modules/neighbor_board_routes.js:233](../server/src/modules/neighbor_board_routes.js#L233) |
 | Geçersiz site kodu. | [server/src/modules/people_access.js:79](../server/src/modules/people_access.js#L79) |
@@ -642,14 +645,14 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | Kapı adı zorunludur. | [server/src/services/door_service.js:597](../server/src/services/door_service.js#L597) |
 | Kapı bulunamadı. | [server/src/services/membership_service.js:2416](../server/src/services/membership_service.js#L2416) |
 | Kapı yetkisi varsayılan ayarlara döndürüldü. | [server/src/services/membership_service.js:2722](../server/src/services/membership_service.js#L2722) |
-| Kapi acma komutu gonderildi. | [server/src/routes/app_doors_routes.js:408](../server/src/routes/app_doors_routes.js#L408) |
+| Kapi acma komutu gonderildi. | [server/src/routes/app_doors_routes.js:409](../server/src/routes/app_doors_routes.js#L409) |
 | Kapi adi zorunludur. | [server/src/routes/manager_routes.js:990](../server/src/routes/manager_routes.js#L990) |
 | Kapi bulunamadi veya erisim yetkiniz yok. | [server/src/services/qr_access_service.js:31](../server/src/services/qr_access_service.js#L31) |
 | Kapi bulunamadi veya yetkiniz yok. | [server/src/routes/guest_passes_routes.js:67](../server/src/routes/guest_passes_routes.js#L67) |
 | Kapi bulunamadi. | [server/src/routes/admin_routes.js:1495](../server/src/routes/admin_routes.js#L1495) |
-| Kapi bulunamadi. | [server/src/routes/app_doors_routes.js:133](../server/src/routes/app_doors_routes.js#L133) |
-| Kapi bulunamadi. | [server/src/routes/app_doors_routes.js:174](../server/src/routes/app_doors_routes.js#L174) |
-| Kapi bulunamadi. | [server/src/routes/app_doors_routes.js:432](../server/src/routes/app_doors_routes.js#L432) |
+| Kapi bulunamadi. | [server/src/routes/app_doors_routes.js:134](../server/src/routes/app_doors_routes.js#L134) |
+| Kapi bulunamadi. | [server/src/routes/app_doors_routes.js:175](../server/src/routes/app_doors_routes.js#L175) |
+| Kapi bulunamadi. | [server/src/routes/app_doors_routes.js:433](../server/src/routes/app_doors_routes.js#L433) |
 | Kapi bulunamadi. | [server/src/routes/manager_routes.js:868](../server/src/routes/manager_routes.js#L868) |
 | Kapi bulunamadi. | [server/src/routes/manager_routes.js:910](../server/src/routes/manager_routes.js#L910) |
 | Kapi bulunamadi. | [server/src/routes/manager_routes.js:953](../server/src/routes/manager_routes.js#L953) |
@@ -663,10 +666,10 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | Kapi loglari alinamadi. | [server/src/routes/door_log_routes.js:101](../server/src/routes/door_log_routes.js#L101) |
 | Kapi loglari alinamadi. | [server/src/routes/door_log_routes.js:197](../server/src/routes/door_log_routes.js#L197) |
 | Karekod dosyasi bulunamadi. | [server/src/routes/company_routes.js:287](../server/src/routes/company_routes.js#L287) |
-| Karekod ile eslesen aktif bir kapi bulunamadi. | [server/src/routes/app_doors_routes.js:284](../server/src/routes/app_doors_routes.js#L284) |
+| Karekod ile eslesen aktif bir kapi bulunamadi. | [server/src/routes/app_doors_routes.js:285](../server/src/routes/app_doors_routes.js#L285) |
 | Karekod talebi çok sık yapıldı. Lütfen birkaç saniye bekleyip tekrar deneyiniz. | [server/src/middlewares/rate_limiters.js:196](../server/src/middlewares/rate_limiters.js#L196) |
-| Karekodun süresi dolmuş. Lütfen cihaz ekranında yenilenen güncel karekodu okutun. | [server/src/routes/app_doors_routes.js:342](../server/src/routes/app_doors_routes.js#L342) |
-| Karekodun süresi dolmuş. Lütfen cihaz ekranında yenilenen güncel karekodu okutun. | [server/src/routes/app_doors_routes.js:363](../server/src/routes/app_doors_routes.js#L363) |
+| Karekodun süresi dolmuş. Lütfen cihaz ekranında yenilenen güncel karekodu okutun. | [server/src/routes/app_doors_routes.js:343](../server/src/routes/app_doors_routes.js#L343) |
+| Karekodun süresi dolmuş. Lütfen cihaz ekranında yenilenen güncel karekodu okutun. | [server/src/routes/app_doors_routes.js:364](../server/src/routes/app_doors_routes.js#L364) |
 | Katılım başvurusu reddedildi. | [server/src/services/membership_service.js:1536](../server/src/services/membership_service.js#L1536) |
 | Katılım talebi bulunamadı. | [server/src/services/membership_service.js:1340](../server/src/services/membership_service.js#L1340) |
 | Katılım talebi bulunamadı. | [server/src/services/membership_service.js:1473](../server/src/services/membership_service.js#L1473) |
@@ -750,7 +753,7 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | Modülleri yalnızca sistem yöneticisi açıp kapatabilir. Modül talebi gönderebilirsiniz. | [server/src/modules/module_routes.js:38](../server/src/modules/module_routes.js#L38) |
 | MQTT ACL senkronu zaman asimina ugradi (${timeoutMs} ms). | [server/src/mqtt_acl_sync.js:208](../server/src/mqtt_acl_sync.js#L208) |
 | MQTT baglantisi hazir degil. | [server/src/routes/admin_routes.js:1616](../server/src/routes/admin_routes.js#L1616) |
-| MQTT baglantisi hazir degil. | [server/src/routes/app_doors_routes.js:65](../server/src/routes/app_doors_routes.js#L65) |
+| MQTT baglantisi hazir degil. | [server/src/routes/app_doors_routes.js:66](../server/src/routes/app_doors_routes.js#L66) |
 | MQTT broker senkronu basarisiz. | [server/src/routes/admin_routes.js:1572](../server/src/routes/admin_routes.js#L1572) |
 | MQTT broker senkronu basarisiz. | [server/src/routes/manager_routes.js:672](../server/src/routes/manager_routes.js#L672) |
 | MQTT cihaz kimligi uretilemedi. | [server/src/routes/admin_routes.js:1576](../server/src/routes/admin_routes.js#L1576) |
@@ -876,10 +879,11 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | Talep bulunamadı. | [server/src/modules/module_request_routes.js:40](../server/src/modules/module_request_routes.js#L40) |
 | tazminat satir sayisi uyusmuyor (${written.rowCount} / ${lines.length}) | [server/src/modules/finance_late_fee.js:594](../server/src/modules/finance_late_fee.js#L594) |
 | Tek istekte en fazla ${MAX_DEVICE_LOG_BATCH} kayit gonderilebilir. | [server/src/routes/door_log_routes.js:237](../server/src/routes/door_log_routes.js#L237) |
+| Teklif gönderilemedi. Daha sonra tekrar deneyin. | [server/src/modules/equipment_quote_form_page.js:153](../server/src/modules/equipment_quote_form_page.js#L153) |
 | Temel modül değil: ${code} | [server/src/modules/core_modules.js:50](../server/src/modules/core_modules.js#L50) |
 | Token bulunamadı. | [server/src/services/qr_access_service.js:442](../server/src/services/qr_access_service.js#L442) |
 | Token bulunamadı. | [server/src/services/qr_access_service.js:470](../server/src/services/qr_access_service.js#L470) |
-| Token parametresi zorunludur. | [server/src/routes/app_doors_routes.js:535](../server/src/routes/app_doors_routes.js#L535) |
+| Token parametresi zorunludur. | [server/src/routes/app_doors_routes.js:537](../server/src/routes/app_doors_routes.js#L537) |
 | Token zorunludur. | [server/src/services/qr_access_service.js:437](../server/src/services/qr_access_service.js#L437) |
 | Toplam daire sayısı en fazla ${SITE_LIMITS.maxApartments} olabilir. | [server/src/services/membership_rules.js:577](../server/src/services/membership_rules.js#L577) |
 | toplu eşleme satır sayısı uyuşmuyor | [server/src/modules/finance_accounts.js:965](../server/src/modules/finance_accounts.js#L965) |
@@ -906,7 +910,7 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | Yükleme türü bulunamadı. | [server/src/modules/bulk_import_routes.js:93](../server/src/modules/bulk_import_routes.js#L93) |
 | Zaten bu dairenin aktif bir sakinisisiniz (${existingMemberRes.rows[0].role}). | [server/src/services/membership_service.js:1083](../server/src/services/membership_service.js#L1083) |
 
-## Uygulama (Flutter) mesajları (571)
+## Uygulama (Flutter) mesajları (573)
 
 Kaynak: `lib` (`ApiException(...)`, `_errorMessage =`, `lib/services` içindeki `return '...'`).
 
@@ -1022,6 +1026,7 @@ Kaynak: `lib` (`ApiException(...)`, `_errorMessage =`, `lib/services` içindeki 
 | Bu dönem kapatılmış; kapalı döneme kayıt eklenemez. Kapalı ayı yalnızca süper kullanıcı yeniden açabilir. | [lib/services/auth_api.dart:4143](../lib/services/auth_api.dart#L4143) |
 | Bu e-posta ile kayıtlı bir kişi zaten var. | [lib/services/auth_api.dart:4088](../lib/services/auth_api.dart#L4088) |
 | Bu e-posta ile kayıtlı hesap yok. | [lib/services/auth_api.dart:4066](../lib/services/auth_api.dart#L4066) |
+| Bu form bağlantısı artık beklemede değil. Listeyi yenileyin. | [lib/services/equipment_api.dart:752](../lib/services/equipment_api.dart#L752) |
 | Bu fotoğrafı yalnız ekleyen kişi ya da yönetici silebilir. | [lib/services/work_tracking_api.dart:1051](../lib/services/work_tracking_api.dart#L1051) |
 | Bu fotoğrafın yüklemesi zaten sürüyor. Biraz sonra tekrar deneyin. | [lib/services/work_tracking_api.dart:1021](../lib/services/work_tracking_api.dart#L1021) |
 | Bu gider kategorisi pasif. Başka bir kategori seçin. | [lib/services/finance_4b_errors.dart:86](../lib/services/finance_4b_errors.dart#L86) |
@@ -1052,7 +1057,7 @@ Kaynak: `lib` (`ApiException(...)`, `_errorMessage =`, `lib/services` içindeki 
 | Bu işlem için yetkiniz yok. | [lib/services/cctv_api.dart:287](../lib/services/cctv_api.dart#L287) |
 | Bu işlem için yetkiniz yok. | [lib/services/decision_book_api.dart:331](../lib/services/decision_book_api.dart#L331) |
 | Bu işlem için yetkiniz yok. | [lib/services/device_integrations_api.dart:235](../lib/services/device_integrations_api.dart#L235) |
-| Bu işlem için yetkiniz yok. | [lib/services/equipment_api.dart:616](../lib/services/equipment_api.dart#L616) |
+| Bu işlem için yetkiniz yok. | [lib/services/equipment_api.dart:736](../lib/services/equipment_api.dart#L736) |
 | Bu işlem için yetkiniz yok. | [lib/services/plate_recognition_api.dart:426](../lib/services/plate_recognition_api.dart#L426) |
 | Bu işlem için yetkiniz yok. | [lib/services/reservation_api.dart:633](../lib/services/reservation_api.dart#L633) |
 | Bu işlem için yetkiniz yok. | [lib/services/survey_api.dart:343](../lib/services/survey_api.dart#L343) |
@@ -1074,7 +1079,7 @@ Kaynak: `lib` (`ApiException(...)`, `_errorMessage =`, `lib/services` içindeki 
 | Bu makbuz zaten iptal edilmiş. Listeyi yenileyip kontrol edin. | [lib/services/finance_4b_errors.dart:22](../lib/services/finance_4b_errors.dart#L22) |
 | Bu modül bu site için kapalı. | [lib/services/cctv_api.dart:285](../lib/services/cctv_api.dart#L285) |
 | Bu modül bu site için kapalı. | [lib/services/device_integrations_api.dart:233](../lib/services/device_integrations_api.dart#L233) |
-| Bu modül bu site için kapalı. | [lib/services/equipment_api.dart:614](../lib/services/equipment_api.dart#L614) |
+| Bu modül bu site için kapalı. | [lib/services/equipment_api.dart:734](../lib/services/equipment_api.dart#L734) |
 | Bu modül için bekleyen bir talebiniz var. | [lib/services/auth_api.dart:4081](../lib/services/auth_api.dart#L4081) |
 | Bu modül kapatılamaz. | [lib/services/auth_api.dart:4058](../lib/services/auth_api.dart#L4058) |
 | Bu modül yakında. | [lib/services/auth_api.dart:4056](../lib/services/auth_api.dart#L4056) |
@@ -1105,7 +1110,7 @@ Kaynak: `lib` (`ApiException(...)`, `_errorMessage =`, `lib/services` içindeki 
 | Bu siteye erişim yetkiniz yok. | [lib/services/contract_api.dart:416](../lib/services/contract_api.dart#L416) |
 | Bu siteye erişim yetkiniz yok. | [lib/services/decision_book_api.dart:333](../lib/services/decision_book_api.dart#L333) |
 | Bu siteye erişim yetkiniz yok. | [lib/services/device_integrations_api.dart:237](../lib/services/device_integrations_api.dart#L237) |
-| Bu siteye erişim yetkiniz yok. | [lib/services/equipment_api.dart:618](../lib/services/equipment_api.dart#L618) |
+| Bu siteye erişim yetkiniz yok. | [lib/services/equipment_api.dart:738](../lib/services/equipment_api.dart#L738) |
 | Bu siteye erişim yetkiniz yok. | [lib/services/plate_recognition_api.dart:428](../lib/services/plate_recognition_api.dart#L428) |
 | Bu siteye erişim yetkiniz yok. | [lib/services/reservation_api.dart:635](../lib/services/reservation_api.dart#L635) |
 | Bu siteye erişim yetkiniz yok. | [lib/services/site_audit_log_api.dart:104](../lib/services/site_audit_log_api.dart#L104) |
@@ -1119,9 +1124,10 @@ Kaynak: `lib` (`ApiException(...)`, `_errorMessage =`, `lib/services` içindeki 
 | Bu tanım bu dönem için zaten borçlandırılmış. Aynı ay ikinci kez borçlandırılamaz. | [lib/services/auth_api.dart:4141](../lib/services/auth_api.dart#L4141) |
 | Bu tanım pasif ya da bu dönemde geçerli değil. Tanımı etkinleştirin veya dönemi kontrol edin. | [lib/services/auth_api.dart:4159](../lib/services/auth_api.dart#L4159) |
 | Bu tarihin dönemi kapatılmış. Önce dönemi açın. | [lib/services/bank_import_api.dart:37](../lib/services/bank_import_api.dart#L37) |
+| Bu taslak teklif zaten karara bağlanmış. Listeyi yenileyin. | [lib/services/equipment_api.dart:754](../lib/services/equipment_api.dart#L754) |
 | Bu tedarikçiden aynı belge numarasıyla iptal edilmemiş bir gider zaten var. | [lib/services/finance_4b_errors.dart:82](../lib/services/finance_4b_errors.dart#L82) |
-| Bu teklif için revizyon açılamaz. | [lib/services/equipment_api.dart:628](../lib/services/equipment_api.dart#L628) |
-| Bu teklifin daha yeni bir sürümü var. Listeyi yenileyip en son sürümle devam edin. | [lib/services/equipment_api.dart:626](../lib/services/equipment_api.dart#L626) |
+| Bu teklif için revizyon açılamaz. | [lib/services/equipment_api.dart:748](../lib/services/equipment_api.dart#L748) |
+| Bu teklifin daha yeni bir sürümü var. Listeyi yenileyip en son sürümle devam edin. | [lib/services/equipment_api.dart:746](../lib/services/equipment_api.dart#L746) |
 | Bu yönetim türü yakında. | [lib/services/auth_api.dart:4062](../lib/services/auth_api.dart#L4062) |
 | Bu yükleme farklı bilgilerle daha önce gönderilmiş. Dosyayı yeniden seçin. | [lib/services/bank_import_api.dart:45](../lib/services/bank_import_api.dart#L45) |
 | Bu yükleme farklı bilgilerle daha önce gönderilmiş. Dosyayı yeniden seçip yükleyin. | [lib/services/bulk_api.dart:50](../lib/services/bulk_api.dart#L50) |
@@ -1229,7 +1235,7 @@ Kaynak: `lib` (`ApiException(...)`, `_errorMessage =`, `lib/services` içindeki 
 | İş takibi bu site için kapalı. | [lib/services/work_tracking_api.dart:930](../lib/services/work_tracking_api.dart#L930) |
 | İşlem başarısız ($status) | [lib/services/cctv_api.dart:301](../lib/services/cctv_api.dart#L301) |
 | İşlem başarısız ($status) | [lib/services/device_integrations_api.dart:245](../lib/services/device_integrations_api.dart#L245) |
-| İşlem başarısız ($status) | [lib/services/equipment_api.dart:638](../lib/services/equipment_api.dart#L638) |
+| İşlem başarısız ($status) | [lib/services/equipment_api.dart:762](../lib/services/equipment_api.dart#L762) |
 | İşlem başarısız ($status) | [lib/services/plate_recognition_api.dart:434](../lib/services/plate_recognition_api.dart#L434) |
 | İşlem başarısız ($status) | [lib/services/site_audit_log_api.dart:121](../lib/services/site_audit_log_api.dart#L121) |
 | İşlem başarısız ($status). | [lib/services/legal_api.dart:230](../lib/services/legal_api.dart#L230) |
@@ -1242,7 +1248,7 @@ Kaynak: `lib` (`ApiException(...)`, `_errorMessage =`, `lib/services` içindeki 
 | Kapıyı kapatma veya kilitleme komutu desteklenmiyor. Açmak için "kapıyı aç" deyin. | [lib/services/voice_door_service.dart:493](../lib/services/voice_door_service.dart#L493) |
 | Karar bulunamadı ya da erişiminiz yok. Listeyi yenileyin. | [lib/services/decision_book_api.dart:337](../lib/services/decision_book_api.dart#L337) |
 | Karar Defteri bu site için kapalı. | [lib/services/decision_book_api.dart:329](../lib/services/decision_book_api.dart#L329) |
-| Karara bağlanmış teklif düzenlenemez. Onaylı teklifte değişiklik için revizyon oluşturun. | [lib/services/equipment_api.dart:624](../lib/services/equipment_api.dart#L624) |
+| Karara bağlanmış teklif düzenlenemez. Onaylı teklifte değişiklik için revizyon oluşturun. | [lib/services/equipment_api.dart:744](../lib/services/equipment_api.dart#L744) |
 | Karekodun süresi doldu. Ekranda yenilenen güncel karekodu okutun. | [lib/services/auth_api.dart:4025](../lib/services/auth_api.dart#L4025) |
 | Kasa bulunamadı. İşletme Projesi (Aidat) Hesabı ya da Yatırım ve Demirbaş (Fon) Hesabı seçin. | [lib/services/finance_4b_errors.dart:111](../lib/services/finance_4b_errors.dart#L111) |
 | Kasalar arası aktarım bulunamadı. Listeyi yenileyip kontrol edin. | [lib/services/finance_4b_errors.dart:113](../lib/services/finance_4b_errors.dart#L113) |
@@ -1292,7 +1298,7 @@ Kaynak: `lib` (`ApiException(...)`, `_errorMessage =`, `lib/services` içindeki 
 | Oturum açmanız gerekmektedir. | [lib/services/device_integrations_api.dart:259](../lib/services/device_integrations_api.dart#L259) |
 | Oturum açmanız gerekmektedir. | [lib/services/document_api.dart:1052](../lib/services/document_api.dart#L1052) |
 | Oturum açmanız gerekmektedir. | [lib/services/emergency_api.dart:43](../lib/services/emergency_api.dart#L43) |
-| Oturum açmanız gerekmektedir. | [lib/services/equipment_api.dart:651](../lib/services/equipment_api.dart#L651) |
+| Oturum açmanız gerekmektedir. | [lib/services/equipment_api.dart:775](../lib/services/equipment_api.dart#L775) |
 | Oturum açmanız gerekmektedir. | [lib/services/feedback_api.dart:341](../lib/services/feedback_api.dart#L341) |
 | Oturum açmanız gerekmektedir. | [lib/services/finance_4b_api.dart:1945](../lib/services/finance_4b_api.dart#L1945) |
 | Oturum açmanız gerekmektedir. | [lib/services/finance_payment_api.dart:177](../lib/services/finance_payment_api.dart#L177) |
@@ -1319,7 +1325,7 @@ Kaynak: `lib` (`ApiException(...)`, `_errorMessage =`, `lib/services` içindeki 
 | Önizlemeden sonra kayıtlar değişti. Önizlemeyi yenileyip tekrar deneyin. | [lib/services/bank_import_api.dart:23](../lib/services/bank_import_api.dart#L23) |
 | Plaka biçimi geçersiz. Örnek: 34 ABC 123 (il kodu 01-81). | [lib/services/auth_api.dart:4096](../lib/services/auth_api.dart#L4096) |
 | Plaka Tanıma modülü bu site için kapalı. | [lib/services/plate_recognition_api.dart:424](../lib/services/plate_recognition_api.dart#L424) |
-| Revizyon için en az bir alan değişmeli. | [lib/services/equipment_api.dart:630](../lib/services/equipment_api.dart#L630) |
+| Revizyon için en az bir alan değişmeli. | [lib/services/equipment_api.dart:750](../lib/services/equipment_api.dart#L750) |
 | Rezervasyon bulunamadı ya da erişiminiz yok. | [lib/services/reservation_api.dart:643](../lib/services/reservation_api.dart#L643) |
 | Rezervasyon ve Konsiyerj bu site için kapalı. | [lib/services/reservation_api.dart:631](../lib/services/reservation_api.dart#L631) |
 | Rezervasyon ve talep için sitede aktif daire sakini olmalısınız. | [lib/services/reservation_api.dart:637](../lib/services/reservation_api.dart#L637) |
@@ -1373,7 +1379,7 @@ Kaynak: `lib` (`ApiException(...)`, `_errorMessage =`, `lib/services` içindeki 
 | Sunucu yanıt vermedi, tekrar deneyin. | [lib/services/brand_theme_api.dart:33](../lib/services/brand_theme_api.dart#L33) |
 | Sunucu yanıt vermedi, tekrar deneyin. | [lib/services/cctv_api.dart:253](../lib/services/cctv_api.dart#L253) |
 | Sunucu yanıt vermedi, tekrar deneyin. | [lib/services/device_integrations_api.dart:208](../lib/services/device_integrations_api.dart#L208) |
-| Sunucu yanıt vermedi, tekrar deneyin. | [lib/services/equipment_api.dart:594](../lib/services/equipment_api.dart#L594) |
+| Sunucu yanıt vermedi, tekrar deneyin. | [lib/services/equipment_api.dart:714](../lib/services/equipment_api.dart#L714) |
 | Sunucu yanıt vermedi, tekrar deneyin. | [lib/services/management_company_api.dart:32](../lib/services/management_company_api.dart#L32) |
 | Sunucu yanıt vermedi, tekrar deneyin. | [lib/services/plate_recognition_api.dart:391](../lib/services/plate_recognition_api.dart#L391) |
 | Sunucu yanıt vermedi, tekrar deneyin. | [lib/services/site_audit_log_api.dart:65](../lib/services/site_audit_log_api.dart#L65) |
@@ -1419,7 +1425,7 @@ Kaynak: `lib` (`ApiException(...)`, `_errorMessage =`, `lib/services` içindeki 
 | Sunucuya bağlanılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin. | [lib/services/cctv_api.dart:255](../lib/services/cctv_api.dart#L255) |
 | Sunucuya bağlanılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin. | [lib/services/device_integrations_api.dart:210](../lib/services/device_integrations_api.dart#L210) |
 | Sunucuya bağlanılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin. | [lib/services/emergency_api.dart:55](../lib/services/emergency_api.dart#L55) |
-| Sunucuya bağlanılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin. | [lib/services/equipment_api.dart:596](../lib/services/equipment_api.dart#L596) |
+| Sunucuya bağlanılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin. | [lib/services/equipment_api.dart:716](../lib/services/equipment_api.dart#L716) |
 | Sunucuya bağlanılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin. | [lib/services/finance_payment_api.dart:92](../lib/services/finance_payment_api.dart#L92) |
 | Sunucuya bağlanılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin. | [lib/services/management_company_api.dart:34](../lib/services/management_company_api.dart#L34) |
 | Sunucuya bağlanılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin. | [lib/services/menu_layout_api.dart:51](../lib/services/menu_layout_api.dart#L51) |
@@ -1461,8 +1467,8 @@ Kaynak: `lib` (`ApiException(...)`, `_errorMessage =`, `lib/services` içindeki 
 | Tazminat çalıştırması bulunamadı. | [lib/services/finance_4b_errors.dart:39](../lib/services/finance_4b_errors.dart#L39) |
 | Tedarikçi bulunamadı. | [lib/services/finance_4b_errors.dart:88](../lib/services/finance_4b_errors.dart#L88) |
 | Tek seferde en çok 1000 kişiye e-posta gönderilebilir. Hedefi bölüp ayrı duyurular oluşturun. | [lib/services/auth_api.dart:4113](../lib/services/auth_api.dart#L4113) |
-| Teklif zaten karara bağlanmış. | [lib/services/equipment_api.dart:622](../lib/services/equipment_api.dart#L622) |
-| Teklifin geçerlilik süresi dolmuş. | [lib/services/equipment_api.dart:620](../lib/services/equipment_api.dart#L620) |
+| Teklif zaten karara bağlanmış. | [lib/services/equipment_api.dart:742](../lib/services/equipment_api.dart#L742) |
+| Teklifin geçerlilik süresi dolmuş. | [lib/services/equipment_api.dart:740](../lib/services/equipment_api.dart#L740) |
 | Toplam tutar değişti. Önizleme yenilendi, tekrar inceleyin. | [lib/services/bulk_api.dart:54](../lib/services/bulk_api.dart#L54) |
 | Toplantı tarihi gelmemiş karar kesinleştirilemez. | [lib/services/decision_book_api.dart:341](../lib/services/decision_book_api.dart#L341) |
 | Toplu işlemler geçici olarak kapalı. | [lib/services/bulk_api.dart:45](../lib/services/bulk_api.dart#L45) |

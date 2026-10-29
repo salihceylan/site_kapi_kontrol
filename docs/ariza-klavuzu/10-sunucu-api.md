@@ -919,7 +919,7 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 300 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/routes/app_doors_routes.js:161](../../server/src/routes/app_doors_routes.js#L161) | <code>appDoorsRouter.post('/app/doors/:id/open', authRequired, doorCommandRateLimiter, async (r…</code> | Uzaktan kapı açma ucu; önce kullanıcının bu kapıya erişimi sorgulanır |
+| [server/src/routes/app_doors_routes.js:162](../../server/src/routes/app_doors_routes.js#L162) | <code>appDoorsRouter.post('/app/doors/:id/open', authRequired, doorCommandRateLimiter, async (r…</code> | Uzaktan kapı açma ucu; önce kullanıcının bu kapıya erişimi sorgulanır |
 | [server/src/services/door_service.js:513](../../server/src/services/door_service.js#L513) | <code>export async function getAccessibleDoorForUser({ authUser, doorId }) {</code> | Kapı, kullanıcının erişebildiği kapılar listesinde yoksa null -> 404 |
 | [server/src/services/door_service.js:400](../../server/src/services/door_service.js#L400) | <code>AND s.approval_status = 'approved'</code> | Süper kullanıcı dışında yalnızca ONAYLI sitelerin kapıları görünür |
 | [server/src/services/door_service.js:403](../../server/src/services/door_service.js#L403) | <code>-- 1. Site Yöneticisi veya Site Sahibi / Admini (Tüm kapıları görür)</code> | Yönetici/site sahibi sitenin tüm kapılarına erişir |
@@ -947,7 +947,7 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 300 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/routes/app_doors_routes.js:109](../../server/src/routes/app_doors_routes.js#L109) | <code>appDoorsRouter.get('/app/my-doors', authRequired, async (req, res) =&gt; {</code> | Kullanıcının erişebildiği kapı listesi |
+| [server/src/routes/app_doors_routes.js:110](../../server/src/routes/app_doors_routes.js#L110) | <code>appDoorsRouter.get('/app/my-doors', authRequired, async (req, res) =&gt; {</code> | Kullanıcının erişebildiği kapı listesi |
 | [server/src/services/door_service.js:294](../../server/src/services/door_service.js#L294) | <code>export async function listAccessibleDoorsForUser(authUser, { doorId = null } = {}) {</code> | Tüm erişim kuralları tek SQL'de: yönetici, ek izin, sakin otomatik yetkisi |
 | [server/src/services/door_service.js:415](../../server/src/services/door_service.js#L415) | <code>-- 2. Özel Kapı İzni (Manuel ek yetki verilmiş)</code> | Ek izin yalnızca üyeliği pasife alınmamış kullanıcı için çalışır |
 | [server/src/services/door_service.js:465](../../server/src/services/door_service.js#L465) | <code>-- 3a. Sitenin tüm ortak kapıları (SITE_COMMON)</code> | Aktif daire üyesi/sakini sitenin SITE_COMMON kapılarını görür |
@@ -975,7 +975,7 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 300 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/routes/app_doors_routes.js:177](../../server/src/routes/app_doors_routes.js#L177) | <code>return res.status(409).json({ error: 'Bu kapiya cihaz atanmamis.' });</code> | Açma ucunda cihaz atanmamışsa 409 (1. eşleşme durum ucunda, 3. eşleşme karekod ucundadır) |
+| [server/src/routes/app_doors_routes.js:178](../../server/src/routes/app_doors_routes.js#L178) | <code>return res.status(409).json({ error: 'Bu kapiya cihaz atanmamis.' });</code> | Açma ucunda cihaz atanmamışsa 409 (1. eşleşme durum ucunda, 3. eşleşme karekod ucundadır) |
 | [server/src/services/door_service.js:525](../../server/src/services/door_service.js#L525) | <code>export async function unassignDoorDevice({ doorId, authUser = null }) {</code> | Yönetici kapıdan cihazı çıkarınca assigned_device_id boşalır |
 | [server/src/services/device_service.js:992](../../server/src/services/device_service.js#L992) | <code>export async function releaseDeviceOwnership({ deviceId, authUser }) {</code> | Sahiplik sıfırlanınca cihaz kapıdan da sökülür |
 | [server/src/routes/company_routes.js:162](../../server/src/routes/company_routes.js#L162) | <code>export async function removeCompanyDeviceRecord(db, deviceUid) {</code> | Şirket aracıyla cihaz silinince kapı ataması da temizlenir |
@@ -998,10 +998,10 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 300 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/routes/app_doors_routes.js:68](../../server/src/routes/app_doors_routes.js#L68) | <code>if (error?.code === 'DEVICE_OFFLINE') {</code> | Köprü cihazı çevrimdışı görüyorsa 409 DEVICE_OFFLINE |
-| [server/src/routes/app_doors_routes.js:64](../../server/src/routes/app_doors_routes.js#L64) | <code>if (error?.code === 'MQTT_BRIDGE_NOT_CONNECTED') {</code> | Sunucunun MQTT köprüsü brokera bağlı değilse 503 |
-| [server/src/routes/app_doors_routes.js:191](../../server/src/routes/app_doors_routes.js#L191) | <code>await publishDoorPulse({</code> | Komut MQTT ile yayınlanır (publishDoorPulse mqtt_bridge.js içindedir); başarılıysa 202 döner |
-| [server/src/routes/app_doors_routes.js:121](../../server/src/routes/app_doors_routes.js#L121) | <code>appDoorsRouter.get('/app/doors/:id/status', authRequired, async (req, res) =&gt; {</code> | Cihaz çevrimiçi/IP/yerel kontrol durumu bu uçtan okunur |
+| [server/src/routes/app_doors_routes.js:69](../../server/src/routes/app_doors_routes.js#L69) | <code>if (error?.code === 'DEVICE_OFFLINE') {</code> | Köprü cihazı çevrimdışı görüyorsa 409 DEVICE_OFFLINE |
+| [server/src/routes/app_doors_routes.js:65](../../server/src/routes/app_doors_routes.js#L65) | <code>if (error?.code === 'MQTT_BRIDGE_NOT_CONNECTED') {</code> | Sunucunun MQTT köprüsü brokera bağlı değilse 503 |
+| [server/src/routes/app_doors_routes.js:192](../../server/src/routes/app_doors_routes.js#L192) | <code>await publishDoorPulse({</code> | Komut MQTT ile yayınlanır (publishDoorPulse mqtt_bridge.js içindedir); başarılıysa 202 döner |
+| [server/src/routes/app_doors_routes.js:122](../../server/src/routes/app_doors_routes.js#L122) | <code>appDoorsRouter.get('/app/doors/:id/status', authRequired, async (req, res) =&gt; {</code> | Cihaz çevrimiçi/IP/yerel kontrol durumu bu uçtan okunur |
 | [server/src/routes/firmware_routes.js:123](../../server/src/routes/firmware_routes.js#L123) | <code>firmwareRouter.get('/health', async (_req, res) =&gt; {</code> | /health yanıtındaki mqtt alanı köprü durumunu gösterir |
 
 **Olası nedenler**
@@ -1035,7 +1035,7 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 200 --nostrea
 | --- | --- | --- |
 | [server/src/middlewares/rate_limiters.js:179](../../server/src/middlewares/rate_limiters.js#L179) | <code>export const doorCommandRateLimiter = createRuleLimiter({</code> | Kapı komutu: kullanıcı+yol başına 10 sn'de en çok 4 istek |
 | [server/src/middlewares/rate_limiters.js:190](../../server/src/middlewares/rate_limiters.js#L190) | <code>message: 'Kapi komutu cok sik gonderildi. Biraz sonra tekrar deneyin.',</code> | 429 metni |
-| [server/src/routes/app_doors_routes.js:262](../../server/src/routes/app_doors_routes.js#L262) | <code>appDoorsRouter.post('/app/doors/scan-qr-open', authRequired, doorCommandRateLimiter, asyn…</code> | Aynı sınırlayıcı karekodla açma ve yerel açma bildirimi uçlarında da kullanılır |
+| [server/src/routes/app_doors_routes.js:263](../../server/src/routes/app_doors_routes.js#L263) | <code>appDoorsRouter.post('/app/doors/scan-qr-open', authRequired, doorCommandRateLimiter, asyn…</code> | Aynı sınırlayıcı karekodla açma ve yerel açma bildirimi uçlarında da kullanılır |
 
 **Olası nedenler**
 - Uygulama/kullanıcı 10 saniyede 4'ten fazla komut gönderdi (çift dokunuş, otomatik yeniden deneme)
@@ -1054,7 +1054,7 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 200 --nostrea
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
 | [server/src/services/door_access_policy.js:89](../../server/src/services/door_access_policy.js#L89) | <code>code: 'REMOTE_OPEN_DISABLED',</code> | feature_remote_open_enabled === false ve kullanıcı super_user değilse red |
-| [server/src/routes/app_doors_routes.js:181](../../server/src/routes/app_doors_routes.js#L181) | <code>assertDoorOpenAllowed({ door, channel: 'remote', authUser: req.authUser });</code> | Açma ucunda politika kontrolü (kanal: remote) |
+| [server/src/routes/app_doors_routes.js:182](../../server/src/routes/app_doors_routes.js#L182) | <code>assertDoorOpenAllowed({ door, channel: 'remote', authUser: req.authUser });</code> | Açma ucunda politika kontrolü (kanal: remote) |
 | [server/src/utils/site_rules.js:398](../../server/src/utils/site_rules.js#L398) | <code>error: 'Giris yontemi yetkilendirmesi (Uygulama/QR) yalnizca super user tarafindan yapila…</code> | Bu bayrağı yalnızca süper kullanıcı değiştirebilir (site yöneticisi 403 alır) |
 | [server/src/routes/admin_routes.js:1175](../../server/src/routes/admin_routes.js#L1175) | <code>adminRouter.patch('/admin/sites/:id/features', authRequired, requireSuperUser, async (req…</code> | Süper kullanıcı site modüllerini (uzaktan açma/QR/yerel/misafir) buradan açar-kapatır |
 
@@ -1104,7 +1104,7 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 200 --nostrea
 | [server/src/services/geofence_service.js:292](../../server/src/services/geofence_service.js#L292) | <code>if (ageMs &gt; GEOFENCE_MAX_AGE_MS) {</code> | Konum zaman damgası 60 sn'den eski (ya da gelecekte) -> LOCATION_STALE |
 | [server/src/services/geofence_service.js:301](../../server/src/services/geofence_service.js#L301) | <code>if (clientAccuracy &gt; GEOFENCE_MAX_ACCURACY_METERS) {</code> | accuracy 100 m'den büyük -> LOCATION_INACCURATE |
 | [server/src/services/geofence_service.js:151](../../server/src/services/geofence_service.js#L151) | <code>export function extractClientLocation(body) {</code> | Konum alanları gövdede üst düzey ya da location nesnesi içinde aranır |
-| [server/src/routes/app_doors_routes.js:184](../../server/src/routes/app_doors_routes.js#L184) | <code>validateGeofenceForDoorRequest({</code> | Açma ucunda çağrı; hata buildGeofenceErrorBody ile code/missing_fields olarak döner |
+| [server/src/routes/app_doors_routes.js:185](../../server/src/routes/app_doors_routes.js#L185) | <code>validateGeofenceForDoorRequest({</code> | Açma ucunda çağrı; hata buildGeofenceErrorBody ile code/missing_fields olarak döner |
 
 **Olası nedenler**
 - Uygulama konum göndermiyor: GPS izni/konum servisi kapalı (missing_fields hangisinin eksik olduğunu söyler)
@@ -1172,9 +1172,9 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 300 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/routes/app_doors_routes.js:262](../../server/src/routes/app_doors_routes.js#L262) | <code>appDoorsRouter.post('/app/doors/scan-qr-open', authRequired, doorCommandRateLimiter, asyn…</code> | Uygulamanın kapı önündeki karekodu okutarak açtığı uç |
-| [server/src/routes/app_doors_routes.js:318](../../server/src/routes/app_doors_routes.js#L318) | <code>deniedAudit('DYNAMIC_QR_REQUIRED');</code> | Ekranlı cihazda karekod token içermiyorsa (statik UID) 403 |
-| [server/src/routes/app_doors_routes.js:326](../../server/src/routes/app_doors_routes.js#L326) | <code>deniedAudit('EKRAN_QR_BEKLENIYOR');</code> | Köprü ekran tokenını henüz almadıysa UID ile AÇILMAZ, 409 |
+| [server/src/routes/app_doors_routes.js:263](../../server/src/routes/app_doors_routes.js#L263) | <code>appDoorsRouter.post('/app/doors/scan-qr-open', authRequired, doorCommandRateLimiter, asyn…</code> | Uygulamanın kapı önündeki karekodu okutarak açtığı uç |
+| [server/src/routes/app_doors_routes.js:319](../../server/src/routes/app_doors_routes.js#L319) | <code>deniedAudit('DYNAMIC_QR_REQUIRED');</code> | Ekranlı cihazda karekod token içermiyorsa (statik UID) 403 |
+| [server/src/routes/app_doors_routes.js:327](../../server/src/routes/app_doors_routes.js#L327) | <code>deniedAudit('EKRAN_QR_BEKLENIYOR');</code> | Köprü ekran tokenını henüz almadıysa UID ile AÇILMAZ, 409 |
 | [server/src/services/door_access_policy.js:223](../../server/src/services/door_access_policy.js#L223) | <code>export function doorDeviceHasScreen(row) {</code> | C3 dışındaki donanım "ekranlı" sayılır (bilinmeyen donanımda da fail-closed) |
 
 **Olası nedenler**
@@ -1199,7 +1199,7 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 300 --nostrea
 | [server/src/services/door_access_policy.js:293](../../server/src/services/door_access_policy.js#L293) | <code>export function checkScreenQrToken(entry, token, now = Date.now()) {</code> | Geçerlilik: güncel token süresi + 12 sn tolerans; önceki token yalnızca 12 sn |
 | [server/src/services/door_access_policy.js:233](../../server/src/services/door_access_policy.js#L233) | <code>export const SCREEN_QR_GRACE_MS = 12000;</code> | Token değişiminde tolerans penceresi |
 | [server/src/services/door_access_policy.js:323](../../server/src/services/door_access_policy.js#L323) | <code>export function consumeScreenQrToken(entry, token, now = Date.now()) {</code> | Token tek kullanımlık; tüketimde usedTokens'a eklenir |
-| [server/src/routes/app_doors_routes.js:338](../../server/src/routes/app_doors_routes.js#L338) | <code>code: 'SCREEN_QR_ALREADY_USED',</code> | Kullanılmış token 403 |
+| [server/src/routes/app_doors_routes.js:339](../../server/src/routes/app_doors_routes.js#L339) | <code>code: 'SCREEN_QR_ALREADY_USED',</code> | Kullanılmış token 403 |
 | [server/src/services/door_access_policy.js:336](../../server/src/services/door_access_policy.js#L336) | <code>export function releaseScreenQrToken(entry, token) {</code> | Komut gönderilemezse token iade edilir (yanmaz) |
 
 **Olası nedenler**
@@ -1220,9 +1220,9 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 300 --nostrea
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
 | [server/src/services/door_access_policy.js:185](../../server/src/services/door_access_policy.js#L185) | <code>export function parseScanQrPayload(raw) {</code> | Biçimler: AHBU:DOOR:<uid>:<token>, AHBU:DOOR:<uid>, <uid>:<token>, <uid>; en çok 128 karakter |
-| [server/src/routes/app_doors_routes.js:266](../../server/src/routes/app_doors_routes.js#L266) | <code>return res.status(400).json({ error: 'Gecersiz karekod verisi.', code: 'INVALID_QR_PAYLOA…</code> | Karekod metni çözülemezse 400 |
-| [server/src/routes/app_doors_routes.js:285](../../server/src/routes/app_doors_routes.js#L285) | <code>code: 'DOOR_NOT_FOUND',</code> | UID'ye atanmış aktif kapı yoksa 404 |
-| [server/src/routes/app_doors_routes.js:296](../../server/src/routes/app_doors_routes.js#L296) | <code>code: 'DOOR_ACCESS_DENIED',</code> | Kullanıcının o kapıya erişimi yoksa 403 |
+| [server/src/routes/app_doors_routes.js:267](../../server/src/routes/app_doors_routes.js#L267) | <code>return res.status(400).json({ error: 'Gecersiz karekod verisi.', code: 'INVALID_QR_PAYLOA…</code> | Karekod metni çözülemezse 400 |
+| [server/src/routes/app_doors_routes.js:286](../../server/src/routes/app_doors_routes.js#L286) | <code>code: 'DOOR_NOT_FOUND',</code> | UID'ye atanmış aktif kapı yoksa 404 |
+| [server/src/routes/app_doors_routes.js:297](../../server/src/routes/app_doors_routes.js#L297) | <code>code: 'DOOR_ACCESS_DENIED',</code> | Kullanıcının o kapıya erişimi yoksa 403 |
 
 **Olası nedenler**
 - Başka bir karekod (örn. site katılım QR'ı ya da yabancı kod) okutuldu
@@ -1242,7 +1242,7 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 300 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/routes/app_doors_routes.js:475](../../server/src/routes/app_doors_routes.js#L475) | <code>appDoorsRouter.post('/app/doors/:id/qr-token', authRequired, qrTokenRateLimiter, async (r…</code> | Kullanıcıya kapı için 30 sn (site ayarı) geçerli token üretir |
+| [server/src/routes/app_doors_routes.js:477](../../server/src/routes/app_doors_routes.js#L477) | <code>appDoorsRouter.post('/app/doors/:id/qr-token', authRequired, qrTokenRateLimiter, async (r…</code> | Kullanıcıya kapı için 30 sn (site ayarı) geçerli token üretir |
 | [server/src/services/qr_access_service.js:22](../../server/src/services/qr_access_service.js#L22) | <code>export async function generateQrTokenForDoor({ authUser, doorId, clientLocation }) {</code> | Yetki, politika, donanım, geofence ve token üretimi sırası |
 | [server/src/services/qr_access_service.js:45](../../server/src/services/qr_access_service.js#L45) | <code>error.code = 'NO_QR_SCANNER_HARDWARE';</code> | C3 cihaz, cihaz atanmamış ya da qr_reader_enabled !== true ise 400 |
 | [server/src/middlewares/rate_limiters.js:193](../../server/src/middlewares/rate_limiters.js#L193) | <code>export const qrTokenRateLimiter = createAuthUserRateLimiter({</code> | Kullanıcı+kapı başına dakikada 6 token isteği (429, retry_after_seconds döner) |
@@ -1407,7 +1407,7 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 300 --nostrea
 | --- | --- | --- |
 | [server/src/services/door_service.js:71](../../server/src/services/door_service.js#L71) | <code>export async function recordDoorAccessLog({</code> | Günlük yazımı: hata YUTULUR (false döner), kapı yine açılmış olur |
 | [server/src/services/door_service.js:120](../../server/src/services/door_service.js#L120) | <code>auditLog('door_access_log_write_failed', {</code> | Yazım hatasında denetim satırı |
-| [server/src/routes/app_doors_routes.js:236](../../server/src/routes/app_doors_routes.js#L236) | <code>console.error('Kapi gecis logu DB kayit hatasi:', err.message);</code> | Açma ucu günlüğü arka planda yazar; hata yalnız burada görünür |
+| [server/src/routes/app_doors_routes.js:237](../../server/src/routes/app_doors_routes.js#L237) | <code>console.error('Kapi gecis logu DB kayit hatasi:', err.message);</code> | Açma ucu günlüğü arka planda yazar; hata yalnız burada görünür |
 | [server/src/services/maintenance_service.js:82](../../server/src/services/maintenance_service.js#L82) | <code>DELETE FROM door_access_logs</code> | Günlük bakım 30 günden eski geçiş kayıtlarını siler |
 
 **Olası nedenler**
