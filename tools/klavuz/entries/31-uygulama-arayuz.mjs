@@ -1856,7 +1856,7 @@ export default {
           note: 'Düzenle/sil/onayla/reddet bayrağa bağlıdır; `canManageApartmentUsers` ve `canAssignDoorDevices` bu görünümde okunmaz' },
         { file: 'lib/ui/views/sites_view.dart', find: 'onManagePermissions: onManageDoorPermissions != null',
           note: 'Kapı yetki düğmesi geri çağrı verilirse çizilir' },
-        { file: 'lib/ui/widgets/site_card.dart', find: 'if (widget.isSuperUser &&',
+        { file: 'lib/ui/widgets/site_card.dart', find: 'widget.onDeleteWithEmail != null &&',
           note: 'Karttaki bazı eylemler yalnız süper kullanıcıya' },
         { file: 'lib/ui/pages/home_page.dart', find: 'bool _canAccessMenu(SirketMenuItem item, UserRole role) {',
           note: 'Ekrana erişim kuralı; asıl yetki kontrolü sunucudadır' },

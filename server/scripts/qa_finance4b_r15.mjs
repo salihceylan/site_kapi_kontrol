@@ -62,7 +62,7 @@ export default async function sectionR15(t) {
   // ============================================================================================================
   // S5 (P2-2): ACCOUNT_INACTIVE iletisi etkin hesap varken yaniltmaz
   // ============================================================================================================
-  await call('PUT', '/admin/finance-legal-gate', SUPER, { legal_ok: true });
+  await t.legalAll(true); // hukuk onayi site basina (114): simdiki ve bundan sonra olusacak siteler acik
   const ps = await mkManaged('F4B R15 Pasif', { 'P Blok': 2 });
   const pb = P(ps.code);
   const oldAcc = (await mkAcc(pb, 'Eski Kasa', { opening_date: ago(100) })).body.account.id;
@@ -76,7 +76,7 @@ export default async function sectionR15(t) {
   // ============================================================================================================
   // S6 (P2-1): gonderim aninda dusen daire icin aralik kaydi ve kalem apartment_ids guncellenir
   // ============================================================================================================
-  await call('PUT', '/admin/finance-legal-gate', SUPER, { legal_ok: true });
+  await t.legalAll(true);
   const site = await mkManaged('F4B R15 Hatirlatma', { 'H Blok': 2 });
   const [h1, h2] = site.ids;
   const tag = `r15${Date.now() % 100000}`;

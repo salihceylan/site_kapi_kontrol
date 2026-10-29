@@ -1,9 +1,11 @@
-// Finans Faz 4b ayarları (makbuz otomatik düzenleme, gecikme tazminatı, borç hatırlatma eşikleri) ve sistem düzeyindeki hukuk onayı bayrağı.
+// Finans Faz 4b ayarları (makbuz otomatik düzenleme, gecikme tazminatı, borç hatırlatma eşikleri) ve SİTE düzeyindeki hukuk onayı bayrağı.
 //
 // Sözleşme: docs/PLATFORM_FINANS_4B.md "Ayarlar ucu". Satır tembel oluşur (okuma satır yoksa varsayılanları döner). Yazma `expected_settings_version` ister
 // (uyuşmazlık 409 SETTINGS_STALE); her UPDATE sürümü bir artırır (DB tetikleyicisi). Audit yalnız DEĞİŞEN anahtar adlarını yazar, değerleri değil.
-// KOORDİNATÖR KARARI (Q2): gecikme tazminatı ve borç hatırlatma site ayarında VARSAYILAN KAPALI ve ayrıca sistem düzeyinde
-// `platform_settings` anahtarı `finance.legal_ok` (varsayılan kapalı) bayrağına bağlıdır: bayrak kapalıyken AÇILAMAZ.
+// KOORDİNATÖR KARARI (Q2) + SATIŞ HAZIRLIĞI: gecikme tazminatı ve borç hatırlatma site ayarında VARSAYILAN KAPALI ve ayrıca o sitenin hukuk onayı bayrağına
+// (`sites.legal_ok`, migration 114) bağlıdır: bayrak kapalıyken AÇILAMAZ. Mevcut siteler açık kalır; YENİ siteler kapalı başlar; yalnız süper kullanıcı açar
+// (avukat onayından sonra; PUT /admin/sites/:siteCode/finance-legal-gate; işlem izi finance.legal_gate.updated). Eski sistem geneli `platform_settings`
+// `finance.legal_ok` anahtarı artık OKUNMAZ (satırı zararsız kalır).
 
 import { pool } from '../db.js';
 import { isSmtpConfigured } from '../mailer.js';
@@ -24,13 +26,11 @@ import {
   invalidBody,
   parsePeriod,
   periodLabel,
+  siteNotFound,
 } from './finance_common.js';
 import { lockActorRow, recordFinanceAudit, withFinanceTransaction } from './finance_tx.js';
 import { todayIso } from './people_common.js';
-import { parseFlag } from './platform_config_service.js';
 import { getRule } from './platform_rules.js';
-
-export const LEGAL_OK_KEY = 'finance.legal_ok';
 
 /**
  * Kurallar tablosu (G11; docs/PLATFORM_KURALLAR.md): aylık oran üst sınırı bu kuraldan okunur. Etkin üst sınır = min(kural, LATE_FEE_MAX_MONTHLY_BP):
@@ -98,10 +98,10 @@ export async function loadEffectiveSettings(db, siteCode) {
   return settings;
 }
 
-/** Sistem düzeyi hukuk onayı bayrağı (platform_settings finance.legal_ok); satır yok/geçersiz = KAPALI. */
-export async function readLegalOk(db = pool) {
-  const result = await db.query(`SELECT value FROM platform_settings WHERE key = $1`, [LEGAL_OK_KEY]);
-  return parseFlag(result.rows?.[0]?.value);
+/** Site düzeyi hukuk onayı bayrağı (sites.legal_ok, migration 114); site yok / siteCode verilmedi / değer true değil = KAPALI (kapalı-güvenli). */
+export async function readLegalOk(db, siteCode) {
+  const result = await db.query(`SELECT legal_ok FROM sites WHERE site_code = $1`, [siteCode]);
+  return result.rows?.[0]?.legal_ok === true;
 }
 
 /** Son aktif tazminat çalıştırması (varsa) ve sıradaki dönem. */
@@ -148,7 +148,7 @@ export async function getSettings(siteCode, db = pool) {
   const settings = await loadEffectiveSettings(db, siteCode);
   const chain = await loadLateFeeChainState(db, siteCode, settings);
   const maxRateBp = await lateFeeMaxRateBp(db);
-  return settingsBody(settings, chain, { legalOk: await readLegalOk(db), smtpConfigured: isSmtpConfigured(), maxRateBp });
+  return settingsBody(settings, chain, { legalOk: await readLegalOk(db, siteCode), smtpConfigured: isSmtpConfigured(), maxRateBp });
 }
 
 // --- PUT ---------------------------------------------------------------------------------------------------------------------------------
@@ -255,8 +255,8 @@ export async function updateSettings({ siteCode, body, actor, now = new Date() }
       throw settingsStale({ settings_version: current.settings_version });
     }
     const next = { ...current, ...input.changes };
-    const legalOk = await readLegalOk(client);
-    // Hukuk onayı bayrağı kapalıyken tazminat / hatırlatma AÇILAMAZ (kapalıdan açığa geçiş).
+    const legalOk = await readLegalOk(client, siteCode);
+    // Sitenin hukuk onayı bayrağı kapalıyken tazminat / hatırlatma AÇILAMAZ (kapalıdan açığa geçiş).
     if (!legalOk && ((next.late_fee_enabled && !current.late_fee_enabled) || (next.reminders_enabled && !current.reminders_enabled))) {
       throw legalApprovalRequired();
     }
@@ -297,8 +297,13 @@ export async function updateSettings({ siteCode, body, actor, now = new Date() }
   });
 }
 
-/** Süper kullanıcı: sistem düzeyi hukuk onayı bayrağını yazar (audit: finance.legal_gate.updated, yalnız açık/kapalı). */
-export async function setLegalGate({ enabled, actor }) {
+/**
+ * Süper kullanıcı: BİR sitenin hukuk onayı bayrağını (sites.legal_ok) yazar. Finans modülü kapalı olsa da yazılabilir (bayrak modülden bağımsızdır).
+ * Audit: finance.legal_gate.updated, site_code dolu (yalnız açık/kapalı ve önceki değer). Kapatmak açık ayarları silmez: tazminat / hatırlatma o sitede
+ * önizleme, onay ve gönderim anında engellenir (LEGAL_APPROVAL_REQUIRED); yeniden açınca ayarlar olduğu gibi devam eder.
+ * `sites` satırı FOR NO KEY UPDATE kilitlenir: finans yazmalarının `FOR KEY SHARE` kilidini bekletmez.
+ */
+export async function setLegalGate({ siteCode, enabled, actor }) {
   if (typeof enabled !== 'boolean') {
     throw invalidBody('Hukuk onayı değeri geçersiz (evet veya hayır olmalıdır).');
   }
@@ -306,20 +311,15 @@ export async function setLegalGate({ enabled, actor }) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    if (actorInfo.userCode !== null) {
-      await client.query('SELECT user_code FROM users WHERE user_code = $1 AND deleted_at IS NULL FOR KEY SHARE', [actorInfo.userCode]);
+    await lockActorRow(client, actorInfo);
+    const current = await client.query(`SELECT legal_ok FROM sites WHERE site_code = $1 FOR NO KEY UPDATE`, [siteCode]);
+    if (!current.rows?.[0]) {
+      throw siteNotFound();
     }
-    await client.query(
-      `
-        INSERT INTO platform_settings (key, value, updated_at, updated_by)
-        VALUES ($1, $2::JSONB, NOW(), $3)
-        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW(), updated_by = EXCLUDED.updated_by
-      `,
-      [LEGAL_OK_KEY, JSON.stringify(enabled), actorInfo.userCode],
-    );
-    await recordFinanceAudit(client, actor, 'finance.legal_gate.updated', 0, LEGAL_OK_KEY, { enabled });
+    await client.query(`UPDATE sites SET legal_ok = $2 WHERE site_code = $1`, [siteCode, enabled]);
+    await recordFinanceAudit(client, actor, 'finance.legal_gate.updated', siteCode, siteCode, { enabled, previous: current.rows[0].legal_ok === true });
     await client.query('COMMIT');
-    return { legal_ok: enabled };
+    return { site_code: Number(siteCode), legal_ok: enabled };
   } catch (error) {
     await client.query('ROLLBACK').catch(() => {});
     throw error;

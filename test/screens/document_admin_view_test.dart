@@ -78,8 +78,24 @@ Future<void> _debounce(WidgetTester t) async {
 }
 
 void main() {
-  // Belgeler ve Google Drive TEK modül (Dosya Deposu, drive_storage): yönetim ekranında belge listesinin altında Drive bölümü.
+  // Belgeler ve Google Drive TEK modül (Dosya Deposu, drive_storage): yönetim ekranında Drive bölümü ÜSTTE, sunucu
+  // depolama kotası (200 MB çubuğu) ve belge listesi ALTTA görünür.
   group('Dosya Deposu: Google Drive bölümü', () {
+    testWidgets('görünüş sırası: Drive kartı üstte, 200 MB kota çubuğu ve belge listesi altta', (t) async {
+      final auth = DocumentFakeAuth();
+      final service = seededDocuments(auth);
+      await _pump(t, auth, service);
+      final drive = find.byKey(const ValueKey<String>('drive_storage_card'));
+      final quota = find.byKey(const ValueKey<String>('document_usage_bar'));
+      expect(drive, findsOneWidget);
+      expect(quota, findsOneWidget);
+      expect(find.byType(DocumentAdminCard), findsNWidgets(3));
+      final driveBottom = t.getBottomLeft(drive).dy;
+      expect(driveBottom, lessThanOrEqualTo(t.getTopLeft(quota).dy));
+      expect(driveBottom, lessThanOrEqualTo(t.getTopLeft(find.byType(DocumentAdminCard).first).dy));
+      expect(t.takeException(), isNull);
+    });
+
     testWidgets('yazma yetkisi olan yönetimde belge listesiyle birlikte görünür ("Yakında…" bağlı değilken)', (t) async {
       final auth = DocumentFakeAuth();
       final service = seededDocuments(auth);

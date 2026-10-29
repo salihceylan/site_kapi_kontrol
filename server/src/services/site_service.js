@@ -299,6 +299,28 @@ export async function updateSiteByCode({
   return updatedSite;
 }
 
+/**
+ * Kampanya tarihlerini (115) günceller: her alan undefined (dokunma) | null (temizle) | "YYYY-MM-DD". Doğrulama çağıranda
+ * (parseFreePeriodBody + freePeriodOrderError). Yalnız süper kullanıcı ucundan çağrılır.
+ */
+export async function updateSiteFreePeriod({ siteCode, subscriptionStartedAt, freeUntil }) {
+  const sets = [];
+  const values = [];
+  if (subscriptionStartedAt !== undefined) {
+    values.push(subscriptionStartedAt);
+    sets.push(`subscription_started_at = $${values.length}::DATE`);
+  }
+  if (freeUntil !== undefined) {
+    values.push(freeUntil);
+    sets.push(`free_until = $${values.length}::DATE`);
+  }
+  if (sets.length === 0) {
+    return;
+  }
+  values.push(siteCode);
+  await pool.query(`UPDATE sites SET ${sets.join(', ')} WHERE site_code = $${values.length}`, values);
+}
+
 export async function siteExists(siteCode) {
   if (siteCode == null) {
     return true;
@@ -587,6 +609,8 @@ export async function getSiteByCode(siteCode) {
         s.qr_totp_secret,
         s.qr_rotation_seconds,
         s.management_type,
+        to_char(s.subscription_started_at, 'YYYY-MM-DD') AS subscription_started_at,
+        to_char(s.free_until, 'YYYY-MM-DD') AS free_until,
         sm.manager_user_code,
         manager.full_name AS manager_name,
         s.created_at
@@ -656,6 +680,8 @@ export async function listSitesForAuthUser({
           s.deletion_requested_by_role,
           s.deletion_requested_at,
           s.management_type,
+          to_char(s.subscription_started_at, 'YYYY-MM-DD') AS subscription_started_at,
+          to_char(s.free_until, 'YYYY-MM-DD') AS free_until,
           sm.manager_user_code,
           manager.full_name AS manager_name,
           s.created_at
@@ -735,6 +761,8 @@ export async function listSitesForAuthUser({
         s.deletion_requested_by_role,
         s.deletion_requested_at,
         s.management_type,
+        to_char(s.subscription_started_at, 'YYYY-MM-DD') AS subscription_started_at,
+        to_char(s.free_until, 'YYYY-MM-DD') AS free_until,
         COALESCE(sms.manager_user_code, sm.user_code) AS manager_user_code,
         COALESCE(manager.full_name, sm_user.full_name, 'Site Yöneticisi') AS manager_name,
         s.created_at

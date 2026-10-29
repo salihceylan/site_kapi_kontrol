@@ -187,7 +187,7 @@ export default async function sectionLocks(t) {
   // H3. Daire azaltma (syncSiteStructureCounts) x gecikme tazminati x odeme x rapor
   // ============================================================================================================
   const siteSvc = await import('../src/services/site_service.js');
-  await call('PUT', '/admin/finance-legal-gate', SUPER, { legal_ok: true });
+  await t.legalAll(true); // hukuk onayi site basina (114): simdiki ve bundan sonra olusacak siteler acik
   const dlBeforeShrink = deadlocks();
   const errBeforeShrink = errorIds();
   const shrinkOutcomes = [];

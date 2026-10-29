@@ -27,10 +27,14 @@ export default async function sectionLateFee(t) {
   const put = (body, user = MGR, version) => call('PUT', `${base}/settings`, user, { expected_settings_version: version ?? 1, ...body });
   const noLegal = await put({ late_fee: { enabled: true, start_period: ym(-3) } });
   check('F1b: hukuk onayi bayragi KAPALIYKEN tazminat AÇILAMAZ (409 LEGAL_APPROVAL_REQUIRED); hatirlatma da; ayar degismedi', noLegal.status === 409 && noLegal.body.code === 'LEGAL_APPROVAL_REQUIRED' && (await put({ reminders: { enabled: true } })).body.code === 'LEGAL_APPROVAL_REQUIRED' && (await call('GET', `${base}/settings`, MGR)).body.settings_version === 1, noLegal.body);
-  const gateMgr = await call('PUT', `/admin/finance-legal-gate`, MGR, { legal_ok: true });
-  const gateOn = await call('PUT', `/admin/finance-legal-gate`, SUPER, { legal_ok: true });
-  check('F1c: hukuk onayi bayragini YALNIZ super kullanici acar (yonetici 403); GET /admin/finance-legal-gate; audit', gateMgr.status === 403 && gateOn.status === 200 && gateOn.body.legal_ok === true && (await call('GET', `/admin/finance-legal-gate`, SUPER)).body.legal_ok === true
+  const gateUrl = `/admin/sites/${site.code}/finance-legal-gate`;
+  const gateMgr = await call('PUT', gateUrl, MGR, { legal_ok: true });
+  const gateOn = await call('PUT', gateUrl, SUPER, { legal_ok: true });
+  const gateAudit = (await q(`SELECT details FROM audit_log WHERE action = 'finance.legal_gate.updated' AND site_code = $1 ORDER BY id DESC LIMIT 1`, [site.code])).rows[0]?.details;
+  check('F1c: hukuk onayi bayragi SITE basina; YALNIZ super kullanici acar (yonetici 403); GET /admin/sites/:siteCode/finance-legal-gate; audit site kodunu tasir; olmayan site 404', gateMgr.status === 403 && gateOn.status === 200 && gateOn.body.legal_ok === true && gateOn.body.site_code === site.code && (await call('GET', gateUrl, SUPER)).body.legal_ok === true
+    && gateAudit?.enabled === true && gateAudit?.previous === false && (await call('PUT', '/admin/sites/999999999999/finance-legal-gate', SUPER, { legal_ok: true })).status === 404
     && (await q(`SELECT COUNT(*)::int AS n FROM audit_log WHERE action = 'finance.legal_gate.updated'`)).rows[0].n >= 1, [gateMgr.status, gateOn.body]);
+  await t.legalAll(true); // hukuk onayi site basina (114): F1c sonrasi simdiki ve bundan sonra olusacak siteler (F13 buyuk site dahil) acik; eski sistem geneli bayragin kalici acikligi gibi
   const bad = [];
   for (const [label, body] of [['oran 501', { late_fee: { rate_bp: 501 } }], ['oran -1', { late_fee: { rate_bp: -1 } }], ['ondalik oran', { late_fee: { rate_bp: 12.5 } }], ['gecersiz yontem', { late_fee: { method: 'x' } }], ['ek gun 91', { late_fee: { grace_days: 91 } }],
     ['gecersiz baslangic', { late_fee: { start_period: '2026-13' } }], ['bilinmeyen alan', { late_fee: { foo: 1 } }], ['bilinmeyen kok', { foo: {} }], ['bos govde', {}], ['esik 99 kurus', { reminders: { min_overdue_minor: 99 } }],

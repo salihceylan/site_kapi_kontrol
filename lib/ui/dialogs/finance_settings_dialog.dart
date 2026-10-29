@@ -28,7 +28,7 @@ import 'package:site_kapi_kontrol/ui/widgets/money_field.dart';
 /// - Kaydetme KISMİDİR ve `expected_settings_version` ile yapılır; başka biri ayarı bu arada değiştirdiyse sunucu 409
 ///   `SETTINGS_STALE` döner: güncel ayarlar yüklenir, form yeniden kurulur ve kullanıcı değişikliğini yeniden gözden
 ///   geçirip kaydeder (eski sürümle üstüne yazılmaz).
-/// - Gecikme tazminatı ve hatırlatma, sistem bayrağı `finance.legal_ok` KAPALIYKEN açılamaz ("Hukuk onayı bekleniyor").
+/// - Gecikme tazminatı ve hatırlatma, site bayrağı `sites.legal_ok` KAPALIYKEN açılamaz ("Hukuk onayı bekleniyor").
 /// - Tazminat oranı sistem sınırını ([LateFeeSettings.maxRateBp], %5,00) aşamaz; oran / yöntem / ek gün yalnız SONRAKİ
 ///   hesaplamaları etkiler; başlangıç ayı yalnız hiç aktif çalıştırma yokken değişir.
 class FinanceSettingsDialog extends StatefulWidget {

@@ -123,6 +123,15 @@ class _SiteCardState extends State<SiteCard> {
                             icon: Icons.category_rounded,
                           ),
                         ),
+                        // Kampanya (şimdi abone olana 2 ay ücretsiz): yalnız süper kullanıcı; sürüyorsa yeşil, bittiyse gri.
+                        if (widget.isSuperUser && site.freePeriodBadgeLabel != null)
+                          StatusChip(
+                            label: site.freePeriodBadgeLabel!,
+                            tone: site.hasActiveFreePeriod
+                                ? AppTone.success
+                                : AppTone.neutral,
+                            icon: Icons.card_giftcard_rounded,
+                          ),
                       ],
                     ),
                     const SizedBox(height: AppSpace.xs),
@@ -137,6 +146,21 @@ class _SiteCardState extends State<SiteCard> {
                               fontWeight: FontWeight.w600,
                             ),
                     ),
+                    // Site yöneticisine küçük bilgi satırı (süper kullanıcı rozeti zaten başlıkta görür).
+                    if (!widget.isSuperUser &&
+                        site.freePeriodManagerNote != null) ...[
+                      const SizedBox(height: AppSpace.xs),
+                      Text(
+                        site.freePeriodManagerNote!,
+                        key: const ValueKey('site-free-period-note'),
+                        style: th.bodySmall?.copyWith(
+                          color: site.hasActiveFreePeriod
+                              ? AppTone.success.ink(p)
+                              : p.textSecondary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -258,6 +282,15 @@ class _SiteCardState extends State<SiteCard> {
               InfoChip('Adres: ${site.address}'),
             if (site.city != null && site.city!.isNotEmpty)
               InfoChip('Şehir: ${site.city}'),
+            // Süper kullanıcı detayı: kampanya tarihleri (tanımsızsa görünmez).
+            if (widget.isSuperUser && site.subscriptionStartedAt != null)
+              InfoChip(
+                'Abonelik başlangıcı: ${SiteRecord.formatDay(site.subscriptionStartedAt)}',
+              ),
+            if (widget.isSuperUser && site.freeUntil != null)
+              InfoChip(
+                'Ücretsiz dönem sonu: ${SiteRecord.formatDay(site.freeUntil)}',
+              ),
           ],
         ),
         if (groups.isNotEmpty) const SizedBox(height: AppSpace.md),

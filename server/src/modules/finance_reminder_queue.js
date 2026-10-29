@@ -17,7 +17,6 @@ import { deliverableEmailSql, suppressedSql } from './announcement_recipients.js
 import { buildFinanceReminderEmail } from './finance_reminder_mail.js';
 import { dayNumber } from './finance_4b_common.js';
 import { candidateKey, loadCandidateApartments, loadRecipientRows } from './finance_reminders.js';
-import { readLegalOk } from './finance_settings.js';
 import { recordFinanceAudit } from './finance_tx.js';
 import { isPermanentSendError } from './announcement_email_queue.js';
 import { ACCOUNT_KIND_SQL, HAS_ACCOUNT_SQL, todayIso } from './people_common.js';
@@ -204,7 +203,7 @@ async function claimBatch(batchSize, attempted) {
       `
         SELECT
           i.run_id, i.person_id, i.apartment_ids, i.with_amount, i.email, i.email_hash, i.email_attempts,
-          r.site_code, r.tone, r.note, r.params, s.name AS site_name,
+          r.site_code, r.tone, r.note, r.params, s.name AS site_name, (s.legal_ok IS TRUE) AS legal_on,
           COALESCE((SELECT m.enabled FROM site_modules m WHERE m.site_code = r.site_code AND m.module_code = 'finance'), TRUE) AS module_on,
           COALESCE((SELECT fs.reminders_enabled FROM finance_settings fs WHERE fs.site_code = r.site_code), FALSE) AS reminders_on,
           pc.person_active, pc.has_account, pc.account_kind, pc.verified, pc.pref, pc.current_email,
@@ -236,10 +235,9 @@ async function claimBatch(batchSize, attempted) {
       [MAX_EMAIL_ATTEMPTS, attempted.runIds, attempted.personIds, batchSize, EMAIL_CLAIM_STALE_MINUTES, salts],
     );
     const rows = picked.rows ?? [];
-    // GÖNDERİM ANI KAPILARI (çalıştırma oluşturulduktan sonra değişmiş olabilir): sistem hukuk onayı (finance.legal_ok), finans modülü, hatırlatma ayarı.
+    // GÖNDERİM ANI KAPILARI (çalıştırma oluşturulduktan sonra değişmiş olabilir): SİTENİN hukuk onayı (sites.legal_ok; satır başına, yukarıdaki sorgudan), finans modülü, hatırlatma ayarı.
     // Finans temel modüldür (Kural 25): site_modules satırı yoksa açık sayılır.
     // Kapalıysa satır GÖNDERİLMEZ: 'cancelled' (adres silinir) ve nedeni denetime (kod) yazılır.
-    const legalOk = rows.length === 0 ? true : await readLegalOk(client);
     // Taze borç: site başına, ilgili dairelerin M1 gecikmiş borcu / en eski vadesi (bugün)
     const today = todayIso();
     const todayDay = dayNumber(today);
@@ -275,7 +273,7 @@ async function claimBatch(batchSize, attempted) {
     for (const row of rows) {
       const minOverdue = BigInt(row.params?.min_overdue_minor ?? 0);
       const minDays = Number(row.params?.min_days_overdue ?? 0);
-      const gate = !legalOk ? 'legal_gate' : row.module_on !== true ? 'module_disabled' : row.reminders_on !== true ? 'reminders_disabled' : null;
+      const gate = row.legal_on !== true ? 'legal_gate' : row.module_on !== true ? 'module_disabled' : row.reminders_on !== true ? 'reminders_disabled' : null;
       if (gate !== null) {
         mark(row, 'cancelled');
         const gateKey = `${row.run_id}|${row.site_code}|${gate}`;

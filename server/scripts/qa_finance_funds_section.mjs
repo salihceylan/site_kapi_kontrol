@@ -595,7 +595,7 @@ export default async function sectionFunds(t) {
       const closed = await call('POST', `${P(LF.code)}/periods/${ym(off)}/close`, MGR);
       if (closed.status !== 200) throw new Error(`donem kapatilamadi: ${JSON.stringify(closed.body)}`);
     }
-    await call('PUT', '/admin/finance-legal-gate', SUPER, { legal_ok: true });
+    await call('PUT', `/admin/sites/${LF.code}/finance-legal-gate`, SUPER, { legal_ok: true }); // hukuk onayi site basina (114)
     const lfSettings = await call('GET', `${P(LF.code)}/settings`, MGR);
     const lfEnable = await call('PUT', `${P(LF.code)}/settings`, MGR, { expected_settings_version: lfSettings.body.settings_version, late_fee: { enabled: true, start_period: ym(-1), rate_bp: 200, method: 'daily_30', grace_days: 0 } });
     if (lfEnable.status !== 200) throw new Error(`tazminat acilamadi: ${JSON.stringify(lfEnable.body)}`);

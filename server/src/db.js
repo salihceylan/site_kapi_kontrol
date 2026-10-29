@@ -43,6 +43,7 @@ import { ensureTeamSchema } from './modules/team_schema.js';
 import { ensureDriveSchema } from './modules/drive_schema.js';
 import { ensureDriveSourceSchema } from './modules/drive_source_schema.js';
 import { ensureDriveHealthSchema } from './modules/drive_health_schema.js';
+import { ensureSiteFreePeriodSchema } from './modules/site_free_period_schema.js';
 import { ensureMeteringFieldSchema } from './modules/metering_field_schema.js';
 import { ensureMeteringSchema } from './modules/metering_schema.js';
 import { ensureManagementCompanySchema } from './modules/management_company_schema.js';
@@ -61,6 +62,7 @@ import { ensureMenuLayoutSchema } from './modules/menu_layout_schema.js';
 import { ensureEmergencySchema } from './modules/emergency_schema.js';
 import { ensureTrialAccessSchema } from './modules/trial_access_schema.js';
 import { ensureCheckMarkSchema } from './modules/check_mark_schema.js';
+import { ensureSiteLegalGateSchema } from './modules/site_legal_gate_schema.js';
 import { CORE_MODULES_BACKFILL_SQL } from './modules/core_modules.js';
 import { CARD_PAYMENTS_INTO_FINANCE_SQL } from './modules/card_payments_into_finance.js';
 import { ensureTenantAdminRule } from './modules/apartment_tenant_admin_sql.js';
@@ -2074,6 +2076,12 @@ export async function ensureDbSchema() {
     // 110 (kontrol izi, P2-20: gider ve dekont icin "kontrol edildi (kim, ne zaman)"): expenses (040) ve payment_notices (066) SONRASI; dev blokta DEGIL; katalog kontrolu + her adim
     // kendi otomatik onayli ifadesi (check_mark_schema.js = migrations/110). Her sey varsa hicbir ifade / kilit yok. Gider ve dekont satirlari DEGISMEZ (yan tablolar).
     await ensureCheckMarkSchema(client);
+    // 114 (site basina hukuk onayi bayragi, satis hazirligi): sites'tan SONRA; dev blokta DEGIL; katalog kontrolu + her adim kendi otomatik onayli ifadesi (site_legal_gate_schema.js = migrations/114).
+    // Mevcut siteler ACIK kalir (sutun DEFAULT TRUE ile eklenir), YENI siteler KAPALI baslar (varsayilan FALSE). Her sey yerindeyse hicbir ifade / kilit yok; mevcut degerler asla yeniden yazilmaz.
+    await ensureSiteLegalGateSchema(client);
+    // 115 (kampanya "simdi abone olana 2 ay ucretsiz": sites.subscription_started_at + sites.free_until): sites'tan SONRA; dev blokta DEGIL; katalog kontrolu + her adim kendi otomatik onayli
+    // ifadesi (site_free_period_schema.js = migrations/115). Her sey varsa hicbir ifade / kilit yok; yalniz ekleyici DATE sutunlari, mevcut sitelere dokunmaz (NULL = kampanyadan once).
+    await ensureSiteFreePeriodSchema(client);
 
     // 031 people_v1: mevcut sakinlerin CRM'e tek seferlik aktarimi. Savunmaci: hata sunucunun acilmasini ENGELLEMEZ
     // (kendi transaction'i geri alinir, isaret yazilmaz => sonraki acilista yeniden denenir; okuma anindaki

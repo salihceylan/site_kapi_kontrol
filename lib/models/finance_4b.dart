@@ -99,7 +99,7 @@ enum LateFeeMethod {
 
 // --- Ayarlar (GET/PUT …/finance/settings) --------------------------------------------------------
 
-/// Gecikme tazminatı ayarları. [legalOk]: sistem bayrağı `finance.legal_ok` (hukuki onay); false iken özellik
+/// Gecikme tazminatı ayarları. [legalOk]: site bayrağı `sites.legal_ok` (hukuki onay, site başına); false iken özellik
 /// site ayarı açık olsa da KULLANILAMAZ; null = sunucu bildirmedi (bilinmiyor, engellenmez, sunucu zorlar).
 @immutable
 class LateFeeSettings {
