@@ -3,8 +3,10 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:site_kapi_kontrol/models/payment_info.dart' show groupIban, parseTrIban;
 import 'package:site_kapi_kontrol/models/payment_notice.dart';
 import 'package:site_kapi_kontrol/models/vehicle_record.dart' show crmDateParam;
+import 'package:site_kapi_kontrol/services/document_text_reader.dart' show DocumentTextReader;
 import 'package:site_kapi_kontrol/services/payment_notice_api.dart';
 import 'package:site_kapi_kontrol/services/payment_notice_file.dart';
 import 'package:site_kapi_kontrol/services/share_inbox.dart';
@@ -16,14 +18,18 @@ import 'package:site_kapi_kontrol/ui/helpers/finance_errors.dart';
 import 'package:site_kapi_kontrol/ui/helpers/istanbul_time.dart';
 import 'package:site_kapi_kontrol/ui/helpers/money.dart';
 import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
+import 'package:site_kapi_kontrol/ui/widgets/document_ocr_suggestions.dart';
 import 'package:site_kapi_kontrol/ui/widgets/money_field.dart';
 
 class PaymentNoticeManualDialog extends StatefulWidget {
-  const PaymentNoticeManualDialog({super.key, required this.scope, this.pickFile = pickNoticeFile, this.now});
+  const PaymentNoticeManualDialog({super.key, required this.scope, this.pickFile = pickNoticeFile, this.now, this.ocrReader});
 
   final PeopleScope scope;
   final Future<SharedReceipt?> Function() pickFile;
   final DateTime Function()? now;
+
+  /// Görselden cihazda metin okuyucu (testlerde sahte); null ise platform varsayılanı (yalnız Android / iOS).
+  final DocumentTextReader? ocrReader;
 
   static Future<bool?> show(BuildContext context, PeopleScope scope) =>
       showDialog<bool>(context: context, barrierDismissible: false, builder: (_) => PaymentNoticeManualDialog(scope: scope));
@@ -36,6 +42,7 @@ class _PaymentNoticeManualDialogState extends State<PaymentNoticeManualDialog> {
   final _form = GlobalKey<FormState>();
   final _amount = TextEditingController();
   final _sender = TextEditingController();
+  final _iban = TextEditingController();
   final _description = TextEditingController();
   ({int id, String label})? _apartment;
   String _method = 'cash';
@@ -57,6 +64,7 @@ class _PaymentNoticeManualDialogState extends State<PaymentNoticeManualDialog> {
   void dispose() {
     _amount.dispose();
     _sender.dispose();
+    _iban.dispose();
     _description.dispose();
     super.dispose();
   }
@@ -73,6 +81,16 @@ class _PaymentNoticeManualDialogState extends State<PaymentNoticeManualDialog> {
     } on NoticeFileException catch (e) {
       if (mounted) setState(() => _fileError = e.message);
     }
+  }
+
+  DateTime _ocrToday() {
+    final wall = istanbulNow(widget.now?.call());
+    return DateTime(wall.year, wall.month, wall.day);
+  }
+
+  DateTime _ocrOldest() {
+    final today = _ocrToday();
+    return DateTime(today.year - 5, today.month, today.month == 2 && today.day == 29 ? 28 : today.day);
   }
 
   Future<void> _pickDate() async {
@@ -92,6 +110,7 @@ class _PaymentNoticeManualDialogState extends State<PaymentNoticeManualDialog> {
     if (!(_form.currentState?.validate() ?? false)) return;
     final minor = parseMoney(_amount.text).minor;
     if (minor == null) return;
+    final iban = parseTrIban(_iban.text);
     final file = _file;
     setState(() {
       _busy = true;
@@ -109,6 +128,7 @@ class _PaymentNoticeManualDialogState extends State<PaymentNoticeManualDialog> {
             'paid_on': crmDateParam(_date),
             'method': _method,
             if (_sender.text.trim().isNotEmpty) 'sender_name': _sender.text.trim(),
+            'sender_iban': ?iban,
             if (_description.text.trim().isNotEmpty) 'description': _description.text.trim(),
             if (file != null) 'file': <String, dynamic>{'name': file.name, 'size': file.bytes.length, 'content_type': file.mime},
             'idempotency_key': _key,
@@ -175,6 +195,16 @@ class _PaymentNoticeManualDialogState extends State<PaymentNoticeManualDialog> {
                   label: Text('Ödeme tarihi: ${formatDateField(_date)}'),
                 ),
                 TextFormField(controller: _sender, enabled: !_busy, maxLength: 80, decoration: const InputDecoration(labelText: 'Ödeyen adı (isteğe bağlı)')),
+                TextFormField(
+                  key: const ValueKey<String>('notice_manual_iban'),
+                  controller: _iban,
+                  enabled: !_busy,
+                  maxLength: 40,
+                  textCapitalization: TextCapitalization.characters,
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
+                  decoration: const InputDecoration(labelText: 'Ödeyen IBAN (isteğe bağlı)', hintText: 'TR00 0000 0000 0000 0000 0000 00'),
+                  validator: (value) => (value ?? '').trim().isEmpty || parseTrIban(value!) != null ? null : 'IBAN geçersiz. TR ile başlayan 26 karakterli IBAN girin.',
+                ),
                 TextFormField(controller: _description, enabled: !_busy, maxLength: 200, decoration: const InputDecoration(labelText: 'Açıklama (isteğe bağlı)')),
                 OutlinedButton.icon(
                   style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48)),
@@ -183,6 +213,18 @@ class _PaymentNoticeManualDialogState extends State<PaymentNoticeManualDialog> {
                   label: Text(_file == null ? 'Makbuz / dekont dosyası ekle (isteğe bağlı)' : '${_file!.name} (${noticeSizeText(_file!.bytes.length)})'),
                 ),
                 if (_fileError != null) Text(_fileError!, style: th.bodySmall?.copyWith(color: AppTone.danger.ink(p))),
+                // P2-13: görselden cihazda okuma; yalnız ÖNERİ, kullanıcı dokunmadan alanlara yazılmaz. Desteklenmeyen platformda / PDF'te çizilmez.
+                DocumentOcrSuggestions(
+                  keyPrefix: 'notice_manual_ocr',
+                  reader: widget.ocrReader,
+                  bytes: _file?.bytes,
+                  enabled: !_busy,
+                  notBefore: _ocrOldest(),
+                  notAfter: _ocrToday(),
+                  onAmount: (minor) => setState(() => _amount.text = formatMinor(minor, symbol: false)),
+                  onDate: (date) => setState(() => _date = date),
+                  onIban: (iban) => setState(() => _iban.text = groupIban(iban)),
+                ),
                 if (_error != null) ...[
                   const SizedBox(height: AppSpace.md),
                   Text(_error!, key: const ValueKey<String>('notice_manual_error'), style: th.bodyMedium?.copyWith(color: AppTone.danger.ink(p))),
