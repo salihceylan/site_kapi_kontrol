@@ -4780,7 +4780,7 @@
       "id": "F25",
       "baslik": "Kiracı ve ev sahibi için ayrı hesap",
       "durum": "hazir",
-      "ozet": "Her dairenin artık iki ayrı hesabı vardır: \"Kiracı hesabı\" ve \"Ev sahibi hesabı\"; bakiyeler birbirine karışmaz. Yönetici iki hesabı ekstrede iki sekmede görür, tahsilatı hangi hesaba yazacağını seçer, aidat ve ek borçta \"Kim öder\"i belirler; sakin yalnız kendi hesabını görür. Gecikme tazminatı ve borç hatırlatma maddeleri (F25.14, F25.15) avukat onayından sonra denenir. Saha listesinde bölüm 88.",
+      "ozet": "Her dairenin artık iki ayrı hesabı vardır: \"Kiracı hesabı\" ve \"Ev sahibi hesabı\"; bakiyeler birbirine karışmaz. Yönetici iki hesabı ekstrede iki sekmede görür, tahsilatı hangi hesaba yazacağını seçer, aidat ve ek borçta \"Kim öder\"i belirler; sakin yalnız kendi hesabını görür. Gecikme tazminatı ve borç hatırlatma maddeleri (F25.14, F25.15) avukat onayından sonra denenir. Saha listesinde bölüm 88. Ay ortasında taşınan kiracının ilk ay aidatının ev sahibi hesabına yazıldığı bilgi notudur (F25.16).",
       "maddeler": [
         {
           "id": "F25.01",
@@ -4981,6 +4981,21 @@
           "on_kosul": "Borç hatırlatma ancak avukat onayından sonra açılır; bugün \"Hukuk onayı bekleniyor\" yazar. Alıcılar doğrulanmış e-postalı TEST hesapları olmalı.",
           "yeni": false,
           "gelistirme": "planli"
+        },
+        {
+          "id": "F25.16",
+          "baslik": "Ay ortasında taşınan kiracı: ilk ayın aidatı ev sahibi hesabına yazılır (bilgi notu)",
+          "adimlar": [
+            "Finans > Daireler'den \"Borç ve bildirimler kime gitsin\" ayarı \"Kiracı\" ya da \"İkisi\" olan bir test dairesi seçin. Kişiler sekmesinde bu daireye yeni bir kiracı ekleyin ve \"Taşınma (giriş) tarihi\"ni ayın 1'inden SONRA, bugünden ileri olmayan bir güne ayarlayın (örneğin bu ayın ya da geçen ayın 10'u).",
+            "Finans > Tanımlar'da aylık aidat tanımının kartındaki \"Borçlandır\"a dokunun, \"Dönem\" bölümünden taşınma tarihinin ait olduğu ayı seçip \"Önizle\"ye basın. Önizlemede bu dairenin altında borcun yazılacağı hesaba bakın.",
+            "Aynı önizlemede, kiracısı o ayın başından beri oturan (ya da taşınma günü ayın 1'i olan) başka bir daireye bakın.",
+            "\"Onayla ve Borçlandır\"a basıp ilk dairenin ekstresini açın ve \"Ev sahibi hesabı\" ile \"Kiracı hesabı\" sekmelerine sırayla bakın."
+          ],
+          "beklenen": "Bu bir bilgi notudur; davranış değişmez. Aylık aidat her ayın ilk günü yazılır ve borcun hesabı o gün dairede kiracı olup olmadığına bakılarak belirlenir. Kiracı ayın 1'inden sonra taşındıysa o gün kiracı yoktur: önizlemede ilk dairenin altında \"Ev sahibi hesabı\" yazar ve o ayın aidatının TAMAMI ev sahibi hesabına yazılır (borç sorumlusu \"Kiracı\" ya da \"İkisi\" olsa bile). Tutar gün sayısına göre kiracı ile ev sahibi arasında bölünmez; yazılım gün oranı hesaplamaz. Kiracısı ayın başından beri oturan (ya da taşınma günü ayın 1'i olan) dairede \"Kiracı hesabı\" yazar. Ertesi aydan itibaren ilk dairenin aidatı da kiracı hesabına yazılır. Ay ortasında ÇIKAN kiracıda ise tersi olur: o ayın tamamı kiracının hesabında kalır. Yazılmış borç satırının hesabı sonradan taşınma tarihi düzeltilse bile değişmez. Devir yalnız kiracı hesabından ev sahibine yapılır; ev sahibi hesabından kiracı hesabına borç aktarma yoktur, ilk ayın payını ev sahibi ile kiracı kendi aralarında düzenler. Gün oranına göre bölünmesini isterseniz \"Böyle istemiyorum\" işaretleyip notunuza nasıl istediğinizi yazın; \"Böyle istiyorum\" derseniz davranış olduğu gibi kalır.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Aidat ve Finans açık bir TEST sitesi; aylık aidat tanımı; \"Borç ve bildirimler kime gitsin\" ayarı \"Kiracı\" ya da \"İkisi\" olan ve seçilen ayın ilk günü kiracısı bulunmayan bir daire",
+          "yeni": true,
+          "gelistirme": "hazir"
         }
       ]
     },

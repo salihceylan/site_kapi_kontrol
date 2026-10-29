@@ -267,6 +267,26 @@ kez sayılır, öğeleri hesap adıyla); hatırlatma önizlemesinde hesap sayıs
   hesabın sahibi (G2-G5, R6/R6b), sakin kapsamı fikstürlerinde kiracı senaryolarının satırları kiracı hesabında (S2, S3b, S11), makbuz dışa aktarmasında
   son sütun "Hesap" (E8c).
 
+### Ay ortası taşınma: giriş (K18 / C-25, 2026-10-29)
+
+Karar K18 (`docs/PLATFORM_YOL_HARITASI.md` "Karar kaydı (2026-10-28)"; karşılaştırma raporu C-25): ay ortasında GİRİŞ yapan kiracı için o ayın aidatının
+tamamı Ev sahibi hesabına yazılır. Bu mevcut davranış olarak KORUNUR; **kod değişmez**. Bu bölüm davranışı ve yöneticiye verilecek bilgi notunu kaydeder.
+
+1. **Borç tarihi dönemin ilk günüdür** (`finance_service.resolveTiming`: aylık aidatta `entryDate = period`). Borcun hesabı o tarihte dairenin etkin kiracısı
+   olup olmadığına bakılarak çözülür (`loadTargetApartments` `onDate: entryDate`, `finance_parties.tenantOnDateSql`: `COALESCE(move_in_date, ilişki kaydının günü) <= tarih`).
+2. **Kiracı ayın 1'inden SONRA taşındıysa** o gün etkin kiracı yoktur: borç sorumlusu `tenant` / `both` olan dairede bile `occupantAccount(responsibleParty, false)` =
+   `owner`; o ayın aidatının tamamı Ev sahibi hesabına yazılır. Taşınma günü ayın 1'i ya da daha önceyse Kiracı hesabına yazılır; sonraki aylar Kiracı hesabına gider.
+3. **Gün oranı (kıst) hesaplanmaz.** Tutar ay içinde kiracı ile malik arasında bölünmez. Aynı ilke çıkışta da geçerlidir: ay ortasında çıkan kiracı o ayın tamamı için
+   Kiracı hesabında kalır (`move_out_date >= tarih`, çıkış günü dahil).
+4. **Yazılmış satır değişmez** (defter eklemelidir): taşınma tarihi sonradan düzeltilse de yazılmış borcun hesabı değişmez. `move_in_date` boşsa ilişki kaydının günü
+   kullanılır (aşağıdaki "Bilinen sınırlar" madde 3).
+5. **Aktarma yönü.** Devir (K1) yalnız Kiracı hesabından Ev sahibi hesabına yapılır; Ev sahibi hesabından Kiracı hesabına borç aktaran bir akış yoktur. Ay ortasında giren
+   kiracının payını malik ile kiracı kendi aralarında düzenler; yazılım bu payı hesaplamaz.
+
+**Yöneticiye bilgi notu:** Faz Kontrol Listesi madde **F25.16** (`tools/deneme_listesi/platform.json`, `yeni: true`; "Ay ortasında taşınan kiracı: ilk ayın aidatı ev sahibi
+hesabına yazılır (bilgi notu)"). Madde bir onay sorusudur: sahip "Böyle istiyorum" derse davranış olduğu gibi kalır; gün oranına göre bölme istenirse bu ayrı bir karar ve
+kod işi olur (borç tarihi ve hesap çözümü değişir).
+
 ### Bilinen sınırlar
 
 1. Hatırlatma sıklık kaydı (`finance_reminder_apartments`) daire başına kalır (temkinli: iki hesaptan birine giden hatırlatma dairenin aralığını başlatır);
