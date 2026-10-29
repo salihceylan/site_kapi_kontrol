@@ -375,6 +375,7 @@ void main() {
       auth.rows
         ..clear()
         ..[90] = annRow(90, title: 'Mavi Park duyurusu', status: 'draft');
+      await t.ensureVisible(find.byType(DropdownButtonFormField<int>));
       await t.tap(find.byType(DropdownButtonFormField<int>));
       await t.pump();
       await t.pump(const Duration(milliseconds: 400));

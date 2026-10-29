@@ -43,6 +43,7 @@ import { ensureTeamSchema } from './modules/team_schema.js';
 import { ensureDriveSchema } from './modules/drive_schema.js';
 import { ensureDriveSourceSchema } from './modules/drive_source_schema.js';
 import { ensureDriveHealthSchema } from './modules/drive_health_schema.js';
+import { ensureMessagingSchema } from './modules/messaging_schema.js';
 import { ensureSiteFreePeriodSchema } from './modules/site_free_period_schema.js';
 import { ensurePaymentConnectionSchema } from './modules/payment_connection_schema.js';
 import { ensureMeteringFieldSchema } from './modules/metering_field_schema.js';
@@ -2088,6 +2089,8 @@ export async function ensureDbSchema() {
     await ensureSiteFreePeriodSchema(client);
     // 116 (online tahsilat saglayici baglantisi, sirlar sifreli): sites'tan SONRA; dev blokta DEGIL; tablo varsa hicbir ifade yok (payment_connection_schema.js = migrations/116). Mevcut tablolara ALTER yok.
     await ensurePaymentConnectionSchema(client);
+    // 117 (site basina SMS + WhatsApp baglantisi): sites'tan SONRA; dev blokta DEGIL; tablo varsa hicbir ifade / kilit yok (messaging_schema.js = migrations/117). Yeni tablo; mevcutlara dokunmaz.
+    await ensureMessagingSchema(client);
 
     // 031 people_v1: mevcut sakinlerin CRM'e tek seferlik aktarimi. Savunmaci: hata sunucunun acilmasini ENGELLEMEZ
     // (kendi transaction'i geri alinir, isaret yazilmaz => sonraki acilista yeniden denenir; okuma anindaki

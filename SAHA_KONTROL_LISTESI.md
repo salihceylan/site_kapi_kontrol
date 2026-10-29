@@ -4463,3 +4463,11 @@ Sayaç türü başına geçerlilik tarihli birim fiyat tarifesi; Faturalandır s
 - [ ] **157.3. Önizleme tarifeyle hesaplanır, onaydan sonra aynı tutarlar Finans’a borç yazılır (F81.03):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: F81.01 tarifesi; dönem başında ve sonunda okumalar tam. İki okuma tarihi arasını seçip “Önizle” deyin; satırlardaki tüketim ve tutarlara, üstteki “Tarife:” satırına bakın. “Borçlandır” deyip onaylayın; sonra Finans’ta bir dairenin hesabına bakın. Yeni bir tarife ekleyin ve geçmiş faturalandırmalar listesine bakın.
   - **Beklenen Sonuç:** Önizlemede her dairenin tutarı tüketim x tarifedeki birim fiyattır; toplam ve daire sayısı yazar. Onaydan sonra Finans’ta yazılan borç, önizlemedeki tutarla birebir aynıdır (önizleme olmadan tahakkuk yapılamaz; önizlemeden sonra tarife değişirse kayıt “Önizleme güncel değil” diyerek reddedilir). Tarife dönem İÇİNDE başlamışsa önizlemede kırmızı uyarı çıkar. Sonradan girilen yeni tarife geçmiş faturalandırmayı değiştirmez.
+## 158. 💬 SMS ve WhatsApp Bağlantısı, Site Başına (2026-10-29, migration 117)
+
+- [ ] **158.1. NetGSM bağlantısı kaydı ve sınaması (F82.01):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Sunucuda migration 117 ve MESSAGING_SECRET_KEY; kendi NetGSM hesabınız. Duyurular ekranının en altındaki "SMS ve WhatsApp bağlantısı" kartında NetGSM bilgilerinizi kaydedin ve "Bağlantıyı sına"ya basın. Sonra şifreyi yanlış girip yeniden sınayın.
+  - **Beklenen Sonuç:** Doğru bilgide "Kimlik doğrulandı" ve bakiye görünür, telefona SMS gelmez. Yanlış şifrede sağlayıcı hata kodu ve açıklaması çıkar. Kullanıcı kodu ve şifre ekranda görünmez.
+- [ ] **158.2. WhatsApp iskeleti dürüstlüğü ve kurul salt okunur (F82.01):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi ve yönetim kurulu üyesi. WhatsApp bölümüne işletme adı, numara kimliği ve belirteç girip "Alanları doğrula"ya basın. Kurul üyesiyle aynı karta bakın. "Kaldır"ı onay penceresiyle deneyin.
+  - **Beklenen Sonuç:** "WhatsApp sürücüsü bu sürümde doğrulama modunda; Meta hesabı bağlanınca etkinleşir." notu görünür, sınama bağlı olduğunu söylemez. Kurul üyesi yalnız görür. Kaldırma onay ister.
