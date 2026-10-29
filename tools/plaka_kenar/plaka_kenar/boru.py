@@ -129,5 +129,6 @@ class Boru:
             "zaman": t, "kutu": kutu, "anlik": anlik[0] if anlik else "", "anlik_guven": anlik[1] if anlik else 0.0,
             "konsensus": konsensus_bilgi[0] or "", "guven": konsensus_bilgi[1] or (anlik[1] if anlik else 0.0),
             "profil": profil, "sure_ms": (time.perf_counter() - t0) * 1000.0, "fps": self._fps(kid, t),
-            "roi": roimod.normalize(kamera.get("roi")), "okundu": bool(sonuc)}
+            "roi": roimod.normalize(kamera.get("roi")), "okundu": bool(sonuc),
+            "kare": (int(kare.shape[1]), int(kare.shape[0]))}  # kutu bu cozunurlukte; arayuz olcekli goruntude orantilar
         return sonuc

@@ -168,6 +168,34 @@
     "olay_db": "veri/olay.db",
     "gunluk": "veri/plaka_kenar.log"
   },
+  "kesif": {
+    "sure_sn": 3.5,
+    "zaman_asimi_sn": 4.0,
+    "rtsp_port": 554,
+    "onvif_portlar": [80, 8000, 8080, 2020],
+    "tarama": {
+      "etkin": true,
+      "portlar": [554, 80, 8000, 8080, 2020],
+      "zaman_asimi_sn": 0.3,
+      "is_parcacigi": 256,
+      "alt_ag_uzunlugu": 24,
+      "tur": 1,
+      "haric_aglar": ["100.64.0.0/10"],
+      "rtsp_portlari": [554, 8554],
+      "kamera_portlari": [554, 8000, 2020, 8554]
+    }
+  },
+  "izleme": {
+    "fps": 12,
+    "goruntu_fps": 12,
+    "karo_yukseklik": 360,
+    "buyuk_yukseklik": 720,
+    "goruntu_yok_sn": 3.0,
+    "rozet_sn": 4.0,
+    "kare_genislik": 640,
+    "fps_ema": 0.3,
+    "min_roi": 0.05
+  },
   "arayuz": {
     "olay_seridi_satir": 300
   }
