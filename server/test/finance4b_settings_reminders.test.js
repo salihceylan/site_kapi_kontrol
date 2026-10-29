@@ -3,7 +3,6 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   LATE_FEE_METHODS,
-  LEGAL_OK_KEY,
   SETTINGS_DEFAULTS,
   parseSettingsPatch,
   settingsBody,
@@ -34,7 +33,6 @@ describe('ayar varsayılanları (yasal kapı: varsayılan KAPALI)', () => {
     assert.equal(SETTINGS_DEFAULTS.late_fee_start_period, null);
     assert.deepEqual([SETTINGS_DEFAULTS.reminder_min_overdue_minor, SETTINGS_DEFAULTS.reminder_min_days_overdue, SETTINGS_DEFAULTS.reminder_min_interval_days, SETTINGS_DEFAULTS.reminder_max_consecutive], [5000, 5, 14, 3]);
     assert.equal(SETTINGS_DEFAULTS.settings_version, 1);
-    assert.equal(LEGAL_OK_KEY, 'finance.legal_ok');
     assert.deepEqual([...LATE_FEE_METHODS], ['daily_30', 'daily_actual']);
     assert.throws(() => { SETTINGS_DEFAULTS.late_fee_enabled = true; }, TypeError, 'donmuş');
   });

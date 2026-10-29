@@ -14,9 +14,10 @@ madde 37, 38 ve 39. Karar: `docs/PLATFORM_YOL_HARITASI.md` "Karar kaydı (2026-1
 - **Borç hatırlatma e-postası:** Yönetici önizler ve gönderir. Varsayılan: kapalı. En az 50 TL ve en az 5 gün gecikme, iki
   hatırlatma arasında en az 14 gün, ödeme gelmezse art arda en çok 3 hatırlatma.
 - **Makbuz:** Her tahsilatta otomatik makbuz düzenlenir (site ayarıyla kapatılabilir). Metin taslaktır (şablon sürümü 1).
-- **Hukuk kapısı:** Tazminat ve hatırlatma, sistem genelindeki "hukuk onayı" bayrağı (`finance.legal_ok`) kapalıyken hiçbir sitede
-  açılamaz. Uygulama bu durumda "Hukuk onayı bekleniyor" der. Bayrağı yalnız süper kullanıcı açar; bugün bunun için uygulamada düğme
-  yoktur, sunucu ucu kullanılır (`PUT /admin/finance-legal-gate`).
+- **Hukuk kapısı:** Tazminat ve hatırlatma, SİTENİN "hukuk onayı" bayrağı (`sites.legal_ok`) kapalıyken o sitede
+  açılamaz. Uygulama bu durumda "Hukuk onayı bekleniyor" der. Mevcut siteler açık kalır; satıştan sonra oluşan YENİ siteler KAPALI başlar
+  ve bu belgedeki avukat onayı alındıktan sonra açılır. Bayrağı yalnız süper kullanıcı açar; bugün bunun için uygulamada düğme
+  yoktur, sunucu ucu kullanılır (`PUT /admin/sites/:siteCode/finance-legal-gate`, işlem izi `finance.legal_gate.updated`).
 - **Yakında:** Her dairenin iki hesabı olacak: Kiracı hesabı ve Ev sahibi hesabı (karar G12, İP-1A). Tazminat, hatırlatma ve makbuz
   hesap bazında çalışacak. Aşağıdaki örnekler tek bir hesap içindir; kural her hesapta aynıdır.
 

@@ -49,6 +49,11 @@ describe('4b: değişmez tablolar yalnız eklenir (UPDATE / DELETE yok)', () => 
       for (const match of body.matchAll(/\b(?:UPDATE|DELETE\s+FROM)\s+([a-z_]+)\b/g)) {
         const table = match[1];
         if (['s', 'set', 'ile'].includes(table)) continue; // ardışık düz metin ("UPDATE s" -> yorum/SET)
+        // Satış hazırlığı (migration 114): YALNIZ finance_settings.js, süper kullanıcının site hukuk onayı bayrağı için `UPDATE sites SET legal_ok` yazar; başka modül sites'a yazamaz.
+        if (table === 'sites' && name === 'finance_settings') {
+          assert.match(body, /UPDATE sites SET legal_ok = \$2 WHERE site_code = \$1/);
+          continue;
+        }
         assert.ok(allowed.has(table), `${name}: beklenmeyen değişiklik hedefi ${table}`);
       }
     }

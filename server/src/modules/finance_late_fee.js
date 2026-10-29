@@ -324,7 +324,7 @@ const mapPlanLine = (line) => ({
 async function evaluateBlockers(db, siteCode, period, settings, chain, now) {
   const blockers = [];
   if (!settings.late_fee_enabled) blockers.push('LATE_FEE_DISABLED');
-  if (!(await readLegalOk(db))) blockers.push('LEGAL_APPROVAL_REQUIRED');
+  if (!(await readLegalOk(db, siteCode))) blockers.push('LEGAL_APPROVAL_REQUIRED');
   if (chain.nextPeriod === null) {
     blockers.push('LATE_FEE_NOT_CONFIGURED');
     return blockers;
