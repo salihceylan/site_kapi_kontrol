@@ -6,6 +6,7 @@ import 'package:site_kapi_kontrol/models/site_page.dart';
 import 'package:site_kapi_kontrol/models/site_record.dart';
 import 'package:site_kapi_kontrol/models/site_structure_record.dart';
 import 'package:site_kapi_kontrol/models/site_manager_record.dart';
+import 'package:site_kapi_kontrol/services/finance_4b_api.dart' show Finance4bService;
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/buttons.dart';
 import 'package:site_kapi_kontrol/ui/design/empty_state.dart';
@@ -75,6 +76,7 @@ class SitesView extends StatelessWidget {
     this.onApproveDeleteSite,
     this.onRejectDeleteSite,
     this.onDeleteSiteWithEmail,
+    this.legalGateService,
   });
 
   final bool canManageSites;
@@ -106,6 +108,9 @@ class SitesView extends StatelessWidget {
   final ValueChanged<SiteRecord>? onApproveDeleteSite;
   final ValueChanged<SiteRecord>? onRejectDeleteSite;
   final ValueChanged<SiteRecord>? onDeleteSiteWithEmail;
+
+  /// Süper kullanıcıda site kartına "Hukuk onayı" anahtarını getirir (null ise anahtar yok).
+  final Finance4bService? legalGateService;
   final ValueChanged<ApartmentRecord> onEditApartmentResident;
   /// "PIN'i Sıfırla" (dahili daire hesabı): yeni PIN bir kez gösterilir; sunucu PIN saklamaz.
   final ValueChanged<ApartmentRecord> onResetApartmentPin;
@@ -254,6 +259,7 @@ class SitesView extends StatelessWidget {
           ? () => onManageJoinRequests!(site)
           : null,
       isSuperUser: isSuperUser,
+      legalGateService: legalGateService,
       onApproveDeletion: onApproveDeleteSite != null
           ? () => onApproveDeleteSite!(site)
           : null,

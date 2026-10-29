@@ -99,6 +99,34 @@ class Finance4bApi {
     return _parse('Ayarlar', () => FinanceSettings.fromJson(r.body));
   }
 
+  // --- Hukuk onayı bayrağı (yalnız süper kullanıcı; SİTE başına, sites.legal_ok) -------------------------------
+
+  static String _legalGate(int siteCode) => '/admin/sites/$siteCode/finance-legal-gate';
+
+  /// Sitenin hukuk onayı bayrağı (gecikme tazminatı / borç hatırlatma açılabilir mi?).
+  Future<bool> getSiteLegalGate({required String token, required int siteCode}) async {
+    final r = await _send('GET', _legalGate(siteCode), token: token);
+    return _parse('Hukuk onayı', () => _legalGateValue(r.body));
+  }
+
+  /// Bayrağı [enabled] yapar (işlem izi sunucuda tutulur). Dönen değer sunucunun kaydettiği son durumdur.
+  Future<bool> setSiteLegalGate({required String token, required int siteCode, required bool enabled}) async {
+    final r = await _send(
+      'PUT',
+      _legalGate(siteCode),
+      token: token,
+      body: <String, dynamic>{'legal_ok': enabled},
+      write: true,
+    );
+    return _parse('Hukuk onayı', () => _legalGateValue(r.body));
+  }
+
+  static bool _legalGateValue(Map<String, dynamic> body) {
+    final value = body['legal_ok'];
+    if (value is! bool) throw const FormatException('legal_ok');
+    return value;
+  }
+
   // --- Makbuz ------------------------------------------------------------------------------------
 
   Future<ReceiptPage> listReceipts({
