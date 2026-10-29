@@ -4,6 +4,7 @@ import 'package:site_kapi_kontrol/models/announcement.dart';
 import 'package:site_kapi_kontrol/models/contract_models.dart' show contractActionLabel;
 import 'package:site_kapi_kontrol/models/decision_models.dart' show decisionBookActionLabel;
 import 'package:site_kapi_kontrol/models/document_models.dart' show documentActionLabel;
+import 'package:site_kapi_kontrol/models/emergency_models.dart' show emergencyActionLabel;
 import 'package:site_kapi_kontrol/models/finance.dart';
 import 'package:site_kapi_kontrol/models/history_item.dart';
 import 'package:site_kapi_kontrol/models/plate_audit_label.dart' show plateActionLabel;
@@ -132,6 +133,7 @@ class AuditLogEntry {
             platformRuleActionLabel(action) ??
             plateActionLabel(action) ??
             accessAuditActionLabel(action) ??
+            emergencyActionLabel(action) ??
             'Diğer işlem';
     }
   }

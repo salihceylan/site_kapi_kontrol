@@ -455,6 +455,9 @@ void main() {
     testWidgets('misafir öğesi: çekmece kapanır ve geçiş diyaloğu açılır', (t) async {
       await pumpHome(t, _ResidentAuth(g2Door(qrReader: true)));
       await open(t);
+      // Çekmece uzun: öğe görünür alanın dışında kalabilir (yeni öğeler listeyi uzatır), önce kaydırılır.
+      await t.ensureVisible(find.text('Kurye / Misafir Geçiş Linki Oluştur'));
+      await t.pump();
       await t.tap(find.text('Kurye / Misafir Geçiş Linki Oluştur'));
       await t.pump();
       await t.pump(const Duration(milliseconds: 500));

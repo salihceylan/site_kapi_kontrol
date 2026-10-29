@@ -32,7 +32,7 @@ const MEMBERS_SQL = `
 `;
 
 const RESIDENCIES_SQL = `
-  SELECT r.id, r.person_id, r.relation, r.origin, r.sponsor_person_id, r.is_minor, r.move_in_date,
+  SELECT r.id, r.person_id, r.relation, r.is_account_holder, r.origin, r.sponsor_person_id, r.is_minor, r.move_in_date,
          sp.user_code, sp.is_active AS person_active,
          COALESCE(NULLIF(u.full_name, ''), sp.full_name) AS name,
          ${ACCOUNT_KIND_SQL} AS account_kind

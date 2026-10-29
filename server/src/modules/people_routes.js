@@ -5,6 +5,9 @@
 //              PATCH      /manager/sites/:siteCode/residencies/:residencyId
 //              POST       /manager/sites/:siteCode/residencies/:residencyId/end
 //   Daireler   GET        /manager/sites/:siteCode/apartments        GET/PATCH /apartments/:apartmentId
+//   Malikler   GET/POST   /manager/sites/:siteCode/apartments/:apartmentId/owners   (coklu malik, 104)
+//              PUT        /manager/sites/:siteCode/apartments/:apartmentId/owners/account-holder
+//              POST       /manager/sites/:siteCode/apartments/:apartmentId/owners/:residencyId/remove
 //   Araçlar    GET/POST   /manager/sites/:siteCode/vehicles          DELETE    /vehicles/:vehicleId
 //   Geçmiş     GET        /manager/sites/:siteCode/history
 //   Sakin      GET        /app/my-records
@@ -15,6 +18,7 @@
 import express from 'express';
 import { authRequired } from '../middlewares/auth_middleware.js';
 import { createRuleLimiter } from '../middlewares/rate_limiters.js';
+import { addApartmentOwner, listApartmentOwners, removeApartmentOwner, setAccountHolder } from './apartment_owners_service.js';
 import { getApartmentDetail, listApartments, updateApartment } from './apartment_records_service.js';
 import { resolvePeopleAccess } from './people_access.js';
 import { redactForReadOnlyRole } from './people_common.js';
@@ -264,6 +268,61 @@ peopleRouter.patch(
     body: await updateApartment({
       siteCode: access.siteCode,
       apartmentId: req.params.apartmentId,
+      body: bodyOf(req),
+      actor: req.authUser,
+    }),
+  })),
+);
+
+// --- Malikler (çoklu malik, 104): tüm malikler kayıtlı + TEK hesap muhatabı ---------------------------------
+
+peopleRouter.get(
+  '/manager/sites/:siteCode/apartments/:apartmentId/owners',
+  authRequired,
+  peopleReadLimiter,
+  handler({ context: 'apartment_owners_list', fallback: 'Malikler yüklenemedi.' }, async ({ req, access }) => ({
+    body: await listApartmentOwners({ siteCode: access.siteCode, apartmentId: req.params.apartmentId }),
+  })),
+);
+
+peopleRouter.post(
+  '/manager/sites/:siteCode/apartments/:apartmentId/owners',
+  authRequired,
+  peopleWriteLimiter,
+  handler({ context: 'apartment_owner_add', fallback: 'Malik eklenemedi.', write: true }, async ({ req, access }) => ({
+    status: 201,
+    body: await addApartmentOwner({
+      siteCode: access.siteCode,
+      apartmentId: req.params.apartmentId,
+      body: bodyOf(req),
+      actor: req.authUser,
+    }),
+  })),
+);
+
+peopleRouter.put(
+  '/manager/sites/:siteCode/apartments/:apartmentId/owners/account-holder',
+  authRequired,
+  peopleWriteLimiter,
+  handler({ context: 'apartment_account_holder', fallback: 'Hesap muhatabı değiştirilemedi.', write: true }, async ({ req, access }) => ({
+    body: await setAccountHolder({
+      siteCode: access.siteCode,
+      apartmentId: req.params.apartmentId,
+      body: bodyOf(req),
+      actor: req.authUser,
+    }),
+  })),
+);
+
+peopleRouter.post(
+  '/manager/sites/:siteCode/apartments/:apartmentId/owners/:residencyId/remove',
+  authRequired,
+  peopleWriteLimiter,
+  handler({ context: 'apartment_owner_remove', fallback: 'Malik çıkarılamadı.', write: true }, async ({ req, access }) => ({
+    body: await removeApartmentOwner({
+      siteCode: access.siteCode,
+      apartmentId: req.params.apartmentId,
+      residencyId: req.params.residencyId,
       body: bodyOf(req),
       actor: req.authUser,
     }),

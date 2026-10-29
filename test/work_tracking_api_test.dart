@@ -593,6 +593,178 @@ void main() {
     });
   });
 
+  group('kategoriler (100)', () {
+    test('yönetim listesi: GET .../work-categories (pasifler dahil, active gönderilmez); kullanım sayısı ayrıştırılır', () async {
+      late http.Request seen;
+      final api = _api((request) async {
+        seen = request;
+        return _json(200, <String, dynamic>{
+          'items': <Object>[
+            wkCategory(700, 'ariza', 'Arıza', system: true, order: 10, itemCount: 3),
+            wkCategory(704, 'k_su_kacagi', 'Su kaçağı', active: false, order: 50, itemCount: 0),
+          ],
+        });
+      });
+      final items = await api.listCategories(token: 'tok-1', siteCode: 11);
+      expect(seen.method, 'GET');
+      expect(seen.url.path, '/manager/sites/11/work-categories');
+      expect(seen.url.queryParameters, isEmpty);
+      expect(seen.headers['Authorization'], 'Bearer tok-1');
+      expect(items.map((c) => [c.key, c.isActive, c.itemCount]), <List<Object?>>[
+        <Object?>['ariza', true, 3],
+        <Object?>['k_su_kacagi', false, 0],
+      ]);
+      await api.listCategories(token: 't', siteCode: 11, active: true);
+      expect(seen.url.queryParameters, <String, String>{'active': 'true'});
+    });
+
+    test('sakin listesi: GET /app/work-categories?site_code=', () async {
+      late http.Request seen;
+      final api = _api((request) async {
+        seen = request;
+        return _json(200, <String, dynamic>{'items': <Object>[wkCategory(700, 'ariza', 'Arıza', system: true)]});
+      });
+      final items = await api.listMyCategories(token: 't', siteCode: 11);
+      expect(seen.url.path, '/app/work-categories');
+      expect(seen.url.queryParameters, <String, String>{'site_code': '11'});
+      expect(items.single.label, 'Arıza');
+    });
+
+    test('ekleme: POST { label } (kırpılmış), 201; yanıt kategoridir', () async {
+      late http.Request seen;
+      final api = _api((request) async {
+        seen = request;
+        return _json(201, <String, dynamic>{'category': wkCategory(801, 'k_su_kacagi', 'Su kaçağı', order: 50, itemCount: 0)});
+      });
+      final created = await api.createCategory(token: 't', siteCode: 11, label: '  Su kaçağı ');
+      expect(seen.method, 'POST');
+      expect(seen.url.path, '/manager/sites/11/work-categories');
+      expect(jsonDecode(seen.body), <String, dynamic>{'label': 'Su kaçağı'});
+      expect([created.key, created.label, created.itemCount], <Object?>['k_su_kacagi', 'Su kaçağı', 0]);
+    });
+
+    test('güncelleme: PATCH yalnız verilen alanları gönderir (ad kırpılır, is_active); anahtar GÖNDERİLMEZ', () async {
+      late http.Request seen;
+      final api = _api((request) async {
+        seen = request;
+        return _json(200, <String, dynamic>{'category': wkCategory(801, 'k_su_kacagi', 'Su sızıntısı', active: false)});
+      });
+      final renamed = await api.updateCategory(token: 't', siteCode: 11, id: 801, label: ' Su sızıntısı ');
+      expect(seen.method, 'PATCH');
+      expect(seen.url.path, '/manager/sites/11/work-categories/801');
+      expect(jsonDecode(seen.body), <String, dynamic>{'label': 'Su sızıntısı'});
+      expect(renamed.label, 'Su sızıntısı');
+      await api.updateCategory(token: 't', siteCode: 11, id: 801, isActive: false);
+      expect(jsonDecode(seen.body), <String, dynamic>{'is_active': false});
+      await api.updateCategory(token: 't', siteCode: 11, id: 801, label: 'X', isActive: true);
+      expect(jsonDecode(seen.body), <String, dynamic>{'label': 'X', 'is_active': true});
+      expect((jsonDecode(seen.body) as Map).containsKey('key'), isFalse);
+    });
+
+    test('silme: DELETE; kullanılmamış { deleted: true }; kullanılmış { deleted: false, deactivated: true, category }', () async {
+      late http.Request seen;
+      var used = false;
+      final api = _api((request) async {
+        seen = request;
+        if (used) {
+          return _json(200, <String, dynamic>{
+            'deleted': false,
+            'deactivated': true,
+            'category': wkCategory(801, 'k_su_kacagi', 'Su kaçağı', active: false, itemCount: 2),
+          });
+        }
+        return _json(200, <String, dynamic>{'deleted': true});
+      });
+      final gone = await api.deleteCategory(token: 't', siteCode: 11, id: 801);
+      expect(seen.method, 'DELETE');
+      expect(seen.url.path, '/manager/sites/11/work-categories/801');
+      expect([gone.deleted, gone.deactivated], <bool>[true, false]);
+      used = true;
+      final off = await api.deleteCategory(token: 't', siteCode: 11, id: 801);
+      expect([off.deleted, off.deactivated, off.category?.isActive, off.category?.itemCount], <Object?>[false, true, false, 2]);
+    });
+
+    test('2xx ama kategori yok: anlaşılır hata', () async {
+      final api = _api((request) async => _json(201, <String, dynamic>{'category': <String, dynamic>{}}));
+      final e = await _failureOf(() => api.createCategory(token: 't', siteCode: 11, label: 'x'));
+      expect(e.message, contains('beklenen biçimde değil'));
+    });
+
+    test('hata çevirisi: kategori kodları düz Türkçe; yetki / modül kodları İş Takibi metniyle', () async {
+      Future<ApiException> fail(int status, String code, [String? text]) {
+        final api = _api((request) async => _json(status, <String, dynamic>{'error': text ?? 'ham metin', 'code': code}));
+        return _failureOf(() => api.createCategory(token: 't', siteCode: 11, label: 'x'));
+      }
+
+      expect((await fail(409, 'WORK_CATEGORY_NAME_TAKEN')).message, 'Bu adda bir kategori zaten var.');
+      expect((await fail(409, 'WORK_CATEGORY_LAST_ACTIVE')).message, contains('En az bir kategori açık kalmalıdır'));
+      expect((await fail(409, 'WORK_CATEGORY_SYSTEM')).message, contains('Hazır kategoriler silinemez'));
+      expect((await fail(409, 'WORK_CATEGORY_INACTIVE')).message, contains('artık kullanılmıyor'));
+      expect((await fail(404, 'WORK_CATEGORY_NOT_FOUND')).message, contains('Kategori bulunamadı'));
+      expect((await fail(403, 'FORBIDDEN_ROLE')).message, 'Bu işlem için yetkiniz yok.');
+      expect((await fail(403, 'MODULE_DISABLED')).message, 'İş takibi bu site için kapalı.');
+      final limit = await fail(409, 'LIMIT_REACHED', 'Bir sitede en fazla 40 kategori olabilir.');
+      expect(limit.message, 'Bir sitede en fazla 40 kategori olabilir.', reason: 'sunucunun kendi metni');
+    });
+
+    test('WorkTrackingService: oturum yoksa ağa çıkmaz; çağrılar belirteçle gider', () async {
+      final seen = <String>[];
+      final auth = _FakeAuth()..token = null;
+      final service = WorkTrackingService(
+        authService: auth,
+        api: _api((request) async {
+          seen.add('${request.method} ${request.url.path} ${request.headers['Authorization']}');
+          if (request.method == 'DELETE') return _json(200, <String, dynamic>{'deleted': true});
+          if (request.method == 'POST') return _json(201, <String, dynamic>{'category': wkCategory(9, 'k_a', 'A')});
+          if (request.method == 'PATCH') return _json(200, <String, dynamic>{'category': wkCategory(9, 'k_a', 'B')});
+          return _json(200, <String, dynamic>{'items': <Object>[wkCategory(9, 'k_a', 'A')]});
+        }),
+      );
+      final none = await _failureOf(() => service.categories(11));
+      expect(none.message, 'Oturum açmanız gerekmektedir.');
+      expect(seen, isEmpty);
+      auth.token = 'tok-9';
+      await service.categories(11);
+      await service.myCategories(11);
+      await service.createCategory(11, 'A');
+      await service.updateCategory(11, 9, label: 'B');
+      await service.deleteCategory(11, 9);
+      expect(seen, <String>[
+        'GET /manager/sites/11/work-categories Bearer tok-9',
+        'GET /app/work-categories Bearer tok-9',
+        'POST /manager/sites/11/work-categories Bearer tok-9',
+        'PATCH /manager/sites/11/work-categories/9 Bearer tok-9',
+        'DELETE /manager/sites/11/work-categories/9 Bearer tok-9',
+      ]);
+    });
+  });
+
+  group('fotoğraf uyarıları (100)', () {
+    test('yönetim ayrıntısı photo_warnings taşır; yükleme yanıtı attachment + photo_warnings', () async {
+      final api = _api((request) async {
+        if (request.method == 'PUT') {
+          return _json(200, <String, dynamic>{'attachment': wkAttachment(31, workItemId: 3), 'photo_warnings': <Object>[wkPhotoWarning(31)]});
+        }
+        return _json(200, <String, dynamic>{
+          'item': wkManaged(3),
+          'events': <Object>[],
+          'attachments': <Object>[wkAttachment(31, workItemId: 3)],
+          'photo_warnings': <Object>[wkPhotoWarning(31)],
+        });
+      });
+      final detail = await api.getManaged(token: 't', siteCode: 11, id: 3);
+      expect(detail.photoWarnings.single.attachmentId, 31);
+      final uploaded = await api.uploadAttachmentContent(
+        token: 't',
+        siteCode: 11,
+        id: 3,
+        attachmentId: 31,
+        source: MemoryDocumentSource('f.jpg', kWkPng),
+      );
+      expect(uploaded.photoWarnings.single.code, 'photo_reused_other_location');
+    });
+  });
+
   group('rapor', () {
     test('GET .../work-items/report?from&to (YYYY-AA-GG); gövde ayrıştırılır; görevli 403', () async {
       late http.Request seen;

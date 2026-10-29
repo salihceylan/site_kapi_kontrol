@@ -3672,42 +3672,371 @@ Sakinin Panel'indeki hızlı işlemlerin sonuna sunucu yanıtı gelince “Yöne
 - [ ] **120.10. Dar ekran, en büyük yazı ve ekran okuyucu (F44.10):**
   - **Nasıl Test Edilir:** Rol: Daire sakini / Site yöneticisi. Küçük ekranlı bir telefonda yazı boyutunu en büyüğe alıp 112 düğmesine, kuru mod kartına, “Yöneticiyi ara” kutusuna ve yönetici ipucuna bakın. TalkBack (ya da VoiceOver) ile bu öğelere odaklanın.
   - **Beklenen Sonuç:** Hiçbiri taşmaz ya da kesilmez. Ekran okuyucu 112 düğmesini “112 Acil Çağrı Merkezi'ni ara, düğme”, kutuyu “Yöneticiyi ara. <ad>, düğme” diye okur.
-## 122. OTA Firmware İmzası (Ed25519): İmzasız Paket Reddi, İmzalı Yükleme, Düşürme Reddi ve Köprü Sürüm (2026-10-29, Dalga F): TASLAK
+## 122. 📟 Sayaç Saha Akışı: Blok Seçimi, Çekilenler Listesi, Yeniden Çekim ve Olağan Dışı Tüketim Uyarısı (2026-10-29, karşılaştırma raporu P1-6, P1-7, K12)
 
-**TASLAK:** araç (`tools/ota_imza`), sunucu kuralları ve cihaz doğrulaması birleşip köprü sürüm derlenene kadar bu maddeler denemeye hazır DEĞİLDİR; komut çıktıları ve seri günlük / panel metinleri o zaman kesinleşir ve maddeler gözden geçirilir. Anahtar üretimi, imzalama, karta yazma ve canlı yayın sizin işinizdir (`BEKLEYEN_ISLER.md` bölüm 7). Mimari, anahtar saklama ve geçiş planı: `docs/OTA_IMZA.md`. Denemeleri bir TEST kartında yapın. Kart başına OTA kontrolü için kartı yeniden başlatıp 2-3 dakika bekleyin (açılışta kendiliğinden kontrol eder); Şirket Paneli > Kayıtlı Cihazlar > "Tümüne OTA Kontrolü" bütün kayıtlı cihazlara komut gönderir, `allowed_uids` dışındaki cihazlar paketi almaz.
+“Fotoğrafla sayaç okuma” ekranı: blok seç, dairelerin çekilen / çekilmeyen listesini gör, eksikleri sırayla çek, yanlış çekileni listeden seçip YENİDEN ÇEK. Değer son 3 dönem tüketim ortancasının eşik katını (varsayılan 5; siteye özel ayarlanır) aşarsa görevli sıradaki daireye geçmeden sorulur (engel değil, onaylayınca kaydedilir, onay izi tutulur). Ayrıca sunucudaki tarih kayması düzeltildi: bugün okunan daire artık “Çekildi” görünür ve yönetici ekranındaki okuma tarihi girilen günle aynıdır. Sayaç Okuma modülü açık bir sitede denenir.
 
-**Güvenlik uyarısı (olumsuz denemeler):** İmzasız, yanlış anahtarlı, uydurulmuş ya da düşük sürümlü deneme paketlerini yayınlarken `allowed_uids` alanına YALNIZ test kartınızın UID'sini yazın. Boş bırakırsanız imzayı henüz bilmeyen sahadaki eski cihazlar paketi (SHA-256 tuttuğu için) kurar. Deneme paketi her zaman ÇALIŞAN, zararsız bir derleme olmalıdır (aynı kaynaktan farklı sürüm numaralı bir derleme gibi); iş bitince eski manifest'i geri koyun.
+- [ ] **117.1. Blok seçici (F45.01):**
+  - **Nasıl Test Edilir:** Rol: Görevli / Site yöneticisi. Ön koşul: Sayaç Okuma modülü açık, en az iki bloklu ve sayaçları tanımlı bir TEST sitesi. Görevli (STAFF) hesabıyla “Fotoğrafla sayaç okuma” ekranını açın (birden çok bloklu site). Üstteki blok seçicilerine bakın; bir blok seçin. Tek bloklu bir sitede aynı ekranı açın.
+  - **Beklenen Sonuç:** Üstte “Tümü (0/N)” ve her blok için “A Blok (0/12)” gibi seçiciler görünür; blok seçilince “Sıradaki” daire o bloktan gelir ve okunan/toplam sayısı blok başına güncellenir. Tek bloklu sitede seçici çizilmez.
+- [ ] **117.2. Liste ekranı ve bugünün okuması (F45.02):**
+  - **Nasıl Test Edilir:** Rol: Görevli, Site yöneticisi. Üstteki bantta “Liste (okunan/toplam)” düğmesine basın. Bir daireyi okuyun, uygulamayı kapatıp yeniden açın ve listeye tekrar bakın. Yönetici hesabıyla Sayaçlar sekmesinde o okumanın tarihine bakın.
+  - **Beklenen Sonuç:** Sorunlu, Çekilmeyenler ve Çekilenler bölümleri ve her dairenin durumu görünür (Çekilmedi · son okuma …, Atlandı, Gönderilmeyi bekliyor, Çekildi (değer)). Bugün okunan daire uygulama yeniden açılınca da “Çekildi” görünür; yönetici ekranındaki okuma tarihi girilen günle aynıdır (önceden bir gün geri görünürdü).
+- [ ] **117.3. Yeniden çekim, atlama ve vazgeçme (F45.03):**
+  - **Nasıl Test Edilir:** Rol: Görevli, Site yöneticisi. Listeden bugün çekilmiş bir daireyi “Yeniden çek” ile seçin; üstteki bandın “Yeniden çekim: …” (gri, ok simgeli) olduğunu ve düğmenin “Onayla ve değiştir” yazdığını doğrulayın. Önce bugünkü okumadan önceki okumadan küçük bir değer, sonra geçerli yeni bir değer yazıp onaylayın. Yönetici ekranında aynı günün okumasına bakın. Bir daireyi “Atla” ile atlayıp listede “Atlandı” görünen daireyi seçerek geri çekin; bir seçimi “Vazgeç” ile bırakın; sıra bitince “Atlananlara dön”e basın.
+  - **Beklenen Sonuç:** Önceki okumadan küçük değer engellenir (taban, bugünkü okuma değil ondan önceki okumadır). Geçerli değerde yönetici ekranındaki aynı günlük okuma yeni değere döner, ikinci satır oluşmaz. “Vazgeç” seçimi bırakır; atlanan daire listede “Atlandı” görünür ve oradan çekilebilir; sıra bitince “Atlananlara dön” çıkar.
+- [ ] **117.4. Olağan dışı tüketim uyarısı (F45.04):**
+  - **Nasıl Test Edilir:** Rol: Görevli, Site yöneticisi. Ön koşul: En az 4 okuması olan bir sayaç (son okuma 130, son 3 dönem tüketimi yaklaşık 9, 11, 10). Son okuması 130 olan ve son 3 dönem tüketimi yaklaşık 10 olan bir sayaçta 181 yazıp onaylayın (tüketim 51; eşik 5 kat = 50). Açılan pencerede önce “Değeri düzelt”e, sonra yine onaylayıp “Doğru, kaydet”e basın. Aynı sayaçta 180 (tam eşik) yazın; ayrıca 3 okumalı ya da hiç okuması olmayan bir sayaçta büyük bir değer yazın.
+  - **Beklenen Sonuç:** 181'de sıradaki daireye geçmeden “Olağan dışı tüketim” penceresi (tüketim, ortanca ve eşik rakamlarıyla) çıkar. “Değeri düzelt” hiçbir şey kaydetmez ve yazdığınız değer ekranda kalır; “Doğru, kaydet” kaydeder. 180'de (eşitlikte) uyarı çıkmaz. 3 okumadan az verisi olan ya da hiç okuması olmayan sayaçta uyarı çıkmaz.
+- [ ] **117.5. Sıçrama onayının denetim izi (F45.05):**
+  - **Nasıl Test Edilir:** Rol: Süper kullanıcı / Site yöneticisi. F45.04'te “Doğru, kaydet” ile kaydettiğiniz okumanın ardından süper kullanıcı / yönetici işlem kayıtlarına (ya da veritabanında denetim kaydına) bakın.
+  - **Beklenen Sonuç:** “metering.reading.jump_confirmed” kaydı vardır (sayaç no, eşik katı ve oran yüzdesi). Okunan değerin kendisi denetim kaydında yazmaz.
+- [ ] **117.6. Sunucunun uyardığı okuma Bekleyen listesinde onay bekler (F45.06):**
+  - **Nasıl Test Edilir:** Rol: Görevli, Süper kullanıcı. Ön koşul: Sayaç tabanı hazır bir sayaç (F45.04); süper kullanıcı hesabı. Saha ekranı açıkken (telefon eşiği 5 kat bilir) süper kullanıcıyla siteye özel eşiği 3 kata düşürün (F45.07). Aynı sayaçta 161 yazın (tüketim 31; telefon uyarmaz, sunucu uyarır). Üst çubuktaki kırmızı rozetli “Bekleyen” düğmesine basın; sırasıyla “Doğru, onayla ve gönder”, “Değeri düzelt” ve “Sil”i farklı kayıtlarda deneyin. Başka bir sayaçta önceki okumadan küçük bir değeri sunucuya göndererek reddedilen kaydı da bakın.
+  - **Beklenen Sonuç:** Okuma Bekleyen listesinde “onay bekliyor” olarak kalır; üst çubukta kırmızı rozet ve ekranın altında bildirim görünür. “Doğru, onayla ve gönder” ile gider, “Değeri düzelt” ve “Sil” de çalışır. Sunucunun reddettiği diğer kayıtlar (ör. önceki okumadan küçük değer) da kırmızı rozetle görünür.
+- [ ] **117.7. Siteye özel eşik ayarı (K katsayısı) (F45.07):**
+  - **Nasıl Test Edilir:** Rol: Süper kullanıcı, Site yöneticisi. Ön koşul: Süper kullanıcı hesabı. Süper kullanıcıyla Modüller > Kurallar > ilgili sitenin kuralları > “Sayaç okuma” grubunda “Sayaç okuma: sıçrama uyarısı eşiği” kuralına bakın. Siteye özel 3 kat verip kaydedin; saha ekranını yenileyip (en geç 30 sn) 130 → 161 yazın. Site yöneticisi hesabıyla aynı kurala bakın.
+  - **Beklenen Sonuç:** Kural varsayılan 5 kat gösterilir, sınır 2–100 kattır. Siteye özel 3 kat verilince ekran yenilendikten sonra 161 uyarı verir. Site yöneticisinde kural salt okunurdur (düzenleyemez); değeri yalnız süper kullanıcı verir.
+- [ ] **117.8. Çevrimdışı okuma, yeniden çekim ve hızlı ikinci okuma (F45.08):**
+  - **Nasıl Test Edilir:** Rol: Görevli. Ön koşul: Android telefon. Uçak modunda bir daireyi okuyun, ardından aynı daireyi listeden yeniden çekin. İnterneti açın. Yavaş bir ağda bir daireyi gönderirken hemen ikinci daireyi okuyun.
+  - **Beklenen Sonuç:** Bekleyen listesinde o daire için tek kayıt kalır (“yeniden çekim” etiketli); internet gelince gider. Gönderim sürerken girilen ikinci okuma kaybolmaz.
 
-- [ ] **122.1. Anahtar Çifti Üretimi, Depo Dışı Saklama ve Yedekten Doğrulama:**
-  - **Nasıl Test Edilir:** Rol: Proje sahibi (imzalama bilgisayarı). `docs/OTA_IMZA.md` bölüm 3.1'deki adımları kendi PowerShell pencerenizde (ajan terminalinde değil) izleyip depo DIŞI bir klasörde parolalı anahtar çifti üretin; aracın yazdığı `key_id` ve genel anahtarı not alın. Deneme olarak anahtarı depo klasörünün İÇİNDEKİ bir yola üretmeyi de deneyin. `git status` çalıştırın. Özel anahtar dosyasını ve parolayı ayrı yerlerde, iki yedek olarak saklayın. Yedek kopyayla, elinizdeki herhangi bir derlenmiş `firmware.bin`'i imzalayıp aracın `dogrula` komutuyla doğrulayın; sonra başka bir derlemenin `.sig` dosyasıyla aynı doğrulamayı yineleyin.
-  - **Beklenen Sonuç:** Araç depo içi yolu reddeder; depo dışı yola yazar ve genel anahtarı (PEM, hex, C++ tanımı) ile `key_id` değerini gösterir. `git status` temizdir: özel anahtar depoda, `server/firmware` klasöründe ve sunucuda yoktur. Yedekten imzalanan paket `SONUC: GECTI` verir; başka derlemenin `.sig` dosyasıyla doğrulama `SONUC: GECMEDI` olur. `key_id` değeri `docs/OTA_IMZA.md` bölüm 3.6 tablosuna yazılır.
-- [ ] **122.2. Sunucu: İmzasız Yeni Paket Yayınlanmaz, İmza Bilgisi Manifest'e Yansır, Eski Paketler Sunulur:**
-  - **Nasıl Test Edilir:** Rol: Proje sahibi (süper kullanıcı). Yükleme ucuyla (`docs/OTA_IMZA.md` bölüm 4), `allowed_uids` yalnız test kartı olacak şekilde: (a) `X-Ota-Signature` başlığı OLMADAN çalışan bir deneme paketi yükleyin; (b) başlığa başka bir paketin ya da atılabilir ikinci bir anahtarla atılmış imzayı koyup yükleyin; (c) doğru imzalı paketi yükleyip `curl "https://api.gudeteknoloji.com.tr/firmware/<hedef>/manifest.json?current_version=<eski sürüm>&uid=<test kartı UID>"` çıktısına bakın. Geçiş döneminde yayında duran eski (imzasız) hedefin manifest'ini de aynı komutla açın.
-  - **Beklenen Sonuç:** (a) 400 `FIRMWARE_SIGNATURE_REQUIRED`, (b) 400 `FIRMWARE_SIGNATURE_INVALID` ile reddedilir: paket cihazlara sunulmaz, önceki manifest değişmez. (c) 201 döner; manifest'te `update_available`, `version`, `sha256` ve `url` alanları eskisi gibi durur, bunlara ek olarak imza alanları (`signature`, `signature_alg`, `signature_key_id`, `signature_url`) görünür. Eski imzasız manifest değişmeden yanıt verir (sahadaki cihazlar etkilenmez).
-- [ ] **122.3. Köprü Sürüm Eski Yolla Gelir (İmzayı Bilmeyen Cihaz):**
-  - **Nasıl Test Edilir:** Rol: Proje sahibi. Yayından ÖNCE firmware'in anahtar kontrol betiğiyle köprü sürümün ikilisinde yer tutucu anahtar kalmadığını ve doğru genel anahtarın gömülü olduğunu doğrulayın (`docs/OTA_IMZA_CIHAZ.md`). İmza özelliği OLMAYAN firmware'li bir TEST kartı hazırlayın (aynı hedef). Köprü sürümü imzalayıp `allowed_uids` yalnız bu kartın UID'si olacak şekilde yayınlayın; kartı yeniden başlatıp bekleyin; seri günlüğü izleyin.
-  - **Beklenen Sonuç:** Kart köprü sürümü indirir (SHA-256 doğrulaması geçer), yeniden başlar; yaklaşık 60 sn sonra `ota_validated` olayı gelir. Kapı açma (uygulama ve QR), MQTT ve Wi-Fi eskisi gibi çalışır; seri günlük yeni sürümü gösterir. Köprü sürüm açıldığında seri günlük "OTA imza anahtari: HAZIR (…); parmak izi <16 hane>" satırını yazar ve parmak izi aracın `key_id` değeriyle aynıdır; "YER TUTUCU" ya da "GECERSIZ" yazıyorsa köprü sürüm YAYINLANMAMALIDIR (o kart hiçbir paketi kurmaz).
-- [ ] **122.4. İmzalı Yeni Sürüm Yüklenir (Köprü Sürümlü Kart):**
-  - **Nasıl Test Edilir:** Rol: Proje sahibi. Köprü sürümü çalıştıran TEST kartına (122.3'ten sonra ya da köprü sürümü USB ile yazılmış kart) köprüden daha yüksek sürüm numaralı, araçla imzalanmış, çalışan bir deneme sürümü yayınlayın (`allowed_uids` yalnız o kart); kartı yeniden başlatıp bekleyin.
-  - **Beklenen Sonuç:** İndirme ilerler, imza doğrulanır, kart yeniden başlar; yaklaşık 60 sn sonra `ota_validated` gelir. Bu madde pilot kapısının (122.9) ön koşuludur.
-- [ ] **122.5. İmzasız Paket Cihazda Reddedilir (Sunucu Korumasının Aşıldığı Senaryo):**
-  - **Nasıl Test Edilir:** Rol: Proje sahibi. Köprü sürümlü TEST kartı. Bu madde G5'ten (`OTA_SERVE_UNSIGNED=0`) ÖNCE yapılır; sonrasında sunucu imzasız manifest'i zaten sunmaz. Sunucuya yazabilen bir saldırganı taklit edin: hedef klasörüne imzasız ama ÇALIŞAN bir derlemeyi (daha yüksek sürüm numaralı) ve DOĞRU SHA-256'lı, `signature` alanı olmayan bir manifest'i elle koyun (önce mevcut `manifest.json`'un yedeğini alın; sunucu kuralları böylece atlanır; `allowed_uids` yalnız test kartı). Kartı yeniden başlatıp bekleyin; seri günlüğü izleyin; birkaç dakika sonra kapıyı uygulamadan açmayı deneyin. Deneme sonunda manifest'i yedekten geri koyun.
-  - **Beklenen Sonuç:** SHA-256 doğru olmasına rağmen kart paketi KURMAZ: `ota_failed` olayı (ayrıntı metni "imza:" ile başlar), çalışan sürüm değişmez; kapı açma, MQTT ve QR çalışmaya devam eder. Yinelenen denemeler (10/20/40 dk geri çekilmeyle) aynı sonucu verir. Eski güven modelinde bu paket kurulurdu; asıl koruma budur.
-- [ ] **122.6. Bozulmuş ya da Yanlış Anahtarlı İmzalı Manifest Cihazlara Sunulmaz:**
-  - **Nasıl Test Edilir:** Rol: Proje sahibi. TEST kartı; `allowed_uids` yalnız test kartı ve yayında gerçek imzalı bir paket var. Sunucuda `manifest.json`'un yedeğini alıp elle sırayla bozun: (a) yalnız `version` değerini daha yükseğe çekin; (b) `sha256` değerini değiştirin; (c) `signature` alanına atılabilir ikinci bir anahtarla atılmış imzayı yazın. Her birinden sonra `curl` ile manifest'i okuyun ve kartı yeniden başlatıp bekleyin. Sonunda manifest'i yedekten geri koyun.
-  - **Beklenen Sonuç:** Sunucu imzası doğrulanamayan manifest'i SUNMAZ: `update_available: false`, sunucu günlüğünde "Yayin sunulmuyor (SIGNATURE_INVALID)"; kart hiçbir şey indirmez ve çalışmaya devam eder. Cihazın kendi doğrulaması (sunucu bu paketleri sunmayacağı için) sahada değil, firmware ana makine testleri ve aracın test vektörleriyle sınanır (`docs/OTA_IMZA_CIHAZ.md`); sahada cihaz düzeyindeki ret 122.5'te görülür.
-- [ ] **122.7. Düşürme Reddi (Sunucu ve Cihaz):**
-  - **Nasıl Test Edilir:** Rol: Proje sahibi (süper kullanıcı). Sunucu: yayındaki sürümden DÜŞÜK sürüm numaralı, geçerli imzalı çalışan bir paketi yükleyin; sonra aynı paketi `allow_downgrade=1&downgrade_reason=<en az 10 karakterlik gerekçe>` ile yeniden yükleyin (`allowed_uids` yalnız test kartı: sunucu bu düşürmeyi o karta sunar). Cihaz: bu ikinci yüklemeden sonra, kartın çalışan sürümü bu düşük sürümden yüksekken, kartı yeniden başlatıp bekleyin. Deneme sonunda kartın çalışan sürümünden yüksek, imzalı gerçek sürümü yayınlayarak canlı yayını düzeltin.
-  - **Beklenen Sonuç:** Sunucu düşük sürümü 409 `FIRMWARE_DOWNGRADE_REJECTED` ile reddeder; `allow_downgrade=1` ve gerekçeyle yalnız bilerek kabul eder (201) ve platform denetim kaydına yazar. Kart, sunucu düşürmeyi sunsa bile, aracın imzaladığı paketi düşürme olarak KURMAZ (imzalı bir düşürme yetkisi yoktur): seri günlükte düşürme reddi görünür (sürüm mevcut sürümden yeni değil ya da imzada düşürme yetkisi yok), çalışan sürüm değişmez, kart aynı sürümde çalışır.
-- [ ] **122.8. Reddedilen Güncellemeden Sonra Toparlanma:**
-  - **Nasıl Test Edilir:** Rol: Proje sahibi (süper kullanıcı). 122.5 ya da 122.6'dan sonra hatalı manifest'i kaldırıp doğru imzalı paketi yayınlayın (`allowed_uids` yalnız test kartı); Şirket Paneli > Kayıtlı Cihazlar > "Tümüne OTA Kontrolü" ile komut gönderin (komut `retry` taşır, kartın deneme sayacını ve geri çekilmesini sıfırlar).
+## 123. 🗂️ Dosya Silme Kuralı: Silmeyi Biz Yapmayız, Drive Bekleme Uyarısı ve Dosya Adında Kayıt Kimliği (2026-10-29, P1-8, P1-11, K6)
+
+Drive bekleme kuyruğunda 7 gün sonra otomatik silme kalktı: bekleyen dosya bekler, 7 gün yalnız “uzun süredir bekliyor” uyarı eşiğidir. Kota dolunca YENİ yükleme reddedilir, mevcut dosyalara dokunulmaz. Sunucudaki geçici dosya yalnız Drive teyidinden sonra silinir. Sayaç fotoğrafının telefondaki kopyası kendiliğinden silinmez. Dosya adı kaynak kayıt kimliğini taşır (ör. OKM-123_AB_D13_291026.jpg) ve Drive kaydı kaynak kayda bağlanır.
+
+- [ ] **118.1. Telefondaki fotoğraf kopyası kendiliğinden silinmez (F45.09):**
+  - **Nasıl Test Edilir:** Rol: Görevli. Ön koşul: Android telefon (kamera); Sayaç Okuma modülü açık. Drive bağlı değilken fotoğraflı bir sayaç okuması gönderin. Üst çubuktaki “Telefondaki fotoğraf kopyaları” simgesine dokunun ve önce “Kalsın”a basın. Simgeye yeniden dokunup bu kez “Kopyaları sil”e basın.
+  - **Beklenen Sonuç:** Ekranda “1 okuma gönderildi. Fotoğrafların telefonunuzdaki kopyası silinmedi; isterseniz siz silebilirsiniz.” notu çıkar ve simge görünür. “Kalsın” hiçbir şeyi silmez; “Kopyaları sil” yalnız o zaman siler, “… fotoğraf kopyası telefondan silindi.” der ve simge kaybolur. Sunucu fotoğrafı almadıysa not “okumanın fotoğrafı sunucuya ulaşmadı; kopyası telefonunuzda duruyor” olur.
+- [ ] **118.2. Bekleyen kaydın fotoğrafına dokunulmaz (F45.10):**
+  - **Nasıl Test Edilir:** Rol: Görevli. Ön koşul: Android telefon. İnternet kapalıyken fotoğraflı bir okuma alın. Gönderilmiş başka okumaların kopyaları varsa “Kopyaları sil” deyin. Bekleyen listesinden o kaydı Sil ile atın.
+  - **Beklenen Sonuç:** “Kopyaları sil” bekleyen ya da reddedilen okumanın fotoğrafına dokunmaz. Kaydı siz Sil derseniz fotoğrafı da onunla gider.
+- [ ] **118.3. Dosya adında kayıt kimliği (F45.11):**
+  - **Nasıl Test Edilir:** Rol: Görevli, Site yöneticisi. Ön koşul: Drive bağlı bir site (ve bağlı olmayan bir site). Drive bağlıyken fotoğraflı bir sayaç okuması gönderip Drive'daki dosya adına bakın. Drive bağlı değilken gönderilen okumada yönetici ekranından fotoğrafı indirip adına bakın.
+  - **Beklenen Sonuç:** Drive'da ayın klasöründe dosya adı OKM-<okuma no>_AB_D13_<ggaayy>.jpg biçimindedir. Drive bağlı değilse sunucudaki fotoğrafın indirme adı aynı kimliği taşır.
+- [ ] **118.4. Drive'a gidemeyen dosya silinmez, yöneticiye uyarı gösterilir (F45.12):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Drive bağlı bir TEST sitesi (Google hesabı sizde). Yönetici: Dosya Deposu > Google Drive kartı. Google hesabından Drive erişimini kaldırın ve bir PDF yükleyin. Kartta “Bekleyen” sayısına ve sarı uyarıya bakın. Google Drive'ı yeniden bağlayın ya da “Bekleyenleri şimdi gönder”e basın.
+  - **Beklenen Sonuç:** Dosya bekleyen olarak kabul edilir ve SİLİNMEZ: kartta “Bekleyen: 1” ve sarı “1 dosya Drive'a gönderilmeyi bekliyor” uyarısı görünür. Drive bağlanınca ya da “Bekleyenleri şimdi gönder” ile dosya Drive'a gider ve uyarı kaybolur. 7 günü geçen dosya silinmez, “uzun süredir bekliyor” uyarısı alır.
+- [ ] **118.5. Bekleme alanı dolunca yeni yükleme reddedilir (QA) (F45.13):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi (teknik doğrulama). Ön koşul: Kapalı devre TEST ortamı; canlıda denenmez. (Test ortamında) Drive kopukken bekleyen dosyaların toplamını 100 MB'a yaklaştırıp yeni bir dosya yükleyin.
+  - **Beklenen Sonuç:** Yeni yükleme 503 DRIVE_QUEUE_FULL ile reddedilir (yönetiminize bildirin); mevcut bekleyen dosyalar ve geçici dosyalar yerinde kalır. Kartta “Bekleme alanı doldu” uyarısı çıkar, denetim kaydında drive.queue_full görünür. Drive ayaktaysa aynı yükleme doğrudan Drive'a gider.
+- [ ] **118.6. Kayda bağlı dosya süzgeci (QA / API) (F45.14):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi (teknik doğrulama). Ön koşul: Drive bağlı TEST sitesi; fotoğraflı bir okuma. (API) GET .../drive/files?source_type=meter_reading&source_id=<okuma no> çağrısı yapın; geçersiz tür ya da numara ile de deneyin.
+  - **Beklenen Sonuç:** Yalnız o okumanın dosyaları döner. Geçersiz tür ya da numara 400 INVALID_SOURCE verir.
+
+## 124. 🔧 İş Kaydı ↔ Ekipman Bağı, Önce / Sonra Fotoğraf Etiketi ve Servis Geçmişi (2026-10-29, P1-10, P2-7, migration 096)
+
+Yönetim, bir talebe sitenin ekipman listesinden isteğe bağlı ekipman bağlayabilir; ekipman kartında “Servis geçmişi (iş kayıtları)” görünür. Talebe fotoğraf eklerken Önce / Sonra etiketi seçilebilir. Bağı yalnız yönetim kurar; sakin formunda ekipman alanı yoktur. İş Takibi ve Ekipman ve Bakım modülleri açık sitede denenir.
+
+- [ ] **119.1. Talebe ekipman bağlama ve kaldırma (F45.15):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi, Daire sakini. Ön koşul: İş Takibi ve Ekipman ve Bakım açık, en az bir ekipmanı olan TEST sitesi. Yönetici: Talepler > bir talebi açın > “Talebi yönet” bölümünde “Ekipman (isteğe bağlı)” listesinden bir ekipman seçip “Değişiklikleri Kaydet”e basın. Aynı talepte ekipmanı “Seçilmedi” yapıp kaydedin. Kapanmış ya da iptal edilmiş bir talebi açın. Sakin hesabıyla aynı talebe bakın.
+  - **Beklenen Sonuç:** Bilgi satırında “Ekipman: …”, Geçmiş'te “Ekipman: Seçilmedi → …” ve liste kartında “Ekipman: …” çipi görünür; sakin ekranında ekipman görünmez. Kaldırınca Geçmiş'te “Ekipman: … → Seçilmedi”. Kapanmış / iptal talepte ekipman seçici hiç görünmez.
+- [ ] **119.2. Ekipman kartında servis geçmişi (F45.16):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi, Kurul üyesi. Ön koşul: Bir ekipmana bağlı birkaç iş; İş Takibi kapalı ikinci bir site. Ekipman ve Bakım > bir ekipmanın kartı > en alttaki “Servis geçmişi (iş kayıtları)” bölümüne bakın. 30'dan fazla bağlı iş varsa “Daha fazla göster”e basın. İş Takibi modülü KAPALI bir sitede ekipman kartını açın.
+  - **Beklenen Sonuç:** Bağlı işler görünür: “Toplam n iş kaydı · m açık”, durum / kategori / tarih, çözülmüş işlerde “Çözüm: tarih”, fotoğraf özeti (“Önce 1 · Sonra 2 · 3 fotoğraf”) ve “İş #n”. İş Takibi kapalı sitede “İş Takibi bu sitede kapalı…” bilgisi çıkar ve kart bozulmaz.
+- [ ] **119.3. Önce / Sonra fotoğraf etiketi (F45.17):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi, Daire sakini. Ön koşul: F45.15 ile ekipman bağlı talep. Bir talepte “Fotoğraf etiketi” seçicisinden Önce'yi seçip fotoğraf ekleyin; sonra Sonra'yı seçip bir fotoğraf daha, ardından etiket seçmeden bir fotoğraf ekleyin. Fotoğrafa dokunun; altındaki yazıya bakın. Sakin hesabıyla aynı talebe bakın. Fotoğrafların bağlı olduğu ekipmanın servis geçmişine bakın.
+  - **Beklenen Sonuç:** Şeritte “Önce · ad” / “Sonra · ad”, Geçmiş'te “Fotoğraf eklendi (Önce)” görünür; fotoğrafa dokununca altta “Talep #n · Fotoğraf #m” yazar. Etiketsiz ve eski fotoğraflar eskisi gibi etiketsiz görünür. Sakin etiket seçemez ama etiketli fotoğrafın altında “Önce” / “Sonra” yazar. Ekipman servis geçmişinde ilgili işin satırında Önce / Sonra sayıları görünür.
+- [ ] **119.4. Pasif ekipman, görevli ve kurul (F45.18):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi, Görevli, Kurul üyesi. Ön koşul: F45.15'teki test sitesi; görevli ve kurul hesabı. Bir ekipmanı pasife alın; talepte ekipman listesine bakın; önceden o ekipmana bağlı bir talebi açın ve kaydedin. Görevli hesabıyla ekipmanın servis geçmişine bakın. Kurul hesabıyla geçmişe ve bir talebe bakın.
+  - **Beklenen Sonuç:** Pasif ekipman yeni bağ için listede görünmez; önceden bağlı talepte “<ad> (tür) - pasif” görünür ve kaydedince bağ kaybolmaz. Görevli geçmişte yalnız kendine atanmış ya da atanmamış işleri görür. Kurul geçmişi görür ama ekipman / etiket seçici yoktur.
+
+## 125. 📑 Teklif Karşılaştırma ve Onaylı Teklif Revizyonu (2026-10-29, P2-9, P2-10, K14, migration 098 ve 099)
+
+Aynı konudaki teklifler yan yana karşılaştırılır (tutar, KDV esası, geçerlilik, teslim süresi, kapsam). Kabul edilmiş (onaylı) teklif yerinde değişmez: değişiklik “Revizyon oluştur” ile yeni sürüm olur, önceki sürüme bağlanır ve yeniden yönetici kararı bekler. Ekipman ve Bakım modülü açık sitede denenir.
+
+- [ ] **120.1. Karşılaştırma tablosu ve KDV esası (F45.19):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Ekipman ve Bakım açık TEST sitesi. Ekipman ve Bakım > Teklifler > Teklif ekle: aynı konuda iki teklif girin (A: 5.000 TL, KDV hariç, 30 gün; B: 4.500 TL, KDV hariç, 10 gün, kapsam notu yazın). Aynı konuya üçüncü bir teklifi “KDV dahil” olarak girin.
+  - **Beklenen Sonuç:** Konu başlığının altında “Karşılaştırma” tablosu çıkar (dar ekranda yatay kayar); B'de “En düşük” ve “En hızlı” görünür. Üçüncü teklif KDV dahil olunca tablonun üstünde “Tutarlar farklı KDV esaslarında” uyarısı çıkar ve hiçbir teklifte “En düşük” işareti kalmaz.
+- [ ] **120.2. Açık teklifi yerinde düzenle (F45.20):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: F45.19'daki teklifler. Karara bağlanmamış (açık) bir teklifte Düzenle'ye basıp tutarı ve teslim süresini değiştirin. Geçerlilik süresi dolmuş açık bir teklifi açın.
+  - **Beklenen Sonuç:** Kart güncellenir. Süresi dolmuş açık teklifte “Kabul et” yoktur, ama “Düzenle” (geçerlilik tarihini uzatmak için) ve “Reddet” vardır.
+- [ ] **120.3. Kabul edilen teklif kilitlenir, değişiklik yeni sürümdür (F45.21):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Finans ve Sözleşmeler modülleri açık TEST sitesi. Bir teklifi sözleşme olarak Kabul edin ve kartına bakın. “Revizyon oluştur”a basıp gerekçe yazmadan Kaydet'e basın. Gerekçe ve yeni tutarla yeniden kaydedin; Sözleşmeler ekranında ilk sözleşmeye bakın.
+  - **Beklenen Sonuç:** Kartta “Onay tarihi … güncel fiyat sayılmaz” yazısı ve “Revizyon oluştur” düğmesi vardır; Düzenle / Reddet / Kabul et yoktur. Gerekçesiz kayıt uyarı verir. Gerekçeyle kaydedince kartta “Sürüm 2”, “Revizyon: onay bekliyor” ve “Onaylı sürüm (1. sürüm): … sözleşme olarak kayıtlı” görünür; ilk sözleşme değişmeden kalır.
+- [ ] **120.4. Sürüm geçmişi (F45.22):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi, Kurul üyesi. Ön koşul: F45.21 sonrası. Revizyonlu teklifte “Sürüm geçmişi”ne basın.
+  - **Beklenen Sonuç:** 1. ve 2. sürüm eskiden yeniye listelenir; her satırda “Önceki sürüme göre: +X TL” farkı, gerekçe, “Geçerli onaylı sürüm” ve “En son sürüm” işaretleri görünür.
+- [ ] **120.5. Revizyonu kabul etmek ve reddetmek (F45.23):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: F45.21 sonrası. Revizyonu Kabul edin; “Önceki sürüm zaten kayıtlı” uyarısında önce Vazgeç'e, sonra yeniden kabul edip Devam et'e basın. Başka bir revizyonu Reddet'le sonuçlandırın.
+  - **Beklenen Sonuç:** Vazgeç hiçbir kayıt oluşturmaz. Devam et AYRI bir sözleşme açar (başlıkta “(revizyon 2)”); ilk sözleşme olduğu gibi kalır (çift sayım olmaz). Revizyon reddedilince onaylı 1. sürüm geçerli kalır; kartta “Revizyon reddedildi” ve yeniden “Revizyon oluştur” çıkar.
+- [ ] **120.6. Yetki ve eski uygulama sürümü (F45.24):**
+  - **Nasıl Test Edilir:** Rol: Kurul üyesi, Görevli, Site yöneticisi. Ön koşul: Eski bir uygulama sürümü (isteğe bağlı). Kurul üyesi ve görevli hesabıyla Teklifler'e bakın. Eski uygulama sürümüyle yeni sunucuya karşı bir teklif ekleyin, kabul edin ve reddedin.
+  - **Beklenen Sonuç:** Kurul ve görevlide hiçbir yazma düğmesi yoktur; yalnız (varsa) “Sürüm geçmişi” görünür. Eski sürümde teklif ekleme, kabul ve ret çalışır; önceki sürümü zaten kayıtlı bir revizyonu eski sürümde kabul etmek sunucu mesajıyla reddedilir (uygulamayı güncelleyin).
+
+## 126. 🏷️ Yönetilebilir Talep Kategorileri ve Aynı Fotoğraf Uyarısı (2026-10-29, P2-6, P2-11, migration 100)
+
+Her sitenin iş takibi kategorileri artık site yöneticisi tarafından eklenir, yeniden adlandırılır, pasife alınır ve kullanılmamışsa silinir. Dört hazır kategori (Arıza, Bakım, Şikayet / Öneri, Diğer) silinmez. Kullanılmış kategori silinmez, pasife alınır. Ayrıca bir talepteki fotoğraf aynı sitede başka bir talepte de varsa yönetime UYARI gösterilir (engel değildir; yalnız birebir aynı dosya yakalanır). İş Takibi açık sitede denenir.
+
+- [ ] **121.1. Kategori düzenleme yetkisi (F45.25):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi, Görevli, Kurul üyesi. Ön koşul: İş Takibi açık TEST sitesi. Site yöneticisiyle Talepler ekranında kategori simgeli “Kategorileri düzenle” düğmesine bakın. Görevli ve yönetim kurulu hesaplarıyla aynı ekrana bakın.
+  - **Beklenen Sonuç:** Düğme yalnız yönetici / süper kullanıcıda görünür; görevli ve yönetim kurulunda hiç yoktur.
+- [ ] **121.2. Kategori ekleme, ad benzersizliği ve sakin formu (F45.26):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi, Daire sakini. Ön koşul: İş Takibi açık TEST sitesi; sakin hesabı. Kategorileri düzenle > “Su kaçağı” ekleyin (listede “Kullanılmadı” etiketi görünür). Aynı adı farklı yazımlarla (“SU KAÇAĞI”, “su kaçağı”) ve hazır bir adı (“Arıza”, “ariza”) eklemeyi deneyin. Sakin hesabıyla Yeni Talep formunda Kategori listesine bakıp “Su kaçağı” ile talep gönderin. Yönetim Talepler listesinde ve kategori süzgecinde talebi bulun.
+  - **Beklenen Sonuç:** Aynı ad (büyük / küçük harf ve Türkçe karakter farkıyla) “Bu adda bir kategori zaten var.” diye reddedilir. Sakin formunda “Su kaçağı” seçilebilir; talep kartında “Su kaçağı · Ortak alan” yazar; yönetim listesinde ve süzgecinde de “Su kaçağı” görünür.
+- [ ] **121.3. Kullanılmış kategori silinmez, pasife alınır (F45.27):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi, Daire sakini. Ön koşul: F45.26 sonrası. “Su kaçağı” (artık 1 talepte kullanılmış) için çöp kutusu simgesine basıp “Kategori pasife alınsın mı?” onayını verin. Sakin formuna, eski talebe ve yönetim süzgecine bakın. Göz simgesiyle kategoriyi yeniden etkinleştirin.
+  - **Beklenen Sonuç:** Onaydan sonra “Pasif” etiketi gelir ve kategori listede KALIR. Sakin formunda artık görünmez; eski talep kategorisini ve adını korur; yönetim süzgecinde “Su kaçağı (pasif)” olarak görünür. Yeniden etkinleştirince sakin formuna geri döner.
+- [ ] **121.4. Kullanılmamış kategoriyi silme, hazır kategori kuralları ve son etkin kategori (F45.28):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: F45.26 sonrası. Hiç kullanılmamış özel bir kategoriyi silin. Hazır kategorilerde (Arıza, Bakım, Şikayet / Öneri, Diğer) silme simgesi arayın; “Arıza”yı “Teknik arıza” olarak yeniden adlandırın. Kategorileri tek tek pasife alıp SON etkin olanı da pasife almayı deneyin. Boş ya da 60 karakterden uzun bir ad girin.
+  - **Beklenen Sonuç:** Kullanılmamış kategori onaydan sonra tamamen gider. Hazır kategorilerde silme simgesi yoktur; yeniden adlandırma çalışır ve talep kartları, performans raporu ve faaliyet raporu yeni adı gösterir. Son etkin kategori pasife alınamaz (“En az bir kategori açık kalmalıdır…” hatası). Boş / uzun ad alan hatası verir.
+- [ ] **121.5. Aynı fotoğraf başka kayıtta uyarısı (F45.29):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi, Görevli. Ön koşul: İş Takibi açık TEST sitesi; telefondan fotoğraf yükleme. Telefondan aynı dosyayı farklı konumlu iki talebe yükleyin (ör. A Blok Daire 1 ve B Blok Daire 5); ikinci talebin yönetici ayrıntısına bakın. Aynı fotoğrafı aynı konumlu iki talebe yükleyin. Aynı fotoğrafı aynı talebe iki kez ekleyin.
+  - **Beklenen Sonuç:** Farklı konumda sarı “Fotoğraf N: Bu fotoğraf farklı bir konuma ait başka bir kayıtta da kullanılmış (#… · … Blok - Daire …)” uyarısı çıkar; yükleme, kaydetme ve silme düğmeleri etkilenmez. Aynı konumda mavi bilgi, aynı talebe ikinci eklemede yalnız SONRAKİ kopyada “Aynı fotoğraf bu kayıtta birden fazla kez eklenmiş.” bilgisi görünür. Yeniden sıkıştırılmış / kırpılmış fotoğraf eşleşmez (yalnız birebir aynı dosya yakalanır).
+- [ ] **121.6. Fotoğraf uyarısının gizliliği (F45.30):**
+  - **Nasıl Test Edilir:** Rol: Daire sakini, Görevli, Kurul üyesi. Ön koşul: F45.29 sonrası; görevli ve kurul hesabı. Sakin hesabıyla F45.29'daki talebin ayrıntısına bakın. Görevli hesabıyla kendisine atanmamış (kapsam dışı) bir kayıtla eşleşen talebin ayrıntısına bakın. Yönetim kurulu hesabıyla aynı talebe bakın.
+  - **Beklenen Sonuç:** Sakin ayrıntısında hiçbir fotoğraf uyarısı yoktur. Görevli kapsam dışı eşleşmeyi “#numara / konum” olmadan yalnızca sayı olarak görür. Kurul uyarıyı görür ama düğme görmez.
+## 127. 👨‍👩‍👧 Çoklu Malik: Tüm Malikler Kayıtlı, Tek Hesap Muhatabı (2026-10-29, karşılaştırma raporu P1-12, karar K7, migration 104)
+
+Bir dairede birden çok malik (eş, kardeş, mirasçı) kayıtlı olabilir; TAM BİRİ “hesap muhatabı”dır. Borç, tahakkuk, tahsilat, Borcum ekranı ve hatırlatmalar yalnız muhataba bağlıdır; diğer malikler “ortak malik” olarak kayıtlıdır (malik yetkisi ve borç görünümü yoktur). Daire kartında malik ekleme, muhatap değiştirme ve malik çıkarma eylemleri yalnız site yöneticisindedir. Veritabanı yükseltmesi (migration 104) mevcut tek maliki kayıpsız muhatap yapar; borç ve bakiye hesapları değişmez. Sürüm yayınlanınca denenir (maddeler “Denemeye hazır” görünse de sürüm yayınlanmadan uygulamada yoktur). Faz sayfasında bölüm F50 olarak da yer alır.
+
+- [ ] **120.1. Daireye ikinci malik ekleme (yeni kişi) (F50.01):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Tek malikli bir TEST dairesi. Kişiler > Daireler bölümünden bir daire kartını açın. “Malik ekle” > “Yeni kişi” seçin, yalnız ad soyad yazıp Ekle'ye basın.
+  - **Beklenen Sonuç:** Kartta iki malik görünür. İlk malikte “Hesap muhatabı” rozeti, “Malik (hesap muhatabı)” satırı ve açıklama bandı çıkar.
+- [ ] **120.2. Ekleme sırasında hesap muhatabını başka malike verme (F50.02):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Borcu olan bir TEST dairesi. “Malik ekle” penceresinde “Kayıtlı kişi” ile başka bir kişiyi seçin ve “Hesap muhatabı olsun” anahtarını açın. Aidat ve Finans > Bakiyeler'de o dairenin bakiyesine bakın.
+  - **Beklenen Sonuç:** Rozet yeni kişiye geçer. Dairenin bakiyesi DEĞİŞMEZ; yalnız Malik adı yeni muhatap olur.
+- [ ] **120.3. “Muhatap yap” (F50.03):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi / Daire sakini. Ön koşul: İki malikli daire; iki malikin de hesabı olsun. Muhatap olmayan malikte “Muhatap yap”a basın, onay penceresini onaylayın. Eski ve yeni muhatabın hesabıyla sırayla girip Borcum ve Dairem ekranlarına bakın.
+  - **Beklenen Sonuç:** Rozet taşınır. Eski muhatabın Borcum ekranı boşalır, yenisininki dolar. Dairem'de eski muhatap “Ortak malik” rolünde görünür ve hiçbir yönetim düğmesi yoktur.
+- [ ] **120.4. Maliki çıkarma kuralları (F50.04):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: 1, 2 ve 3+ malikli TEST daireleri. Muhatap olmayan maliki “Maliki çıkar” ile çıkarın. 3+ malikli dairede muhatabı çıkarmayı deneyin; 2 malikli dairede de deneyin. Tek malikli dairede “Maliki çıkar”ı deneyin.
+  - **Beklenen Sonuç:** Muhatap olmayan malik doğrudan çıkar (“Taşındı”). 3+ malikte muhatabı çıkarırken “Yeni hesap muhatabı” seçmeden Çıkar düğmesi basmaz. 2 malikte “Hesap muhatabı X olacak” bilgisi çıkar. Dairenin TEK maliki çıkarılamaz (kişi kartından Taşındı kullanılır).
+- [ ] **120.5. Kurul üyesi ve listeler (F50.05):**
+  - **Nasıl Test Edilir:** Rol: Yönetim kurulu üyesi. Ön koşul: Çoklu maliklı daire. Kurul üyesi hesabıyla aynı daire kartını açın. Daire listesine ve daire seçiciye bakın.
+  - **Beklenen Sonuç:** Rozet ve açıklama görünür; Malik ekle / Muhatap yap / Maliki çıkar düğmeleri YOKTUR. Listede ve seçicide “Malik: Ayşe Y. (+1 malik)” gibi yazar.
+- [ ] **120.6. Daire geçmişi (F50.06):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Daire geçmişi ekranını açın. Muhatap malike “Taşındı” işleyin.
+  - **Beklenen Sonuç:** “Malik eklendi”, “Malik çıkarıldı” ve “Hesap muhatabı değişti” satırları görünür. Muhatap Taşındı olunca otomatik devirde Sistem kaydı düşer.
+- [ ] **120.7. Toplu yükleme ve ilişki ekleme tek malikli kalır (F50.07):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Maliki olan bir daire. Toplu yükleme dosyasında aynı daireye ikinci bir malik yazın ve yükleyin. Kişi kartından “ilişki ekle” ile aynı daireye ikinci malik eklemeyi deneyin.
+  - **Beklenen Sonuç:** İkisi de “bu dairede zaten malik var” (409) verir. Bu bilinçlidir: ek malikler yalnız Daire kartındaki “Malik ekle”den eklenir.
+- [ ] **120.8. Hatırlatma ve makbuz muhataba gider (F50.08):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Borçlu, çoklu maliklı daire. Borç hatırlatması önizlemesini açın. Aynı daire için bir tahsilat girip makbuza bakın.
+  - **Beklenen Sonuç:** Hatırlatma alıcısı yalnız hesap muhatabıdır. Makbuzda ödeyen adı muhataptır.
+- [ ] **120.9. Yükseltme sonrası mevcut daireler (F50.09):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi / Daire sakini. Ön koşul: Yükseltme öncesi tek malikli, borçlu bir daire. Sürüm yükseltildikten sonra bu dairenin kartına, bakiyesine ve malikin Borcum ekranına bakın.
+  - **Beklenen Sonuç:** Malik “Hesap muhatabı” rozetiyle görünür; bakiye, borç kalemleri ve Borcum ekranı yükseltme öncesiyle aynıdır.
+
+## 128. 🧭 Site Kurulum Sihirbazı ve Listelerde “Excel'den Yükle” Kısayolu (2026-10-29, karşılaştırma raporu P2-15 ve P2-16)
+
+Yeni onaylanmış site için altı adımlı Site Kurulum Sihirbazı (Site bilgileri, Bloklar, Daireler, Kişiler, Modüller, Finans açılışı): mevcut ekranları adım adım açar, dönünce durumu sunucudan okur; yarım kalırsa kalınan adımdan sürer (kalınan adım ve “atlandı” bilgisi cihazda saklanır). Kişiler, Daireler ve Araçlar listelerinde “Excel'den yükle” kısayolu da eklendi. Yalnız istemci değişti (sunucu dağıtımı gerekmez; web ve APK yeniden derlenir). Site bilgisi ve blok düzenleme sunucuda yalnız süper kullanıcıya açıktır; site yöneticisinde bu iki adım salt gösterimdir. Sürüm yayınlanınca denenir (maddeler “Denemeye hazır” görünse de sürüm yayınlanmadan uygulamada yoktur). Faz sayfasında bölüm F51 olarak da yer alır.
+
+- [ ] **121.1. Onaydan sonra sihirbaza yönlendirme (F51.01):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Yeni onaylanmış bir TEST sitesi. Yeni onaylanan sitenin yöneticisiyle giriş yapın. Onay iletisindeki “Kuruluma başla”ya ve Panel'deki kuruluma ait karta bakın.
+  - **Beklenen Sonuç:** Panel'de “Site kurulumunu tamamlayın” kartı görünür. “Kuruluma başla” sihirbazı “Adım 4 / 6 · Kişiler” adımından açar; ilk üç adım “Tamam” görünür.
+- [ ] **121.2. Kişiler adımı: Excel'den yükleme (F51.02):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Kişiler adımında “Excel'den yükle”ye basın. Şablonu doldurup yükleyin ve sihirbaza dönün. “Kişileri tek tek ekle”ye basın.
+  - **Beklenen Sonuç:** Toplu Yükle sihirbazı “Hepsi bir arada” seçili açılır. Dönünce adım “Tamam” olur ve “N kişi kayıtlı” yazar. “Kişileri tek tek ekle” Kişiler ekranını Kişiler sekmesinde açar.
+- [ ] **121.3. Yarım bırakma ve kaldığı yerden devam (F51.03):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Sihirbazı ortada X ile kapatın (bir adımı “Atla” ile geçmiş olun). Panel'deki karta bakıp “Kuruluma devam et”e basın. “Şimdilik gizle”ye basın; sonra Site Yönetimi > “Kurulum Sihirbazı”nı açın.
+  - **Beklenen Sonuç:** “Site kurulumunuz yarım kaldı · N / 6 adım tamam” kartı çıkar; devam kaldığınız adımdan açılır; atladığınız adım “Atlandı” görünür. “Şimdilik gizle” kartı kaldırır, sihirbaz Site Yönetimi'nden yine açılır.
+- [ ] **121.4. Modüller adımı (F51.04):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi / Süper kullanıcı. Modüller adımına gelin; “Modülleri seç / talep et”e basın. Bir modül talep edip dönün. Aynısını süper kullanıcıyla deneyin.
+  - **Beklenen Sonuç:** Temel modüller “Her sitede açık” yazar. Modüller ekranı bu site seçili açılır; talep sayısı adımda görünür. Süper kullanıcıda düğme “Modülleri seç” olur ve modül doğrudan açılıp kapanır.
+- [ ] **121.5. Finans adımı (F51.05):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. “Aidat tanımı ekle”yi kaydedin. “Devir bakiyesi yükle” ve “Finans ekranını aç”a basın. İş merkezi türündeki bir sitede etiketlere bakın.
+  - **Beklenen Sonuç:** Tanım kaydedilince adım “Tamam” olur. Devir penceresi açılır; Finans ekranı Tanımlar sekmesinde açılır. İş merkezi türünde etiket “Ortak gider tanımı ekle” olur.
+- [ ] **121.6. Yetki: kim düzenleyebilir, kim görür (F51.06):**
+  - **Nasıl Test Edilir:** Rol: Süper kullanıcı / Site yöneticisi / Daire sakini / Kurul üyesi. Süper kullanıcıyla Site bilgileri ve Bloklar adımlarındaki düzenleme düğmelerini kullanın. Site yöneticisiyle aynı adımlara bakın. Daire sakini ve kurul üyesiyle sihirbazı arayın.
+  - **Beklenen Sonuç:** Süper kullanıcıda düzenleme düğmeleri çalışır. Site yöneticisinde düğmeler yoktur, “yalnızca sistem yöneticisi değiştirir” notu görünür. Sakin ve kurul üyesi sihirbazı hiçbir yerde görmez.
+- [ ] **121.7. “Excel'den yükle” liste kısayolları (F51.07):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi / Kurul üyesi. Kişiler ekranında Kişiler, Daireler ve Araçlar sekmelerindeki “Excel'den yükle” düğmesine basın. Boş bir Kişiler listesine bakın. Kurul üyesiyle aynı sekmelere bakın.
+  - **Beklenen Sonuç:** Kişiler ve Daireler Toplu Yükle'yi “Hepsi bir arada”, Araçlar “Araçlar” türüyle açar. Boş Kişiler listesinde yalnız boş durum kartındaki düğme görünür. Kurul üyesi bu düğmeleri görmez.
+- [ ] **121.8. Dar ekran, büyük yazı ve ekran okuyucu (F51.08):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Yazı boyutunu en büyüğe alıp sihirbazın altı adımına, özetine ve Panel kartına bakın (açık ve koyu tema). Ekran okuyucuyu açıp adım değiştirin.
+  - **Beklenen Sonuç:** Hiçbir ekranda taşma ya da kesilme olmaz. Ekran okuyucu adım değişince “Adım N / 6 · ...” başlığını okur.
+- [ ] **121.9. Hesap değişince kurulum kartı (F51.09):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: İki farklı yönetici hesabı. Kurulumu yarım bırakmış hesaptan çıkış yapın (ya da hesabı silin). Başka bir hesapla girip Panel'e bakın.
+  - **Beklenen Sonuç:** Kurulum kayıtları cihazdan silindiği için Panel'de eski hesabın kurulum kartı çıkmaz.
+
+## 129. 🚨 Acil Durum Akışı: 112, Yangın ve Asansör Arızası, Kuru Mod (2026-10-29, karşılaştırma raporu P2-24, karar K13, migration 107)
+
+Çekmecede “Ana sayfa” başlığı altında “Acil durum” ekranı: büyük “112'yi ara”, ayrı Yangın ve Asansör arızası hızlı düğmeleri, çağrı merkezinin soracakları ve aramada söylenecek site adı ile adres. Arama kanalı olmayan cihazda (masaüstü, web, telefonsuz tablet) KURU MOD çalışır: numaralar ve adres kopyalanabilir metindir ve uygulama hiçbir yerde “arandı” demez (telefon uygulaması yalnız açılır, aramayı kullanıcı başlatır). Asansör bakım firması adı ve telefonu site ayarı olarak yöneticide kaydedilir (migration 107). Çekirdek özelliktir: modül değildir, süper kullanıcı dışında herkeste görünür. Sunucu dağıtımı gerekir. Sürüm yayınlanınca denenir (maddeler “Denemeye hazır” görünse de sürüm yayınlanmadan uygulamada yoktur). Faz sayfasında bölüm F52 olarak da yer alır.
+
+- [ ] **122.1. 112 düğmesi (telefon) (F52.01):**
+  - **Nasıl Test Edilir:** Rol: Daire sakini. Ön koşul: Android telefon. Çekmece > Ana sayfa > “Acil durum” > büyük “112'yi ara”ya basın.
+  - **Beklenen Sonuç:** Telefon uygulaması 112 hazır olarak açılır; aramayı orada başlatırsınız. Ekranda “arandı” gibi bir durum YAZMAZ.
+- [ ] **122.2. Kuru mod (arama kanalı yok) (F52.02):**
+  - **Nasıl Test Edilir:** Rol: Daire sakini. Ön koşul: Windows masaüstü, tarayıcı ya da telefonsuz tablet. Acil durum ekranını açın. Yangın ve Asansör arızası kartlarına bakın; “Bilgileri kopyala”ya basın.
+  - **Beklenen Sonuç:** Sarı “Bu cihazdan arama başlatılamıyor” şeridi görünür; 112 yerine büyük numara ve “Numarayı kopyala” çıkar. Panoya numara, adres ve sorular kopyalanır.
+- [ ] **122.3. Yangın düğmesi (F52.03):**
+  - **Nasıl Test Edilir:** Rol: Daire sakini / Site yöneticisi. Ön koşul: Adresi kayıtlı ve kayıtsız iki site. “Yangın”a basın.
+  - **Beklenen Sonuç:** “Yangın var.” cümlesi, site adı ve adres (Site Yönetimi'ndeki kayıtla aynı), 5 soru ve güvenlik yönlendirmesi görünür. Adres kayıtlı değilse yöneticide “Site Yönetimi'nden ekleyin”, sakinde “kendiniz söyleyin” yazar.
+- [ ] **122.4. Birden çok siteli kullanıcı (F52.04):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi / Daire sakini. Ön koşul: İki ayrı sitede üyeliği olan hesap. “Hangi site için?” seçicisiyle siteyi değiştirin. Çekmecedeki site seçiciyle bir site seçip Acil durum'u açın.
+  - **Beklenen Sonuç:** Adres ve bakım firması seçilen siteye göre değişir; önceki sitenin izi kalmaz. Acil durum, çekmecede seçili siteyle açılır.
+- [ ] **122.5. Asansör bakım firması ekleme, düzenleme, kaldırma (F52.05):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi / Daire sakini. Ön koşul: Aynı sitenin yöneticisi ve sakini. Yöneticiyle Acil durum > Asansör arızası > “Bakım firmasını ekle” (ad ve telefon, örnek 444 1 234) ile kaydedin; düzenleyin; kaldırın. Aynı sitenin sakin hesabıyla Asansör arızası'na bakın; sakin moduna geçip yöneticide düzenleme düğmesini arayın.
+  - **Beklenen Sonuç:** Kayıttan sonra firma kartı çıkar; sakin hesabında “Bakım firmasını ara” görünür. Sakin modunda düzenleme düğmesi yoktur.
+- [ ] **122.6. Bakım firması kayıtlı değilken (F52.06):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi / Daire sakini / Kurul üyesi / Görevli. Ön koşul: Firması kayıtsız site. Her rolle Asansör arızası'nı açın.
+  - **Beklenen Sonuç:** Yönetici “Ekleyin” ipucunu ve ekleme düğmesini; sakin, kurul ve görevli “Site yönetiminden isteyin” ipucunu görür. Her ikisinde 112 kartı vardır.
+- [ ] **122.7. İnternet yokken (F52.07):**
+  - **Nasıl Test Edilir:** Rol: Daire sakini. Ön koşul: Uçak modu açık telefon. Uçak modunda Acil durum'u açın; sonra interneti açıp “Tekrar Dene”ye basın.
+  - **Beklenen Sonuç:** Sayfa açılır ve 112 çalışır; site adresi için “alınamadı” + “Tekrar Dene” çıkar. İnternet gelince adres dolar.
+- [ ] **122.8. Denetim kaydı, vitrin ve yardım (F52.08):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Bakım firmasını kaydedin; Denetim Kaydı'na (süper kullanıcı) ve İşlem Kayıtları'na bakın. Panel vitrinine ve Yardım ve Destek'e bakın.
+  - **Beklenen Sonuç:** “Acil durum bilgisi güncellendi” satırı görünür (telefon numarası yazılmaz). Vitrinde “Acil durum” kartı, Yardım'da “Acil durumda ne yapmalıyım?” konusu vardır.
+
+## 130. 🎟️ Tek Kullanımlık Deneme Erişim Kodu: 72 Saat, Demo Siteye Kilitli (2026-10-29, karşılaştırma raporu P2-27, karar K10, migration 106)
+
+Tanıtım denemesi için tek kullanımlık kod: kodla açılan oturum 72 saat sürer ve YALNIZ işaretli demo siteye kilitlidir (başka sitelere, parola/e-posta değiştirmeye, dış e-posta veya SMS gönderen ve donanıma dokunan işlemlere kapalıdır; demo sitenin kendi verisinde işlem serbesttir). Kod sunucuda `node scripts/trial_code.mjs` ile üretilir ve ekranda BİR KEZ görünür; sahip için uygulama ekranı yoktur. Gerçek bir müşteri sitesi ASLA demo olarak işaretlenmemelidir. Sunucu dağıtımı gerekir. Sürüm yayınlanınca denenir (maddeler “Denemeye hazır” görünse de sürüm yayınlanmadan uygulamada yoktur). Faz sayfasında bölüm F53 olarak da yer alır.
+
+- [ ] **123.1. Demo site işaretleme ve kod üretme (sunucu) (F53.01):**
+  - **Nasıl Test Edilir:** Rol: Sahip (sunucu). Ön koşul: Sunucuya erişim; yedekli bir TEST/DEMO sitesi. Sunucuda server klasöründe `node scripts/trial_code.mjs demo <DEMO_SITE_KODU> --yes` ile demo siteyi işaretleyin. `node scripts/trial_code.mjs create --days 7 --note "Aday A" --yes` ile kod üretin; sonra `status` ve `list` çalıştırın.
+  - **Beklenen Sonuç:** Kod ekranda yalnız bir kez görünür. `status` ve `list` kodu göstermez, yalnız son 4 karakterini gösterir.
+- [ ] **123.2. Kodla giriş (F53.02):**
+  - **Nasıl Test Edilir:** Rol: Aday (deneme). Ön koşul: Üretilmiş kod. Giriş ekranında “Deneme kodum var”a basın; kodu küçük harfle ve tiresiz yazın; “Giriş Yap”a basın.
+  - **Beklenen Sonuç:** Kod otomatik büyük harfe ve tireli biçime gelir. Ana sayfa açılır; ekranın ÜSTÜNDE “Deneme - 72 saat kaldı” şeridi görünür. Siteler listesinde YALNIZ demo site vardır.
+- [ ] **123.3. Tek kullanım ve yanlış kod (F53.03):**
+  - **Nasıl Test Edilir:** Rol: Aday (deneme). Aynı kodu ikinci kez girin (çıkış yapıp ya da başka cihazdan). Uydurma bir kod girin; ardından 11 yanlış kodu art arda deneyin.
+  - **Beklenen Sonuç:** İkinci kullanımda “Bu deneme kodu daha önce kullanılmış...” mesajı çıkar. Yanlış kodda “Deneme kodu geçersiz”. 11 yanlışta “Çok fazla deneme kodu girişi...” (hız sınırı) çıkar.
+- [ ] **123.4. Demo sitede serbest işlem (F53.04):**
+  - **Nasıl Test Edilir:** Rol: Aday (deneme). Deneme hesabıyla demo sitede duyuru yayımlayın, tahsilat/borç girin, kişi ekleyin, anket açın, belge yükleyin.
+  - **Beklenen Sonuç:** Hepsi çalışır.
+- [ ] **123.5. Kısıtlı işlemler kapalı (F53.05):**
+  - **Nasıl Test Edilir:** Rol: Aday (deneme). Profil'de parola/e-posta değiştirmeyi ve hesap silmeyi deneyin. Yeni site ekleme/başvuru, yönetici davet etme, kapı/cihaz/kamera ekleme, kişiye davet veya şifre sıfırlama, borç hatırlatma gönderme ve toplu yükleme onayını deneyin.
+  - **Beklenen Sonuç:** Hepsi “Bu işlem deneme hesabında kullanılamaz.” der ve hiçbir şey değişmez.
+- [ ] **123.6. Süre dolumu (F53.06):**
+  - **Nasıl Test Edilir:** Rol: Sahip (sunucu) / Aday. Ön koşul: Açık bir deneme oturumu. Sunucuda ilgili kodun session_expires_at değerini geçmişe çekin (UPDATE trial_access_codes SET session_expires_at = NOW() - interval '1 minute' WHERE id = ...). Uygulamada herhangi bir işlem yapın ya da yenileyin.
+  - **Beklenen Sonuç:** Giriş ekranına dönülür ve “Deneme süreniz doldu...” görünür. Şerit 30 sn'de bir yenilenir; son saatte dakika gösterir.
+- [ ] **123.7. Kod iptali (F53.07):**
+  - **Nasıl Test Edilir:** Rol: Sahip (sunucu) / Aday. Ön koşul: Açık bir deneme oturumu. `node scripts/trial_code.mjs revoke <KOD_NO> --yes` çalıştırın. Açık oturumda bir işlem yapın; iptal edilen kodla yeniden girmeyi deneyin.
+  - **Beklenen Sonuç:** Açık oturum bir sonraki istekte “Deneme erişiminiz sonlandırıldı.” ile kapanır; iptal edilmiş kodla giriş “iptal edilmiş” der.
+- [ ] **123.8. Normal girişler etkilenmez (F53.08):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi / Daire sakini. Normal kullanıcı adı/parola, SMS ve sosyal girişle girin; eski uygulama sürümüyle de girmeyi deneyin.
+  - **Beklenen Sonuç:** Giriş çalışır, üstte deneme şeridi YOKTUR.
+- [ ] **123.9. Dar ekran ve koyu tema (F53.09):**
+  - **Nasıl Test Edilir:** Rol: Aday (deneme). En dar telefon ekranında ve en büyük yazı boyutunda giriş ekranına, kod penceresine (uzun hata mesajıyla) ve üst şeride bakın; koyu temayı deneyin.
+  - **Beklenen Sonuç:** Hiçbir yerde taşma olmaz; koyu temada şerit okunaklıdır.
+
+## 131. 📜 Yönetici İşlem Kayıtları: Kendi Sitenizde Kim, Ne Zaman, Ne Yaptı (2026-10-29, karşılaştırma raporu P2-19)
+
+Site yöneticisi, Ayarlar panelinde Modüller'in altındaki “İşlem Kayıtları” ekranında kendi sitesinde yapılan işlemleri görür: işlem türü ve dönem süzgeci, “Daha fazla yükle”, İstanbul saati. Yalnız o sitenin yöneticisi okur; kayıtlar değiştirilemez; parola, telefon, e-posta ve kullanıcı kodu görünmez; sakinin gizli güvenlik talebi ve adli kayıt listede yoktur. Sunucu dağıtımı gerekir (yeni uç). Sürüm yayınlanınca denenir (maddeler “Denemeye hazır” görünse de sürüm yayınlanmadan uygulamada yoktur). Faz sayfasında bölüm F54 olarak da yer alır.
+
+- [ ] **124.1. Menüde kim görür (F54.01):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi / Daire sakini / Kurul üyesi / Görevli / Süper kullanıcı. Site yöneticisi hesabıyla sağ üstteki dişliden Ayarlar panelini açın; “İşlem Kayıtları”nı arayın. Aynısını sakin, kurul üyesi, görevli, bireysel, sakin moduna geçmiş yönetici ve süper kullanıcıyla yapın.
+  - **Beklenen Sonuç:** Yönetici modundaki site yöneticisinde Modüller'in altında görünür; diğerlerinde görünmez.
+- [ ] **124.2. Yeni işlemler listede (F54.02):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Kendi sitenizde birkaç işlem yapın (modül talebi, duyuru yayınla, kişi ekle, tahsilat gir, talep aç). İşlem Kayıtları'nı yenileyin; 50'den fazla kayıt varsa “Daha fazla yükle”ye basın.
+  - **Beklenen Sonuç:** Yeni kayıtlar en üstte, doğru başlık, kim ve İstanbul saatiyle görünür; “Daha fazla yükle” eski kayıtları getirir.
+- [ ] **124.3. İşlem türü ve dönem süzgeçleri (F54.03):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. İşlem türü listesinden “Aidat ve finans”ı seçin; “Tümü”ne dönün. Bugün, Son 7 gün, Son 30 gün çiplerini deneyin; Özel aralıkta GG.AA.YYYY yazın, bir tarihi boş bırakın, ters aralık ve 31.02 yazın.
+  - **Beklenen Sonuç:** Yalnız finans satırları gelir; “Tümü” süzgeci kaldırır. Dönem çipleri çalışır. Ters aralık ve geçersiz tarih hata verir, istek atmaz.
+- [ ] **124.4. Siteler arası ayrım ve yetki (F54.04):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: İki siteli yönetici; sakin hesabı. Site seçiciyi değiştirin. Sakin hesabının belirteciyle GET /manager/sites/<site_kodu>/audit-log çağrısı yapın; başka sitenin yöneticisiyle de çağırın.
+  - **Beklenen Sonuç:** Diğer sitenin kaydı asla görünmez. Sakin ve başka site yöneticisi 403 alır.
+- [ ] **124.5. Kişisel veri ve gizli kayıtlar (F54.05):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Süper kullanıcının yaptığı bir işlem; silinmiş bir hesap. Süper kullanıcının bir işleminin (örneğin modül açma) yönetici ekranındaki adına bakın. Silinmiş bir hesabın eski işlemlerine, kayıt ayrıntılarına ve sakinin güvenlik talebine bakın.
+  - **Beklenen Sonuç:** “Sistem yöneticisi” ve “Silinmiş Kullanıcı” yazar. Kayıtlarda e-posta, telefon, parola ve kullanıcı kodu bulunmaz; güvenlik talebi ve adli kayıt satırları listede olmaz.
+- [ ] **124.6. Dar ekran, büyük yazı, koyu tema (F54.06):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. En dar telefon ekranında ve en büyük yazı boyutunda, açık ve koyu temada listeye, süzgeçlere ve boş/hata durumlarına bakın.
+  - **Beklenen Sonuç:** Taşma olmaz; yükleniyor, boş ve hata durumları anlaşılırdır.
+- [ ] **124.7. Çoklu malik ve acil durum işlemleri (F54.07):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: F50 ve F52 maddelerini yapmış olmak. Daireye malik ekleyin / muhatap değiştirin / maliki çıkarın; asansör bakım firmasını kaydedin. İşlem Kayıtları'na bakın.
+  - **Beklenen Sonuç:** “Daireye malik eklendi”, “Daire hesap muhatabı değişti”, “Daireden malik çıkarıldı” ve “Acil durum bilgisi güncellendi” satırları Türkçe başlıkla görünür.
+
+## 132. 🏘️ Komşu Panosu İstemci Sınır Davranışları (2026-10-29, karşılaştırma raporu P2-29)
+
+Yalnız test eklendi, ürün kodu değişmedi: Komşu Panosu için uzun metin/taşma, boş durum, yetkisiz kullanıcı, çok kayıt, ağ hatası ve Türkçe karakter sınırları otomatik testle sabitlendi (170 test). Aşağıdaki maddeler aynı sınırları elle de doğrulatır. BİLİNEN SORUN: klavye açıkken “Şikayet et / Reddet / Kaldır” ve “Yeni ilan” pencereleri yatay ya da büyük yazıda taşabilir (testte kayıtlı, düzeltme ayrı iş); bu madde sonucu bildirmeniz içindir. Sürüm yayınlanınca denenir (maddeler “Denemeye hazır” görünse de sürüm yayınlanmadan uygulamada yoktur). Faz sayfasında bölüm F55 olarak da yer alır.
+
+- [ ] **125.1. Uzun metin ve taşma (F55.01):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi / Daire sakini. Ön koşul: Dar ekranlı telefon, en büyük yazı boyutu. 120 karakterlik boşluksuz bir başlık ve 2000 karakterlik metinle ilan açın, yönetici onayıyla yayınlayın.
+  - **Beklenen Sonuç:** Kartta yatay taşma / sarı-siyah şerit olmaz; metin alt satırlara bölünür.
+- [ ] **125.2. Karakter sınırları (F55.02):**
+  - **Nasıl Test Edilir:** Rol: Daire sakini / Site yöneticisi. Yeni ilan penceresinde başlığa 120+, metne 2000+ karakter yapıştırın. Şikayet gerekçesinde 200, ret/kaldır gerekçesinde 300 karakteri aşmayı ve boş gerekçeyle Gönder'e basmayı deneyin.
+  - **Beklenen Sonuç:** Sayaç 120/120 ve 2000/2000'de durur, fazlası eklenmez. Gerekçeler 200 ve 300 karakterde durur; boş gerekçeyle Gönder pencereyi kapatmaz.
+- [ ] **125.3. Ağ hatası (F55.03):**
+  - **Nasıl Test Edilir:** Rol: Daire sakini. Uçak modunda Komşu Panosu'nu açın; uçak modunu kapatıp sayfayı aşağı çekerek yenileyin.
+  - **Beklenen Sonuç:** “Sunucuya bağlanılamadı...” çıkar (“Henüz ilan yok.” ÇIKMAZ). İnternet gelince liste yüklenir.
+- [ ] **125.4. Yetkiye göre düğmeler (F55.04):**
+  - **Nasıl Test Edilir:** Rol: Daire sakini / Site yöneticisi. Ön koşul: Biri yönetici biri sakin olduğu iki siteli hesap. Sakin hesabında Onayla / Reddet / Kaldır düğmelerini ve durum sekmelerini arayın. Yönetici hesabında Yeni ilan / Şikayet et / Geri çek düğmelerini arayın; çoklu sitede site değiştirin.
+  - **Beklenen Sonuç:** Sakinde yönetim düğmeleri ve durum sekmeleri yoktur; yöneticide yazma/şikayet/geri çekme düğmeleri yoktur. Denetimler seçili siteye göre değişir.
+- [ ] **125.5. Menüde kim görür (F55.05):**
+  - **Nasıl Test Edilir:** Rol: Görevli / Süper kullanıcı / Bireysel / Kurul üyesi. Kapı erişimi olmayan görevli, süper kullanıcı ve bireysel hesapla yan menüye bakın; kurul üyesi ve kapı erişimli görevliyle de bakın.
+  - **Beklenen Sonuç:** İlk üçünde “Komşu Panosu” yoktur; kurul üyesi ve kapı erişimli görevli sakin gibi görür.
+- [ ] **125.6. Türkçe karakterler (F55.06):**
+  - **Nasıl Test Edilir:** Rol: Daire sakini / Site yöneticisi. I i ğ Ğ ş Ş ç Ç ö Ö ü Ü, tırnak ve satır sonu içeren bir ilan yazın; sakin ve yönetici ekranlarında karşılaştırın.
+  - **Beklenen Sonuç:** İki ekranda da aynı görünür; tarih gg.aa.yyyy biçimindedir.
+- [ ] **125.7. Çok kayıt (F55.07):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Demo veriyle 100+ ilan. Sayfayı sonuna kadar kaydırın; kartların üstünden sürükleyin.
+  - **Beklenen Sonuç:** Son ilana ve “Yakında: telefon bildirimi, fotoğraf ve yorum.” notuna ulaşılır; kartların üstünden sürükleyince sayfa kayar.
+- [ ] **125.8. BİLİNEN SORUN: klavye açıkken pencereler (sonucu bildirin) (F55.08):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi / Daire sakini. Ön koşul: Yatay telefon, büyük yazı. Telefonu yatay çevirip klavyeyi açarak “Şikayet et”, “Reddet”, “Kaldır” ve “Yeni ilan” pencerelerini deneyin (özellikle büyük yazı boyutunda). Onayla ya da Onaya gönder düğmesine hızlı iki kez dokunun.
+  - **Beklenen Sonuç:** Taşma / sarı-siyah şerit görülürse testte kayıtlı sorunla aynıdır (düzeltilecek). Hızlı çift dokunuşta ikinci istek “İlan bu işlem için uygun durumda değil.” uyarısı verebilir (bilinen davranış).
+
+## 133. 📚 Durum Sözlüğü, Ekran Envanteri ve Düzeltilen Teknik Notlar (2026-10-29, karşılaştırma raporu P2-31 ve P2-28)
+
+docs/DURUM_SOZLUGU.md (rol ve bağ, hesap-üyelik-başvuru, kapı-cihaz-geçiş, finans-para ve modül/iş akışı durumlarının etiketleri) ve docs/EKRAN_ENVANTERI.md (48 menü öğesi: rota, ekran sınıfı, modül, kim görür) yazıldı; README ve teknik notlardaki bayat bilgiler koda göre düzeltildi. Ürün kodu değişmedi. Belge ile uygulama arasında sapma bulursanız belge ya da kod düzeltilir. Faz sayfasında bölüm F56 olarak da yer alır.
+
+- [ ] **126.1. Ekran envanteri ile menü karşılaştırması (F56.01):**
+  - **Nasıl Test Edilir:** Rol: Kurul üyesi / Görevli (ve diğer roller). Ön koşul: docs/EKRAN_ENVANTERI.md Bölüm 3. Bir rolle (örneğin kurul üyesi ya da görevli) uygulamaya girip çekmecedeki öğeleri belgedeki “Kim görür” sütunuyla karşılaştırın.
+  - **Beklenen Sonuç:** Çekmecedeki öğeler belgeyle aynıdır; sapma varsa belge ya da kod düzeltilmelidir.
+- [ ] **126.2. Durum etiketleri sözlükle aynı (F56.02):**
+  - **Nasıl Test Edilir:** Rol: Daire sakini / Site yöneticisi. Ön koşul: docs/DURUM_SOZLUGU.md D3. Sakin hesabından bir dekont bildirimi gönderin; yöneticide onaylayın ve iptal edin.
+  - **Beklenen Sonuç:** “İnceleniyor / Onaylandı / İptal edildi” etiketleri sözlükteki gibi görünür.
+- [ ] **126.3. README hızlı başlangıç (F56.03):**
+  - **Nasıl Test Edilir:** Rol: Geliştirici. Ön koşul: Temiz bir klasör; Docker ve Node kurulu. README'deki Hızlı başlangıç sırasını izleyin: docker compose up -d postgres, cd server, npm ci, npm run dev, flutter run --dart-define=API_BASE_URL=http://localhost:8080.
+  - **Beklenen Sonuç:** Sunucu 8080'de açılır; /health {ok, database, mqtt} döndürür.
+- [ ] **126.4. Kestirmeler ekranı iletişim kutusu (F56.04):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Çekmecede “Eller Serbest & Kestirmeler”e dokunun.
+  - **Beklenen Sonuç:** Sayfa değişmez; sesli kapı açma ayar penceresi açılır (envanterde sayfa değil iletişim kutusu olarak yazılıdır).
+
+## 134. 🧪 Yerel Yalıtım Aracı: Sunucuyu Yalnız Bu Bilgisayarda ve Temiz Ortamla Çalıştırma (2026-10-29, karşılaştırma raporu P2-30)
+
+Geliştirici aracı `tools/yerel/yalitim`: sunucuyu yalnız 127.0.0.1'de, temiz ortamla başlatır; dışarıya TCP/DNS/UDP bağlantısı ve alt süreç açılmasını engeller ve kayda geçirir; isteğe bağlı olarak Chrome/Edge'i yeni profille, yalnız yerel proxy arkasında açar. Kaza korumasıdır, güvenlik sınırı DEĞİLDİR (yerel eklentiler ve dosya sistemi kısıtlanmaz). Uygulamayı ve sunucu koduna dokunmaz; yeniden derleme gerekmez. Faz sayfasında bölüm F57 olarak da yer alır.
+
+- [ ] **127.1. Kuru çalıştırma (F57.01):**
+  - **Nasıl Test Edilir:** Rol: Geliştirici. Ön koşul: Depo kökü; Python 3.9+, Node. Depo kökünde `python tools/yerel/yalitim/calistir.py --dry-run --no-browser` çalıştırın.
+  - **Beklenen Sonuç:** `KURU_CALISMA_TAMAM` ve Node/profil/yol satırları görünür; `tools/yerel/runs` klasörü OLUŞMAZ.
+- [ ] **127.2. Tarayıcılı kip (F57.02):**
+  - **Nasıl Test Edilir:** Rol: Geliştirici. Ön koşul: server/node_modules kurulu; yerel PG, MQTT ve SMTP uçları açık. `python tools/yerel/yalitim/calistir.py --port 8081 --url http://127.0.0.1:8081/health` çalıştırın. Açılan tarayıcıda adres çubuğuna http://example.invalid/ yazın; sonra Ctrl+C ile durdurun.
+  - **Beklenen Sonuç:** Yeni profilli Chrome/Edge açılır. Dış adres açılmaz; koşu dizinindeki engellenen.jsonl'e yalnız `browser-proxy` kanalı ve hedef özeti düşer. Ctrl+C tarayıcıyı ve Node'u kapatır.
+- [ ] **127.3. Yerel uçlar yokken başlangıç hatası (F57.03):**
+  - **Nasıl Test Edilir:** Rol: Geliştirici. Yerel veritabanı/MQTT/SMTP uçları kapalıyken aracı çalıştırın; hazırlık zaman aşımında `node-stderr.log` içeriğine bakın.
+  - **Beklenen Sonuç:** Araç bu uçları kurmaz; sunucunun başlangıç hatası günlükte görünür.
+- [ ] **127.4. Banka PDF içe aktarımı bu kipte çalışmaz (F57.04):**
+  - **Nasıl Test Edilir:** Rol: Geliştirici. Bu kipte Banka ekstresi PDF yüklemeyi deneyin; aynı akışı yalıtımsız ortamda tekrarlayın.
+  - **Beklenen Sonuç:** Kasıtlı olarak çalışmaz (worker_threads engelli); yalıtımsız ortamda çalışır.
+
+## 135. 🔏 OTA Firmware İmzası (Ed25519): İmzasız Paket Reddi, İmzalı Yükleme, Düşürme Koruması ve Köprü Sürüm (2026-10-29, Dalga F)
+
+Cihaza giden yazılım güncellemesi artık proje sahibinin ÖZEL anahtarıyla imzalanır; cihaz imzası doğrulanmamış hiçbir paketi kurmaz (sunucuyu ya da yönetici hesabını ele geçiren biri bile cihaza kendi yazılımını yükleyemez). İmzalama aracı (`tools/ota_imza`), sunucu yükleme ucu (`POST /admin/firmware/<hedef>/releases`) ve cihaz doğrulayıcısı kodlandı ve test edildi; ÜRETİM anahtarı üretilmedi, hiçbir karta yazılmadı, sunucu dağıtılmadı. Maddeler SIRAYLA yapılır ve hepsi sizin işinizdir: anahtar üretimi, köprü sürümün derlenip karta yazılması, imzalama ve canlı yayın (`BEKLEYEN_ISLER.md` bölüm 7); sunucu dağıtılmadan ve köprü sürüm yazılmadan etkisi yoktur (maddeler «Denemeye hazır» görünse de bu hazırlıklar olmadan denenemez). Olumsuz denemelerde (imzasız, yanlış anahtarlı, uydurulmuş, düşük sürümlü paket) `allowed_uids` alanına YALNIZ test kartınızın UID'sini yazın: boş bırakırsanız imzayı henüz bilmeyen sahadaki eski cihazlar paketi (SHA-256 tuttuğu için) kurar. Deneme paketi her zaman ÇALIŞAN, zararsız bir derleme olmalıdır; iş bitince eski manifest'i geri koyun. Kart başına OTA kontrolü için kartı yeniden başlatıp 2-3 dakika bekleyin (açılışta kendiliğinden kontrol eder); Şirket Paneli > Kayıtlı Cihazlar > "Tümüne OTA Kontrolü" bütün kayıtlı cihazlara komut gönderir, `allowed_uids` dışındaki cihazlar paketi almaz. Mimari, anahtar saklama ve geçiş planı: `docs/OTA_IMZA.md`; cihaz sözleşmesi: `docs/OTA_IMZA_CIHAZ.md`; araç: `tools/ota_imza/README.md`. Faz sayfasında bölüm F58 olarak da yer alır.
+
+- [ ] **135.1. Anahtar çifti üretimi, depo dışı saklama ve yedekten doğrulama (F58.01):**
+  - **Nasıl Test Edilir:** Rol: Proje sahibi (imzalama bilgisayarı). Ön koşul: Node 20+; derlenmiş bir `firmware.bin`; şifreli harici bellek ya da depo dışı güvenli klasör. Kendi PowerShell pencerenizde (ajan terminalinde değil) `docs/OTA_IMZA.md` bölüm 3.1'deki adımlarla parolalı anahtar çifti üretin: önce `OTA_IMZA_PAROLA` tanımlayın, sonra depo DIŞI bir yola `node tools\ota_imza\ota_imza.mjs anahtar-uret --ozel <depo dışı yol> --genel <genel anahtar dosyası>` çalıştırın; ekrandaki `key_id` ve genel anahtarı not alın. Deneme olarak aynı komutu önce `--ozel` yolu depo klasörünün İÇİNDE olacak biçimde, sonra `--ozel` hiç vermeden, sonra ilk anahtarın yoluna ikinci kez üretmeyi deneyerek çalıştırın. `git status` çalıştırın. Özel anahtar dosyasını ve parolayı ayrı yerlerde iki yedek olarak saklayın. Yedek kopyayla, elinizdeki herhangi bir derlenmiş `firmware.bin`'i `imzala` ile imzalayıp `dogrula` ile doğrulayın; sonra başka bir derlemenin `.sig` dosyasıyla aynı doğrulamayı yineleyin.
+  - **Beklenen Sonuç:** Anahtar üretimi `key_id` ve genel anahtarı (PEM, hex, C++ tanımı) gösterir. Depo içi yol «İÇİNDE olamaz», yol verilmemesi «varsayılan bir yol YOKTUR» (çıkış 2), ikinci üretim «ZATEN VAR» diye reddedilir ve dosya OLUŞMAZ / ilk anahtar değişmez. `git status` temizdir: özel anahtar depoda, `server/firmware` klasöründe ve sunucuda yoktur. Yedekten imzalanan paket `SONUC: GECTI` verir; başka derlemenin `.sig` dosyasıyla doğrulama `SONUC: GECMEDI` olur. `key_id` değeri `docs/OTA_IMZA.md` bölüm 3.6 tablosuna yazılır.
+- [ ] **135.2. Sunucu: imzasız yeni paket yayınlanmaz, imza bilgisi manifest'e yansır, eski paketler sunulur (F58.02):**
+  - **Nasıl Test Edilir:** Rol: Proje sahibi (süper kullanıcı). Ön koşul: F58.01 tamam; sunucu bu sürümle dağıtılmış (VPS); süper kullanıcı JWT'si; test kartının UID'si. Canlı `.env`'e `OTA_PUBLIC_KEY` olarak GENEL anahtarı yazın, `pm2 restart kapi-api --update-env` yapın; `pm2 logs`ta `[OTA] Imza dogrulama anahtari yuklendi (kimlik: ...)` satırındaki kimliği aracın `key_id` değeriyle karşılaştırın. nginx'te `/admin/firmware/` yolu için gövde sınırını en az 3 MB yapın. `allowed_uids` yalnız test kartı olacak şekilde yükleme ucuna (`docs/OTA_IMZA.md` bölüm 4, PowerShell örneği) şunları gönderin: (a) `X-Ota-Signature` başlığı OLMADAN çalışan bir deneme paketi; (b) başlığa başka bir paketin ya da atılabilir ikinci bir anahtarla atılmış `.sig` koyup yükleme; (c) doğru imzalı paket. `curl.exe "https://api.gudeteknoloji.com.tr/firmware/<hedef>/manifest.json?current_version=<eski sürüm>&uid=<test kartı UID>"` çıktısına bakın. Geçiş döneminde yayında duran eski (imzasız) hedefin manifest'ini de aynı komutla açın.
+  - **Beklenen Sonuç:** (a) 400 `FIRMWARE_SIGNATURE_REQUIRED`, (b) 400 `FIRMWARE_SIGNATURE_INVALID` ile reddedilir: paket cihazlara sunulmaz, önceki manifest değişmez. (c) 201 döner; manifest'te `update_available`, `version`, `sha256` ve `url` alanları eskisi gibi durur, bunlara ek olarak imza alanları (`signature`, `signature_alg`, `signature_format`, `signature_key_id`, `signature_url`) görünür. Eski imzasız manifest değişmeden yanıt verir (sahadaki cihazlar etkilenmez).
+- [ ] **135.3. Köprü sürüm eski yolla gelir (imzayı bilmeyen cihaz) (F58.03):**
+  - **Nasıl Test Edilir:** Rol: Proje sahibi. Ön koşul: F58.01 ve F58.02 tamam; imzayı bilmeyen eski firmware'li TEST kartı (C3 ve WROOM için ayrı kart); USB kablosu; PlatformIO. Genel anahtarı firmware'e `node cihaz_kontrol\tools\ota_anahtar.mjs yaz <genel anahtar dosyası>` ile yazın; hedef başına derleyin (`pio run -e lolin_c3_mini`, `pio run -e esp32_relay_wroom`; yayın derlemesini `SKP_OTA_ANAHTAR_ZORUNLU=1` ile yapın). Yayından ÖNCE `node cihaz_kontrol\tools\ota_anahtar.mjs kontrol <firmware.bin> <genel anahtar dosyası>` çalıştırın. Köprü sürümü (C3 4.4.0 / WROOM 5.3.0) araçla imzalayıp `allowed_uids` yalnız TEST kartının UID'si olacak şekilde yayınlayın; kartı yeniden başlatıp 2-3 dakika bekleyin; seri günlüğü izleyin.
+  - **Beklenen Sonuç:** `kontrol` çıkış kodu 0 verir (2 = ikilide yer tutucu var, YAYINLAMAYIN; 3 = beklenen anahtar ikilide yok). Kart köprü sürümü indirir (SHA-256 doğrulaması geçer), yeniden başlar; yaklaşık 60 sn sonra `ota_validated` olayı gelir. Kapı açma (uygulama ve QR), MQTT ve Wi-Fi eskisi gibi çalışır; seri günlük yeni sürümü gösterir. Köprü sürüm açıldığında seri günlük «OTA imza anahtari: HAZIR (Ed25519, zorunlu); parmak izi <16 hane>» satırını yazar ve parmak izi aracın `key_id` değeriyle aynıdır; «YER TUTUCU» ya da «GECERSIZ» yazıyorsa köprü sürüm YAYINLANMAMALIDIR (o kart hiçbir paketi kurmaz).
+- [ ] **135.4. İmzalı yeni sürüm yüklenir (köprü sürümlü kart) (F58.04):**
+  - **Nasıl Test Edilir:** Rol: Proje sahibi. Ön koşul: F58.03 tamam (ya da köprü sürümü USB ile yazılmış TEST kartı). Köprü sürümü çalıştıran TEST kartına, köprüden daha yüksek sürüm numaralı, araçla imzalanmış, çalışan bir deneme sürümü yayınlayın (`ota_guncelleme.h` içindeki `OTA_VERSION_*` değerini artırıp yeniden derleyin; `allowed_uids` yalnız o kart). Kartı yeniden başlatıp 2-3 dakika bekleyin; seri günlüğü izleyin.
+  - **Beklenen Sonuç:** İndirme ilerler, imza doğrulanır, kart yeniden başlar; yaklaşık 60 sn sonra `ota_validated` gelir. Bu madde pilot kapısının (F58.09) ön koşuludur.
+- [ ] **135.5. İmzasız paket cihazda reddedilir (sunucu korumasının aşıldığı senaryo) (F58.05):**
+  - **Nasıl Test Edilir:** Rol: Proje sahibi. Ön koşul: F58.04 tamam; `OTA_SERVE_UNSIGNED=0` YAPILMADAN ÖNCE (sonrasında sunucu imzasız manifest'i zaten sunmaz); köprü sürümlü TEST kartı. Sunucuya yazabilen bir saldırganı taklit edin: hedef klasörüne imzasız ama ÇALIŞAN bir derlemeyi (daha yüksek sürüm numaralı) ve DOĞRU SHA-256'lı, `signature` alanı olmayan bir manifest'i elle koyun (önce mevcut `manifest.json`'un yedeğini alın; `allowed_uids` yalnız test kartı). Kartı yeniden başlatıp bekleyin; seri günlüğü izleyin; birkaç dakika sonra kapıyı uygulamadan açmayı deneyin. Deneme sonunda manifest'i yedekten geri koyun.
+  - **Beklenen Sonuç:** SHA-256 doğru olmasına rağmen kart paketi KURMAZ: `ota_failed` olayı (ayrıntı metni «imza:» ile başlar), çalışan sürüm değişmez; kapı açma, MQTT ve QR çalışmaya devam eder. Yinelenen denemeler (10/20/40 dk geri çekilmeyle) aynı sonucu verir. Eski güven modelinde bu paket kurulurdu; asıl koruma budur.
+- [ ] **135.6. Bozulmuş ya da yanlış anahtarlı imzalı manifest cihazlara sunulmaz (F58.06):**
+  - **Nasıl Test Edilir:** Rol: Proje sahibi. Ön koşul: F58.02 tamam; yayında gerçek imzalı bir paket; `allowed_uids` yalnız test kartı. Sunucuda `manifest.json`'un yedeğini alıp elle sırayla bozun: (a) yalnız `version` değerini daha yükseğe çekin; (b) `sha256` değerini değiştirin; (c) `signature` alanına atılabilir ikinci bir anahtarla atılmış imzayı yazın. Her birinden sonra `curl.exe` ile manifest'i okuyun ve kartı yeniden başlatıp bekleyin. Sonunda manifest'i yedekten geri koyun.
+  - **Beklenen Sonuç:** Sunucu imzası doğrulanamayan manifest'i SUNMAZ: `update_available: false`, sunucu günlüğünde «Yayin sunulmuyor (SIGNATURE_INVALID)»; kart hiçbir şey indirmez ve çalışmaya devam eder. Cihazın kendi doğrulaması (sunucu bu paketleri sunmayacağı için) sahada değil, firmware ana makine testleri ve aracın test vektörleriyle sınanır; sahada cihaz düzeyindeki ret F58.05'te görülür.
+- [ ] **135.7. Düşürme koruması: düşük sürüm reddi (sunucu) ve imzasız yetkiyle düşürmenin cihazda kurulmaması (F58.07):**
+  - **Nasıl Test Edilir:** Rol: Proje sahibi (süper kullanıcı). Ön koşul: F58.04 tamam; `allowed_uids` yalnız test kartı. Yayındaki sürümden DÜŞÜK sürüm numaralı, geçerli imzalı çalışan bir paketi yükleyin. Aynı paketi `allow_downgrade=1&downgrade_reason=<en az 10 karakterlik gerekçe>` ile yeniden yükleyin; platform denetim kaydına (`ota_release_downgrade`) bakın. Kartın çalışan sürümü bu düşük sürümden yüksekken `curl.exe` ile manifest'i kartın sürümünü vererek okuyun; kartı yeniden başlatıp bekleyin. Deneme sonunda kartın çalışan sürümünden yüksek, imzalı gerçek sürümü yayınlayarak canlı yayını düzeltin.
+  - **Beklenen Sonuç:** İlk yükleme 409 `FIRMWARE_DOWNGRADE_REJECTED` ile reddedilir. `allow_downgrade=1` ve gerekçeyle yükleme kabul edilir (201) ve platform denetim kaydına yazılır; ama imza `rollback_max` taşımadığı için sunucu bunu daha yeni sürümdeki karta düşürme olarak SUNMAZ (`update_available: false`, «surum dusurme sunulmuyor»); sürümü paketin altındaki bir cihaz bunu normal yükseltme olarak alır. Kart hiçbir koşulda imzalı yetki olmadan düşürmeyi kurmaz: çalışan sürüm değişmez, kart aynı sürümde çalışır.
+- [ ] **135.8. Reddedilen güncellemeden sonra toparlanma (F58.08):**
+  - **Nasıl Test Edilir:** Rol: Proje sahibi (süper kullanıcı). Ön koşul: F58.05 ya da F58.06 yapılmış. Hatalı manifest'i kaldırıp doğru imzalı paketi yayınlayın (`allowed_uids` yalnız test kartı). Şirket Paneli > Kayıtlı Cihazlar > «Tümüne OTA Kontrolü» ile komut gönderin (komut `retry` taşır, kartın deneme sayacını ve geri çekilmesini sıfırlar).
   - **Beklenen Sonuç:** Kart doğru imzalı sürümü kurar, `ota_validated` gelir. Ret denemeleri sırasında ve sonrasında kapı açma (uygulama ve QR) kesintisiz çalışmıştır; `allowed_uids` dışındaki cihazlar bir şey kurmamıştır.
-- [ ] **122.9. Pilot Kapısı: Yaygın Yayından Önce İmzalı Güncelleme Sahada Kanıtlanır:**
-  - **Nasıl Test Edilir:** Rol: Proje sahibi. Köprü sürümü her hedef için 1-2 saha cihazına `allowed_uids` ile yayınlayın; 2-3 gün çevrimiçi süresini ve kapı açma günlüğünü izleyin. Sonra aynı cihazlara imzalı bir sonraki sürümü yayınlayın.
+- [ ] **135.9. Pilot kapısı: yaygın yayından önce imzalı güncelleme sahada kanıtlanır (F58.09):**
+  - **Nasıl Test Edilir:** Rol: Proje sahibi. Ön koşul: F58.01 – F58.08 tamam. Köprü sürümü her hedef için 1-2 saha cihazına `allowed_uids` ile yayınlayın; 2-3 gün çevrimiçi süresini ve kapı açma günlüğünü izleyin. Sonra aynı cihazlara imzalı bir sonraki sürümü yayınlayın.
   - **Beklenen Sonuç:** Pilot cihazlar köprüyü sorunsuz çalıştırır, sonraki imzalı sürümü (imza doğrulanarak) kurar ve `ota_validated` gelir. Bu sonuç alınmadan `allowed_uids` boşaltılmaz: köprüdeki doğrulayıcı ya da gömülü anahtar hatalıysa köprüyü alan her cihazı kurtarmak USB ile sahaya gitmek demektir (`docs/OTA_IMZA.md` bölüm 7).
-- [ ] **122.10. Yaygın Yayın İzleme ve Geçiş Sonu:**
-  - **Nasıl Test Edilir:** Rol: Proje sahibi (süper kullanıcı). `allowed_uids` boşaltıldıktan sonra (yayın gününde ve birkaç gün sonra) Şirket Paneli > Kayıtlı Cihazlar'da "Sürüm Raporu (PDF)" oluşturun; hedef başına köprü ya da daha yeni sürümdeki cihaz sayısına ve kalanların nedenine bakın.
-  - **Beklenen Sonuç:** Çevrimiçi tüm cihazlar köprü ya da daha yeni sürümdedir; çevrimdışı olanlar geldiklerinde kurar. Hepsi tamamlanınca sunucuda imzasız paket sunumu kapatılır ve eski imzasız ikililer kaldırılır (`docs/OTA_IMZA.md` bölüm 7, G5).
-- [ ] **122.11. Anahtar Devri Provası (İsteğe Bağlı, TEST Kartında):**
-  - **Nasıl Test Edilir:** Rol: Proje sahibi. `docs/OTA_IMZA.md` bölüm 8.2'nin cihazınıza uyan kolunu (iki yuvalı ya da tek yuvalı) bir TEST kartında, atılabilir bir ikinci anahtar çiftiyle izleyin. Üretim anahtarlarına dokunmayın.
-  - **Beklenen Sonuç:** Kart yeni anahtarla imzalı sürümü kurar ve `ota_validated` gelir; sunucudaki `OTA_PUBLIC_KEY` değiştirildikten sonra yükleme ucu yeni anahtarla imzalı paketi kabul eder, eski anahtarla imzalıyı reddeder. Devir sonrası eski anahtarın cihazdaki durumu (yuva tasarımına bağlıdır) bu maddeye not edilir.
+- [ ] **135.10. Yaygın yayın izleme ve geçiş sonu (F58.10):**
+  - **Nasıl Test Edilir:** Rol: Proje sahibi (süper kullanıcı). Ön koşul: F58.09 tamam. `allowed_uids` boşaltıldıktan sonra (yayın gününde ve birkaç gün sonra) Şirket Paneli > Kayıtlı Cihazlar'da «Sürüm Raporu (PDF)» oluşturun; hedef başına köprü ya da daha yeni sürümdeki cihaz sayısına ve kalanların nedenine bakın. Hepsi tamamlanınca canlı `.env`'de `OTA_SERVE_UNSIGNED=0` yapıp `pm2 restart kapi-api --update-env` çalıştırın.
+  - **Beklenen Sonuç:** Çevrimiçi tüm cihazlar köprü ya da daha yeni sürümdedir; çevrimdışı olanlar geldiklerinde kurar. `OTA_SERVE_UNSIGNED=0` sonrası imzasız manifest artık sunulmaz («Imzasiz paket sunulmuyor») ve eski imzasız ikililer (yedeği alındıktan sonra) kaldırılabilir (`docs/OTA_IMZA.md` bölüm 7, G5).
+- [ ] **135.11. Anahtar devri provası (isteğe bağlı, TEST kartında) (F58.11):**
+  - **Nasıl Test Edilir:** Rol: Proje sahibi. Ön koşul: F58.09 tamam; atılabilir ikinci bir anahtar çifti; yalnız TEST kartı. `docs/OTA_IMZA.md` bölüm 8.2'nin tek yuvalı kolunu (cihazda tek anahtar yuvası vardır) bir TEST kartında, atılabilir ikinci anahtar çiftiyle izleyin. Üretim anahtarlarına dokunmayın.
+  - **Beklenen Sonuç:** Kart yeni anahtarla imzalı sürümü kurar ve `ota_validated` gelir; sunucudaki `OTA_PUBLIC_KEY` değiştirildikten sonra yükleme ucu yeni anahtarla imzalı paketi kabul eder, eski anahtarla imzalıyı reddeder. Devir sonrası eski anahtarın cihazdaki durumu bu maddeye not edilir.
+- [ ] **135.12. İmzalı sınırlı sürüm düşürme (`--rollback-max`; isteğe bağlı) (F58.12):**
+  - **Nasıl Test Edilir:** Rol: Proje sahibi (süper kullanıcı). Ön koşul: F58.04 tamam; yalnız gerçek bir geri dönüş ihtiyacında ya da prova için; `allowed_uids` yalnız TEST kartı. Kartta çalışan sürümden (N) önceki kararlı kodu ayrı derleyip `imzala ... --surum <eski sürüm> --rollback-max <N>` ile imzalayın (ekranda «SURUM DUSURME YETKISI» uyarısı çıkar); `dogrula` çıktısında «surum dusurme yetkisi» uyarısını görün. Yükleme ucuna `allow_downgrade=1&downgrade_reason=<gerekçe>` ile yükleyin (`allowed_uids` yalnız test kartı); yanıtta `rollback_max` değerine bakın. Manifest'i `curl.exe` ile kartın sürümüyle (N), N'den DÜŞÜK bir cihaz sürümüyle ve N'den YÜKSEK bir cihaz sürümüyle okuyun; kartı yeniden başlatıp bekleyin. Deneme sonunda daha yüksek numaralı normal imzalı sürümü yayınlayın.
+  - **Beklenen Sonuç:** Yükleme 201 olur, yanıtta `rollback_max` görünür. Kartın sürümü N ya da daha eskiyse manifest `allow_downgrade: true` ve `rollback_max` ile gelir; kart imzayı (yetki dahil) doğrular, eski sürüme iner ve `ota_validated` gelir. Sürümü N'den yüksek cihaz için teklif yoktur; sürümü paketin altındaki cihaza yükseltme olarak da sunulmaz («yalniz surum dusurme icin imzali»). Bu bir operasyonel istisnadır; güvenli yol eski kodu daha yüksek numarayla yeniden imzalamaktır.

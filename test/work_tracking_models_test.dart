@@ -438,4 +438,175 @@ void main() {
       expect(workRateText(85), '%85', reason: 'sunucu yüzde verirse olduğu gibi');
     });
   });
+
+  group('kategoriler (100)', () {
+    test('WorkCategoryOption: sunucu satırı, kullanım sayısı, eksik ad anahtardan; bozuk satır atılır; defaults dört hazır kategori', () {
+      final option = WorkCategoryOption.fromJson(wkCategory(703, 'k_su_kacagi', 'Su kaçağı', order: 50, itemCount: 4))!;
+      expect(option.id, 703);
+      expect(option.key, 'k_su_kacagi');
+      expect(option.label, 'Su kaçağı');
+      expect(option.isSystem, isFalse);
+      expect(option.isActive, isTrue);
+      expect(option.itemCount, 4);
+      expect(option.isUsed, isTrue);
+      expect(option.legacy, WorkCategory.diger, reason: 'özel kategori simge için "diger" gibi çizilir');
+
+      final system = WorkCategoryOption.fromJson(<String, dynamic>{'id': 1, 'key': 'bakim', 'is_system': true})!;
+      expect(system.label, 'Bakım', reason: 'ad yoksa varsayılan ad');
+      expect(system.itemCount, isNull);
+      expect(system.isUsed, isFalse);
+      expect(system.legacy, WorkCategory.bakim);
+      expect(WorkCategoryOption.fromJson(<String, dynamic>{'key': 'k_x'})!.label, 'k_x', reason: 'bilinmeyen anahtar adsızsa anahtar');
+      expect(WorkCategoryOption.fromJson(<String, dynamic>{'id': 4, 'is_active': false}), isNull, reason: 'anahtarsız satır atılır');
+      expect(WorkCategoryOption.fromJson('x'), isNull);
+      expect(WorkCategoryOption.fromJson(<String, dynamic>{'category': wkCategory(9, 'diger', 'Diğer', system: true, active: false)})!.isActive, isFalse, reason: 'sarmalı gövde');
+
+      final list = WorkCategoryOption.listFrom(<Object?>[wkCategory(1, 'ariza', 'Arıza', system: true), 'bozuk', <String, dynamic>{}, wkCategory(2, 'k_a', 'A')]);
+      expect(list.map((c) => c.key), <String>['ariza', 'k_a']);
+      expect(WorkCategoryOption.listFrom(null), isEmpty);
+      expect(WorkCategoryOption.defaults.map((c) => c.key), <String>['ariza', 'bakim', 'sikayet_oneri', 'diger']);
+      expect(WorkCategoryOption.defaults.map((c) => c.label), <String>['Arıza', 'Bakım', 'Şikayet / Öneri', 'Diğer']);
+      expect(WorkCategoryOption.defaults.every((c) => c.isSystem && c.isActive), isTrue);
+    });
+
+    test('silme sonucu: silindi ya da KULLANILDIĞI için pasife alındı (güncel kategoriyle)', () {
+      final gone = WorkCategoryDeleteResult.fromJson(<String, dynamic>{'deleted': true});
+      expect([gone.deleted, gone.deactivated, gone.category], <Object?>[true, false, null]);
+      final off = WorkCategoryDeleteResult.fromJson(<String, dynamic>{
+        'deleted': false,
+        'deactivated': true,
+        'category': wkCategory(9, 'k_su', 'Su', active: false, itemCount: 3),
+      });
+      expect([off.deleted, off.deactivated, off.category?.isActive, off.category?.itemCount], <Object?>[false, true, false, 3]);
+      expect(WorkCategoryDeleteResult.fromJson(null).deleted, isFalse);
+    });
+
+    test('talep kategorisi: anahtar + sunucu adı; ad yoksa varsayılan ad; bilinmeyen anahtar enum için "diger" (eski uygulama çökmez)', () {
+      final managed = WorkManagedItem.fromJson(wkManaged(1, category: 'k_su_kacagi', categoryLabel: 'Su kaçağı'));
+      expect(managed.categoryKey, 'k_su_kacagi');
+      expect(managed.categoryLabel, 'Su kaçağı');
+      expect(managed.categoryText, 'Su kaçağı');
+      expect(managed.category, WorkCategory.diger);
+
+      final renamed = WorkManagedItem.fromJson(wkManaged(2, category: 'ariza', categoryLabel: 'Teknik arıza'));
+      expect(renamed.category, WorkCategory.ariza);
+      expect(renamed.categoryText, 'Teknik arıza');
+
+      final oldServer = WorkManagedItem.fromJson(wkManaged(3, category: 'bakim'));
+      expect([oldServer.categoryLabel, oldServer.categoryText], <String>['', 'Bakım'], reason: 'eski sunucu: category_label yok');
+
+      final resident = WorkResidentItem.fromJson(wkResident(4, category: 'k_asansor', categoryLabel: 'Asansör'));
+      expect([resident.categoryKey, resident.categoryText, resident.category], <Object>['k_asansor', 'Asansör', WorkCategory.diger]);
+      expect(resident.copyWith(unread: false).categoryText, 'Asansör', reason: 'copyWith kategori adını korur');
+      expect(WorkResidentItem.fromJson(wkResident(5, category: 'sikayet_oneri')).categoryText, 'Şikayet / Öneri');
+    });
+
+    test('talep gövdesi: varsayılan kategoride kategori enumu, sitenin kategorisinde k_<ad> gider; imza anahtarı ayırır', () {
+      const base = WorkCreateRequest(
+        siteCode: 11,
+        category: WorkCategory.bakim,
+        locationType: WorkLocationType.ortakAlan,
+        title: 'Başlık',
+        description: 'Açıklama',
+      );
+      expect(base.categoryApiValue, 'bakim');
+      expect(base.toJson('k-12345678')['category'], 'bakim');
+      const custom = WorkCreateRequest(
+        siteCode: 11,
+        category: WorkCategory.diger,
+        categoryKey: 'k_su_kacagi',
+        locationType: WorkLocationType.ortakAlan,
+        title: 'Başlık',
+        description: 'Açıklama',
+      );
+      expect(custom.categoryApiValue, 'k_su_kacagi');
+      expect(custom.toJson('k-12345678')['category'], 'k_su_kacagi');
+      expect(custom.signature, isNot(base.signature));
+      const blank = WorkCreateRequest(
+        siteCode: 11,
+        category: WorkCategory.ariza,
+        categoryKey: '  ',
+        locationType: WorkLocationType.ortakAlan,
+        title: 'T',
+        description: 'D',
+      );
+      expect(blank.categoryApiValue, 'ariza', reason: 'boş anahtar yok sayılır');
+    });
+
+    test('rapor: sitedeki kategori adı (category_label) öncelikli; yoksa varsayılan ad; bilinmeyen anahtar etikette olduğu gibi', () {
+      final report = WorkReport.fromJson(<String, dynamic>{
+        'by_category': <Object>[
+          <String, dynamic>{'category': 'ariza', 'category_label': 'Teknik arıza', 'opened': 2, 'resolved': 1},
+          <String, dynamic>{'category': 'bakim', 'opened': 1, 'resolved': 0},
+          <String, dynamic>{'category': 'k_su_kacagi', 'category_label': 'Su kaçağı', 'opened': 3, 'resolved': 2},
+          <String, dynamic>{'category': 'k_eski', 'opened': 1, 'resolved': 0},
+        ],
+      });
+      expect(report.byCategory.map((c) => c.label), <String>['Teknik arıza', 'Bakım', 'Su kaçağı', 'k_eski']);
+    });
+  });
+
+  group('fotoğraf uyarıları (100)', () {
+    test('WorkPhotoWarning: kod, önem, mesaj, ilgili kayıt kimlikleri; mesajsız / fotoğrafsız uyarı atılır', () {
+      final warning = WorkPhotoWarning.fromJson(wkPhotoWarning(12, related: <int>[45, 41]))!;
+      expect(warning.code, 'photo_reused_other_location');
+      expect(warning.attachmentId, 12);
+      expect(warning.severity, WorkPhotoWarningSeverity.warning);
+      expect(warning.isWarning, isTrue);
+      expect(warning.relatedCount, 2);
+      expect(warning.relatedItemIds, <int>[45, 41]);
+      expect(warning.message, contains('farklı bir konuma ait'));
+
+      final info = WorkPhotoWarning.fromJson(wkPhotoWarning(3, code: 'photo_reused', severity: 'info', message: 'Aynı konumda.', related: <int>[]))!;
+      expect([info.isWarning, info.relatedItemIds], <Object>[false, <int>[]]);
+      final unknownSeverity = WorkPhotoWarning.fromJson(<String, dynamic>{'code': 'x', 'attachment_id': 4, 'message': 'Metin'})!;
+      expect(unknownSeverity.severity, WorkPhotoWarningSeverity.info, reason: 'bilinmeyen önem bilgi sayılır');
+
+      expect(WorkPhotoWarning.fromJson(<String, dynamic>{'attachment_id': 4, 'message': ''}), isNull);
+      expect(WorkPhotoWarning.fromJson(<String, dynamic>{'message': 'Metin'}), isNull);
+      expect(WorkPhotoWarning.fromJson(<String, dynamic>{'attachment_id': 0, 'message': 'Metin'}), isNull);
+      expect(WorkPhotoWarning.fromJson('x'), isNull);
+      final cleaned = WorkPhotoWarning.fromJson(<String, dynamic>{
+        'attachment_id': 5,
+        'message': 'Metin',
+        'related': <Object>[
+          <String, dynamic>{'work_item_id': 7},
+          <String, dynamic>{'work_item_id': 0},
+          'bozuk',
+          <String, dynamic>{},
+        ],
+      })!;
+      expect(cleaned.relatedItemIds, <int>[7]);
+      expect(WorkPhotoWarning.listFrom(null), isEmpty);
+      expect(WorkPhotoWarning.listFrom(<Object?>[wkPhotoWarning(1), 'x', <String, dynamic>{}]).length, 1);
+    });
+
+    test('yönetim ayrıntısı: photo_warnings okunur; eski sunucuda yoksa boş (çökmez)', () {
+      final item = wkManaged(1);
+      final withWarnings = WorkManagedDetail.fromJson(<String, dynamic>{
+        'item': item,
+        'events': <Object>[],
+        'attachments': <Object>[wkAttachment(901), wkAttachment(902)],
+        'photo_warnings': <Object>[wkPhotoWarning(902), wkPhotoWarning(901, code: 'photo_duplicate_in_item', severity: 'info', message: 'Aynı fotoğraf bu kayıtta birden fazla kez eklenmiş.', related: <int>[])],
+      });
+      expect(withWarnings.photoWarnings.map((w) => w.attachmentId), <int>[902, 901]);
+      final old = WorkManagedDetail.fromJson(<String, dynamic>{'item': item});
+      expect(old.photoWarnings, isEmpty);
+      expect(WorkManagedDetail.fromJson(<String, dynamic>{'item': item, 'photo_warnings': 'bozuk'}).photoWarnings, isEmpty);
+    });
+
+    test('yükleme tamamlama yanıtı: attachment + photo_warnings; liste satırında ve sakin yanıtında uyarı yok', () {
+      final upload = WorkAttachment.fromJson(<String, dynamic>{
+        'attachment': wkAttachment(31, workItemId: 5),
+        'photo_warnings': <Object>[wkPhotoWarning(31)],
+      })!;
+      expect(upload.id, 31);
+      expect(upload.photoWarnings.map((w) => w.attachmentId), <int>[31]);
+      expect(WorkAttachment.fromJson(<String, dynamic>{'attachment': wkAttachment(32)})!.photoWarnings, isEmpty);
+      expect(WorkAttachment.fromJson(wkAttachment(33))!.photoWarnings, isEmpty);
+      expect(WorkAttachment.listFrom(<Object>[wkAttachment(1), wkAttachment(2)]).every((a) => a.photoWarnings.isEmpty), isTrue);
+      final resident = WorkResidentDetail.fromJson(<String, dynamic>{'item': wkResident(1), 'attachments': <Object>[wkAttachment(1)]});
+      expect(resident.attachments.single.photoWarnings, isEmpty);
+    });
+  });
 }

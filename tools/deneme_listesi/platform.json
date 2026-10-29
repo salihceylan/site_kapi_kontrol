@@ -8707,6 +8707,1228 @@
           "gelistirme": "hazir"
         }
       ]
+    },
+    {
+      "id": "F45",
+      "baslik": "Dalga C: saha paketleri (sayaç saha akışı, dosya silme kuralı, iş–ekipman bağı, teklif revizyonu, kategoriler)",
+      "durum": "hazir",
+      "ozet": "Sayaç okuma saha akışı (blok seçimi, çekilenler listesi, yeniden çekim, olağan dışı tüketim uyarısı ve site eşiği), “silmeyi biz yapmayız” dosya kuralı (Drive bekleme kuyruğunda otomatik silme kalktı, telefondaki fotoğraf kopyası kendiliğinden silinmez, dosya adında kayıt kimliği), iş kaydı ↔ ekipman bağı ve önce/sonra fotoğraf etiketi, onaylı teklifin değişmezliği + revizyon + teklif karşılaştırma, yönetilebilir talep kategorileri ve aynı fotoğrafın başka kayıtta kullanıldığı uyarısı. Sürüm yayınlanınca denenir (maddeler “Denemeye hazır” görünse de sürüm yayınlanmadan uygulamada yoktur).",
+      "maddeler": [
+        {
+          "id": "F45.01",
+          "baslik": "Blok seçici",
+          "adimlar": [
+            "Görevli (STAFF) hesabıyla “Fotoğrafla sayaç okuma” ekranını açın (birden çok bloklu site).",
+            "Üstteki blok seçicilerine bakın; bir blok seçin.",
+            "Tek bloklu bir sitede aynı ekranı açın."
+          ],
+          "beklenen": "Üstte “Tümü (0/N)” ve her blok için “A Blok (0/12)” gibi seçiciler görünür; blok seçilince “Sıradaki” daire o bloktan gelir ve okunan/toplam sayısı blok başına güncellenir. Tek bloklu sitede seçici çizilmez.",
+          "rol_notu": "Görevli / Site yöneticisi",
+          "on_kosul": "Sayaç Okuma modülü açık, en az iki bloklu ve sayaçları tanımlı bir TEST sitesi",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.02",
+          "baslik": "Liste ekranı ve bugünün okuması",
+          "adimlar": [
+            "Üstteki bantta “Liste (okunan/toplam)” düğmesine basın.",
+            "Bir daireyi okuyun, uygulamayı kapatıp yeniden açın ve listeye tekrar bakın.",
+            "Yönetici hesabıyla Sayaçlar sekmesinde o okumanın tarihine bakın."
+          ],
+          "beklenen": "Sorunlu, Çekilmeyenler ve Çekilenler bölümleri ve her dairenin durumu görünür (Çekilmedi · son okuma …, Atlandı, Gönderilmeyi bekliyor, Çekildi (değer)). Bugün okunan daire uygulama yeniden açılınca da “Çekildi” görünür; yönetici ekranındaki okuma tarihi girilen günle aynıdır (önceden bir gün geri görünürdü).",
+          "rol_notu": "Görevli, Site yöneticisi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.03",
+          "baslik": "Yeniden çekim, atlama ve vazgeçme",
+          "adimlar": [
+            "Listeden bugün çekilmiş bir daireyi “Yeniden çek” ile seçin; üstteki bandın “Yeniden çekim: …” (gri, ok simgeli) olduğunu ve düğmenin “Onayla ve değiştir” yazdığını doğrulayın.",
+            "Önce bugünkü okumadan önceki okumadan küçük bir değer, sonra geçerli yeni bir değer yazıp onaylayın.",
+            "Yönetici ekranında aynı günün okumasına bakın.",
+            "Bir daireyi “Atla” ile atlayıp listede “Atlandı” görünen daireyi seçerek geri çekin; bir seçimi “Vazgeç” ile bırakın; sıra bitince “Atlananlara dön”e basın."
+          ],
+          "beklenen": "Önceki okumadan küçük değer engellenir (taban, bugünkü okuma değil ondan önceki okumadır). Geçerli değerde yönetici ekranındaki aynı günlük okuma yeni değere döner, ikinci satır oluşmaz. “Vazgeç” seçimi bırakır; atlanan daire listede “Atlandı” görünür ve oradan çekilebilir; sıra bitince “Atlananlara dön” çıkar.",
+          "rol_notu": "Görevli, Site yöneticisi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.04",
+          "baslik": "Olağan dışı tüketim uyarısı",
+          "adimlar": [
+            "Son okuması 130 olan ve son 3 dönem tüketimi yaklaşık 10 olan bir sayaçta 181 yazıp onaylayın (tüketim 51; eşik 5 kat = 50).",
+            "Açılan pencerede önce “Değeri düzelt”e, sonra yine onaylayıp “Doğru, kaydet”e basın.",
+            "Aynı sayaçta 180 (tam eşik) yazın; ayrıca 3 okumalı ya da hiç okuması olmayan bir sayaçta büyük bir değer yazın."
+          ],
+          "beklenen": "181'de sıradaki daireye geçmeden “Olağan dışı tüketim” penceresi (tüketim, ortanca ve eşik rakamlarıyla) çıkar. “Değeri düzelt” hiçbir şey kaydetmez ve yazdığınız değer ekranda kalır; “Doğru, kaydet” kaydeder. 180'de (eşitlikte) uyarı çıkmaz. 3 okumadan az verisi olan ya da hiç okuması olmayan sayaçta uyarı çıkmaz.",
+          "rol_notu": "Görevli, Site yöneticisi",
+          "on_kosul": "En az 4 okuması olan bir sayaç (son okuma 130, son 3 dönem tüketimi yaklaşık 9, 11, 10)",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.05",
+          "baslik": "Sıçrama onayının denetim izi",
+          "adimlar": [
+            "F45.04'te “Doğru, kaydet” ile kaydettiğiniz okumanın ardından süper kullanıcı / yönetici işlem kayıtlarına (ya da veritabanında denetim kaydına) bakın."
+          ],
+          "beklenen": "“metering.reading.jump_confirmed” kaydı vardır (sayaç no, eşik katı ve oran yüzdesi). Okunan değerin kendisi denetim kaydında yazmaz.",
+          "rol_notu": "Süper kullanıcı / Site yöneticisi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.06",
+          "baslik": "Sunucunun uyardığı okuma Bekleyen listesinde onay bekler",
+          "adimlar": [
+            "Saha ekranı açıkken (telefon eşiği 5 kat bilir) süper kullanıcıyla siteye özel eşiği 3 kata düşürün (F45.07).",
+            "Aynı sayaçta 161 yazın (tüketim 31; telefon uyarmaz, sunucu uyarır).",
+            "Üst çubuktaki kırmızı rozetli “Bekleyen” düğmesine basın; sırasıyla “Doğru, onayla ve gönder”, “Değeri düzelt” ve “Sil”i farklı kayıtlarda deneyin.",
+            "Başka bir sayaçta önceki okumadan küçük bir değeri sunucuya göndererek reddedilen kaydı da bakın."
+          ],
+          "beklenen": "Okuma Bekleyen listesinde “onay bekliyor” olarak kalır; üst çubukta kırmızı rozet ve ekranın altında bildirim görünür. “Doğru, onayla ve gönder” ile gider, “Değeri düzelt” ve “Sil” de çalışır. Sunucunun reddettiği diğer kayıtlar (ör. önceki okumadan küçük değer) da kırmızı rozetle görünür.",
+          "rol_notu": "Görevli, Süper kullanıcı",
+          "on_kosul": "Sayaç tabanı hazır bir sayaç (F45.04); süper kullanıcı hesabı",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.07",
+          "baslik": "Siteye özel eşik ayarı (K katsayısı)",
+          "adimlar": [
+            "Süper kullanıcıyla Modüller > Kurallar > ilgili sitenin kuralları > “Sayaç okuma” grubunda “Sayaç okuma: sıçrama uyarısı eşiği” kuralına bakın.",
+            "Siteye özel 3 kat verip kaydedin; saha ekranını yenileyip (en geç 30 sn) 130 → 161 yazın.",
+            "Site yöneticisi hesabıyla aynı kurala bakın."
+          ],
+          "beklenen": "Kural varsayılan 5 kat gösterilir, sınır 2–100 kattır. Siteye özel 3 kat verilince ekran yenilendikten sonra 161 uyarı verir. Site yöneticisinde kural salt okunurdur (düzenleyemez); değeri yalnız süper kullanıcı verir.",
+          "rol_notu": "Süper kullanıcı, Site yöneticisi",
+          "on_kosul": "Süper kullanıcı hesabı",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.08",
+          "baslik": "Çevrimdışı okuma, yeniden çekim ve hızlı ikinci okuma",
+          "adimlar": [
+            "Uçak modunda bir daireyi okuyun, ardından aynı daireyi listeden yeniden çekin.",
+            "İnterneti açın.",
+            "Yavaş bir ağda bir daireyi gönderirken hemen ikinci daireyi okuyun."
+          ],
+          "beklenen": "Bekleyen listesinde o daire için tek kayıt kalır (“yeniden çekim” etiketli); internet gelince gider. Gönderim sürerken girilen ikinci okuma kaybolmaz.",
+          "rol_notu": "Görevli",
+          "on_kosul": "Android telefon",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.09",
+          "baslik": "Telefondaki fotoğraf kopyası kendiliğinden silinmez",
+          "adimlar": [
+            "Drive bağlı değilken fotoğraflı bir sayaç okuması gönderin.",
+            "Üst çubuktaki “Telefondaki fotoğraf kopyaları” simgesine dokunun ve önce “Kalsın”a basın.",
+            "Simgeye yeniden dokunup bu kez “Kopyaları sil”e basın."
+          ],
+          "beklenen": "Ekranda “1 okuma gönderildi. Fotoğrafların telefonunuzdaki kopyası silinmedi; isterseniz siz silebilirsiniz.” notu çıkar ve simge görünür. “Kalsın” hiçbir şeyi silmez; “Kopyaları sil” yalnız o zaman siler, “… fotoğraf kopyası telefondan silindi.” der ve simge kaybolur. Sunucu fotoğrafı almadıysa not “okumanın fotoğrafı sunucuya ulaşmadı; kopyası telefonunuzda duruyor” olur.",
+          "rol_notu": "Görevli",
+          "on_kosul": "Android telefon (kamera); Sayaç Okuma modülü açık",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.10",
+          "baslik": "Bekleyen kaydın fotoğrafına dokunulmaz",
+          "adimlar": [
+            "İnternet kapalıyken fotoğraflı bir okuma alın.",
+            "Gönderilmiş başka okumaların kopyaları varsa “Kopyaları sil” deyin.",
+            "Bekleyen listesinden o kaydı Sil ile atın."
+          ],
+          "beklenen": "“Kopyaları sil” bekleyen ya da reddedilen okumanın fotoğrafına dokunmaz. Kaydı siz Sil derseniz fotoğrafı da onunla gider.",
+          "rol_notu": "Görevli",
+          "on_kosul": "Android telefon",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.11",
+          "baslik": "Dosya adında kayıt kimliği",
+          "adimlar": [
+            "Drive bağlıyken fotoğraflı bir sayaç okuması gönderip Drive'daki dosya adına bakın.",
+            "Drive bağlı değilken gönderilen okumada yönetici ekranından fotoğrafı indirip adına bakın."
+          ],
+          "beklenen": "Drive'da ayın klasöründe dosya adı OKM-<okuma no>_AB_D13_<ggaayy>.jpg biçimindedir. Drive bağlı değilse sunucudaki fotoğrafın indirme adı aynı kimliği taşır.",
+          "rol_notu": "Görevli, Site yöneticisi",
+          "on_kosul": "Drive bağlı bir site (ve bağlı olmayan bir site)",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.12",
+          "baslik": "Drive'a gidemeyen dosya silinmez, yöneticiye uyarı gösterilir",
+          "adimlar": [
+            "Yönetici: Dosya Deposu > Google Drive kartı. Google hesabından Drive erişimini kaldırın ve bir PDF yükleyin.",
+            "Kartta “Bekleyen” sayısına ve sarı uyarıya bakın.",
+            "Google Drive'ı yeniden bağlayın ya da “Bekleyenleri şimdi gönder”e basın."
+          ],
+          "beklenen": "Dosya bekleyen olarak kabul edilir ve SİLİNMEZ: kartta “Bekleyen: 1” ve sarı “1 dosya Drive'a gönderilmeyi bekliyor” uyarısı görünür. Drive bağlanınca ya da “Bekleyenleri şimdi gönder” ile dosya Drive'a gider ve uyarı kaybolur. 7 günü geçen dosya silinmez, “uzun süredir bekliyor” uyarısı alır.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Drive bağlı bir TEST sitesi (Google hesabı sizde)",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.13",
+          "baslik": "Bekleme alanı dolunca yeni yükleme reddedilir (QA)",
+          "adimlar": [
+            "(Test ortamında) Drive kopukken bekleyen dosyaların toplamını 100 MB'a yaklaştırıp yeni bir dosya yükleyin."
+          ],
+          "beklenen": "Yeni yükleme 503 DRIVE_QUEUE_FULL ile reddedilir (yönetiminize bildirin); mevcut bekleyen dosyalar ve geçici dosyalar yerinde kalır. Kartta “Bekleme alanı doldu” uyarısı çıkar, denetim kaydında drive.queue_full görünür. Drive ayaktaysa aynı yükleme doğrudan Drive'a gider.",
+          "rol_notu": "Site yöneticisi (teknik doğrulama)",
+          "on_kosul": "Kapalı devre TEST ortamı; canlıda denenmez",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.14",
+          "baslik": "Kayda bağlı dosya süzgeci (QA / API)",
+          "adimlar": [
+            "(API) GET .../drive/files?source_type=meter_reading&source_id=<okuma no> çağrısı yapın; geçersiz tür ya da numara ile de deneyin."
+          ],
+          "beklenen": "Yalnız o okumanın dosyaları döner. Geçersiz tür ya da numara 400 INVALID_SOURCE verir.",
+          "rol_notu": "Site yöneticisi (teknik doğrulama)",
+          "on_kosul": "Drive bağlı TEST sitesi; fotoğraflı bir okuma",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.15",
+          "baslik": "Talebe ekipman bağlama ve kaldırma",
+          "adimlar": [
+            "Yönetici: Talepler > bir talebi açın > “Talebi yönet” bölümünde “Ekipman (isteğe bağlı)” listesinden bir ekipman seçip “Değişiklikleri Kaydet”e basın.",
+            "Aynı talepte ekipmanı “Seçilmedi” yapıp kaydedin.",
+            "Kapanmış ya da iptal edilmiş bir talebi açın.",
+            "Sakin hesabıyla aynı talebe bakın."
+          ],
+          "beklenen": "Bilgi satırında “Ekipman: …”, Geçmiş'te “Ekipman: Seçilmedi → …” ve liste kartında “Ekipman: …” çipi görünür; sakin ekranında ekipman görünmez. Kaldırınca Geçmiş'te “Ekipman: … → Seçilmedi”. Kapanmış / iptal talepte ekipman seçici hiç görünmez.",
+          "rol_notu": "Site yöneticisi, Daire sakini",
+          "on_kosul": "İş Takibi ve Ekipman ve Bakım açık, en az bir ekipmanı olan TEST sitesi",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.16",
+          "baslik": "Ekipman kartında servis geçmişi",
+          "adimlar": [
+            "Ekipman ve Bakım > bir ekipmanın kartı > en alttaki “Servis geçmişi (iş kayıtları)” bölümüne bakın.",
+            "30'dan fazla bağlı iş varsa “Daha fazla göster”e basın.",
+            "İş Takibi modülü KAPALI bir sitede ekipman kartını açın."
+          ],
+          "beklenen": "Bağlı işler görünür: “Toplam n iş kaydı · m açık”, durum / kategori / tarih, çözülmüş işlerde “Çözüm: tarih”, fotoğraf özeti (“Önce 1 · Sonra 2 · 3 fotoğraf”) ve “İş #n”. İş Takibi kapalı sitede “İş Takibi bu sitede kapalı…” bilgisi çıkar ve kart bozulmaz.",
+          "rol_notu": "Site yöneticisi, Kurul üyesi",
+          "on_kosul": "Bir ekipmana bağlı birkaç iş; İş Takibi kapalı ikinci bir site",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.17",
+          "baslik": "Önce / Sonra fotoğraf etiketi",
+          "adimlar": [
+            "Bir talepte “Fotoğraf etiketi” seçicisinden Önce'yi seçip fotoğraf ekleyin; sonra Sonra'yı seçip bir fotoğraf daha, ardından etiket seçmeden bir fotoğraf ekleyin.",
+            "Fotoğrafa dokunun; altındaki yazıya bakın.",
+            "Sakin hesabıyla aynı talebe bakın.",
+            "Fotoğrafların bağlı olduğu ekipmanın servis geçmişine bakın."
+          ],
+          "beklenen": "Şeritte “Önce · ad” / “Sonra · ad”, Geçmiş'te “Fotoğraf eklendi (Önce)” görünür; fotoğrafa dokununca altta “Talep #n · Fotoğraf #m” yazar. Etiketsiz ve eski fotoğraflar eskisi gibi etiketsiz görünür. Sakin etiket seçemez ama etiketli fotoğrafın altında “Önce” / “Sonra” yazar. Ekipman servis geçmişinde ilgili işin satırında Önce / Sonra sayıları görünür.",
+          "rol_notu": "Site yöneticisi, Daire sakini",
+          "on_kosul": "F45.15 ile ekipman bağlı talep",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.18",
+          "baslik": "Pasif ekipman, görevli ve kurul",
+          "adimlar": [
+            "Bir ekipmanı pasife alın; talepte ekipman listesine bakın; önceden o ekipmana bağlı bir talebi açın ve kaydedin.",
+            "Görevli hesabıyla ekipmanın servis geçmişine bakın.",
+            "Kurul hesabıyla geçmişe ve bir talebe bakın."
+          ],
+          "beklenen": "Pasif ekipman yeni bağ için listede görünmez; önceden bağlı talepte “<ad> (tür) - pasif” görünür ve kaydedince bağ kaybolmaz. Görevli geçmişte yalnız kendine atanmış ya da atanmamış işleri görür. Kurul geçmişi görür ama ekipman / etiket seçici yoktur.",
+          "rol_notu": "Site yöneticisi, Görevli, Kurul üyesi",
+          "on_kosul": "F45.15'teki test sitesi; görevli ve kurul hesabı",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.19",
+          "baslik": "Karşılaştırma tablosu ve KDV esası",
+          "adimlar": [
+            "Ekipman ve Bakım > Teklifler > Teklif ekle: aynı konuda iki teklif girin (A: 5.000 TL, KDV hariç, 30 gün; B: 4.500 TL, KDV hariç, 10 gün, kapsam notu yazın).",
+            "Aynı konuya üçüncü bir teklifi “KDV dahil” olarak girin."
+          ],
+          "beklenen": "Konu başlığının altında “Karşılaştırma” tablosu çıkar (dar ekranda yatay kayar); B'de “En düşük” ve “En hızlı” görünür. Üçüncü teklif KDV dahil olunca tablonun üstünde “Tutarlar farklı KDV esaslarında” uyarısı çıkar ve hiçbir teklifte “En düşük” işareti kalmaz.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Ekipman ve Bakım açık TEST sitesi",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.20",
+          "baslik": "Açık teklifi yerinde düzenle",
+          "adimlar": [
+            "Karara bağlanmamış (açık) bir teklifte Düzenle'ye basıp tutarı ve teslim süresini değiştirin.",
+            "Geçerlilik süresi dolmuş açık bir teklifi açın."
+          ],
+          "beklenen": "Kart güncellenir. Süresi dolmuş açık teklifte “Kabul et” yoktur, ama “Düzenle” (geçerlilik tarihini uzatmak için) ve “Reddet” vardır.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "F45.19'daki teklifler",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.21",
+          "baslik": "Kabul edilen teklif kilitlenir, değişiklik yeni sürümdür",
+          "adimlar": [
+            "Bir teklifi sözleşme olarak Kabul edin ve kartına bakın.",
+            "“Revizyon oluştur”a basıp gerekçe yazmadan Kaydet'e basın.",
+            "Gerekçe ve yeni tutarla yeniden kaydedin; Sözleşmeler ekranında ilk sözleşmeye bakın."
+          ],
+          "beklenen": "Kartta “Onay tarihi … güncel fiyat sayılmaz” yazısı ve “Revizyon oluştur” düğmesi vardır; Düzenle / Reddet / Kabul et yoktur. Gerekçesiz kayıt uyarı verir. Gerekçeyle kaydedince kartta “Sürüm 2”, “Revizyon: onay bekliyor” ve “Onaylı sürüm (1. sürüm): … sözleşme olarak kayıtlı” görünür; ilk sözleşme değişmeden kalır.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Finans ve Sözleşmeler modülleri açık TEST sitesi",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.22",
+          "baslik": "Sürüm geçmişi",
+          "adimlar": [
+            "Revizyonlu teklifte “Sürüm geçmişi”ne basın."
+          ],
+          "beklenen": "1. ve 2. sürüm eskiden yeniye listelenir; her satırda “Önceki sürüme göre: +X TL” farkı, gerekçe, “Geçerli onaylı sürüm” ve “En son sürüm” işaretleri görünür.",
+          "rol_notu": "Site yöneticisi, Kurul üyesi",
+          "on_kosul": "F45.21 sonrası",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.23",
+          "baslik": "Revizyonu kabul etmek ve reddetmek",
+          "adimlar": [
+            "Revizyonu Kabul edin; “Önceki sürüm zaten kayıtlı” uyarısında önce Vazgeç'e, sonra yeniden kabul edip Devam et'e basın.",
+            "Başka bir revizyonu Reddet'le sonuçlandırın."
+          ],
+          "beklenen": "Vazgeç hiçbir kayıt oluşturmaz. Devam et AYRI bir sözleşme açar (başlıkta “(revizyon 2)”); ilk sözleşme olduğu gibi kalır (çift sayım olmaz). Revizyon reddedilince onaylı 1. sürüm geçerli kalır; kartta “Revizyon reddedildi” ve yeniden “Revizyon oluştur” çıkar.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "F45.21 sonrası",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.24",
+          "baslik": "Yetki ve eski uygulama sürümü",
+          "adimlar": [
+            "Kurul üyesi ve görevli hesabıyla Teklifler'e bakın.",
+            "Eski uygulama sürümüyle yeni sunucuya karşı bir teklif ekleyin, kabul edin ve reddedin."
+          ],
+          "beklenen": "Kurul ve görevlide hiçbir yazma düğmesi yoktur; yalnız (varsa) “Sürüm geçmişi” görünür. Eski sürümde teklif ekleme, kabul ve ret çalışır; önceki sürümü zaten kayıtlı bir revizyonu eski sürümde kabul etmek sunucu mesajıyla reddedilir (uygulamayı güncelleyin).",
+          "rol_notu": "Kurul üyesi, Görevli, Site yöneticisi",
+          "on_kosul": "Eski bir uygulama sürümü (isteğe bağlı)",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.25",
+          "baslik": "Kategori düzenleme yetkisi",
+          "adimlar": [
+            "Site yöneticisiyle Talepler ekranında kategori simgeli “Kategorileri düzenle” düğmesine bakın.",
+            "Görevli ve yönetim kurulu hesaplarıyla aynı ekrana bakın."
+          ],
+          "beklenen": "Düğme yalnız yönetici / süper kullanıcıda görünür; görevli ve yönetim kurulunda hiç yoktur.",
+          "rol_notu": "Site yöneticisi, Görevli, Kurul üyesi",
+          "on_kosul": "İş Takibi açık TEST sitesi",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.26",
+          "baslik": "Kategori ekleme, ad benzersizliği ve sakin formu",
+          "adimlar": [
+            "Kategorileri düzenle > “Su kaçağı” ekleyin (listede “Kullanılmadı” etiketi görünür).",
+            "Aynı adı farklı yazımlarla (“SU KAÇAĞI”, “su kaçağı”) ve hazır bir adı (“Arıza”, “ariza”) eklemeyi deneyin.",
+            "Sakin hesabıyla Yeni Talep formunda Kategori listesine bakıp “Su kaçağı” ile talep gönderin.",
+            "Yönetim Talepler listesinde ve kategori süzgecinde talebi bulun."
+          ],
+          "beklenen": "Aynı ad (büyük / küçük harf ve Türkçe karakter farkıyla) “Bu adda bir kategori zaten var.” diye reddedilir. Sakin formunda “Su kaçağı” seçilebilir; talep kartında “Su kaçağı · Ortak alan” yazar; yönetim listesinde ve süzgecinde de “Su kaçağı” görünür.",
+          "rol_notu": "Site yöneticisi, Daire sakini",
+          "on_kosul": "İş Takibi açık TEST sitesi; sakin hesabı",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.27",
+          "baslik": "Kullanılmış kategori silinmez, pasife alınır",
+          "adimlar": [
+            "“Su kaçağı” (artık 1 talepte kullanılmış) için çöp kutusu simgesine basıp “Kategori pasife alınsın mı?” onayını verin.",
+            "Sakin formuna, eski talebe ve yönetim süzgecine bakın.",
+            "Göz simgesiyle kategoriyi yeniden etkinleştirin."
+          ],
+          "beklenen": "Onaydan sonra “Pasif” etiketi gelir ve kategori listede KALIR. Sakin formunda artık görünmez; eski talep kategorisini ve adını korur; yönetim süzgecinde “Su kaçağı (pasif)” olarak görünür. Yeniden etkinleştirince sakin formuna geri döner.",
+          "rol_notu": "Site yöneticisi, Daire sakini",
+          "on_kosul": "F45.26 sonrası",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.28",
+          "baslik": "Kullanılmamış kategoriyi silme, hazır kategori kuralları ve son etkin kategori",
+          "adimlar": [
+            "Hiç kullanılmamış özel bir kategoriyi silin.",
+            "Hazır kategorilerde (Arıza, Bakım, Şikayet / Öneri, Diğer) silme simgesi arayın; “Arıza”yı “Teknik arıza” olarak yeniden adlandırın.",
+            "Kategorileri tek tek pasife alıp SON etkin olanı da pasife almayı deneyin.",
+            "Boş ya da 60 karakterden uzun bir ad girin."
+          ],
+          "beklenen": "Kullanılmamış kategori onaydan sonra tamamen gider. Hazır kategorilerde silme simgesi yoktur; yeniden adlandırma çalışır ve talep kartları, performans raporu ve faaliyet raporu yeni adı gösterir. Son etkin kategori pasife alınamaz (“En az bir kategori açık kalmalıdır…” hatası). Boş / uzun ad alan hatası verir.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "F45.26 sonrası",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.29",
+          "baslik": "Aynı fotoğraf başka kayıtta uyarısı",
+          "adimlar": [
+            "Telefondan aynı dosyayı farklı konumlu iki talebe yükleyin (ör. A Blok Daire 1 ve B Blok Daire 5); ikinci talebin yönetici ayrıntısına bakın.",
+            "Aynı fotoğrafı aynı konumlu iki talebe yükleyin.",
+            "Aynı fotoğrafı aynı talebe iki kez ekleyin."
+          ],
+          "beklenen": "Farklı konumda sarı “Fotoğraf N: Bu fotoğraf farklı bir konuma ait başka bir kayıtta da kullanılmış (#… · … Blok - Daire …)” uyarısı çıkar; yükleme, kaydetme ve silme düğmeleri etkilenmez. Aynı konumda mavi bilgi, aynı talebe ikinci eklemede yalnız SONRAKİ kopyada “Aynı fotoğraf bu kayıtta birden fazla kez eklenmiş.” bilgisi görünür. Yeniden sıkıştırılmış / kırpılmış fotoğraf eşleşmez (yalnız birebir aynı dosya yakalanır).",
+          "rol_notu": "Site yöneticisi, Görevli",
+          "on_kosul": "İş Takibi açık TEST sitesi; telefondan fotoğraf yükleme",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F45.30",
+          "baslik": "Fotoğraf uyarısının gizliliği",
+          "adimlar": [
+            "Sakin hesabıyla F45.29'daki talebin ayrıntısına bakın.",
+            "Görevli hesabıyla kendisine atanmamış (kapsam dışı) bir kayıtla eşleşen talebin ayrıntısına bakın.",
+            "Yönetim kurulu hesabıyla aynı talebe bakın."
+          ],
+          "beklenen": "Sakin ayrıntısında hiçbir fotoğraf uyarısı yoktur. Görevli kapsam dışı eşleşmeyi “#numara / konum” olmadan yalnızca sayı olarak görür. Kurul uyarıyı görür ama düğme görmez.",
+          "rol_notu": "Daire sakini, Görevli, Kurul üyesi",
+          "on_kosul": "F45.29 sonrası; görevli ve kurul hesabı",
+          "yeni": true,
+          "gelistirme": "hazir"
+        }
+      ]
+    },
+    {
+      "id": "F50",
+      "baslik": "Çoklu malik: bir dairede birden çok malik, tek hesap muhatabı",
+      "durum": "hazir",
+      "ozet": "Bir dairede birden çok malik (eş, kardeş, mirasçı) kayıtlı olabilir; TAM BİRİ “hesap muhatabı”dır. Borç, tahakkuk, tahsilat, Borcum ekranı ve hatırlatmalar yalnız muhataba bağlıdır; diğer malikler “ortak malik” olarak kayıtlıdır (malik yetkisi ve borç görünümü yoktur). Daire kartında malik ekleme, muhatap değiştirme ve malik çıkarma eylemleri yalnız site yöneticisindedir. Veritabanı yükseltmesi (migration 104) mevcut tek maliki kayıpsız muhatap yapar; borç ve bakiye hesapları değişmez. Sürüm yayınlanınca denenir (maddeler “Denemeye hazır” görünse de sürüm yayınlanmadan uygulamada yoktur).",
+      "maddeler": [
+        {
+          "id": "F50.01",
+          "baslik": "Daireye ikinci malik ekleme (yeni kişi)",
+          "adimlar": [
+            "Kişiler > Daireler bölümünden bir daire kartını açın.",
+            "“Malik ekle” > “Yeni kişi” seçin, yalnız ad soyad yazıp Ekle'ye basın."
+          ],
+          "beklenen": "Kartta iki malik görünür. İlk malikte “Hesap muhatabı” rozeti, “Malik (hesap muhatabı)” satırı ve açıklama bandı çıkar.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Tek malikli bir TEST dairesi",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F50.02",
+          "baslik": "Ekleme sırasında hesap muhatabını başka malike verme",
+          "adimlar": [
+            "“Malik ekle” penceresinde “Kayıtlı kişi” ile başka bir kişiyi seçin ve “Hesap muhatabı olsun” anahtarını açın.",
+            "Aidat ve Finans > Bakiyeler'de o dairenin bakiyesine bakın."
+          ],
+          "beklenen": "Rozet yeni kişiye geçer. Dairenin bakiyesi DEĞİŞMEZ; yalnız Malik adı yeni muhatap olur.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Borcu olan bir TEST dairesi",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F50.03",
+          "baslik": "“Muhatap yap”",
+          "adimlar": [
+            "Muhatap olmayan malikte “Muhatap yap”a basın, onay penceresini onaylayın.",
+            "Eski ve yeni muhatabın hesabıyla sırayla girip Borcum ve Dairem ekranlarına bakın."
+          ],
+          "beklenen": "Rozet taşınır. Eski muhatabın Borcum ekranı boşalır, yenisininki dolar. Dairem'de eski muhatap “Ortak malik” rolünde görünür ve hiçbir yönetim düğmesi yoktur.",
+          "rol_notu": "Site yöneticisi / Daire sakini",
+          "on_kosul": "İki malikli daire; iki malikin de hesabı olsun",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F50.04",
+          "baslik": "Maliki çıkarma kuralları",
+          "adimlar": [
+            "Muhatap olmayan maliki “Maliki çıkar” ile çıkarın.",
+            "3+ malikli dairede muhatabı çıkarmayı deneyin; 2 malikli dairede de deneyin.",
+            "Tek malikli dairede “Maliki çıkar”ı deneyin."
+          ],
+          "beklenen": "Muhatap olmayan malik doğrudan çıkar (“Taşındı”). 3+ malikte muhatabı çıkarırken “Yeni hesap muhatabı” seçmeden Çıkar düğmesi basmaz. 2 malikte “Hesap muhatabı X olacak” bilgisi çıkar. Dairenin TEK maliki çıkarılamaz (kişi kartından Taşındı kullanılır).",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "1, 2 ve 3+ malikli TEST daireleri",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F50.05",
+          "baslik": "Kurul üyesi ve listeler",
+          "adimlar": [
+            "Kurul üyesi hesabıyla aynı daire kartını açın.",
+            "Daire listesine ve daire seçiciye bakın."
+          ],
+          "beklenen": "Rozet ve açıklama görünür; Malik ekle / Muhatap yap / Maliki çıkar düğmeleri YOKTUR. Listede ve seçicide “Malik: Ayşe Y. (+1 malik)” gibi yazar.",
+          "rol_notu": "Yönetim kurulu üyesi",
+          "on_kosul": "Çoklu maliklı daire",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F50.06",
+          "baslik": "Daire geçmişi",
+          "adimlar": [
+            "Daire geçmişi ekranını açın.",
+            "Muhatap malike “Taşındı” işleyin."
+          ],
+          "beklenen": "“Malik eklendi”, “Malik çıkarıldı” ve “Hesap muhatabı değişti” satırları görünür. Muhatap Taşındı olunca otomatik devirde Sistem kaydı düşer.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F50.07",
+          "baslik": "Toplu yükleme ve ilişki ekleme tek malikli kalır",
+          "adimlar": [
+            "Toplu yükleme dosyasında aynı daireye ikinci bir malik yazın ve yükleyin.",
+            "Kişi kartından “ilişki ekle” ile aynı daireye ikinci malik eklemeyi deneyin."
+          ],
+          "beklenen": "İkisi de “bu dairede zaten malik var” (409) verir. Bu bilinçlidir: ek malikler yalnız Daire kartındaki “Malik ekle”den eklenir.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Maliki olan bir daire",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F50.08",
+          "baslik": "Hatırlatma ve makbuz muhataba gider",
+          "adimlar": [
+            "Borç hatırlatması önizlemesini açın.",
+            "Aynı daire için bir tahsilat girip makbuza bakın."
+          ],
+          "beklenen": "Hatırlatma alıcısı yalnız hesap muhatabıdır. Makbuzda ödeyen adı muhataptır.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Borçlu, çoklu maliklı daire",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F50.09",
+          "baslik": "Yükseltme sonrası mevcut daireler",
+          "adimlar": [
+            "Sürüm yükseltildikten sonra bu dairenin kartına, bakiyesine ve malikin Borcum ekranına bakın."
+          ],
+          "beklenen": "Malik “Hesap muhatabı” rozetiyle görünür; bakiye, borç kalemleri ve Borcum ekranı yükseltme öncesiyle aynıdır.",
+          "rol_notu": "Site yöneticisi / Daire sakini",
+          "on_kosul": "Yükseltme öncesi tek malikli, borçlu bir daire",
+          "yeni": true,
+          "gelistirme": "hazir"
+        }
+      ]
+    },
+    {
+      "id": "F51",
+      "baslik": "Site kurulum sihirbazı ve “Excel'den yükle” kısayolu",
+      "durum": "hazir",
+      "ozet": "Yeni onaylanmış site için altı adımlı Site Kurulum Sihirbazı (Site bilgileri, Bloklar, Daireler, Kişiler, Modüller, Finans açılışı): mevcut ekranları adım adım açar, dönünce durumu sunucudan okur; yarım kalırsa kalınan adımdan sürer (kalınan adım ve “atlandı” bilgisi cihazda saklanır). Kişiler, Daireler ve Araçlar listelerinde “Excel'den yükle” kısayolu da eklendi. Yalnız istemci değişti (sunucu dağıtımı gerekmez; web ve APK yeniden derlenir). Site bilgisi ve blok düzenleme sunucuda yalnız süper kullanıcıya açıktır; site yöneticisinde bu iki adım salt gösterimdir. Sürüm yayınlanınca denenir (maddeler “Denemeye hazır” görünse de sürüm yayınlanmadan uygulamada yoktur).",
+      "maddeler": [
+        {
+          "id": "F51.01",
+          "baslik": "Onaydan sonra sihirbaza yönlendirme",
+          "adimlar": [
+            "Yeni onaylanan sitenin yöneticisiyle giriş yapın.",
+            "Onay iletisindeki “Kuruluma başla”ya ve Panel'deki kuruluma ait karta bakın."
+          ],
+          "beklenen": "Panel'de “Site kurulumunu tamamlayın” kartı görünür. “Kuruluma başla” sihirbazı “Adım 4 / 6 · Kişiler” adımından açar; ilk üç adım “Tamam” görünür.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Yeni onaylanmış bir TEST sitesi",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F51.02",
+          "baslik": "Kişiler adımı: Excel'den yükleme",
+          "adimlar": [
+            "Kişiler adımında “Excel'den yükle”ye basın.",
+            "Şablonu doldurup yükleyin ve sihirbaza dönün.",
+            "“Kişileri tek tek ekle”ye basın."
+          ],
+          "beklenen": "Toplu Yükle sihirbazı “Hepsi bir arada” seçili açılır. Dönünce adım “Tamam” olur ve “N kişi kayıtlı” yazar. “Kişileri tek tek ekle” Kişiler ekranını Kişiler sekmesinde açar.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F51.03",
+          "baslik": "Yarım bırakma ve kaldığı yerden devam",
+          "adimlar": [
+            "Sihirbazı ortada X ile kapatın (bir adımı “Atla” ile geçmiş olun).",
+            "Panel'deki karta bakıp “Kuruluma devam et”e basın.",
+            "“Şimdilik gizle”ye basın; sonra Site Yönetimi > “Kurulum Sihirbazı”nı açın."
+          ],
+          "beklenen": "“Site kurulumunuz yarım kaldı · N / 6 adım tamam” kartı çıkar; devam kaldığınız adımdan açılır; atladığınız adım “Atlandı” görünür. “Şimdilik gizle” kartı kaldırır, sihirbaz Site Yönetimi'nden yine açılır.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F51.04",
+          "baslik": "Modüller adımı",
+          "adimlar": [
+            "Modüller adımına gelin; “Modülleri seç / talep et”e basın.",
+            "Bir modül talep edip dönün. Aynısını süper kullanıcıyla deneyin."
+          ],
+          "beklenen": "Temel modüller “Her sitede açık” yazar. Modüller ekranı bu site seçili açılır; talep sayısı adımda görünür. Süper kullanıcıda düğme “Modülleri seç” olur ve modül doğrudan açılıp kapanır.",
+          "rol_notu": "Site yöneticisi / Süper kullanıcı",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F51.05",
+          "baslik": "Finans adımı",
+          "adimlar": [
+            "“Aidat tanımı ekle”yi kaydedin.",
+            "“Devir bakiyesi yükle” ve “Finans ekranını aç”a basın.",
+            "İş merkezi türündeki bir sitede etiketlere bakın."
+          ],
+          "beklenen": "Tanım kaydedilince adım “Tamam” olur. Devir penceresi açılır; Finans ekranı Tanımlar sekmesinde açılır. İş merkezi türünde etiket “Ortak gider tanımı ekle” olur.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F51.06",
+          "baslik": "Yetki: kim düzenleyebilir, kim görür",
+          "adimlar": [
+            "Süper kullanıcıyla Site bilgileri ve Bloklar adımlarındaki düzenleme düğmelerini kullanın.",
+            "Site yöneticisiyle aynı adımlara bakın.",
+            "Daire sakini ve kurul üyesiyle sihirbazı arayın."
+          ],
+          "beklenen": "Süper kullanıcıda düzenleme düğmeleri çalışır. Site yöneticisinde düğmeler yoktur, “yalnızca sistem yöneticisi değiştirir” notu görünür. Sakin ve kurul üyesi sihirbazı hiçbir yerde görmez.",
+          "rol_notu": "Süper kullanıcı / Site yöneticisi / Daire sakini / Kurul üyesi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F51.07",
+          "baslik": "“Excel'den yükle” liste kısayolları",
+          "adimlar": [
+            "Kişiler ekranında Kişiler, Daireler ve Araçlar sekmelerindeki “Excel'den yükle” düğmesine basın.",
+            "Boş bir Kişiler listesine bakın.",
+            "Kurul üyesiyle aynı sekmelere bakın."
+          ],
+          "beklenen": "Kişiler ve Daireler Toplu Yükle'yi “Hepsi bir arada”, Araçlar “Araçlar” türüyle açar. Boş Kişiler listesinde yalnız boş durum kartındaki düğme görünür. Kurul üyesi bu düğmeleri görmez.",
+          "rol_notu": "Site yöneticisi / Kurul üyesi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F51.08",
+          "baslik": "Dar ekran, büyük yazı ve ekran okuyucu",
+          "adimlar": [
+            "Yazı boyutunu en büyüğe alıp sihirbazın altı adımına, özetine ve Panel kartına bakın (açık ve koyu tema).",
+            "Ekran okuyucuyu açıp adım değiştirin."
+          ],
+          "beklenen": "Hiçbir ekranda taşma ya da kesilme olmaz. Ekran okuyucu adım değişince “Adım N / 6 · ...” başlığını okur.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F51.09",
+          "baslik": "Hesap değişince kurulum kartı",
+          "adimlar": [
+            "Kurulumu yarım bırakmış hesaptan çıkış yapın (ya da hesabı silin).",
+            "Başka bir hesapla girip Panel'e bakın."
+          ],
+          "beklenen": "Kurulum kayıtları cihazdan silindiği için Panel'de eski hesabın kurulum kartı çıkmaz.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "İki farklı yönetici hesabı",
+          "yeni": true,
+          "gelistirme": "hazir"
+        }
+      ]
+    },
+    {
+      "id": "F52",
+      "baslik": "Acil durum: 112, yangın ve asansör arızası",
+      "durum": "hazir",
+      "ozet": "Çekmecede “Ana sayfa” başlığı altında “Acil durum” ekranı: büyük “112'yi ara”, ayrı Yangın ve Asansör arızası hızlı düğmeleri, çağrı merkezinin soracakları ve aramada söylenecek site adı ile adres. Arama kanalı olmayan cihazda (masaüstü, web, telefonsuz tablet) KURU MOD çalışır: numaralar ve adres kopyalanabilir metindir ve uygulama hiçbir yerde “arandı” demez (telefon uygulaması yalnız açılır, aramayı kullanıcı başlatır). Asansör bakım firması adı ve telefonu site ayarı olarak yöneticide kaydedilir (migration 107). Çekirdek özelliktir: modül değildir, süper kullanıcı dışında herkeste görünür. Sunucu dağıtımı gerekir. Sürüm yayınlanınca denenir (maddeler “Denemeye hazır” görünse de sürüm yayınlanmadan uygulamada yoktur).",
+      "maddeler": [
+        {
+          "id": "F52.01",
+          "baslik": "112 düğmesi (telefon)",
+          "adimlar": [
+            "Çekmece > Ana sayfa > “Acil durum” > büyük “112'yi ara”ya basın."
+          ],
+          "beklenen": "Telefon uygulaması 112 hazır olarak açılır; aramayı orada başlatırsınız. Ekranda “arandı” gibi bir durum YAZMAZ.",
+          "rol_notu": "Daire sakini",
+          "on_kosul": "Android telefon",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F52.02",
+          "baslik": "Kuru mod (arama kanalı yok)",
+          "adimlar": [
+            "Acil durum ekranını açın.",
+            "Yangın ve Asansör arızası kartlarına bakın; “Bilgileri kopyala”ya basın."
+          ],
+          "beklenen": "Sarı “Bu cihazdan arama başlatılamıyor” şeridi görünür; 112 yerine büyük numara ve “Numarayı kopyala” çıkar. Panoya numara, adres ve sorular kopyalanır.",
+          "rol_notu": "Daire sakini",
+          "on_kosul": "Windows masaüstü, tarayıcı ya da telefonsuz tablet",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F52.03",
+          "baslik": "Yangın düğmesi",
+          "adimlar": [
+            "“Yangın”a basın."
+          ],
+          "beklenen": "“Yangın var.” cümlesi, site adı ve adres (Site Yönetimi'ndeki kayıtla aynı), 5 soru ve güvenlik yönlendirmesi görünür. Adres kayıtlı değilse yöneticide “Site Yönetimi'nden ekleyin”, sakinde “kendiniz söyleyin” yazar.",
+          "rol_notu": "Daire sakini / Site yöneticisi",
+          "on_kosul": "Adresi kayıtlı ve kayıtsız iki site",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F52.04",
+          "baslik": "Birden çok siteli kullanıcı",
+          "adimlar": [
+            "“Hangi site için?” seçicisiyle siteyi değiştirin.",
+            "Çekmecedeki site seçiciyle bir site seçip Acil durum'u açın."
+          ],
+          "beklenen": "Adres ve bakım firması seçilen siteye göre değişir; önceki sitenin izi kalmaz. Acil durum, çekmecede seçili siteyle açılır.",
+          "rol_notu": "Site yöneticisi / Daire sakini",
+          "on_kosul": "İki ayrı sitede üyeliği olan hesap",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F52.05",
+          "baslik": "Asansör bakım firması ekleme, düzenleme, kaldırma",
+          "adimlar": [
+            "Yöneticiyle Acil durum > Asansör arızası > “Bakım firmasını ekle” (ad ve telefon, örnek 444 1 234) ile kaydedin; düzenleyin; kaldırın.",
+            "Aynı sitenin sakin hesabıyla Asansör arızası'na bakın; sakin moduna geçip yöneticide düzenleme düğmesini arayın."
+          ],
+          "beklenen": "Kayıttan sonra firma kartı çıkar; sakin hesabında “Bakım firmasını ara” görünür. Sakin modunda düzenleme düğmesi yoktur.",
+          "rol_notu": "Site yöneticisi / Daire sakini",
+          "on_kosul": "Aynı sitenin yöneticisi ve sakini",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F52.06",
+          "baslik": "Bakım firması kayıtlı değilken",
+          "adimlar": [
+            "Her rolle Asansör arızası'nı açın."
+          ],
+          "beklenen": "Yönetici “Ekleyin” ipucunu ve ekleme düğmesini; sakin, kurul ve görevli “Site yönetiminden isteyin” ipucunu görür. Her ikisinde 112 kartı vardır.",
+          "rol_notu": "Site yöneticisi / Daire sakini / Kurul üyesi / Görevli",
+          "on_kosul": "Firması kayıtsız site",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F52.07",
+          "baslik": "İnternet yokken",
+          "adimlar": [
+            "Uçak modunda Acil durum'u açın; sonra interneti açıp “Tekrar Dene”ye basın."
+          ],
+          "beklenen": "Sayfa açılır ve 112 çalışır; site adresi için “alınamadı” + “Tekrar Dene” çıkar. İnternet gelince adres dolar.",
+          "rol_notu": "Daire sakini",
+          "on_kosul": "Uçak modu açık telefon",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F52.08",
+          "baslik": "Denetim kaydı, vitrin ve yardım",
+          "adimlar": [
+            "Bakım firmasını kaydedin; Denetim Kaydı'na (süper kullanıcı) ve İşlem Kayıtları'na bakın.",
+            "Panel vitrinine ve Yardım ve Destek'e bakın."
+          ],
+          "beklenen": "“Acil durum bilgisi güncellendi” satırı görünür (telefon numarası yazılmaz). Vitrinde “Acil durum” kartı, Yardım'da “Acil durumda ne yapmalıyım?” konusu vardır.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        }
+      ]
+    },
+    {
+      "id": "F53",
+      "baslik": "Deneme erişim kodu: 72 saat, demo siteye kilitli",
+      "durum": "hazir",
+      "ozet": "Tanıtım denemesi için tek kullanımlık kod: kodla açılan oturum 72 saat sürer ve YALNIZ işaretli demo siteye kilitlidir (başka sitelere, parola/e-posta değiştirmeye, dış e-posta veya SMS gönderen ve donanıma dokunan işlemlere kapalıdır; demo sitenin kendi verisinde işlem serbesttir). Kod sunucuda `node scripts/trial_code.mjs` ile üretilir ve ekranda BİR KEZ görünür; sahip için uygulama ekranı yoktur. Gerçek bir müşteri sitesi ASLA demo olarak işaretlenmemelidir. Sunucu dağıtımı gerekir. Sürüm yayınlanınca denenir (maddeler “Denemeye hazır” görünse de sürüm yayınlanmadan uygulamada yoktur).",
+      "maddeler": [
+        {
+          "id": "F53.01",
+          "baslik": "Demo site işaretleme ve kod üretme (sunucu)",
+          "adimlar": [
+            "Sunucuda server klasöründe `node scripts/trial_code.mjs demo <DEMO_SITE_KODU> --yes` ile demo siteyi işaretleyin.",
+            "`node scripts/trial_code.mjs create --days 7 --note \"Aday A\" --yes` ile kod üretin; sonra `status` ve `list` çalıştırın."
+          ],
+          "beklenen": "Kod ekranda yalnız bir kez görünür. `status` ve `list` kodu göstermez, yalnız son 4 karakterini gösterir.",
+          "rol_notu": "Sahip (sunucu)",
+          "on_kosul": "Sunucuya erişim; yedekli bir TEST/DEMO sitesi",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F53.02",
+          "baslik": "Kodla giriş",
+          "adimlar": [
+            "Giriş ekranında “Deneme kodum var”a basın; kodu küçük harfle ve tiresiz yazın; “Giriş Yap”a basın."
+          ],
+          "beklenen": "Kod otomatik büyük harfe ve tireli biçime gelir. Ana sayfa açılır; ekranın ÜSTÜNDE “Deneme - 72 saat kaldı” şeridi görünür. Siteler listesinde YALNIZ demo site vardır.",
+          "rol_notu": "Aday (deneme)",
+          "on_kosul": "Üretilmiş kod",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F53.03",
+          "baslik": "Tek kullanım ve yanlış kod",
+          "adimlar": [
+            "Aynı kodu ikinci kez girin (çıkış yapıp ya da başka cihazdan).",
+            "Uydurma bir kod girin; ardından 11 yanlış kodu art arda deneyin."
+          ],
+          "beklenen": "İkinci kullanımda “Bu deneme kodu daha önce kullanılmış...” mesajı çıkar. Yanlış kodda “Deneme kodu geçersiz”. 11 yanlışta “Çok fazla deneme kodu girişi...” (hız sınırı) çıkar.",
+          "rol_notu": "Aday (deneme)",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F53.04",
+          "baslik": "Demo sitede serbest işlem",
+          "adimlar": [
+            "Deneme hesabıyla demo sitede duyuru yayımlayın, tahsilat/borç girin, kişi ekleyin, anket açın, belge yükleyin."
+          ],
+          "beklenen": "Hepsi çalışır.",
+          "rol_notu": "Aday (deneme)",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F53.05",
+          "baslik": "Kısıtlı işlemler kapalı",
+          "adimlar": [
+            "Profil'de parola/e-posta değiştirmeyi ve hesap silmeyi deneyin.",
+            "Yeni site ekleme/başvuru, yönetici davet etme, kapı/cihaz/kamera ekleme, kişiye davet veya şifre sıfırlama, borç hatırlatma gönderme ve toplu yükleme onayını deneyin."
+          ],
+          "beklenen": "Hepsi “Bu işlem deneme hesabında kullanılamaz.” der ve hiçbir şey değişmez.",
+          "rol_notu": "Aday (deneme)",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F53.06",
+          "baslik": "Süre dolumu",
+          "adimlar": [
+            "Sunucuda ilgili kodun session_expires_at değerini geçmişe çekin (UPDATE trial_access_codes SET session_expires_at = NOW() - interval '1 minute' WHERE id = ...).",
+            "Uygulamada herhangi bir işlem yapın ya da yenileyin."
+          ],
+          "beklenen": "Giriş ekranına dönülür ve “Deneme süreniz doldu...” görünür. Şerit 30 sn'de bir yenilenir; son saatte dakika gösterir.",
+          "rol_notu": "Sahip (sunucu) / Aday",
+          "on_kosul": "Açık bir deneme oturumu",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F53.07",
+          "baslik": "Kod iptali",
+          "adimlar": [
+            "`node scripts/trial_code.mjs revoke <KOD_NO> --yes` çalıştırın.",
+            "Açık oturumda bir işlem yapın; iptal edilen kodla yeniden girmeyi deneyin."
+          ],
+          "beklenen": "Açık oturum bir sonraki istekte “Deneme erişiminiz sonlandırıldı.” ile kapanır; iptal edilmiş kodla giriş “iptal edilmiş” der.",
+          "rol_notu": "Sahip (sunucu) / Aday",
+          "on_kosul": "Açık bir deneme oturumu",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F53.08",
+          "baslik": "Normal girişler etkilenmez",
+          "adimlar": [
+            "Normal kullanıcı adı/parola, SMS ve sosyal girişle girin; eski uygulama sürümüyle de girmeyi deneyin."
+          ],
+          "beklenen": "Giriş çalışır, üstte deneme şeridi YOKTUR.",
+          "rol_notu": "Site yöneticisi / Daire sakini",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F53.09",
+          "baslik": "Dar ekran ve koyu tema",
+          "adimlar": [
+            "En dar telefon ekranında ve en büyük yazı boyutunda giriş ekranına, kod penceresine (uzun hata mesajıyla) ve üst şeride bakın; koyu temayı deneyin."
+          ],
+          "beklenen": "Hiçbir yerde taşma olmaz; koyu temada şerit okunaklıdır.",
+          "rol_notu": "Aday (deneme)",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        }
+      ]
+    },
+    {
+      "id": "F54",
+      "baslik": "İşlem Kayıtları: sitede kim, ne zaman, ne yaptı",
+      "durum": "hazir",
+      "ozet": "Site yöneticisi, Ayarlar panelinde Modüller'in altındaki “İşlem Kayıtları” ekranında kendi sitesinde yapılan işlemleri görür: işlem türü ve dönem süzgeci, “Daha fazla yükle”, İstanbul saati. Yalnız o sitenin yöneticisi okur; kayıtlar değiştirilemez; parola, telefon, e-posta ve kullanıcı kodu görünmez; sakinin gizli güvenlik talebi ve adli kayıt listede yoktur. Sunucu dağıtımı gerekir (yeni uç). Sürüm yayınlanınca denenir (maddeler “Denemeye hazır” görünse de sürüm yayınlanmadan uygulamada yoktur).",
+      "maddeler": [
+        {
+          "id": "F54.01",
+          "baslik": "Menüde kim görür",
+          "adimlar": [
+            "Site yöneticisi hesabıyla sağ üstteki dişliden Ayarlar panelini açın; “İşlem Kayıtları”nı arayın.",
+            "Aynısını sakin, kurul üyesi, görevli, bireysel, sakin moduna geçmiş yönetici ve süper kullanıcıyla yapın."
+          ],
+          "beklenen": "Yönetici modundaki site yöneticisinde Modüller'in altında görünür; diğerlerinde görünmez.",
+          "rol_notu": "Site yöneticisi / Daire sakini / Kurul üyesi / Görevli / Süper kullanıcı",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F54.02",
+          "baslik": "Yeni işlemler listede",
+          "adimlar": [
+            "Kendi sitenizde birkaç işlem yapın (modül talebi, duyuru yayınla, kişi ekle, tahsilat gir, talep aç).",
+            "İşlem Kayıtları'nı yenileyin; 50'den fazla kayıt varsa “Daha fazla yükle”ye basın."
+          ],
+          "beklenen": "Yeni kayıtlar en üstte, doğru başlık, kim ve İstanbul saatiyle görünür; “Daha fazla yükle” eski kayıtları getirir.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F54.03",
+          "baslik": "İşlem türü ve dönem süzgeçleri",
+          "adimlar": [
+            "İşlem türü listesinden “Aidat ve finans”ı seçin; “Tümü”ne dönün.",
+            "Bugün, Son 7 gün, Son 30 gün çiplerini deneyin; Özel aralıkta GG.AA.YYYY yazın, bir tarihi boş bırakın, ters aralık ve 31.02 yazın."
+          ],
+          "beklenen": "Yalnız finans satırları gelir; “Tümü” süzgeci kaldırır. Dönem çipleri çalışır. Ters aralık ve geçersiz tarih hata verir, istek atmaz.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F54.04",
+          "baslik": "Siteler arası ayrım ve yetki",
+          "adimlar": [
+            "Site seçiciyi değiştirin.",
+            "Sakin hesabının belirteciyle GET /manager/sites/<site_kodu>/audit-log çağrısı yapın; başka sitenin yöneticisiyle de çağırın."
+          ],
+          "beklenen": "Diğer sitenin kaydı asla görünmez. Sakin ve başka site yöneticisi 403 alır.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "İki siteli yönetici; sakin hesabı",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F54.05",
+          "baslik": "Kişisel veri ve gizli kayıtlar",
+          "adimlar": [
+            "Süper kullanıcının bir işleminin (örneğin modül açma) yönetici ekranındaki adına bakın.",
+            "Silinmiş bir hesabın eski işlemlerine, kayıt ayrıntılarına ve sakinin güvenlik talebine bakın."
+          ],
+          "beklenen": "“Sistem yöneticisi” ve “Silinmiş Kullanıcı” yazar. Kayıtlarda e-posta, telefon, parola ve kullanıcı kodu bulunmaz; güvenlik talebi ve adli kayıt satırları listede olmaz.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Süper kullanıcının yaptığı bir işlem; silinmiş bir hesap",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F54.06",
+          "baslik": "Dar ekran, büyük yazı, koyu tema",
+          "adimlar": [
+            "En dar telefon ekranında ve en büyük yazı boyutunda, açık ve koyu temada listeye, süzgeçlere ve boş/hata durumlarına bakın."
+          ],
+          "beklenen": "Taşma olmaz; yükleniyor, boş ve hata durumları anlaşılırdır.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F54.07",
+          "baslik": "Çoklu malik ve acil durum işlemleri",
+          "adimlar": [
+            "Daireye malik ekleyin / muhatap değiştirin / maliki çıkarın; asansör bakım firmasını kaydedin.",
+            "İşlem Kayıtları'na bakın."
+          ],
+          "beklenen": "“Daireye malik eklendi”, “Daire hesap muhatabı değişti”, “Daireden malik çıkarıldı” ve “Acil durum bilgisi güncellendi” satırları Türkçe başlıkla görünür.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "F50 ve F52 maddelerini yapmış olmak",
+          "yeni": true,
+          "gelistirme": "hazir"
+        }
+      ]
+    },
+    {
+      "id": "F55",
+      "baslik": "Komşu Panosu: sınır davranışları",
+      "durum": "hazir",
+      "ozet": "Yalnız test eklendi, ürün kodu değişmedi: Komşu Panosu için uzun metin/taşma, boş durum, yetkisiz kullanıcı, çok kayıt, ağ hatası ve Türkçe karakter sınırları otomatik testle sabitlendi (170 test). Aşağıdaki maddeler aynı sınırları elle de doğrulatır. BİLİNEN SORUN: klavye açıkken “Şikayet et / Reddet / Kaldır” ve “Yeni ilan” pencereleri yatay ya da büyük yazıda taşabilir (testte kayıtlı, düzeltme ayrı iş); bu madde sonucu bildirmeniz içindir. Sürüm yayınlanınca denenir (maddeler “Denemeye hazır” görünse de sürüm yayınlanmadan uygulamada yoktur).",
+      "maddeler": [
+        {
+          "id": "F55.01",
+          "baslik": "Uzun metin ve taşma",
+          "adimlar": [
+            "120 karakterlik boşluksuz bir başlık ve 2000 karakterlik metinle ilan açın, yönetici onayıyla yayınlayın."
+          ],
+          "beklenen": "Kartta yatay taşma / sarı-siyah şerit olmaz; metin alt satırlara bölünür.",
+          "rol_notu": "Site yöneticisi / Daire sakini",
+          "on_kosul": "Dar ekranlı telefon, en büyük yazı boyutu",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F55.02",
+          "baslik": "Karakter sınırları",
+          "adimlar": [
+            "Yeni ilan penceresinde başlığa 120+, metne 2000+ karakter yapıştırın.",
+            "Şikayet gerekçesinde 200, ret/kaldır gerekçesinde 300 karakteri aşmayı ve boş gerekçeyle Gönder'e basmayı deneyin."
+          ],
+          "beklenen": "Sayaç 120/120 ve 2000/2000'de durur, fazlası eklenmez. Gerekçeler 200 ve 300 karakterde durur; boş gerekçeyle Gönder pencereyi kapatmaz.",
+          "rol_notu": "Daire sakini / Site yöneticisi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F55.03",
+          "baslik": "Ağ hatası",
+          "adimlar": [
+            "Uçak modunda Komşu Panosu'nu açın; uçak modunu kapatıp sayfayı aşağı çekerek yenileyin."
+          ],
+          "beklenen": "“Sunucuya bağlanılamadı...” çıkar (“Henüz ilan yok.” ÇIKMAZ). İnternet gelince liste yüklenir.",
+          "rol_notu": "Daire sakini",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F55.04",
+          "baslik": "Yetkiye göre düğmeler",
+          "adimlar": [
+            "Sakin hesabında Onayla / Reddet / Kaldır düğmelerini ve durum sekmelerini arayın.",
+            "Yönetici hesabında Yeni ilan / Şikayet et / Geri çek düğmelerini arayın; çoklu sitede site değiştirin."
+          ],
+          "beklenen": "Sakinde yönetim düğmeleri ve durum sekmeleri yoktur; yöneticide yazma/şikayet/geri çekme düğmeleri yoktur. Denetimler seçili siteye göre değişir.",
+          "rol_notu": "Daire sakini / Site yöneticisi",
+          "on_kosul": "Biri yönetici biri sakin olduğu iki siteli hesap",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F55.05",
+          "baslik": "Menüde kim görür",
+          "adimlar": [
+            "Kapı erişimi olmayan görevli, süper kullanıcı ve bireysel hesapla yan menüye bakın; kurul üyesi ve kapı erişimli görevliyle de bakın."
+          ],
+          "beklenen": "İlk üçünde “Komşu Panosu” yoktur; kurul üyesi ve kapı erişimli görevli sakin gibi görür.",
+          "rol_notu": "Görevli / Süper kullanıcı / Bireysel / Kurul üyesi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F55.06",
+          "baslik": "Türkçe karakterler",
+          "adimlar": [
+            "I i ğ Ğ ş Ş ç Ç ö Ö ü Ü, tırnak ve satır sonu içeren bir ilan yazın; sakin ve yönetici ekranlarında karşılaştırın."
+          ],
+          "beklenen": "İki ekranda da aynı görünür; tarih gg.aa.yyyy biçimindedir.",
+          "rol_notu": "Daire sakini / Site yöneticisi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F55.07",
+          "baslik": "Çok kayıt",
+          "adimlar": [
+            "Sayfayı sonuna kadar kaydırın; kartların üstünden sürükleyin."
+          ],
+          "beklenen": "Son ilana ve “Yakında: telefon bildirimi, fotoğraf ve yorum.” notuna ulaşılır; kartların üstünden sürükleyince sayfa kayar.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Demo veriyle 100+ ilan",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F55.08",
+          "baslik": "BİLİNEN SORUN: klavye açıkken pencereler (sonucu bildirin)",
+          "adimlar": [
+            "Telefonu yatay çevirip klavyeyi açarak “Şikayet et”, “Reddet”, “Kaldır” ve “Yeni ilan” pencerelerini deneyin (özellikle büyük yazı boyutunda).",
+            "Onayla ya da Onaya gönder düğmesine hızlı iki kez dokunun."
+          ],
+          "beklenen": "Taşma / sarı-siyah şerit görülürse testte kayıtlı sorunla aynıdır (düzeltilecek). Hızlı çift dokunuşta ikinci istek “İlan bu işlem için uygun durumda değil.” uyarısı verebilir (bilinen davranış).",
+          "rol_notu": "Site yöneticisi / Daire sakini",
+          "on_kosul": "Yatay telefon, büyük yazı",
+          "yeni": true,
+          "gelistirme": "hazir"
+        }
+      ]
+    },
+    {
+      "id": "F56",
+      "baslik": "Belgeler: durum sözlüğü ve ekran envanteri",
+      "durum": "hazir",
+      "ozet": "docs/DURUM_SOZLUGU.md (rol ve bağ, hesap-üyelik-başvuru, kapı-cihaz-geçiş, finans-para ve modül/iş akışı durumlarının etiketleri) ve docs/EKRAN_ENVANTERI.md (48 menü öğesi: rota, ekran sınıfı, modül, kim görür) yazıldı; README ve teknik notlardaki bayat bilgiler koda göre düzeltildi. Ürün kodu değişmedi. Belge ile uygulama arasında sapma bulursanız belge ya da kod düzeltilir.",
+      "maddeler": [
+        {
+          "id": "F56.01",
+          "baslik": "Ekran envanteri ile menü karşılaştırması",
+          "adimlar": [
+            "Bir rolle (örneğin kurul üyesi ya da görevli) uygulamaya girip çekmecedeki öğeleri belgedeki “Kim görür” sütunuyla karşılaştırın."
+          ],
+          "beklenen": "Çekmecedeki öğeler belgeyle aynıdır; sapma varsa belge ya da kod düzeltilmelidir.",
+          "rol_notu": "Kurul üyesi / Görevli (ve diğer roller)",
+          "on_kosul": "docs/EKRAN_ENVANTERI.md Bölüm 3",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F56.02",
+          "baslik": "Durum etiketleri sözlükle aynı",
+          "adimlar": [
+            "Sakin hesabından bir dekont bildirimi gönderin; yöneticide onaylayın ve iptal edin."
+          ],
+          "beklenen": "“İnceleniyor / Onaylandı / İptal edildi” etiketleri sözlükteki gibi görünür.",
+          "rol_notu": "Daire sakini / Site yöneticisi",
+          "on_kosul": "docs/DURUM_SOZLUGU.md D3",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F56.03",
+          "baslik": "README hızlı başlangıç",
+          "adimlar": [
+            "README'deki Hızlı başlangıç sırasını izleyin: docker compose up -d postgres, cd server, npm ci, npm run dev, flutter run --dart-define=API_BASE_URL=http://localhost:8080."
+          ],
+          "beklenen": "Sunucu 8080'de açılır; /health {ok, database, mqtt} döndürür.",
+          "rol_notu": "Geliştirici",
+          "on_kosul": "Temiz bir klasör; Docker ve Node kurulu",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F56.04",
+          "baslik": "Kestirmeler ekranı iletişim kutusu",
+          "adimlar": [
+            "Çekmecede “Eller Serbest & Kestirmeler”e dokunun."
+          ],
+          "beklenen": "Sayfa değişmez; sesli kapı açma ayar penceresi açılır (envanterde sayfa değil iletişim kutusu olarak yazılıdır).",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        }
+      ]
+    },
+    {
+      "id": "F57",
+      "baslik": "Yerel yalıtım aracı (geliştirici)",
+      "durum": "hazir",
+      "ozet": "Geliştirici aracı `tools/yerel/yalitim`: sunucuyu yalnız 127.0.0.1'de, temiz ortamla başlatır; dışarıya TCP/DNS/UDP bağlantısı ve alt süreç açılmasını engeller ve kayda geçirir; isteğe bağlı olarak Chrome/Edge'i yeni profille, yalnız yerel proxy arkasında açar. Kaza korumasıdır, güvenlik sınırı DEĞİLDİR (yerel eklentiler ve dosya sistemi kısıtlanmaz). Uygulamayı ve sunucu koduna dokunmaz; yeniden derleme gerekmez.",
+      "maddeler": [
+        {
+          "id": "F57.01",
+          "baslik": "Kuru çalıştırma",
+          "adimlar": [
+            "Depo kökünde `python tools/yerel/yalitim/calistir.py --dry-run --no-browser` çalıştırın."
+          ],
+          "beklenen": "`KURU_CALISMA_TAMAM` ve Node/profil/yol satırları görünür; `tools/yerel/runs` klasörü OLUŞMAZ.",
+          "rol_notu": "Geliştirici",
+          "on_kosul": "Depo kökü; Python 3.9+, Node",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F57.02",
+          "baslik": "Tarayıcılı kip",
+          "adimlar": [
+            "`python tools/yerel/yalitim/calistir.py --port 8081 --url http://127.0.0.1:8081/health` çalıştırın.",
+            "Açılan tarayıcıda adres çubuğuna http://example.invalid/ yazın; sonra Ctrl+C ile durdurun."
+          ],
+          "beklenen": "Yeni profilli Chrome/Edge açılır. Dış adres açılmaz; koşu dizinindeki engellenen.jsonl'e yalnız `browser-proxy` kanalı ve hedef özeti düşer. Ctrl+C tarayıcıyı ve Node'u kapatır.",
+          "rol_notu": "Geliştirici",
+          "on_kosul": "server/node_modules kurulu; yerel PG, MQTT ve SMTP uçları açık",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F57.03",
+          "baslik": "Yerel uçlar yokken başlangıç hatası",
+          "adimlar": [
+            "Yerel veritabanı/MQTT/SMTP uçları kapalıyken aracı çalıştırın; hazırlık zaman aşımında `node-stderr.log` içeriğine bakın."
+          ],
+          "beklenen": "Araç bu uçları kurmaz; sunucunun başlangıç hatası günlükte görünür.",
+          "rol_notu": "Geliştirici",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F57.04",
+          "baslik": "Banka PDF içe aktarımı bu kipte çalışmaz",
+          "adimlar": [
+            "Bu kipte Banka ekstresi PDF yüklemeyi deneyin; aynı akışı yalıtımsız ortamda tekrarlayın."
+          ],
+          "beklenen": "Kasıtlı olarak çalışmaz (worker_threads engelli); yalıtımsız ortamda çalışır.",
+          "rol_notu": "Geliştirici",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        }
+      ]
     }
   ]
 }

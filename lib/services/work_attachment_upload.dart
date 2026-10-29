@@ -138,6 +138,10 @@ class WorkAttachmentUploadController extends ChangeNotifier {
 
   WorkUploadPhase get phase => _phase;
 
+  /// Yeni açılan ek kayıtlarına yazılacak "önce / sonra" etiketi (null: etiketsiz). Ekran, fotoğraf seçilmeden ÖNCE
+  /// seçili etiketi buraya koyar; zaten açılmış (yarım) kayıtlar etiketini değiştirmez.
+  WorkAttachmentPhase? photoPhase;
+
   /// Sıradaki fotoğrafın numarası (1'den başlar) ve bu turdaki toplam.
   int get index => _index;
   int get total => _total;
@@ -285,6 +289,7 @@ class WorkAttachmentUploadController extends ChangeNotifier {
               fileName: photo.name,
               mimeType: photo.mimeType,
               sizeBytes: photo.size,
+              phase: photoPhase,
             ),
           );
           if (_disposed) return results;
@@ -313,6 +318,7 @@ class WorkAttachmentUploadController extends ChangeNotifier {
             mimeType: photo.mimeType,
             sizeBytes: photo.size,
             status: WorkAttachmentStatus.ready,
+            phase: photoPhase,
             uploadedByMe: true,
           );
         }

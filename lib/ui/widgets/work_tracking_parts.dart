@@ -133,7 +133,7 @@ class WorkResidentCard extends StatelessWidget {
     final semantic = StringBuffer('Talep: $title. Durum: ${i.status.label}.');
     if (i.unread) semantic.write(' Yeni güncelleme var.');
     if (i.urgent) semantic.write(' Acil olarak işaretlendi.');
-    semantic.write(' ${i.category.label}. Konum: ${i.locationText}.');
+    semantic.write(' ${i.categoryText}. Konum: ${i.locationText}.');
     if (i.attachmentCount > 0) semantic.write(' ${i.attachmentCount} fotoğraf.');
     if (showSite && site.isNotEmpty) semantic.write(' $site.');
     if (i.createdAt != null) {
@@ -177,7 +177,7 @@ class WorkResidentCard extends StatelessWidget {
                   ),
                   const SizedBox(height: AppSpace.xs),
                   Text(
-                    '${i.category.label} · ${i.locationText}',
+                    '${i.categoryText} · ${i.locationText}',
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: th.bodyMedium?.copyWith(color: p.textSecondary),
@@ -225,10 +225,11 @@ class WorkManagedCard extends StatelessWidget {
       'Talep: $title. Durum: ${i.status.label}. Öncelik: ${i.priority.label}.',
     );
     if (i.residentUrgent) semantic.write(' Sakin acil olarak işaretledi.');
-    semantic.write(' ${i.category.label}. Konum: ${i.locationText}.');
+    semantic.write(' ${i.categoryText}. Konum: ${i.locationText}.');
     if (i.attachmentCount > 0) semantic.write(' ${i.attachmentCount} fotoğraf.');
     if (requester.isNotEmpty) semantic.write(' Açan: $requester.');
     semantic.write(' $assigneeText.');
+    if (i.equipment != null) semantic.write(' Ekipman: ${i.equipment!.label}.');
     if (due != null) semantic.write(' Hedef tarih: $due.');
     if (i.updatedAt != null) {
       semantic.write(' Güncelleme: ${_dateTime(i.updatedAt)}.');
@@ -272,7 +273,7 @@ class WorkManagedCard extends StatelessWidget {
                   ),
                   const SizedBox(height: AppSpace.xs),
                   Text(
-                    '${i.category.label} · ${i.locationText}',
+                    '${i.categoryText} · ${i.locationText}',
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: th.bodyMedium?.copyWith(color: p.textSecondary),
@@ -284,6 +285,8 @@ class WorkManagedCard extends StatelessWidget {
                     children: [
                       if (requester.isNotEmpty) InfoChip('Açan: $requester'),
                       InfoChip(assigneeText),
+                      if (i.equipment != null)
+                        InfoChip('Ekipman: ${i.equipment!.label}'),
                       if (due != null) InfoChip('Hedef: $due'),
                       if (i.updatedAt != null)
                         InfoChip(
@@ -327,9 +330,17 @@ String workEventTitle(WorkEvent event) {
     case WorkEventType.comment:
       return event.internal ? 'İç not' : 'Yorum';
     case WorkEventType.attachmentAdded:
-      return 'Fotoğraf eklendi';
+      // Etiket (önce / sonra) `from` alanında gelir; etiketsiz ya da eski olayda yalnız "Fotoğraf eklendi".
+      final phase = WorkAttachmentPhase.fromApi(event.from);
+      return phase == null
+          ? 'Fotoğraf eklendi'
+          : 'Fotoğraf eklendi (${phase.label})';
     case WorkEventType.attachmentRemoved:
       return 'Fotoğraf kaldırıldı';
+    case WorkEventType.equipmentChanged:
+      final from = event.fromLabel ?? 'Seçilmedi';
+      final to = event.toLabel ?? 'Seçilmedi';
+      return 'Ekipman: $from → $to';
     case WorkEventType.unknown:
       return 'Güncelleme';
   }
@@ -345,6 +356,7 @@ IconData _eventIcon(WorkEvent event) => switch (event.type) {
     event.internal ? Icons.lock_outline_rounded : Icons.chat_bubble_outline,
   WorkEventType.attachmentAdded => Icons.add_photo_alternate_outlined,
   WorkEventType.attachmentRemoved => Icons.hide_image_outlined,
+  WorkEventType.equipmentChanged => Icons.build_circle_outlined,
   WorkEventType.unknown => Icons.circle_outlined,
 };
 

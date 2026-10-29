@@ -10146,6 +10146,7 @@ async function sectionAccount() {
     'work_items.assigned_to': 'TEMIZLENIR (acik taleplerde atama kaldirilir, olay yazilir; kapali talepte tombstone)',
     'work_item_events.actor_user_code': 'TOMBSTONE (olay gunlugu degismez; yazan JOIN ile Silinmis Kullanici)',
     'work_item_attachments.uploaded_by': 'TOMBSTONE (fotograf taleple birlikte siteye aittir; dosya kalir, yukleyen JOIN ile Silinmis Kullanici; FK SET NULL)',
+    'work_categories.created_by': 'TOMBSTONE (is takibi kategorisi siteye aittir; satir kalir, ekleyen FK SET NULL; audit YALNIZ anahtar, kategori adi yazilmaz)',
     'reservation_areas.created_by': 'TOMBSTONE (alan siteye aittir)',
     'reservations.user_code': 'TOMBSTONE (rezervasyon siteye aittir; gelecektekiler ayni islemde iptal edilir, sakin JOIN ile Silinmis Kullanici)',
     'reservations.decided_by': 'TOMBSTONE (karari veren JOIN ile Silinmis Kullanici)',

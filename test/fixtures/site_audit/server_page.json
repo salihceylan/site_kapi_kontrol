@@ -1,0 +1,130 @@
+{
+  "items": [
+    {
+      "id": 412,
+      "created_at": "2026-10-27T11:20:00.000Z",
+      "actor_name": "Ayşe Yönetici",
+      "actor_role": "site_manager",
+      "actor_role_label": "Site yöneticisi",
+      "action": "board_decision.finalized",
+      "action_label": "Karar kesinleştirildi",
+      "category": "services",
+      "category_label": "Site hizmetleri",
+      "target_type": "board_decision",
+      "target_id": "17",
+      "details": {
+        "number_label": "2026/5"
+      }
+    },
+    {
+      "id": 411,
+      "created_at": "2026-10-26T08:05:00.000Z",
+      "actor_name": "Ayşe Yönetici",
+      "actor_role": "site_manager",
+      "actor_role_label": "Site yöneticisi",
+      "action": "finance.run.posted",
+      "action_label": "Aidat borçlandırıldı",
+      "category": "finance",
+      "category_label": "Aidat ve finans",
+      "target_type": "finance",
+      "target_id": "2026-10",
+      "details": {
+        "count": 28
+      }
+    },
+    {
+      "id": 409,
+      "created_at": "2026-10-25T07:40:00.000Z",
+      "actor_name": "Sistem yöneticisi",
+      "actor_role": "super_user",
+      "actor_role_label": null,
+      "action": "module_request.approved",
+      "action_label": "Modül talebi onaylandı",
+      "category": "modules",
+      "category_label": "Modüller",
+      "target_type": "module_request",
+      "target_id": "9",
+      "details": {
+        "module_code": "survey",
+        "via": "request"
+      }
+    },
+    {
+      "id": 405,
+      "created_at": "2026-10-24T06:00:00.000Z",
+      "actor_name": "Sistem",
+      "actor_role": "system",
+      "actor_role_label": null,
+      "action": "announcement.published",
+      "action_label": "Duyuru yayınlandı",
+      "category": "announcements",
+      "category_label": "Duyurular",
+      "target_type": "announcement",
+      "target_id": "5",
+      "details": {}
+    },
+    {
+      "id": 401,
+      "created_at": "2026-10-23T12:10:00.000Z",
+      "actor_name": "Silinmiş Kullanıcı",
+      "actor_role": "site_manager",
+      "actor_role_label": "Site yöneticisi",
+      "action": "person.created",
+      "action_label": "Kişi eklendi",
+      "category": "people",
+      "category_label": "Kişi ve daire kayıtları",
+      "target_type": "person",
+      "target_id": "31",
+      "details": {}
+    },
+    {
+      "id": 399,
+      "created_at": "2026-10-22T09:30:00.000Z",
+      "actor_name": "Deniz Sakin",
+      "actor_role": "apartment_owner",
+      "actor_role_label": "Daire sakini",
+      "action": "work_item.created",
+      "action_label": "Talep açıldı",
+      "category": "services",
+      "category_label": "Site hizmetleri",
+      "target_type": "work_item",
+      "target_id": "9",
+      "details": {
+        "status": "yeni"
+      }
+    },
+    {
+      "id": 397,
+      "created_at": "2026-10-21T15:45:00.000Z",
+      "actor_name": "Ayşe Yönetici",
+      "actor_role": "site_manager",
+      "actor_role_label": "Site yöneticisi",
+      "action": "door_permission.granted",
+      "action_label": "Kapı özel izni verildi",
+      "category": "access",
+      "category_label": "Kapı ve geçiş",
+      "target_type": "user",
+      "target_id": "30004",
+      "details": {
+        "door_id": 4
+      }
+    },
+    {
+      "id": 390,
+      "created_at": "2026-10-20T10:00:00.000Z",
+      "actor_name": "Ayşe Yönetici",
+      "actor_role": "site_manager",
+      "actor_role_label": "Site yöneticisi",
+      "action": "staff_role.assigned",
+      "action_label": "Ek rol atandı",
+      "category": "roles",
+      "category_label": "Yetki ve roller",
+      "target_type": "user",
+      "target_id": "20003",
+      "details": {
+        "role": "BOARD_MEMBER"
+      }
+    }
+  ],
+  "next_before_id": 390
+}

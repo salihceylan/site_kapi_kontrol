@@ -279,5 +279,55 @@ void main() {
       expect(c.assigneesLoaded, isTrue);
       c.dispose();
     });
+
+    test('fotoğraf uyarıları (100): ayrıntıdan gelir; yükleme yanıtındakiler birleşir; uyarısız yükleme silmez; silinen fotoğrafın uyarısı kalkar; sunucu esastır', () async {
+      final service = managerWork(WorkFakeAuth());
+      service.photoWarnings[1] = <Map<String, dynamic>>[wkPhotoWarning(902)];
+      final c = _manager(service, 1);
+      expect(c.photoWarnings, isEmpty, reason: 'yüklenmeden uyarı yok');
+      await c.load();
+      expect(c.photoWarnings.map((w) => w.attachmentId), <int>[902]);
+
+      // yükleme tamamlandı ve sunucu yeni fotoğraf için uyarı verdi
+      c.addAttachment(
+        WorkAttachment.fromJson(<String, dynamic>{
+          'attachment': wkAttachment(903, workItemId: 1),
+          'photo_warnings': <Object>[wkPhotoWarning(903, code: 'photo_reused', severity: 'info', message: 'Aynı konumda.')],
+        })!,
+      );
+      expect(c.photoWarnings.map((w) => w.attachmentId), <int>[902, 903]);
+      // aynı fotoğraf için yeni yanıt eskisini ezer
+      c.addAttachment(
+        WorkAttachment.fromJson(<String, dynamic>{
+          'attachment': wkAttachment(903, workItemId: 1),
+          'photo_warnings': <Object>[wkPhotoWarning(903, code: 'photo_reused_other_location')],
+        })!,
+      );
+      expect(c.photoWarnings.where((w) => w.attachmentId == 903).map((w) => w.code), <String>['photo_reused_other_location']);
+      // uyarısız yükleme mevcut uyarıları silmez
+      c.addAttachment(WorkAttachment.fromJson(wkAttachment(904, workItemId: 1))!);
+      expect(c.photoWarnings.length, 2);
+
+      // silme: o fotoğrafın uyarısı kalkar
+      final target = c.attachments.firstWhere((a) => a.id == 902);
+      expect(await c.deleteAttachment(target), isTrue);
+      expect(c.photoWarnings.map((w) => w.attachmentId), <int>[903]);
+
+      // yeniden yükleme: sunucu esastır
+      service.photoWarnings[1] = <Map<String, dynamic>>[];
+      await c.load(silent: true);
+      expect(c.photoWarnings, isEmpty);
+      c.dispose();
+    });
+
+    test('güncelleme (PATCH) yanıtı da uyarıları taşır (ayrıntı yanıtıyla aynı biçim)', () async {
+      final service = managerWork(WorkFakeAuth());
+      service.photoWarnings[1] = <Map<String, dynamic>>[wkPhotoWarning(901)];
+      final c = _manager(service, 1);
+      await c.load();
+      expect(await c.save(<String, Object?>{'priority': 'dusuk'}), isTrue);
+      expect(c.photoWarnings.map((w) => w.attachmentId), <int>[901]);
+      c.dispose();
+    });
   });
 }

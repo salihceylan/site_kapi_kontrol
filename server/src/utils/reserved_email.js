@@ -6,8 +6,11 @@
 // Bağımlılığı yoktur (validators.js ve site_rules.js ile hesap modülleri paylaşır; döngü olmasın).
 
 export const DELETED_EMAIL_DOMAIN = 'deleted.invalid';
+// Deneme erişim kodu hesapları (P2-27): `trial-<rastgele>@deneme.invalid`. Alan adı kullanıcıya açık olsaydı biri bu adresle kayıt olup
+// deneme hesabı oluşturmayı çökertebilir (users.email UNIQUE) ya da hesabın "deneme" kimliğini taklit edebilirdi.
+export const TRIAL_EMAIL_DOMAIN = 'deneme.invalid';
 
-const RESERVED_DOMAINS = Object.freeze([DELETED_EMAIL_DOMAIN]);
+const RESERVED_DOMAINS = Object.freeze([DELETED_EMAIL_DOMAIN, TRIAL_EMAIL_DOMAIN]);
 
 /** E-posta ayrılmış (sistem) bir alan adındaysa ya da onun alt alan adındaysa true. Biçim doğrulaması YAPMAZ. */
 export function isReservedEmail(value) {

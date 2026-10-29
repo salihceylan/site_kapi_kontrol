@@ -193,6 +193,9 @@ void main() {
       expect(titles, isNot(contains('Rezervasyon')), reason: 'yönetici modunda sakin ekranı yok');
       expect(titles.indexOf('Rezervasyonlar'), titles.indexOf('Duyurular') + 1);
       expectUnderDrawerHeader(t, 'Rezervasyonlar', 'Site hizmetleri');
+      // Çekmece uzun: öğe görünür alanın dışında kalabilir (yeni öğeler listeyi uzatır), önce kaydırılır.
+      await t.ensureVisible(_tileTitle('Rezervasyonlar'));
+      await t.pump();
       await t.tap(_tileTitle('Rezervasyonlar'));
       await t.pump();
       await t.pump(const Duration(milliseconds: 600));
@@ -294,6 +297,9 @@ void main() {
       await _pumpHome(t, auth, access: access);
       await _openDrawer(t);
       expect(_tileTitle('Rezervasyonlar'), findsNothing);
+      // Çekmece uzun: öğe görünür alanın dışında kalabilir (yeni öğeler listeyi uzatır), önce kaydırılır.
+      await t.ensureVisible(_tileTitle('Rezervasyon'));
+      await t.pump();
       await t.tap(_tileTitle('Rezervasyon'));
       await t.pump();
       await t.pump(const Duration(milliseconds: 600));

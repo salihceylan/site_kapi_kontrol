@@ -76,6 +76,7 @@ abstract final class HelpContent {
     'Plaka Tanıma',
     'Kapılar',
     'Dairem',
+    'Acil durum',
     'Profilim',
     'Eller Serbest & Kestirmeler',
     'Kullanıcı Yönetimi',
@@ -91,6 +92,7 @@ abstract final class HelpContent {
     'Modüller',
     'Modül Talepleri',
     'Denetim Kaydı',
+    'İşlem Kayıtları',
     'Kişiler',
     'Duyurular',
     'Site Başvuruları',
@@ -122,6 +124,10 @@ abstract final class HelpContent {
 
   /// Menü dışı ekran içi etiketler (düğme, bölüm, sekme adları; kodda aynen geçer).
   static const Set<String> knownScreenLabels = <String>{
+    // İşlem Kayıtları (site yöneticisi; lib/ui/views/site_audit_log_view.dart ve sunucu sunumu)
+    'Daha fazla yükle',
+    'Sistem yöneticisi',
+    'Silinmiş Kullanıcı',
     // Dairem (daire sahipliği ve yönetimi, güvenlik ve destek)
     'Kiracı ekle',
     'Sistemden ara',
@@ -252,6 +258,11 @@ abstract final class HelpContent {
     'Kapı',
     'Dosyalar',
     'Tüm siteler',
+    // Acil durum (P2-24): hızlı düğmeler ve kopyalama / bakım firması düğmeleri.
+    'Yangın',
+    'Asansör arızası',
+    'Numarayı kopyala',
+    'Bakım firmasını ekle',
   };
 
   // --- Konular ----------------------------------------------------------------------------------
@@ -297,6 +308,20 @@ abstract final class HelpContent {
       'Uzaklaştırma ya da koruma kararınız varsa belgeyi site yönetimine bildirin; site yöneticisi gerekirse kişinin kapı erişimini askıya alabilir.',
     ],
     note: 'Uygulama polisin ya da mahkemenin yerine geçmez. Sistem iddiayı doğrulayamaz ve otomatik kilitleme yapmaz; kararı site yöneticisi verir.',
+  );
+
+  /// Acil durum (P2-24): 112, yangın ve asansör arızası; arama kanalı yoksa numaralar ve adres kopyalanabilir metin olarak verilir.
+  static const HelpTopic _emergency = HelpTopic(
+    id: 'emergency',
+    title: 'Acil durumda ne yapmalıyım?',
+    icon: Icons.emergency_rounded,
+    steps: <String>[
+      'Çekmecede “Ana sayfa” başlığı altındaki “Acil durum” ekranını açın. Tehlikedeyseniz büyük 112 düğmesine dokunun; telefon uygulaması numara hazır olarak açılır.',
+      'Yangın için “Yangın”a, asansör arızası için “Asansör arızası”na dokunun: aranacak numara, çağrı merkezinin soracakları ve aramada söyleyeceğiniz site adresi görünür.',
+      'Asansörde mahsur kalan varsa önce sitenin asansör bakım firmasını arayın; kişi tehlikedeyse ya da sağlık sorunu varsa 112’yi arayın.',
+      'Bu cihazdan arama başlatılamıyorsa ekran bunu söyler; numarayı ve adresi “Numarayı kopyala” ile alıp başka bir telefondan arayabilirsiniz.',
+    ],
+    note: 'Telefon uygulaması açılınca aramayı sizin başlatmanız gerekir; uygulama aramanın yapıldığını göstermez. Site yöneticisi, asansör bakım firmasını “Asansör arızası” bölümünde “Bakım firmasını ekle” ile kaydeder; kayıtlı değilse yönetimden isteyin.',
   );
 
   /// Site yöneticisi: eski sakin / adli kayıt (sakin yardımına EKLENMEZ; kayıt sakinlere gösterilmez).
@@ -445,6 +470,7 @@ abstract final class HelpContent {
     _apartmentManagement,
     _myVehicles,
     _apartmentSafety,
+    _emergency,
     HelpTopic(
       id: 'payment_notice_resident',
       title: 'Ödememi nasıl bildiririm (dekont)?',
@@ -543,6 +569,7 @@ abstract final class HelpContent {
     _apartmentManagement,
     _myVehicles,
     _apartmentSafety,
+    _emergency,
     _panelIndividual,
     _navigationIndividual,
     HelpTopic(
@@ -593,9 +620,21 @@ abstract final class HelpContent {
         'Menüden “Ekipman ve Bakım” ekranını açın. Ekipman ekle ile asansör, interkom, kamera gibi ekipmanları kaydedin.',
         'Ekipmana dokunup Plan ekle ile aylık, 3, 6 ya da 12 aylık bakım planı kurun. Asansör gibi yasal kontrolü olan ekipmanda Yasal kontrol planı yıllık hatırlatma tarihi açar.',
         'Bakım yapılınca Yapıldı ya da Bakım kaydı ile tarih, firma ve maliyeti girin; plan bir sonraki tarihe ilerler. Bakım takvimi sekmesi yaklaşan ve geciken bakımları listeler.',
-        'Teklifler sekmesinde aynı konudaki teklifleri karşılaştırın (en düşük tutar işaretlenir). Kabul ettiğiniz teklif gider ya da sözleşme olarak kaydedilir. Gider kırılımı sekmesi giderleri ekipman bazında gösterir.',
+        'Teklifler sekmesinde aynı konudaki teklifleri yan yana tabloda karşılaştırın: tutar, KDV esası, geçerlilik, teslim süresi ve kapsam / not. Tutarlar aynı KDV esasındaysa en düşük tutar ve en kısa teslim süresi işaretlenir. Kabul ettiğiniz teklif gider ya da sözleşme olarak kaydedilir. Gider kırılımı sekmesi giderleri ekipman bazında gösterir.',
+        'Henüz karara bağlanmamış (açık) teklifi Düzenle ile yerinde değiştirebilirsiniz. Kabul edilmiş (onaylı) teklif değişmez: Revizyon oluştur ile gerekçesini yazıp yeni sürüm açın; yeni sürüm önceki sürüme bağlanır, sizin onayınızı bekler ve Sürüm geçmişi’nde tüm sürümler görünür. Reddedilirse önceki onay geçerli kalır.',
       ],
-      note: 'Telefon / e-posta ile otomatik hatırlatma ve teklife belge yükleme Yakında…',
+      note: 'Eski onaylı fiyat tarihli fiyattır, bugünün fiyatı sayılmaz. Telefon / e-posta ile otomatik hatırlatma ve teklife belge yükleme Yakında…',
+    ),
+    HelpTopic(
+      id: 'site_audit_log',
+      title: 'Sitemde kim ne yaptı, nereden görürüm?',
+      icon: Icons.history_rounded,
+      steps: <String>[
+        'Sağ üstteki dişliden Ayarlar panelini açıp “İşlem Kayıtları”na dokunun. Sitenizde yapılan yönetim işlemleri yeniden eskiye listelenir: ne yapıldı, kim yaptı, ne zaman.',
+        'İşlem türü listesinden yalnız bir türü (örneğin Aidat ve finans) seçin. Dönem çipleriyle bugünü, son 7 ya da 30 günü seçin; özel aralıkta tarihleri GG.AA.YYYY yazın, tarihlerden biri boş olabilir.',
+        'Daha eski kayıtlar için “Daha fazla yükle”ye dokunun.',
+      ],
+      note: 'Kayıtlar değiştirilemez. Parola, telefon ve e-posta kayıtta yer almaz; sistem yöneticisinin işlemleri “Sistem yöneticisi”, silinmiş hesapların işlemleri “Silinmiş Kullanıcı” olarak görünür.',
     ),
     HelpTopic(
       id: 'cctv',
@@ -610,6 +649,7 @@ abstract final class HelpContent {
     ),
     _panelAdmin,
     _navigationManager,
+    _emergency,
     HelpTopic(
       id: 'manage_site',
       title: 'Sitemi, bloklarımı ve kapılarımı nasıl yönetirim?',

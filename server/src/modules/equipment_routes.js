@@ -6,10 +6,15 @@
 //   GET   equipment/due?days=60                   yaklasan / geciken bakimlar (yasal kontroller dahil)
 //   GET   equipment/expense-breakdown?from&to     2E gider kirilimi (YYYY-AA)
 //   GET   equipment/:id    PATCH equipment/:id    ayrinti { equipment, plans, logs, expense_ids } / duzenle ya da pasife al
+//   GET   equipment/:id/work-history?before_id&limit   servis gecmisi: ekipmana bagli is kayitlari (096; work_equipment_history.js)
 //   POST  equipment/:id/plans   PATCH equipment/plans/:planId
 //   POST  equipment/:id/logs                      bakim kaydi (yalniz ekleme; planli ise sonraki tarih ilerler)
 //   POST  equipment/:id/expense-links   DELETE equipment/:id/expense-links/:expenseId
-//   GET   quotes?status&topic   POST quotes   POST quotes/:id/reject   POST quotes/:id/accept { as: expense|contract, expense|contract }
+//   GET   quotes?status&topic   POST quotes   POST quotes/:id/reject   POST quotes/:id/accept { as: expense|contract, expense|contract, acknowledge_previous? }
+//   GET   quotes/:id/history                      teklifin tum surumleri (eskiden yeniye; K14)
+//   PATCH quotes/:id                              ACIK teklifi yerinde duzenle (karara baglanmis teklif 409 QUOTE_LOCKED)
+//   POST  quotes/:id/revise { reason, ...alanlar }  ONAYLI teklifte degisiklik = yeni surum (201 { quote }); onceki surum degismez
+//   Liste yalniz EN SON surumleri doner (karsilastirma alanlari: delivery_days, note, vat_included; lowest / fastest / basis_mixed isaretleri).
 //
 // Yetki: yonetici / super yazar; kurul ve gorevli salt okur; sakin ve ilgisiz 403 FORBIDDEN_ROLE; baska site 403 FORBIDDEN_SITE; `equipment` modulu kapaliysa
 // 403 MODULE_DISABLED. Sakine acik uc YOK. Sozlesme: docs/PLATFORM_EKIPMAN.md. Hata govdesi { error, code }.
@@ -25,6 +30,7 @@ import { FORBIDDEN_ROLE_BODY, FORBIDDEN_SITE_BODY, SITE_NOT_FOUND_BODY } from '.
 import { isModuleEnabled } from './module_service.js';
 import { HOUR_MS, ipKey, respondError, userKey } from './route_helpers.js';
 import * as svc from './equipment_service.js';
+import { listEquipmentWorkHistory } from './work_equipment_history.js';
 
 export const equipmentRouter = express.Router();
 
@@ -108,6 +114,10 @@ write('patch', '/equipment/plans/:planId', 'equipment_plan_update', 'Plan günce
   svc.updatePlan({ siteCode, rawPlanId: req.params.planId, actor, body: bodyOf(req) }),
 );
 read('/equipment/:id', 'equipment_get', 'Ekipman yüklenemedi.', ({ siteCode, req }) => svc.getEquipment(siteCode, req.params.id));
+// Servis geçmişi (096): ekipmana bağlı iş kayıtları (iş takibi görünürlük kuralları; modül kapalıysa boş liste).
+read('/equipment/:id/work-history', 'equipment_work_history', 'Servis geçmişi yüklenemedi.', ({ siteCode, req, access }) =>
+  listEquipmentWorkHistory({ siteCode, rawEquipmentId: req.params.id, query: req.query, access }),
+);
 write('patch', '/equipment/:id', 'equipment_update', 'Ekipman güncellenemedi.', ({ siteCode, actor, req }) => svc.updateEquipment({ siteCode, rawId: req.params.id, actor, body: bodyOf(req) }));
 write('post', '/equipment/:id/plans', 'equipment_plan_create', 'Plan kaydedilemedi.', ({ siteCode, actor, req }) => svc.createPlan({ siteCode, rawId: req.params.id, actor, body: bodyOf(req) }), 201);
 write('post', '/equipment/:id/logs', 'equipment_log_create', 'Bakım kaydedilemedi.', ({ siteCode, actor, access, req }) =>
@@ -123,6 +133,12 @@ write('delete', '/equipment/:id/expense-links/:expenseId', 'equipment_unlink', '
 
 read('/quotes', 'quotes_list', 'Teklifler yüklenemedi.', ({ siteCode, req }) => svc.listQuotes(siteCode, req.query));
 write('post', '/quotes', 'quotes_create', 'Teklif kaydedilemedi.', ({ siteCode, actor, access, req }) => svc.createQuote({ siteCode, actor, access, body: bodyOf(req) }), 201);
+read('/quotes/:id/history', 'quotes_history', 'Sürüm geçmişi yüklenemedi.', ({ siteCode, req }) => svc.quoteHistory(siteCode, req.params.id));
+write('patch', '/quotes/:id', 'quotes_update', 'Teklif güncellenemedi.', ({ siteCode, actor, req }) => svc.updateQuote({ siteCode, rawId: req.params.id, actor, body: bodyOf(req) }));
+write('post', '/quotes/:id/revise', 'quotes_revise', 'Revizyon kaydedilemedi.', ({ siteCode, actor, access, req }) =>
+  svc.reviseQuote({ siteCode, rawId: req.params.id, actor, access, body: bodyOf(req) }),
+  201,
+);
 write('post', '/quotes/:id/reject', 'quotes_reject', 'Teklif reddedilemedi.', ({ siteCode, actor, req }) => svc.rejectQuote({ siteCode, rawId: req.params.id, actor }));
 write('post', '/quotes/:id/accept', 'quotes_accept', 'Teklif kabul edilemedi.', ({ siteCode, actor, access, req }) =>
   svc.acceptQuote({ siteCode, rawId: req.params.id, actor, access, body: bodyOf(req) }),

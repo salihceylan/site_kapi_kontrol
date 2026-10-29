@@ -199,13 +199,14 @@ const base = (site = SITE_1) => `/manager/sites/${site}`;
 // ---------------------------------------------------------------------------
 
 describe('people rotalari: zincir', () => {
-  it('19 rota; hepsi authRequired ile baslar; /manager uclari ve my-records hiz sinirli (okuma 1200/saat, yazma 120/saat)', () => {
+  it('23 rota (4 tanesi cok malik, 104); hepsi authRequired ile baslar; /manager uclari ve my-records hiz sinirli (okuma 1200/saat, yazma 120/saat)', () => {
     const summary = ORIGINAL_ROUTES.map((r) => `${r.method.toUpperCase()} ${r.path}`).sort();
     assert.deepEqual(summary, [
       'DELETE /manager/sites/:siteCode/vehicles/:vehicleId',
       'GET /app/my-records',
       'GET /manager/sites/:siteCode/apartments',
       'GET /manager/sites/:siteCode/apartments/:apartmentId',
+      'GET /manager/sites/:siteCode/apartments/:apartmentId/owners',
       'GET /manager/sites/:siteCode/history',
       'GET /manager/sites/:siteCode/people',
       'GET /manager/sites/:siteCode/people/:personId',
@@ -213,6 +214,8 @@ describe('people rotalari: zincir', () => {
       'PATCH /manager/sites/:siteCode/apartments/:apartmentId',
       'PATCH /manager/sites/:siteCode/people/:personId',
       'PATCH /manager/sites/:siteCode/residencies/:residencyId',
+      'POST /manager/sites/:siteCode/apartments/:apartmentId/owners',
+      'POST /manager/sites/:siteCode/apartments/:apartmentId/owners/:residencyId/remove',
       'POST /manager/sites/:siteCode/people',
       'POST /manager/sites/:siteCode/people/:personId/account',
       'POST /manager/sites/:siteCode/people/:personId/password-reset',
@@ -221,6 +224,7 @@ describe('people rotalari: zincir', () => {
       'POST /manager/sites/:siteCode/people/bulk-actions',
       'POST /manager/sites/:siteCode/residencies/:residencyId/end',
       'POST /manager/sites/:siteCode/vehicles',
+      'PUT /manager/sites/:siteCode/apartments/:apartmentId/owners/account-holder',
     ]);
     for (const route of ORIGINAL_ROUTES) {
       assert.equal(route.handlers[0], authRequired, route.path);
@@ -752,6 +756,7 @@ describe('GET apartments / vehicles / history / my-records', () => {
       land_share: { numerator: 35, denominator: 1000 },
       responsible_party: 'tenant',
       owner: { person_id: 5, full_name: 'Ali Veli' },
+      owner_count: 1,
       tenant: { person_id: 6, full_name: 'Veli Kaya' },
       resident_count: 3,
     });
@@ -767,6 +772,7 @@ describe('GET apartments / vehicles / history / my-records', () => {
       land_share: null,
       responsible_party: 'both',
       owner: null,
+      owner_count: 0,
       tenant: null,
       resident_count: 0,
     });
@@ -807,6 +813,11 @@ describe('GET apartments / vehicles / history / my-records', () => {
       { residency_id: 2, person_id: 6, full_name: 'Eski Kiracı', relation: 'tenant', move_in_date: '2022-01-01', has_account: false, move_out_date: '2023-12-31' },
     ]);
     assert.equal(res.body.owner.full_name, 'Ali Veli');
+    // Coklu malik (104): tum guncel malikler, hesap muhatabi basta; muhatap bayragi olmayan eski satir muhatap SAYILMAZ.
+    assert.deepEqual(res.body.owners, [
+      { residency_id: 1, person_id: 5, full_name: 'Ali Veli', has_account: true, is_account_holder: false, move_in_date: '2024-01-01' },
+    ]);
+    assert.equal(res.body.owner_count, 1);
     assert.equal(res.body.tenant, null, 'gecmis kiraci "guncel kiraci" sayilmaz');
     assert.equal(res.body.resident_count, 1);
 

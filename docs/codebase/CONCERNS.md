@@ -12,7 +12,7 @@
 | medium | Rate limiters and login lock-out are in-memory | `server/src/middlewares/rate_limiters.js`, `login_throttle.js` | Limits reset on restart and are per process | Move to a shared store if PM2 cluster mode is ever used |
 | low | Local door control (UDP v2) is unencrypted on the LAN | `cihaz_kontrol/include/yerel_kapi_kontrol.h`, `docs/YEREL_KONTROL_V2.md` | Request/response content is readable, but the token never leaves the devices and commands are bound to a single-use challenge | Encrypt only if the threat model requires it; app and firmware must be updated together (v1 clients no longer work) |
 | medium | Generated firmware binaries are tracked in git (~180 MB) | `cihaz_kontrol/firmware_releases/` | Repository size, unclear provenance | Move release binaries to external storage |
-| low | Very large Flutter files | `lib/ui/pages/home_page.dart` (~4,400 lines), `lib/services/auth_service.dart`, `lib/services/auth_api.dart` | Harder reviews and rebuild cost | Extract by feature when editing |
+| low | Very large Flutter files | `lib/ui/pages/home_page.dart` (~7,500 lines), `lib/services/auth_service.dart` (~4,300), `lib/services/auth_api.dart` (~4,900) | Harder reviews and rebuild cost | Extract by feature when editing |
 | low | UI changes were verified by analysis, unit/widget tests and builds only (no device/emulator walk-through) | `SAHA_KONTROL_LISTESI.md` section 52, `BEKLEYEN_ISLER.md` Faz 4/5 | Visual regressions (dark theme, small screens, large text) may only show on devices | The owner runs section 52 on a phone and a desktop window; frame-time harness: `integration_test/perf_frames_test.dart` |
 
 Resolved since the previous scan (kept here for traceability): monolithic `server.js` (now layered), wildcard CORS (allowlist), missing CI (`.github/workflows/ci.yml`), no backend tests (`server/test/`), hard-coded MQTT credentials in Flutter defaults (removed), insecure MQTT TLS in firmware (CA verification on), UID-only local control (token required; since v2 the token is never sent and HTTP open was removed), unauthenticated company routes (`X-Company-Key`/super user), unbounded app polling (`AdaptivePoller`), heavy work on the UI isolate (PDF/JSON offloaded), low text contrast and five divergent "open door" buttons (design system, `DoorOpenButton`).
@@ -59,7 +59,7 @@ Resolved since the previous scan (kept here for traceability): monolithic `serve
 1. Rotate production credentials and decide on git history cleanup.
 2. Whether `cihaz_kontrol/firmware_releases/` stays in git.
 3. Production values for `JWT_EXPIRES_IN`, `NODE_ENV`, `CORS_ORIGINS`.
-4. Release signing / application id (`com.example.*`) before store publication.
+4. Store publication steps. The application id is already `tr.com.gudeteknoloji.siteyonetim` on Android and iOS (no `com.example.*` left), and Android release builds read the signing key from `android/key.properties` (outside git; the build fails with an explicit error if it is incomplete). Remaining store steps are tracked in `BEKLEYEN_ISLER.md`.
 
 ### 7) Evidence
 
