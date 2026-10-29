@@ -77,6 +77,7 @@ import { budgetRouter } from './modules/budget_routes.js';
 import { driveRouter } from './modules/drive_routes.js';
 import { neighborBoardRouter } from './modules/neighbor_board_routes.js';
 import { paymentNoticeRouter } from './modules/payment_notice_routes.js';
+import { checkMarkRouter } from './modules/check_mark_routes.js';
 import { annualReportRouter } from './modules/annual_report_routes.js';
 import { emergencyRouter } from './modules/emergency_routes.js';
 import { startDocumentsMaintenance, stopDocumentsMaintenance } from './modules/document_maintenance.js';
@@ -176,6 +177,8 @@ app.use(financePaymentRouter);
 app.use(financeFundChoiceRouter);
 // Dekont bildirimi / gecici kabul (066): /app/my-finance/payment-notices[...] + /manager/sites/:siteCode/finance/payment-notices[...] (finance modulu + 2A notices_enabled).
 app.use(paymentNoticeRouter);
+// Kontrol izi (110, P2-20): gider ve dekont icin "kontrol edildi (kim, ne zaman)" isareti; yonetici/super yazar, muhasebeci rolu ACILMAZ.
+app.use(checkMarkRouter);
 app.use(bankImportRouter);
 app.use(financeHomeRouter);
 // Belgeler (dosya deposu): yonetici uclari + sakin uclari + ham govde akisi (PUT .../content, application/octet-stream; JSON govde sinirina dokunmaz).

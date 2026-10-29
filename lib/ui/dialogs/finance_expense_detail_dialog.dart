@@ -18,6 +18,7 @@ import 'package:site_kapi_kontrol/ui/helpers/idempotency.dart';
 import 'package:site_kapi_kontrol/ui/helpers/istanbul_time.dart';
 import 'package:site_kapi_kontrol/ui/helpers/money.dart';
 import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
+import 'package:site_kapi_kontrol/ui/widgets/check_mark_panel.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_4b_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
@@ -335,6 +336,15 @@ class _FinanceExpenseDetailDialogState extends State<FinanceExpenseDetailDialog>
         ),
         if (e.createdByName != null) FinanceInfoRow(label: 'Kaydeden', value: e.createdByName),
         if (e.createdAt != null) FinanceInfoRow(label: 'Kayıt zamanı', value: formatIstanbulDateTime(e.createdAt)),
+        const SizedBox(height: AppSpace.md),
+        // Kontrol izi (P2-20): muhasebeci rolü yok; siteyi yöneten işaretler, kurul yalnız görür. İptal edilmiş gidere yeni işaret konmaz.
+        CheckMarkPanel(
+          key: ValueKey<String>('finance_expense_check_${e.id}'),
+          mark: e.checkMark,
+          canWrite: _canWrite && !e.isVoided,
+          onSet: () => widget.scope.f4Call((api, t, s) => api.setExpenseCheck(token: t, siteCode: s, expenseId: e.id)),
+          onClear: () => widget.scope.f4Call((api, t, s) => api.clearExpenseCheck(token: t, siteCode: s, expenseId: e.id)),
+        ),
         const SizedBox(height: AppSpace.md),
         Semantics(header: true, container: true, child: Text('Belgeler', style: th.titleSmall)),
         const SizedBox(height: AppSpace.xs),

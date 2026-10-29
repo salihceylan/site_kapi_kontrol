@@ -1160,6 +1160,7 @@ const BOARD_HIDDEN_KEYS = new Set([
   'requested_by_name',
   'resolved_by_name',
   'reversed_by_name',
+  'checked_by_name',
   'cancel_note',
 ]);
 

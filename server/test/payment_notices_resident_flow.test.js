@@ -128,6 +128,8 @@ function makeDb({ views, dupCount = 0, fundRows = [] } = {}) {
     ],
     // --- bildirim okuma (SELECT_NOTICE): tek satır
     [/FROM payment_notices n INNER JOIN apartments a ON a\.id = n\.apartment_id/, () => ok(state.notice ? [noticeRow()] : [])],
+    // --- kontrol izi (110): yönetici ayrıntısı iz alanlarını ekler; bu akışta iz yok
+    [/FROM payment_notice_check_marks m/, () => ok([])],
     // --- onay: kilitler
     [/^SELECT site_code FROM sites WHERE site_code = \$1 FOR KEY SHARE$/, () => ok([{ site_code: SITE }])],
     [/^SELECT apartment_id FROM payment_notices WHERE id = \$1 AND site_code = \$2$/, () => ok([{ apartment_id: '7' }])],
