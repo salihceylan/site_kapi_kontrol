@@ -127,7 +127,7 @@
   "tanima": {
     "tur": "otomatik",
     "model_yolu": "modeller/karakter.onnx",
-    "model_onayli": true,
+    "model_onayli": false,
     "sablon_dizini": "sablonlar",
     "sablon_onayli": false,
     "sablon_min_ornek": 3,
