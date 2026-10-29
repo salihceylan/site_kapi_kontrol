@@ -360,6 +360,8 @@ Görme güçlüğü olan ya da yaşlı kullanıcı için tek anahtarla açılan 
 - **Kritik uyarı**: yalnız eylem isteyen yerde `critical` kutusu (koyu); bilgi ve durum için düz kart + `StatusDot`.
 - **Renk**: yalnız `AppPalette` ve `AppTone` (metin için `tone.ink(palette)`, simge için `tone.sign(palette)`, nokta için
   `tone.dot`); Panel vitrini `AppShowcaseColors` (aynı değerler). Düz hex yazmayın.
+- **Yeni ekran incelemesi**: §12.3 listesi (boş / hata / bağlı değil üçlüsü + etiket kuralı + renk anlam kuralı) PR'dan
+  önce işaretlenir.
 
 ## 10. Ne yapılmaz
 
@@ -374,6 +376,8 @@ Görme güçlüğü olan ya da yaşlı kullanıcı için tek anahtarla açılan 
   `ElevatedButton` / `FilledButton` `styleFrom` zemini ve ön planı BİRLİKTE verir: tema ön planı beyaz değildir
   (açıkta #F8FAFC, koyuda #0F172A), yalnız zemin veren çağrı koyu temada renkli zemin üstüne koyu metin çizer
   (`sade_style_test.dart` kaynakta denetler).
+- "Diğer" / "Çeşitli" gibi torba etiket: sığmayan işler "Tüm işlemler"e gider (bkz. §12).
+- Anlamı yalnız renkle vermek: her durum metin ve/veya simgeyle de söylenir (bkz. §12).
 
 ## 11. Tema ile çözülmeyen, ekran düzeyinde kalanlar (İP-1C, 2026-10-21)
 
@@ -407,3 +411,48 @@ dalgalarda ya da ilgili İP'de):
   `dynamic_qr_pass_modal.dart` `shadow(1)` / `shadow(2)`; ekranlarda `IconOrb(glow: true)` (artık etkisiz).
 - Finans ekranlarının yerel renkleri (İP-1A'nın alanı). Ortak `DialogMetaPill` / `DialogPanel` bileşenleri sade kurala
   bağlandığından finanstaki borç ve durum hapları artık zemin boyamaz (renk metin ve simgede).
+
+## 12. Etiket kuralı ve renk anlam kuralı (karşılaştırma raporu P3, Ek C A2 / A15)
+
+Bu iki kural yeni ekran ve metin yazarken ilk bakılacak yazılı ölçüttür; mevcut ekranlar bu kurala göre ekran ekran
+yamalanmaz, dokunulan ekran kurala uyar. Dış paketin paleti ya da sözlüğü alınmaz: yalnız ilke alınır.
+
+### 12.1 Etiket kuralı
+
+1. **Eylem adı = sonuç adı.** Düğme ya da menü öğesinin adı, dokununca açılan ekranın başlığıyla (ya da işin sonucunu
+   anlatan bildirimle) aynı sözcüklerle söylenir. Örnek: çekmecedeki "Tüm işlemler" girişi "Tüm işlemler" ekranını açar
+   (`AllActionsView`); "Yöneticiyi ara" yönetici numarasıyla arama ekranını açar. Ad, sonucun kanıtlanmış olandan
+   fazlasını vaat etmez: sunucunun kabul ettiği kapı komutu "Komut gönderildi"dir, "açıldı" değil (P1-15, dürüst başarı).
+2. **"Diğer" yok.** Ana menüye (kompakt menü, K8) ya da bir gruba sığmayan işler "Diğer", "Çeşitli", "Genel" gibi torba
+   bir başlığın altına atılmaz; yerleri **"Tüm işlemler"**dir (kategorili ve aramalı, hiçbir iş kaybolmaz).
+3. **En çok 3 düzey.** Bir işe giden yol en çok üç düzeydir: (1) Panel ya da çekmece grubu, (2) modül ekranı / liste,
+   (3) kayıt ya da eylem ayrıntısı. Daha derin bir yapı yeni gezinme düzeyi olmaz: ayrıntı ekranında bölüm, sekme ya da
+   "Tüm işlemler" araması olur. Derin ekranlarda `HomeShortcutButton` kuralı geçerlidir (§8, Gezinme).
+4. Terim: kullanıcı hesabı için ürün terimi **"Hesap"**tır; aynı şeye ekran ekran farklı ad (profil, üyelik, kullanıcı
+   kaydı) verilmez.
+
+### 12.2 Renk anlam kuralı
+
+| Anlam | Renk (tek kaynak) | Not |
+| --- | --- | --- |
+| Acil, kritik, hata, tehlike | **Tek kırmızı ailesi**: mercan `AppTone.danger` (nokta / dolgu #E11D48, yazı #BE123C) | İkinci bir kırmızı, turuncu ya da ham `Colors.red` acil için eklenmez; 112 düğmesi, "Sil" onayı ve kritik nokta aynı ailedir |
+| Deneme, uyarı, bekliyor | **Amber**: `AppTone.warning` (nokta #F59E0B, yazı / simge koyu amber) | Hata değildir, korkutmaz (ör. `StateView.offline`) |
+| Tamam | Yeşil: `AppTone.success` (nokta #10B981) | |
+| Bilgi, nötr | Nötr gri; mavi yalnız bağlantı ve odak halkasıdır | §1, §10 |
+
+- **Renk tek başına anlam taşımaz.** Her durum metin ve/ya simgeyle de söylenir: durum noktası her zaman metnin yanındadır
+  (`StatusDot`), boş / hata / bağlı değil üçü ikon + başlıkla ayrılır (`StateView`), ekran okuyucu etiketi durumu söyler.
+  Rengi bilmeyen biri (renk körlüğü, gri tonlama, kolay görünüm) ekranı aynı doğrulukla okuyabilmelidir (WCAG 1.4.1).
+- Renk yalnız `AppPalette` / `AppTone` belirteçlerinden gelir (§9 Renk); düz hex yazılmaz.
+
+### 12.3 Yeni ekran inceleme listesi
+
+Yeni ekran ya da ekran değişikliği birleşmeden önce işaretlenir:
+
+- [ ] **Boş / hata / bağlı değil üçlüsü**: liste ve bölüm durumları `StateView` ile (liste için `CrmListBody` /
+      `CursorListBody`); elle `InlineNotice` / `EmptyCard` dizilmez; hata (sunucu yanıt verdi) ile bağlı değil
+      (sunucuya ulaşılamıyor, amber) karışmaz; "Tekrar Dene" vardır.
+- [ ] **Etiket kuralı**: eylem adı = sonuç adı; "Diğer" yok (sığmayan iş "Tüm işlemler"de); yol en çok 3 düzey; "Hesap"
+      terimi.
+- [ ] **Renk anlam kuralı**: acil = tek kırmızı ailesi, deneme / uyarı = amber; her durumda metin ya da simge de var.
+- [ ] Ortak ölçütler (§6): taşma matrisi (320 dp x 2,0), kontrast, dokunma hedefi >= 44 dp, ekran okuyucuda tek düğüm.

@@ -15,6 +15,11 @@
 //   PATCH quotes/:id                              ACIK teklifi yerinde duzenle (karara baglanmis teklif 409 QUOTE_LOCKED)
 //   POST  quotes/:id/revise { reason, ...alanlar }  ONAYLI teklifte degisiklik = yeni surum (201 { quote }); onceki surum degismez
 //   Liste yalniz EN SON surumleri doner (karsilastirma alanlari: delivery_days, note, vat_included; lowest / fastest / basis_mixed isaretleri).
+//   GET   quote-requests?status                   dis firma form baglantilari + firma taslaklari (113, P2-8; belirtec / ozet ASLA donmez)
+//   POST  quote-requests { topic, vendor_hint?, equipment_id?, valid_days? }  201 { request, link } (baglanti YALNIZ burada, tek sefer)
+//   POST  quote-requests/:id/revoke               kullanilmamis baglantiyi iptal et   |   POST quote-requests/:id/reject  taslagi reddet
+//   POST  quote-requests/:id/approve              taslagi onayla = ACIK teklif olusur ({ request, quote }); gider / sozlesme olusmaz (kabul ayri karar)
+//   Herkese acik (kimlik yok, equipmentPublicRouter): GET /firma-teklif/:token (form sayfasi), POST /public/quote-forms/:token (taslak teklif dusurur).
 //
 // Yetki: yonetici / super yazar; kurul ve gorevli salt okur; sakin ve ilgisiz 403 FORBIDDEN_ROLE; baska site 403 FORBIDDEN_SITE; `equipment` modulu kapaliysa
 // 403 MODULE_DISABLED. Sakine acik uc YOK. Sozlesme: docs/PLATFORM_EKIPMAN.md. Hata govdesi { error, code }.
@@ -28,8 +33,11 @@ import { actorFromAuthUser } from './audit_service.js';
 import { getContractsAccessKind } from './contracts_access.js';
 import { FORBIDDEN_ROLE_BODY, FORBIDDEN_SITE_BODY, SITE_NOT_FOUND_BODY } from './people_access.js';
 import { isModuleEnabled } from './module_service.js';
+import { newErrorId } from '../middlewares/error_handler.js';
+import { isPlatformError } from './errors.js';
 import { HOUR_MS, ipKey, respondError, userKey } from './route_helpers.js';
 import * as svc from './equipment_service.js';
+import { generateCspNonce, quoteFormPageHeaders, renderQuoteFormPage, renderQuoteFormUnusablePage } from './equipment_quote_form_page.js';
 import { listEquipmentWorkHistory } from './work_equipment_history.js';
 
 export const equipmentRouter = express.Router();
@@ -143,3 +151,70 @@ write('post', '/quotes/:id/reject', 'quotes_reject', 'Teklif reddedilemedi.', ({
 write('post', '/quotes/:id/accept', 'quotes_accept', 'Teklif kabul edilemedi.', ({ siteCode, actor, access, req }) =>
   svc.acceptQuote({ siteCode, rawId: req.params.id, actor, access, body: bodyOf(req) }),
 );
+
+// Firma teklif formu (113, P2-8): yonetici tarafi. Olusturma yaniti form baglantisini TEK SEFER tasir; liste / ayrinti belirtec ya da ozet tasimaz.
+equipmentRouter.use(`${B}/quote-requests`, (req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store');
+  next();
+});
+read('/quote-requests', 'quote_requests_list', 'Firma formları yüklenemedi.', ({ siteCode, req }) => svc.listQuoteRequests(siteCode, req.query));
+write('post', '/quote-requests', 'quote_requests_create', 'Firma formu oluşturulamadı.', ({ siteCode, actor, access, req }) =>
+  svc.createQuoteRequest({ siteCode, actor, access, body: bodyOf(req) }),
+  201,
+);
+write('post', '/quote-requests/:id/revoke', 'quote_requests_revoke', 'Form bağlantısı iptal edilemedi.', ({ siteCode, actor, access, req }) =>
+  svc.revokeQuoteRequest({ siteCode, rawId: req.params.id, actor, access }),
+);
+write('post', '/quote-requests/:id/approve', 'quote_requests_approve', 'Taslak teklif onaylanamadı.', ({ siteCode, actor, access, req }) =>
+  svc.approveQuoteRequest({ siteCode, rawId: req.params.id, actor, access }),
+);
+write('post', '/quote-requests/:id/reject', 'quote_requests_reject', 'Taslak teklif reddedilemedi.', ({ siteCode, actor, access, req }) =>
+  svc.rejectQuoteRequest({ siteCode, rawId: req.params.id, actor, access }),
+);
+
+// --- Firma teklif formu: HERKESE ACIK taraf (kimlik yok; belirtec yetkidir) --------------------------------------------------------------------------------
+// GET  /firma-teklif/:token          form sayfasi (HTML; nonce'lu katı CSP). Kullanilamaz baglanti: 410 + bilgi sayfasi (nedenler ayirt edilmez).
+// POST /public/quote-forms/:token    firma girisi -> TASLAK teklif (201 { submitted, topic }); ikinci gonderim 410. Teklif / gider / sozlesme olusmaz.
+// Hiz siniri: IP basina saatte 120 sayfa / 20 gonderim; belirtec basina saatte 10 gonderim denemesi.
+export const equipmentPublicRouter = express.Router();
+
+export const quoteFormPageLimiter = createRuleLimiter({
+  rules: [{ windowMs: HOUR_MS, max: 120, key: ipKey }],
+  message: 'Çok fazla istek. Biraz sonra tekrar deneyin.',
+  includeRetryBody: true,
+});
+
+export const quoteFormSubmitLimiter = createRuleLimiter({
+  rules: [
+    { windowMs: HOUR_MS, max: 20, key: ipKey },
+    { windowMs: HOUR_MS, max: 10, key: (req) => `qf:${String(req.params?.token ?? '').slice(0, 16)}` },
+  ],
+  message: 'Çok fazla deneme. Biraz sonra tekrar deneyin.',
+  includeRetryBody: true,
+});
+
+equipmentPublicRouter.get(`${svc.QUOTE_FORM_PATH}/:token`, quoteFormPageLimiter, async (req, res) => {
+  const nonce = generateCspNonce();
+  for (const [name, value] of Object.entries(quoteFormPageHeaders(nonce))) res.setHeader(name, value);
+  try {
+    const form = await svc.getPublicQuoteForm(req.params.token);
+    return res.status(200).send(renderQuoteFormPage({ nonce, token: req.params.token, form }));
+  } catch (error) {
+    if (isPlatformError(error)) return res.status(error.statusCode).send(renderQuoteFormUnusablePage({ nonce }));
+    const errorId = newErrorId();
+    console.error(`[modules] quote_form_page (errorId=${errorId})`, error?.stack || error?.message || error);
+    return res.status(500).send(renderQuoteFormUnusablePage({ nonce, message: `Bir sorun oluştu. Biraz sonra tekrar deneyin. Referans: ${errorId}` }));
+  }
+});
+
+equipmentPublicRouter.post('/public/quote-forms/:token', quoteFormSubmitLimiter, async (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  try {
+    const declared = Number(req.headers['content-length']);
+    const size = Number.isFinite(declared) && declared > 0 ? declared : Buffer.byteLength(JSON.stringify(req.body ?? {}));
+    if (size > svc.MAX_BODY_BYTES) throw svc.bodyTooLarge();
+    return res.status(201).json(await svc.submitPublicQuote(req.params.token, bodyOf(req)));
+  } catch (error) {
+    return respondError(res, 'quote_form_submit', error, 'Teklif gönderilemedi.');
+  }
+});

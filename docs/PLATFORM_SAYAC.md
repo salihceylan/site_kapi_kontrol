@@ -1,6 +1,6 @@
 # Sayaç Okuma ve Faturalandırma (`metering`, migration 061)
 
-Modül varsayılan KAPALI; yönetici modül talep eder, süper kullanıcı açar. Sakine açık uç yoktur. Borçlandırma ayrıca `finance` modülünü ister; Aidat ve Finans temel modül olduğundan (079) her sitede açıktır, ekranda "modül açık olmalı" diye şart gösterilmez.
+Modül varsayılan KAPALI; yönetici modül talep eder, süper kullanıcı açar. Sakine açık uç yoktur. Borçlandırma ayrıca `finance` modülünü ister; Aidat ve Finans temel modül olduğundan (079) her sitede açıktır, ekranda "modül açık olmalı" diye şart gösterilmez. **Sayaç okuma izni finans / borçlandırma izni vermez:** saha okuma uçlarına (`meter-field`) girebilen görevli (STAFF) sayaç yönetimi, faturalandırma (`meters`, `meter-billings`) ve finans uçlarına giremez (403 `FORBIDDEN_ROLE`); borçlandırmayı yalnız yönetici / süper yapar, kurul üyesi salt okur. Aynı cümle yardım metninde de yazılıdır (`lib/ui/views/help_content.dart`, konu `metering`).
 
 ## Tablolar (hepsi ekleyici; defter şemasına dokunulmaz)
 

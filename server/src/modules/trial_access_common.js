@@ -158,7 +158,9 @@ const SITE_DENIED_FIRST = new Set([
 //  - drive (Drive hesabı bağlama / yükleme), access-cards (kart verme), card-payments (ödeme sağlayıcısı ayarı), modules (açma / kapama)
 //  - staff-roles: e-postaya göre PLATFORMDAKİ herhangi bir hesabı bulup siteye rol verir ("bu e-posta kayıtlı mı / kim" yanıtı verir):
 //    başka sitelerin kullanıcılarını sorgulamak için kullanılamasın.
-const SITE_READ_ONLY_FIRST = new Set(['drive', 'access-cards', 'card-payments', 'modules', 'staff-roles']);
+//  - quote-requests (113, P2-8): kimliksiz dış firmaya AÇIK internet bağlantısı üretir (firma girişiyle yazma yapılır); misafir geçişi /
+//    katılım belirteci gibi dış etkilidir, deneme oturumu oluşturamaz / onaylayamaz. Listeleme (belirteç / özet asla dönmez) açık kalır.
+const SITE_READ_ONLY_FIRST = new Set(['drive', 'access-cards', 'card-payments', 'modules', 'staff-roles', 'quote-requests']);
 
 // /manager/sites/<demo>/people/<id>/<alt>: hesap açma, parola / PIN üretme, davet gönderme (dış e-posta / SMS ve kullanıcı kodu tüketir).
 const PERSON_DENIED_SUB = new Set(['password-reset', 'account', 'reset-pin', 'invitation']);

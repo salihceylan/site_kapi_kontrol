@@ -39,14 +39,14 @@ Kaynak: `server/src/routes/*.js` ve `server/src/server.js`. Sütunlar: yöntem, 
 | POST | `/admin/devices/:id/release-ownership` | authRequired, requireSuperUser | [server/src/routes/admin_routes.js:1815](../server/src/routes/admin_routes.js#L1815) |
 | GET | `/admin/maintenance/health` | authRequired, requireSuperUser | [server/src/routes/admin_routes.js:1837](../server/src/routes/admin_routes.js#L1837) |
 | POST | `/admin/maintenance/cleanup` | authRequired, requireSuperUser | [server/src/routes/admin_routes.js:1849](../server/src/routes/admin_routes.js#L1849) |
-| GET | `/app/my-doors` | authRequired | [server/src/routes/app_doors_routes.js:109](../server/src/routes/app_doors_routes.js#L109) |
-| GET | `/app/doors/:id/status` | authRequired | [server/src/routes/app_doors_routes.js:121](../server/src/routes/app_doors_routes.js#L121) |
-| POST | `/app/doors/:id/open` | authRequired, doorCommandRateLimiter | [server/src/routes/app_doors_routes.js:161](../server/src/routes/app_doors_routes.js#L161) |
-| POST | `/app/doors/scan-qr-open` | authRequired, doorCommandRateLimiter | [server/src/routes/app_doors_routes.js:262](../server/src/routes/app_doors_routes.js#L262) |
-| POST | `/app/doors/:id/local-open-notify` | authRequired, doorCommandRateLimiter | [server/src/routes/app_doors_routes.js:419](../server/src/routes/app_doors_routes.js#L419) |
-| POST | `/app/doors/:id/qr-token` | authRequired, qrTokenRateLimiter | [server/src/routes/app_doors_routes.js:475](../server/src/routes/app_doors_routes.js#L475) |
-| POST | `/app/doors/:id/revoke-my-qr` | authRequired | [server/src/routes/app_doors_routes.js:510](../server/src/routes/app_doors_routes.js#L510) |
-| GET | `/app/doors/qr-status` | authRequired | [server/src/routes/app_doors_routes.js:532](../server/src/routes/app_doors_routes.js#L532) |
+| GET | `/app/my-doors` | authRequired | [server/src/routes/app_doors_routes.js:110](../server/src/routes/app_doors_routes.js#L110) |
+| GET | `/app/doors/:id/status` | authRequired | [server/src/routes/app_doors_routes.js:122](../server/src/routes/app_doors_routes.js#L122) |
+| POST | `/app/doors/:id/open` | authRequired, doorCommandRateLimiter | [server/src/routes/app_doors_routes.js:162](../server/src/routes/app_doors_routes.js#L162) |
+| POST | `/app/doors/scan-qr-open` | authRequired, doorCommandRateLimiter | [server/src/routes/app_doors_routes.js:263](../server/src/routes/app_doors_routes.js#L263) |
+| POST | `/app/doors/:id/local-open-notify` | authRequired, doorCommandRateLimiter | [server/src/routes/app_doors_routes.js:420](../server/src/routes/app_doors_routes.js#L420) |
+| POST | `/app/doors/:id/qr-token` | authRequired, qrTokenRateLimiter | [server/src/routes/app_doors_routes.js:477](../server/src/routes/app_doors_routes.js#L477) |
+| POST | `/app/doors/:id/revoke-my-qr` | authRequired | [server/src/routes/app_doors_routes.js:512](../server/src/routes/app_doors_routes.js#L512) |
+| GET | `/app/doors/qr-status` | authRequired | [server/src/routes/app_doors_routes.js:534](../server/src/routes/app_doors_routes.js#L534) |
 | POST | `/auth/register-individual` | registerLimiter | [server/src/routes/auth_routes.js:55](../server/src/routes/auth_routes.js#L55) |
 | POST | `/auth/verify-code` | verifyCodeLimiter | [server/src/routes/auth_routes.js:92](../server/src/routes/auth_routes.js#L92) |
 | POST | `/auth/resend-code` | resendCodeLimiter | [server/src/routes/auth_routes.js:119](../server/src/routes/auth_routes.js#L119) |
@@ -123,7 +123,7 @@ Kaynak: `server/src/routes/*.js` ve `server/src/server.js`. Sütunlar: yöntem, 
 | GET | `/membership/sites/:id/residents-tree` | authRequired | [server/src/routes/membership_routes.js:408](../server/src/routes/membership_routes.js#L408) |
 | POST | `/api/company/labeled-devices` | companyAccessLimiter, requireCompanyAccess, express.json({ limit: '5m… | [server/src/server.js:135](../server/src/server.js#L135) |
 | POST | `/public/client-errors` | clientErrorBodyParser); | [server/src/server.js:137](../server/src/server.js#L137) |
-| GET | `*` | (req, res, next) => { | [server/src/server.js:272](../server/src/server.js#L272) |
+| GET | `*` | (req, res, next) => { | [server/src/server.js:274](../server/src/server.js#L274) |
 
 ## Ek B — Uygulama → sunucu çağrıları
 
@@ -287,7 +287,7 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | `FIRMWARE_DIR` | [server/src/routes/firmware_routes.js:33](../server/src/routes/firmware_routes.js#L33) |
 | `JWT_SECRET` | [server/src/jwt.js:31](../server/src/jwt.js#L31)<br>[server/src/modules/apartment_mgmt_service.js:91](../server/src/modules/apartment_mgmt_service.js#L91)<br>[server/src/modules/device_integrations_service.js:35](../server/src/modules/device_integrations_service.js#L35) |
 | `LEGAL_DIR` | [server/scripts/qa_platform_pg.mjs:9252](../server/scripts/qa_platform_pg.mjs#L9252) |
-| `LISTEN_HOST` | [server/src/server.js:394](../server/src/server.js#L394) |
+| `LISTEN_HOST` | [server/src/server.js:396](../server/src/server.js#L396) |
 | `MIGRATE_LOCK_TIMEOUT_MS` | [server/scripts/migrate.js:371](../server/scripts/migrate.js#L371) |
 | `MOSQUITTO_PASSWD_BIN` | [server/scripts/sync_mqtt_acl.js:11](../server/scripts/sync_mqtt_acl.js#L11) |
 | `MQTT_ACL_FILE` | [server/scripts/sync_mqtt_acl.js:10](../server/scripts/sync_mqtt_acl.js#L10) |
@@ -306,8 +306,8 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | `NODE_ENV` | [server/scripts/qa_coklu_malik.mjs:102](../server/scripts/qa_coklu_malik.mjs#L102)<br>[server/scripts/qa_platform_pg.mjs:548](../server/scripts/qa_platform_pg.mjs#L548) |
 | `PEOPLE_SYNC_MIN_INTERVAL_MS` | [server/src/modules/people_sync.js:19](../server/src/modules/people_sync.js#L19)<br>[server/scripts/qa_platform_pg.mjs:550](../server/scripts/qa_platform_pg.mjs#L550) |
 | `PORT` | [server/src/server.js:118](../server/src/server.js#L118) |
-| `PUBLIC_APP_URL` | [server/src/modules/person_invite_service.js:64](../server/src/modules/person_invite_service.js#L64)<br>[server/src/routes/auth_routes.js:371](../server/src/routes/auth_routes.js#L371)<br>[server/src/routes/guest_passes_routes.js:40](../server/src/routes/guest_passes_routes.js#L40) |
-| `PUBLIC_BASE_URL` | [server/src/modules/person_invite_service.js:64](../server/src/modules/person_invite_service.js#L64)<br>[server/src/routes/auth_routes.js:372](../server/src/routes/auth_routes.js#L372)<br>[server/src/routes/guest_passes_routes.js:41](../server/src/routes/guest_passes_routes.js#L41) |
+| `PUBLIC_APP_URL` | [server/src/modules/equipment_service.js:979](../server/src/modules/equipment_service.js#L979)<br>[server/src/modules/person_invite_service.js:64](../server/src/modules/person_invite_service.js#L64)<br>[server/src/routes/auth_routes.js:371](../server/src/routes/auth_routes.js#L371) |
+| `PUBLIC_BASE_URL` | [server/src/modules/equipment_service.js:979](../server/src/modules/equipment_service.js#L979)<br>[server/src/modules/person_invite_service.js:64](../server/src/modules/person_invite_service.js#L64)<br>[server/src/routes/auth_routes.js:372](../server/src/routes/auth_routes.js#L372) |
 | `QA_ADMIN_DB` | [server/scripts/qa_finance4b.mjs:162](../server/scripts/qa_finance4b.mjs#L162)<br>[server/scripts/qa_finance4b_upgrade.mjs:75](../server/scripts/qa_finance4b_upgrade.mjs#L75)<br>[server/scripts/qa_finance_funds_section.mjs:719](../server/scripts/qa_finance_funds_section.mjs#L719) |
 | `QA_ANNOUNCEMENT_LOCK_ROUNDS` | [server/scripts/qa_platform_pg.mjs:3805](../server/scripts/qa_platform_pg.mjs#L3805) |
 | `QA_ANNOUNCEMENT_ROUNDS` | [server/scripts/qa_platform_pg.mjs:3218](../server/scripts/qa_platform_pg.mjs#L3218) |
@@ -407,6 +407,7 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | `equipment_items` | — | [server/migrations/068_equipment.sql:5](../server/migrations/068_equipment.sql#L5) |
 | `equipment_maintenance_logs` | — | [server/migrations/068_equipment.sql:42](../server/migrations/068_equipment.sql#L42) |
 | `equipment_plans` | — | [server/migrations/068_equipment.sql:26](../server/migrations/068_equipment.sql#L26) |
+| `equipment_quote_requests` | — | [server/migrations/113_equipment_quote_requests.sql:13](../server/migrations/113_equipment_quote_requests.sql#L13) |
 | `equipment_quotes` | — | [server/migrations/068_equipment.sql:67](../server/migrations/068_equipment.sql#L67) |
 | `expense_categories` | — | [server/migrations/040_finance_4b.sql:207](../server/migrations/040_finance_4b.sql#L207) |
 | `expense_check_marks` | — | [server/migrations/110_check_marks.sql:6](../server/migrations/110_check_marks.sql#L6) |
@@ -511,7 +512,7 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 
 ## Ek E — Kaynak dosya kapsamı
 
-1179 kaynak dosyanın **249**'i en az bir arıza girişine bağlı, **1**'i yalnız dosya haritasında, **929**'i klavuzda hiç geçmiyor. Bir dosya hiç geçmiyorsa onunla ilgili arızayı `--where` ile arayın.
+1180 kaynak dosyanın **249**'i en az bir arıza girişine bağlı, **1**'i yalnız dosya haritasında, **930**'i klavuzda hiç geçmiyor. Bir dosya hiç geçmiyorsa onunla ilgili arızayı `--where` ile arayın.
 
 | Dosya | Satır | Bağlı girişler | Dosya haritası |
 | --- | --- | --- | --- |
@@ -540,8 +541,8 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [company_qr_tool/ui_kit.py](../company_qr_tool/ui_kit.py) | 1549 | — | — |
 | [deploy/remote_audit.sh](../deploy/remote_audit.sh) | 24 | [altyapi-komut-rehberi](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-komut-rehberi), [altyapi-deploy-dogrulama-sonuclari](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-deploy-dogrulama-sonuclari), [altyapi-disk-dolu-yedekler](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-disk-dolu-yedekler) | 20-sunucu-altyapi-ve-yayin |
 | [deploy/remote_deploy.sh](../deploy/remote_deploy.sh) | 170 | [altyapi-geri-alma-ve-yedek](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-geri-alma-ve-yedek), [altyapi-deploy-prepare-basarisiz](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-deploy-prepare-basarisiz), [altyapi-deploy-activate-geri-alma](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-deploy-activate-geri-alma), [altyapi-company-api-key-uretildi](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-company-api-key-uretildi), [altyapi-disk-dolu-yedekler](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-disk-dolu-yedekler) +2 | 20-sunucu-altyapi-ve-yayin |
-| [deploy/remote_rehearse_schema.sh](../deploy/remote_rehearse_schema.sh) | 216 | — | — |
-| [deploy/remote_verify.sh](../deploy/remote_verify.sh) | 114 | [altyapi-komut-rehberi](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-komut-rehberi), [altyapi-deploy-dogrulama-sonuclari](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-deploy-dogrulama-sonuclari), [altyapi-company-api-key-uretildi](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-company-api-key-uretildi) | 20-sunucu-altyapi-ve-yayin |
+| [deploy/remote_rehearse_schema.sh](../deploy/remote_rehearse_schema.sh) | 277 | — | — |
+| [deploy/remote_verify.sh](../deploy/remote_verify.sh) | 162 | [altyapi-komut-rehberi](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-komut-rehberi), [altyapi-deploy-dogrulama-sonuclari](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-deploy-dogrulama-sonuclari), [altyapi-company-api-key-uretildi](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-company-api-key-uretildi) | 20-sunucu-altyapi-ve-yayin |
 | [ekran_yazilimi/include/config.h](../ekran_yazilimi/include/config.h) | 54 | [ekran-siyah-bos](ariza-klavuzu/41-ekran-yazilimi.md#ekran-siyah-bos), [ekran-dokunmatik-yok](ariza-klavuzu/41-ekran-yazilimi.md#ekran-dokunmatik-yok), [ekran-uart-protokol-uyusmazligi](ariza-klavuzu/41-ekran-yazilimi.md#ekran-uart-protokol-uyusmazligi), [ekran-surum-uyusmazligi](ariza-klavuzu/41-ekran-yazilimi.md#ekran-surum-uyusmazligi) | 40-cihaz-yazilimi, 41-ekran-yazilimi |
 | [ekran_yazilimi/include/cst816d_touch.h](../ekran_yazilimi/include/cst816d_touch.h) | 94 | [ekran-dokunmatik-yok](ariza-klavuzu/41-ekran-yazilimi.md#ekran-dokunmatik-yok), [ekran-dokunma-yanlis-koordinat](ariza-klavuzu/41-ekran-yazilimi.md#ekran-dokunma-yanlis-koordinat), [ekran-dokunma-tekrar-tetikleme](ariza-klavuzu/41-ekran-yazilimi.md#ekran-dokunma-tekrar-tetikleme) | 40-cihaz-yazilimi, 41-ekran-yazilimi |
 | [ekran_yazilimi/include/display_protocol.h](../ekran_yazilimi/include/display_protocol.h) | 53 | [ekran-uart-protokol-uyusmazligi](ariza-klavuzu/41-ekran-yazilimi.md#ekran-uart-protokol-uyusmazligi) | 41-ekran-yazilimi |
@@ -716,7 +717,7 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [lib/services/easy_view_service.dart](../lib/services/easy_view_service.dart) | 56 | — | — |
 | [lib/services/emergency_api.dart](../lib/services/emergency_api.dart) | 76 | — | — |
 | [lib/services/emergency_dialer.dart](../lib/services/emergency_dialer.dart) | 80 | — | — |
-| [lib/services/equipment_api.dart](../lib/services/equipment_api.dart) | 683 | — | — |
+| [lib/services/equipment_api.dart](../lib/services/equipment_api.dart) | 812 | — | — |
 | [lib/services/expense_attachments.dart](../lib/services/expense_attachments.dart) | 136 | — | — |
 | [lib/services/feedback_api.dart](../lib/services/feedback_api.dart) | 391 | — | — |
 | [lib/services/finance_4b_api.dart](../lib/services/finance_4b_api.dart) | 1956 | — | — |
@@ -1006,8 +1007,8 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [lib/ui/views/document_resident_view.dart](../lib/ui/views/document_resident_view.dart) | 321 | — | — |
 | [lib/ui/views/document_view.dart](../lib/ui/views/document_view.dart) | 198 | — | — |
 | [lib/ui/views/emergency_view.dart](../lib/ui/views/emergency_view.dart) | 512 | — | — |
-| [lib/ui/views/equipment_quotes_panel.dart](../lib/ui/views/equipment_quotes_panel.dart) | 419 | — | — |
-| [lib/ui/views/equipment_view.dart](../lib/ui/views/equipment_view.dart) | 858 | — | — |
+| [lib/ui/views/equipment_quotes_panel.dart](../lib/ui/views/equipment_quotes_panel.dart) | 617 | — | — |
+| [lib/ui/views/equipment_view.dart](../lib/ui/views/equipment_view.dart) | 1003 | — | — |
 | [lib/ui/views/feedback_inbox_view.dart](../lib/ui/views/feedback_inbox_view.dart) | 355 | — | — |
 | [lib/ui/views/finance_balances_tab.dart](../lib/ui/views/finance_balances_tab.dart) | 240 | — | — |
 | [lib/ui/views/finance_cash_tab.dart](../lib/ui/views/finance_cash_tab.dart) | 462 | — | — |
@@ -1037,7 +1038,7 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [lib/ui/views/managed_users_view.dart](../lib/ui/views/managed_users_view.dart) | 135 | [ui-kullanici-diyalogu-kaydet](ariza-klavuzu/31-uygulama-arayuz.md#ui-kullanici-diyalogu-kaydet) | 31-uygulama-arayuz |
 | [lib/ui/views/management_company_view.dart](../lib/ui/views/management_company_view.dart) | 482 | — | — |
 | [lib/ui/views/menu_layout_view.dart](../lib/ui/views/menu_layout_view.dart) | 566 | — | — |
-| [lib/ui/views/meter_field_view.dart](../lib/ui/views/meter_field_view.dart) | 833 | — | — |
+| [lib/ui/views/meter_field_view.dart](../lib/ui/views/meter_field_view.dart) | 843 | — | — |
 | [lib/ui/views/meters_view.dart](../lib/ui/views/meters_view.dart) | 795 | — | — |
 | [lib/ui/views/module_requests_view.dart](../lib/ui/views/module_requests_view.dart) | 415 | — | — |
 | [lib/ui/views/module_showcase_view.dart](../lib/ui/views/module_showcase_view.dart) | 1484 | — | — |
@@ -1251,7 +1252,7 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [server/scripts/qa_finance4b.mjs](../server/scripts/qa_finance4b.mjs) | 402 | — | — |
 | [server/scripts/qa_metering_field.mjs](../server/scripts/qa_metering_field.mjs) | 125 | — | — |
 | [server/scripts/qa_pending_registration_pg.mjs](../server/scripts/qa_pending_registration_pg.mjs) | 276 | [test-gercek-pg-qa](ariza-klavuzu/50-arac-test-ve-surec.md#test-gercek-pg-qa) | 50-arac-test-ve-surec |
-| [server/scripts/qa_platform_pg.mjs](../server/scripts/qa_platform_pg.mjs) | 11990 | — | — |
+| [server/scripts/qa_platform_pg.mjs](../server/scripts/qa_platform_pg.mjs) | 11992 | — | — |
 | [server/scripts/qa_platform_rules_section.mjs](../server/scripts/qa_platform_rules_section.mjs) | 318 | — | — |
 | [server/scripts/qa_push_section.mjs](../server/scripts/qa_push_section.mjs) | 727 | — | — |
 | [server/scripts/qa_reservation_section.mjs](../server/scripts/qa_reservation_section.mjs) | 928 | — | — |
@@ -1270,7 +1271,7 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [server/src/config/cors.js](../server/src/config/cors.js) | 82 | [sunucu-cors-tarayici-engeli](ariza-klavuzu/10-sunucu-api.md#sunucu-cors-tarayici-engeli) | 10-sunucu-api |
 | [server/src/config/env.js](../server/src/config/env.js) | 367 | [sunucu-kayit-kod-gelmiyor](ariza-klavuzu/10-sunucu-api.md#sunucu-kayit-kod-gelmiyor), [sunucu-eposta-hic-cikmiyor-smtp](ariza-klavuzu/10-sunucu-api.md#sunucu-eposta-hic-cikmiyor-smtp), [sunucu-cors-tarayici-engeli](ariza-klavuzu/10-sunucu-api.md#sunucu-cors-tarayici-engeli), [sunucu-sirket-ucu-401-anahtar](ariza-klavuzu/10-sunucu-api.md#sunucu-sirket-ucu-401-anahtar), [altyapi-env-hata-sunucu-baslamiyor](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-env-hata-sunucu-baslamiyor) +6 | 10-sunucu-api, 20-sunucu-altyapi-ve-yayin |
 | [server/src/config/process_handlers.js](../server/src/config/process_handlers.js) | 39 | [sunucu-async-hata-istek-asili](ariza-klavuzu/10-sunucu-api.md#sunucu-async-hata-istek-asili), [altyapi-api-acilmiyor-pm2-dongu](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-api-acilmiyor-pm2-dongu), [altyapi-port-8080-kullanimda](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-port-8080-kullanimda), [altyapi-yakalanmamis-hata-loglari](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-yakalanmamis-hata-loglari) | 10-sunucu-api, 20-sunucu-altyapi-ve-yayin |
-| [server/src/db.js](../server/src/db.js) | 2138 | [altyapi-health-database-disconnected](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-health-database-disconnected), [altyapi-sema-users-yok](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-sema-users-yok), [altyapi-relation-does-not-exist](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-relation-does-not-exist), [altyapi-sema-baslangic-sql-hatasi](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-sema-baslangic-sql-hatasi), [altyapi-db-havuz-zaman-asimi](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-db-havuz-zaman-asimi) +3 | 20-sunucu-altyapi-ve-yayin |
+| [server/src/db.js](../server/src/db.js) | 2141 | [altyapi-health-database-disconnected](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-health-database-disconnected), [altyapi-sema-users-yok](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-sema-users-yok), [altyapi-relation-does-not-exist](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-relation-does-not-exist), [altyapi-sema-baslangic-sql-hatasi](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-sema-baslangic-sql-hatasi), [altyapi-db-havuz-zaman-asimi](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-db-havuz-zaman-asimi) +3 | 20-sunucu-altyapi-ve-yayin |
 | [server/src/jwt.js](../server/src/jwt.js) | 138 | [sunucu-token-401-gecersiz](ariza-klavuzu/10-sunucu-api.md#sunucu-token-401-gecersiz), [sunucu-token-revoked-parola-degisti](ariza-klavuzu/10-sunucu-api.md#sunucu-token-revoked-parola-degisti) | 10-sunucu-api |
 | [server/src/mailer.js](../server/src/mailer.js) | 810 | [sunucu-kayit-kod-gelmiyor](ariza-klavuzu/10-sunucu-api.md#sunucu-kayit-kod-gelmiyor), [sunucu-sifre-sifirlama-mail-gelmiyor](ariza-klavuzu/10-sunucu-api.md#sunucu-sifre-sifirlama-mail-gelmiyor), [sunucu-eposta-hic-cikmiyor-smtp](ariza-klavuzu/10-sunucu-api.md#sunucu-eposta-hic-cikmiyor-smtp), [sunucu-yonetici-daveti-mail-yok](ariza-klavuzu/10-sunucu-api.md#sunucu-yonetici-daveti-mail-yok), [sunucu-daire-bilgisi-eposta-gitmiyor](ariza-klavuzu/10-sunucu-api.md#sunucu-daire-bilgisi-eposta-gitmiyor) +2 | 10-sunucu-api |
 | [server/src/middlewares/auth_middleware.js](../server/src/middlewares/auth_middleware.js) | 221 | [sunucu-token-401-gecersiz](ariza-klavuzu/10-sunucu-api.md#sunucu-token-401-gecersiz), [sunucu-token-revoked-parola-degisti](ariza-klavuzu/10-sunucu-api.md#sunucu-token-revoked-parola-degisti), [sunucu-oturum-401-kullanici-yok](ariza-klavuzu/10-sunucu-api.md#sunucu-oturum-401-kullanici-yok), [sunucu-oturum-403-hesap-pasif](ariza-klavuzu/10-sunucu-api.md#sunucu-oturum-403-hesap-pasif), [sunucu-db-kesintisi-500-oturum-dusmuyor](ariza-klavuzu/10-sunucu-api.md#sunucu-db-kesintisi-500-oturum-dusmuyor) +5 | 10-sunucu-api |
@@ -1425,10 +1426,11 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [server/src/modules/emergency_routes.js](../server/src/modules/emergency_routes.js) | 56 | — | — |
 | [server/src/modules/emergency_schema.js](../server/src/modules/emergency_schema.js) | 32 | — | — |
 | [server/src/modules/emergency_service.js](../server/src/modules/emergency_service.js) | 183 | — | — |
-| [server/src/modules/equipment_quote_schema.js](../server/src/modules/equipment_quote_schema.js) | 230 | — | — |
-| [server/src/modules/equipment_routes.js](../server/src/modules/equipment_routes.js) | 146 | — | — |
+| [server/src/modules/equipment_quote_form_page.js](../server/src/modules/equipment_quote_form_page.js) | 227 | — | — |
+| [server/src/modules/equipment_quote_schema.js](../server/src/modules/equipment_quote_schema.js) | 346 | — | — |
+| [server/src/modules/equipment_routes.js](../server/src/modules/equipment_routes.js) | 221 | — | — |
 | [server/src/modules/equipment_schema.js](../server/src/modules/equipment_schema.js) | 182 | — | — |
-| [server/src/modules/equipment_service.js](../server/src/modules/equipment_service.js) | 976 | — | — |
+| [server/src/modules/equipment_service.js](../server/src/modules/equipment_service.js) | 1227 | — | — |
 | [server/src/modules/errors.js](../server/src/modules/errors.js) | 24 | — | — |
 | [server/src/modules/feedback_common.js](../server/src/modules/feedback_common.js) | 272 | — | — |
 | [server/src/modules/feedback_maintenance.js](../server/src/modules/feedback_maintenance.js) | 51 | — | — |
@@ -1595,7 +1597,7 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [server/src/modules/site_application_common.js](../server/src/modules/site_application_common.js) | 364 | — | — |
 | [server/src/modules/site_application_routes.js](../server/src/modules/site_application_routes.js) | 217 | — | — |
 | [server/src/modules/site_application_service.js](../server/src/modules/site_application_service.js) | 1027 | — | — |
-| [server/src/modules/site_audit_log_catalog.js](../server/src/modules/site_audit_log_catalog.js) | 440 | — | — |
+| [server/src/modules/site_audit_log_catalog.js](../server/src/modules/site_audit_log_catalog.js) | 445 | — | — |
 | [server/src/modules/site_audit_log_routes.js](../server/src/modules/site_audit_log_routes.js) | 45 | — | — |
 | [server/src/modules/site_audit_log_service.js](../server/src/modules/site_audit_log_service.js) | 354 | — | — |
 | [server/src/modules/sms_login.js](../server/src/modules/sms_login.js) | 135 | — | — |
@@ -1610,7 +1612,7 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [server/src/modules/team_routes.js](../server/src/modules/team_routes.js) | 203 | — | — |
 | [server/src/modules/team_schema.js](../server/src/modules/team_schema.js) | 187 | — | — |
 | [server/src/modules/team_service.js](../server/src/modules/team_service.js) | 528 | — | — |
-| [server/src/modules/trial_access_common.js](../server/src/modules/trial_access_common.js) | 305 | — | — |
+| [server/src/modules/trial_access_common.js](../server/src/modules/trial_access_common.js) | 307 | — | — |
 | [server/src/modules/trial_access_routes.js](../server/src/modules/trial_access_routes.js) | 123 | — | — |
 | [server/src/modules/trial_access_schema.js](../server/src/modules/trial_access_schema.js) | 40 | — | — |
 | [server/src/modules/trial_access_service.js](../server/src/modules/trial_access_service.js) | 397 | — | — |
@@ -1646,7 +1648,7 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [server/src/mqtt_acl_sync.js](../server/src/mqtt_acl_sync.js) | 265 | [altyapi-health-acl-sync-kapali](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-health-acl-sync-kapali), [altyapi-mqtt-acl-yayin-reddi](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-mqtt-acl-yayin-reddi), [altyapi-acl-cihaz-atlandi](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-acl-cihaz-atlandi), [altyapi-acl-senkron-503](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-acl-senkron-503), [altyapi-acl-silinen-cihaz-baglaniyor](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-acl-silinen-cihaz-baglaniyor) +5 | 20-sunucu-altyapi-ve-yayin, 60-akislar, 61-akislar-devam |
 | [server/src/mqtt_bridge.js](../server/src/mqtt_bridge.js) | 1245 | [altyapi-health-mqtt-baglanti-yok](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-health-mqtt-baglanti-yok), [altyapi-health-mqtt-yapilandirilmamis](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-health-mqtt-yapilandirilmamis), [altyapi-health-mqtt-db-error-kodu](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-health-mqtt-db-error-kodu), [altyapi-mqtt-tls-baglanti](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-mqtt-tls-baglanti), [altyapi-mqtt-kimlik-reddi](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-mqtt-kimlik-reddi) +19 | 20-sunucu-altyapi-ve-yayin, 60-akislar |
 | [server/src/routes/admin_routes.js](../server/src/routes/admin_routes.js) | 1863 | [sunucu-giris-403-onay-pasif-rol](ariza-klavuzu/10-sunucu-api.md#sunucu-giris-403-onay-pasif-rol), [sunucu-token-revoked-parola-degisti](ariza-klavuzu/10-sunucu-api.md#sunucu-token-revoked-parola-degisti), [sunucu-oturum-401-kullanici-yok](ariza-klavuzu/10-sunucu-api.md#sunucu-oturum-401-kullanici-yok), [sunucu-oturum-403-hesap-pasif](ariza-klavuzu/10-sunucu-api.md#sunucu-oturum-403-hesap-pasif), [sunucu-yetki-403-super-user](ariza-klavuzu/10-sunucu-api.md#sunucu-yetki-403-super-user) +22 | 10-sunucu-api, 61-akislar-devam |
-| [server/src/routes/app_doors_routes.js](../server/src/routes/app_doors_routes.js) | 557 | [sunucu-kapi-acma-404-yetki](ariza-klavuzu/10-sunucu-api.md#sunucu-kapi-acma-404-yetki), [sunucu-sakin-kapi-listede-yok](ariza-klavuzu/10-sunucu-api.md#sunucu-sakin-kapi-listede-yok), [sunucu-kapi-acma-409-cihaz-atanmamis](ariza-klavuzu/10-sunucu-api.md#sunucu-kapi-acma-409-cihaz-atanmamis), [sunucu-kapi-acma-cihaz-offline](ariza-klavuzu/10-sunucu-api.md#sunucu-kapi-acma-cihaz-offline), [sunucu-kapi-acma-429-cok-sik](ariza-klavuzu/10-sunucu-api.md#sunucu-kapi-acma-429-cok-sik) +16 | 10-sunucu-api, 60-akislar |
+| [server/src/routes/app_doors_routes.js](../server/src/routes/app_doors_routes.js) | 559 | [sunucu-kapi-acma-404-yetki](ariza-klavuzu/10-sunucu-api.md#sunucu-kapi-acma-404-yetki), [sunucu-sakin-kapi-listede-yok](ariza-klavuzu/10-sunucu-api.md#sunucu-sakin-kapi-listede-yok), [sunucu-kapi-acma-409-cihaz-atanmamis](ariza-klavuzu/10-sunucu-api.md#sunucu-kapi-acma-409-cihaz-atanmamis), [sunucu-kapi-acma-cihaz-offline](ariza-klavuzu/10-sunucu-api.md#sunucu-kapi-acma-cihaz-offline), [sunucu-kapi-acma-429-cok-sik](ariza-klavuzu/10-sunucu-api.md#sunucu-kapi-acma-429-cok-sik) +16 | 10-sunucu-api, 60-akislar |
 | [server/src/routes/auth_routes.js](../server/src/routes/auth_routes.js) | 1066 | [sunucu-giris-401](ariza-klavuzu/10-sunucu-api.md#sunucu-giris-401), [sunucu-giris-hesap-kilitli-429](ariza-klavuzu/10-sunucu-api.md#sunucu-giris-hesap-kilitli-429), [sunucu-giris-403-eposta-dogrulanmadi](ariza-klavuzu/10-sunucu-api.md#sunucu-giris-403-eposta-dogrulanmadi), [sunucu-giris-403-onay-pasif-rol](ariza-klavuzu/10-sunucu-api.md#sunucu-giris-403-onay-pasif-rol), [sunucu-token-revoked-parola-degisti](ariza-klavuzu/10-sunucu-api.md#sunucu-token-revoked-parola-degisti) +16 | 10-sunucu-api, 60-akislar |
 | [server/src/routes/company_routes.js](../server/src/routes/company_routes.js) | 497 | [sunucu-kapi-acma-409-cihaz-atanmamis](ariza-klavuzu/10-sunucu-api.md#sunucu-kapi-acma-409-cihaz-atanmamis), [sunucu-sirket-ucu-401-anahtar](ariza-klavuzu/10-sunucu-api.md#sunucu-sirket-ucu-401-anahtar), [sunucu-sirket-cihaz-kayit-hata](ariza-klavuzu/10-sunucu-api.md#sunucu-sirket-cihaz-kayit-hata), [arac-kayit-http-400-donanim](ariza-klavuzu/50-arac-test-ve-surec.md#arac-kayit-http-400-donanim), [arac-kayitli-cihazlar-pdf](ariza-klavuzu/50-arac-test-ve-surec.md#arac-kayitli-cihazlar-pdf) +2 | 10-sunucu-api |
 | [server/src/routes/door_log_routes.js](../server/src/routes/door_log_routes.js) | 272 | [sunucu-yonetici-gecis-gunlugu-bos](ariza-klavuzu/10-sunucu-api.md#sunucu-yonetici-gecis-gunlugu-bos), [sunucu-offline-log-senkronu-hata](ariza-klavuzu/10-sunucu-api.md#sunucu-offline-log-senkronu-hata), [akis-cevrimdisi-kapi-gunlukleri](ariza-klavuzu/60-akislar.md#akis-cevrimdisi-kapi-gunlukleri), [akis-pdf-ciktilari](ariza-klavuzu/61-akislar-devam.md#akis-pdf-ciktilari) | 10-sunucu-api |
@@ -1665,11 +1667,11 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [server/src/security/password_hashing.js](../server/src/security/password_hashing.js) | 44 | — | — |
 | [server/src/security/password_policy.js](../server/src/security/password_policy.js) | 304 | [sunucu-profil-parola-degistirme-hata](ariza-klavuzu/10-sunucu-api.md#sunucu-profil-parola-degistirme-hata) | — |
 | [server/src/security/trust_proxy.js](../server/src/security/trust_proxy.js) | 116 | — | — |
-| [server/src/server.js](../server/src/server.js) | 427 | [altyapi-api-acilmiyor-pm2-dongu](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-api-acilmiyor-pm2-dongu), [altyapi-env-hata-sunucu-baslamiyor](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-env-hata-sunucu-baslamiyor), [altyapi-env-uyari-jwt-kisa](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-env-uyari-jwt-kisa), [altyapi-env-uyari-eksik-ayarlar](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-env-uyari-eksik-ayarlar), [altyapi-env-degisikligi-etkisiz](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-env-degisikligi-etkisiz) +8 | 20-sunucu-altyapi-ve-yayin |
+| [server/src/server.js](../server/src/server.js) | 429 | [altyapi-api-acilmiyor-pm2-dongu](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-api-acilmiyor-pm2-dongu), [altyapi-env-hata-sunucu-baslamiyor](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-env-hata-sunucu-baslamiyor), [altyapi-env-uyari-jwt-kisa](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-env-uyari-jwt-kisa), [altyapi-env-uyari-eksik-ayarlar](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-env-uyari-eksik-ayarlar), [altyapi-env-degisikligi-etkisiz](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-env-degisikligi-etkisiz) +8 | 20-sunucu-altyapi-ve-yayin |
 | [server/src/services/apartment_service.js](../server/src/services/apartment_service.js) | 660 | [sunucu-daire-bilgisi-eposta-gitmiyor](ariza-klavuzu/10-sunucu-api.md#sunucu-daire-bilgisi-eposta-gitmiyor), [sunucu-daire-sakin-yonetimi-hata](ariza-klavuzu/10-sunucu-api.md#sunucu-daire-sakin-yonetimi-hata) | 10-sunucu-api |
 | [server/src/services/device_service.js](../server/src/services/device_service.js) | 1079 | [sunucu-kapi-acma-409-cihaz-atanmamis](ariza-klavuzu/10-sunucu-api.md#sunucu-kapi-acma-409-cihaz-atanmamis), [sunucu-yerel-kontrol-token-bos](ariza-klavuzu/10-sunucu-api.md#sunucu-yerel-kontrol-token-bos), [sunucu-yerel-token-rotasyonu](ariza-klavuzu/10-sunucu-api.md#sunucu-yerel-token-rotasyonu), [sunucu-admin-ota-tetikleme-hata](ariza-klavuzu/10-sunucu-api.md#sunucu-admin-ota-tetikleme-hata), [sunucu-admin-cihaz-envanteri-hata](ariza-klavuzu/10-sunucu-api.md#sunucu-admin-cihaz-envanteri-hata) +8 | 10-sunucu-api, 20-sunucu-altyapi-ve-yayin, 61-akislar-devam |
 | [server/src/services/door_access_policy.js](../server/src/services/door_access_policy.js) | 342 | [sunucu-kapi-acma-403-uzaktan-kapali](ariza-klavuzu/10-sunucu-api.md#sunucu-kapi-acma-403-uzaktan-kapali), [sunucu-karekod-politika-kapali](ariza-klavuzu/10-sunucu-api.md#sunucu-karekod-politika-kapali), [sunucu-tarama-qr-ekran-token](ariza-klavuzu/10-sunucu-api.md#sunucu-tarama-qr-ekran-token), [sunucu-tarama-qr-suresi-doldu](ariza-klavuzu/10-sunucu-api.md#sunucu-tarama-qr-suresi-doldu), [sunucu-tarama-qr-gecersiz-yuk](ariza-klavuzu/10-sunucu-api.md#sunucu-tarama-qr-gecersiz-yuk) +2 | 10-sunucu-api, 60-akislar |
-| [server/src/services/door_log_service.js](../server/src/services/door_log_service.js) | 462 | [sunucu-offline-log-senkronu-hata](ariza-klavuzu/10-sunucu-api.md#sunucu-offline-log-senkronu-hata), [altyapi-offline-log-alimi](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-offline-log-alimi), [akis-cevrimdisi-kapi-gunlukleri](ariza-klavuzu/60-akislar.md#akis-cevrimdisi-kapi-gunlukleri), [akis-pdf-ciktilari](ariza-klavuzu/61-akislar-devam.md#akis-pdf-ciktilari) | 10-sunucu-api |
+| [server/src/services/door_log_service.js](../server/src/services/door_log_service.js) | 648 | [sunucu-offline-log-senkronu-hata](ariza-klavuzu/10-sunucu-api.md#sunucu-offline-log-senkronu-hata), [altyapi-offline-log-alimi](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-offline-log-alimi), [akis-yerel-kapi-acma](ariza-klavuzu/60-akislar.md#akis-yerel-kapi-acma), [akis-cevrimdisi-kapi-gunlukleri](ariza-klavuzu/60-akislar.md#akis-cevrimdisi-kapi-gunlukleri), [akis-pdf-ciktilari](ariza-klavuzu/61-akislar-devam.md#akis-pdf-ciktilari) | 10-sunucu-api |
 | [server/src/services/door_service.js](../server/src/services/door_service.js) | 1091 | [sunucu-kapi-acma-404-yetki](ariza-klavuzu/10-sunucu-api.md#sunucu-kapi-acma-404-yetki), [sunucu-sakin-kapi-listede-yok](ariza-klavuzu/10-sunucu-api.md#sunucu-sakin-kapi-listede-yok), [sunucu-kapi-acma-409-cihaz-atanmamis](ariza-klavuzu/10-sunucu-api.md#sunucu-kapi-acma-409-cihaz-atanmamis), [sunucu-yerel-kontrol-token-bos](ariza-klavuzu/10-sunucu-api.md#sunucu-yerel-kontrol-token-bos), [sunucu-kapi-gecis-logu-yazilmadi](ariza-klavuzu/10-sunucu-api.md#sunucu-kapi-gecis-logu-yazilmadi) +7 | 10-sunucu-api, 60-akislar |
 | [server/src/services/firmware_manifest_service.js](../server/src/services/firmware_manifest_service.js) | 178 | [sunucu-firmware-manifest-ota](ariza-klavuzu/10-sunucu-api.md#sunucu-firmware-manifest-ota), [altyapi-ota-hedef-uyusmazligi](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-ota-hedef-uyusmazligi) | 10-sunucu-api, 20-sunucu-altyapi-ve-yayin |
 | [server/src/services/firmware_release_service.js](../server/src/services/firmware_release_service.js) | 808 | [sunucu-firmware-yukleme-imza](ariza-klavuzu/10-sunucu-api.md#sunucu-firmware-yukleme-imza) | 10-sunucu-api |

@@ -1,5 +1,5 @@
 import { pool } from '../db.js';
-import { normalizeDeviceUid } from '../utils/helpers.js';
+import { auditLog, normalizeDeviceUid } from '../utils/helpers.js';
 
 // Cihazdan (MQTT) veya mobil uygulamadan (POST /device/sync-logs) gelen cevrimdisi kapi gecis
 // kayitlarini dogrulayip door_access_logs tablosuna IDEMPOTENT yazar.
@@ -346,6 +346,176 @@ export const INSERT_LOG_NATURAL_KEY_SQL = `
   RETURNING id
 `;
 
+// --- Yerel (UDP/Wi-Fi) acma: cihaz logu + uygulama bildirimi tekillestirme -----------------------
+// Ayni yerel acma IKI yoldan yazilabilir: (1) cihazin kendi logu (trigger local_udp, kullanici "Yerel UDP", user_code
+// YOK; MQTT/sync-logs ile gelir) ve (2) uygulamanin POST /app/doors/:id/local-open-notify bildirimi (trigger local_wifi,
+// user_code VAR). Iki satir tek acmanin kaydi sayilir; kisa pencerede (15 sn) ayni kapida eslesirse TEK satir kalir:
+//  - cihaz satiri korunur (client_log_id idempotentligi bozulmasin, cihaz ayni batch'i yeniden yollasa cift yazilmasin),
+//  - kullanici bilgisi (user_code/ad/rol/daire) uygulama satirindan cihaz satirina tasinir, uygulama satiri silinir.
+// Eslestirme siraya bagli degildir: hangisi once gelirse gelsin, ikincisi yazildiktan SONRA tek bir atomik
+// birlestirme sorgusu calisir (otomatik commit; iki yol ayni anda yazsa bile sonradan baslayan birlestirme ikisini de gorur).
+// Birlestirme hatasi kaydi/ack'i bozmaz (yalniz cift satir kalir = eski davranis).
+
+export const LOCAL_OPEN_DEDUPE_WINDOW_SEC = 15;
+export const LOCAL_OPEN_APP_TRIGGER = 'local_wifi';
+// Cihazin yerel acma loglarinda gorulebilen tetikleyiciler (su an firmware yalniz local_udp yazar).
+export const LOCAL_OPEN_DEVICE_TRIGGERS = ['local_udp', 'local_wifi', 'local_http'];
+const LOCAL_TRIGGER_SQL_LIST = LOCAL_OPEN_DEVICE_TRIGGERS.map((trigger) => `'${trigger}'`).join(', ');
+const MAX_RECONCILE_PER_BATCH = 50;
+const RECONCILE_WARN_INTERVAL_MS = 5 * 60 * 1000;
+
+// Uygulama bildirimi INSERT'i. Parametre sirasi recordDoorAccessLog ile aynidir ($8 = trigger_type).
+// Ayni kullanici + kapi + pencere icinde yerel bir satir (uygulama, birlestirilmis ya da kullanicisi bilinen) varsa yazmaz.
+export const INSERT_LOCAL_OPEN_NOTIFY_SQL = `
+  INSERT INTO door_access_logs (
+    site_code, door_id, door_name, user_code, user_name, user_role,
+    apartment_label, trigger_type, opened_at, ip_address
+  )
+  SELECT
+    $1::bigint, $2::bigint, $3::text, $4::bigint, $5::text, $6::text,
+    $7::text, $8::text, $9::timestamptz, $10::text
+  WHERE NOT EXISTS (
+    SELECT 1 FROM door_access_logs x
+    WHERE x.site_code = $1::bigint
+      AND x.door_id = $2::bigint
+      AND x.user_code = $4::bigint
+      AND x.trigger_type IN (${LOCAL_TRIGGER_SQL_LIST})
+      AND x.opened_at BETWEEN $9::timestamptz - ${LOCAL_OPEN_DEDUPE_WINDOW_SEC} * interval '1 second'
+                          AND $9::timestamptz + ${LOCAL_OPEN_DEDUPE_WINDOW_SEC} * interval '1 second'
+  )
+  RETURNING id
+`;
+
+// Atomik birlestirme: $3 civarindaki (+-pencere) kullanicisiz cihaz satiri ile kullanicili uygulama satirini
+// (en yakin cift) tek satira indirir. Satir kilitleri SKIP LOCKED: ayni cifti baska birlestirme tutuyorsa o tamamlar.
+export const RECONCILE_LOCAL_OPEN_SQL = `
+  WITH candidate AS (
+    SELECT a.id AS app_id, d.id AS dev_id
+    FROM door_access_logs a
+    JOIN door_access_logs d
+      ON d.site_code = a.site_code AND d.door_id = a.door_id
+    WHERE a.site_code = $1::bigint
+      AND a.door_id = $2::bigint
+      AND a.user_code IS NOT NULL
+      AND a.device_uid IS NULL
+      AND a.trigger_type = '${LOCAL_OPEN_APP_TRIGGER}'
+      AND a.opened_at BETWEEN $3::timestamptz - ${LOCAL_OPEN_DEDUPE_WINDOW_SEC} * interval '1 second'
+                          AND $3::timestamptz + ${LOCAL_OPEN_DEDUPE_WINDOW_SEC} * interval '1 second'
+      AND d.user_code IS NULL
+      AND d.device_uid IS NOT NULL
+      AND d.trigger_type IN (${LOCAL_TRIGGER_SQL_LIST})
+      AND d.opened_at BETWEEN $3::timestamptz - ${LOCAL_OPEN_DEDUPE_WINDOW_SEC} * interval '1 second'
+                          AND $3::timestamptz + ${LOCAL_OPEN_DEDUPE_WINDOW_SEC} * interval '1 second'
+      AND ABS(EXTRACT(EPOCH FROM (a.opened_at - d.opened_at))) <= ${LOCAL_OPEN_DEDUPE_WINDOW_SEC}
+    ORDER BY ABS(EXTRACT(EPOCH FROM (a.opened_at - d.opened_at))), a.id, d.id
+    LIMIT 1
+    FOR UPDATE OF a, d SKIP LOCKED
+  ),
+  merged AS (
+    UPDATE door_access_logs d
+    SET user_code = a.user_code,
+        user_name = a.user_name,
+        user_role = a.user_role,
+        apartment_label = a.apartment_label
+    FROM candidate c, door_access_logs a
+    WHERE d.id = c.dev_id
+      AND a.id = c.app_id
+      AND d.user_code IS NULL
+    RETURNING d.id
+  )
+  DELETE FROM door_access_logs a
+  USING candidate c
+  WHERE a.id = c.app_id
+    AND EXISTS (SELECT 1 FROM merged)
+  RETURNING a.id
+`;
+
+let lastReconcileWarnMs = 0;
+
+/**
+ * Bir yerel acmanin iki kaydini (cihaz + uygulama) tek satira indirir. Hata FIRLATMAZ.
+ * Donus: birlestirilen cift sayisi (0 veya 1).
+ */
+export async function reconcileLocalOpenLogs({ siteCode, doorId, around }, db = pool) {
+  const site = Number(siteCode);
+  const door = Number(doorId);
+  if (!Number.isSafeInteger(site) || site <= 0 || !Number.isSafeInteger(door) || door <= 0) {
+    return 0;
+  }
+  try {
+    const result = await db.query(RECONCILE_LOCAL_OPEN_SQL, [
+      site,
+      door,
+      around instanceof Date ? around : new Date(around),
+    ]);
+    return result?.rowCount > 0 ? 1 : 0;
+  } catch (error) {
+    const nowMs = Date.now();
+    if (nowMs - lastReconcileWarnMs >= RECONCILE_WARN_INTERVAL_MS) {
+      lastReconcileWarnMs = nowMs;
+      console.warn('[Door Log] yerel acma kayitlari birlestirilemedi (cift satir kalabilir):', error?.code || error?.message || 'hata');
+    }
+    return 0;
+  }
+}
+
+/**
+ * Uygulamanin local-open-notify bildirimini yazar; cihazin ayni acma icin yazdigi (ya da yazacagi) satirla tekillestirir.
+ * recordDoorAccessLog gibi hata YUTAR (firlatmaz). Donus: 'inserted' | 'duplicate' | 'merged' | 'failed'
+ *  - duplicate: ayni kullanici + kapi icin 15 sn icinde yerel kayit zaten var, yazilmadi
+ *  - merged: cihaz satiri zaten vardi, kullanici bilgisi ona islendi (uygulama satiri kalmadi)
+ */
+export async function recordLocalOpenNotifyLog({
+  siteCode,
+  doorId = null,
+  doorName,
+  userCode = null,
+  userName,
+  userRole = null,
+  apartmentLabel = null,
+  openedAt = new Date(),
+  ipAddress = null,
+}, db = pool) {
+  try {
+    if (!siteCode) {
+      console.warn('[Door Log] siteCode eksik oldugu icin log kaydedilemedi.');
+      return 'failed';
+    }
+    const when = openedAt || new Date();
+    const inserted = await db.query(INSERT_LOCAL_OPEN_NOTIFY_SQL, [
+      Number(siteCode),
+      doorId ? Number(doorId) : null,
+      doorName || 'Site Kapısı',
+      userCode ? Number(userCode) : null,
+      userName || 'Yetkili Kullanıcı',
+      userRole || 'apartment_owner',
+      apartmentLabel,
+      LOCAL_OPEN_APP_TRIGGER,
+      when,
+      ipAddress,
+    ]);
+    if (!(inserted?.rowCount > 0)) {
+      return 'duplicate';
+    }
+    if (doorId && userCode) {
+      const merged = await reconcileLocalOpenLogs({ siteCode, doorId, around: when }, db);
+      if (merged > 0) {
+        return 'merged';
+      }
+    }
+    return 'inserted';
+  } catch (err) {
+    auditLog('door_access_log_write_failed', {
+      site_code: siteCode ? Number(siteCode) : null,
+      door_id: doorId ? Number(doorId) : null,
+      trigger_type: LOCAL_OPEN_APP_TRIGGER,
+      error: err?.message || String(err),
+    });
+    console.error('Error recording door access log:', err);
+    return 'failed';
+  }
+}
+
 async function resolveLogTarget(deviceUid) {
   const result = await pool.query(
     `
@@ -425,6 +595,9 @@ export async function insertDeviceLogBatch({
     : (sanitizeLogText(ipAddress, FIELD_LIMITS.ipAddress) || `${sanitizeLogText(source, 16) || 'app'}_sync`);
   const hasIdempotencyColumns = await ensureDoorLogIdempotencySchema();
 
+  // Zamani BILINEN yerel acma kayitlari: commit sonrasi uygulamanin local-open-notify satiriyla birlestirilir.
+  const reconcileTimes = [];
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -445,11 +618,24 @@ export async function insertDeviceLogBatch({
         : await client.query(INSERT_LOG_NATURAL_KEY_SQL, baseParams);
       if (inserted.rowCount > 0) {
         result.inserted += 1;
+        if (
+          hasIdempotencyColumns
+          && target.doorId !== null
+          && entry.openedAtMs !== null
+          && LOCAL_OPEN_DEVICE_TRIGGERS.includes(entry.triggerType)
+        ) {
+          reconcileTimes.push(entry.openedAt);
+        }
       } else {
         result.duplicates += 1;
       }
     }
     await client.query('COMMIT');
+
+    // COMMIT sonrasi (otomatik commit): hata firlatmaz, batch'in ack'ini etkilemez.
+    for (const around of reconcileTimes.slice(0, MAX_RECONCILE_PER_BATCH)) {
+      await reconcileLocalOpenLogs({ siteCode: target.siteCode, doorId: target.doorId, around }, client);
+    }
   } catch (error) {
     await client.query('ROLLBACK').catch(() => {});
     throw error;

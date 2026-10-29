@@ -37,7 +37,7 @@ Bir sitedeki baglar (yonetim kurulu / denetci `BOARD_MEMBER`, gorevli `STAFF`, d
 
 - Flutter istemci: `lib/main.dart`, `lib/app.dart`; tasarim sistemi `lib/ui/design/`
 - API server (Node.js, Express 4, ESM): `server/src/server.js` (`routes/`, `services/`, `middlewares/`, `config/`, `utils/`, platform ozellikleri `modules/`)
-- Veritabani: PostgreSQL (Docker); sema `server/migrations/` (ardisik numarali `NNN_*.sql`; 2026-10-28 itibariyla 001-084) + `server/scripts/migrate.js`
+- Veritabani: PostgreSQL (Docker); sema `server/migrations/` (numarali `NNN_*.sql`; 2026-10-29 itibariyla 001-113, 103 dosya) + `server/scripts/migrate.js`. 001-085 ardisiktir (037 bos adim); 085'ten sonra paralel isler icin numara bloklari ayrildi ve kullanilmayan numaralar bilerek bos birakildi (086-087, 092-095, 101, 105, 108-109); bu numaralar yeniden kullanilmaz, yeni migration, klasore bakilarak, son numaradan sonraki ilk bos numarayla eklenir; ayrinti `PROJE_TEKNIK_NOTLAR.md` 6.4
 - Platform modulleri: 23 modul, 8'i cekirdek (her sitede acik); katalog `server/src/modules/catalog.js`, aciklama `docs/PLATFORM_MODUL_SISTEMI.md`
 - MQTT koprusu: `server/src/mqtt_bridge.js`; broker ACL uretimi: `server/src/mqtt_acl_sync.js`
 - Firmware: `cihaz_kontrol/` (ESP32-C3 ve ESP32-WROOM), `ekran_yazilimi/` (WROOM'a bagli dokunmatik ekran)

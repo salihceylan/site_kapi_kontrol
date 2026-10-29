@@ -502,7 +502,7 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 200 --nostrea
 | [lib/services/auth_api.dart:3586](../../lib/services/auth_api.dart#L3586) | <code>} on TimeoutException {</code> | Zaman aşımında ApiException; yazma isteği (POST) ASLA otomatik tekrar edilmez (çift açma riski) |
 | [lib/services/auth_api.dart:3578](../../lib/services/auth_api.dart#L3578) | <code>final isIdempotentRead = method == 'GET';</code> | Yeniden deneme yalnız GET'te; kapı açma POST olduğu için tek denemedir |
 | [lib/services/auth_api.dart:3201](../../lib/services/auth_api.dart#L3201) | <code>_ensureStatus(response, 202);</code> | Açma yanıtı YALNIZ 202 kabul edilir; başka 2xx (örn. 200) "İşlem başarısız (200)" olur (bu dosyada ikinci eşleşme: openDoor içinde) |
-| [server/src/routes/app_doors_routes.js:240](../../server/src/routes/app_doors_routes.js#L240) | <code>return res.status(202).json({</code> | Sunucu tarafı: açma komutu kabul edilince 202 döner (sözleşme) |
+| [server/src/routes/app_doors_routes.js:241](../../server/src/routes/app_doors_routes.js#L241) | <code>return res.status(202).json({</code> | Sunucu tarafı: açma komutu kabul edilince 202 döner (sözleşme) |
 | [lib/services/auth_service.dart:3130](../../lib/services/auth_service.dart#L3130) | <code>return (null, 'Kapı açılamadı. Sunucuya bağlanılamadı.');</code> | ApiException dışı her istisna bu genel mesaja düşer |
 
 **Olası nedenler**
@@ -1584,7 +1584,7 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 300 --nostrea
 | [lib/services/auth_api.dart:3295](../../lib/services/auth_api.dart#L3295) | <code>Future&lt;List&lt;DoorRecord&gt;&gt; listMyDoors({required String token}) async {</code> | Yanıttaki doors dizisi yoksa boş liste olur (hata verilmez); bir kapı satırı bozuksa tüm liste "Kapilar verisi ..." hatasına düşer |
 | [lib/app.dart:271](../../lib/app.dart#L271) | <code>_showFeedback(error ?? 'Kapılar alınamadı.');</code> | Kısayol/deep link yolunda kapı listesi alınamazsa gösterilen mesaj |
 | [lib/services/auth_service.dart:3216](../../lib/services/auth_service.dart#L3216) | <code>if (_session?.token == active.token) {</code> | Liste yalnız oturum hâlâ aynı token'dayken widget'a senkronlanır |
-| [server/src/routes/app_doors_routes.js:109](../../server/src/routes/app_doors_routes.js#L109) | <code>appDoorsRouter.get('/app/my-doors', authRequired, async (req, res) =&gt; {</code> | Sunucu tarafı: kullanıcının erişebildiği kapıları döndüren uç nokta |
+| [server/src/routes/app_doors_routes.js:110](../../server/src/routes/app_doors_routes.js#L110) | <code>appDoorsRouter.get('/app/my-doors', authRequired, async (req, res) =&gt; {</code> | Sunucu tarafı: kullanıcının erişebildiği kapıları döndüren uç nokta |
 
 **Olası nedenler**
 - Kullanıcının erişebildiği kapı yok (üyelik/izin yok): sunucu boş liste döner, istemci hata vermez

@@ -22,7 +22,7 @@ import { ensureContractsSchema } from './modules/contracts_schema.js';
 import { ensureEquipmentSchema } from './modules/equipment_schema.js';
 import { ensureWorkEquipmentSchema } from './modules/work_equipment_schema.js';
 import { ensureWorkVendorSchema } from './modules/work_vendor_schema.js';
-import { ensureQuoteSchema } from './modules/equipment_quote_schema.js';
+import { ensureQuoteRequestSchema, ensureQuoteSchema } from './modules/equipment_quote_schema.js';
 import { ensureCctvSchema } from './modules/cctv_schema.js';
 import { ensureApartmentMgmtSchema } from './modules/apartment_mgmt_schema.js';
 import { ensureApartmentOwnersSchema } from './modules/apartment_owners_schema.js';
@@ -1960,6 +1960,9 @@ export async function ensureDbSchema() {
     // 098 + 099 (teklif karsilastirma alanlari, onayli teklif revizyonu + degismezlik tetikleyicisi): 068'den SONRA; yalniz equipment_quotes'a sutun / kisit / indeks / islev / tetikleyici;
     // katalog kontrolu + her adim kendi otomatik onayli ifadesi (equipment_quote_schema.js = migrations/098 + 099).
     await ensureQuoteSchema(client);
+    // 113 (dis firma icin bagimsiz tek kullanimlik teklif formu, P2-8): 068 (equipment_items / equipment_quotes) ve 099'dan SONRA; dev blokta DEGIL; yalniz YENI tablo, katalog kontrolu +
+    // her adim kendi otomatik onayli ifadesi (equipment_quote_schema.js QUOTE_REQUEST_STEPS = migrations/113). Her sey varsa hicbir ifade / kilit yok; mevcut tablolara dokunmaz.
+    await ensureQuoteRequestSchema(client);
     // 050 (karar defteri): dev blokta DEGIL; katalog kontrolu + her adim kendi otomatik onayli ifadesi (decision_book_schema.js = migrations/050).
     await ensureDecisionBookSchema(client);
     // 051 (daire PIN'i duz metin kopyasi silinir): katalog kontrolu + kendi otomatik onayli ALTER'i; aktarim partili ve kilitli satiri atlar

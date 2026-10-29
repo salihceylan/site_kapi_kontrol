@@ -2,7 +2,7 @@
 
 > Bu klavuz **elle yazılmış satır numarası içermez**: her `dosya:satır` bağlantısı `tools/klavuz/build.mjs` tarafından koddan çözülür; kod parçası bulunamazsa ya da belirsizse üretim hata verir. Kod değişince belgeleri yenileyin: `node tools/klavuz/build.mjs` (denetim: `node tools/klavuz/build.mjs --check --fresh`).
 
-Kapsam: 11 bölüm, **458 arıza girişi**, 2615 kod bağlantısı + otomatik ekler.
+Kapsam: 11 bölüm, **458 arıza girişi**, 2616 kod bağlantısı + otomatik ekler.
 
 ## Nasıl kullanılır (kişi ya da ajan için)
 
@@ -40,7 +40,7 @@ rg -i "Giris bilgileri hatali" docs/ARIZA_KLAVUZU_HATA_MESAJLARI.md   # ekranda 
 | [Cihaz yazılımı — ESP32 firmware, ekran, OTA, GM60, yerel kontrol](ariza-klavuzu/40-cihaz-yazilimi.md) | 45 | 259 | ⚠ doğrulanmadı |
 | [Ekran yazılımı — ST7789 ekran, CST816D dokunmatik, QR, UART protokolü](ariza-klavuzu/41-ekran-yazilimi.md) | 20 | 103 | ⚠ doğrulanmadı |
 | [Araçlar, test altyapısı, süreç/kurallar ve derleme/sürüm](ariza-klavuzu/50-arac-test-ve-surec.md) | 50 | 303 | ⚠ doğrulanmadı |
-| [Uçtan uca akış haritaları (uygulama -> sunucu -> veritabanı -> MQTT -> cihaz)](ariza-klavuzu/60-akislar.md) | 11 | 132 | ⚠ doğrulanmadı |
+| [Uçtan uca akış haritaları (uygulama -> sunucu -> veritabanı -> MQTT -> cihaz)](ariza-klavuzu/60-akislar.md) | 11 | 133 | ⚠ doğrulanmadı |
 | [Uçtan uca akış haritaları 2/2 (kurulum, OTA, katılım, abonelik, envanter, yetki, PDF)](ariza-klavuzu/61-akislar-devam.md) | 11 | 107 | ⚠ doğrulanmadı |
 
 ## İlgili belgeler ve kurallar

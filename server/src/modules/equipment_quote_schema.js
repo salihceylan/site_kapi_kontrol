@@ -160,6 +160,95 @@ END $$;`,
 /** Bir migration dosyasinin govdesi (o numaranin adimlarinin birlesimi). */
 export const quoteMigrationBody = (migration) => `${QUOTE_STEPS.filter((s) => s.migration === migration).map((s) => s.sql).join('\n\n')}\n`;
 
+// --- 113: dis firma icin bagimsiz, tek kullanimlik teklif formu (P2-8) ------------------------------------------------------------------------------------
+// Davet kalibi (team_schema.js person_invitations): rastgele belirtec, veritabaninda YALNIZ SHA-256 ozeti, sure, tek kullanim. Firma girisi AYNI satira "taslak" olarak
+// dusulur (status = 'draft'); yonetici onaylayana kadar `equipment_quotes`a, gidere ya da sozlesmeye HICBIR sey yazilmaz. Mevcut tablolara DOKUNULMAZ (yalniz yeni tablo).
+// Silme politikasi: site silinirse CASCADE; kullanici silinirse created_by / decided_by SET NULL (TOMBSTONE); ekipman / onaylanan teklif satiri silinirse baglanti SET NULL.
+// Bu adimlar QUOTE_STEPS'e KATILMAZ (098 / 099 sozlesmesi ve testleri degismez); migration: migrations/113_equipment_quote_requests.sql.
+
+export const QUOTE_REQUEST_TABLE = 'equipment_quote_requests';
+export const QUOTE_REQUEST_STATUSES = Object.freeze(['invited', 'draft', 'approved', 'rejected', 'revoked']);
+
+const QUOTE_REQUEST_TABLE_SQL = `CREATE TABLE IF NOT EXISTS equipment_quote_requests (
+  id BIGSERIAL PRIMARY KEY,
+  site_code BIGINT NOT NULL,
+  topic TEXT NOT NULL,
+  equipment_id BIGINT,
+  vendor_hint TEXT,
+  token_hash TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'invited',
+  expires_at TIMESTAMPTZ NOT NULL,
+  created_by INTEGER,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  submitted_at TIMESTAMPTZ,
+  vendor_name TEXT,
+  vendor_contact TEXT,
+  vendor_phone TEXT,
+  amount_kurus BIGINT,
+  valid_until DATE,
+  delivery_days INTEGER,
+  note TEXT,
+  vat_included BOOLEAN,
+  decided_by INTEGER,
+  decided_at TIMESTAMPTZ,
+  quote_id BIGINT,
+  CONSTRAINT chk_equipment_quote_requests_topic CHECK (char_length(topic) BETWEEN 1 AND 160),
+  CONSTRAINT chk_equipment_quote_requests_hint CHECK (vendor_hint IS NULL OR char_length(vendor_hint) BETWEEN 1 AND 120),
+  CONSTRAINT chk_equipment_quote_requests_token CHECK (token_hash ~ '^[0-9a-f]{64}$'),
+  CONSTRAINT chk_equipment_quote_requests_status CHECK (status IN ('invited', 'draft', 'approved', 'rejected', 'revoked')),
+  CONSTRAINT chk_equipment_quote_requests_vendor CHECK (vendor_name IS NULL OR char_length(vendor_name) BETWEEN 1 AND 120),
+  CONSTRAINT chk_equipment_quote_requests_contact CHECK (vendor_contact IS NULL OR char_length(vendor_contact) BETWEEN 1 AND 80),
+  CONSTRAINT chk_equipment_quote_requests_phone CHECK (vendor_phone IS NULL OR char_length(vendor_phone) BETWEEN 3 AND 32),
+  CONSTRAINT chk_equipment_quote_requests_amount CHECK (amount_kurus IS NULL OR amount_kurus BETWEEN 1 AND 1000000000000),
+  CONSTRAINT chk_equipment_quote_requests_delivery CHECK (delivery_days IS NULL OR delivery_days BETWEEN 0 AND 1095),
+  CONSTRAINT chk_equipment_quote_requests_note CHECK (note IS NULL OR char_length(note) BETWEEN 1 AND 500),
+  CONSTRAINT chk_equipment_quote_requests_submission CHECK (
+    (status IN ('invited', 'revoked') AND submitted_at IS NULL AND vendor_name IS NULL AND amount_kurus IS NULL)
+    OR (status IN ('draft', 'approved', 'rejected') AND submitted_at IS NOT NULL AND vendor_name IS NOT NULL AND amount_kurus IS NOT NULL)
+  ),
+  CONSTRAINT chk_equipment_quote_requests_decision CHECK ((status IN ('approved', 'rejected', 'revoked')) = (decided_at IS NOT NULL))
+);`;
+
+function requestFk(column, parent, parentColumn, onDelete) {
+  const name = `${QUOTE_REQUEST_TABLE}_${column}_fkey`;
+  return {
+    kind: 'fk',
+    name,
+    parent,
+    sql: `DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = '${name}' AND conrelid = '${QUOTE_REQUEST_TABLE}'::regclass
+  ) THEN
+    ALTER TABLE ${QUOTE_REQUEST_TABLE} ADD CONSTRAINT ${name} FOREIGN KEY (${column}) REFERENCES ${parent}(${parentColumn}) ON DELETE ${onDelete};
+  END IF;
+END $$;`,
+  };
+}
+
+/** Adim = { kind, name, sql, parent? }. SIRA BAGLAYICIDIR (migration ile ayni): tablo -> yabanci anahtarlar -> indeksler. Tablo FK'SIZ olusur, her FK ayri ve katalog korumalidir. */
+export const QUOTE_REQUEST_STEPS = Object.freeze([
+  { kind: 'table', name: QUOTE_REQUEST_TABLE, sql: QUOTE_REQUEST_TABLE_SQL },
+  requestFk('site_code', 'sites', 'site_code', 'CASCADE'),
+  requestFk('equipment_id', 'equipment_items', 'id', 'SET NULL'),
+  requestFk('created_by', 'users', 'user_code', 'SET NULL'),
+  requestFk('decided_by', 'users', 'user_code', 'SET NULL'),
+  requestFk('quote_id', 'equipment_quotes', 'id', 'SET NULL'),
+  {
+    kind: 'index',
+    name: 'uq_equipment_quote_requests_token',
+    sql: 'CREATE UNIQUE INDEX IF NOT EXISTS uq_equipment_quote_requests_token ON equipment_quote_requests (token_hash);',
+  },
+  {
+    kind: 'index',
+    name: 'idx_equipment_quote_requests_site',
+    sql: 'CREATE INDEX IF NOT EXISTS idx_equipment_quote_requests_site ON equipment_quote_requests (site_code, status, id DESC);',
+  },
+].map((step) => Object.freeze(step)));
+
+/** 113 migration dosyasinin govdesi (adimlarin birlesimi). */
+export const quoteRequestMigrationBody = () => `${QUOTE_REQUEST_STEPS.map((s) => s.sql).join('\n\n')}\n`;
+
 const RETRYABLE = new Set(['40P01', '55P03']);
 export const quoteSchemaTuning = { retryDelayMs: 300 };
 
@@ -223,6 +312,33 @@ export async function ensureQuoteSchema(client) {
       if (step.kind === 'columns') for (const c of step.columns) present.columns.add(c);
       else present[step.kind === 'check' || step.kind === 'fk' ? 'constraint' : step.kind].add(step.name);
     }
+  } finally {
+    await client.query('RESET lock_timeout').catch(() => {});
+  }
+}
+
+/**
+ * 113'u uygular (db.js'te `ensureEquipmentSchema` ve `ensureQuoteSchema`dan SONRA). Eksik nesne yoksa (her normal acilis) tek katalog sorgusundan sonra hicbir ifade
+ * gonderilmez: kilit alinmaz. Ust tablo (sites, users, equipment_items, equipment_quotes) henuz yoksa o FK atlanir, sonraki acilista eklenir.
+ */
+export async function ensureQuoteRequestSchema(client) {
+  const names = (kind) => QUOTE_REQUEST_STEPS.filter((s) => s.kind === kind).map((s) => s.name);
+  const externalParents = [...new Set(QUOTE_REQUEST_STEPS.filter((s) => s.kind === 'fk').map((s) => s.parent))];
+  const found = await client.query(
+    `SELECT to_regclass('public.equipment_quote_requests') IS NOT NULL AS has_table,
+       ARRAY(SELECT c.conname::TEXT FROM pg_constraint c WHERE c.contype = 'f' AND c.connamespace = 'public'::regnamespace AND c.conname = ANY($1::TEXT[])) AS fks,
+       ARRAY(SELECT i.indexname::TEXT FROM pg_indexes i WHERE i.schemaname = 'public' AND i.indexname = ANY($2::TEXT[])) AS indexes,
+       ARRAY(SELECT t FROM unnest($3::TEXT[]) AS t WHERE to_regclass('public.' || t) IS NOT NULL) AS parents`,
+    [names('fk'), names('index'), externalParents],
+  );
+  const row = found.rows[0] ?? {};
+  const present = new Set([...(row.has_table === true ? [QUOTE_REQUEST_TABLE] : []), ...(row.fks ?? []), ...(row.indexes ?? [])]);
+  const parents = new Set(row.parents ?? []);
+  const pending = QUOTE_REQUEST_STEPS.filter((s) => !present.has(s.name) && !(s.kind === 'fk' && !parents.has(s.parent)));
+  if (pending.length === 0) return;
+  await client.query("SET lock_timeout = '2s'");
+  try {
+    for (const step of pending) await runDdl(client, step.sql);
   } finally {
     await client.query('RESET lock_timeout').catch(() => {});
   }

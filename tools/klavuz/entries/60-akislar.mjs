@@ -707,8 +707,13 @@ export default {
         },
         {
           file: 'server/src/routes/app_doors_routes.js',
-          find: "triggerType: 'local_wifi',",
-          note: 'Adım 12 — veritabanı (günlük): door_access_logs\'a trigger_type local_wifi satırı yazılır; bu uç yerel açmayı DOĞRULAMAZ, yalnızca kaydeder.',
+          find: 'await recordLocalOpenNotifyLog({',
+          note: 'Adım 12 — veritabanı (günlük): door_access_logs\'a trigger_type local_wifi satırı yazılır (aynı kullanıcı + kapı için 15 sn içinde yerel satır varsa yazılmaz); bu uç yerel açmayı DOĞRULAMAZ, yalnızca kaydeder.',
+        },
+        {
+          file: 'server/src/services/door_log_service.js',
+          find: 'export async function reconcileLocalOpenLogs(',
+          note: 'Adım 13 — veritabanı (tekilleştirme): cihaz aynı yerel açmayı kendi offline logu olarak da (local_udp, kullanıcısız) gönderir; 15 sn içinde eşleşen çiftte cihaz satırı korunur, kullanıcı bilgisi ona taşınır, uygulama satırı silinir (eşleşme gelişin sırasından bağımsız; saati bilinmeyen kayıtlar eşleşmez, çift satır kalabilir).',
         },
       ],
       causes: [
