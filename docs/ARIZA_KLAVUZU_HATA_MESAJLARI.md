@@ -2,7 +2,7 @@
 
 > Kullanıcıya/istemciye görünen metinleri üretildikleri `dosya:satır` ile eşler. `Ctrl+F` ile ekranda gördüğünüz mesajın bir parçasını arayın. Koddan otomatik üretilir: `node tools/klavuz/build.mjs`. Ana sayfa: [ARIZA_KLAVUZU.md](ARIZA_KLAVUZU.md) · [İndeks](ARIZA_KLAVUZU_INDEKS.md).
 
-## Sunucu mesajları (917)
+## Sunucu mesajları (918)
 
 Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`). Uygulama bu metinleri HTTP yanıt gövdesinde (`error` alanı) alır.
 
@@ -328,7 +328,8 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | Çok fazla istek. Biraz sonra tekrar deneyin. | [server/src/modules/notify_channels_routes.js:32](../server/src/modules/notify_channels_routes.js#L32) |
 | Çok fazla istek. Biraz sonra tekrar deneyin. | [server/src/modules/payment_connection_routes.js:28](../server/src/modules/payment_connection_routes.js#L28) |
 | Çok fazla istek. Biraz sonra tekrar deneyin. | [server/src/modules/people_routes.js:60](../server/src/modules/people_routes.js#L60) |
-| Çok fazla istek. Biraz sonra tekrar deneyin. | [server/src/modules/plate_recognition_routes.js:82](../server/src/modules/plate_recognition_routes.js#L82) |
+| Çok fazla istek. Biraz sonra tekrar deneyin. | [server/src/modules/plate_recognition_routes.js:83](../server/src/modules/plate_recognition_routes.js#L83) |
+| Çok fazla istek. Biraz sonra tekrar deneyin. | [server/src/modules/plate_recognition_routes.js:148](../server/src/modules/plate_recognition_routes.js#L148) |
 | Çok fazla istek. Biraz sonra tekrar deneyin. | [server/src/modules/platform_config_routes.js:30](../server/src/modules/platform_config_routes.js#L30) |
 | Çok fazla istek. Biraz sonra tekrar deneyin. | [server/src/modules/platform_rules_routes.js:25](../server/src/modules/platform_rules_routes.js#L25) |
 | Çok fazla istek. Biraz sonra tekrar deneyin. | [server/src/modules/push_routes.js:40](../server/src/modules/push_routes.js#L40) |
@@ -356,14 +357,14 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | Çok fazla kural değişikliği. Biraz sonra tekrar deneyin. | [server/src/modules/platform_rules_routes.js:35](../server/src/modules/platform_rules_routes.js#L35) |
 | Çok fazla menü değişikliği. Biraz sonra tekrar deneyin. | [server/src/modules/menu_layout_routes.js:25](../server/src/modules/menu_layout_routes.js#L25) |
 | çok fazla metin ögesi | [server/src/modules/bank_pdf_worker.js:57](../server/src/modules/bank_pdf_worker.js#L57) |
-| Çok fazla misafir plakası işlemi. Biraz sonra tekrar deneyin. | [server/src/modules/plate_recognition_routes.js:74](../server/src/modules/plate_recognition_routes.js#L74) |
+| Çok fazla misafir plakası işlemi. Biraz sonra tekrar deneyin. | [server/src/modules/plate_recognition_routes.js:75](../server/src/modules/plate_recognition_routes.js#L75) |
 | Çok fazla modül değişikliği. Biraz sonra tekrar deneyin. | [server/src/modules/module_routes.js:63](../server/src/modules/module_routes.js#L63) |
 | Çok fazla modül talebi. Biraz sonra tekrar deneyin. | [server/src/modules/module_request_routes.js:36](../server/src/modules/module_request_routes.js#L36) |
 | Çok fazla olay. | [server/src/modules/device_integrations_routes.js:65](../server/src/modules/device_integrations_routes.js#L65) |
 | Çok fazla onay işlemi. Biraz sonra tekrar deneyin. | [server/src/modules/legal_routes.js:49](../server/src/modules/legal_routes.js#L49) |
 | Çok fazla oy denemesi. Biraz sonra tekrar deneyin. | [server/src/modules/survey_routes.js:38](../server/src/modules/survey_routes.js#L38) |
 | Çok fazla PDF okuma isteği. Biraz sonra tekrar deneyin. | [server/src/modules/bank_import_routes.js:38](../server/src/modules/bank_import_routes.js#L38) |
-| Çok fazla plaka işlemi. Biraz sonra tekrar deneyin. | [server/src/modules/plate_recognition_routes.js:65](../server/src/modules/plate_recognition_routes.js#L65) |
+| Çok fazla plaka işlemi. Biraz sonra tekrar deneyin. | [server/src/modules/plate_recognition_routes.js:66](../server/src/modules/plate_recognition_routes.js#L66) |
 | Çok fazla rapor isteği. Biraz sonra tekrar deneyin. | [server/src/modules/finance_4b_routes.js:427](../server/src/modules/finance_4b_routes.js#L427) |
 | Çok fazla rapor. Biraz sonra tekrar deneyin. | [server/src/modules/client_error_routes.js:42](../server/src/modules/client_error_routes.js#L42) |
 | Çok fazla rapor. Biraz sonra tekrar deneyin. | [server/src/modules/client_error_routes.js:58](../server/src/modules/client_error_routes.js#L58) |
@@ -586,7 +587,7 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | Geçersiz site kodu. | [server/src/modules/neighbor_board_routes.js:233](../server/src/modules/neighbor_board_routes.js#L233) |
 | Geçersiz site kodu. | [server/src/modules/payment_connection_routes.js:38](../server/src/modules/payment_connection_routes.js#L38) |
 | Geçersiz site kodu. | [server/src/modules/people_access.js:79](../server/src/modules/people_access.js#L79) |
-| Geçersiz site kodu. | [server/src/modules/plate_recognition_routes.js:99](../server/src/modules/plate_recognition_routes.js#L99) |
+| Geçersiz site kodu. | [server/src/modules/plate_recognition_routes.js:100](../server/src/modules/plate_recognition_routes.js#L100) |
 | Geçersiz site kodu. | [server/src/modules/reservation_access.js:42](../server/src/modules/reservation_access.js#L42) |
 | Geçersiz site kodu. | [server/src/modules/route_helpers.js:38](../server/src/modules/route_helpers.js#L38) |
 | Geçersiz site kodu. | [server/src/modules/survey_access.js:23](../server/src/modules/survey_access.js#L23) |
@@ -1074,7 +1075,7 @@ Kaynak: `lib` (`ApiException(...)`, `_errorMessage =`, `lib/services` içindeki 
 | Bu işlem için yetkiniz yok. | [lib/services/decision_book_api.dart:331](../lib/services/decision_book_api.dart#L331) |
 | Bu işlem için yetkiniz yok. | [lib/services/device_integrations_api.dart:381](../lib/services/device_integrations_api.dart#L381) |
 | Bu işlem için yetkiniz yok. | [lib/services/equipment_api.dart:736](../lib/services/equipment_api.dart#L736) |
-| Bu işlem için yetkiniz yok. | [lib/services/plate_recognition_api.dart:501](../lib/services/plate_recognition_api.dart#L501) |
+| Bu işlem için yetkiniz yok. | [lib/services/plate_recognition_api.dart:534](../lib/services/plate_recognition_api.dart#L534) |
 | Bu işlem için yetkiniz yok. | [lib/services/reservation_api.dart:633](../lib/services/reservation_api.dart#L633) |
 | Bu işlem için yetkiniz yok. | [lib/services/survey_api.dart:343](../lib/services/survey_api.dart#L343) |
 | Bu işlem için yetkiniz yok. | [lib/services/visitor_log_api.dart:363](../lib/services/visitor_log_api.dart#L363) |
@@ -1127,7 +1128,7 @@ Kaynak: `lib` (`ApiException(...)`, `_errorMessage =`, `lib/services` içindeki 
 | Bu siteye erişim yetkiniz yok. | [lib/services/decision_book_api.dart:333](../lib/services/decision_book_api.dart#L333) |
 | Bu siteye erişim yetkiniz yok. | [lib/services/device_integrations_api.dart:383](../lib/services/device_integrations_api.dart#L383) |
 | Bu siteye erişim yetkiniz yok. | [lib/services/equipment_api.dart:738](../lib/services/equipment_api.dart#L738) |
-| Bu siteye erişim yetkiniz yok. | [lib/services/plate_recognition_api.dart:503](../lib/services/plate_recognition_api.dart#L503) |
+| Bu siteye erişim yetkiniz yok. | [lib/services/plate_recognition_api.dart:536](../lib/services/plate_recognition_api.dart#L536) |
 | Bu siteye erişim yetkiniz yok. | [lib/services/reservation_api.dart:635](../lib/services/reservation_api.dart#L635) |
 | Bu siteye erişim yetkiniz yok. | [lib/services/site_audit_log_api.dart:104](../lib/services/site_audit_log_api.dart#L104) |
 | Bu siteye erişim yetkiniz yok. | [lib/services/survey_api.dart:345](../lib/services/survey_api.dart#L345) |
@@ -1252,7 +1253,7 @@ Kaynak: `lib` (`ApiException(...)`, `_errorMessage =`, `lib/services` içindeki 
 | İşlem başarısız ($status) | [lib/services/cctv_api.dart:301](../lib/services/cctv_api.dart#L301) |
 | İşlem başarısız ($status) | [lib/services/device_integrations_api.dart:391](../lib/services/device_integrations_api.dart#L391) |
 | İşlem başarısız ($status) | [lib/services/equipment_api.dart:762](../lib/services/equipment_api.dart#L762) |
-| İşlem başarısız ($status) | [lib/services/plate_recognition_api.dart:509](../lib/services/plate_recognition_api.dart#L509) |
+| İşlem başarısız ($status) | [lib/services/plate_recognition_api.dart:542](../lib/services/plate_recognition_api.dart#L542) |
 | İşlem başarısız ($status) | [lib/services/site_audit_log_api.dart:121](../lib/services/site_audit_log_api.dart#L121) |
 | İşlem başarısız ($status). | [lib/services/legal_api.dart:230](../lib/services/legal_api.dart#L230) |
 | İşlem kayıtlarını yalnızca site yöneticisi görebilir. | [lib/services/site_audit_log_api.dart:102](../lib/services/site_audit_log_api.dart#L102) |
@@ -1324,7 +1325,7 @@ Kaynak: `lib` (`ApiException(...)`, `_errorMessage =`, `lib/services` içindeki 
 | Oturum açmanız gerekmektedir. | [lib/services/meter_api.dart:276](../lib/services/meter_api.dart#L276) |
 | Oturum açmanız gerekmektedir. | [lib/services/neighbor_board_api.dart:61](../lib/services/neighbor_board_api.dart#L61) |
 | Oturum açmanız gerekmektedir. | [lib/services/payment_notice_api.dart:260](../lib/services/payment_notice_api.dart#L260) |
-| Oturum açmanız gerekmektedir. | [lib/services/plate_recognition_api.dart:522](../lib/services/plate_recognition_api.dart#L522) |
+| Oturum açmanız gerekmektedir. | [lib/services/plate_recognition_api.dart:555](../lib/services/plate_recognition_api.dart#L555) |
 | Oturum açmanız gerekmektedir. | [lib/services/platform_rules_api.dart:274](../lib/services/platform_rules_api.dart#L274) |
 | Oturum açmanız gerekmektedir. | [lib/services/push_service.dart:707](../lib/services/push_service.dart#L707) |
 | Oturum açmanız gerekmektedir. | [lib/services/push_service.dart:747](../lib/services/push_service.dart#L747) |
@@ -1341,7 +1342,7 @@ Kaynak: `lib` (`ApiException(...)`, `_errorMessage =`, `lib/services` içindeki 
 | Önemli uyarılar var. Her birini gözden geçirdiğinizi işaretleyin. | [lib/services/payment_notice_api.dart:213](../lib/services/payment_notice_api.dart#L213) |
 | Önizlemeden sonra kayıtlar değişti. Önizlemeyi yenileyip tekrar deneyin. | [lib/services/bank_import_api.dart:23](../lib/services/bank_import_api.dart#L23) |
 | Plaka biçimi geçersiz. Örnek: 34 ABC 123 (il kodu 01-81). | [lib/services/auth_api.dart:4096](../lib/services/auth_api.dart#L4096) |
-| Plaka Tanıma modülü bu site için kapalı. | [lib/services/plate_recognition_api.dart:499](../lib/services/plate_recognition_api.dart#L499) |
+| Plaka Tanıma modülü bu site için kapalı. | [lib/services/plate_recognition_api.dart:532](../lib/services/plate_recognition_api.dart#L532) |
 | Revizyon için en az bir alan değişmeli. | [lib/services/equipment_api.dart:750](../lib/services/equipment_api.dart#L750) |
 | Rezervasyon bulunamadı ya da erişiminiz yok. | [lib/services/reservation_api.dart:643](../lib/services/reservation_api.dart#L643) |
 | Rezervasyon ve Konsiyerj bu site için kapalı. | [lib/services/reservation_api.dart:631](../lib/services/reservation_api.dart#L631) |
@@ -1398,7 +1399,7 @@ Kaynak: `lib` (`ApiException(...)`, `_errorMessage =`, `lib/services` içindeki 
 | Sunucu yanıt vermedi, tekrar deneyin. | [lib/services/device_integrations_api.dart:352](../lib/services/device_integrations_api.dart#L352) |
 | Sunucu yanıt vermedi, tekrar deneyin. | [lib/services/equipment_api.dart:714](../lib/services/equipment_api.dart#L714) |
 | Sunucu yanıt vermedi, tekrar deneyin. | [lib/services/management_company_api.dart:32](../lib/services/management_company_api.dart#L32) |
-| Sunucu yanıt vermedi, tekrar deneyin. | [lib/services/plate_recognition_api.dart:459](../lib/services/plate_recognition_api.dart#L459) |
+| Sunucu yanıt vermedi, tekrar deneyin. | [lib/services/plate_recognition_api.dart:492](../lib/services/plate_recognition_api.dart#L492) |
 | Sunucu yanıt vermedi, tekrar deneyin. | [lib/services/site_audit_log_api.dart:65](../lib/services/site_audit_log_api.dart#L65) |
 | Sunucu yanıtı beklenen biçimde değil. Lütfen tekrar deneyin. | [lib/services/decision_book_api.dart:173](../lib/services/decision_book_api.dart#L173) |
 | Sunucu yanıtı beklenen biçimde değil. Lütfen tekrar deneyin. | [lib/services/survey_api.dart:204](../lib/services/survey_api.dart#L204) |
@@ -1448,7 +1449,7 @@ Kaynak: `lib` (`ApiException(...)`, `_errorMessage =`, `lib/services` içindeki 
 | Sunucuya bağlanılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin. | [lib/services/menu_layout_api.dart:51](../lib/services/menu_layout_api.dart#L51) |
 | Sunucuya bağlanılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin. | [lib/services/neighbor_board_api.dart:74](../lib/services/neighbor_board_api.dart#L74) |
 | Sunucuya bağlanılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin. | [lib/services/payment_notice_api.dart:160](../lib/services/payment_notice_api.dart#L160) |
-| Sunucuya bağlanılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin. | [lib/services/plate_recognition_api.dart:461](../lib/services/plate_recognition_api.dart#L461) |
+| Sunucuya bağlanılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin. | [lib/services/plate_recognition_api.dart:494](../lib/services/plate_recognition_api.dart#L494) |
 | Sunucuya bağlanılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin. | [lib/services/site_audit_log_api.dart:67](../lib/services/site_audit_log_api.dart#L67) |
 | Sunucuya bağlanılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin. | [lib/ui/widgets/drive_storage_card.dart:173](../lib/ui/widgets/drive_storage_card.dart#L173) |
 | Sunucuya bağlanılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin. | [lib/ui/widgets/messaging_connections_card.dart:34](../lib/ui/widgets/messaging_connections_card.dart#L34) |

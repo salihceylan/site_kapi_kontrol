@@ -86,9 +86,13 @@ class PlateDecisionRow {
     required this.seenAt,
     required this.deviceName,
     required this.doorName,
+    this.decisionKind,
+    this.direction,
   });
 
   factory PlateDecisionRow.fromJson(Map<String, dynamic> json) => PlateDecisionRow(
+    decisionKind: json['decision_kind'] as String?,
+    direction: json['direction'] as String?,
     id: (json['id'] as num?)?.toInt() ?? 0,
     plate: '${json['plate'] ?? ''}',
     decision: '${json['decision'] ?? 'UNKNOWN'}',
@@ -110,8 +114,31 @@ class PlateDecisionRow {
   final String? deviceName;
   final String? doorName;
 
+  /// Kenar istemci karar türü: acildi | red | tanimsiz | kara_liste (eski kayıtlarda null).
+  final String? decisionKind;
+
+  /// Geçiş yönü: giris | cikis (eski kayıtlarda null).
+  final String? direction;
+
   /// Otomatik açma planlanmıştı ama kapı komutu gönderilmedi (bu sürümde kapı açma yok).
   bool get wouldOpen => autoAction == 'would_open';
+}
+
+/// Canlı geçiş akışı yanıtı: son geçişler + içerideki araç sayısı + sunucunun söylediği yenileme ayarı (istemcide sabit yok).
+class PlateLiveFeed {
+  const PlateLiveFeed({required this.events, required this.insideCount, required this.refreshSeconds, required this.limit});
+
+  factory PlateLiveFeed.fromJson(Map<String, dynamic> json) => PlateLiveFeed(
+    events: <PlateDecisionRow>[for (final raw in (json['events'] as List? ?? const <Object?>[])) if (raw is Map) PlateDecisionRow.fromJson(Map<String, dynamic>.from(raw))],
+    insideCount: (json['inside_count'] as num?)?.toInt() ?? 0,
+    refreshSeconds: ((json['refresh_seconds'] as num?)?.toInt() ?? 5).clamp(2, 60),
+    limit: ((json['limit'] as num?)?.toInt() ?? 30).clamp(1, 200),
+  );
+
+  final List<PlateDecisionRow> events;
+  final int insideCount;
+  final int refreshSeconds;
+  final int limit;
 }
 
 class PlatePermit {
@@ -296,6 +323,12 @@ class PlateRecognitionApi {
   Future<List<PlateDecisionRow>> events(String token, int site, {String? decision}) async {
     final json = await _send('GET', _site(site, 'events'), token, query: <String, String>{'limit': '50', 'decision': ?decision});
     return <PlateDecisionRow>[for (final raw in (json['events'] as List? ?? const <Object?>[])) if (raw is Map) PlateDecisionRow.fromJson(Map<String, dynamic>.from(raw))];
+  }
+
+  /// Canlı akış: `live=1` (limit sunucu ayarından); [limit] verilmezse sunucu karar verir.
+  Future<PlateLiveFeed> liveFeed(String token, int site, {int? limit}) async {
+    final json = await _send('GET', _site(site, 'events'), token, query: <String, String>{'live': '1', if (limit != null) 'limit': '$limit'});
+    return PlateLiveFeed.fromJson(json);
   }
 
   Future<List<PlatePermit>> permits(String token, int site) async {
@@ -531,6 +564,7 @@ class PlateRecognitionService {
   }
 
   Future<List<PlateDecisionRow>> events(int site, {String? decision}) => _guard((t) => api.events(t, site, decision: decision));
+  Future<PlateLiveFeed> liveFeed(int site, {int? limit}) => _guard((t) => api.liveFeed(t, site, limit: limit));
   Future<List<PlatePermit>> permits(int site) => _guard((t) => api.permits(t, site));
   Future<List<PlateApartment>> searchApartments(int site, String q) => _guard((t) => api.searchApartments(t, site, q));
   Future<void> createPermit(int site, PermitDraft draft) => _guard((t) => api.createPermit(t, site, draft));

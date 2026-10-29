@@ -11905,6 +11905,34 @@
           "on_kosul": "Sunucuda migration 121 uygulanmış; Plaka Tanıma modülü açık; yeni uygulama sürümü; güvenlik kulübesinde kenar PC uygulaması (Aşama A2) kurulu ve anahtarla bağlı",
           "yeni": true,
           "gelistirme": "hazir"
+        },
+        {
+          "id": "F85.07",
+          "baslik": "Canlı akış: kapıdan geçen araçlar kartlarla anında görünür (yön, plaka, karar, içeride sayısı)",
+          "adimlar": [
+            "Plaka Tanıma ekranında “Canlı akış” sekmesini açın; üstteki büyük “İçeride: N araç” sayısını “Geçiş noktaları” sekmesindeki “İçeride” toplamıyla karşılaştırın.",
+            "Kayıtlı bir araçla kapıdan girin, sonra çıkın; ayrıca kara listedeki bir plakayla ve tanınmayan bir plakayla gelin. Sekmeyi kapatmadan bekleyin.",
+            "Telefonda ya da dar bir pencerede (yaklaşık 320 piksel) aynı sekmeye bakın."
+          ],
+          "beklenen": "Her geçiş birkaç saniye içinde kendiliğinden yeni bir kart olarak en üste eklenir: belirgin sabit aralıklı (monospace) plaka, giriş için aşağı ok (yeşil ton), çıkış için yukarı ok (mavi ton), kapı adı ve saat. Karar rozeti metinle yazılır: AÇILDI (yeşil), RED (kırmızı), TANIMSIZ (gri), KARA LİSTE (koyu). Üstteki “İçeride: N araç” sayısı girişte artar, çıkışta azalır. Yenileme aralığı ve liste uzunluğu sunucu ayarından gelir (ekranda “Otomatik: N sn” yazar); dar ekranda hiçbir yazı taşmaz ve ekran okuyucu her kartı tek cümleyle okur. Kurul üyesi ve görevli aynı sekmeyi görür (salt okur); kişisel veri olarak yalnız plaka, yön, karar, kapı ve saat gösterilir.",
+          "rol_notu": "Site yöneticisi (kurul üyesi ve görevli salt okur)",
+          "on_kosul": "Plaka Tanıma modülü açık; yeni uygulama sürümü ve sunucu sürümü; güvenlik kulübesinde kenar PC uygulaması (Aşama A2) kurulu ve anahtarla bağlı",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F85.08",
+          "baslik": "Canlı akış: otomatik yenileme aç/kapa, bağlantı kopunca son liste korunur, boş durum",
+          "adimlar": [
+            "Canlı akış sekmesinde “Otomatik” düğmesine dokunarak yenilemeyi kapatın; bir araç geçirin ve kartın eklenmediğini görün; “Şimdi yenile” düğmesine basın.",
+            "Otomatik yenilemeyi tekrar açın (hemen bir yenileme yapılır); sonra cihazın internetini kapatıp birkaç saniye bekleyin, internet gelince bekleyin.",
+            "Hiç geçişi olmayan yeni bir sitede aynı sekmeyi açın."
+          ],
+          "beklenen": "Kapalıyken liste kendiliğinden değişmez, “Şimdi yenile” ile güncellenir ve ekranda “Son güncelleme” saati yazar. Bağlantı kopunca liste silinmez; üstte “Bağlantı kesildi; son bilinen liste gösteriliyor” uyarısı çıkar, bağlantı dönünce uyarı kendiliğinden kalkar. İlk açılışta bağlantı yoksa “Bağlantı kurulamadı” ve “Yeniden dene” düğmesi görünür. Hiç geçiş yoksa “Henüz geçiş yok” yazar ve sayaç “İçeride: 0 araç” gösterir. Başka bir sekmeye geçince yenileme durur (arka planda istek atılmaz).",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Plaka Tanıma modülü açık; yeni uygulama sürümü ve sunucu sürümü",
+          "yeni": true,
+          "gelistirme": "hazir"
         }
       ]
     }

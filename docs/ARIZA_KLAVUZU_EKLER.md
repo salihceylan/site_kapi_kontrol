@@ -523,7 +523,7 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 
 ## Ek E — Kaynak dosya kapsamı
 
-1210 kaynak dosyanın **249**'i en az bir arıza girişine bağlı, **1**'i yalnız dosya haritasında, **960**'i klavuzda hiç geçmiyor. Bir dosya hiç geçmiyorsa onunla ilgili arızayı `--where` ile arayın.
+1211 kaynak dosyanın **249**'i en az bir arıza girişine bağlı, **1**'i yalnız dosya haritasında, **961**'i klavuzda hiç geçmiyor. Bir dosya hiç geçmiyorsa onunla ilgili arızayı `--where` ile arayın.
 
 | Dosya | Satır | Bağlı girişler | Dosya haritası |
 | --- | --- | --- | --- |
@@ -765,7 +765,7 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [lib/services/pdf_finance_service.dart](../lib/services/pdf_finance_service.dart) | 1170 | — | — |
 | [lib/services/pdf_font_set.dart](../lib/services/pdf_font_set.dart) | 80 | [cekirdek-pdf-turkce-karakter-font](ariza-klavuzu/30-uygulama-cekirdek.md#cekirdek-pdf-turkce-karakter-font) | 30-uygulama-cekirdek |
 | [lib/services/pdf_logs_service.dart](../lib/services/pdf_logs_service.dart) | 540 | [cekirdek-pdf-turkce-karakter-font](ariza-klavuzu/30-uygulama-cekirdek.md#cekirdek-pdf-turkce-karakter-font), [cekirdek-pdf-gecis-raporu-bos](ariza-klavuzu/30-uygulama-cekirdek.md#cekirdek-pdf-gecis-raporu-bos), [cekirdek-buyuk-yanit-yavas-arayuz](ariza-klavuzu/30-uygulama-cekirdek.md#cekirdek-buyuk-yanit-yavas-arayuz), [akis-pdf-ciktilari](ariza-klavuzu/61-akislar-devam.md#akis-pdf-ciktilari) | 30-uygulama-cekirdek |
-| [lib/services/plate_recognition_api.dart](../lib/services/plate_recognition_api.dart) | 589 | — | — |
+| [lib/services/plate_recognition_api.dart](../lib/services/plate_recognition_api.dart) | 623 | — | — |
 | [lib/services/platform_rules_api.dart](../lib/services/platform_rules_api.dart) | 292 | — | — |
 | [lib/services/push_api.dart](../lib/services/push_api.dart) | 367 | — | — |
 | [lib/services/push_firebase_gateway.dart](../lib/services/push_firebase_gateway.dart) | 263 | — | — |
@@ -1068,7 +1068,7 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [lib/ui/views/people_team_tab.dart](../lib/ui/views/people_team_tab.dart) | 357 | — | — |
 | [lib/ui/views/people_vehicles_tab.dart](../lib/ui/views/people_vehicles_tab.dart) | 233 | — | — |
 | [lib/ui/views/people_view.dart](../lib/ui/views/people_view.dart) | 496 | — | — |
-| [lib/ui/views/plate_recognition_view.dart](../lib/ui/views/plate_recognition_view.dart) | 866 | — | — |
+| [lib/ui/views/plate_recognition_view.dart](../lib/ui/views/plate_recognition_view.dart) | 870 | — | — |
 | [lib/ui/views/platform_rules_view.dart](../lib/ui/views/platform_rules_view.dart) | 332 | — | — |
 | [lib/ui/views/platform_settings_view.dart](../lib/ui/views/platform_settings_view.dart) | 889 | — | — |
 | [lib/ui/views/profile_view.dart](../lib/ui/views/profile_view.dart) | 530 | [ui-profil-kaydet](ariza-klavuzu/31-uygulama-arayuz.md#ui-profil-kaydet) | 31-uygulama-arayuz |
@@ -1178,6 +1178,7 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [lib/ui/widgets/person_card.dart](../lib/ui/widgets/person_card.dart) | 442 | — | — |
 | [lib/ui/widgets/person_roles_panel.dart](../lib/ui/widgets/person_roles_panel.dart) | 536 | — | — |
 | [lib/ui/widgets/plate_gates_panel.dart](../lib/ui/widgets/plate_gates_panel.dart) | 572 | — | — |
+| [lib/ui/widgets/plate_live_feed_panel.dart](../lib/ui/widgets/plate_live_feed_panel.dart) | 321 | — | — |
 | [lib/ui/widgets/platform_rules_entry_card.dart](../lib/ui/widgets/platform_rules_entry_card.dart) | 61 | — | — |
 | [lib/ui/widgets/push_prefs_panel.dart](../lib/ui/widgets/push_prefs_panel.dart) | 785 | — | — |
 | [lib/ui/widgets/push_soft_prompt_card.dart](../lib/ui/widgets/push_soft_prompt_card.dart) | 239 | — | — |
@@ -1595,11 +1596,11 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [server/src/modules/plate_gates_service.js](../server/src/modules/plate_gates_service.js) | 421 | — | — |
 | [server/src/modules/plate_health_scheduler.js](../server/src/modules/plate_health_scheduler.js) | 104 | — | — |
 | [server/src/modules/plate_notify.js](../server/src/modules/plate_notify.js) | 218 | — | — |
-| [server/src/modules/plate_recognition_common.js](../server/src/modules/plate_recognition_common.js) | 187 | — | — |
+| [server/src/modules/plate_recognition_common.js](../server/src/modules/plate_recognition_common.js) | 225 | — | — |
 | [server/src/modules/plate_recognition_permits.js](../server/src/modules/plate_recognition_permits.js) | 240 | — | — |
-| [server/src/modules/plate_recognition_routes.js](../server/src/modules/plate_recognition_routes.js) | 277 | — | — |
+| [server/src/modules/plate_recognition_routes.js](../server/src/modules/plate_recognition_routes.js) | 288 | — | — |
 | [server/src/modules/plate_recognition_schema.js](../server/src/modules/plate_recognition_schema.js) | 153 | — | — |
-| [server/src/modules/plate_recognition_service.js](../server/src/modules/plate_recognition_service.js) | 307 | — | — |
+| [server/src/modules/plate_recognition_service.js](../server/src/modules/plate_recognition_service.js) | 317 | — | — |
 | [server/src/modules/platform_config_routes.js](../server/src/modules/platform_config_routes.js) | 74 | — | — |
 | [server/src/modules/platform_config_service.js](../server/src/modules/platform_config_service.js) | 354 | — | — |
 | [server/src/modules/platform_rules_routes.js](../server/src/modules/platform_rules_routes.js) | 82 | — | — |

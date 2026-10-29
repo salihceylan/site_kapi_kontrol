@@ -14,10 +14,11 @@ import 'package:site_kapi_kontrol/ui/design/license_plate.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/helpers/plate_input.dart';
 import 'package:site_kapi_kontrol/ui/widgets/plate_gates_panel.dart';
+import 'package:site_kapi_kontrol/ui/widgets/plate_live_feed_panel.dart';
 
 /// "Plaka Tanıma" ekranı (`plate_recognition` modülü, varsayılan KAPALI).
 ///
-/// - Yönetici: Olaylar | Misafir izinleri | Kara liste | Geçiş noktaları | Ayarlar sekmeleri; izin verir/iptal eder, kara listeyi ve kapı/kamera ayarlarını yönetir.
+/// - Yönetici: Olaylar | Canlı akış | Misafir izinleri | Kara liste | Geçiş noktaları | Ayarlar sekmeleri; izin verir/iptal eder, kara listeyi ve kapı/kamera ayarlarını yönetir.
 /// - Kurul üyesi / görevli: aynı sekmeleri SALT OKUR (hiçbir yazma düğmesi çizilmez).
 /// - Sakin: sade "Misafir plakası" ekranı; yalnız kendi dairesi için 1 gün - 30 gün geçici izin verir ve iptal eder.
 /// - Kapı açma "Yakında…": otomatik açma açık kapıda izinli okumalar yalnız "açılırdı" diye kaydedilir; kapı komutu gönderilmez.
@@ -36,7 +37,7 @@ class PlateRecognitionView extends StatefulWidget {
 
 class PlateRecognitionViewState extends State<PlateRecognitionView> {
   late final PlateRecognitionService _service = widget.service ?? PlateRecognitionService(authService: widget.authService);
-  static const List<String> _tabs = <String>['Olaylar', 'Misafir izinleri', 'Kara liste', 'Geçiş noktaları', 'Ayarlar'];
+  static const List<String> _tabs = <String>['Olaylar', 'Canlı akış', 'Misafir izinleri', 'Kara liste', 'Geçiş noktaları', 'Ayarlar'];
   static const String _kvkkNote =
       'Plaka kişisel veridir; yalnızca site güvenliği amacıyla işlenir ve sakinlerle paylaşılmaz.';
 
@@ -91,14 +92,16 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
             if (!_isCurrent(token)) return;
             setState(() => _events = rows);
           case 1:
+            break; // Canlı akış: panel kendi verisini yükler ve yeniler.
+          case 2:
             final rows = await _service.permits(site.code);
             if (!_isCurrent(token)) return;
             setState(() => _permits = rows);
-          case 2:
+          case 3:
             final rows = await _service.blacklist(site.code);
             if (!_isCurrent(token)) return;
             setState(() => _blacklist = rows);
-          case 3:
+          case 4:
             final gates = await _service.gatesOverview(site.code);
             final inside = await _service.inside(site.code);
             if (!_isCurrent(token)) return;
@@ -496,9 +499,10 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
     else
       ...switch (_tab) {
         0 => _eventsTab(),
-        1 => _permitsTab(site),
-        2 => _blacklistTab(site),
-        3 => _gatesTab(site),
+        1 => <Widget>[PlateLiveFeedPanel(key: ValueKey<int>(site.code), service: _service, siteCode: site.code)],
+        2 => _permitsTab(site),
+        3 => _blacklistTab(site),
+        4 => _gatesTab(site),
         _ => _settingsTab(site),
       },
   ];
