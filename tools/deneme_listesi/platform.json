@@ -1,7 +1,7 @@
 {
   "baslik": "Platform Faz Kontrol Listesi",
   "aciklama": "SmartKeyPass (kapı kontrol), site ve toplu yaşam yönetim platformunun seçilebilir bir modülü olacak. Bu sayfa işi fazlara böler. Her faz canlıya alındığında maddeleri “Denemeye hazır” olur; siz denersiniz ve “Çalışıyor / Çalışmıyor” diye işaretlersiniz. Henüz yapılmamış maddelerde “Böyle istiyorum / istemiyorum” ile planı şimdiden şekillendirebilirsiniz. İşaretleriniz ve notlarınız kaydedilir, Claude okuyup yanıtlar.",
-  "durum_metni": "Durum: Faz 0, Faz 1, Faz 1.1, Faz 2a, Faz 3a, site başvurusu ve Faz 4a (Aidat ve Finans: tanım, borçlandırma, tahsilat, düzeltme, ay kapatma) canlıda ve denemeye hazır; Aidat ve Finans modülü TEMEL modüldür: her sitede açıktır, talep edilmez ve kapatılamaz. Faz 2b (Excel’den toplu yükleme ve dışa aktarma; F13), Faz 3b-A (Belgeler; F14) ve Faz 4b (makbuz, kasa/banka, gider, raporlar, gecikme tazminatı, borç hatırlatma; F15) ile hesap silme ve veri dosyası güncellemeleri (F16) kodlandı ve test edildi; sunucu ve uygulama sürümü yayınlanınca denenir (maddeler “Denemeye hazır” görünse de sürüm yayınlanmadan uygulamada yoktur). Gecikme tazminatı ve borç hatırlatma, avukatın vereceği hukuk onayı (finance.legal_ok) gelene kadar kapalı kalır: “Hukuk onayı bekleniyor” iletisi denemeye hazırdır, çalışan hali Planlıdır. Telefon bildirimi (Faz 3b-B, Firebase) F3.07’de planlı kalır. Beş yönetim türü ve türe göre terimler (F9), Anket ve Oylama ile Ziyaretçi ve Kargo (F11) canlıdadır; kartlı geçişin sunucu altyapısı hazırdır, uygulama ekranı ve kart okuyucu planlıdır (F10). Kartla ödeme ve bankalarla doğrudan bağlantı “Yakında”dır (F8); banka ekstresi dosyasından tahsilat ve ödeme kodu eşleştirmesi hazırdır (F30, F60). Sayaç okuma ve faturalandırma hazırdır (F32, F45); uzaktan okuyan sayaç ve tüketimin sakine bildirilmesi “Yakında”dır (F7). Satışa hazırlık paketi (F12: hesabı silme ve veri indirme, yasal metinler, giriş güvenliği, Yardım ve tanıtım turu, Platform Ayarları, bakım ve sürüm kapısı, yedek ve izleme, mağaza hazırlığı): sunucu tarafı canlıdadır; uygulama ve web sürümü yasal metinler tamamlanınca yayınlanacaktır, bu yüzden F12 maddelerini sürüm yayınlandıktan sonra (ya da geliştirici derlemesiyle) deneyin. Dalga 1 (F25–F29: kiracı ve ev sahibi için ayrı hesap, kurallar tablosu ve altın veri seti, sade tasarım, gruplu menü ve sakin alt çubuğu, avukat taslakları ve hesap rehberleri) kodlandı ve bağımsız incelemeden geçti; sürüm yayınlanınca denenir. Gezinme değişti: Profilim, Modüller, Modül Talepleri, Site Başvuruları, cihaz ekranları, Denetim Kaydı, Platform Ayarları ve İstemci Hataları artık sağ üstteki dişlinin açtığı Ayarlar panelindedir; bu yüzden ilgili eski maddeler güncellendi ve “Bugün değişti” işaretlidir. 2026-10-28: Anket ve Oylama, Komşu Panosu, Ekipman ve Bakım, Faaliyet Raporu ve Dosya Deposu da temel modül oldu (her sitede açık, talep gerekmez); Kart Ödemesi Aidat ve Finans’ın, Belgeler Dosya Deposu’nun içine alındı (F38; bu modüllerle ilgili eski maddeler güncellendi ve “Bugün değişti” işaretlidir). 2026-10-29 Dalga D (F39–F43): kompakt menü ve “Tüm işlemler” (F39), sayfa bağlamlı Geri bildirim (F40), bağlam şeridi, “bağlı değil” bildirimi, belirgin Yenile ve onaylı Çıkış (F41), liste/kutucuk anahtarı ve Kolay görünüm (F42), Yöneticiyi ara ve büyük 112 düğmesi (F43) kodlandı ve test edildi; sürüm yayınlanınca denenir. 2026-10-29 Dalga F (F58): OTA firmware imzası (imzalama aracı, sunucu yükleme ucu ve cihaz doğrulayıcısı) kodlandı ve test edildi; ÜRETİM anahtarı üretilmedi, hiçbir karta yazılmadı, sunucu dağıtılmadı. Maddeler sırayla ve tamamen sizin işinizdir (anahtar üretimi, köprü sürümün derlenip karta yazılması, imzalama ve canlı yayın); sunucu dağıtımı ve köprü sürüm yazılmadan etkisi yoktur. 2026-10-29 Dalga H: Alacak iadesi ekranları (sakin ve yönetici; F64.04–F64.07), muhasebe kontrol izi (F65), Dönem raporu (F66), ikinci altın veri seti ve örnek site tohumu (F67), İş Takibi’nde firmaya yönlendirme (F68) ve dekont / gider formlarında cihaz içi “Görselden oku” (F69) kodlandı ve test edildi; sunucu (migration 110 ve 111) ve uygulama sürümü yayınlanınca denenir. 2026-10-29 Liste düzeni: F7 ve F8’de yapılmış işi hâlâ “Yakında” gösteren tekrar maddeleri (F7.01, F7.02, F8.02, F8.03) kaldırıldı; denemeleri F32, F45, F30 ve F60 bölümlerindedir. Tüketimin sakine bildirilmesi yeni madde F7.04 olarak “Yakında” kaldı.",
+  "durum_metni": "Durum: Faz 0, Faz 1, Faz 1.1, Faz 2a, Faz 3a, site başvurusu ve Faz 4a (Aidat ve Finans: tanım, borçlandırma, tahsilat, düzeltme, ay kapatma) canlıda ve denemeye hazır; Aidat ve Finans modülü TEMEL modüldür: her sitede açıktır, talep edilmez ve kapatılamaz. Faz 2b (Excel’den toplu yükleme ve dışa aktarma; F13), Faz 3b-A (Belgeler; F14) ve Faz 4b (makbuz, kasa/banka, gider, raporlar, gecikme tazminatı, borç hatırlatma; F15) ile hesap silme ve veri dosyası güncellemeleri (F16) kodlandı ve test edildi; sunucu ve uygulama sürümü yayınlanınca denenir (maddeler “Denemeye hazır” görünse de sürüm yayınlanmadan uygulamada yoktur). Gecikme tazminatı ve borç hatırlatma, avukatın vereceği hukuk onayı (finance.legal_ok) gelene kadar kapalı kalır: “Hukuk onayı bekleniyor” iletisi denemeye hazırdır, çalışan hali Planlıdır. Telefon bildirimi (Faz 3b-B, Firebase) F3.07’de planlı kalır. Beş yönetim türü ve türe göre terimler (F9), Anket ve Oylama ile Ziyaretçi ve Kargo (F11) canlıdadır; kartlı geçişin sunucu altyapısı hazırdır, uygulama ekranı ve kart okuyucu planlıdır (F10). Kartla ödeme ve bankalarla doğrudan bağlantı “Yakında”dır (F8); banka ekstresi dosyasından tahsilat ve ödeme kodu eşleştirmesi hazırdır (F30, F60). Sayaç okuma ve faturalandırma hazırdır (F32, F45); uzaktan okuyan sayaç ve tüketimin sakine bildirilmesi “Yakında”dır (F7). Satışa hazırlık paketi (F12: hesabı silme ve veri indirme, yasal metinler, giriş güvenliği, Yardım ve tanıtım turu, Platform Ayarları, bakım ve sürüm kapısı, yedek ve izleme, mağaza hazırlığı): sunucu tarafı canlıdadır; uygulama ve web sürümü yasal metinler tamamlanınca yayınlanacaktır, bu yüzden F12 maddelerini sürüm yayınlandıktan sonra (ya da geliştirici derlemesiyle) deneyin. Dalga 1 (F25–F29: kiracı ve ev sahibi için ayrı hesap, kurallar tablosu ve altın veri seti, sade tasarım, gruplu menü ve sakin alt çubuğu, avukat taslakları ve hesap rehberleri) kodlandı ve bağımsız incelemeden geçti; sürüm yayınlanınca denenir. Gezinme değişti: Profilim, Modüller, Modül Talepleri, Site Başvuruları, cihaz ekranları, Denetim Kaydı, Platform Ayarları ve İstemci Hataları artık sağ üstteki dişlinin açtığı Ayarlar panelindedir; bu yüzden ilgili eski maddeler güncellendi ve “Bugün değişti” işaretlidir. 2026-10-28: Anket ve Oylama, Komşu Panosu, Ekipman ve Bakım, Faaliyet Raporu ve Dosya Deposu da temel modül oldu (her sitede açık, talep gerekmez); Kart Ödemesi Aidat ve Finans’ın, Belgeler Dosya Deposu’nun içine alındı (F38; bu modüllerle ilgili eski maddeler güncellendi ve “Bugün değişti” işaretlidir). 2026-10-29 Dalga D (F39–F43): kompakt menü ve “Tüm işlemler” (F39), sayfa bağlamlı Geri bildirim (F40), bağlam şeridi, “bağlı değil” bildirimi, belirgin Yenile ve onaylı Çıkış (F41), liste/kutucuk anahtarı ve Kolay görünüm (F42), Yöneticiyi ara ve büyük 112 düğmesi (F43) kodlandı ve test edildi; sürüm yayınlanınca denenir. 2026-10-29 Dalga F (F58): OTA firmware imzası (imzalama aracı, sunucu yükleme ucu ve cihaz doğrulayıcısı) kodlandı ve test edildi; ÜRETİM anahtarı üretilmedi, hiçbir karta yazılmadı, sunucu dağıtılmadı. Maddeler sırayla ve tamamen sizin işinizdir (anahtar üretimi, köprü sürümün derlenip karta yazılması, imzalama ve canlı yayın); sunucu dağıtımı ve köprü sürüm yazılmadan etkisi yoktur. 2026-10-29 Dalga H: Alacak iadesi ekranları (sakin ve yönetici; F64.04–F64.07), muhasebe kontrol izi (F65), Dönem raporu (F66), ikinci altın veri seti ve örnek site tohumu (F67), İş Takibi’nde firmaya yönlendirme (F68) ve dekont / gider formlarında cihaz içi “Görselden oku” (F69) kodlandı ve test edildi; sunucu (migration 110 ve 111) ve uygulama sürümü yayınlanınca denenir. 2026-10-29 Liste düzeni: F7 ve F8’de yapılmış işi hâlâ “Yakında” gösteren tekrar maddeleri (F7.01, F7.02, F8.02, F8.03) kaldırıldı; denemeleri F32, F45, F30 ve F60 bölümlerindedir. Tüketimin sakine bildirilmesi yeni madde F7.04 olarak “Yakında” kaldı. 2026-10-29 Dalga I birleşimi: dış firma için bağımsız teklif formu (F70, migration 113), kapı günlüğünde yerel açma çift satırının teke indirilmesi (F71), sayaç saha ekranı açıklaması ve yardım cümlesi (F72), dağıtım betiği migration kontrolleri (F73) ve ay ortasında taşınan kiracı bilgi notu (F25.16) kodlandı ve test edildi; sunucu ve uygulama sürümü yayınlanınca denenir (F70 ve F71 sunucu dağıtımı ister, F70 migration 113 gerektirir).",
   "bolumler": [
     {
       "id": "F0",
@@ -10936,6 +10936,265 @@
           "beklenen": "Okuma internet olmadan da çalışır (cihaz içi).",
           "rol_notu": "Daire sakini",
           "on_kosul": "Android telefon; uçak modu açık",
+          "yeni": true,
+          "gelistirme": "hazir"
+        }
+      ]
+    },
+    {
+      "id": "F70",
+      "baslik": "Dış firma için bağımsız teklif formu (tek kullanımlık bağlantı)",
+      "durum": "hazir",
+      "ozet": "Yönetici, Ekipman ve Bakım > Teklifler’de “Form bağlantısı oluştur” ile dış firma için tek kullanımlık, süreli (1–30 gün, varsayılan 14) bir bağlantı üretir. Firma giriş yapmadan formu doldurur; gelen teklif TASLAK olarak düşer. Yönetici onaylayana kadar teklif, gider ya da sözleşme yazılmaz; onay yalnız AÇIK bir teklif oluşturur, kabul (gider / sözleşme) yine ayrı yönetici kararıdır. Bağlantı yalnız oluşturma anında gösterilir (veritabanında yalnız özeti tutulur). Teklif Pro API’sine bağlı değildir; firmaya bildirim ya da e-posta gitmez, bağlantıyı yönetici iletir. Sunucuda migration 113 gerekir.",
+      "maddeler": [
+        {
+          "id": "F70.01",
+          "baslik": "Form bağlantısı oluştur: bağlantı yalnız bir kez görünür",
+          "adimlar": [
+            "Ekipman ve Bakım > Teklifler sekmesini açın.",
+            "“Form bağlantısı oluştur”a dokunup bir konu yazın ve bağlantıyı üretin.",
+            "Açılan pencerede bağlantının göründüğünü, Kopyala ve Paylaş’ın çalıştığını görün.",
+            "Pencereyi kapatıp sayfayı yenileyin."
+          ],
+          "beklenen": "Bağlantı yalnız oluşturma penceresinde görünür; kapatıp yenileyince bir daha görünmez. “Bekleyen bağlantılar” listesinde yalnız konu ve son geçerlilik tarihi yer alır.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Ekipman ve Bakım açık bir test sitesi; sunucuda migration 113 uygulanmış",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F70.02",
+          "baslik": "Firma formu girişsiz doldurur; aynı bağlantı ikinci kez açılmaz",
+          "adimlar": [
+            "Üretilen bağlantıyı telefonda ya da gizli sekmede (giriş yapmadan) açın.",
+            "Firma adı, irtibat bilgisi ve tutarı (örnek 12.500,00) yazıp gönderin.",
+            "Aynı bağlantıyı yeniden açın."
+          ],
+          "beklenen": "Form giriş istemeden açılır; gönderince “Teklifiniz iletildi” çıkar. Aynı bağlantı ikinci kez açılınca “Bağlantı kullanılamıyor” (410) görünür. Küçük ekranda yazılar taşmaz.",
+          "rol_notu": "Dış firma yetkilisi (hesapsız)",
+          "on_kosul": "Üretilmiş, kullanılmamış bir form bağlantısı",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F70.03",
+          "baslik": "Gelen teklif taslak olarak görünür; teklif, gider ve sözleşme oluşmaz",
+          "adimlar": [
+            "Uygulamada Teklifler sekmesini yenileyin.",
+            "“Onay bekleyen taslaklar” altındaki kaydı açın: firma, tutar, KDV, irtibat ve notu görün.",
+            "Teklifler listesine, Finans’taki giderlere ve Sözleşmeler’e bakın."
+          ],
+          "beklenen": "Gönderilen teklif yalnız “Onay bekleyen taslaklar” altında görünür. Teklifler listesinde henüz teklif, Finans’ta gider, Sözleşmeler’de kayıt oluşmamıştır.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Firmanın gönderdiği bir teklif (bir önceki madde)",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F70.04",
+          "baslik": "Onayla: açık teklif oluşur; reddet; bağlantıyı iptal et",
+          "adimlar": [
+            "Bir taslakta “Onayla: açık teklif oluştur”a dokunun; Teklifler listesine ve belge notuna bakın.",
+            "Finans’ta gider ve Sözleşmeler’de kayıt oluşmadığını doğrulayın.",
+            "Başka bir taslakta “Reddet”e dokunun.",
+            "Bekleyen bir bağlantıda “Bağlantıyı iptal et”e dokunup o bağlantıyı açmayı deneyin."
+          ],
+          "beklenen": "Onayda Açık durumunda yeni bir teklif belirir (irtibat bilgisi belge notunda); gider ya da sözleşme oluşmaz, kabul için mevcut “Kabul et” akışı gerekir. Reddedilen taslak onaya düşmez. İptal edilen bağlantı açılınca 410 görünür.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "En az iki taslak teklif ve bir bekleyen bağlantı",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F70.05",
+          "baslik": "Yetki: salt okur roller işlem yapamaz, sakin göremez",
+          "adimlar": [
+            "Kurul üyesi ya da görevli hesabıyla Teklifler sekmesini açın.",
+            "Daire sakini hesabıyla bu bölümü açmayı deneyin."
+          ],
+          "beklenen": "Salt okur rol taslakları görür ama onay, ret, iptal ve bağlantı oluşturma düğmeleri görünmez. Sakin hesabında bu bölüm açılmaz (sunucu uçları 403 verir).",
+          "rol_notu": "Kurul üyesi, görevli ve daire sakini",
+          "on_kosul": "Bekleyen en az bir taslak",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F70.06",
+          "baslik": "Dağıtım: tablo (migration 113) ve firmanın açacağı alan adı",
+          "adimlar": [
+            "Sunucu dağıtımından sonra equipment_quote_requests tablosunun oluştuğunu doğrulayın (migration 113).",
+            "Sunucunun PUBLIC_APP_URL (yoksa PUBLIC_BASE_URL) değerinin firmanın açacağı alan adını verdiğini kontrol edin.",
+            "Bir bağlantı üretip adresin bu alan adıyla başladığına bakın."
+          ],
+          "beklenen": "Tablo vardır; üretilen bağlantının adresi doğru alan adıyla kurulur.",
+          "rol_notu": "Dağıtımı yapan (geliştirici)",
+          "on_kosul": "Sunucu dağıtımı yapılmış",
+          "yeni": true,
+          "gelistirme": "hazir"
+        }
+      ]
+    },
+    {
+      "id": "F71",
+      "baslik": "Kapı günlüğü: yerel açmada çift satırın teke indirilmesi",
+      "durum": "hazir",
+      "ozet": "Telefon kapıyı yerel ağdan (UDP) açtığında cihaz kendi çevrimdışı kaydını (kullanıcısız “Yerel UDP”), uygulama da kendi bildirimini (kullanıcılı) gönderiyor ve aynı açma günlükte iki satır oluyordu. Artık aynı kapıda 15 saniye içinde tek satır kalır: cihaz satırı korunur, açanın adı ve dairesi o satıra taşınır, uygulamanın ikinci satırı silinir. Eşleşme, hangisinin önce geldiğinden bağımsızdır. Yalnız sunucu değişti, migration yoktur; cihaz saati bilinmeyen (NTP senkronsuz) kayıtlar eşleştirilmez.",
+      "maddeler": [
+        {
+          "id": "F71.01",
+          "baslik": "Aynı Wi-Fi’de uygulamadan yerel açma: günlükte tek satır",
+          "adimlar": [
+            "Telefon kapı cihazıyla aynı Wi-Fi’deyken uygulamadan kapıyı açın (yerel açma).",
+            "1–2 dakika sonra kapı günlüğüne bakın."
+          ],
+          "beklenen": "O açma için TEK satır vardır ve açan hesabın adıyla görünür; “Yerel UDP” adlı kullanıcısız ikinci bir satır görünmez.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Çevrimiçi bir kapı cihazı; telefon aynı Wi-Fi’de; yerel açma etkin; sunucu yeni sürümde",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F71.02",
+          "baslik": "Cihaz çevrimdışıyken yerel açma, bağlantı gelince eşleşir",
+          "adimlar": [
+            "Cihazın Wi-Fi’si var, internet / MQTT yokken uygulamadan yerel açın.",
+            "Bağlantıyı geri verin ve kapı günlüğüne bakın."
+          ],
+          "beklenen": "Kayıt yine tek satır ve kullanıcılıdır. Cihazın saati NTP ile senkron değilse eşleşme olmaz ve çift satır kalabilir (bilinen sınır).",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Wi-Fi’ye bağlı ama internetsiz bir kapı cihazı (modemde internet çekilebilir)",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F71.03",
+          "baslik": "İki farklı hesap 15 saniye içinde açarsa iki satır kalır",
+          "adimlar": [
+            "İki farklı hesapla aynı kapıyı 15 saniye içinde yerelden açın.",
+            "Kapı günlüğüne bakın."
+          ],
+          "beklenen": "Günlükte iki satır vardır; her biri kendi hesabıyla görünür.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Aynı siteye bağlı iki hesap ve çevrimiçi bir kapı",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F71.04",
+          "baslik": "Aynı hesap 15 saniye içinde iki kez açarsa",
+          "adimlar": [
+            "Aynı hesapla aynı kapıyı 15 saniye içinde iki kez yerelden açın.",
+            "Kapı günlüğüne bakın."
+          ],
+          "beklenen": "Tek kullanıcılı satır ve ikinci açma için kullanıcısız “Yerel UDP” satırı kalabilir; bu bilinçli kuraldır (aynı kullanıcı + kapı + zaman penceresi tekilleştirilir).",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Çevrimiçi bir kapı cihazı; yerel açma etkin",
+          "yeni": true,
+          "gelistirme": "hazir"
+        }
+      ]
+    },
+    {
+      "id": "F72",
+      "baslik": "Sayaç saha ekranı ve yardım metni: küçük düzeltmeler",
+      "durum": "hazir",
+      "ozet": "Sayaç saha ekranında kamerası ya da metin tanıması olmayan platformlarda (web, masaüstü) boş kalan alana kısa bir açıklama konuldu: “Bu cihazda fotoğrafla okuma yok; değeri elle yazın.” Telefonda ekran değişmez. Ayrıca Yardım’daki sayaç konusuna, sayaç okuma izninin finans / borçlandırma izni vermediği (görevli Faturalandır ve Finans işlemlerini yapamaz, borçlandırmayı yalnız site yöneticisi yapar) cümlesi eklendi. Yalnız istemci ve belge; sunucu değişmedi.",
+      "maddeler": [
+        {
+          "id": "F72.01",
+          "baslik": "Kamera olmayan platformda açıklama görünür",
+          "adimlar": [
+            "Web (Chrome) ya da Windows sürümünde Sayaç saha ekranını açın.",
+            "Boş kalan alana ve altındaki “Okunan değer” alanına bakın."
+          ],
+          "beklenen": "Kamera alanı yerine ortada “Bu cihazda fotoğrafla okuma yok; değeri elle yazın.” açıklaması görünür; “Okunan değer” alanı ve “Onayla ve sonraki” çalışmaya devam eder.",
+          "rol_notu": "Sayaç okuyan görevli ya da site yöneticisi",
+          "on_kosul": "Web ya da Windows sürümü; etkin sayacı olan bir site",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F72.02",
+          "baslik": "Android ve iOS’ta ekran değişmez",
+          "adimlar": [
+            "Android ya da iOS telefonda Sayaç saha ekranını açın.",
+            "Kamera iznini verin ve önizlemeye bakın; sonra izni kapatıp ekranı yeniden açın."
+          ],
+          "beklenen": "Kamera önizlemesi ve çekim düğmesi eskisi gibidir. İzin reddedilirse eski “Kamera izni verilmedi. Değeri elle yazabilirsiniz.” metni çıkar; yeni açıklama çıkmaz.",
+          "rol_notu": "Sayaç okuyan görevli ya da site yöneticisi",
+          "on_kosul": "Android ya da iOS telefon",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F72.03",
+          "baslik": "Yardım: “okuma izni finans izni vermez” cümlesi",
+          "adimlar": [
+            "Yardım’da “Sayaç okumalarını nasıl girer ve faturalandırırım?” konusunu açın.",
+            "Not kutusunun sonuna bakın; dar ekranda (yaklaşık 320 px) taşma olup olmadığına bakın."
+          ],
+          "beklenen": "Not kutusunun sonunda “Sayaç okuma izni finans / borçlandırma izni vermez…” cümlesi görünür ve metin taşmaz.",
+          "rol_notu": "Herhangi bir rol",
+          "on_kosul": "Yeni uygulama sürümü",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F72.04",
+          "baslik": "Görevli finansa giremez, yönetici borçlandırabilir",
+          "adimlar": [
+            "Görevli hesabıyla Faturalandır / Finans ekranına girmeyi deneyin.",
+            "Site yöneticisi hesabıyla Borçlandır’ı deneyin."
+          ],
+          "beklenen": "Görevli yetki hatası alır (yardım cümlesiyle tutarlı); yönetici Borçlandır’ı yapabilir.",
+          "rol_notu": "Görevli ve site yöneticisi",
+          "on_kosul": "Sayaç okuma yetkisi verilmiş bir görevli hesabı",
+          "yeni": true,
+          "gelistirme": "hazir"
+        }
+      ]
+    },
+    {
+      "id": "F73",
+      "baslik": "Dağıtım betikleri: 085–111 migration varlık kontrolleri (geliştirici aracı)",
+      "durum": "hazir",
+      "ozet": "Dağıtım prova (remote_rehearse_schema.sh) ve doğrulama (remote_verify.sh) betiklerine 085, 088–091, 096–100, 102, 103, 110 ve 111 numaralı 14 migration için varlık kontrolleri eklendi (tablo, sütun, indeks, kısıt, tetikleyici, işlev). Prova ayrıca 14 tablonun satır sayısı ve süzgeçli sayımlarını yükseltmeden önce ve sonra karşılaştırır; doğrulama canlı veritabanında salt okunur çalışır ve 14 satırlık özet basar. Bu madde yalnız dağıtımı yapana aittir.",
+      "maddeler": [
+        {
+          "id": "F73.01",
+          "baslik": "Prova: ok085-111=t ve PROVA_OK",
+          "adimlar": [
+            "Sonraki dağıtımda önce bash remote_deploy.sh <TS> prepare, sonra bash remote_rehearse_schema.sh <TS> çalıştırın.",
+            "Çıktının sonuna bakın."
+          ],
+          "beklenen": "Son satırda ok085-111=t ve PROVA_OK görünür; “[085-111] veri sayıları” satırı yükseltmeden önce ve sonra AYNI yazar.",
+          "rol_notu": "Dağıtımı yapan (geliştirici)",
+          "on_kosul": "Sonraki sunucu dağıtımı",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F73.02",
+          "baslik": "Doğrulama: 14 satır OK, SEMA_085_111_OK",
+          "adimlar": [
+            "Dağıtımdan sonra bash remote_verify.sh çalıştırın.",
+            "Şema bölümündeki 085–111 satırlarına bakın."
+          ],
+          "beklenen": "14 satırın hepsi OK görünür ve son satır SEMA_085_111_OK (14/14) olur.",
+          "rol_notu": "Dağıtımı yapan (geliştirici)",
+          "on_kosul": "Sunucu dağıtımı tamamlanmış",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F73.03",
+          "baslik": "Prova: 091 aidat dağıtım kısıtı satırı 1 olmalı",
+          "adimlar": [
+            "Prova çıktısında “[091] aidat dağıtım kısıtı” satırına bakın."
+          ],
+          "beklenen": "Satır 1 gösterir. 0 görünürse db.js’in sessizce yuttuğu bir 091 hatası vardır; sunucu açılış günlüğünde “[DB] 091” satırına bakın.",
+          "rol_notu": "Dağıtımı yapan (geliştirici)",
+          "on_kosul": "Prova çıktısı",
           "yeni": true,
           "gelistirme": "hazir"
         }
