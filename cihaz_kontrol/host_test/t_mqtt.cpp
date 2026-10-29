@@ -709,6 +709,38 @@ int main() {
       // alan degerleri dosyadan ALINMAZ: JSON baska surum/hedef/boyut/ozet diyor ama imza gercek yuk icin gecerli -> kurulur (imza paketi baglar)
       jsonKur(imza_json(ham, DIGER_HEDEF, "1.2.3", fw_govde + "x"));
       basari(kos(mfOk), S_VER.c_str(), "S13 JSON'un target/version/size/sha256 alanlari cihazca kullanilmaz (yuk cihazin kendi degerlerinden kurulur)");
+      // ARACIN GERCEK .sig serilestiricisinin ciktisi (tools/ota_imza/lib/bicim.mjs; gen_imza_vectors.mjs "P" satirlari): cihaz bu dosya
+      // baytlarindan imzayi birebir cikarabilmeli (alan adlari, sira, girinti, LF, rollback_max alani dahil)
+      { FILE* vf = fopen("imza_vectors.txt", "r");
+        CHECK(vf != nullptr, "S13: imza_vectors.txt var (node gen_imza_vectors.mjs)");
+        int gercek = 0, gecen = 0, rollbackli = 0;
+        if (vf) {
+          std::string satir;
+          int ch;
+          auto hexten = [](const std::string& h) { std::string r; for (size_t i = 0; i + 1 < h.size(); i += 2) r += static_cast<char>(strtoul(h.substr(i, 2).c_str(), nullptr, 16)); return r; };
+          auto isle = [&](const std::string& s) {
+            if (s.size() < 3 || s[0] != 'P' || s[1] != ' ') return;
+            const size_t bos = s.find(' ', 2);
+            if (bos == std::string::npos) return;
+            const std::string dosya = hexten(s.substr(2, bos - 2));
+            const std::string beklenen = hexten(s.substr(bos + 1));
+            gercek++;
+            if (dosya.find("rollback_max") != std::string::npos) rollbackli++;
+            uint8_t cikan[OTA_IMZA_BOYUT];
+            memset(cikan, 0xAA, sizeof(cikan));
+            const bool tamam = otaImzaDosyasiCozumle(reinterpret_cast<const uint8_t*>(dosya.data()), dosya.size(), cikan);
+            if (tamam && beklenen.size() == OTA_IMZA_BOYUT && memcmp(cikan, beklenen.data(), OTA_IMZA_BOYUT) == 0 && dosya.size() < OTA_IMZA_DOSYA_MAX) gecen++;
+          };
+          while ((ch = fgetc(vf)) != EOF) {
+            if (ch != '\n' && ch != '\r') { satir += static_cast<char>(ch); continue; }
+            if (!satir.empty()) isle(satir);
+            satir.clear();
+          }
+          if (!satir.empty()) isle(satir);
+          fclose(vf);
+        }
+        CHECKF(gercek == 3 && gecen == 3 && rollbackli == 1, "S13: aracin GERCEK .sig dosyalari cihaz ayristiricisindan imzayi birebir verdi (dosya=%d, tamam=%d, rollback_max'li=%d)", gercek, gecen, rollbackli);
+      }
       // reddedilenler
       const std::vector<std::pair<std::string, std::string>> bicim = {
         {"yabanci/eski etiket (SKP-OTA-V1)", imza_json(ham, OTA_TARGET, S_VER, fw_govde, nullptr, "SKP-OTA-V1")},

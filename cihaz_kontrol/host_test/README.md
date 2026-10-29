@@ -10,12 +10,12 @@ Cihazdaki gerçek davranış (röle, Wi-Fi, OTA rollback, ekran, gerçek ağ) bu
 | `t_udp.cpp` | `yerel_kapi_kontrol.h`: UDP/HTTP uçtan uca (beacon, discover, open/pulse, hata yolları) | 143 |
 | `t_pin.cpp` | `admin_pin.h`: zayıf PIN listesi, kilitleme zamanı | 78 |
 | `t_gm60.cpp` | `gm60_scanner.h`: QR okuyucu korumaları | 44 |
-| `t_imza.cpp` | `ota_ed25519.h` + `ota_imza.h` (OTA imzası): SHA-512 ve Ed25519 çekirdeği — RFC 8032 vektörleri, OpenSSL (Node) imzalı 200 rastgele vektör, tek-bit bozma, `S ≥ L` reddi, 8 küçük mertebeli nokta ve bağımsız JS gerçeklemesiyle 356 anahtar adayında aynı karar; imza yükü (birebir metin, alan doğrulama), imza dosyası çözümleme, uçtan uca `otaImzaDogrula` | 229 |
-| `t_mqtt.cpp` (WROOM) | `mqtt_baglanti.h` + `ota_guncelleme.h` + `ota_is_kimligi.h` + **OTA imza akışı** (S1-S12: imzasız/bozuk/başka sürüm-hedef-paket imzası reddi, `Update.end` yalnız geçerli imzada, gömülü imza, `sig_url`, yer tutucu anahtar, izinli sürüm düşürme, deneme sınırı) | 347 |
-| `t_mqtt.cpp` (C3) | aynı başlıklar, ESP32-C3 derleme koşullarıyla | 308 |
+| `t_imza.cpp` | `ota_ed25519.h` + `ota_imza.h` (OTA imzası): SHA-512 ve Ed25519 çekirdeği — RFC 8032 vektörleri, OpenSSL (Node) imzalı 200 rastgele vektör, tek-bit bozma, `S ≥ L` reddi, 8 küçük mertebeli nokta ve bağımsız JS gerçeklemesiyle 356 anahtar adayında aynı karar; imza yükü (birebir metin, alan doğrulama), imza dosyası çözümleme, uçtan uca `otaImzaDogrula`; **imzalama aracının (`tools/ota_imza`) bilinen-cevap vektörleri** (2 normal + 1 `rollback_max`'lı, özel anahtarsız; cihaz kodu araç imzalarını doğrular) | 427 |
+| `t_mqtt.cpp` (WROOM) | `mqtt_baglanti.h` + `ota_guncelleme.h` + `ota_is_kimligi.h` + **OTA imza akışı** (S1-S13: imzasız/bozuk/başka sürüm-hedef-paket imzası reddi, `Update.end` yalnız geçerli imzada, gömülü imza, `sig_url`, yer tutucu anahtar, izinli sürüm düşürme, deneme sınırı, aracın `.sig` JSON'u — aracın GERÇEK serileştirici çıktısı dahil) | 445 |
+| `t_mqtt.cpp` (C3) | aynı başlıklar, ESP32-C3 derleme koşullarıyla | 406 |
 | `t_fuzz.cpp` (isteğe bağlı) | rastgele olay dizileri, AddressSanitizer | — |
 
-Toplam: 1314 doğrulama (2026-10-29 itibarıyla hepsi geçiyor). Protokol sözleşmesi: `../../docs/YEREL_KONTROL_V2.md`; OTA imzası: `../../docs/OTA_IMZA_CIHAZ.md`.
+Toplam: 1708 doğrulama (2026-10-29 itibarıyla hepsi geçiyor). Protokol sözleşmesi: `../../docs/YEREL_KONTROL_V2.md`; OTA imzası: `../../docs/OTA_IMZA_CIHAZ.md`.
 
 ## Gereksinimler
 

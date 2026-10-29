@@ -11,6 +11,7 @@
 //   O <genel anahtar> <tohum> <hedef> <surum> <boyut> <sha256> <rollback_max|-> <imza>   OTA imza yuku, Node imzali
 //   T <genel anahtar> <hedef> <surum> <boyut> <sha256> <rollback_max|-> <imza>   IMZALAMA ARACININ bilinen-cevap vektoru
 //                                                                              (tools/ota_imza/test/vektorler.json; ozel anahtar YOK)
+//   P <.sig dosyasi baytlari hex> <beklenen imza hex>                           ARACIN GERCEK .sig serilestiricisinin ciktisi (t_mqtt S13: cihaz JSON ayristiricisi)
 //
 // IMZALAYAN taraf icin referans uygulama tools/ota_imza/lib/bicim.mjs'tir (BAGLAYICI TANIM: tools/ota_imza/README.md). imzaYuku() bu
 // dosyanin kendi kurucusudur (cihazin "-rc1" gibi esnek surumlerini de denemek icin) ve kati surumlerde ARAC KURUCUSUYLA BAYT-BAYT ayni
@@ -20,7 +21,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { imzaMesajiKur } from '../../tools/ota_imza/lib/bicim.mjs';
+import { imzaDosyasiKur, imzaDosyasiMetni, imzaMesajiKur } from '../../tools/ota_imza/lib/bicim.mjs';
 import { anahtarDogrula } from '../tools/ota_anahtar.mjs';
 
 const PKCS8_ONEK = Buffer.from('302e020100300506032b657004220420', 'hex');
@@ -130,6 +131,16 @@ function uret() {
   }
   const r = belge.rollback_vektoru;
   satirlar.push(`T ${r.genel_anahtar_hex} ${r.hedef} ${r.surum} ${r.boyut} ${r.sha256} ${r.rollback_max} ${r.imza_hex}`);
+
+  // Aracin GERCEK .sig serilestiricisi (imzaDosyasiKur + imzaDosyasiMetni): cihazin JSON ayristiricisi bu dosya baytlarindan imzayi cikarabilmeli
+  for (const v of belge.vektorler) {
+    const metin = imzaDosyasiMetni(imzaDosyasiKur({ hedef: v.hedef, surum: v.surum, boyut: v.boyut, sha256: v.sha256, anahtarKimligi: belge.anahtar_kimligi, imzaHex: v.imza_hex }));
+    satirlar.push(`P ${Buffer.from(metin, 'utf8').toString('hex')} ${v.imza_hex}`);
+  }
+  const rmetin = imzaDosyasiMetni(imzaDosyasiKur({
+    hedef: r.hedef, surum: r.surum, boyut: r.boyut, sha256: r.sha256, anahtarKimligi: r.anahtar_kimligi, imzaHex: r.imza_hex, rollbackMax: r.rollback_max,
+  }));
+  satirlar.push(`P ${Buffer.from(rmetin, 'utf8').toString('hex')} ${r.imza_hex}`);
   return satirlar;
 }
 
