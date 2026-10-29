@@ -18,9 +18,11 @@ class PaymentInfoItem {
     this.periodLabel,
     this.detailsChangedAt,
     this.noticesEnabled = false,
+    this.onlinePaymentAvailable = false,
   });
 
   factory PaymentInfoItem.fromJson(Map<String, dynamic> json) => PaymentInfoItem(
+    onlinePaymentAvailable: json['online_payment_available'] == true,
     siteCode: _int(json['site_code']),
     apartmentId: _int(json['apartment_id']),
     siteName: _str(json['site_name']) ?? '',
@@ -61,6 +63,9 @@ class PaymentInfoItem {
 
   /// Dekont yükleme anahtarı (2B); false iken "Dekont yükle" gösterilmez.
   final bool noticesEnabled;
+
+  /// Site bağlantısı CANLI + sınanmış + sürücü ETKİN ise true; yalnız o zaman "Online Öde" çizilir (eski sunucuda alan yok => false).
+  final bool onlinePaymentAvailable;
 
   /// IBAN son [days] günde değiştiyse true.
   bool changedRecently(DateTime now, {int days = 14}) {

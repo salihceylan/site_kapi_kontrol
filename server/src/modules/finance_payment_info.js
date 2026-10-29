@@ -10,6 +10,7 @@ import { invalidBody } from './finance_common.js';
 import { formatIban, maskIban, parseTrIban } from './finance_iban.js';
 import { aptCode, formatRef, parsePrefix, periodLabel, suggestPrefix } from './finance_payment_ref.js';
 import { enabledFinanceSites, loadVisibleAccounts } from './finance_read_service.js';
+import { isOnlinePaymentAvailable } from './payment_connection_service.js';
 import { lockActorRow, recordFinanceAudit, withFinanceTransaction } from './finance_tx.js';
 import { parsePositiveId } from './people_common.js';
 import { syncUserPeopleSafe } from './people_sync.js';
@@ -328,6 +329,8 @@ export async function getMyPaymentInfo(authUser, { now = new Date(), db = pool }
   for (const siteCode of [...new Set(apartments.map((row) => Number(row.site_code)))]) {
     siteInfo.set(siteCode, await loadSiteInfo(db, siteCode));
   }
+  const onlineBySite = new Map();
+  for (const siteCode of siteInfo.keys()) onlineBySite.set(siteCode, await isOnlinePaymentAvailable(siteCode, db));
   const codeCache = new Map();
   const items = [];
   for (const apt of apartments) {
@@ -347,6 +350,8 @@ export async function getMyPaymentInfo(authUser, { now = new Date(), db = pool }
       details_changed_at: null,
       notices_enabled: info.noticesEnabled,
       card_payment: 'coming_soon',
+      // "Online Öde": YALNIZ canlı mod + başarılı sınama + ETKİN sürücü varsa true (şimdilik hiçbir sağlayıcı etkin değil => hep false).
+      online_payment_available: onlineBySite.get(siteCode) === true,
     };
     if (!info.prefix || !info.bank) {
       items.push(base);

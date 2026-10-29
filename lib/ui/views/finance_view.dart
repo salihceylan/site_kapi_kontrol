@@ -11,6 +11,7 @@ import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/buttons.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/finance_card_payments_dialog.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/finance_online_collection_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/finance_payment_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/finance_receipt_flow.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/finance_run_dialog.dart';
@@ -474,13 +475,37 @@ class FinanceViewState extends State<FinanceView> {
     }
   }
 
+  Future<void> _openOnlineCollection(PeopleSite site) async {
+    if (_opening) return;
+    _opening = true;
+    try {
+      await FinanceOnlineCollectionDialog.show(context, scope: _scopeOf(site));
+    } finally {
+      _opening = false;
+    }
+  }
+
+  /// Kart Ödemesi (komisyon notu) + Online Tahsilat (ödeme kuruluşu bağlantısı kurulumu; yönetici düzenler, kurul görüntüler).
   Widget _cardPaymentsButton(PeopleSite site) {
-    return PrimaryActionButton(
-      key: const ValueKey<String>('finance_open_card_payments'),
-      label: 'Kart Ödemesi',
-      icon: Icons.credit_card_rounded,
-      variant: AppButtonVariant.tonal,
-      onPressed: () => _openCardPayments(site),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        PrimaryActionButton(
+          key: const ValueKey<String>('finance_open_card_payments'),
+          label: 'Kart Ödemesi',
+          icon: Icons.credit_card_rounded,
+          variant: AppButtonVariant.tonal,
+          onPressed: () => _openCardPayments(site),
+        ),
+        const SizedBox(height: AppSpace.sm),
+        PrimaryActionButton(
+          key: const ValueKey<String>('finance_open_online_collection'),
+          label: 'Online Tahsilat',
+          icon: Icons.account_balance_rounded,
+          variant: AppButtonVariant.tonal,
+          onPressed: () => _openOnlineCollection(site),
+        ),
+      ],
     );
   }
 
