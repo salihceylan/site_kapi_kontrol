@@ -96,14 +96,20 @@ export function transferWrites(items) {
  * Devir geri alma planı. `rows` = bu devrin yazdığı defter satırları (source_kind = 'liability_transfer', source_id = devir) ve ters çevrilen asıllar:
  *   { id, kind, accountParty, amount: bigint, reversesId, reversedBy: number|null (ters kaydı), original?: { id, amount, dueDate, definitionName, fund } }
  * Çıktı: reverseIds (ters çevrilecek borç satırları: malik devir borçları + kiracıdaki ödenmiş kısım borçları),
- *        reinstate (kiracıya yeniden yazılacak borçlar: asıl kalemin TAM tutarı, vadesi ve adı).
+ *        reinstate (kiracıya yeniden yazılacak borçlar: asıl kalemin TAM tutarı, vadesi ve adı),
+ *        supersededIds (bu devrin yazdığı ama SONRADAN başka bir işlemle zaten ters çevrilmiş borç satırları).
+ * supersededIds DOLUYSA geri alma YAPILMAMALIDIR: reinstate asıl kalemin TAM tutarını yazar ve ters çevrilmiş satırın payını da içerir; o pay sonraki işlemde
+ * (örn. ödenmiş kısım borcunun ikinci bir devri) başka yere taşınmıştır, geri alma borcu iki hesapta birden bırakırdı (çift sayım). Servis 409 verir.
  */
 export function planTransferReversal(rows) {
   const reverseIds = [];
   const reinstate = [];
+  const supersededIds = [];
   for (const row of rows) {
     if (row.kind === 'charge' && row.reversedBy === null) {
       reverseIds.push(row.id);
+    } else if (row.kind === 'charge') {
+      supersededIds.push(row.id);
     } else if (row.kind === 'reversal' && row.accountParty === 'tenant' && row.original) {
       reinstate.push({
         originalEntryId: row.original.id,
@@ -114,7 +120,11 @@ export function planTransferReversal(rows) {
       });
     }
   }
-  return { reverseIds: reverseIds.sort((a, b) => a - b), reinstate: reinstate.sort((a, b) => a.originalEntryId - b.originalEntryId) };
+  return {
+    reverseIds: reverseIds.sort((a, b) => a - b),
+    reinstate: reinstate.sort((a, b) => a.originalEntryId - b.originalEntryId),
+    supersededIds: supersededIds.sort((a, b) => a - b),
+  };
 }
 
 /** İstek parmak izi (idempotans): aynı anahtar + farklı gövde = 409. */

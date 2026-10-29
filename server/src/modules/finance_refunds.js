@@ -8,6 +8,8 @@
 //
 // KURALLAR
 //  - İade tutarı onayda daire kilidi altında `max(0, -hesap bakiyesi)` ile sınanır (409 REFUND_EXCEEDS_CREDIT); talep anında bekleyen talepler de düşülür. Tutar onayda DEĞİŞTİRİLEMEZ.
+//  - SAKİN talebinin üst sınırı sakinin Borcum'da GÖRDÜĞÜ alacaktır (taşınma ayından itibaren, mahsuplu; residentVisibleCredit): önceki sakinin kapsam dışı borca mahsup edilmiş
+//    fazla ödemesinin artığı yeni sakine iade edilemez ve 409 gövdesinde sızmaz. Yönetici adına açılan talep dairenin tüm defterini görür (kapsamsız hesap alacağı).
 //  - İade tarihi her zaman BUGÜNDÜR (sunucu, İstanbul); o ayın dönemi kapalıysa 409 PERIOD_CLOSED (tahsilatla aynı kural).
 //  - Sakin yalnız KENDİ hesabı için talep açar / geri çeker / görür (başka dairenin talebi 404). Kurul okur (adsız); görevli ve ilgisiz 403 (rota katmanı).
 //  - Defter eklemelidir: iade satırları silinmez / değiştirilmez; düzeltme yalnız bu dosyadaki geri alma ile (genel "kaydı iptal et" ucu iade satırını reddeder: finance_refund_guard).
@@ -40,7 +42,8 @@ import { ENTRY_SELECT, insertReversal } from './finance_ledger_service.js';
 import { minorToNumber, toBigInt } from './finance_money.js';
 import { accountPartySql } from './finance_parties.js';
 import { RECEIPT_TEMPLATE_VERSION, receiptSecret, snapshotHash, verificationCodeFor } from './finance_receipts.js';
-import { enabledFinanceSites, loadVisibleAccounts } from './finance_read_service.js';
+import { enabledFinanceSites, loadResidentLedger, loadVisibleAccounts, rowsOfView, viewSinceOf } from './finance_read_service.js';
+import { residentEntryOf, residentView } from './finance_resident_view.js';
 import { isPeriodClosed, lockActorRow, recordFinanceAudit, withFinanceTransaction } from './finance_tx.js';
 import { apartmentLabel, parsePositiveId, toIso } from './people_common.js';
 import { syncUserPeopleSafe } from './people_sync.js';
@@ -75,6 +78,17 @@ export const formatRefundNumber = (year, no) => `${REFUND_SERIES}-${year}-${Stri
 export function creditOf(balanceMinor) {
   const balance = toBigInt(balanceMinor);
   return balance < 0n ? -balance : 0n;
+}
+
+/**
+ * SAKİNİN GÖRDÜĞÜ alacak (kuruş, BigInt): Borcum ile AYNI kapsam ve mahsup (finance_resident_view.residentView; sakin yalnız taşınma ayından itibaren görür) -> yalnız eksi
+ * bakiye iade edilebilir. Hesabın kapsamsız alacağından küçük ya da eşittir: önceki sakinin kapsam dışı borca mahsup edilmiş fazla ödemesinin artığı yeni sakine görünmez
+ * ve ona iade edilemez (KVKK ölçülülük; iade yönetici adına açılırsa kapsamsız alacak kullanılır). Saf.
+ * @param {Array<object>} accountRows hesabın defter satırları (finance_read_service.loadResidentLedger / rowsOfView: `anchor` sütunu dahil)
+ * @param {{ since: string|null, today: string }} options sakin görünümünün kapsam başlangıcı ('YYYY-MM-01') ve bugün (İstanbul)
+ */
+export function residentVisibleCredit(accountRows, { since, today: todayIsoDate }) {
+  return creditOf(residentView(accountRows.map(residentEntryOf), { since, today: todayIsoDate }).balance);
 }
 
 /** Hesaptan çıkış yöntemi: nakit hesap -> nakit, banka hesabı -> havale. */
@@ -276,7 +290,11 @@ async function notifyRequester(client, row, message) {
 
 // --- Talep (sakin / yönetici) ---------------------------------------------------------------------------------------------------------
 
-async function insertRequest(client, { siteCode, input, accountParty, kind, requestedBy, actor }) {
+/**
+ * `scopeView`: SAKİN yolunda sakinin görünümü ({ account_party, visible_from }; loadVisibleAccounts `views[]`). Verilirse üst sınır kapsamsız hesap alacağı değil sakinin
+ * Borcum'da GÖRDÜĞÜ alacaktır (residentVisibleCredit); yönetici yolunda null (yönetici dairenin tüm defterini görür).
+ */
+async function insertRequest(client, { siteCode, input, accountParty, kind, requestedBy, actor, scopeView = null }) {
   const fingerprint = requestFingerprint({ apartmentId: input.apartmentId, accountParty, amountMinor: input.amountMinor, note: input.note });
   const existing = await loadRefundByKey(client, siteCode, input.idempotencyKey);
   if (existing) {
@@ -292,7 +310,16 @@ async function insertRequest(client, { siteCode, input, accountParty, kind, requ
     return { replayed: true, row: existing };
   }
   const balance = await accountBalance(client, siteCode, input.apartmentId, accountParty);
-  const credit = creditOf(balance);
+  let credit = creditOf(balance);
+  if (scopeView !== null) {
+    // Sakin yolu: önceki sakinin kapsam dışı borca mahsup edilmiş fazla ödemesinin artığı bu sakine iade edilemez; 409 gövdesindeki `credit_minor` da kapsamsız tutarı sızdırmaz.
+    const todayIsoDate = today();
+    const accountRows = rowsOfView(await loadResidentLedger(client, [siteCode], [input.apartmentId]), scopeView);
+    const visible = residentVisibleCredit(accountRows, { since: viewSinceOf(scopeView, todayIsoDate), today: todayIsoDate });
+    if (visible < credit) {
+      credit = visible;
+    }
+  }
   if (credit === 0n) {
     throw noCredit();
   }
@@ -341,7 +368,7 @@ export async function createMyRefundRequest(authUser, body) {
   return withFinanceTransaction(siteCode, async (client) => {
     await lockApartment(client, siteCode, input.apartmentId);
     await lockActorRow(client, actorInfo);
-    const out = await insertRequest(client, { siteCode, input, accountParty: ownParty, kind: 'resident', requestedBy: userCode, actor: authUser });
+    const out = await insertRequest(client, { siteCode, input, accountParty: ownParty, kind: 'resident', requestedBy: userCode, actor: authUser, scopeView: own });
     return { replayed: out.replayed, refund: mapRefundRow(out.row, { forResident: true }) };
   });
 }

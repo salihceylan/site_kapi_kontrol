@@ -1,7 +1,7 @@
 // Dikkat kaydı: modüllerin "yönetici bir şey yapmalı" sayaçlarını tek bir özet ucuna eklemesi için kayıt defteri.
 //
-// Bir kaynak `registerAttentionSource({ key, module, run })` ile kaydolur. `run(db, siteCode)` -> `{ count, total_minor? } | null` döner
-// (null ya da count 0: gösterilecek bir şey yok). Modülü site için kapalıysa kaynak çalıştırılmaz. Bir kaynağın hatası diğerlerini ve özeti
+// Bir kaynak `registerAttentionSource({ key, module, run })` ile kaydolur. `run(db, siteCode)` -> `{ count, total_minor?, at_least? } | null` döner
+// (null ya da count 0: gösterilecek bir şey yok; at_least true: sayı kesilmiş bir listeden çıktı, "en az" değerdir). Modülü site için kapalıysa kaynak çalıştırılmaz. Bir kaynağın hatası diğerlerini ve özeti
 // bozmaz; o kaynak listeden düşer. Bugün yalnız finans kaynağı var; sonradan eklenenler (dekont, banka satırı, bütçe...) kendi satırını ekler.
 
 import { pool } from '../db.js';
@@ -30,7 +30,14 @@ export async function collectAttention(siteCode, db = pool) {
       const result = await source.run(db, siteCode);
       const count = Number(result?.count ?? 0);
       if (count > 0) {
-        items.push({ key: source.key, module: source.module, count, ...(result.total_minor === undefined ? {} : { total_minor: result.total_minor }) });
+        items.push({
+          key: source.key,
+          module: source.module,
+          count,
+          ...(result.total_minor === undefined ? {} : { total_minor: result.total_minor }),
+          // Kaynak sayıyı kesilmiş bir listeden çıkardıysa (at_least) sayı "en az" değerdir; istemci bunu açıkça yazar.
+          ...(result.at_least === true ? { at_least: true } : {}),
+        });
       }
     } catch (_error) {
       // tek kaynağın hatası özeti bozmaz

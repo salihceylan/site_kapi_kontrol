@@ -10,6 +10,9 @@
 //      (Isletme + Fon + avans = hesaplar toplami), nakit yetersiz, ret (gerekce sakine gorunur), geri alma, iade varken odeme iptali engeli, cift onay yarisi, raporlarda tahakkuk degismez
 //   K17 gecikmede de oneri: kiraci OTURUYOR ama vadesi gecmis, odenmemis borc varsa daire "devredilebilir" adaylar listesinde ve yonetici dikkat satirinda (tenant_debt_overdue_transfer);
 //      devirden sonra listeden duser, geri almada geri gelir; kiraci ayrilmissa reason=exited (gecikme satirina sayilmaz); malik kaydi olmayan daire can_transfer=false
+//   K  dalga B bagimsiz inceleme duzeltmeleri: K17 aday kesimi SUZGECTEN SONRA (limit 2 / 1; pozitif bakiyeli ama gecikmemis daireler gecikmisleri itmez), devir geri alma
+//      CIFT SAYIM korumasi (odenmis kisim borcu ikinci devirle tasininca ilk devir geri alinamaz, toplam degismez), sakin iade ust siniri Borcum'da GORULEN alacak (kapsamsiz
+//      onceki kiraci artigi iade edilemez, 409 govdesi sizdirmaz; yonetici talebi kapsamsiz)
 // Her kontrol `check(ad, kosul, ayrinti)`; en sonda ozet ve cikis kodu (0 = hepsi gecti).
 
 const SERVER = new URL('..', import.meta.url).href;
@@ -45,7 +48,7 @@ const fails = async (fn) => {
     await fn();
     return null;
   } catch (error) {
-    return { status: error.statusCode ?? null, code: error.code ?? null, message: error.message };
+    return { status: error.statusCode ?? null, code: error.code ?? null, message: error.message, extra: error.extra ?? null };
   }
 };
 
@@ -389,6 +392,120 @@ console.log('--- I. alacak iadesi (088) ---');
   const cashBank = await refunds.createManagerRefundRequest({ siteCode: site.code, body: { apartment_id: apt, account_party: 'owner', amount_minor: 100, idempotency_key: key('mrq5') }, actor: MANAGER });
   const viaBank = await refunds.approveRefund({ siteCode: site.code, rawId: cashBank.refund.id, body: { pay_account_id: bank.id, idempotency_key: key('ap5') }, actor: MANAGER });
   check('I14: banka hesabindan iade (yontem havale), hesap bakiyesi eksiye dusebilir', viaBank.refund.pay_method === 'transfer' && viaBank.refund.receipt.snapshot.method === 'transfer' && /^IA-\d{4}-000003$/.test(viaBank.refund.receipt.number), viaBank.refund); // sira: 000001 ilk onay, 000002 yarisin kazanani, 000003 bu iade (kaybeden islem sayac almadi: bosluk yok)
+}
+
+// =====================================================================================================================================
+// K. Dalga B bagimsiz inceleme duzeltmeleri: K17 aday kesimi (suzgecten SONRA), devir geri alma cift sayim korumasi, sakin iade kapsami
+// =====================================================================================================================================
+console.log('--- K. K17 aday kesimi, devir cift sayim korumasi, sakin iade kapsami ---');
+{
+  // K17 aday listesi kesimi: kesim yalniz ADAY olabilecek dairelere uygulanir. Eski sorgu kesimi "kiraci hesabi bakiyesi pozitif" tum dairelere (blok / daire sirasiyla) uyguluyordu;
+  // aylik tahakkuktan sonra hemen her daire pozitif oldugu icin buyuk sitede gecikmis daireler listeden ve dikkat sayacindan sessizce dusuyordu.
+  const site = await mkSite('QA K17 Kesim Sitesi', 5);
+  for (const [index, id] of site.ids.entries()) {
+    await addResident(site, id, 'tenant', await mkUser(`QA Kesim Kiraci ${index}`, 'apartment_owner'));
+  }
+  await addResident(site, site.ids[3], 'owner', await mkUser('QA Kesim Malik 3', 'apartment_owner'));
+  await addResident(site, site.ids[4], 'owner', await mkUser('QA Kesim Malik 4', 'apartment_owner'));
+  // 0, 1: yalniz GELECEK vadeli borc (bakiye pozitif, gecikmis degil); 2: gecmis borc TAMAMEN odenmis + gelecek borc (bakiye pozitif, gecikmis degil); 3: gecikmis 1200; 4: gecikmis 800
+  await insertLedger(site, site.ids[0], { amount: 700, entryDate: TODAY, dueDate: ago(-20), name: 'Gelecek aidat' });
+  await insertLedger(site, site.ids[1], { amount: 900, entryDate: TODAY, dueDate: ago(-10), name: 'Gelecek aidat' });
+  await insertLedger(site, site.ids[2], { amount: 1000, entryDate: ago(50), dueDate: ago(40) });
+  await insertLedger(site, site.ids[2], { kind: 'payment', amount: -1000, entryDate: ago(35), extraCols: ', method', extraVals: ['cash'] });
+  await insertLedger(site, site.ids[2], { amount: 600, entryDate: TODAY, dueDate: ago(-15), name: 'Gelecek aidat' });
+  await insertLedger(site, site.ids[3], { amount: 1200, entryDate: ago(20), dueDate: ago(5) });
+  await insertLedger(site, site.ids[4], { amount: 800, entryDate: ago(20), dueDate: ago(5) });
+  const positive = Number(
+    (await q(`SELECT COUNT(*)::INT AS n FROM (SELECT l.apartment_id FROM ledger_entries l WHERE l.site_code = $1 AND ${accountPartySql('l')} = 'tenant' GROUP BY l.apartment_id HAVING SUM(l.amount_minor) > 0) t`, [site.code])).rows[0].n,
+  );
+  check('K17i0: kurulum: 5 dairenin 5i de kiraci hesabinda POZITIF bakiyeli (eski kesim hepsini sirayla alirdi); yalniz 2si gecikmis', positive === 5, positive);
+  const two = await liability.listTransferCandidates(site.code, new Date(), pool, { limit: 2 });
+  check('K17i: limit 2: gecikmis iki daire (1200, 800) kesilmez (onlarca gecikmemis ama pozitif bakiyeli daire onlari itmez); truncated=false; buyuk tutar once',
+    two.truncated === false && JSON.stringify(two.items.map((i) => [i.apartment_id, i.total_minor])) === JSON.stringify([[site.ids[3], 1200], [site.ids[4], 800]]), two);
+  const one = await liability.listTransferCandidates(site.code, new Date(), pool, { limit: 1 });
+  check('K17j: limit 1: kesilir (truncated=true) ve kalan EN BUYUK tutardir (1200); gecikmemis daireler yer tutmaz', one.truncated === true && one.items.length === 1 && one.items[0].apartment_id === site.ids[3] && one.items[0].total_minor === 1200, one);
+  const att = await liability.tenantDebtOverdueAttention(pool, site.code);
+  check('K17k: dikkat satiri iki gecikmis daireyi sayar (liste kesilmedigi icin at_least yok)', att.count === 2 && att.total_minor === 2000 && !('at_least' in att), att);
+
+  // Gercek olcek (varsayilan limit): 520 pozitif bakiyeli ama gecikmemis daire BLOK SIRASINDA once, 2 gecikmis daire en sonda. Eski sorgu ilk 501 daireyi (hepsi gecikmemis) alip
+  // gecikmisleri dusuruyor, listeyi bos + truncated=true donuyordu; dikkat sayaci 0 (eksik sayiyi tam saniyordu).
+  const big = await mkSite('QA K17 Buyuk Site', 2);
+  const bigBlock = Number((await q(`SELECT id FROM site_blocks WHERE site_code = $1`, [big.code])).rows[0].id);
+  await q(`UPDATE apartments SET sort_order = 1000 + id - $2 WHERE site_code = $1`, [big.code, big.ids[0]]); // 2 gecikmis daire (mkSite) en sonda
+  await q(`INSERT INTO apartments (site_code, block_id, unit_label, sort_order) SELECT $1::BIGINT, $2::BIGINT, 'Toplu ' || n, n FROM generate_series(1, 520) AS n`, [big.code, bigBlock]);
+  await q(
+    `INSERT INTO ledger_entries (site_code, apartment_id, kind, amount_minor, period, entry_date, due_date, definition_name, payer_party, account_party)
+     SELECT $1::BIGINT, a.id, 'charge', 700, $2::DATE, $3::DATE, $4::DATE, 'Gelecek aidat', 'both', 'tenant' FROM apartments a WHERE a.site_code = $1::BIGINT AND a.sort_order <= 520`,
+    [big.code, periodOf(TODAY), TODAY, ago(-20)],
+  );
+  for (const [index, id] of big.ids.entries()) {
+    await addResident(big, id, 'tenant', await mkUser(`QA Buyuk Kiraci ${index}`, 'apartment_owner'));
+    await addResident(big, id, 'owner', await mkUser(`QA Buyuk Malik ${index}`, 'apartment_owner'));
+    await insertLedger(big, id, { amount: index === 0 ? 1500 : 900, entryDate: ago(20), dueDate: ago(5) });
+  }
+  const bigPositive = Number(
+    (await q(`SELECT COUNT(*)::INT AS n FROM (SELECT l.apartment_id FROM ledger_entries l WHERE l.site_code = $1 AND ${accountPartySql('l')} = 'tenant' GROUP BY l.apartment_id HAVING SUM(l.amount_minor) > 0) t`, [big.code])).rows[0].n,
+  );
+  check('K17l0: kurulum: 522 dairenin 522si de kiraci hesabinda pozitif bakiyeli (> varsayilan limit 500); gecikmis olanlar blok sirasinda EN SONDA', bigPositive === 522, bigPositive);
+  const bigList = await liability.listTransferCandidates(big.code);
+  check('K17l: varsayilan limitte (500) bile gecikmis iki daire listede: 1500 ve 900; truncated=false (gecikmemis 520 daire kesimi doldurmaz)',
+    bigList.truncated === false && JSON.stringify(bigList.items.map((i) => [i.apartment_id, i.total_minor])) === JSON.stringify([[big.ids[0], 1500], [big.ids[1], 900]]), { truncated: bigList.truncated, items: bigList.items.slice(0, 3) });
+  const bigAtt = await liability.tenantDebtOverdueAttention(pool, big.code);
+  check('K17m: yonetici dikkat satiri buyuk sitede de iki gecikmis daireyi sayar: count 2, toplam 2400, at_least yok', bigAtt.count === 2 && bigAtt.total_minor === 2400 && !('at_least' in bigAtt), bigAtt);
+}
+{
+  // Devir geri alma cift sayim korumasi: odenmis kisim borcu (kiracida kalan) ikinci bir devirle tasininca ilk devir geri alinamaz. Eski surum sessizce atlayip kiraciya TAM tutari
+  // yeniden yaziyor, ikinci devrin malik borcu yerinde kaliyordu: borc iki hesapta birden (1000 yerine 1500).
+  const site = await mkSite('QA Devir Cift Sayim Sitesi', 1);
+  const [apt] = site.ids;
+  await addResident(site, apt, 'owner', await mkUser('QA Cift Malik', 'apartment_owner'));
+  await addResident(site, apt, 'tenant', await mkUser('QA Cift Kiraci', 'apartment_owner'));
+  await insertLedger(site, apt, { amount: 1000, entryDate: ago(50), dueDate: ago(40) });
+  const payId = await insertLedger(site, apt, { kind: 'payment', amount: -500, entryDate: ago(30), extraCols: ', method', extraVals: ['cash'] });
+  const total = async () => (await balance(site, apt, 'tenant')) + (await balance(site, apt, 'owner'));
+  check('D13a: kurulum: 1000 borc, 500 odeme -> iki hesabin toplami 500', (await total()) === 500);
+  const prev1 = await liability.previewLiabilityTransfer(site.code, apt);
+  const t1 = await liability.createLiabilityTransfer({ siteCode: site.code, rawApartmentId: apt, body: { expected_total_minor: prev1.total_minor, expected_hash: prev1.preview_hash, reason: 'ilk devir', idempotency_key: key('cs1') }, actor: MANAGER });
+  check('D13b: ilk devir: malike 500; kismen odenmis kalemin odenmis kismi (500) kiracida yeni borc olarak kalir; toplam 500', prev1.total_minor === 500 && (await balance(site, apt, 'owner')) === 500 && (await total()) === 500, { prev1, owner: await balance(site, apt, 'owner') });
+  await ledgerService.reverseEntry({ siteCode: site.code, rawId: payId, body: { reason: 'Cek karsiliksiz', idempotency_key: key('cs-pay') }, actor: MANAGER });
+  const prev2 = await liability.previewLiabilityTransfer(site.code, apt);
+  check('D13c: kiracinin odemesi iptal edilince odenmis kisim borcu (500) yeniden devredilebilir; toplam borc 1000', prev2.total_minor === 500 && prev2.item_count === 1 && (await total()) === 1000, prev2);
+  const t2 = await liability.createLiabilityTransfer({ siteCode: site.code, rawApartmentId: apt, body: { expected_total_minor: prev2.total_minor, expected_hash: prev2.preview_hash, reason: 'ikinci devir', idempotency_key: key('cs2') }, actor: MANAGER });
+  check('D13d: ikinci devir: malikte 1000, kiracida 0, toplam 1000', (await balance(site, apt, 'owner')) === 1000 && (await balance(site, apt, 'tenant')) === 0 && (await total()) === 1000);
+  const hist = await liability.listLiabilityTransfers(site.code, apt);
+  check('D13e: gecmis: ilk devir (satiri ikinci devirle tasindi) geri alinabilir DEGIL; ikinci devir geri alinabilir', hist.items.find((i) => i.id === t1.transfer.id)?.reversible === false && hist.items.find((i) => i.id === t2.transfer.id)?.reversible === true, hist);
+  const ledgerRowsBefore = Number((await q(`SELECT COUNT(*)::INT AS n FROM ledger_entries WHERE site_code = $1`, [site.code])).rows[0].n);
+  const blockedFirst = await fails(() => liability.reverseLiabilityTransfer({ siteCode: site.code, rawId: t1.transfer.id, body: { reason: 'ilk devri geri al', idempotency_key: key('cs-rev1') }, actor: MANAGER }));
+  const ledgerRowsAfter = Number((await q(`SELECT COUNT(*)::INT AS n FROM ledger_entries WHERE site_code = $1`, [site.code])).rows[0].n);
+  check('D13f: ilk devrin geri alinmasi 409 LIABILITY_TRANSFER_NOT_REVERSIBLE; hicbir satir yazilmadi; toplam 1000 (cift sayim yok)',
+    blockedFirst?.status === 409 && blockedFirst.code === 'LIABILITY_TRANSFER_NOT_REVERSIBLE' && ledgerRowsAfter === ledgerRowsBefore && (await total()) === 1000 && (await balance(site, apt, 'owner')) === 1000, blockedFirst);
+  await liability.reverseLiabilityTransfer({ siteCode: site.code, rawId: t2.transfer.id, body: { reason: 'ikinci devri geri al', idempotency_key: key('cs-rev2') }, actor: MANAGER });
+  check('D13g: ikinci devir geri alininca toplam 1000 kalir (kiracida 500, malikte 500)', (await total()) === 1000 && (await balance(site, apt, 'tenant')) === 500 && (await balance(site, apt, 'owner')) === 500);
+  const stillBlocked = await fails(() => liability.reverseLiabilityTransfer({ siteCode: site.code, rawId: t1.transfer.id, body: { reason: 'tekrar', idempotency_key: key('cs-rev1b') }, actor: MANAGER }));
+  check('D13h: ilk devir yine geri alinamaz (odenmis kisim borcu ikinci devirle ters cevrilmisti) ve toplam degismez', stillBlocked?.status === 409 && stillBlocked.code === 'LIABILITY_TRANSFER_NOT_REVERSIBLE' && (await total()) === 1000, stillBlocked);
+}
+{
+  // Sakin iade kapsami: sakinin iade ust siniri Borcum'da GORDUGU alacaktir (taşınma ayindan itibaren, mahsuplu). Eski surum dairenin kapsamsiz hesap alacagini kullaniyordu:
+  // onceki kiracinin kapsam disi borca mahsup edilmis fazla odemesinin artigi yeni kiraciya iade edilebiliyor ve 409 govdesinde sizdiriliyordu.
+  const site = await mkSite('QA Iade Kapsam Sitesi', 1);
+  const [apt] = site.ids;
+  const newTenant = await mkUser('QA Yeni Kiraci', 'apartment_owner');
+  await addResident(site, apt, 'tenant', newTenant, { moveIn: periodOf(TODAY) });
+  await addResident(site, apt, 'owner', await mkUser('QA Kapsam Malik', 'apartment_owner'));
+  await insertLedger(site, apt, { amount: 600, entryDate: ago(100), dueDate: ago(90) });
+  await insertLedger(site, apt, { kind: 'payment', amount: -1000, entryDate: ago(80), extraCols: ', method', extraVals: ['cash'] });
+  check('I15a: kurulum: kiraci hesabi -400 (kapsamsiz alacak 400; onceki kiracinin 600 borcuna 1000 odeme)', (await balance(site, apt, 'tenant')) === -400);
+  const mk = (over = {}) => ({ apartment_id: apt, amount_minor: 100, idempotency_key: key('ks'), ...over });
+  const hidden = await fails(() => refunds.createMyRefundRequest(newTenant, mk()));
+  check('I15b: yeni kiraci onceki kiracinin artik alacagini iade EDEMEZ: Borcum alacak gostermiyor -> 409 NO_CREDIT (kapsamsiz 400 sizmaz)', hidden?.status === 409 && hidden.code === 'NO_CREDIT' && hidden.extra === null, hidden);
+  await insertLedger(site, apt, { kind: 'payment', amount: -500, entryDate: TODAY, extraCols: ', method', extraVals: ['cash'] }); // yeni kiracinin KAPSAM ICI fazla odemesi
+  const over = await fails(() => refunds.createMyRefundRequest(newTenant, mk({ amount_minor: 600 })));
+  check('I15c: kapsam ici fazla odeme 500 (hesap alacagi 900): 600 talep 409 REFUND_EXCEEDS_CREDIT ve hata govdesi KAPSAMLI tutari (500) verir, kapsamsiz 900u degil',
+    over?.status === 409 && over.code === 'REFUND_EXCEEDS_CREDIT' && over.extra?.credit_minor === 500, over);
+  const okRequest = await refunds.createMyRefundRequest(newTenant, mk({ amount_minor: 500, idempotency_key: key('ks500') }));
+  check('I15d: kapsamli alacak kadar (500) talep acilir', okRequest.refund.status === 'requested' && okRequest.refund.amount_minor === 500, okRequest.refund);
+  const byManager = await refunds.createManagerRefundRequest({ siteCode: site.code, body: { apartment_id: apt, account_party: 'tenant', amount_minor: 400, idempotency_key: key('ksm') }, actor: MANAGER });
+  check('I15e: yonetici adina talep kapsamsiz kalir: hesap alacagindan (900) bekleyen talep (500) dusulunce kalan 400 talep edilebilir', byManager.refund.status === 'requested' && byManager.refund.amount_minor === 400, byManager.refund);
 }
 
 console.log(`\n${total - failures}/${total} kontrol gecti${failures ? `, ${failures} HATA` : ''}`);

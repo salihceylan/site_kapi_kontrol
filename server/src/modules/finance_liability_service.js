@@ -3,7 +3,8 @@
 // İLKELER
 //  - Devir ASLA kendiliğinden olmaz: yönetici önizlemeyi görüp onaylar (tutar + önizleme özeti gövdede; arada değişirse 409 LIABILITY_TRANSFER_CHANGED).
 //  - Hesap modeli korunur; defter eklemelidir. Kalem bazlı ters kayıt + malik hesabına yeni borç (planlama: finance_liability_plan.js, SAF). Gecikme tazminatı devredilmez.
-//  - Geri alınabilir: malik hesabı borçları ters çevrilir, kiracıya her kalemin TAM tutarı yeniden yazılır. Devirden sonra malik hesabına ödeme girildiyse geri alınamaz (409).
+//  - Geri alınabilir: malik hesabı borçları ters çevrilir, kiracıya her kalemin TAM tutarı yeniden yazılır. Devirden sonra malik hesabına ödeme girildiyse geri alınamaz (409);
+//    devrin yazdığı bir borç satırı sonradan başka bir devirle taşındıysa da geri alınamaz (409; aksi halde o pay iki hesapta birden kalırdı).
 //  - İzli: finance_liability_transfers (kim / ne zaman / kaç kalem / ne kadar / neden) + denetim kaydı (tutar / sayı / kimlik; neden metni ASLA) + defterde source_kind = 'liability_transfer'.
 //  - Yetki: yazma = yönetici / süper; okuma = + kurul (adsız); sakin / görevli 403 (rota katmanı). Kilit sırası finance_tx ile aynı: sites -> finance_post -> apartments -> users -> finans satırları.
 //  - Tüm yazmalar TEK işlemde; yarım kalmaz. Aynı işlem anahtarı = aynı kayıt (200 replayed); farklı gövde = 409 IDEMPOTENCY_CONFLICT.
@@ -37,6 +38,7 @@ import {
   transferRequestFingerprint,
   transferWrites,
 } from './finance_liability_plan.js';
+import { m1Ctes } from './finance_m1.js';
 import { minorToNumber, toBigInt } from './finance_money.js';
 import { accountBalances, accountPartySql, currentTenantSql } from './finance_parties.js';
 import { lockActorRow, recordFinanceAudit, withFinanceTransaction } from './finance_tx.js';
@@ -56,6 +58,11 @@ export const ownerPaidAfterTransfer = () =>
   conflict(
     'LIABILITY_TRANSFER_OWNER_PAID',
     'Devirden sonra ev sahibi hesabına ödeme girilmiş; devir geri alınamaz. Önce o ödemeyi düzeltin ya da fazlasını ayrıca iade edin.',
+  );
+export const transferSuperseded = () =>
+  conflict(
+    'LIABILITY_TRANSFER_NOT_REVERSIBLE',
+    'Bu devrin kalemlerinden biri sonradan başka bir devirle taşındığı için geri alınamaz (borç iki hesapta birden kalırdı). Bakiyeleri kontrol edin; gerekirse ilgili kalemler için yeni bir devir yapın.',
   );
 
 const HASH_PATTERN = /^[0-9a-f]{64}$/;
@@ -259,12 +266,19 @@ export async function listLiabilityTransfers(siteCode, rawApartmentId, db = pool
     const item = mapTransferRow(row);
     let reversible = false;
     if (item.kind === 'transfer' && item.reversed_by_transfer_id === null) {
+      // superseded: devrin yazdığı bir borç satırı sonradan başka bir devirle ters çevrilmiş -> geri alma çift sayım yapardı (reverseLiabilityTransfer 409 verir).
       const first = await db.query(
-        `SELECT MIN(id) AS first_id FROM ledger_entries WHERE site_code = $1 AND source_kind = $2 AND source_id = $3`,
+        `
+          SELECT MIN(l.id) AS first_id,
+                 COALESCE(BOOL_OR(l.kind = 'charge' AND EXISTS (SELECT 1 FROM ledger_entries r WHERE r.reverses_entry_id = l.id)), FALSE) AS superseded
+          FROM ledger_entries l
+          WHERE l.site_code = $1 AND l.source_kind = $2 AND l.source_id = $3
+        `,
         [siteCode, LIABILITY_SOURCE_KIND, item.id],
       );
       const firstId = first.rows?.[0]?.first_id;
-      reversible = firstId === null || firstId === undefined ? false : !(await ownerPaidAfter(db, siteCode, apartmentId, Number(firstId)));
+      const superseded = first.rows?.[0]?.superseded === true;
+      reversible = firstId === null || firstId === undefined || superseded ? false : !(await ownerPaidAfter(db, siteCode, apartmentId, Number(firstId)));
     }
     items.push({ ...item, reversible });
   }
@@ -508,6 +522,10 @@ export async function reverseLiabilityTransfer({ siteCode, rawId, body, actor, n
       throw ownerPaidAfterTransfer();
     }
     const plan = planTransferReversal(rows);
+    if (plan.supersededIds.length > 0) {
+      // Bu devrin yazdığı bir borç satırı sonradan başka bir devirle ters çevrilmiş (ödenmiş kısım borcunun ikinci devri): geri alma o payı iki kez yazardı.
+      throw transferSuperseded();
+    }
     const openPeriod = await resolveOpenPeriod(client, siteCode, now);
     const todayIso = today(now);
     const inserted = await client.query(
@@ -634,17 +652,27 @@ registerAttentionSource({ key: 'tenant_debt_pending_transfer', module: 'finance'
 /** Aday listesinde en çok bu kadar daire değerlendirilir (aşılırsa `truncated: true`). */
 export const CANDIDATE_LIMIT = 500;
 
+/** M1 mahsubu yalnız kiracı hesabında çalışsın (ev sahibi hesabı satırları taranmaz). */
+const TENANT_ACCOUNT_ONLY = ` AND ${ACCOUNT_L} = 'tenant'`;
+
 /**
  * GET liability-transfer/candidates -> { items, count, total_minor, truncated } (salt okunur; hiçbir şey yazmaz).
  * Karar K17: "Borç mutlaka tahsil edilir; kiracı vermezse mal sahibi öder." Devir yalnız kiracı ÇIKIŞINDA değil GECİKMEDE de yönetici önüne açıkça önerilir; yazma yine
  * önizleme + onay + neden + geri alma desenindedir (K1). Aday = kiracı hesabında planLiabilityTransfer'in devredilebilir saydığı en az bir kalemi (vadesi bugün ve öncesi,
  * ödenmemiş, gecikme tazminatı değil) olan daire. `reason`: 'overdue' (güncel kiracı oturuyor, borç gecikmiş) | 'exited' (güncel kiracı yok). `can_transfer`: dairede güncel,
  * etkin bir malik kaydı var (yoksa daire yine listelenir ama devredilemez: önce malik kaydı eklenmeli). Sıra: büyük tutar önce.
+ *
+ * KESİM SÜZGEÇTEN SONRA: `limit` (varsayılan CANDIDATE_LIMIT) yalnız aday olabilecek dairelere uygulanır. SQL, M1 kalanı (finance_m1.m1Ctes; planLiabilityTransfer'in kullandığı
+ * kuralın aynısı) kiracı hesabında > 0 olan, vadesi bugün ve öncesi, tazminat olmayan kalemi bulunan daireleri seçer; kesilirse en büyük tutarlar kalır. Kesim eskiden "bakiyesi
+ * pozitif" tüm dairelere uygulanıyordu (aylık tahakkuktan sonra hemen hepsi) ve büyük sitede gecikmiş daireleri sessizce düşürüyordu. Kesin ayrım yine planLiabilityTransfer'dedir
+ * (SQL süzgeci onun kümesini kapsar; tek fark iade kalemleri: SQL'de sayılır, planda devredilmez).
  */
-export async function listTransferCandidates(siteCode, now = new Date(), db = pool) {
+export async function listTransferCandidates(siteCode, now = new Date(), db = pool, { limit = CANDIDATE_LIMIT } = {}) {
   const todayIso = today(now);
+  const cap = Number.isInteger(limit) && limit > 0 ? limit : CANDIDATE_LIMIT;
   const found = await db.query(
     `
+      WITH ${m1Ctes('$1', '$2', TENANT_ACCOUNT_ONLY)}
       SELECT t.apartment_id, a.unit_label, b.block_name, ${currentTenantSql('a')} AS tenant_present,
              EXISTS (
                SELECT 1 FROM apartment_residencies r
@@ -652,22 +680,21 @@ export async function listTransferCandidates(siteCode, now = new Date(), db = po
                WHERE r.apartment_id = a.id AND r.relation = 'owner' AND r.is_current = TRUE
              ) AS has_owner
       FROM (
-        SELECT l.apartment_id
-        FROM ledger_entries l
-        WHERE l.site_code = $1 AND ${ACCOUNT_L} = 'tenant'
-        GROUP BY l.apartment_id
-        HAVING SUM(l.amount_minor) > 0
+        SELECT rem.apartment_id, SUM(rem.r) AS remaining
+        FROM rem
+        WHERE rem.account_party = 'tenant' AND rem.due <= $2::DATE AND NOT rem.is_lf AND rem.r > 0
+        GROUP BY rem.apartment_id
       ) t
       INNER JOIN apartments a ON a.id = t.apartment_id AND a.site_code = $1
       INNER JOIN site_blocks b ON b.id = a.block_id
-      ORDER BY b.sort_order, a.sort_order, a.id
-      LIMIT ${CANDIDATE_LIMIT + 1}
+      ORDER BY t.remaining DESC, b.sort_order, a.sort_order, a.id
+      LIMIT $3
     `,
-    [siteCode],
+    [siteCode, todayIso, cap + 1],
   );
   const rows = found.rows ?? [];
-  const truncated = rows.length > CANDIDATE_LIMIT;
-  const apartments = rows.slice(0, CANDIDATE_LIMIT);
+  const truncated = rows.length > cap;
+  const apartments = rows.slice(0, cap);
   const ledgers = await loadTenantLedgers(db, siteCode, apartments.map((row) => Number(row.apartment_id)));
   const items = [];
   for (const row of apartments) {
@@ -695,11 +722,18 @@ export async function listTransferCandidates(siteCode, now = new Date(), db = po
   return { items, count: items.length, total_minor: items.reduce((sum, item) => sum + item.total_minor, 0), truncated };
 }
 
-/** Kiracısı OTURAN, kiracı hesabında devredilebilir gecikmiş borcu olan ve malik kaydı bulunan daire sayısı + toplam (kuruş): yöneticiye "malike devredebilirsiniz" önerisi. */
+/**
+ * Kiracısı OTURAN, kiracı hesabında devredilebilir gecikmiş borcu olan ve malik kaydı bulunan daire sayısı + toplam (kuruş): yöneticiye "malike devredebilirsiniz" önerisi.
+ * Aday listesi kesildiyse (`truncated`: en çok CANDIDATE_LIMIT daire değerlendirilir) sayı ve toplam "EN AZ" değerdir: `at_least: true` döner (yönetici eksik sayıyı tam sanmasın).
+ */
 export async function tenantDebtOverdueAttention(db, siteCode, now = new Date()) {
   const result = await listTransferCandidates(siteCode, now, db);
   const actionable = result.items.filter((item) => item.reason === 'overdue' && item.can_transfer);
-  return { count: actionable.length, total_minor: actionable.reduce((sum, item) => sum + item.total_minor, 0) };
+  return {
+    count: actionable.length,
+    total_minor: actionable.reduce((sum, item) => sum + item.total_minor, 0),
+    ...(result.truncated ? { at_least: true } : {}),
+  };
 }
 
 registerAttentionSource({ key: 'tenant_debt_overdue_transfer', module: 'finance', run: (db, siteCode) => tenantDebtOverdueAttention(db, siteCode) });

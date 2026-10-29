@@ -65,6 +65,30 @@ describe('alacak, yöntem ve makbuz numarası', () => {
     assert.equal(refunds.creditOf(5000n), 0n, 'borçlu hesapta alacak yok');
   });
 
+  it('residentVisibleCredit: sakinin iade üst sınırı Borcum\'da GÖRDÜĞÜ alacaktır; önceki sakinin gizli borca mahsup edilmiş fazla ödemesi yeni sakine iade edilemez', () => {
+    const entry = (id, kind, amount, entryDate, anchor, over = {}) => ({ id, kind, amount_minor: String(amount), anchor, entry_date: entryDate, due_date: kind === 'charge' ? entryDate : null, reverses_entry_id: null, ...over });
+    // önceki kiracı: kapsam dışı (temmuz) 600 borç; ağustosta 1000 öder -> 600 borca mahsup, 400 artık (hesap alacağı 400)
+    const old = [entry(1, 'charge', 600, '2026-07-20', '2026-07-01'), entry(2, 'payment', -1000, '2026-08-10', '2026-08-01')];
+    const sinceNew = { since: '2026-10-01', today: '2026-10-29' };
+    assert.equal(refunds.residentVisibleCredit(old, sinceNew), 0n, 'yeni sakin Borcum\'da alacak görmez -> iade edemez (hesap alacağı 400 olsa da)');
+    // yeni sakin kapsam içinde 500 fazla öderse YALNIZ onu görür (900 değil)
+    const withOwn = [...old, entry(3, 'payment', -500, '2026-10-05', '2026-10-01')];
+    assert.equal(refunds.residentVisibleCredit(withOwn, sinceNew), 500n);
+    // kapsam yok (since null = dairenin tüm defteri; yönetici görünümü) hesap alacağıyla aynıdır
+    assert.equal(refunds.residentVisibleCredit(old, { since: null, today: '2026-10-29' }), 400n);
+    // borçlu sakin: alacak yok
+    assert.equal(refunds.residentVisibleCredit([entry(4, 'charge', 900, '2026-10-02', '2026-10-01')], sinceNew), 0n);
+    assert.equal(refunds.residentVisibleCredit([], sinceNew), 0n);
+  });
+
+  it('sakin talebi servis sözleşmesi: üst sınır görünüm kapsamıyla hesaplanır (scopeView), yönetici talebinde kapsamsız kalır; 409 gövdesi kapsamlı tutarı verir (kaynak sözleşmesi)', () => {
+    const code = src('finance_refunds.js');
+    assert.match(code, /insertRequest\(client, \{ siteCode, input, accountParty: ownParty, kind: 'resident', requestedBy: userCode, actor: authUser, scopeView: own \}\)/);
+    assert.match(code, /insertRequest\(client, \{ siteCode, input, accountParty: input\.accountParty, kind: 'manager', requestedBy: actorInfo\.userCode, actor \}\)/, 'yönetici talebi scopeView almaz');
+    assert.match(code, /if \(scopeView !== null\) \{[\s\S]*?residentVisibleCredit\(accountRows, \{ since: viewSinceOf\(scopeView, todayIsoDate\), today: todayIsoDate \}\)[\s\S]*?credit = visible;/);
+    assert.match(code, /throw refundExceedsCredit\(minorToNumber\(available > 0n \? available : 0n\)\)/, 'hata gövdesi `available` (kapsamlı) tutarla kurulur');
+  });
+
   it('payMethodOf: nakit hesap -> nakit, banka -> havale', () => {
     assert.equal(refunds.payMethodOf('cash'), 'cash');
     assert.equal(refunds.payMethodOf('bank'), 'transfer');
@@ -155,6 +179,17 @@ describe('korumalar', () => {
     assert.equal(guard.entryManagedByFlow().code, 'ENTRY_MANAGED_BY_FLOW');
     assert.equal(guard.entryManagedByFlow().statusCode, 409);
     assert.equal(guard.refundBlocksPaymentChange().code, 'REFUND_BLOCKS_PAYMENT_CHANGE');
+  });
+
+  it('devir geri alma: devrin satırı sonradan başka bir devirle taşındıysa 409 LIABILITY_TRANSFER_NOT_REVERSIBLE; geri alma ve geçmiş listesi aynı kuralı kullanır (kaynak sözleşmesi)', async () => {
+    const liability = await import('../src/modules/finance_liability_service.js');
+    const error = liability.transferSuperseded();
+    assert.equal(error.statusCode, 409);
+    assert.equal(error.code, 'LIABILITY_TRANSFER_NOT_REVERSIBLE');
+    const code = src('finance_liability_service.js');
+    assert.match(code, /if \(plan\.supersededIds\.length > 0\) \{[\s\S]*?throw transferSuperseded\(\);/);
+    assert.match(code, /BOOL_OR\(l\.kind = 'charge' AND EXISTS \(SELECT 1 FROM ledger_entries r WHERE r\.reverses_entry_id = l\.id\)\)/);
+    assert.match(code, /firstId === null \|\| firstId === undefined \|\| superseded \? false/);
   });
 
   it('hasApprovedRefund: site + daire + hesap ile yalnız ONAYLI (geri alınmamış) iadeyi arar', async () => {

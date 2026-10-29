@@ -128,7 +128,8 @@ function applyTransfer(ledger, transferId, items, party = 'tenant') {
   return out;
 }
 
-function applyReversal(all, transferId, reverseTransferId) {
+/** Bir devrin geri alma planı (servisin loadTransferLedger girdisi: devrin yazdığı satırlar + ters çevrilen asıllar). */
+function reversalPlanOf(all, transferId) {
   const reversedBy = new Set(all.filter((r) => r.kind === 'reversal').map((r) => r.reversesId));
   const rows = all
     .filter((r) => r.sourceKind === 'liability_transfer' && r.sourceId === transferId)
@@ -140,7 +141,11 @@ function applyReversal(all, transferId, reverseTransferId) {
       reversedBy: reversedBy.has(r.id) ? 1 : null,
       original: r.kind === 'reversal' ? (() => { const o = all.find((x) => x.id === r.reversesId); return { id: o.id, amount: o.amount, dueDate: o.dueDate, definitionName: o.definitionName, fund: o.fund }; })() : null,
     }));
-  const undo = plan.planTransferReversal(rows);
+  return plan.planTransferReversal(rows);
+}
+
+function applyReversal(all, transferId, reverseTransferId) {
+  const undo = reversalPlanOf(all, transferId);
   const out = [];
   for (const id of undo.reverseIds) {
     const o = all.find((x) => x.id === id);
@@ -220,5 +225,33 @@ describe('devir ve geri alma (bellek içi defter simülasyonu)', () => {
     assert.deepEqual(undo.reinstate.map((r) => r.fund), ['capital', 'operating']);
     const already = rows.map((r) => (r.kind === 'charge' ? { ...r, reversedBy: 9 } : r));
     assert.deepEqual(plan.planTransferReversal(already).reverseIds, [], 'zaten ters çevrilmiş borç tekrar seçilmez');
+    assert.deepEqual(plan.planTransferReversal(already).supersededIds, rows.filter((r) => r.kind === 'charge').map((r) => r.id).sort((a, b) => a - b), 'başka işlemle ters çevrilmiş borç satırları supersededIds\'te işaretlenir');
+    assert.deepEqual(undo.supersededIds, [], 'dokunulmamış devirde işaretli satır yok');
+  });
+
+  it('ÇİFT SAYIM koruması: ödenmiş kısım borcu sonradan başka bir devirle taşındıysa ilk devir geri alınamaz (supersededIds); koruma olmasaydı borç iki hesapta kalırdı', () => {
+    // 1000 borç, 500 ödeme -> T1: 500 malike, ödenmiş kısım (500) kiracıda yeni borç olarak kalır
+    const c = row({ dueDate: '2026-08-10' });
+    const p = pay(500);
+    const ledger = [c, p].map((r) => ({ ...r, party: 'tenant' }));
+    const t1 = applyTransfer(ledger, 1, plan.planLiabilityTransfer(ledger, { today: TODAY }).items);
+    const paidPartCharge = t1.find((r) => r.kind === 'charge' && r.party === 'tenant');
+    const ownerCharge = t1.find((r) => r.kind === 'charge' && r.party === 'owner');
+    assert.equal(paidPartCharge.amount, 500n);
+    // kiracının ödemesi iptal edilir (ters kayıt): ödenmiş kısım borcu artık ödenmemiş; ikinci devir onu da taşır
+    const cancel = { id: nextId++, kind: 'reversal', party: 'tenant', amount: 500n, reversesId: p.id, dueDate: null, entryDate: TODAY, sourceKind: null };
+    const afterCancel = [...ledger, ...t1, cancel];
+    const second = plan.planLiabilityTransfer(afterCancel.filter((r) => r.party === 'tenant'), { today: TODAY });
+    assert.deepEqual(second.items.map((i) => [i.entryId, i.remainingMinor]), [[paidPartCharge.id, 500n]], 'ödenmiş kısım borcu şimdi devredilebilir');
+    const all = [...afterCancel, ...applyTransfer(afterCancel, 2, second.items)];
+    const total = (rows) => balanceOf(rows, 'tenant') + balanceOf(rows, 'owner');
+    assert.equal(total(all), 1000n, 'iki devirden sonra toplam borç hâlâ 1000');
+
+    const undo = reversalPlanOf(all, 1);
+    assert.deepEqual(undo.supersededIds, [paidPartCharge.id], 'T1\'in ödenmiş kısım borcu T2 ile ters çevrilmiş: işaretli');
+    assert.deepEqual(undo.reverseIds, [ownerCharge.id], 'yalnız malik borcu hâlâ canlı');
+    // Servis supersededIds doluyken 409 verir; bu planı yine de uygulasaydık borç çoğalırdı:
+    const naive = applyReversal(all, 1, 3);
+    assert.equal(total([...all, ...naive]), 1500n, 'koruma yoksa: 500 iki yerde (T2\'nin malik borcu + tam tutarla yeniden yazılan kiracı borcu)');
   });
 });
