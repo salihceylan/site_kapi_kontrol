@@ -11572,13 +11572,13 @@
       ]
     },
     {
-      "id": "F79",
+      "id": "F83",
       "baslik": "Dosya Deposu yalnız Google Drive’a yükler (200 MB sunucu kotası kalktı)",
       "durum": "hazir",
       "ozet": "Belgeler artık yalnız sitenin Google Drive’ına yüklenir. Drive bağlı olmayan site dosya yükleyemez (sunucu 409 DRIVE_REQUIRED: “Dosya yüklemek için önce Google Drive’ı bağlayın”; eski uygulama sürümü de aynı iletiyi görür) ve “Belge Yükle” düğmesi pasiftir. “… MB / 200 MB” sunucu kotası ve DOCUMENTS_SITE_QUOTA_BYTES (belge alanı için) kalktı; sunucu diski yalnız anlık aktarım tamponudur (SHA-256 doğrulamalı Drive aktarımı, teyitten sonra geçici dosya silinir). Dosyalar Drive’da özel kalır; içerik sunucu üzerinden, yetki denetimiyle akıtılır (paylaşım bağlantısı yok). Yalnız Drive’a kaydı teyit edilmiş dosya açılır; aktarımı süren dosya “Drive’a aktarılıyor” görünür ve tıklanamaz. Mevcut sunucu belgeleri okunur kalır. Migration 116 (document_versions.drive_file_id, server_copy). Eski belgelerin Drive’a otomatik taşınması bu sürümde YOKTUR (sonraki iş).",
       "maddeler": [
         {
-          "id": "F79.01",
+          "id": "F83.01",
           "baslik": "Drive bağlı değilken yükleme kapalı; bağlıyken Drive’a gider",
           "adimlar": [
             "Drive’ı bağlı OLMAYAN bir test sitesinin yöneticisiyle Dosya Deposu ekranını açın; “Belge Yükle” düğmesine ve altındaki nota bakın.",

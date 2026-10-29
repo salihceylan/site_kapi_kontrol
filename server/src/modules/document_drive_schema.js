@@ -1,4 +1,4 @@
-// Dosya Deposu yalnız-Drive modeli şeması: 116. migrations/116_document_drive_only.sql ile AYNI ifadeler, AYNI sırayla.
+// Dosya Deposu yalnız-Drive modeli şeması: 116. migrations/119_document_drive_only.sql ile AYNI ifadeler, AYNI sırayla.
 // Yalnız ekleyici: document_versions.drive_file_id (drive_files.id; FK yok), server_copy (varsayılan TRUE = mevcut sürümlerin dosyası sunucuda). Eski sunucu sürümü sütunları yok sayar.
 // Katalog eksik diyorsa, kendi otomatik onaylı ifadesiyle, lock_timeout 2 sn + 40P01/55P03'te yeniden denemeyle çalışır. db.js'i İÇE AKTARMAZ.
 
