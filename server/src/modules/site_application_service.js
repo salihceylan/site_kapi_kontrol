@@ -23,6 +23,7 @@ import { pool } from '../db.js';
 import { sendSiteApplicationDecisionEmail, sendSiteApplicationNotificationEmail } from '../mailer.js';
 import { normalizeSetupSiteInput, shouldPromoteToSiteManager } from '../services/membership_rules.js';
 import { createSiteWithStructure, userHasOwnerLink } from '../services/site_setup_core.js';
+import { applyApprovalFreePeriod } from './site_free_period.js';
 import {
   SITE_APPLICATION_NAME_UNIQUE_INDEXES,
   SITE_NAME_UNIQUE_INDEXES,
@@ -857,6 +858,10 @@ export async function approveSiteApplication({ applicationId, note, actor }) {
       subscription: { source: 'manual_approval', applicationId: id },
     });
     const siteCode = Number(created.site.id);
+
+    // 6b. Kampanya "şimdi abone olana 2 ay ücretsiz" (114): abonelik başlangıcı = bugün, ücretsiz dönem sonu = bugün + 2 ay (varsayılan; süper kullanıcı sonradan düzenler).
+    // Aynı işlemde yazılır; ortak kurulum çekirdeğine (anlık kurulum) dokunmaz.
+    await applyApprovalFreePeriod(client, siteCode);
 
     // 7. Başvuru onaylandı.
     await client.query(

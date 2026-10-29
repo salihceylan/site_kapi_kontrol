@@ -143,6 +143,7 @@ function install(config = {}) {
     if (/^UPDATE devices SET site_code/.test(sql) || /^UPDATE site_doors SET assigned_device_id/.test(sql)) return ok();
     if (/^INSERT INTO site_subscriptions/.test(sql)) return ok();
     if (/^INSERT INTO site_modules/.test(sql)) return ok();
+    if (/^UPDATE sites SET subscription_started_at/.test(sql)) return ok(); // kampanya (114): "şimdi abone olana 2 ay ücretsiz"
     if (/^UPDATE site_applications SET/.test(sql)) return ok();
     if (/^SELECT full_name, email FROM users WHERE user_code = \$1 LIMIT 1$/.test(sql)) return ok([{ full_name: 'Ayşe Başvuran', email: 'ayse@example.com' }]);
     // iptal
@@ -583,6 +584,7 @@ describe('approveSiteApplication', () => {
       /^UPDATE devices SET site_code/,
       /^UPDATE site_doors SET assigned_device_id/,
       /^INSERT INTO site_subscriptions/,
+      /^UPDATE sites SET subscription_started_at/,
       /^UPDATE site_applications SET status = 'approved'/,
       /^INSERT INTO audit_log/,
       /^COMMIT/,
@@ -606,7 +608,14 @@ describe('approveSiteApplication', () => {
 
     assert.deepEqual(find(db.log, /^INSERT INTO site_subscriptions/).params, [900, 'manual_approval', 'manual_approval', 41]);
     assert.match(find(db.log, /^INSERT INTO site_subscriptions/).sql, /VALUES \(\$1, \$2, 'active', \$3, \$4\)/);
-    const update = find(db.log, /^UPDATE site_applications SET status = 'approved'/);
+    // kampanya (114): onayla birlikte aynı işlemde bugün + 2 ay; yalnız iki alan da boşsa (ezmez), yalnız yeni site satırı
+    const campaign = find(db.log, /^UPDATE sites SET subscription_started_at/);
+    assert.deepEqual(campaign.params, [900, 2]);
+    assert.match(campaign.sql, /subscription_started_at = CURRENT_DATE/);
+    assert.match(campaign.sql, /free_until = \(CURRENT_DATE \+ make_interval\(months => \$2\)\)::DATE/);
+    assert.match(campaign.sql, /WHERE site_code = \$1 AND subscription_started_at IS NULL AND free_until IS NULL$/);
+    assert.ok(indexOfSql(db.log, /^UPDATE sites SET subscription_started_at/) < indexOfSql(db.log, /^COMMIT/));
+    const update =find(db.log, /^UPDATE site_applications SET status = 'approved'/);
     assert.deepEqual(update.params, [41, 1, 'Uygun', 900]);
     assert.match(update.sql, /decision_source = 'super_user'/);
     const audit = find(db.log, /^INSERT INTO audit_log/);
@@ -723,7 +732,7 @@ describe('approveSiteApplication', () => {
   });
 
   it('yarıda hata (herhangi bir adımda): ROLLBACK, COMMIT YOK, bağlantı bırakılır, hata sızdırılmaz biçimde yukarı çıkar', async () => {
-    const steps = [/^INSERT INTO sites/, /^INSERT INTO site_manager_sites/, /^INSERT INTO site_memberships/, /^UPDATE users SET role/, /^INSERT INTO site_blocks/, /^INSERT INTO apartments/, /^INSERT INTO site_doors/, /^UPDATE devices SET site_code/, /^INSERT INTO site_modules/, /^INSERT INTO site_subscriptions/, /^UPDATE site_applications SET status = 'approved'/];
+    const steps = [/^INSERT INTO sites/, /^INSERT INTO site_manager_sites/, /^INSERT INTO site_memberships/, /^UPDATE users SET role/, /^INSERT INTO site_blocks/, /^INSERT INTO apartments/, /^INSERT INTO site_doors/, /^UPDATE devices SET site_code/, /^INSERT INTO site_modules/, /^INSERT INTO site_subscriptions/, /^UPDATE sites SET subscription_started_at/, /^UPDATE site_applications SET status = 'approved'/];
     for (const failOn of steps) {
       const db = install({ row: storedRow({ device_uid: 'A0B1C2D3E4F5' }), failOn });
       await assert.rejects(() => approveSiteApplication({ applicationId: 41, actor: superUser }), (error) => error.code === 'XX000' && !isPlatformError(error), String(failOn));

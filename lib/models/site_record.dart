@@ -36,6 +36,10 @@ class SiteRecord {
     this.managementType = ManagementType.apartmentSite,
     this.managementTypeLabel = 'Apartman ve Site',
     this.managementTerms = ManagementTerms.defaults,
+    this.subscriptionStartedAt,
+    this.freeUntil,
+    this.freePeriodState = 'none',
+    this.freePeriodDaysLeft,
   });
 
   final int id;
@@ -77,6 +81,52 @@ class SiteRecord {
 
   /// Türün arayüz terimleri (`management_terms`, F9); sunucu göndermezse varsayılan (Daire / Sakin / ...).
   final ManagementTerms managementTerms;
+
+  /// Kampanya "şimdi abone olana 2 ay ücretsiz" (sunucu 114): aboneliğin başladığı gün; kampanyadan önceki sitelerde null.
+  final DateTime? subscriptionStartedAt;
+
+  /// Ücretsiz dönemin SON günü (o gün dahil); tanımsızsa null.
+  final DateTime? freeUntil;
+
+  /// Sunucunun İstanbul takvimiyle hesapladığı durum: 'none' | 'active' | 'ended' (alan yoksa 'none').
+  final String freePeriodState;
+
+  /// Ücretsiz dönem sürüyorsa bugünden son güne gün sayısı (son gün = 0); aksi null.
+  final int? freePeriodDaysLeft;
+
+  bool get hasActiveFreePeriod => freePeriodState == 'active' && freeUntil != null;
+
+  bool get hasEndedFreePeriod => freePeriodState == 'ended' && freeUntil != null;
+
+  /// 'GG.AA.YYYY' (tarih alanı yoksa null).
+  static String? formatDay(DateTime? day) {
+    if (day == null) return null;
+    final d = day.day.toString().padLeft(2, '0');
+    final m = day.month.toString().padLeft(2, '0');
+    return '$d.$m.${day.year}';
+  }
+
+  /// Süper kullanıcı rozeti: sürüyorsa "Ücretsiz dönem: GG.AA.YYYY tarihine kadar", bittiyse "Ücretsiz dönem bitti", tanımsızsa null.
+  String? get freePeriodBadgeLabel {
+    if (hasActiveFreePeriod) return 'Ücretsiz dönem: ${formatDay(freeUntil)} tarihine kadar';
+    if (hasEndedFreePeriod) return 'Ücretsiz dönem bitti';
+    return null;
+  }
+
+  /// Site yöneticisi için küçük bilgi satırı; tanımsızsa null.
+  String? get freePeriodManagerNote {
+    if (hasActiveFreePeriod) {
+      final left = freePeriodDaysLeft;
+      final tail = left == null
+          ? ''
+          : left == 0
+              ? ' (son gün)'
+              : ' ($left gün kaldı)';
+      return 'Ücretsiz dönem: ${formatDay(freeUntil)} tarihine kadar$tail';
+    }
+    if (hasEndedFreePeriod) return 'Ücretsiz dönem sona erdi.';
+    return null;
+  }
 
   bool get isApproved => approvalStatus == 'approved';
 
@@ -145,6 +195,10 @@ class SiteRecord {
     ManagementType? managementType,
     String? managementTypeLabel,
     ManagementTerms? managementTerms,
+    DateTime? subscriptionStartedAt,
+    DateTime? freeUntil,
+    String? freePeriodState,
+    int? freePeriodDaysLeft,
   }) {
     return SiteRecord(
       id: id ?? this.id,
@@ -180,6 +234,10 @@ class SiteRecord {
       managementType: managementType ?? this.managementType,
       managementTypeLabel: managementTypeLabel ?? this.managementTypeLabel,
       managementTerms: managementTerms ?? this.managementTerms,
+      subscriptionStartedAt: subscriptionStartedAt ?? this.subscriptionStartedAt,
+      freeUntil: freeUntil ?? this.freeUntil,
+      freePeriodState: freePeriodState ?? this.freePeriodState,
+      freePeriodDaysLeft: freePeriodDaysLeft ?? this.freePeriodDaysLeft,
     );
   }
 
@@ -242,6 +300,19 @@ class SiteRecord {
               ? rawTypeLabel.trim()
               : type.label,
       managementTerms: ManagementTerms.fromJson(json['management_terms']),
+      subscriptionStartedAt: _day(json['subscription_started_at']),
+      freeUntil: _day(json['free_until']),
+      freePeriodState: json['free_period_state'] is String
+          ? json['free_period_state'] as String
+          : 'none',
+      freePeriodDaysLeft: (json['free_period_days_left'] as num?)?.toInt(),
     );
+  }
+
+  /// 'YYYY-MM-DD' (ya da tam ISO) -> tarih; boş / bozuksa null.
+  static DateTime? _day(Object? raw) {
+    if (raw == null) return null;
+    final text = raw.toString();
+    return text.isEmpty ? null : DateTime.tryParse(text);
   }
 }

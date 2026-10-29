@@ -43,6 +43,7 @@ import { ensureTeamSchema } from './modules/team_schema.js';
 import { ensureDriveSchema } from './modules/drive_schema.js';
 import { ensureDriveSourceSchema } from './modules/drive_source_schema.js';
 import { ensureDriveHealthSchema } from './modules/drive_health_schema.js';
+import { ensureSiteFreePeriodSchema } from './modules/site_free_period_schema.js';
 import { ensureMeteringFieldSchema } from './modules/metering_field_schema.js';
 import { ensureMeteringSchema } from './modules/metering_schema.js';
 import { ensureManagementCompanySchema } from './modules/management_company_schema.js';
@@ -2064,6 +2065,9 @@ export async function ensureDbSchema() {
     // 112 (Drive saglik gostergesi + kota izleme + aktarim dogrulamasi, P2-2 / P2-17 / P2-18): 060'tan (site_drive_connections, drive_files, drive_pending_uploads) SONRA; dev blokta DEGIL; katalog kontrolu + her adim
     // kendi otomatik onayli ifadesi (drive_health_schema.js = migrations/112). Her sey varsa hicbir ifade / kilit yok; yalniz ekleyici sutunlar, mevcut satirlara dokunmaz.
     await ensureDriveHealthSchema(client);
+    // 114 (kampanya "simdi abone olana 2 ay ucretsiz": sites.subscription_started_at + sites.free_until): sites'tan SONRA; dev blokta DEGIL; katalog kontrolu + her adim kendi otomatik onayli
+    // ifadesi (site_free_period_schema.js = migrations/114). Her sey varsa hicbir ifade / kilit yok; yalniz ekleyici DATE sutunlari, mevcut sitelere dokunmaz (NULL = kampanyadan once).
+    await ensureSiteFreePeriodSchema(client);
     // 100 (is takibi kategorileri + fotograf yeniden kullanim indeksi): 042 (work_items) ve 047 (work_item_attachments) SONRASI; dev blokta DEGIL; katalog kontrolu + her adim kendi
     // otomatik onayli ifadesi (work_categories_schema.js = migrations/100). Her sey varsa hicbir ifade / kilit yok; varsayilan dort kategori her site icin ilk kullanimda tohumlanir (veri adimi yok).
     await ensureWorkCategoriesSchema(client);
