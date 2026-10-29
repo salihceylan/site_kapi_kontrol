@@ -4437,11 +4437,11 @@ Kampanya: şimdi abone olan siteye ilk 2 ay ücretsiz. Site başvurusu onaylanı
   - **Nasıl Test Edilir:** Rol: Proje sahibi. Ön koşul: Tanıtım sitesi derlenmiş ve FTP ile yayınlanmış (ana oturum yapar). Tanıtım sitesi derlenip yayınlandıktan sonra ana sayfada #paketler başlığının altına bakın. Şeridi 320 px dar ekranda ve masaüstünde, açık ve koyu temada görün. Fiyat kartlarına ve hesaplayıcıya bakın.
   - **Beklenen Sonuç:** Başlığın altında, fiyat kartlarının üstünde tek cümlelik “Şimdi abone olun: ilk 2 ay ücretsiz” şeridi görünür; her genişlikte ve iki temada okunur. Fiyat rakamları ve hesaplayıcı değişmemiştir (hesaplayıcı ücretsiz dönemi düşmez); “ücretsiz” sözcüğü sitede başka hiçbir yerde geçmez.
 
-## 156. 💬 SMS ve WhatsApp Bağlantısı, Site Başına (2026-10-29, migration 117)
+## 158. 💬 SMS ve WhatsApp Bağlantısı, Site Başına (2026-10-29, migration 117)
 
-- [ ] **156.1. NetGSM bağlantısı kaydı ve sınaması (F79.01):**
+- [ ] **158.1. NetGSM bağlantısı kaydı ve sınaması (F82.01):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Sunucuda migration 117 ve MESSAGING_SECRET_KEY; kendi NetGSM hesabınız. Duyurular ekranının en altındaki "SMS ve WhatsApp bağlantısı" kartında NetGSM bilgilerinizi kaydedin ve "Bağlantıyı sına"ya basın. Sonra şifreyi yanlış girip yeniden sınayın.
   - **Beklenen Sonuç:** Doğru bilgide "Kimlik doğrulandı" ve bakiye görünür, telefona SMS gelmez. Yanlış şifrede sağlayıcı hata kodu ve açıklaması çıkar. Kullanıcı kodu ve şifre ekranda görünmez.
-- [ ] **156.2. WhatsApp iskeleti dürüstlüğü ve kurul salt okunur (F79.01):**
+- [ ] **158.2. WhatsApp iskeleti dürüstlüğü ve kurul salt okunur (F82.01):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi ve yönetim kurulu üyesi. WhatsApp bölümüne işletme adı, numara kimliği ve belirteç girip "Alanları doğrula"ya basın. Kurul üyesiyle aynı karta bakın. "Kaldır"ı onay penceresiyle deneyin.
   - **Beklenen Sonuç:** "WhatsApp sürücüsü bu sürümde doğrulama modunda; Meta hesabı bağlanınca etkinleşir." notu görünür, sınama bağlı olduğunu söylemez. Kurul üyesi yalnız görür. Kaldırma onay ister.
