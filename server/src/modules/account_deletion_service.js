@@ -58,6 +58,7 @@ import { logResidencyEvent } from './residency_log.js';
 import { peopleLockKey } from './people_sync.js';
 import { deletePushDataForUser } from './push_devices.js';
 import { ownOpenDebts } from './finance_read_service.js';
+import { cancelUserPendingRefunds } from './account_refund_cleanup.js';
 import { workItemsKeepNote } from './work_tracking_common.js';
 import { attachmentsKeepNote } from './work_attachments_common.js';
 import { releaseAssignedWorkItems } from './work_tracking_service.js';
@@ -728,6 +729,9 @@ async function runAttempt(userCode) {
     const releasedReservations = await releaseUserReservations(client, userCode);
     if (releasedReservations.reservations > 0) summary.reservations_cancelled = releasedReservations.reservations;
     if (releasedReservations.requests > 0) summary.concierge_cancelled = releasedReservations.requests;
+    // Alacak iadesi (088, K4 kararı): bekleyen iade talebi silmeyi ENGELLEMEZ; talep iptal edilir ve işlem izine yazılır (onaylı / reddedilmiş talepler değişmez). Tablo yoksa atlanır.
+    const cancelledRefunds = await cancelUserPendingRefunds(client, userCode);
+    if (cancelledRefunds > 0) summary.refunds_cancelled = cancelledRefunds;
     // Anket ve oylama (044): oylar KALIR, hesap bagi koparilir (anonimlesir); actigi anketlerde created_by NULL. Kullanici satiri tombstone oldugu icin FK SET NULL kendiliginden calismaz. Tablo yoksa atlanir.
     const surveyData = await anonymizeUserSurveyData(client, userCode);
     if (surveyData.votes > 0) summary.survey_votes_anonymized = surveyData.votes;

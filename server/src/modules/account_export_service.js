@@ -53,6 +53,7 @@ export const EXPORT_EXCLUDED = Object.freeze([
   'Makbuzlar ve tahsilat belgeleri: yalnız sizin görebildiğiniz dairelerin makbuz özeti (numara, tür, durum, tutar, tarih, daire) "receipts" bölümündedir; makbuzu düzenleyen yönetici adı, ödeyen kişinin adı (başkasına ait olabilir), doğrulama kodu ve belge anlık görüntüsü site yönetiminin resmi kaydı olduğu için dışarıda bırakılmıştır (makbuz belgeniz uygulamadaki makbuz ekranından alınır).',
   'Aidat hatırlatma e-postaları: yalnız size gönderilen hatırlatmaların geçmişi (tarih, ton, durum) "finance_reminders_received" bölümündedir; e-postanın metni, tutarlar, yönetici notu ve gönderim adresinin özeti yönetim / güvenlik kaydı olduğu için dışarıda bırakılmıştır.',
   PUSH_EXPORT_EXCLUDED_NOTE,
+  'İade talepleri: yalnız SİZİN açtığınız fazla ödeme iade taleplerinin (daire, hesap türü, tutar, notunuz, durum, tarihler ve onaylandıysa iade makbuzu numarası) "refund_requests_made" bölümünde yer alır; yönetimin ret gerekçesi, iadenin çıkış yapıldığı kasa / banka hesabı, geri alma nedeni ve yönetici adına açılan talepler site yönetiminin kaydı olduğu için dışarıda bırakılmıştır.',
   'Rezervasyon ve konsiyerj: yalnız SİZİN yaptığınız rezervasyonların (alan adı, zaman, durum, notunuz) "reservations_made" bölümünde ve açtığınız konsiyerj taleplerinin (kategori, notunuz, istenen zaman, durum) "concierge_requests_made" bölümünde yer alır; yönetimin gerekçe ve kısa notları ile başkalarının rezervasyonları site yönetiminin kaydı olduğu için dışarıda bırakılmıştır.',
   'İş takibi talepleri: yalnız sizin açtığınız taleplerin başlığı, açıklaması, kategorisi, konumu, durumu ve tarihleri "work_items_created" bölümünde, yalnız SİZİN yazdığınız yorumlar "work_item_comments" bölümündedir; başkalarının yorumları, yönetimin diğer iç notları, öncelik, atanan görevli, hedef tarih ve durum geçmişi satırları site yönetiminin kaydı olduğu için dışarıda bırakılmıştır.',
   'Anket ve oylama: yalnız SİZİN kullandığınız oylar (anket başlığı, seçtiğiniz seçenek metni, oy zamanı) "survey_votes_cast" bölümündedir; başkalarının oyları, sonuç sayımları ve anketin hedef kitlesi site yönetiminin kaydı olduğu için dışarıda bırakılmıştır.',
@@ -298,6 +299,19 @@ const SQL = Object.freeze({
     WHERE v.user_code = $1
     ORDER BY v.id DESC
   `,
+  // İade taleplerim (Dalga B, K4): YALNIZ sizin açtığınız (requested_by_kind = 'resident') talepler; tutar, hesap türü, durum, tarihler, kendi notunuz ve onaylandıysa iade makbuzu numarası.
+  // Yönetimin ret gerekçesi, çıkış yapılan kasa / banka hesabı, geri alma nedeni ve karar veren yönetici SEÇİLMEZ; yönetici adına açılan talepler de bu bölüme girmez.
+  refundRequestsMade: `
+    SELECT r.id, r.site_code, s.name AS site_name, b.block_name, a.unit_label, r.account_party, r.amount_minor::TEXT AS amount_minor, r.status, r.note,
+           r.requested_at, r.resolved_at, to_char(r.pay_date, 'YYYY-MM-DD') AS pay_date,
+           CASE WHEN r.receipt_no IS NULL THEN NULL ELSE 'IA-' || r.receipt_year::TEXT || '-' || lpad(r.receipt_no::TEXT, 6, '0') END AS receipt_number
+    FROM finance_refunds r
+    INNER JOIN sites s ON s.site_code = r.site_code
+    INNER JOIN apartments a ON a.id = r.apartment_id
+    LEFT JOIN site_blocks b ON b.id = a.block_id
+    WHERE r.requested_by = $1 AND r.requested_by_kind = 'resident'
+    ORDER BY r.id DESC
+  `,
   announcements: `
     SELECT a.id, a.site_code, s.name AS site_name, a.title, a.body, a.importance, a.published_at, r.read_at, r.hidden_at
     FROM site_people sp
@@ -364,7 +378,8 @@ const OPTIONAL_OBJECTS_SQL = `
     (to_regclass('public.work_items') IS NOT NULL) AS has_work_items,
     (to_regclass('public.work_item_attachments') IS NOT NULL) AS has_work_item_attachments,
     (to_regclass('public.reservations') IS NOT NULL) AS has_reservations,
-    (to_regclass('public.survey_votes') IS NOT NULL) AS has_surveys
+    (to_regclass('public.survey_votes') IS NOT NULL) AS has_surveys,
+    (to_regclass('public.finance_refunds') IS NOT NULL) AS has_refunds
 `;
 
 const CONSENT_KEYS = ['id', 'document_id', 'version', 'accepted_at', 'source'];
@@ -467,6 +482,8 @@ export async function collectPersonalData(userCode, { now = new Date(), db = poo
     const reservationsMade = optional.has_reservations === true ? await bounded('reservations_made', SQL.reservationsMade, EXPORT_ROW_LIMITS.reservations_made) : [];
     const conciergeRequestsMade = optional.has_reservations === true ? await bounded('concierge_requests_made', SQL.conciergeRequestsMade, EXPORT_ROW_LIMITS.concierge_requests_made) : [];
     const surveyVotesCast = optional.has_surveys === true ? await bounded('survey_votes_cast', SQL.surveyVotesCast, EXPORT_ROW_LIMITS.survey_votes_cast) : [];
+    // İade talepleriniz (088, K4): YALNIZ sizin açtıklarınız; yönetim kararının iç alanları HARİÇ. Tablo yoksa boş ve sorgu gitmez.
+    const refundRequestsMade = optional.has_refunds === true ? await bounded('refund_requests_made', SQL.refundRequestsMade, EXPORT_ROW_LIMITS.refund_requests_made) : [];
     // Kartlı geçiş kartlarınız (046): kendi kişi kaydınız üzerinden; UID maskeli (maskCardUid). Tablo yoksa boş.
     const hasAccessCards = (await client.query(`SELECT (to_regclass('public.access_cards') IS NOT NULL) AS has_access_cards`)).rows?.[0]?.has_access_cards === true;
     const accessCards = hasAccessCards ? await bounded('access_cards', SQL.accessCards, 200) : [];
@@ -544,6 +561,7 @@ export async function collectPersonalData(userCode, { now = new Date(), db = poo
       reservations_made: withIds(reservationsMade),
       concierge_requests_made: withIds(conciergeRequestsMade),
       survey_votes_cast: surveyVotesCast.map((row) => ({ survey_title: row.survey_title, option_text: row.option_text ?? null, voted_at: row.voted_at })),
+      refund_requests_made: withIds(refundRequestsMade).map((row) => ({ ...row, amount_minor: numOrNull(row.amount_minor) })),
       site_applications: withIds(applications),
       guest_passes: withIds(guestPasses),
       door_events: withIds(doorEvents),
@@ -602,6 +620,7 @@ export const SHRINKABLE_SECTIONS = Object.freeze([
   'vehicles',
   'devices',
   'survey_votes_cast',
+  'refund_requests_made',
 ]);
 
 /**

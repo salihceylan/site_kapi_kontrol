@@ -52,6 +52,7 @@ export const EXPORT_ROW_LIMITS = Object.freeze({
   finance_reminders_received: 300,
   receipts: 200,
   survey_votes_cast: 500,
+  refund_requests_made: 200,
 });
 
 // --- Silme engelleri --------------------------------------------------------------------------------------

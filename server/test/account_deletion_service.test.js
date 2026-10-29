@@ -99,6 +99,9 @@ function handle(sql, params) {
   if (/^SELECT COUNT\(\*\)::INTEGER AS n FROM work_item_events WHERE actor_user_code = \$1 AND event_type = 'comment'$/.test(sql)) return ok([{ n: state.optionalCounts.workItemComments ?? 0 }]);
   if (/^SELECT to_regclass\('public\.work_items'\) IS NOT NULL AS present$/.test(sql)) return ok([{ present: state.optionalTables.work === true }]);
   if (/^UPDATE work_items SET assigned_to = NULL, updated_at = NOW\(\) WHERE id IN/.test(sql)) return ok((state.releasedItems ?? []).map((id) => ({ id: String(id), site_code: '1000000001' })));
+  if (/^SELECT to_regclass\('public\.finance_refunds'\) IS NOT NULL AS present$/.test(sql)) return ok([{ present: state.optionalTables.refunds === true }]);
+  if (/^SELECT id, site_code, apartment_id, amount_minor::TEXT AS amount_minor FROM finance_refunds WHERE requested_by = \$1/.test(sql)) return ok(state.pendingRefunds ?? []);
+  if (/^UPDATE finance_refunds SET status = 'cancelled'/.test(sql)) return ok([], 1);
   if (/^SELECT COUNT\(\*\)::INTEGER AS n FROM finance_reminder_items i /.test(sql)) return ok([{ n: state.optionalCounts.pendingReminders ?? 0 }]);
   if (/^UPDATE finance_reminder_items i SET /.test(sql)) return { rows: (state.reminderRunIds ?? []).map((id) => ({ run_id: String(id) })), rowCount: state.reminderRows };
   if (/^DELETE FROM push_devices WHERE id IN/.test(sql)) return ok([], 2);
@@ -415,6 +418,43 @@ describe('hesap silme: kimliksizleştirme ifadesi', () => {
     assert.ok(indexOf(/^UPDATE users SET full_name = \$2/) >= 0 && indexOf(/^UPDATE users SET full_name = \$2/) < indexOf(/^UPDATE work_items SET assigned_to = NULL/), 'kullanıcı satırından SONRA');
     const audit = log.find((entry) => /^INSERT INTO audit_log/.test(entry.sql) && entry.params[3] === 'account.deleted');
     assert.equal(JSON.parse(audit.params[7]).work_items_released, 2);
+  });
+
+  it('Alacak iadesi (K4): bekleyen iade talebi silmeyi ENGELLEMEZ; silmede talep iptal edilir (yalnız kendi açtığı, bekleyen), kullanıcı satırından SONRA ve işlem izine (nedenli, notsuz) yazılır', async () => {
+    state.optionalTables = { refunds: true };
+    state.pendingRefunds = [
+      { id: '7', site_code: '1000000002', apartment_id: '501', amount_minor: '25000' },
+      { id: '8', site_code: '1000000002', apartment_id: '501', amount_minor: '1500' },
+    ];
+    const result = await performAccountDeletion(12345);
+    const select = sqls(/FROM finance_refunds WHERE requested_by = \$1/)[0];
+    assert.ok(select.sql.includes("requested_by_kind = 'resident' AND status = 'requested' ORDER BY id FOR UPDATE"), 'yalnız kendi açtığı bekleyen talepler, id sırasıyla kilitli');
+    assert.deepEqual(select.params, [12345]);
+    const updates = sqls(/^UPDATE finance_refunds SET status = 'cancelled'/);
+    assert.deepEqual(updates.map((entry) => entry.params), [['7', 12345], ['8', 12345]]);
+    assert.ok(updates[0].sql.includes("WHERE id = $1 AND status = 'requested'"), 'yalnız hâlâ bekleyen satır');
+    assert.equal(result.summary.refunds_cancelled, 2);
+    assert.ok(indexOf(/^UPDATE users SET full_name = \$2/) < indexOf(/^UPDATE finance_refunds SET status = 'cancelled'/), 'kullanıcı satırından SONRA');
+    const audits = log.filter((entry) => /^INSERT INTO audit_log/.test(entry.sql) && entry.params[3] === 'finance.refund.cancelled');
+    assert.equal(audits.length, 2, 'her iptal işlem izine yazılır');
+    const details = JSON.parse(audits[0].params[7]);
+    assert.deepEqual(details, { apartment_id: 501, amount_minor: 25000, reason: 'account_deleted' });
+    const final = log.find((entry) => /^INSERT INTO audit_log/.test(entry.sql) && entry.params[3] === 'account.deleted');
+    assert.equal(JSON.parse(final.params[7]).refunds_cancelled, 2);
+  });
+
+  it('Alacak iadesi (K4): finance_refunds tablosu yoksa ya da bekleyen talep yoksa güncelleme gitmez ve özet anahtarı eklenmez', async () => {
+    state.optionalTables = {};
+    state.pendingRefunds = [{ id: '7', site_code: '1000000002', apartment_id: '501', amount_minor: '25000' }];
+    let result = await performAccountDeletion(12345);
+    assert.equal(sqls(/FROM finance_refunds/).length, 0);
+    assert.equal('refunds_cancelled' in result.summary, false);
+    log = [];
+    state = defaultState();
+    state.optionalTables = { refunds: true };
+    result = await performAccountDeletion(12345);
+    assert.equal(sqls(/^UPDATE finance_refunds/).length, 0);
+    assert.equal('refunds_cancelled' in result.summary, false);
   });
 
   it('İş Takibi (P2): work_items tablosu yoksa atama sorgusu gitmez ve özet anahtarı eklenmez', async () => {

@@ -671,6 +671,32 @@ describe('dışa aktarma: veri toplama şekli (sahte tutarlı görünüm)', () =
     assert.ok(EXPORT_EXCLUDED.some((line) => /^İş takibi fotoğrafları:/.test(line) && /"work_item_attachments_uploaded"/.test(line) && /içeriği \(görüntü\)/.test(line)));
   });
 
+  it('İade talepleri (088, K4): "refund_requests_made" yalnız kullanıcının KENDİ açtığı talepler (tutar kuruş sayı, durum, tarihler, kendi notu, makbuz no); ret gerekçesi / çıkış hesabı / geri alma nedeni / karar veren YOK; tablo yoksa boş ve sorgu gitmez; kısaltılabilir; hariç tutulanlar anılır', async () => {
+    const snapshot = fakeSnapshot({
+      optional: { has_refunds: true },
+      refundRequestsMade: [
+        { id: '9', site_code: '1000000001', site_name: 'Gül Sitesi', block_name: 'A Blok', unit_label: 'Daire 1', account_party: 'owner', amount_minor: '25000', status: 'approved', note: 'Fazla ödeme', requested_at: new Date('2026-10-20T08:00:00Z'), resolved_at: new Date('2026-10-21T08:00:00Z'), pay_date: '2026-10-21', receipt_number: 'IA-2026-000003' },
+      ],
+    });
+    const { data } = await collectPersonalData(12345, { db: snapshot.db });
+    assert.deepEqual(data.refund_requests_made, [
+      { id: 9, site_code: 1000000001, site_name: 'Gül Sitesi', block_name: 'A Blok', unit_label: 'Daire 1', account_party: 'owner', amount_minor: 25000, status: 'approved', note: 'Fazla ödeme', requested_at: new Date('2026-10-20T08:00:00Z'), resolved_at: new Date('2026-10-21T08:00:00Z'), pay_date: '2026-10-21', receipt_number: 'IA-2026-000003' },
+    ]);
+    const sent = snapshot.log.find((entry) => /FROM finance_refunds r/.test(entry.sql));
+    assert.equal(sent.params[0], 12345, 'çağıranın kodu');
+    // yönetim kararının iç alanları ve başkasının kimliği seçilmez
+    for (const pattern of [/reject_reason/i, /reversal_reason/i, /pay_account/i, /resolved_by/i, /reversed_by/i, /requested_by,/i, /receipt_snapshot/i, /receipt_code/i, /receipt_sha256/i, /decision_key/i, /idempotency_key/i, /JOIN\s+users/i]) {
+      assert.equal(pattern.test(exportInternals.SQL.refundRequestsMade), false, String(pattern));
+    }
+    // yalnız sakinin kendi açtığı talepler; yönetici adına açılanlar girmez; en yeni önce
+    assert.match(norm(exportInternals.SQL.refundRequestsMade), /WHERE r\.requested_by = \$1 AND r\.requested_by_kind = 'resident' ORDER BY r\.id DESC$/);
+    const absent = fakeSnapshot();
+    assert.deepEqual((await collectPersonalData(12345, { db: absent.db })).data.refund_requests_made, []);
+    assert.equal(absent.log.some((entry) => /FROM finance_refunds/.test(entry.sql)), false, 'tablo yoksa sorgu gitmez');
+    assert.ok(SHRINKABLE_SECTIONS.includes('refund_requests_made'));
+    assert.ok(EXPORT_EXCLUDED.some((line) => /^İade talepleri:/.test(line) && /"refund_requests_made"/.test(line) && /ret gerekçesi/.test(line)));
+  });
+
   it('kullanıcı satırı yoksa 401 ACCOUNT_DELETED ve işlem kapatılır', async () => {
     const { log, db } = fakeSnapshot({ user: [] });
     await assert.rejects(collectPersonalData(12345, { db }), (error) => error.code === 'ACCOUNT_DELETED');

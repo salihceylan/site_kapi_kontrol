@@ -16,6 +16,7 @@ import 'package:site_kapi_kontrol/ui/widgets/finance_fund_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/my_finance_4b_parts.dart';
+import 'package:site_kapi_kontrol/ui/widgets/my_refund_section.dart';
 import 'package:site_kapi_kontrol/ui/widgets/pay_sheet.dart';
 import 'package:site_kapi_kontrol/ui/widgets/payment_notice_status.dart';
 
@@ -455,6 +456,12 @@ class _MyFinanceCardState extends State<MyFinanceCard> {
             const SizedBox(height: AppSpace.md),
             MyFinanceActions(authService: widget.authService!, item: item, now: widget.now),
             PaymentNoticeStatusLine(authService: widget.authService!, apartmentId: item.apartmentId),
+            // Fazla ödeme (alacak) iadesi (K4): talep + durum; alacak ve talep yoksa hiçbir şey çizilmez.
+            MyRefundSection(
+              key: ValueKey<String>('my_finance_refund_${item.siteCode}_${item.apartmentId}'),
+              authService: widget.authService!,
+              item: item,
+            ),
           ],
           // İP-1A: salt okunur kiracı hesabı (borç sorumlusu "malik ve kiracı" olan dairede malike); kendi hesabından AYRI.
           for (final account in item.readOnlyAccounts) ...[

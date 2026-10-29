@@ -17,6 +17,7 @@ import 'package:site_kapi_kontrol/models/finance_4b.dart';
 import 'package:site_kapi_kontrol/models/finance_charts.dart';
 import 'package:site_kapi_kontrol/models/finance_funds.dart';
 import 'package:site_kapi_kontrol/models/finance_liability.dart';
+import 'package:site_kapi_kontrol/models/finance_refund.dart';
 import 'package:site_kapi_kontrol/models/fund_models.dart';
 import 'package:site_kapi_kontrol/models/late_fee_models.dart';
 import 'package:site_kapi_kontrol/models/period_report_models.dart';
@@ -2423,6 +2424,242 @@ class FakeFinance4bApi extends Finance4bApi {
       }
     }
     throw ApiException('Devir kaydı bulunamadı.', statusCode: 404, code: 'LIABILITY_TRANSFER_NOT_FOUND');
+  }
+
+  // --- Alacak iadesi (K4) --------------------------------------------------------------------
+  // Sunucuyu taklit eder (docs/PLATFORM_FINANS.md "Alacak iadesi"): sakin ve yönetici uçları AYNI satırları okur; talep alacakla sınırlanır, onay Hesaptan çıkış + makbuz
+  // yazar (nakit Hesapta bakiye yetmezse 409 CASH_INSUFFICIENT), ret gerekçe ister, geri alma makbuzu iptal sayar.
+  final List<Map<String, dynamic>> refundRows = <Map<String, dynamic>>[];
+
+  /// Sakinin Borcum'da gördüğü alacak (kuruş); `createMyRefundRequest` bunu bekleyen taleplerle birlikte sınar. 0: 409 NO_CREDIT.
+  int refundCreditMinor = 0;
+  Object? refundListError;
+  Object? refundWriteError;
+  F4Gate? refundListGate;
+  int _refundNextId = 1;
+  int _refundReceiptNo = 1;
+  final Map<String, int> _refundRequestKeys = <String, int>{};
+
+  Map<String, dynamic> addRefund({
+    int? id,
+    int apartmentId = 301,
+    String label = 'A Blok - 5',
+    int amount = 25000,
+    String status = 'requested',
+    String kind = 'resident',
+    String party = 'owner',
+    String? note,
+    String? rejectReason,
+  }) {
+    final row = <String, dynamic>{
+      'id': id ?? _refundNextId++,
+      'apartment_id': apartmentId,
+      'apartment_label': label,
+      'account_party': party,
+      'amount_minor': amount,
+      'status': status,
+      'requested_by_kind': kind,
+      'requested_at': '2026-10-28T08:00:00.000Z',
+      'resolved_at': status == 'requested' ? null : '2026-10-28T09:00:00.000Z',
+      'reject_reason': rejectReason,
+      'note': note,
+      'pay_date': null,
+      'receipt': null,
+      'reversed_at': null,
+      'pay_account_id': null,
+      'pay_account_name': null,
+      'pay_method': null,
+      'reversal_reason': null,
+    };
+    refundRows.insert(0, row);
+    return row;
+  }
+
+  Map<String, dynamic>? _refund(int id) {
+    for (final row in refundRows) {
+      if (row['id'] == id) return row;
+    }
+    return null;
+  }
+
+  int get _pendingRefundMinor => refundRows.where((r) => r['status'] == 'requested').fold<int>(0, (a, r) => a + (r['amount_minor'] as int));
+
+  @override
+  Future<RefundRequest> createMyRefundRequest({
+    required String token,
+    required int apartmentId,
+    required int amountMinor,
+    String? note,
+    required String idempotencyKey,
+  }) async {
+    await _enter('createMyRefundRequest', <String, Object?>{'apartment_id': apartmentId, 'amount_minor': amountMinor, 'note': note, 'key': idempotencyKey});
+    final error = refundWriteError;
+    if (error != null) {
+      refundWriteError = null;
+      throw error;
+    }
+    final replay = _refundRequestKeys[idempotencyKey];
+    if (replay != null) return RefundRequest.fromJson(_refund(replay)!);
+    if (refundCreditMinor <= 0) throw f4Coded('NO_CREDIT', 409);
+    if (amountMinor > refundCreditMinor - _pendingRefundMinor) throw f4Coded('REFUND_EXCEEDS_CREDIT', 409);
+    final row = addRefund(apartmentId: apartmentId, amount: amountMinor, note: note);
+    _refundRequestKeys[idempotencyKey] = row['id'] as int;
+    return RefundRequest.fromJson(row);
+  }
+
+  @override
+  Future<List<RefundRequest>> listMyRefundRequests({required String token, int? apartmentId}) async {
+    await _enter('listMyRefundRequests');
+    final error = refundListError;
+    if (error != null) throw error;
+    return <RefundRequest>[
+      for (final row in refundRows)
+        if (row['requested_by_kind'] == 'resident' && (apartmentId == null || row['apartment_id'] == apartmentId)) RefundRequest.fromJson(row),
+    ];
+  }
+
+  @override
+  Future<RefundRequest> cancelMyRefundRequest({required String token, required int refundId}) async {
+    await _enter('cancelMyRefundRequest', <String, Object?>{'refund_id': refundId});
+    final error = refundWriteError;
+    if (error != null) {
+      refundWriteError = null;
+      throw error;
+    }
+    final row = _refund(refundId);
+    if (row == null) throw f4Coded('REFUND_NOT_FOUND', 404);
+    if (row['status'] != 'requested') throw f4Coded('REFUND_NOT_PENDING', 409);
+    row['status'] = 'cancelled';
+    row['resolved_at'] = '2026-10-29T09:00:00.000Z';
+    return RefundRequest.fromJson(row);
+  }
+
+  @override
+  Future<RefundPage> listRefunds({
+    required String token,
+    required int siteCode,
+    String status = 'requested',
+    int? apartmentId,
+    int? beforeId,
+    int limit = 50,
+  }) async {
+    await _enter('listRefunds');
+    await refundListGate?.future;
+    final error = refundListError;
+    if (error != null) throw error;
+    final filtered = <Map<String, dynamic>>[
+      for (final row in refundRows)
+        if ((status == 'all' || row['status'] == status) && (beforeId == null || (row['id'] as int) < beforeId)) row,
+    ];
+    final page = filtered.take(limit).toList();
+    final pending = refundRows.where((r) => r['status'] == 'requested').toList();
+    return RefundPage.fromJson(<String, dynamic>{
+      'items': page,
+      'pending_count': pending.length,
+      'pending_total_minor': pending.fold<int>(0, (a, r) => a + (r['amount_minor'] as int)),
+      'next_before_id': filtered.length > limit && page.isNotEmpty ? page.last['id'] : null,
+    });
+  }
+
+  @override
+  Future<RefundRequest> approveRefund({
+    required String token,
+    required int siteCode,
+    required int refundId,
+    required int payAccountId,
+    required String idempotencyKey,
+  }) async {
+    await _enter('approveRefund', <String, Object?>{'refund_id': refundId, 'pay_account_id': payAccountId, 'key': idempotencyKey});
+    final error = refundWriteError;
+    if (error != null) {
+      refundWriteError = null;
+      throw error;
+    }
+    final row = _refund(refundId);
+    if (row == null) throw f4Coded('REFUND_NOT_FOUND', 404);
+    if (row['status'] != 'requested') throw f4Coded('REFUND_NOT_PENDING', 409);
+    final account = _account(payAccountId);
+    if (account == null) throw f4Coded('ACCOUNT_NOT_FOUND', 404);
+    final amount = row['amount_minor'] as int;
+    if (account['kind'] == 'cash' && (account['balance_minor'] as int) < amount) throw f4Coded('CASH_INSUFFICIENT', 409);
+    account['balance_minor'] = (account['balance_minor'] as int) - amount;
+    final number = 'IA-2026-${(_refundReceiptNo++).toString().padLeft(6, '0')}';
+    row
+      ..['status'] = 'approved'
+      ..['resolved_at'] = '2026-10-29T09:00:00.000Z'
+      ..['pay_date'] = '2026-10-29'
+      ..['pay_account_id'] = payAccountId
+      ..['pay_account_name'] = account['name']
+      ..['pay_method'] = account['kind'] == 'cash' ? 'cash' : 'transfer'
+      ..['receipt'] = <String, dynamic>{
+        'number': number,
+        'issued_on': '2026-10-29',
+        'verification_code': 'KOD12345',
+        'status': 'active',
+        'snapshot': <String, dynamic>{
+          'v': 1,
+          'kind': 'refund',
+          'paid_on': '2026-10-29',
+          'method': account['kind'] == 'cash' ? 'cash' : 'transfer',
+          'site': <String, dynamic>{'name': 'Gül Sitesi'},
+          'apartment': <String, dynamic>{'label': row['apartment_label']},
+          'payee': <String, dynamic>{'party': row['account_party'], 'name': 'Ayşe Yılmaz'},
+          'from_account': <String, dynamic>{'name': account['name']},
+          'issuer': <String, dynamic>{'name': 'Yönetici'},
+        },
+      };
+    return RefundRequest.fromJson(row);
+  }
+
+  @override
+  Future<RefundRequest> rejectRefund({
+    required String token,
+    required int siteCode,
+    required int refundId,
+    required String reason,
+    required String idempotencyKey,
+  }) async {
+    await _enter('rejectRefund', <String, Object?>{'refund_id': refundId, 'reason': reason, 'key': idempotencyKey});
+    final error = refundWriteError;
+    if (error != null) {
+      refundWriteError = null;
+      throw error;
+    }
+    final row = _refund(refundId);
+    if (row == null) throw f4Coded('REFUND_NOT_FOUND', 404);
+    if (row['status'] != 'requested') throw f4Coded('REFUND_NOT_PENDING', 409);
+    row
+      ..['status'] = 'rejected'
+      ..['resolved_at'] = '2026-10-29T09:00:00.000Z'
+      ..['reject_reason'] = reason;
+    return RefundRequest.fromJson(row);
+  }
+
+  @override
+  Future<RefundRequest> reverseRefund({
+    required String token,
+    required int siteCode,
+    required int refundId,
+    required String reason,
+    required String idempotencyKey,
+  }) async {
+    await _enter('reverseRefund', <String, Object?>{'refund_id': refundId, 'reason': reason, 'key': idempotencyKey});
+    final error = refundWriteError;
+    if (error != null) {
+      refundWriteError = null;
+      throw error;
+    }
+    final row = _refund(refundId);
+    if (row == null) throw f4Coded('REFUND_NOT_FOUND', 404);
+    if (row['status'] != 'approved') throw f4Coded('REFUND_NOT_APPROVED', 409);
+    final account = _account(row['pay_account_id'] as int);
+    if (account != null) account['balance_minor'] = (account['balance_minor'] as int) + (row['amount_minor'] as int);
+    row
+      ..['status'] = 'reversed'
+      ..['reversed_at'] = '2026-10-29T10:00:00.000Z'
+      ..['reversal_reason'] = reason;
+    (row['receipt'] as Map<String, dynamic>)['status'] = 'cancelled';
+    return RefundRequest.fromJson(row);
   }
 }
 
