@@ -729,7 +729,7 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | Kullanici kodu olusturulurken cakisma oldu, tekrar deneyin. | [server/src/utils/validators.js:413](../server/src/utils/validators.js#L413) |
 | Kullanici rolu ile secilen rol uyusmuyor. | [server/src/routes/auth_routes.js:877](../server/src/routes/auth_routes.js#L877) |
 | Kullanici silinemedi. | [server/src/routes/admin_routes.js:693](../server/src/routes/admin_routes.js#L693) |
-| liability transfer reversal: beklenen ters kayıt sayısı yazılamadı | [server/src/modules/finance_liability_service.js:560](../server/src/modules/finance_liability_service.js#L560) |
+| liability transfer reversal: beklenen ters kayıt sayısı yazılamadı | [server/src/modules/finance_liability_service.js:554](../server/src/modules/finance_liability_service.js#L554) |
 | liability transfer: beklenen defter satırı sayısı yazılamadı | [server/src/modules/finance_liability_service.js:455](../server/src/modules/finance_liability_service.js#L455) |
 | Log senkronizasyonu basarisiz. | [server/src/routes/door_log_routes.js:267](../server/src/routes/door_log_routes.js#L267) |
 | logs bir dizi olmali. | [server/src/routes/door_log_routes.js:232](../server/src/routes/door_log_routes.js#L232) |
@@ -889,8 +889,8 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | Uygulamaya davet bağlantısı gönderildi. | [server/src/modules/people_bulk_service.js:118](../server/src/modules/people_bulk_service.js#L118) |
 | Üye daireden başarıyla çıkarıldı. | [server/src/services/membership_service.js:1920](../server/src/services/membership_service.js#L1920) |
 | Vekalet en fazla bir yıl geçerli olabilir. | [server/src/modules/apartment_mgmt_rules.js:259](../server/src/modules/apartment_mgmt_rules.js#L259) |
-| Veritabanı sağlık bilgisi alınamadı. | [server/src/services/maintenance_service.js:228](../server/src/services/maintenance_service.js#L228) |
-| Veritabanı temizliği başarısız oldu. | [server/src/services/maintenance_service.js:114](../server/src/services/maintenance_service.js#L114) |
+| Veritabanı sağlık bilgisi alınamadı. | [server/src/services/maintenance_service.js:255](../server/src/services/maintenance_service.js#L255) |
+| Veritabanı temizliği başarısız oldu. | [server/src/services/maintenance_service.js:141](../server/src/services/maintenance_service.js#L141) |
 | Veritabani saglik bilgisi alinamadi. | [server/src/routes/admin_routes.js:1844](../server/src/routes/admin_routes.js#L1844) |
 | Veritabani temizligi sirasinda hata olustu. | [server/src/routes/admin_routes.js:1859](../server/src/routes/admin_routes.js#L1859) |
 | yalnızca https:// ile başlayan bağlantı kabul edilir. | [server/src/modules/platform_config_service.js:104](../server/src/modules/platform_config_service.js#L104) |

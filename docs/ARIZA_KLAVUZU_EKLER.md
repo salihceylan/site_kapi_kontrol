@@ -511,7 +511,7 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 
 ## Ek E — Kaynak dosya kapsamı
 
-1175 kaynak dosyanın **249**'i en az bir arıza girişine bağlı, **1**'i yalnız dosya haritasında, **925**'i klavuzda hiç geçmiyor. Bir dosya hiç geçmiyorsa onunla ilgili arızayı `--where` ile arayın.
+1177 kaynak dosyanın **249**'i en az bir arıza girişine bağlı, **1**'i yalnız dosya haritasında, **927**'i klavuzda hiç geçmiyor. Bir dosya hiç geçmiyorsa onunla ilgili arızayı `--where` ile arayın.
 
 | Dosya | Satır | Bağlı girişler | Dosya haritası |
 | --- | --- | --- | --- |
@@ -1251,7 +1251,7 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [server/scripts/qa_finance4b.mjs](../server/scripts/qa_finance4b.mjs) | 402 | — | — |
 | [server/scripts/qa_metering_field.mjs](../server/scripts/qa_metering_field.mjs) | 125 | — | — |
 | [server/scripts/qa_pending_registration_pg.mjs](../server/scripts/qa_pending_registration_pg.mjs) | 276 | [test-gercek-pg-qa](ariza-klavuzu/50-arac-test-ve-surec.md#test-gercek-pg-qa) | 50-arac-test-ve-surec |
-| [server/scripts/qa_platform_pg.mjs](../server/scripts/qa_platform_pg.mjs) | 11988 | — | — |
+| [server/scripts/qa_platform_pg.mjs](../server/scripts/qa_platform_pg.mjs) | 11990 | — | — |
 | [server/scripts/qa_platform_rules_section.mjs](../server/scripts/qa_platform_rules_section.mjs) | 318 | — | — |
 | [server/scripts/qa_push_section.mjs](../server/scripts/qa_push_section.mjs) | 727 | — | — |
 | [server/scripts/qa_reservation_section.mjs](../server/scripts/qa_reservation_section.mjs) | 928 | — | — |
@@ -1281,8 +1281,9 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [server/src/middlewares/request_logger.js](../server/src/middlewares/request_logger.js) | 64 | [sunucu-istek-gunlugu-ve-basliklar](ariza-klavuzu/10-sunucu-api.md#sunucu-istek-gunlugu-ve-basliklar) | 10-sunucu-api, 20-sunucu-altyapi-ve-yayin |
 | [server/src/middlewares/security_headers.js](../server/src/middlewares/security_headers.js) | 23 | [sunucu-istek-gunlugu-ve-basliklar](ariza-klavuzu/10-sunucu-api.md#sunucu-istek-gunlugu-ve-basliklar) | 10-sunucu-api |
 | [server/src/modules/account_common.js](../server/src/modules/account_common.js) | 170 | [sunucu-profil-parola-degistirme-hata](ariza-klavuzu/10-sunucu-api.md#sunucu-profil-parola-degistirme-hata) | — |
-| [server/src/modules/account_deletion_service.js](../server/src/modules/account_deletion_service.js) | 1013 | — | — |
+| [server/src/modules/account_deletion_service.js](../server/src/modules/account_deletion_service.js) | 1032 | — | — |
 | [server/src/modules/account_export_service.js](../server/src/modules/account_export_service.js) | 711 | — | — |
+| [server/src/modules/account_neighbor_cleanup.js](../server/src/modules/account_neighbor_cleanup.js) | 51 | — | — |
 | [server/src/modules/account_password_guard.js](../server/src/modules/account_password_guard.js) | 87 | [sunucu-profil-parola-degistirme-hata](ariza-klavuzu/10-sunucu-api.md#sunucu-profil-parola-degistirme-hata) | — |
 | [server/src/modules/account_refund_cleanup.js](../server/src/modules/account_refund_cleanup.js) | 60 | — | — |
 | [server/src/modules/account_routes.js](../server/src/modules/account_routes.js) | 98 | — | — |
@@ -1313,6 +1314,7 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [server/src/modules/apartment_mgmt_schema.js](../server/src/modules/apartment_mgmt_schema.js) | 327 | — | — |
 | [server/src/modules/apartment_mgmt_service.js](../server/src/modules/apartment_mgmt_service.js) | 1324 | — | — |
 | [server/src/modules/apartment_mgmt_vehicles.js](../server/src/modules/apartment_mgmt_vehicles.js) | 339 | — | — |
+| [server/src/modules/apartment_owner_notice.js](../server/src/modules/apartment_owner_notice.js) | 56 | — | — |
 | [server/src/modules/apartment_owners_schema.js](../server/src/modules/apartment_owners_schema.js) | 337 | — | — |
 | [server/src/modules/apartment_owners_service.js](../server/src/modules/apartment_owners_service.js) | 517 | — | — |
 | [server/src/modules/apartment_pin_schema.js](../server/src/modules/apartment_pin_schema.js) | 283 | — | — |
@@ -1446,7 +1448,7 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [server/src/modules/finance_distribution.js](../server/src/modules/finance_distribution.js) | 317 | — | — |
 | [server/src/modules/finance_documents_adapter.js](../server/src/modules/finance_documents_adapter.js) | 179 | — | — |
 | [server/src/modules/finance_enforcement.js](../server/src/modules/finance_enforcement.js) | 141 | — | — |
-| [server/src/modules/finance_exit_notice.js](../server/src/modules/finance_exit_notice.js) | 88 | — | — |
+| [server/src/modules/finance_exit_notice.js](../server/src/modules/finance_exit_notice.js) | 74 | — | — |
 | [server/src/modules/finance_expense_analysis.js](../server/src/modules/finance_expense_analysis.js) | 267 | — | — |
 | [server/src/modules/finance_expense_documents.js](../server/src/modules/finance_expense_documents.js) | 332 | — | — |
 | [server/src/modules/finance_expense_nature_schema.js](../server/src/modules/finance_expense_nature_schema.js) | 91 | — | — |
@@ -1468,7 +1470,7 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [server/src/modules/finance_liability_plan.js](../server/src/modules/finance_liability_plan.js) | 138 | — | — |
 | [server/src/modules/finance_liability_routes.js](../server/src/modules/finance_liability_routes.js) | 74 | — | — |
 | [server/src/modules/finance_liability_schema.js](../server/src/modules/finance_liability_schema.js) | 248 | — | — |
-| [server/src/modules/finance_liability_service.js](../server/src/modules/finance_liability_service.js) | 740 | — | — |
+| [server/src/modules/finance_liability_service.js](../server/src/modules/finance_liability_service.js) | 734 | — | — |
 | [server/src/modules/finance_m1.js](../server/src/modules/finance_m1.js) | 91 | — | — |
 | [server/src/modules/finance_money.js](../server/src/modules/finance_money.js) | 87 | — | — |
 | [server/src/modules/finance_opening_routes.js](../server/src/modules/finance_opening_routes.js) | 43 | — | — |
@@ -1671,7 +1673,7 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [server/src/services/firmware_release_service.js](../server/src/services/firmware_release_service.js) | 808 | [sunucu-firmware-yukleme-imza](ariza-klavuzu/10-sunucu-api.md#sunucu-firmware-yukleme-imza) | 10-sunucu-api |
 | [server/src/services/geofence_service.js](../server/src/services/geofence_service.js) | 335 | [sunucu-geofence-konum-reddi](ariza-klavuzu/10-sunucu-api.md#sunucu-geofence-konum-reddi), [sunucu-geofence-menzil-disi](ariza-klavuzu/10-sunucu-api.md#sunucu-geofence-menzil-disi), [akis-bulut-kapi-acma](ariza-klavuzu/60-akislar.md#akis-bulut-kapi-acma) | 10-sunucu-api, 60-akislar |
 | [server/src/services/local_token_service.js](../server/src/services/local_token_service.js) | 82 | [sunucu-yerel-token-rotasyonu](ariza-klavuzu/10-sunucu-api.md#sunucu-yerel-token-rotasyonu), [akis-kapi-yetkileri-izinler](ariza-klavuzu/61-akislar-devam.md#akis-kapi-yetkileri-izinler) | 10-sunucu-api |
-| [server/src/services/maintenance_service.js](../server/src/services/maintenance_service.js) | 232 | [sunucu-dogrulama-404-bekleyen-kayit-yok](ariza-klavuzu/10-sunucu-api.md#sunucu-dogrulama-404-bekleyen-kayit-yok), [sunucu-kapi-gecis-logu-yazilmadi](ariza-klavuzu/10-sunucu-api.md#sunucu-kapi-gecis-logu-yazilmadi), [altyapi-bakim-temizlik-hatasi](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-bakim-temizlik-hatasi), [altyapi-bakim-saklama-sureleri](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-bakim-saklama-sureleri), [akis-bakim-temizlik-health](ariza-klavuzu/60-akislar.md#akis-bakim-temizlik-health) +1 | 10-sunucu-api, 20-sunucu-altyapi-ve-yayin |
+| [server/src/services/maintenance_service.js](../server/src/services/maintenance_service.js) | 259 | [sunucu-dogrulama-404-bekleyen-kayit-yok](ariza-klavuzu/10-sunucu-api.md#sunucu-dogrulama-404-bekleyen-kayit-yok), [sunucu-kapi-gecis-logu-yazilmadi](ariza-klavuzu/10-sunucu-api.md#sunucu-kapi-gecis-logu-yazilmadi), [altyapi-bakim-temizlik-hatasi](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-bakim-temizlik-hatasi), [altyapi-bakim-saklama-sureleri](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-bakim-saklama-sureleri), [akis-bakim-temizlik-health](ariza-klavuzu/60-akislar.md#akis-bakim-temizlik-health) +1 | 10-sunucu-api, 20-sunucu-altyapi-ve-yayin |
 | [server/src/services/membership_rules.js](../server/src/services/membership_rules.js) | 618 | [sunucu-giris-403-eposta-dogrulanmadi](ariza-klavuzu/10-sunucu-api.md#sunucu-giris-403-eposta-dogrulanmadi), [sunucu-kayit-503-eposta-gonderilemedi](ariza-klavuzu/10-sunucu-api.md#sunucu-kayit-503-eposta-gonderilemedi), [sunucu-kayit-429-bekleme-sinir](ariza-klavuzu/10-sunucu-api.md#sunucu-kayit-429-bekleme-sinir), [sunucu-dogrulama-kod-hatali-400](ariza-klavuzu/10-sunucu-api.md#sunucu-dogrulama-kod-hatali-400), [sunucu-dogrulama-429-deneme-asildi](ariza-klavuzu/10-sunucu-api.md#sunucu-dogrulama-429-deneme-asildi) +6 | 10-sunucu-api |
 | [server/src/services/membership_service.js](../server/src/services/membership_service.js) | 3089 | [sunucu-giris-403-eposta-dogrulanmadi](ariza-klavuzu/10-sunucu-api.md#sunucu-giris-403-eposta-dogrulanmadi), [sunucu-profil-parola-degistirme-hata](ariza-klavuzu/10-sunucu-api.md#sunucu-profil-parola-degistirme-hata), [sunucu-yonetici-sakin-sifre-403](ariza-klavuzu/10-sunucu-api.md#sunucu-yonetici-sakin-sifre-403), [sunucu-kayit-kod-gelmiyor](ariza-klavuzu/10-sunucu-api.md#sunucu-kayit-kod-gelmiyor), [sunucu-kayit-503-eposta-gonderilemedi](ariza-klavuzu/10-sunucu-api.md#sunucu-kayit-503-eposta-gonderilemedi) +20 | 10-sunucu-api, 60-akislar, 61-akislar-devam |
 | [server/src/services/ota_signature.js](../server/src/services/ota_signature.js) | 467 | [sunucu-firmware-yukleme-imza](ariza-klavuzu/10-sunucu-api.md#sunucu-firmware-yukleme-imza) | 10-sunucu-api |

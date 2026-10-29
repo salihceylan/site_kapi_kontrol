@@ -10258,7 +10258,7 @@ async function sectionAccount() {
     'apartment_safety_notes.author_user_code': 'SAKLANIR - adli saklama karari 2026-10-27 (serbest metin guvenlik notu; yazan JOIN ile Silinmis Kullanici, metin kalir)',
     'management_company_members.user_code': 'SAKLANIR - adli saklama karari 2026-10-27 (firma uyeligi tombstone\'a bagli kalir; FK CASCADE yalniz kalici silmede)',
     'neighbor_post_reports.reporter_user_code': 'SAKLANIR - adli saklama karari 2026-10-27 (sikayet eden tombstone\'a bagli; serbest metin olabilir)',
-    'neighbor_posts.author_user_code': 'SAKLANIR - adli saklama karari 2026-10-27 (komsu panosu ilani serbest metindir; yazan JOIN ile Silinmis Kullanici, metin kalir)',
+    'neighbor_posts.author_user_code': 'SIL (komsu panosu ilani serbest metindir: hesap silmede ilanlar silinir, KVKK / kapanis karari; account_neighbor_cleanup.js, islem izi neighbor_board.posts_deleted_account_closed; sikayetler SAKLANIR)',
     'payment_notices.submitted_by': 'TOMBSTONE (dekont bildirimi; onaya kadar hesap silme ENGELLI - bkz. blockers; sonrasi degismez defter kaydina baglidir)',
     'person_invitations.accepted_user_code': 'TOMBSTONE (davet kabul eden JOIN ile Silinmis Kullanici)',
     // Karsilastirma programi Dalga B (088 iade, 089 devir): kayit siteye aittir; talep eden / karari veren / geri alan / devri yapan UPDATE edilmez (FK SET NULL yalniz users satiri silinirse), ad JOIN ile Silinmis Kullanici

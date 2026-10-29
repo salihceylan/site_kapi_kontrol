@@ -59,6 +59,7 @@ import { peopleLockKey } from './people_sync.js';
 import { deletePushDataForUser } from './push_devices.js';
 import { ownOpenDebts } from './finance_read_service.js';
 import { cancelUserPendingRefunds } from './account_refund_cleanup.js';
+import { deleteUserNeighborPosts } from './account_neighbor_cleanup.js';
 import { workItemsKeepNote } from './work_tracking_common.js';
 import { attachmentsKeepNote } from './work_attachments_common.js';
 import { releaseAssignedWorkItems } from './work_tracking_service.js';
@@ -263,7 +264,7 @@ async function findPendingClosureSites(db, userCode) {
  * @returns {Promise<{ pushDevices: number, uploadedDocuments: number, pendingReminders: number }>}
  */
 async function previewOptionalCounts(db, userCode) {
-  const out = { pushDevices: 0, uploadedDocuments: 0, pendingReminders: 0, workItems: 0, workItemComments: 0, uploadedAttachments: 0, upcomingReservations: 0, reservationRecords: 0, openRequests: 0, requestRecords: 0 };
+  const out = { pushDevices: 0, uploadedDocuments: 0, pendingReminders: 0, workItems: 0, workItemComments: 0, uploadedAttachments: 0, upcomingReservations: 0, reservationRecords: 0, openRequests: 0, requestRecords: 0, pendingRefunds: 0, neighborPosts: 0 };
   const flags = (
     await db.query(
       `
@@ -272,7 +273,9 @@ async function previewOptionalCounts(db, userCode) {
                (to_regclass('public.finance_reminder_items') IS NOT NULL) AS has_reminders,
                (to_regclass('public.work_items') IS NOT NULL) AS has_work_items,
                (to_regclass('public.work_item_attachments') IS NOT NULL) AS has_work_item_attachments,
-               (to_regclass('public.reservations') IS NOT NULL) AS has_reservations
+               (to_regclass('public.reservations') IS NOT NULL) AS has_reservations,
+               (to_regclass('public.finance_refunds') IS NOT NULL) AS has_refunds,
+               (to_regclass('public.neighbor_posts') IS NOT NULL) AS has_neighbor_posts
       `,
     )
   ).rows?.[0];
@@ -301,6 +304,13 @@ async function previewOptionalCounts(db, userCode) {
     out.pendingReminders = await count(
       `SELECT COUNT(*)::INTEGER AS n FROM finance_reminder_items i INNER JOIN site_people sp ON sp.id = i.person_id AND sp.user_code = $1 WHERE i.email_status = 'pending' AND i.email IS NOT NULL`,
     );
+  }
+  // Bekleyen alacak iadesi talepleri (088; silmede iptal edilir) ve komşu panosu ilanları (064; silmede silinir): yalnız kendi kayıtları, tablo yoksa 0.
+  if (flags?.has_refunds === true) {
+    out.pendingRefunds = await count(`SELECT COUNT(*)::INTEGER AS n FROM finance_refunds WHERE requested_by = $1 AND requested_by_kind = 'resident' AND status = 'requested'`);
+  }
+  if (flags?.has_neighbor_posts === true) {
+    out.neighborPosts = await count('SELECT COUNT(*)::INTEGER AS n FROM neighbor_posts WHERE author_user_code = $1');
   }
   // Anket ve oylama (044): oylar KALIR ve anonimleşir; yalnız sayı (tablo yoksa 0).
   out.surveyVotes = await countUserSurveyVotes(db, userCode);
@@ -387,6 +397,12 @@ export async function previewAccountDeletion(authUser, db = pool) {
     willRemove.push(`Size gönderilmek üzere bekleyen aidat hatırlatma e-postalarının (${optionalCounts.pendingReminders}) kayıtlarındaki e-posta adresiniz silinir; bu hatırlatmalar gönderilmez.`);
   }
 
+  // Alacak iadesi (088): bekleyen talep silmeyi ENGELLEMEZ, silmede iptal edilir ve işlem izine yazılır (onaylı / reddedilmiş talepler değişmez). Satır her zaman gösterilir.
+  willRemove.push(optionalCounts.pendingRefunds > 0 ? `Bekleyen iade talebiniz (${optionalCounts.pendingRefunds}) iptal edilir.` : 'Bekleyen iade talebiniz varsa iptal edilir.');
+  if (optionalCounts.neighborPosts > 0) {
+    willRemove.push(`Komşu panosundaki ilanlarınız (${optionalCounts.neighborPosts}) silinir.`);
+  }
+
   if (optionalCounts.upcomingReservations > 0 || optionalCounts.openRequests > 0) {
     willRemove.push(reservationRemoveNote({ upcoming: optionalCounts.upcomingReservations, openRequests: optionalCounts.openRequests }));
   }
@@ -432,7 +448,7 @@ export async function previewAccountDeletion(authUser, db = pool) {
   if (counts.has_consents === true) {
     willKeep.push('Verdiğiniz yasal onayların kaydı, kimliksizleştirilmiş hesaba bağlı olarak yasal saklama süresince tutulur.');
     // Adli saklama (kullanıcı kararı 2026-10-27): bu içerikler hesap silmede silinmez; kullanıcıya önceden söylenir (legal/account_deletion.md bölüm 3).
-    willKeep.push('Komşu panosundaki ilan ve şikâyetleriniz, daire güvenlik notlarınız, size gönderilen daire bildirimleri, daire bağlantı talepleriniz ve yönetim şirketi üyeliğiniz adli veya resmî bir talep hâlinde bilgi verilebilmesi için silinmeden saklanır; yazan adı "Silinmiş Kullanıcı" görünür.');
+    willKeep.push('Komşu panosundaki şikâyetleriniz, daire güvenlik notlarınız, size gönderilen daire bildirimleri, daire bağlantı talepleriniz ve yönetim şirketi üyeliğiniz adli veya resmî bir talep hâlinde bilgi verilebilmesi için silinmeden saklanır; yazan adı "Silinmiş Kullanıcı" görünür.');
   }
 
   return { can_delete: blockers.length === 0, blockers, will_remove: willRemove, will_keep: willKeep };
@@ -732,6 +748,9 @@ async function runAttempt(userCode) {
     // Alacak iadesi (088, K4 kararı): bekleyen iade talebi silmeyi ENGELLEMEZ; talep iptal edilir ve işlem izine yazılır (onaylı / reddedilmiş talepler değişmez). Tablo yoksa atlanır.
     const cancelledRefunds = await cancelUserPendingRefunds(client, userCode);
     if (cancelledRefunds > 0) summary.refunds_cancelled = cancelledRefunds;
+    // Komşu panosu (064, kapanış kararı / KVKK): kullanıcının yazdığı İLANLAR silinir ve silme işlem izine (site başına sayı) yazılır; başka ilanlara yaptığı şikâyetler kalır. Tablo yoksa atlanır.
+    const deletedNeighborPosts = await deleteUserNeighborPosts(client, userCode);
+    if (deletedNeighborPosts > 0) summary.neighbor_posts_deleted = deletedNeighborPosts;
     // Anket ve oylama (044): oylar KALIR, hesap bagi koparilir (anonimlesir); actigi anketlerde created_by NULL. Kullanici satiri tombstone oldugu icin FK SET NULL kendiliginden calismaz. Tablo yoksa atlanir.
     const surveyData = await anonymizeUserSurveyData(client, userCode);
     if (surveyData.votes > 0) summary.survey_votes_anonymized = surveyData.votes;

@@ -12,7 +12,7 @@ Eskiden bir dairede en çok BİR güncel malik tutuluyordu; hissedar / eş ikinc
 - İçlerinden **TAM BİRİ hesap muhatabıdır**: borç, ekstre, makbuz, hatırlatma ve sakin «Borcum» görünümünün hitap ettiği tek malik. Veri: `apartment_residencies.is_account_holder`.
 - **Borç / tahakkuk mantığı değişmez.** Dairenin `owner` ve `tenant` hesabı kişiye değil daireye bağlıdır (`ledger_entries.account_party`); muhatap yalnız «bu hesap kime hitap eder» bilgisidir. Muhatap değişince bakiyeler DEĞİŞMEZ.
 - Dairede «borç muhatabı = Malik / Kiracı / İkisi» ayarı (`apartments.responsible_party`) **aynen kalır** (K17).
-- Diğer malikler **malik yetkisi taşımaz** (kiracı ekleme, vekalet, kişi arama, bağ kesme onayı, imza hakkı yalnız muhatapta) ve **borç görmez** (sakin görünümü, hatırlatma alıcısı muhatapla sınırlı). Bu bilinçli bir veri-asgarileştirme kararıdır; ileride genişletilebilir.
+- Diğer malikler **malik yetkisi taşımaz** (kiracı ekleme, vekalet, kişi arama, bağ kesme onayı, imza hakkı yalnız muhatapta) ve **borç görmez** (sakin görünümü, hatırlatma alıcısı muhatapla sınırlı; **borç bildirimleri de**: kiracı borcunun malike devri ve kiracı çıkışı bildirimlerinde borç tutarı YALNIZ muhataba gider, diğer maliklere tutarsız genel not gider: "Dairenizle ilgili bir borç işlemi yapıldı; ayrıntılar hesap muhatabında." - `apartment_owner_notice.js`). Bu bilinçli bir veri-asgarileştirme kararıdır; ileride genişletilebilir.
 
 ## Veri modeli ve DB garantileri («muhatapsız daire oluşamaz»)
 
