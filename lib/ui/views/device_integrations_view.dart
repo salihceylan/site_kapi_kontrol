@@ -34,10 +34,15 @@ class DeviceIntegrationsView extends StatefulWidget {
     this.plateService,
     this.refreshInterval = const Duration(seconds: 15),
     this.discoveryPollInterval = const Duration(seconds: 3),
+    this.embedded = false,
   });
 
   final AuthService authService;
   final List<DeviceSite> sites;
+
+  /// Plaka Tanıma > "Kameralar" sekmesine gömülü kullanım: başlık ve canlı akış çizilmez (canlı akış kendi sekmesindedir) ve kenar istemci
+  /// yoksa tek satır yönlendirme gösterilir. Kamera ızgarası, ağda arama ve ekleme / düzenleme aynıdır.
+  final bool embedded;
 
   /// Eski (olay belirteçli) kamera uçları; yalnız Plaka Tanıma modülü kapalıyken ve belirteç yenilemede kullanılır.
   final DeviceIntegrationsService? service;
@@ -232,13 +237,7 @@ class DeviceIntegrationsViewState extends State<DeviceIntegrationsView> with Wid
     await reload();
   }
 
-  /// Dürüst kayıt mesajı: kenar RTSP'yi sınıyor / kenar çevrimdışı / kenar tanımlı değil.
-  String _savedMessage(int? probeId, PlateCamerasOverview overview) {
-    if (probeId != null) {
-      return overview.edge.online ? 'Kamera kaydedildi. Kenar PC RTSP\'yi sınıyor.' : 'Kamera kaydedildi. Kenar PC çevrimdışı; bağlanınca RTSP\'yi sınayacak.';
-    }
-    return overview.edge.count == 0 ? 'Kamera kaydedildi. Kenar uygulama tanımlı olmadığı için RTSP sınanmadı.' : 'Kamera kaydedildi.';
-  }
+  String _savedMessage(int? probeId, PlateCamerasOverview overview) => plateCameraSavedMessage(probeId, overview);
 
   Future<void> _onCameraAction(PlateCameraMenuAction action, PlateCameraRow camera) async {
     final site = _site;
@@ -389,6 +388,14 @@ class DeviceIntegrationsViewState extends State<DeviceIntegrationsView> with Wid
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
+        if (widget.embedded && overview.edge.count == 0) ...<Widget>[
+          const InlineNoticeText(
+            key: ValueKey<String>('edge_hint'),
+            tone: AppTone.warning,
+            text: 'Ağda arama ve görüntü için önce Kenar istemci ekleyin (Geçiş noktaları sekmesi).',
+          ),
+          const SizedBox(height: AppSpace.md),
+        ],
         _autoOpenCard(context, overview),
         const SizedBox(height: AppSpace.md),
         Text('Kameralar', style: theme.titleMedium),
@@ -399,7 +406,9 @@ class DeviceIntegrationsViewState extends State<DeviceIntegrationsView> with Wid
           AppCard(
             key: const ValueKey<String>('no_cameras'),
             child: Text(
-              overview.edge.count == 0
+              widget.embedded && overview.edge.count == 0
+                  ? 'Henüz kamera eklenmemiş. "Kamera ekle" ile IP adresiyle ekleyebilirsiniz.'
+                  : overview.edge.count == 0
                   ? 'Henüz kamera eklenmemiş. Önce Plaka Tanıma > Geçiş noktaları bölümünden kenar istemci (güvenlik kulübesindeki PC) ekleyin; sonra "Ağda kamera ara" ile kameraları bulun.'
                   : 'Henüz kamera eklenmemiş. "Ağda kamera ara" ile kameraları bulun ya da "Kamera ekle" ile IP adresiyle ekleyin.',
             ),
@@ -414,10 +423,12 @@ class DeviceIntegrationsViewState extends State<DeviceIntegrationsView> with Wid
             canWrite: site.canWrite,
             onAction: (action, camera) => unawaited(_onCameraAction(action, camera)),
           ),
-        const SizedBox(height: AppSpace.lg),
-        Text('Canlı akış', style: theme.titleMedium),
-        const SizedBox(height: AppSpace.sm),
-        PlateLiveFeedPanel(key: ValueKey<String>('feed_${site.code}'), service: _plate, siteCode: site.code),
+        if (!widget.embedded) ...<Widget>[
+          const SizedBox(height: AppSpace.lg),
+          Text('Canlı akış', style: theme.titleMedium),
+          const SizedBox(height: AppSpace.sm),
+          PlateLiveFeedPanel(key: ValueKey<String>('feed_${site.code}'), service: _plate, siteCode: site.code),
+        ],
       ],
     );
   }
@@ -579,8 +590,10 @@ class DeviceIntegrationsViewState extends State<DeviceIntegrationsView> with Wid
       physics: const NeverScrollableScrollPhysics(),
       padding: const EdgeInsets.all(AppSpace.lg),
       children: <Widget>[
-        Text('Kamera ve Plaka', style: Theme.of(context).textTheme.headlineSmall),
-        const SizedBox(height: AppSpace.md),
+        if (!widget.embedded) ...<Widget>[
+          Text('Kamera ve Plaka', style: Theme.of(context).textTheme.headlineSmall),
+          const SizedBox(height: AppSpace.md),
+        ],
         if (widget.sites.length > 1)
           DropdownButtonFormField<DeviceSite>(
             initialValue: site,

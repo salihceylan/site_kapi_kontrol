@@ -43,6 +43,7 @@ class PlateGatesPanel extends StatefulWidget {
     required this.overview,
     required this.inside,
     required this.onChanged,
+    this.onAddCamera,
   });
 
   final PlateRecognitionService service;
@@ -51,6 +52,9 @@ class PlateGatesPanel extends StatefulWidget {
   final PlateGatesOverview overview;
   final PlateInside inside;
   final VoidCallback onChanged;
+
+  /// Kapı satırındaki "Kamera ekle": kamera ekleme diyaloğunu o kapı ön seçili açar (yalnız yazma yetkisinde çizilir; null ise düğme yok).
+  final void Function(PlateGate gate)? onAddCamera;
 
   @override
   State<PlateGatesPanel> createState() => _PlateGatesPanelState();
@@ -278,7 +282,19 @@ class _PlateGatesPanelState extends State<PlateGatesPanel> {
               )
             else
               Text('SmartKeyPass cihazı bağlı değil.', style: theme.textTheme.bodySmall),
-            if (gate.cameras.isEmpty) Text('Kamera bağlı değil.', style: theme.textTheme.bodySmall),
+            if (gate.cameras.isEmpty)
+              Row(
+                children: <Widget>[
+                  Expanded(child: Text('Kamera bağlı değil.', style: theme.textTheme.bodySmall)),
+                  if (widget.canWrite && widget.onAddCamera != null)
+                    TextButton.icon(
+                      key: ValueKey<String>('gate_add_camera_${gate.id}'),
+                      onPressed: () => widget.onAddCamera!(gate),
+                      icon: const Icon(Icons.add_a_photo_outlined, size: 18),
+                      label: const Text('Kamera ekle'),
+                    ),
+                ],
+              ),
             for (final cam in gate.cameras)
               Padding(
                 padding: const EdgeInsets.only(top: AppSpace.xs),
@@ -299,6 +315,8 @@ class _PlateGatesPanelState extends State<PlateGatesPanel> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: <Widget>[
+                  if (gate.cameras.isNotEmpty && widget.onAddCamera != null)
+                    TextButton(key: ValueKey<String>('gate_add_camera_${gate.id}'), onPressed: () => widget.onAddCamera!(gate), child: const Text('Kamera ekle')),
                   TextButton(onPressed: () => _editGate(gate), child: const Text('Düzenle')),
                   TextButton(onPressed: () => _deleteGate(gate), child: const Text('Sil')),
                 ],
@@ -529,7 +547,7 @@ class _GateEditDialogState extends State<GateEditDialog> {
               ),
               const SizedBox(height: AppSpace.sm),
               Text('Kameralar', style: Theme.of(context).textTheme.titleSmall),
-              if (_availableCameras.isEmpty) const Text('Boşta kamera yok. Kameralar "Kamera ve Plaka" ekranından eklenir.'),
+              if (_availableCameras.isEmpty) const Text('Boşta kamera yok. Kameralar "Kameralar" sekmesinden ya da kapı satırındaki "Kamera ekle" ile eklenir.'),
               for (final cam in _availableCameras)
                 Row(
                   children: <Widget>[

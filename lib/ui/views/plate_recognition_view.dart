@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:site_kapi_kontrol/models/plate_gates.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
+import 'package:site_kapi_kontrol/services/device_integrations_api.dart' show DeviceSite;
+import 'package:site_kapi_kontrol/services/plate_cameras_api.dart';
 import 'package:site_kapi_kontrol/services/plate_recognition_api.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_snack.dart';
@@ -12,24 +14,28 @@ import 'package:site_kapi_kontrol/ui/design/buttons.dart';
 import 'package:site_kapi_kontrol/ui/design/status_dot.dart';
 import 'package:site_kapi_kontrol/ui/design/license_plate.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/plate_camera_form_dialog.dart';
 import 'package:site_kapi_kontrol/ui/helpers/plate_input.dart';
+import 'package:site_kapi_kontrol/ui/views/device_integrations_view.dart';
 import 'package:site_kapi_kontrol/ui/widgets/plate_gates_panel.dart';
 import 'package:site_kapi_kontrol/ui/widgets/plate_live_feed_panel.dart';
 
 /// "Plaka Tanıma" ekranı (`plate_recognition` modülü, varsayılan KAPALI).
 ///
-/// - Yönetici: Olaylar | Canlı akış | Misafir izinleri | Kara liste | Geçiş noktaları | Ayarlar sekmeleri; izin verir/iptal eder, kara listeyi ve kapı/kamera ayarlarını yönetir.
+/// - Yönetici: Olaylar | Canlı akış | Misafir izinleri | Kara liste | Geçiş noktaları | Kameralar | Ayarlar sekmeleri; izin verir/iptal eder, kara listeyi ve kapı/kamera ayarlarını yönetir.
+///   "Kameralar" sekmesi Kamera ve Plaka ekranının kamera ızgarası / ağda arama / ekleme panelidir; kapı satırından da "Kamera ekle" ile kapı ön seçili eklenir.
 /// - Kurul üyesi / görevli: aynı sekmeleri SALT OKUR (hiçbir yazma düğmesi çizilmez).
 /// - Sakin: sade "Misafir plakası" ekranı; yalnız kendi dairesi için 1 gün - 30 gün geçici izin verir ve iptal eder.
 /// - Kapı açma: güvenlik bilgisayarındaki kenar sistemiyle yapılır; bu eski doğrudan-bildirim yolunda yalnız kayıt tutulur.
 /// - Yetkili araçlar (kalıcı araç listesi) Araçlar ekranından yönetilir; burada tekrarlanmaz.
 /// - [PlateRecognitionViewState.reload] sayfa kabuğunun aşağı çekip yenilemesinden çağrılır.
 class PlateRecognitionView extends StatefulWidget {
-  const PlateRecognitionView({super.key, required this.authService, required this.sites, this.service});
+  const PlateRecognitionView({super.key, required this.authService, required this.sites, this.service, this.camerasService});
 
   final AuthService authService;
   final List<PlateSite> sites;
   final PlateRecognitionService? service;
+  final PlateCamerasService? camerasService;
 
   @override
   State<PlateRecognitionView> createState() => PlateRecognitionViewState();
@@ -37,7 +43,8 @@ class PlateRecognitionView extends StatefulWidget {
 
 class PlateRecognitionViewState extends State<PlateRecognitionView> {
   late final PlateRecognitionService _service = widget.service ?? PlateRecognitionService(authService: widget.authService);
-  static const List<String> _tabs = <String>['Olaylar', 'Canlı akış', 'Misafir izinleri', 'Kara liste', 'Geçiş noktaları', 'Ayarlar'];
+  late final PlateCamerasService _cameras = widget.camerasService ?? PlateCamerasService(authService: widget.authService);
+  static const List<String> _tabs = <String>['Olaylar', 'Canlı akış', 'Misafir izinleri', 'Kara liste', 'Geçiş noktaları', 'Kameralar', 'Ayarlar'];
   static const String _kvkkNote =
       'Plaka kişisel veridir; yalnızca site güvenliği amacıyla işlenir ve sakinlerle paylaşılmaz.';
 
@@ -109,6 +116,8 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
               _gates = gates;
               _inside = inside;
             });
+          case 5:
+            break; // Kameralar: panel kendi verisini yükler ve yeniler.
           default:
             final data = await _service.settings(site.code);
             if (!_isCurrent(token)) return;
@@ -452,16 +461,52 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
         overview: gates,
         inside: inside,
         onChanged: () => unawaited(reload()),
+        onAddCamera: (gate) => unawaited(_addCameraForGate(site, gate)),
       ),
     ];
   }
+
+  /// Kapı satırından "Kamera ekle": kamera ekleme formu o kapı ön seçili açılır; kayıttan sonra kapı listesi yenilenir.
+  Future<void> _addCameraForGate(PlateSite site, PlateGate gate) async {
+    try {
+      final overview = await _cameras.overview(site.code);
+      if (!mounted) return;
+      int? probeId;
+      final saved = await showPlateCameraForm(
+        context,
+        overview: overview,
+        initialGateId: gate.id,
+        onSave: (draft) async {
+          final created = await _cameras.createCamera(site.code, draft);
+          probeId = created.probeCommandId;
+        },
+      );
+      if (saved != true || !mounted) return;
+      AppSnack.show(context, plateCameraSavedMessage(probeId, overview), kind: AppSnackKind.success);
+      await reload();
+    } on ApiException catch (e) {
+      if (mounted) AppSnack.show(context, e.message, kind: AppSnackKind.error);
+    }
+  }
+
+  /// "Kameralar" sekmesi: Kamera ve Plaka ekranının paneli (ızgara, ağda ara, ekle / düzenle); canlı akış kendi sekmesinde olduğu için gömülü kipte çizilmez.
+  List<Widget> _camerasTab(PlateSite site) => <Widget>[
+    DeviceIntegrationsView(
+      key: ValueKey<String>('cameras_${site.code}'),
+      authService: widget.authService,
+      sites: <DeviceSite>[DeviceSite(code: site.code, name: site.name, canWrite: site.canWrite)],
+      camerasService: _cameras,
+      plateService: _service,
+      embedded: true,
+    ),
+  ];
 
   List<Widget> _settingsTab(PlateSite site) {
     final settings = _settings;
     if (settings == null) return const <Widget>[];
     return <Widget>[
       _note('Kapı açma kenar (güvenlik bilgisayarı) sistemindedir; bu doğrudan-bildirim yolu yalnız kayıt tutar, kapıya komut göndermez.'),
-      _note('Kameralar "Kamera ve Plaka" ekranından eklenir; burada kameranın hangi kapıya baktığını eşlersiniz. Kamera okuma güvenini (confidence) göndermiyorsa otomatik açma yapılmaz.'),
+      _note('Kameralar "Kameralar" sekmesinden eklenir; burada kameranın hangi kapıya baktığını eşlersiniz. Kamera okuma güvenini (confidence) göndermiyorsa otomatik açma yapılmaz.'),
       if (settings.doors.isEmpty) _empty('Bu sitede tanımlı kapı yok.'),
       for (final door in settings.doors)
         _GateCard(
@@ -503,6 +548,7 @@ class PlateRecognitionViewState extends State<PlateRecognitionView> {
         2 => _permitsTab(site),
         3 => _blacklistTab(site),
         4 => _gatesTab(site),
+        5 => _camerasTab(site),
         _ => _settingsTab(site),
       },
   ];
