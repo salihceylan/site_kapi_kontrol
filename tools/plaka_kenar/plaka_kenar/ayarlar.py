@@ -135,9 +135,26 @@ VARSAYILAN: dict = {
         "harfe": {"0": "O", "1": "I", "8": "B", "5": "S", "2": "Z", "6": "G"},
     },
     # Canli izleme sekmesi
-    # Agda kamera kesfi (ONVIF WS-Discovery) - ayar penceresi 'Agda kamera ara'
-    "kesif": {"sure_sn": 3.5, "zaman_asimi_sn": 4.0, "rtsp_port": 554},
-    "izleme": {"fps": 6, "rozet_sn": 4.0, "kare_genislik": 640, "fps_ema": 0.3, "min_roi": 0.05},
+    # Agda kamera kesfi: ONVIF WS-Discovery + yerel alt ag TCP taramasi (birlikte) - Kameralar sekmesi 'Agda kamera ara'
+    "kesif": {
+        "sure_sn": 3.5, "zaman_asimi_sn": 4.0, "rtsp_port": 554,
+        "onvif_portlar": [80, 8000, 8080, 2020],  # ONVIF GetStreamUri denenen servis portlari (kamera XAddrs vermezse)
+        "tarama": {
+            "etkin": True,
+            "portlar": [554, 80, 8000, 8080, 2020],  # 554 RTSP, 80/8080 web, 8000 Hikvision/ONVIF, 2020 Tapo ONVIF
+            "zaman_asimi_sn": 0.3,  # her baglanti denemesi
+            "is_parcacigi": 256,
+            "alt_ag_uzunlugu": 24,  # PC'nin IPv4 adresinin /24 agi taranir
+            "tur": 1,  # >1: yanit vermeyen (zaman asimi) portlar toplam bu kadar tur denenir (yavas ARP/Wi-Fi kameralar icin)
+            "haric_aglar": ["100.64.0.0/10"],  # taranmayacak aglar (Tailscale/CGNAT gibi VPN arayuzleri)
+            "rtsp_portlari": [554, 8554],  # bu portlardan biri aciksa 'RTSP var' diye siralamada one alinir
+            "kamera_portlari": [554, 8000, 2020, 8554],  # 80/8080 tek basina (yonlendirici, yazici) daha dusuk olasilik
+        },
+    },
+    # Canli izleme MOZAIGI: tum etkin kameralar ayni anda. goruntu_fps = akis -> karo yayin hizi (ISLEME fps'inden bagimsiz);
+    # fps = arayuz cizim hizi; karo_yukseklik = mozaik karosunun kare yuksekligi (px, ~360p); buyuk_yukseklik = tek kamera modu (0 = tam cozunurluk).
+    "izleme": {"fps": 12, "goruntu_fps": 12, "karo_yukseklik": 360, "buyuk_yukseklik": 720, "goruntu_yok_sn": 3.0,
+               "rozet_sn": 4.0, "kare_genislik": 640, "fps_ema": 0.3, "min_roi": 0.05},
     "dogrulama": {"teyit_kare": 2, "teyit_pencere_sn": 4.0, "tekillestirme_sn": 5.0},
     "karar": {
         # tum_yerler_bos | en_az_bir_yer_bos  (plan 5, soru 3)
@@ -246,14 +263,53 @@ def dogrula(ayar: dict) -> list[str]:
         if r is not None and not _roi_gecerli(r):
             u.append(f"Kamera {kid}: roi [x, y, w, h] 0-1 oran olmali (x+w<=1, y+h<=1)")
     s = ayar.get("sunucu", {})
-    if s.get("etkin") and not (s.get("adres") and s.get("cihaz_anahtari")):
-        u.append("Sunucu etkin ama adres/cihaz_anahtari eksik")
-    if s.get("etkin") and s.get("cihaz_anahtari") and not re.fullmatch(r"\d{1,15}\.[a-f0-9]{48}", str(s["cihaz_anahtari"]).strip()):
-        u.append("Cihaz anahtari '<id>.<48 onaltilik>' biciminde olmali")
-    if s.get("etkin"):
+    # Sunucu baglantisi ISTEGE BAGLIDIR: adres/anahtar bos ise hicbir uyari cikmaz, olay gonderimi sessizce kapali kalir.
+    if sunucu_hazir(ayar):
+        if not re.fullmatch(r"\d{1,15}\.[a-f0-9]{48}", str(s["cihaz_anahtari"]).strip()):
+            u.append("Cihaz anahtari '<id>.<48 onaltilik>' biciminde olmali")
         for k in ayar.get("kameralar", []):
             if k.get("etkin", True) and not _tam_sayi(k.get("sunucu_id")):
                 u.append(f"Kamera {k.get('id')}: 'sunucu_id' (sunucudaki kamera kimligi) bos; olaylari sunucuya gonderilemez")
     if ayar.get("karar", {}).get("misafir_kurali") not in ("tum_yerler_bos", "en_az_bir_yer_bos"):
         u.append("karar.misafir_kurali gecersiz")
+    for k in ayar.get("kameralar", []):
+        if k.get("yon", "") not in ("", "giris", "cikis"):
+            u.append(f"Kamera {k.get('id')}: yon 'giris' veya 'cikis' olmali")
     return u
+
+
+def sunucu_hazir(ayar: dict) -> bool:
+    """Sunucu baglantisi yalniz etkin VE adres + cihaz anahtari doluysa acik sayilir; aksi halde uygulama yalniz yerel calisir."""
+    s = ayar.get("sunucu", {})
+    return bool(s.get("etkin")) and bool(str(s.get("adres", "")).strip()) and bool(str(s.get("cihaz_anahtari", "")).strip())
+
+
+def yon_uyarilari(ayar: dict) -> dict:
+    """Kamera basina yon denetimi (SARI uyari, engel degil): {"kameralar": {kamera_id: metin}, "kapilar": {kapi_id: metin}}.
+    Cift yonlu kapida en az bir giris + bir cikis kamerasi beklenir; giris/cikis kapisinda o yonde bir kamera beklenir.
+    Yonu secilmemis kamera da isaretlenir (olay yonu kameradan alinir)."""
+    kam_u: dict = {}
+    kapi_u: dict = {}
+    etkin = [k for k in ayar.get("kameralar", []) if k.get("etkin", True)]
+    for k in etkin:
+        if k.get("yon", "") not in ("giris", "cikis"):
+            kam_u[k.get("id", "")] = "Yön seçilmemiş (giriş / çıkış)"
+    for kapi in ayar.get("kapilar", []):
+        kid, mod = kapi.get("id"), kapi.get("yon_modu", "cift")
+        yonler = {k.get("yon") for k in etkin if k.get("kapi_id") == kid}
+        beklenen = {"giris": ["giris"], "cikis": ["cikis"]}.get(mod, ["giris", "cikis"])
+        eksik = [y for y in beklenen if y not in yonler]
+        if not eksik:
+            continue
+        ad = " ve ".join("giriş" if y == "giris" else "çıkış" for y in eksik)
+        kapi_u[kid] = f"{ad} kamerası eksik"
+        for k in etkin:
+            if k.get("kapi_id") == kid and k.get("id", "") not in kam_u:
+                kam_u[k.get("id", "")] = f"Kapı '{kid}' için {ad} kamerası eksik"
+    return {"kameralar": kam_u, "kapilar": kapi_u}
+
+
+def siradaki_yon(ayar: dict, kapi_id: str = "") -> str:
+    """Yeni eklenen kamera icin yon onerisi: ayni kapida giris kamerasi var ve cikis yoksa 'cikis'; digerleri 'giris'."""
+    yonler = {k.get("yon") for k in ayar.get("kameralar", []) if k.get("etkin", True) and (k.get("kapi_id") or "") == (kapi_id or "")}
+    return "cikis" if "giris" in yonler and "cikis" not in yonler else "giris"

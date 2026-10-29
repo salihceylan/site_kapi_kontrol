@@ -56,6 +56,7 @@ class Servis:
         self.kam_durum: dict = {}  # id -> {durum, son_kare, son_okuma}
         self.kapi_durum: dict = {}
         self.son_kare: dict = {}  # id -> (kare, zaman)
+        self.goruntu: dict = {}  # id -> (kucultulmus kare, zaman): mozaik yayini, isleme hizindan bagimsiz
         self._akislar: list = []
         self._dur = threading.Event()
         self._kayitli = False
@@ -179,7 +180,8 @@ class Servis:
                 continue
             self.kam_durum.setdefault(kam["id"], {"durum": "bekliyor", "son_kare": 0, "son_okuma": 0})
             if kam.get("mod", "akis") == "akis":
-                a = yakalama.AkisKaynagi(kam, self.ayar["yakalama"], self._kare_cb, self._durum_cb)
+                a = yakalama.AkisKaynagi(kam, self.ayar["yakalama"], self._kare_cb, self._durum_cb,
+                                         self._goruntu_cb, self.ayar["izleme"])
                 self._akislar.append(a)
                 a.start()
         self._arka = threading.Thread(target=self._arka_dongu, daemon=True, name="arka")
@@ -196,6 +198,13 @@ class Servis:
             self.kare_isle(kam, kare, t)
         except Exception:  # noqa: BLE001 - tek kare hatasi akisi oldurmesin
             log.exception("kare isleme hatasi")
+
+    def _goruntu_cb(self, kid: str, kare, t: float) -> None:
+        self.goruntu[kid] = (kare, t)
+
+    def akis(self, kamera_id: str):
+        """Kamera icin calisan RTSP akisi (yoksa None); arayuz tek kamera modunda goruntu yuksekligini degistirir."""
+        return next((a for a in self._akislar if a.kam["id"] == kamera_id), None)
 
     def _durum_cb(self, kid: str, durum: str) -> None:
         self.kam_durum.setdefault(kid, {"son_kare": 0, "son_okuma": 0})["durum"] = durum
@@ -332,15 +341,21 @@ class Servis:
         }
 
     # --- Sina (ayar penceresi) -----------------------------------------------------------
-    def sina(self) -> list:
-        """[(ad, basarili, mesaj)] - her kameradan tek kare + sunucu erisimi + kapi bilgisi."""
+    def sina(self, kamera_id: str | None = None) -> list:
+        """[(ad, basarili, mesaj)] - her kameradan (ya da yalniz `kamera_id`) tek kare + isteğe bagli sunucu erisimi + ayar uyarilari.
+        Sunucu bagi ISTEGE BAGLIDIR: adres/anahtar bos ise sorun degil, yalniz bilgi satiri yazilir."""
         sonuc = []
         for kam in self.ayar["kameralar"]:
+            if kamera_id is not None and kam.get("id") != kamera_id:
+                continue
             kare, hata = yakalama.tek_kare(kam["url"], self.ayar["yakalama"]) if kam.get("url") else (None, "url_bos")
             sonuc.append((f"Kamera {kam.get('ad') or kam['id']}", kare is not None,
                           f"kare {kare.shape[1]}x{kare.shape[0]}" if kare is not None else hata))
-        ok, mesaj = self.sunucu.sina()
-        sonuc.append(("Sunucu", ok, mesaj))
+        if ayarmod.sunucu_hazir(self.ayar):
+            ok, mesaj = self.sunucu.sina()
+            sonuc.append(("Sunucu", ok, mesaj))
+        else:
+            sonuc.append(("Sunucu", True, "bağlantı kapalı (isteğe bağlı) — uygulama yalnız yerel çalışır, olaylar gönderilmez"))
         for u in ayarmod.dogrula(self.ayar):
             sonuc.append(("Ayar uyarisi", False, u))
         sonuc.append(("Tanima motoru", not self.boru.kalibrasyon_modu, self.boru.tanima.aciklama))

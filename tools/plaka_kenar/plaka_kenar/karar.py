@@ -213,6 +213,8 @@ class KararMotoru:
             self.kural = k
 
     def yon_bul(self, kapi_yon_modu: str, kamera_yon: str, arac) -> str:
+        """Olay yonu KAMERANIN yonunden gelir (cift yonlu kapida biri giris biri cikis kamerasi). Kapinin yon modu
+        yalniz yonu secilmemis ESKI kamera satirlarinda geri-dusustur (o da cift ise icerideki durumdan cikarilir)."""
         if kamera_yon in ("giris", "cikis"):
             return kamera_yon
         if kapi_yon_modu in ("giris", "cikis"):

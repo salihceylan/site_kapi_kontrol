@@ -37,8 +37,12 @@ class SunucuIstemcisi:
             self._oturum = requests.Session()
         return self._oturum
 
+    def hazir(self) -> bool:
+        """Sunucu bagi ISTEGE BAGLI: etkin + adres + cihaz anahtari dolu degilse hicbir uc cagrilmaz (sessizce kapali)."""
+        return bool(self.s.get("etkin")) and bool(str(self.s.get("adres", "")).strip()) and bool(str(self.s.get("cihaz_anahtari", "")).strip())
+
     def uc_etkin(self, ad: str) -> bool:
-        return bool(self.s.get("etkin")) and bool(self.s["uclar"].get(ad, {}).get("etkin"))
+        return self.hazir() and bool(self.s["uclar"].get(ad, {}).get("etkin"))
 
     def _url(self, ad: str) -> str:
         return self.s["adres"].rstrip("/") + self.s["uclar"][ad]["yol"]
