@@ -5,6 +5,7 @@
 // (veritabani tetikleyicisi de reddeder); degisiklik, onceki surume baglanan YENI SURUM satiri olusturur (previous_id, revision_no, revision_reason).
 // Onaysiz (acik) teklif yerinde duzenlenir; her duzenleme denetim kaydina eski / yeni tutarla yazilir.
 
+import { createHash, randomBytes } from 'node:crypto';
 import { pool } from '../db.js';
 import { PlatformError } from './errors.js';
 import { recordAudit } from './audit_service.js';
@@ -959,6 +960,255 @@ export async function acceptQuote({ siteCode, rawId, actor, access, body }) {
     throw error;
   }
   return { quote: await loadQuote(siteCode, quoteId) };
+}
+
+// --- Firma teklif formu (113, P2-8): dis firma icin bagimsiz, tek kullanimlik form --------------------------------------------------------------------------
+// Davet kalibi (team_schema.js person_invitations): 32 bayt CSPRNG hex belirtec, veritabaninda YALNIZ SHA-256 ozeti, sure, tek kullanim (atomik UPDATE).
+// Teklif Pro API'sine BAGLANMAZ. Firma girisi `equipment_quote_requests`a TASLAK olarak duser; yonetici onaylayana kadar `equipment_quotes`a, gidere ya da
+// sozlesmeye HICBIR sey yazilmaz. Onay yalniz ACIK bir teklif olusturur: kabul (gider / sozlesme) yine ayri ve yine yonetici karari (acceptQuote).
+// Belirtec ve baglanti yalniz olusturma yanitinda doner; liste / ayrinti yanitlari hicbir zaman belirtec ya da ozet tasimaz. Dis giris metni denetim gunlugune YAZILMAZ.
+
+export const QUOTE_REQUEST_LIMITS = Object.freeze({ open: 100, defaultDays: 14, maxDays: 30, list: 200 });
+export const QUOTE_REQUEST_TOKEN = /^[0-9a-f]{64}$/;
+export const QUOTE_FORM_PATH = '/firma-teklif';
+const QUOTE_REQUEST_PHONE = /^[0-9+()\-.\s]{3,32}$/;
+const QUOTE_REQUEST_STATUS_FILTER = Object.freeze(['invited', 'draft', 'approved', 'rejected', 'revoked']);
+
+export const hashQuoteRequestToken = (token) => createHash('sha256').update(String(token)).digest('hex');
+const publicBaseUrl = () => String(process.env.PUBLIC_APP_URL || process.env.PUBLIC_BASE_URL || 'https://api.gudeteknoloji.com.tr').replace(/\/+$/, '');
+const unusableForm = () => new PlatformError(410, 'QUOTE_FORM_UNUSABLE', 'Bu form bağlantısı geçersiz, süresi dolmuş, iptal edilmiş ya da daha önce kullanılmış.');
+const requestNotPending = () => new PlatformError(409, 'QUOTE_REQUEST_NOT_PENDING', 'Bu form bağlantısı artık beklemede değil.');
+const requestNotDraft = () => new PlatformError(409, 'QUOTE_REQUEST_NOT_DRAFT', 'Bu taslak teklif zaten karara bağlanmış ya da henüz gönderilmemiş.');
+
+const REQUEST_COLS = `r.id, r.topic, r.equipment_id, r.vendor_hint, r.status, r.expires_at, r.created_at, r.submitted_at, r.vendor_name, r.vendor_contact, r.vendor_phone,
+  r.amount_kurus, to_char(r.valid_until, 'YYYY-MM-DD') AS valid_until, r.delivery_days, r.note, r.vat_included, r.decided_at, r.quote_id`;
+
+const isoOrNull = (v) => (v === null || v === undefined ? null : v instanceof Date ? v.toISOString() : String(v));
+
+/** Liste / ayrinti satiri: belirtec ve ozeti ASLA donmez. `expired` = bekleyen baglantinin suresi dolmus (okuma anindaki turetilmis durum). */
+export function mapQuoteRequest(r, now = new Date()) {
+  const expiresAt = r.expires_at ? new Date(r.expires_at) : null;
+  return {
+    id: Number(r.id),
+    topic: r.topic,
+    equipment_id: nullableNumber(r.equipment_id),
+    vendor_hint: r.vendor_hint ?? null,
+    status: r.status,
+    expired: r.status === 'invited' && expiresAt !== null && expiresAt <= now,
+    expires_at: isoOrNull(r.expires_at),
+    created_at: isoOrNull(r.created_at),
+    submitted_at: isoOrNull(r.submitted_at),
+    vendor_name: r.vendor_name ?? null,
+    vendor_contact: r.vendor_contact ?? null,
+    vendor_phone: r.vendor_phone ?? null,
+    amount_kurus: nullableNumber(r.amount_kurus),
+    valid_until: r.valid_until ?? null,
+    delivery_days: nullableNumber(r.delivery_days),
+    note: r.note ?? null,
+    vat_included: r.vat_included === null || r.vat_included === undefined ? null : r.vat_included === true,
+    decided_at: isoOrNull(r.decided_at),
+    quote_id: nullableNumber(r.quote_id),
+  };
+}
+
+async function loadQuoteRequest(siteCode, requestId) {
+  const r = await pool.query(`SELECT ${REQUEST_COLS} FROM equipment_quote_requests r WHERE r.id = $1 AND r.site_code = $2`, [requestId, siteCode]);
+  if (!r.rows[0]) throw notFound('Firma formu');
+  return mapQuoteRequest(r.rows[0]);
+}
+
+export async function listQuoteRequests(siteCode, query = {}) {
+  const status = QUOTE_REQUEST_STATUS_FILTER.includes(query.status) ? query.status : null;
+  const r = await pool.query(
+    `SELECT ${REQUEST_COLS} FROM equipment_quote_requests r WHERE r.site_code = $1 AND ($2::TEXT IS NULL OR r.status = $2) ORDER BY r.id DESC LIMIT ${QUOTE_REQUEST_LIMITS.list}`,
+    [siteCode, status],
+  );
+  const now = new Date();
+  return { items: r.rows.map((x) => mapQuoteRequest(x, now)) };
+}
+
+/**
+ * Yeni form baglantisi. Yanit `link` (tam adres + yol) YALNIZ burada doner; yonetici firmaya kendisi iletir (e-posta / mesaj). Ayni anda en fazla 100 bekleyen
+ * (suresi dolmamis baglanti + onay bekleyen taslak) olabilir.
+ */
+export async function createQuoteRequest({ siteCode, actor, access, body }) {
+  const b = bodyOf(body);
+  const topic = text(b.topic, 'topic', 'Konu', 160, { required: true });
+  const vendorHint = text(b.vendor_hint, 'vendor_hint', 'Beklenen firma', 120);
+  const equipmentId = id(b.equipment_id, 'equipment_id', 'Ekipman');
+  if (equipmentId !== null) await loadItem(siteCode, equipmentId);
+  const rawDays = b.valid_days === undefined || b.valid_days === null || b.valid_days === '' ? QUOTE_REQUEST_LIMITS.defaultDays : b.valid_days;
+  if (!Number.isSafeInteger(rawDays) || rawDays < 1 || rawDays > QUOTE_REQUEST_LIMITS.maxDays) {
+    throw invalid('valid_days', `Bağlantı süresi 1 ile ${QUOTE_REQUEST_LIMITS.maxDays} gün arasında tam sayı olmalı.`);
+  }
+  const open = await pool.query(
+    `SELECT COUNT(*)::INTEGER AS n FROM equipment_quote_requests WHERE site_code = $1 AND (status = 'draft' OR (status = 'invited' AND expires_at > NOW()))`,
+    [siteCode],
+  );
+  if (Number(open.rows[0].n) >= QUOTE_REQUEST_LIMITS.open) {
+    throw new PlatformError(409, 'LIMIT_REACHED', `Bir sitede aynı anda en fazla ${QUOTE_REQUEST_LIMITS.open} bekleyen firma formu olabilir. Eskileri iptal edin ya da taslakları karara bağlayın.`, {
+      limit: QUOTE_REQUEST_LIMITS.open,
+    });
+  }
+  const token = randomBytes(32).toString('hex');
+  const r = await pool.query(
+    `INSERT INTO equipment_quote_requests (site_code, topic, equipment_id, vendor_hint, token_hash, expires_at, created_by)
+     VALUES ($1, $2, $3, $4, $5, NOW() + ($6::INTEGER * INTERVAL '1 day'), $7) RETURNING id`,
+    [siteCode, topic, equipmentId, vendorHint, hashQuoteRequestToken(token), rawDays, userOf(access)],
+  );
+  const requestId = Number(r.rows[0].id);
+  await audit(actor, 'quote.request_created', siteCode, 'equipment_quote_request', requestId, { topic, valid_days: rawDays });
+  const request = await loadQuoteRequest(siteCode, requestId);
+  const path = `${QUOTE_FORM_PATH}/${token}`;
+  return { request, link: { url: `${publicBaseUrl()}${path}`, path, expires_at: request.expires_at } };
+}
+
+/** Henuz kullanilmamis baglantiyi iptal eder (yalniz `invited`). */
+export async function revokeQuoteRequest({ siteCode, rawId, actor, access }) {
+  const requestId = id(rawId, 'id', 'Firma formu', { required: true });
+  const r = await pool.query(
+    `UPDATE equipment_quote_requests SET status = 'revoked', decided_by = $3, decided_at = NOW() WHERE id = $1 AND site_code = $2 AND status = 'invited' RETURNING id`,
+    [requestId, siteCode, userOf(access)],
+  );
+  if (!r.rows[0]) {
+    await loadQuoteRequest(siteCode, requestId);
+    throw requestNotPending();
+  }
+  await audit(actor, 'quote.request_revoked', siteCode, 'equipment_quote_request', requestId, {});
+  return { request: await loadQuoteRequest(siteCode, requestId) };
+}
+
+/** Firma taslagini reddeder (yalniz `draft`); hicbir teklif / gider / sozlesme olusmaz. */
+export async function rejectQuoteRequest({ siteCode, rawId, actor, access }) {
+  const requestId = id(rawId, 'id', 'Firma formu', { required: true });
+  const r = await pool.query(
+    `UPDATE equipment_quote_requests SET status = 'rejected', decided_by = $3, decided_at = NOW() WHERE id = $1 AND site_code = $2 AND status = 'draft' RETURNING id`,
+    [requestId, siteCode, userOf(access)],
+  );
+  if (!r.rows[0]) {
+    await loadQuoteRequest(siteCode, requestId);
+    throw requestNotDraft();
+  }
+  await audit(actor, 'quote.request_rejected', siteCode, 'equipment_quote_request', requestId, {});
+  return { request: await loadQuoteRequest(siteCode, requestId) };
+}
+
+const requestDocumentNote = (contact, phone) => {
+  const parts = [contact, phone].filter(Boolean).join(', ');
+  return `Firma formundan geldi${parts ? ` (irtibat: ${parts})` : ''}`.slice(0, 300);
+};
+
+/**
+ * Taslagi onaylar: AYNI islemde (kilitli satirdan okunan degerlerle) ACIK bir teklif (`equipment_quotes`) olusur ve taslak `approved` olur. Gider / sozlesme OLUSMAZ;
+ * teklifin kabulu ayri bir yonetici karari olarak `acceptQuote` ile yapilir. Cift tiklama / yaris: ikinci cagri 409 QUOTE_REQUEST_NOT_DRAFT.
+ */
+export async function approveQuoteRequest({ siteCode, rawId, actor, access }) {
+  const requestId = id(rawId, 'id', 'Firma formu', { required: true });
+  const client = await pool.connect();
+  let quoteId;
+  try {
+    await client.query('BEGIN');
+    const found = await client.query(
+      `SELECT r.id, r.topic, r.equipment_id, r.status, r.vendor_name, r.vendor_contact, r.vendor_phone, r.amount_kurus, to_char(r.valid_until, 'YYYY-MM-DD') AS valid_until,
+              r.delivery_days, r.note, r.vat_included
+         FROM equipment_quote_requests r WHERE r.id = $1 AND r.site_code = $2 FOR UPDATE`,
+      [requestId, siteCode],
+    );
+    const draft = found.rows[0];
+    if (!draft) throw notFound('Firma formu');
+    if (draft.status !== 'draft') throw requestNotDraft();
+    const count = await client.query(`SELECT COUNT(*)::INTEGER AS n FROM equipment_quotes WHERE site_code = $1`, [siteCode]);
+    if (Number(count.rows[0].n) >= LIMITS.quotes) throw new PlatformError(409, 'LIMIT_REACHED', 'Bir sitede en fazla 3000 teklif kaydedilebilir.', { limit: LIMITS.quotes });
+    const ins = await client.query(
+      `INSERT INTO equipment_quotes (site_code, topic, vendor_name, amount_kurus, valid_until, document_note, equipment_id, created_by, delivery_days, note, vat_included)
+       VALUES ($1, $2, $3, $4, $5::DATE, $6, $7, $8, $9, $10, $11) RETURNING id`,
+      [
+        siteCode,
+        draft.topic,
+        draft.vendor_name,
+        Number(draft.amount_kurus),
+        draft.valid_until ?? null,
+        requestDocumentNote(draft.vendor_contact, draft.vendor_phone),
+        nullableNumber(draft.equipment_id),
+        userOf(access),
+        nullableNumber(draft.delivery_days),
+        draft.note ?? null,
+        draft.vat_included === null || draft.vat_included === undefined ? null : draft.vat_included === true,
+      ],
+    );
+    quoteId = Number(ins.rows[0].id);
+    await client.query(`UPDATE equipment_quote_requests SET status = 'approved', decided_by = $3, decided_at = NOW(), quote_id = $4 WHERE id = $1 AND site_code = $2`, [
+      requestId,
+      siteCode,
+      userOf(access),
+      quoteId,
+    ]);
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+  await audit(actor, 'quote.request_approved', siteCode, 'equipment_quote_request', requestId, { quote_id: quoteId });
+  return { request: await loadQuoteRequest(siteCode, requestId), quote: await loadQuote(siteCode, quoteId) };
+}
+
+/** Bir belirtecin satiri ve (ayni 410 ile) kullanilamaz durumlari: bilinmeyen, kullanilmis, suresi dolmus, iptal, modul kapali. Hicbiri ayirt edilmez. */
+async function usableFormRow(rawToken) {
+  const token = typeof rawToken === 'string' ? rawToken : '';
+  if (!QUOTE_REQUEST_TOKEN.test(token)) throw unusableForm();
+  const r = await pool.query(
+    `SELECT r.id, r.site_code, r.topic, r.vendor_hint, r.status, r.expires_at, s.name AS site_name
+       FROM equipment_quote_requests r JOIN sites s ON s.site_code = r.site_code WHERE r.token_hash = $1 LIMIT 1`,
+    [hashQuoteRequestToken(token)],
+  );
+  const row = r.rows[0];
+  if (!row || row.status !== 'invited' || new Date(row.expires_at) <= new Date()) throw unusableForm();
+  if (!(await isModuleEnabled(Number(row.site_code), EQUIPMENT_MODULE))) throw unusableForm();
+  return { token, row };
+}
+
+/** Herkese acik form sayfasinin verisi (kimlik yok): yalniz konu, site adi, beklenen firma ve son gecerlilik. */
+export async function getPublicQuoteForm(rawToken) {
+  const { row } = await usableFormRow(rawToken);
+  return { topic: row.topic, site_name: row.site_name ?? '', vendor_hint: row.vendor_hint ?? null, expires_at: isoOrNull(row.expires_at) };
+}
+
+/**
+ * Firma girisi (kimlik yok, belirtec yetkidir). Dogrulama ONCE yapilir (gecersiz alan belirteci tuketmez); sonra TEK atomik UPDATE `invited -> draft` yapar:
+ * ayni baglantiyla ikinci gonderim (cift tiklama / yaris) 410 alir. Girdi taslaga yazilir; teklif / gider / sozlesme olusmaz.
+ */
+export async function submitPublicQuote(rawToken, body) {
+  const b = bodyOf(body);
+  const vendorName = text(b.vendor_name, 'vendor_name', 'Firma adı', 120, { required: true });
+  const vendorContact = text(b.vendor_contact, 'vendor_contact', 'Yetkili kişi', 80);
+  const vendorPhone = text(b.vendor_phone, 'vendor_phone', 'Telefon', 32);
+  if (vendorPhone !== null && !QUOTE_REQUEST_PHONE.test(vendorPhone)) throw invalid('vendor_phone', 'Telefon yalnız rakam, + ( ) - . ve boşluk içerebilir (en az 3 karakter).');
+  const fields = parseQuoteFields({ amount_kurus: b.amount_kurus, valid_until: b.valid_until, delivery_days: b.delivery_days, note: b.note, vat_included: b.vat_included });
+  if (fields.valid_until && fields.valid_until < todayIstanbul()) throw invalid('valid_until', 'Geçerlilik tarihi geçmişte olamaz.');
+  const { token, row } = await usableFormRow(rawToken);
+  const claim = await pool.query(
+    `UPDATE equipment_quote_requests
+        SET status = 'draft', submitted_at = NOW(), vendor_name = $2, vendor_contact = $3, vendor_phone = $4, amount_kurus = $5, valid_until = $6::DATE,
+            delivery_days = $7, note = $8, vat_included = $9
+      WHERE token_hash = $1 AND status = 'invited' AND expires_at > NOW()
+      RETURNING id, site_code`,
+    [
+      hashQuoteRequestToken(token),
+      vendorName,
+      vendorContact,
+      vendorPhone,
+      fields.amount_kurus,
+      fields.valid_until ?? null,
+      fields.delivery_days ?? null,
+      fields.note ?? null,
+      fields.vat_included ?? null,
+    ],
+  );
+  if (!claim.rows[0]) throw unusableForm();
+  await audit({ full_name: 'Dış firma (form bağlantısı)' }, 'quote.request_submitted', Number(claim.rows[0].site_code), 'equipment_quote_request', Number(claim.rows[0].id), {});
+  return { submitted: true, topic: row.topic };
 }
 
 /** 2E gider analizine ekipman kirilimi ekler (modul aciksa; analiz penceresiyle ayni donem). Hata analizi bozmaz. */

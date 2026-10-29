@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/services/equipment_api.dart';
@@ -37,6 +39,7 @@ class EquipmentViewState extends State<EquipmentView> {
   List<EquipmentItem> _items = const <EquipmentItem>[];
   List<MaintenancePlan> _due = const <MaintenancePlan>[];
   List<EquipmentQuote> _quotes = const <EquipmentQuote>[];
+  List<QuoteRequest> _requests = const <QuoteRequest>[];
   EquipmentBreakdown? _breakdown;
 
   static const List<String> _tabs = <String>['Ekipman', 'Bakım takvimi', 'Teklifler', 'Gider kırılımı'];
@@ -59,12 +62,14 @@ class EquipmentViewState extends State<EquipmentView> {
       final items = await _service.list(site.code);
       final due = await _service.due(site.code);
       final quotes = await _service.quotes(site.code);
+      final requests = await _loadRequests(site);
       final breakdown = site.financeOn ? await _service.breakdown(site.code) : null;
       if (!mounted || _site != site) return;
       setState(() {
         _items = items;
         _due = due;
         _quotes = quotes;
+        _requests = requests;
         _breakdown = breakdown;
         _error = null;
         _loading = false;
@@ -413,15 +418,155 @@ class EquipmentViewState extends State<EquipmentView> {
     );
   }
 
-  Widget _quotesTab(EquipmentSite site) => EquipmentQuotesPanel(
-    quotes: _quotes,
-    canWrite: site.canWrite,
-    onAccept: _accept,
-    onReject: _reject,
-    onEdit: _editQuote,
-    onRevise: _reviseQuote,
-    onHistory: _openHistory,
+  Widget _quotesTab(EquipmentSite site) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: <Widget>[
+      QuoteRequestsSection(
+        requests: _requests,
+        canWrite: site.canWrite,
+        onCreate: _createRequest,
+        onRevoke: _revokeRequest,
+        onApprove: _approveRequest,
+        onReject: _rejectRequest,
+      ),
+      EquipmentQuotesPanel(
+        quotes: _quotes,
+        canWrite: site.canWrite,
+        onAccept: _accept,
+        onReject: _reject,
+        onEdit: _editQuote,
+        onRevise: _reviseQuote,
+        onHistory: _openHistory,
+      ),
+    ],
   );
+
+  // --- Firma formu (113, P2-8): tek kullanımlık bağlantı -> firma TASLAK teklifi -> yönetici onayı -------------------------------------------------------
+
+  /// Bağlantı listesi yüklenemezse (ör. eski sunucu) Teklifler sekmesi bozulmaz: bölüm boş görünür.
+  Future<List<QuoteRequest>> _loadRequests(EquipmentSite site) async {
+    try {
+      return await _service.quoteRequests(site.code);
+    } on ApiException {
+      return const <QuoteRequest>[];
+    }
+  }
+
+  Future<void> _createRequest() async {
+    final site = _site!;
+    final v = await askForm(context, 'Firma teklif formu bağlantısı', <FormField2>[
+      const FormField2.text('topic', 'Konu (örn. Asansör bakımı)', required: true, max: 160),
+      const FormField2.text('vendor_hint', 'Beklenen firma (isteğe bağlı)', max: 120),
+      FormField2.choice('valid_days', 'Bağlantı süresi', const <(String, String)>[('7', '7 gün'), ('14', '14 gün'), ('30', '30 gün')], initial: '14'),
+      FormField2.choice('equipment_id', 'İlgili ekipman', <(String, String)>[('', 'Yok'), for (final i in _items) ('${i.id}', i.name)], initial: ''),
+    ]);
+    if (v == null) return;
+    final QuoteRequestCreated created;
+    try {
+      created = await _service.createQuoteRequest(site.code, <String, Object?>{
+        'topic': v['topic'],
+        if ((v['vendor_hint'] ?? '').isNotEmpty) 'vendor_hint': v['vendor_hint'],
+        'valid_days': int.parse(v['valid_days'] ?? '14'),
+        if ((v['equipment_id'] ?? '').isNotEmpty) 'equipment_id': int.parse(v['equipment_id']!),
+      });
+    } on ApiException catch (e) {
+      if (mounted) AppSnack.show(context, e.message, kind: AppSnackKind.error);
+      return;
+    }
+    if (!mounted) return;
+    // Bağlantı yalnız bu yanıtta gelir: önce göster, sonra listeyi yenile.
+    await _showRequestLink(created);
+    if (mounted) await reload();
+  }
+
+  Future<void> _showRequestLink(QuoteRequestCreated created) {
+    final url = created.link.url;
+    final text = '${created.request.topic} için teklif formu: $url';
+    return showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        key: const ValueKey<String>('quote_request_link_dialog'),
+        title: const Text('Form bağlantısı hazır'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              const Text('Bu bağlantı yalnızca şimdi gösterilir ve bir kez kullanılabilir. Firmaya iletin; kaybederseniz iptal edip yenisini oluşturun.'),
+              const SizedBox(height: AppSpace.sm),
+              SelectableText(url, key: const ValueKey<String>('quote_request_link_text')),
+              if (created.link.expiresAt != null) Padding(padding: const EdgeInsets.only(top: AppSpace.sm), child: Text('Geçerlilik: ${quoteDate(created.link.expiresAt!)} tarihine kadar')),
+            ],
+          ),
+        ),
+        actions: <Widget>[
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Kapat')),
+          TextButton.icon(
+            onPressed: () async {
+              await Clipboard.setData(ClipboardData(text: url));
+              if (dialogContext.mounted) AppSnack.show(dialogContext, 'Bağlantı panoya kopyalandı.', kind: AppSnackKind.success);
+            },
+            icon: const Icon(Icons.copy_rounded, size: 18),
+            label: const Text('Kopyala'),
+          ),
+          FilledButton.icon(
+            onPressed: () async {
+              try {
+                // Sistem paylaşım sayfasını (WhatsApp, e-posta ...) açar.
+                await SharePlus.instance.share(ShareParams(text: text, subject: 'Teklif formu'));
+              } catch (_) {
+                // Paylaşım açılamadıysa mesaj panoya kopyalanır.
+                await Clipboard.setData(ClipboardData(text: text));
+                if (dialogContext.mounted) AppSnack.show(dialogContext, 'Mesaj kopyalandı. Firmaya yapıştırıp gönderebilirsiniz.', kind: AppSnackKind.success);
+              }
+            },
+            icon: const Icon(Icons.share_rounded, size: 18),
+            label: const Text('Paylaş'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<bool> _confirmRequest(String title, String message, String action) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: <Widget>[
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Vazgeç')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(action)),
+        ],
+      ),
+    );
+    return ok == true;
+  }
+
+  Future<void> _revokeRequest(QuoteRequest r) async {
+    final site = _site!;
+    if (!await _confirmRequest(r.expired ? 'Kaydı kapat' : 'Bağlantıyı iptal et', r.expired ? '"${r.topic}" için süresi dolmuş bağlantı kapatılsın mı?' : '"${r.topic}" için gönderdiğiniz bağlantı iptal edilsin mi? Firma artık bu bağlantıyla teklif giremez.', r.expired ? 'Kapat' : 'İptal et')) return;
+    await _run(() => _service.revokeQuoteRequest(site.code, r.id), 'Bağlantı iptal edildi.');
+  }
+
+  Future<void> _approveRequest(QuoteRequest r) async {
+    final site = _site!;
+    final amount = r.amountKurus == null ? '' : ' (${formatKurus(r.amountKurus!)})';
+    if (!await _confirmRequest(
+      'Taslak teklifi onayla',
+      '${r.vendorName ?? 'Firma'} teklifi$amount onaylanırsa AÇIK bir teklif olarak Teklifler listesine eklenir. Gider veya sözleşme oluşmaz; teklifi kabul etmek ayrı bir karardır.',
+      'Onayla',
+    )) {
+      return;
+    }
+    await _run(() => _service.approveQuoteRequest(site.code, r.id), 'Taslak onaylandı. Açık teklif olarak eklendi; kabul kararı sizde.');
+  }
+
+  Future<void> _rejectRequest(QuoteRequest r) async {
+    final site = _site!;
+    if (!await _confirmRequest('Taslak teklifi reddet', '${r.vendorName ?? 'Firma'} teklifi reddedilsin mi? Teklif oluşmaz.', 'Reddet')) return;
+    await _run(() => _service.rejectQuoteRequest(site.code, r.id), 'Taslak teklif reddedildi.');
+  }
 
   Widget _breakdownTab(EquipmentSite site) {
     final b = _breakdown;

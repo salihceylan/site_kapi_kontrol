@@ -388,6 +388,7 @@ Etiketler istemci modellerindedir (`lib/models/`); "son" = o durumdan başka dur
 | Belge kategorisi | `regulation` Yönetmelik · `minutes` Toplantı Tutanağı / Karar · `contract` Sözleşme · `notice` Bilgilendirme · `other` Diğer |
 | **Komşu panosu ilanı** (`neighbor_posts.status`, 064) | `pending` Onay bekliyor · `published` Yayında · `rejected` Reddedildi · `removed` Kaldırıldı · `withdrawn` Geri çekildi |
 | Ekipman teklifi (`equipment_quotes.status`, 068) | `open` · `accepted` · `rejected` |
+| Firma teklif formu (`equipment_quote_requests.status`, 113) | `invited` Bağlantı bekliyor · `draft` Taslak teklif (firma gönderdi, onay bekliyor) · `approved` Onaylandı (açık teklif oluştu) · `rejected` Reddedildi · `revoked` Bağlantı iptal edildi (süresi dolan `invited` yanıtta `expired`) |
 | Bakım planı aralığı (`equipment_plans.interval_months`) | 1 · 3 · 6 · 12 ay |
 | Toplu yükleme türü (`ImportKind`) | `apartments` Daireler · `people` Kişiler · `vehicles` Araçlar · `all_in_one` Hepsi bir arada · `opening_balances` Devir bakiyesi |
 | Beyaz etiket kapsamı (`brand_themes.scope_type`, 071) | `company` · `site` |
