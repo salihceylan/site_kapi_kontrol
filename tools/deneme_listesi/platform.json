@@ -1,7 +1,7 @@
 {
   "baslik": "Platform Faz Kontrol Listesi",
   "aciklama": "SmartKeyPass (kapı kontrol), site ve toplu yaşam yönetim platformunun seçilebilir bir modülü olacak. Bu sayfa işi fazlara böler. Her faz canlıya alındığında maddeleri “Denemeye hazır” olur; siz denersiniz ve “Çalışıyor / Çalışmıyor” diye işaretlersiniz. Henüz yapılmamış maddelerde “Böyle istiyorum / istemiyorum” ile planı şimdiden şekillendirebilirsiniz. İşaretleriniz ve notlarınız kaydedilir, Claude okuyup yanıtlar.",
-  "durum_metni": "Durum: Faz 0, Faz 1, Faz 1.1, Faz 2a, Faz 3a, site başvurusu ve Faz 4a (Aidat ve Finans: tanım, borçlandırma, tahsilat, düzeltme, ay kapatma) canlıda ve denemeye hazır; Aidat ve Finans modülü TEMEL modüldür: her sitede açıktır, talep edilmez ve kapatılamaz. Faz 2b (Excel’den toplu yükleme ve dışa aktarma; F13), Faz 3b-A (Belgeler; F14) ve Faz 4b (makbuz, kasa/banka, gider, raporlar, gecikme tazminatı, borç hatırlatma; F15) ile hesap silme ve veri dosyası güncellemeleri (F16) kodlandı ve test edildi; sunucu ve uygulama sürümü yayınlanınca denenir (maddeler “Denemeye hazır” görünse de sürüm yayınlanmadan uygulamada yoktur). Gecikme tazminatı ve borç hatırlatma, avukatın vereceği hukuk onayı (finance.legal_ok) gelene kadar kapalı kalır: “Hukuk onayı bekleniyor” iletisi denemeye hazırdır, çalışan hali Planlıdır. Telefon bildirimi (Faz 3b-B, Firebase) F3.07’de planlı kalır. Beş yönetim türü ve türe göre terimler (F9), Anket ve Oylama ile Ziyaretçi ve Kargo (F11) canlıdadır; kartlı geçişin sunucu altyapısı hazırdır, uygulama ekranı ve kart okuyucu planlıdır (F10). Banka ve ödeme işleri “Yakında”. Satışa hazırlık paketi (F12: hesabı silme ve veri indirme, yasal metinler, giriş güvenliği, Yardım ve tanıtım turu, Platform Ayarları, bakım ve sürüm kapısı, yedek ve izleme, mağaza hazırlığı): sunucu tarafı canlıdadır; uygulama ve web sürümü yasal metinler tamamlanınca yayınlanacaktır, bu yüzden F12 maddelerini sürüm yayınlandıktan sonra (ya da geliştirici derlemesiyle) deneyin. Dalga 1 (F25–F29: kiracı ve ev sahibi için ayrı hesap, kurallar tablosu ve altın veri seti, sade tasarım, gruplu menü ve sakin alt çubuğu, avukat taslakları ve hesap rehberleri) kodlandı ve bağımsız incelemeden geçti; sürüm yayınlanınca denenir. Gezinme değişti: Profilim, Modüller, Modül Talepleri, Site Başvuruları, cihaz ekranları, Denetim Kaydı, Platform Ayarları ve İstemci Hataları artık sağ üstteki dişlinin açtığı Ayarlar panelindedir; bu yüzden ilgili eski maddeler güncellendi ve “Bugün değişti” işaretlidir. 2026-10-28: Anket ve Oylama, Komşu Panosu, Ekipman ve Bakım, Faaliyet Raporu ve Dosya Deposu da temel modül oldu (her sitede açık, talep gerekmez); Kart Ödemesi Aidat ve Finans’ın, Belgeler Dosya Deposu’nun içine alındı (F38; bu modüllerle ilgili eski maddeler güncellendi ve “Bugün değişti” işaretlidir). 2026-10-29 Dalga D (F39–F43): kompakt menü ve “Tüm işlemler” (F39), sayfa bağlamlı Geri bildirim (F40), bağlam şeridi, “bağlı değil” bildirimi, belirgin Yenile ve onaylı Çıkış (F41), liste/kutucuk anahtarı ve Kolay görünüm (F42), Yöneticiyi ara ve büyük 112 düğmesi (F43) kodlandı ve test edildi; sürüm yayınlanınca denenir. 2026-10-29 Dalga F (F58): OTA firmware imzası (imzalama aracı, sunucu yükleme ucu ve cihaz doğrulayıcısı) kodlandı ve test edildi; ÜRETİM anahtarı üretilmedi, hiçbir karta yazılmadı, sunucu dağıtılmadı. Maddeler sırayla ve tamamen sizin işinizdir (anahtar üretimi, köprü sürümün derlenip karta yazılması, imzalama ve canlı yayın); sunucu dağıtımı ve köprü sürüm yazılmadan etkisi yoktur. 2026-10-29 Dalga H: Alacak iadesi ekranları (sakin ve yönetici; F64.04–F64.07), muhasebe kontrol izi (F65), Dönem raporu (F66), ikinci altın veri seti ve örnek site tohumu (F67), İş Takibi’nde firmaya yönlendirme (F68) ve dekont / gider formlarında cihaz içi “Görselden oku” (F69) kodlandı ve test edildi; sunucu (migration 110 ve 111) ve uygulama sürümü yayınlanınca denenir.",
+  "durum_metni": "Durum: Faz 0, Faz 1, Faz 1.1, Faz 2a, Faz 3a, site başvurusu ve Faz 4a (Aidat ve Finans: tanım, borçlandırma, tahsilat, düzeltme, ay kapatma) canlıda ve denemeye hazır; Aidat ve Finans modülü TEMEL modüldür: her sitede açıktır, talep edilmez ve kapatılamaz. Faz 2b (Excel’den toplu yükleme ve dışa aktarma; F13), Faz 3b-A (Belgeler; F14) ve Faz 4b (makbuz, kasa/banka, gider, raporlar, gecikme tazminatı, borç hatırlatma; F15) ile hesap silme ve veri dosyası güncellemeleri (F16) kodlandı ve test edildi; sunucu ve uygulama sürümü yayınlanınca denenir (maddeler “Denemeye hazır” görünse de sürüm yayınlanmadan uygulamada yoktur). Gecikme tazminatı ve borç hatırlatma, avukatın vereceği hukuk onayı (finance.legal_ok) gelene kadar kapalı kalır: “Hukuk onayı bekleniyor” iletisi denemeye hazırdır, çalışan hali Planlıdır. Telefon bildirimi (Faz 3b-B, Firebase) F3.07’de planlı kalır. Beş yönetim türü ve türe göre terimler (F9), Anket ve Oylama ile Ziyaretçi ve Kargo (F11) canlıdadır; kartlı geçişin sunucu altyapısı hazırdır, uygulama ekranı ve kart okuyucu planlıdır (F10). Banka ve ödeme işleri “Yakında”. Satışa hazırlık paketi (F12: hesabı silme ve veri indirme, yasal metinler, giriş güvenliği, Yardım ve tanıtım turu, Platform Ayarları, bakım ve sürüm kapısı, yedek ve izleme, mağaza hazırlığı): sunucu tarafı canlıdadır; uygulama ve web sürümü yasal metinler tamamlanınca yayınlanacaktır, bu yüzden F12 maddelerini sürüm yayınlandıktan sonra (ya da geliştirici derlemesiyle) deneyin. Dalga 1 (F25–F29: kiracı ve ev sahibi için ayrı hesap, kurallar tablosu ve altın veri seti, sade tasarım, gruplu menü ve sakin alt çubuğu, avukat taslakları ve hesap rehberleri) kodlandı ve bağımsız incelemeden geçti; sürüm yayınlanınca denenir. Gezinme değişti: Profilim, Modüller, Modül Talepleri, Site Başvuruları, cihaz ekranları, Denetim Kaydı, Platform Ayarları ve İstemci Hataları artık sağ üstteki dişlinin açtığı Ayarlar panelindedir; bu yüzden ilgili eski maddeler güncellendi ve “Bugün değişti” işaretlidir. 2026-10-28: Anket ve Oylama, Komşu Panosu, Ekipman ve Bakım, Faaliyet Raporu ve Dosya Deposu da temel modül oldu (her sitede açık, talep gerekmez); Kart Ödemesi Aidat ve Finans’ın, Belgeler Dosya Deposu’nun içine alındı (F38; bu modüllerle ilgili eski maddeler güncellendi ve “Bugün değişti” işaretlidir). 2026-10-29 Dalga D (F39–F43): kompakt menü ve “Tüm işlemler” (F39), sayfa bağlamlı Geri bildirim (F40), bağlam şeridi, “bağlı değil” bildirimi, belirgin Yenile ve onaylı Çıkış (F41), liste/kutucuk anahtarı ve Kolay görünüm (F42), Yöneticiyi ara ve büyük 112 düğmesi (F43) kodlandı ve test edildi; sürüm yayınlanınca denenir. 2026-10-29 Dalga F (F58): OTA firmware imzası (imzalama aracı, sunucu yükleme ucu ve cihaz doğrulayıcısı) kodlandı ve test edildi; ÜRETİM anahtarı üretilmedi, hiçbir karta yazılmadı, sunucu dağıtılmadı. Maddeler sırayla ve tamamen sizin işinizdir (anahtar üretimi, köprü sürümün derlenip karta yazılması, imzalama ve canlı yayın); sunucu dağıtımı ve köprü sürüm yazılmadan etkisi yoktur. 2026-10-29 Dalga H: Alacak iadesi ekranları (sakin ve yönetici; F64.04–F64.07), muhasebe kontrol izi (F65), Dönem raporu (F66), ikinci altın veri seti ve örnek site tohumu (F67), İş Takibi’nde firmaya yönlendirme (F68) ve dekont / gider formlarında cihaz içi “Görselden oku” (F69) kodlandı ve test edildi; sunucu (migration 110 ve 111) ve uygulama sürümü yayınlanınca denenir. 2026-10-29 Dalga J: Google Drive aktarım doğrulaması, sağlık göstergesi ve kota uyarısı (F70; migration 112) ile dört küçük açığın kapanışı (F71: bildirim gizliliği, hesap silmede iade ve komşu ilanları, geri bildirim eki yedeği, deneme kodu temizliği) kodlandı ve test edildi; sunucu (migration 112) ve uygulama sürümü yayınlanınca denenir. Gerçek Google hesabıyla deneme size kalmıştır.",
   "bolumler": [
     {
       "id": "F0",
@@ -10951,6 +10951,171 @@
           "beklenen": "Okuma internet olmadan da çalışır (cihaz içi).",
           "rol_notu": "Daire sakini",
           "on_kosul": "Android telefon; uçak modu açık",
+          "yeni": true,
+          "gelistirme": "hazir"
+        }
+      ]
+    },
+    {
+      "id": "F70",
+      "baslik": "Google Drive: aktarım doğrulaması (SHA-256), sağlık göstergesi ve kota uyarısı",
+      "durum": "hazir",
+      "ozet": "Google Drive aktarımı üç yönden sağlamlaştı. (1) Drive'a giden dosyanın SHA-256 değeri, Drive'ın döndürdüğü değerle karşılaştırılır (hem doğrudan yüklemede hem bekleyen dosya gönderiminde); uyuşmazsa Drive'daki bozuk kopya çöp kutusuna alınır, dosya “kaydedildi” yazılmaz, sunucudaki asıl kopya silinmez ve yeniden denenir (denetim kaydı ve durum uyarısı düşer). Drive sağlama toplamı bildirmezse kimlik ve boyut yeterlidir. (2) Dosya Deposu > Google Drive kartına sağlık göstergesi eklendi: durum rozeti, erişim belirteci durumu, son başarılı aktarım, kuyruk, Google kotası çubuğu ve “Şimdi denetle” düğmesi (eski sunucuda bölüm görünmez). (3) Google kotası site başına 6 saatte bir ve “Şimdi denetle” ile okunur; %90'da ve %100'de uyarı (denetim kaydı + durum uyarısı, saatte bir) düşer. Google “depolama dolu” ile istek sınırı artık ayrıdır; dosya reddedilmez, bekler. Yeni arka plan işi (5 dakikada bir) vakti gelmiş bekleyen dosyaları kendiliğinden gönderir ve izin geri alınmışsa bağlantıyı “koptu” yapıp uyarı düşürür. Sunucuda migration 112 gerekir. Yönetici e-postası yoktur: uyarı durum ekranında ve site denetim kaydındadır. Gerçek Google hesabıyla deneme size kalmıştır.",
+      "maddeler": [
+        {
+          "id": "F70.01",
+          "baslik": "Sağlık rozeti ve son başarılı aktarım",
+          "adimlar": [
+            "Dosya Deposu'na küçük bir PDF yükleyin.",
+            "Dosya Deposu ekranındaki Google Drive kartına bakın.",
+            "Drive'da dosyanın klasörde açıldığını kontrol edin."
+          ],
+          "beklenen": "Kartta yeşil “Drive bağlantısı sağlıklı” rozeti, “Erişim” satırı ve dolu bir “Son başarılı aktarım” saati görünür; “Kuyruk: boş” yazar. Drive'daki dosya açılır.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Google Drive bağlı bir site; sunucuda migration 112 ve güncel uygulama",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F70.02",
+          "baslik": "Şimdi denetle: kota satırı ve çubuğu dolar",
+          "adimlar": [
+            "Kartta “Şimdi denetle” düğmesine dokunun.",
+            "Kota satırına ve çubuğuna, “Son denetim” saatine bakın."
+          ],
+          "beklenen": "Kota satırı ve çubuk dolar (örnek: yüzde ve GB değerleri), “Son denetim” saati güncellenir. Dosya yüklemek ya da başka bir şey değişmez.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "F70.01'deki bağlı Drive hesabı",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F70.03",
+          "baslik": "İzin geri alınınca bağlantı “koptu” olur, yeniden bağlayınca düzelir",
+          "adimlar": [
+            "Google hesabında Uygulamalar'dan SmartKeyPass erişimini kaldırın.",
+            "Uygulamada “Şimdi denetle”ye dokunun.",
+            "Site denetim kaydına bakın.",
+            "Google Drive'ı yeniden bağlayın."
+          ],
+          "beklenen": "Rozet kırmızı olur ve “Drive bağlantısı koptu; yeniden bağlayın” yazar; denetim kaydında “Google Drive bağlantısı koptu” satırı çıkar. Yeniden bağlayınca rozet düzelir; bekleyen dosyalar silinmeden gönderilir.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Bağlı Drive hesabı; Google hesabına girebilen biri. Bekleyen dosya varsa silinmemesi beklenir",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F70.04",
+          "baslik": "Bağlantı kesikken yükleme kuyruğa girer, 5 dakika içinde kendiliğinden gider",
+          "adimlar": [
+            "Drive bağlantısını kesin ve bir dosya yükleyin (kuyruğa girer).",
+            "Drive'ı yeniden bağlayın ve yaklaşık 5 dakika bekleyin (ya da “Bekleyenleri şimdi gönder”e dokunun).",
+            "Kartta “Kuyruk” satırına ve Drive klasörüne bakın."
+          ],
+          "beklenen": "Dosya Drive'a gider, kuyruk boşalır; sunucudaki geçici kopya temizlenir. Bekleme sırasında dosya hiçbir zaman silinmez.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Bağlı Drive hesabı",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F70.05",
+          "baslik": "Kota %90 üstünde sarı uyarı; dosya reddedilmez",
+          "adimlar": [
+            "“Şimdi denetle”ye dokunun.",
+            "Kartın uyarı kutusuna ve site denetim kaydına bakın.",
+            "Dosya Deposu'na yeni bir dosya yükleyin."
+          ],
+          "beklenen": "Sarı “Google Drive depolama alanı %9x dolu” uyarısı çıkar; denetim kaydında “Google Drive kotası dolmak üzere” satırı olur. Yükleme reddedilmez. Depolama tamamen doluysa dosya “Google Drive depolama alanı dolu” nedeniyle bekler, silinmez.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Google depolaması %90'ın üstünde dolu bir Drive hesabı (yoksa bu madde atlanır)",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F70.06",
+          "baslik": "Canlı kayıtta doğrulama yöntemi “sha256” mı (geliştirici kontrolü)",
+          "adimlar": [
+            "Sunucu veritabanında şu sorguyu çalıştırın: SELECT verify_method, count(*) FROM drive_files WHERE status='stored' GROUP BY 1;"
+          ],
+          "beklenen": "Çoğu satır “sha256” çıkmalıdır. Çoğu “size” çıkıyorsa Drive yanıtında sağlama toplamı gelmiyor demektir; bu durumda kimlik ve boyut doğrulaması yapılmıştır, hata değildir ama bildirin. SHA-256 uyuşmazlığı gerçek Drive'da kolay üretilmez; bu yol sahte istemciyle testte doğrulandı.",
+          "rol_notu": "Geliştirici (sunucuya erişimi olan)",
+          "on_kosul": "En az bir dosya Drive'a kaydedilmiş canlı sunucu",
+          "yeni": true,
+          "gelistirme": "hazir"
+        }
+      ]
+    },
+    {
+      "id": "F71",
+      "baslik": "Küçük açıklar: bildirim gizliliği, hesap silme (iade ve komşu ilanları), geri bildirim eki yedeği, deneme kodu temizliği",
+      "durum": "hazir",
+      "ozet": "Dört küçük açık kapandı (şema değişikliği yok). (1) Bildirim gizliliği: kiracı borcunun malike devri ve kiracı çıkışı bildirimlerinde borç tutarı yalnız hesap muhatabı olan malike gider; diğer maliklere “Dairenizle ilgili bir borç işlemi yapıldı; ayrıntılar hesap muhatabında.” notu gider. (2) Hesap silme: önizleme her zaman “Bekleyen iade talebiniz varsa iptal edilir.” der (talep varsa sayısıyla); silme komşu panosundaki ilanlarınızı da siler ve site denetim kaydına yalnız sayı yazılır (başlık ve ad yok). Başkalarının ilanlarına yaptığınız şikâyetler adli saklama gereği korunur. (3) Sunucu yedeği: geri bildirim ekleri (feedback_attachments) fotoğraf arşivine katıldı. (4) Bakım temizliği: bitmiş deneme erişim kodu satırları 90 gün sonra silinir; kullanılmış ama kapanmamış satıra ve kullanıcı hesabına dokunulmaz. Yasal metindeki [AVUKAT DOĞRULASIN] işaretleri değişmedi.",
+      "maddeler": [
+        {
+          "id": "F71.01",
+          "baslik": "Çoklu malikli dairede borç devri bildirimi yalnız muhataba tutar gösterir",
+          "adimlar": [
+            "Yönetici olarak kiracı borcunu malike devredin (ya da kiracı çıkışı yapın).",
+            "Muhatap malikin Dairem bildirimlerine bakın.",
+            "İkinci malikin bildirimlerine bakın."
+          ],
+          "beklenen": "Muhatap malikte tutarı gösteren bildirim görünür. İkinci malikte yalnız “Dairenizle ilgili bir borç işlemi yapıldı; ayrıntılar hesap muhatabında.” notu çıkar, tutar görünmez.",
+          "rol_notu": "Site yöneticisi ve iki malik hesabı (biri hesap muhatabı)",
+          "on_kosul": "Hesap muhatabı olan ve olmayan iki malikli bir daire; kiracıya ait açık borç",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F71.02",
+          "baslik": "Hesabı sil önizlemesi: iade talebi ve komşu ilanları satırları",
+          "adimlar": [
+            "Hesap ekranında Hesabı sil'e dokunun; silmeden önizlemeye bakın.",
+            "Aynı önizlemeye iade talebi ve ilanı olmayan bir hesapla da bakın."
+          ],
+          "beklenen": "İlan ve iade talebi olan hesapta “Bekleyen iade talebiniz (N) iptal edilir.” ve “Komşu panosundaki ilanlarınız (N) silinir.” satırları görünür. İade talebi olmayan hesapta da “Bekleyen iade talebiniz varsa iptal edilir.” satırı vardır.",
+          "rol_notu": "Daire sakini (deneme hesabı)",
+          "on_kosul": "Komşu panosunda ilanı ve bekleyen iade talebi olan bir deneme hesabı",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F71.03",
+          "baslik": "Silme sonrası: ilanlar gider, iade talebi iptal olur, denetim kaydı sayı yazar",
+          "adimlar": [
+            "Hesabı silmeyi onaylayın.",
+            "Yönetici olarak komşu panosuna ve iade taleplerine bakın.",
+            "Site denetim kaydında “neighbor_board.posts_deleted_account_closed” satırına bakın."
+          ],
+          "beklenen": "Hesabın ilanları panoda yoktur; bekleyen iade talebi iptal edilmiştir. Denetim kaydı yalnız sayıyı ve durum dağılımını gösterir, ilan başlığı ya da hesap adı yoktur.",
+          "rol_notu": "Daire sakini ve site yöneticisi (deneme)",
+          "on_kosul": "F71.02'deki deneme hesabı (gerçek kullanıcı hesabıyla denemeyin)",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F71.04",
+          "baslik": "Sunucu yedeği geri bildirim eklerini de alır (sunucu)",
+          "adimlar": [
+            "Sunucuda bash ~/ops/backup_db.sh çalıştırın.",
+            "Log'da adım 8'e ve kapi_work_attachments_* arşivinin listesine bakın."
+          ],
+          "beklenen": "Adım 8 tamam der; arşiv listesinde feedback_attachments/ yolları çıkar. Bu klasör sembolik bağlantıysa yedek reddedilir.",
+          "rol_notu": "Geliştirici (sunucuya erişimi olan)",
+          "on_kosul": "feedback_attachments altında en az bir dosya olan sunucu",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F71.05",
+          "baslik": "Bitmiş deneme erişim kodu satırları 90 gün sonra temizlenir",
+          "adimlar": [
+            "Yönetim panelinde Veritabanı temizliğini çalıştırın.",
+            "Sunucu günlüğüne ve denetim kaydına bakın."
+          ],
+          "beklenen": "Günlükte “bitmiş deneme erişim kodu satırı silindi” yazar; denetim kaydında maintenance.trial_access_codes_purged görünür. Kullanılmış ama kapanmamış kodlara ve kullanıcı hesabına dokunulmaz. Silinecek satır yoksa kayıt düşmez.",
+          "rol_notu": "Süper kullanıcı",
+          "on_kosul": "Süresi 90 günden fazla dolmuş (kullanılmamış) bir deneme erişim kodu satırı",
           "yeni": true,
           "gelistirme": "hazir"
         }

@@ -2,7 +2,7 @@
 
 > Kullanıcıya/istemciye görünen metinleri üretildikleri `dosya:satır` ile eşler. `Ctrl+F` ile ekranda gördüğünüz mesajın bir parçasını arayın. Koddan otomatik üretilir: `node tools/klavuz/build.mjs`. Ana sayfa: [ARIZA_KLAVUZU.md](ARIZA_KLAVUZU.md) · [İndeks](ARIZA_KLAVUZU_INDEKS.md).
 
-## Sunucu mesajları (897)
+## Sunucu mesajları (899)
 
 Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`). Uygulama bu metinleri HTTP yanıt gövdesinde (`error` alanı) alır.
 
@@ -30,11 +30,12 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | ${label} ${min} ile ${max} arasında bir tamsayı olmalıdır. | [server/src/services/membership_rules.js:515](../server/src/services/membership_rules.js#L515) |
 | ${label} dairesinin yönetimi site yöneticisi tarafından ${next.name} kişisine verildi. Dairede kalmaya devam ediyorsunuz. | [server/src/modules/apartment_mgmt_manager.js:186](../server/src/modules/apartment_mgmt_manager.js#L186) |
 | ${label} dairesinin yönetimi site yöneticisi tarafından size verildi. | [server/src/modules/apartment_mgmt_manager.js:177](../server/src/modules/apartment_mgmt_manager.js#L177) |
+| ${n} dosyanın Drive'a ulaşan kopyası doğrulanamadı (SHA-256 uyuşmadı). Dosya silinmedi; sunucudaki asıl kopya yeniden gönderilecek. | [server/src/modules/drive_common.js:284](../server/src/modules/drive_common.js#L284) |
 | ${name} env degiskeni eksik. | [server/src/mailer.js:6](../server/src/mailer.js#L6) |
 | ${name}: dosya çok büyük | [server/src/modules/legal_documents.js:222](../server/src/modules/legal_documents.js#L222) |
-| ${overdueCount} dosya ${PENDING_WARN_DAYS} günden uzun süredir Drive'a gönderilemedi. Dosyalar silinmedi; Drive bağlantısı düzelince gönderilir. | [server/src/modules/drive_common.js:219](../server/src/modules/drive_common.js#L219) |
+| ${overdueCount} dosya ${PENDING_WARN_DAYS} günden uzun süredir Drive'a gönderilemedi. Dosyalar silinmedi; Drive bağlantısı düzelince gönderilir. | [server/src/modules/drive_common.js:366](../server/src/modules/drive_common.js#L366) |
 | ${pass.door_name} icin kapi acma komutu gonderildi. | [server/src/routes/guest_passes_routes.js:464](../server/src/routes/guest_passes_routes.js#L464) |
-| ${pendingCount} dosya Drive'a gönderilmeyi bekliyor. Silinmez; bağlantı sağlanınca gönderilir. | [server/src/modules/drive_common.js:224](../server/src/modules/drive_common.js#L224) |
+| ${pendingCount} dosya Drive'a gönderilmeyi bekliyor. Silinmez; bağlantı sağlanınca gönderilir. | [server/src/modules/drive_common.js:371](../server/src/modules/drive_common.js#L371) |
 | ${req.full_name} sakini, "${req.block_name \|\| ''} ${req.unit_label}" dairesine ${assignedRole === 'APARTMENT_ADMIN' ? 'Daire Yöneticisi' : 'Aile Üyesi'} olarak başarıyla onaylandı. | [server/src/services/membership_service.js:1445](../server/src/services/membership_service.js#L1445) |
 | ${result.revoked_count} aktif karekod basariyla iptal edildi. | [server/src/routes/manager_routes.js:1117](../server/src/routes/manager_routes.js#L1117) |
 | ${site?.name ?  | [server/src/modules/account_common.js:70](../server/src/modules/account_common.js#L70) |
@@ -63,9 +64,8 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | Başlangıç tarihi geçersiz. | [server/src/modules/apartment_mgmt_rules.js:253](../server/src/modules/apartment_mgmt_rules.js#L253) |
 | Başlangıç tarihi geçmişte olamaz. | [server/src/modules/apartment_mgmt_rules.js:254](../server/src/modules/apartment_mgmt_rules.js#L254) |
 | Başvuru bulunamadı. | [server/src/modules/site_application_common.js:25](../server/src/modules/site_application_common.js#L25) |
-| Bekleme alanı %${percent} doldu. Dolarsa yeni dosya kabul edilmez; mevcut dosyalar silinmez. | [server/src/modules/drive_common.js:213](../server/src/modules/drive_common.js#L213) |
-| Bekleme alanı doldu (%${Math.min(percent, 100)}). Drive'a gönderilemeyen dosyalar silinmez; alan boşalana kadar yeni dosya kabul edilmez. Drive bağlantısını yenileyip bekleyenleri gönderin. | [server/src/modules/drive_common.js:208](../server/src/modules/drive_common.js#L208) |
-| beklenmeyen hata | [server/src/modules/drive_service.js:425](../server/src/modules/drive_service.js#L425) |
+| Bekleme alanı %${percent} doldu. Dolarsa yeni dosya kabul edilmez; mevcut dosyalar silinmez. | [server/src/modules/drive_common.js:360](../server/src/modules/drive_common.js#L360) |
+| Bekleme alanı doldu (%${Math.min(percent, 100)}). Drive'a gönderilemeyen dosyalar silinmez; alan boşalana kadar yeni dosya kabul edilmez. Drive bağlantısını yenileyip bekleyenleri gönderin. | [server/src/modules/drive_common.js:355](../server/src/modules/drive_common.js#L355) |
 | Bekleyen abonelik talebi bulunamadi. | [server/src/routes/admin_routes.js:812](../server/src/routes/admin_routes.js#L812) |
 | Bekleyen kayıt bulunamadı. Lütfen yeniden kayıt olunuz. | [server/src/services/membership_service.js:466](../server/src/services/membership_service.js#L466) |
 | Bekleyen site talebi bulunamadi. | [server/src/routes/admin_routes.js:960](../server/src/routes/admin_routes.js#L960) |
@@ -76,7 +76,7 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | Belirtilen cihaz zaten başka bir sitede kullanımda. | [server/src/services/membership_service.js:919](../server/src/services/membership_service.js#L919) |
 | Bilinmeyen kontrol izi türü: ${kind} | [server/src/modules/check_mark_service.js:68](../server/src/modules/check_mark_service.js#L68) |
 | Bilinmeyen toplu yükleme türü. | [server/src/modules/bulk_import_plan.js:27](../server/src/modules/bulk_import_plan.js#L27) |
-| Bir sorun oluştu. Uygulamadan yeniden deneyin. | [server/src/modules/drive_routes.js:165](../server/src/modules/drive_routes.js#L165) |
+| Bir sorun oluştu. Uygulamadan yeniden deneyin. | [server/src/modules/drive_routes.js:171](../server/src/modules/drive_routes.js#L171) |
 | Bitiş tarihi başlangıçtan önce olamaz. | [server/src/modules/apartment_mgmt_rules.js:258](../server/src/modules/apartment_mgmt_rules.js#L258) |
 | Bitiş tarihi geçersiz. | [server/src/modules/apartment_mgmt_rules.js:257](../server/src/modules/apartment_mgmt_rules.js#L257) |
 | borçlandırma satır sayısı uyuşmuyor (${written.rowCount} / ${lines.length}) | [server/src/modules/finance_service.js:605](../server/src/modules/finance_service.js#L605) |
@@ -272,7 +272,7 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | Çok fazla dosya yükleme denemesi. Biraz sonra tekrar deneyin. | [server/src/modules/feedback_routes.js:41](../server/src/modules/feedback_routes.js#L41) |
 | Çok fazla dosya yükleme isteği. Biraz sonra tekrar deneyin. | [server/src/modules/finance_4b_routes.js:216](../server/src/modules/finance_4b_routes.js#L216) |
 | Çok fazla döküm istendi. Biraz sonra tekrar deneyin. | [server/src/modules/residency_log_routes.js:33](../server/src/modules/residency_log_routes.js#L33) |
-| Çok fazla Drive işlemi. Biraz sonra tekrar deneyin. | [server/src/modules/drive_routes.js:43](../server/src/modules/drive_routes.js#L43) |
+| Çok fazla Drive işlemi. Biraz sonra tekrar deneyin. | [server/src/modules/drive_routes.js:44](../server/src/modules/drive_routes.js#L44) |
 | Çok fazla duyuru işlemi. Biraz sonra tekrar deneyin. | [server/src/modules/announcement_routes.js:61](../server/src/modules/announcement_routes.js#L61) |
 | Çok fazla ekipman işlemi. Biraz sonra tekrar deneyin. | [server/src/modules/equipment_routes.js:42](../server/src/modules/equipment_routes.js#L42) |
 | Çok fazla faaliyet raporu işlemi. Biraz sonra tekrar deneyin. | [server/src/modules/annual_report_routes.js:23](../server/src/modules/annual_report_routes.js#L23) |
@@ -304,8 +304,8 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | Çok fazla istek. Biraz sonra tekrar deneyin. | [server/src/modules/decision_book_routes.js:39](../server/src/modules/decision_book_routes.js#L39) |
 | Çok fazla istek. Biraz sonra tekrar deneyin. | [server/src/modules/device_integrations_routes.js:57](../server/src/modules/device_integrations_routes.js#L57) |
 | Çok fazla istek. Biraz sonra tekrar deneyin. | [server/src/modules/document_routes.js:72](../server/src/modules/document_routes.js#L72) |
-| Çok fazla istek. Biraz sonra tekrar deneyin. | [server/src/modules/drive_routes.js:34](../server/src/modules/drive_routes.js#L34) |
-| Çok fazla istek. Biraz sonra tekrar deneyin. | [server/src/modules/drive_routes.js:49](../server/src/modules/drive_routes.js#L49) |
+| Çok fazla istek. Biraz sonra tekrar deneyin. | [server/src/modules/drive_routes.js:35](../server/src/modules/drive_routes.js#L35) |
+| Çok fazla istek. Biraz sonra tekrar deneyin. | [server/src/modules/drive_routes.js:50](../server/src/modules/drive_routes.js#L50) |
 | Çok fazla istek. Biraz sonra tekrar deneyin. | [server/src/modules/emergency_routes.js:22](../server/src/modules/emergency_routes.js#L22) |
 | Çok fazla istek. Biraz sonra tekrar deneyin. | [server/src/modules/equipment_routes.js:51](../server/src/modules/equipment_routes.js#L51) |
 | Çok fazla istek. Biraz sonra tekrar deneyin. | [server/src/modules/feedback_routes.js:51](../server/src/modules/feedback_routes.js#L51) |
@@ -409,7 +409,7 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | Doğrulama kodu ${VERIFICATION_CODE_DIGITS} haneli sayı olmalıdır. | [server/src/modules/oauth_login.js:932](../server/src/modules/oauth_login.js#L932) |
 | Doğrulama kodu ${VERIFICATION_CODE_DIGITS} haneli sayı olmalıdır. | [server/src/services/membership_service.js:387](../server/src/services/membership_service.js#L387) |
 | Dosya çok büyük. Bir seferde en çok ${BODY_SIZE_LABEL} gönderilebilir. | [server/src/modules/bulk_import_routes.js:119](../server/src/modules/bulk_import_routes.js#L119) |
-| DRIVE_TOKEN_KEY en az 32 karakter olmali | [server/src/modules/drive_common.js:47](../server/src/modules/drive_common.js#L47) |
+| DRIVE_TOKEN_KEY en az 32 karakter olmali | [server/src/modules/drive_common.js:52](../server/src/modules/drive_common.js#L52) |
 | E-posta adresi gereklidir. | [server/src/routes/auth_routes.js:122](../server/src/routes/auth_routes.js#L122) |
 | E-posta adresi gereklidir. | [server/src/services/membership_service.js:555](../server/src/services/membership_service.js#L555) |
 | E-posta adresi güvenlik nedeniyle değiştirilemez. | [server/src/routes/admin_routes.js:457](../server/src/routes/admin_routes.js#L457) |
@@ -486,7 +486,7 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | Gecersiz kapi ID. | [server/src/routes/manager_routes.js:1096](../server/src/routes/manager_routes.js#L1096) |
 | Gecersiz kapi id. | [server/src/routes/app_doors_routes.js:40](../server/src/routes/app_doors_routes.js#L40) |
 | Gecersiz karekod verisi. | [server/src/routes/app_doors_routes.js:266](../server/src/routes/app_doors_routes.js#L266) |
-| gecersiz klasor girdisi | [server/src/modules/drive_common.js:122](../server/src/modules/drive_common.js#L122) |
+| gecersiz klasor girdisi | [server/src/modules/drive_common.js:127](../server/src/modules/drive_common.js#L127) |
 | Gecersiz kullanici kodu. | [server/src/routes/admin_routes.js:384](../server/src/routes/admin_routes.js#L384) |
 | Gecersiz kullanici kodu. | [server/src/routes/admin_routes.js:509](../server/src/routes/admin_routes.js#L509) |
 | Gecersiz kullanici kodu. | [server/src/routes/admin_routes.js:547](../server/src/routes/admin_routes.js#L547) |
@@ -603,6 +603,8 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | Giris islemi basarisiz. | [server/src/routes/auth_routes.js:902](../server/src/routes/auth_routes.js#L902) |
 | Giris yontemi yetkilendirmesi (Uygulama/QR) yalnizca super user tarafindan yapilabilir. | [server/src/utils/site_rules.js:398](../server/src/utils/site_rules.js#L398) |
 | Giriş doğrulama değeri (nonce) geçersiz. | [server/src/modules/oauth_login.js:724](../server/src/modules/oauth_login.js#L724) |
+| Google Drive depolama alanı %${percent} dolu (${formatBytes(quota.used_bytes)} / ${formatBytes(quota.limit_bytes)}). Dolarsa yeni dosyalar Drive'a gönderilemez, sunucuda bekler; hiçbir dosya silinmez. Yer açın ya da dep… | [server/src/modules/drive_common.js:271](../server/src/modules/drive_common.js#L271) |
+| Google Drive depolama alanı doldu${Number.isFinite(percent) ?  | [server/src/modules/drive_common.js:266](../server/src/modules/drive_common.js#L266) |
 | Google kimlik doğrulama belirteci geçersiz veya süresi dolmuş. | [server/src/modules/oauth_login.js:266](../server/src/modules/oauth_login.js#L266) |
 | Gövde bir nesne olmalıdır. | [server/src/modules/client_error_service.js:106](../server/src/modules/client_error_service.js#L106) |
 | Guncellenecek alan gonderilmedi. | [server/src/routes/admin_routes.js:446](../server/src/routes/admin_routes.js#L446) |
@@ -789,7 +791,7 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | Sıfırlama anahtarı (token) eksik. | [server/src/routes/auth_routes.js:485](../server/src/routes/auth_routes.js#L485) |
 | Sifre 4 haneli sayisal olmali. | [server/src/services/apartment_service.js:299](../server/src/services/apartment_service.js#L299) |
 | Sifre en fazla ${MAX_PASSWORD_LENGTH} karakter olabilir. | [server/src/routes/auth_routes.js:960](../server/src/routes/auth_routes.js#L960) |
-| sifreli belirtec biçimi geçersiz | [server/src/modules/drive_common.js:62](../server/src/modules/drive_common.js#L62) |
+| sifreli belirtec biçimi geçersiz | [server/src/modules/drive_common.js:67](../server/src/modules/drive_common.js#L67) |
 | Silme doğrulama kodu e-posta adresinize (${maskedEmail}) gönderildi. | [server/src/services/site_service.js:2043](../server/src/services/site_service.js#L2043) |
 | Silme doğrulama kodunun 10 dakikalık süresi dolmuş. Lütfen yeni bir kod isteyiniz. | [server/src/services/site_service.js:2112](../server/src/services/site_service.js#L2112) |
 | Site adı en fazla ${SETUP_NAME_MAX} karakter olabilir. | [server/src/services/membership_rules.js:544](../server/src/services/membership_rules.js#L544) |
@@ -1427,7 +1429,7 @@ Kaynak: `lib` (`ApiException(...)`, `_errorMessage =`, `lib/services` içindeki 
 | Sunucuya bağlanılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin. | [lib/services/payment_notice_api.dart:160](../lib/services/payment_notice_api.dart#L160) |
 | Sunucuya bağlanılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin. | [lib/services/plate_recognition_api.dart:393](../lib/services/plate_recognition_api.dart#L393) |
 | Sunucuya bağlanılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin. | [lib/services/site_audit_log_api.dart:67](../lib/services/site_audit_log_api.dart#L67) |
-| Sunucuya bağlanılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin. | [lib/ui/widgets/drive_storage_card.dart:104](../lib/ui/widgets/drive_storage_card.dart#L104) |
+| Sunucuya bağlanılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin. | [lib/ui/widgets/drive_storage_card.dart:173](../lib/ui/widgets/drive_storage_card.dart#L173) |
 | Sunucuya bağlanılamadı. Lütfen internet bağlantınızı kontrol ediniz. | [lib/services/auth_service.dart:390](../lib/services/auth_service.dart#L390) |
 | Sunucuya bağlanılamadı. Lütfen internet bağlantınızı kontrol ediniz. | [lib/services/auth_service.dart:430](../lib/services/auth_service.dart#L430) |
 | Sunucuya bağlanılamadı. Lütfen internet bağlantınızı kontrol ediniz. | [lib/services/auth_service.dart:534](../lib/services/auth_service.dart#L534) |
