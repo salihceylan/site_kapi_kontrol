@@ -341,7 +341,7 @@ Sahadaki cihazlar imzayı BİLMEZ. Onlara imza denetimini getirecek yazılım da
 SHA-256 + artan sürüm) kurar. Bu yüzden geçişte bir kez eski güven modeline dayanılır:
 
 - **N:** sahadaki mevcut sürüm (imzayı bilmez).
-- **N+1 = köprü sürüm:** genel anahtarı ve doğrulayıcıyı taşıyan İLK sürüm. Eski cihazlar onu eski yolla kurar (imza bilgisini yok sayar). Köprü de araçla imzalanır
+- **N+1 = köprü sürüm** (ESP32-C3 **4.4.0**, ESP32-WROOM **5.3.0**; `ota_guncelleme.h`): genel anahtarı ve doğrulayıcıyı taşıyan İLK sürüm. Eski cihazlar onu eski yolla kurar (imza bilgisini yok sayar). Köprü de araçla imzalanır
   (zincir tek tip kalır, sunucu "yeni paket imzalı olmalı" kuralını ona da uygular), ama imzayı bilmeyen cihazlar için bu imza henüz bir şey ifade etmez.
 - **N+2 ve sonrası:** köprüyü çalıştıran cihazlar yalnız geçerli imzalı paket kurar.
 
@@ -371,7 +371,8 @@ aynı kartta G1'in olumsuz denemelerini yapın. Hedef başına (C3 ve WROOM) ayr
 ### 7.3 Köprü sürüm boyutu
 
 OTA bölümleri `app0`/`app1` 0x1E0000 = 1.966.080 bayttır (`cihaz_kontrol/partitions_ota_4mb.csv`). Eklenen kodla birlikte `firmware.bin` bu sınırın altında kalmalıdır;
-sığmazsa OTA ile kurulamaz. Derleme çıktısındaki boyutu G0'da yazın.
+sığmazsa OTA ile kurulamaz. Derleme çıktısındaki boyutu G0'da yazın. Ölçülen (yer tutuculu anahtarla, 2026-10-29; gerçek anahtarla aynı): ESP32-C3 1.745.824 bayt (%88,8; ~220 KB pay),
+ESP32-WROOM 1.863.589 bayt (%94,8; ~100 KB pay: sonraki özellikler için dikkat).
 
 ### 7.4 Ölümcül hatalar ve önlemleri
 
