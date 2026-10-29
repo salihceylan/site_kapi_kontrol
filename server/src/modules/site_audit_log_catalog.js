@@ -126,6 +126,14 @@ export const SITE_AUDIT_LABELS = Object.freeze({
   'plate.blacklist_removed': 'Plaka kara listeden çıkarıldı',
   'plate.settings_changed': 'Plaka kapı ayarı değişti',
   'plate.auto_open': 'Plakayla otomatik açma kaydı',
+  'plate.gate_created': 'Plaka geçiş noktası eklendi',
+  'plate.gate_updated': 'Plaka geçiş noktası değişti',
+  'plate.gate_deleted': 'Plaka geçiş noktası silindi',
+  'plate.site_settings_changed': 'Plaka misafir kuralı / durum eşikleri değişti',
+  'plate.edge_client_created': 'Plaka kenar istemcisi eklendi',
+  'plate.edge_client_rotated': 'Plaka kenar istemcisi anahtarı yenilendi',
+  'plate.edge_client_revoked': 'Plaka kenar istemcisi kaldırıldı',
+  'plate.inside_cleared': 'İçerideki araç elle düşürüldü',
   'device.ownership_released': 'Cihaz sahipliği sıfırlandı',
 
   // Kişi ve daire kayıtları

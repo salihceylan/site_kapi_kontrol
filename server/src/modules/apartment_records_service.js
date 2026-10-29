@@ -38,7 +38,8 @@ const APARTMENT_COLUMNS = `
   NULL::NUMERIC(8,2) AS net_area_m2,
   a.land_share_numerator,
   a.land_share_denominator,
-  a.responsible_party
+  a.responsible_party,
+  a.parking_slots
 `;
 
 function mapApartmentBase(row) {
@@ -55,6 +56,8 @@ function mapApartmentBase(row) {
     net_area_m2: asNumberOrNull(row.net_area_m2),
     land_share: numerator !== null && denominator !== null ? { numerator, denominator } : null,
     responsible_party: row.responsible_party ?? 'both',
+    // Plaka tanima (120): daire basina park yeri sayisi (0 = misafir arac kabul edilmez).
+    parking_slots: asNumberOrNull(row.parking_slots) ?? 0,
   };
 }
 
@@ -313,10 +316,17 @@ export function parseApartmentPatch(body = {}) {
     }
     patch.responsible_party = body.responsible_party;
   }
+  if (body.parking_slots !== undefined) {
+    if (body.parking_slots === null) {
+      throw invalidBody('parking_slots', 'parking_slots alanı boş olamaz (0 ile 50 arasında tam sayı).');
+    }
+    patch.parking_slots = parseNullableInteger(body.parking_slots, 'parking_slots', { min: 0, max: 50 });
+  }
   return patch;
 }
 
 const PATCH_COLUMNS = [
+  'parking_slots',
   'floor',
   'land_share_numerator',
   'land_share_denominator',
@@ -358,7 +368,7 @@ export async function updateApartment({ siteCode, apartmentId, body = {}, actor 
     await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [peopleLockKey(siteCode)]);
     const found = await client.query(
       `
-        SELECT floor, land_share_numerator, land_share_denominator, category, responsible_party
+        SELECT floor, land_share_numerator, land_share_denominator, category, responsible_party, parking_slots
         FROM apartments
         WHERE id = $1 AND site_code = $2
         FOR UPDATE
@@ -377,6 +387,7 @@ export async function updateApartment({ siteCode, apartmentId, body = {}, actor 
       land_share_denominator: asNumberOrNull(row.land_share_denominator),
       category: row.category ?? null,
       responsible_party: row.responsible_party ?? 'both',
+      parking_slots: asNumberOrNull(row.parking_slots) ?? 0,
     };
     if (patch.land_share_numerator !== undefined || patch.land_share_denominator !== undefined) {
       const merged = mergeLandShare(

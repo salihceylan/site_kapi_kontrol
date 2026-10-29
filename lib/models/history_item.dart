@@ -77,6 +77,7 @@ class FieldChange {
     'category': 'Kategori',
     'responsible_party': 'Borç ve bildirim muhatabı',
     'plate': 'Plaka',
+    'parking_slots': 'Park yeri sayısı',
   };
 
   /// Değeri geçmişte ASLA gösterilmeyen alanlar: telefon, e-posta ve not (kişisel veri). Sunucu bu

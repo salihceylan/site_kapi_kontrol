@@ -37,7 +37,24 @@ import {
   searchApartments,
 } from './plate_recognition_permits.js';
 
+import {
+  clearInside,
+  createEdgeClient,
+  createGate,
+  deleteGate,
+  getGatesOverview,
+  getSiteSettings,
+  listInside,
+  revokeEdgeClient,
+  rotateEdgeKey,
+  saveSiteSettings,
+  updateGate,
+} from './plate_gates_service.js';
+
 export const plateRecognitionRouter = express.Router();
+
+/** Kapı gövdesi (çok kameralı kapı): istek boyutu güvenliği, ürün sınırı değildir. */
+const GATE_BODY_BYTES = 16384;
 
 const writeLimiter = createRuleLimiter({
   rules: [
@@ -67,11 +84,11 @@ const readLimiter = createRuleLimiter({
 
 const bodyOf = (req) => (req.body && typeof req.body === 'object' && !Array.isArray(req.body) ? req.body : {});
 
-function assertBodySize(req) {
+function assertBodySize(req, maxBytes = MAX_BODY_BYTES) {
   if (req.method === 'GET') return;
   const declared = Number(req.headers['content-length']);
   const size = Number.isFinite(declared) && declared > 0 ? declared : Buffer.byteLength(JSON.stringify(req.body ?? {}));
-  if (size > MAX_BODY_BYTES) throw bodyTooLarge();
+  if (size > maxBytes) throw bodyTooLarge();
 }
 
 /** Sıra: biçim (400) -> yetki (403) -> site (404) -> modül (403). Hata yanıtını yazar ve null döner. */
@@ -101,13 +118,13 @@ async function resolveAccess(req, res, { write }) {
   return { siteCode, canWrite, authUser: req.authUser, userCode: actorFromAuthUser(req.authUser).userCode };
 }
 
-function managerHandler({ context, fallback, write = false, status = 200, limiter }, run) {
+function managerHandler({ context, fallback, write = false, status = 200, limiter, maxBytes }, run) {
   return [
     authRequired,
     limiter ?? (write ? writeLimiter : readLimiter),
     async (req, res) => {
       try {
-        assertBodySize(req);
+        assertBodySize(req, maxBytes);
         const access = await resolveAccess(req, res, { write });
         if (!access) return undefined;
         return res.status(status).json(await run({ req, access }));
@@ -165,6 +182,61 @@ plateRecognitionRouter.put(
   `${BASE}/settings/:doorId`,
   ...managerHandler({ context: 'plate_settings_save', fallback: 'Ayar kaydedilemedi.', write: true }, ({ req, access }) =>
     saveGateSettings({ siteCode: access.siteCode, rawDoorId: req.params.doorId, body: bodyOf(req), authUser: access.authUser }),
+  ),
+);
+
+// --- Geçiş noktaları (A1): kapı CRUD + DURUM, site ayarı, kenar istemci anahtarları, "içeride" -----------------------------
+// Kenar istemci (kimliği anahtarlı) uçları AYRI yoldadır: plate_edge_routes.js (/edge/plate/v1/...).
+
+plateRecognitionRouter.get(`${BASE}/gates`, ...managerHandler({ context: 'plate_gates', fallback: 'Geçiş noktaları yüklenemedi.' }, ({ access }) => getGatesOverview(access.siteCode)));
+plateRecognitionRouter.post(
+  `${BASE}/gates`,
+  ...managerHandler({ context: 'plate_gate_create', fallback: 'Geçiş noktası kaydedilemedi.', write: true, status: 201, maxBytes: GATE_BODY_BYTES }, ({ req, access }) =>
+    createGate({ siteCode: access.siteCode, body: bodyOf(req), authUser: access.authUser }),
+  ),
+);
+plateRecognitionRouter.put(
+  `${BASE}/gates/:id`,
+  ...managerHandler({ context: 'plate_gate_update', fallback: 'Geçiş noktası kaydedilemedi.', write: true, maxBytes: GATE_BODY_BYTES }, ({ req, access }) =>
+    updateGate({ siteCode: access.siteCode, rawId: req.params.id, body: bodyOf(req), authUser: access.authUser }),
+  ),
+);
+plateRecognitionRouter.delete(
+  `${BASE}/gates/:id`,
+  ...managerHandler({ context: 'plate_gate_delete', fallback: 'Geçiş noktası silinemedi.', write: true }, ({ req, access }) =>
+    deleteGate({ siteCode: access.siteCode, rawId: req.params.id, authUser: access.authUser }),
+  ),
+);
+plateRecognitionRouter.get(`${BASE}/gate-settings`, ...managerHandler({ context: 'plate_gate_settings', fallback: 'Ayarlar yüklenemedi.' }, ({ access }) => getSiteSettings(access.siteCode)));
+plateRecognitionRouter.put(
+  `${BASE}/gate-settings`,
+  ...managerHandler({ context: 'plate_gate_settings_save', fallback: 'Ayar kaydedilemedi.', write: true }, ({ req, access }) =>
+    saveSiteSettings({ siteCode: access.siteCode, body: bodyOf(req), authUser: access.authUser }),
+  ),
+);
+plateRecognitionRouter.post(
+  `${BASE}/edge-clients`,
+  ...managerHandler({ context: 'plate_edge_create', fallback: 'Kenar istemci kaydedilemedi.', write: true, status: 201 }, ({ req, access }) =>
+    createEdgeClient({ siteCode: access.siteCode, body: bodyOf(req), authUser: access.authUser }),
+  ),
+);
+plateRecognitionRouter.post(
+  `${BASE}/edge-clients/:id/rotate-key`,
+  ...managerHandler({ context: 'plate_edge_rotate', fallback: 'Anahtar yenilenemedi.', write: true }, ({ req, access }) =>
+    rotateEdgeKey({ siteCode: access.siteCode, rawId: req.params.id, authUser: access.authUser }),
+  ),
+);
+plateRecognitionRouter.post(
+  `${BASE}/edge-clients/:id/revoke`,
+  ...managerHandler({ context: 'plate_edge_revoke', fallback: 'Kenar istemci kaldırılamadı.', write: true }, ({ req, access }) =>
+    revokeEdgeClient({ siteCode: access.siteCode, rawId: req.params.id, authUser: access.authUser }),
+  ),
+);
+plateRecognitionRouter.get(`${BASE}/inside`, ...managerHandler({ context: 'plate_inside', fallback: 'İçerideki araçlar yüklenemedi.' }, ({ access }) => listInside(access.siteCode)));
+plateRecognitionRouter.post(
+  `${BASE}/inside/:id/clear`,
+  ...managerHandler({ context: 'plate_inside_clear', fallback: 'Kayıt düzeltilemedi.', write: true }, ({ req, access }) =>
+    clearInside({ siteCode: access.siteCode, rawId: req.params.id, authUser: access.authUser }),
   ),
 );
 

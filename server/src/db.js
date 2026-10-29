@@ -45,6 +45,7 @@ import { ensureDriveSourceSchema } from './modules/drive_source_schema.js';
 import { ensureDocumentDriveSchema } from './modules/document_drive_schema.js';
 import { ensureDriveHealthSchema } from './modules/drive_health_schema.js';
 import { ensureMessagingSchema } from './modules/messaging_schema.js';
+import { ensurePlateGatesSchema } from './modules/plate_gates_schema.js';
 import { ensureSiteFreePeriodSchema } from './modules/site_free_period_schema.js';
 import { ensurePaymentConnectionSchema } from './modules/payment_connection_schema.js';
 import { ensureMeteringFieldSchema } from './modules/metering_field_schema.js';
@@ -2094,6 +2095,9 @@ export async function ensureDbSchema() {
     await ensurePaymentConnectionSchema(client);
     // 117 (site basina SMS + WhatsApp baglantisi): sites'tan SONRA; dev blokta DEGIL; tablo varsa hicbir ifade / kilit yok (messaging_schema.js = migrations/117). Yeni tablo; mevcutlara dokunmaz.
     await ensureMessagingSchema(client);
+    // 120 (plaka tanima A1: gecis noktalari, kapi-kamera bagi, kenar istemciler, kamera durumu, site ayari, "iceride" takibi, plate_events genisletme, apartments.parking_slots):
+    // sites (kok), plate_events (065) ve apartments'tan SONRA; dev blokta DEGIL; katalog kontrolu + eksikse idempotent ifadeler (plate_gates_schema.js = migrations/120). Mevcut satirlara dokunmaz.
+    await ensurePlateGatesSchema(client);
 
     // 031 people_v1: mevcut sakinlerin CRM'e tek seferlik aktarimi. Savunmaci: hata sunucunun acilmasini ENGELLEMEZ
     // (kendi transaction'i geri alinir, isaret yazilmaz => sonraki acilista yeniden denenir; okuma anindaki

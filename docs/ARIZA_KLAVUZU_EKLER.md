@@ -121,9 +121,9 @@ Kaynak: `server/src/routes/*.js` ve `server/src/server.js`. Sütunlar: yöntem, 
 | POST | `/membership/doors/:id/permissions` | authRequired | [server/src/routes/membership_routes.js:353](../server/src/routes/membership_routes.js#L353) |
 | POST | `/membership/doors/:id/permissions/bulk` | authRequired | [server/src/routes/membership_routes.js:381](../server/src/routes/membership_routes.js#L381) |
 | GET | `/membership/sites/:id/residents-tree` | authRequired | [server/src/routes/membership_routes.js:408](../server/src/routes/membership_routes.js#L408) |
-| POST | `/api/company/labeled-devices` | companyAccessLimiter, requireCompanyAccess, express.json({ limit: '5m… | [server/src/server.js:135](../server/src/server.js#L135) |
-| POST | `/public/client-errors` | clientErrorBodyParser); | [server/src/server.js:137](../server/src/server.js#L137) |
-| GET | `*` | (req, res, next) => { | [server/src/server.js:274](../server/src/server.js#L274) |
+| POST | `/api/company/labeled-devices` | companyAccessLimiter, requireCompanyAccess, express.json({ limit: '5m… | [server/src/server.js:138](../server/src/server.js#L138) |
+| POST | `/public/client-errors` | clientErrorBodyParser); | [server/src/server.js:140](../server/src/server.js#L140) |
+| GET | `*` | (req, res, next) => { | [server/src/server.js:283](../server/src/server.js#L283) |
 
 ## Ek B — Uygulama → sunucu çağrıları
 
@@ -264,19 +264,19 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | `ANNOUNCEMENT_SCHEDULER_DISABLED` | [server/scripts/qa_platform_pg.mjs:2794](../server/scripts/qa_platform_pg.mjs#L2794) |
 | `ANNOUNCEMENT_URGENT_EMAIL_MAX_PER_DAY_PER_SITE` | [server/scripts/qa_platform_pg.mjs:2801](../server/scripts/qa_platform_pg.mjs#L2801) |
 | `BULK_IMPORT_DISABLED` | [server/scripts/qa_bulk_import.mjs:1409](../server/scripts/qa_bulk_import.mjs#L1409) |
-| `CAMERA_SECRET_KEY` | [server/src/modules/device_integrations_service.js:35](../server/src/modules/device_integrations_service.js#L35) |
+| `CAMERA_SECRET_KEY` | [server/src/modules/device_integrations_service.js:37](../server/src/modules/device_integrations_service.js#L37) |
 | `CLIENT_ERROR_MAX_ROWS` | [server/scripts/qa_platform_pg.mjs:9253](../server/scripts/qa_platform_pg.mjs#L9253) |
 | `CONCIERGE_MAX_OPEN_PER_SITE` | [server/scripts/qa_reservation_section.mjs:622](../server/scripts/qa_reservation_section.mjs#L622) |
 | `CONCIERGE_MAX_OPEN_PER_USER` | [server/scripts/qa_reservation_section.mjs:611](../server/scripts/qa_reservation_section.mjs#L611) |
 | `CONCIERGE_MAX_PER_USER_PER_HOUR` | [server/scripts/qa_reservation_section.mjs:616](../server/scripts/qa_reservation_section.mjs#L616) |
-| `DB_CONNECT_TIMEOUT_MS` | [server/src/db.js:80](../server/src/db.js#L80) |
-| `DB_HOST` | [server/src/db.js:83](../server/src/db.js#L83)<br>[server/scripts/apply_017.js:15](../server/scripts/apply_017.js#L15)<br>[server/scripts/apply_018.js:15](../server/scripts/apply_018.js#L15) |
-| `DB_NAME` | [server/src/db.js:85](../server/src/db.js#L85)<br>[server/scripts/apply_017.js:17](../server/scripts/apply_017.js#L17)<br>[server/scripts/apply_018.js:17](../server/scripts/apply_018.js#L17) |
-| `DB_PASSWORD` | [server/src/db.js:87](../server/src/db.js#L87)<br>[server/scripts/apply_017.js:19](../server/scripts/apply_017.js#L19)<br>[server/scripts/apply_018.js:19](../server/scripts/apply_018.js#L19) |
-| `DB_POOL_MAX` | [server/src/db.js:78](../server/src/db.js#L78) |
-| `DB_PORT` | [server/src/db.js:84](../server/src/db.js#L84)<br>[server/scripts/apply_017.js:16](../server/scripts/apply_017.js#L16)<br>[server/scripts/apply_018.js:16](../server/scripts/apply_018.js#L16) |
-| `DB_STATEMENT_TIMEOUT_MS` | [server/src/db.js:79](../server/src/db.js#L79)<br>[server/scripts/qa_bulk_import.mjs:72](../server/scripts/qa_bulk_import.mjs#L72)<br>[server/scripts/qa_documents_section.mjs:34](../server/scripts/qa_documents_section.mjs#L34) |
-| `DB_USER` | [server/src/db.js:86](../server/src/db.js#L86)<br>[server/scripts/apply_017.js:18](../server/scripts/apply_017.js#L18)<br>[server/scripts/apply_018.js:18](../server/scripts/apply_018.js#L18) |
+| `DB_CONNECT_TIMEOUT_MS` | [server/src/db.js:84](../server/src/db.js#L84) |
+| `DB_HOST` | [server/src/db.js:87](../server/src/db.js#L87)<br>[server/scripts/apply_017.js:15](../server/scripts/apply_017.js#L15)<br>[server/scripts/apply_018.js:15](../server/scripts/apply_018.js#L15) |
+| `DB_NAME` | [server/src/db.js:89](../server/src/db.js#L89)<br>[server/scripts/apply_017.js:17](../server/scripts/apply_017.js#L17)<br>[server/scripts/apply_018.js:17](../server/scripts/apply_018.js#L17) |
+| `DB_PASSWORD` | [server/src/db.js:91](../server/src/db.js#L91)<br>[server/scripts/apply_017.js:19](../server/scripts/apply_017.js#L19)<br>[server/scripts/apply_018.js:19](../server/scripts/apply_018.js#L19) |
+| `DB_POOL_MAX` | [server/src/db.js:82](../server/src/db.js#L82) |
+| `DB_PORT` | [server/src/db.js:88](../server/src/db.js#L88)<br>[server/scripts/apply_017.js:16](../server/scripts/apply_017.js#L16)<br>[server/scripts/apply_018.js:16](../server/scripts/apply_018.js#L16) |
+| `DB_STATEMENT_TIMEOUT_MS` | [server/src/db.js:83](../server/src/db.js#L83)<br>[server/scripts/qa_bulk_import.mjs:72](../server/scripts/qa_bulk_import.mjs#L72)<br>[server/scripts/qa_documents_section.mjs:34](../server/scripts/qa_documents_section.mjs#L34) |
+| `DB_USER` | [server/src/db.js:90](../server/src/db.js#L90)<br>[server/scripts/apply_017.js:18](../server/scripts/apply_017.js#L18)<br>[server/scripts/apply_018.js:18](../server/scripts/apply_018.js#L18) |
 | `DOCUMENTS_DIR` | [server/scripts/qa_work_tracking_section.mjs:600](../server/scripts/qa_work_tracking_section.mjs#L600) |
 | `DOCUMENTS_MAX_PER_SITE` | [server/scripts/qa_documents_section.mjs:718](../server/scripts/qa_documents_section.mjs#L718) |
 | `DOCUMENTS_MIN_FREE_BYTES` | [server/scripts/qa_work_tracking_section.mjs:601](../server/scripts/qa_work_tracking_section.mjs#L601) |
@@ -285,9 +285,9 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | `FINANCE_RECEIPT_SECRET` | [server/scripts/qa_finance4b.mjs:14](../server/scripts/qa_finance4b.mjs#L14)<br>[server/scripts/qa_finance4b_receipts.mjs:21](../server/scripts/qa_finance4b_receipts.mjs#L21) |
 | `FINANCE_REMINDER_MAX_PER_DAY_PER_SITE` | [server/scripts/qa_finance4b_reminders.mjs:288](../server/scripts/qa_finance4b_reminders.mjs#L288) |
 | `FIRMWARE_DIR` | [server/src/routes/firmware_routes.js:33](../server/src/routes/firmware_routes.js#L33) |
-| `JWT_SECRET` | [server/src/jwt.js:31](../server/src/jwt.js#L31)<br>[server/src/modules/apartment_mgmt_service.js:91](../server/src/modules/apartment_mgmt_service.js#L91)<br>[server/src/modules/device_integrations_service.js:35](../server/src/modules/device_integrations_service.js#L35) |
+| `JWT_SECRET` | [server/src/jwt.js:31](../server/src/jwt.js#L31)<br>[server/src/modules/apartment_mgmt_service.js:91](../server/src/modules/apartment_mgmt_service.js#L91)<br>[server/src/modules/device_integrations_service.js:37](../server/src/modules/device_integrations_service.js#L37) |
 | `LEGAL_DIR` | [server/scripts/qa_platform_pg.mjs:9252](../server/scripts/qa_platform_pg.mjs#L9252) |
-| `LISTEN_HOST` | [server/src/server.js:396](../server/src/server.js#L396) |
+| `LISTEN_HOST` | [server/src/server.js:405](../server/src/server.js#L405) |
 | `MIGRATE_LOCK_TIMEOUT_MS` | [server/scripts/migrate.js:371](../server/scripts/migrate.js#L371) |
 | `MOSQUITTO_PASSWD_BIN` | [server/scripts/sync_mqtt_acl.js:11](../server/scripts/sync_mqtt_acl.js#L11) |
 | `MQTT_ACL_FILE` | [server/scripts/sync_mqtt_acl.js:10](../server/scripts/sync_mqtt_acl.js#L10) |
@@ -305,7 +305,7 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | `MQTT_USER` | [server/src/mqtt_bridge.js:67](../server/src/mqtt_bridge.js#L67)<br>[server/scripts/trigger_ota.js:35](../server/scripts/trigger_ota.js#L35) |
 | `NODE_ENV` | [server/scripts/qa_coklu_malik.mjs:102](../server/scripts/qa_coklu_malik.mjs#L102)<br>[server/scripts/qa_platform_pg.mjs:548](../server/scripts/qa_platform_pg.mjs#L548) |
 | `PEOPLE_SYNC_MIN_INTERVAL_MS` | [server/src/modules/people_sync.js:19](../server/src/modules/people_sync.js#L19)<br>[server/scripts/qa_platform_pg.mjs:550](../server/scripts/qa_platform_pg.mjs#L550) |
-| `PORT` | [server/src/server.js:118](../server/src/server.js#L118) |
+| `PORT` | [server/src/server.js:121](../server/src/server.js#L121) |
 | `PUBLIC_APP_URL` | [server/src/modules/equipment_service.js:979](../server/src/modules/equipment_service.js#L979)<br>[server/src/modules/person_invite_service.js:64](../server/src/modules/person_invite_service.js#L64)<br>[server/src/routes/auth_routes.js:371](../server/src/routes/auth_routes.js#L371) |
 | `PUBLIC_BASE_URL` | [server/src/modules/equipment_service.js:979](../server/src/modules/equipment_service.js#L979)<br>[server/src/modules/person_invite_service.js:64](../server/src/modules/person_invite_service.js#L64)<br>[server/src/routes/auth_routes.js:372](../server/src/routes/auth_routes.js#L372) |
 | `QA_ADMIN_DB` | [server/scripts/qa_finance4b.mjs:170](../server/scripts/qa_finance4b.mjs#L170)<br>[server/scripts/qa_finance4b_upgrade.mjs:75](../server/scripts/qa_finance4b_upgrade.mjs#L75)<br>[server/scripts/qa_finance_funds_section.mjs:719](../server/scripts/qa_finance_funds_section.mjs#L719) |
@@ -352,28 +352,28 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | Tablo | db.js | İlk migration |
 | --- | --- | --- |
 | `access_cards` | — | [server/migrations/046_access_cards.sql:10](../server/migrations/046_access_cards.sql#L10) |
-| `account_data_exports` | [server/src/db.js:158](../server/src/db.js#L158) | [server/migrations/036_account_deletion.sql:27](../server/migrations/036_account_deletion.sql#L27) |
+| `account_data_exports` | [server/src/db.js:162](../server/src/db.js#L162) | [server/migrations/036_account_deletion.sql:27](../server/migrations/036_account_deletion.sql#L27) |
 | `account_movements` | — | [server/migrations/040_finance_4b.sql:358](../server/migrations/040_finance_4b.sql#L358) |
 | `account_reconciliations` | — | [server/migrations/040_finance_4b.sql:410](../server/migrations/040_finance_4b.sql#L410) |
 | `account_transfers` | — | [server/migrations/040_finance_4b.sql:335](../server/migrations/040_finance_4b.sql#L335) |
 | `announcement_attachments` | — | [server/migrations/039_documents.sql:143](../server/migrations/039_documents.sql#L143) |
-| `announcement_email_suppressions` | [server/src/db.js:1514](../server/src/db.js#L1514) | [server/migrations/032_announcements.sql:115](../server/migrations/032_announcements.sql#L115) |
-| `announcement_recipients` | [server/src/db.js:1476](../server/src/db.js#L1476) | [server/migrations/032_announcements.sql:77](../server/migrations/032_announcements.sql#L77) |
-| `announcements` | [server/src/db.js:1410](../server/src/db.js#L1410) | [server/migrations/032_announcements.sql:11](../server/migrations/032_announcements.sql#L11) |
+| `announcement_email_suppressions` | [server/src/db.js:1518](../server/src/db.js#L1518) | [server/migrations/032_announcements.sql:115](../server/migrations/032_announcements.sql#L115) |
+| `announcement_recipients` | [server/src/db.js:1480](../server/src/db.js#L1480) | [server/migrations/032_announcements.sql:77](../server/migrations/032_announcements.sql#L77) |
+| `announcements` | [server/src/db.js:1414](../server/src/db.js#L1414) | [server/migrations/032_announcements.sql:11](../server/migrations/032_announcements.sql#L11) |
 | `annual_reports` | — | [server/migrations/069_annual_report.sql:6](../server/migrations/069_annual_report.sql#L6) |
 | `apartment_access_suspensions` | — | [server/migrations/074_apartment_management.sql:87](../server/migrations/074_apartment_management.sql#L87) |
 | `apartment_admin_delegations` | — | [server/migrations/074_apartment_management.sql:8](../server/migrations/074_apartment_management.sql#L8) |
 | `apartment_link_requests` | — | [server/migrations/074_apartment_management.sql:27](../server/migrations/074_apartment_management.sql#L27) |
-| `apartment_memberships` | [server/src/db.js:1052](../server/src/db.js#L1052) | [server/migrations/016_membership_v2_schema.sql:35](../server/migrations/016_membership_v2_schema.sql#L35) |
+| `apartment_memberships` | [server/src/db.js:1056](../server/src/db.js#L1056) | [server/migrations/016_membership_v2_schema.sql:35](../server/migrations/016_membership_v2_schema.sql#L35) |
 | `apartment_notices` | — | [server/migrations/074_apartment_management.sql:46](../server/migrations/074_apartment_management.sql#L46) |
 | `apartment_proxies` | — | [server/migrations/074_apartment_management.sql:104](../server/migrations/074_apartment_management.sql#L104) |
-| `apartment_residencies` | [server/src/db.js:1252](../server/src/db.js#L1252) | [server/migrations/031_people_and_apartments.sql:30](../server/migrations/031_people_and_apartments.sql#L30) |
+| `apartment_residencies` | [server/src/db.js:1256](../server/src/db.js#L1256) | [server/migrations/031_people_and_apartments.sql:30](../server/migrations/031_people_and_apartments.sql#L30) |
 | `apartment_residency_log` | — | [server/migrations/075_residency_log.sql:11](../server/migrations/075_residency_log.sql#L11) |
 | `apartment_safety_notes` | — | [server/migrations/074_apartment_management.sql:77](../server/migrations/074_apartment_management.sql#L77) |
 | `apartment_safety_requests` | — | [server/migrations/074_apartment_management.sql:59](../server/migrations/074_apartment_management.sql#L59) |
-| `apartments` | [server/src/db.js:778](../server/src/db.js#L778) | [server/migrations/006_site_structure_and_access.sql:66](../server/migrations/006_site_structure_and_access.sql#L66) |
-| `app_maintenance_runs` | [server/src/db.js:238](../server/src/db.js#L238) | — |
-| `audit_log` | [server/src/db.js:1169](../server/src/db.js#L1169) | [server/migrations/029_platform_modules.sql:34](../server/migrations/029_platform_modules.sql#L34) |
+| `apartments` | [server/src/db.js:782](../server/src/db.js#L782) | [server/migrations/006_site_structure_and_access.sql:66](../server/migrations/006_site_structure_and_access.sql#L66) |
+| `app_maintenance_runs` | [server/src/db.js:242](../server/src/db.js#L242) | — |
+| `audit_log` | [server/src/db.js:1173](../server/src/db.js#L1173) | [server/migrations/029_platform_modules.sql:34](../server/migrations/029_platform_modules.sql#L34) |
 | `auth_attempt_limits` | — | [server/migrations/085_auth_attempt_limits.sql:6](../server/migrations/085_auth_attempt_limits.sql#L6) |
 | `bank_import_profiles` | — | [server/migrations/067_bank_imports.sql:2](../server/migrations/067_bank_imports.sql#L2) |
 | `bank_imports` | — | [server/migrations/067_bank_imports.sql:15](../server/migrations/067_bank_imports.sql#L15) |
@@ -388,21 +388,21 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | `cargo_notify_log` | — | [server/migrations/063_notify_channels.sql:25](../server/migrations/063_notify_channels.sql#L25) |
 | `cctv_camera_doors` | — | [server/migrations/072_cctv_link.sql:30](../server/migrations/072_cctv_link.sql#L30) |
 | `cctv_cameras` | — | [server/migrations/072_cctv_link.sql:6](../server/migrations/072_cctv_link.sql#L6) |
-| `client_error_reports` | [server/src/db.js:1896](../server/src/db.js#L1896) | [server/migrations/035_platform_services.sql:26](../server/migrations/035_platform_services.sql#L26) |
+| `client_error_reports` | [server/src/db.js:1900](../server/src/db.js#L1900) | [server/migrations/035_platform_services.sql:26](../server/migrations/035_platform_services.sql#L26) |
 | `concierge_requests` | — | [server/migrations/043_reservation.sql:151](../server/migrations/043_reservation.sql#L151) |
 | `contract_reminders` | — | [server/migrations/049_contracts.sql:131](../server/migrations/049_contracts.sql#L131) |
 | `contract_vendors` | — | [server/migrations/049_contracts.sql:14](../server/migrations/049_contracts.sql#L14) |
-| `device_connectivity_logs` | [server/src/db.js:931](../server/src/db.js#L931) | [server/migrations/010_device_connectivity_logs.sql:4](../server/migrations/010_device_connectivity_logs.sql#L4) |
-| `device_runtime_status` | [server/src/db.js:657](../server/src/db.js#L657) | [server/migrations/008_guest_passes_and_door_logs.sql:18](../server/migrations/008_guest_passes_and_door_logs.sql#L18) |
-| `devices` | [server/src/db.js:563](../server/src/db.js#L563) | [server/migrations/003_sites_devices.sql:30](../server/migrations/003_sites_devices.sql#L30) |
+| `device_connectivity_logs` | [server/src/db.js:935](../server/src/db.js#L935) | [server/migrations/010_device_connectivity_logs.sql:4](../server/migrations/010_device_connectivity_logs.sql#L4) |
+| `device_runtime_status` | [server/src/db.js:661](../server/src/db.js#L661) | [server/migrations/008_guest_passes_and_door_logs.sql:18](../server/migrations/008_guest_passes_and_door_logs.sql#L18) |
+| `devices` | [server/src/db.js:567](../server/src/db.js#L567) | [server/migrations/003_sites_devices.sql:30](../server/migrations/003_sites_devices.sql#L30) |
 | `document_versions` | — | [server/migrations/039_documents.sql:85](../server/migrations/039_documents.sql#L85) |
 | `documents` | — | [server/migrations/039_documents.sql:13](../server/migrations/039_documents.sql#L13) |
-| `door_access_logs` | [server/src/db.js:901](../server/src/db.js#L901) | [server/migrations/008_guest_passes_and_door_logs.sql:68](../server/migrations/008_guest_passes_and_door_logs.sql#L68) |
-| `door_access_overrides` | [server/src/db.js:1114](../server/src/db.js#L1114) | [server/migrations/016_membership_v2_schema.sql:100](../server/migrations/016_membership_v2_schema.sql#L100) |
+| `door_access_logs` | [server/src/db.js:905](../server/src/db.js#L905) | [server/migrations/008_guest_passes_and_door_logs.sql:68](../server/migrations/008_guest_passes_and_door_logs.sql#L68) |
+| `door_access_overrides` | [server/src/db.js:1118](../server/src/db.js#L1118) | [server/migrations/016_membership_v2_schema.sql:100](../server/migrations/016_membership_v2_schema.sql#L100) |
 | `drive_files` | — | [server/migrations/060_drive_storage.sql:29](../server/migrations/060_drive_storage.sql#L29) |
 | `drive_oauth_states` | — | [server/migrations/060_drive_storage.sql:22](../server/migrations/060_drive_storage.sql#L22) |
 | `drive_pending_uploads` | — | [server/migrations/060_drive_storage.sql:48](../server/migrations/060_drive_storage.sql#L48) |
-| `email_verifications` | [server/src/db.js:1010](../server/src/db.js#L1010) | [server/migrations/016_membership_v2_schema.sql:7](../server/migrations/016_membership_v2_schema.sql#L7) |
+| `email_verifications` | [server/src/db.js:1014](../server/src/db.js#L1014) | [server/migrations/016_membership_v2_schema.sql:7](../server/migrations/016_membership_v2_schema.sql#L7) |
 | `equipment_expense_links` | — | [server/migrations/068_equipment.sql:59](../server/migrations/068_equipment.sql#L59) |
 | `equipment_items` | — | [server/migrations/068_equipment.sql:5](../server/migrations/068_equipment.sql#L5) |
 | `equipment_maintenance_logs` | — | [server/migrations/068_equipment.sql:42](../server/migrations/068_equipment.sql#L42) |
@@ -415,8 +415,8 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | `expense_natures` | — | [server/migrations/056_expense_natures.sql:5](../server/migrations/056_expense_natures.sql#L5) |
 | `expense_voids` | — | [server/migrations/040_finance_4b.sql:285](../server/migrations/040_finance_4b.sql#L285) |
 | `expenses` | — | [server/migrations/040_finance_4b.sql:239](../server/migrations/040_finance_4b.sql#L239) |
-| `fee_definitions` | [server/src/db.js:1624](../server/src/db.js#L1624) | [server/migrations/034_finance.sql:10](../server/migrations/034_finance.sql#L10) |
-| `fee_runs` | [server/src/db.js:1676](../server/src/db.js#L1676) | [server/migrations/034_finance.sql:62](../server/migrations/034_finance.sql#L62) |
+| `fee_definitions` | [server/src/db.js:1628](../server/src/db.js#L1628) | [server/migrations/034_finance.sql:10](../server/migrations/034_finance.sql#L10) |
+| `fee_runs` | [server/src/db.js:1680](../server/src/db.js#L1680) | [server/migrations/034_finance.sql:62](../server/migrations/034_finance.sql#L62) |
 | `feedback_attachments` | — | [server/migrations/103_feedback.sql:30](../server/migrations/103_feedback.sql#L30) |
 | `feedback_reports` | — | [server/migrations/103_feedback.sql:11](../server/migrations/103_feedback.sql#L11) |
 | `finance_account_bank_details` | — | [server/migrations/054_finance_payment_info.sql:38](../server/migrations/054_finance_payment_info.sql#L38) |
@@ -426,7 +426,7 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | `finance_liability_transfers` | — | [server/migrations/089_finance_liability_transfers.sql:27](../server/migrations/089_finance_liability_transfers.sql#L27) |
 | `finance_opening_reverts` | — | [server/migrations/055_opening_balances.sql:16](../server/migrations/055_opening_balances.sql#L16) |
 | `finance_payment_settings` | — | [server/migrations/054_finance_payment_info.sql:9](../server/migrations/054_finance_payment_info.sql#L9) |
-| `finance_period_closures` | [server/src/db.js:1759](../server/src/db.js#L1759) | [server/migrations/034_finance.sql:145](../server/migrations/034_finance.sql#L145) |
+| `finance_period_closures` | [server/src/db.js:1763](../server/src/db.js#L1763) | [server/migrations/034_finance.sql:145](../server/migrations/034_finance.sql#L145) |
 | `finance_refund_counters` | — | [server/migrations/088_finance_refunds.sql:138](../server/migrations/088_finance_refunds.sql#L138) |
 | `finance_refunds` | — | [server/migrations/088_finance_refunds.sql:78](../server/migrations/088_finance_refunds.sql#L78) |
 | `finance_reminder_apartments` | — | [server/migrations/040_finance_4b.sql:500](../server/migrations/040_finance_4b.sql#L500) |
@@ -436,12 +436,12 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | `finance_settings` | — | [server/migrations/040_finance_4b.sql:7](../server/migrations/040_finance_4b.sql#L7) |
 | `finance_site_ref_prefixes` | — | [server/migrations/054_finance_payment_info.sql:19](../server/migrations/054_finance_payment_info.sql#L19) |
 | `finance_suppliers` | — | [server/migrations/040_finance_4b.sql:220](../server/migrations/040_finance_4b.sql#L220) |
-| `guest_passes` | [server/src/db.js:838](../server/src/db.js#L838) | [server/migrations/008_guest_passes_and_door_logs.sql:49](../server/migrations/008_guest_passes_and_door_logs.sql#L49) |
+| `guest_passes` | [server/src/db.js:842](../server/src/db.js#L842) | [server/migrations/008_guest_passes_and_door_logs.sql:49](../server/migrations/008_guest_passes_and_door_logs.sql#L49) |
 | `i` | — | [server/migrations/032_announcements.sql:45](../server/migrations/032_announcements.sql#L45) |
-| `join_requests` | [server/src/db.js:1078](../server/src/db.js#L1078) | [server/migrations/016_membership_v2_schema.sql:63](../server/migrations/016_membership_v2_schema.sql#L63) |
+| `join_requests` | [server/src/db.js:1082](../server/src/db.js#L1082) | [server/migrations/016_membership_v2_schema.sql:63](../server/migrations/016_membership_v2_schema.sql#L63) |
 | `late_fee_run_lines` | — | [server/migrations/040_finance_4b.sql:97](../server/migrations/040_finance_4b.sql#L97) |
 | `late_fee_runs` | — | [server/migrations/040_finance_4b.sql:38](../server/migrations/040_finance_4b.sql#L38) |
-| `ledger_entries` | [server/src/db.js:1706](../server/src/db.js#L1706) | [server/migrations/034_finance.sql:92](../server/migrations/034_finance.sql#L92) |
+| `ledger_entries` | [server/src/db.js:1710](../server/src/db.js#L1710) | [server/migrations/034_finance.sql:92](../server/migrations/034_finance.sql#L92) |
 | `management_companies` | — | [server/migrations/062_management_companies.sql:6](../server/migrations/062_management_companies.sql#L6) |
 | `management_company_members` | — | [server/migrations/062_management_companies.sql:17](../server/migrations/062_management_companies.sql#L17) |
 | `management_company_sites` | — | [server/migrations/062_management_companies.sql:27](../server/migrations/062_management_companies.sql#L27) |
@@ -449,60 +449,69 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | `meter_billings` | — | [server/migrations/061_metering.sql:95](../server/migrations/061_metering.sql#L95) |
 | `meter_reading_photos` | — | [server/migrations/070_meter_reading_photos.sql:4](../server/migrations/070_meter_reading_photos.sql#L4) |
 | `meter_readings` | — | [server/migrations/061_metering.sql:53](../server/migrations/061_metering.sql#L53) |
+| `meter_tariffs` | — | [server/migrations/117_meter_tariffs.sql:8](../server/migrations/117_meter_tariffs.sql#L8) |
 | `meters` | — | [server/migrations/061_metering.sql:9](../server/migrations/061_metering.sql#L9) |
-| `module_requests` | [server/src/db.js:1209](../server/src/db.js#L1209) | [server/migrations/030_module_requests.sql:6](../server/migrations/030_module_requests.sql#L6) |
+| `module_requests` | [server/src/db.js:1213](../server/src/db.js#L1213) | [server/migrations/030_module_requests.sql:6](../server/migrations/030_module_requests.sql#L6) |
 | `neighbor_post_reports` | — | [server/migrations/064_neighbor_board.sql:28](../server/migrations/064_neighbor_board.sql#L28) |
 | `neighbor_posts` | — | [server/migrations/064_neighbor_board.sql:7](../server/migrations/064_neighbor_board.sql#L7) |
-| `notification_preferences` | [server/src/db.js:1505](../server/src/db.js#L1505) | [server/migrations/032_announcements.sql:106](../server/migrations/032_announcements.sql#L106) |
-| `ota_update_job_devices` | [server/src/db.js:713](../server/src/db.js#L713) | — |
-| `ota_update_jobs` | [server/src/db.js:698](../server/src/db.js#L698) | — |
+| `notification_preferences` | [server/src/db.js:1509](../server/src/db.js#L1509) | [server/migrations/032_announcements.sql:106](../server/migrations/032_announcements.sql#L106) |
+| `ota_update_job_devices` | [server/src/db.js:717](../server/src/db.js#L717) | — |
+| `ota_update_jobs` | [server/src/db.js:702](../server/src/db.js#L702) | — |
 | `payment_notice_check_marks` | — | [server/migrations/110_check_marks.sql:44](../server/migrations/110_check_marks.sql#L44) |
 | `payment_notices` | — | [server/migrations/066_payment_notices.sql:5](../server/migrations/066_payment_notices.sql#L5) |
+| `payment_provider_connections` | — | [server/migrations/116_payment_connections.sql:5](../server/migrations/116_payment_connections.sql#L5) |
 | `payment_provider_settings` | — | [server/migrations/065_device_integrations.sql:4](../server/migrations/065_device_integrations.sql#L4) |
-| `pending_registrations` | [server/src/db.js:1025](../server/src/db.js#L1025) | [server/migrations/028_pending_registrations.sql:6](../server/migrations/028_pending_registrations.sql#L6) |
+| `pending_registrations` | [server/src/db.js:1029](../server/src/db.js#L1029) | [server/migrations/028_pending_registrations.sql:6](../server/migrations/028_pending_registrations.sql#L6) |
 | `person_invitations` | — | [server/migrations/058_team_and_invitations.sql:94](../server/migrations/058_team_and_invitations.sql#L94) |
 | `plate_blacklist` | — | [server/migrations/073_plate_recognition.sql:35](../server/migrations/073_plate_recognition.sql#L35) |
+| `plate_camera_status` | — | [server/migrations/120_plate_gates_edge.sql:84](../server/migrations/120_plate_gates_edge.sql#L84) |
 | `plate_decisions` | — | [server/migrations/073_plate_recognition.sql:81](../server/migrations/073_plate_recognition.sql#L81) |
+| `plate_edge_clients` | — | [server/migrations/120_plate_gates_edge.sql:56](../server/migrations/120_plate_gates_edge.sql#L56) |
 | `plate_events` | — | [server/migrations/065_device_integrations.sql:52](../server/migrations/065_device_integrations.sql#L52) |
+| `plate_gate_cameras` | — | [server/migrations/120_plate_gates_edge.sql:35](../server/migrations/120_plate_gates_edge.sql#L35) |
 | `plate_gate_settings` | — | [server/migrations/073_plate_recognition.sql:57](../server/migrations/073_plate_recognition.sql#L57) |
+| `plate_gates` | — | [server/migrations/120_plate_gates_edge.sql:9](../server/migrations/120_plate_gates_edge.sql#L9) |
 | `plate_guest_permits` | — | [server/migrations/073_plate_recognition.sql:5](../server/migrations/073_plate_recognition.sql#L5) |
-| `platform_backfills` | [server/src/db.js:1343](../server/src/db.js#L1343) | [server/migrations/031_people_and_apartments.sql:122](../server/migrations/031_people_and_apartments.sql#L122) |
+| `plate_presence` | — | [server/migrations/120_plate_gates_edge.sql:125](../server/migrations/120_plate_gates_edge.sql#L125) |
+| `plate_site_settings` | — | [server/migrations/120_plate_gates_edge.sql:102](../server/migrations/120_plate_gates_edge.sql#L102) |
+| `platform_backfills` | [server/src/db.js:1347](../server/src/db.js#L1347) | [server/migrations/031_people_and_apartments.sql:122](../server/migrations/031_people_and_apartments.sql#L122) |
 | `platform_rule_values` | — | [server/migrations/053_platform_rules.sql:13](../server/migrations/053_platform_rules.sql#L13) |
-| `platform_settings` | [server/src/db.js:1557](../server/src/db.js#L1557) | [server/migrations/033_site_applications.sql:44](../server/migrations/033_site_applications.sql#L44) |
+| `platform_settings` | [server/src/db.js:1561](../server/src/db.js#L1561) | [server/migrations/033_site_applications.sql:44](../server/migrations/033_site_applications.sql#L44) |
 | `push_devices` | — | [server/migrations/041_push.sql:13](../server/migrations/041_push.sql#L13) |
 | `push_outbox` | — | [server/migrations/041_push.sql:41](../server/migrations/041_push.sql#L41) |
-| `qr_access_tokens` | [server/src/db.js:868](../server/src/db.js#L868) | [server/migrations/011_qr_access_tokens.sql:7](../server/migrations/011_qr_access_tokens.sql#L7) |
+| `qr_access_tokens` | [server/src/db.js:872](../server/src/db.js#L872) | [server/migrations/011_qr_access_tokens.sql:7](../server/migrations/011_qr_access_tokens.sql#L7) |
 | `receipt_counters` | — | [server/migrations/040_finance_4b.sql:115](../server/migrations/040_finance_4b.sql#L115) |
 | `receipt_print_events` | — | [server/migrations/040_finance_4b.sql:167](../server/migrations/040_finance_4b.sql#L167) |
 | `receipts` | — | [server/migrations/040_finance_4b.sql:124](../server/migrations/040_finance_4b.sql#L124) |
 | `reservation_areas` | — | [server/migrations/043_reservation.sql:12](../server/migrations/043_reservation.sql#L12) |
 | `reservations` | — | [server/migrations/043_reservation.sql:65](../server/migrations/043_reservation.sql#L65) |
-| `site_applications` | [server/src/db.js:1570](../server/src/db.js#L1570) | [server/migrations/033_site_applications.sql:57](../server/migrations/033_site_applications.sql#L57) |
-| `site_blocks` | [server/src/db.js:767](../server/src/db.js#L767) | [server/migrations/006_site_structure_and_access.sql:56](../server/migrations/006_site_structure_and_access.sql#L56) |
+| `site_applications` | [server/src/db.js:1574](../server/src/db.js#L1574) | [server/migrations/033_site_applications.sql:57](../server/migrations/033_site_applications.sql#L57) |
+| `site_blocks` | [server/src/db.js:771](../server/src/db.js#L771) | [server/migrations/006_site_structure_and_access.sql:56](../server/migrations/006_site_structure_and_access.sql#L56) |
 | `site_contracts` | — | [server/migrations/049_contracts.sql:57](../server/migrations/049_contracts.sql#L57) |
 | `site_directory_contacts` | — | [server/migrations/058_team_and_invitations.sql:57](../server/migrations/058_team_and_invitations.sql#L57) |
-| `site_doors` | [server/src/db.js:810](../server/src/db.js#L810) | [server/migrations/006_site_structure_and_access.sql:85](../server/migrations/006_site_structure_and_access.sql#L85) |
+| `site_doors` | [server/src/db.js:814](../server/src/db.js#L814) | [server/migrations/006_site_structure_and_access.sql:85](../server/migrations/006_site_structure_and_access.sql#L85) |
 | `site_drive_connections` | — | [server/migrations/060_drive_storage.sql:7](../server/migrations/060_drive_storage.sql#L7) |
 | `site_emergency_info` | — | [server/migrations/107_site_emergency_info.sql:7](../server/migrations/107_site_emergency_info.sql#L7) |
-| `site_join_tokens` | [server/src/db.js:1066](../server/src/db.js#L1066) | [server/migrations/016_membership_v2_schema.sql:50](../server/migrations/016_membership_v2_schema.sql#L50) |
-| `site_manager_invitations` | [server/src/db.js:1129](../server/src/db.js#L1129) | [server/migrations/023_site_manager_invitations.sql:4](../server/migrations/023_site_manager_invitations.sql#L4) |
-| `site_manager_sites` | [server/src/db.js:755](../server/src/db.js#L755) | [server/migrations/006_site_structure_and_access.sql:46](../server/migrations/006_site_structure_and_access.sql#L46) |
-| `site_memberships` | [server/src/db.js:1038](../server/src/db.js#L1038) | [server/migrations/016_membership_v2_schema.sql:20](../server/migrations/016_membership_v2_schema.sql#L20) |
+| `site_join_tokens` | [server/src/db.js:1070](../server/src/db.js#L1070) | [server/migrations/016_membership_v2_schema.sql:50](../server/migrations/016_membership_v2_schema.sql#L50) |
+| `site_manager_invitations` | [server/src/db.js:1133](../server/src/db.js#L1133) | [server/migrations/023_site_manager_invitations.sql:4](../server/migrations/023_site_manager_invitations.sql#L4) |
+| `site_manager_sites` | [server/src/db.js:759](../server/src/db.js#L759) | [server/migrations/006_site_structure_and_access.sql:46](../server/migrations/006_site_structure_and_access.sql#L46) |
+| `site_memberships` | [server/src/db.js:1042](../server/src/db.js#L1042) | [server/migrations/016_membership_v2_schema.sql:20](../server/migrations/016_membership_v2_schema.sql#L20) |
 | `site_menu_layouts` | — | [server/migrations/102_site_menu_layout.sql:8](../server/migrations/102_site_menu_layout.sql#L8) |
-| `site_modules` | [server/src/db.js:1159](../server/src/db.js#L1159) | [server/migrations/029_platform_modules.sql:23](../server/migrations/029_platform_modules.sql#L23) |
-| `site_people` | [server/src/db.js:1231](../server/src/db.js#L1231) | [server/migrations/031_people_and_apartments.sql:9](../server/migrations/031_people_and_apartments.sql#L9) |
-| `site_subscriptions` | [server/src/db.js:1541](../server/src/db.js#L1541) | [server/migrations/033_site_applications.sql:28](../server/migrations/033_site_applications.sql#L28) |
+| `site_messaging_connections` | — | [server/migrations/118_site_messaging.sql:6](../server/migrations/118_site_messaging.sql#L6) |
+| `site_modules` | [server/src/db.js:1163](../server/src/db.js#L1163) | [server/migrations/029_platform_modules.sql:23](../server/migrations/029_platform_modules.sql#L23) |
+| `site_people` | [server/src/db.js:1235](../server/src/db.js#L1235) | [server/migrations/031_people_and_apartments.sql:9](../server/migrations/031_people_and_apartments.sql#L9) |
+| `site_subscriptions` | [server/src/db.js:1545](../server/src/db.js#L1545) | [server/migrations/033_site_applications.sql:28](../server/migrations/033_site_applications.sql#L28) |
 | `site_team_duties` | — | [server/migrations/058_team_and_invitations.sql:8](../server/migrations/058_team_and_invitations.sql#L8) |
-| `sites` | [server/src/db.js:383](../server/src/db.js#L383) | [server/migrations/003_sites_devices.sql:17](../server/migrations/003_sites_devices.sql#L17) |
+| `sites` | [server/src/db.js:387](../server/src/db.js#L387) | [server/migrations/003_sites_devices.sql:17](../server/migrations/003_sites_devices.sql#L17) |
 | `sms_login_codes` | — | [server/migrations/063_notify_channels.sql:2](../server/migrations/063_notify_channels.sql#L2) |
-| `subscription_plans` | [server/src/db.js:1522](../server/src/db.js#L1522) | [server/migrations/033_site_applications.sql:9](../server/migrations/033_site_applications.sql#L9) |
+| `subscription_plans` | [server/src/db.js:1526](../server/src/db.js#L1526) | [server/migrations/033_site_applications.sql:9](../server/migrations/033_site_applications.sql#L9) |
 | `survey_votes` | — | [server/migrations/044_survey.sql:60](../server/migrations/044_survey.sql#L60) |
 | `surveys` | — | [server/migrations/044_survey.sql:12](../server/migrations/044_survey.sql#L12) |
 | `trial_access_codes` | — | [server/migrations/106_trial_access_codes.sql:7](../server/migrations/106_trial_access_codes.sql#L7) |
-| `user_consents` | [server/src/db.js:1882](../server/src/db.js#L1882) | [server/migrations/035_platform_services.sql:10](../server/migrations/035_platform_services.sql#L10) |
+| `user_consents` | [server/src/db.js:1886](../server/src/db.js#L1886) | [server/migrations/035_platform_services.sql:10](../server/migrations/035_platform_services.sql#L10) |
 | `user_oauth_identities` | — | [server/migrations/076_oauth_identities.sql:2](../server/migrations/076_oauth_identities.sql#L2) |
 | `users` | — | [server/migrations/001_init.sql:19](../server/migrations/001_init.sql#L19) |
-| `vehicles` | [server/src/db.js:1327](../server/src/db.js#L1327) | [server/migrations/031_people_and_apartments.sql:106](../server/migrations/031_people_and_apartments.sql#L106) |
+| `vehicles` | [server/src/db.js:1331](../server/src/db.js#L1331) | [server/migrations/031_people_and_apartments.sql:106](../server/migrations/031_people_and_apartments.sql#L106) |
 | `visitor_entries` | — | [server/migrations/045_visitor_log.sql:11](../server/migrations/045_visitor_log.sql#L11) |
 | `web_push_subscriptions` | — | [server/migrations/063_notify_channels.sql:13](../server/migrations/063_notify_channels.sql#L13) |
 | `work_categories` | — | [server/migrations/100_work_categories.sql:13](../server/migrations/100_work_categories.sql#L13) |
@@ -512,7 +521,7 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 
 ## Ek E — Kaynak dosya kapsamı
 
-1186 kaynak dosyanın **249**'i en az bir arıza girişine bağlı, **1**'i yalnız dosya haritasında, **936**'i klavuzda hiç geçmiyor. Bir dosya hiç geçmiyorsa onunla ilgili arızayı `--where` ile arayın.
+1206 kaynak dosyanın **249**'i en az bir arıza girişine bağlı, **1**'i yalnız dosya haritasında, **956**'i klavuzda hiç geçmiyor. Bir dosya hiç geçmiyorsa onunla ilgili arızayı `--where` ile arayın.
 
 | Dosya | Satır | Bağlı girişler | Dosya haritası |
 | --- | --- | --- | --- |
@@ -571,7 +580,7 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [lib/models/account_platform_config.dart](../lib/models/account_platform_config.dart) | 325 | — | — |
 | [lib/models/announcement.dart](../lib/models/announcement.dart) | 870 | — | — |
 | [lib/models/annual_report.dart](../lib/models/annual_report.dart) | 186 | — | — |
-| [lib/models/apartment_crm.dart](../lib/models/apartment_crm.dart) | 403 | — | — |
+| [lib/models/apartment_crm.dart](../lib/models/apartment_crm.dart) | 410 | — | — |
 | [lib/models/apartment_household.dart](../lib/models/apartment_household.dart) | 119 | — | — |
 | [lib/models/apartment_management.dart](../lib/models/apartment_management.dart) | 579 | — | — |
 | [lib/models/apartment_member_record.dart](../lib/models/apartment_member_record.dart) | 96 | [model-kimlik-id-user-code-site-code](ariza-klavuzu/33-uygulama-modeller.md#model-kimlik-id-user-code-site-code), [model-daire-uyelik-ve-site-yapisi](ariza-klavuzu/33-uygulama-modeller.md#model-daire-uyelik-ve-site-yapisi) | 33-uygulama-modeller |
@@ -611,7 +620,7 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [lib/models/finance.dart](../lib/models/finance.dart) | 1949 | — | — |
 | [lib/models/fund_models.dart](../lib/models/fund_models.dart) | 325 | — | — |
 | [lib/models/guest_pass.dart](../lib/models/guest_pass.dart) | 49 | [model-tarih-saat-yanlis](ariza-klavuzu/33-uygulama-modeller.md#model-tarih-saat-yanlis), [model-misafir-linki-gecersiz](ariza-klavuzu/33-uygulama-modeller.md#model-misafir-linki-gecersiz) | 33-uygulama-modeller |
-| [lib/models/history_item.dart](../lib/models/history_item.dart) | 219 | — | — |
+| [lib/models/history_item.dart](../lib/models/history_item.dart) | 220 | — | — |
 | [lib/models/join_request_record.dart](../lib/models/join_request_record.dart) | 112 | [model-katilim-istegi-ve-qr-bilgisi](ariza-klavuzu/33-uygulama-modeller.md#model-katilim-istegi-ve-qr-bilgisi) | 33-uygulama-modeller |
 | [lib/models/late_fee_models.dart](../lib/models/late_fee_models.dart) | 405 | — | — |
 | [lib/models/legal_document.dart](../lib/models/legal_document.dart) | 252 | — | — |
@@ -623,14 +632,15 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [lib/models/manager_contact.dart](../lib/models/manager_contact.dart) | 53 | — | — |
 | [lib/models/menu_layout.dart](../lib/models/menu_layout.dart) | 138 | — | — |
 | [lib/models/meter_field_models.dart](../lib/models/meter_field_models.dart) | 324 | — | — |
-| [lib/models/meter_models.dart](../lib/models/meter_models.dart) | 332 | — | — |
+| [lib/models/meter_models.dart](../lib/models/meter_models.dart) | 377 | — | — |
 | [lib/models/module_request.dart](../lib/models/module_request.dart) | 138 | — | — |
 | [lib/models/neighbor_post.dart](../lib/models/neighbor_post.dart) | 67 | — | — |
-| [lib/models/payment_info.dart](../lib/models/payment_info.dart) | 182 | — | — |
+| [lib/models/payment_info.dart](../lib/models/payment_info.dart) | 187 | — | — |
 | [lib/models/payment_notice.dart](../lib/models/payment_notice.dart) | 313 | — | — |
 | [lib/models/period_report_models.dart](../lib/models/period_report_models.dart) | 234 | — | — |
 | [lib/models/person_record.dart](../lib/models/person_record.dart) | 272 | — | — |
-| [lib/models/plate_audit_label.dart](../lib/models/plate_audit_label.dart) | 20 | — | — |
+| [lib/models/plate_audit_label.dart](../lib/models/plate_audit_label.dart) | 36 | — | — |
+| [lib/models/plate_gates.dart](../lib/models/plate_gates.dart) | 300 | — | — |
 | [lib/models/platform_module.dart](../lib/models/platform_module.dart) | 407 | — | — |
 | [lib/models/platform_rule.dart](../lib/models/platform_rule.dart) | 442 | — | — |
 | [lib/models/push_models.dart](../lib/models/push_models.dart) | 295 | — | — |
@@ -703,7 +713,7 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [lib/services/crash_reporter.dart](../lib/services/crash_reporter.dart) | 660 | — | — |
 | [lib/services/decision_book_api.dart](../lib/services/decision_book_api.dart) | 509 | — | — |
 | [lib/services/deep_link_service.dart](../lib/services/deep_link_service.dart) | 362 | [cekirdek-kullanici-degisince-eski-veri](ariza-klavuzu/30-uygulama-cekirdek.md#cekirdek-kullanici-degisince-eski-veri), [cekirdek-deep-link-kisayol-calismiyor](ariza-klavuzu/30-uygulama-cekirdek.md#cekirdek-deep-link-kisayol-calismiyor) | 30-uygulama-cekirdek |
-| [lib/services/device_integrations_api.dart](../lib/services/device_integrations_api.dart) | 286 | — | — |
+| [lib/services/device_integrations_api.dart](../lib/services/device_integrations_api.dart) | 438 | — | — |
 | [lib/services/document_api.dart](../lib/services/document_api.dart) | 1280 | — | — |
 | [lib/services/document_download.dart](../lib/services/document_download.dart) | 294 | — | — |
 | [lib/services/document_file_share.dart](../lib/services/document_file_share.dart) | 181 | — | — |
@@ -731,7 +741,7 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [lib/services/login_device_token_store.dart](../lib/services/login_device_token_store.dart) | 117 | — | — |
 | [lib/services/management_company_api.dart](../lib/services/management_company_api.dart) | 92 | — | — |
 | [lib/services/menu_layout_api.dart](../lib/services/menu_layout_api.dart) | 72 | — | — |
-| [lib/services/meter_api.dart](../lib/services/meter_api.dart) | 305 | — | — |
+| [lib/services/meter_api.dart](../lib/services/meter_api.dart) | 324 | — | — |
 | [lib/services/meter_field_queue.dart](../lib/services/meter_field_queue.dart) | 304 | — | — |
 | [lib/services/meter_file_reader.dart](../lib/services/meter_file_reader.dart) | 112 | — | — |
 | [lib/services/meter_ocr.dart](../lib/services/meter_ocr.dart) | 67 | — | — |
@@ -753,7 +763,7 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [lib/services/pdf_finance_service.dart](../lib/services/pdf_finance_service.dart) | 1170 | — | — |
 | [lib/services/pdf_font_set.dart](../lib/services/pdf_font_set.dart) | 80 | [cekirdek-pdf-turkce-karakter-font](ariza-klavuzu/30-uygulama-cekirdek.md#cekirdek-pdf-turkce-karakter-font) | 30-uygulama-cekirdek |
 | [lib/services/pdf_logs_service.dart](../lib/services/pdf_logs_service.dart) | 540 | [cekirdek-pdf-turkce-karakter-font](ariza-klavuzu/30-uygulama-cekirdek.md#cekirdek-pdf-turkce-karakter-font), [cekirdek-pdf-gecis-raporu-bos](ariza-klavuzu/30-uygulama-cekirdek.md#cekirdek-pdf-gecis-raporu-bos), [cekirdek-buyuk-yanit-yavas-arayuz](ariza-klavuzu/30-uygulama-cekirdek.md#cekirdek-buyuk-yanit-yavas-arayuz), [akis-pdf-ciktilari](ariza-klavuzu/61-akislar-devam.md#akis-pdf-ciktilari) | 30-uygulama-cekirdek |
-| [lib/services/plate_recognition_api.dart](../lib/services/plate_recognition_api.dart) | 482 | — | — |
+| [lib/services/plate_recognition_api.dart](../lib/services/plate_recognition_api.dart) | 540 | — | — |
 | [lib/services/platform_rules_api.dart](../lib/services/platform_rules_api.dart) | 292 | — | — |
 | [lib/services/push_api.dart](../lib/services/push_api.dart) | 367 | — | — |
 | [lib/services/push_firebase_gateway.dart](../lib/services/push_firebase_gateway.dart) | 263 | — | — |
@@ -811,7 +821,7 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [lib/ui/dialogs/announcement_read_dialog.dart](../lib/ui/dialogs/announcement_read_dialog.dart) | 275 | — | — |
 | [lib/ui/dialogs/apartment_admin_dialogs.dart](../lib/ui/dialogs/apartment_admin_dialogs.dart) | 474 | — | — |
 | [lib/ui/dialogs/apartment_card_dialog.dart](../lib/ui/dialogs/apartment_card_dialog.dart) | 490 | — | — |
-| [lib/ui/dialogs/apartment_edit_dialog.dart](../lib/ui/dialogs/apartment_edit_dialog.dart) | 428 | — | — |
+| [lib/ui/dialogs/apartment_edit_dialog.dart](../lib/ui/dialogs/apartment_edit_dialog.dart) | 459 | — | — |
 | [lib/ui/dialogs/apartment_info_section.dart](../lib/ui/dialogs/apartment_info_section.dart) | 208 | — | — |
 | [lib/ui/dialogs/apartment_mgmt_dialogs.dart](../lib/ui/dialogs/apartment_mgmt_dialogs.dart) | 443 | — | — |
 | [lib/ui/dialogs/apartment_owner_dialogs.dart](../lib/ui/dialogs/apartment_owner_dialogs.dart) | 467 | — | — |
@@ -865,6 +875,7 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [lib/ui/dialogs/finance_liability_candidates_dialog.dart](../lib/ui/dialogs/finance_liability_candidates_dialog.dart) | 221 | — | — |
 | [lib/ui/dialogs/finance_liability_transfer_dialog.dart](../lib/ui/dialogs/finance_liability_transfer_dialog.dart) | 486 | — | — |
 | [lib/ui/dialogs/finance_movements_dialog.dart](../lib/ui/dialogs/finance_movements_dialog.dart) | 157 | — | — |
+| [lib/ui/dialogs/finance_online_collection_dialog.dart](../lib/ui/dialogs/finance_online_collection_dialog.dart) | 331 | — | — |
 | [lib/ui/dialogs/finance_opening_dialog.dart](../lib/ui/dialogs/finance_opening_dialog.dart) | 304 | — | — |
 | [lib/ui/dialogs/finance_payment_dialog.dart](../lib/ui/dialogs/finance_payment_dialog.dart) | 1051 | — | — |
 | [lib/ui/dialogs/finance_payment_settings_dialog.dart](../lib/ui/dialogs/finance_payment_settings_dialog.dart) | 221 | — | — |
@@ -976,7 +987,7 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [lib/ui/views/all_actions_view.dart](../lib/ui/views/all_actions_view.dart) | 357 | — | — |
 | [lib/ui/views/all_users_view.dart](../lib/ui/views/all_users_view.dart) | 944 | [ui-hesap-listesi-arama](ariza-klavuzu/31-uygulama-arayuz.md#ui-hesap-listesi-arama), [ui-veritabani-bakim-diyalogu](ariza-klavuzu/31-uygulama-arayuz.md#ui-veritabani-bakim-diyalogu), [akis-bakim-temizlik-health](ariza-klavuzu/60-akislar.md#akis-bakim-temizlik-health) | 31-uygulama-arayuz |
 | [lib/ui/views/announcements_admin_list.dart](../lib/ui/views/announcements_admin_list.dart) | 242 | — | — |
-| [lib/ui/views/announcements_admin_view.dart](../lib/ui/views/announcements_admin_view.dart) | 253 | — | — |
+| [lib/ui/views/announcements_admin_view.dart](../lib/ui/views/announcements_admin_view.dart) | 262 | — | — |
 | [lib/ui/views/announcements_inbox_view.dart](../lib/ui/views/announcements_inbox_view.dart) | 385 | — | — |
 | [lib/ui/views/announcements_view.dart](../lib/ui/views/announcements_view.dart) | 210 | — | — |
 | [lib/ui/views/annual_report_view.dart](../lib/ui/views/annual_report_view.dart) | 257 | — | — |
@@ -1000,7 +1011,7 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [lib/ui/views/decision_manager_view.dart](../lib/ui/views/decision_manager_view.dart) | 581 | — | — |
 | [lib/ui/views/decision_resident_view.dart](../lib/ui/views/decision_resident_view.dart) | 221 | — | — |
 | [lib/ui/views/device_add_view.dart](../lib/ui/views/device_add_view.dart) | 90 | [ui-cihaz-kayit-formu](ariza-klavuzu/31-uygulama-arayuz.md#ui-cihaz-kayit-formu) | — |
-| [lib/ui/views/device_integrations_view.dart](../lib/ui/views/device_integrations_view.dart) | 273 | — | — |
+| [lib/ui/views/device_integrations_view.dart](../lib/ui/views/device_integrations_view.dart) | 281 | — | — |
 | [lib/ui/views/directory_view.dart](../lib/ui/views/directory_view.dart) | 143 | — | — |
 | [lib/ui/views/document_admin_list.dart](../lib/ui/views/document_admin_list.dart) | 396 | — | — |
 | [lib/ui/views/document_admin_view.dart](../lib/ui/views/document_admin_view.dart) | 317 | — | — |
@@ -1021,7 +1032,7 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [lib/ui/views/finance_periods_tab.dart](../lib/ui/views/finance_periods_tab.dart) | 427 | — | — |
 | [lib/ui/views/finance_reminder_card.dart](../lib/ui/views/finance_reminder_card.dart) | 163 | — | — |
 | [lib/ui/views/finance_reports_tab.dart](../lib/ui/views/finance_reports_tab.dart) | 2199 | — | — |
-| [lib/ui/views/finance_view.dart](../lib/ui/views/finance_view.dart) | 817 | — | — |
+| [lib/ui/views/finance_view.dart](../lib/ui/views/finance_view.dart) | 842 | — | — |
 | [lib/ui/views/help_content.dart](../lib/ui/views/help_content.dart) | 1012 | — | — |
 | [lib/ui/views/help_view.dart](../lib/ui/views/help_view.dart) | 750 | — | — |
 | [lib/ui/views/individual_home_view.dart](../lib/ui/views/individual_home_view.dart) | 1333 | [cekirdek-konum-mesafe-disi](ariza-klavuzu/30-uygulama-cekirdek.md#cekirdek-konum-mesafe-disi), [ui-kapi-ac-basari-tiki](ariza-klavuzu/31-uygulama-arayuz.md#ui-kapi-ac-basari-tiki), [ui-bireysel-ana-ekran-kapilar](ariza-klavuzu/31-uygulama-arayuz.md#ui-bireysel-ana-ekran-kapilar), [ui-qr-konum-hatasi](ariza-klavuzu/31-uygulama-arayuz.md#ui-qr-konum-hatasi), [ui-ekran-qr-oku](ariza-klavuzu/31-uygulama-arayuz.md#ui-ekran-qr-oku) +2 | 31-uygulama-arayuz |
@@ -1039,7 +1050,7 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [lib/ui/views/management_company_view.dart](../lib/ui/views/management_company_view.dart) | 482 | — | — |
 | [lib/ui/views/menu_layout_view.dart](../lib/ui/views/menu_layout_view.dart) | 566 | — | — |
 | [lib/ui/views/meter_field_view.dart](../lib/ui/views/meter_field_view.dart) | 843 | — | — |
-| [lib/ui/views/meters_view.dart](../lib/ui/views/meters_view.dart) | 795 | — | — |
+| [lib/ui/views/meters_view.dart](../lib/ui/views/meters_view.dart) | 957 | — | — |
 | [lib/ui/views/module_requests_view.dart](../lib/ui/views/module_requests_view.dart) | 415 | — | — |
 | [lib/ui/views/module_showcase_view.dart](../lib/ui/views/module_showcase_view.dart) | 1484 | — | — |
 | [lib/ui/views/modules_view.dart](../lib/ui/views/modules_view.dart) | 626 | — | — |
@@ -1055,7 +1066,7 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [lib/ui/views/people_team_tab.dart](../lib/ui/views/people_team_tab.dart) | 357 | — | — |
 | [lib/ui/views/people_vehicles_tab.dart](../lib/ui/views/people_vehicles_tab.dart) | 233 | — | — |
 | [lib/ui/views/people_view.dart](../lib/ui/views/people_view.dart) | 496 | — | — |
-| [lib/ui/views/plate_recognition_view.dart](../lib/ui/views/plate_recognition_view.dart) | 824 | — | — |
+| [lib/ui/views/plate_recognition_view.dart](../lib/ui/views/plate_recognition_view.dart) | 853 | — | — |
 | [lib/ui/views/platform_rules_view.dart](../lib/ui/views/platform_rules_view.dart) | 332 | — | — |
 | [lib/ui/views/platform_settings_view.dart](../lib/ui/views/platform_settings_view.dart) | 889 | — | — |
 | [lib/ui/views/profile_view.dart](../lib/ui/views/profile_view.dart) | 530 | [ui-profil-kaydet](ariza-klavuzu/31-uygulama-arayuz.md#ui-profil-kaydet) | 31-uygulama-arayuz |
@@ -1150,6 +1161,7 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [lib/ui/widgets/management_type_selector.dart](../lib/ui/widgets/management_type_selector.dart) | 205 | — | — |
 | [lib/ui/widgets/manager_attention_bar.dart](../lib/ui/widgets/manager_attention_bar.dart) | 284 | — | — |
 | [lib/ui/widgets/manager_call_tile.dart](../lib/ui/widgets/manager_call_tile.dart) | 344 | — | — |
+| [lib/ui/widgets/messaging_connections_card.dart](../lib/ui/widgets/messaging_connections_card.dart) | 408 | — | — |
 | [lib/ui/widgets/module_card.dart](../lib/ui/widgets/module_card.dart) | 247 | — | — |
 | [lib/ui/widgets/module_request_card.dart](../lib/ui/widgets/module_request_card.dart) | 149 | — | — |
 | [lib/ui/widgets/money_field.dart](../lib/ui/widgets/money_field.dart) | 110 | — | — |
@@ -1158,11 +1170,12 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [lib/ui/widgets/my_refund_section.dart](../lib/ui/widgets/my_refund_section.dart) | 309 | — | — |
 | [lib/ui/widgets/notification_prefs_section.dart](../lib/ui/widgets/notification_prefs_section.dart) | 280 | — | — |
 | [lib/ui/widgets/panel_site_creation_card.dart](../lib/ui/widgets/panel_site_creation_card.dart) | 151 | — | — |
-| [lib/ui/widgets/pay_sheet.dart](../lib/ui/widgets/pay_sheet.dart) | 332 | — | — |
+| [lib/ui/widgets/pay_sheet.dart](../lib/ui/widgets/pay_sheet.dart) | 346 | — | — |
 | [lib/ui/widgets/payment_notice_status.dart](../lib/ui/widgets/payment_notice_status.dart) | 106 | — | — |
 | [lib/ui/widgets/pending_invitations_card.dart](../lib/ui/widgets/pending_invitations_card.dart) | 111 | — | — |
 | [lib/ui/widgets/person_card.dart](../lib/ui/widgets/person_card.dart) | 442 | — | — |
 | [lib/ui/widgets/person_roles_panel.dart](../lib/ui/widgets/person_roles_panel.dart) | 536 | — | — |
+| [lib/ui/widgets/plate_gates_panel.dart](../lib/ui/widgets/plate_gates_panel.dart) | 527 | — | — |
 | [lib/ui/widgets/platform_rules_entry_card.dart](../lib/ui/widgets/platform_rules_entry_card.dart) | 61 | — | — |
 | [lib/ui/widgets/push_prefs_panel.dart](../lib/ui/widgets/push_prefs_panel.dart) | 785 | — | — |
 | [lib/ui/widgets/push_soft_prompt_card.dart](../lib/ui/widgets/push_soft_prompt_card.dart) | 239 | — | — |
@@ -1272,7 +1285,7 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [server/src/config/cors.js](../server/src/config/cors.js) | 82 | [sunucu-cors-tarayici-engeli](ariza-klavuzu/10-sunucu-api.md#sunucu-cors-tarayici-engeli) | 10-sunucu-api |
 | [server/src/config/env.js](../server/src/config/env.js) | 367 | [sunucu-kayit-kod-gelmiyor](ariza-klavuzu/10-sunucu-api.md#sunucu-kayit-kod-gelmiyor), [sunucu-eposta-hic-cikmiyor-smtp](ariza-klavuzu/10-sunucu-api.md#sunucu-eposta-hic-cikmiyor-smtp), [sunucu-cors-tarayici-engeli](ariza-klavuzu/10-sunucu-api.md#sunucu-cors-tarayici-engeli), [sunucu-sirket-ucu-401-anahtar](ariza-klavuzu/10-sunucu-api.md#sunucu-sirket-ucu-401-anahtar), [altyapi-env-hata-sunucu-baslamiyor](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-env-hata-sunucu-baslamiyor) +6 | 10-sunucu-api, 20-sunucu-altyapi-ve-yayin |
 | [server/src/config/process_handlers.js](../server/src/config/process_handlers.js) | 39 | [sunucu-async-hata-istek-asili](ariza-klavuzu/10-sunucu-api.md#sunucu-async-hata-istek-asili), [altyapi-api-acilmiyor-pm2-dongu](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-api-acilmiyor-pm2-dongu), [altyapi-port-8080-kullanimda](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-port-8080-kullanimda), [altyapi-yakalanmamis-hata-loglari](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-yakalanmamis-hata-loglari) | 10-sunucu-api, 20-sunucu-altyapi-ve-yayin |
-| [server/src/db.js](../server/src/db.js) | 2152 | [altyapi-health-database-disconnected](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-health-database-disconnected), [altyapi-sema-users-yok](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-sema-users-yok), [altyapi-relation-does-not-exist](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-relation-does-not-exist), [altyapi-sema-baslangic-sql-hatasi](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-sema-baslangic-sql-hatasi), [altyapi-db-havuz-zaman-asimi](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-db-havuz-zaman-asimi) +3 | 20-sunucu-altyapi-ve-yayin |
+| [server/src/db.js](../server/src/db.js) | 2165 | [altyapi-health-database-disconnected](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-health-database-disconnected), [altyapi-sema-users-yok](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-sema-users-yok), [altyapi-relation-does-not-exist](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-relation-does-not-exist), [altyapi-sema-baslangic-sql-hatasi](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-sema-baslangic-sql-hatasi), [altyapi-db-havuz-zaman-asimi](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-db-havuz-zaman-asimi) +3 | 20-sunucu-altyapi-ve-yayin |
 | [server/src/jwt.js](../server/src/jwt.js) | 138 | [sunucu-token-401-gecersiz](ariza-klavuzu/10-sunucu-api.md#sunucu-token-401-gecersiz), [sunucu-token-revoked-parola-degisti](ariza-klavuzu/10-sunucu-api.md#sunucu-token-revoked-parola-degisti) | 10-sunucu-api |
 | [server/src/mailer.js](../server/src/mailer.js) | 810 | [sunucu-kayit-kod-gelmiyor](ariza-klavuzu/10-sunucu-api.md#sunucu-kayit-kod-gelmiyor), [sunucu-sifre-sifirlama-mail-gelmiyor](ariza-klavuzu/10-sunucu-api.md#sunucu-sifre-sifirlama-mail-gelmiyor), [sunucu-eposta-hic-cikmiyor-smtp](ariza-klavuzu/10-sunucu-api.md#sunucu-eposta-hic-cikmiyor-smtp), [sunucu-yonetici-daveti-mail-yok](ariza-klavuzu/10-sunucu-api.md#sunucu-yonetici-daveti-mail-yok), [sunucu-daire-bilgisi-eposta-gitmiyor](ariza-klavuzu/10-sunucu-api.md#sunucu-daire-bilgisi-eposta-gitmiyor) +2 | 10-sunucu-api |
 | [server/src/middlewares/auth_middleware.js](../server/src/middlewares/auth_middleware.js) | 221 | [sunucu-token-401-gecersiz](ariza-klavuzu/10-sunucu-api.md#sunucu-token-401-gecersiz), [sunucu-token-revoked-parola-degisti](ariza-klavuzu/10-sunucu-api.md#sunucu-token-revoked-parola-degisti), [sunucu-oturum-401-kullanici-yok](ariza-klavuzu/10-sunucu-api.md#sunucu-oturum-401-kullanici-yok), [sunucu-oturum-403-hesap-pasif](ariza-klavuzu/10-sunucu-api.md#sunucu-oturum-403-hesap-pasif), [sunucu-db-kesintisi-500-oturum-dusmuyor](ariza-klavuzu/10-sunucu-api.md#sunucu-db-kesintisi-500-oturum-dusmuyor) +5 | 10-sunucu-api |
@@ -1320,7 +1333,7 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [server/src/modules/apartment_owners_schema.js](../server/src/modules/apartment_owners_schema.js) | 337 | — | — |
 | [server/src/modules/apartment_owners_service.js](../server/src/modules/apartment_owners_service.js) | 517 | — | — |
 | [server/src/modules/apartment_pin_schema.js](../server/src/modules/apartment_pin_schema.js) | 283 | — | — |
-| [server/src/modules/apartment_records_service.js](../server/src/modules/apartment_records_service.js) | 432 | — | — |
+| [server/src/modules/apartment_records_service.js](../server/src/modules/apartment_records_service.js) | 443 | — | — |
 | [server/src/modules/apartment_tenant_admin_sql.js](../server/src/modules/apartment_tenant_admin_sql.js) | 154 | — | — |
 | [server/src/modules/apartment_tenant_admin.js](../server/src/modules/apartment_tenant_admin.js) | 56 | — | — |
 | [server/src/modules/app_config_routes.js](../server/src/modules/app_config_routes.js) | 79 | — | — |
@@ -1364,6 +1377,7 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [server/src/modules/bulk_import_snapshot.js](../server/src/modules/bulk_import_snapshot.js) | 157 | — | — |
 | [server/src/modules/bulk_import_spec.js](../server/src/modules/bulk_import_spec.js) | 245 | — | — |
 | [server/src/modules/bulk_import_writer.js](../server/src/modules/bulk_import_writer.js) | 761 | — | — |
+| [server/src/modules/camera_probe.js](../server/src/modules/camera_probe.js) | 51 | — | — |
 | [server/src/modules/card_access_access.js](../server/src/modules/card_access_access.js) | 44 | — | — |
 | [server/src/modules/card_access_common.js](../server/src/modules/card_access_common.js) | 143 | — | — |
 | [server/src/modules/card_access_routes.js](../server/src/modules/card_access_routes.js) | 117 | — | — |
@@ -1373,9 +1387,9 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [server/src/modules/card_payments_into_finance.js](../server/src/modules/card_payments_into_finance.js) | 18 | — | — |
 | [server/src/modules/cargo_notify.js](../server/src/modules/cargo_notify.js) | 77 | — | — |
 | [server/src/modules/catalog.js](../server/src/modules/catalog.js) | 374 | — | — |
-| [server/src/modules/cctv_routes.js](../server/src/modules/cctv_routes.js) | 144 | — | — |
+| [server/src/modules/cctv_routes.js](../server/src/modules/cctv_routes.js) | 146 | — | — |
 | [server/src/modules/cctv_schema.js](../server/src/modules/cctv_schema.js) | 113 | — | — |
-| [server/src/modules/cctv_service.js](../server/src/modules/cctv_service.js) | 447 | — | — |
+| [server/src/modules/cctv_service.js](../server/src/modules/cctv_service.js) | 476 | — | — |
 | [server/src/modules/cctv_snapshot.js](../server/src/modules/cctv_snapshot.js) | 208 | — | — |
 | [server/src/modules/check_mark_common.js](../server/src/modules/check_mark_common.js) | 10 | — | — |
 | [server/src/modules/check_mark_routes.js](../server/src/modules/check_mark_routes.js) | 31 | — | — |
@@ -1398,9 +1412,9 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [server/src/modules/decision_book_routes.js](../server/src/modules/decision_book_routes.js) | 149 | — | — |
 | [server/src/modules/decision_book_schema.js](../server/src/modules/decision_book_schema.js) | 269 | — | — |
 | [server/src/modules/decision_book_service.js](../server/src/modules/decision_book_service.js) | 416 | — | — |
-| [server/src/modules/device_integrations_routes.js](../server/src/modules/device_integrations_routes.js) | 180 | — | — |
+| [server/src/modules/device_integrations_routes.js](../server/src/modules/device_integrations_routes.js) | 190 | — | — |
 | [server/src/modules/device_integrations_schema.js](../server/src/modules/device_integrations_schema.js) | 117 | — | — |
-| [server/src/modules/device_integrations_service.js](../server/src/modules/device_integrations_service.js) | 252 | — | — |
+| [server/src/modules/device_integrations_service.js](../server/src/modules/device_integrations_service.js) | 275 | — | — |
 | [server/src/modules/document_access.js](../server/src/modules/document_access.js) | 35 | — | — |
 | [server/src/modules/document_attachments.js](../server/src/modules/document_attachments.js) | 193 | — | — |
 | [server/src/modules/document_common.js](../server/src/modules/document_common.js) | 512 | — | — |
@@ -1484,7 +1498,7 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [server/src/modules/finance_opening.js](../server/src/modules/finance_opening.js) | 213 | — | — |
 | [server/src/modules/finance_parties_schema.js](../server/src/modules/finance_parties_schema.js) | 306 | — | — |
 | [server/src/modules/finance_parties.js](../server/src/modules/finance_parties.js) | 496 | — | — |
-| [server/src/modules/finance_payment_info.js](../server/src/modules/finance_payment_info.js) | 411 | — | — |
+| [server/src/modules/finance_payment_info.js](../server/src/modules/finance_payment_info.js) | 416 | — | — |
 | [server/src/modules/finance_payment_ref.js](../server/src/modules/finance_payment_ref.js) | 152 | — | — |
 | [server/src/modules/finance_payment_routes.js](../server/src/modules/finance_payment_routes.js) | 63 | — | — |
 | [server/src/modules/finance_payment_schema.js](../server/src/modules/finance_payment_schema.js) | 288 | — | — |
@@ -1520,17 +1534,23 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [server/src/modules/menu_layout_routes.js](../server/src/modules/menu_layout_routes.js) | 87 | — | — |
 | [server/src/modules/menu_layout_schema.js](../server/src/modules/menu_layout_schema.js) | 30 | — | — |
 | [server/src/modules/menu_layout_service.js](../server/src/modules/menu_layout_service.js) | 240 | — | — |
+| [server/src/modules/messaging_common.js](../server/src/modules/messaging_common.js) | 98 | — | — |
+| [server/src/modules/messaging_routes.js](../server/src/modules/messaging_routes.js) | 67 | — | — |
+| [server/src/modules/messaging_schema.js](../server/src/modules/messaging_schema.js) | 29 | — | — |
+| [server/src/modules/messaging_service.js](../server/src/modules/messaging_service.js) | 176 | — | — |
 | [server/src/modules/metering_access.js](../server/src/modules/metering_access.js) | 18 | — | — |
-| [server/src/modules/metering_billing.js](../server/src/modules/metering_billing.js) | 364 | — | — |
+| [server/src/modules/metering_billing.js](../server/src/modules/metering_billing.js) | 384 | — | — |
 | [server/src/modules/metering_calc.js](../server/src/modules/metering_calc.js) | 156 | — | — |
-| [server/src/modules/metering_common.js](../server/src/modules/metering_common.js) | 146 | — | — |
+| [server/src/modules/metering_common.js](../server/src/modules/metering_common.js) | 151 | — | — |
 | [server/src/modules/metering_field_routes.js](../server/src/modules/metering_field_routes.js) | 198 | — | — |
 | [server/src/modules/metering_field_schema.js](../server/src/modules/metering_field_schema.js) | 51 | — | — |
 | [server/src/modules/metering_field_service.js](../server/src/modules/metering_field_service.js) | 164 | — | — |
 | [server/src/modules/metering_jump.js](../server/src/modules/metering_jump.js) | 112 | — | — |
-| [server/src/modules/metering_routes.js](../server/src/modules/metering_routes.js) | 176 | — | — |
+| [server/src/modules/metering_routes.js](../server/src/modules/metering_routes.js) | 197 | — | — |
 | [server/src/modules/metering_schema.js](../server/src/modules/metering_schema.js) | 184 | — | — |
 | [server/src/modules/metering_service.js](../server/src/modules/metering_service.js) | 358 | — | — |
+| [server/src/modules/metering_tariff_schema.js](../server/src/modules/metering_tariff_schema.js) | 53 | — | — |
+| [server/src/modules/metering_tariff.js](../server/src/modules/metering_tariff.js) | 64 | — | — |
 | [server/src/modules/module_request_routes.js](../server/src/modules/module_request_routes.js) | 157 | — | — |
 | [server/src/modules/module_request_service.js](../server/src/modules/module_request_service.js) | 544 | — | — |
 | [server/src/modules/module_routes.js](../server/src/modules/module_routes.js) | 250 | — | — |
@@ -1542,11 +1562,15 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [server/src/modules/oauth_login.js](../server/src/modules/oauth_login.js) | 1179 | — | — |
 | [server/src/modules/oauth_routes.js](../server/src/modules/oauth_routes.js) | 289 | — | — |
 | [server/src/modules/oauth_schema.js](../server/src/modules/oauth_schema.js) | 31 | — | — |
+| [server/src/modules/payment_connection_routes.js](../server/src/modules/payment_connection_routes.js) | 92 | — | — |
+| [server/src/modules/payment_connection_schema.js](../server/src/modules/payment_connection_schema.js) | 31 | — | — |
+| [server/src/modules/payment_connection_service.js](../server/src/modules/payment_connection_service.js) | 191 | — | — |
 | [server/src/modules/payment_notice_common.js](../server/src/modules/payment_notice_common.js) | 247 | — | — |
 | [server/src/modules/payment_notice_routes.js](../server/src/modules/payment_notice_routes.js) | 147 | — | — |
 | [server/src/modules/payment_notice_schema.js](../server/src/modules/payment_notice_schema.js) | 168 | — | — |
 | [server/src/modules/payment_notice_service.js](../server/src/modules/payment_notice_service.js) | 563 | — | — |
 | [server/src/modules/payment_notice_upload.js](../server/src/modules/payment_notice_upload.js) | 206 | — | — |
+| [server/src/modules/payment_providers.js](../server/src/modules/payment_providers.js) | 45 | — | — |
 | [server/src/modules/people_access.js](../server/src/modules/people_access.js) | 96 | — | — |
 | [server/src/modules/people_backfill.js](../server/src/modules/people_backfill.js) | 43 | — | — |
 | [server/src/modules/people_bulk_service.js](../server/src/modules/people_bulk_service.js) | 160 | — | — |
@@ -1559,10 +1583,15 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [server/src/modules/people_sync.js](../server/src/modules/people_sync.js) | 176 | — | — |
 | [server/src/modules/person_invite_routes.js](../server/src/modules/person_invite_routes.js) | 186 | — | — |
 | [server/src/modules/person_invite_service.js](../server/src/modules/person_invite_service.js) | 414 | — | — |
+| [server/src/modules/plate_edge_routes.js](../server/src/modules/plate_edge_routes.js) | 58 | — | — |
+| [server/src/modules/plate_edge_service.js](../server/src/modules/plate_edge_service.js) | 273 | — | — |
 | [server/src/modules/plate_format.js](../server/src/modules/plate_format.js) | 57 | — | — |
-| [server/src/modules/plate_recognition_common.js](../server/src/modules/plate_recognition_common.js) | 182 | — | — |
+| [server/src/modules/plate_gates_common.js](../server/src/modules/plate_gates_common.js) | 341 | — | — |
+| [server/src/modules/plate_gates_schema.js](../server/src/modules/plate_gates_schema.js) | 236 | — | — |
+| [server/src/modules/plate_gates_service.js](../server/src/modules/plate_gates_service.js) | 393 | — | — |
+| [server/src/modules/plate_recognition_common.js](../server/src/modules/plate_recognition_common.js) | 187 | — | — |
 | [server/src/modules/plate_recognition_permits.js](../server/src/modules/plate_recognition_permits.js) | 237 | — | — |
-| [server/src/modules/plate_recognition_routes.js](../server/src/modules/plate_recognition_routes.js) | 199 | — | — |
+| [server/src/modules/plate_recognition_routes.js](../server/src/modules/plate_recognition_routes.js) | 271 | — | — |
 | [server/src/modules/plate_recognition_schema.js](../server/src/modules/plate_recognition_schema.js) | 153 | — | — |
 | [server/src/modules/plate_recognition_service.js](../server/src/modules/plate_recognition_service.js) | 307 | — | — |
 | [server/src/modules/platform_config_routes.js](../server/src/modules/platform_config_routes.js) | 74 | — | — |
@@ -1600,7 +1629,7 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [server/src/modules/site_application_common.js](../server/src/modules/site_application_common.js) | 364 | — | — |
 | [server/src/modules/site_application_routes.js](../server/src/modules/site_application_routes.js) | 217 | — | — |
 | [server/src/modules/site_application_service.js](../server/src/modules/site_application_service.js) | 1032 | — | — |
-| [server/src/modules/site_audit_log_catalog.js](../server/src/modules/site_audit_log_catalog.js) | 445 | — | — |
+| [server/src/modules/site_audit_log_catalog.js](../server/src/modules/site_audit_log_catalog.js) | 459 | — | — |
 | [server/src/modules/site_audit_log_routes.js](../server/src/modules/site_audit_log_routes.js) | 45 | — | — |
 | [server/src/modules/site_audit_log_service.js](../server/src/modules/site_audit_log_service.js) | 354 | — | — |
 | [server/src/modules/site_free_period_schema.js](../server/src/modules/site_free_period_schema.js) | 63 | — | — |
@@ -1673,7 +1702,7 @@ Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerl
 | [server/src/security/password_hashing.js](../server/src/security/password_hashing.js) | 44 | — | — |
 | [server/src/security/password_policy.js](../server/src/security/password_policy.js) | 304 | [sunucu-profil-parola-degistirme-hata](ariza-klavuzu/10-sunucu-api.md#sunucu-profil-parola-degistirme-hata) | — |
 | [server/src/security/trust_proxy.js](../server/src/security/trust_proxy.js) | 116 | — | — |
-| [server/src/server.js](../server/src/server.js) | 429 | [altyapi-api-acilmiyor-pm2-dongu](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-api-acilmiyor-pm2-dongu), [altyapi-env-hata-sunucu-baslamiyor](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-env-hata-sunucu-baslamiyor), [altyapi-env-uyari-jwt-kisa](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-env-uyari-jwt-kisa), [altyapi-env-uyari-eksik-ayarlar](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-env-uyari-eksik-ayarlar), [altyapi-env-degisikligi-etkisiz](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-env-degisikligi-etkisiz) +8 | 20-sunucu-altyapi-ve-yayin |
+| [server/src/server.js](../server/src/server.js) | 438 | [altyapi-api-acilmiyor-pm2-dongu](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-api-acilmiyor-pm2-dongu), [altyapi-env-hata-sunucu-baslamiyor](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-env-hata-sunucu-baslamiyor), [altyapi-env-uyari-jwt-kisa](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-env-uyari-jwt-kisa), [altyapi-env-uyari-eksik-ayarlar](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-env-uyari-eksik-ayarlar), [altyapi-env-degisikligi-etkisiz](ariza-klavuzu/20-sunucu-altyapi-ve-yayin.md#altyapi-env-degisikligi-etkisiz) +8 | 20-sunucu-altyapi-ve-yayin |
 | [server/src/services/apartment_service.js](../server/src/services/apartment_service.js) | 660 | [sunucu-daire-bilgisi-eposta-gitmiyor](ariza-klavuzu/10-sunucu-api.md#sunucu-daire-bilgisi-eposta-gitmiyor), [sunucu-daire-sakin-yonetimi-hata](ariza-klavuzu/10-sunucu-api.md#sunucu-daire-sakin-yonetimi-hata) | 10-sunucu-api |
 | [server/src/services/device_service.js](../server/src/services/device_service.js) | 1079 | [sunucu-kapi-acma-409-cihaz-atanmamis](ariza-klavuzu/10-sunucu-api.md#sunucu-kapi-acma-409-cihaz-atanmamis), [sunucu-yerel-kontrol-token-bos](ariza-klavuzu/10-sunucu-api.md#sunucu-yerel-kontrol-token-bos), [sunucu-yerel-token-rotasyonu](ariza-klavuzu/10-sunucu-api.md#sunucu-yerel-token-rotasyonu), [sunucu-admin-ota-tetikleme-hata](ariza-klavuzu/10-sunucu-api.md#sunucu-admin-ota-tetikleme-hata), [sunucu-admin-cihaz-envanteri-hata](ariza-klavuzu/10-sunucu-api.md#sunucu-admin-cihaz-envanteri-hata) +8 | 10-sunucu-api, 20-sunucu-altyapi-ve-yayin, 61-akislar-devam |
 | [server/src/services/door_access_policy.js](../server/src/services/door_access_policy.js) | 342 | [sunucu-kapi-acma-403-uzaktan-kapali](ariza-klavuzu/10-sunucu-api.md#sunucu-kapi-acma-403-uzaktan-kapali), [sunucu-karekod-politika-kapali](ariza-klavuzu/10-sunucu-api.md#sunucu-karekod-politika-kapali), [sunucu-tarama-qr-ekran-token](ariza-klavuzu/10-sunucu-api.md#sunucu-tarama-qr-ekran-token), [sunucu-tarama-qr-suresi-doldu](ariza-klavuzu/10-sunucu-api.md#sunucu-tarama-qr-suresi-doldu), [sunucu-tarama-qr-gecersiz-yuk](ariza-klavuzu/10-sunucu-api.md#sunucu-tarama-qr-gecersiz-yuk) +2 | 10-sunucu-api, 60-akislar |

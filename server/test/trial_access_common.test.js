@@ -298,6 +298,13 @@ describe('evaluateTrialRequest: deneme oturumu erişim ilkesi (varsayılan RED)'
     denied('GET', `/manager/sites/${DEMO}/cctv/cameras/3/snapshot`);
     denied('POST', `/manager/sites/${DEMO}/cctv/clip-link`);
     denied('GET', `/manager/sites/${DEMO}/plate-recognition/events`);
+    // Plaka A1 (120): geçiş noktaları, kenar istemci anahtarları ve "içeride" ucu `plate-recognition` alt ağacındadır => HER yöntemde kapalı (donanım + anahtar üretimi).
+    // Kenar istemci uçları (/edge/plate/v1/*) kullanıcı oturumu taşımaz (cihaz anahtarı); bir DENEME oturumu o yola gelirse tanınmayan yol olarak kapanır: deneme kapsamı DIŞI.
+    denied('GET', `/manager/sites/${DEMO}/plate-recognition/gates`);
+    denied('POST', `/manager/sites/${DEMO}/plate-recognition/edge-clients`);
+    denied('GET', `/manager/sites/${DEMO}/plate-recognition/inside`);
+    denied('GET', '/edge/plate/v1/sync');
+    denied('POST', '/edge/plate/v1/events');
     denied('GET', `/manager/sites/${DEMO}/plate-events`);
     denied('POST', `/manager/sites/${DEMO}/drive/connect`);
     denied('DELETE', `/manager/sites/${DEMO}/drive`);

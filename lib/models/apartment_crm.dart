@@ -115,6 +115,7 @@ class ApartmentSummary {
     this.netAreaM2,
     this.landShare,
     this.responsibleParty = ResponsibleParty.both,
+    this.parkingSlots = 0,
     this.owner,
     this.tenant,
     this.residentCount = 0,
@@ -131,6 +132,9 @@ class ApartmentSummary {
   final double? netAreaM2;
   final LandShare? landShare;
   final ResponsibleParty responsibleParty;
+
+  /// Daire başına park yeri sayısı (plaka tanıma: 0 = misafir araç kabul edilmez).
+  final int parkingSlots;
   /// Hesap muhatabı olan malik (çoklu malik, 104; eski istemci uyumu için alan adı değişmedi).
   final ApartmentPartyRef? owner;
   final ApartmentPartyRef? tenant;
@@ -153,6 +157,7 @@ class ApartmentSummary {
       netAreaM2: crmDoubleOrNull(json['net_area_m2']),
       landShare: LandShare.fromJson(json['land_share']),
       responsibleParty: ResponsibleParty.fromApi(json['responsible_party']),
+      parkingSlots: crmIntOrNull(json['parking_slots']) ?? 0,
       owner: ApartmentPartyRef.fromJson(json['owner']),
       tenant: ApartmentPartyRef.fromJson(json['tenant']),
       residentCount: crmInt(json['resident_count']),
@@ -285,6 +290,7 @@ class ApartmentDetail extends ApartmentSummary {
     super.netAreaM2,
     super.landShare,
     super.responsibleParty,
+    super.parkingSlots,
     super.owner,
     super.tenant,
     super.residentCount,
@@ -319,6 +325,7 @@ class ApartmentDetail extends ApartmentSummary {
       netAreaM2: base.netAreaM2,
       landShare: base.landShare,
       responsibleParty: base.responsibleParty,
+      parkingSlots: base.parkingSlots,
       owner: base.owner,
       tenant: base.tenant,
       residentCount: json['resident_count'] == null ? current.length : base.residentCount,

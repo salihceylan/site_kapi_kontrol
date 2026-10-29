@@ -11737,6 +11737,84 @@
           "gelistirme": "hazir"
         }
       ]
+    },
+    {
+      "id": "F84",
+      "baslik": "Plaka tanıma: geçiş noktaları, kenar PC durumu, park yeri ve misafir kuralı (Aşama A1)",
+      "durum": "hazir",
+      "ozet": "Plaka Tanıma ekranına “Geçiş noktaları” sekmesi eklendi: istediğiniz kadar kapı tanımlarsınız (ad, yön modu: yalnız giriş / yalnız çıkış / çift yön, bağlı SmartKeyPass cihazı, bağlı kameralar). Güvenlik kulübesindeki bilgisayar (kenar istemci) kendi anahtarıyla sunucuya bağlanır: izin listesini ve daire park yeri / içerideki araç sayılarını çeker, plaka olaylarını bildirir, düzenli kalp atışı gönderir. Ekran kapı, kamera, SmartKeyPass ve kenar PC için çalışıyor / koptu / hiç bağlanmadı rozetlerini gösterir (eşikler site ayarı). Daire formuna park yeri sayısı eklendi; misafir araç yalnız park yeri varsa ve (varsayılan kuralda) tüm yerler boşsa kabul edilir; kural site ayarıdır. Kapıyı açan hâlâ SmartKeyPass cihazıdır; bu sürümde sunucu kapı açmaz. Migration 120 (plate_gates, plate_gate_cameras, plate_edge_clients, plate_camera_status, plate_site_settings, plate_presence, plate_events genişletme, apartments.parking_slots). Kenar PC uygulaması (Aşama A2) sonraki iştir.",
+      "maddeler": [
+        {
+          "id": "F84.01",
+          "baslik": "Geçiş noktası (kapı) ekle, düzenle, sil",
+          "adimlar": [
+            "Plaka Tanıma ekranında “Geçiş noktaları” sekmesini açın; “Geçiş noktası ekle” deyin.",
+            "Ad yazın (örn. Ana kapı), yön modunu seçin (Yalnız giriş, Yalnız çıkış ya da Çift yön), bir SmartKeyPass cihazı seçin ve boşta kameralardan birini ya da birkaçını işaretleyin. Çift yönde her kamera için Giriş / Çıkış / Otomatik seçin.",
+            "Kaydedin; kartı “Düzenle” ile değiştirin, aynı adla ikinci bir kapı eklemeyi ve aynı kamerayı iki kapıya bağlamayı deneyin; son olarak kapıyı “Sil” ile kaldırın."
+          ],
+          "beklenen": "Kapı kartı adı, yön modu, bağlı SmartKeyPass cihazı ve kameralarıyla listelenir. Kapı ve kamera sayısında üst sınır yoktur. Aynı ad ya da aynı kamerayı ikinci kapıya bağlama Türkçe uyarıyla reddedilir; tek yönlü kapıda ters yönlü kamera seçilemez. Silinen kapı listeden kalkar, geçmiş plaka kayıtları silinmez. Kurul üyesi / görevli ekranı yalnız okur (düğme yok).",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Sunucuda migration 120 uygulanmış; Plaka Tanıma modülü açık; sitede en az bir kamera (Kamera ve Plaka ekranı) ve bir SmartKeyPass cihazı tanımlı; yeni uygulama sürümü",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F84.02",
+          "baslik": "Kenar PC kaydı ve anahtar (bir kez gösterilir)",
+          "adimlar": [
+            "“Geçiş noktaları” sekmesinde “Kenar istemci (güvenlik kulübesi PC)” bölümünde “Ekle” deyin, ad yazın ve oluşturun.",
+            "Açılan anahtarı “Kopyala” ile alın, pencereyi kapatın; kayıt satırında “Hiç bağlanmadı” rozetini görün.",
+            "Satırın menüsünden “Anahtarı yenile” deyin, sonra “Kaldır” deyin."
+          ],
+          "beklenen": "Anahtar yalnız oluşturma / yenileme anında bir kez görünür (sunucuda düz saklanmaz; veritabanında yalnız özeti vardır). Yeni kayıt “Hiç bağlanmadı” rozeti taşır. Anahtar yenilenince eski anahtar geçersiz olur; kaldırılan kenar istemci listeden kalkar ve sunucuya bağlanamaz.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Sunucuda migration 120 uygulanmış; Plaka Tanıma modülü açık; sitede en az bir kamera (Kamera ve Plaka ekranı) ve bir SmartKeyPass cihazı tanımlı; yeni uygulama sürümü",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F84.03",
+          "baslik": "Daire formunda park yeri sayısı",
+          "adimlar": [
+            "Kişiler ya da Daireler listesinden bir dairenin “Daire bilgileri” düzenleme penceresini açın.",
+            "“Park yeri sayısı” alanına 2 yazıp kaydedin; pencereyi yeniden açın. Sonra 51 ve harf yazmayı deneyin.",
+            "Dairenin geçmiş (değişiklik) kaydına bakın."
+          ],
+          "beklenen": "Alan varsayılan 0 gelir (0 = misafir araç otomatik kabul edilmez). 2 kaydedilir ve yeniden açılınca görünür; 0-50 dışı ya da sayı olmayan değer Türkçe uyarıyla reddedilir. Geçmişte “Park yeri sayısı” değişikliği görünür.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Sunucuda migration 120 uygulanmış; Plaka Tanıma modülü açık; sitede en az bir kamera (Kamera ve Plaka ekranı) ve bir SmartKeyPass cihazı tanımlı; yeni uygulama sürümü",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F84.04",
+          "baslik": "Misafir kuralı, durum eşikleri ve daire doluluğu",
+          "adimlar": [
+            "“Geçiş noktaları” sekmesinde “Misafir kuralı ve eşikler” bölümünde “Düzenle” deyin.",
+            "Kuralı “Tüm park yerleri boşsa” ile “En az bir park yeri boşsa” arasında değiştirin; sarı eşiği 120, kırmızı eşiği 300 sn yapıp kaydedin; kırmızıyı sarıdan küçük yazmayı da deneyin.",
+            "Aynı sekmenin altındaki “İçeride” bölümüne bakın."
+          ],
+          "beklenen": "Seçilen kural ve eşikler kartta görünür; kırmızı eşik sarıdan büyük olmak zorundadır (aksi halde Türkçe uyarı). “İçeride” bölümü, park yeri tanımlı her dairenin park yeri ve içerideki araç sayısını, “Misafir kabul edilir” ya da “Park yerleri dolu / Park yeri tanımlı değil” durumuyla gösterir. Kural, 2 yerli dairede 1 araç içerideyse “Tüm park yerleri boşsa” seçiliyken misafiri kabul ETMEZ.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Sunucuda migration 120 uygulanmış; Plaka Tanıma modülü açık; sitede en az bir kamera (Kamera ve Plaka ekranı) ve bir SmartKeyPass cihazı tanımlı; yeni uygulama sürümü",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F84.05",
+          "baslik": "Canlı durum rozetleri ve “içeride” takibi (kenar PC uygulamasıyla)",
+          "adimlar": [
+            "Güvenlik kulübesindeki kenar PC uygulaması kuruluyken (Aşama A2) “Geçiş noktaları” sekmesini açın.",
+            "Kamerayı ya da kenar PC’yi kapatıp 3 dakika, sonra 10 dakika bekleyin; ekranı yenileyin.",
+            "Kayıtlı bir araçla giriş ve çıkış yapın; “İçeride” bölümünü izleyin."
+          ],
+          "beklenen": "Kalp atışı gecikince ilgili satır 3 dakikada sarı (Gecikmeli), 10 dakikada kırmızı (Koptu) olur; hiç haber gelmemişse gri (Hiç bağlanmadı). Giriş aracı “İçeride” listesine ve dairenin içerideki sayısına ekler, çıkış düşürür. Bu madde kenar PC uygulaması hazır olunca denenir.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Kenar PC uygulaması (Aşama A2) kurulu ve anahtarla bağlı",
+          "yeni": true,
+          "gelistirme": "yakinda"
+        }
+      ]
     }
   ]
 }
