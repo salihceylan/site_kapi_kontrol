@@ -1,7 +1,7 @@
 {
   "baslik": "Platform Faz Kontrol Listesi",
   "aciklama": "SmartKeyPass (kapı kontrol), site ve toplu yaşam yönetim platformunun seçilebilir bir modülü olacak. Bu sayfa işi fazlara böler. Her faz canlıya alındığında maddeleri “Denemeye hazır” olur; siz denersiniz ve “Çalışıyor / Çalışmıyor” diye işaretlersiniz. Henüz yapılmamış maddelerde “Böyle istiyorum / istemiyorum” ile planı şimdiden şekillendirebilirsiniz. İşaretleriniz ve notlarınız kaydedilir, Claude okuyup yanıtlar.",
-  "durum_metni": "Durum: Faz 0, Faz 1, Faz 1.1, Faz 2a, Faz 3a, site başvurusu ve Faz 4a (Aidat ve Finans: tanım, borçlandırma, tahsilat, düzeltme, ay kapatma) canlıda ve denemeye hazır; Aidat ve Finans modülü TEMEL modüldür: her sitede açıktır, talep edilmez ve kapatılamaz. Faz 2b (Excel’den toplu yükleme ve dışa aktarma; F13), Faz 3b-A (Belgeler; F14) ve Faz 4b (makbuz, kasa/banka, gider, raporlar, gecikme tazminatı, borç hatırlatma; F15) ile hesap silme ve veri dosyası güncellemeleri (F16) kodlandı ve test edildi; sunucu ve uygulama sürümü yayınlanınca denenir (maddeler “Denemeye hazır” görünse de sürüm yayınlanmadan uygulamada yoktur). Gecikme tazminatı ve borç hatırlatma, avukatın vereceği hukuk onayı (finance.legal_ok) gelene kadar kapalı kalır: “Hukuk onayı bekleniyor” iletisi denemeye hazırdır, çalışan hali Planlıdır. Telefon bildirimi (Faz 3b-B, Firebase) F3.07’de planlı kalır. Beş yönetim türü ve türe göre terimler (F9), Anket ve Oylama ile Ziyaretçi ve Kargo (F11) canlıdadır; kartlı geçişin sunucu altyapısı hazırdır, uygulama ekranı ve kart okuyucu planlıdır (F10). Banka ve ödeme işleri “Yakında”. Satışa hazırlık paketi (F12: hesabı silme ve veri indirme, yasal metinler, giriş güvenliği, Yardım ve tanıtım turu, Platform Ayarları, bakım ve sürüm kapısı, yedek ve izleme, mağaza hazırlığı): sunucu tarafı canlıdadır; uygulama ve web sürümü yasal metinler tamamlanınca yayınlanacaktır, bu yüzden F12 maddelerini sürüm yayınlandıktan sonra (ya da geliştirici derlemesiyle) deneyin. Dalga 1 (F25–F29: kiracı ve ev sahibi için ayrı hesap, kurallar tablosu ve altın veri seti, sade tasarım, gruplu menü ve sakin alt çubuğu, avukat taslakları ve hesap rehberleri) kodlandı ve bağımsız incelemeden geçti; sürüm yayınlanınca denenir. Gezinme değişti: Profilim, Modüller, Modül Talepleri, Site Başvuruları, cihaz ekranları, Denetim Kaydı, Platform Ayarları ve İstemci Hataları artık sağ üstteki dişlinin açtığı Ayarlar panelindedir; bu yüzden ilgili eski maddeler güncellendi ve “Bugün değişti” işaretlidir. 2026-10-28: Anket ve Oylama, Komşu Panosu, Ekipman ve Bakım, Faaliyet Raporu ve Dosya Deposu da temel modül oldu (her sitede açık, talep gerekmez); Kart Ödemesi Aidat ve Finans’ın, Belgeler Dosya Deposu’nun içine alındı (F38; bu modüllerle ilgili eski maddeler güncellendi ve “Bugün değişti” işaretlidir). 2026-10-29 Dalga D (F39–F43): kompakt menü ve “Tüm işlemler” (F39), sayfa bağlamlı Geri bildirim (F40), bağlam şeridi, “bağlı değil” bildirimi, belirgin Yenile ve onaylı Çıkış (F41), liste/kutucuk anahtarı ve Kolay görünüm (F42), Yöneticiyi ara ve büyük 112 düğmesi (F43) kodlandı ve test edildi; sürüm yayınlanınca denenir. 2026-10-29 Dalga F (F58): OTA firmware imzası (imzalama aracı, sunucu yükleme ucu ve cihaz doğrulayıcısı) kodlandı ve test edildi; ÜRETİM anahtarı üretilmedi, hiçbir karta yazılmadı, sunucu dağıtılmadı. Maddeler sırayla ve tamamen sizin işinizdir (anahtar üretimi, köprü sürümün derlenip karta yazılması, imzalama ve canlı yayın); sunucu dağıtımı ve köprü sürüm yazılmadan etkisi yoktur.",
+  "durum_metni": "Durum: Faz 0, Faz 1, Faz 1.1, Faz 2a, Faz 3a, site başvurusu ve Faz 4a (Aidat ve Finans: tanım, borçlandırma, tahsilat, düzeltme, ay kapatma) canlıda ve denemeye hazır; Aidat ve Finans modülü TEMEL modüldür: her sitede açıktır, talep edilmez ve kapatılamaz. Faz 2b (Excel’den toplu yükleme ve dışa aktarma; F13), Faz 3b-A (Belgeler; F14) ve Faz 4b (makbuz, kasa/banka, gider, raporlar, gecikme tazminatı, borç hatırlatma; F15) ile hesap silme ve veri dosyası güncellemeleri (F16) kodlandı ve test edildi; sunucu ve uygulama sürümü yayınlanınca denenir (maddeler “Denemeye hazır” görünse de sürüm yayınlanmadan uygulamada yoktur). Gecikme tazminatı ve borç hatırlatma, avukatın vereceği hukuk onayı (finance.legal_ok) gelene kadar kapalı kalır: “Hukuk onayı bekleniyor” iletisi denemeye hazırdır, çalışan hali Planlıdır. Telefon bildirimi (Faz 3b-B, Firebase) F3.07’de planlı kalır. Beş yönetim türü ve türe göre terimler (F9), Anket ve Oylama ile Ziyaretçi ve Kargo (F11) canlıdadır; kartlı geçişin sunucu altyapısı hazırdır, uygulama ekranı ve kart okuyucu planlıdır (F10). Banka ve ödeme işleri “Yakında”. Satışa hazırlık paketi (F12: hesabı silme ve veri indirme, yasal metinler, giriş güvenliği, Yardım ve tanıtım turu, Platform Ayarları, bakım ve sürüm kapısı, yedek ve izleme, mağaza hazırlığı): sunucu tarafı canlıdadır; uygulama ve web sürümü yasal metinler tamamlanınca yayınlanacaktır, bu yüzden F12 maddelerini sürüm yayınlandıktan sonra (ya da geliştirici derlemesiyle) deneyin. Dalga 1 (F25–F29: kiracı ve ev sahibi için ayrı hesap, kurallar tablosu ve altın veri seti, sade tasarım, gruplu menü ve sakin alt çubuğu, avukat taslakları ve hesap rehberleri) kodlandı ve bağımsız incelemeden geçti; sürüm yayınlanınca denenir. Gezinme değişti: Profilim, Modüller, Modül Talepleri, Site Başvuruları, cihaz ekranları, Denetim Kaydı, Platform Ayarları ve İstemci Hataları artık sağ üstteki dişlinin açtığı Ayarlar panelindedir; bu yüzden ilgili eski maddeler güncellendi ve “Bugün değişti” işaretlidir. 2026-10-28: Anket ve Oylama, Komşu Panosu, Ekipman ve Bakım, Faaliyet Raporu ve Dosya Deposu da temel modül oldu (her sitede açık, talep gerekmez); Kart Ödemesi Aidat ve Finans’ın, Belgeler Dosya Deposu’nun içine alındı (F38; bu modüllerle ilgili eski maddeler güncellendi ve “Bugün değişti” işaretlidir). 2026-10-29 Dalga D (F39–F43): kompakt menü ve “Tüm işlemler” (F39), sayfa bağlamlı Geri bildirim (F40), bağlam şeridi, “bağlı değil” bildirimi, belirgin Yenile ve onaylı Çıkış (F41), liste/kutucuk anahtarı ve Kolay görünüm (F42), Yöneticiyi ara ve büyük 112 düğmesi (F43) kodlandı ve test edildi; sürüm yayınlanınca denenir. 2026-10-29 Dalga F (F58): OTA firmware imzası (imzalama aracı, sunucu yükleme ucu ve cihaz doğrulayıcısı) kodlandı ve test edildi; ÜRETİM anahtarı üretilmedi, hiçbir karta yazılmadı, sunucu dağıtılmadı. Maddeler sırayla ve tamamen sizin işinizdir (anahtar üretimi, köprü sürümün derlenip karta yazılması, imzalama ve canlı yayın); sunucu dağıtımı ve köprü sürüm yazılmadan etkisi yoktur. 2026-10-29 Dalga H: Alacak iadesi ekranları (sakin ve yönetici; F64.04–F64.07), muhasebe kontrol izi (F65), Dönem raporu (F66), ikinci altın veri seti ve örnek site tohumu (F67), İş Takibi’nde firmaya yönlendirme (F68) ve dekont / gider formlarında cihaz içi “Görselden oku” (F69) kodlandı ve test edildi; sunucu (migration 110 ve 111) ve uygulama sürümü yayınlanınca denenir.",
   "bolumler": [
     {
       "id": "F0",
@@ -10467,9 +10467,9 @@
     },
     {
       "id": "F64",
-      "baslik": "Kiracı borcunun malike devri, gecikmede öneri ve alacak iadesi (devir ekranları hazır, iade ekranları sonraki iş)",
-      "durum": "yapiliyor",
-      "ozet": "Sunucu tarafı hazır ve gerçek PostgreSQL’de sınandı; borcu malike devretme ve gecikmede öneri ekranları yönetici tarafında hazırdır, alacak iadesi ekranları (yönetici ve sakin) henüz yok (sonraki iş) ve o madde “Yakında…” durumundadır. Kiracı borcunun malike devri açık, yönetici onaylı, izli ve geri alınabilir bir eylemdir; borç mutlaka tahsil edilir, kiracı vermezse mal sahibi öder: devir yalnız çıkışta değil gecikmede de yönetici önüne önerilir. Fazla ödeme varsayılan olarak alacak kalır; iade isteğe bağlı ve yönetici onaylıdır. Kiracı çıkışında malike giden bildirim şimdiden denenebilir. Devir ve bildirim metinlerinin hukuki zemini avukat onayı bekler.",
+      "baslik": "Kiracı borcunun malike devri, gecikmede öneri ve alacak iadesi",
+      "durum": "hazir",
+      "ozet": "Sunucu tarafı hazır ve gerçek PostgreSQL’de sınandı; borcu malike devretme ve gecikmede öneri ekranları yönetici tarafında hazırdır, alacak iadesi ekranları (sakin “Fazla ödememi iade et”, yönetici “İade Talepleri”) da hazırdır. Kiracı borcunun malike devri açık, yönetici onaylı, izli ve geri alınabilir bir eylemdir; borç mutlaka tahsil edilir, kiracı vermezse mal sahibi öder: devir yalnız çıkışta değil gecikmede de yönetici önüne önerilir. Fazla ödeme varsayılan olarak alacak kalır; iade isteğe bağlı ve yönetici onaylıdır. Kiracı çıkışında malike giden bildirim şimdiden denenebilir. Devir ve bildirim metinlerinin hukuki zemini avukat onayı bekler.",
       "maddeler": [
         {
           "id": "F64.01",
@@ -10515,14 +10515,444 @@
           "id": "F64.04",
           "baslik": "Alacak iadesi: talep, onay, ret, geri alma",
           "adimlar": [
-            "3.000 TL borca 5.000 TL ödenmiş bir dairede sakin “Fazla ödememi iade et” ile 1.500 TL iade istesin; 2.500 TL (alacaktan fazla) istemeyi de deneyin (sakin ekranı yakında).",
-            "Yönetici ödeme hesabını seçip onaylasın; nakit hesapta bakiye yetmiyorsa deneyin; bir talebi gerekçeyle reddedin; onaylı bir iadeyi geri alın; onaylı iade varken o ödemeyi iptal etmeyi deneyin (yönetici ekranı yakında)."
+            "3.000 TL borca 5.000 TL ödenmiş bir dairede sakin hesabıyla Borcum kartındaki “Fazla ödememi iade et”e dokunun ve 1.500 TL iade isteyin; 2.500 TL (alacaktan fazla) yazmayı da deneyin.",
+            "Yönetici hesabıyla ana sayfadaki “iade talebi onayınızı bekliyor” satırından “İadeleri İncele”ye dokunun; bir talebi Onayla ile onaylayın (ödeme Hesabını siz seçin; nakit Hesapta bakiye yetmiyorsa da deneyin), bir başkasını gerekçeyle reddedin; onaylı bir iadeyi geri alın; onaylı iade varken o ödemeyi iptal etmeyi deneyin."
           ],
-          "beklenen": "Alacaktan fazlası istenemez; başka dairenin hesabına talep açılamaz. Onayda daire alacağı 2.000 TL’den 500 TL’ye iner, seçilen hesaptan 1.500 TL çıkış görünür, IA-yıl-sıra numaralı iade makbuzu oluşur; Aidat + Fon + avans toplamı hesapların toplamına eşit kalır. Nakit hesapta bakiye yetmezse “yeterli nakit yok” uyarısı çıkar. Reddedilince gerekçe sakine görünür. İade geri alınınca alacak ve hesap bakiyesi geri gelir, makbuz iptal sayılır. Onaylı iade varken o ödemeyi iptal etmek “önce iadeyi geri alın” diye reddedilir.",
+          "beklenen": "Alacaktan fazlası istenemez (“İade tutarı alacağınızdan (...) fazla olamaz.” çıkar ve istek sunucuya gitmez); başka dairenin hesabına talep açılamaz. Onay, ödeme Hesabı seçilmeden açılmaz. Onayda daire alacağı 2.000 TL’den 500 TL’ye iner, seçilen Hesaptan 1.500 TL çıkış görünür, IA-yıl-sıra numaralı iade makbuzu oluşur; Aidat + Fon + avans toplamı Hesapların toplamına eşit kalır. Nakit Hesapta bakiye yetmezse onaydan önce uyarı çıkar, “yeterli nakit yok” diye reddedilir. Reddedilince gerekçe sakine görünür. İade geri alınınca alacak ve Hesap bakiyesi geri gelir, makbuz iptal sayılır. Onaylı iade varken o ödemeyi iptal etmek “önce iadeyi geri alın” diye reddedilir.",
           "rol_notu": "Daire sakini ve site yöneticisi",
           "on_kosul": "Fazla ödemesi (alacağı) olan bir daire; en az bir kasa ya da banka hesabı",
           "yeni": true,
-          "gelistirme": "yakinda"
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F64.05",
+          "baslik": "Yönetici: iade dikkat satırı, İade Talepleri penceresi ve makbuz",
+          "adimlar": [
+            "Yönetici ana sayfasındaki dikkat satırına ve Finans > Daireler sekmesindeki uyarı kartına bakın; “İadeleri İncele”ye dokunun.",
+            "Pencerede Bekleyen / İade edilen / Tümü süzgeçlerini değiştirin; liste uzunsa “Daha fazla göster”e dokunun. İade edilen bir talepte “Makbuzu Gör”e, sonra “Geri Al”a dokunun (neden yazın) ve makbuza yeniden bakın.",
+            "Bir talebi reddederken nedeni boş bırakıp göndermeyi deneyin.",
+            "Aynı pencereyi kurul üyesi hesabıyla açın."
+          ],
+          "beklenen": "Dikkat satırı “N iade talebi onayınızı bekliyor, toplam X” der; Daireler sekmesinde sayı ve toplamlı uyarı kartı çıkar ve “İade talepleri” düğmesi her durumda vardır. Makbuzda IA-yıl-sıra numarası, Hesap, yöntem ve doğrulama kodu görünür; geri alınan iadenin makbuzu “İptal edildi” der ve sakinin alacağı geri döner. Ret nedeni boşken gönderilmez. Kurul listeyi görür, Onayla / Reddet / Geri Al düğmeleri çıkmaz. Makbuz için PDF ya da yazdır yoktur (yalnız ekran).",
+          "rol_notu": "Site yöneticisi ve kurul üyesi",
+          "on_kosul": "F64.04 ile açılmış en az bir bekleyen ve bir onaylı iade talebi",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F64.06",
+          "baslik": "Sakin: iade taleplerim, durumlar ve talebi geri çekme",
+          "adimlar": [
+            "Sakin hesabıyla Borcum kartındaki iade talepleri listesine bakın.",
+            "Bekleyen bir talepte “Talebi Geri Çek”e dokunun; ardından yeniden talep açmayı deneyin.",
+            "Bekleyen talepler alacağın tamamını kapsıyorsa yeni talep açmayı deneyin.",
+            "Alacağı ve talebi olmayan bir sakin hesabıyla Borcum kartına bakın."
+          ],
+          "beklenen": "Talepler “Onay bekliyor”, “İade edildi” (makbuz numarasıyla), “Reddedildi” (ret nedeniyle), “Geri çekildi” ve “İade geri alındı” durumlarıyla listelenir. Geri çekilen talep “Geri çekildi” olur ve düğme yeniden kullanılabilir. Tamamı kapsanıyorsa “Bekleyen iade talepleriniz alacağınızın tamamını kapsıyor.” yazar. Alacak ve talep yoksa iade bölümü hiç çizilmez. Talepler okunamazsa “talep yok” denmez; hata ve “Tekrar Dene” çıkar.",
+          "rol_notu": "Daire sakini",
+          "on_kosul": "Fazla ödemesi (alacağı) olan bir daire; sakinin açtığı bekleyen, onaylı ve reddedilmiş birer iade talebi",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F64.07",
+          "baslik": "KVKK: iade talepleri veri dosyasında; hesap silinirken bekleyen talep iptal edilir",
+          "adimlar": [
+            "Sakin hesabıyla Verilerimi indir ile veri dosyasını alın; “refund_requests_made” bölümüne ve “excluded” listesindeki iade talepleri satırına bakın.",
+            "Aynı hesapla hesabı silmeyi başlatıp tamamlayın (bekleyen iade talebi varken).",
+            "Yönetici hesabıyla Ayarlar > İşlem Kayıtları’na bakın."
+          ],
+          "beklenen": "Veri dosyasında yalnız sakinin kendi açtığı talepler vardır (daire, Hesap türü, tutar, kendi notu, durum, tarihler, makbuz numarası); ret gerekçesi, çıkış Hesabı, geri alma nedeni ve yönetici adına açılan talepler dışarıda olup “excluded” listesinde açıklanır. Bekleyen iade talebi hesap silmeyi ENGELLEMEZ; silmede talep iptal edilir ve işlem kayıtlarına “finance.refund.cancelled” (neden: hesap silindi) düşer. Hesap silme önizlemesi bu iptali ayrıca söylemez (bilinen sınır).",
+          "rol_notu": "Daire sakini ve site yöneticisi",
+          "on_kosul": "Bekleyen iade talebi olan bir sakin hesabı (silinmesinde sakınca olmayan deneme hesabı)",
+          "yeni": true,
+          "gelistirme": "hazir"
+        }
+      ]
+    },
+    {
+      "id": "F65",
+      "baslik": "Muhasebe kontrol izi: gider ve dekont için “kontrol edildi (kim, ne zaman)”",
+      "durum": "hazir",
+      "ozet": "Muhasebeci rolü açılmadı; onun yerine site yöneticisi bir gider kaydını ya da dekont bildirimini “kontrol edildi” diye işaretler ve kimin, ne zaman işaretlediği görünür (sahip kararı 2026-10-28). İz, giderin ve karara bağlanmış dekontun kendisini DEĞİŞTİRMEZ (ayrı bir kayıt olarak tutulur, satırlar değişmez kalır). Yönetici koyar ve kaldırır; kurul yalnız görür (kontrol edenin adı kurulda gizlidir); sakin hiçbir yerde görmez. Liste satırlarında rozet, “kontrolsüzleri süz” ve toplu işaretleme henüz yoktur. Sunucuda migration 110 gerekir.",
+      "maddeler": [
+        {
+          "id": "F65.01",
+          "baslik": "Giderde kontrol işareti koy ve kaldır",
+          "adimlar": [
+            "Finans > Giderler’den bir gideri açın; en alttaki “Muhasebe kontrolü” bölümüne bakın.",
+            "“Kontrol Edildi Olarak İşaretle”ye dokunun; gideri kapatıp yeniden açın.",
+            "“Kontrol İşaretini Kaldır”a dokunun."
+          ],
+          "beklenen": "Önce “Henüz kontrol edilmedi” yazar. İşaretleyince “Kontrol edildi - <adınız>, <tarih saat>” görünür ve düğme “Kontrol İşaretini Kaldır” olur; gideri kapatıp açınca iz kalır. Kaldırınca yeniden “Henüz kontrol edilmedi” yazar. Giderin tutarı, tarihi ve durumu değişmez.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "En az bir kayıtlı (iptal edilmemiş) gider",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F65.02",
+          "baslik": "İkinci yönetici: ilk iz korunur, kaldırıp yeniden koyabilir",
+          "adimlar": [
+            "Aynı gideri ikinci yönetici hesabıyla açın.",
+            "İzi kaldırın ve kendi adınızla yeniden koyun."
+          ],
+          "beklenen": "İlk kontrol edenin adı ve zamanı görünür; işaretle düğmesi yerine “Kontrol İşaretini Kaldır” çıkar (üzerine yazılmaz, ilk iz korunur). İkinci yönetici izi kaldırıp kendi adıyla yeniden koyabilir.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Aynı sitede iki yönetici hesabı; birincisinin kontrol ettiği bir gider",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F65.03",
+          "baslik": "İptal edilmiş giderde kontrol işareti",
+          "adimlar": [
+            "İptal edilmiş bir gideri açın.",
+            "İptalden önce işaretlenmiş giderde “Muhasebe kontrolü” bölümüne bakın."
+          ],
+          "beklenen": "İptal edilmiş giderde “Kontrol Edildi Olarak İşaretle” düğmesi çıkmaz. İptalden önce işaretlenmiş giderde iz yalnız görünür, düğme çıkmaz.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "İptal edilmiş bir gider; iptalden önce işaretlenmiş bir gider",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F65.04",
+          "baslik": "Kurul üyesi: iz görünür, ad ve düğme yok",
+          "adimlar": [
+            "Kurul üyesi hesabıyla bu gideri açın."
+          ],
+          "beklenen": "İz varsa “Kontrol edildi - <tarih>” görünür; kontrol eden kişinin adı görünmez. İşaretle / kaldır düğmesi çıkmaz.",
+          "rol_notu": "Kurul üyesi",
+          "on_kosul": "Yöneticinin işaretlediği bir gider",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F65.05",
+          "baslik": "Dekont incelemede kontrol işareti",
+          "adimlar": [
+            "Üç dekontu sırayla açın (karşılaştırma penceresi); “Muhasebe kontrolü” bölümüne bakın.",
+            "Bekleyen dekontu işaretleyin (pencere kapanmamalı), sonra dekontu onaylayın."
+          ],
+          "beklenen": "Bölüm üç durumda da görünür. İşaretle / kaldır sırasında pencere kapanmaz ve Onayla / İptal et düğmeleri etkilenmez. Bekleyen dekontu işaretleyip onaylamak normal çalışır; onaydan sonra iz silinmez.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Finans > Dekontlar’da onaylı, iptal edilmiş ve bekleyen birer dekont bildirimi",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F65.06",
+          "baslik": "Sakin kontrol izini görmez",
+          "adimlar": [
+            "Sakin hesabıyla dekont listesine ve işaretli dekontun ayrıntısına bakın."
+          ],
+          "beklenen": "Kontrol izi hiçbir yerde görünmez; sakin ekranları eskisi gibidir.",
+          "rol_notu": "Daire sakini",
+          "on_kosul": "Yöneticinin işaretlediği bir dekont",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F65.07",
+          "baslik": "İşlem kayıtlarında kontrol işareti",
+          "adimlar": [
+            "Ayarlar > İşlem Kayıtları’na bakın."
+          ],
+          "beklenen": "“Gider kontrol edildi olarak işaretlendi / kontrol işareti kaldırıldı” ve dekont karşılıkları kim ve ne zaman ile görünür.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "F65.01 ve F65.05 ile yapılmış işaretleme ve kaldırma",
+          "yeni": true,
+          "gelistirme": "hazir"
+        }
+      ]
+    },
+    {
+      "id": "F66",
+      "baslik": "Dönem raporu: iki Hesabın dönem başı, tahsilat, gider ve dönem sonu bakiyesi",
+      "durum": "hazir",
+      "ozet": "Finans > Raporlar içinde yeni “Dönem raporu”: seçilen ay, 3 ay ya da yıl için İşletme (Aidat) ve Fon Hesabının dönem başı bakiyesi, tahsilat, gider kalemleri, aktarım giriş / çıkışı, düzeltme ve dönem sonu bakiyesi; iki Hesabın toplamı, avans ve mutabakat; aylık kırılım; dönem sonu borçlu özeti (yalnız adet, vadesi geçmiş toplam ve yaşlandırma; ad ve daire etiketi yok). Yeni bir hesap kuralı yoktur, rakamlar Kasa özetinden ve yaşlandırmadan gelir. Yönetici, süper ve kurul okur; yalnız yönetici CSV / Excel olarak dışa aktarır. PDF henüz yoktur. Bilinen sınırlar: geçmiş bir dönem sonunda mutabakat farkı sıfırdan farklı olabilir (ekranda not görünür); borçlu özeti Hesap bazında değil toplamdır; tahsilat yalnız bir nakit / banka hesabına eşlenmiş tahsilatlardır (eşlenmemişler ayrı uyarılır).",
+      "maddeler": [
+        {
+          "id": "F66.01",
+          "baslik": "Açılış, hazır dönem düğmeleri ve Kasa ile aynı bakiye",
+          "adimlar": [
+            "Finans > Raporlar > Dönem raporu’nu açın; varsayılan dönemi okuyun.",
+            "“Son 3 ay” ve “Bu yıl” düğmelerine, sonra ay seçiciye dokunun.",
+            "Aidat Hesabı ve Fon Hesabı kartlarındaki dönem sonu bakiyeyi Finans > Kasa ekranındaki bakiyelerle (aynı tarih) karşılaştırın."
+          ],
+          "beklenen": "Varsayılan “Bu ay” yüklenir; hazır dönem düğmeleri raporu otomatik yeniler. Her iki Hesabın dönem sonu bakiyesi Kasa ekranındaki bakiyeyle aynıdır.",
+          "rol_notu": "Site yöneticisi ve kurul üyesi",
+          "on_kosul": "Birkaç aylık tahsilat ve gider hareketi olan bir site",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F66.02",
+          "baslik": "Çeyrek / yıl toplamları tutarlı",
+          "adimlar": [
+            "Bir çeyrek ya da yıl seçin.",
+            "Aylık kırılımdaki tahsilat ve gider toplamlarını Aidat + Fon kartlarındaki Tahsilat ve Gider toplamıyla karşılaştırın; “İki Hesabın toplamı” kartına bakın."
+          ],
+          "beklenen": "Aylık kırılım toplamları iki Hesabın dönem toplamına eşittir. “İki Hesabın toplamı” kartı dönem sonu bakiyeyi iki kartın toplamı olarak gösterir.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "En az üç aylık hareket",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F66.03",
+          "baslik": "Hesaplar arası aktarım dönem raporunda",
+          "adimlar": [
+            "Aktarımın yapıldığı ayı seçin; iki Hesap kartına ve “İki Hesabın toplamı”na bakın."
+          ],
+          "beklenen": "Aktarım Aidat kartında çıkış, Fon kartında giriş olarak görünür; iki Hesabın toplamında etkisi yoktur.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Aidat ve Fon Hesapları arasında aktarım yapılmış bir ay",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F66.04",
+          "baslik": "Dışa aktar (yönetici) ve kurul görünümü",
+          "adimlar": [
+            "Yönetici hesabıyla Dışa Aktar’dan CSV ve Excel dosyasını indirip açın.",
+            "Kurul üyesi hesabıyla aynı raporu açın."
+          ],
+          "beklenen": "Dosyada Bölüm / Hesap / Kalem / Dönem / Adet / Tutar sütunları ve Özet, Gider kalemi, Aylık, Borçlu özeti bölümleri dolu olur; rakamlar ekranla aynıdır. Kurul raporu görür ama Dışa Aktar düğmesi yoktur.",
+          "rol_notu": "Site yöneticisi ve kurul üyesi",
+          "on_kosul": "Dönem raporu açık",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F66.05",
+          "baslik": "Eşlenmemiş tahsilat uyarısı ve kişi verisiz borçlu özeti",
+          "adimlar": [
+            "O siteyi seçip Dönem raporu’nu açın; uyarıya ve “Borçlu özeti” bölümüne bakın."
+          ],
+          "beklenen": "Eşlenmemiş tahsilat için uyarı ve not görünür. Borçlu özeti yalnız borçlu daire sayısını, vadesi geçmiş toplamı ve yaşlandırma kovalarını gösterir; ad ya da daire etiketi yoktur.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Bir nakit / banka hesabına bağlanmamış tahsilatı olan bir site",
+          "yeni": true,
+          "gelistirme": "hazir"
+        }
+      ]
+    },
+    {
+      "id": "F67",
+      "baslik": "İkinci altın veri seti ve örnek site tohumu (geliştirici aracı)",
+      "durum": "hazir",
+      "ozet": "Dalga B finans kurallarının (Hesap seçimi, malike devir, gecikmede öneri, alacak iadesi, dağıtım tabanları, alacaklı devir) elle hesaplanmış ikinci veri seti: saf test ve gerçek PostgreSQL ile her koşuda aynı özet çıkar. Aynı veri `tools/demo_seed/golden_site.mjs` ile örnek bir siteye yazılabilir (yalnız yönetici uygulamaya girer; sakin hesaplarına daire üyeliği yazılmaz; hedef koruması ve geri alma vardır). Örnek site 2026-10-20 tarihine göre kurgulandı; uygulama bugünün tarihine baktığı için vade / gecikme etiketleri kayar, bakiyeler değişmez. Bilinen bulgu: devir ve geri alma, gecikme tazminatı tabanından devir gününü bir gün düşürür (mevcut davranış testle sabitlendi; değiştirme kararı sahibindedir).",
+      "maddeler": [
+        {
+          "id": "F67.01",
+          "baslik": "Örnek site kurulumu, korumalar ve temizleme",
+          "adimlar": [
+            "`tools/demo_seed` içinde `golden_site.mjs --dry-run` çalıştırın.",
+            "Veritabanı adı “postgres” olan bir hedefle (izinsiz) çalıştırın.",
+            "İzinli deneme veritabanında gerçek çalıştırın; aynı komutu ikinci kez çalıştırın.",
+            "`cleanup.mjs --batch demo-golden2-… --yes` ile temizleyin."
+          ],
+          "beklenen": "--dry-run hiçbir şey yazmaz. İzinsiz hedefte araç hiçbir şey yapmadan durur (çıkış kodu 2). Gerçek çalıştırma 14 bölümü doğrular; ikinci çalıştırma aynı adlı site olduğu için durur (çıkış kodu 4). Makbuz anahtarı tanımlı değilse durur (çıkış kodu 3). Temizleme tüm satırları siler, kalıntı kalmaz.",
+          "rol_notu": "Geliştirici",
+          "on_kosul": "Sunucu ağacı olan bir bilgisayar ve tek kullanımlık bir deneme veritabanı (canlı değil)",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F67.02",
+          "baslik": "Örnek sitede gecikmede devir önerisi",
+          "adimlar": [
+            "Örnek sitede yönetici olarak Finans > Daireler sekmesindeki “Malike devredilebilir borç” şeridine ve ana sayfadaki dikkat satırına bakın; “Devri İncele”ye dokunun."
+          ],
+          "beklenen": "A-4 (3.600,00 TL) ve A-2 (1.000,00 TL) malike devredilebilir adaylar olarak listelenir. Vadesi sonradan dolan kalemler (bugünün tarihine bakıldığı için) listeye eklenebilir; asıl tutarlar kuruluş günü içindir.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "F67.01 ile kurulmuş örnek site (kuruluş gününe yakın tarih)",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F67.03",
+          "baslik": "Örnek sitede A-2 devri: önizleme, devir, geri alma",
+          "adimlar": [
+            "A-2 dairesinin ekstresinden “Kiracı Borcunu Malike Devret”e dokunup önizlemeye bakın, nedenle devri onaylayın.",
+            "Devir geçmişinden devri geri alın."
+          ],
+          "beklenen": "Önizleme 1 kalem ve 1.000,00 TL (aidatın kalan tutarı) gösterir. Devirden sonra kiracı bakiyesi 1.250,00 TL’den 250,00 TL’ye iner, malik bakiyesi 1.400,00 TL’den 2.400,00 TL’ye çıkar; iki hesabın toplamı aynı kalır. Geri alma eski değerleri döndürür.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "F67.02 ile aday listesinde görünen A-2 dairesi",
+          "yeni": true,
+          "gelistirme": "hazir"
+        }
+      ]
+    },
+    {
+      "id": "F68",
+      "baslik": "İş Takibi: talebi firmaya (taşerona) yönlendirme",
+      "durum": "hazir",
+      "ozet": "Yönetici, yeni / işlemde / beklemede bir iş kaydını “Firmaya Yönlendir” ile bir dış firmaya (taşeron) yönlendirir: firma adı (zorunlu), yetkili, telefon ve anlaşılan tutar (isteğe bağlı) elle girilir, durum “Firmada” olur. Firma serbest metindir (firma kataloğu yoktur); dış firmaya giriş ya da form verilmez. Sakin yalnız “Firmada” durumunu görür; firma bilgisi yalnız yönetim kadrosuna (yönetici, süper, kapsamındaki görevli) ve kurula (salt okunur) görünür. Çözüldü / kapandı / iptal talebe yönlendirilemez. Firma adı, telefon ve tutar işlem kayıtlarına yazılmaz. Sunucuda migration 111 gerekir.",
+      "maddeler": [
+        {
+          "id": "F68.01",
+          "baslik": "Firmaya yönlendir: ad zorunlu, durum Firmada olur",
+          "adimlar": [
+            "Talebi açın; “Firma (taşeron)” bölümünde “Firmaya Yönlendir”e dokunun.",
+            "Firma adını boş bırakıp gönderin.",
+            "Firma adı, yetkili, telefon ve tutar (örnek 1.250,50) girip yönlendirin."
+          ],
+          "beklenen": "Boş adda “Firma adını girin” hatası çıkar. Yönlendirince durum “Firmada” olur; kartta Firma, Firma yetkilisi, Firma telefonu, Anlaşılan tutar ve Firmaya yönlendirme satırları görünür; geçmişte Yeni → Firmada olayı vardır.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Yeni, işlemde ya da beklemede durumunda bir iş talebi",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F68.02",
+          "baslik": "Firma bilgisini düzenle ve durumu değiştir",
+          "adimlar": [
+            "“Firma Bilgisini Düzenle” ile tutarı değiştirin.",
+            "Durum seçicisinden talebi Çözüldü ya da İşlemde’ye alın."
+          ],
+          "beklenen": "Tutar değişince durum ve sakinin okunmamış rozeti değişmez. Firmadan çıkınca firma bilgisi kayıt olarak kartta kalır.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "F68.01 ile firmaya yönlendirilmiş talep",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F68.03",
+          "baslik": "Sakin firma bilgisini görmez",
+          "adimlar": [
+            "Talebi açan sakin hesabıyla talebe bakın."
+          ],
+          "beklenen": "Talebin durumu “Firmada” görünür; firma adı, telefon ve tutar hiçbir yerde görünmez.",
+          "rol_notu": "Daire sakini",
+          "on_kosul": "Sakinin açtığı ve firmaya yönlendirilmiş talep",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F68.04",
+          "baslik": "Kurul: firma satırları görünür, yönlendirme düğmesi yok",
+          "adimlar": [
+            "Kurul üyesi hesabıyla firmadaki talebi açın.",
+            "Çözüldü durumundaki talebi açın."
+          ],
+          "beklenen": "Firma satırları görünür; “Firmaya Yönlendir” / “Firma Bilgisini Düzenle” düğmesi çıkmaz. Çözüldü talepte yönlendirme bölümü çıkmaz.",
+          "rol_notu": "Kurul üyesi",
+          "on_kosul": "Firmaya yönlendirilmiş bir talep ve Çözüldü durumunda bir talep",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F68.05",
+          "baslik": "Görevli: yalnız kapsamındaki talebi yönlendirir",
+          "adimlar": [
+            "Görevli hesabıyla kendine atanmış talebi firmaya yönlendirin.",
+            "Başkasına atanmış talebi bulmaya çalışın."
+          ],
+          "beklenen": "Kapsamdaki talepte yönlendirme çalışır. Başkasına atanmış talep görevlinin listesinde görünmez.",
+          "rol_notu": "Görevli",
+          "on_kosul": "Görevliye atanmış ve atanmamış (başkasına atanmış) talep",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F68.06",
+          "baslik": "Eski uygulama sürümü çökmez",
+          "adimlar": [
+            "Eski sürümle firmadaki talebi açın."
+          ],
+          "beklenen": "Uygulama çökmez; durum “Durum bilinmiyor” görünür.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Firmadaki talep ve (varsa) uygulamanın eski bir sürümü",
+          "yeni": true,
+          "gelistirme": "hazir"
+        }
+      ]
+    },
+    {
+      "id": "F69",
+      "baslik": "Dekont ve gider formlarında “Görselden oku” (cihaz içi, öneri)",
+      "durum": "hazir",
+      "ozet": "Dekont bildir (sakin), Elden makbuz / dekont girişi (yönetici) ve Gider Ekle (belge eki seçiliyken) formlarına telefonda “Görselden oku” eklendi: seçilen JPEG / PNG görselden cihazda (ML Kit) metin çıkarılır; tutar, tarih ve (elden makbuzda) TR IBAN adayları ÖNERİ olarak gösterilir, siz bir öneriye dokunmadan hiçbir alana yazılmaz. Görüntü ve metin ağa gitmez, dış yapay zekâ kullanılmaz. PDF seçiliyken ve web / masaüstünde düğme çizilmez, form eskisi gibi çalışır. Elden makbuza isteğe bağlı “Ödeyen IBAN” alanı eklendi. Yönetici “Dekont incelemesi” penceresinde okuma yoktur. Sunucu değişmedi.",
+      "maddeler": [
+        {
+          "id": "F69.01",
+          "baslik": "Sakin: dekont görselinden tutar ve tarih önerisi",
+          "adimlar": [
+            "Sakin hesabıyla Öde > Dekont yükle ile görseli seçin.",
+            "“Görselden oku”ya dokunun; önerilere bakın, hiçbir şeye dokunmadan alanları kontrol edin.",
+            "Bir tutar ve bir tarih önerisine dokunun."
+          ],
+          "beklenen": "Tutar ve tarih önerileri çip olarak çıkar. Dokunmadan alanlar değişmez; dokununca yalnız dokunulan değer ilgili alana yazılır.",
+          "rol_notu": "Daire sakini",
+          "on_kosul": "Android telefon; bir banka dekontu ekran görüntüsü (JPEG / PNG)",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F69.02",
+          "baslik": "PDF dekontta düğme çıkmaz",
+          "adimlar": [
+            "Dekont yükle ile PDF dosyası seçin."
+          ],
+          "beklenen": "“Görselden oku” düğmesi görünmez ve form eskisi gibi çalışır.",
+          "rol_notu": "Daire sakini",
+          "on_kosul": "Android telefon; PDF bir dekont",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F69.03",
+          "baslik": "Yönetici: elden makbuzda tutar, tarih ve IBAN",
+          "adimlar": [
+            "Elden makbuz / dekont girişinde görseli ekleyip “Görselden oku”ya dokunun.",
+            "IBAN önerisine dokunun; “Ödeyen IBAN” alanına bakın, kaydedin.",
+            "Ayrıca alana geçersiz bir IBAN yazıp kaydetmeyi deneyin."
+          ],
+          "beklenen": "Tutar, tarih ve IBAN önerileri gelir; IBAN çipine dokununca “Ödeyen IBAN” alanı gruplu dolar; kayıtta Gönderen IBAN görünür. Geçersiz IBAN kaydı engeller.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Android telefon; IBAN içeren bir dekont görseli",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F69.04",
+          "baslik": "Gider Ekle: fatura fotoğrafından tutar ve tarih",
+          "adimlar": [
+            "Gider Ekle’de fatura görselini belge eki olarak ekleyin ve “Görselden oku”ya dokunun."
+          ],
+          "beklenen": "Toplam tutar önde, KDV ve komisyon satırları geride sıralanır; dokunulan öneri alana yazılır.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Android telefon; bir fatura fotoğrafı; belge eki seçilebilen Gider Ekle ekranı",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F69.05",
+          "baslik": "Web ve masaüstünde düğme çıkmaz",
+          "adimlar": [
+            "Dekont ve gider formlarını açın."
+          ],
+          "beklenen": "“Görselden oku” düğmesi hiç görünmez; formlar eskisi gibi çalışır.",
+          "rol_notu": "Site yöneticisi ve daire sakini",
+          "on_kosul": "Web ya da Windows sürümü",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F69.06",
+          "baslik": "Uçak modunda da okur",
+          "adimlar": [
+            "Uçak modunda dekont görselini okutun."
+          ],
+          "beklenen": "Okuma internet olmadan da çalışır (cihaz içi).",
+          "rol_notu": "Daire sakini",
+          "on_kosul": "Android telefon; uçak modu açık",
+          "yeni": true,
+          "gelistirme": "hazir"
         }
       ]
     }

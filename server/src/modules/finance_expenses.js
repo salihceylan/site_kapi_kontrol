@@ -50,6 +50,7 @@ import {
 } from './finance_common.js';
 import { CAPITAL_CATEGORY_NAME, categoryFundLocked, parseFundField } from './finance_funds.js';
 import { minorToNumber } from './finance_money.js';
+import { checkMarkFields } from './check_mark_common.js';
 import { categoryDefaultNature, derivedNatureSql, loadSuggestionFacts, parseNature, writeExpenseNature } from './finance_expense_nature.js';
 import { lockActorRow, recordFinanceAudit, withFinanceTransaction } from './finance_tx.js';
 import { escapeLike, foldSql, foldText, parsePositiveId, toIso } from './people_common.js';
@@ -427,6 +428,7 @@ const EXPENSE_SELECT = `
     to_char(e.expense_date, 'YYYY-MM-DD') AS expense_date, e.account_id, a.name AS account_name, e.document_kind, e.document_no, e.corrects_expense_id,
     e.request_fingerprint, e.created_at, u.full_name AS created_by_name, n.nature AS nature_value, n.source AS nature_source_value,
     e.fund AS expense_fund, ec.fund AS category_fund,
+    cm.checked_at, cu.full_name AS checked_by_name,
     v.voided_at, v.reason AS void_reason, to_char(v.period, 'YYYY-MM-DD') AS void_period,
     (SELECT COUNT(*) FROM expense_documents d WHERE d.expense_id = e.id AND d.status = 'ready' AND d.removed_at IS NULL)::INTEGER AS documents_count
   FROM expenses e
@@ -435,6 +437,8 @@ const EXPENSE_SELECT = `
   LEFT JOIN users u ON u.user_code = e.created_by
   LEFT JOIN expense_voids v ON v.expense_id = e.id
   LEFT JOIN expense_natures n ON n.expense_id = e.id
+  LEFT JOIN expense_check_marks cm ON cm.expense_id = e.id
+  LEFT JOIN users cu ON cu.user_code = cm.checked_by
 `;
 
 export function mapExpenseRow(row) {
@@ -460,6 +464,8 @@ export function mapExpenseRow(row) {
     nature_source: row.nature_value ? row.nature_source_value ?? 'manual' : 'derived',
     created_by_name: row.created_by_name ?? null,
     created_at: toIso(row.created_at),
+    // Kontrol izi (110): satır yoksa ikisi de null (kontrolsüz). Ad kurula gizlenir (redactFinanceForBoard: *_by_name).
+    ...checkMarkFields(row),
   };
 }
 

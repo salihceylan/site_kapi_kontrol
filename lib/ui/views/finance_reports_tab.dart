@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/models/expense_analysis.dart';
 import 'package:site_kapi_kontrol/models/finance.dart';
+import 'package:site_kapi_kontrol/models/finance_funds.dart' show FinanceFund;
+import 'package:site_kapi_kontrol/models/period_report_models.dart';
 import 'package:site_kapi_kontrol/models/report_models.dart';
 import 'package:site_kapi_kontrol/models/vehicle_record.dart' show crmDateParam;
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
@@ -62,7 +64,8 @@ enum FinanceReportKind {
   statement('statement', 'Daire ekstresi', Icons.receipt_long_rounded),
   boardSummary('board_summary', 'Yıllık hesap', Icons.groups_rounded),
   expenseAnalysis('expense_analysis', 'Gider Analizi', Icons.insights_rounded),
-  enforcement('enforcement', 'İcra dökümü', Icons.gavel_rounded);
+  enforcement('enforcement', 'İcra dökümü', Icons.gavel_rounded),
+  periodReport('period_report', 'Dönem raporu', Icons.date_range_rounded);
 
   const FinanceReportKind(this.key, this.label, this.icon);
 
@@ -138,6 +141,8 @@ class FinanceReportsTabState extends State<FinanceReportsTab> {
         return _ExpenseAnalysisReportView(scope: widget.scope, now: widget.now, launcher: widget.exportLauncher);
       case FinanceReportKind.enforcement:
         return FinanceEnforcementView(scope: widget.scope, now: widget.now, exportLauncher: widget.exportLauncher);
+      case FinanceReportKind.periodReport:
+        return _PeriodReportView(scope: widget.scope, now: widget.now, launcher: widget.exportLauncher);
     }
   }
 }
@@ -1702,6 +1707,282 @@ class _StatementReportViewState extends _ReportState<_StatementReportView, Apart
 }
 
 // --- 5. Yönetim kurulu özeti ----------------------------------------------------------------
+
+// --- Dönem raporu (aylık / 3 aylık / yıllık; iki Hesap) -----------------------------------------
+
+/// Hazır dönem seçenekleri; ay seçicilerle her aralık da seçilebilir.
+enum _PeriodPreset {
+  thisMonth('Bu ay'),
+  lastThreeMonths('Son 3 ay'),
+  thisYear('Bu yıl'),
+  lastYear('Geçen yıl');
+
+  const _PeriodPreset(this.label);
+
+  final String label;
+
+  (FinancePeriod, FinancePeriod) range(FinancePeriod current) {
+    switch (this) {
+      case _PeriodPreset.thisMonth:
+        return (current, current);
+      case _PeriodPreset.lastThreeMonths:
+        return (current.addMonths(-2), current);
+      case _PeriodPreset.thisYear:
+        return (FinancePeriod(current.year, 1), current);
+      case _PeriodPreset.lastYear:
+        return (FinancePeriod(current.year - 1, 1), FinancePeriod(current.year - 1, 12));
+    }
+  }
+}
+
+/// "Dönem raporu": seçilen aylık / 3 aylık / yıllık dönem için iki Hesabın (Aidat / Fon) dönem başı bakiyesi, tahsilatı, gider kalemleri,
+/// aktarımları ve dönem sonu bakiyesi + aylık kırılım + dönem sonu borçlu özeti (yalnız adet ve tutar; kişi bilgisi yok). Rakamlar sunucudan
+/// alınır, istemci hesaplamaz. Dışa aktarma (CSV / Excel) yalnız yönetici içindir; kurul ekranda okur.
+class _PeriodReportView extends StatefulWidget {
+  const _PeriodReportView({required this.scope, required this.now, required this.launcher});
+
+  final PeopleScope scope;
+  final DateTime Function()? now;
+  final FinanceExportLauncher launcher;
+
+  @override
+  State<_PeriodReportView> createState() => _PeriodReportViewState();
+}
+
+class _PeriodReportViewState extends _ReportState<_PeriodReportView, PeriodReport> {
+  @override
+  PeopleScope get scope => widget.scope;
+  @override
+  DateTime Function()? get nowFn => widget.now;
+  @override
+  FinanceExportLauncher get launcher => widget.launcher;
+
+  late FinancePeriod _from = FinancePeriod.of(today);
+  late FinancePeriod _to = FinancePeriod.of(today);
+  FinancePeriod? _appliedFrom;
+  FinancePeriod? _appliedTo;
+
+  FinancePeriod get _maxMonth => FinancePeriod.of(today);
+  FinancePeriod get _minMonth => FinancePeriod.of(today).addMonths(-60);
+
+  @override
+  String get currentSignature => '${_from.toApi()}|${_to.toApi()}';
+
+  @override
+  String? validateFilters() {
+    if (_from > _to) return 'Başlangıç ayı bitiş ayından sonra olamaz.';
+    final months = (_to.year * 12 + _to.month) - (_from.year * 12 + _from.month) + 1;
+    if (months > 36) return 'Rapor en çok 36 ay olabilir. Dönemi daraltın.';
+    return null;
+  }
+
+  @override
+  Future<PeriodReport> fetch() {
+    _appliedFrom = _from;
+    _appliedTo = _to;
+    return scope.f4Call((api, t, s) => api.getPeriodReport(token: t, siteCode: s, from: _from, to: _to));
+  }
+
+  bool _isPreset(_PeriodPreset preset) {
+    final (from, to) = preset.range(_maxMonth);
+    return from == _from && to == _to;
+  }
+
+  void _pick(_PeriodPreset preset) {
+    final (from, to) = preset.range(_maxMonth);
+    setState(() {
+      _from = from;
+      _to = to;
+    });
+    unawaited(load());
+  }
+
+  List<ExportSource> _sources() => <ExportSource>[
+    financeExportSource(
+      scope: scope,
+      label: 'Dönem raporu',
+      kind: 'finance_period_report',
+      icon: Icons.date_range_rounded,
+      query: <String, String>{'from': _appliedFrom!.toApi(), 'to': _appliedTo!.toApi()},
+      filterSummary: '${_appliedFrom!.label} - ${_appliedTo!.label}',
+    ),
+  ];
+
+  static String _dayText(DateTime? day) => day == null
+      ? '-'
+      : '${day.day.toString().padLeft(2, '0')}.${day.month.toString().padLeft(2, '0')}.${day.year}';
+
+  Widget _section(BuildContext context, String key, String title, IconData icon, List<Widget> children) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpace.md),
+      child: AppCard(
+        key: ValueKey<String>('finance_period_$key'),
+        padding: listCardPadding(context),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Semantics(header: true, container: true, child: DialogSectionTitle(icon: icon, title: title)),
+            const SizedBox(height: AppSpace.sm),
+            ...children,
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _fundCard(BuildContext context, PeriodFundSection f) {
+    final th = Theme.of(context).textTheme;
+    final p = context.palette;
+    return _section(context, 'fund_${f.fund.apiValue}', f.fund.label, Icons.account_balance_wallet_rounded, [
+      FinanceInfoRow(label: 'Dönem başı bakiye', money: f.openingMinor),
+      FinanceInfoRow(label: 'Tahsilat', money: f.collectionsMinor),
+      FinanceInfoRow(label: 'Gider', money: f.expensesMinor),
+      if (f.transfersInMinor != 0) FinanceInfoRow(label: 'Hesaplar arası aktarım (giriş)', money: f.transfersInMinor),
+      if (f.transfersOutMinor != 0) FinanceInfoRow(label: 'Hesaplar arası aktarım (çıkış)', money: f.transfersOutMinor),
+      if (f.adjustmentsMinor != 0) FinanceInfoRow(label: 'Düzeltme', money: f.adjustmentsMinor),
+      FinanceInfoRow(label: 'Dönem sonu bakiye', money: f.closingMinor, emphasize: true),
+      FinanceInfoRow(label: 'Dönem içi değişim', money: f.changeMinor),
+      if (f.negativeBalance)
+        Padding(
+          padding: const EdgeInsets.only(top: AppSpace.xs),
+          child: Text('Bakiye eksiye düşmüş; kayıtlar eksik olabilir.', style: th.bodySmall?.copyWith(color: p.textSecondary)),
+        ),
+      const SizedBox(height: AppSpace.sm),
+      Semantics(header: true, container: true, child: Text('Gider kalemleri', style: th.titleSmall)),
+      if (f.expenseByCategory.isEmpty)
+        Text('Bu dönemde bu hesaptan gider yok.', style: th.bodySmall?.copyWith(color: p.textSecondary))
+      else
+        for (final c in f.expenseByCategory) FinanceInfoRow(label: c.categoryName, money: c.totalMinor),
+    ]);
+  }
+
+  List<Widget> _body(BuildContext context, PeriodReport r) {
+    final th = Theme.of(context).textTheme;
+    final p = context.palette;
+    return <Widget>[
+      metaCard(r.meta),
+      const SizedBox(height: AppSpace.md),
+      actions(pdfAllowed: false, onPdf: (_) async {}, exportSources: _sources),
+      const SizedBox(height: AppSpace.md),
+      if (r.periodTitle.isNotEmpty) Semantics(header: true, container: true, child: Text(r.periodTitle, style: th.titleLarge)),
+      const SizedBox(height: AppSpace.sm),
+      if (r.warnings.isNotEmpty || !r.hasAccounts) ...[
+        DialogPanel(
+          key: const ValueKey<String>('finance_period_warnings'),
+          tone: AppTone.warning,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const DialogSectionTitle(icon: Icons.warning_amber_rounded, title: 'Uyarılar', tone: AppTone.warning),
+              const SizedBox(height: AppSpace.sm),
+              if (!r.hasAccounts)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: AppSpace.xs),
+                  child: Text('• Henüz nakit / banka hesabı tanımlanmamış; Hesap bakiyeleri anlamlı değil.', style: th.bodyMedium),
+                ),
+              for (final w in r.warnings)
+                if (w.code != 'NO_ACCOUNTS')
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: AppSpace.xs),
+                    child: Text('• ${w.message}', style: th.bodyMedium),
+                  ),
+            ],
+          ),
+        ),
+        const SizedBox(height: AppSpace.md),
+      ],
+      for (final fund in FinanceFund.values) _fundCard(context, r.of(fund)),
+      _section(context, 'totals', 'İki hesabın toplamı', Icons.functions_rounded, [
+        FinanceInfoRow(label: 'Dönem başı bakiye', money: r.totals.openingMinor),
+        FinanceInfoRow(label: 'Tahsilat', money: r.totals.collectionsMinor),
+        FinanceInfoRow(label: 'Gider', money: r.totals.expensesMinor),
+        FinanceInfoRow(label: 'Dönem sonu bakiye', money: r.totals.closingMinor, emphasize: true),
+        if (r.advanceMinor != 0) FinanceInfoRow(label: 'Borca dağıtılmamış ödeme (avans)', money: r.advanceMinor),
+        if (r.unassigned.any)
+          Padding(
+            padding: const EdgeInsets.only(top: AppSpace.xs),
+            child: Text(
+              '${r.unassigned.count} tahsilat bir nakit / banka hesabına eşlenmemiş; Hesap rakamlarına dahil değildir.',
+              style: th.bodySmall?.copyWith(color: p.textSecondary),
+            ),
+          ),
+        if (!r.balanced)
+          Padding(
+            padding: const EdgeInsets.only(top: AppSpace.xs),
+            child: Text(
+              'Geçmiş bir dönem sonunda Hesap toplamı ile nakit / banka toplamı arasında fark olabilir (dağıtım güncel kayıtlardan türetilir).',
+              style: th.bodySmall?.copyWith(color: p.textSecondary),
+            ),
+          ),
+      ]),
+      if (r.months.length > 1)
+        _section(context, 'months', 'Aylık kırılım', Icons.calendar_view_month_rounded, [
+          for (final m in r.months) ...[
+            Semantics(header: true, container: true, child: Text(m.period.label, style: th.titleSmall)),
+            FinanceInfoRow(label: 'Tahsilat', money: m.collectionsMinor),
+            FinanceInfoRow(label: 'Gider', money: m.expensesMinor),
+            FinanceInfoRow(label: 'Net', money: m.netMinor, emphasize: true),
+            const SizedBox(height: AppSpace.sm),
+          ],
+        ]),
+      _section(context, 'debtors', 'Borçlu özeti', Icons.hourglass_bottom_rounded, [
+        Text('Dönem sonu: ${_dayText(r.debtors.asOf)}', style: th.bodySmall?.copyWith(color: p.textSecondary)),
+        FinanceInfoRow(label: 'Borçlu daire', value: '${r.debtors.debtorCount} / ${r.debtors.apartmentCount}'),
+        FinanceInfoRow(label: 'Vadesi geçmiş borç', money: r.debtors.totalOverdueMinor, emphasize: true),
+        for (final a in r.debtors.aging)
+          if (a.count > 0 || a.totalMinor != 0) FinanceInfoRow(label: '${a.label} (${a.count} daire)', money: a.totalMinor),
+      ]),
+    ];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final report = data;
+    final status = statusWidget();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Wrap(
+          spacing: AppSpace.sm,
+          runSpacing: AppSpace.sm,
+          children: [
+            for (final preset in _PeriodPreset.values)
+              ChoiceChip(
+                key: ValueKey<String>('finance_period_preset_${preset.name}'),
+                label: Text(preset.label),
+                selected: _isPreset(preset),
+                onSelected: (loading || busyLocked || retry.locked) ? null : (_) => _pick(preset),
+              ),
+          ],
+        ),
+        const SizedBox(height: AppSpace.md),
+        _MonthStepper(
+          keyPrefix: 'finance_period_from',
+          label: 'Başlangıç ayı',
+          value: _from,
+          min: _minMonth,
+          max: _maxMonth,
+          onChanged: (v) => setState(() => _from = v),
+        ),
+        const SizedBox(height: AppSpace.sm),
+        _MonthStepper(
+          keyPrefix: 'finance_period_to',
+          label: 'Bitiş ayı',
+          value: _to,
+          min: _minMonth,
+          max: _maxMonth,
+          onChanged: (v) => setState(() => _to = v),
+        ),
+        const SizedBox(height: AppSpace.md),
+        fetchButton(),
+        const SizedBox(height: AppSpace.md),
+        ?errorBanner(),
+        ?staleNote(),
+        if (status != null) status else ..._body(context, report!),
+      ],
+    );
+  }
+}
 
 class _BoardSummaryReportView extends StatefulWidget {
   const _BoardSummaryReportView({required this.scope, required this.now, required this.launcher});

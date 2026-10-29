@@ -12,6 +12,7 @@ import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
 import 'package:site_kapi_kontrol/ui/widgets/crm_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_liability_banner.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_parts.dart';
+import 'package:site_kapi_kontrol/ui/widgets/finance_refunds_entry.dart';
 
 /// "Daireler" sekmesi (Platform Faz 4a): arama (daire etiketi, sakin adı) + durum süzgeci (Hepsi / Borçlu /
 /// Alacaklı), sayfalı bakiye listesi; daireye dokununca ekstre açılır.
@@ -196,19 +197,22 @@ class FinanceBalancesTabState extends State<FinanceBalancesTab> {
           ),
         ),
         const SizedBox(height: AppSpace.md),
-        if (widget.scope.canWrite) ...[
-          FinanceLiabilityBanner(key: ValueKey<int>(_liabilityTick), scope: widget.scope, onChanged: _afterChange),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: OutlinedButton.icon(
-              key: const ValueKey<String>('finance_opening_button'),
-              onPressed: () => unawaited(FinanceOpeningDialog.show(context, scope: widget.scope, onChanged: _afterChange)),
-              icon: const Icon(Icons.account_balance_wallet_outlined),
-              label: const Text('Devir bakiyesi'),
-            ),
-          ),
-          const SizedBox(height: AppSpace.md),
-        ],
+        if (widget.scope.canWrite) FinanceLiabilityBanner(key: ValueKey<int>(_liabilityTick), scope: widget.scope, onChanged: _afterChange),
+        // İade talepleri (K4): onay bekleyen varsa kart, her durumda "İade talepleri" düğmesi (kurul da listeyi okur); yanında "Devir bakiyesi" (yalnız yazma yetkisi).
+        FinanceRefundsEntry(
+          key: ValueKey<String>('finance_refunds_entry_$_liabilityTick'),
+          scope: widget.scope,
+          onChanged: _afterChange,
+          extraAction: widget.scope.canWrite
+              ? OutlinedButton.icon(
+                  key: const ValueKey<String>('finance_opening_button'),
+                  onPressed: () => unawaited(FinanceOpeningDialog.show(context, scope: widget.scope, onChanged: _afterChange)),
+                  icon: const Icon(Icons.account_balance_wallet_outlined),
+                  label: const Text('Devir bakiyesi'),
+                )
+              : null,
+        ),
+        const SizedBox(height: AppSpace.md),
         SectionHeader(
           title: 'Daireler',
           count: _loader.loadedOnce ? _loader.total : null,

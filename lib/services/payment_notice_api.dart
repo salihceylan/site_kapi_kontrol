@@ -10,6 +10,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show ValueNotifier, visibleForTesting;
 import 'package:http/http.dart' as http;
+import 'package:site_kapi_kontrol/models/check_mark.dart';
 import 'package:site_kapi_kontrol/models/finance_funds.dart' show FinanceFund;
 import 'package:site_kapi_kontrol/models/payment_notice.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
@@ -101,6 +102,17 @@ class PaymentNoticeApi {
       'acknowledged': acknowledged,
     },
   );
+
+  /// Dekont bildirimine "kontrol edildi (kim, ne zaman)" izini koyar (P2-20; yalnız yönetici / süper). Onay / ret kararından AYRI muhasebe kontrolüdür.
+  /// İz zaten varsa İLK iz döner.
+  Future<CheckMark?> setCheck({required String token, required int siteCode, required int id}) async =>
+      CheckMark.tryParse(await _send('PUT', '${_mgr(siteCode)}/$id/check', token: token));
+
+  /// Kontrol izini kaldırır (iz yoksa sessizce başarılı). Her zaman null (kontrolsüz) döner.
+  Future<CheckMark?> clearCheck({required String token, required int siteCode, required int id}) async {
+    await _send('DELETE', '${_mgr(siteCode)}/$id/check', token: token);
+    return null;
+  }
 
   Future<void> link({required String token, required int siteCode, required int id, required int ledgerEntryId}) =>
       _send('POST', '${_mgr(siteCode)}/$id/link', token: token, body: <String, dynamic>{'ledger_entry_id': ledgerEntryId});

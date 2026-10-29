@@ -17,8 +17,10 @@ import 'package:site_kapi_kontrol/models/finance_4b.dart';
 import 'package:site_kapi_kontrol/models/finance_charts.dart';
 import 'package:site_kapi_kontrol/models/finance_funds.dart';
 import 'package:site_kapi_kontrol/models/finance_liability.dart';
+import 'package:site_kapi_kontrol/models/finance_refund.dart';
 import 'package:site_kapi_kontrol/models/fund_models.dart';
 import 'package:site_kapi_kontrol/models/late_fee_models.dart';
+import 'package:site_kapi_kontrol/models/period_report_models.dart';
 import 'package:site_kapi_kontrol/models/receipt_models.dart';
 import 'package:site_kapi_kontrol/models/reminder_models.dart';
 import 'package:site_kapi_kontrol/models/report_models.dart';
@@ -1706,6 +1708,7 @@ class FakeFinance4bApi extends Finance4bApi {
   Map<String, dynamic> chartsJson = f4ChartsJson();
   Map<String, dynamic> statementJson = f4StatementJson();
   Map<String, dynamic> boardJson = f4BoardJson();
+  Map<String, dynamic> periodJson = f4PeriodJson();
   Object? reportError;
   F4Gate? reportGate;
   final List<Map<String, Object?>> reportCalls = <Map<String, Object?>>[];
@@ -1786,6 +1789,18 @@ class FakeFinance4bApi extends Finance4bApi {
       },
       () => ApartmentStatement.fromJson(statementJson),
     );
+  }
+
+  @override
+  Future<PeriodReport> getPeriodReport({
+    required String token,
+    required int siteCode,
+    required FinancePeriod from,
+    required FinancePeriod to,
+  }) {
+    return _report('getPeriodReport', <String, Object?>{'from': from.toApi(), 'to': to.toApi()}, () {
+      return PeriodReport.fromJson(<String, dynamic>{...periodJson, 'from': from.toApi(), 'to': to.toApi()});
+    });
   }
 
   @override
@@ -2410,6 +2425,242 @@ class FakeFinance4bApi extends Finance4bApi {
     }
     throw ApiException('Devir kaydı bulunamadı.', statusCode: 404, code: 'LIABILITY_TRANSFER_NOT_FOUND');
   }
+
+  // --- Alacak iadesi (K4) --------------------------------------------------------------------
+  // Sunucuyu taklit eder (docs/PLATFORM_FINANS.md "Alacak iadesi"): sakin ve yönetici uçları AYNI satırları okur; talep alacakla sınırlanır, onay Hesaptan çıkış + makbuz
+  // yazar (nakit Hesapta bakiye yetmezse 409 CASH_INSUFFICIENT), ret gerekçe ister, geri alma makbuzu iptal sayar.
+  final List<Map<String, dynamic>> refundRows = <Map<String, dynamic>>[];
+
+  /// Sakinin Borcum'da gördüğü alacak (kuruş); `createMyRefundRequest` bunu bekleyen taleplerle birlikte sınar. 0: 409 NO_CREDIT.
+  int refundCreditMinor = 0;
+  Object? refundListError;
+  Object? refundWriteError;
+  F4Gate? refundListGate;
+  int _refundNextId = 1;
+  int _refundReceiptNo = 1;
+  final Map<String, int> _refundRequestKeys = <String, int>{};
+
+  Map<String, dynamic> addRefund({
+    int? id,
+    int apartmentId = 301,
+    String label = 'A Blok - 5',
+    int amount = 25000,
+    String status = 'requested',
+    String kind = 'resident',
+    String party = 'owner',
+    String? note,
+    String? rejectReason,
+  }) {
+    final row = <String, dynamic>{
+      'id': id ?? _refundNextId++,
+      'apartment_id': apartmentId,
+      'apartment_label': label,
+      'account_party': party,
+      'amount_minor': amount,
+      'status': status,
+      'requested_by_kind': kind,
+      'requested_at': '2026-10-28T08:00:00.000Z',
+      'resolved_at': status == 'requested' ? null : '2026-10-28T09:00:00.000Z',
+      'reject_reason': rejectReason,
+      'note': note,
+      'pay_date': null,
+      'receipt': null,
+      'reversed_at': null,
+      'pay_account_id': null,
+      'pay_account_name': null,
+      'pay_method': null,
+      'reversal_reason': null,
+    };
+    refundRows.insert(0, row);
+    return row;
+  }
+
+  Map<String, dynamic>? _refund(int id) {
+    for (final row in refundRows) {
+      if (row['id'] == id) return row;
+    }
+    return null;
+  }
+
+  int get _pendingRefundMinor => refundRows.where((r) => r['status'] == 'requested').fold<int>(0, (a, r) => a + (r['amount_minor'] as int));
+
+  @override
+  Future<RefundRequest> createMyRefundRequest({
+    required String token,
+    required int apartmentId,
+    required int amountMinor,
+    String? note,
+    required String idempotencyKey,
+  }) async {
+    await _enter('createMyRefundRequest', <String, Object?>{'apartment_id': apartmentId, 'amount_minor': amountMinor, 'note': note, 'key': idempotencyKey});
+    final error = refundWriteError;
+    if (error != null) {
+      refundWriteError = null;
+      throw error;
+    }
+    final replay = _refundRequestKeys[idempotencyKey];
+    if (replay != null) return RefundRequest.fromJson(_refund(replay)!);
+    if (refundCreditMinor <= 0) throw f4Coded('NO_CREDIT', 409);
+    if (amountMinor > refundCreditMinor - _pendingRefundMinor) throw f4Coded('REFUND_EXCEEDS_CREDIT', 409);
+    final row = addRefund(apartmentId: apartmentId, amount: amountMinor, note: note);
+    _refundRequestKeys[idempotencyKey] = row['id'] as int;
+    return RefundRequest.fromJson(row);
+  }
+
+  @override
+  Future<List<RefundRequest>> listMyRefundRequests({required String token, int? apartmentId}) async {
+    await _enter('listMyRefundRequests');
+    final error = refundListError;
+    if (error != null) throw error;
+    return <RefundRequest>[
+      for (final row in refundRows)
+        if (row['requested_by_kind'] == 'resident' && (apartmentId == null || row['apartment_id'] == apartmentId)) RefundRequest.fromJson(row),
+    ];
+  }
+
+  @override
+  Future<RefundRequest> cancelMyRefundRequest({required String token, required int refundId}) async {
+    await _enter('cancelMyRefundRequest', <String, Object?>{'refund_id': refundId});
+    final error = refundWriteError;
+    if (error != null) {
+      refundWriteError = null;
+      throw error;
+    }
+    final row = _refund(refundId);
+    if (row == null) throw f4Coded('REFUND_NOT_FOUND', 404);
+    if (row['status'] != 'requested') throw f4Coded('REFUND_NOT_PENDING', 409);
+    row['status'] = 'cancelled';
+    row['resolved_at'] = '2026-10-29T09:00:00.000Z';
+    return RefundRequest.fromJson(row);
+  }
+
+  @override
+  Future<RefundPage> listRefunds({
+    required String token,
+    required int siteCode,
+    String status = 'requested',
+    int? apartmentId,
+    int? beforeId,
+    int limit = 50,
+  }) async {
+    await _enter('listRefunds');
+    await refundListGate?.future;
+    final error = refundListError;
+    if (error != null) throw error;
+    final filtered = <Map<String, dynamic>>[
+      for (final row in refundRows)
+        if ((status == 'all' || row['status'] == status) && (beforeId == null || (row['id'] as int) < beforeId)) row,
+    ];
+    final page = filtered.take(limit).toList();
+    final pending = refundRows.where((r) => r['status'] == 'requested').toList();
+    return RefundPage.fromJson(<String, dynamic>{
+      'items': page,
+      'pending_count': pending.length,
+      'pending_total_minor': pending.fold<int>(0, (a, r) => a + (r['amount_minor'] as int)),
+      'next_before_id': filtered.length > limit && page.isNotEmpty ? page.last['id'] : null,
+    });
+  }
+
+  @override
+  Future<RefundRequest> approveRefund({
+    required String token,
+    required int siteCode,
+    required int refundId,
+    required int payAccountId,
+    required String idempotencyKey,
+  }) async {
+    await _enter('approveRefund', <String, Object?>{'refund_id': refundId, 'pay_account_id': payAccountId, 'key': idempotencyKey});
+    final error = refundWriteError;
+    if (error != null) {
+      refundWriteError = null;
+      throw error;
+    }
+    final row = _refund(refundId);
+    if (row == null) throw f4Coded('REFUND_NOT_FOUND', 404);
+    if (row['status'] != 'requested') throw f4Coded('REFUND_NOT_PENDING', 409);
+    final account = _account(payAccountId);
+    if (account == null) throw f4Coded('ACCOUNT_NOT_FOUND', 404);
+    final amount = row['amount_minor'] as int;
+    if (account['kind'] == 'cash' && (account['balance_minor'] as int) < amount) throw f4Coded('CASH_INSUFFICIENT', 409);
+    account['balance_minor'] = (account['balance_minor'] as int) - amount;
+    final number = 'IA-2026-${(_refundReceiptNo++).toString().padLeft(6, '0')}';
+    row
+      ..['status'] = 'approved'
+      ..['resolved_at'] = '2026-10-29T09:00:00.000Z'
+      ..['pay_date'] = '2026-10-29'
+      ..['pay_account_id'] = payAccountId
+      ..['pay_account_name'] = account['name']
+      ..['pay_method'] = account['kind'] == 'cash' ? 'cash' : 'transfer'
+      ..['receipt'] = <String, dynamic>{
+        'number': number,
+        'issued_on': '2026-10-29',
+        'verification_code': 'KOD12345',
+        'status': 'active',
+        'snapshot': <String, dynamic>{
+          'v': 1,
+          'kind': 'refund',
+          'paid_on': '2026-10-29',
+          'method': account['kind'] == 'cash' ? 'cash' : 'transfer',
+          'site': <String, dynamic>{'name': 'Gül Sitesi'},
+          'apartment': <String, dynamic>{'label': row['apartment_label']},
+          'payee': <String, dynamic>{'party': row['account_party'], 'name': 'Ayşe Yılmaz'},
+          'from_account': <String, dynamic>{'name': account['name']},
+          'issuer': <String, dynamic>{'name': 'Yönetici'},
+        },
+      };
+    return RefundRequest.fromJson(row);
+  }
+
+  @override
+  Future<RefundRequest> rejectRefund({
+    required String token,
+    required int siteCode,
+    required int refundId,
+    required String reason,
+    required String idempotencyKey,
+  }) async {
+    await _enter('rejectRefund', <String, Object?>{'refund_id': refundId, 'reason': reason, 'key': idempotencyKey});
+    final error = refundWriteError;
+    if (error != null) {
+      refundWriteError = null;
+      throw error;
+    }
+    final row = _refund(refundId);
+    if (row == null) throw f4Coded('REFUND_NOT_FOUND', 404);
+    if (row['status'] != 'requested') throw f4Coded('REFUND_NOT_PENDING', 409);
+    row
+      ..['status'] = 'rejected'
+      ..['resolved_at'] = '2026-10-29T09:00:00.000Z'
+      ..['reject_reason'] = reason;
+    return RefundRequest.fromJson(row);
+  }
+
+  @override
+  Future<RefundRequest> reverseRefund({
+    required String token,
+    required int siteCode,
+    required int refundId,
+    required String reason,
+    required String idempotencyKey,
+  }) async {
+    await _enter('reverseRefund', <String, Object?>{'refund_id': refundId, 'reason': reason, 'key': idempotencyKey});
+    final error = refundWriteError;
+    if (error != null) {
+      refundWriteError = null;
+      throw error;
+    }
+    final row = _refund(refundId);
+    if (row == null) throw f4Coded('REFUND_NOT_FOUND', 404);
+    if (row['status'] != 'approved') throw f4Coded('REFUND_NOT_APPROVED', 409);
+    final account = _account(row['pay_account_id'] as int);
+    if (account != null) account['balance_minor'] = (account['balance_minor'] as int) + (row['amount_minor'] as int);
+    row
+      ..['status'] = 'reversed'
+      ..['reversed_at'] = '2026-10-29T10:00:00.000Z'
+      ..['reversal_reason'] = reason;
+    (row['receipt'] as Map<String, dynamic>)['status'] = 'cancelled';
+    return RefundRequest.fromJson(row);
+  }
 }
 
 /// Test için servis kurar ve [auth]'a kaydeder; sahte API'yi döndürür.
@@ -2573,6 +2824,88 @@ Map<String, dynamic> f4ChartsJson({bool empty = false}) {
     },
   };
 }
+
+/// Dönem raporu (sunucu finance_period_report.test.js senaryosuyla aynı rakamlar): Aidat 600.000 → 514.000, Fon 0 → 90.000 (kuruş).
+Map<String, dynamic> f4PeriodJson() => <String, dynamic>{
+  'site': <String, dynamic>{'name': 'Gül Sitesi'},
+  'generated_at': '2026-10-16T09:00:00Z',
+  'closed_through': '2026-08',
+  'from': '2026-09',
+  'to': '2026-10',
+  'period_title': 'Eylül 2026 - Ekim 2026',
+  'has_accounts': true,
+  'funds': <String, dynamic>{
+    'operating': <String, dynamic>{
+      'fund': 'operating',
+      'opening_minor': 600000,
+      'collections_minor': 0,
+      'expenses_minor': 35000,
+      'transfers_in_minor': 0,
+      'transfers_out_minor': 50000,
+      'adjustments_minor': -1000,
+      'closing_minor': 514000,
+      'change_minor': -86000,
+      'negative_balance': false,
+      'expense_by_category': <Map<String, dynamic>>[
+        <String, dynamic>{'category_name': 'Temizlik', 'total_minor': 35000},
+      ],
+    },
+    'capital': <String, dynamic>{
+      'fund': 'capital',
+      'opening_minor': 0,
+      'collections_minor': 60000,
+      'expenses_minor': 20000,
+      'transfers_in_minor': 50000,
+      'transfers_out_minor': 0,
+      'adjustments_minor': 0,
+      'closing_minor': 90000,
+      'change_minor': 90000,
+      'negative_balance': false,
+      'expense_by_category': <Map<String, dynamic>>[
+        <String, dynamic>{'category_name': 'Asansör', 'total_minor': 20000},
+      ],
+    },
+  },
+  'totals': <String, dynamic>{
+    'opening_minor': 600000,
+    'collections_minor': 60000,
+    'expenses_minor': 55000,
+    'closing_minor': 604000,
+    'change_minor': 4000,
+  },
+  'months': <Map<String, dynamic>>[
+    <String, dynamic>{
+      'period': '2026-09',
+      'collections_minor': 60000,
+      'expenses_minor': 30000,
+      'net_minor': 30000,
+      'operating': <String, dynamic>{'collections_minor': 0, 'expenses_minor': 30000, 'net_minor': -30000},
+      'capital': <String, dynamic>{'collections_minor': 60000, 'expenses_minor': 0, 'net_minor': 60000},
+    },
+    <String, dynamic>{
+      'period': '2026-10',
+      'collections_minor': 0,
+      'expenses_minor': 25000,
+      'net_minor': -25000,
+      'operating': <String, dynamic>{'collections_minor': 0, 'expenses_minor': 5000, 'net_minor': -5000},
+      'capital': <String, dynamic>{'collections_minor': 0, 'expenses_minor': 20000, 'net_minor': -20000},
+    },
+  ],
+  'advance_minor': 0,
+  'reconciliation': <String, dynamic>{'accounts_total_minor': 604000, 'difference_minor': 0, 'balanced': true},
+  'unassigned_payments': <String, dynamic>{'count': 0, 'total_minor': 0},
+  'debtors': <String, dynamic>{
+    'as_of': '2026-10-16',
+    'apartment_count': 2,
+    'debtor_count': 1,
+    'total_overdue_minor': 40000,
+    'aging': <Map<String, dynamic>>[
+      <String, dynamic>{'bucket': 'not_due', 'count': 0, 'total_minor': 0},
+      <String, dynamic>{'bucket': 'd0_30', 'count': 1, 'total_minor': 40000},
+    ],
+  },
+  'warnings': <Map<String, dynamic>>[],
+};
 
 Map<String, dynamic> f4CashPositionJson({int unassignedCount = 0}) => <String, dynamic>{
   'site': <String, dynamic>{'name': 'Gül Sitesi'},

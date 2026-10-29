@@ -2,7 +2,7 @@
 
 > Kullanıcıya/istemciye görünen metinleri üretildikleri `dosya:satır` ile eşler. `Ctrl+F` ile ekranda gördüğünüz mesajın bir parçasını arayın. Koddan otomatik üretilir: `node tools/klavuz/build.mjs`. Ana sayfa: [ARIZA_KLAVUZU.md](ARIZA_KLAVUZU.md) · [İndeks](ARIZA_KLAVUZU_INDEKS.md).
 
-## Sunucu mesajları (896)
+## Sunucu mesajları (897)
 
 Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`). Uygulama bu metinleri HTTP yanıt gövdesinde (`error` alanı) alır.
 
@@ -19,7 +19,7 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | <Türkçe mesaj> | [server/src/modules/site_audit_log_routes.js:8](../server/src/modules/site_audit_log_routes.js#L8) |
 | ${apartmentLabel(state.apartment.block_name, state.apartment.unit_label)} dairesinin maliki size ${scope === 'toplanti_imza' ? 'toplantı imzası' : 'kurul üyeliği'} için vekalet verdi (${window.valid_until} tarihine kada… | [server/src/modules/apartment_mgmt_proxy.js:69](../server/src/modules/apartment_mgmt_proxy.js#L69) |
 | ${cleanEmail} adresine ${VERIFICATION_CODE_DIGITS} haneli doğrulama kodu gönderildi. | [server/src/modules/oauth_login.js:903](../server/src/modules/oauth_login.js#L903) |
-| ${debt?.site_name ?  | [server/src/modules/account_common.js:85](../server/src/modules/account_common.js#L85) |
+| ${debt?.site_name ?  | [server/src/modules/account_common.js:86](../server/src/modules/account_common.js#L86) |
 | ${deviceUid} kodlu cihaz ve karekodu basariyla silindi. | [server/src/routes/company_routes.js:464](../server/src/routes/company_routes.js#L464) |
 | ${field.body} alani true/false olmalidir. | [server/src/utils/site_rules.js:312](../server/src/utils/site_rules.js#L312) |
 | ${fieldName} alanı true/false olmalıdır. | [server/src/services/membership_service.js:1935](../server/src/services/membership_service.js#L1935) |
@@ -37,7 +37,7 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | ${pendingCount} dosya Drive'a gönderilmeyi bekliyor. Silinmez; bağlantı sağlanınca gönderilir. | [server/src/modules/drive_common.js:224](../server/src/modules/drive_common.js#L224) |
 | ${req.full_name} sakini, "${req.block_name \|\| ''} ${req.unit_label}" dairesine ${assignedRole === 'APARTMENT_ADMIN' ? 'Daire Yöneticisi' : 'Aile Üyesi'} olarak başarıyla onaylandı. | [server/src/services/membership_service.js:1445](../server/src/services/membership_service.js#L1445) |
 | ${result.revoked_count} aktif karekod basariyla iptal edildi. | [server/src/routes/manager_routes.js:1117](../server/src/routes/manager_routes.js#L1117) |
-| ${site?.name ?  | [server/src/modules/account_common.js:69](../server/src/modules/account_common.js#L69) |
+| ${site?.name ?  | [server/src/modules/account_common.js:70](../server/src/modules/account_common.js#L70) |
 | ${targetUserCodes.length} sakin için kapı yetkisi ${actionText}. | [server/src/services/membership_service.js:2881](../server/src/services/membership_service.js#L2881) |
 | Abonelik talebiniz onay bekliyor. | [server/src/middlewares/auth_middleware.js:157](../server/src/middlewares/auth_middleware.js#L157) |
 | Abonelik talebiniz onay bekliyor. | [server/src/routes/auth_routes.js:883](../server/src/routes/auth_routes.js#L883) |
@@ -74,6 +74,7 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | Belirtilen cihaz hesabınıza ait değil. | [server/src/services/membership_service.js:912](../server/src/services/membership_service.js#L912) |
 | Belirtilen cihaz zaten başka bir kapıya atanmış. | [server/src/services/membership_service.js:927](../server/src/services/membership_service.js#L927) |
 | Belirtilen cihaz zaten başka bir sitede kullanımda. | [server/src/services/membership_service.js:919](../server/src/services/membership_service.js#L919) |
+| Bilinmeyen kontrol izi türü: ${kind} | [server/src/modules/check_mark_service.js:68](../server/src/modules/check_mark_service.js#L68) |
 | Bilinmeyen toplu yükleme türü. | [server/src/modules/bulk_import_plan.js:27](../server/src/modules/bulk_import_plan.js#L27) |
 | Bir sorun oluştu. Uygulamadan yeniden deneyin. | [server/src/modules/drive_routes.js:165](../server/src/modules/drive_routes.js#L165) |
 | Bitiş tarihi başlangıçtan önce olamaz. | [server/src/modules/apartment_mgmt_rules.js:258](../server/src/modules/apartment_mgmt_rules.js#L258) |
@@ -285,7 +286,7 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | Çok fazla hatalı giriş denemesi. Lütfen ${wait} sonra tekrar deneyin ya da "Şifremi unuttum" ile şifrenizi sıfırlayın. | [server/src/routes/auth_routes.js:750](../server/src/routes/auth_routes.js#L750) |
 | Çok fazla hatırlatma gönderimi. Biraz sonra tekrar deneyin. | [server/src/modules/finance_4b_routes.js:369](../server/src/modules/finance_4b_routes.js#L369) |
 | Çok fazla hesap işlemi isteği. Biraz sonra tekrar deneyin. | [server/src/modules/account_routes.js:34](../server/src/modules/account_routes.js#L34) |
-| Çok fazla hesap raporu isteği. Biraz sonra tekrar deneyin. | [server/src/modules/finance_funds_routes.js:26](../server/src/modules/finance_funds_routes.js#L26) |
+| Çok fazla hesap raporu isteği. Biraz sonra tekrar deneyin. | [server/src/modules/finance_funds_routes.js:27](../server/src/modules/finance_funds_routes.js#L27) |
 | Çok fazla indirme isteği. Biraz sonra tekrar deneyin. | [server/src/modules/document_routes.js:82](../server/src/modules/document_routes.js#L82) |
 | Çok fazla istek. Biraz sonra tekrar deneyin. | [server/src/modules/account_routes.js:26](../server/src/modules/account_routes.js#L26) |
 | Çok fazla istek. Biraz sonra tekrar deneyin. | [server/src/modules/announcement_routes.js:71](../server/src/modules/announcement_routes.js#L71) |
@@ -594,7 +595,7 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | Geçersiz talep ID. | [server/src/routes/manager_routes.js:1306](../server/src/routes/manager_routes.js#L1306) |
 | Geçersiz talep kimliği. | [server/src/services/membership_service.js:1318](../server/src/services/membership_service.js#L1318) |
 | Geçersiz talep kimliği. | [server/src/services/membership_service.js:1462](../server/src/services/membership_service.js#L1462) |
-| gider hareketi bulunamadi | [server/src/modules/finance_expenses.js:647](../server/src/modules/finance_expenses.js#L647) |
+| gider hareketi bulunamadi | [server/src/modules/finance_expenses.js:653](../server/src/modules/finance_expenses.js#L653) |
 | Girdiğiniz ${VERIFICATION_CODE_DIGITS} haneli kod hatalıdır. | [server/src/modules/oauth_login.js:985](../server/src/modules/oauth_login.js#L985) |
 | Girdiğiniz ${VERIFICATION_CODE_DIGITS} haneli kod hatalıdır. | [server/src/services/membership_service.js:443](../server/src/services/membership_service.js#L443) |
 | Girdiğiniz silme doğrulama kodu hatalı. | [server/src/services/site_service.js:2144](../server/src/services/site_service.js#L2144) |
@@ -856,7 +857,7 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | SMTP_FROM veya SMTP_USER env degiskeni eksik. | [server/src/mailer.js:751](../server/src/mailer.js#L751) |
 | SMTP_FROM veya SMTP_USER env degiskeni eksik. | [server/src/mailer.js:766](../server/src/mailer.js#L766) |
 | SMTP_FROM veya SMTP_USER env degiskeni eksik. | [server/src/mailer.js:798](../server/src/mailer.js#L798) |
-| Süper kullanıcı hesabı bu ekrandan silinemez. Hesabın kaldırılması için başka bir süper kullanıcıyla iletişime geçin. | [server/src/modules/account_common.js:63](../server/src/modules/account_common.js#L63) |
+| Süper kullanıcı hesabı bu ekrandan silinemez. Hesabın kaldırılması için başka bir süper kullanıcıyla iletişime geçin. | [server/src/modules/account_common.js:64](../server/src/modules/account_common.js#L64) |
 | Süper kullanıcı hesabına kayıtlı bir e-posta adresi bulunamadı. | [server/src/services/site_service.js:2009](../server/src/services/site_service.js#L2009) |
 | sürüm major.minor.patch biçiminde olmalıdır (örn. 1.2.0). | [server/src/modules/platform_config_service.js:150](../server/src/modules/platform_config_service.js#L150) |
 | Şifre en az 4 karakter uzunluğunda olmalıdır. | [server/src/services/membership_service.js:2182](../server/src/services/membership_service.js#L2182) |
@@ -905,7 +906,7 @@ Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`).
 | Yükleme türü bulunamadı. | [server/src/modules/bulk_import_routes.js:93](../server/src/modules/bulk_import_routes.js#L93) |
 | Zaten bu dairenin aktif bir sakinisisiniz (${existingMemberRes.rows[0].role}). | [server/src/services/membership_service.js:1083](../server/src/services/membership_service.js#L1083) |
 
-## Uygulama (Flutter) mesajları (563)
+## Uygulama (Flutter) mesajları (571)
 
 Kaynak: `lib` (`ApiException(...)`, `_errorMessage =`, `lib/services` içindeki `return '...'`).
 
@@ -929,7 +930,7 @@ Kaynak: `lib` (`ApiException(...)`, `_errorMessage =`, `lib/services` içindeki 
 | $trimmed ${AuthApi.formatWait(retryAfter)} sonra tekrar deneyin. | [lib/services/contract_api.dart:467](../lib/services/contract_api.dart#L467) |
 | $trimmed ${AuthApi.formatWait(retryAfter)} sonra tekrar deneyin. | [lib/services/decision_book_api.dart:364](../lib/services/decision_book_api.dart#L364) |
 | $trimmed ${AuthApi.formatWait(retryAfter)} sonra tekrar deneyin. | [lib/services/document_api.dart:968](../lib/services/document_api.dart#L968) |
-| $trimmed ${AuthApi.formatWait(retryAfter)} sonra tekrar deneyin. | [lib/services/finance_4b_api.dart:1730](../lib/services/finance_4b_api.dart#L1730) |
+| $trimmed ${AuthApi.formatWait(retryAfter)} sonra tekrar deneyin. | [lib/services/finance_4b_api.dart:1886](../lib/services/finance_4b_api.dart#L1886) |
 | $trimmed ${AuthApi.formatWait(retryAfter)} sonra tekrar deneyin. | [lib/services/platform_rules_api.dart:212](../lib/services/platform_rules_api.dart#L212) |
 | $trimmed ${AuthApi.formatWait(retryAfter)} sonra tekrar deneyin. | [lib/services/push_api.dart:321](../lib/services/push_api.dart#L321) |
 | $trimmed ${AuthApi.formatWait(retryAfter)} sonra tekrar deneyin. | [lib/services/reservation_api.dart:734](../lib/services/reservation_api.dart#L734) |
@@ -937,13 +938,13 @@ Kaynak: `lib` (`ApiException(...)`, `_errorMessage =`, `lib/services` içindeki 
 | $trimmed ${AuthApi.formatWait(retryAfter)} sonra tekrar deneyin. | [lib/services/visitor_log_api.dart:395](../lib/services/visitor_log_api.dart#L395) |
 | $trimmed ${AuthApi.formatWait(retryAfter)} sonra tekrar deneyin. | [lib/services/work_tracking_api.dart:1067](../lib/services/work_tracking_api.dart#L1067) |
 | $trimmed Lütfen ${formatWait(retryAfter)} sonra tekrar deneyin. | [lib/services/auth_api.dart:3844](../lib/services/auth_api.dart#L3844) |
-| $what bilgisi işlenemedi. Lütfen tekrar deneyin. | [lib/services/finance_4b_api.dart:1540](../lib/services/finance_4b_api.dart#L1540) |
-| $what bilgisi işlenemedi. Lütfen tekrar deneyin. | [lib/services/finance_4b_api.dart:1542](../lib/services/finance_4b_api.dart#L1542) |
+| $what bilgisi işlenemedi. Lütfen tekrar deneyin. | [lib/services/finance_4b_api.dart:1696](../lib/services/finance_4b_api.dart#L1696) |
+| $what bilgisi işlenemedi. Lütfen tekrar deneyin. | [lib/services/finance_4b_api.dart:1698](../lib/services/finance_4b_api.dart#L1698) |
 | $year-${yymmdd.substring(2, 4)}-${yymmdd.substring(4, 6)} | [lib/services/mt940_parser.dart:54](../lib/services/mt940_parser.dart#L54) |
 | Aidat tanımı bulunamadı. | [lib/services/auth_api.dart:4167](../lib/services/auth_api.dart#L4167) |
 | Aidat ve Finans özelliği bu sitede kapalı. | [lib/services/bank_import_api.dart:43](../lib/services/bank_import_api.dart#L43) |
 | Aidat ve Finans özelliği bu sitede kapalı. | [lib/services/finance_payment_api.dart:141](../lib/services/finance_payment_api.dart#L141) |
-| Aidat ve Finans özelliği bu sitede kapalı. | [lib/services/payment_notice_api.dart:212](../lib/services/payment_notice_api.dart#L212) |
+| Aidat ve Finans özelliği bu sitede kapalı. | [lib/services/payment_notice_api.dart:224](../lib/services/payment_notice_api.dart#L224) |
 | Aktarım bulunamadı. | [lib/services/finance_4b_errors.dart:64](../lib/services/finance_4b_errors.dart#L64) |
 | Alan bulunamadı ya da artık kullanılamıyor. Listeyi yenileyin. | [lib/services/reservation_api.dart:641](../lib/services/reservation_api.dart#L641) |
 | Anket bu durumda bu işleme izin vermiyor. Başkası güncellemiş olabilir; yenileyip tekrar deneyin. | [lib/services/survey_api.dart:351](../lib/services/survey_api.dart#L351) |
@@ -954,7 +955,7 @@ Kaynak: `lib` (`ApiException(...)`, `_errorMessage =`, `lib/services` içindeki 
 | Anlık görüntü adresi https:// ile başlamalı. | [lib/services/cctv_api.dart:196](../lib/services/cctv_api.dart#L196) |
 | Anlık konum alınamadı. Lütfen GPS'i kontrol edip tekrar deneyin. | [lib/services/geofence_service.dart:134](../lib/services/geofence_service.dart#L134) |
 | Araç bulunamadı. | [lib/services/auth_api.dart:3876](../lib/services/auth_api.dart#L3876) |
-| Ayarlar başka biri tarafından değiştirilmiş. Güncel ayarlar yüklendi; kontrol edip yeniden kaydedin. | [lib/services/finance_4b_errors.dart:146](../lib/services/finance_4b_errors.dart#L146) |
+| Ayarlar başka biri tarafından değiştirilmiş. Güncel ayarlar yüklendi; kontrol edip yeniden kaydedin. | [lib/services/finance_4b_errors.dart:163](../lib/services/finance_4b_errors.dart#L163) |
 | Ayarlar siz bakarken değişti. Ekranı yenileyip tekrar deneyin. | [lib/services/finance_payment_api.dart:137](../lib/services/finance_payment_api.dart#L137) |
 | Aynı duyuru az önce yayınlandı. Çift gönderimi önlemek için bir dakika bekleyin. | [lib/services/auth_api.dart:3888](../lib/services/auth_api.dart#L3888) |
 | Aynı ek borç kısa süre önce kaydedilmiş görünüyor. Önce daire hesaplarını kontrol edin. | [lib/services/auth_api.dart:4157](../lib/services/auth_api.dart#L4157) |
@@ -980,6 +981,7 @@ Kaynak: `lib` (`ApiException(...)`, `_errorMessage =`, `lib/services` içindeki 
 | Belgenin durumu değişmiş. Listeyi yenileyip tekrar deneyin. | [lib/services/document_api.dart:955](../lib/services/document_api.dart#L955) |
 | Bilinmeyen yer tutucu: ${unknown.first}. | [lib/services/cctv_api.dart:188](../lib/services/cctv_api.dart#L188) |
 | Bir gidere en çok 5 belge eklenebilir. | [lib/services/finance_4b_errors.dart:92](../lib/services/finance_4b_errors.dart#L92) |
+| Bir hesapta en çok 5 bekleyen iade talebi olabilir. Bekleyen taleplerin sonuçlanmasını bekleyin ya da birini geri çekin. | [lib/services/finance_4b_errors.dart:150](../lib/services/finance_4b_errors.dart#L150) |
 | Bir seferde en çok 5.000 satır yüklenebilir. | [lib/services/bulk_api.dart:31](../lib/services/bulk_api.dart#L31) |
 | Birden çok benzer tahsilat var. "Mevcut tahsilata bağla" ile birini seçin. | [lib/services/bank_import_api.dart:33](../lib/services/bank_import_api.dart#L33) |
 | Bluetooth islemi basarisiz oldu. | [lib/services/ble_wifi_provision_service.dart:534](../lib/services/ble_wifi_provision_service.dart#L534) |
@@ -1027,6 +1029,8 @@ Kaynak: `lib` (`ApiException(...)`, `_errorMessage =`, `lib/services` içindeki 
 | Bu hatırlatma çalıştırması iptal edilemez (zaten iptal edilmiş). | [lib/services/finance_4b_errors.dart:143](../lib/services/finance_4b_errors.dart#L143) |
 | Bu hesap henüz etkin değil. | [lib/services/auth_api.dart:4068](../lib/services/auth_api.dart#L4068) |
 | Bu hesap pasif; pasif hesaba yeni hareket yazılamaz. | [lib/services/finance_4b_errors.dart:50](../lib/services/finance_4b_errors.dart#L50) |
+| Bu hesapta iade edilecek alacak (fazla ödeme) yok. | [lib/services/finance_4b_errors.dart:146](../lib/services/finance_4b_errors.dart#L146) |
+| Bu iade talebi zaten karara bağlanmış ya da geri çekilmiş. Listeyi yenileyip kontrol edin. | [lib/services/finance_4b_errors.dart:154](../lib/services/finance_4b_errors.dart#L154) |
 | Bu ilişki artık güncel değil. | [lib/services/auth_api.dart:3880](../lib/services/auth_api.dart#L3880) |
 | Bu isimde bir kapı bulunamadı. Lütfen kapının adını veya numarasını söyleyin. | [lib/services/voice_door_service.dart:503](../lib/services/voice_door_service.dart#L503) |
 | Bu islem icin site yonetim yetkisi gerekir. | [lib/services/auth_service.dart:2639](../lib/services/auth_service.dart#L2639) |
@@ -1077,9 +1081,9 @@ Kaynak: `lib` (`ApiException(...)`, `_errorMessage =`, `lib/services` içindeki 
 | Bu modül zaten açık. | [lib/services/auth_api.dart:4079](../lib/services/auth_api.dart#L4079) |
 | Bu ödeme iptal edilmiş; iptal edilmiş ödeme için makbuz düzenlenemez. | [lib/services/finance_4b_errors.dart:20](../lib/services/finance_4b_errors.dart#L20) |
 | Bu önek başka bir sitede kullanılıyor. Başka bir önek seçin. | [lib/services/finance_payment_api.dart:135](../lib/services/finance_payment_api.dart#L135) |
-| Bu özellik hukuki onay bekliyor; onaylanınca kullanılabilir. | [lib/services/finance_4b_errors.dart:148](../lib/services/finance_4b_errors.dart#L148) |
+| Bu özellik hukuki onay bekliyor; onaylanınca kullanılabilir. | [lib/services/finance_4b_errors.dart:165](../lib/services/finance_4b_errors.dart#L165) |
 | Bu özellik şu an kapalı. Site yöneticisi Modüller ekranından açabilir. | [lib/services/auth_api.dart:4054](../lib/services/auth_api.dart#L4054) |
-| Bu PDF kabul edilemedi. Dekontun ekran görüntüsünü yüklemeyi deneyin. | [lib/services/payment_notice_api.dart:210](../lib/services/payment_notice_api.dart#L210) |
+| Bu PDF kabul edilemedi. Dekontun ekran görüntüsünü yüklemeyi deneyin. | [lib/services/payment_notice_api.dart:222](../lib/services/payment_notice_api.dart#L222) |
 | Bu PDF taranmış bir resim; metni okunamıyor. Bankanın Excel (xlsx) ya da CSV dökümünü yükleyin. | [lib/services/bank_import_api.dart:47](../lib/services/bank_import_api.dart#L47) |
 | Bu plaka bu sitede zaten kayıtlı. | [lib/services/auth_api.dart:4098](../lib/services/auth_api.dart#L4098) |
 | Bu platform MQTT TCP baglantisini desteklemiyor. | [lib/services/mqtt_door_service_stub.dart:41](../lib/services/mqtt_door_service_stub.dart#L41) |
@@ -1088,7 +1092,7 @@ Kaynak: `lib` (`ApiException(...)`, `_errorMessage =`, `lib/services` içindeki 
 | Bu site için günlük duyuru sınırına ulaşıldı. Yarın tekrar deneyin. | [lib/services/auth_api.dart:3890](../lib/services/auth_api.dart#L3890) |
 | Bu site için yetkiniz yok. | [lib/services/bulk_api.dart:52](../lib/services/bulk_api.dart#L52) |
 | Bu sitede aynı adlı bir alan zaten var. Başka bir ad seçin. | [lib/services/reservation_api.dart:656](../lib/services/reservation_api.dart#L656) |
-| Bu sitede dekont bildirimi henüz açık değil. Yönetime sorun. | [lib/services/payment_notice_api.dart:197](../lib/services/payment_notice_api.dart#L197) |
+| Bu sitede dekont bildirimi henüz açık değil. Yönetime sorun. | [lib/services/payment_notice_api.dart:209](../lib/services/payment_notice_api.dart#L209) |
 | Bu sitede kasa ya da banka hesabı tanımlı; tahsilat için bir hesap seçin. | [lib/services/finance_4b_errors.dart:52](../lib/services/finance_4b_errors.dart#L52) |
 | Bu sitede misafir geçişi kapalı. | [lib/services/auth_api.dart:4015](../lib/services/auth_api.dart#L4015) |
 | Bu sitede QR ile giriş kapalı. | [lib/services/auth_api.dart:4011](../lib/services/auth_api.dart#L4011) |
@@ -1130,14 +1134,14 @@ Kaynak: `lib` (`ApiException(...)`, `_errorMessage =`, `lib/services` içindeki 
 | Cihaz sahiplenme sırasında bir hata oluştu. | [lib/ui/widgets/claim_device_dialog.dart:83](../lib/ui/widgets/claim_device_dialog.dart#L83) |
 | Cihaz şu an çevrimdışı. Cihazın internet bağlantısını kontrol edin. | [lib/services/auth_api.dart:4041](../lib/services/auth_api.dart#L4041) |
 | Cihazlar yüklenirken bir sorun oluştu. | [lib/ui/views/individual_home_view.dart:208](../lib/ui/views/individual_home_view.dart#L208) |
-| Çok fazla bekleyen bildiriminiz var. Yönetim karar verdikten sonra yenisini gönderin. | [lib/services/payment_notice_api.dart:199](../lib/services/payment_notice_api.dart#L199) |
+| Çok fazla bekleyen bildiriminiz var. Yönetim karar verdikten sonra yenisini gönderin. | [lib/services/payment_notice_api.dart:211](../lib/services/payment_notice_api.dart#L211) |
 | Çok fazla hatalı deneme yapıldı.$wait | [lib/services/auth_api.dart:3981](../lib/services/auth_api.dart#L3981) |
 | Çok fazla istek gönderildi. | [lib/services/auth_api.dart:3865](../lib/services/auth_api.dart#L3865) |
 | Çok fazla istek. Biraz sonra tekrar deneyin. | [lib/services/site_audit_log_api.dart:112](../lib/services/site_audit_log_api.dart#L112) |
 | Çok fazla kayıt var. Süzgeçle daraltın. | [lib/services/bulk_api.dart:43](../lib/services/bulk_api.dart#L43) |
 | Daire bulunamadı. | [lib/services/auth_api.dart:4094](../lib/services/auth_api.dart#L4094) |
-| Dairede İşletme ve Fon borcu birlikte açık; dekontu tek tek inceleyip ödemenin işleneceği hesabı seçin. | [lib/services/payment_notice_api.dart:208](../lib/services/payment_notice_api.dart#L208) |
-| Dekontun tarihi kapalı bir döneme düşüyor. "Açık döneme yaz" seçeneğiyle bugünün tarihine işleyebilirsiniz. | [lib/services/payment_notice_api.dart:203](../lib/services/payment_notice_api.dart#L203) |
+| Dairede İşletme ve Fon borcu birlikte açık; dekontu tek tek inceleyip ödemenin işleneceği hesabı seçin. | [lib/services/payment_notice_api.dart:220](../lib/services/payment_notice_api.dart#L220) |
+| Dekontun tarihi kapalı bir döneme düşüyor. "Açık döneme yaz" seçeneğiyle bugünün tarihine işleyebilirsiniz. | [lib/services/payment_notice_api.dart:215](../lib/services/payment_notice_api.dart#L215) |
 | Devam etmek için onay kutusunu işaretleyin. | [lib/services/bulk_api.dart:41](../lib/services/bulk_api.dart#L41) |
 | Devam etmek için şifrenizi girin. | [lib/services/account_api.dart:392](../lib/services/account_api.dart#L392) |
 | Devir kayıtları değişti. Ayrıntıyı yenileyip tekrar inceleyin. | [lib/services/bulk_api.dart:58](../lib/services/bulk_api.dart#L58) |
@@ -1147,12 +1151,12 @@ Kaynak: `lib` (`ApiException(...)`, `_errorMessage =`, `lib/services` içindeki 
 | Dosya alınamadı. İnternet bağlantınızı kontrol edip tekrar deneyin. | [lib/services/feedback_api.dart:158](../lib/services/feedback_api.dart#L158) |
 | Dosya beklenen biçimde değil. Tekrar deneyin. | [lib/services/feedback_api.dart:165](../lib/services/feedback_api.dart#L165) |
 | Dosya boyutu yükleme sırasında değişti. Dosyayı yeniden seçip tekrar deneyin. | [lib/services/document_api.dart:924](../lib/services/document_api.dart#L924) |
-| Dosya çok büyük (en fazla 10 MB). | [lib/services/payment_notice_api.dart:177](../lib/services/payment_notice_api.dart#L177) |
-| Dosya çok büyük. | [lib/services/finance_4b_api.dart:1624](../lib/services/finance_4b_api.dart#L1624) |
-| Dosya çok büyük. | [lib/services/finance_4b_api.dart:1631](../lib/services/finance_4b_api.dart#L1631) |
+| Dosya çok büyük (en fazla 10 MB). | [lib/services/payment_notice_api.dart:189](../lib/services/payment_notice_api.dart#L189) |
+| Dosya çok büyük. | [lib/services/finance_4b_api.dart:1780](../lib/services/finance_4b_api.dart#L1780) |
+| Dosya çok büyük. | [lib/services/finance_4b_api.dart:1787](../lib/services/finance_4b_api.dart#L1787) |
 | Dosya çok büyük. Daha küçük bir dosya seçin. | [lib/services/finance_4b_errors.dart:96](../lib/services/finance_4b_errors.dart#L96) |
 | Dosya içeriği uzantısıyla uyuşmuyor ya da bozuk. | [lib/services/document_api.dart:914](../lib/services/document_api.dart#L914) |
-| Dosya indirilemedi. İnternet bağlantınızı kontrol edip tekrar deneyin. | [lib/services/payment_notice_api.dart:165](../lib/services/payment_notice_api.dart#L165) |
+| Dosya indirilemedi. İnternet bağlantınızı kontrol edip tekrar deneyin. | [lib/services/payment_notice_api.dart:177](../lib/services/payment_notice_api.dart#L177) |
 | Dosya okunamadı. Yeniden seçip tekrar deneyin. | [lib/services/feedback_api.dart:75](../lib/services/feedback_api.dart#L75) |
 | Dosya taraması şu an yapılamıyor. Biraz sonra tekrar deneyin. | [lib/services/document_api.dart:920](../lib/services/document_api.dart#L920) |
 | Dosya zararlı yazılım içerdiği için reddedildi. | [lib/services/document_api.dart:918](../lib/services/document_api.dart#L918) |
@@ -1213,10 +1217,13 @@ Kaynak: `lib` (`ApiException(...)`, `_errorMessage =`, `lib/services` içindeki 
 | Hesabı olan kişinin bilgileri kişinin kendi profilinden değişir. | [lib/services/auth_api.dart:4090](../lib/services/auth_api.dart#L4090) |
 | Hesabınız şu anda silinemez. Nedenleri aşağıda görebilirsiniz. | [lib/services/account_api.dart:400](../lib/services/account_api.dart#L400) |
 | Hesap bakiyesi siz bakarken değişti. Güncel bakiyeyi kontrol edip yeniden onaylayın. | [lib/services/finance_4b_errors.dart:68](../lib/services/finance_4b_errors.dart#L68) |
-| Hesap bilgisi işlenemedi. Lütfen tekrar deneyin. | [lib/services/finance_4b_api.dart:1329](../lib/services/finance_4b_api.dart#L1329) |
+| Hesap bilgisi işlenemedi. Lütfen tekrar deneyin. | [lib/services/finance_4b_api.dart:1362](../lib/services/finance_4b_api.dart#L1362) |
 | Hesap bulunamadı. | [lib/services/finance_4b_errors.dart:48](../lib/services/finance_4b_errors.dart#L48) |
 | Hesap bulunamadı. | [lib/services/finance_payment_api.dart:139](../lib/services/finance_payment_api.dart#L139) |
 | IBAN geçersiz. TR ile başlayan 26 haneli, sağlama basamağı doğru bir IBAN girin. | [lib/services/finance_payment_api.dart:133](../lib/services/finance_payment_api.dart#L133) |
+| İade makbuzu şu anda düzenlenemiyor. Biraz sonra tekrar deneyin. | [lib/services/finance_4b_errors.dart:160](../lib/services/finance_4b_errors.dart#L160) |
+| İade talebi bulunamadı. Listeyi yenileyip kontrol edin. | [lib/services/finance_4b_errors.dart:152](../lib/services/finance_4b_errors.dart#L152) |
+| İade tutarı hesaptaki alacaktan (bekleyen talepler dahil) fazla olamaz. Güncel alacağı kontrol edin. | [lib/services/finance_4b_errors.dart:148](../lib/services/finance_4b_errors.dart#L148) |
 | İkili Excel biçimi (.xlsb) desteklenmez. Dosyayı .xlsx ya da CSV olarak kaydedin. | [lib/services/bulk_file_parser.dart:88](../lib/services/bulk_file_parser.dart#L88) |
 | İlişki kaydı bulunamadı. | [lib/services/auth_api.dart:3878](../lib/services/auth_api.dart#L3878) |
 | İş takibi bu site için kapalı. | [lib/services/work_tracking_api.dart:930](../lib/services/work_tracking_api.dart#L930) |
@@ -1287,13 +1294,13 @@ Kaynak: `lib` (`ApiException(...)`, `_errorMessage =`, `lib/services` içindeki 
 | Oturum açmanız gerekmektedir. | [lib/services/emergency_api.dart:43](../lib/services/emergency_api.dart#L43) |
 | Oturum açmanız gerekmektedir. | [lib/services/equipment_api.dart:651](../lib/services/equipment_api.dart#L651) |
 | Oturum açmanız gerekmektedir. | [lib/services/feedback_api.dart:341](../lib/services/feedback_api.dart#L341) |
-| Oturum açmanız gerekmektedir. | [lib/services/finance_4b_api.dart:1789](../lib/services/finance_4b_api.dart#L1789) |
+| Oturum açmanız gerekmektedir. | [lib/services/finance_4b_api.dart:1945](../lib/services/finance_4b_api.dart#L1945) |
 | Oturum açmanız gerekmektedir. | [lib/services/finance_payment_api.dart:177](../lib/services/finance_payment_api.dart#L177) |
 | Oturum açmanız gerekmektedir. | [lib/services/management_company_api.dart:20](../lib/services/management_company_api.dart#L20) |
 | Oturum açmanız gerekmektedir. | [lib/services/menu_layout_api.dart:39](../lib/services/menu_layout_api.dart#L39) |
 | Oturum açmanız gerekmektedir. | [lib/services/meter_api.dart:260](../lib/services/meter_api.dart#L260) |
 | Oturum açmanız gerekmektedir. | [lib/services/neighbor_board_api.dart:61](../lib/services/neighbor_board_api.dart#L61) |
-| Oturum açmanız gerekmektedir. | [lib/services/payment_notice_api.dart:248](../lib/services/payment_notice_api.dart#L248) |
+| Oturum açmanız gerekmektedir. | [lib/services/payment_notice_api.dart:260](../lib/services/payment_notice_api.dart#L260) |
 | Oturum açmanız gerekmektedir. | [lib/services/plate_recognition_api.dart:447](../lib/services/plate_recognition_api.dart#L447) |
 | Oturum açmanız gerekmektedir. | [lib/services/platform_rules_api.dart:274](../lib/services/platform_rules_api.dart#L274) |
 | Oturum açmanız gerekmektedir. | [lib/services/push_service.dart:707](../lib/services/push_service.dart#L707) |
@@ -1308,7 +1315,7 @@ Kaynak: `lib` (`ApiException(...)`, `_errorMessage =`, `lib/services` içindeki 
 | Oturum bulunamadi. | [lib/services/auth_service.dart:3474](../lib/services/auth_service.dart#L3474) |
 | Ödeme ile site açma yakında. | [lib/services/auth_api.dart:4133](../lib/services/auth_api.dart#L4133) |
 | Önce ilgili dönemi kapatın. Tazminat yalnızca kapatılmış ay için hesaplanır. | [lib/services/finance_4b_errors.dart:31](../lib/services/finance_4b_errors.dart#L31) |
-| Önemli uyarılar var. Her birini gözden geçirdiğinizi işaretleyin. | [lib/services/payment_notice_api.dart:201](../lib/services/payment_notice_api.dart#L201) |
+| Önemli uyarılar var. Her birini gözden geçirdiğinizi işaretleyin. | [lib/services/payment_notice_api.dart:213](../lib/services/payment_notice_api.dart#L213) |
 | Önizlemeden sonra kayıtlar değişti. Önizlemeyi yenileyip tekrar deneyin. | [lib/services/bank_import_api.dart:23](../lib/services/bank_import_api.dart#L23) |
 | Plaka biçimi geçersiz. Örnek: 34 ABC 123 (il kodu 01-81). | [lib/services/auth_api.dart:4096](../lib/services/auth_api.dart#L4096) |
 | Plaka Tanıma modülü bu site için kapalı. | [lib/services/plate_recognition_api.dart:424](../lib/services/plate_recognition_api.dart#L424) |
@@ -1324,6 +1331,7 @@ Kaynak: `lib` (`ApiException(...)`, `_errorMessage =`, `lib/services` içindeki 
 | Seçilen dosya boş. Başka bir dosya seçin. | [lib/services/document_api.dart:922](../lib/services/document_api.dart#L922) |
 | Seçilen firma pasif. Başka bir firma seçin ya da firmayı Firmalar sekmesinden etkinleştirin. | [lib/services/contract_api.dart:424](../lib/services/contract_api.dart#L424) |
 | Seçilen hedefte duyuruyu alacak kimse yok. Hedefi değiştirin. | [lib/services/auth_api.dart:4107](../lib/services/auth_api.dart#L4107) |
+| Seçilen kasada yeterli nakit yok. Başka bir hesap seçin ya da önce kasaya para girişi yapın. | [lib/services/finance_4b_errors.dart:158](../lib/services/finance_4b_errors.dart#L158) |
 | Seçilen kişi bu talebe atanamaz. Listeyi yenileyip tekrar deneyin. | [lib/services/work_tracking_api.dart:954](../lib/services/work_tracking_api.dart#L954) |
 | Seçilen saat alanın açık saatlerine uymuyor. Boş saatleri yenileyip başka bir saat seçin. | [lib/services/reservation_api.dart:668](../lib/services/reservation_api.dart#L668) |
 | Seçtiğiniz saat bu arada doldu. Boş saatleri yenileyip başka bir saat seçin. | [lib/services/reservation_api.dart:676](../lib/services/reservation_api.dart#L676) |
@@ -1373,11 +1381,11 @@ Kaynak: `lib` (`ApiException(...)`, `_errorMessage =`, `lib/services` içindeki 
 | Sunucu yanıtı beklenen biçimde değil. Lütfen tekrar deneyin. | [lib/services/survey_api.dart:204](../lib/services/survey_api.dart#L204) |
 | Sunucu yanıtı okunamadı. Lütfen tekrar deneyin. | [lib/services/bank_import_api.dart:276](../lib/services/bank_import_api.dart#L276) |
 | Sunucu yanıtı okunamadı. Lütfen tekrar deneyin. | [lib/services/decision_book_api.dart:395](../lib/services/decision_book_api.dart#L395) |
-| Sunucu yanıtı okunamadı. Lütfen tekrar deneyin. | [lib/services/finance_4b_api.dart:1573](../lib/services/finance_4b_api.dart#L1573) |
-| Sunucu yanıtı okunamadı. Lütfen tekrar deneyin. | [lib/services/finance_4b_api.dart:1577](../lib/services/finance_4b_api.dart#L1577) |
+| Sunucu yanıtı okunamadı. Lütfen tekrar deneyin. | [lib/services/finance_4b_api.dart:1729](../lib/services/finance_4b_api.dart#L1729) |
+| Sunucu yanıtı okunamadı. Lütfen tekrar deneyin. | [lib/services/finance_4b_api.dart:1733](../lib/services/finance_4b_api.dart#L1733) |
 | Sunucu yanıtı okunamadı. Lütfen tekrar deneyin. | [lib/services/finance_payment_api.dart:96](../lib/services/finance_payment_api.dart#L96) |
 | Sunucu yanıtı okunamadı. Lütfen tekrar deneyin. | [lib/services/meter_api.dart:184](../lib/services/meter_api.dart#L184) |
-| Sunucu yanıtı okunamadı. Lütfen tekrar deneyin. | [lib/services/payment_notice_api.dart:152](../lib/services/payment_notice_api.dart#L152) |
+| Sunucu yanıtı okunamadı. Lütfen tekrar deneyin. | [lib/services/payment_notice_api.dart:164](../lib/services/payment_notice_api.dart#L164) |
 | Sunucu yanıtı okunamadı. Lütfen tekrar deneyin. | [lib/services/platform_rules_api.dart:243](../lib/services/platform_rules_api.dart#L243) |
 | Sunucu yanıtı okunamadı. Lütfen tekrar deneyin. | [lib/services/survey_api.dart:407](../lib/services/survey_api.dart#L407) |
 | Sunucuda beklenmeyen bir hata oluştu ($status). Lütfen biraz sonra tekrar deneyin. | [lib/services/auth_api.dart:4233](../lib/services/auth_api.dart#L4233) |
@@ -1416,7 +1424,7 @@ Kaynak: `lib` (`ApiException(...)`, `_errorMessage =`, `lib/services` içindeki 
 | Sunucuya bağlanılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin. | [lib/services/management_company_api.dart:34](../lib/services/management_company_api.dart#L34) |
 | Sunucuya bağlanılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin. | [lib/services/menu_layout_api.dart:51](../lib/services/menu_layout_api.dart#L51) |
 | Sunucuya bağlanılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin. | [lib/services/neighbor_board_api.dart:74](../lib/services/neighbor_board_api.dart#L74) |
-| Sunucuya bağlanılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin. | [lib/services/payment_notice_api.dart:148](../lib/services/payment_notice_api.dart#L148) |
+| Sunucuya bağlanılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin. | [lib/services/payment_notice_api.dart:160](../lib/services/payment_notice_api.dart#L160) |
 | Sunucuya bağlanılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin. | [lib/services/plate_recognition_api.dart:393](../lib/services/plate_recognition_api.dart#L393) |
 | Sunucuya bağlanılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin. | [lib/services/site_audit_log_api.dart:67](../lib/services/site_audit_log_api.dart#L67) |
 | Sunucuya bağlanılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin. | [lib/ui/widgets/drive_storage_card.dart:104](../lib/ui/widgets/drive_storage_card.dart#L104) |
@@ -1427,7 +1435,7 @@ Kaynak: `lib` (`ApiException(...)`, `_errorMessage =`, `lib/services` içindeki 
 | Sunucuya ulasilamadi. Internet veya DNS baglantisini kontrol edin. | [lib/services/auth_api.dart:4247](../lib/services/auth_api.dart#L4247) |
 | Sunucuya ulaşılamadı. Ağ bağlantınızı kontrol edip tekrar deneyin. | [lib/services/bank_import_api.dart:286](../lib/services/bank_import_api.dart#L286) |
 | Sunucuya ulaşılamadı. Ağ bağlantınızı kontrol edip tekrar deneyin. | [lib/services/meter_api.dart:204](../lib/services/meter_api.dart#L204) |
-| Sunucuya ulaşılamadı. Ağ bağlantınızı kontrol edip tekrar deneyin. | [lib/services/payment_notice_api.dart:175](../lib/services/payment_notice_api.dart#L175) |
+| Sunucuya ulaşılamadı. Ağ bağlantınızı kontrol edip tekrar deneyin. | [lib/services/payment_notice_api.dart:187](../lib/services/payment_notice_api.dart#L187) |
 | Sunucuya ulaşılamadı. İnternet bağlantınızı kontrol edin. | [lib/services/platform_rules_api.dart:147](../lib/services/platform_rules_api.dart#L147) |
 | Süzgeç geçersiz. Süzgeçleri temizleyip tekrar deneyin. | [lib/services/contract_api.dart:439](../lib/services/contract_api.dart#L439) |
 | Süzgeç geçersiz. Süzgeçleri temizleyip tekrar deneyin. | [lib/services/contract_api.dart:452](../lib/services/contract_api.dart#L452) |
@@ -1440,7 +1448,7 @@ Kaynak: `lib` (`ApiException(...)`, `_errorMessage =`, `lib/services` içindeki 
 | Şifreniz hatalı. Lütfen kontrol edip tekrar deneyin. | [lib/services/account_api.dart:394](../lib/services/account_api.dart#L394) |
 | Şifrenizi değiştirmek için mevcut şifrenizi girin. | [lib/services/auth_service.dart:3362](../lib/services/auth_service.dart#L3362) |
 | Şifrenizi değiştirmek için mevcut şifrenizi girmelisiniz. | [lib/services/auth_api.dart:3975](../lib/services/auth_api.dart#L3975) |
-| Tahsilatın gireceği kasa ya da banka hesabını seçin. | [lib/services/payment_notice_api.dart:205](../lib/services/payment_notice_api.dart#L205) |
+| Tahsilatın gireceği kasa ya da banka hesabını seçin. | [lib/services/payment_notice_api.dart:217](../lib/services/payment_notice_api.dart#L217) |
 | Talebin durumu bu şekilde değiştirilemez. Talep başka biri tarafından güncellenmiş olabilir; yenileyip tekrar deneyin. | [lib/services/work_tracking_api.dart:963](../lib/services/work_tracking_api.dart#L963) |
 | Talep bulunamadı ya da erişiminiz yok. | [lib/services/reservation_api.dart:645](../lib/services/reservation_api.dart#L645) |
 | Talep bulunamadı ya da erişiminiz yok. | [lib/services/work_tracking_api.dart:938](../lib/services/work_tracking_api.dart#L938) |
@@ -1462,12 +1470,13 @@ Kaynak: `lib` (`ApiException(...)`, `_errorMessage =`, `lib/services` içindeki 
 | Veriler değişti. Önizleme yenilendi, tekrar inceleyin. | [lib/services/bulk_api.dart:27](../lib/services/bulk_api.dart#L27) |
 | Veriler önizlemeden sonra değişti. Önizlemeyi yenileyip toplamı kontrol edin. | [lib/services/auth_api.dart:4137](../lib/services/auth_api.dart#L4137) |
 | Yalnız .xlsx ve .csv dosyaları yüklenebilir. | [lib/services/bulk_file_parser.dart:92](../lib/services/bulk_file_parser.dart#L92) |
+| Yalnız onaylanmış iade geri alınabilir. Listeyi yenileyip kontrol edin. | [lib/services/finance_4b_errors.dart:156](../lib/services/finance_4b_errors.dart#L156) |
 | Yalnızca tahsilat düzeltilebilir. Borç için kaydı iptal edin. | [lib/services/auth_api.dart:4151](../lib/services/auth_api.dart#L4151) |
 | Yayın zamanı geçersiz. En az 1 dakika, en çok 1 yıl sonrası seçin. | [lib/services/auth_api.dart:4111](../lib/services/auth_api.dart#L4111) |
 | Yeni şifreler birbiriyle eşleşmiyor. | [lib/ui/dialogs/force_change_password_dialog.dart:82](../lib/ui/dialogs/force_change_password_dialog.dart#L82) |
 | Yetkilendirme servisi bulunamadı. | [lib/ui/widgets/dynamic_qr_pass_modal.dart:433](../lib/ui/widgets/dynamic_qr_pass_modal.dart#L433) |
 | Yükleme adresi geçersiz. İşlemi baştan başlatın. | [lib/services/document_api.dart:221](../lib/services/document_api.dart#L221) |
-| Yükleme adresi geçersiz. Lütfen tekrar deneyin. | [lib/services/finance_4b_api.dart:861](../lib/services/finance_4b_api.dart#L861) |
+| Yükleme adresi geçersiz. Lütfen tekrar deneyin. | [lib/services/finance_4b_api.dart:864](../lib/services/finance_4b_api.dart#L864) |
 | Yükleme isteği eksik gönderildi. Tekrar deneyin. | [lib/services/document_api.dart:926](../lib/services/document_api.dart#L926) |
 | Yükleme sunucusu şu an meşgul.$wait | [lib/services/finance_4b_errors.dart:105](../lib/services/finance_4b_errors.dart#L105) |
 | Yükleme süresi doldu. Tekrar deneyin. | [lib/services/work_tracking_api.dart:1019](../lib/services/work_tracking_api.dart#L1019) |

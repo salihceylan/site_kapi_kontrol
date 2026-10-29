@@ -363,6 +363,7 @@ class WorkManagerViewState extends State<WorkManagerView> {
     return (_counts[WorkStatus.yeni] ?? 0) +
         (_counts[WorkStatus.islemde] ?? 0) +
         (_counts[WorkStatus.beklemede] ?? 0) +
+        (_counts[WorkStatus.firmada] ?? 0) +
         (_counts[WorkStatus.cozuldu] ?? 0);
   }
 

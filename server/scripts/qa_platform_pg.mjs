@@ -10233,6 +10233,8 @@ async function sectionAccount() {
     'equipment_maintenance_logs.created_by': 'TOMBSTONE (bakim kaydi siteye aittir)',
     'equipment_quotes.created_by': 'TOMBSTONE (teklif siteye aittir)',
     'expense_natures.set_by': 'TOMBSTONE (gider niteligini belirleyen JOIN ile Silinmis Kullanici)',
+    'expense_check_marks.checked_by': 'TOMBSTONE (kontrol izi siteye aittir; kontrol eden JOIN ile Silinmis Kullanici; 110)',
+    'payment_notice_check_marks.checked_by': 'TOMBSTONE (kontrol izi siteye aittir; kontrol eden JOIN ile Silinmis Kullanici; 110)',
     'finance_account_bank_details.created_by': 'TOMBSTONE (hesap bilgisi siteye aittir)',
     'finance_fund_transfers.created_by': 'TOMBSTONE (degismez kasa aktarimi; 080)',
     'finance_opening_reverts.reverted_by': 'TOMBSTONE (degismez acilis geri alma kaydi)',

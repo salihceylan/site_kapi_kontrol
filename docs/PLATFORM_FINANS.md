@@ -319,7 +319,7 @@ kez sayılır, öğeleri hesap adıyla); hatırlatma önizlemesinde hesap sayıs
 
 Karar F5: gerçekçi bir site için ELLE hesaplanmış tablo; dağıtım, yuvarlama, gecikme tazminatı ve mahsup kodu bu tabloyla kuruşu kuruşuna
 karşılaştırılır, tutmazsa test düşer. Beklenen değerlerin hiçbiri kod çalıştırılarak üretilmedi; her birinin hesap adımları fikstürde yazılıdır.
-Cenk'in gerçek tablosu gelince ikinci set olarak eklenecek.
+Cenk'in gerçek tablosu gelince ayrı bir set olarak eklenecek (Dalga B kurallarını kapsayan ikinci set: aşağıda «Altın veri seti 2»).
 
 - Fikstür (site, senaryolar, adım adım hesap): `server/test/fixtures/finance_golden_site.js`
 - Test: `server/test/finance_golden_dataset.test.js` (gerçek `buildDistributionPlan`, `lateFeeForApartment` + gün gün kaba kuvvet tanımı, `m1Remainders`;
@@ -406,6 +406,40 @@ sınanır).
 | OC4 (B-3) | ev sahibi hesabı alacağı 500,00 TL; kiracı hesabı Ekim aidatı 750,00 TL | kiracı borcu 75.000 AÇIK kalır (mahsup hesap bazında); tek hesapta karışsaydı 25.000 |
 | OC5 (A-6) | Ekim aidatı 1.250,00 TL (vade 05.10) + 01.10 devir alacağı 500,00 TL; Ekim 2026, daily_30 | S = 26 x 75.000 = 1.950.000, tazminat 3.250 (alacaksız 5.417); 20.10'da alacak iptal edilirse S = 2.550.000, tazminat 4.250 |
 | OC6 (site) | D1 eşit aidat + A-6 500,00 ve B-12 8.000,00 TL devir alacağı | A-6 304.167 borçlu, B-12 -445.834 alacaklı; borçlu toplamı 8.095.834, alacak toplamı 445.834, net 7.650.000 |
+
+## Altın veri seti 2 (Dalga B, P2-5; 2026-10-29)
+
+Birinci set çekirdeği (dağıtım, yuvarlama, tazminat, mahsup) kuruşu kuruşuna sınar; ikinci set **Dalga B kurallarını küçük bir sitede uçtan uca** sınar ve örnek site olarak kurulabilir. Cenk'in gerçek tablosu gelince üçüncü set olarak eklenecek.
+Beklenen değerlerin hiçbiri kod çalıştırılarak üretilmedi; adım adım elle hesap fikstürdedir (sapma çıkarsa önce elle hesap iki kez yeniden yapılır). İlk koşuda gerçek PostgreSQL dahil bütün kontroller tuttu; sabitlenen davranışlar aşağıda.
+
+- Fikstür (senaryo + beklenen + elle hesap): `server/test/fixtures/finance_golden_site_2.js`. Çalıştırıcı (gerçek servisler, HTTP yok, sabit saat 2026-10-20): `server/scripts/lib/golden2_runner.mjs`.
+- Saf test (veritabanı yok, 23 kontrol): `server/test/finance_golden_dataset_2.test.js` (gerçek `buildDistributionPlan`, `accountForCharge`, `m1Remainders`, `planLiabilityTransfer` / `transferWrites` / `planTransferReversal`, `allocateFunds`, `lateFeeForApartment` + gün gün kaba kuvvet).
+- Gerçek PostgreSQL: `server/scripts/qa_finance_golden2_pg.mjs` (tek kullanımlık yerel veritabanı; `--runs 2` AYRI sitelerde iki koşu, gözlemler kimliksiz kanonik JSON olarak birebir aynı olmalı, `GOLDEN2_DIGEST` yazar; iki ayrı süreç koşusunun özeti de aynı).
+- Örnek site tohumu: `tools/demo_seed/golden_site.mjs` (hedef koruması + `demo_seed_registry` geri alma; `tools/demo_seed/README.md` "Altin veri seti 2 ornek sitesi").
+
+**Site:** `A Blok`, 6 daire; A-2, A-4, A-6 kiracılı (oturan kiracı, sorumlu = kiracı), A-1, A-3, A-5 malik oturan. Arsa payları 12 / 14 / 16 / 18 / 20 / 20 (payda 100); kategoriler 1+1, 2+1, 2+1, 3+1, 3+1, 3+1.
+
+| Adım | Girdi | Elle hesap / beklenen |
+| --- | --- | --- |
+| Devir alacağı (K16) | A-5, `-500,00` (2026-09-01) | A-5 ev sahibi hesabı −50.000; tahsilat sayılmaz; M1 ile aidattan düşer |
+| Aylık aidat, **kategori** tabanı (2026-09, 2026-10) | 1+1 120.000, 2+1 150.000, 3+1 180.000 | dönem toplamı 960.000; oturanın hesabı: kiracılı daireler kiracı hesabı |
+| Asansör bakım payı, **daire başı sabit** | 25.000, oturan, vade 11-10 | toplam 150.000; vadesi gelecek: devredilmez, gecikmez |
+| Çatı onarımı, **arsa payı** | 1.000.003, ev sahibi (Fon), vade 11-20 | 120.000 / 140.000 / 160.000 / 180.001 / 200.001 / 200.001 (artan 3 kuruş en büyük kalanlara A-5, A-6, A-4); kiracılı dairede de ev sahibi hesabı |
+| Ödemeler | A-1 2 x 120.000; A-2 kiracı 200.000; A-3 600.000; A-5 400.000; A-6 kiracı 2 x 180.000 | bakiye sonrası: A-3 −115.000 (alacak), A-5 135.001, A-2 kiracı 125.000 |
+| Mahsup | A-2 kiracı; A-5 | A-2: Eylül 0, Ekim 100.000, asansör 25.000 açık. A-5: çatı 135.001 açık (devir alacağı olmasaydı 185.001) |
+| K17 adayları | saat 2026-10-20 | A-4 (2 kalem, 360.000, en eski vade 09-05) ve A-2 (1 kalem, 100.000); A-6 aday DEĞİL (yalnız gelecek vadeli borç); toplam 460.000 |
+| A-2 devir + geri alma (K1) | Ekim aidatı 150.000, ödenmiş kısım 50.000 | devir: kiracı 125.000 → 25.000, ev sahibi 140.000 → 240.000, 3 satır; geri alma: tam eski değerler, 6 satır kalır |
+| A-4 "kiracı vermezse malik öder" (K17 + K3) | 360.000 ödenmemiş | seçimsiz ödeme 400 `FUND_CHOICE_REQUIRED` (açık: İşletme 360.000, Fon 180.001); bayat toplam 409; devir: kiracı 385.000 → 25.000, ev sahibi 180.001 → 540.001; malik İşletme 360.000 + Fon 180.001 öder → 0; geri alma 409 `LIABILITY_TRANSFER_OWNER_PAID` |
+| A-3 iade (K4) | alacak 115.000 | 120.000 talebi 409 `REFUND_EXCEEDS_CREDIT`; 100.000 iade onayı: bakiye −15.000, Kasa 1.800.000 → 1.700.000, makbuz sıra 1 |
+| Kasa değişmezi | — | İşletme tahsilatı 1.820.000 + Fon 405.001 + avans 15.000 = hesaplar 2.240.001 (Kasa 1.700.000 + Banka 540.001) |
+
+**Gecikme tazminatı (Ekim 2026, `daily_30`, ek gün 0, %5) — devrin tabana etkisi:** A-2 kiracı 2.500.000 kuruş·gün → **4.167**; A-3 ev sahibi 1.950.000 → **3.250**; A-4 kiracı 5.940.000 → **9.900**; A-5 ev sahibi (devir alacağıyla) 1.270.000 → **2.117**; toplam **19.434**.
+Sabitlenen iki davranış (kod değişirse test bunu söyler, kararı sahibi verir):
+- **Devir günü tabandan düşer.** Devrin yazdığı kalemler kayıt günüyle (10-20) yazılır ve «geç kaydedilen kalem kayıt gününden önce gecikmeye girmez» kuralıyla ertesi günden gecikir; kiracıdaki asıl kalem ters kayıt gününden itibaren sayılmaz. Sonuç: devir (ve geri alma) ile
+  gecikme tabanı **bir gün eksik** hesaplanır (A-2: devir olmasaydı 2.600.000 → 4.333; A-4 devir olmasaydı kiracı hesabında 10.260.000 → 17.100, devirle kiracıda 5.940.000 + ev sahibinde 0 çünkü aynı gün ödedi).
+- **Devir alacağı tabanı düşürür** (A-5: 1.620.000 → 1.270.000, 2.700 → 2.117) ve iade sonradan yazılan borçla (kayıt günü 10-20) önceki günlerin tabanını değiştirmez.
+
+**Bozma denemeleri (2026-10-29):** tazminat eşiğinde kayıt gününü yok sayma ve devirde malik borcunu kalan yerine asıl tutarla yazma değişiklikleri saf testte VE gerçek PostgreSQL betiğinde yakalandı (ikisi de geri alındı).
 
 ## Devir bakiyesi (F4, 2026-10-21)
 
@@ -526,6 +560,17 @@ hesabı VE avansı eşit azaltır.
 **Uçlar.** Sakin: `POST /app/my-finance/refund-requests` `{ apartment_id, amount_minor, note?, idempotency_key }`, `GET …`, `POST …/:id/cancel`. Yönetici (`/manager/sites/:siteCode/finance/refunds`; yazma = yönetici / süper,
 okuma = + kurul adsız, görevli / sakin 403): `GET` (süzgeç `status`, `apartment_id`, `before_id`), `GET /:id`, `POST` (sakin adına talep: + `account_party`), `POST /:id/approve { pay_account_id, idempotency_key }`,
 `POST /:id/reject { reason, idempotency_key }`, `POST /:id/reverse { reason, idempotency_key }`. Dikkat kaydı: `refund_requests` (bekleyen talep sayısı + toplamı). Makbuz PDF'i istemcide üretilir (sunucu anlık görüntü + kod verir).
+
+**İstemci (Dalga B ekranları).** Yönetici: Daireler sekmesinde onay bekleyen talep varsa uyarı kartı (sayı + toplam, «İadeleri İncele») ve her durumda «İade talepleri» düğmesi (kurul listeyi açar, eylem görmez);
+dikkat barı `refund_requests` satırı «N iade talebi onayınızı bekliyor, toplam …» + «İadeleri İncele» (pencereyi doğrudan açar). «İade Talepleri» penceresi: süzgeç (Bekleyen / İade edilen / Tümü), «Onayla» (ödeme hesabı
+YÖNETİCİ seçer; nakit hesapta bakiye yetmezse onaydan önce uyarı + sunucu 409), «Reddet» (gerekçe zorunlu, sakine gösterilir), onaylı iadede «Geri Al» (nedenli) ve «Makbuzu Gör» (IA-yıl-sıra, hesap, yöntem, doğrulama kodu; geri
+alınan iadenin makbuzu «İptal edildi»; iade makbuzu şimdilik yalnız ekranda görüntülenir, PDF / yazdır YOK). Sakin: Borcum kartında alacak varsa «Fazla ödememi iade et» (tutar = alacak − bekleyen talepler; sınır sunucuda da sınanır), talep listesi (Onay bekliyor / İade edildi + makbuz /
+Reddedildi + neden / Geri çekildi / İade geri alındı), bekleyen talep için «Talebi Geri Çek». Alacak ve talep yoksa bölüm çizilmez. Dosyalar: `lib/models/finance_refund.dart`, `lib/ui/dialogs/finance_refunds_dialog.dart`,
+`finance_refund_approve_dialog.dart`, `finance_refund_receipt_dialog.dart`, `my_refund_request_dialog.dart`, `lib/ui/widgets/finance_refunds_entry.dart`, `my_refund_section.dart`.
+
+**KVKK bütünlüğü (karar kayıtlı).** Kişisel veri dışa aktarma (`account_export_service`) sakinin KENDİ açtığı iade taleplerini `refund_requests_made` bölümüne koyar (daire, hesap türü, tutar, kendi notu, durum, tarihler, iade makbuzu
+numarası); yönetimin ret gerekçesi, çıkış hesabı, geri alma nedeni ve yönetici adına açılan talepler dışarıda bırakılır (`excluded` açıklar). **Bekleyen iade talebi hesap silmeyi ENGELLEMEZ**: silmede talep `cancelled` olur ve işlem
+izine `finance.refund.cancelled` (`reason: account_deleted`; not YOK) yazılır, silme özetine `refunds_cancelled` eklenir (`account_refund_cleanup.js`); onaylı / reddedilmiş talepler değişmez (defter eklemelidir).
 
 **Doğrulama.** Birim: `finance_funds_refund.test.js` (allocateFunds + rastgele özellik), `finance_liability_plan.test.js`, `finance_refunds.test.js`, `finance_*_schema.test.js`, `finance_devir_iade_routes.test.js` (yetki matrisi).
 Gerçek PostgreSQL: `server/scripts/qa_finance_devir_iade.mjs` (devir / geri alma, iade talep → onay → makbuz → geri alma, kasa değişmezi, yarışlar, DB korumaları; 70 kontrol).

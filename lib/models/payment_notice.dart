@@ -2,6 +2,8 @@
 //
 // Bildirim deftere YAZILMAZ: yönetici onaylayınca tahsilat (ve makbuz) dekont tarihiyle oluşur; iptalde neden sakine gösterilir.
 
+import 'package:site_kapi_kontrol/models/check_mark.dart';
+
 String? _s(Object? v) => v is String && v.trim().isNotEmpty ? v : null;
 int _i(Object? v, [int fallback = 0]) => v is num ? v.toInt() : (v is String ? int.tryParse(v) ?? fallback : fallback);
 DateTime? _d(Object? v) => DateTime.tryParse(_s(v) ?? '');
@@ -68,6 +70,7 @@ class PaymentNotice {
     this.ledgerEntryId,
     this.linkedExisting = false,
     this.unseenDecision = false,
+    this.checkMark,
   });
 
   factory PaymentNotice.fromJson(Map<String, dynamic> j) => PaymentNotice(
@@ -97,6 +100,7 @@ class PaymentNotice {
     ledgerEntryId: j['ledger_entry_id'] == null ? null : _i(j['ledger_entry_id']),
     linkedExisting: j['linked_existing'] == true,
     unseenDecision: j['unseen_decision'] == true,
+    checkMark: CheckMark.tryParse(j),
   );
 
   final int id;
@@ -125,6 +129,12 @@ class PaymentNotice {
   final int? ledgerEntryId;
   final bool linkedExisting;
   final bool unseenDecision;
+
+  /// "Kontrol edildi (kim, ne zaman)" izi (P2-20; yalnız yönetici yanıtında); onay / ret kararından ayrı muhasebe kontrolüdür. null = kontrolsüz.
+  final CheckMark? checkMark;
+
+  /// Kontrol işareti konabilir mi (sunucu: bekleyen, onaylı ya da reddedilmiş bildirim; yükleniyor / geri çekilmiş değil).
+  bool get canBeChecked => status == NoticeStatus.pending || status == NoticeStatus.approved || status == NoticeStatus.rejected;
 
   bool get isPending => status == NoticeStatus.pending;
   bool get isPdf => mimeType == 'application/pdf';

@@ -4139,7 +4139,7 @@ Devir bakiyesi dosyasındaki eksi tutar artık hata değil, ALACAKLI devirdir: d
 
 ## 141. 🏘️ Kiracı Borcunun Malike Devri, Gecikmede Öneri ve Alacak İadesi (2026-10-29, karşılaştırma raporu P1-1, P1-4, kararlar K1, K4, K17, migration 088 ve 089)
 
-Sunucu tarafı hazır ve gerçek PostgreSQL’de sınandı; borcu malike devretme ve gecikmede öneri ekranları yönetici tarafında hazırdır, alacak iadesi ekranları (yönetici ve sakin) henüz yok (sonraki iş) ve o madde “Yakında…” durumundadır. Kiracı borcunun malike devri açık, yönetici onaylı, izli ve geri alınabilir bir eylemdir; borç mutlaka tahsil edilir, kiracı vermezse mal sahibi öder: devir yalnız çıkışta değil gecikmede de yönetici önüne önerilir. Fazla ödeme varsayılan olarak alacak kalır; iade isteğe bağlı ve yönetici onaylıdır. Kiracı çıkışında malike giden bildirim şimdiden denenebilir. Devir ve bildirim metinlerinin hukuki zemini avukat onayı bekler.
+Sunucu tarafı hazır ve gerçek PostgreSQL’de sınandı; borcu malike devretme ve gecikmede öneri ekranları yönetici tarafında hazırdır, alacak iadesi ekranları (sakin “Fazla ödememi iade et”, yönetici “İade Talepleri”) da hazırdır. Kiracı borcunun malike devri açık, yönetici onaylı, izli ve geri alınabilir bir eylemdir; borç mutlaka tahsil edilir, kiracı vermezse mal sahibi öder: devir yalnız çıkışta değil gecikmede de yönetici önüne önerilir. Fazla ödeme varsayılan olarak alacak kalır; iade isteğe bağlı ve yönetici onaylıdır. Kiracı çıkışında malike giden bildirim şimdiden denenebilir. Devir ve bildirim metinlerinin hukuki zemini avukat onayı bekler.
 
 - [ ] **141.1. Kiracı çıkışında malike borç bildirimi (F64.01):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi ve ev sahibi. Ön koşul: Hem malik hem kiracısı olan bir daire; kiracı hesabında ödenmemiş borç. Hesabında ödenmemiş borç olan bir kiracı için “Daireden ayrıl” (ya da yönetici olarak “Taşındı”) işlemini yapın. Aynı işlemi borcu olmayan bir kiracıyla yapın. Ev sahibi hesabıyla uygulamadaki bildirimlere bakın.
@@ -4150,6 +4150,121 @@ Sunucu tarafı hazır ve gerçek PostgreSQL’de sınandı; borcu malike devretm
 - [ ] **141.3. Gecikmede de malike devir önerisi (F64.03):**
   - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Kiracısı oturan, vadesi geçmiş borcu olan ve malik kaydı bulunan daire. Kiracısı oturan, vadesi geçmiş ödenmemiş borcu olan ve malik kaydı bulunan bir dairede yönetici ana sayfasındaki dikkat satırlarına bakın; “Devri İncele”ye dokunun. Sonra Finans > Daireler sekmesinin üstündeki “Malike devredilebilir borç” şeridine bakın; listeden bir daireye dokunup devir penceresini açın.
   - **Beklenen Sonuç:** Borç mutlaka tahsil edilir; kiracı vermezse mal sahibi öder: gecikmiş kiracı borcu için malike devir yalnız çıkışta değil gecikmede de yönetici önüne önerilir. Ana sayfada “N dairede kiracının borcu gecikti; ev sahibine devredilebilir” satırı (liste kesildiyse “En az N”) ve “Devri İncele” düğmesi görünür; Daireler sekmesinde aynı öneri şeridi çıkar. “Malike Devredilebilir Borçlar” penceresi daireleri tutarıyla (büyük önce), neden rozetiyle (Gecikmiş borç / Kiracı ayrıldı) listeler; malik kaydı olmayan daire “Malik kaydı yok” uyarısıyla görünür ve devredilemez. Devir yine önizleme, onay ve neden ile yapılır ve geri alınabilir; devirden sonra daire listeden düşer. Kurul bu şeridi görmez.
-- [ ] **141.4. Alacak iadesi: talep, onay, ret, geri alma (F64.04) (ekran yakında; şimdilik denenmez):**
-  - **Nasıl Test Edilir:** Rol: Daire sakini ve site yöneticisi. Ön koşul: Fazla ödemesi (alacağı) olan bir daire; en az bir kasa ya da banka hesabı. 3.000 TL borca 5.000 TL ödenmiş bir dairede sakin “Fazla ödememi iade et” ile 1.500 TL iade istesin; 2.500 TL (alacaktan fazla) istemeyi de deneyin (sakin ekranı yakında). Yönetici ödeme hesabını seçip onaylasın; nakit hesapta bakiye yetmiyorsa deneyin; bir talebi gerekçeyle reddedin; onaylı bir iadeyi geri alın; onaylı iade varken o ödemeyi iptal etmeyi deneyin (yönetici ekranı yakında).
-  - **Beklenen Sonuç:** Alacaktan fazlası istenemez; başka dairenin hesabına talep açılamaz. Onayda daire alacağı 2.000 TL’den 500 TL’ye iner, seçilen hesaptan 1.500 TL çıkış görünür, IA-yıl-sıra numaralı iade makbuzu oluşur; Aidat + Fon + avans toplamı hesapların toplamına eşit kalır. Nakit hesapta bakiye yetmezse “yeterli nakit yok” uyarısı çıkar. Reddedilince gerekçe sakine görünür. İade geri alınınca alacak ve hesap bakiyesi geri gelir, makbuz iptal sayılır. Onaylı iade varken o ödemeyi iptal etmek “önce iadeyi geri alın” diye reddedilir.
+- [ ] **141.4. Alacak iadesi: talep, onay, ret, geri alma (F64.04):**
+  - **Nasıl Test Edilir:** Rol: Daire sakini ve site yöneticisi. Ön koşul: Fazla ödemesi (alacağı) olan bir daire; en az bir kasa ya da banka hesabı. 3.000 TL borca 5.000 TL ödenmiş bir dairede sakin hesabıyla Borcum kartındaki “Fazla ödememi iade et”e dokunun ve 1.500 TL iade isteyin; 2.500 TL (alacaktan fazla) yazmayı da deneyin. Yönetici hesabıyla ana sayfadaki “iade talebi onayınızı bekliyor” satırından “İadeleri İncele”ye dokunun; bir talebi Onayla ile onaylayın (ödeme Hesabını siz seçin; nakit Hesapta bakiye yetmiyorsa da deneyin), bir başkasını gerekçeyle reddedin; onaylı bir iadeyi geri alın; onaylı iade varken o ödemeyi iptal etmeyi deneyin.
+  - **Beklenen Sonuç:** Alacaktan fazlası istenemez (“İade tutarı alacağınızdan (...) fazla olamaz.” çıkar ve istek sunucuya gitmez); başka dairenin hesabına talep açılamaz. Onay, ödeme Hesabı seçilmeden açılmaz. Onayda daire alacağı 2.000 TL’den 500 TL’ye iner, seçilen Hesaptan 1.500 TL çıkış görünür, IA-yıl-sıra numaralı iade makbuzu oluşur; Aidat + Fon + avans toplamı Hesapların toplamına eşit kalır. Nakit Hesapta bakiye yetmezse onaydan önce uyarı çıkar, “yeterli nakit yok” diye reddedilir. Reddedilince gerekçe sakine görünür. İade geri alınınca alacak ve Hesap bakiyesi geri gelir, makbuz iptal sayılır. Onaylı iade varken o ödemeyi iptal etmek “önce iadeyi geri alın” diye reddedilir.
+- [ ] **141.5. Yönetici: iade dikkat satırı, İade Talepleri penceresi ve makbuz (F64.05):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi ve kurul üyesi. Ön koşul: F64.04 ile açılmış en az bir bekleyen ve bir onaylı iade talebi. Yönetici ana sayfasındaki dikkat satırına ve Finans > Daireler sekmesindeki uyarı kartına bakın; “İadeleri İncele”ye dokunun. Pencerede Bekleyen / İade edilen / Tümü süzgeçlerini değiştirin; liste uzunsa “Daha fazla göster”e dokunun. İade edilen bir talepte “Makbuzu Gör”e, sonra “Geri Al”a dokunun (neden yazın) ve makbuza yeniden bakın. Bir talebi reddederken nedeni boş bırakıp göndermeyi deneyin. Aynı pencereyi kurul üyesi hesabıyla açın.
+  - **Beklenen Sonuç:** Dikkat satırı “N iade talebi onayınızı bekliyor, toplam X” der; Daireler sekmesinde sayı ve toplamlı uyarı kartı çıkar ve “İade talepleri” düğmesi her durumda vardır. Makbuzda IA-yıl-sıra numarası, Hesap, yöntem ve doğrulama kodu görünür; geri alınan iadenin makbuzu “İptal edildi” der ve sakinin alacağı geri döner. Ret nedeni boşken gönderilmez. Kurul listeyi görür, Onayla / Reddet / Geri Al düğmeleri çıkmaz. Makbuz için PDF ya da yazdır yoktur (yalnız ekran).
+- [ ] **141.6. Sakin: iade taleplerim, durumlar ve talebi geri çekme (F64.06):**
+  - **Nasıl Test Edilir:** Rol: Daire sakini. Ön koşul: Fazla ödemesi (alacağı) olan bir daire; sakinin açtığı bekleyen, onaylı ve reddedilmiş birer iade talebi. Sakin hesabıyla Borcum kartındaki iade talepleri listesine bakın. Bekleyen bir talepte “Talebi Geri Çek”e dokunun; ardından yeniden talep açmayı deneyin. Bekleyen talepler alacağın tamamını kapsıyorsa yeni talep açmayı deneyin. Alacağı ve talebi olmayan bir sakin hesabıyla Borcum kartına bakın.
+  - **Beklenen Sonuç:** Talepler “Onay bekliyor”, “İade edildi” (makbuz numarasıyla), “Reddedildi” (ret nedeniyle), “Geri çekildi” ve “İade geri alındı” durumlarıyla listelenir. Geri çekilen talep “Geri çekildi” olur ve düğme yeniden kullanılabilir. Tamamı kapsanıyorsa “Bekleyen iade talepleriniz alacağınızın tamamını kapsıyor.” yazar. Alacak ve talep yoksa iade bölümü hiç çizilmez. Talepler okunamazsa “talep yok” denmez; hata ve “Tekrar Dene” çıkar.
+- [ ] **141.7. KVKK: iade talepleri veri dosyasında; hesap silinirken bekleyen talep iptal edilir (F64.07):**
+  - **Nasıl Test Edilir:** Rol: Daire sakini ve site yöneticisi. Ön koşul: Bekleyen iade talebi olan bir sakin hesabı (silinmesinde sakınca olmayan deneme hesabı). Sakin hesabıyla Verilerimi indir ile veri dosyasını alın; “refund_requests_made” bölümüne ve “excluded” listesindeki iade talepleri satırına bakın. Aynı hesapla hesabı silmeyi başlatıp tamamlayın (bekleyen iade talebi varken). Yönetici hesabıyla Ayarlar > İşlem Kayıtları’na bakın.
+  - **Beklenen Sonuç:** Veri dosyasında yalnız sakinin kendi açtığı talepler vardır (daire, Hesap türü, tutar, kendi notu, durum, tarihler, makbuz numarası); ret gerekçesi, çıkış Hesabı, geri alma nedeni ve yönetici adına açılan talepler dışarıda olup “excluded” listesinde açıklanır. Bekleyen iade talebi hesap silmeyi ENGELLEMEZ; silmede talep iptal edilir ve işlem kayıtlarına “finance.refund.cancelled” (neden: hesap silindi) düşer. Hesap silme önizlemesi bu iptali ayrıca söylemez (bilinen sınır).
+
+## 142. 🧾 Muhasebe Kontrol İzi: Gider ve Dekont İçin “Kontrol Edildi (Kim, Ne Zaman)” (2026-10-29, karşılaştırma raporu P2-20, migration 110)
+
+Muhasebeci rolü açılmadı; onun yerine site yöneticisi bir gider kaydını ya da dekont bildirimini “kontrol edildi” diye işaretler ve kimin, ne zaman işaretlediği görünür (sahip kararı 2026-10-28). İz, giderin ve karara bağlanmış dekontun kendisini DEĞİŞTİRMEZ (ayrı bir kayıt olarak tutulur, satırlar değişmez kalır). Yönetici koyar ve kaldırır; kurul yalnız görür (kontrol edenin adı kurulda gizlidir); sakin hiçbir yerde görmez. Liste satırlarında rozet, “kontrolsüzleri süz” ve toplu işaretleme henüz yoktur. Sunucuda migration 110 gerekir.
+
+- [ ] **142.1. Giderde kontrol işareti koy ve kaldır (F65.01):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: En az bir kayıtlı (iptal edilmemiş) gider. Finans > Giderler’den bir gideri açın; en alttaki “Muhasebe kontrolü” bölümüne bakın. “Kontrol Edildi Olarak İşaretle”ye dokunun; gideri kapatıp yeniden açın. “Kontrol İşaretini Kaldır”a dokunun.
+  - **Beklenen Sonuç:** Önce “Henüz kontrol edilmedi” yazar. İşaretleyince “Kontrol edildi - <adınız>, <tarih saat>” görünür ve düğme “Kontrol İşaretini Kaldır” olur; gideri kapatıp açınca iz kalır. Kaldırınca yeniden “Henüz kontrol edilmedi” yazar. Giderin tutarı, tarihi ve durumu değişmez.
+- [ ] **142.2. İkinci yönetici: ilk iz korunur, kaldırıp yeniden koyabilir (F65.02):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Aynı sitede iki yönetici hesabı; birincisinin kontrol ettiği bir gider. Aynı gideri ikinci yönetici hesabıyla açın. İzi kaldırın ve kendi adınızla yeniden koyun.
+  - **Beklenen Sonuç:** İlk kontrol edenin adı ve zamanı görünür; işaretle düğmesi yerine “Kontrol İşaretini Kaldır” çıkar (üzerine yazılmaz, ilk iz korunur). İkinci yönetici izi kaldırıp kendi adıyla yeniden koyabilir.
+- [ ] **142.3. İptal edilmiş giderde kontrol işareti (F65.03):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: İptal edilmiş bir gider; iptalden önce işaretlenmiş bir gider. İptal edilmiş bir gideri açın. İptalden önce işaretlenmiş giderde “Muhasebe kontrolü” bölümüne bakın.
+  - **Beklenen Sonuç:** İptal edilmiş giderde “Kontrol Edildi Olarak İşaretle” düğmesi çıkmaz. İptalden önce işaretlenmiş giderde iz yalnız görünür, düğme çıkmaz.
+- [ ] **142.4. Kurul üyesi: iz görünür, ad ve düğme yok (F65.04):**
+  - **Nasıl Test Edilir:** Rol: Kurul üyesi. Ön koşul: Yöneticinin işaretlediği bir gider. Kurul üyesi hesabıyla bu gideri açın.
+  - **Beklenen Sonuç:** İz varsa “Kontrol edildi - <tarih>” görünür; kontrol eden kişinin adı görünmez. İşaretle / kaldır düğmesi çıkmaz.
+- [ ] **142.5. Dekont incelemede kontrol işareti (F65.05):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Finans > Dekontlar’da onaylı, iptal edilmiş ve bekleyen birer dekont bildirimi. Üç dekontu sırayla açın (karşılaştırma penceresi); “Muhasebe kontrolü” bölümüne bakın. Bekleyen dekontu işaretleyin (pencere kapanmamalı), sonra dekontu onaylayın.
+  - **Beklenen Sonuç:** Bölüm üç durumda da görünür. İşaretle / kaldır sırasında pencere kapanmaz ve Onayla / İptal et düğmeleri etkilenmez. Bekleyen dekontu işaretleyip onaylamak normal çalışır; onaydan sonra iz silinmez.
+- [ ] **142.6. Sakin kontrol izini görmez (F65.06):**
+  - **Nasıl Test Edilir:** Rol: Daire sakini. Ön koşul: Yöneticinin işaretlediği bir dekont. Sakin hesabıyla dekont listesine ve işaretli dekontun ayrıntısına bakın.
+  - **Beklenen Sonuç:** Kontrol izi hiçbir yerde görünmez; sakin ekranları eskisi gibidir.
+- [ ] **142.7. İşlem kayıtlarında kontrol işareti (F65.07):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: F65.01 ve F65.05 ile yapılmış işaretleme ve kaldırma. Ayarlar > İşlem Kayıtları’na bakın.
+  - **Beklenen Sonuç:** “Gider kontrol edildi olarak işaretlendi / kontrol işareti kaldırıldı” ve dekont karşılıkları kim ve ne zaman ile görünür.
+
+## 143. 📊 Dönem Raporu: İki Hesabın Dönem Başı, Tahsilat, Gider ve Dönem Sonu Bakiyesi (2026-10-29, karşılaştırma raporu, Finans > Raporlar)
+
+Finans > Raporlar içinde yeni “Dönem raporu”: seçilen ay, 3 ay ya da yıl için İşletme (Aidat) ve Fon Hesabının dönem başı bakiyesi, tahsilat, gider kalemleri, aktarım giriş / çıkışı, düzeltme ve dönem sonu bakiyesi; iki Hesabın toplamı, avans ve mutabakat; aylık kırılım; dönem sonu borçlu özeti (yalnız adet, vadesi geçmiş toplam ve yaşlandırma; ad ve daire etiketi yok). Yeni bir hesap kuralı yoktur, rakamlar Kasa özetinden ve yaşlandırmadan gelir. Yönetici, süper ve kurul okur; yalnız yönetici CSV / Excel olarak dışa aktarır. PDF henüz yoktur. Bilinen sınırlar: geçmiş bir dönem sonunda mutabakat farkı sıfırdan farklı olabilir (ekranda not görünür); borçlu özeti Hesap bazında değil toplamdır; tahsilat yalnız bir nakit / banka hesabına eşlenmiş tahsilatlardır (eşlenmemişler ayrı uyarılır).
+
+- [ ] **143.1. Açılış, hazır dönem düğmeleri ve Kasa ile aynı bakiye (F66.01):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi ve kurul üyesi. Ön koşul: Birkaç aylık tahsilat ve gider hareketi olan bir site. Finans > Raporlar > Dönem raporu’nu açın; varsayılan dönemi okuyun. “Son 3 ay” ve “Bu yıl” düğmelerine, sonra ay seçiciye dokunun. Aidat Hesabı ve Fon Hesabı kartlarındaki dönem sonu bakiyeyi Finans > Kasa ekranındaki bakiyelerle (aynı tarih) karşılaştırın.
+  - **Beklenen Sonuç:** Varsayılan “Bu ay” yüklenir; hazır dönem düğmeleri raporu otomatik yeniler. Her iki Hesabın dönem sonu bakiyesi Kasa ekranındaki bakiyeyle aynıdır.
+- [ ] **143.2. Çeyrek / yıl toplamları tutarlı (F66.02):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: En az üç aylık hareket. Bir çeyrek ya da yıl seçin. Aylık kırılımdaki tahsilat ve gider toplamlarını Aidat + Fon kartlarındaki Tahsilat ve Gider toplamıyla karşılaştırın; “İki Hesabın toplamı” kartına bakın.
+  - **Beklenen Sonuç:** Aylık kırılım toplamları iki Hesabın dönem toplamına eşittir. “İki Hesabın toplamı” kartı dönem sonu bakiyeyi iki kartın toplamı olarak gösterir.
+- [ ] **143.3. Hesaplar arası aktarım dönem raporunda (F66.03):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Aidat ve Fon Hesapları arasında aktarım yapılmış bir ay. Aktarımın yapıldığı ayı seçin; iki Hesap kartına ve “İki Hesabın toplamı”na bakın.
+  - **Beklenen Sonuç:** Aktarım Aidat kartında çıkış, Fon kartında giriş olarak görünür; iki Hesabın toplamında etkisi yoktur.
+- [ ] **143.4. Dışa aktar (yönetici) ve kurul görünümü (F66.04):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi ve kurul üyesi. Ön koşul: Dönem raporu açık. Yönetici hesabıyla Dışa Aktar’dan CSV ve Excel dosyasını indirip açın. Kurul üyesi hesabıyla aynı raporu açın.
+  - **Beklenen Sonuç:** Dosyada Bölüm / Hesap / Kalem / Dönem / Adet / Tutar sütunları ve Özet, Gider kalemi, Aylık, Borçlu özeti bölümleri dolu olur; rakamlar ekranla aynıdır. Kurul raporu görür ama Dışa Aktar düğmesi yoktur.
+- [ ] **143.5. Eşlenmemiş tahsilat uyarısı ve kişi verisiz borçlu özeti (F66.05):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Bir nakit / banka hesabına bağlanmamış tahsilatı olan bir site. O siteyi seçip Dönem raporu’nu açın; uyarıya ve “Borçlu özeti” bölümüne bakın.
+  - **Beklenen Sonuç:** Eşlenmemiş tahsilat için uyarı ve not görünür. Borçlu özeti yalnız borçlu daire sayısını, vadesi geçmiş toplamı ve yaşlandırma kovalarını gösterir; ad ya da daire etiketi yoktur.
+
+## 144. 🧪 İkinci Altın Veri Seti ve Örnek Site Tohumu (geliştirici aracı) (2026-10-29, Dalga B doğrulaması)
+
+Dalga B finans kurallarının (Hesap seçimi, malike devir, gecikmede öneri, alacak iadesi, dağıtım tabanları, alacaklı devir) elle hesaplanmış ikinci veri seti: saf test ve gerçek PostgreSQL ile her koşuda aynı özet çıkar. Aynı veri `tools/demo_seed/golden_site.mjs` ile örnek bir siteye yazılabilir (yalnız yönetici uygulamaya girer; sakin hesaplarına daire üyeliği yazılmaz; hedef koruması ve geri alma vardır). Örnek site 2026-10-20 tarihine göre kurgulandı; uygulama bugünün tarihine baktığı için vade / gecikme etiketleri kayar, bakiyeler değişmez. Bilinen bulgu: devir ve geri alma, gecikme tazminatı tabanından devir gününü bir gün düşürür (mevcut davranış testle sabitlendi; değiştirme kararı sahibindedir).
+
+- [ ] **144.1. Örnek site kurulumu, korumalar ve temizleme (F67.01):**
+  - **Nasıl Test Edilir:** Rol: Geliştirici. Ön koşul: Sunucu ağacı olan bir bilgisayar ve tek kullanımlık bir deneme veritabanı (canlı değil). `tools/demo_seed` içinde `golden_site.mjs --dry-run` çalıştırın. Veritabanı adı “postgres” olan bir hedefle (izinsiz) çalıştırın. İzinli deneme veritabanında gerçek çalıştırın; aynı komutu ikinci kez çalıştırın. `cleanup.mjs --batch demo-golden2-… --yes` ile temizleyin.
+  - **Beklenen Sonuç:** --dry-run hiçbir şey yazmaz. İzinsiz hedefte araç hiçbir şey yapmadan durur (çıkış kodu 2). Gerçek çalıştırma 14 bölümü doğrular; ikinci çalıştırma aynı adlı site olduğu için durur (çıkış kodu 4). Makbuz anahtarı tanımlı değilse durur (çıkış kodu 3). Temizleme tüm satırları siler, kalıntı kalmaz.
+- [ ] **144.2. Örnek sitede gecikmede devir önerisi (F67.02):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: F67.01 ile kurulmuş örnek site (kuruluş gününe yakın tarih). Örnek sitede yönetici olarak Finans > Daireler sekmesindeki “Malike devredilebilir borç” şeridine ve ana sayfadaki dikkat satırına bakın; “Devri İncele”ye dokunun.
+  - **Beklenen Sonuç:** A-4 (3.600,00 TL) ve A-2 (1.000,00 TL) malike devredilebilir adaylar olarak listelenir. Vadesi sonradan dolan kalemler (bugünün tarihine bakıldığı için) listeye eklenebilir; asıl tutarlar kuruluş günü içindir.
+- [ ] **144.3. Örnek sitede A-2 devri: önizleme, devir, geri alma (F67.03):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: F67.02 ile aday listesinde görünen A-2 dairesi. A-2 dairesinin ekstresinden “Kiracı Borcunu Malike Devret”e dokunup önizlemeye bakın, nedenle devri onaylayın. Devir geçmişinden devri geri alın.
+  - **Beklenen Sonuç:** Önizleme 1 kalem ve 1.000,00 TL (aidatın kalan tutarı) gösterir. Devirden sonra kiracı bakiyesi 1.250,00 TL’den 250,00 TL’ye iner, malik bakiyesi 1.400,00 TL’den 2.400,00 TL’ye çıkar; iki hesabın toplamı aynı kalır. Geri alma eski değerleri döndürür.
+
+## 145. 🛠️ İş Takibi: Talebi Firmaya (Taşerona) Yönlendirme (2026-10-29, karşılaştırma raporu P2-8 ve P2-12, migration 111)
+
+Yönetici, yeni / işlemde / beklemede bir iş kaydını “Firmaya Yönlendir” ile bir dış firmaya (taşeron) yönlendirir: firma adı (zorunlu), yetkili, telefon ve anlaşılan tutar (isteğe bağlı) elle girilir, durum “Firmada” olur. Firma serbest metindir (firma kataloğu yoktur); dış firmaya giriş ya da form verilmez. Sakin yalnız “Firmada” durumunu görür; firma bilgisi yalnız yönetim kadrosuna (yönetici, süper, kapsamındaki görevli) ve kurula (salt okunur) görünür. Çözüldü / kapandı / iptal talebe yönlendirilemez. Firma adı, telefon ve tutar işlem kayıtlarına yazılmaz. Sunucuda migration 111 gerekir.
+
+- [ ] **145.1. Firmaya yönlendir: ad zorunlu, durum Firmada olur (F68.01):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Yeni, işlemde ya da beklemede durumunda bir iş talebi. Talebi açın; “Firma (taşeron)” bölümünde “Firmaya Yönlendir”e dokunun. Firma adını boş bırakıp gönderin. Firma adı, yetkili, telefon ve tutar (örnek 1.250,50) girip yönlendirin.
+  - **Beklenen Sonuç:** Boş adda “Firma adını girin” hatası çıkar. Yönlendirince durum “Firmada” olur; kartta Firma, Firma yetkilisi, Firma telefonu, Anlaşılan tutar ve Firmaya yönlendirme satırları görünür; geçmişte Yeni → Firmada olayı vardır.
+- [ ] **145.2. Firma bilgisini düzenle ve durumu değiştir (F68.02):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: F68.01 ile firmaya yönlendirilmiş talep. “Firma Bilgisini Düzenle” ile tutarı değiştirin. Durum seçicisinden talebi Çözüldü ya da İşlemde’ye alın.
+  - **Beklenen Sonuç:** Tutar değişince durum ve sakinin okunmamış rozeti değişmez. Firmadan çıkınca firma bilgisi kayıt olarak kartta kalır.
+- [ ] **145.3. Sakin firma bilgisini görmez (F68.03):**
+  - **Nasıl Test Edilir:** Rol: Daire sakini. Ön koşul: Sakinin açtığı ve firmaya yönlendirilmiş talep. Talebi açan sakin hesabıyla talebe bakın.
+  - **Beklenen Sonuç:** Talebin durumu “Firmada” görünür; firma adı, telefon ve tutar hiçbir yerde görünmez.
+- [ ] **145.4. Kurul: firma satırları görünür, yönlendirme düğmesi yok (F68.04):**
+  - **Nasıl Test Edilir:** Rol: Kurul üyesi. Ön koşul: Firmaya yönlendirilmiş bir talep ve Çözüldü durumunda bir talep. Kurul üyesi hesabıyla firmadaki talebi açın. Çözüldü durumundaki talebi açın.
+  - **Beklenen Sonuç:** Firma satırları görünür; “Firmaya Yönlendir” / “Firma Bilgisini Düzenle” düğmesi çıkmaz. Çözüldü talepte yönlendirme bölümü çıkmaz.
+- [ ] **145.5. Görevli: yalnız kapsamındaki talebi yönlendirir (F68.05):**
+  - **Nasıl Test Edilir:** Rol: Görevli. Ön koşul: Görevliye atanmış ve atanmamış (başkasına atanmış) talep. Görevli hesabıyla kendine atanmış talebi firmaya yönlendirin. Başkasına atanmış talebi bulmaya çalışın.
+  - **Beklenen Sonuç:** Kapsamdaki talepte yönlendirme çalışır. Başkasına atanmış talep görevlinin listesinde görünmez.
+- [ ] **145.6. Eski uygulama sürümü çökmez (F68.06):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Firmadaki talep ve (varsa) uygulamanın eski bir sürümü. Eski sürümle firmadaki talebi açın.
+  - **Beklenen Sonuç:** Uygulama çökmez; durum “Durum bilinmiyor” görünür.
+
+## 146. 📷 Dekont ve Gider Formlarında “Görselden Oku” (Cihaz İçi, Öneri) (2026-10-29, karşılaştırma raporu P2-13, karar K15)
+
+Dekont bildir (sakin), Elden makbuz / dekont girişi (yönetici) ve Gider Ekle (belge eki seçiliyken) formlarına telefonda “Görselden oku” eklendi: seçilen JPEG / PNG görselden cihazda (ML Kit) metin çıkarılır; tutar, tarih ve (elden makbuzda) TR IBAN adayları ÖNERİ olarak gösterilir, siz bir öneriye dokunmadan hiçbir alana yazılmaz. Görüntü ve metin ağa gitmez, dış yapay zekâ kullanılmaz. PDF seçiliyken ve web / masaüstünde düğme çizilmez, form eskisi gibi çalışır. Elden makbuza isteğe bağlı “Ödeyen IBAN” alanı eklendi. Yönetici “Dekont incelemesi” penceresinde okuma yoktur. Sunucu değişmedi.
+
+- [ ] **146.1. Sakin: dekont görselinden tutar ve tarih önerisi (F69.01):**
+  - **Nasıl Test Edilir:** Rol: Daire sakini. Ön koşul: Android telefon; bir banka dekontu ekran görüntüsü (JPEG / PNG). Sakin hesabıyla Öde > Dekont yükle ile görseli seçin. “Görselden oku”ya dokunun; önerilere bakın, hiçbir şeye dokunmadan alanları kontrol edin. Bir tutar ve bir tarih önerisine dokunun.
+  - **Beklenen Sonuç:** Tutar ve tarih önerileri çip olarak çıkar. Dokunmadan alanlar değişmez; dokununca yalnız dokunulan değer ilgili alana yazılır.
+- [ ] **146.2. PDF dekontta düğme çıkmaz (F69.02):**
+  - **Nasıl Test Edilir:** Rol: Daire sakini. Ön koşul: Android telefon; PDF bir dekont. Dekont yükle ile PDF dosyası seçin.
+  - **Beklenen Sonuç:** “Görselden oku” düğmesi görünmez ve form eskisi gibi çalışır.
+- [ ] **146.3. Yönetici: elden makbuzda tutar, tarih ve IBAN (F69.03):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Android telefon; IBAN içeren bir dekont görseli. Elden makbuz / dekont girişinde görseli ekleyip “Görselden oku”ya dokunun. IBAN önerisine dokunun; “Ödeyen IBAN” alanına bakın, kaydedin. Ayrıca alana geçersiz bir IBAN yazıp kaydetmeyi deneyin.
+  - **Beklenen Sonuç:** Tutar, tarih ve IBAN önerileri gelir; IBAN çipine dokununca “Ödeyen IBAN” alanı gruplu dolar; kayıtta Gönderen IBAN görünür. Geçersiz IBAN kaydı engeller.
+- [ ] **146.4. Gider Ekle: fatura fotoğrafından tutar ve tarih (F69.04):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi. Ön koşul: Android telefon; bir fatura fotoğrafı; belge eki seçilebilen Gider Ekle ekranı. Gider Ekle’de fatura görselini belge eki olarak ekleyin ve “Görselden oku”ya dokunun.
+  - **Beklenen Sonuç:** Toplam tutar önde, KDV ve komisyon satırları geride sıralanır; dokunulan öneri alana yazılır.
+- [ ] **146.5. Web ve masaüstünde düğme çıkmaz (F69.05):**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi ve daire sakini. Ön koşul: Web ya da Windows sürümü. Dekont ve gider formlarını açın.
+  - **Beklenen Sonuç:** “Görselden oku” düğmesi hiç görünmez; formlar eskisi gibi çalışır.
+- [ ] **146.6. Uçak modunda da okur (F69.06):**
+  - **Nasıl Test Edilir:** Rol: Daire sakini. Ön koşul: Android telefon; uçak modu açık. Uçak modunda dekont görselini okutun.
+  - **Beklenen Sonuç:** Okuma internet olmadan da çalışır (cihaz içi).

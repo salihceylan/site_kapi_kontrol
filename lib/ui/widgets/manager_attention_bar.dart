@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/models/finance_home.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+import 'package:site_kapi_kontrol/ui/helpers/money.dart';
 import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
 
 /// Finans sekmeleri (FinanceView kimlikleri; sekme çubuğundaki sıra farklı olabilir).
@@ -31,6 +32,7 @@ class ManagerAttentionBar extends StatefulWidget {
     required this.onOpenFinance,
     this.onOpenBankLines,
     this.onOpenLiabilityTransfer,
+    this.onOpenRefunds,
   });
 
   /// Yazma yetkili finans siteleri.
@@ -46,6 +48,9 @@ class ManagerAttentionBar extends StatefulWidget {
   /// Malike devredilebilir kiracı borçları penceresini (K17: `tenant_debt_overdue_transfer` / `tenant_debt_pending_transfer`) doğrudan açar;
   /// verilmezse düğme Daireler sekmesine götürür (orada öneri şeridi aynı pencereyi açar).
   final Future<void> Function(PeopleSite site)? onOpenLiabilityTransfer;
+
+  /// Onay bekleyen iade talepleri penceresini (K4: `refund_requests`) doğrudan açar; verilmezse düğme Daireler sekmesine götürür (orada iade girişi aynı pencereyi açar).
+  final Future<void> Function(PeopleSite site)? onOpenRefunds;
 
   @override
   State<ManagerAttentionBar> createState() => _ManagerAttentionBarState();
@@ -107,6 +112,9 @@ class _ManagerAttentionBarState extends State<ManagerAttentionBar> {
     } else if (_isLiabilityKey(a.key) && widget.onOpenLiabilityTransfer != null) {
       await widget.onOpenLiabilityTransfer!(site);
       if (mounted) unawaited(_load());
+    } else if (a.key == 'refund_requests' && widget.onOpenRefunds != null) {
+      await widget.onOpenRefunds!(site);
+      if (mounted) unawaited(_load());
     } else {
       widget.onOpenFinance(site.code, _describe(a).$2);
     }
@@ -143,6 +151,13 @@ class _ManagerAttentionBarState extends State<ManagerAttentionBar> {
           '${a.count} dairede kiracı ayrıldı, borcu kiracı hesabında duruyor; ev sahibine devredilebilir',
           FinanceHomeTab.balances,
           'Devri İncele',
+        );
+      case 'refund_requests':
+        // K4: sakinin "Fazla ödememi iade et" talebi; iade YALNIZ yönetici onayıyla yapılır.
+        return (
+          '${a.count} iade talebi onayınızı bekliyor${a.totalMinor == null ? '' : ', toplam ${formatMinor(a.totalMinor!)}'}',
+          FinanceHomeTab.balances,
+          'İadeleri İncele',
         );
       default:
         return ('${a.count} bekleyen iş var', FinanceHomeTab.balances, 'İncele');
@@ -198,7 +213,7 @@ class _ManagerAttentionBarState extends State<ManagerAttentionBar> {
                         ),
                         onPressed: () => _handleAction(site, a),
                         child: Semantics(
-                          label: '${multi ? '${site.label}: ' : ''}${_describe(a).$1}. ${_describe(a).$3}',
+                          label: spokenMoneyText('${multi ? '${site.label}: ' : ''}${_describe(a).$1}. ${_describe(a).$3}'),
                           excludeSemantics: true,
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
@@ -232,6 +247,7 @@ class _ManagerAttentionBarState extends State<ManagerAttentionBar> {
                           children: [
                             Text(
                               labelText,
+                              semanticsLabel: spokenMoneyText(labelText),
                               style: th.bodyLarge?.copyWith(color: AppShowcaseColors.onFocus),
                             ),
                             const SizedBox(height: AppSpace.sm),
@@ -248,6 +264,7 @@ class _ManagerAttentionBarState extends State<ManagerAttentionBar> {
                           Expanded(
                             child: Text(
                               labelText,
+                              semanticsLabel: spokenMoneyText(labelText),
                               style: th.bodyLarge?.copyWith(color: AppShowcaseColors.onFocus),
                             ),
                           ),

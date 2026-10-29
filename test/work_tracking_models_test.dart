@@ -216,7 +216,7 @@ void main() {
     });
 
     test('durum ve sabit değerler: bilinen listesi, son durumlar, bilinmeyen güvenli', () {
-      expect(WorkStatus.known.length, 6);
+      expect(WorkStatus.known.length, 7, reason: 'yeni, işlemde, beklemede, firmada (111), çözüldü, kapandı, iptal');
       expect(WorkStatus.kapandi.isTerminal && WorkStatus.iptal.isTerminal, isTrue);
       expect(WorkStatus.cozuldu.isTerminal, isFalse);
       expect(WorkStatus.fromApi('YENI'), WorkStatus.yeni);

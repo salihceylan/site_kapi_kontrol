@@ -109,6 +109,7 @@ describe('finans kaynakları: para hesabında kayan nokta YOK', () => {
       'finance_payment_ref.js',
       'finance_payment_routes.js',
       'finance_payment_schema.js',
+      'finance_period_report.js',
       'finance_read_service.js',
       'finance_receipts.js',
       'finance_refund_guard.js',

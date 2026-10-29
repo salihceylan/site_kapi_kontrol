@@ -22,15 +22,19 @@ import {
   idempotencyConflict,
   invalidAssignee,
   invalidEquipment,
+  invalidField,
   invalidTransition,
+  isStaffTransitionAllowed,
   itemClosed,
   mapEvent,
   mapManagerItem,
   parseCommentInput,
   parseListQuery,
   parsePatchInput,
+  sameVendor,
   siteNotFound,
   staffScope,
+  vendorRequired,
   workItemLimits,
   workItemNotFound,
 } from './work_tracking_common.js';
@@ -125,6 +129,7 @@ const MANAGER_COLUMNS = `
   to_char(w.due_date, 'YYYY-MM-DD') AS due_date, w.created_at, w.updated_at, w.closed_at,
   w.created_by, w.assigned_to, w.apartment_id, w.block_id, b.block_name, a.unit_label,
   w.equipment_id, eq.name AS equipment_name, eq.kind AS equipment_kind, eq.is_active AS equipment_active,
+  w.vendor_name, w.vendor_contact, w.vendor_phone, w.vendor_amount_kurus, w.vendor_referred_at,
   CASE WHEN w.created_by IS NULL OR ru.deleted_at IS NOT NULL THEN NULL ELSE ru.full_name END AS requester_name,
   CASE WHEN ru.deleted_at IS NULL THEN ru.phone_number END AS requester_phone,
   CASE WHEN au.deleted_at IS NOT NULL THEN NULL ELSE au.full_name END AS assignee_name,
@@ -348,7 +353,7 @@ export async function updateWorkItem({ siteCode, rawId, actor, access, body }) {
     const userCode = await lockActiveUser(client, actor);
     // Görevli kapsamı (kendine atanmış / atanmamış / yetim atama) kilit sorgusunun İÇİNDE: görünmeyen talep 404.
     const found = await client.query(
-      `SELECT w.id, w.status, w.priority, w.assigned_to, w.equipment_id, to_char(w.due_date, 'YYYY-MM-DD') AS due_date FROM work_items w
+      `SELECT w.id, w.status, w.priority, w.assigned_to, w.equipment_id, w.vendor_name, w.vendor_contact, w.vendor_phone, w.vendor_amount_kurus, to_char(w.due_date, 'YYYY-MM-DD') AS due_date FROM work_items w
        WHERE w.id = $1 AND w.site_code = $2${access.kind === 'staff' ? ` AND ${staffScope('$3')}` : ''} FOR UPDATE OF w`,
       access.kind === 'staff' ? [id, siteCode, userCode] : [id, siteCode],
     );
@@ -365,14 +370,31 @@ export async function updateWorkItem({ siteCode, rawId, actor, access, body }) {
     if ('dueDate' in input && input.dueDate !== (row.due_date ?? null)) changes.dueDate = input.dueDate;
     const currentEquipment = row.equipment_id === null || row.equipment_id === undefined ? null : Number(row.equipment_id);
     if ('equipmentId' in input && input.equipmentId !== currentEquipment) changes.equipmentId = input.equipmentId;
+    // Firma (111): mevcut firma satırdaki sütunlardan okunur (ad yoksa firma yok).
+    const currentVendor = row.vendor_name
+      ? {
+          name: row.vendor_name,
+          contact: row.vendor_contact ?? null,
+          phone: row.vendor_phone ?? null,
+          amountKurus: row.vendor_amount_kurus === null || row.vendor_amount_kurus === undefined ? null : Number(row.vendor_amount_kurus),
+        }
+      : null;
+    if ('vendor' in input && !sameVendor(input.vendor, currentVendor)) changes.vendor = input.vendor;
     if (Object.keys(changes).length === 0) {
       return;
     }
     if (TERMINAL_STATUSES.includes(row.status)) {
       throw itemClosed();
     }
-    if (changes.status !== undefined && !(STAFF_TRANSITIONS[row.status] ?? []).includes(changes.status)) {
+    if (changes.status !== undefined && !isStaffTransitionAllowed(row.status, changes.status)) {
       throw invalidTransition(row.status, changes.status);
+    }
+    // `firmada` durumunda firma bilgisi ZORUNLUDUR: firmaya yönlendirme firma adıyla birlikte gelir (ya da işte zaten firma vardır); firmadaki işin firması silinemez.
+    if ((changes.status ?? row.status) === 'firmada') {
+      const nextVendor = 'vendor' in changes ? changes.vendor : currentVendor;
+      if (nextVendor === null) {
+        throw changes.status === 'firmada' ? invalidField('Firmaya yönlendirmek için firma adını girin.') : vendorRequired();
+      }
     }
     if ('assignedTo' in changes) {
       await assertAssignable(client, { siteCode, access, userCode, currentAssignee, target: changes.assignedTo });
@@ -400,6 +422,16 @@ export async function updateWorkItem({ siteCode, rawId, actor, access, body }) {
     }
     // Ekipman bağı (096) iç bir bilgidir: sakinin "okunmamış" işaretini TETİKLEMEZ (resident_updated_at dokunulmaz).
     if ('equipmentId' in changes) sets.push(`equipment_id = ${push(changes.equipmentId)}`);
+    // Firma bilgisi (111) iç bir bilgidir: sakinin "okunmamış" işaretini TETİKLEMEZ (firmaya yönlendirmede durum değişimi zaten tetikler). Kaldırılınca yönlendirme zamanı da silinir.
+    if ('vendor' in changes) {
+      const vendor = changes.vendor;
+      sets.push(`vendor_name = ${push(vendor === null ? null : vendor.name)}`);
+      sets.push(`vendor_contact = ${push(vendor === null ? null : vendor.contact)}`);
+      sets.push(`vendor_phone = ${push(vendor === null ? null : vendor.phone)}`);
+      sets.push(`vendor_amount_kurus = ${push(vendor === null ? null : vendor.amountKurus)}`);
+      if (vendor === null) sets.push('vendor_referred_at = NULL');
+    }
+    if (changes.status === 'firmada') sets.push('vendor_referred_at = NOW()');
     await client.query(`UPDATE work_items SET ${sets.join(', ')} WHERE id = $1 AND site_code = $2`, params);
 
     const base = { itemId: id, siteCode, actorUserCode: userCode, actorKind: actorKindOf(access.kind) };
@@ -435,6 +467,12 @@ export async function updateWorkItem({ siteCode, rawId, actor, access, body }) {
         to: changes.equipmentId === null ? null : String(changes.equipmentId),
       });
       await audit(client, actor, 'work_item.updated', siteCode, id, { field: 'equipment', from: currentEquipment, to: changes.equipmentId });
+    }
+    if ('vendor' in changes) {
+      // Olay günlüğüne YAZILMAZ (olay değerleri 40 karakterle sınırlı, firma adı 80): durum değişimi `status_changed` olayında görünür. Denetim kaydı yalnız türü taşır
+      // (firma adı / yetkili / telefon / tutar günlüğe girmez).
+      const kind = changes.vendor === null ? 'cleared' : currentVendor === null ? 'set' : 'updated';
+      await audit(client, actor, 'work_item.updated', siteCode, id, { field: 'vendor', change: kind });
     }
   });
   return getWorkItemDetail(siteCode, id, access);

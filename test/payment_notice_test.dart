@@ -10,6 +10,7 @@ import 'package:site_kapi_kontrol/models/finance_funds.dart';
 import 'package:site_kapi_kontrol/models/payment_notice.dart';
 import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
+import 'package:site_kapi_kontrol/services/document_text_reader.dart' show DocumentTextReader;
 import 'package:site_kapi_kontrol/services/payment_notice_api.dart';
 import 'package:site_kapi_kontrol/services/payment_notice_file.dart';
 import 'package:site_kapi_kontrol/services/share_inbox.dart';
@@ -135,6 +136,22 @@ _FundLoader _loaderOf(Map<String, dynamic> body, {List<Map<String, Object?>>? ca
       return FundChoiceInfo.tryParse(<String, dynamic>{...body, 'account_party': accountParty?.apiValue ?? body['account_party']})!;
     };
 
+/// Sahte cihaz içi metin okuyucu (P2-13): her zaman desteklenir, verilen metni döndürür.
+class _FakeOcr implements DocumentTextReader {
+  _FakeOcr(this.text);
+
+  final String text;
+
+  @override
+  bool get supported => true;
+
+  @override
+  Future<String?> read(Uint8List imageBytes) async => text;
+}
+
+String _amountText(WidgetTester t) =>
+    t.widget<EditableText>(find.descendant(of: find.byKey(const ValueKey<String>('notice_amount')), matching: find.byType(EditableText))).controller.text;
+
 bool _selected(WidgetTester t, String key) => find
     .descendant(of: find.byKey(ValueKey<String>(key)), matching: find.byIcon(Icons.radio_button_checked_rounded))
     .evaluate()
@@ -235,6 +252,46 @@ void main() {
       expect((api.createBody!['file'] as Map)['content_type'], 'application/pdf');
       expect((api.createBody!['idempotency_key'] as String).isNotEmpty, isTrue);
       expect(api.uploaded, pdf);
+      // PDF'te "Görselden oku" çizilmez; form eski haliyle çalışır.
+      expect(find.byKey(const ValueKey<String>('notice_ocr_read')), findsNothing);
+    });
+
+    testWidgets('görselden oku: öneri dokunulmadan forma yazılmaz; dokunulan tutar ve tarih gönderilir', (t) async {
+      final auth = FakeBulkAuth(role: UserRole.apartmentOwner);
+      final api = _FakeApi();
+      PaymentNoticeService.register(auth, PaymentNoticeService(authService: auth, api: api, tokenProvider: () => 'tok'));
+      final jpeg = Uint8List.fromList(<int>[0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]);
+      await _show(
+        t,
+        PaymentNoticeDialog(
+          authService: auth,
+          choices: const <NoticeApartmentChoice>[NoticeApartmentChoice(apartmentId: 7, label: 'Gül Sitesi - A Blok 3')],
+          amountMinor: 125000,
+          pickFile: () async => SharedReceipt(name: 'dekont.jpg', mime: 'image/jpeg', bytes: jpeg),
+          now: () => DateTime(2026, 10, 21, 12),
+          ocrReader: _FakeOcr('İşlem Tarihi: 15.10.2026 14:32\nTutar: 1.250,50 TL'),
+        ),
+      );
+      // Dosya seçilmeden düğme yok.
+      expect(find.byKey(const ValueKey<String>('notice_ocr_read')), findsNothing);
+      await t.tap(find.byKey(const ValueKey<String>('notice_pick')));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const ValueKey<String>('notice_ocr_read')));
+      await t.pumpAndSettle();
+      // Öneri göründü ama alanlar değişmedi.
+      expect(find.byKey(const ValueKey<String>('notice_ocr_amount_0')), findsOneWidget);
+      expect(_amountText(t), '1.250,00');
+      expect(find.text('Ödeme tarihi: 21.10.2026'), findsOneWidget);
+
+      await t.tap(find.byKey(const ValueKey<String>('notice_ocr_amount_0')));
+      await t.tap(find.byKey(const ValueKey<String>('notice_ocr_date_0')));
+      await t.pumpAndSettle();
+      expect(_amountText(t), '1.250,50');
+      expect(find.text('Ödeme tarihi: 15.10.2026'), findsOneWidget);
+      await t.tap(find.byKey(const ValueKey<String>('notice_submit')));
+      await t.pumpAndSettle();
+      expect(api.createBody!['amount_minor'], 125050);
+      expect(api.createBody!['paid_on'], '2026-10-15');
     });
   });
 

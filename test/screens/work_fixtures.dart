@@ -36,6 +36,8 @@ const Map<String, List<String>> kWorkTransitions = <String, List<String>>{
   'yeni': <String>['islemde', 'beklemede', 'cozuldu', 'iptal'],
   'islemde': <String>['beklemede', 'cozuldu', 'iptal'],
   'beklemede': <String>['islemde', 'cozuldu', 'iptal'],
+  // 111: firmada hedefi düz durum listesinde YOKTUR (yalnız "Firmaya yönlendir" ile, firma bilgisiyle girilir; bkz. updateManaged).
+  'firmada': <String>['islemde', 'beklemede', 'cozuldu', 'iptal'],
   'cozuldu': <String>['kapandi', 'islemde'],
   'kapandi': <String>[],
   'iptal': <String>[],
@@ -859,7 +861,10 @@ class FakeWorkService extends WorkTrackingService {
     var next = 5000 + list.length;
     final status = fields['status'];
     if (status != null) {
-      if (!(kWorkTransitions[row['status']] ?? const <String>[]).contains(status)) {
+      final referral = status == 'firmada' &&
+          const <String>['yeni', 'islemde', 'beklemede'].contains(row['status']) &&
+          (fields['vendor'] != null || row['vendor'] != null);
+      if (!referral && !(kWorkTransitions[row['status']] ?? const <String>[]).contains(status)) {
         throw ApiException(
           'Talebin durumu bu şekilde değiştirilemez.',
           statusCode: 409,
@@ -886,6 +891,18 @@ class FakeWorkService extends WorkTrackingService {
     if (fields.containsKey('due_date')) {
       list.add(wkEvent(next++, type: 'due_date_changed', actorKind: 'manager', actorName: 'Ben Yönetici', from: row['due_date'] as String?, to: fields['due_date'] as String?));
       row['due_date'] = fields['due_date'];
+    }
+    if (fields.containsKey('vendor')) {
+      final vendor = fields['vendor'] as Map<String, Object?>?;
+      row['vendor'] = vendor == null
+          ? null
+          : <String, dynamic>{
+              'name': vendor['name'],
+              'contact': vendor['contact'],
+              'phone': vendor['phone'],
+              'amount_kurus': vendor['amount_kurus'],
+              'referred_at': status == 'firmada' ? '2026-10-29T09:00:00Z' : (row['vendor'] as Map?)?['referred_at'],
+            };
     }
     if (fields.containsKey('equipment_id')) {
       final id = fields['equipment_id'];

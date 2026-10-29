@@ -147,13 +147,14 @@ const B = (site = SITE_1) => `/manager/sites/${site}/finance`;
 const ROUTES = [
   ['GET', '/funds', 'read'],
   ['GET', '/funds/operating/movements', 'read'],
+  ['GET', '/reports/period', 'read'],
   ['GET', '/fund-transfers', 'read'],
   ['POST', '/fund-transfers', 'write'],
   ['POST', '/fund-transfers/1/reverse', 'write'],
 ];
 
 describe('kasa rota listesi ve zincir', () => {
-  it('5 rota, sözleşmedeki listeyle birebir', () => {
+  it('6 rota, sözleşmedeki listeyle birebir', () => {
     const expected = ROUTES.map(([method, path]) => `${method} /manager/sites/:siteCode/finance${path.replace('/operating/', '/:fund/').replace('/1/', '/:id/')}`).sort();
     const actual = ORIGINAL.map((route) => `${route.method} ${route.path}`).sort();
     assert.deepEqual(actual, expected);
@@ -164,7 +165,7 @@ describe('kasa rota listesi ve zincir', () => {
       assert.equal(route.handlers[0], authRequired, `${route.method} ${route.path}`);
       assert.equal(route.handlers[1], route.method === 'POST' ? financeWriteLimiter : financeReadLimiter, `${route.method} ${route.path}: sınırlayıcı`);
     }
-    for (const path of ['/manager/sites/:siteCode/finance/funds', '/manager/sites/:siteCode/finance/funds/:fund/movements']) {
+    for (const path of ['/manager/sites/:siteCode/finance/funds', '/manager/sites/:siteCode/finance/funds/:fund/movements', '/manager/sites/:siteCode/finance/reports/period']) {
       assert.ok(ORIGINAL.find((route) => route.path === path).handlers.includes(fundsReportLimiter), `${path}: ağır rapor sınırlayıcı`);
     }
   });
